@@ -216,7 +216,9 @@ effect).
   operations (`FinRow`), which makes it run alone from every finite memory (`finAlone_of_finRow`,
   `finOK_of_finRow`, through `ownWorld` and `wpG_seg`). On complete runs, given that each fired
   finaliser runs alone to a value or an uncaught raise (`FinAloneAt`): `finaliserOrder_at`
-  (`CancelRun`, `UnwindRun`).
+  (`CancelRun`, `UnwindRun`). `progOutT` meets `cancel_prefix`'s hypotheses
+  (`progOutT_cancel_prefix`), and so does `progOutTA`, the same program at an affine raise, typed
+  at an effect context with no unrestricted abortive operation (`progOutTA_cancel_prefix`).
 - **Inversions, and what no derivation types** (`SPEC.md` §19 *Laws* item 4 and *Programs*,
   `Inversions.lean`, `Rejections.lean`). Each inversion is an induction on `CDerives` that carries a
   class of judgements through the rules concluding with their premise's term: a variable is read at
@@ -228,6 +230,15 @@ effect).
   `at13` have no derivation at all (`not_der_at05`, …). `at08Once`, `at08` with the copy used once,
   is typed and every run of it ends at `()` (`d_at08Once`, `at08Once_runs`; the kernel program
   `at08-once`). A rule added to `CDerives` adds a case to each inversion.
+- **What §27's typing rejects** (`SPEC.md` §19 *Laws* item 6, §27 *Programs*,
+  `EffCancelTyped.lean`). `[handle]`, `[then]`, `[perform]`, `[raise]`, `[let]` and `bind` are
+  read with their premises at their conclusions, and the rules that conclude with their premise's
+  term only grow rows (`der_hndJ`, `der_thenJ`, `der_performJ`, `der_raiseJ`, `der_letJ`,
+  `JR.rowLe`, `Inversions.lean`). So a finaliser's raise is recorded in the cancel row of the
+  operations its computation performs, and the clause that cancels reads it at its own row:
+  `progT` has no derivation at a row without `2` (`not_der_progT`), `progNCrecT` none at all
+  (`not_der_progNCrecT`), and E7c (`e7c`) none at a row without `exnᵢ` (`not_der_e7c`), while at
+  the row of `exnᵢ` it is typed by a tied derivation (`dAt_e7c_lift`, `d_e7c_lift`).
 - **Embedding.** `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (.val (cbv T))` for every
   `DerivesWf` rule, and `adequacy_of_derivesWf`. `EmbeddingExamples.lean` runs BoLo's baseline
   programs through it.

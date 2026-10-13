@@ -312,6 +312,10 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.dAt_progOutT
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_cancels
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_cancel_prefix
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.noUnrExn_Ξ₁₂A
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.dAt_progOutTA
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutTA_cancels
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutTA_cancel_prefix
 -- SPEC §19, *Laws* item 4 and *Programs*: a continuation's use, and the programs no derivation types
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.fv_live
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.der_var
@@ -392,3 +396,22 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_thenRe
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_progReT
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progNCrecT_run
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutTA_run
+-- SPEC §27, *Programs*: the programs §27's typing rejects, by inversion of `CDerives`
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.JR.rowLe
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.der_hndJ
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.der_thenJ
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.der_performJ
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.der_raiseJ
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.der_letJ
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.kappa_cancel_jr
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.kcancel_jr_aff
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.not_der_progT
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.not_der_progT_ret
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.not_der_progNCrecT
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progNCrecT_stuck
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.timeoutCl_finds
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.not_der_e7c
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.dAt_e7c_lift
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_e7c_lift
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.noUnrExn_Ξe7c

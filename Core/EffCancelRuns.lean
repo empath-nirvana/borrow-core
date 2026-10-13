@@ -43,7 +43,10 @@ is one (`path_of_steps`).
   (`finAloneAt_supersedeE`), so `finaliserOrder_at` holds of it (`supersede_finaliserOrder`).
   `progOutT` (`Core/EffCancelTyped.lean`) is typed by a tied derivation (`dAt_progOutT`), its run
   cancels `κ` (`progOutT_cancels`), and its region's finaliser raises `2`: it meets
-  `cancel_prefix`'s hypotheses (`progOutT_cancel_prefix`).
+  `cancel_prefix`'s hypotheses (`progOutT_cancel_prefix`).  So does `progOutTA`, the same program
+  at an affine raise of `2` (`progOutTA_cancel_prefix`): a tied derivation types it at `Ξ₁₂A`,
+  which has no unrestricted abortive operation (`dAt_progOutTA`, `noUnrExn_Ξ₁₂A`), the shape the
+  checker gives every program it accepts (`checkProgram_tiedAt`, `Frontend/Check/Program.lean`).
 -/
 
 noncomputable section
@@ -2075,6 +2078,178 @@ theorem progOutT_cancel_prefix {q : List (Heap × Expr)}
     (fun D hD => ?_) hq
   · subst hm; decide
   · rw [fins_K, List.mem_singleton] at hD
+    subst hD
+    exact finRow_raiseU2
+
+/-! #### At an affine raise: a context with no unrestricted abortive operation
+
+`progOutTA` is `progOutT` with its raise of `2` affine (`rSigA 2`), every handler of `2` at the tag
+`aff`.  Its effect context `Ξ₁₂A`, `1 : 1 ↠^unr 1` and `2 : 1 ↠^aff 0`, has no unrestricted abortive
+operation (`noUnrExn_Ξ₁₂A`, decision 63's restriction), so a tied derivation at it has the shape
+the checker gives every program it accepts (`checkProgram_tiedAt`).  A tied derivation types it
+(`dAt_progOutTA`), its run cancels `κ` (`progOutTA_cancels`), and its region's finaliser raises
+`2`: it meets `cancel_prefix`'s hypotheses (`progOutTA_cancel_prefix`). -/
+
+/-- The effect context of `progOutTA`: `1 : 1 ↠^unr 1` and `2 : 1 ↠^aff 0`. -/
+def Ξ₁₂A : EffCtx := fun n => if n = 1 then [(.unr, .unit, .unit)] else
+  if n = 2 then [(.aff, .unit, .zero)] else []
+
+/-- **`Ξ₁₂A` has no unrestricted abortive operation**: `1` resumes, and `2` is affine. -/
+theorem noUnrExn_Ξ₁₂A : Ξ₁₂A.NoUnrExn := by
+  intro n p hp hq
+  unfold Ξ₁₂A at hp
+  split at hp
+  · simp only [List.mem_singleton] at hp; subst hp; rfl
+  · split at hp
+    · simp only [List.mem_singleton] at hp; subst hp; simp at hq
+    · cases hp
+
+theorem opAt_rSigA2 : OpAt Ξ₁₂A (rSigA 2) :=
+  ⟨by decide, by simp [Ξ₁₂A, rSigA], by simp [Ξ₁₂A, rSigA]⟩
+
+theorem opAt_pSig1A (F : CTy) : OpAt Ξ₁₂A (pSig 1 F) :=
+  ⟨by simp [pSig], by simp [Ξ₁₂A, pSig], by simp [Ξ₁₂A, pSig]⟩
+
+theorem rowAt_twoA (F : CTy) : RowAt Ξ₁₂A [rSigA 2, pSig 1 F] := by
+  refine rowAt_of_sigsAt fun o ho => ?_
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+  rcases ho with rfl | rfl
+  · exact opAt_rSigA2
+  · exact opAt_pSig1A F
+
+theorem rowAt_twoA' (F : CTy) : RowAt Ξ₁₂A [pSig 1 F, rSigA 2] := by
+  refine rowAt_of_sigsAt fun o ho => ?_
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+  rcases ho with rfl | rfl
+  · exact opAt_pSig1A F
+  · exact opAt_rSigA2
+
+theorem rowAt_r2A : RowAt Ξ₁₂A [rSigA 2] :=
+  rowAt_left (S' := [pSig 1 (.ret .unit)]) (rowAt_twoA _)
+
+theorem rowAt_p1A (F : CTy) : RowAt Ξ₁₂A [pSig 1 F] :=
+  rowAt_left (S' := [rSigA 2]) (rowAt_twoA' F)
+
+/-- `progTA`'s `[then]`, tied to `Ξ₁₂A`: `perform 1 then x. x unwind raise 2` at `{2, 1⟨{2}⟩}`,
+the raise affine. -/
+theorem dAt_then₂A {Δ : LifeCtx} :
+    CDerivesAt Ξ₁₂A Δ [] ((uF (raiseU 2) .hole).plug (performU 1))
+      (.comp (CTy.effOf [rSigA 2, pSig 1 (finRA 2)] .unit)) := by
+  show CDerivesAt Ξ₁₂A Δ [] (thenE (.var 0) (raiseU 2) (performU 1)) _
+  refine .effThen (Γ₁ := []) (Γ₂ := []) (A := .unit) (SM := [pSig 1 (.ret .unit)])
+    (SD := [rSigA 2]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
+  · intro o ho
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+    rcases ho with rfl | rfl <;> decide
+  · simp [Row.Uniq, rSigA, pSig]
+  · intro _ s hs; simp at hs
+  · refine RowLe.of_mem fun o ho => ?_
+    simp only [List.mem_singleton] at ho
+    subst ho
+    refine ⟨pSig 1 (finRA 2), rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => ?_⟩
+    exact (finLe_iff _ _).mpr (Or.inr ⟨rfl, RowLe.nil _⟩)
+  · refine RowLe.of_mem fun o ho => ?_
+    simp only [List.mem_singleton] at ho
+    subst ho
+    exact ⟨rSigA 2, rfl, OpSig.LeF.refl _⟩
+  · intro n i o o' hf hf' _
+    obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
+    simp only [List.mem_singleton] at hm
+    subst hm
+    obtain rfl : o' = pSig 1 (finRA 2) := Option.some.inj (hf'.symm.trans rfl)
+    rw [ThenLe]
+    refine Or.inr ⟨rfl, fun n i o h => by simp [Row.find, CTy.rowOf, pSig] at h, fun n i o h => ?_⟩
+    obtain ⟨hm, rfl, rfl⟩ := Row.find_mem h
+    simp only [List.mem_singleton] at hm
+    subst hm
+    exact ⟨rSigA 2, rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩,
+      fun hc => by simp [capB, rSigA, VTy.isZero] at hc⟩
+  · intro _ o ho
+    simp only [List.mem_singleton] at ho
+    subst ho
+    exact ⟨fun h => by simp [OpSig.abort, pSig, VTy.isZero] at h, fun _ => trivial⟩
+  · exact .effPerform (o := pSig 1 (.ret .unit)) (rowAt_p1A _) rfl rfl (.unitI .nil)
+  · exact .effSub (RowLe.nil _) (.ret (.var (.here .nil)))
+  · exact .effRaise (o := rSigA 2) rowAt_r2A rfl rfl .unit (.unitI (.cons .nil))
+
+/-- `hnd (2, H₂) [·]` around `progTA`'s `[then]`, tied, `H₂`'s tag `aff`. -/
+theorem dAt_inner₂A {Δ : LifeCtx} :
+    CDerivesAt Ξ₁₂A Δ [] ((KA 2).plug (performU 1))
+      (.comp (CTy.effOf [pSig 1 (finRA 2)] .unit)) := by
+  show CDerivesAt Ξ₁₂A Δ [] (hndExpr 2 [.aff] (.pair (.val idV) (.pair (.val (constC Val.unit))
+    (.val Val.unit))) ((uF (raiseU 2) .hole).plug (performU 1))) _
+  exact .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.aff, .unit, .zero)]) (fs := finsNil)
+    (rowAt_twoA _) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
+    (CDerivesAt.ofEffFree (.tensorI .nil (d_idV _ .unit)
+      (.tensorI .nil (d_constC_raise _ (.unitI (.cons .nil))) (.unitI .nil))) rfl)
+    (by decide) (by simp [pSig]) (by simp) dAt_then₂A
+
+/-- **`progTA` is typed by a tied derivation** at `Ξ₁₂A`, at the row holding the affine `2`. -/
+theorem dAt_progTA {Δ : LifeCtx} :
+    CDerivesAt Ξ₁₂A Δ [] progTA (.comp (CTy.effOf [rSigA 2] .unit)) := by
+  show CDerivesAt Ξ₁₂A Δ [] (hndExpr 1 [.unr] (.pair (.val idV) (.pair (.val cancelCT)
+    (.val Val.unit))) ((KA 2).plug (performU 1))) _
+  refine .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)]) (fs := fun _ => finRA 2)
+    (rowAt_twoA' _) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
+    (CDerivesAt.ofEffFree (.tensorI .nil (d_idV _ .unit)
+      (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil))) rfl)
+    (by decide) (by simp [rSigA]) (by simp) ?_
+  · refine RowLe.of_mem fun o ho => ?_
+    rw [show (finRA 2).rowOf ++ [rSigA 2] = [rSigA 2, rSigA 2] from rfl] at ho
+    simp only [List.mem_cons, List.not_mem_nil, or_false, or_self] at ho
+    subst ho
+    exact ⟨rSigA 2, rfl, OpSig.LeF.refl _⟩
+  · refine .effSub (RowLe.of_mem fun o ho => ?_) dAt_inner₂A
+    simp only [List.mem_singleton] at ho
+    subst ho
+    exact ⟨pSig 1 (finRA 2), rfl, OpSig.LeF.refl _⟩
+
+/-- **`progOutTA` is typed by a tied derivation** at `Ξ₁₂A`, at `F (1 ⊕ 1)`. -/
+theorem dAt_progOutTA {Δ : LifeCtx} :
+    CDerivesAt Ξ₁₂A Δ [] progOutTA (.comp (.ret (.sum .unit .unit))) := by
+  show CDerivesAt Ξ₁₂A Δ [] (hndExpr 2 [.aff] (.pair (.val injlV)
+    (.pair (.val (constC (Val.inj₂ Val.unit))) (.val Val.unit))) progTA)
+    (.comp (CTy.effOf [] (.sum .unit .unit)))
+  exact .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.aff, .unit, .zero)]) (fs := finsNil)
+    rowAt_r2A .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
+    (CDerivesAt.ofEffFree (.tensorI .nil (d_injlV _ .unit .unit)
+      (.tensorI .nil (d_constC_raise _ (.sumI₂ (.unitI (.cons .nil)))) (.unitI .nil))) rfl)
+    (by decide) (by simp) (by simp) dAt_progTA
+
+/-- The canceller's context in `progOutTA`: the live affine handler of `2`. -/
+abbrev K₂ₒA : Kont := hF (hQ 2 .aff injlV (constC (Val.inj₂ Val.unit))) .hole
+
+/-- The finalisers of `KA m`: the one finaliser `λ_. raise m`. -/
+theorem fins_KA (m : UInt32) : (KA m).fins = [(finV (raiseU m)).1] := rfl
+
+/-- **`progOutTA`'s run reaches the cancel of `κ`**: `H₁T`'s clause cancels the continuation of
+`perform 1`, whose region is `KA 2`. -/
+theorem progOutTA_cancels (μ : Heap) :
+    Steps (ℍ := ℍ) μ progOutTA μ
+      (K₂ₒA.plug (.app (kappa H₁T (KA 2)) (.val (Val.inj₂ .unit)))) := by
+  let κv : Val := ⟨kappa H₁T (KA 2), isVal_kappa _ _⟩
+  show Steps μ (K₂ₒA.plug (hndE (hU 1 idV cancelCT) ((KA 2).plug (performU 1)))) μ _
+  refine Steps.plug K₂ₒA ?_
+  refine .more (st .hole (Head.hop μ 1 0 (qualsVal [.unr]) idV (Val.pair cancelCT Val.unit)
+    cancelCT Val.unit (KA 2) (hcl cancelCT) rfl)) ?_
+  refine .more (st .hole (Head.beta μ _ (Val.pair Val.unit κv))) ?_
+  refine .more (st .hole (Head.letpair μ Val.unit κv _)) ?_
+  show Steps μ (.app (.val (Val.lam (.app (.var 0) (.val (Val.inj₂ Val.unit)))))
+    (Expr.subst 0 Val.unit (Expr.shift 1 0 κv.1))) μ _
+  rw [subst_shift_one]
+  exact .one (st .hole (Head.beta μ _ κv))
+
+/-- **`cancel_prefix` at `progOutTA`**, a program whose effect context has no unrestricted abortive
+operation: from the start of its cancel run, every path is a prefix of the cancel trace of the
+dead region `(KA 2)†`, whose finaliser raises `2`, at the names of `Ξ₁₂A`. -/
+theorem progOutTA_cancel_prefix {q : List (Heap × Expr)}
+    (hq : Path (ℍ := ℍ) Adequacy.emptyMem (K₂ₒA.plug (cancelOf (KA 2))) q) :
+    CancelTr (ℍ := ℍ) (· = 2) Ξ₁₂A.Names K₂ₒA Adequacy.emptyMem (KA 2).dead none q := by
+  refine cancel_prefix (dAt_progOutTA (Δ := LifeCtx.empty)) (fun m hm => ?_) (.inl rfl)
+    (progOutTA_cancels Adequacy.emptyMem) (Steps.plug K₂ₒA (kappa_cancel_steps _ _ _))
+    (fun D hD => ?_) hq
+  · subst hm; decide
+  · rw [fins_KA, List.mem_singleton] at hD
     subst hD
     exact finRow_raiseU2
 

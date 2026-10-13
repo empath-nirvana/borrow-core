@@ -33,6 +33,13 @@ none (`der_prim`); `swap` at `Ref A ⊸ B ⊸ Ref B ⊗ A` only, since its body 
 (`der_swap`).  Every free variable of a typed term has a live slot (`fv_live`), so a variable used
 on both sides of a split is persistent (`splitP_both`).
 
+**The rows a computation is read at.**  `[handle]`, `[then]`, `[perform]`, `[raise]`, `[let]` and
+`bind` are read with their premises at the judgement each concludes with, and the same-term rules'
+path from there (`der_hndJ`, `der_thenJ`, `der_performJ`, `der_raiseJ`, `der_letJ`); those rules
+only grow rows (`JR.rowLe`).  `κ`'s cancel branch, applied, is read at what they reach from its
+type (`kappa_cancel_jr` at an unrestricted `κ`, `kcancel_jr_aff` at an affine one), and at a row
+only when its cancel row is no `⊤` and below the row (`cancelTy_rowLe`).
+
 **A continuation is used once.**  At a resuming linear or affine operation, a clause's `κ` is at
 `kTy`, a thunk of an `&`, which is not persistent (`kTy_not_persistent`): a live slot of it is
 neither dropped by a consumed context nor read on both sides of a split, and a linear `κ`'s cancel
@@ -1902,6 +1909,551 @@ theorem ValCls.at {T₀ T : VTy} {j : Jdg} (h : ValCls T₀ j)
   · obtain ⟨S', Y, he, hY⟩ := h
     obtain ⟨-, rfl⟩ := effOf_inj he
     exact hY
+
+/-! ### The rows a computation is read at
+
+`[handle]`, `[then]`, `[perform]`, `[raise]`, `[let]` and `bind` conclude at a row, and the
+same-term rules read a computation at another row only by `[sub]`: they grow rows (`JR.rowLe`).
+Each inversion below gives its rule's premises at the judgement the rule concludes with, and the
+same-term rules' path from there to the judgement read. -/
+
+/-- What a computation at `F_Σ Y` is read at through the same-term rules: a row above `Σ` over a
+view of `Y`, or, with `Σ` below the empty row, a view of `Y`. -/
+def RowCls (S : Row) (Y : VTy) : Jdg → Prop
+  | .comp D => ∃ S' Y', D = CTy.effOf S' Y' ∧ RowLe S S' ∧ VView Y Y'
+  | .val Y' => RowLe S [] ∧ VView Y Y'
+
+theorem RowCls.step {S : Row} {Y : VTy} {j j' : Jdg} (hs : JS j j') (h : RowCls S Y j) :
+    RowCls S Y j' := by
+  cases hs with
+  | val hv => exact ⟨h.1, h.2.tail hv⟩
+  | ret A => exact ⟨[], A, rfl, h.1, h.2⟩
+  | ofRet A =>
+      obtain ⟨S', Y', he, hle, hY⟩ := h
+      obtain ⟨rfl, rfl⟩ := effOf_inj (S := []) he
+      exact ⟨hle, hY⟩
+  | effSub S₀ S₁ A hle' =>
+      obtain ⟨S', Y', he, hle, hY⟩ := h
+      obtain ⟨rfl, rfl⟩ := effOf_inj he
+      exact ⟨_, _, rfl, hle.trans hle', hY⟩
+  | nuIn C hC =>
+      obtain ⟨S', Y', he, -⟩ := h
+      obtain ⟨C₁, C₂, hu⟩ := unroll_amp hC
+      exact absurd (hu.symm.trans he) (effOf_ne_amp S' Y' C₁ C₂).symm
+  | nuOut C hC =>
+      obtain ⟨S', Y', he, -⟩ := h
+      exact absurd he.symm (effOf_ne_nu S' Y' C)
+
+theorem RowCls.reach {S : Row} {Y : VTy} {j j' : Jdg} (hr : JR j j') (h : RowCls S Y j) :
+    RowCls S Y j' := by
+  induction hr with
+  | refl => exact h
+  | tail _ hs ih => exact ih.step hs
+
+/-- **The same-term rules grow rows**: a computation at `F_Σ Y` read at `F_Σ′ Y′` has `Σ ≤ Σ′`. -/
+theorem JR.rowLe {S S' : Row} {Y Y' : VTy}
+    (hr : JR (.comp (CTy.effOf S Y)) (.comp (CTy.effOf S' Y'))) : RowLe S S' := by
+  obtain ⟨S₁, Y₁, he, hle, -⟩ := RowCls.reach hr (S := S) (Y := Y) ⟨S, Y, rfl, RowLe.refl S, .refl⟩
+  obtain ⟨rfl, -⟩ := effOf_inj he
+  exact hle
+
+/-- `[handle]`'s premises, at its conclusion `j₀`. -/
+def HndBase (Δ : LifeCtx) (Γ : Ctx VTy) (n : UInt32) (Q H M : Expr) (j₀ : Jdg) : Prop :=
+  ∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy),
+    Ctx.SplitP Γ Γ₁ Γ₂ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧
+    CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))) ∧
+    CDerives Δ Γ₂ M (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) ∧
+    (∀ o ∈ S, o.n ≠ n) ∧ j₀ = .comp (CTy.effOf S R)
+
+/-- **A handler term is `[handle]`'s, then the same-term rules**: the handled body at the handler's
+signature row before the outer row `Σ`, the clauses at `Σ`, and the term read at a row the
+same-term rules reach from `Σ`. -/
+theorem der_hndJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
+    ∀ (n : UInt32) (Q H M : Expr),
+      e = .app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) (.pair Q H))) M →
+      ∃ j₀, HndBase Δ Γ n Q H M j₀ ∧ JR j₀ j := by
+  induction h with
+  | effHandleV hs _ _ hc _ hnS _ he =>
+      intro n Q H M he'
+      simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.app.injEq, Expr.pair.injEq] at he'
+      obtain ⟨⟨-, hn, rfl, rfl⟩, rfl⟩ := he'
+      simp only [Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at hn
+      subst hn
+      exact ⟨_, ⟨_, _, _, _, _, _, _, hs, rfl, hc, he, hnS, rfl⟩, .refl⟩
+  | force => intro n Q H M he; rcases forceE_var he with h | h <;> simp at h
+  | lolliE _ _ hf =>
+      intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
+      exact (not_der_app_prim hf _ _ rfl id (by decide) (by decide)).elim
+  | app _ hM _ =>
+      intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
+      exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
+  | allE hM _ | proj₁ hM | proj₂ hM =>
+      intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
+      exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
+  | allEV hM _ =>
+      intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
+      exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
+  | ret _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he; exact ⟨j₀, hb, hr.tail (JS.ret _)⟩
+  | ofRet _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he; exact ⟨j₀, hb, hr.tail (JS.ofRet _)⟩
+  | effSub hle _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
+      exact ⟨j₀, hb, hr.tail (JS.effSub _ _ _ hle)⟩
+  | nuIn hC _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he; exact ⟨j₀, hb, hr.tail (JS.nuIn _ hC)⟩
+  | nuOut hC _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
+      exact ⟨j₀, hb, hr.tail (JS.nuOut _ hC)⟩
+  | bangE _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.bang _))⟩
+  | boxI _ _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.boxI _ _))⟩
+  | boxE _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+  | immSub _ _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.immS _ _ _))⟩
+  | mutSub _ _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.mutS _ _ _))⟩
+  | roll _ _ _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.roll _))⟩
+  | unroll _ ih =>
+      intro n Q H M he; obtain ⟨j₀, hb, hr⟩ := ih n Q H M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
+  | _ => intro n Q H M he; cd_at he
+
+/-- `[then]`'s premises, at its conclusion `j₀`. -/
+def ThenBase (Δ : LifeCtx) (Γ : Ctx VTy) (D M : Expr) (j₀ : Jdg) : Prop :=
+  ∃ (Γ₁ Γ₂ : Ctx VTy) (A B : VTy) (S SM SD : Row), Ctx.SplitP Γ Γ₁ Γ₂ ∧
+    RowLe SM S ∧ RowLe SD S ∧
+    (∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
+      capB o.q o.B = true → ThenLe o.fin SD o'.fin) ∧
+    CDerives Δ Γ₁ M (.comp (CTy.effOf SM A)) ∧
+    CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit)) ∧
+    j₀ = .comp (CTy.effOf S B)
+
+/-- **A `M then x. N unwind D` is `[then]`'s, then the same-term rules**: `M` and the finaliser at
+rows below the `[then]`'s, each capturable operation of `M`'s row recording the finaliser's row in
+its cancel row (`ThenLe`). -/
+theorem der_thenJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
+    ∀ N D M, e = thenE N D M → ∃ j₀, ThenBase Δ Γ D M j₀ ∧ JR j₀ j := by
+  induction h with
+  | effThen hs _ _ _ hMS hDS hfin _ hM _ hD _ _ _ =>
+      intro N D M he; cases he
+      exact ⟨_, ⟨_, _, _, _, _, _, _, hs, hMS, hDS, hfin, hM, hD, rfl⟩, .refl⟩
+  | force => intro N D M he; rcases forceE_var he with h | h <;> simp [thenE] at h
+  | lolliE _ _ hf =>
+      intro N D M he; simp only [thenE, Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
+      exact (not_der_app_prim hf _ _ rfl id (by decide) (by decide)).elim
+  | app _ hM _ =>
+      intro N D M he; simp only [thenE, Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
+      exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
+  | allE hM _ | proj₁ hM | proj₂ hM =>
+      intro N D M he; simp only [thenE, Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
+      exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
+  | allEV hM _ =>
+      intro N D M he; simp only [thenE, Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
+      exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
+  | ret _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he; exact ⟨j₀, hb, hr.tail (JS.ret _)⟩
+  | ofRet _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he; exact ⟨j₀, hb, hr.tail (JS.ofRet _)⟩
+  | effSub hle _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
+      exact ⟨j₀, hb, hr.tail (JS.effSub _ _ _ hle)⟩
+  | nuIn hC _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he; exact ⟨j₀, hb, hr.tail (JS.nuIn _ hC)⟩
+  | nuOut hC _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
+      exact ⟨j₀, hb, hr.tail (JS.nuOut _ hC)⟩
+  | bangE _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.bang _))⟩
+  | boxI _ _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.boxI _ _))⟩
+  | boxE _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+  | immSub _ _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.immS _ _ _))⟩
+  | mutSub _ _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.mutS _ _ _))⟩
+  | roll _ _ _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.roll _))⟩
+  | unroll _ ih =>
+      intro N D M he; obtain ⟨j₀, hb, hr⟩ := ih N D M he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
+  | _ => intro N D M he; cd_terms
+
+/-- `[perform]`'s premises, at its conclusion `j₀`. -/
+def PerfBase (n i : UInt32) (j₀ : Jdg) : Prop :=
+  ∃ (S : Row) (o : OpSig), Row.find S n i = some o ∧ o.abort = false ∧
+    j₀ = .comp (CTy.effOf S o.B)
+
+/-- **A `perform` is `[perform]`'s, then the same-term rules**: its row finds the operation. -/
+theorem der_performJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
+    ∀ n i V, e = BoCa.BoLo.performE (opArgE n i V) → ∃ j₀, PerfBase n i j₀ ∧ JR j₀ j := by
+  induction h with
+  | effPerform hf hna _ =>
+      intro n i V he
+      simp only [BoCa.BoLo.performE, opArgE, Expr.val, Val.prim, Val.i32, Expr.app.injEq,
+        Expr.pair.injEq, Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at he
+      obtain ⟨-, rfl, rfl, -⟩ := he
+      exact ⟨_, ⟨_, _, hf, hna, rfl⟩, .refl⟩
+  | force => intro n i V he; rcases forceE_var he with h | h <;> cd_at h
+  | lolliE _ _ hf =>
+      intro n i V he; simp only [BoCa.BoLo.performE, Expr.app.injEq] at he
+      obtain ⟨rfl, -⟩ := he; exact (der_prim hf _ rfl).elim
+  | app _ hM _ =>
+      intro n i V he; simp only [BoCa.BoLo.performE, Expr.app.injEq] at he
+      obtain ⟨rfl, -⟩ := he; exact (der_prim hM _ rfl).elim
+  | allE hM _ | proj₁ hM | proj₂ hM =>
+      intro n i V he; simp only [BoCa.BoLo.performE, Expr.app.injEq] at he
+      obtain ⟨rfl, -⟩ := he; exact (der_prim hM _ rfl).elim
+  | allEV hM _ =>
+      intro n i V he; simp only [BoCa.BoLo.performE, Expr.app.injEq] at he
+      obtain ⟨rfl, -⟩ := he; exact (der_prim hM _ rfl).elim
+  | ret _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.ret _)⟩
+  | ofRet _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.ofRet _)⟩
+  | effSub hle _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.effSub _ _ _ hle)⟩
+  | nuIn hC _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.nuIn _ hC)⟩
+  | nuOut hC _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.nuOut _ hC)⟩
+  | bangE _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.bang _))⟩
+  | boxI _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.boxI _ _))⟩
+  | boxE _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+  | immSub _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.immS _ _ _))⟩
+  | mutSub _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.mutS _ _ _))⟩
+  | roll _ _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.roll _))⟩
+  | unroll _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
+  | _ => intro n i V he; cd_at he
+
+/-- `[raise]`'s premises, at its conclusion `j₀`. -/
+def RaiseBase (n i : UInt32) (j₀ : Jdg) : Prop :=
+  ∃ (S : Row) (o : OpSig) (B : VTy), Row.find S n i = some o ∧ o.abort = true ∧
+    j₀ = .comp (CTy.effOf S B)
+
+/-- **A `raise` is `[raise]`'s, then the same-term rules**: its row finds the operation. -/
+theorem der_raiseJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
+    ∀ n i V, e = BoCa.BoLo.raiseE (opArgE n i V) → ∃ j₀, RaiseBase n i j₀ ∧ JR j₀ j := by
+  induction h with
+  | effRaise hf ha _ _ =>
+      intro n i V he
+      simp only [BoCa.BoLo.raiseE, opArgE, Expr.val, Val.prim, Val.i32, Expr.app.injEq,
+        Expr.pair.injEq, Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at he
+      obtain ⟨-, rfl, rfl, -⟩ := he
+      exact ⟨_, ⟨_, _, _, hf, ha, rfl⟩, .refl⟩
+  | force => intro n i V he; rcases forceE_var he with h | h <;> cd_at h
+  | lolliE _ _ hf =>
+      intro n i V he; simp only [BoCa.BoLo.raiseE, Expr.app.injEq] at he
+      obtain ⟨rfl, -⟩ := he; exact (der_prim hf _ rfl).elim
+  | app _ hM _ =>
+      intro n i V he; simp only [BoCa.BoLo.raiseE, Expr.app.injEq] at he
+      obtain ⟨rfl, -⟩ := he; exact (der_prim hM _ rfl).elim
+  | allE hM _ | proj₁ hM | proj₂ hM =>
+      intro n i V he; simp only [BoCa.BoLo.raiseE, Expr.app.injEq] at he
+      obtain ⟨rfl, -⟩ := he; exact (der_prim hM _ rfl).elim
+  | allEV hM _ =>
+      intro n i V he; simp only [BoCa.BoLo.raiseE, Expr.app.injEq] at he
+      obtain ⟨rfl, -⟩ := he; exact (der_prim hM _ rfl).elim
+  | ret _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.ret _)⟩
+  | ofRet _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.ofRet _)⟩
+  | effSub hle _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.effSub _ _ _ hle)⟩
+  | nuIn hC _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he; exact ⟨j₀, hb, hr.tail (JS.nuIn _ hC)⟩
+  | nuOut hC _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.nuOut _ hC)⟩
+  | bangE _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.bang _))⟩
+  | boxI _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.boxI _ _))⟩
+  | boxE _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+  | immSub _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.immS _ _ _))⟩
+  | mutSub _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.mutS _ _ _))⟩
+  | roll _ _ _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.roll _))⟩
+  | unroll _ ih =>
+      intro n i V he; obtain ⟨j₀, hb, hr⟩ := ih n i V he
+      exact ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
+  | _ => intro n i V he; cd_at he
+
+/-- `bind`'s and `[let]`'s premise on the bound term, at the conclusion `j₀`: the bound term at a
+row, and the conclusion at that row (`[let]`), or the bound term at the empty row (`bind`). -/
+def LetBase (Δ : LifeCtx) (Γ : Ctx VTy) (M : Expr) (j₀ : Jdg) : Prop :=
+  ∃ (Γ₁ : Ctx VTy) (S : Row) (A : VTy), CtxLe Γ₁ Γ ∧ CDerives Δ Γ₁ M (.comp (CTy.effOf S A)) ∧
+    (S = [] ∨ ∃ B, j₀ = .comp (CTy.effOf S B))
+
+/-- **A `M to x. N` whose bound term is no variable, λ-value, `()` or injection of `()`** is
+`bind`'s or `[let]`'s, then the same-term rules; or `⊸E`'s, its bound term at a value
+judgement. -/
+theorem der_letJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
+    ∀ N M, e = .app (.lam N) M → (∀ i, M ≠ .var i) → (∀ b, M ≠ .lam b) → M ≠ .unit →
+      M ≠ .inj₁ .unit → M ≠ .inj₂ .unit →
+      (∃ j₀, LetBase Δ Γ M j₀ ∧ JR j₀ j) ∨ ∃ Γ₁ A, CtxLe Γ₁ Γ ∧ CDerives Δ Γ₁ M (.val A) := by
+  induction h with
+  | bind hs hM _ =>
+      intro N M he _ _ _ _ _
+      simp only [Expr.app.injEq] at he
+      obtain ⟨-, rfl⟩ := he
+      exact .inl ⟨_, ⟨_, [], _, splitP_le_left hs, hM, .inl rfl⟩, .refl⟩
+  | effLet hs _ _ hM _ =>
+      intro N M he _ _ _ _ _
+      simp only [Expr.app.injEq] at he
+      obtain ⟨-, rfl⟩ := he
+      exact .inl ⟨_, ⟨_, _, _, splitP_le_left hs, hM, .inr ⟨_, rfl⟩⟩, .refl⟩
+  | lolliE hs ha _ =>
+      intro N M he _ _ _ _ _
+      simp only [Expr.app.injEq] at he
+      obtain ⟨-, rfl⟩ := he
+      exact .inr ⟨_, _, splitP_le_left hs, ha⟩
+  | app _ _ _ =>
+      intro N M he hv _ _ _ _
+      simp only [Expr.app.injEq] at he
+      exact (hv _ he.2.symm).elim
+  | letPoly b _ _ _ =>
+      intro N M he _ hl _ _ _
+      simp only [Expr.app.injEq] at he
+      exact (hl _ he.2.symm).elim
+  | allE _ _ =>
+      intro N M he _ _ hu _ _
+      simp only [Expr.app.injEq] at he
+      exact (hu he.2.symm).elim
+  | allEV _ _ =>
+      intro N M he _ _ hu _ _
+      simp only [Expr.app.injEq] at he
+      exact (hu he.2.symm).elim
+  | proj₁ _ =>
+      intro N M he _ _ _ hu _
+      simp only [Expr.app.injEq] at he
+      exact (hu he.2.symm).elim
+  | proj₂ _ =>
+      intro N M he _ _ _ _ hu
+      simp only [Expr.app.injEq] at he
+      exact (hu he.2.symm).elim
+  | force => intro N M he; rcases forceE_var he with h | h <;> simp at h
+  | ret _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.ret _)⟩
+      · exact .inr h
+  | ofRet _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.ofRet _)⟩
+      · exact .inr h
+  | effSub hle _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.effSub _ _ _ hle)⟩
+      · exact .inr h
+  | nuIn hC _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.nuIn _ hC)⟩
+      · exact .inr h
+  | nuOut hC _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.nuOut _ hC)⟩
+      · exact .inr h
+  | bangE _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.bang _))⟩
+      · exact .inr h
+  | boxI _ _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.boxI _ _))⟩
+      · exact .inr h
+  | boxE _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.boxE _ _))⟩
+      · exact .inr h
+  | immSub _ _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.immS _ _ _))⟩
+      · exact .inr h
+  | mutSub _ _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.mutS _ _ _))⟩
+      · exact .inr h
+  | roll _ _ _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.roll _))⟩
+      · exact .inr h
+  | unroll _ ih =>
+      intro N M he h₁ h₂ h₃ h₄ h₅
+      rcases ih N M he h₁ h₂ h₃ h₄ h₅ with ⟨j₀, hb, hr⟩ | h
+      · exact .inl ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
+      · exact .inr h
+  | _ => intro N M he; cd_at he
+
+/-! ### `κ`'s cancel branch, applied -/
+
+/-- A λ-value that is no constant and no pair of computations, read at `A ⊸ D` with `A` no `1`, is
+`[⊸I]`'s. -/
+theorem lam_arr {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {A : VTy} {D : CTy} {j : Jdg}
+    (h : CDerives Δ Γ (.lam N) j) (hj : j = .comp (.arr A D) ∨ j = .val (.thunk (.arr A D)))
+    (hA : A ≠ .unit) (hw : ∀ M₁ M₂, Expr.lam N ≠ withPair M₁ M₂) (hc : NotConst (.lam N)) :
+    CDerives Δ (⟨A, true⟩ :: Γ) N (.comp D) := by
+  have hcls : ∀ {D' : CTy} {Γ' : Ctx VTy}, LamCls Γ' D' j → D' = .arr A D := by
+    intro D' Γ' h
+    rcases hj with rfl | rfl
+    · rcases h with h | h | ⟨-, h⟩
+      · cases h; rfl
+      · obtain ⟨S, Y, he, -⟩ := h; exact absurd he.symm (effOf_ne_arr S Y A D)
+      · obtain ⟨S, Y, he, -⟩ := h; exact absurd he.symm (effOf_ne_arr S Y A D)
+    · rcases h with h | h | ⟨-, h⟩
+      · cases h
+      · exact vview_thunk h
+      · exact vview_bang_thunk h
+  rcases der_lam h N rfl with ⟨A', D', hN, hl⟩ | ⟨S, B, -, hl⟩ | ⟨_, _, _, _, _, -, hl⟩ |
+    ⟨A', -, hl⟩ | ⟨M₁, M₂, hwp⟩ | hx
+  · cases hcls hl; exact hN
+  · have := hcls hl
+    simp only [CTy.arr.injEq] at this
+    exact (hA this.1.symm).elim
+  · cases hcls hl
+  · rcases hj with rfl | rfl
+    · rcases hl with ⟨S, Y, he, -⟩ | ⟨-, S, Y, he, -⟩ <;>
+        exact absurd he.symm (effOf_ne_arr S Y A D)
+    · rcases hl with hl | ⟨-, hl⟩
+      · cases vview_thunk hl
+      · cases vview_bang_thunk hl
+  · exact (hw M₁ M₂ hwp).elim
+  · exact (hc.notAx _ hx).elim
+
+/-- A variable whose slot, in a context below `Γ`, is `Γ`'s slot `0`. -/
+theorem varCls_of_le {Δ : LifeCtx} {Γ Γ' : Ctx VTy} {T : VTy} {j : Jdg}
+    (hslot : Γ[0]? = some ⟨T, true⟩) (hle : CtxLe Γ' Γ) (h : CDerives Δ Γ' (.var 0) j) :
+    VarCls T j := by
+  obtain ⟨T', hT', hc⟩ := der_var h 0 rfl
+  rw [hle 0 T' hT'] at hslot
+  cases hslot
+  exact hc
+
+/-- No view of a `!` thunk is `1`. -/
+theorem vview_bang_thunk_unit {C : CTy} (h : VView (.bang (.thunk C)) .unit) : False := by
+  rcases h.hnf (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)) with
+    h' | ⟨A', hA, h'⟩ | ⟨a, A', h'⟩ | ⟨a, A', h'⟩
+  · have := h'.eq_self (fun _ _ h => by cases h) (fun _ h => by cases h); cases this
+  · cases hA
+    have := h'.eq_of_heads (fun _ _ h => by cases h) (fun _ h => by cases h) (fun _ h => by cases h)
+      (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
+      (fun _ h => by cases h)
+    cases this
+  · cases h'
+  · cases h'
+
+/-- **An unrestricted `κ`'s cancel branch, applied**: at a slot whose type is a view of
+`!U(C₁ & C₂)`, `x (inj₂ ())` is read at what the same-term rules reach from `C₂`. -/
+theorem kappa_cancel_jr {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy} {T : VTy} {j : Jdg}
+    (hT : VView (.bang (.thunk (.amp C₁ C₂))) T) (hslot : Γ[0]? = some ⟨T, true⟩)
+    (h : CDerives Δ Γ (.app (.var 0) (.val (Val.inj₂ Val.unit))) j) : JR (.comp C₂) j := by
+  obtain ⟨j₀, hb, hr⟩ := der_app h (.var 0) (.val (Val.inj₂ Val.unit)) rfl
+  rcases hb with ⟨_, _, _, _, hs, -, hf, rfl⟩ | ⟨_, _, _, _, _, he, -⟩ | ⟨_, _, _, _, _, _, he, -⟩ |
+    ⟨_, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, he, -⟩ |
+    ⟨D₁, D₂, -, hX, rfl⟩ | ⟨he, -⟩ | he | he | ⟨_, he⟩ | ⟨_, he⟩
+  · rcases varCls_of_le hslot (splitP_le_right hs) hf with hc | ⟨C, rfl, -, hr'⟩
+    · cases vview_bang_thunk (hT.trans hc)
+    · cases vview_bang_thunk hT
+      obtain ⟨S, A, he⟩ := JR.comp_val hr'
+      exact absurd he (effOf_ne_amp S A C₁ C₂).symm
+  all_goals first
+    | (cases he)
+    | skip
+  · rcases varCls_of_le hslot (CtxLe.refl Γ) hX with hc | ⟨C, rfl, -, hr'⟩
+    · obtain ⟨S, Y, he, -⟩ := hc
+      exact absurd he.symm (effOf_ne_amp S Y D₁ D₂)
+    · cases vview_bang_thunk hT
+      obtain ⟨-, rfl⟩ := JR.amp_amp hr'
+      exact hr
+
+/-- **An affine `κ`'s cancel branch, applied**: at a slot of `U(C₁ & C₂)`, `x (inj₂ ())` is read at
+what the same-term rules reach from `C₂`. -/
+theorem kcancel_jr_aff {Δ : LifeCtx} {Γ Γ' : Ctx VTy} {C₁ C₂ : CTy} {j : Jdg}
+    (hslot : Γ[0]? = some ⟨.thunk (.amp C₁ C₂), true⟩) (hle : CtxLe Γ' Γ)
+    (h : CDerives Δ Γ' (.app (.var 0) (.val (Val.inj₂ Val.unit))) j) : JR (.comp C₂) j := by
+  obtain ⟨j₀, hb, hr⟩ := der_app h (.var 0) (.val (Val.inj₂ Val.unit)) rfl
+  rcases hb with ⟨_, _, _, _, hs, -, hf, rfl⟩ | ⟨_, _, _, _, _, he, -⟩ | ⟨_, _, _, _, _, _, he, -⟩ |
+    ⟨_, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, he, -⟩ |
+    ⟨D₁, D₂, -, hX, rfl⟩ | ⟨he, -⟩ | he | he | ⟨_, he⟩ | ⟨_, he⟩
+  · rcases varCls_of_le hslot (CtxLe.trans (splitP_le_right hs) hle) hf with hc | ⟨C, hT, -, hr'⟩
+    · cases vview_thunk hc
+    · cases hT
+      obtain ⟨S, A, he⟩ := JR.comp_val hr'
+      exact absurd he (effOf_ne_amp S A C₁ C₂).symm
+  all_goals first
+    | (cases he)
+    | skip
+  · rcases varCls_of_le hslot hle hX with hc | ⟨C, hT, -, hr'⟩
+    · obtain ⟨S, Y, he, -⟩ := hc
+      exact absurd he.symm (effOf_ne_amp S Y D₁ D₂)
+    · cases hT
+      obtain ⟨-, rfl⟩ := JR.amp_amp hr'
+      exact hr
+
+/-- **`κ`'s cancel read at a row**: the cancel row is no `⊤`, and its operations, ahead of the row,
+are below the row. -/
+theorem cancelTy_rowLe {S : Row} {F : CTy} {R : VTy}
+    (h : JR (.comp (cancelTy S F)) (.comp (CTy.effOf S R))) :
+    F.isTop = false ∧ RowLe (F.rowOf ++ S) S := by
+  cases hF : F.isTop
+  · rw [show cancelTy S F = CTy.effOf (F.rowOf ++ S) .unit by simp [cancelTy, hF]] at h
+    exact ⟨rfl, JR.rowLe h⟩
+  · rw [show cancelTy S F = .top by simp [cancelTy, hF]] at h
+    have := JR.rigid h rigid_top
+    simp only [Jdg.comp.injEq] at this
+    exact (effOf_ne_top S R this).elim
 
 /-! ### A continuation is used once: the clauses R1–R4
 

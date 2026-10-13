@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.50 · 2026-10-13
+Version 0.51 · 2026-10-13
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2934,7 +2934,11 @@ does not hold. Safety is stated of the runs of typed programs (`Core/EffSafety.l
    memory with finitely many cells (`finAlone_of_finRow`; at the empty row, to `()`,
    `finOK_of_finRow`). A finaliser that performs an operation a handler outside it answers (§27) is
    not covered (§27 *Open*). `progOutT` meets the hypotheses: a tied derivation types it, its run
-   cancels `κ`, and its region's finaliser raises `2` (`progOutT_cancel_prefix`).
+   cancels `κ`, and its region's finaliser raises `2` (`progOutT_cancel_prefix`). So does
+   `progOutTA`, the same program at an affine raise of `2` (`progOutTA_cancel_prefix`), typed by a
+   tied derivation at an effect context with no unrestricted abortive operation (`EffCtx.NoUnrExn`,
+   §18; `noUnrExn_Ξ₁₂A`): the shape the checker gives every program it accepts
+   (`checkProgram_tiedAt`).
 6. **The finally law; a finaliser's raise propagates; a raise with no live handler is a type
    error.**
    - *Finally*: `(raise e) then x. N unwind D = D (); raise e`. `[finalise]` steps
@@ -2953,8 +2957,14 @@ does not hold. Safety is stated of the runs of typed programs (`Core/EffSafety.l
      holding no `ccatch` or `cfin` frame, keeping the first error (`CancelRun`). The program
      above meets `FinAloneAt` (`finAloneAt_supersedeE`, `supersede_finaliserOrder`).
    - *A raise with no live handler*: a typed closed program's raises are caught (item 9). A
-     finaliser whose raise has no live handler at the canceller is rejected by §27's typing
-     (`progT` at the rows without `2`); that rejection is not yet a Core theorem.
+     finaliser whose raise has no live handler at the canceller is rejected by §27's typing, by
+     inversion of `CDerives` (`Core/EffCancelTyped.lean`, §27 *Programs*). `progT`, whose
+     finaliser raises `2` handled only inside the cancelled region, has no derivation at a row
+     without `2` (`not_der_progT`). E7c, a `timeout` whose cancelled region handles its
+     finaliser's raise of `exnᵢ`, has none at a row without `exnᵢ` (`not_der_e7c`), and is typed
+     at the row of `exnᵢ` (`d_e7c_lift`): the rejection is of the rows with no live instance.
+     `progNCrecT`, whose second finaliser performs the operation of the handler that cancels, has
+     no derivation at all (`not_der_progNCrecT`).
 9. **Safety**: every operation a run performs has a live handler of its name, and every raise a
    live frame that catches it; a stuck state is never a semantics. Stated of a typed closed
    program, a closed computation of `F A` (its row empty, `A` any type), and of its runs from the
@@ -4053,10 +4063,11 @@ finaliser is at `F 1`.
 
 The check cannot live in `[then]`. `e7b 1 2 = toResult 2 (timeoutH 1 (bodyF 1 (raise 2)))` and
 `e7c 1 2 = timeoutH 1 (toResult 2 (bodyF 1 (raise 2)))` hold the same `[then]` subterm at rows with
-the same entries, and D3 accepts the first and rejects the second. What decides is the row of the
-code that cancels, which is visible where `κ`'s cancel branch is used. So each operation whose
-continuation may be cancelled records what that cancel may do, its *cancel row*; the record is
-carried outward through function types and `[sub]`, and checked where the cancel is invoked.
+the same entries, and D3 accepts the first and rejects the second (`not_der_e7c`, *Programs*). What
+decides is the row of the code that cancels, which is visible where `κ`'s cancel branch is used. So
+each operation whose continuation may be cancelled records what that cancel may do, its *cancel
+row*; the record is carried outward through function types and `[sub]`, and checked where the
+cancel is invoked.
 
 ### Typing
 
@@ -4164,10 +4175,13 @@ one β-step longer at each use of `κ`:
 
 - **`progT`** (D3): handler `1` cancels the continuation of `perform 1`, whose region holds a
   handler of `2` and a finaliser that raises `2`. It is typed at a row holding `2`, the cancel row
-  of `perform 1`'s continuation `{2}` (`d_progT`), and at no row without `2`
-  (by inversion through `[handle]`, `[then]` and the clause; not yet a Core theorem); its run ends at a raise of `2` that no handler catches (`progT_run`).
+  of `perform 1`'s continuation `{2}` (`d_progT`), and at no row without `2` (`not_der_progT`, by
+  inversion through `[handle]`, `[then]` and the clause); its run ends at a raise of `2` that no
+  handler catches (`progT_run`).
 - **`progOutT`**: `progT` under a live handler of `2`, typed at `F (1 ⊕ 1)` (`d_progOutT`); its run
-  reaches `inj₂ ()` (`progOutT_run`).
+  reaches `inj₂ ()` (`progOutT_run`). **`progOutTA`** is the same program at an affine raise of `2`,
+  typed by a tied derivation at a context with no unrestricted abortive operation
+  (`dAt_progOutTA`, `noUnrExn_Ξ₁₂A`), and run alike (`progOutTA_run`).
 - **`cancelKeptT`** and **`progReT`**: the kept raise of `3` caught by a live `3` outside the
   region, the region re-entering the site `3` in `progReT` (`f ()` at `{1}`); cancel row `{3}`.
 - **`progFinOpT`** and **`progNC₁T`**: the finaliser performs `4`, whose live instance at the
@@ -4179,8 +4193,15 @@ one β-step longer at each use of `κ`:
 - **`progNCrecT`** (the leftover clause): two finalisers perform `4` under the handler of `4` that
   cancels. The second is a leftover of the first one's cancel, so `⋈` puts `4` in the cancel row of
   the `4` in the cancel row of `1`, which the cancelling handler's clause row, its own outer row,
-  cannot hold: no derivation (not yet a Core theorem). Its run ends at a `perform 4` no handler
-  catches (`progNCrecT_run`).
+  cannot hold: no derivation at any context and judgement (`not_der_progNCrecT`). Its run ends at a
+  `perform 4` no handler catches (`progNCrecT_run`, `progNCrecT_stuck`).
+- **`e7c nw ni qi`** (D3, E7c): `timeout (handle exnᵢ {…} (body (raise exnᵢ ())))`. `timeout`
+  handles an affine `wait : 1 ↠ 1` and its clause cancels `κ`; the body's finaliser raises `exnᵢ`,
+  handled only inside the cancelled region. `[then]` puts `exnᵢ` in `wait`'s cancel row, and the
+  clause reads `κ`'s cancel branch at its own row, so no derivation types the program at a row
+  without `exnᵢ` (`not_der_e7c`). At the row of `exnᵢ` it is typed, by a tied derivation at an
+  effect context declaring `wait` and `exnᵢ` (`dAt_e7c_lift`, `d_e7c_lift`); at an affine `exnᵢ`
+  that context has no unrestricted abortive operation (`noUnrExn_Ξe7c`).
 
 ### Lowering
 
@@ -4339,8 +4360,11 @@ Entry 26 (§27) is implemented in the kernel: cancel rows in `Core/Types.lean` (
 (`OpEnt.fin`, `cancelOK`, `cancelTab`, `cancelObl`) and `Core/Relation.lean` (`finObl`); the order,
 `⋈`, the cancel lemmas and the compatibility of `[sub]`, `[let]`, `[then]` and `[handle]` in
 `Core/EffFin.lean`; the rules in `Core/Fundamental.lean` (`CDerives.effThen`, `effHandleV`); the
-checker's empty cancel rows (`Frontend/Check/`); the typed cancel programs in
-`Core/EffCancelTyped.lean`. The backend rejects a finaliser that may suspend
+checker's empty cancel rows (`Frontend/Check/`); the typed cancel programs, and the programs the
+typing rejects (`not_der_progT`, `not_der_progNCrecT`, `not_der_e7c`), in
+`Core/EffCancelTyped.lean`, by inversions of `CDerives` that read the rows a computation is read at
+(`der_hndJ`, `der_thenJ`, `der_performJ`, `der_raiseJ`, `der_letJ`, `JR.rowLe` in
+`Core/Inversions.lean`). The backend rejects a finaliser that may suspend
 (`Backend/Clos/Capture.lean`).
 
 The facts a statement about every run of a program reads (§3, §13, §19), with no change to
@@ -4396,6 +4420,17 @@ at finalisers typed at rows of abortive operations (`FinRow`, `finAlone_of_finRo
 ---
 
 ## Changelog
+
+- **0.51** (2026-10-13) — §19 *Laws* item 6 and §27 *Programs*: the rejections of decision D3 are
+  Core theorems, each by inversion of `CDerives`. `progT` has no derivation at a row without `2`,
+  `progNCrecT` none at all, and E7c (`e7c`) none at a row without its inner `exnᵢ`; at the row of
+  `exnᵢ`, E7c is typed by a tied derivation (`Core/EffCancelTyped.lean`). The inversions read the
+  rows a computation is read at: `[handle]`, `[then]`, `[perform]`, `[raise]`, `[let]` and `bind` at
+  their conclusions, and the rules that conclude with their premise's term only grow rows
+  (`Core/Inversions.lean`). §19 *Laws* item 5: `cancel_prefix`'s hypotheses are met by a program
+  whose effect context has no unrestricted abortive operation, `progOutT` at an affine raise of `2`
+  (`progOutTA`, `Core/EffCancelRuns.lean`). No change to the machine, the relation, `CDerives` or
+  the statement of any theorem.
 
 - **0.50** (2026-10-13) — §19 *Laws* item 4: a continuation is used as its qualifier allows. At a
   resuming linear or affine operation a clause that drops `κ`, resumes it twice, or cancels and
