@@ -54,10 +54,13 @@ open GhostEnd
 section
 variable {δ : LSub}
 
-/-- **(S1) Not derived.** A borrower Core's typing derives at a resuming row, its context rebuilt
-from the views at every re-lend of the stack and its answer in `[top]`, is D16.1's piece at the
-stack, holding nothing of its own. -/
-theorem piece_of_typed {S : Row} {σ : LStack} (_hx : AllCross σ (Row.tab S δ))
+/-- **(S1) Not derived.** A borrower Core's typing derives at a resuming row — linear operations
+answered at `1` whose arguments are closed data, free of every lend's variable and outliving every
+lifetime (`Row.Resume`), so no lend escapes in a payload — its context rebuilt from the views at
+every re-lend of the stack and its answer in `[top]`, is D16.1's piece at the stack, holding nothing
+of its own. -/
+theorem piece_of_typed {S : Row} {σ : LStack} (_hS : ∀ e ∈ σ, Row.Resume S e.x)
+    (_hx : AllCross σ (Row.tab S δ))
     (_hLR : LinResume (Row.tab S δ)) {ds : List Bool} {Qa : List SRec → Val → WProp}
     {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {B : VTy}
     (_hd : CDerives Δ Γ M (.comp (CTy.effOf S B))) {γ : List Val}
@@ -78,7 +81,8 @@ rebuilt from the views at every re-lend: beside the owners of the stack's lender
 `ewpTS`, the owners handed back with its answer. `fold_mixed` (D3) folds the lenders; the piece is
 (S1). -/
 theorem law2 {S : Row} (hLR : LinResume (Row.tab S δ)) (hL : (Row.tab S δ).Local) {β : Life}
-    {σ : LStack} (hσ : MixedStack σ) (hx : AllCross σ (Row.tab S δ))
+    {σ : LStack} (hσ : MixedStack σ) (hS : ∀ e ∈ σ, Row.Resume S e.x)
+    (hx : AllCross σ (Row.tab S δ))
     (hP : ∀ e ∈ σ, ∀ ls w ρ, vCE (ℍ := ℍ) none true e.T ls δ w ρ → ρ.InStratum β)
     (hadm : ∀ e ∈ σ, ∀ v, e.k = .imm v → AdmWf e.T δ)
     {Qa : List SRec → Val → WProp} (hQa : ∀ ls₁ ls₂ u ρ, Ext ls₁ ls₂ ρ → Qa ls₁ u ρ → Qa ls₂ u ρ)
@@ -95,7 +99,7 @@ theorem law2 {S : Row} (hLR : LinResume (Row.tab S δ)) (hL : (Row.tab S δ).Loc
     Entails (ownersM (ℍ := ℍ) δ σ ls)
       (ewpTS (ℍ := ℍ) ls (substAll γ M) (opTable (Row.tab S δ)) (withOwnersM δ σ Qa)) :=
   fun ρo ho => fold_mixed hLR hL hσ hx hP hadm Qa hQa ds bs hds hbs hβ ls _ ρo PMap.empty ρo ho
-    (fun ls₁ _ => piece_of_typed hx hLR hd hctx hQ bs ls₁) (ResU.comp_empty_right ρo)
+    (fun ls₁ _ => piece_of_typed hS hx hLR hd hctx hQ bs ls₁) (ResU.comp_empty_right ρo)
 
 end
 

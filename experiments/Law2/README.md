@@ -121,7 +121,8 @@ at every configuration the relation relates: not derived, no obstruction verifie
 
 ```lean
 theorem law2 {S : Row} (hLR : LinResume (Row.tab S δ)) (hL : (Row.tab S δ).Local) {β : Life}
-    {σ : LStack} (hσ : MixedStack σ) (hx : AllCross σ (Row.tab S δ)) (hP …) (hadm …) (hQa …)
+    {σ : LStack} (hσ : MixedStack σ) (hS : ∀ e ∈ σ, Row.Resume S e.x)
+    (hx : AllCross σ (Row.tab S δ)) (hP …) (hadm …) (hQa …)
     (hds …) (hbs …) (hβ …) {Δ Γ M B} (hd : CDerives Δ Γ M (.comp (CTy.effOf S B))) {γ}
     (hctx : at every re-lend of σ, the context rebuilt from the views)
     (hQ : the answer in [top]) (ls : List SRec) :
@@ -131,7 +132,9 @@ theorem law2 {S : Row} (hLR : LinResume (Row.tab S δ)) (hL : (Row.tab S δ).Loc
 
 A borrower Core's typing derives at a resuming row, holding a mixed stack of lends open across its
 stops: beside the owners of the stack's lenders it is its `ewpTS`, the owners handed back with its
-answer. Proof: `fold_mixed` (deliverable 3) applied to the borrower's piece.
+answer. The row is `Row.Resume` at every lend's variable: linear operations answered at `1` whose
+arguments are closed data outliving every lifetime, so no lend escapes in a payload (lending
+iterators are outside). Proof: `fold_mixed` (deliverable 3) applied to the borrower's piece.
 
 **Enumerated sorries** (`Law2/Target.lean`, the only ones in the library):
 
