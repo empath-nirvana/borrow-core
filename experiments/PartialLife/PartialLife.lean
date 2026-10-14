@@ -6,3 +6,5 @@ import PartialLife.Symmetry
 import PartialLife.Interleave
 import PartialLife.Statics
 import PartialLife.OrderFacts
+import PartialLife.Reproved
+import PartialLife.Forall

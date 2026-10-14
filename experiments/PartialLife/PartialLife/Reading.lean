@@ -13,7 +13,7 @@ relation reads may be incomparable.
   strictly monotone map; into a partial order a strictly monotone image of the slots is a chain, so
   two cells could never be read at incomparable lifetimes. `Reading.Extends` says the slot order
   extends the reading (a slot read strictly below another is strictly below it): the slots are then
-  a linear extension, a schedule, of the lifetimes they are read at.
+  a chain extending the order of the lifetimes they are read at, a schedule of them.
 * `lubOpt`, `glbOpt`: `a ⊔ b`, `a ⊓ b` where the least upper (greatest lower) bound exists. A
   partial order need not have them; the lifetime terms `@a ⊔ @b`, `@a ⊓ @b` are read through them,
   and are undefined where the bound does not exist (`interpP`). In a lattice they are `⊔`, `⊓`
@@ -53,7 +53,7 @@ def map (ι : Reading L) (π : L ≃o L) : Reading L :=
 @[simp] theorem map_apply (ι : Reading L) (π : L ≃o L) (x : Life) : ι.map π x = π (ι x) := rfl
 
 /-- **The slot order extends the reading**: a slot read strictly below another is strictly below
-it. The slots are then a linear extension of the lifetimes they are read at. -/
+it. The slots are then a chain extending the order of the lifetimes they are read at. -/
 def Extends (ι : Reading L) : Prop := ∀ s t : Life, ι s < ι t → s < t
 
 theorem extends_id : Extends Reading.id := fun _ _ h => h

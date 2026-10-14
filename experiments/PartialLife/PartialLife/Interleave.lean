@@ -12,8 +12,8 @@ lifetimes on the first branch (`br₁ n`), task 2's on the second (`br₂ m`), i
 
 **The reading** `ι₂`: Core's slot `s` is read at `Nat.unpair s` (`ι₂`). It is a bijection from the
 slots onto `TwoBranches` (`ι₂_slotOf`, `slotOf_ι₂`), and the slot order extends it (`ι₂_extends`):
-the cells stay on Core's chain of slots, which is a schedule, a linear extension, of the lifetimes
-they are read at. Two cells at slots `6` and `4` are read at `br₁ 2` and `br₂ 2`.
+the cells stay on Core's chain of slots, which is a schedule: a chain extending the order of the
+lifetimes they are read at. Two cells at slots `6` and `4` are read at `br₁ 2` and `br₂ 2`.
 
 **The configuration** (`Δ₂`, `δ₂`, `cfg`): the lifetime context `'a ⊏ ⊤, 'b ⊏ ⊤, 'x ⊏ 'a, 'y ⊏ 'b`
 read at `'a ↦ br₁ 1`, `'b ↦ br₂ 1`, `'x ↦ br₁ 2`, `'y ↦ br₂ 2` (`modelsP_Δ₂`); each borrow beneath its
@@ -33,6 +33,16 @@ cells and records in play) and any lifetime of task 1's branch, there is a slot 
 them, which is what Core's proofs pick (`exists_fresh`), read on task 1's branch beneath the given
 lifetime and incomparable with every lifetime of task 2 below `⊤`. The schedule puts the new slot
 below everything; the reading puts it beneath the resumer's branch only.
+
+**What Core's freshness reads** (`no_fresh_bound`, `ι₂_not_monotone`, `inStratum_of_outlivesP`).
+Core's 6.65 quantifies the fresh lifetime over *every* slot below a bound (`И`), and the borrow
+rule instantiates the callback's `∀'x ⊏ ⊓Δ` at each; below every slot bound some slots are read on
+task 2's branch, outside the callback's bound (`no_fresh_bound`). So the transfer of the borrow
+rules that `DenseCarrier` made over a monotone reading (`fresh_bound`, `ptoMutD_slot`) does not
+carry over as is: it needs 6.65 with `И` ranging over the slots read on the borrower's branch,
+which `fresh_on_branch` shows is never empty below any finitely many slots. The other direction
+the transfer reads, from the reading's outlives facts to the slots' strata, holds for every
+reading the slot order extends (`inStratum_of_outlivesP`).
 -/
 
 noncomputable section
@@ -79,7 +89,7 @@ theorem pair_le_pair {a b c d : ℕ} (h₁ : a ≤ c) (h₂ : b ≤ d) : Nat.pai
     · exact le_rfl
     · exact (Nat.pair_lt_pair_right c h₂).le
 
-/-- **The slot order extends the reading**: the slots are a linear extension of `TwoBranches`. -/
+/-- **The slot order extends the reading**: the slots are a chain extending `TwoBranches`. -/
 theorem ι₂_extends : ι₂.Extends := by
   intro s t hst
   rw [← slotOf_ι₂ s, ← slotOf_ι₂ t]
@@ -334,6 +344,45 @@ theorem fresh_on_branch (S : List Life) (n : ℕ) :
     omega
   · rw [ι₂_slotOf]; exact br₁_lt_br₁ (by omega)
   · rw [ι₂_slotOf]; exact br_incomparable (by omega) hm
+
+/-! ### What the borrow rules' freshness reads -/
+
+/-- **The reading carries an outlives fact to the slots' strata**: if the slot order extends the
+reading, a resource whose cells are read strictly above `β` lies in `Res_A` for every slot `A` read
+at or below `β`. This is the direction `DenseCarrier`'s `withbor2_compatD` uses at 6.60 and at the
+callback's `['x]` (`outlivesD_slot`, `.mp`). -/
+theorem inStratum_of_outlivesP {L : Type} [PartialOrder L] [OrderTop L] {ι : Reading L}
+    (hι : ι.Extends) {A : Life} {β : L} (hA : ι A ≤ β) {σ : WRes} (h : OutlivesP ι σ β) :
+    σ.InStratum A := by
+  intro l ψ e
+  have hψ := h l ψ e
+  cases ψ with
+  | own v => exact trivial
+  | imm i => exact hι _ _ (lt_of_le_of_lt hA hψ)
+  | «mut» m => exact hι _ _ (lt_of_le_of_lt hA hψ)
+
+/-- **The reading is not monotone**: `s₁` is below `s₂` on Core's chain and its reading is not
+below `s₂`'s. A borrow's cell at a slot `b ⊒ α` is then not read at or above `ι α`, which
+`DenseCarrier.ptoMutD_slot` reads in the other direction. -/
+theorem ι₂_not_monotone : s₁ < s₂ ∧ ¬ ι₂ s₁ ≤ ι₂ s₂ := by
+  refine ⟨s₁_lt_s₂, ?_⟩
+  rw [ι₂_s₁, ι₂_s₂]
+  exact (br_incomparable (by decide) (by decide)).1
+
+/-- **No slot bound below which every slot is read beneath task 1's lifetime.** Core's 6.65
+quantifies the fresh lifetime over every slot below a bound (`И`, `BoLo.fresh`), and the callback
+can be instantiated only at a lifetime read beneath its bound; `DenseCarrier.fresh_bound` supplies
+such a bound for a monotone reading. Here slots read on task 2's branch lie below every slot. -/
+theorem no_fresh_bound : ¬ ∃ b : Life, ∀ α : Life, α < b → ι₂ α < br₁ 1 := by
+  rintro ⟨b, hb⟩
+  set k : ℕ := OrderDual.ofDual b + 1
+  have hk : OrderDual.ofDual b < Nat.pair 0 k := by
+    have : k ≤ Nat.pair 0 k := Nat.right_le_pair 0 k
+    omega
+  have hα : slotOf (br₂ k) < b := hk
+  have := hb _ hα
+  rw [ι₂_slotOf] at this
+  exact (br_incomparable (n := 1) (m := k) (by decide) (by omega)).2 this.le
 
 end PartialLife
 

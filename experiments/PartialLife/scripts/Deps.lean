@@ -35,6 +35,18 @@ def classIII : List Name :=
    `BoCa.Fig16.BoLo.cellCompR_inStratum, `BoCa.Fig16.ResU.atLife_comp_sqsupset,
    `BoCa.Fig16.LogRel.Core.frameLife_reb_like, `BoCa.Fig16.SPropS.conj_assoc]
 
+/-- The class (iii) places whose statement is a chain fact (the others compare two lifetimes only
+in their proofs, `PartialLife/Reproved.lean`). -/
+def classIIIStatement : List Name :=
+  [`BoCa.Fig16.CellU.InStratum.sup, `BoCa.Fig16.ResU.InStratum.sup, `BoCa.Fig16.LSet.union,
+   `BoCa.Fig16.CellU.CompS.inStratum, `BoCa.Fig16.BoLo.cellCompS_inStratum,
+   `BoCa.Fig16.BoLo.cellCompR_inStratum, `BoCa.Fig16.ResU.atLife_comp_sqsupset,
+   `BoCa.Fig16.LogRel.Core.frameLife_reb_like]
+
+/-- The census's class (iv), `DenseCarrier`'s class (c). -/
+def classIV : List Name :=
+  [`BoCa.Fig16.Life.le_of_down_lt, `BoCa.Fig16.Life.not_lt_of_down_lt]
+
 /-- The statics' entailments, read over `ℕ`-valued lifetime substitutions (a chain). -/
 def statics : List Name :=
   [`BoCa.Lifetime.LifeCtx.EntailsLt, `BoCa.Lifetime.LifeCtx.EntailsLe]
@@ -81,5 +93,7 @@ open PartialDeps in
   for t in classIII do
     report t.toString [t]
   report "class (iii), all" classIII
+  report "class (iii), statement-level" classIIIStatement
+  report "class (iv), the two discreteness facts" classIV
   for t in statics do
     report t.toString [t]

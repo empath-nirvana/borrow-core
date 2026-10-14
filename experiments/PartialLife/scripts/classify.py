@@ -69,6 +69,9 @@ DISCRETE_LINES = {
     ('Support.Model.Outlives', 'BoCa.Fig16.ResU.Sub.inStratum'): 625}
 # A lifetime strictly beneath finitely many, built as `(Σ ofDual) + 1`: a common lower bound.
 FRESH = {'BoCa.Fig16.LogRel.Core.exists_fresh', 'BoCa.Fig16.LogRel.Typed.exists_fresh'}
+# Statements that are a chain-only fact at the resource level, proved through another (iii) place
+# and so carrying no finding of their own beyond `⊔`.
+CHAIN_STATEMENTS = {'BoCa.Fig16.ResU.InStratum.sup'}
 
 PREFIXES = ['BoCa.Fig16.LogRel.Core.', 'BoCa.Fig16.LogRel.Typed.', 'BoCa.Fig16.LogRel.',
             'BoCa.Fig16.BoLo.', 'BoCa.Fig16.', 'BoCa.Lifetime.']
@@ -128,9 +131,10 @@ def main(path):
         key = (m.strip(), parent(n.strip()))
         if key in lines:
             decls.setdefault(key, set()).add((kind.strip(), head.strip(), cls.strip()))
-    for key, line in DISCRETE_LINES.items():
-        decls.setdefault(key, set())
-        lines[key] = line
+    if any(m == 'Support.Model.Outlives' for m, _ in decls):
+        for key, line in DISCRETE_LINES.items():
+            decls.setdefault(key, set())
+            lines[key] = line
     classes = {}
     for (m, n), fs in decls.items():
         cs = {finding_class(*f) for f in fs} - {None}
@@ -138,6 +142,8 @@ def main(path):
             cs.add('iv')
         if n in FRESH:
             cs.add('ii-meet')
+        if n in CHAIN_STATEMENTS:
+            cs.add('iii')
         if not cs:
             continue
         classes[(m, n)] = cs
@@ -156,7 +162,7 @@ def main(path):
         cnt = collections.Counter(m.split('.')[0] for m, _ in places)
         tot.update(cnt)
         print(f"| {title} | {len(places)} | {cnt['Paper']} | {cnt['Support']} | {cnt['Core']} |")
-    print(f"| total | {sum(tot.values())} | {tot['Paper']} | {tot['Support']} | {tot['Core']} |")
+    print(f"| all | {sum(tot.values())} | {tot['Paper']} | {tot['Support']} | {tot['Core']} |")
     print()
     print(f'(Places are distinct file and line; a declaration is counted once, in its strongest '
           f'class. {len(classes)} declarations.)')
