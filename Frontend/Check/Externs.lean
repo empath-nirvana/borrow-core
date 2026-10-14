@@ -368,12 +368,12 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 `IORun.expr`, from the empty memory and under every allocator, continues to a value of
 `run_io`'s result type at the empty memory. `io_every_run` at the checked wrapper.
 `[spec §11, §13]` -/
-theorem IORun.every_run (r : IORun) (hl : r.loops = false) (inp : List UInt8)
+theorem IORun.every_run (r : IORun) (hp : r.c.pins = []) (hl : r.loops = false) (inp : List UInt8)
     {μ₁ : BoCa.BoLo.Heap} {e₁ : Expr}
     (hs : BoCa.BoLo.Steps BoCa.Adequacy.emptyMem (r.expr inp) μ₁ e₁) :
     ∃ v : CVal, BoCa.BoLo.Steps μ₁ e₁ BoCa.Adequacy.emptyMem (.val v) ∧
       ∃ ls δ, BoCa.Fig16.LogRel.Core.vCE none true r.R ls δ v BoCa.Fig16.PMap.empty := by
-  have h := r.c.deriv
+  have h := r.c.deriv hp
   rw [r.hC, ioType, hl] at h
   exact io_every_run h r.hR r.hγ (bytesVal_bytes inp) hs
 
@@ -382,14 +382,15 @@ theorem IORun.every_run (r : IORun) (hl : r.loops = false) (inp : List UInt8)
 continues to a value at the empty memory. `io_loop_every_run` at the checked wrapper; a run of
 `bcc interp` that finishes after `k` observations is the run of the `k`-th prefix.
 `[spec §11, §13]` -/
-theorem IORun.loop_every_run (r : IORun) (hl : r.loops = true) (inp : List UInt8) (n : ℕ)
+theorem IORun.loop_every_run (r : IORun) (hp : r.c.pins = []) (hl : r.loops = true)
+    (inp : List UInt8) (n : ℕ)
     {μ₁ : BoCa.BoLo.Heap} {e₁ : Expr}
     (hs : BoCa.BoLo.Steps BoCa.Adequacy.emptyMem
       (BoCa.Fig16.LogRel.substAll r.γ (ioLoopE r.N inp n)) μ₁ e₁) :
     ∃ v : CVal, BoCa.BoLo.Steps μ₁ e₁ BoCa.Adequacy.emptyMem (.val v) ∧
       ∃ ls δ, BoCa.Fig16.LogRel.Core.vCE none true (.sum r.R r.R') ls δ v
         BoCa.Fig16.PMap.empty := by
-  have h := r.c.deriv
+  have h := r.c.deriv hp
   rw [r.hC, ioType, hl, r.he] at h
   exact io_loop_every_run h r.hR r.hR' r.hγ inp n hs
 

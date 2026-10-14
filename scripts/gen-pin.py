@@ -34,6 +34,10 @@ ind = block(r"^inductive CDerives ", r"^/-- `\[then\]` with its finaliser at the
 while ind and ind[-1].strip() == "":
     ind.pop()
 fund = block(r"^theorem fundamentalC ", r"^/-! ### Adequacy")
+# `[then]` at the pure row and `[handle]` at two variables, stated after the inductive
+derived = block(r"^/-- `\[then\]` with its finaliser at the pure row", r"^/-! ### The delay, stream")
+while derived and derived[-1].strip() == "":
+    derived.pop()
 while fund and fund[-1].strip() == "":
     fund.pop()
 
@@ -101,6 +105,7 @@ for name, explicit in ctors:
 # --- assemble ---------------------------------------------------------------------------------
 der = (TMPL / "CDerivesP.tmpl.lean").read_text()
 der = der.replace("--@CORE_RULES@", "\n".join(rename(ind[1:])))
+der = der.replace("--@CORE_DERIVED@", "\n".join(rename(derived)))
 
 fun = (TMPL / "PinFundamental.tmpl.lean").read_text()
 fcases = rename(fund)

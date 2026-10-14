@@ -141,6 +141,8 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | nilDead {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (hΓ : Ctx.Dead Γ)
       (h : CDerivesP Δ [] e j) : CDerivesP Δ Γ e j
 
+--@CORE_DERIVED@
+
 end BoCa.Fig16.LogRel.Core
 
 end

@@ -26,18 +26,21 @@ closed `main : F 1`.
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt Jdg SemC fundamentalC adequacyC EffCtx SigsAt)
+open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesP Jdg SemC fundamentalC adequacyC EffCtx
+  SigsAt PinLaw fundamentalC_pin adequacyC_pin)
 
 /-- A checked `main`: its context, erasure and type, the rows its derivation reads at `[perform]`,
-`[raise]` and `[handle]`, which give each operation one signature (`sigsOkB`), and the derivation,
-tied at every effect context at which those rows are. -/
+`[raise]` and `[handle]`, which give each operation one signature (`sigsOkB`), the relaxed rules
+its derivation uses (SPEC §28), and the derivation: of `CDerivesP`, and, when it uses no relaxed
+rule, tied at every effect context at which those rows are. -/
 structure Checked where
   ctx : Ctx CVTy
   e : CExpr
   C : CCTy
   sigs : CRow
   ok : sigsOkB sigs = true
-  tied : TiedDer sigs LifeCtx.empty ctx e (.comp C)
+  pins : Pins
+  tied : TiedDer pins sigs LifeCtx.empty ctx e (.comp C)
 
 /-- **The program's effect context**: each name's signature, as the rows `main`'s derivation reads
 give it. For an elaborated program these are its effect declarations' signatures at its handler
@@ -45,13 +48,32 @@ sites: the elaborator writes each row and each handler's clauses from the declar
 `[spec §19]` -/
 def Checked.Ξ (c : Checked) : EffCtx := effCtxOf c.sigs
 
-/-- `main`'s derivation at the program's effect context. -/
-theorem Checked.derivAt (c : Checked) : CDerivesAt c.Ξ LifeCtx.empty c.ctx c.e (.comp c.C) :=
-  c.tied _ (sigsAt_effCtxOf c.ok)
+/-- `main`'s derivation at the program's effect context, when it uses no relaxed rule. -/
+theorem Checked.derivAt (c : Checked) (hp : c.pins = []) :
+    CDerivesAt c.Ξ LifeCtx.empty c.ctx c.e (.comp c.C) :=
+  c.tied.1 hp _ (sigsAt_effCtxOf c.ok)
 
-/-- `main`'s derivation, a `CDerives` derivation. -/
-theorem Checked.deriv (c : Checked) : CDerives LifeCtx.empty c.ctx c.e (.comp c.C) :=
-  c.derivAt.toCDerives
+/-- `main`'s derivation, a `CDerives` derivation when it uses no relaxed rule. -/
+theorem Checked.deriv (c : Checked) (hp : c.pins = []) :
+    CDerives LifeCtx.empty c.ctx c.e (.comp c.C) :=
+  (c.derivAt hp).toCDerives
+
+/-- `main`'s derivation, of `CDerivesP`.  `[spec §28]` -/
+theorem Checked.derivP (c : Checked) : CDerivesP LifeCtx.empty c.ctx c.e (.comp c.C) :=
+  c.tied.2
+
+/-- What `bcc check` prints of a checked `main`'s assurance: `unconditional` when its derivation
+is of `CDerives`, else `PinLaw` and where each relaxed rule is used.  `[spec §28]` -/
+def Pins.assurance : Pins → String
+  | [] => "assurance: unconditional"
+  | ps =>
+    let sites (r : String) : List String :=
+      (ps.filter (·.rule == r)).map fun p => s!"{p.line}:{p.col}"
+    let parts := ["R1", "R2"].filterMap fun r =>
+      match sites r with
+      | [] => none
+      | xs => some s!"{r} at {", ".intercalate xs}"
+    s!"assurance: PinLaw ({"; ".intercalate parts})"
 
 /-- What `bcc check` prints, and the checked `main`. -/
 structure Report where
@@ -104,7 +126,8 @@ def checkMain (ds : Array Decl) (k : Nat) (sp : Span) (C : CTy) (M : Comp) :
   let r ← chkC checkFuel E LifeCtx.empty T M C'
   if h : subL (allL T) (orL r.F.u r.F.w) = true then
     if hs : sigsOkB r.sigs = true then
-      pure ⟨mkCtx T (allL T), r.e, C', r.sigs, hs, r.F.d _ (btw_allL T _ _ r.F.hu r.F.hw h)⟩
+      pure ⟨mkCtx T (allL T), r.e, C', r.sigs, hs, r.pins,
+        r.F.d _ (btw_allL T _ _ r.F.hu r.F.hw h)⟩
     else throw ⟨sp, sigsErr r.sigs⟩
   else match firstUnconsumed r.F.u r.F.w with
     | some i => throw ⟨sp, s!"`main` does not consume the extern {E.slotName i}, of type " ++
@@ -190,17 +213,17 @@ def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := 
 externs, at every effect context `Ξ` at which the rows the derivation reads at `[perform]`,
 `[raise]` and `[handle]` are.  `[spec §19]` -/
 theorem checkProgram_tied {p : Program} {r : Report} {c : Checked}
-    (_h : checkProgram p = .ok r) (_hc : r.main = some c) :
+    (_h : checkProgram p = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
     ∀ Ξ : EffCtx, SigsAt Ξ c.sigs → CDerivesAt Ξ LifeCtx.empty c.ctx c.e (.comp c.C) :=
-  c.tied
+  c.tied.1 hp
 
 /-- **At the program's own effect context**, whose abortive operations are affine (decision 63):
 `main`'s derivation is `CDerivesAt c.Ξ`, and `c.Ξ` has no unrestricted operation answering `0`.
 `[spec §18, §19]` -/
 theorem checkProgram_tiedAt {p : Program} {r : Report} {c : Checked}
-    (_h : checkProgram p = .ok r) (_hc : r.main = some c) :
+    (_h : checkProgram p = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
     CDerivesAt c.Ξ LifeCtx.empty c.ctx c.e (.comp c.C) ∧ c.Ξ.NoUnrExn :=
-  ⟨c.derivAt, noUnrExn_effCtxOf c.ok⟩
+  ⟨c.derivAt hp, noUnrExn_effCtxOf c.ok⟩
 
 /-- **The checker's copies are `[let-poly]`'s premise** (decision 45): a `def` is checked at each
 use, so `main`'s erasure holds a function at each of its uses. For a closed λ-value `λb` typed at
@@ -209,33 +232,55 @@ of the let that binds `λb` once: its body is `main`'s erasure with `λb`'s occu
 the bound variable (`Expr.unfill`), whose filling is `main`'s erasure (`subst_unfill`).
 `[spec §18, §24]` -/
 theorem checkProgram_letPoly {p : Program} {r : Report} {c : Checked}
-    (_h : checkProgram p = .ok r) (_hc : r.main = some c) {b : BoCa.Expr} {j : Jdg}
-    (hcl : BoCa.Fig16.LogRel.Core.closedAt 0 (BoCa.Val.lam b).1 = true)
+    (_h : checkProgram p = .ok r) (_hc : r.main = some c) (hp : c.pins = []) {b : BoCa.Expr}
+    {j : Jdg} (hcl : BoCa.Fig16.LogRel.Core.closedAt 0 (BoCa.Val.lam b).1 = true)
     (hV : CDerivesAt c.Ξ LifeCtx.empty [] (.val (.lam b)) j) :
     CDerivesAt c.Ξ LifeCtx.empty c.ctx (.app (.val (.lam (c.e.unfill b 0))) (.val (.lam b)))
       (.comp c.C) :=
-  BoCa.Fig16.LogRel.Core.CDerivesAt.letPoly_copy b hcl hV c.derivAt
+  BoCa.Fig16.LogRel.Core.CDerivesAt.letPoly_copy b hcl hV (c.derivAt hp)
 
-/-- **Soundness of the checker.** If `bcc` accepts a program, its `main` erases to an `Expr`
-with a `CDerives` derivation at `Δ = ∅` and the context of its externs. -/
+/-- **Soundness of the checker.** If `bcc` accepts a program and reports `assurance:
+unconditional`, its `main` erases to an `Expr` with a `CDerives` derivation at `Δ = ∅` and the
+context of its externs. -/
 theorem checkProgram_sound {p : Program} {r : Report} {c : Checked}
-    (_h : checkProgram p = .ok r) (_hc : r.main = some c) :
+    (_h : checkProgram p = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
     CDerives LifeCtx.empty c.ctx c.e (.comp c.C) :=
-  c.deriv
+  c.deriv hp
+
+/-- **Soundness of the checker, at every assurance.** If `bcc` accepts a program, its `main`
+erases to an `Expr` with a `CDerivesP` derivation at `Δ = ∅` and the context of its externs.
+`[spec §28]` -/
+theorem checkProgram_soundP {p : Program} {r : Report} {c : Checked}
+    (_h : checkProgram p = .ok r) (_hc : r.main = some c) :
+    CDerivesP LifeCtx.empty c.ctx c.e (.comp c.C) :=
+  c.derivP
 
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
-/-- The Fundamental Property at a checked `main`: it is semantically well typed at every
-host. -/
-theorem checked_sem (c : Checked) : SemC LifeCtx.empty c.ctx c.e c.C :=
-  fundamentalC c.deriv
+/-- The Fundamental Property at a checked `main` that uses no relaxed rule: it is semantically
+well typed at every host. -/
+theorem checked_sem (c : Checked) (hp : c.pins = []) : SemC LifeCtx.empty c.ctx c.e c.C :=
+  fundamentalC (c.deriv hp)
 
-/-- Adequacy at a checked `main : F 1` with no externs: it runs from the empty memory to `()`
-and the empty memory. -/
-theorem checked_runs (c : Checked) (hΓ : c.ctx = []) (hC : c.C = .ret .unit) :
+/-- Adequacy at a checked `main : F 1` with no externs that uses no relaxed rule: it runs from
+the empty memory to `()` and the empty memory. -/
+theorem checked_runs (c : Checked) (hp : c.pins = []) (hΓ : c.ctx = []) (hC : c.C = .ret .unit) :
     BoCa.BoLo.Steps BoCa.Adequacy.emptyMem c.e BoCa.Adequacy.emptyMem (Expr.val BoCa.Val.unit) := by
-  have h := c.deriv
+  have h := c.deriv hp
   rw [hΓ, hC] at h
   exact adequacyC h
+
+/-- The Fundamental Property at every checked `main`, under `PinLaw`.  `[spec §28]` -/
+theorem checked_sem_pin (hPin : PinLaw (ℍ := ℍ)) (c : Checked) :
+    SemC LifeCtx.empty c.ctx c.e c.C :=
+  fundamentalC_pin hPin c.derivP
+
+/-- Adequacy at every checked `main : F 1` with no externs, under `PinLaw`.  `[spec §28]` -/
+theorem checked_runs_pin (hPin : PinLaw (ℍ := ℍ)) (c : Checked) (hΓ : c.ctx = [])
+    (hC : c.C = .ret .unit) :
+    BoCa.BoLo.Steps BoCa.Adequacy.emptyMem c.e BoCa.Adequacy.emptyMem (Expr.val BoCa.Val.unit) := by
+  have h := c.derivP
+  rw [hΓ, hC] at h
+  exact adequacyC_pin hPin h
 
 end Frontend.Check

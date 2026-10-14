@@ -486,6 +486,35 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | nilDead {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (hΓ : Ctx.Dead Γ)
       (h : CDerivesP Δ [] e j) : CDerivesP Δ Γ e j
 
+/-- `[then]` with its finaliser at the pure row (SPEC §24, option A): `effThen` at `Σ_M = Σ` and
+`Σ_D = ∅`, since `F ⋈ ∅ ≤ F` (`ThenLe.nil`).  `[spec §24, §27]` -/
+theorem CDerivesP.effThenA {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
+    (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂)
+    (hM : CDerivesP Δ Γ₁ M (.comp (CTy.effOf S A)))
+    (hN : CDerivesP Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
+    (hD : CDerivesP Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
+    CDerivesP Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
+  .effThen (SD := []) hs hNZ hUq hU (RowLe.refl S) (RowLe.nil S)
+    (fun _ _ o _ hf hf' _ => by rw [hf] at hf'; cases hf'; exact ThenLe.nil o.fin)
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hM hN hD
+
+/-- `[handle]` at two variables: `handle_n e with (h_ret, hs)`, `h_ret` and `hs` variables of
+slots at their types.  An instance of `effHandleV`: `(h_ret, hs)` is a value form, typed by
+`[⊗I]`, over slots that are persistent.  `[spec §19]` -/
+theorem CDerivesP.effHandle {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)}
+    {n : UInt32} {A R : VTy} {ir ic : Nat} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc)
+    (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E))
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (he : CDerivesP Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
+    CDerivesP Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) := by
+  obtain ⟨sr, hsr, hlr⟩ := hr.live
+  obtain ⟨sc, hsc, hlc⟩ := hc.live
+  obtain ⟨sr', hsr', hlr'⟩ := hs₁.live_left hsr hlr
+  obtain ⟨sc', hsc', hlc'⟩ := hs₁.live_right hsc hlc
+  exact .effHandleV hs
+    (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E finsNil)))
+    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen he
+
 end BoCa.Fig16.LogRel.Core
 
 end

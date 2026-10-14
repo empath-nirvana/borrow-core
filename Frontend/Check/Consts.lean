@@ -19,7 +19,7 @@ A fold's shape argument is a type with the recursive position `X`, decoded to an
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt Jdg VFree VOutlives VOutlivesLe FShape FD₁ mutM immM
+open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesP Jdg VFree VOutlives VOutlivesLe FShape FD₁ mutM immM
   d_allocS d_freeS withborSM_wf withborSI_wf withborM2_wf withborI2_wf FamSide cbTy2 famTy2
   plainV HasDtor dtorE dtor_wf withborUE withbor1UTy withbor2UTy withbor3UTy withloadUTy
   sliceBorrowMUTy sliceBorrowIUTy closedAt)
@@ -60,14 +60,14 @@ variable {Δ : LifeCtx} {T : List CVTy}
 def cDead {A : CVTy} (sp : Span) (e : CExpr)
     (h : ∀ {Γ}, BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ → CDerives Δ Γ e (.val A)) :
     Except Error (Σ B : CVTy, Res Δ T (.val B)) :=
-  if he : e.effFree = true then pure ⟨A, e, [], (Fam.dead T).map fun _ hd => .ofCDerives (h hd) he⟩
+  if he : e.effFree = true then pure ⟨A, e, [], [], (Fam.dead T).map fun _ hd => .ofCDerives (h hd) he⟩
   else err sp "internal error: a constant performs or handles an operation"
 
 /-- A derived form stated at `Ctx.Dead`: every slot dead, tied. -/
 def cStrict {A : CVTy} (sp : Span) (e : CExpr) (h : ∀ {Γ}, Ctx.Dead Γ → CDerives Δ Γ e (.val A)) :
     Except Error (Σ B : CVTy, Res Δ T (.val B)) :=
   if he : e.effFree = true then
-    pure ⟨A, e, [], (Fam.deadStrict T).map fun _ hd => .ofCDerives (h hd) he⟩
+    pure ⟨A, e, [], [], (Fam.deadStrict T).map fun _ hd => .ofCDerives (h hd) he⟩
   else err sp "internal error: a derived form performs or handles an operation"
 
 /-- `'x` fresh for `Δ` and free in neither `A` nor `B`. -/
@@ -477,8 +477,11 @@ def famLife (M : Mode) : CShape → CVTy → Option CLife
 /-- `shortenE σ` applied to a checked family. -/
 def shortenAt {A B : CVTy} {s : CShape} (r : Res Δ T (.val A))
     (h : ∀ {Ξ Γ e}, CDerivesAt Ξ Δ Γ e (.val A) →
-      CDerivesAt Ξ Δ Γ (BoCa.Fig16.LogRel.Core.shortenE s e) (.val B)) : Res Δ T (.val B) :=
-  ⟨BoCa.Fig16.LogRel.Core.shortenE s r.e, r.sigs, r.F.map fun _ hd Ξ hΞ => h (hd Ξ hΞ)⟩
+      CDerivesAt Ξ Δ Γ (BoCa.Fig16.LogRel.Core.shortenE s e) (.val B))
+    (hP : ∀ {Γ e}, CDerivesP Δ Γ e (.val A) →
+      CDerivesP Δ Γ (BoCa.Fig16.LogRel.Core.shortenE s e) (.val B)) : Res Δ T (.val B) :=
+  ⟨BoCa.Fig16.LogRel.Core.shortenE s r.e, r.sigs, r.pins,
+    r.F.map fun _ hd => ⟨fun hn Ξ hΞ => h (hd.1 hn Ξ hΞ), hP hd.2⟩⟩
 
 /-- `shorten_mut[σ, @a] V` / `shorten_imm[σ, @a] V`: `V : fam m @b σ` with `Δ ⊨ @a ⊑ @b`. -/
 def shortenIt {A : CVTy} (_E : Env) (T : List CVTy) (sp : Span) (m : Mode) (s : CShape)
@@ -490,13 +493,15 @@ def shortenIt {A : CVTy} (_E : Env) (T : List CVTy) (sp : Span) (m : Mode) (s : 
   match m with
   | .mut =>
     if h : A = s.famTy mutM b then
-      pure ⟨_, shortenAt (h ▸ r) fun hd =>
-        shortenE_wfAt mutM (fun h' hle' => .mutSub h' hle') hd (leB_sound hle)⟩
+      pure ⟨_, shortenAt (h ▸ r)
+        (fun hd => shortenE_wfAt mutM (fun h' hle' => .mutSub h' hle') hd (leB_sound hle))
+        (fun hd => shortenE_wfP mutM (fun h' hle' => .mutSub h' hle') hd (leB_sound hle))⟩
     else err sp s!"`shorten_mut` needs `fam mut @ σ`, but the operand has type `{ppVTy A}`"
   | .imm =>
     if h : A = s.famTy immM b then
-      pure ⟨_, shortenAt (h ▸ r) fun hd =>
-        shortenE_wfAt immM (fun h' hle' => .immSub h' hle') hd (leB_sound hle)⟩
+      pure ⟨_, shortenAt (h ▸ r)
+        (fun hd => shortenE_wfAt immM (fun h' hle' => .immSub h' hle') hd (leB_sound hle))
+        (fun hd => shortenE_wfP immM (fun h' hle' => .immSub h' hle') hd (leB_sound hle))⟩
     else err sp s!"`shorten_imm` needs `fam imm @ σ`, but the operand has type `{ppVTy A}`"
 
 end
