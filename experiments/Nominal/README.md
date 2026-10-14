@@ -204,13 +204,15 @@ resource is related (`kU_related_x`). The same-parents re-make preserves the rel
 every resource (`kU_swap`, an instance of `vN_map`), so the closure is related at `x′`
 (`kU_related_x'`).
 
-**The `Imm 'x (Imm 'r U)` closure.** In this relation `Imm 'x (Imm 'r (U C))` is inhabited at every
-reading, `r` an ancestor of `x` or not (`vN_immImm_inhabited`): an `imm` payload carries no
-stratification condition, and an inner `imm` cell at `{⊤}` lies in the stratum of any outer cell.
-So the premise "vacuously related at `x`, the domain is empty" does not hold for `Imm` here. It
-holds for the `Mut` analogue: `Mut 'x (Mut 'r 1)` is empty when `r` is not a strict ancestor of `x`
-(`vN_mutMut_empty`), so `kV = U(Mut 'x (Mut 'r 1) ⊸ F mm0)` is related at `x` (`kV_related_x`) and
-at `x′` (`kV_swap`, `kV_related_x'`).
+**The `Imm 'x (Imm 'r U)` closure.** In this relation `Imm 'x (Imm 'r (U C))` is inhabited at
+every reading, `r` an ancestor of `x` or not, by a valid resource (`vN_immImm_inhabited`,
+`immImmRes_valid`): an `imm` payload carries no stratification condition, and an inner `imm` cell
+at `{⊤}` lies in the stratum of any outer cell. So the premise "vacuously related at `x`, the
+domain is empty" does not hold for `Imm` here: the closure over it returning `mm0` is related at
+none of `x`, `x′`, `x″` (`kI_related_none`). The premise holds for the `Mut` analogue:
+`Mut 'x (Mut 'r 1)` is empty when `r` is not a strict ancestor of `x` (`vN_mutMut_empty`), so
+`kV = U(Mut 'x (Mut 'r 1) ⊸ F mm0)` is related at `x` (`kV_related_x`) and at `x′` (`kV_swap`,
+`kV_related_x'`).
 
 **(b) The extra-parents re-make fails.** At `x″` the argument types are inhabited by valid
 borrows of borrows (`vN_boxMM_x''`, `mmCell_valid`; for `kV`, outer cell at `x″`, inner at `r`), and
@@ -228,7 +230,10 @@ Rust's `T: 'q`.
 
 **The self-borrow.** The minimal package (`c` owns `()`, the contents are the borrow of `c`),
 opened at `x`, is related at `Mut 'x 1` (`selfBorrow_related`), and re-opened at `x′` too
-(`selfBorrow_reopen`, from `reopen_swap` with every hypothesis discharged).
+(`selfBorrow_reopen`, from `reopen_swap` with every hypothesis discharged). At a closure type: the
+package whose contents are `λ_. c`, a closure over the borrow of its own place, is related at
+`U (F (Mut 'x 1))` when opened (`genPkg_related`: forcing it runs one `β` step to the borrow, a
+valid run), and `reopen_swap` carries it to `x′` (`genPkg_reopen`).
 
 ## 6. Core port map
 
@@ -271,6 +276,11 @@ below" becomes a fresh atom with the given parents.
   packages with captured borrows storable only under `Mut 'q` with `S ⊐ 'q`.
 * **The re-make needs no separate construction.** Moving the opened package by the swap is
   re-making its borrow at `x′` (`move_eq_remake`), including the stored predicates.
+* **`DenseCarrier`'s open item, relating `κ` at the fresh lifetime, is `reopen` at `κ`'s type.**
+  The positional route needed `κ` to be a term the fundamental property relates (`semD_relend`)
+  and failed pointwise at `U` (`not_relend_kU`); under the nominal convention a stored package —
+  its contents a closure or a suspended computation — is related at `x′` whenever it was at `x`,
+  at every configuration the swap fixes.
 * **The relation has to read lifetime expressions as bounds** (`⊓Δ` as "beneath every lifetime of
   `Δ`") and `[α]` in two ways; both are natural and agree with Core on chains.
 
@@ -303,7 +313,7 @@ below" becomes a fresh atom with the given parents.
 | `Nominal/ModelEquiv.lean` | every operation carried and invariant; `wpN_relRU_iff` |
 | `Nominal/Relation.lean` | `LSubN`, `interpN`, `LtLifeN`, `ModelsN`, `ptoMutN`, `ptoImmN`, `vN`, `cN`, `SemN` |
 | `Nominal/Equivariance.lean` | `vN_map`, `cN_map`, `semN_map_iff` |
-| `Nominal/Facts.lean` | small resources, walks of one cell, `valid_mut_mut`, `OwnOnly`, the readings on a chain |
+| `Nominal/Facts.lean` | small resources, walks of one cell, `valid_mut_mut`, `valid_imm_imm`, `OwnOnly`, the readings on a chain |
 | `Nominal/Package.lean` | `Pkg`, `reopen`, `reopen_iff`, `reopen_swap`, `reopen_fresh`, `exists_iff_forall_fresh` |
-| `Nominal/Witnesses.lean` | `kU_convention`, `kV_*`, `vN_immImm_inhabited`, the scheduler, `move_eq_remake`, `split_is_real` |
+| `Nominal/Witnesses.lean` | `kU_convention`, `kV_*`, `kI_related_none`, the scheduler, `move_eq_remake`, `genPkg_reopen`, `split_is_real` |
 | `scripts/Axioms.lean` | every declaration's axioms |

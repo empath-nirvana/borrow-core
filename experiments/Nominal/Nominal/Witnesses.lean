@@ -17,9 +17,10 @@ it (`kU_not_related_x''`): `r` lies strictly between `x″` and `q`, a valid bor
 inhabits the argument type, and `F mm0` has no value.
 
 **The `Imm 'x (Imm 'r U)` closure.** In this relation `Imm 'x (Imm 'r U)` is inhabited at every
-reading, `r` an ancestor of `x` or not (`vN_immImm_inhabited`): an `imm` cell's payload carries no
-stratification condition, and an inner cell at `⊤` (or at a common ancestor) is in the outer
-cell's stratum. So a closure over it is not vacuously related at `x`. The `Mut` analogue is:
+reading, `r` an ancestor of `x` or not, by a valid resource (`vN_immImm_inhabited`,
+`immImmRes_valid`): an `imm` cell's payload carries no stratification condition, and an inner cell
+at `⊤` (or at a common ancestor) is in the outer cell's stratum. So a closure over it returning
+`mm0` is related at none of `x`, `x′`, `x″` (`kI_related_none`): no witness at `Imm`. The `Mut` analogue is:
 `Mut 'x (Mut 'r 1)` is empty when `r` is not a strict ancestor of `x` (`vN_mutMut_empty`), so
 `kV = U(Mut 'x (Mut 'r 1) ⊸ F mm0)` is related at `x` (`kV_related_x`), at `x′`
 (`kV_related_x'`), and not at `x″`, beneath `r` (`kV_not_related_x''`).
@@ -509,29 +510,58 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 /-- `Imm 'x (Imm 'r A)`. -/
 abbrev immImm (A : VTy) : VTy := .imm (.var 0) (.imm (.var 1) A)
 
-/-- **`Imm 'x (Imm 'r (U C))` is inhabited at every reading**: the inner cell at `{⊤}` is in the
-stratum of any outer cell, and the payload `U C` is held in the observable view. -/
+theorem top_inStratum_empty : ResU.InStratum {⊤} (PMap.empty : ResU Lft) :=
+  fun _ _ e => absurd e (by simp)
+
+/-- The inner cell `imm({⊤}, (), ∅)`. -/
+def topImm : CellU Lft :=
+  CellU.immOf {⊤} (Finset.singleton_nonempty _) .unit PMap.empty top_inStratum_empty
+
+theorem topImm_inStratum {α : Lft} (hα : α ≠ ⊤) : ResU.InStratum {α} (ResU.single 1 topImm) := by
+  intro l ψ e
+  obtain ⟨-, rfl⟩ := ResU.single_get_eq_some e
+  refine ⟨Finset.singleton_nonempty _, fun t ht s hs => ?_⟩
+  rw [Finset.mem_singleton.mp ht, Finset.mem_singleton.mp hs]
+  exact lt_of_le_of_ne le_top hα
+
+/-- `ℓ ↦ imm({α}, ℓ′, ℓ′ ↦ imm({⊤}, (), ∅))`. -/
+def immImmRes (α : Lft) (hα : α ≠ ⊤) : ResU Lft :=
+  ResU.single 0 (CellU.immOf {α} (Finset.singleton_nonempty _) (.loc 1) (ResU.single 1 topImm)
+    (topImm_inStratum hα))
+
+theorem immImmRes_valid (α : Lft) (hα : α ≠ ⊤) : (immImmRes α hα).Valid :=
+  valid_imm_imm (by decide) rfl rfl (CellU.wit_immOf _ _ _ _ _) (CellU.wit_immOf _ _ _ _ _)
+
+/-- **`Imm 'x (Imm 'r (U C))` is inhabited at every reading**, by a valid resource: the inner cell
+at `{⊤}` is in the stratum of any outer cell, and the payload `U C` is held in the observable
+view. -/
 theorem vN_immImm_inhabited (α ρl : Lft) (hα : α ≠ ⊤) (C : CTy) (b : Bool) :
-    ∃ v σ, vN (ℍ := ℍ) b (immImm (.thunk C)) (δ₂ α ρl) v σ := by
-  have hin : ResU.InStratum {⊤} (PMap.empty : ResU Lft) := fun _ _ e => absurd e (by simp)
-  have hne : ({⊤} : Finset Lft).Nonempty := Finset.singleton_nonempty _
-  set inner : CellU Lft := CellU.immOf {⊤} hne .unit PMap.empty hin with hinner
-  have hσ : (ResU.single 1 inner).InStratum {α} := by
-    intro l ψ e
-    obtain ⟨-, rfl⟩ := ResU.single_get_eq_some e
-    refine ⟨hne, fun t ht s hs => ?_⟩
-    rw [Finset.mem_singleton.mp ht, Finset.mem_singleton.mp hs]
-    exact lt_of_le_of_ne le_top hα
-  refine ⟨.loc 0, ResU.single 0 (CellU.immOf {α} (Finset.singleton_nonempty _) (.loc 1)
-    (ResU.single 1 inner) hσ), ?_⟩
+    vN (ℍ := ℍ) b (immImm (.thunk C)) (δ₂ α ρl) (.loc 0) (immImmRes α hα) := by
   rw [vN_imm]
   refine ⟨α, rfl, 0, sepN_pure_iff.mpr ⟨rfl, ?_⟩⟩
-  refine ⟨{α}, _, .loc 1, ResU.single 1 inner, hσ, fun m hm => (Finset.mem_singleton.mp hm) ▸ le_rfl,
-    ?_, rfl⟩
+  refine ⟨{α}, _, .loc 1, ResU.single 1 topImm, topImm_inStratum hα,
+    fun m hm => (Finset.mem_singleton.mp hm) ▸ le_rfl, ?_, rfl⟩
   rw [vN_imm]
   refine ⟨ρl, rfl, 1, sepN_pure_iff.mpr ⟨rfl, ?_⟩⟩
-  refine ⟨{⊤}, hne, .unit, PMap.empty, hin, fun m hm => (Finset.mem_singleton.mp hm) ▸ le_top,
-    trivial, rfl⟩
+  exact ⟨{⊤}, _, .unit, PMap.empty, top_inStratum_empty,
+    fun m hm => (Finset.mem_singleton.mp hm) ▸ le_top, trivial, rfl⟩
+
+/-- `U (Imm 'x (Imm 'r (U ⊤)) ⊸ F (Mut 'x (Mut 'x 1)))`. -/
+abbrev kI : VTy := .thunk (.arr (immImm (.thunk .top)) (.ret mm0))
+
+/-- **The `Imm` closure is related at no reading**: its argument type has a valid value at every
+one, and `F mm0` has none. So it is related at none of `x`, `x′`, `x″`. -/
+theorem kI_not_related (α ρl : Lft) (hα : α ≠ ⊤) (v : Val) :
+    ¬ vN (ℍ := ℍ) true kI (δ₂ α ρl) v PMap.empty :=
+  closure_not_related (vN_immImm_inhabited α ρl hα .top true) (immImmRes_valid α hα)
+    (fun u ρ => vN_mm0_empty _ true u ρ) v
+
+theorem kI_related_none (v : Val) :
+    ¬ vN (ℍ := ℍ) true kI (δ₂ x r) v PMap.empty ∧
+      ¬ vN (ℍ := ℍ) true kI (δ₂ x' r) v PMap.empty ∧
+      ¬ vN (ℍ := ℍ) true kI (δ₂ x'' r) v PMap.empty :=
+  ⟨kI_not_related _ _ WithTop.coe_ne_top v, kI_not_related _ _ WithTop.coe_ne_top v,
+    kI_not_related _ _ WithTop.coe_ne_top v⟩
 
 /-- `Mut 'x (Mut 'r 1)`. -/
 abbrev mutMut : VTy := .mut (.var 0) (.mut (.var 1) .unit)
@@ -882,6 +912,79 @@ theorem split_is_real :
     exact absurd hb (by intro e; cases e)
 
 end MoveRemakeW
+
+/-! ### A package whose contents are a closure over the self-borrow -/
+
+section SelfClosure
+open W
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
+/-- `U (F (Mut 'x 1))`: a closure returning the borrow. -/
+abbrev genTy : VTy := .thunk (.ret (.mut (.var 0) .unit))
+
+/-- The package: `c` owns `()`, the contents are `λ_. c`, a closure over the borrow of `c`. -/
+def genPkg (c : Loc) : Pkg Lft := ⟨c, .unit, PMap.empty, Val.lam (.loc c), PMap.empty⟩
+
+/-- The lent cell of the opening at `y`. -/
+def genCell (y : Lft) : CellU Lft :=
+  CellU.mutOf y .unit PMap.empty (empty_inStratum {y})
+    (vN (ℍ := ℍ) true .unit ⟨[]⟩) (vN_unit_empty_iff.mpr ⟨rfl, rfl⟩)
+
+theorem genCell_valid (c : Loc) (y : Lft) : (ResU.single c (genCell (ℍ := ℍ) y)).Valid :=
+  valid_single_mut_empty rfl (CellU.wit_mutOf _ _ _ _ _ _)
+
+theorem genPkg_opens (c : Loc) (y : Lft) :
+    (genPkg c).Opens (vN (ℍ := ℍ) true .unit ⟨[]⟩) y (ResU.single c (genCell (ℍ := ℍ) y)) :=
+  ⟨empty_inStratum {y}, vN_unit_empty_iff.mpr ⟨rfl, rfl⟩, comp_empty_right _ _ _⟩
+
+theorem vN_mut_genCell (c : Loc) (y : Lft) :
+    vN (ℍ := ℍ) true (.mut (.var 0) .unit) ((⟨[]⟩ : LSubN Lft).extend 0 y) (.loc c)
+      (ResU.single c (genCell (ℍ := ℍ) y)) := by
+  rw [vN_mut]
+  refine ⟨y, rfl, c, sepN_pure_iff.mpr ⟨rfl, ?_⟩⟩
+  refine ⟨y, .unit, PMap.empty, empty_inStratum {y}, vN_unit_empty_iff.mpr ⟨rfl, rfl⟩, le_rfl,
+    ?_, ?_⟩
+  · intro u σ h
+    obtain ⟨rfl, -⟩ := vN_unit_empty_iff.mp h
+    exact empty_inStratum {y}
+  · rfl
+
+/-- **Opened at any lifetime, the closure over the self-borrow is related at `U (F (Mut 'x 1))`**:
+forcing it runs one `β` step to the borrow. -/
+theorem genPkg_related (c : Loc) (y : Lft) :
+    vN (ℍ := ℍ) true genTy ((⟨[]⟩ : LSubN Lft).extend 0 y) (genPkg c).w
+      (ResU.single c (genCell (ℍ := ℍ) y)) := by
+  show wpN (ℍ := ℍ) (.app (.val (Val.lam (.loc c))) (.val .unit))
+    (vN (ℍ := ℍ) true (.mut (.var 0) .unit) ((⟨[]⟩ : LSubN Lft).extend 0 y))
+    (ResU.single c (genCell (ℍ := ℍ) y))
+  intro ρf hf
+  obtain ⟨hcf, F, hF, σ, hσ⟩ := hf
+  have hv : F.Valid := ⟨σ, hσ⟩
+  refine ⟨ResU.single c (genCell (ℍ := ℍ) y), PMap.empty, F, F, F,
+    ResU.single c (genCell (ℍ := ℍ) y), .loc c,
+    fun l => (σ.get l).map CellU.erase, fun l => (σ.get l).map CellU.erase,
+    ResU.Hash.symm ⟨hcf, F, hF, hv⟩, hF, hash_empty_of_valid hv, hF, ⟨σ, hσ, fun _ => rfl⟩,
+    comp_empty_right _ _ _, ⟨σ, hσ, fun _ => rfl⟩, ?_, comp_empty_right _ _ _,
+    ⟨⟨fun _ _ _ => Iff.rfl, fun _ _ _ => Iff.rfl⟩, genCell_valid c y, genCell_valid c y⟩,
+    fun _ _ e => absurd e (by simp), vN_mut_genCell c y⟩
+  exact BoCa.BoLo.Steps.one (BoCa.BoLo.Step1.head (BoCa.BoLo.Head.beta _ (.loc c) .unit))
+
+/-- **Re-opened at `x′`, the closure is related too**: `reopen_swap` at a `U` type. -/
+theorem genPkg_reopen (c : Loc) :
+    (∃ ρ, (genPkg c).Opens (vN (ℍ := ℍ) true .unit ⟨[]⟩) (x : Lft) ρ ∧
+        vN (ℍ := ℍ) true genTy ((⟨[]⟩ : LSubN Lft).extend 0 (x : Lft)) (genPkg c).w ρ) ∧
+      (∃ ρ, (genPkg c).Opens (vN (ℍ := ℍ) true .unit ⟨[]⟩) (x' : Lft) ρ ∧
+        vN (ℍ := ℍ) true genTy ((⟨[]⟩ : LSubN Lft).extend 0 (x' : Lft)) (genPkg c).w ρ) := by
+  have hrel : ∃ ρ, (genPkg c).Opens (vN (ℍ := ℍ) true .unit ⟨[]⟩) (x : Lft) ρ ∧
+      vN (ℍ := ℍ) true genTy ((⟨[]⟩ : LSubN Lft).extend 0 (x : Lft)) (genPkg c).w ρ :=
+    ⟨_, genPkg_opens c x, genPkg_related c x⟩
+  have hfix : (genPkg c).FixedBy π (vN (ℍ := ℍ) true .unit ⟨[]⟩) :=
+    fixedBy_of_ownOnly π (fun _ _ e => absurd e (by simp [genPkg]))
+      (fun _ _ e => absurd e (by simp [genPkg])) rfl .unit
+  have hav : ∀ y : Atom, (⟨[]⟩ : LSubN Lft).Avoids y := fun _ p hp => absurd hp (by simp)
+  exact ⟨hrel, (reopen_swap sameParents hfix (hav x) (hav x') 0 true _).mpr hrel⟩
+
+end SelfClosure
 
 end Nominal
 

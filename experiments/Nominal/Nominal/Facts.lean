@@ -95,6 +95,30 @@ theorem comp_single_single (R : CellU L → CellU L → Prop) (C : CellU L → C
       · rw [ResU.single_get_ne ψ e, ResU.single_get_ne ψ' e', ResU.pair_get_ne ψ ψ' e e']
         rfl
 
+theorem CellU.CompatS.symm {ψ₁ ψ₂ : CellU L} (h : CellU.CompatS ψ₁ ψ₂) :
+    CellU.CompatS ψ₂ ψ₁ :=
+  ⟨h.2.1, h.1, h.2.2.1.symm, h.2.2.2.symm⟩
+
+theorem CellU.CompS.symm {ψ₁ ψ₂ ψ : CellU L} (h : CellU.CompS ψ₁ ψ₂ ψ) :
+    CellU.CompS ψ₂ ψ₁ ψ := by
+  obtain ⟨hc, hk, he, hw, hl⟩ := h
+  exact ⟨hc.symm, hk, he.trans hc.2.2.1, hw.trans hc.2.2.2, hl.trans (Finset.union_comm _ _)⟩
+
+/-- `●` is commutative. -/
+theorem ResU.CompS.symm {ρ₁ ρ₂ ρ : ResU L} (h : ResU.CompS ρ₁ ρ₂ ρ) : ResU.CompS ρ₂ ρ₁ ρ := by
+  refine ⟨fun l ψ₂ ψ₁ e₂ e₁ => (h.1 l ψ₁ ψ₂ e₁ e₂).symm, fun l => ?_⟩
+  have hl := h.2 l
+  cases e₁ : ρ₁.get l <;> cases e₂ : ρ₂.get l <;> rw [e₁, e₂] at hl
+  · exact hl
+  · exact hl
+  · exact hl
+  · obtain ⟨ψ, hψ, hc⟩ := hl
+    exact ⟨ψ, hψ, hc.symm⟩
+
+theorem ResU.Hash.symm {ρ₁ ρ₂ : ResU L} (h : ρ₁.Hash ρ₂) : ρ₂.Hash ρ₁ := by
+  obtain ⟨hc, ρ, hρ, hv⟩ := h
+  exact ⟨fun l ψ₂ ψ₁ e₂ e₁ => (hc l ψ₁ ψ₂ e₁ e₂).symm, ρ, hρ.symm, hv⟩
+
 /-! ### Restriction and sites -/
 
 theorem restrict_empty (k : Kind) : ResU.restrict (PMap.empty : ResU L) k = PMap.empty :=
@@ -191,6 +215,43 @@ theorem valid_mut_mut {l l' : Loc} (hl : l ≠ l') {ψ ψ' : CellU L} (hk : ψ.k
   refine ⟨ResU.pair l ψ l' ψ', ResU.pair l ψ l' ψ', PMap.empty, ?_, ?_, comp_empty_right _ _ _⟩
   · exact exW_single_mut hk (by rw [hw]; exact hexI) (comp_single_single _ _ hl ψ ψ')
   · exact agW_single_mut hk (by rw [hw]; exact hagI)
+
+/-- The exclusive walk of one `imm` cell is `∅`. -/
+theorem exW_single_imm (R : CellU L → CellU L → Prop) (C : CellU L → CellU L → CellU L → Prop)
+    {l : Loc} {ψ : CellU L} (hk : ψ.kind = .imm) : ExW R C (ResU.single l ψ) PMap.empty := by
+  refine .mk (w := []) (nm := PMap.empty) (b := PMap.empty)
+    (sites_single_ne l ψ _ (by rw [hk]; decide)) .nil .nil ?_ (comp_empty_left R C _)
+  rw [restrict_single_of_ne l ψ _ (by rw [hk]; decide),
+    restrict_single_of_ne l ψ _ (by rw [hk]; decide)]
+  exact comp_empty_left R C _
+
+/-- The aliasable walk of one `imm` cell: the cell, beside its witness's walks. -/
+theorem agW_single_imm {l : Loc} {ψ : CellU L} (hk : ψ.kind = .imm) {e a p σ : ResU L}
+    (hex : ExR ψ.wit e) (hag : AgW ψ.wit a) (hp : ResU.CompR e a p)
+    (hσ : ResU.CompR (ResU.single l ψ) p σ) : AgW (ResU.single l ψ) σ := by
+  refine .mk (wm := []) (wi := [(l, p)]) (a := ResU.single l ψ) (bm := PMap.empty) (bi := p)
+    (sites_single_ne l ψ _ (by rw [hk]; decide)) ?_ .nil
+    (.cons ψ (ResU.single_get_self _ _) hk e a hex hag hp .nil) .nil
+    (.cons .nil (comp_empty_right _ _ p)) ?_ hσ
+  · have := sites_single l ψ
+    rwa [hk] at this
+  · rw [restrict_single_of l ψ _ hk]
+    exact comp_empty_right _ _ _
+
+/-- **An `imm` borrow of an `imm` borrow is valid**: `ℓ ↦ imm(_, _, ℓ′ ↦ ψ′)` with `ψ′` an `imm`
+cell whose witness is `∅`, `ℓ ≠ ℓ′`. -/
+theorem valid_imm_imm {l l' : Loc} (hl : l ≠ l') {ψ ψ' : CellU L} (hk : ψ.kind = .imm)
+    (hk' : ψ'.kind = .imm) (hw : ψ.wit = ResU.single l' ψ') (hw' : ψ'.wit = PMap.empty) :
+    (ResU.single l ψ).Valid := by
+  have hagI : AgW (ResU.single l' ψ') (ResU.single l' ψ') :=
+    agW_single_imm hk' (e := PMap.empty) (a := PMap.empty) (p := PMap.empty)
+      (by rw [hw']; exact exW_empty _ _) (by rw [hw']; exact agW_empty)
+      (comp_empty_left _ _ _) (comp_empty_right _ _ _)
+  refine ⟨ResU.pair l ψ l' ψ', PMap.empty, ResU.pair l ψ l' ψ', exW_single_imm _ _ hk, ?_,
+    comp_empty_left _ _ _⟩
+  exact agW_single_imm hk (e := PMap.empty) (a := ResU.single l' ψ') (p := ResU.single l' ψ')
+    (by rw [hw]; exact exW_single_imm _ _ hk') (by rw [hw]; exact hagI)
+    (comp_empty_left _ _ _) (comp_single_single _ _ hl ψ ψ')
 
 theorem hash_empty_of_valid {ρ : ResU L} (h : ρ.Valid) : ResU.Hash (PMap.empty : ResU L) ρ :=
   ⟨fun _ _ _ e _ => absurd e (by simp), ρ, comp_empty_left _ _ _, h⟩
