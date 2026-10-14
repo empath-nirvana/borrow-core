@@ -144,7 +144,7 @@ theorem cD_id : ∀ (C : CTy), FragC C → ∀ (ls : List SRec) (δ : LSubD Life
       refine forall_congr' fun α => ?_
       rw [← toLSub_extend δ x α, ← cD_id C hC ls (δ.extend x α)]
       simp only [ltLife_toLSub]
-  | .amp _ _, h, _, _, _ | .nu _, h, _, _, _ | .eff _ _ _ _ _ _, h, _, _, _ => h.elim
+  | .amp _ _, h, _, _, _ | .nu _, h, _, _, _ | .eff _ _ _ _ _ _ _, h, _, _, _ => h.elim
 end
 
 end DenseCarrier

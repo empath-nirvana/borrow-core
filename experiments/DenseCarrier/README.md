@@ -4,6 +4,13 @@ Build with `lake build DenseCarrier`. There is no `sorry`, `axiom`, `native_deci
 `partial`, `unsafe` or `implemented_by`, and every result's `#print axioms` is within
 `[propext, Classical.choice, Quot.sound]`. The library does not import this directory.
 
+On a Core with the tier-1 effect kernel (branch `law2-typed-world`) only `Cantor`, `Carrier`,
+`Relation`, `Faithful`, `Equivariance`, `Rat`, `Nominal` and `Positioned` build: `FL` and `Borrow`
+read the computation types before `F_Σ` gained its cancel row, and `Gap`, `Reslot` and every file
+after them import `ProbeD1`, which imports `Targets`, written against the cancel payload that
+carried handler names. The first-order re-lending and `core_relend_derivable` are proved again
+there at Core's relation (`experiments/Law2/Law2/Remake.lean`).
+
 ## The question
 
 Tier 2 needs Law 2: a lend ended at a stop is re-lent at a fresh lifetime beneath the resumer's
@@ -276,9 +283,10 @@ A cell sits at a slot, so a lifetime of `L` carries a cell only at a slot's posi
   is not empty and holds no slot.
 
 So the moves the relation is invariant under (positions, `cD_map`) cannot put a slot in the gap,
-and the moves that free slots there (re-slotting, with or without new positions, §5) break the
-relation: no move of the two-order design puts the resumer's lends in a gap beneath the region
-with the relation preserved.
+and the moves that free slots there by carrying each stored predicate to its image (`θ.relRU`,
+with or without new positions, §5) break the relation: no such move puts the resumer's lends in a
+gap beneath the region with the relation preserved. Re-making the region's cells frees the same
+slots and keeps the relation at every first-order type (*Re-lending*).
 
 ## 7. Cells at every lifetime: finite support (`Nominal.lean`)
 
@@ -367,7 +375,8 @@ moving positions is invisible (`segShift_iff`). The relation's quantifiers over 
 every `L`: a cell sits at a slot, the slots are discrete (`carrier_covBy`), and a type can need a
 slot strictly between two lifetimes (`not_reflect_boxMM`); through the argument of a `⊸` this
 breaks re-lending at `U` (`not_relend_kU`, at every re-lending other than the identity on every `L`,
-and in Core). Density of the reading removes room from the `∀` clause and from nothing else.
+and in Core). Density of the reading removes room from the `∀` clause; the relation's quantifiers
+over resources read room at every `L` (`not_reflect_boxMM`).
 
 **What carries Law 2 at `U` is where the closure came from.** The refuting closure is related only
 because its argument type is empty at the reading; a term the fundamental property relates is
@@ -403,6 +412,8 @@ so "beneath the resumer's list" is one choice of it; at `WithTop ℚ` probe 1's 
 (`ratRelend`), at `Life` the re-slotting itself (`lifeRelend`). The region's cells are **re-made**
 (`RemakeC`, `RemakeO`, `RemakeR`): same location, kind and value, the slot moved by `θ`, the witness
 re-made cell by cell, the stored predicate whatever the relation at the moved reading asks for.
+`RemakeR` re-makes every cell of a resource, not only the region's: a cell at or above the cut
+keeps its slot (`θ` fixes it), and its re-make may change only the predicate it stores.
 
 **1. The invariant.**
 
@@ -463,7 +474,8 @@ every reading in `⟦Δ⟧`, and a re-lending keeps `⟦Δ⟧` (`modelsD_relend`
 (`relend_gDenD`, `semD_relend_fov`); in Core, `core_relend_derivable`. The refuting closure is no
 such term: a typable `λ` of type `kU` would be related at the moved reading, where its result type
 has no value. A captured closure re-lends by the same argument when it is itself such a term over a
-context that re-lends; that hereditary version is not built.
+context that re-lends; at Core's relation that hereditary version is `htv_relend`
+(`experiments/Law2/Law2/Hereditary.lean`), over every lifetime order it is not built.
 
 **3. Consequence, at the instances** (`RelendDepth.lean`).
 
@@ -476,13 +488,19 @@ context that re-lends; that hereditary version is not built.
 * A nested borrow inside a closure: the identity closure at `U (mmm ⊸ F mmm)` re-lends
   (`relend_idClosure_mmm`; `vD_idClosure`: related at every reading); the closure of `kU` does not
   (`not_relend_kU`).
+* A closure capturing a borrow of a borrow of a borrow: `λ_. return x` closed by a value of `mmm`
+  re-lends at `U (F mmm)` at every re-making (`closure_captures_mmm`,
+  `experiments/Law2/Law2/Instances.lean`), from `core_relend_derivable` at Core's relation
+  (`relend_derivable` there): Core's typing derives the thunk over the first-order context `x : mmm`.
 * Inside a stored continuation's type: `kMut = Mut 'a ([@'a] kU)`, a lent cell holding the closure
   of `kU`, is related at the reading, and no re-make of it is related at the moved one
   (`not_relend_kMut`).
 * At every cut: each positive statement holds at every re-lending, and each refutation at every
   segment shift by `k > 0` at every cut.
 * The typed world: the configurations the refutations run `wpTS` at are typed worlds (`tw_rhoMM`);
-  that a re-make of a typed world is a typed world is not derived.
+  a re-make of a typed world holding no `imm` cell is a typed world (`tw_remake`,
+  `experiments/Law2/Law2/World.lean`: each re-made cell is the end of its lend and the lend made
+  afresh, `TW.mutUnfold` then `TW.mutFold`).
 
 **4. The carrier.** For the first-order part the two-order design suffices, and so does Core's own
 carrier (`core_relend_fov`, `core_relend_derivable` are at `L = Life`). For `U` pointwise no
@@ -529,10 +547,14 @@ arises inside a suspended region, whether a closure related only because its arg
 arises (no typable `λ` is: it would be related at the moved reading, where its result type has no
 value), and whether a `∀` that holds by adjacency arises (`coreAllAdjacentD`) are not checked.
 
-**Re-lending at `∀` and `F`; re-made typed worlds; captured closures.** Not derived: `RelendC` at
-`∀` (one re-make for every instance) and at `F` (the `wpTS` frames sent back from the moved
-reading), that a re-make of a typed world is a typed world, and the hereditary `semD_relend` for a
-captured closure that is itself a term the fundamental property relates.
+**Re-lending at `∀` and `F`; re-made typed worlds; captured closures.** At Core's relation
+(`L = Life`), `experiments/Law2` derives: `∀` and `F` for terms Core's typing derives and for typed
+segments over hereditarily typed contexts (`relend_all`, `relend_ret`: the fundamental property is
+taken at the moved reading, so no instance and no frame is sent back), a re-make of a typed world
+holding no `imm` cell is a typed world (`tw_remake`), and the hereditary re-lending of captured
+closures (`htv_relend`). Not derived: `RelendC` at `∀` and at `F` pointwise, at every configuration
+the relation relates (one re-make for every instance; the `wpTS` frames sent back from the moved
+reading), re-making an `imm` cell, and any of these over a dense `L`.
 
 **The positioned carrier's relation.** Whether Core's relation and the fundamental property port to
 `PCell`, with the `Mut` clause's stored predicate cut down to the cell's stratum: not derived.

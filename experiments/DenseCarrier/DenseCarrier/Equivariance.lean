@@ -150,7 +150,7 @@ theorem cD_map (ι : Slots L) (π : L ≃o L) : ∀ (C : CTy) (ls : List SRec) (
       refine forall_congr' fun α => ?_
       rw [← LSubD.map_extend, cD_map ι π C ls (δ.extend x α)]
       simp only [ltLifeD_map]
-  | .amp _ _, _, _, _ | .nu _, _, _, _ | .eff _ _ _ _ _ _, _, _, _ => rfl
+  | .amp _ _, _, _, _ | .nu _, _, _, _ | .eff _ _ _ _ _ _ _, _, _, _ => rfl
 end
 
 theorem gSepD_map (ι : Slots L) (π : L ≃o L) (ls : List SRec) (δ : LSubD L) :

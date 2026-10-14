@@ -395,6 +395,30 @@ theorem closure_reborrow_spans (s : BoCa.Loc) (ls : List SRec) :
   rw [hw] at h
   exact h
 
+/-! ### A closure capturing a borrow of a borrow of a borrow, re-lent -/
+
+/-- `Mut 'a (Mut 'b (Mut 'c 1))`. -/
+abbrev mmm : VTy := .mut (.var 0) (.mut (.var 1) (.mut (.var 2) .unit))
+
+/-- `thunk (return x)`, `x` the captured variable. -/
+abbrev cloE : Expr := .val (.lam (.var 1))
+
+theorem d_cloE : CDerives LifeCtx.empty [⟨mmm, true⟩] cloE (.comp (.ret (.thunk (.ret mmm)))) :=
+  .ret (.thunkF (.ret (.var (.there (.here .nil)))))
+
+/-- **A closure capturing a borrow of a borrow of a borrow re-lends**, at every re-making of the
+region (every lifetime of `mmm` moved, at any depth): the thunk `λ_. return x` closed by a value of
+`mmm` is related at `U (F mmm)` at the moved reading, at a re-make of the captured resource.
+`relend_derivable` (Core's typing derives the thunk over a first-order context). -/
+theorem closure_captures_mmm {c : Life} (θ : Restrat.Emb c) {δ : LSub} {v : Val}
+    {ls : List SRec} {ρ : WRes} (hg : gDenC (ℍ := ℍ) ls δ [⟨mmm, true⟩] [v] ρ)
+    (ls' : List SRec) :
+    ∃ ρ', RemakeR θ ρ ρ' ∧
+      cC (ℍ := ℍ) (.ret (.thunk (.ret mmm))) ls' (mv θ δ) (substAll [v] cloE) ρ' :=
+  relend_derivable θ d_cloE
+    (fun s hs _ => by simp only [List.mem_singleton] at hs; subst hs; simp [FOV])
+    (fun x u hu => by simp [LifeCtx.empty, LifeCtx.find?, Lifetime.assocFind] at hu) hg ls'
+
 end Law2.Inst
 
 end

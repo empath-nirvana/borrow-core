@@ -2,6 +2,8 @@ import Law2.Remake
 import Law2.Hereditary
 import Law2.Kappa
 import Law2.AllF
+import Law2.World
 import Law2.Mixed
 import Law2.Straight
 import Law2.Instances
+import Law2.Target
