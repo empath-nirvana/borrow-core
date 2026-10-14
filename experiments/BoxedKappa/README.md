@@ -3,8 +3,12 @@
 Build with `lake build BoxedKappa`. There is no `sorry`, `axiom`, `native_decide`, `opaque`,
 `partial`, `unsafe` or `implemented_by`, and every declaration's axioms are within
 `[propext, Classical.choice, Quot.sound]` (`lake env lean experiments/BoxedKappa/scripts/Axioms.lean`).
-The library does not import this directory. It imports `Core.Fundamental` and three `Support.Model`
-files, and adds no definition to Core.
+The library does not import this directory. It imports `Core.Fundamental`, `Core.Demonic`, three
+`Support.Model` files and `Frontend.Check.CrossCheck` (for `Programs.lean`), and adds no definition
+to Core.
+
+The programs of `research/effects/src/boxed-kappa-programs.md` (P4 with stored continuations, and
+ν rests) are in `bc/` and `BoxedKappa/Programs.lean`; see *4. Programs* below.
 
 ## The question
 
@@ -26,6 +30,10 @@ every stop of the handled computation to lie in `Res_{δ(d)}`.
 | 2. BOXED-κ, variable form | `handle_compatCB` | `BoxedKappa/Handle.lean` | proved |
 | 2. BOXED-κ, value form (`effHandleV`'s) | `handleV_compatCB` | `BoxedKappa/Handle.lean` | proved |
 | 3. Necessity of the answer-type condition | — | — | not determined |
+| 4. P4 variant (a) end to end: `spawn` by BOXED-κ | `spawnBody_sem`, `spawnV_sem` | `BoxedKappa/Programs.lean` | proved |
+| 4. P4 variant (a): typed, safe on every run, run | `prog_sem`, `prog_every_run`, `prog_eval` | `BoxedKappa/Programs.lean` | proved |
+| 4. The task type `νX. F(A ⊕ [@d] U X) & F 1` is positive | `taskBodyG_nuOk` | `BoxedKappa/Programs.lean` | proved |
+| 4. BOXED-κ's premises at variants (b), (c), (d) | `ctxOutlives_imm_iff`, `not_ctxOutlives_imm_self`, `not_ansOutlives_thunk`, `ansOutlives_boxTop` | `BoxedKappa/Programs.lean` | proved |
 
 ### 1. The stop lemma
 
@@ -153,6 +161,43 @@ row or the state type. So the boxed `κ` cannot be moved out of `'x`'s lend by t
 failure is in the model (`[@d] K` would be an empty type at that `κ`), not in safety. A premise of
 the form "`Σ` and `R` outlive `@d`" might replace the answer-type condition. That is a hypothesis
 only.
+
+### 4. Programs
+
+`research/effects/src/boxed-kappa-programs.md` has the programs, the hand derivations with every
+side condition, and the verdicts. What is machine-checked here:
+
+- **`bc/`**, each checked by today's `bcc check`:
+  - `spawn-handler.bc`: the handler of `await : 1 ↠^aff 1` whose clause receives `κ : [@⊤] K`
+    and answers the stored task `[@⊤] U(νX. F(i32 ⊕ [@⊤] U X) & F 1)`. It is checked as a value;
+    `[handle]` does not accept its clause type.
+  - `sched-a.bc`: variant (a), two tasks each borrowing its own local across `await`, a queue
+    lent `mut` at a fresh `'q` per observation, and a scheduler loop that runs until the queue is
+    empty. `main` is a function of `spawn`.
+  - `sched-a-div.bc`: the same, with the loop handed back undriven. Its type mentions no lifetime.
+  - `sched-b.bc`: variant (b), a task capturing `imm 'r`, the queue bounded by `'d ⊏ 'r`, and a
+    bounded scheduler inside the blocks.
+  - Rejected: `sched-b-div.bc` (run-until-empty out of the blocks, at `boxed['d]`),
+    `sched-c-equal.bc` (`@d = 'r`, at `boxed['r]`), `sched-c-outside.bc` (`'r ⊏ 'd`, at
+    `boxed['d]`).
+- **`Programs.lean`**:
+  - `handler_shape` and `sched_shape`: the checker's derivations, read off by `decide +kernel`.
+  - `spawnBody_sem`: `spawn = !λtb. handle_1 (tb ()) with (h_ret, hs)` by `handleV_compatCB`. Its
+    premises are `run_ctxOutlives` (the box rule at `[@⊤] Code`) and `await_ansOutlives`.
+  - `prog_sem`: the whole program at `F i32`, through the compatibility lemmas.
+  - `prog_every_run`: every run continues to an `i32` at the empty memory.
+  - `prog_eval`: the interpreter answers `41130` with no cell left. Task 2 finishes before task 1,
+    so the tasks interleave.
+
+**Sorries:** none.
+
+**Not machine-checked:**
+
+- `spawn` polymorphic in `'d` (variant (b)). `sched-b.bc` takes it as a parameter and is checked,
+  but it is not run or proved end to end.
+- The claim that a run-until-empty scheduler can hold only tasks bounded by `⊤`. It is argued in
+  the research page, with one checked instance (`sched-b-div.bc`).
+- The P2b closable-rest rule, a package rule for which Core has no type.
 
 ## What remains
 

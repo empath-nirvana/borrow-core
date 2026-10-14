@@ -1,0 +1,193 @@
+-- Variant (a) with the scheduler's loop handed back, not driven: `sched-a.bc`'s program whose
+-- result is the run-until-empty loop itself, `U (loop i32 1)`. Its type mentions no lifetime, so
+-- it leaves every scope, and a `main` that loops returns it to the runtime, which drives it until
+-- the queue is empty (SPEC §11, §14). Compare `sched-b-div.bc`, where the loop holds a borrow.
+
+type Task = U (nu X. F (i32 + box top U X) & F 1)
+type E = box top Task
+type L = mu Y. 1 + (E * Y)
+type Q = (L * L) * (1 + 1)
+type Code = U (1 -o F[1.0 aff 1 ~> 1] i32)
+type Sp = !U (box top Code -o F E)
+type ULp = U (loop i32 1)
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+def times : i32 * i32 => i32 = unbang host[mul32]
+
+-- Read a cell through a fresh `imm` borrow: one segment.
+def peek : !(ref i32 => ref i32 * i32) =
+  !thunkv fun (c : ref i32) ->
+    q <- return (withbor1['x, i32, i32] c (thunkv Fun 'x < dom. return (thunkv fun (b : imm 'x i32) ->
+           r <- return (withload['x, 'z, i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (v : i32) ->
+                  return (boxed['z] v))));
+           return (boxed['x] r))));
+    return q
+
+-- Increment a cell through a fresh `mut` borrow, answering the old value: one segment.
+def bump : !(ref i32 => ref i32 * i32) =
+  !thunkv fun (c : ref i32) ->
+    q <- return (withbor2['x, top, i32, i32] c (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x i32) ->
+           z <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) -> return (plus (v, i32[1]), v)));
+           let (m, old) = z;
+           u <- return (forget_mut['x, i32] m);
+           let () = u;
+           return (boxed['x] old))));
+    return q
+
+def task1 : !U (1 -o F[1.0 aff 1 ~> 1] i32) =
+  !thunkv fun (u : 1) ->
+    let () = u;
+    c <- return (alloc[i32] i32[10]);
+    p1 <- return ((unbang peek) c);
+    let (c, v1) = p1;
+    w1 <- perform[1.0] ();
+    let () = w1;
+    p2 <- return ((unbang peek) c);
+    let (c, v2) = p2;
+    w2 <- perform[1.0] ();
+    let () = w2;
+    p3 <- return ((unbang peek) c);
+    let (c, v3) = p3;
+    x <- return (free[i32] c);
+    return (plus (plus (plus (v1, v2), plus (v3, x)), i32[90]))
+
+def task2 : !U (1 -o F[1.0 aff 1 ~> 1] i32) =
+  !thunkv fun (u : 1) ->
+    let () = u;
+    c <- return (alloc[i32] i32[20]);
+    p1 <- return ((unbang bump) c);
+    let (c, old) = p1;
+    w1 <- perform[1.0] ();
+    let () = w1;
+    p2 <- return ((unbang peek) c);
+    let (c, now) = p2;
+    x <- return (free[i32] c);
+    let _ = x;
+    return (plus (old, now))
+
+-- Close every task of a list (each task's `close` cancels its continuation).
+def close_alg : !(1 + (E * 1) => 1) =
+  !thunkv fun (r : 1 + (E * 1)) ->
+    case r {
+      inl u -> return u
+    | inr p -> let (t, u) = p; let () = u; g <- return (unbox t); (nu_out (force g)).2
+    }
+
+def drop_q : !(Q => 1) =
+  !thunkv fun (s : Q) ->
+    let (fb, m) = s;
+    let (f, b) = fb;
+    d <- return (fold_own[1 + (E * X), 1] close_alg);
+    u1 <- return ((unbang d) f);
+    let () = u1;
+    u2 <- return ((unbang d) b);
+    let () = u2;
+    case m { inl u -> return u | inr u -> return u }
+
+-- One move of the scheduler over the queue's contents and the accumulator: the new contents, and
+-- `inl acc` (finished: both lists empty) or `inr acc` (go on).
+def round : !(Q * i32 => Q * (i32 + i32)) =
+  !thunkv fun (p : Q * i32) ->
+    let (s, acc) = p;
+    let (fb, mode) = s;
+    let (f, b) = fb;
+    case mode {
+      inl stepping ->
+        let () = stepping;
+        case (unroll f) {
+          inl u ->
+            let () = u;
+            case (unroll b) {
+              inl u2 -> let () = u2; return ((((roll (inl ()) : L), (roll (inl ()) : L)), inl ()), inl acc)
+            | inr cell -> return ((((roll (inl ()) : L), (roll (inr cell) : L)), inr ()), inr acc)
+            }
+        | inr cell ->
+            let (t, f2) = cell;
+            g <- return (unbox t);
+            o <- (nu_out (force g)).1;
+            case o {
+              inl v -> return (((f2, b), inl ()), inr (plus (times (acc, i32[1000]), v)))
+            | inr t2 -> return (((f2, (roll (inr (t2, b)) : L)), inl ()), inr acc)
+            }
+        }
+    | inr moving ->
+        let () = moving;
+        case (unroll b) {
+          inl u -> let () = u; return (((f, (roll (inl ()) : L)), inl ()), inr acc)
+        | inr cell -> let (t, b2) = cell; return ((((roll (inr (t, f)) : L), b2), inr ()), inr acc)
+        }
+    }
+
+-- The scheduler's loop: each observation lends the queue `mut` at a fresh `'q` and does one move.
+def sched_step : !U (ref Q * i32 -o F (i32 + ref Q * i32) & F 1) =
+  !thunkv fun (p : ref Q * i32) ->
+    < let (r, acc) = p;
+      o <- return (withbor2['q, top, Q, i32 + i32] r (thunkv Fun 'q < dom. return (thunkv fun (mq : mut 'q Q) ->
+             z <- return (withswap['q, Q, i32 + i32] mq (thunkv fun (s : Q) -> return ((unbang round) (s, acc))));
+             let (mq, res) = z;
+             u <- return (forget_mut['q, Q] mq);
+             let () = u;
+             return (boxed['q] res))));
+      let (r, res) = o;
+      case res {
+        inl fin -> d <- return (free[Q] r); u <- return ((unbang drop_q) d); let () = u; return (inl fin)
+      | inr acc2 -> return (inr (r, acc2))
+      },
+      let (r, acc) = p;
+      d <- return (free[Q] r);
+      (unbang drop_q) d >
+
+-- A driver: observe a loop at most `n` times (a unary count), and close it if it has not
+-- finished (`experiments/LoopBorrow/bc/lend-config-imm.bc`'s).
+def drive_alg :
+    !(1 + !(ULp => i32 + 1) => !(ULp => i32 + 1)) =
+  !thunkv fun (r : 1 + !(ULp => i32 + 1)) ->
+    case r {
+      inl u ->
+        let () = u;
+        return (!thunkv fun (l : ULp) ->
+          q <- (nu_out (force l)).2;
+          return (inr q))
+    | inr k ->
+        return (!thunkv fun (l : ULp) ->
+          o <- (nu_out (force l)).1;
+          case o {
+            inl a -> return (inl a)
+          | inr l2 -> return ((unbang k) l2)
+          })
+    }
+
+def z0 : mu X. 1 + X = roll (inl ())
+def z1 : mu X. 1 + X = roll (inr z0)
+def z2 : mu X. 1 + X = roll (inr z1)
+def z3 : mu X. 1 + X = roll (inr z2)
+def z4 : mu X. 1 + X = roll (inr z3)
+def z5 : mu X. 1 + X = roll (inr z4)
+def z6 : mu X. 1 + X = roll (inr z5)
+def z7 : mu X. 1 + X = roll (inr z6)
+def z8 : mu X. 1 + X = roll (inr z7)
+def z9 : mu X. 1 + X = roll (inr z8)
+def z10 : mu X. 1 + X = roll (inr z9)
+def z11 : mu X. 1 + X = roll (inr z10)
+def z12 : mu X. 1 + X = roll (inr z11)
+def z13 : mu X. 1 + X = roll (inr z12)
+def z14 : mu X. 1 + X = roll (inr z13)
+def z15 : mu X. 1 + X = roll (inr z14)
+def z16 : mu X. 1 + X = roll (inr z15)
+
+main : F (U (Sp -o F ULp)) =
+  return (thunkv fun (sp : Sp) ->
+    c1 : box top Code <- return (boxed[top] (unbang task1));
+    s1 <- return (unbang sp);
+    t1 <- force s1 c1;
+    c2 : box top Code <- return (boxed[top] (unbang task2));
+    s2 <- return (unbang sp);
+    t2 <- force s2 c2;
+    n0 : L <- return (roll (inl ()));
+    l2 : L <- return (roll (inr (t2, n0)));
+    l1 : L <- return (roll (inr (t1, l2)));
+    n1 : L <- return (roll (inl ()));
+    q <- return (alloc[Q] ((l1, n1), inl ()));
+    f <- return (unbang (unfold[loop i32 1, ref Q * i32] sched_step));
+    s0 : ref Q * i32 <- return (q, i32[0]);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >))

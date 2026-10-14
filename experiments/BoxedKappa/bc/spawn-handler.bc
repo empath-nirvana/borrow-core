@@ -1,0 +1,19 @@
+-- The spawn handler's pair `(h_ret, hs)` for BOXED-κ at `@d = top`, the operation `await` at the
+-- site 1 (`1.0 aff 1 ~> 1`). The clause receives `κ` boxed at `top`, as BOXED-κ gives it, and
+-- answers the task: a `nu` value whose next observation resumes `κ` and whose `close` cancels
+-- it. That value is boxed at `top` by `[]I` over the clause's context `{bk : box top K}`. The
+-- clause's type is the one BOXED-κ assigns; today's `[handle]` does not accept it (its `κ` is
+-- bare), so the pair is checked here as a value and used by `BoxedKappa/Programs.lean`.
+
+type Task = U (nu X. F (i32 + box top U X) & F 1)
+type E = box top Task
+
+main : F (!U (i32 -o F E) * (!U (1 * box top U ((1 -o F E) & F 1) -o F E) * 1)) =
+  return ((!thunkv fun (v : i32) ->
+      return (boxed[top] (thunkv nu_in < return (inl v), return () >))),
+    ((!thunkv fun (p : 1 * box top U ((1 -o F E) & F 1)) ->
+      let (u, bk) = p;
+      let () = u;
+      return (boxed[top] (thunkv nu_in <
+        k <- return (unbox bk); x <- return (); r <- (force k).1 x; return (inr r),
+        k <- return (unbox bk); (force k).2 >))), ()))

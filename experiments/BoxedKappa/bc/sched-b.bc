@@ -1,0 +1,241 @@
+-- Variant (b) of P4 redone with BOXED-κ (research/effects/src/boxed-kappa-programs.md): as
+-- `sched-a.bc`, but task 2 captures an outside borrow `k : imm 'r i32` of `cfg = 42` and holds a
+-- copy of it across its `await`. The queue's bound is a lifetime `'d` strictly below `'r`, named
+-- by a borrow of a unit cell (as `corpus/aff-capture.bc` names its `'w`).
+--
+-- `spawn` is a parameter, at every bound: `!(all 'd < top. box 'd Code => E<'d>)`. Its
+-- instance at `'d` is BOXED-κ at `@d = 'd`; its premises hold for every `'d` because the
+-- handled computation's context is the boxed code (`box 'd Code ⊐ 'd`, the box rule) and
+-- `await` answers `1`. What decides whether a task enters the queue is the `boxed['d]` that
+-- forms its code, over the code's captures: for task 2, `imm 'r i32 ⊐ 'd`, which is `'d ⊏ 'r`.
+-- That is BOXED-κ's `CtxOutlives` premise moved to the `[]I` that forms the code.
+--
+-- The scheduler is `sched-a.bc`'s, at `'d`, with the queue lent at `'q` against the witness
+-- `'d` (`Q<'d> ⊒ 'd`). It runs inside the blocks of `'r` and `'d`, so it is driven by a bounded
+-- driver, a total computation: the loop's state holds task 2, which holds `k`, so the loop cannot
+-- leave `'r`'s block to be driven to the end (`sched-b-div.bc`).
+--
+-- Task 1 is `sched-a.bc`'s (130). Task 2 copies `k`, reads 42 through one copy, owns a cell
+-- holding 1 and bumps it to 2, `await`s holding the other copy, then reads 42 again and its cell:
+-- 42 + 42 + 1 + 2 = 87. Round robin finishes task 2 first: `87 * 1000 + 130 = 87130`.
+
+type Task<'d> = U (nu X. F (i32 + box 'd U X) & F 1)
+type E<'d> = box 'd Task<'d>
+type L<'d> = mu Y. 1 + (E<'d> * Y)
+type Q<'d> = (L<'d> * L<'d>) * (1 + 1)
+type Code = U (1 -o F[1.0 aff 1 ~> 1] i32)
+type Sp = !(all 'd < top. box 'd Code => E<'d>)
+type ULp = U (loop i32 1)
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+def times : i32 * i32 => i32 = unbang host[mul32]
+
+def peek : !(ref i32 => ref i32 * i32) =
+  !thunkv fun (c : ref i32) ->
+    q <- return (withbor1['x, i32, i32] c (thunkv Fun 'x < dom. return (thunkv fun (b : imm 'x i32) ->
+           r <- return (withload['x, 'z, i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (v : i32) ->
+                  return (boxed['z] v))));
+           return (boxed['x] r))));
+    return q
+
+def bump : !(ref i32 => ref i32 * i32) =
+  !thunkv fun (c : ref i32) ->
+    q <- return (withbor2['x, top, i32, i32] c (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x i32) ->
+           z <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) -> return (plus (v, i32[1]), v)));
+           let (m, old) = z;
+           u <- return (forget_mut['x, i32] m);
+           let () = u;
+           return (boxed['x] old))));
+    return q
+
+-- Read through an outside `imm` borrow.
+def look : !(all 'r < top. imm 'r i32 => i32) =
+  !thunkv Fun 'r < top. return (thunkv fun (b : imm 'r i32) ->
+    r <- return (withload['r, 'z, i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (v : i32) ->
+           return (boxed['z] v))));
+    return r)
+
+def task1 : !U (1 -o F[1.0 aff 1 ~> 1] i32) =
+  !thunkv fun (u : 1) ->
+    let () = u;
+    c <- return (alloc[i32] i32[10]);
+    p1 <- return ((unbang peek) c);
+    let (c, v1) = p1;
+    w1 <- perform[1.0] ();
+    let () = w1;
+    p2 <- return ((unbang peek) c);
+    let (c, v2) = p2;
+    w2 <- perform[1.0] ();
+    let () = w2;
+    p3 <- return ((unbang peek) c);
+    let (c, v3) = p3;
+    x <- return (free[i32] c);
+    return (plus (plus (plus (v1, v2), plus (v3, x)), i32[90]))
+
+-- Task 2, over the captured borrow: holds `k2 : imm 'r i32` across its `await`.
+def task2 : !(all 'r < top. imm 'r i32 => U (1 -o F[1.0 aff 1 ~> 1] i32)) =
+  !thunkv Fun 'r < top. return (thunkv fun (k : imm 'r i32) ->
+    return (thunkv fun (u : 1) ->
+      let () = u;
+      ks <- return (copy['r, i32] k);
+      let (k1, k2) = ks;
+      a <- return ((unbang look) ['r] k1);
+      c <- return (alloc[i32] i32[1]);
+      p1 <- return ((unbang bump) c);
+      let (c, old) = p1;
+      w1 <- perform[1.0] ();
+      let () = w1;
+      b <- return ((unbang look) ['r] k2);
+      p2 <- return ((unbang peek) c);
+      let (c, now) = p2;
+      x <- return (free[i32] c);
+      let _ = x;
+      return (plus (plus (a, b), plus (old, now)))))
+
+def close_alg : !(all 'd < top. 1 + (E<'d> * 1) => 1) =
+  !thunkv Fun 'd < top. return (thunkv fun (r : 1 + (E<'d> * 1)) ->
+    case r {
+      inl u -> return u
+    | inr p -> let (t, u) = p; let () = u; g <- return (unbox t); (nu_out (force g)).2
+    })
+
+def drop_q : !(all 'd < top. Q<'d> => 1) =
+  !thunkv Fun 'd < top. return (thunkv fun (s : Q<'d>) ->
+    let (fb, m) = s;
+    let (f, b) = fb;
+    d <- return (fold_own[1 + (E<'d> * X), 1] (!thunkv fun (r : 1 + (E<'d> * 1)) -> (unbang close_alg) ['d] r));
+    u1 <- return ((unbang d) f);
+    let () = u1;
+    u2 <- return ((unbang d) b);
+    let () = u2;
+    case m { inl u -> return u | inr u -> return u })
+
+def round : !(all 'd < top. Q<'d> * i32 => Q<'d> * (i32 + i32)) =
+  !thunkv Fun 'd < top. return (thunkv fun (p : Q<'d> * i32) ->
+    let (s, acc) = p;
+    let (fb, mode) = s;
+    let (f, b) = fb;
+    case mode {
+      inl stepping ->
+        let () = stepping;
+        case (unroll f) {
+          inl u ->
+            let () = u;
+            case (unroll b) {
+              inl u2 -> let () = u2; return ((((roll (inl ()) : L<'d>), (roll (inl ()) : L<'d>)), inl ()), inl acc)
+            | inr cell -> return ((((roll (inl ()) : L<'d>), (roll (inr cell) : L<'d>)), inr ()), inr acc)
+            }
+        | inr cell ->
+            let (t, f2) = cell;
+            g <- return (unbox t);
+            o <- (nu_out (force g)).1;
+            case o {
+              inl v -> return (((f2, b), inl ()), inr (plus (times (acc, i32[1000]), v)))
+            | inr t2 -> return (((f2, (roll (inr (t2, b)) : L<'d>)), inl ()), inr acc)
+            }
+        }
+    | inr moving ->
+        let () = moving;
+        case (unroll b) {
+          inl u -> let () = u; return (((f, (roll (inl ()) : L<'d>)), inl ()), inr acc)
+        | inr cell -> let (t, b2) = cell; return ((((roll (inr (t, f)) : L<'d>), b2), inr ()), inr acc)
+        }
+    })
+
+-- The scheduler's loop at `'d`: each observation lends the queue `mut` at a fresh `'q`, against
+-- the witness `'d`.
+def sched_step : !(all 'd < top. !U (ref Q<'d> * i32 -o F (i32 + ref Q<'d> * i32) & F 1)) =
+  !thunkv Fun 'd < top. return (!thunkv fun (p : ref Q<'d> * i32) ->
+    < let (r, acc) = p;
+      o <- return (withbor2['q, 'd, Q<'d>, i32 + i32] r (thunkv Fun 'q < dom. return (thunkv fun (mq : mut 'q Q<'d>) ->
+             z <- return (withswap['q, Q<'d>, i32 + i32] mq (thunkv fun (s : Q<'d>) -> return ((unbang round) ['d] (s, acc))));
+             let (mq, res) = z;
+             u <- return (forget_mut['q, Q<'d>] mq);
+             let () = u;
+             return (boxed['q] res))));
+      let (r, res) = o;
+      case res {
+        inl fin -> d <- return (free[Q<'d>] r); u <- return ((unbang drop_q) ['d] d); let () = u; return (inl fin)
+      | inr acc2 -> return (inr (r, acc2))
+      },
+      let (r, acc) = p;
+      d <- return (free[Q<'d>] r);
+      (unbang drop_q) ['d] d >)
+
+def drive_alg :
+    !(1 + !(ULp => i32 + 1) => !(ULp => i32 + 1)) =
+  !thunkv fun (r : 1 + !(ULp => i32 + 1)) ->
+    case r {
+      inl u ->
+        let () = u;
+        return (!thunkv fun (l : ULp) ->
+          q <- (nu_out (force l)).2;
+          return (inr q))
+    | inr k ->
+        return (!thunkv fun (l : ULp) ->
+          o <- (nu_out (force l)).1;
+          case o {
+            inl a -> return (inl a)
+          | inr l2 -> return ((unbang k) l2)
+          })
+    }
+
+def z0 : mu X. 1 + X = roll (inl ())
+def z1 : mu X. 1 + X = roll (inr z0)
+def z2 : mu X. 1 + X = roll (inr z1)
+def z3 : mu X. 1 + X = roll (inr z2)
+def z4 : mu X. 1 + X = roll (inr z3)
+def z5 : mu X. 1 + X = roll (inr z4)
+def z6 : mu X. 1 + X = roll (inr z5)
+def z7 : mu X. 1 + X = roll (inr z6)
+def z8 : mu X. 1 + X = roll (inr z7)
+def z9 : mu X. 1 + X = roll (inr z8)
+def z10 : mu X. 1 + X = roll (inr z9)
+def z11 : mu X. 1 + X = roll (inr z10)
+def z12 : mu X. 1 + X = roll (inr z11)
+def z13 : mu X. 1 + X = roll (inr z12)
+def z14 : mu X. 1 + X = roll (inr z13)
+def z15 : mu X. 1 + X = roll (inr z14)
+def z16 : mu X. 1 + X = roll (inr z15)
+
+-- The scheduler at `'d` over two spawned tasks, driven at most 16 observations.
+def run_sched : !(all 'd < top. E<'d> * E<'d> => i32) =
+  !thunkv Fun 'd < top. return (thunkv fun (ts : E<'d> * E<'d>) ->
+    let (t1, t2) = ts;
+    n0 : L<'d> <- return (roll (inl ()));
+    l2 : L<'d> <- return (roll (inr (t2, n0)));
+    l1 : L<'d> <- return (roll (inr (t1, l2)));
+    n1 : L<'d> <- return (roll (inl ()));
+    q <- return (alloc[Q<'d>] ((l1, n1), inl ()));
+    f <- return (unbang (unfold[loop i32 1, ref Q<'d> * i32] ((unbang sched_step) ['d])));
+    s0 : ref Q<'d> * i32 <- return (q, i32[0]);
+    l : ULp <- return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >);
+    d <- return ((unbang (fold_own[1 + X, !(ULp => i32 + 1)] drive_alg)) z16);
+    o <- return ((unbang d) l);
+    case o {
+      inl v -> return v
+    | inr u -> let () = u; return i32[0]
+    })
+
+main : F (U (Sp -o F i32)) =
+  return (thunkv fun (sp : Sp) ->
+    cfg <- return (alloc[i32] i32[42]);
+    q1 <- return (withbor1['r, i32, i32] cfg (thunkv Fun 'r < dom. return (thunkv fun (k : imm 'r i32) ->
+      u <- return (alloc[1] ());
+      q2 <- return (withbor2['d, top, 1, i32] u (thunkv Fun 'd < dom. return (thunkv fun (e : mut 'd 1) ->
+        z <- return (forget_mut['d, 1] e);
+        let () = z;
+        c1 : box 'd Code <- return (boxed['d] (unbang task1));
+        t1 <- return ((unbang sp) ['d] c1);
+        c2 : box 'd Code <- return (boxed['d] ((unbang task2) ['r] k));
+        t2 <- return ((unbang sp) ['d] c2);
+        v <- return ((unbang run_sched) ['d] (t1, t2));
+        return (boxed['d] v))));
+      let (u, v) = q2;
+      w <- return (free[1] u);
+      let () = w;
+      return (boxed['r] v))));
+    let (cfg, v) = q1;
+    x <- return (free[i32] cfg);
+    let _ = x;
+    return v)
