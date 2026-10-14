@@ -23,7 +23,6 @@ each theorem that uses it takes it as a hypothesis `(hPin : PinLaw)`.
 | R2: an `imm` lend over a loop whose state holds the borrow | `PDerives.lendLoopR`, `lendLoopApp` | `Derives.lean` | defined |
 | R2's term is the checked library code | `lendLoopE_is_checked` | `LoopTerm.lean` | proved (`decide +kernel` on `bcc`'s erasure) |
 | the hypothesis | `PinStop`, `PinLoop`, `PinLaw` | `PinLaw.lean` | stated |
-| R1's compatibility lemma, from `PinStop` | `lendR_compat` | `PinLaw.lean` | proved |
 | the Fundamental Property under `PinLaw` | `fundamentalC_pin` | `Fundamental.lean` (generated) | proved |
 | adequacy under `PinLaw`, one run and every run; no stuck state | `adequacyC_pin`, `adequacyD_pin`, `adequacyD_pin_safe` | `Fundamental.lean` | proved |
 | every `CDerives` derivation is a `PDerives` one | `PDerives.ofC` | `Fundamental.lean` | proved |
@@ -31,12 +30,7 @@ each theorem that uses it takes it as a hypothesis `(hPin : PinLaw)`.
 
 ## `PinLaw`
 
-`PinStop`: every borrower `M` typed in `PDerives` at a resuming row, with the view `Mut 'x T`
-alone in its context, is GhostEnd's re-lendable callback (`Relend`) at the unwinding table
-`opTableO`: at each stop the lend is ended, and the continuation is owed at every fresh lend of
-the place. It is GhostEnd's `RelendOfTyped` at `opTableO`, over `PDerives`, with Law 2's added
-hypotheses (the bound defined, the answer free of `U`). Law 2 (branch `law2-typed-world`) proves
-the linear-table, `CDerives` form modulo its 26 rules not derived.
+`PinStop`: R1's compatibility lemma as a `Prop`, at the rule's premises.
 
 `PinLoop`: R2's compatibility lemma as a `Prop`.
 
@@ -71,7 +65,7 @@ today (`i32[2113]`, `live 0`) and is what `LoopTerm.lean` reads.
 | file | content |
 |---|---|
 | `AsyncCap/Derives.lean` | `NoThunkT`, `Row.ResumeO`, `lendCb`, R2's term (`wbInl`, `lendStepE`, `lendLoopE`, `lendLoopApp`), `PDerives` |
-| `AsyncCap/PinLaw.lean` | `PinStop`, `lendR_compat`, `PinLoop`, `PinLaw` |
+| `AsyncCap/PinLaw.lean` | `PinStop`, `PinLoop`, `PinLaw` |
 | `AsyncCap/Fundamental.lean` | `PDerives.ofC`, `fundamentalC_pin`, `adequacyC_pin`, `adequacyD_pin`, `adequacyD_pin_safe` |
 | `AsyncCap/LoopTerm.lean` | `lendLoopP`, `lendLoopE_is_checked` |
 | `AsyncCap/Rows.lean` | `awaitSig`, `yieldSig`, `raiseSig`, `resumeO_await_yield`, `not_resumeO_raise` |

@@ -35,14 +35,10 @@ taken as an escape hatch in the proof; then a test suite that tries to break it.
 - **The assertion is `PinLaw`** (§4). It is a `Prop` over **typed programs**: every quantifier
   over code ranges over derivations of the extended judgment `PDerives`. In one sentence:
   *code that Core's rules (plus R1 and R2) type, suspended while it holds views of a lend, is
-  again in the relation when the place is lent afresh.* Its R1 half (`PinStop`) is the borrower's
-  side of ghost end, which Law 2 proves rule by rule for 59 of Core's 91 rules, and 6 more at part
-  of their instances (branch `law2-typed-world`).
-  Its R2 half (`PinLoop`) is the same principle at an observation boundary, and has less
-  evidence (§4.3).
+  again in the relation when the place is lent afresh.* It is stated as the compatibility lemmas
+  of R1 (`PinStop`) and R2 (`PinLoop`) themselves, and is tested by programs (§6), not proved.
 - **PROVED from `PinLaw`, with no `sorry`:** `fundamentalC_pin`, `adequacyC_pin`,
-  `adequacyD_pin`, `adequacyD_pin_safe` (no run is stuck), and R1's compatibility lemma
-  `lendR_compat`. Programs that use neither relaxed rule keep `fundamentalC` and `adequacyD`
+  `adequacyD_pin`, `adequacyD_pin_safe` (no run is stuck). Programs that use neither relaxed rule keep `fundamentalC` and `adequacyD`
   unconditionally (`PDerives.ofC`).
 - **Many programs need no assertion.** When only the borrow itself crosses an `await`, the
   elaborator splits the block into ordinary lends (L0, §3.3; ADD-5 on `nominal-lifetimes`).
@@ -116,7 +112,11 @@ signature mentions no effect, and the kernel has no row variable:
   divergence (SPEC §14, *specialization at the callback's type*) and per effect assignment
   (SPEC §18); `[let-poly]` (SPEC §24, `CDerives.letPoly`) types one closed function at each use.
   Effectful callbacks at the surface (#161) are DESIGNED in `docs/surface-callbacks.md` (branch
-  `effects-async-a1`, E2–E5), whose kernel programs `async-tasks` and `async-colourless`
+  `effects-async-a1`, E2–E8). U2 takes its elaboration with one change: a called-only block's type
+  carries no row (E1 gives every callback type an inferred row); the block's effects come from
+  the enclosing sites and the copy per use. A *stored* callback or continuation does carry its
+  row, `U(A ⊸ F_Σ B)` boxed at a bound (§2.3), inferred and never written: the store needs a type,
+  and this is the one place rows reach a type the programmer could see. Its kernel programs `async-tasks` and `async-colourless`
   (`Core/EffAsyncPrograms.lean` there) run one generic function at the pure row and in two
   interleaved tasks.
 - **The lowering's control class: specialization, as today.** Each copy of `map` is at closed
@@ -224,7 +224,7 @@ contain another). Neither adds a machine step.
   changes: `Row.ResumeO` (resuming, not unrestricted, empty cancel row, answering `1`, argument
   closed data with no `U`) instead of `Row.Unwind`.
 - Its premise is the callback's **derivation**, in `PDerives`.
-- Its compatibility lemma `lendR_compat` is PROVED from `PinLaw.stop` (§4.2).
+- Its compatibility lemma is `PinLaw.stop` (§4).
 - R1 lends `mut` only. A shared borrow of a task-local place is lent `mut` and read: the place is
   owned by the task, so exclusivity costs nothing. An `imm` R1 (and `withload`, and a fold whose
   algebra suspends, `corpus/pending/async-borrow.bc`) is OQ-2.
@@ -308,19 +308,22 @@ held borrow (`n4`). Both are design limits with open questions (OQ-3, OQ-1), not
 It is never an axiom: it is a hypothesis of the theorems that use it.
 
 ```lean
-/-- R1's content: every borrower typed in `PDerives` at a resuming row is re-lendable. -/
+/-- R1's compatibility lemma: the lend held across resuming operations is in the relation. -/
 def PinStop : Prop :=
-  ∀ (Δ : LifeCtx) (δ : LSub) (x : LifeVar) (b : Lifetime.Life) (T B : VTy) (S : Row)
-    (M : Expr), Δ.Models δ → (∃ β, b.interp δ = some β) → Δ.find? x = none →
-    b.mentions x = false → (∀ y u, Δ.find? y = some u → u.mentions x = false) →
-    ¬ VFree x T → ¬ VFree x B → NoThunkT B → Row.ResumeO S x → closedAt 1 M = true →
+  ∀ (Δ : LifeCtx) (x : LifeVar) (b : Lifetime.Life) (T B : VTy) (d M : Expr) (S : Row),
+    Δ.Defines b → Δ.find? x = none → b.mentions x = false →
+    (∀ y u, Δ.find? y = some u → u.mentions x = false) →
+    ¬ VFree x T → ¬ VFree x B → NoThunkT B →
+    (∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' T) →
+    Row.ResumeO S x → closedAt 1 M = true → closedAt 0 (lendCb M).1 = true →
+    closedAt 0 d = true → SemV Δ [] d (.lolli (.ref T) .unit) →
     PDerives (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
       (.comp (CTy.effOf S (.box (.var x) B))) →
-    ∀ (l : BoCa.Loc) (ls : List SRec),
-      Relend (opTableO (Row.tab S δ) l T δ) l T δ (finPost l T B δ) ls
-        (substAll [Val.loc l] M) PMap.empty
+    SemC Δ [⟨.ref T, true⟩]
+      (.app (.app (.val (withborUV d)) (.var 0)) (.val (lendCb M)))
+      (CTy.effOf S (.tensor (.ref T) B))
 
-/-- R2's content: the shared lend over a loop whose state holds the borrow is in the relation. -/
+/-- R2's compatibility lemma: the shared lend over a loop whose state holds the borrow. -/
 def PinLoop : Prop :=
   ∀ (Δ : LifeCtx) (x : LifeVar) (A S B R : VTy) (N K s0 : Expr),
     Δ.find? x = none → Δ.meetOfDom.mentions x = false →
@@ -343,10 +346,9 @@ structure PinLaw : Prop where
 between a loop's observations) while it holds views of a lend, is again in the relation when the
 place is lent afresh at a new lifetime.
 
-`Relend` (`GhostEnd/Relend.lean:57`) is GhostEnd's re-lendable callback: the least fixed point in
-which, at each stop, the lend is ended and the continuation is owed at every fresh lend of `ℓ`.
-`opTableO` is the unwinding table: resumed, the continuation is owed with the owner; cancelled,
-the owner is left for the finaliser (`GhostEnd/Drop.lean`).
+Each field is the compatibility lemma of its rule, at the rule's own premises. Nothing in it
+says *why* the rule is sound (ghost end, a re-lendable reading, a frame lemma): an assertion of a
+proof route can be wrong where the rule is not, and then every theorem resting on it is vacuous.
 
 ### 4.2 Why it is stated this way, and what part is proved
 
@@ -355,15 +357,16 @@ the owner is left for the finaliser (`GhostEnd/Drop.lean`).
   with theirs. Nothing is pointwise over configurations or over semantically related values.
   The pointwise forms were refuted by junk configurations (`core_not_relend_kU`,
   `refoldKripke_false`), and asserting a false `Prop` would make every theorem below vacuous.
-- **The compatibility lemmas of exactly the relaxed rules.** `PinLoop` is R2's compatibility
-  lemma itself. `PinStop` is *smaller* than R1's compatibility lemma: the lender side is
-  PROVED, so only the borrower's re-lendability is asserted.
+- **The compatibility lemmas of exactly the relaxed rules, and nothing smaller.** Asserting
+  only the borrower's half of R1 (GhostEnd's `Relend` at `opTableO`) and proving the lender's half
+  would put a proof route's intermediate step inside the assertion. That step is doubtful: its
+  cancel clause hands the owner back before the borrower's finalisers run, while `[then]` lets a
+  finaliser hold the view (§4.3). Shrinking `PinLaw` is U8's proof work.
 - **What is proved from it (no `sorry`, axioms `[propext, Classical.choice, Quot.sound]`):**
 
 | result | statement | status |
 |---|---|---|
-| `lendR_compat` | R1's compatibility lemma, from `PinStop` alone. The lender side is `withborR_compat`; the borrower's re-lendability is `PinStop` at the callback's derivation. | PROVED |
-| `fundamentalC_pin (hPin : PinLaw) : PDerives Δ Γ e j → SemJ Δ Γ e j` | the Fundamental Property for the extended judgment: `fundamentalC`'s induction, case for case, plus `lendR_compat` and `hPin.loop` | PROVED |
+| `fundamentalC_pin (hPin : PinLaw) : PDerives Δ Γ e j → SemJ Δ Γ e j` | the Fundamental Property for the extended judgment: `fundamentalC`'s induction, case for case, plus `hPin.stop` and `hPin.loop` | PROVED |
 | `adequacyC_pin (hPin : PinLaw)` | a closed `PDerives` program of `F 1` runs to `()` at the empty memory | PROVED |
 | `adequacyD_pin`, `adequacyD_pin_safe` | every run continues to `()` at the empty memory; no run is stuck | PROVED |
 | `PDerives.ofC` | every `CDerives` derivation is a `PDerives` one | PROVED |
@@ -374,7 +377,8 @@ the owner is left for the finaliser (`GhostEnd/Drop.lean`).
 
 **`PinStop`.**
 
-- **Evidence.** Law 2 (branch `law2-typed-world`, `experiments/Law2`) proves the same statement
+- **Evidence** (for one route to proving it; none of it is asserted). Law 2 (branch
+  `law2-typed-world`, `experiments/Law2`) proves the borrower's re-lendability
   at the linear table and over `CDerives` (`relendOfTyped'`, `law2`, `law2_depth1`) from a
   fundamental lemma for the re-lendable reading, `pj_fundamental`: one induction on `CDerives`,
   91 cases, **59 proved, 6 proved at part of their instances, 26 not derived** (each its own
@@ -383,21 +387,22 @@ the owner is left for the finaliser (`GhostEnd/Drop.lean`).
   closure-holding borrowers instance by instance (§3.2), and at affine yields for straight-line
   borrowers (`relendO_chain`). No rule failed in a machine-checked configuration (Law2's kill
   criterion, not met).
-- **The remainder, which is what is really asserted:** Law 2's 26 rules not derived (the inner
+- **What that route leaves open:** Law 2's 26 rules not derived (the inner
   lends, `[]I` at a type that does not outlive, `∀` with `U` in the context, `μ`/`ν`, writes
   through a `mut` leaf of a family, `[raise]`/`[then]`, `[handle]` of the lenders' name); the
   affine (cancel) path for every borrower, not only straight-line ones; and nested relaxed lends,
   which Law 2 covers on the lender side (`fold_mixed`, every mixed stack) but not inside
-  `PDerives`.
+  `PDerives`. At the cancel path the route's table must re-lend the place for the borrower's own
+  finalisers before the owner returns: `[then]` gives a finaliser the body's context, so it may
+  write through the view (§6.2 row 16). Not machine-checked either way.
 - **Why it should be true.** The lend's view is the location `ℓ`, the same at every lifetime. A
   typed borrower's behaviour does not depend on which lifetime it was typed at: its derivation is
   re-run at the fresh one, as `segment_fundamental` re-runs `fundamentalC`. A typed borrower can
   hand the view to no one: operation arguments are closed data, the answer is free of `'x`, and
   an unrestricted continuation captures only persistent values (`multiShot_ref_refused`).
-- **What would falsify it.** A `PDerives` program using R1 that gets stuck, leaks, or answers a
-  value outside its type on some run (by `adequacyD_pin`, any of these refutes `PinLaw`). In Lean:
-  one of Law 2's `fl_…` cases machine-checked to fail at a configuration a typed program builds,
-  with every hypothesis discharged.
+- **What would falsify it.** A `PDerives` program using R1 that gets stuck, leaks, answers a
+  value outside its type, or trips §6.1's tag check, on some run (by `adequacyD_pin`, any of the
+  first three refutes `PinLaw`). The test is programs (§6); no Lean refutation is attempted.
 
 **`PinLoop`.**
 
@@ -412,11 +417,9 @@ the owner is left for the finaliser (`GhostEnd/Drop.lean`).
 - **Why it should be true.** `imm` only: the place is read-only while lent and unreachable
   between observations (the owner is in the loop's state), so its content is the same at every
   observation, and duplicate `imm` views are sound.
-- **What would falsify it.** A `PDerives` program using R2 that misbehaves on some run, as above;
-  or the re-lendable reading at `ν` (one of Law 2's not-derived rules, `fl_nuIn`/`fl_nuOut`)
-  machine-checked to fail at a typed configuration.
+- **What would falsify it.** A `PDerives` program using R2 that misbehaves on some run, as above.
 - **Minimisation not done.** A lender-side lemma for R2 (GhostEnd's `ewpTS_I_frameR` re-applied
-  per observation) would reduce `PinLoop` to a borrower-side statement like `PinStop`. NOT
+  per observation) would reduce `PinLoop` to a borrower-side statement. NOT
   DETERMINED whether it goes through; it is U8.
 
 ---
@@ -496,6 +499,7 @@ Rejections are by the rules of §3.4; acceptances must run cleanly under §6.1's
 | 13 | a loop state holding a `mut` view (`n6`) | **reject** | R2 is `imm` only; `LoopLend` reports it today |
 | 14 | an unrestricted (multi-shot) operation inside a relaxed lend (`n7`) | **reject** | `Row.ResumeO` excludes `unr` |
 | 15 | stress (U7): many tasks, each with nested relaxed lends of several locals and closures over them, interleaved under a random schedule, with cancellations | **accept**, every run under §6.1's check clean | this is the test of `PinStop` at the rules Law 2 did not derive (inner lends, closures over views) |
+| 16 | a cancelled task whose finaliser writes through a view it holds: `borrow mut c { await () then … unwind (write through m) }`, cancelled at the `await` | **accept**, runs: the borrower's finaliser writes, then the lend ends and the owner's finaliser runs; `live 0` | `[then]` gives the finaliser the body's context. The run order is safe; a proof route that returns the owner first does not cover it (§4.3) |
 
 The stress row is where `PinLaw` is most exposed: inner lends held across a stop, `[]I` of a
 closure over a view, and cancel paths, which are exactly the parts not derived (§4.3).
@@ -517,7 +521,7 @@ Ordered; each unit is one PR and turns the programs named green. No unit changes
 | **U5** | R1 in Core: `CDerivesP` (AsyncCap's `PDerives`), `fundamentalC_pin`, `adequacyD_pin`; the checker's R1 (callback row `Row.ResumeO`, emitted only when L0 does not apply); `bcc check`/`bcc trusted` report `PinLaw`; the lowering keeps a cell lent across a suspension out of line, or the task record unmoved (§3.5) | A2, A5, A6; `n2`, `n4`, `n5`, `n7`, `n9` |
 | **U6** | R2: `LoopLend` keeps its rewrite when the loop's state holds an `imm` view, emitting `lendLoopR` | A3; `n6`, `n1`, `n3`, `n8` (with U1) |
 | **U7** | the adversarial suite (§6.2) in `corpus/reject` and the corpus, with the stress generator | §6.2 rows 1–15 |
-| **U8** | proof track, independent of the others: port Law 2 and reduce `PinStop` to the `fl_…` cases at `opTableO` over `CDerivesP`; a lender-side lemma at observation boundaries for R2 | shrinks `PinLaw`; no program changes |
+| **U8** | proof track, independent of the others, not on the async path: prove R1's compatibility lemma (for example through Law 2's re-lendable reading, at a cancel table that re-lends for the borrower's finalisers, §4.3); a lender-side lemma at observation boundaries for R2 | shrinks `PinLaw`; no program changes |
 
 ---
 

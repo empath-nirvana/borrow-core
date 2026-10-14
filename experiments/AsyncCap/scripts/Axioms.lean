@@ -1,6 +1,5 @@
 import AsyncCap
 open BoCa.Fig16.LogRel.Core.AsyncCap
-#print axioms lendR_compat
 #print axioms fundamentalC_pin
 #print axioms adequacyC_pin
 #print axioms adequacyD_pin
