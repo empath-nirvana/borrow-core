@@ -11,6 +11,7 @@ import Law2.Piece
 import Law2.Handle
 import Law2.Fragment
 import Law2.Rules
+import Law2.Families
 import Law2.Fundamental
 import Law2.Instances
 import Law2.FragInstances

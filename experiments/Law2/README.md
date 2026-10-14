@@ -26,7 +26,7 @@ afresh.
 | lenders, every mixed stack | **proved**, one induction on the stack | `fold_mixed` |
 | the re-lendable reading at every type former | **defined**, one structural recursion | `RSlot`, `RC`, `RTab`, `RIn` |
 | U1: pure code answering an unfrozen view, or a closure over one | **proved** (rules `pj_call`, `rslot_lam`, `pj_let`); instances typed, every hypothesis discharged | `view_call_spans`, `closure_call_spans` |
-| the fundamental lemma for the piece judgment | **one induction on `CDerives`, every one of its 91 rules a case**: 52 proved, 6 proved at part of their instances, 33 not derived | `pj_fundamental` |
+| the fundamental lemma for the piece judgment | **one induction on `CDerives`, every one of its 91 rules a case**: 59 proved, 6 proved at part of their instances, 26 not derived | `pj_fundamental` |
 | (S1) for every derivation | **from the fundamental lemma**; its open steps are the rules not derived | `piece_of_typed` |
 | Law 2 at every mixed stack | **from (S1)** | `law2` |
 | Law 2 for every borrower whose piece judgment holds | **proved**, no open step | `law2_of_pj` |
@@ -42,13 +42,14 @@ into the views it holds and a part in `[top]` that, handed the views made afresh
 is again in the relation. `RSlot σ S₀ A` reads that along `A`'s shape and `RC σ S₀ C` reads the
 computation types, one mutual structural recursion, `S₀` the lenders' row:
 
-* `⊗`, `⊕`, `!`, `Ref`: componentwise (a pair's components re-lend each with its own share; a
-  reference's owned cell is frozen beside its re-lendable payload);
+* `⊗`, `⊕`, `!`, `Ref`, `[L]`: componentwise (a pair's components re-lend each with its own share;
+  a reference's owned cell is frozen beside its re-lendable payload; a family is read leaf by leaf,
+  as the kernel's clause at `[L]`, each leaf re-lendable with its own share);
 * `U C`, for **every** `C`: re-lendable, and forced at every re-lend it is `RC C`. A pure closure
   `U(A ⊸ F B)` is read like one that stops: called at a re-lend on a re-lendable argument, it runs
   to a re-lendable answer;
 * `[@a] A`: re-lendable, and at every re-lend in `Res_{@a}` and `RSlot A`;
-* `Imm`, `Mut`, `μ`, `[L]` and the leaves: re-lendable at the kernel's relation;
+* `Imm`, `Mut`, `μ` and the leaves: re-lendable at the kernel's relation;
 * `F_Σ R`, and `F R` as the empty row: the piece (`bodyH`/`OpenH`, `Law2/Inner.lean`) at the
   row's own operations of the lenders' names (`RTab`, the kernel's `effTab` at those names) and the
   operations of other names, caught by a handler inside the borrower (`RIn`), answering in
@@ -85,7 +86,7 @@ Instances at the depth-2 stack `[s@'x₂ reborrow, s@'x₁]`, each program typed
 * `closure_call_spans`: `mk = λz. return (λ_. use z); f = mk m; u = yield 1; f u` — the answer, a
   closure over the view, is held across the stop and called after it.
 
-## The fundamental lemma (`Law2/Rules.lean`, `Law2/Fundamental.lean`)
+## The fundamental lemma (`Law2/Rules.lean`, `Law2/Families.lean`, `Law2/Fundamental.lean`)
 
 `pj_fundamental : CDerives Δ Γ e j → PJudg δ σ S₀ Δ Γ e j` — `PV` at `V : A`, `PJ` at `M : C` — by
 one induction on the derivation, one case per rule. A rule proved at part of its instances splits
@@ -107,8 +108,9 @@ is left without a case.
 | `lit`, `hostOp` | proved | `pv_lit`, `pv_hostOp` |
 | `boundedFix`, `countFold`, `countTry` | proved, by induction on the budget or the count | `pv_boundedFix`, `pv_countFold`, `pv_countTry` |
 | `arrSize`, `arrLen`, `arrCopy`, `arrForget`, `sliceLenM`, `sliceEmptyI`, `sliceEmptyM` | proved | `pv_arrSize`, `pv_arrLen`, `pv_arrCopy`, `pv_arrForget`, `pv_sliceLenM`, `pv_sliceEmptyI`, `pv_sliceEmptyM` |
-| `arrGet`, `arrReplace`, `sliceGetM`, `sliceSplitI`, `sliceSplitM`, `sliceReplaceM`, `sliceSwapM` | **not derived** | `fl_arrGet`, `fl_arrReplace`, `fl_sliceGetM`, `fl_sliceSplitI`, `fl_sliceSplitM`, `fl_sliceReplaceM`, `fl_sliceSwapM` |
-| `arrNew`, `arrFree` | **not derived** | `fl_arrNew`, `fl_arrFree` |
+| `arrGet`, `sliceGetM`, `sliceSplitI`, `sliceSplitM`, `arrReplace` | proved, leaf by leaf | `pv_arrGet`, `pv_sliceGetM` (`pv_famGet`), `pv_sliceSplitI`, `pv_sliceSplitM` (`pv_famSplit`), `pv_arrReplace` |
+| `arrNew`, `arrFree` | proved, by induction on the cells left, the function held at `!` called at the current lifetimes | `pv_arrNew` (`tabFill_rs`), `pv_arrFree` (`dropFill_rs`) |
+| `sliceReplaceM`, `sliceSwapM` | **not derived** | `fl_sliceReplaceM`, `fl_sliceSwapM` |
 | `allI` | proved at a context free of `U`; **not derived** otherwise | `pj_allI_kernel`; `fl_allI_ctx` |
 | `allE`, `allEV` | **not derived** | `fl_allE`, `fl_allEV` |
 | `roll` | proved at an unrolling free of `U`; **not derived** otherwise | `pv_roll`; `fl_roll_thunk` |
@@ -138,9 +140,12 @@ configuration a typed program builds is machine-checked to fail any of them. Wha
   the kernel's relation; the unrolling is read componentwise, and a whole value's split into views
   and a frozen part does not split along its components; the folds' algebras and the coiteration's
   step are re-lendable closures the kernel's proofs read at the kernel's relation.
-* A leaf or part taken out of a family, or put into one; `array_new`, `array_free`: a family is read
-  at the kernel's relation, and its re-lendable split is not split by location; the loops' element
-  functions are re-lendable closures building or consuming a family read at the kernel's relation.
+* A write through a `mut` leaf of a family (`slice_replace_mut`, `slice_swap_mut`): the leaf is
+  opened by Mut Anti-Frame (6.66), whose continuation is owed at every cell `ptoMutS` admits at the
+  leaf's lifetime, content and cell lifetime new; the leaf's re-lendable split (frozen in `[top]`,
+  or a stack entry's view) is not re-established for such a cell — frozen, it would have to lie
+  above the outermost lend and its payload read alike at every re-lend, and the anti-frame's
+  postcondition states neither.
 * The inner lends (`withbor`, `withload`, `withswap`, the slice borrows, their unwinding forms): the
   kernel's 6.65/6.64/6.66 at the inner lend read the lent value and the callback at the kernel's
   relation and answer at it, which is not re-lendable; a lend opened inside the borrower and held
@@ -225,16 +230,15 @@ form would supply them is not determined.
 
 ## Law 2's remaining sorry list
 
-The `fl_…` lemmas of `Law2/Fundamental.lean`, one per rule (or part of a rule) not derived, each
-stated at the rule's premises: `fl_allI_ctx`, `fl_allE`, `fl_allEV`, `fl_boxI_ctx`,
+The 32 `fl_…` lemmas of `Law2/Fundamental.lean`, one per rule (or part of a rule) not derived,
+each stated at the rule's premises: `fl_allI_ctx`, `fl_allE`, `fl_allEV`, `fl_boxI_ctx`,
 `fl_roll_thunk`, `fl_unroll`, `fl_nuIn`, `fl_nuOut`, `fl_unfoldN`, `fl_foldImm`, `fl_foldOwn`,
-`fl_foldReuse`, `fl_arrNew`, `fl_arrFree`, `fl_arrReplace`, `fl_arrGet`, `fl_sliceGetM`,
-`fl_sliceSplitI`, `fl_sliceSplitM`, `fl_sliceReplaceM`, `fl_sliceSwapM`, `fl_sliceBorrowM`,
-`fl_sliceBorrowI`, `fl_withbor1`, `fl_withbor2`, `fl_withbor3`, `fl_withload`, `fl_withswap`,
-`fl_withbor1U`, `fl_withbor2U`, `fl_withbor3U`, `fl_withloadU`, `fl_sliceBorrowMU`,
-`fl_sliceBorrowIU`, `fl_effPerform_open`, `fl_effRaise`, `fl_effLet_open`, `fl_effThen`,
-`fl_effHandleV_open`. They reach `pj_fundamental`, `piece_of_typed`, `law2`, `relendOfTyped'`,
-`law2_depth1` and `law2_depth1_withbor`; nothing else.
+`fl_foldReuse`, `fl_sliceReplaceM`, `fl_sliceSwapM`, `fl_sliceBorrowM`, `fl_sliceBorrowI`,
+`fl_withbor1`, `fl_withbor2`, `fl_withbor3`, `fl_withload`, `fl_withswap`, `fl_withbor1U`,
+`fl_withbor2U`, `fl_withbor3U`, `fl_withloadU`, `fl_sliceBorrowMU`, `fl_sliceBorrowIU`,
+`fl_effPerform_open`, `fl_effRaise`, `fl_effLet_open`, `fl_effThen`, `fl_effHandleV_open`. They
+reach `pj_fundamental`, `piece_of_typed`, `law2`, `relendOfTyped'`, `law2_depth1` and
+`law2_depth1_withbor`; nothing else.
 
 ## The bridge (`Law2/Bridge.lean`)
 
@@ -299,7 +303,8 @@ rule took two successive patches.
 | `Law2/Piece.lean` | `RSlot`, `RC`, `RTab`, `RIn`, `RCtx`; re-lendability; `rc_step`, `rc_bind`; `PJ`, `PV`; the rules at a row; `openS_of_pj` |
 | `Law2/Handle.lean` | `rslot_kappaC`, `opTable_handle`; `bodyH_handle`, `openH_handle`, `pj_handle` |
 | `Law2/Fragment.lean` | `BVal`, `BComp`, `FrozenTy`; `toCDerives`, `toPJ`; `piece_of_pj`, `piece_of_bcomp`, `law2_of_pj`, `law2_frag` |
-| `Law2/Rules.lean` | the rule lemmas: closures, eliminations, `!`, `[@a]`, sub-lifetimes, the borrow axioms, families, the counted loops, `[sub]`, `[perform]`, `[let-poly]` |
+| `Law2/Rules.lean` | the rule lemmas: closures, eliminations, `!`, `[@a]`, sub-lifetimes, the borrow axioms, the family constants, the counted loops, `[sub]`, `[perform]`, `[let-poly]` |
+| `Law2/Families.lean` | the family operations leaf by leaf: `pv_famGet`, `pv_famSplit`, `pv_arrReplace`; `tabFill_rs`, `pv_arrNew`; `dropFill_rs`, `pv_arrFree` |
 | `Law2/Fundamental.lean` | `PJudg`, the `fl_…` rules not derived, `pj_fundamental` |
 | `Law2/Instances.lean` | `struct_reborrow_spans`, `struct_imm_spans`, `closure_reborrow_spans` |
 | `Law2/FragInstances.lean` | `branch_spans`, `closure_stops_spans`, `loop_spans`, `handler_spans`, `chain3_*` |

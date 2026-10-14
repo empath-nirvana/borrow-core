@@ -1,4 +1,4 @@
-import Law2.Rules
+import Law2.Families
 
 /-!
 # Law2 — the fundamental lemma for the piece judgment
@@ -6,8 +6,8 @@ import Law2.Rules
 `pj_fundamental`: every derivation of Core's typing, at the stack `σ` and the lenders' row `S₀`, is
 the piece judgment — a value judgment `V : A` re-lendable (`PV`), a computation judgment `M : C`
 in `RC C` (`PJ`) — by one induction on `CDerives`, one case per rule. Each case is a lemma of
-`Law2/Rules.lean`, or, where a rule is not derived, its own lemma below, stated at the rule's
-premises and closed by `sorry`. Some rules are proved at part of their instances and not derived
+`Law2/Rules.lean` or `Law2/Families.lean`, or, where a rule is not derived, its own lemma below,
+stated at the rule's premises and closed by `sorry`. Some rules are proved at part of their instances and not derived
 at the rest; the case splits on the rule's own types and rows, never on the stack.
 
 `piece_of_typed_R` is (S1) at a context given slot by slot (`RCtx`), from `pj_fundamental` and
@@ -19,9 +19,7 @@ at the rest; the case splits on the rule's own types and rows, never on the stac
 * `[@a]`: `fl_boxI_ctx` (`[]I` at a type that does not itself outlive `@a`);
 * `μ`, `ν`: `fl_roll_thunk` (`roll` at an unrolling holding `U`), `fl_unroll`, `fl_nuIn`,
   `fl_nuOut`, `fl_unfoldN`, `fl_foldImm`, `fl_foldOwn`, `fl_foldReuse`;
-* loops building or consuming a family over a callback: `fl_arrNew`, `fl_arrFree`;
-* a leaf or part taken out of a family, or put into one: `fl_arrGet`, `fl_arrReplace`,
-  `fl_sliceGetM`, `fl_sliceSplitI`, `fl_sliceSplitM`, `fl_sliceReplaceM`, `fl_sliceSwapM`;
+* a write through a `mut` leaf of a family: `fl_sliceReplaceM`, `fl_sliceSwapM`;
 * an inner lend: `fl_withbor1`, `fl_withbor2`, `fl_withbor3`, `fl_withload`, `fl_withswap`,
   `fl_withbor1U`, `fl_withbor2U`, `fl_withbor3U`, `fl_withloadU`, `fl_sliceBorrowM`,
   `fl_sliceBorrowI`, `fl_sliceBorrowMU`, `fl_sliceBorrowIU`;
@@ -144,33 +142,6 @@ theorem fl_foldReuse {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (R : VTy) (_hΓ 
     PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (foldReuseV F)) (.lolli (algRTy F R) (foldOTy F R)) := by
   sorry
 
-/-- **`array_new` — not derived; no obstruction verified.** Its element function is a
-re-lendable closure, called once per element; the loop at the re-lendable reading is not
-written, and the family it builds is read at the kernel's relation. -/
-theorem fl_arrNew {Δ : LifeCtx} {Γ : Ctx VTy} (A : VTy) (_hΓ : Ctx.DeadP Γ) :
-    PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (.prim .tab)) (arrNewTy A) := by
-  sorry
-
-/-- **`array_free` — not derived; no obstruction verified.** As `fl_arrNew`, its finaliser a
-re-lendable closure called once per element of a family read at the kernel's relation. -/
-theorem fl_arrFree {Δ : LifeCtx} {Γ : Ctx VTy} (A : VTy) (_hΓ : Ctx.DeadP Γ) :
-    PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (.prim .drop)) (arrFreeTy A) := by
-  sorry
-
-/-- **`array_replace` — not derived; no obstruction verified.** A family is read at the kernel's
-relation; the element taken out is not re-lendable on its own (the family's split into views and a
-frozen part is not split by location), and the one stored in has to be at the kernel's
-relation. -/
-theorem fl_arrReplace {Δ : LifeCtx} {Γ : Ctx VTy} (A : VTy) (_hΓ : Ctx.DeadP Γ) :
-    PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val replaceV) (arrReplaceTy A) := by
-  sorry
-
-/-- **`array_get` — not derived; no obstruction verified.** As `fl_arrReplace`: a leaf taken
-out of a family read at the kernel's relation. -/
-theorem fl_arrGet {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
-    (_hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (.prim .idx)) (arrGetTy a A) := by
-  sorry
-
 /-- **`slice_borrow_mut` — not derived; no obstruction verified.** An inner lend: its callback,
 read at the kernel's relation (`∀`), runs with the inner lend open; the kernel's lend (6.65) reads
 the lent array at the kernel's relation, and the result comes back at the kernel's relation, which
@@ -190,28 +161,18 @@ theorem fl_sliceBorrowI {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (x : LifeVar) 
     PV (ℍ := ℍ) δ σ S₀ Δ Γ withbor (sliceBorrowITy x Δ.meetOfDom A B) := by
   sorry
 
-/-- **`slice_get_mut` — not derived; no obstruction verified.** As `fl_arrGet`. -/
-theorem fl_sliceGetM {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
-    (_hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (.prim .idx)) (sliceGetMTy a A) := by
-  sorry
-
-/-- **`slice_split_imm` — not derived; no obstruction verified.** A family read at the kernel's
-relation split by location: its re-lendable split does not split along the parts. -/
-theorem fl_sliceSplitI {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
-    (_hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (.prim .split)) (sliceSplitITy a A) := by
-  sorry
-
-/-- **`slice_split_mut` — not derived; no obstruction verified.** As `fl_sliceSplitI`. -/
-theorem fl_sliceSplitM {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
-    (_hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (.prim .split)) (sliceSplitMTy a A) := by
-  sorry
-
-/-- **`slice_replace_mut` — not derived; no obstruction verified.** As `fl_arrReplace`. -/
+/-- **`slice_replace_mut` — not derived; no obstruction verified.** The leaf is opened by Mut
+Anti-Frame (6.66) at the current lifetimes, and its continuation is owed at every cell `ptoMutS`
+admits at the leaf's lifetime, content and cell lifetime new. The leaf's re-lendable split — frozen
+in `[top]`, or the view a stack entry hands back — is not re-established for such a cell: frozen,
+it would have to lie above the outermost lend and its payload read alike at every re-lend, and the
+anti-frame's postcondition states neither. -/
 theorem fl_sliceReplaceM {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
     (_hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val replaceV) (sliceReplaceMTy a A) := by
   sorry
 
-/-- **`slice_swap_mut` — not derived; no obstruction verified.** As `fl_arrReplace`. -/
+/-- **`slice_swap_mut` — not derived; no obstruction verified.** As `fl_sliceReplaceM`, at two
+leaves. -/
 theorem fl_sliceSwapM {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
     (_hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val swapV) (sliceSwapMTy a A) := by
   sorry
@@ -426,12 +387,12 @@ theorem pj_fundamental : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg},
   | forgetUnk hΓ => exact pv_forgetUnk hΓ
   | lit c hΓ => exact pv_lit c hΓ
   | hostOp op hΓ => exact pv_hostOp op hΓ
-  | arrNew A hΓ => exact fl_arrNew A hΓ
-  | arrFree A hΓ => exact fl_arrFree A hΓ
+  | arrNew A hΓ => exact pv_arrNew A hΓ
+  | arrFree A hΓ => exact pv_arrFree A hΓ
   | arrSize A hΓ => exact pv_arrSize A hΓ
-  | arrReplace A hΓ => exact fl_arrReplace A hΓ
+  | arrReplace A hΓ => exact pv_arrReplace A hΓ
   | arrLen a A hΓ => exact pv_arrLen a A hΓ
-  | arrGet a A hΓ => exact fl_arrGet a A hΓ
+  | arrGet a A hΓ => exact pv_arrGet a A hΓ
   | arrCopy a A hΓ => exact pv_arrCopy a A hΓ
   | arrForget a A hΓ => exact pv_arrForget a A hΓ
   | countFold S hΓ => exact pv_countFold S hΓ
@@ -439,10 +400,10 @@ theorem pj_fundamental : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg},
   | boundedFix A C hΓ => exact pv_boundedFix hΓ
   | sliceBorrowM x hΓ hA hB hf₁ hf₂ => exact fl_sliceBorrowM x hΓ hA hB hf₁ hf₂
   | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ => exact fl_sliceBorrowI x hΓ hsc hA hB hf₁ hf₂
-  | sliceGetM a A hΓ => exact fl_sliceGetM a A hΓ
+  | sliceGetM a A hΓ => exact pv_sliceGetM a A hΓ
   | sliceLenM a A hΓ => exact pv_sliceLenM a A hΓ
-  | sliceSplitI a A hΓ => exact fl_sliceSplitI a A hΓ
-  | sliceSplitM a A hΓ => exact fl_sliceSplitM a A hΓ
+  | sliceSplitI a A hΓ => exact pv_sliceSplitI a A hΓ
+  | sliceSplitM a A hΓ => exact pv_sliceSplitM a A hΓ
   | sliceEmptyI a A hΓ => exact pv_sliceEmptyI a A hΓ
   | sliceEmptyM a A hΓ => exact pv_sliceEmptyM a A hΓ
   | sliceReplaceM a A hΓ => exact fl_sliceReplaceM a A hΓ

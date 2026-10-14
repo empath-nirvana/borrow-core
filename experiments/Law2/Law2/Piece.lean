@@ -13,11 +13,11 @@ part, handed the views made afresh, is again in the relation.
 `RSlot σ S₀ A` is that predicate read along `A`'s shape, `S₀` the lenders' row, and `RC σ S₀ C`
 its computation side, by one structural recursion on the types:
 
-* `⊗`, `⊕`, `!`, `Ref`: componentwise (a pair's components re-lend each with its own share);
+* `⊗`, `⊕`, `!`, `Ref`, `[L]`: componentwise (a pair's components re-lend each with its own
+  share, a family's leaves each with its own);
 * `U C`: re-lendable, and forced at every re-lend it is `RC C`;
 * `[@a] A`: re-lendable, and at every re-lend in `Res_{@a}` and `RSlot A`;
-* every other value type (`Imm`, `Mut`, `μ`, `[L]`, the leaves): re-lendable at the kernel's
-  relation;
+* every other value type (`Imm`, `Mut`, `μ`, the leaves): re-lendable at the kernel's relation;
 * `F_Σ R` and `F R` (the empty row): the piece (`bodyH`/`OpenH`, `Law2/Inner.lean`) at the
   lenders' operations the row has (`RTab`), the operations of other names caught by a handler
   inside the borrower (`RIn`), answering in `RSlot R`. At `F R` the table is empty and nothing is
@@ -60,9 +60,9 @@ def RTab (δ : LSub) (S₀ : Row) (C : CTy) : OpTab :=
 
 mutual
 /-- **Re-lendable values** at the stack `σ`, its lends at `αs`, the lenders' row `S₀`.
-Componentwise at `⊗`, `⊕`, `!` and `Ref`; at `U C`, re-lendable and forced at every re-lend
-`RC C`; at `[@a] A`, re-lendable and at every re-lend in `Res_{@a}` and `RSlot A`; elsewhere
-re-lendable at the kernel's relation. -/
+Componentwise at `⊗`, `⊕`, `!`, `Ref` and `[L]` (a family leaf by leaf, as the kernel's clause
+at `[L]`); at `U C`, re-lendable and forced at every re-lend `RC C`; at `[@a] A`, re-lendable and
+at every re-lend in `Res_{@a}` and `RSlot A`; elsewhere re-lendable at the kernel's relation. -/
 def RSlot (δ : LSub) (σ : LStack) (S₀ : Row) : VTy → List Life → List SRec → Val → WProp
   | .tensor A B, αs, ls, v => ex fun v₁ => ex fun v₂ => ⌜v = .pair v₁ v₂⌝ ⋆
       RSlot δ σ S₀ A αs ls v₁ ⋆ RSlot δ σ S₀ B αs ls v₂
@@ -77,6 +77,8 @@ def RSlot (δ : LSub) (σ : LStack) (S₀ : Row) : VTy → List Life → List SR
   | .box a A, αs, ls, v =>
       RelendableS δ [] σ (fun αs' ls' =>
         atLife (extS δ σ αs') a fun α => box α (RSlot δ σ S₀ A αs' ls' v)) αs ls
+  | .fam L, αs, ls, v => ex fun ℓ => ex fun n => ⌜v = Val.arr ℓ n ∧ n.toNat < 2 ^ 31⌝ ⋆
+      sepRange (fun m => RSlot δ σ S₀ L αs ls (.loc m)) ℓ n.toNat
   | A, αs, ls, v =>
       RelendableS δ [] σ (fun αs' ls' => vCE (ℍ := ℍ) none true A ls' (extS δ σ αs') v) αs ls
 termination_by structural A => A
@@ -185,6 +187,18 @@ theorem relendableS_frozen {P : List Life → List SRec → WProp} {αs : List L
   rw [ResU.CompS.functional hcv (ResU.comp_empty_right ρ)]
   exact h ls' he αs' hr
 
+/-- **`Relendable_σ` is closed under `⊛` over a range**: leaf by leaf (`relendableS_sep`), the
+empty range frozen whole. -/
+theorem relendableS_sepRange {P : BoCa.Loc → List Life → List SRec → WProp} {αs : List Life}
+    {ls : List SRec} (hlen : αs.length = σ.length) :
+    ∀ {ℓ : BoCa.Loc} {n : Nat} {ρ : WRes},
+      sepRange (fun m => RelendableS δ [] σ (P m) αs ls) ℓ n ρ →
+        RelendableS δ [] σ (fun αs' ls' => sepRange (fun m => P m αs' ls') ℓ n) αs ls ρ
+  | _, 0, _, ⟨rfl, _⟩ => relendableS_frozen hlen (fun a _ => ResU.inStratum_empty a)
+      fun _ _ _ _ => ⟨rfl, trivial⟩
+  | _, _ + 1, ρ, ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ =>
+      relendableS_sep ρ ⟨ρ₁, ρ₂, hc, h₁, relendableS_sepRange hlen h₂⟩
+
 /-- **A frozen part beside a re-lendable one**: a resource in `[top]` whose predicate reads no
 list joins the frozen part. -/
 theorem relendableS_frame {seen : List BoCa.Loc} {F : WProp} {P : List Life → List SRec → WProp}
@@ -289,20 +303,22 @@ end rel
 section slot
 variable {δ : LSub} {σ : LStack} {S₀ : Row}
 
-/-- A type `RSlot` reads at the kernel's relation: not `⊗`, `⊕`, `U`, `!`, `Ref` or `[@a]`. -/
+/-- A type `RSlot` reads at the kernel's relation: not `⊗`, `⊕`, `U`, `!`, `Ref`, `[@a]` or
+`[L]`. -/
 def LeafR (A : VTy) : Prop :=
   (∀ A₁ A₂, A ≠ .tensor A₁ A₂) ∧ (∀ A₁ A₂, A ≠ .sum A₁ A₂) ∧ (∀ C, A ≠ .thunk C) ∧
-    (∀ A', A ≠ .bang A') ∧ (∀ A', A ≠ .ref A') ∧ ∀ a A', A ≠ .box a A'
+    (∀ A', A ≠ .bang A') ∧ (∀ A', A ≠ .ref A') ∧ (∀ a A', A ≠ .box a A') ∧ ∀ L, A ≠ .fam L
 
 /-- The kernel's types at which `RSlot` reads the kernel's relation. -/
 macro "leafR_tac" : tactic => `(tactic| exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-  ⟨(fun _ _ h => nomatch h), (fun _ _ h => nomatch h), (fun _ h => nomatch h),
-    (fun _ h => nomatch h), (fun _ h => nomatch h), (fun _ _ h => nomatch h)⟩))))))
+  (Or.inr ⟨(fun _ _ h => nomatch h), (fun _ _ h => nomatch h), (fun _ h => nomatch h),
+    (fun _ h => nomatch h), (fun _ h => nomatch h), (fun _ _ h => nomatch h),
+    (fun _ h => nomatch h)⟩)))))))
 
 /-- The shapes `RSlot` reads. -/
 theorem vty_shape (A : VTy) : (∃ A₁ A₂, A = .tensor A₁ A₂) ∨ (∃ A₁ A₂, A = .sum A₁ A₂) ∨
     (∃ C, A = .thunk C) ∨ (∃ A', A = .bang A') ∨ (∃ A', A = .ref A') ∨
-    (∃ a A', A = .box a A') ∨ LeafR A := by
+    (∃ a A', A = .box a A') ∨ (∃ L, A = .fam L) ∨ LeafR A := by
   cases A with
   | tensor A₁ A₂ => exact Or.inl ⟨_, _, rfl⟩
   | sum A₁ A₂ => exact Or.inr (Or.inl ⟨_, _, rfl⟩)
@@ -310,12 +326,13 @@ theorem vty_shape (A : VTy) : (∃ A₁ A₂, A = .tensor A₁ A₂) ∨ (∃ A�
   | bang A' => exact Or.inr (Or.inr (Or.inr (Or.inl ⟨_, rfl⟩)))
   | ref A' => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨_, rfl⟩))))
   | box a A' => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨_, _, rfl⟩)))))
+  | fam L => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨_, rfl⟩))))))
   | _ => leafR_tac
 
 theorem rslot_leaf {A : VTy} (hA : LeafR A) (αs : List Life) (ls : List SRec) (v : Val) :
     RSlot (ℍ := ℍ) δ σ S₀ A αs ls v =
       RelendableS δ [] σ (fun αs' ls' => vCE (ℍ := ℍ) none true A ls' (extS δ σ αs') v) αs ls := by
-  obtain ⟨h₁, h₂, h₃, h₄, h₅, h₆⟩ := hA
+  obtain ⟨h₁, h₂, h₃, h₄, h₅, h₆, h₇⟩ := hA
   cases A with
   | tensor A₁ A₂ => exact absurd rfl (h₁ A₁ A₂)
   | sum A₁ A₂ => exact absurd rfl (h₂ A₁ A₂)
@@ -323,6 +340,7 @@ theorem rslot_leaf {A : VTy} (hA : LeafR A) (αs : List Life) (ls : List SRec) (
   | bang A' => exact absurd rfl (h₄ A')
   | ref A' => exact absurd rfl (h₅ A')
   | box a A' => exact absurd rfl (h₆ a A')
+  | fam L => exact absurd rfl (h₇ L)
   | _ => rfl
 
 theorem rslot_leaf_fun {A : VTy} (hA : LeafR A) (v : Val) :
@@ -336,47 +354,53 @@ theorem stratS_ptoOwn {αs : List Life} {ℓ : BoCa.Loc} {v : Val} {ρ : WRes} (
     stratS αs ρ := fun a _ => by rw [h]; exact ResU.inStratum_single_own a ℓ v
 
 /-- **A re-lendable value is re-lendable as such**: frozen at a stop and thawed at a re-lend, it
-is a re-lendable value again. Componentwise at `⊗` and `⊕` (`relendableS_sep`); the owned cell of a
-`Ref` frozen beside its payload (`relendableS_frame`); at `U`, `[@a]` and the kernel's types, by
-`relendableS_idem`. -/
+is a re-lendable value again. Componentwise at `⊗` and `⊕` (`relendableS_sep`) and at `[L]`
+(`relendableS_sepRange`); the owned cell of a `Ref` frozen beside its payload
+(`relendableS_frame`); at `U`, `[@a]` and the kernel's types, by `relendableS_idem`. -/
 theorem rslot_relendable (A : VTy) : ∀ {αs : List Life} {ls : List SRec} {v : Val} {ρ : WRes},
-    RSlot (ℍ := ℍ) δ σ S₀ A αs ls v ρ →
+    αs.length = σ.length → RSlot (ℍ := ℍ) δ σ S₀ A αs ls v ρ →
       RelendableS δ [] σ (fun αs' ls' => RSlot (ℍ := ℍ) δ σ S₀ A αs' ls' v) αs ls ρ := by
   rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨C, rfl⟩ | ⟨A', rfl⟩ | ⟨A', rfl⟩ |
-    ⟨a, A', rfl⟩ | hA
-  · intro αs ls v ρ h
+    ⟨a, A', rfl⟩ | ⟨L, rfl⟩ | hA
+  · intro αs ls v ρ hlen h
     obtain ⟨v₁, v₂, hp⟩ := h
     obtain ⟨rfl, ρ₁, ρ₂, hc, h₁, h₂⟩ := pure_sep_iff.mp hp
     exact relendableS_mono' (fun αs' ls' τ hτ => ⟨v₁, v₂, pure_sep_mk rfl hτ⟩) ρ
-      (relendableS_sep ρ ⟨ρ₁, ρ₂, hc, rslot_relendable A₁ h₁, rslot_relendable A₂ h₂⟩)
-  · intro αs ls v ρ h
+      (relendableS_sep ρ ⟨ρ₁, ρ₂, hc, rslot_relendable A₁ hlen h₁, rslot_relendable A₂ hlen h₂⟩)
+  · intro αs ls v ρ hlen h
     rcases h with ⟨v₁, hp⟩ | ⟨v₂, hp⟩
     · obtain ⟨rfl, h₁⟩ := pure_sep_iff.mp hp
       exact relendableS_mono' (fun αs' ls' τ hτ => Or.inl ⟨v₁, pure_sep_mk rfl hτ⟩) ρ
-        (rslot_relendable A₁ h₁)
+        (rslot_relendable A₁ hlen h₁)
     · obtain ⟨rfl, h₂⟩ := pure_sep_iff.mp hp
       exact relendableS_mono' (fun αs' ls' τ hτ => Or.inr ⟨v₂, pure_sep_mk rfl hτ⟩) ρ
-        (rslot_relendable A₂ h₂)
-  · intro αs ls v ρ h
+        (rslot_relendable A₂ hlen h₂)
+  · intro αs ls v ρ _ h
     exact relendableS_idem h
-  · intro αs ls v ρ h
+  · intro αs ls v ρ hlen h
     obtain ⟨rfl, h⟩ := h
-    obtain ⟨ds, ρz, ρn, hc, hn, hz, hth⟩ := rslot_relendable A' h
+    obtain ⟨ds, ρz, ρn, hc, hn, hz, hth⟩ := rslot_relendable A' hlen h
     obtain ⟨rfl, rfl⟩ := compS_eq_empty hc
     refine ⟨ds, PMap.empty, PMap.empty, ResU.comp_empty_right _, hn, hz,
       fun ls' he αs' hr' ρv τ hv hcv => ?_⟩
     obtain rfl := vwS_flags_empty hn hv
     obtain rfl := eq_of_compS_empty_left hcv
     exact ⟨rfl, hth ls' he αs' hr' PMap.empty PMap.empty hv (ResU.comp_empty_right _)⟩
-  · intro αs ls v ρ h
+  · intro αs ls v ρ hlen h
     obtain ⟨ℓ, v', hp⟩ := h
     obtain ⟨rfl, ρo, ρp, hc, ho, hpay⟩ := pure_sep_iff.mp hp
     exact relendableS_mono' (fun αs' ls' τ hτ => ⟨ℓ, v', pure_sep_mk rfl hτ⟩) ρ
       (relendableS_frame (fun _ h => stratS_ptoOwn h) ρ
-        ⟨ρo, ρp, hc, ho, rslot_relendable A' hpay⟩)
-  · intro αs ls v ρ h
+        ⟨ρo, ρp, hc, ho, rslot_relendable A' hlen hpay⟩)
+  · intro αs ls v ρ _ h
     exact relendableS_idem h
-  · intro αs ls v ρ h
+  · intro αs ls v ρ hlen h
+    obtain ⟨ℓ, n, hp⟩ := h
+    obtain ⟨hv, hs⟩ := pure_sep_iff.mp hp
+    exact relendableS_mono' (fun αs' ls' τ hτ => ⟨ℓ, n, pure_sep_mk hv hτ⟩) ρ
+      (relendableS_sepRange (P := fun m αs' ls' => RSlot (ℍ := ℍ) δ σ S₀ L αs' ls' (.loc m)) hlen
+        (sepRange_mono' (fun m τ hτ => rslot_relendable L hlen hτ) hs))
+  · intro αs ls v ρ _ h
     rw [rslot_leaf hA] at h
     rw [rslot_leaf_fun hA]
     exact relendableS_idem h
@@ -390,6 +414,7 @@ def NoThunkT : VTy → Prop
   | .bang A => NoThunkT A
   | .ref A => NoThunkT A
   | .box _ A => NoThunkT A
+  | .fam L => NoThunkT L
   | _ => True
 
 /-- **A re-lendable value of a persistent type holds nothing**: at the current lifetimes it is in
@@ -398,7 +423,7 @@ theorem rslot_persistent_empty (A : VTy) (hp : A.Persistent) : ∀ {αs : List L
     {ls : List SRec} {v : Val} {ρ : WRes}, List.IsChain (· < ·) αs →
       RSlot (ℍ := ℍ) δ σ S₀ A αs ls v ρ → ρ = PMap.empty := by
   rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨C, rfl⟩ | ⟨A', rfl⟩ | ⟨A', rfl⟩ |
-    ⟨a, A', rfl⟩ | hA
+    ⟨a, A', rfl⟩ | ⟨L, rfl⟩ | hA
   · intro αs ls v ρ hch h
     simp only [VTy.Persistent, VTy.persistent, Bool.and_eq_true] at hp
     obtain ⟨v₁, v₂, hq⟩ := h
@@ -419,6 +444,7 @@ theorem rslot_persistent_empty (A : VTy) (hp : A.Persistent) : ∀ {αs : List L
     simp only [VTy.Persistent, VTy.persistent] at hp
     obtain ⟨α, -, hb, -⟩ := relendableS_now hch h
     exact rslot_persistent_empty A' hp hch hb
+  · simp [VTy.Persistent, VTy.persistent] at hp
   · intro αs ls v ρ hch h
     rw [rslot_leaf hA] at h
     exact vP_empty_of_persistent hp (relendableS_now hch h)
@@ -430,7 +456,7 @@ theorem rslot_vC (A : VTy) (hA : NoThunkT A) : ∀ {αs : List Life} {ls : List 
     {ρ : WRes}, List.IsChain (· < ·) αs → RSlot (ℍ := ℍ) δ σ S₀ A αs ls v ρ →
       vCE (ℍ := ℍ) none true A ls (extS δ σ αs) v ρ := by
   rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨C, rfl⟩ | ⟨A', rfl⟩ | ⟨A', rfl⟩ |
-    ⟨a, A', rfl⟩ | hL
+    ⟨a, A', rfl⟩ | ⟨L, rfl⟩ | hL
   · intro αs ls v ρ hch h
     obtain ⟨v₁, v₂, hq⟩ := h
     obtain ⟨rfl, ρ₁, ρ₂, hc, h₁, h₂⟩ := pure_sep_iff.mp hq
@@ -452,6 +478,10 @@ theorem rslot_vC (A : VTy) (hA : NoThunkT A) : ∀ {αs : List Life} {ls : List 
   · intro αs ls v ρ hch h
     obtain ⟨α, ha, hb, hs⟩ := relendableS_now hch h
     exact ⟨α, ha, rslot_vC A' hA hch hb, hs⟩
+  · intro αs ls v ρ hch h
+    obtain ⟨ℓ, n, hq⟩ := h
+    obtain ⟨⟨rfl, hn⟩, hs⟩ := pure_sep_iff.mp hq
+    exact vP_fam_mk hn (sepRange_mono' (fun m τ hτ => rslot_vC L hA hch hτ) hs)
   · intro αs ls v ρ hch h
     rw [rslot_leaf hL] at h
     exact relendableS_now hch h
@@ -555,7 +585,7 @@ theorem rSep_relendable {αs : List Life} (hlen : αs.length = σ.length) {ls : 
       · rw [if_pos hl] at h
         simp only [if_pos hl]
         obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := h
-        exact relendableS_sep ρ ⟨ρ₁, ρ₂, hc, rslot_relendable _ h₁, rSep_relendable hlen Γ γ h₂⟩
+        exact relendableS_sep ρ ⟨ρ₁, ρ₂, hc, rslot_relendable _ hlen h₁, rSep_relendable hlen Γ γ h₂⟩
       · rw [if_neg hl] at h
         simp only [if_neg hl]
         exact rSep_relendable hlen Γ γ h
@@ -609,7 +639,7 @@ theorem relendableS_local {seen : List BoCa.Loc} {P : List Life → List SRec �
 theorem rslot_local (A : VTy) : ∀ {αs : List Life} {ls ls' : List SRec} {v : Val} {ρ : WRes},
     Ext ls ls' ρ → RSlot (ℍ := ℍ) δ σ S₀ A αs ls v ρ → RSlot (ℍ := ℍ) δ σ S₀ A αs ls' v ρ := by
   rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨C, rfl⟩ | ⟨A', rfl⟩ | ⟨A', rfl⟩ |
-    ⟨a, A', rfl⟩ | hA
+    ⟨a, A', rfl⟩ | ⟨L, rfl⟩ | hA
   · intro αs ls ls' v ρ hk h
     obtain ⟨v₁, v₂, hq⟩ := h
     obtain ⟨rfl, ρ₁, ρ₂, hc, h₁, h₂⟩ := pure_sep_iff.mp hq
@@ -631,6 +661,11 @@ theorem rslot_local (A : VTy) : ∀ {αs : List Life} {ls ls' : List SRec} {v : 
     exact ⟨ℓ, v', pure_sep_mk rfl ⟨ρo, ρp, hc, ho, rslot_local A' (hk.right hc) hp⟩⟩
   · intro αs ls ls' v ρ hk h
     exact relendableS_local hk h
+  · intro αs ls ls' v ρ hk h
+    obtain ⟨ℓ, n, hq⟩ := h
+    obtain ⟨hv, hs⟩ := pure_sep_iff.mp hq
+    exact ⟨ℓ, n, pure_sep_mk hv (sepRange_mono_down (R := Ext ls ls')
+      (fun _ _ _ hc h => ⟨h.left hc, h.right hc⟩) (fun m τ hk' h => rslot_local L hk' h) hk hs)⟩
   · intro αs ls ls' v ρ hk h
     rw [rslot_leaf hA] at h ⊢
     exact relendableS_local hk h
@@ -686,7 +721,7 @@ theorem rslot_of_frozen (A : VTy) (hA : NoThunkT A) (hx : ∀ e ∈ σ, ¬ VFree
       vCE (ℍ := ℍ) none true A ls (extS δ σ αs) v ρ → stratS αs ρ →
       RSlot (ℍ := ℍ) δ σ S₀ A αs ls v ρ := by
   rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨C, rfl⟩ | ⟨A', rfl⟩ | ⟨A', rfl⟩ |
-    ⟨a, A', rfl⟩ | hL
+    ⟨a, A', rfl⟩ | ⟨L, rfl⟩ | hL
   · intro αs ls v ρ hlen h hz
     obtain ⟨v₁, v₂, hq⟩ := h
     obtain ⟨rfl, ρ₁, ρ₂, hc, h₁, h₂⟩ := pure_sep_iff.mp hq
@@ -727,6 +762,12 @@ theorem rslot_of_frozen (A : VTy) (hA : NoThunkT A) (hx : ∀ e ∈ σ, ¬ VFree
       rw [vC_extS_of_not_free true ls' σ αs' hxA]
       rw [vC_extS_of_not_free true ls σ αs hxA] at hb
       exact vC_local true A' he hb
+  · intro αs ls v ρ hlen h hz
+    obtain ⟨ℓ, n, rfl, hn, hs⟩ := vP_fam_iff.mp h
+    refine ⟨ℓ, n, pure_sep_mk ⟨rfl, hn⟩ (sepRange_mono_down (R := stratS αs)
+      (fun _ _ _ hc h => ⟨fun a ha => ((outlives_comp hc a).mp (h a ha)).1,
+        fun a ha => ((outlives_comp hc a).mp (h a ha)).2⟩)
+      (fun m τ hτ h => rslot_of_frozen L hA (fun e he hv => hx e he hv) hlen h hτ) hz hs)⟩
   · intro αs ls v ρ hlen h hz
     rw [rslot_leaf hL]
     refine relendableS_frozen hlen hz fun ls' he αs' _ => ?_

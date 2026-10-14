@@ -10,7 +10,8 @@ premises' piece judgments and the rule's side conditions.
 
 This file holds the structural rules, closures and calls, the eliminations, `!`, `[@a]` at a type
 that outlives its lifetime, the sub-lifetime rules, the effect rules at linear operations, the
-polymorphic let, and the borrow axioms on `Ref`, `Imm`, `Mut` and `Unk`.
+polymorphic let, the borrow axioms on `Ref`, `Imm`, `Mut` and `Unk`, the family constants and the
+counted loops. The family operations are in `Law2/Families.lean`.
 -/
 
 noncomputable section
@@ -382,7 +383,8 @@ theorem pv_forgetBang {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP �
 
 /-- The types `RSlot` reads at the kernel's relation, named. -/
 macro "leafR" : term => `(⟨(fun _ _ h => nomatch h), (fun _ _ h => nomatch h), (fun _ h => nomatch h),
-    (fun _ h => nomatch h), (fun _ h => nomatch h), (fun _ _ h => nomatch h)⟩)
+    (fun _ h => nomatch h), (fun _ h => nomatch h), (fun _ _ h => nomatch h),
+    (fun _ h => nomatch h)⟩)
 
 /-- **6.60 at the re-lendable reading**: a re-lendable value of a type outliving `@a` lies in
 `Res_{@a}` at the current lifetimes. -/
@@ -392,7 +394,7 @@ theorem rslot_outlives {Δ : LifeCtx} {a : Lifetime.Life} {α : Life} {αs : Lis
     ∀ {ls : List SRec} {v : Val} {ρ : WRes}, RSlot (ℍ := ℍ) δ σ S₀ A αs ls v ρ →
       ρ.InStratum α := by
   rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨C, rfl⟩ | ⟨A', rfl⟩ | ⟨A', rfl⟩ |
-    ⟨b, A', rfl⟩ | hL
+    ⟨b, A', rfl⟩ | ⟨L, rfl⟩ | hL
   · cases hA with
     | tensor h₁ h₂ =>
         intro ls v ρ h
@@ -425,6 +427,14 @@ theorem rslot_outlives {Δ : LifeCtx} {a : Lifetime.Life} {α : Life} {αs : Lis
         rw [ha] at ha'; cases Option.some.inj ha'
         rw [hb] at hb'; cases Option.some.inj hb'
         exact ho.mono (show (α : Life) ≤ β from hle')
+  · cases hA with
+    | fam hL =>
+        intro ls v ρ h
+        obtain ⟨ℓ, n, hq⟩ := h
+        obtain ⟨-, hs⟩ := pure_sep_iff.mp hq
+        exact sepRange_closed (ResU.inStratum_empty α)
+          (fun _ _ _ hc g₁ g₂ => (outlives_comp hc α).mpr ⟨g₁, g₂⟩)
+          (fun m τ hτ => rslot_outlives hδ ha hch L hL hτ) hs
   · intro ls v ρ h
     rw [rslot_leaf hL] at h
     exact vC_outlives hδ ha hA true ls v ρ (relendableS_now hch h)
@@ -438,7 +448,7 @@ theorem pv_boxI_outlives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} {a :
   intro αs ls γ ρ hlen hch hΔ hg
   refine wpTS_mono (fun ls' v τ hv => ?_) ρ (h αs ls γ ρ hlen hch hΔ hg)
   rw [rslot_box_eq]
-  refine relendableS_mono_rel (fun αs' ls'' hr τ' hτ => ?_) τ (rslot_relendable A hv)
+  refine relendableS_mono_rel (fun αs' ls'' hr τ' hτ => ?_) τ (rslot_relendable A hlen hv)
   obtain ⟨α', ha'⟩ := hdef _ (hΔ αs' hr)
   exact ⟨α', ha', hτ, rslot_outlives (hΔ αs' hr) ha' hr.2 A hA hτ⟩
 
@@ -675,7 +685,7 @@ theorem pv_roll {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} (hA : A.NoMut
   refine wpTS_mono (fun ls' v τ hv => ?_) ρ (h αs ls γ ρ hlen hch hΔ hg)
   rw [rslot_leaf (A := .mu A) leafR]
   exact relendableS_mono_rel (fun αs' ls'' hr τ' hτ => vC_roll hA hc (rslot_vC _ hN hr.2 hτ)) τ
-    (rslot_relendable _ hv)
+    (rslot_relendable _ hlen hv)
 
 /-- **`Λ. M : ∀'x ⊏ @b. C`** at a context free of `U`: `∀` is read at the kernel's relation, which
 the body's own derivation gives (`fundamentalC`, `allI_compatC`), the context read at the kernel's
@@ -803,7 +813,7 @@ theorem pv_swap {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (hΓ : Ctx.DeadP Γ) :
   intro v₁ ρ₁ ρ₂ hv₁ hc
   rw [eq_of_compS_empty_left hc]
   have hlen' : αs'.length = σ.length := (List.Forall₂.length_eq hr.1).trans hlen
-  have hr₁ := rslot_relendable (.ref A) hv₁
+  have hr₁ := rslot_relendable (.ref A) hlen' hv₁
   obtain ⟨ℓ, w, hs₁⟩ := hv₁
   obtain ⟨rfl, -, -, -, -, -⟩ := pure_sep_iff.mp hs₁
   have hβ₁ : Expr.subst 0 (Val.loc ℓ)
@@ -859,12 +869,18 @@ theorem pv_swap {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (hΓ : Ctx.DeadP Γ) :
 
 /-! ### Families: the size, the length, forgetting, the empty family, copying -/
 
-/-- A family's re-lendable reading, at the current lifetimes: the kernel's. -/
-theorem rslot_fam_now {L : VTy} {αs : List Life} {ls : List SRec} {v : Val} {ρ : WRes}
-    (hch : List.IsChain (· < ·) αs) (h : RSlot (ℍ := ℍ) δ σ S₀ (.fam L) αs ls v ρ) :
-    vCE (ℍ := ℍ) none true (.fam L) ls (extS δ σ αs) v ρ := by
-  rw [rslot_leaf (A := .fam L) leafR] at h
-  exact relendableS_now hch h
+/-- A family's shape: a location and a length. -/
+theorem rslot_fam_shape {L : VTy} {αs : List Life} {ls : List SRec} {v : Val} {ρ : WRes}
+    (h : RSlot (ℍ := ℍ) δ σ S₀ (.fam L) αs ls v ρ) : ∃ ℓ n, v = Val.arr ℓ n := by
+  obtain ⟨ℓ, n, hq⟩ := h
+  exact ⟨ℓ, n, (pure_sep_iff.mp hq).1.1⟩
+
+/-- A family of `imm` leaves, at the current lifetimes: the kernel's. -/
+theorem rslot_arrayImm_now {a : Lifetime.Life} {A : VTy} {αs : List Life} {ls : List SRec}
+    {v : Val} {ρ : WRes} (hch : List.IsChain (· < ·) αs)
+    (h : RSlot (ℍ := ℍ) δ σ S₀ (.arrayImm a A) αs ls v ρ) :
+    vCE (ℍ := ℍ) none true (.arrayImm a A) ls (extS δ σ αs) v ρ :=
+  rslot_vC (.fam (.imm a A)) trivial hch h
 
 /-- An `I32`, frozen. -/
 theorem rslot_i32 {αs : List Life} (hlen : αs.length = σ.length) (ls : List SRec) (n : UInt32) :
@@ -882,7 +898,7 @@ theorem pv_famSize {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ) 
   rw [rc_arr_eq]
   intro v ρ₁ ρ₂ hv hc
   rw [eq_of_compS_empty_left hc]
-  obtain ⟨ℓ, n, rfl, -, -⟩ := vP_fam_iff.mp (rslot_fam_now hr.2 hv)
+  obtain ⟨ℓ, n, rfl⟩ := rslot_fam_shape hv
   refine rc_ret_of_wpTS (wpTS_lolli ls' _ _ _ _ ?_)
   show wpTS ls' (.letpair (.val (Val.arr ℓ n)) (.pair (.pair (.var 1) (.var 0)) (.var 0))) _ _
   refine wpTS_tensor ls' (Val.loc ℓ) (Val.i32 n) _ _ _ ?_
@@ -905,7 +921,7 @@ theorem pv_arrLen {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy) (h
   rw [rc_arr_eq]
   intro v ρ₁ ρ₂ hv hc
   rw [eq_of_compS_empty_left hc]
-  have hk := rslot_fam_now hr.2 hv
+  have hk := rslot_arrayImm_now hr.2 hv
   obtain ⟨ℓ, n, rfl, -, -⟩ := vP_fam_iff.mp hk
   refine rc_ret_of_wpTS (wpTS_drop (noOwn_arrayImm hk) (ResU.comp_empty_right ρ₁) ?_)
   refine wpTS_lolli ls' _ _ _ _ ?_
@@ -922,7 +938,7 @@ theorem pv_arrForget {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
   rw [rc_arr_eq]
   intro v ρ₁ ρ₂ hv hc
   rw [eq_of_compS_empty_left hc]
-  have hk := rslot_fam_now hr.2 hv
+  have hk := rslot_arrayImm_now hr.2 hv
   refine rc_ret_of_wpTS (wpTS_drop (noOwn_arrayImm hk) (ResU.comp_empty_right ρ₁) ?_)
   refine wpTS_lolli ls' _ _ _ _ ?_
   exact wpTS_val ls' .unit _ _ (rslot_unit ((List.Forall₂.length_eq hr.1).trans hlen) ls')
@@ -930,10 +946,9 @@ theorem pv_arrForget {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
 /-- **The empty family** (`slice_empty_imm`, `slice_empty_mut`): no leaves, nothing held. -/
 theorem pv_famEmpty {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ) :
     PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val emptyFamV) (.fam L) := by
-  refine pv_const hΓ (fun k γ => by simp [emptyFamV, Val.arr, Val.i32, Expr.psub]) fun αs ls hlen _ => ?_
-  rw [rslot_leaf (A := .fam L) leafR]
-  exact relendableS_frozen hlen (fun a _ => ResU.inStratum_empty a)
-    fun _ _ _ _ => vP_fam_mk (by decide) ⟨rfl, trivial⟩
+  refine pv_const hΓ (fun k γ => by simp [emptyFamV, Val.arr, Val.i32, Expr.psub])
+    fun αs ls _ _ => ?_
+  exact ⟨0, 0, pure_sep_mk ⟨rfl, by decide⟩ ⟨rfl, trivial⟩⟩
 
 theorem pv_sliceEmptyI {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
     (hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val emptyFamV) (.arrayImm a A) := pv_famEmpty hΓ
@@ -966,7 +981,7 @@ theorem pv_arrCopy {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy) (
   rw [rc_arr_eq]
   intro v ρ₁ ρ₂ hv hc
   rw [eq_of_compS_empty_left hc]
-  have hk := rslot_fam_now hr.2 hv
+  have hk := rslot_arrayImm_now hr.2 hv
   refine rc_ret_of_wpTS (wpTS_lolli ls' _ _ _ _ ?_)
   show wpTS ls' (.pair (.val v) (.val v)) _ _
   refine wpTS_val ls' (Val.pair v v) _ _ ?_
