@@ -8,3 +8,5 @@ import PartialLife.Statics
 import PartialLife.OrderFacts
 import PartialLife.Reproved
 import PartialLife.Forall
+import PartialLife.Atoms
+import PartialLife.NominalFrame

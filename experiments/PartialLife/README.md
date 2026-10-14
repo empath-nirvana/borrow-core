@@ -2,7 +2,7 @@
 
 Build with `lake build PartialLife`. There is no `sorry`, `axiom`, `native_decide`, `opaque`,
 `partial`, `unsafe` or `implemented_by`, and every declaration's `#print axioms` is within
-`[propext, Classical.choice, Quot.sound]` (407 declarations checked). The library does not import
+`[propext, Classical.choice, Quot.sound]` (430 declarations checked). The library does not import
 this directory.
 
 ## The question
@@ -33,13 +33,13 @@ every two lifetimes comparable, or only a well-founded measure?**
 * **Core's proofs compare two lifetimes in 12 places** (census class (iii)). Four do so only in
   the proof; three of them are proved again here without it (`Reproved.lean`). Eight state one of
   three order facts, and each fact is, in a lattice, *equivalent* to every two lifetimes being
-  comparable
-  (`sup_lt_iff_chain`, `lt_inf_iff_chain`, `le_of_not_lt_iff_chain`). All of them are about cells'
-  strata: the composition of `imm` cells (a union's witness at `⊔ᾱ`, a composite's stratum at
-  `⊓ᾱ`, `○`'s `mut(α ⊓ β)`) and one typed-world step (a reborrow's view no longer than its frame,
-  through `StratumLe`). 2502 declarations rest on the eight, `fundamentalC` and `adequacyC` among
-  them. On strata ordered partially each would be restated (an `imm` cell's stratum read pointwise
-  over its borrowers, the non-strict stratum read directly), not proved again.
+  comparable (`sup_lt_iff_chain`, `lt_inf_iff_chain`, `le_of_not_lt_iff_chain`). All of them are
+  about cells' strata: the composition of `imm` cells (a union's witness at `⊔ᾱ`, a composite's
+  stratum at `⊓ᾱ`, `○`'s `mut(α ⊓ β)`) and one typed-world step (a reborrow's view no longer than
+  its frame, through `StratumLe`). 2502 declarations rest on the eight, `fundamentalC` and
+  `adequacyC` among them. On strata ordered partially each would be restated (an `imm` cell's
+  stratum read pointwise over its borrowers, the non-strict stratum read directly), not proved
+  again.
 * **The statics read entailment on a chain.** `Δ ⊨ @a ⊏ @b` quantifies over `ℕ`-valued
   substitutions, and the checker's search has two strict rules that hold only on chains: it
   accepts `'x ⊓ 'y ⊏ 'a ⊓ 'b` and `'x ⊔ 'y ⊏ ⊤` at a context where both fail on a partial order
@@ -48,23 +48,30 @@ every two lifetimes comparable, or only a well-founded measure?**
   lifetime, form a typed world, are related at `Mut 'x 1 ⊗ Mut 'y 1`, `F (Mut 'x 1 ⊗ Mut 'y 1)` and
   `U (F (Mut 'x 1)) ⊗ U (F (Mut 'y 1))`, and stay related under the swap of the branches
   (`interleaved`).
+* **For problem B's nominal re-making**: an order with its shape carries the model (`Atoms`), the
+  swap of a re-made lifetime with the ended one is an automorphism there, and the relation's
+  clauses are invariant under it (`nominal_remake`); the borrow rules' freshness has to become
+  nominal (`no_fresh_bound`), and 6.65 holds with it so (`wpTS_M_frameOn`).
 
 **Kill criterion: not met.** No machine-checked result here shows that the cell equation or a rule
 of the relation needs comparability in a way no well-founded partial order can supply. What is
 machine-checked: the eight statement-level places state facts equivalent to comparability, about
 Core's encoding of `imm` strata and of the non-strict stratum, each with a reading that holds on
 partial orders; the checker's two strict rules fail on a partial order, a change to the statics;
-and, with Core's cells kept on their chain, 6.65's choice of a fresh lifetime cannot be read beneath
-one task's branch (`no_fresh_bound`), so the route `DenseCarrier` used for the borrow rules does not
-carry over as it stands. No patch was tried.
+and, with Core's cells kept on their chain, 6.65's freshness cannot be read beneath one task's
+branch (`no_fresh_bound`), so the route `DenseCarrier` used for the borrow rules does not carry over
+as it stands. One restatement was made on that step: 6.65 with its freshness over any set with
+members below every lifetime, proved by Core's proof (`wpTS_M_frameOn`). The borrow rules on top of
+it are not derived.
 
 ## 1. Census
 
 `scripts/Census.lean` walks the elaborated type and value of every declaration of `Paper/`,
 `Support/` and `Core/` (14365 declarations) and records, at every application node:
 
-* an instance argument whose class is applied to `Life` (the chain class `LinearOrder`, `SemilatticeInf`, `Max`,
-  `Preorder`, `Decidable (a ≤ b)`, …), with the constant applied: what the constant asks of the order;
+* an instance argument whose class is applied to `Life` (the chain class `LinearOrder`,
+  `SemilatticeInf`, `Max`, `Preorder`, `Decidable (a ≤ b)`, …), with the constant applied: what the
+  constant asks of the order;
 * an iff lemma that holds only on chains (`not_le`, `sup_lt_iff`, `lt_inf_iff`, `Nat.max_lt`, …) and
   the direction it is used in (`Iff.mp`/`Iff.mpr`), or a rewrite with it;
 * a `Life` passed to an `ℕ` slot or an `ℕ` to a `Life` slot (a fact about `ℕ` used at `Life`), with
@@ -123,8 +130,8 @@ census run on it puts every declaration in class (ii). The statement-level place
 on partial strata: an `imm` cell `imm(ᾱ, v, ρ)` in `Cell_α` when `α ⊏ a` for every `a ∈ ᾱ`, its
 witness in `Res_a` for every `a ∈ ᾱ` (on a chain the same sets as Core's `⊓ᾱ ⊐ α`, `ρ ∈ Res_⊔ᾱ`);
 `ᾱ` a set of borrowers that need not have a greatest or least member, in place of `LSet`;
-`StratumLe W β` read as "every cell of `W` is `⊒ β`". `○`'s `mut(α ⊓ β, …)` would need the same pointwise reading for the `mut` cells
-agreement builds. None of these restatements is carried out.
+`StratumLe W β` read as "every cell of `W` is `⊒ β`". `○`'s `mut(α ⊓ β, …)` would need the same
+pointwise reading for the `mut` cells agreement builds. None of these restatements is carried out.
 
 **Class (iv)** is `DenseCarrier`'s class (c): the non-strict stratum "every cell `⊒ α`" written
 `ρ ∈ Res_{↓α}`, read back by "no lifetime strictly between `↓a` and `a`". On a partial order it can
@@ -172,7 +179,10 @@ So `carrier_rigid` is a fact about chains: the layer equation itself needs a wel
 and nothing else. The automorphisms act on the order; their action on a solution's cells
 (`DenseCarrier`'s `pact` for the positioned carrier) is not built here.
 
-## 3. The relation over a partial order of lifetimes (`Reading.lean`, `Relation.lean`, `Faithful.lean`, `Symmetry.lean`)
+## 3. The relation over a partial order of lifetimes
+
+`Reading.lean`, `Relation.lean`, `Faithful.lean`, `Symmetry.lean`.
+
 
 As in `DenseCarrier`, Core's cells, resources, `wpTS`, typed world and records stay as they are, on
 Core's slots; the relation reads its lifetimes in a second order `L`, here any partial order with a
@@ -232,7 +242,10 @@ given slots, as Core's proofs pick (`exists_fresh`, `↓`), read on task 1's bra
 and incomparable with every lifetime of task 2 below `⊤`. The schedule puts the new slot below
 everything; the reading puts it beneath the resumer's branch only.
 
-## 5. What carrying Core's proofs over reads (`Forall.lean`, `Interleave.lean`, `Statics.lean`)
+## 5. What carrying Core's proofs over reads
+
+`Forall.lean`, `NominalFrame.lean`, `Interleave.lean`, `Statics.lean`.
+
 
 `DenseCarrier` carried `∀I`, `∀E` and `withbor` over a chain `L` with a monotone reading
 (`allI_compatD`, `allE_compatD`, `withbor2_compatD`). Over a partial order with a reading the slot
@@ -251,9 +264,14 @@ order extends:
   `И α. …` must hold at every slot below some bound, and the borrow rule establishes it by
   instantiating the callback `∀'x ⊏ ⊓Δ` at each such slot's reading, which needs the reading beneath
   `⊓Δ`; below every slot bound some slots are read on task 2's branch. `DenseCarrier.fresh_bound`
-  supplied such a bound for a monotone reading. A 6.65 whose `И` ranges over the slots read on the
-  borrower's branch has what it needs below any finitely many slots (`fresh_on_branch`); it is not
-  stated or proved here.
+  supplied such a bound for a monotone reading.
+* **6.65 needs its freshness only on a set with members below every lifetime**
+  (`NominalFrame.lean`): `wpTS_M_frameOn` is Core's 6.65 with `И` ranging over any such set `S`
+  (`freshOn S`), by Core's proof with the fresh lifetime chosen in `S` and every other step
+  unchanged; Core's 6.65 is the case `S = ⊤` (`wpTS_M_frameX_of_on`). The slots read on the
+  borrower's branch beneath its context are such a set (`fresh_on_branch`). What is not derived is
+  the borrow rule's compatibility on top of it: handing the callback its borrow at the fresh slot
+  read in `L`, and `DenseCarrier`'s 6.60 and `[−]` lemmas over a reading that is not monotone.
 * **The premises are read on `L`**: `∀E`'s `Δ ⊨ @a ⊏ @b` is Core's, over `ℕ`; carried to a chain `L`
   by `DenseCarrier.entailsLtD_of_entailsLt`, it does not carry to a partial order
   (`checker_meet_not_partial`, `checker_join_not_partial`).
@@ -266,31 +284,51 @@ lower bound beneath both tasks' frames, not beneath the resumer's branch only.
 
 ## What it means for problem B
 
-Problem B (`research/effects/src/tier2-problems.md`) decided the closed package: a suspended
-self-borrow is ended while its value is stored and re-made at a fresh lifetime on each opening, with
-lifetimes kept as the model's well-founded measure. The reason given is that stratification is
-ordered by ancestry: a `mut` cell's witness must strictly outlive it.
+Problem B (`research/effects/src/tier2-problems.md`) has decided to close and re-make, not keep live:
+a suspended self-borrow is ended while its value is stored and re-made on each opening, with
+lifetimes kept as the model's well-founded measure. Open: positional re-making (beneath the
+resumer's lifetimes, which gives `x′` extra parents) or nominal re-making (`x′` with the same parents
+as `x`, the resumer's lifetimes incomparable to `x′`, borrows made after resumption taking parents
+from both sides, the swap `x ↔ x′` an automorphism, one equivariance lemma).
 
-* **The decision does not depend on comparability.** The layer equation's `mut` layer is the same
-  over every partial order (`MutFP`: the witness lies in strata strictly above the cell's
-  lifetime), so a live self-borrow at a hidden `'x` still cannot sit under a `mut` cell at `'q`
-  unless `'x ⊐ 'q`. A partial order adds no room there.
-* **The closed package needs no incomparable lifetimes.** By the decision's own terms every
-  suspended self-borrow is ended at the stop, so no task holds a borrow while another runs, and the
-  interleaved-tasks test program meets only nested borrows, which Core's chain orders.
-* **Live interleaved borrows are not excluded by the lifetime order.** Two borrows held across
-  interleaved suspensions, at incomparable lifetimes, are a valid typed world related at their
-  types, symmetric under the swap of the tasks (`interleaved`), with Core's cells on their chain
-  used as a schedule. Carrying the fundamental property to them would need, at least: the statics'
-  entailment read on the partial order and the checker's two strict rules dropped; 6.65 with its
-  fresh lifetime ranging over the borrower's branch (`no_fresh_bound`); and, if the strata
-  themselves were made partial, the eight statement-level places restated. None of this is derived.
+* **Nominal re-making needs a partial order, and the carrier allows one.** On a chain that carries
+  the model the only automorphism is the identity (`DenseCarrier.carrier_rigid`), so the swap
+  `x ↔ x′` requires incomparable lifetimes. The layer equation needs only the well-founded measure
+  on a partial order (`carrierP_iff`, `carrierL_iff`): "stratification and the measure unchanged"
+  holds at the carrier, and the `mut` layer keeps ancestry (`MutFP`: the witness strictly above the
+  cell's lifetime), so the decision's reason against keeping a self-borrow live stands on every
+  partial order.
+* **An order with the nominal shape** (`Atoms.lean`): lifetimes as finite sets of atoms under
+  reverse inclusion. Siblings `a ∪ {i}`, `a ∪ {j}` under one parent `a` are incomparable
+  (`siblings_incomparable`), the swap `i ↔ j` is an automorphism exchanging them and fixing `a`
+  (`swap_siblings`), and `x ∪ r` lies beneath both a sibling and a resumer's lifetime `r`
+  (`beneath_both`). A tree without meets has the first two and not the third (`Vee`,
+  `vee_no_lower_bound`).
+* **The equivariance lemma exists for the relation's clauses**: at every partial-order reading
+  (`vP_map`, `cP_map`, `semP_map`), and at `Atoms` re-making `'x` at a sibling is that lemma
+  (`nominal_remake`).
+* **What it does not yet cover is the fundamental property.** `∀I` and `∀E` hold over a
+  partial-order reading (`allI_compatP`, `allE_compatP`, the premise read on the partial order). The
+  borrow rules need 6.65's freshness made nominal: Core's `И` ranges over every slot below a bound,
+  which on Core's chain of slots includes the other task's lifetimes (`no_fresh_bound`). 6.65 holds
+  with `И` over any set with members below every lifetime (`wpTS_M_frameOn`), and the slots read on
+  the borrower's branch are one (`fresh_on_branch`); the borrow rules' compatibility over the
+  partial-order reading on top of it is not derived. The statics' entailment is read on a chain,
+  and the checker's two strict rules fail on a partial order (`checker_meet_not_partial`,
+  `checker_join_not_partial`). With the strata themselves partial rather than read through a
+  second order, the census's eight statement-level places and class (iv) would be restated.
+* **Positional re-making** stays on Core's chain; nothing here changes `DenseCarrier`'s results on
+  it (`relend_fov`, `semD_relend`).
+* **Interleaved tasks.** Under close-and-re-make no task holds a borrow while another runs. Two
+  borrows held live across interleaved suspensions at incomparable lifetimes are nonetheless a valid
+  typed world, related at their types and symmetric under the swap of the tasks (`interleaved`).
 
 ## What is open
 
 * **The fundamental property over a partial-order reading.** Not derived. `∀I` and `∀E` are proved
-  (`∀E` with its premise read on `L`); the borrow rules need 6.65 restated with its fresh lifetime
-  over the borrower's branch (§5), and the other rules `DenseCarrier`'s §8 lists are not re-done.
+  (`∀E` with its premise read on `L`), and 6.65 with its freshness over the borrower's branch
+  (`wpTS_M_frameOn`); the borrow rules' compatibility on top of it, and the other rules
+  `DenseCarrier`'s §8 lists, are not re-done.
 * **Strata ordered partially.** Core's model with its strata in a partial order (cells at
   incomparable strata, no second order): the restatements of §1's eight places, and the typed world
   over them. Not attempted.
@@ -315,6 +353,8 @@ ordered by ancestry: a `mut` cell's witness must strictly outlive it.
 | `PartialLife/OrderFacts.lean` | `sup_lt_iff_chain`, `lt_inf_iff_chain`, `le_of_not_lt_iff_chain`; `exists_lt_all`; `down_on_branch`, `no_down_at_meet` |
 | `PartialLife/Reproved.lean` | `conj_assoc'`, `compS_assoc'`, `ptoImm_agree'` |
 | `PartialLife/Forall.lean` | `allI_compatP`, `allE_compatP`; `interpP_applySub`, `vP_congr`, `cP_tyEq`, `CTyEqP.instLife` |
+| `PartialLife/NominalFrame.lean` | `freshOn`, `freshOn_frame`, `wpTS_M_frameOn`, `wpTS_M_frameX_of_on` |
+| `PartialLife/Atoms.lean` | `Atoms`: `atoms_carrier`, `permAtoms`, `swap_siblings`, `siblings_incomparable`, `beneath_both`, `nominal_remake` |
 | `scripts/Census.lean`, `scripts/classify.py`, `scripts/Deps.lean` | the census |
 
 Reproduce the census: `lake env lean experiments/PartialLife/scripts/Census.lean > census.txt`, then
