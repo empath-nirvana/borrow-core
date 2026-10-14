@@ -14,4 +14,5 @@ import Law2.Rules
 import Law2.Fundamental
 import Law2.Instances
 import Law2.FragInstances
+import Law2.U1
 import Law2.Target
