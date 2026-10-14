@@ -591,7 +591,8 @@ theorem CellU.survives_of_inStratum {α : L} {ψ : CellU L} (h : ψ.InStratum {�
     ψ.Survives α := by
   cases ψ with
   | own v => trivial
-  | imm i => exact fun m hm hle => absurd (h.2 m hm α (Finset.mem_singleton_self α)) (not_lt_of_ge hle)
+  | imm i =>
+      exact fun m hm hle => absurd (h.2 m hm α (Finset.mem_singleton_self α)) (not_lt_of_ge hle)
   | «mut» m => exact fun hle => absurd (h.2 m.β (Finset.mem_singleton_self _) α
       (Finset.mem_singleton_self α)) (not_lt_of_ge hle)
 

@@ -281,7 +281,8 @@ theorem CellU.inStratum_empty (ψ : CellU L) : ψ.InStratum ∅ := by
   cases ψ with
   | own v => trivial
   | imm i => exact ⟨i.hne, fun _ _ _ hs => absurd hs (Finset.notMem_empty _)⟩
-  | «mut» m => exact ⟨Finset.singleton_nonempty _, fun _ _ _ hs => absurd hs (Finset.notMem_empty _)⟩
+  | «mut» m =>
+      exact ⟨Finset.singleton_nonempty _, fun _ _ _ hs => absurd hs (Finset.notMem_empty _)⟩
 
 /-- **`π⁻¹` undoes `π`.** -/
 theorem relU_symm_relU (π : L ≃o L) (ψ : CellU L) : relU π.symm (relU π ψ) = ψ := by

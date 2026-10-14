@@ -77,6 +77,17 @@ theorem ResU.pair_get_ne {l l' k : Loc} (ψ ψ' : CellU L) (h₁ : k ≠ l) (h�
   show (if k = l then some ψ else if k = l' then some ψ' else none) = none
   rw [if_neg h₁, if_neg h₂]
 
+theorem ResU.pair_comm {l l' : Loc} (hl : l ≠ l') (ψ ψ' : CellU L) :
+    ResU.pair l ψ l' ψ' = ResU.pair l' ψ' l ψ := by
+  refine PMap.ext fun k => ?_
+  show (if k = l then some ψ else if k = l' then some ψ' else none) =
+    (if k = l' then some ψ' else if k = l then some ψ else none)
+  by_cases e : k = l
+  · subst e; rw [if_pos rfl, if_neg hl, if_pos rfl]
+  · by_cases e' : k = l'
+    · subst e'; rw [if_neg e, if_pos rfl, if_pos rfl]
+    · rw [if_neg e, if_neg e', if_neg e', if_neg e]
+
 theorem comp_single_single (R : CellU L → CellU L → Prop) (C : CellU L → CellU L → CellU L → Prop)
     {l l' : Loc} (hl : l ≠ l') (ψ ψ' : CellU L) :
     Comp R C (ResU.single l ψ) (ResU.single l' ψ') (ResU.pair l ψ l' ψ') := by
@@ -194,13 +205,18 @@ theorem flat_empty : ResU.Flat (PMap.empty : ResU L) PMap.empty :=
 
 theorem valid_empty : ResU.Valid (PMap.empty : ResU L) := ⟨_, flat_empty⟩
 
-/-- A `mut` cell whose witness is `∅` is valid on its own. -/
-theorem valid_single_mut_empty {l : Loc} {ψ : CellU L} (hk : ψ.kind = .mut)
-    (hw : ψ.wit = PMap.empty) : (ResU.single l ψ).Valid := by
-  refine ⟨ResU.single l ψ, ResU.single l ψ, PMap.empty, ?_, ?_, comp_empty_right _ _ _⟩
+/-- A `mut` cell whose witness is `∅` is its own flattening. -/
+theorem flat_single_mut_empty {l : Loc} {ψ : CellU L} (hk : ψ.kind = .mut)
+    (hw : ψ.wit = PMap.empty) : (ResU.single l ψ).Flat (ResU.single l ψ) := by
+  refine ⟨ResU.single l ψ, PMap.empty, ?_, ?_, comp_empty_right _ _ _⟩
   · refine exW_single_mut hk (e₁ := PMap.empty) (by rw [hw]; exact exW_empty _ _) ?_
     exact comp_empty_right _ _ _
   · exact agW_single_mut hk (by rw [hw]; exact agW_empty)
+
+/-- A `mut` cell whose witness is `∅` is valid on its own. -/
+theorem valid_single_mut_empty {l : Loc} {ψ : CellU L} (hk : ψ.kind = .mut)
+    (hw : ψ.wit = PMap.empty) : (ResU.single l ψ).Valid :=
+  ⟨_, flat_single_mut_empty hk hw⟩
 
 /-- **A borrow of a borrow is valid**: `ℓ ↦ mut(_, _, ℓ′ ↦ ψ′, _)` with `ψ′` a `mut` cell whose
 witness is `∅`, `ℓ ≠ ℓ′`. -/

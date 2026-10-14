@@ -114,7 +114,8 @@ theorem le_iff {a b : Atom} : a ≤ b ↔ a = b ∨ Below a b := Iff.rfl
 theorem lt_of_mem_ps {a b : Atom} (h : b ∈ a.ps) : a < b := Relation.TransGen.single h
 
 instance : WellFoundedGT Atom := by
-  refine ⟨Subrelation.wf (r := InvImage (· < ·) (sizeOf : Atom → ℕ)) ?_ (InvImage.wf _ wellFounded_lt)⟩
+  refine ⟨Subrelation.wf (r := InvImage (· < ·) (sizeOf : Atom → ℕ)) ?_
+    (InvImage.wf _ wellFounded_lt)⟩
   intro x y h
   exact sizeOf_lt_of_below h
 
@@ -374,7 +375,8 @@ theorem swapLft_x {x x' : Atom} (hs : Atom.SameParents x x') : swapLft hs (x : L
 theorem swapLft_x' {x x' : Atom} (hs : Atom.SameParents x x') : swapLft hs (x' : Lft) = x := by
   rw [swapLft_coe, Atom.swap_x']
 
-theorem swapLft_symm {x x' : Atom} (hs : Atom.SameParents x x') : (swapLft hs).symm = swapLft hs := by
+theorem swapLft_symm {x x' : Atom} (hs : Atom.SameParents x x') :
+    (swapLft hs).symm = swapLft hs := by
   ext a
   induction a using WithTop.recTopCoe with
   | top => rfl

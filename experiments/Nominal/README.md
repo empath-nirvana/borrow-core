@@ -36,10 +36,10 @@ equivariance or of the corollary was found, and both are proved.
    (`not_reslotInvC`, `mut_not_natural`) failed because the move was not onto; this one is.
 3. **The relation is equivariant under every order automorphism**, at `1`, `⊗`, `U`, `Ref`, `[@a]`,
    `Imm`, `Mut`, `F`, `⊸`, `⊤`, `∀`, by one induction on types, over a model equivariant operation
-   by operation, `wp` included (`wpN_relRU_iff`): at the printed relation (`vN_map`, `cN_map`) and
-   at Core's clauses with records — `Ext` at `U`, `ls₀` at `Mut` and `Imm`, `CohE` at `Imm`, `wp`
-   a parameter as Core's `WpOp` — whenever the `wp` is carried (`vR_map`, `cR_map`); the printed
-   `wp` is (`wpLift_equiv`).
+   by operation, `wp` included: at the printed relation (`vN_map`, `cN_map`), and at Core's
+   clauses with records — `Ext` at `U`, `ls₀` at `Mut` and `Imm`, `CohE` at `Imm` — over Core's own
+   `wp`, `wpTS` at tagged typed worlds (`vR_map_wpTS`, `cR_map_wpTS`): a typed world moved by an
+   automorphism is a typed world (`TWN_act`), and `wpTS` is carried (`wpTSN_equiv`).
 4. **Re-opening is a corollary** (`reopen`, `reopen_iff`, `reopen_swap`): opening at a fresh atom
    with `x`'s parents relates exactly what opening at `x` related, at every type, `U` and `⊸`
    included. The hypotheses are freshness, discharged for owned packages (`reopen_fresh`); there is
@@ -51,8 +51,8 @@ equivariance or of the corollary was found, and both are proved.
    (`closed_inStratum`); a package that captured a borrow at `s` stores under `Mut 'q` exactly
    when `s ⊐ q` (`vN_store_captured_iff`).
 
-What is built is Core's clauses at the fragment, records included, over the printed `wp`; Core's
-own `wp`, `wpTS` over the typed world `TW`, is not ported (*What is not built*).
+What is built is Core's clauses at the fragment's types, records, typed world and `wpTS` included,
+on the nominal carrier; the fundamental property over it is not (*What is not built*).
 
 ## 1. Atoms with parents (`Atoms.lean`, `Carrier.lean`)
 
@@ -118,7 +118,7 @@ a borrow of a borrow, moved by the swap, is related at the moved reading and **e
 of a borrow made afresh at `x′` (`mm_swap_related`, `move_eq_remake`): under the nominal
 convention, the move is the re-make.
 
-## 3. Equivariance (`Model.lean`, `ModelEquiv.lean`, `Relation.lean`, `Equivariance.lean`)
+## 3. Equivariance (`Model*.lean`, `Relation.lean`, `Equivariance.lean`, `Records.lean`, `CoreRelation.lean`, `TypedWorld*.lean`)
 
 **The model** is `Paper/S5_Model`'s on the new carrier: `▶◀`, `●`, `○`, `◐`, `ρ∣ι`, `⨀`, the walks
 `ex` and `ag`, `⦇ρ⦈`, `✓`, `⟦ρ⟧`, `#`, `↭` (guarded), `ρ∣own = ∅`, `⌜−⌝`, `⋆`, `─⋆`, `∃`, `ℓ ↦ v`, and
@@ -133,7 +133,8 @@ transport `P ↦ P ∘ π⁻¹` (`sepN_relRU_iff`, `wandN_relRU_iff`, `exN_relRU
 `ptoOwnN_relRU_iff`), and so does `wp` (`wpN_relRU_iff`): its frame quantifier is re-indexed by
 `π`, which is onto. `wp` is not vacuous (`wpN_val_empty`, `cN_ret_unit`).
 
-**The relation** `vN b A δ v`, `cN C δ e` (`Relation.lean`), Core's clauses with these changes:
+**The record-free relation** `vN b A δ v`, `cN C δ e` (`Relation.lean`): Core's clauses without
+the record layer, over the printed `wp`, with these changes:
 
 | Core | here | why |
 |---|---|---|
@@ -144,7 +145,7 @@ transport `P ↦ P ∘ π⁻¹` (`sepN_relRU_iff`, `wandN_relRU_iff`, `exN_relRU
 | `[α]P`: `ρ ∈ Res_α` | reading (b), `boxE` | `[@a] T` is what survives the end of `@a`; on a chain it is `ρ ∈ Res_α` |
 | `ptoMutS`: `α ⊑ b`, payload `⊆ Res_b` | `ptoMutN`: `α ≤ b`, payload `⊆ Res_{b}`, reading (a) | strata set-indexed |
 | `ptoImmS`: `α ⊑ ⊓β̄` | `ptoImmN`: `α ≤ m` for every `m ∈ β̄` | `⊓β̄` need not exist |
-| records `ls`, `Ext` at `U`, `ls₀` at `Mut` and `Imm`, `CohE` at `Imm`, `wpTS` | none (`vN`); at `vR`, all of them, with `wp` a parameter | `vN` is the printed relation; `vR` is Core's clauses |
+| records `ls`, `Ext` at `U`, `ls₀` at `Mut` and `Imm`, `CohE` at `Imm`, `wpTS` | none in `vN`; all of them in `vR`, over a `wp` parameter, `wpTS` included | `vN` is the printed relation; `vR` is Core's clauses |
 | `η`, `⊕`, `0`, `!`, `Unk`, `μ`, `ν`, `&`, `[L]`, `I32`, rows | not in the fragment (`False`) | — |
 
 The observable view of an `Imm` payload (`b = false`, `U` read as `True`) is Core's.
@@ -182,6 +183,17 @@ is carried by `π` (`WpEquiv`)**, by the same induction, the `U` clause re-index
 `Mut` and `Imm` their `ls₀` (`ptoMutR_act_iff`, `ptoImmR_act_iff`). The printed `wp`, threading the
 list unchanged, is carried by every `π` (`wpLift_equiv`, `vR_map_wpLift`).
 
+**Core's own `wp`** (`TypedWorld.lean`, `TypedWorldEquiv.lean`). `Core/World.lean`'s `vShape`, `TW`,
+`Tagged` and `wpTS`, with the lineage (`GPos`, `SubRec`, `LinPath`, `Desc`, `LinLoc`,
+`FrameLife`) and `reb_α` (`ResU.RebAt`, `ResU.Reb`), at the fragment's types (`vShapeN`, `TWN`,
+`TaggedN`, `wpTSN`); a cell Core names by `immOf`/`mutOf` with proof arguments is named by its
+data. Every `TW` constructor's premises are moved by `π`: `vShape` (`vShapeN_map`), the lineage
+(`descN_act_iff`, `descRN_act_iff`, `linLocN_act_iff`, `frameLifeN_act_iff`), `reb_α`
+(`rebN_act`), `StratumLe` (`stratumLeN_act_iff`), `ρ/ℓ`, `dom`, `≤`, `ρ∣dom(σ)`, `ρ∣own,mut`; so
+**a typed world moved by `π` is a typed world** (`TWN_act`, `TWN_act_iff`), `Tagged` is invariant
+(`taggedN_act_iff`), and **`wpTS` is carried by every order automorphism** (`wpTSN_equiv`):
+Core's relation over its own `wp` is equivariant (`vR_map_wpTS`, `cR_map_wpTS`).
+
 ## 4. Closing as a corollary (`Package.lean`)
 
 * `Pkg L`: an owned place `c` holding `u` (payload resource `σu`) and contents `w` (resource `ρw`).
@@ -207,7 +219,7 @@ closing is allowed at `π y` iff at `y`. `exists_iff_forall_fresh`: some fresh a
 opens the package to a related configuration iff every fresh one does (the И quantifier).
 
 `reopenR` is the corollary at Core's clauses with records, for an automorphism fixing the record
-list as well and carrying the `wp`.
+list as well and carrying the `wp`; `reopenR_wpTS` at Core's own `wp`.
 
 The hypotheses are freshness, the nominal form of "`x′` is fresh". None mentions how the package
 was built, and the statement holds at every type, closures included: no hypothesis that the
@@ -241,7 +253,9 @@ borrows of borrows (`vN_boxMM_x''`, `mmCell_valid`; for `kV`, outer cell at `x�
 `F mm0` has no value, so the same closure with the same empty resource is not related
 (`kU_not_related_x''`, `kV_not_related_x''`). `kU_convention` states (a) and (b) together, and
 `kUR_convention` the same at Core's clauses with records and the printed `wp` (`CoreWitnesses.lean`:
-the argument type is empty at every record list, `vR_boxMM_empty`). No order automorphism fixing
+the argument type is empty at every record list, `vR_boxMM_empty`), and **`kUW_convention` at Core's
+clauses over `wpTS`** (`CoreWitnessesTW.lean`): the refuting run at `x″` is taken at a typed world,
+the borrow of a borrow built from `∅` by `alloc` and `mutFold` (`tw_mm`, as Core's `tw_nested`). No order automorphism fixing
 `q` sends `x` to `x″` (`no_automorphism_extra_parents`): the convention, not the carrier, is what
 decides.
 
@@ -281,7 +295,8 @@ in this library; "fact proved" means the replacement fact is proved and its user
 | `@(a ⊔ b)δ`, `@(a ⊓ b)δ` as an argument | `Life.interp`, `atLife` | defined on comparable pairs | built (`interpN`) |
 | `Δ ⊨ @a ⊏ @b`, `Δ ⊨ @a ⊑ @b`, `Δ ⊨ @a` | `LifeCtx.EntailsLt/Le/Defines`; `allE`, `immSub`, `mutSub`, borrow rules | over `⟦Δ⟧` read by `ModelsN`; a `Δ` records parents | not ported |
 | records' tags `x.2 ⊐ b`, `ls₀ = {x ∈ ls ∣ x.2 ⊐ b}` (`x.2 ⊐ ⊓β̄` at `imm`), `Ext`, `CellIn ρ b` (`@ψ ⊑ b`) | `Core/Relation`, `Core/Wp`, `Core/FrameRecords` | comparisons on the cell's lifetime set: `x.2 ⊐ ⊓β̄` as "strictly outlives some member", `@ψ ⊑ b` as "some member at or beneath `b`" | built (`Records.lean`, `CoreRelation.lean`) |
-| `StratumLe W β` (`⊒ β`), `TW.reb`'s `β` below every lifetime of the world | `Core/World.lean` | `W ∈ Res_{c}` for `c` a fresh child of `β`; a fresh atom beneath the world's lifetimes | not ported |
+| `StratumLe W β` (`⊒ β`: `∀β′ ⊏ β`), `TW.reb`'s `β` | `Core/World.lean` | `∀β′ ⊏ β` over the partial order; equivalently `W ∈ Res_{c}` for `c` a fresh child of `β` (`freshChild_lt_iff`) | built (`StratumLeN`) |
+| `reb_α`'s `imm({α}, …)` and `t ⊆ s` | `ResU.RebAt`, `ResU.Reb` | `{α}` a singleton set; `t ⊆ s` of finite sets | built (`TypedWorld.lean`) |
 | `min`/`max` lemmas at `Life` (`LSet.union`, `Life.meet_assoc`, `cellCompS_inStratum`, …) | census class (a), 14 places | set union; `∀` over a set | not ported |
 
 The pattern: a single lifetime that the chain supplies as a `⊓` or `⊔` of finitely many becomes the
@@ -293,8 +308,9 @@ below" becomes a fresh atom with the given parents.
 * **On this fragment the nominal convention passes where the positional one failed.** With `x′`
   given `x`'s parents, re-opening relates exactly what opening related, as a corollary of one
   equivariance theorem proved by induction on types; a new type former adds one case to that
-  induction. With extra parents, the probe-3 witness fails as before, and no automorphism is
-  available.
+  induction. This holds at Core's own clauses and `wp` (`vR_map_wpTS`, `reopenR_wpTS`). With extra
+  parents, the probe-3 witness fails as before, there too (`kUW_convention`), and no automorphism
+  is available.
 * **The measure and stratification are unchanged.** The carrier is still built by well-founded
   recursion on strata ordered by ancestry, with no step-indexing; a `Mut` cell's payload still
   lies in its stratum (reading (a)), which is what makes owned packages storable anywhere and
@@ -311,11 +327,9 @@ below" becomes a fresh atom with the given parents.
 
 ## What is not built
 
-* **Core's typed world.** `TW`, `Tagged`, the lineage (`Desc`, `FrameLife`) and `wpTS` (with
-  allocator runs) are not ported; Core's clauses are built with `wp` a parameter, instantiated at
-  the printed `wp`. `TW`'s constructors use composition, validity, lowering, `Reb`, `vShape`, the
-  records and comparisons of lifetimes, each of which is carried by automorphisms here or would be
-  in the same way; that `TW`, hence `wpTS`, is carried is not derived (`WpEquiv π wpTS`).
+* **Types outside the fragment.** `⊕`, `0`, `!`, `Unk`, `μ`, `ν`, `&`, `[L]`, `I32`, effect rows and
+  the type-variable environment are not in the relation, nor in `vShape` (so `TW` holds records
+  only at the fragment's types).
 * **The fundamental property and adequacy over the nominal carrier**, and every compatibility
   lemma: not attempted. The port map says what each chain use becomes.
 * **Faithfulness at a chain.** Each clause agrees with Core's on a chain (`ltLifeN_iff_of_interp`,
@@ -342,6 +356,9 @@ below" becomes a fresh atom with the given parents.
 | `Nominal/Records.lean` | `FrameRecN`, `SRecN`, `ChainN`, `RelN`, `ExtN`, `CohEN`, `TyEqN`; the action on records; `extN_act_iff`, `cohEN_act_iff` |
 | `Nominal/CoreRelation.lean` | `WpOpN`, `ptoMutR`, `ptoImmR`, `vR`, `cR`; `vR_map`, `cR_map`; `wpLift`, `wpLift_equiv` |
 | `Nominal/CoreWitnesses.lean` | `reopenR`; `kUR_convention` |
+| `Nominal/TypedWorld.lean` | `vShapeN`, `ResU.Reb`, the lineage, `TWN`, `TaggedN`, `wpTSN` |
+| `Nominal/TypedWorldEquiv.lean` | `TWN_act`, `taggedN_act_iff`, `wpTSN_equiv`, `vR_map_wpTS` |
+| `Nominal/CoreWitnessesTW.lean` | `reopenR_wpTS`, `tw_mm`, `kUW_convention` |
 | `Nominal/Facts.lean` | small resources, walks of one cell, `valid_mut_mut`, `valid_imm_imm`, `OwnOnly`, the readings on a chain |
 | `Nominal/Package.lean` | `Pkg`, `reopen`, `reopen_iff`, `reopen_swap`, `reopen_fresh`, `exists_iff_forall_fresh` |
 | `Nominal/Witnesses.lean` | `kU_convention`, `kV_*`, `kI_related_none`, the scheduler, `move_eq_remake`, `genPkg_reopen`, `split_is_real` |

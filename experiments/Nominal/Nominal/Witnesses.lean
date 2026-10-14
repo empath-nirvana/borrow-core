@@ -20,10 +20,10 @@ inhabits the argument type, and `F mm0` has no value.
 reading, `r` an ancestor of `x` or not, by a valid resource (`vN_immImm_inhabited`,
 `immImmRes_valid`): an `imm` cell's payload carries no stratification condition, and an inner cell
 at `⊤` (or at a common ancestor) is in the outer cell's stratum. So a closure over it returning
-`mm0` is related at none of `x`, `x′`, `x″` (`kI_related_none`): no witness at `Imm`. The `Mut` analogue is:
-`Mut 'x (Mut 'r 1)` is empty when `r` is not a strict ancestor of `x` (`vN_mutMut_empty`), so
-`kV = U(Mut 'x (Mut 'r 1) ⊸ F mm0)` is related at `x` (`kV_related_x`), at `x′`
-(`kV_related_x'`), and not at `x″`, beneath `r` (`kV_not_related_x''`).
+`mm0` is related at none of `x`, `x′`, `x″` (`kI_related_none`): no witness at `Imm`. The `Mut`
+analogue is: `Mut 'x (Mut 'r 1)` is empty when `r` is not a strict ancestor of `x`
+(`vN_mutMut_empty`), so `kV = U(Mut 'x (Mut 'r 1) ⊸ F mm0)` is related at `x` (`kV_related_x`), at
+`x′` (`kV_related_x'`), and not at `x″`, beneath `r` (`kV_not_related_x''`).
 
 **(b) The convention is what matters**: at `kU` and `kV` the same closure, with the same (empty)
 resource, is related after the same-parents re-make and not after the extra-parents one; and no
@@ -604,7 +604,8 @@ section Scheduler
 variable {L : Type} [PartialOrder L] [OrderTop L] [WellFoundedGT L]
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
-theorem ownOnly_single_own (l : Loc) (v : Val) : OwnOnly (ResU.single l (CellU.own v : CellU L)) := by
+theorem ownOnly_single_own (l : Loc) (v : Val) :
+    OwnOnly (ResU.single l (CellU.own v : CellU L)) := by
   intro l' ψ e
   obtain ⟨-, rfl⟩ := ResU.single_get_eq_some e
   rfl

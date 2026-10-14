@@ -11,3 +11,6 @@ import Nominal.Witnesses
 import Nominal.Records
 import Nominal.CoreRelation
 import Nominal.CoreWitnesses
+import Nominal.TypedWorld
+import Nominal.TypedWorldEquiv
+import Nominal.CoreWitnessesTW
