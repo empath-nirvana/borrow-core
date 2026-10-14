@@ -16,7 +16,10 @@ infinite ascending chain (`WellFoundedGT Atom`: an ancestor is a strict subterm)
 one is an ancestor of the other; siblings are incomparable.
 
 **Fresh atoms.** `fresh S avoid` has parents exactly `S` and occurs in no atom of `avoid` (it is
-neither one of them nor an ancestor of one: `fresh_not_le`).
+neither one of them nor an ancestor of one: `fresh_not_le`). They replace the chain's `↓` and
+`⊓`: every finite set of lifetimes has a common strict lower bound (`exists_lt_all`), and the
+lifetimes strictly above a fresh child of `a` are those at or above `a` (`freshChild_lt_iff`), the
+fact Core reads off `↓a` (`Life.le_of_down_lt`, `Life.not_lt_of_down_lt`).
 
 **The hereditary swap.** For `x`, `x′` with the same parents, `swap x x′` exchanges them and
 re-parents their descendants (`mk ps t ↦ mk (swap ps) t`), and fixes every atom in which neither
@@ -393,6 +396,49 @@ theorem swapLft_ne_refl {x x' : Atom} (hs : Atom.SameParents x x') (hne : x ≠ 
   have := congrArg (fun e : Lft ≃o Lft => e (x : Lft)) h
   simp only [swapLft_x, OrderIso.refl_apply] at this
   exact hne (WithTop.coe_injective this).symm
+
+/-! ### What replaces `↓` and `⊓` -/
+
+/-- The atoms of a list of lifetimes. -/
+def atomsOf (S : List Lft) : List Atom := S.filterMap fun s => (s : Option Atom)
+
+theorem mem_atomsOf {S : List Lft} {a : Atom} (h : (a : Lft) ∈ S) : a ∈ atomsOf S :=
+  List.mem_filterMap.mpr ⟨_, h, rfl⟩
+
+/-- **Every finite set of lifetimes has a common strict lower bound**: a fresh atom with their
+atoms as parents. On a chain this is `↓(⊓S)`; here it is what `exists_fresh`, `exists_shorter`,
+`ResU.exists_stratum`, `Иf`'s bound and `withbor`'s fresh lifetime need. -/
+theorem exists_lt_all (S : List Lft) (avoid : List Atom) :
+    ∀ s ∈ S, (Atom.fresh (atomsOf S) avoid : Lft) < s := by
+  intro s hs
+  induction s using WithTop.recTopCoe with
+  | top => exact WithTop.coe_lt_top _
+  | coe a => exact WithTop.coe_lt_coe.mpr (Atom.lt_of_mem_ps (by simpa using mem_atomsOf hs))
+
+/-- A fresh child of `a`: parents exactly `{a}`. -/
+def freshChild (a : Atom) (avoid : List Atom) : Atom := Atom.fresh [a] avoid
+
+/-- **The lifetimes strictly above a fresh child of `a` are those at or above `a`**: Core's
+`↓a`, with `Life.le_of_down_lt` and `Life.not_lt_of_down_lt` (no lifetime strictly between `↓a`
+and `a`), is a fresh child. -/
+theorem freshChild_lt_iff (a : Atom) (avoid : List Atom) (x : Lft) :
+    (freshChild a avoid : Lft) < x ↔ (a : Lft) ≤ x := by
+  induction x using WithTop.recTopCoe with
+  | top => exact ⟨fun _ => le_top, fun _ => WithTop.coe_lt_top _⟩
+  | coe b =>
+      rw [WithTop.coe_lt_coe, WithTop.coe_le_coe]
+      show Atom.Below (freshChild a avoid) b ↔ a = b ∨ Atom.Below a b
+      constructor
+      · intro h
+        obtain ⟨c, hc, hcb⟩ := Relation.TransGen.head'_iff.mp h
+        have hca : c = a := List.mem_singleton.mp hc
+        subst hca
+        rcases Relation.ReflTransGen.cases_head hcb with rfl | ⟨d, hd, hdb⟩
+        · exact Or.inl rfl
+        · exact Or.inr (Relation.TransGen.head' hd hdb)
+      · rintro (rfl | h)
+        · exact Relation.TransGen.single (List.mem_singleton_self _)
+        · exact Relation.TransGen.head (List.mem_singleton_self _) h
 
 end Nominal
 

@@ -14,7 +14,8 @@ types and terms are Core's (`VTy`, `CTy`, `Expr`, `forceE`).
 | Core | here | why |
 |---|---|---|
 | `δ : LSub` (values `ℕ`), `Life.interp` | `δ : LSubN L`, `interpN` | lifetimes are `L`'s |
-| `@(a ⊔ b)δ = max`, `@(a ⊓ b)δ = min` | the longer / shorter when comparable, else undefined | `⊔`, `⊓` need not exist |
+| `@(a ⊔ b)δ = max`, `@(a ⊓ b)δ = min` as an argument (`atLife`) | the longer / shorter when comparable, else undefined | `⊔`, `⊓` need not exist |
+| `α ⊏ @cδ` as a bound (`LtLife`, at `∀` and in `⟦Δ⟧`) | `LtLifeN`: beneath every lifetime of a `⊓`, beneath one of a `⊔` | `⊓Δ` need not exist; where `@cδ` is defined it is Core's (`ltLifeN_iff_of_interp`) |
 | `∀ α : Life` | `∀ α : L` | the `∀` ranges over the partial order |
 | `[α]P`: `ρ ∈ Res_α` | `boxE`: no cell of `ρ` at or beneath `α` (reading (b)) | `[@a] T` is what survives the end of `@a`; on a chain it is `ρ ∈ Res_α` |
 | `ptoMutS`: `α ⊑ b`, payload `⊆ Res_b` | `ptoMutN`: `α ≤ b`, payload `⊆ Res_{b}` (reading (a)) | as Core; strata are set-indexed |
@@ -116,13 +117,107 @@ def atLifeN [WellFoundedGT L] (δ : LSubN L) (a : Lifetime.Life) (F : L → WPro
     WPropN L :=
   fun ρ => ∃ α, interpN δ a = some α ∧ F α ρ
 
-/-- `α ⊏ @bδ`. -/
-def LtLifeN (δ : LSubN L) (b : Lifetime.Life) (α : L) : Prop :=
-  ∃ β, interpN δ b = some β ∧ α < β
+/-- `α ⊏ @bδ` read as a bound: beneath every lifetime of a `⊓`, beneath one of a `⊔`. On a chain
+it is `α ⊏ @bδ` (`ltLifeN_iff_of_interp`, `interpN_some_of_chain`); in a partial order `⊓Δ`,
+the bound of `withbor` and `withload`, need not exist, and this is "beneath every lifetime of
+`Δ`". -/
+def LtLifeN (δ : LSubN L) : Lifetime.Life → L → Prop
+  | .var x, α => ∃ β, δ.find? x = some β ∧ α < β
+  | .top, α => α < ⊤
+  | .meet a b, α => LtLifeN δ a α ∧ LtLifeN δ b α
+  | .join a b, α => LtLifeN δ a α ∨ LtLifeN δ b α
 
-/-- `δ ∈ ⟦Δ⟧` over `L`. -/
+/-- `δ ∈ ⟦Δ⟧` over `L`: each variable read beneath its bound. -/
 def ModelsN (Δ : LifeCtx) (δ : LSubN L) : Prop :=
-  ∀ x u, Δ.find? x = some u → ∃ m n, δ.find? x = some m ∧ interpN δ u = some n ∧ m < n
+  ∀ x u, Δ.find? x = some u → ∃ m, δ.find? x = some m ∧ LtLifeN δ u m
+
+theorem interpN_meet_some {δ : LSubN L} {a b : Lifetime.Life} {β : L}
+    (h : interpN δ (.meet a b) = some β) :
+    ∃ m n, interpN δ a = some m ∧ interpN δ b = some n ∧ meetN m n = some β := by
+  simp only [interpN] at h
+  cases hm : interpN δ a with
+  | none => rw [hm] at h; cases h
+  | some m =>
+    cases hn : interpN δ b with
+    | none => rw [hm, hn] at h; cases h
+    | some n => rw [hm, hn] at h; exact ⟨m, n, rfl, rfl, h⟩
+
+theorem interpN_join_some {δ : LSubN L} {a b : Lifetime.Life} {β : L}
+    (h : interpN δ (.join a b) = some β) :
+    ∃ m n, interpN δ a = some m ∧ interpN δ b = some n ∧ joinN m n = some β := by
+  simp only [interpN] at h
+  cases hm : interpN δ a with
+  | none => rw [hm] at h; cases h
+  | some m =>
+    cases hn : interpN δ b with
+    | none => rw [hm, hn] at h; cases h
+    | some n => rw [hm, hn] at h; exact ⟨m, n, rfl, rfl, h⟩
+
+/-- **Wherever `@bδ` is defined the bound reading is Core's** `α ⊏ @bδ`; on a chain it is
+defined whenever the variables are read (`interpN_some_of_chain`). -/
+theorem ltLifeN_iff_of_interp (δ : LSubN L) :
+    ∀ (b : Lifetime.Life) (α β : L), interpN δ b = some β → (LtLifeN δ b α ↔ α < β) := by
+  intro b
+  induction b with
+  | var x =>
+      intro α β h
+      change δ.find? x = some β at h
+      simp only [LtLifeN, h, Option.some.injEq, exists_eq_left']
+  | top =>
+      intro α β h
+      cases Option.some.inj h
+      rfl
+  | meet a b iha ihb =>
+      intro α β h
+      obtain ⟨m, n, hm, hn, hβ⟩ := interpN_meet_some h
+      simp only [LtLifeN, iha α m hm, ihb α n hn]
+      unfold meetN at hβ
+      split_ifs at hβ with h₁ h₂
+      · cases Option.some.inj hβ
+        exact ⟨fun k => k.1, fun k => ⟨k, lt_of_lt_of_le k h₁⟩⟩
+      · cases Option.some.inj hβ
+        exact ⟨fun k => k.2, fun k => ⟨lt_of_lt_of_le k h₂, k⟩⟩
+  | join a b iha ihb =>
+      intro α β h
+      obtain ⟨m, n, hm, hn, hβ⟩ := interpN_join_some h
+      simp only [LtLifeN, iha α m hm, ihb α n hn]
+      unfold joinN at hβ
+      split_ifs at hβ with h₁ h₂
+      · cases Option.some.inj hβ
+        exact ⟨fun k => k.elim id (fun k' => lt_of_lt_of_le k' h₁), Or.inl⟩
+      · cases Option.some.inj hβ
+        exact ⟨fun k => k.elim (fun k' => lt_of_lt_of_le k' h₂) id, Or.inr⟩
+
+/-- On a chain every expression whose variables are read is defined. -/
+theorem interpN_some_of_chain (hchain : ∀ a b : L, a ≤ b ∨ b ≤ a) (δ : LSubN L) :
+    ∀ b : Lifetime.Life, (∀ x, b.mentions x = true → ∃ m, δ.find? x = some m) →
+      ∃ β, interpN δ b = some β := by
+  intro b
+  induction b with
+  | var x => intro h; exact h x (by simp [Lifetime.Life.mentions])
+  | top => intro _; exact ⟨⊤, rfl⟩
+  | meet a b iha ihb =>
+      intro h
+      obtain ⟨m, hm⟩ := iha fun x hx => h x (by simp [Lifetime.Life.mentions, hx])
+      obtain ⟨n, hn⟩ := ihb fun x hx => h x (by simp [Lifetime.Life.mentions, hx])
+      refine ⟨if m ≤ n then m else n, ?_⟩
+      simp only [interpN, hm, hn, Option.bind_some, meetN]
+      rcases hchain m n with k | k
+      · rw [if_pos k, if_pos k]
+      · by_cases k' : m ≤ n
+        · rw [if_pos k', if_pos k']
+        · rw [if_neg k', if_neg k', if_pos k]
+  | join a b iha ihb =>
+      intro h
+      obtain ⟨m, hm⟩ := iha fun x hx => h x (by simp [Lifetime.Life.mentions, hx])
+      obtain ⟨n, hn⟩ := ihb fun x hx => h x (by simp [Lifetime.Life.mentions, hx])
+      refine ⟨if n ≤ m then m else n, ?_⟩
+      simp only [interpN, hm, hn, Option.bind_some, joinN]
+      rcases hchain n m with k | k
+      · rw [if_pos k, if_pos k]
+      · by_cases k' : n ≤ m
+        · rw [if_pos k', if_pos k']
+        · rw [if_neg k', if_neg k', if_pos k]
 
 end Interp
 

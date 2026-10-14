@@ -236,20 +236,24 @@ theorem reopen_fresh (x : Atom) (avoid : List Atom) {p : Pkg Lft} (h₁ : OwnOnl
   have hδ : δ.map (swapLft hs) = δ := map_swapLft_of_avoids hs hx hx'
   exact reopen_swap hs (fixedBy_of_ownOnly _ h₁ h₂ hδ A) hx hx' xv b T
 
-/-- **The И quantifier**: some fresh atom with parents `S` opens the package to a related
-configuration iff every one does, when every swap of two such atoms fixes the package. -/
+/-- **The И quantifier**: when every swap of two fresh atoms with parents `S` fixes the package,
+some fresh atom with parents `S` opens it to a related configuration iff every one does. -/
 theorem exists_iff_forall_fresh {P : Val → WPropN Lft} {p : Pkg Lft} {δ : LSubN Lft}
     (S : List Atom) (Fresh : Atom → Prop) (hF : ∀ y, Fresh y → δ.Avoids y)
     (hfix : ∀ y y' (hs : Atom.SameParents y y'), Fresh y → Fresh y' →
       p.FixedBy (swapLft hs) P)
-    (xv : LifeVar) (b : Bool) (T : VTy) :
+    (hex : ∃ y : Atom, y.ps = S ∧ Fresh y) (xv : LifeVar) (b : Bool) (T : VTy) :
     (∃ y : Atom, y.ps = S ∧ Fresh y ∧
-        ∃ ρ, p.Opens P (y : Lft) ρ ∧ vN (ℍ := ℍ) b T (δ.extend xv (y : Lft)) p.w ρ) →
+        ∃ ρ, p.Opens P (y : Lft) ρ ∧ vN (ℍ := ℍ) b T (δ.extend xv (y : Lft)) p.w ρ) ↔
       ∀ y' : Atom, y'.ps = S → Fresh y' →
         ∃ ρ, p.Opens P (y' : Lft) ρ ∧ vN (ℍ := ℍ) b T (δ.extend xv (y' : Lft)) p.w ρ := by
-  rintro ⟨y, hy, hFy, hrel⟩ y' hy' hFy'
-  have hs : Atom.SameParents y y' := fun q => by rw [hy, hy']
-  exact (reopen_swap hs (hfix y y' hs hFy hFy') (hF y hFy) (hF y' hFy') xv b T).mpr hrel
+  constructor
+  · rintro ⟨y, hy, hFy, hrel⟩ y' hy' hFy'
+    have hs : Atom.SameParents y y' := fun q => by rw [hy, hy']
+    exact (reopen_swap hs (hfix y y' hs hFy hFy') (hF y hFy) (hF y' hFy') xv b T).mpr hrel
+  · intro h
+    obtain ⟨y, hy, hFy⟩ := hex
+    exact ⟨y, hy, hFy, h y hy hFy⟩
 
 end Nominal
 

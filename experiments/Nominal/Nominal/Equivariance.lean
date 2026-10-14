@@ -62,27 +62,37 @@ theorem interpN_map (π : L ≃o L) (δ : LSubN L) :
       simp only [interpN, ihp, ihq]
       cases interpN δ p <;> cases interpN δ q <;> simp [meetN_map]
 
-theorem ltLifeN_map (π : L ≃o L) (δ : LSubN L) (b : Lifetime.Life) (α : L) :
-    LtLifeN (δ.map π) b (π α) ↔ LtLifeN δ b α := by
-  simp only [LtLifeN, interpN_map]
-  constructor
-  · rintro ⟨β', hβ', hlt⟩
-    obtain ⟨β, hβ, rfl⟩ := Option.map_eq_some_iff.mp hβ'
-    exact ⟨β, hβ, π.lt_iff_lt.mp hlt⟩
-  · rintro ⟨β, hβ, hlt⟩
-    exact ⟨π β, by rw [hβ]; rfl, π.lt_iff_lt.mpr hlt⟩
+theorem ltLifeN_map (π : L ≃o L) (δ : LSubN L) :
+    ∀ (b : Lifetime.Life) (α : L), LtLifeN (δ.map π) b (π α) ↔ LtLifeN δ b α := by
+  intro b
+  induction b with
+  | var x =>
+      intro α
+      simp only [LtLifeN, LSubN.find?_map]
+      constructor
+      · rintro ⟨β', hβ', hlt⟩
+        obtain ⟨β, hβ, rfl⟩ := Option.map_eq_some_iff.mp hβ'
+        exact ⟨β, hβ, π.lt_iff_lt.mp hlt⟩
+      · rintro ⟨β, hβ, hlt⟩
+        exact ⟨π β, by rw [hβ]; rfl, π.lt_iff_lt.mpr hlt⟩
+  | top =>
+      intro α
+      show π α < ⊤ ↔ α < ⊤
+      conv_lhs => rw [← OrderIso.map_top π]
+      exact π.lt_iff_lt
+  | meet a b iha ihb => intro α; exact and_congr (iha α) (ihb α)
+  | join a b iha ihb => intro α; exact or_congr (iha α) (ihb α)
 
 theorem modelsN_map (π : L ≃o L) (Δ : LifeCtx) (δ : LSubN L) :
     ModelsN Δ (δ.map π) ↔ ModelsN Δ δ := by
-  simp only [ModelsN, LSubN.find?_map, interpN_map]
+  simp only [ModelsN, LSubN.find?_map]
   refine forall_congr' fun x => forall_congr' fun u => imp_congr_right fun _ => ?_
   constructor
-  · rintro ⟨m', n', hm', hn', hlt⟩
+  · rintro ⟨m', hm', hlt⟩
     obtain ⟨m, hm, rfl⟩ := Option.map_eq_some_iff.mp hm'
-    obtain ⟨n, hn, rfl⟩ := Option.map_eq_some_iff.mp hn'
-    exact ⟨m, n, hm, hn, π.lt_iff_lt.mp hlt⟩
-  · rintro ⟨m, n, hm, hn, hlt⟩
-    exact ⟨π m, π n, by rw [hm]; rfl, by rw [hn]; rfl, π.lt_iff_lt.mpr hlt⟩
+    exact ⟨m, hm, (ltLifeN_map π δ u m).mp hlt⟩
+  · rintro ⟨m, hm, hlt⟩
+    exact ⟨π m, by rw [hm]; rfl, (ltLifeN_map π δ u m).mpr hlt⟩
 
 end Interp
 

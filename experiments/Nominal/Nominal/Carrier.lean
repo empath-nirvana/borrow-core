@@ -20,9 +20,13 @@ condition read as a set.
               P̂(v)(ρ)}
 
 `Above T S` is "`T` nonempty and every member of `T` strictly outlives every member of `S`"; it
-is well-founded exactly because `L` has no infinite ascending chain (`above_wf`), so the
-recursion is `WellFounded.fix` on it, as `Paper/S5_Model`'s is on `ℕᵒᵈ`. `Cell_eq` is the cell
-equation, `isCarrier` its solution.
+is well-founded because `L` has no infinite ascending chain (`above_wf`), so the recursion is
+`WellFounded.fix` on it, as `Paper/S5_Model`'s is on `ℕᵒᵈ`. `Cell_eq` is the cell equation,
+`isCarrier` its solution. Conversely an infinite ascending chain leaves no solution: the strata
+along it would have strictly descending cardinals (`no_carrier_of_strictMono`, `DenseCarrier`'s
+Cantor argument with set-indexed strata), so `carrier_iff`: a partial order carries the cells
+exactly when it has no infinite ascending chain. Unlike a chain carrying them, it need not be
+rigid (`Atoms.lean`'s swaps).
 
 The union `CellU ≜ ⋃_S Cell_S` (`ImmU`, `MutU`), stratum membership `CellU.InStratum`, and the
 passage between `Res_S` and `{ρ ∈ Res ∣ ρ ∈ Res_S}` are `Paper/S5_Model`'s, with set-indexed
@@ -37,7 +41,8 @@ read on the union (`CellU.ext_data`); `immOf`/`mutOf` build a cell from that dat
   postcondition, the relation's `[@a] T`) is this.
 
 On cells whose lifetimes are comparable with `α` they agree (`survives_iff_inStratum`); a cell
-at a lifetime incomparable with `α` survives `α` and is not in `Res_{α}`.
+at a lifetime incomparable with `α` survives `α` and is not in `Res_{α}` (`Witnesses.lean`'s
+`split_is_real`).
 -/
 
 noncomputable section

@@ -25,7 +25,12 @@ cell's stratum. So a closure over it is not vacuously related at `x`. The `Mut` 
 (`kV_related_x'`), and not at `x″`, beneath `r` (`kV_not_related_x''`).
 
 **(b) The convention is what matters**: at `kU` and `kV` the same closure, with the same (empty)
-resource, is related after the same-parents re-make and not after the extra-parents one.
+resource, is related after the same-parents re-make and not after the extra-parents one; and no
+order automorphism fixing `q` sends `x` to `x″` (`no_automorphism_extra_parents`).
+
+**The move is the re-make.** `not_reslotInvV`'s configuration, a borrow of a borrow, moved by the
+swap is related at the moved reading and *is* the borrow of a borrow made afresh at `x′`
+(`mm_swap_related`, from `move_eq_remake`): the image of a stored `𝒱⟦A⟧δ` is `𝒱⟦A⟧(π·δ)`.
 
 **(c) The scheduler.** A closed package whose resources are owned (a task that borrowed only its
 own local, `S = ∅`) lies in every stratum, so it can be stored under any `Mut 'q`
@@ -36,6 +41,10 @@ own local, `S = ∅`) lies in every stratum, so it can be stored under any `Mut 
 The self-borrow itself: opening the minimal package (`c` owned, contents the borrow of `c`) at `x`
 is related at `Mut 'x 1` (`selfBorrow_related`), and so is re-opening at `x′` (`selfBorrow_reopen`,
 from `reopen_swap`).
+
+`wp` is not vacuous: a value satisfies it at `∅` (`wpN_val_empty`; `return ()` at `F 1`,
+`cN_ret_unit`). The two readings of `[α]P` differ: a cell at `x′` survives the end of `x` and is not
+in `Res_{x}` (`split_is_real`).
 -/
 
 noncomputable section
@@ -227,6 +236,36 @@ theorem vN_mutMut_empty_of {δ : LSubN L} {a c : Lifetime.Life} {α γ : L}
 
 end MutCells
 
+/-! ### `wp` is not vacuous -/
+
+section WpVal
+variable {L : Type} [PartialOrder L] [OrderTop L] [WellFoundedGT L]
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
+theorem updV_empty : ResU.UpdV (PMap.empty : ResU L) PMap.empty :=
+  ⟨⟨fun _ _ _ => Iff.rfl, fun _ _ _ => Iff.rfl⟩, valid_empty, valid_empty⟩
+
+/-- **A value satisfies `wp` at `∅`** whenever its postcondition holds at `∅`: every frame is
+kept, the run is empty. -/
+theorem wpN_val_empty {Q : Val → WPropN L} {v : Val} (h : Q v PMap.empty) :
+    wpN (ℍ := ℍ) (.val v) Q PMap.empty := by
+  intro ρf hf
+  obtain ⟨-, ρ₀, hc, σ, hσ⟩ := hf
+  obtain rfl := comp_empty_right_eq hc
+  have hv : ρ₀.Valid := ⟨σ, hσ⟩
+  refine ⟨PMap.empty, PMap.empty, ρ₀, ρ₀, ρ₀, PMap.empty, v, fun l => (σ.get l).map CellU.erase,
+    fun l => (σ.get l).map CellU.erase, hash_empty_of_valid hv, comp_empty_right _ _ _,
+    hash_empty_of_valid hv, comp_empty_right _ _ _, ⟨σ, hσ, fun _ => rfl⟩,
+    comp_empty_right _ _ _, ⟨σ, hσ, fun _ => rfl⟩, .refl _ _, comp_empty_left _ _ _, updV_empty,
+    fun _ _ e => absurd e (by simp), h⟩
+
+/-- `return ()` is related at `F 1`, at every reading. -/
+theorem cN_ret_unit (δ : LSubN L) :
+    cN (ℍ := ℍ) (.ret .unit) δ (.val .unit) PMap.empty :=
+  wpN_val_empty (vN_unit_empty_iff.mpr ⟨rfl, rfl⟩)
+
+end WpVal
+
 /-! ### The atoms -/
 
 namespace W
@@ -341,6 +380,33 @@ theorem π_r : π (r : Lft) = r :=
   swapLft_fix sameParents fun a ha => by
     obtain rfl := WithTop.coe_injective ha
     exact ⟨r_not_le x (Or.inl rfl), r_not_le x' (Or.inr rfl)⟩
+
+/-- The lifetimes strictly above `x` are `q` and `⊤`. -/
+theorem lt_x_iff (y : Lft) : (x : Lft) < y ↔ y = q ∨ y = ⊤ := by
+  induction y using WithTop.recTopCoe with
+  | top => exact ⟨fun _ => Or.inr rfl, fun _ => WithTop.coe_lt_top _⟩
+  | coe b =>
+      rw [WithTop.coe_lt_coe]
+      show Atom.Below x b ↔ _
+      rw [below_x_iff]
+      constructor
+      · rintro rfl; exact Or.inl rfl
+      · rintro (h | h)
+        · exact WithTop.coe_injective h
+        · exact absurd h (WithTop.coe_ne_top)
+
+/-- **The extra-parents re-make is not an automorphism**: no order automorphism fixing `q` sends
+`x` to `x″`, since `x″` is beneath `r` and `x` is beneath nothing `r` could come from. -/
+theorem no_automorphism_extra_parents (σ : Lft ≃o Lft) (hq : σ (q : Lft) = q) :
+    σ (x : Lft) ≠ x'' := by
+  intro h
+  have hlt : (x : Lft) < σ.symm r := by
+    rw [← σ.lt_iff_lt, h, σ.apply_symm_apply]; exact x''_lt_r
+  rcases (lt_x_iff _).mp hlt with e | e
+  · have : (r : Lft) = q := by rw [← σ.apply_symm_apply (r : Lft), e, hq]
+    exact r_ne_q (WithTop.coe_injective this)
+  · have : (r : Lft) = ⊤ := by rw [← σ.apply_symm_apply (r : Lft), e, OrderIso.map_top]
+    exact WithTop.coe_ne_top this
 
 /-- `'a ↦ α`, `'b ↦ β`. -/
 def δ₂ (α β : Lft) : LSubN Lft := ⟨[(0, α), (1, β)]⟩

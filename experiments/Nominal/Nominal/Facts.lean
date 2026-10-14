@@ -255,15 +255,15 @@ theorem relU_mutOf_fix (π : L ≃o L) {b : L} {u : Val} {σ : ResU L} {h : σ.I
 /-! ### The two readings of `[α]P` -/
 
 /-- On a chain the two readings agree. -/
-theorem survives_iff_inStratum_of_total {α : L} (htot : ∀ a b : L, a ≤ b ∨ b ≤ a)
+theorem survives_iff_inStratum_of_chain {α : L} (hchain : ∀ a b : L, a ≤ b ∨ b ≤ a)
     (ρ : ResU L) : ρ.Survives α ↔ ρ.InStratum {α} :=
   forall_congr' fun _ => forall_congr' fun _ => imp_congr_right fun _ =>
-    CellU.survives_iff_inStratum (fun m _ => htot m α)
+    CellU.survives_iff_inStratum (fun m _ => hchain m α)
 
-theorem boxE_eq_boxS_of_total (htot : ∀ a b : L, a ≤ b ∨ b ≤ a) (α : L) (P : WPropN L) :
+theorem boxE_eq_boxS_of_chain (hchain : ∀ a b : L, a ≤ b ∨ b ≤ a) (α : L) (P : WPropN L) :
     boxE α P = boxS α P := by
   funext ρ
-  exact propext (and_congr_right fun _ => survives_iff_inStratum_of_total htot ρ)
+  exact propext (and_congr_right fun _ => survives_iff_inStratum_of_chain hchain ρ)
 
 end Nominal
 
