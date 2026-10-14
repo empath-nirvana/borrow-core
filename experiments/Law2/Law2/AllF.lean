@@ -3,7 +3,8 @@ import Law2.Kappa
 /-!
 # Law2 — re-lending at `∀` and at `F`, for what typing builds
 
-Probe 3 (`DenseCarrier`, *Re-lending*) left two cases of re-lending a computation open:
+Re-lending a computation pointwise, at every configuration the relation relates, has two cases
+that read more than the computation (`DenseCarrier`, *Re-lending*):
 
 * **`∀`**: one re-make has to serve every instance of the quantifier at the moved reading,
   including instances no re-making of an old one reaches (a re-making other than the identity is
