@@ -14,7 +14,12 @@ context, `.seq .hole rest`, with the stop the run's first configuration.
   operation's name) whose share is the views it drops beside a part in `[top]`, each continuation
   owed the piece again. `openS_of_run` is the case with no stop; `openS_yield_ds` the case whose run
   is empty and whose stop context is `.seq .hole rest`.
-* `openS_kstop`: a stop of the kernel's table at an operation of the row is a stop of the piece.
+* `stopAt_of_perform`: a stop of the kernel's table at an operation of the row is a stop of the
+  piece.
+* `dropE_join`, `dropS_join`: what two parts drop at a stop joins, entry by entry; the stacked bind
+  (`Law2/Inner.lean`) joins a frame's drops to its inner piece's with them.
+* `relend_of_openS₁`: at one `mut` entry the piece is GhostEnd's single-lend `Relend`.
+* `relend_not_emb`: why the bridge reads re-lends directly rather than through re-makings.
 -/
 
 noncomputable section
@@ -87,8 +92,7 @@ theorem stopAt_of_perform {σ : LStack} {X : XT} {αs : List Life} {ls : List SR
 
 end
 
-/-! ### Bind: a pure context around a piece, a frame frozen at each stop and thawed at each
-re-lend -/
+/-! ### Drops joined across two parts -/
 
 section bind
 variable {δ : LSub} {Tab : OpTab}
@@ -148,147 +152,10 @@ theorem dropS_join : ∀ {seen : List BoCa.Loc} {σ : LStack} {d₁ d₂ : List 
   | _, _ :: _, [], _, _, _, _, h, _, _ => h.elim
   | _, _ :: _, _ :: _, [], _, _, _, _, h, _ => h.elim
 
-/-- A part in `[top]` joins the share a lender's exit hands its owner back to. -/
-theorem ownWandE_frame {e : LEnt} {ls : List SRec} {αs : List Life} {R F : WProp}
-    {ρ₁ ρ₂ ρ : WRes} (h : ownWandE δ e ls (ownerE δ e ls ⋆ boxTop αs R) ρ₁) (hF : F ρ₂)
-    (hs : stratS αs ρ₂) (hc : ResU.CompS ρ₁ ρ₂ ρ) :
-    ownWandE δ e ls (ownerE δ e ls ⋆ boxTop αs (R ⋆ F)) ρ := by
-  have key : ∀ {ρa ρb : WRes}, ResU.CompS ρ ρa ρb → ∀ {ρc ρd : WRes}, ResU.CompS ρb ρc ρd →
-      (∀ {y z : WRes}, ResU.CompS ρ₁ ρa y → ResU.CompS y ρc z →
-        (ownerE δ e ls ⋆ boxTop αs R) z) →
-      (ownerE δ e ls ⋆ boxTop αs (R ⋆ F)) ρd := by
-    intro ρa ρb hab ρc ρd hcd hk
-    obtain ⟨y, hy, hyb⟩ := compS_exch hc hab
-    obtain ⟨z, hz, hzd⟩ := compS_exch hyb hcd
-    obtain ⟨o, r, hcor, ho, hr⟩ := hk hy hz
-    obtain ⟨rr, hrr, hord⟩ := compS_reassoc hcor hzd
-    exact ⟨o, rr, hord, ho, ⟨r, ρ₂, hrr, hr.1, hF⟩,
-      fun a ha => (outlives_comp hrr a).mpr ⟨hr.2 a ha, hs a ha⟩⟩
-  obtain ⟨l, x, T, k, cr⟩ := e
-  cases k with
-  | «mut» =>
-      intro w ρa ρb ha hab ρc ρd hv hcd
-      exact key hab hcd fun hy hz => h w ρa _ ha hy ρc _ hv hz
-  | imm u =>
-      intro ρa ρb ha hab ρc ρd hv hcd
-      exact key hab hcd fun hy hz => h ρa _ ha hy ρc _ hv hz
-
-/-- **A part in `[top]` joins what a stop owes the lenders**: inside every lender's exit, beside
-the share the outermost owes. -/
-theorem ghostS_frame : ∀ {σ : LStack} {αs : List Life}, αs.length = σ.length →
-    List.IsChain (· < ·) αs → ∀ {ls : List SRec} {R F : WProp} {ρ₁ ρ₂ ρ : WRes},
-      ghostS δ σ αs ls R ρ₁ → F ρ₂ → stratS αs ρ₂ → ResU.CompS ρ₁ ρ₂ ρ →
-        ghostS δ σ αs ls (R ⋆ F) ρ
-  | [], [], _, _, _, _, _, ρ₁, ρ₂, _, h, hF, _, hc => ⟨ρ₁, ρ₂, hc, h, hF⟩
-  | _ :: _, _ :: _, _, hch, _, _, _, _, _, _, h, hF, hs, hc =>
-      ⟨ownWandE_frame h.1 hF hs hc, (outlives_comp hc _).mpr ⟨h.2, stratS_head hch hs⟩⟩
-
-variable {σ : LStack}
-
-/-- **Bind at one run, at the stack.** `K` pure around a run at `αs`, the live frame `Fr αs`
-carried through it. At an answer `K[v]` runs on at the same lifetimes (`hk`). At a stop the frame
-freezes (`hfz`): a part `Fz αs d` in `[top]`, beside the views it drops; the piece's drops and the
-frame's join (`dropS_join`), and the frozen frame joins every continuation (`hX`). -/
-theorem bodyS_bind (hLR : LinResume Tab) (hx : AllCross σ Tab) (K : Kont)
-    (hH : ∀ n, K.HasHnd n = false)
-    (Fr : List Life → List SRec → WProp) (Fz : List Life → List Bool → List SRec → WProp)
-    (hFs : ∀ αs ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr αs ls) (Fr αs ls'))
-    (hFe : ∀ αs d ls ls' ρ, Ext ls ls' ρ → Fz αs d ls ρ → Fz αs d ls' ρ)
-    (hFo : ∀ αs d ls ρ, Fz αs d ls ρ → stratS αs ρ)
-    {Q₁ Q : List Life → List SRec → Val → WProp} {X₁ X : XT}
-    {αs : List Life} (hlen : αs.length = σ.length) (hch : List.IsChain (· < ·) αs)
-    (hfz : ∀ ls ρ, Fr αs ls ρ → ∃ d ρz ρn, ResU.CompS ρz ρn ρ ∧ Fz αs d ls ρz ∧ dropS [] σ d ρn)
-    (hX : ∀ d₁ d₂ ls e ρ₁ ρz ρ, MutDisj [] σ d₁ d₂ → d₁.length = σ.length →
-      d₂.length = σ.length → X₁ σ.length d₁ αs [] ls e ρ₁ → Fz αs d₂ ls ρz →
-      ResU.CompS ρ₁ ρz ρ → X σ.length (List.zipWith (· || ·) d₁ d₂) αs [] ls (K.plug e) ρ)
-    (hk : ∀ ls v, Entails (Q₁ αs ls v ⋆ Fr αs ls) (bodyS δ σ Tab Q X αs ls (K.plug (.val v))))
-    {ls : List SRec} {e : Expr} {ρ₁ ρf ρ : WRes}
-    (h : bodyS δ σ Tab Q₁ X₁ αs ls e ρ₁) (hf : Fr αs ls ρf) (hc : ResU.CompS ρ₁ ρf ρ) :
-    bodyS δ σ Tab Q X αs ls (K.plug e) ρ := by
-  refine wpG_garbage ?_
-  refine wpG_bind K e ls _ ρ ?_
-  refine wpG_mono (fun ls' t τ ht => ?_) (wpG_frame (Fr αs) (hFs αs ls) ρ ⟨ρ₁, ρf, hc, h, hf⟩)
-  obtain ⟨τ₁, τ₂, hcτ, hp, hF'⟩ := ht
-  rcases hp with ⟨v, rfl, hv⟩ | hs
-  · exact wpG_mono (fun _ _ τ' hq => ⟨τ', PMap.empty, ResU.comp_empty_right τ', noOwn_empty, hq⟩)
-      (hk ls' v τ ⟨τ₁, τ₂, hcτ, hv, hF'⟩)
-  refine wpG_here _ _ _ τ ?_
-  obtain ⟨d₂, ρz, ρn, hczn, hz, hdn⟩ := hfz ls' τ₂ hF'
-  have hl₂ : d₂.length = σ.length := dropS_length hdn
-  rcases stopS_full hx hlen hs with ⟨d₁, hl₁, ρa, ρg, hca, hda, hg⟩ | ⟨ρg, ρa, hca, hno, hg⟩
-  · -- a stop at the full depth: the drops join, the frozen frame joins the continuations
-    obtain ⟨ac, bd, hac, hbd, hρ⟩ := compS_four hca (ResU.CompS.comm hczn) hcτ
-    obtain ⟨hdrop, hdisj⟩ := dropS_join hda hdn hac
-    have hgz := ghostS_frame hlen hch hg hz (hFo _ _ _ _ hz) hbd
-    refine ⟨τ, PMap.empty, ResU.comp_empty_right τ, noOwn_empty, Or.inr
-      (stopS_of_full hx hlen hdrop (ghostS_mono (fun υ hυ => ?_) _ _ _ bd hgz) hρ)⟩
-    obtain ⟨υ₁, υ₂, hcυ, hR, hFz⟩ := hυ
-    exact opTable_frame hLR K hH (Fz αs d₂) (hFe αs d₂)
-      (fun ls e ρ₁ ρz ρ h₁ h₂ h₃ => hX d₁ d₂ ls e ρ₁ ρz ρ hdisj hl₁ hl₂ h₁ h₂ h₃) hR hFz hcυ
-  · -- a stop no lender admits: it owes nothing it can produce; its garbage is dropped
-    obtain ⟨y, hy, hyτ⟩ := compS_exch hca hcτ
-    obtain ⟨ab, hab, haby⟩ := compS_reassoc' hczn hy
-    have hgz := ghostS_frame hlen hch hg hz (hFo _ _ _ _ hz) hab
-    refine ⟨y, ρa, hyτ, hno, Or.inr (stopS_of_full hx hlen hdn
-      (ghostS_mono (fun υ hυ => ?_) _ _ _ ab hgz) (ResU.CompS.comm haby))⟩
-    obtain ⟨υ₁, υ₂, -, hR, -⟩ := hυ
-    exact hR.elim
-
 /-- A re-lend strictly below is a re-lend. -/
 theorem reLend_of_lt {αs' αs : List Life} (hlt : List.Forall₂ (· < ·) αs' αs)
     (hch : List.IsChain (· < ·) αs') : ReLend αs' αs :=
   ⟨hlt.imp fun _ _ => le_of_lt, hch⟩
-
-/-- **Bind, at the stack.** A pure context `K` around a piece, the frozen frame `Fz αi d₂` beside
-it. At each unfolding the views go to the piece and to the frame by their drops (`vwS_split`), the
-frozen frame thaws to the live frame at the re-lend (`hthaw`), and one run is `bodyS_bind`. By
-induction on the piece's `OpenS`: its stops' continuations are the piece again, at the lifetimes
-just ended, and the frame frozen at them. No step reads the stack's length. -/
-theorem openS_bind (hLR : LinResume Tab) (hx : AllCross σ Tab) (K : Kont)
-    (hH : ∀ n, K.HasHnd n = false)
-    (Fr : List Life → List SRec → WProp) (Fz : List Life → List Bool → List SRec → WProp)
-    (hFs : ∀ αs ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr αs ls) (Fr αs ls'))
-    (hFe : ∀ αs d ls ls' ρ, Ext ls ls' ρ → Fz αs d ls ρ → Fz αs d ls' ρ)
-    (hFo : ∀ αs d ls ρ, Fz αs d ls ρ → stratS αs ρ)
-    (hfz : ∀ αs, αs.length = σ.length → List.IsChain (· < ·) αs → ∀ ls ρ, Fr αs ls ρ →
-      ∃ d ρz ρn, ResU.CompS ρz ρn ρ ∧ Fz αs d ls ρz ∧ dropS [] σ d ρn)
-    (hthaw : ∀ αs αs' d ls ρz ρv ρ, List.Forall₂ (· < ·) αs' αs →
-      List.IsChain (· < ·) αs' → Fz αs d ls ρz → vwS δ [] σ d αs' ls ρv →
-      ResU.CompS ρz ρv ρ → Fr αs' ls ρ)
-    {Q₁ Q : List Life → List SRec → Val → WProp} {B : List Life}
-    (hk : ∀ αs, List.Forall₂ (· ≤ ·) αs B → αs.length = σ.length → List.IsChain (· < ·) αs →
-      ∀ ls v, Entails (Q₁ αs ls v ⋆ Fr αs ls)
-        (bodyS δ σ Tab Q (OpenS δ σ Tab Q) αs ls (K.plug (.val v))))
-    {d₁ d₂ : List Bool} (hd : MutDisj [] σ d₁ d₂) (hl₁ : d₁.length = σ.length)
-    (hl₂ : d₂.length = σ.length) {αi : List Life} (hB : List.Forall₂ (· ≤ ·) αi B)
-    {ls : List SRec} {e : Expr} {ρ₁ ρz ρ : WRes}
-    (h : OpenS δ σ Tab Q₁ σ.length d₁ αi [] ls e ρ₁) (hz : Fz αi d₂ ls ρz)
-    (hc : ResU.CompS ρ₁ ρz ρ) :
-    OpenS δ σ Tab Q σ.length (List.zipWith (· || ·) d₁ d₂) αi [] ls (K.plug e) ρ := by
-  let Mot : XT := fun k d₁ αi αo ls e ρ₁ => k = σ.length → αo = [] →
-    List.Forall₂ (· ≤ ·) αi B → ∀ d₂ ρz ρ,
-    MutDisj [] σ d₁ d₂ → d₁.length = σ.length → d₂.length = σ.length → Fz αi d₂ ls ρz →
-      ResU.CompS ρ₁ ρz ρ → OpenS δ σ Tab Q σ.length (List.zipWith (· || ·) d₁ d₂) αi [] ls
-        (K.plug e) ρ
-  refine h Mot ?_ rfl rfl hB d₂ ρz ρ hd hl₁ hl₂ hz hc
-  rintro k d₁ αi αo ls e ρ₁ hF rfl rfl hB d₂ ρz ρ hd hl₁ hl₂ hz hc
-  refine openS_fold fun αi' hlt hch => ?_
-  rw [List.append_nil] at hch ⊢
-  rw [List.take_length]
-  have hFα := hF αi' hlt (by rw [List.append_nil]; exact hch)
-  rw [List.take_length, List.append_nil] at hFα
-  refine ⟨fun ρv W hv hcv => ?_, fun a ha => (outlives_comp hc a).mpr
-    ⟨hFα.2 a ha, stratS_mono (reLend_of_lt hlt hch) (hFo _ _ _ _ hz) a ha⟩⟩
-  have hlen : αi'.length = σ.length := (vwS_length hv).2
-  obtain ⟨ρv₁, ρv₂, hcv₁₂, hv₁, hv₂⟩ := vwS_split hd hl₁ hl₂ hv
-  obtain ⟨x, y, hxc, hy, hxy⟩ := compS_four hc hcv₁₂ hcv
-  have hb := hFα.1 ρv₁ x hv₁ hxc
-  have hfr := hthaw αi αi' d₂ ls ρz ρv₂ y hlt hch hz hv₂ hy
-  have hB' : List.Forall₂ (· ≤ ·) αi' B := forall₂_le_trans (hlt.imp fun _ _ => le_of_lt) hB
-  exact bodyS_bind hLR hx K hH Fr Fz hFs hFe hFo hlen hch (hfz αi' hlen hch)
-    (fun d₁ d₂ ls e ρ₁ ρz ρ hd' hl₁' hl₂' hM hz' hc' =>
-      hM rfl rfl hB' d₂ ρz ρ hd' hl₁' hl₂' hz' hc')
-    (hk αi' hB' hlen hch) hb hfr hxy
 
 end bind
 

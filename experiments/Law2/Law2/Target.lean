@@ -238,9 +238,10 @@ theorem law2_depth1 {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ) {x : LifeVar
 
 /-- The view at one lend is re-lendable: frozen part `∅`, the view handed afresh at every
 re-lend. -/
-theorem rctx_one {δ : LSub} {l : BoCa.Loc} {x : LifeVar} {T : VTy} (hT : ¬ VFree x T)
-    {α : Life} {ls : List SRec} {ρv : WRes} (hv : vwS δ [] (oneS l x T) [true] [α] ls ρv) :
-    RCtx (ℍ := ℍ) δ (oneS l x T) [α] ls [⟨.mut (.var x) T, true⟩] [Val.loc l] ρv := by
+theorem rctx_one {δ : LSub} {S₀ : Row} {l : BoCa.Loc} {x : LifeVar} {T : VTy}
+    (hT : ¬ VFree x T) {α : Life} {ls : List SRec} {ρv : WRes}
+    (hv : vwS δ [] (oneS l x T) [true] [α] ls ρv) :
+    RCtx (ℍ := ℍ) δ (oneS l x T) S₀ [α] ls [⟨.mut (.var x) T, true⟩] [Val.loc l] ρv := by
   refine pure_sep_mk trivial ⟨ρv, PMap.empty, ResU.comp_empty_right ρv, ?_, ⟨rfl, trivial⟩⟩
   show RelendableS δ [] (oneS l x T)
     (fun αs' ls' => vCE (ℍ := ℍ) none true (.mut (.var x) T) ls' (extS δ (oneS l x T) αs')
@@ -258,7 +259,7 @@ theorem relend_frag {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ) {x : LifeVar
     (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
     {T B : VTy} (hT : ¬ VFree x T) (hB : ¬ VFree x B) {S : Row} (hS : Row.Resume S x)
     (hSne : S ≠ []) {M : Expr} (l : BoCa.Loc)
-    (hD : BComp (ℍ := ℍ) δ (oneS l x T) S (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
+    (hD : BComp (ℍ := ℍ) δ (oneS l x T) S S (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
       (.box (.var x) B))
     (ls : List SRec) :
     Relend (opTable (Row.tab S δ)) l T δ (finPost l T B δ) ls (substAll [Val.loc l] M)
@@ -285,7 +286,7 @@ theorem law2_depth1_frag {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ) {x : Li
     {βP : Life} (hP : ∀ ls w σ, vCE (ℍ := ℍ) none true T ls δ w σ → σ.InStratum βP)
     {S : Row} (hS : Row.Resume S x) (hSne : S ≠ []) {M : Expr} (hM : closedAt 1 M = true)
     (l : BoCa.Loc)
-    (hD : BComp (ℍ := ℍ) δ (oneS l x T) S (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
+    (hD : BComp (ℍ := ℍ) δ (oneS l x T) S S (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
       (.box (.var x) B))
     (v : Val) (ls : List SRec) :
     Entails (ptoOwn l v ⋆ vCE (ℍ := ℍ) none true T ls δ v)

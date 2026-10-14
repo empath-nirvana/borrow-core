@@ -6,7 +6,9 @@ import Law2.World
 import Law2.Mixed
 import Law2.Straight
 import Law2.Bridge
+import Law2.Inner
 import Law2.Piece
+import Law2.Handle
 import Law2.Fragment
 import Law2.Instances
 import Law2.FragInstances

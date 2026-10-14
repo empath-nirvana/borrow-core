@@ -45,7 +45,7 @@ abbrev TM : VTy := .mut (.var 2) TA
 afresh at every re-lend (`ctx_A`). -/
 theorem rctx_view {s : BoCa.Loc} {αs : List Life} {ls : List SRec} {ρv : WRes}
     (hv : vwS δA [] [e₂ s, e₁ s] [true, true] αs ls ρv) :
-    RCtx (ℍ := ℍ) δA [e₂ s, e₁ s] αs ls [⟨TM, true⟩] [Val.loc s] ρv := by
+    RCtx (ℍ := ℍ) δA [e₂ s, e₁ s] [yieldOp] αs ls [⟨TM, true⟩] [Val.loc s] ρv := by
   refine pure_sep_mk trivial ⟨ρv, PMap.empty, ResU.comp_empty_right ρv, ?_, ⟨rfl, trivial⟩⟩
   show RelendableS δA [] [e₂ s, e₁ s]
     (fun αs' ls' => vCE (ℍ := ℍ) none true TM ls' (extS δA [e₂ s, e₁ s] αs') (Val.loc s)) αs ls ρv
@@ -67,7 +67,7 @@ theorem hctx_view {s : BoCa.Loc} {bs : List Life} :
     ∀ αs ls ρv, List.Forall₂ (· < ·) αs bs → List.IsChain (· < ·) αs →
       vwS δA [] [e₂ s, e₁ s] [true, true] αs ls ρv →
         ∃ ρg ρd, ResU.CompS ρg ρd ρv ∧ NoOwn ρd ∧
-          RCtx (ℍ := ℍ) δA [e₂ s, e₁ s] αs ls [⟨TM, true⟩] [Val.loc s] ρg :=
+          RCtx (ℍ := ℍ) δA [e₂ s, e₁ s] [yieldOp] αs ls [⟨TM, true⟩] [Val.loc s] ρg :=
   fun _ _ ρv _ _ hv => ⟨ρv, PMap.empty, ResU.comp_empty_right ρv, noOwn_empty, rctx_view hv⟩
 
 /-- `ΔA` models every re-lend of the stack below `[4, 3]`. -/
@@ -130,14 +130,15 @@ theorem ctxNoEffT_of {Γ : Ctx VTy} (h : ∀ s ∈ Γ, s.live = true → NoEffT 
 /-- **The program is in the fragment**, at the stack `[s@'x₂ reborrow, s@'x₁]` and the row
 `{yield}`. -/
 theorem d_branch {δ : LSub} {σ : LStack} {Δ : LifeCtx} {a : Lifetime.Life} :
-    BComp (ℍ := ℍ) δ σ [yieldOp] Δ [⟨.mut a TA, true⟩] branchE .unit :=
+    BComp (ℍ := ℍ) δ σ [yieldOp] [yieldOp] Δ [⟨.mut a TA, true⟩] branchE .unit :=
   .letE (.right .nil)
     (.ret (.frozen (.sumI₂ (.unitI (.cons .nil)))
       (fun _ hs hl => by simp at hs; subst hs; simp at hl)
       (show NoEffT (.sum .unit .unit) from ⟨trivial, trivial⟩)
       (fun _ _ h => by simp [VFree] at h) (aboveAll_of_persistent rfl)))
     (.letE (.right (.right .nil))
-      (.perform (o := yieldOp) (by simp [Row.find, yieldOp]) rfl rfl rfl
+      (.perform (o := yieldOp) (by simp [Row.find, yieldOp]) (by simp [Row.find, yieldOp]) rfl
+          rfl rfl
         (fun _ _ h => by simp [VFree, yieldOp] at h) (fun _ _ => .int)
         (.lit (.i32 1) (.cons (.cons .nil)))
         (fun _ hs hl => by simp at hs; rcases hs with rfl | rfl <;> simp at hl))
@@ -146,7 +147,8 @@ theorem d_branch {δ : LSub} {σ : LStack} {Δ : LifeCtx} {a : Lifetime.Life} :
             simp at hs; rcases hs with rfl | rfl | rfl | rfl <;> simp_all [NoEffT, yieldOp])
           trivial (fun _ _ h => by simp [VFree] at h) (aboveAll_of_persistent rfl))
         (.letE (.right (.right (.dead (.right .nil))))
-          (.perform (o := yieldOp) (by simp [Row.find, yieldOp]) rfl rfl rfl
+          (.perform (o := yieldOp) (by simp [Row.find, yieldOp]) (by simp [Row.find, yieldOp]) rfl
+          rfl rfl
             (fun _ _ h => by simp [VFree, yieldOp] at h) (fun _ _ => .int)
             (.lit (.i32 2) (.cons (.cons (.cons (.cons .nil)))))
             (fun _ hs hl => by simp at hs; rcases hs with rfl | rfl | rfl | rfl <;> simp at hl))
@@ -158,7 +160,8 @@ theorem d_branch {δ : LSub} {σ : LStack} {Δ : LifeCtx} {a : Lifetime.Life} :
 the reborrow's view and answering `()`: from the struct's owner, its `ewpTS` at `{yield}`, the
 owner handed back. `law2_frag` with every hypothesis discharged once. -/
 theorem law2_A (s : BoCa.Loc) {M : Expr}
-    (hd : BComp (ℍ := ℍ) δA [e₂ s, e₁ s] [yieldOp] ΔA [⟨TM, true⟩] M .unit) (ls : List SRec) :
+    (hd : BComp (ℍ := ℍ) δA [e₂ s, e₁ s] [yieldOp] [yieldOp] ΔA [⟨TM, true⟩] M .unit)
+    (ls : List SRec) :
     Entails (owner s TA δA ls)
       (ewpTS (ℍ := ℍ) ls (substAll [Val.loc s] M) (opTable (Row.tab [yieldOp] δA))
         (fun ls v => owner s TA δA ls ⋆ ⌜v = Val.unit⌝)) := by
@@ -229,17 +232,24 @@ theorem d_tailB {Δ : LifeCtx} {a : Lifetime.Life} {S₀ S₁ : VTy} :
         (.there (.there (.there (.there (.here .nil))))))
       (.ret (.unitI (.drop pu (.cons (.drop pu (.cons (.cons (.cons .nil)))))))))
 
-theorem perform_yield {δ : LSub} {σ : LStack} {Δ : LifeCtx} (n : UInt32) {Γ : Ctx VTy}
-    (hΓ : Ctx.DeadP Γ) (hN : CtxNoEffT Γ) : BComp (ℍ := ℍ) δ σ [yieldOp] Δ Γ (yE n) .unit :=
-  .perform (o := yieldOp) (by simp [Row.find, yieldOp]) rfl rfl rfl
+/-- `yield n` at a row whose `yield` is the lenders'. -/
+theorem perform_yield_at {δ : LSub} {σ : LStack} {Δ : LifeCtx} {S : Row}
+    (hS : Row.find S yieldOp.n yieldOp.i = some yieldOp) (n : UInt32) {Γ : Ctx VTy}
+    (hΓ : Ctx.DeadP Γ) (hN : CtxNoEffT Γ) : BComp (ℍ := ℍ) δ σ [yieldOp] S Δ Γ (yE n) .unit :=
+  .perform (o := yieldOp) hS (by simp [Row.find, yieldOp]) rfl rfl rfl
     (fun _ _ h => by simp [VFree, yieldOp] at h) (fun _ _ => .int) (.lit (.i32 n) hΓ) hN
+
+theorem perform_yield {δ : LSub} {σ : LStack} {Δ : LifeCtx} (n : UInt32) {Γ : Ctx VTy}
+    (hΓ : Ctx.DeadP Γ) (hN : CtxNoEffT Γ) :
+    BComp (ℍ := ℍ) δ σ [yieldOp] [yieldOp] Δ Γ (yE n) .unit :=
+  perform_yield_at (by simp [Row.find, yieldOp]) n hΓ hN
 
 /-- A context of dead slots and live units holds no closure that stops. -/
 theorem noEffT_units {Γ : Ctx VTy} (h : ∀ sl ∈ Γ, sl.live = true → sl.ty = .unit) :
     CtxNoEffT Γ := fun sl hs hl => by rw [h sl hs hl]; trivial
 
 theorem d_closure {δ : LSub} {σ : LStack} {Δ : LifeCtx} {a : Lifetime.Life} :
-    BComp (ℍ := ℍ) δ σ [yieldOp] Δ [⟨.mut a TA, true⟩] closureE .unit :=
+    BComp (ℍ := ℍ) δ σ [yieldOp] [yieldOp] Δ [⟨.mut a TA, true⟩] closureE .unit :=
   .letE (.right .nil)
     (.ret (.lamEff (perform_yield 2 (.drop pu (.cons .nil))
       (noEffT_units fun _ hs hl => by simp at hs; rcases hs with rfl | rfl <;> simp_all))))
@@ -295,7 +305,7 @@ theorem d_tailC {Δ : LifeCtx} {a : Lifetime.Life} {S₀ S₁ S₂ : VTy} :
       (.ret (.unitI (.drop pu (.cons (.drop pu (.cons (.cons (.cons (.cons .nil))))))))))
 
 theorem d_step {δ : LSub} {σ : LStack} {Δ : LifeCtx} {S₀ : VTy} :
-    BComp (ℍ := ℍ) δ σ [yieldOp] Δ [⟨stArgTy, true⟩, ⟨S₀, false⟩] stepBody .unit :=
+    BComp (ℍ := ℍ) δ σ [yieldOp] [yieldOp] Δ [⟨stArgTy, true⟩, ⟨S₀, false⟩] stepBody .unit :=
   .letpair (.left (.dead .nil)) (.var (.here (.cons .nil)))
     (.letE (.right (.right (.dead (.dead .nil))))
       (perform_yield 3 (.cons (.cons (.cons (.cons .nil))))
@@ -311,7 +321,7 @@ theorem d_step {δ : LSub} {σ : LStack} {Δ : LifeCtx} {S₀ : VTy} :
             (.there (.there (.skip pu (.here (.cons (.cons (.cons .nil)))))))))))
 
 theorem d_loop {δ : LSub} {σ : LStack} {Δ : LifeCtx} {a : Lifetime.Life} :
-    BComp (ℍ := ℍ) δ σ [yieldOp] Δ [⟨.mut a TA, true⟩] loopE .unit :=
+    BComp (ℍ := ℍ) δ σ [yieldOp] [yieldOp] Δ [⟨.mut a TA, true⟩] loopE .unit :=
   .letE (.right .nil)
     (.ret (.bangLamEff (fun _ hs hl => by simp at hs; subst hs; simp at hl) d_step))
     (.letE (.right (.right .nil)) (.ret (.bangE (.boundedFix (.cons (.cons .nil)))))
@@ -337,6 +347,102 @@ theorem loop_spans (s : BoCa.Loc) (ls : List SRec) :
       (ewpTS (ℍ := ℍ) ls (substAll [Val.loc s] loopE) (opTable (Row.tab [yieldOp] δA))
         (fun ls v => owner s TA δA ls ⋆ ⌜v = Val.unit⌝)) :=
   law2_A s d_loop ls
+
+/-! ### A handler installed inside the borrower -/
+
+/-- The handler's name, not the lenders'. -/
+abbrev tickN : UInt32 := 9
+
+/-- The handler's effect: one linear operation `tick : 1 ↠ 1`. -/
+abbrev tickE : List (Qual × VTy × VTy) := [(.lin, .unit, .unit)]
+
+/-- The row inside the handler: `tick` ahead of the lenders' `yield`. -/
+abbrev Sin : Row := Row.ofEff tickN tickE 0 ++ [yieldOp]
+
+/-- `tick`, as the row inside holds it. -/
+abbrev tickOp : OpSig := ⟨tickN, UInt32.ofNat 0, .lin, .unit, .unit, finsNil 0⟩
+
+/-- The handled computation: `tick (); yield 1; use m`, `m` at index `0`. -/
+abbrev handledE : Expr :=
+  bindE (performE (opArgE tickOp.n tickOp.i (.val .unit))) (bindE (yE 1) (tailE 2))
+
+/-- The clause of `tick`: `λp. let (u, κ) = p in yield 2; κ u`. The continuation, which holds the
+view `m`, is held across a stop of the lenders' row. -/
+abbrev clauseE : Expr :=
+  .letpair (.var 0) (bindE (yE 2) (.app (.app (.var 1) (.val (.inj₁ .unit))) (.var 2)))
+
+/-- The handler: the answer clause `λx. x`, and the clause of `tick`. -/
+abbrev handlerH : Expr := .pair (.val (.lam (.var 0))) (.pair (.val (.lam clauseE)) (.val .unit))
+
+/-- **The program.** `handle (tick (); yield 1; use m) with {x ↦ x; tick (u, κ) ↦ yield 2; κ u}`:
+the handler is installed inside the region the lends span; `tick` stops inside it, crossing no
+lend, and its clause yields to the lenders before resuming. -/
+abbrev handlerE : Expr := hndExpr tickN (tickE.map Prod.fst) handlerH handledE
+
+/-- `use m` at a context of two live units and `m`. -/
+theorem d_tail₂ {Δ : LifeCtx} {a : Lifetime.Life} :
+    CDerives Δ [⟨.unit, true⟩, ⟨.unit, true⟩, ⟨.mut a TA, true⟩] (tailE 2)
+      (.comp (.ret .unit)) :=
+  .bind (.right (.right (.right .nil)))
+    (.ret (.forgetMut (a := a) (A := TA) (.cons (.cons (.cons .nil)))))
+    (.bind (.left (.right (.right (.left .nil))))
+      (.app (.left (.dead (.dead (.right .nil))))
+        (.force (.here (.cons (.cons (.cons .nil)))))
+        (.there (.there (.there (.here .nil)))))
+      (.ret (.unitI (.drop pu (.cons (.drop pu (.drop pu (.cons .nil))))))))
+
+/-- The handled computation, at the row inside the handler. -/
+theorem d_handled {δ : LSub} {σ : LStack} {Δ : LifeCtx} {a : Lifetime.Life} :
+    BComp (ℍ := ℍ) δ σ [yieldOp] Sin Δ [⟨.mut a TA, true⟩] handledE .unit :=
+  .letE (.right .nil)
+    (.performIn (o := tickOp) rfl rfl rfl (.unit (.cons .nil)))
+    (.letE (.right (.right .nil))
+      (perform_yield_at (by simp [Row.find, Row.ofEff, yieldOp, tickN]) 1 (.cons (.cons .nil))
+        (noEffT_units fun _ hs hl => by simp at hs; rcases hs with rfl | rfl <;> simp_all))
+      (.pure d_tail₂ (fun _ hs hl => by
+          simp at hs; rcases hs with rfl | rfl | rfl <;> simp_all [NoEffT])
+        trivial (fun _ _ h => by simp [VFree] at h) (aboveAll_of_persistent rfl)))
+
+/-- The clause of `tick`, at the row outside, its environment the handler's dead context. -/
+theorem d_clause {δ : LSub} {σ : LStack} {Δ : LifeCtx} {a : Lifetime.Life} :
+    BComp (ℍ := ℍ) δ σ [yieldOp] [yieldOp] Δ
+      [⟨.tensor .unit (kTy [yieldOp] .unit .lin .unit), true⟩, ⟨.mut a TA, false⟩] clauseE .unit :=
+  .letpair (.left (.dead .nil)) (.var (.here (.cons .nil)))
+    (.letE (.right (.right (.dead (.dead .nil))))
+      (perform_yield 2 (.cons (.cons (.cons (.cons .nil))))
+        (noEffT_units fun _ hs hl => by
+          simp at hs; rcases hs with rfl | rfl | rfl | rfl <;> simp at hl))
+      (.resume (.left (.left (.right (.dead (.dead .nil)))))
+        (.skip pu (.here (.cons (.cons (.cons .nil)))))
+        (.there (.there (.here (.cons (.cons .nil)))))))
+
+/-- The handler pair, a value form over the dead context. -/
+theorem d_handlerH {δ : LSub} {σ : LStack} {Δ : LifeCtx} {a : Lifetime.Life} :
+    BVal (ℍ := ℍ) δ σ [yieldOp] [yieldOp] Δ [⟨.mut a TA, false⟩] handlerH
+      (.tensor (retTy [yieldOp] .unit .unit) (clausesTy [yieldOp] .unit tickE)) :=
+  .pair (.dead .nil)
+    (.bangLamEff (fun _ hs hl => by simp at hs; subst hs; simp at hl)
+      (.ret (.var (.here (.cons .nil)))))
+    (.pair (.dead .nil)
+      (.bangLamEff (fun _ hs hl => by simp at hs; subst hs; simp at hl) d_clause)
+      (.unit (.cons .nil)))
+
+theorem d_handler {δ : LSub} {σ : LStack} {Δ : LifeCtx} {a : Lifetime.Life} :
+    BComp (ℍ := ℍ) δ σ [yieldOp] [yieldOp] Δ [⟨.mut a TA, true⟩] handlerE .unit :=
+  .handle (Γ₁ := [⟨.mut a TA, false⟩]) (Γ₂ := [⟨.mut a TA, true⟩]) (.right .nil) (.cons .nil)
+    (.pair (.val _) (.pair (.val _) (.val _))) d_handlerH (by decide)
+    (fun o ho => by simp at ho; subst ho; decide) (by decide) (by simp) rfl d_handled
+
+/-- **A handler installed inside the borrower, its clause holding the continuation across a stop of
+the lenders.** The generator lends `s` at `'x₁` and reborrows it at `'x₂`, and inside the region
+handles `tick (); yield 1; use m`: `tick` is caught inside, crossing no lend; its clause yields to
+the lenders — every view dropped, the continuation holding `m` frozen with it — and resumes the
+continuation at the re-lend, which yields again and uses `m`. -/
+theorem handler_spans (s : BoCa.Loc) (ls : List SRec) :
+    Entails (owner s TA δA ls)
+      (ewpTS (ℍ := ℍ) ls (substAll [Val.loc s] handlerE) (opTable (Row.tab [yieldOp] δA))
+        (fun ls v => owner s TA δA ls ⋆ ⌜v = Val.unit⌝)) :=
+  law2_A s d_handler ls
 
 /-! ### Depth 3: a reborrow chain -/
 
@@ -376,7 +482,8 @@ theorem hΔ_C {αs : List Life}
 every re-lend: the view is re-lendable, no part frozen. -/
 theorem rctx_view₃ {s : BoCa.Loc} {αs : List Life} {ls : List SRec} {ρv : WRes}
     (hv : vwS δA [] [e₃ s, e₂ s, e₁ s] [true, true, true] αs ls ρv) :
-    RCtx (ℍ := ℍ) δA [e₃ s, e₂ s, e₁ s] αs ls [⟨.mut (.var 3) TA, true⟩] [Val.loc s] ρv := by
+    RCtx (ℍ := ℍ) δA [e₃ s, e₂ s, e₁ s] [yieldOp] αs ls [⟨.mut (.var 3) TA, true⟩] [Val.loc s]
+      ρv := by
   refine pure_sep_mk trivial ⟨ρv, PMap.empty, ResU.comp_empty_right ρv, ?_, ⟨rfl, trivial⟩⟩
   show RelendableS δA [] [e₃ s, e₂ s, e₁ s]
     (fun αs' ls' => vCE (ℍ := ℍ) none true (.mut (.var 3) TA) ls'
@@ -415,7 +522,8 @@ theorem Reb_e₃ (s : BoCa.Loc) : Reb (e₃ s) [e₂ s, e₁ s] := by simp [Reb]
 /-- **Law 2 at the depth-3 reborrow chain `[s@'x₃ reborrow, s@'x₂ reborrow, s@'x₁]`, for every
 borrower of the fragment** holding the innermost reborrow's view and answering `()`. -/
 theorem law2_C (s : BoCa.Loc) {M : Expr}
-    (hd : BComp (ℍ := ℍ) δA [e₃ s, e₂ s, e₁ s] [yieldOp] ΔC [⟨.mut (.var 3) TA, true⟩] M .unit)
+    (hd : BComp (ℍ := ℍ) δA [e₃ s, e₂ s, e₁ s] [yieldOp] [yieldOp] ΔC
+      [⟨.mut (.var 3) TA, true⟩] M .unit)
     (ls : List SRec) :
     Entails (owner s TA δA ls)
       (ewpTS (ℍ := ℍ) ls (substAll [Val.loc s] M) (opTable (Row.tab [yieldOp] δA))
@@ -470,6 +578,13 @@ theorem chain3_branch_spans (s : BoCa.Loc) (ls : List SRec) :
       (ewpTS (ℍ := ℍ) ls (substAll [Val.loc s] branchE) (opTable (Row.tab [yieldOp] δA))
         (fun ls v => owner s TA δA ls ⋆ ⌜v = Val.unit⌝)) :=
   law2_C s d_branch ls
+
+/-- **Depth 3, a reborrow chain**, the handler program of `handler_spans`. -/
+theorem chain3_handler_spans (s : BoCa.Loc) (ls : List SRec) :
+    Entails (owner s TA δA ls)
+      (ewpTS (ℍ := ℍ) ls (substAll [Val.loc s] handlerE) (opTable (Row.tab [yieldOp] δA))
+        (fun ls v => owner s TA δA ls ⋆ ⌜v = Val.unit⌝)) :=
+  law2_C s d_handler ls
 
 end Law2.Inst
 
