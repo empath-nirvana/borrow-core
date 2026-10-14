@@ -199,3 +199,8 @@ roots = ["Law2"]
 name = "Nominal"
 srcDir = "experiments/Nominal"
 roots = ["Nominal"]
+
+[[lean_lib]]
+name = "BoxedKappa"
+srcDir = "experiments/BoxedKappa"
+roots = ["BoxedKappa"]
