@@ -99,16 +99,25 @@ stored continuation is one instance.
 
   This is the re-make, phrased as unpack and repack. It has not been defined or tested.
 
-**Decided (2026-10-14): the closed package, with history bookkeeping.**
-- A suspended self-borrow is ended while the value is stored. The package holds only owned cells,
-  plus contents typed abstractly in `'x`. It is re-made at a fresh lifetime on each opening.
-- Lifetimes stay the model's well-founded measure: no step-indexing.
-- The reason: stratification is ordered by ancestry. A `mut` cell's witness must strictly outlive
-  it, so a *live* self-borrow at a hidden `x` can never sit under a `mut` cell at `'q`, whatever
-  shape the lifetime order has. A scheduler could then not store a self-borrowing task in a
-  mutably borrowed queue. A closed package has no cell at `x`, so it can.
-- The cost is accepted: re-making at function types holds for what typed programs build, not
-  pointwise, so the proofs carry a derivation-indexed invariant (as in problem A's work).
+**Decided (2026-10-14): close and re-make, not keep live.** A suspended self-borrow is ended while
+the value is stored (the package holds only owned cells, plus contents typed abstractly in `'x`) and
+re-made on each opening. Lifetimes stay the model's well-founded measure: no step-indexing. The
+reason: stratification is ordered by ancestry, so a *live* self-borrow at a hidden `x` can never sit
+under a `mut` cell at `'q`, whatever shape the lifetime order has.
+
+**Open: positional or nominal re-making.**
+- *Positional* (probes 3–6): re-make beneath the resumer's lifetimes. That gives `x′` extra parents,
+  which is not an automorphism. A closure over `Imm 'x (Imm 'r U)` is vacuously related at `x`
+  (`r` is no ancestor of `x`, so its domain is empty), yet must do real work at `x′`. So it needs
+  history bookkeeping, redone for every new feature.
+- *Nominal*: re-make `x′` with the **same parents** as `x`. The resumer's lifetimes stay
+  incomparable to `x′`, and borrows made after resumption take parents from both sides as needed.
+  The swap `x ↔ x′` is an automorphism, so one equivariance lemma suffices, with stratification
+  and the measure unchanged.
+- Under the nominal reading, the scheduler goes through:
+  - a task that borrows only its own local has no external parents (`S = ∅`), so to `'q` its package
+    is an owned value;
+  - a task that captured borrows needs `S ⊐ 'q` to be stored, which is Rust's `T: 'q`.
 
 **Solved when:**
 - A package construct, or another one, is in the kernel with typing rules.
