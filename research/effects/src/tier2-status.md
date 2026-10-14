@@ -1,5 +1,8 @@
 # Tier 2: status (shelved 2026-10-12)
 
+> Superseded as the plan by [the separate problems](tier2-problems.md), which splits tier 2 into
+> problems A–E. This page keeps the earlier findings.
+
 **Tier 2** is a suspension (a continuation, a generator, an effectful object) that holds a borrow
 across a stop. Today T1 refuses it (`Row.Unwind` on borrow callbacks).
 
