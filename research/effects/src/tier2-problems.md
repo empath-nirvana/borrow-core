@@ -99,6 +99,17 @@ stored continuation is one instance.
 
   This is the re-make, phrased as unpack and repack. It has not been defined or tested.
 
+**Decided (2026-10-14): the closed package, with history bookkeeping.**
+- A suspended self-borrow is ended while the value is stored. The package holds only owned cells,
+  plus contents typed abstractly in `'x`. It is re-made at a fresh lifetime on each opening.
+- Lifetimes stay the model's well-founded measure: no step-indexing.
+- The reason: stratification is ordered by ancestry. A `mut` cell's witness must strictly outlive
+  it, so a *live* self-borrow at a hidden `x` can never sit under a `mut` cell at `'q`, whatever
+  shape the lifetime order has. A scheduler could then not store a self-borrowing task in a
+  mutably borrowed queue. A closed package has no cell at `x`, so it can.
+- The cost is accepted: re-making at function types holds for what typed programs build, not
+  pointwise, so the proofs carry a derivation-indexed invariant (as in problem A's work).
+
 **Solved when:**
 - A package construct, or another one, is in the kernel with typing rules.
 - Its compatibility lemmas are proved.
