@@ -83,7 +83,8 @@ theorem models_A (δ : LSub) (h5 : δ.find? 5 = some 1) {α₂ α₁ : Life} (h2
     refine ⟨1, 0, ?_, rfl, show (0 : ℕ) < 1 from Nat.zero_lt_one⟩
     rw [find?_extend_ne _ _ (by decide), find?_extend_ne _ _ (by decide), h5]
 
-/-- The struct's payload lies above the lifetime `2`: its cell is at `'b`'s lifetime `1` or above. -/
+/-- The struct's payload lies above the lifetime `2`: its cell is at `'b`'s lifetime `1` or
+above. -/
 theorem TA_stratum (ls : List SRec) (w : Val) (ρ : WRes)
     (h : vCE (ℍ := ℍ) none true TA ls δA w ρ) : ρ.InStratum (OrderDual.toDual 2) := by
   obtain ⟨α, hα, ℓ', hsep⟩ := h
@@ -124,7 +125,8 @@ theorem ctx_A {s : BoCa.Loc} {ls : List SRec} {α₂ α₁ : Life} {ρv : WRes}
   have hv : ptoMutS s α₂ ls (fun ls₀ => vCE (ℍ := ℍ) none true TA ls₀ (δA.extend 1 α₁)) ρv := by
     have e : (fun ls₀ => vCE (ℍ := ℍ) none true TA ls₀ (δA.extend 1 α₁)) =
         (fun ls₀ => vCE (ℍ := ℍ) none true TA ls₀ δA) :=
-      funext fun ls₀ => vC_extend_of_not_free (by simp [VFree, Lifetime.Life.mentions]) true ls₀ δA α₁
+      funext fun ls₀ =>
+        vC_extend_of_not_free (by simp [VFree, Lifetime.Life.mentions]) true ls₀ δA α₁
     rw [e]; exact h
   refine pure_sep_mk trivial ?_
   unfold gSepC

@@ -20,9 +20,13 @@ At the depth-2 stack `[s@'x₂ reborrow, s@'x₁]`:
 * `loop_spans`: **a loop around a stop**: `bounded_fix (step, (3, ())); use m`, the step yielding
   once per iteration and calling the next through its self-reference; the view is held in the frame
   across every iteration's stop.
+* `handler_spans`: **a handler installed inside the borrower**:
+  `handle (tick (); yield 1; use m) with {x ↦ x; tick (u, κ) ↦ yield 2; κ u}`. `tick` stops inside,
+  crossing no lend; the clause yields to the lenders holding `κ`, whose continuation holds `m`, and
+  resumes it at the re-lend.
 
 At the depth-3 reborrow chain `[s@'x₃ reborrow, s@'x₂ reborrow, s@'x₁]`: `chain3_loop_spans`,
-`chain3_branch_spans`, the same programs at the innermost view.
+`chain3_branch_spans`, `chain3_handler_spans`, the same programs at the innermost view.
 -/
 
 noncomputable section

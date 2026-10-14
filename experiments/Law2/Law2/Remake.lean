@@ -253,7 +253,8 @@ theorem vC_ls : ∀ A, FOV A → ∀ (ls ls' : List SRec) (δ : LSub),
       rw [vC_ls A h.1 ls ls' δ, vC_ls B h.2 ls ls' δ]
   | .ref A, h, ls, ls', δ => by
       funext v
-      show (ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vCE (ℍ := ℍ) none true A ls δ v') =
+      show (ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆
+          vCE (ℍ := ℍ) none true A ls δ v') =
         (ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vCE (ℍ := ℍ) none true A ls' δ v')
       rw [vC_ls A h ls ls' δ]
   | .box a A, h, ls, ls', δ => by

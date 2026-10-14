@@ -126,7 +126,8 @@ theorem fold_mixed (hLR : LinResume Tab) (hL : Tab.Local) {β : Life} :
       have hβ' : ∀ a ∈ bs.getLast?, a ≤ β :=
         fun a ha => hβ a (List.mem_cons_of_mem _ (List.mem_of_getLast? ha))
       have hstep : ∀ ls₁, Ext ls ls₁ y →
-          OpenS δ σ Tab (cbQ δ σ fun ls v => owner l' T' δ ls ⋆ Qa ls v) σ.length ds bs [] ls₁ e y :=
+          OpenS δ σ Tab (cbQ δ σ fun ls v => owner l' T' δ ls ⋆ Qa ls v) σ.length ds bs [] ls₁ e
+            y :=
         fun ls₁ he => stack_step_other hLR (σ := σ) hx hl hP' hβ'
           (owner_local (Ext.left hy he) ho') (h ls₁ (Ext.right hy he)) hy
       have hQa' : ∀ ls₁ ls₂ u ρ, Ext ls₁ ls₂ ρ →

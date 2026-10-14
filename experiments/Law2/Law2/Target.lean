@@ -23,11 +23,13 @@ borrower's piece, which is the one open step:
 **What is proved of (S1).** `piece_of_bcomp` (`Law2/Fragment.lean`) is (S1) for every borrower whose
 derivation lies in the fragment `BComp` of Core's typing, by one induction on the derivation
 (`BComp.toPJ`): pure code with a frozen answer, `perform`, `let` holding any re-lendable frame
-across the inner stops, `case`, `let (x, y) =`, `V; M`, closures that stop (built and called), and
-`bounded_fix` at the row. `law2_frag` is Law 2 for it at every mixed stack;
-`Law2/FragInstances.lean` discharges every hypothesis on a branch around a stop, a closure that
-stops, and a loop. (S1) reduces to the piece judgment `PJ` holding of every derivation
-(`openS_of_pj`); what the fragment leaves out is listed at `piece_of_typed`.
+across the inner stops, `case`, `let (x, y) =`, `V; M`, closures that stop (built and called),
+`bounded_fix` at the row, and a handler installed inside the borrower at linear operations, its
+clauses holding the continuation across the lenders' stops (`pj_handle`, `pj_resume`).
+`law2_frag` is Law 2 for it at every mixed stack; `Law2/FragInstances.lean` discharges every
+hypothesis on a branch around a stop, a closure that stops, a loop, and a handler inside the
+borrower. (S1) reduces to the piece judgment `PJ` holding of every derivation (`openS_of_pj`);
+what the fragment leaves out is listed at `piece_of_typed`.
 
 `law2_depth1` is the program-level statement at one lend: the resume rule's compatibility for the
 borrow constant `withbor` at a resuming row. Its step at one lend:
@@ -65,18 +67,19 @@ and outliving every lifetime (`Row.Resume`), so no lend escapes in a payload —
 from the views at every re-lend below `αi` and its answer in `[top]`, is D16.1's piece at the
 stack, holding nothing of its own.
 
-Proved for the derivations of the fragment `BComp` (`piece_of_bcomp`). It reduces to the piece
-judgment at every derivation (`openS_of_pj`). The derivations outside the fragment, each not
-derived, no obstruction verified:
+Proved for the derivations of the fragment `BComp` (`piece_of_bcomp`), a handler installed inside
+the borrower among them. It reduces to the piece judgment at every derivation (`openS_of_pj`). The
+derivations outside the fragment, each not derived, no obstruction verified:
 * a pure computation whose answer is not frozen (a view, or a closure over one, returned by a pure
   call; `Mut`/`Imm` at a stack variable, an arrow or `∀` held across a stop): its answer has to be
   re-lendable (`RSlot`), which the kernel's fundamental property does not record; at first-order
   types this is GhostEnd's `lok_thaws` at a stack;
-* a handler installed inside the borrower (`[handle]`): the stops of the operations it handles
-  cross no lend (depth `0`), and `PJ` reads full-depth stops only (`AllCross`); GhostEnd #278;
-* `[then]`, `∀I`/`∀E` at a row, `&` at a row, `[sub]` widening the row, a closure that stops
-  handed to pure code (`CtxNoEffT`), and a context given as one `𝒢⟦Γ⟧` at each re-lend (`hctx`
-  here) rather than slot by slot (`RCtx`). -/
+* a handler inside the borrower at an affine, unrestricted or abortive operation: the
+  continuation a clause is handed may be dropped or copied, and an abortive operation's stop is
+  a `raise` the handler unwinds to, neither of which `InStop` reads;
+* `[then]`, `∀I`/`∀E` at a row, `&` at a row other than a continuation's resume, `[sub]` widening
+  the row, a closure that stops handed to pure code (`CtxNoEffT`), and a context given as one
+  `𝒢⟦Γ⟧` at each re-lend (`hctx` here) rather than slot by slot (`RCtx`). -/
 theorem piece_of_typed {S : Row} {σ : LStack} (_hS : ∀ e ∈ σ, Row.Resume S e.x)
     (_hx : AllCross σ (Row.tab S δ))
     (_hLR : LinResume (Row.tab S δ)) {ds : List Bool} {Qa : List SRec → Val → WProp}
