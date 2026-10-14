@@ -25,6 +25,10 @@ resumed or cancelled before the block ends. Lifetimes still nest:
 
 Today such a body may perform only aborting operations (SPEC §19, T1).
 
+Interleaving is not in A. Suppose two tasks each borrow their own local across an `await`, and a
+scheduler interleaves them: task 1 borrows at `'x1` and suspends, task 2 borrows at `'x2` and
+suspends, then task 1 resumes and ends `'x1` while `'x2` is live. That breaks nesting, so it is B.
+
 **Test programs.**
 - `corpus/reject/gen-self-borrow.bc`: an `imm` borrow of the generator's own local, live at a
   `yield`, consumed by `for`. It moves to the accepted corpus with its output.
@@ -77,6 +81,8 @@ owner does not move the location.
 - A closure owning a cell and a borrow of it, returned and later called.
 - With effects, after A: a generator holding a borrow of its own local, stored and returned from
   the scope that created it, then resumed elsewhere.
+- With effects, after A: two interleaved tasks, each holding a borrow of its own local across an
+  `await`.
 
 **About effects?** No. It is a borrow-calculus problem; Rust has it too (`Pin`, `ouroboros`). A
 stored continuation is one instance.
