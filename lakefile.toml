@@ -194,3 +194,8 @@ roots = ["DenseCarrier"]
 name = "Law2"
 srcDir = "experiments/Law2"
 roots = ["Law2"]
+
+[[lean_lib]]
+name = "PartialLife"
+srcDir = "experiments/PartialLife"
+roots = ["PartialLife"]
