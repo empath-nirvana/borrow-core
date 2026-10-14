@@ -184,8 +184,8 @@ are that `x` and `x′` occur in no lifetime `δ` reads (`LSubN.Avoids`, met by 
 (`fixedBy_of_ownOnly`) and for captured borrows at lifetimes the swap fixes storing relation
 instances at readings it fixes (`relU_mutOf_fix`, `img_vN_fix`). `reopen_fresh`: at
 `x′ = fresh x.ps avoid`, for an owned package, only `δ` avoiding `x` remains. `Pkg.closeOK_iff`:
-closing is allowed at `π y` iff at `y`. `exists_iff_forall_fresh`: if some fresh atom with parents
-`S` opens the package to a related configuration, every fresh one does (the И quantifier).
+closing is allowed at `π y` iff at `y`. `exists_iff_forall_fresh`: some fresh atom with parents `S`
+opens the package to a related configuration iff every fresh one does (the И quantifier).
 
 The hypotheses are freshness, the nominal form of "`x′` is fresh". None mentions how the package
 was built, and the statement holds at every type, closures included: no hypothesis that the
@@ -266,10 +266,11 @@ below" becomes a fresh atom with the given parents.
 
 ## What it means for problem B
 
-* **The positional/nominal question is settled in favour of nominal, on this fragment.** With
-  `x′` given `x`'s parents, re-opening relates exactly what opening related, as a corollary of one
-  equivariance theorem proved by induction on types; adding a type former adds one case. With
-  extra parents, the probe-3 witness fails as before, and no automorphism is available.
+* **On this fragment the nominal convention passes where the positional one failed.** With `x′`
+  given `x`'s parents, re-opening relates exactly what opening related, as a corollary of one
+  equivariance theorem proved by induction on types; a new type former adds one case to that
+  induction. With extra parents, the probe-3 witness fails as before, and no automorphism is
+  available.
 * **The measure and stratification are unchanged.** The carrier is still built by well-founded
   recursion on strata ordered by ancestry, with no step-indexing; a `Mut` cell's payload still
   lies in its stratum (reading (a)), which is what makes owned packages storable anywhere and
