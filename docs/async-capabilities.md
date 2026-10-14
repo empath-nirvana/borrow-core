@@ -464,7 +464,7 @@ Determined from the code:
 So a falsifying program shows up as: a stuck run (use of a freed, unreused location), a leak, or a
 wrong answer. Aliasing that happens to compute the expected answer is invisible.
 
-**The minimal dynamic check** (DESIGNED, U4), in `bcc interp`, not the semantics:
+**The minimal dynamic check** (BUILT, U4), in `bcc interp`, not the semantics:
 
 1. **A never-reuse allocator**: every `alloc` takes a location never used before. Every use after
    free is then stuck.
@@ -476,6 +476,34 @@ wrong answer. Aliasing that happens to compute the expected answer is invisible.
    above it is live, or any access by the owner while a tag is live, is an error.
 3. **Differential runs**: each program under the leastFree allocator, the never-reuse allocator
    and the tagged interpreter must give the same answer with `live 0`.
+
+**Built (U4).** `Backend/Falsify.lean`, `bcc interp --alloc least | --check fresh | --check tags`
+(and `bcc kernel interp`), `scripts/falsify.sh`. Determined while building it: `bcc interp`'s
+default (`Support`'s `Mem.alloc`) already never reuses a location (its `next` only grows), so the
+reusing run is the new `--alloc least` (`Alloc.leastFree`, as `runM`).
+
+- *How tags are attached.* The erasure has no mark at a lend (`withbor1`/`withbor2`/`withbor3`,
+  the slice and block borrows all erase to `withbor`; the unwinding forms to `withborUE d`;
+  `withload`/`withloadU` to `withload`). Before a tagged run, these closed terms are replaced by
+  forms calling three interpreter-only markers (a literal applied to an argument, which no typed
+  program contains): `LEND` pushes a fresh tag over the source's cells (a location, or a family's
+  `n` cells) and hands the callback the view through it; `RETAG` sees `withload`'s contents through
+  a fresh `imm` tag; `END t` frames the callback. No erasure, kernel term or other stage changes.
+- *Kinds.* `withbor1` and `withbor2` erase alike, so a lend from an owner has kind `lend`
+  (exclusive, `imm` or `mut` unknown); a lend from a view (`withbor3`) is `mut`; `withload`'s is
+  `imm`. A write through an `imm` view lent by `withbor1` is therefore not detected.
+- *Suspension.* A tag is active exactly when its `END` frame is on the path from the term's root to
+  the redex. A resuming operation that crosses the frame suspends the tag (it stays live, inactive
+  while the continuation is held, active again when it is resumed or cancelled, so a borrower's
+  finaliser runs with it active); an abortive one ends it.
+- *Checks.* An access through an ended tag, through an inactive one, a free through a view, a
+  write through an `imm` tag, any access through a tag (or the owner) under a live exclusive tag,
+  a write under a live `imm` one, and a lend not ended at the end of the run.
+- *Results.* Every corpus program the source stage runs (149; five `no-source` programs are too
+  large for it), `bc/lend-loop-term.bc` and the 41 kernel programs pass all four modes with one
+  output and `live 0`; no resuming operation crossed a lend in any of them (none can before
+  R1/R2). Seven untyped negative tests (`Backend/FalsifyTests.lean`, `bcc kernel negatives`) trip
+  each check; with `--alloc least` the use after free answers silently.
 
 ### 6.2 The adversarial list
 
