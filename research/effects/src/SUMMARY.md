@@ -6,6 +6,7 @@
 [Synthesis: coherent designs](synthesis.md)
 [Tier 2: the separate problems](tier2-problems.md)
 [Tier 2: status](tier2-status.md)
+[B on paper: typing the package](b-package-typing.md)
 
 # Ground rules
 
