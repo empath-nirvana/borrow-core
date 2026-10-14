@@ -19,11 +19,9 @@ at the rest; the case splits on the rule's own types and rows, never on the stac
 * `[@a]`: `fl_boxI_ctx` (`[]I` at a type that does not itself outlive `@a`);
 * `μ`, `ν`: `fl_roll_thunk` (`roll` at an unrolling holding `U`), `fl_unroll`, `fl_nuIn`,
   `fl_nuOut`, `fl_unfoldN`, `fl_foldImm`, `fl_foldOwn`, `fl_foldReuse`;
-* loops over a callback: `fl_countFold`, `fl_countTry`, `fl_arrNew`, `fl_arrFree`;
-* a leaf or part taken out of a family: `fl_arrGet`, `fl_arrReplace`, `fl_arrCopy`,
+* loops building or consuming a family over a callback: `fl_arrNew`, `fl_arrFree`;
+* a leaf or part taken out of a family, or put into one: `fl_arrGet`, `fl_arrReplace`,
   `fl_sliceGetM`, `fl_sliceSplitI`, `fl_sliceSplitM`, `fl_sliceReplaceM`, `fl_sliceSwapM`;
-* families otherwise: `fl_arrSize`, `fl_arrLen`, `fl_arrForget`, `fl_sliceLenM`, `fl_sliceEmptyI`,
-  `fl_sliceEmptyM`;
 * an inner lend: `fl_withbor1`, `fl_withbor2`, `fl_withbor3`, `fl_withload`, `fl_withswap`,
   `fl_withbor1U`, `fl_withbor2U`, `fl_withbor3U`, `fl_withloadU`, `fl_sliceBorrowM`,
   `fl_sliceBorrowI`, `fl_sliceBorrowMU`, `fl_sliceBorrowIU`;
@@ -146,18 +144,6 @@ theorem fl_foldReuse {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (R : VTy) (_hΓ 
     PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (foldReuseV F)) (.lolli (algRTy F R) (foldOTy F R)) := by
   sorry
 
-/-- **`count_fold` — not derived; no obstruction verified.** Its step is a re-lendable closure;
-the counted loop's induction at the re-lendable reading (as `rslot_boundedFix`'s) is not
-written. -/
-theorem fl_countFold {Δ : LifeCtx} {Γ : Ctx VTy} (S : VTy) (_hΓ : Ctx.DeadP Γ) :
-    PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (.prim .count)) (countFoldTy S) := by
-  sorry
-
-/-- **`count_try` — not derived; no obstruction verified.** As `fl_countFold`. -/
-theorem fl_countTry {Δ : LifeCtx} {Γ : Ctx VTy} (S E : VTy) (_hΓ : Ctx.DeadP Γ) :
-    PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (.prim .countTry)) (countTryTy S E) := by
-  sorry
-
 /-- **`array_new` — not derived; no obstruction verified.** Its element function is a
 re-lendable closure, called once per element; the loop at the re-lendable reading is not
 written, and the family it builds is read at the kernel's relation. -/
@@ -171,13 +157,6 @@ theorem fl_arrFree {Δ : LifeCtx} {Γ : Ctx VTy} (A : VTy) (_hΓ : Ctx.DeadP Γ)
     PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (.prim .drop)) (arrFreeTy A) := by
   sorry
 
-/-- **`array_size` — not derived; no obstruction verified.** A family is read at the kernel's
-relation; the lemma that its re-lendable reading passes through the size step unchanged is not
-written. -/
-theorem fl_arrSize {Δ : LifeCtx} {Γ : Ctx VTy} (A : VTy) (_hΓ : Ctx.DeadP Γ) :
-    PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val sizeV) (arrSizeTy A) := by
-  sorry
-
 /-- **`array_replace` — not derived; no obstruction verified.** A family is read at the kernel's
 relation; the element taken out is not re-lendable on its own (the family's split into views and a
 frozen part is not split by location), and the one stored in has to be at the kernel's
@@ -186,26 +165,10 @@ theorem fl_arrReplace {Δ : LifeCtx} {Γ : Ctx VTy} (A : VTy) (_hΓ : Ctx.DeadP 
     PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val replaceV) (arrReplaceTy A) := by
   sorry
 
-/-- **`array_len` — not derived; no obstruction verified.** As `fl_arrSize`. -/
-theorem fl_arrLen {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
-    (_hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val arrLenV) (arrLenTy a A) := by
-  sorry
-
 /-- **`array_get` — not derived; no obstruction verified.** As `fl_arrReplace`: a leaf taken
 out of a family read at the kernel's relation. -/
 theorem fl_arrGet {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
     (_hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (.prim .idx)) (arrGetTy a A) := by
-  sorry
-
-/-- **`array_copy` — not derived; no obstruction verified.** A family of `imm` leaves duplicated:
-the lemma that the duplicate shares the original's re-lendable reading is not written. -/
-theorem fl_arrCopy {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
-    (_hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val copyV) (arrCopyTy a A) := by
-  sorry
-
-/-- **`array_forget` — not derived; no obstruction verified.** As `fl_arrSize`. -/
-theorem fl_arrForget {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
-    (_hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val forgetV) (arrForgetTy a A) := by
   sorry
 
 /-- **`slice_borrow_mut` — not derived; no obstruction verified.** An inner lend: its callback,
@@ -232,11 +195,6 @@ theorem fl_sliceGetM {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
     (_hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (.prim .idx)) (sliceGetMTy a A) := by
   sorry
 
-/-- **`slice_len_mut` — not derived; no obstruction verified.** As `fl_arrSize`. -/
-theorem fl_sliceLenM {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
-    (_hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val sizeV) (sliceLenMTy a A) := by
-  sorry
-
 /-- **`slice_split_imm` — not derived; no obstruction verified.** A family read at the kernel's
 relation split by location: its re-lendable split does not split along the parts. -/
 theorem fl_sliceSplitI {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
@@ -246,16 +204,6 @@ theorem fl_sliceSplitI {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VT
 /-- **`slice_split_mut` — not derived; no obstruction verified.** As `fl_sliceSplitI`. -/
 theorem fl_sliceSplitM {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
     (_hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (.prim .split)) (sliceSplitMTy a A) := by
-  sorry
-
-/-- **`slice_empty_imm` — not derived; no obstruction verified.** As `fl_arrSize`. -/
-theorem fl_sliceEmptyI {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
-    (_hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val emptyFamV) (.arrayImm a A) := by
-  sorry
-
-/-- **`slice_empty_mut` — not derived; no obstruction verified.** As `fl_arrSize`. -/
-theorem fl_sliceEmptyM {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
-    (_hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val emptyFamV) (.sliceMut a A) := by
   sorry
 
 /-- **`slice_replace_mut` — not derived; no obstruction verified.** As `fl_arrReplace`. -/
@@ -480,23 +428,23 @@ theorem pj_fundamental : ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg},
   | hostOp op hΓ => exact pv_hostOp op hΓ
   | arrNew A hΓ => exact fl_arrNew A hΓ
   | arrFree A hΓ => exact fl_arrFree A hΓ
-  | arrSize A hΓ => exact fl_arrSize A hΓ
+  | arrSize A hΓ => exact pv_arrSize A hΓ
   | arrReplace A hΓ => exact fl_arrReplace A hΓ
-  | arrLen a A hΓ => exact fl_arrLen a A hΓ
+  | arrLen a A hΓ => exact pv_arrLen a A hΓ
   | arrGet a A hΓ => exact fl_arrGet a A hΓ
-  | arrCopy a A hΓ => exact fl_arrCopy a A hΓ
-  | arrForget a A hΓ => exact fl_arrForget a A hΓ
-  | countFold S hΓ => exact fl_countFold S hΓ
-  | countTry S E hΓ => exact fl_countTry S E hΓ
+  | arrCopy a A hΓ => exact pv_arrCopy a A hΓ
+  | arrForget a A hΓ => exact pv_arrForget a A hΓ
+  | countFold S hΓ => exact pv_countFold S hΓ
+  | countTry S E hΓ => exact pv_countTry S E hΓ
   | boundedFix A C hΓ => exact pv_boundedFix hΓ
   | sliceBorrowM x hΓ hA hB hf₁ hf₂ => exact fl_sliceBorrowM x hΓ hA hB hf₁ hf₂
   | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ => exact fl_sliceBorrowI x hΓ hsc hA hB hf₁ hf₂
   | sliceGetM a A hΓ => exact fl_sliceGetM a A hΓ
-  | sliceLenM a A hΓ => exact fl_sliceLenM a A hΓ
+  | sliceLenM a A hΓ => exact pv_sliceLenM a A hΓ
   | sliceSplitI a A hΓ => exact fl_sliceSplitI a A hΓ
   | sliceSplitM a A hΓ => exact fl_sliceSplitM a A hΓ
-  | sliceEmptyI a A hΓ => exact fl_sliceEmptyI a A hΓ
-  | sliceEmptyM a A hΓ => exact fl_sliceEmptyM a A hΓ
+  | sliceEmptyI a A hΓ => exact pv_sliceEmptyI a A hΓ
+  | sliceEmptyM a A hΓ => exact pv_sliceEmptyM a A hΓ
   | sliceReplaceM a A hΓ => exact fl_sliceReplaceM a A hΓ
   | sliceSwapM a A hΓ => exact fl_sliceSwapM a A hΓ
   | withbor1 x hΓ hx hsc₁ hf₁ hf₂ => exact fl_withbor1 x hΓ hx hsc₁ hf₁ hf₂

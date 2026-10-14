@@ -857,6 +857,287 @@ theorem pv_swap {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (hΓ : Ctx.DeadP Γ) :
     ⟨R, b₂, ResU.CompS.comm hb₂R,
       ⟨ℓ, v₂, pure_sep_mk rfl ⟨_, ρ₂, ResU.CompS.comm hR, rfl, hv₂⟩⟩, hA⟩⟩
 
+/-! ### Families: the size, the length, forgetting, the empty family, copying -/
+
+/-- A family's re-lendable reading, at the current lifetimes: the kernel's. -/
+theorem rslot_fam_now {L : VTy} {αs : List Life} {ls : List SRec} {v : Val} {ρ : WRes}
+    (hch : List.IsChain (· < ·) αs) (h : RSlot (ℍ := ℍ) δ σ S₀ (.fam L) αs ls v ρ) :
+    vCE (ℍ := ℍ) none true (.fam L) ls (extS δ σ αs) v ρ := by
+  rw [rslot_leaf (A := .fam L) leafR] at h
+  exact relendableS_now hch h
+
+/-- An `I32`, frozen. -/
+theorem rslot_i32 {αs : List Life} (hlen : αs.length = σ.length) (ls : List SRec) (n : UInt32) :
+    RSlot (ℍ := ℍ) δ σ S₀ (.int .w32) αs ls (Val.i32 n) PMap.empty := by
+  rw [rslot_leaf (A := .int .w32) leafR]
+  exact relendableS_frozen hlen (fun a _ => ResU.inStratum_empty a) fun _ _ _ _ => vP_i32 n
+
+/-- **The size of a family** (`array_size`, `slice_len_mut`): the family answered as it came, its
+re-lendable reading unchanged, beside its length, frozen. -/
+theorem pv_famSize {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ) :
+    PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val sizeV) (.bang (.lolli (.fam L) (.tensor (.fam L) (.int .w32)))) := by
+  refine pv_const hΓ (fun k γ => by simp [sizeV, Expr.psub]) fun αs ls hlen _ => ⟨rfl, ?_⟩
+  refine rslot_const hlen ls fun αs' ls' hr => ?_
+  show RC δ σ S₀ (.arr _ _) αs' ls' (.val sizeV) PMap.empty
+  rw [rc_arr_eq]
+  intro v ρ₁ ρ₂ hv hc
+  rw [eq_of_compS_empty_left hc]
+  obtain ⟨ℓ, n, rfl, -, -⟩ := vP_fam_iff.mp (rslot_fam_now hr.2 hv)
+  refine rc_ret_of_wpTS (wpTS_lolli ls' _ _ _ _ ?_)
+  show wpTS ls' (.letpair (.val (Val.arr ℓ n)) (.pair (.pair (.var 1) (.var 0)) (.var 0))) _ _
+  refine wpTS_tensor ls' (Val.loc ℓ) (Val.i32 n) _ _ _ ?_
+  refine wpTS_val ls' (Val.pair (Val.arr ℓ n) (Val.i32 n)) _ _ ?_
+  exact ⟨_, _, pure_sep_mk rfl ⟨ρ₁, PMap.empty, ResU.comp_empty_right ρ₁, hv,
+    rslot_i32 ((List.Forall₂.length_eq hr.1).trans hlen) ls' n⟩⟩
+
+theorem pv_arrSize {Δ : LifeCtx} {Γ : Ctx VTy} (A : VTy) (hΓ : Ctx.DeadP Γ) :
+    PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val sizeV) (arrSizeTy A) := pv_famSize hΓ
+
+theorem pv_sliceLenM {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
+    (hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val sizeV) (sliceLenMTy a A) := pv_famSize hΓ
+
+/-- **`array_len`**: the family, holding no `own` cell, dropped; its length, frozen. -/
+theorem pv_arrLen {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+    PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val arrLenV) (arrLenTy a A) := by
+  refine pv_const hΓ (fun k γ => by simp [arrLenV, Expr.psub]) fun αs ls hlen _ => ⟨rfl, ?_⟩
+  refine rslot_const hlen ls fun αs' ls' hr => ?_
+  show RC δ σ S₀ (.arr _ _) αs' ls' (.val arrLenV) PMap.empty
+  rw [rc_arr_eq]
+  intro v ρ₁ ρ₂ hv hc
+  rw [eq_of_compS_empty_left hc]
+  have hk := rslot_fam_now hr.2 hv
+  obtain ⟨ℓ, n, rfl, -, -⟩ := vP_fam_iff.mp hk
+  refine rc_ret_of_wpTS (wpTS_drop (noOwn_arrayImm hk) (ResU.comp_empty_right ρ₁) ?_)
+  refine wpTS_lolli ls' _ _ _ _ ?_
+  show wpTS ls' (.letpair (.val (Val.arr ℓ n)) (.var 0)) _ _
+  refine wpTS_tensor ls' (Val.loc ℓ) (Val.i32 n) (.var 0) _ _ ?_
+  exact wpTS_val ls' (Val.i32 n) _ _ (rslot_i32 ((List.Forall₂.length_eq hr.1).trans hlen) ls' n)
+
+/-- **`array_forget`**: the family, holding no `own` cell, dropped. -/
+theorem pv_arrForget {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
+    (hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val forgetV) (arrForgetTy a A) := by
+  refine pv_const hΓ (fun k γ => by simp [forgetV, Expr.psub]) fun αs ls hlen _ => ⟨rfl, ?_⟩
+  refine rslot_const hlen ls fun αs' ls' hr => ?_
+  show RC δ σ S₀ (.arr _ _) αs' ls' (.val forgetV) PMap.empty
+  rw [rc_arr_eq]
+  intro v ρ₁ ρ₂ hv hc
+  rw [eq_of_compS_empty_left hc]
+  have hk := rslot_fam_now hr.2 hv
+  refine rc_ret_of_wpTS (wpTS_drop (noOwn_arrayImm hk) (ResU.comp_empty_right ρ₁) ?_)
+  refine wpTS_lolli ls' _ _ _ _ ?_
+  exact wpTS_val ls' .unit _ _ (rslot_unit ((List.Forall₂.length_eq hr.1).trans hlen) ls')
+
+/-- **The empty family** (`slice_empty_imm`, `slice_empty_mut`): no leaves, nothing held. -/
+theorem pv_famEmpty {Δ : LifeCtx} {Γ : Ctx VTy} {L : VTy} (hΓ : Ctx.DeadP Γ) :
+    PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val emptyFamV) (.fam L) := by
+  refine pv_const hΓ (fun k γ => by simp [emptyFamV, Val.arr, Val.i32, Expr.psub]) fun αs ls hlen _ => ?_
+  rw [rslot_leaf (A := .fam L) leafR]
+  exact relendableS_frozen hlen (fun a _ => ResU.inStratum_empty a)
+    fun _ _ _ _ => vP_fam_mk (by decide) ⟨rfl, trivial⟩
+
+theorem pv_sliceEmptyI {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
+    (hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val emptyFamV) (.arrayImm a A) := pv_famEmpty hΓ
+
+theorem pv_sliceEmptyM {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy)
+    (hΓ : Ctx.DeadP Γ) : PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val emptyFamV) (.sliceMut a A) := pv_famEmpty hΓ
+
+/-- A family of `imm` leaves holds only `imm` cells: it composes with itself to itself. -/
+theorem compS_self_arrayImm {a : Lifetime.Life} {A : VTy} {ls : List SRec} {δ' : LSub} {v : Val}
+    {ρ : WRes} (h : vCE (ℍ := ℍ) none true (.arrayImm a A) ls δ' v ρ) : ResU.CompS ρ ρ ρ := by
+  obtain ⟨ℓ, n, -, -, hs⟩ := vP_fam_iff.mp h
+  have hleaf : ∀ k, k ≠ Kind.imm → ∀ m τ, vCE (ℍ := ℍ) none true (.imm a A) ls δ' (.loc m) τ →
+      Free k τ := by
+    intro k hk m τ hτ
+    obtain ⟨α, -, ℓ', hs'⟩ := hτ
+    obtain ⟨-, s', u, σ', hσ', ls₀, rfl, -⟩ := pure_sep_iff.mp hs'
+    exact free_single (by rw [CellU.kind_immOf]; exact fun e => hk e.symm)
+  have hfree : ∀ k, k ≠ Kind.imm → Free k ρ := fun k hk =>
+    sepRange_closed (free_empty k) (fun _ _ _ hc h₁ h₂ => free_compS hk hc h₁ h₂)
+      (hleaf k hk) hs
+  exact compS_self_of_imm (hfree _ (by decide)) (hfree _ (by decide))
+
+/-- **`array_copy`**: a family of `imm` leaves is duplicated, each copy the original's
+re-lendable reading. -/
+theorem pv_arrCopy {Δ : LifeCtx} {Γ : Ctx VTy} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+    PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val copyV) (arrCopyTy a A) := by
+  refine pv_const hΓ (fun k γ => by simp [copyV, Expr.psub]) fun αs ls hlen _ => ⟨rfl, ?_⟩
+  refine rslot_const hlen ls fun αs' ls' hr => ?_
+  show RC δ σ S₀ (.arr _ _) αs' ls' (.val copyV) PMap.empty
+  rw [rc_arr_eq]
+  intro v ρ₁ ρ₂ hv hc
+  rw [eq_of_compS_empty_left hc]
+  have hk := rslot_fam_now hr.2 hv
+  refine rc_ret_of_wpTS (wpTS_lolli ls' _ _ _ _ ?_)
+  show wpTS ls' (.pair (.val v) (.val v)) _ _
+  refine wpTS_val ls' (Val.pair v v) _ _ ?_
+  exact ⟨v, v, pure_sep_mk rfl ⟨ρ₁, ρ₁, compS_self_arrayImm hk, hv, hv⟩⟩
+
+/-! ### The counted loops -/
+
+/-- A step held at `!`: applied at the current lifetimes to a re-lendable argument, a run to a
+re-lendable answer. -/
+theorem bang_app_rs {A B : VTy} {αs : List Life} (hch : List.IsChain (· < ·) αs) {ls₀ ls : List SRec}
+    (hls : ∀ x, x ∈ ls ↔ x ∈ ls₀) {f : Val}
+    (hf : RSlot (ℍ := ℍ) δ σ S₀ (.bang (.lolli A B)) αs ls₀ f PMap.empty) {a : Val} {ρ : WRes}
+    (ha : RSlot (ℍ := ℍ) δ σ S₀ A αs ls a ρ) :
+    wpTS ls (.app (.val f) (.val a)) (fun ls' v => RSlot (ℍ := ℍ) δ σ S₀ B αs ls' v) ρ := by
+  have hf' := rslot_local (.bang (.lolli A B)) (ext_of_same hls PMap.empty) hf
+  have h₁ := hf'.2
+  rw [rslot_thunk_eq] at h₁
+  have h₂ := relendableS_now hch h₁
+  simp only [forceE] at h₂
+  rw [rc_arr_eq] at h₂
+  exact wpTS_of_rc_ret (h₂ a ρ ρ ha (compS_empty_left ρ))
+
+/-- **The counted loop**, from `i`, the state re-lendable: by induction on `len(n) − i`, each step
+the re-lendable step on the re-lendable state. -/
+theorem countLoop_rs {S : VTy} {αs : List Life} (hch : List.IsChain (· < ·) αs)
+    (hlen : αs.length = σ.length) {ls₀ : List SRec} (f : Val) (n : UInt32)
+    (hf : RSlot (ℍ := ℍ) δ σ S₀ (.bang (.lolli (.tensor (.int .w32) S) S)) αs ls₀ f PMap.empty) :
+    ∀ (k : Nat) (i : UInt32) (ls : List SRec) (s : Val) (ρ : WRes), (∀ x, x ∈ ls ↔ x ∈ ls₀) →
+      (arrLen n).toNat - i.toNat = k → RSlot (ℍ := ℍ) δ σ S₀ S αs ls s ρ →
+      wpTS ls (.app (.val (.prim .count))
+        (.val (Val.pair f (Val.pair (Val.i32 n) (Val.pair (Val.i32 i) s)))))
+        (fun ls' v => RSlot (ℍ := ℍ) δ σ S₀ S αs ls' v) ρ := by
+  intro k
+  induction k with
+  | zero =>
+      intro i ls s ρ _ hk hs
+      refine wpTS_count ls f n i s _ ρ ?_
+      have hi : ¬ i < arrLen n := by
+        rw [UInt32.lt_iff_toNat_lt]; omega
+      unfold countNext
+      rw [if_neg hi]
+      exact wpTS_val ls s _ ρ hs
+  | succ k ih =>
+      intro i ls s ρ hls hk hs
+      refine wpTS_count ls f n i s _ ρ ?_
+      have hi : i < arrLen n := by
+        rw [UInt32.lt_iff_toNat_lt]; omega
+      have hb := arrLen_bound n
+      have hi1 : (i + 1).toNat = i.toNat + 1 := by
+        rw [UInt32.toNat_add]
+        have : i.toNat < (arrLen n).toNat := UInt32.lt_iff_toNat_lt.mp hi
+        simp only [UInt32.toNat_one]
+        exact Nat.mod_eq_of_lt (by omega)
+      unfold countNext
+      rw [if_pos hi]
+      refine wpTS_bind_frame
+        (.appR (.val (.prim .count)) (.pairR f (.pairR (Val.i32 n) (.pairR (Val.i32 (i + 1)) .hole))))
+        (.app (.val f) (.val (Val.pair (Val.i32 i) s))) ls
+        (fun ls' v => RSlot (ℍ := ℍ) δ σ S₀ S αs ls' v) (fun _ => emp) _
+        (fun _ _ _ h => h) ?_ ρ
+        ⟨ρ, PMap.empty, ResU.comp_empty_right ρ,
+          bang_app_rs hch hls hf ⟨Val.i32 i, s, pure_sep_mk rfl
+            ⟨PMap.empty, ρ, compS_empty_left ρ, rslot_i32 hlen ls i, hs⟩⟩, ⟨rfl, trivial⟩⟩
+      rintro ls' hls' v τ ⟨τ₁, τ₂, hc, hv, ⟨rfl, -⟩⟩
+      rw [ResU.CompS.functional hc (ResU.comp_empty_right τ₁)]
+      exact ih (i + 1) ls' v τ₁ (fun x => (hls' x).trans (hls x)) (by omega) hv
+
+/-- The argument of a counted loop, taken apart: the step, held at `!`, the bound and the start,
+integers, and the state. -/
+theorem countArg_rs {T S : VTy} {αs : List Life} (hch : List.IsChain (· < ·) αs) {ls : List SRec}
+    {v : Val} {ρ : WRes}
+    (hv : RSlot (ℍ := ℍ) δ σ S₀ (.tensor (.bang T) (.tensor (.int .w32) (.tensor (.int .w32) S)))
+      αs ls v ρ) :
+    ∃ f n i s, v = Val.pair f (Val.pair (Val.i32 n) (Val.pair (Val.i32 i) s)) ∧
+      RSlot (ℍ := ℍ) δ σ S₀ (.bang T) αs ls f PMap.empty ∧ RSlot (ℍ := ℍ) δ σ S₀ S αs ls s ρ := by
+  obtain ⟨f, v₂, hk⟩ := hv
+  obtain ⟨rfl, σ₁, σ₂, hc, hf, h₂⟩ := pure_sep_iff.mp hk
+  have e₁ : σ₁ = PMap.empty := hf.1
+  subst e₁
+  obtain rfl := eq_of_compS_empty_left hc
+  obtain ⟨vn, v₃, hk₂⟩ := h₂
+  obtain ⟨rfl, ρn, ρ₃, hc₂, hn, h₃⟩ := pure_sep_iff.mp hk₂
+  obtain ⟨rfl, n, rfl⟩ := relendableS_now hch hn
+  obtain rfl := eq_of_compS_empty_left hc₂
+  obtain ⟨vi, s, hk₃⟩ := h₃
+  obtain ⟨rfl, ρi, ρs, hc₃, hi, hs⟩ := pure_sep_iff.mp hk₃
+  obtain ⟨rfl, i, rfl⟩ := relendableS_now hch hi
+  obtain rfl := eq_of_compS_empty_left hc₃
+  exact ⟨f, n, i, s, rfl, hf, hs⟩
+
+/-- **`count_fold`**: the counted loop at the re-lendable reading. -/
+theorem pv_countFold {Δ : LifeCtx} {Γ : Ctx VTy} (S : VTy) (hΓ : Ctx.DeadP Γ) :
+    PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (.prim .count)) (countFoldTy S) := by
+  refine pv_const (c := Val.prim .count) hΓ (fun k γ => rfl) fun αs ls hlen _ => ⟨rfl, ?_⟩
+  refine rslot_const hlen ls fun αs' ls' hr => ?_
+  show RC δ σ S₀ (.arr _ _) αs' ls' (.val (Val.prim .count)) PMap.empty
+  rw [rc_arr_eq]
+  intro v ρ₁ ρ₂ hv hc
+  rw [eq_of_compS_empty_left hc]
+  obtain ⟨f, n, i, s, rfl, hf, hs⟩ := countArg_rs hr.2 hv
+  exact rc_ret_of_wpTS (countLoop_rs hr.2 ((List.Forall₂.length_eq hr.1).trans hlen) f n hf _ i
+    ls' s ρ₁ (fun _ => Iff.rfl) rfl hs)
+
+/-- **The counted loop with an exit**, from `i`: by induction on `len(n) − i`. -/
+theorem countTryLoop_rs {S E : VTy} {αs : List Life} (hch : List.IsChain (· < ·) αs)
+    (hlen : αs.length = σ.length) {ls₀ : List SRec} (f : Val) (n : UInt32)
+    (hf : RSlot (ℍ := ℍ) δ σ S₀ (.bang (.lolli (.tensor (.int .w32) S) (.sum S E))) αs ls₀ f
+      PMap.empty) :
+    ∀ (k : Nat) (i : UInt32) (ls : List SRec) (s : Val) (ρ : WRes), (∀ x, x ∈ ls ↔ x ∈ ls₀) →
+      (arrLen n).toNat - i.toNat = k → RSlot (ℍ := ℍ) δ σ S₀ S αs ls s ρ →
+      wpTS ls (.app (.val (.prim .countTry))
+        (.val (Val.pair f (Val.pair (Val.i32 n) (Val.pair (Val.i32 i) s)))))
+        (fun ls' v => RSlot (ℍ := ℍ) δ σ S₀ (.sum S E) αs ls' v) ρ := by
+  intro k
+  induction k with
+  | zero =>
+      intro i ls s ρ _ hk hs
+      refine wpTS_countTry ls f n i s _ ρ ?_
+      have hi : ¬ i < arrLen n := by
+        rw [UInt32.lt_iff_toNat_lt]; omega
+      unfold countTryNext
+      rw [if_neg hi]
+      exact wpTS_val ls (Val.inj₁ s) _ ρ (Or.inl ⟨s, pure_sep_mk rfl hs⟩)
+  | succ k ih =>
+      intro i ls s ρ hls hk hs
+      refine wpTS_countTry ls f n i s _ ρ ?_
+      have hi : i < arrLen n := by
+        rw [UInt32.lt_iff_toNat_lt]; omega
+      have hb := arrLen_bound n
+      have hi1 : (i + 1).toNat = i.toNat + 1 := by
+        rw [UInt32.toNat_add]
+        have : i.toNat < (arrLen n).toNat := UInt32.lt_iff_toNat_lt.mp hi
+        simp only [UInt32.toNat_one]
+        exact Nat.mod_eq_of_lt (by omega)
+      unfold countTryNext
+      rw [if_pos hi]
+      let e₁ : Expr := .app (.val (.prim .countTry)) (.pair (.val (f.shift 1 0))
+        (.pair (.val (.i32 n)) (.pair (.val (.i32 (i + 1))) (.var 0))))
+      let e₂ : Expr := .inj₂ (.var 0)
+      refine wpTS_bind_frame (.case .hole e₁ e₂)
+        (.app (.val f) (.val (Val.pair (Val.i32 i) s))) ls
+        (fun ls' v => RSlot (ℍ := ℍ) δ σ S₀ (.sum S E) αs ls' v)
+        (fun _ => emp) _ (fun _ _ _ h => h) ?_ ρ
+        ⟨ρ, PMap.empty, ResU.comp_empty_right ρ,
+          bang_app_rs hch hls hf ⟨Val.i32 i, s, pure_sep_mk rfl
+            ⟨PMap.empty, ρ, compS_empty_left ρ, rslot_i32 hlen ls i, hs⟩⟩, ⟨rfl, trivial⟩⟩
+      rintro ls' hls' v τ ⟨τ₁, τ₂, hc, hv, ⟨rfl, -⟩⟩
+      rw [ResU.CompS.functional hc (ResU.comp_empty_right τ₁)]
+      rcases hv with ⟨s', hs'⟩ | ⟨e, he⟩
+      · obtain ⟨rfl, hs₁⟩ := pure_sep_iff.mp hs'
+        refine wpTS_sum₁ ls' s' e₁ e₂ _ τ₁ ?_
+        show wpTS ls' (Expr.subst 0 s' e₁) _ τ₁
+        rw [countTry_cont_subst]
+        exact ih (i + 1) ls' s' τ₁ (fun x => (hls' x).trans (hls x)) (by omega) hs₁
+      · obtain ⟨rfl, he₁⟩ := pure_sep_iff.mp he
+        refine wpTS_sum₂ ls' e e₁ e₂ _ τ₁ ?_
+        exact wpTS_val ls' (Val.inj₂ e) _ τ₁ (Or.inr ⟨e, pure_sep_mk rfl he₁⟩)
+
+/-- **`count_try`**: the counted loop with an exit, at the re-lendable reading. -/
+theorem pv_countTry {Δ : LifeCtx} {Γ : Ctx VTy} (S E : VTy) (hΓ : Ctx.DeadP Γ) :
+    PV (ℍ := ℍ) δ σ S₀ Δ Γ (.val (.prim .countTry)) (countTryTy S E) := by
+  refine pv_const (c := Val.prim .countTry) hΓ (fun k γ => rfl) fun αs ls hlen _ => ⟨rfl, ?_⟩
+  refine rslot_const hlen ls fun αs' ls' hr => ?_
+  show RC δ σ S₀ (.arr _ _) αs' ls' (.val (Val.prim .countTry)) PMap.empty
+  rw [rc_arr_eq]
+  intro v ρ₁ ρ₂ hv hc
+  rw [eq_of_compS_empty_left hc]
+  obtain ⟨f, n, i, s, rfl, hf, hs⟩ := countArg_rs hr.2 hv
+  exact rc_ret_of_wpTS (countTryLoop_rs hr.2 ((List.Forall₂.length_eq hr.1).trans hlen) f n hf _ i
+    ls' s ρ₁ (fun _ => Iff.rfl) rfl hs)
+
 end rules
 
 end Law2
