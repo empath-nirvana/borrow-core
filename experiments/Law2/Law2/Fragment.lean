@@ -202,19 +202,19 @@ stack's depth or on its entries; the hard cases are the fragment's constructors.
 theorem piece_of_bcomp (hS : S ≠ []) (hx : AllCross σ (Row.tab S δ))
     (hLR : LinResume (Row.tab S δ)) {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {B : VTy}
     (hd : BComp (ℍ := ℍ) δ σ S Δ Γ M B) (hB : NoEffT B) {Qa : List SRec → Val → WProp}
-    (hQ : ∀ (αs : List Life) ls v ρ, List.IsChain (· < ·) αs →
+    (hQ : ∀ (αs : List Life) ls v ρ, List.IsChain (· < ·) αs → αs.length = σ.length →
       vCE (ℍ := ℍ) none true B ls (extS δ σ αs) v ρ → boxTop αs (Qa ls v) ρ)
     {ds : List Bool} {αi : List Life} {ls : List SRec} {γ : List Val}
-    (hΔ : ∀ αs, List.Forall₂ (· ≤ ·) αs αi → List.IsChain (· < ·) αs →
+    (hΔ : ∀ αs, List.Forall₂ (· < ·) αs αi → List.IsChain (· < ·) αs →
       Δ.Models (extS δ σ αs))
     (hctx : ∀ αs ρv, List.Forall₂ (· < ·) αs αi → List.IsChain (· < ·) αs →
       vwS δ [] σ ds αs ls ρv →
         ∃ ρg ρd, ResU.CompS ρg ρd ρv ∧ NoOwn ρd ∧ RCtx (ℍ := ℍ) δ σ αs ls Γ γ ρg) :
     OpenS δ σ (Row.tab S δ) (cbQ δ σ Qa) σ.length ds αi [] ls (substAll γ M) PMap.empty := by
-  refine openS_of_pj (BComp.toPJ hS hx hLR hd) (fun αs ls' v hch ρ hq => ?_) hΔ hctx
+  refine openS_of_pj hx (BComp.toPJ hS hx hLR hd) (fun αs ls' v hch hlen ρ hq => ?_) hΔ hctx
   have hq' : RSlot (ℍ := ℍ) δ σ B αs ls' v ρ := by
     have := hq; simp only [QA] at this; rwa [rAns_effOf] at this
-  exact ghostS_of_boxTop' hch (hQ αs ls' v ρ hch (rslot_vC B hB hch hq'))
+  exact ghostS_of_boxTop' hch (hQ αs ls' v ρ hch hlen (rslot_vC B hB hch hq'))
 
 /-- **Law 2 at the fragment, at every mixed stack.** A borrower of the fragment at a resuming row,
 holding a mixed stack of lends open across its stops, every operation crossing every lend, its
@@ -229,12 +229,12 @@ theorem law2_frag (hS : S ≠ []) (hLR : LinResume (Row.tab S δ)) (hL : (Row.ta
     {ds : List Bool} {bs : List Life} (hds : ds.length = σ.length) (hbs : bs.length = σ.length)
     (hβ : ∀ a ∈ bs, a ≤ β) {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {B : VTy}
     (hd : BComp (ℍ := ℍ) δ σ S Δ Γ M B) (hB : NoEffT B) {γ : List Val}
-    (hΔ : ∀ αs, List.Forall₂ (· ≤ ·) αs bs → List.IsChain (· < ·) αs →
+    (hΔ : ∀ αs, List.Forall₂ (· < ·) αs bs → List.IsChain (· < ·) αs →
       Δ.Models (extS δ σ αs))
     (hctx : ∀ αs ls ρv, List.Forall₂ (· < ·) αs bs → List.IsChain (· < ·) αs →
       vwS δ [] σ ds αs ls ρv →
         ∃ ρg ρd, ResU.CompS ρg ρd ρv ∧ NoOwn ρd ∧ RCtx (ℍ := ℍ) δ σ αs ls Γ γ ρg)
-    (hQ : ∀ (αs : List Life) ls v ρ, List.IsChain (· < ·) αs →
+    (hQ : ∀ (αs : List Life) ls v ρ, List.IsChain (· < ·) αs → αs.length = σ.length →
       vCE (ℍ := ℍ) none true B ls (extS δ σ αs) v ρ → boxTop αs (Qa ls v) ρ)
     (ls : List SRec) :
     Entails (ownersM (ℍ := ℍ) δ σ ls)

@@ -175,8 +175,9 @@ theorem law2_A (s : BoCa.Loc) {M : Expr}
       simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
       rcases ha with rfl | rfl <;> decide)
     hd trivial (γ := [Val.loc s])
-    (fun αs hle hch => hΔ_A hle hch s) (fun αs ls ρv hlt hch hv => hctx_view αs ls ρv hlt hch hv)
-    (fun αs ls v ρ _ h => ⟨h, fun a _ => by rw [h.1]; exact ResU.inStratum_empty a⟩) ls ρ ho'
+    (fun αs hlt hch => hΔ_A (hlt.imp fun _ _ => le_of_lt) hch s)
+    (fun αs ls ρv hlt hch hv => hctx_view αs ls ρv hlt hch hv)
+    (fun αs ls v ρ _ _ h => ⟨h, fun a _ => by rw [h.1]; exact ResU.inStratum_empty a⟩) ls ρ ho'
   have hw : withOwnersM (ℍ := ℍ) δA [e₂ s, e₁ s] (fun _ v => ⌜v = Val.unit⌝) =
       fun ls v => owner s TA δA ls ⋆ ⌜v = Val.unit⌝ := by
     simp only [withOwnersM, if_pos (Reb_e₂ s), if_neg (not_Reb_e₁ s)]; rfl

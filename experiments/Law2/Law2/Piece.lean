@@ -1211,14 +1211,49 @@ theorem openS_mono_Q {Q Q' : List Life → List SRec → Val → WProp}
   h (OpenS δ σ Tab Q') fun _ _ _ _ _ _ _ hF => openS_fold fun αi' h₁ h₂ =>
     boxTop_mono (wand_mono_right (bodyS_mono_Q (hQ _ · · h₂))) _ (hF αi' h₁ h₂)
 
+/-- **D16.1's piece is monotone in its answer at the stack's length**, when every operation
+crosses every entry: every vector a run answers at is a re-lend of the stack, of its length. -/
+theorem openS_mono_Q_len (hx : AllCross σ Tab) {Q Q' : List Life → List SRec → Val → WProp}
+    (hQ : ∀ αs ls v, List.IsChain (· < ·) αs → αs.length = σ.length →
+      Entails (Q αs ls v) (Q' αs ls v)) {ds : List Bool} {αi : List Life} {ls : List SRec}
+    {e : Expr} {ρ : WRes} (h : OpenS δ σ Tab Q σ.length ds αi [] ls e ρ) :
+    OpenS δ σ Tab Q' σ.length ds αi [] ls e ρ := by
+  let Mot : XT := fun k ds αi αo ls e ρ => k = σ.length → αo = [] →
+    OpenS δ σ Tab Q' σ.length ds αi [] ls e ρ
+  refine h Mot ?_ rfl rfl
+  rintro k ds αi αo ls e ρ hF rfl rfl
+  refine openS_fold fun αi' hlt hch => ?_
+  have hFα := hF αi' hlt hch
+  rw [List.take_length, List.append_nil] at hFα ⊢
+  rw [List.append_nil] at hch
+  refine ⟨fun w W hw hc => ?_, hFα.2⟩
+  have hlen : αi'.length = σ.length := (vwS_length hw).2
+  refine wpG_garbage (wpG_mono (fun ls'' t τ hq => ?_) (hFα.1 w W hw hc))
+  rcases hq with ⟨v, rfl, hv⟩ | hs
+  · exact ⟨τ, PMap.empty, ResU.comp_empty_right τ, noOwn_empty,
+      Or.inl ⟨v, rfl, hQ αi' ls'' v hch hlen τ hv⟩⟩
+  · rcases stopS_full hx hlen hs with ⟨ds', -, ρ₁, ρ₂, hc₁₂, hd, hg⟩ | ⟨ρ₁, ρ₂, hc₁₂, hno, hg⟩
+    · exact ⟨τ, PMap.empty, ResU.comp_empty_right τ, noOwn_empty, Or.inr (stopS_of_full hx hlen hd
+        (ghostS_mono (fun _ h => opTable_mono _ _ _ _ _ _
+          (fun _ _ _ hM => hM rfl rfl) h) _ _ _ ρ₂ hg) hc₁₂)⟩
+    · exact ⟨ρ₁, ρ₂, hc₁₂, hno, Or.inr (stopS_of_full hx hlen dropS_none
+        (ghostS_mono (fun _ h => h.elim) _ _ _ ρ₁ hg) (compS_empty_left ρ₁))⟩
+
+theorem forall₂_le_lt : ∀ {a b c : List Life}, List.Forall₂ (· ≤ ·) a b →
+    List.Forall₂ (· < ·) b c → List.Forall₂ (· < ·) a c
+  | [], [], [], .nil, .nil => .nil
+  | _ :: _, _ :: _, _ :: _, .cons h₁ t₁, .cons h₂ t₂ =>
+      .cons (lt_of_le_of_lt h₁ h₂) (forall₂_le_lt t₁ t₂)
+
 /-- **The piece judgment gives D16.1's piece.** At every re-lend below `αi` the views handed
 rebuild the borrower's context re-lendably, beside garbage (`hctx`); every re-lend models `Δ`
 (`hΔ`). The piece holds nothing of its own. -/
-theorem openS_of_pj {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
+theorem openS_of_pj (hx : AllCross σ Tab) {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
     (hpj : PJ (ℍ := ℍ) δ σ Tab Δ Γ M C) {Q : List Life → List SRec → Val → WProp}
-    (hQ : ∀ αs ls v, List.IsChain (· < ·) αs → Entails (QA (ℍ := ℍ) δ σ C αs ls v) (Q αs ls v))
+    (hQ : ∀ αs ls v, List.IsChain (· < ·) αs → αs.length = σ.length →
+      Entails (QA (ℍ := ℍ) δ σ C αs ls v) (Q αs ls v))
     {ds : List Bool} {αi : List Life} {ls : List SRec} {γ : List Val}
-    (hΔ : ∀ αs, List.Forall₂ (· ≤ ·) αs αi → List.IsChain (· < ·) αs →
+    (hΔ : ∀ αs, List.Forall₂ (· < ·) αs αi → List.IsChain (· < ·) αs →
       Δ.Models (extS δ σ αs))
     (hctx : ∀ αs ρv, List.Forall₂ (· < ·) αs αi → List.IsChain (· < ·) αs →
       vwS δ [] σ ds αs ls ρv →
@@ -1232,11 +1267,17 @@ theorem openS_of_pj {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
   have hlen : αi'.length = σ.length := (vwS_length hw).2
   obtain ⟨ρg, ρd, hcg, hno, hg⟩ := hctx αi' w hlt hch hw
   have hb := hpj αi' ls γ ρg hlen hch
-    (fun αs'' hr => hΔ αs'' (forall₂_le_trans hr.1 (hlt.imp fun _ _ => le_of_lt)) hr.2) hg
-  refine wpG_absorb (wpG_mono (fun ls'' t τ hq => ?_) hb) hno hcg
+    (fun αs'' hr => hΔ αs'' (forall₂_le_lt hr.1 hlt) hr.2) hg
+  refine wpG_absorb (wpG_garbage (wpG_mono (fun ls'' t τ hq => ?_) hb)) hno hcg
   rcases hq with ⟨v, rfl, hv⟩ | hs
-  · exact Or.inl ⟨v, rfl, hQ αi' ls'' v hch τ hv⟩
-  · exact Or.inr (stopS_mono (fun _ _ _ _ _ _ _ h => openS_mono_Q hQ h) τ hs)
+  · exact ⟨τ, PMap.empty, ResU.comp_empty_right τ, noOwn_empty,
+      Or.inl ⟨v, rfl, hQ αi' ls'' v hch hlen τ hv⟩⟩
+  · rcases stopS_full hx hlen hs with ⟨ds', -, ρ₁, ρ₂, hc₁₂, hd, hg⟩ | ⟨ρ₁, ρ₂, hc₁₂, hno', hg⟩
+    · exact ⟨τ, PMap.empty, ResU.comp_empty_right τ, noOwn_empty,
+        Or.inr (stopS_of_full hx hlen hd (ghostS_mono (fun _ h => opTable_mono _ _ _ _ _ _
+          (fun _ _ _ hO => openS_mono_Q_len hx hQ hO) h) _ _ _ ρ₂ hg) hc₁₂)⟩
+    · exact ⟨ρ₁, ρ₂, hc₁₂, hno', Or.inr (stopS_of_full hx hlen dropS_none
+        (ghostS_mono (fun _ h => h.elim) _ _ _ ρ₁ hg) (compS_empty_left ρ₁))⟩
 
 end piece
 

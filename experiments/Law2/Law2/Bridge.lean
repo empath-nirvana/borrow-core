@@ -292,6 +292,79 @@ theorem openS_bind (hLR : LinResume Tab) (hx : AllCross σ Tab) (K : Kont)
 
 end bind
 
+/-! ### At one `mut` entry: GhostEnd's single-lend callback -/
+
+section one
+variable {δ : LSub} {Tab : OpTab}
+
+/-- **D16.1's piece at one `mut` entry is GhostEnd's re-lendable callback** (`Relend`): at each
+lend `Relend` hands the view, which the piece takes if its drop flag asks for it and leaves as
+garbage otherwise; at a stop the dropped view is garbage and the owner handed back joins the
+continuation (`opTable_frame`), which is the piece again with its bound the lend just ended. -/
+theorem relend_of_openS₁ (hLR : LinResume Tab) {l : BoCa.Loc} {x : LifeVar} {T : VTy}
+    {cr : UInt32 → Bool} (hx : AllCross [⟨l, x, T, .mut, cr⟩] Tab)
+    {Qa Q₀ : List SRec → Val → WProp}
+    (hQ : ∀ ls v, Entails (owner l T δ ls ⋆ Qa ls v) (Q₀ ls v))
+    {d : Bool} {β : Life} {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : OpenS δ [⟨l, x, T, .mut, cr⟩] Tab (cbQ δ [⟨l, x, T, .mut, cr⟩] Qa) 1 [d] [β] [] ls e ρ) :
+    Relend (opTable Tab) l T δ Q₀ ls e ρ := by
+  have hTb := opTable_mono Tab
+  let en : LEnt := ⟨l, x, T, .mut, cr⟩
+  let Mot : XT := fun k ds αi αo ls e ρ => k = 1 → αo = [] → ∀ d β, ds = [d] → αi = [β] →
+    Relend (opTable Tab) l T δ Q₀ ls e ρ
+  refine h Mot ?_ rfl rfl d β rfl rfl
+  rintro k ds αi αo ls e ρ hF rfl rfl d β rfl rfl
+  refine relend_fold hTb ⟨β, fun α hα => ?_⟩
+  have hFα := hF [α] (.cons hα .nil) (List.isChain_singleton α)
+  simp only [List.append_nil] at hFα
+  refine ⟨fun ρm σ hm hcm => ?_, hFα.2 α (by simp)⟩
+  -- the view, fed to the piece or left as garbage
+  have hb : wpG ls e (fun ls'' t => (fun τ => NoOwn τ) ⋆ fun τ =>
+      valPost (cbQ δ [en] Qa [α]) ls'' t τ ∨ stopS δ [en] Tab Mot [α] ls'' t τ) σ := by
+    cases d with
+    | true =>
+        have hv : vwS δ [] [en] [true] [α] ls ρm :=
+          ⟨ρm, PMap.empty, ResU.comp_empty_right ρm, by simpa [vis, vwE] using hm, ⟨rfl, trivial⟩⟩
+        exact wpG_mono (fun _ _ τ hq => ⟨PMap.empty, τ, compS_empty_left τ, noOwn_empty, hq⟩)
+          (hFα.1 ρm σ hv hcm)
+    | false =>
+        have hv : vwS δ [] [en] [false] [α] ls PMap.empty :=
+          ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _, by simp [vis, vwE]; exact ⟨rfl, trivial⟩,
+            ⟨rfl, trivial⟩⟩
+        have hb₀ := hFα.1 PMap.empty ρ hv (ResU.comp_empty_right ρ)
+        exact wpG_mono (fun _ _ _ ⟨τ₁, τ₂, hc, hq, hn⟩ => ⟨τ₂, τ₁, ResU.CompS.comm hc, hn, hq⟩)
+          (wpG_frame (fun _ τ => NoOwn τ) (fun _ _ _ h => h) σ
+            ⟨ρ, ρm, hcm, hb₀, noOwn_ptoMutS hm⟩)
+  refine wpG_garbage (wpG_mono (fun ls'' t τ hq => ?_) hb)
+  obtain ⟨τn, τq, hcτ, hn, hq⟩ := hq
+  rcases hq with ⟨v, rfl, hv⟩ | hs
+  · -- an answer: the owner handed back beside `Qa`
+    refine ⟨τq, τn, ResU.CompS.comm hcτ, hn, fun w ρa ρb ha hcab ρc ρd hc hccd => Or.inl ⟨v, rfl, ?_⟩,
+      hv.2⟩
+    obtain ⟨o, r, hcor, ho, hr⟩ := hv.1 w ρa ρb ha hcab ρc ρd hc hccd
+    exact hQ ls'' v ρd ⟨o, r, hcor, ho, hr.1⟩
+  · rcases stopS_full hx rfl hs with ⟨ds', hl', ρ₁, ρ₂, hc₁₂, hd, hg⟩ | ⟨ρ₁, ρ₂, hc₁₂, hno, hg⟩
+    · -- a stop: the dropped view joins the garbage; the owner joins the continuation
+      obtain ⟨d', rfl⟩ : ∃ d', ds' = [d'] := by
+        match ds', hl' with
+        | [d'], _ => exact ⟨d', rfl⟩
+      obtain ⟨g, hg', hcg⟩ := compS_reassoc' hc₁₂ hcτ
+      refine ⟨ρ₂, g, ResU.CompS.comm hcg, noOwn_compS hg' hn (dropS_noOwn hd),
+        fun w ρa ρb ha hcab ρc ρd hc hccd => Or.inr ?_, hg.2⟩
+      obtain ⟨o, r, hcor, ho, hr⟩ := hg.1 w ρa ρb ha hcab ρc ρd hc hccd
+      exact opTable_frame hLR .hole (fun _ => rfl) (owner l T δ)
+        (fun _ _ _ he h => owner_local he h)
+        (fun _ _ _ ρz _ hM hoz hc' => ⟨ρz, _, ResU.CompS.comm hc', hoz,
+          hM rfl rfl d' α rfl rfl⟩) hr.1 ho (ResU.CompS.comm hcor)
+    · -- a stop no lender admits owes nothing it can produce
+      obtain ⟨g, hg', hcg⟩ := compS_lcomm hc₁₂ hcτ
+      refine ⟨ρ₁, g, hcg, noOwn_compS hg' hn hno,
+        fun w ρa ρb ha hcab ρc ρd hc hccd => ?_, hg.2⟩
+      obtain ⟨o, r, hcor, ho, hr⟩ := hg.1 w ρa ρb ha hcab ρc ρd hc hccd
+      exact hr.1.elim
+
+end one
+
 /-! ### Why the bridge reads re-lends directly -/
 
 /-- **A re-lend no re-stratification realizes.** D16.1's piece is unfolded at every re-lend: each
