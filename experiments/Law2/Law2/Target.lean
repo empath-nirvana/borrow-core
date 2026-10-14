@@ -24,18 +24,19 @@ borrower's piece, which is the one open step:
 derivation lies in the fragment `BComp` of Core's typing, by one induction on the derivation
 (`BComp.toPJ`): pure code with a frozen answer, `perform`, `let` holding any re-lendable frame
 across the inner stops, `case`, `let (x, y) =`, `V; M`, closures that stop (built and called), and
-`bounded_fix` at the row. `law2_frag` is Law 2 for it at every mixed stack; `Law2/FragInstances.lean`
-discharges every hypothesis on a branch around a stop, a closure that stops, and a loop. (S1)
-reduces to the piece judgment `PJ` holding of every derivation (`openS_of_pj`); what the fragment
-leaves out is listed at `piece_of_typed`.
+`bounded_fix` at the row. `law2_frag` is Law 2 for it at every mixed stack;
+`Law2/FragInstances.lean` discharges every hypothesis on a branch around a stop, a closure that
+stops, and a loop. (S1) reduces to the piece judgment `PJ` holding of every derivation
+(`openS_of_pj`); what the fragment leaves out is listed at `piece_of_typed`.
 
 `law2_depth1` is the program-level statement at one lend: the resume rule's compatibility for the
 borrow constant `withbor` at a resuming row. Its step at one lend:
 
 * **(S1′) `relendOfTyped'`**: every borrower typed at a resuming row is GhostEnd's re-lendable
-  callback (`RelendOfTyped'`: GhostEnd's `RelendOfTyped` with the bound `@bδ` defined, the hypothesis
-  GhostEnd's own `relendOfTyped_of_rbodyOfTyped` adds). **Proved from (S1)** at the one-entry stack
-  (`relend_of_openS₁`); at the fragment with no open step (`relend_frag`, `law2_depth1_frag`).
+  callback (`RelendOfTyped'`: GhostEnd's `RelendOfTyped` with the bound `@bδ` defined, the
+  hypothesis GhostEnd's own `relendOfTyped_of_rbodyOfTyped` adds). **Proved from (S1)** at the
+  one-entry stack (`relend_of_openS₁`); at the fragment with no open step (`relend_frag`,
+  `law2_depth1_frag`).
 
 Outside `law2`'s class, not derived: an inner lend whose payload type reads the stack's own
 variables (a borrow of a borrow opened inside the region; the stacked views read payloads at the
@@ -222,7 +223,8 @@ theorem law2_depth1 {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ) {x : LifeVar
     {b : Lifetime.Life} (hb : ∃ β, b.interp δ = some β) (hx : Δ.find? x = none)
     (hbx : b.mentions x = false)
     (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false) {T B : VTy} (hT : ¬ VFree x T)
-    (hB : ¬ VFree x B) {βP : Life} (hP : ∀ ls w σ, vCE (ℍ := ℍ) none true T ls δ w σ → σ.InStratum βP)
+    (hB : ¬ VFree x B) {βP : Life}
+    (hP : ∀ ls w σ, vCE (ℍ := ℍ) none true T ls δ w σ → σ.InStratum βP)
     {S : Row} (hS : Row.Resume S x) {M : Expr} (hM : closedAt 1 M = true)
     (hD : CDerives (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
       (.comp (CTy.effOf S (.box (.var x) B))))
@@ -234,7 +236,8 @@ theorem law2_depth1 {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ) {x : LifeVar
 
 /-! ### At one lend, at the fragment: no open step -/
 
-/-- The view at one lend is re-lendable: frozen part `∅`, the view handed afresh at every re-lend. -/
+/-- The view at one lend is re-lendable: frozen part `∅`, the view handed afresh at every
+re-lend. -/
 theorem rctx_one {δ : LSub} {l : BoCa.Loc} {x : LifeVar} {T : VTy} (hT : ¬ VFree x T)
     {α : Life} {ls : List SRec} {ρv : WRes} (hv : vwS δ [] (oneS l x T) [true] [α] ls ρv) :
     RCtx (ℍ := ℍ) δ (oneS l x T) [α] ls [⟨.mut (.var x) T, true⟩] [Val.loc l] ρv := by

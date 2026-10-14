@@ -329,7 +329,8 @@ theorem relend_of_openS₁ (hLR : LinResume Tab) {l : BoCa.Loc} {x : LifeVar} {T
           (hFα.1 ρm σ hv hcm)
     | false =>
         have hv : vwS δ [] [en] [false] [α] ls PMap.empty :=
-          ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _, by simp [vis, vwE]; exact ⟨rfl, trivial⟩,
+          ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _,
+            by simp [vis, vwE]; exact ⟨rfl, trivial⟩,
             ⟨rfl, trivial⟩⟩
         have hb₀ := hFα.1 PMap.empty ρ hv (ResU.comp_empty_right ρ)
         exact wpG_mono (fun _ _ _ ⟨τ₁, τ₂, hc, hq, hn⟩ => ⟨τ₂, τ₁, ResU.CompS.comm hc, hn, hq⟩)
@@ -339,7 +340,8 @@ theorem relend_of_openS₁ (hLR : LinResume Tab) {l : BoCa.Loc} {x : LifeVar} {T
   obtain ⟨τn, τq, hcτ, hn, hq⟩ := hq
   rcases hq with ⟨v, rfl, hv⟩ | hs
   · -- an answer: the owner handed back beside `Qa`
-    refine ⟨τq, τn, ResU.CompS.comm hcτ, hn, fun w ρa ρb ha hcab ρc ρd hc hccd => Or.inl ⟨v, rfl, ?_⟩,
+    refine ⟨τq, τn, ResU.CompS.comm hcτ, hn,
+      fun w ρa ρb ha hcab ρc ρd hc hccd => Or.inl ⟨v, rfl, ?_⟩,
       hv.2⟩
     obtain ⟨o, r, hcor, ho, hr⟩ := hv.1 w ρa ρb ha hcab ρc ρd hc hccd
     exact hQ ls'' v ρd ⟨o, r, hcor, ho, hr.1⟩
@@ -378,7 +380,8 @@ theorem relend_not_emb :
         [(OrderDual.toDual 5 : Life), OrderDual.toDual 3] ∧
       List.IsChain (· < ·) [(OrderDual.toDual 7 : Life), OrderDual.toDual 6] ∧
       ¬ ∃ (c : Life) (θ : Restrat.Emb c),
-        θ (OrderDual.toDual 5) = OrderDual.toDual 7 ∧ θ (OrderDual.toDual 3) = OrderDual.toDual 6 := by
+        θ (OrderDual.toDual 5) = OrderDual.toDual 7 ∧
+          θ (OrderDual.toDual 3) = OrderDual.toDual 6 := by
   refine ⟨.cons (by decide) (.cons (by decide) .nil), by decide, ?_⟩
   rintro ⟨c, θ, h5, h3⟩
   have h₁ : θ (OrderDual.toDual 5) < θ (OrderDual.toDual 4) := θ.strictMono (by decide)

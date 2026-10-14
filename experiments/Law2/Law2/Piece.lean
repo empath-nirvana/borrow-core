@@ -54,7 +54,8 @@ def RSlot (δ : LSub) (σ : LStack) : VTy → List Life → List SRec → Val �
             (fun αs'' ls'' w => RAns δ σ C αs'' ls'' w))
           αs' ls' (.app (.val f) (.val v))) ρ) αs ls
   | .bang A, αs, ls, v => fun ρ => ρ = PMap.empty ∧ RSlot δ σ A αs ls v ρ
-  | A, αs, ls, v => RelendableS δ [] σ (fun αs' ls' => vCE (ℍ := ℍ) none true A ls' (extS δ σ αs') v) αs ls
+  | A, αs, ls, v =>
+      RelendableS δ [] σ (fun αs' ls' => vCE (ℍ := ℍ) none true A ls' (extS δ σ αs') v) αs ls
 termination_by structural A => A
 /-- The answer of a computation type at a row: `RSlot` at its answer type. -/
 def RAns (δ : LSub) (σ : LStack) : CTy → List Life → List SRec → Val → WProp
@@ -159,7 +160,8 @@ theorem vwS_empty_any : ∀ {seen : List BoCa.Loc} {σ : LStack} {ds : List Bool
           | imm v =>
               obtain ⟨_, _, _, _, _, hρ, -⟩ := ha
               exact absurd (congrArg (fun r => r.get l) hρ) (by simp [ResU.single_get_self])
-      refine ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _, ?_, vwS_empty_any hb (by simpa using hl)⟩
+      refine ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _, ?_,
+        vwS_empty_any hb (by simpa using hl)⟩
       rw [hv]; exact ⟨rfl, trivial⟩
   | _, [], [], _ :: _, _, _, _, h, _ => h.elim
   | _, [], _ :: _, αs, _, _, _, h, _ => by cases αs <;> exact h.elim
@@ -273,7 +275,8 @@ stops and at the kernel's types, by `relendableS_idem`. -/
 theorem rslot_relendable (A : VTy) : ∀ {αs : List Life} {ls : List SRec} {v : Val} {ρ : WRes},
     RSlot (ℍ := ℍ) δ σ A αs ls v ρ →
       RelendableS δ [] σ (fun αs' ls' => RSlot (ℍ := ℍ) δ σ A αs' ls' v) αs ls ρ := by
-  rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨A', n, i, q, A₂, B, fin, C, rfl⟩ | ⟨A', rfl⟩ | hA
+  rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨A', n, i, q, A₂, B, fin, C, rfl⟩ |
+    ⟨A', rfl⟩ | hA
   · intro αs ls v ρ h
     obtain ⟨v₁, v₂, hp⟩ := h
     obtain ⟨rfl, ρ₁, ρ₂, hc, h₁, h₂⟩ := pure_sep_iff.mp hp
@@ -317,7 +320,8 @@ the kernel's relation, which holds such a value only at `∅`. -/
 theorem rslot_persistent_empty (A : VTy) (hp : A.Persistent) : ∀ {αs : List Life}
     {ls : List SRec} {v : Val} {ρ : WRes}, List.IsChain (· < ·) αs →
       RSlot (ℍ := ℍ) δ σ A αs ls v ρ → ρ = PMap.empty := by
-  rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨A', n, i, q, A₂, B, fin, C, rfl⟩ | ⟨A', rfl⟩ | hA
+  rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨A', n, i, q, A₂, B, fin, C, rfl⟩ |
+    ⟨A', rfl⟩ | hA
   · intro αs ls v ρ hch h
     simp only [VTy.Persistent, VTy.persistent, Bool.and_eq_true] at hp
     obtain ⟨v₁, v₂, hq⟩ := h
@@ -343,7 +347,8 @@ closures that stop. -/
 theorem rslot_vC (A : VTy) (hA : NoEffT A) : ∀ {αs : List Life} {ls : List SRec} {v : Val}
     {ρ : WRes}, List.IsChain (· < ·) αs → RSlot (ℍ := ℍ) δ σ A αs ls v ρ →
       vCE (ℍ := ℍ) none true A ls (extS δ σ αs) v ρ := by
-  rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨A', n, i, q, A₂, B, fin, C, rfl⟩ | ⟨A', rfl⟩ | hL
+  rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨A', n, i, q, A₂, B, fin, C, rfl⟩ |
+    ⟨A', rfl⟩ | hL
   · intro αs ls v ρ hch h
     obtain ⟨v₁, v₂, hq⟩ := h
     obtain ⟨rfl, ρ₁, ρ₂, hc, h₁, h₂⟩ := pure_sep_iff.mp hq
@@ -513,7 +518,8 @@ theorem relendableS_local {seen : List BoCa.Loc} {P : List Life → List SRec �
 
 theorem rslot_local (A : VTy) : ∀ {αs : List Life} {ls ls' : List SRec} {v : Val} {ρ : WRes},
     Ext ls ls' ρ → RSlot (ℍ := ℍ) δ σ A αs ls v ρ → RSlot (ℍ := ℍ) δ σ A αs ls' v ρ := by
-  rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨A', n, i, q, A₂, B, fin, C, rfl⟩ | ⟨A', rfl⟩ | hA
+  rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨A', n, i, q, A₂, B, fin, C, rfl⟩ |
+    ⟨A', rfl⟩ | hA
   · intro αs ls ls' v ρ hk h
     obtain ⟨v₁, v₂, hq⟩ := h
     obtain ⟨rfl, ρ₁, ρ₂, hc, h₁, h₂⟩ := pure_sep_iff.mp hq
@@ -572,7 +578,8 @@ theorem rslot_of_frozen (A : VTy) (hA : NoEffT A) (hx : ∀ e ∈ σ, ¬ VFree e
     ∀ {αs : List Life} {ls : List SRec} {v : Val} {ρ : WRes}, αs.length = σ.length →
       vCE (ℍ := ℍ) none true A ls (extS δ σ αs) v ρ → stratS αs ρ →
       RSlot (ℍ := ℍ) δ σ A αs ls v ρ := by
-  rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨A', n, i, q, A₂, B, fin, C, rfl⟩ | ⟨A', rfl⟩ | hL
+  rcases vty_shape A with ⟨A₁, A₂, rfl⟩ | ⟨A₁, A₂, rfl⟩ | ⟨A', n, i, q, A₂, B, fin, C, rfl⟩ |
+    ⟨A', rfl⟩ | hL
   · intro αs ls v ρ hlen h hz
     obtain ⟨v₁, v₂, hq⟩ := h
     obtain ⟨rfl, ρ₁, ρ₂, hc, h₁, h₂⟩ := pure_sep_iff.mp hq
@@ -782,7 +789,8 @@ theorem pj_perform {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : OpSig
     (Row.tab_find hf) ha (ds := List.replicate σ.length false) dropS_none ?_ ?_
     (ResU.comp_empty_right τ) hzt (compS_empty_left τ)
   · exact hv'
-  · refine ⟨fun hu => absurd (hq.symm.trans hu) (by decide), fun ls'' _ => ⟨fun w τ₁ τ₂ hBw hcτ => ?_,
+  · refine ⟨fun hu => absurd (hq.symm.trans hu) (by decide),
+      fun ls'' _ => ⟨fun w τ₁ τ₂ hBw hcτ => ?_,
       fun hl => absurd hq hl⟩⟩
     have hBw' : vCE (ℍ := ℍ) none true .unit ls'' δ w τ₁ := by
       simpa [OpSig.ent, hoB] using hBw
@@ -857,7 +865,8 @@ theorem pj_let (hLR : LinResume Tab) (hx₀ : AllCross σ Tab) {Δ : LifeCtx}
 /-! ### Values, eliminations, and closures that stop -/
 
 theorem substAll_cons₂' (w₂ w₁ : Val) (γ : List Val) (e : Expr) :
-    substAll (w₂ :: w₁ :: γ) e = Expr.subst 0 w₁ (Expr.subst 0 (w₂.shift 1 0) (Expr.psub 2 γ e)) := by
+    substAll (w₂ :: w₁ :: γ) e =
+      Expr.subst 0 w₁ (Expr.subst 0 (w₂.shift 1 0) (Expr.psub 2 γ e)) := by
   show Expr.psub 0 (w₂ :: w₁ :: γ) e = _
   rw [Expr.psub_cons₂ 0 w₂ w₁ γ e, Val.shift_zero]
 
@@ -882,7 +891,8 @@ def PV (δ : LSub) (σ : LStack) (Δ : LifeCtx) (Γ : Ctx VTy) (V : Expr) (A : V
 theorem pj_of_pv {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {A : VTy} {S : Row}
     (h : PV (ℍ := ℍ) δ σ Δ Γ V A) : PJ (ℍ := ℍ) δ σ Tab Δ Γ V (CTy.effOf S A) := by
   intro αs ls γ ρ hlen hch hΔ hg
-  refine wpG_mono (fun ls' t τ hq => Or.inl ?_) ((wpTS_iff_wpG _ _ _ _).mp (h αs ls γ ρ hlen hch hΔ hg))
+  refine wpG_mono (fun ls' t τ hq => Or.inl ?_)
+    ((wpTS_iff_wpG _ _ _ _).mp (h αs ls γ ρ hlen hch hΔ hg))
   obtain ⟨v, rfl, hv⟩ := hq
   exact ⟨v, rfl, by show RAns δ σ (CTy.effOf S A) αs ls' v τ; rw [rAns_effOf]; exact hv⟩
 

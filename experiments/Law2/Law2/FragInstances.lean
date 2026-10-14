@@ -272,10 +272,11 @@ abbrev fxArgTy : VTy := .tensor (fixStepTy .unit C₀) (.tensor (.int .w32) .uni
 /-- **The loop's step**: `λp. let (self, a) = p in yield 3; case self of inj₁ _ ⇒ () |
 inj₂ g ⇒ g a` — one yield per iteration, the next iteration through the self-reference. -/
 abbrev stepBody : Expr :=
-  .letpair (.var 0) (bindE (yE 3) (.case (.var 2) (.val .unit) (bindE (.var 0) (.app (.var 0) (.var 3)))))
+  .letpair (.var 0)
+    (bindE (yE 3) (.case (.var 2) (.val .unit) (bindE (.var 0) (.app (.var 0) (.var 3)))))
 
-/-- **The program.** The step, then `bounded_fix (step, (3, ()))`, then `use m`: the view `m` is held
-in the frame across every iteration's stop. -/
+/-- **The program.** The step, then `bounded_fix (step, (3, ()))`, then `use m`: the view `m` is
+held in the frame across every iteration's stop. -/
 abbrev loopE : Expr :=
   bindE (.val (.lam stepBody))
     (bindE (.val (.prim .boundedFix))
@@ -300,7 +301,8 @@ theorem d_step {δ : LSub} {σ : LStack} {Δ : LifeCtx} {S₀ : VTy} :
       (perform_yield 3 (.cons (.cons (.cons (.cons .nil))))
         (noEffT_units fun _ hs hl => by
           simp at hs; rcases hs with rfl | rfl | rfl | rfl <;> simp_all))
-      (.case (.right (.right (.left (.dead (.dead .nil))))) (.var (.there (.there (.here (.cons (.cons .nil))))))
+      (.case (.right (.right (.left (.dead (.dead .nil)))))
+        (.var (.there (.there (.here (.cons (.cons .nil))))))
         (.ret (.unit (.drop pu (.drop pu (.drop pu (.cons (.cons (.cons .nil))))))))
         (.letE (.left (.right (.right (.dead (.dead (.dead .nil))))))
           (.ret (.bangE (.var (.here (.cons (.cons (.cons (.cons (.cons .nil)))))))))
