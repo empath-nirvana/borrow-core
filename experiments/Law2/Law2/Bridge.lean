@@ -6,14 +6,16 @@ import Law2.Straight
 GhostEnd's stacked piece `OpenS` (D16.1) reads a borrower holding a stack `σ` of lends open across
 its stops: at every re-lend of the stack, handed the views made afresh, it runs to an answer or to a
 stop at which every view is dropped, the lenders are owed `ghostS`, and the continuation is the
-piece again at the lifetimes just ended. `openS_of_run` and `openS_yield_ds` built it for one stop
-context, `.seq .hole rest`, with the stop the run's first configuration.
+piece again at the lifetimes just ended. `openS_of_run` and `openS_yield_ds` (`Law2/Straight.lean`)
+build it for one stop context, `.seq .hole rest`, with the stop the run's first configuration.
 
 * `openS_of_stops`: **the general form.** At every re-lend the run reaches an answer, or a stop of
   the table (`opTable`, at whatever context `K` the run reached, `K` free of a handler of the
   operation's name) whose share is the views it drops beside a part in `[top]`, each continuation
-  owed the piece again. `openS_of_run` is the case with no stop; `openS_yield_ds` the case whose run
-  is empty and whose stop context is `.seq .hole rest`.
+  owed the piece again. `openS_of_run_stops` (no stop) and `openS_yield_stops` (a run of no steps
+  stopping at `.seq .hole rest`) derive `openS_of_run` and `openS_yield_ds` from it. The piece
+  judgment does not go through it: `piece_of_pj` reaches D16.1's piece through `openS_of_pj`,
+  `openS_of_openH` and `openH_bind` (`Law2/Inner.lean`, `Law2/Piece.lean`).
 * `stopAt_of_perform`: a stop of the kernel's table at an operation of the row is a stop of the
   piece.
 * `dropE_join`, `dropS_join`: what two parts drop at a stop joins, entry by entry; the stacked bind
@@ -89,6 +91,40 @@ theorem stopAt_of_perform {σ : LStack} {X : XT} {αs : List Life} {ls : List SR
     StopAt σ Tab X αs ls (K.plug (performE (.val (opPayload n i y)))) ρ :=
   ⟨ds, ρd, ρs, hc, hd, Or.inl ⟨K, n, i, y, en, pure_sep_mk ⟨rfl, hK, hT, ha⟩
     ⟨ρa, ρk, hcs, hy, hk⟩⟩, hstr⟩
+
+/-- **`openS_of_run` from `openS_of_stops`**: a run with no stop. -/
+theorem openS_of_run_stops {σ : LStack} (hx : AllCross σ Tab) {Qa : List SRec → Val → WProp}
+    {ds : List Bool} {E : Expr} (hE : RunsAt (ℍ := ℍ) δ σ ds Qa E) (αi : List Life)
+    (ls : List SRec) : OpenS δ σ Tab (cbQ δ σ Qa) σ.length ds αi [] ls E PMap.empty := by
+  refine openS_of_stops hx (fun _ _ _ a _ => ResU.inStratum_empty a)
+    fun αi' hlt hch w W hw hc => ?_
+  rw [eq_of_compS_empty_left hc]
+  have hlen := (vwS_length hw).2
+  exact wpG_mono (fun ls'' t ρ hq => by
+    obtain ⟨v, hv, hb⟩ := hq
+    exact Or.inl ⟨v, hv, ghostS_of_boxTop hlen hch hb⟩)
+    ((wpTS_iff_wpG _ _ _ _).mp (hE αi' ls hlen hch (lt_top_of_forall₂ hlt) w hw))
+
+/-- **`openS_yield_ds` from `openS_of_stops`**: a run of no steps, stopping at `.seq .hole rest`,
+every view dropped; the continuation, after the `;` step, is the piece again. -/
+theorem openS_yield_stops {σ : LStack} (hx : AllCross σ Tab) {n i : UInt32} {en : OpEnt}
+    (hTn : Tab n i = some en) (ha : en.abort = false) (hq : en.q = .lin)
+    (hPB : ∀ ls w ρ, en.PB ls w ρ → w = Val.unit ∧ ρ = PMap.empty)
+    {Qa : List SRec → Val → WProp} {y : Val} (hy : ∀ ls, en.PA ls y PMap.empty) {rest : Expr}
+    {ds : List Bool}
+    (h : ∀ ls αi, OpenS δ σ Tab (cbQ δ σ Qa) σ.length ds αi [] ls rest PMap.empty)
+    (αi : List Life) (ls : List SRec) :
+    OpenS δ σ Tab (cbQ δ σ Qa) σ.length ds αi [] ls (yieldSeq n i y rest) PMap.empty := by
+  refine openS_of_stops hx (fun _ _ _ a _ => ResU.inStratum_empty a)
+    fun αi' hlt hch w W hw hc => ?_
+  rw [eq_of_compS_empty_left hc]
+  refine wpG_here ls _ _ w (Or.inr ?_)
+  refine stopAt_of_perform (K := .seq .hole rest) rfl hTn ha (dropS_of_vwS hw) (hy ls) ?_
+    (ResU.comp_empty_right _) (fun a _ => ResU.inStratum_empty a) (ResU.comp_empty_right w)
+  refine ⟨fun _ => rfl, fun ls' _ => ⟨fun w' τ₁ τ₂ hBw hcτ => ?_, fun hl => absurd hq hl⟩⟩
+  obtain ⟨rfl, rfl⟩ := hPB _ _ _ hBw
+  rw [eq_of_compS_empty_left hcτ]
+  exact openS_step (fun μ => Step1N.head (Head.seq μ rest) rfl) (h ls' αi')
 
 end
 

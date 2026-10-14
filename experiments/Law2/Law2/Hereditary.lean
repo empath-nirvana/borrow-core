@@ -15,8 +15,8 @@ a first-order value in the relation, a pair of such, or a thunk whose body Core'
 carries a derivation and a hereditarily typed context, never a relation at `U`. Nothing here shows
 that a run produces only `HTV` values or splits its share as an `HTG` context: where a context is
 `HTV`, that is a hypothesis of the theorem using it (`runsAt_of_typed`'s `hctx`). The reading (S1)
-is proved at for the fragment is `RSlot` (`Law2/Piece.lean`), which a borrower's own constructions
-establish (`BVal.toPV`).
+is proved at is `RSlot` (`Law2/Piece.lean`), which a borrower's own derivation establishes rule by
+rule (`pj_fundamental`).
 
 * `htv_sound`, `htg_sound`: a hereditarily typed value is in Core's relation, at every record
   list; a hereditarily typed context is in `𝒢⟦Γ⟧`.

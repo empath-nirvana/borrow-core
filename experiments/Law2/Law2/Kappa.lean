@@ -26,8 +26,8 @@ segment with the share split as its context: the run's relation (`contShare`) st
 continuation's share as one wand, not split by frame. `KappaRelends` is not what D16.1's piece
 (`OpenS`) reads either: the piece keeps the frozen share as it is and hands the views afresh at
 every re-lend, and on `Life = ℕᵒᵈ` some of those re-lends are not the image of any `Restrat.Emb`
-(`relend_not_emb`). (S1) is stated at the piece (`Law2/Target.lean`) and proved at the fragment by
-the re-lendable reading `RSlot` (`Law2/Piece.lean`, `Law2/Fragment.lean`), which reads re-lends
+(`relend_not_emb`). (S1) is stated at the piece (`Law2/Target.lean`) and derived from the
+re-lendable reading `RSlot` (`Law2/Piece.lean`, `Law2/Fundamental.lean`), which reads re-lends
 directly.
 -/
 
