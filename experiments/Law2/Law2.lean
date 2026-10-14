@@ -9,4 +9,5 @@ import Law2.Bridge
 import Law2.Piece
 import Law2.Fragment
 import Law2.Instances
+import Law2.FragInstances
 import Law2.Target

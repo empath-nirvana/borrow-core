@@ -894,6 +894,47 @@ theorem pv_var {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {A : VTy} (h : Ctx.SoloP 
   rw [substAll_var' hv]
   exact wpTS_val ls v _ ρ hval
 
+theorem pv_unit {Δ : LifeCtx} {Γ : Ctx VTy} (h : Ctx.DeadP Γ) :
+    PV (ℍ := ℍ) δ σ Δ Γ (.val .unit) .unit := by
+  intro αs ls γ ρ hlen hch _ hg
+  obtain ⟨-, hs⟩ := pure_sep_iff.mp hg
+  obtain rfl := rSep_deadP hch h hs
+  exact wpTS_val ls Val.unit _ PMap.empty
+    (relendableS_frozen hlen (fun a _ => ResU.inStratum_empty a) fun _ _ _ _ => ⟨rfl, rfl⟩)
+
+/-- **A pair of re-lendable values**, each with its own share. -/
+theorem pv_pair {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {e₁ e₂ : Expr} {A B : VTy}
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (h₁ : PV (ℍ := ℍ) δ σ Δ Γ₁ e₁ A) (h₂ : PV (ℍ := ℍ) δ σ Δ Γ₂ e₂ B) :
+    PV (ℍ := ℍ) δ σ Δ Γ (.pair e₁ e₂) (.tensor A B) := by
+  intro αs ls γ ρ hlen hch hΔ hg
+  obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := rctx_split hch hsp hg
+  refine wpTS_bind_frame (.pairL .hole (substAll γ e₂)) (substAll γ e₁) ls
+    (fun ls' v => RSlot (ℍ := ℍ) δ σ A αs ls' v) (fun ls' => RCtx (ℍ := ℍ) δ σ αs ls' Γ₂ γ) _
+    (fun ls' hls τ h => rctx_local (ext_of_same hls τ) h) ?_ ρ
+    ⟨ρ₁, ρ₂, hc, h₁ αs ls γ ρ₁ hlen hch hΔ hg₁, hg₂⟩
+  rintro ls' - v₁ τ ⟨τ₁, τ₂, hcτ, hv₁, hg₂'⟩
+  refine wpTS_bind_frame (.pairR v₁ .hole) (substAll γ e₂) ls'
+    (fun ls'' v => RSlot (ℍ := ℍ) δ σ B αs ls'' v) (fun ls'' => RSlot (ℍ := ℍ) δ σ A αs ls'' v₁) _
+    (fun ls'' hls τ h => rslot_local A (ext_of_same hls τ) h) ?_ τ
+    ⟨τ₂, τ₁, ResU.CompS.comm hcτ, h₂ αs ls' γ τ₂ hlen hch hΔ hg₂', hv₁⟩
+  rintro ls'' - v₂ υ ⟨υ₁, υ₂, hcυ, hv₂, hv₁'⟩
+  exact wpTS_val ls'' (.pair v₁ v₂) _ υ
+    ⟨v₁, v₂, pure_sep_mk rfl ⟨υ₂, υ₁, ResU.CompS.comm hcυ, hv₁', hv₂⟩⟩
+
+theorem pv_inj₁ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A B : VTy}
+    (h : PV (ℍ := ℍ) δ σ Δ Γ e A) : PV (ℍ := ℍ) δ σ Δ Γ (.inj₁ e) (.sum A B) := by
+  intro αs ls γ ρ hlen hch hΔ hg
+  refine wpTS_bind (.inj₁ .hole) (substAll γ e) ls _ ρ
+    (wpTS_mono (fun ls' v τ hv => ?_) ρ (h αs ls γ ρ hlen hch hΔ hg))
+  exact wpTS_val ls' (.inj₁ v) _ τ (Or.inl ⟨v, pure_sep_mk rfl hv⟩)
+
+theorem pv_inj₂ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A B : VTy}
+    (h : PV (ℍ := ℍ) δ σ Δ Γ e B) : PV (ℍ := ℍ) δ σ Δ Γ (.inj₂ e) (.sum A B) := by
+  intro αs ls γ ρ hlen hch hΔ hg
+  refine wpTS_bind (.inj₂ .hole) (substAll γ e) ls _ ρ
+    (wpTS_mono (fun ls' v τ hv => ?_) ρ (h αs ls γ ρ hlen hch hΔ hg))
+  exact wpTS_val ls' (.inj₂ v) _ τ (Or.inr ⟨v, pure_sep_mk rfl hv⟩)
+
 /-- **A value whose type is frozen**: Core's typing derives it, its type reads none of the
 stack's variables and its values lie in `[top]`. -/
 theorem pv_frozen {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {A : VTy}

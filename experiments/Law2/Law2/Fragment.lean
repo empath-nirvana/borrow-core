@@ -11,7 +11,8 @@ derivations a borrower at a resuming row `S` builds from
 * `perform` at an operation of the row; `M to x. N`; `case`, `let (x, y) =`, `V; M` on values;
 * closures that stop, `λx. M : U(A ⊸ F_S B)` and `!U(A ⊸ F_S B)`, and calling one;
 * `bounded_fix` at the row, a closure that stops;
-* the values the fragment's values are built from: variables, frozen values, dereliction.
+* the values the fragment's values are built from: variables, `()`, pairs, injections, frozen
+  values, dereliction.
 
 `BComp.toPJ` is the piece judgment for every derivation of the fragment, by one induction on it
 (the compatibility lemmas of `Law2/Piece.lean`), and `piece_of_bcomp` is D16.1's piece for every
@@ -45,6 +46,11 @@ mutual
 /-- **The fragment's values**, at the stack `σ` and the row `S`. -/
 inductive BVal (δ : LSub) (σ : LStack) (S : Row) : LifeCtx → Ctx VTy → Expr → VTy → Prop
   | var {Δ Γ i A} : Ctx.SoloP Γ i A → BVal δ σ S Δ Γ (.var i) A
+  | unit {Δ Γ} : Ctx.DeadP Γ → BVal δ σ S Δ Γ (.val .unit) .unit
+  | pair {Δ Γ Γ₁ Γ₂ e₁ e₂ A B} : Ctx.SplitP Γ Γ₁ Γ₂ → BVal δ σ S Δ Γ₁ e₁ A →
+      BVal δ σ S Δ Γ₂ e₂ B → BVal δ σ S Δ Γ (.pair e₁ e₂) (.tensor A B)
+  | inj₁ {Δ Γ e A B} : BVal δ σ S Δ Γ e A → BVal δ σ S Δ Γ (.inj₁ e) (.sum A B)
+  | inj₂ {Δ Γ e A B} : BVal δ σ S Δ Γ e B → BVal δ σ S Δ Γ (.inj₂ e) (.sum A B)
   | frozen {Δ Γ V A} : CDerives Δ Γ V (.val A) → CtxNoEffT Γ → NoEffT A →
       (∀ en ∈ σ, ¬ VFree en.x A) → AboveAll (ℍ := ℍ) δ σ A → BVal δ σ S Δ Γ V A
   | lamEff {Δ Γ M A B} : BComp δ σ S Δ (⟨A, true⟩ :: Γ) M B →
@@ -87,6 +93,10 @@ mutual
 theorem BVal.toCDerives {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {A : VTy}
     (hlin : ∀ o ∈ S, o.q = .lin) : BVal (ℍ := ℍ) δ σ S Δ Γ V A → CDerives Δ Γ V (.val A)
   | .var h => .var h
+  | .unit h => .unitI h
+  | .pair hs h₁ h₂ => .tensorI hs (BVal.toCDerives hlin h₁) (BVal.toCDerives hlin h₂)
+  | .inj₁ h => .sumI₁ (BVal.toCDerives hlin h)
+  | .inj₂ h => .sumI₂ (BVal.toCDerives hlin h)
   | .frozen hd _ _ _ _ => hd
   | .lamEff hM => .thunkV rfl (.lam (BComp.toCDerives hlin hM))
   | .bangLamEff hp hM => .bangThunkV hp rfl (.lam (BComp.toCDerives hlin hM))
@@ -151,6 +161,10 @@ theorem BVal.toPV (hS : S ≠ []) (hx : AllCross σ (Row.tab S δ))
     (hLR : LinResume (Row.tab S δ)) {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {A : VTy} :
     BVal (ℍ := ℍ) δ σ S Δ Γ V A → PV (ℍ := ℍ) δ σ Δ Γ V A
   | .var h => pv_var h
+  | .unit h => pv_unit h
+  | .pair hs h₁ h₂ => pv_pair hs (BVal.toPV hS hx hLR h₁) (BVal.toPV hS hx hLR h₂)
+  | .inj₁ h => pv_inj₁ (BVal.toPV hS hx hLR h)
+  | .inj₂ h => pv_inj₂ (BVal.toPV hS hx hLR h)
   | .frozen hd hΓ hA hxA hz => pv_frozen hd hΓ hA hxA hz
   | .lamEff hM => pv_lamEff' hS (BComp.toPJ hS hx hLR hM)
   | .bangLamEff hp hM => pv_bangLamEff' hS hp (BComp.toPJ hS hx hLR hM)
@@ -201,6 +215,33 @@ theorem piece_of_bcomp (hS : S ≠ []) (hx : AllCross σ (Row.tab S δ))
   have hq' : RSlot (ℍ := ℍ) δ σ B αs ls' v ρ := by
     have := hq; simp only [QA] at this; rwa [rAns_effOf] at this
   exact ghostS_of_boxTop' hch (hQ αs ls' v ρ hch (rslot_vC B hB hch hq'))
+
+/-- **Law 2 at the fragment, at every mixed stack.** A borrower of the fragment at a resuming row,
+holding a mixed stack of lends open across its stops, every operation crossing every lend, its
+context re-lendable as each re-lend rebuilds it: beside the owners of the stack's lenders, it is
+its `ewpTS`, the owners handed back with its answer. `fold_mixed` folds the lenders;
+`piece_of_bcomp` is the piece. -/
+theorem law2_frag (hS : S ≠ []) (hLR : LinResume (Row.tab S δ)) (hL : (Row.tab S δ).Local)
+    {β : Life} (hσ : MixedStack σ) (hx : AllCross σ (Row.tab S δ))
+    (hP : ∀ e ∈ σ, ∀ ls w ρ, vCE (ℍ := ℍ) none true e.T ls δ w ρ → ρ.InStratum β)
+    (hadm : ∀ e ∈ σ, ∀ v, e.k = .imm v → AdmWf e.T δ)
+    {Qa : List SRec → Val → WProp} (hQa : ∀ ls₁ ls₂ u ρ, Ext ls₁ ls₂ ρ → Qa ls₁ u ρ → Qa ls₂ u ρ)
+    {ds : List Bool} {bs : List Life} (hds : ds.length = σ.length) (hbs : bs.length = σ.length)
+    (hβ : ∀ a ∈ bs, a ≤ β) {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {B : VTy}
+    (hd : BComp (ℍ := ℍ) δ σ S Δ Γ M B) (hB : NoEffT B) {γ : List Val}
+    (hΔ : ∀ αs, List.Forall₂ (· ≤ ·) αs bs → List.IsChain (· < ·) αs →
+      Δ.Models (extS δ σ αs))
+    (hctx : ∀ αs ls ρv, List.Forall₂ (· < ·) αs bs → List.IsChain (· < ·) αs →
+      vwS δ [] σ ds αs ls ρv →
+        ∃ ρg ρd, ResU.CompS ρg ρd ρv ∧ NoOwn ρd ∧ RCtx (ℍ := ℍ) δ σ αs ls Γ γ ρg)
+    (hQ : ∀ (αs : List Life) ls v ρ, List.IsChain (· < ·) αs →
+      vCE (ℍ := ℍ) none true B ls (extS δ σ αs) v ρ → boxTop αs (Qa ls v) ρ)
+    (ls : List SRec) :
+    Entails (ownersM (ℍ := ℍ) δ σ ls)
+      (ewpTS (ℍ := ℍ) ls (substAll γ M) (opTable (Row.tab S δ)) (withOwnersM δ σ Qa)) :=
+  fun ρo ho => fold_mixed hLR hL hσ hx hP hadm Qa hQa ds bs hds hbs hβ ls _ ρo PMap.empty ρo ho
+    (fun ls₁ _ => piece_of_bcomp hS hx hLR hd hB hQ hΔ
+      (fun αs ρv hlt hch hv => hctx αs ls₁ ρv hlt hch hv)) (ResU.comp_empty_right ρo)
 
 end
 
