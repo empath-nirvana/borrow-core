@@ -3,8 +3,9 @@
 Build with `lake build Nominal`. There is no `sorry`, `axiom`, `native_decide`, `opaque`, `partial`,
 `unsafe` or `implemented_by`, and every declaration's axioms are within
 `[propext, Classical.choice, Quot.sound]` (`lake env lean experiments/Nominal/scripts/Axioms.lean`).
-The library does not import this directory. It imports Core's syntax (`VTy`, `CTy`, `Expr`,
-`forceE`), `PMap` and the machine (`BoLo.Steps`), and builds its own carrier and model.
+The library does not import this directory. It imports Core's syntax and type-level definitions
+(`VTy`, `CTy`, `Expr`, `forceE`, `RefPos`, `MutPos`, `VFree`, `immReborrow`), `PMap` and the machine
+(`BoLo.Steps`, `ARun`), and builds its own carrier, model, records and typed world.
 
 ## The question
 
@@ -42,10 +43,11 @@ equivariance or of the corollary was found, and both are proved.
    automorphism is a typed world (`TWN_act`), and `wpTS` is carried (`wpTSN_equiv`).
 4. **Re-opening is a corollary** (`reopen`, `reopen_iff`, `reopen_swap`): opening at a fresh atom
    with `x`'s parents relates exactly what opening at `x` related, at every type, `U` and `⊸`
-   included. The hypotheses are freshness, discharged for owned packages (`reopen_fresh`); there is
-   no history or derivation hypothesis.
+   included, and at Core's own `wp` (`reopenR_wpTS`). The hypotheses are freshness, discharged for
+   owned packages (`reopen_fresh`); there is no history or derivation hypothesis.
 5. **The probe-3 witness is preserved by the same-parents re-make and broken by the
-   extra-parents one** (`kU_convention`), and the extra-parents re-make is not an automorphism
+   extra-parents one** (`kU_convention`; at Core's own relation and `wp`, the refuting run at a
+   typed world: `kUW_convention`), and the extra-parents re-make is not an automorphism
    (`no_automorphism_extra_parents`). Moving a borrow of a borrow by the swap *is* re-making it
    (`move_eq_remake`). The scheduler: owned packages store under every `Mut 'q`
    (`closed_inStratum`); a package that captured a borrow at `s` stores under `Mut 'q` exactly
