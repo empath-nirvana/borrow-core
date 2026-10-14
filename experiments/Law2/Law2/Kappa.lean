@@ -22,7 +22,13 @@ reading, which `⟦Δ⟧` admits. This is `relend_derivable` extended from close
 contexts and from first-order contexts to closures, frame by frame.
 
 What is not derived here is that a continuation captured by a run of a typed program is such a
-segment with the share split as its context (`KappaTypedAtStop`, stated in `Law2.lean`).
+segment with the share split as its context: the run's relation (`contShare`) states the
+continuation's share as one wand, not split by frame. `KappaRelends` is not what D16.1's piece
+(`OpenS`) reads either: the piece keeps the frozen share as it is and hands the views afresh at
+every re-lend, and on `Life = ℕᵒᵈ` some of those re-lends are not the image of any `Restrat.Emb`
+(`relend_not_emb`). (S1) is stated at the piece (`Law2/Target.lean`) and proved at the fragment by
+the re-lendable reading `RSlot` (`Law2/Piece.lean`, `Law2/Fragment.lean`), which reads re-lends
+directly.
 -/
 
 noncomputable section

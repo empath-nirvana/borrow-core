@@ -15,9 +15,11 @@ context is rebuilt at each re-lend from the views the lenders make afresh (`runs
 * **Depth 3, mixed**: an `imm` lend of another place inside the two (`struct_imm_spans`). Stack
   `[p@'x₃ imm, s@'x₂ reborrow, s@'x₁]`.
 * **A closure capturing the nested borrow, held across the yield** (`closure_reborrow_spans`): the
-  continuation forces a thunk whose environment is the reborrow's view. Its context is rebuilt by
-  the hereditary typing of the closure (`HTV.thunkF`, `htv_sound`): the closure is re-derived at the
-  re-lent reading.
+  program starts in the state after the closure is built — `yield; force f` with `f`, closed by the
+  reborrow's view, substituted — at the two-entry stack. Its context is rebuilt by the hereditary
+  typing of the closure (`HTV.thunkF`, `htv_sound`): the closure is re-derived at the re-lent
+  reading. A program that builds a closure before a stop and calls it after is
+  `closure_stops_spans` (`Law2/FragInstances.lean`).
 -/
 
 noncomputable section
@@ -326,12 +328,13 @@ abbrev EC : Expr := forceE CC (.var 0)
 
 theorem d_EC : CDerives ΔA [⟨.thunk CC, true⟩] EC (.comp CC) := .force (.here .nil)
 
-/-- **A closure capturing the nested borrow, held across the yield.** Before the yield the
-generator builds `f = thunk (… n …)` over the reborrow's view; it yields with the three-step stack
-open and `f` in its frame, and after the resume forces `f`. The continuation's context, `f`, is
-rebuilt at each re-lend by the closure's hereditary typing (`HTV.thunkF`): the closure is
-re-derived at the re-lent reading, its environment the view made afresh. `law2_straight` at the
-stack `[s@'x₂ reborrow, s@'x₁]`. -/
+/-- **A closure capturing the nested borrow, held across the yield.** The program is the state
+after the closure is built: `yield; force f`, with `f = thunk (… n …)` over the reborrow's view
+substituted for the frame's variable. It yields with the two-entry stack open and `f` in its
+frame, and after the resume forces `f`. The continuation's context, `f`, is rebuilt at each re-lend
+by the closure's hereditary typing (`HTV.thunkF`): the closure is re-derived at the re-lent
+reading, its environment the view made afresh. `law2_straight` at the stack
+`[s@'x₂ reborrow, s@'x₁]`. -/
 theorem closure_reborrow_spans (s : BoCa.Loc) (ls : List SRec) :
     Entails (owner s TA δA ls)
       (ewpTS (ℍ := ℍ) ls (chain yieldOp.n yieldOp.i [Val.i32 1] (substAll [fC s] EC))

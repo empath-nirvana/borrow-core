@@ -25,6 +25,12 @@ exactly when it is valid with the cell unfolded, whatever the cell's lifetime an
 `RemakeR` re-makes `own` and `mut` cells only, so the theorem is stated for re-makes of worlds
 whose re-made part holds no `imm` cell (the fragment `relend_fov` re-lends). Re-making an `imm`
 lend (6.64's records, re-slotted) is not derived here.
+
+The theorem is not used by Law 2 as proved. D16.1's piece (`OpenS`), which `law2`, `law2_straight`
+and `law2_frag` fold, re-lends by keeping the frozen share and handing the views afresh, inside
+the lenders' own steps (6.65 and 6.64 re-applied, which build typed worlds with `TW`'s
+constructors); it never re-makes a region at once. `tw_remake` is the typed-world step for the
+re-make form `KappaRelends` reads.
 -/
 
 noncomputable section

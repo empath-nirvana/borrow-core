@@ -9,10 +9,14 @@ re-making opens room. A closure a typed program builds is not such a closure: it
 typing derives, closed by values the program computed, and the fundamental property relates it at
 every reading in `⟦Δ⟧`.
 
-`HTV A δ v ρ` (hereditarily typed values) records how a value was built: a first-order value in
-the relation, a pair of such, or a thunk whose body Core's typing derives (`[thunkF]`, `[thunkV]`)
-closed by a context of hereditarily typed values (`HTG`). It is an inductive predicate: the closure
-case carries a derivation and a hereditarily typed context, never a relation at `U`.
+`HTV A δ v ρ` (hereditarily typed values) is an inductive predicate on a value and its resource:
+a first-order value in the relation, a pair of such, or a thunk whose body Core's typing derives
+(`[thunkF]`, `[thunkV]`) closed by a context of hereditarily typed values (`HTG`). The closure case
+carries a derivation and a hereditarily typed context, never a relation at `U`. Nothing here shows
+that a run produces only `HTV` values or splits its share as an `HTG` context: where a context is
+`HTV`, that is a hypothesis of the theorem using it (`runsAt_of_typed`'s `hctx`). The reading (S1)
+is proved at for the fragment is `RSlot` (`Law2/Piece.lean`), which a borrower's own constructions
+establish (`BVal.toPV`).
 
 * `htv_sound`, `htg_sound`: a hereditarily typed value is in Core's relation, at every record
   list; a hereditarily typed context is in `𝒢⟦Γ⟧`.
