@@ -1,0 +1,15 @@
+-- expect (designed): reject at the block: `choose` is unrestricted (multi-shot), and a relaxed
+-- lend's row admits no unrestricted operation (`Row.ResumeO`): a copied continuation would hold
+-- the view twice. Decision 63 ignores multi-shot; this rejection is where it meets the borrows.
+-- Surface provisional.
+
+effect Amb { unr choose() -> bool }
+
+fn twice() -> i32 with Amb =
+  let c = alloc(1);
+  let v = borrow mut c { m -> let f = || { *m }; let b = choose(); f() };
+  free(c);
+  v
+
+main -> i32 = 0
+-- now (bcc check, provisional surface): 6:14: expected `fn` or `ctl` (an operation), found name `unr`

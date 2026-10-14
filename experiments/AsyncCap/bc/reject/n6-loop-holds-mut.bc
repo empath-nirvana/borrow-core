@@ -1,0 +1,18 @@
+-- expect (designed): reject at the loop: its state holds `bump`, a closure over `m`, a `mut`
+-- view of `c`, across observations. `LoopLend` re-lends per observation only when the state
+-- outlives the lend (today's message: "an iterator that holds the borrow"); R2 lifts that for
+-- `imm` only: each observation hands its step a fresh view beside the state's, and two `mut`
+-- views of one place would be live at once (OQ-3). The same loop using `*m` directly is
+-- accepted today (`LoopLend`). Surface provisional.
+
+main -> i32 =
+  let c = alloc(0);
+  let r = borrow mut c { m ->
+    let bump = || { *m = *m + 1 };
+    let mut k = 0;
+    while k < 3 { bump(); k = k + 1 };
+    *m
+  };
+  free(c);
+  r
+-- now (bcc check, provisional surface): 11:16: expected a value, found `||`

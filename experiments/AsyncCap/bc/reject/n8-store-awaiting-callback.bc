@@ -1,0 +1,18 @@
+-- expect (designed): reject at `keep`: the block `{ x -> await(); *b + x }` captures `b`, a
+-- borrow local to the task, and is stored (moved into `saved`, which outlives the block). A
+-- stored callback is boxed at a lifetime its captures outlive (`[]I`), and `b`'s lend is inside
+-- the task: the box rule fails. The same block passed to `map` and only called is accepted
+-- (a4-map-await.bc). Surface provisional.
+
+include async
+
+fn keep(f: box top U (i32 -o F[Async] i32)) -> box top U (i32 -o F[Async] i32) = f
+
+fn task() -> i32 with Async =
+  let c = alloc(5);
+  let saved = borrow imm c { b -> keep(box { x -> await(); *b + x }) };
+  free(c);
+  0
+
+main -> list i32 = async::run { s -> s.spawn { task() } }
+-- now (bcc check, provisional surface): 9:32: expected an operation `n.i` of a row, found name `Async`

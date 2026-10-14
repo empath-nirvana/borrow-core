@@ -1,0 +1,33 @@
+-- pending: async-capabilities (docs/async-capabilities.md §1 A1; units U1, U2). Surface provisional.
+-- A run-until-empty scheduler over tasks that are plain direct-style functions performing
+-- `await`. Each task owns its data; nothing is borrowed across a suspension. Tier 1: no relaxed
+-- rule, so `fundamentalC`/`adequacyD` cover it with no hypothesis once BOXED-κ is a Core rule.
+--
+-- `Async` is a declared effect with one control operation, `await : 1 ↠^aff 1`. `run` is the
+-- library scheduler (`lib/async.bc`, designed): a handler of `Async` per task whose clause stores
+-- the task's continuation as the task's rest (BOXED-κ at `⊤`: a task holding no borrow), and a
+-- loop that observes the front task until the queue is empty. `s.spawn { … }` runs the block
+-- under that handler to its first `await` and queues the rest. `run` answers the tasks' results
+-- in spawn order.
+--
+-- Once it lands: `[1111, 22]` — task 1 counts three awaits, task 2 two, interleaved
+-- 1 2 1 2 1; `live 0`.
+
+include async
+
+fn ticker(tag: i32, n: i32) -> i32 with Async =
+  let mut acc = 0;
+  let mut i = 0;
+  for _ in 0..n {
+    acc = acc * 10 + tag;
+    await();
+    i = i + 1
+  };
+  acc * 10 + tag
+
+main -> list i32 =
+  async::run { s ->
+    s.spawn { ticker(1, 3) };
+    s.spawn { ticker(2, 1) }
+  }
+-- now (bcc check, provisional surface): 28:9: expected a type, found name `list`

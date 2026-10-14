@@ -1,0 +1,20 @@
+-- expect (designed): reject at the inner `s.spawn`: inside a relaxed lend of `c`, a task is
+-- spawned that captures `m`. `spawn`'s argument would carry the view out of the lend (not
+-- closed data, `Row.ResumeO`), and the spawned task would outlive the lend (BOXED-κ). Spawning
+-- inside a task with no lend open is accepted (OQ-61 of the draft spec: spawn as an operation).
+-- Surface provisional.
+
+include async
+
+fn parent(s: spawner) -> i32 with Async =
+  let c = alloc(1);
+  let v = borrow mut c { m ->
+    s.spawn { *m = 2; 0 };
+    await();
+    *m
+  };
+  free(c);
+  v
+
+main -> list i32 = async::run { s -> s.spawn { parent(s) } }
+-- now (bcc check, provisional surface): 9:14: expected a type, found name `spawner`

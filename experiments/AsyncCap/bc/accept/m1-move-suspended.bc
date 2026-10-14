@@ -1,0 +1,31 @@
+-- expect (designed): accepted, runs to `[13, 7]`, `live 0`. Surface provisional.
+-- Rust's `Pin` exists so that a suspended future holding a borrow of its own field is not moved.
+-- Here the scheduler moves suspended tasks between its two queues (front and back) and swaps
+-- them, while task 1 holds a relaxed lend of its local `c` with a closure over the view live.
+-- The view is the location of `c`'s cell, and the cell is not part of the task's state: the
+-- state holds the owner (a pointer). Moving the state moves the pointer. The lowering keeps a
+-- cell lent across a suspension out of line (docs/async-capabilities.md §3.5).
+
+include async
+
+fn holder() -> i32 with Async =
+  let c = alloc(10);
+  let v = borrow mut c { m ->
+    let add = |k| { *m = *m + k };
+    await();
+    add(1);
+    await();
+    add(2);
+    *m
+  };
+  free(c);
+  v
+
+fn other() -> i32 with Async = await(); await(); 7
+
+main -> list i32 =
+  async::run_shuffled { s ->
+    s.spawn { holder() };
+    s.spawn { other() }
+  }
+-- now (bcc check, provisional surface): 14:15: expected a value, found `|`

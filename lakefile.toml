@@ -174,3 +174,8 @@ roots = ["Restrat"]
 name = "GhostEnd"
 srcDir = "experiments/GhostEnd"
 roots = ["GhostEnd"]
+
+[[lean_lib]]
+name = "AsyncCap"
+srcDir = "experiments/AsyncCap"
+roots = ["AsyncCap"]

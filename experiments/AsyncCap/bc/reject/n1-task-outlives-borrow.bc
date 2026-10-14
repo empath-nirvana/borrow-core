@@ -1,0 +1,17 @@
+-- expect (designed): reject at `s.spawn`: the task captures `b`, `imm 'x i32`, and the queue of
+-- `run` is bounded at `⊤` (it was created outside the block), so the task's context does not
+-- outlive the queue's bound: BOXED-κ's premise `Δ ⊢ Γ_task ⊐ @d` fails (`sched-c-outside.bc`'s
+-- shape on `nominal-lifetimes`). Use-after-scope through a stored task, and a task resumed after
+-- its captured borrow's scope ended, are this program. Surface provisional.
+
+include async
+
+main -> list i32 =
+  async::run { s ->
+    let c = alloc(1);
+    borrow imm c { b ->
+      s.spawn { await(); *b }
+    };
+    free(c)
+  }
+-- now (bcc check, provisional surface): 9:9: expected a type, found name `list`

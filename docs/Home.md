@@ -37,6 +37,10 @@ below are design and research notes.
 - [Effect polymorphism](effect-polymorphism.md) — functions over effectful computations (#161):
   copies over static names, provided and tunneled rows, site freshness, stored callbacks. A design;
   nothing is built.
+- [Async with capabilities](async-capabilities.md) — a spec entry draft (#52): tasks that borrow
+  across `await` with no `Pin`, by ghost end; two relaxed rules and one named hypothesis,
+  `PinLaw`, over typed programs; `experiments/AsyncCap` proves the Fundamental Property and
+  adequacy from it. Not built.
 - [The affine closure, `FnMut`](fnmut.md) — Rust's `FnMut` as codata, `νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`
   (#236): an experiment over a fork of `Core` with `ν`'s positivity relaxed; the kernel change is
   described, not made.

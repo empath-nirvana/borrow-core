@@ -1,0 +1,17 @@
+-- expect (designed): accepted, runs to `[1, 6]`, `live 0`. Surface provisional.
+-- A recursive task that awaits at each level (recursion is `bounded_fix` over a generator, SPEC
+-- §20/§21; each level's state is one heap object, as Rust's `Box::pin` for a recursive `async
+-- fn`), and a task that spawns another from outside any lend.
+
+include async
+include rec
+
+fn sum_down(n: i32) -> i32 with Async =
+  if n == 0 { 0 } else { await(); n + sum_down(n - 1) }
+
+fn spawner(s: spawner) -> i32 with Async =
+  s.spawn { sum_down(3) };
+  1
+
+main -> list i32 = async::run { s -> s.spawn { spawner(s) } }
+-- now (bcc check, provisional surface): 12:15: expected a type, found name `spawner`

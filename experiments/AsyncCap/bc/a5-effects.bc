@@ -1,0 +1,38 @@
+-- pending: async-capabilities (docs/async-capabilities.md §1 A5; units U2, U5). Surface provisional.
+-- Tasks performing other effects while awaiting: a log, and an error raised and handled per task.
+--
+-- * The log is an operation of the scheduler's handler, `log : i32 ↠^lin 1`, answered by
+--   appending to a buffer the scheduler owns (state behind control, SecondClass P5). Two tasks
+--   log into one buffer with no aliased capability. Inside a relaxed lend `log` is admitted:
+--   it resumes, answers `1`, and its argument is closed data (`Row.ResumeO`).
+-- * `Bad` is abortive and handled inside each task, inside the borrow block, so no abortive
+--   operation crosses a relaxed lend (R1 admits resuming operations only; OQ-1).
+--
+-- Once it lands: results `[30, -2]`, log `[3, 2, 3, 2]`; `live 0`; trusted: PinLaw at 2 blocks.
+
+include async
+
+effect Bad { raise bad(i32) }
+
+fn careful(n: i32) -> i32 with Async =
+  let c = alloc(n);
+  let v = borrow mut c { m ->
+    let bump = || { *m = *m * 10 };
+    log(*m);
+    await();
+    log(*m);
+    try {
+      if *m == 2 { bad(*m) };
+      bump();
+      *m
+    } with { bad(e) -> 0 - e }
+  };
+  free(c);
+  v
+
+main -> list i32 * list i32 =
+  async::run_logged { s ->
+    s.spawn { careful(3) };
+    s.spawn { careful(2) }
+  }
+-- now (bcc check, provisional surface): 15:14: expected `fn` or `ctl` (an operation), found name `raise`
