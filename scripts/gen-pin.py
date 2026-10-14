@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
-"""Generate AsyncCap's copy of Core's typing judgment and of its Fundamental Property.
+"""Generate `CDerivesP` and its Fundamental Property from Core's (SPEC §28).
 
-`PDerives` is `Core.CDerives` with every premise read in `PDerives`, plus the relaxed rules
-written by hand in `Derives.tmpl.lean`.  `fundamentalC_pin` is `Core.fundamentalC`'s induction,
-case for case, plus the relaxed rules' cases written by hand in `Fundamental.tmpl.lean`.
-`PDerives.ofC` (every `CDerives` derivation is a `PDerives` one) is generated from the
-constructors' explicit binders.
+`CDerivesP` (`Core/PinDerives.lean`) is `CDerives` with every premise read in `CDerivesP`, plus
+the rules written by hand in `scripts/pin/CDerivesP.tmpl.lean`.  `fundamentalC_pin`
+(`Core/PinFundamental.lean`) is `fundamentalC`'s induction, case for case, plus those rules' cases
+written by hand in `scripts/pin/PinFundamental.tmpl.lean`.  `CDerivesP.ofC` (every `CDerives`
+derivation is a `CDerivesP` one) is generated from the constructors' explicit binders.  A rule
+added to `CDerives` is picked up by rerunning this script.
 
-Run from the repository root:  python3 experiments/AsyncCap/scripts/gen.py
+    python3 scripts/gen-pin.py           write the two files
+    python3 scripts/gen-pin.py --check   fail if either differs from what would be written
 """
 import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "Core" / "Fundamental.lean"
-OUT = ROOT / "experiments" / "AsyncCap" / "AsyncCap"
-TMPL = ROOT / "experiments" / "AsyncCap" / "scripts"
+OUT = ROOT / "Core"
+TMPL = ROOT / "scripts" / "pin"
+CHECK = "--check" in sys.argv[1:]
 
 text = SRC.read_text().splitlines()
 
@@ -36,7 +39,7 @@ while fund and fund[-1].strip() == "":
 
 
 def rename(lines):
-    return [l.replace("CDerives", "PDerives") for l in lines]
+    return [re.sub(r"\bCDerives\b", "CDerivesP", l) for l in lines]
 
 
 # --- constructors and their explicit binders, for `PDerives.ofC` ---------------------------------
@@ -92,19 +95,32 @@ for name, explicit in ctors:
         else:
             args.append(f"a{i}")
     lhs = " ".join([name] + pat + ihs)
-    rhs = " ".join([f"PDerives.{name}"] + args)
+    rhs = " ".join([f"CDerivesP.{name}"] + args)
     ofc.append(f"  | {lhs} => exact {rhs}")
 
 # --- assemble ---------------------------------------------------------------------------------
-der = (TMPL / "Derives.tmpl.lean").read_text()
+der = (TMPL / "CDerivesP.tmpl.lean").read_text()
 der = der.replace("--@CORE_RULES@", "\n".join(rename(ind[1:])))
-(OUT / "Derives.lean").write_text(der)
 
-fun = (TMPL / "Fundamental.tmpl.lean").read_text()
+fun = (TMPL / "PinFundamental.tmpl.lean").read_text()
 fcases = rename(fund)
 # drop the signature and `induction` line: the template supplies them
 start = next(k for k, l in enumerate(fcases) if l.strip() == "induction h with") + 1
 fun = fun.replace("--@CORE_CASES@", "\n".join(fcases[start:]))
 fun = fun.replace("--@OFC_CASES@", "\n".join(ofc))
-(OUT / "Fundamental.lean").write_text(fun)
-print(f"{len(ctors)} constructors copied")
+
+stale = []
+for name, txt in (("PinDerives.lean", der), ("PinFundamental.lean", fun)):
+    path = OUT / name
+    if CHECK:
+        if not path.exists() or path.read_text() != txt:
+            stale.append(name)
+    else:
+        path.write_text(txt)
+if CHECK:
+    if stale:
+        print("stale: " + ", ".join(f"Core/{n}" for n in stale) + " (run python3 scripts/gen-pin.py)")
+        sys.exit(1)
+    print(f"Core/PinDerives.lean, Core/PinFundamental.lean up to date ({len(ctors)} constructors)")
+else:
+    print(f"{len(ctors)} constructors copied")

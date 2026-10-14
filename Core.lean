@@ -74,6 +74,9 @@ import Core.Totality
 import Core.EffSafety
 import Core.Tied
 import Core.InsertDead
+import Core.PinDerives
+import Core.PinLaw
+import Core.PinFundamental
 import Core.LetCopy
 import Core.RaiseNames
 import Core.EffCancelRuns
