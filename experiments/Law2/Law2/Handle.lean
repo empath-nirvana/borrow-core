@@ -4,9 +4,9 @@ import Law2.Piece
 # Law2 — a handler installed inside the borrower
 
 `handle_n e with (h_ret, hs)` inside the region a stack of lends spans. The handled computation's
-row is the handler's operations ahead of the row outside (`Row.ofEff n E 0 ++ S`), and `n` is not
-a name of the lenders' row (`outN S₀ n = false`), so a stop of `e` at an operation of `n` crosses
-no lend: it is a stop inside (`InStop`), and the handler catches it.
+row is the handler's operations ahead of the row outside (`Row.ofEff n E 0 fs ++ S`), and `n` is
+not a name of the lenders' row (`outN S₀ n = false`), so a stop of `e` at an operation of `n`
+crosses no lend: it is a stop inside (`InStop`), and the handler catches it.
 
 * `bodyH_handle`: one run of `hnd H e`. An answer of `e` runs `h_ret`; a stop of the lenders' row
   and a stop caught further out pass the handler outward, reinstalled in their continuations
@@ -20,7 +20,8 @@ no lend: it is a stop inside (`InStop`), and the handler catches it.
 * `pj_handle`: the piece judgment for `handle_n e with H`, `H` a value form over a context whose
   live slots are persistent, from the piece judgment for `e` and `H` re-lendable.
 
-The handler's operations are linear: `κ` is resumed once, and has no cancel branch.
+The handler's operations are linear: `κ` is resumed once, and has no cancel branch, so the cancel
+rows `fs` are not read.
 -/
 
 noncomputable section
@@ -33,16 +34,6 @@ open BoCa.BoLo (Heap Kont Head Step1N performE opPayload hndE hndVal kappa kappa
   kappaCBody kappaCell freeE clauseAt capTag)
 open BoCa.Lifetime (LifeVar LifeCtx LSub)
 open GhostEnd
-
-/-- One run of the piece at the computation type `C`. -/
-abbrev BH (δ : LSub) (σ : LStack) (S₀ : Row) (C : CTy) (αs : List Life) :
-    List SRec → Expr → WProp :=
-  bodyH δ σ (Row.tab S₀ δ) (RIn (ℍ := ℍ) δ σ S₀ C) (QA (ℍ := ℍ) δ σ S₀ C)
-    (OpenH δ σ (Row.tab S₀ δ) (RIn (ℍ := ℍ) δ σ S₀ C) (QA (ℍ := ℍ) δ σ S₀ C)) αs
-
-/-- The piece at the computation type `C`. -/
-abbrev OH (δ : LSub) (σ : LStack) (S₀ : Row) (C : CTy) : XT :=
-  OpenH δ σ (Row.tab S₀ δ) (RIn (ℍ := ℍ) δ σ S₀ C) (QA (ℍ := ℍ) δ σ S₀ C)
 
 /-! ### The capture cell and the resume, at `wpG` -/
 
@@ -128,24 +119,30 @@ variable {δ : LSub} {σ : LStack} {S₀ : Row}
 /-- **The continuation a clause is handed is re-lendable**: its share is the continuation's,
 re-lendable, beside its cell, owned and in every stratum. Resumed at a re-lend on a re-lendable
 answer it frees the cell and runs `hnd H K[w]`, the piece there. -/
-theorem rslot_kappaC {S : Row} (hS : S ≠ []) {R B : VTy} {H : Val} {K : Kont} {ℓ : Loc}
+theorem rslot_kappaC {S : Row} {R B : VTy} {H : Val} {K : Kont} {ℓ : Loc}
     {αs : List Life} {ls : List SRec} {ρk ρ : WRes} (hlen : αs.length = σ.length)
     (hk : RelendableS δ [] σ (fun αs' ls' ρ => ∀ w, (RSlot (ℍ := ℍ) δ σ S₀ B αs' ls' w ─⋆
-      BH (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs' ls' (hndE H (K.plug (.val w)))) ρ) αs ls ρk)
+      BHC (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs' ls' (hndE H (K.plug (.val w)))) ρ) αs ls ρk)
     (hc : ResU.CompS ρk (ResU.single ℓ (CellU.ownOf Val.unit)) ρ) :
     RSlot (ℍ := ℍ) δ σ S₀ (kTy S R .lin B) αs ls ⟨kappaC false ℓ H K, isVal_kappaC false ℓ H K⟩
       ρ := by
-  obtain ⟨o, S', rfl⟩ := List.exists_cons_of_ne_nil hS
   have hcell : RelendableS δ [] σ (fun _ _ => ptoOwn ℓ Val.unit) αs ls
       (ResU.single ℓ (CellU.ownOf Val.unit)) :=
     relendableS_frozen hlen (fun a _ => ResU.inStratum_single_own a ℓ Val.unit)
       fun _ _ _ _ => rfl
   have hsep := relendableS_sep ρ ⟨ρk, _, hc, hk, hcell⟩
-  change RelendableS δ [] σ _ αs ls ρ
+  simp only [kTy]
+  rw [RSlot]
   refine relendableS_mono_rel ?_ ρ hsep
-  intro αs' ls' _ τ hτ w τw τ' hw hcw
+  intro αs' ls' _ τ hτ
+  simp only [forceE]
+  rw [RC]
+  refine ⟨?_, by rw [RC]; trivial⟩
+  rw [RC]
+  intro w τw τ' hw hcw
   obtain ⟨τ₁, τ₂, hcτ, h₁, h₂⟩ := hτ
   obtain ⟨x, hx, hxτ⟩ := compS_exch hcτ hcw
+  rw [rc_effOf]
   exact wpG_kappaC_resume false ℓ H K w ⟨τ₂, x, ResU.CompS.comm hxτ, h₂, h₁ w τw x hw hx⟩
 
 /-- The clauses of a re-lendable clause tuple, each re-lendable at `∅`. -/
@@ -187,6 +184,20 @@ theorem forall₂_le_append : ∀ {a b : List Life}, List.Forall₂ (· ≤ ·) 
   | [], [], .nil, _ => List.forall₂_same.mpr fun _ _ => le_rfl
   | _ :: _, _ :: _, .cons h t, c => .cons h (forall₂_le_append t c)
 
+/-- **The handler's row reads the lenders' operations of the row outside**: its own operations
+are of a name outside the lenders'. -/
+theorem rTab_ofEff_append {n : UInt32} (hn : outN S₀ n = false) (E : List (Qual × VTy × VTy))
+    (fs : Nat → CTy) (S : Row) (A R : VTy) :
+    RTab (ℍ := ℍ) δ S₀ (CTy.effOf (Row.ofEff n E 0 fs ++ S) A) =
+      RTab (ℍ := ℍ) δ S₀ (CTy.effOf S R) := by
+  rw [rTab_effOf, rTab_effOf]
+  funext m j
+  by_cases ho : outN S₀ m = true
+  · have hm : m ≠ n := fun e => by rw [e, hn] at ho; cases ho
+    simp only [ho, if_true, Row.tab, Row.find_append, Row.find_ofEff_ne n E 0 fs m j hm]
+    rfl
+  · simp [ho]
+
 end vals
 
 /-! ### The handler at the piece -/
@@ -198,27 +209,29 @@ variable {δ : LSub} {σ : LStack} {S₀ : Row}
 runs `h_ret` (`hret`); a stop of the lenders' row and a stop caught further out pass the handler
 outward, its continuations the piece of `hnd H` around `e`'s (`hX`, `hX₀`); a stop at the
 handler's name runs its clause on the argument and `κ`, re-lendable (`hcl`, `rslot_kappaC`). -/
-theorem bodyH_handle {n : UInt32} {E : List (Qual × VTy × VTy)} {S : Row} {A R : VTy}
-    {hr hs : Val} (hS : S ≠ []) (hn : outN S₀ n = false) (hnS : ∀ o ∈ S, o.n ≠ n)
+theorem bodyH_handle {n : UInt32} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {S : Row}
+    {A R : VTy} {hr hs : Val} (hn : outN S₀ n = false) (hnS : ∀ o ∈ S, o.n ≠ n)
     (hlenE : E.length ≤ 2 ^ 32) (hE : ∀ q ∈ E, q.1 = .lin) {B αs : List Life}
     (hrB : ReLend αs B) (hlen : αs.length = σ.length)
     (hret : ∀ αs', ReLend αs' B → ∀ ls v, Entails (RSlot (ℍ := ℍ) δ σ S₀ A αs' ls v)
-      (BH (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs' ls (.app (.val hr) (.val v))))
+      (BHC (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs' ls (.app (.val hr) (.val v))))
     (hcl : ∀ j (hj : j < E.length), ∃ c, clauseAt hs.1 j = some c ∧ ∀ αs', ReLend αs' B →
       ∀ ls x, Entails (RSlot (ℍ := ℍ) δ σ S₀ (.tensor E[j].2.1 (kTy S R .lin E[j].2.2)) αs' ls x)
-        (BH (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs' ls (.app (.val c) (.val x))))
+        (BHC (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs' ls (.app (.val c) (.val x))))
     {X₁ : XT}
     (hX : ∀ ds ls e ρ, X₁ σ.length ds αs [] ls e ρ →
-      OH (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) σ.length ds αs [] ls
+      OHC (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) σ.length ds αs [] ls
         (hndE (hndVal n (qualsVal (E.map Prod.fst)) hr hs) e) ρ)
     (hX₀ : ∀ αs' ls e ρ, ReLend αs' αs → X₁ 0 [] [] αs' ls e ρ →
-      OH (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) 0 [] [] αs' ls
+      OHC (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) 0 [] [] αs' ls
         (hndE (hndVal n (qualsVal (E.map Prod.fst)) hr hs) e) ρ)
     {ls : List SRec} {e : Expr} {ρ : WRes}
-    (h : bodyH δ σ (Row.tab S₀ δ) (RIn (ℍ := ℍ) δ σ S₀ (CTy.effOf (Row.ofEff n E 0 ++ S) A))
-      (QA (ℍ := ℍ) δ σ S₀ (CTy.effOf (Row.ofEff n E 0 ++ S) A)) X₁ αs ls e ρ) :
-    BH (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs ls
+    (h : bodyH δ σ (RTab (ℍ := ℍ) δ S₀ (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))
+      (RIn (ℍ := ℍ) δ σ S₀ (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))
+      (QA (ℍ := ℍ) δ σ S₀ (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) X₁ αs ls e ρ) :
+    BHC (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs ls
       (hndE (hndVal n (qualsVal (E.map Prod.fst)) hr hs) e) ρ := by
+  rw [rTab_ofEff_append hn E fs S A R] at h
   refine wpG_bind (hndK (hndVal n (qualsVal (E.map Prod.fst)) hr hs)) e ls _ ρ
     (wpG_mono (fun ls' t τ ht => ?_) h)
   rcases ht with ⟨v, rfl, hv⟩ | hst | hin
@@ -229,22 +242,22 @@ theorem bodyH_handle {n : UInt32} {E : List (Qual × VTy × VTy)} {S : Row} {A R
     refine wpG_here _ _ _ τ (Or.inr (Or.inl ?_))
     obtain ⟨ds, ρ₁, ρ₂, hc, hd, hb, hstr⟩ := hst
     exact ⟨ds, ρ₁, ρ₂, hc, hd,
-      opTable_handle (tab_none_of_outN hn) (fun _ _ _ h => hX _ _ _ _ h) hb, hstr⟩
+      opTable_handle (rTab_none_of_outN hn _) (fun _ _ _ h => hX _ _ _ _ h) hb, hstr⟩
   · obtain ⟨K₁, m, i, y, P, hp⟩ := hin
     obtain ⟨⟨rfl, hK₁, hP⟩, ρa, ρk, hcak, hA, hk⟩ := pure_sep_iff.mp hp
     by_cases hm : m = n
     · -- `[op]` at the handler's name: its clause, on the argument and `κ` at a fresh cell
       subst hm
       obtain ⟨o, hf, -, rfl⟩ := rIn_effOf_some _ hP
-      have hfo : Row.find (Row.ofEff m E 0) m i = some o := by
+      have hfo : Row.find (Row.ofEff m E 0 fs) m i = some o := by
         rw [Row.find_append] at hf
-        cases h₁ : Row.find (Row.ofEff m E 0) m i with
+        cases h₁ : Row.find (Row.ofEff m E 0 fs) m i with
         | some o' => rw [h₁] at hf; exact hf
         | none =>
             rw [h₁] at hf
             obtain ⟨hm', hn', -⟩ := Row.find_mem hf
             exact absurd hn' (hnS o hm')
-      obtain ⟨-, j, hj, rfl, rfl⟩ := Row.find_ofEff m E 0 finsNil m i o hfo
+      obtain ⟨-, j, hj, rfl, rfl⟩ := Row.find_ofEff m E 0 fs m i o hfo
       have hjn : (UInt32.ofNat (0 + j)).toNat = j := by
         rw [Nat.zero_add]; exact UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)
       obtain ⟨c, hc, hcok⟩ := hcl j hj
@@ -261,13 +274,13 @@ theorem bodyH_handle {n : UInt32} {E : List (Qual × VTy × VTy)} {S : Row} {A R
       obtain ⟨z, hz, hz₂⟩ := compS_reassoc hcak hc₂
       have hk' : RelendableS δ [] σ (fun αs' ls'' ρ => ∀ w,
           (RSlot (ℍ := ℍ) δ σ S₀ E[j].2.2 αs' ls'' w ─⋆
-            BH (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs' ls''
+            BHC (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs' ls''
               (hndE (hndVal m (qualsVal (E.map Prod.fst)) hr hs) (K₁.plug (.val w)))) ρ)
           αs ls' ρk := by
         refine relendableS_mono_rel ?_ ρk hk
         intro αs' ls'' hr' τ' hτ w τw τ'' hw hcw
         exact openH_zero_unfold (hX₀ αs' ls'' _ τ'' hr' (hτ w τw τ'' hw hcw)) hr'.2
-      have hκ := rslot_kappaC (ℍ := ℍ) hS hlen hk' hz
+      have hκ := rslot_kappaC (ℍ := ℍ) (S₀ := S₀) hlen hk' hz
       exact hcok αs hrB ls' (Val.pair y ⟨_, isVal_kappaC false ℓ _ K₁⟩) σ₂
         ⟨y, _, pure_sep_mk rfl ⟨ρa, z, hz₂, hA, hκ⟩⟩
     · -- an operation caught further out passes the handler outward
@@ -275,11 +288,11 @@ theorem bodyH_handle {n : UInt32} {E : List (Qual × VTy × VTy)} {S : Row} {A R
         hs)).comp K₁, m, i, y, P, pure_sep_mk ⟨(Kont.plug_comp _ _ _).symm, ?_, ?_⟩
           ⟨ρa, ρk, hcak, hA, ?_⟩⟩))
       · rw [hasHnd_comp, hndK_hasHnd, hK₁]; simpa using Ne.symm hm
-      · rw [← rIn_effOf_ans S A R, ← rIn_effOf_append (Row.ofEff n E 0)
+      · rw [← rIn_effOf_ans S A R, ← rIn_effOf_append (Row.ofEff n E 0 fs)
           (fun o ho => by rw [mem_ofEff_n E 0 _ o ho]; exact Ne.symm hm) i]
         exact hP
       · refine relendableS_mono_rel (P' := fun αs' ls'' ρ => ∀ w,
-            (P.2 αs' ls'' w ─⋆ OH (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) 0 [] [] αs' ls''
+            (P.2 αs' ls'' w ─⋆ OHC (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) 0 [] [] αs' ls''
               (((hndK (hndVal n (qualsVal (E.map Prod.fst)) hr hs)).comp K₁).plug (.val w))) ρ)
           (fun αs' ls'' hr' τ' hτ w τw τ'' hw hcw => ?_) ρk hk
         rw [Kont.plug_comp]
@@ -287,23 +300,23 @@ theorem bodyH_handle {n : UInt32} {E : List (Qual × VTy × VTy)} {S : Row} {A R
 
 /-- **The handler at every continuation**: by induction on `e`'s piece, `hnd H` around it is the
 piece outside, at every vector below the one it was installed at (`B`). -/
-theorem openH_handle {n : UInt32} {E : List (Qual × VTy × VTy)} {S : Row} {A R : VTy}
-    {hr hs : Val} (hS : S ≠ []) (hn : outN S₀ n = false) (hnS : ∀ o ∈ S, o.n ≠ n)
+theorem openH_handle {n : UInt32} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {S : Row}
+    {A R : VTy} {hr hs : Val} (hn : outN S₀ n = false) (hnS : ∀ o ∈ S, o.n ≠ n)
     (hlenE : E.length ≤ 2 ^ 32) (hE : ∀ q ∈ E, q.1 = .lin) {B : List Life}
     (hBlen : B.length = σ.length)
     (hret : ∀ αs', ReLend αs' B → ∀ ls v, Entails (RSlot (ℍ := ℍ) δ σ S₀ A αs' ls v)
-      (BH (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs' ls (.app (.val hr) (.val v))))
+      (BHC (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs' ls (.app (.val hr) (.val v))))
     (hcl : ∀ j (hj : j < E.length), ∃ c, clauseAt hs.1 j = some c ∧ ∀ αs', ReLend αs' B →
       ∀ ls x, Entails (RSlot (ℍ := ℍ) δ σ S₀ (.tensor E[j].2.1 (kTy S R .lin E[j].2.2)) αs' ls x)
-        (BH (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs' ls (.app (.val c) (.val x)))) :
+        (BHC (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs' ls (.app (.val c) (.val x)))) :
     ∀ {k : Nat} {ds : List Bool} {αi αo : List Life} {ls : List SRec} {e : Expr} {ρ : WRes},
       List.Forall₂ (· ≤ ·) (αi ++ αo) B →
-      OH (ℍ := ℍ) δ σ S₀ (CTy.effOf (Row.ofEff n E 0 ++ S) A) k ds αi αo ls e ρ →
-      OH (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) k ds αi αo ls
+      OHC (ℍ := ℍ) δ σ S₀ (CTy.effOf (Row.ofEff n E 0 fs ++ S) A) k ds αi αo ls e ρ →
+      OHC (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) k ds αi αo ls
         (hndE (hndVal n (qualsVal (E.map Prod.fst)) hr hs) e) ρ := by
   intro k ds αi αo ls e ρ hB h
   let Mot : XT := fun k ds αi αo ls e ρ => List.Forall₂ (· ≤ ·) (αi ++ αo) B →
-    OH (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) k ds αi αo ls
+    OHC (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) k ds αi αo ls
       (hndE (hndVal n (qualsVal (E.map Prod.fst)) hr hs) e) ρ
   refine h Mot ?_ hB
   intro k ds αi αo ls e ρ hF hB
@@ -311,7 +324,7 @@ theorem openH_handle {n : UInt32} {E : List (Qual × VTy × VTy)} {S : Row} {A R
   have hB' : List.Forall₂ (· ≤ ·) (αi' ++ αo) B :=
     forall₂_le_trans (forall₂_le_append (hlt.imp fun _ _ => le_of_lt) αo) hB
   have hlen : (αi' ++ αo).length = σ.length := hB'.length_eq.trans hBlen
-  exact boxTop_mono (wand_mono_right (fun _ hb => bodyH_handle hS hn hnS hlenE hE ⟨hB', hch⟩ hlen
+  exact boxTop_mono (wand_mono_right (fun _ hb => bodyH_handle hn hnS hlenE hE ⟨hB', hch⟩ hlen
     hret hcl (fun _ _ _ _ hM => hM (by simpa using hB'))
     (fun _ _ _ _ hr' hM => hM (by simpa using forall₂_le_trans hr'.1 hB')) hb)) ρ
     (hF αi' hlt hch)
@@ -323,21 +336,21 @@ the piece at the handler's row ahead of `S`. The handler's clauses, holding noth
 re-lendable at every re-lend (`relendableS_empty`); the run is `bodyH_handle`, every continuation
 `openH_handle`. -/
 theorem pj_handle {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {H e : Expr} {S : Row}
-    {E : List (Qual × VTy × VTy)} {n : UInt32} {A R : VTy} (hS : S ≠ [])
+    {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
-    (hHv : PV (ℍ := ℍ) δ σ S₀ Δ Γ₁ H (.tensor (retTy S A R) (clausesTy S R E)))
+    (hHv : PV (ℍ := ℍ) δ σ S₀ Δ Γ₁ H (.tensor (retTy S A R) (clausesTy S R E fs)))
     (hn : outN S₀ n = false) (hnS : ∀ o ∈ S, o.n ≠ n) (hlenE : E.length ≤ 2 ^ 32)
     (hE : ∀ q ∈ E, q.1 = .lin)
-    (he : PJ (ℍ := ℍ) δ σ S₀ Δ Γ₂ e (CTy.effOf (Row.ofEff n E 0 ++ S) A)) :
+    (he : PJ (ℍ := ℍ) δ σ S₀ Δ Γ₂ e (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) :
     PJ (ℍ := ℍ) δ σ S₀ Δ Γ (hndExpr n (E.map Prod.fst) H e) (CTy.effOf S R) := by
-  intro αs ls γ ρ hlen hch hΔ hg
+  refine pj_effOf_iff.mpr fun αs ls γ ρ hlen hch hΔ hg => ?_
   obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := rctx_split hch hsp hg
   obtain ⟨hl₁, hs₁⟩ := pure_sep_iff.mp hg₁
   obtain rfl : ρ₁ = PMap.empty := rSep_deadP hch hd hs₁
   rw [eq_of_compS_empty_left hc]
   have hval : IsVal (substAll γ H) := isVal_psub_valFormIn hl₁ hH
   have hwp := hHv αs ls γ PMap.empty hlen hch hΔ hg₁
-  have hb := he αs ls γ ρ₂ hlen hch hΔ hg₂
+  have hb := pj_effOf_iff.mp he αs ls γ ρ₂ hlen hch hΔ hg₂
   show wpG ls (Expr.psub 0 γ (hndExpr n (E.map Prod.fst) H e)) _ ρ₂
   rw [psub_hndExpr]
   intro ρf fρ ps hf hcf hT htg Al k
@@ -346,34 +359,43 @@ theorem pj_handle {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {H e : Expr} {S : Ro
   obtain ⟨vr, vc, hq⟩ := hv
   obtain ⟨hpair, σr, σc, -, hVr, hVc⟩ := pure_sep_iff.mp hq
   have hHe : Expr.psub 0 γ H = (Val.pair vr vc).1 := congrArg Subtype.val hpair
-  obtain ⟨o, S', rfl⟩ := List.exists_cons_of_ne_nil hS
   obtain ⟨rfl, hVr⟩ := hVr
   have hret : ∀ αs', ReLend αs' αs → ∀ ls v, Entails (RSlot (ℍ := ℍ) δ σ S₀ A αs' ls v)
-      (BH (ℍ := ℍ) δ σ S₀ (CTy.effOf (o :: S') R) αs' ls (.app (.val vr) (.val v))) :=
-    fun αs' hr ls'' v τ hτ => relendableS_empty hVr ls'' (ext_empty' _ _) αs' hr v τ τ hτ
-      (compS_empty_left τ)
+      (BHC (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs' ls (.app (.val vr) (.val v))) := by
+    intro αs' hr ls'' v τ hτ
+    rw [RSlot] at hVr
+    have h₁ := relendableS_empty hVr ls'' (ext_empty' _ _) αs' hr
+    simp only [forceE] at h₁
+    rw [RC] at h₁
+    have h₂ := h₁ v τ τ hτ (compS_empty_left τ)
+    rwa [rc_effOf] at h₂
   have hcl : ∀ j (hj : j < E.length), ∃ c, clauseAt vc.1 j = some c ∧ ∀ αs', ReLend αs' αs →
-      ∀ ls x, Entails (RSlot (ℍ := ℍ) δ σ S₀ (.tensor E[j].2.1 (kTy (o :: S') R .lin E[j].2.2))
-        αs' ls x) (BH (ℍ := ℍ) δ σ S₀ (CTy.effOf (o :: S') R) αs' ls (.app (.val c) (.val x))) := by
+      ∀ ls x, Entails (RSlot (ℍ := ℍ) δ σ S₀ (.tensor E[j].2.1 (kTy S R .lin E[j].2.2))
+        αs' ls x) (BHC (ℍ := ℍ) δ σ S₀ (CTy.effOf S R) αs' ls (.app (.val c) (.val x))) := by
     intro j hj
-    obtain ⟨c, hcj, hVcj⟩ := rslot_clausesTy_at hch E finsNil hVc j hj
+    obtain ⟨c, hcj, hVcj⟩ := rslot_clausesTy_at hch E fs hVc j hj
     refine ⟨c, hcj, fun αs' hr ls'' x τ hτ => ?_⟩
     have hq : E[j].1 = .lin := hE _ (List.getElem_mem hj)
     generalize hEj : E[j] = t at hVcj hq hτ ⊢
     obtain ⟨q, Aj, Bj⟩ := t
     simp only at hq
     subst hq
-    have hct : clauseTy (o :: S') R (Qual.lin, Aj, Bj) (finsNil j) =
-        .bang (.thunk (.arr (.tensor Aj (kTy (o :: S') R .lin Bj)) (CTy.effOf (o :: S') R))) := by
-      simp [clauseTy]
+    have hct : clauseTy S R (Qual.lin, Aj, Bj) (fs j) =
+        .bang (.thunk (.arr (.tensor Aj (kTy S R .lin Bj)) (CTy.effOf S R))) := by
+      simp [clauseTy, kTy]
     rw [hct] at hVcj
     obtain ⟨-, hVcj⟩ := hVcj
-    exact relendableS_empty hVcj ls'' (ext_empty' _ _) αs' hr x τ τ hτ (compS_empty_left τ)
+    rw [RSlot] at hVcj
+    have h₁ := relendableS_empty hVcj ls'' (ext_empty' _ _) αs' hr
+    simp only [forceE] at h₁
+    rw [RC] at h₁
+    have h₂ := h₁ x τ τ hτ (compS_empty_left τ)
+    rwa [rc_effOf] at h₂
   rw [hHe]
-  exact bodyH_handle (ℍ := ℍ) hS hn hnS hlenE hE (reLend_refl hch) hlen hret hcl
-    (fun _ _ _ _ hO => openH_handle hS hn hnS hlenE hE hlen hret hcl
+  exact bodyH_handle (ℍ := ℍ) hn hnS hlenE hE (reLend_refl hch) hlen hret hcl
+    (fun _ _ _ _ hO => openH_handle hn hnS hlenE hE hlen hret hcl
       (by simp only [List.append_nil]; exact List.forall₂_same.mpr fun _ _ => le_rfl) hO)
-    (fun _ _ _ _ hr hO => openH_handle hS hn hnS hlenE hE hlen hret hcl (by simpa using hr.1) hO)
+    (fun _ _ _ _ hr hO => openH_handle hn hnS hlenE hE hlen hret hcl (by simpa using hr.1) hO)
     hb ρf fρ ps hf hcf hT htg Al k
 
 end handle

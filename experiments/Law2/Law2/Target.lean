@@ -260,14 +260,14 @@ GhostEnd's re-lendable callback at every lend of its place. -/
 theorem relend_frag {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ) {x : LifeVar}
     {b : Lifetime.Life} {β : Life} (hβ : b.interp δ = some β)
     (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
-    {T B : VTy} (hT : ¬ VFree x T) (hB : ¬ VFree x B) {S : Row} (hS : Row.Resume S x)
-    (hSne : S ≠ []) {M : Expr} (l : BoCa.Loc)
-    (hD : BComp (ℍ := ℍ) δ (oneS l x T) S S (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
+    {T B : VTy} (hT : ¬ VFree x T) (hB : ¬ VFree x B) (hBn : NoThunkT B) {S : Row}
+    (hS : Row.Resume S x) {M : Expr} (l : BoCa.Loc)
+    (hD : BComp δ (oneS l x T) S S (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
       (.box (.var x) B))
     (ls : List SRec) :
     Relend (opTable (Row.tab S δ)) l T δ (finPost l T B δ) ls (substAll [Val.loc l] M)
       PMap.empty := by
-  have hO := piece_of_bcomp hSne (allCross_oneS l x T _) (hS.linResume δ) hD trivial
+  have hO := piece_of_bcomp (allCross_oneS l x T _) (hS.linResume δ) hD hBn
     (Qa := fun ls v => vCE (ℍ := ℍ) none true B ls δ v)
     (fun αs ls' v ρ hch hlen h => hQ_one hB αs ls' v ρ hch hlen h) (ds := [true]) (αi := [β])
     (ls := ls) (γ := [Val.loc l])
@@ -285,11 +285,11 @@ borrower `M` of the fragment, with no open step. -/
 theorem law2_depth1_frag {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ) {x : LifeVar}
     {b : Lifetime.Life} {β : Life} (hβ : b.interp δ = some β)
     (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
-    {T B : VTy} (hT : ¬ VFree x T) (hB : ¬ VFree x B)
+    {T B : VTy} (hT : ¬ VFree x T) (hB : ¬ VFree x B) (hBn : NoThunkT B)
     {βP : Life} (hP : ∀ ls w σ, vCE (ℍ := ℍ) none true T ls δ w σ → σ.InStratum βP)
-    {S : Row} (hS : Row.Resume S x) (hSne : S ≠ []) {M : Expr} (hM : closedAt 1 M = true)
+    {S : Row} (hS : Row.Resume S x) {M : Expr} (hM : closedAt 1 M = true)
     (l : BoCa.Loc)
-    (hD : BComp (ℍ := ℍ) δ (oneS l x T) S S (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
+    (hD : BComp δ (oneS l x T) S S (Δ.extend x b) [⟨.mut (.var x) T, true⟩] M
       (.box (.var x) B))
     (v : Val) (ls : List SRec) :
     Entails (ptoOwn l v ⋆ vCE (ℍ := ℍ) none true T ls δ v)
@@ -299,7 +299,7 @@ theorem law2_depth1_frag {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ) {x : Li
   refine (cC_effOf S _ ls δ _ ρ).mpr ?_
   exact withbor_relend (Row.tab S δ) (Row.tab_plainCancel S δ) hP _ v
     (relend_lam2 (opTable_mono _) hM
-      (relend_frag hδ hβ hbx hΔx hT hB hS hSne l hD ls)) ρ hρ
+      (relend_frag hδ hβ hbx hΔx hT hB hBn hS l hD ls)) ρ hρ
 
 end Law2
 
