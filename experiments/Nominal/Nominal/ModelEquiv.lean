@@ -133,22 +133,22 @@ theorem comp_relRU {R : CellU L → CellU L → Prop} {C : CellU L → CellU L �
     {ρ₁ ρ₂ ρ : ResU L} (h : Comp R C ρ₁ ρ₂ ρ) : Comp R C (relRU π ρ₁) (relRU π ρ₂) (relRU π ρ) :=
   ⟨compat_relRU hR h.1, fun l => optComp_map hC (h.2 l)⟩
 
-theorem hS (π : L ≃o L) : ∀ ψ₁ ψ₂ : CellU L, CellU.CompatS ψ₁ ψ₂ →
+theorem natCompatS (π : L ≃o L) : ∀ ψ₁ ψ₂ : CellU L, CellU.CompatS ψ₁ ψ₂ →
     CellU.CompatS (relU π ψ₁) (relU π ψ₂) := fun _ _ h => compatS_relU π h
-theorem cS (π : L ≃o L) : ∀ ψ₁ ψ₂ ψ : CellU L, CellU.CompS ψ₁ ψ₂ ψ →
+theorem natCompS (π : L ≃o L) : ∀ ψ₁ ψ₂ ψ : CellU L, CellU.CompS ψ₁ ψ₂ ψ →
     CellU.CompS (relU π ψ₁) (relU π ψ₂) (relU π ψ) := fun _ _ _ h => compS_relU π h
-theorem hR' (π : L ≃o L) : ∀ ψ₁ ψ₂ : CellU L, CellU.CompatR ψ₁ ψ₂ →
+theorem natCompatR (π : L ≃o L) : ∀ ψ₁ ψ₂ : CellU L, CellU.CompatR ψ₁ ψ₂ →
     CellU.CompatR (relU π ψ₁) (relU π ψ₂) := fun _ _ h => compatR_relU π h
-theorem cR (π : L ≃o L) : ∀ ψ₁ ψ₂ ψ : CellU L, CellU.CompR ψ₁ ψ₂ ψ →
+theorem natCompR (π : L ≃o L) : ∀ ψ₁ ψ₂ ψ : CellU L, CellU.CompR ψ₁ ψ₂ ψ →
     CellU.CompR (relU π ψ₁) (relU π ψ₂) (relU π ψ) := fun _ _ _ h => compR_relU π h
 
 theorem compS_relRU {ρ₁ ρ₂ ρ : ResU L} (h : ResU.CompS ρ₁ ρ₂ ρ) :
     ResU.CompS (relRU π ρ₁) (relRU π ρ₂) (relRU π ρ) :=
-  comp_relRU (hS π) (cS π) h
+  comp_relRU (natCompatS π) (natCompS π) h
 
 theorem compR_relRU {ρ₁ ρ₂ ρ : ResU L} (h : ResU.CompR ρ₁ ρ₂ ρ) :
     ResU.CompR (relRU π ρ₁) (relRU π ρ₂) (relRU π ρ) :=
-  comp_relRU (hR' π) (cR π) h
+  comp_relRU (natCompatR π) (natCompR π) h
 
 theorem restrict_relRU (ρ : ResU L) (k : Kind) :
     (relRU π ρ).restrict k = relRU π (ρ.restrict k) := by
@@ -230,8 +230,8 @@ theorem agW_relRU : ∀ {ρ σ : ResU L}, AgW ρ σ → AgW (relRU π ρ) (relRU
         (compR_relRU hσ)
       · rw [mapW_fst]; exact (sites_relRU _ _ _).mpr hsm
       · rw [mapW_fst]; exact (sites_relRU _ _ _).mpr hsi
-      · rw [mapW_snd]; exact bigComp_relRU (hR' π) (cR π) hbm
-      · rw [mapW_snd]; exact bigComp_relRU (hR' π) (cR π) hbi
+      · rw [mapW_snd]; exact bigComp_relRU (natCompatR π) (natCompR π) hbm
+      · rw [mapW_snd]; exact bigComp_relRU (natCompatR π) (natCompR π) hbi
       · rw [restrict_relRU]; exact compR_relRU ha
 
 theorem agWitsM_relRU : ∀ {ρ : ResU L} {w : List (Loc × ResU L)}, AgWitsM ρ w →
@@ -247,14 +247,14 @@ theorem agWitsI_relRU : ∀ {ρ : ResU L} {w : List (Loc × ResU L)}, AgWitsI ρ
   | _, _, .cons ψ hψ hk e a hex hag hp hw => by
       refine .cons (relU π ψ) (by rw [relRU_get, hψ]; rfl) (by rw [kind_relU, hk])
         (relRU π e) (relRU π a) ?_ ?_ (compR_relRU hp) (agWitsI_relRU hw)
-      · rw [wit_relU]; exact exW_relRU (hR' π) (cR π) hex
+      · rw [wit_relU]; exact exW_relRU (natCompatR π) (natCompR π) hex
       · rw [wit_relU]; exact agW_relRU hag
 end
 
 theorem flat_relRU {ρ σ : ResU L} (h : ρ.Flat σ) : (relRU π ρ).Flat (relRU π σ) := by
   obtain ⟨e, a, he, ha, hc⟩ := h
   exact ⟨relRU π e, relRU π a,
-    exW_relRU (hS π) (cS π) he, agW_relRU ha,
+    exW_relRU (natCompatS π) (natCompS π) he, agW_relRU ha,
     compS_relRU hc⟩
 
 theorem valid_relRU {ρ : ResU L} (h : ρ.Valid) : (relRU π ρ).Valid :=
@@ -271,7 +271,7 @@ theorem lower_relRU {ρ : ResU L} {m : Loc → Option Val} (h : ρ.Lower m) :
 
 theorem hash_relRU {ρ₁ ρ₂ : ResU L} (h : ρ₁.Hash ρ₂) : (relRU π ρ₁).Hash (relRU π ρ₂) := by
   obtain ⟨hc, ρ, hρ, hv⟩ := h
-  exact ⟨compat_relRU (hS π) hc, relRU π ρ, compS_relRU hρ, valid_relRU hv⟩
+  exact ⟨compat_relRU (natCompatS π) hc, relRU π ρ, compS_relRU hρ, valid_relRU hv⟩
 
 theorem flatAt_relRU {ρ : ResU L} {l : Loc} {ψ : CellU L} (h : ρ.FlatAt l ψ) :
     (relRU π ρ).FlatAt l (relU π ψ) := by

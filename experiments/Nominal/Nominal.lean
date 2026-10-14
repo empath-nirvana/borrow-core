@@ -8,3 +8,6 @@ import Nominal.Equivariance
 import Nominal.Facts
 import Nominal.Package
 import Nominal.Witnesses
+import Nominal.Records
+import Nominal.CoreRelation
+import Nominal.CoreWitnesses
