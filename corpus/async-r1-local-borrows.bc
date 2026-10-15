@@ -1,0 +1,66 @@
+-- SPEC §28, R1 (docs/async-capabilities.md §1 A2): tasks borrow their own locals across a
+-- suspension, and the scheduler interleaves them. Each task is a stored generator whose `yield`
+-- is its `await`; `main` is the scheduler, written inline: it observes `counter` to its first
+-- `yield`, then `pair_view` to its first, then each to its end. While one task runs, the other is
+-- suspended inside its borrow block, holding the borrow.
+--
+-- * `counter`: a closure over the `mut` borrow (`bump`), called before the `await`; the view it
+--   hands back crosses it.
+-- * `pair_view`: the borrow moved into a pair, which crosses the `await`.
+--
+-- Each block is the relaxed lend R1 (`withbor2r`, `CDerivesP.lendR`): a value derived from the
+-- borrow is live at the suspension, so the block is not segmented into ordinary lends (L0, U3).
+-- `bcc check` reports `assurance: PinLaw (R1 at 22:11, 34:11)`. A2's `reader`, where only the borrow
+-- itself crosses the `await`, waits for L0 (U3).
+--
+-- Answer: i32[1207]: `counter` 12 (10, bumped twice) and `pair_view` 7 (3 + 4); `live 0`. A task
+-- that lost its view's write gives 11 or 3; a scheduler that ran a task twice past its end is stuck.
+include yield
+
+fn counter() -> i32 with Yield[i32] =
+  let c = alloc(10);
+  let v = borrow mut c { m ->
+    let bump = { modify m { x -> x + 1 }; m };
+    m <- force bump;
+    yield(1);
+    modify m { x -> x + 1 };
+    modify m { x -> (x, x) }
+  };
+  let _ = free(c);
+  v
+
+fn pair_view() -> i32 with Yield[i32] =
+  let c = alloc(3);
+  let v = borrow mut c { m ->
+    let p = (m, 4);
+    yield(2);
+    let (m2, k) = p;
+    modify m2 { x -> x + k };
+    modify m2 { x -> (x, x) }
+  };
+  let _ = free(c);
+  v
+
+fn step(it: U (pull i32 i32 1)) -> (i32 * U (pull i32 i32 1)) + i32 =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> inl (x, it)
+  | inr d -> match d { inl r -> inr r | inr it -> inl (0, it) }
+  }
+
+main -> i32 =
+  let a : U (pull i32 i32 1) = counter();
+  let b : U (pull i32 i32 1) = pair_view();
+  match step(a) {
+    inl (x, a) -> match step(b) {
+      inl (y, b) -> match step(a) {
+        inl (z, a) -> (nu_out (force a)).2; 0
+      | inr ra -> match step(b) {
+          inl (w, b) -> (nu_out (force b)).2; 0
+        | inr rb -> ra * 100 + rb
+        }
+      }
+    | inr rb -> 0
+    }
+  | inr ra -> 0
+  }

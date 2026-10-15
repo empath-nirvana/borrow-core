@@ -3,6 +3,7 @@ import Support
 import Examples
 import Core
 import Frontend.Check.Externs
+import Frontend.Check.Program
 /-! The theorems `SPEC.md` names, with their axioms. -/
 #print axioms BoCa.Fig16.LogRel.Typed.fundamentalProperty
 #print axioms BoCa.Fig16.LogRel.Typed.adequacy
@@ -485,3 +486,16 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.sumGenUses_unfill
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.timeoutUses_unfill
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.timeoutProg_run
+-- SPEC §28: the relaxed lend R1 under PinLaw
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesP.ofC
+#print axioms BoCa.Fig16.LogRel.Core.fundamentalC_pin
+#print axioms BoCa.Fig16.LogRel.Core.adequacyC_pin
+#print axioms BoCa.Fig16.LogRel.Core.adequacyD_pin
+#print axioms BoCa.Fig16.LogRel.Core.adequacyD_pin_safe
+#print axioms BoCa.Fig16.LogRel.Core.resumeO_await_yield
+#print axioms BoCa.Fig16.LogRel.Core.not_resumeO_raise
+#print axioms BoCa.Fig16.LogRel.Core.Check.Row.resumeOB_sound
+#print axioms BoCa.Fig16.LogRel.Core.Check.noThunkB_sound
+#print axioms Frontend.Check.checkProgram_soundP
+#print axioms Frontend.Check.checked_sem_pin
+#print axioms Frontend.Check.checked_runs_pin

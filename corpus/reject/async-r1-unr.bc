@@ -1,0 +1,19 @@
+-- expect: 16:5: the row of a relaxed lend's body has only operations that resume once (affine or linear), of names other than 0, answering `1` with the empty cancel row, whose arguments are closed data with no `U` (R1, SPEC §28)
+-- SPEC §28 (docs/async-capabilities.md §6.2 row 14, `n7`), in the core text: an unrestricted
+-- (multi-shot) operation inside a relaxed lend. `Row.ResumeO` admits no unrestricted operation:
+-- a copied continuation would hold the view twice.
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+main : F (i32 + i32) =
+  hr : !U (ref i32 * i32 -o F (i32 + i32)) <- return
+    (!thunkv fun (p : ref i32 * i32) ->
+      let (c, v) = p; w <- return (free[i32] c); return (inr (plus (v, w))));
+  hc : !U (1 * U (1 -o F (i32 + i32)) -o F (i32 + i32)) * 1 <- return
+    ((!thunkv fun (q : 1 * U (1 -o F (i32 + i32))) ->
+      let (x, k) = q; let () = x; u <- return (); force k u), ());
+  c <- return (alloc[i32] i32[10]);
+  handle_with[1](hr, hc) (
+    withbor2r['x, dom, i32, i32, [1.0 unr 1 ~> 1]](c, m) (
+      u <- perform[1.0] ();
+      let () = forget_mut['x, i32] m;
+      return (boxed['x] i32[1])))

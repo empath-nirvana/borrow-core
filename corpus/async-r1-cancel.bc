@@ -1,0 +1,53 @@
+-- SPEC §28, R1 (docs/async-capabilities.md §1 A6): a suspended task holding a borrow and an owned
+-- value is cancelled. `victim` owns `extra` and lends `buf`, and holds the view (in a pair)
+-- across two `await`s. The first `victim` is observed to its first `await` and closed there: the
+-- cancel unwinds its continuation innermost first, the lend's unwinding form ends the lend and
+-- frees `buf` (its finaliser, the source's destructor), and `extra`'s drop glue frees it. The
+-- second runs to its end.
+--
+-- `assurance: PinLaw (R1 at 17:11)`.
+--
+-- Answer: `(inl i32[1], i32[26])`: the first cancelled after yielding 1, the second 15 + 11;
+-- `live 0`, so the cancelled task's cells were both freed.
+include yield
+
+fn victim() -> i32 with Yield[i32] =
+  let extra = alloc(11);
+  let buf = alloc(10);
+  let v = borrow mut buf { m ->
+    let p = (m, 5);
+    yield(1);
+    yield(2);
+    let (m, k) = p;
+    modify m { x -> (x, x + k) }
+  };
+  let _ = free(buf);
+  let e = free(extra);
+  v + e
+
+fn step(it: U (pull i32 i32 1)) -> (i32 * U (pull i32 i32 1)) + i32 =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> inl (x, it)
+  | inr d -> match d { inl r -> inr r | inr it -> inl (0, it) }
+  }
+
+fn stop(it: U (pull i32 i32 1)) -> 1 = (nu_out (force it)).2
+
+fn finish(it: U (pull i32 i32 1)) -> i32 =
+  match step(it) {
+    inl (x, it) -> match step(it) {
+      inl (y, it) -> match step(it) { inl (z, it) -> stop(it); 0 | inr r -> r }
+    | inr r -> r
+    }
+  | inr r -> r
+  }
+
+main -> (i32 + i32) * i32 =
+  let a : U (pull i32 i32 1) = victim();
+  let b : U (pull i32 i32 1) = victim();
+  let cancelled = match step(a) {
+    inl (x, a) -> stop(a); inl x
+  | inr r -> inr r
+  };
+  (cancelled, finish(b))

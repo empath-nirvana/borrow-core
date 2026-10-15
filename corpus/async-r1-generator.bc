@@ -1,0 +1,43 @@
+-- SPEC §28, R1: the generator of `corpus/reject/gen-self-borrow.bc`, borrowing its own local
+-- across a `yield`, with the borrow `mut`. R1 lends `mut` only: the `imm` block there stays
+-- rejected. `main` stores the generator and pulls it twice by hand (`next`), so the generator
+-- is suspended at each `yield` inside the borrow; then it closes it there, which cancels the
+-- rest: the lend's unwinding form ends the lend and frees the cell.
+--
+-- `assurance: PinLaw (R1 at 15:3)`.
+--
+-- Answer: i32[506]: the two elements 5 and 6 (the cell, then the cell bumped through the
+-- view); `live 0`.
+include yield
+
+fn selfref() -> 1 with Yield[i32] =
+  let c = alloc(5);
+  borrow mut c { m ->
+    let a = modify m { v -> (v, v) };
+    yield(a);
+    modify m { v -> v + 1 };
+    let b = modify m { v -> (v, v) };
+    yield(b);
+    ()
+  };
+  let _ = free(c);
+  ()
+
+-- The next element and the rest, or 0 once the generator has finished; a skip counts 0.
+fn next(it: U (pull i32 1 1)) -> i32 * (U (pull i32 1 1) + 1) =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> (x, inl it)
+  | inr d -> match d { inl u -> (0, inr ()) | inr it -> (0, inl it) }
+  }
+
+fn close(it: U (pull i32 1 1) + 1) -> 1 =
+  match it { inl g -> (nu_out (force g)).2 | inr u -> () }
+
+main -> i32 =
+  let g : U (pull i32 1 1) = selfref();
+  let (a, r) = next(g);
+  match r {
+    inl g -> let (b, r) = next(g); close(r); a * 100 + b
+  | inr u -> a * 100
+  }

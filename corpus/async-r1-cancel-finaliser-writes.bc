@@ -1,0 +1,34 @@
+-- SPEC §28, R1, in the core text (docs/async-capabilities.md §6.2 row 16,
+-- `experiments/AsyncCap/bc/accept/m4-cancel-finaliser-writes.bc`): a task cancelled inside a
+-- relaxed lend whose own finaliser writes through the view. `withbor2r` lends `c` as `m`; the
+-- body performs `1.0` (affine, resuming) under `[then]`, whose finaliser writes 99 through `m`.
+-- The handler's clause cancels the continuation at the operation: the borrower's finaliser runs
+-- first, with the lend still open, then the lend ends and the owner's finaliser frees `c`.
+-- `bcc interp --check tags` checks that order: a write through `m` after the lend ended is
+-- reported. The surface has no `then … unwind …` (U2), so the program is written in the core.
+--
+-- `assurance: PinLaw (R1 at 24:5)`.
+--
+-- Answer: inl i32[1], the value the task yielded before it was cancelled; `live 0`.
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+main : F (i32 + i32) =
+  hr : !U (ref i32 * i32 -o F (i32 + i32)) <- return
+    (!thunkv fun (p : ref i32 * i32) ->
+      let (c, v) = p; w <- return (free[i32] c); return (inr (plus (v, w))));
+  hc : !U (i32 * U ((1 -o F (i32 + i32)) & F 1) -o F (i32 + i32)) * 1 <- return
+    ((!thunkv fun (q : i32 * U ((1 -o F (i32 + i32)) & F 1)) ->
+      let (x, k) = q; u <- (force k).2; return (inl x)), ());
+  c <- return (alloc[i32] i32[10]);
+  handle_with[1](hr, hc) (
+    withbor2r['x, dom, i32, i32, [1.0 aff i32 ~> 1]](c, m) (
+      u <- perform[1.0] i32[1] unwind (
+        q <- return (withswap['x, i32, 1] m (thunkv fun (v : i32) -> return (i32[99], ())));
+        let (m, z) = q;
+        let () = z;
+        return (forget_mut['x, i32] m));
+      q <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) ->
+        return (plus (v, i32[1]), plus (v, i32[1]))));
+      let (m, r) = q;
+      let () = forget_mut['x, i32] m;
+      return (boxed['x] r)))
