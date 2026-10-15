@@ -1,5 +1,5 @@
 -- expect: 13:16: unbound lifetime variable 'x
--- SPEC §28 (docs/async-capabilities.md §6.2 row 12, `n5`), in the core text: the view handed to
+-- SPEC §29 (docs/async-capabilities.md §6.2 row 12, `n5`), in the core text: the view handed to
 -- the handler as an operation's argument. The operation's type would name the lend's lifetime,
 -- which the handler, outside the lend, cannot name: the row of `withbor2r` is elaborated where
 -- the lend is made, before `'x` is bound. (An argument of any other borrow, or of a `U`, is

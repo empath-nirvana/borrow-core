@@ -1645,7 +1645,7 @@ def compPrefix : Nat → P Comp
       let M ← compPrefix n
       pure (.handle (← spanFrom st) k hr hc M)
     | .kw "withbor2r" =>
-      -- `withbor2r['x, @b, A, B, [ROW]](p, m) M`, the relaxed lend (SPEC §28).
+      -- `withbor2r['x, @b, A, B, [ROW]](p, m) M`, the relaxed lend (SPEC §29).
       discard bump
       expectSym "["
       let as ← args n CKw.withbor2U.sig

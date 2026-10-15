@@ -499,7 +499,7 @@ reusing run is the new `--alloc least` (`Alloc.leastFree`, as `runM`).
 - *Checks.* An access through an ended tag, through an inactive one, a free through a view, a
   write through an `imm` tag, any access through a tag (or the owner) under a live exclusive tag,
   a write under a live `imm` one, and a lend not ended at the end of the run.
-- *At U5 (R1 built, SPEC §28).* Every corpus program that uses R1 passes all four modes but one,
+- *At U5 (R1 built, SPEC §29).* Every corpus program that uses R1 passes all four modes but one,
   `corpus/async-r1-drain.bc`, whose `main` returns a loop: `--check tags` reports "the lends of
   tags [1] never ended". The runtime drives such a `main` one observation at a time, and the
   harness checks that every lend has ended at the end of each observation's run
@@ -554,7 +554,7 @@ Ordered; each unit is one PR and turns the programs named green. No unit but U1 
 | **U2** | `lib/async.bc` (`Async`, `run`, `run_until_empty`, `run_logged`, task handles, `cancel`), and effectful blocks at the surface (#161, `docs/surface-callbacks.md` E2–E8: a block's row, its call, copies per use; a counted loop at a resuming row) | A1, A4 |
 | **U3** | L0: segmenting a borrow block at a resuming operation when only the borrow crosses it (ADD-5's degenerate case), in `Frontend/Elab` beside `LoopLend` | A2's `reader`; `gen-self-borrow.bc` moves to the corpus |
 | **U4** | the falsifier: never-reuse allocator and tagged interpreter in `bcc interp`; a script that runs every program three ways (§6.1) | the harness, run on A1, A2 (`reader`), A4 and the corpus |
-| **U5** (built, SPEC §28) | R1 in Core: `CDerivesP` (AsyncCap's `PDerives`), `fundamentalC_pin`, `adequacyD_pin`; the checker's R1 (callback row `Row.ResumeO`, emitted only when L0 does not apply); `bcc check`/`bcc trusted` report `PinLaw`; the lowering keeps a cell lent across a suspension out of line, or the task record unmoved (§3.5) | A2, A5, A6; `n2`, `n4`, `n5`, `n7`, `n9` |
+| **U5** (built, SPEC §29) | R1 in Core: `CDerivesP` (AsyncCap's `PDerives`), `fundamentalC_pin`, `adequacyD_pin`; the checker's R1 (callback row `Row.ResumeO`, emitted only when L0 does not apply); `bcc check`/`bcc trusted` report `PinLaw`; the lowering keeps a cell lent across a suspension out of line, or the task record unmoved (§3.5) | A2, A5, A6; `n2`, `n4`, `n5`, `n7`, `n9` |
 | **U6** | R2: `LoopLend` keeps its rewrite when the loop's state holds an `imm` view, emitting `lendLoopR` | A3; `n6`, `n1`, `n3`, `n8` (with U1) |
 | **U7** | the adversarial suite (§6.2) in `corpus/reject` and the corpus, with the stress generator | §6.2 rows 1–15 |
 | **U8** | proof track, independent of the others, not on the async path: prove R1's compatibility lemma (for example through Law 2's re-lendable reading, at a cancel table that re-lends for the borrower's finalisers, §4.3); a lender-side lemma at observation boundaries for R2 | shrinks `PinLaw`; no program changes |

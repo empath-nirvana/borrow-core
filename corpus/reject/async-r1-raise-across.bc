@@ -1,5 +1,5 @@
--- expect: 12:11: this borrow block's body performs the operation 1.0, which resumes, and the abortive operation 2.0: an abortive operation does not cross a borrow held across a resumption (R1, SPEC §28)
--- SPEC §28 (docs/async-capabilities.md §6.2 row 11, `n4`): an abortive operation crossing a
+-- expect: 12:11: this borrow block's body performs the operation 1.0, which resumes, and the abortive operation 2.0: an abortive operation does not cross a borrow held across a resumption (R1, SPEC §29)
+-- SPEC §29 (docs/async-capabilities.md §6.2 row 11, `n4`): an abortive operation crossing a
 -- relaxed lend. The block's body yields (resuming) and raises (abortive), and the handler of
 -- `Fail` is outside the block. A relaxed lend's row has resuming operations only (`Row.ResumeO`);
 -- a row mixing them is OQ-1. With the handler inside the block it is accepted

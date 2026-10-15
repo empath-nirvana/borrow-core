@@ -1,4 +1,4 @@
--- SPEC §28, R1 (docs/async-capabilities.md §1 A5): tasks perform other effects while holding a
+-- SPEC §29, R1 (docs/async-capabilities.md §1 A5): tasks perform other effects while holding a
 -- borrow across a suspension. `careful` lends its cell for the whole task. Its `yield` is both
 -- a log entry and its `await`: the scheduler, `main`, records what each task yields as the
 -- interleaved log. `Fail` is abortive and handled inside the borrow block, so no abortive

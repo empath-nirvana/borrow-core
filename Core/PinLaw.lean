@@ -1,7 +1,7 @@
 import Core.PinDerives
 
 /-!
-# Core — `PinLaw`, the one named hypothesis  `[spec §28]`
+# Core — `PinLaw`, the one named hypothesis  `[spec §29]`
 
 `docs/async-capabilities.md` §4. A borrow held across a suspension is believed sound because the
 place does not move: the suspension may be read as ending the lend and the resumption as lending

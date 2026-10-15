@@ -1,4 +1,4 @@
--- SPEC §28, R1: a relaxed lend inside another. The generator lends `c`, and inside that lend it
+-- SPEC §29, R1: a relaxed lend inside another. The generator lends `c`, and inside that lend it
 -- allocates `d` and lends it too; the inner block's body yields while both lends are open, and
 -- the outer body yields again after the inner lend has ended. The inner lend sits under the outer
 -- body's binders (`[nil-dead]`), so `PinLaw.stop`'s premise is the outer body's derivation with

@@ -1,4 +1,4 @@
--- SPEC §28, R1: the generator of `corpus/reject/gen-self-borrow.bc`, borrowing its own local
+-- SPEC §29, R1: the generator of `corpus/reject/gen-self-borrow.bc`, borrowing its own local
 -- across a `yield`, with the borrow `mut`. R1 lends `mut` only: the `imm` block there stays
 -- rejected. `main` stores the generator and pulls it twice by hand (`next`), so the generator
 -- is suspended at each `yield` inside the borrow; then it closes it there, which cancels the

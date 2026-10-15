@@ -39,7 +39,7 @@ import Backend.FalsifyTests
 Exit code 0 on success, 1 on a syntax error, a round-trip mismatch or a type error, 2 on bad
 usage. A successful `check` has built a `CDerivesP` derivation of `main`'s erasure
 (`Frontend.Check.checkProgram_soundP`), which is a `CDerives` one when it prints
-`assurance: unconditional` (`Frontend.Check.checkProgram_sound`, SPEC §28).
+`assurance: unconditional` (`Frontend.Check.checkProgram_sound`, SPEC §29).
 -/
 
 open Frontend

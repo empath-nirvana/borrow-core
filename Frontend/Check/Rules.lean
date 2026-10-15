@@ -23,7 +23,7 @@ open BoCa.Fig16.LogRel.Core (Jdg withPair withCtx absurdE forceE Persistent CtxO
 abbrev CExpr := BoCa.Expr
 
 /-- A checked term: its erasure `e`, the rows `sigs` its derivations read at `[perform]`,
-`[raise]` and `[handle]`, the relaxed rules `pins` they use (SPEC §28), and a derivation
+`[raise]` and `[handle]`, the relaxed rules `pins` they use (SPEC §29), and a derivation
 `TiedDer pins sigs Δ (mkCtx T L) e j` at every admissible liveness `L` of the slots `T`. -/
 structure Res (Δ : LifeCtx) (T : List CVTy) (j : Jdg) where
   e : CExpr
@@ -314,7 +314,7 @@ def rEffHandleB {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R 
     (h₁ : overlapOK T (oneL T ir) (oneL T ic) = true)
     (h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
   ⟨BoCa.Fig16.LogRel.Core.hndTerm n (E.map Prod.fst) ir ic rM.e,
-    (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ rM.sigs,
+    (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ rM.sigs, rM.pins,
     (((Fam.var T ir _ hir).split (Fam.var T ic _ hic) h₁).split (rM.F.restrict (outlivesB Δ d) hso)
       h₂).map fun _ ⟨_, _, hs, ⟨_, _, hs₁, hr, hc⟩, he, ho⟩ =>
         .effHandleB hs hs₁ hr hc hn0 hnS hlen he

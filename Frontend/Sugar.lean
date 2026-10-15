@@ -2622,7 +2622,7 @@ where
     .thunk sp (.all sp x (.dom sp) (.arr sp L (.eff sp r (.box sp (.var sp x.name) B))))
 
 /-- A `mut` borrow block of an owned cell whose body performs resuming operations, as the relaxed
-lend R1 (SPEC §28): `p <- return P; withbor2r['x, @b, A, B, [r]](p, m) M`, from the unwinding
+lend R1 (SPEC §29): `p <- return P; withbor2r['x, @b, A, B, [r]](p, m) M`, from the unwinding
 form `withbor2u['x, @b, A, B, [r]] P (thunkv Fun 'x < @b. return (thunkv fun (m : …) -> M))` the
 block elaborates to. -/
 def relaxedC? (sp : Span) : Val → Option (Ident × Comp)
@@ -3314,13 +3314,13 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
           let r := S.filter fun o => used.contains o.n.toNat
           if !r.isEmpty then
             if let some o := r.find? (fun o => !o.abort) then
-              -- A `mut` borrow of an owned cell: the relaxed lend R1 (SPEC §28).
+              -- A `mut` borrow of an owned cell: the relaxed lend R1 (SPEC §29).
               if let some (.mut, P) := borrowKind? V then
                 if let some (.ref _) := c.tyV P then
                   if let some a := r.find? (·.abort) then
                     throw ⟨V.span, s!"this borrow block's body performs the operation {o.n}.{o.i}, " ++
                       s!"which resumes, and the abortive operation {a.n}.{a.i}: an abortive " ++
-                      "operation does not cross a borrow held across a resumption (R1, SPEC §28)"⟩
+                      "operation does not cross a borrow held across a resumption (R1, SPEC §29)"⟩
                   let saved := (← get).cbRow
                   modify fun st => { st with cbRow := some r }
                   let V' ← surfV n c none V
@@ -3335,7 +3335,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
                     if let some y := outer.head? then
                       throw ⟨V.span, s!"this borrow block's body uses `{y}`, which is outside " ++
                         s!"it, and performs the operation {o.n}.{o.i}, which resumes: a borrow held " ++
-                        "across a resumption sees only its view (R1, SPEC §28)"⟩
+                        "across a resumption sees only its view (R1, SPEC §29)"⟩
                     return M'
                   | none => pure ()
               throw ⟨V.span, s!"this borrow block's body performs the operation {o.n}.{o.i}, which " ++

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate `CDerivesP` and its Fundamental Property from Core's (SPEC §28).
+"""Generate `CDerivesP` and its Fundamental Property from Core's (SPEC §29).
 
 `CDerivesP` (`Core/PinDerives.lean`) is `CDerives` with every premise read in `CDerivesP`, plus
 the rules written by hand in `scripts/pin/CDerivesP.tmpl.lean`.  `fundamentalC_pin`
@@ -33,7 +33,8 @@ def block(start_pat, stop_pat):
 ind = block(r"^inductive CDerives ", r"^/-- `\[then\]` with its finaliser at the pure row")
 while ind and ind[-1].strip() == "":
     ind.pop()
-fund = block(r"^theorem fundamentalC ", r"^/-! ### Adequacy")
+# fundamentalC's induction: up to the next top-level declaration or section
+fund = block(r"^theorem fundamentalC ", r"^(/-! |/-- |theorem |def |lemma )")
 # `[then]` at the pure row and `[handle]` at two variables, stated after the inductive
 derived = block(r"^/-- `\[then\]` with its finaliser at the pure row", r"^/-! ### The delay, stream")
 while derived and derived[-1].strip() == "":

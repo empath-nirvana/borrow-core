@@ -486,7 +486,7 @@ import Frontend.Check.Program
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.sumGenUses_unfill
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.timeoutUses_unfill
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.timeoutProg_run
--- SPEC §28: the relaxed lend R1 under PinLaw
+-- SPEC §29: the relaxed lend R1 under PinLaw
 #print axioms BoCa.Fig16.LogRel.Core.CDerivesP.ofC
 #print axioms BoCa.Fig16.LogRel.Core.fundamentalC_pin
 #print axioms BoCa.Fig16.LogRel.Core.adequacyC_pin

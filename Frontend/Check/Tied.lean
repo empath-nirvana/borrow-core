@@ -269,10 +269,10 @@ theorem effHandleB {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : BoCa.Expr} {
     (hr : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γr ir (BoCa.Fig16.LogRel.Core.retTy S A R))
     (hc : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γc ic (BoCa.Fig16.LogRel.Core.clausesTyB S R d E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-    (he : TiedDer s Δ Γ₂ e (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
+    (he : TiedAt s Δ Γ₂ e (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
     (hΓd : CtxOutlives Δ Γ₂ d)
     (hSd : BoCa.Fig16.LogRel.Core.Row.AnsOutlives Δ d (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S)) :
-    TiedDer ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ s) Δ Γ
+    TiedAt ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ s) Δ Γ
       (BoCa.Fig16.LogRel.Core.hndTerm n (E.map Prod.fst) ir ic e) (.comp (effOf S R)) :=
   fun Ξ h => CDerivesAt.effHandleB (rowAt_of_union_left h) hs hs₁ hr hc hn0 hnS hlen
     (he Ξ (sigsAt_union_right h)) hΓd hSd
@@ -295,14 +295,14 @@ theorem drop {s : CRow} {Γ₁ Γ₂ : Ctx CVTy} {i : Nat} {T : CVTy} {e : BoCa.
 
 end TiedAt
 
-/-! ### Derivations the checker returns  `[spec §19, §28]`
+/-! ### Derivations the checker returns  `[spec §19, §29]`
 
 The checker returns one derivation per term, and it is of `CDerives` exactly when no relaxed rule
-(SPEC §28) was used. `TiedDer p s Δ Γ e j` is a `CDerivesP` derivation, and, when the list `p` of
+(SPEC §29) was used. `TiedDer p s Δ Γ e j` is a `CDerivesP` derivation, and, when the list `p` of
 the relaxed rules used is empty, a tied `CDerivesAt` one (`TiedAt`). Each rule below applies the
 constructor of both, and its `p` is the concatenation of its premises'. -/
 
-/-- A use of a relaxed rule (SPEC §28): the rule and where in the program it is used. -/
+/-- A use of a relaxed rule (SPEC §29): the rule and where in the program it is used. -/
 structure Pin where
   rule : String
   line : Nat
@@ -313,7 +313,7 @@ structure Pin where
 abbrev Pins := List Pin
 
 /-- **A derivation the checker returns**: of `CDerivesP`, and tied (`TiedAt`) when it uses no
-relaxed rule.  `[spec §19, §28]` -/
+relaxed rule.  `[spec §19, §29]` -/
 def TiedDer (p : Pins) (s : CRow) (Δ : LifeCtx) (Γ : Ctx CVTy) (e : BoCa.Expr) (j : Jdg) : Prop :=
   (p = [] → TiedAt s Δ Γ e j) ∧ CDerivesP Δ Γ e j
 
@@ -593,6 +593,31 @@ theorem effHandle {p : Pins} {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : Bo
   ⟨fun hn => TiedAt.effHandle hs hs₁ hr hc hn0 hnS hlen (he.1 hn),
     CDerivesP.effHandle hs hs₁ hr hc hn0 hnS hlen he.2⟩
 
+/-- BOXED-κ reads its handled row.  `[spec §28]` -/
+theorem effHandleB {p : Pins} {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : BoCa.Expr} {S : CRow}
+    {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {ir ic : Nat} {d : CLife}
+    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂)
+    (hs₁ : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ₁ Γr Γc)
+    (hr : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γr ir (BoCa.Fig16.LogRel.Core.retTy S A R))
+    (hc : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γc ic (BoCa.Fig16.LogRel.Core.clausesTyB S R d E))
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (he : TiedDer p s Δ Γ₂ e (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
+    (hΓd : CtxOutlives Δ Γ₂ d)
+    (hSd : BoCa.Fig16.LogRel.Core.Row.AnsOutlives Δ d (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S)) :
+    TiedDer p ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ s) Δ Γ
+      (BoCa.Fig16.LogRel.Core.hndTerm n (E.map Prod.fst) ir ic e) (.comp (effOf S R)) := by
+  refine ⟨fun hn => TiedAt.effHandleB hs hs₁ hr hc hn0 hnS hlen (he.1 hn) hΓd hSd, ?_⟩
+  obtain ⟨sr, hsr, hlr⟩ := hr.live
+  obtain ⟨sc, hsc, hlc⟩ := hc.live
+  obtain ⟨sr', hsr', hlr'⟩ := hs₁.live_left hsr hlr
+  obtain ⟨sc', hsc', hlc'⟩ := hs₁.live_right hsc hlc
+  exact .effHandleVB hs
+    (hs₁.deadP (hr.deadP (BoCa.Fig16.LogRel.Core.retTy_persistent S A R))
+      (hc.deadP (BoCa.Fig16.LogRel.Core.clausesTyB_persistent S R d E
+        BoCa.Fig16.LogRel.Core.finsNil)))
+    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen he.2
+    hΓd hSd
+
 /-- A derivation of a term with no operation reads no row and uses no relaxed rule. -/
 theorem ofCDerives {e : BoCa.Expr} {j : Jdg} (h : CDerives Δ Γ e j) (he : e.effFree = true) :
     TiedDer [] [] Δ Γ e j := ⟨fun _ => TiedAt.ofCDerives h he, CDerivesP.ofC h⟩
@@ -626,7 +651,7 @@ theorem shortenE_wfAt (M : CLife → CVTy → CVTy)
         (shortenE_wfAt M sub (σ := s₂)
           (.var (.here (.cons (BoCa.Fig16.LogRel.Core.kill_dead Γ)))) hle))))
 
-/-- `⇓σ` in `CDerivesP`, as `shortenE_wfAt`.  `[spec §5, §28]` -/
+/-- `⇓σ` in `CDerivesP`, as `shortenE_wfAt`.  `[spec §5, §29]` -/
 theorem shortenE_wfP (M : CLife → CVTy → CVTy)
     (sub : ∀ {Δ : LifeCtx} {Γ : Ctx CVTy} {e : BoCa.Expr} {a b : CLife} {A : CVTy},
       CDerivesP Δ Γ e (.val (M b A)) → Δ.EntailsLe a b → CDerivesP Δ Γ e (.val (M a A))) :

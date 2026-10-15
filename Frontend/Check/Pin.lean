@@ -1,7 +1,7 @@
 import Frontend.Check.Consts
 
 /-!
-# Frontend — Check — the relaxed lend R1  `[spec §28]`
+# Frontend — Check — the relaxed lend R1  `[spec §29]`
 
 `withbor2r['x, @b, A, B, [ROW]](p, m) M` is R1 (`CDerivesP.lendR`): the owned cell `p : ref A`
 lent as `m : mut 'x A` to a body `M` at a row of resuming operations (`Row.ResumeO`). `M` is
@@ -18,7 +18,7 @@ namespace BoCa.Fig16.LogRel.Core.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core (NoThunkT Row.ResumeO)
 
-/-- `NoThunkT`, decided.  `[spec §28]` -/
+/-- `NoThunkT`, decided.  `[spec §29]` -/
 def noThunkB : VTy → Bool
   | .tensor A B => noThunkB A && noThunkB B
   | .sum A B => noThunkB A && noThunkB B
@@ -39,7 +39,7 @@ theorem noThunkB_sound : ∀ {A : VTy}, noThunkB A = true → NoThunkT A
   | .int _, _ | .opq _, _ => by simp [NoThunkT]
 
 /-- `Row.ResumeO`, decided: every operation resumes, is not unrestricted, has the empty cancel
-row, answers `1`, is of a nonzero name, and takes closed data with no `U`.  `[spec §28]` -/
+row, answers `1`, is of a nonzero name, and takes closed data with no `U`.  `[spec §29]` -/
 def Row.resumeOB (S : Row) (x : LifeVar) : Bool :=
   S.all fun o => !o.abort && o.q != .unr && decide (o.fin = .ret .unit) && decide (o.B = .unit) &&
     o.n != 0 && !vfreeB x o.A && outlivesAllB o.A && noThunkB o.A
@@ -74,7 +74,7 @@ variable {Δ : LifeCtx} {T : List CVTy}
 
 /-- **R1** (`CDerivesP.lendR`) at the slot `i : ref A`, its body `rM` checked at `Δ, 'x ⊏ @b`
 and the view alone: the λ over the rule's term at the empty context, placed by `nilDead` and
-applied to the slot.  `[spec §28]` -/
+applied to the slot.  `[spec §29]` -/
 def rLendR {A B : CVTy} {S : CRow} (q : Pin) (x : LifeVar) (b : CLife) (i : Nat)
     (hi : T[i]? = some (.ref A)) (hb : Δ.Defines b) (hx : Δ.find? x = none)
     (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)

@@ -1,4 +1,4 @@
--- SPEC §28, R1: the generator of `corpus/async-r1-generator.bc`, drained by a `for` over the
+-- SPEC §29, R1: the generator of `corpus/async-r1-generator.bc`, drained by a `for` over the
 -- stored generator. `main` returns that `for` as a loop (div, SPEC §14), and the runtime drives
 -- it: one observation per element, the generator suspended inside its borrow between them.
 --

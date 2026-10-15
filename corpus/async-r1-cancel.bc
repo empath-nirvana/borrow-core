@@ -1,4 +1,4 @@
--- SPEC §28, R1 (docs/async-capabilities.md §1 A6): a suspended task holding a borrow and an owned
+-- SPEC §29, R1 (docs/async-capabilities.md §1 A6): a suspended task holding a borrow and an owned
 -- value is cancelled. `victim` owns `extra` and lends `buf`, and holds the view (in a pair)
 -- across two `await`s. The first `victim` is observed to its first `await` and closed there: the
 -- cancel unwinds its continuation innermost first, the lend's unwinding form ends the lend and

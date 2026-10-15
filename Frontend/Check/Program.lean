@@ -31,7 +31,7 @@ open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesP Jdg SemC fundamentalC
 
 /-- A checked `main`: its context, erasure and type, the rows its derivation reads at `[perform]`,
 `[raise]` and `[handle]`, which give each operation one signature (`sigsOkB`), the relaxed rules
-its derivation uses (SPEC §28), and the derivation: of `CDerivesP`, and, when it uses no relaxed
+its derivation uses (SPEC §29), and the derivation: of `CDerivesP`, and, when it uses no relaxed
 rule, tied at every effect context at which those rows are. -/
 structure Checked where
   ctx : Ctx CVTy
@@ -58,12 +58,12 @@ theorem Checked.deriv (c : Checked) (hp : c.pins = []) :
     CDerives LifeCtx.empty c.ctx c.e (.comp c.C) :=
   (c.derivAt hp).toCDerives
 
-/-- `main`'s derivation, of `CDerivesP`.  `[spec §28]` -/
+/-- `main`'s derivation, of `CDerivesP`.  `[spec §29]` -/
 theorem Checked.derivP (c : Checked) : CDerivesP LifeCtx.empty c.ctx c.e (.comp c.C) :=
   c.tied.2
 
 /-- What `bcc check` prints of a checked `main`'s assurance: `unconditional` when its derivation
-is of `CDerives`, else `PinLaw` and where each relaxed rule is used.  `[spec §28]` -/
+is of `CDerives`, else `PinLaw` and where each relaxed rule is used.  `[spec §29]` -/
 def Pins.assurance : Pins → String
   | [] => "assurance: unconditional"
   | ps =>
@@ -199,7 +199,7 @@ def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := 
   let fx := el.origins.filterMap fun (_, w) =>
     if w.startsWith Frontend.Sugar.effectsTag then some (w.drop Frontend.Sugar.effectsTag.length).toString
     else none
-  -- The assurance of `main`'s derivation (SPEC §28): unconditional, or under `PinLaw` at the
+  -- The assurance of `main`'s derivation (SPEC §29): unconditional, or under `PinLaw` at the
   -- relaxed rules it uses.
   let assurance := match rep.main with
     | some c => [c.pins.assurance]
@@ -254,7 +254,7 @@ theorem checkProgram_sound {p : Program} {r : Report} {c : Checked}
 
 /-- **Soundness of the checker, at every assurance.** If `bcc` accepts a program, its `main`
 erases to an `Expr` with a `CDerivesP` derivation at `Δ = ∅` and the context of its externs.
-`[spec §28]` -/
+`[spec §29]` -/
 theorem checkProgram_soundP {p : Program} {r : Report} {c : Checked}
     (_h : checkProgram p = .ok r) (_hc : r.main = some c) :
     CDerivesP LifeCtx.empty c.ctx c.e (.comp c.C) :=
@@ -275,12 +275,12 @@ theorem checked_runs (c : Checked) (hp : c.pins = []) (hΓ : c.ctx = []) (hC : c
   rw [hΓ, hC] at h
   exact adequacyC h
 
-/-- The Fundamental Property at every checked `main`, under `PinLaw`.  `[spec §28]` -/
+/-- The Fundamental Property at every checked `main`, under `PinLaw`.  `[spec §29]` -/
 theorem checked_sem_pin (hPin : PinLaw (ℍ := ℍ)) (c : Checked) :
     SemC LifeCtx.empty c.ctx c.e c.C :=
   fundamentalC_pin hPin c.derivP
 
-/-- Adequacy at every checked `main : F 1` with no externs, under `PinLaw`.  `[spec §28]` -/
+/-- Adequacy at every checked `main : F 1` with no externs, under `PinLaw`.  `[spec §29]` -/
 theorem checked_runs_pin (hPin : PinLaw (ℍ := ℍ)) (c : Checked) (hΓ : c.ctx = [])
     (hC : c.C = .ret .unit) :
     BoCa.BoLo.Steps BoCa.Adequacy.emptyMem c.e BoCa.Adequacy.emptyMem (Expr.val BoCa.Val.unit) := by

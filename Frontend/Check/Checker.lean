@@ -465,7 +465,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let r ← chkC n E Δ T M C'
       pure ⟨C', r⟩
     | .withbor2r sp x b A B r p m M => do
-      -- R1, the relaxed lend (SPEC §28): its body sees the view alone.
+      -- R1, the relaxed lend (SPEC §29): its body sees the view alone.
       let bl ← E.elabL Δ b
       let A' ← E.elabV Δ A
       let B' ← E.elabV Δ B
@@ -501,10 +501,10 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                         else err sp "internal error: a relaxed lend's body is not closed"
                       else err sp "internal error: a relaxed lend's body is not closed"
                     else err sp s!"the view `{m.name}` of this relaxed lend is not consumed"
-                  else err sp s!"a relaxed lend's result `{E.ppV B'}` holds a `U`: its value is read back after the lend is re-lent (R1, SPEC §28)"
+                  else err sp s!"a relaxed lend's result `{E.ppV B'}` holds a `U`: its value is read back after the lend is re-lent (R1, SPEC §29)"
                 else err sp ("the row of a relaxed lend's body has only operations that resume " ++
                   "once (affine or linear), of names other than 0, answering `1` with the empty " ++
-                  "cancel row, whose arguments are closed data with no `U` (R1, SPEC §28)")
+                  "cancel row, whose arguments are closed data with no `U` (R1, SPEC §29)")
               else err sp s!"`withbor2r`: its number {ppLVar v} occurs in a bound of the lifetime context"
             else err sp s!"`withbor2r`: its bound mentions its own number {ppLVar v}"
           else err sp s!"`withbor2r`: the bound `{E.ppL bl}` is not defined here"

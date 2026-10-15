@@ -1,4 +1,4 @@
--- SPEC §28, R1 (docs/async-capabilities.md §1 A2): tasks borrow their own locals across a
+-- SPEC §29, R1 (docs/async-capabilities.md §1 A2): tasks borrow their own locals across a
 -- suspension, and the scheduler interleaves them. Each task is a stored generator whose `yield`
 -- is its `await`; `main` is the scheduler, written inline: it observes `counter` to its first
 -- `yield`, then `pair_view` to its first, then each to its end. While one task runs, the other is

@@ -335,7 +335,7 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       let rest ← inferC n (E.push (some x.name)) Δ (slot A :: T) exp N
       pure (node rest.ty.c? [hd, d, rest] [b])
     | .withbor2r sp x b A B r _ m M => do
-      -- R1 (SPEC §28): the body sees the view alone.
+      -- R1 (SPEC §29): the body sees the view alone.
       let bl := (E.elabL Δ b).toOption.getD .top
       let A' := (E.elabV Δ A).toOption
       let B' := (E.elabV Δ B).toOption

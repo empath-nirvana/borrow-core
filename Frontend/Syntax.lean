@@ -484,9 +484,9 @@ inductive Comp where
   /-- `x <- M unwind (D); N` (`x : A <- …` with the annotation): `M then x. N unwind D`, the
   finaliser `D` under one dead binder (`[then]`).  `[spec §19]` -/
   | unwind (sp : Span) (x : Ident) (A : Option VTy) (M D N : Comp)
-  /-- `withbor2r['x, @b, A, B, [ROW]](p, m) M`: the relaxed lend R1 (SPEC §28). The owned cell
+  /-- `withbor2r['x, @b, A, B, [ROW]](p, m) M`: the relaxed lend R1 (SPEC §29). The owned cell
   `p : ref A` is lent as `m : mut 'x A` to `M`, which may perform the resuming operations of the
-  row and sees only `m`; its value is `(p, B)`.  `[spec §28]` -/
+  row and sees only `m`; its value is `(p, B)`.  `[spec §29]` -/
   | withbor2r (sp : Span) (x : Ident) (b : Life) (A B : VTy) (r : Row) (p m : Ident) (M : Comp)
 end
 

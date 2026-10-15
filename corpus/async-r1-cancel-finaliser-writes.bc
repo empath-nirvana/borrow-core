@@ -1,4 +1,4 @@
--- SPEC §28, R1, in the core text (docs/async-capabilities.md §6.2 row 16,
+-- SPEC §29, R1, in the core text (docs/async-capabilities.md §6.2 row 16,
 -- `experiments/AsyncCap/bc/accept/m4-cancel-finaliser-writes.bc`): a task cancelled inside a
 -- relaxed lend whose own finaliser writes through the view. `withbor2r` lends `c` as `m`; the
 -- body performs `1.0` (affine, resuming) under `[then]`, whose finaliser writes 99 through `m`.

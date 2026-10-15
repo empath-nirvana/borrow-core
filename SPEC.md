@@ -4552,7 +4552,8 @@ use R1 keeps them unconditionally.
 in `CDerivesP`, plus `lendR`, `lendLoopR` and `nilDead`. It is generated from
 `Core/Fundamental.lean` by `scripts/gen-pin.py` (templates in `scripts/pin/`), so a rule added to
 `CDerives` is in it after a rerun; `python3 scripts/gen-pin.py --check` fails when the generated
-files are stale.
+files are stale. §28's BOXED-κ (`effHandleVB`) is in it so, its case in `fundamentalC_pin`
+`handleV_compatCB`, as in `fundamentalC`.
 
 **`PinLaw`** (`Core/PinLaw.lean`) is a `structure … : Prop` of two fields, the compatibility lemmas
 of R1 (`PinStop`) and R2 (`PinLoop`) at the rules' own premises, with every quantifier over code a

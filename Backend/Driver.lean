@@ -285,7 +285,7 @@ def interpStageExpr (stage : String) (e : BoCa.Expr) : Except String Output := d
     Flat.interp runFuel (← Flat.lower p true T) []
   | _ => throw s!"unknown stage `{stage}`"
 
-/-- What the typing of `main` rests on (SPEC §28): nothing beyond Core's theorems, or `PinLaw` at
+/-- What the typing of `main` rests on (SPEC §29): nothing beyond Core's theorems, or `PinLaw` at
 each relaxed rule the derivation uses. -/
 def typingReport (c : Frontend.Check.Checked) : String :=
   match c.pins with
@@ -297,7 +297,7 @@ def typingReport (c : Frontend.Check.Checked) : String :=
       s!"{ps.length} site{if ps.length == 1 then "" else "s"}" ++
       String.join (ps.map fun q => s!"\n  {q.rule} at {q.line}:{q.col}: {field q.rule}")
 
-/-- The program's trusted boundaries (`bcc trusted`).  `[spec §11, §28]` -/
+/-- The program's trusted boundaries (`bcc trusted`).  `[spec §11, §29]` -/
 def trusted (file src : String) : Except String String := do
   let p ← match Frontend.parseProgram src with
     | .ok p => pure p

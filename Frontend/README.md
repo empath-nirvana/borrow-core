@@ -122,8 +122,8 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Check/Decide.lean` | `DecidableEq` on `VTy` and `CTy` (on `Expr`, `Core/LetCopy.lean`'s); a `Bool` decider for each side condition, with its soundness lemma |
 | `Check/Fam.lean` | linearity: masks of used and absorbable slots, and a derivation at every liveness between them |
 | `Check/Elab.lean` | surface lifetimes, types and shapes to `Core`'s; a printer back |
-| `Check/Tied.lean` | tied derivations (SPEC §19, decision R): `TiedAt`, and the checker's derivations `TiedDer p s` (SPEC §28: of `CDerivesP`, and tied when the list `p` of relaxed rules used is empty), one lemma per rule the builders apply, and the program's effect context (`effCtxOf`, `sigsOkB`) |
-| `Check/Pin.lean` | R1, the relaxed lend (SPEC §28): `withbor2r`'s builder `rLendR`, and the deciders `Row.resumeOB`, `noThunkB` |
+| `Check/Tied.lean` | tied derivations (SPEC §19, decision R): `TiedAt`, and the checker's derivations `TiedDer p s` (SPEC §29: of `CDerivesP`, and tied when the list `p` of relaxed rules used is empty), one lemma per rule the builders apply, and the program's effect context (`effCtxOf`, `sigsOkB`) |
+| `Check/Pin.lean` | R1, the relaxed lend (SPEC §29): `withbor2r`'s builder `rLendR`, and the deciders `Row.resumeOB`, `noThunkB` |
 | `Check/Rules.lean` | one builder per `CDerives` constructor, and `rDrop` (SPEC §12) |
 | `Check/Steps.lean` | the environment, messages, the deciders of fold shapes and destructors, the drops, and the steps shared by the checker's cases |
 | `Check/Consts.lean` | constants (§8, §8a, §8b) and derived forms (§9) |
@@ -155,7 +155,7 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
         CDerivesAt c.Ξ LifeCtx.empty c.ctx c.e (.comp c.C) ∧ c.Ξ.NoUnrExn
 
 `c.e` is `main`'s erasure, `c.C` its type and `c.ctx` its externs, the last declared at index 0,
-all live. `c.pins` lists the relaxed rules (SPEC §28) the derivation uses, and `bcc check` prints
+all live. `c.pins` lists the relaxed rules (SPEC §29) the derivation uses, and `bcc check` prints
 it: `assurance: unconditional` when it is empty, which is `hp`, and `assurance: PinLaw (R1 at
 L:C, …)` otherwise. `checked_sem` is the Fundamental Property at it (`SemC ∅ c.ctx c.e c.C`, at
 every host), and `checked_runs` adequacy for a closed `main : F 1`, both at `hp`;
