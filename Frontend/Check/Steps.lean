@@ -503,6 +503,7 @@ def mentionsC (x : String) : Comp → Bool
   | .perform _ _ _ V | .abort _ _ _ V => mentionsV x V
   | .handle _ _ hr hc M => hr.name == x || hc.name == x || mentionsC x M
   | .unwind _ y _ M D N => mentionsC x M || mentionsC x D || (y.name != x && mentionsC x N)
+  | .withbor2r _ _ _ _ _ _ p m M => p.name == x || (m.name != x && mentionsC x M)
 end
 
 /-- A path's terminal computation: every form except those that pass what is owed on to a tail

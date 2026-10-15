@@ -139,6 +139,7 @@ def _root_.Frontend.Comp.elab (lend : Bool) : Comp → Except Error Comp
   | .abort sp k i V => return .abort sp k i (← V.elab lend)
   | .handle sp k hr hc M => return .handle sp k hr hc (← M.elab false)
   | .unwind sp x A M D N => return .unwind sp x A (← M.elab false) (← D.elab false) (← N.elab false)
+  | .withbor2r sp x b A B r p m M => return .withbor2r sp x b A B r p m (← M.elab false)
 end
 
 /-! ### Filling a template's holes -/
@@ -187,6 +188,7 @@ def _root_.Frontend.Comp.fill (hv : String → Option Val) (hc : String → Opti
   | .abort sp k i V => .abort sp k i (V.fill hv hc)
   | .handle sp k hr hc' M => .handle sp k hr hc' (M.fill hv hc)
   | .unwind sp x A M D N => .unwind sp x A (M.fill hv hc) (D.fill hv hc) (N.fill hv hc)
+  | .withbor2r sp x b A B r p m M => .withbor2r sp x b A B r p m (M.fill hv hc)
   | .for_ sp x V M N => .for_ sp x (V.fill hv hc) (M.fill hv hc) (N.fill hv hc)
   | M => M
 end
@@ -459,6 +461,7 @@ def _root_.Frontend.Comp.names (n : String) : Comp → Bool
   | .perform _ _ _ V | .abort _ _ _ V => V.names n
   | .handle _ _ hr hc M => hr.name == n || hc.name == n || M.names n
   | .unwind _ _ _ M D N => M.names n || D.names n || N.names n
+  | .withbor2r _ _ _ _ _ _ p m M => p.name == n || m.name == n || M.names n
   | .force .. | .top _ => false
 end
 
@@ -564,6 +567,7 @@ def _root_.Frontend.Comp.hasFor : Comp → Bool
   | .case _ _ _ M _ N => M.hasFor || N.hasFor
   | .handle _ _ _ _ M => M.hasFor
   | .unwind _ _ _ M D N => M.hasFor || D.hasFor || N.hasFor
+  | .withbor2r _ _ _ _ _ _ _ _ M => M.hasFor
   | .for_ .. => true
   | _ => false
 
@@ -589,6 +593,7 @@ def _root_.Frontend.Comp.exitAt : Comp → Option Span
   | .perform _ _ _ V | .abort _ _ _ V => V.exitAt
   | .handle _ _ _ _ M => M.exitAt
   | .unwind _ _ _ M D N => M.exitAt.orElse fun _ => D.exitAt.orElse fun _ => N.exitAt
+  | .withbor2r _ _ _ _ _ _ _ _ M => M.exitAt
   | .force .. | .top _ => none
 end
 
@@ -620,6 +625,7 @@ def _root_.Frontend.Comp.anySugar (p : VSugar → Bool) : Comp → Bool
   | .perform _ _ _ V | .abort _ _ _ V => V.anySugar p
   | .handle _ _ _ _ M => M.anySugar p
   | .unwind _ _ _ M D N => M.anySugar p || D.anySugar p || N.anySugar p
+  | .withbor2r _ _ _ _ _ _ _ _ M => M.anySugar p
   | .force .. | .top _ => false
 end
 
@@ -645,6 +651,7 @@ def _root_.Frontend.Comp.sugarAt (p : VSugar → Bool) : Comp → Option Span
   | .perform _ _ _ V | .abort _ _ _ V => V.sugarAt p
   | .handle _ _ _ _ M => M.sugarAt p
   | .unwind _ _ _ M D N => ((M.sugarAt p).orElse fun _ => D.sugarAt p).orElse fun _ => N.sugarAt p
+  | .withbor2r _ _ _ _ _ _ _ _ M => M.sugarAt p
   | .force .. | .top _ => none
 end
 
@@ -2536,6 +2543,7 @@ def opsC (c : TCx) : Nat → Comp → List (Nat × Nat)
     | .ret _ V | .absurd _ V => opsV c k V
     | .bind _ _ _ M N _ | .with_ _ M N => opsC c k M ++ opsC c k N
     | .unwind _ _ _ M D N => opsC c k M ++ opsC c k D ++ opsC c k N
+    | .withbor2r _ _ _ _ _ _ _ _ M => opsC c k M
     | .letUnit _ V M | .letPair _ _ _ V M => opsV c k V ++ opsC c k M
     | .case _ V _ M _ N | .for_ _ _ V M N => opsV c k V ++ opsC c k M ++ opsC c k N
     | .app _ M _ | .proj _ _ M | .inst _ M _ | .nuIn _ M | .nuOut _ M | .ascribe _ M _ | .lamL _ _ _ M
@@ -2613,10 +2621,26 @@ where
   ty (x : Ident) (L B : VTy) (r : Frontend.Row) : VTy :=
     .thunk sp (.all sp x (.dom sp) (.arr sp L (.eff sp r (.box sp (.var sp x.name) B))))
 
+/-- A `mut` borrow block of an owned cell whose body performs resuming operations, as the relaxed
+lend R1 (SPEC §28): `p <- return P; withbor2r['x, @b, A, B, [r]](p, m) M`, from the unwinding
+form `withbor2u['x, @b, A, B, [r]] P (thunkv Fun 'x < @b. return (thunkv fun (m : …) -> M))` the
+block elaborates to. -/
+def relaxedC? (sp : Span) : Val → Option (Ident × Comp)
+  | .app _ (.app _ (.const _ (.withbor2U x b A B r)) P)
+      (.thunkv _ (.lamL _ _ _ (.ret _ (.thunkv _ (.lam _ m _ M))))) =>
+    let p : Ident := ⟨s!"io_rp{sp.start.line}_{sp.start.col}", sp⟩
+    some (m, .bind sp p none (.ret sp P) (.withbor2r sp x b A B r p m M) false)
+  | _ => none
+
 /-- A borrow block, as written. -/
 def borrowBlock? : Val → Option Comp
   | .app _ (.app _ (.sugar _ (.borrow k _)) _) (.thunkv _ (.lam _ _ _ M)) =>
     if k == .modify then none else some M
+  | _ => none
+
+/-- A borrow block's kind and place. -/
+def borrowKind? : Val → Option (BorrowKind × Val)
+  | .app _ (.app _ (.sugar _ (.borrow k _)) P) (.thunkv _ (.lam _ _ _ _)) => some (k, P)
   | _ => none
 
 /-- The components of a `()`-terminated tuple. -/
@@ -2673,6 +2697,7 @@ def rmSelfInC : Comp → Bool
   | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
   | .nuOut _ M | .ascribe _ M _ | .handle _ _ _ _ M => rmSelfInC M
   | .unwind _ _ _ M D N => rmSelfInC M || rmSelfInC D || rmSelfInC N
+  | .withbor2r _ _ _ _ _ _ _ _ M => rmSelfInC M
   | _ => false
 end
 
@@ -3289,6 +3314,30 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
           let r := S.filter fun o => used.contains o.n.toNat
           if !r.isEmpty then
             if let some o := r.find? (fun o => !o.abort) then
+              -- A `mut` borrow of an owned cell: the relaxed lend R1 (SPEC §28).
+              if let some (.mut, P) := borrowKind? V then
+                if let some (.ref _) := c.tyV P then
+                  if let some a := r.find? (·.abort) then
+                    throw ⟨V.span, s!"this borrow block's body performs the operation {o.n}.{o.i}, " ++
+                      s!"which resumes, and the abortive operation {a.n}.{a.i}: an abortive " ++
+                      "operation does not cross a borrow held across a resumption (R1, SPEC §28)"⟩
+                  let saved := (← get).cbRow
+                  modify fun st => { st with cbRow := some r }
+                  let V' ← surfV n c none V
+                  modify fun st => { st with cbRow := saved }
+                  match relaxedC? V.span V' with
+                  | some (m, M') =>
+                    let body := match M' with
+                      | .bind _ _ _ _ (.withbor2r _ _ _ _ _ _ _ _ B) _ => B
+                      | M => M
+                    let outer := c.E.vars.filterMap id |>.filter fun y =>
+                      y != m.name && Frontend.Check.mentionsC y body
+                    if let some y := outer.head? then
+                      throw ⟨V.span, s!"this borrow block's body uses `{y}`, which is outside " ++
+                        s!"it, and performs the operation {o.n}.{o.i}, which resumes: a borrow held " ++
+                        "across a resumption sees only its view (R1, SPEC §28)"⟩
+                    return M'
+                  | none => pure ()
               throw ⟨V.span, s!"this borrow block's body performs the operation {o.n}.{o.i}, which " ++
                 "resumes: only an abortive operation crosses a borrow's scope (a continuation " ++
                 "held across a lend is T1, #172)"⟩
@@ -4664,6 +4713,8 @@ def specC : Nat → TCx → Comp → DM Comp
     | .unwind sp x A M D N => do
       let t := bindTy c A M
       pure (.unwind sp x A (← specC n c M) (← specC n c.pushDead D) (← specC n (c.push x.name t) N))
+    | .withbor2r sp x b A B r p m M => do
+      pure (.withbor2r sp x b A B r p m (← specC n (c.push m.name none) M))
     | M => pure M
 end
 

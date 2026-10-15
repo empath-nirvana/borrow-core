@@ -191,6 +191,9 @@ def Comp.respan (sp : Span) : Comp → Comp
   | .handle _ n hr hc M => .handle sp n (hr.respan sp) (hc.respan sp) (M.respan sp)
   | .unwind _ x A M D N =>
       .unwind sp (x.respan sp) (A.map (VTy.respan sp)) (M.respan sp) (D.respan sp) (N.respan sp)
+  | .withbor2r _ x b A B r p m M =>
+      .withbor2r sp (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
+        (p.respan sp) (m.respan sp) (M.respan sp)
 end
 
 end Frontend

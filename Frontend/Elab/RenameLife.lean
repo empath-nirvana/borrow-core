@@ -192,6 +192,9 @@ def Comp.renameLife (f : String → String) : Comp → Comp
   | .handle s n hr hc M => .handle s n (hr.renameLife f) (hc.renameLife f) (M.renameLife f)
   | .unwind s x A M D N =>
       .unwind s (x.renameLife f) (A.map (VTy.renameLife f)) (M.renameLife f) (D.renameLife f) (N.renameLife f)
+  | .withbor2r s x b A B r p m M =>
+      .withbor2r s (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f)
+        (r.renameLife f) p m (M.renameLife f)
 end
 
 /-- `M` uses the lifetime `'x` (or binds a lifetime of that name).  `[spec §23]` -/

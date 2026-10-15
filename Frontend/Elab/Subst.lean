@@ -178,6 +178,8 @@ def Comp.subst (σ : TySubst) : Comp → Comp
   | .abort sp n i V => .abort sp n i (V.subst σ)
   | .handle sp n hr hc M => .handle sp n hr hc (M.subst σ)
   | .unwind sp x A M D N => .unwind sp x (A.map (VTy.subst σ)) (M.subst σ) (D.subst σ) (N.subst σ)
+  | .withbor2r sp x b A B r p m M =>
+      .withbor2r sp x b (A.subst σ) (B.subst σ) (r.subst σ) p m (M.subst σ)
 end
 
 end Frontend

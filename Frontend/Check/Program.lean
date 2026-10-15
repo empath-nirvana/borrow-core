@@ -68,7 +68,7 @@ def Pins.assurance : Pins → String
   | [] => "assurance: unconditional"
   | ps =>
     let sites (r : String) : List String :=
-      (ps.filter (·.rule == r)).map fun p => s!"{p.line}:{p.col}"
+      ((ps.filter (·.rule == r)).map fun p => s!"{p.line}:{p.col}").eraseDups
     let parts := ["R1", "R2"].filterMap fun r =>
       match sites r with
       | [] => none
@@ -199,7 +199,12 @@ def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := 
   let fx := el.origins.filterMap fun (_, w) =>
     if w.startsWith Frontend.Sugar.effectsTag then some (w.drop Frontend.Sugar.effectsTag.length).toString
     else none
-  let rep := { rep with lines := rep.lines ++ loops.eraseDups ++ fx.eraseDups }
+  -- The assurance of `main`'s derivation (SPEC §28): unconditional, or under `PinLaw` at the
+  -- relaxed rules it uses.
+  let assurance := match rep.main with
+    | some c => [c.pins.assurance]
+    | none => []
+  let rep := { rep with lines := rep.lines ++ loops.eraseDups ++ fx.eraseDups ++ assurance }
   if !copies then return rep
   let marked := (el.origins.filter (·.2 == Frontend.Sugar.cloneOrigin)).map (·.1)
   match Frontend.Elab.implicitCopy el.tir marked with

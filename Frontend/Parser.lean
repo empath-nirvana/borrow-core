@@ -886,7 +886,7 @@ def startsComp (t : Tok) : Bool :=
   match t with
   | .kw "return" | .kw "absurd" | .kw "nu_in" | .kw "delay_in" | .kw "stream_in" | .kw "nu_out"
   | .kw "delay_out" | .kw "stream_out" | .kw "force" | .sym "<" | .kw "case" | .kw "match"
-  | .kw "if" | .kw "perform" | .kw "abort" | .kw "handle_with" => true
+  | .kw "if" | .kw "perform" | .kw "abort" | .kw "handle_with" | .kw "withbor2r" => true
   | _ => false
 
 /-- A binary operator: one of the surface's arithmetic and comparisons, or `&&`/`||`, which are
@@ -1644,6 +1644,21 @@ def compPrefix : Nat → P Comp
       expectSym ")"
       let M ← compPrefix n
       pure (.handle (← spanFrom st) k hr hc M)
+    | .kw "withbor2r" =>
+      -- `withbor2r['x, @b, A, B, [ROW]](p, m) M`, the relaxed lend (SPEC §28).
+      discard bump
+      expectSym "["
+      let as ← args n CKw.withbor2U.sig
+      expectSym "]"
+      let some (.withbor2U x b A B r) := Const.ofArgs .withbor2U as
+        | failAt (← spanFrom st) "malformed arguments of `withbor2r`"
+      expectSym "("
+      let p ← ident "the lent place"
+      expectSym ","
+      let m ← ident "the view"
+      expectSym ")"
+      let M ← compPrefix n
+      pure (.withbor2r (← spanFrom st) x b A B r p m M)
     | _ =>
       let M ← compAtom n
       compSuffixes n st M
