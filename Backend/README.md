@@ -37,6 +37,15 @@ and `nu_out` erase, and `unfold` is a closed λ-term.
 | WAT | `Wasm/Print.lean`, `Wasm/Runtime.lean` | text; the runtime inserted as written | — |
 
 All passes are structural recursion (the interpreters take fuel); `Driver.lean` composes them.
+
+**The falsifier** (`Falsify.lean`, `FalsifyTests.lean`; docs/async-capabilities.md §6.1) is a
+dynamic check at the source stage, outside the semantics: `bcc interp --alloc least` runs the
+erasure under the least-free allocator (a freed location is reused at once), `--check fresh` under
+a never-reuse allocator that reports a use after free, and `--check tags` also tags every lend
+(the lend combinators of the erasure are marked before the run) and reports an access through an
+ended or suspended lend, an aliased access, an owner access while lent, and a lend that never
+ends. `scripts/falsify.sh` runs every accepted program the four ways and requires one output and
+`live 0`; `bcc kernel negatives` are untyped terms that must trip each check.
 No stage optimizes beyond choosing layouts, defunctionalizing closures, calling known codes
 directly, compiling `let` as a binding, cancelling the copy and drop inside `swap`, compiling
 the Z combinator's fixed point natively, building codata thunks eagerly, merging equal codes, and

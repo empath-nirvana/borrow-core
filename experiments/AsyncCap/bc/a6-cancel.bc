@@ -1,0 +1,36 @@
+-- pending: async-capabilities (docs/async-capabilities.md §1 A6; units U2, U5). Surface provisional.
+-- Cancellation of a suspended task that holds a borrow and an owned value. `victim` is suspended
+-- inside a relaxed lend of `buf`, also owning `extra`. `killer` cancels it. The cancel unwinds
+-- the victim's continuation innermost first: the lend's unwinding form ends the lend and runs the
+-- owner's finaliser (`buf`'s destructor), then `extra`'s drop glue runs. The scheduler's log
+-- records each finaliser through its `log` operation at the cancel row (SPEC §27).
+--
+-- Once it lands: results `[cancelled, 2]`, log `[10, 11]` (the destructors of `buf` and
+-- `extra`, innermost first); `live 0`: nothing leaks.
+
+include async
+
+fn victim() -> i32 with Async =
+  let extra = alloc_logged(11);
+  let buf = alloc_logged(10);
+  let v = borrow mut buf { m ->
+    let peek = || { *m };
+    await();
+    await();
+    peek()
+  };
+  free(buf);
+  free(extra);
+  v
+
+fn killer(t: task i32) -> i32 with Async =
+  await();
+  t.cancel();
+  2
+
+main -> list (option i32) * list i32 =
+  async::run_logged { s ->
+    let t = s.spawn { victim() };
+    s.spawn { killer(t) }
+  }
+-- now (bcc check, provisional surface): 17:16: expected a value, found `||`

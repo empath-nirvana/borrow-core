@@ -1,0 +1,15 @@
+-- expect (designed): reject at `send(m)`: an operation performed inside a relaxed lend must take
+-- closed data (`Row.ResumeO`: free of `'x`, outliving every lifetime, no `U`). Handing the view
+-- to the handler would let it outlive the lend's ghost end. Surface provisional.
+
+include async
+
+effect Chan { ctl send(mut 'a i32) }
+
+fn leak() -> 1 with Async, Chan =
+  let c = alloc(1);
+  borrow mut c { m -> send(m); await() };
+  free(c)
+
+main -> 1 = ()
+-- now (bcc check, provisional surface): 7:24: expected a parameter name, found `mut`

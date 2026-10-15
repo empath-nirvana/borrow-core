@@ -2,6 +2,7 @@ import Frontend.Parser
 import Frontend.Check.Program
 import Frontend.Check.Externs
 import Backend.Source
+import Backend.Falsify
 import Backend.Clos.Convert
 import Backend.Clos.Collapse
 import Backend.Clos.Unwind
@@ -228,6 +229,34 @@ def interpStage (stage file src : String) (input : List UInt8) : Except String O
   | "flat" => Flat.interp runFuel (← flatOf file src) input
   | "flat-counts" => Flat.interp runFuel (← flatOf file src true) input
   | _ => throw s!"unknown stage `{stage}`"
+
+/-! ### The falsifier
+
+`bcc interp --check fresh|tags` and `--alloc least` (`Backend/Falsify.lean`,
+docs/async-capabilities.md §6.1): the source stage on the falsifier's machine. The run's output,
+and its statistics. -/
+
+/-- The falsifier's options, by name: `least`, `fresh` or `tags`. -/
+def falsifyOpts : String → Except String Falsify.Opts
+  | "least" => pure ⟨.least, false⟩
+  | "fresh" => pure ⟨.fresh, false⟩
+  | "tags" => pure ⟨.fresh, true⟩
+  | m => throw s!"unknown check `{m}` (expected `fresh` or `tags`, or `--alloc least`)"
+
+/-- The source stage of a source file, on the falsifier's machine under `o`. -/
+def interpChecked (o : Falsify.Opts) (file src : String) (input : List UInt8) :
+    Except String (Output × String) := do
+  let k ← checkedOf file src
+  match k.io with
+  | none => Falsify.interpSource o runFuel k.main.e
+  | some m =>
+    let r ← ioRunOf file k m
+    if r.loops then Falsify.interpIOLoop o runFuel (r.expr input)
+    else Falsify.interpIO o runFuel (r.expr input)
+
+/-- A closed term on the falsifier's machine under `o`. -/
+def interpCheckedExpr (o : Falsify.Opts) (e : BoCa.Expr) : Except String (Output × String) :=
+  Falsify.interpSource o runFuel e
 
 /-! ### Kernel programs
 

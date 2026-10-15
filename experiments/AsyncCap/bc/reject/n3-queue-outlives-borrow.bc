@@ -1,0 +1,16 @@
+-- expect (designed): reject at the block's result: the queue `q` holds a task that captures `b`,
+-- and it is returned out of `b`'s block. The block's result is boxed at `'x`, and the queue's
+-- type `[@x] U(Task)` holds a thunk whose context mentions `'x`: `[]I` needs that context to
+-- outlive `@x`, which a capture of `b` gives, but the result of the block must outlive `'x`
+-- itself, and `U C` has no outlives rule (`gen-escape.bc`'s rule, unchanged). Surface provisional.
+
+include async
+
+main -> i32 =
+  let c = alloc(1);
+  let q = borrow imm c { b ->
+    async::queue_of { s -> s.spawn { await(); *b } }
+  };
+  free(c);
+  async::drain(q)
+-- now (bcc check, provisional surface): 12:11: expected a type, found `:`

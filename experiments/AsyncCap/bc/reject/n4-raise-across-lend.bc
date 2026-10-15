@@ -1,0 +1,24 @@
+-- expect (designed, v1): reject at the block: its body performs `bad`, abortive, and `await`,
+-- resuming, with `bad`'s handler outside the block. A relaxed lend's row is resuming operations
+-- only (`Row.ResumeO`); a row mixing them is OQ-1. Moving the `try` inside the block is accepted
+-- (a5-effects.bc). Surface provisional.
+
+include async
+
+effect Bad { raise bad(i32) }
+
+fn mixed() -> i32 with Async =
+  let c = alloc(1);
+  let v = try {
+    borrow mut c { m ->
+      let f = || { *m };
+      await();
+      if f() == 1 { bad(1) };
+      f()
+    }
+  } with { bad(e) -> e };
+  free(c);
+  v
+
+main -> list i32 = async::run { s -> s.spawn { mixed() } }
+-- now (bcc check, provisional surface): 8:14: expected `fn` or `ctl` (an operation), found name `raise`

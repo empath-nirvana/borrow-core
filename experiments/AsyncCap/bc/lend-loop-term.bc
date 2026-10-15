@@ -1,0 +1,137 @@
+-- The terms of R2 (`docs/async-capabilities.md` §3.3): `lend_loop_imm` and `lend_loop_mut`, the
+-- per-observation lend of `experiments/LoopBorrow/bc/lend-loop-imm.bc` and `lib/lend.bc`, at one
+-- monomorphic instance each, typed at today's strict rule (the state outlives the lend).
+-- `AsyncCap/LoopTerm.lean` reads their erasures (`defErasure`) and checks that the term R2 is
+-- stated over is this checked code at every instance of the same shape.
+--
+-- `main` drives both: the `imm` loop sums the cell's 7 over 3 steps (21), the `mut` loop adds 1
+-- to its cell at each of 4 observations and answers the content the last one saw (13): 21 * 100 + 13 = 2113.
+
+def drive_alg[A, Q] :
+    !(1 + !(U (loop A Q) => A + Q) => !(U (loop A Q) => A + Q)) =
+  !thunkv fun (r : 1 + !(U (loop A Q) => A + Q)) ->
+    case r {
+      inl u ->
+        let () = u;
+        return (!thunkv fun (l : U (loop A Q)) ->
+          q <- (nu_out (force l)).2;
+          return (inr q))
+    | inr k ->
+        return (!thunkv fun (l : U (loop A Q)) ->
+          o <- (nu_out (force l)).1;
+          case o {
+            inl a -> return (inl a)
+          | inr l2 -> return ((unbang k) l2)
+          })
+    }
+
+def z0 : mu X. 1 + X = roll (inl ())
+def z1 : mu X. 1 + X = roll (inr z0)
+def z2 : mu X. 1 + X = roll (inr z1)
+def z3 : mu X. 1 + X = roll (inr z2)
+def z4 : mu X. 1 + X = roll (inr z3)
+def z5 : mu X. 1 + X = roll (inr z4)
+
+def lend_loop_imm :
+    !(all 'x < top. imm 'x i32 * (i32 * i32) => box 'x (i32 + i32 * i32)) *
+      !(all 'x < top. imm 'x i32 * (i32 * i32) => box 'x 1) =>
+    !U (ref i32 * (i32 * i32) -o loop (ref i32 * i32) (ref i32 * 1)) =
+  thunkv fun (st : !(all 'x < top. imm 'x i32 * (i32 * i32) => box 'x (i32 + i32 * i32)) *
+                   !(all 'x < top. imm 'x i32 * (i32 * i32) => box 'x 1)) ->
+    let (nx, cl) = st;
+    return (unfold[loop (ref i32 * i32) (ref i32 * 1), ref i32 * (i32 * i32)]
+      (!thunkv fun (p : ref i32 * (i32 * i32)) ->
+        < let (r, s) = p;
+          q <- return (withbor1['x, i32, i32 + i32 * i32] r (thunkv Fun 'x < dom. return (thunkv fun (b : imm 'x i32) ->
+                 return ((unbang nx) ['x] (b, s)))));
+          let (r, o) = q;
+          case o { inl v -> return (inl (r, v)) | inr s2 -> return (inr (r, s2)) },
+          let (r, s) = p;
+          withbor1['x, i32, 1] r (thunkv Fun 'x < dom. return (thunkv fun (b : imm 'x i32) ->
+            return ((unbang cl) ['x] (b, s)))) >))
+
+def lend_loop_mut :
+    !(all 'x < top. mut 'x i32 * (i32 * i32) => box 'x (i32 + i32 * i32)) *
+      !(all 'x < top. mut 'x i32 * (i32 * i32) => box 'x 1) =>
+    !U (ref i32 * (i32 * i32) -o loop (ref i32 * i32) (ref i32 * 1)) =
+  thunkv fun (st : !(all 'x < top. mut 'x i32 * (i32 * i32) => box 'x (i32 + i32 * i32)) *
+                   !(all 'x < top. mut 'x i32 * (i32 * i32) => box 'x 1)) ->
+    let (nx, cl) = st;
+    return (unfold[loop (ref i32 * i32) (ref i32 * 1), ref i32 * (i32 * i32)]
+      (!thunkv fun (p : ref i32 * (i32 * i32)) ->
+        < let (r, s) = p;
+          q <- return (withbor2['x, top, i32, i32 + i32 * i32] r (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x i32) ->
+                 return ((unbang nx) ['x] (m, s)))));
+          let (r, o) = q;
+          case o { inl v -> return (inl (r, v)) | inr s2 -> return (inr (r, s2)) },
+          let (r, s) = p;
+          withbor2['x, top, i32, 1] r (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x i32) ->
+            return ((unbang cl) ['x] (m, s)))) >))
+
+def sub : i32 * i32 => i32 = unbang host[sub32]
+def add : i32 * i32 => i32 = unbang host[add32]
+
+-- `(n, acc)`: finish with `acc` at `n = 0`, else add the cell's content.
+def step_imm : !(all 'x < top. imm 'x i32 * (i32 * i32) => box 'x (i32 + i32 * i32)) =
+  !thunkv Fun 'x < top. return (thunkv fun (p : imm 'x i32 * (i32 * i32)) ->
+    let (b, s) = p;
+    let (n, acc) = s;
+    if n == 0 { u <- return (forget_imm['x, i32] b); let () = u; boxed['x] (inl acc) }
+    else {
+      v <- return (withload['x, 'z, i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (w : i32) ->
+             return (boxed['z] w))));
+      boxed['x] (inr (sub (n, i32[1]), add (acc, v))) })
+
+def stop_imm : !(all 'x < top. imm 'x i32 * (i32 * i32) => box 'x 1) =
+  !thunkv Fun 'x < top. return (thunkv fun (p : imm 'x i32 * (i32 * i32)) ->
+    let (b, s) = p;
+    let (n, acc) = s;
+    u <- return (forget_imm['x, i32] b);
+    let () = u;
+    boxed['x] ())
+
+-- `(n, acc)`: finish with the cell's content at `n = 0`, else add 1 to it.
+def step_mut : !(all 'x < top. mut 'x i32 * (i32 * i32) => box 'x (i32 + i32 * i32)) =
+  !thunkv Fun 'x < top. return (thunkv fun (p : mut 'x i32 * (i32 * i32)) ->
+    let (m, s) = p;
+    let (n, acc) = s;
+    z <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) -> return (add (v, i32[1]), v)));
+    let (m, cur) = z;
+    u <- return (forget_mut['x, i32] m);
+    let () = u;
+    if n == 0 { boxed['x] (inl cur) }
+    else {
+      boxed['x] (inr (sub (n, i32[1]), acc)) })
+
+def stop_mut : !(all 'x < top. mut 'x i32 * (i32 * i32) => box 'x 1) =
+  !thunkv Fun 'x < top. return (thunkv fun (p : mut 'x i32 * (i32 * i32)) ->
+    let (m, s) = p;
+    let (n, acc) = s;
+    u <- return (forget_mut['x, i32] m);
+    let () = u;
+    boxed['x] ())
+
+type ULp = U (loop (ref i32 * i32) (ref i32 * 1))
+
+main : F i32 =
+  t <- return (alloc[i32] i32[7]);
+  f <- return (unbang (lend_loop_imm (step_imm, stop_imm)));
+  s0 : ref i32 * (i32 * i32) <- return (t, (i32[3], i32[0]));
+  l : ULp <- return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >);
+  d <- return ((unbang (fold_own[1 + X, !(ULp => (ref i32 * i32) + (ref i32 * 1))]
+         drive_alg[ref i32 * i32, ref i32 * 1])) z5);
+  o <- return ((unbang d) l);
+  a <- (case o {
+    inl p -> let (t2, n) = p; x <- return (free[i32] t2); return n
+  | inr q -> let (t2, u) = q; let () = u; x <- return (free[i32] t2); return i32[0]
+  });
+  c <- return (alloc[i32] i32[10]);
+  g <- return (unbang (lend_loop_mut (step_mut, stop_mut)));
+  s1 : ref i32 * (i32 * i32) <- return (c, (i32[3], i32[0]));
+  l2 : ULp <- return (thunkv nu_in < (nu_out (force g s1)).1, (nu_out (force g s1)).2 >);
+  o2 <- return ((unbang d) l2);
+  b <- (case o2 {
+    inl p -> let (c2, n) = p; x <- return (free[i32] c2); return n
+  | inr q -> let (c2, u) = q; let () = u; x <- return (free[i32] c2); return i32[0]
+  });
+  return (add ((unbang host[mul32]) (a, i32[100]), b))

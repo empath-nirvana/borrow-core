@@ -1,0 +1,25 @@
+-- pending: async-capabilities (docs/async-capabilities.md §1 A4; units U2). Surface provisional.
+-- An awaiting closure passed to a higher-order function, with no colouring. `map` is written
+-- once. Its parameter `f` is a block, `{A => B}`: second-class (called, never stored or
+-- returned), and its type names no effect. `main` uses `map` with a pure block, and a task uses
+-- it with a block that awaits; each use is a copy of `map` specialised at its block (SPEC §14's
+-- mechanism, keyed by the block): a plain loop for the pure one, a state machine for the other.
+-- Tier 1: nothing is borrowed across the `await` (the list is owned and consumed).
+--
+-- Once it lands: `([2, 3, 4], [[10, 20, 30]])`; `live 0`; the pure copy allocates only the
+-- result's nodes and dispatches no call.
+
+include async
+include lists
+
+fn map[A, B](xs: list A, f: {A => B}) -> list B =
+  match xs { nil -> nil | cons(x, rest) -> cons(f(x), map(rest, f)) }
+
+fn slow_tens() -> list i32 with Async =
+  map(list[1, 2, 3], { x -> await(); x * 10 })
+
+main -> list i32 * list (list i32) =
+  let sync = map(list[1, 2, 3], { x -> x + 1 });
+  let tasks = async::run { s -> s.spawn { slow_tens() } };
+  (sync, tasks)
+-- now (bcc check, provisional surface): 15:18: expected a type, found name `list`

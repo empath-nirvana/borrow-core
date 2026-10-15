@@ -2,6 +2,7 @@ import Frontend.Parser
 import Frontend.Print
 import Frontend.Check.Program
 import Backend.Driver
+import Backend.FalsifyTests
 /-!
 # Frontend — `bcc`
 
@@ -18,6 +19,11 @@ import Backend.Driver
                                 run `main` in the interpreter of stage `S` (`Backend/`):
                                 `source` (the default), `clos`, `flat`; a program that
                                 declares `stdin` reads all of standard input first
+    lake exe bcc interp (--check fresh|tags | --alloc least) [--stats] <file>
+                                the falsifier (`Backend/Falsify.lean`): the source stage with
+                                a never-reuse allocator (`fresh`), with lend tags (`tags`), or
+                                with the least-free allocator (`least`); a failed check is an
+                                error; `--stats` writes the run's counts to standard error
     lake exe bcc desugar <file> print the program with its I/O sugar elaborated (SPEC §11)
     lake exe bcc tir <file>     print the typed IR of the elaborated program: each
                                 declaration's binders with their types and classes
@@ -25,7 +31,8 @@ import Backend.Driver
     lake exe bcc erase <file>   print the erasure of the checked `main`
     lake exe bcc trusted <file> list the program's externs with their contracts, host
                                 implementations and assurance levels (SPEC §11)
-    lake exe bcc kernel (list | interp [--stage S] <name> | compile <name> -o <out.wat> | run <name>)
+    lake exe bcc kernel (list | negatives | interp [--stage S | --check M | --alloc least] <name>
+                          | compile <name> -o <out.wat> | run <name>)
                                 the kernel programs of `Backend/Kernel.lean`, which the surface
                                 cannot spell (SPEC §19), at a stage, compiled, or run
 
@@ -59,6 +66,42 @@ def interp (stage file : String) : IO UInt32 := do
     err.flush
     return 0
   | .error e => IO.eprintln e; return 1
+
+/-- Write the falsifier's output on `file` (`Backend.interpChecked`): as `interp`, and its
+statistics with `stats`. A check that fails is an error. -/
+def interpChecked (mode file : String) (stats : Bool) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  let input ← if Backend.readsInput file src then readAll (← IO.getStdin) (1 <<< 16) .empty
+    else pure .empty
+  let r := do Backend.interpChecked (← Backend.falsifyOpts mode) file src input.toList
+  match r with
+  | .ok (o, st) =>
+    let out ← IO.getStdout
+    out.write o.out
+    out.flush
+    let err ← IO.getStderr
+    err.write o.err
+    if stats then err.putStrLn st
+    err.flush
+    return 0
+  | .error e => IO.eprintln e; return 1
+
+/-- The options of `bcc interp` and `bcc kernel interp`: the stage, the falsifier's mode, and
+whether to write its statistics; then the file or name. -/
+structure InterpArgs where
+  stage : String := "source"
+  check : Option String := none
+  stats : Bool := false
+  target : String := ""
+
+def parseInterpArgs : List String → InterpArgs → Option InterpArgs
+  | ["--stats"], _ => none
+  | "--stage" :: st :: rest, a => parseInterpArgs rest { a with stage := st }
+  | "--check" :: m :: rest, a => parseInterpArgs rest { a with check := some m }
+  | "--alloc" :: m :: rest, a => parseInterpArgs rest { a with check := some m }
+  | "--stats" :: rest, a => parseInterpArgs rest { a with stats := true }
+  | [t], a => if t.startsWith "--" then none else some { a with target := t }
+  | _, _ => none
 
 /-- Print `file` with its I/O sugar elaborated. -/
 def desugar (file : String) : IO UInt32 := do
@@ -131,9 +174,11 @@ def run (file : String) : IO UInt32 := do
 
 /-! ### Kernel programs -/
 
-/-- A kernel program by name (`Backend.kernelPrograms`). -/
+/-- A kernel program by name (`Backend.kernelPrograms`), or a negative test of the falsifier
+(`Backend.FalsifyTests.negatives`). -/
 def kernelProg (name : String) : Option BoCa.Expr :=
-  (Backend.kernelPrograms.lookup name)
+  (Backend.kernelPrograms.lookup name).orElse fun _ =>
+    (Backend.FalsifyTests.negatives.find? (·.1 == name)).map (·.2.1)
 
 /-- Write a kernel program's stage output, or its error. -/
 def kernelReport (r : Except String Backend.Output) : IO UInt32 := do
@@ -176,9 +221,28 @@ def kernel (args : List String) : IO UInt32 := do
   | ["list"] =>
     for (n, _) in Backend.kernelPrograms do IO.println n
     return 0
-  | ["interp", name] => withProg name (kernelReport ∘ Backend.interpStageExpr "source")
-  | ["interp", "--stage", stage, name] =>
-    withProg name (kernelReport ∘ Backend.interpStageExpr stage)
+  | ["negatives"] =>
+    for (n, _, m, msg, ans) in Backend.FalsifyTests.negatives do
+      IO.println s!"{n}\t{m}\t{msg}\t{ans}"
+    return 0
+  | "interp" :: rest =>
+    match parseInterpArgs rest {} with
+    | some { stage, check := none, target, .. } =>
+      withProg target (kernelReport ∘ Backend.interpStageExpr stage)
+    | some { stage, check := some m, stats, target } =>
+      if stage != "source" then
+        IO.eprintln "bcc kernel interp: a check runs at the source stage only"
+        return 2
+      withProg target fun e => do
+        match (do Backend.interpCheckedExpr (← Backend.falsifyOpts m) e) with
+        | .ok (o, st) =>
+          let r ← kernelReport (.ok o)
+          if stats then IO.eprintln st
+          return r
+        | .error err => IO.eprintln err; return 1
+    | _ =>
+      IO.eprintln "usage: bcc kernel interp [--stage S | --check fresh|tags | --alloc least] [--stats] <name>"
+      return 2
   | ["compile", name, "-o", out] => withProg name (kernelCompile · out)
   | ["run", name] => withProg name kernelRun
   | _ =>
@@ -200,8 +264,17 @@ def main (argv : List String) : IO UInt32 := do
   | ["compile", file, "-o", out] => compile file out
   | ["compile", "--timings", file, "-o", out] => compileTimed file out
   | ["run", file] => run file
-  | ["interp", file] => interp "source" file
-  | ["interp", "--stage", stage, file] => interp stage file
+  | "interp" :: rest =>
+    match parseInterpArgs rest {} with
+    | some { stage, check := none, target, .. } => interp stage target
+    | some { stage, check := some m, stats, target } =>
+      if stage != "source" then
+        IO.eprintln "bcc interp: a check runs at the source stage only"
+        return 2
+      interpChecked m target stats
+    | _ =>
+      IO.eprintln "usage: bcc interp [--stage S | --check fresh|tags | --alloc least] [--stats] <file>"
+      return 2
   | ["trusted", file] => trusted file
   | ["desugar", file] => desugar file
   | ["tir", file] => tir file

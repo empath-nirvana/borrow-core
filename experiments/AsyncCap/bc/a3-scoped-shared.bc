@@ -1,0 +1,33 @@
+-- pending: async-capabilities (docs/async-capabilities.md §1 A3; units U1, U2, U6). Surface provisional.
+-- Tasks borrowing a shared outer value, spawned in a scope that outlives the scheduler (scoped
+-- spawn), under a scheduler that runs until its queue is empty, with no bound.
+--
+-- `cfg` is lent `imm` once, around the whole scheduler. The scheduler is a loop (codata) whose
+-- state, the queue, holds tasks holding `c`: the lend spans the loop's observations. Today that
+-- is `LoopLend`'s reported case "an iterator that holds the borrow" (SPEC §14 *Not covered*).
+-- With R2 (`lendLoopR`, `imm` only) the loop re-lends `cfg` at each observation and the queue's
+-- views are valid again at the fresh lifetime: sound under `PinLaw.loop`. The tasks are boxed at
+-- the lend's lifetime (BOXED-κ with `Δ ⊢ Γ_task ⊐ @x`), so none can leave the block.
+--
+-- Once it lands: `[6, 9]` (3·1 + 3, 3·2 + 3); `live 0`; trusted: PinLaw at 1 loop.
+
+include async
+
+type Config = i32
+
+fn scaled(c: &Config, k: i32) -> i32 with Async =
+  let a = *c * k;
+  await();
+  a + *c
+
+main -> list i32 =
+  let cfg = alloc(3);
+  let out = borrow imm cfg { c ->
+    async::run_until_empty { s ->
+      s.spawn { scaled(c, 1) };
+      s.spawn { scaled(c, 2) }
+    }
+  };
+  free(cfg);
+  out
+-- now (bcc check, provisional surface): 18:14: expected a type, found `&`

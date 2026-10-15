@@ -1,0 +1,31 @@
+-- expect (designed): accepted, runs to `([cancelled, 2], [99])`, `live 0`, trusted: PinLaw at 1
+-- block. Surface provisional (`then … unwind …` is SPEC §19's `M then x. N unwind D`).
+-- docs/async-capabilities.md §6.2 row 16. `holder` holds `borrow mut` of its own local `c` across
+-- an `await` (a relaxed lend, R1), and `killer` cancels it there. The body's finaliser writes
+-- through the view `m`: `[then]` gives the finaliser the body's context, so `m` is in scope. The
+-- cancel unwinds `holder` innermost first: the borrower's finaliser writes `99` through `m`, then
+-- the lend ends and the owner's finaliser runs (`c`'s destructor, which logs the cell: `99`). A
+-- log of `10`, or a falsifier report (`scripts/falsify.sh`: a write through an ended tag), would
+-- mean the owner's finaliser ran first. Under `bcc interp --check tags` the run must be clean.
+
+include async
+
+fn holder() -> i32 with Async =
+  let c = alloc_logged(10);
+  let v = borrow mut c { m ->
+    await() then { *m = *m + 1; *m } unwind { *m = 99 }
+  };
+  free(c);
+  v
+
+fn killer(t: task i32) -> i32 with Async =
+  await();
+  t.cancel();
+  2
+
+main -> list (option i32) * list i32 =
+  async::run_logged { s ->
+    let t = s.spawn { holder() };
+    s.spawn { killer(t) }
+  }
+-- now (bcc check, provisional surface): 16:18: expected `}`, found `{`

@@ -1,0 +1,21 @@
+-- expect (designed): accepted, runs to `[60]`, `live 0`, trusted: PinLaw at 1 block. Surface
+-- provisional. A task with a relaxed lend of its local array, inside which it runs a generator
+-- over the borrowed array (a handler of `Yield` inside the lend) and awaits between elements.
+-- `yield` is caught inside the borrower and crosses no lend (Law 2's `InStop`); `await` crosses
+-- the lend and is handled by the scheduler outside.
+
+include async
+include yield
+
+fn task() -> i32 with Async =
+  let a = alloc(array_new[i32](3, { i -> (i + 1) * 10 }));
+  let v = borrow imm a { xs ->
+    let mut acc = 0;
+    for x in elems(xs) { acc = acc + x; await() };
+    acc
+  };
+  free(a);
+  v
+
+main -> list i32 = async::run { s -> s.spawn { task() } }
+-- now (bcc check, provisional surface): 20:9: expected a type, found name `list`

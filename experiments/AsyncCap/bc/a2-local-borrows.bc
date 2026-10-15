@@ -1,0 +1,55 @@
+-- pending: async-capabilities (docs/async-capabilities.md §1 A2; units U3, U5). Surface provisional.
+-- Tasks borrowing their own locals across `await`, `imm` and `mut`.
+--
+-- * `reader`: only the borrow itself crosses each `await`. The elaborator segments the block at
+--   the `await` (L0, ADD-5's degenerate case): two ordinary lends, no relaxed rule, no PinLaw.
+-- * `counter`: a closure over the `mut` borrow crosses the `await`, a value derived from the
+--   borrow, so the block cannot be segmented. It is one relaxed lend (R1, `lendR`): sound
+--   under `PinLaw.stop`. `bcc trusted` lists the block.
+-- * `pair_view`: the borrow moved into a pair that crosses the `await` (derived), R1 again.
+--
+-- No `Pin`, no annotation. Once it lands: `[20, 12, 7]`; `live 0`; trusted: PinLaw at 2 blocks.
+
+include async
+
+fn reader() -> i32 with Async =
+  let c = alloc(10);
+  let v = borrow imm c { b ->
+    let x = *b;
+    await();
+    x + *b
+  };
+  free(c);
+  v
+
+fn counter() -> i32 with Async =
+  let c = alloc(10);
+  let v = borrow mut c { m ->
+    let bump = || { *m = *m + 1 };
+    bump();
+    await();
+    bump();
+    *m
+  };
+  free(c);
+  v
+
+fn pair_view() -> i32 with Async =
+  let c = alloc(3);
+  let v = borrow mut c { m ->
+    let p = (m, 4);
+    await();
+    let (m2, k) = p;
+    *m2 = *m2 + k;
+    *m2
+  };
+  free(c);
+  v
+
+main -> list i32 =
+  async::run { s ->
+    s.spawn { reader() };
+    s.spawn { counter() };
+    s.spawn { pair_view() }
+  }
+-- now (bcc check, provisional surface): 28:16: expected a value, found `||`

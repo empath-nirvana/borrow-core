@@ -1,0 +1,18 @@
+-- expect (designed): reject at the second `s.spawn`: `m : mut 'x i32` is linear and was moved
+-- into the first task; the second task's capture of `m` is a second use (B6, `Ctx.SplitP`). No
+-- rule of this design copies a `mut` view: R1 lends an owned place once, R2 is `imm` only.
+-- Surface provisional.
+
+include async
+
+main -> list i32 =
+  let c = alloc(1);
+  let r = borrow mut c { m ->
+    async::run_until_empty { s ->
+      s.spawn { *m = *m + 1; await(); *m };
+      s.spawn { *m = *m + 2; await(); *m }
+    }
+  };
+  free(c);
+  r
+-- now (bcc check, provisional surface): 8:9: expected a type, found name `list`
