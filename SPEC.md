@@ -4636,8 +4636,9 @@ unconditional`. Every reject program keeps its message.
 suspension; two tasks interleaved), `async-r1-effects.bc` (A5: a log and an error handled inside
 the block), `async-r1-cancel.bc` (A6: a task cancelled while it holds the lend and an owned value),
 `async-r1-cancel-finaliser-writes.bc` (§6.2 row 16, in the core text: the borrower's finaliser
-writes through the view before the lend ends), `async-r1-generator.bc` and `async-r1-drain.bc`
-(§15's self-referential generator with a `mut` borrow). The tasks are stored generators whose
+writes through the view before the lend ends), `async-r1-nested.bc` (a relaxed lend inside
+another), `async-r1-generator.bc` and `async-r1-drain.bc` (§15's self-referential generator with a
+`mut` borrow). The tasks are stored generators whose
 `yield` is their `await`, and the scheduler is written inline: `lib/async.bc` is U2.
 `corpus/reject/async-r1-two-mut.bc`, `async-r1-raise-across.bc`, `async-r1-view-argument.bc`,
 `async-r1-unr.bc` and `async-r1-spawn-captures.bc` are §6.2's rows 2, 11, 12, 14 and 10.

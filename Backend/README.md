@@ -2,7 +2,8 @@
 
 `bcc` compiles a checked, closed `main` (`Frontend/`) to WebAssembly text and runs it under
 `wasmtime`. The input is `main`'s erasure, the untyped BoLo `Expr` that
-`Frontend.Check.checkProgram_sound` derives `CDerives` for. The closure IR recovers layout types
+`Frontend.Check.checkProgram_soundP` derives `CDerivesP` for (`CDerives` at `assurance:
+unconditional`, `checkProgram_sound`). The closure IR recovers layout types
 from it (`Clos/Types.lean`), and every stage from the flat IR on lays values out by type.
 
     lake exe bcc compile <file> -o <out.wat>   compile to WAT

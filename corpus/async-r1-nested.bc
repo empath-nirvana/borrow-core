@@ -1,0 +1,44 @@
+-- SPEC §28, R1: a relaxed lend inside another. The generator lends `c`, and inside that lend it
+-- allocates `d` and lends it too; the inner block's body yields while both lends are open, and
+-- the outer body yields again after the inner lend has ended. The inner lend sits under the outer
+-- body's binders (`[nil-dead]`), so `PinLaw.stop`'s premise is the outer body's derivation with
+-- the inner relaxed lend in it. `main` pulls the generator to its end.
+--
+-- `assurance: PinLaw (R1 at 15:11, 17:13)`.
+--
+-- Answer: i32[19]: 5 (the outer cell) + 7 (the inner cell, read through its view) + 7 (the inner
+-- cell freed); `live 0`.
+include yield
+
+fn nested() -> i32 with Yield[i32] =
+  let c = alloc(5);
+  let v = borrow mut c { m ->
+    let d = alloc(7);
+    let w = borrow mut d { n ->
+      yield(1);
+      modify n { x -> (x, x) }
+    };
+    let e = free(d);
+    yield(2);
+    let a = modify m { x -> (x, x) };
+    a + w + e
+  };
+  let _ = free(c);
+  v
+
+fn step(it: U (pull i32 i32 1)) -> (i32 * U (pull i32 i32 1)) + i32 =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> inl (x, it)
+  | inr d -> match d { inl r -> inr r | inr it -> inl (0, it) }
+  }
+
+main -> i32 =
+  let g : U (pull i32 i32 1) = nested();
+  match step(g) {
+    inl (x, g) -> match step(g) {
+      inl (y, g) -> match step(g) { inl (z, g) -> (nu_out (force g)).2; 0 | inr r -> r }
+    | inr r -> r
+    }
+  | inr r -> r
+  }
