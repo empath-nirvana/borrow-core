@@ -1,0 +1,31 @@
+-- expect: 26:10: the clauses box `κ` at `'r`, so the handled computation's context must outlive it: `k`, of type `imm 'r i32`, is used inside, and it cannot be shown to outlive `'r`
+-- BOXED-κ (SPEC §28), refused at its context premise. The clauses receive `κ` boxed at `'r`, and
+-- the handled computation holds `k : imm 'r i32` across its `await`, so its share at the stop
+-- holds a borrow at `'r` itself: the context must outlive `'r`, and `imm 'r i32 ⊐ 'r` is
+-- `'r ⊏ 'r`, false (the `Imm` rule of the outlives judgment is strict, SPEC §23). The same handler
+-- at a bare `κ` is `[handle]`'s and checks.
+
+def look : !(all 'r < top. imm 'r i32 => i32) =
+  !thunkv Fun 'r < top. return (thunkv fun (b : imm 'r i32) ->
+    r <- return (withload['r, 'z, i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (v : i32) ->
+           return (boxed['z] v))));
+    return r)
+
+main : F i32 =
+  cfg <- return (alloc[i32] i32[42]);
+  q <- return (withbor1['r, i32, i32] cfg (thunkv Fun 'r < dom. return (thunkv fun (k : imm 'r i32) ->
+    hr_ : !U (i32 -o F i32) <- return (!thunkv fun (v : i32) -> return v);
+    hc_ : !U (1 * box 'r U ((1 -o F i32) & F 1) -o F i32) * 1 <- return
+      ((!thunkv fun (p : 1 * box 'r U ((1 -o F i32) & F 1)) ->
+        let (u, bk) = p;
+        let () = u;
+        kk <- return (unbox bk);
+        c <- (force kk).2;
+        let () = c;
+        return i32[0]), ());
+    v <- handle_with[1](hr_, hc_) (w <- perform[1.0] (); let () = w; a <- return ((unbang look) ['r] k); return a);
+    return (boxed['r] v))));
+  let (cfg, v) = q;
+  x <- return (free[i32] cfg);
+  let _ = x;
+  return v

@@ -281,7 +281,10 @@ borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowL
   (`retRead`) and the operations `E` off the clauses' type (`clausesRead`, checked equal to
   `clausesTy Σ R E`); an abortive clause `!U(A -o F_Σ R)` is read as the affine operation
   `A ↠^aff 0` (`aff` and `unr` give it the same clause type). `M` is checked at
-  `F_{ofEff n E 0 ++ Σ} A`.
+  `F_{ofEff n E 0 ++ Σ} A`. When a clause's argument is `A ⊗ [@d] κ`, `κ` a continuation's type,
+  the clauses are read as BOXED-κ's first (`clausesReadBoxed`, `clausesTyB Σ R d E`; SPEC §28):
+  then `@d` must be defined, every non-abortive answer type of the handled row must outlive it
+  (`ansOutlivesB`), and so must every slot `M` uses, and the derivation is `rEffHandleB`'s.
 * **Unwinding borrows.** The finaliser is the source's destructor `dtorE` (`forget` at a `mut`
   source, the cell's and the array's otherwise), closed by evaluation; the derivation is
   `dtor_wf` at a dead context, so these constants absorb no slot (as item 5 of the

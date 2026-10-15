@@ -167,6 +167,9 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
         hMS hDS hfin hP ihM ihN ihD
   | effHandleV hs hd hH _ hn0 hnS hlen _ ihc ihe =>
       exact .effHandleV (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen ihe
+  | effHandleVB hs hd hH _ hn0 hnS hlen _ hΓd hSd ihc ihe =>
+      exact .effHandleVB (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen ihe
+        (ctxOutlives_append h' hΓd) hSd
   | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN
 
 end BoCa.Fig16.LogRel.Core

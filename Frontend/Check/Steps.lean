@@ -267,6 +267,50 @@ def clausesRead (S : CRow) (R : CVTy) :
     pure ⟨e :: E, by subst he hE; rfl⟩
   | _ => none
 
+/-- The operations a clause's type under BOXED-κ may be the type of (`[spec §28]`): a control
+operation `A ↠^q B` (its argument `A ⊗ [@d] κ`), then an abortive one. -/
+def clauseCandsB : CVTy → List (CQual × CVTy × CVTy)
+  | .bang (.thunk (.arr (.tensor A (.box d K)) _)) =>
+      (match kRead K with | some (q, B) => [(q, A, B)] | none => []) ++
+        [(.aff, .tensor A (.box d K), .zero)]
+  | .bang (.thunk (.arr A _)) => [(.aff, A, .zero)]
+  | _ => []
+
+/-- The first candidate whose clause type under BOXED-κ at `@d` is `c`. -/
+def firstClauseB (S : CRow) (R : CVTy) (d : CLife) (c : CVTy) :
+    List (CQual × CVTy × CVTy) → Option {e // BoCa.Fig16.LogRel.Core.clauseTyB S R d e = c}
+  | [] => none
+  | e :: es => if h : BoCa.Fig16.LogRel.Core.clauseTyB S R d e = c then some ⟨e, h⟩
+      else firstClauseB S R d c es
+
+/-- The operations `E` of a handler whose clauses receive `κ` boxed at `@d`, read back from the
+type of its clauses' tuple, with `clausesTyB S R d E` that type.  `[spec §28]` -/
+def clausesReadB (S : CRow) (R : CVTy) (d : CLife) :
+    (Tc : CVTy) → Option {E // BoCa.Fig16.LogRel.Core.clausesTyB S R d E = Tc}
+  | .unit => some ⟨[], rfl⟩
+  | .tensor c rest => do
+    let ⟨e, he⟩ ← firstClauseB S R d c (clauseCandsB c)
+    let ⟨E, hE⟩ ← clausesReadB S R d rest
+    pure ⟨e :: E, by subst he hE; rfl⟩
+  | _ => none
+
+/-- The lifetime a clause tuple's type boxes its continuations at: that of its first clause whose
+argument is `A ⊗ [@d] κ`, `κ` a continuation's type. -/
+def clausesBoxOf : CVTy → Option CLife
+  | .tensor (.bang (.thunk (.arr (.tensor _ (.box d K)) _))) rest =>
+      if (kRead K).isSome then some d else clausesBoxOf rest
+  | .tensor _ rest => clausesBoxOf rest
+  | _ => none
+
+/-- A clause tuple's type read as BOXED-κ's: its boxing lifetime, and its operations. Where it reads,
+the checker prefers it to `clausesRead`, which would read a clause `!U(A ⊗ [@d] κ ⊸ F_Σ R)` as an
+abortive operation's.  `[spec §28]` -/
+def clausesReadBoxed (S : CRow) (R : CVTy) (Tc : CVTy) :
+    Option (Σ d : CLife, {E // BoCa.Fig16.LogRel.Core.clausesTyB S R d E = Tc}) := do
+  let d ← clausesBoxOf Tc
+  let r ← clausesReadB S R d Tc
+  pure ⟨d, r⟩
+
 /-- `h_ret`'s type `!U(A -o F_S R)` read back. -/
 def retRead (Tr : CVTy) :
     Option (Σ' (S : CRow) (A R : CVTy), BoCa.Fig16.LogRel.Core.retTy S A R = Tr) :=

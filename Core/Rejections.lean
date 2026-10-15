@@ -5,9 +5,10 @@ import Core.EffPrograms
 # Core — programs no derivation types  `[spec §19]`
 
 Four programs that `CDerives` types at no context and no judgement, each refused by inversion
-(`Core/Inversions.lean`).  Three are handlers whose clause tuple `(cl, ())` is `[handle]`'s, so the
-clause is at its clause type (`handleWith_clause`, `clause_lin`), and its `κ` at a linear operation
-is at `kTy`, a thunk of an `&`.
+(`Core/Inversions.lean`).  Three are handlers whose clause tuple `(cl, ())` is `[handle]`'s or
+BOXED-κ's (§28), so the clause is at its clause type (`handleWith_clause`, `clause_lin`), and its
+`κ` at a linear operation is at `kTy`, a thunk of an `&`, bare or boxed; a view of either has the
+thunk head (`kviewO`).
 
 * **AT13** (`not_der_at13`): a clause that forgets `κ`.  `forget`'s axioms take `!`, `Imm`, `Mut`,
   `Unk` and `ArrayImm`, and as a λ it drops its argument only at a persistent type
@@ -71,6 +72,18 @@ theorem kview {C₁ C₂ : CTy} {A : VTy} (h : VView (.thunk (.amp C₁ C₂)) A
     (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
   exact ⟨by rw [hh.persistent]; rfl, hh⟩
 
+/-- A view of `κ`'s type at `lin` and `aff`, bare or boxed (BOXED-κ), is not persistent and has the
+thunk head. -/
+theorem kviewO {C₁ C₂ : CTy} {A : VTy} (ob : Option Lifetime.Life)
+    (h : VView (kBoxO ob (.thunk (.amp C₁ C₂))) A) :
+    A.persistent = false ∧ Hnf A (.thunk (.amp C₁ C₂)) := by
+  have hT : Hnf (kBoxO ob (.thunk (.amp C₁ C₂))) (.thunk (.amp C₁ C₂)) := by
+    cases ob with
+    | none => exact hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)
+    | some d => exact .box (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
+  have hh := h.hnf_of hT (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
+  exact ⟨by rw [hh.persistent]; rfl, hh⟩
+
 /-- A type with a thunk head is none of `forget`'s arguments, and no `1`. -/
 theorem kview_not {C : CTy} {A : VTy} (h : Hnf A (.thunk C)) :
     (∀ X, A ≠ .bang X) ∧ (∀ a X, A ≠ .imm a X) ∧ (∀ a X, A ≠ .mut a X) ∧ A ≠ .unk ∧
@@ -84,7 +97,8 @@ theorem kview_not {C : CTy} {A : VTy} (h : Hnf A (.thunk C)) :
 argument only at a persistent type. -/
 theorem not_forget_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
     (h : CDerives Δ Γ (.app forget (.var 0)) (.val .unit))
-    (hΓ : ∀ T, Γ[0]? = some ⟨T, true⟩ → T = .thunk (.amp C₁ C₂)) : False := by
+    (ob : Option Lifetime.Life)
+    (hΓ : ∀ T, Γ[0]? = some ⟨T, true⟩ → T = kBoxO ob (.thunk (.amp C₁ C₂))) : False := by
   obtain ⟨j₀, hb, hr⟩ := der_app h _ _ rfl
   rcases hb with ⟨Γ₁, Γ₂, A, B, hs, hY, hf, rfl⟩ | ⟨Γ₁, Γ₂, i, A, C, hi, hs, hf, hx, rfl⟩ |
     ⟨N, Γ₁, Γ₂, A, S, C, hN, hs, hY, hU, rfl⟩ | ⟨N, b, C, -, hb, -⟩ |
@@ -92,7 +106,7 @@ theorem not_forget_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
   · -- `⊸E`: `forget` at `A ⊸ B`, `κ` at `A`
     obtain ⟨T, hT, hcT⟩ := der_var hY 0 rfl
     obtain rfl := hΓ T (splitP_le_left hs _ _ hT)
-    obtain ⟨hAp, hAh⟩ := kview hcT.val
+    obtain ⟨hAp, hAh⟩ := kviewO ob hcT.val
     obtain ⟨hb, hi, hm, hu, hfam, hun⟩ := kview_not hAh
     rcases der_lam hf .unit rfl with ⟨A', D, hM, hcl⟩ | ⟨S, B', hM, hcl⟩ |
       ⟨x, b, Δ', S, C, hM, hcl⟩ | ⟨A', hM, hcl⟩ | ⟨M₁, M₂, hwp⟩ | hx
@@ -140,13 +154,13 @@ theorem not_forget_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
       obtain ⟨rfl, rfl⟩ := this
       rcases der_unit hM rfl with ⟨hd, -⟩ | hr'
       · have := deadP_slot hd (k := 0) rfl
-        simp [VTy.Persistent, VTy.persistent] at this
+        cases ob <;> simp [kBoxO, VTy.Persistent, VTy.persistent] at this
       · have := (hr'.rigid rigid_top)
         simp only [Jdg.comp.injEq] at this
         exact effOf_ne_top _ _ this
     · have := hcl.comp_rigid (rigid_arr _ _)
       simp only [CTy.arr.injEq] at this
-      cases this.1
+      rcases ob with _ | d <;> cases this.1
     · have := hcl.comp_rigid (rigid_arr _ _); cases this
     · rcases hcl with hcl | ⟨-, hcl⟩
       · obtain ⟨S, Y, he, -⟩ := hcl; exact effOf_ne_arr _ _ _ _ he.symm
@@ -163,9 +177,9 @@ theorem not_forget_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
     · have hAp := deadP_slot hd (k := 0) rfl
       rcases hcT with ⟨S'', Y, he, hv⟩ | ⟨C', hC', -, hr''⟩
       · obtain ⟨-, rfl⟩ := effOf_inj he
-        have := (kview hv).1
+        have := (kviewO ob hv).1
         simp [VTy.Persistent, this] at hAp
-      · cases hC'
+      · rcases ob with _ | d <;> cases hC'
         obtain ⟨D', he, hD'⟩ := hr''.ampNu (.inl ⟨_, _, rfl⟩)
         simp only [Jdg.comp.injEq] at he
         rcases hD' with ⟨_, _, h'⟩ | ⟨_, h'⟩
@@ -192,8 +206,9 @@ theorem handleWith_clause {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {q : Qual} 
     (hNc : NotConst (.lam (bindE (.val (.lam (.var 0))) (hndTerm n [q] 0 1 M))))
     (hHc : NotConst (.lam (hndTerm n [q] 0 1 M)))
     (hM : ((M.subst 0 (Val.lam (.var 0))).shift 1 0) = M) :
-    ∃ Γ₁ S₁ T₁ S R E fs, CtxLe Γ₁ Γ ∧ CDerives Δ Γ₁ (.pair cl .unit) (.comp (CTy.effOf S₁ T₁)) ∧
-      VView T₁ (clausesTy S R E fs) ∧ E.map Prod.fst = [q] := by
+    ∃ Γ₁ S₁ T₁ S R E fs ob, CtxLe Γ₁ Γ ∧
+      CDerives Δ Γ₁ (.pair cl .unit) (.comp (CTy.effOf S₁ T₁)) ∧
+      VView T₁ (clausesTyO S R ob E fs) ∧ E.map Prod.fst = [q] := by
   obtain ⟨Γ₁, Γ', T₁, b, S₁, j₁, hle₁, -, hP, hN₁⟩ := der_bind (M := .pair cl .unit) h
     (fun i h => by cases h) (fun b h => hcl' b h) (fun h => by cases h) (fun h => by cases h)
     (fun h => by cases h) (by not_withPairH) hNc
@@ -216,19 +231,19 @@ theorem handleWith_clause {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {q : Qual} 
         rw [he] at hH5
         exact hH5
   obtain ⟨Γ₄, j₄, X, hslot, hH5⟩ := hH
-  obtain ⟨T, S, R, E, fs, hT, hv, hE⟩ := hnd_clauses hH5
+  obtain ⟨T, S, R, E, fs, ob, hT, hv, hE⟩ := hnd_clauses hH5
   obtain rfl := hslot T hT
-  exact ⟨Γ₁, S₁, T, S, R, E, fs, hle₁, hP, hv, hE⟩
+  exact ⟨Γ₁, S₁, T, S, R, E, fs, ob, hle₁, hP, hv, hE⟩
 
 /-- The clause tuple's clause is read at the clause type of its handler's one operation: at a linear
 operation, `!U(A ⊗ kTy ⊸ F_Σ R)`. -/
 theorem clause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {cl : Expr} {S₁ : Row} {T₁ : VTy} {S : Row}
-    {R : VTy} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+    {R : VTy} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {ob : Option Lifetime.Life}
     (hP : CDerives Δ Γ (.pair cl .unit) (.comp (CTy.effOf S₁ T₁)))
-    (hv : VView T₁ (clausesTy S R E fs)) (hE : E.map Prod.fst = [.lin]) :
+    (hv : VView T₁ (clausesTyO S R ob E fs)) (hE : E.map Prod.fst = [.lin]) :
     ∃ Γ' A₀ B₀, CtxLe Γ' Γ ∧ CDerives Δ Γ' cl
-      (.val (.bang (.thunk (.arr (.tensor A₀ (.thunk (.amp (.arr B₀ (CTy.effOf S R)) .top)))
-        (CTy.effOf S R))))) := by
+      (.val (.bang (.thunk (.arr (.tensor A₀
+        (kBoxO ob (.thunk (.amp (.arr B₀ (CTy.effOf S R)) .top)))) (CTy.effOf S R))))) := by
   obtain ⟨⟨q, A₀, B₀⟩, rfl⟩ : ∃ e, E = [e] := by
     cases E with
     | nil => simp at hE
@@ -239,11 +254,12 @@ theorem clause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {cl : Expr} {S₁ : Row} {T₁ 
   simp only [List.map_cons, List.map_nil, List.cons.injEq, and_true] at hE
   subst hE
   obtain ⟨Γ', A, B, hle, hcl, hv'⟩ := pair_row hP (fun c h => by cases h)
+  rw [clausesTyO_cons, clausesTyO_nil] at hv
   obtain ⟨rfl, -⟩ := vview_tensor (hv'.trans hv)
-  have hty : clauseTy S R (.lin, A₀, B₀) (fs 0) =
-      .bang (.thunk (.arr (.tensor A₀ (.thunk (.amp (.arr B₀ (CTy.effOf S R)) .top)))
+  have hty : clauseTyO S R ob (.lin, A₀, B₀) (fs 0) =
+      .bang (.thunk (.arr (.tensor A₀ (kBoxO ob (.thunk (.amp (.arr B₀ (CTy.effOf S R)) .top))))
         (CTy.effOf S R))) := by
-    simp [clauseTy, kTy]
+    cases ob <;> simp [clauseTyO, clauseTy, clauseTyB, kBoxO, kTy]
   rw [hty] at hcl
   exact ⟨Γ', A₀, B₀, hle, hcl⟩
 
@@ -260,7 +276,7 @@ def at13 : Expr := handleWith 5 .lin at13Cl fooE
 `[handle]`'s), and `forget κ` has no derivation there (`not_forget_kappa`). -/
 theorem not_der_at13 {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ at13 j := by
   intro h
-  obtain ⟨Γ₁, S₁, T₁, S, R, E, fs, -, hP, hv, hE⟩ := handleWith_clause (cl := at13Cl) h
+  obtain ⟨Γ₁, S₁, T₁, S, R, E, fs, ob, -, hP, hv, hE⟩ := handleWith_clause (cl := at13Cl) h
     (fun b h => by cases h) (by not_constH) (by not_constH) rfl
   obtain ⟨Γ_cl, A₀, B₀, -, hCL⟩ := clause_lin hP hv hE
   obtain ⟨-, hB⟩ := lam_bang hCL (fun h => by cases h) (by not_withPairH) (by not_constH)
@@ -271,7 +287,7 @@ theorem not_der_at13 {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ
   subst hT
   obtain ⟨-, rfl⟩ := vview_tensor hc₆.val
   obtain ⟨Γ₇₁, Γ₇₂, C₇, hs₇, hF, -, -⟩ := der_seq hM₆ _ _ rfl
-  refine not_forget_kappa (C₁ := .arr B₀ (CTy.effOf S R)) (C₂ := .top) hF (fun T hT => ?_)
+  refine not_forget_kappa (C₁ := .arr B₀ (CTy.effOf S R)) (C₂ := .top) hF ob (fun T hT => ?_)
   have := splitP_le_left hs₇ 0 T hT
   simp only [List.getElem?_cons_zero, Option.some.injEq, Slot.mk.injEq, and_true] at this
   exact this.symm
@@ -332,7 +348,7 @@ theorem not_der_at06 {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ
     (fun i h => by cases h) (fun b h => by cases h) (fun h => by cases h) (fun h => by cases h)
     (fun h => by cases h) (by not_withPairH) (by not_constH)
   obtain ⟨A₀, hvc⟩ := alloc_row hA
-  obtain ⟨Γ_p, S₁, T₁, S', R, E, fs, hle_p, hP, hv, hE⟩ :=
+  obtain ⟨Γ_p, S₁, T₁, S', R, E, fs, ob, hle_p, hP, hv, hE⟩ :=
     handleWith_clause (cl := at06Cl) (M := at06Body) hN (fun b h => by cases h) (by not_constH)
       (by not_constH) rfl
   obtain ⟨Γ_cl, A₁, B₁, hle_cl, hCL⟩ := clause_lin hP hv hE
@@ -410,7 +426,7 @@ the first `swap` reads that view out as `k₁`.  The second `swap` uses `k₁` a
 resume, on the two sides of a split: `k₁`'s slot is persistent, and a view of a thunk is not. -/
 theorem not_der_at08 {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ at08 j := by
   intro h
-  obtain ⟨Γ₁, S₁, T₁, S, R, E, fs, -, hP, hv, hE⟩ := handleWith_clause (cl := at08Cl) h
+  obtain ⟨Γ₁, S₁, T₁, S, R, E, fs, ob, -, hP, hv, hE⟩ := handleWith_clause (cl := at08Cl) h
     (fun b h => by cases h) (by not_constH) (by not_constH) rfl
   obtain ⟨Γ_cl, A₀, B₀, -, hCL⟩ := clause_lin hP hv hE
   obtain ⟨-, hB⟩ := lam_bang hCL (fun h => by cases h) (by not_withPairH) (by not_constH)
@@ -430,7 +446,7 @@ theorem not_der_at08 {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ
   have hTκ' := hle₇ 0 Tκ (hleκ 0 Tκ hTκ)
   simp only [List.getElem?_cons_zero, Option.some.injEq, Slot.mk.injEq, and_true] at hTκ'
   subst hTκ'
-  obtain ⟨hAκ, -⟩ := kview hcκ.val
+  obtain ⟨hAκ, -⟩ := kviewO ob hcκ.val
   -- `(c₁, k₁) ← swap c ()`: `k₁` is at the cell's content type
   obtain ⟨Γ₈₁, Γ₈₂, A₈, B₈, C₈, hs₈, hV₈, hM₈, -⟩ := der_letpair hN₇ _ _ rfl
   obtain ⟨Γc, Ac, Bc, hlec, hc, hcl⟩ := der_swap_app hV₈ (fun h => by cases h) (fun h => by cases h)

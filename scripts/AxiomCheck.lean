@@ -19,6 +19,14 @@ import Frontend.Check.Externs
 #print axioms BoCa.Programs.mutClosure_runs
 #print axioms BoCa.Fig16.LogRel.Core.fundamentalC
 #print axioms BoCa.Fig16.LogRel.Core.adequacyC
+#print axioms BoCa.Fig16.LogRel.Core.stop_lemma
+#print axioms BoCa.Fig16.LogRel.Core.stop_sem
+#print axioms BoCa.Fig16.LogRel.Core.ewp_stratify
+#print axioms BoCa.Fig16.LogRel.Core.ewp_handleS
+#print axioms BoCa.Fig16.LogRel.Core.handle_compatCB
+#print axioms BoCa.Fig16.LogRel.Core.handleV_compatCB
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.effHandleB
+#print axioms BoCa.Fig16.LogRel.Core.Check.ansOutlivesB_sound
 #print axioms BoCa.Fig16.LogRel.Core.wpTS_angelic
 #print axioms BoCa.Fig16.LogRel.Core.wpTS_demonic
 #print axioms BoCa.Fig16.LogRel.Core.wpTSD_safe

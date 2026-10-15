@@ -299,10 +299,45 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
         | none => err hr.span (s!"the answer clause `{hr.name}` must have a type " ++
             s!"`!U(A -o F[…] R)`, but it has type `{E.ppV Tr}`")
         | some ⟨S, A, R, hr'⟩ =>
-          match clausesRead S R Tc with
-          | none => err hc.span (s!"the clauses `{hc.name}` must have the type of a handler's " ++
-              s!"clauses at `F{ppRow E S} {E.ppV R}`, but they have type `{E.ppV Tc}`")
-          | some ⟨Es, hc'⟩ =>
+          match clausesReadBoxed S R Tc, clausesRead S R Tc with
+          | none, none => err hc.span (s!"the clauses `{hc.name}` must have the type of a " ++
+              s!"handler's clauses at `F{ppRow E S} {E.ppV R}`, but they have type `{E.ppV Tc}`")
+          | some ⟨d, Es, hc'⟩, _ =>
+            -- BOXED-κ (SPEC §28): the clauses receive `κ` boxed at `@d`.
+            if k < 2 ^ 32 ∧ k ≠ 0 then
+              let nm := UInt32.ofNat k
+              if hn0 : nm ≠ 0 then
+                if hnS : ∀ o ∈ S, o.n ≠ nm then
+                  if hlen : Es.length ≤ 2 ^ 32 then
+                    if hwf : d.wf Δ = true then
+                      let Sh := BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S
+                      if hSd : ansOutlivesB Δ d Sh = true then
+                        let rM ← chkC n E Δ T M (effOf Sh A)
+                        if hso : usedSat (outlivesB Δ d) T rM.F.u = true then
+                          if h₁ : overlapOK T (oneL T ir) (oneL T ic) = true then
+                            if h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true then
+                              pure ⟨_, rEffHandleB ir ic (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hwf hSd
+                                rM hso h₁ h₂⟩
+                            else throw (splitErr E T sp (orL (oneL T ir) (oneL T ic)) rM.F.u)
+                          else throw (splitErr E T sp (oneL T ir) (oneL T ic))
+                        else match firstBad (outlivesB Δ d) T rM.F.u with
+                          | some i => err sp (s!"the clauses box `κ` at `{E.ppL d}`, so the " ++
+                              s!"handled computation's context must outlive it: {E.slotName i}, " ++
+                              s!"of type `{E.slotTy T i}`, is used inside, and it cannot be " ++
+                              s!"shown to outlive `{E.ppL d}`")
+                          | none => err sp "internal error: boxed continuation"
+                      else match Sh.find? (fun o => !(o.abort || outlivesB Δ d o.B)) with
+                        | some o => err sp (s!"the clauses box `κ` at `{E.ppL d}`, so every " ++
+                            s!"operation the handled computation resumes at must answer a type " ++
+                            s!"that outlives it: {o.n}.{o.i} answers `{E.ppV o.B}`, which cannot " ++
+                            s!"be shown to outlive `{E.ppL d}`")
+                        | none => err sp "internal error: boxed continuation"
+                    else err hc.span s!"the clauses box `κ` at `{E.ppL d}`, which is not defined here"
+                  else err sp "a handler has at most 2^32 operations"
+                else err sp s!"the name {k} is already in the row `{ppRow E S}` of the handler's answer"
+              else err sp "a handler's name is not 0"
+            else err sp s!"a handler's name is between 1 and 2^32 - 1, not {k}"
+          | none, some ⟨Es, hc'⟩ =>
             if k < 2 ^ 32 ∧ k ≠ 0 then
               let nm := UInt32.ofNat k
               if hn0 : nm ≠ 0 then

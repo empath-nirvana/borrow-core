@@ -260,6 +260,22 @@ theorem effHandle {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : BoCa.Expr} {S
   fun Ξ h => CDerivesAt.effHandle (rowAt_of_union_left h) hs hs₁ hr hc hn0 hnS hlen
     (he Ξ (sigsAt_union_right h))
 
+/-- BOXED-κ reads its handled row.  `[spec §28]` -/
+theorem effHandleB {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : BoCa.Expr} {S : CRow}
+    {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {ir ic : Nat} {d : CLife}
+    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂)
+    (hs₁ : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ₁ Γr Γc)
+    (hr : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γr ir (BoCa.Fig16.LogRel.Core.retTy S A R))
+    (hc : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γc ic (BoCa.Fig16.LogRel.Core.clausesTyB S R d E))
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (he : TiedDer s Δ Γ₂ e (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
+    (hΓd : CtxOutlives Δ Γ₂ d)
+    (hSd : BoCa.Fig16.LogRel.Core.Row.AnsOutlives Δ d (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S)) :
+    TiedDer ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ s) Δ Γ
+      (BoCa.Fig16.LogRel.Core.hndTerm n (E.map Prod.fst) ir ic e) (.comp (effOf S R)) :=
+  fun Ξ h => CDerivesAt.effHandleB (rowAt_of_union_left h) hs hs₁ hr hc hn0 hnS hlen
+    (he Ξ (sigsAt_union_right h)) hΓd hSd
+
 /-! ### Derived forms -/
 
 /-- A derivation of a term with no operation reads no row. -/

@@ -365,6 +365,9 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | effHandleV hAt hs hd hH _ hn0 hnS hlen _ ihc ihe =>
       exact .effHandleV hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
         ihe
+  | effHandleVB hAt hs hd hH _ hn0 hnS hlen _ hΓd hSd ihc ihe =>
+      exact .effHandleVB hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
+        ihe (ctxOutlives_append h' hΓd) hSd
   | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN
 
 /-! ### Typing: calls, callbacks and one-operation handlers -/
