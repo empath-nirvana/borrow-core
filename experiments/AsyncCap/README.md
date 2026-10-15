@@ -27,6 +27,12 @@ of §6.2, in provisional surface syntax. Each is marked pending (or `expect (des
 with today's `bcc check` message. `bc/lend-loop-term.bc` is the exception: it checks and runs
 today (`i32[2113]`, `live 0`) and is what `LoopTerm.lean` reads.
 
+R1 is built (SPEC §28). The programs that exercise it with today's surface, tasks as stored
+generators and the scheduler written inline, are in the corpus: `corpus/async-r1-local-borrows.bc`
+(A2's `counter` and `pair_view`), `async-r1-effects.bc` (A5), `async-r1-cancel.bc` (A6),
+`async-r1-cancel-finaliser-writes.bc` (`accept/m4`), and `corpus/reject/async-r1-*.bc` (`n2`, `n4`,
+`n5`, `n7`, `n9`). The files here stay pending on `lib/async.bc` (U2) and their surface.
+
 | file | program |
 |---|---|
 | `bc/a1-scheduler.bc` … `bc/a6-cancel.bc` | A1–A6 |
