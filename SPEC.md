@@ -4558,6 +4558,11 @@ files are stale. §28's BOXED-κ (`effHandleVB`) is in it so, its case in `funda
 **`PinLaw`** (`Core/PinLaw.lean`) is a `structure … : Prop` of two fields, the compatibility lemmas
 of R1 (`PinStop`) and R2 (`PinLoop`) at the rules' own premises, with every quantifier over code a
 quantifier over `CDerivesP` derivations. It is a hypothesis of the theorems that use it.
+`PinStop`'s premise is the body's `CDerivesP` derivation, so what it covers is every body that
+judgment types: bodies holding a nested relaxed lend (through `nilDead`), and bodies using §28's
+BOXED-κ rule (`effHandleVB`), as well as every rule of `CDerives`. What a named assertion of this
+kind ranges over is an open question of the design of assertions (kind R of `docs/unsafe.md`, on
+the branch `unsafe-spec`).
 `docs/async-capabilities.md` §4 gives the evidence for it, what is proved elsewhere, and what
 would falsify it.
 
@@ -4651,8 +4656,7 @@ another), `async-r1-generator.bc` and `async-r1-drain.bc` (§15's self-referenti
 - A derivation that uses a relaxed rule is not claimed tied (decision R): a tied `CDerivesP` is not
   built.
 - Shrinking `PinLaw` (U8).
-- The falsifier's tag check at a program that returns a loop (`async-r1-drain.bc`): see
-  `docs/async-capabilities.md` §6.1.
+- What `PinStop` ranges over (above): kind R of `docs/unsafe.md`.
 
 ---
 

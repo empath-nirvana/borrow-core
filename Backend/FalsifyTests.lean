@@ -97,6 +97,15 @@ def droppedLend : Expr :=
     (borrowE (.var 0)
       (.seq (BoLo.performE (.pair (lit 5) (.pair (lit 0) (.var 0)))) (loadE (.var 0))))
 
+/-- A loop whose first observation begins a lend and answers the rest of the loop with the lend
+neither ended nor held by a suspended continuation: `let r = alloc 5; λ_. let (t, v) = LEND r;
+inr (λ_. inl 0)`. The marker is called with no frame around the callback, the shape of a lend
+that leaves its scope while active. It is driven as a `main` that returns a loop
+(`loopNegatives`); at the boundary after the first observation the lend is active. -/
+def activeAtBoundary : Expr :=
+  letE (allocE (lit 5)) <|
+  .lam (.letpair (.app (Falsify.mk Falsify.markLend) (.var 1)) (.inj₂ (.lam (.inj₁ (lit 0)))))
+
 /-- Each negative test: its name, its term, the mode that must report it, a part of the report,
 and what `Support`'s interpreter answers. -/
 def negatives : List (String × Expr × String × String × String) :=
@@ -108,6 +117,12 @@ def negatives : List (String × Expr × String × String × String) :=
       "i32[2]"),
    ("neg-suspended-view", suspendedView, "tags", "while its lend is suspended", "i32[5]"),
    ("neg-imm-write", immWrite, "tags", "write of location 0 through an imm tag", "i32[9]"),
-   ("neg-dropped-lend", droppedLend, "tags", "never ended", "live 1")]
+   ("neg-dropped-lend", droppedLend, "tags", "never ended", "live 1"),
+   ("neg-active-at-boundary", activeAtBoundary, "tags", "active at an observation boundary",
+      "source interpreter: stuck")]
+
+/-- The negative tests that are loops: each is driven as a `main` that returns a loop is, one
+observation at a time (`Falsify.interpLoop`, `Source.interpLoop`). -/
+def loopNegatives : List String := ["neg-active-at-boundary"]
 
 end Backend.FalsifyTests

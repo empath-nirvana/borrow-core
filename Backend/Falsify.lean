@@ -50,7 +50,10 @@ or reached from outside its lend), when it frees, when it writes through an `imm
 live exclusive tag stands above it on the cell's stack (a write also when a live `imm` tag
 does). An access through the owner (`t = 0`) is an error while an exclusive tag is live on the
 cell, and a write or free while any tag is. A lend is a use of its source. At the end of the run
-every tag must have ended.
+every tag must have ended. A run that returns a loop is driven one observation at a time; at each
+boundary between observations every live tag must be suspended (a resuming operation crossed its
+frame, which has not been on the running path since), and once the loop finishes every tag must
+have ended.
 -/
 
 namespace Backend.Falsify
@@ -100,6 +103,9 @@ def Kind.exclusive : Kind → Bool
 structure TagInfo where
   kind : Kind
   live : Bool := true
+  /-- A resuming operation crossed the tag's frame outward, and the frame has not been on the
+  running path since: the lend is held by a suspended continuation. -/
+  suspended : Bool := false
   /-- The cells the tag was pushed on. -/
   cells : Array Nat
 
@@ -516,6 +522,9 @@ def step (o : Opts) (act : List Nat) : Expr → M R
   | .app f a => do
     match endFrame? f with
     | some t =>
+      -- The frame is on the running path: its lend is not suspended.
+      if (← tagInfo t).any (·.suspended) then
+        modify fun s => { s with tags := s.tags.modify (t - 1) ({ · with suspended := false }) }
       match ← step o (t :: act) a with
       | .value v => endTag t; return .next v.1
       | .next a' => return .next (.app f a')
@@ -523,7 +532,9 @@ def step (o : Opts) (act : List Nat) : Expr → M R
       | .op r K p =>
         if r then endTag t
         else
-          if (← tagInfo t).any (·.live) then modify fun s => { s with suspends := s.suspends + 1 }
+          if (← tagInfo t).any (·.live) then
+            modify fun s => { s with suspends := s.suspends + 1,
+                                     tags := s.tags.modify (t - 1) ({ · with suspended := true }) }
         return .op r (.appR f K) p
     | none =>
     match ← step o act a with
@@ -568,16 +579,40 @@ def liveTags (s : St) : List Nat :=
   (List.range s.tags.size).filterMap fun i =>
     if (s.tags[i]?.map (·.live)).getD false then some (i + 1) else none
 
-/-- Run `e` under `o` from `s`, and check that every lend ended. -/
-def runChecked (o : Opts) (fuel : Nat) (s : St) (e : Expr) : Except String (Val × St) :=
+/-- The tags live and not suspended: a lend whose frame is neither on the running path nor held by a
+suspended continuation. -/
+def activeTags (s : St) : List Nat :=
+  (List.range s.tags.size).filterMap fun i =>
+    if (s.tags[i]?.map fun t => t.live && !t.suspended).getD false then some (i + 1) else none
+
+/-- Run `e` under `o` from `s`, without the check of the lends at its end. -/
+def runUnchecked (o : Opts) (fuel : Nat) (s : St) (e : Expr) : Except String (Val × St) :=
   match runFrom o fuel s e with
   | (.error err, _) => .error (if o.tags || o.alloc = .fresh then s!"check {o.name}: {err}" else err)
-  | (.ok v, s') =>
-    if o.tags then
-      match liveTags s' with
-      | [] => .ok (v, s')
-      | ts => .error s!"check {o.name}: the lends of tags {ts} never ended"
-    else .ok (v, s')
+  | (.ok v, s') => .ok (v, s')
+
+/-- At the end of the run, every lend has ended. -/
+def checkEnded (o : Opts) (s : St) : Except String Unit :=
+  if o.tags then
+    match liveTags s with
+    | [] => .ok ()
+    | ts => .error s!"check {o.name}: the lends of tags {ts} never ended"
+  else .ok ()
+
+/-- At an observation boundary of a loop (between two observations of a `main` that returns a
+loop), every live lend is suspended: held by the loop's state, inside a suspended continuation. -/
+def checkBoundary (o : Opts) (s : St) : Except String Unit :=
+  if o.tags then
+    match activeTags s with
+    | [] => .ok ()
+    | ts => .error s!"check {o.name}: the lends of tags {ts} are active at an observation boundary"
+  else .ok ()
+
+/-- Run `e` under `o` from `s`, and check that every lend ended. -/
+def runChecked (o : Opts) (fuel : Nat) (s : St) (e : Expr) : Except String (Val × St) := do
+  let (v, s') ← runUnchecked o fuel s e
+  checkEnded o s'
+  pure (v, s')
 
 /-- The term the run starts from: marked when tags are checked. -/
 def prepare (o : Opts) (e : Expr) : Expr := if o.tags then instrument e else e
@@ -596,20 +631,34 @@ def interpIO (o : Opts) (fuel : Nat) (e : Expr) : Except String (Output × Strin
   let (v, s) ← runChecked o fuel {} (prepare o e)
   pure (← ioOutputN v s.cells.size, stats o s)
 
-/-- `driveSource`, checked. -/
+/-- `driveSource`, checked: each observation's run checked, every lend suspended at each boundary
+between observations, and every lend ended once the loop finishes. -/
 def driveSource (o : Opts) (fuel : Nat) : Nat → St → Val → Except String (Val × St)
   | 0, _, _ => .error "source interpreter: out of fuel"
   | n + 1, s, d => do
-    let (w, s') ← runChecked o fuel s (.app (.val d) (.val (.inj₁ .unit)))
+    let (w, s') ← runUnchecked o fuel s (.app (.val d) (.val (.inj₁ .unit)))
     match w with
-    | ⟨.inj₁ r, h⟩ => pure (⟨r, by cases h; assumption⟩, s')
-    | ⟨.inj₂ d', h⟩ => driveSource o fuel n s' ⟨d', by cases h; assumption⟩
+    | ⟨.inj₁ r, h⟩ => checkEnded o s'; pure (⟨r, by cases h; assumption⟩, s')
+    | ⟨.inj₂ d', h⟩ =>
+      checkBoundary o s'
+      driveSource o fuel n s' ⟨d', by cases h; assumption⟩
     | _ => .error "source interpreter: a loop's `next` answered neither `inl` nor `inr`"
+
+/-- A run that returns a loop, then the loop driven: the first boundary is before its first
+observation. -/
+def runLoop (o : Opts) (fuel : Nat) (e : Expr) : Except String (Val × St) := do
+  let (d, s) ← runUnchecked o fuel {} (prepare o e)
+  checkBoundary o s
+  driveSource o fuel fuel s d
 
 /-- `interpIOLoop`, checked. -/
 def interpIOLoop (o : Opts) (fuel : Nat) (e : Expr) : Except String (Output × String) := do
-  let (d, s) ← runChecked o fuel {} (prepare o e)
-  let (v, s') ← driveSource o fuel fuel s d
+  let (v, s') ← runLoop o fuel e
   pure (← ioOutputN v s'.cells.size, stats o s')
+
+/-- A closed term that returns a loop, driven to its end, checked: its value and the cells left. -/
+def interpLoop (o : Opts) (fuel : Nat) (e : Expr) : Except String (Output × String) := do
+  let (v, s') ← runLoop o fuel e
+  pure (.mk' .empty .empty (report (pvOfExpr v.1) s'.cells.size), stats o s')
 
 end Backend.Falsify

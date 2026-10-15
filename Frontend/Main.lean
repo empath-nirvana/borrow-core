@@ -229,13 +229,18 @@ def kernel (args : List String) : IO UInt32 := do
   | "interp" :: rest =>
     match parseInterpArgs rest {} with
     | some { stage, check := none, target, .. } =>
-      withProg target (kernelReport ∘ Backend.interpStageExpr stage)
+      if Backend.FalsifyTests.loopNegatives.contains target && stage == "source" then
+        withProg target (kernelReport ∘ Backend.interpLoop Backend.runFuel)
+      else withProg target (kernelReport ∘ Backend.interpStageExpr stage)
     | some { stage, check := some m, stats, target } =>
       if stage != "source" then
         IO.eprintln "bcc kernel interp: a check runs at the source stage only"
         return 2
       withProg target fun e => do
-        match (do Backend.interpCheckedExpr (← Backend.falsifyOpts m) e) with
+        let run := if Backend.FalsifyTests.loopNegatives.contains target
+          then fun o => Backend.Falsify.interpLoop o Backend.runFuel e
+          else fun o => Backend.interpCheckedExpr o e
+        match (do run (← Backend.falsifyOpts m)) with
         | .ok (o, st) =>
           let r ← kernelReport (.ok o)
           if stats then IO.eprintln st

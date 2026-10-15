@@ -81,6 +81,12 @@ def driveSource (fuel : Nat) : Nat → Mem → Val → Except String (Val × Mem
     | ⟨.inj₂ d', h⟩ => driveSource fuel n μ' ⟨d', by cases h; assumption⟩
     | _ => .error "source interpreter: a loop's `next` answered neither `inl` nor `inr`"
 
+/-- A closed term that returns a loop, driven to its end: its value and the cells left. -/
+def interpLoop (fuel : Nat) (e : Expr) : Except String Output := do
+  let (d, μ) ← runSource fuel Mem.empty e
+  let (v, μ') ← driveSource fuel fuel μ d
+  pure (.mk' .empty .empty (report (pvOfExpr v.1) μ'.cells.length))
+
 /-- The model run of a program that runs until its input ends: `run_io[γ] inp` returns a loop,
 which is observed until it finishes. -/
 def interpIOLoop (fuel : Nat) (e : Expr) : Except String Output := do

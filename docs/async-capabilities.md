@@ -499,18 +499,20 @@ reusing run is the new `--alloc least` (`Alloc.leastFree`, as `runM`).
 - *Checks.* An access through an ended tag, through an inactive one, a free through a view, a
   write through an `imm` tag, any access through a tag (or the owner) under a live exclusive tag,
   a write under a live `imm` one, and a lend not ended at the end of the run.
-- *At U5 (R1 built, SPEC §29).* Every corpus program that uses R1 passes all four modes but one,
-  `corpus/async-r1-drain.bc`, whose `main` returns a loop: `--check tags` reports "the lends of
-  tags [1] never ended". The runtime drives such a `main` one observation at a time, and the
-  harness checks that every lend has ended at the end of each observation's run
-  (`Backend.Falsify.driveSource` calls `runChecked` per observation). There the generator is
-  suspended inside its relaxed lend between observations: tag 1 is live after the first and
-  second observations and ends in the third, every access in between passes the tag check, and
-  the run ends with no live tag and no cell. The harness is not changed here.
+- *Observation boundaries.* A `main` that returns a loop is driven one observation at a time. At
+  each boundary between observations (and before the first) every live tag must be *suspended*:
+  a resuming operation crossed its frame and the frame has not been on the running path since, so
+  the lend is held by the loop's state, inside a suspended continuation. A live tag that is not
+  suspended is reported ("active at an observation boundary"), and once the loop finishes no tag
+  may be live (`checkBoundary`, `checkEnded`, `driveSource`). Before R1 the harness asked for
+  every lend to have ended at each boundary, which a generator holding a relaxed lend between
+  observations breaks (`corpus/async-r1-drain.bc`). The negative test `neg-active-at-boundary`
+  begins a lend with no frame and answers the rest of the loop: it is reported at the first
+  boundary.
 - *Results.* Every corpus program the source stage runs (149; five `no-source` programs are too
   large for it), `bc/lend-loop-term.bc` and the 41 kernel programs pass all four modes with one
   output and `live 0`; no resuming operation crossed a lend in any of them (none can before
-  R1/R2). Seven untyped negative tests (`Backend/FalsifyTests.lean`, `bcc kernel negatives`) trip
+  R1/R2). Eight untyped negative tests (`Backend/FalsifyTests.lean`, `bcc kernel negatives`) trip
   each check; with `--alloc least` the use after free answers silently.
 
 ### 6.2 The adversarial list
