@@ -299,6 +299,27 @@ def rEffHandle {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R :
     (((Fam.var T ir _ hir).split (Fam.var T ic _ hic) h₁).split rM.F h₂).map
       fun _ ⟨_, _, hs, ⟨_, _, hs₁, hr, hc⟩, he⟩ => .effHandle hs hs₁ hr hc hn0 hnS hlen he⟩
 
+/-- BOXED-κ: `handle_n e with (h_ret, hs)`, the clauses at `clausesTyB S R d E`, each capturing
+clause's `κ` boxed at `@d`; `@d` defined, every live slot `e` uses outliving it, and every
+non-abortive answer type of the handled row outliving it. It reads the handled row.
+`[spec §28]` -/
+def rEffHandleB {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {d : CLife}
+    (ir ic : Nat) (hir : T[ir]? = some (BoCa.Fig16.LogRel.Core.retTy S A R))
+    (hic : T[ic]? = some (BoCa.Fig16.LogRel.Core.clausesTyB S R d E)) (hn0 : n ≠ 0)
+    (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hwf : d.wf Δ = true)
+    (hSd : ansOutlivesB Δ d (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = true)
+    (rM : Res Δ T (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
+    (hso : usedSat (outlivesB Δ d) T rM.F.u = true)
+    (h₁ : overlapOK T (oneL T ir) (oneL T ic) = true)
+    (h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
+  ⟨BoCa.Fig16.LogRel.Core.hndTerm n (E.map Prod.fst) ir ic rM.e,
+    (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ rM.sigs,
+    (((Fam.var T ir _ hir).split (Fam.var T ic _ hic) h₁).split (rM.F.restrict (outlivesB Δ d) hso)
+      h₂).map fun _ ⟨_, _, hs, ⟨_, _, hs₁, hr, hc⟩, he, ho⟩ =>
+        .effHandleB hs hs₁ hr hc hn0 hnS hlen he
+          ⟨defines_of_wf hwf, fun s hsm hl => outlivesB_sound Δ d s.ty (ho s hsm hl)⟩
+          (ansOutlivesB_sound hSd)⟩
+
 end
 
 end Frontend.Check

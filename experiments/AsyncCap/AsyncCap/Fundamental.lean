@@ -121,6 +121,8 @@ theorem PDerives.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | effLet a0 a1 a2 a3 a4 ih0 ih1 => exact PDerives.effLet a0 a1 a2 ih0 ih1
   | effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0 ih1 ih2 => exact PDerives.effThen a0 a1 a2 a3 a4 a5 a6 a7 ih0 ih1 ih2
   | effHandleV a0 a1 a2 a3 a4 a5 a6 a7 ih0 ih1 => exact PDerives.effHandleV a0 a1 a2 ih0 a4 a5 a6 ih1
+  | effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0 ih1 =>
+      exact PDerives.effHandleVB a0 a1 a2 ih0 a4 a5 a6 ih1 a8 a9
   | letPoly a0 a1 a2 a3 ih0 ih1 => exact PDerives.letPoly a0 a1 ih0 ih1
 
 /-- **The Fundamental Property under `PinLaw`.** -/
@@ -223,6 +225,8 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
       exact then_compatC hs hNZ hU hMS hDS hfin hP ihM ihN ihD
   | effHandleV hs hd hH _ hn0 hnS hlen _ ihc ihe =>
       exact handleV_compatC hs hd hH ihc hn0 hnS hlen ihe
+  | effHandleVB hs hd hH _ hn0 hnS hlen _ hΓd hSd ihc ihe =>
+      exact handleV_compatCB hs hd hH ihc hn0 hnS hlen ihe hΓd hSd
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN
   | lendR hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc _ hM ihd _ =>
       exact hPin.stop _ _ _ _ _ _ _ _ hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc ihd hM

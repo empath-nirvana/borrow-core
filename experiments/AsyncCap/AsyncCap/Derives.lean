@@ -421,6 +421,15 @@ inductive PDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (he : PDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
       PDerives Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
+  /-- BOXED-κ (`CDerives.effHandleVB`).  `[spec §28]` -/
+  | effHandleVB {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+      {n : UInt32} {A R : VTy} {d : Lifetime.Life} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
+      (hH : H.ValFormIn Γ₁)
+      (hc : PDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs))))
+      (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+      (he : PDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)))
+      (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs ++ S)) :
+      PDerives Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
   /-- `[let-poly]`: `let x = λy. b in N` for a closed λ-value, from `N` with the λ-value for `x`,
   `x`'s slot dead.  Each occurrence of the λ-value in `N` is typed on its own, at its own row: the
   kernel's row polymorphism, with the value restriction.  `[spec §24]` -/

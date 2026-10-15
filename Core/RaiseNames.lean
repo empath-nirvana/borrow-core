@@ -1370,7 +1370,7 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
       simp only [BoCa.BoLo.raiseE, opArgE, Expr.val, Val.prim, Val.i32, rcE, ih,
         names_of_rowAt hAt hf, Bool.and_true, Bool.true_and]
       rfl
-  | effHandleV _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleV _ _ _ _ _ _ _ _ _ ihc ihe | effHandleVB _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       simp [hndExpr, Val.i32, rcE, rcE_app, rcE_qualsVal, ihc, ihe]
   | @letPoly _ _ N _ _ b hcl _ _ ihV ihN =>
       have hb : rcE Ξ.names b = true := ihV

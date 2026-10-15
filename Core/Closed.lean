@@ -153,7 +153,7 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
       rw [(splitP_length hs).1] at ihM
       rw [List.length_cons, (splitP_length hs).2] at ihN ihD
       simp [thenE, closedAt, Expr.val, Val.prim, Val.lam, ihM, ihN, ihD]
-  | effHandleV hs _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleV hs _ _ _ _ _ _ _ ihc ihe | effHandleVB hs _ _ _ _ _ _ _ _ _ ihc ihe =>
       rw [(splitP_length hs).1] at ihc; rw [(splitP_length hs).2] at ihe
       simp [hndExpr, closedAt, Expr.val, Val.prim, Val.i32, closedAt_qualsVal, ihc, ihe]
   | @letPoly _ Γ' N _ _ b hcl _ _ _ ihN =>

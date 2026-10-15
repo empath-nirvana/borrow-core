@@ -536,8 +536,8 @@ closure over a view, and cancel paths, which are exactly the parts not derived (
 
 ## 7. Implementation plan
 
-Ordered; each unit is one PR and turns the programs named green. No unit changes `CDerives`,
-`fundamentalC` or `adequacyD`.
+Ordered; each unit is one PR and turns the programs named green. No unit but U1 changes `CDerives`,
+`fundamentalC` or `adequacyD`; U1 adds one rule and its case (SPEC §28).
 
 | unit | content | turns green |
 |---|---|---|

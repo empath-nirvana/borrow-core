@@ -15,7 +15,8 @@ cases the comments name; where it is not, the gap is stated at the function.
 * `vfreeB`/`cfreeB`: `VFree`/`CFree`, exactly.
 * `ordB`: lifetime entailment `Δ ⊨ @a ⊏ @b` / `Δ ⊨ @a ⊑ @b` (§12 item 1), sound, by a bounded
   search over the structural rules of the carrier (`⊓` is `max`, `⊔` is `min`, `⊤` is `0`).
-* `outlivesB`: `VOutlives`, sound (complete relative to `ordB`).
+* `outlivesB`: `VOutlives`, sound (complete relative to `ordB`); `ansOutlivesB`, BOXED-κ's
+  `Row.AnsOutlives`, from it.
 * `outlivesAllB`: foldImm's `∀ Δ' a, VOutlives Δ' a R` (§12 item 2), sound.
 * `scopedB`: `VScoped`, sound.
 -/
@@ -492,6 +493,18 @@ theorem outlivesB_sound (Δ : LifeCtx) (a : Lifetime.Life) :
   | .mu A, h => .mu (outlivesB_sound Δ a A h)
   | .thunk _, h => by simp [outlivesB] at h
   | .unk, h => by simp [outlivesB] at h
+
+/-- BOXED-κ's answer premise `Row.AnsOutlives Δ d S`: every non-abortive operation's answer type
+outlives `@d`, by `outlivesB`.  `[spec §28]` -/
+def ansOutlivesB (Δ : LifeCtx) (d : Lifetime.Life) (S : Row) : Bool :=
+  S.all fun o => o.abort || outlivesB Δ d o.B
+
+theorem ansOutlivesB_sound {Δ : LifeCtx} {d : Lifetime.Life} {S : Row}
+    (h : ansOutlivesB Δ d S = true) : Row.AnsOutlives Δ d S := by
+  intro o ho ha
+  have := List.all_eq_true.mp h o ho
+  rw [ha, Bool.false_or] at this
+  exact outlivesB_sound Δ d o.B this
 
 /-- `Δ ⊢ A ⊒ @a`, decided through `leB` at a box and at a borrow: the side condition of the
 borrows that lend a payload `mut`.  `[spec §23]` -/

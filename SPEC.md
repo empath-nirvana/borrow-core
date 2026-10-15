@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.54 · 2026-10-13
+Version 0.55 · 2026-10-14
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -4370,6 +4370,140 @@ its rows is the top-level test, so it accepts and rejects what it did.
   discarded with a kept error inside it is the tolerated exception; a linear or affine one holding a
   kept error waits on S6's use exactly once.
 
+## 28. Entry 27 — BOXED-κ: a handler clause that receives its continuation boxed
+
+### Motivation
+
+A scheduler keeps the continuations its handler captures (`docs/async-capabilities.md` §2.3, P4).
+The clause of `await` answers the rest of the task, and the scheduler stores it in a queue whose
+type outlives a bound: a cell lent `mut` at a fresh lifetime takes a payload whose type outlives
+the bound (`withbor2`'s side condition, §23), and so does a block's result (`[]I`). `[handle]`
+gives a clause its continuation bare, at `kTy Σ R q B F` (§19, §27), a `U` type, and the outlives
+judgment has no case for `U C`. So a continuation is never at a `[@d]` type, and no stored task
+outlives anything. Boxing it inside the clause is `[]I` over the clause's context, which holds `κ`
+at a `U` type, so it fails the same way.
+
+BOXED-κ is the variant of `[handle]` whose clause receives `κ : [@d] K`. It is ported from
+`experiments/BoxedKappa` (branch `nominal-lifetimes`), which proves its compatibility with no new
+invariant.
+
+### Typing
+
+    Γ = Γ₁, Γ₂    Γ₁'s live slots persistent    Δ; Γ₁ ⊢ H : retTy Σ A R ⊗ clausesTyB Σ R d E fs
+    Δ; Γ₂ ⊢ e : F_{E_n ⊕ Σ} A    n ∉ Σ, n ≠ 0, |E| ≤ 2³²
+    Δ ⊨ Γ₂ ⊐ @d    every non-abortive o of E_n ⊕ Σ:  Δ ⊢ o.B ⊐ @d
+    ──────────────────────────────────────────────────── [handle-boxed]
+    Δ; Γ ⊢ handle_n e with H : F_Σ R
+
+- `clausesTyB Σ R d E fs` (`Core/EffBoxed.lean`) is `clausesTy`'s tuple (§19, §27) with each
+  capturing clause at `!U(A ⊗ [@d] K ⊸ F_Σ R)`, `K = kTy Σ R q B (fs i)`; an abortive clause is
+  `!U(A ⊸ F_Σ R)`, as in `clausesTy`.
+- `Δ ⊨ Γ₂ ⊐ @d` is `[]I`'s premise at the handled computation's context (`CtxOutlives`, which
+  holds `Δ ⊨ @d`).
+- The answer premise (`Row.AnsOutlives Δ d (E_n ⊕ Σ)`) covers the handled operations and the
+  forwarded ones: a forwarded operation's answer comes back into `e`'s continuation, which a later
+  handled operation may capture. An abortive operation never resumes and is not constrained.
+- No premise excludes a lend open at a stop. A lend's callback is typed at the pure row or at a row
+  of abortive operations (§19), and `wpG`'s `↭` from a run's start to its end already excludes a
+  borrow cell open at a stop.
+- The rule is `CDerives.effHandleVB` (and `CDerivesAt.effHandleVB`, the handled row tied to `Ξ`,
+  §19 *Typing*). Its term is `[handle]`'s `hndExpr`: no term former, no type former, no index.
+
+### Semantics
+
+No change to the machine, the relation, `wpTS`, `wpG`, `ewpTS`'s definition, BoLo's world or a
+borrow lemma. `Core/EffBoxed.lean`:
+
+- **The stratified table** `opTableS α T`: `opTable T` with one more conjunct at each non-abortive
+  stop, the continuation's share in `Res_α` (`box α P ρ = P ρ ∧ ρ.InStratum α`). It is below
+  `opTable T` (`opTableS_le`, `ewpS_ewp`).
+- **The stop lemma.** A run started in `Res_α` ends in `Res_α`: `wpG` carries `↭` from the start
+  to `π = ρ' ● ρp`, `↭` keeps `Res_α` (`ResU.updV_inStratum`, `[TR]` 6.50 at `Res_α`), and the
+  end resource is a `●`-factor (`wpG_inStratum`). At a stop the share is a `●`-factor of the
+  stop's resource; across a resumption the next run starts at the share and the answer, in `Res_α`
+  when the answers are (`OpTab.AnsIn`; `ewp_stratify`, by induction on `ewpTS`'s fixed point). At
+  the typing, `stop_sem` takes the context's resource into `Res_{δ(d)}` by `[]I`'s fold of 6.60
+  (`gSepC_outlives`) and the answers by `vC_outlives` (`Row.ansIn_of_ansOutlives`); `stop_lemma`
+  (`Core/Fundamental.lean`) is it at a `CDerives` derivation.
+- **The handler at the stratified table** (`ewp_handleS`): `ewp_handle`'s proof, the clause given
+  the share's stratum besides `KapRel`. At a linear or affine operation `κ` also holds its capture
+  cell (§25), an `own` cell, in every stratum (`ResU.inStratum_single_own`). From `KapRel`,
+  `vC_kTy_of_kapRel` gives `vC K κ`, and the stratum makes it `vC ([@d] K) κ`
+  (`ewp_handle_valsB`).
+- **Compatibility**: `handleV_compatCB` (the value form, `[handle-boxed]`'s case in
+  `fundamentalC`) and `handle_compatCB` (two variables).
+
+### Theorems
+
+`fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`, `adequacyD_obs` and every compatibility
+lemma keep their statements, over the extended judgment; adequacy stays unconditional. New:
+`stop_lemma`, `stop_sem`, `ewp_stratify`, `ewp_handleS`, `handle_compatCB`, `handleV_compatCB`.
+
+Each induction over `CDerives` and `CDerivesAt` takes the rule as a case (`Core/Closed.lean`,
+`Core/Weaken.lean`, `Core/InsertDead.lean`, `Core/Tied.lean`, `Core/RaiseNames.lean`,
+`Core/EffTier1Programs.lean`). The inversions (`Core/Inversions.lean`) read a handler's clause
+tuple at `clausesTyO Σ R ob E fs`, `κ` bare (`ob = none`, `clausesTy`) or boxed (`ob = some d`,
+`clausesTyB`): `der_hnd`, `der_hndJ`'s `HndBase`, `hnd_clauses`. A boxed `κ`'s views keep the thunk
+head (`vview_kBoxO_thunk`, `kviewO`), and `κ`'s cancel branch is read the same way at either
+(`kcancel_jr_aff`, `cancelCT_jr`, `timeoutCl_finds`), so the programs no derivation types stay
+untyped: `not_der_progT`, `not_der_progNCrecT`, `not_der_e7c` (`Core/EffCancelTyped.lean`),
+`not_der_at06`, `not_der_at08`, `not_der_at13` (`Core/Rejections.lean`).
+
+### Checker
+
+`handle_with[n](hr, hc) M` (§19) reads the clauses' type as BOXED-κ's when it can
+(`clausesReadBoxed`: the lifetime of the first clause whose argument is `A ⊗ [@d] κ`, `κ` a
+continuation's type, then `clausesReadB`; `Frontend/Check/Steps.lean`), and as `[handle]`'s
+otherwise. `clausesRead` would read a clause `!U(A ⊗ [@d] κ ⊸ F_Σ R)` as an abortive operation's,
+so the boxed reading comes first. At the boxed reading it decides `Δ ⊨ @d` (`Life.wf`), the answer
+premise (`ansOutlivesB`, sound by `outlivesB_sound`, `Frontend/Check/Decide.lean`) and the context
+premise on the slots `M` uses (`usedSat (outlivesB Δ d)`, as `[]I`), and builds the derivation by
+`rEffHandleB` (`Frontend/Check/Rules.lean`, `TiedDer.effHandleB`, `CDerivesAt.effHandleB`). Each
+failed premise has its own message, naming the slot or the operation
+(`corpus/reject/boxed-kappa-context.bc`, `corpus/reject/boxed-kappa-answer.bc`).
+
+### Programs
+
+P4 with stored continuations (`research/effects/src/boxed-kappa-programs.md`), the spawn handler
+in the program and typed by the checker:
+
+- `corpus/sched-a.bc`: two tasks, each borrowing its own local across an `await`, spawned by a
+  handler whose clause receives `κ : [@⊤] K` and answers `[@⊤] U Task`,
+  `Task = νX. F(i32 ⊕ [@⊤] U X) & F 1`; a queue lent `mut` at a fresh `'q` per observation of a
+  run-until-empty loop, driven by a bounded driver. `i32[41130]`: task 2 finishes first, so the
+  tasks interleave. Counts `63 18 0`.
+- `corpus/sched-a-div.bc`: the same, the loop handed back to the runtime undriven (its type
+  mentions no lifetime). `i32[41130]`, counts `31 5 0`.
+- `corpus/sched-b.bc`: `spawn` polymorphic in the bound, `!(all 'd < top. box 'd Code => E<'d>)`,
+  BOXED-κ at `@d = 'd`; task 2 captures `imm 'r i32`, the queue bounded by `'d ⊏ 'r`, the bounded
+  scheduler inside the blocks. `i32[87130]`, counts `64 18 0`.
+- Rejected (`corpus/reject/`): `sched-b-div.bc` (the run-until-empty loop out of the blocks, at
+  `boxed['d]`), `sched-c-equal.bc` (`@d = 'r`, at `boxed['r]`), `sched-c-outside.bc` (`'r ⊏ 'd`,
+  at `boxed['d]`); `boxed-kappa-context.bc` (the handled computation holds `imm 'r` across the
+  stop, `κ` boxed at `'r`) and `boxed-kappa-answer.bc` (an operation answering a `U` type). The
+  last two check with `κ` bare.
+
+### Lowering
+
+None: the term is `[handle]`'s, and the backend reads no type. Every stage runs the programs above
+to their goldens with `live 0`.
+
+### Baseline
+
+`Paper/`, `Support/`, the machine, `cC`/`vC` and the effectful `wp` are unchanged; no borrow rule
+and no borrow lemma changes. A clause tuple with no clause whose argument is `A ⊗ [@d] κ` is read
+as before, and no existing program has one: every corpus and kernel program checks and runs as
+before, with the same counts.
+
+### Open
+
+- **Necessity of the answer premise**: not determined (`experiments/BoxedKappa/README.md` §3, on
+  `nominal-lifetimes`). Its only use is `OpTab.AnsIn`, the answers' resources in `Res_{δ(d)}`.
+- **One former for the clause tuples.** `clausesTy` and `clausesTyB` are parallel; `clausesTyO`
+  (`Core/Inversions.lean`) is the general one, used by the inversions only.
+- **The surface.** The sugar's handlers (§18, §19) do not emit the rule; `lib/async.bc` (U2 of
+  `docs/async-capabilities.md` §7) is its first library user.
+
 ---
 
 ## Status
@@ -4551,9 +4685,26 @@ at finalisers typed at rows of abortive operations (`FinRow`, `finAlone_of_finRo
 `finOK_of_finRow`). On complete runs: `finaliserOrder_at` and `finaliserOrder_A` (`CancelRun`,
 `UnwindRun`, `FinaliserOrder`), given `FinAloneAt`.
 
+Entry 27 (§28) is implemented: the stratified table, the stop lemma and BOXED-κ's compatibility in
+`Core/EffBoxed.lean`; the rule `CDerives.effHandleVB` and `stop_lemma` in `Core/Fundamental.lean`,
+`CDerivesAt.effHandleVB` and `CDerivesAt.effHandleB` in `Core/Tied.lean`, a case in each induction
+over either; the inversions at `clausesTyO` (`Core/Inversions.lean`); the checker
+(`clausesReadBoxed`, `ansOutlivesB`, `rEffHandleB`, `TiedDer.effHandleB`, `Frontend/Check/`).
+
 ---
 
 ## Changelog
+
+- **0.55** (2026-10-14) — §28 (new): BOXED-κ, `[handle]` whose capturing clauses receive their
+  continuation boxed at `@d`, given that the handled computation's context and every non-abortive
+  answer type of its row outlive `@d`. `CDerives` and `CDerivesAt` gain `effHandleVB`, its case in
+  `fundamentalC` `handleV_compatCB`, by the stop lemma (`stop_lemma`), with no new invariant. The
+  inversions read a clause tuple bare or boxed (`clausesTyO`), and every refutation of §19 and §27
+  stays proved. The checker emits the rule at `handle_with` when the clauses' type boxes `κ`. New
+  corpus programs `sched-a`, `sched-a-div`, `sched-b` (counts `63 18 0`, `31 5 0`, `64 18 0`) and
+  rejects `sched-b-div`, `sched-c-equal`, `sched-c-outside`, `boxed-kappa-context`,
+  `boxed-kappa-answer`. No change to the machine, the relation, an existing program's output or
+  count, or the statement of any theorem.
 
 - **0.54** (2026-10-13) — §26 *Baseline*: the checker emits `[λ-dead]` for `fun (x : 1) -> M` at
   `1 -o F_Σ B` whose body does not use `x`, and `[λ]` otherwise; every program erases as before,

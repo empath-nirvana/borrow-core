@@ -138,6 +138,9 @@ rec-parser 17 0 0 # the token lists and the tokens put back
 rec-tree 254 0 0 # the tree only, two objects per node less the root
 rec-yield 0 0 0
 reverse-bytes 3 0 0
+sched-a 63 18 0
+sched-a-div 31 5 0
+sched-b 64 18 0
 slice-imm 1 0 0
 slice-lib 3 0 0
 slice-mut 1 0 0

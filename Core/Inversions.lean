@@ -28,7 +28,8 @@ same context (`der_inj₁`); `()` at `1`'s views over a consumed context, or at 
 application by `⊸E`, `[app]`, `[let]`, `[let-poly]`, `∀E` or a projection (`der_app`); a λ-value
 through the rule that types its body, or as one of the λ-constants at its axiom's type
 (`der_lam`); `let (x, y)`, `;`, `then` and `handle` by their own rules (`der_letpair`, `der_seq`,
-`der_then`, `der_hnd`); `alloc` at `A ⊸ Ref A`; a primitive by its own rule only, and `load` has
+`der_then`, `der_hnd`; a handler's clause tuple at `clausesTyO`, `κ` bare by `[handle]` or boxed by
+BOXED-κ, §28); `alloc` at `A ⊸ Ref A`; a primitive by its own rule only, and `load` has
 none (`der_prim`); `swap` at `Ref A ⊸ B ⊸ Ref B ⊗ A` only, since its body loads its cell
 (`der_swap`).  Every free variable of a typed term has a live slot (`fv_live`), so a variable used
 on both sides of a split is persistent (`splitP_both`).
@@ -707,7 +708,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       · obtain ⟨T, hT⟩ := ihN (k + 1) hk; exact ⟨T, splitP_le_right hs k T (slot_succ hT)⟩
       · obtain ⟨T, hT⟩ := ihD (k + 1) hk; exact ⟨T, splitP_le_right hs k T (slot_succ hT)⟩
       · obtain ⟨T, hT⟩ := ihM k hk; exact ⟨T, splitP_le_left hs k T hT⟩
-  | effHandleV hs _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleV hs _ _ _ _ _ _ _ ihc ihe | effHandleVB hs _ _ _ _ _ _ _ _ _ ihc ihe =>
       intro k hk
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.HasVar, false_or] at hk
       rcases hk with (hk | hk) | hk
@@ -1097,7 +1098,7 @@ theorem der_app {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro X Y he; cases he
       exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
         (.inl ⟨_, rfl⟩))))))))))), .refl⟩
-  | effHandleV =>
+  | effHandleV | effHandleVB =>
       intro X Y he; cases he
       exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
         (.inr ⟨_, rfl⟩))))))))))), .refl⟩
@@ -1248,20 +1249,60 @@ theorem der_then {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       exact (not_der_app_prim hM _ _ rfl id (by decide) (by decide)).elim
   | _ => intro N D M he; cd_terms
 
-/-- **A handler term is `[handle]`'s**: its tags are its signature's, and the handler pair is typed
-at the tensor of the return clause's type and the clauses', over a consumed context. -/
+/-- The clauses' type with each capturing clause's `κ` bare (`none`: `[handle]`) or boxed at `@d`
+(`some d`: BOXED-κ, `[spec §28]`). -/
+def clausesTyO (S : Row) (R : VTy) :
+    Option Lifetime.Life → List (Qual × VTy × VTy) → (Nat → CTy) → VTy
+  | none, E, fs => clausesTy S R E fs
+  | some d, E, fs => clausesTyB S R d E fs
+
+/-- A clause's type, `κ` bare or boxed. -/
+def clauseTyO (S : Row) (R : VTy) : Option Lifetime.Life → Qual × VTy × VTy → CTy → VTy
+  | none, o, F => clauseTy S R o F
+  | some d, o, F => clauseTyB S R d o F
+
+/-- `κ`'s type in a clause: `K`, or `[@d] K`. -/
+def kBoxO : Option Lifetime.Life → VTy → VTy
+  | none, K => K
+  | some d, K => .box d K
+
+theorem clausesTyO_nil (S : Row) (R : VTy) (ob : Option Lifetime.Life) (fs : Nat → CTy) :
+    clausesTyO S R ob [] fs = .unit := by cases ob <;> rfl
+
+theorem clausesTyO_cons (S : Row) (R : VTy) (ob : Option Lifetime.Life) (o : Qual × VTy × VTy)
+    (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) :
+    clausesTyO S R ob (o :: E) fs =
+      .tensor (clauseTyO S R ob o (fs 0)) (clausesTyO S R ob E (fun j => fs (j + 1))) := by
+  cases ob <;> rfl
+
+/-- A capturing clause's type: `!U(A ⊗ κ ⊸ F_Σ R)`, `κ` at `kBoxO ob K`. -/
+theorem clauseTyO_cap (S : Row) (R : VTy) (ob : Option Lifetime.Life) {q : Qual} {A B : VTy}
+    (F : CTy) (hB : B.isZero = false) :
+    clauseTyO S R ob (q, A, B) F =
+      .bang (.thunk (.arr (.tensor A (kBoxO ob (kTy S R q B F))) (CTy.effOf S R))) := by
+  cases ob <;> simp [clauseTyO, clauseTy, clauseTyB, kBoxO, hB]
+
+/-- **A handler term is `[handle]`'s or BOXED-κ's**: its tags are its signature's, and the handler
+pair is typed at the tensor of the return clause's type and the clauses', `κ` bare or boxed, over a
+consumed context. -/
 theorem der_hnd {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ (n : UInt32) (Q H M : Expr),
       e = .app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) (.pair Q H))) M →
-      ∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy),
+      ∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
+        (ob : Option Lifetime.Life),
         Ctx.SplitP Γ Γ₁ Γ₂ ∧ Ctx.DeadP Γ₁ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧
-        CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))) := by
+        CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyO S R ob E fs))) := by
   induction h with
   | effHandleV hs hd _ hc _ _ _ _ =>
       intro n Q H M he
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.app.injEq, Expr.pair.injEq] at he
       obtain ⟨⟨-, -, rfl, rfl⟩, -⟩ := he
-      exact ⟨_, _, _, _, _, _, _, hs, hd, rfl, hc⟩
+      exact ⟨_, _, _, _, _, _, _, none, hs, hd, rfl, hc⟩
+  | effHandleVB hs hd _ hc _ _ _ _ =>
+      intro n Q H M he
+      simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.app.injEq, Expr.pair.injEq] at he
+      obtain ⟨⟨-, -, rfl, rfl⟩, -⟩ := he
+      exact ⟨_, _, _, _, _, _, _, some _, hs, hd, rfl, hc⟩
   | force => intro n Q H M he; rcases forceE_var he with h | h <;> simp at h
   | lolliE _ _ hf =>
       intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
@@ -1502,6 +1543,17 @@ theorem vview_thunk {C₀ C : CTy} (h : VView (.thunk C₀) (.thunk C)) : C₀ =
     (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
     (fun _ h => by cases h)
   cases this; rfl
+
+/-- A view of `κ`'s type, bare or boxed, at a thunk is at its thunk. -/
+theorem vview_kBoxO_thunk {C₀ C : CTy} (ob : Option Lifetime.Life)
+    (h : VView (kBoxO ob (.thunk C₀)) (.thunk C)) : C₀ = C := by
+  cases ob with
+  | none => exact vview_thunk h
+  | some d =>
+      have := (h.hnf_of (.box (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h)))
+        (fun _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)).eq_self
+        (fun _ _ h => by cases h) (fun _ h => by cases h)
+      cases this; rfl
 
 theorem not_vview_thunk_bang {C₀ : CTy} {X : VTy} (h : VView (.thunk C₀) (.bang X)) : False := by
   have := (h.hnf_of (hnf_self (fun _ _ h => by cases h) (fun _ h => by cases h))
@@ -1845,16 +1897,17 @@ theorem qualsVal_inj : ∀ {qs qs' : List Qual}, (qualsVal qs).1 = (qualsVal qs'
       cases q <;> cases q' <;> first | rfl | exact absurd hq (by decide)
 
 /-- **A handler's clause tuple**: in `handle_n M with (X, x₁)`, the slot of `x₁` is live and its
-type views to the clauses' type, whose signature carries the handler's tags. -/
+type views to the clauses' type, `κ` bare or boxed, whose signature carries the handler's tags. -/
 theorem hnd_clauses {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {qs : List Qual} {X M : Expr}
     {j : Jdg} (h : CDerives Δ Γ (hndExpr n qs (.pair X (.var 1)) M) j) :
-    ∃ T S R E fs, Γ[1]? = some ⟨T, true⟩ ∧ VView T (clausesTy S R E fs) ∧ E.map Prod.fst = qs := by
-  obtain ⟨Γ₁, Γ₂, S, E, fs, A, R, hs, -, hQ, hH⟩ := der_hnd h n _ _ M rfl
+    ∃ T S R E fs ob, Γ[1]? = some ⟨T, true⟩ ∧ VView T (clausesTyO S R ob E fs) ∧
+      E.map Prod.fst = qs := by
+  obtain ⟨Γ₁, Γ₂, S, E, fs, A, R, ob, hs, -, hQ, hH⟩ := der_hnd h n _ _ M rfl
   have hE : E.map Prod.fst = qs := (qualsVal_inj hQ).symm
   rcases der_pair hH X (.var 1) rfl with ⟨Γ₁₁, Γ₁₂, A', B', hs', -, hv, hc⟩ | he
   · obtain ⟨-, rfl⟩ := vview_tensor hc
     obtain ⟨T, hT, hcT⟩ := der_var hv 1 rfl
-    exact ⟨T, S, R, E, fs, splitP_le_left hs _ _ (splitP_le_right hs' _ _ hT), hcT.val, hE⟩
+    exact ⟨T, S, R, E, fs, ob, splitP_le_left hs _ _ (splitP_le_right hs' _ _ hT), hcT.val, hE⟩
   · simp [emptyFamV, Val.arr, Val.pair, Val.loc, Val.i32] at he
 
 /-- **A pair read at a row**: its first part is read at the first factor of a tensor whose views
@@ -1959,9 +2012,10 @@ theorem JR.rowLe {S S' : Row} {Y Y' : VTy}
 
 /-- `[handle]`'s premises, at its conclusion `j₀`. -/
 def HndBase (Δ : LifeCtx) (Γ : Ctx VTy) (n : UInt32) (Q H M : Expr) (j₀ : Jdg) : Prop :=
-  ∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy),
+  ∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
+    (ob : Option Lifetime.Life),
     Ctx.SplitP Γ Γ₁ Γ₂ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧
-    CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))) ∧
+    CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyO S R ob E fs))) ∧
     CDerives Δ Γ₂ M (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) ∧
     (∀ o ∈ S, o.n ≠ n) ∧ j₀ = .comp (CTy.effOf S R)
 
@@ -1979,7 +2033,14 @@ theorem der_hndJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       obtain ⟨⟨-, hn, rfl, rfl⟩, rfl⟩ := he'
       simp only [Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at hn
       subst hn
-      exact ⟨_, ⟨_, _, _, _, _, _, _, hs, rfl, hc, he, hnS, rfl⟩, .refl⟩
+      exact ⟨_, ⟨_, _, _, _, _, _, _, none, hs, rfl, hc, he, hnS, rfl⟩, .refl⟩
+  | effHandleVB hs _ _ hc _ hnS _ he =>
+      intro n Q H M he'
+      simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.app.injEq, Expr.pair.injEq] at he'
+      obtain ⟨⟨-, hn, rfl, rfl⟩, rfl⟩ := he'
+      simp only [Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at hn
+      subst hn
+      exact ⟨_, ⟨_, _, _, _, _, _, _, some _, hs, rfl, hc, he, hnS, rfl⟩, .refl⟩
   | force => intro n Q H M he; rcases forceE_var he with h | h <;> simp at h
   | lolliE _ _ hf =>
       intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
@@ -2418,18 +2479,19 @@ theorem kappa_cancel_jr {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy} {T : VTy
       obtain ⟨-, rfl⟩ := JR.amp_amp hr'
       exact hr
 
-/-- **An affine `κ`'s cancel branch, applied**: at a slot of `U(C₁ & C₂)`, `x (inj₂ ())` is read at
-what the same-term rules reach from `C₂`. -/
+/-- **An affine `κ`'s cancel branch, applied**: at a slot of `U(C₁ & C₂)`, bare or boxed,
+`x (inj₂ ())` is read at what the same-term rules reach from `C₂`. -/
 theorem kcancel_jr_aff {Δ : LifeCtx} {Γ Γ' : Ctx VTy} {C₁ C₂ : CTy} {j : Jdg}
-    (hslot : Γ[0]? = some ⟨.thunk (.amp C₁ C₂), true⟩) (hle : CtxLe Γ' Γ)
+    {ob : Option Lifetime.Life}
+    (hslot : Γ[0]? = some ⟨kBoxO ob (.thunk (.amp C₁ C₂)), true⟩) (hle : CtxLe Γ' Γ)
     (h : CDerives Δ Γ' (.app (.var 0) (.val (Val.inj₂ Val.unit))) j) : JR (.comp C₂) j := by
   obtain ⟨j₀, hb, hr⟩ := der_app h (.var 0) (.val (Val.inj₂ Val.unit)) rfl
   rcases hb with ⟨_, _, _, _, hs, -, hf, rfl⟩ | ⟨_, _, _, _, _, he, -⟩ | ⟨_, _, _, _, _, _, he, -⟩ |
     ⟨_, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, _, _, he, -⟩ | ⟨_, _, he, -⟩ |
     ⟨D₁, D₂, -, hX, rfl⟩ | ⟨he, -⟩ | he | he | ⟨_, he⟩ | ⟨_, he⟩
   · rcases varCls_of_le hslot (CtxLe.trans (splitP_le_right hs) hle) hf with hc | ⟨C, hT, -, hr'⟩
-    · cases vview_thunk hc
-    · cases hT
+    · cases vview_kBoxO_thunk ob hc
+    · rcases ob with _ | d <;> cases hT
       obtain ⟨S, A, he⟩ := JR.comp_val hr'
       exact absurd he (effOf_ne_amp S A C₁ C₂).symm
   all_goals first
@@ -2438,7 +2500,7 @@ theorem kcancel_jr_aff {Δ : LifeCtx} {Γ Γ' : Ctx VTy} {C₁ C₂ : CTy} {j : 
   · rcases varCls_of_le hslot hle hX with hc | ⟨C, hT, -, hr'⟩
     · obtain ⟨S, Y, he, -⟩ := hc
       exact absurd he.symm (effOf_ne_amp S Y D₁ D₂)
-    · cases hT
+    · rcases ob with _ | d <;> cases hT
       obtain ⟨-, rfl⟩ := JR.amp_amp hr'
       exact hr
 

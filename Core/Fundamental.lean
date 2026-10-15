@@ -8,6 +8,7 @@ import Core.FoldReuse
 import Core.Nu
 import Core.EffFin
 import Core.EffBorrow
+import Core.EffBoxed
 import Core.PolyLet
 import Support.LogicalRelation.Adequacy
 
@@ -23,7 +24,8 @@ borrowed and owned folds `foldImm`, `foldOwn`, `foldReuse` (`FoldImm.lean`, `Fol
 `FoldReuse.lean`), and `νX. C`'s `nuIn`/`nuOut` and coiteration `unfoldN` (`Nu.lean`), of which
 the delay and stream types' rules are instances (`fixD`, `unfoldS`).  §19's effect rules, with
 §24's polymorphic let (`letPoly`), its `[handle]` at a value form (`effHandleV`, of which the
-two-variable `effHandle` is an instance) and its `[then]` at a finaliser of the pure row; §26's
+two-variable `effHandle` is an instance) and its `[then]` at a finaliser of the pure row; §28's
+BOXED-κ (`effHandleVB`: `[handle]` with each clause's continuation boxed at `@d`); §26's
 `λ_. M` at `1 ⊸ F_Σ B` with its binder dead (`lamDead`).
 `fundamentalC` proves every rule sound at `SemV`/`SemC`; `adequacyC` runs a closed `F 1`
 computation to `()` from the empty memory.
@@ -408,6 +410,18 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
       CDerives Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
+  /-- BOXED-κ: `[handle]` whose capturing clauses receive their continuation boxed, `κ : [@d] K`
+  (the clauses at `clausesTyB Σ R d E fs`). The handled computation's context outlives `@d`, and
+  so does the answer type of every non-abortive operation of its row, handled or forwarded.
+  `[spec §28]` -/
+  | effHandleVB {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+      {n : UInt32} {A R : VTy} {d : Lifetime.Life} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
+      (hH : H.ValFormIn Γ₁)
+      (hc : CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs))))
+      (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)))
+      (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs ++ S)) :
+      CDerives Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
   /-- `[let-poly]`: `let x = λy. b in N` for a closed λ-value, from `N` with the λ-value for `x`,
   `x`'s slot dead.  Each occurrence of the λ-value in `N` is typed on its own, at its own row: the
   kernel's row polymorphism, with the value restriction.  `[spec §24]` -/
@@ -604,7 +618,19 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
       exact then_compatC hs hNZ hU hMS hDS hfin hP ihM ihN ihD
   | effHandleV hs hd hH _ hn0 hnS hlen _ ihc ihe =>
       exact handleV_compatC hs hd hH ihc hn0 hnS hlen ihe
+  | effHandleVB hs hd hH _ hn0 hnS hlen _ hΓd hSd ihc ihe =>
+      exact handleV_compatCB hs hd hH ihc hn0 hnS hlen ihe hΓd hSd
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN
+
+/-- **The stop lemma** (BOXED-κ's premise, `[spec §28]`): a computation typed at `F_Σ A` under
+`Γ`, with `Δ ⊨ Γ ⊐ @d` and every non-abortive answer type of `Σ` outliving `@d`, has the
+continuation's share in `Res_{δ(d)}` at every stop, at every `δ`. No premise asks that no lend be
+open at a stop: `CDerives` types a lend's callback at the pure row or at a row of abortive
+operations, and `wpG`'s `↭` already excludes a lend open at a stop. -/
+theorem stop_lemma {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {S : Row} {A : VTy}
+    {d : Lifetime.Life} (hder : CDerives Δ Γ M (.comp (CTy.effOf S A)))
+    (hΓ : CtxOutlives Δ Γ d) (hS : Row.AnsOutlives Δ d S) : SemCS Δ Γ M S A d :=
+  stop_sem (fundamentalC hder) hΓ hS
 
 /-! ### Adequacy -/
 
