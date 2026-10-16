@@ -13,19 +13,22 @@ import Backend.Clos.Convert
   static), so its *key* `(n, i)` is known. A code raises the keys its body may raise and no
   frame of it catches: a `raise`'s key, the keys of the codes a call may call (the 0-CFA,
   `Backend/Clos/Flow.lean`), a `catch n`'s body less the keys of `n`, a finaliser frame's body and
-  finaliser, and a `reraise`'s keys, those any `catchAll` catches. The least solution is found by
-  iteration.
+  finaliser, and a `reraise`'s keys, those any `catchAll` catches. A call of a `sel` code whose
+  argument is a known injection raises only that projection's keys: a resume code's cancel arm
+  (`Capture`) runs none of the `catch` frames its resume arm rebuilds, and raises none of the keys
+  they catch. The least solution is found by iteration.
 - **The convention.** A code that may raise answers a sum: `inl v` when it returns `v`, `inr p`
   when it raises `p`. Codes that a call may call alike share one convention (a class of the
   codes called at one site): a class with a raising code answers sums throughout.
 - **The rewrite.** A term that may raise is computed as such a sum. `let x = e in b`, with `e`
   raising, is `case e {inl x ⇒ b | inr p ⇒ drop (the rest's variables); inr p}`; a call of a
   non-raising code, or a term that cannot raise, is not touched, so a call pays a branch exactly
-  when its callee may raise. A tail call passes the callee's sum on with no branch. A `catch n`
-  cases on its body's sum and answers `inl` of a value or of a caught payload of the name `n` (a
-  compare of the name when the body raises more than one), and passes any other name on. A
-  finaliser frame runs its finaliser on `inr p` and raises `p` again (or the finaliser's own
-  error, which supersedes it).
+  when its callee may raise. A tail call passes the callee's sum on with no branch. A call of a
+  code that answers sums, at a projection that raises nothing, is a `case` whose `inr` is
+  unreachable. A `catch n` cases on its body's sum and answers `inl` of a value or of a caught
+  payload of the name `n` (a compare of the name when the body raises more than one), and passes
+  any other name on. A finaliser frame runs its finaliser on `inr p` and raises `p` again (or the
+  finaliser's own error, which supersedes it).
 
 There is no handler stack and no search: the frame a `raise` reaches is the one whose `case` its
 sum arrives at.
@@ -100,13 +103,17 @@ def payloadKey (defs : Std.HashMap Var Tm) (p : Var) : Option OpKey :=
     | _, _ => none
   | _ => none
 
-/-- The analysis' facts: definitions, the flow solution, every code's raised keys, and the keys
-a `reraise` may raise (those a `catchAll` catches). -/
+/-- The analysis' facts: definitions, the flow solution, every code's raised keys, the keys a
+`reraise` may raise (those a `catchAll` catches), and a `sel` code's raised keys per projection. -/
 structure UFacts where
   defs : Std.HashMap Var Tm
   S : Solver
   rc : Array Raises
   rr : Raises := some []
+  /-- A `sel` code's raised keys per projection (`Code.selShape?`): a call whose argument is a
+  known injection runs only that projection's arm (a resume code's cancel arm, say, which raises
+  none of the keys its resume arm may). -/
+  rcG : Array (Option (Raises × Raises)) := #[]
 
 /-- The codes of the closures a key holds. -/
 def Solver.closuresAt (S : Solver) (k : Nat) : List Nat :=
@@ -119,11 +126,27 @@ def UFacts.codesOf (F : UFacts) (x : Var) : List Nat := F.S.closuresAt (F.S.num.
 def UFacts.rcOf (F : UFacts) (cs : List Nat) : Raises :=
   cs.foldl (fun r c => Raises.union r (F.rc[c]?.getD (some []))) (some [])
 
+/-- The projection a call's argument selects, when it is a known injection. -/
+def UFacts.selArg (F : UFacts) (a : Var) : Option Bool :=
+  match F.defs[a]?.map Tm.tail with
+  | some (.inj b _) => some b
+  | _ => none
+
+/-- The keys a call of the code `c` on an argument that selects `b` may raise. -/
+def UFacts.rcAt (F : UFacts) (c : Nat) (b : Option Bool) : Raises :=
+  match b, F.rcG[c]?.getD none with
+  | some b, some (r₁, r₂) => if b then r₂ else r₁
+  | _, _ => F.rc[c]?.getD (some [])
+
+/-- The keys a call of `f` on `a` may raise. -/
+def UFacts.callRaises (F : UFacts) (f a : Var) : Raises :=
+  (F.codesOf f).foldl (fun r c => Raises.union r (F.rcAt c (F.selArg a))) (some [])
+
 /-- The keys a term may raise. -/
 def UFacts.raises (F : UFacts) : Tm → Raises
   | .raise p => (payloadKey F.defs p).map ([·])
   | .reraise _ => F.rr
-  | .app f _ | .run f _ => F.rcOf (F.codesOf f)
+  | .app f a | .run f a => F.callRaises f a
   | .letv _ e b => Raises.union (F.raises e) (F.raises b)
   | .letpair _ _ _ b | .copy _ _ b | .drop _ b => F.raises b
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => Raises.union (F.raises b₁) (F.raises b₂)
@@ -175,13 +198,17 @@ def wrapInr (t : Tm) : UM Tm := do
   let v ← ufresh
   return .letv v t (.inj true v)
 
-/-- A call answering a plain value, as a sum when `sumMode`. -/
-def callAs (sumMode calleeSum : Bool) (f a : Var) : UM Tm := do
+/-- A call answering a plain value, as a sum when `sumMode`. A callee that answers sums, called
+where the call raises nothing (`raising` false: the projection its argument selects raises
+nothing), answers `inl` of the value. -/
+def callAs (sumMode calleeSum raising : Bool) (f a : Var) : UM Tm := do
   if sumMode then
     if calleeSum then return .app f a else wrapInl (.app f a)
   else
-    if calleeSum then throw "unwind: a call of a raising closure where no raise is handled"
-    else return .app f a
+    if !calleeSum then return .app f a
+    if raising then throw "unwind: a call of a raising closure where no raise is handled"
+    let r ← ufresh; let v ← ufresh; let q ← ufresh
+    return .letv r (.app f a) (.case r v (.var v) q (.absurd q))
 
 /-- Drop each variable, then `t`. -/
 def Tm.drops (xs : List Var) (t : Tm) : Tm := xs.foldr (fun x t => .drop x t) t
@@ -232,7 +259,7 @@ def lowerP (E : UEnv) (outer : List Var) : Tm → UM Tm
   | .when s k n x b r => return .when s k n x (← lowerP E outer b) (← lowerP E outer r)
   | .copy x x' b => return .copy x x' (← lowerP E outer b)
   | .drop x b => return .drop x (← lowerP E outer b)
-  | .app f a => callAs false (E.sumAt f) f a
+  | .app f a => callAs false (E.sumAt f) (E.mayR (.app f a)) f a
   | .reraise p => do
     -- No finaliser raises: no error is kept.
     if !E.mayR (.reraise p) then return .absurd p
@@ -256,7 +283,7 @@ def lowerP (E : UEnv) (outer : List Var) : Tm → UM Tm
 /-- `t` at a sum: `inl` of its value, or `inr` of what it raises. -/
 def lowerS (E : UEnv) (outer : List Var) : Tm → UM Tm
   | .raise p | .reraise p => return .inj true p
-  | .app f a => callAs true (E.sumAt f) f a
+  | .app f a => callAs true (E.sumAt f) (E.mayR (.app f a)) f a
   | .letv x e b => do
     let own := b.fvs.filter (· != x)
     let outer' := outer ++ own
@@ -354,20 +381,25 @@ def Tm.raiseSites : Tm → Nat
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => b₁.raiseSites + b₂.raiseSites
   | _ => 0
 
-/-- Every code's raised keys, the least solution by iteration, and the keys a `reraise` may
-raise. -/
+/-- Every code's raised keys and a `sel` code's per projection, the least solution by iteration,
+and the keys a `reraise` may raise. -/
 def UFacts.solve (defs : Std.HashMap Var Tm) (S : Solver) (p : Prog) : UFacts := Id.run do
-  let mut F : UFacts := ⟨defs, S, .replicate p.codes.size (some []), some []⟩
+  let mut F : UFacts :=
+    ⟨defs, S, .replicate p.codes.size (some []), some [], .replicate p.codes.size none⟩
   let terms := p.main :: p.codes.toList.map (·.body)
-  -- Each round adds a key to a code or to the reraised keys, or makes one unknown; the keys are
-  -- at most the `raise`s.
+  -- Each round adds a key to a code, to a projection of a `sel` code or to the reraised keys, or
+  -- makes one unknown; the keys are at most the `raise`s.
   let keys := terms.foldl (fun k t => k + t.raiseSites) 0 + 2
-  for _ in [0:(p.codes.size + 1) * keys + 1] do
+  for _ in [0:(3 * p.codes.size + 1) * keys + 1] do
     let rc := p.codes.map fun c => F.raises c.body
+    let rcG := p.codes.map fun c =>
+      c.selShape?.map fun (_, _, b₁, _, b₂) => (F.raises b₁, F.raises b₂)
     let rr := terms.foldl (fun r t => Raises.union r (F.caughtAll t)) (some [])
     let len (r : Raises) := r.map (·.length)
-    let same := (rc.toList.zip F.rc.toList).all (fun (r, r') => len r == len r') && len rr == len F.rr
-    F := { F with rc, rr }
+    let lenG (g : Option (Raises × Raises)) := g.map fun (r₁, r₂) => (len r₁, len r₂)
+    let same := (rc.toList.zip F.rc.toList).all (fun (r, r') => len r == len r') &&
+      (rcG.toList.zip F.rcG.toList).all (fun (g, g') => lenG g == lenG g') && len rr == len F.rr
+    F := { F with rc, rcG, rr }
     if same then break
   return F
 
