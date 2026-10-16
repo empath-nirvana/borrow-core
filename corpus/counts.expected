@@ -7,6 +7,7 @@ aff-counter 2 0 0 # the cell the closure is stored in, and the counter's cell; t
 aff-depth 2 0 0 # as aff-counter: four calls through three functions and a reborrow, all direct
 aff-drop 3 0 0 # three counters' cells, each freed by its `close`
 aff-higher 2 6 0 # two counters' cells; the indirect calls are `runner`'s calls of its argument, which closures built at two sites reach: the flow analysis is monovariant, and the argument's code is chosen at run time, as a `dyn` call's is
+answers-two-types 1 2 0 # the indirect calls are of `fake_api`'s answer, a function of its state (SPEC §19, *Handler state*)
 array-empty 0 0 0
 array-get 2 0 0
 array-refs 5 0 0
@@ -172,6 +173,7 @@ lend-server 2 0 0
 list-blocks 13 0 0
 list-capability 7 0 0
 list-generic 27 0 0 # the lists' nodes, one object each; no frame and no closure is allocated
+loop-row-answer 0 0 0
 main-lifetime 0 0 0 # main's lifetime and the unit cell `u` are cells of no words: nothing is allocated
 map-reuse 7 0 0
 nats-sum 0 0 0
@@ -198,7 +200,7 @@ rec-overflow 10101 0 0 # the cells, one per level: 100, and 10001 before the bud
 rec-parser 17 0 0 # the token lists and the tokens put back
 rec-tree 254 0 0 # the tree only, two objects per node less the root
 rec-yield 0 0 0
-reconcile-chain 25 0 0 # the journals' list nodes, and the continuations the clock's and the journal's clauses resume before they answer
+reconcile-chain 28 3 0 # the journals' list nodes, and the continuations the clock's, the service's and the journal's clauses resume before they answer; the indirect calls are of `service`'s answer, a function of its state built by its return clause or by its `request` clause (SPEC §19, *Handler state*)
 reconcile-clock 34 8 0 # the clock cells, the journals' list nodes, and the continuations the clauses resume before they answer; the indirect calls are of `on_clock`'s answer, a function of its state (the clock capability) built by its return clause or by its `pause` clause (SPEC §19, *Handler state*)
 retry-block 2 0 0 # the clock cells
 reverse-bytes 3 0 0

@@ -83,13 +83,23 @@ def readsInput (file src : String) : Bool :=
     | none => false
   | .error _ => false
 
+/-- A converted program with its effects lowered and its codata collapsed, and its layout types
+when they were found. A program whose layout types fail is lowered again with the control
+operations' answers carried as variants (`Clos.Ops.wrapsAnswers`): a code that suspends at
+operations of different answer types is resumed at one type then.  `[spec §34]` -/
+def lowerEffects (p : Clos.Prog) : Except String (Clos.Prog × Option Clos.Types) := do
+  let r := (← (← p.capture).unwind).collapseT
+  if r.2.isSome then return r
+  let r' := (← (← p.capture (wrapAnswers := true)).unwind).collapseT
+  pure (if r'.2.isSome then r' else r)
+
 /-- The closure IR, and its layout types when collapsing found them. -/
 def closTypesOf (file src : String) : Except String (Clos.Prog × Option Clos.Types) := do
   let k ← checkedOf file src
   let p ← match k.io with
     | none => Clos.convert k.main.e
     | some m => Clos.convertMain (← extImpls m) m.loopB.isSome k.main.e
-  pure (← (← p.capture).unwind).collapseT
+  lowerEffects p
 
 def closOf (file src : String) : Except String Clos.Prog := return (← closTypesOf file src).1
 
@@ -269,7 +279,7 @@ as `main`'s erasure is. -/
 
 /-- A kernel program's closure IR and layout types. -/
 def closTypesOfExpr (e : BoCa.Expr) : Except String (Clos.Prog × Option Clos.Types) := do
-  pure (← (← (← Clos.convert e).capture).unwind).collapseT
+  lowerEffects (← Clos.convert e)
 
 /-- A kernel program's WAT. -/
 def compileWatExpr (e : BoCa.Expr) (counts : Bool := false) : Except String String := do

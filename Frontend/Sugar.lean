@@ -20,9 +20,10 @@ program as written (`Frontend.Elab.TCx`), bindings whose type only their uses de
 annotated first (`Frontend.Elab.fillProgram`), and each decision below reads those types.
 
 * **Ambient capabilities in `main`.** A program that declares no externs and whose `main`
-  mentions `stdin`, `stdout` or `stderr` gets the I/O library (`lib/io.bc`), which declares the
-  operations, and an `extern` for each capability it mentions, in the order `stdin`, `stdout`,
-  `stderr`. `main : F A` becomes `main : F (Caps * A)`: each terminal `return V` of its body
+  mentions `stdin`, `stdout` or `stderr` gets the I/O library (`lib/io.bc`), included first, and
+  an `extern` for each capability it mentions, in the order `stdin`, `stdout`, `stderr`. A `main`
+  that performs an effect of the system interface gets the capability's extern too (SPEC §34,
+  `Elab.Effects.platformMain`). `main : F A` becomes `main : F (Caps * A)`: each terminal `return V` of its body
   becomes `return (caps, V)`, and any other terminal `T` becomes `r <- T; return (caps, r)`,
   with the capabilities read by name where the path ends (`wrapTail`).
 * **`for x in V { M }; N`**, `V` an iterator made from a capability, in any function or `main`
@@ -5076,7 +5077,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
         | .def_ _ m _ _ _ _ | .handler _ m _ _ _ _ _ => n.name == m.name || n.name.startsWith (m.name ++ "__")
         | .chandler _ h => n.name.startsWith (h.name.name ++ "__")
         | _ => false
-    | _ => true
+    | d => p₀.decls.contains d
   let ioN := if ioFirst then (rest.takeWhile (!own ·)).length else 0
   let decls ← (lib ++ rest ++ exts ++ mains).mapM fun
     | .def_ sp n ps A V mk => return .def_ sp n ps A (← V.elab false) mk

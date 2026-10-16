@@ -3,7 +3,7 @@ import Frontend.Print
 import Frontend.Elab.Subst
 
 /-!
-# Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21, §30, §32]`
+# Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21, §30, §32, §34]`
 
 An effect declares operations, each **answering** (`fn`) or **control** (`ctl`, with the
 structural qualifier of its continuation: affine by default, `linear ctl`, `multi ctl`). An effect
@@ -54,6 +54,14 @@ rest of the sugar; it knows no effect by name.
   block parameter (§32, `Blk.caps`).
 * **A handler's lifetime parameters** are the meet of the lifetimes in scope at each `with`
   (§32, `HInfo.lives`).
+* **The platform** (§34). A handler whose state is lent, `handler h(&mut s: S)`, gives each
+  clause the capability itself (`HSig.lent`). An answering operation may take lifetime parameters,
+  which its clause takes after the capability's. The effects of the system interface that `main`
+  performs are served by the platform's handlers (`platformEffects`, `platformMain`) on the cells
+  `main` holds: such a capability is the cell (`HSig.cell`), threaded by name, and each operation
+  lends it to its clause. A task of a handler that keeps its continuation boxed at its lifetime
+  (`Env.gives`) is given the capabilities its body uses, lent for the borrow block around it
+  (`Cx.givenC`).
 
 What is not provided, with the message that says so: an operation inside a closure or block that
 is not run in place, other than an effectful block; a block parameter stored; a function with a

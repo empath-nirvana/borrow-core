@@ -434,6 +434,16 @@ A `main` may declare the standard externs (`Frontend/Check/Externs.lean`): the c
   nothing, answering the count). They are unbuffered, so a
   prompt is out before the next read. The plain LLVM/libc counterpart is `read(2)`/`write(2)`
   on the same descriptors; nothing WASI-specific is part of the semantics.
+- **The clock and the arguments (SPEC §34).** `clock` is a cell holding the model's time
+  (`i32[0]`), and `clock_now`/`clock_sleep` are the closure-IR primitives `io clockNow` and
+  `io clockSleep`: in the flat IR the expression `now c` and the statement `sleep c ms`, which the
+  flat-IR interpreter runs on the cell (the model: a sleep adds `max(ms, 0)`, saturating), and
+  Wasm as `$now` (`clock_time_get` of the monotonic clock, in milliseconds since the clock's first
+  use) and `$sleep` (`poll_oneoff` on one relative clock subscription). `args` is a cell holding
+  the stream `0xFFFFFFFF`, which `$getc` and `$getv` read from the arguments `$args` reads once
+  (`args_sizes_get`, `args_get`) into memory `$reserve` takes from the top of the heap: no object,
+  never freed. The interpreters read it from the arguments they are given (`bcc interp … --
+  arg…`). The libc counterparts are `clock_gettime`, `nanosleep` and `argv`.
 - **Loops.** When `main` returns a loop, every stage drives it: it calls the loop on `inl ()`
   until the answer is `inl r` (the source stage by `driveSource`, the closure IR by its `drive`,
   the flat IR by a `drive` function generated at the loop's type), then runs the epilogue on `r`, which the closure

@@ -1,6 +1,26 @@
 -- The elaboration of `for.bc` (SPEC §11, §14), as `bcc desugar` prints it: an ordinary core
 -- program, with the I/O library the sugar brings in, whose `main` is one state machine (SPEC §15).
 -- `scripts/check-sugar.sh` checks that both erase to one term.
+def true : 1 + 1 =
+  inr ()
+
+def false : 1 + 1 =
+  inl ()
+
+def not : !(1 + 1 => 1 + 1) =
+  !thunkv fun (b : 1 + 1) ->
+      case b {
+        inl u -> return true
+      | inr u -> return false
+      }
+
+def to_i32 : !(u8 => i32) =
+  !thunkv fun (b : u8) ->
+      return (unbang host[extend8_u]) b
+
+def to_u8 : !(i32 => u8) =
+  !thunkv fun (i : i32) ->
+      return (unbang host[wrap8]) i
 
 extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (u8 + 1))
 
@@ -10,27 +30,136 @@ extern write_all : !(all 'a < top. all 'b < top. mut 'a output * array_imm 'b u8
 
 extern read_into : !(all 'a < top. all 'b < top. mut 'a input * array_mut 'b u8 => mut 'a input * array_mut 'b u8 * i32)
 
+extern clock_now : !(all 'a < top. mut 'a clock => mut 'a clock * i32)
+
+extern clock_sleep : !(all 'a < top. mut 'a clock * i32 => mut 'a clock)
+
+extern read_arg : !(all 'a < top. mut 'a args => mut 'a args * (u8 + 1))
+
+def wasi_stdin__input_byte : !(all 'fx_l < top. mut 'fx_l input * 1 => mut 'fx_l input * (u8 + 1)) =
+  !thunkv Fun 'fx_l < top.
+      return (thunkv fun (fx_pp5 : mut 'fx_l input * 1) ->
+          let (fx_c, fx_p4) = fx_pp5;
+          let () = fx_p4;
+          i <- return fx_c;
+          let (j, r) = (unbang read_byte) ['fx_l] i;
+          i <- return j;
+          fx_v0 : u8 + 1 <- return r;
+          return (i, fx_v0))
+
+def wasi_stdin__input_into : !(all 'fx_l < top. all 'b < top. mut 'fx_l input * array_mut 'b u8 => mut 'fx_l input * array_mut 'b u8 * i32) =
+  !thunkv Fun 'fx_l < top.
+      return (thunkv Fun 'b < top.
+          return (thunkv fun (fx_pp11 : mut 'fx_l input * array_mut 'b u8) ->
+              let (fx_c, fx_p10) = fx_pp11;
+              v <- return fx_p10;
+              i <- return fx_c;
+              let (j, r) = (unbang read_into) ['fx_l] ['b] (i, v);
+              i <- return j;
+              fx_v6 : array_mut 'b u8 * i32 <- return r;
+              return (i, fx_v6)))
+
+def wasi_stdout__print_byte : !(all 'fx_l < top. mut 'fx_l output * u8 => mut 'fx_l output * 1) =
+  !thunkv Fun 'fx_l < top.
+      return (thunkv fun (fx_pp17 : mut 'fx_l output * u8) ->
+          let (fx_c, fx_p16) = fx_pp17;
+          b <- return fx_p16;
+          o <- return fx_c;
+          o <- return (unbang write_byte) ['fx_l] (o, b);
+          fx_v12 : 1 <- return ();
+          return (o, fx_v12))
+
+def wasi_stdout__print_bytes : !(all 'fx_l < top. all 'b < top. mut 'fx_l output * array_imm 'b u8 => mut 'fx_l output * 1) =
+  !thunkv Fun 'fx_l < top.
+      return (thunkv Fun 'b < top.
+          return (thunkv fun (fx_pp23 : mut 'fx_l output * array_imm 'b u8) ->
+              let (fx_c, fx_p22) = fx_pp23;
+              v <- return fx_p22;
+              o <- return fx_c;
+              o <- return (unbang write_all) ['fx_l] ['b] (o, v);
+              fx_v18 : 1 <- return ();
+              return (o, fx_v18)))
+
+def wasi_stderr__eprint_byte : !(all 'fx_l < top. mut 'fx_l output * u8 => mut 'fx_l output * 1) =
+  !thunkv Fun 'fx_l < top.
+      return (thunkv fun (fx_pp29 : mut 'fx_l output * u8) ->
+          let (fx_c, fx_p28) = fx_pp29;
+          b <- return fx_p28;
+          o <- return fx_c;
+          o <- return (unbang write_byte) ['fx_l] (o, b);
+          fx_v24 : 1 <- return ();
+          return (o, fx_v24))
+
+def wasi_stderr__eprint_bytes : !(all 'fx_l < top. all 'b < top. mut 'fx_l output * array_imm 'b u8 => mut 'fx_l output * 1) =
+  !thunkv Fun 'fx_l < top.
+      return (thunkv Fun 'b < top.
+          return (thunkv fun (fx_pp35 : mut 'fx_l output * array_imm 'b u8) ->
+              let (fx_c, fx_p34) = fx_pp35;
+              v <- return fx_p34;
+              o <- return fx_c;
+              o <- return (unbang write_all) ['fx_l] ['b] (o, v);
+              fx_v30 : 1 <- return ();
+              return (o, fx_v30)))
+
+def wasi_clock__now : !(all 'fx_l < top. mut 'fx_l clock * 1 => mut 'fx_l clock * i32) =
+  !thunkv Fun 'fx_l < top.
+      return (thunkv fun (fx_pp41 : mut 'fx_l clock * 1) ->
+          let (fx_c, fx_p40) = fx_pp41;
+          let () = fx_p40;
+          c <- return fx_c;
+          let (d, t) = (unbang clock_now) ['fx_l] c;
+          c <- return d;
+          fx_v36 : i32 <- return t;
+          return (c, fx_v36))
+
+def wasi_clock__sleep : !(all 'fx_l < top. mut 'fx_l clock * i32 => mut 'fx_l clock * 1) =
+  !thunkv Fun 'fx_l < top.
+      return (thunkv fun (fx_pp47 : mut 'fx_l clock * i32) ->
+          let (fx_c, fx_p46) = fx_pp47;
+          ms <- return fx_p46;
+          c <- return fx_c;
+          c <- return (unbang clock_sleep) ['fx_l] (c, ms);
+          fx_v42 : 1 <- return ();
+          return (c, fx_v42))
+
+def wasi_args__arg_byte : !(all 'fx_l < top. mut 'fx_l args * 1 => mut 'fx_l args * (u8 + 1)) =
+  !thunkv Fun 'fx_l < top.
+      return (thunkv fun (fx_pp53 : mut 'fx_l args * 1) ->
+          let (fx_c, fx_p52) = fx_pp53;
+          let () = fx_p52;
+          a <- return fx_c;
+          let (b, r) = (unbang read_arg) ['fx_l] a;
+          a <- return b;
+          fx_v48 : u8 + 1 <- return r;
+          return (a, fx_v48))
+
 type In = ref input
 
 type Out = ref output
 
 type Bytes = mu X. 1 + u8 * X
 
-def getb : In => In * (u8 + 1) =
-  thunkv fun (c : In) ->
-      return withbor2['x, top, input, u8 + 1] c (thunkv Fun 'x < dom.
-          return (thunkv fun (m : mut 'x input) ->
-              r <- return (unbang read_byte) ['x] m;
-              let (m2, b) = r;
-              return boxed['x] b))
+def getb : !(In => In * (u8 + 1)) =
+  !thunkv fun (io_p3 : In) ->
+      c <- return io_p3;
+      io_b2 <- return withbor2['fx_l0, dom, input, u8 + 1] c (thunkv Fun 'fx_l0 < dom.
+            return (thunkv fun (fx_c1 : mut 'fx_l0 input) ->
+                fx_b54 : mut 'fx_l0 input * (u8 + 1) <- return (unbang wasi_stdin__input_byte) ['fx_l0] (fx_c1, ());
+                let (fx_c1, fx_v55) = fx_b54;
+                return boxed['fx_l0] fx_v55));
+      let (c, r) = io_b2;
+      return (c, r)
 
-def putb : Out * u8 => Out * 1 =
-  thunkv fun (p : Out * u8) ->
-      let (c, b) = p;
-      return withbor2['x, top, output, 1] c (thunkv Fun 'x < dom.
-          return (thunkv fun (m : mut 'x output) ->
-              m2 <- return (unbang write_byte) ['x] (m, b);
-              return boxed['x] ()))
+def putb : !(Out * u8 => Out * 1) =
+  !thunkv fun (io_p8 : Out * u8) ->
+      let (o, b) = io_p8;
+      io_b6 <- return withbor2['fx_l4, dom, output, 1] o (thunkv Fun 'fx_l4 < dom.
+            return (thunkv fun (fx_c5 : mut 'fx_l4 output) ->
+                fx_b56 : mut 'fx_l4 output * 1 <- return (unbang wasi_stdout__print_byte) ['fx_l4] (fx_c5, b);
+                let (fx_c5, fx_v57) = fx_b56;
+                return boxed['fx_l4] fx_v57));
+      let (o, io_d7) = io_b6;
+      return (o, ())
 
 def io_dec_step : !(Out * i32 * i32 * (1 + 1) => Out * i32 * i32 * (1 + 1)) =
   !thunkv fun (s : Out * i32 * i32 * (1 + 1)) ->
@@ -53,7 +182,7 @@ def io_dec_step : !(Out * i32 * i32 * (1 + 1) => Out * i32 * i32 * (1 + 1)) =
             };
           o2 : Out <- case show {
               inl u -> return o
-            | inr u -> q2 <- return putb (o, (unbang host[wrap8]) ((unbang host[add32]) (digit, i32[48])));
+            | inr u -> q2 <- return (unbang putb) (o, (unbang host[wrap8]) ((unbang host[add32]) (digit, i32[48])));
                 let (o3, v) = q2;
                 return o3
             };
@@ -78,28 +207,33 @@ def put_dec : Out * i32 => Out * 1 =
       let (o2, r) = s;
       return (o2, ())
 
-def write_bytes : all 'b < top. Out * array_imm 'b u8 => Out * 1 =
-  thunkv Fun 'b < top.
-      return (thunkv fun (p : Out * array_imm 'b u8) ->
-          let (c, v) = p;
-          return withbor2['x, top, output, 1] c (thunkv Fun 'x < dom.
-              return (thunkv fun (m : mut 'x output) ->
-                  m2 <- return (unbang write_all) ['x] ['b] (m, v);
-                  return boxed['x] ())))
+def write_bytes : !(all 'b < top. Out * array_imm 'b u8 => Out * 1) =
+  !thunkv Fun 'b < top.
+      return (thunkv fun (io_p13 : Out * array_imm 'b u8) ->
+          let (o, v) = io_p13;
+          io_b11 <- return withbor2['fx_l9, dom, output, 1] o (thunkv Fun 'fx_l9 < dom.
+                return (thunkv fun (fx_c10 : mut 'fx_l9 output) ->
+                    fx_b58 <- return (unbang wasi_stdout__print_bytes) ['fx_l9] ['b] (fx_c10, v);
+                    let (fx_c10, fx_v59) = fx_b58;
+                    return boxed['fx_l9] fx_v59));
+          let (o, io_d12) = io_b11;
+          return (o, ()))
 
-def read_bytes : all 'b < top. In * array_mut 'b u8 => In * array_mut 'b u8 * i32 =
-  thunkv Fun 'b < top.
-      return (thunkv fun (p : In * array_mut 'b u8) ->
-          let (c, v) = p;
-          return withbor2['x, top, input, array_mut 'b u8 * i32] c (thunkv Fun 'x < dom.
-              return (thunkv fun (m : mut 'x input) ->
-                  q <- return (unbang read_into) ['x] ['b] (m, v);
-                  let (m2, r) = q;
-                  return boxed['x] r)))
+def read_bytes : !(all 'b < top. In * array_mut 'b u8 => In * array_mut 'b u8 * i32) =
+  !thunkv Fun 'b < top.
+      return (thunkv fun (io_p17 : In * array_mut 'b u8) ->
+          let (c, v) = io_p17;
+          io_b16 <- return withbor2['fx_l14, dom, input, array_mut 'b u8 * i32] c (thunkv Fun 'fx_l14 < dom.
+                return (thunkv fun (fx_c15 : mut 'fx_l14 input) ->
+                    fx_b60 <- return (unbang wasi_stdin__input_into) ['fx_l14] ['b] (fx_c15, v);
+                    let (fx_c15, fx_v61) = fx_b60;
+                    return boxed['fx_l14] fx_v61));
+          let (c, r) = io_b16;
+          return (c, r))
 
 def io_bytes_step : !U (In -o F (u8 * In + In) & F In) =
   !thunkv fun (c : In) ->
-      < q <- return getb c;
+      < q <- return (unbang getb) c;
         let (c2, x) = q;
         case x {
           inl b -> return inl (b, c2)
@@ -113,19 +247,89 @@ def bytes : In => U iter u8 In In =
       return (thunkv nu_in < (nu_out force f c).1,
           (nu_out force f c).2 >)
 
+def dec_each : !(i32 * !(u8 => 1) => 1) =
+  !thunkv fun (io_p22 : i32 * !(u8 => 1)) ->
+      let (x, put) = io_p22;
+      n <- return x;
+      io_j21 <- case (unbang host[lt_s32]) (x, i32[0]) {
+          inl io_else -> io_ju <- return ();
+            return n
+        | inr io_then -> io_s18 <- return (unbang put) u8[45];
+            n <- return (unbang host[sub32]) (i32[0], x);
+            io_ju <- return ();
+            return n
+        };
+      n <- return io_j21;
+      d <- return i32[1000000000];
+      started <- return false;
+      io_lo102_3 <- return i32[0];
+      io_hi102_3 <- return i32[10];
+      io_n102_3 <- return (unbang host[sub32]) (io_hi102_3, io_lo102_3);
+      io_r102_3 <- return (unbang count_try[i32 * !(u8 => 1) * i32 * i32 * (1 + 1), (!(u8 => 1) * i32 * i32 * (1 + 1)) * (1 + 1)]) (!thunkv fun (io_c0 : i32 * i32 * !(u8 => 1) * i32 * i32 * (1 + 1)) ->
+            let (io_i102_3, io_s102_3) = io_c0;
+            let (io_lo102_3, io_s102_3_t) = io_s102_3;
+            let (put, io_s102_3_t_t) = io_s102_3_t;
+            let (n, io_s102_3_t_t_t) = io_s102_3_t_t;
+            let (d, started) = io_s102_3_t_t_t;
+            _ <- return (unbang host[add32]) (io_lo102_3, io_i102_3);
+            q <- case (unbang host[div_u32]) (n, d) {
+                inl y -> return y
+              | inr u -> return i32[0]
+              };
+            io_j20 <- case run case run case started {
+                inl io_sc -> return (unbang host[ne32]) (q, i32[0])
+              | inr io_sc -> return (inr () : 1 + 1)
+              } {
+                inl io_sc -> return (unbang host[eq32]) (d, i32[1])
+              | inr io_sc -> return (inr () : 1 + 1)
+              } {
+                inl io_else -> io_ju <- return ();
+                  return started
+              | inr io_then -> io_s19 <- return (unbang put) ((unbang to_u8) ((unbang host[add32]) (q, i32[48])));
+                  started <- return true;
+                  io_ju <- return ();
+                  return started
+              };
+            started <- return io_j20;
+            n <- return (unbang host[sub32]) (n, (unbang host[mul32]) (q, d));
+            d2 <- case (unbang host[div_u32]) (d, i32[10]) {
+                inl y -> return y
+              | inr u -> return i32[1]
+              };
+            d <- return d2;
+            io_u <- return ();
+            return inl (io_lo102_3, (put, (n, (d, started)))), (io_n102_3, (i32[0], (io_lo102_3, (put, (n, (d, started)))))));
+      io_j102_3 : (!(u8 => 1) * i32 * i32 * (1 + 1)) * (1 + 1) <- case io_r102_3 {
+          inl io_s102_3 -> let (io_lo102_3, io_s102_3_t) = io_s102_3;
+            let (put, io_s102_3_t_t) = io_s102_3_t;
+            let (n, io_s102_3_t_t_t) = io_s102_3_t_t;
+            let (d, started) = io_s102_3_t_t_t;
+            return ((put, (n, (d, started))), inl ())
+        | inr io_e102_3 -> let (io_w102_3, io_o102_3) = io_e102_3;
+            let (put, io_w102_3_t) = io_w102_3;
+            let (n, io_w102_3_t_t) = io_w102_3_t;
+            let (d, started) = io_w102_3_t_t;
+            return ((put, (n, (d, started))), io_o102_3)
+        };
+      let (io_jw102_3, io_ob102_3) = io_j102_3;
+      let (put, io_jw102_3_t) = io_jw102_3;
+      let (n, io_jw102_3_t_t) = io_jw102_3_t;
+      let (d, started) = io_jw102_3_t_t;
+      return ()
+
 extern stdin : ref input
 
 extern stdout : ref output
 
 main : F U loop ((ref input * ref output) * i32) ((ref input * ref output) * 1) =
-  io_run_0 : !(U iter u8 (ref input) (ref input) * ref output * i32 => (ref input * ref output) * i32 + U iter u8 (ref input) (ref input) * ref output * i32) <- return (!thunkv fun (io_a : U iter u8 (ref input) (ref input) * ref output * i32) ->
+  io_run_0 : !U (U iter u8 (ref input) (ref input) * ref output * i32 -o F ((ref input * ref output) * i32 + U iter u8 (ref input) (ref input) * ref output * i32)) <- return (!thunkv fun (io_a : U iter u8 (ref input) (ref input) * ref output * i32) ->
         let (io_it0, io_a_t) = io_a;
         let (stdout, n) = io_a_t;
         io_o <- (nu_out force io_it0).1;
         case io_o {
           inl io_p -> let (b, io_it0) = io_p;
             n : i32 <- return (unbang host[add32]) (n, i32[1]);
-            io_lend <- return putb (stdout, b);
+            io_lend <- return (unbang putb) (stdout, b);
             let (stdout, io_u) = io_lend;
             return inr (io_it0, (stdout, n))
         | inr io_d -> io_q <- return io_d;

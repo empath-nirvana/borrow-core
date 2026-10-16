@@ -1,42 +1,52 @@
 -- A toy reconciler chain, `step() |> timeout |> retry(3, 10) |> logged` (SPEC §33), innermost
--- first: `logged` around `retry` around `timeout` around the step, with a fake clock.
+-- first: `logged` around `retry` around `timeout` around the step, with a fake clock and a fake
+-- service.
 --
--- * The step notes its request in the journal, waits on the service for `ms` (`Wait`), then the
---   request takes `ms` on the clock (`Clock`), and answers 200.
+-- * The step notes its request in the journal, waits on the service for `ms` (`Wait`), then sends
+--   the request to the service (`Api`), which answers its status, and the request takes `ms` on
+--   the clock (`Clock`), whose `sleep` answers the time slept.
 -- * `timeout` takes a computation that provides `Wait`: its handler `deadline` resumes a wait of
 --   at most 50 ms, and cancels the computation at a longer one and raises 408.
 -- * `retry` takes a computation that provides `Fail[i32]`: it runs it under its own `to_result`,
 --   and after a failure sleeps on the clock (`base`, then twice as long) and runs it again, up to
---   `times` attempts, raising the last error.
+--   `times` attempts, raising the last error. It adds up the time it slept.
 -- * `logged` is a handler: `m |> logged` is `with logged { m }`. It notes 9 for a value and 4 for
 --   an error, and answers the sum.
+-- * `service` is a handler with a state, its count of requests: it answers 200 and counts.
 --
 -- Each stage handles what it provides, and every other operation passes on to the next stage out:
--- the step's `note` and `sleep` go where the chain is written (the journal and the clock), and
--- `timeout`'s 408 to `retry`'s handler, the port of `retry`'s computation (`bcc check`: the copy
--- `timeout__n4_…` is for the site 4 of `Fail`, the port 4 of `retry`). The clock and the journal
--- are folds of the computation's answer: a `sleep` adds its time to the time the rest takes, and a
--- `note` puts its entry before the rest's.
+-- the step's `note`, `request` and `sleep` go where the chain is written (the journal, the service
+-- and the clock), and `timeout`'s 408 to `retry`'s handler, the port of `retry`'s computation
+-- (`bcc check`: the copy `timeout__n…` is for the site of `Fail` that is the port of `retry`). The
+-- clock and the journal are folds of the computation's answer: a `sleep` adds its time to the time
+-- the rest takes, and a `note` puts its entry before the rest's.
 --
--- The toy is simplified around three known limits: its service has no state, since a handler
--- with a state around another handler breaks the flat stage (#485) and a capability cannot be used
--- under `retry`'s handler (#487); and its operations answer `()`, since a counted loop at a
--- resuming row whose operation answers a value does not compile to WebAssembly (#486).
+-- The operations answer values (`request` its status, `sleep` the time slept) and the service has
+-- a state, around the other handlers: the shapes #485 and #486 broke in the backend. Simplified
+-- around one limit still: a capability cannot be used under `retry`'s handler (#487), so the
+-- service is a control effect's handler, not an answering one's.
 --
--- Answer: `(((inr i32[408], i32[30]), [80, 80, 80, 4]), ((inl i32[200], i32[20]), [20, 9]))`,
--- the lists as `inr (x, …)`: a stuck service (each request waits 80 ms) is attempted three times,
--- each cut at the deadline before its request runs, with backoffs of 10 and 20 ms, and the error
--- is logged; a healthy one (20 ms) answers at the first attempt, after its request's 20 ms. A
--- `retry` that did not serve its computation's `Fail` would attempt once (`[80, 4]`, clock 0), and
--- a `timeout` that resumed every wait would answer 200 after 80 ms (`[80, 9]`).
+-- Answer: `((((inr i32[408], i32[30]), i32[0]), [80, 80, 80, 4]), (((inl i32[200], i32[20]),
+-- i32[1]), [20, 9]))`, the lists as `inr (x, …)`: a stuck service (each request waits 80 ms) is
+-- attempted three times, each cut at the deadline before its request is sent, with backoffs of 10
+-- and 20 ms, no request reaching the service, and the error is logged; a healthy one (20 ms)
+-- answers at the first attempt, after its request's 20 ms, one request served. A `retry` that did
+-- not serve its computation's `Fail` would attempt once (`[80, 4]`, clock 0), and a `timeout` that
+-- resumed every wait would answer 200 after 80 ms (`[80, 9]`).
 
 include fail
 include list
 
-effect Clock { ctl sleep(ms: i32) }
+effect Clock { ctl sleep(ms: i32) -> i32 }
 handler fake_clock[A]: Clock, A -> A * i32 = {
   return(a) = (a, 0);
-  sleep(ms, k) = { let (a, t) = k(()); (a, t + ms) }
+  sleep(ms, k) = { let (a, t) = k(ms); (a, t + ms) }
+}
+
+effect Api { ctl request(ms: i32) -> i32 }
+handler service[A](mut calls: i32): Api, A -> A * i32 with Audit = {
+  return(a) = (a, calls);
+  request(ms, k) = { calls = calls + 1; k(200) }
 }
 
 effect Audit { ctl note(x: i32) }
@@ -47,11 +57,12 @@ handler journal[A]: Audit, A -> A * List[i32] = {
 
 effect Wait { ctl wait(ms: i32) }
 
-fn reconcile(ms: i32) -> i32 with Audit, Clock, Wait =
+fn reconcile(ms: i32) -> i32 with Audit, Api, Clock, Wait =
   note(ms);
   wait(ms);
-  sleep(ms);
-  200
+  let code = request(ms);
+  let slept = sleep(ms);
+  code
 
 handler deadline[A]: Wait, A -> A with Fail[i32] = {
   return(a) = a;
@@ -63,10 +74,13 @@ fn timeout[A](m: !(1 => A with Wait)) -> A with Fail[i32] = with deadline { m(()
 fn retry[A](m: !(1 => A with Fail[i32]), times: i32, base: i32) -> A with Fail[i32], Clock =
   let mut pause = base;
   let mut last = 0;
+  let mut slept = 0;
   let r = for attempt in 0..times {
     match with to_result { m(()) } {
       inl a -> break (inl a : A + 1)
-    | inr e -> last = e; if attempt + 1 < times { sleep(pause); pause = pause * 2 } else { () }
+    | inr e ->
+        last = e;
+        if attempt + 1 < times { let t = sleep(pause); slept = slept + t; pause = pause * 2 } else { () }
     }
   } else { (inr () : A + 1) };
   match r { inl a -> a | inr u -> raise(last) }
@@ -76,11 +90,11 @@ handler logged[A]: Fail[i32], A -> A + i32 with Audit = {
   raise(e) = { note(4); inr e }
 }
 
-type Run = ((i32 + i32) * i32) * List[i32]
+type Run = (((i32 + i32) * i32) * i32) * List[i32]
 
-fn stuck() -> i32 with Audit, Clock, Wait = reconcile(80)
-fn healthy() -> i32 with Audit, Clock, Wait = reconcile(20)
+fn stuck() -> i32 with Audit, Api, Clock, Wait = reconcile(80)
+fn healthy() -> i32 with Audit, Api, Clock, Wait = reconcile(20)
 
 main -> Run * Run =
-  (with journal { with fake_clock { stuck() |> timeout |> retry(3, 10) |> logged } },
-   with journal { with fake_clock { healthy() |> timeout |> retry(3, 10) |> logged } })
+  (with journal { with service(0) { with fake_clock { stuck() |> timeout |> retry(3, 10) |> logged } } },
+   with journal { with service(0) { with fake_clock { healthy() |> timeout |> retry(3, 10) |> logged } } })
