@@ -1,10 +1,10 @@
 import Frontend.Check.CrossCheck
-import AsyncCap.Derives
+import Core.PinDerives
 
 /-!
 # AsyncCap — R2's term is the checked library code
 
-`lendLoopE C` (`Derives.lean`) is written out by hand. Here it is checked against `bcc`'s
+`lendLoopE C` (`Core/PinDerives.lean`) is written out by hand. Here it is checked against `bcc`'s
 erasure of `lend_loop_imm` and `lend_loop_mut` in `experiments/AsyncCap/bc/lend-loop-term.bc`,
 both at `A = i32`, `B = i32`, `R = 1`: the two combinators erase to the same term, and it is
 `lendLoopE` at that loop body. The file's `main` drives both loops (`bcc interp`: `i32[2113]`,
@@ -13,6 +13,7 @@ takes as its argument; the state type `S` is not part of the term.
 -/
 
 namespace BoCa.Fig16.LogRel.Core.AsyncCap
+open BoCa.Fig16.LogRel.Core (lendLoopE lendLoopBody)
 open BoCa
 open Frontend.Check (defErasure)
 

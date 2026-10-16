@@ -33,4 +33,6 @@ if grep -rhE '^import ' Frontend Frontend.lean Backend Backend.lean \
     | grep -vE '^import +(Frontend|Backend|Support|Paper|Examples|Core|Std)([. ]|$)'; then
   echo "Frontend/ or Backend/ imports a module outside the library."; exit 1
 fi
+# The extended judgment of SPEC §29 is generated from `CDerives`: it must be up to date.
+python3 scripts/gen-pin.py --check
 lake env lean --run scripts/CheckAxioms.lean

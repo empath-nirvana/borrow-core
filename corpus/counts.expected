@@ -13,6 +13,13 @@ array-refs 5 0 0
 array-replace 2 0 0
 array-sum 1 0 0
 ascii-upper 3 0 0 # the stdin and stdout cells, and the string the input is read into
+async-r1-cancel 4 5 0 # the two tasks' `buf` and `extra`; a task's state is a record of the state machine, its lent cell out of line
+async-r1-cancel-finaliser-writes 1 0 0 # the lent cell
+async-r1-drain 1 3 0 # the lent cell; the calls through the stored generator are dispatched
+async-r1-effects 2 6 0 # the two tasks' cells
+async-r1-generator 1 3 0 # the lent cell
+async-r1-local-borrows 2 4 0 # the two tasks' cells, each lent across its task's suspension and out of line
+async-r1-nested 2 3 0 # the two lent cells
 axes/borrow-across-loop 3 0 0
 axes/codata-coeffects 2 0 0
 axes/codata-effects 1 0 0

@@ -285,10 +285,25 @@ def interpStageExpr (stage : String) (e : BoCa.Expr) : Except String Output := d
     Flat.interp runFuel (← Flat.lower p true T) []
   | _ => throw s!"unknown stage `{stage}`"
 
-/-- The program's trusted boundaries (`bcc trusted`).  `[spec §11]` -/
+/-- What the typing of `main` rests on (SPEC §29): nothing beyond Core's theorems, or `PinLaw` at
+each relaxed rule the derivation uses. -/
+def typingReport (c : Frontend.Check.Checked) : String :=
+  match c.pins with
+  | [] => "typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)"
+  | ps =>
+    let ps := ps.eraseDups
+    let field (r : String) : String := if r == "R2" then "PinLaw.loop" else "PinLaw.stop"
+    "typing: PinLaw (Core/PinLaw.lean), the hypothesis of fundamentalC_pin and adequacyD_pin: " ++
+      s!"{ps.length} site{if ps.length == 1 then "" else "s"}" ++
+      String.join (ps.map fun q => s!"\n  {q.rule} at {q.line}:{q.col}: {field q.rule}")
+
+/-- The program's trusted boundaries (`bcc trusted`).  `[spec §11, §29]` -/
 def trusted (file src : String) : Except String String := do
   let p ← match Frontend.parseProgram src with
     | .ok p => pure p
+    | .error e => throw s!"{file}:{e.render}"
+  let typing ← match Frontend.Check.checkProgram p with
+    | .ok r => pure ((r.main.map typingReport).toList)
     | .error e => throw s!"{file}:{e.render}"
   let p ← match Frontend.Sugar.elaborate p with
     | .ok (p, _) => pure p
@@ -300,7 +315,7 @@ def trusted (file src : String) : Except String String := do
   let unproved := xs.filter fun (n, _) => match Frontend.Check.findExtern n with
     | some x => x.host.isSome
     | none => true
-  pure ("\n".intercalate lines ++ "\n" ++
+  pure ("\n".intercalate (lines ++ typing) ++ "\n" ++
     s!"unproved boundaries: {unproved.length}" ++
     (if unproved.isEmpty then "" else s!" ({", ".intercalate (unproved.map (·.1))})") ++
     "\nalways trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, " ++

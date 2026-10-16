@@ -264,6 +264,12 @@ effect).
   their lets' bodies (`threeUses_unfill`, `sumGenUses_unfill`, `timeoutUses_unfill`), and the
   checker's copies of a `def` are such terms (`Frontend/Check/Program.lean`,
   `checkProgram_letPoly`).
+- **A borrow held across a suspension, under `PinLaw`** (`SPEC.md` §29). `CDerivesP`
+  (`PinDerives.lean`) is `CDerives` with every premise in it, plus R1 (`lendR`), R2 (`lendLoopR`)
+  and `nilDead`; `PinLaw` (`PinLaw.lean`) is R1's and R2's compatibility lemmas, a hypothesis;
+  `fundamentalC_pin`, `adequacyC_pin`, `adequacyD_pin`, `adequacyD_pin_safe` and
+  `CDerivesP.ofC` are in `PinFundamental.lean`. Both generated files come from
+  `Fundamental.lean` by `scripts/gen-pin.py`: edit its templates (`scripts/pin/`), not them.
 
 ### Derived rules
 

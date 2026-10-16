@@ -1,0 +1,30 @@
+-- expect: 12:11: this borrow block's body performs the operation 1.0, which resumes, and the abortive operation 2.0: an abortive operation does not cross a borrow held across a resumption (R1, SPEC §29)
+-- SPEC §29 (docs/async-capabilities.md §6.2 row 11, `n4`): an abortive operation crossing a
+-- relaxed lend. The block's body yields (resuming) and raises (abortive), and the handler of
+-- `Fail` is outside the block. A relaxed lend's row has resuming operations only (`Row.ResumeO`);
+-- a row mixing them is OQ-1. With the handler inside the block it is accepted
+-- (`corpus/async-r1-effects.bc`).
+include yield
+include fail
+
+fn mixed() -> i32 with Yield[i32], Fail[i32] =
+  let c = alloc(1);
+  let v = borrow mut c { m ->
+    let p = (m, 1);
+    yield(1);
+    let (m, k) = p;
+    let x = modify m { v -> (v, v) };
+    if x == 1 { raise(x) } else { () };
+    x + k
+  };
+  let _ = free(c);
+  v
+
+fn stop(it: U (pull i32 (i32 + i32) 1)) -> 1 = (nu_out (force it)).2
+
+fn guarded() -> i32 + i32 with Yield[i32] = with to_result[i32, i32] { mixed() }
+
+main -> i32 =
+  let g : U (pull i32 (i32 + i32) 1) = guarded();
+  stop(g);
+  0

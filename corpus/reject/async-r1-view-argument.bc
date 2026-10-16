@@ -1,0 +1,20 @@
+-- expect: 13:16: unbound lifetime variable 'x
+-- SPEC §29 (docs/async-capabilities.md §6.2 row 12, `n5`), in the core text: the view handed to
+-- the handler as an operation's argument. The operation's type would name the lend's lifetime,
+-- which the handler, outside the lend, cannot name: the row of `withbor2r` is elaborated where
+-- the lend is made, before `'x` is bound. (An argument of any other borrow, or of a `U`, is
+-- refused by `Row.ResumeO`: `corpus/reject/async-r1-spawn-captures.bc`.)
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+main : F (i32 + i32) =
+  hr : !U (ref i32 * i32 -o F (i32 + i32)) <- return
+    (!thunkv fun (p : ref i32 * i32) ->
+      let (c, v) = p; w <- return (free[i32] c); return (inr (plus (v, w))));
+  hc : !U (mut 'x i32 * U ((1 -o F (i32 + i32)) & F 1) -o F (i32 + i32)) * 1 <- return
+    ((!thunkv fun (q : mut 'x i32 * U ((1 -o F (i32 + i32)) & F 1)) ->
+      let (x, k) = q; u <- (force k).2; return (inl i32[0])), ());
+  c <- return (alloc[i32] i32[10]);
+  handle_with[1](hr, hc) (
+    withbor2r['x, dom, i32, i32, [1.0 aff mut 'x i32 ~> 1]](c, m) (
+      u <- perform[1.0] m;
+      return (boxed['x] i32[1])))

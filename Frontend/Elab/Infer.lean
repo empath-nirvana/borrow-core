@@ -334,6 +334,19 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
         (S.map fun _ => effOf [] .unit) D
       let rest ← inferC n (E.push (some x.name)) Δ (slot A :: T) exp N
       pure (node rest.ty.c? [hd, d, rest] [b])
+    | .withbor2r sp x b A B r _ m M => do
+      -- R1 (SPEC §29): the body sees the view alone.
+      let bl := (E.elabL Δ b).toOption.getD .top
+      let A' := (E.elabV Δ A).toOption
+      let B' := (E.elabV Δ B).toOption
+      let S := (E.elabRow Δ sp r).toOption
+      let v := Δ.freshVar
+      let E' : Env := { E with vars := [some m.name], own := [false], nExt := 0,
+                                lenv := (x.name, v) :: E.lenv, row := S }
+      let bm ← mkBinder m.name (A'.map (.mut (.var v)))
+      let body ← inferC n E' (Δ.extend v bl) [slot (A'.map (.mut (.var v)))]
+        (do pure (effOf (← S) (.box (.var v) (← B')))) M
+      pure (node (do pure (effOf (← S) (.tensor (.ref (← A')) (← B')))) [body] [bm])
 end
 
 /-! ### Programs -/

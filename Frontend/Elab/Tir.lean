@@ -115,6 +115,7 @@ def Head.kids : Head → List Head
     | .perform _ _ _ V | .abort _ _ _ V => [.val V]
     | .handle _ _ _ _ M => [.comp M]
     | .unwind _ _ _ M D N => [.comp M, .comp D, .comp N]
+    | .withbor2r _ _ _ _ _ _ _ _ M => [.comp M]
     | .force .. | .top _ => []
 
 /-- A source node with its children replaced, in the order of `Head.kids`; `none` when the
@@ -163,6 +164,7 @@ def Head.rebuild : Head → List Head → Option Head
     | .abort sp k i _, [.val V] => some (.comp (.abort sp k i V))
     | .handle sp k hr hc _, [.comp M] => some (.comp (.handle sp k hr hc M))
     | .unwind sp x A _ _ _, [.comp M, .comp D, .comp N] => some (.comp (.unwind sp x A M D N))
+    | .withbor2r sp x b A B r p m _, [.comp M] => some (.comp (.withbor2r sp x b A B r p m M))
     | M@(.force ..), [] | M@(.top _), [] => some (.comp M)
     | _, _ => none
 

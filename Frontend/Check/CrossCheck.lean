@@ -100,17 +100,17 @@ theorem library_erasures :
       some (Expr.val freeCAlgV), some freeCE] := by
   decide +kernel
 
-/-- A checked `main` with the context, erasure and type given. -/
+/-- A checked `main` with the context, erasure and type given, using no relaxed rule. -/
 theorem derives_of_mainOf {p : Program} {Γ : BoCa.Ctx CVTy} {e : BoCa.Expr} {C : CCTy}
-    (h : (mainOf p).map (fun c => (c.ctx, c.e, c.C)) = some (Γ, e, C)) :
+    (h : (mainOf p).map (fun c => (c.ctx, c.e, c.C, c.pins)) = some (Γ, e, C, [])) :
     CDerives BoCa.Lifetime.LifeCtx.empty Γ e (.comp C) := by
   cases hm : mainOf p with
   | none => rw [hm] at h; cases h
   | some c =>
       rw [hm] at h
       simp only [Option.map_some, Option.some.injEq, Prod.mk.injEq] at h
-      obtain ⟨rfl, rfl, rfl⟩ := h
-      exact c.deriv
+      obtain ⟨rfl, rfl, rfl, hp⟩ := h
+      exact c.deriv hp
 
 /-- `corpus/sum-prog-exact.bc`. -/
 def sumProgExact : Program := bcc_program% "corpus/sum-prog-exact.bc"
@@ -118,7 +118,8 @@ def sumProgExact : Program := bcc_program% "corpus/sum-prog-exact.bc"
 set_option maxRecDepth 100000 in
 /-- Its `main` checks at the empty context and `F N`, and erases to `sumProg`. -/
 theorem sumProgExact_main :
-    (mainOf sumProgExact).map (fun c => (c.ctx, c.e, c.C)) = some ([], sumProg, .ret natN) := by
+    (mainOf sumProgExact).map (fun c => (c.ctx, c.e, c.C, c.pins)) =
+      some ([], sumProg, .ret natN, []) := by
   decide +kernel
 
 /-- `sumProg_derives`, from `bcc`'s derivation. -/
@@ -132,8 +133,8 @@ def countDownExact : Program := bcc_program% "corpus/count-down-exact.bc"
 set_option maxRecDepth 100000 in
 /-- Its `main` checks at the empty context and `F (N ⊕ 1)`, and erases to `countDownProg`. -/
 theorem countDownExact_main :
-    (mainOf countDownExact).map (fun c => (c.ctx, c.e, c.C)) =
-      some ([], countDownProg, .ret (.sum natN .unit)) := by
+    (mainOf countDownExact).map (fun c => (c.ctx, c.e, c.C, c.pins)) =
+      some ([], countDownProg, .ret (.sum natN .unit), []) := by
   decide +kernel
 
 /-- `countDownProg_derives`, from `bcc`'s derivation. -/

@@ -654,6 +654,7 @@ def refsC : Nat → Comp → List String
     | .letUnit _ V M | .letPair _ _ _ V M => refsV n V ++ refsC n M
     | .case _ V _ M _ N | .for_ _ _ V M N => refsV n V ++ refsC n M ++ refsC n N
     | .unwind _ _ _ M D N => refsC n M ++ refsC n D ++ refsC n N
+    | .withbor2r _ _ _ _ _ _ _ _ M => refsC n M
     | .force .. | .top _ => []
 end
 

@@ -172,6 +172,7 @@ def Comp.level : Comp → Nat
   | .bind .. | .letUnit .. | .letPair .. | .lam .. | .lamL .. | .for_ .. => 0
   | .unwind .. => 0
   | .ret .. | .absurd .. | .nuIn .. | .nuOut .. | .perform .. | .abort .. | .handle .. => 1
+  | .withbor2r .. => 1
   | .app .. | .proj .. | .inst .. => 2
   | _ => 3
 
@@ -262,6 +263,9 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .perform _ n i V => s!"perform[{n}.{i}] " ++ V.pp 1 k
     | .abort _ n i V => s!"abort[{n}.{i}] " ++ V.pp 1 k
     | .handle _ n hr hc M => s!"handle_with[{n}]({hr.name}, {hc.name}) " ++ M.pp 1 k
+    | .withbor2r _ x b A B r p m M =>
+      let as := (Const.withbor2U x b A B r).toArgs.2
+      "withbor2r[" ++ ", ".intercalate (as.map Arg.pp) ++ s!"]({p.name}, {m.name}) " ++ M.pp 1 k
     | .force _ x => "force " ++ x.name
     | .lam _ x A M => "fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 2) ++ M.pp 0 (k + 2)
     | .app _ M x => M.pp 2 k ++ " " ++ x.name

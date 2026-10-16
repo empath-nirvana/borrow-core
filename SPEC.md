@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.55 · 2026-10-14
+Version 0.56 · 2026-10-15
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -4506,6 +4506,160 @@ before, with the same counts.
 
 ---
 
+## 29. Entry 28 — a borrow held across a suspension: the relaxed lend R1, under `PinLaw`
+
+### Motivation
+
+#52's decision (`docs/async-capabilities.md`): tasks are direct-style code that borrows its own
+locals across `await`, with no `Pin` and no annotation, and the one assertion needed for it is a
+named hypothesis of the theorems, never an axiom, tested by programs that try to break it. Core
+types every borrow callback at a row of abortive operations (`Row.Unwind`, §19): a `mut` borrow
+block whose body performs `yield` or `await` is refused (T1, #172). This entry adds the relaxed lend
+R1 of `docs/async-capabilities.md` §3.3 as a rule of an extended judgment beside `CDerives`, and
+states its soundness as `PinLaw`. `CDerives` and its theorems are unchanged; a program that does not
+use R1 keeps them unconditionally.
+
+### Typing
+
+    Δ ⊨ b defined   x fresh   T, B free of 'x   B has no U   Δ ⊢ T ⊒ @b'   Row.ResumeO Σ 'x
+    M closed but for m   ·  ⊢ d : Ref T ⊸ 1        Δ, 'x ⊏ b ; m : Mut 'x T ⊢ M : F_Σ ([@x] B)
+    ─────────────────────────────────────────────────────────────────────────────── [lend-R]
+              r : Ref T ⊢ withborU d r (Λ. λm. M) : F_Σ (Ref T ⊗ B)
+
+    Δ; · ⊢ e : J        Γ consumed
+    ───────────────────────────────── [nil-dead]
+    Δ; Γ ⊢ e : J
+
+- `Row.ResumeO Σ 'x`: every operation of `Σ` resumes (none abortive), none is unrestricted, its
+  cancel row is empty, it answers `1`, its name is not `0`, and its argument is closed data: free
+  of `'x`, outliving every lifetime, with no `U` (`NoThunkT`). `await` and `yield` are such
+  operations (`resumeO_await_yield`); `raise` is not (`not_resumeO_raise`).
+- The term is §19's unwinding `withbor` (`withborUV d`); only the callback's row differs. `d` is the
+  owner's finaliser, the source's destructor: it runs when a continuation captured inside the
+  callback is cancelled.
+- `[lend-R]`'s premise is the callback's derivation in the extended judgment, so a relaxed lend
+  may hold another. The rule concludes at the context `r : Ref T` alone. `[nil-dead]` places it
+  under a program's other slots, as `(λr. withborU d r (Λ. λm. M)) x`: the λ is typed at the empty
+  context and placed at any consumed one. `[nil-dead]` is admissible for `CDerives`
+  (`CDerives.append_dead`, §26) and sound by `semC_dead`; it is in the extended judgment because
+  `[lend-R]` concludes at one fixed context. It also lets a relaxed lend sit under binders inside
+  another's body, so `PinLaw.stop`'s premise ranges over those derivations too.
+- R2 (`lendLoopR`, the `imm` lend over a loop whose state holds the borrow,
+  `docs/async-capabilities.md` §3.3) is in the judgment as well, with its compatibility lemma
+  `PinLaw.loop`; the checker does not emit it (U6).
+
+**The extended judgment.** `CDerivesP` (`Core/PinDerives.lean`) is `CDerives` with every premise
+in `CDerivesP`, plus `lendR`, `lendLoopR` and `nilDead`. It is generated from
+`Core/Fundamental.lean` by `scripts/gen-pin.py` (templates in `scripts/pin/`), so a rule added to
+`CDerives` is in it after a rerun; `python3 scripts/gen-pin.py --check` fails when the generated
+files are stale. §28's BOXED-κ (`effHandleVB`) is in it so, its case in `fundamentalC_pin`
+`handleV_compatCB`, as in `fundamentalC`.
+
+**`PinLaw`** (`Core/PinLaw.lean`) is a `structure … : Prop` of two fields, the compatibility lemmas
+of R1 (`PinStop`) and R2 (`PinLoop`) at the rules' own premises, with every quantifier over code a
+quantifier over `CDerivesP` derivations. It is a hypothesis of the theorems that use it.
+`PinStop`'s premise is the body's `CDerivesP` derivation, so what it covers is every body that
+judgment types: bodies holding a nested relaxed lend (through `nilDead`), and bodies using §28's
+BOXED-κ rule (`effHandleVB`), as well as every rule of `CDerives`. What a named assertion of this
+kind ranges over is an open question of the design of assertions (kind R of `docs/unsafe.md`, on
+the branch `unsafe-spec`).
+`docs/async-capabilities.md` §4 gives the evidence for it, what is proved elsewhere, and what
+would falsify it.
+
+### The surface
+
+A `borrow mut x { m -> S }` of an owned cell `x : ref A` whose body performs an operation that
+resumes is R1, the core form
+
+    withbor2r['x, @b, A, B, [ROW]](p, m) M
+
+with the lend's bound `dom`, the row the operations of the names the body performs, and `M` the
+body, its result boxed. Its body sees the view alone: a body that names another variable of the
+function is rejected ("… uses `y`, which is outside it …"). A body that performs a resuming
+operation and an abortive one, the abortive one's handler outside the block, is rejected (OQ-1 of
+`docs/async-capabilities.md`). An `imm` block, or a block over a view, whose body resumes is
+rejected as before (§15 *Self-reference*; OQ-2). R1 is chosen only where no ordinary rule
+applies: a block whose body performs only abortive operations is §19's unwinding borrow, and a
+borrow block over a loop is §14's per-observation lend. Segmenting a block at a suspension when
+only the borrow crosses it (L0) is not built (U3).
+
+The checker types `withbor2r` by `[lend-R]` at the slot of `p`: it checks `M` at `Δ, 'x ⊏ @b` and the
+context `m : mut 'x A` alone, and decides `Row.ResumeO` (`Row.resumeOB`), `NoThunkT` (`noThunkB`)
+and the closedness of `M` (`rLendR`, `Frontend/Check/Pin.lean`).
+
+### Semantics
+
+No change to the machine, the relation, `wpTS`, `wpG` or `ewpTS`. The erasure is the unwinding
+`withbor` applied to the callback, under a β-redex.
+
+### The checker's derivation and the assurance report
+
+Every derivation the checker builds is a `CDerivesP` derivation, and it is of `CDerives`, tied
+(decision R, §19), exactly when it uses no relaxed rule: `TiedDer p s` (`Frontend/Check/Tied.lean`)
+carries the list `p` of the relaxed rules used, with where each is used, and is a tied
+`CDerivesAt` derivation when `p` is empty. A checked `main` carries its `pins`.
+
+`bcc check` prints, after the declarations and the reports, one line:
+
+    assurance: unconditional
+    assurance: PinLaw (R1 at 22:11, 34:11)
+
+`bcc trusted` lists the same under `typing:`, each site with the field of `PinLaw` it rests on.
+The programmer writes nothing.
+
+### Lowering
+
+A cell lent across a suspension must not move while the view is held (§3.5 of
+`docs/async-capabilities.md`). The backend already keeps it in place: every `alloc` is a heap
+object (Backend/README.md, *Representation*), and a suspended code's state holds the cell's
+location, a word, never its contents. Nothing is added; the programs below run at every stage
+with the counts of `corpus/counts.expected`.
+
+### Theorems
+
+    fundamentalC_pin (hPin : PinLaw) : CDerivesP Δ Γ e j → SemJ Δ Γ e j
+    adequacyC_pin, adequacyD_pin, adequacyD_pin_safe (hPin : PinLaw)
+    CDerivesP.ofC : CDerives Δ Γ e j → CDerivesP Δ Γ e j
+
+`fundamentalC_pin` is `fundamentalC`'s induction, case for case, with `hPin.stop` at `lendR`,
+`hPin.loop` at `lendLoopR` and `semC_dead` at `nilDead` (`Core/PinFundamental.lean`, generated).
+At the checker: `checkProgram_soundP` (every checked `main` has a `CDerivesP` derivation),
+`checked_sem_pin` and `checked_runs_pin`; `checkProgram_sound`, `checkProgram_tied`,
+`checkProgram_tiedAt`, `checkProgram_letPoly`, `checked_sem`, `checked_runs`,
+`IORun.every_run` and `IORun.loop_every_run` take `c.pins = []`, which `bcc check` reports as
+`assurance: unconditional`.
+
+### Baseline
+
+`CDerives`, `fundamentalC`, `adequacyC` and `adequacyD` are unchanged and unconditional; no borrow
+rule and no borrow lemma changes. A program that performs no resuming operation inside a borrow
+block elaborates, checks and erases as before, and `bcc check` reports it `assurance:
+unconditional`. Every reject program keeps its message.
+
+### Programs
+
+`corpus/async-r1-local-borrows.bc` (A2: a closure over the view, and a pair holding it, across a
+suspension; two tasks interleaved), `async-r1-effects.bc` (A5: a log and an error handled inside
+the block), `async-r1-cancel.bc` (A6: a task cancelled while it holds the lend and an owned value),
+`async-r1-cancel-finaliser-writes.bc` (§6.2 row 16, in the core text: the borrower's finaliser
+writes through the view before the lend ends), `async-r1-nested.bc` (a relaxed lend inside
+another), `async-r1-generator.bc` and `async-r1-drain.bc` (§15's self-referential generator with a
+`mut` borrow). The tasks are stored generators whose
+`yield` is their `await`, and the scheduler is written inline: `lib/async.bc` is U2.
+`corpus/reject/async-r1-two-mut.bc`, `async-r1-raise-across.bc`, `async-r1-view-argument.bc`,
+`async-r1-unr.bc` and `async-r1-spawn-captures.bc` are §6.2's rows 2, 11, 12, 14 and 10.
+
+### Open
+
+- L0 (U3), R2 at the checker (U6), BOXED-κ (U1) and `lib/async.bc` (U2); `docs/async-capabilities.md`
+  OQ-1 to OQ-5.
+- A derivation that uses a relaxed rule is not claimed tied (decision R): a tied `CDerivesP` is not
+  built.
+- Shrinking `PinLaw` (U8).
+- What `PinStop` ranges over (above): kind R of `docs/unsafe.md`.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -4691,9 +4845,27 @@ Entry 27 (§28) is implemented: the stratified table, the stop lemma and BOXED-�
 over either; the inversions at `clausesTyO` (`Core/Inversions.lean`); the checker
 (`clausesReadBoxed`, `ansOutlivesB`, `rEffHandleB`, `TiedDer.effHandleB`, `Frontend/Check/`).
 
+Entry 28 (§29) is implemented: `Core/PinDerives.lean` and `Core/PinFundamental.lean`, generated by
+`scripts/gen-pin.py` (`CDerivesP`, `fundamentalC_pin`, `adequacyC_pin`, `adequacyD_pin`,
+`adequacyD_pin_safe`, `CDerivesP.ofC`), `Core/PinLaw.lean` (`PinStop`, `PinLoop`, `PinLaw`); the
+checker's derivations (`TiedDer`, `Frontend/Check/Tied.lean`), R1 (`Frontend/Check/Pin.lean`,
+`withbor2r` in `Frontend/Check/Checker.lean`), the sugar (`relaxedC?`, `Frontend/Sugar.lean`), the
+core form (`Frontend/Syntax.lean`, `Frontend/Parser.lean`, `Frontend/Print.lean`), and the reports
+(`Pins.assurance`, `Frontend/Check/Program.lean`; `typingReport`, `Backend/Driver.lean`). No change to
+`CDerives`, the machine or the relation.
+
 ---
 
 ## Changelog
+
+- **0.56** (2026-10-15) — §29 (new): a borrow held across a suspension. R1 (`lendR`), with R2
+  (`lendLoopR`) and `nilDead`, in the extended judgment `CDerivesP`, generated from `CDerives`;
+  `PinLaw`, the named hypothesis of `fundamentalC_pin`, `adequacyC_pin`, `adequacyD_pin` and
+  `adequacyD_pin_safe`. The checker emits R1 for a `mut` borrow block of an owned cell whose body
+  performs a resuming operation (`withbor2r`), returns a `CDerivesP` derivation, and a `CDerives`
+  one when no relaxed rule is used; `bcc check` prints the program's assurance and `bcc trusted`
+  lists it. No change to `CDerives`, the machine, the relation or the statement of `fundamentalC`,
+  `adequacyC` or `adequacyD`; the checker's soundness theorems take `pins = []`.
 
 - **0.55** (2026-10-14) — §28 (new): BOXED-κ, `[handle]` whose capturing clauses receive their
   continuation boxed at `@d`, given that the handled computation's context and every non-abortive
