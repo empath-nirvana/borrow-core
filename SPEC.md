@@ -5152,6 +5152,15 @@ change to `CDerives`, `Core/`, `Paper/`, `Support/` or `Backend/`.
 
 ## Changelog
 
+- **0.59** (2026-10-15) — Elaboration hygiene (#481): a control handler's parameters are bound
+  at each `with` under fresh names, and a local named as a declaration of the program or of a
+  library the elaboration brings in is renamed in its scope (`Frontend/Elab/Hygiene.lean`), so a
+  handler's parameter no longer captures the body's or the continuation's variable of its name,
+  and a handler clause, an effect's resolution or generated code no longer resolves a
+  declaration's name to a user's local. New corpus programs `hygiene-*` (thirteen). No change to
+  `CDerives`, the relation, the machine, a kernel program, or an existing program's output or
+  count.
+
 - **0.58** (2026-10-15) — §31 (new): generic recursive groups (type and lifetime parameters,
   layers, the heap driver), blocks with a row given to generic functions, and three inference
   fixes (a nested template call typed at its parameter; a pair as the last argument, #135; a core

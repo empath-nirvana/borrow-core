@@ -1,0 +1,16 @@
+-- Hygiene (#481): a handler's clauses are code of its declaration. Run after the handler in the
+-- scope of the `with` (abortive), or as closures built there (resuming), a function they call is
+-- the declared one, not a local of the same name at the `with`.
+--
+-- Answer: (i32[3], i32[13]): `h`'s clause calls the declared `k` (3), not the local `k` (9);
+-- `g`'s clause resumes with `k()` (3) and the body adds 10.
+include fail
+effect Ask { ctl ask() -> i32 }
+fn k() -> i32 = 3
+handler h[E](x: i32): Fail[E], i32 -> i32 = { return(a) = a; raise(e) = k() + x }
+handler g: Ask, i32 -> i32 = { return(a) = a; ask(r) = r(k()) }
+main -> i32 * i32 =
+  let k: !(1 => i32) = !{ u -> 9 };
+  let a = with h[i32](0) { if 1 > 0 { raise(1) } else { 0 } };
+  let b = with g { ask() + 10 };
+  (a, b)

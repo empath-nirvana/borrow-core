@@ -1,0 +1,10 @@
+-- Hygiene (#481): a control handler's arguments are bound to its parameters one after another;
+-- an argument is not in the scope of the parameters before it. The second argument `d` is the
+-- `let d = 7`, not `pick`'s first parameter `d`.
+--
+-- Answer: i32[7]: the body raises, and the clause answers the second argument.
+include fail
+handler pick[E, A](d: A, e: A): Fail[E], A -> A = { return(a) = a; raise(x) = e }
+main -> i32 =
+  let d = 7;
+  with pick[i32, i32](1, d) { if d > 0 { raise(0) } else { 0 } }

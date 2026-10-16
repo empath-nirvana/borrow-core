@@ -102,6 +102,19 @@ generic-in-def 0 0 0
 generic-pair-arg 0 0 0
 hello 1 0 0 # the output capability cell; the literal is read-only data
 http-request 3 0 0 # the stdout cell, the array of header literals and the request string; literal views point into read-only data
+hygiene-answering-state 1 0 0
+hygiene-borrow-loop 1 0 0
+hygiene-box-lib 1 0 0
+hygiene-clause-global 0 0 0
+hygiene-clause-name 1 0 0
+hygiene-for-global 0 0 0
+hygiene-handler-after 0 0 0
+hygiene-handler-args 0 0 0
+hygiene-handler-generic 0 0 0
+hygiene-handler-param 0 0 0
+hygiene-handler-resume 0 0 0
+hygiene-handler-state 0 2 0
+hygiene-local-fn 2 0 0
 implicit-drops 9 0 0
 int-arith 0 0 0
 int-ops 0 0 0
