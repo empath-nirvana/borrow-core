@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Type-check the corpus with `bcc check`. Every `corpus/*.bc`, `corpus/surface/*.bc` and
-# `corpus/axes/*.bc` must check, except a file marked `-- check: parse-only` (it is for the
-# parser); every `corpus/reject/*.bc` must parse and be rejected by the checker with the message
-# on its `-- expect:` line (`line:col: message`), continued by any `-- expect| ` lines for a
-# message of several lines.
+# Type-check the corpus with `bcc check`. Every `corpus/*.bc`, `corpus/surface/*.bc`,
+# `corpus/axes/*.bc` and `corpus/aoc/*.bc` must check, except a file marked `-- check: parse-only`
+# (it is for the parser); every `corpus/reject/*.bc` must parse and be rejected by the checker
+# with the message on its `-- expect:` line (`line:col: message`), continued by any `-- expect| `
+# lines for a message of several lines.
 #
 # Reports. For every corpus/reports/<name>.txt, the effects lines `bcc check corpus/<name>.bc` prints
 # (`effect`, `row`, `lowering`, `call`: SPEC §18) must be exactly that file: the rows, the lowering
@@ -102,7 +102,7 @@ if [ $# -gt 0 ]; then
   [ "$bad" -eq 0 ]
   exit
 fi
-par checks corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc; bad=$((bad + par_failed))
+par checks corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc; bad=$((bad + par_failed))
 shopt -s nullglob
 par rejects corpus/reject/*.bc; bad=$((bad + par_failed))
 par reports corpus/reports/*.txt; bad=$((bad + par_failed))

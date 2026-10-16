@@ -1,0 +1,145 @@
+-- pending: generic hash map with view keys (#211, generics pass #489); refused #491, #492
+-- now: 32:1: `words` loops, so it is called in direct style one step at a time, and a borrow at `'t` cannot stay open across its steps: it may take one borrow of a cell at `'t`, `imm 't A` or `mut 't A`, which it borrows again at each step (SPEC §14, borrow scopes over loops)
+--
+-- Advent of Code 2020, day 7, ported from `src/year2020/day07.rs` of
+-- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:
+-- `corpus/aoc/LICENSE.md`.
+--
+-- The puzzle: each line is a rule, a bag colour (two words) and how many bags of which colours it
+-- must hold, at most four kinds. Part 1 counts the colours that hold a `shiny gold` bag at some
+-- depth; part 2 counts the bags a `shiny gold` bag holds in all.
+--
+-- The port names each colour by its rule's line through a map from colour to index, whose keys are
+-- views of the input, where the Rust uses a perfect hash of the colours of its input. Each bag has
+-- four slots of rules, as the Rust's. Both parts are recursions over the rules memoised in an
+-- array (`lib/rec.bc`, the depth bounded). A hash map keyed by text, and recursion with
+-- memoisation.
+--
+-- The map is the library's generic hash map with the derived hash and equality of its key
+-- (#211): `map_new[K, V](cap)`, `map_insert(&mut m, k, v)` answering the value it displaces, and
+-- `map_get(&m, k)` a copy of a persistent value. There is no generic map yet, so the first use of
+-- one is refused. Two refusals stand before it: `words`'s `for` over a sub-view is taken for a
+-- loop of unknown bound (#491), and a recursive call in a `for` that threads the memo table is
+-- refused as a linearity error (#492).
+--
+-- Once it lands: on `corpus/aoc/2020-07.in`, as the Rust solution gives, `11` and `327`, one per
+-- line, then `(i32[11], i32[327])`; `live 0`.
+
+include textio
+include rec
+
+-- The first `k` words of `t`, as one view, and the rest after the space that follows them.
+fn words<'t>(t: text 't, k: i32) -> text 't * text 't =
+  let (t, u) = array_copy['t, u8] t;
+  let mut end = 0;
+  let mut seen = 0;
+  for p in u {
+    if seen < k { if *p == b' ' { seen = seen + 1 } else { () }; end = end + 1 } else { () }
+  };
+  match split_at(t, end) {
+    inl (h, r) -> let n = if seen == k { end - 1 } else { end };
+      match split_at(h, n) { inl (h, s) -> (h, r) | inr h -> (h, r) }
+  | inr t -> (t, slice_empty_imm['t, u8])
+  }
+
+-- Each rule's colour, numbered by its line, and the number of `shiny gold`.
+fn number_colours<'t>(t: text 't) -> Map[text 't, i32] * i32 =
+  let (_, (names, gold)) = fold_lines(t, !{ (l, (i, (names, gold))) ->
+    let (name, _) = words(l, 2);
+    let (name, n2) = array_copy['t, u8] name;
+    let mut names = names;
+    map_insert(&mut names, name, i);
+    let gold = if eq_lit(n2, "shiny gold") { i } else { gold };
+    (i + 1, (names, gold)) },
+    (0, (map_new[text 't, i32](64), 0)));
+  (names, gold)
+
+-- A rule's contents into the four slots of bag `i`: `(amount, colour)`, an amount 0 for none.
+fn parse_rule<'t>(st: Map[text 't, i32] * (array (i32 * i32) * i32), l: text 't)
+    -> Map[text 't, i32] * (array (i32 * i32) * i32) =
+  let (names, (slots, i)) = st;
+  let mut names = names;
+  let mut slots = slots;
+  let (_, rest) = words(l, 4);
+  let mut rest = rest;
+  for k in 0..4 {
+    let (amount, after) = words(rest, 1);
+    let n = fold_i32s(amount, !{ (x, n) -> x }, 0);
+    let (colour, after) = words(after, 2);
+    let (_, after) = words(after, 1);
+    rest = after;
+    if 0 < n {
+      let o = map_get(&names, colour);
+      match o { inl j -> slots = array_set(slots, 4 * i + k, (n, j)) | inr _ -> () }
+    } else { () }
+  };
+  (names, (slots, i + 1))
+
+-- Whether bag `key` holds a `shiny gold` bag at some depth: `memo` is 1 or 0 once known, -1
+-- before.
+fn holds_gold(slots: array (i32 * i32), memo: array i32, key: i32)
+    -> (array (i32 * i32) * array i32) * bool =
+  let m = at(&memo, key, 0 - 1);
+  if 0 <= m { ((slots, memo), m == 1) } else {
+    let mut slots = slots;
+    let mut memo = memo;
+    let mut any = false;
+    for k in 0..4 {
+      let (n, j) = at(&slots, 4 * key + k, (0, 0));
+      if 0 < n && not(any) {
+        let ((s, c), r) = holds_gold(slots, memo, j);
+        slots = s;
+        memo = c;
+        any = r
+      } else { () }
+    };
+    let v = if any { 1 } else { 0 };
+    ((slots, array_set(memo, key, v)), any)
+  }
+
+-- The number of bags bag `key` is, with all it holds: `memo` is the count once known, 0 before.
+fn bag_count(slots: array (i32 * i32), memo: array i32, key: i32)
+    -> (array (i32 * i32) * array i32) * i32 =
+  let m = at(&memo, key, 0);
+  if 0 < m { ((slots, memo), m) } else {
+    let mut slots = slots;
+    let mut memo = memo;
+    let mut sum = 1;
+    for k in 0..4 {
+      let (n, j) = at(&slots, 4 * key + k, (0, 0));
+      if 0 < n {
+        let ((s, c), r) = bag_count(slots, memo, j);
+        slots = s;
+        memo = c;
+        sum = sum + n * r
+      } else { () }
+    };
+    ((slots, array_set(memo, key, sum)), sum)
+  }
+
+main -> i32 * i32 =
+  let s = read_input();
+  let r = borrow imm s { 't, t ->
+    let (t, u) = array_copy['t, u8] t;
+    let (t, w) = array_copy['t, u8] t;
+    let n = fold_lines(w, !{ (l, n) -> n + 1 }, 0);
+    let (names, gold) = number_colours(u);
+    let (_, (slots, _)) = fold_lines(t, !{ (l, st) -> parse_rule(st, l) },
+      (names, (array_new[i32 * i32] (4 * n, !{ i -> (0, 0) }), 0)));
+    with on_exhausted(!{ u -> (0, 0) }) {
+      let mut slots = slots;
+      let mut memo = array_set(array_new[i32] (n, !{ i -> 0 - 1 }), gold, 1);
+      let mut outer = 0;
+      for key in 0..n {
+        let ((sl, c), h) = holds_gold(slots, memo, key);
+        slots = sl;
+        memo = c;
+        if h { outer = outer + 1 } else { () }
+      };
+      let (_, inside) = bag_count(slots, array_new[i32] (n, !{ i -> 0 }), gold);
+      (outer - 1, inside - 1)
+    } };
+  let (p1, p2) = r;
+  print_dec(p1); print_byte(b'\n');
+  print_dec(p2); print_byte(b'\n');
+  r

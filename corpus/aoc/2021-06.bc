@@ -1,0 +1,45 @@
+-- Advent of Code 2021, day 6, ported from `src/year2021/day06.rs` of
+-- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:
+-- `corpus/aoc/LICENSE.md`.
+--
+-- The puzzle: each fish has a timer that counts down a day at a time; a fish at 0 resets to 6 and
+-- spawns a new fish at 8. From the comma-separated timers, part 1 is the number of fish after 80
+-- days and part 2 after 256, past `i32`.
+--
+-- The port counts the fish at each timer value in an array of nine `i64`s and turns it as a ring,
+-- one addition a day. Parsing numbers, a small array, and 64-bit arithmetic.
+--
+-- Answer on `2021-06.in` (`corpus/aoc/gen.py`), as the Rust solution gives: `347051` and
+-- `1582632209138`, one per line, then `(i64[347051], i64[1582632209138])`.
+
+include textio
+
+-- `a mod b`, for `a ≥ 0` and `b > 0`.
+fn modulo(a: i32, b: i32) -> i32 = match host[rem_u32](a, b) { inl r -> r | inr u -> 0 }
+
+-- The number of fish after `days` days, from the number at each timer value, 0 to 8, copied into
+-- a ring: on day `d` the fish at slot `d mod 9` spawn, so they are added to the slot that comes
+-- round again in seven days, and stay in their own as the newborn, at timer 8.
+fn simulate<'a>(start: array_imm 'a i64, days: i32) -> i64 =
+  let mut fish = array_new[i64] (9, !{ i -> i64[0] });
+  borrow mut fish { v -> let v = copy_from(v, start); () };
+  for day in 0..days {
+    let born = at(&fish, modulo(day, 9), i64[0]);
+    let k = modulo(day + 7, 9);
+    let old = at(&fish, k, i64[0]);
+    fish = array_set(fish, k, old + born)
+  };
+  let mut sum = i64[0];
+  for i in 0..9 { let x = at(&fish, i, i64[0]); sum = sum + x };
+  sum
+
+main -> i64 * i64 =
+  let s = read_input();
+  let timers = borrow imm s { 't, t ->
+    fold_i32s(t, !{ (x, a) -> let old = at(&a, x, i64[0]); array_set(a, x, old + i64[1]) },
+      array_new[i64] (9, !{ i -> i64[0] })) };
+  let p1 = simulate(&timers, 80);
+  let p2 = simulate(&timers, 256);
+  print_dec64(p1); print_byte(b'\n');
+  print_dec64(p2); print_byte(b'\n');
+  (p1, p2)

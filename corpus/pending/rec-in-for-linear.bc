@@ -1,0 +1,29 @@
+-- pending: refused #492
+-- now: 19:20: in this `case`, `a` is consumed in the `inr` arm but not in the `inl` arm
+--
+-- A recursive call inside a counted `for` whose loop threads an array. The `for` is total (SPEC
+-- §16) and SPEC §20 *Not provided* names only a `while` or a `loop` in a member's body; the same
+-- recursion threading an `i32` alone is accepted, and so is a `raise` in a `for` that threads an
+-- array. The error is in elaborated code, at the recursive call.
+--
+-- Once it lands: `i32[5]`, `live 0`.
+
+include buf
+include rec
+
+fn down(a: array i32, k: i32) -> array i32 * i32 =
+  if k <= 0 { (a, 0) } else {
+    let mut a = a;
+    let mut d = 0;
+    for i in 0..1 {
+      let (b, r) = down(a, k - 1);
+      a = b;
+      d = r + 1
+    };
+    (a, d)
+  }
+
+main -> i32 = with on_exhausted(!{ u -> 0 }) {
+  let (_, d) = down(array_new[i32] (1, !{ i -> 0 }), 5);
+  d
+}

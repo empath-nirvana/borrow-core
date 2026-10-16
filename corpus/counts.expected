@@ -8,6 +8,16 @@ aff-depth 2 0 0 # as aff-counter: four calls through three functions and a rebor
 aff-drop 3 0 0 # three counters' cells, each freed by its `close`
 aff-higher 2 6 0 # two counters' cells; the indirect calls are `runner`'s calls of its argument, which closures built at two sites reach: the flow analysis is monovariant, and the argument's code is chosen at run time, as a `dyn` call's is
 answers-two-types 1 2 0 # the indirect calls are of `fake_api`'s answer, a function of its state (SPEC §19, *Handler state*)
+aoc/2020-08 8 0 0
+aoc/2021-06 6 0 0
+aoc/2021-10 7 0 0
+aoc/2021-15 10 0 0
+aoc/2022-01 6 0 0
+aoc/2022-12 8 0 0
+aoc/2023-01 3 0 0
+aoc/2023-03 9 0 0
+aoc/2023-07 9 0 0
+aoc/2024-02 4 0 0
 array-empty 0 0 0
 array-get 2 0 0
 array-refs 5 0 0

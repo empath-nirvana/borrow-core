@@ -1,0 +1,148 @@
+-- pending: generic hash map with view keys (#211, the generics design pass #489)
+-- now: 45:50: the type of the closure's parameter `io_c4` is not determined by the other arguments of `fold_lines`: write it
+--
+-- Advent of Code 2022, day 21, ported from `src/year2022/day21.rs` of
+-- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:
+-- `corpus/aoc/LICENSE.md`.
+--
+-- The puzzle: each line names a monkey and what it yells: a number, or the result of `+ - * /` on
+-- what two other monkeys yell. The monkeys form a tree. Part 1 is what `root` yells. Part 2: `root`
+-- compares its two operands, and `humn` is us; the answer is the number `humn` must yell for the
+-- two to be equal.
+--
+-- The port, as the Rust, names each monkey by its line's index through a map from name to index,
+-- whose keys are views of the input (no copy), then computes every value bottom up and marks the
+-- monkeys whose value depends on `humn`. Part 2 walks down from `root` along the marked side,
+-- inverting each operation. A hash map keyed by text, recursion over a tree (`lib/rec.bc`, its
+-- depth bounded), and 64-bit arithmetic. A monkey is a sum (no `data` declarations yet, #489).
+--
+-- The map is the library's generic hash map with the derived hash and equality of its key
+-- (#211): `map_new[K, V](cap)`, `map_insert(&mut m, k, v)` answering the value it displaces, and
+-- `map_get(&m, k)` a copy of a persistent value. There is no generic map yet, so the first use of
+-- one is refused.
+-- The message is about the type of a loop's state or of a closure's parameter, which the map's
+-- type would give: loops are elaborated before unknown names are reported.
+--
+-- Once it lands: on `corpus/aoc/2022-21.in`, as the Rust solution gives, `-109340928699256318` and
+-- `868`, one per line, then `(i64[18337403145010295298], i64[868])`, the first printed unsigned;
+-- `live 0`.
+
+include textio
+include rec
+
+-- A monkey: `inl n` yells `n`; `inr (l, (op, r))` yells monkey `l`'s value `op` monkey `r`'s.
+type Monkey = i64 + (i32 * (u8 * i32))
+
+-- The four bytes from `i` on: a monkey's name.
+fn name_at<'t>(l: text 't, i: i32) -> text 't =
+  match split_at(l, i) {
+    inl (h, r) -> match split_at(r, 4) { inl (n, rest) -> n | inr r -> r }
+  | inr l -> l
+  }
+
+-- Each monkey's name, numbered by its line, and the numbers of `root` and `humn`.
+fn number_names<'t>(t: text 't) -> Map[text 't, i32] * (i32 * i32) =
+  let (_, (names, (root, humn))) = fold_lines(t, !{ (l, (i, (names, (root, humn)))) ->
+    let n = name_at(l, 0);
+    let (n, m) = array_copy['t, u8] n;
+    let (n, k) = array_copy['t, u8] n;
+    let mut names = names;
+    map_insert(&mut names, n, i);
+    let root = if eq_lit(m, "root") { i } else { root };
+    let humn = if eq_lit(k, "humn") { i } else { humn };
+    (i + 1, (names, (root, humn))) },
+    (0, (map_new[text 't, i32](64), (0, 0))));
+  (names, (root, humn))
+
+-- A line's monkey: `name: n` or `name: left op right`, the operands found by name.
+fn parse_monkey<'t>(names: Map[text 't, i32], l: text 't) -> Map[text 't, i32] * Monkey =
+  let (l, u) = array_copy['t, u8] l;
+  let (l, w) = array_copy['t, u8] l;
+  let mut names = names;
+  if len(u) < 17 { (names, inl fold_i64s(l, !{ (x, n) -> x }, i64[0])) } else {
+    let (l, v) = array_copy['t, u8] l;
+    let left = map_get(&names, name_at(l, 6));
+    let right = map_get(&names, name_at(v, 13));
+    let op = at(w, 11, 0);
+    match left {
+      inl a -> match right { inl b -> (names, inr (a, (op, b))) | inr _ -> (names, inl i64[0]) }
+    | inr _ -> (names, inl i64[0])
+    }
+  }
+
+fn quot64(a: i64, b: i64) -> i64 = match host[div_s64](a, b) { inl q -> q | inr u -> i64[0] }
+
+fn apply(op: u8, a: i64, b: i64) -> i64 =
+  if op == b'+' { a + b } else { if op == b'-' { a - b } else { if op == b'*' { a * b }
+  else { quot64(a, b) } } }
+
+-- What monkey `i` yells, with every value below it recorded in `yell`.
+fn compute(ms: array Monkey, yell: array i64, i: i32) -> (array Monkey * array i64) * i64 =
+  let m = at(&ms, i, inl i64[0]);
+  match m {
+    inl n -> ((ms, array_set(yell, i, n)), n)
+  | inr (l, (op, r)) ->
+      let ((ms, yell), a) = compute(ms, yell, l);
+      let ((ms, yell), b) = compute(ms, yell, r);
+      let v = apply(op, a, b);
+      ((ms, array_set(yell, i, v)), v)
+  }
+
+-- Whether monkey `i`'s value depends on `humn`'s, recorded in `unknown` for it and below it.
+fn depends(ms: array Monkey, unknown: array bool, humn: i32, i: i32)
+    -> (array Monkey * array bool) * bool =
+  let m = at(&ms, i, inl i64[0]);
+  match m {
+    inl n -> let r = i == humn; ((ms, array_set(unknown, i, r)), r)
+  | inr (l, (op, rt)) ->
+      let ((ms, unknown), a) = depends(ms, unknown, humn, l);
+      let ((ms, unknown), b) = depends(ms, unknown, humn, rt);
+      let r = a || b;
+      ((ms, array_set(unknown, i, r)), r)
+  }
+
+-- What `humn` must yell for monkey `i` to yell `value`: the operation at `i` undone on its side
+-- that depends on `humn`, the other side's value known. At `root` the two sides are equal.
+fn inverse(st: array Monkey * (array i64 * array bool), root: i32, i: i32, value: i64)
+    -> (array Monkey * (array i64 * array bool)) * i64 =
+  let (ms, (yell, unknown)) = st;
+  let m = at(&ms, i, inl i64[0]);
+  match m {
+    inl n -> ((ms, (yell, unknown)), value)
+  | inr (l, (op, r)) ->
+      let ul = at(&unknown, l, false);
+      let yl = at(&yell, l, i64[0]);
+      let yr = at(&yell, r, i64[0]);
+      let st = (ms, (yell, unknown));
+      if i == root { if ul { inverse(st, root, l, yr) } else { inverse(st, root, r, yl) } }
+      else { if ul {
+        let v = if op == b'+' { value - yr } else { if op == b'-' { value + yr }
+          else { if op == b'*' { quot64(value, yr) } else { value * yr } } };
+        inverse(st, root, l, v)
+      } else {
+        let v = if op == b'+' { value - yl } else { if op == b'-' { yl - value }
+          else { if op == b'*' { quot64(value, yl) } else { quot64(yl, value) } } };
+        inverse(st, root, r, v)
+      } }
+  }
+
+main -> i64 * i64 =
+  let s = read_input();
+  let r = borrow imm s { 't, t ->
+    let (t, u) = array_copy['t, u8] t;
+    let (names, (root, humn)) = number_names(u);
+    let (_, ms) = fold_lines(t, !{ (l, (names, ms)) ->
+      let (names, m) = parse_monkey(names, l);
+      let (ms, _) = push(ms, m);
+      (names, ms) }, (names, box buf[Monkey](64)));
+    let (ms, n) = ms;
+    with on_exhausted(!{ u -> (i64[0], i64[0]) }) {
+      let ((ms, yell), p1) = compute(ms, array_new[i64] (n, !{ i -> i64[0] }), root);
+      let ((ms, unknown), _) = depends(ms, array_new[bool] (n, !{ i -> false }), humn, root);
+      let (_, p2) = inverse((ms, (yell, unknown)), root, root, i64[0] - i64[1]);
+      (p1, p2)
+    } };
+  let (p1, p2) = r;
+  print_dec64(p1); print_byte(b'\n');
+  print_dec64(p2); print_byte(b'\n');
+  r

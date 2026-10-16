@@ -1,0 +1,64 @@
+-- pending: generic hash map (#211, the generics design pass #489)
+-- now: 47:3: the loop threads `freq`, whose type is not determined: ascribe it
+--
+-- Advent of Code 2024, day 1, ported from `src/year2024/day01.rs` of
+-- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:
+-- `corpus/aoc/LICENSE.md`.
+--
+-- The puzzle: each line holds a number of a left list and one of a right list. Part 1 pairs the
+-- two lists in sorted order and sums the distances. Part 2 sums each left number times how often
+-- it occurs in the right list.
+--
+-- The port sorts two buffers for part 1, and counts the right list in a map from number to count
+-- for part 2, as the Rust does (`FastMap`). The map is the library's generic hash map with the
+-- derived hash and equality of its key (#211): `map_new[K, V](cap)`, `map_insert(&mut m, k, v)`
+-- answering the value it displaces, and `map_get(&m, k)` a copy of a persistent value. There is
+-- no generic map yet, so the first use of one is refused.
+-- The message is about the type of a loop's state or of a closure's parameter, which the map's
+-- type would give: loops are elaborated before unknown names are reported.
+--
+-- Once it lands: on `corpus/aoc/2024-01.in`, as the Rust solution gives, `595034` and `6665314`,
+-- one per line, then `(i32[595034], i32[6665314])`; `live 0`.
+
+include textio
+
+fn abs(x: i32) -> i32 = if x < 0 { 0 - x } else { x }
+
+-- The numbers of the input, alternately to the left list and to the right.
+fn columns<'t>(t: text 't) -> buf i32 * buf i32 =
+  let ((left, right), _) = fold_i32s(t, !{ (x, ((l, r), side)) ->
+    if side == 0 { let (l, _) = push(l, x); ((l, r), 1) }
+    else { let (r, _) = push(r, x); ((l, r), 0) } },
+    ((box buf[i32](1000), box buf[i32](1000)), 0));
+  (left, right)
+
+main -> i32 * i32 =
+  let s = read_input();
+  let lists = borrow imm s { 't, t -> columns(t) };
+  let (left, right) = lists;
+  let mut left = left;
+  let mut right = right;
+  borrow mut left { 'x, v -> let v = sort(v, cmp_i32, 0); () };
+  borrow mut right { 'x, v -> let v = sort(v, cmp_i32, 0); () };
+  let (l, n) = left;
+  let (r, _) = right;
+  let mut distance = 0;
+  let mut freq : Map[i32, i32] = map_new[i32, i32](1000);
+  for i in 0..n {
+    let x = at(&l, i, 0);
+    let y = at(&r, i, 0);
+    distance = distance + abs(x - y);
+    let o = map_get(&freq, y);
+    let c = match o { inl c -> c | inr _ -> 0 };
+    map_insert(&mut freq, y, c + 1)
+  };
+  let mut similarity = 0;
+  for i in 0..n {
+    let x = at(&l, i, 0);
+    let o = map_get(&freq, x);
+    let c = match o { inl c -> c | inr _ -> 0 };
+    similarity = similarity + x * c
+  };
+  print_dec(distance); print_byte(b'\n');
+  print_dec(similarity); print_byte(b'\n');
+  (distance, similarity)

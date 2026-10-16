@@ -1,0 +1,90 @@
+-- Advent of Code 2020, day 8, ported from `src/year2020/day08.rs` of
+-- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:
+-- `corpus/aoc/LICENSE.md`.
+--
+-- The puzzle: a program of `acc`, `jmp` and `nop` instructions, each with a signed argument, runs
+-- forever. Part 1 is the accumulator just before an instruction runs a second time. Part 2: one
+-- `jmp` or `nop` is corrupted; with it flipped the program steps past its end, and the answer is
+-- the accumulator then.
+--
+-- The port keeps the program in a buffer of instructions, each a sum (no `data` declarations
+-- yet, #489), and runs it with a counted loop: each step marks one more instruction, so the
+-- program's length bounds a run. A simulation, with the Rust's linear repair: the speculative
+-- runs share what they have seen.
+--
+-- Answer on `2020-08.in` (`corpus/aoc/gen.py`), as the Rust solution gives: `-75` and `-36`, one
+-- per line, then `(i32[4294967221], i32[4294967260])`, the same numbers printed unsigned.
+
+include textio
+
+-- An instruction: `acc n`, `jmp n` or `nop n`.
+type Instr = i32 + (i32 + i32)
+
+-- A line `op ±n`: the sign is read with the digits (`fold_i32s`), and the `+` separates them.
+fn parse_instr<'t>(l: text 't) -> Instr =
+  let (l, u) = array_copy['t, u8] l;
+  let n = fold_i32s(l, !{ (x, n) -> x }, 0);
+  let op = at(u, 0, 0);
+  if op == b'a' { inl n } else { if op == b'j' { inr (inl n) } else { inr (inr n) } }
+
+-- A run from `pc` with accumulator `acc`, marking each instruction it executes in `seen`: it
+-- either comes back to an instruction already seen (`inl acc`, a loop) or steps past the end
+-- (`inr acc`, it halts). Each step marks one more instruction, so `n + 1` steps decide it.
+fn execute(prog: buf Instr, pc: i32, acc: i32, seen: array bool)
+    -> (buf Instr * array bool) * (i32 + i32) =
+  let (prog, n) = prog;
+  let mut pc = pc;
+  let mut acc = acc;
+  let mut seen = seen;
+  let mut out = (inl 0 : i32 + i32);
+  for _ in 0..n + 1 {
+    if pc < 0 || n <= pc { out = inr acc; break } else { () };
+    let been = at(&seen, pc, false);
+    if been { out = inl acc; break } else { () };
+    seen = array_set(seen, pc, true);
+    let i = at(&prog, pc, inr (inr 0));
+    match i {
+      inl x -> acc = acc + x; pc = pc + 1
+    | inr j -> match j { inl x -> pc = pc + x | inr x -> pc = pc + 1 }
+    }
+  };
+  (((prog, n), seen), out)
+
+-- Part 2: one instruction is corrupted, a `jmp` that should be a `nop` or the reverse. Walking the
+-- program as it runs, each `jmp` or `nop` met is tried flipped by a speculative run from the
+-- instruction it would go to. The runs share `seen`: an instruction a failed run reached loops
+-- whichever way it is reached again, so every instruction is executed at most once overall.
+fn repair(prog: buf Instr) -> i32 =
+  let (prog, n) = len_of(prog);
+  let mut prog = prog;
+  let mut seen = array_new[bool] (n, !{ i -> false });
+  let mut pc = 0;
+  let mut acc = 0;
+  let mut answer = 0;
+  for _ in 0..n {
+    let (a, m) = prog;
+    let i = at(&a, pc, inr (inr 0));
+    prog = (a, m);
+    match i {
+      inl x -> acc = acc + x; pc = pc + 1
+    | inr j ->
+        let (flip, next) = match j { inl x -> (pc + 1, pc + x) | inr x -> (pc + x, pc + 1) };
+        let ((p, s), r) = execute(prog, flip, acc, seen);
+        prog = p;
+        seen = s;
+        match r { inl a -> pc = next | inr a -> answer = a; break }
+    }
+  };
+  answer
+
+main -> i32 * i32 =
+  let s = read_input();
+  let prog = borrow imm s { 't, t ->
+    fold_lines(t, !{ (l, b) -> let (b, _) = push(b, parse_instr(l)); b }, box buf[Instr](64)) };
+  let (prog, n) = len_of(prog);
+  let ((prog, _), r) = execute(prog, 0, 0, array_new[bool] (n, !{ i -> false }));
+  let p1 = match r { inl a -> a | inr a -> a };
+  let p2 = repair(prog);
+  print_dec(p1); print_byte(b'\n');
+  print_dec(p2); print_byte(b'\n');
+  (p1, p2)

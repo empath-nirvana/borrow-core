@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Compile and run the corpus. Every corpus/*.bc, corpus/surface/*.bc and corpus/axes/*.bc with a
-# `main` (except a file marked `-- check: parse-only`) has a golden output `<name>.out` beside it:
-# the reference semantics, what `Support`'s interpreter (`bcc interp`, the source stage) prints.
+# Compile and run the corpus. Every corpus/*.bc, corpus/surface/*.bc, corpus/axes/*.bc and
+# corpus/aoc/*.bc with a `main` (except a file marked `-- check: parse-only`) has a golden output
+# `<name>.out` beside it: the reference semantics, what `Support`'s interpreter (`bcc interp`, the
+# source stage) prints.
 # It reads `<name>.in` as standard input (the empty input if there is none), and `<name>.args`, one
 # argument per line, as its arguments (SPEC §34; none if there is no such file). At the closure-IR
 # and flat-IR interpreters (`bcc interp --stage clos|flat`) and in WebAssembly under wasmtime
@@ -38,8 +39,8 @@
 # a variable at a non-trivial type (deep copies the ownership discipline inserts where a variable
 # is used twice; Backend/README.md, Memory discipline). Each must be at most the
 # program's entry in `corpus/counts.expected` (`name allocs indirect copies`, the name the file's path
-# under `corpus/`, as `io-wc`, `surface/io-wc` or `axes/data-effects`); a count above it fails,
-# one below it is reported so the file can be lowered. `--write-counts` rewrites the entries of the
+# under `corpus/`, as `io-wc`, `surface/io-wc`, `axes/data-effects` or `aoc/2022-01`); a count
+# above it fails, one below it is reported so the file can be lowered. `--write-counts` rewrites the entries of the
 # programs run (every program, when none is named) with this run's counts, keeping the comment an
 # entry ends with (`# …`).
 set -euo pipefail
@@ -60,7 +61,7 @@ while [ $# -gt 0 ]; do
 done
 [ "$write" = 0 ] || [ "$goldens" = 0 ] || usage
 named=1
-[ ${#files[@]} -gt 0 ] || { named=0; files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc); }
+[ ${#files[@]} -gt 0 ] || { named=0; files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc); }
 for f in "${files[@]}"; do [ -f "$f" ] || { echo "$f: no such file"; exit 2; }; done
 command -v wasmtime >/dev/null || [ "$goldens" = 1 ] || { echo "wasmtime is not on PATH"; exit 1; }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null

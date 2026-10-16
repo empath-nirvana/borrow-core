@@ -1,0 +1,112 @@
+-- Advent of Code 2023, day 3, ported from `src/year2023/day03.rs` of
+-- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:
+-- `corpus/aoc/LICENSE.md`.
+--
+-- The puzzle: a schematic, a grid of digits, symbols and `.`. Part 1 sums the numbers next to a
+-- symbol, diagonals included. Part 2 sums, over each `*` next to exactly two numbers, their
+-- product.
+--
+-- The port, as the Rust, first numbers the numbers row by row and records which number owns each
+-- square of their digits, then visits each symbol's eight neighbours. A 2D grid with neighbour
+-- walks, and arrays indexed by the grid.
+--
+-- Answer on `2023-03.in` (`corpus/aoc/gen.py`), as the Rust solution gives: `33065` and `938687`,
+-- one per line, then `(i32[33065], i32[938687])`.
+
+include textio
+
+-- `a / b`, and below `a mod b`, for `b > 0`.
+fn quot(a: i32, b: i32) -> i32 = match host[div_s32](a, b) { inl q -> q | inr u -> 0 }
+
+fn modulo(a: i32, b: i32) -> i32 = match host[rem_s32](a, b) { inl r -> r | inr u -> 0 }
+
+fn is_digit(b: u8) -> bool = b'0' <= b && b <= b'9'
+
+-- The schematic: its bytes row by row, its width and height.
+type Grid = array u8 * (i32 * i32)
+
+fn grid_of<'t>(t: text 't) -> Grid =
+  let (t, u) = array_copy['t, u8] t;
+  let (t, v) = array_copy['t, u8] t;
+  let w = match find(u, b'\n', eq_u8) { inl k -> k | inr _ -> 0 };
+  let mut cells = box buf[u8](len(v));
+  for p in t { let b = *p; if b != b'\n' { let (c, _) = push(cells, b); cells = c } else { () } };
+  let (a, n) = cells;
+  (a, (w, quot(n, w)))
+
+-- The neighbour of `p` in direction `d`, the eight around it, or `-1` off the grid.
+fn around(p: i32, d: i32, w: i32, h: i32) -> i32 =
+  let dd = if d < 4 { d } else { d + 1 };
+  let x = modulo(p, w) + modulo(dd, 3) - 1;
+  let y = quot(p, w) + quot(dd, 3) - 1;
+  if 0 <= x && x < w && 0 <= y && y < h { y * w + x } else { 0 - 1 }
+
+-- The numbers of the schematic, and which number each square's digit belongs to: `part[k]` is
+-- the `k`-th number met reading row by row (from 1; 0 is none), and `owner[p]` is `k` for each
+-- square `p` of its digits. A number ends at a byte that is not a digit or at the end of a row.
+fn numbers(g: Grid) -> Grid * (array i32 * buf i32) =
+  let (a, (w, h)) = g;
+  let mut owner = array_new[i32] (w * h, !{ i -> 0 });
+  let mut parts = box buf[i32](64);
+  let (p0, _) = push(parts, 0);
+  parts = p0;
+  let mut n = 0;
+  for p in 0..w * h {
+    let b = at(&a, p, 0);
+    if is_digit(b) {
+      let (ps, k) = len_of(parts);
+      parts = ps;
+      owner = array_set(owner, p, k);
+      n = 10 * n + to_i32(b) - 48
+    } else { () };
+    if n > 0 && (not(is_digit(b)) || modulo(p, w) == w - 1) {
+      let (ps, _) = push(parts, n); parts = ps; n = 0
+    } else { () }
+  };
+  ((a, (w, h)), (owner, parts))
+
+-- Part 1: the sum of the numbers next to a symbol, each counted once (it is zeroed when it is
+-- added). Part 2: the sum of the products of the two numbers next to each `*` that has exactly two.
+-- The eight neighbours are visited in reading order, so the squares of one number next to a `*`
+-- are met one after another, and a change of owner is a new number.
+fn survey(g: Grid, owner: array i32, parts: buf i32) -> i32 * i32 =
+  let (a, (w, h)) = g;
+  let (ps, m) = parts;
+  let mut ps = ps;
+  let mut once = array_new[i32] (m, !{ i -> 0 });
+  for k in 0..m { let x = at(&ps, k, 0); once = array_set(once, k, x) };
+  let mut adjacent = 0;
+  let mut gears = 0;
+  for p in 0..w * h {
+    let b = at(&a, p, 0);
+    if not(is_digit(b)) && b != b'.' {
+      let mut previous = 0;
+      let mut distinct = 0;
+      let mut product = 1;
+      for d in 0..8 {
+        let q = around(p, d, w, h);
+        let k = at(&owner, q, 0);
+        if k != 0 {
+          let x = at(&once, k, 0);
+          adjacent = adjacent + x;
+          once = array_set(once, k, 0);
+          if k != previous {
+            let y = at(&ps, k, 0);
+            previous = k; distinct = distinct + 1; product = product * y
+          } else { () }
+        } else { () }
+      };
+      if b == b'*' && distinct == 2 { gears = gears + product } else { () }
+    } else { () }
+  };
+  (adjacent, gears)
+
+main -> i32 * i32 =
+  let s = read_input();
+  let g = borrow imm s { 't, t -> grid_of(t) };
+  let (g, (owner, parts)) = numbers(g);
+  let r = survey(g, owner, parts);
+  let (p1, p2) = r;
+  print_dec(p1); print_byte(b'\n');
+  print_dec(p2); print_byte(b'\n');
+  r

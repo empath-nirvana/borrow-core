@@ -116,3 +116,23 @@ fn eprint_dec(x: i32) -> 1 = dec_each(x, !{ b -> eprint_byte(b) })
 
 -- `ms` milliseconds as the clock's nanoseconds (SPEC §34).
 fn ns_of_ms(ms: i32) -> i64 = host[extend_s](ms) * 1000000
+
+-- The decimal digits of `x`, with a `-` when it is negative, each given to `put`: nineteen steps
+-- cover the digits of the magnitude, which is read unsigned so that `-2^63` has one. `[spec §34]`
+fn dec64_each(x: i64, put: !(u8 => 1)) -> 1 =
+  let mut n = x;
+  if x < i64[0] { put(b'-'); n = i64[0] - x } else { () };
+  let mut d = i64[1000000000000000000];
+  let mut started = false;
+  for _ in 0..19 {
+    let q = match host[div_u64](n, d) { inl y -> y | inr u -> i64[0] };
+    if started || q != i64[0] || d == i64[1] { put(to_u8(host[wrap](q) + 48)); started = true }
+    else { () };
+    n = n - q * d;
+    let d2 = match host[div_u64](d, i64[10]) { inl y -> y | inr u -> i64[1] };
+    d = d2
+  };
+  ()
+
+-- `x` in decimal to standard output, with a `-` when it is negative.
+fn print_dec64(x: i64) -> 1 = dec64_each(x, !{ b -> print_byte(b) })
