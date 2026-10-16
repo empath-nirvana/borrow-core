@@ -3,27 +3,28 @@ import Frontend.Syntax
 /-!
 # Frontend — Elab — renaming the lifetimes a term uses  `[spec §23]`
 
-`renameLife f` applies `f` to the name of every lifetime variable a term, type or constant uses,
-and keeps every binder's name and every span. `mentionsLife x M` holds when `M` uses the lifetime
+`renameLife f` replaces every lifetime variable `'x` a term, type or constant uses, at `s`, by
+`f s x` (another variable, or a lifetime: `substLives`), and keeps every binder's name and every
+span. `mentionsLife x M` holds when `M` uses the lifetime
 `'x`: renaming `'x` changes it. The functions follow `respan` (`Frontend/Elab/Respan.lean`).
 -/
 
 namespace Frontend
 
 /-- A binder's name is kept: only the lifetimes a term uses are renamed. -/
-def Ident.renameLife (_f : String → String) (x : Ident) : Ident := x
+def Ident.renameLife (_f : Span → String → Life) (x : Ident) : Ident := x
 
 
 
-def Life.renameLife (f : String → String) : Life → Life
-  | .var s x => .var s (f x)
+def Life.renameLife (f : Span → String → Life) : Life → Life
+  | .var s x => f s x
   | .top s => .top s
   | .dom s => .dom s
   | .meet s a b => .meet s (a.renameLife f) (b.renameLife f)
   | .join s a b => .join s (a.renameLife f) (b.renameLife f)
 
 mutual
-def VTy.renameLife (f : String → String) : VTy → VTy
+def VTy.renameLife (f : Span → String → Life) : VTy → VTy
   | .unit s => .unit s
   | .zero s => .zero s
   | .tensor s A B => .tensor s (A.renameLife f) (B.renameLife f)
@@ -52,7 +53,7 @@ def VTy.renameLife (f : String → String) : VTy → VTy
   | .app s G A => .app s (G.renameLife f) (A.renameLife f)
   | .lapp s G a => .lapp s (G.renameLife f) (a.renameLife f)
 
-def CTy.renameLife (f : String → String) : CTy → CTy
+def CTy.renameLife (f : Span → String → Life) : CTy → CTy
   | .ret s A => .ret s (A.renameLife f)
   | .arr s A C => .arr s (A.renameLife f) (C.renameLife f)
   | .amp s C D => .amp s (C.renameLife f) (D.renameLife f)
@@ -67,17 +68,17 @@ def CTy.renameLife (f : String → String) : CTy → CTy
   | .pull s A B R => .pull s (A.renameLife f) (B.renameLife f) (R.renameLife f)
   | .eff s r A => .eff s (r.renameLife f) (A.renameLife f)
 
-def Row.renameLife (f : String → String) : Row → Row
+def Row.renameLife (f : Span → String → Life) : Row → Row
   | .nil => .nil
   | .cons n i q A B r => .cons n i q (A.renameLife f) (B.renameLife f) (r.renameLife f)
 
-def Shape.renameLife (f : String → String) : Shape → Shape
+def Shape.renameLife (f : Span → String → Life) : Shape → Shape
   | .leaf s A => .leaf s (A.renameLife f)
   | .node s σ τ => .node s (σ.renameLife f) (τ.renameLife f)
   | .name s n => .name s n
 end
 
-def Const.renameLife (f : String → String) : Const → Const
+def Const.renameLife (f : Span → String → Life) : Const → Const
   | .alloc A => .alloc (A.renameLife f)
   | .free A => .free (A.renameLife f)
   | .swap A B => .swap (A.renameLife f) (B.renameLife f)
@@ -142,7 +143,7 @@ def Const.renameLife (f : String → String) : Const → Const
       .sliceBorrowImmU (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)
 
 mutual
-def Val.renameLife (f : String → String) : Val → Val
+def Val.renameLife (f : Span → String → Life) : Val → Val
   | .var s x => .var s x
   | .defApp s n args => .defApp s n (args.map ((VTy.renameLife f)))
   | .unit s => .unit s
@@ -168,7 +169,7 @@ def Val.renameLife (f : String → String) : Val → Val
   | .lend s x m => .lend s (x.renameLife f) m
   | .sugar s g => .sugar s g
 
-def Comp.renameLife (f : String → String) : Comp → Comp
+def Comp.renameLife (f : Span → String → Life) : Comp → Comp
   | .ret s V => .ret s (V.renameLife f)
   | .bind s x A M N lin => .bind s (x.renameLife f) (A.map ((VTy.renameLife f))) (M.renameLife f) (N.renameLife f) lin
   | .force s x => .force s (x.renameLife f)
@@ -197,8 +198,12 @@ def Comp.renameLife (f : String → String) : Comp → Comp
         (r.renameLife f) p m (M.renameLife f)
 end
 
+/-- The lifetime variables of `σ` replaced by their lifetimes.  `[spec §32]` -/
+def substLives (σ : List (String × Life)) (s : Span) (x : String) : Life :=
+  (σ.lookup x).getD (.var s x)
+
 /-- `M` uses the lifetime `'x` (or binds a lifetime of that name).  `[spec §23]` -/
 def Comp.mentionsLife (x : String) (M : Comp) : Bool :=
-  M.renameLife (fun y => if y == x then y ++ "'" else y) != M
+  M.renameLife (fun s y => .var s (if y == x then y ++ "'" else y)) != M
 
 end Frontend

@@ -171,6 +171,9 @@ main -> i32 * (i32 + 1) =
 operations go). A block is called, or passed on to another function's block parameter: it is
 never stored or returned (SPEC §30).
 
+A block may use a handler's capability, or yield to a `for` it is written inside: it takes what it
+uses at each call and hands it back, and the function's copy passes it along (SPEC §32).
+
 ## Async tasks
 
 `lib/async.bc` is a scheduler written with these pieces (SPEC §30). `await()` is an ordinary
@@ -194,11 +197,13 @@ main -> List[i32] =
 ```
 
 `ticker` names no scheduler: its row is `Async`, and it runs under whichever site spawns it. A
-task holds no borrow across an `await` yet (docs/async-capabilities.md, #52).
+task may lend a cell it owns across an `await` (SPEC §29: `bcc check` reports it under `PinLaw`),
+log to the scheduler (`spawn_logged`, `run_logged`), be cancelled while it holds a lend, and,
+spawned by `spawn_in` inside a scope below a borrow, hold that borrow across its `await`s
+(SPEC §32).
 
 ## Not yet
 
-An operation inside a stored closure or a fold's algebra, a block that uses a handler's
-capability, functions over computations (`retry`, `|>` into a handler), named instances when two
+An operation inside a stored closure or a fold's algebra, functions over computations (`retry`, `|>` into a handler), named instances when two
 handlers of one effect are in scope, and operations that answer a borrow into the handler's state
 are later stages (SPEC §18 *Open*, §30 *Open*).

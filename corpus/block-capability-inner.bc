@@ -1,0 +1,15 @@
+-- A block's capability is not the callee's (SPEC §32): `twice` installs its own `count` handler
+-- and calls its block inside it. The block's `tick` is the handler's where the block is written,
+-- `main`'s: the copy `twice__b0count` takes `main`'s capability and passes it at each call of the
+-- block, and a handler of the same effect inside the copy does not shadow it. `twice`'s own
+-- `tick` is its own handler's.
+--
+-- Answer: `i32[105]`: the block answers 1 + 1 (main's counter at 1), `twice`'s `tick` 101, and
+-- `main`'s second `tick` 2; `live 0`. A block served by `twice`'s handler gives 205.
+effect Count { fn tick() -> i32 }
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+
+fn twice(f: !(i32 => i32)) -> i32 = with count(100) { f(1) + tick() }
+
+main -> i32 =
+  with count(0) { twice(!{ x -> x + tick() }) + tick() }

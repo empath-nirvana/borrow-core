@@ -1,23 +1,30 @@
--- Async tasks with no colouring (SPEC §30, docs/async-capabilities.md). `Async` is an ordinary
--- control effect: a task is a direct-style computation that calls `await()` to let other tasks
--- run. A function that awaits has `Async` in its inferred row; one that only takes a block (a
--- closure parameter) has nothing in its type, and a call that passes it an awaiting block uses its
--- copy at the block's row.
+-- Async tasks with no colouring (SPEC §30, §32, docs/async-capabilities.md). `Async` is an
+-- ordinary control effect: a task is a direct-style computation that calls `await()` to let other
+-- tasks run, and `log(x)` to record an entry with the scheduler. A function that awaits has `Async`
+-- in its inferred row; one that only takes a block (a closure parameter) has nothing in its type,
+-- and a call that passes it an awaiting block uses its copy at the block's row.
 --
 -- * `with spawn { M }` runs `M` to its first `await` and answers the task: its rest, the handler's
 --   continuation boxed at `top` (BOXED-κ, SPEC §28), or its value when it finished. The task is
 --   codata: `resume(t)` runs it to its next `await` (`inr` the rest) or its end (`inl` the value);
---   `cancel(t)` cancels it, which runs what it must finalise.
+--   `cancel(t)` cancels it, which runs what it must finalise. Its `log` resumes at once and
+--   records nothing.
 -- * `push(q, t)` queues a task, and `run_until_empty(q)` runs the queue round robin until no task
 --   is pending, answering the tasks' values in the order they were queued.
+-- * `with spawn_logged { M }` is `spawn` whose task stops at a `log` too; `lpush` and `run_logged`
+--   run such tasks as `push` and `run_until_empty` do, and answer the entries logged, in order.
+-- * `with spawn_in { M }` is `spawn` at a bound: the continuation is boxed at the meet of the
+--   lifetimes in scope at the `with`, so a task spawned inside a scope below a borrow may hold the
+--   borrow across its `await`s. `push_in` and `run_in` run such tasks for a bounded number of
+--   rounds, inside the borrow's scope.
 --
--- A task holds no borrow across an `await` here: what it holds there must drop, and a borrow
--- block's body performs no resuming operation (SPEC §19).
+-- A task that lends a cell it owns across an `await` (`borrow mut c { m -> … await(); … }`) is the
+-- relaxed lend R1 (SPEC §29), and `bcc check` reports it under `PinLaw`.
 
 -- The values of the tasks are answered as a `List` (`lib/list.bc`).
 include list
 
-effect Async { ctl await() }
+effect Async { ctl await(); ctl log(x: i32) }
 
 -- A task of `A`: at its next observation, its value or the rest of it, boxed at `top` so that a
 -- queue may hold it.
@@ -36,7 +43,8 @@ handler spawn[A]: Async, A -> Task[A] = {
   return(v) = boxed[top] (thunkv nu_in < return (inl v), return () >);
   await(k) = boxed[top] (thunkv nu_in <
     kk <- return (unbox k); u <- return (); t <- (force kk).1 u; return (inr t),
-    kk <- return (unbox k); (force kk).2 >)
+    kk <- return (unbox k); (force kk).2 >);
+  log(x, k) = kk <- return (unbox k); u <- return (); (force kk).1 u
 }
 
 -- Run a task to its next `await` (`inr` the rest) or its end (`inl` its value).
@@ -110,3 +118,231 @@ fn run_until_empty[A](q: Queue[A]) -> List[A] =
     more = p
   };
   values(n, slots)
+
+-- A logged task (`run_logged`): a task stopped at an `await` (`inl ()`) or at a `log` of an entry
+-- (`inr x`), with its rest, or finished with its value.
+type LTask[A] = box top U (nu X. F (A + ((1 + i32) * box top U X)) & F 1)
+type Stopped[A] = A + ((1 + i32) * LTask[A])
+type LSlots[A] = mu X. 1 + (Stopped[A] * X)
+type LQueue[A] = i32 * LSlots[A]
+
+handler spawn_logged[A]: Async, A -> Stopped[A] = {
+  return(v) = inl v;
+  await(k) = inr (inl (), boxed[top] (thunkv nu_in <
+    kk <- return (unbox k); u <- return (); (force kk).1 u,
+    kk <- return (unbox k); (force kk).2 >));
+  log(x, k) = inr (inr x, boxed[top] (thunkv nu_in <
+    kk <- return (unbox k); u <- return (); (force kk).1 u,
+    kk <- return (unbox k); (force kk).2 >))
+}
+
+-- Observe a logged task once: run it to its next stop or its end.
+fn lresume[A](t: LTask[A]) -> Stopped[A] = g <- return (unbox t); (nu_out (force g)).1
+
+-- Cancel a logged task: its continuation's finalisers run, innermost first.
+fn lcancel[A](t: LTask[A]) -> 1 = g <- return (unbox t); (nu_out (force g)).2
+
+-- Run a stopped task past its logs, each entry put on `log` (the last first), until it awaits or
+-- finishes: a `log` does not let another task run.
+fn drain[A](s: Stopped[A], log: List[i32]) -> Stopped[A] * List[i32] =
+  let mut cur = s;
+  let mut l = log;
+  let mut going = true;
+  while going {
+    match cur {
+      inl v -> cur = (inl v : Stopped[A]); going = false
+    | inr (e, t) -> match e {
+        inl u -> cur = (inr (inl (), t) : Stopped[A]); going = false
+      | inr x -> l = (roll inr (x, l) : List[i32]); cur = lresume(t)
+      }
+    }
+  };
+  (cur, l)
+
+fn lqueue[A]() -> LQueue[A] * List[i32] = ((0, roll inl ()), roll inl ())
+
+-- Queue a logged task, recording the entries it logged before its first `await`.
+fn lpush[A](q: LQueue[A] * List[i32], s: Stopped[A]) -> LQueue[A] * List[i32] =
+  let ((n, xs), log) = q;
+  let (s2, l) = drain(s, log);
+  ((n + 1, roll inr (s2, xs)), l)
+
+-- The first `n` slots of a logged queue, reversed.
+fn lrev[A](n: i32, xs: LSlots[A]) -> LSlots[A] =
+  let mut acc = (roll inl () : LSlots[A]);
+  let mut cur = xs;
+  for _ in 0..n {
+    match unroll cur {
+      inl u -> cur = (roll inl () : LSlots[A])
+    | inr (x, r) -> acc = (roll inr (x, acc) : LSlots[A]); cur = r
+    }
+  };
+  match unroll cur { inl u -> acc | inr (x, r) -> acc }
+
+-- One round over `n` logged slots in order: each pending task resumed once and run past its logs.
+-- Answers the slots reversed, the log, and whether a task is still pending. Running a task past its
+-- logs is unbounded, so the round is a div loop over the slots.
+fn lround[A](n: i32, xs: LSlots[A], log: List[i32]) -> (LSlots[A] * List[i32]) * bool =
+  let mut acc = (roll inl () : LSlots[A]);
+  let mut cur = xs;
+  let mut l = log;
+  let mut pending = false;
+  let mut i = 0;
+  while i < n {
+    i = i + 1;
+    match unroll cur {
+      inl u -> cur = (roll inl () : LSlots[A])
+    | inr (s, r) ->
+        cur = r;
+        match s {
+          inl v -> acc = (roll inr ((inl v : Stopped[A]), acc) : LSlots[A])
+        | inr (e, t) ->
+            let (s2, l2) = drain(lresume(t), l);
+            l = l2;
+            match s2 {
+              inl v -> acc = (roll inr ((inl v : Stopped[A]), acc) : LSlots[A])
+            | inr (e2, t2) -> pending = true; acc = (roll inr ((inr (e2, t2) : Stopped[A]), acc) : LSlots[A])
+            }
+        }
+    }
+  };
+  match unroll cur { inl u -> ((acc, l), pending) | inr (s, r) -> ((acc, l), pending) }
+
+-- The values of `n` logged slots, in order; a task still pending is cancelled.
+fn lvalues[A](n: i32, xs: LSlots[A]) -> List[A] =
+  let mut acc = (roll inl () : List[A]);
+  let mut cur = xs;
+  for _ in 0..n {
+    match unroll cur {
+      inl u -> cur = (roll inl () : LSlots[A])
+    | inr (s, r) ->
+        cur = r;
+        match s { inl v -> acc = (roll inr (v, acc) : List[A]) | inr (e, t) -> lcancel(t); () }
+    }
+  };
+  match unroll cur { inl u -> rev(n, acc) | inr (s, r) -> rev(n, acc) }
+
+-- A list reversed. It runs until the list ends, so it loops (div).
+fn reverse[T](xs: List[T]) -> List[T] =
+  let mut acc = (roll inl () : List[T]);
+  let mut cur = xs;
+  let mut more = true;
+  while more {
+    match unroll cur {
+      inl u -> cur = (roll inl () : List[T]); more = false
+    | inr (x, r) -> acc = (roll inr (x, acc) : List[T]); cur = r
+    }
+  };
+  match unroll cur { inl u -> acc | inr (x, r) -> acc }
+
+-- Run a logged queue round robin until no task is pending: the tasks' values, in the order they
+-- were queued, and the entries they logged, in the order they logged them. A task's `log` is an
+-- operation of the scheduler, handled outside every block of the task: the scheduler owns the log
+-- and the task resumes at once.
+fn run_logged[A](q: LQueue[A] * List[i32]) -> List[A] * List[i32] =
+  let ((n, s), log) = q;
+  let mut slots = lrev(n, s);
+  let mut l = log;
+  let mut more = true;
+  while more {
+    let ((b, l2), p) = lround(n, slots, l);
+    slots = lrev(n, b);
+    l = l2;
+    more = p
+  };
+  (lvalues(n, slots), reverse(l))
+
+-- A task bounded by `'d` (`spawn_in`): its continuation boxed at `'d`, so that it may hold borrows
+-- that outlive `'d`, and may be stored only where `'d` is in scope.
+type TaskIn[A]<'d> = box 'd U (nu X. F (A + box 'd U X) & F 1)
+
+-- `spawn` at a bound: the handler's lifetime `'d` is the meet of the lifetimes in scope at the
+-- `with`, and its `await` clause receives the continuation boxed at `'d` (BOXED-κ at `'d`). A task
+-- spawned inside a scope below a borrow may hold the borrow across its `await`s.
+handler spawn_in[A]<'d>: Async, A -> TaskIn[A]<'d> = {
+  return(v) = boxed['d] (thunkv nu_in < return (inl v), return () >);
+  await(k) = boxed['d] (thunkv nu_in <
+    kk <- return (unbox k); u <- return (); t <- (force kk).1 u; return (inr t),
+    kk <- return (unbox k); (force kk).2 >);
+  log(x, k) = kk <- return (unbox k); u <- return (); (force kk).1 u
+}
+
+-- Run a bounded task to its next `await` (`inr` the rest) or its end (`inl` its value).
+fn resume_in[A]<'d>(t: TaskIn[A]<'d>) -> A + TaskIn[A]<'d> = g <- return (unbox t); (nu_out (force g)).1
+
+-- Cancel a bounded task: its continuation's finalisers run, innermost first.
+fn cancel_in[A]<'d>(t: TaskIn[A]<'d>) -> 1 = g <- return (unbox t); (nu_out (force g)).2
+
+-- A queue of bounded tasks: its length and its slots, the last queued first.
+type SlotsIn[A]<'d> = mu X. 1 + ((A + TaskIn[A]<'d>) * X)
+type QueueIn[A]<'d> = i32 * SlotsIn[A]<'d>
+
+fn queue_in[A]<'d>() -> QueueIn[A]<'d> = (0, roll inl ())
+
+fn push_in[A]<'d>(q: QueueIn[A]<'d>, t: TaskIn[A]<'d>) -> QueueIn[A]<'d> =
+  let (n, s) = q; (n + 1, roll inr (inr t, s))
+
+-- The first `n` slots of a queue of bounded tasks, reversed.
+fn rev_in[A]<'d>(n: i32, xs: SlotsIn[A]<'d>) -> SlotsIn[A]<'d> =
+  let mut acc = (roll inl () : SlotsIn[A]<'d>);
+  let mut cur = xs;
+  for _ in 0..n {
+    match unroll cur {
+      inl u -> cur = (roll inl () : SlotsIn[A]<'d>)
+    | inr (x, r) -> acc = (roll inr (x, acc) : SlotsIn[A]<'d>); cur = r
+    }
+  };
+  match unroll cur { inl u -> acc | inr (x, r) -> acc }
+
+-- One round over `n` slots of bounded tasks, as `round`.
+fn round_in[A]<'d>(n: i32, xs: SlotsIn[A]<'d>) -> SlotsIn[A]<'d> * bool =
+  let mut acc = (roll inl () : SlotsIn[A]<'d>);
+  let mut cur = xs;
+  let mut pending = false;
+  for _ in 0..n {
+    match unroll cur {
+      inl u -> cur = (roll inl () : SlotsIn[A]<'d>)
+    | inr (s, r) ->
+        cur = r;
+        match s {
+          inl v -> acc = (roll inr (inl v, acc) : SlotsIn[A]<'d>)
+        | inr t ->
+            match resume_in(t) {
+              inl v -> acc = (roll inr (inl v, acc) : SlotsIn[A]<'d>)
+            | inr t2 -> pending = true; acc = (roll inr (inr t2, acc) : SlotsIn[A]<'d>)
+            }
+        }
+    }
+  };
+  match unroll cur { inl u -> (acc, pending) | inr (s, r) -> (acc, pending) }
+
+-- The values of `n` slots of bounded tasks, in order, a task still pending cancelled; and whether
+-- one was.
+fn values_in[A]<'d>(n: i32, xs: SlotsIn[A]<'d>) -> List[A] * bool =
+  let mut acc = (roll inl () : List[A]);
+  let mut cur = xs;
+  let mut cut = false;
+  for _ in 0..n {
+    match unroll cur {
+      inl u -> cur = (roll inl () : SlotsIn[A]<'d>)
+    | inr (s, r) ->
+        cur = r;
+        match s { inl v -> acc = (roll inr (v, acc) : List[A]) | inr t -> cancel_in(t); cut = true }
+    }
+  };
+  match unroll cur { inl u -> (rev(n, acc), cut) | inr (s, r) -> (rev(n, acc), cut) }
+
+-- Run a queue of bounded tasks round robin for at most `rounds` rounds: the tasks' values, in the
+-- order they were queued. It is a counted loop, a total computation, so it runs inside the scope of
+-- the borrows the tasks hold. A task still pending after the last round is cancelled, and the run
+-- performs `exhausted()` (`lib/rec.bc`), as a recursion that spends its budget does.
+fn run_in[A]<'d>(q: QueueIn[A]<'d>, rounds: i32) -> List[A] with Exhausted =
+  let (n, s) = q;
+  let mut slots = rev_in(n, s);
+  for _ in 0..rounds {
+    let (b, p) = round_in(n, slots);
+    slots = rev_in(n, b)
+  };
+  let (vs, cut) = values_in(n, slots);
+  if cut { exhausted() } else { () };
+  vs

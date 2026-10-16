@@ -8,11 +8,13 @@
 -- Blocked by #161: a function with a row is passed as a value, and `any` would handle the yields
 -- of a computation it is given. A generator that performs `Fail` besides what it yields is not
 -- stored either (SPEC §15 Open), so `pull` does not serve. The kernel types a let-bound `any` at
--- each use by `[let-poly]` (SPEC §24).
+-- each use by `[let-poly]` (SPEC §24). What it waits on is a callee that handles the effects of
+-- the computation it is given, as a generator consumer does: a computation parameter, or `|>`
+-- into a handler (#161). Passing the function by name was tried and taken out (SPEC §32 *Open*).
 --
 -- Once it lands: `(inr (), inr ())`: true, and the error; `live 0`.
 --
--- now: 30:41: `gen2` performs `Yield, Fail` and is passed as a value: it can only be called (effectful callbacks, #161)
+-- now: 32:41: `gen2` performs `Yield, Fail` and is passed as a value: it can only be called (effectful callbacks, #161)
 
 include fail
 include yield

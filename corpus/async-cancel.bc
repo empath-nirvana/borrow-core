@@ -1,0 +1,45 @@
+-- A6 of docs/async-capabilities.md (SPEC §32): a suspended task that holds a borrow and an owned
+-- value is cancelled by another task. `victim` owns `extra` and lends `buf`, and holds the view (in
+-- a pair) across two `await`s: the block is the relaxed lend R1 (SPEC §29). `main` spawns it,
+-- which runs it to its first `await`, and gives the task to `killer`, which awaits once and then
+-- cancels it with `cancel` (`lib/async.bc`). The cancel unwinds the victim's continuation
+-- innermost first: the lend's unwinding form ends the lend and runs the owner's finaliser (`buf`'s
+-- destructor), then `extra`'s destructor runs. `bcc interp --check tags` checks that the lend
+-- ended before `buf` was freed.
+--
+-- Tasks are linear values here, so the victim is not in the queue once `killer` holds it: the
+-- scheduler answers `killer`'s value alone. A finaliser cannot log (docs/async-capabilities.md A6's
+-- log [10, 11]): the lend's finaliser is typed pure at the empty context (R1's `· ⊢ d : Ref T ⊸ 1`),
+-- and the backend does not lower a finaliser that performs a control operation (SPEC §27 *Open*).
+--
+-- `assurance: PinLaw (R1 at 24:11)`.
+--
+-- Answer: `inr (i32[2], inl ())`, the list [2], and `live 0`: both of the victim's cells were
+-- freed by its cancel. A cancel that dropped the continuation without unwinding would leave the
+-- two cells live.
+include async
+
+fn victim() -> i32 with Async =
+  let extra = alloc(11);
+  let buf = alloc(10);
+  let v = borrow mut buf { m ->
+    let p = (m, 5);
+    await();
+    await();
+    let (m, k) = p;
+    modify m { x -> (x, x + k) }
+  };
+  let _ = free(buf);
+  let e = free(extra);
+  v + e
+
+fn killer(t: Task[i32]) -> i32 with Async =
+  await();
+  cancel(t);
+  2
+
+main -> List[i32] =
+  let t = with spawn { victim() };
+  let q = queue[i32]();
+  let q = push(q, with spawn { killer(t) });
+  run_until_empty(q)

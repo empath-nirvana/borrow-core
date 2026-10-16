@@ -349,6 +349,8 @@ def Decl.pp : Decl → String
     let (rx, rA, rM) := h.ret
     "handler " ++ h.name.name ++
       (if h.tps.isEmpty then "" else "[" ++ ", ".intercalate (h.tps.map (·.name)) ++ "]") ++
+      (if h.lps.isEmpty then "" else "<" ++ ", ".intercalate (h.lps.map fun (a, b) =>
+        (Life.var a.span a.name).pp ++ (match b with | .top _ => "" | b => " < " ++ b.pp)) ++ ">") ++
       (if h.params.isEmpty then "" else
         "(" ++ ", ".intercalate (h.params.map fun (x, A) => x.name ++ ": " ++ A.pp) ++ ")") ++
       ": " ++ h.eff.name ++ tys h.effArgs ++ ", " ++ rA.pp ++ " -> " ++ h.res.pp ++

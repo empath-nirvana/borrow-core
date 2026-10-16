@@ -3544,10 +3544,23 @@ its arguments' types and the body's, and its clauses as `!` closures at the type
 gives them; then `handle_with[n](hr, hc) M`. -/
 def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp → DM Comp
   | 0, _, sp, _, _, _, _, _ => throw ⟨sp, "internal error: a handler nested too deeply"⟩
-  | n + 1, c, sp, i, P, R, cls, M => do
+  | n + 1, c, sp, i₀, P, R₀, cls₀, M => do
     let S := c.E.row.getD []
     let mismatch (what : String) : Error :=
-      ⟨sp, s!"the handler `{i.name}`: {what} does not have the type its declaration gives it"⟩
+      ⟨sp, s!"the handler `{i₀.name}`: {what} does not have the type its declaration gives it"⟩
+    -- The handler's lifetime parameters, each the meet of the lifetimes in scope here (`dom`), in
+    -- its types and clauses; a kept continuation is boxed at the first (SPEC §32).  `[spec §32]`
+    let dL := c.Δ.meetOfDom
+    let dS ← (c.surfaceL sp dL : Except Error Life)
+    let σL : List (String × Life) := i₀.lives.map (·, dS)
+    let lv (A : VTy) : VTy := if σL.isEmpty then A else A.renameLife (substLives σL)
+    let i : HInfo := { i₀ with
+      ents := i₀.ents.map fun (q, A, B) => (q, lv A, lv B),
+      params := i₀.params.map fun (x, A) => (x, lv A), retA := lv i₀.retA, res := lv i₀.res,
+      after := i₀.after.map lv }
+    let R := if σL.isEmpty then R₀ else R₀.renameLife (substLives σL)
+    let cls := if σL.isEmpty then cls₀ else cls₀.renameLife (substLives σL)
+    let kBound : BoCa.Lifetime.Life := if σL.isEmpty then .top else dL
     let mut σ : TySubst := i.known
     -- The body, with the site's operations innermost; its type determines the return clause's.
     let ops ← i.ents.mapM fun (q, A, B) => do
@@ -3601,13 +3614,13 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
       | .thunkv csp (.lam lsp x _ body) =>
         let K := BoCa.Fig16.LogRel.Core.kTy S Rc q Bi
         let T : CVTy := if Bi.isZero && q != .lin then Ai
-          else .tensor Ai (if i.boxK then .box .top K else K)
+          else .tensor Ai (if i.boxK then .box kBound K else K)
         let body' ← surfC n (cS.push x.name (some T)) (some ans) (body.subst σ)
         hcs := hcs ++ [.bangThunkv csp (.lam lsp x (← (cP.surface lsp T : Except Error VTy)) body')]
       | _ => throw ⟨sp, "internal error: a handler's clause"⟩
     let hcV := hcs.foldr (fun v t => Val.pair sp v t) (.unit sp)
     let hrTy ← (cP.surface sp (BoCa.Fig16.LogRel.Core.retTy S A Rc) : Except Error VTy)
-    let hcTy ← (cP.surface sp (if i.boxK then BoCa.Fig16.LogRel.Core.clausesTyB S Rc .top ops
+    let hcTy ← (cP.surface sp (if i.boxK then BoCa.Fig16.LogRel.Core.clausesTyB S Rc kBound ops
       else BoCa.Fig16.LogRel.Core.clausesTy S Rc ops) : Except Error VTy)
     let hrN : Ident := ⟨s!"io_hr{i.n}", sp⟩
     let hcN : Ident := ⟨s!"io_hc{i.n}", sp⟩
@@ -4625,6 +4638,10 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
                 pure (Wi'', m'.solved Pi)
             | none => pure (Wi', T)
           | none => pure (Wi', T)
+        -- A closure elaborated at its parameter's type, known here, whose synthesized type does not
+        -- show it (a block whose result is a `for`'s threaded variable, answered by an operation,
+        -- SPEC §32): its type is the parameter's, which the checker checks.  `[spec §32]`
+        let T := if (matchV m 0 Pi T).isNone && isClosure Wi && !opn then pat' else T
         match matchV m 0 Pi T with
         | some m' => m := m'
         | none =>

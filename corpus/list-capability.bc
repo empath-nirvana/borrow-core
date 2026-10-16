@@ -1,0 +1,16 @@
+-- A block that uses an answering capability, given to the generic recursive `map` of
+-- `lib/list.bc` (SPEC §31, §32): the copy of `map`'s recursive group for the block takes the
+-- capability as part of its environment, and each level passes it to the block and on to the
+-- next.
+--
+-- Answer: `inr (i32[11], inr (i32[22], inr (i32[33], inl ())))`, the list [11, 22, 33]: each
+-- element plus the counter, 1, 2, 3 in order; `live 0`.
+include list
+include rec
+
+effect Count { fn tick() -> i32 }
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+
+main -> List[i32] =
+  let xs = cons(10, cons(20, cons(30, nil())));
+  with count(0) { with on_exhausted(!{ u -> nil() }) { map(xs, !{ x -> x + tick() }) } }

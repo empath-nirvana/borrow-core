@@ -18,6 +18,10 @@ Already in place:
   block's row (see [Effects and handlers](../effects.md), *Async tasks*; SPEC §30;
   `corpus/async-scheduler.bc`, `corpus/async-map.bc`).
 
-Still to come: borrows across `await` (`docs/async-capabilities.md` §3), spawning from a
-scheduler handle, cancellation of a task holding a lend, and wakers. Async lowers to stackless
-state machines, as Rust's `async` does ([Design decisions](../../decisions.md), 25).
+- A task may lend its own cell across `await` (SPEC §29), log to the scheduler, be cancelled while
+  it holds a lend, and hold an outer borrow when spawned below it (SPEC §32;
+  `corpus/async-logged.bc`, `async-cancel.bc`, `async-scoped.bc`).
+
+Still to come: segmenting a lend at an `await` (L0), an `imm` lend across one, spawning from a
+scheduler handle, and wakers. Async lowers to stackless state machines, as Rust's `async` does
+([Design decisions](../../decisions.md), 25).

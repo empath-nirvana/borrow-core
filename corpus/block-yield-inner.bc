@@ -1,0 +1,27 @@
+-- A block that yields to its caller's `for`, given to a function that runs a `for` of its own
+-- over a generator of the same effect (SPEC §32). `each_sum` iterates over `range`, and calls its
+-- block in the loop's body; the block's `yield` goes to the `for` in `main`, where `tens` is
+-- iterated, whose threaded variable the block takes and hands back. The `for` inside the copy
+-- does not shadow it.
+--
+-- Answer: `i32[30]`: `main` sums 0 + 10 + 20; `live 0`. A block whose yield went to
+-- `each_sum`'s `for` gives 0.
+include yield
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+fn each_sum(n: i32, f: !(i32 => 1)) -> i32 =
+  let mut s = 0;
+  for y in range(0, n) { f(y); s = s + y };
+  s
+
+fn tens(n: i32) -> i32 with Yield[i32] =
+  each_sum(n, !{ x -> yield(x * 10) })
+
+main -> i32 =
+  let mut acc = 0;
+  for x in tens(3) { acc = acc + x };
+  acc
