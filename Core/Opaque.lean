@@ -10,7 +10,7 @@ modes (`Relation.lean`).
 
 * `Input`: the input not yet read, a byte list.
 * `Output`: `(fd, bs)`, the stream `fd` and the bytes written to it, most recent first.
-* `Clock`: `t`, the time in milliseconds (SPEC §34).
+* `Clock`: `t`, the time in nanoseconds (SPEC §34).
 * `Args`: the arguments not yet read, a byte list, each argument followed by `0` (SPEC §34).
 
 A byte list is a value of `Bytes = μX. 1 ⊕ (U8 ⊗ X)` (`Stdio.lean`): `inj₁ ()`, or
@@ -42,7 +42,7 @@ inductive BytesV : Val → Prop where
 def Opaque.Holds : Opaque → Val → Prop
   | .input, v => BytesV v
   | .output, v => ∃ fd bs, v = .pair (.i32 fd) bs ∧ BytesV bs
-  | .clock, v => ∃ t, v = .i32 t
+  | .clock, v => ∃ t, v = .i64 t
   | .args, v => BytesV v
 
 end BoCa.Fig16.LogRel.Core

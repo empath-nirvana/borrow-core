@@ -9,7 +9,7 @@
 --   only at the end. `feed` serves a literal; the two readers read the same bytes, and
 --   `input_into` reads 3 of a 5-byte view at the end.
 -- * `Clock`: `now()` is monotone, and a sleep waits at least what it asks. `fake_clock` keeps its
---   time and adds `max(ms, 0)` at a sleep.
+--   time in nanoseconds and adds `max(ns, 0)` at a sleep.
 -- * `Args`: the arguments one after the other, each followed by `0`, then the end and the end
 --   again. `fake_args` serves a literal of two arguments.
 --
@@ -53,9 +53,9 @@ handler feed(mut st: lit * i32): Stdin = {
 }
 
 -- A fake clock: its time, advanced only by a sleep.
-handler fake_clock(mut t: i32): Clock = {
+handler fake_clock(mut t: i64): Clock = {
   now() = t;
-  sleep(ms) = { if ms > 0 { t = t + ms } else { () } }
+  sleep(ns) = { if ns > 0 { t = t + ns } else { () } }
 }
 
 -- Fake arguments: a literal of arguments, each followed by `0`, and the index of the next byte.
@@ -119,11 +119,11 @@ fn stdin_law() -> bool * bool =
 -- `Clock`'s law: a sleep waits what it asks, and a negative one does not go back.
 fn clock_law() -> bool * bool =
   let t1 = now();
-  sleep(15);
+  sleep(ns_of_ms(15));
   let t2 = now();
-  sleep(0 - 3);
+  sleep(ns_of_ms(0 - 3));
   let t3 = now();
-  (t2 - t1 >= 15, t3 >= t2)
+  (t2 - t1 >= ns_of_ms(15), t3 >= t2)
 
 -- `Args`' law: the arguments counted by their `0`s, and the end, twice.
 fn args_law() -> i32 * bool =
@@ -141,7 +141,8 @@ main -> bool * ((bool * bool) * ((bool * bool) * (i32 * bool))) =
   let a = print_string(a);
   let b = print_string(b);
   let ins = stdin_law();
-  let c = alloc(100);
+  let start : i64 = 100;
+  let c = alloc(start);
   let clk = with fake_clock(&mut c) { clock_law() };
   let _ = free(c);
   let g = alloc(("x\0yz\0", 0));

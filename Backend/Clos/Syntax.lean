@@ -38,10 +38,10 @@ inductive IOOp where
   /-- `read_into (m, (p, n))`: bytes of the stream in the cell `m` read into the view at `p` until
   it is full or the stream ends; the result is `(m, ((p, n), k))`, `k` the bytes read. -/
   | readInto
-  /-- `clock_now m`: `(m, t)`, `t` the time of the clock in the cell `m` in milliseconds
-  (SPEC §34). -/
+  /-- `clock_now m`: `(m, t)`, `t` the time of the clock in the cell `m` in nanoseconds, an
+  `i64` (SPEC §34). -/
   | clockNow
-  /-- `clock_sleep (m, ms)`: wait at least `max(ms, 0)` milliseconds on the clock in the cell `m`;
+  /-- `clock_sleep (m, ns)`: wait at least `max(ns, 0)` nanoseconds on the clock in the cell `m`;
   the result is `m` (SPEC §34). -/
   | clockSleep
   deriving Repr, DecidableEq

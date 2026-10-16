@@ -27,10 +27,10 @@ in `Backend/README.md`:
   left out (SPEC §34): `$args` reads them once, with `args_sizes_get` and `args_get`, into memory
   `$reserve` takes from the heap (it is no range, and is never freed), and `$getc` and `$getv`
   read from there.
-- `$now c` answers the milliseconds of the monotonic clock since the clock's first use, saturating
-  at `2^31 − 1`, and `$sleep c ms` waits at least `ms` milliseconds when `ms > 0`
-  (`poll_oneoff` on one relative clock subscription); `c` is the clock's cell, whose content is
-  the model's and is not read (SPEC §34, `clock_now`, `clock_sleep`).
+- `$now c` answers the nanoseconds of the monotonic clock since the clock's first use, saturating
+  at `2^63 − 1`, and `$sleep c ns` waits at least `ns` nanoseconds when `ns > 0` (`poll_oneoff`
+  on one relative clock subscription); `c` is the clock's cell, whose content is the model's and
+  is not read (SPEC §34, `clock_now`, `clock_sleep`).
 
 Layout: bytes `0–31` hold `$putfd`'s and `$putv`'s I/O vector and byte, bytes `32–63` `$getc`'s
 and `$getv`'s, bytes `64–71` the clock's reading, `72–79` `$args`'s sizes, `128–175` `$sleep`'s
@@ -220,20 +220,17 @@ def runtimeWat : String := "
     (i64.load (i32.const 64)))
 
   (func $now (param $c i64) (result i64)
-    (local $ms i64)
+    (local $ns i64)
     (if (i64.eq (global.get $t0) (i64.const -1)) (then (global.set $t0 (call $mono))))
-    (local.set $ms (i64.div_u (i64.sub (call $mono) (global.get $t0)) (i64.const 1000000)))
-    (if (result i64) (i64.gt_u (local.get $ms) (i64.const 2147483647))
-      (then (i64.const 2147483647)) (else (local.get $ms))))
+    (local.set $ns (i64.sub (call $mono) (global.get $t0)))
+    (if (result i64) (i64.gt_u (local.get $ns) (i64.const 9223372036854775807))
+      (then (i64.const 9223372036854775807)) (else (local.get $ns))))
 
-  (func $sleep (param $c i64) (param $ms i64)
-    (local $d i32)
+  (func $sleep (param $c i64) (param $ns i64)
     (if (i64.eq (global.get $t0) (i64.const -1)) (then (global.set $t0 (call $mono))))
-    (local.set $d (i32.wrap_i64 (local.get $ms)))
-    (if (i32.le_s (local.get $d) (i32.const 0)) (then return))
+    (if (i64.le_s (local.get $ns) (i64.const 0)) (then return))
     (memory.fill (i32.const 128) (i32.const 0) (i32.const 104))
-    (i64.store (i32.const 152)
-      (i64.mul (i64.extend_i32_u (local.get $d)) (i64.const 1000000)))
+    (i64.store (i32.const 152) (local.get $ns))
     (i32.store (i32.const 144) (i32.const 1))
     (drop (call $poll_oneoff (i32.const 128) (i32.const 192) (i32.const 1) (i32.const 224))))
 "

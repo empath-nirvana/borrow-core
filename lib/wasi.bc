@@ -11,8 +11,8 @@ extern write_byte : !(all 'a < top. mut 'a output * u8 => mut 'a output)
 extern write_all : !(all 'a < top. all 'b < top. mut 'a output * array_imm 'b u8 => mut 'a output)
 extern read_into : !(all 'a < top. all 'b < top.
   mut 'a input * array_mut 'b u8 => mut 'a input * (array_mut 'b u8 * i32))
-extern clock_now : !(all 'a < top. mut 'a clock => mut 'a clock * i32)
-extern clock_sleep : !(all 'a < top. mut 'a clock * i32 => mut 'a clock)
+extern clock_now : !(all 'a < top. mut 'a clock => mut 'a clock * i64)
+extern clock_sleep : !(all 'a < top. mut 'a clock * i64 => mut 'a clock)
 extern read_arg : !(all 'a < top. mut 'a args => mut 'a args * (u8 + 1))
 
 handler wasi_stdin(&mut i: input): Stdin = {
@@ -32,7 +32,7 @@ handler wasi_stderr(&mut o: output): Stderr = {
 
 handler wasi_clock(&mut c: clock): Clock = {
   now() = { let (d, t) = clock_now(c); c = d; t };
-  sleep(ms) = { c = clock_sleep(c, ms) }
+  sleep(ns) = { c = clock_sleep(c, ns) }
 }
 
 handler wasi_args(&mut a: args): Args = {

@@ -597,31 +597,31 @@ theorem readInto_meets (ls : List SRec) (δ : LSub) :
 
 /-! ### The clock  `[spec §34]`
 
-A clock is a cell whose content is a time in milliseconds: its representation is `I32`, and the
+A clock is a cell whose content is a time in nanoseconds: its representation is `I64`, and the
 relation there is `Clock`'s model (`vC_clockRep`). `clock_now` answers the time and keeps it;
-`clock_sleep` adds `max(ms, 0)` to it, saturating at `2^31 − 1`; the harness `mk_clock` makes a
+`clock_sleep` adds `max(ns, 0)` to it, saturating at `2^63 − 1`; the harness `mk_clock` makes a
 clock at time `0` and `take_clock` frees it. Each model is a `CDerives` derivation at the
 representation, so it meets its contract by the Fundamental Property, as the streams' do. -/
 
-/-- **`Clock` is `I32` with the rules taken away.**  `[spec §34]` -/
+/-- **`Clock` is `I64` with the rules taken away.**  `[spec §34]` -/
 theorem vC_clockRep (b : Bool) (ls : List SRec) (δ : LSub) :
-    vC b .i32 ls δ = vC b (.opq .clock) ls δ := by
+    vC b .i64 ls δ = vC b (.opq .clock) ls δ := by
   funext v ρ
   rfl
 
-/-- `clock_now`: `∀'a ⊏ ⊤. F (Mut 'a C ⇒ Mut 'a C ⊗ I32)`.  `[spec §34]` -/
+/-- `clock_now`: `∀'a ⊏ ⊤. F (Mut 'a C ⇒ Mut 'a C ⊗ I64)`.  `[spec §34]` -/
 def clockNowC (C : VTy) : CTy :=
-  .all 0 .top (.ret (.lolli (.mut (.var 0) C) (.tensor (.mut (.var 0) C) .i32)))
+  .all 0 .top (.ret (.lolli (.mut (.var 0) C) (.tensor (.mut (.var 0) C) .i64)))
 
-/-- `clock_sleep`: `∀'a ⊏ ⊤. F (Mut 'a C ⊗ I32 ⇒ Mut 'a C)`.  `[spec §34]` -/
+/-- `clock_sleep`: `∀'a ⊏ ⊤. F (Mut 'a C ⊗ I64 ⇒ Mut 'a C)`.  `[spec §34]` -/
 def clockSleepC (C : VTy) : CTy :=
-  .all 0 .top (.ret (.lolli (.tensor (.mut (.var 0) C) .i32) (.mut (.var 0) C)))
+  .all 0 .top (.ret (.lolli (.tensor (.mut (.var 0) C) .i64) (.mut (.var 0) C)))
 
 /-- `mk_clock`: `1 ⊸ F (Ref C)`.  `[spec §34]` -/
 def mkClockC (C : VTy) : CTy := .arr .unit (.ret (.ref C))
 
-/-- `take_clock`: `Ref C ⊸ F I32`.  `[spec §34]` -/
-def takeClockC (C : VTy) : CTy := .arr (.ref C) (.ret .i32)
+/-- `take_clock`: `Ref C ⊸ F I64`.  `[spec §34]` -/
+def takeClockC (C : VTy) : CTy := .arr (.ref C) (.ret .i64)
 
 /-- `clock_now`'s callback: `λt. (t, t)`. -/
 def cnCallback : Expr := .val (.lam (.pair (.var 0) (.var 0)))
@@ -629,72 +629,75 @@ def cnCallback : Expr := .val (.lam (.pair (.var 0) (.var 0)))
 /-- The model of `clock_now`: `Λ. λm. withswap m cnCallback`.  `[spec §34]` -/
 def clockNowV : Val := .lam (.val (.lam (.app (.app withswap (.var 0)) cnCallback)))
 
-/-- The time after a sleep, under `λt` with the duration `ms` at index `1`: `t` when `ms ≤ 0`,
-else `t + ms`, or `2^31 − 1` when the sum overflows. -/
+/-- A 64-bit literal. -/
+def i64E (n : UInt64) : Expr := .val (Val.i64 n)
+
+/-- The time after a sleep, under `λt` with the duration `ns` at index `1`: `t` when `ns ≤ 0`,
+else `t + ns`, or `2^63 − 1` when the sum overflows. -/
 def sleptT : Expr :=
-  .case (hop (.rel .w32 .gt_s) (.pair (.var 1) (i32E 0)))
+  .case (hop (.rel .w64 .gt_s) (.pair (.var 1) (i64E 0)))
     (.var 1)
-    (.case (hop (.rel .w32 .lt_s) (.pair (hop (.bin .w32 .add) (.pair (.var 1) (.var 2))) (.var 1)))
-      (hop (.bin .w32 .add) (.pair (.var 2) (.var 3)))
-      (i32E 0x7fffffff))
+    (.case (hop (.rel .w64 .lt_s) (.pair (hop (.bin .w64 .add) (.pair (.var 1) (.var 2))) (.var 1)))
+      (hop (.bin .w64 .add) (.pair (.var 2) (.var 3)))
+      (i64E 0x7fffffffffffffff))
 
 /-- `clock_sleep`'s callback at the duration (index `0`): `λt. (sleptT, ())`. -/
 def csCallback : Expr := .val (.lam (.pair sleptT (.val .unit)))
 
-/-- The model of `clock_sleep`: `Λ. λp. let (m, ms) = p in let (m', u) = withswap m csCallback in
+/-- The model of `clock_sleep`: `Λ. λp. let (m, ns) = p in let (m', u) = withswap m csCallback in
 u; m'`.  `[spec §34]` -/
 def clockSleepV : Val :=
   .lam (.val (.lam (.letpair (.var 0)
     (.letpair (.app (.app withswap (.var 1)) csCallback) (.seq (.var 0) (.var 1))))))
 
-/-- The model of `mk_clock`: `λu. alloc 0`.  `[spec §34]` -/
-def mkClockV : Val := .lam (.app (.val (.prim .alloc)) (i32E 0))
+/-- The model of `mk_clock`: `λu. alloc i64[0]`.  `[spec §34]` -/
+def mkClockV : Val := .lam (.app (.val (.prim .alloc)) (i64E 0))
 
-theorem d_clockNow : CDerives LifeCtx.empty [] (.val clockNowV) (.comp (clockNowC .i32)) := by
+theorem d_clockNow : CDerives LifeCtx.empty [] (.val clockNowV) (.comp (clockNowC .i64)) := by
   refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy)
     (fun _ h => by cases h) (.ret (.lamV ?_))
-  refine appP (A := .lolli .i32 (.tensor .i32 .i32)) ?_ ?_
+  refine appP (A := .lolli .i64 (.tensor .i64 .i64)) ?_ ?_
   · exact .lamV (pairP (.var (by csoloP)) (.var (by csoloP)))
-  · exact appP (A := .mut (.var 0) .i32) (.var (by csoloP)) (.withswap (by cdeadP))
+  · exact appP (A := .mut (.var 0) .i64) (.var (by csoloP)) (.withswap (by cdeadP))
 
 theorem d_clockSleep :
-    CDerives LifeCtx.empty [] (.val clockSleepV) (.comp (clockSleepC .i32)) := by
+    CDerives LifeCtx.empty [] (.val clockSleepV) (.comp (clockSleepC .i64)) := by
   refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy)
     (fun _ h => by cases h) (.ret (.lamV ?_))
-  refine letP (A := .mut (.var 0) .i32) (B := .i32) (.var (by csoloP)) ?_
-  refine letP (A := .mut (.var 0) .i32) (B := .unit) ?_
+  refine letP (A := .mut (.var 0) .i64) (B := .i64) (.var (by csoloP)) ?_
+  refine letP (A := .mut (.var 0) .i64) (B := .unit) ?_
     (.seqV (partP_split (.var 0) 0 _) (.var (by csoloP)) (.var (by csoloP)))
-  refine appP (A := .lolli .i32 (.tensor .i32 .unit)) ?_ ?_
+  refine appP (A := .lolli .i64 (.tensor .i64 .unit)) ?_ ?_
   · refine .lamV (pairP ?_ (.unitI (by cdeadP)))
     refine caseP (A := .unit) (B := .unit)
-      (d_hop (.rel .w32 .gt_s) (pairP (.var (by csoloP)) (d_i32 0 (by cdeadP))) (by cdeadP))
+      (d_hop (.rel .w64 .gt_s) (pairP (.var (by csoloP)) (.lit (.i64 0) (by cdeadP))) (by cdeadP))
       (.var (by csoloP)) ?_
     refine caseP (A := .unit) (B := .unit)
-      (d_hop (.rel .w32 .lt_s) (pairP (d_hop (.bin .w32 .add)
+      (d_hop (.rel .w64 .lt_s) (pairP (d_hop (.bin .w64 .add)
         (pairP (.var (by csoloP)) (.var (by csoloP))) (by cdeadP)) (.var (by csoloP))) (by cdeadP))
-      ?_ (d_i32 0x7fffffff (by cdeadP))
-    exact d_hop (.bin .w32 .add) (pairP (.var (by csoloP)) (.var (by csoloP))) (by cdeadP)
-  · exact appP (A := .mut (.var 0) .i32) (.var (by csoloP)) (.withswap (by cdeadP))
+      ?_ (.lit (.i64 0x7fffffffffffffff) (by cdeadP))
+    exact d_hop (.bin .w64 .add) (pairP (.var (by csoloP)) (.var (by csoloP))) (by cdeadP)
+  · exact appP (A := .mut (.var 0) .i64) (.var (by csoloP)) (.withswap (by cdeadP))
 
-theorem d_mkClock : CDerives LifeCtx.empty [] (.val mkClockV) (.comp (mkClockC .i32)) :=
-  .lam (.ret (appP (d_i32 0 (by cdeadP)) (.alloc (by cdeadP))))
+theorem d_mkClock : CDerives LifeCtx.empty [] (.val mkClockV) (.comp (mkClockC .i64)) :=
+  .lam (.ret (appP (.lit (.i64 0) (by cdeadP)) (.alloc (by cdeadP))))
 
-theorem d_takeClock : CDerives LifeCtx.empty [] (.val takeCapV) (.comp (takeClockC .i32)) :=
+theorem d_takeClock : CDerives LifeCtx.empty [] (.val takeCapV) (.comp (takeClockC .i64)) :=
   .lam (.ret (appP (.var (by csoloP)) (.free (by cdeadP))))
 
-theorem cC_clockNowC : cC (clockNowC .i32) = cC (clockNowC (.opq .clock)) := by
+theorem cC_clockNowC : cC (clockNowC .i64) = cC (clockNowC (.opq .clock)) := by
   funext ls δ e ρ
   simp only [clockNowC, cC, vCE, forceE, Opaque.Holds, Val.IsInt]
 
-theorem cC_clockSleepC : cC (clockSleepC .i32) = cC (clockSleepC (.opq .clock)) := by
+theorem cC_clockSleepC : cC (clockSleepC .i64) = cC (clockSleepC (.opq .clock)) := by
   funext ls δ e ρ
   simp only [clockSleepC, cC, vCE, forceE, Opaque.Holds, Val.IsInt]
 
-theorem cC_mkClockC : cC (mkClockC .i32) = cC (mkClockC (.opq .clock)) := by
+theorem cC_mkClockC : cC (mkClockC .i64) = cC (mkClockC (.opq .clock)) := by
   funext ls δ e ρ
   simp only [mkClockC, cC, vCE, Opaque.Holds, Val.IsInt]
 
-theorem cC_takeClockC : cC (takeClockC .i32) = cC (takeClockC (.opq .clock)) := by
+theorem cC_takeClockC : cC (takeClockC .i64) = cC (takeClockC (.opq .clock)) := by
   funext ls δ e ρ
   simp only [takeClockC, cC, vCE, Opaque.Holds, Val.IsInt]
 

@@ -65,13 +65,13 @@ def report (v : PV) (live : Nat) : String :=
 reads from the arguments, not from a host stream. -/
 def argsFd : UInt32 := 0xFFFFFFFF
 
-/-- The model's time after a sleep of `ms` milliseconds at time `t`: `t` when `ms ≤ 0`, else
-`t + ms`, saturating at `2^31 − 1` (SPEC §34, `Core/Stdio.lean`'s `clock_sleep`). -/
-def sleptMs (t ms : UInt32) : UInt32 :=
-  if ms.toInt32 ≤ 0 then t
+/-- The model's time after a sleep of `ns` nanoseconds at time `t`: `t` when `ns ≤ 0`, else
+`t + ns`, saturating at `2^63 − 1` (SPEC §34, `Core/Stdio.lean`'s `clock_sleep`). -/
+def sleptNs (t ns : UInt64) : UInt64 :=
+  if ns.toInt64 ≤ 0 then t
   else
-    let s := t + ms
-    if s.toInt32 < t.toInt32 then 0x7fffffff else s
+    let s := t + ns
+    if s.toInt64 < t.toInt64 then 0x7fffffffffffffff else s
 
 /-- The arguments' stream: each argument's bytes followed by `0`. -/
 def argsBytes (args : List String) : List UInt8 :=

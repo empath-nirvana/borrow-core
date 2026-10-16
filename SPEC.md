@@ -5361,9 +5361,11 @@ construction: its clauses are a fold over the operations that keeps the equation
   and consumes it, or `inr ()` at its end, and keeps answering `inr ()` after it. `input_into(v)`
   is `input_byte` into the slots of `v` from its start until it is full or the input ends, and
   answers the view and how many bytes it read, which is less than `v`'s length only at the end.
-- **`Clock`.** `now()` answers a time in milliseconds, monotone within a run: a later `now()`
-  answers no less than an earlier one. `sleep(ms)` waits at least `max(ms, 0)`: a `now()` after it
-  answers at least the `now()` before it plus `max(ms, 0)`. Times saturate at `2^31 − 1`, so the
+- **`Clock`.** `now()` answers an `i64` time in nanoseconds since an arbitrary fixed origin,
+  monotone within a run: a later `now()` answers no less than an earlier one. `sleep(ns)` takes an
+  `i64` duration in nanoseconds and waits at least `max(ns, 0)`: a `now()` after it answers at
+  least the `now()` before it plus `max(ns, 0)`, or `2^63 − 1`. Times saturate at `2^63 − 1`
+  (about 292 years), a sum that would pass it answering it, so the
   laws hold in every run. The time a run spends computing is unspecified: a handler may count it
   (the platform) or not (a fake clock, the model).
 - **`Args`.** The arguments are a list of byte strings fixed before the run. `arg_byte()` answers
@@ -5378,7 +5380,7 @@ construction: its clauses are a fold over the operations that keeps the equation
     effect Stdin  { fn input_byte() -> u8 + 1; fn input_into<'b>(v: array_mut 'b u8) -> array_mut 'b u8 * i32 }
     effect Stdout { fn print_byte(b: u8); fn print_bytes<'b>(v: array_imm 'b u8) }
     effect Stderr { fn eprint_byte(b: u8); fn eprint_bytes<'b>(v: array_imm 'b u8) }
-    effect Clock  { fn now() -> i32; fn sleep(ms: i32) }
+    effect Clock  { fn now() -> i64; fn sleep(ns: i64) }
     effect Args   { fn arg_byte() -> u8 + 1 }
 
 - **Answering, every one.** Each operation answers at once and its clause runs in place, a call on
@@ -5479,7 +5481,7 @@ its `await`s.
   around one operation (`fn putb(o: Out, b: u8) -> Out * 1 = with wasi_stdout(&mut o) {
   print_byte(b) }; (o, ())`), so that an extern is called only by a platform handler; `put_dec`
   and `bytes` over those; and over the effects, `dec_each(x, put)` (the digits of `x` given to a
-  block), `print_dec`, `eprint_dec`.
+  block), `print_dec`, `eprint_dec`, `ns_of_ms` (milliseconds as the clock's nanoseconds).
 - `lib/textio.bc`: `include text`, `include io`; §17's helpers over cells; and over the effects,
   `print_lit`, `print_str`, `print_string`, `eprint_lit`, `eprint_str`, `read_input` (the whole
   input into a string, in chunks of `input_into`), `next_arg` (the next argument appended to a
@@ -5490,17 +5492,17 @@ its `await`s.
 Two new opaque kinds (§11 *Opaque host types*), each a leaf with its model, `Imm̲ = Unk`, no
 destructor:
 
-- `clock`: `clock.Holds v ⇔ ∃ t, v = i32[t]`, the time. Its representation is `I32`
+- `clock`: `clock.Holds v ⇔ ∃ t, v = i64[t]`, the time in nanoseconds. Its representation is `I64`
   (`vC_clockRep`).
 - `args`: `args.Holds v ⇔ BytesV v`, the arguments not yet read, as an input's. Its representation
   is `Bytes` (`vC_argsRep`).
 
 | extern | type | model |
 |---|---|---|
-| `clock_now` | `!(all 'a < top. mut 'a clock => mut 'a clock * i32)` | `withswap` answering the time and keeping it |
-| `clock_sleep` | `!(all 'a < top. mut 'a clock * i32 => mut 'a clock)` | `withswap` adding `max(ms, 0)`, saturating |
+| `clock_now` | `!(all 'a < top. mut 'a clock => mut 'a clock * i64)` | `withswap` answering the time and keeping it |
+| `clock_sleep` | `!(all 'a < top. mut 'a clock * i64 => mut 'a clock)` | `withswap` adding `max(ns, 0)`, saturating at `2^63 − 1` |
 | `read_arg` | `!(all 'a < top. mut 'a args => mut 'a args * (u8 + 1))` | `read_byte`'s, at `Args` |
-| `mk_clock`, `take_clock` | `!(1 => ref clock)`, `!(ref clock => i32)` | `alloc i32[0]`, `free` |
+| `mk_clock`, `take_clock` | `!(1 => ref clock)`, `!(ref clock => i64)` | `alloc i64[0]`, `free` |
 | `mk_args`, `take_args` | `!(Bytes => ref args)`, `!(ref args => Bytes)` | `mk_input`'s, `take_input`'s |
 
 `clockNow_meets`, `clockSleep_meets`, `readArg_meets`, `mkClock_meets`, `takeClock_meets`,
@@ -5516,9 +5518,9 @@ which is a direct call of the extern on the lent cell, lent by `withbor2` as §1
 no allocation, no dispatched call, no copy. `corpus/io-upper-effects.bc` is `io-upper` over the
 effects, at `io-upper`'s counts (`2 0 0`), and every §11 program keeps its counts.
 
-- `clock_now` is WASI `clock_time_get` of the monotonic clock, in milliseconds since the clock's
-  first use, saturating; `clock_sleep` is `poll_oneoff` on one relative clock subscription of `ms`
-  milliseconds (`clock_gettime` and `nanosleep` in libc). The cell's content is the model's and
+- `clock_now` is WASI `clock_time_get` of the monotonic clock, in nanoseconds since the clock's
+  first use (the origin), saturating; `clock_sleep` is `poll_oneoff` on one relative clock
+  subscription of `ns` nanoseconds (`clock_gettime` and `nanosleep` in libc). The cell's content is the model's and
   the runtime does not read it. The closure and flat IRs' interpreters run the model: the cell
   holds the time, and a sleep adds to it.
 - The arguments are read once, at their first use, with `args_sizes_get` and `args_get`, into
@@ -5603,12 +5605,15 @@ proposed and listed with its options in #156.
 - **What `main` is given.** Every interface effect its body performs, served ambiently (built); or
   a bundle record of capabilities `main` takes as a parameter (`docs/platform-design.md` §2.8);
   or effects named in `main`'s written row.
-- **The clock's time.** `i32` milliseconds since the clock's first use, saturating (built); `i64`
-  nanoseconds; or a monotonic `Instant` type with a separate wall clock.
 - **The arguments.** One byte stream, each argument followed by `0` (built); or a count and an
   indexed argument (`arg_count`, `arg_len`, `arg_into`).
 - **Tasks and capabilities.** One task holds a capability, lent for the scope that bounds it
   (built); or the capability threaded through `await`, so that tasks share it.
+
+**Decided by the user** (2026-10-16): the clock's time is **`i64` nanoseconds, monotonic**, since an
+arbitrary fixed origin, saturating at `2^63 − 1`. A process such as the Kubernetes operator runs for
+months, past the `2^31 − 1` milliseconds (about 24.8 days) of an `i32` clock. There is no
+`Instant` type: a time and a duration are both `i64`.
 
 ### Baseline
 
@@ -5876,7 +5881,8 @@ and #486's fixes in `Backend/Clos/Capture.lean` and `Backend/Driver.lean`), with
 ## Changelog
 
 - **0.62** (2026-10-16) — §34 (new, #156): the standard streams, the clock and the arguments as
-  answering effects (`lib/sys.bc`), whose outermost handler is the WASI preview 1 platform
+  answering effects (`lib/sys.bc`), the clock's time `i64` nanoseconds, monotonic, saturating at
+  `2^63 − 1` (the user's decision), whose outermost handler is the WASI preview 1 platform
   (`lib/wasi.bc`), its handlers' state lent to their clauses (`handler h(&mut s: S)`), each clause
   a direct call of an extern; `main` alone is given them ambiently, holding the cells and lending
   one to each operation, and every other function by its row; answering operations with lifetime
@@ -5885,7 +5891,7 @@ and #486's fixes in `Backend/Clos/Capture.lean` and `Backend/Driver.lean`), with
   their externs' models and proofs (`clockNow_meets`, `clockSleep_meets`, `readArg_meets`, and the
   harness's). `lib/io.bc` and `lib/textio.bc` rebuilt on the platform's handlers, with
   `print_dec`, `eprint_dec`, `print_lit`, `print_str`, `print_string`, `eprint_lit`, `eprint_str`,
-  `read_input`, `next_arg`. `bcc trusted` lists the externs `main` reaches; `corpus/trusted/` pins
+  `read_input`, `next_arg`, `ns_of_ms`. `bcc trusted` lists the externs `main` reaches; `corpus/trusted/` pins
   six. Program arguments: `bcc interp … -- arg…`, `bcc run <file> arg…`, `<name>.args`. Backend
   fixes: a code that suspends at operations of different answer types (#485), and a resume code's
   cancel arm injecting one binder at two types (#486). New corpus programs `io-effects`,

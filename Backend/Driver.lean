@@ -67,6 +67,7 @@ def checkedOf (file src : String) : Except String CheckedProg := do
 def extImpls (m : Frontend.Check.IOMain) : Except String (List Clos.ExtImpl) :=
   m.externs.mapM fun x => match x.role with
     | .cap fd => pure (.cap fd)
+    | .clockCap => pure .clockCell
     | .readByte => pure (.io .readByte)
     | .writeByte => pure (.io .writeByte)
     | .writeAll => pure (.io .writeAll)

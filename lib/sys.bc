@@ -8,8 +8,9 @@
 -- * `Stdin`: `input_byte()` answers the input's next byte, or `inr ()` at its end and after it;
 --   `input_into(v)` is `input_byte` into `v` from its start until it is full or the input ends,
 --   and answers how many, fewer than `v`'s length only at the end.
--- * `Clock`: `now()` is monotone within a run, in milliseconds; after `sleep(ms)`, `now()` answers
---   at least the time before it plus `max(ms, 0)`; times saturate at `2^31 - 1`.
+-- * `Clock`: `now()` is monotone within a run, in nanoseconds since an arbitrary fixed origin;
+--   after `sleep(ns)`, `now()` answers at least the time before it plus `max(ns, 0)`; times
+--   saturate at `2^63 - 1`.
 -- * `Args`: `arg_byte()` answers the arguments' bytes in order, each argument followed by `0`,
 --   then `inr ()`, and `inr ()` after it.
 
@@ -29,8 +30,8 @@ effect Stderr {
 }
 
 effect Clock {
-  fn now() -> i32;
-  fn sleep(ms: i32)
+  fn now() -> i64;
+  fn sleep(ns: i64)
 }
 
 effect Args {

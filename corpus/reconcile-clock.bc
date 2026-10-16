@@ -13,8 +13,8 @@
 -- * `logged` notes 9 for a value and 4 for an error.
 -- * `reconcile_both` reads the clock before and after each chain: the time it took.
 --
--- `fake_clock` is lawful by construction (SPEC §34 *Laws*): `now()` answers its time, and
--- `sleep(ms)` adds `max(ms, 0)` to it, so its time is monotone and a sleep waits exactly what it
+-- `fake_clock` is lawful by construction (SPEC §34 *Laws*): `now()` answers its time in
+-- nanoseconds, and `sleep(ns)` adds `max(ns, 0)` to it, so its time is monotone and a sleep waits exactly what it
 -- asks. The platform's clock waits at least that. So the fake clock's times are exact, and the
 -- real clock's are compared with them: at least as long.
 --
@@ -23,8 +23,9 @@
 --
 -- Answer: `(((inr i32[408], inr ()), [80, 80, 80, 4]), ((inl i32[200], inr ()), [20, 9]))` from
 -- the real clock (the stuck service took at least the 30 ms of `retry`'s two backoffs, the
--- healthy one at least 0), and `(((inr i32[408], i32[30]), [80, 80, 80, 4]), ((inl i32[200],
--- i32[0]), [20, 9]))` from the fake one, the lists as `inr (x, …)`.
+-- healthy one at least 0), and `(((inr i32[408], i64[30000000]), [80, 80, 80, 4]), ((inl
+-- i32[200], i64[0]), [20, 9]))` from the fake one, its times in nanoseconds, the lists as
+-- `inr (x, …)`.
 
 include fail
 include list
@@ -55,7 +56,7 @@ effect Pause { ctl pause(ms: i32) }
 
 handler on_clock[A]: Pause, A -> A = {
   return(a) = a;
-  pause(ms, k) = { sleep(ms); k(()) }
+  pause(ms, k) = { sleep(ns_of_ms(ms)); k(()) }
 }
 
 fn retry[A](m: !(1 => A with Fail[i32]), times: i32, base: i32) -> A with Fail[i32], Pause =
@@ -75,15 +76,15 @@ handler logged[A]: Fail[i32], A -> A + i32 with Audit = {
 }
 
 -- A fake clock: its time, advanced only by a sleep.
-handler fake_clock(mut t: i32): Clock = {
+handler fake_clock(mut t: i64): Clock = {
   now() = t;
-  sleep(ms) = { if ms > 0 { t = t + ms } else { () } }
+  sleep(ns) = { if ns > 0 { t = t + ns } else { () } }
 }
 
 fn stuck() -> i32 with Audit, Wait = reconcile(80)
 fn healthy() -> i32 with Audit, Wait = reconcile(20)
 
-type Run = ((i32 + i32) * i32) * List[i32]
+type Run = ((i32 + i32) * i64) * List[i32]
 
 -- The chain on a stuck service and on a healthy one, each with the time it took on the clock.
 fn reconcile_both() -> Run * Run =
@@ -97,12 +98,13 @@ fn reconcile_both() -> Run * Run =
 type Seen = ((i32 + i32) * bool) * List[i32]
 
 -- A run on the real clock, its times compared with the least the laws allow.
-fn at_least(r: Run, ms: i32) -> Seen = let ((v, t), l) = r; ((v, t >= ms), l)
+fn at_least(r: Run, ms: i32) -> Seen = let ((v, t), l) = r; ((v, t >= ns_of_ms(ms)), l)
 
 main -> (Seen * Seen) * (Run * Run) =
   let (a, b) = reconcile_both();
   let real = (at_least(a, 30), at_least(b, 0));
-  let c = alloc(0);
+  let origin : i64 = 0;
+  let c = alloc(origin);
   let fake = with fake_clock(&mut c) { reconcile_both() };
   let _ = free(c);
   (real, fake)

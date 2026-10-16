@@ -234,11 +234,11 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
         | 2 => modify fun st => { st with err := bs.foldl (fun o b => o.push b.toUInt8) st.err }
         | _ => throw s!"flat IR: write to fd {fd}"
         pure (fr, none)
-    | .sleep c ms => do
+    | .sleep c ns => do
         let a ← evalExp p n fr c
-        let ms ← evalExp p n fr ms
+        let ns ← evalExp p n fr ns
         let t ← readWord a.toNat
-        writeWord a.toNat (sleptMs t.toUInt32 ms.toUInt32).toUInt64
+        writeWord a.toNat (sleptNs t ns)
         pure (fr, none)
     | .putc fd b => do
         let fd ← evalExp p n fr fd

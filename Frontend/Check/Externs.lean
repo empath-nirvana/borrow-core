@@ -67,8 +67,10 @@ def Assurance.render (a : Assurance) : String := s!"{a.name} ({a.level})"
 /-- What an extern is. -/
 inductive ExternRole where
   /-- A capability: a cell whose content is the stream with this file descriptor; the arguments'
-  stream is `0xFFFFFFFF`, and a clock's cell holds the model's time `0` (SPEC §34). -/
+  stream is `0xFFFFFFFF` (SPEC §34). -/
   | cap (fd : Nat)
+  /-- The clock: a cell holding the model's time, `i64[0]` (SPEC §34). -/
+  | clockCap
   | readByte
   | writeByte
   | writeAll
@@ -91,7 +93,7 @@ structure ExternSpec where
 
 def ExternSpec.isCap (x : ExternSpec) : Bool :=
   match x.role with
-  | .cap _ => true
+  | .cap _ | .clockCap => true
   | _ => false
 
 /-- The standard externs.  `[spec §11]` -/
@@ -102,7 +104,7 @@ def stdExterns : List ExternSpec :=
       some ("a runtime cell holding fd 1", .assumed)⟩,
     ⟨"stderr", .ref (.opq .output), .cap 2, "vC_outRep (a cell holding (2, nil))",
       some ("a runtime cell holding fd 2", .assumed)⟩,
-    ⟨"clock", .ref (.opq .clock), .cap 0, "vC_clockRep (a cell holding the time, 0)",
+    ⟨"clock", .ref (.opq .clock), .clockCap, "vC_clockRep (a cell holding the time, i64[0])",
       some ("a runtime cell; the time is the host's monotonic clock", .assumed)⟩,
     ⟨"args", .ref (.opq .args), .cap 0xFFFFFFFF,
       "vC_argsRep (a cell holding the arguments, each followed by 0)",
@@ -188,7 +190,7 @@ def bytesLit : List UInt8 → String
 /-- The harness's externs for the clock and the arguments, when `main` declares them (SPEC §34). -/
 def clockExterns (caps : List String) : String :=
   (if caps.contains "clock" then
-    "extern mk_clock : !(1 => ref clock)\nextern take_clock : !(ref clock => i32)\n" else "") ++
+    "extern mk_clock : !(1 => ref clock)\nextern take_clock : !(ref clock => i64)\n" else "") ++
   (if caps.contains "args" then
     s!"extern mk_args : !({bytesSrc} => ref args)\nextern take_args : !(ref args => {bytesSrc})\n"
   else "")

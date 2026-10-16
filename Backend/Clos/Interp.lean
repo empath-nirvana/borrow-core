@@ -245,13 +245,18 @@ def applyOp : Op → List CV → IM CV
         allocObj (.pair m (← allocObj (.inj false (.u8 b))))
   | .io .clockNow, [m] => do
       let (_, c) ← cellOf m
-      let .i32 t := c | throw "closure IR: clock_now on a cell that holds no clock"
-      allocObj (.pair m (.i32 t))
+      let .ptr ta := c | throw "closure IR: clock_now on a cell that holds no clock"
+      let .i64 t ← getObj ta | throw "closure IR: clock_now on a cell that holds no clock"
+      allocObj (.pair m (← allocObj (.i64 t)))
   | .io .clockSleep, [p] => do
       let (m, d) ← unpair p
       let (a, c) ← cellOf m
       match c, d with
-      | .i32 t, .i32 ms => do setObj a (.cell (.i32 (sleptMs t ms))); pure m
+      | .ptr ta, .ptr da => do
+        let .i64 t ← getObj ta | throw "closure IR: clock_sleep on a cell that holds no clock"
+        let .i64 ns ← getObj da | throw "closure IR: clock_sleep of a duration that is not an i64"
+        freeObj ta; freeObj da
+        setObj a (.cell (← allocObj (.i64 (sleptNs t ns)))); pure m
       | _, _ => throw "closure IR: clock_sleep on a cell that holds no clock"
   | .io .writeByte, [p] => do
       let (m, w) ← unpair p

@@ -113,3 +113,6 @@ fn print_dec(x: i32) -> 1 = dec_each(x, !{ b -> print_byte(b) })
 
 -- `x` in decimal to standard error, with a `-` when it is negative.
 fn eprint_dec(x: i32) -> 1 = dec_each(x, !{ b -> eprint_byte(b) })
+
+-- `ms` milliseconds as the clock's nanoseconds (SPEC §34).
+fn ns_of_ms(ms: i32) -> i64 = host[extend_s](ms) * 1000000

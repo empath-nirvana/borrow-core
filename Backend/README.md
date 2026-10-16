@@ -435,10 +435,10 @@ A `main` may declare the standard externs (`Frontend/Check/Externs.lean`): the c
   prompt is out before the next read. The plain LLVM/libc counterpart is `read(2)`/`write(2)`
   on the same descriptors; nothing WASI-specific is part of the semantics.
 - **The clock and the arguments (SPEC §34).** `clock` is a cell holding the model's time
-  (`i32[0]`), and `clock_now`/`clock_sleep` are the closure-IR primitives `io clockNow` and
-  `io clockSleep`: in the flat IR the expression `now c` and the statement `sleep c ms`, which the
-  flat-IR interpreter runs on the cell (the model: a sleep adds `max(ms, 0)`, saturating), and
-  Wasm as `$now` (`clock_time_get` of the monotonic clock, in milliseconds since the clock's first
+  (`i64[0]`, nanoseconds), and `clock_now`/`clock_sleep` are the closure-IR primitives `io clockNow` and
+  `io clockSleep`: in the flat IR the expression `now c` and the statement `sleep c ns`, which the
+  flat-IR interpreter runs on the cell (the model: a sleep adds `max(ns, 0)`, saturating at `2^63 − 1`), and
+  Wasm as `$now` (`clock_time_get` of the monotonic clock, in nanoseconds since the clock's first
   use) and `$sleep` (`poll_oneoff` on one relative clock subscription). `args` is a cell holding
   the stream `0xFFFFFFFF`, which `$getc` and `$getv` read from the arguments `$args` reads once
   (`args_sizes_get`, `args_get`) into memory `$reserve` takes from the top of the heap: no object,
