@@ -7,6 +7,7 @@ import Frontend.Elab.Subst
 import Frontend.Elab.Meta
 import Frontend.Elab.LoopLend
 import Frontend.Elab.Effects
+import Frontend.Elab.Hygiene
 
 /-!
 # Frontend — the sugar  `[spec §11, §14]`
@@ -3568,12 +3569,12 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
       let Pt' := Pt.subst σ
       let exp := if Elab.Effects.mentions i.tps Pt' then none else cP.elabV Pt'
       let a' ← surfV n cP exp a
-      let T ← need a.span s!"the argument `{x}` of `{i.name}`"
+      let T ← need a.span s!"the argument `{Hygiene.written x}` of `{i.name}`"
         (exp.orElse fun _ => cP.tyV a' |>.orElse fun _ => none)
       let Ts ← (cP.surface sp T : Except Error VTy)
       match Elab.Effects.matchTyBy (sameTy cP) i.tps σ Pt' Ts with
       | some σ' => σ := σ'
-      | none => throw (mismatch s!"the argument `{x}`")
+      | none => throw (mismatch s!"the argument `{Hygiene.written x}`")
       binds := binds ++ [(⟨x, sp⟩, Ts, a')]
       cP := cP.push x (some T)
     if let some x := i.tps.find? (fun x => (σ.lookup x).isNone) then
@@ -4916,7 +4917,7 @@ def expandIncludes : Nat → List Decl → List Decl × List String →
 /-- The program with its sugar elaborated, and the number of library declarations it begins
 with, recording the origins of generated code.  `[spec §11, §14]` -/
 def elaborateS (p : Program) : SM (Program × Nat) := do
-  let libOf (m : String) : Except Error (List Decl) :=
+  let libRaw (m : String) : Except Error (List Decl) :=
     match library m with
     | some (.ok src) => match parseProgram src with
       | .ok l => pure l.decls
@@ -4934,6 +4935,22 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- `include m`: the module's declarations, in place (at most once each); a module's own
   -- `include`s come in first.
   let (decls₀, incl) ← expandIncludes libNames.length p.decls ([], [])
+  -- Hygiene (`Frontend/Elab/Hygiene.lean`): no local is named as a declaration of the program or
+  -- of a library the elaboration may bring in, and a control handler's parameters are fresh.
+  -- A library the elaboration brings in by itself is read only when it may: the I/O library
+  -- for ambient capabilities, the others when the program names them. Generated code names the
+  -- divergence library's `div_bind`, `div_fuel` and `div_defer` whether or not it does.
+  let divNames := ["div_bind", "div_fuel", "div_defer"]
+  let p₁ : Program := ⟨decls₀⟩
+  let implicitLibs ← [("io", mayIO), ("div", divNames.any (usesName · p₁)),
+      ("prelude", ["true", "false", "not", "to_i32", "to_u8"].any (usesName · p₁))].flatMapM
+    fun (m, may) => if may && !incl.contains m then libRaw m else pure []
+  -- The capabilities are passed and handed back by name (SPEC §11): a local so named is one.
+  let gs := divNames ++ ((decls₀ ++ implicitLibs).flatMap Decl.globals).filter (!capNames.contains ·)
+  let hyg := Decl.hyg (Hygiene.isGlobal gs)
+  let decls₀ := decls₀.map hyg
+  let p₀ : Program := ⟨p₀.decls.map hyg⟩
+  let libOf (m : String) : Except Error (List Decl) := do pure ((← libRaw m).map hyg)
   -- Effects and handlers (SPEC §18), before the rest of the sugar: the clauses become functions,
   -- the functions with a row their copies, and each `with` a borrow block.
   let libFns := (decls₀.filter fun d => !p₀.decls.contains d).filterMap fun

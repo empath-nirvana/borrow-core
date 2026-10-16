@@ -1,0 +1,10 @@
+-- Hygiene (#481): a control handler whose operations are all abortive runs its clauses after the
+-- handler, in the scope of the `with`, with its parameters bound there (SPEC §19). They do not
+-- capture the code after the `with`: the `d` after it is the `let d = 1`, not `default`'s `d`.
+--
+-- Answer: i32[15]: `d * 10 + r`, with `d` 1 and the body's 5.
+include fail
+main -> i32 =
+  let d = 1;
+  let r = with default[i32, i32](0) { 5 };
+  d * 10 + r

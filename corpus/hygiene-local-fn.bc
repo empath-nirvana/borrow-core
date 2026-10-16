@@ -1,0 +1,23 @@
+-- Hygiene (#481): a local named as a declaration is the local. Effects resolve a call of a
+-- function that performs an effect, and of an operation, to the declaration (its copy for the
+-- handlers in scope, or the handler's clause); a local closure of that name is called instead.
+--
+-- Answer: ((i32[6], i32[0]), (i32[40], i32[0])): the local `f` doubles and the local `tick`
+-- answers 40; neither notes nor ticks.
+effect Log { fn note(x: i32) }
+effect Count { fn tick() -> i32 }
+handler tally(mut n: i32): Log = { note(x) = { n = n + x; () } }
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+fn f(x: i32) -> i32 = note(x); x
+main -> (i32 * i32) * (i32 * i32) =
+  let c = alloc(0);
+  let r = with tally(&mut c) {
+    let f: !(i32 => i32) = !{ y -> y * 2 };
+    f(3)
+  };
+  let d = alloc(0);
+  let s = with count(&mut d) {
+    let tick: !(1 => i32) = !{ u -> 40 };
+    tick(())
+  };
+  ((r, free(c)), (s, free(d)))

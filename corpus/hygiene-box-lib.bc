@@ -1,0 +1,9 @@
+-- Hygiene (#481): `box buf[A](c)` is a call of the library's `buf_new` (lib/buf.bc). A local the
+-- program names `buf_new` neither captures the call nor is replaced by it.
+--
+-- Answer: i32[3]: the local.
+include buf
+main -> i32 =
+  let buf_new = 3;
+  let b = box buf[i32](4);
+  buf_new

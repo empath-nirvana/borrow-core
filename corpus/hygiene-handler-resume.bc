@@ -1,0 +1,16 @@
+-- Hygiene (#481): the parameters of a control handler whose clauses resume, all `!` (no state),
+-- are bound around the body at the site. `on_exhausted`'s `d` (lib/rec.bc) and `const`'s `v` do
+-- not capture the body's `d` and `v`.
+--
+-- Answer: (i32[10], i32[12]): `sum(4)` with the body's `d`, and the body's `v` 5 plus the
+-- answer 7 to `ask()`.
+include rec
+effect Ask { ctl ask() -> i32 }
+handler const(v: !(1 => i32)): Ask, i32 -> i32 = { return(a) = a; ask(k) = k(v(())) }
+fn sum(n: i32) -> i32 = if n == 0 { 0 } else { n + sum(n - 1) }
+main -> i32 * i32 =
+  let d = 4;
+  let a = with on_exhausted(!{ u -> 0 - 1 }) { sum(d) };
+  let v = 5;
+  let b = with const(!{ u -> 7 }) { ask() + v };
+  (a, b)

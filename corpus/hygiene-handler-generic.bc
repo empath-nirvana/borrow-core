@@ -1,0 +1,10 @@
+-- Hygiene (#481): the parameter of a generic control handler whose operations are all abortive
+-- does not capture the body's variable of the same name. `fallback`'s parameter `v` is bound
+-- around the body and, after the handler, around its clauses; the body's `v` is the `let v = 7`.
+--
+-- Answer: i32[8]: the body's `v + 1`; nothing is raised.
+include fail
+handler fallback[E, A](v: A): Fail[E], A -> A = { return(a) = a; raise(e) = v }
+main -> i32 =
+  let v = 7;
+  with fallback[i32, i32](0) { v + 1 }

@@ -1,0 +1,10 @@
+-- Hygiene (#481): an answering handler's state does not capture the body's variable of the same
+-- name. `tally`'s state is named `n`, and so is the body's `let n = 100`; the state lives in a
+-- cell the body borrows, and its clauses are functions of their own.
+--
+-- Answer: i32[100]: the body's `n`, after one note.
+effect Log { fn note(x: i32) }
+handler tally(mut n: i32): Log = { note(x) = { n = n + 1; () } }
+main -> i32 =
+  let n = 100;
+  with tally(0) { note(1); n }
