@@ -1170,12 +1170,13 @@ def Cx.portIn (cx : Cx) (sp : Span) (h e : String) (M : Comp) : Except Error (Op
     unless own do
       throw ⟨sp, s!"`with {h}` serves `{e}` for a call of the computation parameter `{x}`, which " ++
         s!"is called elsewhere outside a handler of `{e}`, where the caller serves it: the effect a " ++
-        "computation parameter provides is served at one site of the function (SPEC §33)"⟩
+        "computation parameter provides is served at one site of the function, until a port can be " ++
+        "relabelled (SPEC §33 *Open*)"⟩
     match out with
     | some (y, n) =>
       unless n == p.n do
         throw ⟨sp, s!"`with {h}` serves `{e}` for the computation parameters `{y}` and `{x}`, which " ++
-          s!"provide it at two ports: not provided (SPEC §33)"⟩
+          "provide it at two ports: not provided until a port can be relabelled (SPEC §33 *Open*)"⟩
     | none => out := some (x, p.n)
   pure (out.map (·.2))
 
@@ -1804,7 +1805,8 @@ def blockParamCall : Nat → Cx → List Cap → Span → Val → String → Lis
         unless s.n == p.n do
           throw ⟨sp, s!"`{x}` is called here, where `{p.eff}` is served by {s.what}, the site " ++
             s!"{s.n}, but it is called elsewhere where `{p.eff}` is served by the site {p.n}: the " ++
-            "effect a computation parameter provides is served at one site of the function (SPEC §33)"⟩
+            "effect a computation parameter provides is served at one site of the function, until a port " ++
+            "can be relabelled (SPEC §33 *Open*)"⟩
       | none => throw ⟨sp, s!"`{x}` performs `{p.eff}`, but no handler of `{p.eff}` is in scope here"⟩
     let (b, W') ← goV k cx cs W
     let r ← fresh "fx_v"

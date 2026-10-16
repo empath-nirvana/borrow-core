@@ -1,9 +1,0 @@
--- A computation parameter's argument that uses a capability, called inside a handler of the callee
--- (SPEC §33 *Open*): the handler's body is lent the capability anew, at a lifetime of its own, and
--- the argument takes it at the callee's.
--- expect: 8:56: the computation parameter `g` uses the capability of `Counter` and is called inside `with to_result`, whose body is lent the capability anew: not provided (SPEC §33 *Open*)
-include fail
-effect Counter { fn tick() -> i32 }
-handler count(mut n: i32): Counter = { tick() = { n = n + 1; n } }
-fn guard(g: !(1 => i32 with Fail[i32])) -> i32 + i32 = with to_result[i32, i32] { g(()) }
-main -> i32 + i32 = with count(0) { guard(!{ u -> let t = tick(); if t > 0 { raise(t) } else { t } }) }

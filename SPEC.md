@@ -5118,7 +5118,7 @@ Each is stated of the elaborated terms and holds by the deep-handler laws alread
    for handler stages. A chain grouped across a stage that is itself a function over a
    computation (`both(c) = c(()) |> retry(…)`) calls `c` inside the block given to `retry`, where
    `c`'s provided effect is served at `retry`'s port, not `c`'s own: that is a computation
-   parameter passed on, rejected (*Ports*, below; *Open*). So associativity of function stages
+   parameter passed on, not provided yet (*Ports*, below; *Open*). So associativity of function stages
    holds of the chain as written, not yet of a regrouping into a function.
 3. **Operations a stage does not handle pass to the next stage.** For a handler stage, H-fwd
    (`catch_fwd`, `fwd_resume`, `fwd_abort`): an operation of another name passes the site. For a
@@ -5163,11 +5163,13 @@ name, its **port** (decision 57), at which the argument performs `E`:
 - otherwise the port is a fresh name, and each `with` of `E` in the copy whose body calls the
   parameter (outside a `with` of `E` inside it) has the port as its static name (`Cx.portIn`).
 
-**PROPOSED** (decision 57 leaves the relabelling open): a parameter called both inside a `with` of
-`E` and outside one is rejected (`corpus/reject/comp-param-two-sites.bc`), as are two parameters
-that provide `E` at two ports under one `with`. The abortive case could be relabelled by a site
-whose clause raises again at the other name (decision 57, R2c), and the resuming case needs
-inlining or a `rename` primitive; neither is built.
+**PROPOSED, provisional until a port can be relabelled** (decision 57 leaves the relabelling
+open): today one port serves every call, so a parameter called both inside a `with` of `E` and
+outside one is not provided (`corpus/pending/comp-param-two-sites.bc`), nor are two parameters
+that provide `E` at two ports under one `with`. This is the current behaviour, not a rule of the
+language: the abortive case can be relabelled by a site whose clause raises again at the other
+name (decision 57, R2c), and the resuming case needs inlining or a `rename` primitive; neither is
+built (*Open*).
 
 The kernel checks each port as any site: `[handle]` asks the port to be absent from the site's
 outer row, which a fresh name is. The argument's type names the port where the argument is
@@ -5189,15 +5191,16 @@ written, outside the port's site; a value has no row, so nothing is performed th
   (`C` the capabilities, `T` the tunneled sites, in the order of the argument's row), so the block
   is checked at its row (§30).
 
-**Not provided**, each rejected with a message that says so:
+**Not provided** yet, each refused with a message that says so; the programs that wait on them are
+in `corpus/pending/`, not `reject/`:
 
 - a provided answering effect (an answering effect is a capability, and the callee's handler of it
   would lend its state to the argument: decision 57's R2d);
 - a computation parameter's argument that uses a capability, called inside a control `with` of the
-  callee (`corpus/reject/comp-param-capability.bc`): the `with`'s body is lent the capability anew,
-  at a lifetime of its own, and the argument takes it at the copy's (*Open*);
+  callee (`corpus/pending/comp-param-capability.bc`, #487): the `with`'s body is lent the capability
+  anew, at a lifetime of its own, and the argument takes it at the copy's (*Open*);
 - a block parameter passed on to a computation parameter (*Ports*);
-- a `for` over a call of a computation parameter (`corpus/reject/comp-param-for.bc`): a `for`'s site
+- a `for` over a call of a computation parameter (`corpus/pending/comp-param-for.bc`): a `for`'s site
   threads the loop's variables through its operation (§15), at a type only the callee knows; a
   handler serves the parameter's iteration effect instead (`gen(()) |> h`);
 - a computation parameter of a recursive function (§20).
@@ -5241,7 +5244,8 @@ counts.
 | `corpus/gen-pipeline-pipe.bc` | the adapters chained with `\|>` | `i32[320110]` | `0 0 0` |
 | `corpus/reconcile-chain.bc` | `step() \|> timeout \|> retry(3, 10) \|> logged`, with a fake clock and a journal | see the file | `25 0 0` |
 
-Rejected: `corpus/reject/block-raise-lexical.bc`, `comp-param-two-sites.bc`,
+Rejected, a rule of the language: `corpus/reject/block-raise-lexical.bc` (a plain block's `raise`
+is not the callee's). Pending, each waiting on an *Open* item: `corpus/pending/comp-param-two-sites.bc`,
 `comp-param-capability.bc`, `comp-param-for.bc`. `corpus/reports/comp-param.txt` and
 `effects-sum-gen.txt` pin the reports: each copy's ports (`its `Fail` at the port 6, served by its
 `with` here`), each call of a computation parameter (`its `Fail` served here by the site 6`) and
@@ -5256,10 +5260,12 @@ Fail[i32])`, so the block's errors are `retry`'s, and the program retries, answe
 `((inr i32[503], i32[0]), (inr i32[503], i32[0]))`. Its counts are unchanged.
 
 `reconcile-chain`'s clock and journal are control effects whose handlers fold the computation's
-answer, and its service has no state: the backend's layout typing fails on programs whose
-resuming operations answer two different types around a handler with a state, and on a counted
-loop at a resuming row whose operation answers a value (`layout types: 1 and i32 differ`; invalid
-WebAssembly). Both reproduce without any construct of this entry (*Open*).
+answer, its operations answer `()`, and its service has no state: the flat stage's layout typing
+fails on a handler with a state around an operation that answers another type (#485, `layout
+types: 1 and i32 differ`), WebAssembly is invalid for a counted loop at a resuming row whose
+operation answers a value (#486), and an answering capability cannot be used by an argument
+called under the callee's handler (#487). Each reproduces without any construct of this entry
+(*Open*).
 
 ### Lowering
 
@@ -5277,16 +5283,17 @@ and runs as before, with the same output, counts and reports, except `retry-bloc
 ### Open
 
 - **Relabelling a port** (decision 57, R2c): a computation parameter called inside and outside its
-  callee's handlers, passed on to another computation parameter, or two of one effect under one
-  site. Abortive: a site whose clause raises again at the other name, typable today. Resuming:
+  callee's handlers (`corpus/pending/comp-param-two-sites.bc`), passed on to another computation
+  parameter, or two of one effect under one site. Abortive: a site whose clause raises again at the other name, typable today. Resuming:
   inlining, or a `rename (p, m)` primitive (one frame, one compatibility lemma).
 - **A capability used by the argument under the callee's handler**: the argument would take its
   capabilities at lifetimes of its own, `!U(∀'x. Mut 'x S ⊗ A ⊸ F_Σ (Mut 'x S ⊗ B))` (decision 57,
-  R2a), instantiated at each call. Built and taken out: the checker compares types without
+  R2a), instantiated at each call (#487). Built and taken out: the checker compares types without
   α-conversion of lifetime binders (*Incompleteness* 2), and the argument's type, elaborated where
   it is written, has other binders than the callee's parameter type instantiated at the call.
   The same limit holds of §32's blocks.
-- **Provided answering effects** (R2d) and a `for` over a call of a computation parameter.
+- **Provided answering effects** (R2d) and a `for` over a call of a computation parameter
+  (`corpus/pending/comp-param-for.bc`).
 - **Stored callbacks with a row** (part B, §32 *Open*). The same type, `!(A => B with E…)` in a
   `let`, a data type or a type parameter, needs choices this entry does not make:
   - *where its ports are fixed*: by the stored type, one per type declaration (decision 57, R6:
@@ -5302,8 +5309,8 @@ and runs as before, with the same output, counts and reports, except `retry-bloc
   Each is a decision about what a stored value means, not an elaboration detail: §32 *Open*
   remains, with these options.
 - **Layout typing in the backend**: resuming operations that answer different types inside a
-  handler with a state, and a counted loop at a resuming row whose operation answers a value, fail
-  to compile (*Programs*).
+  handler with a state (#485), and a counted loop at a resuming row whose operation answers a value
+  (#486), fail to compile (*Programs*).
 - **Associativity across function stages** (law 2): it needs the relabelling above.
 
 ---
@@ -5543,8 +5550,9 @@ change to `CDerives`, `Core/`, `Paper/`, `Support/`, the checker or `Backend/`.
   what each rests on (associativity across function stages is *Open*). An annotated binding whose
   head performs operations of the row is elaborated at the row (a `with` in a counted loop at a
   resuming row). New corpus programs `comp-param`, `pipe-handlers`, `gen-pipeline-pipe`,
-  `reconcile-chain`; `effects-sum-gen` moved from `pending/`; rejects `block-raise-lexical`,
-  `comp-param-two-sites`, `comp-param-capability`, `comp-param-for`; reports `comp-param`,
+  `reconcile-chain`; `effects-sum-gen` moved from `pending/`; reject `block-raise-lexical`; pending
+  `comp-param-two-sites`, `comp-param-capability` (#487), `comp-param-for`, which record what is
+  not provided yet (the port rule is provisional until relabelling); reports `comp-param`,
   `effects-sum-gen`. **`retry-block` changes its output on purpose**: its `retry` takes a
   computation parameter and retries, `((inl i32[200], i32[30]), (inr i32[503], i32[10]))` where
   it answered `((inr i32[503], i32[0]), (inr i32[503], i32[0]))`; its counts are unchanged. Stored

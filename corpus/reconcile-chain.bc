@@ -18,6 +18,11 @@
 -- are folds of the computation's answer: a `sleep` adds its time to the time the rest takes, and a
 -- `note` puts its entry before the rest's.
 --
+-- The toy is simplified around three known limits: its service has no state, since a handler
+-- with a state around another handler breaks the flat stage (#485) and a capability cannot be used
+-- under `retry`'s handler (#487); and its operations answer `()`, since a counted loop at a
+-- resuming row whose operation answers a value does not compile to WebAssembly (#486).
+--
 -- Answer: `(((inr i32[408], i32[30]), [80, 80, 80, 4]), ((inl i32[200], i32[20]), [20, 9]))`,
 -- the lists as `inr (x, …)`: a stuck service (each request waits 80 ms) is attempted three times,
 -- each cut at the deadline before its request runs, with backoffs of 10 and 20 ms, and the error
