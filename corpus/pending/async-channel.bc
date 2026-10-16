@@ -1,0 +1,68 @@
+-- pending: SPEC §30 Open (tasks capturing outer borrows: a task performing an answering effect handled outside its spawn), SPEC §21 Open (a div task under a handler)
+-- now: 65:21: the clauses box `κ` at `top`, so the handled computation's context must outlive it: `fx_c10`, of type `mut 'fx_rl49 (mu X. 1 + i32 * X)`, is used inside, and it cannot be shown to outlive `top`
+-- Producer and consumer over a channel. The channel is an effect whose handler owns the buffer:
+-- `send` appends, `try_recv` takes the oldest item or answers `inr ()` when the buffer is empty.
+-- The producer sends five squares, awaiting after each; the consumer takes items until it has
+-- five, awaiting whenever the channel is empty. Both tasks run under `lib/async.bc`'s scheduler,
+-- inside one `with channel { … }`, so each task's `send`/`try_recv` reaches the one buffer.
+--
+-- Exercises: two effects in one task (`Async`, handled by `spawn` per task, and `Chan`, handled
+-- once around the scheduler), an answering handler with a state of a generic list, a `while`
+-- that awaits, and generic list helpers.
+--
+-- Blocked by: a task that performs an operation of an answering handler outside its `spawn`.
+-- The `Chan` capability is a `mut` borrow of the handler's state, and `spawn`'s clause boxes the
+-- task's continuation at `top` (SPEC §28, §30 *Open*: a handler's lifetime parameters, tasks
+-- capturing outer borrows), so a task that uses it is refused. The consumer's `while` is a div
+-- loop, which `spawn` would also have to wrap (SPEC §21 *Open*). The message names internal
+-- variables (`fx_c10`, `'fx_rl49`) where it means `channel`'s state.
+--
+-- Once it lands: the consumer's sum of 0 + 1 + 4 + 9 + 16 = 30, and the producer's count 5:
+-- `inr (i32[5], inr (i32[30], inl ()))`.
+
+include async
+
+effect Chan { fn send(x: i32); fn try_recv() -> i32 + 1 }
+
+-- `xs` with `x` at its end.
+fn snoc[A](xs: List[A], x: A) -> List[A] with Exhausted =
+  match unroll xs {
+    inl u -> cons(x, nil())
+  | inr (y, rest) -> cons(y, snoc(rest, x))
+  }
+
+-- `snoc` with its recursion's budget handled: a buffer too long to extend is dropped.
+fn append(xs: List[i32], x: i32) -> List[i32] = with on_exhausted(!{ u -> nil() }) { snoc(xs, x) }
+
+handler channel(mut buf: List[i32]): Chan = {
+  send(x) = { buf = append(buf, x); () };
+  try_recv() = {
+    match unroll buf {
+      inl u -> buf = nil[i32](); inr ()
+    | inr (x, rest) -> buf = rest; inl x
+    }
+  }
+}
+
+fn producer(n: i32) -> i32 with Async, Chan =
+  for i in 0..n { send(i * i); await() };
+  n
+
+fn consumer(n: i32) -> i32 with Async, Chan =
+  let mut got = 0;
+  let mut sum = 0;
+  while got < n {
+    match try_recv() {
+      inl x -> sum = sum + x; got = got + 1
+    | inr u -> await()
+    }
+  };
+  sum
+
+main -> List[i32] =
+  with channel(nil[i32]()) {
+    let q = queue[i32]();
+    let q = push(q, with spawn { producer(5) });
+    let q = push(q, with spawn { consumer(5) });
+    run_until_empty(q)
+  }

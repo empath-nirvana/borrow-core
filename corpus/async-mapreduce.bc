@@ -1,0 +1,33 @@
+-- Map-reduce over tasks: a list of documents (each a list of word lengths) is split one task per
+-- document; each task sums its document, awaiting after every word as a cooperative task would
+-- between chunks of work; `run_until_empty` interleaves them and answers the partial sums in the
+-- order the tasks were queued, which a generic `fold` reduces.
+--
+-- Exercises: `lib/async.bc`'s `spawn`, a recursive generic function (`sum_slowly`) whose body
+-- awaits, so its copy is at the row `Async, Exhausted`; the tasks queued by a generic `fold`
+-- whose block spawns; and generic `map`/`fold` over the results.
+--
+-- Answer: `(inr (i32[9], inr (i32[3], inr (i32[12], inl ()))), i32[24])`: the partial sums
+-- [9, 3, 12] and their total 24; `live 0`. A scheduler that dropped a task, or a sum that lost a
+-- word across an `await`, gives other numbers.
+
+include async
+
+-- The sum of a document's word lengths, awaiting after each word.
+fn sum_slowly(ws: List[i32]) -> i32 with Async, Exhausted =
+  match unroll ws {
+    inl u -> 0
+  | inr (w, rest) -> await(); w + sum_slowly(rest)
+  }
+
+fn docs() -> List[List[i32]] =
+  cons(cons(4, cons(5, nil())), cons(cons(3, nil()), cons(cons(2, cons(6, cons(4, nil()))), nil())))
+
+main -> List[i32] * i32 =
+  let q = with on_exhausted(!{ u -> queue[i32]() }) {
+    fold(docs(), queue[i32](), !{ (q, doc) ->
+      push(q, with spawn { with on_exhausted(!{ u -> 0 }) { sum_slowly(doc) } }) })
+  };
+  let sums = run_until_empty(q);
+  let sum = with on_exhausted(!{ u -> 0 }) { fold(clone(sums), 0, !{ (a, x) -> a + x }) };
+  (sums, sum)

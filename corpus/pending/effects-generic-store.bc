@@ -1,0 +1,55 @@
+-- pending: SPEC §18 Not provided (type parameters on an answering effect; a generic answering handler)
+-- now: 31:9: `assoc`: an answering handler is `handler h(mut s: S): E = { op(x) = e; … }`, and a control handler names its body's type and its answer, `handler h[…](…): E[…], A -> R = { return(x) = M; op(x, k) = N; … }`
+-- A key-value store as an effect generic in its value type: `Store[V]` has `get` and `put`, and
+-- the handler `assoc` keeps the entries in an association list. One generic function, `memo_fib`,
+-- caches Fibonacci numbers through it; a second use stores names' lengths at another value type.
+-- A key that is absent answers `inr ()`.
+--
+-- Exercises: an answering effect with a type parameter, a generic handler whose state is a
+-- generic list, a recursive function that performs it, and the same effect at two instances in
+-- one program.
+--
+-- Blocked by: type parameters on an answering effect, and a generic answering handler (SPEC
+-- §18 *Not provided*). The message is the handler's syntax, not that it is not provided, and is
+-- the same for a handler of `Store[i32]` with no type parameter of its own. A store at one value
+-- type, declared as a monomorphic effect, is what can be written today.
+--
+-- Once it lands: `(i32[55], (i32[10], inl (i32[3], i32[1])))`: fib 10 is 55, computed with
+-- 10 entries cached; the entry at key 2 of the second store is `(3, 1)`.
+
+include rec
+include list
+
+effect Store[V] { fn get(k: i32) -> V + 1; fn put(k: i32, v: V) }
+
+fn lookup[V](xs: List[i32 * V], k: i32) -> V + 1 =
+  match unroll xs {
+    inl u -> inr ()
+  | inr (e, rest) -> let (j, v) = e; if j == k { inl v } else { lookup(rest, k) }
+  }
+
+handler assoc[V](mut entries: List[i32 * V]): Store[V] = {
+  get(k) = { with on_exhausted(!{ u -> inr () }) { lookup(clone(entries), k) } };
+  put(k, v) = { entries = cons((k, v), entries); () }
+}
+
+fn memo_fib(n: i32) -> i32 with Store[i32], Exhausted =
+  if n < 2 { n } else {
+    match get(n) {
+      inl v -> v
+    | inr u -> let v = memo_fib(n - 1) + memo_fib(n - 2); put(n, v); v
+    }
+  }
+
+fn length[A](xs: List[A]) -> i32 = match unroll xs { inl u -> 0 | inr (x, r) -> 1 + length(r) }
+
+main -> i32 * (i32 * ((i32 * i32) + 1)) =
+  with on_exhausted(!{ u -> (0, (0, inr ())) }) {
+    let cache = alloc(nil[i32 * i32]());
+    let f = with assoc(&mut cache) { memo_fib(10) };
+    let n = length(free(cache));
+    let pairs = alloc(nil[i32 * (i32 * i32)]());
+    let p = with assoc(&mut pairs) { put(1, (5, 0)); put(2, (3, 1)); get(2) };
+    let _ = free(pairs);
+    (f, (n, p))
+  }

@@ -1,0 +1,53 @@
+-- Retry with exponential backoff, written as a function that takes the attempt as a block:
+-- `retry(times, base, !{ attempt -> call(attempt) })` runs the block, and on an error waits
+-- (`sleep`, an effect the caller handles with a fake clock that records the waits) and runs it
+-- again, up to `times` attempts; the last error is raised to the caller. The service fails its
+-- first two attempts with 503 and answers 200 on the third.
+--
+-- Exercises: a generic higher-order function that tries to handle the errors of the block it is
+-- given (`with to_result { f(attempt) }` inside `retry`), an answering effect (`Clock`) used by
+-- the function itself, and `Fail` raised on after a counted loop.
+--
+-- What it shows: a block's operations go to the handlers where the block is written, never to a
+-- handler inside the function it is passed to (SPEC §30, E6: `corpus/effects-tunnel.bc`). So the
+-- block's `raise` passes `retry`'s own `to_result` and reaches the `to_result` in `with_budget`:
+-- the first failure ends the call, and no attempt is retried. `bcc check` says so: the block is
+-- "at the site 1 of `Fail`", the `with` in `with_budget`, and `retry`'s `with` is the site 2.
+-- A `retry` that handles its block's errors needs a function that handles the operations of a
+-- computation it is given (SPEC §18 *Open*: functions over computations, `retry`), which is not
+-- provided; nothing rejects this program, which reads as if it retried.
+--
+-- Answer: `((inr i32[503], i32[0]), (inr i32[503], i32[0]))`: both calls fail at their first
+-- attempt and never wait. A `retry` that handled its block's errors would answer
+-- `((inl i32[200], i32[30]), (inr i32[503], i32[10]))`.
+
+include fail
+
+effect Clock { fn sleep(ms: i32) }
+
+handler fake_clock(mut waited: i32): Clock = { sleep(ms) = { waited = waited + ms; () } }
+
+-- A flaky service: unavailable until its third attempt.
+fn call(attempt: i32) -> i32 with Fail[i32] = if attempt < 2 { raise(503) } else { 200 }
+
+-- `f(0)`, `f(1)`, … until one answers, sleeping `base`, `2 * base`, … between attempts; after
+-- `times` failures, the last error is raised.
+fn retry[A](times: i32, base: i32, f: !(i32 => A)) -> A with Fail[i32], Clock =
+  let mut pause = base;
+  let mut last = 0;
+  let r = for attempt in 0..times {
+    match with to_result { f(attempt) } {
+      inl a -> break (inl a : A + 1)
+    | inr e -> last = e; if attempt + 1 < times { sleep(pause); pause = pause * 2 } else { () }
+    }
+  } else { (inr () : A + 1) };
+  match r { inl a -> a | inr u -> raise(last) }
+
+fn with_budget(times: i32) -> (i32 + i32) * i32 =
+  let c = alloc(0);
+  let r = with fake_clock(&mut c) {
+    with to_result { retry(times, 10, !{ attempt -> call(attempt) }) }
+  };
+  (r, free(c))
+
+main -> ((i32 + i32) * i32) * ((i32 + i32) * i32) = (with_budget(5), with_budget(2))

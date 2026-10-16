@@ -1,0 +1,143 @@
+-- pending: SPEC §14 (a for over a generator that holds a borrow, inside that borrow's block)
+-- now: 136:7: the iterator of this `for` holds the borrow of `v`: a borrow block over a loop lends its place again at each step, so what the loop holds between steps must not hold the borrow (SPEC §14, borrow scopes over loops)
+-- `parse-recover.bc` with its tokenizer written as a generator: `tokens` yields each token of a
+-- borrowed view of the source literal, and `main` collects them with a `for` inside the borrow
+-- block of the literal, as a user would: `borrow imm "…" { v -> for t in tokens(v) { … } }`.
+--
+-- Blocked by: a `for` over a generator that holds a borrow, inside that borrow's block. The
+-- generator's loop is a div loop (its `for` over the view yields), so the `for` that drives it is
+-- one too, and a borrow block over a loop lends its place per step (SPEC §14): the stored
+-- iterator holds the view between steps. `corpus/gen-borrowed.bc` and
+-- `corpus/gen-tokenize-parse.bc` pull such a generator by hand instead. `parse-recover.bc` is
+-- this program with the tokenizer a counted loop that builds a list.
+--
+-- Once it lands: as `parse-recover.bc`, `([3, 6, 77, 8], [(3, 1), (5, 2)])`.
+
+include text
+include yield
+include rec
+include list
+
+-- A token: its kind and its value. Kinds: 0 a number, 1 `+`, 2 `*`, 3 `(`, 4 `)`, 5 `;`.
+type Tok = i32 * i32
+
+fn is_digit(b: u8) -> bool = 48 <= b && b <= 57
+
+fn kind_of(b: u8) -> i32 =
+  if b == b'+' { 1 } else { if b == b'*' { 2 } else { if b == b'(' { 3 } else {
+  if b == b')' { 4 } else { if b == b';' { 5 } else { 0 - 1 } } } } }
+
+-- The tokens of a view: numbers, operators and `;`; blanks are skipped. A trailing statement is
+-- closed with a `;`.
+fn tokens<'a>(v: text 'a) -> 1 with Yield[Tok] =
+  let mut num = 0;
+  let mut in_num = false;
+  for p in v {
+    let b = *p;
+    if is_digit(b) { num = num * 10 + to_i32(b) - 48; in_num = true }
+    else {
+      if in_num { yield((0, num)); num = 0; in_num = false } else { () };
+      let k = kind_of(b);
+      if k >= 0 { yield((k, 0)) } else { () }
+    }
+  };
+  if in_num { yield((0, num)) } else { () };
+  yield((5, 0))
+
+type Toks = List[Tok]
+
+fn expr(ts: Toks) -> i32 * Toks with Fail[i32], Exhausted =
+  let (v, ts) = term(ts);
+  expr_rest(v, ts)
+
+fn expr_rest(acc: i32, ts: Toks) -> i32 * Toks with Fail[i32], Exhausted =
+  match unroll ts {
+    inl u -> (acc, nil())
+  | inr (t, rest) ->
+      let (k, x) = t;
+      if k == 1 { let (v, ts) = term(rest); expr_rest(acc + v, ts) } else { (acc, cons(t, rest)) }
+  }
+
+fn term(ts: Toks) -> i32 * Toks with Fail[i32], Exhausted =
+  let (v, ts) = factor(ts);
+  term_rest(v, ts)
+
+fn term_rest(acc: i32, ts: Toks) -> i32 * Toks with Fail[i32], Exhausted =
+  match unroll ts {
+    inl u -> (acc, nil())
+  | inr (t, rest) ->
+      let (k, x) = t;
+      if k == 2 { let (v, ts) = factor(rest); term_rest(acc * v, ts) } else { (acc, cons(t, rest)) }
+  }
+
+fn factor(ts: Toks) -> i32 * Toks with Fail[i32], Exhausted =
+  match unroll ts {
+    inl u -> raise(1)
+  | inr (t, rest) ->
+      let (k, x) = t;
+      if k == 0 { (x, rest) } else {
+        if k == 3 {
+          let (v, ts) = expr(rest);
+          match unroll ts {
+            inl u -> raise(2)
+          | inr (c, rest) -> let (kc, xc) = c; if kc == 4 { (v, rest) } else { raise(2) }
+          }
+        } else { raise(1) }
+      }
+  }
+
+-- One statement: its value, and the tokens after its `;`.
+fn statement(ts: Toks) -> i32 * Toks with Fail[i32], Exhausted =
+  let (v, ts) = expr(ts);
+  match unroll ts {
+    inl u -> (v, nil())
+  | inr (t, rest) -> let (k, x) = t; if k == 5 { (v, rest) } else { raise(5) }
+  }
+
+-- The tokens after the next `;`.
+fn skip_statement(ts: Toks) -> Toks =
+  match unroll ts {
+    inl u -> nil()
+  | inr (t, rest) -> let (k, x) = t; if k == 5 { rest } else { skip_statement(rest) }
+  }
+
+effect Diag { fn report(stmt: i32, code: i32) }
+
+handler collect(mut seen: List[i32 * i32]): Diag = {
+  report(stmt, code) = { seen = cons((stmt, code), seen); () }
+}
+
+fn length[A](xs: List[A]) -> i32 =
+  match unroll xs { inl u -> 0 | inr (x, rest) -> 1 + length(rest) }
+
+-- Every statement parsed, in order: the values of the good ones; each bad one reported.
+fn run_all(ts: Toks) -> List[i32] =
+  let mut rest = ts;
+  let mut vals = nil[i32]();
+  let mut n = 0;
+  -- At most one statement per token.
+  for _ in 0..length(clone(rest)) {
+    match unroll clone(rest) {
+      inl u -> ()
+    | inr (t, more) ->
+        n = n + 1;
+        match with to_result { statement(clone(rest)) } {
+          inl (v, after) -> vals = cons(v, vals); rest = after
+        | inr code -> report(n, code); rest = skip_statement(rest)
+        }
+    }
+  };
+  fold(vals, nil[i32](), !{ (acc, v) -> cons(v, acc) })
+
+main -> List[i32] * List[i32 * i32] =
+  with on_exhausted(!{ u -> (nil(), nil()) }) {
+    let mut toks = nil[Tok]();
+    borrow imm "1+2; 2*3; 4*; 7*(5+6); (8; 8" { v ->
+      for t in tokens(v) { toks = cons(t, toks) }
+    };
+    let ts = fold(toks, nil[Tok](), !{ (acc, t) -> cons(t, acc) });
+    let reports = alloc(nil[i32 * i32]());
+    let vals = with collect(&mut reports) { run_all(ts) };
+    let rs = free(reports);
+    (vals, fold(rs, nil[i32 * i32](), !{ (acc, r) -> cons(r, acc) }))
+  }

@@ -13,9 +13,11 @@ array-refs 5 0 0
 array-replace 2 0 0
 array-sum 1 0 0
 ascii-upper 3 0 0 # the stdin and stdout cells, and the string the input is read into
+async-bank-inbox 36 6 0 # the two accounts' cells and inboxes, the scheduler's list nodes; one indirect call per resume of a stored task
 async-cancel 10 3 0 # the victim's `buf` and `extra`, freed by its cancel, and the scheduler's list nodes; an indirect call per resume or cancel of a stored task
 async-logged 22 4 0 # the two tasks' cells, and the scheduler's and the log's list nodes; an indirect call per resume of a stored task
 async-map 29 4 0 # the input and result lists' nodes, the scheduler's, and an object per level of `map`'s recursion the task suspends through (SPEC §19 Lowering); one indirect call per resume of the stored task
+async-mapreduce 57 9 1 # the documents' and results' list nodes, the scheduler's, and an object per level of `sum_slowly`'s recursion a task suspends through; the copy is the written `clone(sums)`
 async-r1-cancel 4 5 0 # the two tasks' `buf` and `extra`; a task's state is a record of the state machine, its lent cell out of line
 async-r1-cancel-finaliser-writes 1 0 0 # the lent cell
 async-r1-drain 1 3 0 # the lent cell; the calls through the stored generator are dispatched
@@ -23,8 +25,11 @@ async-r1-effects 2 6 0 # the two tasks' cells
 async-r1-generator 1 3 0 # the lent cell
 async-r1-local-borrows 2 4 0 # the two tasks' cells, each lent across its task's suspension and out of line
 async-r1-nested 2 3 0 # the two lent cells
+async-race 3 15 0 # the three tasks' buffers; one indirect call per resume or cancel of a task, whose code `race` does not know
 async-scheduler 24 6 0 # the scheduler's list nodes, four per round of `run_until_empty`; one indirect call per resume of a stored task, whose code the queue does not know
 async-scoped 25 4 0 # the read cell, the scope's unit cell and the scheduler's list nodes; an indirect call per resume of a stored task
+async-timers 40 5 0 # the pending and finished lists' nodes; one indirect call per wake or cancel of a stored task
+async-try-join 28 17 0 # the groups' list nodes and the jobs' cells; one indirect call per resume or cancel of a task
 async-workers-scoped 43 7 1
 axes/borrow-across-loop 3 0 0
 axes/codata-coeffects 2 0 0
@@ -104,6 +109,7 @@ gen-pipeline 0 0 0
 gen-pipeline-adapters 0 0 0
 gen-produce 0 0 0
 gen-return 1 0 0
+gen-tokenize-parse 0 0 0 # the stored generator's state is a stack value, and literal views are read-only data
 gen-value 0 0 0
 generic-in-def 0 0 0
 generic-pair-arg 0 0 0
@@ -161,7 +167,9 @@ list-generic 27 0 0 # the lists' nodes, one object each; no frame and no closure
 main-lifetime 0 0 0 # main's lifetime and the unit cell `u` are cells of no words: nothing is allocated
 map-reuse 7 0 0
 nats-sum 0 0 0
+operator-rounds 166 0 24 # the cluster's and the desired state's list nodes, rebuilt per update; the copies are the written `clone`s of the cluster and the spec
 parse-int 3 0 0 # the stdin and stdout cells and the line buffer, reused; literal views read-only data
+parse-recover 246 0 31 # the token list's nodes and the lists rebuilt per statement; the copies are the written `clone(rest)` per statement
 print-borrowed-array 2 0 0
 quicksort 3 0 0 # the data, the range stack, the output capability
 rec-await-exhausted 3 0 0 # the two list cells, and the continuation of the one `await`, an object per level it suspends through
@@ -180,6 +188,7 @@ rec-overflow 10101 0 0 # the cells, one per level: 100, and 10001 before the bud
 rec-parser 17 0 0 # the token lists and the tokens put back
 rec-tree 254 0 0 # the tree only, two objects per node less the root
 rec-yield 0 0 0
+retry-block 2 0 0 # the clock cells
 reverse-bytes 3 0 0
 sched-a 63 18 0
 sched-a-div 31 5 0
@@ -191,6 +200,7 @@ slice-split 1 0 0
 sort-lines 4 0 0 # the stdin and stdout cells, the input string and the buffer of line views
 sort-numbers 2 0 0
 split-at-mut 3 0 0
+state-machine 0 0 0 # the generator's yields are direct calls of the loop's body
 sum-i32 7 0 0
 sum-prog-exact 37 9 0
 surface/array-sum 1 0 0
@@ -199,6 +209,8 @@ surface/io-upper 2 0 0
 surface/io-wc 2 0 0
 surface/map-reuse 7 0 0
 text-lend-lifetime 2 0 0
+text-wordfreq 967 0 192 # the words' and counts' list nodes; the copies are the written `clone`s of words in comparisons and lookups
+tree-map 58 0 2 # the trees' nodes; the copies are the written `clone(m)`s
 trim-replace 7 0 0 # the stdin and stdout cells, the input string, and one replaced string per line (four)
 utf8-count 4 0 0 # the stdin, stdout and stderr cells and the line buffer, reused
 yield-callback 0 0 0

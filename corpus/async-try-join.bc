@@ -1,0 +1,82 @@
+-- Fail-fast joining of tasks (`try_join_all`): a group of tasks, each of which may fail, is run
+-- round robin until all have answered or one has failed; on the first failure the tasks still
+-- running are cancelled, and the error is raised to the caller. Each task turns its own errors
+-- into its value (`with to_result` inside the task), so what the scheduler sees is a task of
+-- `i32 + i32`; `try_join` raises the error after cancelling the rest.
+--
+-- Exercises: tasks in a generic list (`List[Task[A]]`), resumed and cancelled by a recursive
+-- generic driver, `Fail` raised by tasks' bodies and by the driver, a task that owns a cell when
+-- it is cancelled, and the order of results.
+--
+-- Answer: `(inl (inr (i32[6], inr (i32[20], inl ()))), (inr i32[13], inr i32[13]))`: the first
+-- group's jobs answer 6 and 20; in the second, job 13 fails at its second step, and the long job,
+-- which owns a cell, is cancelled by `cancel_all`. The third is the second in the other order:
+-- the long job's rest is held by `step_all`'s frame when job 13's error is raised past it, and
+-- the unwinding cancels it, a task's destructor being its cancel (SPEC §12). `live 0`.
+
+include async
+include fail
+
+-- A job of `steps` steps; a job numbered 13 fails at its second step.
+fn job(id: i32, steps: i32) -> i32 with Async, Fail[i32] =
+  let scratch = alloc(0);
+  for i in 0..steps {
+    if id == 13 && i == 1 { raise(id) } else { () };
+    await()
+  };
+  let _ = free(scratch);
+  id * 2
+
+fn task(id: i32, steps: i32) -> Task[i32 + i32] = with spawn { with to_result { job(id, steps) } }
+
+type Slot = (i32 + i32) + Task[i32 + i32]
+
+fn cancel_all(xs: List[Slot]) -> 1 =
+  match unroll xs {
+    inl u -> ()
+  | inr (s, rest) -> match s { inl r -> cancel_all(rest) | inr t -> cancel(t); cancel_all(rest) }
+  }
+
+-- One round: each pending task resumed once. The slots after it, whether any task is still
+-- pending, and the first error, if one failed (the slots are then all cancelled).
+fn step_all(xs: List[Slot]) -> List[Slot] * bool with Fail[i32], Exhausted =
+  match unroll xs {
+    inl u -> (nil(), false)
+  | inr (s, rest) ->
+      match s {
+        inl r -> let (ys, p) = step_all(rest); (cons((inl r : Slot), ys), p)
+      | inr t ->
+          match resume(t) {
+            inl r -> match r {
+                inl v -> let (ys, p) = step_all(rest); (cons((inl (inl v) : Slot), ys), p)
+              | inr e -> cancel_all(rest); raise(e)
+              }
+          | inr t2 -> let (ys, p) = step_all(rest); (cons((inr t2 : Slot), ys), true)
+          }
+      }
+  }
+
+fn results(xs: List[Slot]) -> List[i32] =
+  match unroll xs {
+    inl u -> nil()
+  | inr (s, rest) -> match s { inl r -> match r { inl v -> cons(v, results(rest)) | inr e -> results(rest) }
+                             | inr t -> cancel(t); results(rest) }
+  }
+
+-- The values of the tasks, in order, or the first error.
+fn try_join(ts: List[Slot], rounds: i32) -> List[i32] with Fail[i32], Exhausted =
+  let (ys, pending) = step_all(ts);
+  if pending && rounds > 0 { try_join(ys, rounds - 1) } else { results(ys) }
+
+fn group(a: Slot, b: Slot) -> List[Slot] = cons(a, cons(b, nil()))
+
+main -> (List[i32] + i32) * ((List[i32] + i32) * (List[i32] + i32)) =
+  let g1 = group(inr task(3, 2), inr task(10, 4));
+  let g2 = group(inr task(13, 3), inr task(7, 50));
+  let g3 = group(inr task(7, 50), inr task(13, 3));
+  with on_exhausted(!{ u -> (inr 0, (inr 0, inr 0)) }) {
+    let a = with to_result { try_join(g1, 100) };
+    let b = with to_result { try_join(g2, 100) };
+    let c = with to_result { try_join(g3, 100) };
+    (a, (b, c))
+  }
