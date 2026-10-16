@@ -1,0 +1,144 @@
+-- pending: generic hash map with string keys (#211, generics pass #489)
+-- now: 87:3: the loop threads `index`, whose type is not determined: ascribe it
+--
+-- LeetCode 49, Group Anagrams.
+--
+-- Each line of the input is one case, words separated by spaces. The program prints, for each,
+-- its groups of words that are rearrangements of one another, a group to a line with its words in
+-- the order they came, the groups in the order of their first words, and a line `--` after the
+-- case; it answers the total number of groups.
+--
+-- A word's key is its bytes, sorted, in a string of its own (as Rust's `String` key). A map from
+-- key to the index of the key's group (`Map[string, i32]`) finds a word's group; the groups are a
+-- buffer of buffers of views of the input, so no word is copied, and their order is the order of
+-- first appearance, which a map's iteration would not give. The map is the library's generic hash
+-- map with the derived hash and equality of its key (#211): `map_new[K, V](cap)`,
+-- `map_insert(&mut m, k, v)` answering the value it displaces, and `map_get(&m, &k)` a copy of a
+-- persistent value, the key lent. There is no generic map yet, so the first use of one is
+-- refused: the message is about the type of the loop's state, which the map's type would give.
+-- With a throwaway stand-in for the map (not committed: the keys in a buffer of strings, searched
+-- linearly, passed by value), the rest of the program gives the answer below.
+--
+-- Once it lands: on `corpus/leetcode/strings/0049-group-anagrams.in`,
+--
+--     eat tea ate
+--     tan nat
+--     bat
+--     --
+--     a
+--     --
+--     --
+--     abc bca cab cba
+--     xyz zyx
+--     --
+--     listen silent enlist inlets
+--     google
+--     banana
+--     --
+--     ab ab ba
+--     b
+--     --
+--
+-- then `i32[11]`; `live 0`.
+
+include textio
+
+-- The words of a line, separated by spaces.
+fn words<'t>(l: text 't) -> buf (text 't) =
+  let (l, u) = array_copy['t, u8] l;
+  let n = len(u);
+  let mut out = box buf[text 't](8);
+  if n == 0 { array_forget['t, u8](l); out } else {
+    let mut rest = l;
+    for _ in 0..n + 1 {
+      match split_once(rest, b' ') {
+        inl (w, r) -> rest = r; let (o, _) = push(out, w); out = o
+      | inr w -> rest = slice_empty_imm['t, u8]; let (o, _) = push(out, w); out = o; break
+      }
+    };
+    array_forget['t, u8](rest);
+    out
+  }
+
+-- A word's key: its bytes, sorted, in a string of its own.
+fn key<'t>(w: text 't) -> string =
+  let mut k = to_string(w);
+  borrow mut k { v -> let v = sort(v, cmp_u8, 0); () };
+  k
+
+-- `w` pushed onto group `g`.
+fn add_to<'t>(groups: buf (buf (text 't)), g: i32, w: text 't) -> buf (buf (text 't)) =
+  let (a, n) = groups;
+  let (a, o) = array_replace[buf (text 't)] (a, g, filler[buf (text 't)]);
+  match o {
+    inl grp ->
+      let (grp, _) = push(grp, w);
+      let (a, _) = array_replace[buf (text 't)] (a, g, grp);
+      (a, n)
+  | inr e -> array_forget['t, u8](w); (a, n)
+  }
+
+-- The words of a case in groups of rearrangements, in the order of their first words.
+fn group<'t>(words: buf (text 't)) -> buf (buf (text 't)) =
+  let (words, n) = len_of(words);
+  let mut words = words;
+  let mut index : Map[string, i32] = map_new[string, i32](16);
+  let mut groups = box buf[buf (text 't)](8);
+  for i in 0..n {
+    let (b, w) = view_at(words, i);
+    words = b;
+    let (w, v) = array_copy['t, u8] w;
+    let k = key(v);
+    let o = map_get(&index, &k);
+    match o {
+      inl g -> groups = add_to(groups, g, w)
+    | inr _ ->
+        let (gs, m) = len_of(groups);
+        let (gs, _) = push(gs, box buf[text 't](4));
+        groups = add_to(gs, m, w);
+        map_insert(&mut index, k, m)
+    }
+  };
+  groups
+
+-- Group `g`'s words, separated by spaces, on a line.
+fn print_group<'t>(groups: buf (buf (text 't)), g: i32) -> buf (buf (text 't)) =
+  let (a, n) = groups;
+  let (a, o) = array_replace[buf (text 't)] (a, g, filler[buf (text 't)]);
+  match o {
+    inl grp ->
+      let (grp, k) = len_of(grp);
+      let mut grp = grp;
+      for i in 0..k {
+        if 0 < i { print_byte(b' ') } else { () };
+        let (b, w) = view_at(grp, i);
+        grp = b;
+        print_str(w)
+      };
+      print_byte(b'\n');
+      let (a, _) = array_replace[buf (text 't)] (a, g, grp);
+      (a, n)
+  | inr e -> (a, n)
+  }
+
+main -> i32 =
+  let s = read_input();
+  let sum = borrow imm s { 't, t ->
+    let (t, u) = array_copy['t, u8] t;
+    let mut rest = t;
+    let mut sum = 0;
+    for _ in 0..len(u) + 1 {
+      match next_line(rest) {
+        inl (l, r) ->
+          rest = r;
+          let groups = group(words(l));
+          let (groups, k) = len_of(groups);
+          let mut groups = groups;
+          for g in 0..k { groups = print_group(groups, g) };
+          print_lit("--\n");
+          sum = sum + k
+      | inr _ -> rest = slice_empty_imm['t, u8]; break
+      }
+    };
+    sum };
+  sum

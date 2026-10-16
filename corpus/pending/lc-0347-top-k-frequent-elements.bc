@@ -1,0 +1,90 @@
+-- pending: generic hash map (#211, generics pass #489)
+-- now: 44:3: the loop threads `freq`, whose type is not determined: ascribe it
+--
+-- LeetCode 347, Top K Frequent Elements.
+--
+-- Each line of the input is one case, integers separated by spaces: `k`, then the numbers. The
+-- program prints, for each, the `k` numbers that occur most often, the most frequent first, and
+-- answers the sum of the `k`s. The cases are chosen so that the answer is unique.
+--
+-- The numbers are counted in a map from number to count (`Map[i32, i32]`), as Rust's `HashMap`.
+-- Its entries then go through a binary min-heap by count (`heap_push`, `heap_pop`, `lib/buf.bc`,
+-- the count the priority and the number the element), cut back to `k` entries at each step, so
+-- the heap holds the `k` most frequent; they leave it least frequent first and are printed in the
+-- reverse order. The map is the library's generic hash map with the derived hash and equality of
+-- its key (#211): `map_new[K, V](cap)`, `map_insert(&mut m, k, v)` answering the value it
+-- displaces, `map_get(&m, k)` a copy of a persistent value, and `map_iter(&m)` its entries, each a
+-- copy of a persistent pair. There is no generic map yet, so the first use of one is refused: the
+-- message is about the type of the loop's state, which the map's type would give. With a throwaway
+-- stand-in for the map (not committed: a buffer of pairs searched linearly, passed by value), the
+-- rest of the program gives the answer below.
+--
+-- Once it lands: on `corpus/leetcode/heaps/0347-top-k-frequent-elements.in`,
+--
+--     1 2
+--     1
+--     4 5 6
+--     -1
+--     7 3
+--     50 40 30 20
+--
+-- then `i32[13]`; `live 0`.
+
+include textio
+
+-- The integers of a line.
+fn numbers<'t>(l: text 't) -> buf i32 =
+  fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](16))
+
+-- The `k` most frequent of the numbers after the first, which is `k`, the most frequent first.
+fn top_k(nums: buf i32) -> buf i32 =
+  let (a, n) = nums;
+  let k = at(&a, 0, 0);
+  let mut freq : Map[i32, i32] = map_new[i32, i32](n);
+  for i in 1..n {
+    let x = at(&a, i, 0);
+    let o = map_get(&freq, x);
+    let c = match o { inl c -> c | inr _ -> 0 };
+    map_insert(&mut freq, x, c + 1)
+  };
+  let mut heap = box buf[i32 * i32](k + 1);
+  for e in map_iter(&freq) {
+    let (x, c) = e;
+    heap = heap_push(heap, c, x);
+    let (h, size) = len_of(heap);
+    heap = h;
+    if k < size { let (h, _) = heap_pop(heap); heap = h } else { () }
+  };
+  let mut out = box buf[i32](k);
+  for _ in 0..k {
+    let (h, o) = heap_pop(heap);
+    heap = h;
+    match o { inl (_, x) -> let (b, _) = push(out, x); out = b | inr _ -> () }
+  };
+  out
+
+-- The numbers in the reverse of their order, separated by spaces, on a line; and how many.
+fn print_reversed(out: buf i32) -> i32 =
+  let (a, n) = out;
+  for i in 0..n {
+    if 0 < i { print_byte(b' ') } else { () };
+    let x = at(&a, n - 1 - i, 0);
+    print_dec(x)
+  };
+  print_byte(b'\n');
+  n
+
+main -> i32 =
+  let s = read_input();
+  let sum = borrow imm s { 't, t ->
+    let (t, u) = array_copy['t, u8] t;
+    let mut rest = t;
+    let mut sum = 0;
+    for _ in 0..len(u) + 1 {
+      match next_line(rest) {
+        inl (l, r) -> rest = r; let k = print_reversed(top_k(numbers(l))); sum = sum + k
+      | inr _ -> rest = slice_empty_imm['t, u8]; break
+      }
+    };
+    sum };
+  sum

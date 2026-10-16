@@ -1,0 +1,119 @@
+-- LeetCode 76, Minimum Window Substring.
+--
+-- Each line of the input is one case, two strings separated by a space: `s`, then `t`. The program
+-- prints, for each, the shortest run of `s` that holds every byte of `t` as many times as `t`
+-- does (the leftmost of the shortest), or an empty line when there is none, and answers how many
+-- cases have one.
+--
+-- A sliding window over `s` with `need`, an array of 256 counts (reused from case to case; on the
+-- stack in Rust, #496): the counts of `t`, less those of the window, and `missing`, how many bytes
+-- of `t` the window still lacks. The window's end moves one byte a step; once nothing is missing,
+-- its start moves past the bytes it holds more of than it needs, the window is a candidate, and its
+-- first byte is let go. The start moves at most `n` times in all, so the inner loop is a counted
+-- loop of `n` steps that leaves by `break`. The answer is a sub-view of the input, at its lifetime:
+-- nothing is copied. The bytes at the window's ends are read by index (`byte_at`): a view is not
+-- duplicable (#142) and has no `v[i]` (#143).
+--
+-- The lines are walked by hand, a counted loop over `next_line` in `main`, so that each answer is
+-- printed as it is found: the closure of `fold_lines` cannot print (#161), and a `for` over
+-- `lines(t)` is a drain whose iterator holds the borrow of the input (SPEC §14).
+-- The views read in the loop are bound under names not used outside it, and a case's two strings
+-- are not named `s`, the input's owner: a body binding that shadows a linear variable outside is
+-- threaded in its place (#493).
+--
+-- The answers on the `.in` beside it agree with a brute-force reference solution, run separately.
+
+include textio
+
+-- The byte at `i`, and the view back.
+fn byte_at<'t>(t: text 't, i: i32) -> text 't * u8 =
+  let (t, u) = array_copy['t, u8] t;
+  (t, at(u, i, 0))
+
+-- `need` less one at `b`, and its count before.
+fn take_one(need: array i32, b: u8) -> array i32 * i32 =
+  let c = at(&need, to_i32(b), 0);
+  (array_set(need, to_i32(b), c - 1), c)
+
+-- `need` plus one at `b`, and its count after.
+fn give_one(need: array i32, b: u8) -> array i32 * i32 =
+  let c = at(&need, to_i32(b), 0);
+  (array_set(need, to_i32(b), c + 1), c + 1)
+
+-- The start and length of the shortest window of `s` holding `t`, the length 0 when there is none,
+-- and the counts back.
+fn window<'t, 'u>(need: array i32, t: text 'u, s: text 't) -> array i32 * (text 't * (i32 * i32)) =
+  let mut need = need;
+  borrow mut need { v -> let v = fill(v, 0); () };
+  let mut missing = 0;
+  for p in t {
+    let b = *p;
+    let (nd, _) = give_one(need, b);
+    need = nd;
+    missing = missing + 1
+  };
+  let mut s = s;
+  let (s1, u) = array_copy['t, u8] s;
+  s = s1;
+  let n = len(u);
+  let mut start = 0;
+  let mut best = 0;
+  let mut best_len = 0;
+  for i in 0..n {
+    let (s2, b) = byte_at(s, i);
+    s = s2;
+    let (nd, c) = take_one(need, b);
+    need = nd;
+    if 0 < c { missing = missing - 1 } else { () };
+    if missing == 0 {
+      for _ in 0..n {
+        let (s3, f) = byte_at(s, start);
+        s = s3;
+        let have = at(&need, to_i32(f), 0);
+        if have < 0 { need = array_set(need, to_i32(f), have + 1); start = start + 1 }
+        else { break }
+      };
+      if best_len == 0 || i + 1 - start < best_len { best = start; best_len = i + 1 - start }
+      else { () };
+      let (s4, f) = byte_at(s, start);
+      s = s4;
+      let (nd, _) = give_one(need, f);
+      need = nd;
+      missing = missing + 1;
+      start = start + 1
+    } else { () }
+  };
+  (need, (s, (best, best_len)))
+
+-- The run of `s` of length `k` at `i`.
+fn sub<'t>(s: text 't, i: i32, k: i32) -> text 't =
+  match split_at(s, i) {
+    inl (h, r) -> array_forget['t, u8](h);
+      match split_at(r, k) { inl (w, e) -> array_forget['t, u8](e); w | inr r -> r }
+  | inr s -> s
+  }
+
+main -> i32 =
+  let s = read_input();
+  let found = borrow imm s { 't, t ->
+    let (t, u) = array_copy['t, u8] t;
+    let mut rest = t;
+    let mut need = array_new[i32] (256, !{ i -> 0 });
+    let mut found = 0;
+    for _ in 0..len(u) + 1 {
+      match next_line(rest) {
+        inl (l, r) ->
+          rest = r;
+          match split_once(l, b' ') {
+            inl (hay, pat) ->
+              let (nd, (hay, (i, k))) = window(need, pat, hay);
+              need = nd;
+              if 0 < k { found = found + 1 } else { () };
+              print_str(sub(hay, i, k)); print_byte(b'\n')
+          | inr l -> ()
+          }
+      | inr _ -> rest = slice_empty_imm['t, u8]; break
+      }
+    };
+    found };
+  found

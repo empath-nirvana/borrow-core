@@ -11,7 +11,7 @@ bcc=.lake/build/bin/bcc
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 bad=0
-for f in corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/sugar/*.bc; do
+for f in corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc corpus/sugar/*.bc; do
   grep -q '^-- check: parse-only' "$f" && continue
   if ! "$bcc" tir "$f" > /dev/null 2> $tmp/err; then
     echo "$f: $(cat $tmp/err)"; bad=$((bad + 1))

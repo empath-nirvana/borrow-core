@@ -172,6 +172,21 @@ iter-range 0 0 0
 json-tokens 3 0 0 # the stdin and stdout cells and the input string; tokens are views, literal views read-only data
 key-value 4 0 0 # the stdin and stdout cells, the input string and the buffer of view pairs
 labels-json 3 0 0 # the stdout cell, the output string and the one escaped string (the owned side of the sum)
+leetcode/heaps/0295-find-median-from-data-stream 30 0 0 # the stdin and stdout cells and the input string; per case the two heaps and the buffer of its answers (#491: Rust would print them at once)
+leetcode/intervals/0056-merge-intervals 22 0 0 # the stdin and stdout cells and the input string; per case the buffer of intervals and the merged one (none for the empty case), as Rust
+leetcode/intervals/0057-insert-interval 23 0 0 # the stdin and stdout cells and the input string; per case the buffer of intervals and the result, as Rust
+leetcode/intervals/0252-meeting-rooms 13 0 0 # the stdin and stdout cells and the input string; per case the buffer of meetings, as Rust
+leetcode/intervals/0253-meeting-rooms-ii 22 0 0 # the stdin and stdout cells and the input string; per case the buffer of meetings and the heap (none for the empty case), as Rust
+leetcode/intervals/0435-non-overlapping-intervals 13 0 0 # the stdin and stdout cells and the input string; per case the buffer of intervals, as Rust
+leetcode/strings/0003-longest-substring-without-repeating-characters 4 0 0 # the stdin and stdout cells, the input string and the table of last positions, reused (on the stack in Rust, #496)
+leetcode/strings/0005-longest-palindromic-substring 3 0 0 # the stdin and stdout cells and the input string; the answers are views
+leetcode/strings/0020-valid-parentheses 4 0 0 # the stdin and stdout cells, the input string and the stack, reused from case to case
+leetcode/strings/0076-minimum-window-substring 4 0 0 # the stdin and stdout cells, the input string and the counts, reused (on the stack in Rust, #496); the answers are views
+leetcode/strings/0125-valid-palindrome 3 0 0 # the stdin and stdout cells and the input string
+leetcode/strings/0242-valid-anagram 4 0 0 # the stdin and stdout cells, the input string and the counts, reused (on the stack in Rust, #496)
+leetcode/strings/0271-encode-and-decode-strings 24 0 0 # the stdin and stdout cells and the input string; per case the list, the encoded string and the decoded list, whose strings are views (Rust's `Vec<String>` allocates each)
+leetcode/strings/0424-longest-repeating-character-replacement 4 0 0 # the stdin and stdout cells, the input string and the counts, reused (on the stack in Rust, #496)
+leetcode/strings/0647-palindromic-substrings 3 0 0 # the stdin and stdout cells and the input string
 lend-config 2 0 0
 lend-div 2 0 0
 lend-lib-each 2 0 0

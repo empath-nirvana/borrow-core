@@ -154,3 +154,9 @@ fn heap_pop[A](h: buf (i32 * A)) -> buf (i32 * A) * ((i32 * A) + 1) =
     };
     ((a, m), inl first)
   }
+
+-- A copy of the element of the smallest priority, with its priority, or `inr ()` for the empty
+-- heap; the heap is unchanged. `[spec §17]`
+fn heap_peek[A](h: buf (i32 * A)) -> buf (i32 * A) * ((i32 * A) + 1) =
+  let (a, n) = h;
+  if n == 0 { ((a, n), inr ()) } else { let (a, x) = heap_at(a, 0); ((a, n), inl x) }

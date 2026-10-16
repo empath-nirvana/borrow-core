@@ -1,0 +1,16 @@
+5#hello5#world
+2 hello|world
+
+0 
+0#0#
+2 |
+1#a
+1 a
+5#12#341##5#5#abc0#1#x
+5 12#34|#|5#abc||x
+19#the quick brown fox10#jumps over12#the lazy dog
+3 the quick brown fox|jumps over|the lazy dog
+1#02#003#000
+3 0|00|000
+i32[16]
+live 0
