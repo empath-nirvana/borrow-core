@@ -1,0 +1,32 @@
+-- pending: SPEC §21 Open (a div computation, a nested run_until_empty, inside a task of spawn)
+-- now: 30:16: this argument of `push` has type `i32 * (mu X. 1 + ((mu X1. 1 + i32 * X1) + box top U (nu X. F ((mu X. 1 + i32 * X) + box top U X) & F 1)) * X)`, which is not `array A * i32`
+-- A task that fans out: a request handler task spawns one subtask per backend it queries and
+-- runs them to completion with a scheduler of its own, then combines their answers. The outer
+-- scheduler runs two such handlers.
+--
+-- Exercises: `run_until_empty` inside a task (a scheduler nested in a task), `spawn` inside a
+-- task, generic lists of lists.
+--
+-- Blocked by: a task whose body runs a loop that is not counted. `run_until_empty`'s rounds are
+-- unbounded, so it is div, and `spawn` cannot wrap a div computation (SPEC §21 *Open*: no handler
+-- wraps a div computation). The message is "this argument of `push` has type `i32 * (…)`, which
+-- is not `array A * i32`": `push` falls back to `lib/buf.bc`'s.
+--
+-- Once it lands: `[[10, 11], [20, 21]]`.
+
+include async
+
+fn backend(n: i32) -> i32 with Async = await(); n
+
+fn handle(base: i32) -> List[i32] with Async =
+  await();
+  let q = queue[i32]();
+  let q = push(q, with spawn { backend(base) });
+  let q = push(q, with spawn { backend(base + 1) });
+  run_until_empty(q)
+
+main -> List[List[i32]] =
+  let q = queue[List[i32]]();
+  let q = push(q, with spawn { handle(10) });
+  let q = push(q, with spawn { handle(20) });
+  run_until_empty(q)

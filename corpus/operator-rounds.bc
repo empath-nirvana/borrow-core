@@ -1,0 +1,110 @@
+-- A reconcile loop in the style of a Kubernetes operator, against a fake API, level-triggered and
+-- synchronous: each round reconciles every object of the desired state once, until a round finds
+-- nothing to do. The API's handler owns the observed state; it moves at most one replica per
+-- update (a rollout) and refuses the first update of deployment 2 with a conflict, which the
+-- reconciler handles by recording an event and leaving the object for the next round. Events are
+-- a second answering effect, whose handler counts them by kind.
+--
+-- Exercises: two answering effects handled around the whole loop (`Api`, `Events`), `Fail`
+-- raised by an API call and handled per object, a recursive generic-list walk, and a counted
+-- loop with `break` and a value.
+--
+-- Answer: `(i32[6], (inr ((i32[2], i32[0]), inr ((i32[1], i32[3]), inr ((i32[3], i32[2]),
+-- inl ()))), (i32[9], i32[1])))`: round 6 is the first with nothing to do (deployment 2, the
+-- slowest, has its conflict in round 1 and goes from 4 to 0 in rounds 2 to 5); the cluster
+-- equals the desired state (in the order the API stored it); nine updates and one conflict. `live 0`. A reconciler that dropped the
+-- object after a conflict never converges deployment 2.
+
+include list
+include fail
+
+type Obj = i32 * i32
+
+effect Api {
+  fn observed(name: i32) -> i32;
+  fn update(name: i32, replicas: i32) -> bool
+}
+
+-- The replicas of `name`, or 0 when it is absent.
+fn lookup(xs: List[Obj], name: i32) -> i32 =
+  match unroll xs {
+    inl u -> 0
+  | inr (o, rest) -> let (n, r) = o; if n == name { r } else { lookup(rest, name) }
+  }
+
+-- `xs` with `name` at `r` replicas.
+fn store(xs: List[Obj], name: i32, r: i32) -> List[Obj] =
+  match unroll xs {
+    inl u -> cons((name, r), nil())
+  | inr (o, rest) ->
+      let (n, q) = o;
+      if n == name { cons((n, r), rest) } else { cons((n, q), store(rest, name, r)) }
+  }
+
+fn get_or_0(xs: List[Obj], name: i32) -> i32 = with on_exhausted(!{ u -> 0 }) { lookup(xs, name) }
+
+fn put(xs: List[Obj], name: i32, r: i32) -> List[Obj] =
+  with on_exhausted(!{ u -> nil() }) { store(xs, name, r) }
+
+-- The cluster, and whether the next update of deployment 2 conflicts.
+type Cluster = List[Obj] * bool
+
+handler fake_api(mut st: Cluster): Api = {
+  observed(name) = { let (xs, c) = st; let r = get_or_0(clone(xs), name); st = (xs, c); r };
+  update(name, replicas) = {
+    let (xs, c) = st;
+    if c && name == 2 { st = (xs, false); false } else { st = (put(xs, name, replicas), c); true }
+  }
+}
+
+effect Events { fn event(kind: i32) }
+
+-- Updates and conflicts.
+handler tally(mut st: i32 * i32): Events = {
+  event(kind) = { let (u, c) = st; if kind == 0 { st = (u + 1, c) } else { st = (u, c + 1) }; () }
+}
+
+-- One step toward `want` from `have`.
+fn toward(have: i32, want: i32) -> i32 = if have < want { have + 1 } else { have - 1 }
+
+-- An update the API may refuse with a conflict (409).
+fn try_update(name: i32, replicas: i32) -> 1 with Fail[i32], Api =
+  if update(name, replicas) { () } else { raise(409) }
+
+-- One object, once: whether it was already converged.
+fn reconcile(o: Obj) -> bool =
+  let (name, want) = o;
+  let have = observed(name);
+  if have == want { true } else {
+    match with to_result { try_update(name, toward(have, want)) } {
+      inl u -> event(0); false
+    | inr e -> event(1); false
+    }
+  }
+
+-- Every object once: how many were not yet converged.
+fn reconcile_all(objs: List[Obj]) -> i32 =
+  match unroll objs {
+    inl u -> 0
+  | inr (o, rest) -> let done = reconcile(o); let n = reconcile_all(rest); if done { n } else { n + 1 }
+  }
+
+fn desired() -> List[Obj] = cons((1, 3), cons((2, 0), cons((3, 2), nil())))
+
+fn initial() -> List[Obj] = cons((2, 4), nil())
+
+main -> i32 * (List[Obj] * (i32 * i32)) =
+  let st = alloc((initial(), true));
+  let ev = alloc((0, 0));
+  let spec = desired();
+  let rounds = with fake_api(&mut st) {
+    with tally(&mut ev) {
+      with on_exhausted(!{ u -> 0 - 1 }) {
+        for round in 1..20 {
+          if reconcile_all(clone(spec)) == 0 { break round } else { () }
+        } else { 0 }
+      }
+    }
+  };
+  let (cluster, c) = free(st);
+  (rounds, (cluster, free(ev)))

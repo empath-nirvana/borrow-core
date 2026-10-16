@@ -1,0 +1,59 @@
+-- Racing two tasks: `race` resumes two tasks in turn until one finishes, then cancels the other.
+-- Cancelling a task runs what it must finalise: here each task owns a buffer (a cell) that it
+-- frees when it ends, and the cancelled one's is freed by its drop glue, so the program ends with
+-- nothing live. A timeout is a race against a task that only waits.
+--
+-- Exercises: `lib/async.bc`'s `resume` and `cancel` driven by a user-written combinator, a
+-- generic recursive one (`race[A]`) over tasks of one type, owned resources inside a cancelled task, and
+-- counted loops at the row `Async`.
+--
+-- Answer: `(inl i32[30], inr ())`: the fast lookup (3 steps) beats the slow one (6 steps) and
+-- answers 30; against a timeout of 2 steps the fast lookup loses. `live 0`: both cancelled
+-- tasks' buffers were freed.
+
+include async
+
+-- A lookup that takes `steps` turns, holding a buffer it owns.
+fn lookup(key: i32, steps: i32) -> i32 with Async =
+  let buf = alloc(key);
+  for _ in 0..steps { await() };
+  free(buf) * 10
+
+fn sleeper(steps: i32) -> i32 with Async =
+  for _ in 0..steps { await() };
+  0
+
+-- A task that only waits. (Spawned in a function of its own: a `with spawn` in `timeout`, whose
+-- row has `race`'s `Exhausted`, is refused, the continuation typed at that row.)
+fn sleeping(steps: i32) -> Task[i32] = with spawn { sleeper(steps) }
+
+-- The value of the first task to finish (`inl` for `a`, `inr` for `b`); the other is cancelled.
+-- After `turns` rounds both are cancelled and the race is `inr` of `inr ()`.
+fn race[A](a: Task[A], b: Task[A], turns: i32) -> A + (A + 1) =
+  if turns == 0 { cancel(a); cancel(b); inr (inr ()) } else {
+    match resume(a) {
+      inl v -> cancel(b); inl v
+    | inr ra ->
+        match resume(b) {
+          inl w -> cancel(ra); inr (inl w)
+        | inr rb -> race(ra, rb, turns - 1)
+        }
+    }
+  }
+
+-- `t`'s value, or `inr ()` when it does not finish within `steps`.
+fn timeout(t: Task[i32], steps: i32) -> i32 + 1 =
+  match race(t, sleeping(steps), steps + 1) {
+    inl v -> inl v
+  | inr e -> inr ()
+  }
+
+main -> (i32 + (i32 + 1)) * (i32 + 1) =
+  let a = with spawn { lookup(3, 3) };
+  let b = with spawn { lookup(4, 6) };
+  let c = with spawn { lookup(5, 3) };
+  with on_exhausted(!{ u -> (inr (inr ()), inr ()) }) {
+    let first = race(a, b, 10);
+    let late = timeout(c, 2);
+    (first, late)
+  }

@@ -1,0 +1,112 @@
+-- An event loop with timers and timeouts. Tasks are direct-style code that calls `sleep(n)` to
+-- wait `n` ticks; the `timed` handler turns a task into its next step: its value, or how long it
+-- sleeps with the rest of it, the continuation boxed at `top` (BOXED-κ, SPEC §28). The loop keeps
+-- each pending task with the tick it wakes at and its deadline: at each tick it resumes the tasks
+-- that are due and cancels those whose deadline has passed, which runs what the task must
+-- finalise.
+--
+-- Exercises: a user-written scheduler handler of a control effect with an argument, stored
+-- continuations in a generic list, cancel, a counted event loop, and generic list helpers that
+-- recurse (`Exhausted`, handled once around the loop).
+--
+-- Answer: `[(2, inl 6), (1, inl 100), (3, inr ())]` with the tick each finished at, as
+-- `inr ((i32[2], (inl i32[6], i32[3])), …)`: the heartbeat (task 2, three beats of one tick, then
+-- 2 * 3) finishes at tick 3, the fetch (task 1, latency 4) at tick 4, and the slow job (task 3,
+-- deadline 5, sleeping 10) is cancelled at tick 5. `live 0`.
+
+include list
+
+effect Timer { ctl sleep(ticks: i32) }
+
+-- A suspended task of `A`: its next observation runs it to its next `sleep` or its end.
+type Susp[A] = box top U (nu X. F (A + (i32 * box top U X)) & F 1)
+
+-- A task's step: its value, or the ticks it sleeps and the rest.
+type Step[A] = A + (i32 * Susp[A])
+
+handler timed[A]: Timer, A -> Step[A] = {
+  return(v) = inl v;
+  sleep(n, k) = inr (n, boxed[top] (thunkv nu_in <
+    kk <- return (unbox k); u <- return (); s <- (force kk).1 u; return s,
+    kk <- return (unbox k); (force kk).2 >))
+}
+
+fn wake[A](t: Susp[A]) -> Step[A] = g <- return (unbox t); (nu_out (force g)).1
+
+fn drop_task[A](t: Susp[A]) -> 1 = g <- return (unbox t); (nu_out (force g)).2
+
+-- The tasks.
+fn fetch(id: i32, latency: i32) -> i32 with Timer = sleep(latency); id * 100
+
+fn heartbeat(beats: i32) -> i32 with Timer =
+  let mut n = 0;
+  for _ in 0..beats { sleep(1); n = n + 1 };
+  n * 2
+
+fn slow_job() -> i32 with Timer = sleep(10); 7
+
+-- A pending task: its id, its deadline, the tick it wakes at, and its rest.
+type Entry = i32 * (i32 * (i32 * Susp[i32]))
+
+-- A finished task: its id, its value or `inr ()` for a timeout, and the tick it ended at.
+type Done = i32 * ((i32 + 1) * i32)
+
+fn append[A](xs: List[A], ys: List[A]) -> List[A] =
+  match unroll xs {
+    inl u -> ys
+  | inr (x, rest) -> cons(x, append(rest, ys))
+  }
+
+-- A task's step at tick `now`: queued again, or finished.
+fn settle(id: i32, deadline: i32, now: i32, s: Step[i32]) -> List[Entry] * List[Done] =
+  match s {
+    inl v -> (nil(), cons((id, ((inl v : i32 + 1), now)), nil()))
+  | inr (n, t) -> (cons((id, (deadline, (now + n, t))), nil()), nil())
+  }
+
+-- One tick: each due task resumed, each overdue one cancelled; the rest kept, in order.
+fn tick(now: i32, es: List[Entry]) -> List[Entry] * List[Done] =
+  match unroll es {
+    inl u -> (nil(), nil())
+  | inr (e, rest) ->
+      let (pending, done) = tick(now, rest);
+      let (id, (deadline, (at, t))) = e;
+      if now >= deadline {
+        drop_task(t);
+        (pending, cons((id, ((inr () : i32 + 1), now)), done))
+      } else {
+        if at > now { (cons((id, (deadline, (at, t))), pending), done) }
+        else {
+          let (p2, d2) = settle(id, deadline, now, wake(t));
+          (append(p2, pending), append(d2, done))
+        }
+      }
+  }
+
+fn start(id: i32, deadline: i32, s: Step[i32], es: List[Entry]) -> List[Entry] =
+  match s {
+    inl v -> es
+  | inr (n, t) -> cons((id, (deadline, (n, t))), es)
+  }
+
+fn cancel_all(es: List[Entry]) -> 1 =
+  match unroll es {
+    inl u -> ()
+  | inr (e, rest) -> let (id, (dl, (at, t))) = e; drop_task(t); cancel_all(rest)
+  }
+
+main -> List[Done] =
+  let es = start(3, 5, with timed { slow_job() }, nil());
+  let es = start(2, 50, with timed { heartbeat(3) }, es);
+  let es = start(1, 50, with timed { fetch(1, 4) }, es);
+  with on_exhausted(!{ u -> nil() }) {
+    let mut pending = es;
+    let mut finished = nil[Done]();
+    for now in 1..12 {
+      let (p, d) = tick(now, pending);
+      pending = p;
+      finished = append(finished, d)
+    };
+    cancel_all(pending);
+    finished
+  }

@@ -1,0 +1,60 @@
+-- pending: K4 (an early exit from a kernel fold: a block that raises, given to lib/text.bc's fold_lines)
+-- now: 277:5: an operation of `Fail` is performed inside a closure or block that is not run in place, and no handler of `Fail` is in scope
+-- Parsing a configuration file: `key = value` lines read from a literal into a record of
+-- settings, starting from defaults. Each line is cut at its `=` and trimmed; the value is parsed
+-- as an integer by `lib/text.bc`'s `parse_i32`, whose `ParseError` is turned into the
+-- configuration's own error (the key's code) by `map_err`; an unknown key, or a value out of
+-- range, raises too. The caller gets the settings or the first error.
+--
+-- Exercises: `fold_lines` over a borrowed view with a block that raises, `map_err` from one error
+-- type to another, `Fail` across a library fold, text views cut and trimmed without copying.
+--
+-- Blocked by: K4, an early exit from a kernel fold (SPEC §18 *Open*): `fold_lines` is a
+-- `count_fold`, and its block raises. The message's position, 277:5, is a line of `lib/text.bc`
+-- (`fold_lines`'s own block) printed under this file's name, and it says no handler of `Fail` is
+-- in scope, where the handler is the `to_result` in `load`.
+--
+-- Once it lands: `(inl (i32[8080], (i32[4], i32[30])), inr i32[2])`: the first file sets
+-- the port and the workers and keeps the default timeout; the second has `workers = four`, the
+-- key whose code is 2.
+
+include text
+
+-- The port, the number of workers and the timeout.
+type Config = i32 * (i32 * i32)
+
+fn defaults() -> Config = (80, (1, 30))
+
+-- A key's code: 1 port, 2 workers, 3 timeout; 0 for an unknown key.
+fn key_code<'a>(k: text 'a) -> i32 =
+  let (k, a) = array_copy['a, u8] k;
+  let (k, b) = array_copy['a, u8] k;
+  if eq_lit(a, "port") { array_forget['a, u8](b); array_forget['a, u8](k); 1 }
+  else { if eq_lit(b, "workers") { array_forget['a, u8](k); 2 }
+  else { if eq_lit(k, "timeout") { 3 } else { 0 } } }
+
+fn set(c: Config, code: i32, v: i32) -> Config with Fail[i32] =
+  let (port, (workers, timeout)) = c;
+  if code == 1 { if v < 1 || v > 65535 { raise(1) } else { (v, (workers, timeout)) } }
+  else { if code == 2 { if v < 1 { raise(2) } else { (port, (v, timeout)) } }
+  else { (port, (workers, v)) } }
+
+-- One line applied; a line without `=` is skipped.
+fn apply_line<'a>(l: text 'a, c: Config) -> Config with Fail[i32] =
+  match split_once(l, b'=') {
+    inl (k, v) ->
+      let code = key_code(trim(k));
+      if code == 0 { array_forget['a, u8](v); raise(0 - 1) } else {
+        let n = with map_err(!{ e -> code }) { parse_i32(trim(v)) };
+        set(c, code, n)
+      }
+  | inr l -> array_forget['a, u8](l); c
+  }
+
+fn parse_config<'a>(t: text 'a) -> Config with Fail[i32] =
+  fold_lines(t, !{ (l, c) -> apply_line(l, c) }, defaults())
+
+fn load(file: lit) -> Config + i32 = borrow imm file { v -> with to_result { parse_config(v) } }
+
+main -> (Config + i32) * (Config + i32) =
+  (load("port = 8080\nworkers = 4\n"), load("port = 8080\nworkers = four\ntimeout = 5\n"))

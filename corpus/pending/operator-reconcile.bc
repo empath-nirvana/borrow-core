@@ -1,0 +1,103 @@
+-- pending: SPEC §21 Open (a task whose loop is a while, under spawn), SPEC §30 Open (a task performing an answering effect handled outside its spawn)
+-- now: 97:34: type mismatch: expected `mut 'fx_rl134 ((mu X. 1 + (i32 * i32) * X) * (1 + 1)) * i32`, but this has type `U (nu X. F[7.0 aff 1 ~> 1, 7.1 aff i32 ~> 1] (mut 'fx_rl134 ((mu X. 1 + (i32 * i32) * X) * (1 + 1)) * i32 + U X) & F[7.0 aff 1 ~> 1, 7.1 aff i32 ~> 1] 1)`
+-- A reconcile loop in the style of a Kubernetes operator, against a fake API. The desired state
+-- is a list of deployments (name, replicas); the API's handler owns the observed state. One task
+-- per object reconciles it: it reads the observed replicas, asks the API to scale one step toward
+-- the desired count (the fake API moves at most one replica per call, as a rollout would), and
+-- awaits until the next round, until the object has converged. A conflict (the fake API refuses
+-- the first update of deployment 2) is an error the task handles by retrying in the next round.
+-- `lib/async.bc`'s scheduler runs the tasks round robin inside one `with fake_api { … }`.
+--
+-- Exercises: tasks that perform an answering effect handled outside the scheduler (`Api`), `Fail`
+-- handled inside a task, a `while` that awaits, generic lists for the desired and observed state,
+-- and a read-only borrow of the desired state shared by every task.
+--
+-- Blocked by, in order: (1) a task whose loop is a `while` (div) under `spawn`: no handler wraps a
+-- div computation (SPEC §21 *Open*); the message is a type mismatch between internal types. A
+-- bounded `for _ in 0..10 { … break … }` instead gets past it to (2): a task that performs an
+-- operation of the answering handler `fake_api` outside its `spawn`, whose capability is a borrow
+-- that `spawn`'s `top`-boxed continuation cannot hold (SPEC §30 *Open*). Before both, the program
+-- also met: a block (the `fold` that spawned one task per object) may not perform an answering
+-- effect (#161, E6), and `try_update` exists because a `with to_result { … }` whose body both
+-- performs `update` and raises is rejected ("the body it handles does not have the type its
+-- declaration gives it"). `corpus/operator-rounds.bc` is the synchronous loop, which runs.
+--
+-- Once it lands: each task's number of updates, `[3, 4, 2]`, and the observed state after
+-- convergence equal to the desired one, `[(1, 3), (2, 0), (3, 2)]`.
+
+include async
+include fail
+
+type Obj = i32 * i32
+
+effect Api {
+  fn observed(name: i32) -> i32;
+  fn update(name: i32, replicas: i32) -> bool
+}
+
+-- The replicas of `name`, or 0 when it is absent.
+fn lookup(xs: List[Obj], name: i32) -> i32 =
+  match unroll xs {
+    inl u -> 0
+  | inr (o, rest) -> let (n, r) = o; if n == name { r } else { lookup(rest, name) }
+  }
+
+-- `xs` with `name` at `r` replicas.
+fn store(xs: List[Obj], name: i32, r: i32) -> List[Obj] =
+  match unroll xs {
+    inl u -> cons((name, r), nil())
+  | inr (o, rest) ->
+      let (n, q) = o;
+      if n == name { cons((n, r), rest) } else { cons((n, q), store(rest, name, r)) }
+  }
+
+fn get_or_0(xs: List[Obj], name: i32) -> i32 = with on_exhausted(!{ u -> 0 }) { lookup(xs, name) }
+
+fn put(xs: List[Obj], name: i32, r: i32) -> List[Obj] =
+  with on_exhausted(!{ u -> nil() }) { store(xs, name, r) }
+
+-- The cluster, and whether the next update of deployment 2 conflicts.
+type Cluster = List[Obj] * bool
+
+handler fake_api(mut st: Cluster): Api = {
+  observed(name) = { let (xs, c) = st; let r = get_or_0(clone(xs), name); st = (xs, c); r };
+  update(name, replicas) = {
+    let (xs, c) = st;
+    if c && name == 2 { st = (xs, false); false } else { st = (put(xs, name, replicas), c); true }
+  }
+}
+
+-- One step toward `want` from `have`.
+fn toward(have: i32, want: i32) -> i32 = if have < want { have + 1 } else { have - 1 }
+
+-- An update the API may refuse with a conflict (409).
+fn try_update(name: i32, replicas: i32) -> 1 with Fail[i32], Api =
+  if update(name, replicas) { () } else { raise(409) }
+
+-- Reconcile one object until it has converged: the number of updates made.
+fn reconcile(name: i32, want: i32) -> i32 with Async, Api =
+  let mut updates = 0;
+  let mut have = observed(name);
+  while have != want {
+    let ok = with to_result { try_update(name, toward(have, want)) };
+    match ok { inl u -> updates = updates + 1 | inr e -> () };
+    await();
+    have = observed(name)
+  };
+  updates
+
+fn desired() -> List[Obj] = cons((1, 3), cons((2, 0), cons((3, 2), nil())))
+
+fn initial() -> List[Obj] = cons((2, 4), nil())
+
+main -> List[i32] * List[Obj] =
+  let st = alloc((initial(), true));
+  let counts = with fake_api(&mut st) {
+    let q = queue[i32]();
+    let q = push(q, with spawn { reconcile(1, 3) });
+    let q = push(q, with spawn { reconcile(2, 0) });
+    let q = push(q, with spawn { reconcile(3, 2) });
+    run_until_empty(q)
+  };
+  let (cluster, c) = free(st);
+  (counts, cluster)

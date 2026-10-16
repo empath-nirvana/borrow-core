@@ -1,0 +1,125 @@
+-- Word frequencies over generic lists. The words of a literal are read into a list of words, each
+-- an owned list of bytes; stop words are filtered out; the rest are counted into an association
+-- list keyed by the word, sorted by count (most frequent first, ties in first-seen order), and
+-- the top three are printed with their counts.
+--
+-- Exercises: the generic `map` and `fold` of `lib/list.bc` at several types (bytes, words,
+-- pairs), generic helpers of the program's own (`reverse`, `insert_by`, `sort_by`,
+-- `first_n`, `list_eq`) that take blocks, a counted loop over a borrowed view of a literal, and
+-- writing to standard output.
+--
+-- Answer: prints `fox 3`, `dog 2`, `quick 1`, each on a line; `i32[7]`, the number of distinct
+-- words kept. `live 0`. A sort that was not stable prints another word third; a filter that kept
+-- `the` prints it first.
+
+include textio
+include list
+
+type Word = List[u8]
+
+fn is_letter(b: u8) -> bool = 97 <= b && b <= 122
+
+fn reverse[A](xs: List[A]) -> List[A] = fold(xs, nil[A](), !{ (acc, x) -> cons(x, acc) })
+
+-- The words of a view, in order. The loop collects each word's bytes last first; they are put
+-- in order after it.
+fn words<'a>(v: text 'a) -> List[Word] =
+  let mut out = nil[Word]();
+  let mut cur = nil[u8]();
+  let mut in_word = false;
+  for p in v {
+    let b = *p;
+    if is_letter(b) { cur = cons(b, cur); in_word = true }
+    else { if in_word { out = cons(cur, out); cur = nil[u8](); in_word = false } else { () } }
+  };
+  if in_word { out = cons(cur, out) } else { () };
+  reverse(map(out, !{ w -> reverse(w) }))
+
+fn list_eq[A](xs: List[A], ys: List[A], eq: !(A * A => bool)) -> bool =
+  match unroll xs {
+    inl u -> match unroll ys { inl v -> true | inr (y, r) -> false }
+  | inr (x, rx) -> match unroll ys {
+      inl v -> false
+    | inr (y, ry) -> if eq(x, y) { list_eq(rx, ry, eq) } else { false }
+    }
+  }
+
+fn word_eq(a: Word, b: Word) -> bool = list_eq(a, b, !{ (x, y) -> x == y })
+
+-- The words that are not stop words. (`filter` of `lib/list.bc` keeps the element it hands its
+-- predicate, so it needs an element it may copy freely; a word is a list, whose copy is a
+-- `clone`.)
+fn drop_stops(ws: List[Word]) -> List[Word] =
+  match unroll ws {
+    inl u -> nil()
+  | inr (w, rest) -> if is_stop(clone(w)) { drop_stops(rest) } else { cons(w, drop_stops(rest)) }
+  }
+
+fn is_stop(w: Word) -> bool =
+  word_eq(clone(w), cons(b't', cons(b'h', cons(b'e', nil())))) ||
+  word_eq(w, cons(b'a', nil()))
+
+-- `w` counted once more in the association list.
+fn bump(counts: List[Word * i32], w: Word) -> List[Word * i32] =
+  match unroll counts {
+    inl u -> cons((w, 1), nil())
+  | inr (e, rest) ->
+      let (k, n) = e;
+      if word_eq(clone(k), clone(w)) { cons((k, n + 1), rest) } else { cons((k, n), bump(rest, w)) }
+  }
+
+-- `x` inserted before the first element `y` with `before(x, y)`: after the elements equal to it.
+fn insert_by[A](x: A, xs: List[A], before: !(A * A => bool)) -> List[A] =
+  match unroll xs {
+    inl u -> cons(x, nil())
+  | inr (y, rest) ->
+      if before(clone(x), clone(y)) { cons(x, cons(y, rest)) } else { cons(y, insert_by(x, rest, before)) }
+  }
+
+-- A stable insertion sort.
+fn sort_by[A](xs: List[A], before: !(A * A => bool)) -> List[A] =
+  fold(xs, nil[A](), !{ (acc, x) -> insert_by(x, acc, before) })
+
+fn first_n[A](n: i32, xs: List[A]) -> List[A] =
+  if n == 0 { nil() } else {
+    match unroll xs { inl u -> nil() | inr (x, rest) -> cons(x, first_n(n - 1, rest)) }
+  }
+
+fn put_word(o: Out, w: Word, len: i32) -> Out * 1 =
+  let mut o = o;
+  let mut rest = w;
+  for _ in 0..len {
+    match unroll rest {
+      inl u -> rest = nil[u8]()
+    | inr (b, more) -> let (o2, u) = putb(o, b); o = o2; rest = more
+    }
+  };
+  (o, ())
+
+fn length[A](xs: List[A]) -> i32 = fold(xs, 0, !{ (k, x) -> k + 1 })
+
+main -> i32 =
+  let r = with on_exhausted(!{ u -> (0, nil[(Word * i32) * i32]()) }) {
+    let ws = borrow imm "the fox saw a dog and the fox ran to the dog then a fox quick end" { v ->
+      with on_exhausted(!{ u -> nil() }) { words(v) } };
+    let kept = drop_stops(ws);
+    let counts = fold(kept, nil[Word * i32](), !{ (acc, w) -> bump(acc, w) });
+    let sorted = sort_by(counts, !{ (a, b) -> let (wa, na) = a; let (wb, nb) = b; na > nb });
+    let n = length(clone(sorted));
+    (n, map(first_n(3, sorted), !{ e -> let (w, k) = e; let c = clone(w); ((c, k), length(w)) }))
+  };
+  let (n, best) = r;
+  let mut rest = best;
+  for _ in 0..3 {
+    match unroll rest {
+      inl u -> rest = nil[(Word * i32) * i32]()
+    | inr (e, more) ->
+        let ((w, k), len) = e;
+        put_word(&mut stdout, w, len);
+        putb(&mut stdout, b' ');
+        put_dec(&mut stdout, k);
+        putb(&mut stdout, b'\n');
+        rest = more
+    }
+  };
+  n
