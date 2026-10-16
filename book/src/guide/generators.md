@@ -202,4 +202,4 @@ across it is then dropped. A capability, such as the input or the output, has no
 must be handed back, so a generator cannot hold one across a `yield`: a generator over the input
 is not provided yet. A body of a loop may use them; the loop's variables are passed through the
 operation. A block that yields to the `for` over its generator would be passed those variables
-and hand them back at each call, which is not built yet (SPEC §29 *Open*).
+and hand them back at each call, which is not built yet (SPEC §30 *Open*).

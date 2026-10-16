@@ -1,4 +1,4 @@
--- E6, no accidental handling (SPEC §19 Laws item 3, the kernel program `tunnel`; SPEC §29):
+-- E6, no accidental handling (SPEC §19 Laws item 3, the kernel program `tunnel`; SPEC §30):
 -- `fwrap` runs its block under its own handler of `Fail`, `default(false)`. The block raises
 -- `Fail`, and it is written under `to_result`: its raise goes to the handler around it where it is
 -- written, and passes `fwrap`'s, whose static name is its own site's. `fwrap`'s copy at the

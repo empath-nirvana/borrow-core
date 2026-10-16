@@ -3,7 +3,7 @@ import Frontend.Print
 import Frontend.Elab.Subst
 
 /-!
-# Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21, §29]`
+# Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21, §30]`
 
 An effect declares operations, each **answering** (`fn`) or **control** (`ctl`, with the
 structural qualifier of its continuation: affine by default, `linear ctl`, `multi ctl`). An effect
@@ -41,7 +41,7 @@ rest of the sugar; it knows no effect by name.
   record of its members, each taking the copy's capabilities first as any copy does; a call of a
   member inside it is a direct call of the self-reference. A layer is a transformer of the
   generator, applied before the fixed point.
-* **An effectful block** (§29) is a closure written as an argument at a parameter of function
+* **An effectful block** (§30) is a closure written as an argument at a parameter of function
   type whose body performs control operations: it is elaborated where it is written, its
   operations resolved to the sites around it, and the call is a call of the callee's copy at the
   block's row (`blockCall`, `copyFor`'s blocks): the parameter's type is `!U(A -o F[row] B)` there,
@@ -139,10 +139,10 @@ structure Env where
   the layers' rows too. A copy's body is outside them: they apply to the calls written inside. -/
   inLayers : List String := []
   /-- The functions declared so far that have no row, each with its declaration: a call that passes
-  one an effectful block uses its copy at the block's row (`blockCall`).  `[spec §29]` -/
+  one an effectful block uses its copy at the block's row (`blockCall`).  `[spec §30]` -/
   plain : List (String × Decl) := []
   /-- In a copy made for effectful blocks: each block parameter and the effect instances its
-  block performs, which a call of it performs (`rowV`).  `[spec §29]` -/
+  block performs, which a call of it performs (`rowV`).  `[spec §30]` -/
   cbRows : List (String × List Inst) := []
 
 /-- A capability in scope: the answering effect it serves, the variable holding its `mut 'l S`
@@ -701,6 +701,7 @@ def unboxesC (k : String) : Nat → Comp → Bool
     | .letUnit _ V M | .letPair _ _ _ V M => unboxesV k n V || unboxesC k n M
     | .case _ V _ M _ N | .for_ _ _ V M N => unboxesV k n V || unboxesC k n M || unboxesC k n N
     | .unwind _ _ _ M D N => unboxesC k n M || unboxesC k n D || unboxesC k n N
+    | .withbor2r _ _ _ _ _ _ _ _ M => unboxesC k n M
     | .force .. | .top _ => false
 end
 
@@ -741,7 +742,7 @@ structure Cx where
   layerCall : Option LCall := none
   /-- In a clause of an operation that resumes: its continuation. -/
   resume : Option ResumeK := none
-  /-- In a copy made for effectful blocks (SPEC §29): each block parameter, and the sites its
+  /-- In a copy made for effectful blocks (SPEC §30): each block parameter, and the sites its
   block's control operations were resolved to where the block was written. -/
   cbs : List (String × List Site) := []
 
@@ -838,7 +839,7 @@ def FnParts.build (sp : Span) (f : FnParts) (row : Row := .nil) : VTy × Val :=
   let (T, M) := inner f.lives
   if f.bang then (.bang sp T, .bangThunkv sp M) else (T, .thunkv sp M)
 
-/-! ### Effectful blocks  `[spec §29]` -/
+/-! ### Effectful blocks  `[spec §30]` -/
 
 /-- The names of a function's parameters, in order, read off its body as the parser binds them
 from the parameter tuple: `let (x, io_pN) = p; let (y, z) = io_pN; …`, `x <- return p`, or none. -/
@@ -923,7 +924,7 @@ def withBlocks (env : Env) (sp : Span) (name : String) (f : FnParts) (ss : List 
 def Env.withBlocks (env : Env) (named : List (String × List Site)) : Env :=
   { env with cbRows := named.map fun (x, ss) => (x, ss.map fun s => (⟨s.eff, some s.args⟩ : Inst)) }
 
-/-- The effectful blocks a call of `x` passes (SPEC §29): each component `j` of its argument tuple
+/-- The effectful blocks a call of `x` passes (SPEC §30): each component `j` of its argument tuple
 at a parameter of a function type that is a closure written here whose body performs control
 operations, or a block parameter of the copy being elaborated; each with the sites its operations
 go to, the innermost handlers of their effects where the block is written. -/
@@ -1264,12 +1265,12 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
         if let some rk := cx.resume then
           if rk.k == x then
             return ← resumeCall k cx cs sp rk W
-        -- A call of a block parameter of a copy made for effectful blocks (SPEC §29).
+        -- A call of a block parameter of a copy made for effectful blocks (SPEC §30).
         if let some ss := cx.cbs.lookup x then
           return ← blockParamCall k cx cs sp f x ss W
         -- An argument at a stored generator's parameter: the stored generator of the call.
         let (bP, W) ← pullArgsV k cx cs x W
-        -- Effectful blocks passed: a call of the callee's copy at their rows (SPEC §29).
+        -- Effectful blocks passed: a call of the callee's copy at their rows (SPEC §30).
         if (cx.env.op? x).isNone then
           let blks ← (blockArgs cx x W : Except Error _)
           if !blks.isEmpty then
@@ -1288,7 +1289,7 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
     | .var sp x => do
       if (cx.cbs.lookup x).isSome then
         throw ⟨sp, s!"`{x}` is a block parameter given an effectful block: it can only be called, " ++
-          "or passed on to a block parameter of a call; a block is not stored (SPEC §29)"⟩
+          "or passed on to a block parameter of a call; a block is not stored (SPEC §30)"⟩
       if let some rk := cx.resume then
         if rk.k == x && rk.stateful then
           throw ⟨sp, s!"the continuation `{x}` of a handler with a state is passed as a value: it " ++
@@ -1547,7 +1548,7 @@ def fnCall : Nat → Cx → List Cap → Span → Val → String → FSig → Va
         (← unpack sp used r t (N' N)) false)
     pure (b ++ [bind], .var sp r)
 
-/-- A call's arguments elaborated, a block parameter passed on as it is (SPEC §29). -/
+/-- A call's arguments elaborated, a block parameter passed on as it is (SPEC §30). -/
 def goArgs : Nat → Cx → List Cap → Val → EM (List Bind × Val)
   | 0, _, _, V => throw ⟨V.span, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, V => match V with
@@ -1558,7 +1559,7 @@ def goArgs : Nat → Cx → List Cap → Val → EM (List Bind × Val)
       pure (b₁ ++ b₂, .pair sp V' W')
     | V => goV k cx cs V
 
-/-- `f(W)` of a block parameter `f` of a copy made for effectful blocks (SPEC §29): a call of a value
+/-- `f(W)` of a block parameter `f` of a copy made for effectful blocks (SPEC §30): a call of a value
 whose type has the block's row, bound before the value it is in. -/
 def blockParamCall : Nat → Cx → List Cap → Span → Val → String → List Site → Val →
     EM (List Bind × Val)
@@ -1570,7 +1571,7 @@ def blockParamCall : Nat → Cx → List Cap → Span → Val → String → Lis
     let bind : Bind := fun N => pure (.bind sp ⟨r, sp⟩ none (.ret sp (.app sp f W')) N false)
     pure (b ++ [bind], .var sp r)
 
-/-- `g(W)` passing effectful blocks `blks` (SPEC §29): each block written here is elaborated where
+/-- `g(W)` passing effectful blocks `blks` (SPEC §30): each block written here is elaborated where
 it is written, its operations resolved to the sites around it; the call is a call of `g`'s copy at
 the blocks' rows (and for what serves `g`'s own row), bound before the value it is in. -/
 def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig → Val → List (Nat × List Site) →
@@ -1579,7 +1580,7 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
   | k + 1, cx, cs, sp, f, x, g, W, blks => do
     noLend sp s!"`{x}`" W
     if let .def_ _ _ (_ :: _) _ _ _ := g.decl then
-      throw ⟨sp, s!"`{x}` is generic and is given an effectful block: not provided (SPEC §29 *Open*)"⟩
+      throw ⟨sp, s!"`{x}` is generic and is given an effectful block: not provided (SPEC §30 *Open*)"⟩
     let some P := (cx.env.sigs.lookup x).bind paramTyOf
       | throw ⟨sp, s!"internal error: the parameters of `{x}`"⟩
     let mut bs : List Bind := []
@@ -2133,7 +2134,7 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
     let some exh := env.exhEff? | throw ⟨sp, s!"internal error: the exhaustion effect"⟩
     let some e := ss.find? (·.eff == exh.name)
       | throw ⟨sp, s!"`{x}` is recursive: its depth is bounded, and no handler of `{exh.name}` is in scope here"⟩
-    -- Effectful blocks (SPEC §29): the member's block parameters at their rows.
+    -- Effectful blocks (SPEC §30): the member's block parameters at their rows.
     if !blks.isEmpty && G₀.members.length > 1 then
       throw ⟨sp, s!"`{x}` is given an effectful block, and is a member of a recursive group of " ++
         "several functions: not provided"⟩
@@ -2315,7 +2316,7 @@ def copyOf : Nat → Env → Span → FSig → List HSig → List Site → Strin
     let q := (← get).quiet
     if env.lib.contains g.name then modify fun s => { s with quiet := true }
     let f ← (fnParts dsp n.name A V : Except Error FnParts)
-    -- Effectful blocks (SPEC §29): the block parameters at their rows.
+    -- Effectful blocks (SPEC §30): the block parameters at their rows.
     let (f, named, ssAll) ← (withBlocks env dsp g.name f ss blks : Except Error _)
     let env := env.withBlocks named
     -- The capabilities, in the order of the row: an answering handler's, and the variable a

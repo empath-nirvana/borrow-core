@@ -2523,7 +2523,7 @@ def fnParamOf : CVTy → Option CVTy
   | _ => none
 
 /-- A value is a closure written in place, or a tuple or injection with one in it: an effectful
-block (SPEC §29) is checked against the parameter type, which gives its row. -/
+block (SPEC §30) is checked against the parameter type, which gives its row. -/
 def hasBlockLit : Val → Bool
   | .thunk .. | .thunkv .. | .bangThunk .. | .bangThunkv .. => true
   | .pair _ V W => hasBlockLit V || hasBlockLit W
@@ -3372,7 +3372,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       match effCall? c' V' with
       | some (f, W) =>
         -- An argument with a block written in place is bound at the parameter's type, which gives
-        -- the block its row (SPEC §29).
+        -- the block its row (SPEC §30).
         let P ← if !hasBlockLit W then pure none else
           match (calleeHead f).bind (fun g => c'.tyV (.var .none g)) |>.bind fnParamOf with
           | some P => do pure (some (← (c'.surface sp P : Except Error VTy)))
@@ -3594,7 +3594,7 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
 `none` when the source is not sized. `V` is the source as written. A body that performs an
 operation that resumes is a div loop at a site observed one turn at a time (`forDataDiv`), and a
 loop at the row otherwise: `bounded_fix` whose budget is the count, its step the body at the row
-(`rowLoop`).  `[spec §16, §29]` -/
+(`rowLoop`).  `[spec §16, §30]` -/
 def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val → Comp → Comp → DM (Option Comp)
   | 0, _, _, _, _, _, _, _, _ => pure none
   | n + 1, c, exp, sp, x, V, V', M, N => do

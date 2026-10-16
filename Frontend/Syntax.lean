@@ -311,7 +311,7 @@ parameters). A site whose operations are all abortive answers `inl` the body's v
 operation's argument, and its clauses run after it (SPEC §19): `after` is then the handler's own
 answer type, which the typed elaboration gives the type name `fx_res{n}` once its type parameters
 are determined. A clause that takes its continuation out of a box (`unbox k`) receives it boxed
-at `top`, `[@⊤] K` (`boxK`, SPEC §28's BOXED-κ, §29). -/
+at `top`, `[@⊤] K` (`boxK`, SPEC §28's BOXED-κ, §30). -/
 structure HInfo where
   name : String
   n : Nat

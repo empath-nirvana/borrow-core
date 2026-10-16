@@ -169,11 +169,11 @@ main -> i32 * (i32 + 1) =
 `twice` is used as written; `guarded` is copied at the block's row, and the block's `raise` passes
 `guarded`'s own `default` to reach `to_result` (`bcc check` reports the copy and where the block's
 operations go). A block is called, or passed on to another function's block parameter: it is
-never stored or returned (SPEC §29).
+never stored or returned (SPEC §30).
 
 ## Async tasks
 
-`lib/async.bc` is a scheduler written with these pieces (SPEC §29). `await()` is an ordinary
+`lib/async.bc` is a scheduler written with these pieces (SPEC §30). `await()` is an ordinary
 control operation; `with spawn { … }` runs a block to its first `await` and answers the task, its
 continuation kept; `run_until_empty` resumes the queued tasks round robin until none is pending.
 
@@ -201,4 +201,4 @@ task holds no borrow across an `await` yet (docs/async-capabilities.md, #52).
 An operation inside a stored closure or a fold's algebra, a block that uses a handler's
 capability, functions over computations (`retry`, `|>` into a handler), named instances when two
 handlers of one effect are in scope, and operations that answer a borrow into the handler's state
-are later stages (SPEC §18 *Open*, §29 *Open*).
+are later stages (SPEC §18 *Open*, §30 *Open*).

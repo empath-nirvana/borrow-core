@@ -15,7 +15,7 @@ Already in place:
 
 - `await` is a handler operation, and `lib/async.bc` is a round-robin scheduler with no function
   colouring: a function that awaits is ordinary, and one that takes a block is copied at the
-  block's row (see [Effects and handlers](../effects.md), *Async tasks*; SPEC §29;
+  block's row (see [Effects and handlers](../effects.md), *Async tasks*; SPEC §30;
   `corpus/async-scheduler.bc`, `corpus/async-map.bc`).
 
 Still to come: borrows across `await` (`docs/async-capabilities.md` §3), spawning from a

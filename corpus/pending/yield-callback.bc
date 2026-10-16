@@ -2,9 +2,9 @@
 -- A callback that yields: `tens` passes `for_each` a closure that yields ten times each element,
 -- so that `tens` yields what the callback yields while `for_each` runs.
 --
--- Blocked by #161: a block passed to a function is copied at its row (SPEC §29), but the `for`'s
+-- Blocked by #161: a block passed to a function is copied at its row (SPEC §30), but the `for`'s
 -- site that `tens`'s `yield` goes to threads the loop's variables through the operation, and a
--- block would have to be passed them and hand them back at each call (SPEC §29 *Open*). Until
+-- block would have to be passed them and hand them back at each call (SPEC §30 *Open*). Until
 -- then a generator that maps another is written as a loop over it (`corpus/gen-pipeline.bc`).
 --
 -- now: 24:25: this block performs `Yield` of an enclosing `for`, which threads its variables through the operation: a block passed to a function does not hand them back (not provided)

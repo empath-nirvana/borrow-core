@@ -35,7 +35,7 @@ generators and the scheduler written inline, are in the corpus: `corpus/async-r1
 
 | file | program |
 |---|---|
-| `bc/a2-local-borrows.bc` … `bc/a6-cancel.bc` | A2, A3, A5, A6; A1 and A4 run and are in the corpus (`corpus/async-scheduler.bc`, `corpus/async-map.bc`, SPEC §29) |
+| `bc/a2-local-borrows.bc` … `bc/a6-cancel.bc` | A2, A3, A5, A6; A1 and A4 run and are in the corpus (`corpus/async-scheduler.bc`, `corpus/async-map.bc`, SPEC §30) |
 | `bc/reject/n1-…` … `n9-…` | programs the design rejects |
 | `bc/accept/m1-…` … `m3-…` | adversarial programs the design accepts, which must run cleanly |
 

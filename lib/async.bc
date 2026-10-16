@@ -1,4 +1,4 @@
--- Async tasks with no colouring (SPEC §29, docs/async-capabilities.md). `Async` is an ordinary
+-- Async tasks with no colouring (SPEC §30, docs/async-capabilities.md). `Async` is an ordinary
 -- control effect: a task is a direct-style computation that calls `await()` to let other tasks
 -- run. A function that awaits has `Async` in its inferred row; one that only takes a block (a
 -- closure parameter) has nothing in its type, and a call that passes it an awaiting block uses its

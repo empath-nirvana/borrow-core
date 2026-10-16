@@ -1,5 +1,5 @@
--- expect: 9:46: `f` is a block parameter given an effectful block: it can only be called, or passed on to a block parameter of a call; a block is not stored (SPEC §29)
--- An effectful block stored (SPEC §29): `keep` answers its block parameter. Given a block that
+-- expect: 9:46: `f` is a block parameter given an effectful block: it can only be called, or passed on to a block parameter of a call; a block is not stored (SPEC §30)
+-- An effectful block stored (SPEC §30): `keep` answers its block parameter. Given a block that
 -- awaits, `keep`'s copy at the block's row would hand the block out of the call, where no site of
 -- its row need be. A block passed to a function is called there or passed on, never stored or
 -- returned; a stored callback is boxed at a bound (§28, docs/async-capabilities.md §2.3).

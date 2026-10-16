@@ -1,4 +1,4 @@
--- A4 of docs/async-capabilities.md (SPEC §29): an awaiting block passed to an ordinary `map`, the
+-- A4 of docs/async-capabilities.md (SPEC §30): an awaiting block passed to an ordinary `map`, the
 -- same `map` also used synchronously. `map`'s type names no effect: `!(List[i32] * !(i32 => i32)
 -- => List[i32])`. Its block parameter `f` is called, never stored or returned. A block's effects are
 -- those of where it is written: `slow_tens`'s block awaits, and its `await` goes to the handler

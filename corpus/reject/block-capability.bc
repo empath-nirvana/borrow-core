@@ -1,7 +1,7 @@
 -- expect: 12:25: this block performs `Count`, an effect answered by a capability: a block passed to a function performs control operations only (#161, E6: not provided)
--- A block that uses an answering capability (SPEC §29): `tick` is a call on the state of the
+-- A block that uses an answering capability (SPEC §30): `tick` is a call on the state of the
 -- `count` handler, a capability lent to the body of the `with`. A block passed to a function would
--- need the capability passed with it at each call, which is not provided (SPEC §29 *Open*); a
+-- need the capability passed with it at each call, which is not provided (SPEC §30 *Open*); a
 -- block's control operations need nothing passed, since they go to the sites around it by name.
 effect Count { fn tick() -> i32 }
 handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }

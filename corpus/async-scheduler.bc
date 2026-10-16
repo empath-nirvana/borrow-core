@@ -1,4 +1,4 @@
--- A1 of docs/async-capabilities.md (SPEC §29): a run-until-empty scheduler over tasks that are plain
+-- A1 of docs/async-capabilities.md (SPEC §30): a run-until-empty scheduler over tasks that are plain
 -- direct-style functions performing `await`. Each task owns its data; nothing is borrowed across a
 -- suspension, so no relaxed rule is used: the program is a `CDerives` derivation, and
 -- `fundamentalC`/`adequacyD` cover it with no hypothesis.
