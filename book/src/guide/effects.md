@@ -172,9 +172,7 @@ operations go). A block is called, or passed on to another function's block para
 never stored or returned (SPEC §30).
 
 A block may use a handler's capability, or yield to a `for` it is written inside: it takes what it
-uses at each call and hands it back, and the function's copy passes it along (SPEC §32). A
-function with a row named where a function is expected is passed by name: the copy calls it where
-the callee calls its parameter, so a `for` over that call iterates it (SPEC §32, proposed).
+uses at each call and hands it back, and the function's copy passes it along (SPEC §32).
 
 ## Async tasks
 

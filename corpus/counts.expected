@@ -45,7 +45,6 @@ block-capability-inner 2 0 0
 block-swap 2 0 0
 block-yield-inner 0 0 0
 borrow-in-scope 2 0 0 # the borrowed cell and the cell holding the borrow
-byname-served-at-call 0 0 0
 bytes-upper 1 0 0
 capture-await-raise 0 0 0 # `skip` resumes in place and `to_result` is a branch: nothing is allocated or dispatched
 capture-log-hand 0 0 0 # equal to the kernel program log-outside-native (corpus/kernel-counts.expected)
@@ -80,7 +79,6 @@ effects-log-fail 3 0 0 # the log cell of each run
 effects-map 11 0 0 # equal to effects-map-hand: the handled program is the capability-passing one
 effects-map-fail 3 0 0
 effects-map-hand 11 0 0
-effects-sum-gen 0 0 0
 effects-tunnel 0 0 0 # equal to the kernel program tunnel
 family-swap 2 0 0
 fields 5 0 0 # the stdin and stdout cells, the line buffer and its two growths at the long line; fields are views

@@ -52,15 +52,12 @@ rest of the sugar; it knows no effect by name.
 * **A block that uses capabilities** (an answering handler's state, a `for`'s threaded variables)
   takes them first and hands them back first; the callee's copy passes them at each call of the
   block parameter (§32, `Blk.caps`).
-* **A function with a row passed by name** at a parameter of function type: the callee's copy
-  calls it where the callee calls its parameter (§32, `Blk.byName`).
 * **A handler's lifetime parameters** are the meet of the lifetimes in scope at each `with`
   (§32, `HInfo.lives`).
 
 What is not provided, with the message that says so: an operation inside a closure or block that
 is not run in place, other than an effectful block; a block parameter stored; a function with a
-row passed as a value other than by name at a parameter of function type (effectful callbacks,
-#161); a lend `&mut x` in the arguments of a call that threads a capability; an operation of an answering
+row passed as a value (effectful callbacks, #161); a lend `&mut x` in the arguments of a call that threads a capability; an operation of an answering
 effect inside a clause; an effect with both kinds of operation; type parameters on an answering
 effect; an unrestricted operation that answers `never` (`multi ctl`: an abortive operation is
 affine, decision 63); a function with a row whose result is a computation (a loop or a
@@ -233,9 +230,6 @@ structure St where
   operation of one of them is a div loop, one turn per observation; of any other site, a total
   loop at the row (SPEC §16, *Effectful bodies*). -/
   perTurn : List Nat := []
-  /-- The functions without a row that were given a function by name (SPEC §32): one that no
-  declaration calls as written is replaced by its copies. -/
-  byNamed : List String := []
 
 abbrev EM := StateT St (Except Error)
 
@@ -485,139 +479,6 @@ where
 /-- The names of a function's parameters (`paramNamesIn`). -/
 def paramNames (f : FnParts) : List String := paramNamesIn f.p.name f.body
 
-/-! ### A function passed by name (SPEC §32) -/
-
-/-- A binder met by `renameParamC x y`: the parameter's first binder is renamed (`fx_byname_x`),
-and `x` below it is read as `y` (`some true`); a later one shadows it (`some false`); another name
-changes nothing (`none`). -/
-def paramBinder (x : String) (z : Ident) (bound : Bool) : Ident × Option Bool :=
-  if z.name != x then (z, none)
-  else if bound then (z, some false)
-  else (⟨"fx_byname_" ++ x, z.span⟩, some true)
-
-mutual
-/-- `V` with the parameter `x` of a function's body read as the function `y` (`paramBinder`).
-`[spec §32]` -/
-def renameParamV (x y : String) (bound : Bool) : Val → Val
-  | .var sp z => .var sp (if bound && z == x then y else z)
-  | .pair sp V W => .pair sp (renameParamV x y bound V) (renameParamV x y bound W)
-  | .inl sp V => .inl sp (renameParamV x y bound V)
-  | .inr sp V => .inr sp (renameParamV x y bound V)
-  | .thunk sp M => .thunk sp (renameParamC x y bound M)
-  | .thunkv sp M => .thunkv sp (renameParamC x y bound M)
-  | .bangThunk sp M => .bangThunk sp (renameParamC x y bound M)
-  | .bangThunkv sp M => .bangThunkv sp (renameParamC x y bound M)
-  | .unbang sp V => .unbang sp (renameParamV x y bound V)
-  | .boxed sp a V => .boxed sp a (renameParamV x y bound V)
-  | .unbox sp V => .unbox sp (renameParamV x y bound V)
-  | .sub sp V a => .sub sp (renameParamV x y bound V) a
-  | .roll sp V => .roll sp (renameParamV x y bound V)
-  | .unroll sp V => .unroll sp (renameParamV x y bound V)
-  | .run sp M => .run sp (renameParamC x y bound M)
-  | .app sp V W => .app sp (renameParamV x y bound V) (renameParamV x y bound W)
-  | .inst sp V a => .inst sp (renameParamV x y bound V) a
-  | .ascribe sp V A => .ascribe sp (renameParamV x y bound V) A
-  | .shorten sp m σ a V => .shorten sp m σ a (renameParamV x y bound V)
-  | V => V
-
-/-- `renameParamV` of a computation; `renameParamU` below a binder. -/
-def renameParamC (x y : String) (bound : Bool) : Comp → Comp
-  | .ret sp V => .ret sp (renameParamV x y bound V)
-  | .bind sp z A M N lin =>
-    let (z', b') := paramBinder x z bound
-    .bind sp z' A (renameParamC x y bound M) (renameParamU x y bound b' N) lin
-  | .lam sp z A M =>
-    let (z', b') := paramBinder x z bound
-    .lam sp z' A (renameParamU x y bound b' M)
-  | .app sp M z => .app sp (renameParamC x y bound M) z
-  | .with_ sp M N => .with_ sp (renameParamC x y bound M) (renameParamC x y bound N)
-  | .proj sp i M => .proj sp i (renameParamC x y bound M)
-  | .letUnit sp V M => .letUnit sp (renameParamV x y bound V) (renameParamC x y bound M)
-  | .letPair sp a b V M =>
-    let (a', ba) := paramBinder x a bound
-    let (b', bb) := paramBinder x b bound
-    .letPair sp a' b' (renameParamV x y bound V)
-      (renameParamU x y bound (if a.name == x then ba else bb) M)
-  | .case sp V a M b N =>
-    let (a', ba) := paramBinder x a bound
-    let (b', bb) := paramBinder x b bound
-    .case sp (renameParamV x y bound V) a' (renameParamU x y bound ba M) b'
-      (renameParamU x y bound bb N)
-  | .absurd sp V => .absurd sp (renameParamV x y bound V)
-  | .lamL sp z b M => .lamL sp z b (renameParamC x y bound M)
-  | .inst sp M a => .inst sp (renameParamC x y bound M) a
-  | .nuIn sp M => .nuIn sp (renameParamC x y bound M)
-  | .nuOut sp M => .nuOut sp (renameParamC x y bound M)
-  | .ascribe sp M C => .ascribe sp (renameParamC x y bound M) C
-  | .for_ sp z V M N =>
-    let (z', bz) := paramBinder x z bound
-    .for_ sp z' (renameParamV x y bound V) (renameParamU x y bound bz M) (renameParamC x y bound N)
-  | .perform sp n i V => .perform sp n i (renameParamV x y bound V)
-  | .abort sp n i V => .abort sp n i (renameParamV x y bound V)
-  | .handle sp n hr hc M => .handle sp n hr hc (renameParamC x y bound M)
-  | .unwind sp z A M D N =>
-    let (z', bz) := paramBinder x z bound
-    .unwind sp z' A (renameParamC x y bound M) (renameParamC x y bound D) (renameParamU x y bound bz N)
-  | .withbor2r sp z b A B r p m M =>
-    let (m', bm) := paramBinder x m bound
-    .withbor2r sp z b A B r p m' (renameParamU x y bound bm M)
-  | M => M
-
-/-- `renameParamC` below a binder that `paramBinder` read. -/
-def renameParamU (x y : String) (bound : Bool) : Option Bool → Comp → Comp
-  | some false, M => M
-  | some true, M => renameParamC x y true M
-  | none, M => renameParamC x y bound M
-end
-
-/-- A function's declaration: one with a row, or a plain one. -/
-def Env.declOf? (env : Env) (x : String) : Option Decl :=
-  match env.fn? x with
-  | some g => some g.decl
-  | none => env.plain.lookup x
-
-/-- A function's code under its `!` and lifetimes: its parameter's name and its body. -/
-def codeC : Nat → Comp → Option (String × Comp)
-  | k + 1, .lamL _ _ _ (.ret _ (.thunkv _ M)) => codeC k M
-  | _ + 1, .lam _ p _ body => some (p.name, body)
-  | _, _ => none
-
-def Decl.code? : Decl → Option (String × Comp)
-  | .def_ _ _ _ _ (.thunkv _ M) _ | .def_ _ _ _ _ (.bangThunkv _ M) _ => codeC fuel M
-  | _ => none
-
-/-- The components `j` of a call of `x` that pass a function with a row by name, at a parameter of
-function type: `(j, f)`.  `[spec §32]` -/
-def Env.byNameArgs (env : Env) (x : String) (W : Val) : List (Nat × String) :=
-  -- A recursive callee is not given a function by name (not provided).
-  if ((env.fn? x).bind (·.group)).isSome then [] else
-  match (env.sigs.lookup x).bind paramTyOf with
-  | none => []
-  | some P => (argComps fuel P W).zipIdx.filterMap fun ((A, V), j) =>
-    match A, V with
-    | .bang _ (.lolli ..), .var _ v | .lolli .., .var _ v =>
-      if (env.fn? v).isSome then some (j, v) else none
-    | _, _ => none
-
-/-- `V` calls a function passing another by name (SPEC §32): the call is a call of a copy. -/
-def Env.byNameV (env : Env) : Nat → Val → Bool
-  | 0, _ => false
-  | k + 1, V => match V with
-    | .app _ f W =>
-      (match headName f with
-        | some x => !(env.byNameArgs x W).isEmpty
-        | none => false) || env.byNameV k f || env.byNameV k W
-    | .pair _ V W => env.byNameV k V || env.byNameV k W
-    | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => env.byNameV k V
-    | _ => false
-
-/-- The body of `x` with its parameter `j` read as the function `v` (SPEC §32). -/
-def Env.byNameBody (env : Env) (x : String) (j : Nat) (v : String) : Option Comp := do
-  let (p, body) ← (env.declOf? x).bind Decl.code?
-  let pj ← (paramNamesIn p body)[j]?
-  pure (renameParamC pj v false body)
-
 mutual
 /-- The effects a value performs, outside the `with`s that handle them. A call of a function
 performing an iteration effect, as an argument at a stored generator's parameter, is the stored
@@ -645,17 +506,7 @@ def rowV (env : Env) : Nat → Val → List Inst
           | none, none => rowV env n f
         | none => rowV env n f
       let args := match headName f with
-        | some x => match env.byNameArgs x W with
-          | [] => (env.pullArgs x W).foldl (fun r (V, pull) => union r (pullRow env n pull V)) []
-          | bn =>
-            -- A function passed by name performs where the callee calls it (SPEC §32): what the
-            -- callee's body, its parameter read as the function, leaves unhandled.
-            let P := ((env.sigs.lookup x).bind paramTyOf).getD (.unit Span.none)
-            (argComps fuel P W).zipIdx.foldl (fun r ((A, V), j) => union r (match bn.lookup j with
-              | some v => match env.byNameBody x j v with
-                | some B => rowC env n B
-                | none => []
-              | none => pullRow env n (isPullTy A) V)) []
+        | some x => (env.pullArgs x W).foldl (fun r (V, pull) => union r (pullRow env n pull V)) []
         | none => rowV env n W
       union head args
     | .var _ x => match env.fn? x with
@@ -1084,9 +935,6 @@ structure Blk where
   j : Nat
   ss : List Site
   caps : List Cap := []
-  /-- A function with a row passed by name: the copy calls it where the callee calls its
-  parameter, and the parameter is `()` (SPEC §32). -/
-  byName : Option String := none
 
 /-- A capability as a copy takes it: an answering handler's at the copy's own names, a `for`'s
 threaded variable as it is.  `[spec §32]` -/
@@ -1124,8 +972,7 @@ def blkCaps (blks : List Blk) : List Cap := blks.foldl (fun acc b => addCaps acc
 /-- The key of a copy for its blocks: `b{j}n{n}…` per block parameter `j`, followed by the
 answering handlers whose capabilities the block uses. -/
 def blockKeys (bs : List Blk) : List String :=
-  bs.map fun b => s!"b{b.j}" ++ (match b.byName with | some v => "f" ++ v | none => "") ++
-    String.join (b.ss.map fun s => s!"n{s.n}") ++
+  bs.map fun b => s!"b{b.j}" ++ String.join (b.ss.map fun s => s!"n{s.n}") ++
     String.join ((b.caps.filter (·.thr.isNone)).map fun c => c.h.name)
 
 /-- The sites, as the reports name them. -/
@@ -1155,20 +1002,13 @@ def withBlocks (env : Env) (sp : Span) (name : String) (f : FnParts) (ss : List 
   for b in blks do
     let some x := names[b.j]? | throw ⟨sp, s!"internal error: the parameter {b.j} of `{name}`"⟩
     let some A := compAt n f.P b.j | throw ⟨sp, s!"internal error: the parameter `{x}` of `{name}`"⟩
-    -- A function passed by name: the parameter is `()`, and its calls are the function's.
-    if b.byName.isSome then
-      reps := reps ++ [(b.j, .unit sp)]
-      continue
     let cs := b.caps.map (·.canon sp)
     let some A' := rowedCapFnTy (env.rowOf b.ss) cs A
       | throw ⟨sp, s!"internal error: the block parameter `{x}` of `{name}`"⟩
     reps := reps ++ [(b.j, A')]
     named := named ++ [(x, b.ss, cs)]
   let all := blks.foldl (fun acc b => addSites acc b.ss) ss
-  let body := blks.foldl (fun M b => match b.byName, names[b.j]? with
-    | some v, some x => renameParamC x v false M
-    | _, _ => M) f.body
-  pure ({ f with P := setComps n f.P 0 reps, body }, named, all)
+  pure ({ f with P := setComps n f.P 0 reps }, named, all)
 
 /-- The environment of a copy's body with its block parameters' rows (`rowV`): the sites' effects,
 and the answering effects whose capabilities the blocks use. -/
@@ -1188,17 +1028,7 @@ def blockArgs (cx : Cx) (x : String) (W : Val) : Except Error (List Blk) := do
     if (rowedFnTy .nil A).isNone then continue
     match V with
     | .var _ v =>
-      if let some (ss, cs) := cx.cbs.lookup v then out := out ++ [⟨j, ss, cs, none⟩]
-      else if (cx.env.byNameArgs x W).any (·.1 == j) then
-        -- A function with a row passed by name (SPEC §32): it performs where the callee calls it,
-        -- and what the callee leaves unhandled is served here.
-        let some B := cx.env.byNameBody x j v
-          | throw ⟨V.span, s!"`{v}` is passed by name to `{x}`, whose parameters are not read"⟩
-        let row := rowC cx.env fuel B
-        let mut ss : List Site := []
-        for i in cx.ctl row do
-          ss := addSites ss [← cx.serve V.span s!"`{v}`, passed to `{x}`," i]
-        out := out ++ [⟨j, ss, cx.need row, some v⟩]
+      if let some (ss, cs) := cx.cbs.lookup v then out := out ++ [⟨j, ss, cs⟩]
     | .thunkv _ M | .bangThunkv _ M =>
       let row := rowC cx.env fuel M
       let ctl := cx.ctl row
@@ -1210,7 +1040,7 @@ def blockArgs (cx : Cx) (x : String) (W : Val) : Except Error (List Blk) := do
       for i in ctl do
         let s ← cx.serve V.span "this block" i
         ss := addSites ss [s]
-      out := out ++ [⟨j, ss, cs, none⟩]
+      out := out ++ [⟨j, ss, cs⟩]
     | _ => pure ()
   pure out
 
@@ -1276,7 +1106,7 @@ def liftPlain (cx : Cx) : Nat → Val → StateT (List Bind) EM Val
       match f with
       | .sugar .. | .app _ (.sugar ..) _ => do pure (.app sp f (← liftPlain cx k W))
       | _ =>
-        if !(cx.needV V).isEmpty || cx.ctlV V || cx.lcallV V || cx.env.byNameV fuel V then do
+        if !(cx.needV V).isEmpty || cx.ctlV V || cx.lcallV V then do
           pure (.app sp f (← liftPlain cx k W))
         else liftCalls k V
     | .pair sp V W => do pure (.pair sp (← liftPlain cx k V) (← liftPlain cx k W))
@@ -1454,7 +1284,7 @@ def trV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
   | 0, _, _, V => throw ⟨V.span, "internal error: a value nested too deeply"⟩
   | n + 1, cx, cs, V => do
     let row := rowV cx.env fuel V
-    let needs := !(cx.need row).isEmpty || !(cx.ctl row).isEmpty || cx.env.byNameV fuel V
+    let needs := !(cx.need row).isEmpty || !(cx.ctl row).isEmpty
     -- An effect with no handler in scope is reported where it is performed (`goV`).
     let unhandled := row.any fun i => (cx.capOf i.eff).isNone && (cx.siteOf i.eff).isNone
     -- A `return e` from a loop's body hands the copy's capabilities back too (`plainApp`).
@@ -1848,7 +1678,6 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
     let mut vs : List Val := []
     for ((_, V), j) in (argComps fuel P W).zipIdx do
       if let some blk := blks.find? (·.j == j) then
-        if blk.byName.isSome then vs := vs ++ [.unit V.span]; continue
         -- A block sees the sites where it is written, and the capabilities it uses, which it takes
         -- first and hands back first (SPEC §32).
         let cxB : Cx := { cx with caps := blk.caps, fnCaps := [] }
@@ -1880,10 +1709,7 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
       | _ => .var f.span name
     let t ← fresh "fx_b"
     let r ← fresh "fx_v"
-    let blkT := blks.map fun b => match b.byName with
-      | some v => s!"`{v}` by name, called where `{x}` calls it" ++
-          (if b.ss.isEmpty then "" else s!", performing at {sitesText b.ss}")
-      | none => "its block " ++ blockText b.ss b.caps
+    let blkT := blks.map fun b => "its block " ++ blockText b.ss b.caps
     report sp "call" (s!"{x} → `{name}`, " ++ ", ".intercalate blkT ++
       (if used.isEmpty then "" else ", passing the capabilities"))
     let ann := if used.isEmpty then none else (closedResult g.decl).map (capsTy sp used)
@@ -2602,8 +2428,6 @@ def copyOf : Nat → Env → Span → FSig → List HSig → List Site → Strin
   | 0, _, sp, _, _, _, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
   | k + 1, env, sp, g, hs, ss, name, blks => do
     let blks := blks.map (·.inCopy ss)
-    if blks.any (·.byName.isSome) then
-      modify fun s => { s with byNamed := if s.byNamed.contains g.name then s.byNamed else g.name :: s.byNamed }
     let st ← get
     if st.made.any (·.1 == name) || st.started.contains name then return name
     modify fun s => { s with started := name :: s.started }
@@ -2626,8 +2450,6 @@ def copyOf : Nat → Env → Span → FSig → List HSig → List Site → Strin
     let tps : List Ident := (((ss.filterMap (·.thr)).map (·.2)) ++
       ((cs.filterMap (·.thr)).filter fun W => !(ss.filterMap (·.thr)).any (·.2 == W))).map
         fun W => ⟨W, dsp⟩
-    -- A function passed by name performs in the copy: its sites are the caller's (SPEC §32).
-    let ss := addSites ss (blks.foldl (fun acc b => if b.byName.isSome then addSites acc b.ss else acc) [])
     let ss := ss.map fun s => { s with sp := dsp, what := "the caller" }
     let cx : Cx := { env, caps := cs, sites := ss, fnCaps := cs, cbs := named }
     let body ← trC k cx cs true f.body
@@ -2635,8 +2457,7 @@ def copyOf : Nat → Env → Span → FSig → List HSig → List Site → Strin
     let (A', V') := f'.build dsp (env.rowOf (ssAll.map fun s => { s with sp := dsp, what := "the caller" }))
     report dsp "lowering" (s!"copy `{name}`: `{g.name}` for " ++ ", ".intercalate
       ((hs.map (·.name)) ++ ss.map (fun s => s!"the site {s.n} of `{s.eff}`") ++
-        named.map (fun (b, bss, bcs) => s!"its block `{b}` {blockText bss bcs}") ++
-        blks.filterMap fun b => b.byName.map fun v => s!"`{v}` by name"))
+        named.map fun (b, bss, bcs) => s!"its block `{b}` {blockText bss bcs}"))
     modify fun s => { s with quiet := q }
     -- A copy that threads a `for`'s variable is generic in its type.
     let mk' := match tps, ps, mk with
@@ -2950,17 +2771,7 @@ def elaborate (ds : List Decl) (lib : List String := []) :
       | d => out := out.push d
     pure out.toList
   match go.run {} with
-  | .ok (ds, st) =>
-    -- A function given functions by name and called as written nowhere is replaced by its copies
-    -- (SPEC §32), as a function with a row is.
-    let uses (x : String) (d : Decl) : Bool := match d with
-      | .def_ _ m _ _ V _ => m.name != x && (refsV fuel V).contains x
-      | .main _ _ M => (refsC fuel M).contains x
-      | _ => false
-    let ds := ds.filter fun
-      | .def_ _ m _ _ _ _ => !st.byNamed.contains m.name || ds.any (uses m.name)
-      | _ => true
-    pure (ds, st.reports.toList, st.perTurn)
+  | .ok (ds, st) => pure (ds, st.reports.toList, st.perTurn)
   | .error e => throw e
 
 end Frontend.Elab.Effects

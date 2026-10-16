@@ -4018,7 +4018,8 @@ derivation of the let (`checkProgram_letPoly`). No program from source has a let
   raises is not stored (§15 *Open*). The core text writes a λ's binder with its type, the row
   included, so a let-bound function has one row there. The kernel programs `hof-two-rows`,
   `sum-gen` and `tunnel` are the three as Core terms; at the surface they are
-  `corpus/effects-hof-two-rows.bc`, `effects-tunnel.bc` (§30) and `effects-sum-gen.bc` (§32).
+  `corpus/effects-hof-two-rows.bc` and `effects-tunnel.bc` (§30), and the pending
+  `corpus/pending/effects-sum-gen.bc` (#161).
 - **A let-bound function used at different value types.** The lowering specialises per row
   (*Lowering*): a `[let-poly]` let whose uses are at one row but at different value types
   (`λx. x` at `I32` and at `1`) is lowered once, and the layout types (`Backend/Clos/Types.lean`)
@@ -4723,8 +4724,8 @@ performing at the site k of `E``.
 
 **Not provided**, each rejected with a message saying so: a block given to a member of a recursive
 group of several functions, or under a heap driver (§20). A block given to a generic function is
-§31's; a block that uses an answering capability or a `for`'s threaded variables, and a named
-function with a row passed as a value, are §32's.
+§31's; a block that uses an answering capability or a `for`'s threaded variables is §32's. A
+named function with a row passed as a value is refused (§18; §32 *Open*, #161).
 
 ### Counted loops at a resuming row
 
@@ -4939,20 +4940,18 @@ keeps its output and counts.
 
 ---
 
-## 32. Entry 31 — logged and scoped tasks, blocks that use capabilities, functions passed by name
+## 32. Entry 31 — logged and scoped tasks, blocks that use capabilities, a handler's lifetimes
 
 ### Motivation
 
-Four pieces §28 and §30 leave open (`docs/async-capabilities.md` §1, §2.3; #52):
+Three pieces §28 and §30 leave open (`docs/async-capabilities.md` §1, §2.3; #52):
 
 1. **A5 and A6 on `lib/async.bc`.** §29's programs schedule stored generators inline; a scheduler
    that logs (A5) and a task cancelled while it holds a relaxed lend (A6) were not built on the
    library (§30 *Open*).
 2. **Blocks that use a capability**: an answering handler's state, or the variables a `for`'s site
    threads (§30 *Not provided*; `corpus/pending/yield-callback.bc`).
-3. **A function with a row passed as a value** to a callee that calls it (§18, §30 *Not
-   provided*; `corpus/pending/effects-sum-gen.bc`).
-4. **A continuation boxed at a bound other than `top`** from a surface handler (§28 *Open*, §30
+3. **A continuation boxed at a bound other than `top`** from a surface handler (§28 *Open*, §30
    *Open*), so that a task may hold a borrow from outside, as `corpus/sched-b.bc` does in the
    core text.
 
@@ -5001,24 +5000,6 @@ is inside.
 A closure that is not a block argument still performs no operation of a capability
 (`corpus/reject/effect-in-closure.bc`).
 
-### Functions passed by name
-
-**PROPOSED.** A function with a row, named at a parameter of function type of a non-recursive
-callee, is passed by name: the call is a call of the callee's copy for the function,
-`x__b{j}f{fn}…`, whose parameter `j` is `()` and whose calls of the parameter are calls of the
-function. A call of a function with a row is served where it is called (§18), so the function's
-operations are served where the callee calls it: a `for` over its call handles its iteration
-effect, a handler of the callee around the call handles that effect, and what the callee leaves
-unhandled is served at the call of the callee. A callee called as written nowhere is replaced by
-its copies, as a function with a row is.
-
-The option not taken is to serve the function where it is passed, as a block (§30): there is no
-site of `Yield` where `effects-sum-gen.bc` passes its generators, so it cannot be written so.
-Passing by name differs from a block where the callee handles an effect of the function: the
-callee's handler serves it (`corpus/byname-served-at-call.bc`), where it does not serve a block's
-(`corpus/effects-tunnel.bc`). Not provided: a recursive callee given a function by name, a function
-with a row stored or returned (*Open*).
-
 ### A handler's lifetime parameters; tasks over an outer borrow
 
     handler h[T, …]<'d, …>: E[…], A -> R = { … }
@@ -5052,8 +5033,7 @@ own (the `Imm` rule is strict, §23), so the tasks are spawned inside a unit cel
 | `corpus/block-capability.bc` | a block that uses an answering capability (moved from `reject/`) | `6` | `1 0 0` |
 | `corpus/block-capability-inner.bc` | the same, given to a function with a handler of its own | `105` | `2 0 0` |
 | `corpus/list-capability.bc` | the same, given to the generic recursive `map` | `[11, 22, 33]` | `7 0 0` |
-| `corpus/effects-sum-gen.bc` | E2d: `any` written once, given two generators by name (moved from `pending/`) | `(inr (), inr ())` | `0 0 0` |
-| `corpus/byname-served-at-call.bc` | a function passed by name, served by the callee's handler | `(999, inr 3)` | `0 0 0` |
+| `corpus/async-workers-scoped.bc` | #479's worker pool: workers hold an outer `imm` borrow across their `await`s | `([63, 92], 155)`, unconditional | `43 7 1` |
 
 Rejected: `corpus/reject/spawn-in-unscoped.bc`. Every program runs at the source stage, the closure
 and flat IRs and WebAssembly with `live 0`, and passes `scripts/falsify.sh`'s four modes.
@@ -5067,8 +5047,7 @@ ends before its cell is.
 
 ### Lowering
 
-Nothing is lowered specially: a block's capabilities are arguments and results, a copy for a
-function passed by name is a `def`, and `spawn_in`'s site is §19's handler with a clause that keeps
+Nothing is lowered specially: a block's capabilities are arguments and results, and `spawn_in`'s site is §19's handler with a clause that keeps
 `κ`.
 
 ### Baseline
@@ -5092,7 +5071,11 @@ existing corpus and kernel program keeps its output and counts; the reports of
   algebra run as a div body), and a data type at the join of its elements' effects; unchanged.
 - **An `imm` relaxed lend** (OQ-2): `corpus/pending/async-borrow.bc`'s `fold_imm` whose algebra
   yields stays pending.
-- A6's finaliser log; a recursive callee given a function by name; a lifetime written at a `with`.
+- **A function with a row passed as a value** (`corpus/pending/effects-sum-gen.bc`): deferred to
+  #161 (a computation parameter, `|>` into a handler). Passing it by name, served where the callee
+  calls it, was built and taken out: it makes `f(g)` and `f({ x -> g(x) })` handle effects
+  differently, so who handles an argument's effects would be decided by syntax, not by type.
+- A6's finaliser log; a lifetime written at a `with`.
 
 ---
 
@@ -5302,8 +5285,8 @@ Entry 30 (§31) is implemented in `Frontend/Elab/Effects.lean` (`RGroup.tps`, `R
 change to `CDerives`, `Core/`, `Paper/`, `Support/` or `Backend/`.
 
 Entry 31 (§32) is implemented in `Frontend/Elab/Effects.lean` (`Blk`, `Cap.blk`, `Cap.canon`,
-`withBlkCaps`, `Blk.inCopy`, `blockArgs`, `blockCall`, `blockParamCall`, `renameParamC`,
-`Env.byNameArgs`, `Env.byNameBody`, `St.byNamed`, `HInfo.lives`), `Frontend/Sugar.lean`
+`withBlkCaps`, `Blk.inCopy`, `blockArgs`, `blockCall`, `blockParamCall`, `HInfo.lives`),
+`Frontend/Sugar.lean`
 (`hndCtlC` at a handler's lifetimes; a closure argument typed at its parameter's type),
 `Frontend/Elab/RenameLife.lean` (`substLives`), `Frontend/Syntax.lean`, `Frontend/Parser.lean`
 and `Frontend/Print.lean` (`CHandler.lps`), and `lib/async.bc`, with no change to `CDerives`,
@@ -5315,13 +5298,13 @@ and `Frontend/Print.lean` (`CHandler.lps`), and `lib/async.bc`, with no change t
 
 - **0.60** (2026-10-16) — §32 (new): `Async`'s `log`, `spawn_logged`, `lpush` and `run_logged`
   (A5); A6 on the library; blocks that use capabilities (an answering handler's state, a `for`'s
-  threaded variables), passed with the block at each call; functions with a row passed by name,
-  served where the callee calls them (PROPOSED); a handler's lifetime parameters, at the meet of
-  the lifetimes in scope, and `spawn_in`, `queue_in`, `push_in`, `run_in` (tasks over an outer
-  borrow). New corpus programs `async-logged`, `async-cancel`, `async-scoped`,
-  `block-yield-inner`, `block-capability-inner`, `list-capability`, `byname-served-at-call`; moved
-  into the corpus: `yield-callback`, `effects-sum-gen` (from `pending/`), `block-capability`
-  (from `reject/`); reject `spawn-in-unscoped`. `experiments/AsyncCap/bc/a5-effects.bc` and
+  threaded variables), passed with the block at each call; a handler's lifetime parameters, at
+  the meet of the lifetimes in scope, and `spawn_in`, `queue_in`, `push_in`, `run_in` (tasks over
+  an outer borrow). A function with a row passed as a value stays refused, deferred to #161
+  (§32 *Open*). New corpus programs `async-logged`, `async-cancel`, `async-scoped`,
+  `block-yield-inner`, `block-capability-inner`, `list-capability`, `async-workers-scoped`; moved
+  into the corpus: `yield-callback` (from `pending/`), `block-capability` (from `reject/`); reject
+  `spawn-in-unscoped`. `experiments/AsyncCap/bc/a5-effects.bc` and
   `a6-cancel.bc` removed (in the corpus). The reports of `async-scheduler` and `async-map` name
   `log`. §28 *Open*, §30 *Not provided* and *Open* updated. No change to `CDerives`, the relation,
   the machine, `PinLaw`, the checker, the backend, a kernel program, or an existing program's
