@@ -1,0 +1,16 @@
+-- A recursion under a budget inside a resuming handler (SPEC §19, §20): every async task's
+-- nesting, `with task { with on_exhausted(…) { recursive_fn() } }`. `mapw` awaits at each level
+-- to the outer `skip`, and the budget's exhaustion is an abortive `Exhausted` operation of the
+-- inner `on_exhausted` (`lib/rec.bc`), caught in the resumed continuation.
+--
+-- Answer: inr (i32[10], inl ()): the one-element list mapped, the budget not spent.
+
+include rec
+effect Async { ctl await() }
+handler skip[A]: Async, A -> A = { return(v) = v; await(k) = k(()) }
+type L = mu X. 1 + (i32 * X)
+def nil : L = roll inl ()
+fn cons(x: i32, xs: L) -> L = roll inr (x, xs)
+fn mapw(xs: L) -> L with Async, Exhausted =
+  match unroll xs { inl u -> nil | inr (x, rest) -> await(); cons(x * 10, mapw(rest)) }
+main -> L = with skip { with on_exhausted(!{ u -> nil }) { mapw(cons(1, nil)) } }

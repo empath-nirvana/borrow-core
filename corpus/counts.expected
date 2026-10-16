@@ -38,8 +38,10 @@ axes/scope-loop-lend 3 0 0
 block-swap 2 0 0
 borrow-in-scope 2 0 0 # the borrowed cell and the cell holding the borrow
 bytes-upper 1 0 0
+capture-await-raise 0 0 0 # `skip` resumes in place and `to_result` is a branch: nothing is allocated or dispatched
 capture-log-hand 0 0 0 # equal to the kernel program log-outside-native (corpus/kernel-counts.expected)
 capture-store-cancel-hand 2 0 0 # equal to the kernel program store-cancel
+capture-store-raise 0 2 0 # the two steps of the stored task, whose code is the answer clause's or the `await` clause's, chosen at run time; as with `f` raising nothing
 capture-take-hand 1 0 0 # the producer's cell; the kernel program take adds its count's node and its handler's two closures
 capture-tick-hand 0 0 0 # equal to the kernel program tick-native
 clause-captures 6 3 0 # the counter and the cells; the indirect calls are the state-passing answers of `asking`, as in the probe P4(a) (a native handler parameter is not built)
@@ -136,6 +138,7 @@ nats-sum 0 0 0
 parse-int 3 0 0 # the stdin and stdout cells and the line buffer, reused; literal views read-only data
 print-borrowed-array 2 0 0
 quicksort 3 0 0 # the data, the range stack, the output capability
+rec-await-exhausted 3 0 0 # the two list cells, and the continuation of the one `await`, an object per level it suspends through
 rec-deep 60040 0 0 # the tree, two objects per node, and each group's buffer of frames growing by doubling
 rec-emit 6 0 0 # the frames of the continuation `summed` resumes in the middle of the recursion, as in the probe P2
 rec-even-odd 0 0 0

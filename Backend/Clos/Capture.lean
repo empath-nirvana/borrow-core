@@ -432,7 +432,7 @@ def SFacts.of (O : Ops) (p : Prog) (hs : Array HInfo) : Except String SFacts := 
   let mut F : SFacts :=
     { S := S, skeys := .replicate n [], skeysG := .replicate n none, poll := .replicate n false,
       raises := .replicate n false,
-      U := ⟨O.defs, S, #[], some []⟩, drvOf := drvOf }
+      U := ⟨O.defs, S, #[], some [], #[]⟩, drvOf := drvOf }
   for _ in [0:(p.codes.size + 1) * (O.keys.size + 1) + 1] do
     let sk := p.codes.toList.zipIdx.map fun (c, k) => sKeysOf O F k [] c.body
     let skG := p.codes.toList.zipIdx.map fun (c, k) =>
