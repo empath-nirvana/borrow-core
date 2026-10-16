@@ -1,0 +1,120 @@
+-- LeetCode 295, Find Median from Data Stream.
+--
+-- Each line of the input is one case, a stream of words separated by spaces: an integer adds it
+-- to the case's numbers, and `?` asks for their median. The program prints, for each case, the
+-- answer to each `?`, separated by spaces (a median halfway between two integers ends in `.5`),
+-- and answers how many it gave.
+--
+-- Two binary heaps (`heap_push`, `heap_pop`, `heap_peek`, `lib/buf.bc`): the smaller half of the
+-- numbers in a max-heap, a min-heap by the negated number, and the larger half in a min-heap,
+-- each number its own priority and nothing else stored (`A = 1`). An added number goes through
+-- the lower half into the upper, and back when the upper is the larger, so the lower half holds
+-- the middle number or the lower of the two. The heaps are min-heaps by an `i32` priority, so the
+-- max-heap is one by the negation: `-2^31` cannot be added. There is no floating point; the median
+-- is computed as twice itself, an integer, and printed as a decimal.
+--
+-- The lines are walked by hand, a counted loop over `next_line` in `main`, so that each case is
+-- printed as it is done: the closure of `fold_lines` cannot print (#161), and a `for` over
+-- `lines(t)` is a drain whose iterator holds the borrow of the input (SPEC §14).
+-- A case's answers are collected in a buffer and printed after it, by a function with no view:
+-- printing from `answers`, which has a lifetime parameter and a loop, makes its copy for the
+-- platform's handler a loop of unknown bound (#491). Rust would print each answer at once.
+--
+-- The answers on the `.in` beside it agree with a brute-force reference solution, run separately.
+
+include textio
+
+-- The lower half of the numbers, by their negations, and the upper half.
+type Median = buf (i32 * 1) * buf (i32 * 1)
+
+fn median_new() -> Median = (box buf[i32 * 1](8), box buf[i32 * 1](8))
+
+-- `x` added.
+fn add_num(m: Median, x: i32) -> Median =
+  let (lo, hi) = m;
+  let (lo, big) = heap_pop(heap_push(lo, 0 - x, ()));
+  let hi = match big { inl (k, _) -> heap_push(hi, 0 - k, ()) | inr _ -> hi };
+  let (lo, nl) = len_of(lo);
+  let (hi, nh) = len_of(hi);
+  if nl < nh {
+    let (hi, least) = heap_pop(hi);
+    match least { inl (k, _) -> (heap_push(lo, 0 - k, ()), hi) | inr _ -> (lo, hi) }
+  } else { (lo, hi) }
+
+-- Twice the median, or `inr ()` when there are no numbers.
+fn find_median(m: Median) -> Median * (i32 + 1) =
+  let (lo, hi) = m;
+  let (lo, nl) = len_of(lo);
+  let (hi, nh) = len_of(hi);
+  let (lo, a) = heap_peek(lo);
+  let (hi, b) = heap_peek(hi);
+  match a {
+    inl (k, _) ->
+      if nh < nl { ((lo, hi), inl (0 - 2 * k)) } else {
+        match b { inl (j, _) -> ((lo, hi), inl (j - k)) | inr _ -> ((lo, hi), inl (0 - 2 * k)) }
+      }
+  | inr _ -> ((lo, hi), inr ())
+  }
+
+-- Half of `t`, in decimal: an odd `t` ends in `.5`.
+fn print_half(t: i32) -> 1 =
+  let a = if t < 0 { 0 - t } else { t };
+  if t < 0 { print_byte(b'-') } else { () };
+  print_dec(host[shr_u32](a, 1));
+  if host[and32](a, 1) == 1 { print_lit(".5") } else { () }
+
+-- The answers of one case, in order: twice each median asked for, `inr ()` when there were no
+-- numbers yet.
+fn answers<'t>(l: text 't) -> buf (i32 + 1) =
+  let (l, u) = array_copy['t, u8] l;
+  let n = len(u);
+  let mut rest = l;
+  let mut m = median_new();
+  let mut out = box buf[i32 + 1](8);
+  for _ in 0..n + 1 {
+    let (w, (r, last)) = match split_once(rest, b' ') {
+      inl (w, r) -> (w, (r, false))
+    | inr w -> (w, (slice_empty_imm['t, u8], true))
+    };
+    rest = r;
+    let (w, c) = array_copy['t, u8] w;
+    let (w, d) = array_copy['t, u8] w;
+    if len(c) == 0 { array_forget['t, u8](w); array_forget['t, u8](d) } else {
+      if eq_lit(d, "?") {
+        array_forget['t, u8](w);
+        let (m2, o) = find_median(m);
+        m = m2;
+        let (b, _) = push(out, o);
+        out = b
+      } else { m = add_num(m, with default(0) { parse_i32(w) }) }
+    };
+    if last { break } else { () }
+  };
+  array_forget['t, u8](rest);
+  out
+
+-- The answers, separated by spaces, on a line; and how many there were.
+fn print_answers(out: buf (i32 + 1)) -> i32 =
+  let (a, n) = out;
+  for i in 0..n {
+    if 0 < i { print_byte(b' ') } else { () };
+    let o = at(&a, i, inr ());
+    match o { inl t -> print_half(t) | inr _ -> print_lit("none") }
+  };
+  print_byte(b'\n');
+  n
+
+main -> i32 =
+  let s = read_input();
+  let sum = borrow imm s { 't, t ->
+    let (t, u) = array_copy['t, u8] t;
+    let mut rest = t;
+    let mut sum = 0;
+    for _ in 0..len(u) + 1 {
+      match next_line(rest) {
+        inl (l, r) -> rest = r; let k = print_answers(answers(l)); sum = sum + k
+      | inr _ -> rest = slice_empty_imm['t, u8]; break
+      }
+    };
+    sum };
+  sum

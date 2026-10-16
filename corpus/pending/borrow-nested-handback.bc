@@ -1,0 +1,18 @@
+-- pending: refused #495
+-- now: 16:3: `q` is used twice here, and its type `array u8 * i32` is not persistent
+--
+-- A borrow block inside another borrow block's body. The outer block lends `q` (the inner block
+-- is a lend of it) and does not bind it, so it hands `q` back (SPEC §17, *Surface*); the owner
+-- is not handed back, and its use after the block is a second use. Handed back by hand,
+-- `let (q, r) = borrow imm p { x -> …; (q, r) }`, the program answers as below.
+--
+-- Once it lands: `inr ()`, `live 0`.
+
+include text
+
+main -> bool =
+  let p = string_of_lit("ab");
+  let q = string_of_lit("ab");
+  let r = borrow imm p { x -> borrow imm q { y -> eq(x, y, eq_u8) } };
+  let (_, n) = len_of(q);
+  r

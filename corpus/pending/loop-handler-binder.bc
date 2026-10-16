@@ -1,0 +1,31 @@
+-- pending: refused #493
+-- now: 18:3: `e` is used twice here, and its type `array_imm 'a u8` is not persistent
+--
+-- A `with default(d) { … }` inside a `for`'s body, in a function with a linear variable named
+-- `e`, consumed before the loop. `default`'s clause `raise(e) = d` (`lib/fail.bc`) binds `e`;
+-- the loop chooses the variables it threads by name, so it threads the outer `e` too, a second
+-- use of it. The name is the library's, invisible at the use. With the variable renamed the
+-- program answers as below.
+--
+-- Once it lands: `i32[42]`, `live 0`.
+
+include text
+
+-- The number `t` holds, parsed three times in a loop, after an earlier use of a view named `e`.
+fn thrice<'a>(t: text 'a) -> i32 =
+  let (e, u) = array_copy['a, u8] t;
+  array_forget['a, u8](u);
+  let mut v = e;
+  let mut k = 0;
+  for _ in 0..3 {
+    let (w, x) = array_copy['a, u8] v;
+    v = w;
+    k = k + with default(0) { parse_i32(x) }
+  };
+  array_forget['a, u8](v);
+  k
+
+main -> i32 =
+  let s = string_of_lit("14");
+  let n = borrow imm s { t -> thrice(t) };
+  n

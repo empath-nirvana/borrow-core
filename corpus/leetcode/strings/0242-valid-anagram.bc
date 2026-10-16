@@ -1,0 +1,59 @@
+-- LeetCode 242, Valid Anagram.
+--
+-- Each line of the input is one case, two strings separated by a space. The program prints, for
+-- each, `true` when the second is a rearrangement of the first's bytes and `false` otherwise, and
+-- answers how many are.
+--
+-- An array of 256 counts (reused from case to case): one up for each byte of the first string,
+-- one down for each of the second, and the strings match when every count ends at 0. The counts
+-- are an allocated array where Rust would keep `[i32; 256]` on the stack (#496).
+--
+-- The lines are walked by hand, a counted loop over `next_line` in `main`, so that each answer is
+-- printed as it is found: the closure of `fold_lines` cannot print (#161), and a `for` over
+-- `lines(t)` is a drain whose iterator holds the borrow of the input (SPEC §14).
+--
+-- The answers on the `.in` beside it agree with a brute-force reference solution, run separately.
+
+include textio
+
+-- The count at `b` moved by `d`.
+fn bump(counts: array i32, b: u8, d: i32) -> array i32 =
+  let c = at(&counts, to_i32(b), 0);
+  array_set(counts, to_i32(b), c + d)
+
+-- Whether `w` is a rearrangement of `v`, and the counts back.
+fn anagram<'t>(counts: array i32, v: text 't, w: text 't) -> array i32 * bool =
+  let mut counts = counts;
+  borrow mut counts { c -> let c = fill(c, 0); () };
+  for p in v { counts = bump(counts, *p, 1) };
+  for p in w { counts = bump(counts, *p, 0 - 1) };
+  let mut ok = true;
+  for i in 0..256 {
+    let c = at(&counts, i, 0);
+    if c != 0 { ok = false; break } else { () }
+  };
+  (counts, ok)
+
+main -> i32 =
+  let s = read_input();
+  let count = borrow imm s { 't, t ->
+    let (t, u) = array_copy['t, u8] t;
+    let mut rest = t;
+    let mut counts = array_new[i32] (256, !{ i -> 0 });
+    let mut count = 0;
+    for _ in 0..len(u) + 1 {
+      match next_line(rest) {
+        inl (l, r) ->
+          rest = r;
+          match split_once(l, b' ') {
+            inl (v, w) ->
+              let (c, ok) = anagram(counts, v, w);
+              counts = c;
+              if ok { print_lit("true\n"); count = count + 1 } else { print_lit("false\n") }
+          | inr l -> ()
+          }
+      | inr _ -> rest = slice_empty_imm['t, u8]; break
+      }
+    };
+    count };
+  count

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.63 · 2026-10-16
+Version 0.64 · 2026-10-16
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1955,9 +1955,10 @@ dropped). `push` on a full buffer grows it to twice its capacity (at least
 8): a new array of fillers (`tab`), each element moved by `array_replace`, and the old array
 dropped with the fillers left in it. Every operation is `tab`, `array_replace`, `array_size`,
 `count` and `drop`, so buffers are sound under every allocator by §9 and §13 with nothing new.
-A **priority queue** is a buffer too (#490): `heap_push(h, k, x)` and `heap_pop(h)`
-keep `buf (i32 * A)` a binary min-heap by the `i32` priority, each sift a counted loop of 32
-steps, and read an element by taking it out and putting it back, so `A` is persistent.
+A **priority queue** is a buffer too (#490): `heap_push(h, k, x)`, `heap_pop(h)` and
+`heap_peek(h)` (#198: a copy of the least element, the heap unchanged) keep `buf (i32 * A)` a
+binary min-heap by the `i32` priority, each sift a counted loop of 32 steps, and read an element
+by taking it out and putting it back, so `A` is persistent.
 
 **No view across growth.** A view of a buffer exists only inside a borrow block (below), whose
 callback does not hold the buffer: a function that grows a buffer takes it and hands it back,
@@ -5887,6 +5888,10 @@ and #486's fixes in `Backend/Clos/Capture.lean` and `Backend/Driver.lean`), with
 
 ## Changelog
 
+- **0.64** (2026-10-16) — Library only (#198, #201, #203, the LeetCode corpus in
+  `corpus/leetcode/`): §17's `lib/buf.bc` gains `heap_peek`, the least element of a heap read
+  without taking it out. Ordinary library code over existing constants. No kernel, checker,
+  elaboration or backend change; every existing program keeps its output and counts.
 - **0.63** (2026-10-16) — Library only (#490, the Advent of Code ports in `corpus/aoc/`): §17's
   `lib/buf.bc` gains `array_set` and a binary min-heap over a buffer (`heap_push`, `heap_pop`),
   and `lib/text.bc` the integers of a view folded into a state (`fold_i32s`, `fold_i64s`); §34's

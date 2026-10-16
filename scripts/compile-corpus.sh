@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Compile and run the corpus. Every corpus/*.bc, corpus/surface/*.bc, corpus/axes/*.bc and
-# corpus/aoc/*.bc with a `main` (except a file marked `-- check: parse-only`) has a golden output
+# Compile and run the corpus. Every corpus/*.bc, corpus/surface/*.bc, corpus/axes/*.bc,
+# corpus/aoc/*.bc and corpus/leetcode/*/*.bc with a `main` (except a file marked `-- check: parse-only`) has a golden output
 # `<name>.out` beside it: the reference semantics, what `Support`'s interpreter (`bcc interp`, the
 # source stage) prints.
 # It reads `<name>.in` as standard input (the empty input if there is none), and `<name>.args`, one
@@ -61,7 +61,7 @@ while [ $# -gt 0 ]; do
 done
 [ "$write" = 0 ] || [ "$goldens" = 0 ] || usage
 named=1
-[ ${#files[@]} -gt 0 ] || { named=0; files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc); }
+[ ${#files[@]} -gt 0 ] || { named=0; files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc); }
 for f in "${files[@]}"; do [ -f "$f" ] || { echo "$f: no such file"; exit 2; }; done
 command -v wasmtime >/dev/null || [ "$goldens" = 1 ] || { echo "wasmtime is not on PATH"; exit 1; }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null

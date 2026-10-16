@@ -1,0 +1,30 @@
+-- pending: refused #493
+-- now: 21:5: `w` is used twice here, and its type `array_imm 'a i32` is not persistent
+--
+-- A name bound in a `for`'s body that is the name of a linear variable outside the loop, already
+-- consumed (`v = w`). The loop chooses the variables it threads by name, without the body's own
+-- bindings, so it threads the outer `w` as well, a second use of it. With the local renamed the
+-- program answers as below. The owner of a borrow block (#493's reproduction) is one case of it.
+--
+-- Once it lands: `i32[6]`, `live 0`.
+
+include slice
+
+-- The sum of the elements of `v`, each read through a fresh copy of the view.
+fn sum<'a>(v: array_imm 'a i32) -> i32 =
+  let mut v = v;
+  let (w, u) = array_copy['a, i32] v;
+  v = w;
+  let mut k = 0;
+  for i in 0..len(u) {
+    let (w, x) = array_copy['a, i32] v;
+    v = w;
+    k = k + at(x, i, 0)
+  };
+  array_forget['a, i32](v);
+  k
+
+main -> i32 =
+  let a = array_new[i32] (3, !{ i -> i + 1 });
+  let n = sum(&a);
+  n

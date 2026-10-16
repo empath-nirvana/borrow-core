@@ -1,0 +1,68 @@
+-- LeetCode 125, Valid Palindrome.
+--
+-- Each line of the input is one case. The program prints, for each, `true` when its letters and
+-- digits read the same both ways, letters compared without case, and `false` otherwise, and
+-- answers how many are.
+--
+-- Two indices close in from the ends of the view, each skipping what is not a letter or a digit;
+-- every step moves one of them, so a counted loop of the view's length covers it, leaving by
+-- `break`. Nothing is copied or allocated. Each read takes a copy of the view first (`byte_at`): a
+-- view is not duplicable (#142) and has no `v[i]` (#143).
+--
+-- The lines are walked by hand, a counted loop over `next_line` in `main`, so that each answer is
+-- printed as it is found: the closure of `fold_lines` cannot print (#161), and a `for` over
+-- `lines(t)` is a drain whose iterator holds the borrow of the input (SPEC §14).
+--
+-- The answers on the `.in` beside it agree with a brute-force reference solution, run separately.
+
+include textio
+
+-- The byte at `i`, and the view back.
+fn byte_at<'t>(t: text 't, i: i32) -> text 't * u8 =
+  let (t, u) = array_copy['t, u8] t;
+  (t, at(u, i, 0))
+
+fn is_alnum(b: u8) -> bool =
+  (b'a' <= b && b <= b'z') || (b'A' <= b && b <= b'Z') || (b'0' <= b && b <= b'9')
+
+fn lower(b: u8) -> u8 = if b'A' <= b && b <= b'Z' { b + 32 } else { b }
+
+-- Whether the letters and digits of `s` read the same both ways.
+fn palindrome<'t>(s: text 't) -> bool =
+  let mut s = s;
+  let (s1, u) = array_copy['t, u8] s;
+  s = s1;
+  let n = len(u);
+  let mut i = 0;
+  let mut j = n - 1;
+  let mut ok = true;
+  for _ in 0..n {
+    if j <= i { break } else { () };
+    let (s2, a) = byte_at(s, i);
+    let (s3, b) = byte_at(s2, j);
+    s = s3;
+    if not(is_alnum(a)) { i = i + 1 } else {
+      if not(is_alnum(b)) { j = j - 1 } else {
+        if lower(a) != lower(b) { ok = false; break } else { i = i + 1; j = j - 1 }
+      }
+    }
+  };
+  array_forget['t, u8](s);
+  ok
+
+main -> i32 =
+  let s = read_input();
+  let count = borrow imm s { 't, t ->
+    let (t, u) = array_copy['t, u8] t;
+    let mut rest = t;
+    let mut count = 0;
+    for _ in 0..len(u) + 1 {
+      match next_line(rest) {
+        inl (l, r) ->
+          rest = r;
+          if palindrome(l) { print_lit("true\n"); count = count + 1 } else { print_lit("false\n") }
+      | inr _ -> rest = slice_empty_imm['t, u8]; break
+      }
+    };
+    count };
+  count

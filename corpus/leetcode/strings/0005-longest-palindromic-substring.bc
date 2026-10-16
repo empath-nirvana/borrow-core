@@ -1,0 +1,82 @@
+-- LeetCode 5, Longest Palindromic Substring.
+--
+-- Each line of the input is one case, a string. The program prints, for each, its longest run
+-- that reads the same both ways (the leftmost of the longest), and answers the sum of their
+-- lengths.
+--
+-- Expansion around each of the `2n - 1` centres, a byte or the gap between two: the run grows by
+-- a byte at each end while the two match, a counted loop that leaves by `break`. The answer is a
+-- sub-view of the input, at its lifetime: nothing is copied or allocated. Each read takes a copy
+-- of the view first (`byte_at`): a view is not duplicable (#142) and has no `v[i]` (#143).
+--
+-- The lines are walked by hand, a counted loop over `next_line` in `main`, so that each answer is
+-- printed as it is found: the closure of `fold_lines` cannot print (#161), and a `for` over
+-- `lines(t)` is a drain whose iterator holds the borrow of the input (SPEC §14).
+--
+-- The answers on the `.in` beside it agree with a brute-force reference solution, run separately.
+
+include textio
+
+-- The byte at `i`, and the view back.
+fn byte_at<'t>(t: text 't, i: i32) -> text 't * u8 =
+  let (t, u) = array_copy['t, u8] t;
+  (t, at(u, i, 0))
+
+-- How far the palindrome around the centre `l`, `r` reaches: the number of steps outward from
+-- `l` and `r` whose bytes match, `l` and `r` themselves first.
+fn reach<'t>(s: text 't, n: i32, l: i32, r: i32) -> text 't * i32 =
+  let mut s = s;
+  let mut k = 0;
+  for _ in 0..n {
+    if l - k < 0 || n <= r + k { break } else { () };
+    let (s1, a) = byte_at(s, l - k);
+    let (s2, b) = byte_at(s1, r + k);
+    s = s2;
+    if a == b { k = k + 1 } else { break }
+  };
+  (s, k)
+
+-- The start and length of the longest palindromic run of `s`.
+fn longest<'t>(s: text 't) -> text 't * (i32 * i32) =
+  let mut s = s;
+  let (s1, u) = array_copy['t, u8] s;
+  s = s1;
+  let n = len(u);
+  let mut best = 0;
+  let mut best_len = 0;
+  for c in 0..2 * n - 1 {
+    let l = host[shr_u32](c, 1);
+    let r = l + host[and32](c, 1);
+    let (s2, k) = reach(s, n, l, r);
+    s = s2;
+    let size = r - l + 2 * k - 1;
+    if best_len < size { best = l - k + 1; best_len = size } else { () }
+  };
+  (s, (best, best_len))
+
+-- The run of `s` of length `k` at `i`.
+fn sub<'t>(s: text 't, i: i32, k: i32) -> text 't =
+  match split_at(s, i) {
+    inl (h, r) -> array_forget['t, u8](h);
+      match split_at(r, k) { inl (w, e) -> array_forget['t, u8](e); w | inr r -> r }
+  | inr s -> s
+  }
+
+main -> i32 =
+  let s = read_input();
+  let sum = borrow imm s { 't, t ->
+    let (t, u) = array_copy['t, u8] t;
+    let mut rest = t;
+    let mut sum = 0;
+    for _ in 0..len(u) + 1 {
+      match next_line(rest) {
+        inl (l, r) ->
+          rest = r;
+          let (l, (i, k)) = longest(l);
+          print_str(sub(l, i, k)); print_byte(b'\n');
+          sum = sum + k
+      | inr _ -> rest = slice_empty_imm['t, u8]; break
+      }
+    };
+    sum };
+  sum
