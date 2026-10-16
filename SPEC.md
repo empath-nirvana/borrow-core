@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.60 · 2026-10-16
+Version 0.61 · 2026-10-16
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1016,7 +1016,7 @@ elaborate to the same term.
 - Destructors for host resources, which perform I/O and can fail (§12 Open).
 - `main` with borrowed capabilities (lifetime-parametric externs) is not provided.
 - `Args`, `Env`, `Exit`, `Fs` and the rest are designed only.
-- `|>` pipelines (#59) are not provided.
+- `|>` pipelines (#59) are §33's.
 
 ---
 
@@ -1440,7 +1440,7 @@ pipeline's finishing value and residual: each adapter would pass them on, the `f
 the finishing value, and the residual would have to hand back an owner that has a destructor. A
 `yield` inside a borrow block is rejected (§15, *Self-reference*). A div
 function called with a borrow that is not lent from a place (a view, a field, a second borrow)
-holds it across its loop. `|>` is not provided (§11 Open).
+holds it across its loop. `|>` is §33's.
 
 Programs: `corpus/axes/borrow-across-loop.bc`, `corpus/lend-mut.bc`, `lend-config.bc`,
 `lend-pipeline.bc` (0 allocations, dispatched calls and copies beyond the table's own),
@@ -1687,8 +1687,10 @@ and §19 is preserved: every construct of this entry is elaborated into core bef
   (`corpus/pending/gen-digits.bc`, `gen-lines.bc`, `gen-lazy.bc`, `gen-adapters-io.bc`). It needs
   a cancel that hands back a residual, or a `linear ctl` iteration effect (no `break`).
 - **Callbacks that yield** to a `for`'s site: a block takes the loop's threaded variables and
-  hands them back at each call (§32, `corpus/yield-callback.bc`). Adapters as handlers over a computation
-  (`|>` at a computation parameter) need functions over computations (#161).
+  hands them back at each call (§32, `corpus/yield-callback.bc`). `|>` chains the adapters as
+  functions over stored generators (§33). Adapters written as handlers over a computation would
+  hold the continuation across their own `yield` (*A body that performs a control operation*,
+  above), and are not provided.
 - **A total consumer of a generator that loops.** A `for` over one is div: its turns are
   unbounded. A finite source written as data, or a sized iterator (§16), is total, and so is a
   generator whose body does not loop.
@@ -2174,7 +2176,8 @@ destructor (§12, class 3) live across such a binding is rejected, naming it.
 
 **Not provided**, each rejected with a message that says so: an operation inside a closure or
 block that is not run in place, other than a block passed at a parameter of function type (§30),
-and a function with a row passed as a value (effectful callbacks, #161; for a fold's algebra that
+and a function with a row passed as a value other than at a parameter of function type, where
+it is the block that calls it (§33; stored callbacks, #161 part B; for a fold's algebra that
 raises, K4 below); a lend `&mut x` in the arguments of a call that
 threads a capability; an operation of an answering effect inside a clause of an answering handler;
 a function with a row whose written result is a computation (a loop); a second instance of
@@ -2260,12 +2263,12 @@ program's derivation gives it (`checkProgram_letPoly`).
 
 - Named instances and lexical resolution between two instances of an effect (S2, #155); bundles
   (#156).
-- Effectful callbacks stored (#161), and with them functions over computations (`retry`, a
-  handler that re-runs its body, and `|>` at a computation parameter). Blocks passed and called
+- Effectful callbacks stored (#161 part B, §33 *Open*). Functions over computations (`retry`, a
+  consumer of generators, `|>` at a computation parameter) are §33. Blocks passed and called
   are §30: E1 (a higher-order function under two handlers) and E6 (a wrapper whose handler the
   callback's raise passes) run from source (`corpus/effects-hof-two-rows.bc`,
-  `corpus/effects-tunnel.bc`). E2d (a consumer of generators at two rows) passes a named function
-  with a row as a value, and waits (§24 *Open*).
+  `corpus/effects-tunnel.bc`), and E2d (a consumer of generators at two rows) does too, its
+  generator a computation parameter (`corpus/effects-sum-gen.bc`, §33).
 - An operation that answers a borrow into the handler's state (#160); `lookup` answers a copy.
 - A handler parameter that is not `!` is the handler's state (§21); its native lowering (§19
   *Open*).
@@ -4018,8 +4021,8 @@ derivation of the let (`checkProgram_letPoly`). No program from source has a let
   raises is not stored (§15 *Open*). The core text writes a λ's binder with its type, the row
   included, so a let-bound function has one row there. The kernel programs `hof-two-rows`,
   `sum-gen` and `tunnel` are the three as Core terms; at the surface they are
-  `corpus/effects-hof-two-rows.bc` and `effects-tunnel.bc` (§30), and the pending
-  `corpus/pending/effects-sum-gen.bc` (#161).
+  `corpus/effects-hof-two-rows.bc` and `effects-tunnel.bc` (§30), and `corpus/effects-sum-gen.bc`
+  (§33).
 - **A let-bound function used at different value types.** The lowering specialises per row
   (*Lowering*): a `[let-poly]` let whose uses are at one row but at different value types
   (`λx. x` at `I32` and at `1`) is lowered once, and the layout types (`Backend/Clos/Types.lean`)
@@ -4725,7 +4728,7 @@ performing at the site k of `E``.
 **Not provided**, each rejected with a message saying so: a block given to a member of a recursive
 group of several functions, or under a heap driver (§20). A block given to a generic function is
 §31's; a block that uses an answering capability or a `for`'s threaded variables is §32's. A
-named function with a row passed as a value is refused (§18; §32 *Open*, #161).
+named function with a row given at a block parameter is the block that calls it (§33).
 
 ### Counted loops at a resuming row
 
@@ -5065,17 +5068,250 @@ existing corpus and kernel program keeps its output and counts; the reports of
   sites where it is written, and a function given such a value copied at its row (§14's
   specialization at a callback's type, at a row as at `div`). Not built: the inference of the row
   of a type written without one (a `let` annotation, a type parameter, a data type's component)
-  is a design question, and with it the join of rows across the elements of one data value.
+  is a design question, and with it the join of rows across the elements of one data value. §33
+  *Open* lists the options, with §33's type `!(A => B with E…)`.
 - **`div` callbacks in data and in a fold's algebra** (`corpus/pending/callbacks-in-data.bc`,
   `map-div-fold.bc`): a fold whose algebra is div (the children's loops sequenced, then the
   algebra run as a div body), and a data type at the join of its elements' effects; unchanged.
 - **An `imm` relaxed lend** (OQ-2): `corpus/pending/async-borrow.bc`'s `fold_imm` whose algebra
   yields stays pending.
-- **A function with a row passed as a value** (`corpus/pending/effects-sum-gen.bc`): deferred to
-  #161 (a computation parameter, `|>` into a handler). Passing it by name, served where the callee
-  calls it, was built and taken out: it makes `f(g)` and `f({ x -> g(x) })` handle effects
-  differently, so who handles an argument's effects would be decided by syntax, not by type.
+- **A function with a row passed as a value**: at a parameter of function type it is the block
+  that calls it, and a computation parameter serves what its type provides (§33). Passing it by
+  name, served where the callee calls it, was built and taken out: it makes `f(g)` and
+  `f({ x -> g(x) })` handle effects differently, so who handles an argument's effects would be
+  decided by syntax, not by type.
 - A6's finaliser log; a lifetime written at a `with`.
+
+---
+
+## 33. Entry 32 — computation parameters and `|>`
+
+### Motivation
+
+#161, part A (§18 *Open*, §30 *Open*, §32 *Open*). A function that handles the effects of a
+computation it is given: a generator consumer, `retry`, a timeout, the reconciler chain
+`timeout |> retry |> log`. A block given at a parameter of function type keeps its effects where it
+is written (§30, E6), and a named function passed by name was refused, because serving it where the
+callee calls it made `f(g)` and `f({ x -> g(x) })` differ in who handles (§32 *Open*). Here the
+callee says, in its parameter's type, which effects it serves for the argument (decision 57's
+provided row), and `f(g)` is `f({ x -> g(x) })` at every parameter. `|>` is decision 50's.
+
+Everything is elaboration into core terms the checker already derives (`Frontend/Elab/Effects.lean`;
+the kernel program `sum-gen`, `dAt_sumGen` in `Core/EffTier1Programs.lean`, is the shape: a thunk
+`U(1 ⊸ F_{yield ⊙ r} 1)` passed to a function that forces it under its own `handle`). No `CDerives`
+rule, relation clause, machine step or kernel type is added.
+
+### Laws
+
+Each is stated of the elaborated terms and holds by the deep-handler laws already proved (§19
+*Laws* item 1) or by the elaboration's definition:
+
+1. **`m |> h ≡ with h { m }`.** The elaboration rewrites `m |> h[As](e, …)`, `h` a handler, to
+   `with h[As](e, …) { m }` before anything else (`resolvePipes`): they are one term, and its
+   meaning is the handler's (H-ret, H-op; `catch_ret`, `catch_step`). Holds by definition
+   (`corpus/pipe-handlers.bc`: `a` and `b`).
+2. **Chains are associative.** `m |> s₁ |> s₂` is `(m |> s₁) |> s₂` (`|>` associates to the left),
+   applied innermost first: `s₂` around `s₁` around `m`. A chain of handlers grouped as one stage,
+   a function whose computation parameter provides their effects (`both(c) = c(()) |> s₁ |> s₂`),
+   elaborates to the same nested sites, each named by the port of its effect, so `m |> s₁ |> s₂`
+   and `both(m)` are one term up to static names (`corpus/pipe-handlers.bc`: `a` and `c`). Holds
+   for handler stages. A chain grouped across a stage that is itself a function over a
+   computation (`both(c) = c(()) |> retry(…)`) calls `c` inside the block given to `retry`, where
+   `c`'s provided effect is served at `retry`'s port, not `c`'s own: that is a computation
+   parameter passed on, not provided yet (*Ports*, below; *Open*). So associativity of function stages
+   holds of the chain as written, not yet of a regrouping into a function.
+3. **Operations a stage does not handle pass to the next stage.** For a handler stage, H-fwd
+   (`catch_fwd`, `fwd_resume`, `fwd_abort`): an operation of another name passes the site. For a
+   function stage, an operation of the computation outside the parameter's provided row is resolved
+   where the computation is written (*The argument*), which is inside the next stage; and an
+   operation the stage provides but does not serve itself goes to the stage's own row, served by
+   its caller, the next stage. Holds (`corpus/reconcile-chain.bc`: the step's `note` and `sleep`
+   pass `timeout` and `retry`; `timeout`'s 408 passes to `retry`; `pipe-handlers.bc`: `a` and
+   `e`).
+4. **A plain block keeps lexical handling.** §30's rule is unchanged: a block at a parameter whose
+   type has no provided row performs everything where it is written (`corpus/effects-tunnel.bc`
+   unchanged; `corpus/comp-param.bc`'s `pass`; `corpus/reject/block-raise-lexical.bc`). Holds.
+
+### The computation parameter
+
+A parameter whose type is a function type with a provided row is a **computation parameter**:
+
+    fn retry[A](times: i32, base: i32, f: !(i32 => A with Fail[i32])) -> A with Fail[i32], Clock
+
+**PROPOSED** spelling: the row is written after the function type inside parentheses,
+`(A => B with E₁, E₂[T, …])`, and `!(…)` for a persistent one; it is the surface type former
+`VTy.rowed`, read by the parser and printer and elaborated away by `Frontend/Elab/Effects.lean`.
+
+- **The provided row** is what the callee serves for the argument. A call `f(v)` in the callee
+  performs the provided effects at that point of the callee, resolved lexically there as an
+  operation is (§19 *Names*): to the innermost `with` of the effect in the callee around the call,
+  or, when none is, to the callee's own row, served by its caller.
+- **Every other effect of the argument tunnels**: it is resolved where the argument is written, as a
+  block's are (§30).
+- A function with a computation parameter is elaborated only through its copies, one per row of
+  the argument's tunneled effects (§30's key, `b{j}n{…}`), never as written; a call of it is a call
+  of its copy, and it is not a value. Its row (§18 *Rows*) has the provided effects of the calls of
+  the parameter outside the callee's handlers, besides its own.
+
+### Ports
+
+For each control effect `E` of a computation parameter's provided row, the copy fixes one static
+name, its **port** (decision 57), at which the argument performs `E`:
+
+- when the copy calls the parameter outside every `with` of `E`, the port is the site of `E` in the
+  copy's own row, its caller's;
+- otherwise the port is a fresh name, and each `with` of `E` in the copy whose body calls the
+  parameter (outside a `with` of `E` inside it) has the port as its static name (`Cx.portIn`).
+
+**PROPOSED, provisional until a port can be relabelled** (decision 57 leaves the relabelling
+open): today one port serves every call, so a parameter called both inside a `with` of `E` and
+outside one is not provided (`corpus/pending/comp-param-two-sites.bc`), nor are two parameters
+that provide `E` at two ports under one `with`. This is the current behaviour, not a rule of the
+language: the abortive case can be relabelled by a site whose clause raises again at the other
+name (decision 57, R2c), and the resuming case needs inlining or a `rename` primitive; neither is
+built (*Open*).
+
+The kernel checks each port as any site: `[handle]` asks the port to be absent from the site's
+outer row, which a fresh name is. The argument's type names the port where the argument is
+written, outside the port's site; a value has no row, so nothing is performed there, and decision
+57's site freshness (R3) reads a provided port as bound.
+
+### The argument
+
+- **A block written in place** is elaborated where it is written, its operations of the provided
+  effects at the copy's ports and the others at the sites around it, the capabilities it uses taken
+  first and handed back first (§32). The copy is made first, so that its ports are known
+  (`blockCall`).
+- **A function named** at a parameter of function type, a computation parameter or a plain block
+  parameter whose function has a row, is the block that calls it: `g` is `!{ a -> g(a) }`
+  (`{ a -> g(a) }` at a parameter that is not `!`; `etaArgs`). So `f(g)` and `f({ x -> g(x) })`
+  are one argument at both kinds of parameter (`corpus/comp-param.bc`). Elsewhere, a function with
+  a row passed as a value is refused as before (§18 *Not provided*).
+- **The call** binds the argument at the copy's parameter type, `!U(C ⊗ A ⊸ F_{ports ∪ T} (C ⊗ B))`
+  (`C` the capabilities, `T` the tunneled sites, in the order of the argument's row), so the block
+  is checked at its row (§30).
+
+**Not provided** yet, each refused with a message that says so; the programs that wait on them are
+in `corpus/pending/`, not `reject/`:
+
+- a provided answering effect (an answering effect is a capability, and the callee's handler of it
+  would lend its state to the argument: decision 57's R2d);
+- a computation parameter's argument that uses a capability, called inside a control `with` of the
+  callee (`corpus/pending/comp-param-capability.bc`, #487): the `with`'s body is lent the capability
+  anew, at a lifetime of its own, and the argument takes it at the copy's (*Open*);
+- a block parameter passed on to a computation parameter (*Ports*);
+- a `for` over a call of a computation parameter (`corpus/pending/comp-param-for.bc`): a `for`'s site
+  threads the loop's variables through its operation (§15), at a type only the callee knows; a
+  handler serves the parameter's iteration effect instead (`gen(()) |> h`);
+- a computation parameter of a recursive function (§20).
+
+### `|>`
+
+`e |> s` is an operator of the lowest precedence, below `||`, associating to the left; each stage
+`s` is a spine: a name, or a name applied to its other arguments (decision 50: `e |> f(a, …)` is
+`f(e, a, …)`, the piped value first). By the stage (`pipeStage`, before the rest of the
+elaboration):
+
+- **a handler** `h`, `h[As]` or `h[As](e₁, …)`: `with h[As](e₁, …) { e }` (law 1);
+- **a function whose first parameter is a computation parameter**, which takes `1`: `f(!{ () -> e },
+  a, …)`, `e` suspended (`{ () -> e }` at a parameter that is not `!`);
+- **any other function**: `f(e, a, …)`. A generator's call piped into an adapter is at its stored
+  generator parameter, and is stored there (§15; `corpus/gen-pipeline-pipe.bc`).
+
+**PROPOSED**: a handler stage given a lent place (`|> h(&mut c)`) is rejected, with a message to
+write `with h(&mut c) { … }`, which hands the place back; the parser gives `with`'s body the
+variables it assigns and the places it lends, and a stage is resolved after parsing. A first
+parameter that is a computation parameter taking an argument is rejected at `|>`.
+
+### Elaboration at the row
+
+One fix in the typed elaboration (`Frontend/Sugar.lean`): an annotated binding `x : A <- M` whose
+head performs operations of the current row elaborates `M` at `F_Σ A` (`Σ` the row), as the
+checker reads it when `F A` fails (*Choices beyond draft 1*, §19 *Effectful binds*), so a `with`
+inside it handles its body at the row around it. A counted loop at a resuming row (§30) binds its
+step's result so; a `with` in its body was elaborated at the empty row before
+(`corpus/reconcile-chain.bc`'s `retry`). Every existing program elaborates to the same output and
+counts.
+
+### Programs
+
+| program | what it shows | answer | counts |
+|---|---|---|---|
+| `corpus/retry-block.bc` | `retry` serves its computation's `Fail` at its port: the service is retried | `((inl i32[200], i32[30]), (inr i32[503], i32[10]))` | `2 0 0` |
+| `corpus/effects-sum-gen.bc` | E2d from source (moved from `pending/`): `any(gen) = gen(()) \|> any_true` at `Yield` alone and with `Fail`, which passes `any`'s handler | `(inr (), inr ())` | `0 0 0`, as the kernel's `sum-gen` |
+| `corpus/comp-param.bc` | `guard` (a computation parameter) and `pass` (a plain block parameter), each given a block and a named function | `((inr i32[7], inr i32[7]), (inr i32[8], inr i32[7]))` | `0 0 0` |
+| `corpus/pipe-handlers.bc` | laws 1–3 for handler stages: `\|>` is `with`, a chain grouped as one stage, the order of a chain | see the file | `0 0 0` |
+| `corpus/gen-pipeline-pipe.bc` | the adapters chained with `\|>` | `i32[320110]` | `0 0 0` |
+| `corpus/reconcile-chain.bc` | `step() \|> timeout \|> retry(3, 10) \|> logged`, with a fake clock and a journal | see the file | `25 0 0` |
+
+Rejected, a rule of the language: `corpus/reject/block-raise-lexical.bc` (a plain block's `raise`
+is not the callee's). Pending, each waiting on an *Open* item: `corpus/pending/comp-param-two-sites.bc`,
+`comp-param-capability.bc`, `comp-param-for.bc`. `corpus/reports/comp-param.txt` and
+`effects-sum-gen.txt` pin the reports: each copy's ports (`its `Fail` at the port 6, served by its
+`with` here`), each call of a computation parameter (`its `Fail` served here by the site 6`) and
+each call that passes one (`its computation performing `Fail` at the port 6 of `guard``). Every
+program runs at the source stage, the closure and flat IRs and WebAssembly with `live 0`, and
+passes `scripts/falsify.sh`'s four modes, except that `gen-pipeline-pipe` is `check: no-source`:
+the source interpreter takes about twenty minutes over it (§15 *Open*).
+
+**`corpus/retry-block.bc` changes its output on purpose**: its `retry` now takes `f: !(i32 => A with
+Fail[i32])`, so the block's errors are `retry`'s, and the program retries, answering
+`((inl i32[200], i32[30]), (inr i32[503], i32[10]))` where it answered
+`((inr i32[503], i32[0]), (inr i32[503], i32[0]))`. Its counts are unchanged.
+
+`reconcile-chain`'s clock and journal are control effects whose handlers fold the computation's
+answer, its operations answer `()`, and its service has no state: the flat stage's layout typing
+fails on a handler with a state around an operation that answers another type (#485, `layout
+types: 1 and i32 differ`), WebAssembly is invalid for a counted loop at a resuming row whose
+operation answers a value (#486), and an answering capability cannot be used by an argument
+called under the callee's handler (#487). Each reproduces without any construct of this entry
+(*Open*).
+
+### Lowering
+
+Nothing is lowered specially: a copy is a `def`, a port a static name, the argument a closure, and
+`|>` is gone before the typed elaboration.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `PinLaw`, the checker, `Core/`, `Paper/`,
+`Support/` or `Backend/`. Every elaborated program is checked by the unchanged checker, so
+`fundamentalC`, `adequacyC`, `fundamentalD` and `adequacyD` cover it with no hypothesis (none of
+the programs above uses a relaxed rule). Every existing corpus and kernel program elaborates, checks
+and runs as before, with the same output, counts and reports, except `retry-block`'s output (above).
+
+### Open
+
+- **Relabelling a port** (decision 57, R2c): a computation parameter called inside and outside its
+  callee's handlers (`corpus/pending/comp-param-two-sites.bc`), passed on to another computation
+  parameter, or two of one effect under one site. Abortive: a site whose clause raises again at the other name, typable today. Resuming:
+  inlining, or a `rename (p, m)` primitive (one frame, one compatibility lemma).
+- **A capability used by the argument under the callee's handler**: the argument would take its
+  capabilities at lifetimes of its own, `!U(∀'x. Mut 'x S ⊗ A ⊸ F_Σ (Mut 'x S ⊗ B))` (decision 57,
+  R2a), instantiated at each call (#487). Built and taken out: the checker compares types without
+  α-conversion of lifetime binders (*Incompleteness* 2), and the argument's type, elaborated where
+  it is written, has other binders than the callee's parameter type instantiated at the call.
+  The same limit holds of §32's blocks.
+- **Provided answering effects** (R2d) and a `for` over a call of a computation parameter
+  (`corpus/pending/comp-param-for.bc`).
+- **Stored callbacks with a row** (part B, §32 *Open*). The same type, `!(A => B with E…)` in a
+  `let`, a data type or a type parameter, needs choices this entry does not make:
+  - *where its ports are fixed*: by the stored type, one per type declaration (decision 57, R6:
+    every `with` of `E` around a call of a stored value of that type takes the port; two types'
+    ports of one effect under one `with` are rejected), or per binding (each `let` its own ports,
+    which a value of the type cannot leave);
+  - *its tunneled row*: none (a stored callback performs only what its type provides, and its
+    creator's handlers are out of reach once it is stored, which R3's site freshness asks), or
+    fixed at the binding and checked at each call to be in scope there;
+  - *its captures*: `!` values only (§2's promotion, #9 to widen), or a box at a lifetime
+    (`[@c] !U(…)`, §28), with the answering capabilities passed in by each caller (R6);
+  - *the join of rows* across the elements of one data value: written, or the union inferred.
+  Each is a decision about what a stored value means, not an elaboration detail: §32 *Open*
+  remains, with these options.
+- **Layout typing in the backend**: resuming operations that answer different types inside a
+  handler with a state (#485), and a counted loop at a resuming row whose operation answers a value
+  (#486), fail to compile (*Programs*).
+- **Associativity across function stages** (law 2): it needs the relabelling above.
 
 ---
 
@@ -5292,9 +5528,38 @@ Entry 31 (§32) is implemented in `Frontend/Elab/Effects.lean` (`Blk`, `Cap.blk`
 and `Frontend/Print.lean` (`CHandler.lps`), and `lib/async.bc`, with no change to `CDerives`,
 `Core/`, `Paper/`, `Support/`, the checker or `Backend/`.
 
+Entry 32 (§33) is implemented in `Frontend/Syntax.lean` (`VTy.rowed`, `VTy.rowEffs`,
+`VSugar.pipe`), `Frontend/Lexer.lean` and `Frontend/Parser.lean` (`|>` in `opOf` and `opsLoop`,
+a provided row in `rtyAtom`),
+`Frontend/Print.lean`, `Frontend/Elab/Effects.lean` (`Env.comps`, `compParamsOf`, `Blk.prov`,
+`etaArgs`, `blockArgs`, `blockCall`, `blockParamCall`, `copyOf`'s ports, `Cx.portIn`, `withCtl`,
+`resolvePipes`, `pipeStage`) and `Frontend/Sugar.lean` (an annotated binding at the row), with no
+change to `CDerives`, `Core/`, `Paper/`, `Support/`, the checker or `Backend/`.
+
 ---
 
 ## Changelog
+
+- **0.61** (2026-10-16) — §33 (new, #161 part A): computation parameters, a parameter whose type
+  has a provided row, `!(A => B with E…)` (PROPOSED spelling), whose provided control effects the
+  callee serves at its ports (decision 57) and whose other effects tunnel to where the argument is
+  written; a function named at a parameter of function type is the block that calls it, so
+  `f(g)` and `f({ x -> g(x) })` are one argument; `|>` (decision 50): a handler stage is `with`,
+  a computation parameter first takes the piped value suspended, any other function takes it
+  first. The laws `m |> h ≡ with h { m }`, associativity, pass-through and lexical blocks, with
+  what each rests on (associativity across function stages is *Open*). An annotated binding whose
+  head performs operations of the row is elaborated at the row (a `with` in a counted loop at a
+  resuming row). New corpus programs `comp-param`, `pipe-handlers`, `gen-pipeline-pipe`,
+  `reconcile-chain`; `effects-sum-gen` moved from `pending/`; reject `block-raise-lexical`; pending
+  `comp-param-two-sites`, `comp-param-capability` (#487), `comp-param-for`, which record what is
+  not provided yet (the port rule is provisional until relabelling); reports `comp-param`,
+  `effects-sum-gen`. **`retry-block` changes its output on purpose**: its `retry` takes a
+  computation parameter and retries, `((inl i32[200], i32[30]), (inr i32[503], i32[10]))` where
+  it answered `((inr i32[503], i32[0]), (inr i32[503], i32[0]))`; its counts are unchanged. Stored
+  callbacks with a row (part B) stay *Open*, with the options written in §33 *Open*. §11, §14,
+  §15, §18, §24, §30 and §32 updated. No change to `CDerives`, the relation, the machine,
+  `PinLaw`, the checker, the backend, a kernel program, or another program's output, count or
+  report.
 
 - **0.60** (2026-10-16) — §32 (new): `Async`'s `log`, `spawn_logged`, `lpush` and `run_logged`
   (A5); A6 on the library; blocks that use capabilities (an answering handler's state, a `for`'s

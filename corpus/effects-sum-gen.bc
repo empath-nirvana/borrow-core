@@ -1,0 +1,34 @@
+-- E2d, a consumer of generators at two rows (SPEC §19 Programs; the kernel program `sum-gen`):
+-- `any` runs the generator it is given and answers whether it yielded `true`. It is given `gen1`,
+-- which yields `false` then `true`, and, under `to_result`, `gen2`, which yields `false` then
+-- raises. Written once, `any` is used at `Yield` alone and at `Yield` with `Fail`.
+--
+-- `gen` is a computation parameter (SPEC §33) that provides `Yield[bool]`: `any` serves its yields,
+-- with `any_true`, the kernel's clause (resume, then answer `true` if the element was). The
+-- computation is `gen(())` piped into the handler, `gen(()) |> any_true`, that is `with any_true
+-- { gen(()) }`, whose static name is `gen`'s port. A function named at the parameter is the block
+-- that calls it: `any(gen2)` is `any(!{ u -> gen2(u) })`. So `gen2`'s `Fail`, which `any` does not
+-- provide, goes to the handler where the call is written, `main`'s `to_result`, and passes
+-- `any_true`. `bcc check` reports two copies of `any`, one per row of the argument (`any__b0` and
+-- `any__b0n1`, at the site 1 of `Fail`), each with its port, and each generator's copy at that
+-- port.
+--
+-- Answer: `(inr (), inr ())`: true, and the error; `live 0`.
+
+include fail
+include yield
+
+fn gen1() -> 1 with Yield[bool] = yield(false); yield(true)
+fn gen2() -> 1 with Yield[bool], Fail[1] = yield(false); raise(())
+
+handler any_true: Yield[bool], 1 -> bool = {
+  return(u) = false;
+  yield(x, k) = let r = k(()); if x { true } else { r }
+}
+
+fn any(gen: !(1 => 1 with Yield[bool])) -> bool = gen(()) |> any_true
+
+main -> bool * (bool + 1) =
+  let a = any(gen1);
+  let b = with to_result[1, bool] { any(gen2) };
+  (a, b)

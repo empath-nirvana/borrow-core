@@ -331,6 +331,9 @@ def elabV : Nat → TyEnv → VTy → Except Error CVTy
     | .arrayImm _ a A => do pure (.fam (.imm (← E.life a) (← elabV n E A)))
     | .arrayMut _ a A => do pure (.fam (.mut (← E.life a) (← elabV n E A)))
     | .sized sp D S A => elabV n E (VTy.sizedExpand sp D S A)
+    | .rowed sp _ _ =>
+        err sp ("a function type with a provided row is the type of a computation parameter " ++
+          "(SPEC §33): it is written on a parameter of a function")
     | A@(.app sp _ _) | A@(.lapp sp _ _) =>
         -- `N[A, …]<'a, …>`: the arguments elaborated at the use, then `N`'s body in its own scope
         -- with its parameters bound to them.  `[spec §7]`

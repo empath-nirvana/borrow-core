@@ -1,7 +1,9 @@
 # Functions over effectful computations: effect polymorphism and higher-order effects (#161)
 
-Design for #161, after §19 (kernel effects) and stages 1–2 of #188 (surface effects). Nothing here
-is built. Each claim is marked as one of:
+Design for #161, after §19 (kernel effects) and stages 1–2 of #188 (surface effects). Computation
+parameters with their provided rows and ports, and `|>` (R1, R2b, R4), are built as SPEC §33, by
+specialisation (one copy per tunneled row) and without R2c's relabelling; the rest is not built.
+Each claim is marked as one of:
 
 - **established**: a Lean declaration on `main`, named after it was found by `grep`;
 - **by inspection**: read off a definition, with no theorem behind it;

@@ -71,6 +71,8 @@ inductive RTy where
   /-- `N[A, …]` and `N[…]<'a, …>`, curried: the arguments of a parameterised `type`. -/
   | app (sp : Span) (F A : RTy)
   | lapp (sp : Span) (F : RTy) (a : Life)
+  /-- `(A => B with E₁, E₂[T])`: a function type with a provided row (`VTy.rowed`).  `[spec §33]` -/
+  | rowed (sp : Span) (F : RTy) (effs : List (Ident × List VTy))
 
 def RTy.span : RTy → Span
   | .unit sp | .zero sp | .tensor sp _ _ | .sum sp _ _ | .U sp _ | .F sp _ | .ref sp _
@@ -78,7 +80,8 @@ def RTy.span : RTy → Span
   | .name sp _ | .lolli sp _ _ | .arr sp _ _ | .all sp _ _ _ | .forall_ sp _ _ _ | .amp sp _ _
   | .top sp | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _ | .nu sp _ _ | .delay sp _
   | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .pull sp _ _ _ | .array sp _ | .arrayImm sp _ _
-  | .arrayMut sp _ _ | .sized sp _ _ _ | .eff sp _ _ | .app sp _ _ | .lapp sp _ _ => sp
+  | .arrayMut sp _ _ | .sized sp _ _ _ | .eff sp _ _ | .app sp _ _ | .lapp sp _ _
+  | .rowed sp _ _ => sp
 
 /-- What a raw type is, for sort errors. -/
 def RTy.former : RTy → String
@@ -125,6 +128,10 @@ def RTy.toV : RTy → Except Error VTy
   | .sized sp D S A => return .sized sp (← D.toV) (← S.toV) (← A.toV)
   | .app sp G A => return .app sp (← G.toV) (← A.toV)
   | .lapp sp G a => return .lapp sp (← G.toV) a
+  | .rowed sp G es => do
+    match ← G.toV with
+    | H@(.lolli ..) => pure (.rowed sp H (VTy.ofRowEffs sp es))
+    | H => .error ⟨H.span, "a provided row `with E` is written on a function type `A => B`"⟩
   | t@(.F ..) | t@(.arr ..) | t@(.forall_ ..) | t@(.amp ..) | t@(.top ..) | t@(.nu ..)
   | t@(.delay ..) | t@(.stream ..) | t@(.iter ..) | t@(.loop ..) | t@(.pull ..)
   | t@(.eff ..) => sortErr t true
@@ -519,8 +526,26 @@ def rtyAtom : Nat → P RTy
         expectSym ">"
       pure F
     | .sym "(" =>
+      let st ← startPos
       discard bump
       let A ← rty n
+      -- `(A => B with E₁, E₂[T, …])`: a function type with a provided row (SPEC §33).
+      if ← isKw "with" then
+        discard bump
+        let mut es : Array (Ident × List VTy) := #[]
+        repeat
+          let e ← uident "an effect name"
+          let mut As : Array VTy := #[]
+          if ← isSym "[" then
+            discard bump
+            repeat
+              As := As.push (← rvty n)
+              if ← isSym "," then discard bump else break
+            expectSym "]"
+          es := es.push (e, As.toList)
+          if ← isSym "," then discard bump else break
+        expectSym ")"
+        return .rowed (← spanFrom st) A es.toList
       expectSym ")"
       pure A
     | _ => expected "a type"
@@ -895,15 +920,18 @@ inductive BinTok where
   | op (o : SurfOp)
   | and
   | or
+  /-- `a |> s` (SPEC §33): `VSugar.pipe` applied to the pair. -/
+  | pipe
 
-/-- The operator of a token, with its precedence: `||` 0, `&&` 1, comparisons 2, `+`/`-` 3,
-`*` 4. -/
+/-- The operator of a token, with its precedence: `|>` 0, `||` 1, `&&` 2, comparisons 3, `+`/`-`
+4, `*` 5. -/
 def opOf (angle : Bool) : Tok → Option (BinTok × Nat)
-  | .sym "||" => some (.or, 0) | .sym "&&" => some (.and, 1)
-  | .sym "==" => some (.op .eq, 2) | .sym "!=" => some (.op .ne, 2) | .sym "<" => some (.op .lt, 2)
-  | .sym "<=" => some (.op .le, 2) | .sym ">=" => some (.op .ge, 2)
-  | .sym ">" => if angle then none else some (.op .gt, 2)
-  | .sym "+" => some (.op .add, 3) | .sym "-" => some (.op .sub, 3) | .sym "*" => some (.op .mul, 4)
+  | .sym "|>" => some (.pipe, 0)
+  | .sym "||" => some (.or, 1) | .sym "&&" => some (.and, 2)
+  | .sym "==" => some (.op .eq, 3) | .sym "!=" => some (.op .ne, 3) | .sym "<" => some (.op .lt, 3)
+  | .sym "<=" => some (.op .le, 3) | .sym ">=" => some (.op .ge, 3)
+  | .sym ">" => if angle then none else some (.op .gt, 3)
+  | .sym "+" => some (.op .add, 4) | .sym "-" => some (.op .sub, 4) | .sym "*" => some (.op .mul, 5)
   | _ => none
 
 /-- `a && b` and `a || b` as `case`s on `a`, `inr ()` being true; `b` runs only when needed. -/
@@ -991,7 +1019,7 @@ def valOps : Nat → Nat → P Val
   | 0, _ => outOfFuel
   | n + 1, lvl => do
     let st ← startPos
-    let a ← if lvl ≥ 4 then valPrefix n else valOps n (lvl + 1)
+    let a ← if lvl ≥ 5 then valPrefix n else valOps n (lvl + 1)
     opsLoop n lvl st a
 
 /-- The operators of precedence `lvl` after the operand `a`. -/
@@ -1004,14 +1032,16 @@ def opsLoop : Nat → Nat → Pos → Val → P Val
       if l != lvl then return a
       let osp := t.span
       discard bump
-      let b ← if lvl ≥ 4 then valPrefix m else valOps m (lvl + 1)
+      -- A stage of `|>` is a spine.
+      let b ← if lvl ≥ 5 || o matches .pipe then valPrefix m else valOps m (lvl + 1)
       let sp ← spanFrom st
       let v := match o with
         | .op o => Val.app sp (.sugar osp (.op o)) (.pair sp a b)
         | .and => shortCircuit sp true a b
         | .or => shortCircuit sp false a b
+        | .pipe => Val.app sp (.sugar osp .pipe) (.pair sp a b)
       -- Comparisons do not associate.
-      if lvl == 2 then return v else opsLoop m lvl st v
+      if lvl == 3 then return v else opsLoop m lvl st v
     | none => return a
 
 /-- The components after the first of a tuple, at least one. -/

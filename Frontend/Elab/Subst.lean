@@ -44,6 +44,7 @@ def VTy.subst (σ : TySubst) : VTy → VTy
   | .sized sp D S A => .sized sp (D.subst σ) (S.subst σ) (A.subst σ)
   | .app sp G A => .app sp (G.subst σ) (A.subst σ)
   | .lapp sp G a => .lapp sp (G.subst σ) a
+  | .rowed sp G r => .rowed sp (G.subst σ) (r.subst σ)
 
 def CTy.subst (σ : TySubst) : CTy → CTy
   | .ret sp A => .ret sp (A.subst σ)

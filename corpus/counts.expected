@@ -59,6 +59,7 @@ capture-take-hand 1 0 0 # the producer's cell; the kernel program take adds its 
 capture-tick-hand 0 0 0 # equal to the kernel program tick-native
 clause-captures 6 3 0 # the counter and the cells; the indirect calls are the state-passing answers of `asking`, as in the probe P4(a) (a native handler parameter is not built)
 clone-reuse 6 0 1
+comp-param 0 0 0 # every argument is a closed block and every error a branch
 core-callback-dead 0 0 0 # the callback and the function it answers are closed λs; each call's code is known
 core-effects-borrow-abort 1 0 0 # the cell, freed by the finaliser on the unwind
 core-effects-borrows 2 0 0
@@ -84,6 +85,7 @@ effects-log-fail 3 0 0 # the log cell of each run
 effects-map 11 0 0 # equal to effects-map-hand: the handled program is the capability-passing one
 effects-map-fail 3 0 0
 effects-map-hand 11 0 0
+effects-sum-gen 0 0 0 # equal to the kernel program sum-gen
 effects-tunnel 0 0 0 # equal to the kernel program tunnel
 family-swap 2 0 0
 fields 5 0 0 # the stdin and stdout cells, the line buffer and its two growths at the long line; fields are views
@@ -107,6 +109,7 @@ gen-from 0 0 0 # the generator that echoed the input (the stdin cell) is in corp
 gen-nested 0 0 0
 gen-pipeline 0 0 0
 gen-pipeline-adapters 0 0 0
+gen-pipeline-pipe 0 0 0 # as gen-pipeline-adapters: the pipelines are its nested calls
 gen-produce 0 0 0
 gen-return 1 0 0
 gen-tokenize-parse 0 0 0 # the stored generator's state is a stack value, and literal views are read-only data
@@ -170,6 +173,7 @@ nats-sum 0 0 0
 operator-rounds 166 0 24 # the cluster's and the desired state's list nodes, rebuilt per update; the copies are the written `clone`s of the cluster and the spec
 parse-int 3 0 0 # the stdin and stdout cells and the line buffer, reused; literal views read-only data
 parse-recover 246 0 31 # the token list's nodes and the lists rebuilt per statement; the copies are the written `clone(rest)` per statement
+pipe-handlers 0 0 0
 print-borrowed-array 2 0 0
 quicksort 3 0 0 # the data, the range stack, the output capability
 rec-await-exhausted 3 0 0 # the two list cells, and the continuation of the one `await`, an object per level it suspends through
@@ -188,6 +192,7 @@ rec-overflow 10101 0 0 # the cells, one per level: 100, and 10001 before the bud
 rec-parser 17 0 0 # the token lists and the tokens put back
 rec-tree 254 0 0 # the tree only, two objects per node less the root
 rec-yield 0 0 0
+reconcile-chain 25 0 0 # the journals' list nodes, and the continuations the clock's and the journal's clauses resume before they answer
 retry-block 2 0 0 # the clock cells
 reverse-bytes 3 0 0
 sched-a 63 18 0

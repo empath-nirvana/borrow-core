@@ -158,6 +158,10 @@ structure Env where
   /-- In a copy made for effectful blocks: each block parameter and the effect instances its
   block performs, which a call of it performs (`rowV`).  `[spec §30]` -/
   cbRows : List (String × List Inst) := []
+  /-- The functions declared so far that take computation parameters (SPEC §33): for each, its
+  computation parameters by index, with their names and their provided rows. A call of one is a
+  call of its copy for its arguments (`blockCall`); it is never used as written.  `[spec §33]` -/
+  comps : List (String × List (Nat × String × List (Ident × List VTy))) := []
 
 /-- A capability in scope: the answering effect it serves, the variable holding its `mut 'l S`
 borrow, the lifetime `'l`, and the handler. Or the variable a `for`'s site of an iteration effect
@@ -230,6 +234,10 @@ structure St where
   operation of one of them is a div loop, one turn per observation; of any other site, a total
   loop at the row (SPEC §16, *Effectful bodies*). -/
   perTurn : List Nat := []
+  /-- The ports of each copy made for computation parameters (SPEC §33), by the copy's name: per
+  parameter index, the site of each provided effect, and whether it is the copy's own (a `with`
+  inside it) rather than one of its row's.  `[spec §33]` -/
+  ports : List (String × List (Nat × List (Site × Bool))) := []
 
 abbrev EM := StateT St (Except Error)
 
@@ -314,6 +322,23 @@ def recBudget : Nat := 10000
 def isPullTy : VTy → Bool
   | .thunk _ (.pull ..) => true
   | _ => false
+
+/-- The provided row of a parameter's written type: `(A => B with E…)` or `!(A => B with E…)`, a
+computation parameter's (SPEC §33).  `[spec §33]` -/
+def provOf : VTy → Option (List (Ident × List VTy))
+  | .rowed _ _ r | .bang _ (.rowed _ _ r) => some r.rowEffs
+  | _ => none
+
+/-- A parameter's written type with its provided row taken off: the function type it is.
+`[spec §33]` -/
+def unrowed : VTy → VTy
+  | .rowed _ F _ => F
+  | .bang sp (.rowed _ F _) => .bang sp F
+  | A => A
+
+/-- The effects `es` taken off a row. -/
+def withoutAll (r : List Inst) (es : List (Ident × List VTy)) : List Inst :=
+  r.filter fun i => !es.any (·.1.name == i.eff)
 
 /-- The parameter tuple's type of a function type as written, under its `!` and lifetimes. -/
 def paramTyOf : VTy → Option VTy
@@ -505,8 +530,16 @@ def rowV (env : Env) : Nat → Val → List Inst
           | none, some g => env.callRow g
           | none, none => rowV env n f
         | none => rowV env n f
+      -- An argument at a computation parameter performs what the callee provides there in the
+      -- callee (SPEC §33): the callee's row has it when the callee passes it on.
       let args := match headName f with
-        | some x => (env.pullArgs x W).foldl (fun r (V, pull) => union r (pullRow env n pull V)) []
+        | some x =>
+          let cps := (env.comps.lookup x).getD []
+          (env.pullArgs x W).zipIdx.foldl (fun r ((V, pull), j) =>
+            let rV := pullRow env n pull V
+            union r (match cps.find? (·.1 == j) with
+              | some (_, _, es) => withoutAll rV es
+              | none => rV)) []
         | none => rowV env n W
       union head args
     | .var _ x => match env.fn? x with
@@ -793,6 +826,10 @@ structure Cx where
   block's control operations were resolved to where the block was written, and the capabilities
   it uses, passed with it at each call (SPEC §32). -/
   cbs : List (String × List Site × List Cap) := []
+  /-- In a copy made for computation parameters (SPEC §33): each parameter's port for each effect
+  it provides, the site its argument performs that effect at, and whether the site is a `with`
+  of the copy (named by the port) rather than one of the copy's row.  `[spec §33]` -/
+  ports : List (String × Site × Bool) := []
 
 /-- What a call of `g` performs here: its row, and for a member of a recursive group the rows of
 the layers its recursion runs under. -/
@@ -935,6 +972,14 @@ structure Blk where
   j : Nat
   ss : List Site
   caps : List Cap := []
+  /-- At a computation parameter (SPEC §33): the effects the callee provides. The block's
+  operations of them go to the callee's port, not to the sites where it is written.
+  `[spec §33]` -/
+  prov : List (Ident × List VTy) := []
+  /-- The control effects the block performs, in the order of its row, provided ones among them:
+  its parameter's row lists their sites in this order, as the block's synthesized type does.
+  `[spec §33]` -/
+  order : List String := []
 
 /-- A capability as a copy takes it: an answering handler's at the copy's own names, a `for`'s
 threaded variable as it is.  `[spec §32]` -/
@@ -992,7 +1037,7 @@ def blockText (ss : List Site) (cs : List Cap) : String :=
 parameters' types `!U(A -o F[row] B)`, the parameters by name with their sites, and the sites of
 every block, beside the copy's own (`ss`). -/
 def withBlocks (env : Env) (sp : Span) (name : String) (f : FnParts) (ss : List Site)
-    (blks : List Blk) :
+    (blks : List Blk) (ports : List (Nat × List (Site × Bool)) := []) :
     Except Error (FnParts × List (String × List Site × List Cap) × List Site) := do
   if blks.isEmpty then return (f, [], ss)
   let names := paramNames f
@@ -1003,10 +1048,16 @@ def withBlocks (env : Env) (sp : Span) (name : String) (f : FnParts) (ss : List 
     let some x := names[b.j]? | throw ⟨sp, s!"internal error: the parameter {b.j} of `{name}`"⟩
     let some A := compAt n f.P b.j | throw ⟨sp, s!"internal error: the parameter `{x}` of `{name}`"⟩
     let cs := b.caps.map (·.canon sp)
-    let some A' := rowedCapFnTy (env.rowOf b.ss) cs A
+    -- At a computation parameter, the block performs what is provided at its ports (SPEC §33),
+    -- its sites in the order of its row.
+    let pss := ((ports.lookup b.j).getD []).map (·.1)
+    let all := addSites b.ss pss
+    let bss := if pss.isEmpty then b.ss else
+      addSites (b.order.filterMap fun e => all.find? (·.eff == e)) all
+    let some A' := rowedCapFnTy (env.rowOf bss) cs (unrowed A)
       | throw ⟨sp, s!"internal error: the block parameter `{x}` of `{name}`"⟩
     reps := reps ++ [(b.j, A')]
-    named := named ++ [(x, b.ss, cs)]
+    named := named ++ [(x, bss, cs)]
   let all := blks.foldl (fun acc b => addSites acc b.ss) ss
   pure ({ f with P := setComps n f.P 0 reps }, named, all)
 
@@ -1023,26 +1074,111 @@ operations, or a block parameter of the copy being elaborated; each with the sit
 go to, the innermost handlers of their effects where the block is written. -/
 def blockArgs (cx : Cx) (x : String) (W : Val) : Except Error (List Blk) := do
   let some P := (cx.env.sigs.lookup x).bind paramTyOf | return []
+  let cps := (cx.env.comps.lookup x).getD []
   let mut out : List Blk := []
   for ((A, V), j) in (argComps fuel P W).zipIdx do
-    if (rowedFnTy .nil A).isNone then continue
+    if (rowedFnTy .nil (unrowed A)).isNone then continue
+    -- A computation parameter's argument (SPEC §33): what the callee provides is served at its
+    -- ports, the rest where the argument is written.
+    let prov := ((cps.find? (·.1 == j)).map (·.2.2)).getD []
+    let isComp := (cps.find? (·.1 == j)).isSome
+    if let some e := prov.find? fun (e, _) => cx.env.answering e.name then
+      throw ⟨e.1.span, s!"`{x}` provides the answering effect `{e.1.name}` to its parameter: not " ++
+        "provided (a provided effect is a control effect, SPEC §33)"⟩
     match V with
     | .var _ v =>
-      if let some (ss, cs) := cx.cbs.lookup v then out := out ++ [⟨j, ss, cs⟩]
-    | .thunkv _ M | .bangThunkv _ M =>
-      let row := rowC cx.env fuel M
-      let ctl := cx.ctl row
-      -- The capabilities it uses (an answering handler's state, a `for`'s threaded variables) are
-      -- passed with it at each call (SPEC §32).
-      let cs := cx.need row
-      if ctl.isEmpty && cs.isEmpty then continue
-      let mut ss : List Site := []
-      for i in ctl do
-        let s ← cx.serve V.span "this block" i
-        ss := addSites ss [s]
-      out := out ++ [⟨j, ss, cs⟩]
+      if let some (ss, cs) := cx.cbs.lookup v then
+        if isComp then
+          throw ⟨V.span, s!"`{v}` is a block parameter, passed on to the computation parameter " ++
+            s!"of `{x}`: not provided (its operations are at the ports of the function it was " ++
+            "given to, SPEC §33)"⟩
+        out := out ++ [{ j, ss, caps := cs }]
+        continue
     | _ => pure ()
+    -- A closure written here, or a function named here (a call of it in a block, `etaArgs`).
+    let row₀ := match V with
+      | .thunkv _ M | .bangThunkv _ M => rowC cx.env fuel M
+      | V => rowV cx.env fuel V
+    let row := withoutAll row₀ prov
+    let ctl := cx.ctl row
+    -- The capabilities it uses (an answering handler's state, a `for`'s threaded variables) are
+    -- passed with it at each call (SPEC §32).
+    let cs := cx.need row
+    if ctl.isEmpty && cs.isEmpty && !isComp then continue
+    match V with
+    | .thunkv .. | .bangThunkv .. => pure ()
+    | V => if !isComp && ((headName V).bind cx.env.fn?).isNone then continue
+    let mut ss : List Site := []
+    for i in ctl do
+      let s ← cx.serve V.span "this block" i
+      ss := addSites ss [s]
+    out := out ++ [⟨j, ss, cs, prov, (cx.ctl row₀).map (·.eff)⟩]
   pure out
+
+/-- The arguments of a call of `x` with each function named at a parameter of function type a
+block that calls it, `!{ a -> g(a) }` (or `{ a -> g(a) }`), when the function has a row or the
+parameter is a computation parameter (SPEC §33): passing `g` and passing `{ a -> g(a) }` are one
+thing. A block parameter of the copy being elaborated is passed on as it is.  `[spec §33]` -/
+def etaArgs (cx : Cx) (x : String) (W : Val) : EM Val := do
+  let some P := (cx.env.sigs.lookup x).bind paramTyOf | return W
+  let cps := (cx.env.comps.lookup x).getD []
+  let comps := argComps fuel P W
+  if !comps.any (fun (A, V) => (rowedFnTy .nil (unrowed A)).isSome && match V with
+      | .thunkv .. | .bangThunkv .. => false
+      | _ => true) then return W
+  let mut vs : List Val := []
+  for ((A, V), j) in comps.zipIdx do
+    let isComp := cps.any (·.1 == j)
+    let named := match V with
+      | .var _ v => (cx.cbs.lookup v).isNone
+      | .defApp .. => true
+      | _ => false
+    let rowed := ((headName V).bind cx.env.fn?).isSome
+    if (rowedFnTy .nil (unrowed A)).isSome && named && (isComp || rowed) then
+      let a ← fresh "fx_e"
+      let sp := V.span
+      let body : Comp := .lam sp ⟨a, sp⟩ (holeTy sp) (.ret sp (.app sp V (.var sp a)))
+      vs := vs ++ [match unrowed A with
+        | .bang .. => .bangThunkv sp body
+        | _ => .thunkv sp body]
+    else vs := vs ++ [V]
+  let rec tuple : List Val → Val
+    | [] => W
+    | [V] => V
+    | V :: Vs => .pair V.span V (tuple Vs)
+  pure (tuple vs)
+
+/-- The environment in which `rowC` reads whether a computation reaches a call of the parameter `x`
+performing `e` outside a `with` of `e`: no operation, no function's row and no handler's own row
+counts, and `x` performs `e` (SPEC §33).  `[spec §33]` -/
+def Env.onlyParam (env : Env) (x e : String) (As : List VTy) : Env :=
+  { env with ops := [], fns := [], cbRows := [(x, [⟨e, some As⟩])],
+             chandlers := env.chandlers.map fun h => { h with row := [] } }
+
+/-- `M` calls the parameter `x` performing `e`, outside a `with` of `e` in it. -/
+def reachesParam (env : Env) (x e : String) (As : List VTy) (M : Comp) : Bool :=
+  (rowC (env.onlyParam x e As) fuel M).any (·.eff == e)
+
+/-- The static name of a `with` of `e` around `M` in a copy made for computation parameters
+(SPEC §33): the port of the parameters whose calls of `e` it serves, when `M` calls one. A port
+that is a site of the copy's row is not a `with`'s, and two ports are not one site's.
+`[spec §33]` -/
+def Cx.portIn (cx : Cx) (sp : Span) (h e : String) (M : Comp) : Except Error (Option Nat) := do
+  let mut out : Option (String × Nat) := none
+  for (x, p, own) in cx.ports do
+    if p.eff != e || !reachesParam cx.env x e p.args M then continue
+    unless own do
+      throw ⟨sp, s!"`with {h}` serves `{e}` for a call of the computation parameter `{x}`, which " ++
+        s!"is called elsewhere outside a handler of `{e}`, where the caller serves it: the effect a " ++
+        "computation parameter provides is served at one site of the function, until a port can be " ++
+        "relabelled (SPEC §33 *Open*)"⟩
+    match out with
+    | some (y, n) =>
+      unless n == p.n do
+        throw ⟨sp, s!"`with {h}` serves `{e}` for the computation parameters `{y}` and `{x}`, which " ++
+          "provide it at two ports: not provided until a port can be relabelled (SPEC §33 *Open*)"⟩
+    | none => out := some (x, p.n)
+  pure (out.map (·.2))
 
 /-- The capabilities of a copy made for the handlers `hs`, one per answering effect of `effs`. -/
 def copyCaps (effs : List String) (hs : List HSig) : List Cap :=
@@ -1057,8 +1193,9 @@ def takeCaps (sp : Span) (cs : List Cap) (f : FnParts) (body : Comp) : EM FnPart
   pure { f with lives := lives ++ f.lives, P := capsTy sp cs f.P, T := capsTy sp cs f.T,
                 p := ⟨pp, sp⟩, body }
 
-/-- A `with`, a `for` over a call that performs an iteration effect, or a stored generator, in a
-value, outside nothing: the elaboration must reach it. -/
+/-- A `with`, a `for` over a call that performs an iteration effect, a stored generator, or a call
+of a function with a computation parameter, in a value, outside nothing: the elaboration must
+reach it. -/
 def withInV (env : Env) : Nat → Val → Bool
   | 0, _ => false
   | k + 1, V => match V with
@@ -1067,7 +1204,11 @@ def withInV (env : Env) : Nat → Val → Bool
       let pull := match headName f with
         | some x => (env.pullArgs x W).any fun (V, p) => p && (env.iterCall? V).isSome
         | none => false
-      pull || withInV env k f || withInV env k W
+      -- A call of a function with a computation parameter is a call of its copy (SPEC §33).
+      let comp := match headName f with
+        | some x => (env.comps.lookup x).isSome
+        | none => false
+      pull || comp || withInV env k f || withInV env k W
     | .pair _ f W => withInV env k f || withInV env k W
     | .inl _ V | .inr _ V | .ascribe _ V _ | .roll _ V | .unroll _ V | .boxed _ _ V
     | .unbox _ V | .unbang _ V | .inst _ V _ | .sub _ V _ | .shorten _ _ _ _ V => withInV env k V
@@ -1351,8 +1492,10 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
           return ← blockParamCall k cx cs sp f x ss bcs W
         -- An argument at a stored generator's parameter: the stored generator of the call.
         let (bP, W) ← pullArgsV k cx cs x W
-        -- Effectful blocks passed: a call of the callee's copy at their rows (SPEC §30).
+        -- Effectful blocks passed: a call of the callee's copy at their rows (SPEC §30); a
+        -- function named at a block's parameter is the block that calls it (SPEC §33).
         if (cx.env.op? x).isNone then
+          let W ← etaArgs cx x W
           let blks ← (blockArgs cx x W : Except Error _)
           if !blks.isEmpty then
             let g? : Option FSig := match cx.env.fn? x with
@@ -1378,6 +1521,9 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
       if let some lc := cx.layerCall then
         if lc.name == x then
           throw ⟨sp, s!"`{x}`, the call a layer runs around, is passed as a value: it can only be called"⟩
+      if (cx.env.comps.lookup x).isSome then
+        throw ⟨sp, s!"`{x}` takes a computation parameter and is passed as a value: it can only be " ++
+          "called (SPEC §33)"⟩
       match cx.env.fn? x with
       | some g =>
         if g.group.isSome then
@@ -1650,10 +1796,26 @@ def blockParamCall : Nat → Cx → List Cap → Span → Val → String → Lis
     EM (List Bind × Val)
   | 0, _, _, sp, _, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, sp, f, x, ss, bcs, W => do
+    -- A computation parameter's provided effects are served here by the site of its port
+    -- (SPEC §33).
+    for (y, p, _) in cx.ports do
+      if y != x then continue
+      match cx.siteOf p.eff with
+      | some s =>
+        unless s.n == p.n do
+          throw ⟨sp, s!"`{x}` is called here, where `{p.eff}` is served by {s.what}, the site " ++
+            s!"{s.n}, but it is called elsewhere where `{p.eff}` is served by the site {p.n}: the " ++
+            "effect a computation parameter provides is served at one site of the function, until a port " ++
+            "can be relabelled (SPEC §33 *Open*)"⟩
+      | none => throw ⟨sp, s!"`{x}` performs `{p.eff}`, but no handler of `{p.eff}` is in scope here"⟩
     let (b, W') ← goV k cx cs W
     let r ← fresh "fx_v"
+    let provd := (cx.ports.filter (·.1 == x)).map (·.2.1)
+    let lexical := ss.filter fun s => !provd.any (·.n == s.n)
     report sp "call" (s!"{x} → the block" ++
-      (if ss.isEmpty then "" else s!", performing at {sitesText ss}") ++
+      (if lexical.isEmpty then "" else s!", performing at {sitesText lexical}") ++
+      (if provd.isEmpty then "" else s!", its {", ".intercalate (provd.map (s!"`{·.eff}`"))} " ++
+        s!"served here by {sitesText provd}") ++
       (if bcs.isEmpty then "" else ", passing the capabilities"))
     if bcs.isEmpty then
       let bind : Bind := fun N => pure (.bind sp ⟨r, sp⟩ none (.ret sp (.app sp f W')) N false)
@@ -1674,13 +1836,22 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
     noLend sp s!"`{x}`" W
     let some P := (cx.env.sigs.lookup x).bind paramTyOf
       | throw ⟨sp, s!"internal error: the parameters of `{x}`"⟩
+    -- At a computation parameter, the copy names the ports the block performs its provided
+    -- effects at: the copy is made first (SPEC §33).
+    let early := blks.any (!·.prov.isEmpty)
+    let name₀ ← if early then copyFor k cx sp x g blks else pure ""
+    let stP ← get
+    let ports : List (Nat × List (Site × Bool)) := if early then ((stP.ports.lookup name₀).getD []) else []
     let mut bs : List Bind := []
     let mut vs : List Val := []
     for ((_, V), j) in (argComps fuel P W).zipIdx do
       if let some blk := blks.find? (·.j == j) then
         -- A block sees the sites where it is written, and the capabilities it uses, which it takes
-        -- first and hands back first (SPEC §32).
-        let cxB : Cx := { cx with caps := blk.caps, fnCaps := [] }
+        -- first and hands back first (SPEC §32); at a computation parameter, the ports of what
+        -- the callee provides (SPEC §33).
+        let pss := ((ports.lookup j).getD []).map (·.1)
+        let cxB : Cx := { cx with caps := blk.caps, fnCaps := [],
+                                  sites := pss ++ cx.sites.filter fun s => !pss.any (·.eff == s.eff) }
         let body (M : Comp) : EM Comp := do
           if blk.caps.isEmpty then return ← trC k cxB [] false M
           match M with
@@ -1703,13 +1874,18 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
       | V :: Vs => .pair V.span V (tuple Vs)
     let W' := tuple vs
     let used := addCaps (cx.needIn (cx.rowOf g)) (blkCaps blks)
-    let name ← copyFor k cx sp x g blks
+    let name ← if early then pure name₀ else copyFor k cx sp x g blks
     let f' : Val := match f with
       | .defApp fsp _ As => .defApp fsp name As
       | _ => .var f.span name
     let t ← fresh "fx_b"
     let r ← fresh "fx_v"
-    let blkT := blks.map fun b => "its block " ++ blockText b.ss b.caps
+    let blkT := blks.map fun b =>
+      let ps := (ports.lookup b.j).getD []
+      if ps.isEmpty then "its block " ++ blockText b.ss b.caps
+      else "its computation performing " ++ ", ".intercalate (
+        (if b.ss.isEmpty && b.caps.isEmpty then [] else [blockText b.ss b.caps]) ++
+        ps.map fun (p, _) => s!"`{p.eff}` at the port {p.n} of `{x}`")
     report sp "call" (s!"{x} → `{name}`, " ++ ", ".intercalate blkT ++
       (if used.isEmpty then "" else ", passing the capabilities"))
     let ann := if used.isEmpty then none else (closedResult g.decl).map (capsTy sp used)
@@ -1778,12 +1954,24 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
           "which threads its variables through the operation: a control handler's body may be " ++
           "abandoned, and does not hand them back; not provided"⟩
       csM := csM ++ [{ c with life := ← fresh "fx_rl" }]
+    -- A computation parameter's argument takes its capabilities at the copy's lifetimes: one
+    -- called in a body that is lent them anew cannot be given them (SPEC §33 *Open*).
+    for (x, _, bcs) in cx.cbs do
+      if !cx.ports.any (·.1 == x) then continue
+      if let some c := bcs.find? (·.thr.isNone) then
+        if (refsC fuel M).contains x && csM.any (·.eff == c.eff) then
+          throw ⟨ksp, s!"the computation parameter `{x}` uses the capability of `{c.eff}` and is " ++
+            s!"called inside `with {ch.name.name}`, whose body is lent the capability anew: not " ++
+            "provided (SPEC §33 *Open*)"⟩
     -- Written type arguments, in the order of the handler's type parameters.
     if As.length > tps.length then
       throw ⟨ksp, s!"`{ch.name.name}` takes {tps.length} type argument(s)"⟩
     let mut σ : TySubst := tps.zip As
-    -- The handled effect's type arguments from what the body performs.
-    let n ← freshSite
+    -- The handled effect's type arguments from what the body performs. Its static name is its
+    -- own, or the port of the computation parameters whose calls it serves (SPEC §33).
+    let n ← match ← (cx.portIn ksp ch.name.name e M : Except Error _) with
+      | some p => pure p
+      | none => freshSite
     if let some i := (rowC cx.env fuel M).find? (·.eff == e) then
       if let some Bs := i.args then
         unless Bs.length == ch.effArgs.length do
@@ -2436,8 +2624,29 @@ def copyOf : Nat → Env → Span → FSig → List HSig → List Site → Strin
     let q := (← get).quiet
     if env.lib.contains g.name then modify fun s => { s with quiet := true }
     let f ← (fnParts dsp n.name A V : Except Error FnParts)
+    -- Computation parameters (SPEC §33): the port of each provided effect, a site of the copy's
+    -- row when the copy calls the parameter outside a handler of it, else a `with`'s of its own.
+    let names := paramNames f
+    let mut ports : List (Nat × List (Site × Bool)) := []
+    let mut cxPorts : List (String × Site × Bool) := []
+    for b in blks do
+      if b.prov.isEmpty then continue
+      let some x := names[b.j]? | throw ⟨sp, s!"internal error: the parameter {b.j} of `{g.name}`"⟩
+      let mut ps : List (Site × Bool) := []
+      for (e, As) in b.prov do
+        if reachesParam env x e.name As f.body then
+          let some s := ss.find? (·.eff == e.name)
+            | throw ⟨sp, s!"internal error: `{g.name}` passes `{e.name}` of `{x}` on, unserved"⟩
+          ps := ps ++ [({ s with sp := dsp, what := "the caller" }, false)]
+        else
+          let p ← freshSite
+          ps := ps ++ [({ eff := e.name, n := p, args := As, sp := dsp,
+                          what := s!"`{g.name}`'s handler of `{e.name}` around `{x}`" }, true)]
+      ports := ports ++ [(b.j, ps)]
+      cxPorts := cxPorts ++ ps.map fun (s, own) => (x, s, own)
+    modify fun st => { st with ports := (name, ports) :: st.ports }
     -- Effectful blocks (SPEC §30): the block parameters at their rows.
-    let (f, named, ssAll) ← (withBlocks env dsp g.name f ss blks : Except Error _)
+    let (f, named, ssAll) ← (withBlocks env dsp g.name f ss blks ports : Except Error _)
     let env := env.withBlocks named
     -- The capabilities, in the order of the row: an answering handler's, and the variable a
     -- `for`'s site threads (whose type is a parameter of the copy, `W`).
@@ -2451,13 +2660,20 @@ def copyOf : Nat → Env → Span → FSig → List HSig → List Site → Strin
       ((cs.filterMap (·.thr)).filter fun W => !(ss.filterMap (·.thr)).any (·.2 == W))).map
         fun W => ⟨W, dsp⟩
     let ss := ss.map fun s => { s with sp := dsp, what := "the caller" }
-    let cx : Cx := { env, caps := cs, sites := ss, fnCaps := cs, cbs := named }
+    let cx : Cx := { env, caps := cs, sites := ss, fnCaps := cs, cbs := named, ports := cxPorts }
     let body ← trC k cx cs true f.body
     let f' ← if cs.isEmpty then pure { f with body } else takeCaps dsp cs f body
     let (A', V') := f'.build dsp (env.rowOf (ssAll.map fun s => { s with sp := dsp, what := "the caller" }))
+    let portText (b : String) : List String :=
+      (cxPorts.filter (·.1 == b)).map fun (_, p, own) =>
+        s!"its `{p.eff}` at the port {p.n}" ++
+          (if own then ", served by its `with` here" else ", passed on to the caller")
     report dsp "lowering" (s!"copy `{name}`: `{g.name}` for " ++ ", ".intercalate
       ((hs.map (·.name)) ++ ss.map (fun s => s!"the site {s.n} of `{s.eff}`") ++
-        named.map fun (b, bss, bcs) => s!"its block `{b}` {blockText bss bcs}"))
+        named.map fun (b, bss, bcs) =>
+          let lex := bss.filter fun s => !cxPorts.any fun (y, p, _) => y == b && p.n == s.n
+          ", ".intercalate ((s!"its block `{b}`" ++
+            (if lex.isEmpty && bcs.isEmpty then "" else " " ++ blockText lex bcs)) :: portText b)))
     modify fun s => { s with quiet := q }
     -- A copy that threads a `for`'s variable is generic in its type.
     let mk' := match tps, ps, mk with
@@ -2555,6 +2771,31 @@ def recGroupsOf (ds : List (String × Val)) : List (List String) := Id.run do
       out := out ++ [names.filter fun y => (r x).contains y && (r y).contains x]
   return out
 
+/-- The computation parameters of a function as written (SPEC §33): each parameter whose type has
+a provided row, by index, with its name and the row.  `[spec §33]` -/
+def compParamsOf (sp : Span) (name : String) (A : VTy) (V : Val) :
+    List (Nat × String × List (Ident × List VTy)) :=
+  match fnParts sp name A V with
+  | .error _ => []
+  | .ok f =>
+    let names := paramNames f
+    names.zipIdx.filterMap fun (x, j) => do
+      let es ← provOf (← compAt names.length f.P j)
+      pure (j, x, es)
+
+/-- A `for` over a call of one of the parameters `xs`, outside nested closures: its span.
+`[spec §33]` -/
+def forOverParam (xs : List String) : Nat → Comp → Option Span
+  | 0, _ => none
+  | k + 1, M => match M with
+    | .for_ sp _ V B N =>
+      if (match V with | .app _ f _ => (headName f).any xs.contains | _ => false) then some sp
+      else (forOverParam xs k B).orElse fun _ => forOverParam xs k N
+    | .bind _ _ _ M N _ | .with_ _ M N | .case _ _ _ M _ N =>
+      (forOverParam xs k M).orElse fun _ => forOverParam xs k N
+    | .letUnit _ _ M | .letPair _ _ _ _ M | .lam _ _ _ M | .lamL _ _ _ M => forOverParam xs k M
+    | _ => none
+
 /-- The names a declaration defines. -/
 def Decl.defName : Decl → Option String
   | .def_ _ n _ _ _ _ => some n.name
@@ -2627,6 +2868,128 @@ def defineGroup (env : Env) (ms : List (Span × Ident × List Ident × VTy × Va
                                              group := some (G.name, (parts.map (·.1)).idxOf x) }] }
   pure env
 
+/-! ### `|>`  `[spec §33]` -/
+
+/-- What the pass knows of the program for `|>`: its handlers' names, and each function's
+written type. -/
+structure PipeEnv where
+  handlers : List String
+  sigs : List (String × VTy)
+
+/-- `e |> s` (SPEC §33): a handler stage `h[…](…)` is `with h[…](…) { e }`; a function stage
+`f(a, …)` whose first parameter is a computation parameter takes `e` suspended, `f(!{ () -> e },
+a, …)` (`{ () -> e }` at a parameter that is not `!`); any other function takes `e` first,
+`f(e, a, …)` (decision 50). -/
+def pipeStage (pe : PipeEnv) (sp : Span) (e s : Val) : EM Val := do
+  let (head, args) : Val × Option Val := match s with
+    | .app _ h@(.var ..) P | .app _ h@(.defApp ..) P => (h, some P)
+    | h => (h, none)
+  let (x, As) ← match head with
+    | .var _ x => pure (x, [])
+    | .defApp _ x As => pure (x, As)
+    | _ => throw ⟨s.span, "the right of `|>` is a handler or a function, applied to its other " ++
+        "arguments"⟩
+  if pe.handlers.contains x then
+    let l ← fresh "fx_pipel"
+    let b ← fresh "fx_pipec"
+    let P := args.getD (.unit sp)
+    if P.lends then
+      throw ⟨P.span, s!"the handler `{x}` of this `|>` is given a lent place: write `with {x}(…) \{ … }`, " ++
+        "which hands the place back"⟩
+    return .app sp (.app sp (.sugar s.span (.handle x l As)) P)
+      (.thunkv sp (.lam sp ⟨b, sp⟩ (holeTy sp) (.ret sp e)))
+  let first : Option VTy := ((pe.sigs.lookup x).bind paramTyOf).map fun
+    | .tensor _ A _ => A
+    | A => A
+  let e' ← match first with
+    | some A@(.rowed ..) | some A@(.bang _ (.rowed ..)) =>
+      match unrowed A with
+      | .bang _ (.lolli _ (.unit _) _) | .lolli _ (.unit _) _ =>
+        let u ← fresh "fx_pipeu"
+        let body : Comp := .lam sp ⟨u, sp⟩ (holeTy sp) (.letUnit sp (.var sp u) (.ret sp e))
+        pure (match A with | .bang .. => Val.bangThunkv sp body | _ => .thunkv sp body)
+      | _ => throw ⟨s.span, s!"the first parameter of `{x}` is a computation parameter that takes " ++
+          "an argument: `|>` passes it a computation of none"⟩
+    | _ => pure e
+  pure (.app sp head (match args with
+    | none | some (.unit _) => e'
+    | some P => .pair sp e' P))
+
+mutual
+/-- `V` with each `e |> s` in it elaborated (`pipeStage`), innermost first. -/
+def pipesV (pe : PipeEnv) : Nat → Val → EM Val
+  | 0, V => pure V
+  | k + 1, V => match V with
+    | .app sp (.sugar _ .pipe) (.pair _ e s) => do
+      pipeStage pe sp (← pipesV pe k e) (← pipesV pe k s)
+    | .pair sp V W => do pure (.pair sp (← pipesV pe k V) (← pipesV pe k W))
+    | .inl sp V => do pure (.inl sp (← pipesV pe k V))
+    | .inr sp V => do pure (.inr sp (← pipesV pe k V))
+    | .thunk sp M => do pure (.thunk sp (← pipesC pe k M))
+    | .thunkv sp M => do pure (.thunkv sp (← pipesC pe k M))
+    | .bangThunk sp M => do pure (.bangThunk sp (← pipesC pe k M))
+    | .bangThunkv sp M => do pure (.bangThunkv sp (← pipesC pe k M))
+    | .unbang sp V => do pure (.unbang sp (← pipesV pe k V))
+    | .boxed sp a V => do pure (.boxed sp a (← pipesV pe k V))
+    | .unbox sp V => do pure (.unbox sp (← pipesV pe k V))
+    | .sub sp V a => do pure (.sub sp (← pipesV pe k V) a)
+    | .roll sp V => do pure (.roll sp (← pipesV pe k V))
+    | .unroll sp V => do pure (.unroll sp (← pipesV pe k V))
+    | .run sp M => do pure (.run sp (← pipesC pe k M))
+    | .app sp V W => do pure (.app sp (← pipesV pe k V) (← pipesV pe k W))
+    | .inst sp V a => do pure (.inst sp (← pipesV pe k V) a)
+    | .ascribe sp V A => do pure (.ascribe sp (← pipesV pe k V) A)
+    | .shorten sp m s a V => do pure (.shorten sp m s a (← pipesV pe k V))
+    | V => pure V
+
+/-- `M` with each `e |> s` in it elaborated. -/
+def pipesC (pe : PipeEnv) : Nat → Comp → EM Comp
+  | 0, M => pure M
+  | k + 1, M => match M with
+    | .ret sp V => do pure (.ret sp (← pipesV pe k V))
+    | .bind sp x A M N lin => do pure (.bind sp x A (← pipesC pe k M) (← pipesC pe k N) lin)
+    | .lam sp x A M => do pure (.lam sp x A (← pipesC pe k M))
+    | .app sp M x => do pure (.app sp (← pipesC pe k M) x)
+    | .with_ sp M N => do pure (.with_ sp (← pipesC pe k M) (← pipesC pe k N))
+    | .proj sp i M => do pure (.proj sp i (← pipesC pe k M))
+    | .letUnit sp V M => do pure (.letUnit sp (← pipesV pe k V) (← pipesC pe k M))
+    | .letPair sp x y V M => do pure (.letPair sp x y (← pipesV pe k V) (← pipesC pe k M))
+    | .case sp V x M y N => do
+      pure (.case sp (← pipesV pe k V) x (← pipesC pe k M) y (← pipesC pe k N))
+    | .absurd sp V => do pure (.absurd sp (← pipesV pe k V))
+    | .lamL sp x b M => do pure (.lamL sp x b (← pipesC pe k M))
+    | .inst sp M a => do pure (.inst sp (← pipesC pe k M) a)
+    | .nuIn sp M => do pure (.nuIn sp (← pipesC pe k M))
+    | .nuOut sp M => do pure (.nuOut sp (← pipesC pe k M))
+    | .ascribe sp M C => do pure (.ascribe sp (← pipesC pe k M) C)
+    | .for_ sp x V M N => do pure (.for_ sp x (← pipesV pe k V) (← pipesC pe k M) (← pipesC pe k N))
+    | .perform sp n i V => do pure (.perform sp n i (← pipesV pe k V))
+    | .abort sp n i V => do pure (.abort sp n i (← pipesV pe k V))
+    | .handle sp n hr hc M => do pure (.handle sp n hr hc (← pipesC pe k M))
+    | .unwind sp x A M D N => do
+      pure (.unwind sp x A (← pipesC pe k M) (← pipesC pe k D) (← pipesC pe k N))
+    | M => pure M
+end
+
+/-- The declarations with each `|>` in them elaborated (SPEC §33).  `[spec §33]` -/
+def resolvePipes (ds : List Decl) : EM (List Decl) := do
+  let pe : PipeEnv := ⟨ds.flatMap fun
+      | .handler _ n .. => [n.name]
+      | .chandler _ h => [h.name.name]
+      | _ => [],
+    ds.filterMap fun
+      | .def_ _ n _ A _ _ => some (n.name, A)
+      | _ => none⟩
+  let cl (c : Clause) : EM Clause := do pure { c with body := ← pipesC pe fuel c.body }
+  ds.mapM fun
+    | .def_ sp n ps A V mk => do pure (.def_ sp n ps A (← pipesV pe fuel V) mk)
+    | .main sp C M => do pure (.main sp C (← pipesC pe fuel M))
+    | .handler sp n st S e cs => do pure (.handler sp n st S e (← cs.mapM cl))
+    | .chandler sp h => do
+      let (rx, rA, rM) := h.ret
+      pure (.chandler sp { h with ret := (rx, rA, ← pipesC pe fuel rM), clauses := ← h.clauses.mapM cl })
+    | d => pure d
+
 /-- The program with its effects elaborated, and the reports for `bcc check`: the effect and
 handler declarations are removed, each answering handler's clauses become functions, each
 function with a row is replaced by its copies for what serves it where it is called, each `with`
@@ -2634,6 +2997,10 @@ of an answering handler becomes a borrow block, and each of a control handler a 
 `[spec §18, §19]` -/
 def elaborate (ds : List Decl) (lib : List String := []) :
     Except Error (List Decl × List (Span × String) × List Nat) := do
+  -- `|>`, before the rest (SPEC §33).
+  let ds ← match (resolvePipes ds).run {} with
+    | .ok (ds, _) => pure ds
+    | .error e => throw e
   -- The recursive groups among the functions, the included libraries' among them (SPEC §20).
   -- A name two functions have (templates of one name in two modules, chosen by the arguments'
   -- types): only one that calls itself takes part in a recursive group.
@@ -2711,6 +3078,19 @@ def elaborate (ds : List Decl) (lib : List String := []) :
         if isLayerTy (ps.map (·.name)) A then
           env := { env with layers := (n.name, .def_ sp n ps A V mk) :: env.layers }
         modify fun s => { s with quiet := lib.contains n.name }
+        -- Computation parameters (SPEC §33): a call of the function is a call of its copy for its
+        -- arguments, and a call of such a parameter performs what it provides.
+        let cps := compParamsOf sp n.name A V
+        if !cps.isEmpty then
+          if (groups.find? (·.contains n.name)).isSome && member n.name V then
+            throw ⟨n.span, s!"`{n.name}` is recursive and takes a computation parameter: not provided " ++
+              "(SPEC §33)"⟩
+          if let some f := (fnParts sp n.name A V).toOption then
+            if let some fsp := forOverParam (cps.map (·.2.1)) fuel f.body then
+              throw ⟨fsp, s!"a `for` over a call of a computation parameter of `{n.name}`: not " ++
+                "provided (its loop's variables would be threaded through the argument, SPEC §33 " ++
+                "*Open*); handle the parameter's iteration effect with a handler, `f(()) |> h`"⟩
+          env := { env with comps := (n.name, cps) :: env.comps }
         if let some G := (groups.find? (·.contains n.name)).filter fun _ => member n.name V then
           -- A recursive function is found by its name, before the types that choose among
           -- templates of one name are known: a call of a name it shares is rejected (`fnCall`).
@@ -2727,7 +3107,9 @@ def elaborate (ds : List Decl) (lib : List String := []) :
               | _ => none)
           continue
         let (written, mk) := splitRow mk
-        let row := rowV env fuel V
+        let envR := if cps.isEmpty then env else
+          { env with cbRows := cps.map fun (_, x, es) => (x, es.map fun (e, As) => ⟨e.name, some As⟩) }
+        let row := rowV envR fuel V
         for i in row do
           unless written.isEmpty || written.any (·.1.name == i.eff) do
             throw ⟨n.span, s!"`{n.name}` performs `{i.eff}`, which its written row does not list"⟩
@@ -2755,6 +3137,9 @@ def elaborate (ds : List Decl) (lib : List String := []) :
             match i.args with
             | some (_ :: _) => s!"{i.eff}[{", ".intercalate ((i.args.getD []).map (VTy.pp · 0))}]"
             | _ => i.eff))
+        else if !cps.isEmpty then
+          -- Used only through its copies (`blockCall`).
+          env := { env with plain := (n.name, d₀) :: env.plain }
         else
           env := { env with plain := (n.name, d₀) :: env.plain }
           let before := (← get).made.size

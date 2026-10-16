@@ -133,6 +133,12 @@ inductive VTy where
   | app (sp : Span) (F A : VTy)
   /-- `N[…]<'a, …>`: its lifetime arguments, curried after the type arguments.  `[spec §7]` -/
   | lapp (sp : Span) (F : VTy) (a : Life)
+  /-- `(A => B with E₁, E₂[T, …])`: a function type with a provided row, the type of a
+  computation parameter (SPEC §33). The callee serves the effects of the row for the argument.
+  `F` is the function type `A => B`, and `row` the effects: the empty name applied to their
+  instances in order, each the effect's name applied to its type arguments (`VTy.rowEffs`).
+  Elaborated away by `Frontend.Elab.Effects`.  `[spec §33]` -/
+  | rowed (sp : Span) (F : VTy) (row : VTy)
 
 /-- Computation types (syntax-core §4). -/
 inductive CTy where
@@ -394,6 +400,11 @@ inductive VSugar where
   /-- The stored generator of a call of a function that performs an iteration effect (SPEC §15),
   applied to the call of its copy for the site. -/
   | pullSite (info : ItInfo)
+  /-- `e |> s`, applied to the pair of `e` and the stage `s` (SPEC §33): a handler `h(…)` is
+  `with h(…) { e }`; a function whose first parameter is a computation parameter takes `e`
+  suspended, `f({ () -> e }, …)`; any other function takes `e` first, `f(e, …)`. Elaborated away
+  by `Frontend.Elab.Effects`.  `[spec §33]` -/
+  | pipe
   deriving DecidableEq, Repr, Inhabited
 
 mutual
@@ -627,6 +638,7 @@ def VTy.strip : VTy → VTy
   | .sized _ D S A => .sized .none D.strip S.strip A.strip
   | .app _ G A => .app .none G.strip A.strip
   | .lapp _ G a => .lapp .none G.strip a.strip
+  | .rowed _ F r => .rowed .none F.strip r.strip
 
 def CTy.strip : CTy → CTy
   | .ret _ A => .ret .none A.strip
@@ -829,7 +841,7 @@ def VTy.span : VTy → Span
   | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .handle sp _ | .mu sp _ _ | .name sp _
   | .lolli sp _ _ | .all sp _ _ _ | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _
   | .array sp _ | .arrayImm sp _ _ | .arrayMut sp _ _ | .sized sp _ _ _ | .app sp _ _
-  | .lapp sp _ _ => sp
+  | .lapp sp _ _ | .rowed sp _ _ => sp
 
 def CTy.span : CTy → Span
   | .ret sp _ | .arr sp _ _ | .amp sp _ _ | .top sp | .all sp _ _ _ | .nu sp _ _ | .name sp _
@@ -837,5 +849,23 @@ def CTy.span : CTy → Span
 
 def Shape.span : Shape → Span
   | .leaf sp _ | .node sp _ _ | .name sp _ => sp
+
+/-- An effect instance of a provided row (`VTy.rowed`): the effect's name applied to its type
+arguments. -/
+def VTy.effInst : VTy → Option (Ident × List VTy)
+  | .name sp e => some (⟨e, sp⟩, [])
+  | .app _ G A => (G.effInst).map fun (e, As) => (e, As ++ [A])
+  | _ => none
+
+/-- The effect instances of a provided row (`VTy.rowed`): the arguments of its application to the
+empty name, in order. -/
+def VTy.rowEffs : VTy → List (Ident × List VTy)
+  | .app _ G A => G.rowEffs ++ A.effInst.toList
+  | _ => []
+
+/-- A provided row from its effect instances: the inverse of `VTy.rowEffs`. -/
+def VTy.ofRowEffs (sp : Span) (es : List (Ident × List VTy)) : VTy :=
+  es.foldl (fun R (e, As) => .app sp R (As.foldl (fun G A => .app sp G A) (.name e.span e.name)))
+    (.name sp "")
 
 end Frontend
