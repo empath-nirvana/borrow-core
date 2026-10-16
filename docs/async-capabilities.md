@@ -59,17 +59,21 @@ and perform other effects while suspended. Every borrow guarantee holds, conditi
 `PinLaw`.
 
 The programs are in `experiments/AsyncCap/bc/`. Each is marked pending and records today's
-`bcc check` message (they do not parse: the surface is provisional). `lib/async.bc` is DESIGNED
-(U2). `effect Async { ctl await() }` declares `await : 1 ↠^aff 1`. `async::run { s -> … }` is the
-scheduler: per task, a handler of `Async` whose clause stores the task's continuation as the
-task's rest; across tasks, a loop that observes the front task until the queue is empty.
+`bcc check` message (they do not parse: the surface is provisional). A1 and A4 run, and are in the
+corpus (`corpus/async-scheduler.bc`, `corpus/async-map.bc`; U2, SPEC §30). `lib/async.bc` EXISTS
+(U2, SPEC §30). `effect Async { ctl await() }` declares `await : 1 ↠^aff 1`. The scheduler is, per
+task, a handler of `Async` whose clause stores the task's continuation as the task's rest
+(`with spawn { … }`), and across tasks a loop that resumes the queued tasks until none is pending
+(`run_until_empty`). The spelling `async::run { s -> s.spawn { … } }` below is the designed one;
+U2 spells spawning `push(q, with spawn { … })` (SPEC §30 *Open*: `s.spawn` needs a provided
+effect).
 
 | program | what it tests | relaxed rule | verdict once built |
 |---|---|---|---|
-| **A1** `a1-scheduler.bc` | run-until-empty scheduler; tasks own their data | none | runs: `[1111, 22]`, `live 0` |
+| **A1** `corpus/async-scheduler.bc` | run-until-empty scheduler; tasks own their data | none | runs: `[1111, 22]`, `live 0` |
 | **A2** `a2-local-borrows.bc` | tasks borrow their own locals across `await`, `imm` and `mut`: the borrow itself (`reader`), a closure over it (`counter`), a pair holding it (`pair_view`) | `reader`: none (L0); the others: R1 | runs: `[20, 12, 7]`, trusted: PinLaw at 2 blocks |
 | **A3** `a3-scoped-shared.bc` | tasks borrow a shared outer value; scoped spawn; the scheduler runs with no bound inside the borrow | R2 | runs: `[6, 9]`, trusted: PinLaw at 1 loop |
-| **A4** `a4-map-await.bc` | an awaiting block passed to `map`, written once and also used synchronously | none | runs: `([2, 3, 4], [[10, 20, 30]])` |
+| **A4** `corpus/async-map.bc` | an awaiting block passed to `map`, written once and also used synchronously | none | runs: `([2, 3, 4], [[10, 20, 30]])` |
 | **A5** `a5-effects.bc` | tasks log (an operation of the scheduler) and raise (handled per task) while holding a borrow across `await` | R1 | runs: `[30, -2]`, log `[3, 2, 3, 2]` |
 | **A6** `a6-cancel.bc` | a suspended task holding a borrow and an owned value is cancelled; its finalisers run, the borrow ends | R1 | runs: `[cancelled, 2]`, finaliser log `[10, 11]`, `live 0` |
 | **A7** `reject/n1`–`n9`, `accept/m1`–`m3` | the adversarial list (§6.2) | — | as §6.2 |
@@ -96,7 +100,7 @@ whether it exists.
 
 | piece | status |
 |---|---|
-| A **block** parameter, `f: {A => B}`: called in the callee's body, never stored or returned. Its type names no effect. | DESIGNED (surface). At Core a block is an ordinary thunk argument `U(A ⊸ F_Σ B)` at the row of the copy that uses it (§2.2); "second-class" is enforced by the elaborator, which rejects storing a block. Core needs no second-class modality: storing a thunk whose captures hold a borrow is already refused by `[]I` (`boxI_compatC`, `Core/Compat.lean:497`), whose premise is the context outliving the box's lifetime. |
+| A **block** parameter, `f: {A => B}`: called in the callee's body, never stored or returned. Its type names no effect. | EXISTS (SPEC §30; written `f: !(A => B)`, a block at a parameter of function type). At Core a block is an ordinary thunk argument `U(A ⊸ F_Σ B)` at the row of the copy that uses it (§2.2); "second-class" is enforced by the elaborator, which rejects storing a block. Core needs no second-class modality: storing a thunk whose captures hold a borrow is already refused by `[]I` (`boxI_compatC`, `Core/Compat.lean:497`), whose premise is the context outliving the box's lifetime. |
 | A **capability** for answering operations (`log`): the handler's state, lent. | EXISTS: §18 elaborates an answering handler to `withbor`/`withswap` on a `Mut` lend of the state. PROVED at the paper layer that this is System Ξ's handler (`HandlersAsBorrows`: `translate_typed`, `effect_safety`). |
 | A **capability** for control operations (`await`): the name of the lexically enclosing handler site. | EXISTS: static names, resolved lexically (SPEC §19 *Names*). It is not a lend, and need not be: §3 makes a lend *crossed* by `await` sound without making `await`'s capability a lend. So O2's cost (b) is replaced by R1. |
 | A **stored** callback or continuation: first-class, boxed at a lifetime bound. | §2.3. |
@@ -114,7 +118,9 @@ signature mentions no effect, and the kernel has no row variable:
   Effectful callbacks at the surface (#161) are DESIGNED in `docs/surface-callbacks.md` (branch
   `effects-async-a1`, E2–E8). U2 takes its elaboration with one change: a called-only block's type
   carries no row (E1 gives every callback type an inferred row); the block's effects come from
-  the enclosing sites and the copy per use. A *stored* callback or continuation does carry its
+  the enclosing sites and the copy per use. EXISTS for called-only blocks (SPEC §30: the copy
+  `map__n2_b1n1` of `corpus/async-map.bc`; OQ-S1 handled there as a PROPOSAL pending the user's decision: a loop at the row
+  for a counted loop at a `with`'s site). A *stored* callback or continuation does carry its
   row, `U(A ⊸ F_Σ B)` boxed at a bound (§2.3), inferred and never written: the store needs a type,
   and this is the one place rows reach a type the programmer could see. Its kernel programs `async-tasks` and `async-colourless`
   (`Core/EffAsyncPrograms.lean` there) run one generic function at the pure row and in two
@@ -553,7 +559,7 @@ Ordered; each unit is one PR and turns the programs named green. No unit but U1 
 |---|---|---|
 | **U0** | this entry; `experiments/AsyncCap` (the statements, `fundamentalC_pin`, adequacy) | — |
 | **U1** | port BOXED-κ from `nominal-lifetimes` as a `CDerives` rule (`effHandleVB`), its case `handleV_compatCB`, one case per inversion; the checker emits it | `BoxedKappa`'s `sched-a.bc`, `sched-b.bc` in the corpus |
-| **U2** | `lib/async.bc` (`Async`, `run`, `run_until_empty`, `run_logged`, task handles, `cancel`), and effectful blocks at the surface (#161, `docs/surface-callbacks.md` E2–E8: a block's row, its call, copies per use; a counted loop at a resuming row) | A1, A4 |
+| **U2** | `lib/async.bc` (`Async`, `run`, `run_until_empty`, `run_logged`, task handles, `cancel`), and effectful blocks at the surface (#161, `docs/surface-callbacks.md` E2–E8: a block's row, its call, copies per use; a counted loop at a resuming row). EXISTS (SPEC §30): `Async`, `spawn`, `resume`, `cancel`, `queue`, `push`, `run_until_empty`; `run_logged` waits for R1 (A5) | A1, A4 (and E1, E6 from source) |
 | **U3** | L0: segmenting a borrow block at a resuming operation when only the borrow crosses it (ADD-5's degenerate case), in `Frontend/Elab` beside `LoopLend` | A2's `reader`; `gen-self-borrow.bc` moves to the corpus |
 | **U4** | the falsifier: never-reuse allocator and tagged interpreter in `bcc interp`; a script that runs every program three ways (§6.1) | the harness, run on A1, A2 (`reader`), A4 and the corpus |
 | **U5** (built, SPEC §29) | R1 in Core: `CDerivesP` (AsyncCap's `PDerives`), `fundamentalC_pin`, `adequacyD_pin`; the checker's R1 (callback row `Row.ResumeO`, emitted only when L0 does not apply); `bcc check`/`bcc trusted` report `PinLaw`; the lowering keeps a cell lent across a suspension out of line, or the task record unmoved (§3.5) | A2, A5, A6; `n2`, `n4`, `n5`, `n7`, `n9` |

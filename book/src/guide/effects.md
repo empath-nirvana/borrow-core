@@ -145,9 +145,60 @@ was inside ends, the place going back to its owner. A value with no destructor (
 capability) cannot be live where an abort may leave: the checker names it. A `raise` in the body
 of a counted `for` leaves the loop by its exit and is raised again after it.
 
+## Blocks that perform effects
+
+A closure passed to a function at a parameter of function type is a **block**. Its type names no
+effect, and its operations go to the handlers around it where it is written, never to a handler
+inside the function it is passed to. The function is copied at the block's row, as it is per
+handler above, so one function serves pure blocks and effectful ones with nothing written.
+
+```bc
+-- answer: (i32[11], inr ())
+include fail
+
+fn twice(f: !(i32 => i32), x: i32) -> i32 = f(f(x))
+
+fn guarded(f: !(i32 => i32)) -> i32 = with default[1, i32](0) { f(1) }
+
+main -> i32 * (i32 + 1) =
+  let a = twice(!{ x -> x + 5 }, 1);
+  let b = with to_result[1, i32] { guarded(!{ x -> raise(()) }) };
+  (a, b)
+```
+
+`twice` is used as written; `guarded` is copied at the block's row, and the block's `raise` passes
+`guarded`'s own `default` to reach `to_result` (`bcc check` reports the copy and where the block's
+operations go). A block is called, or passed on to another function's block parameter: it is
+never stored or returned (SPEC §30).
+
+## Async tasks
+
+`lib/async.bc` is a scheduler written with these pieces (SPEC §30). `await()` is an ordinary
+control operation; `with spawn { … }` runs a block to its first `await` and answers the task, its
+continuation kept; `run_until_empty` resumes the queued tasks round robin until none is pending.
+
+```bc
+-- answer: inr (i32[111], inr (i32[22], inl ()))
+include async
+
+fn ticker(tag: i32, n: i32) -> i32 with Async =
+  let mut acc = 0;
+  for _ in 0..n { acc = acc * 10 + tag; await() };
+  acc * 10 + tag
+
+main -> List[i32] =
+  let q = queue[i32]();
+  let q = push(q, with spawn { ticker(1, 2) });
+  let q = push(q, with spawn { ticker(2, 1) });
+  run_until_empty(q)
+```
+
+`ticker` names no scheduler: its row is `Async`, and it runs under whichever site spawns it. A
+task holds no borrow across an `await` yet (docs/async-capabilities.md, #52).
+
 ## Not yet
 
-An operation inside a closure (a callback passed or stored, or a fold's algebra), functions over
-computations (`retry`, `|>` into a handler), named instances when two handlers of one effect are
-in scope, and operations that answer a borrow into the handler's state are later stages (SPEC §18
-*Open*).
+An operation inside a stored closure or a fold's algebra, a block that uses a handler's
+capability, functions over computations (`retry`, `|>` into a handler), named instances when two
+handlers of one effect are in scope, and operations that answer a borrow into the handler's state
+are later stages (SPEC §18 *Open*, §30 *Open*).

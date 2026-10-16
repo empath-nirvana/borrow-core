@@ -13,6 +13,7 @@ array-refs 5 0 0
 array-replace 2 0 0
 array-sum 1 0 0
 ascii-upper 3 0 0 # the stdin and stdout cells, and the string the input is read into
+async-map 29 4 0 # the input and result lists' nodes, the scheduler's, and an object per level of `map`'s recursion the task suspends through (SPEC §19 Lowering); one indirect call per resume of the stored task
 async-r1-cancel 4 5 0 # the two tasks' `buf` and `extra`; a task's state is a record of the state machine, its lent cell out of line
 async-r1-cancel-finaliser-writes 1 0 0 # the lent cell
 async-r1-drain 1 3 0 # the lent cell; the calls through the stored generator are dispatched
@@ -20,6 +21,7 @@ async-r1-effects 2 6 0 # the two tasks' cells
 async-r1-generator 1 3 0 # the lent cell
 async-r1-local-borrows 2 4 0 # the two tasks' cells, each lent across its task's suspension and out of line
 async-r1-nested 2 3 0 # the two lent cells
+async-scheduler 24 6 0 # the scheduler's list nodes, four per round of `run_until_empty`; one indirect call per resume of a stored task, whose code the queue does not know
 axes/borrow-across-loop 3 0 0
 axes/codata-coeffects 2 0 0
 axes/codata-effects 1 0 0
@@ -37,8 +39,10 @@ axes/scope-loop-lend 3 0 0
 block-swap 2 0 0
 borrow-in-scope 2 0 0 # the borrowed cell and the cell holding the borrow
 bytes-upper 1 0 0
+capture-await-raise 0 0 0 # `skip` resumes in place and `to_result` is a branch: nothing is allocated or dispatched
 capture-log-hand 0 0 0 # equal to the kernel program log-outside-native (corpus/kernel-counts.expected)
 capture-store-cancel-hand 2 0 0 # equal to the kernel program store-cancel
+capture-store-raise 0 2 0 # the two steps of the stored task, whose code is the answer clause's or the `await` clause's, chosen at run time; as with `f` raising nothing
 capture-take-hand 1 0 0 # the producer's cell; the kernel program take adds its count's node and its handler's two closures
 capture-tick-hand 0 0 0 # equal to the kernel program tick-native
 clause-captures 6 3 0 # the counter and the cells; the indirect calls are the state-passing answers of `asking`, as in the probe P4(a) (a native handler parameter is not built)
@@ -63,10 +67,12 @@ effects-borrow-raise 2 0 0 # the cell of each run; freed by the unwinding borrow
 effects-fold 7 0 0 # equal to effects-fold-sum: an abort unwinds, handled at the loop's step and raised again after it, a branch per call
 effects-fold-sum 7 0 0
 effects-generic 1 0 0
+effects-hof-two-rows 0 0 0 # equal to the kernel program hof-two-rows: a copy of `hof` per row, each a direct call
 effects-log-fail 3 0 0 # the log cell of each run
 effects-map 11 0 0 # equal to effects-map-hand: the handled program is the capability-passing one
 effects-map-fail 3 0 0
 effects-map-hand 11 0 0
+effects-tunnel 0 0 0 # equal to the kernel program tunnel
 family-swap 2 0 0
 fields 5 0 0 # the stdin and stdout cells, the line buffer and its two growths at the long line; fields are views
 find-bytes 2 0 0
@@ -133,6 +139,7 @@ nats-sum 0 0 0
 parse-int 3 0 0 # the stdin and stdout cells and the line buffer, reused; literal views read-only data
 print-borrowed-array 2 0 0
 quicksort 3 0 0 # the data, the range stack, the output capability
+rec-await-exhausted 3 0 0 # the two list cells, and the continuation of the one `await`, an object per level it suspends through
 rec-deep 60040 0 0 # the tree, two objects per node, and each group's buffer of frames growing by doubling
 rec-emit 6 0 0 # the frames of the continuation `summed` resumes in the middle of the recursion, as in the probe P2
 rec-even-odd 0 0 0

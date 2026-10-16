@@ -2,7 +2,7 @@
 -- borrow local to the task, and is stored (moved into `saved`, which outlives the block). A
 -- stored callback is boxed at a lifetime its captures outlive (`[]I`), and `b`'s lend is inside
 -- the task: the box rule fails. The same block passed to `map` and only called is accepted
--- (a4-map-await.bc). Surface provisional.
+-- (corpus/async-map.bc). Surface provisional.
 
 include async
 

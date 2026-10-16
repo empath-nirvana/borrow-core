@@ -1,0 +1,111 @@
+-- Async tasks with no colouring (SPEC §30, docs/async-capabilities.md). `Async` is an ordinary
+-- control effect: a task is a direct-style computation that calls `await()` to let other tasks
+-- run. A function that awaits has `Async` in its inferred row; one that only takes a block (a
+-- closure parameter) has nothing in its type, and a call that passes it an awaiting block uses its
+-- copy at the block's row.
+--
+-- * `with spawn { M }` runs `M` to its first `await` and answers the task: its rest, the handler's
+--   continuation boxed at `top` (BOXED-κ, SPEC §28), or its value when it finished. The task is
+--   codata: `resume(t)` runs it to its next `await` (`inr` the rest) or its end (`inl` the value);
+--   `cancel(t)` cancels it, which runs what it must finalise.
+-- * `push(q, t)` queues a task, and `run_until_empty(q)` runs the queue round robin until no task
+--   is pending, answering the tasks' values in the order they were queued.
+--
+-- A task holds no borrow across an `await` here: what it holds there must drop, and a borrow
+-- block's body performs no resuming operation (SPEC §19).
+
+effect Async { ctl await() }
+
+-- A task of `A`: at its next observation, its value or the rest of it, boxed at `top` so that a
+-- queue may hold it.
+type Task[A] = box top U (nu X. F (A + box top U X) & F 1)
+
+type List[A] = mu X. 1 + (A * X)
+
+-- A queue's slot: a task that finished, with its value, or one still pending.
+type Slots[A] = mu X. 1 + ((A + Task[A]) * X)
+
+-- A queue: its length and its slots, the last queued first.
+type Queue[A] = i32 * Slots[A]
+
+-- The spawn handler: the return clause is a task that finished; the clause of `await` receives the
+-- continuation boxed at `top` (it takes `k` out of its box) and answers the rest of the task,
+-- whose next observation resumes it and whose close cancels it.
+handler spawn[A]: Async, A -> Task[A] = {
+  return(v) = boxed[top] (thunkv nu_in < return (inl v), return () >);
+  await(k) = boxed[top] (thunkv nu_in <
+    kk <- return (unbox k); u <- return (); t <- (force kk).1 u; return (inr t),
+    kk <- return (unbox k); (force kk).2 >)
+}
+
+-- Run a task to its next `await` (`inr` the rest) or its end (`inl` its value).
+fn resume[A](t: Task[A]) -> A + Task[A] = g <- return (unbox t); (nu_out (force g)).1
+
+-- Cancel a task: its continuation's finalisers run, innermost first.
+fn cancel[A](t: Task[A]) -> 1 = g <- return (unbox t); (nu_out (force g)).2
+
+fn queue[A]() -> Queue[A] = (0, roll inl ())
+
+fn push[A](q: Queue[A], t: Task[A]) -> Queue[A] = let (n, s) = q; (n + 1, roll inr (inr t, s))
+
+-- The first `n` elements of a list, reversed.
+fn rev[T](n: i32, xs: List[T]) -> List[T] =
+  let mut acc = (roll inl () : List[T]);
+  let mut cur = xs;
+  for _ in 0..n {
+    match unroll cur {
+      inl u -> cur = (roll inl () : List[T])
+    | inr (x, r) -> acc = (roll inr (x, acc) : List[T]); cur = r
+    }
+  };
+  match unroll cur { inl u -> acc | inr (x, r) -> acc }
+
+-- One round over `n` slots in order: each pending task resumed once. Answers the slots reversed,
+-- and whether a task is still pending.
+fn round[A](n: i32, xs: Slots[A]) -> Slots[A] * bool =
+  let mut acc = (roll inl () : Slots[A]);
+  let mut cur = xs;
+  let mut pending = false;
+  for _ in 0..n {
+    match unroll cur {
+      inl u -> cur = (roll inl () : Slots[A])
+    | inr (s, r) ->
+        cur = r;
+        match s {
+          inl v -> acc = (roll inr (inl v, acc) : Slots[A])
+        | inr t ->
+            match resume(t) {
+              inl v -> acc = (roll inr (inl v, acc) : Slots[A])
+            | inr t2 -> pending = true; acc = (roll inr (inr t2, acc) : Slots[A])
+            }
+        }
+    }
+  };
+  match unroll cur { inl u -> (acc, pending) | inr (s, r) -> (acc, pending) }
+
+-- The values of `n` slots, in order; a task still pending is cancelled.
+fn values[A](n: i32, xs: Slots[A]) -> List[A] =
+  let mut acc = (roll inl () : List[A]);
+  let mut cur = xs;
+  for _ in 0..n {
+    match unroll cur {
+      inl u -> cur = (roll inl () : Slots[A])
+    | inr (s, r) ->
+        cur = r;
+        match s { inl v -> acc = (roll inr (v, acc) : List[A]) | inr t -> cancel(t); () }
+    }
+  };
+  match unroll cur { inl u -> rev(n, acc) | inr (s, r) -> rev(n, acc) }
+
+-- Run the queue round robin until no task is pending: the tasks' values, in the order they were
+-- queued. The rounds are unbounded, so this loops (div, SPEC §14).
+fn run_until_empty[A](q: Queue[A]) -> List[A] =
+  let (n, s) = q;
+  let mut slots = rev(n, s);
+  let mut more = true;
+  while more {
+    let (b, p) = round(n, slots);
+    slots = rev(n, b);
+    more = p
+  };
+  values(n, slots)

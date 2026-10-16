@@ -1,0 +1,13 @@
+-- An abortive handler inside a resuming one (SPEC §19). `f` suspends with `await` to the outer
+-- `skip`, a control handler that resumes at once, and raises to the inner `to_result`, whose
+-- operations are all abortive. The inner `catch` is rebuilt in the resume arm of `skip`'s body
+-- (`Backend/Clos/Capture.lean`); the cancel arm runs no `catch`, and a call of `f`'s resume code
+-- for a cancel raises nothing (`Backend/Clos/Unwind.lean`).
+--
+-- Answer: inl i32[4]: `f(3)` awaits, is resumed, and returns 4, which `to_result` answers as `inl`.
+
+include fail
+effect Async { ctl await() }
+handler skip[A]: Async, A -> A = { return(v) = v; await(k) = k(()) }
+fn f(x: i32) -> i32 with Async, Fail[i32] = await(); if x > 5 { raise(x) } else { x + 1 }
+main -> i32 + i32 = with skip { with to_result[i32, i32] { f(3) } }

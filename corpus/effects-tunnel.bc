@@ -1,0 +1,14 @@
+-- E6, no accidental handling (SPEC §19 Laws item 3, the kernel program `tunnel`; SPEC §30):
+-- `fwrap` runs its block under its own handler of `Fail`, `default(false)`. The block raises
+-- `Fail`, and it is written under `to_result`: its raise goes to the handler around it where it is
+-- written, and passes `fwrap`'s, whose static name is its own site's. `fwrap`'s copy at the
+-- block's row, `fwrap__b0n2`, handles its own site 3 and performs the block's site 2.
+--
+-- Answer: `inr ()`: the error, at `to_result` (`default`'s `false` would be `inl inl ()`);
+-- `live 0`.
+
+include fail
+
+fn fwrap(g: !(1 => bool)) -> bool = with default[1, bool](false) { g(()) }
+
+main -> bool + 1 = with to_result[1, bool] { fwrap(!{ u -> raise(()) }) }
