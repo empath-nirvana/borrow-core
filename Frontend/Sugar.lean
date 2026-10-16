@@ -46,7 +46,7 @@ one is adding its name here. The elaboration brings in `io`, `div` and `prelude`
 (`elaborateS`); `include m` brings in any of them. -/
 def libNames : List String :=
   ["io", "div", "prelude", "lend", "adapters", "slice", "buf", "text", "textio", "iters", "fail",
-   "yield", "rec", "aff"]
+   "yield", "rec", "aff", "async"]
 
 /-- The directory of the library: `$BCC_LIB` when it is set; otherwise `lib/` of the checkout
 whose `.lake/build/bin/` holds the running `bcc`; otherwise `lib/` of the working directory. -/
@@ -1761,6 +1761,9 @@ structure DivSt where
   /-- The answer type of each handler site whose clauses run after it (`HInfo.after`), as the type
   name `fx_res{n}`: an annotation that names it is its type.  `[spec §19]` -/
   siteRes : List (String × VTy) := []
+  /-- The handler sites that observe their computation one turn at a time (a `for`'s site and a
+  stored generator's, `Elab.Effects.St.perTurn`).  `[spec §16]` -/
+  perTurn : List Nat := []
 
 /-- Elaboration with the state of the declarations. -/
 abbrev DM := StateT DivSt SM
@@ -2505,12 +2508,27 @@ def effCall? (c : TCx) : Val → Option (Val × Val)
     | none => none
   | _ => none
 
-/-- An effectful call as the computation it is: `g <- return f; a <- return W; (force g) a`. -/
-def effCallC (sp : Span) (f W : Val) : Comp :=
+/-- An effectful call as the computation it is: `g <- return f; a <- return W; (force g) a`; the
+argument's binding annotated with `P` when given. -/
+def effCallC (sp : Span) (f W : Val) (P : Option VTy := none) : Comp :=
   let sfx := s!"{sp.start.line}_{sp.start.col}"
   let g : Ident := ⟨s!"io_fg{sfx}", sp⟩
   let a : Ident := ⟨s!"io_fa{sfx}", sp⟩
-  .bind sp g none (.ret sp f) (.bind sp a none (.ret sp W) (.app sp (.force sp g) a) false) false
+  .bind sp g none (.ret sp f) (.bind sp a P (.ret sp W) (.app sp (.force sp g) a) false) false
+
+/-- The parameter type of an effectful function's type, outside lifetime binders. -/
+def fnParamOf : CVTy → Option CVTy
+  | .bang A => fnParamOf A
+  | .thunk (.arr P _) => some P
+  | _ => none
+
+/-- A value is a closure written in place, or a tuple or injection with one in it: an effectful
+block (SPEC §29) is checked against the parameter type, which gives its row. -/
+def hasBlockLit : Val → Bool
+  | .thunk .. | .thunkv .. | .bangThunk .. | .bangThunkv .. => true
+  | .pair _ V W => hasBlockLit V || hasBlockLit W
+  | .inl _ V | .inr _ V | .ascribe _ V _ => hasBlockLit V
+  | _ => false
 
 /-- A handler site of a control effect, as `Frontend.Elab.Effects` leaves it: the info, the
 arguments, the return clause, the operation clauses and the body. -/
@@ -3350,8 +3368,16 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
             | none => throw ⟨V.span, "this borrow block's body performs an abortive operation, and " ++
                 "its place (a buffer or a literal) has no unwinding form here: not provided"⟩
       let V' ← surfV n c (match exp.bind rowRes? with | some (_, A) => some A | _ => none) V
-      match effCall? (← refresh c) V' with
-      | some (f, W) => pure (effCallC sp f W)
+      let c' ← refresh c
+      match effCall? c' V' with
+      | some (f, W) =>
+        -- An argument with a block written in place is bound at the parameter's type, which gives
+        -- the block its row (SPEC §29).
+        let P ← if !hasBlockLit W then pure none else
+          match (calleeHead f).bind (fun g => c'.tyV (.var .none g)) |>.bind fnParamOf with
+          | some P => do pure (some (← (c'.surface sp P : Except Error VTy)))
+          | none => pure none
+        pure (effCallC sp f W P)
       | none => pure (.ret sp V')
     | .absurd sp V => do pure (.absurd sp (← surfV n c (some .zero) V))
     | .bind sp x A M N lin => do
@@ -3541,14 +3567,16 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     for (cl, (q, Ai, Bi)) in (clauseList cls).zip ops do
       match cl with
       | .thunkv csp (.lam lsp x _ body) =>
+        let K := BoCa.Fig16.LogRel.Core.kTy S Rc q Bi
         let T : CVTy := if Bi.isZero && q != .lin then Ai
-          else .tensor Ai (BoCa.Fig16.LogRel.Core.kTy S Rc q Bi)
+          else .tensor Ai (if i.boxK then .box .top K else K)
         let body' ← surfC n (cS.push x.name (some T)) (some ans) (body.subst σ)
         hcs := hcs ++ [.bangThunkv csp (.lam lsp x (← (cP.surface lsp T : Except Error VTy)) body')]
       | _ => throw ⟨sp, "internal error: a handler's clause"⟩
     let hcV := hcs.foldr (fun v t => Val.pair sp v t) (.unit sp)
     let hrTy ← (cP.surface sp (BoCa.Fig16.LogRel.Core.retTy S A Rc) : Except Error VTy)
-    let hcTy ← (cP.surface sp (BoCa.Fig16.LogRel.Core.clausesTy S Rc ops) : Except Error VTy)
+    let hcTy ← (cP.surface sp (if i.boxK then BoCa.Fig16.LogRel.Core.clausesTyB S Rc .top ops
+      else BoCa.Fig16.LogRel.Core.clausesTy S Rc ops) : Except Error VTy)
     let hrN : Ident := ⟨s!"io_hr{i.n}", sp⟩
     let hcN : Ident := ⟨s!"io_hc{i.n}", sp⟩
     -- A site whose clauses run after it answers its arguments beside its own answer.
@@ -3563,7 +3591,10 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
 
 /-- `for x in V' { M }; N` over a sized source (`dataSrcOf`), `V'` elaborated: a counted loop,
 `count_try` over the length of the source's data (the section *The total `for` over data*);
-`none` when the source is not sized. `V` is the source as written.  `[spec §16]` -/
+`none` when the source is not sized. `V` is the source as written. A body that performs an
+operation that resumes is a div loop at a site observed one turn at a time (`forDataDiv`), and a
+loop at the row otherwise: `bounded_fix` whose budget is the count, its step the body at the row
+(`rowLoop`).  `[spec §16, §29]` -/
 def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val → Comp → Comp → DM (Option Comp)
   | 0, _, _, _, _, _, _, _, _ => pure none
   | n + 1, c, exp, sp, x, V, V', M, N => do
@@ -3572,12 +3603,26 @@ def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val →
     let sfx := s!"{sp.start.line}_{sp.start.col}"
     let M ← (normExits divFuel M : Except Error Comp)
     let pp (T : CVTy) : DM String := do pure (← (c.surface sp T : Except Error VTy)).pp
-    -- A body whose row has an operation that resumes: the loop is a div loop (SPEC §16).
+    -- A body whose row has an operation that resumes (SPEC §16, *Effectful bodies*): of a site
+    -- that observes its computation one turn at a time (a `for`'s site or a stored generator's),
+    -- the loop is a div loop, one turn per observation; of any other site, the loop is total at
+    -- the row, `bounded_fix` over the count (`rowLoop`).
     let S₀ := c.E.row.getD []
-    let resumes := (opsC c divFuel M).find? fun (k, i) =>
+    let resumes := (opsC c divFuel M).filter fun (k, i) =>
       S₀.any fun o => o.n.toNat == k && o.i.toNat == i && !o.abort
-    if let some (k, i) := resumes then
+    if let some (k, i) := resumes.find? (st.perTurn.contains ·.1) then
       return some (← forDataDiv n c exp sp x V src M N k i)
+    let rowLoop := !resumes.isEmpty
+    if rowLoop then
+      match src with
+      | .lend a m _ => throw ⟨sp, s!"the body of this `for` performs an operation that resumes, " ++
+          s!"and its source `&{if m then "mut " else ""}{a.name}` lends `{a.name}` around the whole " ++
+          "loop: an operation that resumes cannot cross a borrow (T1, #172). Iterate a view the " ++
+          "function is given"⟩
+      | .owned _ => throw ⟨sp, "the body of this `for` performs an operation that resumes, and a " ++
+          "`for` over an owned array lends it around the whole loop: an operation that resumes " ++
+          "cannot cross a borrow (T1, #172). Iterate a view the function is given"⟩
+      | _ => pure ()
     -- The loop's value: `let r = for …` with or without `else { d }`, or `for … else { d }`.
     let (keep, els, N) : Option (Ident × Option VTy) × Option Comp × Comp :=
       match N.forElse?, N.forRes? with
@@ -3703,7 +3748,8 @@ case io_so{sfx} \{
     -- the loop the operation is performed again.
     let S := c.E.row.getD []
     let used := (opsC c divFuel M).eraseDups.filter fun (k, _) => S.any (·.n.toNat == k)
-    let names := (used.map (·.1)).eraseDups
+    -- A loop at the row performs its operations where they stand.
+    let names := if rowLoop then [] else (used.map (·.1)).eraseDups
     let (stepT, wrapStep, reabort) ← match names with
       | [] => pure (Et, fun (e : String) => e, "")
       | [k] => do
@@ -3743,9 +3789,37 @@ case io_so{sfx} \{
 ")
       | _ => throw ⟨sp, "the body of this `for` performs abortive operations of two handlers: not provided"⟩
     let rname := if reabort.isEmpty then s!"io_r{sfx}" else s!"io_rr{sfx}"
-    let core := s!"{pre}{rname} <- return count_try[{St}, {stepT}](!\{ (io_i{sfx}, io_s{sfx}) ->
+    -- The loop at the row: `bounded_fix` whose budget is the count, so that the self-reference is
+    -- `inl ()` once the body has run at each index; its step runs the body at the row and goes on
+    -- with the self-reference, or leaves by an exit.
+    let FR ← do
+      let es ← S.mapM fun o => do
+        pure s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q} {← pp o.A} ~> {← pp o.B}"
+      pure s!"F[{", ".intercalate es}] (({St}) + ({stepT}))"
+    let At := s!"i32 * ({St})"
+    let rowCore := s!"{pre}io_nb{sfx} <- if {bound} < 0 \{ 0 } else \{ {bound} };
+io_gs{sfx} : !U (((1 + !U (({At}) -o {FR})) * ({At})) -o {FR}) <- return (!thunkv fun (io_gp{sfx} : (1 + !U (({At}) -o {FR})) * ({At})) ->
+  let (io_self{sfx}, io_ga{sfx}) = io_gp{sfx};
+  let (io_i{sfx}, io_s{sfx}) = io_ga{sfx};
+  case io_self{sfx} \{
+    inl io_z{sfx} -> return (inl io_s{sfx})
+  | inr io_me{sfx} ->
+      io_o{sfx} : ({St}) + ({stepT}) <- ({destructSrc s!"io_s{sfx}" (curN ++ wsN)}{elem});
+      case io_o{sfx} \{
+        inl io_s2{sfx} -> io_g{sfx} <- return (unbang io_me{sfx});
+          io_a2{sfx} <- return (io_i{sfx} + 1, io_s2{sfx});
+          force io_g{sfx} io_a2{sfx}
+      | inr io_e{sfx} -> return (inr io_e{sfx})
+      }
+  });
+io_fb{sfx} <- return (unbang bounded_fix[{At}, {FR}]);
+io_fa{sfx} <- return (io_gs{sfx}, (io_nb{sfx}, ({i0}, {stateS})));
+{rname} <- force io_fb{sfx} io_fa{sfx};
+"
+    let core := (if rowLoop then rowCore else
+      s!"{pre}{rname} <- return count_try[{St}, {stepT}](!\{ (io_i{sfx}, io_s{sfx}) ->
   {destructSrc s!"io_s{sfx}" (curN ++ wsN)}{wrapStep elem} }, {bound}, {i0}, {stateS});
-{reabort}io_j{sfx} : {Jt} <- case io_r{sfx} \{
+") ++ s!"{reabort}io_j{sfx} : {Jt} <- case io_r{sfx} \{
     inl io_s{sfx} -> {destructSrc s!"io_s{sfx}" (curN ++ wsN)}return ({jEnded})
   | inr io_e{sfx} -> let (io_w{sfx}, io_o{sfx}) = io_e{sfx};
       {destructSrc s!"io_w{sfx}" wsN}{jExit}
@@ -3798,7 +3872,11 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
       else if h == "io_hole_else" then els.map restOf
       else if h == "io_hole_ret" then some (retOut rsp (.var rsp s!"io_rv{sfx}")) else none
     let L := L.fill hv hc
-    if !(← get).quiet then report sp s!"`for` is total, bounded by {desc}"
+    if !(← get).quiet then
+      if rowLoop then
+        report sp (s!"`for` is total, bounded by {desc}: its body performs an operation that " ++
+          "resumes, so it is a loop at the row (bounded_fix over the count)")
+      else report sp s!"`for` is total, bounded by {desc}"
     -- The loops inside the body leave by this loop's exit on `return`.
     let ret (tsp : Span) (v : Val) : Comp := .ret tsp (exitV tsp (.inr tsp (.inr tsp v)))
     modify fun s => { s with exits := .total Rt ret :: s.exits }
@@ -4720,8 +4798,9 @@ end
 
 /-- The declarations with divergence inferred, in order (copies before their first use), and
 whether any body was elaborated as a loop. -/
-def elabDivs (lib decls : List Decl) (libNames : List String) : SM (List Decl × Bool) := do
-  let st ← decls.foldlM (init := ({ lib, libNames } : DivSt)) (elabDecl divFuel)
+def elabDivs (lib decls : List Decl) (libNames : List String) (perTurn : List Nat := []) :
+    SM (List Decl × Bool) := do
+  let st ← decls.foldlM (init := ({ lib, libNames, perTurn } : DivSt)) (elabDecl divFuel)
   pure (st.out, st.any)
 
 /-- A `main` that is not ambient, elaborated as a loop when its body loops. `c` is the typing
@@ -4791,7 +4870,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let libFns := (decls₀.filter fun d => !p₀.decls.contains d).filterMap fun
     | .def_ _ m _ _ _ _ => some m.name
     | _ => none
-  let (decls, fx) ← (Elab.Effects.elaborate decls₀ libFns : Except Error _)
+  let (decls, fx, perTurn) ← (Elab.Effects.elaborate decls₀ libFns : Except Error _)
   -- Effects, then rows, lowering shapes and calls, each in source order.
   let kindOf (m : String) : Nat := match (m.splitOn " ").head? with
     | some "effect" => 0 | some "row" => 1 | some "lowering" => 2 | _ => 3
@@ -4819,7 +4898,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let libNames := (decls₀.filter fun d => !p₀.decls.contains d).filterMap fun
     | .def_ _ m _ _ _ _ => some m.name
     | _ => none
-  let (decls, anyDiv) ← elabDivs typing p.decls libNames
+  let (decls, anyDiv) ← elabDivs typing p.decls libNames perTurn
   let rest := decls.filter fun | .main .. => false | _ => true
   let mc := TCx.ofScope (typing ++ rest ++ capDecls) true
   let mainLoops := match decls.findSome? (fun | .main _ C M => some (C, M) | _ => none) with

@@ -1377,7 +1377,8 @@ types, so this is whole-program monomorphization, with no kernel change.
 
 The mechanism is not specific to divergence: it is specialization of a function at the
 computation type of a callback argument, followed by the effect's own inference on the copy.
-Another control effect (async, #52) may reuse it by giving:
+Another control effect may reuse it by giving (§29 does, for every control effect, keyed by a
+block's sites rather than a computation type):
 
 1. its computation type for a callback, as `Loop` is div's (the result shape a call returns);
 2. its inference on a body, as `loopsAt` is div's (which constructs make a body effectful);
@@ -1688,9 +1689,10 @@ and §19 is preserved: every construct of this entry is elaborated into core bef
   input, or one that writes as it yields, is rejected by the checker
   (`corpus/pending/gen-digits.bc`, `gen-lines.bc`, `gen-lazy.bc`, `gen-adapters-io.bc`). It needs
   a cancel that hands back a residual, or a `linear ctl` iteration effect (no `break`).
-- **Callbacks that yield** need effectful callbacks (#161): a closure that performs an operation
-  is a computation passed as a value (`corpus/pending/yield-callback.bc`). So do adapters as
-  handlers over a computation (`|>` at a computation parameter).
+- **Callbacks that yield** to a `for`'s site: a block is passed and called (§29), but the site
+  threads the loop's variables through the operation, which a block would be passed and hand back
+  at each call (`corpus/pending/yield-callback.bc`). Adapters as handlers over a computation
+  (`|>` at a computation parameter) need functions over computations (#161).
 - **A total consumer of a generator that loops.** A `for` over one is div: its turns are
   unbounded. A finite source written as data, or a sized iterator (§16), is total, and so is a
   generator whose body does not loop.
@@ -1871,7 +1873,10 @@ context).
 continuation of a control operation that resumes. When the body's row has one (`opsC` finds a
 `perform` of a non-abortive operation of the row, the rule keyed on the row, no effect named),
 the `for` is a **div loop** over the source's cursor instead: a `while`, a loop of the body's
-machine (§14, §15), one turn per element (`forDataDiv`, `Frontend/Sugar.lean`):
+machine (§14, §15), one turn per element (`forDataDiv`, `Frontend/Sugar.lean`). This holds when the
+operation is of a site that observes its computation one turn at a time, a `for`'s site or a
+stored generator's (§15); at any other site the loop is total at the row, `bounded_fix` over the
+count, which a handler wraps (§29, *Counted loops at a resuming row*):
 
 | source | the loop |
 |---|---|
@@ -2175,8 +2180,9 @@ puts the destructors of the slots the rest uses in a `[then]` finaliser. A value
 destructor (§12, class 3) live across such a binding is rejected, naming it.
 
 **Not provided**, each rejected with a message that says so: an operation inside a closure or
-block that is not run in place, and a function with a row passed as a value (effectful callbacks,
-#161; for a fold's algebra that raises, K4 below); a lend `&mut x` in the arguments of a call that
+block that is not run in place, other than a block passed at a parameter of function type (§29),
+and a function with a row passed as a value (effectful callbacks, #161; for a fold's algebra that
+raises, K4 below); a lend `&mut x` in the arguments of a call that
 threads a capability; an operation of an answering effect inside a clause of an answering handler;
 a function with a row whose written result is a computation (a loop); a second instance of
 an effect in a row; type parameters on an answering effect; an effect with both kinds of operation;
@@ -2261,11 +2267,12 @@ program's derivation gives it (`checkProgram_letPoly`).
 
 - Named instances and lexical resolution between two instances of an effect (S2, #155); bundles
   (#156).
-- Effectful callbacks, stored or passed (#161), and with them functions over computations
-  (`retry`, a handler that re-runs its body, and `|>` at a computation parameter). The effect
-  properties E1 (a higher-order function under two handlers), E2d (a consumer of generators at two
-  rows) and E6 (a wrapper whose handler the callback's raise passes) are Core programs (§19
-  *Programs*) and wait for them at the surface (§24 *Open*).
+- Effectful callbacks stored (#161), and with them functions over computations (`retry`, a
+  handler that re-runs its body, and `|>` at a computation parameter). Blocks passed and called
+  are §29: E1 (a higher-order function under two handlers) and E6 (a wrapper whose handler the
+  callback's raise passes) run from source (`corpus/effects-hof-two-rows.bc`,
+  `corpus/effects-tunnel.bc`). E2d (a consumer of generators at two rows) passes a named function
+  with a row as a value, and waits (§24 *Open*).
 - An operation that answers a borrow into the handler's state (#160); `lookup` answers a copy.
 - A handler parameter that is not `!` is the handler's state (§21); its native lowering (§19
   *Open*).
@@ -4501,8 +4508,183 @@ before, with the same counts.
   `nominal-lifetimes`). Its only use is `OpTab.AnsIn`, the answers' resources in `Res_{δ(d)}`.
 - **One former for the clause tuples.** `clausesTy` and `clausesTyB` are parallel; `clausesTyO`
   (`Core/Inversions.lean`) is the general one, used by the inversions only.
-- **The surface.** The sugar's handlers (§18, §19) do not emit the rule; `lib/async.bc` (U2 of
-  `docs/async-capabilities.md` §7) is its first library user.
+- **The surface.** A surface handler's clause that takes `k` out of a box receives it boxed at
+  `top` (§29); `lib/async.bc`'s `spawn` is its first library user. A bound other than `top` needs
+  a handler's lifetime parameters (§29 *Open*).
+
+---
+
+## 29. Entry 28 — effectful blocks and async tasks at the surface
+
+### Motivation
+
+The async colourless test (#52, `docs/async-capabilities.md` §1): one function written once is used
+by synchronous code and by tasks that suspend to a scheduler, and nothing in its type says which.
+Three pieces of the surface were missing (unit U2 of `docs/async-capabilities.md` §7):
+
+1. **Effectful blocks** (#161). A closure that performs an operation was rejected where it was
+   passed as a value (§18 *Not provided*), so a higher-order function could not be given an
+   awaiting callback.
+2. **A counted loop at a resuming row.** A `for` over data whose body performs an operation that
+   resumes was always a div loop (§16 *Effectful bodies*), and no handler wraps a div computation
+   (§21 *Open*), so a task with a counted loop that awaits could not be spawned.
+3. **BOXED-κ from a surface handler.** Only core-text `handle_with` emitted §28's rule, so a
+   library scheduler could not store a task's continuation in a queue.
+
+Everything here is elaboration into core terms the checker already derives: no `CDerives` rule,
+type former, relation clause or machine step is added.
+
+### Effectful blocks
+
+A **block** is a closure written as an argument at a parameter of function type, `!(A => B)` or
+`A => B`, of a function declared before the call (`docs/async-capabilities.md` §2.1, §2.2):
+
+- **Its type names no effect.** The parameter's written type is the callee's, unchanged: `map(xs:
+  List[i32], f: !(i32 => i32)) -> List[i32]` takes a pure block and an awaiting one alike.
+- **Its effects are those of where it is written.** Its control operations resolve lexically, as
+  any operation does, to the innermost sites of their effects around the block (§19 *Names*): a
+  block that awaits inside a function served by a spawn site performs that site's `await`. The
+  callee handles none of them by accident: its own `with`s are sites with names of their own
+  (`corpus/effects-tunnel.bc`, E6).
+- **A use is a use of a copy at the block's row.** The call `g(…, blk, …)` of a function `g`
+  (with or without a row of its own) is a call of `g`'s copy for its block parameters' rows,
+  `g__…_b{j}n{k}…` (`j` the parameter, `k` the sites of its block), made once per (function, sites,
+  block rows) and shared: §14's specialization at a callback's type and §18's copy per assignment
+  of names, keyed by the block's sites. In the copy, parameter `j` has the type `!U(A -o F[r] B)`
+  (or `U(A -o F[r] B)`), `r` the entries of the block's sites, and the copy's row is its own
+  sites' and the blocks'. A recursive function given a block is the copy of its group (§20).
+- **In the copy, a call of the parameter** is a call of a value whose type has a row, a
+  computation of its own bound before the value it is in, as a call of a copy is (§18 *Rows*);
+  passing the parameter on to a block parameter of a call (a recursive call included) makes that
+  callee's copy at the same rows. **Any other use is rejected** (`corpus/reject/block-stored.bc`):
+  a block is called, never stored or returned. A stored callback carries its row boxed at a bound
+  (`docs/async-capabilities.md` §2.3), which is *Open* below.
+- **The block is checked at its row.** The call's argument is bound at the copy's parameter type
+  (`a : P <- return W`), so the block, a `thunkv`/`!thunkv` closure, is checked against
+  `!U(A -o F[r] B)` and its operations are typed at `r`.
+- Where they coincide, the copies are `[let-poly]`'s premise (§24 *Theorems*,
+  `checkProgram_letPoly`): the kernel has no row variable, and Core checks each copy at closed rows.
+
+The pure use of a function is the function as written: no copy, the block a plain closure
+(`corpus/async-map.bc`: `map__n3` at `Exhausted`'s row only, for its recursion; `map__n2_b1n1`
+for the awaiting block). `bcc check` reports each copy with its blocks, `copy `f__…`: `f` for …,
+its block `x` at the site k of `E``, and each call of a block parameter, `x → the block,
+performing at the site k of `E``.
+
+**Not provided**, each rejected with a message saying so: a block that uses an answering capability
+(it would be passed with the block at each call; `corpus/reject/block-capability.bc`); a block that
+performs an operation of a `for`'s site, which threads the loop's variables
+(`corpus/pending/yield-callback.bc`); a named function with a row passed as a value (§18); a block
+given to a member of a recursive group of several functions, or under a heap driver (§20); a
+block given to a generic function (`fn f[A](…)`), whose instance is matched against the block's
+type before the block's row is known.
+
+### Counted loops at a resuming row
+
+§16's *Effectful bodies* rule is kept where it is needed and narrowed where it is not. A counted
+loop (a `for` over a sized source) whose body performs an operation that resumes is:
+
+- **a div loop, one turn per observation**, when the operation is of a site that observes its
+  computation one turn at a time: a `for`'s site of an iteration effect, or a stored generator's
+  (§15). These are the sites the elaboration of effects records (`St.perTurn`); every such loop
+  of an existing program is one of these, and is elaborated as before;
+- **a loop at the row** otherwise (a site of a `with`): `bounded_fix` (§20) whose budget is the
+  count, `max(0, len)`, so that the self-reference is `inl ()` exactly when the body has run at
+  every index. Its step runs the body at the row, `I32 ⊗ S ⊸ F_Σ (S ⊕ E)`, and goes on with the
+  self-reference at the next index, or leaves by an exit (`break`, `return`, as §16's count_try
+  step does). It is a total computation, which a handler wraps; an abortive operation in the body
+  is performed where it stands. The kernel's `forN` of the async colourless test is this term
+  (`dAt_forN`, branch `effects-async-a1`). A `&a`, `&mut a` or owned-array source lends around
+  the whole loop, and is rejected, as at a div loop (T1, #172).
+
+`bcc check` reports such a loop as `total, bounded by len(…): its body performs an operation that
+resumes, so it is a loop at the row (bounded_fix over the count)`. This decides
+`docs/surface-callbacks.md`'s OQ-S1 (branch `effects-async-a1`) as its option (c), restricted:
+counted sources at a `with`'s site take (a); generators keep today's (b)-shaped div loop.
+
+### BOXED-κ from a surface handler
+
+A clause of a control handler that takes its continuation out of a box, `unbox k`, receives it
+boxed at `top`: the site's clause tuple is `clausesTyB Σ R ⊤ E` (§28), whose capturing clauses take
+`A ⊗ [@⊤] K`, and the checker types the site by `effHandleVB`. A clause that only resumes or
+cancels `k` receives it bare, as before; no existing handler takes `k` out of a box. The bound is
+`top` because a handler declaration has no lifetime parameters; a task that holds a borrow from
+outside is refused by §28's premises (the handled computation's context must outlive `top`). A
+handler with a state (§21) whose clause boxes `k` is not provided. The report of the site adds
+`the clauses receive the continuation boxed at `top` (BOXED-κ)`.
+
+### `lib/async.bc`
+
+`include async` declares
+
+    effect Async { ctl await() }
+    type Task[A]  = box top U (nu X. F (A + box top U X) & F 1)
+    type List[A]  = mu X. 1 + (A * X)
+    type Queue[A] = i32 * (mu X. 1 + ((A + Task[A]) * X))
+    handler spawn[A]: Async, A -> Task[A]
+
+- `with spawn { M }` runs `M` to its first `await` and answers the task: `inl v` at its next
+  observation when it finished, else the rest. The `await` clause receives `κ` boxed at `top`
+  (above) and answers `boxed[top] (thunkv nu_in < resume κ, cancel κ >)`: the task's next
+  observation resumes `κ`, which runs it under the reinstalled handler (handlers are deep) to its
+  next `await` or its end, and its close cancels it.
+- `resume(t) : A + Task[A]` observes a task once; `cancel(t)` closes it, running its finalisers.
+- `queue[A]()`, `push(q, t)`; `run_until_empty(q) : List[A]` resumes the queued tasks round robin
+  until none is pending and answers their values in the order they were queued. Its rounds are
+  unbounded, so it is div (§14): a program that runs it is a loop the runtime drives. A round, the
+  reversals and the final values are counted loops over the queue's length.
+
+The spellings are provisional: `docs/async-capabilities.md`'s `async::run { s -> s.spawn { … } }`
+needs the spawned block's `await` to reach a handler inside `spawn`, a provided effect (decision
+57's ports), which is not built; `with spawn { … }` puts the site around the block lexically.
+
+### Programs
+
+| program | what it shows | answer | counts |
+|---|---|---|---|
+| `corpus/async-scheduler.bc` | A1: two tasks spawned by `with spawn`, each a `ticker` whose counted loop awaits (a loop at the row), run round robin until empty | `[1111, 22]` | `24 6 0` |
+| `corpus/async-map.bc` | A4: `map` written once, given a pure block in `main` and an awaiting block in a task | `([2, 3, 4], [[10, 20, 30]])` | MAPCOUNTS |
+| `corpus/effects-hof-two-rows.bc` | E1 from source: `hof` at three rows | `(inr (), (inr (), inr ()))` | `0 0 0`, as the kernel's `hof-two-rows` |
+| `corpus/effects-tunnel.bc` | E6 from source: a block's raise passes the callee's own handler | `inr ()` | `0 0 0`, as the kernel's `tunnel` |
+
+Rejected: `corpus/reject/block-stored.bc`, `corpus/reject/block-capability.bc`. Every program runs
+at the source stage, the closure and flat IRs and WebAssembly with `live 0`, and passes
+`scripts/falsify.sh`'s four modes.
+
+### Lowering
+
+Nothing is lowered specially: a copy is a `def`, a block a closure, the loop at the row a
+`bounded_fix`, and the spawn site §19's handler with a clause that keeps `κ`
+(`Backend/Clos/Capture.lean`). LOWERING_FIX
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine or a kernel program. Every elaborated program is
+checked by the unchanged checker, so `fundamentalC`, `adequacyC`, `fundamentalD` and `adequacyD`
+cover it with no hypothesis: A1 and A4 hold no borrow across an `await`, and use no relaxed rule of
+`docs/async-capabilities.md` §3.3. Every existing corpus and kernel program elaborates, checks and
+runs as before, with the same output and counts; the reports change only where a message changed
+(`corpus/reject/include-unknown.bc` lists the module `async`; `corpus/pending/yield-callback.bc`
+fails at its block).
+
+### Open
+
+- **Stored callbacks with their row** (`docs/async-capabilities.md` §2.3): a callback stored in
+  data, boxed at a bound, whose row is inferred and never written.
+- **`s.spawn { … }`**: spawning by a scheduler handle, which needs a provided effect (a port,
+  decision 57) or an operation whose argument is a computation (the draft spec's OQ-61).
+- **A handler's lifetime parameters**, so that a clause boxes `κ` at a bound other than `top`
+  (a queue inside a lend, `corpus/sched-b.bc`'s `'d`).
+- **Blocks with answering capabilities** and **blocks at a `for`'s site** (threaded variables):
+  the capabilities passed with the block at each call (`docs/surface-callbacks.md` E6, branch
+  `effects-async-a1`).
+- **Rank 2**: a block parameter has one row per copy; a function that calls one parameter at two
+  rows that cannot share one is not expressible.
+- **One copy per closure** (`docs/surface-callbacks.md` OQ-S6): two blocks of one row given to
+  one copy are one code each, called through the closure's dispatcher where the flow cannot tell
+  them apart.
+- **Tasks that hold a borrow across `await`**: R1 and L0 (`docs/async-capabilities.md` §3, U3 and
+  U5); `cancel` of a task holding a lend (A6) and a scheduler that logs (A5) wait for them.
 
 ---
 

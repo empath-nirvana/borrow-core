@@ -20,6 +20,7 @@ async-r1-effects 2 6 0 # the two tasks' cells
 async-r1-generator 1 3 0 # the lent cell
 async-r1-local-borrows 2 4 0 # the two tasks' cells, each lent across its task's suspension and out of line
 async-r1-nested 2 3 0 # the two lent cells
+async-scheduler 24 6 0 # the scheduler's list nodes, four per round of `run_until_empty`; one indirect call per resume of a stored task, whose code the queue does not know
 axes/borrow-across-loop 3 0 0
 axes/codata-coeffects 2 0 0
 axes/codata-effects 1 0 0
@@ -63,10 +64,12 @@ effects-borrow-raise 2 0 0 # the cell of each run; freed by the unwinding borrow
 effects-fold 7 0 0 # equal to effects-fold-sum: an abort unwinds, handled at the loop's step and raised again after it, a branch per call
 effects-fold-sum 7 0 0
 effects-generic 1 0 0
+effects-hof-two-rows 0 0 0 # equal to the kernel program hof-two-rows: a copy of `hof` per row, each a direct call
 effects-log-fail 3 0 0 # the log cell of each run
 effects-map 11 0 0 # equal to effects-map-hand: the handled program is the capability-passing one
 effects-map-fail 3 0 0
 effects-map-hand 11 0 0
+effects-tunnel 0 0 0 # equal to the kernel program tunnel
 family-swap 2 0 0
 fields 5 0 0 # the stdin and stdout cells, the line buffer and its two growths at the long line; fields are views
 find-bytes 2 0 0

@@ -1,0 +1,33 @@
+-- A1 of docs/async-capabilities.md (SPEC §29): a run-until-empty scheduler over tasks that are plain
+-- direct-style functions performing `await`. Each task owns its data; nothing is borrowed across a
+-- suspension, so no relaxed rule is used: the program is a `CDerives` derivation, and
+-- `fundamentalC`/`adequacyD` cover it with no hypothesis.
+--
+-- `ticker` names no scheduler. Its row, `Async`, is its own operation's; it is copied once per
+-- `with spawn` site (`ticker__n1`, `ticker__n2`). Its counted loop's body awaits, so the loop is a
+-- loop at the row (bounded_fix over the count, SPEC §16): a total computation the handler wraps.
+-- `with spawn { … }` (`lib/async.bc`) runs a task to its first `await` and answers its rest,
+-- the continuation boxed at `top` (BOXED-κ, SPEC §28); `run_until_empty` resumes the queued tasks
+-- round robin until none is pending, and answers their values in the order they were queued.
+--
+-- Answer: `inr (i32[1111], inr (i32[22], inl ()))`, the list [1111, 22]: task 1 awaits three times,
+-- task 2 once; spawning runs each to its first await, then the rounds resume 1 2, 1, 1, and task 2
+-- finishes first. `live 0`. A scheduler that lost a task, or resumed one twice, gives another list.
+
+include async
+
+fn ticker(tag: i32, n: i32) -> i32 with Async =
+  let mut acc = 0;
+  let mut i = 0;
+  for _ in 0..n {
+    acc = acc * 10 + tag;
+    await();
+    i = i + 1
+  };
+  acc * 10 + tag
+
+main -> List[i32] =
+  let q = queue[i32]();
+  let q = push(q, with spawn { ticker(1, 3) });
+  let q = push(q, with spawn { ticker(2, 1) });
+  run_until_empty(q)

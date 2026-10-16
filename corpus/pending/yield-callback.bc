@@ -2,11 +2,12 @@
 -- A callback that yields: `tens` passes `for_each` a closure that yields ten times each element,
 -- so that `tens` yields what the callback yields while `for_each` runs.
 --
--- Blocked by #161: a closure that performs an operation is a computation passed as a value, and
--- the function it is passed to would have to be specialized at the callback's row. Until then a
--- generator that maps another is written as a loop over it (`corpus/gen-pipeline.bc`).
+-- Blocked by #161: a block passed to a function is copied at its row (SPEC §29), but the `for`'s
+-- site that `tens`'s `yield` goes to threads the loop's variables through the operation, and a
+-- block would have to be passed them and hand them back at each call (SPEC §29 *Open*). Until
+-- then a generator that maps another is written as a loop over it (`corpus/gen-pipeline.bc`).
 --
--- now: 23:25: an operation of `Yield` is performed inside a closure or block that is not run in place: it cannot reach its handler (effectful callbacks, #161)
+-- now: 24:25: this block performs `Yield` of an enclosing `for`, which threads its variables through the operation: a block passed to a function does not hand them back (not provided)
 
 include yield
 

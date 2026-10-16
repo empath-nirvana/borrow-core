@@ -1,0 +1,38 @@
+-- A4 of docs/async-capabilities.md (SPEC §29): an awaiting block passed to an ordinary `map`, the
+-- same `map` also used synchronously. `map`'s type names no effect: `!(List[i32] * !(i32 => i32)
+-- => List[i32])`. Its block parameter `f` is called, never stored or returned. A block's effects are
+-- those of where it is written: `slow_tens`'s block awaits, and its `await` goes to the handler
+-- site that serves `slow_tens`'s `Async` (static names; `map` handles no `Async`, so nothing is
+-- handled by accident). Each use of `map` is a copy at its block's row (SPEC §14's specialization,
+-- keyed by the block's sites): `map__n3` at the pure row (only `Exhausted`, its recursion's
+-- budget) for `main`'s block, and `map__n2_b1n1` for `slow_tens`'s, whose row adds the `await` of
+-- the spawn site 1. Each is checked at closed rows; the kernel has no row variable.
+--
+-- `map` is recursive, so it performs `Exhausted` (SPEC §20); the task handles it inside its own
+-- block, so that what the task's observations perform is only `Async`, which `spawn` handles.
+-- Nothing is borrowed across the `await`: the list is owned and consumed.
+--
+-- Answer: `(inr (i32[2], inr (i32[3], inr (i32[4], inl ()))), inr (inr (i32[10], inr (i32[20],
+-- inr (i32[30], inl ()))), inl ()))`: `([2, 3, 4], [[10, 20, 30]])`; the task awaits three times.
+-- `live 0`.
+
+include rec
+include async
+
+fn map(xs: List[i32], f: !(i32 => i32)) -> List[i32] =
+  match unroll xs {
+    inl u -> (roll inl () : List[i32])
+  | inr (x, rest) -> let y = f(x); (roll inr (y, map(rest, f)) : List[i32])
+  }
+
+fn one_two_three() -> List[i32] = roll inr (1, roll inr (2, roll inr (3, roll inl ())))
+
+fn slow_tens() -> List[i32] with Async, Exhausted =
+  map(one_two_three(), !{ x -> await(); x * 10 })
+
+main -> List[i32] * List[List[i32]] =
+  let sync = with on_exhausted(!{ u -> roll inl () }) { map(one_two_three(), !{ x -> x + 1 }) };
+  let q = queue[List[i32]]();
+  let q = push(q, with spawn { with on_exhausted(!{ u -> roll inl () }) { slow_tens() } });
+  let tasks = run_until_empty(q);
+  (sync, tasks)

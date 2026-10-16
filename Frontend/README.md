@@ -303,6 +303,10 @@ borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowL
 * **Abortive operations are affine** (SPEC §18, decision 63). A row entry `n.i unr A ~> 0` is
   rejected where it is written (`elabRow`), and so is an unrestricted operation answering `0` among
   `main`'s rows.
+* **Effectful blocks and stored continuations** (SPEC §29). A block's copy has its parameter at
+  `!U(A -o F_Σ B)`, and the call's argument is bound at that type (`a : P <- return W`), so the
+  block written in place is checked at its row. A surface handler's clause that boxes `κ` gives
+  the site the clause tuple `clausesTyB Σ R ⊤ E`, read as BOXED-κ's above.
 * **Callbacks `λ_. M`** (SPEC §26). `fun (x : 1) -> M` at `1 -o F_Σ B` whose body does not use
   `x` is `[λ-dead]` (`lamIt`, `rLamDead`): the body is checked under the binder's slot as for
   `[λ]`, and the slot is closed dead instead of live. A rule inside the body whose premise takes
