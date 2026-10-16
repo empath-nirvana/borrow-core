@@ -30,9 +30,9 @@ extern write_all : !(all 'a < top. all 'b < top. mut 'a output * array_imm 'b u8
 
 extern read_into : !(all 'a < top. all 'b < top. mut 'a input * array_mut 'b u8 => mut 'a input * array_mut 'b u8 * i32)
 
-extern clock_now : !(all 'a < top. mut 'a clock => mut 'a clock * i32)
+extern clock_now : !(all 'a < top. mut 'a clock => mut 'a clock * i64)
 
-extern clock_sleep : !(all 'a < top. mut 'a clock * i32 => mut 'a clock)
+extern clock_sleep : !(all 'a < top. mut 'a clock * i64 => mut 'a clock)
 
 extern read_arg : !(all 'a < top. mut 'a args => mut 'a args * (u8 + 1))
 
@@ -101,7 +101,7 @@ def wasi_stderr__eprint_bytes : !(all 'fx_l < top. all 'b < top. mut 'fx_l outpu
               fx_v30 : 1 <- return ();
               return (o, fx_v30)))
 
-def wasi_clock__now : !(all 'fx_l < top. mut 'fx_l clock * 1 => mut 'fx_l clock * i32) =
+def wasi_clock__now : !(all 'fx_l < top. mut 'fx_l clock * 1 => mut 'fx_l clock * i64) =
   !thunkv Fun 'fx_l < top.
       return (thunkv fun (fx_pp41 : mut 'fx_l clock * 1) ->
           let (fx_c, fx_p40) = fx_pp41;
@@ -109,16 +109,16 @@ def wasi_clock__now : !(all 'fx_l < top. mut 'fx_l clock * 1 => mut 'fx_l clock 
           c <- return fx_c;
           let (d, t) = (unbang clock_now) ['fx_l] c;
           c <- return d;
-          fx_v36 : i32 <- return t;
+          fx_v36 : i64 <- return t;
           return (c, fx_v36))
 
-def wasi_clock__sleep : !(all 'fx_l < top. mut 'fx_l clock * i32 => mut 'fx_l clock * 1) =
+def wasi_clock__sleep : !(all 'fx_l < top. mut 'fx_l clock * i64 => mut 'fx_l clock * 1) =
   !thunkv Fun 'fx_l < top.
-      return (thunkv fun (fx_pp47 : mut 'fx_l clock * i32) ->
+      return (thunkv fun (fx_pp47 : mut 'fx_l clock * i64) ->
           let (fx_c, fx_p46) = fx_pp47;
-          ms <- return fx_p46;
+          ns <- return fx_p46;
           c <- return fx_c;
-          c <- return (unbang clock_sleep) ['fx_l] (c, ms);
+          c <- return (unbang clock_sleep) ['fx_l] (c, ns);
           fx_v42 : 1 <- return ();
           return (c, fx_v42))
 
@@ -316,6 +316,11 @@ def dec_each : !(i32 * !(u8 => 1) => 1) =
       let (n, io_jw102_3_t_t) = io_jw102_3_t;
       let (d, started) = io_jw102_3_t_t;
       return ()
+
+def ns_of_ms : !(i32 => i64) =
+  !thunkv fun (io_p25 : i32) ->
+      ms <- return io_p25;
+      return (unbang host[mul64]) ((unbang host[extend_s]) ms, i64[1000000])
 
 extern stdin : ref input
 
