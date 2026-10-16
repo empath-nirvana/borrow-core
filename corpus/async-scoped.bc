@@ -1,0 +1,36 @@
+-- Tasks that capture an outer borrow (SPEC §32): two tasks read `cfg` through copies of one
+-- `imm` borrow, each holding its copy across its `await`. `spawn_in` (`lib/async.bc`) is `spawn`
+-- at a bound: its lifetime parameter `'d` is the meet of the lifetimes in scope at each `with`,
+-- and its `await` clause receives the continuation boxed there (BOXED-κ, SPEC §28, at a bound
+-- other than `top`). The borrow `'r` outlives that meet only below a scope of its own, so the
+-- tasks are spawned inside `borrow mut d { 'd, … }`, a unit cell's scope (as `aff-capture.bc`'s
+-- `'w`); without it the spawn is refused (`corpus/reject/spawn-in-unscoped.bc`). The queue holds
+-- tasks of `TaskIn[i32]<'d>`, and `run_in` runs it round robin for at most 4 rounds, a counted
+-- loop, so the scheduler runs inside the borrow's scope; a task still pending after them would be
+-- cancelled and `exhausted()` performed. No borrow is lent across an `await`: the program is a
+-- `CDerives` derivation, `assurance: unconditional`.
+--
+-- Answer: `inr (i32[84], inr (i32[126], inl ()))`, the list [84, 126]: 42 × 1 + 42 and
+-- 42 × 2 + 42, each task reading the cell before and after its `await`; `live 0`.
+include async
+
+fn reader<'r>(tag: i32, k: imm 'r i32) -> i32 with Async =
+  let (k1, k2) = copy['r, i32] k;
+  let a = *k1;
+  await();
+  a * tag + *k2
+
+main -> List[i32] =
+  let cfg = alloc(42);
+  let d = alloc(());
+  let (d, v) = borrow imm cfg { 'r, k ->
+    let v = borrow mut d { 'd, e ->
+      let (k1, k2) = copy['r, i32] k;
+      let q = queue_in[i32]();
+      let q = push_in(q, with spawn_in { reader(1, k1) });
+      let q = push_in(q, with spawn_in { reader(2, k2) });
+      with on_exhausted(!{ u -> nil() }) { run_in(q, 4) } };
+    (d, v) };
+  let _ = free(d);
+  let _ = free(cfg);
+  v

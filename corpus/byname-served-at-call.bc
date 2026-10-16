@@ -1,0 +1,22 @@
+-- A function with a row passed by name is served where the callee calls it (SPEC §32, PROPOSED):
+-- `guarded` calls its parameter inside its own handler of `Fail`, so `risky`'s raise is that
+-- handler's, as it would be if `guarded` called `risky` by its name; `twice` handles nothing, so
+-- `risky`'s raise passes it to `to_result` around the call. Each call is a copy of the callee for
+-- the function (`guarded__b0frisky`, `twice__b0friskyn2`); the callees are called as written
+-- nowhere, so they are replaced by their copies. A block (SPEC §30) is served where it is
+-- written instead, and passes the callee's handler (`corpus/effects-tunnel.bc`).
+--
+-- Answer: `(i32[999], inr i32[3])`: `guarded` answers 10 for 1 and its default −1 for 5
+-- (10 × 100 − 1), and `twice` raises 3 at its second call; `live 0`.
+include fail
+
+fn risky(x: i32) -> i32 with Fail[i32] = if x > 2 { raise(x) } else { x * 10 }
+
+fn guarded(f: !(i32 => i32), x: i32) -> i32 = with default[i32, i32](0 - 1) { f(x) }
+
+fn twice(f: !(i32 => i32), x: i32) -> i32 = f(x) + f(x + 1)
+
+main -> i32 * (i32 + i32) =
+  let a = guarded(risky, 1) * 100 + guarded(risky, 5);
+  let b = with to_result[i32, i32] { twice(risky, 2) };
+  (a, b)

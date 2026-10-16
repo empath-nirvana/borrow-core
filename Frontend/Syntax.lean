@@ -323,6 +323,9 @@ structure HInfo where
   res : VTy
   after : Option VTy := none
   boxK : Bool := false
+  /-- The handler's lifetime parameters (SPEC §32): instantiated at the site at the meet of the
+  lifetimes in scope (`dom`); `κ`, when boxed, is boxed at the first, else at `top`. -/
+  lives : List String := []
   deriving DecidableEq, Repr
 
 /-- A handler site of an iteration effect (SPEC §15), as `Frontend.Elab.Effects` leaves it for the
@@ -551,6 +554,10 @@ structure CHandler where
   /-- The return clause: its binder, the binder's type, and its body. -/
   ret : Ident × VTy × Comp
   clauses : List Clause
+  /-- The lifetime parameters `<'d, …>`, with their bounds: each instantiated at a site at the
+  meet of the lifetimes in scope there; a clause that keeps its continuation receives it boxed at
+  the first (SPEC §32).  `[spec §32]` -/
+  lps : List (Ident × Life) := []
   deriving DecidableEq, Repr
 
 /-- Declarations (syntax-core §10). -/
@@ -793,7 +800,8 @@ def Decl.strip : Decl → Decl
         params := h.params.map (fun (x, A) => (x.strip, A.strip)), eff := h.eff.strip,
         effArgs := h.effArgs.map VTy.strip, row := h.row.map (fun (e, As) => (e.strip, As.map VTy.strip)),
         res := h.res.strip, ret := (h.ret.1.strip, h.ret.2.1.strip, h.ret.2.2.strip),
-        clauses := h.clauses.map fun c => ⟨c.name.strip, c.params.map Ident.strip, c.body.strip⟩ }
+        clauses := h.clauses.map fun c => ⟨c.name.strip, c.params.map Ident.strip, c.body.strip⟩,
+        lps := h.lps.map fun (a, b) => (a.strip, b.strip) }
 
 def Program.strip (p : Program) : Program := ⟨p.decls.map Decl.strip⟩
 

@@ -1,0 +1,28 @@
+-- A block that yields to a `for` (SPEC §32): `tens` passes `for_each` a block that yields ten
+-- times each element, so that `tens` yields what the block yields while `for_each` runs. `tens`
+-- is a generator, its `yield` served at the `for` in `main`, whose site threads the loop's
+-- variables (`acc`) through the operation. The block uses that threaded variable, a capability:
+-- it takes it first and hands it back first, and `for_each`'s copy for the block,
+-- `for_each__b1n1`, takes it with its arguments and passes it at each call of the block. The
+-- block's `yield` goes to the site where it is written, `main`'s `for`; `for_each` handles none.
+--
+-- Answer: `i32[30]`, 0 + 10 + 20; `live 0`. A block that dropped a yield, or the threaded
+-- variable, gives less.
+include yield
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+fn for_each(it: U (pull i32 1 1), f: !(i32 => 1)) -> 1 =
+  for x in it { f(x) };
+  ()
+
+fn tens(n: i32) -> 1 with Yield[i32] =
+  for_each(range(0, n), !{ x -> yield(x * 10) })
+
+main -> i32 =
+  let mut acc = 0;
+  for x in tens(3) { acc = acc + x };
+  acc

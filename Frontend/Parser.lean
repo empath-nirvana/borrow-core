@@ -1944,6 +1944,8 @@ def decl (n : Nat) : P Decl := do
         expectSym "]"
         pure ps
       else pure []
+    -- `<'d, …>`: a control handler's lifetime parameters (SPEC §32).
+    let hlps ← lifeParams
     let mut ps : Array (Ident × VTy) := #[]
     let mut mutPs : List String := []
     if ← isSym "(" then
@@ -2013,10 +2015,12 @@ def decl (n : Nat) : P Decl := do
     match sig with
     | some (A, R) =>
       let some (x, M) := ret | failAt h.span s!"the control handler `{h.name}` has no return clause, `return(x) = M`"
-      pure (.chandler sp ⟨h, tps, ps.toList, e, As, row, R, (x, A, M), cs.toList⟩)
+      pure (.chandler sp ⟨h, tps, ps.toList, e, As, row, R, (x, A, M), cs.toList, hlps⟩)
     | none =>
       match ps.toList, mutPs, tps, As, row, ret with
-      | [(sv, S)], [_], [], [], [], none => pure (.handler sp h sv S e cs.toList)
+      | [(sv, S)], [_], [], [], [], none =>
+        unless hlps.isEmpty do failAt h.span s!"`{h.name}`: an answering handler has no lifetime parameters"
+        pure (.handler sp h sv S e cs.toList)
       | _, _, _, _, _, _ => failAt h.span (s!"`{h.name}`: an answering handler is `handler h(mut s: S): E = " ++
           "{ op(x) = e; … }`, and a control handler names its body's type and its answer, " ++
           "`handler h[…](…): E[…], A -> R = { return(x) = M; op(x, k) = N; … }`")

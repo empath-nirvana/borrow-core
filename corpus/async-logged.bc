@@ -1,0 +1,45 @@
+-- A5 of docs/async-capabilities.md (SPEC §32): tasks perform another operation of the scheduler,
+-- `log`, and raise an error handled per task, while each holds a borrow of its own cell across
+-- its `await`. `careful` lends its cell for the whole task; the view crosses the `await` in a
+-- pair, so the block is the relaxed lend R1 (SPEC §29). Both `log` and `await` are operations of
+-- `Async`, handled outside the block by `spawn_logged` (`lib/async.bc`): each resumes, answers
+-- `1` and takes closed data, as R1 asks (`Row.ResumeO`). The scheduler owns the log, the state
+-- behind control: a task's `log` stops it, `run_logged` records the entry and resumes the task at
+-- once, so a `log` lets no other task run. `Fail` is abortive and handled inside the block, so no
+-- abortive operation crosses the lend (OQ-1).
+--
+-- One relaxed lend, used by both tasks: `assurance: PinLaw (R1 at 23:11)`.
+--
+-- Answer: `(inr (i32[30], inr (i32[4294967294], inl ())), inr (i32[3], inr (i32[2], inr (i32[3],
+-- inr (i32[2], inl ())))))`: the values [30, -2] (3 times 10, and the error 2 negated) and the log
+-- [3, 2, 3, 2], each task logging its cell before and after its `await`, in the order they
+-- interleave; `live 0`. A handler that missed the error gives 20; a log [3, 3, 2, 2] means a task
+-- ran past its `await`; a lost write through the held view gives 3.
+include async
+include fail
+
+fn careful(n: i32) -> i32 with Async =
+  let c = alloc(n);
+  let v = borrow mut c { m ->
+    let a = modify m { x -> (x, x) };
+    log(a);
+    let p = (m, 10);
+    await();
+    let (m, k) = p;
+    let b = modify m { x -> (x, x) };
+    log(b);
+    let r = with to_result[i32, i32] {
+      if b == 2 { raise(b) } else { () };
+      modify m { x -> x * k };
+      modify m { x -> (x, x) }
+    };
+    match r { inl x -> x | inr e -> 0 - e }
+  };
+  let _ = free(c);
+  v
+
+main -> List[i32] * List[i32] =
+  let q = lqueue[i32]();
+  let q = lpush(q, with spawn_logged { careful(3) });
+  let q = lpush(q, with spawn_logged { careful(2) });
+  run_logged(q)

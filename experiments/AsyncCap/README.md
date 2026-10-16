@@ -31,11 +31,12 @@ R1 is built (SPEC §29). The programs that exercise it with today's surface, tas
 generators and the scheduler written inline, are in the corpus: `corpus/async-r1-local-borrows.bc`
 (A2's `counter` and `pair_view`), `async-r1-effects.bc` (A5), `async-r1-cancel.bc` (A6),
 `async-r1-cancel-finaliser-writes.bc` (`accept/m4`), and `corpus/reject/async-r1-*.bc` (`n2`, `n4`,
-`n5`, `n7`, `n9`). The files here stay pending on `lib/async.bc` (U2) and their surface.
+`n5`, `n7`, `n9`). A5 and A6 on `lib/async.bc` are `corpus/async-logged.bc` and
+`corpus/async-cancel.bc` (SPEC §32). The files here stay pending on their surface.
 
 | file | program |
 |---|---|
-| `bc/a2-local-borrows.bc` … `bc/a6-cancel.bc` | A2, A3, A5, A6; A1 and A4 run and are in the corpus (`corpus/async-scheduler.bc`, `corpus/async-map.bc`, SPEC §30) |
+| `bc/a2-local-borrows.bc`, `bc/a3-scoped-shared.bc` | A2, A3; A1, A4, A5 and A6 run and are in the corpus (`corpus/async-scheduler.bc`, `corpus/async-map.bc`, SPEC §30; `corpus/async-logged.bc`, `corpus/async-cancel.bc`, SPEC §32) |
 | `bc/reject/n1-…` … `n9-…` | programs the design rejects |
 | `bc/accept/m1-…` … `m3-…` | adversarial programs the design accepts, which must run cleanly |
 

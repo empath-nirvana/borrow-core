@@ -60,7 +60,8 @@ and perform other effects while suspended. Every borrow guarantee holds, conditi
 
 The programs are in `experiments/AsyncCap/bc/`. Each is marked pending and records today's
 `bcc check` message (they do not parse: the surface is provisional). A1 and A4 run, and are in the
-corpus (`corpus/async-scheduler.bc`, `corpus/async-map.bc`; U2, SPEC §30). `lib/async.bc` EXISTS
+corpus (`corpus/async-scheduler.bc`, `corpus/async-map.bc`; U2, SPEC §30), and so do A5 and A6
+(`corpus/async-logged.bc`, `corpus/async-cancel.bc`; SPEC §32). `lib/async.bc` EXISTS
 (U2, SPEC §30). `effect Async { ctl await() }` declares `await : 1 ↠^aff 1`. The scheduler is, per
 task, a handler of `Async` whose clause stores the task's continuation as the task's rest
 (`with spawn { … }`), and across tasks a loop that resumes the queued tasks until none is pending
@@ -74,8 +75,8 @@ effect).
 | **A2** `a2-local-borrows.bc` | tasks borrow their own locals across `await`, `imm` and `mut`: the borrow itself (`reader`), a closure over it (`counter`), a pair holding it (`pair_view`) | `reader`: none (L0); the others: R1 | runs: `[20, 12, 7]`, trusted: PinLaw at 2 blocks |
 | **A3** `a3-scoped-shared.bc` | tasks borrow a shared outer value; scoped spawn; the scheduler runs with no bound inside the borrow | R2 | runs: `[6, 9]`, trusted: PinLaw at 1 loop |
 | **A4** `corpus/async-map.bc` | an awaiting block passed to `map`, written once and also used synchronously | none | runs: `([2, 3, 4], [[10, 20, 30]])` |
-| **A5** `a5-effects.bc` | tasks log (an operation of the scheduler) and raise (handled per task) while holding a borrow across `await` | R1 | runs: `[30, -2]`, log `[3, 2, 3, 2]` |
-| **A6** `a6-cancel.bc` | a suspended task holding a borrow and an owned value is cancelled; its finalisers run, the borrow ends | R1 | runs: `[cancelled, 2]`, finaliser log `[10, 11]`, `live 0` |
+| **A5** `corpus/async-logged.bc` | tasks log (an operation of the scheduler) and raise (handled per task) while holding a borrow across `await` | R1 | runs: `[30, -2]`, log `[3, 2, 3, 2]` (SPEC §32) |
+| **A6** `corpus/async-cancel.bc` | a suspended task holding a borrow and an owned value is cancelled; its finalisers run, the borrow ends | R1 | runs: `[2]`, `live 0` (SPEC §32: the victim is held by the task that cancels it, and a finaliser does not log) |
 | **A7** `reject/n1`–`n9`, `accept/m1`–`m3` | the adversarial list (§6.2) | — | as §6.2 |
 
 A5's log is in the order the two tasks interleave: each logs its cell before and after its
@@ -531,7 +532,7 @@ Rejections are by the rules of §3.4; acceptances must run cleanly under §6.1's
 | 1 | use-after-scope via a stored task (`n1`): a task spawned into an outer scheduler captures a borrow from an inner block | **reject** | BOXED-κ: the task's context does not outlive the queue's bound |
 | 2 | two tasks holding `mut` borrows of one cell (`n2`) | **reject** | `mut` is linear; the second capture is a second use (B6) |
 | 3 | a task resumed after its captured borrow's scope ended | **reject** (same as 1) | the only way to resume it after the scope is to store it beyond the scope, which BOXED-κ refuses |
-| 4 | cancellation while holding a lend (A6, `a6-cancel.bc`) | **accept**, runs: finalisers innermost first, `live 0` | `withborR_compat`'s cancel path: the lend ends, the owner's finaliser runs (PROVED lender side) |
+| 4 | cancellation while holding a lend (A6, `corpus/async-cancel.bc`) | **accept**, runs: finalisers innermost first, `live 0` | `withborR_compat`'s cancel path: the lend ends, the owner's finaliser runs (PROVED lender side) |
 | 5 | a task stored in a queue that outlives a captured borrow (`n3`) | **reject** | `[]I`/BOXED-κ: the queue's box is at the lend's lifetime, and the block's result must outlive it |
 | 6 | swap or move of a task's state while it is suspended (`accept/m1`) | **accept**, runs `[13, 7]` | the state holds the owner (a pointer); cells do not move (§3.5) |
 | 7 | nested handlers inside tasks: a generator over a borrowed array, inside a relaxed lend, awaiting between elements (`accept/m2`) | **accept**, runs `[60]` | `yield` is caught inside the borrower and crosses no lend (Law 2's `InStop`); `await` crosses it (R1) |
@@ -559,7 +560,7 @@ Ordered; each unit is one PR and turns the programs named green. No unit but U1 
 |---|---|---|
 | **U0** | this entry; `experiments/AsyncCap` (the statements, `fundamentalC_pin`, adequacy) | — |
 | **U1** | port BOXED-κ from `nominal-lifetimes` as a `CDerives` rule (`effHandleVB`), its case `handleV_compatCB`, one case per inversion; the checker emits it | `BoxedKappa`'s `sched-a.bc`, `sched-b.bc` in the corpus |
-| **U2** | `lib/async.bc` (`Async`, `run`, `run_until_empty`, `run_logged`, task handles, `cancel`), and effectful blocks at the surface (#161, `docs/surface-callbacks.md` E2–E8: a block's row, its call, copies per use; a counted loop at a resuming row). EXISTS (SPEC §30): `Async`, `spawn`, `resume`, `cancel`, `queue`, `push`, `run_until_empty`; `run_logged` waits for R1 (A5) | A1, A4 (and E1, E6 from source) |
+| **U2** | `lib/async.bc` (`Async`, `run`, `run_until_empty`, `run_logged`, task handles, `cancel`), and effectful blocks at the surface (#161, `docs/surface-callbacks.md` E2–E8: a block's row, its call, copies per use; a counted loop at a resuming row). EXISTS (SPEC §30): `Async`, `spawn`, `resume`, `cancel`, `queue`, `push`, `run_until_empty`; `spawn_logged` and `run_logged` (A5), `spawn_in` and `run_in` (tasks over an outer borrow) are SPEC §32 | A1, A4, A5, A6 (and E1, E6 from source) |
 | **U3** | L0: segmenting a borrow block at a resuming operation when only the borrow crosses it (ADD-5's degenerate case), in `Frontend/Elab` beside `LoopLend` | A2's `reader`; `gen-self-borrow.bc` moves to the corpus |
 | **U4** | the falsifier: never-reuse allocator and tagged interpreter in `bcc interp`; a script that runs every program three ways (§6.1) | the harness, run on A1, A2 (`reader`), A4 and the corpus |
 | **U5** (built, SPEC §29) | R1 in Core: `CDerivesP` (AsyncCap's `PDerives`), `fundamentalC_pin`, `adequacyD_pin`; the checker's R1 (callback row `Row.ResumeO`, emitted only when L0 does not apply); `bcc check`/`bcc trusted` report `PinLaw`; the lowering keeps a cell lent across a suspension out of line, or the task record unmoved (§3.5) | A2, A5, A6; `n2`, `n4`, `n5`, `n7`, `n9` |

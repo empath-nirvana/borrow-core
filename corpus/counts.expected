@@ -13,6 +13,8 @@ array-refs 5 0 0
 array-replace 2 0 0
 array-sum 1 0 0
 ascii-upper 3 0 0 # the stdin and stdout cells, and the string the input is read into
+async-cancel 10 3 0 # the victim's `buf` and `extra`, freed by its cancel, and the scheduler's list nodes; an indirect call per resume or cancel of a stored task
+async-logged 22 4 0 # the two tasks' cells, and the scheduler's and the log's list nodes; an indirect call per resume of a stored task
 async-map 29 4 0 # the input and result lists' nodes, the scheduler's, and an object per level of `map`'s recursion the task suspends through (SPEC §19 Lowering); one indirect call per resume of the stored task
 async-r1-cancel 4 5 0 # the two tasks' `buf` and `extra`; a task's state is a record of the state machine, its lent cell out of line
 async-r1-cancel-finaliser-writes 1 0 0 # the lent cell
@@ -22,6 +24,8 @@ async-r1-generator 1 3 0 # the lent cell
 async-r1-local-borrows 2 4 0 # the two tasks' cells, each lent across its task's suspension and out of line
 async-r1-nested 2 3 0 # the two lent cells
 async-scheduler 24 6 0 # the scheduler's list nodes, four per round of `run_until_empty`; one indirect call per resume of a stored task, whose code the queue does not know
+async-scoped 25 4 0 # the read cell, the scope's unit cell and the scheduler's list nodes; an indirect call per resume of a stored task
+async-workers-scoped 43 7 1
 axes/borrow-across-loop 3 0 0
 axes/codata-coeffects 2 0 0
 axes/codata-effects 1 0 0
@@ -36,8 +40,12 @@ axes/scope-boxed-iter 3 0 0
 axes/scope-codata-effects 1 0 0
 axes/scope-data-effects 8 0 0
 axes/scope-loop-lend 3 0 0
+block-capability 1 0 0
+block-capability-inner 2 0 0
 block-swap 2 0 0
+block-yield-inner 0 0 0
 borrow-in-scope 2 0 0 # the borrowed cell and the cell holding the borrow
+byname-served-at-call 0 0 0
 bytes-upper 1 0 0
 capture-await-raise 0 0 0 # `skip` resumes in place and `to_result` is a branch: nothing is allocated or dispatched
 capture-log-hand 0 0 0 # equal to the kernel program log-outside-native (corpus/kernel-counts.expected)
@@ -72,6 +80,7 @@ effects-log-fail 3 0 0 # the log cell of each run
 effects-map 11 0 0 # equal to effects-map-hand: the handled program is the capability-passing one
 effects-map-fail 3 0 0
 effects-map-hand 11 0 0
+effects-sum-gen 0 0 0
 effects-tunnel 0 0 0 # equal to the kernel program tunnel
 family-swap 2 0 0
 fields 5 0 0 # the stdin and stdout cells, the line buffer and its two growths at the long line; fields are views
@@ -149,6 +158,7 @@ lend-mut 2 0 0
 lend-pipeline 2 0 0
 lend-server 2 0 0
 list-blocks 13 0 0
+list-capability 7 0 0
 list-generic 27 0 0 # the lists' nodes, one object each; no frame and no closure is allocated
 main-lifetime 0 0 0 # main's lifetime and the unit cell `u` are cells of no words: nothing is allocated
 map-reuse 7 0 0
@@ -193,3 +203,4 @@ surface/map-reuse 7 0 0
 text-lend-lifetime 2 0 0
 trim-replace 7 0 0 # the stdin and stdout cells, the input string, and one replaced string per line (four)
 utf8-count 4 0 0 # the stdin, stdout and stderr cells and the line buffer, reused
+yield-callback 0 0 0

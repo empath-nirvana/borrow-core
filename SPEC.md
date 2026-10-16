@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.58 · 2026-10-15
+Version 0.60 · 2026-10-16
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1686,9 +1686,8 @@ and §19 is preserved: every construct of this entry is elaborated into core bef
   input, or one that writes as it yields, is rejected by the checker
   (`corpus/pending/gen-digits.bc`, `gen-lines.bc`, `gen-lazy.bc`, `gen-adapters-io.bc`). It needs
   a cancel that hands back a residual, or a `linear ctl` iteration effect (no `break`).
-- **Callbacks that yield** to a `for`'s site: a block is passed and called (§30), but the site
-  threads the loop's variables through the operation, which a block would be passed and hand back
-  at each call (`corpus/pending/yield-callback.bc`). Adapters as handlers over a computation
+- **Callbacks that yield** to a `for`'s site: a block takes the loop's threaded variables and
+  hands them back at each call (§32, `corpus/yield-callback.bc`). Adapters as handlers over a computation
   (`|>` at a computation parameter) need functions over computations (#161).
 - **A total consumer of a generator that loops.** A `for` over one is div: its turns are
   unbounded. A finite source written as data, or a sized iterator (§16), is total, and so is a
@@ -4018,8 +4017,8 @@ derivation of the let (`checkProgram_letPoly`). No program from source has a let
   value where it is passed (§18 *Not provided*, effectful callbacks, #161); a generator that also
   raises is not stored (§15 *Open*). The core text writes a λ's binder with its type, the row
   included, so a let-bound function has one row there. The kernel programs `hof-two-rows`,
-  `sum-gen` and `tunnel` are the three as Core terms; at the surface they are the pending programs
-  `corpus/pending/effects-hof-two-rows.bc`, `effects-sum-gen.bc` and `effects-tunnel.bc`.
+  `sum-gen` and `tunnel` are the three as Core terms; at the surface they are
+  `corpus/effects-hof-two-rows.bc`, `effects-tunnel.bc` (§30) and `effects-sum-gen.bc` (§32).
 - **A let-bound function used at different value types.** The lowering specialises per row
   (*Lowering*): a `[let-poly]` let whose uses are at one row but at different value types
   (`λx. x` at `I32` and at `1`) is lowered once, and the layout types (`Backend/Clos/Types.lean`)
@@ -4506,8 +4505,8 @@ before, with the same counts.
 - **One former for the clause tuples.** `clausesTy` and `clausesTyB` are parallel; `clausesTyO`
   (`Core/Inversions.lean`) is the general one, used by the inversions only.
 - **The surface.** A surface handler's clause that takes `k` out of a box receives it boxed at
-  `top` (§30); `lib/async.bc`'s `spawn` is its first library user. A bound other than `top` needs
-  a handler's lifetime parameters (§30 *Open*).
+  `top` (§30); `lib/async.bc`'s `spawn` is its first library user. A handler with a lifetime
+  parameter boxes it at the meet of the lifetimes in scope at the `with` (§32, `spawn_in`).
 
 ---
 
@@ -4722,12 +4721,10 @@ for the awaiting block). `bcc check` reports each copy with its blocks, `copy `f
 its block `x` at the site k of `E``, and each call of a block parameter, `x → the block,
 performing at the site k of `E``.
 
-**Not provided**, each rejected with a message saying so: a block that uses an answering capability
-(it would be passed with the block at each call; `corpus/reject/block-capability.bc`); a block that
-performs an operation of a `for`'s site, which threads the loop's variables
-(`corpus/pending/yield-callback.bc`); a named function with a row passed as a value (§18); a block
-given to a member of a recursive group of several functions, or under a heap driver (§20). A block
-given to a generic function is §31's.
+**Not provided**, each rejected with a message saying so: a block given to a member of a recursive
+group of several functions, or under a heap driver (§20). A block given to a generic function is
+§31's; a block that uses an answering capability or a `for`'s threaded variables, and a named
+function with a row passed as a value, are §32's.
 
 ### Counted loops at a resuming row
 
@@ -4799,9 +4796,9 @@ needs the spawned block's `await` to reach a handler inside `spawn`, a provided 
 | `corpus/effects-hof-two-rows.bc` | E1 from source: `hof` at three rows | `(inr (), (inr (), inr ()))` | `0 0 0`, as the kernel's `hof-two-rows` |
 | `corpus/effects-tunnel.bc` | E6 from source: a block's raise passes the callee's own handler | `inr ()` | `0 0 0`, as the kernel's `tunnel` |
 
-Rejected: `corpus/reject/block-stored.bc`, `corpus/reject/block-capability.bc`. Every program runs
-at the source stage, the closure and flat IRs and WebAssembly with `live 0`, and passes
-`scripts/falsify.sh`'s four modes.
+Rejected: `corpus/reject/block-stored.bc`, and `corpus/reject/block-capability.bc` until §32.
+Every program runs at the source stage, the closure and flat IRs and WebAssembly with `live 0`,
+and passes `scripts/falsify.sh`'s four modes.
 
 ### Lowering
 
@@ -4829,22 +4826,21 @@ fails at its block).
 ### Open
 
 - **Stored callbacks with their row** (`docs/async-capabilities.md` §2.3): a callback stored in
-  data, boxed at a bound, whose row is inferred and never written.
+  data, boxed at a bound, whose row is inferred and never written (§32 *Open*).
 - **`s.spawn { … }`**: spawning by a scheduler handle, which needs a provided effect (a port,
   decision 57) or an operation whose argument is a computation (the draft spec's OQ-61).
 - **A handler's lifetime parameters**, so that a clause boxes `κ` at a bound other than `top`
-  (a queue inside a lend, `corpus/sched-b.bc`'s `'d`).
+  (a queue inside a lend, `corpus/sched-b.bc`'s `'d`): §32.
 - **Blocks with answering capabilities** and **blocks at a `for`'s site** (threaded variables):
-  the capabilities passed with the block at each call (`docs/surface-callbacks.md` E6, branch
-  `effects-async-a1`).
+  §32.
 - **Rank 2**: a block parameter has one row per copy; a function that calls one parameter at two
   rows that cannot share one is not expressible.
 - **One copy per closure** (`docs/surface-callbacks.md` OQ-S6): two blocks of one row given to
   one copy are one code each, called through the closure's dispatcher where the flow cannot tell
   them apart.
-- **Tasks that hold a borrow across `await`** under `lib/async.bc`'s scheduler: R1 is §29, whose
-  programs schedule stored generators inline; a task of `spawn` holding a relaxed lend, `cancel` of
-  one (A6), a scheduler that logs (A5), and L0 (U3) are not built on this library.
+- **Tasks that hold a borrow across `await`** under `lib/async.bc`'s scheduler: a task of `spawn`
+  holding a relaxed lend, `cancel` of one (A6) and a scheduler that logs (A5) are §32's; L0 (U3)
+  is not built.
 
 ## 31. Entry 30 — generic recursion, blocks to generic callees, and the inference gaps
 
@@ -4940,6 +4936,163 @@ keeps its output and counts.
 - Inference into a block's body (D3).
 - Members of a group with type parameters of other names (D4).
 - `data` declarations with constructors and patterns (#54 stage 8), generic or not.
+
+---
+
+## 32. Entry 31 — logged and scoped tasks, blocks that use capabilities, functions passed by name
+
+### Motivation
+
+Four pieces §28 and §30 leave open (`docs/async-capabilities.md` §1, §2.3; #52):
+
+1. **A5 and A6 on `lib/async.bc`.** §29's programs schedule stored generators inline; a scheduler
+   that logs (A5) and a task cancelled while it holds a relaxed lend (A6) were not built on the
+   library (§30 *Open*).
+2. **Blocks that use a capability**: an answering handler's state, or the variables a `for`'s site
+   threads (§30 *Not provided*; `corpus/pending/yield-callback.bc`).
+3. **A function with a row passed as a value** to a callee that calls it (§18, §30 *Not
+   provided*; `corpus/pending/effects-sum-gen.bc`).
+4. **A continuation boxed at a bound other than `top`** from a surface handler (§28 *Open*, §30
+   *Open*), so that a task may hold a borrow from outside, as `corpus/sched-b.bc` does in the
+   core text.
+
+Each is elaboration into core terms the checker already derives, and `lib/async.bc`: no
+`CDerives` rule, relation clause, machine step or kernel type is added, and `PinLaw` is unchanged.
+
+### `log`, and the logged scheduler
+
+`Async` is `effect Async { ctl await(); ctl log(x: i32) }`. `log` is affine, resumes, answers `1`
+and takes closed data, so `Row.ResumeO` admits it (§29) and a `log` inside a relaxed lend is R1.
+
+- `spawn`'s clause of `log` resumes at once: a task run by `spawn` logs nothing. **PROPOSED**
+  (the alternative is to give `log` an effect of its own, which needs a handler of two effects).
+- `with spawn_logged { M }` answers the task stopped: `Stopped[A] = A + ((1 + i32) * LTask[A])`,
+  `LTask[A] = box top U (nu X. F (A + ((1 + i32) * box top U X)) & F 1)`. Its clauses of `await`
+  and `log` keep `κ` (BOXED-κ at `top`) and answer `inr (inl (), t)` or `inr (inr x, t)`, `t` the
+  rest; the return clause answers `inl v`.
+- `lpush(q, s)` records the entries a task logged before its first `await`; `run_logged(q)` runs
+  the queue round robin until no task is pending, each pending task resumed once per round and run
+  past its logs (`drain`), so a `log` lets no other task run. It answers the tasks' values in the
+  order they were queued and the entries in the order they were logged. The drain and the rounds
+  are unbounded, so `drain`, `lround`, `run_logged` and `reverse` are div (§14). The spellings
+  are provisional.
+
+### Blocks that use capabilities
+
+A block (§30) whose body uses capabilities, an answering handler's state or a `for`'s threaded
+variables, **takes them first and hands them back first**: its type at the copy is
+`!U(C ⊗ A ⊸ F_r (C ⊗ B))`, `C` the capabilities. The callee's copy for the block takes them after
+its own row's, and each call of the block parameter passes them and binds them again, as a call of
+a copy with capabilities does (§18). So the block's operations are those of where it is written
+(§30): its `tick` is the state of the `with` around it, its `yield` the operation of the `for` it
+is inside.
+
+- A handler or a `for` of the same effect inside the copy does not shadow a block's capability
+  (`Cap.blk`): the copy's own operations go to its innermost handler, the block's to the
+  capability it was given.
+- A copy's key adds the answering handlers the block uses (`b{j}n{…}{handler}`).
+- A `for`'s threaded variable has a type that is a parameter of the copy (§15); a block's is
+  renamed in the copy (`W` to `Wb`) unless the copy's own row is served at that `for`, so that it
+  is not the caller's parameter of the same name (`Blk.inCopy`).
+- The typed elaboration types a closure argument at its parameter's type when that is known and
+  the closure's synthesized type does not show it: a block whose result is the threaded variable,
+  which an operation answers (`Frontend/Sugar.lean`).
+
+A closure that is not a block argument still performs no operation of a capability
+(`corpus/reject/effect-in-closure.bc`).
+
+### Functions passed by name
+
+**PROPOSED.** A function with a row, named at a parameter of function type of a non-recursive
+callee, is passed by name: the call is a call of the callee's copy for the function,
+`x__b{j}f{fn}…`, whose parameter `j` is `()` and whose calls of the parameter are calls of the
+function. A call of a function with a row is served where it is called (§18), so the function's
+operations are served where the callee calls it: a `for` over its call handles its iteration
+effect, a handler of the callee around the call handles that effect, and what the callee leaves
+unhandled is served at the call of the callee. A callee called as written nowhere is replaced by
+its copies, as a function with a row is.
+
+The option not taken is to serve the function where it is passed, as a block (§30): there is no
+site of `Yield` where `effects-sum-gen.bc` passes its generators, so it cannot be written so.
+Passing by name differs from a block where the callee handles an effect of the function: the
+callee's handler serves it (`corpus/byname-served-at-call.bc`), where it does not serve a block's
+(`corpus/effects-tunnel.bc`). Not provided: a recursive callee given a function by name, a function
+with a row stored or returned (*Open*).
+
+### A handler's lifetime parameters; tasks over an outer borrow
+
+    handler h[T, …]<'d, …>: E[…], A -> R = { … }
+
+At each `with h { … }`, each lifetime parameter is the meet of the lifetimes in scope there
+(`Δ.meetOfDom`, `dom` of §23), substituted in the handler's types and clauses (`HInfo.lives`,
+`hndCtlC`). A clause that keeps its continuation receives it boxed at that lifetime: the site's
+clause tuple is `clausesTyB Σ R d E` (§28) at `d` the meet, and the checker types it by
+`effHandleVB`, whose premises are decided as at §28 (`corpus/reject/spawn-in-unscoped.bc`). A
+bound on a handler's lifetime parameter, and a lifetime written at the `with`, are not provided.
+**PROPOSED**: the instantiation at the meet (a written lifetime would need syntax at the `with`).
+
+`lib/async.bc` declares `type TaskIn[A]<'d> = box 'd U (nu X. F (A + box 'd U X) & F 1)`, the
+handler `spawn_in[A]<'d>` (`spawn` boxed at `'d`), `resume_in`, `cancel_in`, `queue_in`, `push_in`
+and `run_in(q, rounds)`, which runs the queue round robin for at most `rounds` rounds, a counted
+loop: a total computation, which runs inside the scope of the borrows its tasks hold. A task still
+pending after the last round is cancelled and `run_in` performs `exhausted()` (`lib/rec.bc`), as a
+recursion that spends its budget does. A borrow `'r` outlives the meet only below a scope of its
+own (the `Imm` rule is strict, §23), so the tasks are spawned inside a unit cell's borrow, as
+`aff-capture.bc`'s `'w`.
+
+### Programs
+
+| program | what it shows | answer | counts |
+|---|---|---|---|
+| `corpus/async-logged.bc` | A5: two tasks log their cell before and after an `await` while lending it (R1), and raise and handle an error inside the lend | `([30, -2], [3, 2, 3, 2])`, `assurance: PinLaw (R1 at 23:11)` | `22 4 0` |
+| `corpus/async-cancel.bc` | A6: a task holding a relaxed lend and an owned cell is cancelled by another task | `[2]`, `live 0`, `assurance: PinLaw (R1 at 24:11)` | `10 3 0` |
+| `corpus/async-scoped.bc` | two tasks read an outer `imm` borrow across their `await`s, spawned at a bound below it | `[84, 126]`, unconditional | `25 4 0` |
+| `corpus/yield-callback.bc` | a block that yields to its caller's `for` (moved from `pending/`) | `30` | `0 0 0` |
+| `corpus/block-yield-inner.bc` | the same, given to a function with a `for` of its own | `30` | `0 0 0` |
+| `corpus/block-capability.bc` | a block that uses an answering capability (moved from `reject/`) | `6` | `1 0 0` |
+| `corpus/block-capability-inner.bc` | the same, given to a function with a handler of its own | `105` | `2 0 0` |
+| `corpus/list-capability.bc` | the same, given to the generic recursive `map` | `[11, 22, 33]` | `7 0 0` |
+| `corpus/effects-sum-gen.bc` | E2d: `any` written once, given two generators by name (moved from `pending/`) | `(inr (), inr ())` | `0 0 0` |
+| `corpus/byname-served-at-call.bc` | a function passed by name, served by the callee's handler | `(999, inr 3)` | `0 0 0` |
+
+Rejected: `corpus/reject/spawn-in-unscoped.bc`. Every program runs at the source stage, the closure
+and flat IRs and WebAssembly with `live 0`, and passes `scripts/falsify.sh`'s four modes.
+
+Adapted from `docs/async-capabilities.md` §1: A6 answers `[2]`, not `[cancelled, 2]`, since a task
+is a linear value and the victim is held by the task that cancels it, not by the queue; and its
+finaliser log `[10, 11]` is not written: the lend's finaliser is typed pure at the empty context
+(R1's `· ⊢ d : Ref T ⊸ 1`, §29), and the backend does not lower a finaliser that performs a control
+operation (§27 *Open*). `live 0` and `--check tags` show that both cells are freed and the lend
+ends before its cell is.
+
+### Lowering
+
+Nothing is lowered specially: a block's capabilities are arguments and results, a copy for a
+function passed by name is a `def`, and `spawn_in`'s site is §19's handler with a clause that keeps
+`κ`.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `PinLaw`, the checker, the backend or a kernel
+program. `fundamentalC`, `adequacyC`, `fundamentalD` and `adequacyD` cover every program above
+that uses no relaxed rule, and `fundamentalC_pin` and `adequacyD_pin` the two that use R1. Every
+existing corpus and kernel program keeps its output and counts; the reports of
+`corpus/async-scheduler.bc` and `corpus/async-map.bc` name `log` in `spawn`'s lowering line.
+
+### Open
+
+- **Stored callbacks with their row** (`docs/async-capabilities.md` §2.3): a closure that performs
+  control operations stored in data or returned, its type `U(A ⊸ F_Σ B)` carrying the row of the
+  sites where it is written, and a function given such a value copied at its row (§14's
+  specialization at a callback's type, at a row as at `div`). Not built: the inference of the row
+  of a type written without one (a `let` annotation, a type parameter, a data type's component)
+  is a design question, and with it the join of rows across the elements of one data value.
+- **`div` callbacks in data and in a fold's algebra** (`corpus/pending/callbacks-in-data.bc`,
+  `map-div-fold.bc`): a fold whose algebra is div (the children's loops sequenced, then the
+  algebra run as a div body), and a data type at the join of its elements' effects; unchanged.
+- **An `imm` relaxed lend** (OQ-2): `corpus/pending/async-borrow.bc`'s `fold_imm` whose algebra
+  yields stays pending.
+- A6's finaliser log; a recursive callee given a function by name; a lifetime written at a `with`.
 
 ---
 
@@ -5148,9 +5301,31 @@ Entry 30 (§31) is implemented in `Frontend/Elab/Effects.lean` (`RGroup.tps`, `R
 (`genericCall`, `matchC`, `pureArrow`, `argOf`, `makeInst`, `elabDecl`) and `lib/list.bc`, with no
 change to `CDerives`, `Core/`, `Paper/`, `Support/` or `Backend/`.
 
+Entry 31 (§32) is implemented in `Frontend/Elab/Effects.lean` (`Blk`, `Cap.blk`, `Cap.canon`,
+`withBlkCaps`, `Blk.inCopy`, `blockArgs`, `blockCall`, `blockParamCall`, `renameParamC`,
+`Env.byNameArgs`, `Env.byNameBody`, `St.byNamed`, `HInfo.lives`), `Frontend/Sugar.lean`
+(`hndCtlC` at a handler's lifetimes; a closure argument typed at its parameter's type),
+`Frontend/Elab/RenameLife.lean` (`substLives`), `Frontend/Syntax.lean`, `Frontend/Parser.lean`
+and `Frontend/Print.lean` (`CHandler.lps`), and `lib/async.bc`, with no change to `CDerives`,
+`Core/`, `Paper/`, `Support/`, the checker or `Backend/`.
+
 ---
 
 ## Changelog
+
+- **0.60** (2026-10-16) — §32 (new): `Async`'s `log`, `spawn_logged`, `lpush` and `run_logged`
+  (A5); A6 on the library; blocks that use capabilities (an answering handler's state, a `for`'s
+  threaded variables), passed with the block at each call; functions with a row passed by name,
+  served where the callee calls them (PROPOSED); a handler's lifetime parameters, at the meet of
+  the lifetimes in scope, and `spawn_in`, `queue_in`, `push_in`, `run_in` (tasks over an outer
+  borrow). New corpus programs `async-logged`, `async-cancel`, `async-scoped`,
+  `block-yield-inner`, `block-capability-inner`, `list-capability`, `byname-served-at-call`; moved
+  into the corpus: `yield-callback`, `effects-sum-gen` (from `pending/`), `block-capability`
+  (from `reject/`); reject `spawn-in-unscoped`. `experiments/AsyncCap/bc/a5-effects.bc` and
+  `a6-cancel.bc` removed (in the corpus). The reports of `async-scheduler` and `async-map` name
+  `log`. §28 *Open*, §30 *Not provided* and *Open* updated. No change to `CDerives`, the relation,
+  the machine, `PinLaw`, the checker, the backend, a kernel program, or an existing program's
+  output or count.
 
 - **0.59** (2026-10-15) — Elaboration hygiene (#481): a control handler's parameters are bound
   at each `with` under fresh names, and a local named as a declaration of the program or of a
