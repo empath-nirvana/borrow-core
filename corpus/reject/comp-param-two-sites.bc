@@ -1,0 +1,8 @@
+-- A computation parameter's provided effect is served at one site of the callee, its port
+-- (SPEC §33): `twice` calls `f` under its own `to_result` and again outside it, where its caller
+-- would serve the `raise`. The argument performs its `raise` at one static name, which cannot be
+-- both (relabelling it is *Open*).
+-- expect: 7:65: `with to_result` serves `Fail` for a call of the computation parameter `f`, which is called elsewhere outside a handler of `Fail`, where the caller serves it: the effect a computation parameter provides is served at one site of the function (SPEC §33)
+include fail
+fn twice(f: !(1 => i32 with Fail[i32])) -> i32 with Fail[i32] = with to_result[i32, i32] { f(()) }; f(())
+main -> i32 + i32 = with to_result[i32, i32] { twice(!{ u -> raise(1) }) }

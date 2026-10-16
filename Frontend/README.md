@@ -110,6 +110,12 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
     `withloadu[@a, 'x, A, B, [ROW]]`, `slice_borrow_mut_u['x, @b, A, B, [ROW]]`,
     `slice_borrow_imm_u['x, @b, A, B, [ROW]]`. `perform`, `abort`, `handle_with`, `unwind` and the
     six constants are reserved (`handle` is not: the corpus names a `def` so).
+19. **Computation parameters and `|>` (SPEC §33).** `(A => B with E₁, E₂[T])`, in parentheses,
+    is a function type with a provided row (`VTy.rowed`, its row the effect instances applied to
+    the empty name); the printer always parenthesizes it. `|>` is the operator of the lowest precedence, below `||`,
+    associating to the left; its right operand, the stage, is a prefix expression (a spine). `e |>
+    s` is the node `VSugar.pipe` applied to the pair of `e` and `s`, printed in parentheses, and
+    `Frontend/Elab/Effects.lean` elaborates it by the stage.
 
 ## The checker (`Frontend/Check/`)
 

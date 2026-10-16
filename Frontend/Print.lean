@@ -97,6 +97,9 @@ def VTy.pp (A : VTy) (lvl : Nat := 0) : String :=
     | .lapp _ G a =>
       let (h, ts, ls) := G.ppArgs
       ppApp h ts (ls ++ [a.pp 0])
+    | .rowed _ F r =>
+      let (_, ts, _) := r.ppArgs
+      "(" ++ F.pp 0 ++ " with " ++ ", ".intercalate ts ++ ")"
 
 /-- `N[A, …]<'a, …>`: the head name, the printed type arguments and lifetime arguments. -/
 def VTy.ppArgs : VTy → String × List String × List String
@@ -211,6 +214,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .app _ (.sugar _ (.op o)) (.pair _ a b) => "(" ++ a.pp 2 k ++ " " ++ o.str ++ " " ++ b.pp 2 k ++ ")"
     | .app _ (.sugar _ (.call c)) W => c ++ "(" ++ W.pp 0 k ++ ")"
     | .app _ (.sugar _ .count) (.pair _ a b) => "(" ++ a.pp 2 k ++ ".." ++ b.pp 2 k ++ ")"
+    | .app _ (.sugar _ .pipe) (.pair _ a s) => "(" ++ a.pp 1 k ++ " |> " ++ s.pp 2 k ++ ")"
     | .app _ (.sugar _ .deref) V => "*" ++ V.pp 3 k
     | .app _ (.sugar _ .retE) V => "return " ++ V.pp 1 k
     | .app _ (.sugar _ (.forSite i)) V => s!"for_site[{i.n}] " ++ V.pp 1 k

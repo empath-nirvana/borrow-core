@@ -4,22 +4,23 @@
 -- again, up to `times` attempts; the last error is raised to the caller. The service fails its
 -- first two attempts with 503 and answers 200 on the third.
 --
--- Exercises: a generic higher-order function that tries to handle the errors of the block it is
+-- Exercises: a generic higher-order function that handles the errors of the computation it is
 -- given (`with to_result { f(attempt) }` inside `retry`), an answering effect (`Clock`) used by
 -- the function itself, and `Fail` raised on after a counted loop.
 --
--- What it shows: a block's operations go to the handlers where the block is written, never to a
--- handler inside the function it is passed to (SPEC §30, E6: `corpus/effects-tunnel.bc`). So the
--- block's `raise` passes `retry`'s own `to_result` and reaches the `to_result` in `with_budget`:
--- the first failure ends the call, and no attempt is retried. `bcc check` says so: the block is
--- "at the site 1 of `Fail`", the `with` in `with_budget`, and `retry`'s `with` is the site 2.
--- A `retry` that handles its block's errors needs a function that handles the operations of a
--- computation it is given (SPEC §18 *Open*: functions over computations, `retry`, #161), which is not
--- provided; nothing rejects this program, which reads as if it retried.
+-- What it shows: `f` is a computation parameter (SPEC §33): its type provides `Fail[i32]`, so the
+-- callee serves the block's `raise`. A call `f(attempt)` performs it in `retry`, where the innermost
+-- handler of `Fail` is `retry`'s `with to_result`, whose static name is the port of `f`: each
+-- failure is caught there, `retry` sleeps and runs the block again. `bcc check` says so: the copy
+-- is "for … its block `f`, its `Fail` at the port 2, served by its `with` here", the call of the
+-- block is "`f` → the block, its `Fail` served here by the site 2", and `call`'s copy raises at
+-- the site 2. Written `f: !(i32 => A)`, a plain block parameter, the
+-- block's `raise` would go to the `to_result` in `with_budget`, where it is written (SPEC §30,
+-- E6), and no attempt would be retried.
 --
--- Answer: `((inr i32[503], i32[0]), (inr i32[503], i32[0]))`: both calls fail at their first
--- attempt and never wait. A `retry` that handled its block's errors would answer
--- `((inl i32[200], i32[30]), (inr i32[503], i32[10]))`.
+-- Answer: `((inl i32[200], i32[30]), (inr i32[503], i32[10]))`: with five attempts the third
+-- answers 200 after waits of 10 and 20; with two, both fail, one wait of 10, and the last error is
+-- raised to the caller.
 
 include fail
 
@@ -32,7 +33,7 @@ fn call(attempt: i32) -> i32 with Fail[i32] = if attempt < 2 { raise(503) } else
 
 -- `f(0)`, `f(1)`, … until one answers, sleeping `base`, `2 * base`, … between attempts; after
 -- `times` failures, the last error is raised.
-fn retry[A](times: i32, base: i32, f: !(i32 => A)) -> A with Fail[i32], Clock =
+fn retry[A](times: i32, base: i32, f: !(i32 => A with Fail[i32])) -> A with Fail[i32], Clock =
   let mut pause = base;
   let mut last = 0;
   let r = for attempt in 0..times {

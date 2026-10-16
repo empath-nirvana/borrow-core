@@ -1,0 +1,44 @@
+-- `|>` into handlers (SPEC §33): `m |> h` is `with h { m }`, and a chain is applied innermost
+-- first, its order the order of the handlers. `work` ticks twice and raises; `fine` ticks once and
+-- answers.
+--
+-- * `work() |> to_result |> counted` is `with counted { with to_result { work() } }`: the two
+--   are one term (`a` and `b`).
+-- * `both` is the same chain as one stage, a function whose computation parameter provides both
+--   effects: each `with` in it serves the computation's operations of its effect, at the port of
+--   that effect (`c`).
+-- * The other order puts `to_result` outside: `fine() |> counted |> to_result[i32, i32 * i32]`
+--   answers the counter's pair inside the sum (`d`), and `work() |> counted |> to_result[…]` the
+--   error alone, the count lost with the computation the raise left (`e`).
+--
+-- Each stage handles what it handles and passes the rest to the next: in `a` each `tick` passes
+-- `to_result` to `counted`, and in `e` the `raise` passes `counted` to `to_result`.
+--
+-- Answer: `(((inr i32[4], i32[2]), (inr i32[4], i32[2])), ((inr i32[4], i32[2]), (inl (i32[5],
+-- i32[1]), inr i32[4])))`.
+
+include fail
+
+effect Tick { ctl tick() }
+
+-- The ticks a computation performs, counted as its answer is returned.
+handler counted[A]: Tick, A -> A * i32 = {
+  return(a) = (a, 0);
+  tick(k) = { let (a, n) = k(()); (a, n + 1) }
+}
+
+fn work() -> i32 with Fail[i32], Tick = tick(); tick(); raise(4)
+fn fine() -> i32 with Fail[i32], Tick = tick(); 5
+
+fn both[A](c: !(1 => A with Fail[i32], Tick)) -> (A + i32) * i32 = c(()) |> to_result |> counted
+
+type Counted = (i32 + i32) * i32
+type Outside = i32 * i32 + i32
+
+main -> (Counted * Counted) * (Counted * (Outside * Outside)) =
+  let a = work() |> to_result |> counted;
+  let b = with counted { with to_result { work() } };
+  let c = both(work);
+  let d = fine() |> counted |> to_result[i32, i32 * i32];
+  let e = work() |> counted |> to_result[i32, i32 * i32];
+  ((a, b), (c, (d, e)))

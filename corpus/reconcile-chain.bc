@@ -1,0 +1,81 @@
+-- A toy reconciler chain, `step() |> timeout |> retry(3, 10) |> logged` (SPEC §33), innermost
+-- first: `logged` around `retry` around `timeout` around the step, with a fake clock.
+--
+-- * The step notes its request in the journal, waits on the service for `ms` (`Wait`), then the
+--   request takes `ms` on the clock (`Clock`), and answers 200.
+-- * `timeout` takes a computation that provides `Wait`: its handler `deadline` resumes a wait of
+--   at most 50 ms, and cancels the computation at a longer one and raises 408.
+-- * `retry` takes a computation that provides `Fail[i32]`: it runs it under its own `to_result`,
+--   and after a failure sleeps on the clock (`base`, then twice as long) and runs it again, up to
+--   `times` attempts, raising the last error.
+-- * `logged` is a handler: `m |> logged` is `with logged { m }`. It notes 9 for a value and 4 for
+--   an error, and answers the sum.
+--
+-- Each stage handles what it provides, and every other operation passes on to the next stage out:
+-- the step's `note` and `sleep` go where the chain is written (the journal and the clock), and
+-- `timeout`'s 408 to `retry`'s handler, the port of `retry`'s computation (`bcc check`: the copy
+-- `timeout__n4_…` is for the site 4 of `Fail`, the port 4 of `retry`). The clock and the journal
+-- are folds of the computation's answer: a `sleep` adds its time to the time the rest takes, and a
+-- `note` puts its entry before the rest's.
+--
+-- Answer: `(((inr i32[408], i32[30]), [80, 80, 80, 4]), ((inl i32[200], i32[20]), [20, 9]))`,
+-- the lists as `inr (x, …)`: a stuck service (each request waits 80 ms) is attempted three times,
+-- each cut at the deadline before its request runs, with backoffs of 10 and 20 ms, and the error
+-- is logged; a healthy one (20 ms) answers at the first attempt, after its request's 20 ms. A
+-- `retry` that did not serve its computation's `Fail` would attempt once (`[80, 4]`, clock 0), and
+-- a `timeout` that resumed every wait would answer 200 after 80 ms (`[80, 9]`).
+
+include fail
+include list
+
+effect Clock { ctl sleep(ms: i32) }
+handler fake_clock[A]: Clock, A -> A * i32 = {
+  return(a) = (a, 0);
+  sleep(ms, k) = { let (a, t) = k(()); (a, t + ms) }
+}
+
+effect Audit { ctl note(x: i32) }
+handler journal[A]: Audit, A -> A * List[i32] = {
+  return(a) = (a, nil());
+  note(x, k) = { let (a, l) = k(()); (a, cons(x, l)) }
+}
+
+effect Wait { ctl wait(ms: i32) }
+
+fn reconcile(ms: i32) -> i32 with Audit, Clock, Wait =
+  note(ms);
+  wait(ms);
+  sleep(ms);
+  200
+
+handler deadline[A]: Wait, A -> A with Fail[i32] = {
+  return(a) = a;
+  wait(ms, k) = if ms > 50 { u <- (force k).2; raise(408) } else { k(()) }
+}
+
+fn timeout[A](m: !(1 => A with Wait)) -> A with Fail[i32] = with deadline { m(()) }
+
+fn retry[A](m: !(1 => A with Fail[i32]), times: i32, base: i32) -> A with Fail[i32], Clock =
+  let mut pause = base;
+  let mut last = 0;
+  let r = for attempt in 0..times {
+    match with to_result { m(()) } {
+      inl a -> break (inl a : A + 1)
+    | inr e -> last = e; if attempt + 1 < times { sleep(pause); pause = pause * 2 } else { () }
+    }
+  } else { (inr () : A + 1) };
+  match r { inl a -> a | inr u -> raise(last) }
+
+handler logged[A]: Fail[i32], A -> A + i32 with Audit = {
+  return(a) = { note(9); inl a };
+  raise(e) = { note(4); inr e }
+}
+
+type Run = ((i32 + i32) * i32) * List[i32]
+
+fn stuck() -> i32 with Audit, Clock, Wait = reconcile(80)
+fn healthy() -> i32 with Audit, Clock, Wait = reconcile(20)
+
+main -> Run * Run =
+  (with journal { with fake_clock { stuck() |> timeout |> retry(3, 10) |> logged } },
+   with journal { with fake_clock { healthy() |> timeout |> retry(3, 10) |> logged } })

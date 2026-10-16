@@ -1,0 +1,12 @@
+-- A `for` over a call of a computation parameter (SPEC §33 *Open*): the `for`'s site threads the
+-- loop's variables through the operation, so the argument, written at the call, would take them
+-- with each element, at a type only `any` knows. The parameter's yields are handled by a handler,
+-- `gen(()) |> any_true` (`corpus/effects-sum-gen.bc`).
+-- expect: 10:3: a `for` over a call of a computation parameter of `any`: not provided (its loop's variables would be threaded through the argument, SPEC §33 *Open*); handle the parameter's iteration effect with a handler, `f(()) |> h`
+include yield
+fn gen1() -> 1 with Yield[bool] = yield(false); yield(true)
+fn any(gen: !(1 => 1 with Yield[bool])) -> bool =
+  let mut r = false;
+  for x in gen(()) { if x { r = true } else { () } };
+  r
+main -> bool = any(gen1)

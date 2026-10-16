@@ -52,6 +52,7 @@ def VTy.renameLife (f : Span → String → Life) : VTy → VTy
   | .sized s D S A => .sized s (D.renameLife f) (S.renameLife f) (A.renameLife f)
   | .app s G A => .app s (G.renameLife f) (A.renameLife f)
   | .lapp s G a => .lapp s (G.renameLife f) (a.renameLife f)
+  | .rowed s G r => .rowed s (G.renameLife f) (r.renameLife f)
 
 def CTy.renameLife (f : Span → String → Life) : CTy → CTy
   | .ret s A => .ret s (A.renameLife f)

@@ -1,0 +1,23 @@
+effect 13:1: Yield: yield (ctl, affine)
+effect 17:1: Fail: raise (ctl, affine, abortive)
+row 21:1: gen1: Yield[1 + 1]
+row 22:1: gen2: Yield[1 + 1], Fail[1]
+lowering 21:1: copy `gen1__n3`: `gen1` for the site 3 of `Yield`
+lowering 22:1: copy `gen2__n2_n1`: `gen2` for the site 2 of `Yield`, the site 1 of `Fail`
+lowering 29:1: copy `any__b0`: `any` for its block `gen`, its `Yield` at the port 3, served by its `with` here
+lowering 29:1: copy `any__b0n1`: `any` for its block `gen` at the site 1 of `Fail`, its `Yield` at the port 2, served by its `with` here
+lowering 29:62: with any_true (Yield): a handler, the static name 3; yield affine: resumed or cancelled
+lowering 29:62: with any_true (Yield): a handler, the static name 2; yield affine: resumed or cancelled
+lowering 33:11: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 33:11: with to_result (Fail): a handler, the static name 1; raise abortive: a branch per call (final ctl)
+call 21:35: yield (Yield) → perform[3.0], handled by the caller at 21:1
+call 21:49: yield (Yield) → perform[3.0], handled by the caller at 21:1
+call 22:44: yield (Yield) → perform[2.0], handled by the caller at 22:1
+call 22:58: raise (Fail) → abort[1.0], handled by the caller at 22:1: abortive, it never resumes
+call 26:25: k → the continuation resumed
+call 29:51: gen → the block, its `Yield` served here by the site 3 of `Yield`
+call 29:51: gen → the block, performing at the site 1 of `Fail`, its `Yield` served here by the site 2 of `Yield`
+call 32:11: any → `any__b0`, its computation performing `Yield` at the port 3 of `any`
+call 32:15: gen1 → `gen1__n3`
+call 33:37: any → `any__b0n1`, its computation performing at the site 1 of `Fail`, `Yield` at the port 2 of `any`
+call 33:41: gen2 → `gen2__n2_n1`

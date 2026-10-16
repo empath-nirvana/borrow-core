@@ -3428,11 +3428,21 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       if let some L ← (Frontend.Elab.LoopLend.hook c (dataFor (← get).sizedFns) sp x A M N lin :
           Except Error (Option Comp)) then
         return (← surfC n c exp L)
+      -- An annotated head that performs operations of the current row is at that row, as the
+      -- checker reads it (`F_Σ A` when `F A` fails): a handler site inside it handles its body at
+      -- the row around it.  `[spec §33]`
+      let atA : Option CCTy := (A.bind c.elabV).map fun T =>
+        match c.E.row with
+        | some S@(_ :: _) =>
+          if (opsC c divFuel M).any (fun (k, _) => S.any (·.n.toNat == k)) then
+            Frontend.Check.effOf S T
+          else .ret T
+        | _ => .ret T
       let M' ← match M with
         | .ret rsp V => match hndCtl? V with
           | some (i, P, R, cls, B) => hndCtlC n c rsp i P R cls B
-          | none => surfC n c ((A.bind c.elabV).map .ret) M
-        | _ => surfC n c ((A.bind c.elabV).map .ret) M
+          | none => surfC n c atA M
+        | _ => surfC n c atA M
       let c ← refresh c
       let N' ← surfC n (c.push x.name (bindTy c A M')) exp N
       pure (.bind sp x A M' N' lin)
