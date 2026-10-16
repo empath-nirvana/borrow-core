@@ -29,6 +29,7 @@ def lowerExp : Flat.Exp → List Instr
   | .live => [.call "$live"]
   | .getc fd => lowerExp fd ++ [.call "$getc"]
   | .getv fd a k => lowerExp fd ++ lowerExp a ++ lowerExp k ++ [.call "$getv"]
+  | .now c => lowerExp c ++ [.call "$now"]
   | .stat k => [.globalGet (if k == 0 then "$allocs" else if k == 1 then "$indirect" else "$copies")]
 where
   lowerArgs : List Flat.Exp → List Instr
@@ -70,6 +71,7 @@ def lowerStmt (cnt : Bool) : Flat.Stmt → List Instr
   | .out b => lowerExp b ++ [.call "$putc"]
   | .putc fd b => lowerExp fd ++ lowerExp b ++ [.call "$putfd"]
   | .putv fd a k => lowerExp fd ++ lowerExp a ++ lowerExp k ++ [.call "$putv"]
+  | .sleep c ms => lowerExp c ++ lowerExp ms ++ [.call "$sleep"]
   | .ite c t e => lowerExp c ++ [.ifElse (lowerBlock t) (lowerBlock e)]
   | .call ds f args => lowerExp.lowerArgs args ++ [.call (fname f)] ++ popInto ds
   | .switch e cs d => switchCode (lowerExp e) (lowerCases cs) (lowerBlock d)

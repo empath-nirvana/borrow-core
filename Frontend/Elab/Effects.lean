@@ -83,7 +83,8 @@ structure OpSig where
   idx : Nat
   decl : OpDecl
 
-/-- An answering handler: its name, its effect, its state and its clauses. -/
+/-- An answering handler: its name, its effect, its state and its clauses. With `lent`, each
+clause is given the state lent, `mut 'l S`, rather than its value (SPEC §34). -/
 structure HSig where
   name : String
   eff : String
@@ -91,6 +92,13 @@ structure HSig where
   S : VTy
   clauses : List Clause
   sp : Span
+  lent : Bool := false
+  /-- At a use: the capability is the state's cell itself, `ref S`, owned and threaded by name,
+  and each operation lends it for its clause (SPEC §34). `main`'s platform capabilities. -/
+  cell : Bool := false
+
+/-- The key of a capability's handler in a copy's name: a cell's copies are its own. -/
+def HSig.key (h : HSig) : String := if h.cell then h.name ++ "_cell" else h.name
 
 /-- An instance of an effect: its type arguments, when they are determined. -/
 structure Inst where
@@ -181,7 +189,7 @@ structure Cap where
 /-- A capability's type: `mut 'l S`, or the threaded variable's `W`. -/
 def Cap.ty (sp : Span) (c : Cap) : VTy := match c.thr with
   | some W => .name sp W
-  | none => .mut sp (.var sp c.life) c.h.S
+  | none => if c.h.cell then .ref sp c.h.S else .mut sp (.var sp c.life) c.h.S
 
 /-- A handler site of a control effect in scope: the effect, the site's static name, and the
 effect's type arguments there. -/
@@ -238,6 +246,8 @@ structure St where
   parameter index, the site of each provided effect, and whether it is the copy's own (a `with`
   inside it) rather than one of its row's.  `[spec §33]` -/
   ports : List (String × List (Nat × List (Site × Bool))) := []
+  /-- The capabilities `main` lends to the platform's handlers (SPEC §34). -/
+  platform : List String := []
 
 abbrev EM := StateT St (Except Error)
 
@@ -860,6 +870,41 @@ def Cx.ctl (cx : Cx) (row : List Inst) : List Inst := row.filter (!cx.env.answer
 def Cx.ctlV (cx : Cx) (V : Val) : Bool := !(cx.ctl (rowV cx.env fuel V)).isEmpty
 def Cx.ctlC (cx : Cx) (M : Comp) : Bool := !(cx.ctl (rowC cx.env fuel M)).isEmpty
 
+/-- A control handler whose clauses keep its continuation boxed at its lifetime parameter (a
+task of `spawn_in`): the body it handles outlives the `with`, so it is given the capabilities it
+uses (SPEC §34). -/
+def Env.gives (env : Env) (h : String) : Bool :=
+  match env.chandler? h, env.eff? (((env.chandler? h).map (·.eff.name)).getD "") with
+  | some ch, some eff => !ch.lps.isEmpty && eff.ops.any fun o => !o.abortive && ch.clauses.any fun c =>
+      c.name.name == o.name.name && !c.params.isEmpty && unboxesC c.params.getLast!.name fuel c.body
+  | _, _ => false
+
+mutual
+/-- The capabilities the tasks spawned in a value are given (`Env.gives`), outside nested borrow
+blocks and closures: the innermost borrow block around a spawn lends them for its tasks. -/
+def Cx.givenV (cx : Cx) : Nat → Val → List Cap
+  | 0, _ => []
+  | n + 1, V => match V with
+    | .app _ (.app _ (.sugar _ (.handle h _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
+      if cx.env.gives h then cx.needC M else cx.givenV n P ++ cx.givenC n M
+    | .app _ (.app _ (.sugar _ (.borrow ..)) _) _ => []
+    | .app _ f W | .pair _ f W => cx.givenV n f ++ cx.givenV n W
+    | .inl _ V | .inr _ V | .ascribe _ V _ | .roll _ V | .unroll _ V | .boxed _ _ V
+    | .unbox _ V | .unbang _ V | .inst _ V _ | .sub _ V _ | .shorten _ _ _ _ V => cx.givenV n V
+    | .run _ M => cx.givenC n M
+    | _ => []
+/-- `Cx.givenV` of a computation. -/
+def Cx.givenC (cx : Cx) : Nat → Comp → List Cap
+  | 0, _ => []
+  | n + 1, M => match M with
+    | .ret _ V | .absurd _ V => cx.givenV n V
+    | .bind _ _ _ M N _ | .with_ _ M N => cx.givenC n M ++ cx.givenC n N
+    | .letUnit _ V M | .letPair _ _ _ V M => cx.givenV n V ++ cx.givenC n M
+    | .case _ V _ M _ N => cx.givenV n V ++ cx.givenC n M ++ cx.givenC n N
+    | .for_ _ _ V M N => cx.givenV n V ++ cx.givenC n M ++ cx.givenC n N
+    | _ => []
+end
+
 /-- The capability of the effect `e` in scope. -/
 def Cx.capOf (cx : Cx) (e : String) : Option Cap := cx.caps.find? (·.eff == e)
 
@@ -959,7 +1004,7 @@ def rowedCapFnTy (row : Row) (cs : List Cap) : VTy → Option VTy
 /-- The variable `w` of type `W` that a `for`'s site of the iteration effect `e` threads, as a
 capability. -/
 def threadCap (sp : Span) (e w W : String) : Cap :=
-  ⟨e, w, "", ⟨"", e, ⟨"", sp⟩, .unit sp, [], sp⟩, some W, false⟩
+  ⟨e, w, "", ⟨"", e, ⟨"", sp⟩, .unit sp, [], sp, false, false⟩, some W, false⟩
 
 /-- The sites `ss` and those of `extra` not among them, by static name. -/
 def addSites (ss extra : List Site) : List Site :=
@@ -1018,7 +1063,7 @@ def blkCaps (blks : List Blk) : List Cap := blks.foldl (fun acc b => addCaps acc
 answering handlers whose capabilities the block uses. -/
 def blockKeys (bs : List Blk) : List String :=
   bs.map fun b => s!"b{b.j}" ++ String.join (b.ss.map fun s => s!"n{s.n}") ++
-    String.join ((b.caps.filter (·.thr.isNone)).map fun c => c.h.name)
+    String.join ((b.caps.filter (·.thr.isNone)).map fun c => c.h.key)
 
 /-- The sites, as the reports name them. -/
 def sitesText (ss : List Site) : String :=
@@ -1189,7 +1234,8 @@ the capabilities and the original parameter `p`. -/
 def takeCaps (sp : Span) (cs : List Cap) (f : FnParts) (body : Comp) : EM FnParts := do
   let pp ← fresh "fx_pp"
   let body ← unpack sp cs f.p.name pp body
-  let lives := (cs.filter (·.thr.isNone)).map fun c => ((⟨c.life, sp⟩ : Ident), Life.top sp)
+  let lives := (cs.filter (fun c => c.thr.isNone && !c.h.cell)).map fun c =>
+    ((⟨c.life, sp⟩ : Ident), Life.top sp)
   pure { f with lives := lives ++ f.lives, P := capsTy sp cs f.P, T := capsTy sp cs f.T,
                 p := ⟨pp, sp⟩, body }
 
@@ -1467,6 +1513,26 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
         else throw ⟨ksp, s!"no handler `{h}` is declared before this `with`"⟩
     | .app sp (.app sp₂ (.sugar ksp k'@(.borrow ..)) P) (.thunkv tsp (.lam lsp b A M)) => do
       let (bsP, P') ← goV k cx cs P
+      -- The capabilities a task spawned in the block is given are lent for the block, which
+      -- bounds its tasks; they go with the task and are not handed back (SPEC §34).
+      let given₀ := cx.givenC fuel M
+      let given := given₀.foldl (fun acc c => if acc.any (·.var == c.var) then acc else acc ++ [c]) []
+      if let some c := given.find? fun c => (given₀.filter (·.var == c.var)).length > 1 then
+        throw ⟨ksp, s!"two tasks spawned in this block are given the capability of `{c.eff}`: a " ++
+          "capability is lent to one task at a time, which holds it until it ends (SPEC §34 *Open*)"⟩
+      if !given.isEmpty then
+        let mut lent : List Cap := []
+        for c in given do
+          lent := lent ++ [{ c with life := ← fresh "fx_gl", h := { c.h with cell := false } }]
+        let cx' : Cx := { cx with caps := cx.caps.map fun c => (lent.find? (·.var == c.var)).getD c }
+        let csM := (cx'.needC M).filter fun c => !lent.any (·.var == c.var)
+        report ksp "lowering" (s!"borrow block: the tasks spawned in it are given the capabilities of " ++
+          ", ".intercalate (lent.map fun c => s!"`{c.eff}`") ++ ", lent for the block")
+        let M' ← trC k cx' csM true M
+        let blk := Val.app sp (.app sp₂ (.sugar ksp k') P') (.thunkv tsp (.lam lsp b A M'))
+        let (bsH, hv) ← reborrowed k sp ksp blk lent
+        let (bsB, V) ← blockResult k cx sp hv csM
+        return (bsP ++ bsH ++ bsB, V)
       let csM := cx.needC M
       let ctl := cx.ctlC M
       if csM.isEmpty && !ctl then
@@ -1624,7 +1690,7 @@ def selfCall : Nat → Cx → List Cap → Span → RSelf → String → Nat →
         if s.n != n then throw (through e)
     for c in rs.env do
       if let some c' := cx.capOf c.eff then
-        if c'.h.name != c.h.name || c'.var != c.var then throw (through c.eff)
+        if c'.h.key != c.h.key || c'.var != c.var then throw (through c.eff)
     noLend sp s!"`{x}`" W
     let (b, W') ← goArgs k cx cs W
     let t ← fresh "fx_b"
@@ -1716,10 +1782,31 @@ def opCall : Nat → Cx → List Cap → Span → String → OpSig → Val → E
     let (b, W') ← goV k cx cs W
     let t ← fresh "fx_b"
     let r ← fresh "fx_v"
+    if c.h.cell then
+      -- The capability is the cell: the operation lends it to the clause (SPEC §34).
+      let l ← fresh "fx_ol"
+      let m ← fresh "fx_om"
+      let q ← fresh "fx_oq"
+      let m₂ ← fresh "fx_om"
+      let call := Val.app sp (.var sp (clauseName c.h.name x)) (.pair sp (.var sp m) W')
+      report sp "call" (s!"{x} ({o.eff}) → `{clauseName c.h.name x}`, on the cell `{c.var}` " ++
+        "lent to it")
+      let lc : Cap := { c with life := l, h := { c.h with cell := false } }
+      -- The clause's answer is ascribed unless it names the operation's lifetime parameters,
+      -- which the call instantiates.
+      let ann := if o.decl.lives.isEmpty then some (capsTy sp [lc] o.decl.res) else none
+      let inner : Comp := .bind sp ⟨q, sp⟩ ann (.ret sp call)
+        (.letPair sp ⟨m₂, sp⟩ ⟨r, sp⟩ (.var sp q) (.ret sp (.var sp r))) false
+      let blk : Val := .app sp (.app sp (.sugar sp (.borrow .mut l)) (.var sp c.var))
+        (.thunkv sp (.lam sp ⟨m, sp⟩ (holeTy sp) inner))
+      let bind : Bind := fun N => pure (.bind sp ⟨t, sp⟩ none (.ret sp blk)
+        (.letPair sp ⟨c.var, sp⟩ ⟨r, sp⟩ (.var sp t) N) false)
+      return (b ++ [bind], .var sp r)
     let call := Val.app sp (.var sp (clauseName c.h.name x)) (.pair sp (.var sp c.var) W')
     report sp "call" s!"{x} ({o.eff}) → `{clauseName c.h.name x}`, on the state of `{c.h.name}`"
     let bind : Bind := fun N => do
-      pure (.bind sp ⟨t, sp⟩ (some (capsTy sp [c] o.decl.res)) (.ret sp call)
+      pure (.bind sp ⟨t, sp⟩ (if o.decl.lives.isEmpty then some (capsTy sp [c] o.decl.res) else none)
+        (.ret sp call)
         (← unpack sp [c] r t N) false)
     pure (b ++ [bind], .var sp r)
 
@@ -1945,15 +2032,31 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
         "outside it, or lends a place declared outside it: a control handler's body may be " ++
         "abandoned, and does not hand them back; bind what the block answers instead"⟩
     let some eff := cx.env.eff? e | throw ⟨ksp, s!"internal error: the effect `{e}`"⟩
+    -- A clause that takes its continuation out of a box receives it boxed (BOXED-κ, SPEC §28):
+    -- it keeps the continuation in what it answers, a stored task.
+    let boxK := eff.ops.any fun o => !o.abortive && ch.clauses.any fun c =>
+      c.name.name == o.name.name && !c.params.isEmpty && unboxesC c.params.getLast!.name fuel c.body
     -- The capabilities the body uses are reborrowed for it, each at a lifetime of its own, so that
-    -- they come back when the body is abandoned.
+    -- they come back when the body is abandoned. A body whose continuation the clauses keep boxed
+    -- at the handler's lifetime (a task of `spawn_in`) outlives the `with`: it is given the
+    -- capabilities it uses, which go with the task (SPEC §34).
+    let given := boxK && !ch.lps.isEmpty
     let mut csM : List Cap := []
     for c in cx.needC M do
       if c.thr.isSome then
         throw ⟨ksp, s!"the body of `with {ch.name.name}` performs `{c.eff}` of an enclosing `for`, " ++
           "which threads its variables through the operation: a control handler's body may be " ++
           "abandoned, and does not hand them back; not provided"⟩
-      csM := csM ++ [{ c with life := ← fresh "fx_rl" }]
+      if given && c.h.cell then
+        throw ⟨ksp, s!"the task spawned here is given the capability of `{c.eff}`, which it holds " ++
+          "across its suspensions: spawn it inside a borrow block, which lends the capability for " ++
+          "the tasks it bounds (SPEC §34)"⟩
+      if given then
+        report ksp "lowering" (s!"with {ch.name.name}: its body is given the capability of `{c.eff}`, " ++
+          "which goes with the task it answers")
+      else
+        -- A cell is lent for the body: the body has the borrow (SPEC §34).
+        csM := csM ++ [{ c with life := ← fresh "fx_rl", h := { c.h with cell := false } }]
     -- A computation parameter's argument takes its capabilities at the copy's lifetimes: one
     -- called in a body that is lent them anew cannot be given them (SPEC §33 *Open*).
     for (x, _, bcs) in cx.cbs do
@@ -2000,10 +2103,6 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
         s!"`with {ch.name.name}[{", ".intercalate tps}](…)`"⟩
     let site : Site := { eff := e, n, args := effArgs, sp := ksp, what := s!"`with {ch.name.name}`" }
     let ents := cx.env.siteOps site
-    -- A clause that takes its continuation out of a box receives it boxed (BOXED-κ, SPEC §28):
-    -- it keeps the continuation in what it answers, a stored task.
-    let boxK := eff.ops.any fun o => !o.abortive && ch.clauses.any fun c =>
-      c.name.name == o.name.name && !c.params.isEmpty && unboxesC c.params.getLast!.name fuel c.body
     report ksp "lowering" (s!"with {ch.name.name} ({e}): a handler, the static name {n}; " ++
       ", ".intercalate (((cx.env.eff? e).map (·.ops)).getD [] |>.map fun o =>
         s!"{o.name.name} {if o.abortive then "abortive: a branch per call (final ctl)"
@@ -2342,7 +2441,7 @@ def copyFor : Nat → Cx → Span → String → FSig → List Blk → EM String
         let some c := cx.capOf i.eff
           | throw ⟨sp, s!"`{x}` performs `{i.eff}`, but no handler of `{i.eff}` is in scope here"⟩
         hs := hs ++ [c.h]
-        keys := keys ++ [c.h.name]
+        keys := keys ++ [c.h.key]
       else
         let s ← (cx.serve sp s!"`{x}`" i : Except Error Site)
         ss := ss ++ [s]
@@ -2687,8 +2786,10 @@ end
 /-! ### Answering handlers -/
 
 /-- The clause of the answering handler `h` for the operation `o`:
-`fn h__op<'l>(c: mut 'l S, x: A, …) -> mut 'l S * B`, whose body runs the clause on the state by
-`modify` (`withswap`) and hands the borrow back. -/
+`fn h__op<'l, 'b, …>(c: mut 'l S, x: A, …) -> mut 'l S * B`, `'b, …` the operation's lifetime
+parameters, whose body runs the clause on the state by `modify` (`withswap`) and hands the borrow
+back; or, for a handler whose state is lent (SPEC §34), runs the clause on the borrow itself and
+hands back the borrow it ends with. -/
 def clauseDef (env : Env) (h : HSig) (o : OpDecl) (c : Clause) : EM Decl := do
   let sp := c.name.span
   unless c.params.length == o.params.length do
@@ -2716,14 +2817,18 @@ def clauseDef (env : Env) (h : HSig) (o : OpDecl) (c : Clause) : EM Decl := do
     (.thunkv sp (.lam sp h.st (.name sp "_") body))
   let b ← fresh "fx_b"
   let r ← fresh "fx_r"
-  let inner : Comp := .bind sp ⟨b, sp⟩ none (.ret sp modifyV)
-    (.letPair sp ⟨cv, sp⟩ ⟨r, sp⟩ (.var sp b) (.ret sp (.pair sp (.var sp cv) (.var sp r)))) false
+  -- A lent state is the capability itself: the clause runs with the state's name bound to the
+  -- borrow, and hands back the borrow it ends with (SPEC §34). Otherwise the clause runs on the
+  -- state's value, swapped out of the lent cell (`modify`).
+  let inner : Comp := if h.lent then .bind sp h.st none (.ret sp (.var sp cv)) body false else
+    .bind sp ⟨b, sp⟩ none (.ret sp modifyV)
+      (.letPair sp ⟨cv, sp⟩ ⟨r, sp⟩ (.var sp b) (.ret sp (.pair sp (.var sp cv) (.var sp r)))) false
   let p ← fresh "fx_p"
   let inner ← bindParams sp p c.params inner
   let pp ← fresh "fx_pp"
   let cap : Cap := ⟨h.eff, cv, l, h, none, false⟩
   let P := tupleTy sp (o.params.map (·.2))
-  let f : FnParts := ⟨true, [(⟨l, sp⟩, .top sp)], capsTy sp [cap] P, capsTy sp [cap] o.res, ⟨pp, sp⟩,
+  let f : FnParts := ⟨true, (⟨l, sp⟩, .top sp) :: o.lives, capsTy sp [cap] P, capsTy sp [cap] o.res, ⟨pp, sp⟩,
     .letPair sp ⟨cv, sp⟩ ⟨p, sp⟩ (.var sp pp) inner⟩
   let (A, V) := f.build sp
   pure (.def_ sp ⟨clauseName h.name c.name.name, sp⟩ [] A V .none)
@@ -2984,19 +3089,51 @@ def resolvePipes (ds : List Decl) : EM (List Decl) := do
   ds.mapM fun
     | .def_ sp n ps A V mk => do pure (.def_ sp n ps A (← pipesV pe fuel V) mk)
     | .main sp C M => do pure (.main sp C (← pipesC pe fuel M))
-    | .handler sp n st S e cs => do pure (.handler sp n st S e (← cs.mapM cl))
+    | .handler sp n st S e cs l => do pure (.handler sp n st S e (← cs.mapM cl) l)
     | .chandler sp h => do
       let (rx, rA, rM) := h.ret
       pure (.chandler sp { h with ret := (rx, rA, ← pipesC pe fuel rM), clauses := ← h.clauses.mapM cl })
     | d => pure d
+
+/-! ### The platform  `[spec §34]` -/
+
+/-- The system interface's effects, in the order `main`'s handlers nest (the first outermost):
+each with its capability, `main`'s extern, and the platform's handler that serves it on the
+capability's cell. -/
+def platformEffects : List (String × String × String) :=
+  [("Stdin", "stdin", "wasi_stdin"), ("Stdout", "stdout", "wasi_stdout"),
+   ("Stderr", "stderr", "wasi_stderr"), ("Clock", "clock", "wasi_clock"),
+   ("Args", "args", "wasi_args")]
+
+/-- The capabilities of the system interface, in `main`'s order. -/
+def platformCaps : List String := platformEffects.map (·.2.1)
+
+/-- `main`'s platform capabilities (SPEC §34): each effect of the system interface its body
+performs, served by the platform's handler on the capability's cell, which `main` holds and
+threads by name; each operation lends it to the clause. A body that names a capability as a value
+and performs its effect is rejected: the capability is the effect's. -/
+def platformMain (env : Env) (sp : Span) (M : Comp) : EM (List Cap) := do
+  let row := rowC env fuel M
+  let mut caps : List Cap := []
+  for (e, cap, h) in platformEffects do
+    unless row.any (·.eff == e) do continue
+    let some hs := env.handler? h | continue
+    unless hs.eff == e && hs.lent do continue
+    if (M.lentNames true).contains cap then
+      throw ⟨sp, s!"`main` uses `{cap}` as a value and performs `{e}`, which the platform serves " ++
+        s!"on `{cap}`: use one or the other (SPEC §34)"⟩
+    caps := caps ++ [⟨e, cap, "", { hs with cell := true }, none, false⟩]
+    report sp "lowering" (s!"main: `{e}` is served by the platform's `{h}` on the cell `{cap}`, " ++
+      "which each operation lends")
+  pure caps
 
 /-- The program with its effects elaborated, and the reports for `bcc check`: the effect and
 handler declarations are removed, each answering handler's clauses become functions, each
 function with a row is replaced by its copies for what serves it where it is called, each `with`
 of an answering handler becomes a borrow block, and each of a control handler a handler site.
 `[spec §18, §19]` -/
-def elaborate (ds : List Decl) (lib : List String := []) :
-    Except Error (List Decl × List (Span × String) × List Nat) := do
+def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []) :
+    Except Error (List Decl × List (Span × String) × List Nat × List String) := do
   -- `|>`, before the rest (SPEC §33).
   let ds ← match (resolvePipes ds).run {} with
     | .ok (ds, _) => pure ds
@@ -3010,12 +3147,20 @@ def elaborate (ds : List Decl) (lib : List String := []) :
   let groups := recGroupsOf (ds.filterMap fun
     | .def_ _ n _ _ V _ => if member n.name V then some (n.name, V) else none
     | _ => none)
-  if !hasEffects ds && groups.isEmpty then return (ds, [], [])
+  if !hasEffects ds && groups.isEmpty then return (ds, [], [], [])
   let names := ds.filterMap Decl.defName
   let go : EM (List Decl) := do
     let mut env : Env := { lib }
     let mut out : Array Decl := #[]
+    -- The declarations `hide` holds (the system interface's, the platform's and the I/O
+    -- library's, SPEC §34) are not reported, and leave the reports of what follows as they were.
+    let mut restore : Option Bool := none
     for d in ds do
+      if let some q := restore then modify fun s => { s with quiet := q }
+      restore := none
+      if hide.contains d then
+        restore := some (← get).quiet
+        modify fun s => { s with quiet := true }
       match d with
       | .effect sp e tps ops =>
         if (env.eff? e.name).isSome then throw ⟨e.span, s!"the effect `{e.name}` is declared twice"⟩
@@ -3038,13 +3183,13 @@ def elaborate (ds : List Decl) (lib : List String := []) :
             | .fn => ""
             | .ctl q => s!" (ctl, {match q with | .lin => "linear" | .aff => "affine" | .unr => "unrestricted"}{
                 if o.abortive then ", abortive" else ""})"}"))
-      | .handler sp h st S e cs =>
+      | .handler sp h st S e cs lent =>
         let some eff := env.eff? e.name
           | throw ⟨e.span, s!"no effect `{e.name}` is declared before this handler"⟩
         unless eff.answering do
           throw ⟨e.span, s!"`{e.name}` has control operations: its handler is written " ++
             s!"`handler {h.name}[…](…) for {e.name}[…] -> R \{ return(x: A) -> …; op(…) -> … }`"⟩
-        let hs : HSig := ⟨h.name, e.name, st, S, cs, sp⟩
+        let hs : HSig := ⟨h.name, e.name, st, S, cs, sp, lent, false⟩
         for o in eff.ops do
           unless cs.any (·.name.name == o.name.name) do
             throw ⟨sp, s!"the handler `{h.name}` has no clause for `{o.name.name}`"⟩
@@ -3054,8 +3199,9 @@ def elaborate (ds : List Decl) (lib : List String := []) :
           out := out.push (← clauseDef env hs o c)
         env := { env with handlers := env.handlers ++ [hs] }
         report sp "lowering" (s!"handler {h.name} ({e.name}): call — each clause resumes once, in " ++
-          "tail position (fun): a direct call on the lent state (withswap), with no allocation and " ++
-          "no dispatch")
+          "tail position (fun): a direct call on the lent " ++
+          (if lent then "capability, its state lent to the clause" else "state (withswap)") ++
+          ", with no allocation and no dispatch")
       | .chandler _ ch =>
         let some eff := env.eff? ch.eff.name
           | throw ⟨ch.eff.span, s!"no effect `{ch.eff.name}` is declared before this handler"⟩
@@ -3150,13 +3296,15 @@ def elaborate (ds : List Decl) (lib : List String := []) :
       | .main sp C M =>
         modify fun s => { s with quiet := false }
         let before := (← get).made.size
-        let M' ← trC fuel { env, caps := [] } [] false M
+        let pcs ← platformMain env sp M
+        modify fun s => { s with platform := pcs.map (·.var) }
+        let M' ← trC fuel { env, caps := pcs } [] false M
         out := out ++ ((← get).made.extract before).map (·.2)
         out := out.push (.main sp C M')
       | d => out := out.push d
     pure out.toList
   match go.run {} with
-  | .ok (ds, st) => pure (ds, st.reports.toList, st.perTurn)
+  | .ok (ds, st) => pure (ds, st.reports.toList, st.perTurn, st.platform)
   | .error e => throw e
 
 end Frontend.Elab.Effects

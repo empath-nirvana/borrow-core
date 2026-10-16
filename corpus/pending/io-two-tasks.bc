@@ -1,0 +1,29 @@
+-- pending: concurrent writers (SPEC §34 *Open*)
+-- now: 22:11: two tasks spawned in this block are given the capability of `Stdout`: a capability is lent to one task at a time, which holds it until it ends (SPEC §34 *Open*)
+-- Two tasks that both write to standard output, their lines interleaved by the scheduler.
+--
+-- Blocked by: a capability is a `mut` borrow, lent to one task, which holds it across its
+-- `await`s until it ends (`corpus/io-task.bc`). Two pending tasks cannot both hold it. The
+-- options (SPEC §34 *Open*): thread the capability through `await`, so that the scheduler holds
+-- it between turns and gives it to the task it resumes; serve a task's output at the scheduler (a
+-- port, decision 57); or a shared output capability, which needs interior mutability.
+--
+-- Once it lands: `1a2a1b2b1c2c` and a newline, then `[3, 3]`.
+
+include async
+include io
+
+fn worker(id: i32, n: i32) -> i32 with Async, Stdout =
+  for i in 0..n { print_dec(id); print_byte(to_u8(97 + i)); await() };
+  n
+
+main -> List[i32] =
+  let d = alloc(());
+  let v = borrow mut d { 'd, e ->
+    let q = queue_in[i32]();
+    let q = push_in(q, with spawn_in { worker(1, 3) });
+    let q = push_in(q, with spawn_in { worker(2, 3) });
+    with on_exhausted(!{ u -> nil() }) { run_in(q, 5) } };
+  let _ = free(d);
+  print_byte(b'\n');
+  v

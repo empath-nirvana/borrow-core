@@ -1,0 +1,11 @@
+row 16:1: log: Stdout
+row 18:1: greet: Stdout
+lowering 16:1: copy `log__wasi_stdout_cell`: `log` for wasi_stdout
+lowering 18:1: copy `greet__wasi_stdout_cell`: `greet` for wasi_stdout
+lowering 20:1: main: `Stdout` is served by the platform's `wasi_stdout` on the cell `stdout`, which each operation lends
+call 16:37: print_byte (Stdout) → `wasi_stdout__print_byte`, on the cell `fx_c_stdout` lent to it
+call 18:33: log → `log__wasi_stdout_cell`, passing the capabilities
+call 18:43: log → `log__wasi_stdout_cell`, passing the capabilities
+call 18:54: log → `log__wasi_stdout_cell`, passing the capabilities
+call 20:15: greet → `greet__wasi_stdout_cell`, passing the capabilities
+call 20:25: greet → `greet__wasi_stdout_cell`, passing the capabilities

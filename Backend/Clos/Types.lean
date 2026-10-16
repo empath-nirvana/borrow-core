@@ -320,6 +320,14 @@ def primTy : Op → List Var → TM Nat
       let l ← newLoc (← int32)
       unify (← tyVar p) (← newNode (.pair l (← newNode (.int .w8))))
       pure l
+  | .io .clockNow, [m] => do
+      let l ← newLoc (← int32)
+      unify (← tyVar m) l
+      newNode (.pair l (← int32))
+  | .io .clockSleep, [p] => do
+      let l ← newLoc (← int32)
+      unify (← tyVar p) (← newNode (.pair l (← int32)))
+      pure l
   | .io .writeAll, [p] => do
       let l ← newLoc (← int32)
       let f ← newNode (.pair (← newLoc (← newNode (.int .w8))) (← int32))

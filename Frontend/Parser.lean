@@ -41,7 +41,7 @@ inductive RTy where
   | bang (sp : Span) (A : RTy)
   | unk (sp : Span)
   | int (sp : Span) (w : Width)
-  | handle (sp : Span) (out : Bool)
+  | handle (sp : Span) (k : HostKind)
   | mu (sp : Span) (X : Ident) (A : RTy)
   | name (sp : Span) (n : String)
   /-- `A => B`. -/
@@ -494,8 +494,12 @@ def rtyAtom : Nat → P RTy
     | .kw "i32" => discard bump; pure (.int t.span .w32)
     | .kw "i64" => discard bump; pure (.int t.span .w64)
     | .kw "u8" => discard bump; pure (.int t.span .w8)
-    | .kw "input" => discard bump; pure (.handle t.span false)
-    | .kw "output" => discard bump; pure (.handle t.span true)
+    | .kw "input" => discard bump; pure (.handle t.span .input)
+    | .kw "output" => discard bump; pure (.handle t.span .output)
+    -- `clock` and `args`, the clock's and the arguments' resources (SPEC §34): names, so that
+    -- `clock` and `args` are also variables'.
+    | .ident "clock" => discard bump; pure (.handle t.span .clock)
+    | .ident "args" => discard bump; pure (.handle t.span .args)
     | .kw "top" => discard bump; pure (.top t.span)
     -- `bool` is `1 + 1`, `inr ()` for true (the prelude, typed elaboration §5.4).
     | .ident "bool" => discard bump; pure (.sum t.span (.unit t.span) (.unit t.span))
@@ -1951,11 +1955,15 @@ def decl (n : Nat) : P Decl := do
           | .ident "ctl" => do discard bump; pure (OpKind.ctl q)
           | _ => expected "`fn` or `ctl` (an operation)"
       let o ← ident "an operation name"
+      -- `fn op<'b, …>(…)`: an answering operation's lifetime parameters (SPEC §34).
+      let lps ← lifeParams
+      unless lps.isEmpty || kind == OpKind.fn do
+        failAt o.span s!"`{o.name}`: only an answering operation (`fn`) takes lifetime parameters"
       expectSym "("
       let ps ← if ← isSym ")" then pure [] else params n
       expectSym ")"
       let B ← if ← isSym "->" then do discard bump; vty n else pure (VTy.unit o.span)
-      ops := ops.push ⟨o, ps, B, kind⟩
+      ops := ops.push ⟨o, ps, B, kind, lps⟩
       if ← isSym ";" then discard bump
     expectSym "}"
     pure (.effect (← spanFrom st) x tps ops.toList)
@@ -1978,10 +1986,16 @@ def decl (n : Nat) : P Decl := do
     let hlps ← lifeParams
     let mut ps : Array (Ident × VTy) := #[]
     let mut mutPs : List String := []
+    let mut lent := false
     if ← isSym "(" then
       discard bump
       for _ in [0:n] do
         if ← isSym ")" then break
+        -- `&mut s: S`: an answering handler whose clauses are given the state lent (SPEC §34).
+        if ← isSym "&" then
+          discard bump
+          unless ← isKw "mut" do expected "`mut` after `&` (a handler's lent state, `&mut s: S`)"
+          lent := true
         if ← isKw "mut" then
           discard bump
           let x ← ident "a parameter name"
@@ -2044,15 +2058,17 @@ def decl (n : Nat) : P Decl := do
     let sp ← spanFrom st
     match sig with
     | some (A, R) =>
+      if lent then failAt h.span s!"`{h.name}`: only an answering handler's state is lent (`&mut s: S`)"
       let some (x, M) := ret | failAt h.span s!"the control handler `{h.name}` has no return clause, `return(x) = M`"
       pure (.chandler sp ⟨h, tps, ps.toList, e, As, row, R, (x, A, M), cs.toList, hlps⟩)
     | none =>
       match ps.toList, mutPs, tps, As, row, ret with
       | [(sv, S)], [_], [], [], [], none =>
         unless hlps.isEmpty do failAt h.span s!"`{h.name}`: an answering handler has no lifetime parameters"
-        pure (.handler sp h sv S e cs.toList)
+        pure (.handler sp h sv S e cs.toList lent)
       | _, _, _, _, _, _ => failAt h.span (s!"`{h.name}`: an answering handler is `handler h(mut s: S): E = " ++
-          "{ op(x) = e; … }`, and a control handler names its body's type and its answer, " ++
+          "{ op(x) = e; … }` (or `handler h(&mut s: S): E = …`, its state lent to each clause), " ++
+          "and a control handler names its body's type and its answer, " ++
           "`handler h[…](…): E[…], A -> R = { return(x) = M; op(x, k) = N; … }`")
   | .kw "def" =>
     discard bump

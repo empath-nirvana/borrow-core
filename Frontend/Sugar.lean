@@ -47,7 +47,7 @@ one is adding its name here. The elaboration brings in `io`, `div` and `prelude`
 (`elaborateS`); `include m` brings in any of them. -/
 def libNames : List String :=
   ["io", "div", "prelude", "lend", "adapters", "slice", "buf", "text", "textio", "iters", "fail",
-   "yield", "rec", "aff", "async", "list"]
+   "yield", "rec", "aff", "async", "list", "sys", "wasi"]
 
 /-- The directory of the library: `$BCC_LIB` when it is set; otherwise `lib/` of the checkout
 whose `.lake/build/bin/` holds the running `bcc`; otherwise `lib/` of the working directory. -/
@@ -70,9 +70,21 @@ initialize libSources : List (String × Except String String) ← do
 is no module `m`. -/
 def library (m : String) : Option (Except String String) := libSources.lookup m
 
-def capNames : List String := ["stdin", "stdout", "stderr"]
+/-- The capabilities `main` may be given, in its order: the standard streams (SPEC §11), the clock
+and the arguments (SPEC §34). -/
+def capNames : List String := ["stdin", "stdout", "stderr", "clock", "args"]
 
-def capTy (sp : Span) (c : String) : VTy := .ref sp (.handle sp (c != "stdin"))
+/-- The capabilities a `main` may name as values (SPEC §11 *Sugar*). -/
+def streamNames : List String := ["stdin", "stdout", "stderr"]
+
+/-- The host kind of a capability's cell. -/
+def capKind : String → HostKind
+  | "stdout" | "stderr" => .output
+  | "clock" => .clock
+  | "args" => .args
+  | _ => .input
+
+def capTy (sp : Span) (c : String) : VTy := .ref sp (.handle sp (capKind c))
 
 /-! ### Lending a capability to one call -/
 
@@ -1519,11 +1531,15 @@ but mentions no capability has none: the runtime drives its loop without them (S
 def ambientCaps (p : Program) : List String :=
   if p.decls.any (fun | .extern .. => true | _ => false) then [] else
   match p.decls.findSome? (fun | .main _ _ M => some M | _ => none) with
-  | some M => capNames.filter (mentionsC · M)
+  | some M => streamNames.filter (mentionsC · M)
   | none => []
 
 /-- A capability's type. -/
-def capTyC (c : String) : CVTy := .ref (.opq (if c == "stdin" then .input else .output))
+def capTyC (c : String) : CVTy := .ref (.opq (match capKind c with
+  | .input => .input
+  | .output => .output
+  | .clock => .clock
+  | .args => .args))
 
 /-- `main` with ambient capabilities, elaborated: its new type and body. `c` is the typing
 context of `main`.  `[spec §11, §14]` -/
@@ -1935,7 +1951,8 @@ for it (`Flat.zeroCell`). The standard capabilities `caps` the body lends are ha
 its result, as a borrow block hands back what it lends. A body that names no `'main` is left as it
 is: the borrow is not observable.  `[spec §23]` -/
 def mainLife (sp : Span) (C : CTy) (caps : List String) (M : Comp) : Except Error Comp := do
-  if !M.mentionsLife "main" then return M
+  -- A body that binds `'main` itself is one elaborated already (`run_io`'s wrapper holds it).
+  if !M.mentionsLife "main" || M.names "io_main" then return M
   let .ret _ B := C
     | throw ⟨sp, "`main` uses its lifetime `'main`, so its type is written `F A` or `-> A`"⟩
   let x : Ident := ⟨"main", sp⟩
@@ -4389,7 +4406,7 @@ def surfDecl : Nat → Decl → DM Decl
     let c₁ := c₀.pushLife "main" top
     let some v := c₁.E.lenv.lookup "main" | throw ⟨sp, "internal error: main's lifetime"⟩
     let M' ← surfC n (c₁.push "io_mainb" (some (.mut (.var v) .unit))) exp M
-    let M' ← mainLife sp C (["stdin", "stdout", "stderr"].filter (M.lentNames true).contains) M'
+    let M' ← mainLife sp C (capNames.filter (M.lentNames true).contains) M'
     modify fun st => { st with caps := [] }
     pure (.main sp C M')
   | _, d => pure d
@@ -4960,8 +4977,13 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let p₀ := p
   let mayIO := !(ambientCaps p₀).isEmpty
   -- `include m`: the module's declarations, in place (at most once each); a module's own
-  -- `include`s come in first.
-  let (decls₀, incl) ← expandIncludes libNames.length p.decls ([], [])
+  -- `include`s come in first. A `main` that uses the streams ambiently gets the I/O library first,
+  -- as if it were included: its helpers are written over the platform's handlers, so the effects
+  -- are elaborated with the program (SPEC §34).
+  let ioFirst := mayIO && !p.decls.any (fun | .include _ m => m.name == "io" | _ => false)
+  let (ioDecls, incl₀) ← (if ioFirst then expandIncludes libNames.length
+      [Decl.include Span.none ⟨"io", Span.none⟩] ([], []) else pure ([], []) : Except Error _)
+  let (decls₀, incl) ← expandIncludes libNames.length p.decls (ioDecls, incl₀)
   -- Hygiene (`Frontend/Elab/Hygiene.lean`): no local is named as a declaration of the program or
   -- of a library the elaboration may bring in, and a control handler's parameters are fresh.
   -- A library the elaboration brings in by itself is read only when it may: the I/O library
@@ -4981,9 +5003,16 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- Effects and handlers (SPEC §18), before the rest of the sugar: the clauses become functions,
   -- the functions with a row their copies, and each `with` a borrow block.
   let libFns := (decls₀.filter fun d => !p₀.decls.contains d).filterMap fun
-    | .def_ _ m _ _ _ _ => some m.name
+    | .def_ _ m _ _ _ _ | .effect _ m _ _ | .handler _ m _ _ _ _ _ => some m.name
+    | .chandler _ h => some h.name.name
     | _ => none
-  let (decls, fx, perTurn) ← (Elab.Effects.elaborate decls₀ libFns : Except Error _)
+  -- The I/O library's declarations, with the system interface's and the platform's (SPEC §34):
+  -- not reported, however the program brings them in.
+  let (ioRef, _) ← (if incl.contains "io" then expandIncludes libNames.length
+    [Decl.include Span.none ⟨"io", Span.none⟩] ([], []) else pure ([], []) : Except Error _)
+  let ioRef := ioRef.map hyg
+  let hide := decls₀.filter ioRef.contains
+  let (decls, fx, perTurn, pcaps) ← (Elab.Effects.elaborate decls₀ libFns hide : Except Error _)
   -- Effects, then rows, lowering shapes and calls, each in source order.
   let kindOf (m : String) : Nat := match (m.splitOn " ").head? with
     | some "effect" => 0 | some "row" => 1 | some "lowering" => 2 | _ => 3
@@ -5003,7 +5032,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let divAll ← if mayDiv && !incl.contains "div" then libOf "div" else pure []
   let preludeAll ← if mayPrelude then libOf "prelude" else pure []
   let typing := preludeAll ++ ioAll ++ divAll
-  let capDecls := if mayIO then capNames.map fun c =>
+  let capDecls := if mayIO || !pcaps.isEmpty then capNames.map fun c =>
       Decl.extern Span.none ⟨c, Span.none⟩ (capTy Span.none c) else []
   -- Bindings whose type only their uses determine (an injection) are annotated first.
   let p := Elab.fillProgram typing capDecls p
@@ -5011,13 +5040,19 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let libNames := (decls₀.filter fun d => !p₀.decls.contains d).filterMap fun
     | .def_ _ m _ _ _ _ => some m.name
     | _ => none
+  -- A library function's copies (SPEC §18, `f__…`) and its handlers' clauses are the library's too.
+  let libNames := libNames ++ (p.decls.filterMap fun
+    | .def_ _ m _ _ _ _ =>
+      if (libNames ++ libFns).any (fun l => m.name.startsWith (l ++ "__")) then some m.name else none
+    | _ => none)
   let (decls, anyDiv) ← elabDivs typing p.decls libNames perTurn
   let rest := decls.filter fun | .main .. => false | _ => true
   let mc := TCx.ofScope (typing ++ rest ++ capDecls) true
   let mainLoops := match decls.findSome? (fun | .main _ C M => some (C, M) | _ => none) with
     | some (C@(.ret _ B), M) => !C.returnsLoop && (loopsAt mc (mc.elabV B) M).isSome
     | _ => false
-  let cs := ambientCaps p₀
+  -- The capabilities `main` names, and those it lends to the platform's handlers (SPEC §34).
+  let cs := capNames.filter fun c => (ambientCaps p₀).contains c || pcaps.contains c
   let ioLib ← if cs.isEmpty || incl.contains "io" then pure [] else
     if mayIO then pure ioAll else libOf "io"
   let exts := cs.map fun c => Decl.extern Span.none ⟨c, Span.none⟩ (capTy Span.none c)
@@ -5034,11 +5069,20 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let divLib ← if !needDiv || incl.contains "div" then pure [] else
     if mayDiv then pure divAll else libOf "div"
   let lib := preludeAll ++ ioLib ++ divLib
+  -- The I/O library brought in for ambient streams is the library's too: the declarations before
+  -- the program's first.
+  let own (d : Decl) : Bool := match d with
+    | .def_ _ n _ _ _ _ => p₀.decls.any fun
+        | .def_ _ m _ _ _ _ | .handler _ m _ _ _ _ _ => n.name == m.name || n.name.startsWith (m.name ++ "__")
+        | .chandler _ h => n.name.startsWith (h.name.name ++ "__")
+        | _ => false
+    | _ => true
+  let ioN := if ioFirst then (rest.takeWhile (!own ·)).length else 0
   let decls ← (lib ++ rest ++ exts ++ mains).mapM fun
     | .def_ sp n ps A V mk => return .def_ sp n ps A (← V.elab false) mk
     | .main sp C M => return .main sp C (← M.elab false)
     | d => pure d
-  pure (⟨decls⟩, lib.length)
+  pure (⟨decls⟩, lib.length + ioN)
 
 /-- The program with its sugar elaborated, the number of library declarations it begins with,
 and the origins of its generated code. -/

@@ -71,6 +71,8 @@ def extImpls (m : Frontend.Check.IOMain) : Except String (List Clos.ExtImpl) :=
     | .writeByte => pure (.io .writeByte)
     | .writeAll => pure (.io .writeAll)
     | .readInto => pure (.io .readInto)
+    | .clockNow => pure (.io .clockNow)
+    | .clockSleep => pure (.io .clockSleep)
     | .harness => throw s!"extern `{x.name}` is the model's harness and is not compiled"
 
 /-- The program reads standard input. -/
@@ -206,28 +208,30 @@ def compileWatTimed (file src : String) : IO (Except String String) := do
 
 /-- The model run of a program with capabilities: `run_io` checked, with every extern's model
 (`Frontend.Check.IORun`). -/
-def ioRunOf (file : String) (k : CheckedProg) (m : Frontend.Check.IOMain) :
-    Except String Frontend.Check.IORun := do
-  let w ← match Frontend.Check.ioWrapper k.prog m with
+def ioRunOf (file : String) (k : CheckedProg) (m : Frontend.Check.IOMain)
+    (args : List UInt8 := []) : Except String Frontend.Check.IORun := do
+  let w ← match Frontend.Check.ioWrapper k.prog m args with
     | .ok w => pure w
     | .error e => throw s!"{file}: {e}"
   match Frontend.Check.ioRunOf w with
   | .ok r => pure r
   | .error e => throw s!"{file}: {e}"
 
-/-- A stage's output on a source file, with `input` as standard input. -/
-def interpStage (stage file src : String) (input : List UInt8) : Except String Output := do
+/-- A stage's output on a source file, with `input` as standard input and `args` as the
+arguments' stream (each argument followed by `0`, SPEC §34). -/
+def interpStage (stage file src : String) (input : List UInt8) (args : List UInt8 := []) :
+    Except String Output := do
   match stage with
   | "source" =>
     let k ← checkedOf file src
     match k.io with
     | none => interpSource runFuel k.main.e
     | some m =>
-      let r ← ioRunOf file k m
+      let r ← ioRunOf file k m args
       if r.loops then interpIOLoop runFuel (r.expr input) else interpIO runFuel (r.expr input)
-  | "clos" => Clos.interp runFuel (← closOf file src) input
-  | "flat" => Flat.interp runFuel (← flatOf file src) input
-  | "flat-counts" => Flat.interp runFuel (← flatOf file src true) input
+  | "clos" => Clos.interp runFuel (← closOf file src) input args
+  | "flat" => Flat.interp runFuel (← flatOf file src) input args
+  | "flat-counts" => Flat.interp runFuel (← flatOf file src true) input args
   | _ => throw s!"unknown stage `{stage}`"
 
 /-! ### The falsifier
@@ -244,13 +248,13 @@ def falsifyOpts : String → Except String Falsify.Opts
   | m => throw s!"unknown check `{m}` (expected `fresh` or `tags`, or `--alloc least`)"
 
 /-- The source stage of a source file, on the falsifier's machine under `o`. -/
-def interpChecked (o : Falsify.Opts) (file src : String) (input : List UInt8) :
-    Except String (Output × String) := do
+def interpChecked (o : Falsify.Opts) (file src : String) (input : List UInt8)
+    (args : List UInt8 := []) : Except String (Output × String) := do
   let k ← checkedOf file src
   match k.io with
   | none => Falsify.interpSource o runFuel k.main.e
   | some m =>
-    let r ← ioRunOf file k m
+    let r ← ioRunOf file k m args
     if r.loops then Falsify.interpIOLoop o runFuel (r.expr input)
     else Falsify.interpIO o runFuel (r.expr input)
 
@@ -302,15 +306,22 @@ def trusted (file src : String) : Except String String := do
   let p ← match Frontend.parseProgram src with
     | .ok p => pure p
     | .error e => throw s!"{file}:{e.render}"
-  let typing ← match Frontend.Check.checkProgram p with
-    | .ok r => pure ((r.main.map typingReport).toList)
+  let r ← match Frontend.Check.checkProgram p with
+    | .ok r => pure r
     | .error e => throw s!"{file}:{e.render}"
+  let typing := (r.main.map typingReport).toList
   let p ← match Frontend.Sugar.elaborate p with
     | .ok (p, _) => pure p
     | .error e => throw s!"{file}:{e.render}"
   let xs ← match Frontend.Check.externs p.decls.toArray with
     | .ok xs => pure xs
     | .error e => throw s!"{file}:{e.render}"
+  -- The externs `main`'s erasure uses: a library's extern that the program never reaches is not
+  -- in its trusted base (SPEC §34). The last declared is at index 0 of `main`'s context.
+  let xs := match r.main with
+    | some c => xs.zipIdx.filterMap fun (x, i) =>
+        if BoCa.Fig16.LogRel.Core.occ (xs.length - 1 - i) c.e then some x else none
+    | none => xs
   let lines := Frontend.Check.trustedReport xs
   let unproved := xs.filter fun (n, _) => match Frontend.Check.findExtern n with
     | some x => x.host.isSome

@@ -1,9 +1,10 @@
--- Text over the standard streams (`docs/strings-slices-design.md` §4.2): writing a string, a view
--- or a literal in one write (`write_all`), and reading the whole input into a string in chunks
--- (`read_into`). It uses the I/O library, so it is for a program whose `main` uses the
--- capabilities (SPEC §11); `include textio` puts it in scope, with `text`.
+-- Text over the standard streams (`docs/strings-slices-design.md` §4.2, SPEC §17, §34): writing a
+-- string, a view or a literal in one write (`write_all`), reading the whole input into a string in
+-- chunks (`read_into`), and the next argument; over the system interface's effects, and over the
+-- streams' cells. `include textio` puts it in scope, with `text` and `io`.
 
 include text
+include io
 
 -- The bytes of a view, in one write.
 fn write_str<'a>(o: Out, t: text 'a) -> Out * 1 = write_bytes(o, t)
@@ -42,3 +43,59 @@ fn read_all(c: In) -> In * string =
     if more { () } else { break }
   };
   (c, s)
+
+-- ### Over the effects  `[spec §34]`
+
+-- The bytes of a literal to standard output, in one write.
+fn print_lit(l: lit) -> 1 = borrow imm l { v -> print_bytes(v) }
+
+-- The bytes of a view to standard output, in one write.
+fn print_str<'a>(t: text 'a) -> 1 = print_bytes(t)
+
+-- The bytes of a string to standard output, in one write, and the string back.
+fn print_string(s: string) -> string = borrow imm s { v -> print_bytes(v) }; s
+
+-- The bytes of a literal to standard error, in one write.
+fn eprint_lit(l: lit) -> 1 = borrow imm l { v -> eprint_bytes(v) }
+
+-- The bytes of a view to standard error, in one write.
+fn eprint_str<'a>(t: text 'a) -> 1 = eprint_bytes(t)
+
+-- One chunk of standard input read into the string's spare capacity, after making room for 4096
+-- bytes: the string, and whether the chunk filled the room (so that the input may have more).
+fn input_chunk(s: string) -> string * bool =
+  let (a, n) = reserve(s, 4096);
+  let (a, room) = array_size[u8](a);
+  let k = borrow mut a { v ->
+    match split_at_mut(v, n) {
+      inl (h, t) -> let (t, k) = input_into(t); k
+    | inr v -> 0
+    } };
+  ((a, n + k), n + k == room)
+
+-- The whole of standard input, into a string, in chunks (`input_into`). It runs until the input
+-- ends.
+fn read_input() -> string =
+  let mut s = string_new(4096);
+  loop {
+    let (s2, more) = input_chunk(s);
+    s = s2;
+    if more { () } else { break }
+  };
+  s
+
+-- The next argument's bytes appended to `s`, and whether there was one. It runs until the
+-- argument ends.
+fn next_arg(s: string) -> string * bool =
+  let mut s = s;
+  let mut got = false;
+  let mut more = true;
+  while more {
+    match arg_byte() {
+      inl b ->
+        got = true;
+        if b == 0 { more = false } else { let (s2, u) = push_byte(s, b); s = s2 }
+    | inr u -> more = false
+    }
+  };
+  (s, got)

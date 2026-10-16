@@ -3,14 +3,15 @@ import Backend.Driver
 /-!
 # Backend — `bcc-counts`
 
-    lake exe bcc-counts <file>
+    lake exe bcc-counts <file> [-- arg…]
     lake exe bcc-counts --sites <file>
     lake exe bcc-counts --kernel [--sites] <name>
 
 Run the program at the flat IR (`Backend/Flat/Interp.lean`) and under `wasmtime`, each built to
 count, and print `allocs N indirect M copies K`: the objects the run allocates, the indirect calls
 it makes, and the copies of a variable at a non-trivial type it makes. The two stages must agree. A program that declares `stdin` reads all of standard input
-first and gives it to both. `scripts/compile-corpus.sh` compares the counts with
+first and gives it to both, and the words after `--` are the program's arguments at both
+(SPEC §34). `scripts/compile-corpus.sh` compares the counts with
 `corpus/counts.expected`. An indirect call is a dispatched one: a closure call whose code a
 `switch` on the closure's tag chooses at run time. A copy is one that the ownership discipline
 inserts where a variable is used by two sequential parts (`Backend/README.md`, Memory discipline)
@@ -96,11 +97,14 @@ def main (argv : List String) : IO UInt32 := do
     match sites file (← IO.FS.readFile file) with
     | .ok s => IO.println s; return 0
     | .error e => IO.eprintln e; return 1
-  let [file] := argv | IO.eprintln "usage: bcc-counts [--sites] <file>"; return 2
+  let (file, args) ← match argv with
+    | [file] => pure (file, [])
+    | file :: "--" :: args => pure (file, args)
+    | _ => do IO.eprintln "usage: bcc-counts [--sites] <file> [-- arg…]"; return 2
   let src ← IO.FS.readFile file
   let input ← if Backend.readsInput file src then readAllIn (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
-  let flat ← match Backend.interpStage "flat-counts" file src input.toList with
+  let flat ← match Backend.interpStage "flat-counts" file src input.toList (Backend.argsBytes args) with
     | .ok o => pure (String.fromUTF8! o.out)
     | .error e => IO.eprintln e; return 1
   let wat ← match Backend.compileWat file src true with
@@ -111,7 +115,8 @@ def main (argv : List String) : IO UInt32 := do
   IO.FS.writeBinFile (dir / "in") input
   let r ← IO.Process.output
     { cmd := "sh",
-      args := #["-c", s!"wasmtime {" ".intercalate Backend.wasmtimeArgs.toList} '{dir / "main.wat"}' < '{dir / "in"}'"] }
+      args := #["-c", s!"wasmtime {" ".intercalate Backend.wasmtimeArgs.toList} '{dir / "main.wat"}'" ++
+        String.join (args.map fun a => " '" ++ a.replace "'" "'\\''" ++ "'") ++ s!" < '{dir / "in"}'"] }
   IO.FS.removeDirAll dir
   match countsOf flat, countsOf r.stdout with
   | some (a, i, c), some (a', i', c') =>

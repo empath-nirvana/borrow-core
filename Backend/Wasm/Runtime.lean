@@ -23,9 +23,18 @@ in `Backend/README.md`:
   short write (`write_all`).
 - `$getv fd p n` reads bytes of the stream `fd` into the `n` bytes at `p` until they are full or
   the stream ends or fails, and answers how many it read (`read_into`).
+- The stream `0xFFFFFFFF` is the program's arguments, each followed by `0`, the program's own name
+  left out (SPEC §34): `$args` reads them once, with `args_sizes_get` and `args_get`, into memory
+  `$reserve` takes from the heap (it is no range, and is never freed), and `$getc` and `$getv`
+  read from there.
+- `$now c` answers the milliseconds of the monotonic clock since the clock's first use, saturating
+  at `2^31 − 1`, and `$sleep c ms` waits at least `ms` milliseconds when `ms > 0`
+  (`poll_oneoff` on one relative clock subscription); `c` is the clock's cell, whose content is
+  the model's and is not read (SPEC §34, `clock_now`, `clock_sleep`).
 
 Layout: bytes `0–31` hold `$putfd`'s and `$putv`'s I/O vector and byte, bytes `32–63` `$getc`'s
-and `$getv`'s; `1024 + 4s` holds the head of the
+and `$getv`'s, bytes `64–71` the clock's reading, `72–79` `$args`'s sizes, `128–175` `$sleep`'s
+subscription, `192–231` its event and count; `1024 + 4s` holds the head of the
 free list of ranges of `s` words, for `s < 1024`; the program's read-only data (its literals'
 bytes) starts at `16384`, and ranges start after it, each preceded by a word holding its size. `$alloc` pops the free list of its size, or else bumps `$heap`, growing
 memory as needed. A freed range of `s < 1024` words is pushed onto its free list (its first
@@ -39,12 +48,24 @@ def runtimeWat : String := "
     (func $fd_write (param i32 i32 i32 i32) (result i32)))
   (import \"wasi_snapshot_preview1\" \"fd_read\"
     (func $fd_read (param i32 i32 i32 i32) (result i32)))
+  (import \"wasi_snapshot_preview1\" \"clock_time_get\"
+    (func $clock_time_get (param i32 i64 i32) (result i32)))
+  (import \"wasi_snapshot_preview1\" \"poll_oneoff\"
+    (func $poll_oneoff (param i32 i32 i32 i32) (result i32)))
+  (import \"wasi_snapshot_preview1\" \"args_sizes_get\"
+    (func $args_sizes_get (param i32 i32) (result i32)))
+  (import \"wasi_snapshot_preview1\" \"args_get\"
+    (func $args_get (param i32 i32) (result i32)))
   (memory (export \"memory\") 1)
   (global $heap (mut i32) (i32.const 16376))
   (global $live (mut i64) (i64.const 0))
   (global $allocs (mut i64) (i64.const 0))
   (global $indirect (mut i64) (i64.const 0))
   (global $copies (mut i64) (i64.const 0))
+  (global $t0 (mut i64) (i64.const -1))
+  (global $argp (mut i32) (i32.const 0))
+  (global $arge (mut i32) (i32.const 0))
+  (global $argsRead (mut i32) (i32.const 0))
 
   (func $alloc (param $n i64) (result i64)
     (local $s i32) (local $head i32) (local $p i32) (local $top i32) (local $have i32)
@@ -99,7 +120,47 @@ def runtimeWat : String := "
     (drop (call $fd_write (i32.wrap_i64 (local.get $fd))
       (i32.const 0) (i32.const 1) (i32.const 24))))
 
+  (func $reserve (param $n i32) (result i32)
+    (local $p i32) (local $top i32) (local $have i32)
+    (local.set $p (i32.add (global.get $heap) (i32.const 8)))
+    (local.set $top (i32.add (local.get $p)
+      (i32.and (i32.add (local.get $n) (i32.const 7)) (i32.const -8))))
+    (local.set $have (i32.shl (memory.size) (i32.const 16)))
+    (if (i32.gt_u (local.get $top) (local.get $have))
+      (then
+        (if (i32.eq
+              (memory.grow (i32.add (i32.shr_u (i32.sub (local.get $top) (local.get $have))
+                                               (i32.const 16))
+                                    (i32.const 1)))
+              (i32.const -1))
+          (then unreachable))))
+    (global.set $heap (i32.sub (local.get $top) (i32.const 8)))
+    (local.get $p))
+
+  (func $args
+    (local $argc i32) (local $size i32) (local $argv i32) (local $buf i32)
+    (if (global.get $argsRead) (then return))
+    (global.set $argsRead (i32.const 1))
+    (if (call $args_sizes_get (i32.const 72) (i32.const 76)) (then return))
+    (local.set $argc (i32.load (i32.const 72)))
+    (local.set $size (i32.load (i32.const 76)))
+    (local.set $argv (call $reserve (i32.shl (i32.add (local.get $argc) (i32.const 1)) (i32.const 2))))
+    (local.set $buf (call $reserve (i32.add (local.get $size) (i32.const 1))))
+    (if (call $args_get (local.get $argv) (local.get $buf)) (then return))
+    (global.set $arge (i32.add (local.get $buf) (local.get $size)))
+    (global.set $argp (global.get $arge))
+    (if (i32.gt_u (local.get $argc) (i32.const 1))
+      (then (global.set $argp (i32.load (i32.add (local.get $argv) (i32.const 4)))))))
+
   (func $getc (param $fd i64) (result i64)
+    (local $b i64)
+    (if (i64.eq (local.get $fd) (i64.const 4294967295))
+      (then
+        (call $args)
+        (if (i32.ge_u (global.get $argp) (global.get $arge)) (then (return (i64.const -1))))
+        (local.set $b (i64.load8_u (global.get $argp)))
+        (global.set $argp (i32.add (global.get $argp) (i32.const 1)))
+        (return (local.get $b))))
     (i32.store (i32.const 32) (i32.const 48))
     (i32.store (i32.const 36) (i32.const 1))
     (i32.store (i32.const 40) (i32.const 0))
@@ -130,6 +191,14 @@ def runtimeWat : String := "
     (local $a i32) (local $k i32) (local $r i32) (local $got i32)
     (local.set $a (i32.wrap_i64 (local.get $p)))
     (local.set $k (i32.wrap_i64 (local.get $n)))
+    (if (i64.eq (local.get $fd) (i64.const 4294967295))
+      (then
+        (call $args)
+        (local.set $r (i32.sub (global.get $arge) (global.get $argp)))
+        (if (i32.lt_u (local.get $k) (local.get $r)) (then (local.set $r (local.get $k))))
+        (memory.copy (local.get $a) (global.get $argp) (local.get $r))
+        (global.set $argp (i32.add (global.get $argp) (local.get $r)))
+        (return (i64.extend_i32_u (local.get $r)))))
     (block $done
       (loop $again
         (br_if $done (i32.eqz (local.get $k)))
@@ -145,6 +214,28 @@ def runtimeWat : String := "
         (local.set $got (i32.add (local.get $got) (local.get $r)))
         (br $again)))
     (i64.extend_i32_u (local.get $got)))
+
+  (func $mono (result i64)
+    (drop (call $clock_time_get (i32.const 1) (i64.const 1000) (i32.const 64)))
+    (i64.load (i32.const 64)))
+
+  (func $now (param $c i64) (result i64)
+    (local $ms i64)
+    (if (i64.eq (global.get $t0) (i64.const -1)) (then (global.set $t0 (call $mono))))
+    (local.set $ms (i64.div_u (i64.sub (call $mono) (global.get $t0)) (i64.const 1000000)))
+    (if (result i64) (i64.gt_u (local.get $ms) (i64.const 2147483647))
+      (then (i64.const 2147483647)) (else (local.get $ms))))
+
+  (func $sleep (param $c i64) (param $ms i64)
+    (local $d i32)
+    (if (i64.eq (global.get $t0) (i64.const -1)) (then (global.set $t0 (call $mono))))
+    (local.set $d (i32.wrap_i64 (local.get $ms)))
+    (if (i32.le_s (local.get $d) (i32.const 0)) (then return))
+    (memory.fill (i32.const 128) (i32.const 0) (i32.const 104))
+    (i64.store (i32.const 152)
+      (i64.mul (i64.extend_i32_u (local.get $d)) (i64.const 1000000)))
+    (i32.store (i32.const 144) (i32.const 1))
+    (drop (call $poll_oneoff (i32.const 128) (i32.const 192) (i32.const 1) (i32.const 224))))
 "
 
 end Backend.Wasm

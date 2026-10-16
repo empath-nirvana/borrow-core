@@ -135,8 +135,10 @@ implicit-drops 9 0 0
 int-arith 0 0 0
 int-ops 0 0 0
 io-aoc 4 0 0
+io-args 7 0 0 # the stdout and args cells, and a string per argument read and one at the end
 io-break 2 0 0
 io-cat 2 0 0
+io-effects 4 0 0 # the stdin, stdout and stderr cells and the input's string; each operation is a direct call of the platform's clause
 io-for-after 2 0 0 # the stdin and stdout cells: the lines are counted in the loop over the bytes, with no list per line
 io-for-assign 1 0 0
 io-for-then 2 0 0
@@ -144,9 +146,12 @@ io-fuel 1 0 0
 io-guess 3 0 0
 io-head 2 0 0
 io-hex 2 0 0
+io-laws 11 0 0 # the stdout cell, and the fake handlers' cells, the collected strings and the views read into
 io-lines 2 0 0
 io-sections 2 0 0
+io-task 29 7 0 # the stdout and scope cells, the scheduler's list nodes; an indirect call per resume of a stored task
 io-upper 2 0 0
+io-upper-effects 2 0 0 # io-upper's: the stdin and stdout cells, each operation a direct call that lends the cell
 io-wc 2 0 0
 iter-close 2 0 0
 iter-mut 1 0 0
@@ -170,6 +175,7 @@ list-generic 27 0 0 # the lists' nodes, one object each; no frame and no closure
 main-lifetime 0 0 0 # main's lifetime and the unit cell `u` are cells of no words: nothing is allocated
 map-reuse 7 0 0
 nats-sum 0 0 0
+needs-stdout 1 0 0 # the stdout cell
 operator-rounds 166 0 24 # the cluster's and the desired state's list nodes, rebuilt per update; the copies are the written `clone`s of the cluster and the spec
 parse-int 3 0 0 # the stdin and stdout cells and the line buffer, reused; literal views read-only data
 parse-recover 246 0 31 # the token list's nodes and the lists rebuilt per statement; the copies are the written `clone(rest)` per statement
@@ -193,6 +199,7 @@ rec-parser 17 0 0 # the token lists and the tokens put back
 rec-tree 254 0 0 # the tree only, two objects per node less the root
 rec-yield 0 0 0
 reconcile-chain 25 0 0 # the journals' list nodes, and the continuations the clock's and the journal's clauses resume before they answer
+reconcile-clock 34 8 0 # the clock cells, the journals' list nodes, and the continuations the clauses resume before they answer; the indirect calls are of `on_clock`'s answer, a function of its state (the clock capability) built by its return clause or by its `pause` clause (SPEC §19, *Handler state*)
 retry-block 2 0 0 # the clock cells
 reverse-bytes 3 0 0
 sched-a 63 18 0

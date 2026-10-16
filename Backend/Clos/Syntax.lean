@@ -23,8 +23,8 @@ open BoCa
 
 abbrev Var := Nat
 
-/-- The standard I/O operations of SPEC §11, the host implementations of the externs
-`read_byte`, `write_byte`, `write_all` and `read_into`. -/
+/-- The standard I/O operations of SPEC §11 and §34, the host implementations of the externs
+`read_byte`, `write_byte`, `write_all`, `read_into`, `clock_now` and `clock_sleep`. -/
 inductive IOOp where
   /-- `read_byte m`: `(m, inl u8[b])` with the next byte of the stream in the cell `m`, or
   `(m, inr ())` at its end. -/
@@ -38,11 +38,17 @@ inductive IOOp where
   /-- `read_into (m, (p, n))`: bytes of the stream in the cell `m` read into the view at `p` until
   it is full or the stream ends; the result is `(m, ((p, n), k))`, `k` the bytes read. -/
   | readInto
+  /-- `clock_now m`: `(m, t)`, `t` the time of the clock in the cell `m` in milliseconds
+  (SPEC §34). -/
+  | clockNow
+  /-- `clock_sleep (m, ms)`: wait at least `max(ms, 0)` milliseconds on the clock in the cell `m`;
+  the result is `m` (SPEC §34). -/
+  | clockSleep
   deriving Repr, DecidableEq
 
 /-- The lifetime parameters of an operation's extern: the `Λ`s before its argument. -/
 def IOOp.lifes : IOOp → Nat
-  | .readByte | .writeByte => 1
+  | .readByte | .writeByte | .clockNow | .clockSleep => 1
   | .writeAll | .readInto => 2
 
 /-- The primitives of `[TR]` §1, §8 and §9, saturated, and the I/O operations of §11. -/

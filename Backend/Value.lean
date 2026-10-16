@@ -59,4 +59,22 @@ object, so a leaked cell also counts the structure it holds. The two counts are 
 def report (v : PV) (live : Nat) : String :=
   v.render ++ "\nlive " ++ toString live ++ "\n"
 
+/-! ### The clock and the arguments at the interpreters  `[spec §34]` -/
+
+/-- The descriptor of the arguments' stream: the content of the `args` cell, which every stage
+reads from the arguments, not from a host stream. -/
+def argsFd : UInt32 := 0xFFFFFFFF
+
+/-- The model's time after a sleep of `ms` milliseconds at time `t`: `t` when `ms ≤ 0`, else
+`t + ms`, saturating at `2^31 − 1` (SPEC §34, `Core/Stdio.lean`'s `clock_sleep`). -/
+def sleptMs (t ms : UInt32) : UInt32 :=
+  if ms.toInt32 ≤ 0 then t
+  else
+    let s := t + ms
+    if s.toInt32 < t.toInt32 then 0x7fffffff else s
+
+/-- The arguments' stream: each argument's bytes followed by `0`. -/
+def argsBytes (args : List String) : List UInt8 :=
+  args.flatMap fun a => a.toUTF8.toList ++ [0]
+
 end Backend

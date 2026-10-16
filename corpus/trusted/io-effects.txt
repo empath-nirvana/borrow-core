@@ -1,0 +1,21 @@
+extern write_byte : !(all 'l0 < top. mut 'l0 output * u8 => mut 'l0 output)
+  contract: model proved (7), writeByte_meets
+  host: WASI fd_write of one byte (libc write(2)); interpreter-checked (2)
+extern write_all : !(all 'l0 < top. all 'l1 < top. mut 'l0 output * array_imm 'l1 u8 => mut 'l0 output)
+  contract: model proved (7), writeAll_meets
+  host: WASI fd_write of the view (libc write(2)); interpreter-checked (2)
+extern read_into : !(all 'l0 < top. all 'l1 < top. mut 'l0 input * array_mut 'l1 u8 => mut 'l0 input * array_mut 'l1 u8 * i32)
+  contract: model proved (7), readInto_meets
+  host: WASI fd_read into the view until it is full or the input ends (libc read(2)); interpreter-checked (2)
+extern stdin : ref input
+  contract: model proved (7), vC_bytes (a cell holding the input)
+  host: a runtime cell holding fd 0; assumed (1)
+extern stdout : ref output
+  contract: model proved (7), vC_outRep (a cell holding (1, nil))
+  host: a runtime cell holding fd 1; assumed (1)
+extern stderr : ref output
+  contract: model proved (7), vC_outRep (a cell holding (2, nil))
+  host: a runtime cell holding fd 2; assumed (1)
+typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)
+unproved boundaries: 6 (write_byte, write_all, read_into, stdin, stdout, stderr)
+always trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, wasmtime

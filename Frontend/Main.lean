@@ -13,12 +13,14 @@ import Backend.FalsifyTests
                                 compile a closed `main` to WebAssembly text (`Backend/`); with
                                 `--timings`, write each stage's time and output size to
                                 standard error
-    lake exe bcc run <file>     compile, and run under `wasmtime`: `main`'s value, then the number
-                                of live objects after it is dropped
+    lake exe bcc run <file> [arg…]
+                                compile, and run under `wasmtime` with the arguments: `main`'s
+                                value, then the number of live objects after it is dropped
     lake exe bcc interp [--stage S] <file>
                                 run `main` in the interpreter of stage `S` (`Backend/`):
                                 `source` (the default), `clos`, `flat`; a program that
-                                declares `stdin` reads all of standard input first
+                                declares `stdin` reads all of standard input first; the words
+                                after `--` are the program's arguments (SPEC §34)
     lake exe bcc interp (--check fresh|tags | --alloc least) [--stats] <file>
                                 the falsifier (`Backend/Falsify.lean`): the source stage with
                                 a never-reuse allocator (`fresh`), with lend tags (`tags`), or
@@ -53,11 +55,11 @@ def readAll (h : IO.FS.Stream) : Nat → ByteArray → IO ByteArray
 
 /-- Write a stage's output on `file` (`Backend.interpStage`): the program's standard output and
 the report, and its standard error. -/
-def interp (stage file : String) : IO UInt32 := do
+def interp (stage file : String) (args : List String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   let input ← if Backend.readsInput file src then readAll (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
-  match Backend.interpStage stage file src input.toList with
+  match Backend.interpStage stage file src input.toList (Backend.argsBytes args) with
   | .ok o =>
     let out ← IO.getStdout
     out.write o.out
@@ -70,11 +72,13 @@ def interp (stage file : String) : IO UInt32 := do
 
 /-- Write the falsifier's output on `file` (`Backend.interpChecked`): as `interp`, and its
 statistics with `stats`. A check that fails is an error. -/
-def interpChecked (mode file : String) (stats : Bool) : IO UInt32 := do
+def interpChecked (mode file : String) (stats : Bool) (args : List String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   let input ← if Backend.readsInput file src then readAll (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
-  let r := do Backend.interpChecked (← Backend.falsifyOpts mode) file src input.toList
+  let r := do
+    Backend.interpChecked (← Backend.falsifyOpts mode) file src input.toList
+      (Backend.argsBytes args)
   match r with
   | .ok (o, st) =>
     let out ← IO.getStdout
@@ -94,6 +98,8 @@ structure InterpArgs where
   check : Option String := none
   stats : Bool := false
   target : String := ""
+  /-- The program's arguments, the words after `--`. -/
+  args : List String := []
 
 def parseInterpArgs : List String → InterpArgs → Option InterpArgs
   | ["--stats"], _ => none
@@ -102,6 +108,7 @@ def parseInterpArgs : List String → InterpArgs → Option InterpArgs
   | "--alloc" :: m :: rest, a => parseInterpArgs rest { a with check := some m }
   | "--stats" :: rest, a => parseInterpArgs rest { a with stats := true }
   | [t], a => if t.startsWith "--" then none else some { a with target := t }
+  | t :: "--" :: rest, a => if t.startsWith "--" then none else some { a with target := t, args := rest }
   | _, _ => none
 
 /-- Print `file` with its I/O sugar elaborated. -/
@@ -158,7 +165,7 @@ def compileTimed (file out : String) : IO UInt32 := do
 
 /-- Compile `file` and run it under `wasmtime` (with tail calls), with this process's standard
 input, output and error. -/
-def run (file : String) : IO UInt32 := do
+def run (file : String) (args : List String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match Backend.compileWat file src with
   | .error e => IO.eprintln e; return 1
@@ -167,7 +174,7 @@ def run (file : String) : IO UInt32 := do
     let out := dir / "main.wat"
     IO.FS.writeFile out wat
     let child ← IO.Process.spawn
-      { cmd := "wasmtime", args := Backend.wasmtimeArgs.push out.toString,
+      { cmd := "wasmtime", args := Backend.wasmtimeArgs.push out.toString ++ args.toArray,
         stdin := .inherit, stdout := .inherit, stderr := .inherit }
     let code ← child.wait
     IO.FS.removeDirAll dir
@@ -232,7 +239,7 @@ def kernel (args : List String) : IO UInt32 := do
       if Backend.FalsifyTests.loopNegatives.contains target && stage == "source" then
         withProg target (kernelReport ∘ Backend.interpLoop Backend.runFuel)
       else withProg target (kernelReport ∘ Backend.interpStageExpr stage)
-    | some { stage, check := some m, stats, target } =>
+    | some { stage, check := some m, stats, target, .. } =>
       if stage != "source" then
         IO.eprintln "bcc kernel interp: a check runs at the source stage only"
         return 2
@@ -269,15 +276,15 @@ def main (argv : List String) : IO UInt32 := do
   | "kernel" :: args => kernel args
   | ["compile", file, "-o", out] => compile file out
   | ["compile", "--timings", file, "-o", out] => compileTimed file out
-  | ["run", file] => run file
+  | "run" :: file :: args => run file args
   | "interp" :: rest =>
     match parseInterpArgs rest {} with
-    | some { stage, check := none, target, .. } => interp stage target
-    | some { stage, check := some m, stats, target } =>
+    | some { stage, check := none, target, args, .. } => interp stage target args
+    | some { stage, check := some m, stats, target, args } =>
       if stage != "source" then
         IO.eprintln "bcc interp: a check runs at the source stage only"
         return 2
-      interpChecked m target stats
+      interpChecked m target stats args
     | _ =>
       IO.eprintln "usage: bcc interp [--stage S | --check fresh|tags | --alloc least] [--stats] <file>"
       return 2

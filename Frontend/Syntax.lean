@@ -78,6 +78,22 @@ def Qual.str : Qual → String
   | .aff => "aff"
   | .unr => "unr"
 
+/-- The host resource kinds the surface names (SPEC §11, §34): `input`, `output`, `clock`,
+`args`. -/
+inductive HostKind where
+  | input
+  | output
+  | clock
+  | args
+  deriving DecidableEq, Repr, Inhabited
+
+/-- The surface name of a host resource kind. -/
+def HostKind.name : HostKind → String
+  | .input => "input"
+  | .output => "output"
+  | .clock => "clock"
+  | .args => "args"
+
 mutual
 /-- Value types (syntax-core §4), with the built-in abbreviations as nodes of their own:
     the checker expands them. -/
@@ -100,8 +116,8 @@ inductive VTy where
   | unk (sp : Span)
   /-- `i32` / `i64`. -/
   | int (sp : Span) (w : Width)
-  /-- `input` / `output` (`out = true`): the host stream types (SPEC §11). -/
-  | handle (sp : Span) (out : Bool)
+  /-- `input`, `output`, `clock`, `args`: the host resource types (SPEC §11, §34). -/
+  | handle (sp : Span) (k : HostKind)
   /-- `mu X. A`. -/
   | mu (sp : Span) (X : Ident) (A : VTy)
   /-- An upper-case name: a `mu`-bound variable, a `type` abbreviation, or a `def`'s type
@@ -534,12 +550,14 @@ inductive OpKind where
   deriving DecidableEq, Repr, Inhabited
 
 /-- An operation of an `effect` declaration: `fn op(x₁: A₁, …) -> B` or `ctl op(…) -> B`
-(SPEC §18, §19). -/
+(SPEC §18, §19). An answering operation may take lifetime parameters, `fn op<'b, …>(…)`, which its
+parameters and its answer may name (SPEC §34). -/
 structure OpDecl where
   name : Ident
   params : List (Ident × VTy)
   res : VTy
   kind : OpKind
+  lives : List (Ident × Life) := []
   deriving DecidableEq, Repr
 
 /-- A clause of a `handler` declaration: `op(x₁, …) -> { S }`, with the handler's state in scope
@@ -588,9 +606,11 @@ inductive Decl where
   /-- `effect E[T, …] { fn op(x: A, …) -> B; ctl op(…) -> B; … }`: an effect, its type
   parameters and its operations (SPEC §18, §19). -/
   | effect (sp : Span) (n : Ident) (tps : List Ident) (ops : List OpDecl)
-  /-- `handler h(s: S) for E { op(x, …) -> { M }; … }`: a handler of `E` whose state is `s : S`
-  (SPEC §18). -/
+  /-- `handler h(mut s: S): E = { op(x, …) = { M }; … }`: a handler of `E` whose state is `s : S`
+  (SPEC §18). With `lent`, written `handler h(&mut s: S): E = …`, each clause is given the state
+  lent, `s : mut 'l S`, which it hands back (SPEC §34). -/
   | handler (sp : Span) (n : Ident) (st : Ident) (S : VTy) (eff : Ident) (clauses : List Clause)
+      (lent : Bool)
   /-- A handler of a control effect (SPEC §19). -/
   | chandler (sp : Span) (h : CHandler)
   deriving DecidableEq, Repr
@@ -804,9 +824,10 @@ def Decl.strip : Decl → Decl
   | .main _ C M => .main .none C.strip M.strip
   | .include _ n => .include .none n.strip
   | .effect _ n tps ops => .effect .none n.strip (tps.map Ident.strip) (ops.map fun o =>
-      ⟨o.name.strip, o.params.map (fun (x, A) => (x.strip, A.strip)), o.res.strip, o.kind⟩)
-  | .handler _ n st S e cs => .handler .none n.strip st.strip S.strip e.strip (cs.map fun c =>
-      ⟨c.name.strip, c.params.map Ident.strip, c.body.strip⟩)
+      ⟨o.name.strip, o.params.map (fun (x, A) => (x.strip, A.strip)), o.res.strip, o.kind,
+        o.lives.map fun (a, b) => (a.strip, b.strip)⟩)
+  | .handler _ n st S e cs l => .handler .none n.strip st.strip S.strip e.strip (cs.map fun c =>
+      ⟨c.name.strip, c.params.map Ident.strip, c.body.strip⟩) l
   | .chandler _ h => .chandler .none
       { name := h.name.strip, tps := h.tps.map Ident.strip,
         params := h.params.map (fun (x, A) => (x.strip, A.strip)), eff := h.eff.strip,

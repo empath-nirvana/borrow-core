@@ -568,6 +568,14 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       match ← vals p with
       | [m, a, k] => return [.putv (.load (.loc m) 0) (.loc a) (.loc k)] ++ (← emit d [.loc m])
       | _ => throw "flat IR: write_all of a non-pair"
+  | .io .clockNow, [m], d => do
+      let m := (← vals m).headD 0
+      let t ← fresh1
+      return [.set t (.now (.loc m))] ++ (← emit d [.loc m, .loc t])
+  | .io .clockSleep, [p], d => do
+      match ← vals p with
+      | [m, ms] => return [.sleep (.loc m) (.loc ms)] ++ (← emit d [.loc m])
+      | _ => throw "flat IR: clock_sleep of a non-pair"
   | .io .readInto, [p], d => do
       let T ← T
       let f := (T.field (← vty p) 1).1

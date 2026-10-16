@@ -1,0 +1,20 @@
+-- Helpers that need standard output without naming it at each call (moved from `pending/`, which
+-- waited on PR #100's `needs`/`provide`): `greet` calls `log` three times, and `main` is given
+-- `stdout` once, by the platform (SPEC §34). The need is the row: `log` and `greet` perform
+-- `Stdout` and say so (`with Stdout`), and only `main` holds the capability, which each of their
+-- copies takes first and hands back first (decision 30: no ambient authority). The `provide`
+-- block of the sketch is the platform's handler around `main`.
+--
+-- Axes: effects (a threaded `mut` capability is linear state, elaborated as effect threading) ×
+-- scope (the capability is the stream's cell, lent to each operation).
+--
+-- Answer: the lines `Hi` and `Hi`, then `i32[6]` (the bytes written, counted by `greet`'s
+-- results).
+
+include io
+
+fn log(b: i32) -> i32 with Stdout = print_byte(to_u8(b)); 1
+
+fn greet() -> i32 with Stdout = log(72) + log(105) + log(10)
+
+main -> i32 = greet() + greet()

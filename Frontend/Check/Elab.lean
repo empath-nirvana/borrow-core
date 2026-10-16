@@ -159,6 +159,8 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .int .w8 => "u8"
   | .opq .input => "input"
   | .opq .output => "output"
+  | .opq .clock => "clock"
+  | .opq .args => "args"
   -- The variable of the `nu` around (`ppC`), which occurs only as `U X`.
   | .tvar n => if n < d then tvName (d - 1 - n) else if n == d then "U X" else s!"?{n}"
   | .mu A => parenIf (p > 0) s!"mu {tvName d}. {ppV nm (d + 1) 0 A}"
@@ -284,7 +286,11 @@ def elabV : Nat → TyEnv → VTy → Except Error CVTy
     | .bang _ A => do pure (.bang (← elabV n E A))
     | .unk _ => pure .unk
     | .int _ w => pure (.int w)
-    | .handle _ o => pure (.opq (if o then .output else .input))
+    | .handle _ k => pure (.opq (match k with
+        | .input => .input
+        | .output => .output
+        | .clock => .clock
+        | .args => .args))
     | .mu sp X A => do
         let B ← elabV n { E with mu := X.name :: E.mu } A
         -- A template's type, elaborated with its type parameters as placeholders to match a call

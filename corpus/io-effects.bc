@@ -1,0 +1,32 @@
+-- Standard I/O as effects (SPEC §34). `main` reads its whole input (`read_input`, over `Stdin`'s
+-- `input_into`), counts its lines and bytes, and writes a report through `report`, a function
+-- given `Stdout` by its row: nothing in its parameters names a stream. A note goes to standard
+-- error (`Stderr`). `main` is the one place the effects are ambient: the platform's handlers
+-- (`lib/wasi.bc`) serve them on the streams' cells, which `main` holds and each operation lends
+-- to its clause, so `bcc check` reports `main: `Stdout` is served by the platform's
+-- `wasi_stdout` on the cell `stdout``, and every operation is a direct call of the extern.
+--
+-- Answer: `lines 3` and `bytes 29` on standard output, `done` on standard error, and
+-- `(i32[3], i32[29])`. A report that wrote to the wrong stream, or a count of the wrong bytes,
+-- changes a line.
+
+include textio
+
+-- The report, a line per count.
+fn report(lines: i32, bytes: i32) -> 1 =
+  print_lit("lines ");
+  print_dec(lines);
+  print_byte(b'\n');
+  print_lit("bytes ");
+  print_dec(bytes);
+  print_byte(b'\n')
+
+main -> i32 * i32 =
+  let s = read_input();
+  let r = borrow imm s { 'a, t ->
+    let (t, u) = array_copy['a, u8] t;
+    (fold_lines(t, !{ (l, n) -> n + 1 }, 0), len(u)) };
+  let (lines, bytes) = r;
+  report(lines, bytes);
+  eprint_lit("done\n");
+  (lines, bytes)

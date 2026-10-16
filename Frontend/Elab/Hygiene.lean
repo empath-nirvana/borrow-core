@@ -163,9 +163,9 @@ where
   go : Decl → HM Decl
     | .def_ sp n ps A V mk => do pure (.def_ sp n ps A (← V.hyg glob []) mk)
     | .main sp C M => do pure (.main sp C (← M.hyg glob []))
-    | .handler sp n st S e cs => do
+    | .handler sp n st S e cs l => do
       let (st', ρ) ← bind glob [] st
-      pure (.handler sp n st' S e (← cs.mapM (Clause.hyg glob ρ)))
+      pure (.handler sp n st' S e (← cs.mapM (Clause.hyg glob ρ)) l)
     | .chandler sp h => do
       let (ps, ρ) ← bindAll glob [] (h.params.map (·.1)) (force := true)
       let (rx, rA, rM) := h.ret

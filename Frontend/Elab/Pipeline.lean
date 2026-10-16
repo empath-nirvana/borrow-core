@@ -92,7 +92,7 @@ def TDecl.name : TDecl → String
     | .main .. => "main"
     | .include _ n => s!"include {n.name}"
     | .effect _ n _ _ => s!"effect {n.name}"
-    | .handler _ n _ _ _ _ => s!"handler {n.name}"
+    | .handler _ n _ _ _ _ _ => s!"handler {n.name}"
     | .chandler _ h => s!"handler {h.name.name}"
 
 /-- What `bcc tir` prints for a declaration with a body: its name, effect, node count, the

@@ -1,0 +1,21 @@
+-- `corpus/io-upper.bc` over the effects (SPEC §34): the same filter, reading with `input_byte`
+-- and writing with `print_byte`, where `io-upper` passes the streams' cells to `getb` and `putb`.
+-- The two cost the same, the zero cost of the platform's handlers: two allocations (the stdin and
+-- stdout cells, which the runtime makes), no dispatched call, no copy. Each operation is a direct
+-- call of the platform's clause, which lends the cell to the extern, as `putb` lends it.
+--
+-- Answer: `io-upper`'s, the input upper-cased.
+
+include io
+
+fn upper(b: u8) -> u8 = if b - 97 < 26 { b - 32 } else { b }
+
+main -> 1 =
+  let mut more = true;
+  while more {
+    match input_byte() {
+      inl b -> print_byte(upper(b))
+    | inr u -> more = false
+    }
+  };
+  ()
