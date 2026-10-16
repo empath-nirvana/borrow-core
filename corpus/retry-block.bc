@@ -14,7 +14,7 @@
 -- the first failure ends the call, and no attempt is retried. `bcc check` says so: the block is
 -- "at the site 1 of `Fail`", the `with` in `with_budget`, and `retry`'s `with` is the site 2.
 -- A `retry` that handles its block's errors needs a function that handles the operations of a
--- computation it is given (SPEC §18 *Open*: functions over computations, `retry`), which is not
+-- computation it is given (SPEC §18 *Open*: functions over computations, `retry`, #161), which is not
 -- provided; nothing rejects this program, which reads as if it retried.
 --
 -- Answer: `((inr i32[503], i32[0]), (inr i32[503], i32[0]))`: both calls fail at their first
