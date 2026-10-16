@@ -1,0 +1,137 @@
+-- LeetCode 15, 3Sum.
+--
+-- Sort, then for each first element (skipping repeats) close two pointers over the rest: a sum too
+-- small moves the left one up, too large the right one down, and a zero sum is a triple, after
+-- which both pointers skip past repeats. The triples are answered in a buffer of tuples, in order.
+--
+-- The sort is the library's `sort`, an insertion sort, quadratic where Rust's `sort_unstable` is `n
+-- log n`. The outer loop is a `while`, not `for i in 0..n`: a counted `for`'s body is one total
+-- step, and the two-pointer `while` inside it loops (SPEC §16 *Open*). A loop or a div call goes
+-- in tail position (SPEC §14), so the call of `pairs` comes last in the outer loop's body, and the
+-- skips past repeats are functions of their own (`skip_up`, `skip_down`); off the spine the call
+-- is reported as a type mismatch against `U (delay …)` (#503). `&a` may stand only at the head of a
+-- `let` (SPEC §11), so `a[lo] == y` is not a `while` condition (#143).
+--
+-- Each line of the input is a case, and its answer is printed on a line of its own. `cases` holds
+-- the input and the offset of the next line; each turn lends the input to read one line
+-- (`case_at`), and the case is solved on what was read, outside the lend. A loop over the lines of
+-- the lent input, `for l in lines(t)`, would hold the borrow across its turns, the spanning lend
+-- (#172, SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161).
+--
+-- Answer on `0015-3sum.in`: each case's triples, `[x,y,z]` separated by spaces or `none`, one case
+-- per line, then `i32[6]`, the number of cases.
+
+include textio
+
+-- `lo` moved up past the elements equal to `y`, short of `hi`.
+fn skip_up(a: array i32, lo: i32, hi: i32, y: i32) -> array i32 * i32 =
+  let mut lo = lo;
+  while lo < hi {
+    let x = at(&a, lo, 0);
+    if x == y { lo = lo + 1 } else { break }
+  };
+  (a, lo)
+
+-- `hi` moved down past the elements equal to `z`, short of `lo`.
+fn skip_down(a: array i32, lo: i32, hi: i32, z: i32) -> array i32 * i32 =
+  let mut hi = hi;
+  while lo < hi {
+    let x = at(&a, hi, 0);
+    if x == z { hi = hi - 1 } else { break }
+  };
+  (a, hi)
+
+-- The triples `(x, y, z)` with `x` the element at `i` and `y`, `z` after it, added to `out`: two
+-- pointers close over the rest of the sorted array.
+fn pairs(a: array i32, n: i32, i: i32, out: buf (i32 * (i32 * i32)))
+    -> array i32 * buf (i32 * (i32 * i32)) =
+  let mut a = a;
+  let mut out = out;
+  let x = at(&a, i, 0);
+  let mut lo = i + 1;
+  let mut hi = n - 1;
+  while lo < hi {
+    let y = at(&a, lo, 0);
+    let z = at(&a, hi, 0);
+    let s = x + y + z;
+    if s < 0 { lo = lo + 1 } else {
+      if 0 < s { hi = hi - 1 } else {
+        let (o, _) = push(out, (x, (y, z)));
+        out = o;
+        let (b, l) = skip_up(a, lo + 1, hi, y);
+        let (b, h) = skip_down(b, l, hi - 1, z);
+        a = b;
+        lo = l;
+        hi = h
+      }
+    }
+  };
+  (a, out)
+
+fn three_sum(a: array i32, n: i32) -> array i32 * buf (i32 * (i32 * i32)) =
+  let mut a = a;
+  let mut out = box buf[i32 * (i32 * i32)](8);
+  let mut i = 0;
+  while i < n - 2 {
+    let x = at(&a, i, 0);
+    let prev = at(&a, i - 1, 0);
+    let k = i;
+    i = i + 1;
+    if k == 0 || prev != x { let (b, o) = pairs(a, n, k, out); a = b; out = o } else { () }
+  };
+  (a, out)
+
+-- The triples, `[x,y,z]` separated by spaces, or `none`.
+fn print_triples(t: buf (i32 * (i32 * i32))) -> buf (i32 * (i32 * i32)) =
+  let (a, n) = t;
+  if n == 0 { print_lit("none") } else { () };
+  for i in 0..n {
+    if 0 < i { print_byte(b' ') } else { () };
+    let (x, (y, z)) = at(&a, i, (0, (0, 0)));
+    print_byte(b'['); print_dec(x); print_byte(b','); print_dec(y); print_byte(b',');
+    print_dec(z); print_byte(b']')
+  };
+  (a, n)
+
+-- The case on the line that starts at `pos`, and where the next line starts; or `inr ()` at the end
+-- of the input.
+fn case_at<'t>(t: text 't, pos: i32) -> (buf i32 * i32) + 1 =
+  match split_at(t, pos) {
+    inl (h, rest) ->
+      array_forget['t, u8](h);
+      match next_line(rest) {
+        inl (l, r) ->
+          array_forget['t, u8](r);
+          let (l, m) = array_copy['t, u8] l;
+          let c = fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](16));
+          inl (c, pos + len(m) + 1)
+      | inr u -> inr ()
+      }
+  | inr t -> array_forget['t, u8](t); inr ()
+  }
+
+-- Each line of the input a case. The number of cases.
+fn cases(s: string) -> string * i32 =
+  let mut s = s;
+  let mut pos = 0;
+  let mut count = 0;
+  loop {
+    let c = borrow imm s { 't, t -> case_at(t, pos) };
+    match c {
+      inl (b, next) ->
+        let mut b = b;
+        borrow mut b { 'x, v -> let v = sort(v, cmp_i32, 0); () };
+        let (a, k) = b;
+        let (a, t) = three_sum(a, k);
+        let t = print_triples(t);
+        print_byte(b'\n');
+        pos = next;
+        count = count + 1
+    | inr u -> break
+    }
+  };
+  (s, count)
+
+main -> i32 =
+  let (s, count) = cases(read_input());
+  count

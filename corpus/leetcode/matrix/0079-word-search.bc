@@ -1,0 +1,126 @@
+-- LeetCode 79, Word Search.
+--
+-- Backtracking from each cell: `dfs` matches the word's `k`-th letter at a cell, marks the cell
+-- used (a `0` in its place), tries the four neighbours for the next letter, and puts the letter
+-- back. The grid is one flat array of its letters, row by row, element `(r, c)` at `r * w + c` (no
+-- 2D type or indexing, #143). A case is the rows, separated by spaces, `|`, and the word.
+--
+-- The recursion is driven by `bounded`, the default driver (SPEC §20); `exhausted_to_option`
+-- answers `inr ()` if its budget runs out. A member of a recursive group takes no lifetime
+-- parameters, so the grid and the word are owned, copied out of the line and threaded through each
+-- call, where Rust would pass `&mut` the board and `&[u8]` the word. The four neighbours are four
+-- calls in turn, each made only if the ones before failed: a loop over the directions that recurses
+-- threading the grid is refused (#492).
+--
+-- Each line of the input is a case, and its answer is printed on a line of its own. `cases` holds
+-- the input and the offset of the next line; each turn lends the input to read one line
+-- (`case_at`), and the case is solved on what was read, outside the lend. A loop over the lines of
+-- the lent input, `for l in lines(t)`, would hold the borrow across its turns, the spanning lend
+-- (#172, SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161).
+--
+-- Answer on `0079-word-search.in`: `true true false true true false true`, one per line, then
+-- `i32[7]`, the number of cases.
+
+include textio
+include rec
+
+-- Whether the word from its `k`-th letter on can be read from cell `(r, c)` on, through cells not
+-- yet used; the grid and the word back.
+fn dfs(g: array u8, h: i32, w: i32, word: string, r: i32, c: i32, k: i32)
+    -> array u8 * (string * bool) =
+  let (word, n) = len_of(word);
+  if k == n { (g, (word, true)) } else {
+    if r < 0 || h <= r || c < 0 || w <= c { (g, (word, false)) } else {
+      let (wa, wn) = word;
+      let want = at(&wa, k, 0);
+      let word = (wa, wn);
+      let here = at(&g, r * w + c, 0);
+      if here != want { (g, (word, false)) } else {
+        let g = array_set(g, r * w + c, 0);
+        let (g, (word, found)) = dfs(g, h, w, word, r - 1, c, k + 1);
+        let (g, (word, found)) =
+          if found { (g, (word, true)) } else { dfs(g, h, w, word, r, c + 1, k + 1) };
+        let (g, (word, found)) =
+          if found { (g, (word, true)) } else { dfs(g, h, w, word, r + 1, c, k + 1) };
+        let (g, (word, found)) =
+          if found { (g, (word, true)) } else { dfs(g, h, w, word, r, c - 1, k + 1) };
+        (array_set(g, r * w + c, here), (word, found))
+      }
+    }
+  }
+
+fn exist(g: array u8, h: i32, w: i32, word: string) -> bool + 1 =
+  let mut g = g;
+  let mut word = word;
+  let mut found = false;
+  for i in 0..h * w {
+    let r = match host[div_u32](i, w) { inl q -> q | inr u -> 0 };
+    let c = i - r * w;
+    match with exhausted_to_option { dfs(g, h, w, word, r, c, 0) } {
+      inl (g2, (word2, f)) -> g = g2; word = word2; found = f
+    | inr u -> g = array_new[u8] (0, !{ i -> 0 }); word = string_new(0); break
+    };
+    if found { break } else { () }
+  };
+  inl found
+
+-- The letters of the grid's rows, separated by spaces, in one flat array; its height and width.
+fn grid_of<'t>(t: text 't) -> buf u8 * i32 =
+  let mut cells = box buf[u8](16);
+  let mut rows = 0;
+  let mut start = true;
+  for p in t {
+    let b = *p;
+    if b == b' ' { start = true } else {
+      if start { rows = rows + 1; start = false } else { () };
+      let (c, _) = push(cells, b);
+      cells = c
+    }
+  };
+  (cells, rows)
+
+-- The case on the line that starts at `pos`, and where the next line starts; or `inr ()` at the end
+-- of the input.
+fn case_at<'t>(t: text 't, pos: i32) -> (((buf u8 * i32) * string) * i32) + 1 =
+  match split_at(t, pos) {
+    inl (h, rest) ->
+      array_forget['t, u8](h);
+      match next_line(rest) {
+        inl (l, r) ->
+          array_forget['t, u8](r);
+          let (l, m) = array_copy['t, u8] l;
+          let c = match split_once(l, b'|') {
+            inl (g, wd) -> (grid_of(trim(g)), to_string(trim(wd)))
+          | inr l -> (grid_of(l), string_new(0))
+          };
+          inl (c, pos + len(m) + 1)
+      | inr u -> inr ()
+      }
+  | inr t -> array_forget['t, u8](t); inr ()
+  }
+
+-- Each line of the input a case. The number of cases.
+fn cases(s: string) -> string * i32 =
+  let mut s = s;
+  let mut pos = 0;
+  let mut count = 0;
+  loop {
+    let c = borrow imm s { 't, t -> case_at(t, pos) };
+    match c {
+      inl ((((g, n), h), word), next) ->
+        let w = if h == 0 { 0 } else { match host[div_u32](n, h) { inl q -> q | inr u -> 0 } };
+        match exist(g, h, w, word) {
+          inl r -> if r { print_lit("true") } else { print_lit("false") }
+        | inr u -> print_lit("exhausted")
+        };
+        print_byte(b'\n');
+        pos = next;
+        count = count + 1
+    | inr u -> break
+    }
+  };
+  (s, count)
+
+main -> i32 =
+  let (s, count) = cases(read_input());
+  count

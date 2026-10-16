@@ -1,0 +1,83 @@
+-- LeetCode 238, Product of Array Except Self.
+--
+-- Two passes and no division: the answer at `i` is the product of the elements before `i`, written
+-- left to right, times the product of those after it, multiplied in right to left. The answer is a
+-- new array, as the problem returns one.
+--
+-- Each line of the input is a case, and its answer is printed on a line of its own. `cases` holds
+-- the input and the offset of the next line; each turn lends the input to read one line
+-- (`case_at`), and the case is solved on what was read, outside the lend. A loop over the lines of
+-- the lent input, `for l in lines(t)`, would hold the borrow across its turns, the spanning lend
+-- (#172, SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161).
+--
+-- Answer on `0238-product-of-array-except-self.in`: each case's products, separated by spaces, one
+-- case per line, then `i32[5]`, the number of cases.
+
+include textio
+
+fn product_except_self(a: array i32, n: i32) -> array i32 * array i32 =
+  let mut out = array_new[i32] (n, !{ i -> 1 });
+  let mut before = 1;
+  for i in 0..n {
+    out = array_set(out, i, before);
+    let x = at(&a, i, 1);
+    before = before * x
+  };
+  let mut after = 1;
+  for k in 0..n {
+    let i = n - 1 - k;
+    let o = at(&out, i, 1);
+    out = array_set(out, i, o * after);
+    let x = at(&a, i, 1);
+    after = after * x
+  };
+  (a, out)
+
+-- The first `n` elements of `a` on one line, separated by spaces.
+fn print_nums(a: array i32, n: i32) -> array i32 =
+  for i in 0..n {
+    if 0 < i { print_byte(b' ') } else { () };
+    let x = at(&a, i, 0);
+    print_dec(x)
+  };
+  a
+
+-- The case on the line that starts at `pos`, and where the next line starts; or `inr ()` at the end
+-- of the input.
+fn case_at<'t>(t: text 't, pos: i32) -> (buf i32 * i32) + 1 =
+  match split_at(t, pos) {
+    inl (h, rest) ->
+      array_forget['t, u8](h);
+      match next_line(rest) {
+        inl (l, r) ->
+          array_forget['t, u8](r);
+          let (l, m) = array_copy['t, u8] l;
+          let c = fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](16));
+          inl (c, pos + len(m) + 1)
+      | inr u -> inr ()
+      }
+  | inr t -> array_forget['t, u8](t); inr ()
+  }
+
+-- Each line of the input a case. The number of cases.
+fn cases(s: string) -> string * i32 =
+  let mut s = s;
+  let mut pos = 0;
+  let mut count = 0;
+  loop {
+    let c = borrow imm s { 't, t -> case_at(t, pos) };
+    match c {
+      inl ((a, k), next) ->
+        let (a, out) = product_except_self(a, k);
+        let out = print_nums(out, k);
+        print_byte(b'\n');
+        pos = next;
+        count = count + 1
+    | inr u -> break
+    }
+  };
+  (s, count)
+
+main -> i32 =
+  let (s, count) = cases(read_input());
+  count

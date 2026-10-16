@@ -1,0 +1,78 @@
+-- LeetCode 70, Climbing Stairs.
+--
+-- Top-down: the ways to climb `n` steps are the ways for `n - 1` and for `n - 2`, memoised. A case
+-- is `n`.
+--
+-- The recursion is driven by `bounded`, the default driver (SPEC §20): a budget of depth, and
+-- `exhausted_to_option` around the call answers `inr ()` if it runs out. The memo is an array
+-- indexed by the argument, threaded through the recursion and handed back: a member of a recursive
+-- group takes no lifetime parameters (SPEC §20), so it cannot take the `&mut` view Rust would pass,
+-- and the `memo` layer waits on a map and generic effects (SPEC §21 *Open*, #211, #489).
+--
+-- Each line of the input is a case, and its answer is printed on a line of its own. `cases` holds
+-- the input and the offset of the next line; each turn lends the input to read one line
+-- (`case_at`), and the case is solved on what was read, outside the lend. A loop over the lines of
+-- the lent input, `for l in lines(t)`, would hold the borrow across its turns, the spanning lend
+-- (#172, SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161).
+--
+-- Answer on `0070-climbing-stairs.in`: `2 3 1 8 89 1836311903`, one per line, then `i32[6]`, the
+-- number of cases.
+
+include textio
+include rec
+
+fn climb(memo: array i32, n: i32) -> array i32 * i32 =
+  if n <= 1 { (memo, 1) } else {
+    let known = at(&memo, n, 0 - 1);
+    if 0 <= known { (memo, known) } else {
+      let (memo, a) = climb(memo, n - 1);
+      let (memo, b) = climb(memo, n - 2);
+      (array_set(memo, n, a + b), a + b)
+    }
+  }
+
+fn climb_stairs(n: i32) -> i32 + 1 =
+  let memo = array_new[i32] (n + 1, !{ i -> 0 - 1 });
+  match with exhausted_to_option { climb(memo, n) } {
+    inl (memo, r) -> inl r
+  | inr u -> inr ()
+  }
+
+-- The case on the line that starts at `pos`, and where the next line starts; or `inr ()` at the end
+-- of the input.
+fn case_at<'t>(t: text 't, pos: i32) -> (i32 * i32) + 1 =
+  match split_at(t, pos) {
+    inl (h, rest) ->
+      array_forget['t, u8](h);
+      match next_line(rest) {
+        inl (l, r) ->
+          array_forget['t, u8](r);
+          let (l, m) = array_copy['t, u8] l;
+          let c = fold_i32s(l, !{ (x, b) -> x }, 0);
+          inl (c, pos + len(m) + 1)
+      | inr u -> inr ()
+      }
+  | inr t -> array_forget['t, u8](t); inr ()
+  }
+
+-- Each line of the input a case. The number of cases.
+fn cases(s: string) -> string * i32 =
+  let mut s = s;
+  let mut pos = 0;
+  let mut count = 0;
+  loop {
+    let c = borrow imm s { 't, t -> case_at(t, pos) };
+    match c {
+      inl (x, next) ->
+        match climb_stairs(x) { inl r -> print_dec(r) | inr u -> print_lit("exhausted") };
+        print_byte(b'\n');
+        pos = next;
+        count = count + 1
+    | inr u -> break
+    }
+  };
+  (s, count)
+
+main -> i32 =
+  let (s, count) = cases(read_input());
+  count

@@ -1,0 +1,82 @@
+-- LeetCode 213, House Robber II.
+--
+-- The houses are in a circle, so the first and the last are never both robbed: the answer is the
+-- better of robbing the row without the last house and the row without the first, each a sub-view
+-- (`split_at`), robbed as in 198. One house is robbed alone.
+--
+-- Each line of the input is a case, and its answer is printed on a line of its own. `cases` holds
+-- the input and the offset of the next line; each turn lends the input to read one line
+-- (`case_at`), and the case is solved on what was read, outside the lend. A loop over the lines of
+-- the lent input, `for l in lines(t)`, would hold the borrow across its turns, the spanning lend
+-- (#172, SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161).
+--
+-- Answer on `0213-house-robber-ii.in`: `3 4 3 5 14 1`, one per line, then `i32[6]`, the number of
+-- cases.
+
+include textio
+
+fn rob_row<'a>(nums: array_imm 'a i32) -> i32 =
+  let mut prev = 0;
+  let mut best = 0;
+  for p in nums {
+    let take = prev + *p;
+    prev = best;
+    if best < take { best = take } else { () }
+  };
+  best
+
+fn rob<'a>(nums: array_imm 'a i32) -> i32 =
+  let (nums, v) = array_copy['a, i32] nums;
+  let n = len(v);
+  if n == 1 { let r = at(nums, 0, 0); r } else {
+    let (nums, w) = array_copy['a, i32] nums;
+    let a = match split_at(nums, n - 1) {
+      inl (h, t) -> array_forget['a, i32](t); rob_row(h)
+    | inr h -> rob_row(h)
+    };
+    let b = match split_at(w, 1) {
+      inl (h, t) -> array_forget['a, i32](h); rob_row(t)
+    | inr t -> rob_row(t)
+    };
+    if a < b { b } else { a }
+  }
+
+-- The case on the line that starts at `pos`, and where the next line starts; or `inr ()` at the end
+-- of the input.
+fn case_at<'t>(t: text 't, pos: i32) -> (buf i32 * i32) + 1 =
+  match split_at(t, pos) {
+    inl (h, rest) ->
+      array_forget['t, u8](h);
+      match next_line(rest) {
+        inl (l, r) ->
+          array_forget['t, u8](r);
+          let (l, m) = array_copy['t, u8] l;
+          let c = fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](16));
+          inl (c, pos + len(m) + 1)
+      | inr u -> inr ()
+      }
+  | inr t -> array_forget['t, u8](t); inr ()
+  }
+
+-- Each line of the input a case. The number of cases.
+fn cases(s: string) -> string * i32 =
+  let mut s = s;
+  let mut pos = 0;
+  let mut count = 0;
+  loop {
+    let c = borrow imm s { 't, t -> case_at(t, pos) };
+    match c {
+      inl (b, next) ->
+        let r = borrow imm b { v -> rob(v) };
+        print_dec(r);
+        print_byte(b'\n');
+        pos = next;
+        count = count + 1
+    | inr u -> break
+    }
+  };
+  (s, count)
+
+main -> i32 =
+  let (s, count) = cases(read_input());
+  count

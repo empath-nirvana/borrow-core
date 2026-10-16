@@ -1,0 +1,90 @@
+-- LeetCode 1143, Longest Common Subsequence.
+--
+-- Bottom-up over a table of `(m + 1) × (n + 1)` lengths, one flat array indexed `i * (n + 1) + j`
+-- (no 2D indexing, #143): the entry for prefixes of lengths `i + 1` and `j + 1` is one more than
+-- the diagonal when their last bytes agree, the larger of its neighbours otherwise. A case is the
+-- two texts, separated by a space. The second text is a view read once per row, so it is copied
+-- (`array_copy`) for each row's loop (#142).
+--
+-- Each line of the input is a case, and its answer is printed on a line of its own. `cases` holds
+-- the input and the offset of the next line; each turn lends the input to read one line
+-- (`case_at`), and the case is solved on what was read, outside the lend. A loop over the lines of
+-- the lent input, `for l in lines(t)`, would hold the borrow across its turns, the spanning lend
+-- (#172, SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161). The case is
+-- solved inside the lend, on views of the line, so its code is total (SPEC §14).
+--
+-- Answer on `1143-longest-common-subsequence.in`: `3 3 0 1 2 1`, one per line, then `i32[6]`, the
+-- number of cases.
+
+include textio
+
+fn max(x: i32, y: i32) -> i32 = if x < y { y } else { x }
+
+fn lcs<'a, 'b>(x: text 'a, y: text 'b) -> i32 =
+  let (y, y2) = array_copy['b, u8] y;
+  let (x, x2) = array_copy['a, u8] x;
+  let m = len(x2);
+  let w = len(y2) + 1;
+  let mut t = array_new[i32] ((m + 1) * w, !{ i -> 0 });
+  let mut y = y;
+  let mut i = 0;
+  for p in x {
+    let a = *p;
+    let (y1, row) = array_copy['b, u8] y;
+    y = y1;
+    let mut j = 0;
+    for q in row {
+      let diag = at(&t, i * w + j, 0);
+      let up = at(&t, i * w + j + 1, 0);
+      let left = at(&t, (i + 1) * w + j, 0);
+      let v = if a == *q { diag + 1 } else { max(up, left) };
+      t = array_set(t, (i + 1) * w + j + 1, v);
+      j = j + 1
+    };
+    i = i + 1
+  };
+  array_forget['b, u8](y);
+  let r = at(&t, m * w + w - 1, 0);
+  r
+
+-- The answer to the case on the line that starts at `pos`, and where the next line starts; or `inr
+-- ()` at the end of the input. The case is solved on the lent line.
+fn case_at<'t>(t: text 't, pos: i32) -> (i32 * i32) + 1 =
+  match split_at(t, pos) {
+    inl (h, rest) ->
+      array_forget['t, u8](h);
+      match next_line(rest) {
+        inl (l, r) ->
+          array_forget['t, u8](r);
+          let (l, m) = array_copy['t, u8] l;
+          let c = match split_once(l, b' ') {
+            inl (x, y) -> lcs(x, y)
+          | inr l -> array_forget['t, u8](l); 0
+          };
+          inl (c, pos + len(m) + 1)
+      | inr u -> inr ()
+      }
+  | inr t -> array_forget['t, u8](t); inr ()
+  }
+
+-- Each line of the input a case. The number of cases.
+fn cases(s: string) -> string * i32 =
+  let mut s = s;
+  let mut pos = 0;
+  let mut count = 0;
+  loop {
+    let c = borrow imm s { 't, t -> case_at(t, pos) };
+    match c {
+      inl (r, next) ->
+        print_dec(r);
+        print_byte(b'\n');
+        pos = next;
+        count = count + 1
+    | inr u -> break
+    }
+  };
+  (s, count)
+
+main -> i32 =
+  let (s, count) = cases(read_input());
+  count

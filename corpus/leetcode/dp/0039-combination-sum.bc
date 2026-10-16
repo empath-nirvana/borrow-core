@@ -1,0 +1,140 @@
+-- LeetCode 39, Combination Sum.
+--
+-- Backtracking: `go(i, rem)` either takes the `i`-th candidate once more, pushed on the path and
+-- popped after, or moves past it; a path that reaches 0 is copied into the answer, a buffer of
+-- buffers, as Rust's `Vec<Vec<i32>>`. A case is the candidates, `|`, and the target.
+--
+-- The usual loop over the candidates from `i` on, recursing in a `for`, is refused (#492:
+-- `corpus/pending/lc-0039-combination-sum.bc`); this is the same search as two calls, taking the
+-- `i`-th candidate or not, in the same order.
+--
+-- The recursion is driven by `bounded`, the default driver (SPEC §20), and `exhausted_to_option`
+-- answers `inr ()` if its budget runs out. A member of a recursive group takes no lifetime
+-- parameters, so the candidates, the path and the answer are owned, threaded through each call and
+-- handed back, where Rust would pass `&[i32]` and `&mut Vec`s.
+--
+-- Each line of the input is a case, and its answer is printed on a line of its own. `cases` holds
+-- the input and the offset of the next line; each turn lends the input to read one line
+-- (`case_at`), and the case is solved on what was read, outside the lend. A loop over the lines of
+-- the lent input, `for l in lines(t)`, would hold the borrow across its turns, the spanning lend
+-- (#172, SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161).
+--
+-- Answer on `0039-combination-sum.in`: each case's combinations, `[x,y,…]` separated by spaces or
+-- `none`, one case per line, then `i32[6]`, the number of cases.
+
+include textio
+include rec
+
+-- A copy of the elements of a view, in a new buffer: a function of the view, since the same loop
+-- inline in the borrow of the path is refused (#501).
+fn copy_of<'a>(v: array_imm 'a i32) -> buf i32 =
+  let mut b = box buf[i32](8);
+  for p in v { let x = *p; let (c, _) = push(b, x); b = c };
+  b
+
+-- A copy of the path.
+fn copy_path(path: buf i32) -> buf i32 * buf i32 =
+  let dup = borrow imm path { v -> copy_of(v) };
+  (path, dup)
+
+-- The combinations of the candidates from the `i`-th on that make `rem`, added to `out`: those that
+-- use the `i`-th candidate once more, then those that use none of it.
+fn go(c: array i32, n: i32, i: i32, rem: i32, path: buf i32, out: buf (buf i32))
+    -> array i32 * (buf i32 * buf (buf i32)) =
+  if rem == 0 {
+    let (path, dup) = copy_path(path);
+    let (out, _) = push(out, dup);
+    (c, (path, out))
+  } else {
+    if n <= i { (c, (path, out)) } else {
+      let x = at(&c, i, 0);
+      if x <= rem {
+        let (path, _) = push(path, x);
+        let (c, (path, out)) = go(c, n, i, rem - x, path, out);
+        let (path, _) = pop(path);
+        go(c, n, i + 1, rem, path, out)
+      } else { go(c, n, i + 1, rem, path, out) }
+    }
+  }
+
+fn combination_sum(c: array i32, n: i32, target: i32) -> buf (buf i32) + 1 =
+  match with exhausted_to_option { go(c, n, 0, target, box buf[i32](8), box buf[buf i32](8)) } {
+    inl (c, (path, out)) -> inl out
+  | inr u -> inr ()
+  }
+
+-- One combination, `[x,y,…]`, read by index: a function that prints and takes a view is taken to
+-- loop (#491).
+fn print_combo(b: buf i32) -> 1 =
+  let (a, n) = b;
+  print_byte(b'[');
+  for i in 0..n {
+    if 0 < i { print_byte(b',') } else { () };
+    let x = at(&a, i, 0);
+    print_dec(x)
+  };
+  print_byte(b']')
+
+-- The combinations, `[x,y,…]` separated by spaces, or `none`; each is taken out and dropped.
+fn print_combos(out: buf (buf i32)) -> 1 =
+  let (out, n) = len_of(out);
+  let mut out = out;
+  if n == 0 { print_lit("none") } else { () };
+  for i in 0..n {
+    if 0 < i { print_byte(b' ') } else { () };
+    let (o, combo) = take(out, i);
+    out = o;
+    match combo {
+      inl b -> print_combo(b)
+    | inr u -> ()
+    }
+  }
+
+-- The numbers written in `l`, in a buffer.
+fn nums<'t>(l: text 't) -> buf i32 =
+  fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](16))
+
+-- The case on the line that starts at `pos`, and where the next line starts; or `inr ()` at the end
+-- of the input.
+fn case_at<'t>(t: text 't, pos: i32) -> ((buf i32 * i32) * i32) + 1 =
+  match split_at(t, pos) {
+    inl (h, rest) ->
+      array_forget['t, u8](h);
+      match next_line(rest) {
+        inl (l, r) ->
+          array_forget['t, u8](r);
+          let (l, m) = array_copy['t, u8] l;
+          let c = match split_once(l, b'|') {
+            inl (x, y) -> (nums(x), fold_i32s(y, !{ (x, b) -> x }, 0))
+          | inr l -> (nums(l), 0)
+          };
+          inl (c, pos + len(m) + 1)
+      | inr u -> inr ()
+      }
+  | inr t -> array_forget['t, u8](t); inr ()
+  }
+
+-- Each line of the input a case. The number of cases.
+fn cases(s: string) -> string * i32 =
+  let mut s = s;
+  let mut pos = 0;
+  let mut count = 0;
+  loop {
+    let c = borrow imm s { 't, t -> case_at(t, pos) };
+    match c {
+      inl (((a, k), target), next) ->
+        match combination_sum(a, k, target) {
+          inl out -> print_combos(out)
+        | inr u -> print_lit("exhausted")
+        };
+        print_byte(b'\n');
+        pos = next;
+        count = count + 1
+    | inr u -> break
+    }
+  };
+  (s, count)
+
+main -> i32 =
+  let (s, count) = cases(read_input());
+  count

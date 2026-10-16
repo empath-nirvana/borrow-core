@@ -1,0 +1,65 @@
+-- LeetCode 191, Number of 1 Bits.
+--
+-- Each `n & (n - 1)` clears the lowest set bit, so the number of steps to 0 is the number of set
+-- bits. The machine's `popcnt` (`host[popcnt32]`) answers it in one instruction, as Rust's
+-- `count_ones`; the loop is the exercise. Bitwise operations and shifts are `host[and32]`,
+-- `host[xor32]`, `host[shl32]`, … (#144). A case is an unsigned 32-bit number, read modulo 2³².
+--
+-- Each line of the input is a case, and its answer is printed on a line of its own. `cases` holds
+-- the input and the offset of the next line; each turn lends the input to read one line
+-- (`case_at`), and the case is solved on what was read, outside the lend. A loop over the lines of
+-- the lent input, `for l in lines(t)`, would hold the borrow across its turns, the spanning lend
+-- (#172, SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161).
+--
+-- Answer on `0191-number-of-1-bits.in`: `3 1 31 0 1 32`, one per line, then `i32[6]`, the number of
+-- cases.
+
+include textio
+
+fn hamming_weight(n: i32) -> i32 =
+  let mut n = n;
+  let mut count = 0;
+  while n != 0 {
+    n = host[and32](n, n - 1);
+    count = count + 1
+  };
+  count
+
+-- The case on the line that starts at `pos`, and where the next line starts; or `inr ()` at the end
+-- of the input.
+fn case_at<'t>(t: text 't, pos: i32) -> (i32 * i32) + 1 =
+  match split_at(t, pos) {
+    inl (h, rest) ->
+      array_forget['t, u8](h);
+      match next_line(rest) {
+        inl (l, r) ->
+          array_forget['t, u8](r);
+          let (l, m) = array_copy['t, u8] l;
+          let c = fold_i32s(l, !{ (x, b) -> x }, 0);
+          inl (c, pos + len(m) + 1)
+      | inr u -> inr ()
+      }
+  | inr t -> array_forget['t, u8](t); inr ()
+  }
+
+-- Each line of the input a case. The number of cases.
+fn cases(s: string) -> string * i32 =
+  let mut s = s;
+  let mut pos = 0;
+  let mut count = 0;
+  loop {
+    let c = borrow imm s { 't, t -> case_at(t, pos) };
+    match c {
+      inl (x, next) ->
+        print_dec(hamming_weight(x));
+        print_byte(b'\n');
+        pos = next;
+        count = count + 1
+    | inr u -> break
+    }
+  };
+  (s, count)
+
+main -> i32 =
+  let (s, count) = cases(read_input());
+  count

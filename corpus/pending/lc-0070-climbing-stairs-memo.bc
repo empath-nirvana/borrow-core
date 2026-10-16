@@ -1,0 +1,78 @@
+-- pending: the `memo` layer (SPEC §21 *Open*: a layer of its own state; generic effects #489, a map #211)
+-- now: 38:32: no handler `memo` is declared before this `with`
+--
+-- LeetCode 70, Climbing Stairs, top-down with memoisation as a layer (SPEC §21): `climb` is the
+-- plain recursion and knows nothing of the cache; `with memo { … }` transforms its generator so
+-- that each call it makes of itself is looked up first and stored after. The cache is an array
+-- indexed by `n`, the state of a handler of `Memo` (`cache`), lent around the recursion.
+--
+-- A layer is recognised by its written type `!(!(A => B) * A => B)` with `A` and `B` its two type
+-- parameters (SPEC §21). This one is at `i32`, because `Memo`'s operations are: an effect with type
+-- parameters is not provided (SPEC §18 *Open*, #489), and a sparse key needs a map (#211). So the
+-- `with` finds no layer of that name. `corpus/leetcode/dp/0070-climbing-stairs.bc` threads the
+-- cache through the recursion by hand.
+--
+-- Once it lands: on `corpus/leetcode/dp/0070-climbing-stairs.in`, the same output as
+-- `corpus/leetcode/dp/0070-climbing-stairs.out`; `live 0`.
+
+include textio
+include rec
+
+effect Memo { fn lookup(n: i32) -> i32; fn store(n: i32, v: i32) }
+
+-- The cache: `-1` where nothing is stored.
+handler cache(mut c: array i32): Memo = {
+  lookup(n) = { let v = at(&c, n, 0 - 1); v };
+  store(n, v) = { c = array_set(c, n, v) }
+}
+
+-- Around each call the recursion makes of itself: the stored answer, or the call's, stored.
+fn memo(call: !(i32 => i32), n: i32) -> i32 =
+  let v = lookup(n);
+  if 0 <= v { v } else { let r = call(n); store(n, r); r }
+
+fn climb(n: i32) -> i32 = if n <= 1 { 1 } else { climb(n - 1) + climb(n - 2) }
+
+fn climb_stairs(n: i32) -> i32 + 1 =
+  let c = array_new[i32] (n + 1, !{ i -> 0 - 1 });
+  let r = with cache(&mut c) { with memo { with exhausted_to_option { climb(n) } } };
+  r
+
+-- The case on the line that starts at `pos`, and where the next line starts; or `inr ()` at the end
+-- of the input.
+fn case_at<'t>(t: text 't, pos: i32) -> (i32 * i32) + 1 =
+  match split_at(t, pos) {
+    inl (h, rest) ->
+      array_forget['t, u8](h);
+      match next_line(rest) {
+        inl (l, r) ->
+          array_forget['t, u8](r);
+          let (l, m) = array_copy['t, u8] l;
+          let c = fold_i32s(l, !{ (x, b) -> x }, 0);
+          inl (c, pos + len(m) + 1)
+      | inr u -> inr ()
+      }
+  | inr t -> array_forget['t, u8](t); inr ()
+  }
+
+-- Each line of the input a case. The number of cases.
+fn cases(s: string) -> string * i32 =
+  let mut s = s;
+  let mut pos = 0;
+  let mut count = 0;
+  loop {
+    let c = borrow imm s { 't, t -> case_at(t, pos) };
+    match c {
+      inl (x, next) ->
+        match climb_stairs(x) { inl r -> print_dec(r) | inr u -> print_lit("exhausted") };
+        print_byte(b'\n');
+        pos = next;
+        count = count + 1
+    | inr u -> break
+    }
+  };
+  (s, count)
+
+main -> i32 =
+  let (s, count) = cases(read_input());
+  count
