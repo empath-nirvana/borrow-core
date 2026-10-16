@@ -1,0 +1,98 @@
+-- LeetCode 21, Merge Two Sorted Lists.
+--
+-- `merge` splices two sorted lists into one sorted list, in place: the smaller head stays a node
+-- of the answer, its tail cell emptied (`swap` with the empty list), the rest merged and put back
+-- into the cell. No node is allocated or freed, as in the Rust recursion over
+-- `Option<Box<ListNode>>`. A recursion of depth the answer's length, under `bounded`
+-- (`lib/rec.bc`); a node the second list gives up is put back together with `roll`, which costs
+-- nothing (the node's cell is the allocation).
+--
+-- Allocations per case: one cell per node, made by `list_of`, and the line's buffer of numbers.
+--
+-- Input `0021-merge-two-sorted-lists.in`: one case a line, the first list's length, its values,
+-- then the second list's values, each list sorted. Answer: each merged list on a line, then the
+-- number of cases, `i32[6]`.
+
+include textio
+include rec
+
+-- The numbers of a line.
+fn nums<'t>(l: text 't) -> buf i32 =
+  fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](8))
+
+-- The numbers of each line that is not empty.
+fn cases<'t>(t: text 't) -> buf (buf i32) =
+  fold_lines(t, !{ (l, cs) ->
+    let (l, m) = array_copy['t, u8] l;
+    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, nums(l)); cs } },
+    box buf[buf i32](8))
+
+-- A singly linked list: each node is a value and a cell holding the rest, the cell being Rust's
+-- `Box<ListNode>`. Relinking a node is a `swap` of its cell.
+type List = mu X. 1 + (i32 * ref X)
+
+fn nil() -> List = roll inl ()
+
+fn cons(x: i32, t: List) -> List = roll inr (x, alloc(t))
+
+-- The list of `a[b..b + k]`, one cell per node.
+fn list_of(a: array i32, b: i32, k: i32) -> array i32 * List =
+  let mut a = a;
+  let mut l = nil();
+  for i in 0..k { let x = at(&a, b + k - 1 - i, 0); l = cons(x, l) };
+  (a, l)
+
+-- The values of a list on a line, separated by spaces; the list is consumed.
+fn show_rest(l: List) -> 1 =
+  match unroll l {
+    inl _ -> print_byte(b'\n')
+  | inr (x, c) -> print_byte(b' '); print_dec(x); show_rest(free(c))
+  }
+
+fn show(l: List) -> 1 =
+  match unroll l {
+    inl _ -> print_byte(b'\n')
+  | inr (x, c) -> print_dec(x); show_rest(free(c))
+  }
+
+-- The sorted lists `a` and `b` merged, equal values from `a` first.
+fn merge(a: List, b: List) -> List =
+  match unroll a {
+    inl _ -> b
+  | inr (x, ca) -> match unroll b {
+      inl _ -> roll inr (x, ca)
+    | inr (y, cb) ->
+        if x <= y {
+          let (ca, ra) = swap(ca, nil());
+          let b: List = roll inr (y, cb);
+          let (ca, e) = swap(ca, merge(ra, b));
+          roll inr (x, ca)
+        } else {
+          let (cb, rb) = swap(cb, nil());
+          let a: List = roll inr (x, ca);
+          let (cb, e) = swap(cb, merge(a, rb));
+          roll inr (y, cb)
+        }
+    }
+  }
+
+-- One case: the first list's length, then both lists' values.
+fn solve(c: buf i32) -> 1 =
+  let (a, n) = c;
+  let k = at(&a, 0, 0);
+  let (a, l1) = list_of(a, 1, k);
+  let (a, l2) = list_of(a, 1 + k, n - 1 - k);
+  let r = with exhausted_to_option { show(merge(l1, l2)) };
+  match r { inl _ -> () | inr _ -> print_dec(0 - 1); print_byte(b'\n') }
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t -> cases(t) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf i32] (cs, i, filler[buf i32]);
+    cs = c;
+    match o { inl b -> solve(b) | inr b -> () }
+  };
+  n

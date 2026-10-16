@@ -1,0 +1,139 @@
+-- LeetCode 297, Serialize and Deserialize Binary Tree.
+--
+-- The format is the preorder with `#` for each empty subtree, separated by spaces, which is also
+-- how every tree program here reads its input. `deserialize` reads a string into a tree
+-- (`tokens`, then `parse`: a recursion that builds a node from its value and the two trees after
+-- it).
+-- `serialize` writes a tree into a string by a recursion that hands the tree back rebuilt: each
+-- node is taken apart, its value written, and the trees in its cells written and put back. That
+-- is the borrow-free form of the Rust `fn serialize(&self, root: &…) -> String`: the cells are
+-- the same cells, and `roll` costs nothing, so the tree is unchanged and nothing is allocated
+-- for it. A recursion that writes while it reads through a borrow is open (borrowed descent, K5,
+-- #179), and `fold_imm`'s algebra would build a string per subtree to concatenate.
+--
+-- The tree is `mu X. 1 + (ref X * (i32 * ref X))`, a cell per subtree, two per node where Rust
+-- allocates one box (`0104-maximum-depth-of-binary-tree.bc`).
+--
+-- Allocations per case: two cells per node, for each of the two trees; the two strings, with
+-- their growth; and the buffers of tokens of the line and of the first string.
+--
+-- Input `0297-serialize-and-deserialize-binary-tree.in`: one case a line, a tree in the format,
+-- spaced or not. Answer: for each case a line, the tree serialized, then `=` when the tree
+-- deserialized from that string serializes to it again; then the number of cases, `i32[5]`.
+
+include textio
+include rec
+
+-- The tokens of a line: each integer as `inl`, each `#` as `inr ()`.
+fn tokens<'t>(l: text 't) -> buf (i32 + 1) =
+  let mut out = box buf[i32 + 1](16);
+  let mut n = 0;
+  let mut neg = false;
+  let mut inside = false;
+  for p in l {
+    let b = *p;
+    if b'0' <= b && b <= b'9' {
+      n = n * 10 + to_i32(b) - 48;
+      inside = true
+    } else {
+      if inside {
+        let x = if neg { 0 - n } else { n };
+        let (o, _) = push(out, inl x);
+        out = o
+      } else { () };
+      inside = false;
+      n = 0;
+      neg = b == b'-';
+      if b == b'#' { let (o, _) = push(out, inr ()); out = o } else { () }
+    }
+  };
+  if inside { let x = if neg { 0 - n } else { n }; let (o, _) = push(out, inl x); o } else { out }
+
+-- The tokens of each line that is not empty.
+fn cases<'t>(t: text 't) -> buf (buf (i32 + 1)) =
+  fold_lines(t, !{ (l, cs) ->
+    let (l, m) = array_copy['t, u8] l;
+    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, tokens(l)); cs } },
+    box buf[buf (i32 + 1)](8))
+
+-- A binary tree: empty, or a node of a value and a cell for each subtree, the cells being Rust's
+-- `Box<TreeNode>`s.
+type Tree = mu X. 1 + (ref X * (i32 * ref X))
+
+fn tip() -> Tree = roll inl ()
+
+fn branch(l: Tree, v: i32, r: Tree) -> Tree = roll inr (alloc(l), (v, alloc(r)))
+
+-- The tree whose preorder, with `#` for each empty subtree, starts at token `i`, and the index
+-- after it. Past the end of the tokens, the empty tree.
+fn parse(ts: array (i32 + 1), i: i32) -> (array (i32 + 1) * i32) * Tree =
+  let x = at(&ts, i, inr ());
+  match x {
+    inl v ->
+      let ((ts, j), l) = parse(ts, i + 1);
+      let ((ts, k), r) = parse(ts, j);
+      ((ts, k), branch(l, v, r))
+  | inr _ -> ((ts, i + 1), tip())
+  }
+
+-- The tree of a line's tokens, from the first.
+fn tree_of(ts: buf (i32 + 1)) -> Tree = let (a, n) = ts; let (_, t) = parse(a, 0); t
+
+-- A tree's preorder, `#` for each empty subtree; the tree is consumed.
+fn show(t: Tree) -> 1 =
+  match unroll t {
+    inl _ -> print_byte(b'#')
+  | inr (cl, (v, cr)) -> print_dec(v); print_byte(b' '); show(free(cl)); print_byte(b' '); show(free(cr))
+  }
+
+-- `t`'s preorder written at the end of `out`, and `t` back.
+fn write(t: Tree, out: string) -> Tree * string =
+  match unroll t {
+    inl _ -> let (out, _) = push_byte(out, b'#'); (tip(), out)
+  | inr (cl, (v, cr)) ->
+      let (out, _) = push_dec(out, v);
+      let (out, _) = push_byte(out, b' ');
+      let (cl, l) = swap(cl, tip());
+      let (l, out) = write(l, out);
+      let (cl, _) = swap(cl, l);
+      let (out, _) = push_byte(out, b' ');
+      let (cr, r) = swap(cr, tip());
+      let (r, out) = write(r, out);
+      let (cr, _) = swap(cr, r);
+      (roll inr (cl, (v, cr)), out)
+  }
+
+fn serialize(t: Tree) -> Tree * string = write(t, string_new(16))
+
+-- The tree written in `s`, and `s` back. The tokens are read under the borrow of `s` and the tree
+-- built after it: a recursion that may run out of budget cannot run inside the borrow of a
+-- buffer (SPEC §18, *Not provided*: a borrow of a buffer crossed by an abort).
+fn deserialize(s: string) -> string * Tree =
+  let ts = borrow imm s { 'x, v -> tokens(v) };
+  (s, tree_of(ts))
+
+-- One case: a tree in the format.
+fn solve(b: buf (i32 + 1)) -> 1 =
+  let (t, s1) = serialize(tree_of(b));
+  let s1 = print_string(s1);
+  let (s1, u) = deserialize(s1);
+  let (u, s2) = serialize(u);
+  let same = borrow imm s1 { 'x, v -> borrow imm s2 { 'y, w -> eq(v, w, eq_u8) } };
+  if same { print_lit(" =") } else { () }
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t -> cases(t) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf (i32 + 1)] (cs, i, filler[buf (i32 + 1)]);
+    cs = c;
+    match o {
+      inl b -> let r = with exhausted_to_option { solve(b) };
+               match r { inl _ -> () | inr _ -> print_dec(0 - 1) };
+               print_byte(b'\n')
+    | inr b -> ()
+    }
+  };
+  n

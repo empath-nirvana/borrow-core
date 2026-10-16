@@ -1,0 +1,193 @@
+-- LeetCode 212, Word Search II.
+--
+-- `find_words` answers which of a list of words can be traced on a grid of letters, each word a
+-- path of distinct squares, each step to a neighbour along an edge. The words go into a trie
+-- (`0208-implement-trie.bc`'s arena; a node where a word ends holds that word's index), and a
+-- depth-first search from every square follows the trie as it walks: a step to a letter with no
+-- child in the trie is not taken, and every node with a word that the walk reaches marks that
+-- word found. A square is marked while it is on the path and unmarked when the search backs out
+-- of it. The search is a recursion of depth at most the longest word's length, under `bounded`
+-- (`lib/rec.bc`); its state, the grid, the marks, the trie and the found words, is threaded
+-- through it.
+--
+-- The four neighbours are four calls written out: a recursive call inside a counted `for` that
+-- threads the state is refused (#492). The recursion runs after the input's borrow has ended, on
+-- the case's words copied into strings: a recursion cannot run inside the borrow of a buffer
+-- (SPEC §18, *Not provided*: a borrow of a buffer crossed by an abort). The pointer trie of Rust
+-- waits on #182 (`corpus/pending/lc-0208-trie-boxed.bc`).
+--
+-- Allocations per case: the case's words as strings, with the buffer holding them; the trie's
+-- two buffers and their doublings; the grid, the marks and the found flags.
+--
+-- Input `0212-word-search-ii.in`: one case a line, the rows, the columns, the grid's letters row by
+-- row as one word, then the words to find, separated by spaces. Answer: for each case a line of
+-- the words found, in the order given, then the number of cases, `i32[5]`.
+
+include textio
+include rec
+
+-- `a / b`, and below `a mod b`, for `b > 0`.
+fn quot(a: i32, b: i32) -> i32 = match host[div_s32](a, b) { inl q -> q | inr u -> 0 }
+
+fn modulo(a: i32, b: i32) -> i32 = match host[rem_s32](a, b) { inl r -> r | inr u -> 0 }
+
+-- The words of a line, separated by spaces, each copied into a string.
+fn words<'t>(l: text 't) -> buf string =
+  let mut out = box buf[string](8);
+  let mut w = string_new(8);
+  for p in l {
+    let b = *p;
+    if b == b' ' {
+      let (w0, k) = len_of(w);
+      if 0 < k { let (o, _) = push(out, w0); out = o; w = string_new(8) } else { w = w0 }
+    } else { let (w1, _) = push_byte(w, b); w = w1 }
+  };
+  let (w0, k) = len_of(w);
+  if 0 < k { let (o, _) = push(out, w0); o } else { out }
+
+-- The byte at `i` of `w`.
+fn byte_at(w: string, i: i32) -> string * u8 = let (a, n) = w; let b = at(&a, i, 0); ((a, n), b)
+
+-- The number written in `w`.
+fn number(w: string) -> string * i32 =
+  let (w, n) = len_of(w);
+  let mut w = w;
+  let mut x = 0;
+  for i in 0..n { let (v, b) = byte_at(w, i); w = v; x = x * 10 + to_i32(b) - 48 };
+  (w, x)
+
+-- A trie: each node's 26 children (`0` for none), and the index of the word ending at it (`-1`
+-- for none).
+type Trie = buf i32 * buf i32
+
+fn trie_new() -> Trie =
+  let (ends, _) = push(box buf[i32](8), 0 - 1);
+  (array_size[i32](array_new[i32] (26, !{ i -> 0 })), ends)
+
+-- `b[i]`, which must be in range, and `b[i] = x`.
+fn get_i32(b: buf i32, i: i32) -> buf i32 * i32 = let (a, n) = b; let x = at(&a, i, 0); ((a, n), x)
+
+fn set_i32(b: buf i32, i: i32, x: i32) -> buf i32 = let (a, n) = b; (array_set(a, i, x), n)
+
+-- Word `w`, the `id`-th, added.
+fn insert(t: Trie, w: string, id: i32) -> Trie * string =
+  let (kids, ends) = t;
+  let (w, n) = len_of(w);
+  let mut w = w;
+  let mut kids = kids;
+  let mut ends = ends;
+  let mut u = 0;
+  for i in 0..n {
+    let (v, b) = byte_at(w, i);
+    w = v;
+    let c = to_i32(b) - 97;
+    let (k, x) = get_i32(kids, 26 * u + c);
+    kids = k;
+    if x == 0 {
+      let (en, fresh) = len_of(ends);
+      let (en, _) = push(en, 0 - 1);
+      ends = en;
+      let mut k = set_i32(kids, 26 * u + c, fresh);
+      for _ in 0..26 { let (r, _) = push(k, 0); k = r };
+      kids = k;
+      u = fresh
+    } else { u = x }
+  };
+  ((kids, set_i32(ends, u, id)), w)
+
+-- The search's state: the grid of `h` rows and `w` columns, the squares on the path, the trie,
+-- and the words found.
+type State = (array u8 * (i32 * i32)) * (array bool * (Trie * array bool))
+
+-- The neighbour of `p` in direction `d` (up, right, down, left), or `-1` off the grid.
+fn step(p: i32, d: i32, w: i32, h: i32) -> i32 =
+  let x = modulo(p, w);
+  let y = quot(p, w);
+  let nx = if d == 1 { x + 1 } else { if d == 3 { x - 1 } else { x } };
+  let ny = if d == 0 { y - 1 } else { if d == 2 { y + 1 } else { y } };
+  if 0 <= nx && nx < w && 0 <= ny && ny < h { ny * w + nx } else { 0 - 1 }
+
+-- The search from square `p` (or nowhere, at `-1`), at trie node `u`, the walk so far ending
+-- next to `p`.
+fn dfs(s: State, p: i32, u: i32) -> State =
+  let ((grid, (h, w)), (path, ((kids, ends), found))) = s;
+  let on = at(&path, p, true);
+  if p < 0 || on { ((grid, (h, w)), (path, ((kids, ends), found))) } else {
+    let b = at(&grid, p, 0);
+    let (kids, v) = get_i32(kids, 26 * u + to_i32(b) - 97);
+    if v == 0 { ((grid, (h, w)), (path, ((kids, ends), found))) } else {
+      let (ends, id) = get_i32(ends, v);
+      let found = if 0 <= id { array_set(found, id, true) } else { found };
+      let s = ((grid, (h, w)), (array_set(path, p, true), ((kids, ends), found)));
+      let s = dfs(s, step(p, 0, w, h), v);
+      let s = dfs(s, step(p, 1, w, h), v);
+      let s = dfs(s, step(p, 2, w, h), v);
+      let s = dfs(s, step(p, 3, w, h), v);
+      let (g, (path, rest)) = s;
+      (g, (array_set(path, p, false), rest))
+    }
+  }
+
+-- One case: the rows, the columns, the grid, then the words; the words found printed.
+fn find_words(ws: buf string) -> 1 =
+  let (ws, n) = len_of(ws);
+  let mut a = ws;
+  let mut parts = box buf[string](4);
+  let mut h = 0;
+  let mut w = 0;
+  let mut grid = array_new[u8] (0, !{ i -> 0 });
+  let mut t = trie_new();
+  for i in 0..n {
+    let (b, o) = take(a, i);
+    a = b;
+    match o {
+      inl s ->
+        if i == 0 { let (_, x) = number(s); h = x } else {
+          if i == 1 { let (_, x) = number(s); w = x } else {
+            if i == 2 { let (g, _) = s; grid = g } else {
+              let (r, s) = insert(t, s, i - 3);
+              t = r;
+              let (p, _) = push(parts, s);
+              parts = p
+            }
+          }
+        }
+    | inr _ -> ()
+    }
+  };
+  let (parts, k) = len_of(parts);
+  let mut s = ((grid, (h, w)), (array_new[bool] (h * w, !{ i -> false }), (t, array_new[bool] (k, !{ i -> false }))));
+  for p in 0..h * w { s = dfs(s, p, 0) };
+  let (_, (_, (_, found))) = s;
+  let mut parts = parts;
+  let mut first = true;
+  for i in 0..k {
+    let f = at(&found, i, false);
+    let (b, o) = take(parts, i);
+    parts = b;
+    match o {
+      inl s -> if f { if first { first = false } else { print_byte(b' ') }; let _ = print_string(s); () } else { () }
+    | inr _ -> ()
+    }
+  };
+  print_byte(b'\n')
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t ->
+    fold_lines(t, !{ (l, cs) ->
+      let (l, m) = array_copy['t, u8] l;
+      if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, words(l)); cs } },
+      box buf[buf string](8)) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf string] (cs, i, filler[buf string]);
+    cs = c;
+    match o {
+      inl ws -> let r = with exhausted_to_option { find_words(ws) };
+                match r { inl _ -> () | inr _ -> print_dec(0 - 1); print_byte(b'\n') }
+    | inr ws -> ()
+    }
+  };
+  n

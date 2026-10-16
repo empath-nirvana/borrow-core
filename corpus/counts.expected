@@ -172,12 +172,25 @@ iter-range 0 0 0
 json-tokens 3 0 0 # the stdin and stdout cells and the input string; tokens are views, literal views read-only data
 key-value 4 0 0 # the stdin and stdout cells, the input string and the buffer of view pairs
 labels-json 3 0 0 # the stdout cell, the output string and the one escaped string (the owned side of the sum)
+leetcode/graphs/0133-clone-graph 40 0 0 # the stdin and stdout cells and the input string; per case the line's numbers, both graphs' two arrays, the map from node to copy and the queue (an arena: Rust's is a pointer graph of `Rc`s and a `HashMap`)
+leetcode/graphs/0200-number-of-islands 27 0 0 # the stdin and stdout cells and the input string; per case the line's numbers (the grid), the seen array and the queue, as Rust
+leetcode/graphs/0207-course-schedule 41 0 0 # the stdin and stdout cells and the input string; per case the line's numbers, the graph's two arrays, the fill cursor, the counts and the queue (Rust's `Vec<Vec<usize>>` is a buffer per course)
+leetcode/graphs/0261-graph-valid-tree 21 0 0 # the stdin and stdout cells and the input string; per case the line's numbers and the parent and size arrays, as Rust
+leetcode/graphs/0269-alien-dictionary 39 0 0 # the stdin and stdout cells and the input string; per case the edge, count, used and taken arrays (on the stack in Rust, #496) and the answer's string
+leetcode/graphs/0323-number-of-connected-components 24 0 0 # the stdin and stdout cells and the input string; per case the line's numbers and the parent and size arrays, as Rust
+leetcode/graphs/0417-pacific-atlantic-water-flow 33 0 0 # the stdin and stdout cells and the input string; per case the line's numbers, two seen arrays and two queues, as Rust
 leetcode/heaps/0295-find-median-from-data-stream 30 0 0 # the stdin and stdout cells and the input string; per case the two heaps and the buffer of its answers (#491: Rust would print them at once)
 leetcode/intervals/0056-merge-intervals 22 0 0 # the stdin and stdout cells and the input string; per case the buffer of intervals and the merged one (none for the empty case), as Rust
 leetcode/intervals/0057-insert-interval 23 0 0 # the stdin and stdout cells and the input string; per case the buffer of intervals and the result, as Rust
 leetcode/intervals/0252-meeting-rooms 13 0 0 # the stdin and stdout cells and the input string; per case the buffer of meetings, as Rust
 leetcode/intervals/0253-meeting-rooms-ii 22 0 0 # the stdin and stdout cells and the input string; per case the buffer of meetings and the heap (none for the empty case), as Rust
 leetcode/intervals/0435-non-overlapping-intervals 13 0 0 # the stdin and stdout cells and the input string; per case the buffer of intervals, as Rust
+leetcode/lists/0019-remove-nth-node-from-end-of-list 31 0 0 # the stdin and stdout cells and the input string; per case the line's numbers and a cell per node, as Rust's `Box`es; the removal allocates nothing
+leetcode/lists/0021-merge-two-sorted-lists 32 0 0 # the stdin and stdout cells and the input string; per case the line's numbers and a cell per node, as Rust's `Box`es; the merge allocates nothing
+leetcode/lists/0023-merge-k-sorted-lists 45 0 0 # the stdin and stdout cells and the input string; per case the line's numbers, a cell per node, the array of lists and the heap; the merge allocates no node
+leetcode/lists/0141-linked-list-cycle 20 0 0 # the stdin and stdout cells and the input string; per case the line's numbers and the `next` array (an arena: an owned list cannot have a cycle)
+leetcode/lists/0143-reorder-list 43 0 0 # the stdin and stdout cells and the input string; per case the line's numbers, a cell per node, and the cell the lend `&l` makes for the length's fold (none in Rust)
+leetcode/lists/0206-reverse-linked-list 34 0 0 # the stdin and stdout cells and the input string; per case the line's numbers and a cell per node, as Rust's `Box`es; the reversal allocates nothing
 leetcode/strings/0003-longest-substring-without-repeating-characters 4 0 0 # the stdin and stdout cells, the input string and the table of last positions, reused (on the stack in Rust, #496)
 leetcode/strings/0005-longest-palindromic-substring 3 0 0 # the stdin and stdout cells and the input string; the answers are views
 leetcode/strings/0020-valid-parentheses 4 0 0 # the stdin and stdout cells, the input string and the stack, reused from case to case
@@ -187,6 +200,20 @@ leetcode/strings/0242-valid-anagram 4 0 0 # the stdin and stdout cells, the inpu
 leetcode/strings/0271-encode-and-decode-strings 24 0 0 # the stdin and stdout cells and the input string; per case the list, the encoded string and the decoded list, whose strings are views (Rust's `Vec<String>` allocates each)
 leetcode/strings/0424-longest-repeating-character-replacement 4 0 0 # the stdin and stdout cells, the input string and the counts, reused (on the stack in Rust, #496)
 leetcode/strings/0647-palindromic-substrings 3 0 0 # the stdin and stdout cells and the input string
+leetcode/trees/0098-validate-binary-search-tree 68 0 0 # the stdin and stdout cells and the input string; per case the line's tokens, two cells per node (Rust: one box) and the lend's cell (none in Rust)
+leetcode/trees/0100-same-tree 61 0 0 # the stdin and stdout cells and the input string; per case the line's tokens and two cells per node of each tree (Rust: one box)
+leetcode/trees/0102-binary-tree-level-order-traversal 60 0 0 # the stdin and stdout cells and the input string; per case the line's tokens, two cells per node (Rust: one box) and the queue
+leetcode/trees/0104-maximum-depth-of-binary-tree 56 0 0 # the stdin and stdout cells and the input string; per case the line's tokens, two cells per node (Rust: one box) and the lend's cell (none in Rust)
+leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-traversal 41 0 0 # the stdin and stdout cells and the input string; per case the line's tokens and two cells per node (Rust: one box, and a `HashMap`, #211)
+leetcode/trees/0124-binary-tree-maximum-path-sum 73 0 0 # the stdin and stdout cells and the input string; per case the line's tokens, two cells per node (Rust: one box) and the lend's cell (none in Rust)
+leetcode/trees/0208-implement-trie 27 0 0 # the stdin and stdout cells and the input string; per case the trie's two buffers and their doublings and the answer's string (an arena)
+leetcode/trees/0211-design-add-and-search-words-data-structure 48 0 0 # the stdin and stdout cells and the input string; per case the trie's two buffers and their doublings, the search stack and the answer's string (an arena)
+leetcode/trees/0212-word-search-ii 104 0 0 # the stdin and stdout cells and the input string; per case the words as strings and their buffer, the trie's two buffers and their doublings, and the marks and found flags
+leetcode/trees/0226-invert-binary-tree 41 0 0 # the stdin and stdout cells and the input string; per case the line's tokens and two cells per node (Rust: one box); the inversion allocates nothing
+leetcode/trees/0230-kth-smallest-element-in-a-bst 107 0 0 # the stdin and stdout cells and the input string; per case the line's tokens, two cells per node (Rust: one box), and the recursive generator's objects (41 in all; the same walk as a plain recursion is 66)
+leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree 76 0 0 # the stdin and stdout cells and the input string; per case the line's tokens and two cells per node (Rust: one box)
+leetcode/trees/0297-serialize-and-deserialize-binary-tree 82 0 0 # the stdin and stdout cells and the input string; per case the line's tokens, two cells per node of each of two trees (Rust: one box), the two strings and the second string's tokens
+leetcode/trees/0572-subtree-of-another-tree 72 0 0 # the stdin and stdout cells and the input string; per case the line's tokens and two cells per node of each tree (Rust: one box); the comparisons allocate and copy nothing
 lend-config 2 0 0
 lend-div 2 0 0
 lend-lib-each 2 0 0

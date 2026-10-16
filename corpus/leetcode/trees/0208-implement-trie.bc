@@ -1,0 +1,149 @@
+-- LeetCode 208, Implement Trie (Prefix Tree).
+--
+-- A trie of words over `a`–`z` with `insert`, `search` (is this word in it) and `prefixed` (is
+-- some word in it beginning so: the problem's `starts_with`, a name `lib/slice.bc` takes). Each
+-- operation walks one node per letter from the root, making the missing nodes on an insert.
+--
+-- Representation: an arena. Node `u`'s child at letter `c` is `kids[26u + c]`, `0` for none (the
+-- root, node 0, is nobody's child), and `ends[u]` marks a node where a word ends; a new node is
+-- 26 zeros pushed onto `kids` and a `false` onto `ends`. Rust's
+-- `Trie { children: [Option<Box<Trie>>; 26], end: bool }` would be `mu X. bool * array (1 + X)`
+-- here, a node owning an array of its children. That type checks, but it is outside the folds'
+-- and destructors' class (`FShape`: `X` under `array`, #182), so a trie has no destructor and
+-- must be consumed by hand, by a recursion over each node's array that is refused today (#492,
+-- #161); the program is `corpus/pending/lc-0208-trie-boxed.bc`. The arena is also how a Rust
+-- solution avoids a `Box` per node (`Vec<[u32; 26]>`).
+--
+-- Allocations per case: the two buffers and their doublings, and the answer's string; no node is
+-- allocated on its own.
+--
+-- Input `0208-implement-trie.in`: one case a line, its operations in order separated by spaces,
+-- each `+word` (insert), `?word` (search) or `^word` (starts with). Answer: for each case a line
+-- of the answers of its searches, `1` or `0`, then the number of cases, `i32[4]`.
+
+include textio
+
+-- A trie: each node's 26 children, and whether a word ends at it.
+type Trie = buf i32 * buf bool
+
+-- The trie of no words: the root alone.
+fn trie_new() -> Trie =
+  let (ends, _) = push(box buf[bool](8), false);
+  (array_size[i32](array_new[i32] (26, !{ i -> 0 })), ends)
+
+-- `b[i]`, which must be in range.
+fn get_i32(b: buf i32, i: i32) -> buf i32 * i32 = let (a, n) = b; let x = at(&a, i, 0); ((a, n), x)
+
+-- `b[i] = x`.
+fn set_i32(b: buf i32, i: i32, x: i32) -> buf i32 = let (a, n) = b; (array_set(a, i, x), n)
+
+-- The letter at `i`, as `0..26`.
+fn letter<'a>(l: text 'a, i: i32) -> text 'a * i32 =
+  let (l, w) = array_copy['a, u8] l;
+  (l, to_i32(at(w, i, 0)) - 97)
+
+-- The word `l[s..e]` added.
+fn insert<'a>(t: Trie, l: text 'a, s: i32, e: i32) -> text 'a * Trie =
+  let (kids, ends) = t;
+  let mut kids = kids;
+  let mut ends = ends;
+  let mut l = l;
+  let mut u = 0;
+  for i in s..e {
+    let (m, c) = letter(l, i);
+    l = m;
+    let (k, v) = get_i32(kids, 26 * u + c);
+    kids = k;
+    if v == 0 {
+      let (en, fresh) = len_of(ends);
+      let (en, _) = push(en, false);
+      ends = en;
+      let mut k = set_i32(kids, 26 * u + c, fresh);
+      for _ in 0..26 { let (r, _) = push(k, 0); k = r };
+      kids = k;
+      u = fresh
+    } else { u = v }
+  };
+  let (a, n) = ends;
+  (l, (kids, (array_set(a, u, true), n)))
+
+-- The node the walk along `l[s..e]` reaches, or `-1` when it falls off the trie.
+fn walk<'a>(t: Trie, l: text 'a, s: i32, e: i32) -> (text 'a * Trie) * i32 =
+  let (kids, ends) = t;
+  let mut kids = kids;
+  let mut l = l;
+  let mut u = 0;
+  for i in s..e {
+    let (m, c) = letter(l, i);
+    l = m;
+    let (k, v) = get_i32(kids, 26 * u + c);
+    kids = k;
+    if v == 0 { u = 0 - 1; break } else { u = v }
+  };
+  ((l, (kids, ends)), u)
+
+-- Whether the word `l[s..e]` is in the trie.
+fn search<'a>(t: Trie, l: text 'a, s: i32, e: i32) -> (text 'a * Trie) * bool =
+  let ((l, (kids, ends)), u) = walk(t, l, s, e);
+  let (a, n) = ends;
+  let end = at(&a, u, false);
+  ((l, (kids, (a, n))), 0 <= u && end)
+
+-- Whether some word in the trie starts with `l[s..e]`.
+fn prefixed<'a>(t: Trie, l: text 'a, s: i32, e: i32) -> (text 'a * Trie) * bool =
+  let ((l, t), u) = walk(t, l, s, e);
+  ((l, t), 0 <= u)
+
+-- One case's operations, run on a new trie; the answers of its searches.
+fn run_ops<'a>(l: text 'a) -> string =
+  let (l, u) = array_copy['a, u8] l;
+  let n = len(u);
+  let mut t = trie_new();
+  let mut out = string_new(16);
+  let mut l = l;
+  let mut s = 0;
+  for i in 0..n + 1 {
+    let (m, w) = array_copy['a, u8] l;
+    l = m;
+    let b = at(w, i, b' ');
+    if b == b' ' {
+      if s < i {
+        let (m, w) = array_copy['a, u8] l;
+        l = m;
+        let op = at(w, s, 0);
+        if op == b'+' {
+          let (m, r) = insert(t, l, s + 1, i);
+          l = m;
+          t = r
+        } else {
+          let ((m, r), yes) = if op == b'?' { search(t, l, s + 1, i) } else { prefixed(t, l, s + 1, i) };
+          l = m;
+          t = r;
+          let (o1, n1) = len_of(out);
+          let o2 = if 0 < n1 { let (o, _) = push_byte(o1, b' '); o } else { o1 };
+          let d = if yes { b'1' } else { b'0' };
+          let (o3, _) = push_byte(o2, d);
+          out = o3
+        }
+      } else { () };
+      s = i + 1
+    } else { () }
+  };
+  array_forget['a, u8](l);
+  out
+
+main -> i32 =
+  let s = read_input();
+  let r = borrow imm s { 't, t ->
+    fold_lines(t, !{ (l, rs) ->
+      let (l, m) = array_copy['t, u8] l;
+      if len(m) == 0 { array_forget['t, u8](l); rs } else { let (rs, _) = push(rs, run_ops(l)); rs } },
+      box buf[string](8)) };
+  let (rs, n) = r;
+  let mut rs = rs;
+  for i in 0..n {
+    let (a, o) = array_replace[string] (rs, i, filler[string]);
+    rs = a;
+    match o { inl x -> let x = print_string(x); print_byte(b'\n') | inr x -> () }
+  };
+  n

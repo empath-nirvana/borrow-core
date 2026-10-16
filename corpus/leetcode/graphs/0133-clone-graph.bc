@@ -1,0 +1,146 @@
+-- LeetCode 133, Clone Graph.
+--
+-- `copy_graph` makes a deep copy of the connected graph reachable from node 1: new nodes, each with
+-- the copies of its neighbours, in the same order. A breadth-first search from node 1 numbers
+-- the nodes in the order it meets them, and `fresh[u]` is the copy of node `u` (`-1` before it
+-- is met); the copy's adjacency is then each original node's, renumbered.
+--
+-- Representation. The Rust signature is a pointer graph, `Rc<RefCell<Node>>` with neighbours
+-- pointing back, and the clone keeps a `HashMap` from each original node to its copy. Neither
+-- half is expressible here: an owned pointer cannot form a cycle, shared ownership (RC) is opt-in
+-- and not built, and interior mutability through shared handles is #119. The graph is therefore
+-- an arena, nodes as ids: `start[u]..start[u + 1]` are the slots of `targets` holding node `u`'s
+-- neighbours (the compressed form of `0207-course-schedule.bc`). The map from node to copy is then
+-- an array indexed by id, not a hash map, because ids are dense; and the "copy" is a second
+-- arena. The program still does the problem's work, the search and the renumbering, but with
+-- indices the problem's aliasing is gone, which is the point of the problem.
+--
+-- Allocations per case: the original's `start` and `targets`, `fresh`, the queue, and the copy's
+-- `start` and `targets`; and the line's buffer of numbers.
+--
+-- Input `0133-clone-graph.in`: one case a line, `n`, then for each node `1..n` its degree and its
+-- neighbours. Answer: for each case, the copy's adjacency on a line, `node:neighbour,…` per
+-- node in the copy's numbering from 1 (node 1 stays node 1), then the number of cases, `i32[5]`.
+
+include textio
+
+-- The numbers of a line.
+fn nums<'t>(l: text 't) -> buf i32 =
+  fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](8))
+
+-- The numbers of each line that is not empty.
+fn cases<'t>(t: text 't) -> buf (buf i32) =
+  fold_lines(t, !{ (l, cs) ->
+    let (l, m) = array_copy['t, u8] l;
+    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, nums(l)); cs } },
+    box buf[buf i32](8))
+
+-- The graph of a case, read from `a[1..]` (`n` lists, each a degree and that many neighbours
+-- numbered from 1), as `start` and `targets`, numbered from 0.
+fn graph(a: array i32, n: i32) -> array i32 * (array i32 * array i32) =
+  let (a, k) = array_size[i32](a);
+  let mut a = a;
+  let mut start = array_new[i32] (n + 1, !{ i -> 0 });
+  let mut p = 1;
+  for u in 0..n {
+    let d = at(&a, p, 0);
+    let s = at(&start, u, 0);
+    start = array_set(start, u + 1, s + d);
+    p = p + d + 1
+  };
+  let m = at(&start, n, 0);
+  let mut targets = array_new[i32] (m, !{ i -> 0 });
+  let mut p = 1;
+  let mut j = 0;
+  for u in 0..n {
+    let d = at(&a, p, 0);
+    for i in 0..d { let v = at(&a, p + 1 + i, 0); targets = array_set(targets, j, v - 1); j = j + 1 };
+    p = p + d + 1
+  };
+  (a, (start, targets))
+
+-- The copy of the graph reachable from node 0: its `start` and `targets` in its own numbering,
+-- the order in which a breadth-first search from node 0 meets the nodes.
+fn copy_graph(start: array i32, targets: array i32, n: i32) -> array i32 * array i32 =
+  let mut start = start;
+  let mut targets = targets;
+  let mut fresh = array_set(array_new[i32] (n, !{ i -> 0 - 1 }), 0, 0);
+  let mut queue = array_new[i32] (n, !{ i -> 0 });
+  let mut tail = 1;
+  let mut head = 0;
+  for _ in 0..n {
+    if head == tail { break } else { () };
+    let u = at(&queue, head, 0);
+    head = head + 1;
+    let s = at(&start, u, 0);
+    let t = at(&start, u + 1, 0);
+    for j in s..t {
+      let v = at(&targets, j, 0);
+      let f = at(&fresh, v, 0);
+      if f < 0 {
+        fresh = array_set(fresh, v, tail);
+        queue = array_set(queue, tail, v);
+        tail = tail + 1
+      } else { () }
+    }
+  };
+  let mut cstart = array_new[i32] (tail + 1, !{ i -> 0 });
+  for c in 0..tail {
+    let u = at(&queue, c, 0);
+    let s0 = at(&start, u, 0);
+    let s1 = at(&start, u + 1, 0);
+    let d = s1 - s0;
+    let s = at(&cstart, c, 0);
+    cstart = array_set(cstart, c + 1, s + d)
+  };
+  let m = at(&cstart, tail, 0);
+  let mut ctargets = array_new[i32] (m, !{ i -> 0 });
+  for c in 0..tail {
+    let u = at(&queue, c, 0);
+    let s = at(&start, u, 0);
+    let t = at(&start, u + 1, 0);
+    let cs = at(&cstart, c, 0);
+    for j in s..t {
+      let v = at(&targets, j, 0);
+      let f = at(&fresh, v, 0);
+      ctargets = array_set(ctargets, cs + j - s, f)
+    }
+  };
+  (cstart, ctargets)
+
+-- A graph's adjacency, `node:neighbour,…` per node, numbered from 1.
+fn show(start: array i32, targets: array i32) -> 1 =
+  let (start, k) = array_size[i32](start);
+  for u in 0..k - 1 {
+    if 0 < u { print_byte(b' ') } else { () };
+    print_dec(u + 1);
+    print_byte(b':');
+    let s = at(&start, u, 0);
+    let t = at(&start, u + 1, 0);
+    for j in s..t {
+      if s < j { print_byte(b',') } else { () };
+      let v = at(&targets, j, 0);
+      print_dec(v + 1)
+    }
+  };
+  print_byte(b'\n')
+
+-- One case: `n`, then the adjacency lists.
+fn solve(c: buf i32) -> 1 =
+  let (a, k) = c;
+  let n = at(&a, 0, 0);
+  let (a, (start, targets)) = graph(a, n);
+  let (cstart, ctargets) = copy_graph(start, targets, n);
+  show(cstart, ctargets)
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t -> cases(t) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf i32] (cs, i, filler[buf i32]);
+    cs = c;
+    match o { inl b -> solve(b) | inr b -> () }
+  };
+  n

@@ -1,0 +1,137 @@
+-- LeetCode 105, Construct Binary Tree from Preorder and Inorder Traversal.
+--
+-- `build` makes the tree whose preorder and inorder are given, for distinct values: the next
+-- value of the preorder is the root of the inorder range at hand, its place in that range splits
+-- the range into the left and right subtrees' ranges, and the left subtree takes the preorder's
+-- values after the root first. A recursion that hands back the input and the preorder index it
+-- has reached, of depth the tree's height under `bounded` (`lib/rec.bc`).
+--
+-- The root's place in the inorder is found by a scan of the range, so the whole is `O(n²)` at
+-- worst; the Rust keeps a `HashMap` from value to inorder index for `O(n)`, which waits on a
+-- generic hash map (#211, #489). The values are arbitrary `i32`s, so an array indexed by value
+-- is no honest substitute.
+--
+-- The tree is `mu X. 1 + (ref X * (i32 * ref X))`, a cell per subtree, two per node where Rust
+-- allocates one box (`0104-maximum-depth-of-binary-tree.bc`).
+--
+-- Allocations per case: two cells per node, and the line's buffer of tokens.
+--
+-- Input `0105-construct-binary-tree-from-preorder-and-inorder-traversal.in`: one case a line, the
+-- number of nodes `k`, the preorder, then the inorder. Answer: each tree's preorder with `#` for
+-- each empty subtree on a line, then the number of cases, `i32[5]`.
+
+include textio
+include rec
+
+-- The tokens of a line: each integer as `inl`, each `#` as `inr ()`.
+fn tokens<'t>(l: text 't) -> buf (i32 + 1) =
+  let mut out = box buf[i32 + 1](16);
+  let mut n = 0;
+  let mut neg = false;
+  let mut inside = false;
+  for p in l {
+    let b = *p;
+    if b'0' <= b && b <= b'9' {
+      n = n * 10 + to_i32(b) - 48;
+      inside = true
+    } else {
+      if inside {
+        let x = if neg { 0 - n } else { n };
+        let (o, _) = push(out, inl x);
+        out = o
+      } else { () };
+      inside = false;
+      n = 0;
+      neg = b == b'-';
+      if b == b'#' { let (o, _) = push(out, inr ()); out = o } else { () }
+    }
+  };
+  if inside { let x = if neg { 0 - n } else { n }; let (o, _) = push(out, inl x); o } else { out }
+
+-- The tokens of each line that is not empty.
+fn cases<'t>(t: text 't) -> buf (buf (i32 + 1)) =
+  fold_lines(t, !{ (l, cs) ->
+    let (l, m) = array_copy['t, u8] l;
+    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, tokens(l)); cs } },
+    box buf[buf (i32 + 1)](8))
+
+-- A binary tree: empty, or a node of a value and a cell for each subtree, the cells being Rust's
+-- `Box<TreeNode>`s.
+type Tree = mu X. 1 + (ref X * (i32 * ref X))
+
+fn tip() -> Tree = roll inl ()
+
+fn branch(l: Tree, v: i32, r: Tree) -> Tree = roll inr (alloc(l), (v, alloc(r)))
+
+-- The tree whose preorder, with `#` for each empty subtree, starts at token `i`, and the index
+-- after it. Past the end of the tokens, the empty tree.
+fn parse(ts: array (i32 + 1), i: i32) -> (array (i32 + 1) * i32) * Tree =
+  let x = at(&ts, i, inr ());
+  match x {
+    inl v ->
+      let ((ts, j), l) = parse(ts, i + 1);
+      let ((ts, k), r) = parse(ts, j);
+      ((ts, k), branch(l, v, r))
+  | inr _ -> ((ts, i + 1), tip())
+  }
+
+-- The tree of a line's tokens, from the first.
+fn tree_of(ts: buf (i32 + 1)) -> Tree = let (a, n) = ts; let (_, t) = parse(a, 0); t
+
+-- A tree's preorder, `#` for each empty subtree; the tree is consumed.
+fn show(t: Tree) -> 1 =
+  match unroll t {
+    inl _ -> print_byte(b'#')
+  | inr (cl, (v, cr)) -> print_dec(v); print_byte(b' '); show(free(cl)); print_byte(b' '); show(free(cr))
+  }
+
+-- The value at token `i`.
+fn value(a: array (i32 + 1), i: i32) -> array (i32 + 1) * i32 =
+  let x = at(&a, i, inr ());
+  let v = match x { inl v -> v | inr _ -> 0 };
+  (a, v)
+
+-- The place of `v` in `a[lo..hi]`, or `hi`.
+fn place(a: array (i32 + 1), lo: i32, hi: i32, v: i32) -> array (i32 + 1) * i32 =
+  let mut a = a;
+  let mut m = hi;
+  for i in lo..hi {
+    let (b, x) = value(a, i);
+    a = b;
+    if x == v { m = i; break } else { () }
+  };
+  (a, m)
+
+-- The tree whose inorder is `a[lo..hi]` and whose preorder starts at `a[p]`; the index of the
+fn build(a: array (i32 + 1), p: i32, lo: i32, hi: i32) -> (array (i32 + 1) * i32) * Tree =
+  if hi <= lo { ((a, p), tip()) } else {
+    let (a, v) = value(a, p);
+    let (a, m) = place(a, lo, hi, v);
+    let ((a, q), l) = build(a, p + 1, lo, m);
+    let ((a, q), r) = build(a, q, m + 1, hi);
+    ((a, q), branch(l, v, r))
+  }
+
+-- One case: `k`, the preorder, the inorder.
+fn solve(b: buf (i32 + 1)) -> 1 =
+  let (a, n) = b;
+  let (a, k) = value(a, 0);
+  let (_, t) = build(a, 1, 1 + k, 1 + 2 * k);
+  show(t)
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t -> cases(t) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf (i32 + 1)] (cs, i, filler[buf (i32 + 1)]);
+    cs = c;
+    match o {
+      inl b -> let r = with exhausted_to_option { solve(b) };
+               match r { inl _ -> () | inr _ -> print_dec(0 - 1) };
+               print_byte(b'\n')
+    | inr b -> ()
+    }
+  };
+  n

@@ -1,0 +1,153 @@
+-- LeetCode 572, Subtree of Another Tree.
+--
+-- `subtree` answers whether some node of `s` roots a tree equal to `t`, comparing `t` against
+-- each node of `s` in preorder until one matches. Both trees are read many times, so neither may
+-- be consumed: every function here hands its trees back rebuilt. `same` takes two trees apart,
+-- compares them, and puts each back together; `subtree` takes each node of `s` apart to visit its
+-- subtrees and puts it back. The cells are the same cells and `roll` costs nothing, so nothing
+-- is allocated or copied: this is the borrow-free form of the Rust over `&TreeNode`. The trees
+-- hold cells, so they are not persistent and `clone` does not apply; a tree without cells,
+-- `mu X. 1 + (X * (i32 * X))`, could be cloned, but each comparison would then copy `t` whole.
+-- A recursion over borrowed trees, which would need neither, is open (borrowed descent, K5,
+-- #179); `fold_imm` walks one tree, and its algebra cannot hold the other.
+--
+-- The tree is `mu X. 1 + (ref X * (i32 * ref X))`, a cell per subtree, two per node where Rust
+-- allocates one box (`0104-maximum-depth-of-binary-tree.bc`).
+--
+-- Allocations per case: two cells per node of each tree, and the line's buffer of tokens.
+--
+-- Input `0572-subtree-of-another-tree.in`: one case a line, the preorder of `s`, then of `t`, `#`
+-- for each empty subtree. Answer: each case's verdict on a line, `1` when `t` is a subtree of `s`
+-- and `0` otherwise (`1`, `0`, `1`, `1`, `0`, `1`), then the number of cases, `i32[6]`.
+
+include textio
+include rec
+
+-- The tokens of a line: each integer as `inl`, each `#` as `inr ()`.
+fn tokens<'t>(l: text 't) -> buf (i32 + 1) =
+  let mut out = box buf[i32 + 1](16);
+  let mut n = 0;
+  let mut neg = false;
+  let mut inside = false;
+  for p in l {
+    let b = *p;
+    if b'0' <= b && b <= b'9' {
+      n = n * 10 + to_i32(b) - 48;
+      inside = true
+    } else {
+      if inside {
+        let x = if neg { 0 - n } else { n };
+        let (o, _) = push(out, inl x);
+        out = o
+      } else { () };
+      inside = false;
+      n = 0;
+      neg = b == b'-';
+      if b == b'#' { let (o, _) = push(out, inr ()); out = o } else { () }
+    }
+  };
+  if inside { let x = if neg { 0 - n } else { n }; let (o, _) = push(out, inl x); o } else { out }
+
+-- The tokens of each line that is not empty.
+fn cases<'t>(t: text 't) -> buf (buf (i32 + 1)) =
+  fold_lines(t, !{ (l, cs) ->
+    let (l, m) = array_copy['t, u8] l;
+    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, tokens(l)); cs } },
+    box buf[buf (i32 + 1)](8))
+
+-- A binary tree: empty, or a node of a value and a cell for each subtree, the cells being Rust's
+-- `Box<TreeNode>`s.
+type Tree = mu X. 1 + (ref X * (i32 * ref X))
+
+fn tip() -> Tree = roll inl ()
+
+fn branch(l: Tree, v: i32, r: Tree) -> Tree = roll inr (alloc(l), (v, alloc(r)))
+
+-- The tree whose preorder, with `#` for each empty subtree, starts at token `i`, and the index
+-- after it. Past the end of the tokens, the empty tree.
+fn parse(ts: array (i32 + 1), i: i32) -> (array (i32 + 1) * i32) * Tree =
+  let x = at(&ts, i, inr ());
+  match x {
+    inl v ->
+      let ((ts, j), l) = parse(ts, i + 1);
+      let ((ts, k), r) = parse(ts, j);
+      ((ts, k), branch(l, v, r))
+  | inr _ -> ((ts, i + 1), tip())
+  }
+
+-- The tree of a line's tokens, from the first.
+fn tree_of(ts: buf (i32 + 1)) -> Tree = let (a, n) = ts; let (_, t) = parse(a, 0); t
+
+-- A tree's preorder, `#` for each empty subtree; the tree is consumed.
+fn show(t: Tree) -> 1 =
+  match unroll t {
+    inl _ -> print_byte(b'#')
+  | inr (cl, (v, cr)) -> print_dec(v); print_byte(b' '); show(free(cl)); print_byte(b' '); show(free(cr))
+  }
+
+-- Whether `p` and `q` are the same tree, and both back.
+fn same(p: Tree, q: Tree) -> (Tree * Tree) * bool =
+  match unroll p {
+    inl _ -> match unroll q {
+        inl _ -> ((tip(), tip()), true)
+      | inr n -> ((tip(), roll inr n), false)
+      }
+  | inr (pl, (x, pr)) -> match unroll q {
+      inl _ -> ((roll inr (pl, (x, pr)), tip()), false)
+    | inr (ql, (y, qr)) ->
+        let (pl, a) = swap(pl, tip());
+        let (ql, b) = swap(ql, tip());
+        let ((a, b), e1) = same(a, b);
+        let (pl, _) = swap(pl, a);
+        let (ql, _) = swap(ql, b);
+        let (pr, c) = swap(pr, tip());
+        let (qr, d) = swap(qr, tip());
+        let ((c, d), e2) = same(c, d);
+        let (pr, _) = swap(pr, c);
+        let (qr, _) = swap(qr, d);
+        ((roll inr (pl, (x, pr)), roll inr (ql, (y, qr))), x == y && e1 && e2)
+    }
+  }
+
+-- Whether `t` is a subtree of `s`, and both back.
+fn subtree(s: Tree, t: Tree) -> (Tree * Tree) * bool =
+  let ((s, t), e) = same(s, t);
+  if e { ((s, t), true) } else {
+    match unroll s {
+      inl _ -> ((tip(), t), false)
+    | inr (sl, (x, sr)) ->
+        let (sl, a) = swap(sl, tip());
+        let ((a, t), f1) = subtree(a, t);
+        let (sl, _) = swap(sl, a);
+        let (sr, b) = swap(sr, tip());
+        let ((b, t), f2) = subtree(b, t);
+        let (sr, _) = swap(sr, b);
+        ((roll inr (sl, (x, sr)), t), f1 || f2)
+    }
+  }
+
+-- One case: the preorders of `s` and `t`.
+fn solve(b: buf (i32 + 1)) -> 1 =
+  let (a, n) = b;
+  let ((a, j), s) = parse(a, 0);
+  let ((a, _), t) = parse(a, j);
+  let (_, f) = subtree(s, t);
+  let v = if f { 1 } else { 0 };
+  print_dec(v)
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t -> cases(t) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf (i32 + 1)] (cs, i, filler[buf (i32 + 1)]);
+    cs = c;
+    match o {
+      inl b -> let r = with exhausted_to_option { solve(b) };
+               match r { inl _ -> () | inr _ -> print_dec(0 - 1) };
+               print_byte(b'\n')
+    | inr b -> ()
+    }
+  };
+  n

@@ -1,0 +1,67 @@
+-- pending: generic hash map and set (#211, the generics design pass #489)
+-- now: 41:3: the loop threads `seen`, whose type is not determined: ascribe it
+--
+-- LeetCode 128, Longest Consecutive Sequence.
+--
+-- `longest` answers the length of the longest run of consecutive integers among a list's values,
+-- in linear time: every value goes into a hash set, and a run is counted only from its smallest
+-- value (one whose predecessor is not in the set), walking up while the successor is. Each value
+-- starts at most one walk and is passed by at most one, so the walks take `n` steps in all. The
+-- set is the library's generic hash set with the derived hash and equality of its key (#211):
+-- `set_new[K](cap)`, `set_insert(&mut s, k)` answering whether `k` was new, and
+-- `set_contains(&s, k)`. There is no generic set yet, so the first use of one is refused. The
+-- message is about the type of a loop's state, which the set's type would give: loops are
+-- elaborated before unknown names are reported.
+--
+-- What is expressible today is a different algorithm: sort the values (`sort`, `lib/slice.bc`)
+-- and count runs in one pass, `O(n log n)` where the problem asks for `O(n)`. It is not committed
+-- as this problem's solution because the problem is the hash set.
+--
+-- Allocations per case, once it lands: the set's table (and a doubling or two of it, from the
+-- capacity given), as a Rust `HashSet<i32>`; and the line's buffer of numbers.
+--
+-- Once it lands: on `corpus/leetcode/graphs/0128-longest-consecutive-sequence.in`, one case a
+-- line, its values; each case's length on a line, `4`, `9`, `0`, `1`, `3`, `5`, then the number
+-- of cases, `i32[6]`; `live 0`. The logic was checked with a throwaway stand-in for the set (a
+-- sorted array searched by `binary_search`), not committed.
+
+include textio
+
+-- The numbers of a line.
+fn nums<'t>(l: text 't) -> buf i32 =
+  fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](8))
+
+-- The numbers of each line, the empty line included (a case with no values).
+fn cases<'t>(t: text 't) -> buf (buf i32) =
+  fold_lines(t, !{ (l, cs) -> let (cs, _) = push(cs, nums(l)); cs }, box buf[buf i32](8))
+
+-- The length of the longest run of consecutive values of `a[0..n]`.
+fn longest(a: array i32, n: i32) -> i32 =
+  let mut seen : Set[i32] = set_new[i32](n);
+  for i in 0..n { let x = at(&a, i, 0); let _ = set_insert(&mut seen, x); () };
+  let mut best = 0;
+  for i in 0..n {
+    let x = at(&a, i, 0);
+    let p = set_contains(&seen, x - 1);
+    if not(p) {
+      let mut k = 1;
+      for _ in 0..n {
+        let q = set_contains(&seen, x + k);
+        if q { k = k + 1 } else { break }
+      };
+      if best < k { best = k } else { () }
+    } else { () }
+  };
+  best
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t -> cases(t) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf i32] (cs, i, filler[buf i32]);
+    cs = c;
+    match o { inl b -> let (a, k) = b; let r = longest(a, k); print_dec(r); print_byte(b'\n') | inr b -> () }
+  };
+  n

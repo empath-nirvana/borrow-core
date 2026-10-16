@@ -1,0 +1,98 @@
+-- LeetCode 200, Number of Islands.
+--
+-- `islands` counts the groups of land squares of a grid that touch along an edge. The grid is
+-- one array of squares, row by row, as `corpus/aoc/2022-12.bc` keeps one; each land square not
+-- yet seen starts a breadth-first search whose queue is an array holding each square at most
+-- once, with a head and a tail, and which marks what it reaches as seen. A 2D grid, neighbour
+-- walks and BFS with a visited set.
+--
+-- Allocations per case: the seen array and the queue, as a Rust solution with a `Vec<bool>` and a
+-- `VecDeque` makes, and the buffer of the line's numbers, which is the grid.
+--
+-- Input `0200-number-of-islands.in`: one case a line, the rows, the columns, then the squares row
+-- by row (`1` land, `0` water). Answer: each case's count on a line (`3`, `1`, `0`, `1`, `6`,
+-- `0`, `1`), then the number of cases, `i32[7]`.
+
+include textio
+
+-- `a / b`, for `b > 0`.
+fn quot(a: i32, b: i32) -> i32 = match host[div_s32](a, b) { inl q -> q | inr u -> 0 }
+
+-- The numbers of a line.
+fn nums<'t>(l: text 't) -> buf i32 =
+  fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](8))
+
+-- The numbers of each line that is not empty.
+fn cases<'t>(t: text 't) -> buf (buf i32) =
+  fold_lines(t, !{ (l, cs) ->
+    let (l, m) = array_copy['t, u8] l;
+    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, nums(l)); cs } },
+    box buf[buf i32](8))
+
+-- The neighbour of `p` in direction `d` (up, right, down, left), or `-1` off the grid.
+fn step(p: i32, d: i32, w: i32, h: i32) -> i32 =
+  let x = p - quot(p, w) * w;
+  let y = quot(p, w);
+  let nx = if d == 1 { x + 1 } else { if d == 3 { x - 1 } else { x } };
+  let ny = if d == 0 { y - 1 } else { if d == 2 { y + 1 } else { y } };
+  if 0 <= nx && nx < w && 0 <= ny && ny < h { ny * w + nx } else { 0 - 1 }
+
+-- The number of islands of a grid of `h` rows and `w` columns, `grid[b + i]` the square `i`.
+fn islands(grid: array i32, b: i32, h: i32, w: i32) -> array i32 * i32 =
+  let n = h * w;
+  let mut grid = grid;
+  let mut seen = array_new[bool] (n, !{ i -> false });
+  let mut queue = array_new[i32] (n, !{ i -> 0 });
+  let mut count = 0;
+  for s in 0..n {
+    let land = at(&grid, b + s, 0);
+    let been = at(&seen, s, true);
+    if land == 1 && not(been) {
+      count = count + 1;
+      seen = array_set(seen, s, true);
+      queue = array_set(queue, 0, s);
+      let mut head = 0;
+      let mut tail = 1;
+      for _ in 0..n {
+        if head == tail { break } else { () };
+        let p = at(&queue, head, 0);
+        head = head + 1;
+        for d in 0..4 {
+          let q = step(p, d, w, h);
+          if 0 <= q {
+            let lq = at(&grid, b + q, 0);
+            let bq = at(&seen, q, true);
+            if lq == 1 && not(bq) {
+              seen = array_set(seen, q, true);
+              queue = array_set(queue, tail, q);
+              tail = tail + 1
+            } else { () }
+          } else { () }
+        }
+      }
+    } else { () }
+  };
+  (grid, count)
+
+-- One case: `h`, `w`, then the squares.
+fn solve(c: buf i32) -> i32 =
+  let (a, k) = c;
+  let h = at(&a, 0, 0);
+  let w = at(&a, 1, 0);
+  let (_, n) = islands(a, 2, h, w);
+  n
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t -> cases(t) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf i32] (cs, i, filler[buf i32]);
+    cs = c;
+    match o {
+      inl b -> let k = solve(b); print_dec(k); print_byte(b'\n')
+    | inr b -> ()
+    }
+  };
+  n

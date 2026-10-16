@@ -1,0 +1,87 @@
+-- LeetCode 323, Number of Connected Components in an Undirected Graph.
+--
+-- `components` counts the connected components of a graph on nodes `0..n` given by its edges.
+-- Union-find over two arrays: each node's parent and each root's size. `root` walks to the root
+-- and halves the path as it goes (each node on it pointed at its grandparent); `union` links the
+-- smaller tree under the larger. Every union of two different roots is one component fewer.
+-- Arrays as an arena, with node ids as indices.
+--
+-- Allocations per case: the parent and size arrays, as a Rust solution's two `Vec<usize>`s; and
+-- the line's buffer of numbers.
+--
+-- Input `0323-number-of-connected-components.in`: one case a line, `n`, then the edges as pairs of
+-- nodes. Answer: each case's count on a line (`2`, `1`, `5`, `1`, `3`, `1`), then the number of
+-- cases, `i32[6]`.
+
+include textio
+
+-- The numbers of a line.
+fn nums<'t>(l: text 't) -> buf i32 =
+  fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](8))
+
+-- The numbers of each line that is not empty.
+fn cases<'t>(t: text 't) -> buf (buf i32) =
+  fold_lines(t, !{ (l, cs) ->
+    let (l, m) = array_copy['t, u8] l;
+    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, nums(l)); cs } },
+    box buf[buf i32](8))
+
+-- The root of `x`'s tree, each node on the way pointed at its grandparent. A path is never longer
+-- than the number of nodes.
+fn root(parent: array i32, x: i32) -> array i32 * i32 =
+  let (parent, n) = array_size[i32](parent);
+  let mut parent = parent;
+  let mut x = x;
+  for _ in 0..n {
+    let p = at(&parent, x, x);
+    if p == x { break } else { () };
+    let g = at(&parent, p, p);
+    parent = array_set(parent, x, g);
+    x = g
+  };
+  (parent, x)
+
+-- The trees of `a` and `b` joined, the smaller under the larger root; whether they were two.
+fn union(f: array i32 * array i32, a: i32, b: i32) -> (array i32 * array i32) * bool =
+  let (parent, size) = f;
+  let (parent, ra) = root(parent, a);
+  let (parent, rb) = root(parent, b);
+  if ra == rb { ((parent, size), false) } else {
+    let sa = at(&size, ra, 0);
+    let sb = at(&size, rb, 0);
+    if sa < sb {
+      ((array_set(parent, ra, rb), array_set(size, rb, sa + sb)), true)
+    } else {
+      ((array_set(parent, rb, ra), array_set(size, ra, sa + sb)), true)
+    }
+  }
+
+-- `a / 2`, for `a >= 0`.
+fn quot2(a: i32) -> i32 = host[shr_u32](a, 1)
+
+-- One case: `n`, then the edges.
+fn components(c: buf i32) -> i32 =
+  let (a, k) = c;
+  let n = at(&a, 0, 0);
+  let mut f = (array_new[i32] (n, !{ i -> i }), array_new[i32] (n, !{ i -> 1 }));
+  let mut count = n;
+  for e in 0..quot2(k - 1) {
+    let x = at(&a, 1 + 2 * e, 0);
+    let y = at(&a, 2 + 2 * e, 0);
+    let (g, joined) = union(f, x, y);
+    f = g;
+    if joined { count = count - 1 } else { () }
+  };
+  count
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t -> cases(t) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf i32] (cs, i, filler[buf i32]);
+    cs = c;
+    match o { inl b -> let k = components(b); print_dec(k); print_byte(b'\n') | inr b -> () }
+  };
+  n

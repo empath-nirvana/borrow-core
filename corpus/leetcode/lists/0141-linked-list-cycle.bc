@@ -1,0 +1,80 @@
+-- LeetCode 141, Linked List Cycle.
+--
+-- `has_cycle` answers whether following `next` from the head ever comes back to a node: Floyd's
+-- tortoise and hare, one cursor a step at a time and one two, which meet exactly when there is a
+-- cycle; at most `n` turns.
+--
+-- Representation. The problem's list is a pointer structure whose last node may point back into
+-- it. An owned list cannot do that: each cell has one owner, so the list types here
+-- (`mu X. 1 + (i32 * ref X)`, as in `0206-reverse-linked-list.bc`) are acyclic by construction,
+-- and over them the answer is always `0`. A cycle needs shared ownership (RC is opt-in, and not
+-- built) or shared mutable handles (#119). So the list is an arena: the values in one array and
+-- `next[i]` the index of node `i`'s successor, `-1` for none, as a Rust solution over
+-- `Vec<usize>` indices would keep it. The two cursors are indices, which can alias freely.
+--
+-- Allocations per case: the `next` array, and the line's buffer of numbers, which holds the
+-- values.
+--
+-- Input `0141-linked-list-cycle.in`: one case a line, the index the last node points back to
+-- (`-1` for none), then the values. Answer: each case's verdict on a line, `1` for a cycle and
+-- `0` otherwise (`1`, `0`, `1`, `0`, `1`, `0`, `1`, `0`), then the number of cases, `i32[8]`.
+
+include textio
+
+-- The numbers of a line.
+fn nums<'t>(l: text 't) -> buf i32 =
+  fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](8))
+
+-- The numbers of each line that is not empty.
+fn cases<'t>(t: text 't) -> buf (buf i32) =
+  fold_lines(t, !{ (l, cs) ->
+    let (l, m) = array_copy['t, u8] l;
+    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, nums(l)); cs } },
+    box buf[buf i32](8))
+
+-- The successor of node `i`, or `-1` from `-1`.
+fn follow(next: array i32, i: i32) -> array i32 * i32 =
+  if i < 0 { (next, i) } else { let j = at(&next, i, 0 - 1); (next, j) }
+
+-- Whether the list of `n` nodes from node 0 along `next` has a cycle.
+fn has_cycle(next: array i32, n: i32) -> array i32 * bool =
+  let mut next = next;
+  let mut slow = if n == 0 { 0 - 1 } else { 0 };
+  let mut fast = slow;
+  let mut met = false;
+  for _ in 0..n {
+    let (a, s) = follow(next, slow);
+    let (a, f) = follow(a, fast);
+    let (a, f) = follow(a, f);
+    next = a;
+    slow = s;
+    fast = f;
+    if f < 0 { break } else { () };
+    if s == f { met = true; break } else { () }
+  };
+  (next, met)
+
+-- One case: where the last node points, then the values.
+fn solve(c: buf i32) -> bool =
+  let (a, m) = c;
+  let pos = at(&a, 0, 0);
+  let n = m - 1;
+  let next = array_new[i32] (n, !{ i -> i + 1 });
+  let next = array_set(next, n - 1, pos);
+  let (_, r) = has_cycle(next, n);
+  r
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t -> cases(t) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf i32] (cs, i, filler[buf i32]);
+    cs = c;
+    match o {
+      inl b -> let v = if solve(b) { 1 } else { 0 }; print_dec(v); print_byte(b'\n')
+    | inr b -> ()
+    }
+  };
+  n
