@@ -88,3 +88,69 @@ fn truncate[A](b: buf A, k: i32) -> buf A =
 
 -- Length 0, with the capacity kept: every element dropped, its slot filled.
 fn clear[A](b: buf A) -> buf A = truncate(b, 0)
+
+-- `x` in slot `i` of an array; the element that was there is dropped. Past the end, nothing
+-- changes. `[spec §17]`
+fn array_set[A](a: array A, i: i32, x: A) -> array A = let (a, _) = array_replace[A] (a, i, x); a
+
+-- ### A priority queue  `[spec §17]`
+
+-- A binary min-heap: a buffer of elements, each with an `i32` priority, where no element has a
+-- smaller priority than its parent (`(i - 1) / 2`). The elements are read where they lie, so `A`
+-- is persistent: an `i32`, a `bool` or a tuple of them. Each sift is a counted loop of 32 steps,
+-- the most a path from a leaf to the root can take.
+
+-- A copy of the element at `i`, or the filler past the end: taken out and put back.
+fn heap_at[A](a: array (i32 * A), i: i32) -> array (i32 * A) * (i32 * A) =
+  let (a, o) = array_replace[i32 * A] (a, i, filler[i32 * A]);
+  match o {
+    inl x -> let (a, _) = array_replace[i32 * A] (a, i, x); (a, x)
+  | inr x -> (a, x)
+  }
+
+-- The elements at `i` and `j` exchanged.
+fn heap_swap[A](a: array (i32 * A), i: i32, j: i32) -> array (i32 * A) =
+  let (a, x) = heap_at(a, i);
+  let (a, y) = heap_at(a, j);
+  array_set(array_set(a, i, y), j, x)
+
+-- `x` added with priority `k`: put last, and moved up past each parent of a larger priority.
+fn heap_push[A](h: buf (i32 * A), k: i32, x: A) -> buf (i32 * A) =
+  let (h, _) = push(h, (k, x));
+  let (a, n) = h;
+  let mut a = a;
+  let mut i = n - 1;
+  for _ in 0..32 {
+    if i == 0 { break } else { () };
+    let p = host[shr_u32](i - 1, 1);
+    let (b, (kp, _)) = heap_at(a, p);
+    let (b, (ki, _)) = heap_at(b, i);
+    a = b;
+    if ki < kp { a = heap_swap(a, i, p); i = p } else { break }
+  };
+  (a, n)
+
+-- The element of the smallest priority taken out, with its priority, or `inr ()` for the empty
+-- heap: the last element is put in its place and moved down past each child of a smaller
+-- priority.
+fn heap_pop[A](h: buf (i32 * A)) -> buf (i32 * A) * ((i32 * A) + 1) =
+  let (a, n) = h;
+  if n == 0 { ((a, n), inr ()) } else {
+    let (a, first) = heap_at(a, 0);
+    let (a, last) = heap_at(a, n - 1);
+    let mut a = array_set(array_set(a, n - 1, filler[i32 * A]), 0, last);
+    let m = n - 1;
+    let mut i = 0;
+    for _ in 0..32 {
+      let l = 2 * i + 1;
+      let r = l + 1;
+      let (b, (ki, _)) = heap_at(a, i);
+      let (b, (kl, _)) = heap_at(b, l);
+      let (b, (kr, _)) = heap_at(b, r);
+      a = b;
+      let c = if r < m && kr < kl { r } else { l };
+      let kc = if c == r { kr } else { kl };
+      if c < m && kc < ki { a = heap_swap(a, i, c); i = c } else { break }
+    };
+    ((a, m), inl first)
+  }

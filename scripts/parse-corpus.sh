@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Parse the corpus with `bcc parse`. Every `corpus/*.bc`, `corpus/surface/*.bc` and
-# `corpus/axes/*.bc` must parse and survive the print/re-parse round trip; every
+# Parse the corpus with `bcc parse`. Every `corpus/*.bc`, `corpus/surface/*.bc`,
+# `corpus/axes/*.bc` and `corpus/aoc/*.bc` must parse and survive the print/re-parse round trip; every
 # `corpus/fail/*.bc` must be rejected with the message on its `-- expect:` line.
 # (`corpus/pending/` is checked by `check-corpus.sh`.)
 set -euo pipefail
@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc >/dev/null
 bcc=.lake/build/bin/bcc
 bad=0
-for f in corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc; do
+for f in corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc; do
   if ! "$bcc" parse "$f"; then bad=$((bad + 1)); fi
 done
 for f in corpus/fail/*.bc; do

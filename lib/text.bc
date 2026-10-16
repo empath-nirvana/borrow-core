@@ -396,6 +396,47 @@ fn parse_i32<'a>(t: text 'a) -> i32 with Fail[ParseError] =
     if neg { 0 - n } else { n }
   }
 
+-- The integers written in `t`, in order, folded into a state by `f`: each is a run of decimal
+-- digits, negative when a `-` comes just before it, and every other byte separates them, so
+-- `3-7` holds 3 and −7, and `x=12,y=-4` holds 12 and −4. A counted loop over the view's length;
+-- a run past the width wraps. `[spec §17]`
+fn fold_i32s[S]<'a>(t: text 'a, f: !(i32 * S => S), s: S) -> S =
+  let (t, u) = array_copy['a, u8] t;
+  let (_, (_, (s, (n, (neg, (go, _)))))) =
+    count_fold[text 'a * (!(i32 * S => S) * (S * (i32 * (bool * (bool * u8)))))](
+    !{ (i, (t, (f, (s, (n, (neg, (go, prev))))))) ->
+      let (t, w) = array_copy['a, u8] t;
+      let b = at(w, i, 0);
+      if b'0' <= b && b <= b'9' {
+        let d = to_i32(b) - 48;
+        if go { (t, (f, (s, (n * 10 + d, (neg, (true, b)))))) }
+        else { let minus = prev == b'-'; (t, (f, (s, (d, (minus, (true, b)))))) }
+      } else {
+        if go { let x = if neg { 0 - n } else { n }; (t, (f, (f(x, s), (n, (neg, (false, b))))))
+        } else { (t, (f, (s, (n, (neg, (false, b)))))) }
+      } },
+    len(u), 0, (t, (f, (s, (0, (false, (false, 0)))))));
+  if go { let x = if neg { 0 - n } else { n }; f(x, s) } else { s }
+
+-- The same at `i64`.
+fn fold_i64s[S]<'a>(t: text 'a, f: !(i64 * S => S), s: S) -> S =
+  let (t, u) = array_copy['a, u8] t;
+  let (_, (_, (s, (n, (neg, (go, _)))))) =
+    count_fold[text 'a * (!(i64 * S => S) * (S * (i64 * (bool * (bool * u8)))))](
+    !{ (i, (t, (f, (s, (n, (neg, (go, prev))))))) ->
+      let (t, w) = array_copy['a, u8] t;
+      let b = at(w, i, 0);
+      if b'0' <= b && b <= b'9' {
+        let d = host[extend_u](to_i32(b) - 48);
+        if go { (t, (f, (s, (n * 10 + d, (neg, (true, b)))))) }
+        else { let minus = prev == b'-'; (t, (f, (s, (d, (minus, (true, b)))))) }
+      } else {
+        if go { let x = if neg { 0 - n } else { n }; (t, (f, (f(x, s), (n, (neg, (false, b))))))
+        } else { (t, (f, (s, (n, (neg, (false, b)))))) }
+      } },
+    len(u), 0, (t, (f, (s, (i64[0], (false, (false, 0)))))));
+  if go { let x = if neg { 0 - n } else { n }; f(x, s) } else { s }
+
 -- ### Buffers of views
 
 -- A copy of the view at `i` of a buffer of views, which keeps it: taken out (`take`), copied

@@ -1,0 +1,104 @@
+-- Advent of Code 2021, day 15, ported from `src/year2021/day15.rs` of
+-- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:
+-- `corpus/aoc/LICENSE.md`.
+--
+-- The puzzle: a square grid of risk levels 1–9. Part 1 is the lowest total risk of a path from the
+-- top left to the bottom right, moving between neighbours and paying each square entered. Part 2
+-- asks the same of the grid tiled five by five, each tile's risks one more than the tile to its
+-- left or above, 9 wrapping round to 1.
+--
+-- The port is Dijkstra's algorithm with a binary min-heap (`heap_push`, `heap_pop`, `lib/buf.bc`)
+-- where the Rust keeps a bucket queue of ten vectors, one per cost modulo 10: the same search with
+-- the textbook queue. A 2D grid, neighbour walks and a priority queue.
+--
+-- Answer on `2021-15.in` (`corpus/aoc/gen.py`), as the Rust solution gives: `47` and `295`, one per
+-- line, then `(i32[47], i32[295])`.
+
+include textio
+
+-- `a / b`, and below `a mod b`, for `b > 0`.
+fn quot(a: i32, b: i32) -> i32 = match host[div_s32](a, b) { inl q -> q | inr u -> 0 }
+
+fn modulo(a: i32, b: i32) -> i32 = match host[rem_s32](a, b) { inl r -> r | inr u -> 0 }
+
+-- The risk levels of a square cave, row by row, as digits 1 to 9, and its side.
+fn cave_of<'t>(t: text 't) -> array u8 * i32 =
+  let (t, u) = array_copy['t, u8] t;
+  let (t, v) = array_copy['t, u8] t;
+  let side = match find(u, b'\n', eq_u8) { inl k -> k | inr _ -> 0 };
+  let mut cells = box buf[u8](len(v));
+  for p in t {
+    let b = *p;
+    if b != b'\n' { let (c, _) = push(cells, b - b'0'); cells = c } else { () }
+  };
+  let (a, n) = cells;
+  (a, side)
+
+-- The cave five times as wide and as tall: each tile one step riskier than the one left of it or
+-- above it, 9 wrapping round to 1.
+fn expand(cave: array u8, side: i32) -> array u8 * array u8 =
+  let big = 5 * side;
+  let mut out = array_new[u8] (big * big, !{ i -> 0 });
+  for i in 0..big * big {
+    let x = modulo(i, big);
+    let y = quot(i, big);
+    let base = at(&cave, modulo(y, side) * side + modulo(x, side), 0);
+    let base = to_i32(base);
+    out = array_set(out, i, to_u8(1 + modulo(base - 1 + quot(x, side) + quot(y, side), 9)))
+  };
+  (cave, out)
+
+-- The neighbour of `p` in direction `d` (up, right, down, left), or `-1` off the grid.
+fn step(p: i32, d: i32, side: i32) -> i32 =
+  let x = modulo(p, side);
+  let y = quot(p, side);
+  let nx = if d == 1 { x + 1 } else { if d == 3 { x - 1 } else { x } };
+  let ny = if d == 0 { y - 1 } else { if d == 2 { y + 1 } else { y } };
+  if 0 <= nx && nx < side && 0 <= ny && ny < side { ny * side + nx } else { 0 - 1 }
+
+-- The lowest total risk of a path from the top left to the bottom right, entering each square
+-- costing its risk: Dijkstra's algorithm with a binary heap of squares by their best cost so far.
+-- A square is settled when it first leaves the heap; a later, costlier copy of it is skipped. The
+-- heap holds at most one entry per improvement, four per square, so `4n + 1` pops drain it.
+fn lowest_risk(cave: array u8, side: i32) -> array u8 * i32 =
+  let n = side * side;
+  let mut cave = cave;
+  let mut cost = array_set(array_new[i32] (n, !{ i -> 2147483647 }), 0, 0);
+  let mut todo = heap_push(box buf[i32 * i32](64), 0, 0);
+  let mut answer = 0;
+  for _ in 0..4 * n + 1 {
+    let (h, o) = heap_pop(todo);
+    todo = h;
+    match o {
+      inl (c, p) ->
+        if p == n - 1 { answer = c; break } else { () };
+        let best = at(&cost, p, 0);
+        if c == best {
+          for d in 0..4 {
+            let q = step(p, d, side);
+            if 0 <= q {
+              let r = at(&cave, q, 0);
+              let r = to_i32(r);
+              let old = at(&cost, q, 0);
+              if c + r < old {
+                cost = array_set(cost, q, c + r);
+                todo = heap_push(todo, c + r, q)
+              } else { () }
+            } else { () }
+          }
+        } else { () }
+    | inr u -> break
+    }
+  };
+  (cave, answer)
+
+main -> i32 * i32 =
+  let s = read_input();
+  let c = borrow imm s { 't, t -> cave_of(t) };
+  let (cave, side) = c;
+  let (cave, p1) = lowest_risk(cave, side);
+  let (cave, big) = expand(cave, side);
+  let (_, p2) = lowest_risk(big, 5 * side);
+  print_dec(p1); print_byte(b'\n');
+  print_dec(p2); print_byte(b'\n');
+  (p1, p2)

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.62 · 2026-10-16
+Version 0.63 · 2026-10-16
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1950,10 +1950,14 @@ empty family at a borrowed family (`slice_empty_*`), an empty array at an owned 
 allocates nothing), `!(λ_. filler)` at a `!` function, and componentwise at `⊗` and `⊕`. A type
 with no filler (a cell, a capability) is not buffered. `lib/buf.bc` (`include buf`): `buf_new`,
 `push`, `pop`, `take`, `reserve`, `truncate`, `clear`, `len_of`, `cap_of`, `grow`,
-`buf_of_array`, `array_tab`. `push` on a full buffer grows it to twice its capacity (at least
+`buf_of_array`, `array_tab`, and `array_set` (an owned array's slot written, the old element
+dropped). `push` on a full buffer grows it to twice its capacity (at least
 8): a new array of fillers (`tab`), each element moved by `array_replace`, and the old array
 dropped with the fillers left in it. Every operation is `tab`, `array_replace`, `array_size`,
 `count` and `drop`, so buffers are sound under every allocator by §9 and §13 with nothing new.
+A **priority queue** is a buffer too (#490): `heap_push(h, k, x)` and `heap_pop(h)`
+keep `buf (i32 * A)` a binary min-heap by the `i32` priority, each sift a counted loop of 32
+steps, and read an element by taking it out and putting it back, so `A` is persistent.
 
 **No view across growth.** A view of a buffer exists only inside a borrow block (below), whose
 callback does not hold the buffer: a function that grows a buffer takes it and hands it back,
@@ -1973,7 +1977,9 @@ sequence decodes to U+FFFD. `lib/text.bc` (`include text`, which includes `buf` 
 has appends, UTF-8 validation and decoding, character iteration (`chars`, codata over the rest
 of the view), lines as sub-views (`next_line`, `lines`, `fold_lines`: no allocation per line),
 `split_once`, `trim`, `find_str`, `eq_lit`, checked parsing (`parse_i32`, which raises its error,
-§18), and buffers of views (`view_at`, `sort_views`). Every loop is a
+§18), the integers written in a view folded into a state (`fold_i32s`, `fold_i64s`: each run of
+digits, negative after a `-`, every other byte a separator; #490), and buffers of views
+(`view_at`, `sort_views`). Every loop is a
 `count_fold` bounded by a length, so the library is total. `lib/textio.bc` (`include textio`)
 writes and reads text over the standard streams: `write_str`, `write_string` and `write_lit` in
 one `write_all`, and `read_all`, which reads the input in chunks into the string's spare
@@ -5481,7 +5487,8 @@ its `await`s.
   around one operation (`fn putb(o: Out, b: u8) -> Out * 1 = with wasi_stdout(&mut o) {
   print_byte(b) }; (o, ())`), so that an extern is called only by a platform handler; `put_dec`
   and `bytes` over those; and over the effects, `dec_each(x, put)` (the digits of `x` given to a
-  block), `print_dec`, `eprint_dec`, `ns_of_ms` (milliseconds as the clock's nanoseconds).
+  block), `print_dec`, `eprint_dec`, `ns_of_ms` (milliseconds as the clock's nanoseconds), and at
+  `i64` `dec64_each` and `print_dec64` (#490).
 - `lib/textio.bc`: `include text`, `include io`; §17's helpers over cells; and over the effects,
   `print_lit`, `print_str`, `print_string`, `eprint_lit`, `eprint_str`, `read_input` (the whole
   input into a string, in chunks of `input_into`), `next_arg` (the next argument appended to a
@@ -5880,6 +5887,12 @@ and #486's fixes in `Backend/Clos/Capture.lean` and `Backend/Driver.lean`), with
 
 ## Changelog
 
+- **0.63** (2026-10-16) — Library only (#490, the Advent of Code ports in `corpus/aoc/`): §17's
+  `lib/buf.bc` gains `array_set` and a binary min-heap over a buffer (`heap_push`, `heap_pop`),
+  and `lib/text.bc` the integers of a view folded into a state (`fold_i32s`, `fold_i64s`); §34's
+  `lib/io.bc` gains `dec64_each` and `print_dec64`. Each is ordinary library code over existing
+  constants, every loop counted. No kernel, checker, elaboration or backend change; every
+  existing program keeps its output and counts.
 - **0.62** (2026-10-16) — §34 (new, #156): the standard streams, the clock and the arguments as
   answering effects (`lib/sys.bc`), the clock's time `i64` nanoseconds, monotonic, saturating at
   `2^63 − 1` (the user's decision), whose outermost handler is the WASI preview 1 platform

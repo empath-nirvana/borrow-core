@@ -17,9 +17,9 @@
 #                                         programs, and the negative tests
 #     scripts/falsify.sh file.bc…         those files only
 #
-# Accepted programs: every corpus/*.bc, corpus/surface/*.bc and corpus/axes/*.bc with a `main`
-# (except one marked `-- check: parse-only` or `-- check: no-source`, too large for the source
-# interpreter), and every program of experiments/AsyncCap/bc and bc/accept that `bcc check`
+# Accepted programs: every corpus/*.bc, corpus/surface/*.bc, corpus/axes/*.bc and corpus/aoc/*.bc
+# with a `main` (except one marked `-- check: parse-only` or `-- check: no-source`, too large for
+# the source interpreter), and every program of experiments/AsyncCap/bc and bc/accept that `bcc check`
 # accepts today (the others are pending, and listed; bc/reject is never run); each reads `<name>.in` as standard input and `<name>.args` as its arguments when there is one. The
 # kernel programs are `bcc kernel list`.
 #
@@ -120,7 +120,7 @@ files=("$@")
 all=0
 if [ ${#files[@]} -eq 0 ]; then
   all=1
-  for f in corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc; do
+  for f in corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc; do
     grep -q '^-- check: parse-only' "$f" && continue
     grep -q '^-- check: no-source' "$f" && { echo "$f: no-source, skipped"; continue; }
     grep -q '^main' "$f" || continue
