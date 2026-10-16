@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.57 · 2026-10-15
+Version 0.58 · 2026-10-15
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -682,9 +682,6 @@ lemma of the typed world proved by induction on types or on positions has its `[
 
 - An `imm` reborrow of a `mut` family (K2′). Reading an element through a `mut` view is
   `peek`, a replace-and-restore that needs an element to put in the slot meanwhile.
-- A generic function of `lib/slice.bc` is called with its element type written
-  (`reverse[u8](v)`), and one with two lifetimes (`copy_from`, `eq`, `cmp`, …) with both
-  written (`(unbang eq[u8]) ['x] ['y] (…)`): the surface infers one lifetime from the argument.
 - Bounds checks at a dynamic index are not eliminated statically.
 - Whether `slice_borrow`'s side conditions on `A` and `B` can be dropped: they are used by the
   proof, and not known to be needed.
@@ -2052,9 +2049,6 @@ end-to-end I/O theorems keep their statements.
   `'t`), so `borrow mut` of such a buffer is rejected (`cannot show that array_imm 't u8 outlives
   …`). `sort_views` works on the owned buffer instead. Whether the side condition is needed is
   §9's open question.
-- The sugar's type inference types a call of a function with lifetime parameters whose body
-  lends a place (`push_lit(&mut r, …)`) as `1`; `corpus/http-request.bc` writes that function
-  with the appends' results bound instead.
 - The design's lend row (§4.3: `&s` of a string at a `text` parameter), the total `for` over a
   view's iterator, and `*e` of a copyable view are S4's; `data` values and `data` with lifetime
   parameters are S6's; the typed text types (T2) and zero-cost growth (a `buf` former, F) are
@@ -3335,8 +3329,11 @@ row there (§18's copies, `groupCopy`): the bounded fixed point of the group's g
 The kernel has no recursive type and no recursive handler: the self-reference is a value the
 generator is given, and the knot is tied by `bounded_fix`.
 
+A group may be generic in types and lifetimes (§31): its members take the same type and lifetime
+parameters, and its generator, layers and copies are generic in them.
+
 **Not provided**, each rejected with a message: a member whose body has a `while` or a `loop`
-(§21 *Open*); a generic recursive function; and a call of itself inside a handler of an effect
+(§21 *Open*); and a call of itself inside a handler of an effect
 its recursion performs, which would need a site per level (recursion through a site, decision 57;
 generative labels, #173; `corpus/reject/rec-through-site.bc`). A recursion with no handler of
 `Exhausted` in scope is rejected as any unhandled operation is (`corpus/reject/rec-unhandled.bc`):
@@ -3407,8 +3404,8 @@ every other rule and every existing theorem keep their statements. `fundamentalC
   their native depth adds. A global check (the stack pointer, with LLVM) makes it one.
 - **Exact frame sizes** for the headroom: the calibration is a measured constant
   (provisional).
-- A recursion under `deep` that performs an effect; a generic recursive function; recursion
-  through a site (#173). A recursion whose body loops: §21 *Open*.
+- A recursion under `deep` that performs an effect; recursion through a site (#173). A recursion
+  whose body loops: §21 *Open*. Generic recursion: §31.
 - Tail recursion modulo context (Leijen and Lorenzen, POPL '23) could make some frames smaller
   before they reach the buffer; `fold_imm`'s native depth could use the same buffer.
 
@@ -3561,7 +3558,7 @@ is typed by the existing rules (`bounded_fix`, `[handle]`, `[let]`); `fundamenta
 - **`memo`**, a layer, needs a map (#211) and a layer of its own state: an answering effect with
   type parameters (§18 *Open*).
 - A layer over a recursion under `deep`; the heap driver's members with different result types.
-- Effects under `deep` and generic recursion (§20 *Open*; separate, per the spike).
+- Effects under `deep` (§20 *Open*; separate, per the spike). Generic recursion is §31.
 - Recursion through a site (decision 57's parser, `corpus/reject/rec-through-site.bc`): a level's
   own handler is a site per level, which static names cannot give (generative names, L2, #173).
   Recursion through values: a member passed as a value is a function with a row (#161).
@@ -4729,9 +4726,8 @@ performing at the site k of `E``.
 (it would be passed with the block at each call; `corpus/reject/block-capability.bc`); a block that
 performs an operation of a `for`'s site, which threads the loop's variables
 (`corpus/pending/yield-callback.bc`); a named function with a row passed as a value (§18); a block
-given to a member of a recursive group of several functions, or under a heap driver (§20); a
-block given to a generic function (`fn f[A](…)`), whose instance is matched against the block's
-type before the block's row is known.
+given to a member of a recursive group of several functions, or under a heap driver (§20). A block
+given to a generic function is §31's.
 
 ### Counted loops at a resuming row
 
@@ -4849,6 +4845,101 @@ fails at its block).
 - **Tasks that hold a borrow across `await`** under `lib/async.bc`'s scheduler: R1 is §29, whose
   programs schedule stored generators inline; a task of `spawn` holding a relaxed lend, `cancel` of
   one (A6), a scheduler that logs (A5), and L0 (U3) are not built on this library.
+
+## 31. Entry 30 — generic recursion, blocks to generic callees, and the inference gaps
+
+### Motivation
+
+§15's templates were refused where they met §20's recursion, §30's blocks and core `def`s with
+type parameters: a recursive `map[A, B]` over a `List[A]` was rejected, a block with a row given
+to a generic function was rejected, a generic `fn` called inside a core `def[A]` at `A` was
+instantiated at a type it did not know (#136), and a pair given as the last argument of a generic
+function was taken apart (#135). Each is elaboration: no `CDerives` rule, relation clause, machine
+step or kernel type is added. The inventory is `docs/generics-inventory.md`.
+
+### Generic recursive groups
+
+A recursive group (§20) may be generic. Its members take the **same type parameters** and the
+**same lifetime parameters** (by name); otherwise the group is rejected with a message. Then:
+
+- the generator `g__step__…`, each layer's transformer (§21) and each member's copy are templates
+  in the group's type parameters, made once per copy (per row and blocks, as in §18 and §30) and
+  instantiated per use at the call's types (§15): a call from outside is a call of the copy, whose
+  type arguments are read off the arguments as at any template;
+- the group's lifetime parameters are the generator's and the copies' `all 'a < @.`, outside the
+  capabilities' lifetimes (§21); a call of a member inside the group is at the group's own type and
+  lifetime parameters, through the self-reference;
+- under the heap driver (§20), the machine's source `g__mach_src` is a template, and each of its
+  instances `g__gN__mach_src` is made into its machine `g__gN__mach` (`recMachine`), its frames at
+  the instance's types; a member's copy `x__deep` names the machine at its type arguments,
+  `g__mach[T, …]`, which is the machine of the source's instance at `T, …`.
+
+A recursive function in a library module takes part in recursive groups as one of the program's
+does; its reports are not printed, as a library copy's are not.
+
+**Not provided**, each rejected with a message:
+
+- **Polymorphic recursion**, a member calling itself at other type arguments: the self-reference
+  is at the group's own types, and the call is a type error at its argument.
+- **A recursive template sharing its name** with another function (`map` of `lib/list.bc` and of
+  `lib/iters.bc` in one program): templates of one name are chosen by the arguments' types (§15),
+  after the effects are elaborated, but a recursive group is found by name before that. A call of
+  the shared name is rejected (`corpus/reject/rec-name-clash.bc`); a program that includes both
+  modules and calls neither is accepted.
+
+### Blocks to generic callees
+
+A block with a row (§30) may be given to a generic function: the copy for the block is a template,
+its block parameter at `!U(A ⊸ F_Σ B)`. At the call, type arguments are matched through the row
+(`matchC` at `CTy.eff`), and a block, whose synthesized type has no row, is matched by its result
+against the parameter with the row taken off (`pureArrow`); it is elaborated at the parameter's
+type once that is known.
+
+### Inference
+
+- **A nested template call whose parameters leave a type parameter open** (`nil()` in
+  `cons(7, nil())`) is typed last, as an injection is, from its parameter's type with what the
+  other arguments determined. The effects elaboration binds a plain call whole, its arguments'
+  calls in it (`liftCalls`), so that the typed elaboration still sees the nesting.
+- **A pair as the last argument** of a generic call is one argument (`argOf`, #135).
+- **A core `def` with type parameters whose body calls a template** is a template itself,
+  instantiated where it is used (#136): its body is elaborated only at known types.
+
+A type parameter that only a block's result determines (the start `nil()` of a `fold` whose block
+answers a list) is not inferred: inference does not look into a block's body. It is written,
+`nil[i32]()`.
+
+### The library
+
+`lib/list.bc` (`include list`): `List[A] = mu X. 1 + (A * X)`, `nil`, `cons`, and the recursive
+templates `map`, `filter` (its `A` persistent: the predicate takes the element and the element is
+kept) and `fold` (from the left). `lib/async.bc` includes it for `List`.
+
+### Programs
+
+`corpus/list-generic.bc` (`map`, `filter`, `fold` at several types, pure blocks),
+`list-blocks.bc` (blocks that recurse and that raise, given to the generic `map`), `async-map.bc`
+(A4, now the generic `map`: output and counts unchanged), `rec-generic-mutual.bc`,
+`rec-generic-layer.bc`, `rec-generic-deep.bc` (three times the budget, under `deep`),
+`rec-lifetimes.bc` (recursion with a lifetime parameter, generic and not), `generic-pair-arg.bc`
+(#135), `generic-in-def.bc` (#136), `text-lend-lifetime.bc` (#167's S5 case);
+rejects `corpus/reject/rec-generic-params.bc`, `rec-name-clash.bc`, `double-use-in-callee.bc`
+(#145: reported at the use).
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the checker or the backend. Every elaborated
+form is typed by the existing rules; `fundamentalC`, `adequacyC`, `fundamentalD` and `adequacyD`
+keep their statements and cover every elaborated program. Every existing corpus and kernel program
+keeps its output and counts.
+
+### Open
+
+- Templates of one name when one is recursive (above): module-qualified names, or choosing among
+  them before the effects are elaborated (`docs/generics-inventory.md`, D1).
+- Inference into a block's body (D3).
+- Members of a group with type parameters of other names (D4).
+- `data` declarations with constructors and patterns (#54 stage 8), generic or not.
 
 ---
 
@@ -5052,9 +5143,26 @@ Entry 29 (§30) is implemented in `Frontend/Elab/Effects.lean` (`blockArgs`, `bl
 parameter's type), `lib/async.bc` and `Backend/Clos/Unwind.lean` (`rcG`), with no change to
 `CDerives`, `Core/`, `Paper/` or `Support/`.
 
+Entry 30 (§31) is implemented in `Frontend/Elab/Effects.lean` (`RGroup.tps`, `RGroup.lives`,
+`defineGroup`, `groupCopy`, `deepCopy`, `liftCalls`, `Env.clashes`), `Frontend/Sugar.lean`
+(`genericCall`, `matchC`, `pureArrow`, `argOf`, `makeInst`, `elabDecl`) and `lib/list.bc`, with no
+change to `CDerives`, `Core/`, `Paper/`, `Support/` or `Backend/`.
+
 ---
 
 ## Changelog
+
+- **0.58** (2026-10-15) — §31 (new): generic recursive groups (type and lifetime parameters,
+  layers, the heap driver), blocks with a row given to generic functions, and three inference
+  fixes (a nested template call typed at its parameter; a pair as the last argument, #135; a core
+  `def[A]` calling a template, #136). `lib/list.bc`; `lib/async.bc` includes it. New corpus
+  programs `list-generic`, `list-blocks`, `rec-generic-mutual`, `rec-generic-layer`,
+  `rec-generic-deep`, `rec-lifetimes`, `generic-pair-arg`, `generic-in-def`,
+  `text-lend-lifetime`; rejects `rec-generic-params`, `rec-name-clash`, `double-use-in-callee`.
+  `async-map` (A4) uses the generic `map`, with its output and counts unchanged; `quicksort` loses
+  its three ascriptions. §9, §17 *Open*: the stale inference lines removed; §20, §21, §30 *Not
+  provided* and *Open* updated. No change to `CDerives`, the relation, the machine, a kernel
+  program, or an existing program's output or count.
 
 - **0.57** (2026-10-15) — §30 (new): effectful blocks at the surface (#161, called-only: a
   closure passed at a parameter of function type performs at the sites where it is written, and

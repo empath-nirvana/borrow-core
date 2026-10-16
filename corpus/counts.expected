@@ -98,6 +98,8 @@ gen-pipeline-adapters 0 0 0
 gen-produce 0 0 0
 gen-return 1 0 0
 gen-value 0 0 0
+generic-in-def 0 0 0
+generic-pair-arg 0 0 0
 hello 1 0 0 # the output capability cell; the literal is read-only data
 http-request 3 0 0 # the stdout cell, the array of header literals and the request string; literal views point into read-only data
 implicit-drops 9 0 0
@@ -133,6 +135,8 @@ lend-lib-loop 3 0 0
 lend-mut 2 0 0
 lend-pipeline 2 0 0
 lend-server 2 0 0
+list-blocks 13 0 0
+list-generic 27 0 0 # the lists' nodes, one object each; no frame and no closure is allocated
 main-lifetime 0 0 0 # main's lifetime and the unit cell `u` are cells of no words: nothing is allocated
 map-reuse 7 0 0
 nats-sum 0 0 0
@@ -144,7 +148,11 @@ rec-deep 60040 0 0 # the tree, two objects per node, and each group's buffer of 
 rec-emit 6 0 0 # the frames of the continuation `summed` resumes in the middle of the recursion, as in the probe P2
 rec-even-odd 0 0 0
 rec-fib 0 0 0 # the recursion runs on the native stack: no frame is allocated
+rec-generic-deep 120054 0 0 # the four lists of 30000 nodes, one object per node, and the heap driver's buffers, each grown by doubling
+rec-generic-layer 6 0 0
+rec-generic-mutual 8 0 0
 rec-layer 2 0 0 # the two cells only: the layers wrap the self-reference with no allocation
+rec-lifetimes 2 0 0
 rec-log 1 0 0 # the log cell only
 rec-mixed 0 0 0
 rec-overflow 10101 0 0 # the cells, one per level: 100, and 10001 before the budget is spent
@@ -169,5 +177,6 @@ surface/family-swap 2 0 0
 surface/io-upper 2 0 0
 surface/io-wc 2 0 0
 surface/map-reuse 7 0 0
+text-lend-lifetime 2 0 0
 trim-replace 7 0 0 # the stdin and stdout cells, the input string, and one replaced string per line (four)
 utf8-count 4 0 0 # the stdin, stdout and stderr cells and the line buffer, reused

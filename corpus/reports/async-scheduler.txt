@@ -1,4 +1,4 @@
-effect 17:1: Async: await (ctl, affine)
+effect 18:1: Exhausted: exhausted (ctl, affine, abortive)
 row 19:1: ticker: Async
 lowering 19:1: copy `ticker__n1`: `ticker` for the site 1 of `Async`
 lowering 19:1: copy `ticker__n2`: `ticker` for the site 2 of `Async`
