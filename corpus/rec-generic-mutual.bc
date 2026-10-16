@@ -1,0 +1,19 @@
+-- Mutual recursion generic in a type (SPEC §15, §20): `evens` and `odds` call one another, so
+-- they are one recursive group, and both are generic in `A`. The group's generator is a template in
+-- `A`, taken at the record of the two members, and a call of either from outside is a call of its
+-- copy at the call's types: here at `i32` and at `bool`, two instances of one group.
+--
+-- Answer: `([1, 3, 5], [false])`: the elements at even positions of `[1, 2, 3, 4, 5]`, and those
+-- at odd positions of `[true, false]`. A group that called the wrong member gives the other half.
+
+include list
+
+fn evens[A](xs: List[A]) -> List[A] =
+  match unroll xs { inl u -> nil() | inr (x, r) -> cons(x, odds(r)) }
+
+fn odds[A](xs: List[A]) -> List[A] =
+  match unroll xs { inl u -> nil() | inr (x, r) -> evens(r) }
+
+main -> List[i32] * List[bool] = with on_exhausted(!{ u -> (nil(), nil()) }) {
+  (evens(cons(1, cons(2, cons(3, cons(4, cons(5, nil())))))), odds(cons(true, cons(false, nil()))))
+}

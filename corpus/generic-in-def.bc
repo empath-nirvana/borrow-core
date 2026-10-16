@@ -1,0 +1,15 @@
+-- A generic function called at a generic core `def`'s type variables (SPEC §15, #136). The body
+-- of `twice` calls the template `id` at its own `A`, which is known only at a use of `twice`: so
+-- `twice` is instantiated where it is used, as a template is, and `id` at each instance's type.
+-- `thrice` calls `twice` at its `A` in turn.
+--
+-- Answer: `(3, inr ())`: `thrice` at `i32` and at `bool` (`true` is `inr ()`).
+
+fn id[A](x: A) -> A = x
+
+def twice[A] : !(A => A) = !thunkv fun (x : A) -> return id(id(x))
+
+def thrice[A] : !(A => A) =
+  !thunkv fun (x : A) -> y <- return (unbang twice[A]) x; return id[A](y)
+
+main -> i32 * bool = (thrice[i32](3), thrice[bool](true))

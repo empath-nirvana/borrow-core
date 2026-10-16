@@ -1,0 +1,24 @@
+-- A layer over generic recursions (SPEC §21): under `with counted { … }` each call that `fold` and
+-- `map` of `lib/list.bc` make of themselves ticks `Count` first. The layer's transformer is a
+-- template in the group's type parameters, as its generator is, and the counter's capability is
+-- the environment passed down with the argument.
+--
+-- Answer: `(6, ([true], 4))`: `fold` sums `[1, 2, 3]` making three calls of itself and `map` one,
+-- so the counter ends at 4. A layer applied to the outer calls too would count 6.
+
+include list
+
+effect Count { fn tick() -> i32 }
+
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+
+fn counted[A, B](call: !(A => B), a: A) -> B = tick(); call(a)
+
+main -> i32 * (List[bool] * i32) =
+  let c = alloc(0);
+  let r = with count(&mut c) { with counted { with on_exhausted(!{ u -> (0, nil()) }) {
+    (fold(cons(1, cons(2, cons(3, nil()))), 0, !{ (a, x) -> a + x }),
+     map(cons(1, nil()), !{ x -> x > 0 }))
+  } } };
+  let (s, l) = r;
+  (s, (l, free(c)))

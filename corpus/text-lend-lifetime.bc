@@ -1,0 +1,19 @@
+-- A call of a function with a lifetime parameter whose body lends a place (#167; SPEC §17 *Open*):
+-- `greet` appends to its string through `&mut r`, and its call in the borrow block is typed at
+-- `greet`'s result, `string`, with nothing written.
+--
+-- Answer: `hi bob`, then `i32[6]`, its length.
+
+include textio
+
+fn greet<'a>(name: text 'a) -> string =
+  let mut r = box string(64);
+  push_lit(&mut r, "hi ");
+  push_str(&mut r, name);
+  r
+
+main -> i32 =
+  let s = borrow imm "bob" { 'x, v -> greet(v) };
+  let s = write_string(&mut stdout, s);
+  let (s, n) = len_of(s);
+  n

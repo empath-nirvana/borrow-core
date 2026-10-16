@@ -14,13 +14,14 @@
 -- A task holds no borrow across an `await` here: what it holds there must drop, and a borrow
 -- block's body performs no resuming operation (SPEC §19).
 
+-- The values of the tasks are answered as a `List` (`lib/list.bc`).
+include list
+
 effect Async { ctl await() }
 
 -- A task of `A`: at its next observation, its value or the rest of it, boxed at `top` so that a
 -- queue may hold it.
 type Task[A] = box top U (nu X. F (A + box top U X) & F 1)
-
-type List[A] = mu X. 1 + (A * X)
 
 -- A queue's slot: a task that finished, with its value, or one still pending.
 type Slots[A] = mu X. 1 + ((A + Task[A]) * X)

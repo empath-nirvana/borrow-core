@@ -1,0 +1,36 @@
+-- Recursive functions with lifetime parameters (SPEC §20, §23): `vsum` and `count_if` walk a
+-- shared view by calling themselves on its tail, at the view's lifetime `'a`. A group's lifetime
+-- parameters are its generator's and its copies', outside the capabilities' lifetimes, so a call
+-- of itself is at the group's own `'a`; a call from outside instantiates them at the borrow's
+-- lifetime, as any call does. `count_if` is generic in its element type too, used at `i32` and at
+-- `bool`.
+--
+-- Answer: `(10, (2, 1))`: `1 + 2 + 3 + 4`; two elements of `[1, 2, 3, 4]` exceed 2; one element
+-- of `[false, true]` is true.
+
+include rec
+include slice
+
+fn vsum<'a>(v: array_imm 'a i32) -> i32 =
+  match split_first(v) {
+    inl (h, t) -> *h + vsum(t)
+  | inr u -> 0
+  }
+
+fn count_if[A]<'a>(v: array_imm 'a A, p: !(imm 'a A => bool)) -> i32 =
+  match split_first(v) {
+    inl (h, t) -> if p(h) { 1 + count_if(t, p) } else { count_if(t, p) }
+  | inr u -> 0
+  }
+
+fn data(i: i32) -> i32 = i + 1
+
+fn flag(i: i32) -> bool = i > 0
+
+main -> i32 * (i32 * i32) =
+  let mut a = array_new[i32] (4, data);
+  let mut b = array_new[bool] (2, flag);
+  let s = borrow imm a { 'x, v -> with on_exhausted(!{ u -> 0 }) { vsum(v) } };
+  let x = borrow imm a { 'x, v -> with on_exhausted(!{ u -> 0 }) { count_if(v, !{ g -> *g > 2 }) } };
+  let y = borrow imm b { 'x, v -> with on_exhausted(!{ u -> 0 }) { count_if(v, !{ g -> *g }) } };
+  (s, (x, y))

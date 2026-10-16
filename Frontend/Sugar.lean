@@ -46,7 +46,7 @@ one is adding its name here. The elaboration brings in `io`, `div` and `prelude`
 (`elaborateS`); `include m` brings in any of them. -/
 def libNames : List String :=
   ["io", "div", "prelude", "lend", "adapters", "slice", "buf", "text", "textio", "iters", "fail",
-   "yield", "rec", "aff", "async"]
+   "yield", "rec", "aff", "async", "list"]
 
 /-- The directory of the library: `$BCC_LIB` when it is set; otherwise `lib/` of the checkout
 whose `.lake/build/bin/` holds the running `bcc`; otherwise `lib/` of the working directory. -/
@@ -2327,6 +2327,11 @@ def matchC (m : MatchSt) (d : Nat) : CCTy → CCTy → Option MatchSt
   | .amp C D, .amp C' D' => (matchC m d C C').bind (matchC · d D D')
   | .nu C, .nu C' => matchC m (d + 1) C C'
   | .all _ _ C, .all _ _ C' => matchC m d C C'
+  | .eff n i q A B fin C, .eff n' i' q' A' B' fin' C' =>
+    if n == n' && i == i' && q == q' then
+      (matchV m d A A').bind fun m => (matchV m d B B').bind fun m =>
+        (matchC m d fin fin').bind (matchC · d C C')
+    else none
   | p, t => if p = t then some m else none
 end
 
@@ -2438,11 +2443,29 @@ def compsC : CVTy → Val → List (CVTy × Val)
   | .tensor P Q, .pair _ V W => (P, V) :: compsC Q W
   | P, W => [(P, W)]
 
-/-- The argument rebuilt from its components (as `compsC` split it). -/
+/-- The argument rebuilt from its components (as `compsC` split it): the last component is the
+rest of the tuple, a pair itself when that argument is one. -/
 def argOf : Val → List Val → Val
-  | .pair sp _ W, V :: Vs => .pair sp V (argOf W Vs)
   | _, [V] => V
+  | .pair sp _ W, V :: Vs => .pair sp V (argOf W Vs)
   | W, _ => W
+
+/-- A function type with its result's row taken off: `U (A -o F[Σ] B)` as `U (A -o F B)`.
+`[spec §31]` -/
+def pureArrow : CVTy → Option CVTy
+  | .bang (.thunk (.arr X C)) => some (.bang (.thunk (.arr X (.ret (retOf C)))))
+  | .thunk (.arr X C) => some (.thunk (.arr X (.ret (retOf C))))
+  | _ => none
+where
+  retOf : CCTy → CVTy
+    | .eff _ _ _ _ _ _ C => retOf C
+    | .ret B => B
+    | _ => .unit
+
+/-- A closure, `thunkv fun` or `!thunkv fun`. -/
+def isClosure : Val → Bool
+  | .thunkv _ (.lam ..) | .bangThunkv _ (.lam ..) => true
+  | _ => false
 
 /-- A closure whose parameter's type is left to the context. -/
 def holeClosure : Val → Bool
@@ -3299,7 +3322,15 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           let mut g : Val := .unbang sp (.var sp nm)
           for v in extras do g := .inst sp g (← c.surfaceL sp (.var v))
           pure g
-      | none => pure V
+      | none =>
+        -- The machine of a generic recursive group at written type arguments: the machine of the
+        -- instance of its source (`deepCopy`, `recMachine`).
+        let src := h ++ "_src"
+        match (← get).templates.find? (fun | .def_ _ m _ _ _ _ => m.name == src | _ => false) with
+        | some t => do
+          let (nm, _) ← makeInst n c sp t (args.map c.elabV).toArray
+          pure (.var sp (nm.dropEnd "_src".length).toString)
+        | none => pure V
     | .shorten sp m σ l V => do pure (.shorten sp m σ l (← surfV n c none V))
     | .thunk sp M => do
       pure (.thunk sp (← surfC n c.pushDead (exp.bind fun | .thunk C => some C | _ => none) M))
@@ -4394,7 +4425,11 @@ def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) →
     let key := (tn.name, σs.map (·.2.strip))
     let st ← get
     if let some name := st.insts.lookup key then return (name, extras)
-    let name := s!"{tn.name}__g{st.insts.length}"
+    -- An instance of a generic recursive group's machine source keeps the suffix that makes it a
+    -- machine (`recMachine`): `g__gN__mach_src`, whose machine is `g__gN__mach`.  `[spec §31]`
+    let name := if tn.name.endsWith "__mach_src" then
+        s!"{(tn.name.dropEnd "__mach_src".length).toString}__g{st.insts.length}__mach_src"
+      else s!"{tn.name}__g{st.insts.length}"
     let mk' := match mk with
       | .template m _ => m
       | mk => mk
@@ -4508,10 +4543,22 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
     let mut args : Array (Option Val) := Array.replicate comps.length none
     let mut tys : Array (Option CVTy) := Array.replicate comps.length none
     let mut c := c
+    -- A call of a template whose parameters do not determine all its type parameters (`nil()`):
+    -- typed last, as an injection is, from the parameter's type with what the other arguments
+    -- determined.  `[spec §31]`
+    let resultOpen (Wi : Val) : Bool := match Wi with
+      | .app _ g _ => match genericCallee g with
+        | some (h, none) =>
+          !isLocal h && st.templates.any fun
+            | .def_ _ tn tps A _ _ => tn.name == h &&
+                ((paramTy A).map fun P => tps.any fun x => !Elab.Effects.mentions [x.name] P).getD false
+            | _ => false
+        | _ => false
+      | _ => false
     for pass in [0, 1] do
       for ((Pi, Wi), k) in comps.zipIdx do
         if args[k]!.isSome then continue
-        if pass == 0 && checkOnly Wi && m.isOpen Pi then continue
+        if pass == 0 && (checkOnly Wi || resultOpen Wi) && m.isOpen Pi then continue
         let pat' := m.solved Pi
         let opn := m.isOpen Pi
         -- A lent place: its content matches the borrow's, and `lendCall` lends it.
@@ -4561,6 +4608,22 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
               | _ => .thunk (.arr A' (.ret B'))
             | none => T
           | _, _ => T
+        -- A block at a parameter whose result has a row (a copy for effectful blocks, SPEC §30):
+        -- its type as synthesized has no row, so its result is read off it, and the block is
+        -- elaborated at the parameter's type, now known, when it was elaborated without it.
+        -- `[spec §31]`
+        let (Wi', T) ← if (matchV m 0 Pi T).isSome || !isClosure Wi then pure (Wi', T) else
+          match pureArrow Pi with
+          | some P₀ => match matchV m 0 P₀ T with
+            | some m' =>
+              if m'.isOpen Pi then pure (Wi', T)
+              else if !opn then pure (Wi', m'.solved Pi)
+              else do
+                let Wi'' ← surfV n c (some (m'.solved Pi)) Wi
+                c ← refresh c
+                pure (Wi'', m'.solved Pi)
+            | none => pure (Wi', T)
+          | none => pure (Wi', T)
         match matchV m 0 Pi T with
         | some m' => m := m'
         | none =>
@@ -4657,6 +4720,12 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
     -- A generic function is a template, instantiated where it is called.
     if let .def_ _ _ (_ :: _) _ _ (.template _ _) := d then
       return { st with templates := st.templates ++ [d] }
+    -- A core `def` with type parameters whose body calls a template: its body is elaborated only
+    -- at known types, so it is a template too, instantiated where it is used (#136).  `[spec §31]`
+    if let .def_ dsp dn ps@(_ :: _) dA dV mk := d then
+      let tnames := st.templates.filterMap fun | .def_ _ m _ _ _ _ => some m.name | _ => none
+      if tnames.any dV.names then
+        return { st with templates := st.templates ++ [.def_ dsp dn ps dA dV (.template mk)] }
     -- The loops of a library's declarations are not reported.
     let st := { st with quiet := match d with
       | .def_ _ nm _ _ _ _ => st.libNames.contains nm.name

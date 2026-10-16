@@ -1,0 +1,17 @@
+-- expect: 8:3: `v` is used twice here, and its type `array_imm 'a i32` is not persistent
+-- A view used twice inside a callee called from a borrow block (#145, #167): the double use is
+-- reported where it is, in `survey`, not at the block that calls it.
+
+include slice
+
+fn survey<'a>(v: array_imm 'a i32) -> i32 =
+  let n = len(v);
+  let m = len(v);
+  n + m
+
+fn data(i: i32) -> i32 = i
+
+main -> i32 =
+  let mut a = array_new[i32] (3, data);
+  let s0 = borrow imm a { 'x, v -> survey(v) };
+  s0

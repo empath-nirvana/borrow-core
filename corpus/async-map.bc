@@ -1,12 +1,14 @@
 -- A4 of docs/async-capabilities.md (SPEC §30): an awaiting block passed to an ordinary `map`, the
--- same `map` also used synchronously. `map`'s type names no effect: `!(List[i32] * !(i32 => i32)
--- => List[i32])`. Its block parameter `f` is called, never stored or returned. A block's effects are
--- those of where it is written: `slow_tens`'s block awaits, and its `await` goes to the handler
--- site that serves `slow_tens`'s `Async` (static names; `map` handles no `Async`, so nothing is
--- handled by accident). Each use of `map` is a copy at its block's row (SPEC §14's specialization,
--- keyed by the block's sites): `map__n3` at the pure row (only `Exhausted`, its recursion's
--- budget) for `main`'s block, and `map__n2_b1n1` for `slow_tens`'s, whose row adds the `await` of
--- the spawn site 1. Each is checked at closed rows; the kernel has no row variable.
+-- same `map` also used synchronously. `map` is the generic one of `lib/list.bc` (which `lib/async.bc`
+-- includes), `fn map[A, B](xs: List[A], f: !(A => B)) -> List[B]`: its type names no effect. Its
+-- block parameter `f` is called, never stored or returned. A block's effects are those of where it
+-- is written: `slow_tens`'s block awaits, and its `await` goes to the handler site that serves
+-- `slow_tens`'s `Async` (static names; `map` handles no `Async`, so nothing is handled by
+-- accident). Each use of `map` is a copy at its block's row (SPEC §14's specialization, keyed by
+-- the block's sites), and each copy a template instantiated at the call's types (SPEC §15):
+-- `map__n3` at the pure row (only `Exhausted`, its recursion's budget) for `main`'s block, and
+-- `map__n2_b1n1` for `slow_tens`'s, whose row adds the `await` of the spawn site 1, both at
+-- `A = B = i32`. Each is checked at closed rows; the kernel has no row variable.
 --
 -- `map` is recursive, so it performs `Exhausted` (SPEC §20); the task handles it inside its own
 -- block, so that what the task's observations perform is only `Async`, which `spawn` handles.
@@ -16,14 +18,7 @@
 -- inr (i32[30], inl ()))), inl ()))`: `([2, 3, 4], [[10, 20, 30]])`; the task awaits three times.
 -- `live 0`.
 
-include rec
 include async
-
-fn map(xs: List[i32], f: !(i32 => i32)) -> List[i32] =
-  match unroll xs {
-    inl u -> (roll inl () : List[i32])
-  | inr (x, rest) -> let y = f(x); (roll inr (y, map(rest, f)) : List[i32])
-  }
 
 fn one_two_three() -> List[i32] = roll inr (1, roll inr (2, roll inr (3, roll inl ())))
 

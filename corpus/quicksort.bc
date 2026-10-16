@@ -99,12 +99,12 @@ fn put_signed(o: Out, x: i32) -> Out =
 
 main -> i32 =
   let mut a = array_new[i32] (2000, data);
-  let s0: i32 * i32 = borrow imm a { 'x, v -> survey(v) };
+  let s0 = borrow imm a { 'x, v -> survey(v) };
   let (before, _) = s0;
   borrow mut a { 'x, v -> let v = quicksort(v); () };
-  let s1: i32 * i32 = borrow imm a { 'x, v -> survey(v) };
+  let s1 = borrow imm a { 'x, v -> survey(v) };
   let (after, bad) = s1;
-  let xs: i32 * (i32 * (i32 * i32)) = borrow imm a { 'x, v ->
+  let xs = borrow imm a { 'x, v ->
     let (v, w) = array_copy['x, i32] v;
     let (v, u) = array_copy['x, i32] v;
     let (v, t) = array_copy['x, i32] v;

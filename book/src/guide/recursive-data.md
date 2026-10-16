@@ -71,6 +71,24 @@ members may answer different types: the fixed point is taken at the record of th
 A recursion whose body has a `while` or a `loop` is not provided yet: it is div, and its
 `Exhausted` would be performed inside its loop, where no handler reaches.
 
+A recursion may be **generic**. `lib/list.bc` (`include list`) gives `List[A]` with `nil`,
+`cons`, and the recursive templates `map`, `filter` and `fold`. Each use at new types is an
+instance of the whole recursion at those types, and a block given to one may itself perform
+operations, which go to the handlers where the block is written:
+
+```bc
+include list
+
+main -> List[bool] * i32 = with on_exhausted(!{ u -> (nil(), 0) }) {
+  let xs = cons(3, cons(0 - 1, cons(4, nil())));
+  (map(xs, !{ x -> x > 1 }), fold(cons(1, cons(2, nil())), 0, !{ (a, x) -> a + x }))
+}
+-- answer: (inr (inr (), inr (inl (), inr (inr (), inl ()))), i32[3])
+```
+
+The members of a generic recursion take the same type parameters, and a call of itself is at
+them: a recursion that calls itself at other types is not provided.
+
 A **layer** runs around each call a recursion makes of itself. It is a function of the call and
 its argument, generic in their types, and `with L { … }` applies it to the recursions called in the
 block, before their fixed point is taken: it transforms the generator, and the recursion knows

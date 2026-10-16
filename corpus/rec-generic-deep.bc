@@ -1,0 +1,21 @@
+-- check: no-source
+-- Generic recursions under the heap driver (SPEC §20): `replicate`, `map` and `fold` of a generic
+-- list, each at three times the budget of `bounded`. A generic group's machine source is a
+-- template in the group's type parameters, and each instance of it is made into the machine of
+-- that instance, its frames at the instance's types: `map`'s frame holds the mapped element, an
+-- `i32` at one use and a `bool` at the other.
+--
+-- The source interpreter is too slow at this depth (`-- check: no-source`); the golden is the
+-- closed form.
+--
+-- Answer: `(30000, 30000)`: the sum of 30000 ones, and the number of 30000 `true`s, each mapped
+-- from `1`. Under `bounded` each of these runs out of its budget.
+
+include list
+
+fn replicate[A](n: i32, x: A) -> List[A] = if n == 0 { nil() } else { cons(x, replicate(n - 1, x)) }
+
+main -> i32 * i32 = with deep {
+  (fold(map(replicate(30000, 0), !{ x -> x + 1 }), 0, !{ (a, x) -> a + x }),
+   fold(map(replicate(30000, 1), !{ x -> x > 0 }), 0, !{ (a, b) -> if b { a + 1 } else { a } }))
+}

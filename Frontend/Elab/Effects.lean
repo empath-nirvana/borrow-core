@@ -118,6 +118,12 @@ structure RGroup where
   name : String
   members : List (String × FnParts)
   sp : Span
+  /-- The type parameters of a generic group (SPEC §15, §20), each member's: its generator and its
+  copies are templates in them, instantiated where a copy is called.  `[spec §31]` -/
+  tps : List Ident := []
+  /-- The lifetime parameters of the group, each member's (SPEC §15, §20): its generator and its
+  copies are generic in them, outside the capabilities' lifetimes.  `[spec §31]` -/
+  lives : List (Ident × Life) := []
 
 /-- What the elaboration knows, each declared before the point being elaborated. -/
 structure Env where
@@ -138,6 +144,10 @@ structure Env where
   driven by `bounded` over their generator transformed by them, and a call of a member performs
   the layers' rows too. A copy's body is outside them: they apply to the calls written inside. -/
   inLayers : List String := []
+  /-- The recursive functions another function has the name of (SPEC §20): a call of one of these
+  names is rejected, since a recursive group is found by name, before the types that choose among
+  templates of one name are known.  `[spec §31]` -/
+  clashes : List String := []
   /-- The functions declared so far that have no row, each with its declaration: a call that passes
   one an effectful block uses its copy at the block's row (`blockCall`).  `[spec §30]` -/
   plain : List (String × Decl) := []
@@ -625,9 +635,12 @@ def mayLoop : Nat → Comp → Bool
 def threadedPerform (sp : Span) (n i : Nat) (V : Val) (w : String) : Bind := fun N =>
   pure (.bind sp ⟨w, sp⟩ none (.perform sp n i (.pair sp V (.var sp w))) N false)
 
-/-- The plain calls of a value, bound first in the order its evaluation runs them in (innermost
-and leftmost first), so that an effectful call lifted out of it keeps its place among them. A
-sugar form (an operator, `*e`, a borrow block) is not a call and stays where it is. -/
+/-- The plain calls of a value, bound first in the order its evaluation runs them in (leftmost
+first), so that an effectful call lifted out of it keeps its place among them. A call is bound
+whole, its arguments' calls in it: its evaluation runs them first, and the typed elaboration then
+types each where the call's parameter gives it the type it expects (`nil()` in `cons(7, nil())`).
+A sugar form (an operator, `*e`, a borrow block) is not a call and stays where it is.
+`[spec §31]` -/
 def liftCalls : Nat → Val → StateT (List Bind) EM Val
   | 0, V => pure V
   | n + 1, V => match V with
@@ -636,10 +649,8 @@ def liftCalls : Nat → Val → StateT (List Bind) EM Val
       | .sugar .. | .app _ (.sugar ..) _ =>
         pure (.app sp f (← liftCalls n W))
       | _ =>
-        let f' ← liftCalls n f
-        let W' ← liftCalls n W
         let x ← (fresh "fx_n" : EM String)
-        modify (· ++ [fun N => pure (.bind sp ⟨x, sp⟩ none (.ret sp (.app sp f' W')) N false)])
+        modify (· ++ [fun N => pure (.bind sp ⟨x, sp⟩ none (.ret sp (.app sp f W)) N false)])
         pure (.var sp x)
     | .pair sp V W => do pure (.pair sp (← liftCalls n V) (← liftCalls n W))
     | .inl sp V => do pure (.inl sp (← liftCalls n V))
@@ -1523,6 +1534,10 @@ which takes the capabilities first and hands them back first, bound before the v
 def fnCall : Nat → Cx → List Cap → Span → Val → String → FSig → Val → EM (List Bind × Val)
   | 0, _, _, sp, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, sp, f, x, g, W => do
+    if cx.env.clashes.contains x then
+      throw ⟨sp, s!"`{x}` is recursive and another function is named `{x}` too: a call of it is " ++
+        "not provided (two modules may declare templates of one name, chosen by the arguments' " ++
+        "types, only when none of them is recursive)"⟩
     let used := cx.needIn (cx.rowOf g)
     if used.isEmpty && (cx.ctl (cx.rowOf g)).isEmpty then return ← plainApp k cx cs sp f W
     noLend sp s!"`{x}`" W
@@ -1579,8 +1594,6 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
   | 0, _, _, sp, _, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, sp, f, x, g, W, blks => do
     noLend sp s!"`{x}`" W
-    if let .def_ _ _ (_ :: _) _ _ _ := g.decl then
-      throw ⟨sp, s!"`{x}` is generic and is given an effectful block: not provided (SPEC §30 *Open*)"⟩
     let some P := (cx.env.sigs.lookup x).bind paramTyOf
       | throw ⟨sp, s!"internal error: the parameters of `{x}`"⟩
     let mut bs : List Bind := []
@@ -2130,6 +2143,9 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
     let st ← get
     if st.made.any (·.1 == stepName) || st.started.contains stepName then return name
     modify fun s => { s with started := stepName :: s.started }
+    -- A library's recursion is not reported, as its copies are not (`copyOf`).
+    let q := (← get).quiet
+    if env.lib.contains gn then modify fun s => { s with quiet := true }
     let some G₀ := env.groups.find? (·.name == gn) | throw ⟨sp, s!"internal error: the group `{gn}`"⟩
     let some exh := env.exhEff? | throw ⟨sp, s!"internal error: the exhaustion effect"⟩
     let some e := ss.find? (·.eff == exh.name)
@@ -2154,9 +2170,10 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
         (hs.find? (·.eff == i.eff)).map fun h =>
           ⟨i.eff, "fx_c_" ++ i.eff.toLower, "fx_l_" ++ i.eff.toLower, h, none⟩
       else (ss.find? (·.eff == i.eff)).bind fun s => s.thr.map fun (w, W) => threadCap gsp i.eff w W
-    let tps : List Ident := (ss.filterMap (·.thr)).map fun (_, W) => ⟨W, gsp⟩
+    -- The group's own type parameters, then the type of each variable a `for`'s site threads.
+    let tps : List Ident := G.tps ++ (ss.filterMap (·.thr)).map fun (_, W) => ⟨W, gsp⟩
     let tArgs : List VTy := tps.map fun t => .name gsp t.name
-    let lives : List (Ident × Life) :=
+    let lives : List (Ident × Life) := G.lives ++
       (cs.filter (·.thr.isNone)).map fun c => ((⟨c.life, gsp⟩ : Ident), Life.top gsp)
     let ss := ss.map fun s => { s with sp := gsp, what := "the caller" }
     let rowR := env.rowOf (ssAll.map fun s => { s with sp := gsp, what := "the caller" })
@@ -2233,6 +2250,7 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
       let (dA, dV) := drv.build gsp rowR
       let dn := copyName mn keys
       modify fun s => { s with made := s.made.push (dn, .def_ gsp ⟨dn, gsp⟩ tps dA dV mk) }
+    modify fun s => { s with quiet := q }
     pure name
 
 /-- The copy of the recursive group `gn` driven by the heap driver `d`, made once (SPEC §20): the
@@ -2253,6 +2271,12 @@ def deepCopy : Nat → Env → Span → String → String → String → EM Stri
     let some exh := env.exhEff? | throw ⟨sp, s!"internal error: the exhaustion effect"⟩
     let gsp := G.sp
     let some g₀ := env.fn? x | throw ⟨sp, s!"internal error: `{x}`"⟩
+    -- A generic group: its source and its members' copies are templates in its type parameters,
+    -- and each instance of the source is made into the machine of that instance (`recMachine`).
+    -- `[spec §31]`
+    let tArgs : List VTy := G.tps.map fun t => .name gsp t.name
+    let mk : Mark := if G.tps.isEmpty then .none else .template .none
+    let machV : Val := if G.tps.isEmpty then .var gsp mach else .defApp gsp mach tArgs
     if let some i := g₀.row.find? (·.eff != exh.name) then
       throw ⟨sp, s!"`{x}` performs `{i.eff}`: a recursion that performs an effect is not provided " ++
         s!"under the heap driver `{d}`"⟩
@@ -2289,17 +2313,17 @@ def deepCopy : Nat → Env → Span → String → String → String → EM Stri
     let (sA, sV) := srcF.build gsp
     report gsp "lowering" (s!"recursive group {", ".intercalate (G.members.map (·.1))} under `{d}`: " ++
       s!"the machine `{mach}`, its pending calls frames in `{d}`'s buffer")
-    modify fun s => { s with made := s.made.push (src, .def_ gsp ⟨src, gsp⟩ [] sA sV .none) }
+    modify fun s => { s with made := s.made.push (src, .def_ gsp ⟨src, gsp⟩ G.tps sA sV mk) }
     for ((mn, f), j) in G.members.zipIdx do
       let p ← fresh "fx_dp"
       let ms ← fresh "fx_ms"; let mr ← fresh "fx_mr"
       let call : Val := .app gsp (.var gsp d) (.pair gsp (.var gsp ms) (.pair gsp (.var gsp mr)
         (.ascribe gsp (injAt gsp j G.members.length (.var gsp p)) A)))
-      let body : Comp := .letPair gsp ⟨ms, gsp⟩ ⟨mr, gsp⟩ (.var gsp mach) (.ret gsp call)
+      let body : Comp := .letPair gsp ⟨ms, gsp⟩ ⟨mr, gsp⟩ machV (.ret gsp call)
       let drv : FnParts := ⟨true, [], f.P, B, ⟨p, gsp⟩, body⟩
       let (dA, dV) := drv.build gsp
       let dn := s!"{mn}__{d}"
-      modify fun s => { s with made := s.made.push (dn, .def_ gsp ⟨dn, gsp⟩ [] dA dV .none) }
+      modify fun s => { s with made := s.made.push (dn, .def_ gsp ⟨dn, gsp⟩ G.tps dA dV mk) }
     pure name
 
 /-- The copy `name` of `g` for the answering handlers `hs` and the sites `ss`, made once: its body
@@ -2452,18 +2476,26 @@ def hasEffects (ds : List Decl) : Bool :=
 group's row, the union of what its members' bodies perform and the exhaustion effect, which
 `bounded`, its default driver, performs when the budget of depth is spent. A call of a member is a
 call of its copy for what serves that row (`groupCopy`). -/
-def defineGroup (env : Env) (ms : List (Span × Ident × VTy × Val × Mark)) : EM Env := do
-  let some (sp₀, n₀, _, _, _) := ms.head? | throw ⟨Span.none, "internal error: an empty group"⟩
+def defineGroup (env : Env) (ms : List (Span × Ident × List Ident × VTy × Val × Mark)) : EM Env := do
+  let some (sp₀, n₀, tps₀, _, _, _) := ms.head? | throw ⟨Span.none, "internal error: an empty group"⟩
+  -- A generic group: every member generic in the same type parameters, each call of a member
+  -- inside the group at them (SPEC §15, §20).
+  if let some (_, n, _, _, _, _) := ms.find? (fun (_, _, tps, _, _, _) =>
+      tps.map (·.name) != tps₀.map (·.name)) then
+    throw ⟨n.span, s!"`{n.name}` and `{n₀.name}` call one another and take different type " ++
+      "parameters: a recursive group's members are generic in the same type parameters"⟩
   let some exh := env.exhEff?
     | throw ⟨n₀.span, s!"`{n₀.name}` calls itself{if ms.length > 1 then " through " ++
         ", ".intercalate (ms.map (·.2.1.name)) else ""}: a recursion's depth is bounded, and its " ++
         "exhaustion effect is in `lib/rec.bc`: `include rec`"⟩
   let mut parts : List (String × FnParts) := []
   let mut row : List Inst := []
-  for (sp, n, A, V, mk) in ms do
+  for (sp, n, _, A, V, mk) in ms do
     let f ← (fnParts sp n.name A V : Except Error FnParts)
-    unless f.lives.isEmpty do
-      throw ⟨n.span, s!"`{n.name}` is recursive and takes lifetime parameters: not provided"⟩
+    if let some (_, f₀) := parts.head? then
+      unless f.lives.map (·.1.name) == f₀.lives.map (·.1.name) do
+        throw ⟨n.span, s!"`{n.name}` and `{n₀.name}` call one another and take different " ++
+          "lifetime parameters: a recursive group's members take the same lifetime parameters"⟩
     unless f.bang do
       throw ⟨n.span, s!"`{n.name}` is recursive and is not a persistent function"⟩
     if hasWhile fuel f.body then
@@ -2485,13 +2517,13 @@ def defineGroup (env : Env) (ms : List (Span × Ident × VTy × Val × Mark)) : 
         "which its written row does not list"⟩
     parts := parts ++ [(n.name, f)]
   row := addInst row ⟨exh.name, some []⟩
-  let G : RGroup := ⟨n₀.name, parts, sp₀⟩
+  let G : RGroup := ⟨n₀.name, parts, sp₀, tps₀, ((parts.head?).map (·.2.lives)).getD []⟩
   report sp₀ "row" (s!"{", ".intercalate (parts.map (·.1))}: " ++
     ", ".intercalate (row.map (·.eff)) ++ s!" (a recursive group: the fixed point of its " ++
     s!"generator, driven by `bounded` at the budget {recBudget})")
   let mut env := { env with groups := env.groups ++ [G] }
-  for ((x, _), (sp, n, A, V, mk)) in parts.zip ms do
-    env := { env with fns := env.fns ++ [{ name := x, row, decl := .def_ sp n [] A V mk,
+  for ((x, _), (sp, n, ps, A, V, mk)) in parts.zip ms do
+    env := { env with fns := env.fns ++ [{ name := x, row, decl := .def_ sp n ps A V mk,
                                              group := some (G.name, (parts.map (·.1)).idxOf x) }] }
   pure env
 
@@ -2502,14 +2534,15 @@ of an answering handler becomes a borrow block, and each of a control handler a 
 `[spec §18, §19]` -/
 def elaborate (ds : List Decl) (lib : List String := []) :
     Except Error (List Decl × List (Span × String) × List Nat) := do
-  -- The recursive groups among the program's own functions (SPEC §20).
+  -- The recursive groups among the functions, the included libraries' among them (SPEC §20).
+  -- A name two functions have (templates of one name in two modules, chosen by the arguments'
+  -- types): only one that calls itself takes part in a recursive group.
+  let dup (x : String) : Bool :=
+    (ds.filter fun | .def_ _ m _ _ _ _ => m.name == x | _ => false).length ≥ 2
+  let member (x : String) (V : Val) : Bool := !dup x || (refsV fuel V).contains x
   let groups := recGroupsOf (ds.filterMap fun
-    | .def_ _ n [] _ V _ => if lib.contains n.name then none else some (n.name, V)
+    | .def_ _ n _ _ V _ => if member n.name V then some (n.name, V) else none
     | _ => none)
-  if let some (sp, n) := ds.findSome? (fun
-      | .def_ sp n (_ :: _) _ V _ => if (refsV fuel V).contains n.name then some (sp, n.name) else none
-      | _ => none) then
-    throw ⟨sp, s!"`{n}` is generic and calls itself: a generic recursive function is not provided"⟩
   if !hasEffects ds && groups.isEmpty then return (ds, [], [])
   let names := ds.filterMap Decl.defName
   let go : EM (List Decl) := do
@@ -2570,11 +2603,19 @@ def elaborate (ds : List Decl) (lib : List String := []) :
         if isLayerTy (ps.map (·.name)) A then
           env := { env with layers := (n.name, .def_ sp n ps A V mk) :: env.layers }
         modify fun s => { s with quiet := lib.contains n.name }
-        if let some G := groups.find? (·.contains n.name) then
+        if let some G := (groups.find? (·.contains n.name)).filter fun _ => member n.name V then
+          -- A recursive function is found by its name, before the types that choose among
+          -- templates of one name are known: a call of a name it shares is rejected (`fnCall`).
+          if dup n.name then
+            if env.clashes.contains n.name then
+              throw ⟨n.span, s!"`{n.name}` is declared twice, and calls itself"⟩
+            env := { env with clashes := n.name :: env.clashes }
           -- A member of a recursive group: the group is declared at its last member.
           if G.getLast? == some n.name then
             env ← defineGroup env (ds.filterMap fun
-              | .def_ sp' m _ A' V' mk' => if G.contains m.name then some (sp', m, A', V', mk') else none
+              | .def_ sp' m ps' A' V' mk' =>
+                if G.contains m.name && member m.name V' then some (sp', m, ps', A', V', mk')
+                else none
               | _ => none)
           continue
         let (written, mk) := splitRow mk
