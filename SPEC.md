@@ -4643,7 +4643,7 @@ needs the spawned block's `await` to reach a handler inside `spawn`, a provided 
 | program | what it shows | answer | counts |
 |---|---|---|---|
 | `corpus/async-scheduler.bc` | A1: two tasks spawned by `with spawn`, each a `ticker` whose counted loop awaits (a loop at the row), run round robin until empty | `[1111, 22]` | `24 6 0` |
-| `corpus/async-map.bc` | A4: `map` written once, given a pure block in `main` and an awaiting block in a task | `([2, 3, 4], [[10, 20, 30]])` | MAPCOUNTS |
+| `corpus/async-map.bc` | A4: `map` written once, given a pure block in `main` and an awaiting block in a task | `([2, 3, 4], [[10, 20, 30]])` | `29 4 0` |
 | `corpus/effects-hof-two-rows.bc` | E1 from source: `hof` at three rows | `(inr (), (inr (), inr ()))` | `0 0 0`, as the kernel's `hof-two-rows` |
 | `corpus/effects-tunnel.bc` | E6 from source: a block's raise passes the callee's own handler | `inr ()` | `0 0 0`, as the kernel's `tunnel` |
 
@@ -4655,7 +4655,14 @@ at the source stage, the closure and flat IRs and WebAssembly with `live 0`, and
 
 Nothing is lowered specially: a copy is a `def`, a block a closure, the loop at the row a
 `bounded_fix`, and the spawn site §19's handler with a clause that keeps `κ`
-(`Backend/Clos/Capture.lean`). LOWERING_FIX
+(`Backend/Clos/Capture.lean`). One fix in the lowering of abortive operations
+(`Backend/Clos/Unwind.lean`): a call of a `sel` code (a resume code's `inl y` / `inr ()` arms) at a
+known injection raises only that arm's keys, as the flow and `Capture` already read such calls.
+Before, a task's cancel arm was credited with what its resume arm raises, and a task that both
+suspends to an outer handler and raises to an inner one (`with spawn { with on_exhausted(…) {
+recursion } }`, A4) failed to compile. New programs pin it: `corpus/capture-await-raise.bc`,
+`corpus/capture-store-raise.bc`, `corpus/rec-await-exhausted.bc` (`0 0 0`, `0 2 0`, `3 0 0`);
+every other program's counts are unchanged.
 
 ### Baseline
 
@@ -4894,6 +4901,12 @@ in `Frontend/Check/Decide.lean` and `Frontend/Check/Consts.lean`; `main`'s lifet
 lifetime bounds in `Frontend/Sugar.lean`, `Frontend/Parser.lean`, `Frontend/Syntax.lean` and
 `Frontend/Print.lean`; `lib/aff.bc`; cells of no words in `Backend/Flat/Lower.lean`. No change to `Paper/`, `Support/` or `CDerives`'s indices.
 
+Entry 28 (§29) is implemented in `Frontend/Elab/Effects.lean` (`blockArgs`, `blockCall`,
+`blockParamCall`, `withBlocks`, the copies' blocks, `St.perTurn`, `HInfo.boxK`), `Frontend/Sugar.lean`
+(`forData`'s `rowLoop`, `hndCtlC` at `clausesTyB`, the argument of an effectful call bound at its
+parameter's type), `lib/async.bc` and `Backend/Clos/Unwind.lean` (`rcG`), with no change to
+`CDerives`, `Core/`, `Paper/` or `Support/`.
+
 Entry 21 (§22) is implemented: the positivity in `Core/Types.lean`, `Core/Relation.lean`,
 `Core/RelationFacts.lean`, `Core/NuRel.lean`, `Core/Computation.lean` and `Core/Nu.lean`; the
 closure in `Core/Aff.lean`, `Core/AffRules.lean` and `Core/AffPrograms.lean`; the checker's
@@ -5039,6 +5052,19 @@ core form (`Frontend/Syntax.lean`, `Frontend/Parser.lean`, `Frontend/Print.lean`
 ---
 
 ## Changelog
+
+- **0.57** (2026-10-15) — §30 (new): effectful blocks at the surface (#161, called-only: a
+  closure passed at a parameter of function type performs at the sites where it is written, and
+  the callee is copied at the block's row; its type names no effect), a counted loop whose body
+  resumes at a `with`'s site as a loop at the row (`bounded_fix` over the count; §16 *Effectful
+  bodies* narrowed, generators unchanged), BOXED-κ from a surface handler whose clause unboxes `k`,
+  and `lib/async.bc` (`Async`, `spawn`, `resume`, `cancel`, `queue`, `push`, `run_until_empty`).
+  The lowering of abortive operations reads a `sel` code's raised keys per projection. New corpus
+  programs `async-scheduler` (A1, `24 6 0`), `async-map` (A4, `29 4 0`), `effects-hof-two-rows` and
+  `effects-tunnel` (E1 and E6 from source, moved from `pending/`, `0 0 0`), `capture-await-raise`,
+  `capture-store-raise`, `rec-await-exhausted`; rejects `block-stored`, `block-capability`. §15,
+  §16, §18 and §28 *Open* updated. No change to `CDerives`, the relation, the machine, a kernel
+  program, or an existing program's output or count.
 
 - **0.56** (2026-10-15) — §29 (new): a borrow held across a suspension. R1 (`lendR`), with R2
   (`lendLoopR`) and `nilDead`, in the extended judgment `CDerivesP`, generated from `CDerives`;
