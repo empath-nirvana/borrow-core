@@ -1,0 +1,9 @@
+extern write_byte : !(all 'l0 < top. mut 'l0 output * u8 => mut 'l0 output)
+  contract: model proved (7), writeByte_meets
+  host: WASI fd_write of one byte (libc write(2)); interpreter-checked (2)
+extern stdout : ref output
+  contract: model proved (7), vC_outRep (a cell holding (1, nil))
+  host: a runtime cell holding fd 1; assumed (1)
+typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)
+unproved boundaries: 2 (write_byte, stdout)
+always trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, wasmtime

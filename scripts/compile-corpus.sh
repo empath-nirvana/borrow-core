@@ -2,7 +2,8 @@
 # Compile and run the corpus. Every corpus/*.bc, corpus/surface/*.bc and corpus/axes/*.bc with a
 # `main` (except a file marked `-- check: parse-only`) has a golden output `<name>.out` beside it:
 # the reference semantics, what `Support`'s interpreter (`bcc interp`, the source stage) prints.
-# It reads `<name>.in` as standard input (the empty input if there is none). At the closure-IR
+# It reads `<name>.in` as standard input (the empty input if there is none), and `<name>.args`, one
+# argument per line, as its arguments (SPEC §34; none if there is no such file). At the closure-IR
 # and flat-IR interpreters (`bcc interp --stage clos|flat`) and in WebAssembly under wasmtime
 # (`bcc run`), its whole standard output, the program's bytes followed by the report `live N`,
 # must equal `<name>.out`, and its standard error `<name>.err` (empty if there is none). The
@@ -70,6 +71,13 @@ export expected=corpus/counts.expected
 export tmp; tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+# The arguments of program $1, from `<name>.args` (one per line), into the array `args`.
+argsOf() {
+  args=()
+  local a=${1%.bc}.args line
+  [ -f "$a" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do args+=("$line"); done < "$a"
+}
 # Whether file $1 is a program the corpus runs; if not, says why.
 runnable() {
   if grep -q '^-- check: parse-only' "$1"; then echo "$1: parse-only, skipped"; return 1; fi
@@ -84,7 +92,8 @@ golden() {
     echo "$f: no-source: $base.out is written by hand, kept"; return 0
   fi
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
-  if ! "$bcc" interp "$f" < "$in" > "$w/out" 2> "$w/err"; then
+  argsOf "$f"
+  if ! "$bcc" interp "$f" -- "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err"; then
     echo "$f: the source interpreter fails, golden not written: $(head -3 "$w/err")"; return 1
   fi
   if [ "$(tail -1 "$w/out")" != "live 0" ]; then
@@ -95,7 +104,7 @@ golden() {
   echo "$f: wrote $base.out$([ -s "$w/err" ] && echo " and $base.err")"
 }
 if [ "$goldens" = 1 ]; then
-  export -f runnable golden
+  export -f runnable golden argsOf
   par golden "${files[@]}"
   echo "$par_failed failure(s)."
   [ "$par_failed" -eq 0 ]
@@ -109,7 +118,8 @@ bad=0
 counts() {
   local name got a i c want wa wi wc note
   name=${1#corpus/}; name=${name%.bc}
-  if ! got=$("$bccCounts" "$1" < "$2" 2>&1); then echo "$1: counts: $got"; return 1; fi
+  argsOf "$1"
+  if ! got=$("$bccCounts" "$1" -- "${args[@]+"${args[@]}"}" < "$2" 2>&1); then echo "$1: counts: $got"; return 1; fi
   a=$(echo "$got" | awk '{print $2}'); i=$(echo "$got" | awk '{print $4}')
   c=$(echo "$got" | awk '{print $6}')
   # An entry may end with a comment (`# …`), kept when the file is rewritten.
@@ -130,9 +140,10 @@ counts() {
 }
 # Run stage $1 of file $2 on input $3 into $w/out and $w/err.
 runStage() {
-  if [ "$1" = wasm ]; then "$bcc" run "$2" < "$3" > "$w/out" 2> "$w/err"
-  elif [ "$1" = source ]; then "$bcc" interp "$2" < "$3" > "$w/out" 2> "$w/err"
-  else "$bcc" interp --stage "$1" "$2" < "$3" > "$w/out" 2> "$w/err"; fi
+  argsOf "$2"
+  if [ "$1" = wasm ]; then "$bcc" run "$2" "${args[@]+"${args[@]}"}" < "$3" > "$w/out" 2> "$w/err"
+  elif [ "$1" = source ]; then "$bcc" interp "$2" -- "${args[@]+"${args[@]}"}" < "$3" > "$w/out" 2> "$w/err"
+  else "$bcc" interp --stage "$1" "$2" -- "${args[@]+"${args[@]}"}" < "$3" > "$w/out" 2> "$w/err"; fi
 }
 # Whether the source stage runs on program $1 (scripts/source-stage.sh); reports an unverified
 # golden it does not run on.
@@ -202,7 +213,7 @@ bigcat() {
   done
   if [ "$ok" = 1 ]; then echo "corpus/io-cat.bc: a $(wc -c < "$w/big.in" | tr -d ' ')-byte input copied whole at $(echo $stages | tr ' ' ,)"; else return 1; fi
 }
-export -f counts runStage withSource runnable program
+export -f counts runStage withSource runnable program argsOf
 bigpid=""
 case " ${files[*]} " in *" corpus/io-cat.bc "*) bigcat > "$tmp/bigcat.log" 2>&1 & bigpid=$! ;; esac
 par program "${files[@]}"

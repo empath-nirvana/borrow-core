@@ -26,6 +26,8 @@ structure FState where
   next : Nat
   /-- The standard input not yet read. -/
   input : List UInt8
+  /-- The arguments not yet read, each followed by `0` (SPEC §34). -/
+  args : List UInt8 := []
   out : ByteArray
   err : ByteArray
   /-- Allocations so far. -/
@@ -143,21 +145,26 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
     | .live => do pure (← get).ranges.size.toUInt64
     | .getc fd => do
         let fd ← evalExp p n fr fd
-        if fd != 0 then throw s!"flat IR: read from fd {fd}"
+        let ar := fd == argsFd.toUInt64
+        if fd != 0 && !ar then throw s!"flat IR: read from fd {fd}"
         let s ← get
-        match s.input with
+        match (if ar then s.args else s.input) with
         | [] => pure 0xFFFFFFFFFFFFFFFF
-        | b :: bs => do set { s with input := bs }; pure b.toUInt64
+        | b :: bs => do
+          set (if ar then { s with args := bs } else { s with input := bs }); pure b.toUInt64
     | .getv fd a k => do
         let fd ← evalExp p n fr fd
         let a ← evalExp p n fr a
         let k ← evalExp p n fr k
-        if fd != 0 then throw s!"flat IR: read from fd {fd}"
+        let ar := fd == argsFd.toUInt64
+        if fd != 0 && !ar then throw s!"flat IR: read from fd {fd}"
         let s ← get
-        let bs := s.input.take k.toNat
-        set { s with input := s.input.drop k.toNat }
+        let src := if ar then s.args else s.input
+        let bs := src.take k.toNat
+        set (if ar then { s with args := src.drop k.toNat } else { s with input := src.drop k.toNat })
         for (b, i) in bs.zipIdx do writeByte (a.toNat + i) b.toUInt64
         pure bs.length.toUInt64
+    | .now c => do readWord (← evalExp p n fr c).toNat
     | .stat 0 => do pure (← get).allocs.toUInt64
     | .stat 1 => do pure (← get).indirect.toUInt64
     | .stat _ => do pure (← get).copies.toUInt64
@@ -227,6 +234,12 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
         | 2 => modify fun st => { st with err := bs.foldl (fun o b => o.push b.toUInt8) st.err }
         | _ => throw s!"flat IR: write to fd {fd}"
         pure (fr, none)
+    | .sleep c ns => do
+        let a ← evalExp p n fr c
+        let ns ← evalExp p n fr ns
+        let t ← readWord a.toNat
+        writeWord a.toNat (sleptNs t ns)
+        pure (fr, none)
     | .putc fd b => do
         let fd ← evalExp p n fr fd
         let b ← evalExp p n fr b
@@ -256,7 +269,8 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
 end
 
 /-- Run the entry function on the standard input `input`: what it writes. -/
-def interp (fuel : Nat) (p : Prog) (input : List UInt8) : Except String Output := do
+def interp (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []) :
+    Except String Output := do
   -- The read-only data, word by word, little-endian; the heap past it.
   let L := p.data.size
   let mem : Std.HashMap Nat (Option UInt64) := (List.range ((L + 7) / 8)).foldl (fun m k =>
@@ -265,7 +279,7 @@ def interp (fuel : Nat) (p : Prog) (input : List UInt8) : Except String Output :
     m.insert (dataBase + 8 * k) (some w)) {}
   let next := if L == 0 then 8 else staticEnd L + 8
   let (_, s) ← (callFn p fuel p.entry [] (some 0)).run
-    { mem, ranges := {}, next, input, out := .empty, err := .empty,
+    { mem, ranges := {}, next, input, args, out := .empty, err := .empty,
       staticEnd := if L == 0 then 0 else staticEnd L }
   pure ⟨s.out, s.err⟩
 

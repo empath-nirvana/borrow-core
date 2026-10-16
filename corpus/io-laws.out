@@ -1,0 +1,4 @@
+hello, laws
+hello, laws
+(inr (), ((inr (), inr ()), ((inr (), inr ()), (i32[2], inr ()))))
+live 0

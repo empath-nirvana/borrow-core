@@ -51,6 +51,14 @@ dispatches at its resume as it did at its call; a code that suspends through a c
 a state that holds its own `k`, which the layout types make a recursive closure type, one heap
 object per level (`Backend/README.md`).
 
+**Answers as variants.** A resume code takes one answer type, so a code that suspends at
+operations of different answer types does not have layout types. Such a program is lowered again
+with the answers carried as variants of an `n`-ary sum, one per operation, as the payloads are
+(`Ops.wrapsAnswers`, `Backend/Driver.lean`'s `lowerEffects`): `drive` builds each operation's `κ`
+with a resume entry of its own, which puts the clause's answer in the operation's variant, and a
+`perform`'s resumption point takes it out. A program that has layout types without it is lowered
+without it.
+
 **Tail-resumptive operations.** When every handler of a name has the same closed clause for an
 operation, and the clause resumes `κ` once, in tail position, and neither suspends nor raises,
 the operation is a direct call of the clause, its resume removed: the handler is the one known
@@ -73,6 +81,9 @@ structure HInfo where
   drv : Nat
   kap : Nat
   res : Nat
+  /-- Per operation variant of the handler's name, when answers are carried as variants
+  (`Ops.wrapsAnswers`): its own `κ` and `Res`, which put the answer in its variant. -/
+  kaps : List (Nat × Nat × Nat) := []
   /-- `drive`'s variables: the handler, the outcome, and the parts of its `case`. -/
   dVars : Array Var
   /-- `κ`'s variables. -/
@@ -125,6 +136,8 @@ structure Ops where
   ctl : List UInt32
   /-- The abortive operations. -/
   aborts : List OpKey
+  /-- The answers are carried as variants (`Ops.wrapsAnswers`). -/
+  wrapAnswers : Bool := false
 
 def Ops.keyIdx (O : Ops) (k : OpKey) : Nat := (O.keys.toList.idxOf? k).getD 0
 
@@ -144,6 +157,18 @@ def wrapRaise (O : Ops) (p : Var) : KM Tm := do
   return .letpair a b p (.drop a (.letpair i v b (.drop i (.letv v' (.con k O.aborts.length v)
     (.letv i' (.lit (.i32 key.2)) (.letv b' (.pair i' v') (.letv a' (.lit (.i32 key.1))
       (.letv p' (.pair a' b') (.raise p')))))))))
+
+/-- The control operations' answers are carried as a variant per operation, as their payloads
+are, so that a code suspending at operations of different answer types is resumed at one type:
+when the lowering is asked to (`Prog.capture`'s `wrapAnswers`, for a program whose layout types
+fail without it) and the program has more than one control operation. A resumption point of
+`perform` takes its answer out of its operation's variant; `κ`'s resume entry for an operation
+puts it in. -/
+def Ops.wrapsAnswers (O : Ops) : Bool := O.wrapAnswers && O.keys.size > 1
+
+/-- The `κ` code of the operation variant `idx` of the handler `h`. -/
+def HInfo.kapOf (h : HInfo) (idx : Nat) : Nat :=
+  ((h.kaps.find? (·.1 == idx)).map (·.2.1)).getD h.kap
 
 /-- The variants of the control operations of `n`, with their operation indices. -/
 def Ops.keysOf (O : Ops) (n : UInt32) : List (Nat × Nat) :=
@@ -165,7 +190,7 @@ def Ops.of (p : Prog) : Except String Ops := do
   let ctl := (keys.toList.map (·.1)).eraseDups
   if let some (n, _) := aborts.find? (fun k => ctl.contains k.1) then
     throw s!"capture: the name {n} has both control and abortive operations, which is not lowered"
-  return ⟨defs, keys, ctl, aborts⟩
+  return ⟨defs, keys, ctl, aborts, false⟩
 
 /-! ### Handlers and finaliser frames -/
 
@@ -216,7 +241,7 @@ def drvBody (O : Ops) (h : HInfo) (forward : Bool) : KM Tm := do
   for (idx, j) in (O.keysOf h.n).reverse do
     let w ← kfresh; let cls₂ ← kfresh; let kap ← kfresh; let arg ← kfresh
     let call ← withClause cls₂ j fun c => pure (.app c arg)
-    chain := .when pl idx K w (.copy cls cls₂ (.letv kap (.clos h.kap [hr, cls, k])
+    chain := .when pl idx K w (.copy cls cls₂ (.letv kap (.clos (h.kapOf idx) [hr, cls, k])
       (.letv arg (.pair w kap) call))) chain
   return .case r v (.drop cls (.app hr v)) q (.letpair pl k q chain)
 
@@ -230,12 +255,12 @@ where
     | .when s k n x b r => .when s k n x b (go pl r)
     | _ => .absurd pl
 
-/-- `κ`'s body: `inl ()` gives the resume closure `Res`; `inr ()` cancels `k` and answers `()`,
-or re-raises the error the cancel kept (`reraise`). -/
-def kapBody (h : HInfo) (reraise : Bool) : Except String Tm := do
+/-- `κ`'s body: `inl ()` gives the resume closure `Res` (`res`); `inr ()` cancels `k` and answers
+`()`, or re-raises the error the cancel kept (`reraise`). -/
+def kapBody (h : HInfo) (reraise : Bool) (res : Nat := h.res) : Except String Tm := do
   let #[hr, cls, k, s, s', u₁, u₂, mk, mm, e, eu, eq] := h.kVars | throw "capture: κ's variables"
   let err : Tm := if reraise then .reraise eq else .drop eq .unit
-  return .letv s' (.var s) (.case s' u₁ (.drop u₁ (.clos h.res [hr, cls, k])) u₂
+  return .letv s' (.var s) (.case s' u₁ (.drop u₁ (.clos res [hr, cls, k])) u₂
     (.drop u₂ (.drop hr (.drop cls (.letv mk .unit (.letv mm (.inj true mk)
       (.letv e (.app k mm) (.case e eu (.var eu) eq err))))))))
 
@@ -249,13 +274,29 @@ def controlSite (O : Ops) (n : UInt32) (hr cls : Var) (b : Tm) : KM Tm := do
   let cRes ← kregister default
   let dVars ← kfreshN 7
   let kVars ← kfreshN 12
-  let h : HInfo := { n, body := cB, drv := cDrv, kap := cKap, res := cRes, dVars, kVars }
+  -- With answers carried as variants, one `κ` and one `Res` per operation of the name.
+  let mut kaps : List (Nat × Nat × Nat) := []
+  if O.wrapsAnswers then
+    for (idx, _) in O.keysOf n do
+      kaps := kaps ++ [(idx, ← kregister default, ← kregister default)]
+  let h : HInfo := { n, body := cB, drv := cDrv, kap := cKap, res := cRes, dVars, kVars, kaps }
   kset cDrv ⟨[dVars[0]!, dVars[1]!], dVars[2]!, ← drvBody O h true⟩
   kset cKap ⟨[kVars[0]!, kVars[1]!, kVars[2]!], kVars[3]!, ← liftM (kapBody h false)⟩
-  let rv ← kfreshN 7
-  kset cRes ⟨[rv[0]!, rv[1]!, rv[2]!], rv[3]!, .letv rv[4]! (.inj false rv[3]!)
-    (.letv rv[5]! (.run rv[2]! rv[4]!) (.letv rv[6]! (.clos cDrv [rv[0]!, rv[1]!])
-      (.app rv[6]! rv[5]!)))⟩
+  -- `Res`: `λy. drive (hr, cls) (run k (inl y))`, the answer `y` in its variant `idx` when
+  -- answers are variants.
+  let resBody (idx : Option Nat) : KM Code := do
+    let rv ← kfreshN 8
+    let resume : Tm := .letv rv[4]! (.inj false rv[7]!)
+      (.letv rv[5]! (.run rv[2]! rv[4]!) (.letv rv[6]! (.clos cDrv [rv[0]!, rv[1]!])
+        (.app rv[6]! rv[5]!)))
+    let body := match idx with
+      | some i => .letv rv[7]! (.con i O.keys.size rv[3]!) resume
+      | none => .letv rv[7]! (.var rv[3]!) resume
+    pure (⟨[rv[0]!, rv[1]!, rv[2]!], rv[3]!, body⟩ : Code)
+  kset cRes (← resBody none)
+  for (idx, ck, cr) in kaps do
+    kset ck ⟨[kVars[0]!, kVars[1]!, kVars[2]!], kVars[3]!, ← liftM (kapBody h false cr)⟩
+    kset cr (← resBody (some idx))
   modify fun s => { s with hs := s.hs.push h }
   let t ← kfresh; let u₀ ← kfresh; let r ← kfresh; let d ← kfresh
   return .letv t (.clos cB fvb) (.letv u₀ .unit (.letv r (.run t u₀)
@@ -863,13 +904,20 @@ callee's suspended computation at a call point or a forwarding. -/
 def MEnv.resumeArm (E : MEnv) (j : Nat) (y : Var) (k : Option Var) : KM Tm := do
   let some pt := E.points[j]? | throw "capture: no point"
   let hole : Tm ⊕ Tm ← match pt.kind, k with
-    | .perf _, _ => pure (.inl (.var y))
+    | .perf p, _ =>
+      -- The answer, out of its operation's variant (`Ops.wrapsAnswers`).
+      if E.O.wrapsAnswers then
+        let some key := payloadKey E.O.defs p | throw "capture: a control operation whose name is not a literal"
+        let x ← kfresh
+        pure (.inl (.when y (E.O.keyIdx key) E.O.keys.size x (.var x) (.absurd y)))
+      else pure (.inl (.var y))
+    -- `y` is every point's: each injects a copy of its own (as `cancelArm` does).
     | .call .., some k => do
-      let mm ← kfresh
-      pure (.inr (.letv mm (.inj false y) (← E.callPoint j (.app k mm))))
+      let mm ← kfresh; let y' ← kfresh
+      pure (.inr (.letv y' (.var y) (.letv mm (.inj false y') (← E.callPoint j (.app k mm)))))
     | .await .., some k => do
-      let mm ← kfresh
-      pure (.inl (.letv mm (.inj false y) (.app k mm)))
+      let mm ← kfresh; let y' ← kfresh
+      pure (.inl (.letv y' (.var y) (.letv mm (.inj false y') (.app k mm))))
     | _, none => throw "capture: a call point with no callee"
   E.plug hole pt.frames
 
@@ -901,11 +949,14 @@ def MEnv.cancelArm (E : MEnv) (j : Nat) (z : Var) (k : Option Var) : KM Tm := do
         let u₀ ← kfresh
         return .letv u₀ .unit (.letv u (.inj true u₀) (.letv rr (.app dd u) (.drop rr (← go rest e))))
   let tail ← go fins e₀
+  -- `z` is every point's: each injects a copy of its own, whose injection's type is its own
+  -- (`Clos.Types` keys an injection's type by its payload).
+  let z' ← kfresh
   let start ← match k with
     | some k => do
       let mz ← kfresh
-      pure (.letv mz (.inj true z) (.letv e₀ (.app k mz) tail))
-    | none => pure (.letv e₀ (.inj false z) tail)
+      pure (.letv z' (.var z) (.letv mz (.inj true z') (.letv e₀ (.app k mz) tail)))
+    | none => pure (.letv z' (.var z) (.letv e₀ (.inj false z') tail))
   return Tm.drops others start
 
 /-- Group `g`'s resume code: `inl y` resumes, `inr ()` cancels, by the state's variant. -/
@@ -977,9 +1028,9 @@ def lowerHandlers (O : Ops) (p : Prog) : KM Prog := do
 
 /-- **Lower the handlers, control operations and cancels.**  A program with none is returned as
 it is. -/
-def Prog.capture (p : Prog) : Except String Prog := do
+def Prog.capture (p : Prog) (wrapAnswers : Bool := false) : Except String Prog := do
   if !(p.main.hasCapture || p.codes.any (·.body.hasCapture)) then return p
-  let O ← Ops.of p
+  let O := { (← Ops.of p) with wrapAnswers }
   let terms := p.main :: p.codes.toList.map (·.body)
   let next := (terms.map Tm.maxVar).foldl max 0 + 1
   let act : KM Prog := do
@@ -1025,6 +1076,9 @@ def Prog.capture (p : Prog) : Except String Prog := do
       if !forward then kset h.drv { d with body := noForward d.body }
       let kc := q₀.codes[h.kap]!
       kset h.kap { kc with body := ← liftE (kapBody h anyRaise) }
+      for (_, ck, cr) in h.kaps do
+        let kc := q₀.codes[ck]!
+        kset ck { kc with body := ← liftE (kapBody h anyRaise cr) }
     -- Each code that answers outcomes becomes a machine; the others are plain.
     let codes₁ := (← get).codes
     for k in [0:codes₁.size] do

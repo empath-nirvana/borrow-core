@@ -1,5 +1,5 @@
 -- pending: SPEC §18 Not provided (type parameters on an answering effect; a generic answering handler)
--- now: 31:9: `assoc`: an answering handler is `handler h(mut s: S): E = { op(x) = e; … }`, and a control handler names its body's type and its answer, `handler h[…](…): E[…], A -> R = { return(x) = M; op(x, k) = N; … }`
+-- now: 31:9: `assoc`: an answering handler is `handler h(mut s: S): E = { op(x) = e; … }` (or `handler h(&mut s: S): E = …`, its state lent to each clause), and a control handler names its body's type and its answer, `handler h[…](…): E[…], A -> R = { return(x) = M; op(x, k) = N; … }`
 -- A key-value store as an effect generic in its value type: `Store[V]` has `get` and `put`, and
 -- the handler `assoc` keeps the entries in an association list. One generic function, `memo_fib`,
 -- caches Fibonacci numbers through it; a second use stores names' lengths at another value type.

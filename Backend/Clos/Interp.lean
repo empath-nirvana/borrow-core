@@ -43,6 +43,8 @@ structure St where
   next : Nat
   /-- The standard input not yet read. -/
   input : List UInt8
+  /-- The arguments not yet read, each followed by `0` (SPEC §34). -/
+  args : List UInt8 := []
   out : ByteArray
   err : ByteArray
   /-- The program's read-only data, from `dataBase`. -/
@@ -234,13 +236,28 @@ def applyOp : Op → List CV → IM CV
       | _, _, _ => throw "closure IR: litByte of a non-literal"
   | .io .readByte, [m] => do
       let (_, c) ← cellOf m
-      let .i32 _ := c | throw "closure IR: read_byte on a cell that holds no stream"
+      let .i32 fd := c | throw "closure IR: read_byte on a cell that holds no stream"
       let s ← get
-      match s.input with
+      match (if fd == argsFd then s.args else s.input) with
       | [] => do allocObj (.pair m (← allocObj (.inj true .unit)))
       | b :: bs => do
-        set { s with input := bs }
+        set (if fd == argsFd then { s with args := bs } else { s with input := bs })
         allocObj (.pair m (← allocObj (.inj false (.u8 b))))
+  | .io .clockNow, [m] => do
+      let (_, c) ← cellOf m
+      let .ptr ta := c | throw "closure IR: clock_now on a cell that holds no clock"
+      let .i64 t ← getObj ta | throw "closure IR: clock_now on a cell that holds no clock"
+      allocObj (.pair m (← allocObj (.i64 t)))
+  | .io .clockSleep, [p] => do
+      let (m, d) ← unpair p
+      let (a, c) ← cellOf m
+      match c, d with
+      | .ptr ta, .ptr da => do
+        let .i64 t ← getObj ta | throw "closure IR: clock_sleep on a cell that holds no clock"
+        let .i64 ns ← getObj da | throw "closure IR: clock_sleep of a duration that is not an i64"
+        freeObj ta; freeObj da
+        setObj a (.cell (← allocObj (.i64 (sleptNs t ns)))); pure m
+      | _, _ => throw "closure IR: clock_sleep on a cell that holds no clock"
   | .io .writeByte, [p] => do
       let (m, w) ← unpair p
       let (_, c) ← cellOf m
@@ -265,10 +282,12 @@ def applyOp : Op → List CV → IM CV
       let (_, c) ← cellOf m
       let (base, n) ← unpair v
       match c, base, n with
-      | .i32 _, .ptr a, .i32 n => do
+      | .i32 fd, .ptr a, .i32 n => do
         let s ← get
-        let bs := s.input.take n.toNat
-        set { s with input := s.input.drop n.toNat }
+        let src := if fd == argsFd then s.args else s.input
+        let bs := src.take n.toNat
+        set (if fd == argsFd then { s with args := src.drop n.toNat }
+          else { s with input := src.drop n.toNat })
         for (b, i) in bs.zipIdx do setObj (a + i) (.cell (.u8 b))
         let f ← allocObj (.pair (.ptr a) (.i32 n))
         allocObj (.pair m (← allocObj (.pair f (.i32 bs.length.toUInt32))))
@@ -496,7 +515,8 @@ def drive (codes : Array Code) : Nat → CV → IM CV
 
 /-- Run `main` on the standard input `input` (driving it if it returns a loop), print its value,
 drop it, and count the objects left. -/
-def interp (fuel : Nat) (p : Prog) (input : List UInt8) : Except String Output := do
+def interp (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []) :
+    Except String Output := do
   let act : IM String := do
     let (v, rest) ← eval p.codes fuel [] p.main
     if !rest.isEmpty then throw "closure IR: main leaves variables unconsumed"
@@ -508,7 +528,9 @@ def interp (fuel : Nat) (p : Prog) (input : List UInt8) : Except String Output :
     let pv ← observe objFuel v
     deepDrop objFuel v
     pure (report pv (← get).heap.size)
-  let (r, s) ← act.run { heap := {}, next := 1, input, out := .empty, err := .empty, data := p.data }
+  let s₀ : St := { heap := {}, next := 1, input, args, out := .empty, err := .empty,
+                       data := p.data }
+  let (r, s) ← act.run s₀
   pure (.mk' s.out s.err r)
 
 end Backend.Clos

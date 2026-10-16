@@ -67,10 +67,13 @@ def checkedOf (file src : String) : Except String CheckedProg := do
 def extImpls (m : Frontend.Check.IOMain) : Except String (List Clos.ExtImpl) :=
   m.externs.mapM fun x => match x.role with
     | .cap fd => pure (.cap fd)
+    | .clockCap => pure .clockCell
     | .readByte => pure (.io .readByte)
     | .writeByte => pure (.io .writeByte)
     | .writeAll => pure (.io .writeAll)
     | .readInto => pure (.io .readInto)
+    | .clockNow => pure (.io .clockNow)
+    | .clockSleep => pure (.io .clockSleep)
     | .harness => throw s!"extern `{x.name}` is the model's harness and is not compiled"
 
 /-- The program reads standard input. -/
@@ -81,13 +84,23 @@ def readsInput (file src : String) : Bool :=
     | none => false
   | .error _ => false
 
+/-- A converted program with its effects lowered and its codata collapsed, and its layout types
+when they were found. A program whose layout types fail is lowered again with the control
+operations' answers carried as variants (`Clos.Ops.wrapsAnswers`): a code that suspends at
+operations of different answer types is resumed at one type then.  `[spec §34]` -/
+def lowerEffects (p : Clos.Prog) : Except String (Clos.Prog × Option Clos.Types) := do
+  let r := (← (← p.capture).unwind).collapseT
+  if r.2.isSome then return r
+  let r' := (← (← p.capture (wrapAnswers := true)).unwind).collapseT
+  pure (if r'.2.isSome then r' else r)
+
 /-- The closure IR, and its layout types when collapsing found them. -/
 def closTypesOf (file src : String) : Except String (Clos.Prog × Option Clos.Types) := do
   let k ← checkedOf file src
   let p ← match k.io with
     | none => Clos.convert k.main.e
     | some m => Clos.convertMain (← extImpls m) m.loopB.isSome k.main.e
-  pure (← (← p.capture).unwind).collapseT
+  lowerEffects p
 
 def closOf (file src : String) : Except String Clos.Prog := return (← closTypesOf file src).1
 
@@ -206,28 +219,30 @@ def compileWatTimed (file src : String) : IO (Except String String) := do
 
 /-- The model run of a program with capabilities: `run_io` checked, with every extern's model
 (`Frontend.Check.IORun`). -/
-def ioRunOf (file : String) (k : CheckedProg) (m : Frontend.Check.IOMain) :
-    Except String Frontend.Check.IORun := do
-  let w ← match Frontend.Check.ioWrapper k.prog m with
+def ioRunOf (file : String) (k : CheckedProg) (m : Frontend.Check.IOMain)
+    (args : List UInt8 := []) : Except String Frontend.Check.IORun := do
+  let w ← match Frontend.Check.ioWrapper k.prog m args with
     | .ok w => pure w
     | .error e => throw s!"{file}: {e}"
   match Frontend.Check.ioRunOf w with
   | .ok r => pure r
   | .error e => throw s!"{file}: {e}"
 
-/-- A stage's output on a source file, with `input` as standard input. -/
-def interpStage (stage file src : String) (input : List UInt8) : Except String Output := do
+/-- A stage's output on a source file, with `input` as standard input and `args` as the
+arguments' stream (each argument followed by `0`, SPEC §34). -/
+def interpStage (stage file src : String) (input : List UInt8) (args : List UInt8 := []) :
+    Except String Output := do
   match stage with
   | "source" =>
     let k ← checkedOf file src
     match k.io with
     | none => interpSource runFuel k.main.e
     | some m =>
-      let r ← ioRunOf file k m
+      let r ← ioRunOf file k m args
       if r.loops then interpIOLoop runFuel (r.expr input) else interpIO runFuel (r.expr input)
-  | "clos" => Clos.interp runFuel (← closOf file src) input
-  | "flat" => Flat.interp runFuel (← flatOf file src) input
-  | "flat-counts" => Flat.interp runFuel (← flatOf file src true) input
+  | "clos" => Clos.interp runFuel (← closOf file src) input args
+  | "flat" => Flat.interp runFuel (← flatOf file src) input args
+  | "flat-counts" => Flat.interp runFuel (← flatOf file src true) input args
   | _ => throw s!"unknown stage `{stage}`"
 
 /-! ### The falsifier
@@ -244,13 +259,13 @@ def falsifyOpts : String → Except String Falsify.Opts
   | m => throw s!"unknown check `{m}` (expected `fresh` or `tags`, or `--alloc least`)"
 
 /-- The source stage of a source file, on the falsifier's machine under `o`. -/
-def interpChecked (o : Falsify.Opts) (file src : String) (input : List UInt8) :
-    Except String (Output × String) := do
+def interpChecked (o : Falsify.Opts) (file src : String) (input : List UInt8)
+    (args : List UInt8 := []) : Except String (Output × String) := do
   let k ← checkedOf file src
   match k.io with
   | none => Falsify.interpSource o runFuel k.main.e
   | some m =>
-    let r ← ioRunOf file k m
+    let r ← ioRunOf file k m args
     if r.loops then Falsify.interpIOLoop o runFuel (r.expr input)
     else Falsify.interpIO o runFuel (r.expr input)
 
@@ -265,7 +280,7 @@ as `main`'s erasure is. -/
 
 /-- A kernel program's closure IR and layout types. -/
 def closTypesOfExpr (e : BoCa.Expr) : Except String (Clos.Prog × Option Clos.Types) := do
-  pure (← (← (← Clos.convert e).capture).unwind).collapseT
+  lowerEffects (← Clos.convert e)
 
 /-- A kernel program's WAT. -/
 def compileWatExpr (e : BoCa.Expr) (counts : Bool := false) : Except String String := do
@@ -302,15 +317,22 @@ def trusted (file src : String) : Except String String := do
   let p ← match Frontend.parseProgram src with
     | .ok p => pure p
     | .error e => throw s!"{file}:{e.render}"
-  let typing ← match Frontend.Check.checkProgram p with
-    | .ok r => pure ((r.main.map typingReport).toList)
+  let r ← match Frontend.Check.checkProgram p with
+    | .ok r => pure r
     | .error e => throw s!"{file}:{e.render}"
+  let typing := (r.main.map typingReport).toList
   let p ← match Frontend.Sugar.elaborate p with
     | .ok (p, _) => pure p
     | .error e => throw s!"{file}:{e.render}"
   let xs ← match Frontend.Check.externs p.decls.toArray with
     | .ok xs => pure xs
     | .error e => throw s!"{file}:{e.render}"
+  -- The externs `main`'s erasure uses: a library's extern that the program never reaches is not
+  -- in its trusted base (SPEC §34). The last declared is at index 0 of `main`'s context.
+  let xs := match r.main with
+    | some c => xs.zipIdx.filterMap fun (x, i) =>
+        if BoCa.Fig16.LogRel.Core.occ (xs.length - 1 - i) c.e then some x else none
+    | none => xs
   let lines := Frontend.Check.trustedReport xs
   let unproved := xs.filter fun (n, _) => match Frontend.Check.findExtern n with
     | some x => x.host.isSome

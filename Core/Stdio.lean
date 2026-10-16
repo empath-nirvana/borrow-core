@@ -94,6 +94,12 @@ theorem vC_bytes (b : Bool) (ls : List SRec) (δ : LSub) :
   funext v ρ
   exact propext (vC_bytes_iff.trans ⟨fun ⟨h₁, h₂⟩ => ⟨h₁, h₂⟩, fun ⟨h₁, h₂⟩ => ⟨h₁, h₂⟩⟩)
 
+/-- **`Args` is `Bytes` with the rules taken away**, as `Input` is.  `[spec §34]` -/
+theorem vC_argsRep (b : Bool) (ls : List SRec) (δ : LSub) :
+    vC b bytesTy ls δ = vC b (.opq .args) ls δ := by
+  funext v ρ
+  exact propext (vC_bytes_iff.trans ⟨fun ⟨h₁, h₂⟩ => ⟨h₁, h₂⟩, fun ⟨h₁, h₂⟩ => ⟨h₁, h₂⟩⟩)
+
 /-- **`Output` is `I32 ⊗ Bytes` with the rules taken away.**  `[spec §11]` -/
 theorem vC_outRep (b : Bool) (ls : List SRec) (δ : LSub) :
     vC b outRep ls δ = vC b (.opq .output) ls δ := by
@@ -589,6 +595,172 @@ theorem readInto_meets (ls : List SRec) (δ : LSub) :
   rw [← vC_externTy_congr rfl rfl cC_readIntoC]
   exact meets_of_derives rfl d_readInto ls δ
 
+/-! ### The clock  `[spec §34]`
+
+A clock is a cell whose content is a time in nanoseconds: its representation is `I64`, and the
+relation there is `Clock`'s model (`vC_clockRep`). `clock_now` answers the time and keeps it;
+`clock_sleep` adds `max(ns, 0)` to it, saturating at `2^63 − 1`; the harness `mk_clock` makes a
+clock at time `0` and `take_clock` frees it. Each model is a `CDerives` derivation at the
+representation, so it meets its contract by the Fundamental Property, as the streams' do. -/
+
+/-- **`Clock` is `I64` with the rules taken away.**  `[spec §34]` -/
+theorem vC_clockRep (b : Bool) (ls : List SRec) (δ : LSub) :
+    vC b .i64 ls δ = vC b (.opq .clock) ls δ := by
+  funext v ρ
+  rfl
+
+/-- `clock_now`: `∀'a ⊏ ⊤. F (Mut 'a C ⇒ Mut 'a C ⊗ I64)`.  `[spec §34]` -/
+def clockNowC (C : VTy) : CTy :=
+  .all 0 .top (.ret (.lolli (.mut (.var 0) C) (.tensor (.mut (.var 0) C) .i64)))
+
+/-- `clock_sleep`: `∀'a ⊏ ⊤. F (Mut 'a C ⊗ I64 ⇒ Mut 'a C)`.  `[spec §34]` -/
+def clockSleepC (C : VTy) : CTy :=
+  .all 0 .top (.ret (.lolli (.tensor (.mut (.var 0) C) .i64) (.mut (.var 0) C)))
+
+/-- `mk_clock`: `1 ⊸ F (Ref C)`.  `[spec §34]` -/
+def mkClockC (C : VTy) : CTy := .arr .unit (.ret (.ref C))
+
+/-- `take_clock`: `Ref C ⊸ F I64`.  `[spec §34]` -/
+def takeClockC (C : VTy) : CTy := .arr (.ref C) (.ret .i64)
+
+/-- `clock_now`'s callback: `λt. (t, t)`. -/
+def cnCallback : Expr := .val (.lam (.pair (.var 0) (.var 0)))
+
+/-- The model of `clock_now`: `Λ. λm. withswap m cnCallback`.  `[spec §34]` -/
+def clockNowV : Val := .lam (.val (.lam (.app (.app withswap (.var 0)) cnCallback)))
+
+/-- A 64-bit literal. -/
+def i64E (n : UInt64) : Expr := .val (Val.i64 n)
+
+/-- The time after a sleep, under `λt` with the duration `ns` at index `1`: `t` when `ns ≤ 0`,
+else `t + ns`, or `2^63 − 1` when the sum overflows. -/
+def sleptT : Expr :=
+  .case (hop (.rel .w64 .gt_s) (.pair (.var 1) (i64E 0)))
+    (.var 1)
+    (.case (hop (.rel .w64 .lt_s) (.pair (hop (.bin .w64 .add) (.pair (.var 1) (.var 2))) (.var 1)))
+      (hop (.bin .w64 .add) (.pair (.var 2) (.var 3)))
+      (i64E 0x7fffffffffffffff))
+
+/-- `clock_sleep`'s callback at the duration (index `0`): `λt. (sleptT, ())`. -/
+def csCallback : Expr := .val (.lam (.pair sleptT (.val .unit)))
+
+/-- The model of `clock_sleep`: `Λ. λp. let (m, ns) = p in let (m', u) = withswap m csCallback in
+u; m'`.  `[spec §34]` -/
+def clockSleepV : Val :=
+  .lam (.val (.lam (.letpair (.var 0)
+    (.letpair (.app (.app withswap (.var 1)) csCallback) (.seq (.var 0) (.var 1))))))
+
+/-- The model of `mk_clock`: `λu. alloc i64[0]`.  `[spec §34]` -/
+def mkClockV : Val := .lam (.app (.val (.prim .alloc)) (i64E 0))
+
+theorem d_clockNow : CDerives LifeCtx.empty [] (.val clockNowV) (.comp (clockNowC .i64)) := by
+  refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy)
+    (fun _ h => by cases h) (.ret (.lamV ?_))
+  refine appP (A := .lolli .i64 (.tensor .i64 .i64)) ?_ ?_
+  · exact .lamV (pairP (.var (by csoloP)) (.var (by csoloP)))
+  · exact appP (A := .mut (.var 0) .i64) (.var (by csoloP)) (.withswap (by cdeadP))
+
+theorem d_clockSleep :
+    CDerives LifeCtx.empty [] (.val clockSleepV) (.comp (clockSleepC .i64)) := by
+  refine .allI (S := .unit) rfl (fun _ _ hy => LifeCtx.Ok.bound_mentions_false ok_empty rfl hy)
+    (fun _ h => by cases h) (.ret (.lamV ?_))
+  refine letP (A := .mut (.var 0) .i64) (B := .i64) (.var (by csoloP)) ?_
+  refine letP (A := .mut (.var 0) .i64) (B := .unit) ?_
+    (.seqV (partP_split (.var 0) 0 _) (.var (by csoloP)) (.var (by csoloP)))
+  refine appP (A := .lolli .i64 (.tensor .i64 .unit)) ?_ ?_
+  · refine .lamV (pairP ?_ (.unitI (by cdeadP)))
+    refine caseP (A := .unit) (B := .unit)
+      (d_hop (.rel .w64 .gt_s) (pairP (.var (by csoloP)) (.lit (.i64 0) (by cdeadP))) (by cdeadP))
+      (.var (by csoloP)) ?_
+    refine caseP (A := .unit) (B := .unit)
+      (d_hop (.rel .w64 .lt_s) (pairP (d_hop (.bin .w64 .add)
+        (pairP (.var (by csoloP)) (.var (by csoloP))) (by cdeadP)) (.var (by csoloP))) (by cdeadP))
+      ?_ (.lit (.i64 0x7fffffffffffffff) (by cdeadP))
+    exact d_hop (.bin .w64 .add) (pairP (.var (by csoloP)) (.var (by csoloP))) (by cdeadP)
+  · exact appP (A := .mut (.var 0) .i64) (.var (by csoloP)) (.withswap (by cdeadP))
+
+theorem d_mkClock : CDerives LifeCtx.empty [] (.val mkClockV) (.comp (mkClockC .i64)) :=
+  .lam (.ret (appP (.lit (.i64 0) (by cdeadP)) (.alloc (by cdeadP))))
+
+theorem d_takeClock : CDerives LifeCtx.empty [] (.val takeCapV) (.comp (takeClockC .i64)) :=
+  .lam (.ret (appP (.var (by csoloP)) (.free (by cdeadP))))
+
+theorem cC_clockNowC : cC (clockNowC .i64) = cC (clockNowC (.opq .clock)) := by
+  funext ls δ e ρ
+  simp only [clockNowC, cC, vCE, forceE, Opaque.Holds, Val.IsInt]
+
+theorem cC_clockSleepC : cC (clockSleepC .i64) = cC (clockSleepC (.opq .clock)) := by
+  funext ls δ e ρ
+  simp only [clockSleepC, cC, vCE, forceE, Opaque.Holds, Val.IsInt]
+
+theorem cC_mkClockC : cC (mkClockC .i64) = cC (mkClockC (.opq .clock)) := by
+  funext ls δ e ρ
+  simp only [mkClockC, cC, vCE, Opaque.Holds, Val.IsInt]
+
+theorem cC_takeClockC : cC (takeClockC .i64) = cC (takeClockC (.opq .clock)) := by
+  funext ls δ e ρ
+  simp only [takeClockC, cC, vCE, Opaque.Holds, Val.IsInt]
+
+/-- **The model of `clock_now` meets its contract.**  `[spec §34]` -/
+theorem clockNow_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (clockNowC (.opq .clock))) ls δ clockNowV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_clockNowC]
+  exact meets_of_derives rfl d_clockNow ls δ
+
+/-- **The model of `clock_sleep` meets its contract.**  `[spec §34]` -/
+theorem clockSleep_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (clockSleepC (.opq .clock))) ls δ clockSleepV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_clockSleepC]
+  exact meets_of_derives rfl d_clockSleep ls δ
+
+/-- **The model of `mk_clock` meets its contract.**  `[spec §34]` -/
+theorem mkClock_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (mkClockC (.opq .clock))) ls δ mkClockV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_mkClockC]
+  exact meets_of_derives rfl d_mkClock ls δ
+
+/-- **The model of `take_clock` meets its contract.**  `[spec §34]` -/
+theorem takeClock_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (takeClockC (.opq .clock))) ls δ takeCapV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_takeClockC]
+  exact meets_of_derives rfl d_takeClock ls δ
+
+/-! ### The arguments  `[spec §34]`
+
+The arguments' cell holds the arguments not yet read, a byte list, as an input's does: `read_arg`
+is `read_byte`'s model at `Args`, and the harness `mk_args`, `take_args` is `mk_input`'s and
+`take_input`'s. -/
+
+theorem cC_readArgC : cC (readByteC bytesTy) = cC (readByteC (.opq .args)) := by
+  funext ls δ e ρ
+  simp only [readByteC, cC, vCE, forceE, vC_argsRep]
+
+theorem cC_mkArgsC : cC (mkInputC bytesTy) = cC (mkInputC (.opq .args)) := by
+  funext ls δ e ρ
+  simp only [mkInputC, cC, vCE, vC_argsRep]
+
+theorem cC_takeArgsC : cC (takeInputC bytesTy) = cC (takeInputC (.opq .args)) := by
+  funext ls δ e ρ
+  simp only [takeInputC, cC, vCE, vC_argsRep]
+
+/-- **The model of `read_arg` meets its contract.**  `[spec §34]` -/
+theorem readArg_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (readByteC (.opq .args))) ls δ readByteV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_readArgC]
+  exact meets_of_derives rfl d_readByte ls δ
+
+/-- **The model of `mk_args` meets its contract.**  `[spec §34]` -/
+theorem mkArgs_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (mkInputC (.opq .args))) ls δ mkInputV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_mkArgsC]
+  exact meets_of_derives rfl d_mkInput ls δ
+
+/-- **The model of `take_args` meets its contract.**  `[spec §34]` -/
+theorem takeArgs_meets (ls : List SRec) (δ : LSub) :
+    vC true (externTy (takeInputC (.opq .args))) ls δ takeCapV PMap.empty := by
+  rw [← vC_externTy_congr rfl rfl cC_takeArgsC]
+  exact meets_of_derives rfl d_takeInput ls δ
+
 /-! ### End to end -/
 
 /-- **The contracts, as a named hypothesis.**  Each slot of `Γ` is live, at a persistent type,
@@ -661,12 +833,20 @@ def stdModel : List (VTy × Val) :=
    (externTy (takeInputC (.opq .input)), takeCapV),
    (externTy (takeOutputC (.opq .output)), takeCapV),
    (externTy (writeAllC (.opq .output)), writeAllV),
-   (externTy (readIntoC (.opq .input)), readIntoV)]
+   (externTy (readIntoC (.opq .input)), readIntoV),
+   (externTy (clockNowC (.opq .clock)), clockNowV),
+   (externTy (clockSleepC (.opq .clock)), clockSleepV),
+   (externTy (mkClockC (.opq .clock)), mkClockV),
+   (externTy (takeClockC (.opq .clock)), takeCapV),
+   (externTy (readByteC (.opq .args)), readByteV),
+   (externTy (mkInputC (.opq .args)), mkInputV),
+   (externTy (takeInputC (.opq .args)), takeCapV)]
 
 theorem stdModel_meets : ∀ p ∈ stdModel, ∀ ls δ, vC true p.1 ls δ p.2 PMap.empty := by
   intro p hp ls δ
   simp only [stdModel, List.mem_cons, List.not_mem_nil, or_false] at hp
-  rcases hp with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  rcases hp with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl |
+    rfl
   · exact readByte_meets ls δ
   · exact writeByte_meets ls δ
   · exact mkInput_meets ls δ
@@ -675,6 +855,13 @@ theorem stdModel_meets : ∀ p ∈ stdModel, ∀ ls δ, vC true p.1 ls δ p.2 PM
   · exact takeOutput_meets ls δ
   · exact writeAll_meets ls δ
   · exact readInto_meets ls δ
+  · exact clockNow_meets ls δ
+  · exact clockSleep_meets ls δ
+  · exact mkClock_meets ls δ
+  · exact takeClock_meets ls δ
+  · exact readArg_meets ls δ
+  · exact mkArgs_meets ls δ
+  · exact takeArgs_meets ls δ
 
 /-- Externs each given its model, by type. -/
 theorem externsMeet_of_model : ∀ {Γ : Ctx VTy} {γ : List Val},
@@ -685,6 +872,7 @@ theorem externsMeet_of_model : ∀ {Γ : Ctx VTy} {γ : List Val},
       have hT : T.Persistent := by
         simp only [stdModel, List.mem_cons, List.not_mem_nil, or_false, Prod.mk.injEq] at hm
         rcases hm with ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ |
+          ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ |
           ⟨rfl, -⟩ <;> rfl
       exact .cons hT (stdModel_meets _ hm) (externsMeet_of_model h)
 

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.61 · 2026-10-16
+Version 0.62 · 2026-10-16
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -886,7 +886,7 @@ flushed or closed). That the compiled lowering behaves as the model is tested, n
 Each extern records its assurance level, on the ladder of decision 27: (1) assumed,
 (2) interpreter-checked, (3) property-tested, (4) typed low-level (typed unsafe code),
 (5) boundary-checked, (6) semi-automatically verified, (7) proved. `bcc trusted <file>` lists
-every extern a program declares with its level and its implementation; an unproved boundary is
+every extern `main` reaches (§34) with its level and its implementation; an unproved boundary is
 the program's trusted base.
 
 | extern | model | host implementation |
@@ -931,8 +931,10 @@ loop too: its `next` observes `main`'s loop and, when it finishes, takes the out
 
 ### The I/O library
 
-`lib/io.bc` is ordinary library code over the externs, in scope in a program whose `main`
-uses the capabilities ambiently (below):
+`lib/io.bc` is ordinary library code, in scope in a program whose `main` uses the capabilities
+ambiently (below), or that includes it. Its helpers over cells are written over the platform's
+handlers (§34): `putb(o, b)` is `with wasi_stdout(&mut o) { print_byte(b) }`, the cell lent to
+the clause, which calls the extern.
 
 | name | type | |
 |---|---|---|
@@ -958,8 +960,9 @@ and `corpus/sugar/` pairs each sugared program with its hand-written core form, 
 elaborate to the same term.
 
 - **Ambient capabilities in `main`.** A program that declares no externs and whose `main`
-  mentions `stdin`, `stdout` or `stderr` gets the I/O library, the operations, and an `extern`
-  for each capability it mentions (in the order `stdin`, `stdout`, `stderr`). `main : F A`
+  mentions `stdin`, `stdout` or `stderr` gets the I/O library (included first, as `include io`,
+  §34), the operations, and an `extern` for each capability it mentions (in the order `stdin`,
+  `stdout`, `stderr`). `main : F A`
   elaborates to `main : F (Caps ⊗ A)`: every terminal `return V` of its body becomes
   `return (caps, V)`, and any other terminal `T` becomes `r <- T; return (caps, r)`, the
   capabilities read by name where the path ends. Nothing else is ambient: a `def` never sees a
@@ -990,14 +993,15 @@ elaborate to the same term.
 ### Designed, not built
 
 - **More capabilities, one pattern.** Each is a cell with opaque content, a model and externs
-  taking a `Mut` borrow: `Args` (`next_arg`: the next argument into a borrowed array, or the
-  end), `Env` (lookup by name into a borrowed array), `Fs` (open yields an `Input`/`Output`, close
-  consumes it), `Net`, `Clock`, `Random`.
+  taking a `Mut` borrow: `Env` (lookup by name into a borrowed array), `Fs` (open yields an
+  `Input`/`Output`, close consumes it), `Net`, `Random`. `Clock` and `Args` are built, as
+  effects (§34).
 - **Exit.** The exit status is `main`'s result at `A = I32`; not yet passed to the host.
 - **Handlers.** A capability's meaning is its model and its operations are externs, not rules,
   so a capability can be served by any value meeting the extern's type: the host, the model
-  (`bcc interp`'s handler), or later a user-defined handler (#18) such as a mock input or a
-  recording output. Nothing in the typing depends on the host.
+  (`bcc interp`'s handler), or a user-defined handler, such as a mock input or a recording output:
+  the streams are effects whose outermost handler is the platform (§34). Nothing in the typing
+  depends on the host.
 
 ### Baseline
 
@@ -1015,7 +1019,7 @@ elaborate to the same term.
 - `wpTSD_frame_own` is about the end of a value run, not intermediate states.
 - Destructors for host resources, which perform I/O and can fail (§12 Open).
 - `main` with borrowed capabilities (lifetime-parametric externs) is not provided.
-- `Args`, `Env`, `Exit`, `Fs` and the rest are designed only.
+- `Env`, `Exit`, `Fs` and the rest are designed only; `Args` and `Clock` are §34's.
 - `|>` pipelines (#59) are §33's.
 
 ---
@@ -2261,8 +2265,8 @@ program's derivation gives it (`checkProgram_letPoly`).
 
 ### Open
 
-- Named instances and lexical resolution between two instances of an effect (S2, #155); bundles
-  (#156).
+- Named instances and lexical resolution between two instances of an effect (S2, #155). Bundles
+  (#156): no program needs one, since a function is given its effects by its row (§34).
 - Effectful callbacks stored (#161 part B, §33 *Open*). Functions over computations (`retry`, a
   consumer of generators, `|>` at a computation parameter) are §33. Blocks passed and called
   are §30: E1 (a higher-order function under two handlers) and E6 (a wrapper whose handler the
@@ -5242,7 +5246,7 @@ counts.
 | `corpus/comp-param.bc` | `guard` (a computation parameter) and `pass` (a plain block parameter), each given a block and a named function | `((inr i32[7], inr i32[7]), (inr i32[8], inr i32[7]))` | `0 0 0` |
 | `corpus/pipe-handlers.bc` | laws 1–3 for handler stages: `\|>` is `with`, a chain grouped as one stage, the order of a chain | see the file | `0 0 0` |
 | `corpus/gen-pipeline-pipe.bc` | the adapters chained with `\|>` | `i32[320110]` | `0 0 0` |
-| `corpus/reconcile-chain.bc` | `step() \|> timeout \|> retry(3, 10) \|> logged`, with a fake clock and a journal | see the file | `25 0 0` |
+| `corpus/reconcile-chain.bc` | `step() \|> timeout \|> retry(3, 10) \|> logged`, with a fake clock, a fake service and a journal | see the file | `28 3 0` (§34) |
 
 Rejected, a rule of the language: `corpus/reject/block-raise-lexical.bc` (a plain block's `raise`
 is not the callee's). Pending, each waiting on an *Open* item: `corpus/pending/comp-param-two-sites.bc`,
@@ -5259,13 +5263,11 @@ Fail[i32])`, so the block's errors are `retry`'s, and the program retries, answe
 `((inl i32[200], i32[30]), (inr i32[503], i32[10]))` where it answered
 `((inr i32[503], i32[0]), (inr i32[503], i32[0]))`. Its counts are unchanged.
 
-`reconcile-chain`'s clock and journal are control effects whose handlers fold the computation's
-answer, its operations answer `()`, and its service has no state: the flat stage's layout typing
-fails on a handler with a state around an operation that answers another type (#485, `layout
-types: 1 and i32 differ`), WebAssembly is invalid for a counted loop at a resuming row whose
-operation answers a value (#486), and an answering capability cannot be used by an argument
-called under the callee's handler (#487). Each reproduces without any construct of this entry
-(*Open*).
+`reconcile-chain`'s clock, service and journal are control effects whose handlers fold the
+computation's answer: an answering capability cannot be used by an argument called under the
+callee's handler (#487), which reproduces without any construct of this entry (*Open*). Its
+service with a state and its operations that answer values, which the backend failed on (#485,
+#486), are §34's: the backend fixes and the program are there.
 
 ### Lowering
 
@@ -5308,12 +5310,337 @@ and runs as before, with the same output, counts and reports, except `retry-bloc
   - *the join of rows* across the elements of one data value: written, or the union inferred.
   Each is a decision about what a stored value means, not an elaboration detail: §32 *Open*
   remains, with these options.
-- **Layout typing in the backend**: resuming operations that answer different types inside a
-  handler with a state (#485), and a counted loop at a resuming row whose operation answers a value
-  (#486), fail to compile (*Programs*).
 - **Associativity across function stages** (law 2): it needs the relabelling above.
 
 ---
+
+## 34. Entry 33 — IO as effects: the platform as the outermost handler
+
+### Motivation
+
+#156, the IO capability pass. §11 gives a program its standard streams as capabilities, cells with
+opaque content lent to externs, and a helper that does I/O takes the cell as an argument. Effects
+are in the kernel (§19), and an answering operation is a call on a capability value (§18): a
+function that performs `print_bytes(v)` is given the capability by its row, as a function that
+calls `putb(o, b)` is given `o` by its parameter. This entry makes the standard streams, the clock
+and the arguments answering effects whose outermost handler is the platform package, a library
+module that serves them with the externs. `main` is the only place they are ambient; every other
+function is given them by its row; a test serves them with a handler of its own (a fake clock, a
+buffer for an output), by the handler alone.
+
+What exists and is reused, no new mechanism where one serves:
+
+- an answering effect is a capability (§18 *Elaboration*; `Frontend/Elab/Effects.lean`, `withBlk`,
+  `opCall`, `clauseDef`): `with h(&mut c₀) { M }` is a borrow of the cell `c₀`, and an operation
+  is a call of the clause on the capability, which hands it back;
+- a function with a row is copied for what serves it, taking the capabilities first and handing
+  them back first (§18 *Rows*), so a function's row is the capabilities it is given, and a written
+  row is a promise checked against the inferred one;
+- §11's capability externs `stdin`, `stdout`, `stderr`, cells the runtime allocates and `main`
+  hands back (`Frontend/Check/Externs.lean`, `stdExterns`; `Backend/Driver.lean`, `extImpls`),
+  the operations `read_byte`, `write_byte`, `write_all`, `read_into` and their models
+  (`Core/Stdio.lean`), and `bcc trusted` (`trustedReport`);
+- §11's ambient `main` (`Frontend/Sugar.lean`, `ambientMain`), which adds the capability externs
+  `main` uses and hands them back by name;
+- tasks over an outer borrow (§32, `spawn_in`), blocks and computation parameters that use
+  capabilities (§32, §33), and the per-observation lend of a borrow block over a loop (§14,
+  `Frontend/Elab/LoopLend.lean`).
+
+### Laws
+
+Each effect's equations, on the runs of a handled computation. A handler is lawful when the runs of
+every body it handles satisfy them. The platform's handlers are lawful by the host's contract
+(*Assurance*), the model's by its definition (`Core/Stdio.lean`), and a fake handler by
+construction: its clauses are a fold over the operations that keeps the equations termwise.
+
+- **`Stdout`, `Stderr`.** What a run writes is the concatenation, in order, of what its operations
+  write: `print_byte(b)` writes `[b]` and `print_bytes(v)` the bytes of `v`. So
+  `print_bytes(v) ≡ print_byte(v[0]); …; print_byte(v[n-1])`, and `print_bytes` of an empty view
+  writes nothing. The two streams are separate: a write to one leaves the other as it was.
+- **`Stdin`.** The input is a byte list fixed before the run. `input_byte()` answers its next byte
+  and consumes it, or `inr ()` at its end, and keeps answering `inr ()` after it. `input_into(v)`
+  is `input_byte` into the slots of `v` from its start until it is full or the input ends, and
+  answers the view and how many bytes it read, which is less than `v`'s length only at the end.
+- **`Clock`.** `now()` answers an `i64` time in nanoseconds since an arbitrary fixed origin,
+  monotone within a run: a later `now()` answers no less than an earlier one. `sleep(ns)` takes an
+  `i64` duration in nanoseconds and waits at least `max(ns, 0)`: a `now()` after it answers at
+  least the `now()` before it plus `max(ns, 0)`, or `2^63 − 1`. Times saturate at `2^63 − 1`
+  (about 292 years), a sum that would pass it answering it, so the
+  laws hold in every run. The time a run spends computing is unspecified: a handler may count it
+  (the platform) or not (a fake clock, the model).
+- **`Args`.** The arguments are a list of byte strings fixed before the run. `arg_byte()` answers
+  their bytes in order, each argument followed by `0`, then `inr ()`, and `inr ()` after it.
+
+`corpus/io-laws.bc` runs each law's two sides under a fake handler and compares them.
+
+### The effects
+
+`lib/sys.bc`, the system interface (**PROPOSED** spellings and shape, *One-way doors* below):
+
+    effect Stdin  { fn input_byte() -> u8 + 1; fn input_into<'b>(v: array_mut 'b u8) -> array_mut 'b u8 * i32 }
+    effect Stdout { fn print_byte(b: u8); fn print_bytes<'b>(v: array_imm 'b u8) }
+    effect Stderr { fn eprint_byte(b: u8); fn eprint_bytes<'b>(v: array_imm 'b u8) }
+    effect Clock  { fn now() -> i64; fn sleep(ns: i64) }
+    effect Args   { fn arg_byte() -> u8 + 1 }
+
+- **Answering, every one.** Each operation answers at once and its clause runs in place, a call on
+  the capability (§18): the least general kind that serves the programs. None suspends. A program
+  whose own computations wait on time with a control operation serves it with a handler whose
+  clause calls `sleep` (`corpus/reconcile-clock.bc`'s `on_clock`).
+- **One effect per stream.** `Stdout` and `Stderr` are two effects with the same operations, since
+  a row holds one instance of an effect (§18 *Not provided*, S2 #155). A writer that does not care
+  which stream it writes to takes §11's output cell, or is written once over a block (§30) given
+  `print_byte` or `eprint_byte` (`lib/io.bc`'s `dec_each`).
+- **Bytes, and a view per call**, as §11's operations: a byte, and a view for one system call per
+  view. Text, numbers and lines are library code.
+- **`Args` is a byte stream**, each argument followed by `0`, as WASI's `args_get` and
+  `/proc/self/cmdline` lay them out; `next_arg` (`lib/textio.bc`) reads one into a string. The
+  program's own name is not an argument.
+- **Operations with lifetime parameters.** An answering operation may take lifetime parameters,
+  `fn print_bytes<'b>(v: array_imm 'b u8)`. Its clause `h__op` takes them after the capability's,
+  `fn h__op<'l, 'b>(c: mut 'l S, v: array_imm 'b u8) -> mut 'l S * B`, and each call instantiates
+  them as a call of a function with lifetime parameters does. A control operation does not take
+  them (a parse error).
+
+### The platform package
+
+A platform is a library module that serves the system interface with externs. `lib/wasi.bc` is
+WASI preview 1's:
+
+    include sys
+    extern read_byte, write_byte, write_all, read_into                     (§11)
+    extern clock_now : !(all 'a < top. mut 'a clock => mut 'a clock * i32)
+    extern clock_sleep : !(all 'a < top. mut 'a clock * i32 => mut 'a clock)
+    extern read_arg : !(all 'a < top. mut 'a args => mut 'a args * (u8 + 1))
+    handler wasi_stdin(&mut i: input): Stdin = { input_byte() = { let (j, r) = read_byte(i); i = j; r }; … }
+    handler wasi_stdout(&mut o: output): Stdout = { print_byte(b) = { o = write_byte(o, b) }; … }
+    handler wasi_stderr(&mut o: output): Stderr = { … }
+    handler wasi_clock(&mut c: clock): Clock = { now() = { let (d, t) = clock_now(c); c = d; t }; … }
+    handler wasi_args(&mut a: args): Args = { arg_byte() = { let (b, r) = read_arg(a); a = b; r } }
+
+- **A handler whose state is lent**, `handler h(&mut s: S): E = { … }`: each clause is given the
+  state lent, `s : mut 'l S`, the capability itself, and hands back the borrow it ends with:
+
+      fn h__op<'l>(c: mut 'l S, x: A) -> mut 'l S * B = let s = c; M; (s, r)
+
+  where §18's clause runs on the state's value, swapped out of the cell (`withswap`). It is what a
+  handler over an opaque state needs: its externs take the state lent, and its value cannot be
+  inspected. A clause is then a call of the extern on the capability, with no swap. A control
+  handler's state is not lent (a parse error).
+- **The capabilities.** `stdin`, `stdout`, `stderr` (§11), `clock : ref clock` and `args : ref
+  args`, two new opaque kinds (*The models*). Each is an extern of `main` when `main` uses it, a
+  cell the runtime allocates, which `main` hands back.
+- **The ambient table** (`Frontend/Elab/Effects.lean`, `platformEffects`): each effect of the
+  interface with its capability and its platform handler, `Stdin → stdin, wasi_stdin`, … . It
+  names the one platform there is. **PROPOSED**: a second platform (`posix`, over libc's `read`,
+  `write`, `clock_gettime`, `nanosleep` and `argv`, the externs' contracts unchanged, decision 25)
+  is a second module and table, chosen by a build option; neither is built.
+
+### `main`
+
+`main` is the only place the effects are ambient. An effect of the interface that `main`'s body
+performs (its inferred row, §18) and that no `with` in it handles is served by the platform's
+handler of it, and its capability becomes one of `main`'s capability externs, handed back as §11's
+are. So `main -> A` performing `Stdout` elaborates to `main : F (ref output ⊗ A)`.
+
+- **`main` holds the cells.** A platform capability is the cell itself, threaded by name as §11's
+  are, and each operation lends it to the clause for one call: `borrow mut stdout { 'x, m ->
+  wasi_stdout__print_byte(m, b) }`, which is §11's `putb`. A function called from `main` is copied
+  for the cell (`f__wasi_stdout_cell`), and lends it the same way. The cell, not a borrow of it,
+  because a loop without a bound (§14) holds what it threads between observations, and a borrow
+  cannot be held there: a function that loops over the input (`read_input`, `next_arg`, a `while`
+  in `main`) threads the cell, as §11's `for b in bytes stdin` does. Inside a control `with`, whose
+  body may be abandoned, the cell is lent for the body (§18), and the body's operations are calls
+  on that borrow.
+- **No other function is given an effect it does not name.** A function's copy takes exactly the
+  capabilities of its row, and a written row that leaves out an effect the function performs is
+  rejected (`corpus/reject/io-unlisted.bc`).
+- **§11's capability values stay.** A `main` that names `stdin`, `stdout` or `stderr` uses the cell
+  as before (§11 *Sugar*). The I/O library is then included first, as `include io`, since its
+  helpers are written over the platform's handlers. A `main` that both names a stream's cell and
+  performs its effect is rejected with a message (the cell is the effect's capability).
+
+### Tasks
+
+A task performs the effects its body performs; they are resolved lexically where it is spawned
+(§30). **PROPOSED**: a task of a handler whose clauses keep the continuation boxed at the handler's
+lifetime (`spawn_in`, §32) is *given* the capabilities its body uses: its continuation holds them,
+where the body of any other control `with` is lent them anew (§18), since it may be abandoned. A
+task outlives its `with`, so the capabilities are lent for the innermost borrow block around the
+spawn, whose lifetime bounds the tasks (§32's `borrow mut d { 'd, … }`): the block takes a borrow of
+each, gives it to the task, and does not hand it back; after the block the capability is `main`'s
+again. A capability is a `mut` borrow, so one task holds it at a time, until it ends or is
+cancelled (a borrow has no destructor to run, so a cancel is safe). Two tasks given one capability
+in one block are rejected with a message (`corpus/pending/io-two-tasks.bc`), and so is a task
+spawned outside every borrow block. `corpus/io-task.bc`: a task writes to standard output across
+its `await`s.
+
+### The library
+
+- `lib/io.bc`: `include wasi`; §11's helpers over cells, each the platform's handler lent the cell
+  around one operation (`fn putb(o: Out, b: u8) -> Out * 1 = with wasi_stdout(&mut o) {
+  print_byte(b) }; (o, ())`), so that an extern is called only by a platform handler; `put_dec`
+  and `bytes` over those; and over the effects, `dec_each(x, put)` (the digits of `x` given to a
+  block), `print_dec`, `eprint_dec`, `ns_of_ms` (milliseconds as the clock's nanoseconds).
+- `lib/textio.bc`: `include text`, `include io`; §17's helpers over cells; and over the effects,
+  `print_lit`, `print_str`, `print_string`, `eprint_lit`, `eprint_str`, `read_input` (the whole
+  input into a string, in chunks of `input_into`), `next_arg` (the next argument appended to a
+  string, and whether there was one).
+
+### The models
+
+Two new opaque kinds (§11 *Opaque host types*), each a leaf with its model, `Imm̲ = Unk`, no
+destructor:
+
+- `clock`: `clock.Holds v ⇔ ∃ t, v = i64[t]`, the time in nanoseconds. Its representation is `I64`
+  (`vC_clockRep`).
+- `args`: `args.Holds v ⇔ BytesV v`, the arguments not yet read, as an input's. Its representation
+  is `Bytes` (`vC_argsRep`).
+
+| extern | type | model |
+|---|---|---|
+| `clock_now` | `!(all 'a < top. mut 'a clock => mut 'a clock * i64)` | `withswap` answering the time and keeping it |
+| `clock_sleep` | `!(all 'a < top. mut 'a clock * i64 => mut 'a clock)` | `withswap` adding `max(ns, 0)`, saturating at `2^63 − 1` |
+| `read_arg` | `!(all 'a < top. mut 'a args => mut 'a args * (u8 + 1))` | `read_byte`'s, at `Args` |
+| `mk_clock`, `take_clock` | `!(1 => ref clock)`, `!(ref clock => i64)` | `alloc i64[0]`, `free` |
+| `mk_args`, `take_args` | `!(Bytes => ref args)`, `!(ref args => Bytes)` | `mk_input`'s, `take_input`'s |
+
+`clockNow_meets`, `clockSleep_meets`, `readArg_meets`, `mkClock_meets`, `takeClock_meets`,
+`mkArgs_meets`, `takeArgs_meets` (`Core/Stdio.lean`): the Fundamental Property of each model at the
+representation, as §11's, and `stdModel` gains them, so `io_every_run` and `IORun.every_run` cover
+a program that uses them. `run_io` makes the clock at time `0` and the arguments from their bytes
+(written into the wrapper as a literal), and takes them back; its type does not change.
+
+### Lowering
+
+Zero cost against §11's direct extern calls. An operation is a direct call of the platform's clause,
+which is a direct call of the extern on the lent cell, lent by `withbor2` as §11's `putb` lends it:
+no allocation, no dispatched call, no copy. `corpus/io-upper-effects.bc` is `io-upper` over the
+effects, at `io-upper`'s counts (`2 0 0`), and every §11 program keeps its counts.
+
+- `clock_now` is WASI `clock_time_get` of the monotonic clock, in nanoseconds since the clock's
+  first use (the origin), saturating; `clock_sleep` is `poll_oneoff` on one relative clock
+  subscription of `ns` nanoseconds (`clock_gettime` and `nanosleep` in libc). The cell's content is the model's and
+  the runtime does not read it. The closure and flat IRs' interpreters run the model: the cell
+  holds the time, and a sleep adds to it.
+- The arguments are read once, at their first use, with `args_sizes_get` and `args_get`, into
+  memory the runtime takes from the top of the heap, which is no object and is never freed; the
+  `args` cell holds the stream `0xFFFFFFFF`, which `$getc` and `$getv` read from there
+  (`Backend/Wasm/Runtime.lean`). `bcc interp … -- arg…`, `bcc run <file> arg…`,
+  `bcc-counts <file> -- arg…`, and `<name>.args` (one argument per line) in
+  `scripts/compile-corpus.sh` and `scripts/falsify.sh`.
+
+**Two backend fixes**, found by this entry's programs (#485, #486; `corpus/answers-two-types.bc`,
+`corpus/loop-row-answer.bc`, and `corpus/reconcile-chain.bc` without its simplifications):
+
+- A code that suspends at operations of different answer types was resumed at one layout type,
+  which did not unify (#485). A program whose layout types fail is lowered again with the control
+  operations' answers carried as variants, one per operation, as their payloads are
+  (`Backend/Clos/Capture.lean`, `Ops.wrapsAnswers`; `Backend/Driver.lean`, `lowerEffects`): each
+  operation's `κ` puts its answer in its variant, and a resumption point takes it out. A program
+  that compiled before is lowered as before, with its counts.
+- A resume code's cancel arm injected the cancel's `()` from one binder at every point, and the
+  layout types key an injection's type by its payload's variable, so one point's injection took
+  another's type and its padding (#486): each injection now copies the binder first, as does the
+  resume arm's.
+
+### Assurance
+
+| extern | model | host implementation |
+|---|---|---|
+| `clock` | proved (7): a cell holding the time | a runtime cell; the time is the host's monotonic clock; assumed (1) |
+| `clock_now`, `clock_sleep` | proved (7) | WASI `clock_time_get`, `poll_oneoff`; assumed (1): the real clock is not checked against the model |
+| `args` | proved (7): a cell holding the arguments | a runtime cell over the arguments, read once; interpreter-checked (2) |
+| `read_arg` | proved (7) | the arguments in memory (WASI `args_sizes_get`, `args_get`); interpreter-checked (2) |
+| `mk_clock`, `take_clock`, `mk_args`, `take_args` | proved (7) | none: the model's harness |
+
+`bcc trusted` lists the externs `main` reaches, now that a library brings in a platform's
+externs the program may never use: an extern is in a program's trusted base when it occurs in
+`main`'s erasure. `corpus/trusted/*.txt` pin the reports of six I/O programs, and
+`scripts/check-corpus.sh` compares them.
+
+### Programs
+
+| program | what it shows | answer | counts |
+|---|---|---|---|
+| `corpus/io-effects.bc` | the streams as effects: the whole input read, a report written by a function given `Stdout` by its row, a note on standard error | `lines 3`, `bytes 29`; `done` on standard error; `(i32[3], i32[29])` | `4 0 0` |
+| `corpus/io-upper-effects.bc` | `io-upper` over the effects, at its counts | `io-upper`'s | `2 0 0` |
+| `corpus/needs-stdout.bc` | helpers given standard output by their rows (moved from `pending/`, which waited on PR #100's `needs`) | `Hi`, `Hi`, `i32[6]` | `1 0 0` |
+| `corpus/io-args.bc` | the arguments, one per line of `io-args.args`, an empty one among them | `1 alpha` … `4 δ`, `i32[4]` | `7 0 0` |
+| `corpus/io-task.bc` | an async task writes to standard output across its `await`s, given `Stdout` by its spawn's borrow block | `<abc>`, `[3, 2]` | `29 7 0` |
+| `corpus/reconcile-clock.bc` | the reconciler chain run once with the platform's clock and once with a fake clock swapped in by a handler | see the file | `34 8 0` |
+| `corpus/io-laws.bc` | the laws, each under a fake handler | `hello, laws` twice, then the laws all hold | `11 0 0` |
+| `corpus/answers-two-types.bc` | #485 | `(i32[201], i32[1])` | `1 2 0` |
+| `corpus/loop-row-answer.bc` | #486 | `(i32[3], i32[33])` | `0 0 0` |
+
+`corpus/reconcile-chain.bc` loses its simplifications around #485 and #486: its service is a
+handler with a state, its clock's `sleep` answers the time slept, and its answer gains the service's
+count of requests, `((((inr i32[408], i32[30]), i32[0]), [80, 80, 80, 4]), (((inl i32[200],
+i32[20]), i32[1]), [20, 9]))`, at `28 3 0` (from `25 0 0`: the service's continuations, and the
+calls of its answer, a function of its state). Rejected: `corpus/reject/io-unlisted.bc`. Pending:
+`corpus/pending/io-two-tasks.bc`. Every program runs at the source stage, the closure and flat IRs
+and WebAssembly with `live 0`; `reconcile-clock`'s real clock is compared, not printed, so its
+answer is the same at every stage.
+
+### Reports
+
+`bcc check` reports each platform capability of `main`, `lowering L:C: main: `Stdout` is served by
+the platform's `wasi_stdout` on the cell `stdout`, which each operation lends`, each operation on a
+cell, `call L:C: print_byte (Stdout) → `wasi_stdout__print_byte`, on the cell `stdout` lent to it`,
+a lent handler as `a direct call on the lent capability, its state lent to the clause`, and a
+borrow block that gives its tasks capabilities, `borrow block: the tasks spawned in it are given the
+capabilities of `Stdout`, lent for the block`. The system interface's, the platform's and the I/O
+library's own declarations are not reported, however the program brings them in, and a library
+function's copies are the library's for the loop reports. `corpus/reports/io-effects.txt`,
+`io-task.txt` and `needs-stdout.txt` pin them.
+
+### One-way doors
+
+The IO model's user-visible shape and what `main` is given are not settled here: each is built as
+proposed and listed with its options in #156.
+
+- **What a program sees.** Per-stream answering effects with byte and view operations (built);
+  one output effect with named instances for the two streams (needs #155); or capability values
+  only (§11), effects for tests alone.
+- **What `main` is given.** Every interface effect its body performs, served ambiently (built); or
+  a bundle record of capabilities `main` takes as a parameter (`docs/platform-design.md` §2.8);
+  or effects named in `main`'s written row.
+- **The arguments.** One byte stream, each argument followed by `0` (built); or a count and an
+  indexed argument (`arg_count`, `arg_len`, `arg_into`).
+- **Tasks and capabilities.** One task holds a capability, lent for the scope that bounds it
+  (built); or the capability threaded through `await`, so that tasks share it.
+
+**Decided by the user** (2026-10-16): the clock's time is **`i64` nanoseconds, monotonic**, since an
+arbitrary fixed origin, saturating at `2^63 − 1`. A process such as the Kubernetes operator runs for
+months, past the `2^31 − 1` milliseconds (about 24.8 days) of an `i32` clock. There is no
+`Instant` type: a time and a duration are both `i64`.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `PinLaw`, the borrow rules, the Fundamental
+Property or adequacy. `Opaque` gains `clock` and `args`, leaves with their models, and
+`Core/Stdio.lean` their externs' models and proofs, so `fundamentalC`, `adequacyC`, `fundamentalD`,
+`adequacyD` and §11's end-to-end theorems keep their statements and cover the new kinds. Every
+existing corpus and kernel program keeps its output and counts but `reconcile-chain`'s (above); the
+reports change only where a message changed (`corpus/reject/include-unknown.bc` lists `sys` and
+`wasi`; `corpus/pending/effects-generic-store.bc` names the lent handler's form).
+
+### Open
+
+- **Concurrent writers.** Two tasks cannot both be given one capability. The options: thread the
+  capability through `await` (the scheduler holds it between turns and gives it to the task it
+  resumes, as a `for`'s site threads its variables, §15); serve a task's output at the scheduler (a
+  port, decision 57); or a shared output capability, which needs interior mutability.
+- Named instances (S2, #155) for one output effect at two streams; redirecting a function's
+  `Stdout` to standard error (an operation of an answering effect inside an answering clause, §18
+  *Not provided*).
+- A capability used by a computation parameter's argument under the callee's handler (#487): the
+  reconcilers' services and journals are control effects because of it.
+- Choosing the platform module at build time; `posix`.
+- `Env`, `Fs`, `Net`, `Random`, the exit status (§11 *Designed, not built*). I/O errors (§11 *Open*).
+
+---
+
 
 ## Status
 
@@ -5536,9 +5863,47 @@ a provided row in `rtyAtom`),
 `resolvePipes`, `pipeStage`) and `Frontend/Sugar.lean` (an annotated binding at the row), with no
 change to `CDerives`, `Core/`, `Paper/`, `Support/`, the checker or `Backend/`.
 
+Entry 33 (§34) is implemented in `lib/sys.bc`, `lib/wasi.bc`, `lib/io.bc` and `lib/textio.bc`;
+`Frontend/Syntax.lean`, `Frontend/Parser.lean` and `Frontend/Print.lean` (`HostKind`,
+`OpDecl.lives`, `Decl.handler`'s lent state); `Frontend/Elab/Effects.lean` (`HSig.lent`,
+`HSig.cell`, `clauseDef`, `opCall` on a cell, `platformEffects`, `platformMain`, `Env.gives`,
+`Cx.givenC`, a borrow block that lends its tasks' capabilities, `withCtl`'s given capabilities,
+`hide`); `Frontend/Sugar.lean` (the I/O library included first, `capNames`, `mainLife`);
+`Frontend/Check/Externs.lean` (the clock's and the arguments' externs and harness);
+`Core/Opaque.lean` and `Core/Stdio.lean` (`Opaque.clock`, `Opaque.args`, their models and
+proofs); `Backend/` (`IOOp.clockNow`, `IOOp.clockSleep`, the arguments' stream at every stage,
+the WASI runtime's clock and arguments, `bcc trusted` at the externs `main` reaches, and #485's
+and #486's fixes in `Backend/Clos/Capture.lean` and `Backend/Driver.lean`), with no change to
+`CDerives`, the relation, the machine, `Paper/` or `Support/`.
+
 ---
 
 ## Changelog
+
+- **0.62** (2026-10-16) — §34 (new, #156): the standard streams, the clock and the arguments as
+  answering effects (`lib/sys.bc`), the clock's time `i64` nanoseconds, monotonic, saturating at
+  `2^63 − 1` (the user's decision), whose outermost handler is the WASI preview 1 platform
+  (`lib/wasi.bc`), its handlers' state lent to their clauses (`handler h(&mut s: S)`), each clause
+  a direct call of an extern; `main` alone is given them ambiently, holding the cells and lending
+  one to each operation, and every other function by its row; answering operations with lifetime
+  parameters; a task of `spawn_in` given the capabilities its body uses, lent for the borrow block
+  around its spawn (PROPOSED); the laws of each effect. New opaque kinds `clock` and `args` with
+  their externs' models and proofs (`clockNow_meets`, `clockSleep_meets`, `readArg_meets`, and the
+  harness's). `lib/io.bc` and `lib/textio.bc` rebuilt on the platform's handlers, with
+  `print_dec`, `eprint_dec`, `print_lit`, `print_str`, `print_string`, `eprint_lit`, `eprint_str`,
+  `read_input`, `next_arg`, `ns_of_ms`. `bcc trusted` lists the externs `main` reaches; `corpus/trusted/` pins
+  six. Program arguments: `bcc interp … -- arg…`, `bcc run <file> arg…`, `<name>.args`. Backend
+  fixes: a code that suspends at operations of different answer types (#485), and a resume code's
+  cancel arm injecting one binder at two types (#486). New corpus programs `io-effects`,
+  `io-upper-effects`, `io-args`, `io-task`, `reconcile-clock`, `io-laws`, `answers-two-types`,
+  `loop-row-answer`; `needs-stdout` moved from `pending/`; reject `io-unlisted`; pending
+  `io-two-tasks`; reports `io-effects`, `io-task`, `needs-stdout`. **`reconcile-chain` changes its
+  output on purpose**: without its simplifications around #485 and #486 it has a service with a
+  state and a clock whose `sleep` answers, and answers the service's count too, at `28 3 0` (from
+  `25 0 0`). `corpus/reject/include-unknown.bc` and `corpus/pending/effects-generic-store.bc`'s
+  messages, and `corpus/pending/async-progress.bc`'s position, re-recorded. §11, §18 and §33
+  updated. No change to `CDerives`, the relation, the machine, `PinLaw`, a kernel program, or
+  another program's output or count.
 
 - **0.61** (2026-10-16) — §33 (new, #161 part A): computation parameters, a parameter whose type
   has a provided row, `!(A => B with E…)` (PROPOSED spelling), whose provided control effects the

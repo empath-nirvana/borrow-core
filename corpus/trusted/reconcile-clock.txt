@@ -1,0 +1,12 @@
+extern clock_now : !(all 'l0 < top. mut 'l0 clock => mut 'l0 clock * i64)
+  contract: model proved (7), clockNow_meets
+  host: WASI clock_time_get of the monotonic clock (libc clock_gettime); assumed (1)
+extern clock_sleep : !(all 'l0 < top. mut 'l0 clock * i64 => mut 'l0 clock)
+  contract: model proved (7), clockSleep_meets
+  host: WASI poll_oneoff on a relative clock subscription (libc nanosleep); assumed (1)
+extern clock : ref clock
+  contract: model proved (7), vC_clockRep (a cell holding the time, i64[0])
+  host: a runtime cell; the time is the host's monotonic clock; assumed (1)
+typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)
+unproved boundaries: 3 (clock_now, clock_sleep, clock)
+always trusted: the allocator and runtime (Backend/Wasm/Runtime.lean), the WAT printer, wasmtime

@@ -772,6 +772,8 @@ def convertWith (sel : Nat → Bool) (mark : Bool) (e : Expr) :
 descriptor, or an I/O operation. -/
 inductive ExtImpl where
   | cap (fd : Nat)
+  /-- The clock's cell, holding the model's time `i64[0]` (SPEC §34). -/
+  | clockCell
   | io (k : IOOp)
 
 /-- An operation's closure, as the extern's value: `Λ. λm. op m`, with one `Λ` per lifetime
@@ -815,7 +817,7 @@ with `mark`, their uses marked; the marked uses are returned too. `convertMain`
 def convertMainWith (sel : Nat → Bool) (mark : Bool) (exts : List ExtImpl) (loops : Bool)
     (e : Expr) : Except String (Prog × Array PolyUse) := do
   let e := prepare sel mark e
-  let ncaps := (exts.filter fun | .cap _ => true | _ => false).length
+  let ncaps := (exts.filter fun | .cap _ | .clockCell => true | _ => false).length
   let act : CM (Tm × Option Nat) := do
     let xs ← exts.mapM fun _ => fresh
     let ctx := xs.reverse
@@ -835,6 +837,9 @@ def convertMainWith (sel : Nat → Bool) (mark : Bool) (exts : List ExtImpl) (lo
       | .cap fd =>
         let l ← fresh
         body := .letv l (.lit (.i32 fd.toUInt32)) (.letv x (.prim .alloc [l]) body)
+      | .clockCell =>
+        let l ← fresh
+        body := .letv l (.lit (.i64 0)) (.letv x (.prim .alloc [l]) body)
       | .io k => body := .letv x (← ioValue k) body
     return (body, fin)
   let ((t, fin), s) ← act.run { next := dummy + 1, codes := #[], pre := .of e }

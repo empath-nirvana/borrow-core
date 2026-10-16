@@ -78,7 +78,7 @@ def VTy.pp (A : VTy) (lvl : Nat := 0) : String :=
     | .bang _ A => "!" ++ A.pp 4
     | .unk _ => "unk"
     | .int _ w => widthName w
-    | .handle _ o => if o then "output" else "input"
+    | .handle _ k => k.name
     | .mu _ X A => "mu " ++ X.name ++ ". " ++ A.pp 0
     | .name _ n => n
     | .lolli _ A B => A.pp 1 ++ " => " ++ B.pp 0
@@ -335,15 +335,18 @@ def Decl.pp : Decl → String
         | .ctl .lin => "linear ctl "
         | .ctl .aff => "ctl "
         | .ctl .unr => "multi ctl ") ++
-      o.name.name ++ "(" ++ ", ".intercalate (o.params.map fun (x, A) => x.name ++ ": " ++ A.pp) ++
+      o.name.name ++
+        (if o.lives.isEmpty then "" else "<" ++ ", ".intercalate (o.lives.map fun (a, b) =>
+          (Life.var a.span a.name).pp ++ (match b with | .top _ => "" | b => " < " ++ b.pp)) ++ ">") ++
+        "(" ++ ", ".intercalate (o.params.map fun (x, A) => x.name ++ ": " ++ A.pp) ++
         ") -> " ++ o.res.pp
     "effect " ++ n.name ++ (if tps.isEmpty then "" else "[" ++ ", ".intercalate (tps.map (·.name)) ++ "]") ++
       " {" ++ String.join (ops.map fun o => nl 2 ++ op o ++ ";") ++ nl 0 ++ "}"
-  | .handler _ n st S e cs =>
+  | .handler _ n st S e cs l =>
     let cl (c : Clause) : String :=
       c.name.name ++ "(" ++ ", ".intercalate (c.params.map (·.name)) ++ ") = {" ++ nl 4 ++
         c.body.pp 0 4 ++ nl 2 ++ "}"
-    "handler " ++ n.name ++ "(mut " ++ st.name ++ ": " ++ S.pp ++ "): " ++ e.name ++ " = {" ++
+    "handler " ++ n.name ++ (if l then "(&mut " else "(mut ") ++ st.name ++ ": " ++ S.pp ++ "): " ++ e.name ++ " = {" ++
       String.join (cs.map fun c => nl 2 ++ cl c ++ ";") ++ nl 0 ++ "}"
   | .chandler _ h =>
     let tys (As : List VTy) : String :=

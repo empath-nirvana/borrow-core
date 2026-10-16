@@ -1,0 +1,151 @@
+-- The system interface's laws (SPEC §34 *Laws*), each run under a fake handler that is lawful by
+-- construction, its two sides compared. The same functions run under the platform's handlers in
+-- a program that does not swap them: a test serves an effect with a handler alone.
+--
+-- * `Stdout`: `print_bytes(v)` writes what `print_byte` of each of `v`'s bytes writes. `collect`
+--   keeps what is written in a string; `greet_view` writes a literal in one write, `greet_bytes`
+--   byte by byte, and the two strings are equal.
+-- * `Stdin`: `input_into(v)` reads what `input_byte` into each slot of `v` reads, and fewer bytes
+--   only at the end. `feed` serves a literal; the two readers read the same bytes, and
+--   `input_into` reads 3 of a 5-byte view at the end.
+-- * `Clock`: `now()` is monotone, and a sleep waits at least what it asks. `fake_clock` keeps its
+--   time in nanoseconds and adds `max(ns, 0)` at a sleep.
+-- * `Args`: the arguments one after the other, each followed by `0`, then the end and the end
+--   again. `fake_args` serves a literal of two arguments.
+--
+-- Answer: `hello, laws` twice (the two collected strings, written through the platform's
+-- `Stdout` after the fake one is gone), then `(inr (), ((inr (), inr ()), ((inr (), inr ()),
+-- (i32[2], inr ()))))`: the strings are equal, the readers agree and the view read 3 at the end,
+-- the clock waited and is monotone, two arguments and the end twice.
+
+include textio
+
+-- A fake standard output: the bytes written, in a string.
+handler collect(mut out: string): Stdout = {
+  print_byte(b) = { let (s, u) = push_byte(out, b); out = s };
+  print_bytes(v) = { let (s, u) = push_str(out, v); out = s }
+}
+
+-- A fake standard input: a literal and the index of its next byte.
+handler feed(mut st: lit * i32): Stdin = {
+  input_byte() = {
+    let (l, i) = st;
+    let r = borrow imm l { t -> match get(t, i) { inl g -> (inl *g : u8 + 1) | inr u -> (inr () : u8 + 1) } };
+    let j = match r { inl b -> i + 1 | inr u -> i };
+    st = (l, j);
+    r
+  };
+  input_into(v) = {
+    let (l, i) = st;
+    let (v, n) = len_mut(v);
+    let (v, k) = borrow imm l { 'a, t ->
+      match split_at(t, i) {
+        inl (h, rest) ->
+          let (rest, r2) = array_copy['a, u8] rest;
+          let m = len(r2);
+          let k = if n < m { n } else { m };
+          (copy_from(v, rest), k)
+      | inr t -> (v, 0)
+      } };
+    st = (l, i + k);
+    (v, k)
+  }
+}
+
+-- A fake clock: its time, advanced only by a sleep.
+handler fake_clock(mut t: i64): Clock = {
+  now() = t;
+  sleep(ns) = { if ns > 0 { t = t + ns } else { () } }
+}
+
+-- Fake arguments: a literal of arguments, each followed by `0`, and the index of the next byte.
+handler fake_args(mut st: lit * i32): Args = {
+  arg_byte() = {
+    let (l, i) = st;
+    let r = borrow imm l { t -> match get(t, i) { inl g -> (inl *g : u8 + 1) | inr u -> (inr () : u8 + 1) } };
+    let j = match r { inl b -> i + 1 | inr u -> i };
+    st = (l, j);
+    r
+  }
+}
+
+fn greet_view() -> 1 = print_lit("hello, laws\n")
+
+fn greet_bytes() -> 1 =
+  borrow imm "hello, laws\n" { 'a, t ->
+    let (t, u) = array_copy['a, u8] t;
+    let n = len(u);
+    let mut w = t;
+    for i in 0..n { let (w2, x) = array_copy['a, u8] w; w = w2; print_byte(at(x, i, 0)) };
+    array_forget['a, u8](w) }
+
+-- The two sides of `Stdout`'s law, each collected.
+fn stdout_law() -> string * string =
+  let a = alloc(string_new(16));
+  with collect(&mut a) { greet_view() };
+  let b = alloc(string_new(16));
+  with collect(&mut b) { greet_bytes() };
+  (free(a), free(b))
+
+-- The bytes `input_byte` reads into a 5-byte array, and their sum with `input_into`'s.
+fn bytewise() -> i32 =
+  let mut sum = 0;
+  for i in 0..5 { match input_byte() { inl b -> sum = sum + to_i32(b) | inr u -> () } };
+  sum
+
+fn viewwise() -> i32 * i32 =
+  let a = array_new[u8] (5, !{ i -> 0 });
+  let k = borrow mut a { v -> let (v, k) = input_into(v); discard_mut(v); k };
+  let s = borrow imm a { 'a, t ->
+    let mut s = 0;
+    let mut w = t;
+    for i in 0..5 { let (w2, x) = array_copy['a, u8] w; w = w2; s = s + to_i32(at(x, i, 0)) };
+    array_forget['a, u8](w);
+    s };
+  let _ = a;
+  (s, k)
+
+-- `Stdin`'s law: the two readers agree on the first bytes, and the view at the end is short.
+fn stdin_law() -> bool * bool =
+  let c = alloc(("abcdefgh", 0));
+  let x = with feed(&mut c) { bytewise() };
+  let d = alloc(("abcdefgh", 0));
+  let (y, k) = with feed(&mut d) { viewwise() };
+  let (z, k2) = with feed(&mut d) { viewwise() };
+  let _ = free(c);
+  let _ = free(d);
+  (x == y, k2 == 3)
+
+-- `Clock`'s law: a sleep waits what it asks, and a negative one does not go back.
+fn clock_law() -> bool * bool =
+  let t1 = now();
+  sleep(ns_of_ms(15));
+  let t2 = now();
+  sleep(ns_of_ms(0 - 3));
+  let t3 = now();
+  (t2 - t1 >= ns_of_ms(15), t3 >= t2)
+
+-- `Args`' law: the arguments counted by their `0`s, and the end, twice.
+fn args_law() -> i32 * bool =
+  let mut n = 0;
+  for i in 0..8 { match arg_byte() { inl b -> if b == 0 { n = n + 1 } else { () } | inr u -> () } };
+  let e1 = match arg_byte() { inl b -> false | inr u -> true };
+  let e2 = match arg_byte() { inl b -> false | inr u -> true };
+  (n, e1 && e2)
+
+main -> bool * ((bool * bool) * ((bool * bool) * (i32 * bool))) =
+  let (a, b) = stdout_law();
+  let (b, same) = borrow imm a { 'x, t ->
+    let r = borrow imm b { 'y, u -> eq(t, u, !{ (p, q) -> p == q }) };
+    (b, r) };
+  let a = print_string(a);
+  let b = print_string(b);
+  let ins = stdin_law();
+  let start : i64 = 100;
+  let c = alloc(start);
+  let clk = with fake_clock(&mut c) { clock_law() };
+  let _ = free(c);
+  let g = alloc(("x\0yz\0", 0));
+  let arg = with fake_args(&mut g) { args_law() };
+  let _ = free(g);
+  (same, (ins, (clk, arg)))

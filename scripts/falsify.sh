@@ -20,7 +20,7 @@
 # Accepted programs: every corpus/*.bc, corpus/surface/*.bc and corpus/axes/*.bc with a `main`
 # (except one marked `-- check: parse-only` or `-- check: no-source`, too large for the source
 # interpreter), and every program of experiments/AsyncCap/bc and bc/accept that `bcc check`
-# accepts today (the others are pending, and listed; bc/reject is never run); each reads `<name>.in` as standard input when there is one. The
+# accepts today (the others are pending, and listed; bc/reject is never run); each reads `<name>.in` as standard input and `<name>.args` as its arguments when there is one. The
 # kernel programs are `bcc kernel list`.
 #
 # The negative tests (`bcc kernel negatives`, `Backend/FalsifyTests.lean`) are untyped terms,
@@ -32,10 +32,15 @@ cd "$(dirname "$0")/.."
 . scripts/par.sh
 export bcc=.lake/build/bin/bcc
 
-# run TAG ARGS…: run `bcc ARGS…` (stdin from $in), leaving $TAG.out, $TAG.err, $TAG.rc.
+# run TAG ARGS…: run `bcc ARGS…` (stdin from $in, and the program's arguments from $argsf, one per
+# line, after `--`), leaving $TAG.out, $TAG.err, $TAG.rc.
 run() {
   local tag=$1; shift
-  local w=${PAR_TMP:-/tmp}
+  local w=${PAR_TMP:-/tmp} line
+  if [ -n "${argsf:-}" ]; then
+    set -- "$@" --
+    while IFS= read -r line || [ -n "$line" ]; do set -- "$@" "$line"; done < "$argsf"
+  fi
   if [ -n "${in:-}" ]; then "$bcc" "$@" < "$in" > "$w/$tag.out" 2> "$w/$tag.err" && echo 0 > "$w/$tag.rc" || echo $? > "$w/$tag.rc"
   else "$bcc" "$@" < /dev/null > "$w/$tag.out" 2> "$w/$tag.err" && echo 0 > "$w/$tag.rc" || echo $? > "$w/$tag.rc"; fi
 }
@@ -79,19 +84,20 @@ export -f differ
 
 one_file() {
   local f=$1
-  export in=""
+  export in="" argsf=""
   [ -f "${f%.bc}.in" ] && in="${f%.bc}.in"
+  [ -f "${f%.bc}.args" ] && argsf="${f%.bc}.args"
   differ "$f" interp
 }
 export -f one_file
 
-one_kernel() { export in=""; differ "$1" kernel interp; }
+one_kernel() { export in="" argsf=""; differ "$1" kernel interp; }
 export -f one_kernel
 
 # negative NAME MODE MESSAGE ANSWER
 negative() {
   local name=$1 mode=$2 msg=$3 ans=$4 w=${PAR_TMP:-/tmp} flag
-  export in=""
+  export in="" argsf=""
   run default kernel interp "$name"
   if ! grep -qF -- "$ans" "$w/default.out" "$w/default.err"; then
     echo "$name: FAIL: the default run does not give \`$ans\`: $(cat "$w/default.out" "$w/default.err")"; return 1

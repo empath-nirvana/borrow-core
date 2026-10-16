@@ -1,0 +1,20 @@
+-- A counted loop at a resuming row whose operation answers a value (#486): `rep`'s loop is a
+-- `bounded_fix` over the count (SPEC §30), its body calls `step`, which suspends, and sleeps. The
+-- cancel arm of a resume code injects the cancel's `()` at each of its points, as the resume arm
+-- injects the answer: each injection now has a binder of its own, so that its layout type is its
+-- own (the layout types key an injection's type by its payload's variable). Before, the
+-- WebAssembly was invalid: a resumption's cancel passed a sum without its padding.
+--
+-- Answer: `(i32[3], i32[33])`: three steps of 1, and three sleeps of 1 and 10 on the clock.
+
+effect Clock { ctl sleep(ms: i32) -> i32 }
+handler fake_clock[A]: Clock, A -> A * i32 = {
+  return(a) = (a, 0);
+  sleep(ms, k) = { let (a, t) = k(0); (a, t + ms) }
+}
+fn step(n: i32) -> i32 with Clock = sleep(1); n
+fn rep(times: i32) -> i32 with Clock =
+  let mut acc = 0;
+  for attempt in 0..times { acc = acc + step(1); sleep(10) };
+  acc
+main -> i32 * i32 = with fake_clock { rep(3) }

@@ -9,6 +9,10 @@
 # (`effect`, `row`, `lowering`, `call`: SPEC §18) must be exactly that file: the rows, the lowering
 # shape of each handler and each call site's elaboration are pinned.
 #
+# The trusted base. For every corpus/trusted/<name>.txt, what `bcc trusted corpus/<name>.bc` prints
+# (the externs `main` reaches, with their contracts and host implementations: SPEC §11, §34) must
+# be exactly that file.
+#
 # Pending programs. Every `corpus/pending/*.bc` is a program we cannot write yet, named by its
 # `-- pending: <issue or limit>` line. It is an expected failure: `bcc check` (which parses first)
 # must reject it with the message on its `-- now:` line, continued by `-- now| ` lines, so the
@@ -57,6 +61,13 @@ reports() {
     echo "$g: the reports differ"; return 1
   else echo "$g: reports match"; fi
 }
+trusted() {
+  local g=$1 f
+  f=corpus/$(basename "${g%.txt}").bc
+  if ! diff -u "$g" <("$bcc" trusted "$f" 2>&1); then
+    echo "$g: the trusted base differs"; return 1
+  else echo "$g: trusted base matches"; fi
+}
 # A pending program: exit 0 if it fails as recorded, 1 if not.
 pending() {
   local f=$1 issue want out
@@ -73,7 +84,7 @@ pending() {
     echo "$f: pending ($issue), fails as recorded"
   fi
 }
-export -f checks rejects reports pending
+export -f checks rejects reports trusted pending
 if [ $# -gt 0 ]; then
   for f in "$@"; do [ -f "$f" ] || { echo "$f: no such file"; exit 2; }; done
   for f in "$@"; do
@@ -81,6 +92,7 @@ if [ $# -gt 0 ]; then
       corpus/reject/*) par rejects "$f" ;;
       corpus/pending/*) par pending "$f" ;;
       corpus/reports/*.txt) par reports "$f" ;;
+      corpus/trusted/*.txt) par trusted "$f" ;;
       *) par checks "$f"; r=corpus/reports/$(basename "${f%.bc}").txt
          if [ "$par_failed" = 0 ] && [ "$f" = "corpus/$(basename "$f")" ] && [ -f "$r" ]; then par reports "$r"; fi ;;
     esac
@@ -94,6 +106,7 @@ par checks corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc; bad=$((bad + par_fa
 shopt -s nullglob
 par rejects corpus/reject/*.bc; bad=$((bad + par_failed))
 par reports corpus/reports/*.txt; bad=$((bad + par_failed))
+par trusted corpus/trusted/*.txt; bad=$((bad + par_failed))
 pend=(corpus/pending/*.bc)
 par pending ${pend[@]+"${pend[@]}"}; bad=$((bad + par_failed))
 echo "$(( ${#pend[@]} - par_failed )) pending program(s), expected failures."

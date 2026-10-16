@@ -1,0 +1,40 @@
+-- The WASI preview 1 platform (SPEC §34): the system interface (`lib/sys.bc`) served by externs,
+-- each handler's state the capability's cell, lent to each clause. `main` performs the interface
+-- under these handlers, outermost; each clause is a direct call of the extern on the lent cell.
+-- The externs' host implementations are the runtime's (`Backend/Wasm/Runtime.lean`) and their
+-- contracts are `Core/Stdio.lean`'s; `bcc trusted` lists them.
+
+include sys
+
+extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (u8 + 1))
+extern write_byte : !(all 'a < top. mut 'a output * u8 => mut 'a output)
+extern write_all : !(all 'a < top. all 'b < top. mut 'a output * array_imm 'b u8 => mut 'a output)
+extern read_into : !(all 'a < top. all 'b < top.
+  mut 'a input * array_mut 'b u8 => mut 'a input * (array_mut 'b u8 * i32))
+extern clock_now : !(all 'a < top. mut 'a clock => mut 'a clock * i64)
+extern clock_sleep : !(all 'a < top. mut 'a clock * i64 => mut 'a clock)
+extern read_arg : !(all 'a < top. mut 'a args => mut 'a args * (u8 + 1))
+
+handler wasi_stdin(&mut i: input): Stdin = {
+  input_byte() = { let (j, r) = read_byte(i); i = j; r };
+  input_into(v) = { let (j, r) = read_into(i, v); i = j; r }
+}
+
+handler wasi_stdout(&mut o: output): Stdout = {
+  print_byte(b) = { o = write_byte(o, b) };
+  print_bytes(v) = { o = write_all(o, v) }
+}
+
+handler wasi_stderr(&mut o: output): Stderr = {
+  eprint_byte(b) = { o = write_byte(o, b) };
+  eprint_bytes(v) = { o = write_all(o, v) }
+}
+
+handler wasi_clock(&mut c: clock): Clock = {
+  now() = { let (d, t) = clock_now(c); c = d; t };
+  sleep(ns) = { c = clock_sleep(c, ns) }
+}
+
+handler wasi_args(&mut a: args): Args = {
+  arg_byte() = { let (b, r) = read_arg(a); a = b; r }
+}

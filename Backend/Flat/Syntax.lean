@@ -41,6 +41,8 @@ inductive Exp where
   /-- Bytes of the stream `fd` read into the `len` bytes at `addr`, until they are full or the
   stream ends; the number read (SPEC §11, `read_into`). -/
   | getv (fd addr len : Exp)
+  /-- The time of the clock in the cell at `cell`, in nanoseconds (SPEC §34, `clock_now`). -/
+  | now (cell : Exp)
   /-- A run's counter: `0` the allocations so far, `1` the dispatched calls so far, `2` the
   copies of a variable at a non-trivial type so far. -/
   | stat (k : Nat)
@@ -59,6 +61,9 @@ inductive Stmt where
   | putc (fd b : Exp)
   /-- Write the `len` bytes at `addr` to the stream `fd` (SPEC §11, `write_all`). -/
   | putv (fd addr len : Exp)
+  /-- Wait at least `max(ns, 0)` nanoseconds on the clock in the cell at `cell` (SPEC §34,
+  `clock_sleep`). -/
+  | sleep (cell ns : Exp)
   /-- `c` is a 32-bit test. -/
   | ite (c : Exp) (t e : List Stmt)
   /-- `cases[k]` when `e` is `k < cases.length`, else `dflt`. -/

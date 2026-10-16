@@ -185,8 +185,8 @@ def genPrim : Op → List Var → GM Key
       let res ← holding (.inj false st)
       emit (.sub r res)
       pure res
-  | .io .readByte, [m] => holding (.pair (.var m) .none)
-  | .io .writeByte, [p] | .io .writeAll, [p] => do
+  | .io .readByte, [m] | .io .clockNow, [m] => holding (.pair (.var m) .none)
+  | .io .writeByte, [p] | .io .writeAll, [p] | .io .clockSleep, [p] => do
       let m ← freshKey
       emit (.proj (.var p) 0 m)
       pure m

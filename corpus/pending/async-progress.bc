@@ -1,5 +1,5 @@
 -- pending: capabilities in tasks (a task given main's stdout; decision 57's ports, SPEC §30 Open)
--- now: 38:19: the body of `with spawn` assigns a `let mut` variable declared outside it, or lends a place declared outside it: a control handler's body may be abandoned, and does not hand them back; bind what the block answers instead
+-- now: 39:19: the body of `with spawn` assigns a `let mut` variable declared outside it, or lends a place declared outside it: a control handler's body may be abandoned, and does not hand them back; bind what the block answers instead
 -- Tasks that print their progress. Each download task is given the output stream, writes a line
 -- per chunk it fetches, and awaits between chunks, so the lines of the two tasks interleave. The
 -- task takes the stream and hands it back with its value, as any function that writes does.
@@ -11,9 +11,10 @@
 -- lends it is rejected: "the body of `with spawn` … lends a place declared outside it: a control
 -- handler's body may be abandoned, and does not hand them back". A capability has no destructor,
 -- so a task that holds one cannot be cancelled (`lib/yield.bc`'s note: a generator cannot hold
--- one across a `yield`), and two tasks cannot both be given it. Tasks that write need the
--- output passed as a capability per task (a port, decision 57) or a log effect handled by the
--- scheduler (SPEC §30 *Open*).
+-- one across a `yield`), and two tasks cannot both be given it. A task that writes through
+-- `Stdout` (SPEC §34) is given a borrow of the stream instead, which it can drop when cancelled
+-- (`corpus/io-task.bc`), but a borrow is lent to one task at a time: two writers wait on SPEC §34
+-- *Open* (concurrent writers; `corpus/pending/io-two-tasks.bc`).
 --
 -- Once it lands: prints `1:0`, `2:0`, `1:1`, `2:1`, `1:2`, each on a line, and answers `i32[0]`.
 

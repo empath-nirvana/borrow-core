@@ -1,35 +1,21 @@
--- The I/O library (SPEC §11): the standard operations, and helpers over the capabilities that
--- hide the borrow. It is ordinary library code, checked with the program, and in scope in a
--- program whose `main` uses the capabilities ambiently. Each helper takes a capability and
--- hands it back first, so `&mut c` can lend it to one call.
+-- The I/O library (SPEC §11, §34): over the system interface's effects (`lib/sys.bc`), and over
+-- the streams' cells, each helper there the platform's handler (`lib/wasi.bc`) lent the cell around
+-- one operation, so that an extern is called only by a platform handler. It is ordinary library
+-- code, checked with the program, and in scope in a program whose `main` uses the streams
+-- ambiently or that includes it. Each helper over a cell takes it and hands it back first, so
+-- `&mut c` can lend it to one call.
 
-extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (u8 + 1))
-extern write_byte : !(all 'a < top. mut 'a output * u8 => mut 'a output)
-extern write_all : !(all 'a < top. all 'b < top. mut 'a output * array_imm 'b u8 => mut 'a output)
-extern read_into : !(all 'a < top. all 'b < top.
-  mut 'a input * array_mut 'b u8 => mut 'a input * (array_mut 'b u8 * i32))
+include wasi
 
 type In = ref input
 type Out = ref output
 type Bytes = mu X. 1 + (u8 * X)
 
 -- The next byte of an input, or `inr ()` at its end.
-def getb : In => In * (u8 + 1) =
-  thunkv fun (c : In) ->
-    return (withbor2['x, top, input, u8 + 1] c
-      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x input) ->
-         r <- return ((unbang read_byte) ['x] m);
-         let (m2, b) = r;
-         return (boxed['x] b))))
+fn getb(c: In) -> In * (u8 + 1) = let r = with wasi_stdin(&mut c) { input_byte() }; (c, r)
 
 -- One byte to an output.
-def putb : Out * u8 => Out * 1 =
-  thunkv fun (p : Out * u8) ->
-    let (c, b) = p;
-    return (withbor2['x, top, output, 1] c
-      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x output) ->
-         m2 <- return ((unbang write_byte) ['x] (m, b));
-         return (boxed['x] ()))))
+fn putb(o: Out, b: u8) -> Out * 1 = with wasi_stdout(&mut o) { print_byte(b) }; (o, ())
 
 -- Decimal output. The state is (output, (n, (d, started))): `d` runs over 10^9, 10^8, …, 1, and
 -- the digit `n / d` is written once a nonzero digit has been, or at `d = 1`.
@@ -80,24 +66,13 @@ def put_dec : Out * i32 => Out * 1 =
     return (o2, ())
 
 -- The bytes of a view to an output, in one write (`write_all`).
-def write_bytes : all 'b < top. Out * array_imm 'b u8 => Out * 1 =
-  thunkv Fun 'b < top. return (thunkv fun (p : Out * array_imm 'b u8) ->
-    let (c, v) = p;
-    return (withbor2['x, top, output, 1] c
-      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x output) ->
-         m2 <- return ((unbang write_all) ['x] ['b] (m, v));
-         return (boxed['x] ())))))
+fn write_bytes<'b>(o: Out, v: array_imm 'b u8) -> Out * 1 =
+  with wasi_stdout(&mut o) { print_bytes(v) }; (o, ())
 
 -- Bytes of an input read into a view, until it is full or the input ends (`read_into`): the
 -- view back, and the number of bytes read, which is less than its length only at the end.
-def read_bytes : all 'b < top. In * array_mut 'b u8 => In * (array_mut 'b u8 * i32) =
-  thunkv Fun 'b < top. return (thunkv fun (p : In * array_mut 'b u8) ->
-    let (c, v) = p;
-    return (withbor2['x, top, input, array_mut 'b u8 * i32] c
-      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x input) ->
-         q <- return ((unbang read_into) ['x] ['b] (m, v));
-         let (m2, r) = q;
-         return (boxed['x] r)))))
+fn read_bytes<'b>(c: In, v: array_mut 'b u8) -> In * (array_mut 'b u8 * i32) =
+  let r = with wasi_stdin(&mut c) { input_into(v) }; (c, r)
 
 -- The input as a stream of bytes, `iter u8 In In`: `next` reads a byte, and finishes with the
 -- capability at the end of the input; `close` hands the capability back.
@@ -115,3 +90,29 @@ def bytes : In => U (iter u8 In In) =
   thunkv fun (c : In) ->
     f <- return (unbang (unfold[iter u8 In In, In] io_bytes_step));
     return (thunkv nu_in < (nu_out (force f c)).1, (nu_out (force f c)).2 >)
+
+-- ### Over the effects  `[spec §34]`
+
+-- The decimal digits of `x`, with a `-` when it is negative, each given to `put`.
+fn dec_each(x: i32, put: !(u8 => 1)) -> 1 =
+  let mut n = x;
+  if x < 0 { put(b'-'); n = 0 - x } else { () };
+  let mut d = 1000000000;
+  let mut started = false;
+  for _ in 0..10 {
+    let q = match host[div_u32](n, d) { inl y -> y | inr u -> 0 };
+    if started || q != 0 || d == 1 { put(to_u8(q + 48)); started = true } else { () };
+    n = n - q * d;
+    let d2 = match host[div_u32](d, 10) { inl y -> y | inr u -> 1 };
+    d = d2
+  };
+  ()
+
+-- `x` in decimal to standard output, with a `-` when it is negative.
+fn print_dec(x: i32) -> 1 = dec_each(x, !{ b -> print_byte(b) })
+
+-- `x` in decimal to standard error, with a `-` when it is negative.
+fn eprint_dec(x: i32) -> 1 = dec_each(x, !{ b -> eprint_byte(b) })
+
+-- `ms` milliseconds as the clock's nanoseconds (SPEC §34).
+fn ns_of_ms(ms: i32) -> i64 = host[extend_s](ms) * 1000000

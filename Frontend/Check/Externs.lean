@@ -27,7 +27,7 @@ The standard externs, each with its type, its role, its model and its assurance 
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core (Opaque BytesV bytesTy outRep externTy readByteC writeByteC writeAllC
-  readIntoC mkInputC
+  readIntoC clockNowC clockSleepC mkClockC takeClockC mkInputC
   mkOutputC takeInputC takeOutputC readByteV writeByteV mkInputV mkOutputV takeCapV stdModel
   io_every_run io_loop_every_run ioLoopE bytesVal bytesVal_bytes)
 
@@ -66,12 +66,17 @@ def Assurance.render (a : Assurance) : String := s!"{a.name} ({a.level})"
 
 /-- What an extern is. -/
 inductive ExternRole where
-  /-- A capability: a cell whose content is the stream with this file descriptor. -/
+  /-- A capability: a cell whose content is the stream with this file descriptor; the arguments'
+  stream is `0xFFFFFFFF` (SPEC §34). -/
   | cap (fd : Nat)
+  /-- The clock: a cell holding the model's time, `i64[0]` (SPEC §34). -/
+  | clockCap
   | readByte
   | writeByte
   | writeAll
   | readInto
+  | clockNow
+  | clockSleep
   /-- The model's harness: no host implementation. -/
   | harness
   deriving DecidableEq, Repr
@@ -88,7 +93,7 @@ structure ExternSpec where
 
 def ExternSpec.isCap (x : ExternSpec) : Bool :=
   match x.role with
-  | .cap _ => true
+  | .cap _ | .clockCap => true
   | _ => false
 
 /-- The standard externs.  `[spec §11]` -/
@@ -99,6 +104,12 @@ def stdExterns : List ExternSpec :=
       some ("a runtime cell holding fd 1", .assumed)⟩,
     ⟨"stderr", .ref (.opq .output), .cap 2, "vC_outRep (a cell holding (2, nil))",
       some ("a runtime cell holding fd 2", .assumed)⟩,
+    ⟨"clock", .ref (.opq .clock), .clockCap, "vC_clockRep (a cell holding the time, i64[0])",
+      some ("a runtime cell; the time is the host's monotonic clock", .assumed)⟩,
+    ⟨"args", .ref (.opq .args), .cap 0xFFFFFFFF,
+      "vC_argsRep (a cell holding the arguments, each followed by 0)",
+      some ("a runtime cell over the arguments, read once (WASI args_get; libc argv)",
+        .interpChecked)⟩,
     ⟨"read_byte", externTy (readByteC (.opq .input)), .readByte, "readByte_meets",
       some ("WASI fd_read of one byte (libc read(2))", .interpChecked)⟩,
     ⟨"write_byte", externTy (writeByteC (.opq .output)), .writeByte, "writeByte_meets",
@@ -108,6 +119,17 @@ def stdExterns : List ExternSpec :=
     ⟨"read_into", externTy (readIntoC (.opq .input)), .readInto, "readInto_meets",
       some ("WASI fd_read into the view until it is full or the input ends (libc read(2))",
         .interpChecked)⟩,
+    ⟨"clock_now", externTy (clockNowC (.opq .clock)), .clockNow, "clockNow_meets",
+      some ("WASI clock_time_get of the monotonic clock (libc clock_gettime)", .assumed)⟩,
+    ⟨"clock_sleep", externTy (clockSleepC (.opq .clock)), .clockSleep, "clockSleep_meets",
+      some ("WASI poll_oneoff on a relative clock subscription (libc nanosleep)", .assumed)⟩,
+    ⟨"read_arg", externTy (readByteC (.opq .args)), .readByte, "readArg_meets",
+      some ("the arguments read once into memory (WASI args_sizes_get, args_get; libc argv)",
+        .interpChecked)⟩,
+    ⟨"mk_clock", externTy (mkClockC (.opq .clock)), .harness, "mkClock_meets", none⟩,
+    ⟨"mk_args", externTy (mkInputC (.opq .args)), .harness, "mkArgs_meets", none⟩,
+    ⟨"take_args", externTy (takeInputC (.opq .args)), .harness, "takeArgs_meets", none⟩,
+    ⟨"take_clock", externTy (takeClockC (.opq .clock)), .harness, "takeClock_meets", none⟩,
     ⟨"mk_input", externTy (mkInputC (.opq .input)), .harness, "mkInput_meets", none⟩,
     ⟨"mk_output", externTy (mkOutputC (.opq .output)), .harness, "mkOutput_meets", none⟩,
     ⟨"take_input", externTy (takeInputC (.opq .input)), .harness, "takeInput_meets", none⟩,
@@ -160,23 +182,48 @@ def rebindCaps : List String → String → String
   | n :: ns, v => s!"let ({n}, io_rest_{ns.length}) = {v};\n    " ++
       rebindCaps ns s!"io_rest_{ns.length}"
 
-/-- The source of `run_io`: the harness's externs and the wrapped `main`.  `[spec §11]` -/
-def wrapperSrc (caps : List String) (capsT A : CVTy) (body : Comp) : String :=
+/-- A byte list as a value of `Bytes`, in the source syntax. -/
+def bytesLit : List UInt8 → String
+  | [] => s!"(roll inl () : {bytesSrc})"
+  | b :: bs => s!"(roll inr (u8[{b}], {bytesLit bs}) : {bytesSrc})"
+
+/-- The harness's externs for the clock and the arguments, when `main` declares them (SPEC §34). -/
+def clockExterns (caps : List String) : String :=
+  (if caps.contains "clock" then
+    "extern mk_clock : !(1 => ref clock)\nextern take_clock : !(ref clock => i64)\n" else "") ++
+  (if caps.contains "args" then
+    s!"extern mk_args : !({bytesSrc} => ref args)\nextern take_args : !(ref args => {bytesSrc})\n"
+  else "")
+
+/-- Make the clock and the arguments `main` declares: the clock at time `0`, the arguments a
+stream of `args` (SPEC §34). -/
+def makeExtra (caps : List String) (args : List UInt8) : String :=
+  (if caps.contains "clock" then "clock <- return ((unbang mk_clock) ());\n    " else "") ++
+  (if caps.contains "args" then s!"args <- return ((unbang mk_args) {bytesLit args});\n    " else "")
+
+/-- Take back the clock and the arguments `main` declares. -/
+def takeExtra (caps : List String) : String :=
+  (if caps.contains "clock" then "io_clk <- return ((unbang take_clock) clock);\n    " else "") ++
+  (if caps.contains "args" then "io_args <- return ((unbang take_args) args);\n    " else "")
+
+/-- The source of `run_io`: the harness's externs and the wrapped `main`, which is given `args`
+as its arguments.  `[spec §11, §34]` -/
+def wrapperSrc (caps : List String) (capsT A : CVTy) (body : Comp) (args : List UInt8) : String :=
   let B := bytesSrc
   let out := s!"(i32 * {B})"
   s!"extern mk_input : !({B} => ref input)
 extern mk_output : !(i32 => ref output)
 extern take_input : !(ref input => {B})
 extern take_output : !(ref output => i32 * {B})
-
+{clockExterns caps}
 main : {B} -o F ({out} * ({out} * ({ppVTy A}))) =
   fun (io_inp : {B}) ->
     stdin <- return ((unbang mk_input) io_inp);
     stdout <- return ((unbang mk_output) i32[1]);
     stderr <- return ((unbang mk_output) i32[2]);
-    io_r : ({ppVTy capsT}) * ({ppVTy A}) <- ({body.pp 0 6});
+    {makeExtra caps args}io_r : ({ppVTy capsT}) * ({ppVTy A}) <- ({body.pp 0 6});
     let (io_caps, io_a) = io_r;
-    " ++ rebindCaps caps "io_caps" ++ "io_in <- return ((unbang take_input) stdin);
+    " ++ rebindCaps caps "io_caps" ++ takeExtra caps ++ "io_in <- return ((unbang take_input) stdin);
     io_out <- return ((unbang take_output) stdout);
     io_err <- return ((unbang take_output) stderr);
     return (io_out, (io_err, io_a))
@@ -197,7 +244,8 @@ def tupleNames : List String → String
 /-- The source of `run_io` for a `main` that returns a loop: a loop by `unfold` whose state is
 `main`'s loop and the capabilities `main` does not declare. Its `next` observes `main`'s loop and,
 when it finishes, takes the outputs back; its `close` closes it and takes them.  `[spec §11]` -/
-def loopWrapperSrc (caps : List String) (capsT A B : CVTy) (body : Comp) : String :=
+def loopWrapperSrc (caps : List String) (capsT A B : CVTy) (body : Comp) (args : List UInt8) :
+    String :=
   let bs := bytesSrc
   let out := s!"(i32 * {bs})"
   let extra := ["stdin", "stdout", "stderr"].filter (!caps.contains ·)
@@ -221,20 +269,20 @@ def loopWrapperSrc (caps : List String) (capsT A B : CVTy) (body : Comp) : Strin
 extern mk_output : !(i32 => ref output)
 extern take_input : !(ref input => {bs})
 extern take_output : !(ref output => i32 * {bs})
-
+{clockExterns caps}
 main : {bs} -o F (U (loop {res} {res'})) =
   fun (io_inp : {bs}) ->
     stdin <- return ((unbang mk_input) io_inp);
     stdout <- return ((unbang mk_output) i32[1]);
     stderr <- return ((unbang mk_output) i32[2]);
-    io_l : {inner} <- ({body.pp 0 6});
+    {makeExtra caps args}io_l : {inner} <- ({body.pp 0 6});
     io_step : !U ({st} -o F ({res} + ({st})) & F {res'}) <- return (!thunkv fun (io_s : {st}) ->
       < let (io_it, io_x) = io_s;
         {dx}io_o <- (nu_out (force io_it)).1;
         case io_o \{
           inl io_fin ->
             {finA}
-            {rc}io_in <- return ((unbang take_input) stdin);
+            {rc}{takeExtra caps}io_in <- return ((unbang take_input) stdin);
             io_out <- return ((unbang take_output) stdout);
             io_err <- return ((unbang take_output) stderr);
             return (inl (io_out, (io_err, io_a)))
@@ -243,7 +291,7 @@ main : {bs} -o F (U (loop {res} {res'})) =
         let (io_it, io_x) = io_s;
         {dx}io_fin <- (nu_out (force io_it)).2;
         {finB}
-        {rc}io_in <- return ((unbang take_input) stdin);
+        {rc}{takeExtra caps}io_in <- return ((unbang take_input) stdin);
         io_out <- return ((unbang take_output) stdout);
         io_err <- return ((unbang take_output) stderr);
         return (io_out, (io_err, io_b)) >);
@@ -278,7 +326,8 @@ def ioMainOf (p : Program) (c : Checked) : Except String (Option IOMain) := do
   let specs ← checkExterns xs
   let caps := capsOf specs
   if caps.isEmpty then
-    throw "a program with externs must declare a capability (`stdin`, `stdout` or `stderr`)"
+    throw ("a program with externs must declare a capability (`stdin`, `stdout`, `stderr`, " ++
+      "`clock` or `args`)")
   let names := caps.map (·.name)
   if names.eraseDups.length != names.length then throw "a capability is declared twice"
   let T₀ := capsTy caps
@@ -295,7 +344,7 @@ def ioMainOf (p : Program) (c : Checked) : Except String (Option IOMain) := do
 
 /-- The wrapped program: the declarations other than `main` and the capabilities, the
 harness's externs, and `run_io` as `main`.  `[spec §11]` -/
-def ioWrapper (p : Program) (m : IOMain) : Except String Program := do
+def ioWrapper (p : Program) (m : IOMain) (args : List UInt8 := []) : Except String Program := do
   let some body := p.decls.findSome? (fun | .main _ _ M => some M | _ => none)
     | throw "no `main`"
   let keep := p.decls.filter fun
@@ -303,8 +352,8 @@ def ioWrapper (p : Program) (m : IOMain) : Except String Program := do
     | .extern _ n _ => !(m.caps.any (·.name == n.name))
     | _ => true
   let src := match m.loopB with
-    | none => wrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A body
-    | some B => loopWrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A B body
+    | none => wrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A body args
+    | some B => loopWrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A B body args
   match parseProgram src with
   | .ok w => pure ⟨keep ++ w.decls⟩
   | .error e => throw s!"run_io: {e.render}\n{src}"

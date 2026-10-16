@@ -1,0 +1,39 @@
+-- The system interface (SPEC §34): the standard streams, the clock and the arguments, each an
+-- answering effect. A function that performs one is given it by its row; `main` is given it by the
+-- platform (`lib/wasi.bc`), its outermost handler; a test serves it with a handler of its own.
+--
+-- The laws (SPEC §34 *Laws*), which every handler of these effects keeps:
+-- * `Stdout`, `Stderr`: a run writes the concatenation, in order, of what its operations write;
+--   `print_bytes(v)` writes the bytes of `v`, so it is `print_byte` of each in turn.
+-- * `Stdin`: `input_byte()` answers the input's next byte, or `inr ()` at its end and after it;
+--   `input_into(v)` is `input_byte` into `v` from its start until it is full or the input ends,
+--   and answers how many, fewer than `v`'s length only at the end.
+-- * `Clock`: `now()` is monotone within a run, in nanoseconds since an arbitrary fixed origin;
+--   after `sleep(ns)`, `now()` answers at least the time before it plus `max(ns, 0)`; times
+--   saturate at `2^63 - 1`.
+-- * `Args`: `arg_byte()` answers the arguments' bytes in order, each argument followed by `0`,
+--   then `inr ()`, and `inr ()` after it.
+
+effect Stdin {
+  fn input_byte() -> u8 + 1;
+  fn input_into<'b>(v: array_mut 'b u8) -> array_mut 'b u8 * i32
+}
+
+effect Stdout {
+  fn print_byte(b: u8);
+  fn print_bytes<'b>(v: array_imm 'b u8)
+}
+
+effect Stderr {
+  fn eprint_byte(b: u8);
+  fn eprint_bytes<'b>(v: array_imm 'b u8)
+}
+
+effect Clock {
+  fn now() -> i64;
+  fn sleep(ns: i64)
+}
+
+effect Args {
+  fn arg_byte() -> u8 + 1
+}
