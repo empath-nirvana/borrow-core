@@ -51,6 +51,8 @@ def widthName : BoCa.Width → String
   | .w32 => "i32"
   | .w64 => "i64"
   | .w8 => "u8"
+  | .f32 => "f32"
+  | .f64 => "f64"
 
 /-- A printed shape as a shape atom: a name as it is, anything else parenthesized. -/
 def ppShapeAtom (σ : Shape) (printed : String) : String :=
@@ -249,6 +251,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
       "shorten_" ++ m.pp ++ "[" ++ σ.pp ++ ", " ++ a.pp ++ "] " ++ V.pp 1 k
     | .lend _ x m => (if m == .mut then "&mut " else "&") ++ x.name
     | .sugar _ (.lit n) => toString n
+    | .sugar _ (.flit m e) => s!"{m}e{e}"
     | .sugar _ (.str bs) => strLit bs
     | .sugar _ .brk => "break"
     | .sugar _ .cont => "continue"

@@ -774,6 +774,7 @@ theorem raiseOK_host (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = som
   have hi32 : ∀ n, (Val.i32 n).1.RaiseOK P := fun n => raiseOK_lit _
   have hi64 : ∀ n, (Val.i64 n).1.RaiseOK P := fun n => raiseOK_lit _
   have hu8 : ∀ n, (Val.u8 n).1.RaiseOK P := fun n => raiseOK_lit _
+  have hob : ∀ w n, (Val.ofBits w n).1.RaiseOK P := fun w _ => by cases w <;> exact raiseOK_lit _
   cases op with
   | bin w o =>
       cases w <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> (try simp at h)
@@ -811,6 +812,32 @@ theorem raiseOK_host (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = som
       simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h; exact hu8 _
   | extend8_u =>
       simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h; exact hi32 _
+  | fbin f o =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, _, -, rfl⟩ := h; exact hob _ _
+  | fun1 f o =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h; exact hob _ _
+  | frel f o =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, _, -, rfl⟩ := h; exact raiseOK_bool _
+  | convert f i sx =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h; exact hob _ _
+  | trunc i f sx =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h
+      exact raiseOK_opt fun v hv => by
+        simp only [Option.map_eq_some_iff] at hv; obtain ⟨_, -, rfl⟩ := hv; exact hob _ _
+  | trunc_sat i f sx =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h; exact hob _ _
+  | demote =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h; exact hob .f32 _
+  | promote =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h; exact hob .f64 _
+  | reinterpret_i f =>
+      cases f <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
+      · exact hi32 _
+      · exact hi64 _
+  | reinterpret_f f =>
+      cases f <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
+      · exact hob .f32 _
+      · exact hob .f64 _
 
 theorem raiseOK_tabFill {f : Val} (hf : f.1.RaiseOK P) (ℓ : Loc) (n : UInt32) :
     ∀ i k, (tabFill f ℓ n i k).RaiseOK P

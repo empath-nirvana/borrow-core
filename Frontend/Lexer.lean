@@ -23,6 +23,9 @@ inductive Tok where
   /-- A lifetime variable `'x`, held without the `'`. -/
   | life (s : String)
   | int (n : Nat)
+  /-- A float literal `d…(.d…)?([eE][+-]?d…)?` with a fraction or an exponent, as written
+  (SPEC §37). `n.i`, an operation of a row, is lexed as one too and read back by the parser. -/
+  | flt (s : String)
   /-- A string literal `"…"`, held as its bytes: UTF-8 for the characters written, and the
   escapes' bytes. -/
   | str (bs : List Nat)
@@ -60,7 +63,7 @@ def keywords : List String :=
     "nu_in", "nu_out", "delay_in", "delay_out", "stream_in", "stream_out",
     "perform", "abort", "handle_with", "unwind", "withbor2r",
     -- types, lifetimes, shapes
-    "ref", "imm", "mut", "box", "unk", "i32", "i64", "u8", "input", "output", "mu", "all", "forall", "top", "dom",
+    "ref", "imm", "mut", "box", "unk", "i32", "i64", "u8", "f32", "f64", "input", "output", "mu", "all", "forall", "top", "dom",
     "block", "val", "fam", "view", "nu", "delay", "loop", "stream", "str", "iter", "leaf", "sized",
     "for", "in",
     "node", "array", "array_imm", "array_mut",
@@ -84,6 +87,7 @@ def Tok.describe : Tok → String
   | .uident s => s!"name `{s}`"
   | .life s => s!"lifetime `'{s}`"
   | .int n => s!"integer `{n}`"
+  | .flt s => s!"float `{s}`"
   | .str _ => "a string literal"
   | .kw s => s!"`{s}`"
   | .sym s => s!"`{s}`"
@@ -113,7 +117,7 @@ private def twoCharSyms : List (Char × Char × String) :=
 
 /-- One-character symbols. -/
 private def oneCharSyms : List Char :=
-  ['(', ')', '[', ']', '{', '}', ',', ';', ':', '.', '=', '|', '<', '>', '*', '+', '&', '!', '-']
+  ['(', ')', '[', ']', '{', '}', ',', ';', ':', '.', '=', '|', '<', '>', '*', '+', '&', '!', '-', '/']
 
 /-- The Unicode spellings of syntax-core §2 that are one character, with their ASCII token.
     `⊓Δ` (`dom`) and `Imm̲` (`view`) are two- and four-character spellings, handled in `lexGo`. -/
@@ -243,7 +247,25 @@ def lexGo : Nat → List Char → Pos → Bool → Array Token → Except Error 
         else push (.int (natOfDigits 16 ds)) (ds.length + 2) r'
       else if isDigit c then
         let (ds, r') := spanChars isDigit r
-        push (.int (natOfDigits 10 (c :: ds))) (ds.length + 1) r'
+        -- A fraction: `.` followed by a digit (`0..n` is a count).
+        let (fr, r'') := match r' with
+          | '.' :: d :: r₂ => if isDigit d then
+              let (fs, r₃) := spanChars isDigit r₂; ('.' :: d :: fs, r₃) else ([], r')
+          | _ => ([], r')
+        -- An exponent: `e` or `E`, an optional sign, and a digit.
+        let (ex, r''') := match r'' with
+          | e :: '-' :: d :: r₂ | e :: '+' :: d :: r₂ =>
+            if (e == 'e' || e == 'E') && isDigit d then
+              let (es, r₃) := spanChars isDigit r₂
+              (e :: (r''.drop 1).head! :: d :: es, r₃) else ([], r'')
+          | e :: d :: r₂ =>
+            if (e == 'e' || e == 'E') && isDigit d then
+              let (es, r₃) := spanChars isDigit r₂; (e :: d :: es, r₃) else ([], r'')
+          | _ => ([], r'')
+        if fr.isEmpty && ex.isEmpty then push (.int (natOfDigits 10 (c :: ds))) (ds.length + 1) r'
+        else
+          let txt := c :: ds ++ fr ++ ex
+          push (.flt (String.ofList txt)) txt.length r'''
       else .error ⟨⟨pos, advance pos 1⟩, s!"unexpected character `{c}`"⟩
 
 /-- The tokens of a source text, ending with `eof`. -/

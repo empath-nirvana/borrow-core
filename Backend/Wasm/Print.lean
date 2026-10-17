@@ -17,6 +17,8 @@ def widthName : Width → String
   | .w32 => "i32"
   | .w64 => "i64"
   | .w8 => "i32"
+  | .f32 => "f32"
+  | .f64 => "f64"
 
 def binName : BinOp → String
   | .add => "add" | .sub => "sub" | .mul => "mul" | .and => "and" | .or => "or"
@@ -34,7 +36,27 @@ def relName : RelOp → String
   | .eq => "eq" | .ne => "ne" | .lt_s => "lt_s" | .lt_u => "lt_u" | .le_s => "le_s"
   | .le_u => "le_u" | .gt_s => "gt_s" | .gt_u => "gt_u" | .ge_s => "ge_s" | .ge_u => "ge_u"
 
-/-- The Wasm instruction of each host operation (§8). -/
+def fwName : FWidth → String
+  | .f32 => "f32" | .f64 => "f64"
+
+def iwName : IWidth → String
+  | .i32 => "i32" | .i64 => "i64"
+
+def sxName : Sx → String
+  | .s => "s" | .u => "u"
+
+def fbinName : FBinOp → String
+  | .add => "add" | .sub => "sub" | .mul => "mul" | .div => "div" | .min => "min"
+  | .max => "max" | .copysign => "copysign"
+
+def funName : FUnOp → String
+  | .abs => "abs" | .neg => "neg" | .sqrt => "sqrt" | .ceil => "ceil" | .floor => "floor"
+  | .trunc => "trunc" | .nearest => "nearest"
+
+def frelName : FRelOp → String
+  | .eq => "eq" | .ne => "ne" | .lt => "lt" | .gt => "gt" | .le => "le" | .ge => "ge"
+
+/-- The Wasm instruction of each host operation (§8, §37). -/
 def opName : HostOp → String
   | .bin w o => widthName w ++ "." ++ binName o
   | .div w o => widthName w ++ "." ++ divName o
@@ -47,6 +69,16 @@ def opName : HostOp → String
   | .extend32_s => "i64.extend32_s"
   -- The byte's conversions are word operations (`Flat/Lower.lean`, `hostVals`), never emitted.
   | .wrap8 | .extend8_u => "unreachable"
+  | .fbin f o => fwName f ++ "." ++ fbinName o
+  | .fun1 f o => fwName f ++ "." ++ funName o
+  | .frel f o => fwName f ++ "." ++ frelName o
+  | .convert f i sx => fwName f ++ ".convert_" ++ iwName i ++ "_" ++ sxName sx
+  | .trunc i f sx => iwName i ++ ".trunc_" ++ fwName f ++ "_" ++ sxName sx
+  | .trunc_sat i f sx => iwName i ++ ".trunc_sat_" ++ fwName f ++ "_" ++ sxName sx
+  | .demote => "f32.demote_f64"
+  | .promote => "f64.promote_f32"
+  | .reinterpret_i f => iwName f.int ++ ".reinterpret_" ++ fwName f
+  | .reinterpret_f f => fwName f ++ ".reinterpret_" ++ iwName f.int
 
 /-- `(param i64 …) (result i64 …)`. -/
 def sigText (params results : Nat) : String :=

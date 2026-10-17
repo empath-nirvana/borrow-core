@@ -69,10 +69,15 @@ def hostArgWidth : HostOp → Width
   | .extend32_s => .w64
   | .wrap8 => .w32
   | .extend8_u => .w8
+  | .fbin f _ | .fun1 f _ | .frel f _ | .trunc _ f _ | .trunc_sat _ f _ | .reinterpret_i f => f.width
+  | .convert _ i _ => i.width
+  | .demote => .f64
+  | .promote => .f32
+  | .reinterpret_f f => f.int.width
 
 /-- The operation takes a pair. -/
 def hostBinary : HostOp → Bool
-  | .bin .. | .div .. | .rel .. => true
+  | .bin .. | .div .. | .rel .. | .fbin .. | .frel .. => true
   | _ => false
 
 /-- The type of a host operation's result: an integer, a test (`inr ()` for true), or a partial
@@ -90,6 +95,13 @@ def hostResKind : HostOp → ResKind
   | .extend_s | .extend_u | .extend32_s => .int .w64
   | .wrap8 => .int .w8
   | .extend8_u => .int .w32
+  | .fbin f _ | .fun1 f _ | .convert f _ _ | .reinterpret_f f => .int f.width
+  | .frel .. => .test
+  | .trunc i _ _ => .trapping i.width
+  | .trunc_sat i _ _ => .int i.width
+  | .demote => .int .f32
+  | .promote => .int .f64
+  | .reinterpret_i f => .int f.int.width
 
 /-! ### Layout types -/
 
@@ -184,6 +196,8 @@ def describe (k : Nat) (n : Nat) : TM String := do
     | .int .w32 => pure "i32"
     | .int .w64 => pure "i64"
     | .int .w8 => pure "u8"
+    | .int .f32 => pure "f32"
+    | .int .f64 => pure "f64"
     | .pair a b => pure s!"({← describe k a} * {← describe k b})"
     | .sum a b => pure s!"({← describe k a} + {← describe k b})"
     | .sumN fs => pure s!"+[{", ".intercalate (← fs.mapM (describe k))}]"
@@ -347,6 +361,8 @@ def infer (codeTy : Array Nat) (codes : Array Code) : Tm → TM Nat
   | .lit (.i32 _) => int32
   | .lit (.i64 _) => newNode (.int .w64)
   | .lit (.u8 _) => newNode (.int .w8)
+  | .lit (.f32 _) => newNode (.int .f32)
+  | .lit (.f64 _) => newNode (.int .f64)
   | .pair a b => do
       let n ← newNode (.pair (← tyVar a) (← tyVar b))
       modify fun s => { s with cons := s.cons.insert a n }

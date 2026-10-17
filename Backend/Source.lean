@@ -21,6 +21,8 @@ def pvOfExpr : Expr → PV
   | .prim (.lit (.i32 n)) => .i32 n
   | .prim (.lit (.i64 n)) => .i64 n
   | .prim (.lit (.u8 n)) => .u8 n
+  | .prim (.lit (.f32 n)) => .f32 n
+  | .prim (.lit (.f64 n)) => .f64 n
   | .loc _ => .loc
   | _ => .fn
 

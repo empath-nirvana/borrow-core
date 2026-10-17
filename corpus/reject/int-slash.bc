@@ -1,0 +1,5 @@
+-- expect: 5:5: `/` is the float division, and its operands are `i32`; an integer's division answers a sum: `host[div_s32]`, `host[div_u32]`, … (SPEC §8)
+-- `/` is only at a float type (SPEC §37): an integer's division answers a sum where Wasm traps,
+-- `host[div_s32]` and the rest (SPEC §8), so `/` at `i32` is refused.
+main -> i32 =
+  7 / 2

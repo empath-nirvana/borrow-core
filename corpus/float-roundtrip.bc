@@ -1,0 +1,106 @@
+-- Floats as text, round trip (SPEC §37): every float prints as the shortest decimal that reads
+-- back as the same float, and every decimal reads as the float nearest it. Each case is a line
+-- of the literal below:
+--
+-- * `d N`, `f N`: the binary64 (binary32) of bits `N`, printed (`push_f64_bits`, `lib/float.bc`),
+--   and the printed text read back (`parse_f64_bits`): `=` when it is the same float (a NaN reads
+--   back as a NaN), `!` when not;
+-- * `p T`, `q T`: the decimal `T` read as a binary64 (binary32), then its bits, its shortest
+--   text and the same check; `error` when `T` is not a float.
+--
+-- The cases: both zeros, both infinities, NaNs (one negative, with a payload: it prints `NaN`,
+-- and reads back as the canonical NaN), the least and greatest subnormals, the least normal, the
+-- greatest float, `0.1`, `1/3`, the neighbours below `1e16` and `1e-4` where the spelling changes
+-- to and from exponent form, and random bits; at `f32` the same kinds. The decimals: the halfway
+-- points just above and below half the least subnormal (`5e-324` and `0.0`), `2^53 + 1` (ties
+-- to even, down), the exact halfway between `1.0` and its successor (even, `1.0`) and a digit
+-- past it (up), the overflow boundary, `1e400` (`inf`), `-1e-400` (`-0.0`), `-Infinity`, `nan`,
+-- `+3.25`, `.5`, `5.`, two malformed inputs (`1e`, `0x1`) and fifty digits of π; at `f32` the
+-- overflow boundary, half the least subnormal from both sides, `2^24 + 1` and `2^24 + 3` (ties
+-- to even, down and up) and `0.1`.
+--
+-- Answer: the lines of `float-roundtrip.out`; every check is `=`. They agree with Python's
+-- `repr` and NumPy's shortest `float32` digits, respelled as Rust's `{:?}`, and with an exact
+-- rational rounding for the decimals, run separately. `main` answers the number of cases, 61.
+--
+-- The text is built by one call of each printer and parser per width: every call of a function
+-- is compiled as a copy of its body (Backend README).
+
+include float
+
+-- An unsigned decimal, wrapping at 2^64.
+fn dec_u64<'a>(t: text 'a) -> i64 =
+  let s = to_string(t);
+  let (a, n) = s;
+  let mut x = i64[0];
+  for i in 0..n {
+    let b = at(&a, i, u8[0]);
+    x = x * i64[10] + host[extend_u](to_i32(b) - 48)
+  };
+  x
+
+-- `x` read unsigned, in decimal.
+fn push_u64(s: string, x: i64) -> string =
+  let mut ds = box buf[i32](20);
+  let mut x = x;
+  for _ in 0..20 {
+    let q = match host[div_u64](x, i64[10]) { inl q -> q | inr u -> i64[0] };
+    let (b, _) = push(ds, host[wrap](x - q * i64[10]));
+    ds = b;
+    x = q;
+    if x == i64[0] { break } else { () }
+  };
+  let (a, n) = ds;
+  let mut s = s;
+  for j in 0..n { let d = at(&a, n - 1 - j, 0); let (t, _) = push(s, to_u8(48 + d)); s = t };
+  s
+
+-- A NaN's bits, at binary64 (`wide`) or binary32 (the low half).
+fn is_nan_bits(b: i64, wide: bool) -> bool =
+  if wide { host[gt_u64](host[and64](b, i64[9223372036854775807]), i64[9218868437227405312]) }
+  else { host[gt_u64](host[and64](b, i64[2147483647]), i64[2139095040]) }
+
+-- `t` read as a float of the width, its bits widened; `inr ()` when it is not a float.
+fn read_bits<'a>(t: text 'a, wide: bool) -> i64 + 1 =
+  if wide { match with to_result { parse_f64_bits(t) } { inl b -> inl b | inr e -> inr () } }
+  else { match with to_result { parse_f32_bits(t) } { inl b -> inl host[extend_u](b) | inr e -> inr () } }
+
+-- One case.
+fn line<'t>(l: text 't) -> 1 =
+  let (l, u) = array_copy['t, u8] l;
+  let c = at(u, 0, u8[0]);
+  let rest = match split_at(l, 2) { inl (h, r) -> array_forget['t, u8](h); r | inr l -> l };
+  let wide = c == b'd' || c == b'p';
+  let given = c == b'd' || c == b'f';
+  let r = if given { inl dec_u64(rest) } else { read_bits(rest, wide) };
+  match r {
+    inl b ->
+    let s = box string(64);
+    let s = if given { s } else { let s = push_u64(s, b); let (s, _) = push(s, b' '); s };
+    let t = box string(32);
+    let t = if wide { let (t, _) = push_f64_bits(t, b); t }
+      else { let (t, _) = push_f32_bits(t, host[wrap](b)); t };
+    let back = borrow imm t { v -> read_bits(v, wide) };
+    let same = match back {
+      inl b2 -> b2 == b || is_nan_bits(b, wide) && is_nan_bits(b2, wide)
+    | inr _ -> false
+    };
+    let s = print_string(s);
+    let t = print_string(t);
+    if same { print_lit(" =\n") } else { print_lit(" !\n") }
+  | inr _ -> print_lit("error\n")
+  }
+
+main -> i32 =
+  let k = borrow imm "d 0\nd 9223372036854775808\nd 9218868437227405312\nd 18442240474082181120\nd 9221120237041090560\nd 18444492273895866369\nd 1\nd 4503599627370495\nd 4503599627370496\nd 9218868437227405311\nd 4591870180066957722\nd 4599676419421066581\nd 4846369599423283200\nd 4846369599423283199\nd 4547007122018943789\nd 4547007122018943788\nd 4921056587992461136\nd 4638387860618067575\nd 13731694030708141453\nd 1076732024592906162\nd 384606903876184142\nd 14782644736729628435\nd 16775216838401806180\nd 5247709384879325562\nf 0\nf 2147483648\nf 2139095040\nf 2143289344\nf 1\nf 8388607\nf 8388608\nf 2139095039\nf 1036831949\nf 1051372203\nf 1266679808\nf 3758382542\nf 337560256\nf 1729894\np 2.4703282292062328e-324\np 2.4703282292062327e-324\np 9007199254740993\np 1.00000000000000011102230246251565404236316680908203125\np 1.00000000000000011102230246251565404236316680908203126\np 1.7976931348623158e308\np 1e400\np -1e-400\np -Infinity\np nan\np +3.25\np .5\np 5.\np 1e\np 0x1\np 3.14159265358979323846264338327950288419716939937510\nq 3.4028235677973366e38\nq 3.4028236e38\nq 7e-46\nq 7.1e-46\nq 16777217\nq 16777219\nq 0.1\n" { 't, t ->
+    let (t, u) = array_copy['t, u8] t;
+    let mut rest = t;
+    let mut k = 0;
+    for _ in 0..len(u) + 1 {
+      match next_line(rest) {
+        inl (l, r) -> rest = r; line(l); k = k + 1
+      | inr _ -> rest = slice_empty_imm['t, u8]; break
+      }
+    };
+    k };
+  k

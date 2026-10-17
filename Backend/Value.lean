@@ -5,7 +5,7 @@ import Support.Syntax.Integers
 
 The printable form of a result, shared by every stage: `Support`'s interpreter, the closure-IR
 and flat-IR interpreters, and the compiled program (whose printer, generated per layout type in
-`Backend/Flat/Lower.lean`, writes the same text). Integers print as their unsigned bit pattern in the syntax of
+`Backend/Flat/Lower.lean`, writes the same text). Integers and floats print as their unsigned bit pattern in the syntax of
 `docs/syntax-core.md` §8a; a function (a `λ`, a primitive, a partial `store`) prints as `<fun>`
 and a location as `<loc>`, since neither has a machine-independent spelling.
 -/
@@ -18,6 +18,8 @@ inductive PV where
   | i32 (n : UInt32)
   | i64 (n : UInt64)
   | u8 (n : UInt8)
+  | f32 (n : UInt32)
+  | f64 (n : UInt64)
   | pair (a b : PV)
   | inj (right : Bool) (a : PV)
   | fn
@@ -38,6 +40,8 @@ def PV.render : PV → String
   | .i32 n => s!"i32[{n.toNat}]"
   | .i64 n => s!"i64[{n.toNat}]"
   | .u8 n => s!"u8[{n.toNat}]"
+  | .f32 n => s!"f32[{n.toNat}]"
+  | .f64 n => s!"f64[{n.toNat}]"
   | .pair a b => "(" ++ PV.render a ++ ", " ++ PV.render b ++ ")"
   | .inj r a => PV.renderInj r a
   | .fn => "<fun>"

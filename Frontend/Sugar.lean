@@ -48,7 +48,7 @@ one is adding its name here. The elaboration brings in `io`, `div` and `prelude`
 (`elaborateS`); `include m` brings in any of them. -/
 def libNames : List String :=
   ["io", "div", "prelude", "lend", "adapters", "slice", "buf", "text", "textio", "iters", "fail",
-   "yield", "rec", "aff", "async", "list", "sys", "wasi", "key", "map"]
+   "yield", "rec", "aff", "async", "list", "sys", "wasi", "key", "map", "float"]
 
 /-- The directory of the library: `$BCC_LIB` when it is set; otherwise `lib/` of the checkout
 whose `.lake/build/bin/` holds the running `bcc`; otherwise `lib/` of the working directory. -/
@@ -1876,15 +1876,23 @@ gives (`TCx`), into core with every bracket argument written:
   rebound the place where the block is bound or a statement.
 -/
 
-/-- The host operation of a surface operator at a width. -/
-def _root_.Frontend.SurfOp.host (w : BoCa.Width) : SurfOp → BoCa.HostOp
-  | .add => .bin w .add | .sub => .bin w .sub | .mul => .bin w .mul
-  | .eq => .rel w .eq | .ne => .rel w .ne | .lt => .rel w .lt_s | .le => .rel w .le_s
-  | .gt => .rel w .gt_s | .ge => .rel w .ge_s
+/-- The host operation of a surface operator at a width: at a float width, the float operation
+and IEEE 754's comparison (SPEC §37). -/
+def _root_.Frontend.SurfOp.host (w : BoCa.Width) (o : SurfOp) : BoCa.HostOp :=
+  match w.float?, o with
+  | some f, .add => .fbin f .add | some f, .sub => .fbin f .sub | some f, .mul => .fbin f .mul
+  | some f, .div => .fbin f .div
+  | some f, .eq => .frel f .eq | some f, .ne => .frel f .ne | some f, .lt => .frel f .lt
+  | some f, .le => .frel f .le | some f, .gt => .frel f .gt | some f, .ge => .frel f .ge
+  | none, .add => .bin w .add | none, .sub => .bin w .sub | none, .mul => .bin w .mul
+  -- An integer has no `/`: its division answers a sum, `host[div_s32]`. `surfV` refuses it first.
+  | none, .div => .div w .div_s
+  | none, .eq => .rel w .eq | none, .ne => .rel w .ne | none, .lt => .rel w .lt_s
+  | none, .le => .rel w .le_s | none, .gt => .rel w .gt_s | none, .ge => .rel w .ge_s
 
 /-- The family of a surface operator (SPEC §36): `(+)` is `op_add`. -/
 def _root_.Frontend.SurfOp.polyName : SurfOp → String
-  | .add => "op_add" | .sub => "op_sub" | .mul => "op_mul"
+  | .add => "op_add" | .sub => "op_sub" | .mul => "op_mul" | .div => "op_div"
   | .eq => "op_eq" | .ne => "op_ne" | .lt => "op_lt" | .le => "op_le"
   | .gt => "op_gt" | .ge => "op_ge"
 
@@ -1893,10 +1901,20 @@ def widthOf : Option CVTy → Option BoCa.Width
   | some (.int w) => some w
   | _ => none
 
-/-- A literal at a width. -/
+/-- A float literal `m × 10^e` at a float width, correctly rounded (`Frontend/FloatLit.lean`). -/
+def flitAt (sp : Span) (f : BoCa.FWidth) (m : Nat) (e : Int) : Val :=
+  .const sp (.lit (match f with
+    | .f32 => .f32 (UInt32.ofNat (decToBits .f32 m e))
+    | .f64 => .f64 (UInt64.ofNat (decToBits .f64 m e))))
+
+/-- A literal at a width: at a float width, the integer `n` as a float. -/
 def litAt (sp : Span) (w : BoCa.Width) (n : Nat) : Val :=
-  .const sp (.lit (match w with
-    | .w32 => .i32 (UInt32.ofNat n) | .w64 => .i64 (UInt64.ofNat n) | .w8 => .u8 (UInt8.ofNat n)))
+  match w with
+  | .w32 => .const sp (.lit (.i32 (UInt32.ofNat n)))
+  | .w64 => .const sp (.lit (.i64 (UInt64.ofNat n)))
+  | .w8 => .const sp (.lit (.u8 (UInt8.ofNat n)))
+  | .f32 => flitAt sp .f32 n 0
+  | .f64 => flitAt sp .f64 n 0
 
 /-- An operator at `u8`: the operands widened by `extend8_u`, the operation at `i32`, and an
 arithmetic result narrowed by `wrap8`. A byte has no arithmetic of its own (SPEC §8). -/
@@ -2595,7 +2613,7 @@ def phNames (k : Nat) (p : CVTy) : Bool := phOccurs 64 [] (phBase + k) p
 
 /-- The operators' families, by the name the operator's family has (`(+)` is `op_add`). -/
 def opFamilies : List (String × String) :=
-  [("op_add", "+"), ("op_sub", "-"), ("op_mul", "*"), ("op_eq", "=="), ("op_ne", "!="),
+  [("op_add", "+"), ("op_sub", "-"), ("op_mul", "*"), ("op_div", "/"), ("op_eq", "=="), ("op_ne", "!="),
    ("op_lt", "<"), ("op_le", "<="), ("op_gt", ">"), ("op_ge", ">=")]
 
 /-- A family as a message names it: `` `(+)` `` for an operator's. -/
@@ -3288,6 +3306,12 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
     let c := { c with E := { c.E with row := none } }
     match V with
     | .sugar sp (.lit k) => pure (litAt sp ((widthOf exp).getD .w32) k)
+    | .sugar sp (.flit m e) =>
+      match widthOf exp with
+      | some w => match w.float? with
+        | some f => pure (flitAt sp f m e)
+        | none => throw ⟨sp, s!"a float literal where `{ppT (.int w)}` is expected"⟩
+      | none => pure (flitAt sp .f64 m e)
     | .sugar sp (.str bs) => pure (litValue sp bs)
     | .defApp sp "filler" [A] => do
       -- `filler[A]`: the filler of a buffer's unused slots, by the type (design §5.4).
@@ -3310,12 +3334,13 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         else none) (fun _ => none)
       surfV n c exp (.run sp L)
     | .app sp (.sugar osp (.op o)) (.pair psp a b) => do
-      let arith := match o with | .add | .sub | .mul => true | _ => false
+      let arith := match o with | .add | .sub | .mul | .div => true | _ => false
       -- The width: expected of an arithmetic result, or an operand's other than a literal's
       -- (a literal takes the width of the other operand); `i32` by default.
       let a₀ ← surfV n c none a
       let b₀ ← surfV n c none b
-      let isLit : Val → Bool := fun | .sugar _ (.lit _) => true | _ => false
+      let isLit : Val → Bool := fun | .sugar _ (.lit _) | .sugar _ (.flit ..) => true | _ => false
+      let isFlit : Val → Bool := fun | .sugar _ (.flit ..) => true | _ => false
       -- An operand's type, with the instances its calls made in scope when it is one.
       let tOf (v v₀ : Val) : DM (Option CVTy) := do
         if isLit v then return none
@@ -3333,8 +3358,13 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           if (widthOf (some T)).isNone && (polySelect polys c sp fam T).toOption.isSome then
             let Ts ← (c.surface osp T : Except Error VTy)
             return ← surfV n c exp (.app sp (.defApp osp fam [Ts]) (.pair psp a b))
+      -- Two literals: `f64` when either is a float literal.
+      let dflt : BoCa.Width := if isFlit a || isFlit b then .f64 else .w32
       let w := ((if arith then widthOf exp else none).orElse fun _ =>
-        (widthOf ta).orElse fun _ => widthOf tb).getD .w32
+        (widthOf ta).orElse fun _ => widthOf tb).getD dflt
+      if o == .div && w.float?.isNone then
+        throw ⟨osp, s!"`/` is the float division, and its operands are `{ppT (.int w)}`; an " ++
+          "integer's division answers a sum: `host[div_s32]`, `host[div_u32]`, … (SPEC §8)"⟩
       let a' ← surfV n c (some (.int w)) a
       let b' ← surfV n c (some (.int w)) b
       if w == .w8 then return byteOp sp osp psp o a' b'
@@ -5468,7 +5498,7 @@ when a program gives the operator a case: `poly op_add[T](a: T, b: T) -> T`, a c
 answer `bool`. -/
 def opFamily (sp : Span) (fam : String) : Decl :=
   let T := VTy.name sp "T"
-  let R := if ["op_add", "op_sub", "op_mul"].contains fam then T else .sum sp (.unit sp) (.unit sp)
+  let R := if ["op_add", "op_sub", "op_mul", "op_div"].contains fam then T else .sum sp (.unit sp) (.unit sp)
   .poly sp ⟨fam, sp⟩ [⟨"T", sp⟩] [] none (.bang sp (.lolli sp (.tensor sp T T) R))
     (.bangThunkv sp (.lam sp ⟨"io_pp", sp⟩ (.tensor sp T T)
       (.letPair sp ⟨"a", sp⟩ ⟨"b", sp⟩ (.var sp "io_pp") (.force sp ⟨"io_poly_body", sp⟩))))

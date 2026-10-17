@@ -105,6 +105,11 @@ effects-tunnel 0 0 0 # equal to the kernel program tunnel
 family-swap 2 0 0
 fields 3 0 0 # the line buffer and its two growths at the long line; fields are views
 find-bytes 2 0 0
+float-arith 312 0 0 # each float printed allocates its string and the big integers of the exact printer (SPEC §37; Rust's Ryū allocates none)
+float-compare 0 0 0
+float-convert 183 0 0 # each float printed allocates its string and the big integers of the exact printer (SPEC §37; Rust's Ryū allocates none)
+float-ordered 81 0 0 # each float printed allocates its string and the big integers of the exact printer (SPEC §37; Rust's Ryū allocates none)
+float-roundtrip 3721 0 0 # each case's strings, and the big integers of the exact printer and parser (SPEC §37)
 fn-lifetime 7 0 0
 for-adapters 1 0 0
 for-data 1 0 0
@@ -211,6 +216,7 @@ leetcode/graphs/0269-alien-dictionary 37 0 0 # the input string; per case the ed
 leetcode/graphs/0323-number-of-connected-components 22 0 0 # the input string; per case the line's numbers and the parent and size arrays, as Rust
 leetcode/graphs/0417-pacific-atlantic-water-flow 31 0 0 # the input string; per case the line's numbers, two seen arrays and two queues, as Rust
 leetcode/heaps/0295-find-median-from-data-stream 28 0 0 # the input string; per case the two heaps and the buffer of its answers (#491: Rust would print them at once)
+leetcode/heaps/0295-find-median-from-data-stream-f64 281 0 0 # each float printed allocates its string and the big integers of the exact printer (SPEC §37; Rust's Ryū allocates none)
 leetcode/heaps/0347-top-k-frequent-elements 31 0 0 # the input string; per case, its buffer, the map's two arrays (sized for the case), the heap of `k + 1` and the answer's buffer
 leetcode/intervals/0056-merge-intervals 20 0 0 # the input string; per case the buffer of intervals and the merged one (none for the empty case), as Rust
 leetcode/intervals/0057-insert-interval 21 0 0 # the input string; per case the buffer of intervals and the result, as Rust

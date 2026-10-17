@@ -1,0 +1,106 @@
+-- LeetCode 295, Find Median from Data Stream, with the median as a float.
+--
+-- The input and the heaps are those of `0295-find-median-from-data-stream.bc`: each line is one
+-- case, a stream of words separated by spaces, an integer adding it to the case's numbers and `?`
+-- asking for their median. Here the median is an `f64` (SPEC §37): the middle number, or the mean
+-- of the two middle numbers, `(a + b) / 2.0`, each converted exactly from `i32`. It is printed in
+-- the shortest decimal that reads back as the same float (`print_f64`, `lib/float.bc`), so a
+-- median that is an integer prints with `.0`, as Rust's `{:?}` does. The program prints, for each
+-- case, the answer to each `?`, separated by spaces, and answers how many it gave.
+--
+-- The answers on the `.in` beside it agree with a brute-force reference solution, run separately.
+
+include textio
+include float
+
+-- The lower half of the numbers, by their negations, and the upper half.
+type Median = buf (i32 * 1) * buf (i32 * 1)
+
+fn median_new() -> Median = (box buf[i32 * 1](8), box buf[i32 * 1](8))
+
+-- `x` added.
+fn add_num(m: Median, x: i32) -> Median =
+  let (lo, hi) = m;
+  let (lo, big) = heap_pop(heap_push(lo, 0 - x, ()));
+  let hi = match big { inl (k, _) -> heap_push(hi, 0 - k, ()) | inr _ -> hi };
+  let (lo, nl) = len_of(lo);
+  let (hi, nh) = len_of(hi);
+  if nl < nh {
+    let (hi, least) = heap_pop(hi);
+    match least { inl (k, _) -> (heap_push(lo, 0 - k, ()), hi) | inr _ -> (lo, hi) }
+  } else { (lo, hi) }
+
+-- The median, or `inr ()` when there are no numbers.
+fn find_median(m: Median) -> Median * (f64 + 1) =
+  let (lo, hi) = m;
+  let (lo, nl) = len_of(lo);
+  let (hi, nh) = len_of(hi);
+  let (lo, a) = heap_peek(lo);
+  let (hi, b) = heap_peek(hi);
+  match a {
+    inl (k, _) ->
+      let low = f64_of_i32(0 - k);
+      if nh < nl { ((lo, hi), inl low) } else {
+        match b {
+          inl (j, _) -> ((lo, hi), inl ((low + f64_of_i32(j)) / 2.0))
+        | inr _ -> ((lo, hi), inl low)
+        }
+      }
+  | inr _ -> ((lo, hi), inr ())
+  }
+
+-- The answers of one case, in order: each median asked for, `inr ()` when there were no numbers
+-- yet.
+fn answers<'t>(l: text 't) -> buf (f64 + 1) =
+  let (l, u) = array_copy['t, u8] l;
+  let n = len(u);
+  let mut rest = l;
+  let mut m = median_new();
+  let mut out = box buf[f64 + 1](8);
+  for _ in 0..n + 1 {
+    let (w, (r, last)) = match split_once(rest, b' ') {
+      inl (w, r) -> (w, (r, false))
+    | inr w -> (w, (slice_empty_imm['t, u8], true))
+    };
+    rest = r;
+    let (w, c) = array_copy['t, u8] w;
+    let (w, d) = array_copy['t, u8] w;
+    if len(c) == 0 { array_forget['t, u8](w); array_forget['t, u8](d) } else {
+      if eq_lit(d, "?") {
+        array_forget['t, u8](w);
+        let (m2, o) = find_median(m);
+        m = m2;
+        let (b, _) = push(out, o);
+        out = b
+      } else { m = add_num(m, with default(0) { parse_i32(w) }) }
+    };
+    if last { break } else { () }
+  };
+  array_forget['t, u8](rest);
+  out
+
+-- The answers, separated by spaces, on a line; and how many there were.
+fn print_answers(out: buf (f64 + 1)) -> i32 =
+  let (a, n) = out;
+  for i in 0..n {
+    if 0 < i { print_byte(b' ') } else { () };
+    let o = at(&a, i, inr ());
+    match o { inl x -> print_f64(x) | inr _ -> print_lit("none") }
+  };
+  print_byte(b'\n');
+  n
+
+main -> i32 =
+  let s = read_input();
+  let sum = borrow imm s { 't, t ->
+    let (t, u) = array_copy['t, u8] t;
+    let mut rest = t;
+    let mut sum = 0;
+    for _ in 0..len(u) + 1 {
+      match next_line(rest) {
+        inl (l, r) -> rest = r; let k = print_answers(answers(l)); sum = sum + k
+      | inr _ -> rest = slice_empty_imm['t, u8]; break
+      }
+    };
+    sum };
+  sum

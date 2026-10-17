@@ -1,5 +1,6 @@
 import Paper.S1_Syntax.Definitions
 import Support.Syntax.Terms
+import Support.Dynamics.Floats
 
 /-!
 # Support — Dynamics — Host  `[spec §8]`
@@ -44,6 +45,15 @@ structure Host where
   extend32S : UInt64 → UInt64
   wrap8   : UInt32 → UInt8
   extend8U : UInt8 → UInt32
+  /-- The float operations of §37, on the floats' bits. -/
+  fbin    : (f : FWidth) → FBinOp → f.width.bits → f.width.bits → f.width.bits
+  fun1    : (f : FWidth) → FUnOp → f.width.bits → f.width.bits
+  frel    : (f : FWidth) → FRelOp → f.width.bits → f.width.bits → Bool
+  convert : (f : FWidth) → (i : IWidth) → Sx → i.width.bits → f.width.bits
+  trunc   : (i : IWidth) → (f : FWidth) → Sx → f.width.bits → Option i.width.bits
+  truncSat : (i : IWidth) → (f : FWidth) → Sx → f.width.bits → i.width.bits
+  demote  : UInt64 → UInt32
+  promote : UInt32 → UInt64
 
 /-- The machine runs at the host `ℍ`.  `[spec §8]` -/
 class HostIs (ℍ : outParam Host) : Prop where
@@ -60,17 +70,34 @@ def i64 (n : UInt64) : Val := ⟨.prim (.lit (.i64 n)), .prim⟩
 /-- `u8[n]` as a value.  `[spec §8]` -/
 def u8 (n : UInt8) : Val := ⟨.prim (.lit (.u8 n)), .prim⟩
 
-/-- `v` is a literal of width `w`: the values of `I32`, `I64` and `U8`.  `[spec §8]` -/
+/-- `f32[n]` as a value: the float of bits `n`.  `[spec §37]` -/
+def f32 (n : UInt32) : Val := ⟨.prim (.lit (.f32 n)), .prim⟩
+
+/-- `f64[n]` as a value: the float of bits `n`.  `[spec §37]` -/
+def f64 (n : UInt64) : Val := ⟨.prim (.lit (.f64 n)), .prim⟩
+
+/-- The literal of width `w` of bits `n`.  `[spec §8, §37]` -/
+def ofBits : (w : Width) → w.bits → Val
+  | .w32, n => .i32 n
+  | .w64, n => .i64 n
+  | .w8, n => .u8 n
+  | .f32, n => .f32 n
+  | .f64, n => .f64 n
+
+/-- `v` is a literal of width `w`: the values of `I32`, `I64`, `U8`, `F32` and `F64`.
+    `[spec §8, §37]` -/
 def IsInt : Width → Val → Prop
   | .w32, v => ∃ n, v = .i32 n
   | .w64, v => ∃ n, v = .i64 n
   | .w8, v => ∃ n, v = .u8 n
+  | .f32, v => ∃ n, v = .f32 n
+  | .f64, v => ∃ n, v = .f64 n
 
 theorem IsInt.val {w : Width} {v : Val} (h : v.IsInt w) : ∃ c, v.1 = .prim (.lit c) := by
-  cases w <;> obtain ⟨n, rfl⟩ := h
-  · exact ⟨_, rfl⟩
-  · exact ⟨_, rfl⟩
-  · exact ⟨_, rfl⟩
+  cases w <;> obtain ⟨n, rfl⟩ := h <;> exact ⟨_, rfl⟩
+
+theorem isInt_iff {w : Width} {v : Val} : v.IsInt w ↔ ∃ n, v = ofBits w n := by
+  cases w <;> rfl
 
 /-- A boolean at `1 ⊕ 1`: `inj₁ ()` is false, `inj₂ ()` is true.  `[spec §8]` -/
 def bool (b : Bool) : Val := if b then .inj₂ .unit else .inj₁ .unit
@@ -104,6 +131,26 @@ def Expr.arg8? (e : Expr) : Option UInt8 :=
   | some (.u8 n) => some n
   | _ => none
 
+/-- The operand of an operation at width `w`, by its bits.  `[spec §8, §37]` -/
+def Expr.argAt? : (w : Width) → Expr → Option w.bits
+  | .w32, e => e.arg32?
+  | .w64, e => e.arg64?
+  | .w8, e => e.arg8?
+  | .f32, e => match e.lit? with
+    | some (.f32 n) => some n
+    | _ => none
+  | .f64, e => match e.lit? with
+    | some (.f64 n) => some n
+    | _ => none
+
+/-- The operands of a binary operation at width `w`.  `[spec §37]` -/
+def Expr.argsAt? (w : Width) : Expr → Option (w.bits × w.bits)
+  | .pair a b => do pure (← a.argAt? w, ← b.argAt? w)
+  | _ => none
+
+theorem Expr.argAt?_ofBits (w : Width) (n : w.bits) : (Val.ofBits w n).1.argAt? w = some n := by
+  cases w <;> rfl
+
 /-- The operands of a binary operation: a pair of literals of one width.  `[spec §8]` -/
 def Expr.args32? : Expr → Option (UInt32 × UInt32)
   | .pair a b => do pure (← a.arg32?, ← b.arg32?)
@@ -114,8 +161,9 @@ def Expr.args64? : Expr → Option (UInt64 × UInt64)
   | _ => none
 
 /-- Apply a host operation to an argument value. `none` when the argument is not of the
-    operation's shape; a typed program never reaches that case. The grouped operations at `w8`
-    have no argument shape: a byte has no arithmetic.  `[spec §8]` -/
+    operation's shape; a typed program never reaches that case. The grouped integer operations
+    at `w8`, `f32` and `f64` have no argument shape: a byte has no arithmetic, and a float has
+    its own operations. `reinterpret` keeps the bits.  `[spec §8, §37]` -/
 def Host.call (H : Host) : HostOp → Val → Option Val
   | .bin .w32 o, v => v.1.args32?.map fun (a, b) => .i32 (H.bin32 o a b)
   | .bin .w64 o, v => v.1.args64?.map fun (a, b) => .i64 (H.bin64 o a b)
@@ -133,7 +181,23 @@ def Host.call (H : Host) : HostOp → Val → Option Val
   | .extend32_s, v => v.1.arg64?.map fun a => .i64 (H.extend32S a)
   | .wrap8,      v => v.1.arg32?.map fun a => .u8 (H.wrap8 a)
   | .extend8_u,  v => v.1.arg8?.map fun a => .i32 (H.extend8U a)
+  | .fbin f o, v => (v.1.argsAt? f.width).map fun (a, b) => .ofBits f.width (H.fbin f o a b)
+  | .fun1 f o, v => (v.1.argAt? f.width).map fun a => .ofBits f.width (H.fun1 f o a)
+  | .frel f o, v => (v.1.argsAt? f.width).map fun (a, b) => .bool (H.frel f o a b)
+  | .convert f i sx, v => (v.1.argAt? i.width).map fun a => .ofBits f.width (H.convert f i sx a)
+  | .trunc i f sx, v =>
+      (v.1.argAt? f.width).map fun a => .opt ((H.trunc i f sx a).map (.ofBits i.width))
+  | .trunc_sat i f sx, v =>
+      (v.1.argAt? f.width).map fun a => .ofBits i.width (H.truncSat i f sx a)
+  | .demote, v => v.1.argAt? .f64 |>.map fun a => .f32 (H.demote a)
+  | .promote, v => v.1.argAt? .f32 |>.map fun a => .f64 (H.promote a)
+  | .reinterpret_i .f32, v => v.1.argAt? .f32 |>.map .i32
+  | .reinterpret_i .f64, v => v.1.argAt? .f64 |>.map .i64
+  | .reinterpret_f .f32, v => v.1.arg32? |>.map .f32
+  | .reinterpret_f .f64, v => v.1.arg64? |>.map .f64
   | .bin .w8 _, _ | .div .w8 _, _ | .un .w8 _, _ | .eqz .w8, _ | .rel .w8 _, _ => none
+  | .bin .f32 _, _ | .div .f32 _, _ | .un .f32 _, _ | .eqz .f32, _ | .rel .f32 _, _ => none
+  | .bin .f64 _, _ | .div .f64 _, _ | .un .f64 _, _ | .eqz .f64, _ | .rel .f64 _, _ => none
 
 /-! ### Wasm's integer semantics -/
 
@@ -195,7 +259,8 @@ def rel {n : Nat} : RelOp → BitVec n → BitVec n → Bool
 
 end Wasm
 
-/-- Wasm's integer instructions on `UInt32`/`UInt64`. For the interpreter and kernel-checked
+/-- Wasm's integer instructions on `UInt32`/`UInt64`, and its float instructions on the floats'
+    bits with canonical NaNs (`Support/Dynamics/Floats.lean`). For the interpreter and kernel-checked
     runs only; no theorem about the relation, the Fundamental Property or adequacy uses it.
     `[spec §8]` -/
 def wasmHost : Host where
@@ -215,6 +280,14 @@ def wasmHost : Host where
   extend32S a := .ofBitVec ((a.toBitVec.truncate 32).signExtend 64)
   wrap8 a := a.toUInt8
   extend8U a := a.toUInt32
+  fbin := WasmF.fbin
+  fun1 := WasmF.fun1
+  frel := WasmF.frel
+  convert := WasmF.convert
+  trunc := WasmF.trunc
+  truncSat := WasmF.truncSat
+  demote := WasmF.demote
+  promote := WasmF.promote
 
 /-! Spot checks of `wasmHost` against Wasm's reference results, by the kernel. -/
 

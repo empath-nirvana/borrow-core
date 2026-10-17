@@ -1,5 +1,6 @@
 import Frontend.Lexer
 import Frontend.Consts
+import Frontend.FloatLit
 /-!
 # Frontend — Parser
 
@@ -494,6 +495,8 @@ def rtyAtom : Nat → P RTy
     | .kw "i32" => discard bump; pure (.int t.span .w32)
     | .kw "i64" => discard bump; pure (.int t.span .w64)
     | .kw "u8" => discard bump; pure (.int t.span .w8)
+    | .kw "f32" => discard bump; pure (.int t.span .f32)
+    | .kw "f64" => discard bump; pure (.int t.span .f64)
     | .kw "input" => discard bump; pure (.handle t.span .input)
     | .kw "output" => discard bump; pure (.handle t.span .output)
     -- `clock` and `args`, the clock's and the arguments' resources (SPEC §34): names, so that
@@ -562,21 +565,32 @@ def rvty : Nat → P VTy
     | .ok A => pure A
     | .error e => throw e
 
+/-- `n.i` as written: the lexer reads it as a float literal's text (`Tok.flt`). -/
+def nDotI? (s : String) : Option (Nat × Nat) :=
+  match s.splitOn "." with
+  | [a, b] =>
+    if !a.isEmpty && !b.isEmpty && a.all Char.isDigit && b.all Char.isDigit then
+      some (a.toNat!, b.toNat!)
+    else none
+  | _ => none
+
+/-- An operation `n.i`. -/
+def opNameNI (what : String) : P (Nat × Nat) := do
+  let t ← peek
+  match t.tok with
+  | .flt s =>
+    match nDotI? s with
+    | some ki => discard bump; pure ki
+    | none => expected what
+  | _ => expected what
+
 /-- The entries of a row up to its `]`: `n.i q A ~> B`, separated by `,`; `q` is `lin`, `aff` or
 `unr`, read as a name here and nowhere else. -/
 def rowEntries : Nat → P Row
   | 0 => outOfFuel
   | n + 1 => do
     if ← isSym "]" then return .nil
-    let t ← peek
-    let k ← match t.tok with
-      | .int k => discard bump; pure k
-      | _ => expected "an operation `n.i` of a row"
-    expectSym "."
-    let t' ← peek
-    let i ← match t'.tok with
-      | .int i => discard bump; pure i
-      | _ => expected "the index `i` of an operation `n.i`"
+    let (k, i) ← opNameNI "an operation `n.i` of a row"
     let tq ← peek
     let q ← match tq.tok with
       | .ident "lin" => discard bump; pure Qual.lin
@@ -909,7 +923,7 @@ def bracketless : List String := ["alloc", "free", "swap"]
 as the block of a keyword (`case V {`, `for x in V {`). -/
 def startsValAtom (t : Tok) : Bool :=
   match t with
-  | .ident _ | .sym "(" | .sym "&" | .int _ | .str _ | .kw "clone" | .kw "box" => true
+  | .ident _ | .sym "(" | .sym "&" | .int _ | .flt _ | .str _ | .kw "clone" | .kw "box" => true
   | _ => (constKw? t).isSome
 
 /-- Tokens that begin a computation, as against a value statement. -/
@@ -930,7 +944,7 @@ inductive BinTok where
   | pipe
 
 /-- The operator of a token, with its precedence: `|>` 0, `||` 1, `&&` 2, comparisons 3, `+`/`-`
-4, `*` 5. -/
+4, `*` and `/` 5. -/
 def opOf (angle : Bool) : Tok → Option (BinTok × Nat)
   | .sym "|>" => some (.pipe, 0)
   | .sym "||" => some (.or, 1) | .sym "&&" => some (.and, 2)
@@ -938,6 +952,7 @@ def opOf (angle : Bool) : Tok → Option (BinTok × Nat)
   | .sym "<=" => some (.op .le, 3) | .sym ">=" => some (.op .ge, 3)
   | .sym ">" => if angle then none else some (.op .gt, 3)
   | .sym "+" => some (.op .add, 4) | .sym "-" => some (.op .sub, 4) | .sym "*" => some (.op .mul, 5)
+  | .sym "/" => some (.op .div, 5)
   | _ => none
 
 /-- `a && b` and `a || b` as `case`s on `a`, `inr ()` being true; `b` runs only when needed. -/
@@ -1288,6 +1303,7 @@ def valAtom : Nat → P Val
         pure (.defApp (← spanFrom st) s As)
       else pure (.var t.span s)
     | .int k => discard bump; pure (.sugar t.span (.lit k))
+    | .flt x => discard bump; let (m, e) := decOfText x; pure (.sugar t.span (.flit m e))
     | .str bs => discard bump; pure (.sugar t.span (.str bs))
     -- `box buf[A](cap)`, `box string(cap)`, `box array(n, f)`: the allocating constructors of the
     -- buffer and text libraries (`buf_new[A]`, `string_new`, `array_tab`).
@@ -1654,13 +1670,7 @@ def compPrefix : Nat → P Comp
       -- `perform[n.i] V`, `abort[n.i] V` (SPEC §19).
       discard bump
       expectSym "["
-      let k ← match (← peek).tok with
-        | .int k => discard bump; pure k
-        | _ => expected "the name `n` of an operation `n.i`"
-      expectSym "."
-      let i ← match (← peek).tok with
-        | .int i => discard bump; pure i
-        | _ => expected "the index `i` of an operation `n.i`"
+      let (k, i) ← opNameNI "the name `n.i` of an operation"
       expectSym "]"
       let V ← valPrefix n
       let sp ← spanFrom st
@@ -1939,9 +1949,9 @@ def decl (n : Nat) : P Decl := do
         let t ← bump
         let nm ← match t.tok with
           | .sym "+" => pure "op_add" | .sym "-" => pure "op_sub" | .sym "*" => pure "op_mul"
-          | .sym "==" => pure "op_eq" | .sym "!=" => pure "op_ne" | .sym "<" => pure "op_lt"
+          | .sym "/" => pure "op_div" | .sym "==" => pure "op_eq" | .sym "!=" => pure "op_ne" | .sym "<" => pure "op_lt"
           | .sym "<=" => pure "op_le" | .sym ">" => pure "op_gt" | .sym ">=" => pure "op_ge"
-          | _ => failAt t.span "an operator family is one of `(+)`, `(-)`, `(*)`, `(==)`, `(!=)`, `(<)`, `(<=)`, `(>)`, `(>=)`"
+          | _ => failAt t.span "an operator family is one of `(+)`, `(-)`, `(*)`, `(/)`, `(==)`, `(!=)`, `(<)`, `(<=)`, `(>)`, `(>=)`"
         expectSym ")"
         pure (⟨nm, t.span⟩ : Ident)
       else ident "a `poly` name"
