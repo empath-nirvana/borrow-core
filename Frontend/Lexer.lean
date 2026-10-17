@@ -51,7 +51,7 @@ def Error.render (e : Error) : String := s!"{e.span.start.render}: {e.msg}"
 def keywords : List String :=
   [ -- declarations
     "type", "shape", "def", "extern", "main", "total", "div", "fn", "include", "effect", "handler",
-    "with",
+    "with", "poly",
     -- terms
     "return", "force", "fun", "let", "linear", "case", "match", "borrow", "modify", "inl", "inr",
     "if", "else", "while", "break", "continue", "clone",

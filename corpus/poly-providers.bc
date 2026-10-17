@@ -1,0 +1,64 @@
+-- The providers of `lib/key.bc` (SPEC §36): one `equal`, `hash` and `order` per type, chosen by
+-- type. Each takes its operands as views (SPEC §1's `Imm̲`), so an integer, a pair of them or a
+-- view is passed as it is, and a buffer is seen through a borrow: its array's view and its
+-- length, compared by its initialised prefix and not its capacity. Among the cases whose head a
+-- type matches, the most specific is chosen: `string` is `buf u8`, `array u8 * i32`, which both
+-- the buffer case `buf A` and the pair case `A * B` match, and the buffer case is the more
+-- specific.
+--
+-- A program declares a family of its own the same way: `size_of` below has a case at `i32`, one
+-- at every pair, and one at every view.
+--
+-- Answer: `(i32[111], (i32[7], i32[4294967295]))`. Two strings with the same text in buffers of
+-- different capacities are equal and hash alike, and `"ab"` comes before `"abd"` (`-1`, so the
+-- sum is `1 + 10 + 100·1`); a pair-wise comparison of the buffers would see their capacities
+-- differ. `size_of` at `(i32 * text 't) * i32` is `1 + 5 + 1 = 7`. `order` at `bool * i32` puts
+-- `(false, 9)` before `(true, 0)`: `-1`, printed unsigned.
+
+include key
+include text
+
+poly size_of[T]<'a>(x: view 'a T) -> i32
+poly size_of at i32 = 1
+poly size_of[A, B] at A * B = let (p, q) = x; size_of[A](p) + size_of[B](q)
+poly size_of[A]<'h> at array_imm 'h A = len(x)
+
+fn b(x: bool) -> i32 = if x { 1 } else { 0 }
+
+fn word(l: lit, cap: i32) -> string = let (s, _) = push_lit(string_new(cap), l); s
+
+-- Equality and the hashes of two strings, each read through a borrow of it.
+fn same<'p, 'q>(a: imm 'p string, c: imm 'q string) -> i32 =
+  let (a, a2) = copy['p, string](a);
+  let (c, c2) = copy['q, string](c);
+  let e = borrow imm *a { 'u, x -> borrow imm *c { 'w, y -> equal[string](x, y) } };
+  let h = borrow imm *a2 { 'u, x -> hash[string](x) };
+  let k = borrow imm *c2 { 'w, y -> hash[string](y) };
+  b(e) + 10 * b(h == k)
+
+-- Each string lent to `same`, a cell of the caller's frame.
+fn with_second<'p>(a: imm 'p string, c: string) -> i32 =
+  let mut c = c;
+  let r = same(a, &c);
+  r
+
+fn compare(a: string, c: string) -> i32 =
+  let mut a = a;
+  let r = with_second(&a, c);
+  r
+
+-- `"ab"` against `"abd"`, both views at the literal's lifetime.
+fn prefix_order<'t>(t: text 't) -> i32 =
+  let (t, u) = array_copy['t, u8](t);
+  match split_at(t, 2) {
+    inl (h, r) -> array_forget['t, u8](r); order(h, u)
+  | inr t -> array_forget['t, u8](t); array_forget['t, u8](u); 0
+  }
+
+fn sizes<'t>(t: text 't) -> i32 = size_of[(i32 * text 't) * i32](((1, t), 2))
+
+main -> i32 * (i32 * i32) =
+  let e = compare(word("abc", 4), word("abc", 32));
+  let o = borrow imm "abd" { 't, t -> prefix_order(t) };
+  let n = borrow imm "hello" { 't, t -> sizes(t) };
+  (e - 100 * o, (n, order[bool * i32]((false, 9), (true, 0))))

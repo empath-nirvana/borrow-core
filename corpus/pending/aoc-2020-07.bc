@@ -1,5 +1,5 @@
--- pending: generic hash map with view keys (#211, generics pass #489); refused #491, #492
--- now: 32:1: `words` loops, so it is called in direct style one step at a time, and a borrow at `'t` cannot stay open across its steps: it may take one borrow of a cell at `'t`, `imm 't A` or `mut 't A`, which it borrows again at each step (SPEC §14, borrow scopes over loops)
+-- pending: refused #491, #492 (the map it keys by views of the input is SPEC §36's)
+-- now: 34:1: `words` loops, so it is called in direct style one step at a time, and a borrow at `'t` cannot stay open across its steps: it may take one borrow of a cell at `'t`, `imm 't A` or `mut 't A`, which it borrows again at each step (SPEC §14, borrow scopes over loops)
 --
 -- Advent of Code 2020, day 7, ported from `src/year2020/day07.rs` of
 -- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:
@@ -15,17 +15,19 @@
 -- array (`lib/rec.bc`, the depth bounded). A hash map keyed by text, and recursion with
 -- memoisation.
 --
--- The map is the library's generic hash map with the derived hash and equality of its key
--- (#211): `map_new[K, V](cap)`, `map_insert(&mut m, k, v)` answering the value it displaces, and
--- `map_get(&m, k)` a copy of a persistent value. There is no generic map yet, so the first use of
--- one is refused. Two refusals stand before it: `words`'s `for` over a sub-view is taken for a
--- loop of unknown bound (#491), and a recursive call in a `for` that threads the memo table is
--- refused as a linearity error (#492).
+-- The map is `lib/map.bc`'s hash map, keyed by the `hash` and `equal` of `text 't` (`lib/key.bc`,
+-- SPEC §36): `map_new[K, V](cap)`, `map_insert(&mut m, k, v)` answering the value it displaces,
+-- and `map_lookup(&m, k)` a copy of a persistent value. Two refusals unrelated to it stand:
+-- `words`'s `for` over a sub-view is taken for a loop of unknown bound (#491), and a recursive call
+-- in a `for` that threads the memo table is refused as a linearity error (#492). With both written
+-- around (a counted fold for `words`'s loop, the four slots' loops unrolled; not committed), the
+-- program gives the answer below.
 --
 -- Once it lands: on `corpus/aoc/2020-07.in`, as the Rust solution gives, `11` and `327`, one per
 -- line, then `(i32[11], i32[327])`; `live 0`.
 
 include textio
+include map
 include rec
 
 -- The first `k` words of `t`, as one view, and the rest after the space that follows them.
@@ -69,7 +71,7 @@ fn parse_rule<'t>(st: Map[text 't, i32] * (array (i32 * i32) * i32), l: text 't)
     let (_, after) = words(after, 1);
     rest = after;
     if 0 < n {
-      let o = map_get(&names, colour);
+      let o = map_lookup(&names, colour);
       match o { inl j -> slots = array_set(slots, 4 * i + k, (n, j)) | inr _ -> () }
     } else { () }
   };

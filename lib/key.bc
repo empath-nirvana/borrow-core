@@ -1,0 +1,172 @@
+-- Equality, hashing and order, one of each per type (SPEC §36): the `poly` families `equal`,
+-- `hash` and `order`, and their cases at the integer widths, at `1`, at pairs and sums of types
+-- that have them, and at arrays, views and buffers of such elements. `bool` is `1 + 1`, a sum.
+-- A hash map, a set or a sort at a key type uses its type's case, so two maps at one key type
+-- agree, and every binary operation over them is coherent. A type with no sensible equality (a
+-- function, a cell, an opaque host type) has no case, and a use at it is an error at the use.
+--
+-- Each takes its operands as views (`view 'a T`, SPEC §1's `Imm̲`): an `i32`, a pair of them or a
+-- view is its own view, so `equal(x, y)` takes the values; a buffer is seen as its array's view
+-- and its length, so a key need not be persistent, and a map reads its stored keys in place.
+-- `T` is read off the operands when it is their type; a call at another type writes it,
+-- `equal[string](a, b)`.
+--
+-- The operators are separate families (`(==)`, `(<)`, …): their machine cases are the host's
+-- comparisons, and `equal` at an integer is defined by `==`. A type may have an operator and no
+-- `equal` case, or the other way round.
+--
+-- The hash is deterministic, the same on every run and every engine (FxHash's step over 64-bit
+-- words), so a map's iteration order is reproducible. It is not keyed: a map over input an
+-- adversary chooses wants a seeded hash, which is not provided (SPEC §36 *Not provided*).
+--
+-- `include key` puts the families in scope; a hash map (`include map`) includes it.
+
+include slice
+
+poly equal[T]<'a, 'b>(x: view 'a T, y: view 'b T) -> bool
+
+poly hash[T]<'a>(x: view 'a T) -> i64
+
+-- `-1`, `0` or `1`, as `lib/slice.bc`'s comparisons answer.
+poly order[T]<'a, 'b>(x: view 'a T, y: view 'b T) -> i32
+
+-- ### Hashing
+
+-- One step of the hash: the word `k` mixed into `h`.
+fn key_hash_step(h: i64, k: i64) -> i64 =
+  host[mul64](host[xor64](host[rotl64](h, i64[5]), k), i64[0x517cc1b727220a95])
+
+-- The hash of an `i32`, as a word.
+fn key_hash_word(x: i32) -> i64 = key_hash_step(i64[0], host[extend_u](x))
+
+-- ### The integer widths and `1`
+
+poly equal at i32 = x == y
+poly equal at i64 = x == y
+poly equal at u8 = x == y
+poly equal at 1 = true
+
+poly hash at i32 = key_hash_word(x)
+poly hash at i64 = key_hash_step(i64[0], x)
+poly hash at u8 = key_hash_word(to_i32(x))
+poly hash at 1 = i64[0]
+
+-- The order of the integers is signed; of bytes, unsigned.
+fn key_order_i32(x: i32, y: i32) -> i32 = if x < y { 0 - 1 } else { if y < x { 1 } else { 0 } }
+
+poly order at i32 = key_order_i32(x, y)
+poly order at i64 = if x < y { 0 - 1 } else { if y < x { 1 } else { 0 } }
+poly order at u8 = key_order_i32(to_i32(x), to_i32(y))
+poly order at 1 = 0
+
+-- ### Pairs and sums
+
+poly equal[A, B] at A * B =
+  let (x1, x2) = x;
+  let (y1, y2) = y;
+  equal[A](x1, y1) && equal[B](x2, y2)
+
+poly hash[A, B] at A * B =
+  let (x1, x2) = x;
+  key_hash_step(hash[A](x1), hash[B](x2))
+
+-- Lexicographic: the first components, then the second.
+poly order[A, B] at A * B =
+  let (x1, x2) = x;
+  let (y1, y2) = y;
+  let o = order[A](x1, y1);
+  if o == 0 { order[B](x2, y2) } else { o }
+
+poly equal[A, B] at A + B =
+  match x {
+    inl a -> match y { inl b -> equal[A](a, b) | inr b -> false }
+  | inr a -> match y { inl b -> false | inr b -> equal[B](a, b) }
+  }
+
+poly hash[A, B] at A + B =
+  match x { inl a -> key_hash_step(i64[1], hash[A](a)) | inr b -> key_hash_step(i64[2], hash[B](b)) }
+
+-- `inl` before `inr` (so `false` before `true`).
+poly order[A, B] at A + B =
+  match x {
+    inl a -> match y { inl b -> order[A](a, b) | inr b -> 0 - 1 }
+  | inr a -> match y { inl b -> 1 | inr b -> order[B](a, b) }
+  }
+
+-- ### Arrays, views and buffers
+
+-- Whether two views have equal elements, each compared by `equal` through its view (`borrow imm
+-- *p`), and the loop's state the second view and the index.
+fn key_equal_elems[A]<'a, 'b>(x: array_imm 'a A, y: array_imm 'b A) -> bool =
+  let (x, x0) = array_copy['a, A](x);
+  let (y, y0) = array_copy['b, A](y);
+  if len(x0) == len(y0) {
+    let mut same = true;
+    let mut i = 0;
+    let mut rest = y;
+    for p in x {
+      let (r, r0) = array_copy['b, A](rest);
+      rest = r;
+      if same {
+        match get(r0, i) {
+          inl q -> let s = borrow imm *p { 'u, e -> borrow imm *q { 'w, f -> equal[A](e, f) } }; same = s
+        | inr u -> forget_imm['a, A](p); same = false
+        }
+      } else { forget_imm['a, A](p) };
+      i = i + 1
+    };
+    array_forget['b, A](rest);
+    same
+  } else { array_forget['a, A](x); array_forget['b, A](y); false }
+
+-- The hash of a view's length and its elements in order.
+fn key_hash_elems[A]<'a>(x: array_imm 'a A) -> i64 =
+  let (x, x0) = array_copy['a, A](x);
+  let mut h = key_hash_word(len(x0));
+  for p in x {
+    let k = borrow imm *p { 'u, e -> hash[A](e) };
+    h = key_hash_step(h, k)
+  };
+  h
+
+-- The lexicographic order of two views, the elements ordered by `order`.
+fn key_order_elems[A]<'a, 'b>(x: array_imm 'a A, y: array_imm 'b A) -> i32 =
+  let (x, x0) = array_copy['a, A](x);
+  let (y, y0) = array_copy['b, A](y);
+  let n = len(x0);
+  let m = len(y0);
+  let mut o = 0;
+  let mut i = 0;
+  let mut rest = y;
+  for p in x {
+    let (r, r0) = array_copy['b, A](rest);
+    rest = r;
+    if o == 0 {
+      match get(r0, i) {
+        inl q -> let c = borrow imm *p { 'u, e -> borrow imm *q { 'w, f -> order[A](e, f) } }; o = c
+      | inr u -> forget_imm['a, A](p); o = 1
+      }
+    } else { forget_imm['a, A](p) };
+    i = i + 1
+  };
+  array_forget['b, A](rest);
+  if o == 0 { key_order_i32(n, m) } else { o }
+
+poly equal[A]<'h> at array_imm 'h A = key_equal_elems[A](x, y)
+poly hash[A]<'h> at array_imm 'h A = key_hash_elems[A](x)
+poly order[A]<'h> at array_imm 'h A = key_order_elems[A](x, y)
+
+-- An owned array is seen as its view.
+poly equal[A] at array A = key_equal_elems[A](x, y)
+poly hash[A] at array A = key_hash_elems[A](x)
+poly order[A] at array A = key_order_elems[A](x, y)
+
+-- The initialised prefix of a buffer's view: its first `n` elements.
+fn key_prefix[A]<'a>(v: array_imm 'a A * i32) -> array_imm 'a A =
+  let (a, n) = v;
+  match split_at(a, n) { inl (h, t) -> array_forget['a, A](t); h | inr a -> a }
+
+-- A buffer (and so a `string`) is its initialised prefix: its capacity does not count.
+poly equal[A] at buf A = key_equal_elems[A](key_prefix(x), key_prefix(y))
+poly hash[A] at buf A = key_hash_elems[A](key_prefix(x))
+poly order[A] at buf A = key_order_elems[A](key_prefix(x), key_prefix(y))

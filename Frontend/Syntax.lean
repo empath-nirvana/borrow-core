@@ -613,6 +613,13 @@ inductive Decl where
       (lent : Bool)
   /-- A handler of a control effect (SPEC §19). -/
   | chandler (sp : Span) (h : CHandler)
+  /-- `poly f[T]<'a, …>(x₁: A₁, …) -> B`: a family of functions, one case per type `T` (`head` is
+  `none`; `A` and `V` are the type and the code the `fn` would have, `V`'s body the hole
+  `io_poly_body!`). `poly f[P, …]<'h, …> at H = S`: the case of `f` at the type `H` (`head` is
+  `some H`; `tps` are the case's type parameters, `lps` the lifetimes `H` names, `V` is
+  `thunk S`). An operator's family is named for it, `(+)` as `op_add`.  `[spec §36]` -/
+  | poly (sp : Span) (n : Ident) (tps : List Ident) (lps : List Ident) (head : Option VTy)
+      (A : VTy) (V : Val)
   deriving DecidableEq, Repr
 
 /-- A source file: its declarations in order. -/
@@ -835,6 +842,8 @@ def Decl.strip : Decl → Decl
         res := h.res.strip, ret := (h.ret.1.strip, h.ret.2.1.strip, h.ret.2.2.strip),
         clauses := h.clauses.map fun c => ⟨c.name.strip, c.params.map Ident.strip, c.body.strip⟩,
         lps := h.lps.map fun (a, b) => (a.strip, b.strip) }
+  | .poly _ n tps lps H A V => .poly .none n.strip (tps.map Ident.strip) (lps.map Ident.strip)
+      (H.map VTy.strip) A.strip V.strip
 
 def Program.strip (p : Program) : Program := ⟨p.decls.map Decl.strip⟩
 

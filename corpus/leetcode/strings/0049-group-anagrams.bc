@@ -1,6 +1,3 @@
--- pending: generic hash map with string keys (#211, generics pass #489)
--- now: 87:3: the loop threads `index`, whose type is not determined: ascribe it
---
 -- LeetCode 49, Group Anagrams.
 --
 -- Each line of the input is one case, words separated by spaces. The program prints, for each,
@@ -11,15 +8,14 @@
 -- A word's key is its bytes, sorted, in a string of its own (as Rust's `String` key). A map from
 -- key to the index of the key's group (`Map[string, i32]`) finds a word's group; the groups are a
 -- buffer of buffers of views of the input, so no word is copied, and their order is the order of
--- first appearance, which a map's iteration would not give. The map is the library's generic hash
--- map with the derived hash and equality of its key (#211): `map_new[K, V](cap)`,
--- `map_insert(&mut m, k, v)` answering the value it displaces, and `map_get(&m, &k)` a copy of a
--- persistent value, the key lent. There is no generic map yet, so the first use of one is
--- refused: the message is about the type of the loop's state, which the map's type would give.
--- With a throwaway stand-in for the map (not committed: the keys in a buffer of strings, searched
--- linearly, passed by value), the rest of the program gives the answer below.
+-- first appearance, which a map's iteration would not give. The map is `lib/map.bc`'s hash map,
+-- keyed by the `hash` and `equal` of `string` (`lib/key.bc`, SPEC §36: a buffer's case, which
+-- compares the initialised bytes): `map_new[K, V](cap)`, `map_insert(&mut m, k, v)` answering the
+-- value it displaces, and `map_lookup(&m, k)` a copy of a persistent value. The key sought is given
+-- by value, and the lookup drops it; on a word whose group is new, the key is made again for the
+-- insertion (Rust's `get(&k)` borrows it instead).
 --
--- Once it lands: on `corpus/leetcode/strings/0049-group-anagrams.in`,
+-- Answer on `0049-group-anagrams.in`,
 --
 --     eat tea ate
 --     tan nat
@@ -39,9 +35,10 @@
 --     b
 --     --
 --
--- then `i32[11]`; `live 0`.
+-- then `i32[11]`, the number of groups.
 
 include textio
+include map
 
 -- The words of a line, separated by spaces.
 fn words<'t>(l: text 't) -> buf (text 't) =
@@ -88,15 +85,15 @@ fn group<'t>(words: buf (text 't)) -> buf (buf (text 't)) =
     let (b, w) = view_at(words, i);
     words = b;
     let (w, v) = array_copy['t, u8] w;
-    let k = key(v);
-    let o = map_get(&index, &k);
+    let (w, v2) = array_copy['t, u8] w;
+    let o = map_lookup(&index, key(v));
     match o {
-      inl g -> groups = add_to(groups, g, w)
+      inl g -> array_forget['t, u8](v2); groups = add_to(groups, g, w)
     | inr _ ->
         let (gs, m) = len_of(groups);
         let (gs, _) = push(gs, box buf[text 't](4));
         groups = add_to(gs, m, w);
-        map_insert(&mut index, k, m)
+        map_insert(&mut index, key(v2), m)
     }
   };
   groups

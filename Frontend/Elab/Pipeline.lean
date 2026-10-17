@@ -94,6 +94,7 @@ def TDecl.name : TDecl → String
     | .effect _ n _ _ => s!"effect {n.name}"
     | .handler _ n _ _ _ _ _ => s!"handler {n.name}"
     | .chandler _ h => s!"handler {h.name.name}"
+    | .poly _ n _ _ _ _ _ => s!"poly {n.name}"
 
 /-- What `bcc tir` prints for a declaration with a body: its name, effect, node count, the
 nodes whose type is not known, and its binders. The library declarations (the first `lib`) are

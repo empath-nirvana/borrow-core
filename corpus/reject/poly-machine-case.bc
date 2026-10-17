@@ -1,0 +1,7 @@
+-- expect: 5:1: `(+)` has its machine cases at the integer widths (the host's instructions): a case at `i64` would overlap them
+-- An operator's family has the host's instruction as its case at each integer width (SPEC §36); a
+-- program's case at one would be a second case at that type.
+
+poly (+) at i64 = a
+
+main -> i64 = i64[1] + i64[2]

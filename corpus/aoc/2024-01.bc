@@ -1,6 +1,3 @@
--- pending: generic hash map (#211, the generics design pass #489)
--- now: 47:3: the loop threads `freq`, whose type is not determined: ascribe it
---
 -- Advent of Code 2024, day 1, ported from `src/year2024/day01.rs` of
 -- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:
 -- `corpus/aoc/LICENSE.md`.
@@ -10,17 +7,16 @@
 -- it occurs in the right list.
 --
 -- The port sorts two buffers for part 1, and counts the right list in a map from number to count
--- for part 2, as the Rust does (`FastMap`). The map is the library's generic hash map with the
--- derived hash and equality of its key (#211): `map_new[K, V](cap)`, `map_insert(&mut m, k, v)`
--- answering the value it displaces, and `map_get(&m, k)` a copy of a persistent value. There is
--- no generic map yet, so the first use of one is refused.
--- The message is about the type of a loop's state or of a closure's parameter, which the map's
--- type would give: loops are elaborated before unknown names are reported.
+-- for part 2, as the Rust does (`FastMap`). The map is `lib/map.bc`'s hash map, keyed by the
+-- `hash` and `equal` of `i32` (`lib/key.bc`, SPEC §36): `map_new[K, V](cap)`,
+-- `map_insert(&mut m, k, v)` answering the value it displaces, and `map_lookup(&m, k)` a copy of a
+-- persistent value.
 --
--- Once it lands: on `corpus/aoc/2024-01.in`, as the Rust solution gives, `595034` and `6665314`,
--- one per line, then `(i32[595034], i32[6665314])`; `live 0`.
+-- Answer on `2024-01.in`, as the Rust solution gives: `595034` and `6665314`, one per line, then
+-- `(i32[595034], i32[6665314])`.
 
 include textio
+include map
 
 fn abs(x: i32) -> i32 = if x < 0 { 0 - x } else { x }
 
@@ -48,14 +44,14 @@ main -> i32 * i32 =
     let x = at(&l, i, 0);
     let y = at(&r, i, 0);
     distance = distance + abs(x - y);
-    let o = map_get(&freq, y);
+    let o = map_lookup(&freq, y);
     let c = match o { inl c -> c | inr _ -> 0 };
     map_insert(&mut freq, y, c + 1)
   };
   let mut similarity = 0;
   for i in 0..n {
     let x = at(&l, i, 0);
-    let o = map_get(&freq, x);
+    let o = map_lookup(&freq, x);
     let c = match o { inl c -> c | inr _ -> 0 };
     similarity = similarity + x * c
   };

@@ -1,0 +1,12 @@
+-- expect: 10:1: the cases of `pick` at `A * i32` and at `i32 * B` (8:1) both apply at `i32 * i32`, and neither is more specific: a family has one case per type
+-- Two cases whose heads have a common instance, neither more specific than the other (SPEC §36):
+-- at `i32 * i32` both would apply, so the family is rejected where the second is declared,
+-- whether or not a call is at that type.
+
+poly pick[T](x: T) -> i32
+
+poly pick[B] at i32 * B = 1
+
+poly pick[A] at A * i32 = 2
+
+main -> i32 = 0

@@ -1,6 +1,4 @@
--- pending: generic hash map (#211, the generics design pass #489)
--- now: 52:28: this argument of `push` has type `1`, which is not `array A * i32`
---
+-- check: no-source
 -- Advent of Code 2024, day 11, ported from `src/year2024/day11.rs` of
 -- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:
 -- `corpus/aoc/LICENSE.md`.
@@ -13,18 +11,19 @@
 -- The port, as the Rust, never keeps the row: stones with the same number behave alike, so it
 -- numbers each distinct value the first time it is seen, in a map from value to index, and keeps
 -- a count of stones per index. Each blink computes, for each value new in the last blink, the
--- indices it turns into (`stones`), then spreads the counts along them. The map is the library's
--- generic hash map with the derived hash and equality of its key (#211): `map_new[K, V](cap)`,
--- `map_insert(&mut m, k, v)` answering the value it displaces, `map_get(&m, k)` a copy of a
--- persistent value, and `map_len(&m)`. There is no generic map yet, so the first use of one is
--- refused. A hash map, 64-bit arithmetic, and buffers.
--- The message is about the type of a loop's state or of a closure's parameter, which the map's
--- type would give: loops are elaborated before unknown names are reported.
+-- indices it turns into (`stones`), then spreads the counts along them. The map is `lib/map.bc`'s
+-- hash map, keyed by the `hash` and `equal` of `i64` (`lib/key.bc`, SPEC §36): `map_new[K, V](cap)`,
+-- `map_insert(&mut m, k, v)` answering the value it displaces, `map_lookup(&m, k)` a copy of a
+-- persistent value, and `map_len(&m)`. A hash map, 64-bit arithmetic, and buffers.
 --
--- Once it lands: on `corpus/aoc/2024-11.in`, as the Rust solution gives, `165417` and
--- `196622497563392`, one per line, then `(i64[165417], i64[196622497563392])`; `live 0`.
+-- Answer on `2024-11.in`, as the Rust solution gives: `165417` and `196622497563392`, one per line,
+-- then `(i64[165417], i64[196622497563392])`.
+--
+-- The source interpreter takes about half an hour over it (`check: no-source`): its golden is that
+-- interpreter's output, written once from it, and the other stages run it.
 
 include textio
+include map
 
 -- The number of decimal digits of `n > 0`, and `10` to the power of half of them.
 fn digits(n: i64) -> i32 * i64 =
@@ -43,7 +42,7 @@ fn rem64(a: i64, b: i64) -> i64 = match host[rem_u64](a, b) { inl r -> r | inr u
 -- worked out at the next blink.
 fn index_of(seen: Map[i64, i32], todo: buf i64, n: i64) -> (Map[i64, i32] * buf i64) * i32 =
   let mut seen = seen;
-  let o = map_get(&seen, n);
+  let o = map_lookup(&seen, n);
   match o {
     inl i -> ((seen, todo), i)
   | inr _ ->

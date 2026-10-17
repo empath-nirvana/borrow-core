@@ -1,4 +1,4 @@
--- expect: 3:1: no library module `strings`: the modules are io, div, prelude, lend, adapters, slice, buf, text, textio, iters, fail, yield, rec, aff, async, list, sys, wasi
+-- expect: 3:1: no library module `strings`: the modules are io, div, prelude, lend, adapters, slice, buf, text, textio, iters, fail, yield, rec, aff, async, list, sys, wasi, key, map
 -- `include` names a module of `lib/`, embedded in the compiler.
 include strings
 
