@@ -1,0 +1,123 @@
+-- LeetCode 143, Reorder List.
+--
+-- `reorder` interleaves a list with its own second half reversed: first, last, second, second
+-- to last, and so on, in place. As the Rust: the length is read through a borrow (`fold_imm`
+-- over `&l`, which leaves the list where it is), the list is cut after its first half (the cell
+-- of the last node kept is emptied and its contents are the second half), the second half is
+-- reversed by relinking (`0206-reverse-linked-list.bc`), and the two are woven together, each
+-- node's cell given the rest of the other list. No node is allocated or freed. The Rust finds the
+-- middle with a slow and a fast cursor over one list instead of the length, two shared views of
+-- one structure walked in step (T1, #172, for the loop that carries them); with the length, one
+-- cursor suffices, and here each step is a recursion of depth at most the list's length under
+-- `bounded` (`lib/rec.bc`).
+--
+-- Allocations per case: one cell per node, made by `list_of`; the cell the lend `&l` puts the
+-- list in for the fold (SPEC §11), which Rust's `&` does not make (#500); and the line's buffer
+-- of numbers.
+--
+-- Input `0143-reorder-list.in`: one case a line, the list's values. Answer: each reordered list on
+-- a line, then the number of cases, `i32[6]`.
+
+include textio
+include rec
+
+-- The numbers of a line.
+fn nums<'t>(l: text 't) -> buf i32 =
+  fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](8))
+
+-- The numbers of each line that is not empty.
+fn cases<'t>(t: text 't) -> buf (buf i32) =
+  fold_lines(t, !{ (l, cs) ->
+    let (l, m) = array_copy['t, u8] l;
+    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, nums(l)); cs } },
+    box buf[buf i32](8))
+
+-- A singly linked list: each node is a value and a cell holding the rest, the cell being Rust's
+-- `Box<ListNode>`. Relinking a node is a `swap` of its cell.
+type List = mu X. 1 + (i32 * ref X)
+
+fn nil() -> List = roll inl ()
+
+fn cons(x: i32, t: List) -> List = roll inr (x, alloc(t))
+
+-- The list of `a[b..b + k]`, one cell per node.
+fn list_of(a: array i32, b: i32, k: i32) -> array i32 * List =
+  let mut a = a;
+  let mut l = nil();
+  for i in 0..k { let x = at(&a, b + k - 1 - i, 0); l = cons(x, l) };
+  (a, l)
+
+-- The values of a list on a line, separated by spaces; the list is consumed.
+fn show_rest(l: List) -> 1 =
+  match unroll l {
+    inl _ -> print_byte(b'\n')
+  | inr (x, c) -> print_byte(b' '); print_dec(x); show_rest(free(c))
+  }
+
+fn show(l: List) -> 1 =
+  match unroll l {
+    inl _ -> print_byte(b'\n')
+  | inr (x, c) -> print_dec(x); show_rest(free(c))
+  }
+
+-- The number of nodes, read through a borrow: the fold's algebra sees each node's value and the
+-- length of its rest.
+fn len_alg<'y>(r: 1 + i32 * i32) -> i32 = match r { inl _ -> 0 | inr (_, n) -> n + 1 }
+
+fn length<'a>(l: imm 'a List) -> i32 = (unbang (fold_imm[1 + i32 * ref X, 'b, top, i32] len_alg)) ['a] l
+
+-- The first `k` nodes of `l`, and the rest; `k > 0`.
+fn split(l: List, k: i32) -> List * List =
+  match unroll l {
+    inl _ -> (nil(), nil())
+  | inr (x, c) ->
+      let (c, rest) = swap(c, nil());
+      if k == 1 { let l: List = roll inr (x, c); (l, rest) } else {
+        let (front, back) = split(rest, k - 1);
+        let (c, e) = swap(c, front);
+        let l: List = roll inr (x, c);
+        (l, back)
+      }
+  }
+
+-- `l` reversed onto `acc`.
+fn reverse_onto(l: List, acc: List) -> List =
+  match unroll l {
+    inl _ -> acc
+  | inr (x, c) -> let (c, rest) = swap(c, acc); let done: List = roll inr (x, c); reverse_onto(rest, done)
+  }
+
+-- The nodes of `a` and `b` alternately, from `a`'s first.
+fn weave(a: List, b: List) -> List =
+  match unroll a {
+    inl _ -> b
+  | inr (x, c) ->
+      let (c, rest) = swap(c, nil());
+      let (c, e) = swap(c, weave(b, rest));
+      roll inr (x, c)
+  }
+
+fn reorder(l: List) -> List =
+  let mut l = l;
+  let n = length(&l);
+  if n < 3 { l } else {
+    let (front, back) = split(l, n - host[shr_u32](n, 1));
+    weave(front, reverse_onto(back, nil()))
+  }
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t -> cases(t) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf i32] (cs, i, filler[buf i32]);
+    cs = c;
+    match o {
+      inl b -> let (a, k) = b; let (_, l) = list_of(a, 0, k);
+               let r = with exhausted_to_option { show(reorder(l)) };
+               match r { inl _ -> () | inr _ -> print_dec(0 - 1); print_byte(b'\n') }
+    | inr b -> ()
+    }
+  };
+  n

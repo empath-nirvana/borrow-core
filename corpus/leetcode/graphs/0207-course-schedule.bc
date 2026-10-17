@@ -1,0 +1,115 @@
+-- LeetCode 207, Course Schedule.
+--
+-- `can_finish` answers whether the courses `0..n` can all be taken when each pair `(a, b)` says
+-- that `b` comes before `a`: whether the graph of edges `b → a` has no cycle. Kahn's algorithm:
+-- the courses with nothing before them are taken first, each taken course lowers the count of
+-- what is still before each course after it, and a course whose count reaches zero is taken
+-- next. Every course is taken exactly when there is no cycle.
+--
+-- The graph is an adjacency array in compressed form: `start[u]..start[u + 1]` are the slots of
+-- `targets` holding `u`'s successors, counted and then filled from the edge list. Arrays as an
+-- arena, with node ids as indices. The `Vec<Vec<usize>>` of a Rust solution is expressible as an
+-- `array (buf i32)`, but not read in place: `*v` of an element's view copies, and a buffer is not
+-- persistent, so each successor list is taken out of its slot and put back around each read
+-- (reaching the buffer's own elements through the element's `imm` view at the same lifetime is
+-- #219). The flat form reads in place and allocates two arrays where that one allocates a buffer
+-- per course.
+--
+-- Allocations per case: `start`, the fill cursor, `targets`, the counts and the queue; and the
+-- line's buffer of numbers.
+--
+-- Input `0207-course-schedule.in`: one case a line, `n`, then the pairs. Answer: each case's
+-- verdict on a line, `1` when every course can be taken and `0` otherwise (`1`, `0`, `1`, `1`,
+-- `0`, `1`), then the number of cases, `i32[6]`.
+
+include textio
+
+-- The numbers of a line.
+fn nums<'t>(l: text 't) -> buf i32 =
+  fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](8))
+
+-- The numbers of each line that is not empty.
+fn cases<'t>(t: text 't) -> buf (buf i32) =
+  fold_lines(t, !{ (l, cs) ->
+    let (l, m) = array_copy['t, u8] l;
+    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, nums(l)); cs } },
+    box buf[buf i32](8))
+
+-- `a / 2`, for `a >= 0`.
+fn quot2(a: i32) -> i32 = host[shr_u32](a, 1)
+
+-- The graph on `n` nodes whose `m` edges are `es[1 + 2e + 1] → es[1 + 2e]`, as `start` (of length
+-- `n + 1`) and `targets`.
+fn graph(es: array i32, n: i32, m: i32) -> array i32 * (array i32 * array i32) =
+  let mut es = es;
+  let mut start = array_new[i32] (n + 1, !{ i -> 0 });
+  for e in 0..m {
+    let u = at(&es, 2 + 2 * e, 0);
+    let c = at(&start, u + 1, 0);
+    start = array_set(start, u + 1, c + 1)
+  };
+  for u in 0..n {
+    let s = at(&start, u, 0);
+    let c = at(&start, u + 1, 0);
+    start = array_set(start, u + 1, s + c)
+  };
+  let mut next = array_new[i32] (n, !{ i -> 0 });
+  for u in 0..n { let s = at(&start, u, 0); next = array_set(next, u, s) };
+  let mut targets = array_new[i32] (m, !{ i -> 0 });
+  for e in 0..m {
+    let v = at(&es, 1 + 2 * e, 0);
+    let u = at(&es, 2 + 2 * e, 0);
+    let k = at(&next, u, 0);
+    targets = array_set(targets, k, v);
+    next = array_set(next, u, k + 1)
+  };
+  (es, (start, targets))
+
+-- One case: `n`, then the pairs.
+fn can_finish(c: buf i32) -> bool =
+  let (a, k) = c;
+  let n = at(&a, 0, 0);
+  let m = quot2(k - 1);
+  let (a, (start, targets)) = graph(a, n, m);
+  let mut before = array_new[i32] (n, !{ i -> 0 });
+  for e in 0..m {
+    let v = at(&targets, e, 0);
+    let b = at(&before, v, 0);
+    before = array_set(before, v, b + 1)
+  };
+  let mut queue = array_new[i32] (n, !{ i -> 0 });
+  let mut tail = 0;
+  for u in 0..n {
+    let b = at(&before, u, 0);
+    if b == 0 { queue = array_set(queue, tail, u); tail = tail + 1 } else { () }
+  };
+  let mut head = 0;
+  for _ in 0..n {
+    if head == tail { break } else { () };
+    let u = at(&queue, head, 0);
+    head = head + 1;
+    let s = at(&start, u, 0);
+    let t = at(&start, u + 1, 0);
+    for j in s..t {
+      let v = at(&targets, j, 0);
+      let b = at(&before, v, 0);
+      before = array_set(before, v, b - 1);
+      if b == 1 { queue = array_set(queue, tail, v); tail = tail + 1 } else { () }
+    }
+  };
+  tail == n
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t -> cases(t) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf i32] (cs, i, filler[buf i32]);
+    cs = c;
+    match o {
+      inl b -> let v = if can_finish(b) { 1 } else { 0 }; print_dec(v); print_byte(b'\n')
+    | inr b -> ()
+    }
+  };
+  n

@@ -1,0 +1,134 @@
+-- pending: a destructor and folds for `mu` with `X` under `array` (#182)
+-- now: 94:56: `io_d23` is not consumed in its scope, and its type `(1 + (mu X. (1 + 1) * array (1 + X))) + 1 + (mu X. (1 + 1) * array (1 + X))` has no destructor
+--
+-- LeetCode 208, Implement Trie (Prefix Tree), with each node owning an array of its children:
+-- Rust's `Trie { children: [Option<Box<Trie>>; 26], end: bool }`, here `mu X. bool * array
+-- (1 + X)`. The accepted program is `corpus/leetcode/trees/0208-implement-trie.bc`, an arena.
+--
+-- `insert` and `walk` are recursions that take a node apart, take the child at the next letter out
+-- of its array (`array_replace`, leaving `inl ()`), go on in it, and put it back: the borrow-free
+-- form of walking `&mut` down the trie, and nothing is allocated but the new nodes. The trie is
+-- dropped at the end of each case, as a `Box` tree is in Rust.
+--
+-- What is missing. `X` under `array` is outside `FShape` (SPEC §6, §12), so this `mu` type has no
+-- destructor and no fold: every trie, and every `1 + Trie` that `array_replace` hands back, must
+-- be consumed by hand (#182, item 2: folds beyond `FShape`). Writing the destructor by hand does
+-- not get there today: a recursion over a node's 26 children inside a counted `for` is refused
+-- (#492), and freeing the emptied array needs `array_free` with a consumer of `1 + Trie`, whose
+-- `inl` arm must again drop a trie, a recursion inside a closure that is not run in place (#161).
+-- The message names a variable of the elaborated code, and points at another `array_replace`
+-- than the one in `insert` whose answer it is about.
+--
+-- Once it lands: on `corpus/leetcode/trees/0208-implement-trie.in`, the accepted program's
+-- answers, `1 0 1 1 0`, `0 0 1 1 0`, `1 0 1 1 1 0 0` and `1 1 0 0 1`, one per line, then
+-- `i32[4]`; `live 0`.
+
+include textio
+include rec
+
+-- A trie node: whether a word ends here, and the child at each letter, `inl ()` for none.
+type Trie = mu X. bool * array (1 + X)
+
+fn fresh() -> Trie = roll (false, array_new[1 + Trie] (26, !{ i -> inl () }))
+
+-- The tokens of the operations, as owned strings: a recursion cannot run inside the borrow of
+-- the input (SPEC §18, *Not provided*: a borrow of a buffer crossed by an abort).
+fn words<'t>(l: text 't) -> buf string =
+  let (l, u) = array_copy['t, u8] l;
+  let n = len(u);
+  let mut out = box buf[string](8);
+  let mut w = string_new(8);
+  for p in l {
+    let b = *p;
+    if b == b' ' {
+      let (w0, k) = len_of(w);
+      if 0 < k { let (o, _) = push(out, w0); out = o; w = string_new(8) } else { w = w0 }
+    } else { let (w1, _) = push_byte(w, b); w = w1 }
+  };
+  let (w0, k) = len_of(w);
+  if 0 < k { let (o, _) = push(out, w0); o } else { out }
+
+-- The letter at `i` of `w`, as `0..26`.
+fn letter(w: string, i: i32) -> string * i32 =
+  let (a, n) = w;
+  let b = at(&a, i, 0);
+  ((a, n), to_i32(b) - 97)
+
+-- `w[i..]` added below `t`.
+fn insert(t: Trie, w: string, i: i32) -> Trie * string =
+  let (end, kids) = unroll t;
+  let (w, n) = len_of(w);
+  if i == n { (roll (true, kids), w) } else {
+    let (w, c) = letter(w, i);
+    let (kids, o) = array_replace[1 + Trie] (kids, c, inl ());
+    let child = match o { inl s -> match s { inl _ -> fresh() | inr t -> t } | inr s -> fresh() };
+    let (child, w) = insert(child, w, i + 1);
+    let kids = array_set(kids, c, inr child);
+    (roll (end, kids), w)
+  }
+
+-- Whether the walk along `w[i..]` stays in the trie, and whether a word ends where it stops.
+fn walk(t: Trie, w: string, i: i32) -> (Trie * string) * (bool * bool) =
+  let (end, kids) = unroll t;
+  let (w, n) = len_of(w);
+  if i == n { ((roll (end, kids), w), (true, end)) } else {
+    let (w, c) = letter(w, i);
+    let (kids, o) = array_replace[1 + Trie] (kids, c, inl ());
+    match o {
+      inl s -> match s {
+          inl _ -> ((roll (end, kids), w), (false, false))
+        | inr child ->
+            let ((child, w), r) = walk(child, w, i + 1);
+            let kids = array_set(kids, c, inr child);
+            ((roll (end, kids), w), r)
+        }
+    | inr s -> ((roll (end, kids), w), (false, false))
+    }
+  }
+
+-- One case's operations on a new trie, the answers of its searches printed.
+fn run_ops(ws: buf string) -> 1 =
+  let (ws, n) = ws;
+  let mut ws = ws;
+  let mut t = fresh();
+  let mut first = true;
+  for i in 0..n {
+    let (a, o) = array_replace[string] (ws, i, filler[string]);
+    ws = a;
+    match o {
+      inl w ->
+        let (w, op) = letter(w, 0);
+        if op == to_i32(b'+') - 97 {
+          let (r, _) = insert(t, w, 1);
+          t = r
+        } else {
+          let ((r, _), (stays, end)) = walk(t, w, 1);
+          t = r;
+          let yes = if op == to_i32(b'?') - 97 { stays && end } else { stays };
+          if first { first = false } else { print_byte(b' ') };
+          let d = if yes { b'1' } else { b'0' };
+          print_byte(d)
+        }
+    | inr w -> ()
+    }
+  };
+  print_byte(b'\n')
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t ->
+    fold_lines(t, !{ (l, cs) ->
+      let (l, m) = array_copy['t, u8] l;
+      if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, words(l)); cs } },
+      box buf[buf string](8)) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf string] (cs, i, filler[buf string]);
+    cs = c;
+    match o {
+      inl ws -> let r = with exhausted_to_option { run_ops(ws) }; match r { inl _ -> () | inr _ -> () }
+    | inr ws -> ()
+    }
+  };
+  n

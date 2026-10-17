@@ -1,0 +1,131 @@
+-- LeetCode 23, Merge k Sorted Lists.
+--
+-- `merge_all` merges `k` sorted lists with a min-heap of the lists' heads (`heap_push`,
+-- `heap_pop`, `lib/buf.bc`), each entry a head's value with the index of its list, and the lists
+-- in an array. Each step pops the smallest head, takes that node off its list (its tail cell
+-- emptied, the rest put back in the array and its new head pushed), merges what is left, and puts
+-- the merged rest into the node's cell. No node is allocated or freed. The heap holds indices,
+-- not the lists, because its elements are read where they lie and must be persistent: the
+-- `BinaryHeap<Reverse<(i32, usize)>>` of a Rust solution holding indices, rather than one holding
+-- the `Box`es (which Rust can, by `Ord` on the node). A recursion of depth the answer's length,
+-- under `bounded` (`lib/rec.bc`); a Rust solution appends at a tail cursor (`&mut Option<Box>`)
+-- in a loop instead, a `mut` borrow of the last cell held from one turn to the next (T1, #172).
+--
+-- Allocations per case: one cell per node, made by `list_of`; the array of lists and the heap
+-- (with its growth); and the line's buffer of numbers.
+--
+-- Input `0023-merge-k-sorted-lists.in`: one case a line, `k`, then each list as its length and its
+-- sorted values. Answer: each merged list on a line, then the number of cases, `i32[6]`.
+
+include textio
+include rec
+
+-- The numbers of a line.
+fn nums<'t>(l: text 't) -> buf i32 =
+  fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](8))
+
+-- The numbers of each line that is not empty.
+fn cases<'t>(t: text 't) -> buf (buf i32) =
+  fold_lines(t, !{ (l, cs) ->
+    let (l, m) = array_copy['t, u8] l;
+    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, nums(l)); cs } },
+    box buf[buf i32](8))
+
+-- A singly linked list: each node is a value and a cell holding the rest, the cell being Rust's
+-- `Box<ListNode>`. Relinking a node is a `swap` of its cell.
+type List = mu X. 1 + (i32 * ref X)
+
+fn nil() -> List = roll inl ()
+
+fn cons(x: i32, t: List) -> List = roll inr (x, alloc(t))
+
+-- The list of `a[b..b + k]`, one cell per node.
+fn list_of(a: array i32, b: i32, k: i32) -> array i32 * List =
+  let mut a = a;
+  let mut l = nil();
+  for i in 0..k { let x = at(&a, b + k - 1 - i, 0); l = cons(x, l) };
+  (a, l)
+
+-- The values of a list on a line, separated by spaces; the list is consumed.
+fn show_rest(l: List) -> 1 =
+  match unroll l {
+    inl _ -> print_byte(b'\n')
+  | inr (x, c) -> print_byte(b' '); print_dec(x); show_rest(free(c))
+  }
+
+fn show(l: List) -> 1 =
+  match unroll l {
+    inl _ -> print_byte(b'\n')
+  | inr (x, c) -> print_dec(x); show_rest(free(c))
+  }
+
+-- The lists' heads in a heap, `(value, index)`; the empty lists are left out.
+type Heads = buf (i32 * i32)
+
+-- The head of `lists[i]`, if any, pushed onto the heap.
+fn push_head(h: Heads, lists: array List, i: i32) -> Heads * array List =
+  let (lists, o) = array_replace[List] (lists, i, nil());
+  match o {
+    inl l -> match unroll l {
+        inl _ -> (h, lists)
+      | inr (x, c) -> let l: List = roll inr (x, c); (heap_push(h, x, i), array_set(lists, i, l))
+      }
+  | inr l -> (h, lists)
+  }
+
+-- Everything left in the lists, merged: the smallest head taken off its list, and the rest of the
+-- merge put into its cell.
+fn merge_all(h: Heads, lists: array List) -> List * (Heads * array List) =
+  let (h, o) = heap_pop(h);
+  match o {
+    inl (x, i) ->
+      let (lists, taken) = array_replace[List] (lists, i, nil());
+      match taken {
+        inl l -> match unroll l {
+            inl _ -> (nil(), (h, lists))
+          | inr (y, c) ->
+              let (c, rest) = swap(c, nil());
+              let lists = array_set(lists, i, rest);
+              let (h, lists) = push_head(h, lists, i);
+              let (merged, (h, lists)) = merge_all(h, lists);
+              let (c, e) = swap(c, merged);
+              let n: List = roll inr (y, c);
+              (n, (h, lists))
+          }
+      | inr l -> (l, (h, lists))
+      }
+  | inr _ -> (nil(), (h, lists))
+  }
+
+-- One case: `k`, then each list's length and values.
+fn solve(c: buf i32) -> 1 =
+  let (a, n) = c;
+  let k = at(&a, 0, 0);
+  let mut a = a;
+  let mut lists = array_new[List] (k, !{ i -> nil() });
+  let mut h = box buf[i32 * i32](k);
+  let mut p = 1;
+  for i in 0..k {
+    let m = at(&a, p, 0);
+    let (b, l) = list_of(a, p + 1, m);
+    a = b;
+    lists = array_set(lists, i, l);
+    let (g, ls) = push_head(h, lists, i);
+    h = g;
+    lists = ls;
+    p = p + 1 + m
+  };
+  let r = with exhausted_to_option { let (l, _) = merge_all(h, lists); show(l) };
+  match r { inl _ -> () | inr _ -> print_dec(0 - 1); print_byte(b'\n') }
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t -> cases(t) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf i32] (cs, i, filler[buf i32]);
+    cs = c;
+    match o { inl b -> solve(b) | inr b -> () }
+  };
+  n

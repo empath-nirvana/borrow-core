@@ -1,0 +1,144 @@
+-- LeetCode 269, Alien Dictionary.
+--
+-- `order` reads a list of words, sorted in an unknown order of the letters `a`–`z`, and answers
+-- an order of the letters they use that agrees with it, or nothing when none does. Each pair of
+-- neighbouring words gives at most one edge: the letters at the first place where they differ,
+-- the first word's before the second's; a word followed by a proper prefix of itself means no
+-- order exists. The letters are then taken by Kahn's algorithm, the smallest letter with nothing
+-- left before it first, so the answer is the least such order and a test can name it; no letter
+-- left to take while some remain means a cycle.
+--
+-- The graph is 26 letters, so it is a 26 × 26 array of edges, a count per letter of the edges
+-- into it, and a mark per letter used: a Rust solution's `[[bool; 26]; 26]` and `[usize; 26]`,
+-- which are on the stack there and heap arrays here (#496).
+-- The words are never copied: each is a pair of indices into the line, read through its view.
+-- Each read of the view first copies it (`array_copy`, #142).
+--
+-- Allocations per case: the edge, count, used and taken arrays, and the answer's string.
+--
+-- Input `0269-alien-dictionary.in`: one case a line, its words separated by spaces. Answer: each
+-- case's order on a line, `-` when there is none, then the number of cases, `i32[7]`.
+
+include textio
+
+-- The letter at `i`, as `0..26`.
+fn letter<'a>(l: text 'a, i: i32) -> text 'a * i32 =
+  let (l, w) = array_copy['a, u8] l;
+  (l, to_i32(at(w, i, 0)) - 97)
+
+-- The arrays of the order: `edge[26a + b]` when `a` comes before `b`, `into[b]` the edges into
+-- `b`, `used[a]` when a word holds `a`; and whether some pair already ruled out every order.
+type Graph = array bool * (array i32 * (array bool * bool))
+
+-- The edge between the words `l[ps..pe]` and `l[s..e]`, the first before the second.
+fn compare<'a>(l: text 'a, ps: i32, pe: i32, s: i32, e: i32, g: Graph) -> text 'a * Graph =
+  let (edge, (into, (used, bad))) = g;
+  let mut l = l;
+  let mut edge = edge;
+  let mut into = into;
+  let mut found = false;
+  for j in 0..pe - ps {
+    if s + j == e { break } else { () };
+    let (m, a) = letter(l, ps + j);
+    let (m, b) = letter(m, s + j);
+    l = m;
+    if a != b {
+      found = true;
+      let known = at(&edge, 26 * a + b, false);
+      if not(known) {
+        edge = array_set(edge, 26 * a + b, true);
+        let k = at(&into, b, 0);
+        into = array_set(into, b, k + 1)
+      } else { () };
+      break
+    } else { () }
+  };
+  let prefix = not(found) && e - s < pe - ps;
+  (l, (edge, (into, (used, bad || prefix))))
+
+-- Each letter of `l[s..e]` marked as used.
+fn mark<'a>(l: text 'a, s: i32, e: i32, used: array bool) -> text 'a * array bool =
+  let mut l = l;
+  let mut used = used;
+  for i in s..e { let (m, a) = letter(l, i); l = m; used = array_set(used, a, true) };
+  (l, used)
+
+-- The letters in order, smallest available first, or `-`.
+fn take_order(g: Graph) -> string =
+  let (edge, (into, (used, bad))) = g;
+  let mut edge = edge;
+  let mut into = into;
+  let mut used = used;
+  let mut taken = array_new[bool] (26, !{ i -> false });
+  let mut out = string_new(26);
+  let mut left = 0;
+  for a in 0..26 { let u = at(&used, a, false); if u { left = left + 1 } else { () } };
+  let mut stuck = bad;
+  for _ in 0..26 {
+    if left == 0 || stuck { break } else { () };
+    let mut pick = 0 - 1;
+    for a in 0..26 {
+      let u = at(&used, a, false);
+      let t = at(&taken, a, true);
+      let k = at(&into, a, 1);
+      if u && not(t) && k == 0 { pick = a; break } else { () }
+    };
+    if pick < 0 { stuck = true } else {
+      taken = array_set(taken, pick, true);
+      left = left - 1;
+      let (o, _) = push_byte(out, to_u8(pick + 97));
+      out = o;
+      for b in 0..26 {
+        let e = at(&edge, 26 * pick + b, false);
+        if e { let k = at(&into, b, 0); into = array_set(into, b, k - 1) } else { () }
+      }
+    }
+  };
+  if stuck { let (o, _) = push_byte(clear_str(out), b'-'); o } else { out }
+
+-- The order of one case's words.
+fn order<'a>(l: text 'a) -> string =
+  let (l, u) = array_copy['a, u8] l;
+  let n = len(u);
+  let mut g = (array_new[bool] (676, !{ i -> false }),
+               (array_new[i32] (26, !{ i -> 0 }), (array_new[bool] (26, !{ i -> false }), false)));
+  let mut l = l;
+  let mut ps = 0 - 1;
+  let mut pe = 0 - 1;
+  let mut s = 0;
+  for i in 0..n + 1 {
+    let (m, w) = array_copy['a, u8] l;
+    l = m;
+    let b = at(w, i, b' ');
+    if b == b' ' {
+      if s < i {
+        let (edge, (into, (used, bad))) = g;
+        let (m, used) = mark(l, s, i, used);
+        let g1 = (edge, (into, (used, bad)));
+        let (m, g2) = if 0 <= ps { compare(m, ps, pe, s, i, g1) } else { (m, g1) };
+        l = m;
+        g = g2;
+        ps = s;
+        pe = i
+      } else { () };
+      s = i + 1
+    } else { () }
+  };
+  array_forget['a, u8](l);
+  take_order(g)
+
+main -> i32 =
+  let s = read_input();
+  let r = borrow imm s { 't, t ->
+    fold_lines(t, !{ (l, rs) ->
+      let (l, m) = array_copy['t, u8] l;
+      if len(m) == 0 { array_forget['t, u8](l); rs } else { let (rs, _) = push(rs, order(l)); rs } },
+      box buf[string](8)) };
+  let (rs, n) = r;
+  let mut rs = rs;
+  for i in 0..n {
+    let (a, o) = array_replace[string] (rs, i, filler[string]);
+    rs = a;
+    match o { inl x -> let x = print_string(x); print_byte(b'\n') | inr x -> () }
+  };
+  n

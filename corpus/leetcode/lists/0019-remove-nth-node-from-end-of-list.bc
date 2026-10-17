@@ -1,0 +1,94 @@
+-- LeetCode 19, Remove Nth Node From End of List.
+--
+-- `remove` takes out the `n`-th node from the end, in one pass: a recursion that answers the
+-- rest of the list with that node gone and how many nodes it had, so each node learns its place
+-- from the end on the way back and the `n`-th drops itself, its cell freed. Every other node
+-- gets its rest back in its own cell; nothing is allocated. The textbook pass walks two cursors
+-- `n` apart through the one list, which over `Option<Box<ListNode>>` is a shared and a `mut`
+-- reference into one structure at once, refused by Rust too; Rust solutions count the nodes and
+-- then walk a `&mut` cursor to the node before, a `mut` borrow carried from one turn of a loop to
+-- the next (the spanning lend, T1, #172). The recursion needs neither, at a depth of the list's
+-- length under `bounded` (`lib/rec.bc`).
+--
+-- Allocations per case: one cell per node, made by `list_of` (the removed node's cell is freed),
+-- and the line's buffer of numbers.
+--
+-- Input `0019-remove-nth-node-from-end-of-list.in`: one case a line, `n`, then the list's values.
+-- Answer: each list without its `n`-th node from the end on a line, then the number of cases,
+-- `i32[6]`.
+
+include textio
+include rec
+
+-- The numbers of a line.
+fn nums<'t>(l: text 't) -> buf i32 =
+  fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](8))
+
+-- The numbers of each line that is not empty.
+fn cases<'t>(t: text 't) -> buf (buf i32) =
+  fold_lines(t, !{ (l, cs) ->
+    let (l, m) = array_copy['t, u8] l;
+    if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, nums(l)); cs } },
+    box buf[buf i32](8))
+
+-- A singly linked list: each node is a value and a cell holding the rest, the cell being Rust's
+-- `Box<ListNode>`. Relinking a node is a `swap` of its cell.
+type List = mu X. 1 + (i32 * ref X)
+
+fn nil() -> List = roll inl ()
+
+fn cons(x: i32, t: List) -> List = roll inr (x, alloc(t))
+
+-- The list of `a[b..b + k]`, one cell per node.
+fn list_of(a: array i32, b: i32, k: i32) -> array i32 * List =
+  let mut a = a;
+  let mut l = nil();
+  for i in 0..k { let x = at(&a, b + k - 1 - i, 0); l = cons(x, l) };
+  (a, l)
+
+-- The values of a list on a line, separated by spaces; the list is consumed.
+fn show_rest(l: List) -> 1 =
+  match unroll l {
+    inl _ -> print_byte(b'\n')
+  | inr (x, c) -> print_byte(b' '); print_dec(x); show_rest(free(c))
+  }
+
+fn show(l: List) -> 1 =
+  match unroll l {
+    inl _ -> print_byte(b'\n')
+  | inr (x, c) -> print_dec(x); show_rest(free(c))
+  }
+
+-- `l` without its `n`-th node from the end, and the number of nodes `l` had.
+fn remove(l: List, n: i32) -> List * i32 =
+  match unroll l {
+    inl _ -> (nil(), 0)
+  | inr (x, c) ->
+      let (c, rest) = swap(c, nil());
+      let (rest, k) = remove(rest, n);
+      if k + 1 == n { free(c); (rest, k + 1) } else {
+        let (c, e) = swap(c, rest);
+        let l: List = roll inr (x, c);
+        (l, k + 1)
+      }
+  }
+
+-- One case: `n`, then the list's values.
+fn solve(c: buf i32) -> 1 =
+  let (a, m) = c;
+  let n = at(&a, 0, 0);
+  let (a, l) = list_of(a, 1, m - 1);
+  let r = with exhausted_to_option { let (l, _) = remove(l, n); show(l) };
+  match r { inl _ -> () | inr _ -> print_dec(0 - 1); print_byte(b'\n') }
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t -> cases(t) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf i32] (cs, i, filler[buf i32]);
+    cs = c;
+    match o { inl b -> solve(b) | inr b -> () }
+  };
+  n
