@@ -29,7 +29,8 @@ The lowering is type-directed (`Backend/Clos/Types.lean`): a closure-IR variable
   code `t` captures nothing, and otherwise an object holding `t` and the captured values' words.
   Their codes take the closure's word, load the environment into locals and free the object.
 - **Cells and array slots** hold their contents' words, `max 1 |A|` words for a cell and `|A|`
-  per slot.
+  per slot. A scoped cell no suspension crosses is a slot of its function's frame, and a
+  capability's cell a word of the program's data (Frame slots, below; `[spec §35]`).
 - `copy`, `drop`, the printer, the array primitives, the loop driver and the dispatchers are
   functions generated on demand per layout type (`Helper`); at a trivial type a copy is the words
   themselves and a drop is nothing. Copying or dropping a closure switches on its tag and copies
@@ -88,6 +89,8 @@ structure Ctx where
   helperBase : Nat
   /-- The literals' code (`Backend.Clos.Prog.litCode`). -/
   litCode : Option Nat := none
+  /-- The scoped cells placed in a frame slot (`frameScopes`). -/
+  frameScopes : Std.HashSet Nat := {}
 
 structure LState where
   vars : Std.HashMap Var (List Nat) := {}
@@ -97,6 +100,8 @@ structure LState where
   /-- In a code of a recursive closure type, the local holding its environment object (`0` once
   it is reused), and the object's words. -/
   reuse : Option (Nat × Nat) := none
+  /-- The words of the function's frame so far: its slots (`Fn.frame`). -/
+  frame : Nat := 0
 
 abbrev LM := ReaderT Ctx (StateT LState (Except String))
 
@@ -160,13 +165,21 @@ def helper (h : Helper) : LM Nat := do
 
 /-- Run `act` as the body of a function of `params` words: its locals start after them. The
 number of locals beyond the parameters. -/
-def inFn (params : Nat) (act : LM α) : LM (α × Nat) := do
+def inFnF (params : Nat) (act : LM α) : LM (α × Nat × Nat) := do
   let saved ← get
-  set { saved with vars := {}, next := params, reuse := none }
+  set { saved with vars := {}, next := params, reuse := none, frame := 0 }
   let a ← act
   let n := (← get).next
-  modify fun s => { s with vars := saved.vars, next := saved.next, reuse := saved.reuse }
-  pure (a, n - params)
+  let fw := (← get).frame
+  modify fun s => { s with vars := saved.vars, next := saved.next, reuse := saved.reuse,
+                           frame := saved.frame }
+  pure (a, n - params, fw)
+
+/-- `inFnF` for a function with no frame: a helper, which lowers no closure-IR term. -/
+def inFn (params : Nat) (act : LM α) : LM (α × Nat) := do
+  let (a, n, fw) ← inFnF params act
+  if fw != 0 then throw "flat IR: a frame slot in a generated function"
+  pure (a, n)
 
 /-! ### Reusing a code's environment object
 
@@ -420,22 +433,51 @@ def locElem (n : Nat) : LM Nat := do
 width `0` (`1`, a closure with nothing captured), and none is a byte. -/
 def zeroCell (T : Types) (n : Nat) : Bool := T.cellWords n == 0 && !T.byteCell n
 
+/-- `alloc v`, of the scope `k` when it is a scoped cell's. A cell of no words allocates
+nothing: its address is `0`, never read or written. A scoped cell of a scope in `frameScopes`
+is the next slot of the function's frame, and no allocation. -/
+def lowerAlloc (k : Option Nat) (v : Var) (d : Dest) : LM (List Stmt) := do
+  let some n := (← T).cons[v]? | throw "flat IR: an untyped cell"
+  if zeroCell (← T) n then return ← emit d [.c64 0]
+  let ls ← vals v
+  let t ← fresh1
+  let w := max 1 ((← T).cellWords n)
+  let addr ← match k with
+    | some k =>
+      if (← read).frameScopes.contains k then do
+        let off := (← get).frame
+        modify fun s => { s with frame := off + w }
+        pure (Exp.slot off w)
+      else pure (.alloc (.c64 w.toUInt64))
+    | none => pure (.alloc (.c64 w.toUInt64))
+  return [.set t addr] ++ (← storeCell n (.loc t) (locs ls)) ++ (← emit d [.loc t])
+
+/-- `free l`, of the scope `k` when it is a scoped cell's: the contents, and the cell freed (a
+frame slot's life ended). A cell of no words was never allocated, so nothing is freed. -/
+def lowerFree (k : Option Nat) (l : Var) (d : Dest) : LM (List Stmt) := do
+  let a ← locElem (← vty l)
+  let p := Exp.loc ((← vals l).headD 0)
+  let (s, ls) ← loadCell (← vty l) p (← words a)
+  let fs := (← read).frameScopes
+  let slot := match k with
+    | some k => fs.contains k
+    | none => false
+  let fr : List Stmt :=
+    if zeroCell (← T) (← vty l) then [] else if slot then [.unslot p] else [.free p]
+  return s ++ fr ++ (← emit d (locs ls))
+
 def lowerPrim : Op → List Var → Dest → LM (List Stmt)
-  | .alloc, [v], d => do
+  | .alloc, [v], d => lowerAlloc none v d
+  | .scopedAlloc k, [v], d => lowerAlloc (some k) v d
+  | .staticCell addr, [v], d => do
+      -- A capability's cell: the word at `addr` of the program's data, holding the contents.
       let some n := (← T).cons[v]? | throw "flat IR: an untyped cell"
-      -- A cell of no words allocates nothing: its address is `0`, never read or written.
-      if zeroCell (← T) n then return ← emit d [.c64 0]
-      let ls ← vals v
-      let t ← fresh1
-      return [.set t (.alloc (.c64 (max 1 ((← T).cellWords n)).toUInt64))] ++
-        (← storeCell n (.loc t) (locs ls)) ++ (← emit d [.loc t])
-  | .free, [l], d => do
-      let a ← locElem (← vty l)
-      let p := Exp.loc ((← vals l).headD 0)
-      let (s, ls) ← loadCell (← vty l) p (← words a)
-      -- A cell of no words was never allocated, so nothing is freed.
-      let fr : List Stmt := if zeroCell (← T) (← vty l) then [] else [.free p]
-      return s ++ fr ++ (← emit d (locs ls))
+      if (← T).cellWords n > 1 || (← T).byteCell n then
+        throw "flat IR: a capability's cell wider than its word"
+      return (← storeCell n (.c64 addr.toUInt64) (locs (← vals v))) ++
+        (← emit d [.c64 addr.toUInt64])
+  | .free, [l], d => lowerFree none l d
+  | .scopedFree k, [l], d => lowerFree (some k) l d
   | .load, [l], d => do
       let a ← locElem (← vty l)
       let p := Exp.loc ((← vals l).headD 0)
@@ -925,7 +967,7 @@ def lowerCode (k : Nat) (c : Code) : LM Fn := do
     | _ => (fTy, 0)
   let pw ← words aTy
   if T.isRec fTy then
-    let (body, nloc) ← inFn (1 + pw) do
+    let (body, nloc, frame) ← inFnF (1 + pw) do
       bindVals c.param (List.range' 1 pw)
       let mut unpack : List Stmt := []
       let mut off := 1
@@ -938,9 +980,9 @@ def lowerCode (k : Nat) (c : Code) : LM Fn := do
       if !c.env.isEmpty then modify fun st => { st with reuse := some (0, off) }
       let body ← lowerTm c.body (.ret ans)
       pure (unpack ++ body ++ [.trap])
-    return { name := s!"code{k}", params := 1 + pw, results := ans, locals := nloc, body }
+    return { name := s!"code{k}", params := 1 + pw, results := ans, locals := nloc, frame, body }
   let ew := T.envWords k
-  let (body, nloc) ← inFn (ew + pw) do
+  let (body, nloc, frame) ← inFnF (ew + pw) do
     let mut off := 0
     for x in c.env do
       let w ← words (← vty x)
@@ -948,13 +990,13 @@ def lowerCode (k : Nat) (c : Code) : LM Fn := do
       off := off + w
     bindVals c.param (List.range' ew pw)
     pure ((← lowerTm c.body (.ret ans)) ++ [.trap])
-  pure { name := s!"code{k}", params := ew + pw, results := ans, locals := nloc, body }
+  pure { name := s!"code{k}", params := ew + pw, results := ans, locals := nloc, frame, body }
 
 def lowerMain (t : Tm) : LM Fn := do
   let k ← words (← T).mainTy
-  let (body, nloc) ← inFn 0 do
+  let (body, nloc, frame) ← inFnF 0 do
     pure ((← lowerTm t (.ret k)) ++ [.trap])
-  pure { name := "main", params := 0, results := k, locals := nloc, body }
+  pure { name := "main", params := 0, results := k, locals := nloc, frame, body }
 
 /-- The counts of a run, written after the report when they are asked for: allocations,
 indirect (dispatched) calls, and copies of a variable at a non-trivial type. -/
@@ -1386,6 +1428,40 @@ def foldSites (p : Clos.Prog) : Except String (Nat × Nat) := do
   let (n, _) ← (act.run ctx).run {}
   pure (n, p.folds.length - n)
 
+/-! ### Frame slots  `[spec §35]`
+
+A scoped cell (`Backend.Clos.Op.scopedAlloc`) lives from its `alloc` to its scope's `free`. When
+no resumption point of its code lies between them (`Clos.Prog.suspendedScopes`), the cell's life
+is inside one call of the code that holds both: a flat-IR function has no loop, a code that may
+suspend is copied whole into its resume code where it resumes (`Capture`), and a raise returns
+with the cell dropped. Such a cell is a slot of the code's frame (`Exp.slot`), as C and Rust place
+a local whose address is taken: no allocation and no live range. A scoped cell whose scope a
+suspension crosses is allocated: its address is held in the suspended computation's state, which
+outlives the frame. -/
+
+/-- The scoped cells' operations in `t`: each scope's `alloc`s and `free`s. -/
+def scopesOf : Tm → List (Nat × Bool)
+  | .prim (.scopedAlloc k) _ => [(k, true)]
+  | .prim (.scopedFree k) _ => [(k, false)]
+  | .letv _ e b => scopesOf e ++ scopesOf b
+  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .catch _ b | .fin _ _ b | .catchAll b
+  | .hnd _ _ _ b | .ubind _ _ b => scopesOf b
+  | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => scopesOf b₁ ++ scopesOf b₂
+  | _ => []
+
+/-- The scopes whose cells are frame slots: those no suspension crosses. -/
+def frameScopes (p : Clos.Prog) : Std.HashSet Nat :=
+  let all := (p.main :: p.codes.toList.map (·.body)).flatMap scopesOf
+  all.foldl (fun s (k, _) => if p.suspendedScopes.contains k then s else s.insert k) {}
+
+/-- The program's scoped cells: how many are frame slots, and how many are allocated. -/
+def scopeSites (p : Clos.Prog) : Nat × Nat :=
+  let all := (p.main :: p.codes.toList.map (·.body)).flatMap scopesOf |>.filterMap
+    fun (k, a) => if a then some k else none
+  let fs := frameScopes p
+  let framed := all.filter fs.contains
+  (framed.length, all.length - framed.length)
+
 /-- The flat IR of `p`; `types` are `p`'s layout types when they are known already. -/
 def lower (p : Clos.Prog) (counts : Bool := false) (types : Option Types := none) :
     Except String Prog := do
@@ -1401,7 +1477,8 @@ def lower (p : Clos.Prog) (counts : Bool := false) (types : Option Types := none
                      driveKnown := match drive with
                        | some #[c] => some c
                        | _ => none,
-                     litCode := p.litCode }
+                     litCode := p.litCode,
+                     frameScopes := frameScopes p }
   let act : LM (List Fn) := do
     let codes ← p.codes.toList.zipIdx.mapM fun (c, k) => lowerCode k c
     let main ← lowerMain p.main

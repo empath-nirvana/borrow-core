@@ -471,6 +471,97 @@ def markUbinds : Expr → Expr
   | .case a b c => .case (markUbinds a) (markUbinds b) (markUbinds c)
   | e => e
 
+/-! ### Scoped cells  `[spec §35]`
+
+The elaborator scopes three cells to one borrow: the cell of a value lent to a call (`f(&x)`,
+`f(&mut x)`), of a value `modify` changes, and of a handler's state given as a value
+(`Frontend/Sugar.lean`, `lendBorrow`; `Frontend/Elab/Effects.lean`, `withBlk`). Each is
+`let (c, r) = withbor (alloc v) cb; …` with the owner `c` used once afterwards, by its `free`:
+the borrow's scope is the cell's life. `markScoped` marks such an `alloc` and its `free` with
+the scope's number; the conversion makes them `scopedAlloc k` and `scopedFree k`, which are
+`alloc` and `free` in every stage, and which the flat IR places in a frame slot of the code that
+holds both (`Flat/Lower.lean`, `frameScopes`). The marks are literal pairs that no checked term
+has as the operand of `alloc` or `free`. -/
+
+/-- The mark of a scoped cell's `alloc` and `free`: `scopedMark ||| k` for the scope `k`. -/
+def scopedMark : UInt64 := 0x53434F5045000000
+
+/-- The mark carries a scope's number. -/
+def scopedOf? (m : UInt64) : Option Nat :=
+  if m &&& 0xFFFFFFFFFF000000 == scopedMark then some (m &&& 0xFFFFFF).toNat else none
+
+/-- The erasure of `withbor1` and `withbor2`: `λℓ. λf. (ℓ, f () ℓ)`. -/
+def withborE : Expr := .lam (.lam (.pair (.var 1) (.app (.app (.var 0) .unit) (.var 1))))
+
+/-- The free occurrences of the index `j` in `e`. -/
+def occursN (j : Nat) (e : Expr) : Nat := ((fvsRaw e 0).filter (· == j)).length
+
+/-- `e` with the one occurrence of the index `j` marked as the `free` of the scope `k`, when
+that occurrence is the operand of a `free` reached through `let`s (β-redexes, which the
+conversion binds in the same code) and no other `λ`. -/
+def markFreeOf (k : Nat) : Nat → Expr → Option Expr
+  | j, .app (.prim .free) (.var i) =>
+    if i == j then some (.app (.prim .free) (.pair (.prim (.lit (.i64 (scopedMark ||| k.toUInt64))))
+      (.var i))) else none
+  | j, .app (.lam b) a =>
+    if isSwap (.lam b) || (fixBody? (.lam b)).isSome then none
+    else if a == .var j then (markFreeOf k 0 b).map fun b' => .app (.lam b') a
+    else if occurs j a then (markFreeOf k j a).map (.app (.lam b) ·)
+    else (markFreeOf k (j + 1) b).map fun b' => .app (.lam b') a
+  | j, .app f a =>
+    if occurs j f then (markFreeOf k j f).map (.app · a) else (markFreeOf k j a).map (.app f ·)
+  | j, .pair a b =>
+    if occurs j a then (markFreeOf k j a).map (.pair · b) else (markFreeOf k j b).map (.pair a ·)
+  | j, .seq a b =>
+    if occurs j a then (markFreeOf k j a).map (.seq · b) else (markFreeOf k j b).map (.seq a ·)
+  | j, .inj₁ a => (markFreeOf k j a).map .inj₁
+  | j, .inj₂ a => (markFreeOf k j a).map .inj₂
+  | j, .letpair a b =>
+    if occurs j a then (markFreeOf k j a).map (.letpair · b)
+    else (markFreeOf k (j + 2) b).map (.letpair a ·)
+  | j, .case a b c =>
+    if occurs j a then (markFreeOf k j a).map (.case · b c)
+    else if occurs (j + 1) b then (markFreeOf k (j + 1) b).map (.case a · c)
+    else (markFreeOf k (j + 1) c).map (.case a b ·)
+  | _, _ => none
+
+/-- The borrow `withbor (alloc v) cb` of a fresh cell, marked as the scope `k`'s, when `b` (the
+body binding the owner at `1` and the result at `0`) frees the owner and uses it nowhere else. -/
+def scopedAt? (k : Nat) (w b : Expr) : Option (Expr × Expr) :=
+  match w with
+  | .app (.app wb (.app (.prim .alloc) v)) cb =>
+    if wb != withborE || occursN 1 b != 1 then none else
+    (markFreeOf k 1 b).map fun b' =>
+      let mk : Expr := .prim (.lit (.i64 (scopedMark ||| k.toUInt64)))
+      (.app (.app wb (.app (.prim .alloc) (.pair mk v))) cb, b')
+  | _ => none
+
+/-- The term with each scoped cell's `alloc` and `free` marked: `let (c, r) = W; b` and
+`(λp. let (c, r) = p; b) W` for `W = withbor (alloc v) cb`. -/
+def markScoped : Expr → StateM Nat Expr
+  | .letpair w b => do
+    let w ← markScoped w
+    let b ← markScoped b
+    let k ← get
+    match scopedAt? k w b with
+    | some (w', b') => set (k + 1); pure (.letpair w' b')
+    | none => pure (.letpair w b)
+  | .app (.lam (.letpair (.var 0) b)) w => do
+    let b ← markScoped b
+    let w ← markScoped w
+    let k ← get
+    match (if occurs 2 b then none else scopedAt? k w b) with
+    | some (w', b') => set (k + 1); pure (.app (.lam (.letpair (.var 0) b')) w')
+    | none => pure (.app (.lam (.letpair (.var 0) b)) w)
+  | .pair a b => return .pair (← markScoped a) (← markScoped b)
+  | .seq a b => return .seq (← markScoped a) (← markScoped b)
+  | .app a b => return .app (← markScoped a) (← markScoped b)
+  | .inj₁ a => return .inj₁ (← markScoped a)
+  | .inj₂ a => return .inj₂ (← markScoped a)
+  | .lam b => return .lam (← markScoped b)
+  | .case a b c => return .case (← markScoped a) (← markScoped b) (← markScoped c)
+  | e => pure e
+
 /-! ### Polymorphic lets
 
 `let x = λy. b in N` with the λ closed is SPEC §24's `[let-poly]`: each occurrence of `x` in `N`
@@ -617,6 +708,16 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       set { s with uses := s.uses.modify u ({ · with codes := cs.toArray }),
                    useStack := s.useStack.drop 1 }
       return t
+  | .app (.prim .alloc) (.pair (.prim (.lit (.i64 m))) v) => do
+      -- A scoped cell's `alloc`, marked by `markScoped`.
+      let some k := scopedOf? m | throw "an `alloc` of a pair with a literal"
+      let av ← fresh
+      return .letv av (← conv ctx v (k₂ + 2)) (.prim (.scopedAlloc k) [av])
+  | .app (.prim .free) (.pair (.prim (.lit (.i64 m))) l) => do
+      -- A scoped cell's `free`, marked by `markScoped`.
+      let some k := scopedOf? m | throw "a `free` of a pair with a literal"
+      let av ← fresh
+      return .letv av (← conv ctx l (k₂ + 2)) (.prim (.scopedFree k) [av])
   | .app (.prim .tab) (.pair (.prim (.lit (.i64 m))) arg) => do
       -- A literal view's `tab`, marked by `markLitViews`: `litTab`.
       if m != litViewMark then throw "a `tab` of a non-length"
@@ -754,7 +855,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
 β-reducts, each use marked when `mark` (`polyLets`), then the literal views and finaliser frames
 marked. -/
 def prepare (sel : Nat → Bool) (mark : Bool) (e : Expr) : Expr :=
-  markUbinds (markLitViews ((polyLets sel mark e).run' 0))
+  (markScoped (markUbinds (markLitViews ((polyLets sel mark e).run' 0)))).run' 0
 
 /-- Closure-convert a closed term, the polymorphic lets `sel` holds of replaced by their β-reducts
 and, with `mark`, their uses marked; and the marked uses. `convert` (`Backend/Clos/Poly.lean`)
@@ -786,6 +887,14 @@ def ioValue (k : IOOp) : CM Tm := do
     c ← register ⟨[], u, .drop u (.clos c [])⟩
   pure (.clos c [])
 
+/-- A word of the program's data for a capability's cell, after the literals' bytes: its
+address.  `[spec §35]` -/
+def staticWord : CM Nat := do
+  let d := (← get).data
+  let pad := (8 - d.size % 8) % 8
+  modify fun s => { s with data := d ++ Array.replicate (pad + 8) 0 }
+  return dataBase + d.size + pad
+
 /-- Take the capabilities back from `main`'s result `(caps, a)`: each cell is freed with its
 content, and the result is `a`. -/
 def epilogue (r : Var) (n : Nat) : CM Tm := do
@@ -807,8 +916,9 @@ def epilogue (r : Var) (n : Nat) : CM Tm := do
   return .letpair caps a r (wrap body)
 
 /-- Closure-convert `main` over its externs, given in declaration order: the prologue binds each
-extern to its host implementation (a fresh cell holding a capability's file descriptor, or an
-operation's closure), an extern `main` does not use is dropped, and when there are capabilities
+extern to its host implementation (a cell holding a capability's file descriptor, a word of the
+program's data (`staticWord`, `Op.staticCell`), or an operation's closure), an extern `main`
+does not use is dropped, and when there are capabilities
 `main`'s result `(caps, a)` gives them back and `a` is the program's value. When `main` returns a
 loop (`loops`), its value is the loop, and the taking back is the code `fin`, run on the value
 the loop finishes with. The polymorphic lets `sel` holds of are replaced by their β-reducts and,
@@ -836,10 +946,11 @@ def convertMainWith (sel : Nat → Bool) (mark : Bool) (exts : List ExtImpl) (lo
       match ext with
       | .cap fd =>
         let l ← fresh
-        body := .letv l (.lit (.i32 fd.toUInt32)) (.letv x (.prim .alloc [l]) body)
+        let a ← staticWord
+        body := .letv l (.lit (.i32 fd.toUInt32)) (.letv x (.prim (.staticCell a) [l]) body)
       | .clockCell =>
         let l ← fresh
-        body := .letv l (.lit (.i64 0)) (.letv x (.prim .alloc [l]) body)
+        body := .letv l (.lit (.i64 0)) (.letv x (.prim (.staticCell (← staticWord)) [l]) body)
       | .io k => body := .letv x (← ioValue k) body
     return (body, fin)
   let ((t, fin), s) ← act.run { next := dummy + 1, codes := #[], pre := .of e }

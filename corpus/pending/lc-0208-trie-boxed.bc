@@ -1,5 +1,5 @@
 -- pending: a destructor and folds for `mu` with `X` under `array` (#182)
--- now: 94:56: `io_d23` is not consumed in its scope, and its type `(1 + (mu X. (1 + 1) * array (1 + X))) + 1 + (mu X. (1 + 1) * array (1 + X))` has no destructor
+-- now: 97:56: `io_d23` is not consumed in its scope, and its type `(1 + (mu X. (1 + 1) * array (1 + X))) + 1 + (mu X. (1 + 1) * array (1 + X))` has no destructor
 --
 -- LeetCode 208, Implement Trie (Prefix Tree), with each node owning an array of its children:
 -- Rust's `Trie { children: [Option<Box<Trie>>; 26], end: bool }`, here `mu X. bool * array

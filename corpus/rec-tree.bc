@@ -1,7 +1,7 @@
 -- A recursive walk of a `mu` type (SPEC §20): `build` makes a complete tree, `sum` adds its
 -- values, each by calling itself on the subtrees. Both are driven by `bounded`, natively: the
--- run allocates the tree's own objects and nothing else, two per node (the node and the boxed
--- empty subtree beside it, SPEC §6's boxed fields) less the root's, and dispatches no call.
+-- run allocates the tree's own objects and nothing else, one per node (its payload, boxed at the
+-- sum, its subtrees inline: SPEC §35), none for an empty subtree, and dispatches no call.
 --
 -- Answer: i32[8128]: the 127 nodes of a tree of depth 7, numbered 1 to 127 as a heap numbers
 -- them, sum to 127 * 128 / 2. A walk that skipped a subtree gives less; one that visited a node

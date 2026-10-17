@@ -1001,6 +1001,27 @@ def machine (O : Ops) (F : SFacts) (k : Nat) (c : Code) : KM Code := do
     if counts[g]! > 0 then kset groups[g]!.1 (← E.resumeCode g)
   return { c with body }
 
+/-- The scoped cells (`Op.scopedAlloc`) open at a resumption point of a term, given those open
+before it: a `perform`, an `await`, or a call of a code that may suspend, between the cell's
+`alloc` and its `free`. With the scopes open after the term (both arms' of a `case`).
+`[spec §35]` -/
+def crossedScopes (F : SFacts) : List Nat → Tm → List Nat × List Nat
+  | op, .prim (.scopedAlloc k) _ => (k :: op, [])
+  | op, .prim (.scopedFree k) _ => (op.erase k, [])
+  | op, .perform _ | op, .await _ _ => (op, op)
+  | op, .app f _ | op, .run f _ => (op, if F.pollAt f then op else [])
+  | op, .letv _ e b =>
+    let (o₁, c₁) := crossedScopes F op e
+    let (o₂, c₂) := crossedScopes F o₁ b
+    (o₂, c₁ ++ c₂)
+  | op, .letpair _ _ _ b | op, .copy _ _ b | op, .drop _ b | op, .catch _ b | op, .fin _ _ b
+  | op, .catchAll b => crossedScopes F op b
+  | op, .case _ _ b₁ _ b₂ | op, .when _ _ _ _ b₁ b₂ =>
+    let (o₁, c₁) := crossedScopes F op b₁
+    let (o₂, c₂) := crossedScopes F op b₂
+    ((o₁ ++ o₂).eraseDups, c₁ ++ c₂)
+  | op, _ => (op, [])
+
 /-- A code that answers plain values: no `perform`, and no call of a code that may suspend. -/
 def plainCode (F : SFacts) (t : Tm) : Except String Tm := do
   if let some f := t.calls.find? F.pollAt then
@@ -1081,12 +1102,15 @@ def Prog.capture (p : Prog) (wrapAnswers : Bool := false) : Except String Prog :
         kset ck { kc with body := ← liftE (kapBody h anyRaise cr) }
     -- Each code that answers outcomes becomes a machine; the others are plain.
     let codes₁ := (← get).codes
+    let mut crossed : List Nat := []
     for k in [0:codes₁.size] do
       let c := codes₁[k]!
-      if F.poll[k]?.getD false then kset k (← machine O F k c)
+      if F.poll[k]?.getD false then
+        crossed := crossed ++ (crossedScopes F [] c.body).2
+        kset k (← machine O F k c)
       else kset k { c with body := ← liftE ((plainCode F c.body).mapError (s!"in code {k}: " ++ ·)) }
     let main ← liftE ((plainCode F main).mapError ("in main: " ++ ·))
-    pure { p with main, codes := (← get).codes }
+    pure { p with main, codes := (← get).codes, suspendedScopes := crossed.eraseDups }
   act.run' ⟨next, p.codes, #[]⟩
 where
   liftE {α} (x : Except String α) : KM α := match x with

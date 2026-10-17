@@ -9,7 +9,7 @@
 -- Answer: the second field of each line of `fields.in` (a line with one field prints nothing),
 -- and `i32[4]`, the lines read. A cut at the wrong index, or a field that ran past its comma,
 -- would print other bytes. The buffer grows twice, at the long line, and is reused for every
--- other line: the allocations are the buffer, its two growths and the two capabilities' cells.
+-- other line: the allocations are the buffer and its two growths (the cells are static, §35).
 
 include textio
 

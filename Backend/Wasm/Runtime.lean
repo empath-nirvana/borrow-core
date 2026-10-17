@@ -11,10 +11,10 @@ in `Backend/README.md`:
   subtracts one from the live count. An address below the heap, in the program's read-only data
   (a literal's view), is not freed.
 - `$live` is the live count, and is exported as `live_objects`.
-- `$allocs` counts the calls of `$alloc`, `$indirect` the dispatched calls (closure calls
-  whose code a switch chooses at run time), and `$copies` the copies of a variable at a
-  non-trivial type (a generated copy, which allocates); the compiled code counts the last two
-  when it is compiled for counting.
+- `$allocs` counts the calls of `$alloc` and the arguments' reservation (below), `$indirect`
+  the dispatched calls (closure calls whose code a switch chooses at run time), and `$copies`
+  the copies of a variable at a non-trivial type (a generated copy, which allocates); the
+  compiled code counts the last two when it is compiled for counting.
 - `$putc b` writes the low byte of `b` to standard output, and `$putfd fd b` to the stream
   `fd` (WASI `fd_write`; `write(2)` in libc).
 - `$getc fd` reads one byte of the stream `fd`, or answers `-1` at its end or on an error
@@ -25,8 +25,12 @@ in `Backend/README.md`:
   the stream ends or fails, and answers how many it read (`read_into`).
 - The stream `0xFFFFFFFF` is the program's arguments, each followed by `0`, the program's own name
   left out (SPEC §34): `$args` reads them once, with `args_sizes_get` and `args_get`, into memory
-  `$reserve` takes from the heap (it is no range, and is never freed), and `$getc` and `$getv`
-  read from there.
+  `$reserve` takes from the heap (it is no range, and is never freed, but counts as one
+  allocation in `$allocs`), and `$getc` and `$getv` read from there.
+- `$sp` is the stack pointer of the frames of scoped cells (SPEC §35): a function with a frame
+  lowers it by the frame's size on entry, trapping when it would pass `$stackLimit`, and raises it
+  back before it returns or tail-calls (`Backend/Wasm/Lower.lean`, `lowerFn`). A slot is no range
+  and is never given to `$free`.
 - `$now c` answers the nanoseconds of the monotonic clock since the clock's first use, saturating
   at `2^63 − 1`, and `$sleep c ns` waits at least `ns` nanoseconds when `ns > 0` (`poll_oneoff`
   on one relative clock subscription); `c` is the clock's cell, whose content is the model's and
@@ -35,8 +39,10 @@ in `Backend/README.md`:
 Layout: bytes `0–31` hold `$putfd`'s and `$putv`'s I/O vector and byte, bytes `32–63` `$getc`'s
 and `$getv`'s, bytes `64–71` the clock's reading, `72–79` `$args`'s sizes, `128–175` `$sleep`'s
 subscription, `192–231` its event and count; `1024 + 4s` holds the head of the
-free list of ranges of `s` words, for `s < 1024`; the program's read-only data (its literals'
-bytes) starts at `16384`, and ranges start after it, each preceded by a word holding its size. `$alloc` pops the free list of its size, or else bumps `$heap`, growing
+free list of ranges of `s` words, for `s < 1024`; the program's data (its literals' bytes, then a
+word for each capability's cell) starts at `16384`; a module with frames has its stack after the
+data (`Backend/Wasm/Print.lean`, `stackBytes`), growing down from its top; ranges start after
+that, each preceded by a word holding its size. `$alloc` pops the free list of its size, or else bumps `$heap`, growing
 memory as needed. A freed range of `s < 1024` words is pushed onto its free list (its first
 word links the list); a larger one is not reused.
 -/
@@ -58,6 +64,8 @@ def runtimeWat : String := "
     (func $args_get (param i32 i32) (result i32)))
   (memory (export \"memory\") 1)
   (global $heap (mut i32) (i32.const 16376))
+  (global $sp (mut i64) (i64.const 0))
+  (global $stackLimit i64 (i64.const 0))
   (global $live (mut i64) (i64.const 0))
   (global $allocs (mut i64) (i64.const 0))
   (global $indirect (mut i64) (i64.const 0))
@@ -141,6 +149,7 @@ def runtimeWat : String := "
     (local $argc i32) (local $size i32) (local $argv i32) (local $buf i32)
     (if (global.get $argsRead) (then return))
     (global.set $argsRead (i32.const 1))
+    (global.set $allocs (i64.add (global.get $allocs) (i64.const 1)))
     (if (call $args_sizes_get (i32.const 72) (i32.const 76)) (then return))
     (local.set $argc (i32.load (i32.const 72)))
     (local.set $size (i32.load (i32.const 76)))

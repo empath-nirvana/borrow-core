@@ -31,7 +31,7 @@ fn string_new(cap: i32) -> string = buf_new[u8](cap)
 -- Length 0, the capacity kept. The unused bytes of a string need no filler.
 fn clear_str(s: string) -> string = let (a, n) = s; (a, 0)
 
--- The bytes of `t` appended: the string grows once, to fit.
+-- The bytes of `t` appended: the string grows once, to fit. Allocates when it grows (`reserve`).
 fn push_str<'a>(s: string, t: text 'a) -> string * 1 =
   let (t, u) = array_copy['a, u8] t;
   let m = len(u);
@@ -45,7 +45,7 @@ fn push_str<'a>(s: string, t: text 'a) -> string * 1 =
   array_forget['a, u8](t);
   ((a, n + m), ())
 
--- The bytes of a literal appended.
+-- The bytes of a literal appended. Allocates when the string grows (`reserve`).
 fn push_lit(s: string, l: lit) -> string * 1 =
   let (m, f) = l;
   let (a, n) = reserve(s, m);
@@ -54,11 +54,11 @@ fn push_lit(s: string, l: lit) -> string * 1 =
     m, 0, (a, (n, f)));
   ((a, n + m), ())
 
--- A byte appended.
+-- A byte appended. Allocates when the string grows (`push`).
 fn push_byte(s: string, x: u8) -> string * 1 = push(s, x)
 
--- The character `c` (a scalar value) appended as UTF-8: one to four bytes. A value that is not a
--- scalar value (a surrogate, or past U+10FFFF) is appended as U+FFFD.
+-- The character `c` (a scalar value) appended as UTF-8, one to four bytes; allocates when the
+-- string grows (`push`). A surrogate, or a value past U+10FFFF, is appended as U+FFFD.
 fn push_char(s: string, c: i32) -> string * 1 =
   let c = if host[lt_u32](c, 1114112) && not(55296 <= c && c < 57344) { c } else { 65533 };
   let b = host[and32](c, 63);
@@ -86,21 +86,21 @@ fn dec_step(k: i32, st: string * (i32 * (i32 * bool))) -> string * (i32 * (i32 *
   let d2 = match host[div_u32](d, 10) { inl x -> x | inr u -> 1 };
   (s, (n - q * d, (d2, show)))
 
--- `x` in decimal, with a `-` when it is negative.
+-- `x` in decimal, with a `-` when it is negative. Allocates when the string grows (`push`).
 fn push_dec(s: string, x: i32) -> string * 1 =
   let (s, n) = if x < 0 { let (s, _) = push(s, b'-'); (s, 0 - x) } else { (s, x) };
   let (s, _) = count_fold[string * (i32 * (i32 * bool))](
     !{ (k, st) -> dec_step(k, st) }, 10, 0, (s, (n, (1000000000, false))));
   (s, ())
 
--- A copy of `t` as a new string of capacity its length.
+-- A copy of `t` as a new string of capacity its length. Allocates: the string.
 fn to_string<'a>(t: text 'a) -> string =
   let (t, u) = array_copy['a, u8] t;
   let s = string_new(len(u));
   let (s, _) = push_str(s, t);
   s
 
--- A literal as a new string.
+-- A literal as a new string. Allocates: the string.
 fn string_of_lit(l: lit) -> string =
   let (m, f) = l;
   let s = string_new(m);

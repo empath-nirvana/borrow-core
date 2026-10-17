@@ -49,9 +49,10 @@ ends. `scripts/falsify.sh` runs every accepted program the four ways and require
 `live 0`; `bcc kernel negatives` are untyped terms that must trip each check.
 No stage optimizes beyond choosing layouts, defunctionalizing closures, calling known codes
 directly, compiling `let` as a binding, cancelling the copy and drop inside `swap`, compiling
-the Z combinator's fixed point natively, building codata thunks eagerly, merging equal codes, and
-compiling owned folds by pointer reversal (Stack). The WAT printer and the runtime are the only steps no Lean interpreter
-observes.
+the Z combinator's fixed point natively, building codata thunks eagerly, merging equal codes,
+compiling owned folds by pointer reversal (Stack), placing scoped cells in frame slots and
+capability cells in the data (Representation). The WAT printer and the runtime are the only
+steps no Lean interpreter observes.
 
 **Closure conversion** (`Clos/Convert.lean`). De Bruijn indices become variables, and each
 intermediate result is named, in the machine's evaluation order: pairs left to right, an
@@ -262,7 +263,28 @@ The only objects are:
 - **Boxed fields.** A recursive type would be infinitely wide, so the fields that close a cycle
   of pair and sum edges (the back edges of one depth-first search over the types) are stored as
   a pointer to an object of the field's own layout. `μX. 1 + (A ⊗ X)` is a tag and a payload
-  `A ⊗ X` whose `X` is a pointer: `nil` allocates nothing, each `cons` one object.
+  `A ⊗ X` whose `X` is a pointer: `nil` allocates nothing, each `cons` one object. Where the
+  search boxes two fields or more of one cycle, a sum's payload is boxed instead when that boxes
+  fewer (`Clos/Types.lean`, `sumBoxes`): a tree `μX. 1 + X ⊗ (A ⊗ X)` is a tag and a pointer to
+  an object holding the node, its two children inline, so a node is one object and an empty
+  child none, as Rust's `Option<Box<Node>>` (two objects a node, the empty children's among them,
+  when each child is boxed).
+
+Not objects:
+
+- **Scoped cells** (SPEC §35). The cell a lend of a value (`f(&x)`, `f(&mut x)`), a `modify` of a
+  value or a handler's state given as a value (`with h(e) { … }`) borrows lives exactly as long
+  as the borrow: the erasure is `let (c, r) = withbor (alloc v) cb; … free c …`, which the
+  conversion recognises (`Clos/Convert.lean`, `markScoped`) and marks (`scopedAlloc`,
+  `scopedFree`, which every stage runs as `alloc` and `free`). When no resumption point lies
+  between the two (`Clos/Capture.lean`, `crossedScopes`), the cell is a slot of its code's frame
+  on the stack (`Flat.Exp.slot`, `Flat/Lower.lean`, `frameScopes`), as C and Rust place a local
+  whose address is taken: no allocation and no live range. A scope a suspension crosses keeps a
+  heap cell, since the suspended state holds its address; typing excludes it today (a
+  continuation held across a lend is T1, #172), so no program has one.
+- **Capability cells.** `stdin`, `stdout`, `stderr`, `args` and `clock` are words of the
+  program's data, after its literals (`Clos/Convert.lean`, `staticWord`; `Op.staticCell`):
+  the prologue stores the descriptor there, and the epilogue's `free` frees nothing.
 
 - **Literals** (SPEC §17). A string literal's tabulator, the λ the elaborator writes for `"…"`
   (a compare with the length, then a search on the index down to one byte), is recognised by
@@ -288,7 +310,8 @@ data: a closure that captures a closure of its own type, as a fold whose result 
 does (`add` of `13-2-sum-prog` and `sum-prog-exact`, one type). `bcc-counts --sites` lists
 them. They keep the heap
 representation until the source can say `box` (#54). Placement of the objects that remain
-(stack, frame arena or heap, by escape analysis) is also open.
+(stack, frame arena or heap, by escape analysis) is also open; the scoped cells' frame slots are
+the one placement made, by the elaborator's scope, not by an analysis.
 
 The dispatched calls that remain are calls of those closures: a chain of functions built by
 a fold, whose links are different codes (`13-2-sum-prog`'s and `sum-prog-exact`'s `add`).
@@ -401,6 +424,11 @@ The flat-IR interpreter implements exactly this (and never reuses an address, so
 load, store or free outside a live range). The WAT implementation keeps one free list per size
 below 1024 words and bumps a heap pointer otherwise, growing memory as needed; each range is
 preceded by a word holding its size, and the runtime's own data sits below address 16384.
+A module with frames has a stack of 1 MiB between the program's data and the heap, growing down;
+`$sp` is its pointer, lowered by a function's frame on entry and raised back before each return
+and tail call (`Wasm/Lower.lean`, `lowerFn`), with a trap past its end. Frame slots are no
+ranges: `live` does not count them, and the flat-IR interpreter gives each call fresh frame
+addresses and checks every access to a slot against the slot's scope and its frame's call.
 `live` is exported as `live_objects`; `$putc` writes a byte to standard output, `$putfd` a byte to a
 descriptor and `$getc` reads one (SPEC §11). `$allocs` counts the calls of `$alloc` and `$indirect`
 the dispatched calls, which the compiled code counts when it is built to count.
@@ -422,7 +450,8 @@ A `main` may declare the standard externs (`Frontend/Check/Externs.lean`): the c
 `F (U (loop (Caps ⊗ A) (Caps ⊗ B)))` for a program that runs until its input ends.
 
 - **Compiled stages.** `Clos.convertMain` binds each extern before `main` runs: a capability to a
-  fresh cell holding its file descriptor (`i32[0]`, `[1]`, `[2]`), an operation to the closure
+  cell holding its file descriptor (`i32[0]`, `[1]`, `[2]`), a word of the program's data
+  (Representation), an operation to the closure
   `Λ. λm. op m` over the closure-IR primitive `io readByte`/`io writeByte`. An extern `main` does
   not use is dropped. After `main`, its result `(caps, a)` is taken apart, each capability cell
   freed, and `a` is the program's value. In the flat IR the operations are inline, over the
@@ -442,7 +471,8 @@ A `main` may declare the standard externs (`Frontend/Check/Externs.lean`): the c
   use) and `$sleep` (`poll_oneoff` on one relative clock subscription). `args` is a cell holding
   the stream `0xFFFFFFFF`, which `$getc` and `$getv` read from the arguments `$args` reads once
   (`args_sizes_get`, `args_get`) into memory `$reserve` takes from the top of the heap: no object,
-  never freed. The interpreters read it from the arguments they are given (`bcc interp … --
+  never freed, and counted as one allocation (the flat-IR interpreter counts it at the first
+  read of `args` too). The interpreters read it from the arguments they are given (`bcc interp … --
   arg…`). The libc counterparts are `clock_gettime`, `nanosleep` and `argv`.
 - **Loops.** When `main` returns a loop, every stage drives it: it calls the loop on `inl ()`
   until the answer is `inl r` (the source stage by `driveSource`, the closure IR by its `drive`,
@@ -476,12 +506,14 @@ variable used by two sequential parts) at a non-trivial type, which calls the ty
 copy; a copy at a trivial type is the words themselves and is not counted. `scripts/compile-corpus.sh` checks every corpus program's counts against
 `corpus/counts.expected`: a count above the file fails the gate, one below it is reported, and
 `--write-counts` rewrites the file. A pure arithmetic program (`int-arith`, `int-ops`) allocates
-nothing and makes no indirect call; what remains is cells, arrays, boxed recursive fields (a
+nothing and makes no indirect call; frame slots and capability cells are not counted (they are no
+allocation); what remains is cells, arrays, boxed recursive fields (a
 list's nodes), and the heap environments of the few recursive closure types (Open), whose calls
 are the only dispatched ones. `bcc-counts --sites <file>` prints the program's closure calls: how
 many are direct because the union has one code, how many more because the flow analysis finds
-one, how many are dispatched; the recursive closure types; and the owned folds, how many are
-compiled by pointer reversal and how many recurse.
+one, how many are dispatched; the recursive closure types; the owned folds, how many are
+compiled by pointer reversal and how many recurse; and the scoped cells, how many are frame
+slots and how many are allocated.
 
 ## Verification (#15)
 
@@ -592,8 +624,9 @@ merging finds the layout types of its result, which the flat IR reuses.
 ## Scope
 
 No optimizations beyond the layouts, defunctionalization, direct calls of known codes, native
-fixed points, pointer reversal and building a closure in its code's own environment object; no
-stack switching. SPEC §19's handlers, operations and cancels are lowered, but for a name with both
+fixed points, pointer reversal, building a closure in its code's own environment object, frame
+slots for scoped cells and static capability cells; no stack switching. SPEC §19's handlers,
+operations and cancels are lowered, but for a name with both
 control and abortive operations and a cancel whose finalisers may raise under a handler reached
 from its own body (rejected). A tail-resumptive operation is a direct call when its handlers have
 one closed clause; one whose clause captures values is a state machine (its captures passed as
