@@ -49,7 +49,7 @@ one is adding its name here. The elaboration brings in `io`, `div` and `prelude`
 (`elaborateS`); `include m` brings in any of them. -/
 def libNames : List String :=
   ["io", "div", "prelude", "lend", "adapters", "slice", "buf", "text", "textio", "iters", "fail",
-   "yield", "rec", "aff", "async", "list", "sys", "wasi", "key", "map", "float"]
+   "yield", "rec", "aff", "async", "list", "sys", "wasi", "key", "map", "float", "arith"]
 
 /-- The directory of the library: `$BCC_LIB` when it is set; otherwise `lib/` of the checkout
 whose `.lake/build/bin/` holds the running `bcc`; otherwise `lib/` of the working directory. -/
@@ -1860,7 +1860,8 @@ gives (`TCx`), into core with every bracket argument written:
 * **Literals** are `i32[n]`, or `i64[n]`/`u8[n]` where an `i64`/`u8` is expected. An operator
   at `u8` widens its operands and works at `i32` (`byteOp`).
 * **Operators** `+ - * == != < <= > >=` are the host operation at the width of their operands:
-  `add32` or `add64`, …, `lt_s32`, …; a comparison returns `1 + 1`, `inr ()` for true.
+  `add32` or `add64`, …, `lt_s32`, …; a comparison returns `1 + 1`, `inr ()` for true. `/` and
+  `%` at an integer width are the partial division taken apart (SPEC §39, `divCase`).
 * **`alloc(e)`, `free(e)`, `swap(c, e)`** are the constants with their type arguments read off
   their operands.
 * **A call `f(e)` of a persistent function** `f : !(A => B)` is `(unbang f) e`: `!` is not a
@@ -1886,14 +1887,16 @@ def _root_.Frontend.SurfOp.host (w : BoCa.Width) (o : SurfOp) : BoCa.HostOp :=
   | some f, .eq => .frel f .eq | some f, .ne => .frel f .ne | some f, .lt => .frel f .lt
   | some f, .le => .frel f .le | some f, .gt => .frel f .gt | some f, .ge => .frel f .ge
   | none, .add => .bin w .add | none, .sub => .bin w .sub | none, .mul => .bin w .mul
-  -- An integer has no `/`: its division answers a sum, `host[div_s32]`. `surfV` refuses it first.
-  | none, .div => .div w .div_s
+  -- An integer's division answers a sum, `host[div_s32]`: `divCase` takes it apart (SPEC §39).
+  | none, .div => .div w .div_s | none, .rem => .div w .rem_s
+  -- A float has no remainder (Wasm has no `frem`): `surfOp` refuses `%` at a float first.
+  | some f, .rem => .fbin f .div
   | none, .eq => .rel w .eq | none, .ne => .rel w .ne | none, .lt => .rel w .lt_s
   | none, .le => .rel w .le_s | none, .gt => .rel w .gt_s | none, .ge => .rel w .ge_s
 
 /-- The family of a surface operator (SPEC §36): `(+)` is `op_add`. -/
 def _root_.Frontend.SurfOp.polyName : SurfOp → String
-  | .add => "op_add" | .sub => "op_sub" | .mul => "op_mul" | .div => "op_div"
+  | .add => "op_add" | .sub => "op_sub" | .mul => "op_mul" | .div => "op_div" | .rem => "op_rem"
   | .eq => "op_eq" | .ne => "op_ne" | .lt => "op_lt" | .le => "op_le"
   | .gt => "op_gt" | .ge => "op_ge"
 
@@ -1925,6 +1928,107 @@ def byteOp (sp osp psp : Span) (o : SurfOp) (a b : Val) : Val :=
   match o with
   | .add | .sub | .mul => h .wrap8 r
   | _ => r
+
+/-! #### Integer division  `[spec §39]`
+
+`/` and `%` at an integer width are the host's `div_s`/`rem_s` (`div_u`/`rem_u` at `u8`, on the
+widened operands), which answer `inl q`, or `inr ()` where Wasm traps. A division that can fail
+reaches here written as the checked division taken apart by a `case` whose error arm raises
+`Fail[DivError]` (`Frontend/Elab/Divisions.lean`). A division by a nonzero literal (other than
+`-1` for `/` at a signed width) cannot fail: it is the operation with its `inr` arm never taken,
+which the backend lowers to the bare instruction (`Backend/Flat/Lower.lean`, `divTest`). -/
+
+/-- The error type of an integer division, `lib/arith.bc`'s `DivError`: `inl ()` a zero divisor,
+`inr ()` an overflow. -/
+def divErrTy (sp : Span) : VTy := .sum sp (.unit sp) (.unit sp)
+
+/-- The divisor `b`, elaborated at the width `w`, is a literal at which `o` cannot fail: nonzero,
+and for `/` at a signed width not `-1`. -/
+def safeDivisor (w : BoCa.Width) (o : SurfOp) : Val → Bool
+  | .const _ (.lit (.i32 n)) => w == .w32 && n != 0 && (o != .div || n != 0xFFFFFFFF)
+  | .const _ (.lit (.i64 n)) => w == .w64 && n != 0 && (o != .div || n != 0xFFFFFFFFFFFFFFFF)
+  | .const _ (.lit (.u8 n)) => w == .w8 && n != 0
+  | _ => false
+
+/-- The host operation of the integer division `o` at `w`: a byte's is the unsigned one at `i32`,
+on its operands widened. -/
+def divHost (w : BoCa.Width) (o : SurfOp) : BoCa.HostOp :=
+  match w, o with
+  | .w8, .rem => .div .w32 .rem_u
+  | .w8, _ => .div .w32 .div_u
+  | _, .rem => .div w .rem_s
+  | _, _ => .div w .div_s
+
+/-- `a o b` at the integer width `w` by the host operation, its answer taken apart: `ok q` on the
+quotient or remainder `q` (a byte's narrowed), `err b` where it has none. `a` and `b` are bound
+first, in order. -/
+def divCase (sp : Span) (w : BoCa.Width) (o : SurfOp) (a b : Val) (ok : Val → Comp)
+    (err : Val → Comp) : Comp :=
+  let h (op : BoCa.HostOp) (x : Val) : Val := .app sp (.unbang sp (.const sp (.host op))) x
+  let tag := s!"{sp.start.line}_{sp.start.col}"
+  let ta := s!"io_da{tag}"
+  let tb := s!"io_db{tag}"
+  let tq := s!"io_dq{tag}"
+  let tu := s!"io_du{tag}"
+  let wide (x : String) : Val := if w == .w8 then h .extend8_u (.var sp x) else .var sp x
+  let q : Val := if w == .w8 then h .wrap8 (.var sp tq) else .var sp tq
+  .bind sp ⟨ta, sp⟩ (some (.int sp w)) (.ret sp a)
+    (.bind sp ⟨tb, sp⟩ (some (.int sp w)) (.ret sp b)
+      (.case sp (h (divHost w o) (.pair sp (wide ta) (wide tb))) ⟨tq, sp⟩ (ok q) ⟨tu, sp⟩
+        (err (.var sp tb)))
+      false) false
+
+/-- `a o b` at `w` by a divisor at which it cannot fail (`safeDivisor`): its `inr` arm is never
+taken, and answers `0` only to be typed. -/
+def divUnchecked (sp : Span) (w : BoCa.Width) (o : SurfOp) (a b : Val) : Val :=
+  .run sp (divCase sp w o a b (.ret sp) (fun _ => .ret sp (litAt sp w 0)))
+
+/-- `checked_div(a, b)` or `checked_rem(a, b)` at `w`: `inl q`, or `inr e`, `e : DivError`:
+`inl ()` for a zero divisor, `inr ()` for `MIN / -1`. -/
+def divChecked (sp : Span) (w : BoCa.Width) (o : SurfOp) (a b : Val) : Val :=
+  let R : VTy := .sum sp (.int sp w) (divErrTy sp)
+  let res (V : Val) : Comp := .ret sp (.ascribe sp V R)
+  let zero : Val := .inl sp (.unit sp)
+  let ovf : Val := .inr sp (.unit sp)
+  let err (bv : Val) : Comp :=
+    if o == .div && w != .w8 then
+      -- `eqz` answers `inr ()` when the divisor is zero; otherwise the division overflowed.
+      let u : Ident := ⟨s!"io_dz{sp.start.line}_{sp.start.col}", sp⟩
+      let ev : Ident := ⟨s!"io_de{sp.start.line}_{sp.start.col}", sp⟩
+      .bind sp ev (some (divErrTy sp))
+        (.case sp (.app sp (.unbang sp (.const sp (.host (.eqz w)))) bv) u (.ret sp ovf) u
+          (.ret sp zero))
+        (res (.inr sp (.var sp ev.name))) false
+    else res (.inr sp zero)
+  .run sp (divCase sp w o a b (fun q => res (.inl sp q)) err)
+
+/-- The arm `K v` in place of the terminal `return (inj v : R)` of a checked division's arm
+(`divChecked`), the injection on the side `right`. -/
+def checkedArm (right : Bool) (K : Val → Comp) : Nat → Comp → Option Comp
+  | 0, _ => none
+  | k + 1, M => match M, right with
+    | .ret _ (.ascribe _ (.inl _ v) _), false => some (K v)
+    | .ret _ (.ascribe _ (.inr _ v) _), true => some (K v)
+    | .bind sp z A M₁ M₂ l, _ => (checkedArm right K k M₂).map (.bind sp z A M₁ · l)
+    | _, _ => none
+
+/-- `case checked_div(a, b) { inl x -> M | inr y -> N }`, its scrutinee elaborated by
+`divChecked`: the division's own `case`, with `M` in its answer's arm and `N` in its error's,
+so that the division is tested once (SPEC §39). -/
+def fuseChecked (V : Val) (x : Ident) (M : Comp) (y : Ident) (N : Comp) : Option Comp :=
+  match V with
+  | .run _ (.bind s₁ ta A₁ Ma (.bind s₂ tb A₂ Mb (.case s₃ h q OK u ERR) l₂) l₁) =>
+    if !(ta.name.startsWith "io_da" && tb.name.startsWith "io_db") then none else do
+    let OK' ← checkedArm false (fun v => .bind x.span x none (.ret x.span v) M false) 8 OK
+    let ERR' ← checkedArm true (fun v => .bind y.span y (some (divErrTy y.span)) (.ret y.span v) N
+      false) 8 ERR
+    pure (.bind s₁ ta A₁ Ma (.bind s₂ tb A₂ Mb (.case s₃ h q OK' u ERR') l₂) l₁)
+  | _ => none
+
+/-- The origin that records that `main` is served `Fail[DivError]` by `main_div_error` (SPEC
+§39): it answers `inr ()` when a division's error reached it, and the program then exits with
+status 1. -/
+def exitTag : String := "§exit"
 
 def isHoleTy : VTy → Bool
   | .name _ "_" => true
@@ -2452,8 +2556,8 @@ def phNames (k : Nat) (p : CVTy) : Bool := phOccurs 64 [] (phBase + k) p
 
 /-- The operators' families, by the name the operator's family has (`(+)` is `op_add`). -/
 def opFamilies : List (String × String) :=
-  [("op_add", "+"), ("op_sub", "-"), ("op_mul", "*"), ("op_div", "/"), ("op_eq", "=="), ("op_ne", "!="),
-   ("op_lt", "<"), ("op_le", "<="), ("op_gt", ">"), ("op_ge", ">=")]
+  [("op_add", "+"), ("op_sub", "-"), ("op_mul", "*"), ("op_div", "/"), ("op_rem", "%"),
+   ("op_eq", "=="), ("op_ne", "!="), ("op_lt", "<"), ("op_le", "<="), ("op_gt", ">"), ("op_ge", ">=")]
 
 /-- A family as a message names it: `` `(+)` `` for an operator's. -/
 def polyShown (fam : String) : String :=
@@ -3172,42 +3276,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       let L := L.fill (fun h => if h == "io_hole_a" then some a else if h == "io_hole_b" then some b
         else none) (fun _ => none)
       surfV n c exp (.run sp L)
-    | .app sp (.sugar osp (.op o)) (.pair psp a b) => do
-      let arith := match o with | .add | .sub | .mul | .div => true | _ => false
-      -- The width: expected of an arithmetic result, or an operand's other than a literal's
-      -- (a literal takes the width of the other operand); `i32` by default.
-      let a₀ ← surfV n c none a
-      let b₀ ← surfV n c none b
-      let isLit : Val → Bool := fun | .sugar _ (.lit _) | .sugar _ (.flit ..) => true | _ => false
-      let isFlit : Val → Bool := fun | .sugar _ (.flit ..) => true | _ => false
-      -- An operand's type, with the instances its calls made in scope when it is one.
-      let tOf (v v₀ : Val) : DM (Option CVTy) := do
-        if isLit v then return none
-        match c.tyV v₀ with
-        | some t => pure (some t)
-        | none => pure ((← refresh c).tyV v₀)
-      let ta ← tOf a a₀
-      let tb ← tOf b b₀
-      -- At a type that is not a machine integer, the case of the operator's family at that type
-      -- when the program gives one (SPEC §36); the machine cases are the instructions below.
-      let fam := o.polyName
-      let polys := (← get).polys
-      if polys.isFam fam then
-        if let some T := ta.orElse fun _ => tb then
-          if (widthOf (some T)).isNone && (polySelect polys c sp fam T).toOption.isSome then
-            let Ts ← (c.surface osp T : Except Error VTy)
-            return ← surfV n c exp (.app sp (.defApp osp fam [Ts]) (.pair psp a b))
-      -- Two literals: `f64` when either is a float literal.
-      let dflt : BoCa.Width := if isFlit a || isFlit b then .f64 else .w32
-      let w := ((if arith then widthOf exp else none).orElse fun _ =>
-        (widthOf ta).orElse fun _ => widthOf tb).getD dflt
-      if o == .div && w.float?.isNone then
-        throw ⟨osp, s!"`/` is the float division, and its operands are `{ppT (.int w)}`; an " ++
-          "integer's division answers a sum: `host[div_s32]`, `host[div_u32]`, … (SPEC §8)"⟩
-      let a' ← surfV n c (some (.int w)) a
-      let b' ← surfV n c (some (.int w)) b
-      if w == .w8 then return byteOp sp osp psp o a' b'
-      pure (.app sp (.unbang osp (.const osp (.host (o.host w)))) (.pair psp a' b'))
+    | .app sp (.sugar osp (.op o)) (.pair psp a b) => surfOp n c exp sp osp psp o false a b
+    | .app sp (.sugar osp (.checked o)) (.pair psp a b) => surfOp n c exp sp osp psp o true a b
     | .app sp (.sugar ksp (.call k)) W => do
       let W' ← surfV n c none W
       match k, W' with
@@ -3569,6 +3639,9 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           "`borrow mut` take a cell `ref A` or an array (a pair of cells for a family), `modify` a `mut` " ++
           "borrow"⟩
     | .app sp f W => do
+      -- `checked_div(a, b)`, `checked_rem(a, b)` (SPEC §39).
+      if let (some o, .pair psp a b) := (Elab.Instances.checkedOp? c f, W) then
+        return ← surfOp n c exp sp f.span psp o true a b
       -- A call of a generic function: its type and lifetime arguments filled.
       if let some V' ← genericCall n c sp exp f W none then return V'
       let f' ← surfV n c none f
@@ -3675,6 +3748,64 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       pure (.bangThunkv sp (← surfC n c (exp.bind fun | .bang (.thunk C) => some C | _ => none) M))
     | .run sp M => do pure (.run sp (← surfC n c (exp.map .ret) M))
     | V => pure V
+
+/-- A binary operator applied to `a` and `b`, at the width of its operands; with `checked`,
+`checked_div(a, b)` or `checked_rem(a, b)` (SPEC §39). -/
+def surfOp : Nat → TCx → Option CVTy → Span → Span → Span → SurfOp → Bool → Val → Val → DM Val
+  | 0, _, _, sp, _, _, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
+  | n + 1, c, exp, sp, osp, psp, o, checked, a, b => do
+      let c := { c with E := { c.E with row := none } }
+      let isDiv := o == .div || o == .rem
+      let arith := match o with | .add | .sub | .mul | .div | .rem => true | _ => false
+      -- The width: expected of an arithmetic result, or an operand's other than a literal's
+      -- (a literal takes the width of the other operand); `i32` by default. A checked division's
+      -- result is a sum, so only its operands give the width.
+      let a₀ ← surfV n c none a
+      let b₀ ← surfV n c none b
+      let isLit : Val → Bool := fun | .sugar _ (.lit _) | .sugar _ (.flit ..) => true | _ => false
+      let isFlit : Val → Bool := fun | .sugar _ (.flit ..) => true | _ => false
+      -- An operand's type, with the instances its calls made in scope when it is one.
+      let tOf (v v₀ : Val) : DM (Option CVTy) := do
+        if isLit v then return none
+        match c.tyV v₀ with
+        | some t => pure (some t)
+        | none => pure ((← refresh c).tyV v₀)
+      let ta ← tOf a a₀
+      let tb ← tOf b b₀
+      let okAt (sp' : Span) (V : Val) (T : VTy) : Val :=
+        .run sp' (.ret sp' (.ascribe sp' (.inl sp' V) (.sum sp' T (divErrTy sp'))))
+      -- At a type that is not a machine integer, the case of the operator's family at that type
+      -- when the program gives one (SPEC §36); the machine cases are the instructions below. A
+      -- checked division there cannot fail.
+      let fam := o.polyName
+      let polys := (← get).polys
+      if polys.isFam fam then
+        if let some T := ta.orElse fun _ => tb then
+          if (widthOf (some T)).isNone && (polySelect polys c sp fam T).toOption.isSome then
+            let Ts ← (c.surface osp T : Except Error VTy)
+            let call ← surfV n c (if checked then some T else exp)
+              (.app sp (.defApp osp fam [Ts]) (.pair psp a b))
+            return if checked then okAt sp call Ts else call
+      -- Two literals: `f64` when either is a float literal.
+      let dflt : BoCa.Width := if isFlit a || isFlit b then .f64 else .w32
+      let w := ((if arith && !checked then widthOf exp else none).orElse fun _ =>
+        (widthOf ta).orElse fun _ => widthOf tb).getD dflt
+      if o == .rem && w.float?.isSome then
+        throw ⟨osp, s!"`%` at `{ppT (.int w)}`: a float has no remainder (SPEC §39)"⟩
+      let a' ← surfV n c (some (.int w)) a
+      let b' ← surfV n c (some (.int w)) b
+      if isDiv && w.float?.isNone then
+        if checked then return divChecked sp w o a' b'
+        if safeDivisor w o b' then return divUnchecked sp w o a' b'
+        throw ⟨osp, s!"`{o.str}` at `{ppT (.int w)}` can fail here (a zero divisor" ++
+          (if o == .div && w != .w8 then ", or `MIN / -1`" else "") ++ "), and its effect was " ++
+          "not given where effects are resolved: the operands' width is not known there. Ascribe " ++
+          s!"an operand, `(x : {ppT (.int w)})` (SPEC §39)"⟩
+      if checked then
+        return okAt sp (.app sp (.unbang osp (.const osp (.host (o.host w)))) (.pair psp a' b'))
+          (.int sp w)
+      if w == .w8 then return byteOp sp osp psp o a' b'
+      pure (.app sp (.unbang osp (.const osp (.host (o.host w)))) (.pair psp a' b'))
 
 /-- A computation with its surface forms elaborated; `exp` is its type, when known. -/
 def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
@@ -3801,7 +3932,9 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let V' ← surfV n c none V
       let c ← refresh c
       let (Ax, Ay) := sumTys c V'
-      pure (.case sp V' x (← surfC n (c.push x.name Ax) exp M) y (← surfC n (c.push y.name Ay) exp N))
+      let M' ← surfC n (c.push x.name Ax) exp M
+      let N' ← surfC n (c.push y.name Ay) exp N
+      pure ((fuseChecked V' x M' y N').getD (.case sp V' x M' y N'))
     | .lamL sp x b M => do
       let bl := (c.elabL b).getD .top
       let e := match exp with | some (.all _ _ C) => some C | _ => none
@@ -5362,7 +5495,7 @@ when a program gives the operator a case: `poly op_add[T](a: T, b: T) -> T`, a c
 answer `bool`. -/
 def opFamily (sp : Span) (fam : String) : Decl :=
   let T := VTy.name sp "T"
-  let R := if ["op_add", "op_sub", "op_mul", "op_div"].contains fam then T else .sum sp (.unit sp) (.unit sp)
+  let R := if ["op_add", "op_sub", "op_mul", "op_div", "op_rem"].contains fam then T else .sum sp (.unit sp) (.unit sp)
   .poly sp ⟨fam, sp⟩ [⟨"T", sp⟩] [] none (.bang sp (.lolli sp (.tensor sp T T) R))
     (.bangThunkv sp (.lam sp ⟨"io_pp", sp⟩ (.tensor sp T T)
       (.letPair sp ⟨"a", sp⟩ ⟨"b", sp⟩ (.var sp "io_pp") (.force sp ⟨"io_poly_body", sp⟩))))
@@ -5457,25 +5590,55 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let implicitLibs ← [("io", mayIO), ("div", divNames.any (usesName · p₁)),
       ("prelude", ["true", "false", "not", "to_i32", "to_u8"].any (usesName · p₁))].flatMapM
     fun (m, may) => if may && !incl.contains m then libRaw m else pure []
+  -- A division that can fail raises `Fail[DivError]` (`lib/arith.bc`, SPEC §39). When the program
+  -- has a division that may and does not include the module, the module is elaborated first if
+  -- one can fail (`Elab.Effects.elaborate`'s `divLib`), and the platform, whose standard error
+  -- `main_div_error` writes on, just before `main` if `main` needs it (`platform`).
+  let mayFail := decls₀.any Elab.Divisions.Decl.hasCandidate
+  -- The module with what it includes, whether or not the program includes that too: the effects
+  -- pass puts them first, ahead of the program's copies of them.
+  let (divDecls, inclD) ← (if mayFail && !incl.contains "arith" then expandIncludes
+      libNames.length [Decl.include Span.none ⟨"arith", Span.none⟩] ([], [])
+      else pure ([], []) : Except Error _)
+  let inclD := incl ++ inclD
+  let (wasiDecls, _) ← (if (mayFail || incl.contains "arith") && !incl.contains "wasi" then
+      expandIncludes libNames.length [Decl.include Span.none ⟨"wasi", Span.none⟩] ([], inclD)
+      else pure ([], inclD) : Except Error _)
   -- The capabilities are passed and handed back by name (SPEC §11): a local so named is one.
-  let gs := divNames ++ ((decls₀ ++ implicitLibs).flatMap Decl.globals).filter (!capNames.contains ·)
+  let gs := divNames ++ ((divDecls ++ wasiDecls ++ decls₀ ++ implicitLibs).flatMap
+    Decl.globals).filter (!capNames.contains ·)
   let hyg := Decl.hyg (Hygiene.isGlobal gs)
   let decls₀ := decls₀.map hyg
   let p₀ : Program := ⟨p₀.decls.map hyg⟩
   let libOf (m : String) : Except Error (List Decl) := do pure ((← libRaw m).map hyg)
+  let divDecls := divDecls.map hyg
+  let wasiDecls := wasiDecls.map hyg
   -- Effects and handlers (SPEC §18), before the rest of the sugar: the clauses become functions,
   -- the functions with a row their copies, and each `with` a borrow block.
-  let libFns := (decls₀.filter fun d => !p₀.decls.contains d).filterMap fun
+  let libFns := (decls₀.filter (fun d => !p₀.decls.contains d) ++ divDecls ++ wasiDecls).filterMap fun
     | .def_ _ m _ _ _ _ | .effect _ m _ _ | .handler _ m _ _ _ _ _ => some m.name
     | .chandler _ h => some h.name.name
     | _ => none
   -- The I/O library's declarations, with the system interface's and the platform's (SPEC §34):
   -- not reported, however the program brings them in.
-  let (ioRef, _) ← (if incl.contains "io" then expandIncludes libNames.length
+  let (ioRef, _) ← (if incl.contains "io" || incl.contains "sys" then expandIncludes libNames.length
     [Decl.include Span.none ⟨"io", Span.none⟩] ([], []) else pure ([], []) : Except Error _)
   let ioRef := ioRef.map hyg
-  let hide := decls₀.filter ioRef.contains
-  let (decls, fx, perTurn, pcaps) ← (Elab.Effects.elaborate decls₀ libFns hide : Except Error _)
+  let hide := decls₀.filter (fun d => ioRef.contains d) ++ divDecls ++ wasiDecls
+  let fxr ← (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls : Except Error _)
+  let (decls, fx, perTurn, pcaps) := (fxr.decls, fxr.reports, fxr.perTurn, fxr.platform)
+  if fxr.exits then note .none exitTag
+  -- The platform elaborated for `main` is the library's: its externs and its handlers' clauses
+  -- come first, before the program's own declarations.
+  let platNames := wasiDecls.filterMap fun
+    | .extern _ n _ | .handler _ n _ _ _ _ _ => some n.name
+    | .chandler _ h => some h.name.name
+    | _ => none
+  let isPlat (d : Decl) : Bool := match d with
+    | .extern _ n _ => platNames.contains n.name
+    | .def_ _ n _ _ _ _ => platNames.any fun h => n.name.startsWith (h ++ "__")
+    | _ => false
+  let decls := if fxr.withPlatform then decls.filter isPlat ++ decls.filter (!isPlat ·) else decls
   -- Effects, then rows, lowering shapes and calls, each in source order.
   let kindOf (m : String) : Nat := match (m.splitOn " ").head? with
     | some "effect" => 0 | some "row" => 1 | some "lowering" => 2 | _ => 3
@@ -5516,8 +5679,11 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
     | _ => false
   -- The capabilities `main` names, and those it lends to the platform's handlers (SPEC §34).
   let cs := capNames.filter fun c => (ambientCaps p₀).contains c || pcaps.contains c
-  let ioLib ← if cs.isEmpty || incl.contains "io" then pure [] else
-    if mayIO then pure ioAll else libOf "io"
+  -- A `main` whose only platform capability is the one `main_div_error` writes its error on needs
+  -- none of the I/O library (SPEC §39).
+  let ioLib ← if cs.isEmpty || incl.contains "io" || (!mayIO && (incl.contains "wasi" || fxr.exits))
+    then pure []
+    else if mayIO then pure ioAll else libOf "io"
   let exts := cs.map fun c => Decl.extern Span.none ⟨c, Span.none⟩ (capTy Span.none c)
   let mains ← decls.filterMapM fun
     | .main sp C M => do
@@ -5540,7 +5706,8 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
         | .chandler _ h => n.name.startsWith (h.name.name ++ "__")
         | _ => false
     | d => p₀.decls.contains d
-  let ioN := if ioFirst then (rest.takeWhile (!own ·)).length else 0
+  let ioN := if ioFirst || fxr.withDivLib || fxr.withPlatform then (rest.takeWhile (!own ·)).length
+    else 0
   let decls ← (lib ++ rest ++ exts ++ mains).mapM fun
     | .def_ sp n ps A V mk => return .def_ sp n ps A (← V.elab false) mk
     | .main sp C M => return .main sp C (← M.elab false)

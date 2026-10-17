@@ -155,7 +155,8 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Elab/Respan.lean` | `respan`: generated syntax at the span of the sugar that produced it |
 | `Elab/Meta.lean` | typing contexts for the sugar (`TCx`: the program as written, typed by inference), loops and iterators read off types, and metavariables that annotate bindings of injections (`fillProgram`) |
 | `Elab/Match.lean` | first-order matching of a type against a pattern whose placeholders are type parameters (generic calls, decision 45) |
-| `Elab/Instances.lean` | the type arguments of each operation's instance and of each template call, typed at the declaration's own types before effects are resolved (SPEC §38) |
+| `Elab/Instances.lean` | the type arguments of each operation's instance and of each template call, typed at the declaration's own types before effects are resolved (SPEC §38); the integer divisions that can fail, at their operands' width (SPEC §39) |
+| `Elab/Divisions.lean` | each division that can fail written as the checked division and a `raise` of `Fail[DivError]`, before rows are inferred (SPEC §39) |
 | `Elab/Effects.lean` | effects and handlers (SPEC §18–§21, §30–§34, §38): every operation resolved to the handler of its instance, rows, copies, handler sites |
 | `Elab/Tir.lean` | the typed IR: one node per node of the program, with its type, binders (identity, type, class) and effect (`docs/typed-elaboration.md` §1.1) |
 | `Elab/Infer.lean` | inference: the typed IR of each declaration, bidirectionally, in the environment the checker uses; the checker's synthesis answers for the core's substitutions |

@@ -627,9 +627,10 @@ def interpSource (o : Opts) (fuel : Nat) (e : Expr) : Except String (Output × S
   pure (.mk' .empty .empty (report (pvOfExpr v.1) s.cells.size), stats o s)
 
 /-- `interpIO`, checked. -/
-def interpIO (o : Opts) (fuel : Nat) (e : Expr) : Except String (Output × String) := do
+def interpIO (o : Opts) (fuel : Nat) (e : Expr) (exits : Bool := false) :
+    Except String (Output × String) := do
   let (v, s) ← runChecked o fuel {} (prepare o e)
-  pure (← ioOutputN v s.cells.size, stats o s)
+  pure (← ioOutputN v s.cells.size exits, stats o s)
 
 /-- `driveSource`, checked: each observation's run checked, every lend suspended at each boundary
 between observations, and every lend ended once the loop finishes. -/
@@ -652,9 +653,10 @@ def runLoop (o : Opts) (fuel : Nat) (e : Expr) : Except String (Val × St) := do
   driveSource o fuel fuel s d
 
 /-- `interpIOLoop`, checked. -/
-def interpIOLoop (o : Opts) (fuel : Nat) (e : Expr) : Except String (Output × String) := do
+def interpIOLoop (o : Opts) (fuel : Nat) (e : Expr) (exits : Bool := false) :
+    Except String (Output × String) := do
   let (v, s') ← runLoop o fuel e
-  pure (← ioOutputN v s'.cells.size, stats o s')
+  pure (← ioOutputN v s'.cells.size exits, stats o s')
 
 /-- A closed term that returns a loop, driven to its end, checked: its value and the cells left. -/
 def interpLoop (o : Opts) (fuel : Nat) (e : Expr) : Except String (Output × String) := do

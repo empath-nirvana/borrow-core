@@ -1,0 +1,2 @@
+((inl (inl i32[250]), (inr (inl ()), inl (inr (inr ())))), (inl i32[250], (inr (inl ()), inr (inr ()))))
+live 0

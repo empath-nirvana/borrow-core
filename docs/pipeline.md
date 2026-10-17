@@ -56,7 +56,7 @@ interp`, the source stage). Every corpus program's `<name>.out` and every book b
 `-- answer:` and `-- output:` lines record what it prints, and the clos, flat and wasm stages are
 always checked against them. The interpreter takes minutes on the largest programs, so the gate
 runs it only where a golden is unverified (`scripts/source-stage.sh`): on the corpus programs
-whose `.bc`, `.in`, `.out` or `.err` differs from the merge base with origin/main, and on the book
+whose `.bc`, `.in`, `.out`, `.err` or `.status` (its exit status) differs from the merge base with origin/main, and on the book
 blocks whose text is not among the merge base's blocks. An unchanged program and golden were
 checked against the interpreter by the gate that merged them. `make gate-full`
 (`scripts/ci-local.sh --source`, or `BCC_SOURCE=1` for a single script) runs it on every program

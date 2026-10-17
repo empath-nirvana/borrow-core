@@ -1,0 +1,33 @@
+-- A function that raises its own `Fail[E]` and also divides (SPEC §39, constraint 1 of #513). The
+-- division's error is `Fail[DivError]`, another instance of `Fail` beside the program's own
+-- (SPEC §38): `mean` raises its own error, a negative count, and divides by the count, so its
+-- inferred row has two entries, `Fail[i32], Fail[DivError]`, with nothing written. Each `with`
+-- handles the instance its type arguments name, and passes the other.
+--
+-- The two are handled apart or together:
+-- * `apart`: `to_result[i32, …]` handles the program's own error and `default[DivError, …](0)`
+--   the division's, which passes the `with` of `Fail[i32]`;
+-- * `merged`: `map_err[DivError, i32, …](f)` raises the division's error again as the program's
+--   own, `f(e)`, so one `to_result` sees both; the program's own error passes `map_err`.
+--
+-- Answer: `((inl i32[5], (inr i32[4294967293], inl i32[0])), ((inl i32[5], (inr i32[4294967293],
+-- inr i32[4294967196])), inr i32[4294967196]))`: 20 / 4; the count −3; the zero count recovered as
+-- `0`; then the same three merged, the zero count as the error −100; and `merged`'s handlers
+-- written in `main`, −100 again.
+
+include arith
+
+-- The mean of `n` entries summing to `sum`; a negative count is the program's own error.
+fn mean(sum: i32, n: i32) -> i32 = if n < 0 { raise(n) } else { sum / n }
+
+fn apart(sum: i32, n: i32) -> i32 + i32 =
+  with to_result[i32, i32] { with default[DivError, i32](0) { mean(sum, n) } }
+
+fn merged(sum: i32, n: i32) -> i32 + i32 =
+  with to_result[i32, i32] { with map_err[DivError, i32, i32](!{ e -> 0 - 100 }) { mean(sum, n) } }
+
+main -> ((i32 + i32) * ((i32 + i32) * (i32 + i32))) * (((i32 + i32) * ((i32 + i32) * (i32 + i32))) * (i32 + i32)) =
+  let a = (apart(20, 4), (apart(20, 0 - 3), apart(20, 0)));
+  let b = (merged(20, 4), (merged(20, 0 - 3), merged(20, 0)));
+  let c = with to_result[i32, i32] { with map_err[DivError, i32, i32](!{ e -> 0 - 100 }) { mean(7, 0) } };
+  (a, (b, c))

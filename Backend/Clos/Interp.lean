@@ -528,7 +528,7 @@ def drive (codes : Array Code) : Nat → CV → IM CV
 drop it, and count the objects left. -/
 def interp (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []) :
     Except String Output := do
-  let act : IM String := do
+  let act : IM (String × UInt32) := do
     let (v, rest) ← eval p.codes fuel [] p.main
     if !rest.isEmpty then throw "closure IR: main leaves variables unconsumed"
     let v ← match p.fin with
@@ -538,10 +538,10 @@ def interp (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []
         callClos p.codes fuel (← allocObj (.clos c [])) r
     let pv ← observe objFuel v
     deepDrop objFuel v
-    pure (report pv (← get).heap.size)
+    pure (reportExit p.exits pv (← get).heap.size)
   let s₀ : St := { heap := {}, next := 1, input, args, out := .empty, err := .empty,
                        data := p.data }
-  let (r, s) ← act.run s₀
-  pure (.mk' s.out s.err r)
+  let ((r, st), s) ← act.run s₀
+  pure (.mk' s.out s.err r st)
 
 end Backend.Clos

@@ -1,0 +1,7 @@
+-- expect: 5:4: `mean` raises `Fail[DivError]`, a division's error (SPEC §39), which its written row does not list
+-- A written row is a promise that the inferred row is within it (SPEC §18): `mean` divides by a
+-- variable, which raises `Fail[DivError]`, and its written row lists only its own `Fail[i32]`.
+-- Writing `with Fail[i32], Fail[DivError]` accepts it (`corpus/div-own-fail.bc` infers both).
+fn mean(sum: i32, n: i32) -> i32 with Fail[i32] = if n < 0 { raise(n) } else { sum / n }
+
+main -> i32 + i32 = with to_result[i32, i32] { mean(4, 2) }

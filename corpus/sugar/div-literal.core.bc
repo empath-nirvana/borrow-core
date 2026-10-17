@@ -1,0 +1,19 @@
+-- `div-literal.bc` written by hand in core: each division the host's operation on its operands,
+-- whose `inr` arm, where Wasm traps, is never taken at a nonzero divisor.
+def f : !(i32 => i32) =
+  !thunkv fun (p : i32) ->
+    a <- return p;
+    return (unbang host[sub32]) ((unbang host[add32]) ((unbang host[add32])
+      (run (x : i32 <- return a;
+            d : i32 <- return i32[10];
+            case (unbang host[div_s32]) (x, d) { inl q -> return q | inr u -> return i32[0] }),
+       run (x : i32 <- return a;
+            d : i32 <- return i32[10];
+            case (unbang host[rem_s32]) (x, d) { inl q -> return q | inr u -> return i32[0] })),
+      run (x : i32 <- return a;
+           d : i32 <- return i32[7];
+           case (unbang host[div_s32]) (x, d) { inl q -> return q | inr u -> return i32[0] })),
+      i32[3])
+
+main : F i32 =
+  return (unbang f) i32[47]

@@ -17,8 +17,6 @@
 
 include map
 
-fn rem(a: i32, b: i32) -> i32 = match host[rem_s32](a, b) { inl r -> r | inr u -> 0 }
-
 fn adj(i: i32) -> buf i32 = let (b, _) = push(buf_new[i32](2), i * 10 + 1); let (b, _) = push(b, 0); b
 
 -- A buffer read through a view of it: its first element and its length.
@@ -42,7 +40,7 @@ fn each<'k, 'x>(r: MapRef[i32, buf i32]<'k, 'x>) -> i32 =
   let mut s = 0;
   for e in map_iter(r) {
     let (k, v) = e;
-    let d = borrow imm *v { 'y, b -> let (a, n) = b; n + rem(at(a, 0, 0), 10) };
+    let d = borrow imm *v { 'y, b -> let (a, n) = b; n + at(a, 0, 0) % 10 };
     s = s + k + d
   };
   s
@@ -52,7 +50,7 @@ fn each<'k, 'x>(r: MapRef[i32, buf i32]<'k, 'x>) -> i32 =
 fn runs(u: i32) -> i32 * i32 =
   let mut m = map_new[i32, i32](8);
   for i in 0..200 { let o = map_insert(&mut m, 64 * i, i); () };
-  for i in 0..200 { if rem(i, 3) == 0 { let o = map_remove(&mut m, 64 * i); () } else { () } };
+  for i in 0..200 { if i % 3 == 0 { let o = map_remove(&mut m, 64 * i); () } else { () } };
   let mut sum = 0;
   for i in 0..200 {
     let o = map_lookup(&m, 64 * i);

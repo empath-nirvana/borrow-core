@@ -67,7 +67,7 @@ def interp (stage file : String) (args : List String) : IO UInt32 := do
     let err ← IO.getStderr
     err.write o.err
     err.flush
-    return 0
+    return o.status
   | .error e => IO.eprintln e; return 1
 
 /-- Write the falsifier's output on `file` (`Backend.interpChecked`): as `interp`, and its
@@ -88,7 +88,7 @@ def interpChecked (mode file : String) (stats : Bool) (args : List String) : IO 
     err.write o.err
     if stats then err.putStrLn st
     err.flush
-    return 0
+    return o.status
   | .error e => IO.eprintln e; return 1
 
 /-- The options of `bcc interp` and `bcc kernel interp`: the stage, the falsifier's mode, and

@@ -2,9 +2,10 @@ import Frontend.Parser
 import Frontend.Print
 import Frontend.Elab.Subst
 import Frontend.Elab.Instances
+import Frontend.Elab.Divisions
 
 /-!
-# Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21, §30, §32, §34, §38]`
+# Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21, §30, §32, §34, §38, §39]`
 
 An effect declares operations, each **answering** (`fn`) or **control** (`ctl`, with the
 structural qualifier of its continuation: affine by default, `linear ctl`, `multi ctl`). An effect
@@ -69,6 +70,12 @@ rest of the sugar; it knows no effect by name.
   lends it to its clause. A task of a handler that keeps its continuation boxed at its lifetime
   (`Env.gives`) is given the capabilities its body uses, lent for the borrow block around it
   (`Cx.givenC`).
+* **Integer division** (§39). A division that can fail at its operands' width raises
+  `Fail[DivError]`: the walk that reads the instances decides it, and it is written as the checked
+  division and a `raise` before rows are inferred (`Frontend/Elab/Divisions.lean`); `lib/arith.bc`
+  is elaborated first for it when the program does not include it (`elaborate`'s `divLib`). A
+  `Fail[DivError]` that `main` performs and handles nowhere is served by `main_div_error` around
+  the rest of `main` from its first statement that performs it (`divMain`, `splitDiv`).
 
 What is not provided, with the message that says so: an operation inside a closure or block that
 is not run in place, other than an effectful block; a block parameter stored; a function with a
@@ -298,6 +305,9 @@ structure St where
   ports : List (String × List (Nat × List (Site × Bool))) := []
   /-- The capabilities `main` lends to the platform's handlers (SPEC §34). -/
   platform : List String := []
+  /-- `main` is served `Fail[DivError]` by `main_div_error` (SPEC §39): it answers `inr ()` when a
+  division's error reached it, which the runtime reports as the exit status. -/
+  exits : Bool := false
 
 abbrev EM := StateT St (Except Error)
 
@@ -311,6 +321,18 @@ def freshSite : EM Nat := modifyGet fun s => (s.site, { s with site := s.site + 
 its text, at `sp`. -/
 def report (sp : Span) (kind : String) (msg : String) : EM Unit :=
   modify fun s => if s.quiet then s else { s with reports := s.reports.push (sp, kind ++ " " ++ msg) }
+
+/-- The handler that serves `main` a division's error it handles nowhere (SPEC §39). -/
+def mainDivHandler : String := "main_div_error"
+
+/-- `m` with nothing reported when `q`: the code of `main`'s handler of a division's error. -/
+def quietIf {α} (q : Bool) (m : EM α) : EM α := do
+  if !q then return ← m
+  let q₀ := (← get).quiet
+  modify fun s => { s with quiet := true }
+  let r ← m
+  modify fun s => { s with quiet := q₀ }
+  pure r
 
 /-- The depth bound for the traversals below. -/
 def fuel : Nat := 1 <<< 16
@@ -680,7 +702,11 @@ def rowV (env : Env) : Nat → Val → List Inst
       let inner := match env.handler? h, env.chandler? h with
         | some hs, _ => env.withoutInst inner hs.eff (some []) nm
         | none, some ch =>
-          env.union (env.withoutInst inner ch.eff.name (env.handledArgs ch As nm inner) nm) (handlerRow ch)
+          -- The clauses run in the scope of the `with`: the answering effects they perform are
+          -- its own, as its row's control effects are (SPEC §39).
+          let cl := ch.clauses.foldl (fun r c => env.union r (rowC env n c.body)) (rowC env n ch.ret.2.2)
+          env.union (env.union (env.withoutInst inner ch.eff.name (env.handledArgs ch As nm inner) nm)
+            (handlerRow ch)) (cl.filter (env.answering ·.eff))
         | none, none =>
           if env.driver? h then match env.exhEff? with
             | some e => without inner e.name
@@ -2412,7 +2438,10 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     let site : Site := { eff := e, n, args := effArgs, sp := ksp, name := nm,
                          what := s!"`with {((nm.map (· ++ " = ")).getD "")}{ch.name.name}`" }
     let ents := cx.env.siteOps site
-    report ksp "lowering" (s!"with {ch.name.name} ({e}): a handler, the static name {n}; " ++
+    -- `main`'s handler of a division's error is reported by `divMain`, as the platform's handlers
+    -- of the system interface are by `platformMain`.
+    let plat := ch.name.name == mainDivHandler
+    quietIf plat <| report ksp "lowering" (s!"with {ch.name.name} ({e}): a handler, the static name {n}; " ++
       ", ".intercalate (((cx.env.eff? e).map (·.ops)).getD [] |>.map fun o =>
         s!"{o.name.name} {if o.abortive then "abortive: a branch per call (final ctl)"
           else match o.qual with
@@ -2488,10 +2517,10 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       let cxA : Cx := { cx with env := envH,
                                 sites := outerR ++ cx.sites.filter fun s => !outer.any (·.eff == s.eff) }
       let csA := cxA.needC after
-      let after' ← trC k cxA csA true after
+      let after' ← quietIf plat (trC k cxA csA true after)
       let t ← fresh "fx_b"
       let r ← fresh "fx_v"
-      report ksp "lowering" (s!"with {ch.name.name}: every operation abortive, so its clauses run " ++
+      quietIf plat <| report ksp "lowering" (s!"with {ch.name.name}: every operation abortive, so its clauses run " ++
         "after the handler, in the scope of the `with`")
       -- Its type is the handler's answer, which the typed elaboration names `fx_res{n}`.
       let resT : VTy := capsTy sp csA (.name sp s!"fx_res{n}")
@@ -3510,17 +3539,123 @@ def platformMain (env : Env) (sp : Span) (M : Comp) : EM (List Cap) := do
       "which each operation lends")
   pure caps
 
+/-! ### A division's error at `main`  `[spec §39]` -/
+
+/-- The instance a division raises, `Fail[DivError]`, unnamed. -/
+def Env.isDivInst (env : Env) (i : Inst) : Bool :=
+  i.eff == "Fail" && i.name.isNone && match i.args with
+    | some As => env.sameArgs As [Instances.divErrorTy]
+    | none => false
+
+/-- `main`'s body split at the first statement of its spine that performs `Fail[DivError]`: the
+statements before it, as a context, and the rest. A call in that statement whose argument is a
+call that performs none (`f(read_input())`) has its argument bound before it, in the context: the
+argument is evaluated first either way. -/
+def splitDiv (env : Env) : Nat → Comp → (Comp → Comp) × Comp
+  | 0, M => (id, M)
+  | k + 1, M =>
+    let perf (M : Comp) : Bool := (rowC env fuel M).any env.isDivInst
+    let perfV (V : Val) : Bool := (rowV env fuel V).any env.isDivInst
+    -- The argument of the statement's call, bound first.
+    let lift (V : Val) (rest : Val → Comp) : Option ((Comp → Comp) × Comp) :=
+      match V with
+      | .app asp f W@(.app ..) =>
+        if perfV W then none else
+          let a : Ident := ⟨s!"fx_ma{asp.start.line}_{asp.start.col}", asp⟩
+          some (fun H => .bind asp a none (.ret asp W) H false, rest (.app asp f (.var asp a.name)))
+      | _ => none
+    match M with
+    | .bind sp x A M₁ N lin =>
+      if perf M₁ then
+        match M₁ with
+        | .ret rsp V => (lift V fun V' => .bind sp x A (.ret rsp V') N lin).getD (id, M)
+        | _ => (id, M)
+      else
+        let (K, R) := splitDiv env k N
+        (fun H => .bind sp x A M₁ (K H) lin, R)
+    | .letPair sp x y V N =>
+      if perfV V then (lift V fun V' => .letPair sp x y V' N).getD (id, M) else
+        let (K, R) := splitDiv env k N
+        (fun H => .letPair sp x y V (K H), R)
+    | .letUnit sp V N =>
+      if perfV V then (id, M) else
+        let (K, R) := splitDiv env k N
+        (fun H => .letUnit sp V (K H), R)
+    | .for_ sp x V M₁ N =>
+      if perfV V || perf M₁ then (id, M) else
+        let (K, R) := splitDiv env k N
+        (fun H => .for_ sp x V M₁ (K H), R)
+    | M => (id, M)
+
+/-- `main` with `main_div_error` (`lib/arith.bc`) around its body when the body performs
+`Fail[DivError]` and handles it nowhere (SPEC §39), as the platform's handlers serve the system
+interface (SPEC §34): a division's error unwinds what `main` built, the handler writes it on
+standard error, and `main` answers `inr ()`, which the runtime reports as a failing exit status.
+`main : F A` becomes `main : F (A + 1)`. The handler is around the rest of the body from its
+first statement that performs it: what comes before (reading the input, which loops over a
+capability `main` holds) runs outside it, as it cannot fail. A handler of `Fail[DivError]` inside
+`main` is innermost, as any is. -/
+def divMain (env : Env) (sp : Span) (C : CTy) (M : Comp) : EM (CTy × Comp) := do
+  unless (rowC env fuel M).any env.isDivInst do return (C, M)
+  let some _ := env.chandler? mainDivHandler | return (C, M)
+  let A ← match C with
+    | .ret _ A => pure A
+    | _ => throw ⟨sp, "`main` returns a loop and a division's error may reach it: handle " ++
+        "`Fail[DivError]` in `main` (`with default(…) { … }`); `main_div_error` around a loop is " ++
+        "not provided (SPEC §39)"⟩
+  let (K, M) := splitDiv env fuel M
+  if let some c := ["stdin", "stdout", "stderr"].find? (M.lentNames true).contains then
+    throw ⟨sp, s!"`main` uses the cell `{c}` and a division's error may reach it: " ++
+      s!"`{mainDivHandler}` would abandon the cell; handle `Fail[DivError]` in `main` " ++
+      "(`with default(…) { … }`), or perform the stream's effect instead of naming its cell " ++
+      "(SPEC §39, §34)"⟩
+  report sp "lowering" (s!"main: `Fail[DivError]` is served by `{mainDivHandler}`: a division's " ++
+    "error unwinds, is written on standard error, and the program exits with status 1")
+  modify fun s => { s with exits := true }
+  let x ← fresh "fx_l"
+  let b ← fresh "fx_c"
+  let W : Val := .app sp (.app sp (.sugar sp (.handle mainDivHandler x [] none)) (.unit sp))
+    (.thunkv sp (.lam sp ⟨b, sp⟩ (.name sp "_") M))
+  pure (.ret sp (.sum sp A (.unit sp)), K (.ret sp W))
+
+/-- What `elaborate` gives: the declarations, the reports for `bcc check`, the sites observed one
+turn at a time, the capabilities `main` lends to the platform, whether `main` answers `inr ()` on a
+division's error (SPEC §39), and whether `divLib` and `platform` were elaborated with the program. -/
+structure Result where
+  decls : List Decl
+  reports : List (Span × String)
+  perTurn : List Nat
+  platform : List String
+  exits : Bool := false
+  withDivLib : Bool := false
+  withPlatform : Bool := false
+
 /-- The program with its effects elaborated, and the reports for `bcc check`: the effect and
 handler declarations are removed, each answering handler's clauses become functions, each
 function with a row is replaced by its copies for what serves it where it is called, each `with`
 of an answering handler becomes a borrow block, and each of a control handler a handler site.
-`[spec §18, §19]` -/
-def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []) :
-    Except Error (List Decl × List (Span × String) × List Nat × List String) := do
+
+`divLib` is `lib/arith.bc` with what it includes, when the program does not include it: it is
+elaborated first when a division can fail, which raises its `Fail[DivError]` (SPEC §39), and left
+out otherwise.
+`platform` is `lib/wasi.bc` when the program does not include it: it is elaborated just before
+`main` when `main` is served by `main_div_error`, whose clause writes on standard error.
+`[spec §18, §19, §39]` -/
+def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := [])
+    (divLib : List Decl := []) (platform : List Decl := []) : Except Error Result := do
   -- `|>`, before the rest (SPEC §33).
   let ds ← match (resolvePipes ds).run {} with
     | .ok (ds, _) => pure ds
     | .error e => throw e
+  -- The divisions that can fail, at their operands' width, written to raise (SPEC §39).
+  let fd := if ds.any Divisions.Decl.hasCandidate then some (Instances.found ds) else none
+  let withDivLib := !divLib.isEmpty && fd.any (!·.divs.isEmpty)
+  -- The module and what it includes come first, a declaration the program also includes once.
+  let ds := if withDivLib then divLib ++ ds.filter (!divLib.contains ·) else ds
+  let fd := if withDivLib then some (Instances.found ds) else fd
+  let ds := match fd with
+    | some fd => Divisions.rewrite fd.divs ds
+    | none => ds
   -- The recursive groups among the functions, the included libraries' among them (SPEC §20).
   -- A name two functions have (templates of one name in two modules, chosen by the arguments'
   -- types): only one that calls itself takes part in a recursive group.
@@ -3530,15 +3665,36 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
   let groups := recGroupsOf (ds.filterMap fun
     | .def_ _ n _ _ V _ => if member n.name V then some (n.name, V) else none
     | _ => none)
-  if !hasEffects ds && groups.isEmpty then return (ds, [], [], [])
+  if !hasEffects ds && groups.isEmpty then return { decls := ds, reports := [], perTurn := [], platform := [] }
   let names := ds.filterMap Decl.defName
-  let go : EM (List Decl) := do
-    let mut env : Env := { lib, table := Instances.table ds, scope := some (TCx.ofScope ds true) }
+  let go : EM (List Decl × Bool) := do
+    let table := match fd with
+      | some fd => fd.table
+      | none => Instances.table ds
+    let mut env : Env := { lib, table, scope := some (TCx.ofScope ds true) }
+    -- A division whose operands' width the walk could not read is taken to be able to fail.
+    for (owner, sp) in (fd.map (·.unknown)).getD [] |>.reverse do
+      unless lib.contains ((owner.splitOn "@").headD "") do
+        report sp "lowering" ("a division whose operands' width is not known where effects are " ++
+          "resolved: it raises `Fail[DivError]` when it fails, as an integer division; ascribing " ++
+          "an operand gives its width (SPEC §39)")
     let mut out : Array Decl := #[]
     -- The declarations `hide` holds (the system interface's, the platform's and the I/O
     -- library's, SPEC §34) are not reported, and leave the reports of what follows as they were.
     let mut restore : Option Bool := none
-    for d in ds do
+    let mut todo : List Decl := ds
+    let mut spliced := false
+    for _ in [0:ds.length + platform.length + 1] do
+      let d :: rest := todo | break
+      todo := rest
+      -- The platform, for `main_div_error`'s standard error, just before `main` (SPEC §39).
+      if let .main msp _ M := d then
+        let envM := { env with owner := Instances.ownerKey "main" msp, ownerTps := [] }
+        if !spliced && !platform.isEmpty && (env.chandler? mainDivHandler).isSome &&
+            (rowC envM fuel M).any env.isDivInst then
+          spliced := true
+          todo := platform ++ d :: rest
+          continue
       if let some q := restore then modify fun s => { s with quiet := q }
       restore := none
       if hide.contains d then
@@ -3645,6 +3801,11 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
         for i in row do
           unless written.isEmpty || written.any (·.1.name == i.eff) do
             throw ⟨n.span, s!"`{n.name}` performs `{i.eff}`, which its written row does not list"⟩
+        -- A division's instance is always known: a written row lists it as it lists any other.
+        if !written.isEmpty && row.any env.isDivInst &&
+            !written.any (fun (e, As) => e.name == "Fail" && env.sameArgs As [Instances.divErrorTy]) then
+          throw ⟨n.span, s!"`{n.name}` raises `Fail[DivError]`, a division's error (SPEC §39), which " ++
+            "its written row does not list"⟩
         -- Each instance's entry: the written one it is (SPEC §38), or as inferred, its type arguments
         -- from its argument's type or from what the function calls.
         let mut row' : List Inst := []
@@ -3682,15 +3843,18 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
         env := { env with owner := Instances.ownerKey "main" sp, ownerTps := [] }
         modify fun s => { s with quiet := false }
         let before := (← get).made.size
+        let (C, M) ← divMain env sp C M
         let pcs ← platformMain env sp M
         modify fun s => { s with platform := pcs.map (·.var) }
         let M' ← trC fuel { env, caps := pcs } [] false M
         out := out ++ ((← get).made.extract before).map (·.2)
         out := out.push (.main sp C M')
       | d => out := out.push d
-    pure out.toList
+    pure (out.toList, spliced)
   match go.run {} with
-  | .ok (ds, st) => pure (ds, st.reports.toList, st.perTurn, st.platform)
+  | .ok ((ds, spliced), st) =>
+    pure { decls := ds, reports := st.reports.toList, perTurn := st.perTurn, platform := st.platform,
+           exits := st.exits, withDivLib, withPlatform := spliced }
   | .error e => throw e
 
 end Frontend.Elab.Effects

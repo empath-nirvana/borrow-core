@@ -11,7 +11,8 @@
 #             or a lend that never ends is reported
 #
 # Each must succeed, print what the default prints (standard output and standard error), and end
-# with `live 0`.
+# with `live 0`. A program with a `<name>.status` must end with that exit status in every mode
+# (SPEC §39: a division's error that reaches `main` exits with `1`), and succeeds otherwise.
 #
 #     scripts/falsify.sh                  the corpus, the AsyncCap programs that check, the kernel
 #                                         programs, and the negative tests
@@ -49,9 +50,10 @@ export -f run
 # differ NAME KIND…: run NAME four ways (KIND is `interp` or `kernel interp`) and compare.
 differ() {
   local name=$1; shift
-  local w=${PAR_TMP:-/tmp} m stats=""
+  local w=${PAR_TMP:-/tmp} m stats="" want=0
+  [ -f "${name%.bc}.status" ] && want=$(tr -d ' \n' < "${name%.bc}.status")
   run default "$@" "$name"
-  if [ "$(cat "$w/default.rc")" != 0 ]; then
+  if [ "$(cat "$w/default.rc")" != "$want" ]; then
     echo "$name: FAIL: the default run fails: $(head -c 400 "$w/default.err")"; return 1
   fi
   if [ "$(tail -n 1 "$w/default.out")" != "live 0" ]; then
@@ -63,7 +65,7 @@ differ() {
       tags) run "$m" "$@" --check tags --stats "$name" ;;
       *) run "$m" "$@" --check "$m" "$name" ;;
     esac
-    if [ "$(cat "$w/$m.rc")" != 0 ]; then
+    if [ "$(cat "$w/$m.rc")" != "$want" ]; then
       echo "$name: FAIL ($m): $(head -c 600 "$w/$m.err")"; return 1
     fi
     if [ "$m" = tags ]; then

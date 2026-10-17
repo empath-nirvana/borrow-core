@@ -842,3 +842,11 @@ Each entry: the decision, and why. Newest last.
       pass keeps its place, and so its resolution at the template's types.
     - Not decided here, after this unit: integer division's effect (#518), and one output effect at
       two named instances in place of `Stdout` and `Stderr` (SPEC §38 *Open*).
+65. **Integer division that has no answer raises `Fail[DivError]` (#513, SPEC §39; the user's decision of 2026-10-17).**
+    - In the user's words: "I just want div by zero to raise not panic. That is kind of the whole point of an effect system."
+    - So a zero divisor and `MIN / -1` raise through the effect system; never a trap, a panic, or a made-up answer (`x / 0 = 0`).
+    - **`Fail`, not an effect of its own**, chosen after decision 64 (#521): a row holds several instances of an effect, so `Fail[DivError]` sits beside a program's own `Fail[E]`, and §38's slot rule keeps a generic `E := DivError` from rerouting a division's raise. `to_result`, `default` and `map_err` handle it; #518's `Arith` effect and its `arith_*` handlers are not built.
+    - **Decided where the types are**: the effects pass decides a division's row at its operands' width, in the walk that reads the instances (decision 64), with no second elaboration. A width the walk cannot read is taken to be able to fail (a typing over-approximation, reported by `bcc check`; an ascription makes it exact). The points below are defaults under the decision, not decisions of the user's:
+    - **At `main`**, an unhandled `Fail[DivError]` is served by `main_div_error`, as the standard streams are by the platform: the unwind runs the finalisers, the error goes to standard error, and the program exits with status 1.
+    - **A nonzero literal divisor** (other than `-1` for `/`) cannot fail and performs nothing; `checked_div` and `checked_rem` answer a sum; `MIN % -1` is `0`, as in Wasm; truncating `/` and `%`, with `div_euclid` and `rem_euclid`; `host[div_*]` unchanged; `/` at a float unchanged, with no row.
+    - **Spellings (provisional):** `DivError` (`1 + 1`: `inl ()` a zero divisor, `inr ()` an overflow), `div_by_zero`, `div_overflow`, `main_div_error`, `div_euclid`, `rem_euclid`, `checked_div`, `checked_rem`.
