@@ -406,8 +406,12 @@ inductive VSugar where
   written type arguments, applied to its arguments (a tuple, `()` with none; an answering
   handler's one argument is its state, a value or `&mut c`) and then to the callback whose
   parameter is the capability an answering handler's operations are performed on (`'x` its
-  lifetime). Elaborated away by `Frontend.Elab.Effects` before the rest of the sugar. -/
-  | handle (h : String) (x : String) (targs : List VTy)
+  lifetime). `with n = h(…) { S }` names the handler `n` (SPEC §38). Elaborated away by
+  `Frontend.Elab.Effects` before the rest of the sugar. -/
+  | handle (h : String) (x : String) (targs : List VTy) (name : Option String)
+  /-- `n.op`: the operation `op` performed at the handler named `n` (SPEC §38), applied to its
+  argument. Elaborated away by `Frontend.Elab.Effects`. -/
+  | named (n : String) (op : String)
   /-- A handler site of a control effect (SPEC §19), resolved by `Frontend.Elab.Effects` and
   assembled with its clauses where the types are known (`Frontend.Sugar`): applied to the
   handler's arguments, its return clause, the tuple of its operation clauses and the thunk of its
@@ -541,8 +545,9 @@ inductive Mark where
   | template (m : Mark) (bounds : List (Ident × Ident) := [])
   /-- `fn f(…) -> T with E₁, E₂[A] = …`: a written row (SPEC §18), a promise that the inferred
   row is within it, and gives the type arguments of an effect it performs directly. The function
-  is marked `m` besides. -/
-  | row (effs : List (Ident × List VTy)) (m : Mark)
+  is marked `m` besides. `names` are the entries' names, `with src: E` (SPEC §38): empty, or one
+  per entry. -/
+  | row (effs : List (Ident × List VTy)) (m : Mark) (names : List (Option Ident))
   deriving DecidableEq, Repr, Inhabited
 
 /-- The kind of an operation (SPEC §19): answering (`fn`), or control (`ctl`) with the structural
@@ -754,7 +759,7 @@ def Const.strip : Const → Const
 
 /-- A surface form with the spans of its types erased. -/
 def VSugar.strip : VSugar → VSugar
-  | .handle h x As => .handle h x (As.map VTy.strip)
+  | .handle h x As n => .handle h x (As.map VTy.strip) n
   | .hndCtl i => .hndCtl { i with
       ents := i.ents.map (fun (q, A, B) => (q, A.strip, B.strip)),
       known := i.known.map (fun (x, A) => (x, A.strip)),
@@ -818,12 +823,12 @@ end
 /-- The lifetime bounds of a template, under its row.  `[spec §23]` -/
 def Mark.bounds : Mark → List (Ident × Ident)
   | .template _ bs => bs
-  | .row _ m => m.bounds
+  | .row _ m _ => m.bounds
   | _ => []
 
 def Mark.strip : Mark → Mark
   | .template m bs => .template m.strip (bs.map fun (S, c) => (S.strip, c.strip))
-  | .row es m => .row (es.map fun (e, As) => (e.strip, As.map VTy.strip)) m.strip
+  | .row es m ns => .row (es.map fun (e, As) => (e.strip, As.map VTy.strip)) m.strip (ns.map (·.map Ident.strip))
   | m => m
 
 def Decl.strip : Decl → Decl

@@ -1,0 +1,43 @@
+-- Abstraction safety (SPEC §38; Zhang and Myers, POPL 2019): a generic function does not change
+-- meaning when its type arguments happen to coincide with another instance it performs.
+--
+-- * `guarded[E]` handles its own `Fail[E]` and calls `check`, which raises `Fail[ParseError]`. At
+--   the template's types `Fail[E]` and `Fail[ParseError]` are two instances, so `check`'s raise
+--   passes `guarded`'s handler and goes to its caller's. `strict` calls it at `E := ParseError`,
+--   where its handler is a handler of `Fail[ParseError]` too: the raise still passes it.
+-- * `either[E]` performs both instances, its row two entries, `Fail[E]` and `Fail[ParseError]`.
+--   At `E := ParseError` the two entries coincide and are served by the one handler around the
+--   call: two entries of the row, one site.
+--
+-- The operations are resolved at the template's types, before its instances are made
+-- (decision 45): an instance substitutes types into code whose handlers are chosen.
+--
+-- Answer: `((inr (inl ()), inl (inr (inr (inl u8[33])))), (inr (inl ()), inr (inr (inl u8[33]))))`:
+-- `strict(-1)` is `check`'s error at `strict`'s own handler, outside (a handler that captured it
+-- would answer `inl (inr (inl ()))`); `strict(200)` is `guarded`'s own error at its handler; and
+-- both of `either`'s raises reach the one handler of `ParseError` around it.
+
+include text
+
+-- `t` when it is not negative, else the parse error of no digits.
+fn check(t: i32) -> i32 with Fail[ParseError] = if t < 0 { raise((inl () : ParseError)) } else { t }
+
+-- `t` checked, under a handler of `guarded`'s own `Fail[E]`, which raises `d` past 100.
+fn guarded[E](d: E, t: i32) -> i32 + E with Fail[ParseError] =
+  with to_result[E, i32] { if t > 100 { raise(d) } else { () }; check(t) }
+
+-- `guarded` at `E := ParseError`.
+fn strict(t: i32) -> (i32 + ParseError) + ParseError =
+  with to_result[ParseError, i32 + ParseError] { guarded[ParseError]((inr (inl 33) : ParseError), t) }
+
+-- Raises `d` past 100, and `check`'s error below 0.
+fn either[E](d: E, t: i32) -> i32 with Fail[E], Fail[ParseError] =
+  if t > 100 { raise(d) } else { check(t) }
+
+-- `either` at `E := ParseError`: both entries of its row served by one handler.
+fn both(t: i32) -> i32 + ParseError =
+  with to_result[ParseError, i32] { either[ParseError]((inr (inl 33) : ParseError), t) }
+
+main -> (((i32 + ParseError) + ParseError) * ((i32 + ParseError) + ParseError)) *
+    ((i32 + ParseError) * (i32 + ParseError)) =
+  ((strict(0 - 1), strict(200)), (both(0 - 1), both(200)))

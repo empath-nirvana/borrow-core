@@ -91,15 +91,21 @@ count-fold 0 0 0
 count-try 0 0 0
 deep-list 100000 0 0
 div-hof 0 0 0
+effects-abstraction 0 0 0
 effects-borrow-raise 2 0 0 # the cell of each run; freed by the unwinding borrow on the abort
+effects-cancel-two-sites 0 4 0 # the indirect calls are of `scaled`'s answer, a function of its state (SPEC §19, *Handler state*)
+effects-fail-list 0 0 0
 effects-fold 7 0 0 # equal to effects-fold-sum: an abort unwinds, handled at the loop's step and raised again after it, a branch per call
 effects-fold-sum 7 0 0
 effects-generic 1 0 0
 effects-hof-two-rows 0 0 0 # equal to the kernel program hof-two-rows: a copy of `hof` per row, each a direct call
+effects-instances 0 0 0
 effects-log-fail 3 0 0 # the log cell of each run
 effects-map 9 0 0 # equal to effects-map-hand: the handled program is the capability-passing one
 effects-map-fail 2 0 0
 effects-map-hand 9 0 0
+effects-named 10 0 0 # the clusters' arrays and cells, the table's array, the two buffers of pairs and their cells, the hot cache's buffer; no dispatched call
+effects-row-inferred 0 0 0
 effects-sum-gen 0 0 0 # equal to the kernel program sum-gen
 effects-tunnel 0 0 0 # equal to the kernel program tunnel
 family-swap 2 0 0

@@ -1,0 +1,8 @@
+-- A written row that lists one instance twice, unnamed (SPEC §38): the two entries cannot be told
+-- apart in the body, so they are named, `with a: Fail[i32], b: Fail[i32]`, and performed at
+-- their names.
+-- expect: 6:4: `f` lists `Fail[i32]` twice in its written row: name the entries (`with a: E, b: E`, SPEC §38)
+include fail
+fn f(n: i32) -> i32 with Fail[i32], Fail[i32] = raise(n)
+
+main -> i32 + i32 = with to_result { f(3) }

@@ -1,0 +1,26 @@
+-- A resuming handler whose clause cancels its continuation and raises, used inside two handlers of
+-- the effect it raises (#514; the `deadline` pattern of `corpus/reconcile-clock.bc`). `scaled` has
+-- a state (its parameter `d`), so its clauses answer a function of the state, run where the `with`
+-- is. The continuation `k` is at the row there, both sites of `Fail` (`[handle]`, SPEC §19), and the
+-- function that cancels it (`(force k).2`) is at that row too, not only at the handler's own row
+-- (SPEC §38). The clause's `raise` goes to the innermost `to_result`.
+--
+-- Answer: `(inl (inl i32[30]), inl (inr i32[0]))`: `scaled(5)` resumes each `ask` with its value,
+-- 10 + 20; `scaled(0)` cancels the continuation at the first `ask` and raises `0`, which the inner
+-- `to_result` answers. A raise that reached the outer one would answer `inr 0`.
+
+include fail
+
+effect Ask { ctl ask(x: i32) -> i32 }
+
+handler scaled[A](d: i32): Ask, A -> A with Fail[i32] = {
+  return(a) = a;
+  ask(x, k) = if d == 0 { u <- (force k).2; raise(0) } else { k(x) }
+}
+
+fn two() -> i32 with Ask = ask(10) + ask(20)
+
+fn under(d: i32) -> (i32 + i32) + i32 =
+  with to_result[i32, i32 + i32] { with to_result { with scaled(d) { two() } } }
+
+main -> ((i32 + i32) + i32) * ((i32 + i32) + i32) = (under(5), under(0))

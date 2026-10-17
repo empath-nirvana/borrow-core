@@ -1,0 +1,47 @@
+-- `handleFailList` (Schuster, Brachthäuser and Ostermann, ICFP 2020, §4.3; #18's first comment):
+-- a function that installs a handler around the computation it is given. Effekt's second-class
+-- capabilities rule it out ("we cannot abstract over handlers as handler functions, a common idiom
+-- in Koka"); here `prog` is a computation parameter that provides `Fail[1]` (SPEC §33), and
+-- `handle_fail_list` serves it with `or_nil`, the empty list when the computation fails.
+--
+-- `guarded` calls it inside a handler of another instance of `Fail`, `Fail[i32]`: a computation that
+-- raises at both reaches each instance's handler, `or_nil` for `Fail[1]` and `guarded`'s `to_result`
+-- for `Fail[i32]` (SPEC §38).
+--
+-- Answer: `((i32[3], i32[0]), (inl i32[0], inr i32[7]))`: the list `3 2 1` begins with 3; the
+-- computation that raises `()` after building a list is the empty list (`head` of it 0); under
+-- `guarded`, raising `()` is again the empty list (`inl 0`), and raising `7` is `guarded`'s
+-- error, `inr 7`.
+
+include fail
+
+type IntList = mu X. 1 + (i32 * X)
+
+-- The body's list, or the empty list when it raises.
+handler or_nil: Fail[1], IntList -> IntList = {
+  return(l) = l;
+  raise(e) = roll inl ()
+}
+
+-- The list `prog` builds, or the empty list.
+fn handle_fail_list(prog: !(1 => IntList with Fail[1])) -> IntList = with or_nil { prog(()) }
+
+-- The first element, `0` for the empty list.
+fn head(l: IntList) -> i32 = match unroll l { inl u -> 0 | inr (x, rest) -> x }
+
+fn count3(u: 1) -> IntList = roll inr (3, roll inr (2, roll inr (1, roll inl ())))
+
+fn give_up(u: 1) -> IntList with Fail[1] = let l: IntList = roll inr (2, roll inl ()); raise(())
+
+fn bad(u: 1) -> IntList with Fail[i32] = raise(7)
+
+-- `handle_fail_list` inside a handler of `Fail[i32]`.
+fn guarded(b: bool) -> i32 + i32 =
+  with to_result[i32, i32] {
+    if b { head(handle_fail_list(give_up)) } else { head(handle_fail_list(!{ u -> bad(u) })) }
+  }
+
+main -> (i32 * i32) * ((i32 + i32) * (i32 + i32)) =
+  let a = head(handle_fail_list(count3));
+  let b = head(handle_fail_list(give_up));
+  ((a, b), (guarded(true), guarded(false)))

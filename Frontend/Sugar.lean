@@ -7,6 +7,7 @@ import Frontend.Elab.Subst
 import Frontend.Elab.Meta
 import Frontend.Elab.LoopLend
 import Frontend.Elab.Effects
+import Frontend.Elab.Match
 import Frontend.Elab.Hygiene
 
 /-!
@@ -2348,168 +2349,6 @@ where
     | .lamL sp x b (.ret rsp V) => do pure (.lamL sp x b (.ret rsp (← mapFnBody f V)))
     | M => pure M
 
-/-! #### Generic calls
-
-A call's callee may be generic in three ways, and the elaborator fills what the call leaves out
-(typed elaboration §2.2–§2.3):
-
-* **A template**: a `fn f[A, …](…)`. It is not elaborated as written, and
-  a call of it is a call of its instance at the types of the call, the template with the types
-  substituted for its parameters (`Frontend/Elab/Subst.lean`), made and elaborated on first use
-  (whole-program monomorphization, as Rust's generics). Its body is elaborated at the instance's
-  types, so an operation that needs a persistent element (`*g`) is accepted at `u8` and rejected
-  at a type that is not.
-* **A `def` with type parameters** written in core, `def f[A, …] : …`: its call is `f[T, …]`,
-  checked at each use by the checker.
-* **Lifetime parameters**, `!(all 'a < @. all 'b < @'. P => Q)`: its call is
-  `(unbang f) ['x] ['y]`.
-
-The type arguments are written, `f[T, …](…)`, or read off the arguments' types by first-order
-matching against the parameter's type, in which each type parameter is a placeholder; what the
-arguments leave open is matched against the type expected of the call's result. Each lifetime
-parameter is read off the argument whose type mentions it; when two arguments give it different
-lifetimes, it is their meet, and an argument that is a borrow is shortened to it with `:>` (§2.3;
-there is no other solving). A closure argument whose parameter's type is a hole, and an
-injection, are typed last, from the parameter's type with what the other arguments determined. -/
-
-/-- The placeholders of type parameters in a pattern: type variables no type of a program has. -/
-def phBase : Nat := 1 <<< 24
-
-/-- What matching has found: the type parameters, by placeholder; the lifetime parameters of the
-call (`binders`), with the lifetime each is matched with; and those matched with two lifetimes. -/
-structure MatchSt where
-  ty : Array (Option CVTy)
-  binders : List BoCa.Lifetime.LifeVar := []
-  life : List (BoCa.Lifetime.LifeVar × BoCa.Lifetime.Life) := []
-  conflicts : List BoCa.Lifetime.LifeVar := []
-
-/-- `l` is `a`, or one of the lifetimes `a` is the meet of. -/
-def inMeet (l : BoCa.Lifetime.Life) : BoCa.Lifetime.Life → Bool
-  | .meet a b => l == .meet a b || inMeet l a || inMeet l b
-  | a => l == a
-
-/-- The lifetime `a'` of an argument where the pattern has `a`: a lifetime parameter of the call is
-matched with it, or with the meet of it and what it was matched with before. -/
-def matchLife (m : MatchSt) (a a' : BoCa.Lifetime.Life) : MatchSt :=
-  match a with
-  | .var v =>
-    if !m.binders.contains v then m else
-    match m.life.lookup v with
-    | none => { m with life := (v, a') :: m.life }
-    | some l => if inMeet a' l then m else
-      { m with life := (v, .meet l a') :: m.life.filter (·.1 != v), conflicts := v :: m.conflicts }
-  | _ => m
-
-mutual
-/-- `t` matches the pattern `p`, whose placeholders are bound in `m`, under `d` binders of type
-variables (`μ`, `ν`), which shift a placeholder's index by `d`. A lifetime of the pattern that is
-not a lifetime parameter of the call matches any lifetime: the checker decides it. -/
-def matchV (m : MatchSt) (d : Nat) : CVTy → CVTy → Option MatchSt
-  | .tvar i, t =>
-    if i ≥ phBase + d then match m.ty[i - phBase - d]? with
-      | some (some u) => if u = t then some m else none
-      | some none => some { m with ty := m.ty.set! (i - phBase - d) (some t) }
-      | none => none
-    else if t = .tvar i then some m else none
-  | .tensor A B, .tensor A' B' | .sum A B, .sum A' B' => (matchV m d A A').bind (matchV · d B B')
-  | .thunk C, .thunk C' => matchC m d C C'
-  | .mu A, .mu A' => matchV m (d + 1) A A'
-  | .ref A, .ref A' | .bang A, .bang A' | .fam A, .fam A' => matchV m d A A'
-  | .imm a A, .imm a' A' | .mut a A, .mut a' A' | .box a A, .box a' A' =>
-    matchV (matchLife m a a') d A A'
-  | p, t => if p = t then some m else none
-
-/-- `t` matches the computation-type pattern `p`. -/
-def matchC (m : MatchSt) (d : Nat) : CCTy → CCTy → Option MatchSt
-  | .ret A, .ret A' => matchV m d A A'
-  | .arr A C, .arr A' C' => (matchV m d A A').bind (matchC · d C C')
-  | .amp C D, .amp C' D' => (matchC m d C C').bind (matchC · d D D')
-  | .nu C, .nu C' => matchC m (d + 1) C C'
-  | .all _ _ C, .all _ _ C' => matchC m d C C'
-  | .eff n i q A B fin C, .eff n' i' q' A' B' fin' C' =>
-    if n == n' && i == i' && q == q' then
-      (matchV m d A A').bind fun m => (matchV m d B B').bind fun m =>
-        (matchC m d fin fin').bind (matchC · d C C')
-    else none
-  | p, t => if p = t then some m else none
-end
-
-mutual
-/-- A pattern with placeholders. -/
-def hasPhV : CVTy → Bool
-  | .tvar i => i ≥ phBase
-  | .tensor A B | .sum A B => hasPhV A || hasPhV B
-  | .thunk C => hasPhC C
-  | .ref A | .bang A | .mu A | .fam A | .imm _ A | .mut _ A | .box _ A => hasPhV A
-  | _ => false
-
-def hasPhC : CCTy → Bool
-  | .ret A => hasPhV A
-  | .arr A C => hasPhV A || hasPhC C
-  | .amp C D => hasPhC C || hasPhC D
-  | .nu C | .all _ _ C => hasPhC C
-  | .top => false
-  | .eff _ _ _ A B fin C => hasPhV A || hasPhV B || hasPhC fin || hasPhC C
-end
-
-mutual
-/-- A pattern with its solved placeholders replaced, under `d` binders of type variables. The
-types solved are closed, so they need no shift. -/
-def solvedV (σ : Array (Option CVTy)) (d : Nat) : CVTy → CVTy
-  | .tvar i => if i ≥ phBase + d then ((σ[i - phBase - d]?).join).getD (.tvar i) else .tvar i
-  | .tensor A B => .tensor (solvedV σ d A) (solvedV σ d B)
-  | .sum A B => .sum (solvedV σ d A) (solvedV σ d B)
-  | .thunk C => .thunk (solvedC σ d C)
-  | .ref A => .ref (solvedV σ d A)
-  | .bang A => .bang (solvedV σ d A)
-  | .mu A => .mu (solvedV σ (d + 1) A)
-  | .fam A => .fam (solvedV σ d A)
-  | .imm a A => .imm a (solvedV σ d A)
-  | .mut a A => .mut a (solvedV σ d A)
-  | .box a A => .box a (solvedV σ d A)
-  | t => t
-
-def solvedC (σ : Array (Option CVTy)) (d : Nat) : CCTy → CCTy
-  | .ret A => .ret (solvedV σ d A)
-  | .arr A C => .arr (solvedV σ d A) (solvedC σ d C)
-  | .amp C D => .amp (solvedC σ d C) (solvedC σ d D)
-  | .nu C => .nu (solvedC σ (d + 1) C)
-  | .all v b C => .all v b (solvedC σ d C)
-  | .top => .top
-  | .eff n i q A B fin C =>
-      .eff n i q (solvedV σ d A) (solvedV σ d B) (solvedC σ d fin) (solvedC σ d C)
-end
-
-/-- A pattern with what matching found: its placeholders and its lifetime parameters solved. -/
-def MatchSt.solved (m : MatchSt) (P : CVTy) : CVTy := (solvedV m.ty 0 P).applyLSub m.life
-
-/-- The pattern, solved as far as matching has gone, still has an unknown: a placeholder, or a
-lifetime parameter not yet matched. -/
-def MatchSt.isOpen (m : MatchSt) (P : CVTy) : Bool :=
-  let P' := m.solved P
-  hasPhV P' || m.binders.any fun v => BoCa.Fig16.LogRel.Core.Check.vfreeB v P'
-
-/-- The parameter type of a written function type, `!(all 'a < @. … P => Q)`. -/
-def paramTy : VTy → Option VTy
-  | .bang _ A | .all _ _ _ A => paramTy A
-  | .lolli _ P _ | .thunk _ (.arr _ P _) => some P
-  | _ => none
-
-/-- The components of an argument against a written parameter type, as `compsC`. -/
-def argComps : VTy → Val → List (VTy × Val)
-  | .tensor _ P Q, .pair _ V W => (P, V) :: argComps Q W
-  | P, W => [(P, W)]
-
-/-- A type as a pattern: the type parameters `ps` as placeholders. -/
-def patOf (c : TCx) (ps : List String) (P : VTy) : Option CVTy :=
-  ({ c.E with tps := ps.zipIdx.map fun (x, k) => (x, .tvar (phBase + k)) }.elabV c.Δ P).toOption
-
-/-- Why `patOf` fails, for messages. -/
-def patErr (c : TCx) (ps : List String) (P : VTy) : String :=
-  match ({ c.E with tps := ps.zipIdx.map fun (x, k) => (x, .tvar (phBase + k)) }.elabV c.Δ P) with
-  | .error e => s!": {e.msg}"
-  | .ok _ => ""
-
 /-! #### `poly` families: one case per type  `[spec §36]`
 
 A family's case is chosen by the family's type argument `T` alone. The cases whose head matches
@@ -4300,8 +4139,10 @@ case io_so{sfx} \{
     let names := if rowLoop then [] else (used.map (·.1)).eraseDups
     let (stepT, wrapStep, reabort) ← match names with
       | [] => pure (Et, fun (e : String) => e, "")
-      | [k] => do
-        let ops := S.filter (·.n.toNat == k)
+      | ks => do
+        -- The operations of every site the body performs at, in order: the payload is their sum,
+        -- and each site's clauses inject into it. The first site's handler is innermost.
+        let ops := ks.flatMap fun k => S.filter (·.n.toNat == k)
         if let some o := ops.find? (fun o => !o.abort) then
           throw ⟨sp, s!"the body of this `for` performs a control operation that resumes " ++
             s!"(the operation {o.n}.{o.i}): the loop is a counted loop, whose step is pure " ++
@@ -4314,28 +4155,51 @@ case io_so{sfx} \{
         let Et' := s!"({Et}) + ({P})"
         let T := s!"({St}) + ({Et})"
         let R := s!"({St}) + ({Et'})"
-        let cls := (As.zipIdx.map fun (a, j) =>
-          s!"!thunkv fun (io_ae{sfx} : {a}) -> return (inr (inr ({inj j s!"io_ae{sfx}"})))")
-        let clsV := cls.foldr (fun c t => s!"({c}, {t})") "()"
-        let clsT := (As.map fun a => s!"!(({a}) => {R})").foldr (fun c t => s!"({c}) * ({t})") "1"
-        let wrap (e : String) : String :=
-          s!"io_ahr{sfx} : !({T} => {R}) <- return (!thunkv fun (io_av{sfx} : {T}) ->
-    case io_av{sfx} \{ inl io_ax{sfx} -> return (inl io_ax{sfx}) | inr io_ax{sfx} -> return (inr (inl io_ax{sfx})) });
-  io_ahc{sfx} : {clsT} <- return {clsV};
-  handle_with[{k}](io_ahr{sfx}, io_ahc{sfx}) ({e})"
-        let rec reab : List (Nat × String) → String → String
+        let opsAt := (ops.zip As).zipIdx
+        -- A site's return clause and clauses run at the row of the sites around it, the later ones.
+        let rowAt ← ks.zipIdx.mapM fun (_, h) => do
+          let outer := (ks.drop (h + 1)).flatMap fun k' => S.filter (·.n.toNat == k')
+          let es ← outer.mapM fun o => do
+            pure s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q} {← pp o.A} ~> {← pp o.B}"
+          pure (", ".intercalate es)
+        let arrow (A : String) (h : Nat) : String :=
+          match rowAt[h]? with
+          | some r => if r.isEmpty then s!"!(({A}) => {R})" else s!"!U (({A}) -o F[{r}] ({R}))"
+          | none => s!"!(({A}) => {R})"
+        let wrap (e : String) : String := Id.run do
+          let mut e := e
+          for (k, h) in ks.zipIdx do
+            let x := if h == 0 then sfx else s!"{sfx}_{h}"
+            let mine := opsAt.filter fun ((o, _), _) => o.n.toNat == k
+            let cls := mine.map fun ((_, a), j) =>
+              s!"!thunkv fun (io_ae{sfx} : {a}) -> return (inr (inr ({inj j s!"io_ae{sfx}"})))"
+            let clsV := cls.foldr (fun c t => s!"({c}, {t})") "()"
+            let clsT := (mine.map fun ((_, a), _) => arrow a h).foldr
+              (fun c t => s!"({c}) * ({t})") "1"
+            let hrT := if (rowAt[h]?.getD "").isEmpty then s!"!({if h == 0 then T else R} => {R})"
+              else arrow (if h == 0 then T else R) h
+            let hr := if h == 0 then
+                s!"io_ahr{x} : {hrT} <- return (!thunkv fun (io_av{x} : {T}) ->
+    case io_av{x} \{ inl io_ax{x} -> return (inl io_ax{x}) | inr io_ax{x} -> return (inr (inl io_ax{x})) });"
+              else s!"io_ahr{x} : {hrT} <- return (!thunkv fun (io_av{x} : {R}) -> return io_av{x});"
+            let e' := if h == 0 then e else s!"({e})"
+            e := s!"{hr}
+  io_ahc{x} : {clsT} <- return {clsV};
+  handle_with[{k}](io_ahr{x}, io_ahc{x}) {if h == 0 then s!"({e})" else e'}"
+          return e
+        let rec reab : List ((Nat × Nat) × String) → String → String
           | [], _ => "absurd ()"
-          | [(i, _)], v => s!"abort[{k}.{i}] {v}"
-          | (i, _) :: rest, v =>
-            s!"case {v} \{ inl io_aq{i}{sfx} -> abort[{k}.{i}] io_aq{i}{sfx} | inr io_ar{i}{sfx} -> {reab rest s!"io_ar{i}{sfx}"} }"
-        let re := reab ((ops.map (·.i.toNat)).zip As) s!"io_ap{sfx}"
+          | [((k, i), _)], v => s!"abort[{k}.{i}] {v}"
+          | ((k, i), _) :: rest, v =>
+            let y := if ks.length == 1 then s!"{i}" else s!"{k}_{i}"
+            s!"case {v} \{ inl io_aq{y}{sfx} -> abort[{k}.{i}] io_aq{y}{sfx} | inr io_ar{y}{sfx} -> {reab rest s!"io_ar{y}{sfx}"} }"
+        let re := reab ((ops.map fun o => (o.n.toNat, o.i.toNat)).zip As) s!"io_ap{sfx}"
         if !(← get).quiet then
           report sp s!"an abortive operation in its body leaves the loop by its exit, handled at the step and performed again after it"
         pure (Et', wrap, s!"io_r{sfx} : ({St}) + ({Et}) <- case io_rr{sfx} \{
     inl io_aq{sfx} -> return (inl io_aq{sfx})
   | inr io_aq{sfx} -> case io_aq{sfx} \{ inl io_ae{sfx} -> return (inr io_ae{sfx}) | inr io_ap{sfx} -> {re} } };
 ")
-      | _ => throw ⟨sp, "the body of this `for` performs abortive operations of two handlers: not provided"⟩
     let rname := if reabort.isEmpty then s!"io_r{sfx}" else s!"io_rr{sfx}"
     -- The loop at the row: `bounded_fix` whose budget is the count, so that the self-reference is
     -- `inl ()` once the body has run at each index; its step runs the body at the row and goes on

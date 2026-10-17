@@ -1,0 +1,22 @@
+row 25:1: parse_small: Fail[ParseError], Fail[Bad]
+row 32:1: digit: Fail[ParseError]
+row 36:1: digit_sum: Fail[ParseError], Fail[Bad]
+lowering 25:1: copy `parse_small__n1_n2`: `parse_small` for the site 1 of `Fail`, the site 2 of `Fail`
+lowering 32:1: copy `digit__n6`: `digit` for the site 6 of `Fail`
+lowering 36:1: copy `digit_sum__n6_n5`: `digit_sum` for the site 6 of `Fail`, the site 5 of `Fail`
+lowering 46:3: with to_result (Fail): a handler, the static name 1; raise abortive: a branch per call (final ctl)
+lowering 46:3: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 46:43: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 46:43: with to_result (Fail): a handler, the static name 2; raise abortive: a branch per call (final ctl)
+lowering 50:3: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 50:3: with to_result (Fail): a handler, the static name 5; raise abortive: a branch per call (final ctl)
+lowering 50:43: with to_result (Fail): a handler, the static name 6; raise abortive: a branch per call (final ctl)
+lowering 50:43: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+call 26:11: parse_i32 → `parse_i32__n1`
+call 27:16: raise (Fail) → abort[2.0], handled by the caller at 25:1: abortive, it never resumes
+call 28:14: raise (Fail) → abort[2.0], handled by the caller at 25:1: abortive, it never resumes
+call 33:29: raise (Fail) → abort[6.0], handled by the caller at 32:1: abortive, it never resumes
+call 39:17: digit → `digit__n6`
+call 40:20: raise (Fail) → abort[5.0], handled by the caller at 36:1: abortive, it never resumes
+call 46:70: parse_small → `parse_small__n1_n2`
+call 50:77: digit_sum → `digit_sum__n6_n5`

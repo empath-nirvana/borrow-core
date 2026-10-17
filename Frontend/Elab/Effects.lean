@@ -1,9 +1,10 @@
 import Frontend.Parser
 import Frontend.Print
 import Frontend.Elab.Subst
+import Frontend.Elab.Instances
 
 /-!
-# Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21, §30, §32, §34]`
+# Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21, §30, §32, §34, §38]`
 
 An effect declares operations, each **answering** (`fn`) or **control** (`ctl`, with the
 structural qualifier of its continuation: affine by default, `linear ctl`, `multi ctl`). An effect
@@ -20,7 +21,7 @@ rest of the sugar; it knows no effect by name.
   which hands it back. The capability is threaded as a `let mut` variable is.
 * **Control effects** are the kernel's (§19). Each `with h(args) { S }` of a control handler is a
   handler site with a static name `n` of its own, and an operation is resolved lexically to the
-  innermost site of its effect: `perform[n.i](v)`, or `abort[n.i](v)` for an abortive operation
+  innermost site of its instance: `perform[n.i](v)`, or `abort[n.i](v)` for an abortive operation
   (answer `0` at a qualifier with weakening). The site becomes the kernel's `handle[n]` with the
   handler's clauses, assembled where the types are known (`VSugar.hndCtl`, `Frontend/Sugar.lean`).
   A handler may perform the operations of its own row (`with E₂[…]` after `for`), which resolve to
@@ -28,6 +29,12 @@ rest of the sugar; it knows no effect by name.
   (§21): a handler whose operations are all abortive runs its clauses after it, and one whose
   operations resume has a state, its parameters and the capabilities its clauses use; `k(v)`
   resumes.
+* **Instances** (§38). An instance is an effect at its type arguments, read off an operation's
+  argument's type and a template call's arguments' at the declaration's own types, before this
+  pass (`Instances.table`, `Env.table`). An operation goes to the innermost handler of its
+  instance, or of the name it is performed at (`n.op(v)`, `with n = h(…)`); a row's entries are
+  slots, named or not, that a copy relabels its sites as (`slotsOf`), so an operation of a
+  template is resolved at the template's types and instantiation cannot reroute it.
 * **A function's row** is the set of effect instances it performs: the operations it calls, and
   the rows of the functions it calls, less those a `with` inside it handles. It is inferred in
   declaration order; a written row (`fn f(…) -> T with E[A]`) is a promise that the inferred row is
@@ -73,6 +80,7 @@ generator).
 -/
 
 namespace Frontend.Elab.Effects
+open Frontend.Check (CVTy)
 
 /-! ### What is declared -/
 
@@ -108,10 +116,14 @@ structure HSig where
 /-- The key of a capability's handler in a copy's name: a cell's copies are its own. -/
 def HSig.key (h : HSig) : String := if h.cell then h.name ++ "_cell" else h.name
 
-/-- An instance of an effect: its type arguments, when they are determined. -/
+/-- An instance of an effect: its type arguments, when they are determined (SPEC §38). In a
+function's row it is a **slot**, with its name when the row names it (`with src: Kube`): two
+slots are two entries, whatever their type arguments are at a use. An operation performed at a
+named handler (`src.op(…)`) is the instance named so. -/
 structure Inst where
   eff : String
   args : Option (List VTy)
+  name : Option String := none
   deriving BEq
 
 /-- A function's type and value taken apart: its lifetime parameters (outermost first), its
@@ -178,6 +190,16 @@ structure Env where
   computation parameters by index, with their names and their provided rows. A call of one is a
   call of its copy for its arguments (`blockCall`); it is never used as written.  `[spec §33]` -/
   comps : List (String × List (Nat × String × List (Ident × List VTy))) := []
+  /-- The type arguments recorded at each call of an operation or a template, typed where the
+  types are known (`Instances.table`).  `[spec §38]` -/
+  table : Instances.Table := {}
+  /-- The typing context of the program's declarations.  `[spec §38]` -/
+  scope : Option TCx := none
+  /-- The declaration whose code is being elaborated (`Instances.ownerKey`) and its type
+  parameters: the frame in which the table's types, the sites' and the rows' are read.
+  `[spec §38]` -/
+  owner : String := ""
+  ownerTps : List String := []
 
 /-- A capability in scope: the answering effect it serves, the variable holding its `mut 'l S`
 borrow, the lifetime `'l`, and the handler. Or the variable a `for`'s site of an iteration effect
@@ -193,6 +215,17 @@ structure Cap where
   `for` of its effect inside the copy does not shadow it: the block's operations go to where the
   block was written.  `[spec §32]` -/
   blk : Bool := false
+  /-- The handler's name, `with n = h(…)`, or a named slot's of the copy's row (SPEC §38). -/
+  name : Option String := none
+  /-- In a copy: the capability of a slot of its row, which are unordered (SPEC §38). -/
+  slot : Bool := false
+
+/-- The variable holding a copy's capability of `e` (and of the slot named `x`), and its
+lifetime's name. -/
+def capVar (e : String) (x : Option String) : String :=
+  "fx_c_" ++ e.toLower ++ ((x.map ("_" ++ ·)).getD "")
+def capLife (e : String) (x : Option String) : String :=
+  "fx_l_" ++ e.toLower ++ ((x.map ("_" ++ ·)).getD "")
 
 /-- A capability's type: `mut 'l S`, or the threaded variable's `W`. -/
 def Cap.ty (sp : Span) (c : Cap) : VTy := match c.thr with
@@ -212,6 +245,15 @@ structure Site where
   sp : Span
   /-- What serves it, for the reports: the handler's name, or `the caller`. -/
   what : String
+  /-- The handler's name, `with n = h(…)`, or a named slot's (SPEC §38). -/
+  name : Option String := none
+  /-- In a copy, or in a control handler's clauses: the site serving a slot of the row, whose
+  type arguments in the frame of the code being elaborated are these. Slots are unordered: an
+  operation that two of them could serve is ambiguous (SPEC §38). -/
+  slot : Option (List VTy) := none
+
+/-- The type arguments an operation is resolved against at the site: the slot's, in a copy. -/
+def Site.at (s : Site) : List VTy := s.slot.getD s.args
 
 /-- The variable a `for`'s site threads. -/
 def Site.thrVar (s : Site) : Option String := match s.thr with
@@ -230,7 +272,7 @@ structure RSelf where
   /-- The environment `E`: the capabilities the group's copy takes and hands back. -/
   env : List Cap
   /-- The sites the copy serves its row's control effects at, by effect. -/
-  served : List (String × Nat)
+  served : List Site
   /-- Under a heap driver: a call of itself is a call of the self-reference `fx_rself{j}` of the
   group's machine source, which the typed elaboration turns into a request (`recMachine`). -/
   deep : Bool := false
@@ -354,10 +396,6 @@ def unrowed : VTy → VTy
   | .bang sp (.rowed _ F _) => .bang sp F
   | A => A
 
-/-- The effects `es` taken off a row. -/
-def withoutAll (r : List Inst) (es : List (Ident × List VTy)) : List Inst :=
-  r.filter fun i => !es.any (·.1.name == i.eff)
-
 /-- The parameter tuple's type of a function type as written, under its `!` and lifetimes. -/
 def paramTyOf : VTy → Option VTy
   | .bang _ A | .all _ _ _ A => paramTyOf A
@@ -405,8 +443,10 @@ def Env.siteOps (env : Env) (s : Site) : List (Qual × VTy × VTy) :=
       | some (_, W) => (o.qual, .tensor o.name.span A (.name o.name.span W), .name o.name.span W)
       | none => (o.qual, A, o.res.subst σ)
 
-/-- The row entries of the sites `ss`, in order: `n.i q A ~> B`. -/
+/-- The row entries of the sites `ss`, in order: `n.i q A ~> B`, each site once (two slots of a
+row may be served by one site, SPEC §38). -/
 def Env.rowOf (env : Env) (ss : List Site) : Row :=
+  let ss := ss.foldl (fun acc s => if acc.any (·.n == s.n) then acc else acc ++ [s]) []
   ss.foldr (fun s r =>
     ((env.siteOps s).zipIdx).foldr (fun ((q, A, B), i) r => .cons s.n i q A B r) r) .nil
 
@@ -447,6 +487,12 @@ def matchTy (tps : List String) (σ : TySubst) (P A : VTy) : Option TySubst :=
 def mentions (tps : List String) (A : VTy) : Bool :=
   tps.any fun x => (A.subst [(x, .unk .none)]).strip != A.strip
 
+/-- Every type parameter among `tps` that `A` mentions is given by `σ`: `A.subst σ` is determined,
+whatever names the types `σ` gives are written with (an enclosing function's type parameter may
+have the name of one of `tps`). -/
+def solvedBy (tps : List String) (σ : TySubst) (A : VTy) : Bool :=
+  tps.all fun x => !mentions [x] A || (σ.lookup x).isSome
+
 /-! ### Rows -/
 
 /-- The name a call applies: `f(…)`, `f[A](…)`, `f ['x](…)`. -/
@@ -455,34 +501,134 @@ def headName : Val → Option String
   | .inst _ V _ | .unbang _ V => headName V
   | _ => none
 
-/-- An instance of `e` added to a row: one instance per effect, a determined one winning. -/
-def addInst (r : List Inst) (i : Inst) : List Inst :=
-  match r.find? (·.eff == i.eff) with
-  | none => r ++ [i]
-  | some j => if j.args.isNone && i.args.isSome then r.map (fun k => if k.eff == i.eff then i else k)
-    else r
+/-- The type arguments `As`, as types of the frame of the code being elaborated: the
+declarations in scope, and its declaration's type parameters as placeholders.  `[spec §38]` -/
+def Env.keyOf (env : Env) (As : List VTy) : Option (List CVTy) := do
+  let c ← env.scope
+  As.mapM (Instances.frame c env.ownerTps).elabV
 
-def union (a b : List Inst) : List Inst := b.foldl addInst a
+/-- Two lists of type arguments are one instance's: equal as types, or, when they are not types of
+the frame, as written.  `[spec §38]` -/
+def Env.sameArgs (env : Env) (a b : List VTy) : Bool :=
+  a.length == b.length && match env.keyOf a, env.keyOf b with
+    | some x, some y => x == y
+    | _, _ => a.map VTy.strip == b.map VTy.strip
 
+/-- An instance as the messages write it. -/
+def instText (e : String) (As : List VTy) : String :=
+  if As.isEmpty then s!"`{e}`" else s!"`{e}[{", ".intercalate (As.map (VTy.pp · 0))}]`"
+
+/-- An instance of `e` added to a row: one entry per instance (an effect at its type arguments,
+with its name). An instance whose type arguments are not known is an entry of its own until the
+function's row is settled (`Env.settle`, `Env.slotOf`).  `[spec §38]` -/
+def Env.addInst (env : Env) (r : List Inst) (i : Inst) : List Inst :=
+  let same (j : Inst) : Bool := j.eff == i.eff && j.name == i.name && match j.args, i.args with
+    | some a, some b => env.sameArgs a b
+    | none, none => true
+    | _, _ => false
+  if r.any same then r else r ++ [i]
+
+/-- A function's inferred row with no written row, settled (SPEC §38): an instance whose type
+arguments are not known is the one entry of its effect (and name) whose are, at the place of the
+earlier of the two; with none, they are not determined; with two, it is ambiguous. -/
+def Env.settle (sp : Span) (f : String) (r : List Inst) : Except Error (List Inst) := do
+  let mut out := r
+  for u in r do
+    if u.args.isSome then continue
+    let ds := out.filter fun d => d.eff == u.eff && d.name == u.name && d.args.isSome
+    match ds with
+    | [d] =>
+      let iu := out.idxOf u
+      let id := out.idxOf d
+      out := if iu < id then (out.erase d).set iu d else out.erase u
+    | [] => throw ⟨sp, s!"`{f}` performs `{u.eff}`, and its type arguments are not determined: " ++
+        s!"write them, `with {u.eff}[…]`"⟩
+    | ds => throw ⟨sp, s!"`{f}` performs `{u.eff}` at type arguments not known here, and " ++
+        s!"{", ".intercalate (ds.map fun d => instText d.eff (d.args.getD []))} too: ascribe its " ++
+        "argument (`(e : T)`), write its row, or perform it at a named handler (SPEC §38)"⟩
+  pure out
+
+def Env.union (env : Env) (a b : List Inst) : List Inst := b.foldl env.addInst a
+
+/-- The effect `e` taken off a row, every instance of it. -/
 def without (r : List Inst) (e : String) : List Inst := r.filter (·.eff != e)
+
+/-- A handler of the instance `e[args]` named `nm` handles the entry `j`: its effect, at its type
+arguments (any, when either is not known), unnamed or named `nm`.  `[spec §38]` -/
+def Env.handles (env : Env) (e : String) (args : Option (List VTy)) (nm : Option String) (j : Inst) :
+    Bool :=
+  j.eff == e && (j.name.isNone || j.name == nm) && match args, j.args with
+    | some a, some b => env.sameArgs a b
+    | _, _ => true
+
+/-- A row less what a handler of `e[args]` named `nm` handles. -/
+def Env.withoutInst (env : Env) (r : List Inst) (e : String) (args : Option (List VTy))
+    (nm : Option String) : List Inst :=
+  r.filter (!env.handles e args nm ·)
+
+/-- The provided instances `es` (a computation parameter's, SPEC §33) taken off a row: an entry
+of a provided effect at its type arguments, or whose type arguments are not known.
+`[spec §38]` -/
+def Env.withoutAll (env : Env) (r : List Inst) (es : List (Ident × List VTy)) : List Inst :=
+  r.filter fun i => !es.any fun (e, As) => e.name == i.eff && i.args.all (env.sameArgs As)
 
 /-- What a call of `g` performs: its row, and for a member of a recursive group the rows of the
 layers in scope (`inLayers`). -/
 def Env.callRow (env : Env) (g : FSig) : List Inst :=
   if g.group.isNone then g.row
-  else env.inLayers.foldl (fun r L => union r (((env.fn? L).map (·.row)).getD [])) g.row
+  else env.inLayers.foldl (fun r L => env.union r (((env.fn? L).map (·.row)).getD [])) g.row
 
-/-- The instance an operation call of `o` performs: determined when its effect takes no type. -/
-def Env.opInst (env : Env) (o : OpSig) : Inst :=
+/-- The type arguments recorded at the call at `sp` of the code being elaborated
+(`Instances.table`).  `[spec §38]` -/
+def Env.recorded (env : Env) (sp : Span) : Option (List VTy) :=
+  env.table[Instances.key env.owner sp]?
+
+/-- What the call at `sp` of `g` performs: `g`'s row at the call's type arguments, a slot that
+mentions `g`'s type parameters undetermined when they are not known. Each slot stays an entry of
+its own.  `[spec §38]` -/
+def Env.callRowAt (env : Env) (sp : Span) (g : FSig) : List Inst :=
+  let row := env.callRow g
+  match g.decl with
+  | .def_ _ _ ps@(_ :: _) _ _ _ =>
+    let tps := ps.map (·.name)
+    let σ? : Option TySubst := (env.recorded sp).map (tps.zip ·)
+    row.map fun i => match i.args with
+      | some As =>
+        if As.any (mentions tps) then { i with args := σ?.map fun σ => As.map (·.subst σ) } else i
+      | none => i
+  | _ => row
+
+/-- The instance an operation call of `o` at `sp` performs (at the handler named `nm`): its
+effect's type arguments, `[]` when it takes none, else those recorded at the call.
+`[spec §38]` -/
+def Env.opInst (env : Env) (o : OpSig) (sp : Span) (nm : Option String := none) : Inst :=
   ⟨o.eff, match env.eff? o.eff with
-    | some e => if e.tps.isEmpty then some [] else none
-    | none => none⟩
+    | some e => if e.tps.isEmpty then some [] else env.recorded sp
+    | none => none, nm⟩
 
 /-- The instances a control handler's own row adds at a `with`: determined when its patterns
 mention none of the handler's type parameters. -/
 def handlerRow (h : CHandler) : List Inst :=
   let tps := h.tps.map (·.name)
-  h.row.map fun (e, As) => ⟨e.name, if As.any (mentions tps) then none else some As⟩
+  h.row.map fun (e, As) => ⟨e.name, if As.any (mentions tps) then none else some As, none⟩
+
+/-- The type arguments of the effect a control handler `ch` handles at `with ch[As] { M }`, `inner`
+being what `M` performs: those the written arguments give; else those of the instance of the
+effect that `M` performs (unnamed, or named `nm`), when it performs one. `none` when they are not
+determined, or `M` performs two (`withCtl` asks for them).  `[spec §38]` -/
+def Env.handledArgs (env : Env) (ch : CHandler) (As : List VTy) (nm : Option String)
+    (inner : List Inst) : Option (List VTy) := do
+  let tps := ch.tps.map (·.name)
+  let σ : TySubst := tps.zip As
+  let effArgs := ch.effArgs.map (·.subst σ)
+  if ch.effArgs.all (solvedBy tps σ) then return effArgs
+  let mine := inner.filter fun j => j.eff == ch.eff.name && (j.name.isNone || j.name == nm)
+  let Bs ← (mine.filterMap (·.args)).head?
+  guard (mine.all fun j => j.args.all (env.sameArgs Bs))
+  guard (Bs.length == ch.effArgs.length)
+  let σ' ← (ch.effArgs.zip Bs).foldlM (fun σ (Pt, B) => matchTy tps σ Pt B) σ
+  let effArgs := ch.effArgs.map (·.subst σ')
+  if ch.effArgs.all (solvedBy tps σ') then some effArgs else none
 
 /-- A call of a function that performs an iteration effect (SPEC §15): the callee's name, its
 signature, the instance of the iteration effect, and the callee and argument as written. -/
@@ -529,23 +675,27 @@ generator: it does not perform the iteration effect. -/
 def rowV (env : Env) : Nat → Val → List Inst
   | 0, _ => []
   | n + 1, V => match V with
-    | .app _ (.app _ (.sugar _ (.handle h _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
+    | .app _ (.app _ (.sugar _ (.handle h _ As nm)) P) (.thunkv _ (.lam _ _ _ M)) =>
       let inner := rowC env n M
       let inner := match env.handler? h, env.chandler? h with
-        | some hs, _ => without inner hs.eff
-        | none, some ch => union (without inner ch.eff.name) (handlerRow ch)
+        | some hs, _ => env.withoutInst inner hs.eff (some []) nm
+        | none, some ch =>
+          env.union (env.withoutInst inner ch.eff.name (env.handledArgs ch As nm inner) nm) (handlerRow ch)
         | none, none =>
           if env.driver? h then match env.exhEff? with
             | some e => without inner e.name
             | none => inner
-          else if (env.layer? h).isSome then union inner ((env.fn? h).map (·.row) |>.getD [])
+          else if (env.layer? h).isSome then env.union inner ((env.fn? h).map (·.row) |>.getD [])
           else inner
-      union (rowV env n P) inner
-    | .app _ f W =>
+      env.union (rowV env n P) inner
+    -- `x.op(W)`: the operation at the handler named `x` (SPEC §38).
+    | .app sp (.sugar _ (.named x op)) W =>
+      env.union ((env.op? op).toList.map (env.opInst · sp (some x))) (rowV env n W)
+    | .app sp f W =>
       let head := match headName f with
         | some x => match env.op? x, env.fn? x with
-          | some o, _ => [env.opInst o]
-          | none, some g => env.callRow g
+          | some o, _ => [env.opInst o sp]
+          | none, some g => env.callRowAt sp g
           | none, none => rowV env n f
         | none => rowV env n f
       -- An argument at a computation parameter performs what the callee provides there in the
@@ -555,15 +705,15 @@ def rowV (env : Env) : Nat → Val → List Inst
           let cps := (env.comps.lookup x).getD []
           (env.pullArgs x W).zipIdx.foldl (fun r ((V, pull), j) =>
             let rV := pullRow env n pull V
-            union r (match cps.find? (·.1 == j) with
-              | some (_, _, es) => withoutAll rV es
+            env.union r (match cps.find? (·.1 == j) with
+              | some (_, _, es) => env.withoutAll rV es
               | none => rV)) []
         | none => rowV env n W
-      union head args
+      env.union head args
     | .var _ x => match env.fn? x with
       | some g => env.callRow g
       | none => (env.cbRows.lookup x).getD []
-    | .pair _ V W => union (rowV env n V) (rowV env n W)
+    | .pair _ V W => env.union (rowV env n V) (rowV env n W)
     | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
     | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => rowV env n V
     | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => rowC env n M
@@ -574,17 +724,17 @@ def rowC (env : Env) : Nat → Comp → List Inst
   | 0, _ => []
   | n + 1, M => match M with
     | .ret _ V | .absurd _ V => rowV env n V
-    | .bind _ _ (some A) (.ret _ V) N _ => union (pullRow env n (isPullTy A) V) (rowC env n N)
-    | .bind _ _ _ M N _ | .with_ _ M N => union (rowC env n M) (rowC env n N)
-    | .letUnit _ V M | .letPair _ _ _ V M => union (rowV env n V) (rowC env n M)
+    | .bind _ _ (some A) (.ret _ V) N _ => env.union (pullRow env n (isPullTy A) V) (rowC env n N)
+    | .bind _ _ _ M N _ | .with_ _ M N => env.union (rowC env n M) (rowC env n N)
+    | .letUnit _ V M | .letPair _ _ _ V M => env.union (rowV env n V) (rowC env n M)
     | .case _ V _ M _ N =>
-      union (rowV env n V) (union (rowC env n M) (rowC env n N))
+      env.union (rowV env n V) (env.union (rowC env n M) (rowC env n N))
     | .for_ _ _ V M N =>
       -- A `for` over a call that performs an iteration effect handles it.
       let src := match env.iterCall? V with
         | some (_, _, i, _, _) => without (rowV env n V) i.eff
         | none => rowV env n V
-      union src (union (rowC env n M) (rowC env n N))
+      env.union src (env.union (rowC env n M) (rowC env n N))
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
     | .nuOut _ M | .ascribe _ M _ => rowC env n M
     | _ => []
@@ -853,12 +1003,37 @@ structure Cx where
 the layers its recursion runs under. -/
 def Cx.rowOf (cx : Cx) (g : FSig) : List Inst := cx.env.callRow g
 
-/-- The capabilities of `cx` for the effects `row`, in the order of `cx.caps`. -/
-def Cx.need (cx : Cx) (row : List Inst) : List Cap := cx.caps.filter (fun c => row.any (·.eff == c.eff))
+/-- What the call of `g` at `sp` performs here (`Env.callRowAt`). -/
+def Cx.rowAt (cx : Cx) (sp : Span) (g : FSig) : List Inst := cx.env.callRowAt sp g
+
+/-- The capability serving the answering instance `i`: the handler named as it is, when it is
+named; else the innermost handler of its effect. Of a copy's slots, which are unordered, the one
+slot of the effect, or the one unnamed slot (`Cx.capAt` reports two).  `[spec §38]` -/
+def Cx.capFor (cx : Cx) (i : Inst) : Option Cap :=
+  let cands := cx.caps.filter (·.eff == i.eff)
+  match i.name with
+  | some x => cands.find? (·.name == some x)
+  | none => match cands with
+    | c :: _ =>
+      if !c.slot then some c else
+      match cands.filter (·.slot) with
+      | [d] => some d
+      | ds => match ds.filter (·.name.isNone) with
+        | [d] => some d
+        | _ => some c
+    | [] => none
+
+/-- The capabilities of `cx` for the effects `row`, in the order of `cx.caps`: each the
+capability an instance of `row` is served by, and a block's of its effect. -/
+def Cx.need (cx : Cx) (row : List Inst) : List Cap :=
+  cx.caps.filter fun c => row.any fun i => i.eff == c.eff && (c.blk || match cx.capFor i with
+    | some d => d.var == c.var
+    | none => true)
 
 /-- The capabilities of `cx` for the effects `row`, in the order of `row`: those a copy for them
 takes first. -/
-def Cx.needIn (cx : Cx) (row : List Inst) : List Cap := row.filterMap fun i => cx.caps.find? (·.eff == i.eff)
+def Cx.needIn (cx : Cx) (row : List Inst) : List Cap :=
+  (row.filterMap cx.capFor).foldl (fun acc c => if acc.any (·.var == c.var) then acc else acc ++ [c]) []
 
 def Cx.needV (cx : Cx) (V : Val) : List Cap := cx.need (rowV cx.env fuel V)
 def Cx.needC (cx : Cx) (M : Comp) : List Cap := cx.need (rowC cx.env fuel M)
@@ -893,7 +1068,7 @@ blocks and closures: the innermost borrow block around a spawn lends them for it
 def Cx.givenV (cx : Cx) : Nat → Val → List Cap
   | 0, _ => []
   | n + 1, V => match V with
-    | .app _ (.app _ (.sugar _ (.handle h _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
+    | .app _ (.app _ (.sugar _ (.handle h _ _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
       if cx.env.gives h then cx.needC M else cx.givenV n P ++ cx.givenC n M
     | .app _ (.app _ (.sugar _ (.borrow ..)) _) _ => []
     | .app _ f W | .pair _ f W => cx.givenV n f ++ cx.givenV n W
@@ -923,16 +1098,73 @@ def notInClosure (sp : Span) (e : String) : Error :=
   ⟨sp, s!"an operation of `{e}` is performed inside a closure or block that is not run in place: " ++
     "it cannot reach its handler (effectful callbacks, #161)"⟩
 
-/-- The site serving the control instance `i` here, its type arguments checked against the
-instance's when both are determined. -/
-def Cx.serve (cx : Cx) (sp : Span) (what : String) (i : Inst) : Except Error Site := do
-  let some s := cx.siteOf i.eff
+/-- The site serving the control instance `i` here (SPEC §38): the handler named as it is, when
+it is named; else the innermost handler of its instance. When its type arguments are not known
+here, or no handler in scope has them, the innermost handler of its effect, if all of those in
+scope are one instance; with `strict`, its type arguments are checked against the handler's. A
+copy's slots are unordered: of two that could serve it, the one that is not named, else it is
+ambiguous. -/
+def Cx.serve (cx : Cx) (sp : Span) (what : String) (i : Inst) (strict : Bool := true) :
+    Except Error Site := do
+  let env := cx.env
+  let cands := cx.sites.filter (·.eff == i.eff)
+  let some s₀ := cands.head?
     | throw ⟨sp, s!"{what} performs `{i.eff}`, but no handler of `{i.eff}` is in scope here"⟩
-  if let some As := i.args then
-    unless As.map VTy.strip == s.args.map VTy.strip do
-      throw ⟨sp, s!"{what} performs `{i.eff}[{", ".intercalate (As.map (VTy.pp · 0))}]`, but the " ++
-        s!"handler of `{i.eff}` in scope is at `{i.eff}[{", ".intercalate (s.args.map (VTy.pp · 0))}]`"⟩
-  pure s
+  let check (s : Site) : Except Error Unit := do
+    if let some As := i.args then
+      unless env.sameArgs As s.at do
+        throw ⟨sp, s!"{what} performs {instText i.eff As}, but the handler of `{i.eff}` in scope " ++
+          s!"is at {instText i.eff s.args}"⟩
+  let pick (ss : List Site) : Except Error Site := do
+    let some s := ss.head? | throw ⟨sp, "internal error: no site"⟩
+    if s.slot.isNone then return s
+    match ss.filter (·.slot.isSome) with
+    | [t] => pure t
+    | ts => match ts.filter (·.name.isNone) with
+      | [t] => pure t
+      | _ => throw ⟨sp, s!"{what} performs {instText i.eff s.at}, which two entries of the row " ++
+          s!"could serve ({", ".intercalate (ts.map fun t => (t.name.map (s!"`{·}`")).getD "unnamed")}): " ++
+          "perform it at a named one (`n.op(…)`, SPEC §38)"⟩
+  if let some x := i.name then
+    let some s := cands.find? (·.name == some x)
+      | throw ⟨sp, s!"{what} performs `{i.eff}` at the handler named `{x}`, but no handler of " ++
+          s!"`{i.eff}` named `{x}` is in scope here"⟩
+    check s
+    return s
+  let ofInst := match i.args with
+    | some As => cands.filter fun s => env.sameArgs As s.at
+    | none => []
+  if !ofInst.isEmpty then return ← pick ofInst
+  if cands.all fun s => env.sameArgs s.at s₀.at then
+    let s ← pick cands
+    if strict then check s
+    return s
+  let shown := cands.foldl (fun acc s => if acc.any (env.sameArgs s.at ·) then acc else acc ++ [s.at]) []
+  let inScope := ", ".intercalate (shown.map (instText i.eff))
+  match i.args with
+  | some As => throw ⟨sp, s!"{what} performs {instText i.eff As}, and no handler of it is in scope " ++
+      s!"here (handlers of {inScope} are)"⟩
+  | none => throw ⟨sp, s!"{what} performs `{i.eff}` at type arguments not known here, and handlers " ++
+      s!"of {inScope} are in scope: ascribe its argument (`(e : T)`), or perform it at a named " ++
+      "handler (`n.op(…)`, SPEC §38)"⟩
+
+/-- The capability serving the answering instance `i` here (`Cx.capFor`), or why there is none.
+`[spec §38]` -/
+def Cx.capAt (cx : Cx) (sp : Span) (what : String) (i : Inst) : Except Error Cap := do
+  let cands := cx.caps.filter (·.eff == i.eff)
+  if let some x := i.name then
+    let some c := cands.find? (·.name == some x)
+      | throw ⟨sp, s!"{what} performs `{i.eff}` at the handler named `{x}`, but no handler of " ++
+          s!"`{i.eff}` named `{x}` is in scope here"⟩
+    return c
+  let some c := cx.capFor i
+    | throw ⟨sp, s!"{what} performs `{i.eff}`, but no handler of `{i.eff}` is in scope here"⟩
+  if c.slot then
+    let ts := cands.filter (·.slot)
+    if ts.length > 1 && (ts.filter (·.name.isNone)).length != 1 then
+      throw ⟨sp, s!"{what} performs `{i.eff}`, which two entries of the row could serve: perform it " ++
+        "at a named one (`n.op(…)`, SPEC §38)"⟩
+  pure c
 
 def fnParts (sp : Span) (name : String) (A : VTy) (V : Val) : Except Error FnParts := do
   let (bang, A, V) : Bool × VTy × Comp ← match A, V with
@@ -1012,7 +1244,7 @@ def rowedCapFnTy (row : Row) (cs : List Cap) : VTy → Option VTy
 /-- The variable `w` of type `W` that a `for`'s site of the iteration effect `e` threads, as a
 capability. -/
 def threadCap (sp : Span) (e w W : String) : Cap :=
-  ⟨e, w, "", ⟨"", e, ⟨"", sp⟩, .unit sp, [], sp, false, false⟩, some W, false⟩
+  ⟨e, w, "", ⟨"", e, ⟨"", sp⟩, .unit sp, [], sp, false, false⟩, some W, false, none, false⟩
 
 /-- The sites `ss` and those of `extra` not among them, by static name. -/
 def addSites (ss extra : List Site) : List Site :=
@@ -1038,7 +1270,7 @@ structure Blk where
 threaded variable as it is.  `[spec §32]` -/
 def Cap.canon (sp : Span) (c : Cap) : Cap := match c.thr with
   | some W => { threadCap sp c.eff c.var W with blk := true }
-  | none => ⟨c.eff, "fx_c_" ++ c.eff.toLower, "fx_l_" ++ c.eff.toLower, c.h, none, true⟩
+  | none => ⟨c.eff, capVar c.eff c.name, capLife c.eff c.name, c.h, none, true, c.name, false⟩
 
 
 /-- The capabilities `cs` and those of `extra` for effects not among them. -/
@@ -1063,6 +1295,35 @@ def Blk.inCopy (own : List Site) (b : Blk) : Blk :=
 that a block uses too is the block's (`blk`).  `[spec §32]` -/
 def withBlkCaps (cs bc : List Cap) : List Cap :=
   (addCaps cs bc).map fun c => if bc.any (·.eff == c.eff) then { c with blk := true } else c
+
+/-- A copy's capabilities and sites from what serves the slots of its callee's row `row`: `hs` the
+handlers of its answering slots and `ss` the sites of its control slots, each in the row's order
+(SPEC §38). Each capability is at the copy's own variable, named as its slot; each site is
+relabelled as the slot it serves, at the slot's type arguments in the callee's frame, so that an
+operation of the body is resolved at the callee's types. The copy's row is at the slot's types
+when they mention the callee's type parameters `tps`, and otherwise at the site's as the caller
+writes them, which are the same types. -/
+def slotsOf (sp : Span) (row : List Inst) (tps : List String) (hs : List HSig) (ss : List Site)
+    (answering : String → Bool) : List Cap × List Site := Id.run do
+  let mut cs : List Cap := []
+  let mut out : List Site := []
+  let mut ia := 0
+  let mut ic := 0
+  for i in row do
+    if answering i.eff then
+      if let some h := hs[ia]? then
+        cs := cs ++ [⟨i.eff, capVar i.eff i.name, capLife i.eff i.name, h, none, false, i.name, true⟩]
+      ia := ia + 1
+    else
+      if let some s := ss[ic]? then
+        if let some (w, W) := s.thr then cs := cs ++ [threadCap sp i.eff w W]
+        let args := match i.args with
+          | some As => if As.any (mentions tps) then As else s.args
+          | none => s.args
+        out := out ++ [{ s with sp, what := "the caller", name := i.name, slot := some (i.args.getD s.args),
+                                args }]
+      ic := ic + 1
+  return (cs, out)
 
 /-- The capabilities the blocks `blks` use, in the order of the blocks. -/
 def blkCaps (blks : List Blk) : List Cap := blks.foldl (fun acc b => addCaps acc b.caps) []
@@ -1118,8 +1379,8 @@ def withBlocks (env : Env) (sp : Span) (name : String) (f : FnParts) (ss : List 
 and the answering effects whose capabilities the blocks use. -/
 def Env.withBlocks (env : Env) (named : List (String × List Site × List Cap)) : Env :=
   { env with cbRows := named.map fun (x, ss, cs) =>
-      (x, ss.map (fun s => (⟨s.eff, some s.args⟩ : Inst)) ++
-        (cs.filter (·.thr.isNone)).map fun c => (⟨c.eff, none⟩ : Inst)) }
+      (x, ss.map (fun s => (⟨s.eff, some s.args, none⟩ : Inst)) ++
+        (cs.filter (·.thr.isNone)).map fun c => (⟨c.eff, none, none⟩ : Inst)) }
 
 /-- The effectful blocks a call of `x` passes (SPEC §30): each component `j` of its argument tuple
 at a parameter of a function type that is a closure written here whose body performs control
@@ -1152,7 +1413,7 @@ def blockArgs (cx : Cx) (x : String) (W : Val) : Except Error (List Blk) := do
     let row₀ := match V with
       | .thunkv _ M | .bangThunkv _ M => rowC cx.env fuel M
       | V => rowV cx.env fuel V
-    let row := withoutAll row₀ prov
+    let row := cx.env.withoutAll row₀ prov
     let ctl := cx.ctl row
     -- The capabilities it uses (an answering handler's state, a `for`'s threaded variables) are
     -- passed with it at each call (SPEC §32).
@@ -1205,7 +1466,7 @@ def etaArgs (cx : Cx) (x : String) (W : Val) : EM Val := do
 performing `e` outside a `with` of `e`: no operation, no function's row and no handler's own row
 counts, and `x` performs `e` (SPEC §33).  `[spec §33]` -/
 def Env.onlyParam (env : Env) (x e : String) (As : List VTy) : Env :=
-  { env with ops := [], fns := [], cbRows := [(x, [⟨e, some As⟩])],
+  { env with ops := [], fns := [], cbRows := [(x, [⟨e, some As, none⟩])],
              chandlers := env.chandlers.map fun h => { h with row := [] } }
 
 /-- `M` calls the parameter `x` performing `e`, outside a `with` of `e` in it. -/
@@ -1235,7 +1496,7 @@ def Cx.portIn (cx : Cx) (sp : Span) (h e : String) (M : Comp) : Except Error (Op
 
 /-- The capabilities of a copy made for the handlers `hs`, one per answering effect of `effs`. -/
 def copyCaps (effs : List String) (hs : List HSig) : List Cap :=
-  (effs.zip hs).map fun (e, h) => ⟨e, "fx_c_" ++ e.toLower, "fx_l_" ++ e.toLower, h, none, false⟩
+  (effs.zip hs).map fun (e, h) => ⟨e, capVar e none, capLife e none, h, none, false, none, false⟩
 
 /-- A body taking the capabilities `cs` first: `fx_pp : mut 'l₁ S₁ * (… * P)`, taken apart into
 the capabilities and the original parameter `p`. -/
@@ -1357,12 +1618,13 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
       | some x, true =>
         match cx.env.fn? x with
         | some g =>
-          let used := cx.need (cx.rowOf g)
+          let row := cx.rowAt V.span g
+          let used := cx.need row
           -- A call passing effectful blocks is a call of the copy at their rows (`blockCall`).
           let blks ← (blockArgs cx x W : Except Error _)
           if !W.lends && used.map (·.var) == cs.map (·.var) && blks.isEmpty then
             let (bs, W') ← trV n cx cs W
-            let name ← copyFor n cx sp x g []
+            let name ← copyFor n cx sp x g row []
             let f' : Val := match f with
               | .defApp fsp _ As => .defApp fsp name As
               | _ => .var f.span name
@@ -1495,10 +1757,10 @@ def trV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
 def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
   | 0, _, _, V => throw ⟨V.span, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, V => match V with
-    | .app sp (.app sp₂ (.sugar ksp (.handle h l As)) P) (.thunkv tsp (.lam lsp b A M)) =>
+    | .app sp (.app sp₂ (.sugar ksp (.handle h l As nm)) P) (.thunkv tsp (.lam lsp b A M)) =>
       match cx.env.handler? h, cx.env.chandler? h with
-      | some hs, _ => withBlk k cx cs sp sp₂ ksp hs l P tsp lsp b A M
-      | none, some ch => withCtl k cx cs sp ksp ch As P M
+      | some hs, _ => withBlk k cx cs sp sp₂ ksp hs l P tsp lsp b A M nm
+      | none, some ch => withCtl k cx cs sp ksp ch As P M nm
       | none, none =>
         if cx.env.driver? h then do
           -- `with d { M }` of a heap driver: `M`, its recursive groups driven by `d`.
@@ -1549,6 +1811,12 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
       let M' ← trC k cx csM true M
       let blk := Val.app sp (.app sp₂ (.sugar ksp k') P') (.thunkv tsp (.lam lsp b A M'))
       blockResult k cx sp blk csM
+    -- `y.op(W)`: the operation at the handler named `y` (SPEC §38).
+    | .app sp (.sugar osp (.named y x)) W => do
+      let some o := cx.env.op? x
+        | throw ⟨osp, s!"`{x}` is not an operation: `{y}.{x}(…)` performs an operation at the " ++
+            s!"handler named `{y}`"⟩
+      if cx.env.answering o.eff then opCall k cx cs sp x o W (some y) else ctlCall k cx cs sp x o W (some y)
     | .app sp f W => do
       match headName f with
       | some x =>
@@ -1579,7 +1847,8 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
               let (b, V') ← blockCall k cx cs sp f x g W blks
               return (bP ++ b, V')
         let (b, V') ← match cx.env.op? x, cx.env.fn? x with
-          | some o, _ => if cx.env.answering o.eff then opCall k cx cs sp x o W else ctlCall k cx cs sp x o W
+          | some o, _ =>
+            if cx.env.answering o.eff then opCall k cx cs sp x o W none else ctlCall k cx cs sp x o W none
           | none, some g => fnCall k cx cs sp f x g W
           | none, none => plainApp k cx cs sp f W
         pure (bP ++ b, V')
@@ -1693,9 +1962,9 @@ def selfCall : Nat → Cx → List Cap → Span → RSelf → String → Nat →
       ⟨sp, s!"`{x}` calls itself inside a handler of `{e}`, an effect its recursion " ++
         s!"performs: each level's `{e}` would go to the level's own handler, a site per level " ++
         "without end (recursion through a site, decision 57; generative labels, #173)"⟩
-    for (e, n) in rs.served do
-      if let some s := cx.siteOf e then
-        if s.n != n then throw (through e)
+    for s₀ in rs.served do
+      if let .ok s := cx.serve sp "" ⟨s₀.eff, some s₀.at, s₀.name⟩ (strict := false) then
+        if s.n != s₀.n then throw (through s₀.eff)
     for c in rs.env do
       if let some c' := cx.capOf c.eff then
         if c'.h.key != c.h.key || c'.var != c.var then throw (through c.eff)
@@ -1780,12 +2049,14 @@ def plainApp : Nat → Cx → List Cap → Span → Val → Val → EM (List Bin
 
 /-- `op(W)` of an answering effect: a call of the innermost handler's clause on the capability,
 which hands it back. -/
-def opCall : Nat → Cx → List Cap → Span → String → OpSig → Val → EM (List Bind × Val)
-  | 0, _, _, sp, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
-  | k + 1, cx, cs, sp, x, o, W => do
-    let some c := cx.capOf o.eff
-      | throw ⟨sp, s!"the operation `{x}` of `{o.eff}` is performed here, but no handler of " ++
+def opCall : Nat → Cx → List Cap → Span → String → OpSig → Val → Option String →
+    EM (List Bind × Val)
+  | 0, _, _, sp, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, cs, sp, x, o, W, nm => do
+    if (cx.capFor (cx.env.opInst o sp nm)).isNone && nm.isNone then
+      throw ⟨sp, s!"the operation `{x}` of `{o.eff}` is performed here, but no handler of " ++
           s!"`{o.eff}` is in scope"⟩
+    let c ← (cx.capAt sp s!"the operation `{x}`" (cx.env.opInst o sp nm) : Except Error Cap)
     noLend sp s!"the operation `{x}`" W
     let (b, W') ← goV k cx cs W
     let t ← fresh "fx_b"
@@ -1811,7 +2082,8 @@ def opCall : Nat → Cx → List Cap → Span → String → OpSig → Val → E
         (.letPair sp ⟨c.var, sp⟩ ⟨r, sp⟩ (.var sp t) N) false)
       return (b ++ [bind], .var sp r)
     let call := Val.app sp (.var sp (clauseName c.h.name x)) (.pair sp (.var sp c.var) W')
-    report sp "call" s!"{x} ({o.eff}) → `{clauseName c.h.name x}`, on the state of `{c.h.name}`"
+    report sp "call" (s!"{x} ({o.eff}) → `{clauseName c.h.name x}`, on the state of `{c.h.name}`" ++
+      ((c.name.map (s!" named `{·}`")).getD ""))
     let bind : Bind := fun N => do
       pure (.bind sp ⟨t, sp⟩ (if o.decl.lives.isEmpty then some (capsTy sp [c] o.decl.res) else none)
         (.ret sp call)
@@ -1820,10 +2092,12 @@ def opCall : Nat → Cx → List Cap → Span → String → OpSig → Val → E
 
 /-- `op(W)` of a control effect: the kernel's operation, at the static name of the innermost site
 of its effect, bound before the value it is in. -/
-def ctlCall : Nat → Cx → List Cap → Span → String → OpSig → Val → EM (List Bind × Val)
-  | 0, _, _, sp, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
-  | k + 1, cx, cs, sp, x, o, W => do
-    let s ← (cx.serve sp s!"the operation `{x}`" (cx.env.opInst o) : Except Error Site)
+def ctlCall : Nat → Cx → List Cap → Span → String → OpSig → Val → Option String →
+    EM (List Bind × Val)
+  | 0, _, _, sp, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, cs, sp, x, o, W, nm => do
+    let s ← (cx.serve sp s!"the operation `{x}`" (cx.env.opInst o sp nm) (strict := false) :
+      Except Error Site)
     let (b, W') ← goV k cx cs W
     let r ← fresh "fx_v"
     let abortive := o.decl.abortive
@@ -1849,11 +2123,14 @@ def fnCall : Nat → Cx → List Cap → Span → Val → String → FSig → Va
       throw ⟨sp, s!"`{x}` is recursive and another function is named `{x}` too: a call of it is " ++
         "not provided (two modules may declare templates of one name, chosen by the arguments' " ++
         "types, only when none of them is recursive)"⟩
-    let used := cx.needIn (cx.rowOf g)
-    if used.isEmpty && (cx.ctl (cx.rowOf g)).isEmpty then return ← plainApp k cx cs sp f W
+    let row := cx.rowAt sp g
+    let used := cx.needIn row
+    -- A named slot with no handler of its name here is reported where its copy is made.
+    let named := row.any fun i => i.name.isSome && (cx.capFor i).isNone
+    if used.isEmpty && (cx.ctl row).isEmpty && !named then return ← plainApp k cx cs sp f W
     noLend sp s!"`{x}`" W
     let (b, W') ← goV k cx cs W
-    let name ← copyFor k cx sp x g []
+    let name ← copyFor k cx sp x g row []
     let f' : Val := match f with
       | .defApp fsp _ As => .defApp fsp name As
       | _ => .var f.span name
@@ -1934,7 +2211,8 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
     -- At a computation parameter, the copy names the ports the block performs its provided
     -- effects at: the copy is made first (SPEC §33).
     let early := blks.any (!·.prov.isEmpty)
-    let name₀ ← if early then copyFor k cx sp x g blks else pure ""
+    let row := cx.rowAt sp g
+    let name₀ ← if early then copyFor k cx sp x g row blks else pure ""
     let stP ← get
     let ports : List (Nat × List (Site × Bool)) := if early then ((stP.ports.lookup name₀).getD []) else []
     let mut bs : List Bind := []
@@ -1946,7 +2224,8 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
         -- the callee provides (SPEC §33).
         let pss := ((ports.lookup j).getD []).map (·.1)
         let cxB : Cx := { cx with caps := blk.caps, fnCaps := [],
-                                  sites := pss ++ cx.sites.filter fun s => !pss.any (·.eff == s.eff) }
+                                  sites := pss ++ cx.sites.filter fun s =>
+                                    !pss.any fun p => p.eff == s.eff && cx.env.sameArgs p.args s.at }
         let body (M : Comp) : EM Comp := do
           if blk.caps.isEmpty then return ← trC k cxB [] false M
           match M with
@@ -1968,8 +2247,8 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
       | [V] => V
       | V :: Vs => .pair V.span V (tuple Vs)
     let W' := tuple vs
-    let used := addCaps (cx.needIn (cx.rowOf g)) (blkCaps blks)
-    let name ← if early then pure name₀ else copyFor k cx sp x g blks
+    let used := addCaps (cx.needIn row) (blkCaps blks)
+    let name ← if early then pure name₀ else copyFor k cx sp x g row blks
     let f' : Val := match f with
       | .defApp fsp _ As => .defApp fsp name As
       | _ => .var f.span name
@@ -1995,22 +2274,24 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
 /-- `with h(P) { 'l, c -> M }` of an answering handler: a borrow block of the state's cell whose
 callback's parameter `c` is the capability. -/
 def withBlk : Nat → Cx → List Cap → Span → Span → Span → HSig → String → Val → Span → Span →
-    Ident → VTy → Comp → EM (List Bind × Val)
-  | 0, _, _, sp, _, _, _, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
-  | k + 1, cx, cs, sp, sp₂, ksp, hs, l, P, tsp, lsp, b, A, M => do
+    Ident → VTy → Comp → Option String → EM (List Bind × Val)
+  | 0, _, _, sp, _, _, _, _, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, cs, sp, sp₂, ksp, hs, l, P, tsp, lsp, b, A, M, nm => do
     let (bsP, P') ← goV k cx cs P
     let place ← match P' with
       | .lend _ x .mut => pure (Val.var x.span x.name)
       | .lend lsp' _ .imm => throw ⟨lsp', "a handler's state is lent `&mut`"⟩
       | V => pure (.app V.span (.sugar V.span (.call "alloc")) V)
-    let cap : Cap := ⟨hs.eff, b.name, l, hs, none, false⟩
-    let cx' : Cx := { cx with caps := cap :: cx.caps.filter (fun c => c.blk || c.eff != hs.eff) }
+    let cap : Cap := ⟨hs.eff, b.name, l, hs, none, false, nm, false⟩
+    -- An enclosing handler of the effect stays reachable by its name (SPEC §38).
+    let cx' : Cx := { cx with caps := cap :: cx.caps.filter (fun c => c.blk || c.eff != hs.eff ||
+      (c.name.isSome && c.name != nm)) }
     let csM := cx'.needC M
-    let outer := csM.filter (fun c => c.blk || c.eff != hs.eff)
+    let outer := csM.filter (·.var != cap.var)
     let where_ := match P' with
       | .lend _ x _ => s!"lent from `{x.name}`"
       | _ => "in a cell scoped to the block"
-    report ksp "lowering" (s!"with {hs.name} ({hs.eff}): a borrow block of its state ({where_}); its " ++
+    report ksp "lowering" (s!"with {((nm.map (· ++ " = ")).getD "")}{hs.name} ({hs.eff}): a borrow block of its state ({where_}); its " ++
       "operations are calls of the clauses on the capability")
     -- The body hands back the enclosing capabilities it uses; its own is dropped at its end.
     let body ← trC k cx' outer true M
@@ -2030,11 +2311,14 @@ handled effect's type arguments are the ones written, or the ones the body perfo
 handler's own row is resolved to the sites around the `with`. The site is assembled with its
 clauses where the types are known (`VSugar.hndCtl`). -/
 def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VTy → Val → Comp →
-    EM (List Bind × Val)
-  | 0, _, _, sp, _, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
-  | k + 1, cx, cs, sp, ksp, ch, As, P, M => do
+    Option String → EM (List Bind × Val)
+  | 0, _, _, sp, _, _, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, cs, sp, ksp, ch, As, P, M, nm => do
     let tps := ch.tps.map (·.name)
     let e := ch.eff.name
+    -- The handler's clauses are elaborated in its own frame (SPEC §38).
+    let envH : Env := { cx.env with owner := Instances.ownerKey ch.name.name ch.name.span,
+                                    ownerTps := tps }
     if M.boundNames.contains "io_bt" then
       throw ⟨ksp, s!"the body of `with {ch.name.name}` assigns a `let mut` variable declared " ++
         "outside it, or lends a place declared outside it: a control handler's body may be " ++
@@ -2083,8 +2367,16 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     let n ← match ← (cx.portIn ksp ch.name.name e M : Except Error _) with
       | some p => pure p
       | none => freshSite
-    if let some i := (rowC cx.env fuel M).find? (·.eff == e) then
-      if let some Bs := i.args then
+    -- The instance it handles: at the written type arguments; else the one instance of its effect
+    -- the body performs, unnamed or named as this handler (SPEC §38).
+    if !(ch.effArgs.all (solvedBy tps σ)) then
+      let mine := (rowC cx.env fuel M).filter fun j => j.eff == e && (j.name.isNone || j.name == nm)
+      let known := mine.filterMap (·.args)
+      if let some Bs := known.head? then
+        if let some Cs := known.find? (!cx.env.sameArgs Bs ·) then
+          throw ⟨ksp, s!"the body of `with {ch.name.name}` performs {instText e Bs} and {instText e Cs}: " ++
+            s!"write the type arguments of the instance it handles, `with {ch.name.name}[…]`, or name " ++
+            "the handler of the other (SPEC §38)"⟩
         unless Bs.length == ch.effArgs.length do
           throw ⟨ksp, s!"internal error: `{e}`'s type arguments"⟩
         for (Pt, B) in ch.effArgs.zip Bs do
@@ -2093,23 +2385,32 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
           | none => throw ⟨ksp, s!"`with {ch.name.name}` handles `{e}[{", ".intercalate
               (ch.effArgs.map (VTy.pp · 0))}]`, but its body performs `{e}[{", ".intercalate
               (Bs.map (VTy.pp · 0))}]`"⟩
-    -- The handler's own row, at the sites around the `with`.
+    -- The handler's own row, at the sites around the `with`: each entry served by the innermost
+    -- handler of its instance there.
     let mut outer : List Site := []
     for (e₂, Ps) in ch.row do
-      let some s := cx.siteOf e₂.name
-        | throw ⟨ksp, s!"`{ch.name.name}` performs `{e₂.name}`, and no handler of `{e₂.name}` is " ++
+      unless (cx.siteOf e₂.name).isSome do
+        throw ⟨ksp, s!"`{ch.name.name}` performs `{e₂.name}`, and no handler of `{e₂.name}` is " ++
             "in scope at this `with`"⟩
+      let Ps' := Ps.map (·.subst σ)
+      let s ← (cx.serve ksp s!"`{ch.name.name}`"
+        ⟨e₂.name, if Ps.all (solvedBy tps σ) then some Ps' else none, none⟩ (strict := false) :
+        Except Error Site)
       for (Pt, B) in Ps.zip s.args do
         match matchTy tps σ Pt B with
         | some σ' => σ := σ'
         | none => throw ⟨ksp, s!"`{ch.name.name}` performs `{e₂.name}` at a type other than the " ++
             s!"handler of `{e₂.name}` in scope here"⟩
       outer := outer ++ [s]
+    -- The clauses see the sites of the handler's row as the entries they serve, at the handler's
+    -- own types (SPEC §38).
+    let outerR : List Site := (outer.zip ch.row).map fun (s, (_, Ps)) => { s with slot := some Ps, name := none }
     let effArgs := ch.effArgs.map (·.subst σ)
-    if effArgs.any (mentions tps) then
+    if !(ch.effArgs.all (solvedBy tps σ)) then
       throw ⟨ksp, s!"the type arguments of `{e}` at this `with` are not determined: write them, " ++
         s!"`with {ch.name.name}[{", ".intercalate tps}](…)`"⟩
-    let site : Site := { eff := e, n, args := effArgs, sp := ksp, what := s!"`with {ch.name.name}`" }
+    let site : Site := { eff := e, n, args := effArgs, sp := ksp, name := nm,
+                         what := s!"`with {((nm.map (· ++ " = ")).getD "")}{ch.name.name}`" }
     let ents := cx.env.siteOps site
     report ksp "lowering" (s!"with {ch.name.name} ({e}): a handler, the static name {n}; " ++
       ", ".intercalate (((cx.env.eff? e).map (·.ops)).getD [] |>.map fun o =>
@@ -2123,7 +2424,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
           | some (a, _) => s!"its lifetime `'{a.name}`, the meet of the lifetimes in scope here"
           | none => "`top`") ++ " (BOXED-κ), so what they answer may keep it" else ""))
     -- The body, with this site innermost for `e`.
-    let cxB : Cx := { cx with sites := site :: cx.sites.filter (·.eff != e),
+    let cxB : Cx := { cx with sites := site :: cx.sites,
                               caps := cx.caps.map fun c => (csM.find? (·.var == c.var)).getD c }
     let M' ← trC k cxB [] false M
     let (rx, rA, rM) := ch.ret
@@ -2131,6 +2432,12 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       unless eff.ops.any (·.name.name == c.name.name) do
         throw ⟨c.name.span, s!"`{c.name.name}` is not an operation of `{e}`"⟩
     let rest := tps.filter fun x => (σ.lookup x).isNone
+    -- The handler's type parameters the site leaves open are named apart from the enclosing
+    -- function's, so that instantiating a template cannot capture them (SPEC §38).
+    let ren : TySubst := rest.filterMap fun x =>
+      if cx.env.ownerTps.contains x then some (x, .name sp (x ++ "'")) else none
+    let σr : TySubst := σ ++ ren
+    let rest := rest.map fun x => if (ren.lookup x).isSome then x ++ "'" else x
     -- Every operation abortive: each clause runs at most once and never resumes, so the clauses
     -- run after the handler (SPEC §19, *Abortive clauses*). The site answers the body's value
     -- `inl x` or an operation's argument `inr (inj_i v)`, and a `case` on that runs the return
@@ -2146,8 +2453,8 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       -- The site binds the handler's arguments to its parameters before the body runs, and answers
       -- them beside its own answer, for the clauses after it.
       let info : HInfo := ⟨ch.name.name, n, ents, rest, σ,
-        ch.params.map (fun (x, A) => (x.name, A.subst σ)), rA.subst σ, .sum sp (rA.subst σ) pay,
-        some (ch.res.subst σ), false, ch.lps.map (·.1.name)⟩
+        ch.params.map (fun (x, A) => (x.name, A.subst σr)), rA.subst σr, .sum sp (rA.subst σr) pay,
+        some (ch.res.subst σr), false, ch.lps.map (·.1.name)⟩
       let clsV := injCls.foldr (fun c t => Val.pair sp c t) (.unit sp)
       let (bsP, P') ← goV k cx cs P
       let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) P')
@@ -2169,16 +2476,17 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
           throw ⟨c.name.span, s!"the clause `{c.name.name}` of `{ch.name.name}` takes " ++
             s!"{o.params.length} name(s): the operation's parameters"⟩
         let q ← fresh "fx_aq"
-        arms := arms ++ [(q, ← bindParams c.name.span q c.params (c.body.subst σ))]
+        arms := arms ++ [(q, ← bindParams c.name.span q c.params (c.body.subst σr))]
       let rec dispatch : Nat → String → List (String × Comp) → Comp
         | _, v, [(q, N)] => .bind sp ⟨q, sp⟩ none (.ret sp (.var sp v)) N false
         | m + 1, v, (q, N) :: rest =>
           let y := v ++ "r"
           .case sp (.var sp v) ⟨q, sp⟩ N ⟨y, sp⟩ (dispatch m y rest)
         | _, v, _ => .absurd sp (.var sp v)
-      let after : Comp := .case sp rv rx (rM.subst σ) ⟨ev, sp⟩ (dispatch (nOps + 1) ev arms)
+      let after : Comp := .case sp rv rx (rM.subst σr) ⟨ev, sp⟩ (dispatch (nOps + 1) ev arms)
       -- Its operations are the handler's row's, at the sites around the `with`.
-      let cxA : Cx := { cx with sites := outer ++ cx.sites.filter fun s => !outer.any (·.eff == s.eff) }
+      let cxA : Cx := { cx with env := envH,
+                                sites := outerR ++ cx.sites.filter fun s => !outer.any (·.eff == s.eff) }
       let csA := cxA.needC after
       let after' ← trC k cxA csA true after
       let t ← fresh "fx_b"
@@ -2190,8 +2498,8 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       let bind : Bind := fun N => do pure (bindFlat sp t (some resT) after' (← unpack sp csA r t N))
       return (bsP ++ bsH ++ [params, bind], .var sp r)
     -- The capabilities the clauses use: the handler holds them between operations, in its state.
-    let csCl := cx.need (ch.clauses.foldl (fun r c => union r (rowC cx.env fuel c.body))
-      (rowC cx.env fuel rM))
+    let csCl := cx.need (ch.clauses.foldl (fun r c => envH.union r (rowC envH fuel c.body))
+      (rowC envH fuel rM))
     if let some c := csCl.find? (fun c => csM.any (·.var == c.var)) then
       throw ⟨ksp, s!"the body of `with {ch.name.name}` and its clauses both use the capability of " ++
         s!"`{c.eff}`: the handler holds it between operations, so the body cannot (not provided)"⟩
@@ -2210,21 +2518,26 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
         "state (a parameter that is not `!`, or a capability its clauses use): not provided"⟩
     if stateful then
       let pNames := ch.params.map (·.1.name)
-      let Pt : VTy := tupleTy sp (ch.params.map fun (_, A) => A.subst σ)
-      let Rv := ch.res.subst σ
+      let Pt : VTy := tupleTy sp (ch.params.map fun (_, A) => A.subst σr)
+      let Rv := ch.res.subst σr
       let St : VTy := capsTy sp csCl Pt
-      let rowO := cx.env.rowOf outer
+      -- The function of the state runs where the `with` is, and resumes or cancels the
+      -- continuation there, whose row is the row at the `with` (`[handle]`, SPEC §19): its row is
+      -- the handler's own row and every other site in scope (#514).
+      let others := (cx.sites.foldl (fun acc s => if acc.any (·.n == s.n) then acc else acc ++ [s]) []).filter
+        fun s => !outer.any (·.n == s.n)
+      let rowO := cx.env.rowOf (outer ++ others)
       let Ans : VTy := capsTy sp csCl Rv
       let ansT : VTy := .thunk sp (.arr sp St (match rowO with
         | .nil => .ret sp Ans
         | r => .eff sp r Ans))
-      let cxS (rk : Option ResumeK) : Cx := { env := cx.env, caps := csCl, sites := outer, resume := rk }
+      let cxS (rk : Option ResumeK) : Cx := { env := envH, caps := csCl, sites := outerR, resume := rk }
       let stThunk (body : Comp) : EM Val := do
         let sv ← fresh "fx_hs"
         let ps ← fresh "fx_hq"
         let inner ← unpack sp csCl ps sv (← bindParams sp ps (ch.params.map (·.1)) body)
         pure (.thunkv sp (.lam sp ⟨sv, sp⟩ St inner))
-      let rM' ← trC k (cxS none) csCl true (rM.subst σ)
+      let rM' ← trC k (cxS none) csCl true (rM.subst σr)
       let hr : Val := .thunkv sp (.lam sp rx rA (.ret sp (← stThunk rM')))
       let mut cls : List Val := []
       for o in eff.ops do
@@ -2239,13 +2552,13 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
         let p ← fresh "fx_p"
         let kv := c.params.getLast!
         let rk : Option ResumeK := if abortive then none else some ⟨kv.name, pNames, true⟩
-        let body ← trC k (cxS rk) csCl true (c.body.subst σ)
+        let body ← trC k (cxS rk) csCl true (c.body.subst σr)
         let th : Comp := .ret csp (← stThunk body)
         let body ← if abortive then bindParams csp p c.params th else do
           let q ← fresh "fx_q"
           pure (.letPair csp ⟨q, csp⟩ kv (.var csp p) (← bindParams csp q c.params.dropLast th))
         cls := cls ++ [.thunkv csp (.lam csp ⟨p, csp⟩ (holeTy csp) body)]
-      let info : HInfo := ⟨ch.name.name, n, ents, rest, σ, [], rA.subst σ, ansT, none, false,
+      let info : HInfo := ⟨ch.name.name, n, ents, rest, σ, [], rA.subst σr, ansT, none, false,
         ch.lps.map (·.1.name)⟩
       let (bsP, P') ← goV k cx cs P
       let pv ← fresh "fx_hp"
@@ -2267,8 +2580,8 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
         ", passed to each clause and to the continuation at each resume")
       return (bsP ++ [args] ++ bsH ++ [run], .var sp r)
     -- The clauses run outside the handler: their operations go to the sites of the handler's row.
-    let cxH : Cx := { env := cx.env, caps := [], sites := outer }
-    let rM' ← trC k cxH [] false (rM.subst σ)
+    let cxH : Cx := { env := envH, caps := [], sites := outerR }
+    let rM' ← trC k cxH [] false (rM.subst σr)
     let mut cls : List Val := []
     for o in eff.ops do
       let some c := ch.clauses.find? (·.name.name == o.name.name)
@@ -2279,7 +2592,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
         throw ⟨c.name.span, s!"the clause `{c.name.name}` of `{ch.name.name}` takes {want} " ++
           s!"name(s): the operation's parameters{if abortive then "" else ", then its continuation"}"⟩
       let rk : Option ResumeK := if abortive then none else some ⟨c.params.getLast!.name, [], false⟩
-      let body ← trC k { cxH with resume := rk } [] false (c.body.subst σ)
+      let body ← trC k { cxH with resume := rk } [] false (c.body.subst σr)
       let csp := c.name.span
       let p ← fresh "fx_p"
       let body ← if abortive then bindParams csp p c.params body else do
@@ -2289,7 +2602,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
         pure (.letPair csp ⟨q, csp⟩ kv (.var csp p) (← bindParams csp q xs body))
       cls := cls ++ [.thunkv csp (.lam csp ⟨p, csp⟩ (holeTy csp) body)]
     let info₀ : HInfo := ⟨ch.name.name, n, ents, rest, σ,
-      ch.params.map fun (x, A) => (x.name, A.subst σ), rA.subst σ, ch.res.subst σ, none, false, []⟩
+      ch.params.map fun (x, A) => (x.name, A.subst σr), rA.subst σr, ch.res.subst σr, none, false, []⟩
     let info : HInfo := { info₀ with boxK := boxK, lives := ch.lps.map (·.1.name) }
     let (bsP, P') ← goV k cx cs P
     let clsV := cls.foldr (fun c t => Val.pair sp c t) (.unit sp)
@@ -2355,7 +2668,7 @@ def forSite : Nat → Cx → List Cap → Bool → Span → Ident → String →
     let (bP, W) ← pullArgsV k cx cs gname W
     let (bs, W') ← trV k cx cs W
     let bs := bP ++ bs
-    let name ← copyFor k cxF sp gname g []
+    let name ← copyFor k cxF sp gname g (cx.rowOf g) []
     let f' : Val := match f with
       | .defApp fsp _ Ts => .defApp fsp name Ts
       | _ => .var f.span name
@@ -2393,7 +2706,7 @@ def pullSite : Nat → Cx → List Cap → Span → String → FSig → Inst →
     let (bP, W) ← pullArgsV k cx cs gname W
     let (bs, W') ← goV k cx cs W
     let bs := bP ++ bs
-    let name ← copyFor k cxP sp gname g []
+    let name ← copyFor k cxP sp gname g (cx.rowOf g) []
     let f' : Val := match f with
       | .defApp fsp _ Ts => .defApp fsp name Ts
       | _ => .var f.span name
@@ -2433,9 +2746,9 @@ def pullArgsV : Nat → Cx → List Cap → String → Val → EM (List Bind × 
     pure (bs, tuple vs)
 
 /-- The copy of `g` for what serves its effects at a call in `cx`, made once. -/
-def copyFor : Nat → Cx → Span → String → FSig → List Blk → EM String
-  | 0, _, sp, _, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
-  | k + 1, cx, sp, x, g, blks => do
+def copyFor : Nat → Cx → Span → String → FSig → List Inst → List Blk → EM String
+  | 0, _, sp, _, _, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
+  | k + 1, cx, sp, x, g, row, blks => do
     if let (some (gn, _), some d) := (g.group, cx.driver) then
       unless blks.isEmpty do
         throw ⟨sp, s!"`{x}` is given an effectful block under the heap driver `{d}`: not provided"⟩
@@ -2443,11 +2756,16 @@ def copyFor : Nat → Cx → Span → String → FSig → List Blk → EM String
     let mut hs : List HSig := []
     let mut ss : List Site := []
     let mut keys : List String := []
-    let row := cx.rowOf g
+    -- Each slot of the row served here, in the row's order (SPEC §38): an answering slot by a
+    -- capability of its own.
+    let mut taken : List String := []
     for i in row do
       if cx.env.answering i.eff then
-        let some c := cx.capOf i.eff
-          | throw ⟨sp, s!"`{x}` performs `{i.eff}`, but no handler of `{i.eff}` is in scope here"⟩
+        let c ← (cx.capAt sp s!"`{x}`" i : Except Error Cap)
+        if taken.contains c.var then
+          throw ⟨sp, s!"`{x}` performs `{i.eff}` at two entries of its row, which one handler would " ++
+            "serve: name the handlers as its row names the entries (`with n = h(…)`, SPEC §38)"⟩
+        taken := taken ++ [c.var]
         hs := hs ++ [c.h]
         keys := keys ++ [c.h.key]
       else
@@ -2458,7 +2776,7 @@ def copyFor : Nat → Cx → Span → String → FSig → List Blk → EM String
     keys := keys ++ blockKeys blks
     if let some (gn, _) := g.group then
       let env := { cx.env with inLayers := [] }
-      return ← groupCopy k env sp gn row cx.env.inLayers hs ss (keys ++ cx.env.inLayers) x blks
+      return ← groupCopy k env sp gn (cx.rowOf g) cx.env.inLayers hs ss (keys ++ cx.env.inLayers) x blks
     copyOf k { cx.env with inLayers := [] } sp g hs ss (copyName x keys) blks
 
 /-- The layer `L` made for the group `G` (SPEC §20): a transformer of its generator, applied before
@@ -2484,8 +2802,9 @@ def layerCopy : Nat → Env → Span → String → RGroup → List Cap → List
     let mut fields : List Comp := []
     for ((_, fm), j) in G.members.zipIdx do
       let σ : TySubst := [(A.name, fm.P), (B.name, fm.T)]
-      let cxL : Cx := { env, caps := cs, sites := ss, fnCaps := cs,
-                        layerCall := some ⟨callN.name, gv, j, rs⟩ }
+      let cxL : Cx := { env := { env with owner := Instances.ownerKey ln.name ln.span,
+                                          ownerTps := [A.name, B.name] },
+                        caps := cs, sites := ss, fnCaps := cs, layerCall := some ⟨callN.name, gv, j, rs⟩ }
       let body ← trC k cxL cs true (M.subst σ)
       let pp ← fresh "fx_pp"
       fields := fields ++ [.lam gsp ⟨pp, gsp⟩ (capsTy gsp cs fm.P) (← unpack gsp cs y.name pp body)]
@@ -2548,14 +2867,11 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
       G := { G₀ with members := [(mn, f')] }
       named := nm
       ssAll := all
-    let env := env.withBlocks named
+    let env := { env.withBlocks named with ownerTps := G.tps.map (·.name) }
     let gsp := G.sp
-    -- The environment: the capabilities, in the order of the row, as `copyOf` takes them.
-    let cs : List Cap := row.filterMap fun i =>
-      if env.answering i.eff then
-        (hs.find? (·.eff == i.eff)).map fun h =>
-          ⟨i.eff, "fx_c_" ++ i.eff.toLower, "fx_l_" ++ i.eff.toLower, h, none, false⟩
-      else (ss.find? (·.eff == i.eff)).bind fun s => s.thr.map fun (w, W) => threadCap gsp i.eff w W
+    -- The environment: the capabilities, in the order of the row, as `copyOf` takes them; the
+    -- sites relabelled as the slots they serve (SPEC §38).
+    let (cs, ssR) := slotsOf gsp row (G.tps.map (·.name)) hs ss env.answering
     -- The capabilities the blocks use, after the row's (SPEC §32).
     let cs := withBlkCaps cs ((blkCaps blks).map (·.canon gsp))
     -- The group's own type parameters, then the type of each variable a `for`'s site threads.
@@ -2565,20 +2881,24 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
     let tArgs : List VTy := tps.map fun t => .name gsp t.name
     let lives : List (Ident × Life) := G.lives ++
       (cs.filter (·.thr.isNone)).map fun c => ((⟨c.life, gsp⟩ : Ident), Life.top gsp)
-    let ss := ss.map fun s => { s with sp := gsp, what := "the caller" }
-    let rowR := env.rowOf (ssAll.map fun s => { s with sp := gsp, what := "the caller" })
+    let rowR := env.rowOf (ssR ++ (ssAll.filter fun s => !ss.any (·.n == s.n)).map fun s =>
+      { s with sp := gsp, what := "the caller" })
+    let ss := ssR
     let n := G.members.length
     let Cs : List CTy := G.members.map fun (_, f) =>
       .arr gsp (capsTy gsp cs f.P) (.eff gsp rowR (capsTy gsp cs f.T))
     let R := ampTys gsp Cs
     let selfT : VTy := .sum gsp (.unit gsp) (.bang gsp (.thunk gsp (.arr gsp (.unit gsp) R)))
     let self := "fx_self"
-    let rs : RSelf := ⟨G.members.map (·.1), e.n, self, Cs, cs, ss.map (fun s => (s.eff, s.n)), false⟩
+    let rs : RSelf := ⟨G.members.map (·.1), e.n, self, Cs, cs, ss, false⟩
     let cx : Cx := { env, caps := cs, sites := ss, fnCaps := cs, recSelf := some rs, cbs := named }
     -- The generator's record: each member's body, taking the environment first.
     let mut fields : List Comp := []
-    for (_, f) in G.members do
-      let body ← trC k cx cs true f.body
+    for (mn, f) in G.members do
+      let owner := match (env.fn? mn).map (·.decl) with
+        | some (.def_ _ m _ _ _ _) => Instances.ownerKey m.name m.span
+        | _ => env.owner
+      let body ← trC k { cx with env := { cx.env with owner } } cs true f.body
       if cs.isEmpty then
         fields := fields ++ [.lam gsp f.p f.P body]
       else
@@ -2728,6 +3048,8 @@ def copyOf : Nat → Env → Span → FSig → List HSig → List Site → Strin
     modify fun s => { s with started := name :: s.started }
     let .def_ dsp n ps A V mk := g.decl
       | throw ⟨sp, s!"internal error: `{g.name}` is not a function"⟩
+    -- The body is elaborated in its own frame (SPEC §38).
+    let env := { env with owner := Instances.ownerKey n.name n.span, ownerTps := ps.map (·.name) }
     let q := (← get).quiet
     if env.lib.contains g.name then modify fun s => { s with quiet := true }
     let f ← (fnParts dsp n.name A V : Except Error FnParts)
@@ -2752,21 +3074,19 @@ def copyOf : Nat → Env → Span → FSig → List HSig → List Site → Strin
       ports := ports ++ [(b.j, ps)]
       cxPorts := cxPorts ++ ps.map fun (s, own) => (x, s, own)
     modify fun st => { st with ports := (name, ports) :: st.ports }
-    -- Effectful blocks (SPEC §30): the block parameters at their rows.
-    let (f, named, ssAll) ← (withBlocks env dsp g.name f ss blks ports : Except Error _)
-    let env := env.withBlocks named
     -- The capabilities, in the order of the row: an answering handler's, and the variable a
-    -- `for`'s site threads (whose type is a parameter of the copy, `W`).
-    let cs : List Cap := g.row.filterMap fun i =>
-      if env.answering i.eff then
-        (hs.find? (·.eff == i.eff)).map fun h => ⟨i.eff, "fx_c_" ++ i.eff.toLower, "fx_l_" ++ i.eff.toLower, h, none, false⟩
-      else (ss.find? (·.eff == i.eff)).bind fun s => s.thr.map fun (w, W) => threadCap dsp i.eff w W
+    -- `for`'s site threads (whose type is a parameter of the copy, `W`); the sites relabelled as
+    -- the slots they serve (SPEC §38).
+    let (cs, ssR) := slotsOf dsp g.row (ps.map (·.name)) hs ss env.answering
+    -- Effectful blocks (SPEC §30): the block parameters at their rows.
+    let (f, named, ssAll) ← (withBlocks env dsp g.name f ssR blks ports : Except Error _)
+    let env := env.withBlocks named
     -- The capabilities the blocks use, after the row's (SPEC §32).
     let cs := withBlkCaps cs ((blkCaps blks).map (·.canon dsp))
     let tps : List Ident := (((ss.filterMap (·.thr)).map (·.2)) ++
       ((cs.filterMap (·.thr)).filter fun W => !(ss.filterMap (·.thr)).any (·.2 == W))).map
         fun W => ⟨W, dsp⟩
-    let ss := ss.map fun s => { s with sp := dsp, what := "the caller" }
+    let ss := ssR
     let cx : Cx := { env, caps := cs, sites := ss, fnCaps := cs, cbs := named, ports := cxPorts }
     let body ← trC k cx cs true f.body
     let f' ← if cs.isEmpty then pure { f with body } else takeCaps dsp cs f body
@@ -2775,8 +3095,11 @@ def copyOf : Nat → Env → Span → FSig → List HSig → List Site → Strin
       (cxPorts.filter (·.1 == b)).map fun (_, p, own) =>
         s!"its `{p.eff}` at the port {p.n}" ++
           (if own then ", served by its `with` here" else ", passed on to the caller")
+    let hText := (cs.filter (fun c => c.thr.isNone && !c.blk)).map fun c =>
+      c.h.name ++ ((c.name.map (s!" as `{·}`")).getD "")
     report dsp "lowering" (s!"copy `{name}`: `{g.name}` for " ++ ", ".intercalate
-      ((hs.map (·.name)) ++ ss.map (fun s => s!"the site {s.n} of `{s.eff}`") ++
+      ((if hText.length == hs.length then hText else hs.map (·.name)) ++
+        ss.map (fun s => s!"the site {s.n} of `{s.eff}`" ++ ((s.name.map (s!" as `{·}`")).getD "")) ++
         named.map fun (b, bss, bcs) =>
           let lex := bss.filter fun s => !cxPorts.any fun (y, p, _) => y == b && p.n == s.n
           ", ".intercalate ((s!"its block `{b}`" ++
@@ -2834,7 +3157,7 @@ def clauseDef (env : Env) (h : HSig) (o : OpDecl) (c : Clause) : EM Decl := do
   let p ← fresh "fx_p"
   let inner ← bindParams sp p c.params inner
   let pp ← fresh "fx_pp"
-  let cap : Cap := ⟨h.eff, cv, l, h, none, false⟩
+  let cap : Cap := ⟨h.eff, cv, l, h, none, false, none, false⟩
   let P := tupleTy sp (o.params.map (·.2))
   let f : FnParts := ⟨true, (⟨l, sp⟩, .top sp) :: o.lives, capsTy sp [cap] P, capsTy sp [cap] o.res, ⟨pp, sp⟩,
     .letPair sp ⟨cv, sp⟩ ⟨p, sp⟩ (.var sp pp) inner⟩
@@ -2916,8 +3239,57 @@ def Decl.defName : Decl → Option String
 
 /-- The mark of a definition without its written row, and the row. -/
 def splitRow : Mark → List (Ident × List VTy) × Mark
-  | .row es m => (es, m)
+  | .row es m _ => (es, m)
   | m => ([], m)
+
+/-- The names of a written row's entries (SPEC §38), one per entry. -/
+def rowNames : Mark → List (Option String)
+  | .row es _ ns => es.zipIdx.map fun (_, j) => (ns[j]?).join.map (·.name)
+  | _ => []
+
+/-- The entry of a written row (`written`, its entries' names `names`) that the instance `i` a
+function performs is: the entry named as it is, when it is named; else the one of its type
+arguments, or the only one of its effect (SPEC §38). Two entries that could be it, neither of them
+the one unnamed, are ambiguous. `none` when the row lists no entry of its effect. -/
+def Env.slotOf (env : Env) (sp : Span) (f : String) (written : List (Ident × List VTy))
+    (names : List (Option String)) (i : Inst) : Except Error (Option Inst) := do
+  let ents := written.zipIdx.filterMap fun ((e, As), j) =>
+    if e.name == i.eff then some (As, (names[j]?).join) else none
+  if ents.isEmpty then return none
+  let slot (e : List VTy × Option String) : Inst := ⟨i.eff, some e.1, e.2⟩
+  if let some x := i.name then
+    let some e := ents.find? (·.2 == some x)
+      | throw ⟨sp, s!"`{f}` performs `{i.eff}` at `{x}`, which its written row does not name"⟩
+    return some (slot e)
+  let pickOne (es : List (List VTy × Option String)) (what : String) : Except Error Inst := do
+    match es with
+    | [e] => pure (slot e)
+    | es => match es.filter (·.2.isNone) with
+      | [e] => pure (slot e)
+      | _ => throw ⟨sp, s!"`{f}` performs {what}, which two entries of its written row could be: " ++
+          "ascribe its argument (`(e : T)`), or perform it at a named entry (`n.op(…)`, SPEC §38)"⟩
+  match i.args with
+  | some As =>
+    match ents.filter (env.sameArgs As ·.1) with
+    | [] =>
+      match ents with
+      | [e] => return some (slot e)
+      | _ => throw ⟨sp, s!"`{f}` performs {instText i.eff As}, which its written row does not list"⟩
+    | es => return some (← pickOne es (instText i.eff As))
+  | none =>
+    if let [e] := ents then return some (slot e)
+    return some (← pickOne ents s!"`{i.eff}` at type arguments not known here")
+
+/-- A written row lists each entry once: two entries of one instance are named, and differently
+(SPEC §38). -/
+def Env.checkWritten (env : Env) (sp : Span) (f : String) (written : List (Ident × List VTy))
+    (names : List (Option String)) : Except Error Unit := do
+  let ents := written.zipIdx.map fun ((e, As), j) => (e.name, As, (names[j]?).join)
+  for ((e, As, x), j) in ents.zipIdx do
+    for (e', As', x') in ents.drop (j + 1) do
+      if e == e' && x == x' && As.length == As'.length && env.sameArgs As As' then
+        throw ⟨sp, s!"`{f}` lists {instText e As} twice in its written row" ++
+          (if x.isNone then ": name the entries (`with a: E, b: E`, SPEC §38)" else "")⟩
 
 /-- Anything for this pass to do: an effect, a handler or a written row. -/
 def hasEffects (ds : List Decl) : Bool :=
@@ -2957,20 +3329,23 @@ def defineGroup (env : Env) (ms : List (Span × Ident × List Ident × VTy × Va
         "div: the `Exhausted` of its budget would be performed inside its loop, and a handler around " ++
         "a div computation is not provided"⟩
     let (written, _) := splitRow mk
-    for i in rowV env fuel V do
+    let env := { env with owner := Instances.ownerKey n.name n.span, ownerTps := tps₀.map (·.name) }
+    (env.checkWritten n.span n.name written (rowNames mk) : Except Error Unit)
+    let inferred := rowV env fuel V
+    for i in inferred do
       unless written.isEmpty || written.any (·.1.name == i.eff) do
         throw ⟨n.span, s!"`{n.name}` performs `{i.eff}`, which its written row does not list"⟩
-      let i ← match written.find? (·.1.name == i.eff), i.args with
-        | some (_, As), _ => pure ⟨i.eff, some As⟩
-        | none, some _ => pure i
-        | none, none => throw ⟨n.span, s!"`{n.name}` performs `{i.eff}`, and its type arguments " ++
-            s!"are not determined: write them, `with {i.eff}[…]`"⟩
-      row := addInst row i
+    let mine ← if written.isEmpty then pure inferred else
+      inferred.filterMapM fun i => (env.slotOf n.span n.name written (rowNames mk) i : Except Error _)
+    for i in mine do
+      row := env.addInst row i
     unless written.isEmpty || written.any (·.1.name == exh.name) do
       throw ⟨n.span, s!"`{n.name}` is recursive, so it performs `{exh.name}` when its depth runs out, " ++
         "which its written row does not list"⟩
     parts := parts ++ [(n.name, f)]
-  row := addInst row ⟨exh.name, some []⟩
+  -- The group's row settled once, over its members (SPEC §38).
+  row ← (Env.settle n₀.span n₀.name row : Except Error _)
+  row := env.addInst row ⟨exh.name, some [], none⟩
   let G : RGroup := ⟨n₀.name, parts, sp₀, tps₀, ((parts.head?).map (·.2.lives)).getD []⟩
   report sp₀ "row" (s!"{", ".intercalate (parts.map (·.1))}: " ++
     ", ".intercalate (row.map (·.eff)) ++ s!" (a recursive group: the fixed point of its " ++
@@ -3009,7 +3384,7 @@ def pipeStage (pe : PipeEnv) (sp : Span) (e s : Val) : EM Val := do
     if P.lends then
       throw ⟨P.span, s!"the handler `{x}` of this `|>` is given a lent place: write `with {x}(…) \{ … }`, " ++
         "which hands the place back"⟩
-    return .app sp (.app sp (.sugar s.span (.handle x l As)) P)
+    return .app sp (.app sp (.sugar s.span (.handle x l As none)) P)
       (.thunkv sp (.lam sp ⟨b, sp⟩ (holeTy sp) (.ret sp e)))
   let first : Option VTy := ((pe.sigs.lookup x).bind paramTyOf).map fun
     | .tensor _ A _ => A
@@ -3130,7 +3505,7 @@ def platformMain (env : Env) (sp : Span) (M : Comp) : EM (List Cap) := do
     if (M.lentNames true).contains cap then
       throw ⟨sp, s!"`main` uses `{cap}` as a value and performs `{e}`, which the platform serves " ++
         s!"on `{cap}`: use one or the other (SPEC §34)"⟩
-    caps := caps ++ [⟨e, cap, "", { hs with cell := true }, none, false⟩]
+    caps := caps ++ [⟨e, cap, "", { hs with cell := true }, none, false, none, false⟩]
     report sp "lowering" (s!"main: `{e}` is served by the platform's `{h}` on the cell `{cap}`, " ++
       "which each operation lends")
   pure caps
@@ -3158,7 +3533,7 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
   if !hasEffects ds && groups.isEmpty then return (ds, [], [], [])
   let names := ds.filterMap Decl.defName
   let go : EM (List Decl) := do
-    let mut env : Env := { lib }
+    let mut env : Env := { lib, table := Instances.table ds, scope := some (TCx.ofScope ds true) }
     let mut out : Array Decl := #[]
     -- The declarations `hide` holds (the system interface's, the platform's and the I/O
     -- library's, SPEC §34) are not reported, and leave the reports of what follows as they were.
@@ -3228,7 +3603,8 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
               "scope at each `with`, and a bound on it is not provided"⟩
         env := { env with chandlers := env.chandlers ++ [ch] }
       | .def_ sp n ps A V mk =>
-        env := { env with sigs := (n.name, A) :: env.sigs }
+        env := { env with sigs := (n.name, A) :: env.sigs, owner := Instances.ownerKey n.name n.span,
+                          ownerTps := ps.map (·.name) }
         if isLayerTy (ps.map (·.name)) A then
           env := { env with layers := (n.name, .def_ sp n ps A V mk) :: env.layers }
         modify fun s => { s with quiet := lib.contains n.name }
@@ -3260,26 +3636,27 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
                 else none
               | _ => none)
           continue
+        let names := rowNames mk
         let (written, mk) := splitRow mk
+        (env.checkWritten n.span n.name written names : Except Error Unit)
         let envR := if cps.isEmpty then env else
-          { env with cbRows := cps.map fun (_, x, es) => (x, es.map fun (e, As) => ⟨e.name, some As⟩) }
+          { env with cbRows := cps.map fun (_, x, es) => (x, es.map fun (e, As) => ⟨e.name, some As, none⟩) }
         let row := rowV envR fuel V
         for i in row do
           unless written.isEmpty || written.any (·.1.name == i.eff) do
             throw ⟨n.span, s!"`{n.name}` performs `{i.eff}`, which its written row does not list"⟩
-        -- Each instance's type arguments: written, or from what the function calls.
+        -- Each instance's entry: the written one it is (SPEC §38), or as inferred, its type arguments
+        -- from its argument's type or from what the function calls.
         let mut row' : List Inst := []
-        for i in row do
-          match written.find? (·.1.name == i.eff) with
-          | some (_, As) =>
+        if written.isEmpty then row' ← (Env.settle n.span n.name row : Except Error _)
+        for i in if written.isEmpty then [] else row do
+          match ← (env.slotOf n.span n.name written names i : Except Error _) with
+          | some j =>
             let k := ((env.eff? i.eff).map (·.tps.length)).getD 0
-            unless As.length == k do
+            unless (j.args.getD []).length == k do
               throw ⟨n.span, s!"`{i.eff}` takes {k} type argument(s)"⟩
-            row' := row' ++ [⟨i.eff, some As⟩]
-          | none => match i.args with
-            | some _ => row' := row' ++ [i]
-            | none => throw ⟨n.span, s!"`{n.name}` performs `{i.eff}`, and its type arguments are " ++
-                s!"not determined: write them, `with {i.eff}[…]`"⟩
+            row' := env.addInst row' j
+          | none => throw ⟨n.span, s!"`{n.name}` performs `{i.eff}`, which its written row does not list"⟩
         let d₀ : Decl := .def_ sp n ps A V mk
         -- A row on a value that is not a function: a function with a row used as a value, which
         -- is reported as such.
@@ -3288,7 +3665,7 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
         if !row'.isEmpty then
           env := { env with fns := env.fns ++ [{ name := n.name, row := row', decl := d₀ }] }
           report sp "row" (s!"{n.name}: " ++ ", ".intercalate (row'.map fun i =>
-            match i.args with
+            ((i.name.map (· ++ ": ")).getD "") ++ match i.args with
             | some (_ :: _) => s!"{i.eff}[{", ".intercalate ((i.args.getD []).map (VTy.pp · 0))}]"
             | _ => i.eff))
         else if !cps.isEmpty then
@@ -3302,6 +3679,7 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
           out := out ++ ((← get).made.extract before).map (·.2)
           out := out.push (.def_ sp n ps A V' mk)
       | .main sp C M =>
+        env := { env with owner := Instances.ownerKey "main" sp, ownerTps := [] }
         modify fun s => { s with quiet := false }
         let before := (← get).made.size
         let pcs ← platformMain env sp M

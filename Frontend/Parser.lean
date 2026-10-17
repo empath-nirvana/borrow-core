@@ -796,7 +796,7 @@ def Val.lentNames (vars : Bool := false) : Val → List String
   | .var _ x => if vars then [x] else []
   -- A borrow block's body runs in place: what it lends and names is the block's.
   | .app _ (.app _ (.sugar _ (.borrow _ _)) P) (.thunkv _ (.lam _ _ _ M))
-  | .app _ (.app _ (.sugar _ (.handle _ _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
+  | .app _ (.app _ (.sugar _ (.handle _ _ _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
     P.lentNames vars ++ M.lentNames vars
   | .pair _ V W | .app _ V W => V.lentNames vars ++ W.lentNames vars
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
@@ -822,7 +822,7 @@ mutual
 /-- The cells lent to a `with h(&mut c)` in a value, outside nested closures, that are not bound
 in `local`: an enclosing block hands them back (SPEC §18). -/
 def Val.withPlaces (loc : List String) : Val → List String
-  | .app _ (.app _ (.sugar _ (.handle _ _ _)) P) (.thunkv _ (.lam _ b _ M)) =>
+  | .app _ (.app _ (.sugar _ (.handle _ _ _ _)) P) (.thunkv _ (.lam _ b _ M)) =>
     (match P with
       | .lend _ x _ => if loc.contains x.name then [] else [x.name]
       | _ => []) ++ M.withPlaces (b.name :: loc)
@@ -870,7 +870,7 @@ def Val.rebinds : Val → Option Pat
   -- `with h(&mut c) { … }` hands the cell `c` back; a `with` whose body hands back the
   -- variables it assigns hands back its place beside them, which is dropped. Any other `with`
   -- answers its result alone.
-  | .app sp (.app _ (.sugar _ (.handle _ _ _)) P) (.thunkv _ (.lam _ _ _ M)) => match P with
+  | .app sp (.app _ (.sugar _ (.handle _ _ _ _)) P) (.thunkv _ (.lam _ _ _ M)) => match P with
     | .lend _ x _ => some (.var x)
     | _ => if M.boundNames.contains "io_bt" then some (.wild sp) else none
   | _ => none
@@ -1220,6 +1220,12 @@ def withBlock : Nat → P Val
     inClosure do
     let st ← startPos
     let t ← bump
+    -- `with n = h(…) { S }`: the handler named `n` (SPEC §38).
+    let nm ← if (← peekAt 1).tok == .sym "=" then do
+        let n ← ident "the handler's name"
+        expectSym "="
+        pure (some n.name)
+      else pure none
     let h ← ident "a handler name"
     -- `with h[A, …](e, …) { S }`: written type arguments, then the arguments (none: `()`).
     let As ← if ← isSym "[" then do
@@ -1267,7 +1273,7 @@ def withBlock : Nat → P Val
         (.ret T.span (.pair T.span (.var T.span "io_bt") (varTuple T.span thr))) false) M
     modify fun s => { s with blockThreads := thr, joined := [],
                              assigned := s.assigned ++ thr.filter s₀.muts.contains }
-    pure (.app sp (.app sp (.sugar t.span (.handle h.name x As)) place)
+    pure (.app sp (.app sp (.sugar t.span (.handle h.name x As nm)) place)
       (.thunkv sp (.lam sp b (holeTy sp) M)))
 
 /-- The suffixes of a value spine, associating to the left: argument atoms and `[@]`. -/
@@ -1296,6 +1302,13 @@ def valAtom : Nat → P Val
     | .ident s =>
       discard bump
       let nx ← peek
+      -- `n.op`: the operation `op` at the handler named `n` (SPEC §38).
+      if nx.tok == .sym "." && !nx.spaced then
+        if let .ident op := (← peekAt 1).tok then
+          if !(← peekAt 1).spaced then
+            discard bump
+            discard bump
+            return .sugar (← spanFrom st) (.named s op)
       if nx.tok == .sym "[" && !nx.spaced then
         discard bump
         let As ← tyList n (fuelPerToken * ((← get).toks.size + 1))
@@ -2205,7 +2218,9 @@ where
     expectSym "->"
     let T ← rty n
     -- `with E₁, E₂[A]`: a written row (SPEC §18).
-    let es ← if ← isKw "with" then do discard bump; rowList n else pure []
+    let nes ← if ← isKw "with" then do discard bump; namedRowList n else pure []
+    let es := nes.map (·.2)
+    let ns := if nes.all (·.1.isNone) then [] else nes.map (·.1)
     let bs ← whereBounds tps (lives.map (·.1.name))
     expectSym "="
     modify fun s => { s with muts := [], assigned := [], surf := true }
@@ -2221,11 +2236,20 @@ where
       | .error _ => do let C ← liftSort T.toC; pure (VTy.thunk sp (.arr sp A C))
     let (ty, V) := withLives sp lives fnTy lam
     let mk := if tps.isEmpty then mk else .template mk bs
-    pure (.def_ sp x tps ty V (if es.isEmpty then mk else .row es mk))
-  /-- `E₁, E₂[A, …], …`: the effects of a written row, at least one. -/
+    pure (.def_ sp x tps ty V (if es.isEmpty then mk else .row es mk ns))
+  /-- `E₁, E₂[A, …], …`: the effects of a written row, at least one; `src: E` names an entry
+  (SPEC §38). -/
   rowList : Nat → P (List (Ident × List VTy))
+    | n' => do pure ((← namedRowList n').map (·.2))
+  namedRowList : Nat → P (List (Option Ident × Ident × List VTy))
     | 0 => outOfFuel
     | m + 1 => do
+      let x ← if (match (← peek).tok with | .ident _ => true | _ => false) &&
+          (← peekAt 1).tok == .sym ":" then do
+          let x ← ident "the entry's name"
+          expectSym ":"
+          pure (some x)
+        else pure none
       let e ← uident "an effect name"
       let As ← if ← isSym "[" then do
           discard bump
@@ -2235,8 +2259,8 @@ where
         else pure []
       if ← isSym "," then
         discard bump
-        return (e, As) :: (← rowList m)
-      else pure [(e, As)]
+        return (x, e, As) :: (← namedRowList m)
+      else pure [(x, e, As)]
   /-- `where S: 'c, …`: lifetime bounds on the type parameters `tps`, each by a lifetime
   parameter (one of `lives`, when they are given), or none. `where` is a word here, not a
   keyword.  `[spec §23]` -/
@@ -2328,10 +2352,11 @@ where
 def rowDecl (n : Nat) : P Decl := do
   let t ← bump
   expectSym "["
-  let es ← decl.rowList n n
+  let nes ← decl.namedRowList n n
   expectSym "]"
+  let ns := if nes.all (·.1.isNone) then [] else nes.map (·.1)
   match ← decl n with
-  | .def_ sp x ps A V mk => pure (.def_ sp x ps A V (.row es mk))
+  | .def_ sp x ps A V mk => pure (.def_ sp x ps A V (.row (nes.map (·.2)) mk ns))
   | _ => failAt t.span "a written row is on a function"
 
 /-- Declarations until the end of input. -/
