@@ -6410,7 +6410,8 @@ platform's report; `corpus/sugar/div-literal.bc` the elaborated code.
 and counts stay as they were: `aoc/2021-06` (`modulo(day, 9)`, a literal divisor), `map-views`
 (`rem(x, 10)`, `rem(i, 3)`), `aoc/2021-15`, `leetcode/graphs/0200` and `0417` (`quot`, `modulo` by
 the grid's width: `main` is now served `Arith` by the platform; the divisors are never zero on the
-inputs). The others keep their form, each for a limit that applies to any abortive operation:
+inputs). The others keep their form, each for a limit that applies to any abortive operation
+(#517):
 
 - `aoc/2022-12`, `aoc/2023-03`, `aoc/2024-11`, `aoc/2022-21`: the division is inside `borrow imm s`
   of the input string, a borrow of a buffer that an abort would cross (§18 *Not provided*);
@@ -6453,9 +6454,12 @@ changes.
 
 ### Open
 
-- Inferring rows with types: the first pass exists only because rows are inferred before types
-  are known (§18). A row inference in the typed elaboration would decide a division's effect where
-  its width is decided, in one pass.
+- Inferring rows with types (#516): the first pass exists only because rows are inferred before
+  types are known (§18). A row inference in the typed elaboration would decide a division's effect
+  where its width is decided, in one pass.
+- Where the platform's handler cannot reach (#517): a division inside a borrow of a buffer, a loop
+  with no bound, or a statement after a loop over a capability `main` holds; the programs below
+  that keep their form.
 - Named instances (#155) would let `arith_fail` serve beside a program's own `Fail`.
 - The platform's handler for `Exhausted` at `main` (#228), by the same mechanism (`onDemand`,
   `exitTag`, `reportExit`).
