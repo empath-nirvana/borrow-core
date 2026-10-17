@@ -1,0 +1,75 @@
+-- Floats in order (SPEC §37). A float has no equality, hash or order of its own to sort or key
+-- by: `==` and `<` are IEEE 754's, under which a NaN is unordered and `-0.0 == 0.0`. Two ways to
+-- order floats anyway, both by IEEE 754's `totalOrder` (−NaN < −inf < … < −0.0 < 0.0 < … < inf
+-- < NaN):
+--
+-- * `total_cmp_f64` as the comparison of a sort (`sort`, `lib/slice.bc`): nine floats, with both
+--   zeros, both infinities and a NaN of each sign, sorted in place through a `mut` view;
+-- * the `OrderedFloat` pattern: `ord_f64` maps a float to the `i64` key whose signed order is
+--   `totalOrder`, one-to-one (`of_ord_f64` inverts it), so the key's own equality and order are
+--   the float's under `totalOrder`. The keys are sorted by `cmp_i64` and their duplicates dropped
+--   by `==` at `i64`, and each is mapped back.
+--
+-- Answer: the first line `NaN -inf -0.0 0.0 0.0 1.0 2.0 3.5 NaN` (the negative NaN first, the
+-- positive last; `-0.0` before both `0.0`s); the second the distinct keys' floats, `NaN -inf
+-- -0.0 0.0 1.0 2.0 3.5 NaN`, eight (the two `0.0`s are one key, `-0.0` another, and the two
+-- NaNs differ in sign); then the line `-0 bits: 1 0`, the sign bits of the third and fourth
+-- floats sorted. `main` answers the number of distinct keys, 8. Sorting by `<` would leave the
+-- NaNs where they started, and keying by `==` would merge the zeros and never match a NaN.
+
+include float
+
+fn data(i: i32) -> f64 =
+  let nan = 0.0 / 0.0;
+  let inf = 1.0 / 0.0;
+  if i == 0 { 3.5 } else { if i == 1 { nan } else { if i == 2 { 0.0 } else { if i == 3 { neg_f64(inf) }
+  else { if i == 4 { neg_f64(0.0) } else { if i == 5 { 1.0 } else { if i == 6 { neg_f64(nan) }
+  else { if i == 7 { 2.0 } else { 0.0 } } } } } } } }
+
+fn cmp_i64(x: i64, y: i64) -> i32 = if x < y { 0 - 1 } else { if y < x { 1 } else { 0 } }
+
+-- The floats to print, each with the byte after it, printed by one loop: every call of a
+-- function is compiled as a copy of its body (Backend README), so the printer is called once.
+type Items = buf (f64 * u8)
+
+fn put(b: Items, x: f64, last: bool) -> Items =
+  let sep = if last { b'\n' } else { b' ' };
+  let (b, _) = push(b, (x, sep));
+  b
+
+main -> i32 =
+  let mut a = array_new[f64] (9, data);
+  borrow mut a { 'x, v -> let v = sort(v, total_cmp_f64, 0.0); () };
+  let mut items = box buf[f64 * u8](24);
+  for i in 0..9 { let x = at(&a, i, 0.0); items = put(items, x, i == 8) };
+  -- The keys, sorted, their duplicates dropped, mapped back.
+  let mut k = array_new[i64] (9, !{ i -> 0 });
+  for i in 0..9 { let x = at(&a, i, 0.0); k = array_set(k, i, ord_f64(x)) };
+  borrow mut k { 'x, v -> let v = sort(v, cmp_i64, ord_f64(0.0)); () };
+  let mut out = box buf[f64](9);
+  let mut last = ord_f64(0.0);
+  for i in 0..9 {
+    let key = at(&k, i, 0);
+    if i == 0 || key != last { let (b, _) = push(out, of_ord_f64(key)); out = b } else { () };
+    last = key
+  };
+  let (o, n) = out;
+  for i in 0..n { let x = at(&o, i, 0.0); items = put(items, x, i == n - 1) };
+  let (arr, m) = items;
+  for i in 0..m {
+    let (x, sep) = at(&arr, i, (0.0, b'\n'));
+    print_f64(x);
+    print_byte(sep)
+  };
+  print_lit("-0 bits: ");
+  let x3 = at(&a, 2, 0.0);
+  let x4 = at(&a, 3, 0.0);
+  let s3 = bits_f64(x3) < 0;
+  let s4 = bits_f64(x4) < 0;
+  let b3 = if s3 { b'1' } else { b'0' };
+  let b4 = if s4 { b'1' } else { b'0' };
+  print_byte(b3); print_byte(b' '); print_byte(b4); print_byte(b'\n');
+  array_free[i64] (!{ x -> () }, k);
+  array_free[f64] (!{ x -> () }, a);
+  array_free[f64] (!{ x -> () }, o);
+  n

@@ -1,0 +1,666 @@
+-- The float library (SPEC §37): the float operations by name at `f64` and `f32`, the conversions,
+-- IEEE 754's `totalOrder` and the `OrderedFloat` key, and printing and parsing in the shortest
+-- decimal that reads back as the same float. `include float` puts it in scope, with `textio`.
+
+include textio
+
+-- ### The float operations  `[spec §37]`
+--
+-- Wasm's float instructions are host operations (`host[f64_sqrt]`, `host[f32_min]`, …; SPEC §37);
+-- these are their names at each width. `+ - * /` and the comparisons are the operators at a float
+-- type. A NaN an arithmetic operation answers is the canonical one at every engine.
+
+fn sqrt_f64(x: f64) -> f64 = host[f64_sqrt](x)
+fn abs_f64(x: f64) -> f64 = host[f64_abs](x)
+fn neg_f64(x: f64) -> f64 = host[f64_neg](x)
+fn floor_f64(x: f64) -> f64 = host[f64_floor](x)
+fn ceil_f64(x: f64) -> f64 = host[f64_ceil](x)
+fn trunc_f64(x: f64) -> f64 = host[f64_trunc](x)
+-- To the nearest integer, ties to even (`f64.nearest`).
+fn round_f64(x: f64) -> f64 = host[f64_nearest](x)
+fn min_f64(x: f64, y: f64) -> f64 = host[f64_min](x, y)
+fn max_f64(x: f64, y: f64) -> f64 = host[f64_max](x, y)
+fn copysign_f64(x: f64, y: f64) -> f64 = host[f64_copysign](x, y)
+
+fn sqrt_f32(x: f32) -> f32 = host[f32_sqrt](x)
+fn abs_f32(x: f32) -> f32 = host[f32_abs](x)
+fn neg_f32(x: f32) -> f32 = host[f32_neg](x)
+fn floor_f32(x: f32) -> f32 = host[f32_floor](x)
+fn ceil_f32(x: f32) -> f32 = host[f32_ceil](x)
+fn trunc_f32(x: f32) -> f32 = host[f32_trunc](x)
+fn round_f32(x: f32) -> f32 = host[f32_nearest](x)
+fn min_f32(x: f32, y: f32) -> f32 = host[f32_min](x, y)
+fn max_f32(x: f32, y: f32) -> f32 = host[f32_max](x, y)
+fn copysign_f32(x: f32, y: f32) -> f32 = host[f32_copysign](x, y)
+
+-- Whether `x` is a NaN: the one float not equal to itself.
+fn is_nan_f64(x: f64) -> bool = x != x
+fn is_nan_f32(x: f32) -> bool = x != x
+
+-- ### Conversions  `[spec §37]`
+--
+-- An integer to a float is total, correctly rounded. A float to an integer is partial where Wasm
+-- traps (a NaN, or an integer part out of range): `inr ()`. The `_sat` forms are total: a NaN is
+-- `0`, and out of range is the least or greatest integer.
+
+fn f64_of_i32(n: i32) -> f64 = host[f64_convert_i32_s](n)
+fn f64_of_i64(n: i64) -> f64 = host[f64_convert_i64_s](n)
+fn f32_of_i32(n: i32) -> f32 = host[f32_convert_i32_s](n)
+fn f32_of_i64(n: i64) -> f32 = host[f32_convert_i64_s](n)
+
+fn i32_of_f64(x: f64) -> i32 + 1 = host[i32_trunc_f64_s](x)
+fn i64_of_f64(x: f64) -> i64 + 1 = host[i64_trunc_f64_s](x)
+fn i32_of_f32(x: f32) -> i32 + 1 = host[i32_trunc_f32_s](x)
+fn i64_of_f32(x: f32) -> i64 + 1 = host[i64_trunc_f32_s](x)
+fn i32_of_f64_sat(x: f64) -> i32 = host[i32_trunc_sat_f64_s](x)
+fn i64_of_f64_sat(x: f64) -> i64 = host[i64_trunc_sat_f64_s](x)
+fn i32_of_f32_sat(x: f32) -> i32 = host[i32_trunc_sat_f32_s](x)
+fn i64_of_f32_sat(x: f32) -> i64 = host[i64_trunc_sat_f32_s](x)
+
+-- Between the widths: `f32` to `f64` is exact; `f64` to `f32` rounds to nearest, ties to even.
+fn f64_of_f32(x: f32) -> f64 = host[f64_promote_f32](x)
+fn f32_of_f64(x: f64) -> f32 = host[f32_demote_f64](x)
+
+-- The bits of a float, and the float of bits.
+fn bits_f64(x: f64) -> i64 = host[i64_reinterpret_f64](x)
+fn of_bits_f64(b: i64) -> f64 = host[f64_reinterpret_i64](b)
+fn bits_f32(x: f32) -> i32 = host[i32_reinterpret_f32](x)
+fn of_bits_f32(b: i32) -> f32 = host[f32_reinterpret_i32](b)
+
+-- ### Equality and order  `[spec §37]`
+--
+-- `==`, `<` and the rest are IEEE 754's comparisons: a NaN is unordered (every comparison with it
+-- is false but `!=`), and `-0.0 == 0.0`. They are not an equivalence or a total order, so a float
+-- has no equality, hash or order to key a map or to sort by. `total_cmp_f64` is IEEE 754's
+-- `totalOrder`: −NaN < −inf < … < −0.0 < 0.0 < … < inf < NaN, payloads ordered by their bits.
+-- `ord_f64` is the `OrderedFloat` pattern: the `i64` key whose signed order is `totalOrder`, a
+-- bijection (`of_ord_f64` inverts it), so the key's equality, hash and order are the integer's.
+
+-- The `totalOrder` key: the bits as a signed integer, the magnitude flipped when negative.
+fn ord_f64(x: f64) -> i64 =
+  let b = bits_f64(x);
+  host[xor64](b, host[shr_u64](host[shr_s64](b, 63), 1))
+
+fn of_ord_f64(k: i64) -> f64 = of_bits_f64(host[xor64](k, host[shr_u64](host[shr_s64](k, 63), 1)))
+
+fn ord_f32(x: f32) -> i32 =
+  let b = bits_f32(x);
+  host[xor32](b, host[shr_u32](host[shr_s32](b, 31), 1))
+
+fn of_ord_f32(k: i32) -> f32 = of_bits_f32(host[xor32](k, host[shr_u32](host[shr_s32](k, 31), 1)))
+
+-- `-1`, `0` or `1` as `x` is below, equal to or above `y` in `totalOrder`.
+fn total_cmp_f64(x: f64, y: f64) -> i32 =
+  let a = ord_f64(x);
+  let b = ord_f64(y);
+  if a < b { 0 - 1 } else { if b < a { 1 } else { 0 } }
+
+fn total_cmp_f32(x: f32, y: f32) -> i32 =
+  let a = ord_f32(x);
+  let b = ord_f32(y);
+  if a < b { 0 - 1 } else { if b < a { 1 } else { 0 } }
+
+-- ### Printing and parsing  `[spec §37]`
+--
+-- Printing and parsing work on the bit patterns: binary64 as an `i64`, binary32 as an `i32`.
+-- Every function is exact, and every loop counted.
+--
+-- Arithmetic is on `Big`, a natural number as a buffer of 32-bit limbs, least significant first,
+-- each held in an `i64`, with no zero limb at the top (zero is the empty buffer). A limb times a
+-- factor below 2^32 plus a carry below 2^32 fits an `i64` read unsigned, so every step is one
+-- host multiplication and a shift. A buffer is as long as its number, so short numbers stay cheap.
+--
+-- Printing is Burger and Dybvig's free-format algorithm (Steele and White's, with exact integers):
+-- the value is `r / s` and its rounding interval `(r - m⁻, r + m⁺) / s`, scaled by a power of ten
+-- so that the high end is at most 1; each step multiplies by 10 and takes a digit, and stops at the
+-- first digit after which the number left lies in the interval. The interval is closed when the
+-- significand is even (round-half-even parsing reads the end points back to it). Of the last
+-- digit and its successor the nearer is taken, the even one at a tie. The digits are the shortest
+-- that read back to the same float, and the nearest of those. The output is Rust's `{:?}`: `NaN`,
+-- `inf`, `-inf`, `0.0`, `-0.0`; a decimal with at least one fractional digit when the scientific
+-- exponent `e` (the value being `d.ddd × 10^e`) has `-4 <= e < 16`; otherwise `d.ddde<e>`, with
+-- no `.` for one digit (`1e16`, `1.5e-7`, `5e-324`).
+--
+-- Parsing reads `[+-]? (digits [. digits*] | . digits) ([eE] [+-]? digits)?`, or `inf`, `infinity`
+-- or `nan` in any case. It keeps the first 800 significant digits `D` and whether any digit past
+-- them is nonzero (a point halfway between two floats has at most 767 significant digits, so the
+-- rounding is decided by them and that flag), with the exponent `E` of `D × 10^E`. The value is the
+-- quotient `N / M` of two `Big`s (`D × 10^E` over 1, or `D` over `10^-E`), scaled by a power of two
+-- so that the quotient `Q` has `p + 1` or `p + 2` bits, `p` the significand's width; `Q` is found
+-- by restoring division, one bit per step, and the remainder says whether anything is left. `Q` is
+-- then rounded once, half to even, to the bits the exponent leaves it (fewer for a subnormal), so
+-- a binary32 is rounded from the decimal directly, never through binary64. Past the largest
+-- float the answer is an infinity, below half the least subnormal a zero; an exponent past 10^6
+-- saturates.
+
+-- ### Natural numbers
+
+type Big = buf i64
+
+-- `x`, read unsigned.
+fn big_of(x: i64) -> Big =
+  let b = box buf[i64](4);
+  let h = host[shr_u64](x, i64[32]);
+  let b = if x != i64[0] { let (b, _) = push(b, host[and64](x, i64[4294967295])); b } else { b };
+  if h != i64[0] { let (b, _) = push(b, h); b } else { b }
+
+-- Limb `i`, `0` past the top (the unused slots of a buffer hold `0`).
+fn limb(b: Big, i: i32) -> Big * i64 =
+  let (a, n) = b;
+  let x = at(&a, i, i64[0]);
+  ((a, n), x)
+
+-- A copy.
+fn big_copy(b: Big) -> Big * Big =
+  let (a, n) = b;
+  let mut c = box buf[i64](n + 1);
+  for i in 0..n { let x = at(&a, i, i64[0]); let (d, _) = push(c, x); c = d };
+  ((a, n), c)
+
+-- The zero limbs at the top removed.
+fn big_trim(b: Big) -> Big =
+  let (a, n) = b;
+  let mut a = a;
+  let mut m = n;
+  for _ in 0..n {
+    let x = at(&a, m - 1, i64[0]);
+    if x == i64[0] { m = m - 1 } else { break }
+  };
+  (a, m)
+
+-- `b * m + c`, for `m` and `c` below 2^32.
+fn big_mul_add(b: Big, m: i64, c: i64) -> Big =
+  let (a, n) = b;
+  let mut a = a;
+  let mut c = c;
+  for i in 0..n {
+    let x = at(&a, i, i64[0]);
+    let p = x * m + c;
+    a = array_set(a, i, host[and64](p, i64[4294967295]));
+    c = host[shr_u64](p, i64[32])
+  };
+  let b = (a, n);
+  let b = if c != i64[0] { let (b, _) = push(b, c); b } else { b };
+  big_trim(b)
+
+-- `b * 10^k`, `k >= 0`.
+fn big_mul_pow10(b: Big, k: i32) -> Big =
+  let mut b = b;
+  let q = match host[div_u32](k, 9) { inl x -> x | inr u -> 0 };
+  for _ in 0..q { b = big_mul_add(b, i64[1000000000], i64[0]) };
+  let mut m = i64[1];
+  for _ in 0..k - 9 * q { m = m * i64[10] };
+  big_mul_add(b, m, i64[0])
+
+-- `b * 2^k`, `k >= 0`.
+fn big_shl(b: Big, k: i32) -> Big =
+  let (a, n) = b;
+  let q = host[shr_u32](k, 5);
+  let r = host[and32](k, 31);
+  let rr = host[extend_u](r);
+  let back = host[extend_u](32 - r);
+  let mut c = box buf[i64](n + q + 1);
+  if n == 0 { () } else { for _ in 0..q { let (d, _) = push(c, i64[0]); c = d } };
+  let mut carry = i64[0];
+  for i in 0..n {
+    let x = at(&a, i, i64[0]);
+    let y = host[or64](host[and64](host[shl64](x, rr), i64[4294967295]), carry);
+    let (d, _) = push(c, y);
+    c = d;
+    let nc = if r == 0 { i64[0] } else { host[shr_u64](x, back) };
+    carry = nc
+  };
+  if carry != i64[0] { let (d, _) = push(c, carry); d } else { c }
+
+-- The number of bits of `x`, read unsigned.
+fn bits64(x: i64) -> i32 = 64 - host[wrap](host[clz64](x))
+
+-- The number of bits of `b`.
+fn big_bits(b: Big) -> Big * i32 =
+  let (a, n) = b;
+  if n == 0 { ((a, n), 0) } else { let t = at(&a, n - 1, i64[0]); ((a, n), 32 * (n - 1) + bits64(t)) }
+
+-- `-1`, `0` or `1` as `a` is below, equal to or above `b`.
+fn big_cmp(a: Big, b: Big) -> (Big * Big) * i32 =
+  let (x, n) = a;
+  let (y, m) = b;
+  if n < m { (((x, n), (y, m)), 0 - 1) } else { if m < n { (((x, n), (y, m)), 1) } else {
+    let mut c = 0;
+    for j in 0..n {
+      let i = n - 1 - j;
+      let p = at(&x, i, i64[0]);
+      let q = at(&y, i, i64[0]);
+      if p < q { c = 0 - 1; break } else { if q < p { c = 1; break } else { () } }
+    };
+    (((x, n), (y, m)), c) } }
+
+-- `a + b`, and `b` back.
+fn big_add(a: Big, b: Big) -> Big * Big =
+  let (x, n) = a;
+  let (y, m) = b;
+  let k = if n < m { m } else { n };
+  let mut c = box buf[i64](k + 1);
+  let mut carry = i64[0];
+  for i in 0..k {
+    let u = at(&x, i, i64[0]);
+    let v = at(&y, i, i64[0]);
+    let p = u + v + carry;
+    let (d, _) = push(c, host[and64](p, i64[4294967295]));
+    c = d;
+    carry = host[shr_u64](p, i64[32])
+  };
+  let c = if carry != i64[0] { let (d, _) = push(c, carry); d } else { c };
+  (c, (y, m))
+
+-- `a - b` for `a >= b`, and `b` back.
+fn big_sub(a: Big, b: Big) -> Big * Big =
+  let (x, n) = a;
+  let (y, m) = b;
+  let mut x = x;
+  let mut br = i64[0];
+  for i in 0..n {
+    let v = at(&y, i, i64[0]);
+    let u = at(&x, i, i64[0]);
+    let d = u - v - br;
+    if d < i64[0] { x = array_set(x, i, d + i64[4294967296]); br = i64[1] }
+    else { x = array_set(x, i, d); br = i64[0] }
+  };
+  (big_trim((x, n)), (y, m))
+
+-- How `a + b` compares with `s`, all three back: `s - a - b` limb by limb, with its borrow, and
+-- nothing allocated. A limb's difference is at least `-(2^33 + 2)`, and its borrow is the number
+-- of `2^32`s that bring it to a limb.
+fn big_sum_cmp(a: Big, b: Big, s: Big) -> ((Big * Big) * Big) * i32 =
+  let (x, n) = a;
+  let (y, m) = b;
+  let (z, k) = s;
+  let l1 = if n < m { m } else { n };
+  let l = if l1 < k { k } else { l1 };
+  let mut br = i64[0];
+  let mut nz = false;
+  for i in 0..l {
+    let u = at(&x, i, i64[0]);
+    let v = at(&y, i, i64[0]);
+    let w = at(&z, i, i64[0]);
+    let d = w - u - v - br;
+    if host[and64](d, i64[4294967295]) != i64[0] { nz = true } else { () };
+    br = i64[0] - host[shr_s64](d, i64[32])
+  };
+  let c = if i64[0] < br { 1 } else { if nz { 0 - 1 } else { 0 } };
+  ((((x, n), (y, m)), (z, k)), c)
+
+-- ### Printing
+
+-- Of the digit `d` and its successor, the one nearer to `d + r / s`; the even one at a tie.
+fn nearer(r: Big, s: Big, d: i32) -> (Big * Big) * i32 =
+  let (r, rc) = big_copy(r);
+  let ((t, s), c) = big_cmp(big_shl(rc, 1), s);
+  let x = if c < 0 { d } else { if 0 < c { d + 1 } else { if host[and32](d, 1) == 0 { d } else { d + 1 } } };
+  ((r, s), x)
+
+-- `r - d × s`, for `r >= d × s` and `d` below 2^31, and `s` back; nothing allocated.
+fn big_sub_mul(a: Big, b: Big, d: i64) -> Big * Big =
+  let (x, n) = a;
+  let (y, m) = b;
+  let mut x = x;
+  let mut carry = i64[0];
+  let mut br = i64[0];
+  for i in 0..n {
+    let v = at(&y, i, i64[0]);
+    let u = at(&x, i, i64[0]);
+    let pr = v * d + carry;
+    carry = host[shr_u64](pr, i64[32]);
+    let df = u - host[and64](pr, i64[4294967295]) - br;
+    x = array_set(x, i, host[and64](df, i64[4294967295]));
+    br = i64[0] - host[shr_s64](df, i64[32])
+  };
+  (big_trim((x, n)), (y, m))
+
+-- The digit `⌊r / s⌋` (below 10) and `r mod s`, `s` back, for `s` whose top limb has its top bit
+-- set: the estimate from the top limbs, `⌊(r[t+1] 2^32 + r[t]) / (s[t] + 1)⌋` with `t` the top of
+-- `s`, is the digit or below it by at most two, and is corrected by subtraction.
+fn big_digit(r: Big, s: Big) -> (Big * Big) * i32 =
+  let (s, n) = len_of(s);
+  let (s, st) = limb(s, n - 1);
+  let (r, r1) = limb(r, n);
+  let (r, r0) = limb(r, n - 1);
+  let est = host[shl64](r1, i64[32]) + r0;
+  let d0 = match host[div_u64](est, st + i64[1]) { inl q -> q | inr u -> i64[0] };
+  let (r, s) = big_sub_mul(r, s, d0);
+  let mut r = r;
+  let mut s = s;
+  let mut d = host[wrap](d0);
+  for _ in 0..10 {
+    let ((r2, s2), c) = big_cmp(r, s);
+    if c < 0 { r = r2; s = s2; break } else {
+      let (r3, s3) = big_sub(r2, s2);
+      r = r3; s = s3; d = d + 1
+    }
+  };
+  ((r, s), d)
+
+-- How `r` compares with the low end of the interval: `m⁻`, which is `m⁺` unless `close`.
+fn low_cmp(r: Big, mp: Big, mm: Big, close: bool) -> ((Big * Big) * Big) * i32 =
+  if close { let ((r, mm), c) = big_cmp(r, mm); (((r, mp), mm), c) }
+  else { let ((r, mp), c) = big_cmp(r, mp); (((r, mp), mm), c) }
+
+-- The shortest digits of `f × 2^e` (`f > 0`) that read back to it at significand width `p` and
+-- least exponent `emin`, and `k`, the value being `0.d₁d₂… × 10^k`. When the float below is as
+-- far as the float above (`f` not a power of two, or the least exponent) `m⁻ = m⁺`, and `mm` is
+-- not kept.
+fn shortest(f: i64, e: i32, p: i32, emin: i32) -> buf i32 * i32 =
+  let even = host[and64](f, i64[1]) == i64[0];
+  let close = f == host[shl64](i64[1], host[extend_u](p - 1)) && emin < e;
+  let (r, (s, (mp, mm))) =
+    if 0 <= e {
+      if close {
+        (big_shl(big_of(f), e + 2), (big_of(i64[4]), (big_shl(big_of(i64[1]), e + 1), big_shl(big_of(i64[1]), e))))
+      } else {
+        (big_shl(big_of(f), e + 1), (big_of(i64[2]), (big_shl(big_of(i64[1]), e), big_of(i64[0]))))
+      }
+    } else {
+      if close {
+        (big_of(f * i64[4]), (big_shl(big_of(i64[1]), 2 - e), (big_of(i64[2]), big_of(i64[1]))))
+      } else {
+        (big_of(f * i64[2]), (big_shl(big_of(i64[1]), 1 - e), (big_of(i64[1]), big_of(i64[0]))))
+      }
+    };
+  -- `k₀ = ⌊(e + bits(f) - 1) log₁₀ 2⌋`, at most two below the `k` sought, never above it.
+  let x = host[extend_s](e + bits64(f) - 1);
+  let k0 = host[wrap](host[shr_s64](x * i64[78913], i64[18]));
+  let mut k = k0;
+  let mut r = r;
+  let mut s = s;
+  let mut mp = mp;
+  let mut mm = mm;
+  if 0 <= k0 { s = big_mul_pow10(s, k0) } else {
+    r = big_mul_pow10(r, 0 - k0); mp = big_mul_pow10(mp, 0 - k0); mm = big_mul_pow10(mm, 0 - k0)
+  };
+  for _ in 0..4 {
+    let (((r2, mp2), s2), c) = big_sum_cmp(r, mp, s);
+    r = r2; mp = mp2; s = s2;
+    if c > 0 || (even && c == 0) { s = big_mul_add(s, i64[10], i64[0]); k = k + 1 } else { break }
+  };
+  -- Every quantity scaled by one power of two, so that the top limb of `s` has its top bit set.
+  let (sn, sb) = big_bits(s);
+  let j = host[and32](32 - host[and32](sb, 31), 31);
+  r = big_shl(r, j); s = big_shl(sn, j); mp = big_shl(mp, j); mm = big_shl(mm, j);
+  let mut ds = box buf[i32](20);
+  for _ in 0..40 {
+    r = big_mul_add(r, i64[10], i64[0]);
+    mp = big_mul_add(mp, i64[10], i64[0]);
+    mm = big_mul_add(mm, i64[10], i64[0]);
+    let ((r2, s2), d) = big_digit(r, s);
+    r = r2; s = s2;
+    let (((r2, mp2), mm2), c1) = low_cmp(r, mp, mm, close);
+    r = r2; mp = mp2; mm = mm2;
+    let low = c1 < 0 || (even && c1 == 0);
+    let (((r2, mp2), s2), c2) = big_sum_cmp(r, mp, s);
+    r = r2; mp = mp2; s = s2;
+    let high = c2 > 0 || (even && c2 == 0);
+    if low || high {
+      let up = if low { d } else { d + 1 };
+      let ((r2, s2), last) = if low && high { nearer(r, s, d) } else { ((r, s), up) };
+      r = r2; s = s2;
+      let (b, _) = push(ds, last);
+      ds = b;
+      break
+    } else { let (b, _) = push(ds, d); ds = b }
+  };
+  (ds, k)
+
+-- `n` zeros.
+fn push_zeros(s: string, n: i32) -> string =
+  let mut s = s;
+  for _ in 0..n { let (t, _) = push(s, b'0'); s = t };
+  s
+
+-- The digits `ds[i..j)`.
+fn push_digits(s: string, ds: buf i32, i: i32, j: i32) -> string * buf i32 =
+  let (a, n) = ds;
+  let mut s = s;
+  for x in i..j { let v = at(&a, x, 0); let (t, _) = push(s, to_u8(48 + v)); s = t };
+  (s, (a, n))
+
+-- The digits `ds` of `0.d₁d₂… × 10^k`, in Rust's `{:?}` form.
+fn push_decimal(s: string, ds: buf i32, k: i32) -> string =
+  let (ds, n) = len_of(ds);
+  let e = k - 1;
+  if 0 - 4 <= e && e < 16 {
+    if 0 <= e {
+      let w = if n < e + 1 { n } else { e + 1 };
+      let (s, ds) = push_digits(s, ds, 0, w);
+      let s = push_zeros(s, e + 1 - w);
+      let (s, _) = push(s, b'.');
+      if e + 1 < n { let (s, ds) = push_digits(s, ds, e + 1, n); s } else { let (s, _) = push(s, b'0'); s }
+    } else {
+      let (s, _) = push(s, b'0');
+      let (s, _) = push(s, b'.');
+      let s = push_zeros(s, 0 - e - 1);
+      let (s, ds) = push_digits(s, ds, 0, n);
+      s
+    }
+  } else {
+    let (s, ds) = push_digits(s, ds, 0, 1);
+    let (s, ds) = if 1 < n { let (s, _) = push(s, b'.'); push_digits(s, ds, 1, n) } else { (s, ds) };
+    let (s, _) = push(s, b'e');
+    let (s, _) = push_dec(s, e);
+    s
+  }
+
+-- A float of significand width `p` (hidden bit included) and exponent width `w`, its sign,
+-- biased exponent `be` and fraction `fr`, appended.
+fn push_float(s: string, neg: bool, be: i32, fr: i64, p: i32, w: i32) -> string =
+  let eh = host[shl32](1, w) - 1;
+  let bias = host[shl32](1, w - 1) - 1;
+  let emin = 2 - bias - p;
+  if be == eh {
+    if fr != i64[0] { let (s, _) = push_lit(s, "NaN"); s } else {
+      let (s, _) = if neg { push_lit(s, "-inf") } else { push_lit(s, "inf") };
+      s }
+  } else {
+    let (s, _) = if neg { push(s, b'-') } else { (s, ()) };
+    if be == 0 && fr == i64[0] { let (s, _) = push_lit(s, "0.0"); s } else {
+      let f = if be == 0 { fr } else { host[or64](fr, host[shl64](i64[1], host[extend_u](p - 1))) };
+      let e = if be == 0 { emin } else { be - bias - p + 1 };
+      let (ds, k) = shortest(f, e, p, emin);
+      push_decimal(s, ds, k)
+    }
+  }
+
+-- The binary64 of bits `b`, appended in the shortest form that reads back to it.
+fn push_f64_bits(s: string, b: i64) -> string * 1 =
+  let neg = b < i64[0];
+  let be = host[wrap](host[and64](host[shr_u64](b, i64[52]), i64[2047]));
+  let fr = host[and64](b, i64[4503599627370495]);
+  (push_float(s, neg, be, fr, 53, 11), ())
+
+-- The binary32 of bits `b`, appended in the shortest form that reads back to it.
+fn push_f32_bits(s: string, b: i32) -> string * 1 =
+  let neg = b < 0;
+  let be = host[and32](host[shr_u32](b, 23), 255);
+  let fr = host[extend_u](host[and32](b, 8388607));
+  (push_float(s, neg, be, fr, 24, 8), ())
+
+-- ### Parsing
+
+-- A parse error: `inl ()` for text that ends where a digit is needed (empty, `-`, `.`, `1e`),
+-- `inr b` for the byte `b` where it cannot stand.
+type FloatParseError = 1 + u8
+
+-- The byte at `i` of `s`, lower-cased if a letter, `0` past the end.
+fn byte_lc(s: string, i: i32) -> string * u8 =
+  let (a, n) = s;
+  let b = at(&a, i, u8[0]);
+  let b = if b'A' <= b && b <= b'Z' { to_u8(to_i32(b) + 32) } else { b };
+  ((a, n), b)
+
+-- Whether the bytes of `s` from `i` on are the literal `l`, lower-cased.
+fn rest_is(s: string, i: i32, l: lit) -> string * bool =
+  let (s, n) = len_of(s);
+  let (m, f) = l;
+  if n - i != m { (s, false) } else {
+    let mut s = s;
+    let mut ok = true;
+    for j in 0..m {
+      let (s2, b) = byte_lc(s, i + j);
+      s = s2;
+      if f(j) != b { ok = false } else { () }
+    };
+    (s, ok)
+  }
+
+-- `D × 10^E`, `D > 0` the `Big` of the `nd` digits and `sticky` whether a dropped digit was
+-- nonzero, rounded to significand width `p` and exponent width `w`: the bits of the float, its sign
+-- clear.
+fn round_dec(d: Big, ex: i32, sticky: bool, nd: i32, p: i32, w: i32) -> i64 =
+  let bias = host[shl32](1, w - 1) - 1;
+  let inf = host[shl64](host[extend_u](host[shl32](1, w) - 1), host[extend_u](p - 1));
+  -- `10^(t-1) <= D × 10^E < 10^t`; past the largest float, or below half the least, at once.
+  let t = ex + nd;
+  let big = if w == 11 { 310 } else { 40 };
+  let small = if w == 11 { 0 - 326 } else { 0 - 47 };
+  if big < t { inf } else { if t < small { i64[0] } else {
+    let (n, m) = if 0 <= ex { (big_mul_pow10(d, ex), big_of(i64[1])) } else { (d, big_mul_pow10(big_of(i64[1]), 0 - ex)) };
+    let (n, bn) = big_bits(n);
+    let (m, bm) = big_bits(m);
+    -- `Q = ⌊N / M / 2^sh⌋` has `p + 1` or `p + 2` bits.
+    let sh = bn - bm - p - 1;
+    let x = if sh < 0 { big_shl(n, 0 - sh) } else { n };
+    let m = if 0 < sh { big_shl(m, sh) } else { m };
+    let y = big_shl(m, p + 2);
+    let mut x = x;
+    let mut y = y;
+    let mut q = i64[0];
+    for _ in 0..p + 2 {
+      x = big_shl(x, 1);
+      let ((x2, y2), c) = big_cmp(x, y);
+      if c < 0 { x = x2; y = y2; q = q * i64[2] } else {
+        let (x3, y3) = big_sub(x2, y2);
+        x = x3; y = y3; q = q * i64[2] + i64[1]
+      }
+    };
+    let (x, rest) = len_of(x);
+    let sticky = sticky || rest != 0;
+    let l = bits64(q);
+    let eh = sh + l - 1;
+    let emin = 1 - bias;
+    if bias < eh { inf } else {
+      let keep = if emin <= eh { p } else { p - (emin - eh) };
+      let drop = l - keep;
+      if 62 < drop { i64[0] } else {
+        let dd = host[extend_u](drop);
+        let kept = host[shr_u64](q, dd);
+        let rem = host[and64](q, host[shl64](i64[1], dd) - i64[1]);
+        let half = host[shl64](i64[1], dd - i64[1]);
+        let up = half < rem || (rem == half && (sticky || host[and64](kept, i64[1]) == i64[1]));
+        let kept = if up { kept + i64[1] } else { kept };
+        let bits = if emin <= eh { host[shl64](host[extend_u](eh + bias - 1), host[extend_u](p - 1)) + kept } else { kept };
+        if inf < bits { inf } else { bits }
+      }
+    } } }
+
+-- The text read as a float of significand width `p` and exponent width `w`: its sign, and the
+-- bits of its magnitude.
+fn parse_float<'a>(t: text 'a, p: i32, w: i32) -> bool * i64 with Fail[FloatParseError] =
+  let s = to_string(t);
+  let (s, n) = len_of(s);
+  let (s, c0) = byte_lc(s, 0);
+  let neg = c0 == b'-';
+  let i0 = if c0 == b'-' || c0 == b'+' { 1 } else { 0 };
+  let inf = host[shl64](host[extend_u](host[shl32](1, w) - 1), host[extend_u](p - 1));
+  let (s, is_inf) = rest_is(s, i0, "inf");
+  let (s, is_infinity) = rest_is(s, i0, "infinity");
+  let (s, is_nan) = rest_is(s, i0, "nan");
+  if is_inf || is_infinity { (neg, inf) } else {
+  if is_nan { (neg, host[or64](inf, host[shl64](i64[1], host[extend_u](p - 2)))) } else {
+    let mut d = box buf[i64](4);
+    let mut chunk = i64[0];
+    let mut scale = i64[1];
+    let mut nd = 0;
+    let mut ex = 0;
+    let mut sticky = false;
+    let mut seen = false;
+    let mut point = false;
+    let mut at_e = 0 - 1;
+    let mut exp_seen = false;
+    let mut exp_neg = false;
+    let mut ev = 0;
+    let mut s = s;
+    for i in i0..n {
+      let (s2, b) = byte_lc(s, i);
+      s = s2;
+      if 0 <= at_e {
+        if b'0' <= b && b <= b'9' {
+          exp_seen = true;
+          if ev < 1000000 { ev = ev * 10 + (to_i32(b) - 48) } else { () }
+        } else {
+          if (b == b'-' || b == b'+') && i == at_e + 1 { exp_neg = b == b'-' } else { raise(inr b) }
+        }
+      } else {
+        if b'0' <= b && b <= b'9' {
+          seen = true;
+          let v = to_i32(b) - 48;
+          if nd == 0 && v == 0 { if point { ex = ex - 1 } else { () } } else {
+            if nd < 800 {
+              chunk = chunk * i64[10] + host[extend_u](v);
+              scale = scale * i64[10];
+              nd = nd + 1;
+              if point { ex = ex - 1 } else { () };
+              if scale == i64[1000000000] {
+                d = big_mul_add(d, scale, chunk); chunk = i64[0]; scale = i64[1]
+              } else { () }
+            } else {
+              if v != 0 { sticky = true } else { () };
+              if point { () } else { ex = ex + 1 }
+            }
+          }
+        } else {
+          if b == b'.' && not(point) { point = true } else {
+            if b == b'e' && seen { at_e = i } else { raise(inr b) }
+          }
+        }
+      }
+    };
+    if not(seen) || (0 <= at_e && not(exp_seen)) { raise(inl ()) } else { () };
+    let d = if scale != i64[1] { big_mul_add(d, scale, chunk) } else { d };
+    let (d, k) = len_of(d);
+    let e = if exp_neg { ex - ev } else { ex + ev };
+    if k == 0 { (neg, i64[0]) } else { (neg, round_dec(d, e, sticky, nd, p, w)) }
+  } }
+
+-- The text read as a binary64, correctly rounded: its bits.
+fn parse_f64_bits<'a>(t: text 'a) -> i64 with Fail[FloatParseError] =
+  let (neg, m) = parse_float(t, 53, 11);
+  if neg { host[or64](m, host[shl64](i64[1], i64[63])) } else { m }
+
+-- The text read as a binary32, correctly rounded from the decimal: its bits.
+fn parse_f32_bits<'a>(t: text 'a) -> i32 with Fail[FloatParseError] =
+  let (neg, m) = parse_float(t, 24, 8);
+  let m = host[wrap](m);
+  if neg { host[or32](m, host[shl32](1, 31)) } else { m }
+
+-- ### Floats as text  `[spec §37]`
+--
+-- Printing builds the digits in a string and big integers in buffers, so it allocates.
+
+-- `x` appended in the shortest decimal that reads back as `x`, spelled as Rust's `{:?}`.
+fn push_f64(s: string, x: f64) -> string * 1 = push_f64_bits(s, bits_f64(x))
+
+fn push_f32(s: string, x: f32) -> string * 1 = push_f32_bits(s, bits_f32(x))
+
+-- The float nearest the decimal `t`, ties to even; it raises a `FloatParseError`.
+fn parse_f64<'a>(t: text 'a) -> f64 with Fail[FloatParseError] = of_bits_f64(parse_f64_bits(t))
+
+fn parse_f32<'a>(t: text 'a) -> f32 with Fail[FloatParseError] = of_bits_f32(parse_f32_bits(t))
+
+-- `x` to standard output, as `push_f64` spells it.
+fn print_f64(x: f64) -> 1 =
+  let (s, _) = push_f64(string_new(32), x);
+  let s = print_string(s);
+  ()
+
+fn print_f32(x: f32) -> 1 =
+  let (s, _) = push_f32(string_new(16), x);
+  let s = print_string(s);
+  ()

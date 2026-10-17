@@ -56,7 +56,21 @@ def toBit (b : Bool) : UInt64 := if b then 1 else 0
 
 def trapIf : Option UInt64 → Except String UInt64
   | some r => .ok r
-  | none => .error "flat IR: trap in an integer instruction"
+  | none => .error "flat IR: trap in a numeric instruction"
+
+/-- A float's bits in a word, and back: an `f32` is the low half.  `[spec §37]` -/
+def fbits : (f : FWidth) → UInt64 → f.width.bits
+  | .f32, a => a.toUInt32
+  | .f64, a => a
+def fword : (f : FWidth) → f.width.bits → UInt64
+  | .f32, a => UInt32.toUInt64 a
+  | .f64, a => a
+def ibits : (i : IWidth) → UInt64 → i.width.bits
+  | .i32, a => a.toUInt32
+  | .i64, a => a
+def iword : (i : IWidth) → i.width.bits → UInt64
+  | .i32, a => UInt32.toUInt64 a
+  | .i64, a => a
 
 /-- A numeric operation on words; 32-bit operands are the low halves. -/
 def evalOp : HostOp → List UInt64 → Except String UInt64
@@ -76,6 +90,15 @@ def evalOp : HostOp → List UInt64 → Except String UInt64
   | .extend32_s, [a] => .ok (wasmHost.extend32S a)
   | .wrap8, [a] => .ok (wasmHost.wrap8 a.toUInt32).toUInt64
   | .extend8_u, [a] => .ok (wasmHost.extend8U a.toUInt8).toUInt64
+  | .fbin f o, [a, b] => .ok (fword f (wasmHost.fbin f o (fbits f a) (fbits f b)))
+  | .fun1 f o, [a] => .ok (fword f (wasmHost.fun1 f o (fbits f a)))
+  | .frel f o, [a, b] => .ok (toBit (wasmHost.frel f o (fbits f a) (fbits f b)))
+  | .convert f i sx, [a] => .ok (fword f (wasmHost.convert f i sx (ibits i a)))
+  | .trunc i f sx, [a] => trapIf ((wasmHost.trunc i f sx (fbits f a)).map (iword i))
+  | .trunc_sat i f sx, [a] => .ok (iword i (wasmHost.truncSat i f sx (fbits f a)))
+  | .demote, [a] => .ok (wasmHost.demote a).toUInt64
+  | .promote, [a] => .ok (wasmHost.promote a.toUInt32)
+  | .reinterpret_i _, [a] | .reinterpret_f _, [a] => .ok a
   | _, _ => .error "flat IR: operation arity"
 
 def liftE {α} (x : Except String α) : FM α := match x with

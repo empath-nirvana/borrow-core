@@ -25,6 +25,7 @@ inductive CV where
   | unit
   | i32 (n : UInt32)
   | u8 (n : UInt8)
+  | f32 (n : UInt32)
   | ptr (a : Nat)
   deriving Repr, BEq, Inhabited
 
@@ -35,6 +36,7 @@ inductive Obj where
   | con (t : Nat) (a : CV)
   | clos (code : Nat) (env : List CV)
   | i64 (n : UInt64)
+  | f64 (n : UInt64)
   | cell (v : CV)
   deriving Repr, Inhabited
 
@@ -110,6 +112,7 @@ def deepCopy : Nat → CV → IM CV
       | .con t x => do let x ← deepCopy n x; allocObj (.con t x)
       | .clos c xs => do let xs ← xs.mapM (deepCopy n); allocObj (.clos c xs)
       | .i64 k => allocObj (.i64 k)
+      | .f64 k => allocObj (.f64 k)
       | .cell _ => pure v
     | _ => pure v
 
@@ -125,7 +128,7 @@ def deepDrop : Nat → CV → IM Unit
       | .pair x y => do deepDrop n x; deepDrop n y; freeObj a
       | .inj _ x | .con _ x => do deepDrop n x; freeObj a
       | .clos _ xs => do xs.forM (deepDrop n); freeObj a
-      | .i64 _ => freeObj a
+      | .i64 _ | .f64 _ => freeObj a
       | .cell _ => pure ()
     | _ => pure ()
 
@@ -137,12 +140,14 @@ def toSource : Nat → CV → IM Val
     | .unit => pure .unit
     | .i32 k => pure (.i32 k)
     | .u8 k => pure (.u8 k)
+    | .f32 k => pure (.f32 k)
     | .ptr a =>
       match ← getObj a with
       | .pair x y => do pure (.pair (← toSource n x) (← toSource n y))
       | .inj false x => do pure (.inj₁ (← toSource n x))
       | .inj true x => do pure (.inj₂ (← toSource n x))
       | .i64 k => pure (.i64 k)
+      | .f64 k => pure (.f64 k)
       | _ => throw "closure IR: a host operation applied to a function or location"
 
 /-- Allocate the representation of a data value. -/
@@ -151,6 +156,8 @@ def ofSource : Expr → IM CV
   | .prim (.lit (.i32 k)) => pure (.i32 k)
   | .prim (.lit (.i64 k)) => allocObj (.i64 k)
   | .prim (.lit (.u8 k)) => pure (.u8 k)
+  | .prim (.lit (.f32 k)) => pure (.f32 k)
+  | .prim (.lit (.f64 k)) => allocObj (.f64 k)
   | .pair a b => do let a ← ofSource a; let b ← ofSource b; allocObj (.pair a b)
   | .inj₁ a => do let a ← ofSource a; allocObj (.inj false a)
   | .inj₂ a => do let a ← ofSource a; allocObj (.inj true a)
@@ -372,6 +379,8 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
     | .lit (.i32 k) => pure (.i32 k, env)
     | .lit (.i64 k) => do pure (← allocObj (.i64 k), env)
     | .lit (.u8 k) => pure (.u8 k, env)
+    | .lit (.f32 k) => pure (.f32 k, env)
+    | .lit (.f64 k) => do pure (← allocObj (.f64 k), env)
     | .pair a b => do
         let (va, env) ← take env a
         let (vb, env) ← take env b
@@ -487,6 +496,7 @@ def observe : Nat → CV → IM PV
     | .unit => pure .unit
     | .i32 k => pure (.i32 k)
     | .u8 k => pure (.u8 k)
+    | .f32 k => pure (.f32 k)
     | .ptr 0 => pure .loc
     | .ptr a =>
       if ← freedCell a then return .loc
@@ -496,6 +506,7 @@ def observe : Nat → CV → IM PV
       | .con _ _ => throw "closure IR: a suspended state as the program's value"
       | .clos _ _ => pure .fn
       | .i64 k => pure (.i64 k)
+      | .f64 k => pure (.f64 k)
       | .cell _ => pure .loc
 
 /-- Observe the loop `d` until it finishes: call it on `inl ()`, which answers `inl r` to finish

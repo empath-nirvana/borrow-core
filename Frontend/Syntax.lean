@@ -306,11 +306,11 @@ inductive Const where
 
 /-- A binary operator of the surface (draft 0 §2.12), resolved by the width of its operands. -/
 inductive SurfOp where
-  | add | sub | mul | eq | ne | lt | le | gt | ge
+  | add | sub | mul | div | eq | ne | lt | le | gt | ge
   deriving DecidableEq, Repr, Inhabited
 
 def SurfOp.str : SurfOp → String
-  | .add => "+" | .sub => "-" | .mul => "*" | .eq => "==" | .ne => "!=" | .lt => "<"
+  | .add => "+" | .sub => "-" | .mul => "*" | .div => "/" | .eq => "==" | .ne => "!=" | .lt => "<"
   | .le => "<=" | .gt => ">" | .ge => ">="
 
 /-- The kinds of borrow block (draft 0 §2.6). -/
@@ -366,6 +366,9 @@ to its operands as values, and elaborated to core by the typed pass of `Frontend
 inductive VSugar where
   /-- An integer literal, `i32` or `i64` by the type expected of it (`i32` by default). -/
   | lit (n : Nat)
+  /-- A float literal `m × 10^e`, `f64` or `f32` by the type expected of it (`f64` by default).
+  `[spec §37]` -/
+  | flit (m : Nat) (e : Int)
   /-- A binary operator, applied to a pair of operands. -/
   | op (o : SurfOp)
   /-- A constant written without its bracket arguments, `alloc(e)`, `free(e)`, `swap(c, e)`,

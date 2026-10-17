@@ -39,27 +39,48 @@ abbrev VTy.boolT : VTy := .sum .unit .unit
 /-- `U8`, the byte.  `[spec §8]` -/
 abbrev VTy.u8 : VTy := .int .w8
 
+/-- `F32`, `F64`.  `[spec §37]` -/
+abbrev VTy.f32 : VTy := .int .f32
+abbrev VTy.f64 : VTy := .int .f64
+
 /-- The width of a literal. -/
 def _root_.BoCa.IntLit.width : IntLit → Width
   | .i32 _ => .w32
   | .i64 _ => .w64
   | .u8 _ => .w8
+  | .f32 _ => .f32
+  | .f64 _ => .f64
 
-/-- The argument type of a host operation. The grouped operations at `w8` take `0`: a byte has
-no arithmetic, and none of them is applicable.  `[spec §8]` -/
+/-- `A` at an integer width with grouped operations (`w32`, `w64`), else `0`.  `[spec §8]` -/
+def intOnly : Width → VTy → VTy
+  | .w32, A | .w64, A => A
+  | _, _ => .zero
+
+/-- The argument type of a host operation. The grouped integer operations at `w8`, `f32` and
+`f64` take `0`: a byte has no arithmetic and a float has its own, so none of them is applicable.
+`[spec §8, §37]` -/
 def hostArg : HostOp → VTy
-  | .bin .w8 _ | .div .w8 _ | .un .w8 _ | .eqz .w8 | .rel .w8 _ => .zero
-  | .bin w _ => .tensor (.int w) (.int w)
-  | .div w _ => .tensor (.int w) (.int w)
-  | .un w _ => .int w
-  | .eqz w => .int w
-  | .rel w _ => .tensor (.int w) (.int w)
+  | .bin w _ => intOnly w (.tensor (.int w) (.int w))
+  | .div w _ => intOnly w (.tensor (.int w) (.int w))
+  | .un w _ => intOnly w (.int w)
+  | .eqz w => intOnly w (.int w)
+  | .rel w _ => intOnly w (.tensor (.int w) (.int w))
   | .wrap => .int .w64
   | .extend_s => .int .w32
   | .extend_u => .int .w32
   | .extend32_s => .int .w64
   | .wrap8 => .int .w32
   | .extend8_u => .int .w8
+  | .fbin f _ => .tensor (.int f.width) (.int f.width)
+  | .fun1 f _ => .int f.width
+  | .frel f _ => .tensor (.int f.width) (.int f.width)
+  | .convert _ i _ => .int i.width
+  | .trunc _ f _ => .int f.width
+  | .trunc_sat _ f _ => .int f.width
+  | .demote => .int .f64
+  | .promote => .int .f32
+  | .reinterpret_i f => .int f.width
+  | .reinterpret_f f => .int f.int.width
 
 /-- The result type of a host operation: `I`, `I ⊕ 1` for the partial operations, `1 ⊕ 1` for
 the tests.  `[spec §8]` -/
@@ -75,6 +96,16 @@ def hostRes : HostOp → VTy
   | .extend32_s => .int .w64
   | .wrap8 => .int .w8
   | .extend8_u => .int .w32
+  | .fbin f _ => .int f.width
+  | .fun1 f _ => .int f.width
+  | .frel _ _ => .boolT
+  | .convert f _ _ => .int f.width
+  | .trunc i _ _ => .sum (.int i.width) .unit
+  | .trunc_sat i _ _ => .int i.width
+  | .demote => .int .f32
+  | .promote => .int .f64
+  | .reinterpret_i f => .int f.int.width
+  | .reinterpret_f f => .int f.width
 
 /-- `hostArg op ⊸ hostRes op` at value type: `U (A ⊸ F B)`.  `[spec §8]` -/
 abbrev hostSig (op : HostOp) : VTy := .lolli (hostArg op) (hostRes op)
@@ -90,6 +121,11 @@ theorem vP_lit (c : IntLit) {ls : List SRec} {δ : LSub} :
   | i32 n => exact ⟨rfl, n, rfl⟩
   | i64 n => exact ⟨rfl, n, rfl⟩
   | u8 n => exact ⟨rfl, n, rfl⟩
+  | f32 n => exact ⟨rfl, n, rfl⟩
+  | f64 n => exact ⟨rfl, n, rfl⟩
+
+theorem vP_ofBits (w : Width) (n : w.bits) {ls : List SRec} {δ : LSub} :
+    vP (.int w) ls δ (Val.ofBits w n) PMap.empty := ⟨rfl, Val.isInt_iff.mpr ⟨n, rfl⟩⟩
 
 theorem vP_i32 (n : UInt32) {ls : List SRec} {δ : LSub} :
     vP (.int .w32) ls δ (Val.i32 n) PMap.empty := ⟨rfl, n, rfl⟩
@@ -134,7 +170,7 @@ theorem host_call_sound (H : Host) (op : HostOp) {ls ls' : List SRec} {δ : LSub
   cases op with
   | bin w o =>
       cases w
-      case w8 => exact h.elim
+      case w8 | f32 | f64 => exact h.elim
       all_goals
         obtain ⟨rfl, a, b, rfl, ha, hb⟩ := vP_int_pair h
         refine ⟨rfl, ?_⟩
@@ -144,7 +180,7 @@ theorem host_call_sound (H : Host) (op : HostOp) {ls ls' : List SRec} {δ : LSub
       · exact ⟨_, rfl, vP_i64 _⟩
   | div w o =>
       cases w
-      case w8 => exact h.elim
+      case w8 | f32 | f64 => exact h.elim
       all_goals
         obtain ⟨rfl, a, b, rfl, ha, hb⟩ := vP_int_pair h
         refine ⟨rfl, ?_⟩
@@ -158,7 +194,7 @@ theorem host_call_sound (H : Host) (op : HostOp) {ls ls' : List SRec} {δ : LSub
         exact vP_i64 k
   | un w o =>
       cases w
-      case w8 => exact h.elim
+      case w8 | f32 | f64 => exact h.elim
       all_goals
         obtain ⟨rfl, n, rfl⟩ := h
         refine ⟨rfl, ?_⟩
@@ -166,13 +202,13 @@ theorem host_call_sound (H : Host) (op : HostOp) {ls ls' : List SRec} {δ : LSub
       · exact ⟨_, rfl, vP_i64 _⟩
   | eqz w =>
       cases w
-      case w8 => exact h.elim
+      case w8 | f32 | f64 => exact h.elim
       all_goals
         obtain ⟨rfl, n, rfl⟩ := h
         exact ⟨rfl, _, rfl, vP_bool _⟩
   | rel w o =>
       cases w
-      case w8 => exact h.elim
+      case w8 | f32 | f64 => exact h.elim
       all_goals
         obtain ⟨rfl, a, b, rfl, ha, hb⟩ := vP_int_pair h
         refine ⟨rfl, ?_⟩
@@ -197,6 +233,55 @@ theorem host_call_sound (H : Host) (op : HostOp) {ls ls' : List SRec} {δ : LSub
   | extend8_u =>
       obtain ⟨rfl, n, rfl⟩ := h
       exact ⟨rfl, _, rfl, vP_i32 _⟩
+  | fbin f o =>
+      obtain ⟨rfl, a, b, rfl, ha, hb⟩ := vP_int_pair h
+      obtain ⟨n, rfl⟩ := Val.isInt_iff.mp ha
+      obtain ⟨m, rfl⟩ := Val.isInt_iff.mp hb
+      refine ⟨rfl, _, ?_, vP_ofBits _ (H.fbin f o n m)⟩
+      simp [Host.call, Expr.argsAt?, Expr.argAt?_ofBits]
+  | fun1 f o =>
+      obtain ⟨rfl, hv⟩ := h
+      obtain ⟨n, rfl⟩ := Val.isInt_iff.mp hv
+      refine ⟨rfl, _, ?_, vP_ofBits _ (H.fun1 f o n)⟩
+      simp [Host.call, Expr.argAt?_ofBits]
+  | frel f o =>
+      obtain ⟨rfl, a, b, rfl, ha, hb⟩ := vP_int_pair h
+      obtain ⟨n, rfl⟩ := Val.isInt_iff.mp ha
+      obtain ⟨m, rfl⟩ := Val.isInt_iff.mp hb
+      refine ⟨rfl, _, ?_, vP_bool (H.frel f o n m)⟩
+      simp [Host.call, Expr.argsAt?, Expr.argAt?_ofBits]
+  | convert f i sx =>
+      obtain ⟨rfl, hv⟩ := h
+      obtain ⟨n, rfl⟩ := Val.isInt_iff.mp hv
+      refine ⟨rfl, _, ?_, vP_ofBits _ (H.convert f i sx n)⟩
+      simp [Host.call, Expr.argAt?_ofBits]
+  | trunc i f sx =>
+      obtain ⟨rfl, hv⟩ := h
+      obtain ⟨n, rfl⟩ := Val.isInt_iff.mp hv
+      refine ⟨rfl, _, ?_, vP_opt (o := (H.trunc i f sx n).map (Val.ofBits i.width))
+        fun r hr => ?_⟩
+      · simp [Host.call, Expr.argAt?_ofBits]
+      · obtain ⟨k, -, rfl⟩ := Option.map_eq_some_iff.mp hr
+        exact vP_ofBits _ k
+  | trunc_sat i f sx =>
+      obtain ⟨rfl, hv⟩ := h
+      obtain ⟨n, rfl⟩ := Val.isInt_iff.mp hv
+      refine ⟨rfl, _, ?_, vP_ofBits _ (H.truncSat i f sx n)⟩
+      simp [Host.call, Expr.argAt?_ofBits]
+  | demote =>
+      obtain ⟨rfl, n, rfl⟩ := h
+      exact ⟨rfl, _, rfl, vP_ofBits .f32 _⟩
+  | promote =>
+      obtain ⟨rfl, n, rfl⟩ := h
+      exact ⟨rfl, _, rfl, vP_ofBits .f64 _⟩
+  | reinterpret_i f =>
+      cases f <;> obtain ⟨rfl, n, rfl⟩ := h
+      · exact ⟨rfl, _, rfl, vP_i32 _⟩
+      · exact ⟨rfl, _, rfl, vP_i64 _⟩
+  | reinterpret_f f =>
+      cases f <;> obtain ⟨rfl, n, rfl⟩ := h
+      · exact ⟨rfl, _, rfl, vP_ofBits .f32 _⟩
+      · exact ⟨rfl, _, rfl, vP_ofBits .f64 _⟩
 
 /-! ### Compatibility -/
 

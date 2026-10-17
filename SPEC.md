@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.66 · 2026-10-17
+Version 0.67 · 2026-10-17
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -442,7 +442,7 @@ between engines is tested on the corpus, not proved.
 
 ### Open
 
-- Floats (`F32`, `F64`) by the same scheme; Wasm's NaN bit patterns are nondeterministic.
+- Floats (`F32`, `F64`) are §36, by the same scheme.
 - Checked (non-wrapping) arithmetic is derivable from the operations above.
 - `plainV` excludes the integer types, so they cannot yet be `withborS` leaves.
 - The backend's layout is type-directed (`Backend/README.md`, Representation): `I32` and `I64`
@@ -6023,6 +6023,204 @@ existing corpus program keeps its output, golden and counts.
   form, #489).
 - Module-qualified families and an orphan rule, once there are modules (#63).
 - `T` read off arguments whose view is not themselves (a buffer's view): the call writes `T`.
+## 37. Entry 36 — floats: `f32` and `f64`
+
+### Motivation
+
+Programs compute with real numbers: a median, a mean, a distance. The LeetCode corpus computed
+twice a median as an integer and printed `.5` by hand (#498). This entry adds IEEE 754 binary32
+and binary64 by §8's scheme (#499): two more widths of `VTy.int`, literals, and Wasm's float
+instructions as host operations.
+
+### Types and literals
+
+    A ::= … | F32 | F64                                   (VTy.int .f32, VTy.int .f64)
+
+`Width` gains `f32` and `f64`, and `IntLit` gains `f32 n` and `f64 n`, a float given by its bit
+pattern `n` (`UInt32`, `UInt64`). Nothing else in the kernel changes: the relation at `int w`
+holds exactly at a literal of width `w` and the empty resource (`Val.IsInt`), so the floats are
+persistent, `Imm̲ 'b F = F`, they outlive every lifetime, and every theorem stated for the widths
+holds for them unchanged. A float holds no resource.
+
+The core syntax writes `f32[n]` and `f64[n]` (`n` the bits). The surface writes a decimal,
+`1.5`, `2.5e-3`, `1e10` (a fraction or an exponent makes it a float), read as the float nearest
+its value, ties to even (`Frontend/FloatLit.lean`, exact arithmetic): an `f64` unless an `f32`
+is expected. An integer literal where a float is expected is that integer as a float.
+
+### Operations
+
+Wasm's float instructions (`Support/Syntax/Integers.lean`), at each float width `f`:
+
+| group | operations | type (at `F64`) |
+|---|---|---|
+| binary | `fbin f o`: `add`, `sub`, `mul`, `div`, `min`, `max`, `copysign` | `F64 ⊗ F64 ⇒ F64` |
+| unary | `fun1 f o`: `abs`, `neg`, `sqrt`, `ceil`, `floor`, `trunc`, `nearest` | `F64 ⇒ F64` |
+| tests | `frel f o`: `eq`, `ne`, `lt`, `gt`, `le`, `ge` | `F64 ⊗ F64 ⇒ 1 ⊕ 1` |
+| to a float | `convert f i sx` (`f64.convert_i32_s`, …), `demote`, `promote` | `I32 ⇒ F64`, `F64 ⇒ F32`, `F32 ⇒ F64` |
+| to an integer, partial | `trunc i f sx` (`i32.trunc_f64_s`, …) | `F64 ⇒ I32 ⊕ 1` |
+| to an integer, total | `trunc_sat i f sx` (`i32.trunc_sat_f64_s`, …) | `F64 ⇒ I32` |
+| bits | `reinterpret_i f`, `reinterpret_f f` | `F64 ⇒ I64`, `I64 ⇒ F64` |
+
+`trunc` returns a sum where Wasm traps (a NaN, an infinity, an integer part out of range), as
+the integer division does (§8): a trap would abandon linear resources. `trunc_sat` is total: `0`
+at a NaN, the least or greatest integer out of range. `§8`'s grouped integer operations at a
+float width take `0`, as at `w8`. `host[op]` names a float operation as its Wasm instruction with
+`_` for `.`: `host[f64_add]`, `host[f32_sqrt]`, `host[f64_lt]`, `host[f64_convert_i32_s]`,
+`host[i32_trunc_f64_s]`, `host[i64_trunc_sat_f32_u]`, `host[f32_demote_f64]`,
+`host[i64_reinterpret_f64]`, `host[f64_reinterpret_i64]`.
+
+A host `ℍ` gains a function per group, on the floats' bits (`Host.fbin`, `fun1`, `frel`,
+`convert`, `trunc`, `truncSat`, `demote`, `promote`); `reinterpret` keeps the bits and is fixed in
+`Host.call`. `host_call_sound` covers the new operations at every host, from the construction of
+`Host.call` alone: nothing about float arithmetic is proved, as nothing about integer arithmetic
+is (§8).
+
+### NaN: canonical at every engine
+
+Wasm fixes every float result but one: the bits of a NaN that an arithmetic operation answers,
+which may be any NaN whose payload is canonical or propagated from an operand, of either sign.
+x86 and ARM differ there (x86's generated NaN is negative). The engines here **canonicalise**,
+as Wasm's deterministic profile does: every NaN that `add`, `sub`, `mul`, `div`, `min`, `max`,
+`sqrt`, `ceil`, `floor`, `trunc`, `nearest`, `demote` and `promote` answer is the canonical NaN
+of positive sign (`0x7FC00000`, `0x7FF8000000000000`). `abs`, `neg`, `copysign` and
+`reinterpret` act on the bits and keep a NaN's payload, as Wasm requires of them.
+
+Why canonicalise rather than compare modulo payload: the sign and payload of a NaN are
+observable without `reinterpret` (`copysign(1.0, 0.0 / 0.0)` is `±1.0`), so a comparison modulo
+payload would have to know which outputs a NaN reached. Canonical NaNs make the host a function
+(`wasmHost` is one host, and the machine is deterministic at each host, §1), make every program's
+output one string at every engine, and need nothing of the oracle. The cost is in the compiled
+code only: after each operation above, a test `x ≠ x` and a select (`Backend/Flat/Lower.lean`,
+`hostVals`), a few instructions per float operation and no allocation. A C lowering is the same:
+`float`/`double` and the same test, since C leaves NaN bits to the platform too.
+
+`wasmHost`'s float operations are Lean's `Float32`/`Float` (IEEE 754, round to nearest even),
+with each NaN result made canonical and `min`, `max`, `nearest` and the conversions written to
+Wasm's definitions (`Support/Dynamics/Floats.lean`). The interpreters (the source, closure-IR and
+flat-IR stages and the falsifier) all apply `wasmHost`; the Wasm stage runs wasmtime's
+instructions. They agree bit for bit.
+
+### Lowering
+
+A float is one word holding its bits, an `f32`'s zero-extended, as an `i32`'s (Backend README,
+*Representation*): no new local type, and `reinterpret` is the word itself. A float operation
+reinterprets each operand as `f32`/`f64` as it is pushed and its result back to an integer
+(`Backend/Wasm/Lower.lean`, `floatIn`, `floatOut`), so the module uses Wasm's `f32`/`f64`
+instructions. `trunc` is lowered as its range test (two float comparisons against the bounds of
+Wasm's range, false at a NaN) and `trunc_sat` inside it, so the compiled code never traps. Printed,
+a float value is `f32[n]`/`f64[n]`, its bits, as an integer prints its bits (`Backend/Value.lean`).
+
+### Surface
+
+The operators `+ - * /` and `== != < <= > >=` at a float type are the float operation and IEEE
+754's comparison, by §8's per-width dispatch (`SurfOp.host`): the width is the one expected of
+an arithmetic result, or an operand's other than a literal's, and `f64` when both operands are
+literals and one is a float literal. `/` is only at a float width: an integer's division answers
+a sum (`host[div_s32]`), and `/` at an integer is refused with that message
+(`corpus/reject/int-slash.bc`). There is no unary minus: `neg_f64(x)` (`0.0 - x` is `+0.0` at
+`x = 0.0`).
+
+### Equality and order
+
+`==`, `<` and the rest are IEEE 754's comparisons, returning `bool`: a NaN is unordered (every
+comparison with it is false but `!=`, so `x != x` exactly at a NaN), and `-0.0 == 0.0`. They are
+neither an equivalence nor a total order, so, as in Rust (`PartialEq`/`PartialOrd`, no `Eq`,
+`Hash`, `Ord`), **a float has no equality, hash or order provider**: under one provider per type
+(#489, #508) it has none, it is not a map key, and it is not sortable by default. The comparison
+operators are host operations at the float widths, separate from any provider, so a provider's
+cases need no float case.
+
+Where an order is needed (`lib/float.bc`):
+
+- `total_cmp_f64`, `total_cmp_f32`: IEEE 754's `totalOrder`, −NaN < −inf < … < −0.0 < 0.0 < … <
+  inf < NaN, NaNs by their payloads; a comparison for `sort`.
+- the `OrderedFloat` pattern: `ord_f64` maps a float to the `i64` whose signed order is
+  `totalOrder` (the bits, with the magnitude flipped when the sign is set), a bijection with
+  inverse `of_ord_f64`. A map keyed by `ord_f64(x)` or a sort of the keys uses the integer's
+  equality, hash and order, which are the float's under `totalOrder`: `-0.0` and `0.0` are two
+  keys, and a NaN equals itself. Once a generic `data` newtype lands (#508), `data OrdF64(i64)`
+  is this with its own name.
+
+### Library
+
+`lib/float.bc` (`include float`):
+
+- the operations by name at each width (`sqrt_f64`, `abs_f64`, `neg_f64`, `floor_f64`,
+  `ceil_f64`, `trunc_f64`, `round_f64` (Wasm's `nearest`, ties to even), `min_f64`, `max_f64`,
+  `copysign_f64`, `is_nan_f64`, and the same at `f32`);
+- conversions: `f64_of_i32`, `f64_of_i64`, `f32_of_i32`, `f32_of_i64`; `i32_of_f64`, `i64_of_f64`
+  (partial, `I ⊕ 1`) and `i32_of_f64_sat`, `i64_of_f64_sat`, and at `f32`; `f64_of_f32`,
+  `f32_of_f64`; `bits_f64`, `of_bits_f64`, `bits_f32`, `of_bits_f32`;
+- `total_cmp_*`, `ord_*`, `of_ord_*`, above;
+- printing and parsing: `push_f64`, `push_f32` (onto a string), `print_f64`, `print_f32` (to
+  standard output), `parse_f64`, `parse_f32` (raising `FloatParseError`, `1 + u8`: the text ends
+  where a digit is needed, or the byte that cannot stand where it is), and the same on bit
+  patterns (`push_f64_bits`, `parse_f64_bits`, …).
+
+**Printing** is the shortest decimal that reads back as the same float, and of those the nearest
+(the property of Steele and White's, Burger and Dybvig's, Grisu's and Ryū's output). It is
+Burger and Dybvig's free-format algorithm on exact big integers (`Big`, a buffer of 32-bit limbs
+in `i64`s, as long as its number): the value and its rounding interval scaled by a power of ten,
+a digit per step until the rest lies in the interval, which is closed when the significand is
+even, and the nearer of the last digit and its successor, the even one at a tie. It is spelled
+as Rust's `{:?}`: `NaN` (every NaN), `inf`, `-inf`, `0.0`, `-0.0`; with `e` the decimal exponent
+of `d.ddd × 10^e`, a decimal with at least one fractional digit when `-4 ≤ e < 16` (`1.0`,
+`0.0001`, `1000000000000000.0`), else `d.ddde<e>` (`1e16`, `1.5e-7`, `5e-324`,
+`3.4028235e38`).
+
+**Parsing** reads `[+-]? (digits [. digits*] | . digits) ([eE] [+-]? digits)?`, or `inf`,
+`infinity` or `nan` in any case, as the float nearest the decimal, ties to even, overflowing to
+an infinity and underflowing through the subnormals to zero. It keeps the first 800 significant
+digits and whether any later digit is nonzero (a point halfway between two floats has at most 767
+significant digits), divides exactly, one bit at a time, and rounds once; an `f32` is rounded from
+the decimal directly, never through `f64`. Every loop is counted, so both are total.
+
+Both allocate (the string, the big integers), where Rust's printer allocates nothing: correctness
+first.
+
+### Programs
+
+Each runs at every stage with one output (source, closure IR, flat IR, Wasm), and passes the
+falsifier.
+
+| program | what it shows | answer | counts |
+|---|---|---|---|
+| `corpus/float-arith.bc` | arithmetic, `sqrt`, overflow, `0 / 0`, subnormals, `-0.0`, the rounding functions (`nearest` ties to even), `f32` arithmetic; shortest printing | `0.30000000000000004`, …, `1e-45`; `19` | `312 0 0` |
+| `corpus/float-compare.bc` | IEEE 754 comparisons at NaN, `-0.0`, the infinities; `total_cmp_f64`; `min`/`max` of the zeros; the canonical NaN | six lines of comparisons, `9221120237041090560`; `6` | `0 0 0` |
+| `corpus/float-convert.bc` | `trunc` partial and `trunc_sat` at `i32`, unsigned `i32` and `i64` at every range boundary, `inf`, NaN; integer to float rounding; demote and promote | thirteen lines, then `9007199254740992.0 16777216.0 4294967300.0 0.1 0.10000000149011612`; `13` | `183 0 0` |
+| `corpus/float-ordered.bc` | sorting by `total_cmp_f64`; the `OrderedFloat` key `ord_f64`, sorted and deduplicated as `i64`s | `NaN -inf -0.0 0.0 0.0 1.0 2.0 3.5 NaN`, the eight distinct keys; `8` | `81 0 0` |
+| `corpus/float-roundtrip.bc` | 38 floats printed and read back, 23 decimals read (halfway cases, long inputs, overflow, underflow, malformed text), at both widths, against Python's references | every check `=`; `61` | `3721 0 0` |
+| `corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc` | LeetCode 295 with the median an `f64` (the integer program, `…-stream.bc`, unchanged) | `1.5 2.0`, …; `24` | `281 0 0` |
+
+Each program prints through one call of the printer per width: the backend compiles every call
+of a function as a copy of its body, so each call of `print_f64` is a copy of the printer and
+its big-integer library (#509).
+
+### Baseline
+
+The Fundamental Property and adequacy hold unchanged: `CDerives.lit` and `CDerives.hostOp` are the
+rules they were, at more literals and operations, and `host_call_sound` covers the new operations
+at every host. No new rule, index or former. Every existing corpus and kernel program keeps its
+output, goldens, `corpus/kernel-counts.expected` and counts. The lexer reads `n.i`, an operation
+of a row, as a float literal's text, and the parser reads it back (`nDotI?`), so every row is read
+as before.
+
+### Not provided
+
+- A unary minus, and float literals written negative: `neg_f64`.
+- An equality, hash or order provider at a float type: the classical default, as in Rust (above).
+- Formatting options (a fixed number of digits, padding): only the shortest round-trip form.
+- Floats as `withborS` leaves (`plainV`, as the integers, §8 *Open*).
+
+### Open
+
+- Rounding modes other than nearest-even, and floating-point exceptions: Wasm has neither.
+- Removing the NaN canonicalisation where no NaN bit is observed (a NaN that only reaches a
+  comparison or the printer): an optimisation of the compiled code, not of the semantics.
+- SIMD (`v128`) and fused multiply-add, which Wasm's scalar core lacks.
+- Faster, allocation-free shortest printing (Ryū or Schubfach tables) in place of the exact
+  big-integer one, and parsing by Eisel–Lemire with this one as its fallback.
+- Each call of the printer is compiled as a copy of it (#509); the programs call it once.
 
 ---
 
@@ -6275,10 +6473,33 @@ interpreter's frames) and `Backend/Wasm/` (`$sp`, the stack, `lowerFn`), with th
 comments in `lib/buf.bc`, `lib/text.bc` and `lib/rec.bc`; no change to `CDerives`, `Core/`,
 `Paper/`, `Support/`, the checker or the elaboration.
 
+Entry 35 (§36) is implemented: `Width.f32`/`f64`, `IntLit.f32`/`f64` and the float `HostOp`s in
+`Support/Syntax/Integers.lean`; the host's float functions and `Host.call` in
+`Support/Dynamics/Host.lean`, `wasmHost`'s in `Support/Dynamics/Floats.lean`; `hostArg`,
+`hostRes` and `host_call_sound` in `Core/Integers.lean` (and the host's answers closed and
+raise-free, `Core/Closed.lean`, `Core/RaiseNames.lean`); the lexer, parser, printer, operator
+dispatch and literal rounding in `Frontend/` (`Frontend/FloatLit.lean`); every stage of
+`Backend/` (`Flat/Lower.lean`'s `hostVals` canonicalises, `Wasm/Lower.lean` reinterprets); and
+`lib/float.bc`. No change to `CDerives`, the relation, the machine's rules or the checker's rules.
+
 ---
 
 ## Changelog
 
+- **0.67** (2026-10-17) — §37 (new, #499): floats. `f32` and `f64` are two more widths of
+  `VTy.int`, with literals given by their bits and Wasm's float instructions as host operations
+  (arithmetic, `min`/`max`/`copysign`, `abs`/`neg`/`sqrt`/`ceil`/`floor`/`trunc`/`nearest`, the
+  IEEE comparisons, the conversions); float-to-integer `trunc` answers a sum where Wasm traps,
+  `trunc_sat` is total. Every engine makes an arithmetic NaN result the canonical NaN (Wasm's
+  deterministic profile), so all agree bit for bit. The surface reads decimal float literals,
+  correctly rounded, and dispatches `+ - * /` and the comparisons at the float widths; `/` is
+  only at floats. A float has no equality, hash or order provider: `total_cmp_*` and the
+  `OrderedFloat` key `ord_*` give IEEE `totalOrder`. `lib/float.bc`: the operations by name,
+  conversions, shortest round-trip printing (Burger–Dybvig, exact) and correctly rounded parsing.
+  §8 *Open* updated. New corpus programs `float-arith`, `float-compare`, `float-convert`,
+  `float-ordered`, `float-roundtrip`, `leetcode/heaps/0295-find-median-from-data-stream-f64`.
+  No change to `CDerives`, the relation, the checker's rules, a kernel program, or any existing
+  program's output or counts.
 - **0.66** (2026-10-17) — §36 (new, #508, from #489): `poly` families, a family of functions with
   one case per type, chosen as the most specific case whose head the type argument matches; a
   second case at a type, or two overlapping cases neither more specific, is an error at the

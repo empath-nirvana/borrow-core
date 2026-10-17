@@ -10,7 +10,7 @@ inverse (`Const.ofArgs_toArgs`).
 
 namespace Frontend
 
-open BoCa (Width IntLit HostOp BinOp DivOp UnOp RelOp)
+open BoCa (Width IntLit HostOp BinOp DivOp UnOp RelOp FWidth IWidth Sx FBinOp FUnOp FRelOp)
 
 /-- The kind of one bracket argument. -/
 inductive ArgKind where
@@ -22,7 +22,7 @@ inductive CKw where
   | alloc | free | swap | copy | copyBang | forgetImm | forgetMut | forgetUnk | forgetBang
   | withbor1 | withbor2 | withbor3 | withload | withswap
   | foldImm | foldOwn | foldReuse | fixd | unfoldS | unfold
-  | i32 | i64 | u8 | host
+  | i32 | i64 | u8 | f32 | f64 | host
   | allocS | freeS | withborSMut | withborSImm | withborF2Mut | withborF2Imm
   | arrayNew | arrayFree | arraySize | arrayReplace | arrayLen | arrayGet | arrayCopy
   | arrayForget | sliceBorrowMut | sliceBorrowImm | sliceGetMut | sliceLenMut
@@ -40,7 +40,8 @@ def CKw.str : CKw → String
   | .withload => "withload" | .withswap => "withswap"
   | .foldImm => "fold_imm" | .foldOwn => "fold_own" | .foldReuse => "fold_reuse"
   | .fixd => "fixd" | .unfoldS => "unfold_s" | .unfold => "unfold"
-  | .i32 => "i32" | .i64 => "i64" | .u8 => "u8" | .host => "host"
+  | .i32 => "i32" | .i64 => "i64" | .u8 => "u8" | .f32 => "f32" | .f64 => "f64"
+  | .host => "host"
   | .allocS => "alloc_s" | .freeS => "free_s"
   | .withborSMut => "withbor_s_mut" | .withborSImm => "withbor_s_imm"
   | .withborF2Mut => "withbor_f2_mut" | .withborF2Imm => "withbor_f2_imm"
@@ -61,7 +62,7 @@ def CKw.str : CKw → String
 def CKw.all : List CKw :=
   [.alloc, .free, .swap, .copy, .copyBang, .forgetImm, .forgetMut, .forgetUnk, .forgetBang,
    .withbor1, .withbor2, .withbor3, .withload, .withswap,
-   .foldImm, .foldOwn, .foldReuse, .fixd, .unfoldS, .unfold, .i32, .i64, .u8, .host,
+   .foldImm, .foldOwn, .foldReuse, .fixd, .unfoldS, .unfold, .i32, .i64, .u8, .f32, .f64, .host,
    .allocS, .freeS, .withborSMut, .withborSImm, .withborF2Mut, .withborF2Imm,
    .arrayNew, .arrayFree, .arraySize, .arrayReplace, .arrayLen, .arrayGet, .arrayCopy,
    .arrayForget, .sliceBorrowMut, .sliceBorrowImm, .sliceGetMut, .sliceLenMut,
@@ -93,7 +94,7 @@ def CKw.sig : CKw → List ArgKind
   | .withbor3 | .withload => [life, binder, ty, ty]
   | .withswap => [life, ty, ty]
   | .foldImm => [ty, binder, life, ty]
-  | .i32 | .i64 | .u8 => [nat]
+  | .i32 | .i64 | .u8 | .f32 | .f64 => [nat]
   | .host => [op]
   | .allocS | .freeS => [shape]
   | .withborSMut | .withborSImm => [shape, binder, ty]
@@ -128,6 +129,8 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .i32, [.nat n] => some (.lit (.i32 (UInt32.ofNat n)))
   | .i64, [.nat n] => some (.lit (.i64 (UInt64.ofNat n)))
   | .u8, [.nat n] => some (.lit (.u8 (UInt8.ofNat n)))
+  | .f32, [.nat n] => some (.lit (.f32 (UInt32.ofNat n)))
+  | .f64, [.nat n] => some (.lit (.f64 (UInt64.ofNat n)))
   | .host, [.op o] => some (.host o)
   | .allocS, [.shape σ] => some (.allocS σ)
   | .freeS, [.shape σ] => some (.freeS σ)
@@ -193,6 +196,8 @@ def Const.toArgs : Const → CKw × List Arg
   | .lit (.i32 n) => (.i32, [.nat n.toNat])
   | .lit (.i64 n) => (.i64, [.nat n.toNat])
   | .lit (.u8 n) => (.u8, [.nat n.toNat])
+  | .lit (.f32 n) => (.f32, [.nat n.toNat])
+  | .lit (.f64 n) => (.f64, [.nat n.toNat])
   | .host o => (.host, [.op o])
   | .allocS σ => (.allocS, [.shape σ])
   | .freeS σ => (.freeS, [.shape σ])
@@ -236,6 +241,8 @@ theorem Const.ofArgs_toArgs (c : Const) : Const.ofArgs c.toArgs.1 c.toArgs.2 = s
     | i32 n => show some (Const.lit (.i32 (UInt32.ofNat n.toNat))) = _; simp
     | i64 n => show some (Const.lit (.i64 (UInt64.ofNat n.toNat))) = _; simp
     | u8 n => show some (Const.lit (.u8 (UInt8.ofNat n.toNat))) = _; simp
+    | f32 n => show some (Const.lit (.f32 (UInt32.ofNat n.toNat))) = _; simp
+    | f64 n => show some (Const.lit (.f64 (UInt64.ofNat n.toNat))) = _; simp
   | withborS m => cases m <;> rfl
   | _ => rfl
 
@@ -247,12 +254,41 @@ theorem CKw.ofString_str (k : CKw) : CKw.ofString? k.str = some k := by
 `host[op]` names an operation as its Wasm instruction name with the width as a suffix
 (`add32`, `div_s32`, `lt_u64`, `eqz64`, `extend8_s32`), and the conversions by their bare
 names (`wrap`, `extend_s`, `extend_u`, `extend32_s`, and the byte's `wrap8`, `extend8_u`). The
-grouped names at `8` (`add8`, …) exist and take `0`: a byte has no arithmetic (SPEC §8). -/
+grouped names at `8` (`add8`, …) exist and take `0`: a byte has no arithmetic (SPEC §8), and so
+do those at the float widths (`addf32`, …). The float operations are named as Wasm's instructions
+with `_` for `.` (`f64_add`, `f32_sqrt`, `f64_lt`, `f64_convert_i32_s`, `i32_trunc_f64_s`,
+`i64_trunc_sat_f32_u`, `f32_demote_f64`, `f64_promote_f32`, `i64_reinterpret_f64`,
+`f32_reinterpret_i32`; SPEC §37). -/
 
 def widthSuffix : Width → String
   | .w32 => "32"
   | .w64 => "64"
   | .w8 => "8"
+  | .f32 => "f32"
+  | .f64 => "f64"
+
+def fwName : FWidth → String
+  | .f32 => "f32"
+  | .f64 => "f64"
+
+def iwName : IWidth → String
+  | .i32 => "i32"
+  | .i64 => "i64"
+
+def sxName : Sx → String
+  | .s => "s"
+  | .u => "u"
+
+def fbinName : FBinOp → String
+  | .add => "add" | .sub => "sub" | .mul => "mul" | .div => "div" | .min => "min"
+  | .max => "max" | .copysign => "copysign"
+
+def funName : FUnOp → String
+  | .abs => "abs" | .neg => "neg" | .sqrt => "sqrt" | .ceil => "ceil" | .floor => "floor"
+  | .trunc => "trunc" | .nearest => "nearest"
+
+def frelName : FRelOp → String
+  | .eq => "eq" | .ne => "ne" | .lt => "lt" | .gt => "gt" | .le => "le" | .ge => "ge"
 
 def binOpName : BinOp → String
   | .add => "add" | .sub => "sub" | .mul => "mul" | .and => "and" | .or => "or"
@@ -282,10 +318,23 @@ def hostOpName : HostOp → String
   | .extend32_s => "extend32_s"
   | .wrap8 => "wrap8"
   | .extend8_u => "extend8_u"
+  | .fbin f o => fwName f ++ "_" ++ fbinName o
+  | .fun1 f o => fwName f ++ "_" ++ funName o
+  | .frel f o => fwName f ++ "_" ++ frelName o
+  | .convert f i sx => fwName f ++ "_convert_" ++ iwName i ++ "_" ++ sxName sx
+  | .trunc i f sx => iwName i ++ "_trunc_" ++ fwName f ++ "_" ++ sxName sx
+  | .trunc_sat i f sx => iwName i ++ "_trunc_sat_" ++ fwName f ++ "_" ++ sxName sx
+  | .demote => "f32_demote_f64"
+  | .promote => "f64_promote_f32"
+  | .reinterpret_i f => iwName f.int ++ "_reinterpret_" ++ fwName f
+  | .reinterpret_f f => fwName f ++ "_reinterpret_" ++ iwName f.int
 
 /-- Every host operation. -/
 def allHostOps : List HostOp :=
-  let ws := [Width.w32, .w64, .w8]
+  let ws := [Width.w32, .w64, .w8, .f32, .f64]
+  let fs := [FWidth.f32, .f64]
+  let is := [IWidth.i32, .i64]
+  let sxs := [Sx.s, .u]
   (ws.flatMap fun w =>
     ([.add, .sub, .mul, .and, .or, .xor, .shl, .shr_s, .shr_u, .rotl, .rotr] : List BinOp).map
         (.bin w) ++
@@ -294,13 +343,22 @@ def allHostOps : List HostOp :=
       [.eqz w] ++
       ([.eq, .ne, .lt_s, .lt_u, .le_s, .le_u, .gt_s, .gt_u, .ge_s, .ge_u] : List RelOp).map
         (.rel w)) ++
-  [.wrap, .extend_s, .extend_u, .extend32_s, .wrap8, .extend8_u]
+  [.wrap, .extend_s, .extend_u, .extend32_s, .wrap8, .extend8_u, .demote, .promote] ++
+  (fs.flatMap fun f =>
+    ([.add, .sub, .mul, .div, .min, .max, .copysign] : List FBinOp).map (.fbin f) ++
+      ([.abs, .neg, .sqrt, .ceil, .floor, .trunc, .nearest] : List FUnOp).map (.fun1 f) ++
+      ([.eq, .ne, .lt, .gt, .le, .ge] : List FRelOp).map (.frel f) ++
+      [.reinterpret_i f, .reinterpret_f f] ++
+      (is.flatMap fun i => sxs.flatMap fun sx =>
+        [.convert f i sx, .trunc i f sx, .trunc_sat i f sx]))
 
 def hostOpOfName (s : String) : Option HostOp := allHostOps.find? (hostOpName · == s)
 
 /-- Every host operation is listed, and the names are distinct, so `hostOpOfName` inverts `hostOpName`. -/
 theorem hostOpOfName_name (o : HostOp) : hostOpOfName (hostOpName o) = some o := by
-  rcases o with ⟨w, o⟩ | ⟨w, o⟩ | ⟨w, o⟩ | w | ⟨w, o⟩ | _ | _ | _ | _ | _ | _ <;>
-    (try cases w) <;> (try cases o) <;> decide
+  rcases o with ⟨w, o⟩ | ⟨w, o⟩ | ⟨w, o⟩ | w | ⟨w, o⟩ | _ | _ | _ | _ | _ | _ | ⟨f, o⟩ |
+      ⟨f, o⟩ | ⟨f, o⟩ | ⟨f, i, sx⟩ | ⟨i, f, sx⟩ | ⟨i, f, sx⟩ | _ | _ | f | f <;>
+    (try cases w) <;> (try cases f) <;> (try cases i) <;> (try cases sx) <;> (try cases o) <;>
+    decide
 
 end Frontend

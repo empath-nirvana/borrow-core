@@ -437,6 +437,7 @@ theorem closedAt_host (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = so
   have hi32 : ∀ n, closedAt 0 (Val.i32 n).1 = true := fun _ => rfl
   have hi64 : ∀ n, closedAt 0 (Val.i64 n).1 = true := fun _ => rfl
   have hu8 : ∀ n, closedAt 0 (Val.u8 n).1 = true := fun _ => rfl
+  have hob : ∀ w n, closedAt 0 (Val.ofBits w n).1 = true := fun w _ => by cases w <;> rfl
   have hbool : ∀ b, closedAt 0 (Val.bool b).1 = true := fun b => by cases b <;> rfl
   have hopt : ∀ (o : Option Val), (∀ v, o = some v → closedAt 0 v.1 = true) →
       closedAt 0 (Val.opt o).1 = true := fun o ho => by
@@ -480,6 +481,32 @@ theorem closedAt_host (H : Host) (op : HostOp) {v r : Val} (h : H.call op v = so
       simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h; exact hu8 _
   | extend8_u =>
       simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h; exact hi32 _
+  | fbin f o =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, _, -, rfl⟩ := h; exact hob _ _
+  | fun1 f o =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h; exact hob _ _
+  | frel f o =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, _, -, rfl⟩ := h; exact hbool _
+  | convert f i sx =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h; exact hob _ _
+  | trunc i f sx =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h
+      exact hopt _ fun v hv => by
+        simp only [Option.map_eq_some_iff] at hv; obtain ⟨_, -, rfl⟩ := hv; exact hob _ _
+  | trunc_sat i f sx =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h; exact hob _ _
+  | demote =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h; exact hob .f32 _
+  | promote =>
+      simp only [Host.call, Option.map_eq_some_iff] at h; obtain ⟨_, -, rfl⟩ := h; exact hob .f64 _
+  | reinterpret_i f =>
+      cases f <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
+      · exact hi32 _
+      · exact hi64 _
+  | reinterpret_f f =>
+      cases f <;> simp only [Host.call, Option.map_eq_some_iff] at h <;> obtain ⟨_, -, rfl⟩ := h
+      · exact hob .f32 _
+      · exact hob .f64 _
 
 theorem closedAt_tabFill {f : Val} (hf : closedAt 0 f.1 = true) (ℓ : Loc) (n : UInt32) :
     ∀ i k, closedAt 0 (tabFill f ℓ n i k) = true

@@ -1,0 +1,52 @@
+-- Float comparisons (SPEC §37): IEEE 754's, not an order. For each pair `(x, y)` the line holds
+-- `==`, `!=`, `<`, `<=`, `>`, `>=`, each `1` or `0`, then `total_cmp_f64(x, y)`, IEEE 754's
+-- `totalOrder`. The pairs: `1 < 2`; a NaN against its negation and against `1`; `-0.0` against `0.0`;
+-- `-inf` against `inf`; and a NaN against `inf`. Then the zeros' and NaN's own facts: `min` and
+-- `max` of the two zeros (Wasm orders `-0.0` below `0.0`), `abs` and `neg` of the NaN (which act
+-- on the sign bit and keep it a NaN), and the NaN's canonical bits.
+--
+-- Answer, line by line:
+--
+--     011100 -1      1 < 2
+--     010000 1       a NaN against its negation: unordered, only `!=`; totalOrder puts the
+--                    positive NaN above the negative one
+--     010000 1       NaN against 1: unordered; totalOrder puts a positive NaN above everything
+--     100101 -1      -0.0 == 0.0, yet totalOrder puts -0.0 first
+--     011100 -1      -inf < inf
+--     010000 1       NaN against inf
+--
+-- then `1 0`, the sign bits of `min` and `max` of the two zeros (`-0.0`, `0.0`), `1 1` (`abs` and
+-- `neg` of a NaN are NaNs), and `9221120237041090560`, `0x7FF8000000000000`, the canonical NaN
+-- that `0.0 / 0.0` answers at every engine. `main` answers how many lines it printed, 6.
+--
+-- A comparison that treated NaN as equal to itself, `-0.0` as below `0.0`, or that compared
+-- bits, prints a different line; a total order whose NaN came first prints `-1` on line 3.
+
+include float
+
+fn bit(b: bool) -> 1 = if b { print_byte(b'1') } else { print_byte(b'0') }
+
+-- One line: the six comparisons, then `totalOrder`.
+fn line(x: f64, y: f64) -> 1 =
+  bit(x == y); bit(x != y); bit(x < y); bit(x <= y); bit(x > y); bit(x >= y);
+  print_byte(b' ');
+  let c = total_cmp_f64(x, y);
+  if c < 0 { print_byte(b'-'); print_dec(0 - c) } else { print_dec(c) };
+  print_byte(b'\n')
+
+fn sign(x: f64) -> 1 = if bits_f64(x) < 0 { print_byte(b'1') } else { print_byte(b'0') }
+
+main -> i32 =
+  let nan = 0.0 / 0.0;
+  let inf = 1.0 / 0.0;
+  let mz = neg_f64(0.0);
+  line(1.0, 2.0);
+  line(nan, neg_f64(nan));
+  line(nan, 1.0);
+  line(mz, 0.0);
+  line(neg_f64(inf), inf);
+  line(nan, inf);
+  sign(min_f64(mz, 0.0)); print_byte(b' '); sign(max_f64(mz, 0.0)); print_byte(b'\n');
+  bit(is_nan_f64(abs_f64(nan))); print_byte(b' '); bit(is_nan_f64(neg_f64(nan))); print_byte(b'\n');
+  print_dec64(bits_f64(nan)); print_byte(b'\n');
+  6

@@ -386,24 +386,63 @@ def emit : Dest → List Exp → LM (List Stmt)
     bindVals x ls.toList
     return ss.toList
 
-/-- A host operation on its operand's words (§8): an integer, a tag, or a partial operation's
-tag and integer. A 32-bit integer is held zero-extended. -/
+/-- The operation answers a float whose NaN Wasm leaves to the implementation: the arithmetic,
+which the compiled code makes canonical (SPEC §37). -/
+def canonicalises : HostOp → Bool
+  | .fbin _ o => match o with | .copysign => false | _ => true
+  | .fun1 _ o => match o with | .abs | .neg => false | _ => true
+  | .demote | .promote => true
+  | _ => false
+
+/-- A float's canonical NaN, as a word. -/
+def canonWord : FWidth → Exp
+  | .f32 => .c64 0x7FC00000
+  | .f64 => .c64 0x7FF8000000000000
+
+/-- A float constant, given by its bits, at a float operation's operand: an `f32` is 32 bits. -/
+def fconst (f : FWidth) (b32 : UInt32) (b64 : UInt64) : Exp :=
+  match f with
+  | .f32 => .c32 b32
+  | .f64 => .c64 b64
+
+/-- `trunc`'s range at `f` (Wasm's): the integer part of `x` fits `i` read by `sx` exactly when
+`x` compares above the lower bound (`>`, or `≥` where the bound is a float of the format) and
+below the upper. Both comparisons are false at a NaN. -/
+def truncRange (i : IWidth) (f : FWidth) (sx : Sx) : FRelOp × Exp × Exp :=
+  match i, sx, f with
+  | .i32, .s, .f64 => (.gt, .c64 0xC1E0000000200000, .c64 0x41E0000000000000)
+  | .i32, .s, .f32 => (.ge, .c32 0xCF000000, .c32 0x4F000000)
+  | .i64, .s, f => (.ge, fconst f 0xDF000000 0xC3E0000000000000, fconst f 0x5F000000 0x43E0000000000000)
+  | .i32, .u, f => (.gt, fconst f 0xBF800000 0xBFF0000000000000, fconst f 0x4F800000 0x41F0000000000000)
+  | .i64, .u, f => (.gt, fconst f 0xBF800000 0xBFF0000000000000, fconst f 0x5F800000 0x43F0000000000000)
+
+/-- A host operation on its operand's words (§8, §37): an integer or a float's bits, a tag, or a
+partial operation's tag and integer. A 32-bit value is held zero-extended. -/
 def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
   -- A byte is held zero-extended, as an `i32` is: `wrap8` keeps the low 8 bits, and
-  -- `extend8_u` is the word itself.
+  -- `extend8_u` is the word itself. A float is held as its bits, so `reinterpret` is the word.
   match o with
   | .wrap8 => return ([], [and64 (.loc (ls.headD 0)) (.c64 0xff)])
-  | .extend8_u => return ([], [.loc (ls.headD 0)])
+  | .extend8_u | .reinterpret_i _ | .reinterpret_f _ => return ([], [.loc (ls.headD 0)])
   | _ => pure ()
-  let raw (l : Nat) : Exp := match hostArgWidth o with
-    | .w32 | .w8 => wrap (.loc l)
-    | .w64 => .loc l
+  let rawAt (w : Width) (e : Exp) : Exp := match w with
+    | .w32 | .w8 | .f32 => wrap e
+    | .w64 | .f64 => e
+  let raw (l : Nat) : Exp := rawAt (hostArgWidth o) (.loc l)
   let args := ls.map raw
   let word (w : Width) (e : Exp) : Exp := match w with
-    | .w32 | .w8 => extendU e
-    | .w64 => e
+    | .w32 | .w8 | .f32 => extendU e
+    | .w64 | .f64 => e
   match hostResKind o, o with
-  | .int w, _ => pure ([], [word w (.op o args)])
+  | .int w, _ =>
+    match canonicalises o, w.float? with
+    | true, some f =>
+      -- A NaN result is replaced by the canonical one: `x ≠ x` holds exactly at a NaN.
+      let t ← fresh1
+      let x := rawAt w (.loc t)
+      pure ([.set t (word w (.op o args)), .ite (.op (.frel f .ne) [x, x]) [.set t (canonWord f)] []],
+        [.loc t])
+    | _, _ => pure ([], [word w (.op o args)])
   | .test, _ => pure ([], [extendU (.op o args)])
   | .trapping w, .div _ d =>
     let t₀ ← fresh1
@@ -414,14 +453,23 @@ def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
     let trapC := match d with
       | .div_s =>
         let intMin := match w with
-          | .w32 | .w8 => Exp.c32 0x80000000 | .w64 => .c64 0x8000000000000000
+          | .w32 | .w8 | .f32 => Exp.c32 0x80000000 | .w64 | .f64 => .c64 0x8000000000000000
         let minus1 := match w with
-          | .w32 | .w8 => Exp.c32 0xFFFFFFFF | .w64 => .c64 0xFFFFFFFFFFFFFFFF
+          | .w32 | .w8 | .f32 => Exp.c32 0xFFFFFFFF | .w64 | .f64 => .c64 0xFFFFFFFFFFFFFFFF
         or32 zero (and32 (.op (.rel w .eq) [a, intMin]) (.op (.rel w .eq) [b, minus1]))
       | _ => zero
     pure ([.ite trapC [.set t₀ (.c64 1), .set t₁ (.c64 0)]
             [.set t₀ (.c64 0), .set t₁ (word w (.op o args))]], [.loc t₀, .loc t₁])
-  | .trapping _, _ => throw "flat IR: a trapping operation that is not a division"
+  | .trapping w, .trunc i f sx =>
+    -- Where Wasm's `trunc` traps, `inr ()`; in range, `trunc_sat` is `trunc`.
+    let t₀ ← fresh1
+    let t₁ ← fresh1
+    let x := args.headD (.c64 0)
+    let (loOp, lo, hi) := truncRange i f sx
+    let ok := and32 (.op (.frel f loOp) [x, lo]) (.op (.frel f .lt) [x, hi])
+    pure ([.ite ok [.set t₀ (.c64 0), .set t₁ (word w (.op (.trunc_sat i f sx) [x]))]
+            [.set t₀ (.c64 1), .set t₁ (.c64 0)]], [.loc t₀, .loc t₁])
+  | .trapping _, _ => throw "flat IR: a trapping operation that is neither a division nor a trunc"
 
 /-- The contents' type of a `loc` type. -/
 def locElem (n : Nat) : LM Nat := do
@@ -646,6 +694,8 @@ def lowerTm : Tm → Dest → LM (List Stmt)
   | .lit (.i32 n), d => emit d [.c64 n.toUInt64]
   | .lit (.i64 n), d => emit d [.c64 n]
   | .lit (.u8 n), d => emit d [.c64 n.toUInt64]
+  | .lit (.f32 n), d => emit d [.c64 n.toUInt64]
+  | .lit (.f64 n), d => emit d [.c64 n]
   | .pair a b, d => do
       let some n := (← T).cons[a]? | throw "flat IR: an untyped pair"
       let (s, vs) ← mkPair n (locs (← vals a)) (locs (← vals b))
@@ -1157,6 +1207,8 @@ def genHelper (h : Helper) : LM Fn := do
       | .int .w32 => pure (outStr "i32[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
       | .int .w64 => pure (outStr "i64[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
       | .int .w8 => pure (outStr "u8[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
+      | .int .f32 => pure (outStr "f32[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
+      | .int .f64 => pure (outStr "f64[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
       | .fn .. => pure (outStr "<fun>")
       | .loc .. => pure (outStr "<loc>")
       | .pair .. => do

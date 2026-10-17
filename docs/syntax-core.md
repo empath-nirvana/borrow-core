@@ -402,7 +402,8 @@ Notes on the table:
 <!-- ANCHOR: integers -->
 Integer literals and operations are constants (`SPEC.md` §8, `Core/Integers.lean`):
 
-- **Literals:** `i32[n]`, `i64[n]` are the `Prim.lit` constant, typed by `CDerives.lit` at `i32`/`i64`.
+- **Literals:** `i32[n]`, `i64[n]` are the `Prim.lit` constant, typed by `CDerives.lit` at `i32`/`i64`;
+  `f32[n]`, `f64[n]` are the floats of IEEE 754 bit pattern `n` (SPEC §37).
   `n` is decimal or `0x`-hex and is read modulo 2^32 / 2^64.
 - **Operations:** `host[op]`, typed by `CDerives.hostOp op : !(hostArg op => hostRes op)`. `op` is
   written `add32`, `div_s32`, `lt_u64`, `wrap`, `extend_s`, … (one name per `HostOp`,
@@ -418,6 +419,16 @@ Integer literals and operations are constants (`SPEC.md` §8, `Core/Integers.lea
   `8` (`add8`, …) take `0`. At the surface an operator at `u8` widens its operands and works at
   `i32`, narrowing an arithmetic result back; the prelude's `to_i32` and `to_u8` are the
   conversions.
+- **Floats** (`SPEC.md` §37): the types `f32` and `f64`, persistent; the literals `f32[n]` and
+  `f64[n]` of IEEE 754 bit pattern `n`. The surface literal `d.d`, `d.de±d` or `de±d` is the
+  float nearest its decimal value, `f64` unless an `f32` is expected; an integer literal where a
+  float is expected is that integer as a float. The operations are Wasm's float instructions,
+  named with `_` for `.` (`host[f64_add]`, `host[f32_sqrt]`, `host[f64_lt]`,
+  `host[f64_convert_i32_s]`, `host[i32_trunc_f64_s]`, `host[i64_trunc_sat_f32_u]`,
+  `host[f32_demote_f64]`, `host[i64_reinterpret_f64]`); `trunc` returns `i32 + 1` with `inr ()`
+  where Wasm traps. At the surface `+ - * /` and the comparisons at a float type are the float
+  operation and IEEE 754's comparison; `/` is only at floats. The grouped integer names at the
+  float widths (`addf32`, …) take `0`.
 - **Characters and strings** (`SPEC.md` §17): `'c'` (one character, or `'\n'`, `'\t'`,
   `'\r'`, `'\0'`, `'\\'`, `'\''`) is its scalar value, which the lexer reads as `i32[n]`; a
   lifetime `'x` is never followed by `'`. `"…"` is a string literal, its bytes UTF-8 with the

@@ -156,7 +156,7 @@ type and with captured values of the same types, are merged: `unfold`'s first st
 closure of which is built (from `main`, transitively) is in no union and is compiled as a stub.
 
 **Layout types** (`Clos/Types.lean`). Unification over the closure IR gives every variable a
-layout type `1 | i32 | i64 | A ⊗ B | A ⊕ B | ⊕[A, …] | fn(A; C, D) | loc A` (see Representation).
+layout type `1 | i32 | i64 | u8 | f32 | f64 | A ⊗ B | A ⊕ B | ⊕[A, …] | fn(A; C, D) | loc A` (see Representation).
 Value types are monomorphic: a definition is substituted at each use, and polymorphism is over
 lifetimes only, whose arguments are `()`; a let-bound λ used at different value types but at one
 row is reported (SPEC §24 *Open*). Unification has no occurs check, since `μ` and `ν`
@@ -211,6 +211,7 @@ word is an `i64` local; `|A|` is the number of words of `A`.
 |---|---|---|
 | `1` | 0 | nothing |
 | `i32`, `i64`, `u8` | 1 | the integer (an `i32` or a `u8` zero-extended) |
+| `f32`, `f64` | 1 | the float's bits (an `f32`'s zero-extended); a float operation reinterprets its operands as `f32`/`f64` and its result back (`Wasm/Lower.lean`), and an arithmetic result that is a NaN is replaced by the canonical NaN (`Flat/Lower.lean`, `hostVals`; SPEC §37) |
 | `A ⊗ B` | `\|A\| + \|B\|` | `A`'s words, then `B`'s |
 | `A ⊕ B` | `1 + max \|A\| \|B\|` | a tag word (`0` for `inl`), then the payload's words, padded |
 | `⊕[A₀, …, Aₙ₋₁]` | `1 + maxᵢ \|Aᵢ\|` | a tag word `i`, then variant `i`'s payload's words, padded: a suspended computation's state, an operation's payload |

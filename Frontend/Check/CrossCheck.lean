@@ -32,6 +32,12 @@ deriving instance ToExpr for BoCa.BinOp
 deriving instance ToExpr for BoCa.DivOp
 deriving instance ToExpr for BoCa.UnOp
 deriving instance ToExpr for BoCa.RelOp
+deriving instance ToExpr for BoCa.FWidth
+deriving instance ToExpr for BoCa.IWidth
+deriving instance ToExpr for BoCa.Sx
+deriving instance ToExpr for BoCa.FBinOp
+deriving instance ToExpr for BoCa.FUnOp
+deriving instance ToExpr for BoCa.FRelOp
 deriving instance ToExpr for BoCa.HostOp
 deriving instance ToExpr for Frontend.Pos
 deriving instance ToExpr for Frontend.Span
