@@ -307,6 +307,15 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
         M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
 end
 
+/-- The printed form of a `poly` declaration (`Decl.poly`): `poly def f[T] : A = V` for a family,
+`poly def f[P, …]<'h, …> at H = V` for a case.  `[spec §36]` -/
+def Decl.ppPoly (n : Ident) (tps lps : List Ident) (H : Option VTy) (A : VTy) (V : Val) : String :=
+  let params := if tps.isEmpty then "" else "[" ++ ", ".intercalate (tps.map (·.name)) ++ "]"
+  let lives := if lps.isEmpty then "" else "<" ++ ", ".intercalate (lps.map ("'" ++ ·.name)) ++ ">"
+  match H with
+  | none => "poly def " ++ n.name ++ params ++ " : " ++ A.pp ++ " =" ++ nl 2 ++ V.pp 0 2
+  | some H => "poly def " ++ n.name ++ params ++ lives ++ " at " ++ H.pp ++ " =" ++ nl 2 ++ V.pp 0 2
+
 def Decl.pp : Decl → String
   | .type _ n ps ls A =>
     "type " ++ n.name ++ (if ps.isEmpty then "" else "[" ++ ", ".intercalate (ps.map (·.name)) ++ "]") ++
@@ -348,6 +357,7 @@ def Decl.pp : Decl → String
         c.body.pp 0 4 ++ nl 2 ++ "}"
     "handler " ++ n.name ++ (if l then "(&mut " else "(mut ") ++ st.name ++ ": " ++ S.pp ++ "): " ++ e.name ++ " = {" ++
       String.join (cs.map fun c => nl 2 ++ cl c ++ ";") ++ nl 0 ++ "}"
+  | .poly _ n tps lps H A V => Decl.ppPoly n tps lps H A V
   | .chandler _ h =>
     let tys (As : List VTy) : String :=
       if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]"

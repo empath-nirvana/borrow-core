@@ -866,6 +866,8 @@ where
     | .pair sp (.var s₁ x) (.var s₂ y) => some (.pair sp (.var ⟨x, s₁⟩) (.var ⟨y, s₂⟩))
     -- A literal lent by a borrow block is handed back, and dropped.
     | .sugar sp (.str _) => some (.wild sp)
+    -- A load `borrow imm *g { … }` hands back nothing: its value is `((), B)`.
+    | .app sp (.sugar _ .deref) _ => some (.wild sp)
     | _ => none
 
 /-- The pattern of the variables `xs`. -/
@@ -1926,6 +1928,58 @@ def decl (n : Nat) : P Decl := do
   | .kw "fn" =>
     discard bump
     fnRest st .none
+  | .kw "poly" =>
+    -- `poly f[T]<'a, …>(x: A, …) -> B`, a family; `poly f[P, …]<'h, …> at H = S`, a case;
+    -- `poly (+) at H = S`, a case of an operator's family; and the printed forms
+    -- `poly def f[T] : A = V` and `poly def f[P, …]<'h, …> at H = V`.  `[spec §36]`
+    discard bump
+    let printed ← if ← isKw "def" then discard bump; pure true else pure false
+    let x ← if ← isSym "(" then do
+        discard bump
+        let t ← bump
+        let nm ← match t.tok with
+          | .sym "+" => pure "op_add" | .sym "-" => pure "op_sub" | .sym "*" => pure "op_mul"
+          | .sym "==" => pure "op_eq" | .sym "!=" => pure "op_ne" | .sym "<" => pure "op_lt"
+          | .sym "<=" => pure "op_le" | .sym ">" => pure "op_gt" | .sym ">=" => pure "op_ge"
+          | _ => failAt t.span "an operator family is one of `(+)`, `(-)`, `(*)`, `(==)`, `(!=)`, `(<)`, `(<=)`, `(>)`, `(>=)`"
+        expectSym ")"
+        pure (⟨nm, t.span⟩ : Ident)
+      else ident "a `poly` name"
+    let tps ← typeParams
+    let lives ← lifeParams
+    if (← peek).tok == .ident "at" then
+      discard bump
+      let H ← vty n
+      expectSym "="
+      let V ← if printed then val n else do
+        modify fun s => { s with muts := [], assigned := [], surf := true }
+        let M ← comp n
+        modify fun s => { s with surf := false }
+        pure (Val.thunk M.span M)
+      return .poly (← spanFrom st) x tps (lives.map (·.1)) (some H) (.unit x.span) V
+    if printed then
+      expectSym ":"
+      let A ← vty n
+      expectSym "="
+      let V ← val n
+      return .poly (← spanFrom st) x tps [] none A V
+    unless tps.length == 1 do
+      failAt x.span s!"a `poly` family has one type parameter, the type its case is chosen by: `poly {x.name}[T](…) -> B`"
+    expectSym "("
+    let ps ← if ← isSym ")" then pure [] else params n
+    expectSym ")"
+    expectSym "->"
+    let T ← rty n
+    let sp ← spanFrom st
+    let A := tupleTy sp (ps.map (·.2))
+    let pn ← freshName "io_p"
+    let body ← bindParams sp pn (ps.map (·.1)) (.force sp ⟨"io_poly_body", sp⟩)
+    let lam := Comp.lam sp ⟨pn, sp⟩ A body
+    let fnTy ← match T.toV with
+      | .ok B => pure (VTy.lolli sp A B)
+      | .error _ => do let C ← liftSort T.toC; pure (VTy.thunk sp (.arr sp A C))
+    let (ty, V) := withLives sp lives fnTy lam
+    pure (.poly sp x tps [] none ty V)
   | .kw "include" =>
     discard bump
     let x ← ident "the name of a library module"

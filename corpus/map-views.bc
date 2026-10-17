@@ -1,0 +1,70 @@
+-- The hash map of `lib/map.bc` (SPEC §36) at a value that is not persistent, a buffer, and its
+-- views. `borrow imm m { 'x, r -> … }` lends the map as a family (its keys and its values each
+-- lent as an array is), and `map_get(r, k)` answers a view of the value at `'x`, as `get` of
+-- `lib/slice.bc` does of an element: two views are live at once, passed to a function and read
+-- through a load (`borrow imm *v`), with no copy of the buffers and no block per lookup.
+-- `map_iter(r)` visits every entry. A map of buffers holds what they own, so it has a
+-- destructor: the map dropped at the end frees every buffer (`live 0`).
+--
+-- Then removal: 200 keys that collide in long runs (multiples of 64) are inserted, every third is
+-- removed (each removal shifts the run back over its hole), and each key is looked up again.
+--
+-- Answer: `(i32[106], (i32[52], (i32[133], i32[13267])))`. The values at 3 and 7 are `[31, 0]`
+-- and `[71, 0]`, each read as its first element plus its length: `33 + 73`. The iteration sums
+-- the keys `0 … 7`, the lengths `8 · 2` and the last digits `8 · 1`: `28 + 16 + 8`. Of the 200
+-- keys, the 67 multiples of 3 are removed and 133 are left, whose values sum to
+-- `19900 − 3 · (0 + … + 66) = 13267`: a removal that broke a run would lose a key after its hole.
+
+include map
+
+fn rem(a: i32, b: i32) -> i32 = match host[rem_s32](a, b) { inl r -> r | inr u -> 0 }
+
+fn adj(i: i32) -> buf i32 = let (b, _) = push(buf_new[i32](2), i * 10 + 1); let (b, _) = push(b, 0); b
+
+-- A buffer read through a view of it: its first element and its length.
+fn first<'z>(v: imm 'z (buf i32)) -> i32 =
+  let r = borrow imm *v { 'y, b -> let (a, n) = b; at(a, 0, 0) + n };
+  r
+
+-- Two values of the lent map, both views at once.
+fn two<'k, 'x>(r: MapRef[i32, buf i32]<'k, 'x>) -> i32 =
+  let ((ks, vs), n) = r;
+  let (ks, ks2) = array_copy['k, 1 + (i32 * i32)](ks);
+  let (vs, vs2) = array_copy['x, buf i32](vs);
+  let a = map_get(((ks, vs), n), 3);
+  let b = map_get(((ks2, vs2), n), 7);
+  let x = match a { inl v -> first(v) | inr u -> 0 };
+  let y = match b { inl v -> first(v) | inr u -> 0 };
+  x + y
+
+-- Every entry: its key, and its value's length and first element's last digit.
+fn each<'k, 'x>(r: MapRef[i32, buf i32]<'k, 'x>) -> i32 =
+  let mut s = 0;
+  for e in map_iter(r) {
+    let (k, v) = e;
+    let d = borrow imm *v { 'y, b -> let (a, n) = b; n + rem(at(a, 0, 0), 10) };
+    s = s + k + d
+  };
+  s
+
+-- Keys `64 i` for `i < 200`, valued `i`; every third removed; the keys left and the sum of their
+-- values, each looked up.
+fn runs(u: i32) -> i32 * i32 =
+  let mut m = map_new[i32, i32](8);
+  for i in 0..200 { let o = map_insert(&mut m, 64 * i, i); () };
+  for i in 0..200 { if rem(i, 3) == 0 { let o = map_remove(&mut m, 64 * i); () } else { () } };
+  let mut sum = 0;
+  for i in 0..200 {
+    let o = map_lookup(&m, 64 * i);
+    match o { inl v -> sum = sum + v | inr u -> () }
+  };
+  let n = map_len(&m);
+  (n, sum)
+
+main -> i32 * (i32 * (i32 * i32)) =
+  let mut m = map_new[i32, buf i32](4);
+  for i in 0..8 { let o = map_insert(&mut m, i, adj(i)); () };
+  let x = borrow imm m { 'x, r -> two(r) };
+  let y = borrow imm m { 'x, r -> each(r) };
+  let (n, s) = runs(0);
+  (x, (y, (n, s)))

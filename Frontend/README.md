@@ -116,6 +116,12 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
     associating to the left; its right operand, the stage, is a prefix expression (a spine). `e |>
     s` is the node `VSugar.pipe` applied to the pair of `e` and `s`, printed in parentheses, and
     `Frontend/Elab/Effects.lean` elaborates it by the stage.
+20. **`poly` (SPEC §36).** `poly f[T]<'a, …>(x: A, …) -> B` with no `=` declares a family;
+    `poly f[P, …]<'h, …> at H = S` a case, its body a statement sequence as a `fn`'s; `poly (+) at
+    H = S` a case of an operator's family (`(+)` read as `op_add`, …). `at` is a word here, not a
+    keyword, so it stays a name elsewhere. The printer writes `poly def f[T] : A = V` and `poly def
+    f[P, …]<'h, …> at H = V`, which the parser reads back. A load `borrow imm *g { … }` keeps `*g`
+    as its place, which hands nothing back (`Val.rebinds` is `_`).
 
 ## The checker (`Frontend/Check/`)
 

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.65 · 2026-10-16
+Version 0.66 · 2026-10-17
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1630,7 +1630,8 @@ iterator, §16) is a lifetime parameter of the instance, `all 'io_q0 < top.` out
 template's own: the instance is shared by every use at the same types up to those lifetimes, and
 each use applies it to its own (`corpus/for-adapters.bc`). Templates of one name from two modules
 (`map` of `lib/adapters.bc` and of `lib/iters.bc`) are one name chosen by the arguments' types:
-the first whose parameters the arguments match.
+the first whose parameters the arguments match. A `poly` family (§36) is chosen otherwise: one case
+per type, the most specific, and a second case at a type is an error.
 
 Each lifetime parameter `'a` (bounded by `top`, or `'a < @`) is an `all 'a < @.` around the
 function type and a `Fun 'a < @.` around its body, outermost first (draft 0 §2.5), for a `fn`
@@ -5759,6 +5760,272 @@ the falsifier passes on the corpus.
 
 ---
 
+## 36. Entry 35 — `poly` families: one case per type; operators as families; the hash map
+
+### Motivation
+
+The generics design pass (#489) agreed three things this entry builds (#508). **One provider per
+type**: every map or set at a key type uses the same equality and hash, so two of them agree and
+an operation over both is coherent; a different hash function is a different type. **Operators
+are a family chosen by type** (the user's decision of 2026-10-17), whose cases at the integer
+widths are the machine instructions; a different arithmetic is a different type, not a scoped
+handler. This replaces decision 54's `Num[T]` effect. **The map is a plain value**, a trial: it is
+passed and handed back, `map_insert(&mut m, k, v)`, and `get` answers a view through the map lent
+as a family, as `get` of `lib/slice.bc` does (no block form). The pending map programs of #490 and
+the LeetCode corpus (#194, #201, #203) are the tests.
+
+Everything here is elaboration and library code over existing core terms (§15's
+monomorphization): no `CDerives` rule, relation clause, machine step, kernel type or checker change.
+
+### `poly` families
+
+**Declarations.** A family is declared by its signature, with one type parameter, the type its
+case is chosen by, and no body:
+
+    poly f[T]<'a, …>(x₁: A₁, …, xₙ: Aₙ) -> B
+
+A case gives the body at a type `H`, its head, generic in its own type parameters `P, …` (each
+named by `H`); `'h, …` are lifetimes `H` names. The family's parameters `x₁, …` are in scope in
+`S`, at their types with `T := H`:
+
+    poly f[P, …]<'h, …> at H = S
+
+Each operator has a family, which the elaboration declares when a program gives the operator a
+case; its parameters are `a` and `b`: `poly (+) at H = S`, and likewise `(-)`, `(*)`, `(==)`,
+`(!=)`, `(<)`, `(<=)`, `(>)`, `(>=)`. Arithmetic is `(a: T, b: T) -> T`, a comparison
+`(a: T, b: T) -> bool`. Internally the families are named `op_add`, `op_sub`, …; a program may not
+declare one. The printed forms are `poly def f[T] : A = V` (the code `V` has the hole
+`io_poly_body!` for its body) and `poly def f[P, …]<'h, …> at H = V`.
+
+**Elaboration** (`Frontend/Sugar.lean`, `polyDecls`). A family is the template (§15) of its
+signature, whose body is never elaborated. A case is the template `f__at{k}[T′, P, …]` of the
+family's signature with `T` renamed `T′`, and body `S`. The families and cases of the program and
+of every module it includes are collected before any declaration is elaborated (`PolyTab`), so
+which case a call reaches does not depend on the order of declarations or of calls.
+
+**The selection rule.** A call `f(W)` of a family, or `f[U](W)`:
+
+1. **The type.** `T` is the written `U`, or else is read off the arguments by §15's first-order
+   matching against the family's parameter types, in which `view 'a T` matches as `T` (an `i32`,
+   a pair of them or a view is its own view, so `equal(x, y)` at such a type writes no `T`). What
+   matching elaborated is elaborated again at the chosen case's instance.
+2. **The candidates** are the cases whose head matches `T`: first-order matching with the case's
+   type parameters as placeholders, a lifetime the head names matching any lifetime.
+3. **The choice** is the candidate **at least as specific as every other**: its head is an
+   instance of each other candidate's (matched by it). With none, the call is an error,
+   "`f` has no case at `T`". Coherence (below) makes a choice exist whenever there is a candidate.
+4. **The call** is a call of the chosen case's instance at `T` and the type arguments matching
+   found, made and shared as a template's instance is (§15); every argument, its lifetimes and
+   `unbang` are filled as for any call of that instance.
+
+A family's lifetime parameter that its instance's type does not mention once elaborated (`'a` in
+`view 'a T` at `T = i32`) is left out of the instance (`dropPhantoms`), and its other mentions in
+the parameters' written types read `top`, on which `view 'a i32 = i32` does not depend. A
+parameter the case's body names is kept. Otherwise a call in a function with no lifetime in scope
+would have no lifetime to give it (§15).
+
+**Coherence** (`polyCheck`), checked over every case of the program before anything is
+elaborated, each an error at the case's declaration:
+
+- **A second case at a type** — two cases of one family whose heads are equal up to renaming
+  their type parameters — is "a second case of `f` at `H`, the first at `L:C`: a family has one
+  case per type". It is never resolved by order (`corpus/reject/poly-second-case.bc`).
+- **Two cases that overlap and neither is more specific** — heads with a common instance (found
+  by unification, lifetimes ignored), neither an instance of the other — is "the cases of `f` at
+  `H₁` and at `H₂` both apply at `U`, and neither is more specific" (`poly-overlap.bc`).
+- A head names each of its case's type parameters; a head elaborates.
+- **An operator's machine cases.** A case of an operator's family whose head has a common instance
+  with an integer type (`i32`, `i64`, `u8`) is rejected (`poly-machine-case.bc`): those types have
+  the host's instructions as their case.
+
+So for every type there is at most one choice, and it is a function of the type: one provider per
+type. A family's cases are global to the program: there are no modules (#63), and so no orphan
+rule.
+
+**What changes for existing programs: nothing.** No existing program declares a family. Templates
+of one name declared by two modules (`map` of `lib/adapters.bc` and of `lib/iters.bc`) are not a
+family and keep §15's rule, the first whose parameters the arguments match. The one corpus file
+whose text changes is `corpus/reject/include-unknown.bc`, whose expected message lists the library
+modules, two more now.
+
+### Operators
+
+`a + b` (and every operator of §15) at operands of an integer type is the host's instruction at
+that width, as before: every existing program elaborates to the same code. At operands of another
+type `T` — the type of an operand that is not a literal — it is the call `op_add[T](a, b)` of the
+operator's family when the program gives a case that `T` selects; otherwise it is elaborated as
+before (and fails to type, as it did). So `poly (+) at Complex = …` makes `a + b` work at
+`Complex`, in generic code too: `dot[T]` of `corpus/poly-operators.bc` multiplies and adds at its
+type parameter, its instance at `i32` with the instructions and at `Complex` with the cases.
+
+A different arithmetic is a different type. There are no `data` declarations (§31 *Open*), so a
+case is at a structural type: `type Complex = i32 * i32` gives the case at `i32 * i32`, which every
+pair of `i32`s then has.
+
+**`==` and `equal` are distinct.** The operators' families are not the providers' below. A type
+may have `(==)` and no `equal` case, or the other way round. The float widths (#499) are meant to
+get the host's comparisons as machine cases of the operators' families and no case of `equal`,
+`hash` or `order`: `x == y` compares floats, and a map keyed by a float is rejected at its use
+(`equal` has no case at `f64`), which is expressible because the two are distinct families.
+
+### The providers: `lib/key.bc`
+
+    poly equal[T]<'a, 'b>(x: view 'a T, y: view 'b T) -> bool
+    poly hash[T]<'a>(x: view 'a T) -> i64
+    poly order[T]<'a, 'b>(x: view 'a T, y: view 'b T) -> i32        -- -1, 0 or 1
+
+Each takes its operands as views (§1's `Imm̲`): a map reads a key it stores in place, through the
+`withload` of its slot, so a key need not be persistent, and a key that is its own view (an
+integer, a pair of them, `text 't`) is passed as it is. A buffer's view is its array's view and
+its length.
+
+| head | `equal` | `hash` | `order` |
+|---|---|---|---|
+| `i32`, `i64`, `u8` | `==` | the word, one step | signed; bytes unsigned |
+| `1` | true | 0 | 0 |
+| `A * B` | both components | the two hashes combined | lexicographic |
+| `A + B` | the same side, then its payload | the side's tag and the payload | `inl` before `inr` |
+| `array_imm 'h A`, `array A` | the lengths, then each element | the length, then each element | lexicographic |
+| `buf A` | the initialised prefixes | the prefix | the prefixes, lexicographic |
+
+`bool` (`1 + 1`), `text 't` (`array_imm 't u8`) and `string` (`buf u8`) are covered. `buf A` is
+`array A * i32`, which `A * B` also matches; the buffer's case is the more specific, so a buffer
+is compared by its contents and not its capacity (`corpus/poly-providers.bc`). An element is read
+through `borrow imm *p` (below). The hash is FxHash's step over 64-bit words: deterministic on
+every run and every engine, so a map's order of iteration is reproducible.
+
+**No case** at a function (`!`, `U`), a cell, a borrow (other than through a view), an opaque host
+type, or a recursive type (`μ`): a case at a recursive type would call its own instance, a
+recursion the effects elaboration groups by name before types (§31's D1), which is not provided.
+
+**Laws** (stated; checked by the corpus programs, not proved): over runs that finish, `equal` is
+an equivalence, `equal(x, y)` implies `hash(x) = hash(y)`, and `order` is an order in which every
+two values are comparable, with `equal` as its equivalence. The cases above are structural, so the
+laws hold by construction from the integers' cases. A user's case is that type's own
+correctness, like any function. Integer laws need the host's (decision 10).
+
+### Elaboration that the map uses
+
+Each elaborates into existing core terms:
+
+- **A load through a borrow**, `borrow imm *g { 'y, v -> S }`, `g : imm 'a A`, is
+  `withload['a, 'y, A, B] g (Fun 'y < dom. fun (v : view 'y A) -> S)`, `B` free of `'y`; the
+  block's value is `((), B)`, nothing handed back. It reads any content, where `*g` copies a
+  persistent one.
+- **A record lent fieldwise**, `borrow imm r { 'x, v -> S }` at a place whose type is a tree of
+  `⊗` of owned arrays and persistent values (at least one array; a buffer `array A * i32` keeps
+  §17's form, its prefix): each array is lent by its own `slice_borrow_imm` (§9), nested left to
+  right, the last at `'x` and the others at lifetimes `'x_0`, … of their own; the persistent fields
+  are as they are; `v` is the record of the families and fields, and the record is rebuilt from
+  what the borrows hand back. The result may name none of the lifetimes. Two families at one
+  lifetime would need a family to be shortened (`[Imm 'k A] ⊑ [Imm 'x A]`), a kernel constant this
+  entry does not add, so a view of such a record carries a lifetime per array. `imm` only, and not
+  at a body that performs an operation.
+- **A lend to a function with several lifetime parameters**, `f(&k, …)` at a parameter `imm 'q A`
+  or `mut 'q A` (or a family's): the lent parameter's lifetime is the lend's own, and the others
+  are applied inside it at the lifetimes the call gives them (§15). Before, a lend needed the
+  callee to have one lifetime parameter.
+- **The type of a place lent at a parameter of its own type** (`map_lookup(&m, k)`, which moves
+  `m` in and hands it back, §15) is matched against that parameter, so `m`'s type gives `K` and
+  `V`.
+- An operator's operands are typed with the instances made so far in scope (`hash(a) == hash(b)`
+  at `i64`).
+
+### The map and set: `lib/map.bc`
+
+    type Map[K, V] = (array (1 + (i32 * K)) * array V) * i32
+    type MapRef[K, V]<'k, 'x> = (array_imm 'k (1 + (i32 * K)) * array_imm 'x V) * i32
+    type Set[K] = Map[K, 1]
+
+| function | type | |
+|---|---|---|
+| `map_new[K, V](cap)` | `Map[K, V]` | room for `cap` entries before it grows |
+| `map_insert(&mut m, k, v)` | `V + 1` | the value displaced; a key already present keeps its first key |
+| `map_lookup(&m, k)` | `V + 1` | a copy of the value (`V` persistent) |
+| `map_contains(&m, k)` | `bool` | |
+| `map_remove(&mut m, k)` | `V + 1` | the value taken out |
+| `map_len(&m)` | `i32` | |
+| `map_get(r, k)` | `imm 'x V + 1` | a view of the value, `r : MapRef[K, V]<'k, 'x>` |
+| `map_iter(r)` | `sized … (K * imm 'x V)` | every entry in slot order, the key copied out of its slot (a key that is its own view) |
+| `map_size(r)` | `i32` | |
+| `set_new[K](cap)`, `set_insert(&mut s, k)`, `set_contains(&s, k)`, `set_remove(&mut s, k)`, `set_len(&s)` | | `set_insert` answers whether `k` was new |
+
+`r` is the map lent as a family, `borrow imm m { 'x, r -> … }` (above); while it is lent the map
+cannot change, so no view outlives a growth (linearity, as §17's *No view across growth*).
+
+**The table.** Open addressing with linear probing over a power-of-two table at most half full,
+grown by doubling; each slot holds `inl ()` or `inr (h, k)`, the key with its slot hash, and the
+value at the same index, the filler of `V` where there is no entry (so `V` has a filler: integers,
+views, arrays, buffers, and pairs and sums of them). Removal shifts the entries after the hole
+back over it, each whose probe sequence passes it (Knuth's algorithm R), so a search never meets a
+tombstone. A probe compares slot hashes, then `equal` on the two keys' views. Every loop is
+counted by the table's size; a search ends at an empty slot, which a half-full table has.
+
+**Keys and values.** A key sought is given by value and dropped after the search: it is lent to
+the search, a cell of the caller's frame (§35). A key may be a view (`text 't`): the map's type
+then mentions `'t`, and the map cannot outlive what its keys borrow. A linear `K` or `V` makes the
+map linear: it has a destructor exactly when its keys and values do (§12). A replaced key is
+dropped, so `K` has a destructor or is persistent.
+
+**Generic `data`.** `Map`, `MapRef` and `Set` are generic `type` abbreviations, transparent: there
+are no `data` declarations (§31 *Open*), so the representation is not hidden outside the module.
+
+### Programs
+
+| program | what it shows | answer | counts |
+|---|---|---|---|
+| `corpus/poly-operators.bc` | `(+)`, `(*)`, `(==)` at `Complex`; a generic `dot` at `i32` (the instructions) and at `Complex` (the cases) | `(32, ((-9, 12), true))` | `0 0 0` |
+| `corpus/poly-providers.bc` | `equal`, `hash` and `order` at strings of two capacities, views, sums; specificity of `buf A` over `A * B`; a family of the program's | `(111, (7, -1))` | `2 0 0` |
+| `corpus/map-views.bc` | views of buffer values, two at once, read through `borrow imm *v`; `map_iter`; 200 colliding keys, every third removed | `(106, (52, (133, 13267)))` | `24 0 0` |
+| `corpus/aoc/2024-01.bc`, `2024-11.bc`, `2022-21.bc` | #490's map days: counts, interning to indices, keys that are views of the input | the Rust answers | `5 0 0`, `271 0 0`, `12 0 0` |
+| `corpus/leetcode/arrays/0001-two-sum.bc`, `0217-contains-duplicate.bc`, `strings/0049-group-anagrams.bc`, `graphs/0128-longest-consecutive-sequence.bc`, `heaps/0347-top-k-frequent-elements.bc` | a map, a set, `string` keys, `map_iter` | as their headers | `19`, `13`, `70`, `15`, `31` allocations, no indirect call or copy |
+
+`corpus/aoc/2024-11.bc` is `-- check: no-source`: the source interpreter takes about half an
+hour over it, and its golden is that interpreter's output, written once from it.
+
+Rejected: `corpus/reject/poly-second-case.bc`, `poly-overlap.bc`, `poly-machine-case.bc`,
+`poly-no-case.bc` (`equal` at a function). Still pending: `corpus/pending/aoc-2020-07.bc`, behind
+#491 and #492 (with both written around, its map gives the Rust answers);
+`lc-0070-climbing-stairs-memo.bc`, behind the `memo` layer (an effect with type parameters).
+
+Each program edited from its pending form keeps its algorithm: `include map`, and `map_get(&m, k)`
+read `map_lookup(&m, k)`, the copy; `0347` visits its entries with the map lent (`map_iter(r)`), and
+`0049` makes a new group's key again for its insertion, since the lookup drops the key it is given.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `PinLaw`, the checker or the backend, and no
+kernel program changes (`corpus/kernel-counts.expected` unchanged). `fundamentalC`, `adequacyC`,
+`fundamentalD` and `adequacyD` keep their statements and cover every elaborated program. Every
+existing corpus program keeps its output, golden and counts.
+
+### Not provided
+
+- **The bounds layer** (`ability Key[K] { poly eq[K]; poly hash[K] }`, `gives`, `given`; spelling
+  provisional): bounds checked at the call, grouping, associated types. A later unit (#489). A
+  type with no case is an error at the instance, inside the library.
+- **A hasher type parameter** (`HashMap[K, V, S]`): there are no defaulted type parameters. A
+  seeded (keyed) hash, and `entry`.
+- **`data` declarations** and so newtypes and a hidden representation (§31 *Open*).
+- **A lookup by a key at another lifetime than the map's** (Rust's `Borrow`, a literal against
+  `Map[text 't, …]`), and a one-lifetime `MapRef`: both need a family shortened, a kernel constant.
+- **A key lent to a lookup** (`map_lookup(&m, &k)`): a call lends one place. The key is given by
+  value.
+- **Cases at recursive types** (a list's equality): see above.
+- **`borrow mut` of a map as a family** (`get_mut`), and a fieldwise `mut` lend.
+- **`map_iter` at a key that is not its own view** (`string`): the key is copied out of its slot.
+- **`!=` from `==`**, or any family's case derived from another's.
+- Swiss tables and other performance work; laws proved in Lean.
+
+### Open
+
+- Whether the plain-value map stays (the trial; an instanced effect `with m { … }` is the other
+  form, #489).
+- Module-qualified families and an orphan rule, once there are modules (#63).
+- `T` read off arguments whose view is not themselves (a buffer's view): the call writes `T`.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -5993,6 +6260,13 @@ the WASI runtime's clock and arguments, `bcc trusted` at the externs `main` reac
 and #486's fixes in `Backend/Clos/Capture.lean` and `Backend/Driver.lean`), with no change to
 `CDerives`, the relation, the machine, `Paper/` or `Support/`.
 
+Entry 35 (§36) is implemented in `Frontend/Syntax.lean`, `Frontend/Lexer.lean`,
+`Frontend/Parser.lean` and `Frontend/Print.lean` (`Decl.poly`), `Frontend/Sugar.lean` (`polyDecls`,
+`PolyTab`, `polyCheck`, `polySelect`, `polyInst`, `dropPhantoms`, the family's call in
+`genericCall`, an operator's case in `surfV`, `borrow imm *g`, a record lent fieldwise, `lendCall`
+at several lifetime parameters), and `lib/key.bc` and `lib/map.bc`, with no change to `CDerives`,
+`Core/`, `Paper/`, `Support/`, the checker or `Backend/`.
+
 Entry 34 (§35) is implemented in `Backend/` alone: `Backend/Clos/Convert.lean` (`markScoped`,
 `staticWord`), `Backend/Clos/Syntax.lean` (`Op.scopedAlloc`, `Op.scopedFree`, `Op.staticCell`,
 `Prog.suspendedScopes`), `Backend/Clos/Capture.lean` (`crossedScopes`), `Backend/Clos/Types.lean`
@@ -6005,6 +6279,19 @@ comments in `lib/buf.bc`, `lib/text.bc` and `lib/rec.bc`; no change to `CDerives
 
 ## Changelog
 
+- **0.66** (2026-10-17) — §36 (new, #508, from #489): `poly` families, a family of functions with
+  one case per type, chosen as the most specific case whose head the type argument matches; a
+  second case at a type, or two overlapping cases neither more specific, is an error at the
+  declaration. Operators are families: their cases at the integer widths are the host's
+  instructions, as before, and a program's case at another type makes the operator work there.
+  `lib/key.bc`: `equal`, `hash` and `order` over views, at the integers, `1`, pairs, sums, arrays,
+  views and buffers. `lib/map.bc`: the hash map and set, a plain value (a trial), `map_get` a view
+  through the map lent fieldwise. Elaboration: `borrow imm *g { … }`, a record of arrays lent
+  fieldwise, a lend to a function with several lifetime parameters, a type read off a place lent
+  at a parameter of its own type. New programs `poly-operators`, `poly-providers`, `map-views`;
+  eight pending programs accepted (`aoc/2024-01`, `2024-11`, `2022-21`, and LeetCode 1, 49, 128,
+  217, 347); four rejects. No change to `CDerives`, the relation, the machine, the checker, the
+  backend, a kernel program, or any existing program's output or counts.
 - **0.65** (2026-10-16) — §35 (new, #500): the backend's implicit allocations. A cell the
   elaboration scopes to one borrow (a lend of a value, `modify` of a value, a handler's state
   given as a value) is a slot of its code's frame when no suspension crosses its scope, on a Wasm

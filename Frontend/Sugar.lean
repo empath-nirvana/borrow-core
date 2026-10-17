@@ -48,7 +48,7 @@ one is adding its name here. The elaboration brings in `io`, `div` and `prelude`
 (`elaborateS`); `include m` brings in any of them. -/
 def libNames : List String :=
   ["io", "div", "prelude", "lend", "adapters", "slice", "buf", "text", "textio", "iters", "fail",
-   "yield", "rec", "aff", "async", "list", "sys", "wasi"]
+   "yield", "rec", "aff", "async", "list", "sys", "wasi", "key", "map"]
 
 /-- The directory of the library: `$BCC_LIB` when it is set; otherwise `lib/` of the checkout
 whose `.lake/build/bin/` holds the running `bcc`; otherwise `lib/` of the working directory. -/
@@ -1749,6 +1749,29 @@ inductive LoopExit where
   | total (Rt : CVTy) (ret : Span → Val → Comp)
   | drain
 
+/-- A case of a `poly` family (SPEC §36): its family, the template it is (`f__at{k}`, generic in
+the family's type parameter first and then in the case's own), the case's type parameters, the
+lifetimes its head names, its head, and the lifetimes its body names. -/
+structure PolyCase where
+  fam : String
+  name : String
+  tps : List String
+  lps : List String
+  head : VTy
+  sp : Span
+  bodyLives : List String := []
+
+/-- The `poly` families of a program: each family's name and type parameter, and every case.
+`[spec §36]` -/
+structure PolyTab where
+  fams : List (String × String) := []
+  cases : List PolyCase := []
+  deriving Inhabited
+
+def PolyTab.isFam (t : PolyTab) (f : String) : Bool := t.fams.any (·.1 == f)
+
+def PolyTab.casesOf (t : PolyTab) (f : String) : List PolyCase := t.cases.filter (·.fam == f)
+
 /-- The elaboration so far: the libraries (in scope for typing); the source declarations in
 scope, newest first; the elaborated ones, in order; whether any body became a loop; and the
 copies made, by function and parameter type. -/
@@ -1782,6 +1805,9 @@ structure DivSt where
   /-- The handler sites that observe their computation one turn at a time (a `for`'s site and a
   stored generator's, `Elab.Effects.St.perTurn`).  `[spec §16]` -/
   perTurn : List Nat := []
+  /-- The `poly` families and their cases, all of the program's, known before any call is
+  elaborated.  `[spec §36]` -/
+  polys : PolyTab := {}
 
 /-- Elaboration with the state of the declarations. -/
 abbrev DM := StateT DivSt SM
@@ -1855,6 +1881,12 @@ def _root_.Frontend.SurfOp.host (w : BoCa.Width) : SurfOp → BoCa.HostOp
   | .add => .bin w .add | .sub => .bin w .sub | .mul => .bin w .mul
   | .eq => .rel w .eq | .ne => .rel w .ne | .lt => .rel w .lt_s | .le => .rel w .le_s
   | .gt => .rel w .gt_s | .ge => .rel w .ge_s
+
+/-- The family of a surface operator (SPEC §36): `(+)` is `op_add`. -/
+def _root_.Frontend.SurfOp.polyName : SurfOp → String
+  | .add => "op_add" | .sub => "op_sub" | .mul => "op_mul"
+  | .eq => "op_eq" | .ne => "op_ne" | .lt => "op_lt" | .le => "op_le"
+  | .gt => "op_gt" | .ge => "op_ge"
 
 /-- The width of an integer type. -/
 def widthOf : Option CVTy → Option BoCa.Width
@@ -2089,31 +2121,61 @@ def lendSlice (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A : CVTy) (v : BoCa.
   pure (.app sp (.app sp (.const sp C) (.lend sp x m)) cb)
 
 /-- A call `f W` whose argument lends a place at a borrow parameter of `f`: the borrow around
-the call. `none` when it does not. -/
-def lendCall (c : TCx) (sp : Span) (f W : Val) : DM (Option Val) := do
-  -- `f : !(all 'a < b. P => Q)` or `all 'a < b. P => Q`.
-  let (bang, v, P, Q) ← match c.tyV f with
-    | some (.bang (.thunk (.all v _ (.ret (.thunk (.arr P (.ret Q))))))) => pure (true, v, P, Q)
-    | some (.thunk (.all v _ (.ret (.thunk (.arr P (.ret Q)))))) => pure (false, v, P, Q)
-    | _ => return none
+the call. `none` when it does not. `f` may take several lifetime parameters when `apps` gives the
+lifetime each one is applied at, outermost first (a generic call's, SPEC §36): the lent
+parameter's is the lend's own, and the others are applied inside it. Without `apps`, `f` takes
+one. -/
+def lendCall (c : TCx) (sp : Span) (f W : Val)
+    (apps : Option (List (Option BoCa.Lifetime.Life)) := none) : DM (Option Val) := do
+  -- `f : !(all 'a < b. … P => Q)` or `all 'a < b. … P => Q`.
+  let rec peel : Nat → CVTy → Option (List BoCa.Lifetime.LifeVar × CVTy × CVTy)
+    | 0, _ => none
+    | k + 1, .thunk (.all v _ (.ret X)) => do let (vs, P, Q) ← peel k X; pure (v :: vs, P, Q)
+    | _, .thunk (.arr P (.ret Q)) => some ([], P, Q)
+    | _, _ => none
+  let (bang, vs, P, Q) ← match c.tyV f with
+    | some (.bang T) => match peel 64 T with
+      | some (vs, P, Q) => pure (true, vs, P, Q)
+      | none => return none
+    | some T => match peel 64 T with
+      | some (vs, P, Q) => pure (false, vs, P, Q)
+      | none => return none
+    | none => return none
+  if vs.isEmpty || (apps.isNone && vs.length != 1) then return none
   let some (x, m, Px) := lendParam P W | return none
-  let (pm, A, fam) ← match Px with
-    | .mut (.var w) A => if w == v then pure (Mode.mut, A, false) else return none
-    | .imm (.var w) A => if w == v then pure (Mode.imm, A, false) else return none
-    | .fam (.mut (.var w) A) => if w == v then pure (Mode.mut, A, true) else return none
-    | .fam (.imm (.var w) A) => if w == v then pure (Mode.imm, A, true) else return none
+  let (pm, w, A, fam) ← match Px with
+    | .mut (.var w) A => pure (Mode.mut, w, A, false)
+    | .imm (.var w) A => pure (Mode.imm, w, A, false)
+    | .fam (.mut (.var w) A) => pure (Mode.mut, w, A, true)
+    | .fam (.imm (.var w) A) => pure (Mode.imm, w, A, true)
     | _ => return none
+  unless vs.contains w do return none
   if pm != m then
     throw ⟨x.span, s!"the parameter here is {if pm == .mut then "a `mut`" else "an `imm`"} borrow: " ++
       s!"lend `{x.name}` as `{if pm == .mut then "&mut " else "&"}{x.name}`"⟩
+  -- The other lifetime parameters, at the lifetimes the call gives them.
+  let mut σ : List (BoCa.Lifetime.LifeVar × BoCa.Lifetime.Life) := []
+  for (v, k) in vs.zipIdx do
+    if v == w then continue
+    match apps.bind (·[k]?) |>.join with
+    | some l => σ := σ ++ [(v, l)]
+    | none => throw ⟨sp, "internal error: a lifetime of a call that lends a place"⟩
+  let mut ls : List (Option Frontend.Life) := []
+  for v in vs do
+    match σ.lookup v with
+    | some l => ls := ls ++ [some (← (c.surfaceL sp l : Except Error Frontend.Life))]
+    | none => ls := ls ++ [none]
+  let Q := Q.applyLSub σ
+  let A := A.applyLSub σ
   let f' := if bang then Val.unbang f.span f else f
-  if fam then return some (← lendSlice c sp x m A v Q fun l mv =>
-    .ret sp (.app sp (.inst sp f' (.var sp l)) (replaceLend mv W)))
-  if BoCa.Fig16.LogRel.Core.Check.vfreeB v Q then
+  let applied (l : String) : Val := ls.foldl (fun g o => .inst sp g (o.getD (.var sp l))) f'
+  if fam then return some (← lendSlice c sp x m A w Q fun l mv =>
+    .ret sp (.app sp (applied l) (replaceLend mv W)))
+  if BoCa.Fig16.LogRel.Core.Check.vfreeB w Q then
     throw ⟨sp, "the call's result mentions the lifetime of the lent place, so the place cannot " ++
       "be handed back after it"⟩
   some <$> lendBorrow c sp x m A Q fun l mv =>
-    boxedResult sp l (.ret sp (.app sp (.inst sp f' (.var sp l)) (replaceLend mv W)))
+    boxedResult sp l (.ret sp (.app sp (applied l) (replaceLend mv W)))
 
 /-- The typing context `c` with the declarations made so far in scope (the instances and copies
 made while elaborating the declaration it is in). -/
@@ -2430,6 +2492,172 @@ def patErr (c : TCx) (ps : List String) (P : VTy) : String :=
   | .error e => s!": {e.msg}"
   | .ok _ => ""
 
+/-! #### `poly` families: one case per type  `[spec §36]`
+
+A family's case is chosen by the family's type argument `T` alone. The cases whose head matches
+`T` are found by the matching above, each head a pattern with the case's type parameters as
+placeholders and any lifetime it names matching any lifetime. One of them must be **at least as
+specific as every other**: its head is an instance of theirs. No two cases of a family have
+heads equal up to renaming, and two heads with a common instance have one more specific than the
+other (`polyCheck`), so the choice is a function of `T`: coherence is one provider per type. -/
+
+/-- A case's head as a pattern: its type parameters as placeholders, the lifetimes it names in
+scope. -/
+def polyPat (c : TCx) (pc : PolyCase) : Option CVTy :=
+  patOf (pc.lps.foldl (fun c x => c.pushLife x .top) c) pc.tps pc.head
+
+/-- Why a case's head does not elaborate, for messages. -/
+def polyPatErr (c : TCx) (pc : PolyCase) : String :=
+  patErr (pc.lps.foldl (fun c x => c.pushLife x .top) c) pc.tps pc.head
+
+/-- The pattern `q` (with `n` placeholders) matches `p`: `p` is at least as specific as `q`. -/
+def polyAtLeast (n : Nat) (p q : CVTy) : Bool :=
+  (matchV { ty := Array.replicate n none } 0 q p).isSome
+
+mutual
+/-- Placeholders shifted by `k`, so that two patterns' placeholders are apart. -/
+def phShiftV (k : Nat) : CVTy → CVTy
+  | .tvar i => if i ≥ phBase then .tvar (i + k) else .tvar i
+  | .tensor A B => .tensor (phShiftV k A) (phShiftV k B)
+  | .sum A B => .sum (phShiftV k A) (phShiftV k B)
+  | .thunk C => .thunk (phShiftC k C)
+  | .ref A => .ref (phShiftV k A)
+  | .bang A => .bang (phShiftV k A)
+  | .mu A => .mu (phShiftV k A)
+  | .fam A => .fam (phShiftV k A)
+  | .imm a A => .imm a (phShiftV k A)
+  | .mut a A => .mut a (phShiftV k A)
+  | .box a A => .box a (phShiftV k A)
+  | t => t
+
+def phShiftC (k : Nat) : CCTy → CCTy
+  | .ret A => .ret (phShiftV k A)
+  | .arr A C => .arr (phShiftV k A) (phShiftC k C)
+  | .amp C D => .amp (phShiftC k C) (phShiftC k D)
+  | .nu C => .nu (phShiftC k C)
+  | .all v b C => .all v b (phShiftC k C)
+  | .top => .top
+  | .eff n i q A B fin C =>
+      .eff n i q (phShiftV k A) (phShiftV k B) (phShiftC k fin) (phShiftC k C)
+end
+
+/-- A placeholder's solution, followed. -/
+def phWalk : Nat → List (Nat × CVTy) → CVTy → CVTy
+  | n + 1, σ, .tvar i => match σ.lookup i with
+    | some u => phWalk n σ u
+    | none => .tvar i
+  | _, _, t => t
+
+/-- The placeholder `i` occurs in `t` under the solution `σ`. -/
+def phOccurs : Nat → List (Nat × CVTy) → Nat → CVTy → Bool
+  | 0, _, _, _ => true
+  | n + 1, σ, i, t => match phWalk 64 σ t with
+    | .tvar j => i == j
+    | .tensor A B | .sum A B => phOccurs n σ i A || phOccurs n σ i B
+    | .ref A | .bang A | .fam A | .imm _ A | .mut _ A | .box _ A => phOccurs n σ i A
+    | _ => false
+
+/-- Two patterns have a common instance: their placeholders solved together, lifetimes left to
+match any lifetime. A `μ` or a computation type is compared as written. -/
+def phUnify : Nat → List (Nat × CVTy) → CVTy → CVTy → Option (List (Nat × CVTy))
+  | 0, _, _, _ => none
+  | n + 1, σ, a, b =>
+    match phWalk 64 σ a, phWalk 64 σ b with
+    | .tvar i, .tvar j =>
+      if i == j then some σ
+      else if i ≥ phBase then some ((i, .tvar j) :: σ)
+      else if j ≥ phBase then some ((j, .tvar i) :: σ)
+      else none
+    | .tvar i, t | t, .tvar i =>
+      if i ≥ phBase && !phOccurs 64 σ i t then some ((i, t) :: σ) else none
+    | .tensor A B, .tensor A' B' | .sum A B, .sum A' B' =>
+      (phUnify n σ A A').bind (phUnify n · B B')
+    | .ref A, .ref A' | .bang A, .bang A' | .fam A, .fam A' | .imm _ A, .imm _ A'
+    | .mut _ A, .mut _ A' | .box _ A, .box _ A' => phUnify n σ A A'
+    | a, b => if a == b then some σ else none
+
+/-- A pattern with the solution `σ` applied. -/
+def phApply : Nat → List (Nat × CVTy) → CVTy → CVTy
+  | 0, _, t => t
+  | n + 1, σ, t => match phWalk 64 σ t with
+    | .tensor A B => .tensor (phApply n σ A) (phApply n σ B)
+    | .sum A B => .sum (phApply n σ A) (phApply n σ B)
+    | .ref A => .ref (phApply n σ A)
+    | .bang A => .bang (phApply n σ A)
+    | .fam A => .fam (phApply n σ A)
+    | .imm a A => .imm a (phApply n σ A)
+    | .mut a A => .mut a (phApply n σ A)
+    | .box a A => .box a (phApply n σ A)
+    | t => t
+
+/-- The placeholder `k` occurs in the pattern `p`: the head names the case's type parameter. -/
+def phNames (k : Nat) (p : CVTy) : Bool := phOccurs 64 [] (phBase + k) p
+
+/-- The operators' families, by the name the operator's family has (`(+)` is `op_add`). -/
+def opFamilies : List (String × String) :=
+  [("op_add", "+"), ("op_sub", "-"), ("op_mul", "*"), ("op_eq", "=="), ("op_ne", "!="),
+   ("op_lt", "<"), ("op_le", "<="), ("op_gt", ">"), ("op_ge", ">=")]
+
+/-- A family as a message names it: `` `(+)` `` for an operator's. -/
+def polyShown (fam : String) : String :=
+  match opFamilies.lookup fam with
+  | some o => s!"`({o})`"
+  | none => s!"`{fam}`"
+
+/-- The heads of an operator's machine cases (SPEC §8): a user case may not overlap them. -/
+def machineHeads : List CVTy := [.int .w32, .int .w64, .int .w8]
+
+/-- The cases of every family are coherent: each head elaborates and names each of its case's
+type parameters; no case of an operator's family overlaps a machine case; and of two cases whose
+heads have a common instance, one is more specific than the other. -/
+def polyCheck (c : TCx) (tab : PolyTab) : Except Error Unit := do
+  let mut seen : List (PolyCase × CVTy) := []
+  for pc in tab.cases do
+    let some p := polyPat c pc
+      | throw ⟨pc.sp, s!"the head `{pc.head.pp}` of this case of {polyShown pc.fam} does not elaborate{polyPatErr c pc}"⟩
+    for (x, k) in pc.tps.zipIdx do
+      unless phNames k p do
+        throw ⟨pc.sp, s!"the head `{pc.head.pp}` of this case of {polyShown pc.fam} does not name its type " ++
+          s!"parameter `{x}`: a case's type parameters are read off its head"⟩
+    if pc.fam.startsWith "op_" then
+      if machineHeads.any (fun t => (phUnify 64 [] p t).isSome) then
+        throw ⟨pc.sp, s!"{polyShown pc.fam} has its machine cases at the integer widths (the " ++
+          s!"host's instructions): a case at `{pc.head.pp}` would overlap them"⟩
+    for (qc, q) in seen do
+      if qc.fam != pc.fam then continue
+      let q' := phShiftV (1 <<< 20) q
+      let some σ := phUnify 128 [] p q' | continue
+      let pq := polyAtLeast qc.tps.length p q
+      let qp := polyAtLeast pc.tps.length q p
+      if pq && qp then
+        throw ⟨pc.sp, s!"a second case of {polyShown pc.fam} at `{pc.head.pp}`, the first at " ++
+          s!"{qc.sp.start.render}: a family has one case per type"⟩
+      if !pq && !qp then
+        throw ⟨pc.sp, s!"the cases of {polyShown pc.fam} at `{pc.head.pp}` and at `{qc.head.pp}` " ++
+          s!"({qc.sp.start.render}) both apply at `{ppT (phApply 64 σ p)}`, and neither is more " ++
+          "specific: a family has one case per type"⟩
+    seen := seen ++ [(pc, p)]
+
+/-- The case of the family `fam` at the type `T`, and its type arguments: the most specific of
+the cases whose head `T` matches. -/
+def polySelect (tab : PolyTab) (c : TCx) (sp : Span) (fam : String) (T : CVTy) :
+    Except Error (PolyCase × Array (Option CVTy)) := do
+  let mut hits : List (PolyCase × CVTy × Array (Option CVTy)) := []
+  for pc in tab.casesOf fam do
+    let some p := polyPat c pc | continue
+    if let some m := matchV { ty := Array.replicate pc.tps.length none } 0 p T then
+      hits := hits ++ [(pc, p, m.ty)]
+  let shown := polyShown fam
+  match hits with
+  | [] => throw ⟨sp, s!"{shown} has no case at `{ppT T}`" ++
+      (if fam.startsWith "op_" then s!": give one, `poly {shown} at …`" else "")⟩
+  | [(pc, _, σ)] => pure (pc, σ)
+  | _ =>
+    match hits.find? (fun (pc, p, _) => hits.all fun (qc, q, _) =>
+        pc.name == qc.name || polyAtLeast qc.tps.length p q) with
+    | some (pc, _, σ) => pure (pc, σ)
+    | none => throw ⟨sp, s!"{shown} has several cases at `{ppT T}`, and none is more specific"⟩
+
 /-- A function's signature: whether it is persistent (`!`), its lifetime parameters with their
 bounds, outermost first, its parameter type and its result. -/
 structure Sig where
@@ -2449,6 +2677,56 @@ def sigGo : Nat → CVTy → Option (List (BoCa.Lifetime.LifeVar × BoCa.Lifetim
 def sigOf : CVTy → Option Sig
   | .bang T => (sigGo 64 T).map fun (bs, P, R) => ⟨true, bs, P, R⟩
   | T => (sigGo 64 T).map fun (bs, P, R) => ⟨false, bs, P, R⟩
+
+/-- The lifetime binders of a written function type `all 'a < @. … F` (under its `!`),
+outermost first, and `F`. -/
+def splitLivesTy : VTy → List (Ident × Life) × VTy
+  | .all _ a b X => let (ls, F) := splitLivesTy X; ((a, b) :: ls, F)
+  | F => ([], F)
+
+/-- The `Fun 'a < @.` binders of a function's code (`withLives`'s form), and its code. -/
+def splitLivesC : Comp → List (Ident × Life) × Comp
+  | .lamL _ a b (.ret _ (.thunkv _ M)) => let (ls, M') := splitLivesC M; ((a, b) :: ls, M')
+  | M => ([], M)
+
+/-- A persistent function of type `F` and code `lam`, generic in `lives` (the parser's
+`withLives`). -/
+def wrapLives (sp : Span) (lives : List (Ident × Life)) (F : VTy) (lam : Comp) : VTy × Val :=
+  let rec inner : List (Ident × Life) → VTy × Comp
+    | [] => (F, lam)
+    | (a, b) :: ls =>
+      let (T, M) := inner ls
+      (.all sp a b T, .lamL sp a b (.ret sp (.thunkv sp M)))
+  match lives with
+  | [] => (.bang sp F, .bangThunkv sp lam)
+  | _ => let (T, M) := inner lives; (.bang sp T, .bangThunkv sp M)
+
+/-- A case's instance with the lifetime parameters its type no longer mentions left out: a
+family's `'a` in `view 'a T` is no lifetime of the instance at a `T` whose view is itself (`i32`,
+a view, a pair of them). Such a binder is dropped, and its other mentions, in the parameter's
+written type, read `top`, which they do not depend on. A binder the case's body names (`keep`),
+or a later binder's bound names, stays.  `[spec §36]` -/
+def dropPhantoms (c : TCx) (keep : List String) (A : VTy) (V : Val) : VTy × Val :=
+  match A, V with
+  | .bang sp X, .bangThunkv _ M =>
+    let (ls, F) := splitLivesTy X
+    let (lsV, lam) := splitLivesC M
+    if ls.isEmpty || ls.length != lsV.length then (A, V) else
+    match (c.elabV A).bind sigOf with
+    | none => (A, V)
+    | some sig =>
+      if sig.binders.length != ls.length then (A, V) else
+      let fnTy : CVTy := .thunk (.arr sig.P sig.R)
+      let phantom := (ls.zip sig.binders).zipIdx.filterMap fun (((a, _), (v, _)), k) =>
+        if keep.contains a.name || BoCa.Fig16.LogRel.Core.Check.vfreeB v fnTy ||
+            (ls.drop (k + 1)).any (fun (_, b) => b.vars.contains a.name) then none
+        else some a.name
+      if phantom.isEmpty then (A, V) else
+      let f (s : Span) (x : String) : Life := if phantom.contains x then .top s else .var s x
+      let kept := (ls.filter fun (a, _) => !phantom.contains a.name).map fun (a, b) =>
+        (a, b.renameLife f)
+      wrapLives sp kept (F.renameLife f) (lam.renameLife f)
+  | _, _ => (A, V)
 
 /-- The names of a written function type's lifetime parameters, outermost first. -/
 def lifeNames : VTy → List String
@@ -2715,6 +2993,36 @@ def restScope : String := "io_rest_scope"
 /-- `N`, what follows a loop, marked as outside it (`restScope`). -/
 def restOf (N : Comp) : Comp :=
   .bind N.span ⟨restScope, N.span⟩ none (.ret N.span (.unit N.span)) N false
+
+/-! #### A record lent fieldwise  `[spec §36]` -/
+
+/-- The fields of a record type, a tree of `⊗`, left to right. -/
+def recLeaves : CVTy → List CVTy
+  | .tensor A B => recLeaves A ++ recLeaves B
+  | t => [t]
+
+/-- The record type `R` with its field `k` (numbered from `k₀`) replaced by `f k`. -/
+def recBuildTy (R : CVTy) (f : Nat → CVTy → CVTy) (k₀ : Nat) : CVTy :=
+  match R with
+  | .tensor A B => .tensor (recBuildTy A f k₀) (recBuildTy B f (k₀ + (recLeaves A).length))
+  | t => f k₀ t
+
+/-- The record of shape `R` whose field `k` (numbered from `k₀`) is `f k`. -/
+def recBuild (sp : Span) (R : CVTy) (f : Nat → Val) (k₀ : Nat) : Val :=
+  match R with
+  | .tensor A B => .pair sp (recBuild sp A f k₀) (recBuild sp B f (k₀ + (recLeaves A).length))
+  | _ => f k₀
+
+/-- `M` with the fields of `V : R` bound to `io_rf{k}` (numbered from `k₀`). -/
+def recBind (sp : Span) (R : CVTy) (V : Val) (k₀ : Nat) (M : Comp) : Comp :=
+  match R with
+  | .tensor A B =>
+    let n := (recLeaves R).length
+    let l := s!"io_rl{k₀}_{n}"
+    let r := s!"io_rr{k₀}_{n}"
+    .letPair sp ⟨l, sp⟩ ⟨r, sp⟩ V
+      (recBind sp A (.var sp l) k₀ (recBind sp B (.var sp r) (k₀ + (recLeaves A).length) M))
+  | _ => .bind sp ⟨s!"io_rf{k₀}", sp⟩ none (.ret sp V) M false
 
 /-! ### The machine of a recursion under a heap driver  `[spec §20]`
 
@@ -3008,9 +3316,25 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       let a₀ ← surfV n c none a
       let b₀ ← surfV n c none b
       let isLit : Val → Bool := fun | .sugar _ (.lit _) => true | _ => false
-      let wOf (v v₀ : Val) : Option BoCa.Width := if isLit v then none else widthOf (c.tyV v₀)
+      -- An operand's type, with the instances its calls made in scope when it is one.
+      let tOf (v v₀ : Val) : DM (Option CVTy) := do
+        if isLit v then return none
+        match c.tyV v₀ with
+        | some t => pure (some t)
+        | none => pure ((← refresh c).tyV v₀)
+      let ta ← tOf a a₀
+      let tb ← tOf b b₀
+      -- At a type that is not a machine integer, the case of the operator's family at that type
+      -- when the program gives one (SPEC §36); the machine cases are the instructions below.
+      let fam := o.polyName
+      let polys := (← get).polys
+      if polys.isFam fam then
+        if let some T := ta.orElse fun _ => tb then
+          if (widthOf (some T)).isNone && (polySelect polys c sp fam T).toOption.isSome then
+            let Ts ← (c.surface osp T : Except Error VTy)
+            return ← surfV n c exp (.app sp (.defApp osp fam [Ts]) (.pair psp a b))
       let w := ((if arith then widthOf exp else none).orElse fun _ =>
-        (wOf a a₀).orElse fun _ => wOf b b₀).getD .w32
+        (widthOf ta).orElse fun _ => widthOf tb).getD .w32
       let a' ← surfV n c (some (.int w)) a
       let b' ← surfV n c (some (.int w)) b
       if w == .w8 then return byteOp sp osp psp o a' b'
@@ -3110,6 +3434,31 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       -- The callback's row, when this block is an unwinding borrow; blocks inside are not.
       let cbr := (← get).cbRow
       modify fun st => { st with cbRow := none }
+      -- `borrow imm *g { 'y, v -> S }`: the content of the `imm` borrow `g` read through
+      -- `withload`, `v` its view at `'y`, whatever its content's type (`*g` copies a persistent
+      -- one). Nothing is handed back: the block's value is `((), B)`.  `[spec §36]`
+      if let .app _ (.sugar dsp .deref) G := P then
+        unless k == .imm do throw ⟨dsp, "`borrow mut *g { … }` is not provided: a load reads"⟩
+        let G' ← surfV n c none G
+        let (a, A) ← match (← refresh c).tyV G' with
+          | some (.imm a A) => pure (a, A)
+          | t => throw ⟨dsp, s!"`borrow imm *g` reads through an `imm` borrow, but this has type " ++
+              s!"`{(t.map ppT).getD "?"}`"⟩
+        let dom ← need lsp "the block's bound" (c.elabL (.dom lsp))
+        let c₁ := c.pushLife x dom
+        let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
+        let Tb : CVTy := A.immReborrow (.var v)
+        let S' ← surfC n (c₁.push b.name (some Tb)) none S
+        let B ← need tsp "the block's result" (resultOfC ((← refresh c₁).push b.name (some Tb) |>.tyC S'))
+        if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
+          throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
+        let As ← c.surface ksp A
+        let Bs ← c.surface ksp B
+        let xi : Ident := ⟨x, ksp⟩
+        let C := Const.withload (← c.surfaceL dsp a) xi As Bs
+        let Tbs := VTy.view lsp (.var lsp x) As
+        return .pair sp (.unit sp) (.app sp (.app sp₂ (.const ksp C) G') (.thunkv tsp (.lamL lsp xi (.dom lsp)
+          (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
       let P' ← surfV n c none P
       let tP ← need P.span "the borrowed place" (c.tyV P')
       match k, tP with
@@ -3248,6 +3597,79 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
                   (.var sp "io_la")) cb))
                 (.letPair sp (ids "io_la2") (ids "io_lv") (.var sp "io_lr")
                   (.ret sp (.pair sp (.var sp "io_lp") (.var sp "io_lv")))) false) false)) false))
+      | .imm, R@(.tensor _ _) =>
+        -- A record of arrays and persistent values, lent fieldwise: each array as a family by
+        -- its own `slice_borrow_imm`, nested left to right, the last at the block's lifetime and
+        -- the others at lifetimes of their own; the persistent fields as they are. The record is
+        -- rebuilt from what the borrows hand back.  `[spec §36]`
+        do
+        let leaves := recLeaves R
+        let isArr : CVTy → Bool := fun | .fam (.ref _) => true | _ => false
+        unless cbr.isNone do
+          throw ⟨sp, "a record lent fieldwise to a block that performs an operation is not provided"⟩
+        unless leaves.any isArr && leaves.all (fun t => isArr t || t.persistent) do
+          throw ⟨P.span, s!"this borrow block's place has type `{ppT tP}`: a record is lent " ++
+            "fieldwise when its fields are arrays and persistent values; `borrow imm`/`borrow mut` " ++
+            "take a cell `ref A` or an array"⟩
+        let arrs : List (Nat × CVTy) := leaves.zipIdx.filterMap fun (t, k) => match t with
+          | .fam (.ref A) => some (k, A)
+          | _ => none
+        let m := arrs.length
+        let lname (i : Nat) : String := if i + 1 == m then x else s!"{x}_{i}"
+        -- The context of the body: the fields, then each lifetime and family, then the record.
+        let mut cx := leaves.zipIdx.foldl (fun cx (t, k) => cx.push s!"io_rf{k}" (some t)) c
+        let mut vs : List BoCa.Lifetime.LifeVar := []
+        for (i, (_, A)) in (List.range m).zip arrs do
+          let dom ← need lsp "the block's bound" (cx.elabL (.dom lsp))
+          cx := cx.pushLife (lname i) dom
+          let some v := cx.E.lenv.lookup (lname i) | throw ⟨lsp, "internal error: a borrow block"⟩
+          vs := vs ++ [v]
+          cx := cx.push s!"io_rv{i}" (some (.fam (.imm (.var v) A)))
+        let famOf (k : Nat) : Option Nat := arrs.findIdx? (·.1 == k)
+        let rTy := recBuildTy R (fun k t => match famOf k with
+          | some i => match vs[i]?, arrs[i]? with
+            | some v, some (_, A) => .fam (.imm (.var v) A)
+            | _, _ => t
+          | none => t) 0
+        let S' ← surfC n (cx.push b.name (some rTy)) none S
+        let B ← need tsp "the block's result" (resultOfC ((← refresh cx).push b.name (some rTy) |>.tyC S'))
+        for (v, i) in vs.zipIdx do
+          if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
+            throw (Frontend.Elab.LoopLend.escapeError tsp (lname i) (Frontend.Check.ppV cx.E.lenv 0 0 B))
+        -- The borrows, innermost first.
+        let rVal := recBuild sp R (fun k => match famOf k with
+          | some i => .var sp s!"io_rv{i}"
+          | none => .var sp s!"io_rf{k}") 0
+        let Bs ← c.surface ksp B
+        let mut body : Comp := .bind sp b none (.ret sp rVal) (boxTail (lname (m - 1)) S') false
+        let mut resTy : VTy := Bs
+        let mut app : Val := .unit sp
+        for i in (List.range m).reverse do
+          let some (k, A) := arrs[i]? | throw ⟨sp, "internal error: a record's borrow"⟩
+          let As ← c.surface ksp A
+          let li : Ident := ⟨lname i, ksp⟩
+          let cb : Val := .thunkv tsp (.lamL lsp li (.dom lsp) (.ret lsp (.thunkv lsp
+            (.lam lsp ⟨s!"io_rv{i}", lsp⟩ (.arrayImm lsp (.var lsp (lname i)) As) body))))
+          app := .app sp (.app sp₂ (.const ksp (.sliceBorrowImm li (.dom ksp) As resTy))
+            (.var sp s!"io_rf{k}")) cb
+          resTy := .tensor sp (.array sp As) resTy
+          if i > 0 then
+            let r := s!"io_rres{i}"
+            body := .bind sp ⟨r, sp⟩ none (.ret sp app)
+              (.ret sp (.boxed sp (.var sp (lname (i - 1))) (.var sp r))) false
+        -- What the borrows hand back: each array, then the block's result.
+        let rec unpack : Nat → String → Comp → Comp
+          | 0, _, M => M
+          | j + 1, v, M => .letPair sp ⟨s!"io_ra{m - j - 1}", sp⟩ ⟨s!"io_rq{m - j - 1}", sp⟩ (.var sp v)
+              (unpack j s!"io_rq{m - j - 1}" M)
+        let back := recBuild sp R (fun k => match famOf k with
+          | some i => .var sp s!"io_ra{i}"
+          | none => .var sp s!"io_rf{k}") 0
+        let Rs ← c.surface ksp R
+        let fin : Comp := .ret sp (.pair sp back (.var sp s!"io_rq{m - 1}"))
+        let M : Comp := recBind sp R P' 0
+          (.bind sp ⟨"io_rtop", sp⟩ none (.ret sp app) (unpack m "io_rtop" fin) false)
+        pure (Val.ascribe sp (.run sp M) (.tensor sp Rs Bs))
       | .famMut, .tensor (.ref A) (.ref B) => do
         let dom ← need lsp "the block's bound" (c.elabL (.dom lsp))
         let c₁ := c.pushLife x dom
@@ -3331,11 +3753,34 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       match (← refresh c).tyV V' with
       | some (.bang (.thunk (.all ..))) => pure (.inst sp (.unbang V.span V') l)
       | _ => pure (.inst sp V' l)
+    | .defApp sp h [Ta] => do
+      if (← get).polys.isFam h then
+        -- A `poly` family at a written type: its case's instance.  `[spec §36]`
+        let some T := c.elabV Ta | throw ⟨sp, s!"the type argument of `{h}` does not elaborate here"⟩
+        let (nm, extras) ← polyInst n c sp h T
+        if extras.isEmpty then return .var sp nm
+        let mut g : Val := .unbang sp (.var sp nm)
+        for v in extras do g := .inst sp g (← c.surfaceL sp (.var v))
+        return g
+      match (← get).templates.find? (fun | .def_ _ m _ _ _ _ => m.name == h | _ => false) with
+      | some t => do
+        let (nm, extras) ← makeInst n c sp t #[c.elabV Ta] none
+        if extras.isEmpty then pure (.var sp nm) else
+          let mut g : Val := .unbang sp (.var sp nm)
+          for v in extras do g := .inst sp g (← c.surfaceL sp (.var v))
+          pure g
+      | none =>
+        let src := h ++ "_src"
+        match (← get).templates.find? (fun | .def_ _ m _ _ _ _ => m.name == src | _ => false) with
+        | some t => do
+          let (nm, _) ← makeInst n c sp t #[c.elabV Ta] none
+          pure (.var sp (nm.dropEnd "_src".length).toString)
+        | none => pure V
     | .defApp sp h args => do
       -- A template at written type arguments: its instance.
       match (← get).templates.find? (fun | .def_ _ m _ _ _ _ => m.name == h | _ => false) with
       | some t => do
-        let (nm, extras) ← makeInst n c sp t (args.map c.elabV).toArray
+        let (nm, extras) ← makeInst n c sp t (args.map c.elabV).toArray none
         if extras.isEmpty then pure (.var sp nm) else
           -- The instance's own lifetimes at the call's.
           let mut g : Val := .unbang sp (.var sp nm)
@@ -3347,7 +3792,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let src := h ++ "_src"
         match (← get).templates.find? (fun | .def_ _ m _ _ _ _ => m.name == src | _ => false) with
         | some t => do
-          let (nm, _) ← makeInst n c sp t (args.map c.elabV).toArray
+          let (nm, _) ← makeInst n c sp t (args.map c.elabV).toArray none
           pure (.var sp (nm.dropEnd "_src".length).toString)
         | none => pure V
     | .shorten sp m σ l V => do pure (.shorten sp m σ l (← surfV n c none V))
@@ -4442,10 +4887,10 @@ known): its name, made and elaborated on first use, and the lifetimes of the cal
 first. A type argument with lifetimes (a view, `array_imm 'x u8`) makes an instance with a
 lifetime parameter of its own for each, outside the template's: `!(all 'io_q0 < top. …)`, and a
 call instantiates them at the call's lifetimes.  `[spec §15]` -/
-def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) →
+def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) → Option (List String) →
     DM (String × List BoCa.Lifetime.LifeVar)
-  | 0, _, sp, _, _ => throw ⟨sp, "instantiation of generic functions does not terminate"⟩
-  | n + 1, c, sp, t, σ => do
+  | 0, _, sp, _, _, _ => throw ⟨sp, "instantiation of generic functions does not terminate"⟩
+  | n + 1, c, sp, t, σ, keep => do
     let .def_ tsp tn ps A V mk := t | throw ⟨sp, "internal error: a generic function"⟩
     let names := ps.map (·.name)
     let mut ts₀ : List CVTy := []
@@ -4488,6 +4933,12 @@ def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) →
         let q := qs.foldl (Life.meet tsp) q
         A₁ := boundTyLife cv.name q A₁
         V₁ := boundValLife cv.name q V₁
+    -- A case of a `poly` family: the lifetimes its instance's type does not mention left out.
+    -- `[spec §36]`
+    if let some ks := keep then
+      let (A₂, V₂) := dropPhantoms c' ks A₁ V₁
+      A₁ := A₂
+      V₁ := V₂
     let (A', V') ← if extras.isEmpty then pure (A₁, V₁) else
       match A₁, V₁ with
       | .bang asp X, .bangThunkv vsp N =>
@@ -4502,6 +4953,17 @@ def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) →
     let st' ← (elabDecl n { st with insts := (key, name) :: st.insts, libNames } inst : SM DivSt)
     set { st' with quiet := st.quiet }
     return (name, extras)
+
+/-- The instance of the case of the family `fam` at `T` (SPEC §36): its name, and the lifetimes
+of `T` it takes first (`makeInst`). -/
+def polyInst : Nat → TCx → Span → String → CVTy → DM (String × List BoCa.Lifetime.LifeVar)
+  | 0, _, sp, _, _ => throw ⟨sp, "instantiation of generic functions does not terminate"⟩
+  | n + 1, c, sp, fam, T => do
+    let st ← get
+    let (pc, σ) ← (polySelect st.polys c sp fam T : Except Error _)
+    let some t := st.templates.find? (fun | .def_ _ m _ _ _ _ => m.name == pc.name | _ => false)
+      | throw ⟨sp, s!"internal error: the case `{pc.name}` of `{fam}`"⟩
+    makeInst n c sp t (#[some T] ++ σ) (some pc.bodyLives)
 
 /-- A call `f W` of a generic callee (a template, a core `def` with type parameters, or a
 function with lifetime parameters), with the type and lifetime arguments it leaves out filled and
@@ -4544,6 +5006,23 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
       | none => do
         let f' ← surfV n c none f
         pure (Head.plain f' (calleeTy c f'))
+    -- A `poly` family: the instance of its case at the type `T` (written, or read off the
+    -- arguments below), called as a function of its own.  `[spec §36]`
+    let polyRun (T : CVTy) : DM (Option Val) := do
+      let fam := (genericCallee f).map (·.1) |>.getD ""
+      let (nm, _) ← polyInst n c sp fam T
+      let c' ← refresh c
+      some <$> surfV n c' exp (.app sp (.var f.span nm) W)
+    let famOf : Option String := match head with
+      | .tmpl (.def_ _ tn _ _ _ _) _ => if st.polys.isFam tn.name then some tn.name else none
+      | _ => none
+    if let (some fam, .tmpl _ (some targs)) := (famOf, head) then
+      match targs with
+      | [Ta] =>
+        let some T := c.elabV Ta
+          | throw ⟨sp, s!"the type argument of {polyShown fam} does not elaborate here"⟩
+        return ← polyRun T
+      | _ => throw ⟨sp, s!"{polyShown fam} takes one type argument"⟩
     let (fname, ps, pat?, tyW) : String × List String × Option CVTy × Option VTy := match head with
       | .tmpl (.def_ _ tn tps A _ _) _ =>
         (tn.name, tps.map (·.name), patOf c (tps.map (·.name)) A, some A)
@@ -4612,6 +5091,9 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
             if let some m' := matchV m 0 A A' then m := m'
           | .imm _ A, some A' | .mut _ A, some A' =>
             if let some m' := matchV m 0 A A' then m := m'
+          -- A lend at a parameter of the place's own type (`map_get(&m, k)`): the place's type.
+          -- `[spec §36]`
+          | P, some A' => if let some m' := matchV m 0 P A' then m := m'
           | _, _ => pure ()
           args := args.set! k (some Wi)
           continue
@@ -4687,11 +5169,24 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
     if let (some e, .ret Q) := (exp, sig.R) then
       if m.isOpen Q then
         if let some m' := matchV m 0 Q e then m := m'
+    if let some fam := famOf then
+      let some T := m.ty[0]?.join
+        | throw ⟨sp, s!"the type `{ps.headD "T"}` of {polyShown fam} is not determined by its " ++
+            s!"arguments: write it, `{fam}[…](…)`"⟩
+      -- What matching elaborated is elaborated again, at the case's instance.
+      set st
+      return ← polyRun T
     let lends := W.lends
     -- A lifetime the call leaves undetermined is `dom`, the meet of the lifetimes in scope (in
     -- `main`, at least `'main`).  `[spec §23]`
+    -- The lifetime of a parameter a place is lent at is the lend's own (`lendCall`).
+    let lentV : Option BoCa.Lifetime.LifeVar := if !lends then none else
+      match lendParam sig.P W with
+      | some (_, _, .imm (.var w) _) | some (_, _, .mut (.var w) _)
+      | some (_, _, .fam (.imm (.var w) _)) | some (_, _, .fam (.mut (.var w) _)) => some w
+      | _ => none
     for (v, _) in sig.binders do
-      if (m.life.lookup v).isNone && !(lends && sig.binders.length == 1) then
+      if (m.life.lookup v).isNone && lentV != some v && !(lends && sig.binders.length == 1) then
         if c.Δ.entries.isEmpty then
           throw ⟨sp, s!"the lifetime `{lname v}` of `{fname}` is not determined by its arguments " ++
             s!"here: write it, `{writeLives fname}"⟩
@@ -4700,7 +5195,7 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
     let mut extras : List BoCa.Lifetime.LifeVar := []
     let base ← match head with
       | .tmpl t _ => do
-        let (nm, ex) ← makeInst n c sp t m.ty
+        let (nm, ex) ← makeInst n c sp t m.ty none
         extras := ex
         pure (Val.var f.span nm)
       | .gdef h tps _ => do
@@ -4723,10 +5218,11 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
         | some (_, _, .fam (.mut ..)) | some (_, _, .fam (.imm ..)) => true
         | _ => false
       if atBorrow then
-        if sig.binders.length != 1 then
-          throw ⟨sp, s!"`{fname}` has several lifetime parameters: a lend `&x` in its call is " ++
-            "not provided; borrow in a block and pass the borrow"⟩
-        match ← lendCall c sp base (argOf W argsL) with
+        -- The lifetimes the callee is applied at: the instance's own (`makeInst`), then its
+        -- parameters', the lent one's left to the lend.
+        let apps := extras.map (fun v => some (BoCa.Lifetime.Life.var v)) ++
+          sig.binders.map fun (v, _) => m.life.lookup v
+        match ← lendCall c sp base (argOf W argsL) (some apps) with
         | some V => return some V
         | none => throw ⟨sp, s!"the lend in this call of `{fname}` is not at a borrow parameter"⟩
     let mut g := if sig.bang then Val.unbang f.span base else base
@@ -4913,9 +5409,15 @@ end
 
 /-- The declarations with divergence inferred, in order (copies before their first use), and
 whether any body was elaborated as a loop. -/
-def elabDivs (lib decls : List Decl) (libNames : List String) (perTurn : List Nat := []) :
-    SM (List Decl × Bool) := do
-  let st ← decls.foldlM (init := ({ lib, libNames, perTurn } : DivSt)) (elabDecl divFuel)
+def elabDivs (lib decls : List Decl) (libNames : List String) (perTurn : List Nat := [])
+    (polys : PolyTab := {}) : SM (List Decl × Bool) := do
+  -- Every family and case is known before any call is elaborated, so that a case is chosen
+  -- among all of them (SPEC §36).
+  (polyCheck (TCx.ofScope (lib ++ decls) false) polys : Except Error Unit)
+  let names := polys.fams.map (·.1) ++ polys.cases.map (·.name)
+  let templates := decls.filter fun | .def_ _ m _ _ _ _ => names.contains m.name | _ => false
+  let st ← decls.foldlM (init := ({ lib, libNames, perTurn, polys, templates } : DivSt))
+    (elabDecl divFuel)
   pure (st.out, st.any)
 
 /-- A `main` that is not ambient, elaborated as a loop when its body loops. `c` is the typing
@@ -4959,6 +5461,69 @@ def expandIncludes : Nat → List Decl → List Decl × List String →
           ", ".intercalate libNames⟩
     | d => pure (acc ++ [d], inc)
 
+/-! ### `poly` declarations  `[spec §36]` -/
+
+/-- The family of the operator named `fam` (`op_add` is `(+)`'s), which the elaboration declares
+when a program gives the operator a case: `poly op_add[T](a: T, b: T) -> T`, a comparison's
+answer `bool`. -/
+def opFamily (sp : Span) (fam : String) : Decl :=
+  let T := VTy.name sp "T"
+  let R := if ["op_add", "op_sub", "op_mul"].contains fam then T else .sum sp (.unit sp) (.unit sp)
+  .poly sp ⟨fam, sp⟩ [⟨"T", sp⟩] [] none (.bang sp (.lolli sp (.tensor sp T T) R))
+    (.bangThunkv sp (.lam sp ⟨"io_pp", sp⟩ (.tensor sp T T)
+      (.letPair sp ⟨"a", sp⟩ ⟨"b", sp⟩ (.var sp "io_pp") (.force sp ⟨"io_poly_body", sp⟩))))
+
+/-- The `poly` declarations of a program as templates, and its families and cases. A family is the
+template of its signature, whose body is never elaborated: a call of it is a call of its case. A
+case `poly f[P, …] at H = S` is the template `f__at{k}[T', P, …]` of the family's signature, its
+type parameter renamed `T'`, with body `S`, the family's parameters in scope. Each `poly`
+declaration is paired with what replaces it. -/
+def polyDecls (ds : List Decl) : Except Error (List Decl × PolyTab × List (Decl × List Decl)) := do
+  let caseOf (op : String) : Option Span := ds.findSome? fun
+    | .poly sp n _ _ (some _) _ _ => if n.name == op then some sp else none
+    | _ => none
+  let ops := opFamilies.filterMap fun (op, _) => (caseOf op).map (opFamily · op)
+  let mut fams : List (String × (Ident × VTy × Val)) := []
+  for d in ops ++ ds do
+    if let .poly sp n tps _ none A V := d then
+      if !ops.contains d && opFamilies.any (·.1 == n.name) then
+        throw ⟨sp, s!"`{n.name}` is the family of {polyShown n.name}: its cases are written " ++
+          s!"`poly {(polyShown n.name).replace "`" ""} at T = …`"⟩
+      if fams.any (·.1 == n.name) then throw ⟨sp, s!"a second family `{n.name}`"⟩
+      if ds.any (fun | .def_ _ m _ _ _ _ => m.name == n.name | _ => false) then
+        throw ⟨sp, s!"`{n.name}` names a `poly` family and a function"⟩
+      let some T := tps.head? | throw ⟨sp, "internal error: a family's type parameter"⟩
+      fams := fams ++ [(n.name, (T, A, V))]
+  let mut tab : PolyTab := { fams := fams.map fun (n, (T, _)) => (n, T.name) }
+  let mut out : List Decl := []
+  let mut pairs : List (Decl × List Decl) := []
+  let mut k := 0
+  for d in ops ++ ds do
+    match d with
+    | .poly sp n tps _ none A V =>
+      let d' := Decl.def_ sp n tps A V (.template .none [])
+      out := out ++ [d']
+      pairs := pairs ++ [(d, [d'])]
+    | .poly sp n tps lps (some H) _ V =>
+      let some (T, A, FV) := fams.lookup n.name
+        | throw ⟨sp, s!"no family `poly {n.name}[T](…) -> …` is declared for this case"⟩
+      let S ← match V with
+        | .thunk _ S => pure S
+        | _ => throw ⟨sp, "internal error: a case's body"⟩
+      let name := s!"{n.name}__at{k}"
+      k := k + 1
+      let σ : TySubst := [(T.name, .name T.span "IoPolyT")]
+      let V' := (FV.subst σ).fill (fun _ => none) fun h => if h == "io_poly_body" then some S else none
+      let famLives := (splitLivesTy (match A with | .bang _ X => X | X => X)).1.map (·.1.name)
+      let d' := Decl.def_ sp ⟨name, n.span⟩ (⟨"IoPolyT", T.span⟩ :: tps) (A.subst σ) V' (.template .none [])
+      let pc : PolyCase := ⟨n.name, name, tps.map Ident.name, lps.map Ident.name, H, sp,
+        famLives.filter (S.mentionsLife ·)⟩
+      tab := { tab with cases := tab.cases ++ [pc] }
+      out := out ++ [d']
+      pairs := pairs ++ [(d, [d'])]
+    | d => out := out ++ [d]
+  pure (out, tab, pairs)
+
 /-- The program with its sugar elaborated, and the number of library declarations it begins
 with, recording the origins of generated code.  `[spec §11, §14]` -/
 def elaborateS (p : Program) : SM (Program × Nat) := do
@@ -4985,6 +5550,9 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let (ioDecls, incl₀) ← (if ioFirst then expandIncludes libNames.length
       [Decl.include Span.none ⟨"io", Span.none⟩] ([], []) else pure ([], []) : Except Error _)
   let (decls₀, incl) ← expandIncludes libNames.length p.decls (ioDecls, incl₀)
+  -- `poly` families and their cases (SPEC §36): templates, and the table that chooses a case.
+  let (decls₀, polys, polyPairs) ← (polyDecls decls₀ : Except Error _)
+  let p₀ : Program := ⟨p₀.decls.flatMap fun d => (polyPairs.lookup d).getD [d]⟩
   -- Hygiene (`Frontend/Elab/Hygiene.lean`): no local is named as a declaration of the program or
   -- of a library the elaboration may bring in, and a control handler's parameters are fresh.
   -- A library the elaboration brings in by itself is read only when it may: the I/O library
@@ -5046,7 +5614,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
     | .def_ _ m _ _ _ _ =>
       if (libNames ++ libFns).any (fun l => m.name.startsWith (l ++ "__")) then some m.name else none
     | _ => none)
-  let (decls, anyDiv) ← elabDivs typing p.decls libNames perTurn
+  let (decls, anyDiv) ← elabDivs typing p.decls libNames perTurn polys
   let rest := decls.filter fun | .main .. => false | _ => true
   let mc := TCx.ofScope (typing ++ rest ++ capDecls) true
   let mainLoops := match decls.findSome? (fun | .main _ C M => some (C, M) | _ => none) with

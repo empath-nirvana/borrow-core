@@ -1,0 +1,12 @@
+-- expect: 10:1: a second case of `(+)` at `i32 * i32`, the first at 8:1: a family has one case per type
+-- A family has one case per type (SPEC §36): a second case at a type that already has one is an
+-- error at its declaration, never a choice by order. `Complex` is a `type` abbreviation, so its
+-- case is the case at `i32 * i32`.
+
+type Complex = i32 * i32
+
+poly (+) at Complex = let (ar, ai) = a; let (br, bi) = b; (ar + br, ai + bi)
+
+poly (+) at i32 * i32 = let (ar, ai) = a; let (br, bi) = b; (ar + br, ai - bi)
+
+main -> Complex = (1, 2) + (3, 4)

@@ -14,10 +14,13 @@ aoc/2021-10 5 0 0
 aoc/2021-15 8 0 0
 aoc/2022-01 4 0 0
 aoc/2022-12 6 0 0
+aoc/2022-21 12 0 0 # the input string; the map from name to index (two arrays at 128 slots, doubled twice for the 165 names: six); the buffer of monkeys and its two doublings; the two arrays of values and marks
 aoc/2023-01 1 0 0
 aoc/2023-03 7 0 0
 aoc/2023-07 7 0 0
+aoc/2024-01 5 0 0 # the input string, the two lists' buffers, and the map's two arrays (sized for the 1000 numbers, so it never grows); a probe lends the key in a frame slot
 aoc/2024-02 2 0 0
+aoc/2024-11 271 0 0 # the input string; per count, the map's two arrays (sized for 5000 values, so they never grow) and its three buffers; per blink, the next `todo` buffer and the next counts' array; and the doublings of the `todo` buffers in the blinks with more than 64 new values
 array-empty 0 0 0
 array-get 2 0 0
 array-refs 5 0 0
@@ -173,6 +176,7 @@ iter-range 0 0 0
 json-tokens 1 0 0 # the input string; tokens are views, literal views read-only data
 key-value 2 0 0 # the input string and the buffer of view pairs
 labels-json 2 0 0 # the output string and the one escaped string (the owned side of the sum)
+leetcode/arrays/0001-two-sum 19 0 0 # the input string; per case, its buffer and the map's two arrays, sized for the case (Rust's `HashMap::with_capacity`)
 leetcode/arrays/0011-container-with-most-water 7 0 0 # the input string and each case's buffer
 leetcode/arrays/0015-3sum 13 0 0 # the input string, each case's buffer, and the buffer of its triples (one buffer of tuples, where Rust's `Vec<Vec<i32>>` allocates one per triple)
 leetcode/arrays/0033-search-in-rotated-sorted-array 8 0 0 # the input string and each case's buffer
@@ -180,6 +184,7 @@ leetcode/arrays/0053-maximum-subarray 7 0 0 # the input string and each case's b
 leetcode/arrays/0121-best-time-to-buy-and-sell-stock 8 0 0 # the input string and each case's buffer, as Rust's `Vec` per case
 leetcode/arrays/0152-maximum-product-subarray 8 0 0 # the input string and each case's buffer
 leetcode/arrays/0153-find-minimum-in-rotated-sorted-array 8 0 0 # the input string and each case's buffer
+leetcode/arrays/0217-contains-duplicate 13 0 0 # the input string; per case, its buffer and the set's slots (its values are `1`, an array of no words)
 leetcode/arrays/0238-product-of-array-except-self 11 0 0 # the input string, each case's buffer, and its answer array
 leetcode/binary/0190-reverse-bits 1 0 0 # the input string; nothing per case
 leetcode/binary/0191-number-of-1-bits 1 0 0 # the input string; nothing per case
@@ -197,6 +202,7 @@ leetcode/dp/0213-house-robber-ii 7 0 0 # the input string and each case's buffer
 leetcode/dp/0300-longest-increasing-subsequence 13 0 0 # the input string; per case the buffer and the tails
 leetcode/dp/0322-coin-change 15 0 0 # the input string; per case the buffer and the table
 leetcode/dp/1143-longest-common-subsequence 7 0 0 # the input string and each case's table; the texts are views of the line
+leetcode/graphs/0128-longest-consecutive-sequence 15 0 0 # the input string, the buffer of cases and one doubling of a case's buffer; per case, its buffer and the set's slots (no words for its values)
 leetcode/graphs/0133-clone-graph 38 0 0 # the input string; per case the line's numbers, both graphs' two arrays, the map from node to copy and the queue (an arena: Rust's is a pointer graph of `Rc`s and a `HashMap`)
 leetcode/graphs/0200-number-of-islands 25 0 0 # the input string; per case the line's numbers (the grid), the seen array and the queue, as Rust
 leetcode/graphs/0207-course-schedule 39 0 0 # the input string; per case the line's numbers, the graph's two arrays, the fill cursor, the counts and the queue (Rust's `Vec<Vec<usize>>` is a buffer per course)
@@ -205,6 +211,7 @@ leetcode/graphs/0269-alien-dictionary 37 0 0 # the input string; per case the ed
 leetcode/graphs/0323-number-of-connected-components 22 0 0 # the input string; per case the line's numbers and the parent and size arrays, as Rust
 leetcode/graphs/0417-pacific-atlantic-water-flow 31 0 0 # the input string; per case the line's numbers, two seen arrays and two queues, as Rust
 leetcode/heaps/0295-find-median-from-data-stream 28 0 0 # the input string; per case the two heaps and the buffer of its answers (#491: Rust would print them at once)
+leetcode/heaps/0347-top-k-frequent-elements 31 0 0 # the input string; per case, its buffer, the map's two arrays (sized for the case), the heap of `k + 1` and the answer's buffer
 leetcode/intervals/0056-merge-intervals 20 0 0 # the input string; per case the buffer of intervals and the merged one (none for the empty case), as Rust
 leetcode/intervals/0057-insert-interval 21 0 0 # the input string; per case the buffer of intervals and the result, as Rust
 leetcode/intervals/0252-meeting-rooms 11 0 0 # the input string; per case the buffer of meetings, as Rust
@@ -223,6 +230,7 @@ leetcode/matrix/0079-word-search 15 0 0 # the input string; per case the grid an
 leetcode/strings/0003-longest-substring-without-repeating-characters 2 0 0 # the input string and the table of last positions, reused (on the stack in Rust, #496)
 leetcode/strings/0005-longest-palindromic-substring 1 0 0 # the input string; the answers are views
 leetcode/strings/0020-valid-parentheses 2 0 0 # the input string and the stack, reused from case to case
+leetcode/strings/0049-group-anagrams 70 0 0 # the input string; per case, the buffer of words, the buffer of groups and the map's two arrays; per word, its key (a string), and per new group its buffer and its key made again for the insertion
 leetcode/strings/0076-minimum-window-substring 2 0 0 # the input string and the counts, reused (on the stack in Rust, #496); the answers are views
 leetcode/strings/0125-valid-palindrome 1 0 0 # the input string
 leetcode/strings/0242-valid-anagram 2 0 0 # the input string and the counts, reused (on the stack in Rust, #496)
@@ -257,12 +265,15 @@ list-generic 27 0 0 # the lists' nodes, one object each; no frame and no closure
 loop-row-answer 0 0 0
 main-lifetime 0 0 0 # main's lifetime and the unit cell `u` are cells of no words: nothing is allocated
 map-reuse 7 0 0
+map-views 24 0 0 # the eight values' buffers; the first map's arrays and one doubling; the second map's arrays and five doublings (16 to 512 slots for 200 keys)
 nats-sum 0 0 0
 needs-stdout 0 0 0 # nothing: the stdout cell is a word of the program's data
 operator-rounds 166 0 24 # the cluster's and the desired state's list nodes, rebuilt per update; the copies are the written `clone`s of the cluster and the spec
 parse-int 1 0 0 # the line buffer, reused; literal views read-only data
 parse-recover 246 0 31 # the token list's nodes and the lists rebuilt per statement; the copies are the written `clone(rest)` per statement
 pipe-handlers 0 0 0
+poly-operators 0 0 0 # a case of an operator is a direct call; nothing is allocated
+poly-providers 2 0 0 # the two strings; the comparisons read views and allocate nothing
 print-borrowed-array 1 0 0
 quicksort 2 0 0 # the data and the range stack; the output capability's cell is a word of the program's data
 rec-await-exhausted 3 0 0 # the two list cells, and the continuation of the one `await`, an object per level it suspends through
