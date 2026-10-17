@@ -1,0 +1,17 @@
+-- pending: refused #501
+-- now: 16:55: the iterator of this `for` holds the borrow of `v`: a borrow block over a loop lends its place again at each step, so what the loop holds between steps must not hold the borrow (SPEC §14, borrow scopes over loops)
+--
+-- A counted `for` over the view that a borrow of a buffer lends, written inline in the borrow
+-- block. The loop is total, bounded by the view's length (SPEC §16), as the same block over an
+-- array is; the source has no type when the elaboration decides whether the block's body loops, so
+-- it is read as a drain (as #491).
+--
+-- Once it lands: `i32[5]`, `live 0`.
+
+include buf
+include slice
+
+main -> i32 =
+  let (a, _) = push(box buf[i32](4), 5);
+  let s = borrow imm a { v -> let mut b = 0; for p in v { let x = *p; b = b + x }; b };
+  s

@@ -172,6 +172,30 @@ iter-range 0 0 0
 json-tokens 3 0 0 # the stdin and stdout cells and the input string; tokens are views, literal views read-only data
 key-value 4 0 0 # the stdin and stdout cells, the input string and the buffer of view pairs
 labels-json 3 0 0 # the stdout cell, the output string and the one escaped string (the owned side of the sum)
+leetcode/arrays/0011-container-with-most-water 9 0 0 # the stdin and stdout cells and the input string, and each case's buffer
+leetcode/arrays/0015-3sum 15 0 0 # the stdin and stdout cells and the input string, each case's buffer, and the buffer of its triples (one buffer of tuples, where Rust's `Vec<Vec<i32>>` allocates one per triple)
+leetcode/arrays/0033-search-in-rotated-sorted-array 10 0 0 # the stdin and stdout cells and the input string, and each case's buffer
+leetcode/arrays/0053-maximum-subarray 9 0 0 # the stdin and stdout cells and the input string, and each case's buffer
+leetcode/arrays/0121-best-time-to-buy-and-sell-stock 10 0 0 # the stdin and stdout cells and the input string, and each case's buffer, as Rust's `Vec` per case
+leetcode/arrays/0152-maximum-product-subarray 10 0 0 # the stdin and stdout cells and the input string, and each case's buffer
+leetcode/arrays/0153-find-minimum-in-rotated-sorted-array 10 0 0 # the stdin and stdout cells and the input string, and each case's buffer
+leetcode/arrays/0238-product-of-array-except-self 13 0 0 # the stdin and stdout cells and the input string, each case's buffer, and its answer array
+leetcode/binary/0190-reverse-bits 3 0 0 # the stdin and stdout cells and the input string; nothing per case
+leetcode/binary/0191-number-of-1-bits 3 0 0 # the stdin and stdout cells and the input string; nothing per case
+leetcode/binary/0268-missing-number 8 0 0 # the stdin and stdout cells and the input string, and each case's buffer
+leetcode/binary/0338-counting-bits 7 0 0 # the stdin and stdout cells and the input string, and each case's answer array
+leetcode/binary/0371-sum-of-two-integers 3 0 0 # the stdin and stdout cells and the input string; nothing per case
+leetcode/dp/0039-combination-sum 39 0 0 # the stdin and stdout cells and the input string; per case the candidates, the path and the answer's buffer, a copy of the path per combination (15), and the buffers that grow past their first capacity
+leetcode/dp/0055-jump-game 10 0 0 # the stdin and stdout cells and the input string, and each case's buffer
+leetcode/dp/0062-unique-paths 9 0 0 # the stdin and stdout cells and the input string, and each case's row
+leetcode/dp/0070-climbing-stairs 9 0 0 # the stdin and stdout cells and the input string, and each case's memo array
+leetcode/dp/0091-decode-ways 3 0 0 # the stdin and stdout cells and the input string; the case is solved on a view of the line, nothing per case
+leetcode/dp/0139-word-break 15 0 0 # the stdin and stdout cells and the input string; per case the buffer of the words' views and the array of flags
+leetcode/dp/0198-house-robber 9 0 0 # the stdin and stdout cells and the input string, and each case's buffer
+leetcode/dp/0213-house-robber-ii 9 0 0 # the stdin and stdout cells and the input string, and each case's buffer; the two rows are sub-views
+leetcode/dp/0300-longest-increasing-subsequence 15 0 0 # the stdin and stdout cells and the input string; per case the buffer and the tails
+leetcode/dp/0322-coin-change 17 0 0 # the stdin and stdout cells and the input string; per case the buffer and the table
+leetcode/dp/1143-longest-common-subsequence 9 0 0 # the stdin and stdout cells and the input string, and each case's table; the texts are views of the line
 leetcode/graphs/0133-clone-graph 40 0 0 # the stdin and stdout cells and the input string; per case the line's numbers, both graphs' two arrays, the map from node to copy and the queue (an arena: Rust's is a pointer graph of `Rc`s and a `HashMap`)
 leetcode/graphs/0200-number-of-islands 27 0 0 # the stdin and stdout cells and the input string; per case the line's numbers (the grid), the seen array and the queue, as Rust
 leetcode/graphs/0207-course-schedule 41 0 0 # the stdin and stdout cells and the input string; per case the line's numbers, the graph's two arrays, the fill cursor, the counts and the queue (Rust's `Vec<Vec<usize>>` is a buffer per course)
@@ -191,6 +215,10 @@ leetcode/lists/0023-merge-k-sorted-lists 45 0 0 # the stdin and stdout cells and
 leetcode/lists/0141-linked-list-cycle 20 0 0 # the stdin and stdout cells and the input string; per case the line's numbers and the `next` array (an arena: an owned list cannot have a cycle)
 leetcode/lists/0143-reorder-list 43 0 0 # the stdin and stdout cells and the input string; per case the line's numbers, a cell per node, and the cell the lend `&l` makes for the length's fold (none in Rust)
 leetcode/lists/0206-reverse-linked-list 34 0 0 # the stdin and stdout cells and the input string; per case the line's numbers and a cell per node, as Rust's `Box`es; the reversal allocates nothing
+leetcode/matrix/0048-rotate-image 7 0 0 # the stdin and stdout cells and the input string, and each case's buffer, rotated in place
+leetcode/matrix/0054-spiral-matrix 17 0 0 # the stdin and stdout cells and the input string; per case the buffer and the answer's
+leetcode/matrix/0073-set-matrix-zeroes 21 0 0 # the stdin and stdout cells and the input string; per case the buffer and the two arrays of flags
+leetcode/matrix/0079-word-search 17 0 0 # the stdin and stdout cells and the input string; per case the grid and the word, owned to be threaded through the recursion
 leetcode/strings/0003-longest-substring-without-repeating-characters 4 0 0 # the stdin and stdout cells, the input string and the table of last positions, reused (on the stack in Rust, #496)
 leetcode/strings/0005-longest-palindromic-substring 3 0 0 # the stdin and stdout cells and the input string; the answers are views
 leetcode/strings/0020-valid-parentheses 4 0 0 # the stdin and stdout cells, the input string and the stack, reused from case to case

@@ -1,0 +1,72 @@
+-- LeetCode 91, Decode Ways.
+--
+-- One pass over the digits keeping the decodings of the prefix that ends at the previous digit and
+-- at the one before: a digit other than `0` extends the first, and a two-digit code from 10 to 26
+-- extends the second. A case is the digits.
+--
+-- Each line of the input is a case, and its answer is printed on a line of its own. `cases` holds
+-- the input and the offset of the next line; each turn lends the input to read one line
+-- (`case_at`), and the case is solved on what was read, outside the lend. A loop over the lines of
+-- the lent input, `for l in lines(t)`, would hold the borrow across its turns, the spanning lend
+-- (#172, SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161). The case is
+-- solved inside the lend, on views of the line, so its code is total (SPEC §14).
+--
+-- Answer on `0091-decode-ways.in`: `2 3 0 1 1 2 1 89`, one per line, then `i32[8]`, the number of
+-- cases.
+
+include textio
+
+fn num_decodings<'a>(s: text 'a) -> i32 =
+  let mut before = 0;
+  let mut prev = 1;
+  let mut last = 0;
+  for p in s {
+    let d = to_i32(*p) - 48;
+    let two = last * 10 + d;
+    let mut cur = 0;
+    if d != 0 { cur = prev } else { () };
+    if 10 <= two && two <= 26 { cur = cur + before } else { () };
+    before = prev;
+    prev = cur;
+    last = d
+  };
+  prev
+
+-- The answer to the case on the line that starts at `pos`, and where the next line starts; or `inr
+-- ()` at the end of the input. The case is solved on the lent line.
+fn case_at<'t>(t: text 't, pos: i32) -> (i32 * i32) + 1 =
+  match split_at(t, pos) {
+    inl (h, rest) ->
+      array_forget['t, u8](h);
+      match next_line(rest) {
+        inl (l, r) ->
+          array_forget['t, u8](r);
+          let (l, m) = array_copy['t, u8] l;
+          let c = num_decodings(trim(l));
+          inl (c, pos + len(m) + 1)
+      | inr u -> inr ()
+      }
+  | inr t -> array_forget['t, u8](t); inr ()
+  }
+
+-- Each line of the input a case. The number of cases.
+fn cases(s: string) -> string * i32 =
+  let mut s = s;
+  let mut pos = 0;
+  let mut count = 0;
+  loop {
+    let c = borrow imm s { 't, t -> case_at(t, pos) };
+    match c {
+      inl (r, next) ->
+        print_dec(r);
+        print_byte(b'\n');
+        pos = next;
+        count = count + 1
+    | inr u -> break
+    }
+  };
+  (s, count)
+
+main -> i32 =
+  let (s, count) = cases(read_input());
+  count

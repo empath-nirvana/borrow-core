@@ -1,0 +1,101 @@
+-- LeetCode 73, Set Matrix Zeroes.
+--
+-- Two passes: mark the rows and the columns that hold a zero, in two arrays of flags, then zero
+-- every element whose row or column is marked, in place.
+--
+-- The matrix is one flat array, row by row, with its width: element `(i, j)` is at `i * w + j`, as
+-- there is no 2D type or indexing (#143). A case is the rows, separated by `;`.
+--
+-- Each line of the input is a case, and its answer is printed on a line of its own. `cases` holds
+-- the input and the offset of the next line; each turn lends the input to read one line
+-- (`case_at`), and the case is solved on what was read, outside the lend. A loop over the lines of
+-- the lent input, `for l in lines(t)`, would hold the borrow across its turns, the spanning lend
+-- (#172, SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161).
+--
+-- Answer on `0073-set-matrix-zeroes.in`: each case's matrix, rows separated by `;`, one case per
+-- line, then `i32[6]`, the number of cases.
+
+include textio
+
+fn set_zeroes(a: array i32, n: i32, w: i32) -> array i32 =
+  let h = if w == 0 { 0 } else { match host[div_u32](n, w) { inl q -> q | inr u -> 0 } };
+  let mut a = a;
+  let mut rows = array_new[bool] (h, !{ i -> false });
+  let mut cols = array_new[bool] (w, !{ j -> false });
+  for i in 0..h {
+    for j in 0..w {
+      let x = at(&a, i * w + j, 1);
+      if x == 0 { rows = array_set(rows, i, true); cols = array_set(cols, j, true) } else { () }
+    }
+  };
+  for i in 0..h {
+    for j in 0..w {
+      let r = at(&rows, i, false);
+      let c = at(&cols, j, false);
+      if r || c { a = array_set(a, i * w + j, 0) } else { () }
+    }
+  };
+  a
+
+-- The width of a matrix written row by row, separated by `;`: the numbers before the first `;`.
+fn width<'t>(l: text 't) -> i32 =
+  match split_once(l, b';') {
+    inl (h, t) -> array_forget['t, u8](t); fold_i32s(h, !{ (x, n) -> n + 1 }, 0)
+  | inr l -> fold_i32s(l, !{ (x, n) -> n + 1 }, 0)
+  }
+
+-- The numbers written in `l`, in a buffer.
+fn nums<'t>(l: text 't) -> buf i32 =
+  fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](16))
+
+-- The matrix, its rows separated by `;`, its elements by spaces.
+fn print_matrix(a: array i32, n: i32, w: i32) -> array i32 =
+  let mut col = 0;
+  for i in 0..n {
+    if 0 < i { if col == 0 { print_byte(b';') } else { print_byte(b' ') } } else { () };
+    let x = at(&a, i, 0);
+    print_dec(x);
+    col = col + 1;
+    if col == w { col = 0 } else { () }
+  };
+  a
+
+-- The case on the line that starts at `pos`, and where the next line starts; or `inr ()` at the end
+-- of the input.
+fn case_at<'t>(t: text 't, pos: i32) -> ((buf i32 * i32) * i32) + 1 =
+  match split_at(t, pos) {
+    inl (h, rest) ->
+      array_forget['t, u8](h);
+      match next_line(rest) {
+        inl (l, r) ->
+          array_forget['t, u8](r);
+          let (l, m) = array_copy['t, u8] l;
+          let (l, l2) = array_copy['t, u8] l;
+          let c = (nums(l), width(l2));
+          inl (c, pos + len(m) + 1)
+      | inr u -> inr ()
+      }
+  | inr t -> array_forget['t, u8](t); inr ()
+  }
+
+-- Each line of the input a case. The number of cases.
+fn cases(s: string) -> string * i32 =
+  let mut s = s;
+  let mut pos = 0;
+  let mut count = 0;
+  loop {
+    let c = borrow imm s { 't, t -> case_at(t, pos) };
+    match c {
+      inl (((a, n), w), next) ->
+        let a = print_matrix(set_zeroes(a, n, w), n, w);
+        print_byte(b'\n');
+        pos = next;
+        count = count + 1
+    | inr u -> break
+    }
+  };
+  (s, count)
+
+main -> i32 =
+  let (s, count) = cases(read_input());
+  count

@@ -1,0 +1,68 @@
+-- LeetCode 153, Find Minimum in Rotated Sorted Array.
+--
+-- Binary search for the rotation point: the minimum is right of `mid` when `a[mid] > a[hi]`. The
+-- midpoint is `lo + (hi - lo) >> 1`, written `host[shr_u32]` (#144); the array is read with `at(&a,
+-- i, d)` on the owned buffer and handed back, as a view could be read only once (#142).
+--
+-- Each line of the input is a case, and its answer is printed on a line of its own. `cases` holds
+-- the input and the offset of the next line; each turn lends the input to read one line
+-- (`case_at`), and the case is solved on what was read, outside the lend. A loop over the lines of
+-- the lent input, `for l in lines(t)`, would hold the borrow across its turns, the spanning lend
+-- (#172, SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161).
+--
+-- Answer on `0153-find-minimum-in-rotated-sorted-array.in`: `1 0 11 1 1 1 1`, one per line, then
+-- `i32[7]`, the number of cases.
+
+include textio
+
+fn find_min(a: array i32, n: i32) -> array i32 * i32 =
+  let mut lo = 0;
+  let mut hi = n - 1;
+  while lo < hi {
+    let mid = lo + host[shr_u32](hi - lo, 1);
+    let x = at(&a, mid, 0);
+    let y = at(&a, hi, 0);
+    if y < x { lo = mid + 1 } else { hi = mid }
+  };
+  let r = at(&a, lo, 0);
+  (a, r)
+
+-- The case on the line that starts at `pos`, and where the next line starts; or `inr ()` at the end
+-- of the input.
+fn case_at<'t>(t: text 't, pos: i32) -> (buf i32 * i32) + 1 =
+  match split_at(t, pos) {
+    inl (h, rest) ->
+      array_forget['t, u8](h);
+      match next_line(rest) {
+        inl (l, r) ->
+          array_forget['t, u8](r);
+          let (l, m) = array_copy['t, u8] l;
+          let c = fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](16));
+          inl (c, pos + len(m) + 1)
+      | inr u -> inr ()
+      }
+  | inr t -> array_forget['t, u8](t); inr ()
+  }
+
+-- Each line of the input a case. The number of cases.
+fn cases(s: string) -> string * i32 =
+  let mut s = s;
+  let mut pos = 0;
+  let mut count = 0;
+  loop {
+    let c = borrow imm s { 't, t -> case_at(t, pos) };
+    match c {
+      inl ((a, k), next) ->
+        let (a, r) = find_min(a, k);
+        print_dec(r);
+        print_byte(b'\n');
+        pos = next;
+        count = count + 1
+    | inr u -> break
+    }
+  };
+  (s, count)
+
+main -> i32 =
+  let (s, count) = cases(read_input());
+  count

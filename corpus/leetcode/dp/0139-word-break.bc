@@ -1,0 +1,109 @@
+-- LeetCode 139, Word Break.
+--
+-- Bottom-up over the prefixes: the prefix of length `i` can be split when, for some word, the
+-- prefix before it can and the word ends at `i`. The words are views of the line in a buffer (`buf
+-- (text 't)`), as Rust would hold `&str`s, and are compared in place (`starts_with`). A case is the
+-- text, `|`, and the words, separated by spaces. A view is read once, so each read of the text or a
+-- word is of a copy (`array_copy`, `view_at`, #142).
+--
+-- Each line of the input is a case, and its answer is printed on a line of its own. `cases` holds
+-- the input and the offset of the next line; each turn lends the input to read one line
+-- (`case_at`), and the case is solved on what was read, outside the lend. A loop over the lines of
+-- the lent input, `for l in lines(t)`, would hold the borrow across its turns, the spanning lend
+-- (#172, SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161). The case is
+-- solved inside the lend, on views of the line, so its code is total (SPEC §14).
+--
+-- Answer on `0139-word-break.in`: `true true false true false true`, one per line, then `i32[6]`,
+-- the number of cases.
+
+include textio
+
+-- The words of `t`, separated by spaces, as views.
+fn words<'t>(t: text 't) -> buf (text 't) =
+  let (t, u) = array_copy['t, u8] t;
+  let mut ws = box buf[text 't](8);
+  let mut rest = t;
+  for _ in 0..len(u) + 1 {
+    let r = skip_while(rest, is_space);
+    match split_once(r, b' ') {
+      inl (w, r) -> let (b, _) = push(ws, w); ws = b; rest = r
+    | inr w ->
+        let (w, w2) = array_copy['t, u8] w;
+        if len(w2) == 0 { array_forget['t, u8](w) } else { let (b, _) = push(ws, w); ws = b };
+        rest = slice_empty_imm['t, u8];
+        break
+    }
+  };
+  array_forget['t, u8](rest);
+  ws
+
+fn word_break<'t>(s: text 't, ws: buf (text 't)) -> bool =
+  let (s, s2) = array_copy['t, u8] s;
+  let n = len(s2);
+  let (ws, k) = len_of(ws);
+  let mut ws = ws;
+  let mut s = s;
+  let mut ok = array_set(array_new[bool] (n + 1, !{ i -> false }), 0, true);
+  for i in 0..n {
+    let here = at(&ok, i, false);
+    if here {
+      let (s1, s3) = array_copy['t, u8] s;
+      s = s1;
+      let rest = match split_at(s3, i) { inl (h, r) -> array_forget['t, u8](h); r | inr r -> r };
+      let mut rest = rest;
+      for j in 0..k {
+        let (b, w) = view_at(ws, j);
+        ws = b;
+        let (w, w2) = array_copy['t, u8] w;
+        let (r1, r2) = array_copy['t, u8] rest;
+        rest = r1;
+        if starts_with(r2, w, eq_u8) { ok = array_set(ok, i + len(w2), true) } else { () }
+      };
+      array_forget['t, u8](rest)
+    } else { () }
+  };
+  array_forget['t, u8](s);
+  let r = at(&ok, n, false);
+  r
+
+-- The answer to the case on the line that starts at `pos`, and where the next line starts; or `inr
+-- ()` at the end of the input. The case is solved on the lent line.
+fn case_at<'t>(t: text 't, pos: i32) -> (i32 * i32) + 1 =
+  match split_at(t, pos) {
+    inl (h, rest) ->
+      array_forget['t, u8](h);
+      match next_line(rest) {
+        inl (l, r) ->
+          array_forget['t, u8](r);
+          let (l, m) = array_copy['t, u8] l;
+          let c = match split_once(l, b'|') {
+            inl (s, ws) -> if word_break(trim(s), words(ws)) { 1 } else { 0 }
+          | inr l -> array_forget['t, u8](l); 0
+          };
+          inl (c, pos + len(m) + 1)
+      | inr u -> inr ()
+      }
+  | inr t -> array_forget['t, u8](t); inr ()
+  }
+
+-- Each line of the input a case. The number of cases.
+fn cases(s: string) -> string * i32 =
+  let mut s = s;
+  let mut pos = 0;
+  let mut count = 0;
+  loop {
+    let c = borrow imm s { 't, t -> case_at(t, pos) };
+    match c {
+      inl (r, next) ->
+        if r == 1 { print_lit("true") } else { print_lit("false") };
+        print_byte(b'\n');
+        pos = next;
+        count = count + 1
+    | inr u -> break
+    }
+  };
+  (s, count)
+
+main -> i32 =
+  let (s, count) = cases(read_input());
+  count

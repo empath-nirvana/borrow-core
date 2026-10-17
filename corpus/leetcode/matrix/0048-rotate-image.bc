@@ -1,0 +1,99 @@
+-- LeetCode 48, Rotate Image.
+--
+-- A quarter turn clockwise, in place, through an exclusive view of the square matrix: transpose it
+-- (`swap_at` above the diagonal), then reverse each row, each a sub-view split off the rest
+-- (`split_at_mut`) and reversed by the library's `reverse`.
+--
+-- The matrix is one flat array, row by row, with its width: element `(i, j)` is at `i * w + j`, as
+-- there is no 2D type or indexing (#143). A case is the rows, separated by `;`.
+--
+-- Each line of the input is a case, and its answer is printed on a line of its own. `cases` holds
+-- the input and the offset of the next line; each turn lends the input to read one line
+-- (`case_at`), and the case is solved on what was read, outside the lend. A loop over the lines of
+-- the lent input, `for l in lines(t)`, would hold the borrow across its turns, the spanning lend
+-- (#172, SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161).
+--
+-- Answer on `0048-rotate-image.in`: each case's rotated matrix, rows separated by `;`, one case per
+-- line, then `i32[4]`, the number of cases.
+
+include textio
+
+fn rotate<'a>(v: array_mut 'a i32, w: i32) -> array_mut 'a i32 =
+  let mut v = v;
+  for i in 0..w {
+    for j in i + 1..w { v = swap_at(v, i * w + j, j * w + i) }
+  };
+  let (v, n) = len_mut(v);
+  let mut rest = v;
+  for _ in 0..w {
+    match split_at_mut(rest, w) {
+      inl (row, r) -> discard_mut(reverse(row)); rest = r
+    | inr r -> rest = r
+    }
+  };
+  rest
+
+-- The width of a matrix written row by row, separated by `;`: the numbers before the first `;`.
+fn width<'t>(l: text 't) -> i32 =
+  match split_once(l, b';') {
+    inl (h, t) -> array_forget['t, u8](t); fold_i32s(h, !{ (x, n) -> n + 1 }, 0)
+  | inr l -> fold_i32s(l, !{ (x, n) -> n + 1 }, 0)
+  }
+
+-- The numbers written in `l`, in a buffer.
+fn nums<'t>(l: text 't) -> buf i32 =
+  fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](16))
+
+-- The matrix, its rows separated by `;`, its elements by spaces.
+fn print_matrix(a: array i32, n: i32, w: i32) -> array i32 =
+  let mut col = 0;
+  for i in 0..n {
+    if 0 < i { if col == 0 { print_byte(b';') } else { print_byte(b' ') } } else { () };
+    let x = at(&a, i, 0);
+    print_dec(x);
+    col = col + 1;
+    if col == w { col = 0 } else { () }
+  };
+  a
+
+-- The case on the line that starts at `pos`, and where the next line starts; or `inr ()` at the end
+-- of the input.
+fn case_at<'t>(t: text 't, pos: i32) -> ((buf i32 * i32) * i32) + 1 =
+  match split_at(t, pos) {
+    inl (h, rest) ->
+      array_forget['t, u8](h);
+      match next_line(rest) {
+        inl (l, r) ->
+          array_forget['t, u8](r);
+          let (l, m) = array_copy['t, u8] l;
+          let (l, l2) = array_copy['t, u8] l;
+          let c = (nums(l), width(l2));
+          inl (c, pos + len(m) + 1)
+      | inr u -> inr ()
+      }
+  | inr t -> array_forget['t, u8](t); inr ()
+  }
+
+-- Each line of the input a case. The number of cases.
+fn cases(s: string) -> string * i32 =
+  let mut s = s;
+  let mut pos = 0;
+  let mut count = 0;
+  loop {
+    let c = borrow imm s { 't, t -> case_at(t, pos) };
+    match c {
+      inl (((a, n), w), next) ->
+        let mut a = a;
+        borrow mut a { 'x, v -> discard_mut(rotate(v, w)) };
+        let a = print_matrix(a, n, w);
+        print_byte(b'\n');
+        pos = next;
+        count = count + 1
+    | inr u -> break
+    }
+  };
+  (s, count)
+
+main -> i32 =
+  let (s, count) = cases(read_input());
+  count

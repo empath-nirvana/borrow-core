@@ -1,0 +1,86 @@
+-- pending: generic hash map (#211, the generics design pass #489)
+-- now: 29:3: the loop threads `seen`, whose type is not determined: ascribe it
+--
+-- LeetCode 1, Two Sum.
+--
+-- One pass with a map from each number seen to its index: at `x`, the index of `target - x` if it
+-- was seen, else `x` is added. The map is the library's generic hash map with the derived hash and
+-- equality of its key (#211), as `corpus/pending/aoc-2024-01.bc` writes it: `map_new[K, V](cap)`,
+-- `map_insert(&mut m, k, v)` answering the value it displaces, and `map_get(&m, k)` a copy of a
+-- persistent value. There is no generic map yet, so the first use of one is refused; the message is
+-- about the type of the loop's state, which the map's type would give. Checked with a throwaway
+-- stand-in map (a linear scan of a `buf (i32 * i32)`, not committed), it gives the answer below. A
+-- case is the numbers, `|`, and the target.
+--
+-- Each line of the input is a case, and its answer is printed on a line of its own. `cases` holds
+-- the input and the offset of the next line; each turn lends the input to read one line
+-- (`case_at`), and the case is solved on what was read, outside the lend. A loop over the lines of
+-- the lent input, `for l in lines(t)`, would hold the borrow across its turns, the spanning lend
+-- (#172, SPEC §14 *Not covered*), and a `fold_lines` callback cannot print (#161).
+--
+-- Once it lands: on `corpus/leetcode/arrays/0001-two-sum.in`, `0 1 1 2 0 1 2 4 none 0 3`, one pair
+-- per line, then `i32[6]`; `live 0`.
+
+include textio
+
+fn two_sum(a: array i32, n: i32, target: i32) -> array i32 * (i32 * i32 + 1) =
+  let mut seen = map_new[i32, i32](n);
+  let mut r : (i32 * i32) + 1 = inr ();
+  for i in 0..n {
+    let x = at(&a, i, 0);
+    let j = map_get(&seen, target - x);
+    match j { inl j -> r = (inl (j, i) : (i32 * i32) + 1); break | inr u -> () };
+    let old = map_insert(&mut seen, x, i);
+    ()
+  };
+  (a, r)
+
+-- The numbers written in `l`, in a buffer.
+fn nums<'t>(l: text 't) -> buf i32 =
+  fold_i32s(l, !{ (x, b) -> let (b, _) = push(b, x); b }, box buf[i32](16))
+
+-- The case on the line that starts at `pos`, and where the next line starts; or `inr ()` at the end
+-- of the input.
+fn case_at<'t>(t: text 't, pos: i32) -> ((buf i32 * i32) * i32) + 1 =
+  match split_at(t, pos) {
+    inl (h, rest) ->
+      array_forget['t, u8](h);
+      match next_line(rest) {
+        inl (l, r) ->
+          array_forget['t, u8](r);
+          let (l, m) = array_copy['t, u8] l;
+          let c = match split_once(l, b'|') {
+            inl (x, y) -> (nums(x), fold_i32s(y, !{ (x, b) -> x }, 0))
+          | inr l -> (nums(l), 0)
+          };
+          inl (c, pos + len(m) + 1)
+      | inr u -> inr ()
+      }
+  | inr t -> array_forget['t, u8](t); inr ()
+  }
+
+-- Each line of the input a case. The number of cases.
+fn cases(s: string) -> string * i32 =
+  let mut s = s;
+  let mut pos = 0;
+  let mut count = 0;
+  loop {
+    let c = borrow imm s { 't, t -> case_at(t, pos) };
+    match c {
+      inl (((a, k), target), next) ->
+        let (a, r) = two_sum(a, k, target);
+        match r {
+          inl (i, j) -> print_dec(i); print_byte(b' '); print_dec(j)
+        | inr u -> print_lit("none")
+        };
+        print_byte(b'\n');
+        pos = next;
+        count = count + 1
+    | inr u -> break
+    }
+  };
+  (s, count)
+
+main -> i32 =
+  let (s, count) = cases(read_input());
+  count
