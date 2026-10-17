@@ -27,6 +27,8 @@ in `Backend/README.md`:
   left out (SPEC §34): `$args` reads them once, with `args_sizes_get` and `args_get`, into memory
   `$reserve` takes from the heap (it is no range, and is never freed, but counts as one
   allocation in `$allocs`), and `$getc` and `$getv` read from there.
+- `$exit code` ends the run with the exit status `code` (WASI `proc_exit`; `exit(3)` in libc):
+  the entry's last act when an arithmetic error reached `main` (SPEC §38).
 - `$sp` is the stack pointer of the frames of scoped cells (SPEC §35): a function with a frame
   lowers it by the frame's size on entry, trapping when it would pass `$stackLimit`, and raises it
   back before it returns or tail-calls (`Backend/Wasm/Lower.lean`, `lowerFn`). A slot is no range
@@ -62,6 +64,8 @@ def runtimeWat : String := "
     (func $args_sizes_get (param i32 i32) (result i32)))
   (import \"wasi_snapshot_preview1\" \"args_get\"
     (func $args_get (param i32 i32) (result i32)))
+  (import \"wasi_snapshot_preview1\" \"proc_exit\"
+    (func $proc_exit (param i32)))
   (memory (export \"memory\") 1)
   (global $heap (mut i32) (i32.const 16376))
   (global $sp (mut i64) (i64.const 0))
@@ -117,6 +121,9 @@ def runtimeWat : String := "
 
   (func $live (export \"live_objects\") (result i64)
     (global.get $live))
+
+  (func $exit (param $code i64)
+    (call $proc_exit (i32.wrap_i64 (local.get $code))))
 
   (func $putc (param $b i64)
     (call $putfd (i64.const 1) (local.get $b)))

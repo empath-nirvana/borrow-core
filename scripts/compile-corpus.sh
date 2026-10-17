@@ -7,8 +7,9 @@
 # argument per line, as its arguments (SPEC §34; none if there is no such file). At the closure-IR
 # and flat-IR interpreters (`bcc interp --stage clos|flat`) and in WebAssembly under wasmtime
 # (`bcc run`), its whole standard output, the program's bytes followed by the report `live N`,
-# must equal `<name>.out`, and its standard error `<name>.err` (empty if there is none). The
-# first stage that differs is named. The report must be `live 0`: no object is live once the
+# must equal `<name>.out`, its standard error `<name>.err` (empty if there is none), and its exit
+# status `<name>.status` (`0` if there is none: a program that an arithmetic error ends exits with
+# `1`, SPEC §38). The first stage that differs is named. The report must be `live 0`: no object is live once the
 # value is dropped. (The source counts cells, the compiled stages all objects, so the two agree
 # when either is 0.)
 #
@@ -23,9 +24,10 @@
 # the golden: `make gate-full` re-verifies every golden this way. With `BCC_SOURCE=0` it never
 # runs (`ci-local.sh --changed`), and the unverified programs are listed.
 #
-# `--write-goldens` (`make goldens`) writes `<name>.out` and `<name>.err` (removed when empty)
-# from the source stage, and only from it: a golden is never a compiled stage's output. It
-# refuses a program that fails or leaves cells live.
+# `--write-goldens` (`make goldens`) writes `<name>.out`, `<name>.err` (removed when empty) and
+# `<name>.status` (removed when `0`) from the source stage, and only from it: a golden is never a
+# compiled stage's output. It refuses a program that fails or leaves cells live; a nonzero exit
+# status is the program's only when the stage wrote its report (`live N`).
 #
 # A program marked `-- check: no-source` is too large for the source interpreter
 # (`corpus/deep-list.bc`): its golden is written by hand, and it is run at every other stage.
@@ -79,6 +81,11 @@ argsOf() {
   [ -f "$a" ] || return 0
   while IFS= read -r line || [ -n "$line" ]; do args+=("$line"); done < "$a"
 }
+# The exit status program $1 must end with: `<name>.status`, else `0`.
+statusOf() {
+  local s=${1%.bc}.status
+  if [ -f "$s" ]; then tr -d ' \n' < "$s"; else echo 0; fi
+}
 # Whether file $1 is a program the corpus runs; if not, says why.
 runnable() {
   if grep -q '^-- check: parse-only' "$1"; then echo "$1: parse-only, skipped"; return 1; fi
@@ -94,7 +101,9 @@ golden() {
   fi
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
   argsOf "$f"
-  if ! "$bcc" interp "$f" -- "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err"; then
+  local rc=0
+  "$bcc" interp "$f" -- "${args[@]+"${args[@]}"}" < "$in" > "$w/out" 2> "$w/err" || rc=$?
+  if [ "$rc" != 0 ] && ! grep -q '^live ' "$w/out"; then
     echo "$f: the source interpreter fails, golden not written: $(head -3 "$w/err")"; return 1
   fi
   if [ "$(tail -1 "$w/out")" != "live 0" ]; then
@@ -102,10 +111,11 @@ golden() {
   fi
   cp "$w/out" "$base.out"
   if [ -s "$w/err" ]; then cp "$w/err" "$base.err"; else rm -f "$base.err"; fi
-  echo "$f: wrote $base.out$([ -s "$w/err" ] && echo " and $base.err")"
+  if [ "$rc" != 0 ]; then echo "$rc" > "$base.status"; else rm -f "$base.status"; fi
+  echo "$f: wrote $base.out$([ -s "$w/err" ] && echo " and $base.err")$([ "$rc" != 0 ] && echo " and $base.status ($rc)")"
 }
 if [ "$goldens" = 1 ]; then
-  export -f runnable golden argsOf
+  export -f runnable golden argsOf statusOf
   par golden "${files[@]}"
   echo "$par_failed failure(s)."
   [ "$par_failed" -eq 0 ]
@@ -139,12 +149,15 @@ counts() {
     cnt="$cnt (below $expected's $wa, $wi, $wc: lower it)"
   fi
 }
-# Run stage $1 of file $2 on input $3 into $w/out and $w/err.
+# Run stage $1 of file $2 on input $3 into $w/out and $w/err; it fails unless it ends with the
+# program's exit status (`statusOf`).
 runStage() {
+  local rc=0
   argsOf "$2"
-  if [ "$1" = wasm ]; then "$bcc" run "$2" "${args[@]+"${args[@]}"}" < "$3" > "$w/out" 2> "$w/err"
-  elif [ "$1" = source ]; then "$bcc" interp "$2" -- "${args[@]+"${args[@]}"}" < "$3" > "$w/out" 2> "$w/err"
-  else "$bcc" interp --stage "$1" "$2" -- "${args[@]+"${args[@]}"}" < "$3" > "$w/out" 2> "$w/err"; fi
+  if [ "$1" = wasm ]; then "$bcc" run "$2" "${args[@]+"${args[@]}"}" < "$3" > "$w/out" 2> "$w/err" || rc=$?
+  elif [ "$1" = source ]; then "$bcc" interp "$2" -- "${args[@]+"${args[@]}"}" < "$3" > "$w/out" 2> "$w/err" || rc=$?
+  else "$bcc" interp --stage "$1" "$2" -- "${args[@]+"${args[@]}"}" < "$3" > "$w/out" 2> "$w/err" || rc=$?; fi
+  [ "$rc" = "$(statusOf "$2")" ]
 }
 # Whether the source stage runs on program $1 (scripts/source-stage.sh); reports an unverified
 # golden it does not run on.
@@ -152,11 +165,11 @@ withSource() {
   local f=$1 base=${1%.bc}
   case "$BCC_SOURCE" in
     1) return 0 ;;
-    0) if unverified "$f" "$base.in" "$base.out" "$base.err"; then
+    0) if unverified "$f" "$base.in" "$base.out" "$base.err" "$base.status"; then
          echo "$f: unverified: changed since $source_base, not run at the source stage (scripts/compile-corpus.sh $f runs it)"
        fi
        return 1 ;;
-    *) unverified "$f" "$base.in" "$base.out" "$base.err" ;;
+    *) unverified "$f" "$base.in" "$base.out" "$base.err" "$base.status" ;;
   esac
 }
 # One corpus program, run at every stage and counted (in parallel, by `par`; its scratch
@@ -180,7 +193,7 @@ program() {
   fi
   for st in $stages; do
     if ! runStage "$st" "$f" "$in"; then
-      echo "$f: stage $st fails: $(head -3 "$w/err")"; ok=0; break
+      echo "$f: stage $st fails, or does not exit with status $(statusOf "$f"): $(head -3 "$w/err")"; ok=0; break
     fi
     if ! cmp -s "$w/out" "$base.out" || ! cmp -s "$w/err" "$err"; then
       echo "$f: stage $st differs from $base.out or from its standard error"
@@ -214,7 +227,7 @@ bigcat() {
   done
   if [ "$ok" = 1 ]; then echo "corpus/io-cat.bc: a $(wc -c < "$w/big.in" | tr -d ' ')-byte input copied whole at $(echo $stages | tr ' ' ,)"; else return 1; fi
 }
-export -f counts runStage withSource runnable program argsOf
+export -f counts runStage withSource runnable program argsOf statusOf
 bigpid=""
 case " ${files[*]} " in *" corpus/io-cat.bc "*) bigcat > "$tmp/bigcat.log" 2>&1 & bigpid=$! ;; esac
 par program "${files[@]}"

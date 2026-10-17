@@ -1,0 +1,15 @@
+-- pending: #155 (named instances: two instances of an effect in a row)
+-- `arith_fail` raises an arithmetic error as `Fail[ArithError]` (SPEC §38), for `Fail`'s handlers.
+-- Under it, a function that raises its own `Fail[i32]` performs two instances of `Fail`, which a
+-- row cannot hold (SPEC §18 *Not provided*). `arith_into(f)` raises the error as the program's own
+-- `Fail[i32]` instead (`corpus/div-own-fail.bc`); this program needs the two kept apart.
+
+include fail
+include arith
+
+fn mean(sum: i32, n: i32) -> i32 with Fail[i32], Arith =
+  if n < 0 { raise(n) } else { sum / n }
+
+main -> (i32 + i32) + ArithError =
+  with to_result[ArithError, i32 + i32] { with to_result[i32, i32] { with arith_fail { mean(20, 0) } } }
+-- now: 14:70: `arith_fail` performs `Fail` at a type other than the handler of `Fail` in scope here

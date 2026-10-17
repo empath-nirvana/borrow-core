@@ -39,7 +39,7 @@ gate-full: | tools
 gate-fast: | tools
 	scripts/ci-local.sh --changed
 
-# Rewrite every corpus golden (`.out`, `.err`) from `Support`'s interpreter.
+# Rewrite every corpus golden (`.out`, `.err`, `.status`) from `Support`'s interpreter.
 goldens: | tools
 	scripts/compile-corpus.sh --write-goldens
 

@@ -1,0 +1,29 @@
+effect 17:1: Fail: raise (ctl, affine, abortive)
+effect 27:1: Arith: arith_raise (ctl, affine, abortive)
+row 23:1: mean: Arith, Fail[i32]
+lowering 23:1: copy `mean__n2_n1`: `mean` for the site 2 of `Arith`, the site 1 of `Fail`
+lowering 23:1: copy `mean__n6_n5`: `mean` for the site 6 of `Arith`, the site 5 of `Fail`
+lowering 23:1: copy `mean__n4_n3`: `mean` for the site 4 of `Arith`, the site 3 of `Fail`
+lowering 26:43: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 26:43: with to_result (Fail): a handler, the static name 1; raise abortive: a branch per call (final ctl)
+lowering 26:60: with arith_default: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 26:60: with arith_default (Arith): a handler, the static name 2; arith_raise abortive: a branch per call (final ctl)
+lowering 29:3: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 29:3: with to_result (Fail): a handler, the static name 3; raise abortive: a branch per call (final ctl)
+lowering 29:20: with arith_into (Arith): a handler, the static name 4; arith_raise abortive: a branch per call (final ctl)
+lowering 29:20: with arith_into: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 34:11: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 34:11: with to_result (Fail): a handler, the static name 5; raise abortive: a branch per call (final ctl)
+lowering 34:28: with arith_into (Arith): a handler, the static name 6; arith_raise abortive: a branch per call (final ctl)
+lowering 34:28: with arith_into: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+call 24:14: raise (Fail) → abort[3.0], handled by the caller at 23:1: abortive, it never resumes
+call 24:14: raise (Fail) → abort[5.0], handled by the caller at 23:1: abortive, it never resumes
+call 24:14: raise (Fail) → abort[1.0], handled by the caller at 23:1: abortive, it never resumes
+call 24:32: arith_raise (Arith) → abort[4.0], handled by the caller at 23:1: abortive, it never resumes
+call 24:32: arith_raise (Arith) → abort[2.0], handled by the caller at 23:1: abortive, it never resumes
+call 24:32: arith_raise (Arith) → abort[6.0], handled by the caller at 23:1: abortive, it never resumes
+call 26:84: mean → `mean__n2_n1`
+call 29:57: mean → `mean__n4_n3`
+call 34:65: mean → `mean__n6_n5`
+call 46:20: raise (Fail) → abort[5.0], handled by `with to_result` at 34:11: abortive, it never resumes
+call 46:20: raise (Fail) → abort[3.0], handled by `with to_result` at 29:3: abortive, it never resumes

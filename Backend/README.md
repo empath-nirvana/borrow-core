@@ -23,7 +23,10 @@ the syntax of `docs/syntax-core.md` (`inl`, `inr`, pairs, `()`, `i32[n]`/`i64[n]
 a function prints as `<fun>` and a location as `<loc>`. A `main` whose value is codata (a thunk
 of a `nu` type such as `delay`, `stream` or `iter`) prints `<fun>`; the corpus drives such values
 inside `main`, as `Core/DelayPrograms.lean` does. Codata needs nothing of its own here: `nu_in`
-and `nu_out` erase, and `unfold` is a closed λ-term.
+and `nu_out` erase, and `unfold` is a closed λ-term. A `main` the platform serves `Arith`
+(SPEC §38) answers `inl v` or `inr ()`: every stage prints `v`'s report, or, at `inr ()`, the live
+count alone and ends with exit status `1` (`Backend.reportExit`; the flat IR's `Stmt.status`, the
+runtime's `$exit`).
 
 ## Pipeline
 
@@ -439,7 +442,9 @@ the dispatched calls, which the compiled code counts when it is built to count.
 A literal is a constant word. Each host operation is inline: its Wasm instruction on the
 operands' words (`Flat/Lower.lean`, `hostVals`). Tests produce `inr ()` for true and `inl ()` for
 false, the tag word `1` or `0`. A partial operation is checked before the instruction runs: a
-zero divisor, or `INT_MIN / -1` for `div_s`, produces `inr ()`, anything else `inl n`. The flat-IR interpreter
+zero divisor, or `INT_MIN / -1` for `div_s`, produces `inr ()`, anything else `inl n`. A division
+by a local the function sets to a constant at which it has an answer has no check, and a `case` on a
+division's answer is the division's own test (`divTest`, SPEC §38). The flat-IR interpreter
 evaluates the instructions with `wasmHost`, so the flat IR and the source agree on arithmetic by
 construction; Wasm agreeing with `wasmHost` is tested, not proved (SPEC §8).
 

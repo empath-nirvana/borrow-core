@@ -1,0 +1,8 @@
+row 19:1: split: Arith
+lowering 19:1: copy `split__n1`: `split` for the site 1 of `Arith`
+lowering 27:1: main: `Stderr` is served by the platform's `wasi_stderr` on the cell `stderr`, which each operation lends
+lowering 27:1: main: `Stdout` is served by the platform's `wasi_stdout` on the cell `stdout`, which each operation lends
+lowering 27:1: main: `Arith` is served by the platform's `wasi_arith`: an arithmetic error unwinds, is written on standard error, and the program exits with status 1
+call 22:11: arith_raise (Arith) → abort[1.0], handled by the caller at 19:1: abortive, it never resumes
+call 28:3: print_lit → `print_lit__wasi_stdout_cell`, passing the capabilities
+call 29:3: split → `split__n1`

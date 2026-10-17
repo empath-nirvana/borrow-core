@@ -90,7 +90,14 @@ count-down-exact 6 0 0
 count-fold 0 0 0
 count-try 0 0 0
 deep-list 100000 0 0
+div-euclid 0 0 0
 div-hof 0 0 0
+div-infer 0 4 0 # the resumptions of `scaled`'s continuation: a handler with a parameter dispatches at each resume (SPEC §21); every division is a test, no allocation
+div-literal 0 0 0
+div-overflow 0 0 0
+div-own-fail 0 0 0
+div-recover 5 0 0 # the two arrays of rows and the buffers `means` builds; `bad`'s is dropped by the unwind
+div-unhandled 1 0 0 # the buffer, dropped by the unwind
 effects-borrow-raise 2 0 0 # the cell of each run; freed by the unwinding borrow on the abort
 effects-fold 7 0 0 # equal to effects-fold-sum: an abort unwinds, handled at the loop's step and raised again after it, a branch per call
 effects-fold-sum 7 0 0
@@ -154,6 +161,7 @@ hygiene-local-fn 2 0 0
 implicit-drops 9 0 0
 int-arith 0 0 0
 int-ops 0 0 0
+int-slash 0 0 0
 io-aoc 2 0 0
 io-args 6 0 0 # a string per argument read and one at the end, and the runtime's reservation of the arguments' memory, read at their first use
 io-break 0 0 0

@@ -16,11 +16,6 @@
 
 include textio
 
--- `a / b`, and below `a mod b`, for `b > 0`.
-fn quot(a: i32, b: i32) -> i32 = match host[div_s32](a, b) { inl q -> q | inr u -> 0 }
-
-fn modulo(a: i32, b: i32) -> i32 = match host[rem_s32](a, b) { inl r -> r | inr u -> 0 }
-
 -- The risk levels of a square cave, row by row, as digits 1 to 9, and its side.
 fn cave_of<'t>(t: text 't) -> array u8 * i32 =
   let (t, u) = array_copy['t, u8] t;
@@ -40,18 +35,18 @@ fn expand(cave: array u8, side: i32) -> array u8 * array u8 =
   let big = 5 * side;
   let mut out = array_new[u8] (big * big, !{ i -> 0 });
   for i in 0..big * big {
-    let x = modulo(i, big);
-    let y = quot(i, big);
-    let base = at(&cave, modulo(y, side) * side + modulo(x, side), 0);
+    let x = i % big;
+    let y = i / big;
+    let base = at(&cave, y % side * side + x % side, 0);
     let base = to_i32(base);
-    out = array_set(out, i, to_u8(1 + modulo(base - 1 + quot(x, side) + quot(y, side), 9)))
+    out = array_set(out, i, to_u8(1 + (base - 1 + x / side + y / side) % 9))
   };
   (cave, out)
 
 -- The neighbour of `p` in direction `d` (up, right, down, left), or `-1` off the grid.
 fn step(p: i32, d: i32, side: i32) -> i32 =
-  let x = modulo(p, side);
-  let y = quot(p, side);
+  let x = p % side;
+  let y = p / side;
   let nx = if d == 1 { x + 1 } else { if d == 3 { x - 1 } else { x } };
   let ny = if d == 0 { y - 1 } else { if d == 2 { y + 1 } else { y } };
   if 0 <= nx && nx < side && 0 <= ny && ny < side { ny * side + nx } else { 0 - 1 }

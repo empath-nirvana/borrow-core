@@ -103,6 +103,30 @@ main -> (i32 + i32) * ((i32 + i32) * i32) =
   (x, (y, z))
 ```
 
+### Division that has no answer
+
+`a / b` and `a % b` at `i32`, `i64` and `u8` truncate toward zero, the remainder taking the
+dividend's sign. A division with no answer raises: a zero divisor, and `MIN / -1` at a signed
+width. The error is `Arith`'s (`include arith`), an abortive effect of its own, so that a function
+may raise its own `Fail[E]` and divide (a row holds one instance of an effect). Its handlers are
+`arith_default(d)`, `arith_to_result`, `arith_fail` (the error as `Fail[ArithError]`) and
+`arith_into(f)` (the error as the program's own `Fail[E]`). A function that divides by a variable
+gets `Arith` in its row with nothing written; a division by a nonzero literal cannot fail, and
+performs nothing. An error that reaches `main` unwinds, is written on standard error, and the
+program exits with status 1. `checked_div` and `checked_rem` answer the sum instead (SPEC §38).
+
+```bc
+-- answer: (i32[0], (inl i32[3], i32[4294967293]))
+include arith
+
+fn mean(sum: i32, n: i32) -> i32 = sum / n
+
+main -> i32 * ((i32 + ArithError) * i32) =
+  let a = with arith_default(0) { mean(7, 0) };
+  let b = with arith_to_result { mean(9, 3) };
+  (a, (b, (0 - 7) / 2))
+```
+
 A handler is an ordinary declaration. `to_result` is
 
 ```bc,ignore

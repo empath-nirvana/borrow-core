@@ -3,7 +3,7 @@ import Frontend.Print
 import Frontend.Elab.Subst
 
 /-!
-# Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21, §30, §32, §34]`
+# Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21, §30, §32, §34, §38]`
 
 An effect declares operations, each **answering** (`fn`) or **control** (`ctl`, with the
 structural qualifier of its continuation: affine by default, `linear ctl`, `multi ctl`). An effect
@@ -62,6 +62,10 @@ rest of the sugar; it knows no effect by name.
   lends it to its clause. A task of a handler that keeps its continuation boxed at its lifetime
   (`Env.gives`) is given the capabilities its body uses, lent for the borrow block around it
   (`Cx.givenC`).
+* **Arithmetic errors at `main`** (§38). An `Arith` that `main` performs and handles nowhere is
+  served by the platform's `wasi_arith` around the rest of `main` from its first statement that
+  performs it (`arithMain`, `splitArith`); the platform is elaborated for it when the program does
+  not include it (`elaborate`'s `onDemand`).
 
 What is not provided, with the message that says so: an operation inside a closure or block that
 is not run in place, other than an effectful block; a block parameter stored; a function with a
@@ -256,6 +260,9 @@ structure St where
   ports : List (String × List (Nat × List (Site × Bool))) := []
   /-- The capabilities `main` lends to the platform's handlers (SPEC §34). -/
   platform : List String := []
+  /-- `main` is served `Arith` by the platform (SPEC §38): it answers `inr ()` when an arithmetic
+  error reached it, which the runtime reports as the exit status. -/
+  exits : Bool := false
 
 abbrev EM := StateT St (Except Error)
 
@@ -269,6 +276,18 @@ def freshSite : EM Nat := modifyGet fun s => (s.site, { s with site := s.site + 
 its text, at `sp`. -/
 def report (sp : Span) (kind : String) (msg : String) : EM Unit :=
   modify fun s => if s.quiet then s else { s with reports := s.reports.push (sp, kind ++ " " ++ msg) }
+
+/-- The platform's handler of `Arith` at `main` (SPEC §38). -/
+def platformArith : String := "wasi_arith"
+
+/-- `m` with nothing reported when `q`: the platform's own code in a program (SPEC §38). -/
+def quietIf {α} (q : Bool) (m : EM α) : EM α := do
+  if !q then return ← m
+  let q₀ := (← get).quiet
+  modify fun s => { s with quiet := true }
+  let r ← m
+  modify fun s => { s with quiet := q₀ }
+  pure r
 
 /-- The depth bound for the traversals below. -/
 def fuel : Nat := 1 <<< 16
@@ -533,7 +552,11 @@ def rowV (env : Env) : Nat → Val → List Inst
       let inner := rowC env n M
       let inner := match env.handler? h, env.chandler? h with
         | some hs, _ => without inner hs.eff
-        | none, some ch => union (without inner ch.eff.name) (handlerRow ch)
+        | none, some ch =>
+          -- The clauses run in the scope of the `with`: the answering effects they perform are
+          -- its own, as its row's control effects are.
+          let cl := ch.clauses.foldl (fun r c => union r (rowC env n c.body)) (rowC env n ch.ret.2.2)
+          union (union (without inner ch.eff.name) (handlerRow ch)) (cl.filter (env.answering ·.eff))
         | none, none =>
           if env.driver? h then match env.exhEff? with
             | some e => without inner e.name
@@ -2111,7 +2134,10 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
         s!"`with {ch.name.name}[{", ".intercalate tps}](…)`"⟩
     let site : Site := { eff := e, n, args := effArgs, sp := ksp, what := s!"`with {ch.name.name}`" }
     let ents := cx.env.siteOps site
-    report ksp "lowering" (s!"with {ch.name.name} ({e}): a handler, the static name {n}; " ++
+    -- The platform's handler of `Arith` at `main` is reported by `arithMain`, as its handlers of
+    -- the system interface are by `platformMain`.
+    let plat := ch.name.name == platformArith
+    quietIf plat <| report ksp "lowering" (s!"with {ch.name.name} ({e}): a handler, the static name {n}; " ++
       ", ".intercalate (((cx.env.eff? e).map (·.ops)).getD [] |>.map fun o =>
         s!"{o.name.name} {if o.abortive then "abortive: a branch per call (final ctl)"
           else match o.qual with
@@ -2180,10 +2206,10 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       -- Its operations are the handler's row's, at the sites around the `with`.
       let cxA : Cx := { cx with sites := outer ++ cx.sites.filter fun s => !outer.any (·.eff == s.eff) }
       let csA := cxA.needC after
-      let after' ← trC k cxA csA true after
+      let after' ← quietIf plat (trC k cxA csA true after)
       let t ← fresh "fx_b"
       let r ← fresh "fx_v"
-      report ksp "lowering" (s!"with {ch.name.name}: every operation abortive, so its clauses run " ++
+      quietIf plat <| report ksp "lowering" (s!"with {ch.name.name}: every operation abortive, so its clauses run " ++
         "after the handler, in the scope of the `with`")
       -- Its type is the handler's answer, which the typed elaboration names `fx_res{n}`.
       let resT : VTy := capsTy sp csA (.name sp s!"fx_res{n}")
@@ -3135,13 +3161,87 @@ def platformMain (env : Env) (sp : Span) (M : Comp) : EM (List Cap) := do
       "which each operation lends")
   pure caps
 
+/-- `main`'s body split at the first statement of its spine that performs `Arith`: the statements
+before it, as a context, and the rest. A call in that statement whose argument is a call that
+performs no `Arith` (`f(read_input())`) has its argument bound before it, in the context: the
+argument is evaluated first either way. -/
+def splitArith (env : Env) : Nat → Comp → (Comp → Comp) × Comp
+  | 0, M => (id, M)
+  | k + 1, M =>
+    let perf (M : Comp) : Bool := (rowC env fuel M).any (·.eff == "Arith")
+    let perfV (V : Val) : Bool := (rowV env fuel V).any (·.eff == "Arith")
+    -- The argument of the statement's call, bound first.
+    let lift (V : Val) (rest : Val → Comp) : Option ((Comp → Comp) × Comp) :=
+      match V with
+      | .app asp f W@(.app ..) =>
+        if perfV W then none else
+          let a : Ident := ⟨s!"fx_ma{asp.start.line}_{asp.start.col}", asp⟩
+          some (fun H => .bind asp a none (.ret asp W) H false, rest (.app asp f (.var asp a.name)))
+      | _ => none
+    match M with
+    | .bind sp x A M₁ N lin =>
+      if perf M₁ then
+        match M₁ with
+        | .ret rsp V => (lift V fun V' => .bind sp x A (.ret rsp V') N lin).getD (id, M)
+        | _ => (id, M)
+      else
+        let (K, R) := splitArith env k N
+        (fun H => .bind sp x A M₁ (K H) lin, R)
+    | .letPair sp x y V N =>
+      if perfV V then (lift V fun V' => .letPair sp x y V' N).getD (id, M) else
+        let (K, R) := splitArith env k N
+        (fun H => .letPair sp x y V (K H), R)
+    | .letUnit sp V N =>
+      if perfV V then (id, M) else
+        let (K, R) := splitArith env k N
+        (fun H => .letUnit sp V (K H), R)
+    | .for_ sp x V M₁ N =>
+      if perfV V || perf M₁ then (id, M) else
+        let (K, R) := splitArith env k N
+        (fun H => .for_ sp x V M₁ (K H), R)
+    | M => (id, M)
+
+/-- `main` with the platform's handler of `Arith` around its body when the body performs it and
+handles it nowhere (SPEC §38), as the platform's handlers serve the system interface (SPEC §34):
+an arithmetic error unwinds what `main` built, `wasi_arith` writes it on standard error, and `main`
+answers `inr ()`, which the runtime reports as a failing exit status. `main : F A` becomes
+`main : F (A + 1)`. The handler is around the rest of the body from its first statement that
+performs `Arith`: what comes before it (reading the input, which loops over a capability `main`
+holds) runs outside it, as it cannot fail. -/
+def arithMain (env : Env) (sp : Span) (C : CTy) (M : Comp) : EM (CTy × Comp) := do
+  unless (rowC env fuel M).any (·.eff == "Arith") do return (C, M)
+  let some _ := env.chandler? platformArith | return (C, M)
+  let A ← match C with
+    | .ret _ A => pure A
+    | _ => throw ⟨sp, "`main` returns a loop and an arithmetic error may reach it: handle `Arith` " ++
+        "in `main` (`with arith_default(…) { … }`, `lib/arith.bc`); the platform's handler of it " ++
+        "around a loop is not provided (SPEC §38)"⟩
+  let (K, M) := splitArith env fuel M
+  if let some c := ["stdin", "stdout", "stderr"].find? (M.lentNames true).contains then
+    throw ⟨sp, s!"`main` uses the cell `{c}` and an arithmetic error may reach it: the platform's " ++
+      "handler of `Arith` would abandon the cell; handle `Arith` in `main` (`with arith_default(…) " ++
+      "{ … }`, `lib/arith.bc`), or perform the stream's effect instead of naming its cell " ++
+      "(SPEC §38, §34)"⟩
+  report sp "lowering" (s!"main: `Arith` is served by the platform's `{platformArith}`: an " ++
+    "arithmetic error unwinds, is written on standard error, and the program exits with status 1")
+  modify fun s => { s with exits := true }
+  let x ← fresh "fx_l"
+  let b ← fresh "fx_c"
+  let W : Val := .app sp (.app sp (.sugar sp (.handle platformArith x [])) (.unit sp))
+    (.thunkv sp (.lam sp ⟨b, sp⟩ (.name sp "_") M))
+  pure (.ret sp (.sum sp A (.unit sp)), K (.ret sp W))
+
 /-- The program with its effects elaborated, and the reports for `bcc check`: the effect and
 handler declarations are removed, each answering handler's clauses become functions, each
 function with a row is replaced by its copies for what serves it where it is called, each `with`
 of an answering handler becomes a borrow block, and each of a control handler a handler site.
-`[spec §18, §19]` -/
-def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []) :
-    Except Error (List Decl × List (Span × String) × List Nat × List String) := do
+`onDemand` is the platform (`lib/wasi.bc`) when the program does not include it: it is
+elaborated just before `main` when `main` performs `Arith` and handles it nowhere, so that the
+platform's handler of it serves `main` (`arithMain`), and is left out otherwise.
+`[spec §18, §19, §38]` -/
+def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := [])
+    (onDemand : List Decl := []) :
+    Except Error (List Decl × List (Span × String) × List Nat × List String × Bool) := do
   -- `|>`, before the rest (SPEC §33).
   let ds ← match (resolvePipes ds).run {} with
     | .ok (ds, _) => pure ds
@@ -3155,7 +3255,7 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
   let groups := recGroupsOf (ds.filterMap fun
     | .def_ _ n _ _ V _ => if member n.name V then some (n.name, V) else none
     | _ => none)
-  if !hasEffects ds && groups.isEmpty then return (ds, [], [], [])
+  if !hasEffects ds && groups.isEmpty then return (ds, [], [], [], false)
   let names := ds.filterMap Decl.defName
   let go : EM (List Decl) := do
     let mut env : Env := { lib }
@@ -3163,7 +3263,17 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
     -- The declarations `hide` holds (the system interface's, the platform's and the I/O
     -- library's, SPEC §34) are not reported, and leave the reports of what follows as they were.
     let mut restore : Option Bool := none
-    for d in ds do
+    let mut todo : List Decl := ds
+    let mut spliced := false
+    for _ in [0:ds.length + onDemand.length + 1] do
+      let d :: rest := todo | break
+      todo := rest
+      if let .main _ _ M := d then
+        if !spliced && !onDemand.isEmpty && (env.chandler? platformArith).isNone &&
+            (rowC env fuel M).any (·.eff == "Arith") then
+          spliced := true
+          todo := onDemand ++ d :: rest
+          continue
       if let some q := restore then modify fun s => { s with quiet := q }
       restore := none
       if hide.contains d then
@@ -3304,6 +3414,7 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
       | .main sp C M =>
         modify fun s => { s with quiet := false }
         let before := (← get).made.size
+        let (C, M) ← arithMain env sp C M
         let pcs ← platformMain env sp M
         modify fun s => { s with platform := pcs.map (·.var) }
         let M' ← trC fuel { env, caps := pcs } [] false M
@@ -3312,7 +3423,7 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
       | d => out := out.push d
     pure out.toList
   match go.run {} with
-  | .ok (ds, st) => pure (ds, st.reports.toList, st.perTurn, st.platform)
+  | .ok (ds, st) => pure (ds, st.reports.toList, st.perTurn, st.platform, st.exits)
   | .error e => throw e
 
 end Frontend.Elab.Effects

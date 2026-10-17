@@ -1,0 +1,65 @@
+-- Arithmetic errors (SPEC §38). An integer division with no answer raises: `a / b` and `a % b` by
+-- a zero divisor, and `MIN / -1` at a signed width, whose quotient is not representable, perform
+-- `arith_raise`, an abortive operation of `Arith`. It unwinds as any error does (SPEC §19),
+-- running the finalisers of what it abandons, and a handler receives the error. A division by a
+-- nonzero literal (other than `-1` for `/`) cannot fail, and performs nothing.
+--
+-- `Arith` is an effect of its own, not `Fail[ArithError]`: a row holds one instance of an effect
+-- (SPEC §18), so a function that raises its own `Fail[E]` and divides performs both, and a handler
+-- of one leaves the other to the handler around it. The handlers:
+--
+-- * `arith_default(d)`: the body's value, or `d`;
+-- * `arith_to_result`: `inl` the body's value, or `inr e`;
+-- * `arith_fail`: the error raised again as `Fail[ArithError]`, for `Fail`'s handlers (`include
+--   fail`);
+-- * `arith_into(f)`: the error raised again as the program's own `Fail[E]`, `f(e)`.
+--
+-- An error that reaches `main` is the platform's (`lib/wasi.bc`, `wasi_arith`): it is written on
+-- standard error and the program exits with status 1, after the unwind.
+--
+-- `checked_div(a, b)` and `checked_rem(a, b)` answer the sum instead of raising; `div_euclid` and
+-- `rem_euclid` are the Euclidean quotient and remainder (the remainder is never negative), which
+-- raise as `/` and `%` do.
+
+-- `inl ()`: the divisor is zero. `inr ()`: the quotient overflows (`MIN / -1`).
+type ArithError = 1 + 1
+
+effect Arith { ctl arith_raise(e: ArithError) -> never }
+
+handler arith_default[A](d: A): Arith, A -> A = {
+  return(a) = a;
+  arith_raise(e) = d
+}
+
+handler arith_to_result[A]: Arith, A -> A + ArithError = {
+  return(a) = inl a;
+  arith_raise(e) = inr e
+}
+
+handler arith_fail[A]: Arith, A -> A with Fail[ArithError] = {
+  return(a) = a;
+  arith_raise(e) = raise(e)
+}
+
+handler arith_into[E, A](f: !(ArithError => E)): Arith, A -> A with Fail[E] = {
+  return(a) = a;
+  arith_raise(e) = raise(f(e))
+}
+
+-- The Euclidean quotient: `a = b * q + r` with `0 <= r < |b|`. The remainder's `inr` arm is
+-- never taken: the division by the same divisor had an answer.
+fn div_euclid[T](a: T, b: T) -> T =
+  match checked_div(a, b) {
+    inl q -> match checked_rem(a, b) {
+        inl r -> if r < 0 { if b > 0 { q - 1 } else { q + 1 } } else { q }
+      | inr e -> q
+      }
+  | inr e -> arith_raise(e)
+  }
+
+-- The Euclidean remainder: never negative. `rem_euclid(MIN, -1)` is `0`, as `MIN % -1` is.
+fn rem_euclid[T](a: T, b: T) -> T =
+  match checked_rem(a, b) {
+    inl r -> if r < 0 { if b < 0 { r - b } else { r + b } } else { r }
+  | inr e -> arith_raise(e)
+  }

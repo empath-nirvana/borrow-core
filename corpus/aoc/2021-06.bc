@@ -14,9 +14,6 @@
 
 include textio
 
--- `a mod b`, for `a ≥ 0` and `b > 0`.
-fn modulo(a: i32, b: i32) -> i32 = match host[rem_u32](a, b) { inl r -> r | inr u -> 0 }
-
 -- The number of fish after `days` days, from the number at each timer value, 0 to 8, copied into
 -- a ring: on day `d` the fish at slot `d mod 9` spawn, so they are added to the slot that comes
 -- round again in seven days, and stay in their own as the newborn, at timer 8.
@@ -24,8 +21,8 @@ fn simulate<'a>(start: array_imm 'a i64, days: i32) -> i64 =
   let mut fish = array_new[i64] (9, !{ i -> i64[0] });
   borrow mut fish { v -> let v = copy_from(v, start); () };
   for day in 0..days {
-    let born = at(&fish, modulo(day, 9), i64[0]);
-    let k = modulo(day + 7, 9);
+    let born = at(&fish, day % 9, i64[0]);
+    let k = (day + 7) % 9;
     let old = at(&fish, k, i64[0]);
     fish = array_set(fish, k, old + born)
   };

@@ -1,0 +1,42 @@
+-- Integer division raises (SPEC §38): a `with` that handles a zero divisor and recovers. `mean`
+-- divides by its count, a variable, so it performs `Arith`: its row is inferred, and nothing is
+-- written. A count of zero raises the error `inl ()` (`ArithError`, `lib/arith.bc`), and the
+-- handlers recover: `arith_default(d)` answers `d`, `arith_to_result` the error as a sum.
+--
+-- `means` builds a buffer of the means of its rows, dividing as it goes: a row with no entries
+-- raises halfway, the unwind drops the buffer built so far (SPEC §19), and `live 0` says so. The
+-- loop is a counted `for` (SPEC §16): the error leaves it by its exit and is raised again after.
+--
+-- Answer: `((i32[4], i32[4294967295]), ((inl i32[3], inr (inl ())), (i32[3], i32[4294967295])))`:
+-- 12 / 3; the fallback −1 for 7 / 0; the two sums; the three means of `good` (3 of them), and −1
+-- for `bad`, whose second row is empty. A buffer the unwind did not drop would leave `live 1`.
+
+include arith
+include buf
+
+-- The mean of `n` entries summing to `sum`.
+fn mean(sum: i32, n: i32) -> i32 = sum / n
+
+-- The means of rows given as (sum, count) pairs, into a buffer.
+fn means<'a>(rows: array_imm 'a (i32 * i32)) -> buf i32 =
+  let mut b = box buf[i32](2);
+  for p in rows {
+    let (s, n) = *p;
+    push(&mut b, mean(s, n))
+  };
+  b
+
+-- How many means `rows` has, or −1 when a row is empty.
+fn count_means<'a>(rows: array_imm 'a (i32 * i32)) -> i32 =
+  match with arith_to_result { means(rows) } { inl b -> let (b, n) = len_of(b); n | inr e -> 0 - 1 }
+
+main -> (i32 * i32) * (((i32 + ArithError) * (i32 + ArithError)) * (i32 * i32)) =
+  let a = with arith_default(0 - 1) { mean(12, 3) };
+  let b = with arith_default(0 - 1) { mean(7, 0) };
+  let c = with arith_to_result { mean(9, 3) };
+  let d = with arith_to_result { mean(9, 0) };
+  let good = array_new[i32 * i32] (3, !{ i -> (i * 10, i + 1) });
+  let bad = array_new[i32 * i32] (3, !{ i -> (i * 10, 1 - i) });
+  let g = count_means(&good);
+  let h = count_means(&bad);
+  ((a, b), ((c, d), (g, h)))

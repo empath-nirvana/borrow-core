@@ -824,3 +824,10 @@ Each entry: the decision, and why. Newest last.
       `exn` signature are **restricted out**". An abortive operation is affine: `multi ctl op(…) ->
       never` is rejected, and so is an unrestricted operation answering `0` in a core row (SPEC
       §18, 0.47).
+64. **Integer division that has no answer raises (#513, SPEC §38; the user's decision of 2026-10-17).**
+    - In the user's words: "I just want div by zero to raise not panic. That is kind of the whole point of an effect system."
+    - So a zero divisor and `MIN / -1` raise through the effect system; never a trap, a panic, or a made-up answer (`x / 0 = 0`). The points below are defaults under it, not decisions of the user's:
+    - **A distinct abortive effect** `Arith` (`ctl arith_raise(e: ArithError) -> never`, `lib/arith.bc`), not `Fail[ArithError]`: a row holds one instance of an effect (#155), and a function that raises its own `Fail[E]` and divides must compose. `arith_into(f)` merges it into the program's own `Fail[E]`.
+    - **At `main`**, an unhandled `Arith` is the platform's, as the standard streams are: the unwind runs the finalisers, the error goes to standard error, and the program exits with status 1.
+    - **A nonzero literal divisor** (other than `-1` for `/`) cannot fail and performs nothing; `checked_div` and `checked_rem` answer a sum; `MIN % -1` is `0`, as in Wasm.
+    - **Spellings (provisional):** `Arith`, `ArithError` (`inl ()` a zero divisor, `inr ()` an overflow), `arith_raise`, `arith_default`, `arith_to_result`, `arith_fail`, `arith_into`, `div_euclid`, `rem_euclid`, `checked_div`, `checked_rem`.

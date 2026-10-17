@@ -102,6 +102,10 @@ structure LState where
   reuse : Option (Nat × Nat) := none
   /-- The words of the function's frame so far: its slots (`Fn.frame`). -/
   frame : Nat := 0
+  /-- The function's locals set to a constant where they are made (`emit`): each is set once, so
+  it holds that constant wherever it is read. A division by a constant that cannot fail, and a
+  `case` on a constant tag, are lowered without their test (SPEC §38). -/
+  consts : Std.HashMap Nat UInt64 := {}
 
 abbrev LM := ReaderT Ctx (StateT LState (Except String))
 
@@ -167,12 +171,12 @@ def helper (h : Helper) : LM Nat := do
 number of locals beyond the parameters. -/
 def inFnF (params : Nat) (act : LM α) : LM (α × Nat × Nat) := do
   let saved ← get
-  set { saved with vars := {}, next := params, reuse := none, frame := 0 }
+  set { saved with vars := {}, next := params, reuse := none, frame := 0, consts := {} }
   let a ← act
   let n := (← get).next
   let fw := (← get).frame
   modify fun s => { s with vars := saved.vars, next := saved.next, reuse := saved.reuse,
-                           frame := saved.frame }
+                           frame := saved.frame, consts := saved.consts }
   pure (a, n - params, fw)
 
 /-- `inFnF` for a function with no frame: a helper, which lowers no closure-IR term. -/
@@ -383,6 +387,7 @@ def emit : Dest → List Exp → LM (List Stmt)
         let t ← fresh1
         ss := ss.push (.set t e)
         ls := ls.push t
+        if let .c64 k := e then modify fun s => { s with consts := s.consts.insert t k }
     bindVals x ls.toList
     return ss.toList
 
@@ -416,6 +421,40 @@ def truncRange (i : IWidth) (f : FWidth) (sx : Sx) : FRelOp × Exp × Exp :=
   | .i32, .u, f => (.gt, fconst f 0xBF800000 0xBFF0000000000000, fconst f 0x4F800000 0x41F0000000000000)
   | .i64, .u, f => (.gt, fconst f 0xBF800000 0xBFF0000000000000, fconst f 0x5F800000 0x43F0000000000000)
 
+/-- The integer division `o` on its operands' words `ls` (§8): where Wasm traps, the test that
+holds there, and the quotient or remainder's word where it does not. A divisor that is a constant
+at which the division has an answer (`LState.consts`) has no test: the bare instruction
+(SPEC §38). -/
+def divTest (o : HostOp) (ls : List Nat) : LM (Option Exp × Exp) := do
+  let (w, d) ← match o with
+    | .div w d => pure (w, d)
+    | _ => throw "flat IR: not a division"
+  let raw (l : Nat) : Exp := match w with
+    | .w32 | .w8 | .f32 => wrap (.loc l)
+    | .w64 | .f64 => .loc l
+  let args := ls.map raw
+  let q : Exp := match w with
+    | .w32 | .w8 | .f32 => extendU (.op o args)
+    | .w64 | .f64 => .op o args
+  let minus1 : UInt64 := match w with
+    | .w32 | .w8 | .f32 => 0xFFFFFFFF | .w64 | .f64 => 0xFFFFFFFFFFFFFFFF
+  let k := ((← get).consts.get? (ls.getD 1 0)).map fun k => match w with
+    | .w32 | .w8 | .f32 => k &&& 0xFFFFFFFF | .w64 | .f64 => k
+  if let some k := k then
+    if k != 0 && (d != .div_s || k != minus1) then return (none, q)
+  let a := args.headD (.c64 0)
+  let b := args.getD 1 (.c64 0)
+  let zero := Exp.op (.eqz w) [b]
+  let trapC := match d with
+    | .div_s =>
+      let intMin := match w with
+        | .w32 | .w8 | .f32 => Exp.c32 0x80000000 | .w64 | .f64 => .c64 0x8000000000000000
+      let m1 := match w with
+        | .w32 | .w8 | .f32 => Exp.c32 0xFFFFFFFF | .w64 | .f64 => .c64 0xFFFFFFFFFFFFFFFF
+      or32 zero (and32 (.op (.rel w .eq) [a, intMin]) (.op (.rel w .eq) [b, m1]))
+    | _ => zero
+  pure (some trapC, q)
+
 /-- A host operation on its operand's words (§8, §37): an integer or a float's bits, a tag, or a
 partial operation's tag and integer. A 32-bit value is held zero-extended. -/
 def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
@@ -444,22 +483,14 @@ def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
         [.loc t])
     | _, _ => pure ([], [word w (.op o args)])
   | .test, _ => pure ([], [extendU (.op o args)])
-  | .trapping w, .div _ d =>
+  | .trapping _, .div _ _ =>
     let t₀ ← fresh1
     let t₁ ← fresh1
-    let a := args.headD (.c64 0)
-    let b := args.getD 1 (.c64 0)
-    let zero := Exp.op (.eqz w) [b]
-    let trapC := match d with
-      | .div_s =>
-        let intMin := match w with
-          | .w32 | .w8 | .f32 => Exp.c32 0x80000000 | .w64 | .f64 => .c64 0x8000000000000000
-        let minus1 := match w with
-          | .w32 | .w8 | .f32 => Exp.c32 0xFFFFFFFF | .w64 | .f64 => .c64 0xFFFFFFFFFFFFFFFF
-        or32 zero (and32 (.op (.rel w .eq) [a, intMin]) (.op (.rel w .eq) [b, minus1]))
-      | _ => zero
-    pure ([.ite trapC [.set t₀ (.c64 1), .set t₁ (.c64 0)]
-            [.set t₀ (.c64 0), .set t₁ (word w (.op o args))]], [.loc t₀, .loc t₁])
+    match ← divTest o ls with
+    | (none, q) => return ([], [.c64 0, q])
+    | (some trapC, q) =>
+      pure ([.ite trapC [.set t₀ (.c64 1), .set t₁ (.c64 0)] [.set t₀ (.c64 0), .set t₁ q]],
+        [.loc t₀, .loc t₁])
   | .trapping w, .trunc i f sx =>
     -- Where Wasm's `trunc` traps, `inr ()`; in range, `trunc_sat` is `trunc`.
     let t₀ ← fresh1
@@ -716,6 +747,46 @@ def lowerTm : Tm → Dest → LM (List Stmt)
       let T ← T
       let some r := T.apps[f]? | throw "flat IR: an untyped call"
       lowerCall f a (T.answerWords (← vty f)) (T.words r) d
+  | .letv x e@(.prim (.host o@(.div ..)) [p]) b@(.case s xq b₁ xu b₂), d =>
+      if s != x then do
+        let se ← lowerTm e (.bind x)
+        return se ++ (← lowerTm b d)
+      else do
+      -- A `case` on a division's answer is the division's own test: the quotient in one arm,
+      -- the other where Wasm traps (SPEC §38).
+      let d ← match d with
+        | .bind z => pure (.to (← bindFresh z))
+        | d => pure d
+      let (trapC, q) ← divTest o (← vals p)
+      let t ← fresh1
+      bindVals xq [t]
+      let t₁ ← lowerTm b₁ d
+      match trapC with
+      | none => return [.set t q] ++ t₁
+      | some c =>
+        bindVals xu []
+        let t₂ ← lowerTm b₂ d
+        return [.ite c t₂ ([.set t q] ++ t₁)]
+  | .letv x e@(.letv y e₁ (.prim (.host o@(.div ..)) [p])) b@(.case s xq b₁ xu b₂), d =>
+      if s != x || p != y then do
+        let se ← lowerTm e (.bind x)
+        return se ++ (← lowerTm b d)
+      else do
+      -- The same, its operands' pair bound first.
+      let se ← lowerTm e₁ (.bind y)
+      let d ← match d with
+        | .bind z => pure (.to (← bindFresh z))
+        | d => pure d
+      let (trapC, q) ← divTest o (← vals p)
+      let t ← fresh1
+      bindVals xq [t]
+      let t₁ ← lowerTm b₁ d
+      match trapC with
+      | none => return se ++ [.set t q] ++ t₁
+      | some c =>
+        bindVals xu []
+        let t₂ ← lowerTm b₂ d
+        return se ++ [.ite c t₂ ([.set t q] ++ t₁)]
   | .letv x e b, d => do
       let se ← lowerTm e (.bind x)
       return se ++ (← lowerTm b d)
@@ -737,7 +808,11 @@ def lowerTm : Tm → Dest → LM (List Stmt)
       let (s₂, v₂) ← payload n true ls true
       bindVals y v₂
       let t₂ ← lowerTm b₂ d
-      return [.ite (eqz64 (.loc (ls.headD 0))) (s₁ ++ t₁) (s₂ ++ t₂)]
+      -- A tag set to a constant where it was made selects its arm (SPEC §38).
+      match (← get).consts.get? (ls.headD 0) with
+      | some 0 => return s₁ ++ t₁
+      | some _ => return s₂ ++ t₂
+      | none => return [.ite (eqz64 (.loc (ls.headD 0))) (s₁ ++ t₁) (s₂ ++ t₂)]
   | .when s k _ x b r, d => do
       -- A chain of `when`s on `s` ending in `absurd` is a `switch` on its tag; one ending in
       -- another term is a compare of the tag per arm, then that term.
@@ -1056,8 +1131,10 @@ def countsReport : List Stmt :=
     [.call [] fPrintDec [.stat 2]] ++ outStr "\n"
 
 /-- Run `main` (driving it and running the code `fin` on what it finishes with, when it returns
-a loop), print the value, drop it, print the live count, and with `counts` the run's counts. -/
-def entryFn (fMain : Nat) (fin : Option Nat) (counts : Bool) : LM Fn := do
+a loop), print the value, drop it, print the live count, and with `counts` the run's counts. With
+`exits`, `main`'s value is `inl v`, whose `v` is printed, or `inr ()`, which prints nothing and
+ends the run with exit status `1` (SPEC §38). -/
+def entryFn (fMain : Nat) (fin : Option Nat) (counts : Bool) (exits : Bool := false) : LM Fn := do
   let T ← T
   let (body, nloc) ← inFn 0 do
     let m ← fresh (T.words T.mainTy)
@@ -1075,9 +1152,17 @@ def entryFn (fMain : Nat) (fin : Option Nat) (counts : Bool) : LM Fn := do
         pure ([Stmt.call m fMain [], .call rs (← helper (.drive T.mainTy)) (locs m),
           .call es (codeFn c) (self ++ locs rs)], es.take (T.words T.resTy))
     let dr ← dropVals T.resTy v
-    pure (run ++ [.call [] (← helper (.print T.resTy)) (locs v)] ++ outStr "\n" ++ dr ++
+    let (shown, status) ← if exits then do
+        let .sum .. := T.ty T.resTy | throw "flat IR: `main`'s value is not `inl v` or `inr ()`"
+        let tag := Exp.loc (v.headD 0)
+        let (c, _) := T.field T.resTy 0
+        let (sg, vs) ← getField T.resTy 0 (← fieldLocals T.resTy 0 v) false
+        let pr := sg ++ [Stmt.call [] (← helper (.print c)) (locs vs)]
+        pure ([Stmt.ite (eqz64 tag) (pr ++ outStr "\n") []], [Stmt.ite (eqz64 tag) [] [.status (.c64 1)]])
+      else pure ([.call [] (← helper (.print T.resTy)) (locs v)] ++ outStr "\n", [])
+    pure (run ++ shown ++ dr ++
       outStr "live " ++ [.call [] fPrintDec [.live]] ++ outStr "\n" ++
-      (if counts then countsReport else []) ++ [.ret []])
+      (if counts then countsReport else []) ++ status ++ [.ret []])
   pure { name := "entry", params := 0, results := 0, locals := nloc, body }
 
 /-- `printDec n`: `n` in unsigned decimal. -/
@@ -1534,7 +1619,7 @@ def lower (p : Clos.Prog) (counts : Bool := false) (types : Option Types := none
   let act : LM (List Fn) := do
     let codes ← p.codes.toList.zipIdx.mapM fun (c, k) => lowerCode k c
     let main ← lowerMain p.main
-    let entry ← entryFn fMain p.fin counts
+    let entry ← entryFn fMain p.fin counts p.exits
     let mut gen : Array Fn := #[]
     for _ in [0:1 <<< 20] do
       let q := (← get).queue

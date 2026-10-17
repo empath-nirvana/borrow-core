@@ -304,14 +304,15 @@ inductive Const where
   | sliceBorrowImmU (x : Ident) (b : Life) (A B : VTy) (r : Row)
   deriving DecidableEq, Repr
 
-/-- A binary operator of the surface (draft 0 §2.12), resolved by the width of its operands. -/
+/-- A binary operator of the surface (draft 0 §2.12), resolved by the width of its operands.
+`rem` is `%` (SPEC §38). -/
 inductive SurfOp where
-  | add | sub | mul | div | eq | ne | lt | le | gt | ge
+  | add | sub | mul | div | eq | ne | lt | le | gt | ge | rem
   deriving DecidableEq, Repr, Inhabited
 
 def SurfOp.str : SurfOp → String
   | .add => "+" | .sub => "-" | .mul => "*" | .div => "/" | .eq => "==" | .ne => "!=" | .lt => "<"
-  | .le => "<=" | .gt => ">" | .ge => ">="
+  | .le => "<=" | .gt => ">" | .ge => ">=" | .rem => "%"
 
 /-- The kinds of borrow block (draft 0 §2.6). -/
 inductive BorrowKind where
@@ -371,6 +372,14 @@ inductive VSugar where
   | flit (m : Nat) (e : Int)
   /-- A binary operator, applied to a pair of operands. -/
   | op (o : SurfOp)
+  /-- An integer division `/` or `%` whose divisor may have no answer, applied to its operands,
+  numbered `k` for the typed elaboration's first pass, which says whether it can fail (SPEC §38,
+  `Frontend/Sugar.lean`, `elaborateS`). Elaborated as `op o`; never in a final elaboration. -/
+  | opAt (o : SurfOp) (k : Nat)
+  /-- `checked_div(a, b)`, `checked_rem(a, b)` (`o` is `div` or `rem`), applied to the pair of
+  operands: the quotient or remainder `inl q`, or `inr e`, `e : ArithError` (`inl ()` for a zero
+  divisor, `inr ()` for an overflow) (SPEC §38). -/
+  | checked (o : SurfOp)
   /-- A constant written without its bracket arguments, `alloc(e)`, `free(e)`, `swap(c, e)`,
   applied to its operands; or `clone(x)`, an explicit copy of a persistent variable. -/
   | call (k : String)

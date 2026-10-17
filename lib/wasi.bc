@@ -5,6 +5,7 @@
 -- contracts are `Core/Stdio.lean`'s; `bcc trusted` lists them.
 
 include sys
+include arith
 
 extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (u8 + 1))
 extern write_byte : !(all 'a < top. mut 'a output * u8 => mut 'a output)
@@ -37,4 +38,18 @@ handler wasi_clock(&mut c: clock): Clock = {
 
 handler wasi_args(&mut a: args): Args = {
   arg_byte() = { let (b, r) = read_arg(a); a = b; r }
+}
+
+-- An arithmetic error that reaches `main` (SPEC §38, `lib/arith.bc`): what `main` built has been
+-- finalised by the unwind; the error is written on standard error, and `main` answers `inr ()`,
+-- which the runtime reports as the exit status 1.
+handler wasi_arith[A]: Arith, A -> A + 1 = {
+  return(a) = inl a;
+  arith_raise(e) = {
+    match e {
+      inl u -> borrow imm "error: division by zero\n" { v -> eprint_bytes(v) }
+    | inr u -> borrow imm "error: integer overflow in division\n" { v -> eprint_bytes(v) }
+    };
+    inr ()
+  }
 }

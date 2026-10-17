@@ -83,6 +83,8 @@ inductive Stmt where
   | tick
   /-- Count a copy of a variable at a non-trivial type: a generated copy that allocates. -/
   | tickCopy
+  /-- End the run with the exit status `code` once the entry returns (SPEC §38). -/
+  | status (code : Exp)
   | trap
   deriving Repr, Inhabited
 

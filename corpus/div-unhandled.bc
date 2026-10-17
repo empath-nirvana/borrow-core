@@ -1,0 +1,29 @@
+-- An arithmetic error that no handler catches (SPEC §38): the program compiles, and the platform
+-- serves `Arith` at `main` as it serves the standard streams (SPEC §34), `wasi_arith` of
+-- `lib/wasi.bc`. `split` divides by a variable, so `main` performs `Arith` and handles it nowhere:
+-- `bcc check` reports `main: `Arith` is served by the platform's `wasi_arith``.
+--
+-- `main` writes a line, builds a buffer, and divides by zero. The error unwinds: the buffer is
+-- dropped by its destructor (SPEC §12, §19), so the run ends with `live 0`; the platform writes
+-- `error: division by zero` on standard error, and the program exits with status 1
+-- (`div-unhandled.status`), with no value. The harness checks the three at every stage.
+--
+-- Answer: `before` on standard output, then `live 0`; `error: division by zero` on standard
+-- error; exit status 1. A run that did not unwind the buffer would report `live 1`.
+
+include buf
+include textio
+
+-- `amount` split into `parts`: the buffer holds the amount, then each part's share. The buffer is
+-- live across the division.
+fn split(amount: i32, parts: i32) -> i32 =
+  let mut b = box buf[i32](2);
+  push(&mut b, amount);
+  let s = amount / parts;
+  push(&mut b, s);
+  let (b, n) = len_of(b);
+  n
+
+main -> i32 =
+  print_lit("before\n");
+  split(100, 0)

@@ -39,11 +39,13 @@ def wasmtimeArgs : Array String :=
 /-- The fuel of every interpreter. -/
 def runFuel : Nat := 100000000
 
-/-- A checked program: the source, `main`, and its capabilities if it has any. -/
+/-- A checked program: the source, `main`, and its capabilities if it has any; `exits` when the
+platform serves `main` `Arith`, so that its value `inr ()` is an exit status (SPEC §38). -/
 structure CheckedProg where
   prog : Frontend.Program
   main : Frontend.Check.Checked
   io : Option Frontend.Check.IOMain
+  exits : Bool := false
 
 /-- Parse and check `src`; a `main` with externs must be a standard I/O program (SPEC §11). -/
 def checkedOf (file src : String) : Except String CheckedProg := do
@@ -55,12 +57,13 @@ def checkedOf (file src : String) : Except String CheckedProg := do
   let r ← match Frontend.Check.checkProgram p₀ with
     | .ok r => pure r
     | .error e => throw s!"{file}:{e.render}"
-  let p ← match Frontend.Sugar.elaborate p₀ with
-    | .ok (p, _) => pure p
+  let (p, os) ← match Frontend.Sugar.elaborateO p₀ with
+    | .ok (p, _, os) => pure (p, os)
     | .error e => throw s!"{file}:{e.render}"
   let some c := r.main | throw s!"{file}: no `main`"
+  let exits := os.any (·.2 == Frontend.Sugar.exitTag)
   match Frontend.Check.ioMainOf p c with
-  | .ok io => pure ⟨p, c, io⟩
+  | .ok io => pure ⟨p, c, io, exits⟩
   | .error e => throw s!"{file}: {e}"
 
 /-- The host implementation of each extern, in declaration order. -/
@@ -100,7 +103,8 @@ def closTypesOf (file src : String) : Except String (Clos.Prog × Option Clos.Ty
   let p ← match k.io with
     | none => Clos.convert k.main.e
     | some m => Clos.convertMain (← extImpls m) m.loopB.isSome k.main.e
-  lowerEffects p
+  let (p, T) ← lowerEffects p
+  pure ({ p with exits := k.exits }, T)
 
 def closOf (file src : String) : Except String Clos.Prog := return (← closTypesOf file src).1
 
@@ -239,7 +243,8 @@ def interpStage (stage file src : String) (input : List UInt8) (args : List UInt
     | none => interpSource runFuel k.main.e
     | some m =>
       let r ← ioRunOf file k m args
-      if r.loops then interpIOLoop runFuel (r.expr input) else interpIO runFuel (r.expr input)
+      if r.loops then interpIOLoop runFuel (r.expr input) k.exits
+      else interpIO runFuel (r.expr input) k.exits
   | "clos" => Clos.interp runFuel (← closOf file src) input args
   | "flat" => Flat.interp runFuel (← flatOf file src) input args
   | "flat-counts" => Flat.interp runFuel (← flatOf file src true) input args
@@ -266,8 +271,8 @@ def interpChecked (o : Falsify.Opts) (file src : String) (input : List UInt8)
   | none => Falsify.interpSource o runFuel k.main.e
   | some m =>
     let r ← ioRunOf file k m args
-    if r.loops then Falsify.interpIOLoop o runFuel (r.expr input)
-    else Falsify.interpIO o runFuel (r.expr input)
+    if r.loops then Falsify.interpIOLoop o runFuel (r.expr input) k.exits
+    else Falsify.interpIO o runFuel (r.expr input) k.exits
 
 /-- A closed term on the falsifier's machine under `o`. -/
 def interpCheckedExpr (o : Falsify.Opts) (e : BoCa.Expr) : Except String (Output × String) :=

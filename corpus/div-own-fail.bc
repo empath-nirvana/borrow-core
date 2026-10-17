@@ -1,0 +1,35 @@
+-- A function that raises its own `Fail[E]` and also divides (SPEC §38, constraint 1 of #513). A
+-- row holds one instance of an effect (SPEC §18, #155), so the arithmetic error is not a second
+-- `Fail`: it is `Arith` (`lib/arith.bc`), an effect of its own, handled with `with` as `Fail` is.
+-- `mean` raises its own error, a negative count, and divides by the count; its row has both,
+-- `Fail[i32], Arith`. Its written row lists both: a written row is a promise that the inferred
+-- one is within it, and `Fail`'s type argument is not determined otherwise.
+--
+-- The two are handled apart or together:
+-- * `apart`: `to_result` handles `Fail[i32]` and `arith_default` the arithmetic error, which
+--   passes the `with` of `Fail` as any other effect does;
+-- * `merged`: `arith_into(f)` raises the arithmetic error as the program's own `Fail[i32]`, `f(e)`,
+--   so one `to_result` sees both; the program's own error passes the `with` of `Arith`.
+--
+-- Answer: `((inl i32[5], (inr i32[4294967293], inl i32[0])), ((inl i32[5], (inr i32[4294967293],
+-- inr i32[4294967196])), inr i32[4294967196]))`: 20 / 4; the count −3; the zero count recovered as
+-- `0`; then the same three merged, the zero count as the error −100; and `merged`'s handlers
+-- written in `main`, −100 again.
+
+include fail
+include arith
+
+-- The mean of `n` entries summing to `sum`; a negative count is the program's own error.
+fn mean(sum: i32, n: i32) -> i32 with Fail[i32], Arith =
+  if n < 0 { raise(n) } else { sum / n }
+
+fn apart(sum: i32, n: i32) -> i32 + i32 = with to_result { with arith_default(0) { mean(sum, n) } }
+
+fn merged(sum: i32, n: i32) -> i32 + i32 =
+  with to_result { with arith_into(!{ e -> 0 - 100 }) { mean(sum, n) } }
+
+main -> ((i32 + i32) * ((i32 + i32) * (i32 + i32))) * (((i32 + i32) * ((i32 + i32) * (i32 + i32))) * (i32 + i32)) =
+  let a = (apart(20, 4), (apart(20, 0 - 3), apart(20, 0)));
+  let b = (merged(20, 4), (merged(20, 0 - 3), merged(20, 0)));
+  let c = with to_result { with arith_into(!{ e -> 0 - 100 }) { mean(7, 0) } };
+  (a, (b, c))

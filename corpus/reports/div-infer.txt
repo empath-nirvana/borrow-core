@@ -1,0 +1,40 @@
+effect 27:1: Arith: arith_raise (ctl, affine, abortive)
+effect 41:1: Ask: ask (ctl, affine)
+row 26:1: quot: Arith
+row 28:1: harmonic: Arith
+row 33:1: half: Arith
+row 51:1: two: Ask
+lowering 26:1: copy `quot__n3`: `quot` for the site 3 of `Arith`
+lowering 28:1: copy `harmonic__n3`: `harmonic` for the site 3 of `Arith`
+lowering 33:1: copy `half__n3`: `half` for the site 3 of `Arith`
+lowering 39:1: copy `twice__b0n4`: `twice` for its block `f` at the site 4 of `Arith`
+lowering 39:1: copy `twice__b0n3`: `twice` for its block `f` at the site 3 of `Arith`
+lowering 51:1: copy `two__n2`: `two` for the site 2 of `Ask`
+lowering 54:32: with arith_default: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 54:32: with arith_default (Arith): a handler, the static name 1; arith_raise abortive: a branch per call (final ctl)
+lowering 54:60: with scaled (Ask): a handler, the static name 2; ask affine: resumed or cancelled
+lowering 54:60: with scaled: a handler with a state, its parameters, passed to each clause and to the continuation at each resume
+lowering 56:1: main: `Stderr` is served by the platform's `wasi_stderr` on the cell `stderr`, which each operation lends
+lowering 56:1: main: `Arith` is served by the platform's `wasi_arith`: an arithmetic error unwinds, is written on standard error, and the program exits with status 1
+lowering 60:11: with arith_default: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 60:11: with arith_default (Arith): a handler, the static name 4; arith_raise abortive: a branch per call (final ctl)
+call 26:34: arith_raise (Arith) → abort[3.0], handled by the caller at 26:1: abortive, it never resumes
+call 30:27: arith_raise (Arith) → abort[3.0], handled by the caller at 28:1: abortive, it never resumes
+call 33:31: arith_raise (Arith) → abort[3.0], handled by the caller at 33:1: abortive, it never resumes
+call 39:40: f → the block, performing at the site 3 of `Arith`
+call 39:40: f → the block, performing at the site 4 of `Arith`
+call 39:42: f → the block, performing at the site 3 of `Arith`
+call 39:42: f → the block, performing at the site 4 of `Arith`
+call 46:16: k → the continuation resumed, at the handler's state
+call 47:34: arith_raise (Arith) → abort[1.0], handled by `with arith_default` at 54:32: abortive, it never resumes
+call 51:28: ask (Ask) → perform[2.0], handled by the caller at 51:1
+call 51:38: ask (Ask) → perform[2.0], handled by the caller at 51:1
+call 54:77: two → `two__n2`
+call 57:11: quot → `quot__n3`
+call 57:24: harmonic → `harmonic__n3`
+call 57:39: half → `half__n3`
+call 58:11: half → `half__n3`
+call 59:11: twice → `twice__b0n3`, its block at the site 3 of `Arith`
+call 59:25: arith_raise (Arith) → abort[3.0], handled by `with wasi_arith` at 56:1: abortive, it never resumes
+call 60:39: twice → `twice__b0n4`, its block at the site 4 of `Arith`
+call 60:53: arith_raise (Arith) → abort[4.0], handled by `with arith_default` at 60:11: abortive, it never resumes

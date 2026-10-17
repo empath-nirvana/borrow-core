@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.67 · 2026-10-17
+Version 0.68 · 2026-10-17
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -443,6 +443,8 @@ between engines is tested on the corpus, not proved.
 ### Open
 
 - Floats (`F32`, `F64`) are §36, by the same scheme.
+- The surface's integer `/` and `%` take the partial operations' sum apart and raise where it
+  has no answer (§38).
 - Checked (non-wrapping) arithmetic is derivable from the operations above.
 - `plainV` excludes the integer types, so they cannot yet be `withborS` leaves.
 - The backend's layout is type-directed (`Backend/README.md`, Representation): `I32` and `I64`
@@ -6115,9 +6117,8 @@ a float value is `f32[n]`/`f64[n]`, its bits, as an integer prints its bits (`Ba
 The operators `+ - * /` and `== != < <= > >=` at a float type are the float operation and IEEE
 754's comparison, by §8's per-width dispatch (`SurfOp.host`): the width is the one expected of
 an arithmetic result, or an operand's other than a literal's, and `f64` when both operands are
-literals and one is a float literal. `/` is only at a float width: an integer's division answers
-a sum (`host[div_s32]`), and `/` at an integer is refused with that message
-(`corpus/reject/int-slash.bc`). There is no unary minus: `neg_f64(x)` (`0.0 - x` is `+0.0` at
+literals and one is a float literal. `/` at an integer is §38's, which raises where the
+division has no answer. There is no unary minus: `neg_f64(x)` (`0.0 - x` is `+0.0` at
 `x = 0.0`).
 
 ### Equality and order
@@ -6221,6 +6222,244 @@ as before.
 - Faster, allocation-free shortest printing (Ryū or Schubfach tables) in place of the exact
   big-integer one, and parsing by Eisel–Lemire with this one as its fallback.
 - Each call of the printer is compiled as a copy of it (#509); the programs call it once.
+
+---
+
+## 38. Entry 37 — integer `/` and `%`: a division with no answer raises
+
+### Motivation
+
+#513. An integer division with no answer (a zero divisor, `MIN / -1`) **raises** through the
+effect system. **Decided by the user** (2026-10-17): "I just want div by zero to raise not panic.
+That is kind of the whole point of an effect system." It never traps, panics or answers a made-up
+value (`x / 0 = 0`). Until this entry, integer division was reachable only as `host[div_s32]` and
+the rest, answering `I32 + 1` (§8), and programs matched on that by hand; §37 made `/` float-only
+for the time being.
+
+Everything here is elaboration, library code and lowering over existing core terms: no `CDerives`
+rule, relation clause, machine step, host operation, kernel type or checker rule.
+
+### The operators
+
+`/` and `%` at `i32`, `i64` and `u8`, and the library's `div_euclid` and `rem_euclid`:
+
+| form | answer | can fail |
+|---|---|---|
+| `a / b` | the quotient truncated toward zero (C, Rust, Wasm) | `b = 0`; `MIN / -1` at `i32`, `i64` |
+| `a % b` | the remainder, with the dividend's sign; `MIN % -1 = 0`, as Wasm's `rem_s` | `b = 0` |
+| `div_euclid(a, b)`, `rem_euclid(a, b)` | `q`, `r` with `a = b·q + r`, `0 ≤ r < |b|` | as `/` and `%` |
+| `checked_div(a, b)`, `checked_rem(a, b)` | `inl q`, or `inr e`, `e : ArithError` | never: the error is the answer |
+
+At `u8` the division is the unsigned `i32` one on the widened operands (as §8's byte operators
+are), and cannot overflow. The operators are `SurfOp.div` and `SurfOp.rem`, `%` at `*`'s
+precedence; `(%)` is a `poly` family as `(/)` is (§36, `op_rem`), so a user type gives its own
+case. At a float width `/` is IEEE 754's (§37) and `%` is refused: a float has no remainder (Wasm
+has no `frem`). `host[div_*]` and `host[rem_*]` are unchanged.
+
+### The error: `Arith`, not a second `Fail`
+
+`lib/arith.bc`:
+
+    type ArithError = 1 + 1          -- inl (): the divisor is zero; inr (): MIN / -1 overflows
+    effect Arith { ctl arith_raise(e: ArithError) -> never }
+    handler arith_default[A](d: A): Arith, A -> A
+    handler arith_to_result[A]: Arith, A -> A + ArithError
+    handler arith_fail[A]: Arith, A -> A with Fail[ArithError]
+    handler arith_into[E, A](f: !(ArithError => E)): Arith, A -> A with Fail[E]
+    fn div_euclid[T](a: T, b: T) -> T       fn rem_euclid[T](a: T, b: T) -> T
+
+**Why a distinct abortive effect.** A row holds one instance of an effect (§18 *Not provided*,
+#155). Were the error `Fail[ArithError]`, a function that raises its own `Fail[E]` and divides
+would perform two instances of `Fail`. `Arith` is an effect of its own with one abortive
+operation, so the two compose: the row is `Fail[E], Arith`, a handler of one passes the other, as
+`Stdout` and `Stderr` are two effects for the same reason (§34). It is the existing mechanism, an
+abortive control effect handled by ordinary `with`s (§18, §19): no new kind of error, and
+`raise` is unchanged. The other options: named instances (#155, not built); `Fail` with the error
+type a sum of the program's and the arithmetic's (every function's error type would change);
+`Fail[ArithError]` alone (refuses the program that does both).
+
+**What the programmer writes.** Nothing to divide: a function that divides by a variable has
+`Arith` in its inferred row. To handle it, `include arith` and a `with`: `arith_default(d)`,
+`arith_to_result`; `arith_into(f)` raises the error as the program's own `Fail[E]`, `f(e)`, so one
+`Fail` handler sees both; `arith_fail` raises it as `Fail[ArithError]`, for `Fail`'s handlers when
+no other `Fail` is in the row. A written row that lists `Fail[E]` lists `Arith` too, as it lists
+any effect performed (`fn mean(sum: i32, n: i32) -> i32 with Fail[i32], Arith`). `bcc check`
+reports the row, `row L:C: mean: Arith, Fail[i32]`, and a division's call as `arith_raise
+(Arith) → abort[n.0]`. A control handler whose clauses divide lists `Arith` in its row (§18).
+
+### Elaboration
+
+Rows are inferred before types are known (§18, `Frontend/Elab/Effects.lean`), and whether a
+division can fail depends on its width (a float's cannot) and on its divisor elaborated at that
+width (`4294967295` is `-1` at `i32`). The typed elaboration decides it, and the elaboration runs
+twice when it must (`Frontend/Sugar.lean`, `elaborateS`; `Frontend/Elab/Divs.lean`):
+
+- **Candidates.** A `/` or `%` is a candidate unless it evidently cannot fail: its divisor is a
+  literal `k`, `0 < k < 256`, or a float literal, or its dividend is a float literal. A program
+  with no candidate is elaborated once, as before.
+- **The first pass** numbers the candidates in declaration order (`VSugar.opAt o k`). The typed
+  elaboration elaborates each at its width; one that can fail there (an integer width, and a
+  divisor that is not a literal at which it cannot: nonzero, and not `-1` for a signed `/`) is
+  recorded (`divTag`) and stands as the unchecked operation only to be typed. A template's
+  division fails if it can at one of its instances.
+- **The second pass** numbers them again in the same order and writes those recorded, before
+  effects are resolved, as a program would by hand:
+
+      a / b   ⟶   run (case checked_div(a, b) { inl q -> return q | inr e -> return arith_raise(e) })
+
+  so `arith_raise` is an ordinary abortive operation for everything §18 does: rows, copies,
+  counted loops, unwinding borrows, drop glue. The others are `VSugar.op` again.
+
+`checked_div(a, b)` (`VSugar.checked`) at an integer width is the host operation taken apart
+(`divChecked`): `inl q`, or `inr e` where it has no answer, `e` chosen by `eqz` of the divisor for
+a signed `/`. A `case` on it is fused with the operation's own (`fuseChecked`), so the division is
+tested once: the quotient's arm and the error's arm are the host operation's. At a float width or a
+`poly` case, `checked_div` answers `inl` of the division, which has an answer.
+
+A division by a literal at which it cannot fail is `divUnchecked`: the host operation whose `inr`
+arm, never taken, answers `0` to be typed.
+
+### Zero cost
+
+- **A literal divisor** (nonzero, not `-1` for a signed `/`) performs nothing: no effect in the
+  row, no copy, and the bare instruction. The flat IR knows the locals set to a constant where they
+  are made (`LState.consts`, each local set once): a division by such a constant has no test
+  (`divTest`), and a `case` on a constant tag selects its arm. `corpus/div-literal.bc` (counts
+  `0 0 0`) compiles `m % 10` and `m / 10` to `i32.rem_s` and `i32.div_s` with no branch, and
+  `corpus/sugar/div-literal.bc` pins the elaborated code against `div-literal.core.bc`.
+- **A variable divisor costs one test**: Wasm's trap condition (`b = 0`, and `a = MIN ∧ b = -1`
+  for `div_s`), a branch to the error arm, the instruction in the other. A `case` on a division's
+  answer is lowered as the division's own test (`Backend/Flat/Lower.lean`, `lowerTm`'s fused
+  `letv`/`case`), so no tag is built and tested again. An error leaving a function is §19's: the
+  copy answers a sum, as any abortive effect does.
+
+### `main`
+
+An `Arith` that `main` performs and handles nowhere is served by the platform, as the system
+interface is (§34): `lib/wasi.bc`'s `wasi_arith[A]: Arith, A -> A + 1`, whose clause writes
+`error: division by zero` or `error: integer overflow in division` on standard error (`Stderr`,
+served by the platform on its cell) and answers `inr ()`. `Frontend/Elab/Effects.lean`,
+`arithMain`:
+
+- `main : F A` becomes `main : F (A + 1)`, and the handler is around the rest of `main`'s body
+  from its first statement that performs `Arith` (`splitArith`; a call's argument that performs
+  none, `f(read_input())`, is bound before it). What comes before runs outside it: reading the
+  input, which loops over a capability `main` holds and so cannot be in a control handler's body
+  (below), cannot fail.
+- The unwind runs the finalisers of what `main` built (§19), and the run ends with `live 0`.
+- **The exit status.** The elaboration records that `main` is served `Arith` (`exitTag`); its value
+  `inl v` is reported as `v`, and `inr ()` as no value, the live count, and exit status `1`
+  (`Backend/Value.lean`, `reportExit`). Every stage does the same: the source stage's model run
+  (`ioOutputN`), the closure IR (`Clos.Prog.exits`), the flat IR (`Stmt.status`, `entryFn`) and
+  Wasm (`$exit`, WASI `proc_exit`, the entry's last act). `bcc interp` and `bcc run` exit with it;
+  `bcc-counts` checks that the flat IR and Wasm end with the same status.
+- **The platform on demand.** A program with `lib/arith.bc` that does not include the platform
+  is given it only when `main` needs it: `Elab.Effects.elaborate`'s `onDemand` elaborates
+  `lib/wasi.bc` just before `main` then, its externs and clauses ahead of the program's own
+  declarations, and leaves it out otherwise (a program with the platform's externs and no
+  capability does not run, #515).
+- **Harness.** `<name>.status` holds a corpus program's exit status (`0` when absent), compared
+  at every stage by `scripts/compile-corpus.sh` and in every mode by `scripts/falsify.sh`, and
+  written by `--write-goldens` with `<name>.out` and `<name>.err`.
+
+### Inference
+
+Checked by the programs below:
+
+| case | row | program |
+|---|---|---|
+| a function dividing by a parameter | `Arith`, inferred | `div-infer`'s `quot` |
+| a counted `for` whose body divides by a variable | `Arith`: the error leaves the loop by its exit and is raised again after it (§16) | `div-infer`'s `harmonic`, `div-recover`'s `means` |
+| a generic function at `i32` and `i64` | `Arith` | `div-infer`'s `half` |
+| a float division by a variable | none | `div-infer`'s `ratio` |
+| a literal divisor | none | `div-infer`'s `tenth`, `div-literal` |
+| a block passed to a generic higher-order function (§30) | the callee's copy at the block's row | `div-infer`'s `twice` |
+| a resuming handler's clause | the handler's row lists `Arith`; the clause uses `checked_div` and cancels `k` before raising, as a clause that raises must | `div-infer`'s `scaled` |
+| a function that raises its own `Fail[E]` and divides | `Fail[E], Arith` | `div-own-fail` |
+
+Refused, each as a `raise` is, and pending (`corpus/pending/`):
+
+- a variable divisor in an adapter's function (`map`, `lib/adapters.bc`), which the generator
+  stores: an effectful callback stored (#161; `div-in-adapter.bc`);
+- a variable divisor in a clause of an answering handler, which performs no operation (§18 *Not
+  provided*; `div-answering-clause.bc`);
+- `arith_fail` around a function that raises its own `Fail[E]`: two instances of `Fail` (#155;
+  `div-two-fails.bc`);
+- `k(x / d)` in a resuming clause: `k` is live across the abort (§18, drop glue); `checked_div`
+  and a cancel serve;
+- a resuming handler that cancels `k` and raises, under two sites of the raised effect: rejected
+  by the checker, with `Fail` as with `Arith` (#514; `clause-cancel-nested.bc`).
+
+### Programs
+
+| program | what it shows | answer | counts |
+|---|---|---|---|
+| `corpus/div-recover.bc` | `arith_default` and `arith_to_result` recover a zero divisor; a buffer built in a counted loop dropped by the unwind | `((i32[4], i32[4294967295]), …)` | `5 0 0` |
+| `corpus/div-unhandled.bc` | no handler: `main` is served by the platform; the buffer unwinds, the error on standard error, status 1 (`.err`, `.status`) | `before`, `live 0`; `error: division by zero`; 1 | `1 0 0` |
+| `corpus/div-overflow.bc` | `MIN / -1` overflows at `i32` and `i64`, `MIN % -1 = 0`; bytes; `checked_div`, `checked_rem`; a literal `-1` divisor | `((inr (inr ()), i32[0]), …)` | `0 0 0` |
+| `corpus/div-euclid.bc` | truncating against Euclidean results on negative operands, and `div_euclid(MIN, -1)` | see the file | `0 0 0` |
+| `corpus/div-own-fail.bc` | constraint 1: `Fail[i32]` and `Arith` handled apart and merged by `arith_into` | `((inl i32[5], …)` | `0 0 0` |
+| `corpus/div-infer.bc` | the inference cases above | see the file | `0 4 0` (the resumptions of a handler with a parameter, §21) |
+| `corpus/div-literal.bc` | division by a literal: no row, the bare instruction | `(i32[15], i32[49500])` | `0 0 0` |
+| `corpus/int-slash.bc` | `7 / 2`, moved from `corpus/reject/` | `i32[3]` | `0 0 0` |
+
+`corpus/reports/div-own-fail.txt`, `div-infer.txt` and `div-unhandled.txt` pin the rows and the
+platform's report; `corpus/sugar/div-literal.bc` the elaborated code.
+
+**Corpus rewrites.** The hand-written divisions became `/` and `%` where each program's output
+and counts stay as they were: `aoc/2021-06` (`modulo(day, 9)`, a literal divisor), `map-views`
+(`rem(x, 10)`, `rem(i, 3)`), `aoc/2021-15`, `leetcode/graphs/0200` and `0417` (`quot`, `modulo` by
+the grid's width: `main` is now served `Arith` by the platform; the divisors are never zero on the
+inputs). The others keep their form, each for a limit that applies to any abortive operation:
+
+- `aoc/2022-12`, `aoc/2023-03`, `aoc/2024-11`, `aoc/2022-21`: the division is inside `borrow imm s`
+  of the input string, a borrow of a buffer that an abort would cross (§18 *Not provided*);
+- `leetcode/matrix/0054`, `0073`, `0079`: the division is inside `cases`, a loop over the input
+  with no bound, and a handler around a div computation is not provided (§20);
+- `leetcode/trees/0212`: the body of a counted `for` would perform two abortive effects,
+  `Exhausted` and `Arith` (§18 *Not provided*);
+- `float-roundtrip`: `div_u64` of a float's bits, which `/` (signed) would change;
+- `int-arith`, `int-ops` and the core forms of `corpus/sugar/`: they are the host operations'
+  own tests, in core.
+
+The library's `host[div_u*]` uses (`lib/io.bc`, `lib/text.bc`, `lib/float.bc`) are unsigned and
+keep their form.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the host's operations, `PinLaw`, `Paper/`,
+`Support/`, `Core/` or the checker's rules. `fundamentalC`, `adequacyC`, `fundamentalD` and
+`adequacyD` keep their statements and cover every elaborated program. Every existing corpus and
+kernel program keeps its output and goldens; `corpus/kernel-counts.expected` and
+`corpus/counts.expected` are unchanged but for the new programs' entries. The flat IR's two
+lowerings above (a constant divisor, a constant tag; a `case` on a division) change the code of
+programs that divide or match on a constant injection, not what they compute or count.
+`corpus/reject/include-unknown.bc`'s message lists `arith`. The row of a control handler's `with`
+now includes the answering effects its clauses perform (`rowV`): no existing program's report
+changes.
+
+### Not provided
+
+- A control handler around a loop of `main` (a `main` that returns a loop): `main` handles
+  `Arith` itself.
+- The platform's handler around a statement of `main` that loops over a capability `main` holds
+  (`read_input()` after the first division): a control handler's body is lent the capabilities,
+  and a borrow cannot be held across a loop's observations (§14, §34). `main` handles `Arith`
+  around the division instead, or reads first.
+- `%` at a float type; unsigned `/` at `i32` and `i64` (there are no unsigned types:
+  `host[div_u32]`).
+- Arithmetic overflow of `+`, `-`, `*`: they wrap, as Wasm's (§8); `add_checked` and
+  `mul_checked` raise (§18).
+
+### Open
+
+- Inferring rows with types: the first pass exists only because rows are inferred before types
+  are known (§18). A row inference in the typed elaboration would decide a division's effect where
+  its width is decided, in one pass.
+- Named instances (#155) would let `arith_fail` serve beside a program's own `Fail`.
+- The platform's handler for `Exhausted` at `main` (#228), by the same mechanism (`onDemand`,
+  `exitTag`, `reportExit`).
+- A message naming where the division was; an exit status other than `1`.
 
 ---
 
@@ -6482,9 +6721,36 @@ dispatch and literal rounding in `Frontend/` (`Frontend/FloatLit.lean`); every s
 `Backend/` (`Flat/Lower.lean`'s `hostVals` canonicalises, `Wasm/Lower.lean` reinterprets); and
 `lib/float.bc`. No change to `CDerives`, the relation, the machine's rules or the checker's rules.
 
+Entry 37 (§38) is implemented in `lib/arith.bc` and `lib/wasi.bc` (`wasi_arith`);
+`Frontend/Syntax.lean`, `Frontend/Lexer.lean` and `Frontend/Parser.lean` (`SurfOp.rem`, `%`,
+`(%)`, `VSugar.opAt`, `VSugar.checked`); `Frontend/Elab/Divs.lean` (the candidates, numbered and
+rewritten); `Frontend/Sugar.lean` (`elaborateP`'s two passes, `surfOp`, `divCase`,
+`divUnchecked`, `divChecked`, `fuseChecked`, the library brought in, `exitTag`);
+`Frontend/Elab/Effects.lean` (`arithMain`, `splitArith`, `onDemand`, a `with`'s row with its
+clauses' answering effects); and `Backend/` (`Output.status` and `reportExit` at every stage,
+`Clos.Prog.exits`, `Flat.Stmt.status`, the runtime's `$exit`, `divTest`, the constant locals and
+the fused `case` of the flat IR), with the harness's `<name>.status`; no change to `CDerives`,
+`Core/`, `Paper/`, `Support/` or the checker's rules.
+
 ---
 
 ## Changelog
+
+- **0.68** (2026-10-17) — §38 (new, #513): integer `/` and `%` at `i32`, `i64` and `u8`, and
+  `div_euclid`, `rem_euclid`, `checked_div`, `checked_rem`. A division with no answer (a zero
+  divisor, `MIN / -1`) raises `arith_raise` of `Arith` (`lib/arith.bc`), an abortive effect of its
+  own so that it composes with a program's own `Fail[E]` in one row; handlers `arith_default`,
+  `arith_to_result`, `arith_fail`, `arith_into`. Rows are inferred with no annotation; the typed
+  elaboration's first pass decides which divisions can fail. A nonzero literal divisor (not `-1`
+  for `/`) performs nothing and is the bare instruction; a variable divisor costs one test. An
+  `Arith` that reaches `main` is served by the platform (`wasi_arith`): the unwind runs the
+  finalisers, the error is written on standard error, and the program exits with status 1 at
+  every stage (`<name>.status` in the harness). `int-slash` moves from `corpus/reject/` to the
+  corpus; new programs `div-recover`, `div-unhandled`, `div-overflow`, `div-euclid`,
+  `div-own-fail`, `div-infer`, `div-literal`, `sugar/div-literal`; five programs rewritten with
+  `/` and `%` at their outputs and counts. §8 *Open* and §37 *Surface* updated. No change to
+  `CDerives`, the relation, the machine, a kernel program, or any existing program's output or
+  counts.
 
 - **0.67** (2026-10-17) — §37 (new, #499): floats. `f32` and `f64` are two more widths of
   `VTy.int`, with literals given by their bits and Wasm's float instructions as host operations

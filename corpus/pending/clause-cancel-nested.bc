@@ -1,0 +1,22 @@
+-- pending: #514 (a resuming clause that cancels its continuation and raises, under two sites of the raised effect)
+-- A resuming handler whose clause cancels its continuation and then raises, as `deadline` of
+-- `corpus/reconcile-clock.bc` does, with its `with` inside two handlers of the raised effect. The
+-- clause raises at the innermost, but the continuation's type carries both sites, so its cancel is
+-- rejected. With one `to_result` around it the program runs. Under SPEC §38 the same arises for
+-- such a handler of `Arith` used in a `main` the platform serves `Arith`.
+--
+-- Answer, once it runs: `inl (inr i32[0])`.
+
+include fail
+effect Ask { ctl ask(x: i32) -> i32 }
+
+handler scaled[A](d: i32): Ask, A -> A with Fail[i32] = {
+  return(a) = a;
+  ask(x, k) = if d == 0 { u <- (force k).2; raise(0) } else { k(x) }
+}
+
+fn two() -> i32 with Ask = ask(10) + ask(20)
+
+main -> (i32 + i32) + i32 = with to_result[i32, i32 + i32] {
+  with to_result { with scaled(0) { two() } } }
+-- now: 15:63: this computation performs the operations `[2.0 aff i32 ~> 0, 1.0 aff i32 ~> 0]`, which are not within the row `[2.0 aff i32 ~> 0]` here
