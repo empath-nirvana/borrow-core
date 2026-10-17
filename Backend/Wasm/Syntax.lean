@@ -39,6 +39,8 @@ inductive Instr where
   | unreachable
   /-- The value of the runtime's global `name`. -/
   | globalGet (name : String)
+  /-- Set the runtime's global `name` (the stack pointer `$sp`). -/
+  | globalSet (name : String)
   /-- Add one to the runtime's count of dispatched calls. -/
   | countInd
   /-- Add one to the runtime's count of copies at a non-trivial type. -/
@@ -59,6 +61,8 @@ structure Module where
   funcs : List Func
   /-- The read-only data, at `Flat.dataBase`. -/
   data : Array UInt8 := #[]
+  /-- Some function has a frame: the module has a stack (`Backend/Wasm/Runtime.lean`). -/
+  stack : Bool := false
   deriving Repr, Inhabited
 
 end Backend.Wasm

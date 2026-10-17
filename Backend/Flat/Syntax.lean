@@ -34,6 +34,10 @@ inductive Exp where
   | op (o : HostOp) (args : List Exp)
   /-- The allocator: a fresh range of `words` words. -/
   | alloc (words : Exp)
+  /-- The address of the function's frame slot at word `off` of its frame, `words` words wide,
+  whose life starts here: a scoped cell's (`Backend/Flat/Lower.lean`, `frameScopes`). It is no
+  allocation and no live range; it ends at `unslot` or when the function returns. -/
+  | slot (off words : Nat)
   /-- The allocator's count of live ranges. -/
   | live
   /-- The next byte of the stream `fd`, or `2⁶⁴ - 1` at its end (SPEC §11). -/
@@ -55,6 +59,8 @@ inductive Stmt where
   | store8 (addr : Exp) (v : Exp)
   /-- Return a range to the allocator. -/
   | free (addr : Exp)
+  /-- End the life of the frame slot at `addr` (`Exp.slot`): nothing is freed. -/
+  | unslot (addr : Exp)
   /-- Write the byte `b` to standard output. -/
   | out (b : Exp)
   /-- Write the low byte of `b` to the stream `fd` (SPEC §11). -/
@@ -86,6 +92,9 @@ structure Fn where
   results : Nat
   /-- Locals beyond the parameters. -/
   locals : Nat
+  /-- The words of the function's frame: its slots (`Exp.slot`), taken from the stack on entry
+  and given back on return. -/
+  frame : Nat := 0
   body : List Stmt
   deriving Repr, Inhabited
 

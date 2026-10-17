@@ -8,7 +8,7 @@
 -- Answer: `x=12, y=-7 é` and a newline, and `i32[14]`, its length in bytes (`é` is two). A
 -- digit in the wrong order, a lost sign or a character encoded in the wrong number of bytes
 -- changes the text or the length. The string does not grow: its one allocation is the only one
--- beside the capability's cell.
+-- (the capability's cell is a word of the data, SPEC §35).
 
 include textio
 

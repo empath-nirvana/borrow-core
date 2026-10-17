@@ -33,7 +33,9 @@ handler exhausted_to_option[A]: Exhausted, A -> A + 1 = {
 -- argument until it answers (`inl b`) or calls the group (`inr (a, f)`), `f` the frame to resume
 -- with the answer (`inl k`) or none when the call is in tail position (`inr ()`); `resume`
 -- continues a frame with the answer. `deep` drives it: a call pushes its frame and starts the
--- callee, an answer pops a frame and resumes it, one observation each.
+-- callee, an answer pops a frame and resumes it, one observation each. Allocates: the frames'
+-- buffer is on the heap, growing by `push` (`lib/buf.bc`) as calls nest, where a native recursion
+-- would use the stack.
 include buf
 
 fn deep_settle[A, B, K](st: buf (1 + K), o: B + A * (K + 1)) -> B + buf (1 + K) * (A + B) =

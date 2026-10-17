@@ -1,6 +1,6 @@
 -- Hello, world: a literal written to standard output in one call (`write_lit`, the `write_all`
 -- extern). The literal's bytes sit in the program's read-only data and are written from there,
--- so nothing is allocated for the text: the one allocation is the output capability's cell.
+-- so nothing is allocated: the output capability's cell is a word of the data too (SPEC §35).
 --
 -- Answer: `Hello, world!` and a newline, and `()`.
 

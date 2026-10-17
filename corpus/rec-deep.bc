@@ -8,8 +8,8 @@
 -- `tot` holds `n` in its one frame. `even` and `odd` call each other in tail position only, and
 -- push nothing. `spine` builds a tree that leans left, and `sum` walks it, its frame holding the
 -- right subtree and the value (an owned `mu` value in the buffer, whose empty slots are `inl ()`).
--- Each group's buffer grows by doubling: a few allocations per run, beside the tree's own two per
--- node (`corpus/counts.expected`).
+-- Each group's buffer grows by doubling: a few allocations per run, beside the tree's own one per
+-- node (SPEC §35, `corpus/counts.expected`).
 --
 -- The source interpreter is too slow at this depth (`-- check: no-source`); the golden is the
 -- closed form: 1 + … + 30000, and the same for the tree's values.

@@ -7,7 +7,7 @@
 --
 -- Answer: on `ascii-upper.in`, the text upper-cased with `é`, `ö` and `✓` kept, and `i32[31]`,
 -- its length in bytes. A transform that touched a continuation byte would break a character.
--- The only allocation beyond the capabilities' cells is the string.
+-- The only allocation is the string; the capabilities' cells are words of the data (SPEC §35).
 
 include textio
 

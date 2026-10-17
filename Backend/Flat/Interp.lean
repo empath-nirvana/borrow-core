@@ -12,6 +12,9 @@ words disjoint from every live range, `free a` takes back the range starting at 
 counts the live ranges. This implementation never reuses an address and leaves a gap after
 every range, so it reports what a reusing allocator would hide: a load or store outside a live
 range, a read of a word never written, a `free` of anything but the start of a live range.
+Each call has a frame of fresh addresses, never reused; a frame slot's words are live from its
+`slot` to its `unslot` or the call's return (or tail call), so an access to a slot after its
+scope or its frame is an error too. Slots are not ranges: `live` does not count them.
 Numeric operations are `wasmHost`'s; an instruction where Wasm traps is an error.
 -/
 
@@ -38,6 +41,14 @@ structure FState where
   copies : Nat := 0
   /-- The end of the read-only data: an address below it is not freed. -/
   staticEnd : Nat := 0
+  /-- Live frame slots: start ↦ length in words. They are not ranges: `live` does not count
+  them. -/
+  slots : Std.HashMap Nat Nat := {}
+  /-- The frames of the calls running, innermost first: each one's base address and words. -/
+  frames : List (Nat × Nat) := []
+  /-- The arguments have been read: the runtime's reservation of their memory, at their first
+  read, is counted as one allocation, as `$args` counts it (`Backend/Wasm/Runtime.lean`). -/
+  argsRead : Bool := false
 
 abbrev FM := StateT FState (Except String)
 
@@ -117,6 +128,36 @@ def freeRange (a : Nat) : FM Unit := do
     if a < s.staticEnd then pure ()
     else throw s!"flat IR: free of {a}, not the start of a live range"
 
+/-- The slot at word `off` of the current frame, `n` words, starts its life: its address. -/
+def startSlot (off n : Nat) : FM UInt64 := do
+  let s ← get
+  let some (fp, w) := s.frames.head? | throw "flat IR: a slot outside a function"
+  if off + n > w then throw s!"flat IR: a slot past its frame of {w} words"
+  let a := fp + 8 * off
+  if s.slots.contains a then throw s!"flat IR: the slot at {a} is already live"
+  let mem := (List.range n).foldl (fun m i => m.insert (a + 8 * i) none) s.mem
+  set { s with mem, slots := s.slots.insert a n }
+  pure a.toUInt64
+
+/-- End the life of the slot at `a`. -/
+def endSlot (a : Nat) : FM Unit := do
+  let s ← get
+  match s.slots[a]? with
+  | some n =>
+    let mem := (List.range n).foldl (fun m i => m.erase (a + 8 * i)) s.mem
+    set { s with mem, slots := s.slots.erase a }
+  | none => throw s!"flat IR: unslot of {a}, not a live slot"
+
+/-- End the life of every slot of the current frame: it returns, or tail-calls. -/
+def endFrame : FM Unit := do
+  let some (fp, w) := (← get).frames.head? | pure ()
+  for i in [0:w] do
+    if (← get).slots.contains (fp + 8 * i) then endSlot (fp + 8 * i)
+
+/-- The first read of the arguments counts the runtime's reservation of their memory. -/
+def readArgs : FM Unit :=
+  modify fun s => if s.argsRead then s else { s with argsRead := true, allocs := s.allocs + 1 }
+
 def setLocal (fr : Array UInt64) (i : Nat) (v : UInt64) : FM (Array UInt64) :=
   if i < fr.size then pure (fr.set! i v) else throw s!"flat IR: no local {i}"
 
@@ -142,11 +183,13 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
     | .load8 a => do readByte (← evalExp p n fr a).toNat
     | .op o args => do liftE (evalOp o (← evalArgs p n fr args))
     | .alloc w => do allocRange (← evalExp p n fr w).toNat
+    | .slot off w => startSlot off w
     | .live => do pure (← get).ranges.size.toUInt64
     | .getc fd => do
         let fd ← evalExp p n fr fd
         let ar := fd == argsFd.toUInt64
         if fd != 0 && !ar then throw s!"flat IR: read from fd {fd}"
+        if ar then readArgs
         let s ← get
         match (if ar then s.args else s.input) with
         | [] => pure 0xFFFFFFFFFFFFFFFF
@@ -158,6 +201,7 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
         let k ← evalExp p n fr k
         let ar := fd == argsFd.toUInt64
         if fd != 0 && !ar then throw s!"flat IR: read from fd {fd}"
+        if ar then readArgs
         let s ← get
         let src := if ar then s.args else s.input
         let bs := src.take k.toNat
@@ -187,7 +231,14 @@ def callFn (p : Prog) : Nat → Nat → List UInt64 → Option Nat → FM (List 
     if let some k := results then
       if k != fn.results then throw s!"flat IR: {fn.name} answers {fn.results} results, not {k}"
     let fr := (args ++ List.replicate fn.locals 0).toArray
-    match ← execBlock p n fr fn.body with
+    -- The frame: a fresh range of addresses, as a stack frame's is when the stack is reused.
+    let fp := (← get).next
+    modify fun st => { st with next := st.next + (if fn.frame == 0 then 0 else 8 * fn.frame + 8),
+                               frames := (fp, fn.frame) :: st.frames }
+    let r ← execBlock p n fr fn.body
+    endFrame
+    modify fun st => { st with frames := st.frames.drop 1 }
+    match r with
     | (_, some r) =>
       if r.length != fn.results then throw s!"flat IR: {fn.name} returns {r.length} results"
       pure r
@@ -220,6 +271,7 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
         writeByte a.toNat v
         pure (fr, none)
     | .free a => do freeRange (← evalExp p n fr a).toNat; pure (fr, none)
+    | .unslot a => do endSlot (← evalExp p n fr a).toNat; pure (fr, none)
     | .out b => do
         let b ← evalExp p n fr b
         modify fun st => { st with out := st.out.push b.toUInt8 }
@@ -258,7 +310,11 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
         | some b => execBlock p n fr b
         | none => execBlock p n fr d
     | .ret es => do pure (fr, some (← evalArgs p n fr es))
-    | .tailCall f args => do pure (fr, some (← callFn p n f (← evalArgs p n fr args) none))
+    | .tailCall f args => do
+        -- The caller's frame is given back before the callee runs.
+        let vs ← evalArgs p n fr args
+        endFrame
+        pure (fr, some (← callFn p n f vs none))
     | .tick => do
         modify fun st => { st with indirect := st.indirect + 1 }
         pure (fr, none)

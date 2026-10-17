@@ -1,7 +1,7 @@
 -- `corpus/io-upper.bc` over the effects (SPEC §34): the same filter, reading with `input_byte`
 -- and writing with `print_byte`, where `io-upper` passes the streams' cells to `getb` and `putb`.
--- The two cost the same, the zero cost of the platform's handlers: two allocations (the stdin and
--- stdout cells, which the runtime makes), no dispatched call, no copy. Each operation is a direct
+-- The two cost the same, the zero cost of the platform's handlers: no allocation (the stdin and
+-- stdout cells are words of the data, §35), no dispatched call, no copy. Each operation is a direct
 -- call of the platform's clause, which lends the cell to the extern, as `putb` lends it.
 --
 -- Answer: `io-upper`'s, the input upper-cased.

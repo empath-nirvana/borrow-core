@@ -31,7 +31,8 @@ fn cap_of[A](b: buf A) -> buf A * i32 =
   let (a, c) = array_size[A](a);
   ((a, n), c)
 
--- The elements moved into a new array of capacity `cap`, which is at least the length.
+-- The elements moved into a new array of capacity `cap`, which is at least the length. Allocates:
+-- the new array, one heap allocation; the old one is freed.
 fn grow[A](b: buf A, cap: i32) -> buf A =
   let (old, n) = b;
   let fresh = array_new[A] (cap, !{ i -> filler[A] });
@@ -46,13 +47,15 @@ fn grow[A](b: buf A, cap: i32) -> buf A =
   (fresh, n)
 
 -- Room for `extra` more elements: the capacity doubles, or grows to fit, when it is short.
+-- Allocates when it grows (`grow`).
 fn reserve[A](b: buf A, extra: i32) -> buf A =
   let (a, n) = b;
   let (a, c) = array_size[A](a);
   let want = if n + extra <= c * 2 { c * 2 } else { n + extra };
   if n + extra <= c { (a, n) } else { grow((a, n), want) }
 
--- `x` at the end. A full buffer grows first, to twice its capacity and at least 8.
+-- `x` at the end. A full buffer grows first, to twice its capacity and at least 8. Allocates when
+-- it grows (`grow`): one heap allocation per doubling, as Rust's `Vec::push`.
 fn push[A](b: buf A, x: A) -> buf A * 1 =
   let (a, n) = b;
   let (a, c) = array_size[A](a);

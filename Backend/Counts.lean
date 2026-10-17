@@ -20,8 +20,9 @@ at a type whose copy is not the words themselves: each is a deep copy that alloc
 With `--sites`, print the program's closure calls instead (`Flat.callSites`): how many there
 are, how many are direct because their type's union has one code, how many more because the flow
 analysis finds one code, the recursive closure types, which keep heap environments, with the
-number of codes in each union, and the owned folds compiled by pointer reversal and those that
-recurse.
+number of codes in each union, the owned folds compiled by pointer reversal and those that
+recurse, and the scoped cells (`Backend/Flat/Lower.lean`, `frameScopes`) placed in frame slots
+and those allocated.
 
 With `--kernel`, the program is the kernel program `name` (`Backend/Kernel.lean`).
 -/
@@ -49,8 +50,10 @@ def sites (file src : String) : Except String String := do
   let T ← p.types
   let recs := T.recFn.toList.map fun t => (T.union t).size
   let (rev, rc) ← Backend.Flat.foldSites p
+  let (sf, sa) := Backend.Flat.scopeSites p
   pure (s!"calls {n} direct {ty + fl} (union {ty}, flow {fl}) dispatched {n - ty - fl} " ++
-    s!"recursive-types {recs.length} {recs} owned-folds reversed {rev} recursive {rc}")
+    s!"recursive-types {recs.length} {recs} owned-folds reversed {rev} recursive {rc} " ++
+    s!"scoped-cells framed {sf} allocated {sa}")
 
 /-- The call-site report of `--sites` for a closure-IR program. -/
 def sitesOfProg (p : Backend.Clos.Prog) : Except String String := do
@@ -58,8 +61,10 @@ def sitesOfProg (p : Backend.Clos.Prog) : Except String String := do
   let T ← p.types
   let recs := T.recFn.toList.map fun t => (T.union t).size
   let (rev, rc) ← Backend.Flat.foldSites p
+  let (sf, sa) := Backend.Flat.scopeSites p
   pure (s!"calls {n} direct {ty + fl} (union {ty}, flow {fl}) dispatched {n - ty - fl} " ++
-    s!"recursive-types {recs.length} {recs} owned-folds reversed {rev} recursive {rc}")
+    s!"recursive-types {recs.length} {recs} owned-folds reversed {rev} recursive {rc} " ++
+    s!"scoped-cells framed {sf} allocated {sa}")
 
 /-- `bcc-counts --kernel [--sites] <name>`. -/
 def kernelMain (sitesOnly : Bool) (name : String) : IO UInt32 := do

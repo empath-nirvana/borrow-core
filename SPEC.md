@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.64 · 2026-10-16
+Version 0.65 · 2026-10-16
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -900,8 +900,8 @@ An extern the compiler has no implementation for is reported as assumed and not 
 
 ### Lowering
 
-The runtime allocates the three cells holding file descriptors 0, 1 and 2, runs `main`, frees
-the cells `main` returns and prints the result. `read_byte` is WASI `fd_read` of one byte from
+The runtime binds the three cells holding file descriptors 0, 1 and 2, each a word of the
+program's data (§35), runs `main`, takes back the cells `main` returns and prints the result. `read_byte` is WASI `fd_read` of one byte from
 the cell's descriptor (end of input, or an error, is `inr ()`); `write_all` is `fd_write` of the
 view's bytes, called again after a short write; `read_into` is `fd_read` into the view, called
 again until it is full or a read answers nothing; `write_byte` is `fd_write` of one
@@ -2033,7 +2033,8 @@ Each is elaborated before checking into core terms the unchanged checker checks.
   allocated; otherwise it is `tab`. Copying the family is typable only at an `imm` family, so no
   write reaches the array; `$free` skips addresses below the heap.
 - **Buffers** are `(ptr, cap, len)`: an array's two words and the length. Growth allocates the
-  new block, moves the elements one by one and frees the old block.
+  new block, moves the elements one by one and frees the old block; each function that may grow
+  says so (§35).
 
 That the lowering of literals is the model's run up to locations is a lowering claim, tested on
 the corpus (design §5.7, §11 Assurance), not proved.
@@ -5532,7 +5533,9 @@ effects, at `io-upper`'s counts (`2 0 0`), and every §11 program keeps its coun
   the runtime does not read it. The closure and flat IRs' interpreters run the model: the cell
   holds the time, and a sleep adds to it.
 - The arguments are read once, at their first use, with `args_sizes_get` and `args_get`, into
-  memory the runtime takes from the top of the heap, which is no object and is never freed; the
+  memory the runtime takes from the top of the heap, which is no object and is never freed, and
+  counts as one allocation (§35); the clock's and the arguments' cells are words of the program's
+  data (§35); the
   `args` cell holds the stream `0xFFFFFFFF`, which `$getc` and `$getv` read from there
   (`Backend/Wasm/Runtime.lean`). `bcc interp … -- arg…`, `bcc run <file> arg…`,
   `bcc-counts <file> -- arg…`, and `<name>.args` (one argument per line) in
@@ -5649,6 +5652,112 @@ reports change only where a message changed (`corpus/reject/include-unknown.bc` 
 
 ---
 
+
+## 35. Entry 34 — implicit allocations: frame slots, static cells, one box a node
+
+### Motivation
+
+A sweep of every heap allocation the source does not write (#500) found two kinds. Some are
+pointless: a cell whose life the typing already scopes to one borrow, and the capability cells
+every I/O program allocates. Others are needed but unstated: the boxes of recursive data, closures
+on a type cycle, a buffer's growth, the heap driver's frames. The target is C's and Rust's: a
+compiler temporary whose address is taken is a slot of its function's frame, a process-wide
+object is static, and a tree allocates one object a node. This entry removes the pointless
+allocations in the lowering and marks the rest. No allocator effect, arena or row is introduced
+(those stay the eventual `Alloc` handlers).
+
+### Language
+
+No change: no type, rule, term, typing, elaboration or semantics. The kernel term of every program
+is the one it was, and every program's output. Only the backend changes, below the model.
+
+### Lowering
+
+- **Scoped cells are frame slots.** Three elaborations allocate a cell for one borrow: the lend of
+  a value to a call (`f(&x)`, `f(&mut x)`, `Frontend/Sugar.lean`, `lendBorrow`), `modify &mut x
+  { … }` of a value (the same), and a handler's state given as a value (`with h(e) { … }`,
+  `Frontend/Elab/Effects.lean`, `withBlk`). Each erases to `let (c, r) = withbor (alloc v) cb;
+  b` with the owner `c` used once in `b`, by its `free`. The closure conversion recognises the
+  shape (`Backend/Clos/Convert.lean`, `markScoped`: the borrow of a fresh cell, its owner freed
+  through `let`s and no other `λ`) and marks the two as one scope (`scopedAlloc k`,
+  `scopedFree k`), which every stage runs as `alloc` and `free`. When no resumption point of the
+  code lies between them (`Backend/Clos/Capture.lean`, `crossedScopes`: a `perform`, an `await`
+  or a call of a code that may suspend while the scope is open), the flat IR places the cell in a
+  slot of the code's frame (`Backend/Flat/Lower.lean`, `frameScopes`; `Flat.Exp.slot`,
+  `Stmt.unslot`, `Fn.frame`). The slot is no allocation and no live range. The Wasm module then
+  has a stack of 1 MiB between the data and the heap, as clang and rustc lay out the shadow
+  stack: `$sp` is lowered by a function's frame on entry, with a trap past the stack's end, and
+  raised back before each return and tail call (`Backend/Wasm/Lower.lean`, `lowerFn`). A raise
+  returns through the frame and drops the cell with it. LLVM's counterpart is an `alloca`.
+- **A suspension inside a scope.** A code that may suspend is a state machine whose state holds
+  the variables live at its resumption point, and whose resume code is a new call with a frame of
+  its own (§19 *Lowering*); a slot open at the point would be held in the state past its frame.
+  Such a scope keeps a heap cell (`Clos.Prog.suspendedScopes`). No program has one: the typing
+  refuses a resuming operation across a borrow block's body (a continuation held across a lend is
+  T1, #172), and a lend in the arguments of a function that threads a capability. A scope between
+  two suspensions is framed in each code that runs it: `corpus/async-lend-slots.bc`.
+- **Capability cells are static.** `stdin`, `stdout`, `stderr`, `args` and `clock` (§11, §34) are
+  each a word of the program's data, after its literals (`Backend/Clos/Convert.lean`,
+  `staticWord`; `Op.staticCell`): the prologue stores the descriptor there, and the epilogue's
+  `free`, of an address below the heap, frees nothing.
+- **One box a node.** A recursive type boxes the fields that close its cycles: the back edges of
+  one depth-first search over the pair and sum fields (`Backend/Clos/Types.lean`). Where that
+  boxes two fields or more of one cycle, a sum's payload is boxed instead when that boxes fewer
+  (`sumBoxes`). A tree `μX. 1 + X ⊗ (A ⊗ X)` boxed its two children, two objects a node with the
+  empty children's among them; it is now a tag and a pointer to an object holding the node, its
+  children inline, so one object a node and none for an empty child, as Rust's
+  `Option<Box<Node>>`. A linear shape (a list) boxes one field either way and keeps it at its
+  recursive position, which pointer reversal reads (Backend README, *Stack*). Sum boxing keeps
+  the tag word, where Rust uses the null pointer.
+- **The arguments' memory is counted.** The runtime's one reservation of the arguments' memory at
+  their first read (§34 *Lowering*) counts as one allocation in `$allocs`, at the flat IR and in
+  Wasm alike; it is still no range and never freed.
+
+### Implicit allocations that remain
+
+Each is needed, and is now said where it arises:
+
+| allocation | where it is said |
+|---|---|
+| a buffer's growth: `push`, `reserve`, `grow`, the string `push_*`, `to_string`, `string_of_lit` | `lib/buf.bc`, `lib/text.bc` (each function's comment) |
+| the heap driver's frames, `with deep` | `lib/rec.bc` (`deep`'s comment) |
+| a boxed field or payload of a recursive type | Backend README, *Representation* |
+| a closure of a recursive closure type that captures | `bcc-counts --sites` (`recursive-types`); Backend README, *Representation* |
+| a deep copy at a type holding recursive data | `clone`, written (§10); `bcc-counts` (`copies`) |
+| the arguments' memory | `$allocs`, above |
+| a scoped cell a suspension crosses | `bcc-counts --sites` (`scoped-cells … allocated`) |
+
+### Programs
+
+| program | what it shows | answer | counts |
+|---|---|---|---|
+| `corpus/async-lend-slots.bc` | lends of a `let mut`, a `modify` and a handler's state as a value in a task, between its `await`s: every scoped cell framed | `[45, 67]` | `22 6 0` |
+
+Every count that changed is lower but one: `io-args` counts the arguments' memory (`7 0 0` before,
+`6 0 0` now: two capability cells fewer and the reservation). `rec-tree` is `127 0 0` (from
+`254`), `tree-map` `29 0 2` (from `58`), `rec-deep` `30040 0 0` (from `60040`); every I/O program
+loses its capability cells; every program that lends a value loses its scoped cells. The counts
+quoted in the tables of earlier entries are as of their versions; `corpus/counts.expected` has
+the current ones.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `PinLaw`, the checker, the elaboration or a
+kernel program (`corpus/kernel-counts.expected` unchanged). Every corpus program keeps its output.
+The flat-IR interpreter checks every access to a frame slot against its scope and its call's frame
+(each call has fresh frame addresses), as it checks every heap access against the live ranges, and
+the falsifier passes on the corpus.
+
+### Open
+
+- A scoped cell a suspension crosses: its slot would live in the suspended state, which then
+  needs a stable address (a pinned frame). Typing excludes it today.
+- A sum's boxed payload with a null-pointer niche (the tag word dropped), as Rust's `Option<Box>`.
+- An owned fold over a tree still recurses natively (Backend README, *Stack*).
+- Placing the objects that remain by escape analysis (stack, frame arena or heap): the scoped
+  cells are placed by the elaborator's scope, not by an analysis.
+
+---
 
 ## Status
 
@@ -5884,10 +5993,30 @@ the WASI runtime's clock and arguments, `bcc trusted` at the externs `main` reac
 and #486's fixes in `Backend/Clos/Capture.lean` and `Backend/Driver.lean`), with no change to
 `CDerives`, the relation, the machine, `Paper/` or `Support/`.
 
+Entry 34 (§35) is implemented in `Backend/` alone: `Backend/Clos/Convert.lean` (`markScoped`,
+`staticWord`), `Backend/Clos/Syntax.lean` (`Op.scopedAlloc`, `Op.scopedFree`, `Op.staticCell`,
+`Prog.suspendedScopes`), `Backend/Clos/Capture.lean` (`crossedScopes`), `Backend/Clos/Types.lean`
+(`sumBoxes`), `Backend/Flat/` (`frameScopes`, `Exp.slot`, `Stmt.unslot`, `Fn.frame`, the
+interpreter's frames) and `Backend/Wasm/` (`$sp`, the stack, `lowerFn`), with the library's
+comments in `lib/buf.bc`, `lib/text.bc` and `lib/rec.bc`; no change to `CDerives`, `Core/`,
+`Paper/`, `Support/`, the checker or the elaboration.
+
 ---
 
 ## Changelog
 
+- **0.65** (2026-10-16) — §35 (new, #500): the backend's implicit allocations. A cell the
+  elaboration scopes to one borrow (a lend of a value, `modify` of a value, a handler's state
+  given as a value) is a slot of its code's frame when no suspension crosses its scope, on a Wasm
+  shadow stack (`$sp`); the capability cells are words of the program's data; a recursive type
+  boxes a sum's payload in place of its payload's recursive fields when that boxes fewer (a tree
+  is one object a node, an empty child none); the arguments' memory counts in `$allocs`. The
+  allocations that remain are said in the library's comments and §35. New corpus program
+  `async-lend-slots`; `bcc-counts --sites` reports the scoped cells. Counts fall (`rec-tree` 254 →
+  127, `tree-map` 58 → 29, `rec-deep` 60040 → 30040, every I/O program's capability cells), but
+  `io-args`'s (7 → 6, its reservation counted). §11's and §34's *Lowering* updated. No change to
+  `CDerives`, the relation, the machine, the elaboration, a kernel program, or any program's
+  output.
 - **0.64** (2026-10-16) — Library only (#198, #201, #203, the LeetCode corpus in
   `corpus/leetcode/`): §17's `lib/buf.bc` gains `heap_peek`, the least element of a heap read
   without taking it out. Ordinary library code over existing constants. No kernel, checker,

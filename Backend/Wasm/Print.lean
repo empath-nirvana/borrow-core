@@ -77,6 +77,7 @@ def printInstr (d : Nat) : Instr → List String
   | .drop => [indent d ++ "drop"]
   | .unreachable => [indent d ++ "unreachable"]
   | .globalGet g => [indent d ++ s!"global.get {g}"]
+  | .globalSet g => [indent d ++ s!"global.set {g}"]
   | .countInd => [indent d ++ "global.get $indirect", indent d ++ "i64.const 1",
       indent d ++ "i64.add", indent d ++ "global.set $indirect"]
   | .countCopy => [indent d ++ "global.get $copies", indent d ++ "i64.const 1",
@@ -102,13 +103,25 @@ def printData (bs : Array UInt8) : List String :=
     "\\" ++ (hex (b.toNat / 16)).toString ++ (hex (b.toNat % 16)).toString)
   [indent 1 ++ s!"(data (i32.const {Flat.dataBase}) \"{esc}\")"]
 
-/-- The module's text. The heap starts past the read-only data. -/
+/-- The bytes of the stack, when the module has one: frames of scoped cells only, so a frame is
+a few words. -/
+def stackBytes : Nat := 1 <<< 20
+
+/-- The module's text. The stack, when the module has one, starts past the read-only data, and
+the heap past the stack. -/
 def printModule (m : Module) : String :=
   let L := m.data.size
-  let heap := if L == 0 then 16376 else Flat.staticEnd L
-  let rt := (runtimeWat.replace "(global $heap (mut i32) (i32.const 16376))"
+  let staticEnd := if L == 0 then 16384 else Flat.staticEnd L
+  let stackTop := staticEnd + (if m.stack then stackBytes else 0)
+  let heap := if m.stack then stackTop else if L == 0 then 16376 else staticEnd
+  let pages := (stackTop + 8 + 65535) / 65536
+  let rt := ((((runtimeWat.replace "(global $heap (mut i32) (i32.const 16376))"
     s!"(global $heap (mut i32) (i32.const {heap}))").replace "STATIC_END"
-    (toString (if L == 0 then 16384 else Flat.staticEnd L))
+    (toString staticEnd)).replace "(global $sp (mut i64) (i64.const 0))"
+    s!"(global $sp (mut i64) (i64.const {stackTop}))").replace
+    "(global $stackLimit i64 (i64.const 0))"
+    s!"(global $stackLimit i64 (i64.const {staticEnd}))").replace
+    "(memory (export \"memory\") 1)" s!"(memory (export \"memory\") {pages})"
   let lines := ["(module", rt] ++ printData m.data ++ (m.funcs.flatMap printFunc) ++ [")"]
   "\n".intercalate lines ++ "\n"
 

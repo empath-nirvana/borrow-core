@@ -57,6 +57,16 @@ inductive Op where
   | alloc
   /-- `free ℓ`: the cell's contents; the cell is freed. -/
   | free
+  /-- `alloc v` of a cell the elaborator scopes to one borrow (the lend of a value, `modify` of a
+  value, a handler's state given as a value: `Convert.markScoped`), `k` naming the scope. It is
+  `alloc`; the flat IR places the cell in a frame slot when the scope's `scopedFree k` is in the
+  same code (`Flat/Lower.lean`, `frameScopes`). -/
+  | scopedAlloc (k : Nat)
+  /-- `free ℓ` of the cell `scopedAlloc k` allocates: `free`. -/
+  | scopedFree (k : Nat)
+  /-- `alloc v` of a capability's cell (SPEC §11, §34): `alloc`; the flat IR places the cell at
+  `addr`, a word of the program's data, and frees nothing. -/
+  | staticCell (addr : Nat)
   /-- `load ℓ`: a copy of the cell's contents. -/
   | load
   /-- `store ℓ v`: the old contents are dropped and `v` stored; the result is `()`. -/
@@ -200,6 +210,9 @@ structure Prog where
   /-- The code of a literal's tabulator, `λi. litByte (a, n, i)` over its captured `(a, n)`,
   when the program has a literal. -/
   litCode : Option Nat := none
+  /-- The scoped cells (`Op.scopedAlloc`) open at a resumption point of their code: their
+  address is held in a suspended computation's state (`Capture`, `crossedScopes`). -/
+  suspendedScopes : List Nat := []
   deriving Repr, Inhabited
 
 /-- The address of the read-only data: after the runtime's own memory, before the heap

@@ -241,11 +241,11 @@ def unitT : TM Nat := newNode .unit
 
 /-- The type of a saturated primitive, constraining its operands. -/
 def primTy : Op → List Var → TM Nat
-  | .alloc, [v] => do
+  | .alloc, [v] | .scopedAlloc _, [v] | .staticCell _, [v] => do
       let n ← newLoc (← tyVar v)
       modify fun s => { s with cons := s.cons.insert v n }
       pure n
-  | .free, [l] | .load, [l] => do
+  | .free, [l] | .scopedFree _, [l] | .load, [l] => do
       let a ← newNode .any
       unify (← tyVar l) (← newLoc a)
       pure a
@@ -543,7 +543,7 @@ end Types
 /-- The strongly connected component of every node of the graph `succ` (Tarjan's algorithm,
 iteratively), and whether the node lies on a cycle: its component has two nodes or more, or it
 is its own successor. -/
-def onCycle (succL : Array (List Nat)) : Array Bool := Id.run do
+def sccs (succL : Array (List Nat)) : Array Bool × Array Nat := Id.run do
   let succ := succL.map List.toArray
   let n := succ.size
   let mut index : Array (Option Nat) := Array.replicate n none
@@ -552,6 +552,8 @@ def onCycle (succL : Array (List Nat)) : Array Bool := Id.run do
   let mut stack : List Nat := []
   let mut next := 0
   let mut cyc : Array Bool := Array.replicate n false
+  let mut comp : Array Nat := Array.replicate n 0
+  let mut ncomp := 0
   -- A bound on the steps of one search: every node entered and left, every edge followed.
   let steps := 4 * n + 4 + succ.foldl (fun k l => k + l.size) 0
   for root in [0:n] do
@@ -575,15 +577,103 @@ def onCycle (succL : Array (List Nat)) : Array Bool := Id.run do
         | none =>
           calls := rest
           if some low[v]! == index[v]! then
-            let comp := (stack.takeWhile (· != v)) ++ [v]
+            let members := (stack.takeWhile (· != v)) ++ [v]
             stack := (stack.dropWhile (· != v)).drop 1
-            for u in comp do onStack := onStack.set! u false
-            let isCyc := comp.length > 1 || succ[v]!.contains v
-            if isCyc then for u in comp do cyc := cyc.set! u true
+            for u in members do onStack := onStack.set! u false
+            for u in members do comp := comp.set! u ncomp
+            ncomp := ncomp + 1
+            let isCyc := members.length > 1 || succ[v]!.contains v
+            if isCyc then for u in members do cyc := cyc.set! u true
           match rest with
           | (u, _) :: _ => low := low.set! u (min low[u]! low[v]!)
           | [] => pure ()
-  return cyc
+  return (cyc, comp)
+
+/-- Whether each node of the graph `succ` lies on a cycle (`sccs`). -/
+def onCycle (succL : Array (List Nat)) : Array Bool := (sccs succL).1
+
+/-- The back edges `(v, i)` (field `i` of `v`) of one depth-first search over the graph whose
+node `v` has the successors `fs v`, from `roots` in order, not following the edges in `skip`. -/
+def backEdges (n : Nat) (fs : Nat → Array Nat) (roots : List Nat)
+    (skip : Std.HashSet (Nat × Nat)) : Std.HashSet (Nat × Nat) := Id.run do
+  let mut color : Array Nat := Array.replicate n 0
+  let mut back : Std.HashSet (Nat × Nat) := {}
+  let steps := 4 * n + 4 + (List.range n).foldl (fun k v => k + (fs v).size) 0
+  for root in roots do
+    if color[root]! != 0 then continue
+    let mut stack : List (Nat × Nat) := [(root, 0)]
+    color := color.set! root 1
+    for _ in [0:steps] do
+      match stack with
+      | [] => break
+      | (v, i) :: rest =>
+        match (fs v)[i]? with
+        | some c =>
+          stack := (v, i + 1) :: rest
+          if skip.contains (v, i) then continue
+          if color[c]! == 1 then back := back.insert (v, i)
+          else if color[c]! == 0 then
+            color := color.set! c 1
+            stack := (c, 0) :: stack
+        | none =>
+          color := color.set! v 2
+          stack := rest
+  return back
+
+/-- `b` reaches `a` in the graph `fs`, not following the edges in `skip`. -/
+def reachesF (n : Nat) (fs : Nat → Array Nat) (skip : Std.HashSet (Nat × Nat)) (b a : Nat) :
+    Bool := Id.run do
+  let mut seen : Std.HashSet Nat := {}
+  let mut todo : List Nat := [b]
+  for _ in [0:n + 1] do
+    match todo with
+    | [] => return false
+    | v :: rest =>
+      todo := rest
+      if v == a then return true
+      if seen.contains v then continue
+      seen := seen.insert v
+      for (c, i) in (fs v).toList.zipIdx do
+        if !skip.contains (v, i) && !seen.contains c then todo := c :: todo
+  return seen.contains a
+
+/-- The boxed fields of a component of the field graph (`comp`) where one search's back edges
+`back` box two fields or more: a sum's payload is boxed in place of its payload's recursive
+fields when that boxes fewer. A tree `μX. 1 + X ⊗ (A ⊗ X)` boxes its two children, and so two
+objects a node, the empty children's among them; boxing the sum's payload instead makes one object
+a node, holding the node's words with its children inline, and none for an empty child, as Rust's
+`Option<Box<Node>>` does. The payloads are boxed one by one, each only when it closes a cycle of
+the fields kept. A linear shape (a list) boxes one field either way, and keeps the field at its
+recursive position, which pointer reversal reads (`Flat/Lower.lean`, `dswOK`).  `[spec §35]` -/
+def sumBoxes (n : Nat) (fs : Nat → Array Nat) (shape : Array LTy) (comp : Array Nat)
+    (back : Std.HashSet (Nat × Nat)) : Std.HashSet (Nat × Nat) := Id.run do
+  let mut byComp : Std.HashMap Nat (List (Nat × Nat)) := {}
+  for (v, i) in back.toList do
+    byComp := byComp.insert comp[v]! ((v, i) :: byComp.getD comp[v]! [])
+  let mut out := back
+  for (C, es) in byComp.toList do
+    if es.length < 2 then continue
+    let nodes := (List.range n).filter (comp[·]! == C)
+    -- The edges leaving the component, and the sums' payloads inside it.
+    let mut leave : Std.HashSet (Nat × Nat) := {}
+    let mut sums : List (Nat × Nat) := []
+    for v in nodes do
+      for (c, i) in (fs v).toList.zipIdx do
+        if comp[c]! != C then leave := leave.insert (v, i)
+        else if let .sum .. := shape[v]! then sums := sums ++ [(v, i)]
+    if sums.isEmpty then continue
+    let mut skip := sums.foldl (·.insert ·) leave
+    let mut boxes := backEdges n fs nodes skip
+    skip := boxes.fold (·.insert ·) skip
+    for (v, i) in sums do
+      let c := (fs v)[i]!
+      let without := skip.erase (v, i)
+      if reachesF n fs without c v then boxes := boxes.insert (v, i)
+      else skip := without
+    if boxes.size < es.length then
+      out := es.foldl (·.erase ·) out
+      out := boxes.fold (·.insert ·) out
+  return out
 
 /-- Resolve the unifier's state. The unions are grouped by representative; the recursive closure
 types are those on a cycle of pair, sum and captured-value edges; then one depth-first search
@@ -620,10 +710,13 @@ def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (main
     | _ => m) {}
   let succA := succ.map List.toArray
   let fieldsOf (v : Nat) : Array Nat := if recFn.contains v then #[] else succA[v]!
+  let roots := (List.range n).filter fun v => rep[v]! == v
+  let back := backEdges n fieldsOf roots {}
+  let comp := (sccs ((Array.range n).map fun v => (fieldsOf v).toList)).2
   let mut color : Array Nat := Array.replicate n 0
   let mut width : Array Nat := Array.replicate n 0
   let mut trivial : Array Bool := Array.replicate n true
-  let mut boxed : Std.HashSet (Nat × Nat) := {}
+  let mut boxed : Std.HashSet (Nat × Nat) := sumBoxes n fieldsOf shape comp back
   let steps := 4 * n + 4 + succ.foldl (fun k l => k + l.length) 0
   for root in [0:n] do
     if rep[root]! != root || color[root]! != 0 then continue
@@ -637,6 +730,7 @@ def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (main
         match fs[i]? with
         | some c =>
           stack := (v, i + 1) :: rest
+          if boxed.contains (v, i) then continue
           if color[c]! == 1 then boxed := boxed.insert (v, i)
           else if color[c]! == 0 then
             color := color.set! c 1
