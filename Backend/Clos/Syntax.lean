@@ -213,6 +213,9 @@ structure Prog where
   /-- The scoped cells (`Op.scopedAlloc`) open at a resumption point of their code: their
   address is held in a suspended computation's state (`Capture`, `crossedScopes`). -/
   suspendedScopes : List Nat := []
+  /-- `main`'s value is `inl v`, or `inr ()` when a division's error reached it, which ends the
+  run with exit status `1` (SPEC §39). -/
+  exits : Bool := false
   deriving Repr, Inhabited
 
 /-- The address of the read-only data: after the runtime's own memory, before the heap

@@ -1,0 +1,29 @@
+-- Truncating and Euclidean division on negative operands (SPEC §39). `/` truncates toward zero
+-- and `%` takes the dividend's sign, as in C, Rust and Wasm; `div_euclid` and `rem_euclid`
+-- (`lib/arith.bc`) give the quotient and remainder of `a = b * q + r` with `0 <= r < |b|`. Both
+-- raise `Fail[DivError]` as `/` and `%` do: `div_euclid(MIN, -1)` overflows, and
+-- `rem_euclid(MIN, -1)` is `0`.
+--
+-- Answer, per pair (a, b) of (7, 2), (-7, 2), (7, -2), (-7, -2), the four results
+-- `a / b, a % b, div_euclid, rem_euclid`, each printed as its 32 bits:
+--   7 / 2:    3   1   3  1
+--   -7 / 2:  -3  -1  -4  1
+--   7 / -2:  -3   1  -3  1
+--   -7 / -2:  3  -1   4  1
+-- then `div_euclid(MIN, -1)`'s overflow `inr (inr ())`, `rem_euclid(MIN, -1)` = 0, and at `i64`
+-- `div_euclid(-7, 2)` = -4 and `rem_euclid(-7, 2)` = 1.
+
+include arith
+
+type Four = (i32 * i32) * (i32 * i32)
+
+fn four(a: i32, b: i32) -> Four = ((a / b, a % b), (div_euclid(a, b), rem_euclid(a, b)))
+
+main -> (Four * Four) * ((Four * Four) * (((i32 + DivError) * i32) * (i64 * i64))) =
+  let n7 = 0 - 7;
+  let n2 = 0 - 2;
+  let min = i32[0x80000000];
+  let o = with to_result { div_euclid(min, 0 - 1) };
+  let z = rem_euclid(min, 0 - 1);
+  let w = (div_euclid(i64[0] - i64[7], i64[2]), rem_euclid(i64[0] - i64[7], i64[2]));
+  ((four(7, 2), four(n7, 2)), ((four(7, n2), four(n7, n2)), ((o, z), w)))

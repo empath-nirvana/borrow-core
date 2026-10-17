@@ -117,7 +117,7 @@ private def twoCharSyms : List (Char × Char × String) :=
 
 /-- One-character symbols. -/
 private def oneCharSyms : List Char :=
-  ['(', ')', '[', ']', '{', '}', ',', ';', ':', '.', '=', '|', '<', '>', '*', '+', '&', '!', '-', '/']
+  ['(', ')', '[', ']', '{', '}', ',', ';', ':', '.', '=', '|', '<', '>', '*', '+', '&', '!', '-', '/', '%']
 
 /-- The Unicode spellings of syntax-core §2 that are one character, with their ASCII token.
     `⊓Δ` (`dom`) and `Imm̲` (`view`) are two- and four-character spellings, handled in `lexGo`. -/

@@ -944,7 +944,7 @@ inductive BinTok where
   | pipe
 
 /-- The operator of a token, with its precedence: `|>` 0, `||` 1, `&&` 2, comparisons 3, `+`/`-`
-4, `*` and `/` 5. -/
+4, `*`, `/` and `%` 5. -/
 def opOf (angle : Bool) : Tok → Option (BinTok × Nat)
   | .sym "|>" => some (.pipe, 0)
   | .sym "||" => some (.or, 1) | .sym "&&" => some (.and, 2)
@@ -952,7 +952,7 @@ def opOf (angle : Bool) : Tok → Option (BinTok × Nat)
   | .sym "<=" => some (.op .le, 3) | .sym ">=" => some (.op .ge, 3)
   | .sym ">" => if angle then none else some (.op .gt, 3)
   | .sym "+" => some (.op .add, 4) | .sym "-" => some (.op .sub, 4) | .sym "*" => some (.op .mul, 5)
-  | .sym "/" => some (.op .div, 5)
+  | .sym "/" => some (.op .div, 5) | .sym "%" => some (.op .rem, 5)
   | _ => none
 
 /-- `a && b` and `a || b` as `case`s on `a`, `inr ()` being true; `b` runs only when needed. -/
@@ -1962,9 +1962,10 @@ def decl (n : Nat) : P Decl := do
         let t ← bump
         let nm ← match t.tok with
           | .sym "+" => pure "op_add" | .sym "-" => pure "op_sub" | .sym "*" => pure "op_mul"
-          | .sym "/" => pure "op_div" | .sym "==" => pure "op_eq" | .sym "!=" => pure "op_ne" | .sym "<" => pure "op_lt"
+          | .sym "/" => pure "op_div" | .sym "%" => pure "op_rem" | .sym "==" => pure "op_eq"
+          | .sym "!=" => pure "op_ne" | .sym "<" => pure "op_lt"
           | .sym "<=" => pure "op_le" | .sym ">" => pure "op_gt" | .sym ">=" => pure "op_ge"
-          | _ => failAt t.span "an operator family is one of `(+)`, `(-)`, `(*)`, `(/)`, `(==)`, `(!=)`, `(<)`, `(<=)`, `(>)`, `(>=)`"
+          | _ => failAt t.span "an operator family is one of `(+)`, `(-)`, `(*)`, `(/)`, `(%)`, `(==)`, `(!=)`, `(<)`, `(<=)`, `(>)`, `(>=)`"
         expectSym ")"
         pure (⟨nm, t.span⟩ : Ident)
       else ident "a `poly` name"

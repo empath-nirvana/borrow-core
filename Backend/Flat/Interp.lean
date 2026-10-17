@@ -49,6 +49,8 @@ structure FState where
   /-- The arguments have been read: the runtime's reservation of their memory, at their first
   read, is counted as one allocation, as `$args` counts it (`Backend/Wasm/Runtime.lean`). -/
   argsRead : Bool := false
+  /-- The exit status the run ends with (SPEC §39). -/
+  status : UInt32 := 0
 
 abbrev FM := StateT FState (Except String)
 
@@ -344,6 +346,10 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
     | .tickCopy => do
         modify fun st => { st with copies := st.copies + 1 }
         pure (fr, none)
+    | .status e => do
+        let c ← evalExp p n fr e
+        modify fun st => { st with status := c.toUInt32 }
+        pure (fr, none)
     | .trap => throw "flat IR: trap"
 end
 
@@ -360,6 +366,6 @@ def interp (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []
   let (_, s) ← (callFn p fuel p.entry [] (some 0)).run
     { mem, ranges := {}, next, input, args, out := .empty, err := .empty,
       staticEnd := if L == 0 then 0 else staticEnd L }
-  pure ⟨s.out, s.err⟩
+  pure ⟨s.out, s.err, s.status⟩
 
 end Backend.Flat

@@ -1,0 +1,63 @@
+-- Rows of division inferred (SPEC §39): a function that divides by a variable raises
+-- `Fail[DivError]`, and its row says so with nothing written; one that divides by a nonzero
+-- literal, or divides floats, performs nothing.
+--
+-- * `quot` divides by a parameter: `Fail[DivError]`.
+-- * `harmonic` divides in the body of a counted `for` (SPEC §16): the error leaves the loop by
+--   its exit and is raised again after it, so `harmonic`'s row is `Fail[DivError]`.
+-- * `half[T]` is generic: its operands are `T`, which is not known to be an integer or a float, so
+--   it is taken to be able to fail, and the template's row is `Fail[DivError]`; its instances at
+--   `i32` and `i64` divide.
+-- * `ratio` divides floats (SPEC §37): IEEE 754's division, which has an answer, so no row.
+-- * `tenth` divides by the literal 10: no row, and no test.
+-- * `twice` is a generic higher-order function, given a block that divides (SPEC §30): its copy
+--   is made at the block's row, and the error reaches the handler where the block is written.
+-- * `scaled` is a resuming handler whose clause divides: by `checked_div`, so that it cancels its
+--   continuation before the error leaves the clause, as a clause that raises must
+--   (`corpus/reconcile-clock.bc`'s `deadline`); `k(x / d)` is rejected, as `k(f(x))` is for an `f`
+--   that raises: `k` would be live across the abort. The handler's row lists `Fail[DivError]`
+--   (SPEC §18).
+--
+-- Answer: `((i32[2933], i64[4]), ((f64[4598175219545276416], i32[4]), ((i32[7], i32[4294967295]),
+-- (i32[6], i32[4294967295]))))`: 3 + 2920 + 3 + 7 (`harmonic(10)`'s 1000 / k summed is 2920);
+-- 8 / 2; 0.25; 47 / 10; `twice` of 1000 / x at 7 (142, then 7), and at 0 recovered as −1;
+-- 10 / 5 + 20 / 5 = 6 under `scaled(5)`, and −1 under `scaled(0)`.
+
+include arith
+
+fn quot(a: i32, b: i32) -> i32 = a / b
+
+fn harmonic(n: i32) -> i32 =
+  let mut s = 0;
+  for k in 0..n { s = s + 1000 / (k + 1) };
+  s
+
+fn half[T](a: T, b: T) -> T = a / b
+
+fn ratio(a: f64, b: f64) -> f64 = a / b
+
+fn tenth(a: i32) -> i32 = a / 10
+
+fn twice[A](f: !(A => A), x: A) -> A = f(f(x))
+
+effect Ask { ctl ask(x: i32) -> i32 }
+
+handler scaled[A](d: i32): Ask, A -> A with Fail[DivError] = {
+  return(a) = a;
+  ask(x, k) = match checked_div(x, d) {
+      inl q -> k(q)
+    | inr e -> u <- (force k).2; raise(e)
+    }
+}
+
+fn two() -> i32 with Ask = ask(10) + ask(20)
+
+-- `two` under `scaled(d)`, its error recovered as −1.
+fn scaled_two(d: i32) -> i32 = with default(0 - 1) { with scaled(d) { two() } }
+
+main -> (i32 * i64) * ((f64 * i32) * ((i32 * i32) * (i32 * i32))) =
+  let r = quot(7, 2) + harmonic(10) + half(9, 3);
+  let w = half(i64[8], i64[2]);
+  let t = twice(!{ x -> 1000 / x }, 7);
+  let z = with default(0 - 1) { twice(!{ x -> 1000 / x }, 0) };
+  ((r, w), ((ratio(1.0, 4.0), tenth(47)), ((t, z), (scaled_two(5), scaled_two(0)))))

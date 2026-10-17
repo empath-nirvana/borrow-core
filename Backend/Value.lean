@@ -48,20 +48,31 @@ def PV.render : PV → String
   | .loc => "<loc>"
 end
 
-/-- What a stage writes: the program's standard output followed by the report, and its standard
-error. -/
+/-- What a stage writes: the program's standard output followed by the report, its standard
+error, and its exit status (SPEC §39). -/
 structure Output where
   out : ByteArray
   err : ByteArray
+  status : UInt32 := 0
 
 /-- The program's output bytes, then the report. -/
-def Output.mk' (out err : ByteArray) (report : String) : Output := ⟨out ++ report.toUTF8, err⟩
+def Output.mk' (out err : ByteArray) (report : String) (status : UInt32 := 0) : Output :=
+  ⟨out ++ report.toUTF8, err, status⟩
 
 /-- What every stage prints for a finished run: the value, then the number of live objects
 after the value has been dropped. The source counts cells; the compiled stages count every
 object, so a leaked cell also counts the structure it holds. The two counts are zero together. -/
 def report (v : PV) (live : Nat) : String :=
   v.render ++ "\nlive " ++ toString live ++ "\n"
+
+/-- The report of a `main` served `Fail[DivError]` by `main_div_error` (SPEC §39), whose value is
+`inl v` or, when a division's error reached it, `inr ()`: `v`'s report, or the live count alone and the exit
+status `1`. Any other `main`'s is `report`'s, with status `0`. -/
+def reportExit (exits : Bool) (v : PV) (live : Nat) : String × UInt32 :=
+  match exits, v with
+  | true, .inj false a => (report a live, 0)
+  | true, .inj true _ => ("live " ++ toString live ++ "\n", 1)
+  | _, v => (report v live, 0)
 
 /-! ### The clock and the arguments at the interpreters  `[spec §34]` -/
 

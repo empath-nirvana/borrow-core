@@ -109,8 +109,8 @@ def main (argv : List String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   let input ← if Backend.readsInput file src then readAllIn (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
-  let flat ← match Backend.interpStage "flat-counts" file src input.toList (Backend.argsBytes args) with
-    | .ok o => pure (String.fromUTF8! o.out)
+  let (flat, status) ← match Backend.interpStage "flat-counts" file src input.toList (Backend.argsBytes args) with
+    | .ok o => pure (String.fromUTF8! o.out, o.status)
     | .error e => IO.eprintln e; return 1
   let wat ← match Backend.compileWat file src true with
     | .ok w => pure w
@@ -123,6 +123,10 @@ def main (argv : List String) : IO UInt32 := do
       args := #["-c", s!"wasmtime {" ".intercalate Backend.wasmtimeArgs.toList} '{dir / "main.wat"}'" ++
         String.join (args.map fun a => " '" ++ a.replace "'" "'\\''" ++ "'") ++ s!" < '{dir / "in"}'"] }
   IO.FS.removeDirAll dir
+  -- The two stages end with one exit status (SPEC §39).
+  if r.exitCode != status then
+    IO.eprintln s!"{file}: the flat IR exits with status {status}, wasm with {r.exitCode}"
+    return 1
   match countsOf flat, countsOf r.stdout with
   | some (a, i, c), some (a', i', c') =>
     if a == a' && i == i' && c == c' then

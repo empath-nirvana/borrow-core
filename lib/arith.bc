@@ -1,0 +1,60 @@
+-- Integer division's error (SPEC §39). An integer division with no answer raises: `a / b` and
+-- `a % b` by a zero divisor, and `MIN / -1` at a signed width, whose quotient is not
+-- representable, raise `Fail[DivError]` (`lib/fail.bc`). It unwinds as any error does (SPEC §19),
+-- running the finalisers of what it abandons, and `Fail`'s handlers receive it: `to_result`,
+-- `default(d)`, `map_err(f)`. A division by a nonzero literal (other than `-1` for `/`) cannot
+-- fail, and performs nothing.
+--
+-- `Fail[DivError]` is one instance of `Fail` beside a program's own `Fail[E]` (SPEC §38): a
+-- function that raises its own error and divides has both in its row, and a handler of one passes
+-- the other. A generic `Fail[E]` at `E := DivError` is still a slot of its own.
+--
+-- An error that reaches `main` is served by `main_div_error`: it is written on standard error and
+-- the program exits with status 1, after the unwind.
+--
+-- `checked_div(a, b)` and `checked_rem(a, b)` answer the sum instead of raising; `div_euclid` and
+-- `rem_euclid` are the Euclidean quotient and remainder (the remainder is never negative), which
+-- raise as `/` and `%` do.
+
+include fail
+include sys
+
+-- `inl ()`: the divisor is zero. `inr ()`: the quotient overflows (`MIN / -1`).
+type DivError = 1 + 1
+
+-- The two errors.
+def div_by_zero : 1 + 1 = inl ()
+
+def div_overflow : 1 + 1 = inr ()
+
+-- The Euclidean quotient: `a = b * q + r` with `0 <= r < |b|`. The remainder's `inr` arm is
+-- never taken: the division by the same divisor had an answer.
+fn div_euclid[T](a: T, b: T) -> T =
+  match checked_div(a, b) {
+    inl q -> match checked_rem(a, b) {
+        inl r -> if r < 0 { if b > 0 { q - 1 } else { q + 1 } } else { q }
+      | inr e -> q
+      }
+  | inr e -> raise(e)
+  }
+
+-- The Euclidean remainder: never negative. `rem_euclid(MIN, -1)` is `0`, as `MIN % -1` is.
+fn rem_euclid[T](a: T, b: T) -> T =
+  match checked_rem(a, b) {
+    inl r -> if r < 0 { if b < 0 { r - b } else { r + b } } else { r }
+  | inr e -> raise(e)
+  }
+
+-- A division's error that reaches `main` (SPEC §39): what `main` built has been finalised by the
+-- unwind; the error is written on standard error, and `main` answers `inr ()`, which the runtime
+-- reports as the exit status 1.
+handler main_div_error[A]: Fail[DivError], A -> A + 1 = {
+  return(a) = inl a;
+  raise(e) = {
+    match e {
+      inl u -> borrow imm "error: division by zero\n" { v -> eprint_bytes(v) }
+    | inr u -> borrow imm "error: integer overflow in division\n" { v -> eprint_bytes(v) }
+    };
+    inr ()
+  }
+}

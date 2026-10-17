@@ -1,0 +1,16 @@
+row 10:1: quot: Fail[DivError]
+lowering 10:1: copy `quot__n2`: `quot` for the site 2 of `Fail`
+lowering 10:1: copy `quot__n1`: `quot` for the site 1 of `Fail`
+lowering 10:1: copy `quot__n3`: `quot` for the site 3 of `Fail`
+lowering 12:1: main: `Fail[DivError]` is served by `main_div_error`: a division's error unwinds, is written on standard error, and the program exits with status 1
+lowering 12:1: main: `Stderr` is served by the platform's `wasi_stderr` on the cell `stderr`, which each operation lends
+lowering 14:11: with default (Fail): a handler, the static name 3; raise abortive: a branch per call (final ctl)
+lowering 14:11: with default: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 15:11: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 15:11: with to_result (Fail): a handler, the static name 2; raise abortive: a branch per call (final ctl)
+call 10:34: raise (Fail) → abort[2.0], handled by the caller at 10:1: abortive, it never resumes
+call 10:34: raise (Fail) → abort[3.0], handled by the caller at 10:1: abortive, it never resumes
+call 10:34: raise (Fail) → abort[1.0], handled by the caller at 10:1: abortive, it never resumes
+call 13:11: quot → `quot__n1`
+call 14:33: quot → `quot__n3`
+call 15:28: quot → `quot__n2`

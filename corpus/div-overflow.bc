@@ -1,0 +1,36 @@
+-- A division whose quotient is not representable (SPEC §39): `MIN / -1` at a signed width raises
+-- the error `inr ()` (`DivError`'s overflow, `lib/arith.bc`), and `MIN % -1` is `0`, as in Wasm.
+-- A zero divisor raises `inl ()`, at every width. `checked_div` and `checked_rem` answer the sum
+-- instead of raising.
+--
+-- At `u8` the division is unsigned and cannot overflow. A literal divisor is elaborated at the
+-- divisor's width: `4294967295` at `i32` is `-1`, so `x / 4294967295` can still fail and raises,
+-- while `x % 4294967295` cannot and performs nothing.
+--
+-- Answer: the overflow `inr (inr ())` and `i32[0]` for `MIN / -1` and `MIN % -1` at `i32`; the
+-- overflow at `i64` and from `checked_div`; `inr (inl ())` from `checked_rem(7, 0)`; the bytes
+-- 200 / 7 = 28 and 200 % 7 = 4; a byte divided by zero, `inr (inl ())`; the literal `-1` divisor's
+-- overflow, and `i32[0]`.
+
+include arith
+
+fn quot(a: i32, b: i32) -> i32 = a / b
+fn rem(a: i32, b: i32) -> i32 = a % b
+fn quot64(a: i64, b: i64) -> i64 = a / b
+fn quot8(a: u8, b: u8) -> u8 = a / b
+fn rem8(a: u8, b: u8) -> u8 = a % b
+
+main -> ((i32 + DivError) * i32) * (((i64 + DivError) * (i32 + DivError)) *
+    ((i32 + DivError) * (((u8 * u8) * (u8 + DivError)) * ((i32 + DivError) * i32)))) =
+  let min = i32[0x80000000];
+  let m1 = 0 - 1;
+  let a = with to_result { quot(min, m1) };
+  let b = rem(min, m1);
+  let c = with to_result { quot64(i64[0x8000000000000000], i64[0] - i64[1]) };
+  let d = checked_div(min, m1);
+  let e = checked_rem(7, 0);
+  let f = (quot8(u8[200], u8[7]), rem8(u8[200], u8[7]));
+  let g = with to_result { quot8(u8[1], u8[0]) };
+  let h = with to_result { min / 4294967295 };
+  let i = min % 4294967295;
+  ((a, b), ((c, d), (e, ((f, g), (h, i)))))

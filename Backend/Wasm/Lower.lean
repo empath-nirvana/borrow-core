@@ -112,6 +112,7 @@ def lowerStmt (cnt : Bool) (fp frame : Nat) : Flat.Stmt → List Instr
   | .tailCall f args => lowerExp.lowerArgs fp args ++ popFrame fp frame ++ [.returnCall (fname f)]
   | .tick => if cnt then [.countInd] else []
   | .tickCopy => if cnt then [.countCopy] else []
+  | .status c => lowerExp fp c ++ [.call "$exit"]
   | .trap => [.unreachable]
 where
   lowerBlock : List Flat.Stmt → List Instr

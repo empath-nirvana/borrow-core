@@ -1,0 +1,7 @@
+-- Division by a literal (SPEC §39): it cannot fail, so it is the host's `div_s32`/`rem_s32` whose
+-- `inr` arm is never taken, and it performs nothing. `div-literal.core.bc` is the program
+-- written by hand in core.
+-- Answer: i32[13]: 47 / 10 + 47 % 10 + 47 / 7 - 3.
+fn f(a: i32) -> i32 = a / 10 + a % 10 + a / 7 - 3
+
+main -> i32 = f(47)

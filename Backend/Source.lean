@@ -51,7 +51,7 @@ def bytesOf : Expr → Option (List UInt8)
 /-- The output of a finished model run: `((fd, out), ((fd', err), a))` holds the bytes written to
 each stream, most recent first, and `main`'s result `a`. Each stream's bytes go to its
 descriptor, then the report of `a`, with `live` cells left. -/
-def ioOutputN (v : Val) (live : Nat) : Except String Output := do
+def ioOutputN (v : Val) (live : Nat) (exits : Bool := false) : Except String Output := do
   match v.1 with
   | .pair (.pair (.prim (.lit (.i32 fd₁))) o₁) (.pair (.pair (.prim (.lit (.i32 fd₂))) o₂) a) =>
     let some b₁ := bytesOf o₁ | throw "source interpreter: an output stream is not a byte list"
@@ -59,17 +59,19 @@ def ioOutputN (v : Val) (live : Nat) : Except String Output := do
     let streams := [(fd₁, b₁.reverse), (fd₂, b₂.reverse)]
     let on (fd : UInt32) : ByteArray :=
       ⟨(streams.filter (·.1 == fd)).foldl (fun acc s => acc ++ s.2.toArray) #[]⟩
-    pure (.mk' (on 1) (on 2) (report (pvOfExpr a) live))
+    let (r, st) := reportExit exits (pvOfExpr a) live
+    pure (.mk' (on 1) (on 2) r st)
   | _ => throw "source interpreter: run_io's value is not its outputs and result"
 
 /-- `ioOutputN` at the number of cells `μ` holds. -/
-def ioOutput (v : Val) (μ : Mem) : Except String Output := ioOutputN v μ.cells.length
+def ioOutput (v : Val) (μ : Mem) (exits : Bool := false) : Except String Output :=
+  ioOutputN v μ.cells.length exits
 
 /-- The model run of a program with capabilities (SPEC §11): `run_io[γ] inp` from the empty
 memory. -/
-def interpIO (fuel : Nat) (e : Expr) : Except String Output := do
+def interpIO (fuel : Nat) (e : Expr) (exits : Bool := false) : Except String Output := do
   let (v, μ) ← runSource fuel Mem.empty e
-  ioOutput v μ
+  ioOutput v μ exits
 
 /-- Observe the loop `d` until it finishes: each `next` is `d (inl ())`, which answers `inl r` to
 finish with `r` or `inr d'` to go on with `d'`. This is `driveE` without its bound: a run that
@@ -91,10 +93,10 @@ def interpLoop (fuel : Nat) (e : Expr) : Except String Output := do
 
 /-- The model run of a program that runs until its input ends: `run_io[γ] inp` returns a loop,
 which is observed until it finishes. -/
-def interpIOLoop (fuel : Nat) (e : Expr) : Except String Output := do
+def interpIOLoop (fuel : Nat) (e : Expr) (exits : Bool := false) : Except String Output := do
   let (d, μ) ← runSource fuel Mem.empty e
   let (v, μ') ← driveSource fuel fuel μ d
-  ioOutput v μ'
+  ioOutput v μ' exits
 
 
 end Backend

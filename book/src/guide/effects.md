@@ -183,6 +183,28 @@ was inside ends, the place going back to its owner. A value with no destructor (
 capability) cannot be live where an abort may leave: the checker names it. A `raise` in the body
 of a counted `for` leaves the loop by its exit and is raised again after it.
 
+## Division that has no answer
+
+`a / b` and `a % b` at `i32`, `i64` and `u8` truncate toward zero, the remainder taking the
+dividend's sign. A division with no answer raises `Fail[DivError]`: a zero divisor, and `MIN / -1`
+at a signed width (`DivError` is `1 + 1`, `inl ()` the zero divisor; `div_by_zero` and
+`div_overflow` name the two). It is one more instance of `Fail`, so `to_result`, `default` and
+`map_err` handle it, and a function may raise its own `Fail[E]` and divide: the two are two
+entries of its row. A function that divides by a variable has it in its row with nothing written;
+a division by a nonzero literal cannot fail, and performs nothing. An error that reaches `main`
+unwinds, is written on standard error, and the program exits with status 1. `checked_div` and
+`checked_rem` answer the sum instead (SPEC §39).
+
+```bc
+-- answer: (i32[0], (inl i32[3], i32[4294967293]))
+fn mean(sum: i32, n: i32) -> i32 = sum / n
+
+main -> i32 * ((i32 + DivError) * i32) =
+  let a = with default(0) { mean(7, 0) };
+  let b = with to_result { mean(9, 3) };
+  (a, (b, (0 - 7) / 2))
+```
+
 ## Blocks that perform effects
 
 A closure passed to a function at a parameter of function type is a **block**. Its type names no

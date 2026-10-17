@@ -1,0 +1,36 @@
+-- The slot rule (SPEC §38) at a division's error (SPEC §39): a generic body does not change
+-- meaning when its type argument coincides with the division's `DivError`.
+--
+-- * `share[E]` handles its own `Fail[E]` around a division by `t`. At the template's types
+--   `Fail[E]` and the division's `Fail[DivError]` are two instances: the division's `raise`
+--   resolves to the slot of `Fail[DivError]` in `share`'s row, which its caller serves, and passes
+--   `share`'s own handler. `strict` calls it at `E := DivError`, where that handler is a handler of
+--   `Fail[DivError]` too: the division's error still passes it and reaches `strict`'s handler.
+-- * `either[E]` raises its own `Fail[E]` and divides: its row has two entries, `Fail[DivError]` and
+--   `Fail[E]`. At `E := DivError` they coincide, and are served by the one handler around the
+--   call: two entries of the row, one site.
+--
+-- Answer: `((inl (inl i32[250]), (inr (inl ()), inl (inr (inr ())))), (inl i32[250], (inr (inl ()),
+-- inr (inr ()))))`: 1000 / 4; the zero divisor at `strict`'s own handler, outside (a handler that
+-- captured it would answer `inl (inr (inl ()))`); past 100 `share`'s own error, `div_overflow`, at
+-- its own handler; then `either`'s quotient, and both its raises at the one handler.
+
+include arith
+
+-- 1000 divided by `t`, under a handler of `share`'s own `Fail[E]`, which raises `d` past 100.
+fn share[E](d: E, t: i32) -> i32 + E =
+  with to_result[E, i32] { if t > 100 { raise(d) } else { () }; 1000 / t }
+
+-- `share` at `E := DivError`.
+fn strict(t: i32) -> (i32 + DivError) + DivError =
+  with to_result[DivError, i32 + DivError] { share[DivError](div_overflow, t) }
+
+-- Raises `d` past 100, and divides 1000 by `t` below.
+fn either[E](d: E, t: i32) -> i32 = if t > 100 { raise(d) } else { 1000 / t }
+
+-- `either` at `E := DivError`: both entries of its row served by one handler.
+fn both(t: i32) -> i32 + DivError = with to_result[DivError, i32] { either[DivError](div_overflow, t) }
+
+main -> (((i32 + DivError) + DivError) * (((i32 + DivError) + DivError) * ((i32 + DivError) + DivError))) *
+    ((i32 + DivError) * ((i32 + DivError) * (i32 + DivError))) =
+  ((strict(4), (strict(0), strict(200))), (both(4), (both(0), both(200))))

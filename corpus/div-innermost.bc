@@ -1,0 +1,16 @@
+-- A program's own handlers of a division's error inside `main`'s (SPEC §39). `main` divides by a
+-- variable outside any handler, so `main_div_error` serves it, around the rest of `main` from that
+-- statement on. The `with default(…)` and `with to_result` written after it are inside it, and
+-- innermost: each handles its own body's error, which never reaches `main_div_error`. Nothing is
+-- written on standard error, and the exit status is 0.
+--
+-- Answer: `(i32[5], (i32[4294967295], inr (inl ())))`: 10 / 2; 7 / 0 recovered as −1 by
+-- `default`; and 9 / 0's error as a sum, the zero divisor, by `to_result`.
+
+fn quot(a: i32, b: i32) -> i32 = a / b
+
+main -> i32 * (i32 * (i32 + DivError)) =
+  let a = quot(10, 2);
+  let b = with default(0 - 1) { quot(7, 0) };
+  let c = with to_result { quot(9, 0) };
+  (a, (b, c))

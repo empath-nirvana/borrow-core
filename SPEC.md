@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.68 · 2026-10-17
+Version 0.69 · 2026-10-17
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -443,6 +443,8 @@ between engines is tested on the corpus, not proved.
 ### Open
 
 - Floats (`F32`, `F64`) are §36, by the same scheme.
+- The surface's integer `/` and `%` take the partial operations' sum apart and raise
+  `Fail[DivError]` where it has no answer (§39).
 - Checked (non-wrapping) arithmetic is derivable from the operations above.
 - `plainV` excludes the integer types, so they cannot yet be `withborS` leaves.
 - The backend's layout is type-directed (`Backend/README.md`, Representation): `I32` and `I64`
@@ -6120,9 +6122,8 @@ a float value is `f32[n]`/`f64[n]`, its bits, as an integer prints its bits (`Ba
 The operators `+ - * /` and `== != < <= > >=` at a float type are the float operation and IEEE
 754's comparison, by §8's per-width dispatch (`SurfOp.host`): the width is the one expected of
 an arithmetic result, or an operand's other than a literal's, and `f64` when both operands are
-literals and one is a float literal. `/` is only at a float width: an integer's division answers
-a sum (`host[div_s32]`), and `/` at an integer is refused with that message
-(`corpus/reject/int-slash.bc`). There is no unary minus: `neg_f64(x)` (`0.0 - x` is `+0.0` at
+literals and one is a float literal. `/` at an integer is §39's, which raises where the
+division has no answer. There is no unary minus: `neg_f64(x)` (`0.0 - x` is `+0.0` at
 `x = 0.0`).
 
 ### Equality and order
@@ -6389,16 +6390,249 @@ output, goldens, counts, `corpus/kernel-counts.expected` and reports.
 
 ### Open
 
-- Integer division that raises (#518, held open): an effect decided by a type is now decided where
-  the type is. The table can record a division's operand type, so the effects pass can give `a / b`
-  its instance at an integer width and elaborate it to the checked division and a `raise`, with no
-  second elaboration. Whether that instance is `Fail[DivByZero]` (an instance of `Fail` beside the
-  program's others) or an effect of its own is a choice on the merits.
+- Integer division that raises is §39: the effects pass gives `a / b` the instance
+  `Fail[DivError]` at an integer width, decided by the walk that reads the instances.
 - `Stdout` and `Stderr` as one output effect at two named instances (§34): `main`'s platform
   handlers installed named (`stdout`, `stderr`), the library's writers taking an unnamed entry
   (served by the innermost) or a named one, and the corpus's `eprint_byte` calls written
   `stderr.print_byte(…)`.
 - A name in a `|>` stage (§33), and on a `for`'s site of an iteration effect (§15).
+
+---
+
+## 39. Entry 38 — integer `/` and `%`: a division with no answer raises `Fail[DivError]`
+
+### Motivation
+
+#513. An integer division with no answer (a zero divisor, `MIN / -1`) **raises** through the
+effect system. **Decided by the user** (2026-10-17): "I just want div by zero to raise not panic.
+That is kind of the whole point of an effect system." It never traps, panics or answers a made-up
+value (`x / 0 = 0`). Until this entry integer division was reachable only as `host[div_s32]` and
+the rest, answering `I32 + 1` (§8), and programs matched on that by hand; §37 made `/` float-only
+for the time being. The error is an instance of `Fail`, `Fail[DivError]`: §38 lets a row hold it
+beside a program's own `Fail[E]`, so no effect of its own is needed (decision 65).
+
+Everything here is elaboration, library code and lowering over existing core terms: no `CDerives`
+rule, relation clause, machine step, host operation, kernel type or checker rule.
+
+### The operators
+
+`/` and `%` at `i32`, `i64` and `u8`, and the library's `div_euclid` and `rem_euclid`:
+
+| form | answer | can fail |
+|---|---|---|
+| `a / b` | the quotient truncated toward zero (C, Rust, Wasm) | `b = 0`; `MIN / -1` at `i32`, `i64` |
+| `a % b` | the remainder, with the dividend's sign; `MIN % -1 = 0`, as Wasm's `rem_s` | `b = 0` |
+| `div_euclid(a, b)`, `rem_euclid(a, b)` | `q`, `r` with `a = b·q + r`, `0 ≤ r < |b|` | as `/` and `%` |
+| `checked_div(a, b)`, `checked_rem(a, b)` | `inl q`, or `inr e`, `e : DivError` | never: the error is the answer |
+
+At `u8` the division is the unsigned `i32` one on the widened operands (as §8's byte operators
+are), and cannot overflow. The operators are `SurfOp.div` and `SurfOp.rem`, `%` at `*`'s
+precedence; `(%)` is a `poly` family as `(/)` is (§36, `op_rem`). At a float width `/` is IEEE
+754's (§37), with no row, and `%` is refused: a float has no remainder (Wasm has no `frem`).
+`host[div_*]` and `host[rem_*]` are unchanged. `checked_div` and `checked_rem` are names of the
+surface, `VSugar.checked`, unless the program declares a function of that name.
+
+### The error: `Fail[DivError]`
+
+`lib/arith.bc`, brought in by the elaboration when a division can fail (`include arith` names it,
+for `div_euclid` and the type):
+
+    type DivError = 1 + 1          -- inl (): the divisor is zero; inr (): MIN / -1 overflows
+    def div_by_zero : 1 + 1 = inl ()
+    def div_overflow : 1 + 1 = inr ()
+    fn div_euclid[T](a: T, b: T) -> T       fn rem_euclid[T](a: T, b: T) -> T
+    handler main_div_error[A]: Fail[DivError], A -> A + 1
+
+The handlers are `Fail`'s own (`lib/fail.bc`): `to_result`, `default(d)`, `map_err(f)`. A
+function that divides by a variable has `Fail[DivError]` in its inferred row, with nothing written.
+
+- **Beside a program's own `Fail[E]`.** A function that raises its own error and divides has two
+  entries, `Fail[E], Fail[DivError]` (§38); a `with` handles the instance its type arguments say
+  (`default[DivError, i32](0)`), or the one instance its body performs, and passes the other.
+  `map_err[DivError, E, A](f)` raises the division's error as the program's own.
+- **The slot rule** (§38, *Abstraction safety*). A division's `raise` is resolved at the template's
+  types like any operation: in `share[E]`, which handles its own `Fail[E]` around `1000 / t`, the
+  division's error goes to the slot `Fail[DivError]` of `share`'s row, and at `E := DivError`
+  still passes `share`'s handler (`corpus/div-abstraction.bc`). Two entries that coincide at an
+  instance are served by one site.
+- **A written row** lists `Fail[DivError]` as it lists any instance the body performs; a written
+  row without it is an error that says so (`corpus/reject/div-row-unlisted.bc`).
+
+### Elaboration: deciding a division's row
+
+Whether `a / b` can fail depends on its width (a float's cannot) and on its divisor at that width
+(`4294967295` is `-1` at `i32`). §38's effects pass reads instances where the types are, by the
+typed elaboration's inference over each body before effects are resolved
+(`Frontend/Elab/Instances.lean`), and decides a division there:
+
+- **The operands' width.** `Instances.argTy` types an operator as the typed elaboration does
+  (`surfOp`): its operands' width, a literal taking the other operand's; a comparison's is
+  `1 + 1`; a checked division's is the width and `DivError`. A counted loop's variable is an
+  `i32` (§16).
+- **The decision** (`divCanFail`). At an integer width, a division can fail unless its divisor is a
+  literal at which it has an answer (nonzero, and not `-1` for a signed `/`); at a float width, or
+  with a float literal operand, it cannot. A written literal `k` with `0 < k < 256` cannot fail at
+  any integer width. One that can fail is recorded at its own span with the instance it raises,
+  `[DivError]`.
+- **A width not known there** — an operand inference does not type (a block's parameter whose type
+  a generic callee's instantiation gives, a local bound from a `match` with literal arms), a type
+  parameter (whose instances may be integers), or a program's own type with a case of the
+  operator's family — is **taken to be able to fail**: the division raises when it fails, as an
+  integer division would, and at a float or a family's case its error arm is never taken. `bcc
+  check` reports each (`lowering L:C: a division whose operands' width is not known where effects
+  are resolved…`), and ascribing an operand, `(x : i32)` or `(x : f64)`, makes it exact. No
+  existing corpus program has a float division of this kind.
+- **The rewrite** (`Frontend/Elab/Divisions.lean`). Before rows are inferred, each recorded division
+  is written as a program would by hand,
+
+      a / b   ⟶   run (case checked_div(a, b) { inl q -> return q | inr e -> return raise((e : DivError)) })
+
+  with the `raise` at the division's span, where the table holds its instance. So it is an ordinary
+  operation of `Fail[DivError]` for everything §18 and §38 do: rows, slots, copies, counted loops,
+  recursive groups, unwinding borrows, drop glue. The rewrite is one pass over the declarations at
+  the decisions of the walk §38 already makes: there is no second elaboration.
+- **The typed elaboration** (`Frontend/Sugar.lean`, `surfOp`) gives each division the host
+  operation taken apart at its width: the checked form `divChecked` (`inl q`, or `inr e` with `e`
+  chosen by `eqz` of the divisor for a signed `/`), or, at a divisor at which it cannot fail,
+  `divUnchecked`, whose `inr` arm, never taken, answers `0` to be typed. A division that reaches
+  it at an integer width with a divisor that can fail and was not written to raise is an error
+  (`… its effect was not given where effects are resolved …`): the walk and the typed elaboration
+  read the width the same way, so this is a check, not a case a program meets.
+- **A `case` on a checked division** is fused with the operation's own (`fuseChecked`): the
+  quotient's arm and the error's arm are the host operation's, and the division is tested once.
+
+### Zero cost
+
+- **A literal divisor** (nonzero, not `-1` for a signed `/`) performs nothing: no row, no copy,
+  and the bare instruction. The flat IR knows the locals set to a constant where they are made
+  (`LState.consts`, each local set once): a division by such a constant has no test (`divTest`),
+  and a `case` on a constant tag selects its arm. `corpus/div-literal.bc` (counts `0 0 0`)
+  compiles `m % 10` and `m / 10` to `i32.rem_s` and `i32.div_s` with no branch, and
+  `corpus/sugar/div-literal.bc` pins the elaborated code against `div-literal.core.bc`.
+- **A variable divisor costs one test**: Wasm's trap condition (`b = 0`, and `a = MIN ∧ b = -1`
+  for `div_s`), a branch to the error arm, the instruction in the other. A `case` on a division's
+  answer is lowered as the division's own test (`Backend/Flat/Lower.lean`, `lowerTm`'s fused
+  `letv`/`case`), so no tag is built and tested again. An error leaving a function is §19's: the
+  copy answers a sum, as any abortive operation does. The six rewritten corpus programs keep their
+  counts.
+
+### `main`
+
+A `Fail[DivError]` that `main` performs and handles nowhere is served by `main_div_error`, as the
+platform serves the system interface (§34). Its clause writes `error: division by zero` or
+`error: integer overflow in division` on standard error (`Stderr`, served by the platform on its
+cell) and answers `inr ()`. `Frontend/Elab/Effects.lean`, `divMain`:
+
+- `main : F A` becomes `main : F (A + 1)`, and the handler is around the rest of `main`'s body
+  from its first statement that performs `Fail[DivError]` (`splitDiv`; a call's argument that
+  performs none, `f(read_input())`, is bound before it). What comes before runs outside it:
+  reading the input, which loops over a capability `main` holds and so cannot be in a control
+  handler's body (below), cannot fail.
+- **Innermost.** A program's own handler of `Fail[DivError]` is a `with` inside `main`'s body, so
+  it is inside `main_div_error` and innermost: it handles its body's errors, which never reach
+  `main_div_error` (`corpus/div-innermost.bc`). Only an instance `main` leaves unhandled is
+  served; a program's own `Fail[E]` unhandled at `main` is §18's error, as before.
+- The unwind runs the finalisers of what `main` built (§19), and the run ends with `live 0`.
+- **The exit status.** The elaboration records that `main` is served (`exitTag`); its value
+  `inl v` is reported as `v`, and `inr ()` as no value, the live count, and exit status `1`
+  (`Backend/Value.lean`, `reportExit`). Every stage does the same: the source stage's model run
+  (`ioOutputN`), the closure IR (`Clos.Prog.exits`), the flat IR (`Stmt.status`, `entryFn`) and
+  Wasm (`$exit`, WASI `proc_exit`, the entry's last act). `bcc interp` and `bcc run` exit with it;
+  `bcc-counts` checks that the flat IR and Wasm end with the same status.
+- **The libraries on demand.** A program with a division that may fail that does not include
+  `lib/arith.bc` is given it only when one can (`Elab.Effects.elaborate`'s `divLib`), ahead of
+  the program; and `lib/wasi.bc`, for `main_div_error`'s standard error, only when `main` is
+  served (`platform`), just before `main`, its externs and clauses ahead of the program's own
+  declarations (a program with the platform's externs and no capability does not run, #515).
+- **Harness.** `<name>.status` holds a corpus program's exit status (`0` when absent), compared
+  at every stage by `scripts/compile-corpus.sh` and in every mode by `scripts/falsify.sh`, and
+  written by `--write-goldens` with `<name>.out` and `<name>.err`.
+
+### Programs
+
+| program | what it shows | answer | counts |
+|---|---|---|---|
+| `corpus/div-recover.bc` | `default` and `to_result` recover a zero divisor; a buffer built in a counted loop dropped by the unwind | `((i32[4], i32[4294967295]), …)` | `5 0 0` |
+| `corpus/div-unhandled.bc` | no handler: `main` is served by `main_div_error`; the buffer unwinds, the error on standard error, status 1 (`.err`, `.status`) | `before`, `live 0`; `error: division by zero`; 1 | `1 0 0` |
+| `corpus/div-innermost.bc` | the program's own `default` and `to_result` inside `main_div_error`'s region are innermost; status 0 | `(i32[5], (i32[4294967295], inr (inl ())))` | `0 0 0` |
+| `corpus/div-own-fail.bc` | constraint 1: `Fail[i32]` and `Fail[DivError]` in one inferred row, handled apart and merged by `map_err` | `((inl i32[5], …)` | `0 0 0` |
+| `corpus/div-abstraction.bc` | the slot rule at `E := DivError`, and two entries that coincide served by one site | `((inl (inl i32[250]), …)` | `0 0 0` |
+| `corpus/div-overflow.bc` | `MIN / -1` overflows at `i32` and `i64`, `MIN % -1 = 0`; bytes; `checked_div`, `checked_rem`; a literal `-1` divisor | `((inr (inr ()), i32[0]), …)` | `0 0 0` |
+| `corpus/div-euclid.bc` | truncating against Euclidean results on negative operands, and `div_euclid(MIN, -1)` | see the file | `0 0 0` |
+| `corpus/div-infer.bc` | rows inferred: a parameter divisor, a counted `for`, a generic at `i32` and `i64`, a float division (no row), a literal divisor (no row), a block to a generic HOF, a resuming handler's clause by `checked_div` and a cancel | see the file | `0 4 0` (the resumptions of a handler with a parameter, §21) |
+| `corpus/div-recursive.bc` | a division in a recursive group (§20), beside `Exhausted` | `(i32[12], inr (inl ()))` | `0 0 0` |
+| `corpus/div-literal.bc` | division by a literal: no row, the bare instruction | `(i32[15], i32[49500])` | `0 0 0` |
+| `corpus/int-slash.bc` | `7 / 2`, moved from `corpus/reject/` | `i32[3]` | `0 0 0` |
+
+`corpus/reports/div-*.txt` pin the rows, the copies and `main`'s report; `corpus/sugar/div-literal.bc`
+the elaborated code; `corpus/reject/div-row-unlisted.bc` a written row that leaves the division's
+instance out. Pending, each refused as a `raise` there is: a variable divisor in an adapter's
+stored function (#161, `corpus/pending/div-in-adapter.bc`) and in a clause of an answering handler
+(§18 *Not provided*, `div-answering-clause.bc`); `k(x / d)` in a resuming clause, where `k` is
+live across the abort (`checked_div` and a cancel serve, as `div-infer`'s `scaled`).
+
+**Corpus rewrites.** The hand-written divisions became `/` and `%` where each program's output and
+counts stay as they were: `aoc/2021-06` (`modulo(day, 9)`, a literal divisor), `map-views`
+(`rem(x, 10)`, `rem(i, 3)`), `aoc/2021-15`, `leetcode/graphs/0200`, `0417` and
+`leetcode/trees/0212` (`quot`, `modulo` by the grid's width; `main` is now served by
+`main_div_error`; the divisors are never zero on the inputs). `0212` was kept in its form by #518
+for two abortive effects in a counted `for`'s body, which §38 provides. The others keep their
+form, each for a limit that applies to any abortive operation (#517), checked again here:
+
+- `aoc/2022-12`, `aoc/2023-03`, `aoc/2024-11`, `aoc/2022-21`: the division is inside `borrow imm s`
+  of the input string, a borrow of a buffer that an abort would cross (§18 *Not provided*);
+- `leetcode/matrix/0054`, `0073`, `0079`: the division is inside `cases`, a loop over the input
+  with no bound, and a handler around a div computation is not provided (§20); the refusal is
+  reported as a type mismatch against the loop's type, as it is for a `raise` there (#522);
+- `float-roundtrip`: `div_u64` of a float's bits, which `/` (signed) would change;
+- `int-arith`, `int-ops` and the core forms of `corpus/sugar/`: the host operations' own tests.
+
+The library's `host[div_u*]` uses (`lib/io.bc`, `lib/text.bc`, `lib/float.bc`) are unsigned and
+keep their form.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the host's operations, `PinLaw`, `Paper/`,
+`Support/`, `Core/` or the checker's rules. `fundamentalC`, `adequacyC`, `fundamentalD` and
+`adequacyD` keep their statements and cover every elaborated program. Every existing corpus
+program elaborates to the same core and the same reports (`bcc desugar` and `bcc check`, compared
+on every corpus program), with the same output, goldens, `corpus/kernel-counts.expected` and
+`corpus/counts.expected` entries; the file only gains the new programs'. The flat IR's two
+lowerings (a constant divisor, a constant tag; a `case` on a division) change the code of
+programs that divide or match on a constant injection, not what they compute or count. A control
+handler's `with` now has in its row the answering effects its clauses perform (`rowV`; they run
+in the scope of the `with`). `corpus/reject/include-unknown.bc`'s message lists `arith`. The
+system interface's declarations are not reported however a program brings them in, `lib/arith.bc`
+included (§34).
+
+### Not provided
+
+- `main_div_error` around a loop of `main` (a `main` that returns a loop): `main` handles
+  `Fail[DivError]` itself.
+- `main_div_error` around a statement of `main` that loops over a capability `main` holds
+  (`read_input()` after the first division): a control handler's body is lent the capabilities,
+  and a borrow cannot be held across a loop's observations (§14, §34). `main` handles the error
+  around the division instead, or reads first.
+- `%` at a float type; unsigned `/` at `i32` and `i64` (there are no unsigned types:
+  `host[div_u32]`).
+- Arithmetic overflow of `+`, `-`, `*`: they wrap, as Wasm's (§8); `add_checked` and
+  `mul_checked` raise their own `Fail[1]`.
+
+### Open
+
+- **The width where effects are resolved.** The walk types operands by inference with no type
+  expected of them, so a division whose width only its context gives (a block's parameter typed by
+  a generic callee's instantiation, a literal's width from the type expected of it) is taken to be
+  able to fail. No corpus program has a float division of this kind; one would have a row it does
+  not need until an operand is ascribed. Reading the type the typed elaboration expects there would
+  make it exact.
+- Where `main_div_error` cannot reach (#517): a division inside a borrow of a buffer, a loop with
+  no bound, or a statement after a loop over a capability `main` holds; the programs above that
+  keep their form.
+- A message naming where the division was; an exit status other than `1`.
+- The platform's handler for `Exhausted` at `main` (#228), by the same mechanism (`divMain`,
+  `exitTag`, `reportExit`).
 
 ---
 
@@ -6670,9 +6904,38 @@ and `Frontend/Syntax.lean`, `Frontend/Parser.lean` and `Frontend/Print.lean` (`V
 name, `VSugar.named`, `Mark.row`'s names), with no change to `CDerives`, `Core/`, `Paper/`,
 `Support/`, the checker or `Backend/`.
 
+Entry 38 (§39) is implemented in `lib/arith.bc` (`DivError`, `div_euclid`, `rem_euclid`,
+`main_div_error`); `Frontend/Syntax.lean`, `Frontend/Lexer.lean` and `Frontend/Parser.lean`
+(`SurfOp.rem`, `%`, `(%)`, `VSugar.checked`); `Frontend/Elab/Instances.lean` (`argTy` at
+operators, `divCanFail`, `safeDivisor`, `Found`); `Frontend/Elab/Divisions.lean` (the rewrite);
+`Frontend/Elab/Effects.lean` (`divMain`, `splitDiv`, `divLib`, `platform`, a `with`'s row with its
+clauses' answering effects, a written row's check); `Frontend/Sugar.lean` (`surfOp`, `divCase`,
+`divUnchecked`, `divChecked`, `fuseChecked`, the libraries brought in, `exitTag`); and `Backend/`
+(`Output.status` and `reportExit` at every stage, `Clos.Prog.exits`, `Flat.Stmt.status`, the
+runtime's `$exit`, `divTest`, the constant locals and the fused `case` of the flat IR), with the
+harness's `<name>.status`; no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the checker's
+rules.
+
 ---
 
 ## Changelog
+
+- **0.69** (2026-10-17) — §39 (new, #513): integer `/` and `%` at `i32`, `i64` and `u8`, and
+  `div_euclid`, `rem_euclid`, `checked_div`, `checked_rem`. A division with no answer (a zero
+  divisor, `MIN / -1`) raises `Fail[DivError]` (`lib/arith.bc`), an instance of `Fail` beside a
+  program's own (§38), handled by `to_result`, `default` and `map_err`. The effects pass decides a
+  division's row at its operands' width, in the walk that reads the instances, and writes one that
+  can fail as the checked division and a `raise` before rows are inferred (a width it cannot read
+  is taken to be able to fail). A nonzero literal divisor (not `-1` for `/`) performs nothing and
+  is the bare instruction; a variable divisor costs one test. A `Fail[DivError]` that reaches
+  `main` is served by `main_div_error`: the unwind runs the finalisers, the error is written on
+  standard error, and the program exits with status 1 at every stage (`<name>.status` in the
+  harness). `int-slash` moves from `corpus/reject/` to the corpus; new programs `div-recover`,
+  `div-unhandled`, `div-innermost`, `div-own-fail`, `div-abstraction`, `div-overflow`,
+  `div-euclid`, `div-infer`, `div-recursive`, `div-literal`, `sugar/div-literal`, and the reject
+  `div-row-unlisted`; six programs rewritten with `/` and `%` at their outputs and counts. §8
+  *Open*, §37 *Surface* and §38 *Open* updated. No change to `CDerives`, the relation, the
+  machine, a kernel program, or any existing program's output, core or counts.
 
 - **0.68** (2026-10-17) — §38 (new, #519, #155, #516): instances of an effect. An instance is an
   effect at its type arguments; a row holds an entry per instance, with names
