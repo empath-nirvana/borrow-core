@@ -1,0 +1,11 @@
+-- A handler whose type arguments are left to the body, around a body that performs two instances
+-- of its effect (SPEC §38): which one it handles is not determined. Writing them,
+-- `with to_result[u8, i32]`, says which; the other passes it.
+-- expect: 9:62: the body of `with to_result` performs `Fail[i32]` and `Fail[u8]`: write the type arguments of the instance it handles, `with to_result[…]`, or name the handler of the other (SPEC §38)
+include fail
+fn a(n: i32) -> i32 with Fail[i32] = raise(n)
+fn b(n: i32) -> i32 with Fail[u8] = raise(u8[1])
+
+fn f() -> (i32 + u8) + i32 = with to_result[i32, i32 + u8] { with to_result { a(1) + b(2) } }
+
+main -> (i32 + u8) + i32 = f()

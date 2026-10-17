@@ -66,14 +66,16 @@ clause directly.
 
 An operation declared `ctl` is a **control** operation: its handler receives the rest of the
 computation, its continuation, and decides whether and how to go on (SPEC §19). Each `with` of a
-control handler is a handler of its own, and an operation goes to the innermost one of its effect.
+control handler is a handler of its own, and an operation goes to the innermost one of its
+instance, the effect at its type arguments (below).
 An operation that answers `never` cannot be resumed: it is **abortive**, and its clause receives
 only its argument.
 
 Errors are such an effect, `Fail[E]`, declared in the library (`include fail`) with three
 handlers: `to_result` answers `inl` the value or `inr` the error, `default(d)` the value or
 `d`, and `map_err(f)` raises `f(e)` to the handler around it. A function that raises writes its
-error type in its row, `with Fail[E]`, unless it gets it from a function it calls. There is no
+error type in its row, `with Fail[E]`, unless the raised value's type or a function it calls gives
+it. There is no
 `?`: a call of a function that raises propagates the error by itself.
 
 ```bc
@@ -118,6 +120,42 @@ handler to_result[E, A]: Fail[E], A -> A + E = {
 `A + E`. Every operation of `Fail` is abortive, so a clause runs at most once, after the handler:
 what a handler is given is an ordinary value, such as `default`'s fallback, owned and dropped when
 the body answers, and a clause may use the capabilities in scope at the `with`.
+
+## Several instances, and names
+
+`Fail[i32]` and `Fail[ParseError]` are two **instances** of `Fail`, and a row may hold both (SPEC
+§38). An operation goes to the innermost handler of its instance, read off its argument's type, so
+nesting two handlers in either order changes nothing. Two handlers of one instance are told apart
+by name: `with n = h(…) { … }` names a handler, `n.op(v)` performs at it, and a row may name its
+entries, `with src: Kube, dst: Kube`, each served by the handler of its name where the function is
+called. An operation whose instance is not known (a literal, `raise(1)`) where two instances are
+in scope is an error that asks for an ascription, `raise((1 : u8))`, or a name.
+
+```bc
+-- answer: ((inr i32[4294967295], inl (inr u8[2])), (inl (inr i32[1]), inr i32[2]))
+include fail
+
+-- Raises its own error, an `i32`, or a `u8` from `small`: two instances, no conversion between them.
+fn small(n: i32) -> i32 with Fail[u8] = if n > 9 { raise(u8[2]) } else { n }
+fn check(n: i32) -> i32 with Fail[i32], Fail[u8] = if n < 0 { raise(n) } else { small(n) }
+
+-- Each raise reaches its own instance's handler, whatever their order.
+fn both(n: i32) -> (i32 + u8) + i32 = with to_result[i32, i32 + u8] { with to_result[u8, i32] { check(n) } }
+
+-- Two handlers of one instance: `raise` goes to the inner one, `outer.raise` to the outer one.
+fn pick(b: bool) -> (i32 + i32) + i32 =
+  with outer = to_result[i32, i32 + i32] {
+    with to_result[i32, i32] { if b { raise(1) } else { () }; if b { () } else { outer.raise(2) }; 0 } }
+
+main -> (((i32 + u8) + i32) * ((i32 + u8) + i32)) * (((i32 + i32) + i32) * ((i32 + i32) + i32)) =
+  ((both(0 - 1), both(10)), (pick(true), pick(false)))
+```
+
+A generic function keeps its meaning at every instance: in `f[E]` with the row
+`Fail[E], Fail[ParseError]`, an operation goes to the entry it is at `f`'s own types, and at
+`E := ParseError` the two entries are still two, served by one handler. A handler of `Fail[E]`
+inside `f` does not catch a `Fail[ParseError]` that passes it at that instance
+(`corpus/effects-abstraction.bc`).
 
 An operation that resumes passes its continuation `k` to its clause, and `k(v)` resumes it: the
 body goes on with `v` as the operation's answer, and `k(v)` answers what the handler answers for
@@ -204,6 +242,7 @@ spawned by `spawn_in` inside a scope below a borrow, hold that borrow across its
 
 ## Not yet
 
-An operation inside a stored closure or a fold's algebra, functions over computations (`retry`, `|>` into a handler), named instances when two
-handlers of one effect are in scope, and operations that answer a borrow into the handler's state
-are later stages (SPEC §18 *Open*, §30 *Open*).
+An operation inside a stored closure or a fold's algebra, functions over computations (`retry`,
+`|>` into a handler), renaming a handler to serve an entry of another name, and operations that
+answer a borrow into the handler's state are later stages (SPEC §18 *Open*, §30 *Open*, §38 *Not
+provided*).

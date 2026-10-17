@@ -1,0 +1,135 @@
+-- Several instances of one effect at once (SPEC §38; target 3 of #18, #155): two clusters, two
+-- maps and two caches, each pair two handlers of one effect in scope together, told apart by name.
+--
+-- * **Two clusters.** `sync` copies a config map from one cluster to another. Its row names its
+--   two entries of `Kube`, `src` and `dst`, and its body performs each at its own (`src.read_map(k)`,
+--   `dst.apply(k, v)`). A call is served by the handlers named so where it is made: `promote`
+--   runs it with `with src = cluster(…)` around `with dst = cluster(…)`, and `rollback` with the
+--   names the other way round, over the same two cells.
+-- * **Two maps.** `merge` adds the counts of one `Map` into another; `src` is an array (`table`)
+--   and `dst` a buffer of pairs (`assoc`), two handlers of one effect.
+-- * **Two caches**, nested, of one handler (#18's "two nested same-typed capabilities"): `fetch`
+--   names both (`hot.cached(k)`, `cold.cached(k)`) and fills the hot cache from the cold one; an
+--   operation performed without a name, `size()`, goes to the innermost handler, `hot`.
+--
+-- Nothing is dispatched: each function is copied for the handlers that serve its entries
+-- (`sync__cluster_cluster`), each operation a direct call of a clause on its capability.
+--
+-- Answer: `((i32[37], i32[90]), (i32[7], (i32[30], (i32[4], i32[1]))))`: after `promote` staging's
+-- 37 is prod's too, after `rollback` prod's 90 is staging's; the merged count of key 3 is 2 + 5,
+-- and of key 6 is 30 (only in `src`); `fetch(4)` twice is 2 + 2, the first from the cold cache,
+-- kept in the hot one, the second from the hot one, which then has one entry. A name resolved to the wrong handler
+-- changes a number: `promote` and `rollback` swapped give 90 and 37, a merge into `src` gives 5.
+
+include buf
+include slice
+
+-- A cluster: its config maps, by key.
+effect Kube { fn read_map(k: i32) -> i32; fn apply(k: i32, v: i32) }
+
+handler cluster(mut a: array i32): Kube = {
+  read_map(k) = borrow imm a { v -> at(v, k, 0) };
+  apply(k, v) = { let (a, _) = array_replace[i32](a, k, v); () }
+}
+
+-- The config map `k` of `src`, applied to `dst`.
+fn sync(k: i32) -> i32 with src: Kube, dst: Kube = let v = src.read_map(k); dst.apply(k, v); v
+
+-- Staging's map 2 promoted to prod.
+fn promote(staging: ref (array i32), prod: ref (array i32)) -> i32 * (ref (array i32) * ref (array i32)) =
+  let v = with src = cluster(&mut staging) { with dst = cluster(&mut prod) { sync(2) } };
+  (v, (staging, prod))
+
+-- Prod's map 5 rolled back into staging: the same two handlers, named the other way round.
+fn rollback(staging: ref (array i32), prod: ref (array i32)) -> i32 * (ref (array i32) * ref (array i32)) =
+  let v = with dst = cluster(&mut staging) { with src = cluster(&mut prod) { sync(5) } };
+  (v, (staging, prod))
+
+-- A map of counts.
+effect Map { fn lookup(k: i32) -> i32 + 1; fn insert(k: i32, v: i32) }
+
+fn assoc_find<'a>(v: array_imm 'a (i32 * i32), k: i32) -> i32 + 1 =
+  let mut r = 0 - 1;
+  for p in v { let (kk, x) = *p; if kk == k { r = x } else { () } };
+  if r < 0 { inr () } else { inl r }
+
+-- A buffer of pairs, the last one with a key its value.
+handler assoc(mut s: buf (i32 * i32)): Map = {
+  lookup(k) = borrow imm s { v -> assoc_find(v, k) };
+  insert(k, v) = { let e = (k, v); push(&mut s, e) }
+}
+
+-- An array indexed by the key, `0` for a key not present.
+handler table(mut t: array i32): Map = {
+  lookup(k) = { let x = borrow imm t { v -> at(v, k, 0) }; if x == 0 { inr () } else { inl x } };
+  insert(k, v) = { let (t, _) = array_replace[i32](t, k, v); () }
+}
+
+fn count_of(n: i32 + 1) -> i32 = match n { inl m -> m | inr u -> 0 }
+
+-- The counts of `src` added into `dst`, for the keys below 8.
+fn merge() -> 1 with src: Map, dst: Map =
+  for k in 0..8 {
+    match src.lookup(k) {
+      inl n -> dst.insert(k, count_of(dst.lookup(k)) + n)
+    | inr u -> ()
+    }
+  }
+
+-- `merge`, then `dst`'s counts of 3 and 6.
+fn merged() -> i32 * i32 with src: Map, dst: Map =
+  merge();
+  let a = count_of(dst.lookup(3));
+  let b = count_of(dst.lookup(6));
+  (a, b)
+
+-- A cache: what it has kept, and how many entries it has.
+effect Cache { fn cached(k: i32) -> i32 + 1; fn keep(k: i32, v: i32); fn size() -> i32 }
+
+handler cache(mut s: buf (i32 * i32)): Cache = {
+  cached(k) = borrow imm s { v -> assoc_find(v, k) };
+  keep(k, v) = { let e = (k, v); push(&mut s, e) };
+  size() = { let (s, n) = len_of(s); n }
+}
+
+-- `k` from the hot cache, else from the cold one, kept in the hot one.
+fn fetch(k: i32) -> i32 with hot: Cache, cold: Cache =
+  match hot.cached(k) {
+    inl v -> v
+  | inr u -> match cold.cached(k) { inl v -> hot.keep(k, v); v | inr u -> 0 }
+  }
+
+fn zero(i: i32) -> i32 = 0
+fn seven(i: i32) -> i32 = if i == 2 { 37 } else { 0 }
+fn ninety(i: i32) -> i32 = if i == 5 { 90 } else { 0 }
+fn tens(i: i32) -> i32 = if i == 3 { 5 } else { if i == 6 { 30 } else { 0 } }
+
+main -> (i32 * i32) * (i32 * (i32 * (i32 * i32))) =
+  -- Two clusters.
+  let staging = alloc(array_new[i32] (8, seven));
+  let prod = alloc(array_new[i32] (8, ninety));
+  let (p, (staging, prod)) = promote(staging, prod);
+  let (r, (staging, prod)) = rollback(staging, prod);
+  let s = free(staging);
+  let q = free(prod);
+  let ps = borrow imm q { v -> at(v, 2, 0) };
+  let rs = borrow imm s { v -> at(v, 5, 0) };
+  array_free[i32](!{ x -> () }, s);
+  array_free[i32](!{ x -> () }, q);
+  -- Two maps.
+  let mut b0 = box buf[i32 * i32](4);
+  push(&mut b0, (3, 2));
+  let counts = alloc(b0);
+  let (a, b) = with src = table(array_new[i32] (8, tens)) { with dst = assoc(&mut counts) { merged() } };
+  let (ca, _) = free(counts);
+  array_free[i32 * i32](!{ x -> () }, ca);
+  -- Two caches, nested: `size()`, performed without a name, is the innermost's.
+  let mut b1 = box buf[i32 * i32](4);
+  push(&mut b1, (4, 2));
+  let cold = alloc(b1);
+  let (v, n) = with cold = cache(&mut cold) {
+    with hot = cache(box buf[i32 * i32](4)) { let v = fetch(4); let w = fetch(4); (v + w, size()) }
+  };
+  let (cb, _) = free(cold);
+  array_free[i32 * i32](!{ x -> () }, cb);
+  ((ps, rs), (a, (b, (v, n))))

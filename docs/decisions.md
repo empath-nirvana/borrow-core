@@ -824,3 +824,21 @@ Each entry: the decision, and why. Newest last.
       `exn` signature are **restricted out**". An abortive operation is affine: `multi ctl op(…) ->
       never` is rejected, and so is an unrestricted operation answering `0` in a core row (SPEC
       §18, 0.47).
+64. **E3's direction is built (effect instances, SPEC §38, #519; spellings provisional).**
+    - **Resolution is lexical and by instance**, as `docs/effects-scoping.md` E3 decided (Effekt,
+      Helium): an operation goes to the innermost handler of its instance, an effect at its type
+      arguments; a name picks another, `with n = h(…) { M }` and `n.op(v)`; a row's entries may be
+      named, `with src: Kube, dst: Kube`, and a named entry is served by the handler of its name.
+    - **An operation two instances in scope could serve is rejected**, with a message that asks
+      for an ascription or a name, when its type arguments are not known (a literal, an injection, a
+      local inference cannot type). One instance in scope keeps §18's innermost handler of the
+      effect, so every program that checked before checks with the same core.
+    - **Abstraction safety** (Zhang and Myers, POPL 2019): a row's entries are distinct slots, an
+      operation resolves to a slot at the template's types, and instantiation never merges slots.
+      Resolution runs on the template, before decision 45 makes its instances.
+    - **Rows are inferred with types.** The type arguments are read by the typed elaboration's own
+      inference and matching over each body before effects are resolved
+      (`Frontend/Elab/Instances.lean`), not by a typed pass that also resolves effects: the effects
+      pass keeps its place, and so its resolution at the template's types.
+    - Not decided here, after this unit: integer division's effect (#518), and one output effect at
+      two named instances in place of `Stdout` and `Stderr` (SPEC §38 *Open*).

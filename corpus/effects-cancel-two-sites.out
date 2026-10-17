@@ -1,0 +1,2 @@
+(inl (inl i32[30]), inl (inr i32[0]))
+live 0

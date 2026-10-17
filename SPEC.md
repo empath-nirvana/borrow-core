@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.67 · 2026-10-17
+Version 0.68 · 2026-10-17
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2117,8 +2117,10 @@ clauses use. `with E₂[…]` lists what its clauses perform, served around the 
 `with h(…) { M }` runs `M` with `h` handling its effect. An operation is called like a function,
 `op(v)`: there is no `perform` token (decision 49). An operation's name is its own: no function may
 share it. A **written row** after a function's result type is a promise that its inferred row is
-within it, checked, and gives the type arguments of an effect the function performs directly.
-All spellings are provisional (decisions 51, 55).
+within it, checked, and gives the type arguments of an effect the function performs directly. A
+row may hold several instances of one effect, and handlers and a row's entries may be named,
+`with n = h(…) { M }`, `n.op(v)`, `with src: E` (§38). All spellings are provisional
+(decisions 51, 55).
 
 **Errors** are the library effect `Fail[E]` (`lib/fail.bc`), `ctl raise(e: E) -> never`, handled
 by ordinary handlers: `to_result` (`inl` the value or `inr` the error), `default(d)` (the value,
@@ -2132,8 +2134,9 @@ structure: one control operation that resumes and answers `()`.
 
 ### Elaboration
 
-All of it is in `Frontend/Elab/Effects.lean` (resolution, before the rest of the sugar) and
-`Frontend/Sugar.lean` (assembly, where types are known); the checker sees only core.
+All of it is in `Frontend/Elab/Effects.lean` (resolution, before the rest of the sugar, with the
+types of operations' arguments read first, §38) and `Frontend/Sugar.lean` (assembly, where types
+are known); the checker sees only core.
 
 **Answering effects** are capabilities. With the capability `c : Mut 'l S`:
 
@@ -2142,14 +2145,14 @@ All of it is in `Frontend/Elab/Effects.lean` (resolution, before the rest of the
 | a clause `op(x) = M` of `h` | `fn h__op<'l>(c: mut 'l S, x: A) -> mut 'l S * B = let r = modify c { s -> M; (s, r) }; (c, r)`: `!` code run on the lent state by `withswap`, the `FnMut` row of §2 |
 | `with h(e) { M }` | `borrow mut (alloc(e)) { 'l, c -> M' }`: a `withbor` of the state's cell whose callback's parameter is the capability; the cell is dropped after |
 | `with h(&mut c₀) { M }` | `borrow mut c₀ { 'l, c -> M' }`, and `c₀` is rebound |
-| `op(v)` in `M` | `let (c, r) = h__op(c, v)`, `h` the innermost handler of `E` |
+| `op(v)` in `M` | `let (c, r) = h__op(c, v)`, `h` the innermost handler of `E` (or the one named, §38) |
 
 The capability is threaded as a `let mut` variable is: bound again after each call, handed out of
 each arm of a `match` or `if` that uses it, out of a borrow block, and through a `for`'s body.
 
 **Control effects** are §19's. Each `with` of a control handler is a **handler site** with a
 static name `n` of its own, and an operation is resolved lexically to the innermost site of its
-effect: `perform[n.i](v)`, or `abort[n.i](v)` for an abortive operation. The site is
+instance (§38): `perform[n.i](v)`, or `abort[n.i](v)` for an abortive operation. The site is
 `handle_with[n](hr, hc) M`: the return clause and the operation clauses as `!` closures, at the
 types `[handle]` gives them, the handler's type parameters matched against the body's type and its
 arguments' types. The clauses run outside the site: their operations go to the sites around the
@@ -2157,14 +2160,14 @@ arguments' types. The clauses run outside the site: their operations go to the s
 
 **Rows.** A function's **row** is the set of effect instances it performs: those of the operations
 it calls and of the functions it calls, less those a `with` inside it handles. It is inferred in
-declaration order. A function with a row is elaborated once per assignment of its effects to what
+declaration order, an operation's instance read off its argument's type (§38). A function with a row is elaborated once per assignment of its effects to what
 serves them in scope (the handlers of its answering effects, the sites of its control effects), as
 a generic function is once per instance (decision 45): the copy `f__…` takes the capabilities
 first and hands them back first, and its type has the sites' operations as its row,
 `A ⇒ F[n.i …] B`. A call of `f` is a call of that copy, a computation of its own:
 `g <- return f; a <- return v; (force g) a`. A function with a row that is never called is not
-elaborated. Resolution is lexical: an operation goes to the innermost handler of its effect around
-it, or to what the enclosing function's copy was given.
+elaborated. Resolution is lexical: an operation goes to the innermost handler of its instance around
+it, or to what the enclosing function's copy was given (§38).
 
 The checker checks a copy, as any `def`, at each of its uses, so a program holding a closed
 function at its uses is §24's `[let-poly]` read by substitution: the program's derivation gives the
@@ -2175,7 +2178,8 @@ names.
 **Where an abortive operation may stand.**
 - *In a counted loop's body* (`for` over data, §16): `count_try`'s step is pure, so the step
   handles the operations of the names its body performs itself, each leaving the loop by its exit,
-  and after the loop the operation is performed again at the same name. A body with a control
+  and after the loop the operation is performed again at the same name; of several sites, each
+  (§38). A body with a control
   operation that resumes makes the loop a div loop instead (§16, *Effectful bodies*).
 - *In a borrow block's body*: the block is the unwinding form of its borrow (§19), at the
   operations its body performs, which must be abortive (a resuming one is T1, #172); its callback
@@ -2193,11 +2197,11 @@ and a function with a row passed as a value other than at a parameter of functio
 it is the block that calls it (§33; stored callbacks, #161 part B; for a fold's algebra that
 raises, K4 below); a lend `&mut x` in the arguments of a call that
 threads a capability; an operation of an answering effect inside a clause of an answering handler;
-a function with a row whose written result is a computation (a loop); a second instance of
-an effect in a row; type parameters on an answering effect; an effect with both kinds of operation;
-an unrestricted operation that answers `never` (`multi ctl`, above); a `let mut` declared outside
-a control `with` and assigned in it, or a place lent in it; abortive operations of two sites in
-one counted loop's body; a borrow of a buffer or a literal crossed by an abort.
+a function with a row whose written result is a computation (a loop); type parameters on an
+answering effect; an effect with both kinds of operation; an unrestricted operation that answers
+`never` (`multi ctl`, above); a `let mut` declared outside a control `with` and assigned in it, or
+a place lent in it; a borrow of a buffer or a literal crossed by an abort. Several instances of one
+effect are §38's, with what it does not provide.
 
 ### Reports
 
@@ -2274,8 +2278,8 @@ program's derivation gives it (`checkProgram_letPoly`).
 
 ### Open
 
-- Named instances and lexical resolution between two instances of an effect (S2, #155). Bundles
-  (#156): no program needs one, since a function is given its effects by its row (§34).
+- Bundles (#156): no program needs one, since a function is given its effects by its row (§34).
+  Named instances and resolution by instance are §38.
 - Effectful callbacks stored (#161 part B, §33 *Open*). Functions over computations (`retry`, a
   consumer of generators, `|>` at a computation parameter) are §33. Blocks passed and called
   are §30: E1 (a higher-order function under two handlers) and E6 (a wrapper whose handler the
@@ -2443,7 +2447,7 @@ Rows `Σ` are finite sets of names, each with its operations' types. So:
   handlers are two sites, two names, and two row entries; an operation reaches the one whose
   name it carries, whatever handlers lie between. A higher-order function that handles its own
   instance of an effect cannot capture its callback's operations (no accidental handling).
-  **Named instances fall out.**
+  **Named instances fall out**: the surface's are §38.
 - **Re-entry of one site** (`memo` running itself under itself) meets the nearest enclosing
   instance of that name, as Koka's dynamic handlers do. That instance has the same operation
   types, so this is sound. Operation types are closed in lifetimes, so every instance of a site
@@ -5396,8 +5400,9 @@ construction: its clauses are a fold over the operations that keeps the equation
   the capability (§18): the least general kind that serves the programs. None suspends. A program
   whose own computations wait on time with a control operation serves it with a handler whose
   clause calls `sleep` (`corpus/reconcile-clock.bc`'s `on_clock`).
-- **One effect per stream.** `Stdout` and `Stderr` are two effects with the same operations, since
-  a row holds one instance of an effect (§18 *Not provided*, S2 #155). A writer that does not care
+- **One effect per stream.** `Stdout` and `Stderr` are two effects with the same operations: they
+  were written when a row held one instance of an effect, and a row may now hold two, named (§38),
+  so merging them into one effect is a later change of the library (§38 *Open*). A writer that does not care
   which stream it writes to takes §11's output cell, or is written once over a block (§30) given
   `print_byte` or `eprint_byte` (`lib/io.bc`'s `dec_each`).
 - **Bytes, and a view per call**, as §11's operations: a byte, and a view for one system call per
@@ -5612,7 +5617,7 @@ The IO model's user-visible shape and what `main` is given are not settled here:
 proposed and listed with its options in #156.
 
 - **What a program sees.** Per-stream answering effects with byte and view operations (built);
-  one output effect with named instances for the two streams (needs #155); or capability values
+  one output effect with named instances for the two streams (§38 *Open*); or capability values
   only (§11), effects for tests alone.
 - **What `main` is given.** Every interface effect its body performs, served ambiently (built); or
   a bundle record of capabilities `main` takes as a parameter (`docs/platform-design.md` §2.8);
@@ -5643,7 +5648,7 @@ reports change only where a message changed (`corpus/reject/include-unknown.bc` 
   capability through `await` (the scheduler holds it between turns and gives it to the task it
   resumes, as a `for`'s site threads its variables, §15); serve a task's output at the scheduler (a
   port, decision 57); or a shared output capability, which needs interior mutability.
-- Named instances (S2, #155) for one output effect at two streams; redirecting a function's
+- Named instances (§38) for one output effect at two streams; redirecting a function's
   `Stdout` to standard error (an operation of an answering effect inside an answering clause, §18
   *Not provided*).
 - A capability used by a computation parameter's argument under the callee's handler (#487): the
@@ -6224,6 +6229,179 @@ as before.
 
 ---
 
+## 38. Entry 37 — instances of an effect: rows with types, names, abstraction safety
+
+### Motivation
+
+The kernel tells two handlers of one effect apart: a row is keyed by handler site and operation
+(§19 *Names*), and `Row.uniqB` forbids only one site's operation twice. §18's surface did not.
+Rows were inferred on the untyped program, before the types that tell `Fail[i32]` from
+`Fail[ParseError]` are known (#516), so a row held one instance per effect, a second one was
+dropped, and an operation went to the innermost handler of its *effect*. Programs worked around
+it: `Stdout` and `Stderr` are two effects (§34), `parse_i32` maps its arithmetic's errors into its
+own (`lib/text.bc`), and §18 *Not provided* listed a second instance in a row and two sites in a
+counted loop's body. This entry makes the surface keep what the kernel has (#519, #155, #516):
+instances, resolution by instance, names, and the rule that keeps a generic body's meaning.
+
+### Instances and rows
+
+An **instance** is an effect at its type arguments: `Fail[i32]` and `Fail[ParseError]` are two.
+Two type argument lists are one instance's when they are equal as types (abbreviations expanded,
+`Env.sameArgs`). A function's **row** is a list of **entries**, one per instance it performs, each
+with its name when the row names it: `fn sync(k: i32) -> i32 with src: Kube, dst: Kube`.
+
+**Rows are inferred with types.** The type arguments of an operation's instance are read off its
+argument's type, by matching the operation's parameter types against it; those of a call of a
+template are written, `f[T](…)`, or matched from its parameter's type against its argument's
+(decision 45's matching). Both are read before the operations are resolved, by the typed
+elaboration's own inference (`TCx.tyV`, `Elab.inferV`) and matching (`Frontend/Elab/Match.lean`)
+over each declaration's body, at the declaration's own types: its type parameters are
+placeholders (`Frontend/Elab/Instances.lean`). What inference cannot synthesize is not known: a
+literal (whose width its context decides), an injection, a local of unknown type. `(e : T)`
+ascribes it.
+
+- **A written row** is a promise, as in §18: each instance the body performs is the entry named as
+  it is, when it is named; else the entry of its type arguments; else the only entry of its
+  effect. Two entries that could be it, neither the one unnamed, are ambiguous, and an error asks
+  for an ascription or a name. A row that lists one instance twice names the two entries.
+- **With no written row**, an instance whose type arguments are not known is the one entry of its
+  effect (and name) whose are; with none they are not determined (§18's error); with two, it is
+  ambiguous.
+
+### Resolution
+
+- **By instance.** `op(v)` goes to the innermost handler in scope of its instance. When its type
+  arguments are not known, or no handler in scope has them, it goes to the innermost handler of
+  its effect if every handler of the effect in scope is one instance (§18's rule, unchanged for a
+  program with one instance in scope); otherwise it is an error that asks for an ascription or a
+  name.
+- **Names** (spellings provisional). `with n = h(…) { M }` names the handler `n`; `n.op(v)` performs
+  `op` at the innermost handler named `n`. An entry of a row named `src` is served, at a call, by
+  the innermost handler named `src` of its instance, and an unnamed entry by the innermost handler
+  of its instance, named or not. So an unnamed `with` handles the unnamed instances of its effect,
+  and a named one those and the ones of its name: an operation named for an outer handler passes
+  the inner ones.
+- **A copy's entries are unordered.** A function is elaborated once per assignment of its entries
+  to what serves them (§18): in its copy, the entries of its row are its handlers, with no nesting
+  between them. Of two entries that could serve an operation, the one unnamed is chosen if it is
+  the only one, and otherwise it is ambiguous. A `with` inside the body is innermost, as anywhere.
+- **The instance a `with` handles** is at its written type arguments; else at those of the one
+  instance of its effect its body performs (unnamed, or named as the handler); a body that performs
+  two asks for them. The handler's own row (`with E₂[…]`) is served by the innermost handlers of
+  its instances around the `with`, and its clauses see them as its row's entries, at the
+  handler's own types.
+
+### Abstraction safety
+
+A generic body does not change meaning when its type arguments coincide with another instance it
+performs (Zhang and Myers, *Abstraction-safe effect handlers via tunneling*, POPL 2019). In
+`f[E]` with the row `Fail[E], Fail[ParseError]`, instantiating `E := ParseError` must not merge
+the two or reroute a `raise`; and in `g[E]` that handles its own `Fail[E]` around a call that
+raises `Fail[ParseError]`, the handler must not catch that raise at `E := ParseError`.
+
+**The rule.** The entries of a written or inferred row are distinct slots; an operation resolves
+to a slot at the template's types; instantiation never merges slots.
+
+**Why it holds.** Resolution runs on the template: the effects pass elaborates a function's copy
+with its type parameters as placeholders, and the table of type arguments is read at them
+(`Instances.table`). Decision 45 makes each instance from that copy by substituting types: the
+static names of its sites and operations are fixed, so instantiation reaches the types of a
+site (`HInfo.subst`, `Frontend/Elab/Subst.lean`) and never which site an operation names. A
+handler type parameter that a site leaves open is named apart from the template's
+(`withCtl`), so the substitution cannot capture it. Two slots that coincide at an instance are two
+entries served by one site: the copy's row lists the site once (`Env.rowOf`), and both entries'
+operations go to it, as the caller's handler of that instance.
+
+**Prior art.** Zhang and Myers make handlers abstraction-safe by tunneling: an effect not named in
+a function's signature passes the handlers inside it, which is this rule's effect for a slot.
+Helium (Biernacki, Piróg, Polesiuk and Sieczkowski, *Binders by day, labels by night*, POPL 2020)
+resolves lexically, with named instances and a name required only where two instances are in
+scope. Effekt (Brachthäuser, Schuster and Ostermann, *Effects as capabilities*, OOPSLA 2020)
+passes capabilities lexically, the implicit form of §18's capability per handler.
+
+`corpus/effects-abstraction.bc` runs both programs above at `E := ParseError`.
+
+### Several sites
+
+- **In a counted loop's body** (§16): the step handles the abortive operations of every site the
+  body performs, each site's handler around the previous one at the row of the ones around it, each
+  operation leaving the loop by its exit; after the loop each is performed again at its site
+  (`forData`, `Frontend/Sugar.lean`).
+- **A resuming handler with a state** (§19 *Handler state*): its clauses answer a function of the
+  state, which runs where the `with` is, and which resumes or cancels the continuation there. The
+  continuation is at the row of the `with` (`[handle]`), so the function's row is the handler's
+  own row and every other site in scope, not the handler's row alone (#514).
+
+### Elaboration
+
+| where | what |
+|---|---|
+| `Frontend/Elab/Instances.lean` | the table of type arguments, per declaration and call |
+| `Frontend/Elab/Match.lean` | the typed elaboration's matching, moved out of `Frontend/Sugar.lean` |
+| `Frontend/Elab/Effects.lean` | entries (`Env.addInst`, `Env.withoutInst`, `Env.handledArgs`), resolution (`Cx.serve`, `Cx.capFor`, `Cx.capAt`), a copy's slots (`slotsOf`), written rows (`Env.slotOf`, `Env.checkWritten`, `Env.settle`) |
+| `Frontend/Elab/Subst.lean` | a handler site's types at a template's instance (`HInfo.subst`) |
+| `Frontend/Sugar.lean` | several sites in a counted loop's body |
+| `Frontend/Parser.lean` | `with n = h(…)`, `n.op(…)`, `src: E` in a written row |
+
+The reports (§18) print an entry's name, `row L:C: sync: src: Kube, dst: Kube`, the handler a
+call goes to, `on the state of `cluster` named `src``, and a copy's slots, `for cluster as
+`src`, cluster as `dst``.
+
+### Programs
+
+| program | what it shows | answer | counts |
+|---|---|---|---|
+| `corpus/effects-instances.bc` | `Fail[Bad]` and `Fail[ParseError]` in one row with no `map_err`; both raised in one counted loop's body; the two handlers nested both ways | `((inl (inl i32[42]), …), (inl (inl i32[10]), (inr (inl i32[108]), inl (inr (inr (inl u8[97]))))))` | `0 0 0` |
+| `corpus/effects-abstraction.bc` | the rule at a coinciding instance: a generic body's own handler of `Fail[E]` does not catch `Fail[ParseError]` at `E := ParseError`; two entries that coincide, served by one site | `((inr (inl ()), inl (inr (inr (inl u8[33])))), (inr (inl ()), inr (inr (inl u8[33]))))` | `0 0 0` |
+| `corpus/effects-named.bc` | target 3 of #18: two clusters (`sync` with `src` and `dst`, the names swapped), two maps of two handlers, two nested caches of one handler | `((i32[37], i32[90]), (i32[7], (i32[30], (i32[4], i32[1]))))` | `10 0 0` |
+| `corpus/effects-fail-list.bc` | `handleFailList` (Schuster et al., ICFP 2020, §4.3): a handler installed around a computation parameter, under another instance's handler | `((i32[3], i32[0]), (inl i32[0], inr i32[7]))` | `0 0 0` |
+| `corpus/effects-cancel-two-sites.bc` | #514: a stateful clause that cancels `k` and raises, under two handlers of `Fail` | `(inl (inl i32[30]), inl (inr i32[0]))` | `0 4 0` |
+| `corpus/effects-row-inferred.bc` | a row inferred from a raised value's type, with no written row | `(inl i32[3], inr i32[4294967292])` | `0 0 0` |
+
+Rejects: `corpus/reject/effect-instance-ambiguous.bc` (an operation two instances in scope could
+serve, its argument a literal), `effect-row-twice.bc` (an instance listed twice, unnamed),
+`effect-name-unserved.bc` (a named entry with no handler of its name), and
+`effect-with-two-instances.bc` (a handler whose type arguments the body leaves open, over two
+instances). `corpus/reject/effect-error-type.bc` now raises a literal: its `raise(n)` at `n : i32`
+determines `Fail[i32]`, and is `corpus/effects-row-inferred.bc`.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine or the checker's rules: two instances are two
+sites, as §19 has them, and the elaboration emits the core terms it did. `fundamentalC`,
+`adequacyC`, `fundamentalD` and `adequacyD` keep their statements. Every existing corpus program
+elaborates to the same core (`bcc desugar`, compared on every corpus program), with the same
+output, goldens, counts, `corpus/kernel-counts.expected` and reports.
+
+### Not provided
+
+- Renaming a handler to serve an entry of another name (`with src = a { … }` over a handler `a`
+  in scope); a function whose entries are named `a` and `b` calls one whose are `src` and `dst`
+  only through handlers named so.
+- An operation's instance from a type inference does not synthesize: it is ascribed, or named.
+- A computation parameter (§33) that provides two instances of one effect: its ports are by
+  effect.
+- A `poly` case (§36) that performs an effect: the case is chosen in the typed elaboration, after
+  the operations are resolved. The table now has the argument types a case is chosen by, so the
+  effects pass could choose it.
+- Type parameters on an answering effect (§18): two instances of one answering effect are told
+  apart by name only.
+
+### Open
+
+- Integer division that raises (#518, held open): an effect decided by a type is now decided where
+  the type is. The table can record a division's operand type, so the effects pass can give `a / b`
+  its instance at an integer width and elaborate it to the checked division and a `raise`, with no
+  second elaboration. Whether that instance is `Fail[DivByZero]` (an instance of `Fail` beside the
+  program's others) or an effect of its own is a choice on the merits.
+- `Stdout` and `Stderr` as one output effect at two named instances (§34): `main`'s platform
+  handlers installed named (`stdout`, `stderr`), the library's writers taking an unnamed entry
+  (served by the innermost) or a named one, and the corpus's `eprint_byte` calls written
+  `stderr.print_byte(…)`.
+- A name in a `|>` stage (§33), and on a `for`'s site of an iteration effect (§15).
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -6482,9 +6660,37 @@ dispatch and literal rounding in `Frontend/` (`Frontend/FloatLit.lean`); every s
 `Backend/` (`Flat/Lower.lean`'s `hostVals` canonicalises, `Wasm/Lower.lean` reinterprets); and
 `lib/float.bc`. No change to `CDerives`, the relation, the machine's rules or the checker's rules.
 
+Entry 37 (§38) is implemented in `Frontend/Elab/Instances.lean` (the table of type arguments),
+`Frontend/Elab/Match.lean` (the matching, moved from `Frontend/Sugar.lean`),
+`Frontend/Elab/Effects.lean` (`Inst.name`, `Site.slot`, `Cap.slot`, `Env.addInst`,
+`Env.withoutInst`, `Env.handledArgs`, `Env.callRowAt`, `Cx.serve`, `Cx.capFor`, `Cx.capAt`,
+`slotsOf`, `Env.slotOf`, `Env.checkWritten`, `Env.settle`, a stateful handler's row in `withCtl`),
+`Frontend/Elab/Subst.lean` (`HInfo.subst`), `Frontend/Sugar.lean` (several sites in `forData`),
+and `Frontend/Syntax.lean`, `Frontend/Parser.lean` and `Frontend/Print.lean` (`VSugar.handle`'s
+name, `VSugar.named`, `Mark.row`'s names), with no change to `CDerives`, `Core/`, `Paper/`,
+`Support/`, the checker or `Backend/`.
+
 ---
 
 ## Changelog
+
+- **0.68** (2026-10-17) — §38 (new, #519, #155, #516): instances of an effect. An instance is an
+  effect at its type arguments; a row holds an entry per instance, with names
+  (`with src: Kube, dst: Kube`); an operation's type arguments are read off its argument's type,
+  a template call's off its arguments', at the declaration's own types, by the typed elaboration's
+  inference before effects are resolved. An operation goes to the innermost handler of its
+  instance; `with n = h(…)` names a handler and `n.op(v)` performs at it, a named entry is served
+  by the handler of its name; an operation two instances in scope could serve is an error that
+  asks for an ascription or a name. Abstraction safety: a row's entries are slots resolved at the
+  template's types, never merged by instantiation (a handler site's types are now instantiated
+  with a template, `HInfo.subst`). Several sites in one counted loop's body; a stateful handler's
+  function of its state at the row of its `with` (#514). §18 *Not provided* loses a second
+  instance in a row and two sites in a counted loop's body; §18 *Open*, §19 *Names* and §34 point
+  to §38. New corpus programs `effects-instances`, `effects-abstraction`, `effects-named`,
+  `effects-fail-list`, `effects-cancel-two-sites`, `effects-row-inferred`, and four rejects;
+  `corpus/reject/effect-error-type.bc` raises a literal, its old form now inferred. No change to
+  `CDerives`, the relation, the checker's rules, a kernel program, or any existing program's core,
+  output, counts or reports.
 
 - **0.67** (2026-10-17) — §37 (new, #499): floats. `f32` and `f64` are two more widths of
   `VTy.int`, with literals given by their bits and Wasm's float instructions as host operations

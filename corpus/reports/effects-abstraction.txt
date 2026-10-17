@@ -1,0 +1,21 @@
+row 23:1: check: Fail[ParseError]
+row 26:1: guarded: Fail[ParseError]
+row 34:1: either: Fail[ParseError], Fail[E]
+lowering 23:1: copy `check__n1`: `check` for the site 1 of `Fail`
+lowering 23:1: copy `check__n3`: `check` for the site 3 of `Fail`
+lowering 26:1: copy `guarded__n1`: `guarded` for the site 1 of `Fail`
+lowering 27:3: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 27:3: with to_result (Fail): a handler, the static name 2; raise abortive: a branch per call (final ctl)
+lowering 31:3: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 31:3: with to_result (Fail): a handler, the static name 1; raise abortive: a branch per call (final ctl)
+lowering 34:1: copy `either__n3_n3`: `either` for the site 3 of `Fail`, the site 3 of `Fail`
+lowering 39:3: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 39:3: with to_result (Fail): a handler, the static name 3; raise abortive: a branch per call (final ctl)
+call 23:60: raise (Fail) → abort[1.0], handled by the caller at 23:1: abortive, it never resumes
+call 23:60: raise (Fail) → abort[3.0], handled by the caller at 23:1: abortive, it never resumes
+call 27:41: raise (Fail) → abort[2.0], handled by `with to_result` at 27:3: abortive, it never resumes
+call 27:65: check → `check__n1`
+call 31:50: guarded → `guarded__n1`
+call 35:16: raise (Fail) → abort[3.0], handled by the caller at 34:1: abortive, it never resumes
+call 35:34: check → `check__n3`, in tail position: its answer is this one's
+call 39:37: either → `either__n3_n3`

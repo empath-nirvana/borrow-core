@@ -1,0 +1,38 @@
+effect 49:1: Map: lookup, insert
+effect 87:1: Cache: cached, keep, size
+row 36:1: sync: src: Kube, dst: Kube
+row 71:1: merge: src: Map, dst: Map
+row 80:1: merged: src: Map, dst: Map
+row 96:1: fetch: hot: Cache, cold: Cache
+lowering 36:1: copy `sync__cluster_cluster`: `sync` for cluster as `src`, cluster as `dst`
+lowering 40:11: with src = cluster (Kube): a borrow block of its state (lent from `staging`); its operations are calls of the clauses on the capability
+lowering 40:46: with dst = cluster (Kube): a borrow block of its state (lent from `prod`); its operations are calls of the clauses on the capability
+lowering 45:11: with dst = cluster (Kube): a borrow block of its state (lent from `staging`); its operations are calls of the clauses on the capability
+lowering 45:46: with src = cluster (Kube): a borrow block of its state (lent from `prod`); its operations are calls of the clauses on the capability
+lowering 57:1: handler assoc (Map): call — each clause resumes once, in tail position (fun): a direct call on the lent state (withswap), with no allocation and no dispatch
+lowering 63:1: handler table (Map): call — each clause resumes once, in tail position (fun): a direct call on the lent state (withswap), with no allocation and no dispatch
+lowering 71:1: copy `merge__table_assoc`: `merge` for table as `src`, assoc as `dst`
+lowering 80:1: copy `merged__table_assoc`: `merged` for table as `src`, assoc as `dst`
+lowering 89:1: handler cache (Cache): call — each clause resumes once, in tail position (fun): a direct call on the lent state (withswap), with no allocation and no dispatch
+lowering 96:1: copy `fetch__cache_cache`: `fetch` for cache as `hot`, cache as `cold`
+lowering 123:16: with src = table (Map): a borrow block of its state (in a cell scoped to the block); its operations are calls of the clauses on the capability
+lowering 123:61: with dst = assoc (Map): a borrow block of its state (lent from `counts`); its operations are calls of the clauses on the capability
+lowering 130:16: with cold = cache (Cache): a borrow block of its state (lent from `cold`); its operations are calls of the clauses on the capability
+lowering 131:5: with hot = cache (Cache): a borrow block of its state (in a cell scoped to the block); its operations are calls of the clauses on the capability
+call 36:60: read_map (Kube) → `cluster__read_map`, on the state of `cluster` named `src`
+call 36:77: apply (Kube) → `cluster__apply`, on the state of `cluster` named `dst`
+call 40:78: sync → `sync__cluster_cluster`, passing the capabilities
+call 45:78: sync → `sync__cluster_cluster`, passing the capabilities
+call 73:11: lookup (Map) → `table__lookup`, on the state of `table` named `src`
+call 74:16: insert (Map) → `assoc__insert`, on the state of `assoc` named `dst`
+call 74:39: lookup (Map) → `assoc__lookup`, on the state of `assoc` named `dst`
+call 81:3: merge → `merge__table_assoc`, passing the capabilities
+call 82:20: lookup (Map) → `assoc__lookup`, on the state of `assoc` named `dst`
+call 83:20: lookup (Map) → `assoc__lookup`, on the state of `assoc` named `dst`
+call 97:9: cached (Cache) → `cache__cached`, on the state of `cache` named `hot`
+call 99:20: cached (Cache) → `cache__cached`, on the state of `cache` named `cold`
+call 99:46: keep (Cache) → `cache__keep`, on the state of `cache` named `hot`
+call 123:93: merged → `merged__table_assoc`, passing the capabilities
+call 131:55: fetch → `fetch__cache_cache`, passing the capabilities
+call 131:73: fetch → `fetch__cache_cache`, passing the capabilities
+call 131:91: size (Cache) → `cache__size`, on the state of `cache` named `hot`

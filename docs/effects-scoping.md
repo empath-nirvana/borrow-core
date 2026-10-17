@@ -251,6 +251,8 @@ and a rough proof burden; dependencies; and whether it is a one-way door.
 
 ### E3. Capabilities: resolution and named instances
 
+- **Status:** built, lexical and by instance, with names (SPEC §38, decision 64).
+
 - **Decides:** how an operation call finds its handler: implicitly, lexically, to the innermost
   handler of that effect in scope (Effekt), or by a name when there are several; how names appear
   in signatures (`with src: Kube, dst: Kube`); how a capability is passed to callees (implicitly

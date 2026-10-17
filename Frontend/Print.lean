@@ -228,8 +228,8 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
         | .imm => "borrow imm " | .mut | .famMut => "borrow mut " | .modify => "modify "
       let lt := if x == "" then "" else "'" ++ x ++ ", "
       kw ++ P.pp 3 k ++ " { " ++ lt ++ b.name ++ " ->" ++ nl (k + 2) ++ M.pp 0 (k + 2) ++ " }"
-    | .app _ (.app _ (.sugar _ (.handle h x As)) P) (.thunkv _ (.lam _ b _ M)) =>
-      "with " ++ h ++ (if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]") ++
+    | .app _ (.app _ (.sugar _ (.handle h x As nm)) P) (.thunkv _ (.lam _ b _ M)) =>
+      "with " ++ (match nm with | some n => n ++ " = " | none => "") ++ h ++ (if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]") ++
         "(" ++ P.pp 0 k ++ ") { '" ++ x ++ ", " ++ b.name ++ " ->" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ " }"
     | .thunk _ M => "thunk " ++ M.pp 0 (k + 2)
@@ -255,6 +255,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .sugar _ (.str bs) => strLit bs
     | .sugar _ .brk => "break"
     | .sugar _ .cont => "continue"
+    | .sugar _ (.named n op) => n ++ "." ++ op
     | .sugar _ s => s!"<{reprStr s}>"
 
 /-- A computation at level `lvl`, indented by `k` after each line break. -/
@@ -330,8 +331,8 @@ def Decl.pp : Decl → String
     let rec mk : Mark → String
       | .none => "" | .total => "total " | .div => "div "
       | .template m _ => mk m ++ "fn "
-      | .row es m => "with[" ++ ", ".intercalate (es.map fun (e, As) =>
-          e.name ++ (if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]")) ++
+      | .row es m ns => "with[" ++ ", ".intercalate (es.zipIdx.map fun ((e, As), j) =>
+          (match ns[j]? with | some (some x) => x.name ++ ": " | _ => "") ++ e.name ++ (if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]")) ++
           "] " ++ mk m
     let bounds := if m.bounds.isEmpty then "" else
       " where " ++ ", ".intercalate (m.bounds.map fun (S, c) => S.name ++ ": '" ++ c.name)

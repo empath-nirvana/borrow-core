@@ -1,8 +1,8 @@
--- A function that raises with its error type not determined (SPEC §19): `check` raises directly
--- and calls nothing that raises, so the type argument of its `Fail` is not determined;
--- `with Fail[i32]` would give it.
+-- A function that raises with its error type not determined (SPEC §19, §38): `check` raises a
+-- literal, whose width its context decides, and calls nothing that raises, so the type argument
+-- of its `Fail` is not known from its argument's type; `with Fail[i32]` would give it.
 -- expect: 6:4: `check` performs `Fail`, and its type arguments are not determined: write them, `with Fail[…]`
 include fail
-fn check(n: i32) -> i32 = if n < 0 { raise(n) } else { n }
+fn check(n: i32) -> i32 = if n < 0 { raise(0) } else { n }
 
 main -> i32 + i32 = with to_result { check(3) }

@@ -1,0 +1,11 @@
+-- A row inferred with types (SPEC §38): `check` raises `n`, an `i32`, and writes no row, so its
+-- row is `Fail[i32]`, the type argument read off the argument's type; `to_result`'s type
+-- arguments are then read off its body's row. (`corpus/reject/effect-error-type.bc` raises a
+-- literal, whose type is not known there.)
+--
+-- Answer: `(inl i32[3], inr i32[4294967292])`: 3 is not negative; −4 is raised.
+include fail
+
+fn check(n: i32) -> i32 = if n < 0 { raise(n) } else { n }
+
+main -> (i32 + i32) * (i32 + i32) = (with to_result { check(3) }, with to_result { check(0 - 4) })

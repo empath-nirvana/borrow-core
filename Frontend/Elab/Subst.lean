@@ -127,6 +127,16 @@ def Const.subst (σ : TySubst) : Const → Const
   | .sliceBorrowMutU x b A B r => .sliceBorrowMutU x b (A.subst σ) (B.subst σ) (r.subst σ)
   | .sliceBorrowImmU x b A B r => .sliceBorrowImmU x b (A.subst σ) (B.subst σ) (r.subst σ)
 
+/-- A control handler's site (SPEC §19) at a template's instance: its types, at the template's
+type arguments. The handler's own type parameters the site leaves open (`tps`) are named apart
+from the template's (`Frontend.Elab.Effects.withCtl`), and are not substituted. -/
+def HInfo.subst (σ : TySubst) (i : HInfo) : HInfo :=
+  let σ := σ.filter fun (x, _) => !i.tps.contains x
+  { i with ents := i.ents.map fun (q, A, B) => (q, A.subst σ, B.subst σ),
+           known := i.known.map fun (x, A) => (x, A.subst σ),
+           params := i.params.map fun (x, A) => (x, A.subst σ),
+           retA := i.retA.subst σ, res := i.res.subst σ, after := i.after.map (·.subst σ) }
+
 mutual
 def Val.subst (σ : TySubst) : Val → Val
   | .var sp x => .var sp x
@@ -154,6 +164,7 @@ def Val.subst (σ : TySubst) : Val → Val
   | .lend sp x m => .lend sp x m
   | .sugar sp (.forSite i) => .sugar sp (.forSite { i with T := i.T.subst σ })
   | .sugar sp (.pullSite i) => .sugar sp (.pullSite { i with T := i.T.subst σ })
+  | .sugar sp (.hndCtl i) => .sugar sp (.hndCtl (i.subst σ))
   | .sugar sp s => .sugar sp s
 
 def Comp.subst (σ : TySubst) : Comp → Comp

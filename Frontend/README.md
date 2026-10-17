@@ -122,6 +122,11 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
     keyword, so it stays a name elsewhere. The printer writes `poly def f[T] : A = V` and `poly def
     f[P, …]<'h, …> at H = V`, which the parser reads back. A load `borrow imm *g { … }` keeps `*g`
     as its place, which hands nothing back (`Val.rebinds` is `_`).
+21. **Names of handlers and of a row's entries (SPEC §38).** `with n = h(…) { S }` names the
+    handler (`VSugar.handle`'s last field); `n.op` with no space around the `.` is
+    `VSugar.named n op`, applied to the operation's argument; a written row's entry may be named,
+    `with src: E`, the names kept beside the entries (`Mark.row`'s third field). The printer writes
+    each back as it is read.
 
 ## The checker (`Frontend/Check/`)
 
@@ -149,6 +154,9 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Sugar.lean` | the sugar, elaborated before checking and decided by types (`Elab/Meta.lean`): draft 0's surface forms that need types (`Val.sugar`: literals, string literals, operators, `alloc(e)`, `clone(x)`, blocks and closures, borrow blocks, on buffers and literals too, and a buffer's `filler[A]`; `surfDecl`, decision 37); ambient capabilities in `main`, lends `&mut x` and `&x` (`lendCall`, decision 38), `for` (SPEC §11); divergence inferred, `total`/`div` markers, direct-style div calls as delay binds, specialization at a callback's type (SPEC §14) |
 | `Elab/Respan.lean` | `respan`: generated syntax at the span of the sugar that produced it |
 | `Elab/Meta.lean` | typing contexts for the sugar (`TCx`: the program as written, typed by inference), loops and iterators read off types, and metavariables that annotate bindings of injections (`fillProgram`) |
+| `Elab/Match.lean` | first-order matching of a type against a pattern whose placeholders are type parameters (generic calls, decision 45) |
+| `Elab/Instances.lean` | the type arguments of each operation's instance and of each template call, typed at the declaration's own types before effects are resolved (SPEC §38) |
+| `Elab/Effects.lean` | effects and handlers (SPEC §18–§21, §30–§34, §38): every operation resolved to the handler of its instance, rows, copies, handler sites |
 | `Elab/Tir.lean` | the typed IR: one node per node of the program, with its type, binders (identity, type, class) and effect (`docs/typed-elaboration.md` §1.1) |
 | `Elab/Infer.lean` | inference: the typed IR of each declaration, bidirectionally, in the environment the checker uses; the checker's synthesis answers for the core's substitutions |
 | `Elab/Pipeline.lean` | the pipeline `checkProgram` runs: the sugar, inference, lowering (the identity on core at stage 1), and errors in generated code named by their sugar (`renderError`); `bcc tir` |
