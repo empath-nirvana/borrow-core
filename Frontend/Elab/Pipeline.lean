@@ -47,19 +47,23 @@ def TProgram.lower (t : TProgram) : Option Program := do
 /-! ### The pipeline -/
 
 /-- An elaborated program: the core the checker checks, the number of library declarations it
-begins with, the origins of its generated code, and its typed IR. -/
+begins with, the origins of its generated code, its typed IR, whether `main` is served
+`Fail[DivError]` by `main_div_error` (SPEC §39), and the core the sugar produced, which lowering
+the typed IR gives back (`bcc tir` checks it). -/
 structure Elaborated where
   prog : Program
   lib : Nat
   origins : Sugar.Origins
   tir : TProgram
+  exits : Bool
+  sugared : Program
 
 /-- Elaborate a parsed program for the checker. -/
 def elaborate (p : Program) : Except Error Elaborated := do
-  let (q, lib, os) ← Sugar.elaborateO p
-  let t := inferProgram q
+  let s ← Sugar.elaborateO p
+  let t := inferProgram s.prog
   match t.lower with
-  | some q' => pure ⟨q', lib, os, t⟩
+  | some q' => pure ⟨q', s.lib, s.origins, t, s.exits, s.prog⟩
   | none => throw ⟨Span.none, "internal error: the typed IR does not lower to core"⟩
 
 /-! ### Errors -/
@@ -115,12 +119,11 @@ def TDecl.report (d : TDecl) : List String :=
 declaration is typed and lowering gives back the program the checker is given. -/
 def tirReport (p : Program) : Except Error (List String × Bool) := do
   let el ← elaborate p
-  let (q, _, _) ← Sugar.elaborateO p
   let user := el.tir.decls.drop el.lib
   let lines := user.flatMap TDecl.report
   let typed := el.tir.decls.all fun d => match d.body? with
     | some b => b.counts.2 == 0
     | none => true
-  pure (lines, typed && decide (el.prog = q))
+  pure (lines, typed && decide (el.prog = el.sugared))
 
 end Frontend.Elab
