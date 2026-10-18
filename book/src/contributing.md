@@ -35,7 +35,8 @@ each experiment and what it found.
 
 ## Tests
 
-CI (`.github/workflows/ci.yml`) runs on every push and pull request:
+The gate, `make gate` (`scripts/ci-local.sh`), is run locally before a pull request is opened or
+merged; GitHub Actions does not run for this repository. It runs, among other checks:
 
 | script | checks |
 |---|---|
@@ -79,8 +80,7 @@ Use `text` for fragments that are not whole programs, and `bc,ignore` for syntax
 but not accepted yet.
 
 To build the book, install [mdBook](https://rust-lang.github.io/mdBook/) and run
-`mdbook build book` (output in `book/book/`) or `mdbook serve book`. CI uploads the built book as
-the `book` artifact of each run.
+`mdbook build book` (output in `book/book/`) or `mdbook serve book`.
 
 Guide chapters change with the features they describe: a feature's pull request updates its
-chapter, or replaces a planned chapter with a real one.
+chapter and its line on the [Status](status.md) page.
