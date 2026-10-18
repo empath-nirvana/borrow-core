@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.72 · 2026-10-18
+Version 0.73 · 2026-10-18
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -6799,6 +6799,80 @@ for byte, and every output, golden and count is unchanged.
 
 ---
 
+## 41. Entry 40 — loops as loops: the flat IR's specializer
+
+### Motivation
+
+#540, part of #530 and #213 (item 3). A loop that may diverge (a `while`, a `loop`, a generator's
+body, a `main` that loops, §14) is codata, and the flat IR ran it as written: the runtime's
+`drive` observes the loop, the observation runs one turn of the step and answers the next state
+as a closure, and `drive` calls itself on it. Each turn crossed every layer of `unfold`'s
+machinery and of the handlers' drives (§19), and moved the state as a union of every loop code's
+environment, padded with zeros: 49, 36 and 71 words in `bench/sieve`, `chain-yield` and
+`chain-gen`, the last through memory under the native convention. The cost was 5–22× Rust
+(`bench/README.md`).
+
+Everything here is backend: no change to the language, the kernel, the checker, the elaboration,
+the semantics of divergence (a loop is still codata that may not terminate) or any program.
+
+### The lowering
+
+The flat IR gains two words (`Backend/Flat/Syntax.lean`):
+
+- `Exp.tag k`, the word `k`, where the lowering builds a tag: a sum's arm, an `n`-ary sum's
+  variant, a closure's code in its union;
+- `Exp.undef`, a word no run reads: a sum's padding past its variant's payload, a closure's past
+  its code's captured values, a code's answer past the projection's. Any word: `0` in Wasm and in
+  the flat-IR interpreter, `poison` natively.
+
+`Backend/Flat/Opt.lean` is a pass from flat IR to flat IR, run on every program before either
+target (`Backend/README.md`, *Loops as loops*): inlining of calls whose callee is small, called
+once, or meets a literal tag at a parameter it tests; folding of tests on known words; copying of
+the statements after a call into the callee's exits where they test its results and the copies
+are cheap (case-of-case), with a copy per exit specialized to what it knows otherwise; copies of
+the functions of the call graph's cycles (`drive`, loops of tail calls, handlers' drives) per
+pattern of tags in their arguments; removal of sets nothing reads and of parameters no function
+reads; and one exit after branches that end in the same tail call.
+
+`drive`'s call on the next state's tags is then a self tail call of its copy for that state, whose
+body keeps only that state's code: a loop of tail calls in its own function, its state in its
+parameters, the words that state uses and no padding. A stored generator consumed by a `for` or
+`|>` is a state of the consumer's machine, so its pulls fold into the consumer's loop when their
+tags are known: `range |> map |> filter` summed by `for` (`bench/chain-gen`) is one self tail call
+of five words per element. Where no literal reaches a state, `drive` runs it as before.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the host's operations, `Paper/`, `Support/`,
+`Core/`, the frontend, the checker or the closure IR. Every program's output, standard error,
+exit status and `live` is unchanged at every stage, and so are its allocations, copies, loads,
+stores and bounds checks: an inlined body runs the same statements in the same order, and the
+pass removes only words no run reads and tests whose answer is known. Its dispatched calls drop
+where a closure's tag becomes known.
+
+### Tests
+
+The corpus at the closure IR, the flat IR, Wasm and natively against its goldens and counts
+(`scripts/compile-corpus.sh`, `scripts/compile-native.sh`), the kernel programs
+(`scripts/compile-kernel.sh`), and the falsifier (`scripts/falsify.sh`, at the source stage).
+`bcc-counts --calls <file>` prints the flat IR's calls by function, with the words passed: a loop
+specialized as a loop is one function called once per turn.
+
+### Open
+
+- **Joins.** The statements after a call or a branching are copied into its exits, or follow it
+  once; there is no join point to share a copy between exits that know the same, so the copies
+  are bounded by size, and a loop whose turn passes through a join that loses its state's tags is
+  run by the unspecialized `drive`.
+- **Nested loops carry the enclosing loops' live words** as parameters, passed unchanged each
+  turn (`bench/sieve`'s strike loop takes twelve): the inner loop is not a function called by
+  the outer.
+- **Compile time.** The pass is bounded per function (statements kept, statements expanded,
+  copies per pattern); `scripts/compile-scaling.sh --guard` holds, but large programs compile
+  slower than before.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -7092,9 +7166,26 @@ Entry 39 (§40) is implemented in `Backend/Native/Lower.lean` (the LLVM IR), `Ba
 `Op.dataAddr` and `Exp.data` in the closure IR and the flat IR, and `scripts/compile-native.sh`;
 no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the checker.
 
+Entry 40 (§41) is implemented in `Backend/Flat/Opt.lean` (the specializer), `Exp.tag` and
+`Exp.undef` in `Backend/Flat/Syntax.lean` and their lowerings (`Backend/Flat/Lower.lean`,
+`Interp.lean`, `Backend/Wasm/Lower.lean`, `Backend/Native/Lower.lean`), and
+`bcc-counts --calls` (`Flat.interpCalls`); no change to `CDerives`, `Core/`, `Paper/`,
+`Support/`, the frontend, the checker or the closure IR.
+
 ---
 
 ## Changelog
+
+- **0.73** (2026-10-18) — §41 (new, #540): loops as loops. The flat IR is specialized before
+  either target (`Backend/Flat/Opt.lean`): known calls inlined, tests of known words folded, the
+  statements after a call copied into its exits where they test its results, the functions of
+  the call graph's cycles (`drive`, loops of tail calls) copied per pattern of tags in their
+  arguments, and sets and parameters nothing reads removed. A loop that may diverge runs as a
+  self tail call of its state's words, a pipeline of stored generators as one such loop where its
+  tags are known. The flat IR's `Exp.tag` names a tag, `Exp.undef` a padding word (`poison`
+  natively). `bcc-counts --calls` prints a run's calls by function. No change to `CDerives`, the
+  relation, the machine, a kernel program, or any program's output, allocations, copies, loads,
+  stores or bounds; dispatched calls drop where a closure's tag becomes known.
 
 - **0.72** (2026-10-18) — §19, *Lowering* (#544): a clause is tail-resumptive when every path
   through it ends in one resume of `κ` in tail position, each arm of a `case` with its own, not

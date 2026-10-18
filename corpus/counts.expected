@@ -8,8 +8,8 @@ aff-coerce 1 0 0 3 3 0 # the counter's cell; `main`'s lifetime is a cell of no w
 aff-counter 2 0 0 29 29 0 # the cell the closure is stored in, and the counter's cell; the calls through `mut` are direct
 aff-depth 2 0 0 49 49 0 # as aff-counter: four calls through three functions and a reborrow, all direct
 aff-drop 3 0 0 5 5 0 # three counters' cells, each freed by its `close`
-aff-higher 2 6 0 8 8 0 # two counters' cells; the indirect calls are `runner`'s calls of its argument, which closures built at two sites reach: the flow analysis is monovariant, and the argument's code is chosen at run time, as a `dyn` call's is
-answers-two-types 1 2 0 8 9 0 # the heap environment of the continuation `journal` forwards `attempt` through, whose closure type is recursive (`bcc-counts --sites`); the indirect calls are of `fake_api`'s answer, a function of its state (SPEC §19, *Handler state*)
+aff-higher 2 0 0 8 8 0 # two counters' cells; `runner`'s calls of its argument, which closures built at two sites reach, are direct once `runner` is inlined at each site (the flat IR's specializer, SPEC §41)
+answers-two-types 1 1 0 8 9 0 # the heap environment of the continuation `journal` forwards `attempt` through, whose closure type is recursive (`bcc-counts --sites`); the indirect calls are of `fake_api`'s answer, a function of its state (SPEC §19, *Handler state*)
 aoc/2020-08 6 0 0 10216 7451 7579
 aoc/2021-06 4 0 0 6409 4779 6364
 aoc/2021-10 5 0 0 13182 8140 13219
@@ -35,14 +35,14 @@ async-lend-slots 22 6 0 346 334 0 # the scheduler's list nodes and the result li
 async-logged 22 4 0 246 228 0 # the two tasks' cells, and the scheduler's and the log's list nodes; an indirect call per resume of a stored task
 async-map 29 4 0 316 302 0 # the input and result lists' nodes, the scheduler's, and an object per level of `map`'s recursion the task suspends through (SPEC §19 Lowering); one indirect call per resume of the stored task
 async-mapreduce 57 9 1 610 606 0 # the documents' and results' list nodes, the scheduler's, and an object per level of `sum_slowly`'s recursion a task suspends through; the copy is the written `clone(sums)`
-async-r1-cancel 4 5 0 5 5 0 # the two tasks' `buf` and `extra`; a task's state is a record of the state machine, its lent cell out of line
+async-r1-cancel 4 0 0 5 5 0 # the two tasks' `buf` and `extra`; a task's state is a record of the state machine, its lent cell out of line
 async-r1-cancel-finaliser-writes 1 0 0 2 2 0 # the lent cell
-async-r1-drain 1 3 0 4 4 0 # the lent cell; the calls through the stored generator are dispatched
-async-r1-effects 2 6 0 8 8 0 # the two tasks' cells
-async-r1-generator 1 3 0 4 4 0 # the lent cell
-async-r1-local-borrows 2 4 0 7 7 0 # the two tasks' cells, each lent across its task's suspension and out of line
-async-r1-nested 2 3 0 4 4 0 # the two lent cells
-async-race 3 15 0 3 3 0 # the three tasks' buffers; one indirect call per resume or cancel of a task, whose code `race` does not know
+async-r1-drain 1 0 0 4 4 0 # the lent cell; the calls through the stored generator are direct once its code's tag is known (SPEC §41)
+async-r1-effects 2 0 0 8 8 0 # the two tasks' cells
+async-r1-generator 1 0 0 4 4 0 # the lent cell
+async-r1-local-borrows 2 0 0 7 7 0 # the two tasks' cells, each lent across its task's suspension and out of line
+async-r1-nested 2 0 0 4 4 0 # the two lent cells
+async-race 3 4 0 3 3 0 # the three tasks' buffers; one indirect call per resume or cancel of a task, whose code `race` does not know
 async-scheduler 24 6 0 458 452 0 # the scheduler's list nodes, four per round of `run_until_empty`; one indirect call per resume of a stored task, whose code the queue does not know
 async-scoped 25 4 0 323 313 0 # the read cell `cfg`, the scheduler's list nodes, rebuilt at each round, and the result list's; the scope's unit cell `d` takes no words; an indirect call per resume of a stored task
 async-timers 40 5 0 468 450 0 # the pending and finished lists' nodes; one indirect call per wake or cancel of a stored task
@@ -71,10 +71,10 @@ bytes-upper 1 0 0 80 52 54
 capture-await-raise 0 0 0 0 0 0 # `skip` resumes in place and `to_result` is a branch: nothing is allocated or dispatched
 capture-log-hand 0 0 0 0 0 0 # equal to the kernel program log-outside-native (corpus/kernel-counts.expected)
 capture-store-cancel-hand 2 0 0 2 2 0 # equal to the kernel program store-cancel
-capture-store-raise 0 2 0 0 0 0 # the two steps of the stored task, whose code is the answer clause's or the `await` clause's, chosen at run time; as with `f` raising nothing
+capture-store-raise 0 0 0 0 0 0 # the two steps of the stored task, whose code (the answer clause's or the `await` clause's) is a literal where the step is called once specialized (SPEC §41); as with `f` raising nothing
 capture-take-hand 1 0 0 1 1 0 # the producer's cell; the kernel program take adds its count's node and its handler's two closures
 capture-tick-hand 0 0 0 0 0 0 # equal to the kernel program tick-native
-clause-captures 6 3 0 10 10 0 # the counter and the cells; the indirect calls are the state-passing answers of `asking`, as in the probe P4(a) (a native handler parameter is not built)
+clause-captures 6 0 0 10 10 0 # the counter and the cells; the state-passing answers of `asking` (as in the probe P4(a)) are direct calls once specialized (SPEC §41)
 clone-reuse 6 0 1 36 27 0
 comp-param 0 0 0 0 0 0 # every argument is a closed block and every error a branch
 core-callback-dead 0 0 0 0 0 0 # the callback and the function it answers are closed λs; each call's code is known
@@ -95,7 +95,7 @@ deep-list 100000 0 0 450000 450000 0
 div-abstraction 0 0 0 0 0 0
 div-euclid 0 0 0 1 1 0
 div-hof 0 0 0 0 0 0
-div-infer 0 4 0 1 1 0 # the resumptions of `scaled`'s continuation: a handler with a parameter dispatches at each resume (SPEC §21); every division is a test, no allocation
+div-infer 0 0 0 1 1 0 # the resumptions of `scaled`'s continuation are direct once specialized (SPEC §41); every division is a test, no allocation
 div-innermost 0 0 0 1 1 0
 div-literal 0 0 0 0 0 0
 div-overflow 0 0 0 1 1 0
@@ -105,7 +105,7 @@ div-recursive 0 0 0 1 1 0
 div-unhandled 1 0 0 38 5 1 # the buffer, dropped by the unwind
 effects-abstraction 0 0 0 0 0 0
 effects-borrow-raise 2 0 0 3 3 0 # the cell of each run; freed by the unwinding borrow on the abort
-effects-cancel-two-sites 0 4 0 0 0 0 # the indirect calls are of `scaled`'s answer, a function of its state (SPEC §19, *Handler state*)
+effects-cancel-two-sites 0 0 0 0 0 0 # `scaled`'s answer, a function of its state (SPEC §19, *Handler state*), is called directly once specialized (SPEC §41)
 effects-fail-list 0 0 0 0 0 0
 effects-fold 7 0 0 73 49 40 # equal to effects-fold-sum: an abort unwinds, handled at the loop's step and raised again after it, a branch per call
 effects-fold-sum 7 0 0 73 49 40
@@ -168,7 +168,7 @@ hygiene-handler-args 0 0 0 0 0 0
 hygiene-handler-generic 0 0 0 0 0 0
 hygiene-handler-param 0 0 0 0 0 0
 hygiene-handler-resume 0 0 0 0 0 0
-hygiene-handler-state 0 2 0 0 0 0
+hygiene-handler-state 0 0 0 0 0 0
 hygiene-local-fn 2 0 0 2 2 0
 implicit-drops 9 0 0 22 22 0
 int-arith 0 0 0 0 0 0
@@ -318,8 +318,8 @@ rec-overflow 10101 0 0 10101 10101 0 # the cells, one per level: 100, and 10001 
 rec-parser 17 0 0 51 51 0 # the token lists and the tokens put back
 rec-tree 127 0 0 635 635 0 # the tree only, one object per node (its payload, boxed at the sum; an empty child is none)
 rec-yield 0 0 0 0 0 0
-reconcile-chain 28 3 0 524 536 0 # the journals' list nodes, and the continuations the clock's, the service's and the journal's clauses resume before they answer; the indirect calls are of `service`'s answer, a function of its state built by its return clause or by its `request` clause (SPEC §19, *Handler state*)
-reconcile-clock 33 8 0 457 445 0 # the fake clock's cells, the journals' list nodes, and the continuations the clauses resume before they answer; the platform's clock cell is a word of the program's data; the indirect calls are of `on_clock`'s answer, a function of its state (the clock capability) built by its return clause or by its `pause` clause (SPEC §19, *Handler state*)
+reconcile-chain 28 2 0 524 536 0 # the journals' list nodes, and the continuations the clock's, the service's and the journal's clauses resume before they answer; the indirect calls are of `service`'s answer, a function of its state built by its return clause or by its `request` clause (SPEC §19, *Handler state*)
+reconcile-clock 33 6 0 457 445 0 # the fake clock's cells, the journals' list nodes, and the continuations the clauses resume before they answer; the platform's clock cell is a word of the program's data; the indirect calls are of `on_clock`'s answer, a function of its state (the clock capability) built by its return clause or by its `pause` clause (SPEC §19, *Handler state*)
 retry-block 2 0 0 5 5 0 # the clock cells
 reverse-bytes 1 0 0 132 91 41
 sched-a 63 18 0 1558 897 0

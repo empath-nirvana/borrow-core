@@ -4,45 +4,47 @@ import Backend.Flat.Syntax
 import Backend.Flat.Interp
 
 /-!
-# Backend — the flat IR's specializer
+# Backend — the flat IR's specializer  `[spec §41]`
 
-A pass from flat IR to flat IR that makes the loops of a program loops of its own functions
-(`Backend/README.md`, *Loops*). The flat IR from `Lower` runs a loop that may diverge (a `while`,
-a `loop`, a generator's body, `main`'s state machine) one observation at a time: the loop driver
-calls the codata's code, which runs one turn of the step and answers the next state as a closure,
-an injection whose words the driver passes back to itself. Every word of such a state is built in
-the step with a literal tag (a closure's code, a sum's arm, a resumption point's variant), and
-the driver only takes it apart again. The pass does what a partial evaluator does with that:
+A pass from flat IR to flat IR, run on every program before either target, that makes the loops
+of a program loops of their own functions (`Backend/README.md`, *Loops as loops*). The flat IR
+from `Lower` runs a loop that may diverge one observation at a time: `drive` calls the codata's
+code, which runs one turn of the step and answers the next state, a closure in the loop type's
+union, and `drive` passes those words back to itself. Every tag in such a state is a literal
+(`Exp.tag`) where it is built. The pass is a partial evaluator that meets those literals with
+the tests that take them apart:
 
-- **Inlining.** A call of a function is replaced by the function's body, its parameters bound
-  to the arguments and its locals renamed, when the function is small or has one call site, does
-  not call itself, and is not already being inlined on the path (so a recursion unrolls at most
-  once). A `ret` of the body sets the call's destinations; a tail call of the body is a call, or a
-  tail call where the call itself was one.
-- **Known tags.** A local set to a literal (or to another local, or bound to a literal argument)
-  is that literal where it is read, and an `ite` or a `switch` on a known word keeps one branch. A
-  `switch` case knows its operand, and the `then` branch of an `ite` on `eqz x` knows `x = 0`.
-  A short continuation after a call or an `ite` is copied into each of their exits, so that what
-  each exit knows reaches it (case-of-case): the driver's test of the step's answer meets the
-  literal injection each path of the step builds.
-- **Call-pattern specialization.** A call of a function of a recursive group (a loop of tail
-  calls, the driver, a handler's drive) with literal arguments is a call of a copy of the function
-  with those parameters fixed, made once per function and pattern. The driver's self-call with
-  the next state's literal tags is then a self tail call of the copy for that state, whose body
-  keeps only that state's code: a loop of tail calls in its own function, its state in its
-  parameters.
-- **Narrowing.** A set whose local is never read, of a word with no effect, is removed, and so is
-  a parameter that no function reads (one passed only to the same parameter of a self-call is not
-  read): what a loop passes from turn to turn is then the words it uses, not a union of every
-  state's words padded with zeros.
+- **Inlining** (`inlinable`, `doCall`). A call is replaced by its callee's body, parameters bound
+  to the arguments, locals renamed, frame slots moved into the caller's frame, when the callee
+  does not call itself, is on the path at most once (twice when a tag it tests is a literal
+  argument), and is small, called once, or meets such a tag. A `ret` of the body goes to the
+  call's continuation (`Kont`).
+- **Known words** (`Ctx`). A local set to an atom is that atom where it is read, and its set is
+  made only where a join reads it (`Ctx.lazy`, `Join.mat`); a test of a known word keeps one
+  branch; a `switch` case knows its operand, and an `ite` on `eqz x` knows `x = 0` in `then`.
+- **Continuations into exits.** When the statements after a call test its results, they are
+  copied into each exit of the inlined body where the copies are cheap (`cpsCost`, `kontCost`),
+  so that each exit's literal decides the test. Otherwise they follow the call once, and each
+  exit tries a copy specialized to what it knows that ends the function in a few statements
+  (`tryCopy`); so do the branches of an `ite` or a `switch` whose statements after it test what
+  the branches set.
+- **Call-pattern specialization** (`specOf`). A call of a function on a cycle of the call graph
+  with tags among its arguments is a call of the function's copy for those tags, made once per
+  function and pattern. `drive`'s self-call on the next state's tags is then a self tail call of
+  the copy for that state.
+- **Narrowing.** Sets nothing reads, of words with no effect, are removed (`dropDeadSets`), and so
+  are parameters no function reads, at every call (`dropDeadParams`); branches that end in a
+  tail call of one function share one, after them (`mergeExits`); locals are renumbered
+  (`compact`).
 
-Every run computes what it computed: the pass removes only computation whose results are never
-observed and tests whose answers are known, and an inlined body runs the same statements, in
-order, with the same allocations, memory accesses and counts. A dispatched call (`apply`) whose
-closure's tag becomes a literal is a direct call and is no longer counted as dispatched.
+Every run computes what it computed: the pass removes only words no run reads and tests whose
+answer is known, and an inlined body runs the same statements in the same order, so the output,
+allocations, copies, loads, stores and bounds checks of a run are unchanged. A dispatched call
+whose closure's tag becomes a literal is a direct call, and is no longer counted.
 
-Bounds: a function grows by at most `budget` statements, a function has at most `specMax`
-specializations, and inlining is at most `depthMax` deep. Past a bound the call is kept.
+The pass is bounded: a function past `budget` statements is built again without copied
+continuations (`OState.modest`), a try of a copy stops past `copyWork` statements expanded, a
+function has at most `specMax` copies, and nesting stops at `depthMax`.
 -/
 
 namespace Backend.Flat.Opt
@@ -399,8 +401,6 @@ structure Info where
   dup : Nat
   /-- Its exits: `ret`s and tail calls. -/
   exits : Nat
-  /-- Its parameters that a test reads (an `ite`'s condition, a `switch`'s operand). -/
-  scrut : Array Bool
   /-- Its parameters whose word may reach a test of a tag (`tagParams`). -/
   tagged : Array Bool
   /-- What its exits return at each result position (`exitProfiles`). -/
@@ -549,7 +549,6 @@ def infos (fns : Array Fn) : Array Info := Id.run do
     let mut used := Array.replicate f.params false
     for i in rd do
       if i < f.params then used := used.set! i true
-    let tests : Std.HashSet Nat := Std.HashSet.ofList (testsL f.body)
     let mut seen : Std.HashSet Nat := {}
     let mut multi : Std.HashSet Nat := {}
     for i in setsL f.body do
@@ -558,7 +557,6 @@ def infos (fns : Array Fn) : Array Info := Id.run do
     out := out.push { size := sizeL f.body, selfCall := (succ[k]!).contains k, recur := cyc[k]!,
                       sites := sites[k]!, isApply := f.name == "apply", used, multi,
                       dup := dupL f.body, exits := exitsL f.body,
-                      scrut := (List.range f.params).toArray.map fun i => tests.contains i,
                       tagged := tp[k]!, prof := pr[k]! }
   pure out
 
