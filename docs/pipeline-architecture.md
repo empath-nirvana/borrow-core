@@ -402,7 +402,7 @@ B3 → units 4, 5, 9 → U3 → U4 → 7 → 8, 6. #216 can go any time after un
 
 ### 4.1 S0, the proof spike
 
-An experiment (`experiments/DivEffect`, per *Spec first*), kernel only, before any build.
+An experiment (`experiments/DivEffect`, per *Spec first*), kernel only, before any build. B1 (#563) promoted it into `Core/`; its code is at `f661c7b`.
 
 **Unknown 1: the relation.** `ewpTS` is a least fixed point (SPEC §19 *Divergence*), so a
 computation that ticks forever is not in it. That is why today's div is `ν` codata.

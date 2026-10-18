@@ -359,15 +359,21 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
       exact .effLet (splitP_append h' hs)
         (fun hw => live_append (P := fun s => s.ty.Drop) h' (hW hw))
         (fun hu => persistent_append h' (hU hu)) ihM ihN
-  | effThen hs hNZ hUq hU hMS hDS hfin hP _ _ _ ihM ihN ihD =>
+  | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
       exact .effThen (splitP_append h' hs) hNZ hUq (fun hu => persistent_append h' (hU hu))
-        hMS hDS hfin hP ihM ihN ihD
-  | effHandleV hAt hs hd hH _ hn0 hnS hlen _ ihc ihe =>
+        hMS hDS hfin hP hSD ihM ihN ihD
+  | effHandleV hAt hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       exact .effHandleV hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
-        ihe
-  | effHandleVB hAt hs hd hH _ hn0 hnS hlen _ hΓd hSd ihc ihe =>
+        hdv ihe
+  | effHandleVB hAt hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
       exact .effHandleVB hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
-        ihe (ctxOutlives_append h' hΓd) hSd
+        hdv ihe (ctxOutlives_append h' hΓd) hSd
+  | effHandleT hAt hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+      exact .effHandleT hAt (splitP_append h' hs) (deadP_append h' hd) hHr.append hHc.append ihc
+        hn0 hnd hnS hlen hSN hLin ihe
+  | iterate S St B R hAt hS hΓ => exact .iterate S St B R hAt hS (deadP_append h' hΓ)
+  | divFuel S A hAt hS hΓ => exact .divFuel S A hAt hS (deadP_append h' hΓ)
+  | reify S B R res hAt hS hcl hres hΓ _ => exact .reify S B R res hAt hS hcl hres (deadP_append h' hΓ)
   | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN
 
 /-! ### Typing: calls, callbacks and one-operation handlers -/
@@ -413,14 +419,15 @@ theorem dAt_hQ {Δ : LifeCtx} {Γ Γ₁ : Ctx VTy} (hs : Ctx.SplitP Γ Γ₁ Γ)
     {hr c : Val} {M : Expr} (hhr : CDerivesAt Ξ Δ [] (.val hr) (.val (retTy S X R)))
     (hc : CDerivesAt Ξ Δ [] (.val c) (.val (clauseTy S R (q, A, B) F)))
     (hM : CDerivesAt Ξ Δ Γ M
-      (.comp (CTy.effOf (Row.ofEff n [(q, A, B)] 0 (fun _ => F) ++ S) X))) :
+      (.comp (CTy.effOf (Row.ofEff n [(q, A, B)] 0 (fun _ => F) ++ S) X)))
+    (hΞ : Ξ divEff = [] := by first | rfl | decide) :
     CDerivesAt Ξ Δ Γ (hndE (hQ n q hr c) M) (.comp (CTy.effOf S R)) := by
   show CDerivesAt Ξ Δ Γ (hndExpr n [q] (.pair (.val hr) (.pair (.val c) (.val Val.unit))) M) _
-  exact .effHandleV (E := [(q, A, B)]) (fs := fun _ => F)
-    (rowAt_ofEff_fs (rowAt_ofEff_append hn hn0 (by simp) hS)) hs hΓ₁.toP
+  have hAt := rowAt_ofEff_fs (fs' := fun _ => F) (rowAt_ofEff_append hn hn0 (by simp) hS)
+  exact .effHandleV (E := [(q, A, B)]) (fs := fun _ => F) hAt hs hΓ₁.toP
     (.pair (.val _) (.pair (.val _) (.val _)))
     ((CDerivesAt.tensorI .nil hhr (.tensorI .nil hc (.unitI .nil))).append_dead hΓ₁)
-    hn0 hnS (by simp) hM
+    hn0 hnS (by simp) (Row.divB_of_rowAt hAt hΞ) hM
 
 end Kernel
 
@@ -496,7 +503,7 @@ theorem dAt_e8b {Δ : LifeCtx} :
   show CDerivesAt ΞE Δ [] (thenE (.var 0) (raiseU 6) (raiseU 1)) _
   refine .effThen (Γ₁ := []) (Γ₂ := []) (A := .unit) (SM := exnRow 1 .aff)
     (SD := exnRow 6 .aff) .nil ?_ (by simp [Row.Uniq, Row.ofEff])
-    (fun _ => fun _ h => absurd h List.not_mem_nil) ?_ (rowLe_append_right _ _) ?_ ?_
+    (fun _ => fun _ h => absurd h List.not_mem_nil) ?_ (rowLe_append_right _ _) ?_ ?_ rfl
     (dAt_raiseU .nil ΞE_1 (by decide) (by decide) .unit)
     (.effSub (RowLe.nil _) (.ret (.var (.here .nil))))
     (dAt_raiseU (.cons .nil) ΞE_6 (by decide) (by decide) .unit)
@@ -577,7 +584,7 @@ theorem dAt_e7d {Δ : LifeCtx} :
   show CDerivesAt ΞE Δ [] (thenE (.var 0) (raiseU 6) (bodyF 2 (raiseU 1))) _
   refine .effThen (Γ₁ := []) (Γ₂ := []) (A := boolT)
     (SM := waitRow 2 (finExn 1 .aff) ++ rowBA) (SD := exnRow 6 .aff) .nil (hNZ _) (hUq _)
-    (fun _ => fun _ h => absurd h List.not_mem_nil) ?_ ?_ ?_ ?_ ?_
+    (fun _ => fun _ h => absurd h List.not_mem_nil) ?_ ?_ ?_ ?_ rfl ?_
     (.effSub (RowLe.nil _) (.ret (.var (.here .nil))))
     (dAt_raiseU (.cons .nil) ΞE_6 (by decide) (by decide) .unit)
   · -- `M`'s row is below the `[then]`'s: `wait`'s cancel row grows to hold `exn_b`
@@ -930,7 +937,7 @@ theorem dAt_storedKFin {Δ : LifeCtx} :
   show CDerivesAt ΞE Δ [] (thenE (.var 0) (raiseU 1) gen9E) _
   refine .effThen (Γ₁ := []) (Γ₂ := []) (A := .unit) (SM := yieldRow) (SD := exnRow 1 .aff)
     .nil ?_ (by simp [Row.Uniq, Row.ofEff]) (fun _ => fun _ h => absurd h List.not_mem_nil)
-    ?_ ?_ ?_ ?_ dAt_gen9 (.effSub (RowLe.nil _) (.ret (.var (.here .nil))))
+    ?_ ?_ ?_ ?_ rfl dAt_gen9 (.effSub (RowLe.nil _) (.ret (.var (.here .nil))))
     (dAt_raiseU (.cons .nil) ΞE_1 (by decide) (by decide) .unit)
   · intro o ho
     simp only [Row.ofEff, List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil,

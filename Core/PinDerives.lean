@@ -240,12 +240,12 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   step `iterate`: the loop that ticks at each back edge.  `[spec §14]` -/
   | iterate {Δ Γ} (S : Row) (St B R : VTy) (hS : Row.divB S = true) (hΓ : Ctx.DeadP Γ) :
       CDerivesP Δ Γ (.val (.prim .iterate)) (.val (iterTy S St B R))
-  /-- `div_fuel : !U(U(F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)`, `Σ` without `Div`'s name: the handler of
+  /-- `div_fuel : !U(U(1 ⊸ F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)`, `Σ` without `Div`'s name: the handler of
   `Div` that answers *next* to the first ticks, as many as the budget, and *close* after.
   `[spec §14]` -/
   | divFuel {Δ Γ} (S : Row) (A : VTy) (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
       CDerivesP Δ Γ (.val divFuelV) (.val (divFuelTy S A))
-  /-- `reify_res : !U(U(F_{tick, Σ}(B ⊕ R)) ⊸ F_Σ U(Loop_Σ B R))`, `Σ` without `Div`'s name, at
+  /-- `reify_res : !U(U(1 ⊸ F_{tick, Σ}(B ⊕ R)) ⊸ F_Σ U(Loop_Σ B R))`, `Σ` without `Div`'s name, at
   the residual of a result `res : !U(B ⊸ F_Σ R)`, a closed term: the handler of `Div` that makes
   a loop value of a computation.  `[spec §14]` -/
   | reify {Δ Γ} (S : Row) (B R : VTy) (res : Val) (hS : ∀ o ∈ S, o.n ≠ divEff)
@@ -417,8 +417,8 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   perform when a continuation captured in `M` is cancelled is recorded in that operation's cancel
   row.  `Γ₂` is persistent where `Σ` has an unrestricted operation at some depth of its cancel
   rows (`Row.UnrD`), since the finaliser runs in the cancels below it, and the errors pending at the
-  finaliser are persistent where `Σ_D` has one.  The finaliser's row does not hold `Div`
-  (decision 68).  `[then]` at option A, the finaliser at `F 1`, is `CDerivesP.effThenA`.
+  finaliser are persistent where `Σ_D` has one.  The finaliser's row does not hold `Div`: a
+  finaliser runs to its end in a cancel (SPEC §14, *Open*).  `[then]` at option A, the finaliser at `F 1`, is `CDerivesP.effThenA`.
   `[spec §14, §19, §24, §27]` -/
   | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
       (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)

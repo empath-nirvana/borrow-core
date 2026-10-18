@@ -151,7 +151,9 @@ def vCE : Option (Nat → TEnt) → Bool → VTy → List SRec → LSub → Val 
       sepRange (fun m => vCE η b L ls δ (.loc m)) ℓ c.toNat
 /-- `𝒞⟦C⟧(ls)δ(e)`, curried on the connective.  At `νX. C` the greatest fixed point
 `⋃{R | R ⊆ cB (nuEnv C R) C}`, written in `Prop` as `∃ R` (`docs/scope-recursion.md` §3.1), and
-trivial unless `C` is positive (`CTy.NuOk`).  `[spec §3, §7]` -/
+trivial unless `C` is positive (`CTy.NuOk`).  At `F_Σ A` the relation at the row's table is
+`effWp`: `cwp`, the greatest fixed point over segments, where the row holds `Div`, and `ewpTS`
+elsewhere.  `[spec §3, §7, §14, §19]` -/
 def cC : CTy → List SRec → LSub → Expr → WProp
   | .ret A, ls, δ, e => wpTS ls e (fun ls'' => vCE none true A ls'' δ)
   | .arr A C, ls, δ, e => fun ρ =>

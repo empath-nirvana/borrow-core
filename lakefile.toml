@@ -180,7 +180,3 @@ name = "AsyncCap"
 srcDir = "experiments/AsyncCap"
 roots = ["AsyncCap"]
 
-[[lean_lib]]
-name = "DivEffect"
-srcDir = "experiments/DivEffect"
-roots = ["DivEffect"]

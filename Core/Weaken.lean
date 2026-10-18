@@ -116,6 +116,9 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | countFold S hΓ => exact .countFold S (deadP_append h' hΓ)
   | countTry S E hΓ => exact .countTry S E (deadP_append h' hΓ)
   | boundedFix A C hΓ => exact .boundedFix A C (deadP_append h' hΓ)
+  | iterate S St B R hS hΓ => exact .iterate S St B R hS (deadP_append h' hΓ)
+  | divFuel S A hS hΓ => exact .divFuel S A hS (deadP_append h' hΓ)
+  | reify S B R res hS hcl hres hΓ _ => exact .reify S B R res hS hcl hres (deadP_append h' hΓ)
   | sliceBorrowM x hΓ hA hB hf₁ hf₂ => exact .sliceBorrowM x (deadP_append h' hΓ) hA hB hf₁ hf₂
   | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ =>
       exact .sliceBorrowI x (deadP_append h' hΓ) hsc hA hB hf₁ hf₂
@@ -162,14 +165,18 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
       exact .effLet (splitP_append h' hs)
         (fun hw => live_append (P := fun s => s.ty.Drop) h' (hW hw))
         (fun hu => persistent_append h' (hU hu)) ihM ihN
-  | effThen hs hNZ hUq hU hMS hDS hfin hP _ _ _ ihM ihN ihD =>
+  | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
       exact .effThen (splitP_append h' hs) hNZ hUq (fun hu => persistent_append h' (hU hu))
-        hMS hDS hfin hP ihM ihN ihD
-  | effHandleV hs hd hH _ hn0 hnS hlen _ ihc ihe =>
-      exact .effHandleV (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen ihe
-  | effHandleVB hs hd hH _ hn0 hnS hlen _ hΓd hSd ihc ihe =>
-      exact .effHandleVB (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen ihe
-        (ctxOutlives_append h' hΓd) hSd
+        hMS hDS hfin hP hSD ihM ihN ihD
+  | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
+      exact .effHandleV (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen hdv
+        ihe
+  | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+      exact .effHandleVB (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen hdv
+        ihe (ctxOutlives_append h' hΓd) hSd
+  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+      exact .effHandleT (splitP_append h' hs) (deadP_append h' hd) hHr.append hHc.append ihc hn0
+        hnd hnS hlen hSN hLin ihe
   | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN
 
 end BoCa.Fig16.LogRel.Core

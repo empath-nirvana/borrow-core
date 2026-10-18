@@ -736,6 +736,140 @@ theorem handleT_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hc e : Exp
     exact ewp_unfold (divTab_mono _ _ _) (cwp_out (cwp_handle_tail (fs := fs) hnd hn0 hnS hlen hSN
       hLin hVr hVc hSd hE')) ρf fρ ps hf hcf hT htg Al k
 
+/-! ### Closed terms -/
+
+theorem closedAt_shift_add (d : Nat) : ∀ (e : Expr) (k c : Nat), closedAt k e = true →
+    closedAt (k + d) (e.shift d c) = true
+  | .var i, k, c, h => by
+      simp only [closedAt, decide_eq_true_eq] at h
+      simp only [Expr.shift]; split <;> simp [closedAt] <;> omega
+  | .unit, _, _, _ => rfl
+  | .pair a b, k, c, h => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [Expr.shift, closedAt, closedAt_shift_add d a k c h.1, closedAt_shift_add d b k c h.2,
+        Bool.and_self]
+  | .inj₁ a, k, c, h => closedAt_shift_add d a k c h
+  | .inj₂ a, k, c, h => closedAt_shift_add d a k c h
+  | .lam b, k, c, h => by
+      have := closedAt_shift_add d b (k + 1) (c + 1) h
+      simp only [Expr.shift, closedAt]; rwa [show k + d + 1 = k + 1 + d by omega]
+  | .loc _, _, _, _ => rfl
+  | .prim _, _, _, _ => rfl
+  | .seq a b, k, c, h => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [Expr.shift, closedAt, closedAt_shift_add d a k c h.1, closedAt_shift_add d b k c h.2,
+        Bool.and_self]
+  | .letpair a b, k, c, h => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      have hb := closedAt_shift_add d b (k + 2) (c + 2) h.2
+      simp only [Expr.shift, closedAt, closedAt_shift_add d a k c h.1, Bool.true_and]
+      rwa [show k + d + 2 = k + 2 + d by omega]
+  | .case a b₁ b₂, k, c, h => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      have h₁ := closedAt_shift_add d b₁ (k + 1) (c + 1) h.1.2
+      have h₂ := closedAt_shift_add d b₂ (k + 1) (c + 1) h.2
+      simp only [Expr.shift, closedAt, closedAt_shift_add d a k c h.1.1, Bool.true_and,
+        Bool.and_eq_true]
+      rw [show k + d + 1 = k + 1 + d by omega]
+      exact ⟨h₁, h₂⟩
+  | .app f a, k, c, h => by
+      simp only [closedAt, Bool.and_eq_true] at h
+      simp only [Expr.shift, closedAt, closedAt_shift_add d f k c h.1, closedAt_shift_add d a k c h.2,
+        Bool.and_self]
+
+theorem closedAt_pickE : ∀ (j : Nat) {k : Nat} {t : Expr}, closedAt k t = true →
+    closedAt k (pickE j t) = true
+  | 0, k, t, h => by simp [pickE, closedAt, h]
+  | j + 1, k, t, h => by
+      simp only [pickE, closedAt, h, Bool.true_and]
+      exact closedAt_pickE j (by simp [closedAt])
+
+theorem closedAt_tailTuple {k : Nat} {Hc : Expr} (h : closedAt k Hc = true) :
+    ∀ (E : List (Qual × VTy × VTy)) (j : Nat), closedAt k (tailTuple E j Hc) = true
+  | [], _ => rfl
+  | (q, _, B) :: E, j => by
+      simp only [tailTuple, closedAt, closedAt_tailTuple h E (j + 1), Bool.and_true]
+      unfold tailClause
+      split
+      · have := closedAt_pickE j (closedAt_shift_add 1 Hc k 0 h)
+        simp [closedAt, this]
+      · have := closedAt_pickE j (closedAt_shift_add 3 Hc k 0 h)
+        simp [closedAt, resumeB, this, Val.lam]
+
+/-! ### Shifts of the clauses -/
+
+theorem Expr.shift_shift_comm (k d c : Nat) :
+    ∀ (e : Expr) (b : Nat), (e.shift k b).shift d (b + c + k) = (e.shift d (b + c)).shift k b
+  | .var i, b => by
+      simp only [Expr.shift]
+      by_cases h₁ : i < b
+      · have h₂ : i < b + c := by omega
+        have h₃ : i < b + c + k := by omega
+        simp [h₁, h₂, h₃, Expr.shift]
+      · by_cases h₂ : i < b + c
+        · have h₃ : i + k < b + c + k := by omega
+          simp [h₁, h₂, h₃, Expr.shift]
+        · have h₃ : ¬ (i + k < b + c + k) := by omega
+          have h₄ : ¬ (i + d < b) := by omega
+          simp only [h₁, h₂, h₃, h₄, if_false, Expr.shift]
+          congr 1; omega
+  | .unit, _ => rfl
+  | .pair a e, b => by simp only [Expr.shift, Expr.shift_shift_comm k d c a b,
+      Expr.shift_shift_comm k d c e b]
+  | .inj₁ a, b => by simp only [Expr.shift, Expr.shift_shift_comm k d c a b]
+  | .inj₂ a, b => by simp only [Expr.shift, Expr.shift_shift_comm k d c a b]
+  | .lam a, b => by
+      simp only [Expr.shift]
+      have := Expr.shift_shift_comm k d c a (b + 1)
+      rw [show b + 1 + c + k = b + c + k + 1 by omega, show b + 1 + c = b + c + 1 by omega] at this
+      rw [this]
+  | .loc _, _ => rfl
+  | .prim _, _ => rfl
+  | .seq a e, b => by simp only [Expr.shift, Expr.shift_shift_comm k d c a b,
+      Expr.shift_shift_comm k d c e b]
+  | .letpair a e, b => by
+      simp only [Expr.shift, Expr.shift_shift_comm k d c a b]
+      have := Expr.shift_shift_comm k d c e (b + 2)
+      rw [show b + 2 + c + k = b + c + k + 2 by omega, show b + 2 + c = b + c + 2 by omega] at this
+      rw [this]
+  | .case a e₁ e₂, b => by
+      simp only [Expr.shift, Expr.shift_shift_comm k d c a b]
+      have h₁ := Expr.shift_shift_comm k d c e₁ (b + 1)
+      have h₂ := Expr.shift_shift_comm k d c e₂ (b + 1)
+      rw [show b + 1 + c + k = b + c + k + 1 by omega, show b + 1 + c = b + c + 1 by omega] at h₁ h₂
+      rw [h₁, h₂]
+  | .app f a, b => by simp only [Expr.shift, Expr.shift_shift_comm k d c f b,
+      Expr.shift_shift_comm k d c a b]
+
+theorem pickE_shift : ∀ (j d c : Nat) (t : Expr),
+    Expr.shift d c (pickE j t) = pickE j (Expr.shift d c t)
+  | 0, d, c, t => by simp [pickE, Expr.shift]
+  | j + 1, d, c, t => by
+      simp only [pickE, Expr.shift]
+      rw [pickE_shift j d (c + 2) (.var 0)]
+      simp [Expr.shift]
+
+theorem tailClause_shift (j : Nat) (b : Bool) (d c : Nat) (Hc : Expr) :
+    Expr.shift d c (tailClause j b Hc) = tailClause j b (Hc.shift d c) := by
+  cases b
+  · have e := Expr.shift_shift_comm 3 d c Hc 0
+    simp only [Nat.zero_add] at e
+    simp only [tailClause, Bool.false_eq_true, if_false, Expr.shift, pickE_shift]
+    rw [show c + 1 + 2 = c + 3 by omega, e]
+    simp [resumeB, Expr.shift, Val.lam, Val.inj₁, Val.unit]
+  · have e := Expr.shift_shift_comm 1 d c Hc 0
+    simp only [Nat.zero_add] at e
+    simp only [tailClause, if_true, Expr.shift, pickE_shift]
+    rw [e]
+    simp [Expr.shift]
+
+theorem tailTuple_shift (d c : Nat) (Hc : Expr) :
+    ∀ (E : List (Qual × VTy × VTy)) (j : Nat),
+      Expr.shift d c (tailTuple E j Hc) = tailTuple E j (Hc.shift d c)
+  | [], _ => by simp [tailTuple, Expr.shift, Val.unit]
+  | _ :: E, j => by
+      simp only [tailTuple, Expr.shift, tailClause_shift, tailTuple_shift d c Hc E (j + 1)]
+
 end BoCa.Fig16.LogRel.Core
 
 end

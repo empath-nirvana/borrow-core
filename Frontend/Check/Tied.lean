@@ -255,10 +255,11 @@ theorem effHandle {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : BoCa.Expr} {S
     (hr : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γr ir (BoCa.Fig16.LogRel.Core.retTy S A R))
     (hc : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γc ic (BoCa.Fig16.LogRel.Core.clausesTy S R E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = false)
     (he : TiedAt s Δ Γ₂ e (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A))) :
     TiedAt ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ s) Δ Γ
       (BoCa.Fig16.LogRel.Core.hndTerm n (E.map Prod.fst) ir ic e) (.comp (effOf S R)) :=
-  fun Ξ h => CDerivesAt.effHandle (rowAt_of_union_left h) hs hs₁ hr hc hn0 hnS hlen
+  fun Ξ h => CDerivesAt.effHandle (rowAt_of_union_left h) hs hs₁ hr hc hn0 hnS hlen hdv
     (he Ξ (sigsAt_union_right h))
 
 /-- BOXED-κ reads its handled row.  `[spec §28]` -/
@@ -269,12 +270,13 @@ theorem effHandleB {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : BoCa.Expr} {
     (hr : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γr ir (BoCa.Fig16.LogRel.Core.retTy S A R))
     (hc : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γc ic (BoCa.Fig16.LogRel.Core.clausesTyB S R d E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = false)
     (he : TiedAt s Δ Γ₂ e (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
     (hΓd : CtxOutlives Δ Γ₂ d)
     (hSd : BoCa.Fig16.LogRel.Core.Row.AnsOutlives Δ d (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S)) :
     TiedAt ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ s) Δ Γ
       (BoCa.Fig16.LogRel.Core.hndTerm n (E.map Prod.fst) ir ic e) (.comp (effOf S R)) :=
-  fun Ξ h => CDerivesAt.effHandleB (rowAt_of_union_left h) hs hs₁ hr hc hn0 hnS hlen
+  fun Ξ h => CDerivesAt.effHandleB (rowAt_of_union_left h) hs hs₁ hr hc hn0 hnS hlen hdv
     (he Ξ (sigsAt_union_right h)) hΓd hSd
 
 /-! ### Derived forms -/
@@ -587,11 +589,12 @@ theorem effHandle {p : Pins} {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : Bo
     (hr : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γr ir (BoCa.Fig16.LogRel.Core.retTy S A R))
     (hc : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γc ic (BoCa.Fig16.LogRel.Core.clausesTy S R E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = false)
     (he : TiedDer p s Δ Γ₂ e (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A))) :
     TiedDer p ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ s) Δ Γ
       (BoCa.Fig16.LogRel.Core.hndTerm n (E.map Prod.fst) ir ic e) (.comp (effOf S R)) :=
-  ⟨fun hn => TiedAt.effHandle hs hs₁ hr hc hn0 hnS hlen (he.1 hn),
-    CDerivesP.effHandle hs hs₁ hr hc hn0 hnS hlen he.2⟩
+  ⟨fun hn => TiedAt.effHandle hs hs₁ hr hc hn0 hnS hlen hdv (he.1 hn),
+    CDerivesP.effHandle hs hs₁ hr hc hn0 hnS hlen hdv he.2⟩
 
 /-- BOXED-κ reads its handled row.  `[spec §28]` -/
 theorem effHandleB {p : Pins} {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : BoCa.Expr} {S : CRow}
@@ -601,12 +604,13 @@ theorem effHandleB {p : Pins} {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : B
     (hr : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γr ir (BoCa.Fig16.LogRel.Core.retTy S A R))
     (hc : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γc ic (BoCa.Fig16.LogRel.Core.clausesTyB S R d E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = false)
     (he : TiedDer p s Δ Γ₂ e (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
     (hΓd : CtxOutlives Δ Γ₂ d)
     (hSd : BoCa.Fig16.LogRel.Core.Row.AnsOutlives Δ d (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S)) :
     TiedDer p ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ s) Δ Γ
       (BoCa.Fig16.LogRel.Core.hndTerm n (E.map Prod.fst) ir ic e) (.comp (effOf S R)) := by
-  refine ⟨fun hn => TiedAt.effHandleB hs hs₁ hr hc hn0 hnS hlen (he.1 hn) hΓd hSd, ?_⟩
+  refine ⟨fun hn => TiedAt.effHandleB hs hs₁ hr hc hn0 hnS hlen hdv (he.1 hn) hΓd hSd, ?_⟩
   obtain ⟨sr, hsr, hlr⟩ := hr.live
   obtain ⟨sc, hsc, hlc⟩ := hc.live
   obtain ⟨sr', hsr', hlr'⟩ := hs₁.live_left hsr hlr
@@ -615,7 +619,7 @@ theorem effHandleB {p : Pins} {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : B
     (hs₁.deadP (hr.deadP (BoCa.Fig16.LogRel.Core.retTy_persistent S A R))
       (hc.deadP (BoCa.Fig16.LogRel.Core.clausesTyB_persistent S R d E
         BoCa.Fig16.LogRel.Core.finsNil)))
-    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen he.2
+    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he.2
     hΓd hSd
 
 /-- A derivation of a term with no operation reads no row and uses no relaxed rule. -/

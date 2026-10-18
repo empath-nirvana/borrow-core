@@ -868,3 +868,17 @@ Each entry: the decision, and why. Newest last.
     - Loops perform the effect's operation. The runtime's driver, `div_fuel` and the reification of
       a loop value are its handlers. The model and the lowering are `docs/pipeline-architecture.md`
       (#552), beginning with a proof spike; SPEC changes come with the build units.
+68. **`[handle]` around a computation that ticks is the tail-resuming rule, for now (#563; the user's decision on #554).**
+    - In the user's words: "**Choice 3, option (A):** B1 (#563) lands the restriction to
+      tail-resuming clauses as a recorded, temporary decision. #564 proves `handle_general` by the
+      general route and lifts it."
+    - So a handler of another name around a body that ticks is typed only when its clause resumes
+      `κ` in tail position (`effHandleT`, SPEC §14 *The effect `Div` in the kernel*): each clause is
+      `λ(x, κ). (λw. κ.1 w) (g x)`, `g : !U(A ⊸ F_{Σ_N} B)` at a row `Σ_N ≤ Σ` of linear operations,
+      or, at an abortive operation, `g` itself. `effHandleV` and `effHandleVB` ask the handled row
+      not to hold `Div`.
+    - This is a deliberate, temporary restriction (hard-stop item 4), not the design: #564 proves
+      `handle_general` and lifts it.
+    - No program that runs today is rejected: the frontend writes no `Div` in any row until B2, and
+      every kernel program's handled rows are without `Div`. `operator-reconcile.bc` is already
+      pending.

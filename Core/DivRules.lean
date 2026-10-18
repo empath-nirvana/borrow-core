@@ -125,10 +125,30 @@ theorem Row.divB_false_of_find {S : Row} (h : ∀ o, Row.find S divEff 0 = some 
       obtain ⟨o, hf, ho⟩ := Row.divB_find hd
       rw [h o hf] at ho; cases ho
 
+/-- A row none of whose operations has `tick`'s signature does not hold `Div`. -/
+theorem Row.divB_of_noTick {S : Row} (h : ∀ o ∈ S, tickB o.q o.A o.B = false) :
+    Row.divB S = false :=
+  Row.divB_false_of_find fun o hf => h o (Row.find_mem hf).1
+
+/-- `Row.divB S = false`, at a row read off by its operations' signatures. -/
+macro "div_free" : tactic => `(tactic| first
+  | decide
+  | exact Row.divB_of_noTick (by
+      simp (config := { decide := true }) [Row.ofEff, tickB, VTy.isUnitB, VTy.isNextB]))
+
 /-- A row of abortive operations does not hold `Div`. -/
 theorem Row.divB_of_abort {S : Row} (h : ∀ o ∈ S, o.abort = true) : Row.divB S = false := by
   refine Row.divB_false_of_find fun o hf => ?_
   have ha := h o (Row.find_mem hf).1
+  obtain ⟨n, i, q, A, B, fin⟩ := o
+  simp only [OpSig.abort, Bool.and_eq_true, bne_iff_ne, ne_eq] at ha
+  simp [tickB, ha.2]
+
+/-- A row whose operations found at `Div`'s key are abortive does not hold `Div`. -/
+theorem Row.divB_of_find_abort {S : Row} (h : ∀ n i o, Row.find S n i = some o → o.abort = true) :
+    Row.divB S = false := by
+  refine Row.divB_false_of_find fun o hf => ?_
+  have ha := h _ _ o hf
   obtain ⟨n, i, q, A, B, fin⟩ := o
   simp only [OpSig.abort, Bool.and_eq_true, bne_iff_ne, ne_eq] at ha
   simp [tickB, ha.2]

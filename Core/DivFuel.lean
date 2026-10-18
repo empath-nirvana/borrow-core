@@ -4,7 +4,7 @@ import Core.BoundedFix
 /-!
 # Core — `div_fuel`  `[spec §14]`
 
-    div_fuel : !U(U(F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)
+    div_fuel : !U(U(1 ⊸ F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)
 
 `div_fuel (t, k)` handles `Div` in `t ()`: it answers *next* to the first `k` ticks (the budget
 read unsigned) and *close* to every tick after.  It is a deep handler of `Div` whose handled
@@ -368,9 +368,11 @@ end
 
 /-! ### The constant -/
 
-/-- `div_fuel : !U(U(F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)`.  `[spec §14]` -/
+/-- `div_fuel : !U(U(1 ⊸ F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)`, the computation a callback
+`U(1 ⊸ F_{tick, Σ} A)`.  `[spec §14]` -/
 abbrev divFuelTy (S : Row) (A : VTy) : VTy :=
-  .bang (.thunk (.arr (.tensor (.thunk (CTy.effOf (tickSig :: S) A)) (.int .w32)) (CTy.effOf S A)))
+  .bang (.thunk (.arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSig :: S) A))) (.int .w32))
+    (CTy.effOf S A)))
 
 /-- `div_fuel (t, k) ↦* (λg. bounded_fix (fuelStep, (k, g))) (hnd_Div H (t ()))`. -/
 theorem divFuel_steps (t : Val) (k : UInt32) :
@@ -398,7 +400,8 @@ theorem divFuel_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy}
   rw [compS_empty_eq hc]
   refine (cC_effOf S A ls' δ _ σ₁ (Row.divB_of_without hS)).mpr ?_
   refine ewp_pureSteps (opTable_mono _) (divFuel_steps t n) _ _ σ₁ ?_
-  have hM := (cC_effOf_wp (tickSig :: S) A ls' δ _ σ₁).mp (ht ls' (Ext.refl _ _))
+  have hM := (cC_effOf_wp (tickSig :: S) A ls' δ _ σ₁).mp
+    (ht ls' (Ext.refl _ _) .unit PMap.empty σ₁ ⟨rfl, rfl⟩ (ResU.comp_empty_right σ₁))
   rw [Row.divB_tick] at hM
   exact fuel_total hS δ n.toNat n rfl (fuelK_frame n) hM
 

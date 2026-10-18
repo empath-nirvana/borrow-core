@@ -275,7 +275,7 @@ theorem d_then₂ {Δ : LifeCtx} :
       (.comp (CTy.effOf [rSig 2, pSig 1 (finR 2)] .unit)) := by
   show CDerives Δ [] (thenE (.var 0) (raiseU 2) (performU 1)) _
   refine .effThen (Γ₁ := []) (Γ₂ := []) (A := .unit) (SM := [pSig 1 (.ret .unit)])
-    (SD := [rSig 2]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
+    (SD := [rSig 2]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ rfl ?_ ?_ ?_
   · intro o ho
     simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
     rcases ho with rfl | rfl <;> decide
@@ -319,7 +319,7 @@ theorem d_inner₂ {Δ : LifeCtx} :
     .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI .nil (d_idV _ .unit) (.tensorI .nil (d_constC_raise _ (.unitI (.cons .nil)))
       (.unitI .nil)))
-    (by decide) (by simp [pSig]) (by simp) d_then₂
+    (by decide) (by simp [pSig]) (by simp) rfl d_then₂
 
 /-- **`progT` is typed at a row holding `2`**: the cancel row of `perform 1`'s continuation is
 `{2}`, and `H₁`'s clause reads `κ`'s cancel at `F_{{2} ⊕ Σ} 1` at its row `Σ = {2}`. -/
@@ -329,7 +329,7 @@ theorem d_progT {Δ : LifeCtx} : CDerives Δ [] progT (.comp (CTy.effOf [rSig 2]
   refine .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)]) (fs := fun _ => finR 2)
     .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI .nil (d_idV _ .unit) (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil)))
-    (by decide) (by simp [rSig]) (by simp) ?_
+    (by decide) (by simp [rSig]) (by simp) rfl ?_
   · refine RowLe.of_mem fun o ho => ?_
     rw [show (finR 2).rowOf ++ [rSig 2] = [rSig 2, rSig 2] from rfl] at ho
     simp only [List.mem_cons, List.not_mem_nil, or_false, or_self] at ho
@@ -349,7 +349,7 @@ theorem d_progOutT {Δ : LifeCtx} : CDerives Δ [] progOutT (.comp (.ret (.sum .
     .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI .nil (d_injlV _ .unit .unit)
       (.tensorI .nil (d_constC_raise _ (.sumI₂ (.unitI (.cons .nil)))) (.unitI .nil)))
-    (by decide) (by simp) (by simp) d_progT
+    (by decide) (by simp) (by simp) rfl d_progT
 
 /-! ### `progT` at no row without `2` (D3)
 
@@ -446,8 +446,9 @@ theorem not_der_progT {Δ : LifeCtx} {Γ : Ctx VTy} {S' : Row} {Y : VTy}
   intro h
   -- `[handle] 1`
   obtain ⟨j₁, ⟨Γ₁, Γ₂, S, E, fs, A, R, _, -, hQ, hH, hM, -, rfl⟩, hr₁⟩ :=
-    der_hndJ h 1 (qualsVal [.unr]).1 (.pair (.val idV) (.pair (.val cancelCT) (.val Val.unit)))
-      ((K 2).plug (performU 1)) rfl
+    der_hndJ₁ (n := 1) (Q := (qualsVal [.unr]).1)
+      (H := (.pair (.val idV) (.pair (.val cancelCT) (.val Val.unit))))
+      (M := ((K 2).plug (performU 1))) h (by not_tail [cancelCT, constC])
   have hSS' : RowLe S S' := JR.rowLe hr₁
   have hE : [Qual.unr] = E.map Prod.fst := qualsVal_inj hQ
   obtain ⟨⟨q₁, A₁, B₁⟩, rfl⟩ : ∃ e, E = [e] := by
@@ -459,9 +460,9 @@ theorem not_der_progT {Δ : LifeCtx} {Γ : Ctx VTy} {S' : Row} {Y : VTy}
   subst hE
   -- `[handle] 2`, then the `[then]`
   obtain ⟨j₂, ⟨Γ₃, Γ₄, S₂, E₂, fs₂, A₂, R₂, _, -, -, -, hM₂, -, rfl⟩, hr₂⟩ :=
-    der_hndJ hM 2 (qualsVal [.unr]).1
-      (.pair (.val idV) (.pair (.val (constC Val.unit)) (.val Val.unit)))
-      ((uF (raiseU 2) .hole).plug (performU 1)) rfl
+    der_hndJ₁ (n := 2) (Q := (qualsVal [.unr]).1)
+      (H := (.pair (.val idV) (.pair (.val (constC Val.unit)) (.val Val.unit))))
+      (M := ((uF (raiseU 2) .hole).plug (performU 1))) hM (by not_tail [cancelCT, constC])
   have hS₂ : RowLe S₂ (Row.ofEff 1 [(.unr, A₁, B₁)] 0 fs ++ S) := JR.rowLe hr₂
   obtain ⟨j₃, ⟨Γ₅, Γ₆, A₃, B₃, S₃, SM, SD, -, hMS, -, hfin, hMp, hDr, rfl⟩, hr₃⟩ :=
     der_thenJ hM₂ (.var 0) (raiseU 2) (performU 1) rfl
@@ -621,7 +622,7 @@ theorem d_thenP {Δ : LifeCtx} :
       (.comp (CTy.effOf [pSig 4 (.ret .unit), pSig 1 (finP 4)] .unit)) := by
   show CDerives Δ [] (thenE (.var 0) (performU 4) (performU 1)) _
   refine .effThen (Γ₁ := []) (Γ₂ := []) (A := .unit) (SM := [pSig 1 (.ret .unit)])
-    (SD := [pSig 4 (.ret .unit)]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
+    (SD := [pSig 4 (.ret .unit)]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ rfl ?_ ?_ ?_
   · intro o ho
     simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
     rcases ho with rfl | rfl <;> decide
@@ -668,7 +669,7 @@ theorem d_innerP {Δ : LifeCtx} :
     (fs := fun _ => .ret .unit) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI .nil (d_idV _ .unit) (.tensorI .nil (d_constC_op _ (.unitI (.drop rfl .nil)))
       (.unitI .nil)))
-    (by decide) (by simp [pSig]) (by simp) d_thenP
+    (by decide) (by simp [pSig]) (by simp) rfl d_thenP
 
 /-- `hnd (1, H₁T) …` in `progFinT`, at the outer row `{4}`: `H₁`'s clause reads `κ`'s cancel at
 `F_{{4} ⊕ {4}} 1` at `{4}`. -/
@@ -680,7 +681,7 @@ theorem d_midP {Δ : LifeCtx} :
   refine .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)]) (fs := fun _ => finP 4)
     .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI .nil (d_idV _ .unit) (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil)))
-    (by decide) (by simp [pSig]) (by simp) ?_
+    (by decide) (by simp [pSig]) (by simp) rfl ?_
   · refine RowLe.of_mem fun o ho => ?_
     rw [show (finP 4).rowOf ++ [pSig 4 (.ret .unit)] = [pSig 4 (.ret .unit), pSig 4 (.ret .unit)]
       from rfl] at ho
@@ -701,7 +702,7 @@ theorem d_progFinOpT {Δ : LifeCtx} : CDerives Δ [] progFinOpT (.comp (.ret (.s
   exact .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)])
     (fs := fun _ => .ret .unit) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI .nil (d_injlV _ .unit .unit) (.tensorI .nil (d_resumeCT _ _ _) (.unitI .nil)))
-    (by decide) (by simp) (by simp) d_midP
+    (by decide) (by simp) (by simp) rfl d_midP
 
 /-- **`progNC₁T` is typed at `F 1`**: the outer `4` cancels the finaliser's continuation, whose
 cancel row is empty. -/
@@ -713,7 +714,7 @@ theorem d_progNC₁T {Δ : LifeCtx} : CDerives Δ [] progNC₁T (.comp (.ret .un
     (fs := fun _ => .ret .unit) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI .nil (d_idV _ .unit)
       (.tensorI .nil (d_cancelCT rfl (by simp [RowLe.refl, CTy.rowOf])) (.unitI .nil)))
-    (by decide) (by simp) (by simp) d_midP
+    (by decide) (by simp) (by simp) rfl d_midP
 
 /-! ### A kept error pending at a finaliser that performs -/
 
@@ -786,7 +787,7 @@ theorem d_thenK₁ {Δ : LifeCtx} :
       (.comp (CTy.effOf [pSig 1 (finR 2), rSig 2] .unit)) := by
   show CDerives Δ [] (thenE (.var 0) (raiseU 2) (performU 1)) _
   refine .effThen (Γ₁ := []) (Γ₂ := []) (A := .unit) (SM := [pSig 1 (.ret .unit)])
-    (SD := [rSig 2]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
+    (SD := [rSig 2]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ rfl ?_ ?_ ?_
   · intro o ho
     simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
     rcases ho with rfl | rfl <;> decide
@@ -827,7 +828,7 @@ theorem d_thenK₂ {Δ : LifeCtx} :
       (.comp (CTy.effOf [pSig 1 finKD, rSig 2, pSig 4 (finR 2)] .unit)) := by
   show CDerives Δ [] (thenE (.var 0) (performU 4) (thenU (performU 1) (raiseU 2))) _
   refine .effThen (Γ₁ := []) (Γ₂ := []) (A := .unit) (SM := [pSig 1 (finR 2), rSig 2])
-    (SD := [pSig 4 (.ret .unit)]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ d_thenK₁ ?_ ?_
+    (SD := [pSig 4 (.ret .unit)]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ rfl d_thenK₁ ?_ ?_
   · intro o ho
     simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
     rcases ho with rfl | rfl | rfl <;> decide
@@ -890,7 +891,7 @@ theorem d_midK {Δ : LifeCtx} :
   refine .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)]) (fs := fun _ => finKD)
     .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI .nil (d_idV _ .unit) (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil)))
-    (by decide) (by simp [rSig, pSig]) (by simp) d_thenK₂
+    (by decide) (by simp [rSig, pSig]) (by simp) rfl d_thenK₂
   refine RowLe.of_mem fun o ho => ?_
   rw [show finKD.rowOf ++ [rSig 2, pSig 4 (finR 2)] =
     [rSig 2, pSig 4 (finR 2), rSig 2, pSig 4 (finR 2)] from rfl] at ho
@@ -914,14 +915,14 @@ theorem d_progKDT {Δ : LifeCtx} {c : Val}
     .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI .nil (d_idV _ _)
       (.tensorI .nil (d_constC_raise _ (.sumI₂ (.unitI (.cons .nil)))) (.unitI .nil)))
-    (by decide) (by simp) (by simp) ?_
+    (by decide) (by simp) (by simp) rfl ?_
   show CDerives Δ [] (hndExpr 4 [.unr] (.pair (.val injlV) (.pair (.val c) (.val Val.unit)))
     (hndE H₁T (thenU (thenU (performU 1) (raiseU 2)) (performU 4))))
     (.comp (CTy.effOf [rSig 2] (.sum .unit .unit)))
   refine .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)]) (fs := fun _ => finR 2)
     .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI .nil (d_injlV _ .unit .unit) (.tensorI .nil hc (.unitI .nil)))
-    (by decide) (by simp [rSig]) (by simp) ?_
+    (by decide) (by simp [rSig]) (by simp) rfl ?_
   refine .effSub (RowLe.of_mem fun o ho => ?_) d_midK
   simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
   rcases ho with rfl | rfl
@@ -958,7 +959,7 @@ theorem d_then₃ {Δ : LifeCtx} :
       (.comp (CTy.effOf [rSig 2, pSig 1 (finR 3), rSig 3] .unit)) := by
   show CDerives Δ [] (thenE (.var 0) (raiseU 3) (performU 1)) _
   refine .effThen (Γ₁ := []) (Γ₂ := []) (A := .unit) (SM := [pSig 1 (.ret .unit)])
-    (SD := [rSig 3]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
+    (SD := [rSig 3]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ rfl ?_ ?_ ?_
   · intro o ho
     simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
     rcases ho with rfl | rfl | rfl <;> decide
@@ -1001,13 +1002,13 @@ theorem d_cancelKeptT {Δ : LifeCtx} : CDerives Δ [] cancelKeptT (.comp (.ret (
     .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI .nil (d_injlV _ .unit .unit)
       (.tensorI .nil (d_constC_raise _ (.sumI₂ (.unitI (.cons .nil)))) (.unitI .nil)))
-    (by decide) (by simp) (by simp) ?_
+    (by decide) (by simp) (by simp) rfl ?_
   show CDerives Δ [] (hndExpr 1 [.unr] (.pair (.val idV) (.pair (.val cancelCT) (.val Val.unit)))
     ((K 3).plug (performU 1))) (.comp (CTy.effOf [rSig 3] .unit))
   refine .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)]) (fs := fun _ => finR 3)
     .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI .nil (d_idV _ .unit) (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil)))
-    (by decide) (by simp [rSig]) (by simp) ?_
+    (by decide) (by simp [rSig]) (by simp) rfl ?_
   · refine RowLe.of_mem fun o ho => ?_
     rw [show (finR 3).rowOf ++ [rSig 3] = [rSig 3, rSig 3] from rfl] at ho
     simp only [List.mem_cons, List.not_mem_nil, or_false, or_self] at ho
@@ -1020,7 +1021,7 @@ theorem d_cancelKeptT {Δ : LifeCtx} : CDerives Δ [] cancelKeptT (.comp (.ret (
       .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
       (.tensorI .nil (d_idV _ .unit) (.tensorI .nil (d_constC_raise _ (.unitI (.cons .nil)))
         (.unitI .nil)))
-      (by decide) (by simp [rSig, pSig]) (by simp) d_then₃
+      (by decide) (by simp [rSig, pSig]) (by simp) rfl d_then₃
 
 /-! ### A region that re-enters the site of a name -/
 
@@ -1062,7 +1063,7 @@ theorem d_fRe {Δ : LifeCtx} :
     (.tensorI (.dead .nil) (d_idVΓ (.cons .nil) _ .unit)
       (.tensorI (.dead .nil) (d_constC_raiseΓ (.cons .nil) _ (.unitI (.cons (.cons .nil))))
         (.unitI (.cons .nil))))
-    (by decide) (by simp [pSig]) (by simp)
+    (by decide) (by simp [pSig]) (by simp) rfl
     (.effPerform (o := pSig 1 (.ret .unit)) rfl rfl (.unitI (.drop rfl .nil)))
 
 /-- **The `[then]` of `progReT`**: `f () then x. x unwind raise 3` at `{1⟨{3}⟩, 3}`. -/
@@ -1071,7 +1072,7 @@ theorem d_thenRe {Δ : LifeCtx} :
       (.comp (CTy.effOf [pSig 1 (finR 3), rSig 3] .unit)) := by
   show CDerives Δ [] (thenE (.var 0) (raiseU 3) (.app (.val fRe) (.val Val.unit))) _
   refine .effThen (Γ₁ := []) (Γ₂ := []) (A := .unit) (SM := [pSig 1 (.ret .unit)])
-    (SD := [rSig 3]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ d_fRe ?_ ?_
+    (SD := [rSig 3]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ rfl d_fRe ?_ ?_
   · intro o ho
     simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
     rcases ho with rfl | rfl <;> decide
@@ -1114,13 +1115,13 @@ theorem d_progReT {Δ : LifeCtx} : CDerives Δ [] progReT (.comp (.ret (.sum .un
     .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI .nil (d_injlV _ .unit .unit)
       (.tensorI .nil (d_constC_raise _ (.sumI₂ (.unitI (.cons .nil)))) (.unitI .nil)))
-    (by decide) (by simp) (by simp) ?_
+    (by decide) (by simp) (by simp) rfl ?_
   show CDerives Δ [] (hndExpr 1 [.unr] (.pair (.val idV) (.pair (.val cancelCT) (.val Val.unit)))
     (thenU (.app (.val fRe) (.val Val.unit)) (raiseU 3))) (.comp (CTy.effOf [rSig 3] .unit))
   refine .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)]) (fs := fun _ => finR 3)
     .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (.tensorI .nil (d_idV _ .unit) (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil)))
-    (by decide) (by simp [rSig]) (by simp) d_thenRe
+    (by decide) (by simp [rSig]) (by simp) rfl d_thenRe
   refine RowLe.of_mem fun o ho => ?_
   rw [show (finR 3).rowOf ++ [rSig 3] = [rSig 3, rSig 3] from rfl] at ho
   simp only [List.mem_cons, List.not_mem_nil, or_false, or_self] at ho
@@ -1240,10 +1241,10 @@ theorem not_der_progNCrecT {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives
   intro h
   -- the outer `[handle] 4`
   obtain ⟨j₀, ⟨Γa, Γb, S₀, E₀, fs₀, A₀', R₀, _, -, hQ₀, hH₀, hM₀, hnS₀, rfl⟩, -⟩ :=
-    der_hndJ h 4 (qualsVal [.unr]).1
-      (.pair (.val idV) (.pair (.val cancelCT) (.val Val.unit)))
-      (hndE H₁T (hndE (hU 4 idV (constC Val.unit))
-        (thenU (thenU (performU 1) (performU 4)) (performU 4)))) rfl
+    der_hndJ₁ (n := 4) (Q := (qualsVal [.unr]).1)
+      (H := (.pair (.val idV) (.pair (.val cancelCT) (.val Val.unit))))
+      (M := (hndE H₁T (hndE (hU 4 idV (constC Val.unit))
+        (thenU (thenU (performU 1) (performU 4)) (performU 4))))) h (by not_tail [cancelCT, constC])
   have hE₀ : [Qual.unr] = E₀.map Prod.fst := qualsVal_inj hQ₀
   obtain ⟨⟨q₀, A₀, B₀⟩, rfl⟩ : ∃ e, E₀ = [e] := by
     rcases E₀ with _ | ⟨e, _ | ⟨e', E'⟩⟩
@@ -1254,10 +1255,10 @@ theorem not_der_progNCrecT {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives
   subst hE₀
   -- `[handle] 1`
   obtain ⟨j₁, ⟨Γc, Γd, S₁, E₁, fs₁, A₁', R₁, _, -, hQ₁, hH₁, hM₁, -, rfl⟩, hr₁⟩ :=
-    der_hndJ hM₀ 1 (qualsVal [.unr]).1
-      (.pair (.val idV) (.pair (.val cancelCT) (.val Val.unit)))
-      (hndE (hU 4 idV (constC Val.unit))
-        (thenU (thenU (performU 1) (performU 4)) (performU 4))) rfl
+    der_hndJ₁ (n := 1) (Q := (qualsVal [.unr]).1)
+      (H := (.pair (.val idV) (.pair (.val cancelCT) (.val Val.unit))))
+      (M := (hndE (hU 4 idV (constC Val.unit))
+        (thenU (thenU (performU 1) (performU 4)) (performU 4)))) hM₀ (by not_tail [cancelCT, constC])
   have hS₁ : RowLe S₁ (Row.ofEff 4 [(.unr, A₀, B₀)] 0 fs₀ ++ S₀) := JR.rowLe hr₁
   have hE₁ : [Qual.unr] = E₁.map Prod.fst := qualsVal_inj hQ₁
   obtain ⟨⟨q₁, A₁, B₁⟩, rfl⟩ : ∃ e, E₁ = [e] := by
@@ -1269,9 +1270,9 @@ theorem not_der_progNCrecT {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives
   subst hE₁
   -- the inner `[handle] 4`, then the two `[then]`s
   obtain ⟨j₂, ⟨Γe, Γf, S₂, E₂, fs₂, A₂, R₂, _, -, hQ₂, -, hM₂, -, rfl⟩, hr₂⟩ :=
-    der_hndJ hM₁ 4 (qualsVal [.unr]).1
-      (.pair (.val idV) (.pair (.val (constC Val.unit)) (.val Val.unit)))
-      (thenU (thenU (performU 1) (performU 4)) (performU 4)) rfl
+    der_hndJ₁ (n := 4) (Q := (qualsVal [.unr]).1)
+      (H := (.pair (.val idV) (.pair (.val (constC Val.unit)) (.val Val.unit))))
+      (M := (thenU (thenU (performU 1) (performU 4)) (performU 4))) hM₁ (by not_tail [cancelCT, constC])
   have hS₂ : RowLe S₂ (Row.ofEff 1 [(.unr, A₁, B₁)] 0 fs₁ ++ S₁) := JR.rowLe hr₂
   have hE₂ : [Qual.unr] = E₂.map Prod.fst := qualsVal_inj hQ₂
   obtain ⟨⟨q₂, A₂', B₂'⟩, rfl⟩ : ∃ e, E₂ = [e] := by
@@ -1460,8 +1461,9 @@ theorem not_der_e7c {Δ : LifeCtx} {Γ : Ctx VTy} {nw ni : UInt32} {qi : Qual} (
   intro h
   -- `[handle] wait`
   obtain ⟨j₁, ⟨Γ₁, Γ₂, S, E, fs, A, R, _, -, hQ, hH, hM, -, rfl⟩, hr₁⟩ :=
-    der_hndJ h nw (qualsVal [.aff]).1 (.pair (.val injlV) (.pair (.val timeoutCl) (.val Val.unit)))
-      (hndE (toResultH ni qi) (bodyF nw (raiseU ni))) rfl
+    der_hndJ₁ (n := nw) (Q := (qualsVal [.aff]).1)
+      (H := (.pair (.val injlV) (.pair (.val timeoutCl) (.val Val.unit))))
+      (M := (hndE (toResultH ni qi) (bodyF nw (raiseU ni)))) h (by not_tail [timeoutCl, constC, bindE, Inversions.cancelE])
   have hSS' : RowLe S S' := JR.rowLe hr₁
   have hE : [Qual.aff] = E.map Prod.fst := qualsVal_inj hQ
   obtain ⟨⟨q₁, A₁, B₁⟩, rfl⟩ : ∃ e, E = [e] := by
@@ -1473,9 +1475,9 @@ theorem not_der_e7c {Δ : LifeCtx} {Γ : Ctx VTy} {nw ni : UInt32} {qi : Qual} (
   subst hE
   -- `[handle] exnᵢ`, then the `[then]`
   obtain ⟨j₂, ⟨Γ₃, Γ₄, S₂, E₂, fs₂, A₂, R₂, _, -, -, -, hM₂, -, rfl⟩, hr₂⟩ :=
-    der_hndJ hM ni (qualsVal [qi]).1
-      (.pair (.val injlV) (.pair (.val (constC (Val.inj₂ Val.unit))) (.val Val.unit)))
-      (bodyF nw (raiseU ni)) rfl
+    der_hndJ₁ (n := ni) (Q := (qualsVal [qi]).1)
+      (H := (.pair (.val injlV) (.pair (.val (constC (Val.inj₂ Val.unit))) (.val Val.unit))))
+      (M := (bodyF nw (raiseU ni))) hM (by not_tail [timeoutCl, constC, bindE, Inversions.cancelE])
   have hS₂ : RowLe S₂ (Row.ofEff nw [(.aff, A₁, B₁)] 0 fs ++ S) := JR.rowLe hr₂
   obtain ⟨j₃, ⟨Γ₅, Γ₆, A₃, B₃, S₃, SM, SD, -, hMS, -, hfin, hMp, hDr, rfl⟩, hr₃⟩ :=
     der_thenJ hM₂ (.var 0) (raiseU ni) (bindE (performU nw) (.inj₂ .unit)) rfl
@@ -1649,7 +1651,8 @@ holding operations of `S`. -/
 theorem dAt_timeout {Δ : LifeCtx} {nw : UInt32} (hw : Ξ nw = [(.aff, .unit, .unit)])
     (hnw : nw ≠ 0) {S : Row} (hS : RowAt Ξ S) (hnS : ∀ o ∈ S, o.n ≠ nw) {X : VTy} {F : CTy}
     (hF : F.isTop = false) (hFS : RowLe (F.rowOf ++ S) S) {M : Expr}
-    (hM : CDerivesAt Ξ Δ [] M (.comp (CTy.effOf (waitRow nw F ++ S) X))) :
+    (hM : CDerivesAt Ξ Δ [] M (.comp (CTy.effOf (waitRow nw F ++ S) X)))
+    (hdv : Row.divB (waitRow nw F ++ S) = false := by div_free) :
     CDerivesAt Ξ Δ [] (hndE (timeoutH nw) M) (.comp (CTy.effOf S (.sum X .unit))) := by
   show CDerivesAt Ξ Δ [] (hndExpr nw [.aff] (.pair (.val injlV) (.pair (.val timeoutCl)
     (.val Val.unit))) M) _
@@ -1658,13 +1661,14 @@ theorem dAt_timeout {Δ : LifeCtx} {nw : UInt32} (hw : Ξ nw = [(.aff, .unit, .u
     (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_injlV _ X .unit)
       (.tensorI .nil (d_timeoutCl .nil hF hFS) (.unitI .nil))) rfl)
-    hnw hnS (by simp) hM
+    hnw hnS (by simp) hdv hM
 
 /-- **`toResult M`**, tied: at the row `S`, `M` at `exn`'s row before `S`, `exn` affine or
 unrestricted. -/
 theorem dAt_toResult {Δ : LifeCtx} {ne : UInt32} {q : Qual} (he : Ξ ne = [(q, .unit, .zero)])
     (hne : ne ≠ 0) (hq : q ≠ .lin) {S : Row} (hS : RowAt Ξ S) (hnS : ∀ o ∈ S, o.n ≠ ne) {A : VTy}
-    {M : Expr} (hM : CDerivesAt Ξ Δ [] M (.comp (CTy.effOf (exnRow ne q ++ S) A))) :
+    {M : Expr} (hM : CDerivesAt Ξ Δ [] M (.comp (CTy.effOf (exnRow ne q ++ S) A)))
+    (hdv : Row.divB (exnRow ne q ++ S) = false := by div_free) :
     CDerivesAt Ξ Δ [] (hndE (toResultH ne q) M) (.comp (CTy.effOf S (.sum A .unit))) := by
   have hcl : CDerives Δ [] (.val (constC (Val.inj₂ Val.unit)))
       (.val (clauseTy S (.sum A .unit) (q, .unit, .zero))) := by
@@ -1676,7 +1680,7 @@ theorem dAt_toResult {Δ : LifeCtx} {ne : UInt32} {q : Qual} (he : Ξ ne = [(q, 
     (rowAt_ofEff_append he hne (by simp) hS) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_injlV _ A .unit) (.tensorI .nil hcl (.unitI .nil)))
       rfl)
-    hne hnS (by simp) hM
+    hne hnS (by simp) hdv hM
 
 /-- The raise of `exn`, tied, at its row. -/
 theorem dAt_raiseU {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) {n : UInt32} {q : Qual}
@@ -1693,7 +1697,8 @@ theorem dAt_raiseU {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) {n : UInt3
 theorem dAt_bodyF {Δ : LifeCtx} {nw : UInt32} (hw : Ξ nw = [(.aff, .unit, .unit)]) (hnw : nw ≠ 0)
     {S SD : Row} {F : CTy} (hNZ : (waitRow nw F ++ S).NZ) (hUq : (waitRow nw F ++ S).Uniq)
     (hDS : RowLe SD (waitRow nw F ++ S)) (hfin : ThenLe (.ret .unit) SD F) {D : Expr}
-    (hD : CDerivesAt Ξ Δ [⟨.unit, false⟩] D (.comp (CTy.effOf SD .unit))) :
+    (hD : CDerivesAt Ξ Δ [⟨.unit, false⟩] D (.comp (CTy.effOf SD .unit)))
+    (hSD : Row.divB SD = false := by div_free) :
     CDerivesAt Ξ Δ [] (bodyF nw D) (.comp (CTy.effOf (waitRow nw F ++ S) (.sum .unit .unit))) := by
   have hW : RowAt Ξ (Row.ofEff nw [(.aff, .unit, .unit)] 0) :=
     rowAt_left (S' := []) (rowAt_ofEff_append hw hnw (by simp) (rowAt_nil Ξ))
@@ -1706,7 +1711,7 @@ theorem dAt_bodyF {Δ : LifeCtx} {nw : UInt32} (hw : Ξ nw = [(.aff, .unit, .uni
       (.effSub (RowLe.nil _) (.ret (.sumI₂ (.unitI (.drop rfl .nil)))))
   show CDerivesAt Ξ Δ [] (thenE (.var 0) D (bindE (performU nw) (.inj₂ .unit))) _
   refine .effThen (SM := Row.ofEff nw [(.aff, .unit, .unit)] 0) (SD := SD) .nil hNZ hUq
-    (fun _ => fun _ h => absurd h List.not_mem_nil) ?_ hDS ?_ ?_ hM
+    (fun _ => fun _ h => absurd h List.not_mem_nil) ?_ hDS ?_ ?_ hSD hM
     (.effSub (RowLe.nil _) (.ret (.var (.here .nil)))) hD
   · intro n i o hf
     obtain ⟨rfl, rfl, rfl⟩ := find_ofEff_one hf

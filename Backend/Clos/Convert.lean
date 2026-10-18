@@ -1,6 +1,7 @@
 import Std.Data.HashSet
 import Std.Data.TreeMap
 import Paper.S1_Syntax.Definitions
+import Support.Dynamics.Iterate
 import Backend.Clos.Syntax
 
 /-!
@@ -226,6 +227,8 @@ def Op.ofPrim? : Prim → Option Op
   | .countTry => some .countTry
   -- `bounded_fix` is converted to codes of its own (`fixValue`).
   | .boundedFix => none
+  -- `iterate` is replaced by its fixed point before conversion (`expandIter`).
+  | .iterate => none
   | .store => none
   | .lit _ => none
   -- The primitives of spec §19 are converted by their shapes in `conv`; as values `primValue`
@@ -851,11 +854,41 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       let c ← register ⟨es, p, body⟩
       return .clos c xs
 
-/-- The term the conversion converts: the polymorphic lets `sel` holds of replaced by their
-β-reducts, each use marked when `mark` (`polyLets`), then the literal views and finaliser frames
+/-- `iterate`'s body as a fixed point's, under `self` (`1`) and the pair `(f, s)` (`0`), as the
+machine's step `iterNext` unfolds it (`Support/Dynamics/Iterate.lean`):
+`let (f, s) = p; case (f s).1 { inl b → inl b | inr s′ → tick () to n. case n
+{ inl _ → self (f, s′) | inr _ → (λq. inr q) ((f s′).2) } }`.  `[spec §14]` -/
+def iterFixB : Expr :=
+  .letpair (.var 0)
+    (.case (.app (.app (.var 1) (.var 0)) (.inj₁ .unit))
+      (.inj₁ (.var 0))
+      (.app (.lam (.case (.var 0)
+          (.app (.var 6) (.pair (.var 4) (.var 2)))
+          (.app (.lam (.inj₂ (.var 0))) (.app (.app (.var 4) (.var 2)) (.inj₂ .unit)))))
+        BoCa.tickE))
+
+/-- `iterate` as the Z combinator's fixed point of `iterFixB`, which `conv` lowers to a code that
+calls itself (`fixBody?`). -/
+def iterFix : Expr := .lam (.app (.app (zXE iterFixB) (zXE iterFixB)) (.var 0))
+
+/-- The term with each `iterate` replaced by `iterFix`. -/
+def expandIter : Expr → Expr
+  | .prim .iterate => iterFix
+  | .pair a b => .pair (expandIter a) (expandIter b)
+  | .seq a b => .seq (expandIter a) (expandIter b)
+  | .app a b => .app (expandIter a) (expandIter b)
+  | .inj₁ a => .inj₁ (expandIter a)
+  | .inj₂ a => .inj₂ (expandIter a)
+  | .lam b => .lam (expandIter b)
+  | .letpair a b => .letpair (expandIter a) (expandIter b)
+  | .case a b c => .case (expandIter a) (expandIter b) (expandIter c)
+  | e => e
+
+/-- The term the conversion converts: each `iterate` replaced by its fixed point (`expandIter`), the
+polymorphic lets `sel` holds of replaced by their β-reducts, each use marked when `mark` (`polyLets`), then the literal views and finaliser frames
 marked. -/
 def prepare (sel : Nat → Bool) (mark : Bool) (e : Expr) : Expr :=
-  (markScoped (markUbinds (markLitViews ((polyLets sel mark e).run' 0)))).run' 0
+  (markScoped (markUbinds (markLitViews ((polyLets sel mark (expandIter e)).run' 0)))).run' 0
 
 /-- Closure-convert a closed term, the polymorphic lets `sel` holds of replaced by their β-reducts
 and, with `mark`, their uses marked; and the marked uses. `convert` (`Backend/Clos/Poly.lean`)

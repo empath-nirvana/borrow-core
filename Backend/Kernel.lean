@@ -3,6 +3,7 @@ import Core.EffCancel
 import Core.EffExamples
 import Core.Rejections
 import Core.EffTier1Programs
+import Core.DivPrograms
 
 /-!
 # Backend — kernel programs
@@ -30,6 +31,8 @@ lowers their operations in `Backend/Clos/Capture.lean` and `Backend/Clos/Unwind.
   `tunnel`, no accidental handling; `e7a`, `e7b` and `e7d`, a cancelled suspension's finalisers;
   `e8b`, an unwind through a finaliser that raises; and `storedKResume`, `storedKCancel` and
   `storedKFin`, a stored continuation.
+- `Core/DivPrograms.lean`'s `divResidual`, a loop of `iterate` whose state is a cell, closed by
+  `div_fuel 3`, which hands the cell back (`dAt_divResidual`, `divResidual_runs`).
 - Terms that exercise the lowering's other shapes (*Shapes*, below).
 
 The cancels and the shapes are not typed: each stage is compared with `Support`'s interpreter on
@@ -201,6 +204,7 @@ def kernelPrograms : List (String × BoCa.Expr) :=
     ("stored-k-cancel", BoCa.Fig16.LogRel.Core.Tier1Programs.storedKCancel),
     ("stored-k-fin", BoCa.Fig16.LogRel.Core.Tier1Programs.storedKFin),
     ("timeout", BoCa.Fig16.LogRel.Core.Tier1Programs.timeoutProg),
+    ("div-residual", BoCa.Fig16.LogRel.Core.DivPrograms.divResidual),
     ("loop-tail", Shapes.loopTail 100000),
     ("loop-captured", Shapes.loopCaptured 100000),
     ("recursive-yield", Shapes.recYield 20),

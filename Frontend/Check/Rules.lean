@@ -323,6 +323,7 @@ def rEffHandle (ir ic : TInfo) {S : CRow} {E : List (CQual × CVTy × CVTy)} {n 
     {A R : CVTy} (kr kc : Nat) (hkr : T[kr]? = some (BoCa.Fig16.LogRel.Core.retTy S A R))
     (hkc : T[kc]? = some (BoCa.Fig16.LogRel.Core.clausesTy S R E)) (hn0 : n ≠ 0)
     (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = false)
     (rM : Res Δ T (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
     (h₁ : overlapOK T (oneL T kr) (oneL T kc) = true)
     (h₂ : overlapOK T (orL (oneL T kr) (oneL T kc)) rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
@@ -332,7 +333,7 @@ def rEffHandle (ir ic : TInfo) {S : CRow} {E : List (CQual × CVTy × CVTy)} {n 
         (BoCa.Fig16.LogRel.Core.clausesTy S R E) kr kc (oneL T kr)) rM.t,
     (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ rM.sigs, rM.pins,
     (((Fam.var T kr _ hkr).split (Fam.var T kc _ hkc) h₁).split rM.F h₂).map
-      fun _ ⟨_, _, hs, ⟨_, _, hs₁, hr, hc⟩, he⟩ => TTied.effHandle i ir ic _ _ hs hs₁ hr hc hn0 hnS hlen he⟩
+      fun _ ⟨_, _, hs, ⟨_, _, hs₁, hr, hc⟩, he⟩ => TTied.effHandle i ir ic _ _ hs hs₁ hr hc hn0 hnS hlen hdv he⟩
 
 /-- BOXED-κ: `handle_n e with (h_ret, hs)`, the clauses at `clausesTyB S R d E`, each capturing
 clause's `κ` boxed at `@d`; `@d` defined, every live slot `e` uses outliving it, and every
@@ -342,7 +343,9 @@ def rEffHandleB (ir ic : TInfo) {S : CRow} {E : List (CQual × CVTy × CVTy)} {n
     {A R : CVTy} {d : CLife} (kr kc : Nat)
     (hkr : T[kr]? = some (BoCa.Fig16.LogRel.Core.retTy S A R))
     (hkc : T[kc]? = some (BoCa.Fig16.LogRel.Core.clausesTyB S R d E)) (hn0 : n ≠ 0)
-    (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hwf : d.wf Δ = true)
+    (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = false)
+    (hwf : d.wf Δ = true)
     (hSd : ansOutlivesB Δ d (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = true)
     (rM : Res Δ T (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
     (hso : usedSat (outlivesB Δ d) T rM.F.u = true)
@@ -355,7 +358,7 @@ def rEffHandleB (ir ic : TInfo) {S : CRow} {E : List (CQual × CVTy × CVTy)} {n
     (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ rM.sigs, rM.pins,
     (((Fam.var T kr _ hkr).split (Fam.var T kc _ hkc) h₁).split (rM.F.restrict (outlivesB Δ d) hso)
       h₂).map fun _ ⟨_, _, hs, ⟨_, _, hs₁, hr, hc⟩, he, ho⟩ =>
-        TTied.effHandleB i ir ic _ _ hs hs₁ hr hc hn0 hnS hlen he
+        TTied.effHandleB i ir ic _ _ hs hs₁ hr hc hn0 hnS hlen hdv he
           ⟨defines_of_wf hwf, fun s hsm hl => outlivesB_sound Δ d s.ty (ho s hsm hl)⟩
           (ansOutlivesB_sound hSd)⟩
 

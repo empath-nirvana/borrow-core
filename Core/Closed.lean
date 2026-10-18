@@ -149,13 +149,20 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | unfoldN => exact closedAt_of_zero (unfoldV_closed _) _
   | effPerform _ _ _ ih | effRaise _ _ _ _ ih =>
       simp [performE, raiseE, opArgE, closedAt, Expr.val, Val.prim, Val.i32, ih]
-  | effThen hs _ _ _ _ _ _ _ _ _ _ ihM ihN ihD =>
+  | effThen hs _ _ _ _ _ _ _ _ _ _ _ ihM ihN ihD =>
       rw [(splitP_length hs).1] at ihM
       rw [List.length_cons, (splitP_length hs).2] at ihN ihD
       simp [thenE, closedAt, Expr.val, Val.prim, Val.lam, ihM, ihN, ihD]
-  | effHandleV hs _ _ _ _ _ _ _ ihc ihe | effHandleVB hs _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleV hs _ _ _ _ _ _ _ _ ihc ihe | effHandleVB hs _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       rw [(splitP_length hs).1] at ihc; rw [(splitP_length hs).2] at ihe
       simp [hndExpr, closedAt, Expr.val, Val.prim, Val.i32, closedAt_qualsVal, ihc, ihe]
+  | effHandleT hs _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+      rw [(splitP_length hs).1] at ihc; rw [(splitP_length hs).2] at ihe
+      simp only [closedAt, Bool.and_eq_true] at ihc
+      simp [hndExpr, closedAt, Expr.val, Val.prim, Val.i32, closedAt_qualsVal, ihc.1, ihe,
+        closedAt_tailTuple ihc.2]
+  | divFuel => exact closedAt_of_zero divFuelV_closed _
+  | reify _ _ _ _ _ hcl => exact closedAt_of_zero (reifyV_closed hcl) _
   | @letPoly _ Γ' N _ _ b hcl _ _ _ ihN =>
       rw [List.length_cons] at ihN
       have hN := closedAt_of_fill hcl N 0 (Γ'.length + 1) (Nat.succ_pos _) ihN
@@ -588,6 +595,15 @@ theorem closed_head {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ := ℍ) μ a μ
       · simp only [Val.inj₂, Val.lam, closedAt, Val.prim, Val.i32, Bool.and_eq_true,
           val_shift_closed ha.2.1, decide_eq_true_eq]
         exact ⟨trivial, closedAt_mono _ ha.2.1 (by omega), trivial, by omega⟩
+  | iterate f s' =>
+      simp only [closedAt, Expr.val, Val.prim, Val.pair, Bool.and_eq_true] at ha
+      refine ⟨?_, hμ⟩
+      have h₁ := closedAt_mono _ ha.2.1 (Nat.zero_le 3)
+      simp only [iterNext, iterTurn, closedAt, Expr.val, Val.lam, Val.inj₁, Val.inj₂, Val.unit,
+        Val.prim, nextV, closeV, inrV, tickE, Val.pair, Val.i32, val_shift_closed ha.2.1,
+        Bool.and_eq_true, decide_eq_true_eq]
+      exact ⟨⟨⟨⟨ha.2.1, ha.2.2⟩, trivial⟩, by omega⟩, ⟨⟨by omega, trivial, h₁, by omega⟩, by omega,
+        ⟨h₁, by omega⟩, trivial⟩, trivial, trivial, trivial, trivial⟩
   | hret n qs hr hs w =>
       simp only [hndE, hndVal, closedAt, Expr.val, Val.prim, Val.pair, Val.i32,
         Bool.and_eq_true] at ha

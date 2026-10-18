@@ -30,6 +30,7 @@ stored-k-resume 0 3 0 # stash's answer is one of two closures (the clauses'), ca
 stored-k-cancel 0 1 0 # stash's answer, called once: it cancels κ
 stored-k-fin 0 1 0 # stash's answer, called once: it cancels κ, whose finaliser raises
 timeout 0 0 0
+div-residual 1 5 0 # the loop's cell; the step and the callback are closures, the step called at each turn
 loop-tail 0 0 0
 loop-captured 0 0 0
 recursive-yield 20 0 0 # recursion through a resumption point: one frame object per level, reused at each resume

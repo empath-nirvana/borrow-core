@@ -16,6 +16,13 @@ import Core.EffWp
 import Core.DivDefs
 import Core.DivWp
 import Core.DivRules
+import Core.DivIterate
+import Core.DivHandlers
+import Core.DivFuel
+import Core.DivReify
+import Core.DivHandle
+import Core.DivPrograms
+import Core.DivRuntime
 import Core.EffCancel
 import Core.EffCancelTyped
 import Core.Persistent

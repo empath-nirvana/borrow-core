@@ -178,6 +178,16 @@ effect).
   allocator is a prefix of it (`total_run_prefix`), every run continues to a value
   (`total_every_run`), and there is no infinite run (`total_no_infinite_run`, through the
   allocator `Alloc.ofRun` built from the run).
+- **`Div` in the kernel** (`SPEC.md` §14 *The effect `Div` in the kernel*, `DivDefs.lean` to
+  `DivRuntime.lean`). At a row that holds `Div` (`Row.divB`) the relation is `cwp`, the greatest
+  fixed point over segments with `Closing` (`DivDefs.lean`, `effWp`); `DivWp.lean` and
+  `DivRules.lean` give its coinduction, bind, frames and `[sub]`/`[perform]`/`[raise]`, `EffFin.lean`
+  `[then]` (`cwp_then`). `iterate` (`DivIterate.lean`, `cwp_iterate`), `div_fuel` (`DivFuel.lean`,
+  `fuel_total`) and `reify` (`DivReify.lean`, `reify_compat`) are constants with their rules;
+  `effHandleT` (`DivHandle.lean`, `cwp_handle_tail`) is `[handle]` around a computation that ticks,
+  at clauses resuming `κ` in tail position (decision 68). `divResidual` (`DivPrograms.lean`) is a
+  loop holding a cell closed by `div_fuel 3`, tied and run (`div-residual`); `divFuel_every_run`
+  and `runtime_every_run` (`DivRuntime.lean`) are adequacy at the row of `Div`.
 - **Effect safety** (`SPEC.md` §19 *Laws*, `EffSafety.lean`). Every configuration a typed closed
   program reaches from the empty memory is a value or steps, and is no operation that no live frame
   catches: no `K[perform p]` with `K` free of a handler of `p`'s name, no `K[raise p]` with `K`

@@ -3,7 +3,7 @@ import Core.DivFuel
 /-!
 # Core — `reify`  `[spec §14]`
 
-    reify_res : !U(U(F_{tick, Σ}(B ⊕ R)) ⊸ F_Σ U(Loop_Σ B R))        res : !U(B ⊸ F_Σ R)
+    reify_res : !U(U(1 ⊸ F_{tick, Σ}(B ⊕ R)) ⊸ F_Σ U(Loop_Σ B R))        res : !U(B ⊸ F_Σ R)
 
 `reify_res t` makes a loop value of the computation `t ()`: it runs it to its first tick, or to its
 end, and answers the loop there.  It is a deep handler of `Div`:
@@ -477,9 +477,10 @@ end rel
 /-- The residual's type, `!U(B ⊸ F_Σ R)`.  `[spec §14]` -/
 abbrev resTy (S : Row) (B R : VTy) : VTy := .bang (.thunk (.arr B (CTy.effOf S R)))
 
-/-- `reify_res : !U(U(F_{tick, Σ}(B ⊕ R)) ⊸ F_Σ U(Loop_Σ B R))`.  `[spec §14]` -/
+/-- `reify_res : !U(U(1 ⊸ F_{tick, Σ}(B ⊕ R)) ⊸ F_Σ U(Loop_Σ B R))`, the computation a callback
+`U(1 ⊸ F_{tick, Σ}(B ⊕ R))`.  `[spec §14]` -/
 abbrev reifyTy (S : Row) (B R : VTy) : VTy :=
-  .bang (.thunk (.arr (.thunk (CTy.effOf (tickSig :: S) (.sum B R)))
+  .bang (.thunk (.arr (.thunk (.arr .unit (CTy.effOf (tickSig :: S) (.sum B R))))
     (CTy.effOf S (.thunk (CTy.loopEff S B R)))))
 
 /-- A closed value of a semantic judgment at the empty context is in the relation, at a list. -/
@@ -530,7 +531,8 @@ theorem reify_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {B R : VTy} {res :
     simp [BoCa.BoLo.hndE, closed_subst (rkV_closed hres), closed_subst (reifyH_closed hres)]
   refine ewp_step (opTable_mono _) (fun μ => Step1N.head (Head.beta μ _ t) rfl) ls' _ σ ?_
   rw [e]
-  have hM := (cC_effOf_wp (tickSig :: S) _ ls' δ _ σ).mp (ht ls' (Ext.refl _ _))
+  have hM := (cC_effOf_wp (tickSig :: S) _ ls' δ _ σ).mp
+    (ht ls' (Ext.refl _ _) .unit PMap.empty σ ⟨rfl, rfl⟩ (ResU.comp_empty_right σ))
   rw [Row.divB_tick] at hM
   exact reify_compat hS res hres hresR hM
 
