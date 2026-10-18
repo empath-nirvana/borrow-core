@@ -73,6 +73,7 @@ mutual
 a `for`'s site threads is a name of the program in them. -/
 def _root_.Frontend.Val.hyg (glob : String → Bool) (ρ : Ren) : Val → HM Val
   | .var sp x => pure (.var sp (look ρ x))
+  | .clone sp x => pure (.clone sp (look ρ x))
   | .defApp sp n args => pure (.defApp sp n args)
   | .unit sp => pure (.unit sp)
   | .pair sp V W => do pure (.pair sp (← V.hyg glob ρ) (← W.hyg glob ρ))

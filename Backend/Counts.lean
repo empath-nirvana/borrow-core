@@ -111,12 +111,13 @@ def kernelMain (sitesOnly : Bool) (name : String) : IO UInt32 := do
 /-- `bcc-counts --native <file>`: the flat IR's counts against the native build's.  `[spec §40]` -/
 def nativeMain (file : String) (args : List String) : IO UInt32 := do
   let src ← IO.FS.readFile file
-  let input ← if Backend.readsInput file src then readAllIn (← IO.getStdin) (1 <<< 16) .empty
+  let k := Backend.checkedOf file src
+  let input ← if Backend.readsInput k then readAllIn (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
-  let (flat, status) ← match Backend.interpStage "flat-counts" file src input.toList (Backend.argsBytes args) with
+  let (flat, status) ← match Backend.interpStage "flat-counts" file k input.toList (Backend.argsBytes args) with
     | .ok o => pure (String.fromUTF8! o.out, o.status)
     | .error e => IO.eprintln e; return 1
-  let ll ← match Backend.compileLL file src true with
+  let ll ← match k >>= (·.ll true) with
     | .ok w => pure w
     | .error e => IO.eprintln e; return 1
   let dir ← IO.FS.createTempDir
@@ -160,12 +161,13 @@ def main (argv : List String) : IO UInt32 := do
     | file :: "--" :: args => pure (file, args)
     | _ => do IO.eprintln "usage: bcc-counts [--sites] <file> [-- arg…]"; return 2
   let src ← IO.FS.readFile file
-  let input ← if Backend.readsInput file src then readAllIn (← IO.getStdin) (1 <<< 16) .empty
+  let k := Backend.checkedOf file src
+  let input ← if Backend.readsInput k then readAllIn (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
-  let (flat, status, mem) ← match Backend.flatMemCounts file src input.toList (Backend.argsBytes args) with
+  let (flat, status, mem) ← match k >>= fun k => Backend.flatMemCounts k input.toList (Backend.argsBytes args) with
     | .ok (o, m) => pure (String.fromUTF8! o.out, o.status, m)
     | .error e => IO.eprintln e; return 1
-  let wat ← match Backend.compileWat file src true with
+  let wat ← match k >>= (·.wat true) with
     | .ok w => pure w
     | .error e => IO.eprintln e; return 1
   let dir ← IO.FS.createTempDir

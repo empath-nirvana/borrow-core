@@ -293,7 +293,7 @@ mutual
 def synM : Nat → MCx → Val → MM MTy
   | 0, _, _ => freshM
   | n + 1, c, v => match v with
-    | .var _ x | .lend _ ⟨x, _⟩ _ => match c.env.lookup x with
+    | .var _ x | .clone _ x | .lend _ ⟨x, _⟩ _ => match c.env.lookup x with
       | some t => pure t
       | none => ofOpt (c.tc.tyV (.var Span.none x))
     | .unit _ => pure (.known .unit)

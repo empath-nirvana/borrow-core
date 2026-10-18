@@ -825,6 +825,11 @@ still calls `Sugar.elaborate` directly. It sees the same core, because lowering 
 switching it to `Elab.elaborate` is a one-line change for the stage that makes lowering do
 something.
 
+**Since #559 (compiler unit C1).** The typed IR inferred on core after the sugar, its lowering,
+`bcc tir`, `scripts/check-elab.sh` and `corpus/tir/` are removed: the checker returns a typed
+term (`Frontend/Check/TExpr.lean`, SPEC §3), and what was read off the typed IR (the check of
+implicit copies) reads that. `inferV`/`inferC` remain as the sugar's own inference (`TCx`).
+
 **Stage 2, as built.** `Sugar.lean` now decides on types. A typing context (`TCx`,
 `Frontend/Elab/Meta.lean`) types the program as written, with each `def` at the type elaborated
 so far, so a div function has its loop type and a call of it in direct style binds the loop's

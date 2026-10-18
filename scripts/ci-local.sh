@@ -77,7 +77,6 @@ steps=(
   "compile kernel"   "scripts/compile-kernel.sh"
   "native"           "scripts/compile-native.sh"
   "sugar pairs"      "scripts/check-sugar.sh"
-  "typed IR"         "scripts/check-elab.sh"
   "book doc-tests"   "scripts/book-doctest.sh"
   "book build"       "mdbook build book"
 )
@@ -100,7 +99,7 @@ if [ "$changed" = 1 ]; then
   done
   if [ "$lean" = 0 ]; then
     all=0
-    corpus=("parse corpus" "check corpus" "compile corpus" "sugar pairs" "typed IR" "native")
+    corpus=("parse corpus" "check corpus" "compile corpus" "sugar pairs" "native")
     for f in $files; do
       case "$f" in
         corpus/kernel-counts.expected) add "compile kernel" ;;
@@ -115,7 +114,6 @@ if [ "$changed" = 1 ]; then
         scripts/compile-native.sh) add "native" ;;
         scripts/compile-scaling.sh) add "compile scaling" ;;
         scripts/check-sugar.sh) add "sugar pairs" ;;
-        scripts/check-elab.sh) add "typed IR" ;;
         scripts/book-doctest.sh) add "book doc-tests" ;;
         scripts/source-stage.sh) add "compile corpus" "book doc-tests" ;;
       esac

@@ -110,7 +110,7 @@ def paramTyOf : VTy → Option VTy
 
 /-- The callee of a call as written, with its written type arguments. -/
 def callee : Val → Option (String × Option (List VTy))
-  | .var _ f => some (f, none)
+  | .var _ f | .clone _ f => some (f, none)
   | .defApp _ f As => some (f, some As)
   | .sugar _ (.named _ op) => some (op, none)
   | .inst _ V _ | .unbang _ V => callee V
@@ -120,7 +120,7 @@ def callee : Val → Option (String × Option (List VTy))
 def varsV : Nat → Val → List String
   | 0, _ => []
   | k + 1, V => match V with
-    | .var _ x => [x]
+    | .var _ x | .clone _ x => [x]
     | .lend _ x _ => [x.name]
     | .pair _ V W | .app _ V W => varsV k V ++ varsV k W
     | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
@@ -134,7 +134,7 @@ def divErrorTy : VTy := .name .none "DivError"
 /-- `checked_div(a, b)` or `checked_rem(a, b)` (`VSugar.checked`): a call of that name when the
 program declares no function of it and no local so named is in scope (SPEC §39). -/
 def checkedOp? (c : TCx) : Val → Option SurfOp
-  | .var _ x =>
+  | .var _ x | .clone _ x =>
     if (c.locals.lookup x).isSome || (c.E.scope.findDef x).isSome then none
     else if x == "checked_div" then some .div else if x == "checked_rem" then some .rem else none
   | _ => none

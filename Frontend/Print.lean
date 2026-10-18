@@ -207,6 +207,7 @@ mutual
 def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
   paren (V.level < lvl) <| match V with
     | .var _ x => x
+    | .clone _ x => s!"clone({x})"
     | .defApp _ n As => n ++ "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]"
     | .unit _ => "()"
     | .pair _ V W => "(" ++ V.pp 0 k ++ ", " ++ W.pp 0 k ++ ")"

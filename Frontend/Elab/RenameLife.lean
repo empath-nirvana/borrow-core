@@ -146,6 +146,7 @@ def Const.renameLife (f : Span → String → Life) : Const → Const
 mutual
 def Val.renameLife (f : Span → String → Life) : Val → Val
   | .var s x => .var s x
+  | .clone s x => .clone s x
   | .defApp s n args => .defApp s n (args.map ((VTy.renameLife f)))
   | .unit s => .unit s
   | .pair s V W => .pair s (V.renameLife f) (W.renameLife f)

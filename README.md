@@ -176,7 +176,6 @@ was built in (or `$BCC_LIB`), so editing the library needs no rebuild.
 | `run <file>` | compile to WebAssembly and run under `wasmtime` |
 | `compile <file> -o <out.wat>` | compile to WebAssembly text |
 | `desugar <file>` | print the core a surface program elaborates to |
-| `tir <file>` | print the typed IR |
 | `erase <file>` | print the erasure of the checked `main` |
 | `trusted <file>` | list the externs a program depends on, with their contracts and assurance levels |
 | `kernel list`, `kernel interp <name>`, `kernel run <name>`, `kernel compile <name> -o <out.wat>` | the kernel programs of `Backend/Kernel.lean`, which the surface cannot spell (SPEC §19) |

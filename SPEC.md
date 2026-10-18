@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.73 · 2026-10-18
+Version 0.74 · 2026-10-18
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -177,6 +177,39 @@ and three call-by-value derived forms (`lolliE`, `allEV`, `ofRet`). No new machi
 
 The typed world of §1, re-typed at `VTy`/`CTy`: `vC`, `cC`, `SemV`, `SemC`. `U C` is a leaf of the
 record machinery (`Imm̲ (U C) = Unk`).
+
+### What the checker returns: the typed term
+
+The checker returns a **typed term** `t : TExpr` with its derivation, not an erased term alone
+(`docs/compiler.md` §2.3). `TExpr` has one node per rule application: one constructor per rule of
+`CDerivesP` (so per rule of `CDerives`, and R1, R2 and `nilDead` of §29), of the same name, and
+`scheme`, a closed term typed at a consumed context by a lemma of `Core/` (a derived constant, a
+destructor). A node holds
+
+- its judgment, a value type or a computation type;
+- its rule's arguments other than its contexts, its proofs and the terms its premises type: binder
+  types, rows, operation signatures, lifetimes and lifetime variables, a handler's name, qualifiers
+  and cancel rows, constants' type arguments;
+- at a split (`Ctx.SplitP`), the use mask of its left part, as the checker computed it;
+- its source (`TInfo`): the span it was checked from, and at a variable its name and whether the
+  program writes the use `clone(x)` (§10);
+- one child per premise, in the rule's order.
+
+`TExpr.erase` is the term the node's rule concludes with, from its children's erasures. The
+checked term is `Checked.e := t.erase`: the term the backend compiles is the term the derivation
+types, by definition. `TDerivesAt Ξ Δ Γ t j` and `TDerivesP Δ Γ t j` are `CDerivesAt Ξ` (§19,
+decision R) and `CDerivesP` (§29) with each premise at a child and the conclusion at the node; a
+premise that types a term built from other arguments (`thunkV`'s `λN`) carries the equation
+between the child's erasure and that term. They project to `CDerivesAt`/`CDerivesP` at
+`t.erase` (`TDerivesAt.erase`, `TDerivesP.erase`), so a derivation fixes every field of every
+node, and every theorem below, and §19's and §29's, holds of `t.erase` as stated. The node types,
+the derivations, the projections and the erasure are generated from `CDerivesAt` and `CDerivesP`
+by `scripts/gen-pin.py`, so a rule added to `CDerives` is picked up by rerunning it.
+
+Two facts are on the term without being fixed by its derivation: a split's use mask (the split is
+chosen at each liveness by `Fam`, after the node is built), and the witness of a side condition
+stated as `∃ b, …` (`withbor2`'s, the unwinding and slice borrows', R1's), which is not an
+argument of the rule and not a field (`Frontend/Check/TFacts.lean`).
 
 ### Baseline, restated
 
@@ -737,10 +770,12 @@ program keeps each object owned by one word, so a variable used by two sequentia
 copied for the earlier one (`Backend/README.md`, Memory discipline), and at a persistent type
 that holds recursive data (a `μ`, also under `⊗`, `⊕`, `[@a]`, `!`) that copy allocates every
 node. Such a use is written `clone(x)` at the surface; a checked program that would copy
-recursive data at an unwritten use is rejected at that use (`Frontend/Elab/Copies.lean`,
-decision 39). `clone(x)` elaborates to `x`. A copy at a type that copies as words (`I32`, `1 + 1`,
-their products) stays implicit. The check runs on the elaborated program after the checker, so
-it only rejects more programs: `checkProgram_sound` and every theorem are unchanged.
+recursive data at an unwritten use is rejected at that use (`Frontend/Check/Copies.lean`,
+decision 39). `clone(x)` elaborates to the core form `clone(x)`, which the checker checks as `x`;
+its typed node records the written copy. A copy at a type that copies as words (`I32`, `1 + 1`,
+their products) stays implicit. The check runs after the checker, on the typed terms it returns
+(`main`'s, and each `def`'s without parameters, checked at its declaration), so it only rejects
+more programs: `checkProgram_sound` and every theorem are unchanged.
 
 ### Open
 
@@ -1119,8 +1154,8 @@ destruction is a bug, such as a transaction that must be committed or aborted.
 
 ### Soundness
 
-The elaborated term, with drops inserted, is what the checker returns with its `CDerives`
-derivation (`checkProgram_sound`, unchanged). The drop is `unitE` over `lolliE` of the variable and
+The elaborated term, with drops inserted, is what the checker returns, as the erasure of its typed
+term (§3), with its `CDerives` derivation (`checkProgram_sound`). The drop is `unitE` over `lolliE` of the variable and
 `dtor_wf` (`drop_derives`). `fundamentalC` and `adequacyC` apply unchanged, so the baseline theorems
 (§1) and every theorem of entries 1–10 are preserved; nothing in them is touched. Placement does
 not affect soundness: any placement of a destructor call is a `CDerives` derivation. The policy
@@ -6631,8 +6666,7 @@ cell) and answers `inr ()`. `Frontend/Elab/Effects.lean`, `divMain`:
   served; a program's own `Fail[E]` unhandled at `main` is §18's error, as before.
 - The unwind runs the finalisers of what `main` built (§19), and the run ends with `live 0`.
 - **The exit status.** The elaboration records that `main` is served (`Sugar.Sugared.exits`,
-  `Elab.Elaborated.exits`), and the checker's report carries it with the program it checked
-  (`Check.Report.el`); its value `inl v` is reported as `v`, and `inr ()` as no value, the live
+  `Elab.Elaborated.exits`), and the checked `main` carries it (`Check.Checked.exits`); its value `inl v` is reported as `v`, and `inr ()` as no value, the live
   count, and exit status `1` (`Backend/Value.lean`, `reportExit`). Every stage does the same: the source stage's model run
   (`ioOutputN`), the closure IR (`Clos.Prog.exits`), the flat IR (`Stmt.status`, `entryFn`) and
   Wasm (`$exit`, WASI `proc_exit`, the entry's last act). `bcc interp` and `bcc run` exit with it;
@@ -7104,6 +7138,18 @@ float operation at a resolution, `NaNEq` and its lemmas), `Support/Dynamics/Host
 `Backend/Flat/Lower.lean` (`hostVals` without the NaN test); no change to `CDerives`, the relation,
 the machine, `Core/`, `Paper/` or the checker.
 
+§3's typed term is implemented in `Frontend/Check/TExpr.lean` (`TExpr`, `TInfo`, `TExpr.erase`,
+`TExpr.isLam`, `TExpr.children`) and `Frontend/Check/TDerives.lean` (`TDerivesAt`, `TDerivesP`,
+`TDerivesAt.erase`, `TDerivesP.erase`, `TDerivesAt.toP`, `jdg_eq`), both generated by
+`scripts/gen-pin.py` from `Core/Tied.lean` and `Core/PinDerives.lean`; `Frontend/Check/TTied.lean`
+(`TTied`, one builder per rule, `TTied.tied`); `Frontend/Check/TFacts.lean`; the checker's builders
+(`Frontend/Check/Rules.lean`, `Consts.lean`, `Steps.lean`, `Pin.lean`, `Checker.lean`), which build
+each node beside its derivation; `Checked.t` and `Checked.e := t.erase`, with `checkProgram_typed`,
+`checkProgram_typedAt` and every theorem of `Frontend/Check/Program.lean` at `c.t.erase`; and
+§10's check on the typed terms (`Frontend/Check/Copies.lean`, the core form `Val.clone`). No
+change to `CDerives`, `Core/`, the relation, the machine, a rule of the checker, or any program's
+erasure, output, goldens or counts.
+
 Entry 39 (§40) is implemented in `Backend/Native/Lower.lean` (the LLVM IR), `Backend/Native/Runtime.lean`
 (the runtime), `Backend/Native/Tests.lean` (`bcc hostops`, `bcc tailcalls`), `Backend/Driver.lean`
 (`compileLL`, `buildNative`), `Frontend/Main.lean` and `Backend/Counts.lean` (the commands),
@@ -7114,6 +7160,13 @@ no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the chec
 
 ## Changelog
 
+- **0.74** (2026-10-18) — §3, *What the checker returns: the typed term* (#559): the checker
+  returns a typed term with one node per rule application and a generated typed derivation that
+  projects to `CDerivesAt`/`CDerivesP`; the checked term is its erasure. §10: `clone(x)` is a core
+  form, recorded on its node, and the check of implicit copies reads the typed terms; the typed
+  IR inferred on core after the sugar, and `bcc tir`, are removed. §39: `main`'s exit status is on
+  the checked `main` (`Checked.exits`). No change to `CDerives`, the relation, the machine, a
+  checker rule, or any program's erasure, output, goldens or counts.
 - **0.73** (2026-10-18) — §39, *The exit status* (#558): the elaboration's record that `main` is
   served `Fail[DivError]` is a field of the elaborated program (`Elaborated.exits`), not an
   origin string, and the checker's `Report` carries the elaborated program it checked
