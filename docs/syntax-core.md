@@ -85,16 +85,20 @@ lexically, innermost first, and are then discarded. Two consequences:
 
 <!-- ANCHOR: types -->
     value  A ::= 1 | 0 | A * A | A + A | U C | ref A | imm @ A | mut @ A | box @ A | !A | unk
-               | i32 | i64                                      (VTy.int, SPEC §8)
-               | input | output                                 (VTy.opq, SPEC §11)
-               | mu X. A | X | Name
+               | i32 | i64 | u8 | f32 | f64                     (VTy.int, SPEC §8, §37)
+               | input | output | clock | args                 (VTy.opq, SPEC §11, §34)
+               | mu X. A | X | Name | Name[A, …]<@, …>
                | A => A | all 'x < @. A                          (built-in abbreviations)
                | block σ | val σ | fam mut @ σ | fam imm @ σ | view @ A
                | array A | array_imm @ A | array_mut @ A        (VTy.fam, SPEC §9)
     comp   C ::= F A | A -o C | C & C | top | forall 'x < @. C | nu X. C
+               | F[n.i q A ~> B, …] A                          (the effectful returner, SPEC §19)
                | delay A | stream A | iter A A A | loop A A      (built-in abbreviations)
 
-`VTy`/`CTy` are defined at `Ty:33`/`Ty:57`. `box @ A` is `[@] A`.
+`VTy`/`CTy` are defined at `Ty:33`/`Ty:57`. `box @ A` is `[@] A`. In a row, `n.i` is operation
+`i` of the handler name `n`, `q` its qualifier (`lin`, `aff` or `unr`), and `A ~> B` its argument
+and answer; `F[] A` is `F A` (`Frontend/README.md`, item 18). `buf A`, `string`, `text @`,
+`text_mut @` and `lit` are read by the parser as the types of section 8a.
 
 **Precedence**, loosest first:
 
@@ -508,6 +512,16 @@ The splits and writes on a borrowed family (`SPEC.md` §9, `Core/SliceOps.lean`)
 at `i, …, n − 1`, threading the state, and answers the last state. A negative `n` is the empty
 loop, as a negative array length is. At the surface it is called as any constant:
 `count_fold[i32] (step, n, 0, acc)`.
+
+`count_try[S, E] : !(!(i32 * S => S + E) * (i32 * (i32 * S)) => S + E)` (`SPEC.md` §16, rule
+`countTry`) is `count_fold` whose step may stop the loop: the step answers `inl` of the next state
+to go on, or `inr e` to answer `inr e` at once; at the bound the loop answers `inl` of the last
+state. It is the core of a `for` over data with `break` or `return`.
+
+`bounded_fix[A, C] : !U(!U((1 + !U(A -o C)) * A -o C) * (i32 * A) -o C)` (`SPEC.md` §20, rule
+`boundedFix`), at every computation type `C`: from `(s, (k, a))` it runs the step `s` on
+`(self, a)`, where `self` is `inl ()` when the budget `k` is spent and otherwise `inr` of the
+fixed point at `k − 1`. It is the core of a recursive group under the driver `bounded`.
 <!-- ANCHOR_END: counted -->
 
 ## 9. Derived forms
@@ -581,22 +595,27 @@ keyword because each mode is a separate theorem.
     `take[Nat]` is re-checked. Lifetime parameters are not supported; lifetime polymorphism is
     written with `all`/`forall`.
   - `def`s are checked in order, and a `def` may not refer to itself or a later one. Recursion
-    goes through `fold_*`, `fixd`, `unfold_s` or `unfold`.
+    goes through `fold_*`, `fixd`, `unfold_s`, `unfold` or `bounded_fix`; a surface `fn` that
+    calls itself is a recursive group, elaborated to `bounded_fix` (SPEC §20, §21).
 - **`extern name : A`** adds a live slot of type `A` to `main`'s initial context. The last
   declared extern gets index 0. `A` must be closed (no free lifetime variables). `main` must
   consume every non-persistent extern; persistent externs (such as `!`-typed ones) may go unused.
   Externs are never dropped implicitly (§7). A `def` may use the persistent externs declared
   before it, never a non-persistent one (SPEC §11): it is checked at them, and at each use it
-  sees `main`'s slots of them. The standard externs (`stdin`, `stdout`, `stderr`, `read_byte`,
-  `write_byte`, and the model's harness) are listed by `bcc trusted`; a program with capability
+  sees `main`'s slots of them. The standard externs (`stdin`, `stdout`, `stderr`, `clock`, `args`,
+  `read_byte`, `write_byte`, `write_all`, `read_into`, `clock_now`, `clock_sleep`, `read_arg`, and
+  the model's harness) are listed by `bcc trusted` (SPEC §11, §34); a program with capability
   externs has `main : F (Caps * A)`, or `main : F (U (loop (Caps * A) (Caps * B)))` to run until
   it finishes (SPEC §11).
 - **I/O sugar** (SPEC §11), elaborated before checking (`bcc desugar` prints the result): a
   program that declares no externs and whose `main` names `stdin`, `stdout` or `stderr` uses
   them ambiently and gets the I/O library (`lib/io.bc`); `&c` in the head of `x <- M; N` lends
-  the capability `c` to one call; `for x in bytes c { M }; N` is a loop over the input.
-- **Divergence** (SPEC §14), elaborated before checking: a `def` whose body loops (a `for`, or a
-  direct-style call `x <- return (f V); N` of a div function) is div, and its `A => B` becomes
+  the capability `c` to one call; `for x in bytes c { M }; N` is a loop over the input. The
+  effects of `lib/sys.bc` (`Stdout`, `Stdin`, `Stderr`, `Clock`, `Args`) that `main` performs
+  are served by the platform's handlers on those cells (SPEC §34).
+- **Divergence** (SPEC §14), elaborated before checking: a `def` whose body loops (a `while`, a `loop`, a
+  `for` over an unbounded source, or a direct-style call `x <- return (f V); N` of a div
+  function) is div, and its `A => B` becomes
   `A => U (loop B R)`; so is `main`, whose written type stays `F A`. `total def` asserts that a
   body does not loop, `div def` that it is div.
 - **`main : C = M`** is checked at `Δ = ∅` and `Γ =` the externs. `C` is any computation type.
