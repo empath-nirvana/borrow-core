@@ -576,14 +576,35 @@ def testedIn (info : Array Info) (rest : List Stmt) : Std.HashSet Nat := Id.run 
     if !grew then break
   pure t
 
+mutual
+/-- `ss`'s statements, each call also counting its callee's (`sz`), up to `cap + 1`: the
+traversal stops there. -/
+def expL (sz : Nat → Nat) (cap : Nat) : List Stmt → Nat
+  | [] => 0
+  | s :: ss =>
+    let a := expS sz cap s
+    if a > cap then cap + 1 else min (cap + 1) (a + expL sz (cap - a) ss)
+def expS (sz : Nat → Nat) (cap : Nat) : Stmt → Nat
+  | .ite _ t e =>
+    let a := expL sz cap t
+    if a + 1 > cap then cap + 1 else min (cap + 1) (1 + a + expL sz (cap - a - 1) e)
+  | .switch _ cs d =>
+    let a := expLL sz cap cs
+    if a + 1 > cap then cap + 1 else min (cap + 1) (1 + a + expL sz (cap - a - 1) d)
+  | .call _ g _ | .tailCall g _ => 1 + sz g
+  | .tickBound => 0
+  | _ => 1
+def expLL (sz : Nat → Nat) (cap : Nat) : List (List Stmt) → Nat
+  | [] => 0
+  | c :: cs =>
+    let a := expL sz cap c
+    if a > cap then cap + 1 else min (cap + 1) (a + expLL sz (cap - a) cs)
+end
+
 /-- The statements `ss` comes to when its calls are inlined once (each call counts its callee's
 size), counted up to `cap + 1`: the decisions that read it compare it with bounds below `cap`. -/
-def expandedSize (info : Array Info) (ss : List Stmt) (cap : Nat := 4096) : Nat := Id.run do
-  let mut n := 0
-  for s in ss do
-    n := n + sizeS s + (calleesS s).foldl (fun m g => m + ((info[g]?.map (·.size)).getD 0)) 0
-    if n > cap then return cap + 1
-  pure n
+def expandedSize (info : Array Info) (ss : List Stmt) (cap : Nat := 1024) : Nat :=
+  expL (fun g => (info[g]?.map (·.size)).getD 0) cap ss
 
 /-- The first statements of `ss` up to `cap` statements, and of a longer statement only its own
 test: the decisions that read a continuation's tests look at its start. -/
@@ -591,7 +612,7 @@ def prefixOf (cap : Nat) (ss : List Stmt) : List Stmt := Id.run do
   let mut out : Array Stmt := #[]
   let mut n := 0
   for s in ss do
-    let k := sizeS s
+    let k := expS (fun _ => 0) cap s
     if n + k ≤ cap then out := out.push s; n := n + k
     else
       match s with
@@ -707,6 +728,11 @@ structure OState where
   /-- The most statements the function may hold while a copied continuation is being tried
   (`cpsTry`); past it the try is abandoned. -/
   limit : Nat := 0
+  /-- The function is built without copied continuations (it came to more than `budget`
+  statements with them): a call's continuation follows it once, and an `ite`'s too. -/
+  modest : Bool := false
+  /-- The most statements expanded while a copy is tried. -/
+  workLimit : Nat := 0
   log : Array String := #[]
   /-- The statements expanded for the function being built: past `workMax`, nothing more is
   inlined or copied. -/
@@ -725,9 +751,9 @@ structure Env where
 
 abbrev OM := ReaderT Env (StateT OState (Except String))
 
-def budget : Nat := 20000
+def budget : Nat := 8000
 /-- The most statements expanded (copied and inlined, kept or not) for one function. -/
-def workMax : Nat := 400000
+def workMax : Nat := 200000
 def specMax : Nat := 256
 def depthMax : Nat := 256
 /-- A continuation this short is copied into each exit of the call or `ite` before it. -/
@@ -742,6 +768,8 @@ def cpsTry : Nat := 3000
 def copyMax : Nat := 200
 /-- The most exits of one call that take a copy of its continuation; the others share one. -/
 def copyLimit : Nat := 8
+/-- The most statements expanded for one try of a copy (`tryCopy`). -/
+def copyWork : Nat := 2000
 
 /-- A copy of `rest` is kept where it ends the function in at most half of what `rest` comes to,
 or in a few statements: what the exit knows decided most of it. -/
@@ -800,28 +828,36 @@ def tooManyCopies (id : Nat) : String := s!"flat IR: more than {copyLimit} copie
 /-- The error that abandons a try of copied continuations whose limit is `l`. -/
 def abandon (l : Nat) : String := s!"flat IR: continuations past {l} statements"
 
+/-- The error that abandons a function past `budget` statements, to be built again without
+copies (`OState.modest`). -/
+def overBudget : String := "flat IR: a function past its budget"
+
 def emit (k : Nat) : OM Unit := do
   let s ← get
   set { s with emitted := s.emitted + k }
   if s.limit > 0 && s.emitted + k > s.limit then throw (abandon s.limit)
+  if !s.modest && s.emitted + k > budget then throw overBudget
 
 /-- `act`'s statements when they end every path and come to at most `bound` (and `copyMax`)
 statements; otherwise `none`, and nothing `act` did. -/
 def tryCopy (bound : Nat) (act : OM (List Stmt)) : OM (Option (List Stmt)) := do
   let s₀ ← get
-  if s₀.work > workMax then return none
+  if s₀.work > workMax || s₀.modest then return none
   let m := min bound copyMax
   let l := if s₀.limit > 0 then min s₀.limit (s₀.emitted + m) else s₀.emitted + m
-  set { s₀ with limit := l }
+  let wl := if s₀.workLimit > 0 then min s₀.workLimit (s₀.work + copyWork) else s₀.work + copyWork
+  set { s₀ with limit := l, workLimit := wl }
   try
     let r ← act
     if termL r && sizeL r ≤ m then
-      modify fun s => { s with limit := s₀.limit }
+      modify fun s => { s with limit := s₀.limit, workLimit := s₀.workLimit }
       return some r
-    set s₀
+    -- The work done stays counted against `workMax`.
+    let w := (← get).work
+    set { s₀ with work := w }
     return none
   catch e =>
-    if e == abandon l then set s₀; return none
+    if e == abandon l then set { s₀ with work := s₀.work + copyWork }; return none
     throw e
 
 /-- `act` with at most `cpsTry` more statements emitted, or `none` (and nothing it did) when it
@@ -936,7 +972,9 @@ def simpList : Nat → Ctx → List Stmt → Kont → Join → OM (List Stmt)
     let mut ctx := ctx₀
     let mut ss := ss₀
     for _ in [0:1 <<< 30] do
-      modify fun st => { st with work := st.work + 1 }
+      let st₀ ← get
+      set { st₀ with work := st₀.work + 1 }
+      if st₀.workLimit > 0 && st₀.work + 1 > st₀.workLimit then throw (abandon st₀.limit)
       match ss with
       | [] =>
         -- The end of a branch: a copy of the statements after the branching, specialized to
@@ -973,7 +1011,9 @@ def simpList : Nat → Ctx → List Stmt → Kont → Join → OM (List Stmt)
           -- Each copy of the continuation also copies what the continuations it returns to copy.
           let kc := kontCost info 8 k
           let exits := ((info[f]?.map (·.exits)).getD 1)
+          let modest := (← get).modest
           let cps := !rest.isEmpty && (← get).emitted < budget && ds.any tested.contains &&
+            (!modest || es ≤ 8) &&
             (exits * (es + kc) ≤ cpsMax || cpsCost info f ds rest + exits * kc ≤ cpsMax)
           let id ← modifyGet fun st => (st.frames, { st with frames := st.frames + 1 })
           let jn := if !rest.isEmpty && ds.any tested.contains then
@@ -1011,7 +1051,7 @@ def simpList : Nat → Ctx → List Stmt → Kont → Join → OM (List Stmt)
             let info := (← read).info
             let push := !rest.isEmpty &&
               (exitL t || exitL e ||
-                ((!termL t || !termL e) && (← get).emitted < budget &&
+                ((!termL t || !termL e) && (← get).emitted < budget && !(← get).modest &&
                   ((expandedSize info rest ≤ cpsMax / 2 &&
                       (setsL t ++ setsL e).any (testedIn info (prefixOf 256 rest)).contains) ||
                     (expandedSize info rest ≤ contMax && termL rest))))
@@ -1039,7 +1079,7 @@ def simpList : Nat → Ctx → List Stmt → Kont → Join → OM (List Stmt)
             let info := (← read).info
             let push := !rest.isEmpty &&
               (exitLL cs || exitL d ||
-                ((!termLL cs || !termL d) && (← get).emitted < budget &&
+                ((!termLL cs || !termL d) && (← get).emitted < budget && !(← get).modest &&
                   ((expandedSize info rest * (cs.length + 1) ≤ cpsMax &&
                       (setsLL cs ++ setsL d).any (testedIn info (prefixOf 256 rest)).contains) ||
                     (expandedSize info rest * (cs.length + 1) ≤ 2 * contMax && termL rest))))
@@ -1188,7 +1228,12 @@ def runJob (j : Job) : OM Unit := do
                        dropTick := info.isApply && j.pattern.any (·.1 == 0) }
   for (i, l) in j.pattern do
     c := { c with vals := c.vals.insert i (litExp l), lazy := c.lazy.insert i }
-  let body ← simpList fuel c fn.body [] {}
+  let s₀ ← get
+  let body ← try simpList fuel c fn.body [] {} catch e =>
+    if e != overBudget then throw e
+    set { s₀ with modest := true }
+    simpList fuel c fn.body [] {}
+  modify fun s => { s with modest := false }
   let s ← get
   set { s with log := s.log.push s!"job {fn.name} o{j.out} emitted {s.emitted} work {s.work} pattern {j.pattern.length}" }
   let s ← get
