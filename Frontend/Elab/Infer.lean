@@ -298,12 +298,18 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       let C' := (E.elabC Δ C).toOption
       let a ← inferC n E Δ T C' M
       pure (node C' [a])
-    | .for_ _ x V M N => do
+    | .loop _ _ src V M N => do
       let a ← inferV n E Δ T none V
-      let bx ← mkBinder x.name none
-      let body ← inferC n (E.push (some x.name)) Δ (.unit :: T) none M
-      let rest ← inferC n E Δ T exp N
-      pure (node none [a, body, rest] [bx])
+      match src.var? with
+      | some x =>
+        let bx ← mkBinder x.name none
+        let body ← inferC n (E.push (some x.name)) Δ (.unit :: T) none M
+        let rest ← inferC n E Δ T exp N
+        pure (node none [a, body, rest] [bx])
+      | none =>
+        let body ← inferC n E Δ T none M
+        let rest ← inferC n E Δ T exp N
+        pure (node none [a, body, rest] [])
     | .perform sp k i V => do
       let o := (findOp E sp "perform" k i).toOption
       let a ← inferV n E Δ T (o.map (·.2.1.A)) V

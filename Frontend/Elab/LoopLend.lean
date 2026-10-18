@@ -79,7 +79,7 @@ def spineNames : Nat → Comp → List String
   | n + 1, .letPair _ x y _ M => x.name :: y.name :: spineNames n M
   | n + 1, .letUnit _ _ M => spineNames n M
   | n + 1, .case _ _ x M y N => x.name :: y.name :: (spineNames n M ++ spineNames n N)
-  | n + 1, .for_ _ _ _ M N => spineNames n M ++ spineNames n N
+  | n + 1, .loop _ _ _ _ M N => spineNames n M ++ spineNames n N
   | _, _ => []
 
 def fuel : Nat := 1 <<< 16
@@ -92,7 +92,7 @@ def spliceTail (f : Comp → Comp) : Nat → Comp → Comp
   | n + 1, .letUnit sp V M => .letUnit sp V (spliceTail f n M)
   | n + 1, .letPair sp x y V M => .letPair sp x y V (spliceTail f n M)
   | n + 1, .case sp V x M y N => .case sp V x (spliceTail f n M) y (spliceTail f n N)
-  | n + 1, .for_ sp x V M N => .for_ sp x V M (spliceTail f n N)
+  | n + 1, .loop sp ℓ src V M N => .loop sp ℓ src V M (spliceTail f n N)
   | _, T => f T
 
 /-- A right-nested tuple of variables (`()` when empty). -/
@@ -118,6 +118,12 @@ def isLoopHead (divCall : Val → Bool) : Comp → Bool
 loop: a borrow block around it keeps its borrow open for the whole loop. -/
 abbrev Finite := Val → Comp → Comp → Bool
 
+/-- A loop is total by `fin`: only a `for` can be; a `while` or a `loop` never is. -/
+def _root_.Frontend.LoopSrc.fin (src : LoopSrc) (fin : Finite) (V : Val) (M N : Comp) : Bool :=
+  match src with
+  | .each _ => fin V M N
+  | _ => false
+
 /-- A computation loops on its spine: a `for` that is not total, or a call of a div function in
 the head of a binding or at a terminal. -/
 def loopsOnSpine (divCall : Val → Bool) (fin : Finite) : Nat → Comp → Bool
@@ -125,7 +131,7 @@ def loopsOnSpine (divCall : Val → Bool) (fin : Finite) : Nat → Comp → Bool
   | n + 1, .bind _ _ _ M N _ => isLoopHead divCall M || loopsOnSpine divCall fin n N
   | n + 1, .letUnit _ _ M | n + 1, .letPair _ _ _ _ M => loopsOnSpine divCall fin n M
   | n + 1, .case _ _ _ M _ N => loopsOnSpine divCall fin n M || loopsOnSpine divCall fin n N
-  | n + 1, .for_ _ _ V M N => !fin V M N || loopsOnSpine divCall fin n N
+  | n + 1, .loop _ _ src V M N => !src.fin fin V M N || loopsOnSpine divCall fin n N
   | _ + 1, T => isLoopHead divCall T
 
 /-- What the rewrite of one block works with. -/
@@ -195,10 +201,10 @@ def Env.flush (E : Env) (sp : Span) (s : Seg) (rest : Comp) : LM (Comp → Comp)
 
 /-- The body of a `for` inside the block: in a borrow block of its own when it uses the borrow,
 handing on the variables in scope that it assigns. -/
-def Env.forBody (E : Env) (scope : List String) (sp : Span) (y : String) (M : Comp) : LM Comp := do
+def Env.forBody (E : Env) (scope : List String) (sp : Span) (ys : List String) (M : Comp) : LM Comp := do
   if !E.usesC M then return M
   let ws := (spineNames fuel M).eraseDups.filter fun z =>
-    scope.contains z && !E.aliases.contains z && z != y
+    scope.contains z && !E.aliases.contains z && !ys.contains z
   let body := spliceTail (fun T => .bind T.span ⟨"io_u", T.span⟩ none T
     (.ret T.span (tupleVal T.span ws)) false) fuel M
   E.blockBind sp body ws (.ret sp (.unit sp))
@@ -255,10 +261,16 @@ def escapeError (sp : Span) (x T : String) : Error :=
     "over loops)"⟩
 
 /-- The error for an iterator that holds the borrow. -/
-def iterError (E : Env) (sp : Span) : Error :=
-  ⟨sp, s!"the iterator of this `for` holds the borrow of `{E.B.b.name}`: a borrow block over a " ++
-    "loop lends its place again at each step, so what the loop holds between steps must not " ++
-    "hold the borrow (SPEC §14, borrow scopes over loops)"⟩
+def iterError (E : Env) (src : LoopSrc) (sp : Span) : Error :=
+  match src with
+  | .each _ =>
+    ⟨sp, s!"the iterator of this `for` holds the borrow of `{E.B.b.name}`: a borrow block over a " ++
+      "loop lends its place again at each step, so what the loop holds between steps must not " ++
+      "hold the borrow (SPEC §14, borrow scopes over loops)"⟩
+  | _ =>
+    ⟨sp, s!"the condition of this {src.what} uses the borrow of `{E.B.b.name}`: a borrow block " ++
+      "over a loop lends its place again at each step, to the loop's body only, not to its " ++
+      "condition (SPEC §14, borrow scopes over loops)"⟩
 
 /-- The block's body, rewritten: each stretch that uses the borrow in a block of its own, each
 `for` on the spine with its body lent per step. `scope` is the names in scope. -/
@@ -276,18 +288,18 @@ def Env.walk (E : Env) : Nat → List String → Seg → Comp → LM Comp
   | n + 1, scope, s, .letPair sp y z V M =>
     E.walk n (scope ++ [y.name, z.name])
       (s.push (fun K => .letPair sp y z V K) [y.name, z.name] (E.usesV V)) M
-  | n + 1, scope, s, .for_ sp y V M N =>
-    if E.fin V M N then
+  | n + 1, scope, s, .loop sp ℓ src V M N =>
+    if src.fin E.fin V M N then
       -- A total `for` is one computation: a statement of the stretch it is in.
-      E.walk n scope (s.push (fun K => .for_ sp y V M K) (spineNames fuel M)
+      E.walk n scope (s.push (fun K => .loop sp ℓ src V M K) (spineNames fuel M)
         (E.usesV V || E.usesC M)) N
     else do
-      if E.usesV V then throw (iterError E V.span)
-      let S := Comp.for_ sp y V M N
+      if E.usesV V then throw (iterError E src V.span)
+      let S := Comp.loop sp ℓ src V M N
       let pre ← E.flush sp s S
       let scope' := scope ++ s.names
-      let M' ← E.forBody scope' sp y.name M
-      pure (pre (.for_ sp y V M' (← E.walk n scope' {} N)))
+      let M' ← E.forBody scope' sp src.bound M
+      pure (pre (.loop sp ℓ src V M' (← E.walk n scope' {} N)))
   | n + 1, scope, s, S@(.case sp V y M z N) => do
     if !(loopsOnSpine E.divCall E.fin fuel M || loopsOnSpine E.divCall E.fin fuel N) then
       return (← E.terminal s S)

@@ -53,6 +53,7 @@ deriving instance ToExpr for Frontend.BorrowKind
 deriving instance ToExpr for Frontend.HInfo
 deriving instance ToExpr for Frontend.ItInfo
 deriving instance ToExpr for Frontend.VSugar
+deriving instance ToExpr for Frontend.LoopSrc
 deriving instance ToExpr for Frontend.Val, Frontend.Comp
 deriving instance ToExpr for Frontend.Mark
 deriving instance ToExpr for Frontend.OpKind

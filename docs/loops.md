@@ -386,7 +386,8 @@ needs a sigil:
 - Zig's `outer: for … { break :outer v }` has no collision.
 
 Either fits the node. The choice is a one-way door only in the sense that labels appear in user
-code. A label is a static name, so the edge's target is found lexically, as handler sites are
+code. U1 parses Rust's form, `'outer: for …`, the spelling §7.4 is written in; it stays
+provisional. A label is a static name, so the edge's target is found lexically, as handler sites are
 (§19 *Names*).
 
 ## 3. Element borrows in loops

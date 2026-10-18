@@ -1285,10 +1285,26 @@ its residual (`corpus/sugar/surface-defer.bc`). Library code over `unfold`, like
 (§11); it never closes it. Timeouts and cooperative yielding to a scheduler (#52) are further
 handlers of the same loops.
 
+### The loop node
+
+The surface has one loop, `'ℓ: L { M }; N` (`Comp.loop`), whose source `L` is what the program
+writes (`docs/loops.md` §2.1):
+
+- `for x in V`: `V` is the source, and `x` its element. Which source it is, a count, data
+  (§16), a call of a generator (§15) or a drain, is decided from `V` and its type;
+- `while c`: the condition `c`, tested before each turn;
+- `loop`: no source, so the loop ends only by an exit.
+
+The label `'ℓ:` is optional, and its spelling provisional (`docs/loops.md` §2.8). It is parsed
+and carried on the node; `break`, `break e` and `continue` leave or restart the innermost loop,
+and no exit names a label yet. A message about a loop names the construct written: a `while` is
+reported as a `while`, never as a `for`.
+
 ### Inference and markers
 
 A function is div when its type says so (`A ⇒ U(Loop B R)`), or when its body **loops**: on its
-spine (the tail positions of binds, `let`s, `case` arms and `for`s) it has a `for`, or it runs
+spine (the tail positions of binds, `let`s, `case` arms and loops) it has a loop that is not a
+counted loop (a `while`, a `loop`, or a `for` over a source that is not sized, §16), or it runs
 a call of a div function in **direct style**: an application whose type is a loop, where the
 type expected of it is not that loop, at any depth of a bound or returned value, a `case`
 scrutinee or a `let`'s value. A
@@ -1847,7 +1863,8 @@ the way out. After the loop the threaded variables are rebound and the loop's va
 the `else` value when the source ended. `return e` in the body of a loop of a surface `fn` (or
 `main ->`) returns from the function from any depth of its loops: each counted loop leaves by its
 exit, and the loop around it by its own (`DivSt.exits`); the loop is first moved onto the
-function's spine (`normExits`). A core `def`'s `return V` is the core's.
+function's spine (`normExits`). A core `def`'s `return V` is the core's. `break` and `continue`
+are the innermost loop's, labelled or not (§14, *The loop node*).
 
 **The loop's value.** Over a source that can end, `for … { … break v … } else { d }` has the value
 `v`, or `d` when the source ends (Zig's `else`, provisional); `break v` without `else` is rejected

@@ -14,6 +14,10 @@ namespace Frontend
 
 def Ident.respan (sp : Span) (x : Ident) : Ident := { x with span := sp }
 
+def LoopSrc.respan (sp : Span) : LoopSrc → LoopSrc
+  | .each x => .each (x.respan sp)
+  | s => s
+
 def Life.respan (sp : Span) : Life → Life
   | .var _ x => .var sp x
   | .top _ => .top sp
@@ -186,7 +190,8 @@ def Comp.respan (sp : Span) : Comp → Comp
   | .nuIn _ M => .nuIn sp (M.respan sp)
   | .nuOut _ M => .nuOut sp (M.respan sp)
   | .ascribe _ M C => .ascribe sp (M.respan sp) (C.respan sp)
-  | .for_ _ x V M N => .for_ sp (x.respan sp) (V.respan sp) (M.respan sp) (N.respan sp)
+  | .loop _ ℓ src V M N =>
+    .loop sp (ℓ.map (·.respan sp)) (src.respan sp) (V.respan sp) (M.respan sp) (N.respan sp)
   | .perform _ n i V => .perform sp n i (V.respan sp)
   | .abort _ n i V => .abort sp n i (V.respan sp)
   | .handle _ n hr hc M => .handle sp n (hr.respan sp) (hc.respan sp) (M.respan sp)

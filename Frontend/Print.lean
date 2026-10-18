@@ -174,7 +174,7 @@ def Val.level : Val → Nat
   | _ => 3
 
 def Comp.level : Comp → Nat
-  | .bind .. | .letUnit .. | .letPair .. | .lam .. | .lamL .. | .for_ .. => 0
+  | .bind .. | .letUnit .. | .letPair .. | .lam .. | .lamL .. | .loop .. => 0
   | .unwind .. => 0
   | .ret .. | .absurd .. | .nuIn .. | .nuOut .. | .perform .. | .abort .. | .handle .. => 1
   | .withbor2r .. => 1
@@ -186,6 +186,11 @@ def linKw (lin : Bool) : String := if lin then "linear " else ""
 
 /-- A newline followed by `k` spaces. -/
 def nl (k : Nat) : String := "\n" ++ "".pushn ' ' k
+
+/-- A loop's label as written before it, `'ℓ: `, or nothing. -/
+def lbl : Option Ident → String
+  | some ℓ => "'" ++ ℓ.name ++ ": "
+  | none => ""
 
 /-- A string literal: printable ASCII as itself, the escapes `\n`, `\t`, `\r`, `\0`, `\\` and
 `\"`, and any other byte as `\xNN`. The lexer reads it back to the same bytes. -/
@@ -292,22 +297,22 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .nuIn _ M => "nu_in " ++ M.pp 1 k
     | .nuOut _ M => "nu_out " ++ M.pp 1 k
     | .ascribe _ M C => "(" ++ M.pp 1 k ++ " : " ++ C.pp ++ ")"
-    | .for_ _ _ (.app _ (.sugar _ .while_) (.sugar _ .forever)) M N =>
-      "loop {" ++ nl (k + 2) ++ M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
-    | .for_ _ _ (.app _ (.sugar _ .while_) c) M N =>
-      "while " ++ c.pp 1 k ++ " {" ++ nl (k + 2) ++
+    | .loop _ ℓ .forever _ M N =>
+      lbl ℓ ++ "loop {" ++ nl (k + 2) ++ M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
+    | .loop _ ℓ .while_ c M N =>
+      lbl ℓ ++ "while " ++ c.pp 1 k ++ " {" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
-    | .for_ _ x V M (.bind _ r A (.ret _ (.app _ (.sugar _ .forRes) (.thunk _ d))) N _) =>
-      "let " ++ r.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " = for " ++
-        x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
+    | .loop _ ℓ (.each x) V M (.bind _ r A (.ret _ (.app _ (.sugar _ .forRes) (.thunk _ d))) N _) =>
+      "let " ++ r.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " = " ++
+        lbl ℓ ++ "for " ++ x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ nl k ++ "} else {" ++ nl (k + 2) ++ d.pp 0 (k + 2) ++ nl k ++ "};" ++
         nl k ++ N.pp 0 k
-    | .for_ _ x V M (.bind _ r A (.ret _ (.sugar _ .forRes)) N _) =>
-      "let " ++ r.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " = for " ++
-        x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
+    | .loop _ ℓ (.each x) V M (.bind _ r A (.ret _ (.sugar _ .forRes)) N _) =>
+      "let " ++ r.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " = " ++
+        lbl ℓ ++ "for " ++ x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
-    | .for_ _ x V M N =>
-      "for " ++ x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
+    | .loop _ ℓ (.each x) V M N =>
+      lbl ℓ ++ "for " ++ x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
 end
 

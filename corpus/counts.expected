@@ -288,6 +288,7 @@ lend-server 1 0 0 16 3 0
 list-blocks 13 0 0 55 43 0
 list-capability 6 0 0 31 22 0
 list-generic 27 0 0 148 102 0 # the lists' nodes, one object each; no frame and no closure is allocated
+loop-labels 0 0 0 0 0 0
 loop-row-answer 0 0 0 0 0 0
 main-lifetime 0 0 0 0 0 0 # main's lifetime and the unit cell `u` are cells of no words: nothing is allocated
 map-reuse 7 0 0 48 48 0

@@ -353,9 +353,12 @@ def synCM : Nat → MCx → Comp → MM MTy
       let r₂ ← synCM n (← c.push y.name b) N
       unifyM r₁ r₂
       pure r₁
-    | .for_ _ x V M N => do
+    | .loop _ _ (.each x) V M N => do
       let el := (c.tc.tyV V).bind elemOf
       let _ ← synCM n (← c.push x.name (← ofOpt el)) M
+      synCM n c N
+    | .loop _ _ _ _ M N => do
+      let _ ← synCM n c M
       synCM n c N
     | m => match (c.tc.tyC m).bind effRow? with
       | some (_, A) => pure (.known A)
@@ -375,7 +378,7 @@ def _root_.Frontend.Comp.annotate (ann : List (Span × VTy)) : Comp → Comp
   | .letUnit sp V M => .letUnit sp V (M.annotate ann)
   | .letPair sp x y V M => .letPair sp x y V (M.annotate ann)
   | .case sp V x M y N => .case sp V x (M.annotate ann) y (N.annotate ann)
-  | .for_ sp x V M N => .for_ sp x V (M.annotate ann) (N.annotate ann)
+  | .loop sp ℓ src V M N => .loop sp ℓ src V (M.annotate ann) (N.annotate ann)
   | .handle sp k hr hc M => .handle sp k hr hc (M.annotate ann)
   | .unwind sp x A M D N => .unwind sp x A (M.annotate ann) (D.annotate ann) (N.annotate ann)
   | M => M
@@ -384,7 +387,7 @@ def _root_.Frontend.Comp.annotate (ann : List (Span × VTy)) : Comp → Comp
 def _root_.Frontend.Comp.needsFill : Comp → Bool
   | .bind _ _ A M N _ => (A.isNone && M.synthInj) || M.needsFill || N.needsFill
   | .letUnit _ _ M | .letPair _ _ _ _ M => M.needsFill
-  | .case _ _ _ M _ N | .for_ _ _ _ M N => M.needsFill || N.needsFill
+  | .case _ _ _ M _ N | .loop _ _ _ _ M N => M.needsFill || N.needsFill
   | .handle _ _ _ _ M => M.needsFill
   | .unwind _ _ _ M D N => M.needsFill || D.needsFill || N.needsFill
   | _ => false
