@@ -44,7 +44,7 @@ rather than the language. #213 asks for those to be reported separately.
 | matmul | 139 (138–140) | 133 (131–135) | 148 (147–149) | 1.05× | 0.94× | 4.0K / 215K / 0.7K | 50K / 350K / 33K | 0.78 (0.62 + 0.16) / 0.14 / 0.05 |
 | quicksort | 133 (131–135) | 107 (106–108) | 106 (104–108) | 1.24× | 1.25× | 4.8K / 215K / 1.2K | 50K / 334K / 33K | 0.42 (0.20 + 0.22) / 0.13 / 0.05 |
 | chain-for | 143 (142–144) | 145 (144–147) | 138 (137–139) | 0.99× | 1.04× | 3.4K / 214K / 0.4K | 50K / 334K / 33K | 0.27 (0.14 + 0.14) / 0.11 / 0.04 |
-| chain-yield | 884 (881–887) | 145 (144–145) | 138 (137–139) | **6.10×** | 6.40× | 3.3K / 214K / 0.4K | 50K / 334K / 33K | 0.31 (0.16 + 0.15) / 0.12 / 0.04 |
+| chain-yield | 311 (306–314) | 148 (147–149) | 142 (141–146) | **2.10×** | 2.19× | 3.3K / 214K / 0.4K | 50K / 334K / 33K | 0.31 (0.16 + 0.15) / 0.12 / 0.04 |
 | chain-gen | 3112 (3110–3116) | 145 (144–145) | 138 (138–139) | **21.5×** | 22.5× | 4.6K / 214K / 0.4K | 50K / 334K / 33K | 0.49 (0.24 + 0.25) / 0.11 / 0.05 |
 | sort-generic | 201 (200–203) | 156 (153–157) | — | 1.29× | — | 4.8K / 215K / — | 50K / 334K / — | 0.43 (0.21 + 0.23) / 0.13 / — |
 | parse | 155 (152–157) | 127 (126–128) | 139 (137–144) | 1.22× | 1.11× | 2.8K / 213K / 0.3K | 50K / 334K / 33K | 0.24 (0.13 + 0.11) / 0.10 / 0.04 |
@@ -71,7 +71,7 @@ rather than the language. #213 asks for those to be reported separately.
     1.3×.
 - **Not on par.** Two causes, both in the backend and both shown below:
   - **Loops that may diverge** (`while`, `loop`, a generator's body) run as a state machine
-    driven one turn at a time. That costs 5–22×: sieve, chain-yield, chain-gen.
+    driven one turn at a time. That costs 2–22×: sieve, chain-yield, chain-gen.
   - **Specific missed optimisations** cost 1.7–2×: a sum loop that does not vectorise, bounds
     checks, a recursive call that is not a tail call. These are sum, n-body and gen-tree.
 - **Nothing structural** stands between us and Rust:
@@ -119,7 +119,7 @@ Profiles are xctrace's Time Profiler. `sample` hangs on this machine, and `perf`
 available. The IR excerpts come from `bench/out/<name>/main.ll` as emitted, and from clang's
 optimised IR (`xcrun clang -O2 -S -emit-llvm`).
 
-### Loops that may diverge are a state machine: sieve 5.6×, chain-yield 6.1×, chain-gen 21.5×
+### Loops that may diverge are a state machine: sieve 5.6×, chain-yield 2.1×, chain-gen 21.5×
 
 **Cause.** A `while` or `loop` is div (SPEC §14), and so is every generator's body. Its turns
 are observations of a `delay` codata value. The flat IR's `drive` function runs them: it calls
@@ -176,7 +176,10 @@ LBB1_53:          ; the strike step, in the drive loop's header BB1_2
   `mov w12,w11; cmp x12,x27; b.hs; strb wzr,[x12,x0]; add; subs; b.eq`.
 - **The chains.**
   - chain-for (a counted `for`) runs at parity with Rust, 0.99×.
-  - chain-yield is 6.1×: one `while` generator whose `yield` is a direct call of the body.
+  - chain-yield is 2.1×: one `while` generator whose `yield` is a direct call of the body
+    (`bcc-counts --sites`: `tail-resumptive [(1, 0)]`, no code that may suspend). The body's
+    `if` resumes the generator at the end of each arm, so the clause is tail-resumptive (SPEC
+    §19). What is left is the driven `while`.
   - chain-gen is 21.5×. The adapters' stored generators (`U (pull …)`) add a state machine
     each, which widens the state to 71 words.
 - **Counts.** chain-gen's `bcc-counts` are 40 loads and 22 stores at every n: the flat IR does no
@@ -371,7 +374,7 @@ Ranked by measured impact. None is filed (#537: the list is agreed first).
      in its function, its state in locals. `drive` then runs only at real suspensions.
    - Expected:
      - sieve from 5.6× to sieve-for's 1.3×;
-     - chain-yield from 6.1× toward chain-for's 1.0×;
+     - chain-yield from 2.1× toward chain-for's 1.0×;
      - every program that reads its arguments (`next_arg`) stops making `main` one state
        machine.
 2. **Narrow the driver's state, and pad sums with `poison`.**

@@ -20,6 +20,14 @@ the clause answers the new state `s'` and the result `r`, the call reaches `K[(�
 in the cell (`op_answer`). The continuation is resumed once, in place, with the answer: nothing
 is captured or allocated, and `K` is never inspected.
 
+**A resume in every arm (`tail_resumes`).** A control clause whose every path ends in one
+resume `R N` in tail position, through the arms of `case`s and the bodies of `let`s and
+sequences (`TailResumes`), runs as the clause with its resumes removed followed by one resume:
+each step of the one is a step of the other at the same memory (`TailResumes.step`), and when
+the clause without its resumes answers `r`, the clause reaches `R r`. So it is the clause whose
+resume is its last call, which the backend lowers as a direct call (`Backend/Clos/Capture.lean`,
+`tailClause?`).
+
 **Handling is the fold of the clauses (`handle_fold`).** A handled body that performs the
 operations `(g₁, v₁), …, (gₙ, vₙ)` and goes on with `k` runs the clauses one after the other on the
 threaded state, and then `k`: the tail-resumptive handler is the state-passing fold of its clauses
@@ -136,6 +144,149 @@ theorem op_answer (K : Kont) {μ μ₁ : Heap} {ℓ : Loc} {g s v s' r w : Val} 
     (hw : μ₁ ℓ = some w) :
     Steps (ℍ := ℍ) μ (K.plug (opCall ℓ g v)) (μ₁.upd ℓ s') (K.plug (.val (.pair (.loc ℓ) r))) :=
   (op_tail K hs g v hg hv).trans ((clauseRun_answers hrun hw hr).plug K)
+
+/-! ### A resume in every arm
+
+A control clause that resumes `κ` on every path, in tail position, runs as the clause with its
+resumes removed followed by one resume: the resume commutes out of the arms of a `case` and the
+bodies of a `let`. This is the step that makes such a clause the tail-resumptive clause `g` of
+`op_tail` whose single resume is its last call (`Backend/Clos/Capture.lean`, `tailClause?`). -/
+
+/-- `B` resumes with `R` on every path, in tail position, and `B'` is `B` with each resume
+`R N` replaced by its answer `N`: through the arms of a `case`, the body of a `let (x, y)`, and
+the rest of a sequence. -/
+inductive TailResumes (R : Expr) : Expr → Expr → Prop where
+  | resume (N : Expr) : TailResumes R (.app R N) N
+  | case (e : Expr) {B₁ B₂ B₁' B₂' : Expr} :
+      TailResumes R B₁ B₁' → TailResumes R B₂ B₂' →
+      TailResumes R (.case e B₁ B₂) (.case e B₁' B₂')
+  | letpair (e : Expr) {B B' : Expr} : TailResumes R B B' →
+      TailResumes R (.letpair e B) (.letpair e B')
+  | seq (e : Expr) {B B' : Expr} : TailResumes R B B' → TailResumes R (.seq e B) (.seq e B')
+
+/-- A substitution keeps the shape, `R` being closed. -/
+theorem TailResumes.subst {R : Expr} (hR : closedAt 0 R = true) {B B' : Expr}
+    (h : TailResumes R B B') : ∀ (j : Nat) (v : Val), TailResumes R (B.subst j v) (B'.subst j v) := by
+  induction h with
+  | resume N =>
+      intro j v
+      have := TailResumes.resume (R := R) (N.subst j v)
+      simpa [Expr.subst, subst_closedAt R v hR (Nat.zero_le _)] using this
+  | case e _ _ ih₁ ih₂ => intro j v; exact .case _ (ih₁ _ _) (ih₂ _ _)
+  | letpair e _ ih => intro j v; exact .letpair _ (ih _ _)
+  | seq e _ ih => intro j v; exact .seq _ (ih _ _)
+
+/-- `case v {…}`, `v` a value, steps only by its head step. -/
+theorem step1_case_val_inv {μ μ₁ : Heap} {v : Val} {e₁ e₂ E : Expr}
+    (h : Step1 (ℍ := ℍ) μ (.case v.1 e₁ e₂) μ₁ E) :
+    μ₁ = μ ∧ ((∃ u : Val, v = .inj₁ u ∧ E = e₁.subst 0 u) ∨
+      (∃ u : Val, v = .inj₂ u ∧ E = e₂.subst 0 u)) := by
+  have hh := step1_top h fun K c hE hK => by
+    cases K with
+    | hole => exact absurd rfl hK
+    | case K u₁ u₂ =>
+        simp only [Kont.plug, Expr.case.injEq] at hE
+        exact K.isVal_of_plug (hE.1 ▸ v.2)
+    | _ => simp [Kont.plug] at hE
+  generalize hE : Expr.case v.1 e₁ e₂ = X at hh
+  cases hh with
+  | case₁ u b₁ b₂ =>
+      simp only [Expr.case.injEq] at hE
+      obtain ⟨hv, rfl, rfl⟩ := hE
+      exact ⟨rfl, .inl ⟨u, Subtype.ext hv, rfl⟩⟩
+  | case₂ u b₁ b₂ =>
+      simp only [Expr.case.injEq] at hE
+      obtain ⟨hv, rfl, rfl⟩ := hE
+      exact ⟨rfl, .inr ⟨u, Subtype.ext hv, rfl⟩⟩
+  | _ => simp_all [BoLo.hndE, BoLo.ubindE, BoLo.ccatchE, BoLo.cfinE]
+
+/-- `v; e`, `v` a value, steps only by its head step: `v` is `()`, and it steps to `e`. -/
+theorem step1_seq_val_inv {μ μ₁ : Heap} {v : Val} {e E : Expr}
+    (h : Step1 (ℍ := ℍ) μ (.seq v.1 e) μ₁ E) : v = .unit ∧ μ₁ = μ ∧ E = e := by
+  have hh := step1_top h fun K c hE hK => by
+    cases K with
+    | hole => exact absurd rfl hK
+    | seq K u =>
+        simp only [Kont.plug, Expr.seq.injEq] at hE
+        exact K.isVal_of_plug (hE.1 ▸ v.2)
+    | _ => simp [Kont.plug] at hE
+  generalize hE : Expr.seq v.1 e = X at hh
+  cases hh with
+  | seq b =>
+      simp only [Expr.seq.injEq] at hE
+      obtain ⟨hv, rfl⟩ := hE
+      exact ⟨Subtype.ext hv, rfl, rfl⟩
+  | _ => simp_all [BoLo.hndE, BoLo.ubindE, BoLo.ccatchE, BoLo.cfinE]
+
+/-- **The resume commutes out of the arms, one step.** Each step of the clause without its
+resumes is matched by one step of the clause, at the same memory, and the shape is kept. -/
+theorem TailResumes.step {R : Expr} (hR : closedAt 0 R = true) {B B' : Expr}
+    (h : TailResumes R B B') {μ μ₁ : Heap} {E' : Expr} (hs : Step1 (ℍ := ℍ) μ B' μ₁ E') :
+    ∃ E, Step1 (ℍ := ℍ) μ B μ₁ E ∧ TailResumes R E E' := by
+  induction h generalizing E' with
+  | resume N => exact ⟨_, hs.plug (.appR R .hole), .resume E'⟩
+  | case e h₁ h₂ _ _ =>
+      by_cases hv : IsVal e
+      · obtain ⟨rfl, ⟨u, hu, rfl⟩ | ⟨u, hu, rfl⟩⟩ :=
+          step1_case_val_inv (ℍ := ℍ) (v := ⟨e, hv⟩) hs
+        · have he : e = (Val.inj₁ u).1 := congrArg Subtype.val hu
+          subst he
+          exact ⟨_, .head (Head.case₁ _ u _ _), h₁.subst hR 0 u⟩
+        · have he : e = (Val.inj₂ u).1 := congrArg Subtype.val hu
+          subst he
+          exact ⟨_, .head (Head.case₂ _ u _ _), h₂.subst hR 0 u⟩
+      · obtain ⟨e', rfl, he⟩ := step1_plug_inv (.case .hole _ _) (by simp [Kont.Plain]) hv hs
+        exact ⟨_, he.plug (.case .hole _ _), .case e' h₁ h₂⟩
+  | letpair e hB _ =>
+      by_cases hv : IsVal e
+      · obtain ⟨v₁, v₂, hp, rfl, rfl⟩ := step1_letpair_inv (ℍ := ℍ) (v := ⟨e, hv⟩) hs
+        have he : e = (Val.pair v₁ v₂).1 := congrArg Subtype.val hp
+        subst he
+        exact ⟨_, .head (Head.letpair _ v₁ v₂ _),
+          (hB.subst hR 0 (v₂.shift 1 0)).subst hR 0 v₁⟩
+      · obtain ⟨e', rfl, he⟩ := step1_plug_inv (.letpair .hole _) (by simp [Kont.Plain]) hv hs
+        exact ⟨_, he.plug (.letpair .hole _), .letpair e' hB⟩
+  | seq e hB _ =>
+      by_cases hv : IsVal e
+      · obtain ⟨hu, rfl, rfl⟩ := step1_seq_val_inv (ℍ := ℍ) (v := ⟨e, hv⟩) hs
+        have he : e = Val.unit.1 := congrArg Subtype.val hu
+        subst he
+        exact ⟨_, .head (Head.seq _ _), hB⟩
+      · obtain ⟨e', rfl, he⟩ := step1_plug_inv (.seq .hole _) (by simp [Kont.Plain]) hv hs
+        exact ⟨_, he.plug (.seq .hole _), .seq e' hB⟩
+
+/-- **The resume commutes out of the arms, every run.** A run of the clause without its resumes
+is matched, step for step and at the same memories, by a run of the clause. -/
+theorem TailResumes.steps {R : Expr} (hR : closedAt 0 R = true) {μ μ' : Heap} {X E' : Expr}
+    (hs : Steps (ℍ := ℍ) μ X μ' E') : ∀ {B : Expr}, TailResumes R B X →
+    ∃ E, Steps (ℍ := ℍ) μ B μ' E ∧ TailResumes R E E' := by
+  induction hs with
+  | refl => intro B h; exact ⟨B, .refl _ _, h⟩
+  | more h₁ _ ih =>
+      intro B h
+      obtain ⟨E₁, hE₁, h'⟩ := h.step hR h₁
+      obtain ⟨E, hE, h''⟩ := ih h'
+      exact ⟨E, .more hE₁ hE, h''⟩
+
+/-- **A clause that resumes in every arm** (`TailResumes`). When the clause without its resumes
+runs to the answer `r`, the clause runs, at the same memories, to the one resume `R r`: it is
+the clause `λ…. let y = B' in R y` whose resume is its last call. -/
+theorem tail_resumes {R B B' : Expr} (hR : closedAt 0 R = true) (h : TailResumes R B B')
+    {μ μ' : Heap} {r : Val} (hs : Steps (ℍ := ℍ) μ B' μ' r.1) :
+    Steps (ℍ := ℍ) μ B μ' (.app R r.1) := by
+  obtain ⟨E, hE, h'⟩ := h.steps hR hs
+  have hv : IsVal r.1 := r.2
+  generalize r.1 = Y at h' hv ⊢
+  cases h' with
+  | resume => exact hE
+  | case => exact absurd hv (by simp)
+  | letpair => exact absurd hv (by simp)
+  | seq => exact absurd hv (by simp)
+
+/-- The shape is met by a `case` with a resume in each arm, as a `for` body's `if` elaborates. -/
+example (R e N₁ N₂ : Expr) :
+    TailResumes R (.case e (.app R N₁) (.app R N₂)) (.case e N₁ N₂) :=
+  .case e (.resume N₁) (.resume N₂)
 
 /-! ### The abort class -/
 

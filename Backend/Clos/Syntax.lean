@@ -219,6 +219,14 @@ structure Prog where
   /-- `main`'s value is `inl v`, or `inr ()` when a division's error reached it, which ends the
   run with exit status `1` (SPEC §39). -/
   exits : Bool := false
+  /-- The control operations, as `(name, operation)`, that `Capture` lowered as direct calls of
+  their clause (tail-resumptive). -/
+  tailOps : List (UInt32 × UInt32) := []
+  /-- The codes `Capture` made machines, which answer an outcome: those that may suspend, and the
+  handlers' bodies, which answer `inl` alone when they cannot. -/
+  machines : Nat := 0
+  /-- Of `machines`, those that may suspend. -/
+  suspending : Nat := 0
   deriving Repr, Inhabited
 
 /-- The address of the program's data: the Wasm target's, after its runtime's own memory and

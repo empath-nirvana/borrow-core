@@ -27,8 +27,10 @@ With `--sites`, print the program's closure calls instead (`Flat.callSites`): ho
 are, how many are direct because their type's union has one code, how many more because the flow
 analysis finds one code, the recursive closure types, which keep heap environments, with the
 number of codes in each union, the owned folds compiled by pointer reversal and those that
-recurse, and the scoped cells (`Backend/Flat/Lower.lean`, `frameScopes`) placed in frame slots
-and those allocated.
+recurse, the scoped cells (`Backend/Flat/Lower.lean`, `frameScopes`) placed in frame slots
+and those allocated; and `Capture`'s lowering: the control operations `(name, operation)` it made
+direct calls of their tail-resumptive clause, the codes it made machines, and how many of those
+may suspend (the others are handlers' bodies that answer `inl` alone).
 
 With `--native`, the second run is the native build (`bcc run --native`, SPEC §40) instead of
 `wasmtime`'s, and the two must agree on the counts and the exit status.
@@ -62,7 +64,8 @@ def sites (file src : String) : Except String String := do
   let (sf, sa) := Backend.Flat.scopeSites p
   pure (s!"calls {n} direct {ty + fl} (union {ty}, flow {fl}) dispatched {n - ty - fl} " ++
     s!"recursive-types {recs.length} {recs} owned-folds reversed {rev} recursive {rc} " ++
-    s!"scoped-cells framed {sf} allocated {sa}")
+    s!"scoped-cells framed {sf} allocated {sa} " ++
+    s!"tail-resumptive {p.tailOps} machines {p.machines} suspending {p.suspending}")
 
 /-- The call-site report of `--sites` for a closure-IR program. -/
 def sitesOfProg (p : Backend.Clos.Prog) : Except String String := do
@@ -73,7 +76,8 @@ def sitesOfProg (p : Backend.Clos.Prog) : Except String String := do
   let (sf, sa) := Backend.Flat.scopeSites p
   pure (s!"calls {n} direct {ty + fl} (union {ty}, flow {fl}) dispatched {n - ty - fl} " ++
     s!"recursive-types {recs.length} {recs} owned-folds reversed {rev} recursive {rc} " ++
-    s!"scoped-cells framed {sf} allocated {sa}")
+    s!"scoped-cells framed {sf} allocated {sa} " ++
+    s!"tail-resumptive {p.tailOps} machines {p.machines} suspending {p.suspending}")
 
 /-- `bcc-counts --kernel [--sites] <name>`. -/
 def kernelMain (sitesOnly : Bool) (name : String) : IO UInt32 := do
