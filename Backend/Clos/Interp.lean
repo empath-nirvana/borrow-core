@@ -14,11 +14,17 @@ source machine (SPEC §9). This is the uniform boxed representation, independent
 types the flat IR uses (`Backend/Clos/Types.lean`). It checks the ownership discipline as it
 runs: using a variable consumes it, a consumed variable cannot be used again, and a call or
 `main` must end with every variable of its frame consumed. Host operations go through
-`Host.call` at `wasmHost`, as in the source interpreter.
+`Host.call` at `closHost`: `wasmHost` with the negative NaN where an arithmetic float operation
+answers a NaN, a resolution other than the source interpreter's (SPEC §37), so that a program
+whose output depends on that NaN's sign differs from its golden here.
 -/
 
 namespace Backend.Clos
 open BoCa
+
+/-- The closure-IR interpreter's host: the negative NaN at an arithmetic float result.
+    `[spec §37]` -/
+def closHost : Host := wasmHostAt .negative
 
 /-- A word: an immediate or a heap address. -/
 inductive CV where
@@ -207,7 +213,7 @@ def applyOp : Op → List CV → IM CV
   | .host op, [v] => do
       let sv ← toSource objFuel v
       deepDrop objFuel v
-      match wasmHost.call op sv with
+      match closHost.call op sv with
       | some r => ofSource r.1
       | none => throw "closure IR: host operation stuck"
   | .idx, [v] => do

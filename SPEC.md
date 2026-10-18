@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.69 · 2026-10-17
+Version 0.70 · 2026-10-17
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -406,11 +406,15 @@ structure of typed Lean functions grouped by operation family (`bin32`, `div32`,
 64-bit analogues, and the conversions), so every host is well-sorted by construction. An
 ill-shaped argument is stuck. Results are encoded as follows: arithmetic gives a literal; tests give
 `inj₂ ()` for true and `inj₁ ()` for false; partial operations give `inj₁ n`, or `inj₂ ()` where
-Wasm traps.
+the operation has no answer.
 
 ### Operations
 
-Wasm's integer instructions (`HostOp`, `Support/Syntax/Integers.lean`), at each width `w`:
+The language's integer operations (`HostOp`, `Support/Syntax/Integers.lean`), at each width `w`.
+They are defined here, on bit-vectors of `w` bits, as `wasmHost` computes them
+(`Support/Dynamics/Host.lean`, `Prim.bin`, `Prim.div`, `Prim.un`, `Prim.rel` on `BitVec`). Each is
+named as the Wasm instruction that computes it; Wasm and native code are two implementations of
+this section, and neither is its reference.
 
 | group | operations | type (at `I32`) |
 |---|---|---|
@@ -422,21 +426,40 @@ Wasm's integer instructions (`HostOp`, `Support/Syntax/Integers.lean`), at each 
 | conversion | `wrap`, `extend_s`, `extend_u`, `extend32_s` | between widths |
 | byte | `wrap8`, `extend8_u` | `I32 ⇒ U8` (the low 8 bits), `U8 ⇒ I32` |
 
-The grouped operations are Wasm's, at `w32` and `w64`. At `w8` they exist as names and take `0`
+What each computes, on `w`-bit vectors `a`, `b`:
+
+- `add`, `sub`, `mul` wrap: the result mod `2^w`. `and`, `or`, `xor` are bitwise.
+- `shl`, `shr_s` (arithmetic), `shr_u` (logical), `rotl`, `rotr` **mask the amount**: they shift
+  or rotate by `b mod w`, the low 5 (6) bits of `b`, read unsigned. A shift is never undefined, and
+  `<<` is total at every amount; this is also what x86 and ARM shift instructions do.
+- `div_s`, `div_u` truncate toward zero and `rem_s`, `rem_u` take the sign of the dividend; each
+  answers `inj₂ ()` at a zero divisor, and `div_s` also at `INT_MIN / -1` (`rem_s` answers `0`
+  there). The surface raises where these answer `inj₂ ()` (§39).
+- `clz`, `ctz` count leading and trailing zero bits, `w` at `0`; `popcnt` counts set bits;
+  `extend8_s`, `extend16_s` sign-extend the low 8 (16) bits.
+- the tests compare `a` and `b` as integers, read signed (`_s`) or unsigned (`_u`).
+- `wrap` keeps the low 32 bits, `extend_s`/`extend_u` sign- or zero-extend 32 bits to 64,
+  `extend32_s` sign-extends the low 32 bits of a 64-bit vector; `wrap8` keeps the low 8 bits, and
+  `extend8_u` zero-extends a byte.
+
+The grouped operations are at `w32` and `w64`. At `w8` they exist as names and take `0`
 (`hostArg`), so none is applicable, and `Host.call` has no argument shape for them: arithmetic
-on bytes is done at `I32`, as in Wasm. The surface elaborates an operator at `u8` to the `i32`
+on bytes is done at `I32`. The surface elaborates an operator at `u8` to the `i32`
 operation on `extend8_u` of its operands, narrowing an arithmetic result by `wrap8`, and reads
 the byte literal `b'c'` as `u8[n]` (`docs/decisions.md` 43).
 
 `A ⇒ B` is the call-by-value function type `U(A ⊸ F B)`. Typing: `CDerives.lit` gives a literal
 its width's type, and `CDerives.hostOp op` gives `host op` the type `!(hostArg op ⇒ hostRes op)`.
-Partial operations return a sum where Wasm traps, because a trap would abandon linear resources.
+Partial operations return a sum where they have no answer (where Wasm traps), because a trap
+would abandon linear resources.
 
 ### Semantics
 
 The value relation at `int w` holds exactly at a literal of width `w` and the empty resource. Every
 theorem holds for every host `ℍ`, so nothing about arithmetic is proved. The concrete host
 `wasmHost` (on `BitVec`) is used only by the interpreter and by `decide`-checked evaluations.
+`Host.Conforms ℍ` (`Support/Dynamics/Host.lean`) states what an implementation of the operations
+is: `wasmHost` at every integer operation, and at every float operation up to §37's NaNs.
 Compiler correctness will be stated with the target's own operations as the host. Agreement
 between engines is tested on the corpus, not proved.
 
@@ -2026,8 +2049,9 @@ Each is elaborated before checking into core terms the unchanged checker checks.
 
 - **Literals in read-only data.** A literal's `t` (the shape above) becomes a closure of one
   shared code over the address and length of its bytes (`Backend/Clos/Convert.lean`,
-  `litTable?`, `litClosure`), whose body is a load (`litByte`). The bytes are emitted once, as a
-  Wasm data segment from `16384`, before the heap. Every literal is one code, so a call of one is
+  `litTable?`, `litClosure`), whose body is a load (`litByte`). The bytes are emitted once, in the
+  program's data before the heap, at an address the target chooses (`Backend/Flat/Syntax.lean`,
+  `dataBase`; the Wasm target's data segment is from `16384`). Every literal is one code, so a call of one is
   direct.
 - **Literal views point into the data.** The erased shape of a literal view — the array lent by
   `withbor`'s term to a callback that first copies the family, then dropped — is recognised
@@ -6036,8 +6060,8 @@ existing corpus program keeps its output, golden and counts.
 
 Programs compute with real numbers: a median, a mean, a distance. The LeetCode corpus computed
 twice a median as an integer and printed `.5` by hand (#498). This entry adds IEEE 754 binary32
-and binary64 by §8's scheme (#499): two more widths of `VTy.int`, literals, and Wasm's float
-instructions as host operations.
+and binary64 by §8's scheme (#499): two more widths of `VTy.int`, literals, and the float
+operations as host operations.
 
 ### Types and literals
 
@@ -6056,7 +6080,10 @@ is expected. An integer literal where a float is expected is that integer as a f
 
 ### Operations
 
-Wasm's float instructions (`Support/Syntax/Integers.lean`), at each float width `f`:
+The language's float operations (`Support/Syntax/Integers.lean`), at each float width `f`, on the
+floats' bits, as `wasmHost` computes them (`Support/Dynamics/Floats.lean`): IEEE 754 binary32 and
+binary64, round to nearest even, each operation named as the Wasm instruction that computes it.
+As at §8, Wasm and native code are implementations of this section.
 
 | group | operations | type (at `F64`) |
 |---|---|---|
@@ -6068,9 +6095,11 @@ Wasm's float instructions (`Support/Syntax/Integers.lean`), at each float width 
 | to an integer, total | `trunc_sat i f sx` (`i32.trunc_sat_f64_s`, …) | `F64 ⇒ I32` |
 | bits | `reinterpret_i f`, `reinterpret_f f` | `F64 ⇒ I64`, `I64 ⇒ F64` |
 
-`trunc` returns a sum where Wasm traps (a NaN, an infinity, an integer part out of range), as
+`trunc` returns a sum where it has no answer (a NaN, an infinity, an integer part out of range), as
 the integer division does (§8): a trap would abandon linear resources. `trunc_sat` is total: `0`
-at a NaN, the least or greatest integer out of range. `§8`'s grouped integer operations at a
+at a NaN, the least or greatest integer out of range. `min` and `max` answer a NaN when either
+operand is one and order `-0.0` below `0.0`; `nearest` rounds to the nearest integer, ties to
+even. `§8`'s grouped integer operations at a
 float width take `0`, as at `w8`. `host[op]` names a float operation as its Wasm instruction with
 `_` for `.`: `host[f64_add]`, `host[f32_sqrt]`, `host[f64_lt]`, `host[f64_convert_i32_s]`,
 `host[i32_trunc_f64_s]`, `host[i64_trunc_sat_f32_u]`, `host[f32_demote_f64]`,
@@ -6082,30 +6111,61 @@ A host `ℍ` gains a function per group, on the floats' bits (`Host.fbin`, `fun1
 `Host.call` alone: nothing about float arithmetic is proved, as nothing about integer arithmetic
 is (§8).
 
-### NaN: canonical at every engine
+### NaN: sign and payload unspecified
 
-Wasm fixes every float result but one: the bits of a NaN that an arithmetic operation answers,
-which may be any NaN whose payload is canonical or propagated from an operand, of either sign.
-x86 and ARM differ there (x86's generated NaN is negative). The engines here **canonicalise**,
-as Wasm's deterministic profile does: every NaN that `add`, `sub`, `mul`, `div`, `min`, `max`,
-`sqrt`, `ceil`, `floor`, `trunc`, `nearest`, `demote` and `promote` answer is the canonical NaN
-of positive sign (`0x7FC00000`, `0x7FF8000000000000`). `abs`, `neg`, `copysign` and
-`reinterpret` act on the bits and keep a NaN's payload, as Wasm requires of them.
+*Amended in 0.70 (decision 66, #528). Through 0.69 every engine made each NaN these operations
+answer the canonical one; this rule replaces that one.*
 
-Why canonicalise rather than compare modulo payload: the sign and payload of a NaN are
-observable without `reinterpret` (`copysign(1.0, 0.0 / 0.0)` is `±1.0`), so a comparison modulo
-payload would have to know which outputs a NaN reached. Canonical NaNs make the host a function
-(`wasmHost` is one host, and the machine is deterministic at each host, §1), make every program's
-output one string at every engine, and need nothing of the oracle. The cost is in the compiled
-code only: after each operation above, a test `x ≠ x` and a select (`Backend/Flat/Lower.lean`,
-`hostVals`), a few instructions per float operation and no allocation. A C lowering is the same:
-`float`/`double` and the same test, since C leaves NaN bits to the platform too.
+Every float result is fixed but one: **the sign and payload of a NaN that `add`, `sub`, `mul`,
+`div`, `min`, `max`, `sqrt`, `ceil`, `floor`, `trunc`, `nearest`, `demote` or `promote` answers
+are unspecified.** The result is a NaN exactly where IEEE 754 answers one; which NaN is the
+engine's choice, as in Rust (RFC 3514) and in Wasm. `abs`, `neg`, `copysign` and `reinterpret` act
+on the bits and keep a NaN's sign and payload, so a NaN given by its bits (`of_bits_f64`) is that
+NaN everywhere. The choice is observed only by `reinterpret` and by `copysign`'s sign operand,
+which a NaN may reach through `abs`, `neg` and `copysign` (and `total_cmp_*`, `ord_*` through
+`reinterpret`); the comparisons, `trunc`, `trunc_sat` and the printer, which prints every NaN as
+`NaN`, do not observe it.
+
+The engines do not canonicalise. x86 generates a negative NaN, ARM a positive one, and both
+propagate an operand's payload; the compiled code is the hardware's float instruction alone.
+
+**What the semantics is.** `Host.Conforms ℍ` (`Support/Dynamics/Host.lean`): `ℍ` is `wasmHost` at
+every operation, except that at each of the thirteen operations above its answer and
+`wasmHost`'s are equal or both NaNs (`PrimF.NaNEq`), and at `copysign`, `abs` and `neg` equal. A
+resolution `r` of those NaNs (a NaN at each width) gives the host `wasmHostAt r`, and
+`wasmHostAt_conforms` proves every such host conforms. `wasmHost`, the Lean host the interpreters
+and goldens use, resolves every such NaN to the canonical one (`0x7FC00000`,
+`0x7FF8000000000000`): one allowed choice (`wasmHost_conforms`), kept because it makes the
+reference output independent of the machine Lean runs on.
+
+**What the proofs cover.** Every theorem over the machine (the Fundamental Property, adequacy,
+`fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD` and §13's safety) is stated for every
+host `ℍ`, so it holds at every conforming host, with no statement changed. Exactly:
+
+- An engine whose NaN choice is a function of the operation and its operands' bits (the hardware
+  of x86 and ARM, wasmtime on either) is the machine at one conforming host, and every theorem
+  holds of its runs as of the reference's.
+- **Not proved:** that a program which does not observe a NaN's bits prints the same at every
+  conforming host. It is tested: the closure-IR interpreter runs at `wasmHostAt .negative` (the
+  canonical NaN with its sign set), the flat-IR interpreter at `wasmHostAt .payload` (payload
+  `1`), and Wasm at its hardware's choice, and each must print every corpus golden, which the
+  source interpreter writes at `wasmHost` (*Engines*, below). A program whose output depends on
+  the choice fails there. That noninterference theorem is *Open*.
+- **Not covered:** an engine whose choice is not a function of the operation and operands, as
+  when an optimiser folds one occurrence of `0.0 / 0.0` and the hardware computes another. No one
+  host is that run, so no theorem here is about it (*Open*).
+
+**Engines.** The source interpreter and the falsifier apply `wasmHost`; the closure-IR and
+flat-IR interpreters `wasmHostAt .negative` and `wasmHostAt .payload`; the Wasm stage runs
+wasmtime's instructions, which do not canonicalise (Wasm allows any NaN there, as this section
+does). Goldens print floats through the printer and bits through `reinterpret`; no corpus program
+prints the bits, sign or `totalOrder` position of an arithmetic NaN (`float-compare.bc` takes its
+NaN by its bits; `float-ordered.bc` sorts `0.0 / 0.0` and its negation, which print `NaN` at both
+ends whichever sign the first has).
 
 `wasmHost`'s float operations are Lean's `Float32`/`Float` (IEEE 754, round to nearest even),
-with each NaN result made canonical and `min`, `max`, `nearest` and the conversions written to
-Wasm's definitions (`Support/Dynamics/Floats.lean`). The interpreters (the source, closure-IR and
-flat-IR stages and the falsifier) all apply `wasmHost`; the Wasm stage runs wasmtime's
-instructions. They agree bit for bit.
+with each NaN result resolved and `min`, `max`, `nearest` and the conversions written to their
+definitions above (`Support/Dynamics/Floats.lean`).
 
 ### Lowering
 
@@ -6192,7 +6252,7 @@ falsifier.
 | program | what it shows | answer | counts |
 |---|---|---|---|
 | `corpus/float-arith.bc` | arithmetic, `sqrt`, overflow, `0 / 0`, subnormals, `-0.0`, the rounding functions (`nearest` ties to even), `f32` arithmetic; shortest printing | `0.30000000000000004`, …, `1e-45`; `19` | `312 0 0` |
-| `corpus/float-compare.bc` | IEEE 754 comparisons at NaN, `-0.0`, the infinities; `total_cmp_f64`; `min`/`max` of the zeros; the canonical NaN | six lines of comparisons, `9221120237041090560`; `6` | `0 0 0` |
+| `corpus/float-compare.bc` | IEEE 754 comparisons at NaN, `-0.0`, the infinities; `total_cmp_f64`; `min`/`max` of the zeros; a NaN given by its bits | six lines of comparisons, `9221120237041090560`; `6` | `0 0 0` |
 | `corpus/float-convert.bc` | `trunc` partial and `trunc_sat` at `i32`, unsigned `i32` and `i64` at every range boundary, `inf`, NaN; integer to float rounding; demote and promote | thirteen lines, then `9007199254740992.0 16777216.0 4294967300.0 0.1 0.10000000149011612`; `13` | `183 0 0` |
 | `corpus/float-ordered.bc` | sorting by `total_cmp_f64`; the `OrderedFloat` key `ord_f64`, sorted and deduplicated as `i64`s | `NaN -inf -0.0 0.0 0.0 1.0 2.0 3.5 NaN`, the eight distinct keys; `8` | `81 0 0` |
 | `corpus/float-roundtrip.bc` | 38 floats printed and read back, 23 decimals read (halfway cases, long inputs, overflow, underflow, malformed text), at both widths, against Python's references | every check `=`; `61` | `3721 0 0` |
@@ -6221,8 +6281,14 @@ as before.
 ### Open
 
 - Rounding modes other than nearest-even, and floating-point exceptions: Wasm has neither.
-- Removing the NaN canonicalisation where no NaN bit is observed (a NaN that only reaches a
-  comparison or the printer): an optimisation of the compiled code, not of the semantics.
+- **NaN noninterference**: a program in which no NaN that an arithmetic operation answered
+  (directly or through `abs`, `neg`, `copysign`) reaches `reinterpret` or `copysign`'s sign
+  operand prints the same at every conforming host. Tested (*NaN*, *Engines*), not proved; it
+  needs a relation between two runs at two hosts.
+- **A machine at a host relation**: an engine whose NaN choice varies between two applications of
+  one operation to the same operands (an optimiser's constant folding, LLVM's NaN semantics) is
+  not the machine at one host. Covering it needs the host step to be a relation, `ℍ.call op v r`,
+  with the theorems restated over it (#529's native backend is such an engine).
 - SIMD (`v128`) and fused multiply-add, which Wasm's scalar core lacks.
 - Faster, allocation-free shortest printing (Ryū or Schubfach tables) in place of the exact
   big-integer one, and parsing by Eisel–Lemire with this one as its fallback.
@@ -6891,7 +6957,7 @@ Entry 35 (§36) is implemented: `Width.f32`/`f64`, `IntLit.f32`/`f64` and the fl
 `hostRes` and `host_call_sound` in `Core/Integers.lean` (and the host's answers closed and
 raise-free, `Core/Closed.lean`, `Core/RaiseNames.lean`); the lexer, parser, printer, operator
 dispatch and literal rounding in `Frontend/` (`Frontend/FloatLit.lean`); every stage of
-`Backend/` (`Flat/Lower.lean`'s `hostVals` canonicalises, `Wasm/Lower.lean` reinterprets); and
+`Backend/` (`Flat/Lower.lean`'s `hostVals`, `Wasm/Lower.lean` reinterprets); and
 `lib/float.bc`. No change to `CDerives`, the relation, the machine's rules or the checker's rules.
 
 Entry 37 (§38) is implemented in `Frontend/Elab/Instances.lean` (the table of type arguments),
@@ -6916,9 +6982,30 @@ runtime's `$exit`, `divTest`, the constant locals and the fused `case` of the fl
 harness's `<name>.status`; no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the checker's
 rules.
 
+§8 and §37 as restated in 0.70 are implemented in `Support/Dynamics/Floats.lean` (`NaNs`, every
+float operation at a resolution, `NaNEq` and its lemmas), `Support/Dynamics/Host.lean`
+(`Prim`, `wasmHostAt`, `Host.Conforms`, `wasmHostAt_conforms`, `wasmHost_conforms`),
+`Backend/Clos/Interp.lean` (`closHost`), `Backend/Flat/Interp.lean` (`flatHost`) and
+`Backend/Flat/Lower.lean` (`hostVals` without the NaN test); no change to `CDerives`, the relation,
+the machine, `Core/`, `Paper/` or the checker.
+
 ---
 
 ## Changelog
+
+- **0.70** (2026-10-17) — §8 and §37 restated (#528, decision 66): the integer and float
+  operations are the language's own, defined on bit-vectors as `wasmHost` computes them; Wasm and
+  native code implement them. A shift or rotation masks its amount (the behaviour already; the
+  wording is new). The sign and payload of a NaN an arithmetic float operation answers are
+  unspecified (Rust RFC 3514), amending 0.67's canonicalisation: `Host.Conforms` is the set of
+  allowed hosts, `wasmHostAt r` conforms at every resolution `r` and `wasmHost` (canonical) is
+  one; every theorem holds at each, unchanged; noninterference and engines whose choice is not a
+  function of the operands are §37 *Open*. The compiled code no longer tests each float result
+  for a NaN; the closure-IR and flat-IR interpreters run at two other resolutions, so a program
+  whose output depends on the choice fails the harness. `corpus/float-compare.bc` takes its NaN by
+  its bits (its output unchanged). The flat IR's documentation is target-neutral: its operations
+  are SPEC's, and the data's address (`16384` in Wasm) is the target's. No change to `CDerives`,
+  the relation, the machine, a kernel program, or any program's output, goldens or counts.
 
 - **0.69** (2026-10-17) — §39 (new, #513): integer `/` and `%` at `i32`, `i64` and `u8`, and
   `div_euclid`, `rem_euclid`, `checked_div`, `checked_rem`. A division with no answer (a zero

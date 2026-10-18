@@ -1,8 +1,9 @@
 /-!
 # Support — Syntax — Integers  `[spec §8]`
 
-The numeric literals and the names of the host operations: Wasm's integer instructions at
-`i32` and `i64` (§8) and its float instructions at `f32` and `f64` (§37). Both are constants of the term language (`Prim.lit`, `Prim.host`), so they
+The numeric literals and the names of the host operations: the language's integer operations at
+`i32` and `i64` (§8) and its float operations at `f32` and `f64` (§37), each named as the Wasm
+instruction that computes it. Both are constants of the term language (`Prim.lit`, `Prim.host`), so they
 are values, and shifting and substitution leave them fixed.
 
 What an operation computes is not fixed here. The machine applies a host operation through a
@@ -21,7 +22,7 @@ inductive IntLit where
   | f64 (n : UInt64)
   deriving DecidableEq, Repr
 
-/-- The width of a numeric type. The grouped integer operations are Wasm's, at `w32` and `w64`;
+/-- The width of a numeric type. The grouped integer operations are at `w32` and `w64`;
     `w8` is the byte, which has only its conversions (`wrap8`, `extend8_u`); `f32` and `f64` are
     the floats, which have the float operations (§37).  `[spec §8, §37]` -/
 inductive Width where
@@ -77,7 +78,7 @@ inductive BinOp where
   | and | or | xor | shl | shr_s | shr_u | rotl | rotr
   deriving DecidableEq, Repr
 
-/-- Partial binary operations `I ⊗ I ⊸ F (I ⊕ 1)`, where Wasm traps.  `[spec §8]` -/
+/-- Partial binary operations `I ⊗ I ⊸ F (I ⊕ 1)`: `inr ()` where there is no answer.  `[spec §8]` -/
 inductive DivOp where
   | div_s | div_u | rem_s | rem_u
   deriving DecidableEq, Repr
@@ -108,7 +109,8 @@ inductive FRelOp where
   | eq | ne | lt | gt | le | ge
   deriving DecidableEq, Repr
 
-/-- The host operations of §8, one name per Wasm integer instruction.  `[spec §8]`
+/-- The host operations of §8 and §37, each named as the Wasm instruction that computes it.
+    `[spec §8, §37]`
 
     - `bin w o`, `div w o`, `un w o`, `eqz w`, `rel w o`: the grouped operations at width `w`;
     - `wrap` (`i32.wrap_i64`), `extend_s`/`extend_u` (`i64.extend_i32_s`/`_u`) and
@@ -117,7 +119,7 @@ inductive FRelOp where
       `i32`): the byte's conversions;
     - `fbin f o`, `fun1 f o`, `frel f o`: the float operations at `f` (§37);
     - `convert f i sx` (`f.convert_i_sx`), the total conversion of an integer to a float;
-      `trunc i f sx` (`i.trunc_f_sx`), partial, where Wasm traps; `trunc_sat i f sx`
+      `trunc i f sx` (`i.trunc_f_sx`), partial, `inr ()` where there is no answer; `trunc_sat i f sx`
       (`i.trunc_sat_f_sx`), total; `demote` (`f32.demote_f64`), `promote` (`f64.promote_f32`);
       `reinterpret_i f` (a float's bits as the integer of its size) and `reinterpret_f f` (the
       converse). -/

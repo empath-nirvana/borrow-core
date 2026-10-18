@@ -5,13 +5,16 @@ import Support.Syntax.Integers
 
 Functions over 64-bit words with numbered locals, explicit allocation and free, direct calls
 with any number of results, explicit tail calls, and structured control (`ite`, `switch`); no
-closures, no function pointers and no variables beyond locals. It is meant to lower as directly
-to LLVM IR as to Wasm: a function of several results is a Wasm multi-value function, and an LLVM
-function returning a struct by value (or through an `sret` pointer when it is wide); `switch` is
-Wasm's `br_table` and LLVM's `switch`.
+closures, no function pointers and no variables beyond locals. No target is its reference: it
+lowers as directly to LLVM IR as to Wasm. A function of several results is a Wasm multi-value
+function, and an LLVM function returning a struct by value (or through an `sret` pointer when it
+is wide); `switch` is Wasm's `br_table` and LLVM's `switch`.
 
 Words are `i64`. An operation's operands and result have the widths §8 gives it: the numeric
-operations are `HostOp`, the integer instructions of Wasm, and a test yields a 32-bit `0`/`1`.
+operations are `HostOp`, the language's operations of SPEC §8 and §37 (not any target's
+instructions), and a test yields a 32-bit `0`/`1`. A float result that is a NaN is any NaN where
+§37 leaves its sign and payload unspecified, so a target lowers each operation to its own float
+instruction.
 Addresses are words; `load a k` and `store a k v` access the word at `a + 8k`, and `load8 a` and
 `store8 a v` the byte at `a` (a byte slot, `Backend/README.md`, Representation).
 
@@ -30,7 +33,7 @@ inductive Exp where
   | load (addr : Exp) (off : Nat)
   /-- The byte at `addr`, zero-extended. -/
   | load8 (addr : Exp)
-  /-- A Wasm integer instruction; a partial one traps where its §8 form answers `inr ()`. -/
+  /-- A host operation (SPEC §8, §37); a partial one traps where its §8 form answers `inr ()`. -/
   | op (o : HostOp) (args : List Exp)
   /-- The allocator: a fresh range of `words` words. -/
   | alloc (words : Exp)
@@ -108,7 +111,11 @@ structure Prog where
   data : Array UInt8 := #[]
   deriving Repr, Inhabited
 
-/-- The address of the read-only data. -/
+/-- The address of the program's data, as `Backend.Clos.dataBase`. The closure IR and the flat IR
+hold a literal as an address in that data, so the IR's contract is only that the data is at one
+address fixed before the run, outside every range `alloc` returns. Which address is the target's
+choice, a detail of its backend: the Wasm target's is `16384`, after its runtime's memory. A
+target that places the data elsewhere (a native one, where the linker does) supplies its own. -/
 def dataBase : Nat := 16384
 
 /-- The end of the read-only data, rounded up to a word: the heap starts past it. -/

@@ -1,7 +1,9 @@
-# Backend: the compiler to WebAssembly
+# Backend: the compiler
 
-`bcc` compiles a checked, closed `main` (`Frontend/`) to WebAssembly text and runs it under
-`wasmtime`. The input is `main`'s erasure, the untyped BoLo `Expr` that
+`bcc` compiles a checked, closed `main` (`Frontend/`) through the closure IR and the flat IR to a
+target. The flat IR is target-neutral (`Flat/Syntax.lean`): its operations are SPEC §8's and
+§37's, and where its data lives is the target's choice. WebAssembly is one target, compiled to
+text and run under `wasmtime`; a native target through LLVM is #529. The input is `main`'s erasure, the untyped BoLo `Expr` that
 `Frontend.Check.checkProgram_soundP` derives `CDerivesP` for (`CDerives` at `assurance:
 unconditional`, `checkProgram_sound`). The closure IR recovers layout types
 from it (`Clos/Types.lean`), and every stage from the flat IR on lays values out by type.
@@ -32,11 +34,11 @@ runtime's `$exit`).
 
 | stage | file | what it is | interpreter |
 |---|---|---|---|
-| source | `Source.lean` | `main`'s erasure | `Support`'s `step` at `wasmHost` |
-| closure IR | `Clos/Syntax.lean`, `Clos/Convert.lean`, `Clos/Poly.lean`, `Clos/Capture.lean`, `Clos/Unwind.lean`, `Clos/Collapse.lean` | named A-normal form, explicit environments and ownership; a let used at different rows per use; §19's handlers, operations and cancels lowered | `Clos/Interp.lean` |
+| source | `Source.lean` | `main`'s erasure | `Support`'s `step` at `wasmHost` (the reference; the canonical NaN) |
+| closure IR | `Clos/Syntax.lean`, `Clos/Convert.lean`, `Clos/Poly.lean`, `Clos/Capture.lean`, `Clos/Unwind.lean`, `Clos/Collapse.lean` | named A-normal form, explicit environments and ownership; a let used at different rows per use; §19's handlers, operations and cancels lowered | `Clos/Interp.lean` (at `wasmHostAt .negative`) |
 | layout types | `Clos/Types.lean` | a layout type for every closure-IR variable, code and constructor; each type's layout; each closure type's union of codes | — |
 | closure flow | `Clos/Flow.lean` | a 0-CFA: the codes each call may call | — |
-| flat IR | `Flat/Syntax.lean`, `Flat/Lower.lean` | functions over words, locals, allocation, calls and tail calls of several results, `ite` | `Flat/Interp.lean` |
+| flat IR | `Flat/Syntax.lean`, `Flat/Lower.lean` | functions over words, locals, allocation, calls and tail calls of several results, `ite`; target-neutral | `Flat/Interp.lean` (at `wasmHostAt .payload`) |
 | Wasm | `Wasm/Syntax.lean`, `Wasm/Lower.lean` | the Wasm subset, as an AST | `wasmtime` |
 | WAT | `Wasm/Print.lean`, `Wasm/Runtime.lean` | text; the runtime inserted as written | — |
 
@@ -214,7 +216,7 @@ word is an `i64` local; `|A|` is the number of words of `A`.
 |---|---|---|
 | `1` | 0 | nothing |
 | `i32`, `i64`, `u8` | 1 | the integer (an `i32` or a `u8` zero-extended) |
-| `f32`, `f64` | 1 | the float's bits (an `f32`'s zero-extended); a float operation reinterprets its operands as `f32`/`f64` and its result back (`Wasm/Lower.lean`), and an arithmetic result that is a NaN is replaced by the canonical NaN (`Flat/Lower.lean`, `hostVals`; SPEC §37) |
+| `f32`, `f64` | 1 | the float's bits (an `f32`'s zero-extended); a float operation reinterprets its operands as `f32`/`f64` and its result back (`Wasm/Lower.lean`), and is the target's float instruction alone: a NaN result's sign and payload are the target's (SPEC §37) |
 | `A ⊗ B` | `\|A\| + \|B\|` | `A`'s words, then `B`'s |
 | `A ⊕ B` | `1 + max \|A\| \|B\|` | a tag word (`0` for `inl`), then the payload's words, padded |
 | `⊕[A₀, …, Aₙ₋₁]` | `1 + maxᵢ \|Aᵢ\|` | a tag word `i`, then variant `i`'s payload's words, padded: a suspended computation's state, an operation's payload |
@@ -294,8 +296,9 @@ Not objects:
   (a compare with the length, then a search on the index down to one byte), is recognised by
   its shape (`Clos/Convert.lean`, `litTable?`) and converted to a closure of one shared code,
   `litCode`, capturing the address and length of the literal's bytes; its body is `litByte`, a
-  compare and a byte load. The bytes are the program's read-only data (`Prog.data`), a Wasm data
-  segment from `16384`, each literal once; the heap starts past them. A literal is then two
+  compare and a byte load. The bytes are the program's read-only data (`Prog.data`), each literal
+  once, at `dataBase`; the heap starts past them. Where that data lives is the target's choice
+  (`Flat/Syntax.lean`, `dataBase`): the Wasm target's is a data segment from `16384`. A literal is then two
   words and no object, and every literal is one code, so a call of one is direct. A literal
   view's array (the borrow block on a literal: `tab` of the literal, lent to a callback that
   first copies the family, then dropped; `litView?`) is `litTab`: `(address, n)` in the data when
@@ -439,14 +442,17 @@ the dispatched calls, which the compiled code counts when it is built to count.
 
 ## Host operations (SPEC §8)
 
-A literal is a constant word. Each host operation is inline: its Wasm instruction on the
-operands' words (`Flat/Lower.lean`, `hostVals`). Tests produce `inr ()` for true and `inl ()` for
+A literal is a constant word. Each host operation is inline: the target's instruction for it on
+the operands' words (`Flat/Lower.lean`, `hostVals`; in Wasm the instruction it is named after). Tests produce `inr ()` for true and `inl ()` for
 false, the tag word `1` or `0`. A partial operation is checked before the instruction runs: a
 zero divisor, or `INT_MIN / -1` for `div_s`, produces `inr ()`, anything else `inl n`. A division
 by a local the function sets to a constant at which it has an answer has no check, and a `case` on a
 division's answer is the division's own test (`divTest`, SPEC §39). The flat-IR interpreter
-evaluates the instructions with `wasmHost`, so the flat IR and the source agree on arithmetic by
-construction; Wasm agreeing with `wasmHost` is tested, not proved (SPEC §8).
+evaluates the operations with `flatHost`, `wasmHost` but for the NaN an arithmetic float
+operation answers (payload `1`), and the closure-IR interpreter with `closHost` (the negative
+NaN), so the compiled stages agree with the source on every result SPEC fixes by construction,
+and a program whose output depends on a NaN's sign or payload differs from its golden at one of
+them (SPEC §37, *Engines*). Wasm agreeing with `wasmHost` is tested, not proved (SPEC §8).
 
 ## Standard I/O (SPEC §11)
 

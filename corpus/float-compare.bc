@@ -2,8 +2,13 @@
 -- `==`, `!=`, `<`, `<=`, `>`, `>=`, each `1` or `0`, then `total_cmp_f64(x, y)`, IEEE 754's
 -- `totalOrder`. The pairs: `1 < 2`; a NaN against its negation and against `1`; `-0.0` against `0.0`;
 -- `-inf` against `inf`; and a NaN against `inf`. Then the zeros' and NaN's own facts: `min` and
--- `max` of the two zeros (Wasm orders `-0.0` below `0.0`), `abs` and `neg` of the NaN (which act
--- on the sign bit and keep it a NaN), and the NaN's canonical bits.
+-- `max` of the two zeros (`-0.0` is below `0.0`), `abs` and `neg` of the NaN (which act on the
+-- sign bit and keep it a NaN), and the NaN's bits.
+--
+-- The NaN is given by its bits, `of_bits_f64` of `0x7FF8000000000000`, the quiet NaN of positive
+-- sign: the sign and payload of a NaN an arithmetic operation answers (`0.0 / 0.0`) are
+-- unspecified (SPEC §37), and `total_cmp_f64` and `bits_f64` observe them (`float-arith.bc`
+-- prints `0.0 / 0.0`, which shows no bits).
 --
 -- Answer, line by line:
 --
@@ -16,8 +21,8 @@
 --     010000 1       NaN against inf
 --
 -- then `1 0`, the sign bits of `min` and `max` of the two zeros (`-0.0`, `0.0`), `1 1` (`abs` and
--- `neg` of a NaN are NaNs), and `9221120237041090560`, `0x7FF8000000000000`, the canonical NaN
--- that `0.0 / 0.0` answers at every engine. `main` answers how many lines it printed, 6.
+-- `neg` of a NaN are NaNs), and `9221120237041090560`, `0x7FF8000000000000`, the NaN's bits
+-- read back. `main` answers 6.
 --
 -- A comparison that treated NaN as equal to itself, `-0.0` as below `0.0`, or that compared
 -- bits, prints a different line; a total order whose NaN came first prints `-1` on line 3.
@@ -37,7 +42,7 @@ fn line(x: f64, y: f64) -> 1 =
 fn sign(x: f64) -> 1 = if bits_f64(x) < 0 { print_byte(b'1') } else { print_byte(b'0') }
 
 main -> i32 =
-  let nan = 0.0 / 0.0;
+  let nan = of_bits_f64(9221120237041090560);
   let inf = 1.0 / 0.0;
   let mz = neg_f64(0.0);
   line(1.0, 2.0);

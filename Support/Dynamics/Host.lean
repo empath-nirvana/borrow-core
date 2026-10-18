@@ -17,12 +17,15 @@ lets instance search find the host from the local instance, and a section variab
 mention the machine. There is no global instance, so every theorem over the machine holds at
 every host.
 
-`wasmHost` is one host, Wasm's integer semantics on `UInt32`/`UInt64`. It is used by the
-interpreter (`eval`) and by kernel-checked runs of programs only.
+`wasmHost` is one host: the language's operations (SPEC §8, §37) on `UInt32`/`UInt64`, as
+bit-vectors, with the canonical NaN where an arithmetic float operation answers a NaN. It is used
+by the interpreter (`eval`) and by kernel-checked runs of programs only. `wasmHostAt r` is the
+same host resolving those NaNs by `r`. `Host.Conforms` says what every implementation of the
+operations must be: `wasmHost` at every operation, up to the sign and payload of those NaNs.
 
 Encodings of results: a literal is `Prim.lit`; a test answers `inj₁ ()` for false and
 `inj₂ ()` for true (the `1 ⊕ 1` booleans of `Core/Folds.lean`); a partial operation answers
-`inj₁ n`, or `inj₂ ()` where Wasm traps.
+`inj₁ n`, or `inj₂ ()` where the operation has no answer.
 -/
 
 namespace BoCa
@@ -102,7 +105,7 @@ theorem isInt_iff {w : Width} {v : Val} : v.IsInt w ↔ ∃ n, v = ofBits w n :=
 /-- A boolean at `1 ⊕ 1`: `inj₁ ()` is false, `inj₂ ()` is true.  `[spec §8]` -/
 def bool (b : Bool) : Val := if b then .inj₂ .unit else .inj₁ .unit
 
-/-- A partial result at `I ⊕ 1`: `inj₁ v`, or `inj₂ ()` where Wasm traps.  `[spec §8]` -/
+/-- A partial result at `I ⊕ 1`: `inj₁ v`, or `inj₂ ()` where there is no answer.  `[spec §8]` -/
 def opt (o : Option Val) : Val :=
   match o with
   | some v => .inj₁ v
@@ -199,9 +202,9 @@ def Host.call (H : Host) : HostOp → Val → Option Val
   | .bin .f32 _, _ | .div .f32 _, _ | .un .f32 _, _ | .eqz .f32, _ | .rel .f32 _, _ => none
   | .bin .f64 _, _ | .div .f64 _, _ | .un .f64 _, _ | .eqz .f64, _ | .rel .f64 _, _ => none
 
-/-! ### Wasm's integer semantics -/
+/-! ### The integer operations, on bit-vectors -/
 
-namespace Wasm
+namespace Prim
 
 /-- Leading zeros of the low `w` bits of `n`, counting from bit `w - 1`. -/
 def clzN : Nat → Nat → Nat
@@ -214,7 +217,8 @@ def ctzN (w n : Nat) : Nat := ((List.range w).takeWhile fun i => !n.testBit i).l
 /-- Set bits of `n` among its low `w` bits. -/
 def popcntN (w n : Nat) : Nat := (List.range w).countP fun i => n.testBit i
 
-/-- Wasm's binary operations on `n`-bit vectors: wrapping, shift counts taken mod `n`. -/
+/-- The binary operations on `n`-bit vectors: `+ - *` wrap, and a shift or rotation takes its
+amount mod `n`. -/
 def bin {n : Nat} : BinOp → BitVec n → BitVec n → BitVec n
   | .add,   a, b => a + b
   | .sub,   a, b => a - b
@@ -228,7 +232,7 @@ def bin {n : Nat} : BinOp → BitVec n → BitVec n → BitVec n
   | .rotl,  a, b => a.rotateLeft (b.toNat % n)
   | .rotr,  a, b => a.rotateRight (b.toNat % n)
 
-/-- Wasm's division and remainder: `none` at a zero divisor, and at `INT_MIN / -1`. -/
+/-- Division and remainder, truncating: `none` at a zero divisor, and at `INT_MIN / -1`. -/
 def div {n : Nat} : DivOp → BitVec n → BitVec n → Option (BitVec n)
   | .div_s, a, b =>
       if b = 0 then none
@@ -257,39 +261,117 @@ def rel {n : Nat} : RelOp → BitVec n → BitVec n → Bool
   | .ge_s, a, b => b.sle a
   | .ge_u, a, b => b.ule a
 
-end Wasm
+end Prim
 
-/-- Wasm's integer instructions on `UInt32`/`UInt64`, and its float instructions on the floats'
-    bits with canonical NaNs (`Support/Dynamics/Floats.lean`). For the interpreter and kernel-checked
-    runs only; no theorem about the relation, the Fundamental Property or adequacy uses it.
-    `[spec §8]` -/
+/-- The language's integer operations on `UInt32`/`UInt64`, and its float operations on the
+    floats' bits with canonical NaNs (`Support/Dynamics/Floats.lean`). For the interpreter and
+    kernel-checked runs only; no theorem about the relation, the Fundamental Property or adequacy
+    uses it.  `[spec §8, §37]` -/
 def wasmHost : Host where
-  bin32 o a b := .ofBitVec (Wasm.bin o a.toBitVec b.toBitVec)
-  bin64 o a b := .ofBitVec (Wasm.bin o a.toBitVec b.toBitVec)
-  div32 o a b := (Wasm.div o a.toBitVec b.toBitVec).map .ofBitVec
-  div64 o a b := (Wasm.div o a.toBitVec b.toBitVec).map .ofBitVec
-  un32 o a := .ofBitVec (Wasm.un o a.toBitVec)
-  un64 o a := .ofBitVec (Wasm.un o a.toBitVec)
+  bin32 o a b := .ofBitVec (Prim.bin o a.toBitVec b.toBitVec)
+  bin64 o a b := .ofBitVec (Prim.bin o a.toBitVec b.toBitVec)
+  div32 o a b := (Prim.div o a.toBitVec b.toBitVec).map .ofBitVec
+  div64 o a b := (Prim.div o a.toBitVec b.toBitVec).map .ofBitVec
+  un32 o a := .ofBitVec (Prim.un o a.toBitVec)
+  un64 o a := .ofBitVec (Prim.un o a.toBitVec)
   eqz32 a := a == 0
   eqz64 a := a == 0
-  rel32 o a b := Wasm.rel o a.toBitVec b.toBitVec
-  rel64 o a b := Wasm.rel o a.toBitVec b.toBitVec
+  rel32 o a b := Prim.rel o a.toBitVec b.toBitVec
+  rel64 o a b := Prim.rel o a.toBitVec b.toBitVec
   wrap a := .ofBitVec (a.toBitVec.truncate 32)
   extendS a := .ofBitVec (a.toBitVec.signExtend 64)
   extendU a := .ofBitVec (a.toBitVec.zeroExtend 64)
   extend32S a := .ofBitVec ((a.toBitVec.truncate 32).signExtend 64)
   wrap8 a := a.toUInt8
   extend8U a := a.toUInt32
-  fbin := WasmF.fbin
-  fun1 := WasmF.fun1
-  frel := WasmF.frel
-  convert := WasmF.convert
-  trunc := WasmF.trunc
-  truncSat := WasmF.truncSat
-  demote := WasmF.demote
-  promote := WasmF.promote
+  fbin := PrimF.fbin .canonical
+  fun1 := PrimF.fun1 .canonical
+  frel := PrimF.frel
+  convert := PrimF.convert
+  trunc := PrimF.trunc
+  truncSat := PrimF.truncSat
+  demote := PrimF.demote .canonical
+  promote := PrimF.promote .canonical
 
-/-! Spot checks of `wasmHost` against Wasm's reference results, by the kernel. -/
+/-- `wasmHost` with the NaN an arithmetic float operation answers resolved by `r`.
+    `[spec §37]` -/
+def wasmHostAt (r : PrimF.NaNs) : Host :=
+  { wasmHost with
+    fbin := PrimF.fbin r
+    fun1 := PrimF.fun1 r
+    demote := PrimF.demote r
+    promote := PrimF.promote r }
+
+/-- **`ℍ` implements the language's primitive operations** (SPEC §8, §37): it is `wasmHost` at
+    every operation, except that a NaN which `add`, `sub`, `mul`, `div`, `min`, `max`, `sqrt`,
+    `ceil`, `floor`, `trunc`, `nearest`, `demote` or `promote` answers may be any NaN.
+    `copysign`, `abs` and `neg` act on the bits and keep a NaN's sign and payload.
+    `[spec §37]` -/
+structure Host.Conforms (ℍ : Host) : Prop where
+  bin32 : ℍ.bin32 = wasmHost.bin32
+  bin64 : ℍ.bin64 = wasmHost.bin64
+  div32 : ℍ.div32 = wasmHost.div32
+  div64 : ℍ.div64 = wasmHost.div64
+  un32 : ℍ.un32 = wasmHost.un32
+  un64 : ℍ.un64 = wasmHost.un64
+  eqz32 : ℍ.eqz32 = wasmHost.eqz32
+  eqz64 : ℍ.eqz64 = wasmHost.eqz64
+  rel32 : ℍ.rel32 = wasmHost.rel32
+  rel64 : ℍ.rel64 = wasmHost.rel64
+  wrap : ℍ.wrap = wasmHost.wrap
+  extendS : ℍ.extendS = wasmHost.extendS
+  extendU : ℍ.extendU = wasmHost.extendU
+  extend32S : ℍ.extend32S = wasmHost.extend32S
+  wrap8 : ℍ.wrap8 = wasmHost.wrap8
+  extend8U : ℍ.extend8U = wasmHost.extend8U
+  fbin : ∀ f o a b, PrimF.NaNEq f (ℍ.fbin f o a b) (wasmHost.fbin f o a b)
+  copysign : ∀ f a b, ℍ.fbin f .copysign a b = wasmHost.fbin f .copysign a b
+  fun1 : ∀ f o a, PrimF.NaNEq f (ℍ.fun1 f o a) (wasmHost.fun1 f o a)
+  abs : ∀ f a, ℍ.fun1 f .abs a = wasmHost.fun1 f .abs a
+  neg : ∀ f a, ℍ.fun1 f .neg a = wasmHost.fun1 f .neg a
+  frel : ℍ.frel = wasmHost.frel
+  convert : ℍ.convert = wasmHost.convert
+  trunc : ℍ.trunc = wasmHost.trunc
+  truncSat : ℍ.truncSat = wasmHost.truncSat
+  demote : ∀ a, PrimF.NaNEq .f32 (ℍ.demote a) (wasmHost.demote a)
+  promote : ∀ a, PrimF.NaNEq .f64 (ℍ.promote a) (wasmHost.promote a)
+
+/-- **Every resolution of the NaNs implements the operations**: `wasmHostAt r` conforms when
+    `r`'s answers are NaNs. `wasmHost` (the canonical NaN) is the case `r = canonical`.
+    `[spec §37]` -/
+theorem wasmHostAt_conforms {r : PrimF.NaNs} (hr : r.Ok) : (wasmHostAt r).Conforms where
+  bin32 := rfl
+  bin64 := rfl
+  div32 := rfl
+  div64 := rfl
+  un32 := rfl
+  un64 := rfl
+  eqz32 := rfl
+  eqz64 := rfl
+  rel32 := rfl
+  rel64 := rfl
+  wrap := rfl
+  extendS := rfl
+  extendU := rfl
+  extend32S := rfl
+  wrap8 := rfl
+  extend8U := rfl
+  fbin f o a b := PrimF.fbin_nanEq hr PrimF.NaNs.canonical_ok f o a b
+  copysign f a b := PrimF.fbin_copysign r .canonical f a b
+  fun1 f o a := PrimF.fun1_nanEq hr PrimF.NaNs.canonical_ok f o a
+  abs f a := PrimF.fun1_abs r .canonical f a
+  neg f a := PrimF.fun1_neg r .canonical f a
+  frel := rfl
+  convert := rfl
+  trunc := rfl
+  truncSat := rfl
+  demote a := PrimF.demote_nanEq hr PrimF.NaNs.canonical_ok a
+  promote a := PrimF.promote_nanEq hr PrimF.NaNs.canonical_ok a
+
+theorem wasmHost_conforms : wasmHost.Conforms := wasmHostAt_conforms PrimF.NaNs.canonical_ok
+
+/-! Spot checks of `wasmHost` against the reference results of Wasm's integer instructions, by
+the kernel. -/
 
 example : wasmHost.bin32 .add 0xFFFFFFFF 2 = 1 := by decide
 example : wasmHost.bin32 .mul 0x10000 0x10000 = 0 := by decide
