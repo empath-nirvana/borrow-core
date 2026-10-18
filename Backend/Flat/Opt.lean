@@ -576,10 +576,30 @@ def testedIn (info : Array Info) (rest : List Stmt) : Std.HashSet Nat := Id.run 
     if !grew then break
   pure t
 
-/-- The statements `ss` comes to when its calls are inlined once: each call counts its callee's
-size. -/
-def expandedSize (info : Array Info) (ss : List Stmt) : Nat :=
-  sizeL ss + (calleesL ss).foldl (fun n g => n + ((info[g]?.map (·.size)).getD 0)) 0
+/-- The statements `ss` comes to when its calls are inlined once (each call counts its callee's
+size), counted up to `cap + 1`: the decisions that read it compare it with bounds below `cap`. -/
+def expandedSize (info : Array Info) (ss : List Stmt) (cap : Nat := 4096) : Nat := Id.run do
+  let mut n := 0
+  for s in ss do
+    n := n + sizeS s + (calleesS s).foldl (fun m g => m + ((info[g]?.map (·.size)).getD 0)) 0
+    if n > cap then return cap + 1
+  pure n
+
+/-- The first statements of `ss` up to `cap` statements, and of a longer statement only its own
+test: the decisions that read a continuation's tests look at its start. -/
+def prefixOf (cap : Nat) (ss : List Stmt) : List Stmt := Id.run do
+  let mut out : Array Stmt := #[]
+  let mut n := 0
+  for s in ss do
+    let k := sizeS s
+    if n + k ≤ cap then out := out.push s; n := n + k
+    else
+      match s with
+      | .ite c _ _ => out := out.push (.ite c [] [])
+      | .switch x _ _ => out := out.push (.switch x [] [])
+      | _ => pure ()
+      break
+  pure out.toList
 
 /-- What copying `rest` into each exit of a call of `f` whose results go to `ds` comes to: where
 `rest` first tests one of `ds`, each exit that returns a literal there takes the arm the literal
@@ -650,6 +670,8 @@ structure Frame where
   id : Nat := 0
   /-- With no continuation copied: the continuation each exit tries a copy of (`tryCopy`). -/
   join : Option (Ctx × List Stmt × List Frame) := none
+  /-- The result positions whose word the continuation tests (`kontTests`). -/
+  wants : Std.HashSet Nat := {}
   deriving Inhabited
 
 abbrev Kont := List Frame
@@ -865,24 +887,29 @@ def returnsOf (rest : List Stmt) : List (Nat × Nat) :=
       | _ => none
     | .inr _ => []
 
-/-- The continuation `k` tests the word returned at result position `r`: the statements after
-the call it returns to test the destination, or return it to a continuation that does. -/
-def kontTests (info : Array Info) : Nat → Kont → Nat → Bool
-  | 0, _, _ => false
-  | _, [], _ => false
-  | n + 1, fr :: k, r =>
-    match fr.dIn[r]? with
-    | none => false
-    | some d =>
-      let rest := match fr.after, fr.join with
-        | some (_, rest), _ => some rest
-        | none, some (_, rest, _) => some rest
-        | none, none => none
-      match rest with
-      | none => false
-      | some rest =>
-        (testedIn info rest).contains d ||
-          (returnsOf rest).any fun (d', r') => d' == d && kontTests info n k r'
+/-- The continuation `k` tests the word returned at result position `r`. -/
+def kontTests (k : Kont) (r : Nat) : Bool :=
+  match k with
+  | [] => false
+  | fr :: _ => fr.wants.contains r
+
+/-- The result positions of a call whose results go to `dIn`, with the statements `rest` after
+it returning to `k`, that `rest` tests (`tested`), or returns to a continuation that does. -/
+def wantsOf (tested : Std.HashSet Nat) (head : List Stmt) (dIn : List Nat) (k : Kont) :
+    Std.HashSet Nat :=
+  let ret := returnsOf head
+  dIn.zipIdx.foldl (fun w (d, r) =>
+    if tested.contains d || ret.any (fun (d', r') => d' == d && kontTests k r') then w.insert r
+    else w) {}
+
+/-- What a copy of a continuation returning to `k` copies besides itself: the continuations
+copied into the exits of the calls it returns to. -/
+def kontCost (info : Array Info) : Nat → Kont → Nat
+  | 0, _ => 0
+  | _, [] => 0
+  | n + 1, fr :: k => match fr.after with
+    | some (_, rest) => expandedSize info rest + kontCost info n k
+    | none => 0
 
 /-- The input function `f`'s body can be inlined from context `ctx`. -/
 def inlinable (ctx : Ctx) (f : Nat) (as : List Exp) : OM Bool := do
@@ -893,12 +920,9 @@ def inlinable (ctx : Ctx) (f : Nat) (as : List Exp) : OM Bool := do
   let lit := as.zipIdx.any fun (a, i) => (lit? a).isSome && info.tagged.getD i false
   let onStack := ctx.stack.count f
   if info.selfCall || onStack > (if lit then 1 else 0) || ctx.stack.length ≥ depthMax then
-    if !info.selfCall then
-      modify fun st => { st with log := st.log.push s!"noinline {fn.name}: stack {onStack} lit {lit} depth {ctx.stack.length}" }
     return false
   if fn.name == "entry" || info.dup > smallMax then return false
   if (← get).emitted + info.size > budget || (← get).work > workMax then
-    modify fun st => { st with log := st.log.push s!"noinline {fn.name}: budget {st.emitted}" }
     return false
   return info.size ≤ smallMax || info.sites ≤ 1 || (lit && info.size ≤ mediumMax)
 
@@ -938,32 +962,29 @@ def simpList : Nat → Ctx → List Stmt → Kont → Join → OM (List Stmt)
           let ctx' := ctx.forget ds
           let ds' := ds.map fun d => ctx.ren.getD d d
           let info := (← read).info
-          let tested := (returnsOf rest).foldl (fun t (d, r) =>
-            if kontTests info 8 k r then t.insert d else t) (testedIn info rest)
+          let head := prefixOf 256 rest
+          let tested := (returnsOf head).foldl (fun t (d, r) =>
+            if kontTests k r then t.insert d else t) (testedIn info head)
+          let wants := wantsOf tested head ds k
           let es := expandedSize info rest
           -- The continuation is copied into each exit when that is cheap, or when it is short and
           -- at most `copyLimit` exits take it (past them the call is expanded again, with the
           -- continuation once after it).
+          -- Each copy of the continuation also copies what the continuations it returns to copy.
+          let kc := kontCost info 8 k
+          let exits := ((info[f]?.map (·.exits)).getD 1)
           let cps := !rest.isEmpty && (← get).emitted < budget && ds.any tested.contains &&
-            (es ≤ contMax || cpsCost info f ds rest ≤ cpsMax || es ≤ cpsMax)
-          if !cps then
-            let nm := ((← read).fns[f]?.map (·.name)).getD "?"
-            let cn := ((← read).fns[ctx.fn]?.map (·.name)).getD "?"
-            modify fun st => { st with log := st.log.push s!"FT {cn} -> {nm}: tested {ds.any tested.contains} res {ds.length} es {expandedSize info rest} cost {cpsCost info f ds rest} restlen {rest.length}" }
+            (exits * (es + kc) ≤ cpsMax || cpsCost info f ds rest + exits * kc ≤ cpsMax)
           let id ← modifyGet fun st => (st.frames, { st with frames := st.frames + 1 })
           let jn := if !rest.isEmpty && ds.any tested.contains then
             some (ctx', rest, k) else none
           if cps then
-            let fr : Frame := { ds := ds', dIn := ds, id, after := some (ctx', rest),
+            let fr : Frame := { ds := ds', dIn := ds, id, after := some (ctx', rest), wants,
                                 afterJoin := join.copy, afterMat := join.mat }
-            let s₀ ← get
-            try
-              return out.toList ++ (← doCall n ctx f as' (fr :: k))
-            catch e =>
-              if e != tooManyCopies id then throw e
-              set s₀
+            return out.toList ++ (← doCall n ctx f as' (fr :: k))
           let id ← modifyGet fun st => (st.frames, { st with frames := st.frames + 1 })
-          let fr : Frame := { ds := ds', dIn := ds, id, join := jn, after := none }
+          let fr : Frame := { ds := ds', dIn := ds, id, join := jn, after := none,
+                              wants := if jn.isSome then wants else {} }
           let r ← doCall n ctx f as' (fr :: k)
           out := out ++ r.toArray
           -- Every exit took a copy of the statements after the call: they are not reached.
@@ -992,7 +1013,7 @@ def simpList : Nat → Ctx → List Stmt → Kont → Join → OM (List Stmt)
               (exitL t || exitL e ||
                 ((!termL t || !termL e) && (← get).emitted < budget &&
                   ((expandedSize info rest ≤ cpsMax / 2 &&
-                      (setsL t ++ setsL e).any (testedIn info rest).contains) ||
+                      (setsL t ++ setsL e).any (testedIn info (prefixOf 256 rest)).contains) ||
                     (expandedSize info rest ≤ contMax && termL rest))))
             if rest.isEmpty || push then
               let t' ← simpList n (ctx.thenFacts c') (t ++ rest) k join
@@ -1000,7 +1021,8 @@ def simpList : Nat → Ctx → List Stmt → Kont → Join → OM (List Stmt)
               emit 1
               return (out.push (.ite c' t' e')).toList
             let emitted := (← get).emitted
-            let cp := emitted < budget && (setsL t ++ setsL e).any (testedIn info rest).contains
+            let cp := emitted < budget &&
+              (setsL t ++ setsL e).any (testedIn info (prefixOf 256 rest)).contains
             let jn : Join := { copy := if cp then some (rest, k) else none,
                                mat := setsL t ++ setsL e }
             let t' ← simpList n (ctx.thenFacts c') t k jn
@@ -1019,11 +1041,12 @@ def simpList : Nat → Ctx → List Stmt → Kont → Join → OM (List Stmt)
               (exitLL cs || exitL d ||
                 ((!termLL cs || !termL d) && (← get).emitted < budget &&
                   ((expandedSize info rest * (cs.length + 1) ≤ cpsMax &&
-                      (setsLL cs ++ setsL d).any (testedIn info rest).contains) ||
+                      (setsLL cs ++ setsL d).any (testedIn info (prefixOf 256 rest)).contains) ||
                     (expandedSize info rest * (cs.length + 1) ≤ 2 * contMax && termL rest))))
             let tail := if rest.isEmpty || push then rest else []
             let emitted := (← get).emitted
-            let cp := emitted < budget && (setsLL cs ++ setsL d).any (testedIn info rest).contains
+            let cp := emitted < budget &&
+              (setsLL cs ++ setsL d).any (testedIn info (prefixOf 256 rest)).contains
             let jn : Join := if rest.isEmpty || push then join
               else { copy := if cp then some (rest, k) else none, mat := setsLL cs ++ setsL d }
             let mut cs' : Array (List Stmt) := #[]
@@ -1075,9 +1098,7 @@ def retTo : Nat → List Exp → Kont → OM (List Stmt)
     | some (actx, rest) =>
       -- Past `copyLimit` copies, an exit sets the destinations and the statements after the
       -- call follow it once.
-      let nc := (← get).copies.getD fr.id 0
-      if nc ≥ copyLimit then throw (tooManyCopies fr.id)
-      modify fun st => { st with copies := st.copies.insert fr.id (nc + 1) }
+
       -- The continuation follows in this exit: an atom is known, any other word set.
       let mut a := actx
       let mut st : Array Stmt := #[]
@@ -1137,9 +1158,7 @@ def callTo : Nat → Nat → List Exp → Kont → OM (List Stmt)
         modify fun st => { st with leaves := st.leaves.insert fr.id none }
         return [c]
       | some (actx, rest) =>
-        let nc := (← get).copies.getD fr.id 0
-        if nc ≥ copyLimit then throw (tooManyCopies fr.id)
-        modify fun st => { st with copies := st.copies.insert fr.id (nc + 1) }
+
         return c :: (← simpList n actx rest k' { copy := fr.afterJoin, mat := fr.afterMat })
 
 end
@@ -1171,7 +1190,7 @@ def runJob (j : Job) : OM Unit := do
     c := { c with vals := c.vals.insert i (litExp l), lazy := c.lazy.insert i }
   let body ← simpList fuel c fn.body [] {}
   let s ← get
-  set { s with log := s.log.push s!"job {fn.name} o{j.out} emitted {s.emitted} pattern {j.pattern.length}" }
+  set { s with log := s.log.push s!"job {fn.name} o{j.out} emitted {s.emitted} work {s.work} pattern {j.pattern.length}" }
   let s ← get
   let name := if j.pattern.isEmpty then fn.name else s!"{fn.name}_s{j.out}"
   let f : Fn := { name, params := np, results := fn.results, locals := s.next - np,
