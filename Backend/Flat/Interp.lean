@@ -15,11 +15,18 @@ range, a read of a word never written, a `free` of anything but the start of a l
 Each call has a frame of fresh addresses, never reused; a frame slot's words are live from its
 `slot` to its `unslot` or the call's return (or tail call), so an access to a slot after its
 scope or its frame is an error too. Slots are not ranges: `live` does not count them.
-Numeric operations are `wasmHost`'s; an instruction where Wasm traps is an error.
+Numeric operations are `flatHost`'s: `wasmHost` with a NaN of payload `1` where an arithmetic
+float operation answers a NaN, a resolution other than the source's and the closure IR's
+(SPEC §37), so that a program whose output depends on that NaN's payload differs from its golden
+here. A partial instruction where its operation has no answer is an error.
 -/
 
 namespace Backend.Flat
 open BoCa
+
+/-- The flat-IR interpreter's host: a NaN of payload `1` at an arithmetic float result.
+    `[spec §37]` -/
+def flatHost : Host := wasmHostAt .payload
 
 structure FState where
   /-- Every word of a live range; `none` until written. -/
@@ -76,30 +83,30 @@ def iword : (i : IWidth) → i.width.bits → UInt64
 
 /-- A numeric operation on words; 32-bit operands are the low halves. -/
 def evalOp : HostOp → List UInt64 → Except String UInt64
-  | .bin .w32 o, [a, b] => .ok (wasmHost.bin32 o a.toUInt32 b.toUInt32).toUInt64
-  | .bin .w64 o, [a, b] => .ok (wasmHost.bin64 o a b)
-  | .div .w32 o, [a, b] => trapIf ((wasmHost.div32 o a.toUInt32 b.toUInt32).map (·.toUInt64))
-  | .div .w64 o, [a, b] => trapIf (wasmHost.div64 o a b)
-  | .un .w32 o, [a] => .ok (wasmHost.un32 o a.toUInt32).toUInt64
-  | .un .w64 o, [a] => .ok (wasmHost.un64 o a)
-  | .eqz .w32, [a] => .ok (toBit (wasmHost.eqz32 a.toUInt32))
-  | .eqz .w64, [a] => .ok (toBit (wasmHost.eqz64 a))
-  | .rel .w32 o, [a, b] => .ok (toBit (wasmHost.rel32 o a.toUInt32 b.toUInt32))
-  | .rel .w64 o, [a, b] => .ok (toBit (wasmHost.rel64 o a b))
-  | .wrap, [a] => .ok (wasmHost.wrap a).toUInt64
-  | .extend_s, [a] => .ok (wasmHost.extendS a.toUInt32)
-  | .extend_u, [a] => .ok (wasmHost.extendU a.toUInt32)
-  | .extend32_s, [a] => .ok (wasmHost.extend32S a)
-  | .wrap8, [a] => .ok (wasmHost.wrap8 a.toUInt32).toUInt64
-  | .extend8_u, [a] => .ok (wasmHost.extend8U a.toUInt8).toUInt64
-  | .fbin f o, [a, b] => .ok (fword f (wasmHost.fbin f o (fbits f a) (fbits f b)))
-  | .fun1 f o, [a] => .ok (fword f (wasmHost.fun1 f o (fbits f a)))
-  | .frel f o, [a, b] => .ok (toBit (wasmHost.frel f o (fbits f a) (fbits f b)))
-  | .convert f i sx, [a] => .ok (fword f (wasmHost.convert f i sx (ibits i a)))
-  | .trunc i f sx, [a] => trapIf ((wasmHost.trunc i f sx (fbits f a)).map (iword i))
-  | .trunc_sat i f sx, [a] => .ok (iword i (wasmHost.truncSat i f sx (fbits f a)))
-  | .demote, [a] => .ok (wasmHost.demote a).toUInt64
-  | .promote, [a] => .ok (wasmHost.promote a.toUInt32)
+  | .bin .w32 o, [a, b] => .ok (flatHost.bin32 o a.toUInt32 b.toUInt32).toUInt64
+  | .bin .w64 o, [a, b] => .ok (flatHost.bin64 o a b)
+  | .div .w32 o, [a, b] => trapIf ((flatHost.div32 o a.toUInt32 b.toUInt32).map (·.toUInt64))
+  | .div .w64 o, [a, b] => trapIf (flatHost.div64 o a b)
+  | .un .w32 o, [a] => .ok (flatHost.un32 o a.toUInt32).toUInt64
+  | .un .w64 o, [a] => .ok (flatHost.un64 o a)
+  | .eqz .w32, [a] => .ok (toBit (flatHost.eqz32 a.toUInt32))
+  | .eqz .w64, [a] => .ok (toBit (flatHost.eqz64 a))
+  | .rel .w32 o, [a, b] => .ok (toBit (flatHost.rel32 o a.toUInt32 b.toUInt32))
+  | .rel .w64 o, [a, b] => .ok (toBit (flatHost.rel64 o a b))
+  | .wrap, [a] => .ok (flatHost.wrap a).toUInt64
+  | .extend_s, [a] => .ok (flatHost.extendS a.toUInt32)
+  | .extend_u, [a] => .ok (flatHost.extendU a.toUInt32)
+  | .extend32_s, [a] => .ok (flatHost.extend32S a)
+  | .wrap8, [a] => .ok (flatHost.wrap8 a.toUInt32).toUInt64
+  | .extend8_u, [a] => .ok (flatHost.extend8U a.toUInt8).toUInt64
+  | .fbin f o, [a, b] => .ok (fword f (flatHost.fbin f o (fbits f a) (fbits f b)))
+  | .fun1 f o, [a] => .ok (fword f (flatHost.fun1 f o (fbits f a)))
+  | .frel f o, [a, b] => .ok (toBit (flatHost.frel f o (fbits f a) (fbits f b)))
+  | .convert f i sx, [a] => .ok (fword f (flatHost.convert f i sx (ibits i a)))
+  | .trunc i f sx, [a] => trapIf ((flatHost.trunc i f sx (fbits f a)).map (iword i))
+  | .trunc_sat i f sx, [a] => .ok (iword i (flatHost.truncSat i f sx (fbits f a)))
+  | .demote, [a] => .ok (flatHost.demote a).toUInt64
+  | .promote, [a] => .ok (flatHost.promote a.toUInt32)
   | .reinterpret_i _, [a] | .reinterpret_f _, [a] => .ok a
   | _, _ => .error "flat IR: operation arity"
 

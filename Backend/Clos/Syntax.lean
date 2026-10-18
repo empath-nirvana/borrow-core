@@ -218,8 +218,9 @@ structure Prog where
   exits : Bool := false
   deriving Repr, Inhabited
 
-/-- The address of the read-only data: after the runtime's own memory, before the heap
-(`Backend/Wasm/Runtime.lean`). -/
+/-- The address of the program's data: the Wasm target's, after its runtime's own memory and
+before the heap (`Backend/Wasm/Runtime.lean`). It is a detail of that backend, not of the IR
+(`Backend.Flat.dataBase`). -/
 def dataBase : Nat := 16384
 
 end Backend.Clos

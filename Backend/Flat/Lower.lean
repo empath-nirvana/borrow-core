@@ -391,19 +391,6 @@ def emit : Dest → List Exp → LM (List Stmt)
     bindVals x ls.toList
     return ss.toList
 
-/-- The operation answers a float whose NaN Wasm leaves to the implementation: the arithmetic,
-which the compiled code makes canonical (SPEC §37). -/
-def canonicalises : HostOp → Bool
-  | .fbin _ o => match o with | .copysign => false | _ => true
-  | .fun1 _ o => match o with | .abs | .neg => false | _ => true
-  | .demote | .promote => true
-  | _ => false
-
-/-- A float's canonical NaN, as a word. -/
-def canonWord : FWidth → Exp
-  | .f32 => .c64 0x7FC00000
-  | .f64 => .c64 0x7FF8000000000000
-
 /-- A float constant, given by its bits, at a float operation's operand: an `f32` is 32 bits. -/
 def fconst (f : FWidth) (b32 : UInt32) (b64 : UInt64) : Exp :=
   match f with
@@ -473,15 +460,7 @@ def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
     | .w32 | .w8 | .f32 => extendU e
     | .w64 | .f64 => e
   match hostResKind o, o with
-  | .int w, _ =>
-    match canonicalises o, w.float? with
-    | true, some f =>
-      -- A NaN result is replaced by the canonical one: `x ≠ x` holds exactly at a NaN.
-      let t ← fresh1
-      let x := rawAt w (.loc t)
-      pure ([.set t (word w (.op o args)), .ite (.op (.frel f .ne) [x, x]) [.set t (canonWord f)] []],
-        [.loc t])
-    | _, _ => pure ([], [word w (.op o args)])
+  | .int w, _ => pure ([], [word w (.op o args)])
   | .test, _ => pure ([], [extendU (.op o args)])
   | .trapping _, .div _ _ =>
     let t₀ ← fresh1

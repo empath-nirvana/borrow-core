@@ -6,9 +6,11 @@ include textio
 
 -- ### The float operations  `[spec §37]`
 --
--- Wasm's float instructions are host operations (`host[f64_sqrt]`, `host[f32_min]`, …; SPEC §37);
+-- The float operations are host operations (`host[f64_sqrt]`, `host[f32_min]`, …; SPEC §37);
 -- these are their names at each width. `+ - * /` and the comparisons are the operators at a float
--- type. A NaN an arithmetic operation answers is the canonical one at every engine.
+-- type. The sign and payload of a NaN an arithmetic operation answers are unspecified: they differ
+-- between engines, and only the operations on bits (`bits_f64`, `copysign_f64`, `abs_f64`,
+-- `neg_f64`, and `total_cmp_f64` and `ord_f64` through them) observe them.
 
 fn sqrt_f64(x: f64) -> f64 = host[f64_sqrt](x)
 fn abs_f64(x: f64) -> f64 = host[f64_abs](x)
