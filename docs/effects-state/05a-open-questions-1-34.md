@@ -181,7 +181,16 @@ it is on the kernel path.
 *Question.* Does the first kernel lift implement tier 1 under R-T1 (a), target tier 2 (b), or
 stay at tier 1 permanently (c)?
 
-*Class.* **DECIDED (a).**
+*Class.* **CORRECTED by the user (2026-10-18): div is a handled effect.** Not "DECIDED (a)".
+
+*The correction.* The user, 2026-10-18: "The original plan was Div being a handled effect." The
+user's own words on record are "Div should be an effect" (2026-09-28) and that the runtime driving
+`main` is the outermost handler. The sentence "Div is not an algebraic effect; it stays
+codata/delay, and nobody should pretend it is handled" was a recorder's, not the user's. Neither
+(a) as recorded nor (b) is the plan: div is an effect whose operation loops perform, handled by
+the runtime's driver, `div_fuel` and the reification of a loop value. Its model and lowering are
+`docs/pipeline-architecture.md` (#552), starting with a proof spike. What is listed below was
+drift, kept as the record of how the reading arose.
 
 *Decisions.*
 
@@ -511,8 +520,8 @@ The handler around a div computation was parked by the user. `docs/handlers-over
 around loops are not a priority, since the operator's shape (a generator pipeline with a handler
 per iteration) already works." Its general form uses only existing rules [inspection].
 
-*Needs the user?* No for the reading. Whether the spanning handler (K-HDIV) is lifted is OQ-67,
-outside this file. That depends on how the 10-01 parking sits with U5 "full stop" (09-30).
+*Needs the user?* No: the user has corrected the reading (above). Whether the spanning handler
+(K-HDIV) is lifted is OQ-67, outside this file. That depends on how the 10-01 parking sits with U5 "full stop" (09-30).
 
 ### OQ-16. Is multi-shot free?
 

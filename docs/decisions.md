@@ -856,3 +856,15 @@ Each entry: the decision, and why. Newest last.
     - **The sign and payload of a NaN an arithmetic float operation answers are unspecified** (Rust RFC 3514). *Amends* SPEC §37 as written in 0.67, which had every engine canonicalise those NaNs (Wasm's deterministic profile): the engines no longer do. The compiled code is the target's float instruction alone; `copysign`, `abs`, `neg` and `reinterpret` still act on the bits.
     - **What the proofs then cover** (SPEC §37): `Host.Conforms` is the set of hosts the semantics allows; `wasmHost` (the canonical NaN) is one, and `wasmHostAt r` is one for every resolution `r` (`wasmHostAt_conforms`). Every theorem over the machine is stated for every host, so it holds at each, unchanged. That a program not observing NaN bits prints the same at every conforming host is tested (the closure-IR and flat-IR interpreters run at two other resolutions, Wasm at the hardware's), not proved; an engine whose choice is not a function of the operands is no one host (both SPEC §37 *Open*).
     - The points below are defaults under the decision, not decisions of the user's: the Lean host keeps the canonical NaN, so goldens do not depend on the machine Lean runs on; the harness compares outputs exactly, not modulo payload, and no corpus program's output depends on the choice (`float-compare.bc` takes its NaN by its bits).
+67. **Div is a handled effect (the user's correction of 2026-10-18; amends how decision 35 is read).**
+    - In the user's words: "The original plan was Div being a handled effect." The user's earlier
+      words are "Div should be an effect" (2026-09-28), with the runtime driving `main` as the
+      outermost handler.
+    - Decision 35's "a div function returns a loop, `A ⇒ U(Loop B R)`" describes the encoding as
+      built. It is not read as excluding handling: the records that did so ("Div is not an
+      algebraic effect … nobody should pretend it is handled"; OQ-15 "DECIDED (a)") were a
+      recorder's wording, and are corrected (`docs/effects-state/04-decisions.md` item 10 and D1,
+      `05a-open-questions-1-34.md` OQ-15).
+    - Loops perform the effect's operation. The runtime's driver, `div_fuel` and the reification of
+      a loop value are its handlers. The model and the lowering are `docs/pipeline-architecture.md`
+      (#552), beginning with a proof spike; SPEC changes come with the build units.
