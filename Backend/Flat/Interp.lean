@@ -217,6 +217,8 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
     | .loc i => getLocal fr i
     | .c64 k => pure k
     | .c32 k => pure k.toUInt64
+    | .tag k => pure k
+    | .undef => pure 0
     | .load a off => do
         let a ← evalExp p n fr a
         modify fun st => { st with loads := st.loads + 1 }

@@ -3,6 +3,7 @@ import Backend.Clos.Syntax
 import Backend.Clos.Types
 import Backend.Clos.Flow
 import Backend.Flat.Syntax
+import Backend.Flat.Opt
 
 /-!
 # Backend — closure IR to flat IR
@@ -128,6 +129,9 @@ def boundTick : LM (List Stmt) := do
 def locs (ls : List Nat) : List Exp := ls.map .loc
 
 def zeros (k : Nat) : List Exp := List.replicate k (.c64 0)
+
+/-- `k` words no run reads: padding. -/
+def pad (k : Nat) : List Exp := List.replicate k .undef
 
 def vty (x : Var) : LM Nat := do
   match (← read).T.varTy[x]? with
@@ -267,13 +271,13 @@ def mkPair (n : Nat) (a b : List Exp) : LM (List Stmt × List Exp) := do
 def mkInj (n : Nat) (r : Bool) (a : List Exp) : LM (List Stmt × List Exp) := do
   let (s, v) ← putField n (if r then 1 else 0) a
   let pw := (← words n) - 1
-  pure (s, [.c64 (if r then 1 else 0)] ++ v ++ zeros (pw - v.length))
+  pure (s, [.tag (if r then 1 else 0)] ++ v ++ pad (pw - v.length))
 
 /-- Variant `k` of the `n`-ary sum `n`: its tag, then the payload, padded. -/
 def mkCon (n k : Nat) (a : List Exp) : LM (List Stmt × List Exp) := do
   let (s, v) ← putField n k a
   let pw := (← words n) - 1
-  pure (s, [.c64 k.toUInt64] ++ v ++ zeros (pw - v.length))
+  pure (s, [.tag k.toUInt64] ++ v ++ pad (pw - v.length))
 
 /-- The fields of a pair's or injection's locals. -/
 def fieldLocals (n i : Nat) (ls : List Nat) : LM (List Nat) := do
@@ -312,11 +316,11 @@ def closVals (c : Nat) (env : List Exp) : LM (List Stmt × List Exp) := do
   let n := T.codeType c
   let t := T.tag c
   if T.isRec n then
-    if env.isEmpty then return ([], [.c64 (2 * t + 1).toUInt64])
+    if env.isEmpty then return ([], [.tag (2 * t + 1).toUInt64])
     let p ← fresh1
     return ((← reuseOrAlloc (1 + env.length) p) ++ [.store (.loc p) 0 (.c64 t.toUInt64)] ++
       storeAt (.loc p) 1 env, [.loc p])
-  return ([], [.c64 t.toUInt64] ++ env ++ zeros (T.words n - 1 - env.length))
+  return ([], [.tag t.toUInt64] ++ env ++ pad (T.words n - 1 - env.length))
 
 /-- The function and arguments that call the closure of type `n` in the locals `ls` on the words
 `args`. When its code `c` is known (`known`, from the flow analysis, or the union's one code),
@@ -380,7 +384,7 @@ def emitTo (ls : List Nat) (vs : List Exp) : LM (List Stmt) := do
 
 def emit : Dest → List Exp → LM (List Stmt)
   | .to ls, vs => emitTo ls vs
-  | .ret k, vs => return (← releaseReuse) ++ [.ret (vs ++ zeros (k - vs.length))]
+  | .ret k, vs => return (← releaseReuse) ++ [.ret (vs ++ pad (k - vs.length))]
   | .bind x, vs => do
     -- A word already in a local is held there: every local is set once, where it is made, and
     -- what it held is consumed here. Any other word is set in a fresh local.
@@ -393,7 +397,9 @@ def emit : Dest → List Exp → LM (List Stmt)
         let t ← fresh1
         ss := ss.push (.set t e)
         ls := ls.push t
-        if let .c64 k := e then modify fun s => { s with consts := s.consts.insert t k }
+        match e with
+        | .c64 k | .tag k => modify fun s => { s with consts := s.consts.insert t k }
+        | _ => pure ()
     bindVals x ls.toList
     return ss.toList
 
@@ -1224,7 +1230,7 @@ def genHelper (h : Helper) : LM Fn := do
               s := s ++ s₁
               out := out ++ ls
               off := off + T.words e
-            return s ++ [.ret ([.loc 0] ++ locs out ++ zeros (w - 1 - out.length))]
+            return s ++ [.ret ([.loc 0] ++ locs out ++ pad (w - 1 - out.length))]
       | .pair .. => do
         let (s₁, a) ← copyField n 0 (← fieldLocals n 0 ps)
         let (s₂, b) ← copyField n 1 (← fieldLocals n 1 ps)
@@ -1233,12 +1239,12 @@ def genHelper (h : Helper) : LM Fn := do
         let (s₁, a) ← copyField n 0 (← fieldLocals n 0 ps)
         let (s₂, b) ← copyField n 1 (← fieldLocals n 1 ps)
         pure [.ite (eqz64 (.loc 0))
-          (s₁ ++ [.ret ([.c64 0] ++ a ++ zeros (w - 1 - a.length))])
-          (s₂ ++ [.ret ([.c64 1] ++ b ++ zeros (w - 1 - b.length))])]
+          (s₁ ++ [.ret ([.tag 0] ++ a ++ pad (w - 1 - a.length))])
+          (s₂ ++ [.ret ([.tag 1] ++ b ++ pad (w - 1 - b.length))])]
       | .sumN fs => do
         let cases ← (List.range fs.length).mapM fun k => do
           let (s₁, a) ← copyField n k (← fieldLocals n k ps)
-          pure (s₁ ++ [.ret ([.c64 k.toUInt64] ++ a ++ zeros (w - 1 - a.length))])
+          pure (s₁ ++ [.ret ([.tag k.toUInt64] ++ a ++ pad (w - 1 - a.length))])
         pure [.switch (.loc 0) cases [.trap]]
       | _ => pure [.ret (locs ps)]
     pure { name := "copy", params := w, results := w, locals := nloc, body := body ++ [.trap] }
@@ -1588,8 +1594,8 @@ def scopeSites (p : Clos.Prog) : Nat × Nat :=
   (framed.length, all.length - framed.length)
 
 /-- The flat IR of `p`; `types` are `p`'s layout types when they are known already. -/
-def lower (p : Clos.Prog) (counts : Bool := false) (types : Option Types := none) :
-    Except String Prog := do
+def lower (p : Clos.Prog) (counts : Bool := false) (types : Option Types := none)
+    (specialize : Bool := true) : Except String Prog := do
   let T ← match types with
     | some T => pure T
     | none => p.types
@@ -1616,6 +1622,7 @@ def lower (p : Clos.Prog) (counts : Bool := false) (types : Option Types := none
       | none => break
     pure ([printDecFn] ++ codes ++ [main, entry] ++ gen.toList)
   let (fns, _) ← (act.run ctx).run {}
-  pure { fns := fns.toArray, entry := fMain + 1, data := p.data }
+  let q : Prog := { fns := fns.toArray, entry := fMain + 1, data := p.data }
+  if specialize then Opt.optimize q else pure q
 
 end Backend.Flat

@@ -42,6 +42,8 @@ def lowerExp (fp : Nat) : Flat.Exp → List Instr
   | .loc i => [.localGet i]
   | .c64 n => [.i64Const n]
   | .c32 n => [.i32Const n]
+  | .tag n => [.i64Const n]
+  | .undef => [.i64Const 0]
   | .load a off => lowerExp fp a ++ [.num .wrap, .i64Load (8 * off)]
   | .load8 a => lowerExp fp a ++ [.num .wrap, .i64Load8U]
   | .op o args => lowerOpArgs o args ++ [.num o] ++ floatOut o

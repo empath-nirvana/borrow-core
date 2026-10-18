@@ -29,6 +29,13 @@ inductive Exp where
   | loc (i : Nat)
   | c64 (n : UInt64)
   | c32 (n : UInt32)
+  /-- A constant that names a variant: a sum's tag, an `n`-ary sum's variant, a closure's code in
+  its union (`Backend/README.md`, Representation). It is the word `k`, as `c64 k`; the specializer
+  (`Backend/Flat/Opt.lean`) makes copies of a loop at its tags, not at its other constants. -/
+  | tag (k : UInt64)
+  /-- A word no run reads: a sum's padding past the payload of its variant, a closure's past its
+  code's captured values. Any word: `0` in Wasm and the flat-IR interpreter, `poison` natively. -/
+  | undef
   /-- The word at `addr + 8·off`. -/
   | load (addr : Exp) (off : Nat)
   /-- The byte at `addr`, zero-extended. -/

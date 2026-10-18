@@ -316,6 +316,8 @@ def expr (fp : String) : Exp → EM String
   | .loc i => val s!"load i64, ptr %l{i}"
   | .c64 n => pure (lit n)
   | .c32 n => pure (toString n.toNat)
+  | .tag n => pure (lit n)
+  | .undef => pure "poison"
   | .load a off => do
     let p ← ptrAt (← expr fp a) off
     val s!"load i64, ptr {p}, align 8"
