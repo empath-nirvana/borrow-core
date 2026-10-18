@@ -532,8 +532,8 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       let some n := (← T).cons[v]? | throw "flat IR: an untyped cell"
       if (← T).cellWords n > 1 || (← T).byteCell n then
         throw "flat IR: a capability's cell wider than its word"
-      return (← storeCell n (.c64 addr.toUInt64) (locs (← vals v))) ++
-        (← emit d [.c64 addr.toUInt64])
+      return (← storeCell n (.data (addr - dataBase)) (locs (← vals v))) ++
+        (← emit d [.data (addr - dataBase)])
   | .free, [l], d => lowerFree none l d
   | .scopedFree k, [l], d => lowerFree (some k) l d
   | .load, [l], d => do
@@ -625,6 +625,7 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
           (← emit d (locs ts))
       | _ => throw "flat IR: split of a non-array"
   | .nullLoc, [], d => emit d [.c64 0]
+  | .dataAddr a, [], d => emit d [.data (a - dataBase)]
   | .drop, [v], d => do
       let T ← T
       let n ← vty v

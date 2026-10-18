@@ -393,7 +393,7 @@ def litClosure (bs : List UInt8) : CM Tm := do
       modify fun s => { s with litCode := some c }
       pure c
   let a ← fresh; let n ← fresh
-  return .letv a (.lit (.i32 addr.toUInt32)) (.letv n (.lit (.i32 bs.length.toUInt32))
+  return .letv a (.prim (.dataAddr addr) []) (.letv n (.lit (.i32 bs.length.toUInt32))
     (.clos c [a, n]))
 
 /-- `x` occurs free in `e`. -/

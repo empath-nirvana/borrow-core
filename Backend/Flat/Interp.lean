@@ -244,6 +244,7 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
     | .stat 0 => do pure (← get).allocs.toUInt64
     | .stat 1 => do pure (← get).indirect.toUInt64
     | .stat _ => do pure (← get).copies.toUInt64
+    | .data off => pure (dataBase + off).toUInt64
 
 def evalArgs (p : Prog) : Nat → Array UInt64 → List Exp → FM (List UInt64)
   | 0, _, _ => throw "flat IR: out of fuel"

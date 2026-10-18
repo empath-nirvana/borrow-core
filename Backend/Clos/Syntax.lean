@@ -67,6 +67,9 @@ inductive Op where
   /-- `alloc v` of a capability's cell (SPEC §11, §34): `alloc`; the flat IR places the cell at
   `addr`, a word of the program's data, and frees nothing. -/
   | staticCell (addr : Nat)
+  /-- The address `addr` of a byte of the program's data (a literal's bytes, SPEC §17), an `i32`
+  word: a backend places the data (`Flat.Exp.data`). -/
+  | dataAddr (addr : Nat)
   /-- `load ℓ`: a copy of the cell's contents. -/
   | load
   /-- `store ℓ v`: the old contents are dropped and `v` stored; the result is `()`. -/

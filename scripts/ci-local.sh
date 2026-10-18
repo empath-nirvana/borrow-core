@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The project's gate: every check CI would run, run locally. Run before opening or merging a PR,
-# and paste the final summary into the PR. Needs elan and wasmtime; mdbook is optional (skipped
-# with a notice if absent).
+# and paste the final summary into the PR. Needs elan and wasmtime; mdbook is optional (the book
+# build is skipped with a notice if absent), and so is a C compiler for the native target
+# (scripts/compile-native.sh says so and passes).
 #
 #     scripts/ci-local.sh             the full gate: the merge requirement (`make gate`)
 #     scripts/ci-local.sh --source    the full gate with the source stage on every program
@@ -74,6 +75,7 @@ steps=(
   "check corpus"     "scripts/check-corpus.sh"
   "compile corpus"   "scripts/compile-corpus.sh"
   "compile kernel"   "scripts/compile-kernel.sh"
+  "native"           "scripts/compile-native.sh"
   "sugar pairs"      "scripts/check-sugar.sh"
   "typed IR"         "scripts/check-elab.sh"
   "book doc-tests"   "scripts/book-doctest.sh"
@@ -98,7 +100,7 @@ if [ "$changed" = 1 ]; then
   done
   if [ "$lean" = 0 ]; then
     all=0
-    corpus=("parse corpus" "check corpus" "compile corpus" "sugar pairs" "typed IR")
+    corpus=("parse corpus" "check corpus" "compile corpus" "sugar pairs" "typed IR" "native")
     for f in $files; do
       case "$f" in
         corpus/kernel-counts.expected) add "compile kernel" ;;
@@ -110,6 +112,7 @@ if [ "$changed" = 1 ]; then
         scripts/check-corpus.sh) add "check corpus" ;;
         scripts/compile-corpus.sh) add "compile corpus" ;;
         scripts/compile-kernel.sh) add "compile kernel" ;;
+        scripts/compile-native.sh) add "native" ;;
         scripts/compile-scaling.sh) add "compile scaling" ;;
         scripts/check-sugar.sh) add "sugar pairs" ;;
         scripts/check-elab.sh) add "typed IR" ;;

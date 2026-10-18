@@ -238,6 +238,7 @@ def applyOp : Op → List CV → IM CV
         else allocObj (.inj true (← allocObj (.pair (.ptr a) (.i32 n))))
       | _, _, _ => throw "closure IR: split of a non-array"
   | .nullLoc, [] => pure (.ptr 0)
+  | .dataAddr a, [] => pure (.i32 a.toUInt32)
   | .litByte, [a, n, i] => do
       match a, n, i with
       | .i32 a, .i32 n, .i32 i =>

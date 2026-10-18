@@ -306,6 +306,7 @@ def primTy : Op → List Var → TM Nat
       modify fun s => { s with cons := s.cons.insert v r }
       pure r
   | .nullLoc, [] => do newLoc (← newNode .any)
+  | .dataAddr _, [] => int32
   | .drop, [v] => do
       let a ← newNode .any
       let r ← newNode .any

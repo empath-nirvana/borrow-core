@@ -59,7 +59,7 @@ def armHead? (bound : Var) : Tm → Option (Var ⊕ (Var × Var))
 
 /-- A term that builds a value from variables and literals, with no call, primitive or case. -/
 def Tm.pureValue : Tm → Bool
-  | .var _ | .unit | .lit _ | .pair .. | .inj .. | .con .. | .clos .. => true
+  | .var _ | .unit | .lit _ | .pair .. | .inj .. | .con .. | .clos .. | .prim (.dataAddr _) [] => true
   | .letv _ e b => e.pureValue && b.pureValue
   | _ => false
 

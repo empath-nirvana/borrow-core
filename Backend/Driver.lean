@@ -14,6 +14,8 @@ import Backend.Flat.Lower
 import Backend.Flat.Interp
 import Backend.Wasm.Lower
 import Backend.Wasm.Print
+import Backend.Native.Lower
+import Backend.Native.Runtime
 
 /-!
 # Backend — driver
@@ -118,6 +120,61 @@ def flatOf (file src : String) (counts : Bool := false) : Except String Flat.Pro
 the report. -/
 def compileWat (file src : String) (counts : Bool := false) : Except String String := do
   pure (Wasm.printModule (Wasm.lowerProg (← flatOf file src counts) counts))
+
+/-! ### The native target  `[spec §40]`
+
+`bcc compile --target native` prints the program's LLVM IR (`Backend/Native/Lower.lean`), for
+the host's target; `bcc run --native` builds it with `clang`, beside the runtime
+(`Backend/Native/Runtime.lean`), and runs it. -/
+
+/-- The target the native code is built for: the host's. -/
+def nativeTriple : String := System.Platform.target
+
+/-- The program as LLVM IR; with `counts`, it counts dispatched calls and copies and writes the
+run's counts after the report. -/
+def compileLL (file src : String) (counts : Bool := false) : Except String String := do
+  Native.printProg (← flatOf file src counts) nativeTriple counts
+
+/-- The flags `clang` builds a native program with. -/
+def clangArgs : Array String := #["-O2", "-w", "-pthread"]
+
+/-- A `clang` on `PATH` outside a Lean toolchain: `lake exe` and `lake env` put the toolchain's
+`bin` first, and its bundled `clang` has no C library headers. -/
+def clangOnPath : IO (Option String) := do
+  let path := (← IO.getEnv "PATH").getD ""
+  for d in path.splitOn ":" do
+    if d.isEmpty || (d.splitOn "/.elan/").length > 1 then continue
+    let c : System.FilePath := d / "clang"
+    if ← c.pathExists then return some c.toString
+  return none
+
+/-- The C compiler the native target builds with, as a command and the arguments that come
+first (`[spec §40]`): `$BC_CC` when set; else on macOS `xcrun clang`, the Xcode toolchain's
+`clang` with the SDK `xcrun` finds (that `clang` run by its path has no SDK, so no C headers);
+else the first `clang` on `PATH` outside a Lean toolchain (`clangOnPath`). `none` when there is
+none. -/
+def nativeCC : IO (Option (String × Array String)) := do
+  if let some cc := ← IO.getEnv "BC_CC" then
+    if !cc.isEmpty then return some (cc, #[])
+  if System.Platform.isOSX then
+    let r ← try IO.Process.output { cmd := "xcrun", args := #["-f", "clang"] }
+      catch _ => pure { exitCode := 1, stdout := "", stderr := "" }
+    if r.exitCode == 0 then return some ("xcrun", #["clang"])
+  return (← clangOnPath).map (·, #[])
+
+/-- Build the LLVM IR `ll` and the runtime in `dir` with `nativeCC`: the executable's path, or
+the compiler's error. -/
+def buildNative (ll : String) (dir : System.FilePath) : IO (Except String System.FilePath) := do
+  let some (cc, pre) ← nativeCC
+    | return .error "no C compiler for the native target: set BC_CC, or install clang"
+  IO.FS.writeFile (dir / "main.ll") ll
+  IO.FS.writeFile (dir / "runtime.c") Native.runtimeC
+  let exe := dir / "main"
+  let r ← IO.Process.output
+    { cmd := cc, args := pre ++ clangArgs ++
+        #[(dir / "main.ll").toString, (dir / "runtime.c").toString, "-o", exe.toString] }
+  if r.exitCode != 0 then return .error s!"{cc} failed ({r.exitCode}):\n{r.stderr}"
+  pure (.ok exe)
 
 /-! ### Timings
 
@@ -292,6 +349,11 @@ def closTypesOfExpr (e : BoCa.Expr) : Except String (Clos.Prog × Option Clos.Ty
 def compileWatExpr (e : BoCa.Expr) (counts : Bool := false) : Except String String := do
   let (p, T) ← closTypesOfExpr e
   pure (Wasm.printModule (Wasm.lowerProg (← Flat.lower p counts T) counts))
+
+/-- A kernel program's LLVM IR. -/
+def compileLLExpr (e : BoCa.Expr) (counts : Bool := false) : Except String String := do
+  let (p, T) ← closTypesOfExpr e
+  Native.printProg (← Flat.lower p counts T) nativeTriple counts
 
 /-- A kernel program at stage `stage`'s interpreter. -/
 def interpStageExpr (stage : String) (e : BoCa.Expr) : Except String Output := do

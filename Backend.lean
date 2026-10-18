@@ -17,3 +17,6 @@ import Backend.Wasm.Syntax
 import Backend.Wasm.Runtime
 import Backend.Wasm.Lower
 import Backend.Wasm.Print
+import Backend.Native.Lower
+import Backend.Native.Runtime
+import Backend.Native.Tests
