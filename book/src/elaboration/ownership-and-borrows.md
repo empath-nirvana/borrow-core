@@ -1,4 +1,7 @@
-# Ownership and borrows
+# Cells and borrows
+
+This chapter is the core form of the guide's [Ownership and borrows](../guide/ownership.md): the
+cell constants, the borrow constants and their lifetimes, written out.
 
 ## Persistent and linear values
 

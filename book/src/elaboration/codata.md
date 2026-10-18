@@ -153,7 +153,9 @@ main : F (i32 + 1) =
 From the state `1` the loop takes one step to `0` and then finishes. There is no syntax for
 running a loop to completion yet: a driver is written out to the depth wanted, as here.
 
-## Planned
+## Beyond this chapter
 
-- Iterators over borrowed data (#57), and the iterator library and `|>` pipelines (#48, #59).
-  Adapters such as `map` and `filter` will be library code over `iter`, not new formers.
+The surface's generators and stored generators are codata of this former, `pull A B R`, and the
+adapters (`map`, `filter`, `take`, …) are library code over them, not new formers
+([Iteration](../guide/iteration.md)). External iteration over borrowed linked structures is still
+open (#57).

@@ -1,6 +1,8 @@
-# Integers
+# Integers and host operations
 
-`i32` and `i64` are WebAssembly's integers. They are persistent: an integer variable can be used
+The surface's operators at the numbers are these operations ([Values, functions and
+numbers](../guide/basics.md#numbers)); this chapter writes them as the core does. `i32` and `i64`
+are WebAssembly's integers. They are persistent: an integer variable can be used
 any number of times.
 
 ## Literals
@@ -54,6 +56,24 @@ main : F i32 =
 ```
 
 `42 < 100` is true, so the `inr` arm runs and returns `42 / 7`.
+
+The surface's `a / b` and `a % b` are these partial operations followed by a test: `inr ()`
+raises `Fail[DivError]` ([Errors](../guide/errors.md#division), SPEC §39), and a division by a
+nonzero literal is the operation alone.
+
+## Bytes and floats
+
+`u8` is the byte: the literal `u8[n]` (read modulo 2⁸), and `b'c'`, which the lexer reads as
+`u8[n]`. Its operations are its conversions, `host[wrap8]` (`i32 => u8`, the low 8 bits) and
+`host[extend8_u]` (`u8 => i32`); a surface operator at `u8` works at `i32` and narrows back.
+
+`f32` and `f64` are IEEE 754 floats, persistent like the integers. The core literal is the bit
+pattern, `f64[4617315517961601024]` for `5.0`, and the operations are WebAssembly's float
+instructions, named with `_` for `.`: `host[f64_add]`, `host[f32_sqrt]`, `host[f64_lt]`,
+`host[f64_convert_i32_s]`, `host[i32_trunc_f64_s]`. A truncation to an integer that WebAssembly
+would trap on returns `inr ()`; the `trunc_sat` forms saturate instead. Every NaN an arithmetic
+operation produces is the canonical positive NaN, at every engine, so every program prints one
+output (SPEC §37).
 
 ## Nothing about arithmetic is assumed
 

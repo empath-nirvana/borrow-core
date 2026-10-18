@@ -1,6 +1,6 @@
 # Values and computations
 
-borrow-core is a call-by-push-value language: it has two kinds of type and two kinds of term.
+The core is a call-by-push-value language: it has two kinds of type and two kinds of term.
 
 - A **value type** classifies data: `1` (the unit, written `()`), `0` (no values), pairs
   `A * B`, sums `A + B`, integers `i32` and `i64`, cells `ref A`, borrows `imm 'a A` and

@@ -26,93 +26,12 @@ def cons : i32 * List => List =
 
 ## Recursion
 
-A function may call itself, and functions may call one another: they form a recursive group, and
-a **driver** runs it (SPEC §20, §21). The group is the fixed point of its *generator*, the members'
-bodies with their calls of the group going to a self-reference, and each of those calls is a
-direct call. The default driver, `bounded`, needs nothing written: it takes the fixed point as
-native calls, carrying a budget of depth, and when the budget is spent it performs `exhausted()`,
-an error like any other (`include rec`). So a recursive function's row has `Exhausted`, and
-something handles it:
-
-```bc
-include rec
-
-type Tree = mu X. 1 + (X * (i32 * X))
-
-def empty : Tree = roll inl ()
-fn mk(l: Tree, v: i32, r: Tree) -> Tree = roll inr (l, (v, r))
-
-fn build(d: i32) -> Tree = if d == 0 { empty } else { mk(build(d - 1), d, build(d - 1)) }
-
-fn sum(t: Tree) -> i32 =
-  match unroll t {
-    inl u -> 0
-  | inr (l, p) -> let (v, r) = p; sum(l) + v + sum(r)
-  }
-
-fn down(n: i32) -> i32 = if n == 0 { 0 } else { 1 + down(n - 1) }
-
-main -> i32 * i32 =
-  let s = with on_exhausted(!{ u -> 0 - 1 }) { sum(build(4)) };
-  let d = with on_exhausted(!{ u -> 0 - 1 }) { down(20000) };
-  (s, d)
--- answer: (i32[26], i32[4294967295])
-```
-
-`down(20000)` is deeper than the budget, so it performs `exhausted()`, which unwinds every level
-(running what each level must finalise) and reaches `on_exhausted`. A recursion that must go
-deeper runs under the heap driver, `with deep { down(20000) }`, which keeps its pending calls in
-a buffer instead of on the stack, and is div.
-
-A recursion may do what any function does. It may use a handler's capability: the capability is
-passed down with each call and handed back with each answer, as to any function that uses one. It
-may yield, or perform any operation, which goes to the handler around the call from outside. Its
-members may answer different types: the fixed point is taken at the record of their functions.
-A recursion whose body has a `while` or a `loop` is not provided yet: it is div, and its
-`Exhausted` would be performed inside its loop, where no handler reaches.
-
-A recursion may be **generic**. `lib/list.bc` (`include list`) gives `List[A]` with `nil`,
-`cons`, and the recursive templates `map`, `filter` and `fold`. Each use at new types is an
-instance of the whole recursion at those types, and a block given to one may itself perform
-operations, which go to the handlers where the block is written:
-
-```bc
-include list
-
-main -> List[bool] * i32 = with on_exhausted(!{ u -> (nil(), 0) }) {
-  let xs = cons(3, cons(0 - 1, cons(4, nil())));
-  (map(xs, !{ x -> x > 1 }), fold(cons(1, cons(2, nil())), 0, !{ (a, x) -> a + x }))
-}
--- answer: (inr (inr (), inr (inl (), inr (inr (), inl ()))), i32[3])
-```
-
-The members of a generic recursion take the same type parameters, and a call of itself is at
-them: a recursion that calls itself at other types is not provided.
-
-A **layer** runs around each call a recursion makes of itself. It is a function of the call and
-its argument, generic in their types, and `with L { … }` applies it to the recursions called in the
-block, before their fixed point is taken: it transforms the generator, and the recursion knows
-nothing of it.
-
-```bc
-include rec
-
-effect Count { fn tick() -> i32 }
-
-handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
-
-fn counted[A, B](call: !(A => B), a: A) -> B = tick(); call(a)
-
-fn fib(n: i32) -> i32 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
-
-main -> i32 * i32 =
-  let c = alloc(0);
-  let f = with count(&mut c) { with counted { with on_exhausted(!{ u -> 0 - 1 }) { fib(10) } } };
-  (f, free(c))
--- answer: (i32[55], i32[176])
-```
-
-`fib(10)` makes 176 calls of itself, each counted; the call from outside is not.
+The surface's recursion (a function that calls itself, its drivers `bounded` and `deep`, and
+layers) is in [Data and generics](../guide/data.md#recursion). In the core, a recursive group is
+the bounded fixed point of its *generator*: the record of the members' bodies, each call of the
+group a call of the self-reference. `bounded` is the kernel's `bounded_fix` at a budget of depth,
+whose end performs `Exhausted`; `deep` is a machine whose pending calls are frames in a growable
+buffer (SPEC §20, §21). `bcc check` reports the generator and each copy.
 
 A `def` written in the core text is not a recursion: its body is code over a fixed point the
 kernel provides (`unfold`, the folds, `bounded_fix`), and a name it uses is declared before it:
