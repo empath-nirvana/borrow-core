@@ -111,13 +111,14 @@ These are detailed under each topic below (the IDs in brackets).
      two ways of saying the same thing" (2026-09-30), with fuel drivers setting totality.
    - `docs/rec-effect/README.md:44-70` presents the superseded design as "the design, as decided".
    - The memory record is not marked superseded. [D3, D4]
-10. **Div: "an effect" or "not an algebraic effect".**
+10. **Div: "an effect" or "not an algebraic effect".** *Corrected by the user, 2026-10-18.*
     - Decision 35 and mem:`div-is-an-effect`: running a loop "is handling the effect", and the
       runtime is "the outermost handler".
     - mem:`no-effect-ish-approximations`: "Div is not an algebraic effect; it stays codata/delay,
-      and nobody should pretend it is handled".
-    - Both are the user's positions. They agree that div is codata (`Loop`). They differ in whether
-      to call driving it "handling". [D1]
+      and nobody should pretend it is handled". This sentence was a recorder's, not the user's.
+    - The user, 2026-10-18: "The original plan was Div being a handled effect." So the conflict is
+      resolved for the first record: div is a handled effect. The second record's sentence is
+      drift. [D1]
 11. **Traits and providers.**
     - Decision 54 ("Tentative: no traits") lists "invariant-bearing structures … capture their
       provider at construction" and lexical handlers.
@@ -449,12 +450,12 @@ These are detailed under each topic below (the IDs in brackets).
 - Scope: kernel and surface.
 - Sources: mem:`div-is-an-effect`:11-15; decision 35 (`docs/decisions.md:174-184`);
   `SPEC.md:1190-1200`; #81 (closed).
-- **Tension.** mem:`no-effect-ish-approximations`:16: "Div is not an algebraic effect; it stays
-  codata/delay, and nobody should pretend it is handled". Decision 35 says "running a loop is
-  handling the effect", and mem:`div-is-an-effect` calls the runtime "the outermost handler". Both
-  records agree on the representation (`Loop` codata). They differ in calling driving it
-  "handling". SPEC §19 keeps div as `Loop_Σ` codata, with no second fixed point
-  (`SPEC.md:2693-2711`).
+- **Tension, corrected (2026-10-18).** mem:`no-effect-ish-approximations`:16 said "Div is not an
+  algebraic effect; it stays codata/delay, and nobody should pretend it is handled". That was a
+  recorder's sentence. The user: "The original plan was Div being a handled effect." Decision 35's
+  "running a loop is handling the effect" and the runtime as "the outermost handler" are the plan.
+  SPEC §19's "no second fixed point" and `Loop_Σ` as the only reading of div are the state as
+  built, not a decision; `docs/pipeline-architecture.md` (#552) designs div as a handled effect.
 
 **D2. Totality is not a goal.**
 - Words: "i don't really care about totality in general unless we need it for something specific,
