@@ -60,9 +60,10 @@ with a resume entry of its own, which puts the clause's answer in the operation'
 without it.
 
 **Tail-resumptive operations.** When every handler of a name has the same closed clause for an
-operation, and the clause resumes `κ` once, in tail position, and neither suspends nor raises,
-the operation is a direct call of the clause, its resume removed: the handler is the one known
-statically, and nothing is suspended or resumed.
+operation, and the clause resumes `κ` once on every path, in tail position (each arm of a `case`
+ending in its own resume), and neither suspends nor raises, the operation is a direct call of the
+clause, its resumes removed: the handler is the one known statically, and nothing is suspended or
+resumed. The resume commutes out of the arms (`Core/Handlers.lean`, `tail_resumes`).
 
 **Cancels.** `κ`'s cancel entry cancels `k`, then answers `()` or re-raises the kept error
 (`reraise`) at the canceller. The region's handlers are dead, as §19's *Cancels* asks: a cancel
@@ -519,11 +520,12 @@ def SFacts.of (O : Ops) (p : Prog) (hs : Array HInfo) : Except String SFacts := 
 
 /-! ### Tail-resumptive operations
 
-A clause that resumes `κ` once, in tail position, with an answer it computes without `κ`
-(`λ(w, k). …; k.resume y`) is *tail-resumptive*. When every handler of a name has one closed
-tail-resumptive clause for an operation, and the clause neither suspends nor raises, a `perform`
-of that operation is a direct call of the clause's code with its resume removed: the handler is
-the one known statically, and no continuation is materialised. -/
+A clause that resumes `κ` once on every path, in tail position, with an answer it computes without
+`κ` (`λ(w, k). …; k.resume y`, or a `case` with such an arm on each side) is *tail-resumptive*.
+When every handler of a name has one closed tail-resumptive clause for an operation, and the clause
+neither suspends nor raises, a `perform` of that operation is a direct call of the clause's code
+with its resumes removed: the handler is the one known statically, and no continuation is
+materialised. -/
 
 /-- `x`, and the variables a `let y = z` of `t` binds to one of them, transitively. -/
 def aliasesIn (t : Tm) (x : Var) : List Var := Id.run do
@@ -550,21 +552,56 @@ def Tm.operands : Tm → List Var
   | .hnd _ hr cls b | .ubind hr cls b => hr :: cls :: b.operands
   | .catch _ b | .catchAll b => b.operands
 
-/-- The uses of the variables `xs` in `t`. -/
-def occurrences (t : Tm) (xs : List Var) : Nat := (t.operands.filter xs.contains).length
+/-- The variables the `let`s of a term bind, at any depth. -/
+def Tm.letBound : Tm → List Var
+  | .letv x e b => x :: e.letBound ++ b.letBound
+  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .fin _ _ b | .catch _ b | .catchAll b
+  | .hnd _ _ _ b | .ubind _ _ b => b.letBound
+  | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => b₁.letBound ++ b₂.letBound
+  | _ => []
 
-/-- A `let f = E` of `t` whose value is the resume projection `kk s` of `κ` (`kk` among `ks`, `s`
-an `inl`): `f`, `kk` and `s`. -/
-def findResume (defs : Std.HashMap Var Tm) (ks : List Var) : Tm → Option (Var × Var × Var)
-  | .letv f e b =>
-    match e.tail with
+/-- A path of a term from its root through its `case`s to one of its tails: the operands it uses
+on the way (each non-tail part's in full), the variables its `let`s bind, and the tail. -/
+structure TPath where
+  uses : List Var
+  bound : List Var
+  /-- The definitions of the `let`s on the path, outermost first. -/
+  lets : List (Var × Tm)
+  tail : Tm
+
+/-- The paths of a term (`TPath`). -/
+def Tm.paths : Tm → List TPath
+  | .letv x e b => b.paths.map fun π =>
+    { π with uses := e.operands ++ π.uses, bound := x :: e.letBound ++ π.bound,
+             lets := (x, e) :: π.lets }
+  | .letpair _ _ p b => b.paths.map fun π => { π with uses := p :: π.uses }
+  | .copy x _ b | .drop x b => b.paths.map fun π => { π with uses := x :: π.uses }
+  | .case s _ b₁ _ b₂ | .when s _ _ _ b₁ b₂ =>
+    (b₁.paths ++ b₂.paths).map fun π => { π with uses := s :: π.uses }
+  | t => [{ uses := t.operands, bound := [], lets := [], tail := t }]
+
+/-- The uses of the variables `xs` among `us`. -/
+def countIn (us xs : List Var) : Nat := (us.filter xs.contains).length
+
+/-- A path's one resume, when it ends in one: the path's tail is `ff y` with `ff` an alias of a
+`let f = E` on the path whose value is the resume projection `kk s` of `κ` (`kk` among `ka`, the
+aliases of `κ`; `s` an `inl`), and the path uses `κ` and `f` only along their alias chains and at
+those two calls. Its `(kk, s, ff, y)`. -/
+def TPath.resume? (defs : Std.HashMap Var Tm) (B : Tm) (k : Var) (ka : List Var) (π : TPath) :
+    Option (Var × Var × Var × Var) := do
+  let .app ff y := π.tail | none
+  let (f, kk, s) ← π.lets.findSome? fun (f, e) => match e.tail with
     | .app kk s =>
-      if ks.contains kk && (match defs[s]?.map Tm.tail with | some (.inj false _) => true | _ => false)
-      then some (f, kk, s) else findResume defs ks e <|> findResume defs ks b
-    | _ => findResume defs ks e <|> findResume defs ks b
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => findResume defs ks b
-  | .case _ _ b₁ _ b₂ => findResume defs ks b₁ <|> findResume defs ks b₂
-  | _ => none
+      if ka.contains kk && (match defs[s]?.map Tm.tail with | some (.inj false _) => true | _ => false)
+      then some (f, kk, s) else none
+    | _ => none
+  let fa := aliasesIn B f
+  -- Each alias on the path is bound by a use of the previous one, and the last is used once by
+  -- the call: one use more than the aliases the path binds is a use outside the chain.
+  guard (fa.contains ff && !fa.contains y)
+  guard (countIn π.uses ka == countIn (k :: π.bound) ka)
+  guard (countIn π.uses fa == countIn π.bound fa)
+  return (kk, s, ff, y)
 
 /-- `t` with the resume projection `kk s` replaced by `()` and the resume `ff y` by `y`, the
 variables they consumed dropped. -/
@@ -575,23 +612,24 @@ def Tm.dropResume (kk s ff y : Var) : Tm → Tm
   | .letv x e b => .letv x (e.dropResume kk s ff y) (b.dropResume kk s ff y)
   | .letpair x z p b => .letpair x z p (b.dropResume kk s ff y)
   | .case s' x b₁ z b₂ => .case s' x (b₁.dropResume kk s ff y) z (b₂.dropResume kk s ff y)
+  | .when s' k n x b r => .when s' k n x (b.dropResume kk s ff y) (r.dropResume kk s ff y)
   | .copy x x' b => .copy x x' (b.dropResume kk s ff y)
   | .drop x b => .drop x (b.dropResume kk s ff y)
   | t => t
 
-/-- The clause code `λp. let (w, k) = p; B` without its resume, when it is tail-resumptive: `B`
-uses `κ` once, as `k.resume y` in tail position. Its argument is still the pair, with `()` for
-`κ`. -/
+/-- The clause code `λp. let (w, k) = p; B` without its resumes, when it is tail-resumptive: every
+path of `B` ends in one resume of `κ`, `k.resume y`, and uses `κ` nowhere else (`TPath.resume?`).
+A path that ends otherwise (a raise, a value, a call of something else, a resume under a `catch`
+or `fin` frame) or that uses `κ` otherwise (drops it, cancels it, stores it, resumes it twice)
+makes the clause not tail-resumptive. Its argument is still the pair, with `()` for `κ`. -/
 def tailClause? (c : Code) : Option Code := do
   let .letv p' (.var p) (.letpair w k p'' B) := c.body | none
   guard (p == c.param && p' == p'' && c.env.isEmpty)
   let defs := defsOf {} B
   let ka := aliasesIn B k
-  let (f, kk, s) ← findResume defs ka B
-  let fa := aliasesIn B f
-  let .app ff y := B.tail | none
-  guard (fa.contains ff && occurrences B ka == ka.length && occurrences B fa == fa.length)
-  return { c with body := .letv p' (.var p) (.letpair w k p' (B.dropResume kk s ff y)) }
+  let rs ← B.paths.mapM (·.resume? defs B k ka)
+  let B' := rs.foldl (fun t (kk, s, ff, y) => t.dropResume kk s ff y) B
+  return { c with body := .letv p' (.var p) (.letpair w k p' B') }
 
 /-- The codes of the clauses at index `j` of the clause tuples a key holds. -/
 def Solver.clausesAt (S : Solver) (k : Nat) : Nat → List Nat
@@ -1103,14 +1141,19 @@ def Prog.capture (p : Prog) (wrapAnswers : Bool := false) : Except String Prog :
     -- Each code that answers outcomes becomes a machine; the others are plain.
     let codes₁ := (← get).codes
     let mut crossed : List Nat := []
+    let mut machines := 0
+    let mut suspending := 0
     for k in [0:codes₁.size] do
       let c := codes₁[k]!
       if F.poll[k]?.getD false then
         crossed := crossed ++ (crossedScopes F [] c.body).2
+        machines := machines + 1
+        if !(F.skeys[k]?.getD []).isEmpty then suspending := suspending + 1
         kset k (← machine O F k c)
       else kset k { c with body := ← liftE ((plainCode F c.body).mapError (s!"in code {k}: " ++ ·)) }
     let main ← liftE ((plainCode F main).mapError ("in main: " ++ ·))
-    pure { p with main, codes := (← get).codes, suspendedScopes := crossed.eraseDups }
+    pure { p with main, codes := (← get).codes, suspendedScopes := crossed.eraseDups,
+                  tailOps := direct.map (·.1), machines, suspending }
   act.run' ⟨next, p.codes, #[]⟩
 where
   liftE {α} (x : Except String α) : KM α := match x with

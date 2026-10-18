@@ -774,7 +774,14 @@ operations and cancels are lowered, but for a name with both
 control and abortive operations and a cancel whose finalisers may raise under a handler reached
 from its own body (rejected). A tail-resumptive operation is a direct call when its handlers have
 one closed clause; one whose clause captures values is a state machine (its captures passed as
-evidence is open). The cancel frames `ccatch` and
+evidence is open). A clause is tail-resumptive when every path through it, through the arms of
+its `case`s and the bodies of its `let`s, ends in one `k.resume y` and uses `κ` nowhere else, and
+the clause neither suspends nor raises (`Capture`'s `tailClause?`, SPEC §19). A path that raises
+out of the clause, cancels, drops or stores `κ`, resumes twice, or resumes under a `catch` or
+finaliser frame makes the clause a state machine; a raise caught inside the clause is a branch in
+it. The resume commutes out of the arms (`Core/Handlers.lean`, `tail_resumes`). `bcc-counts
+--sites` reports the operations lowered so (`tail-resumptive [(name, op)]`), the codes made
+machines, and how many of them may suspend. The cancel frames `ccatch` and
 `cfin` occur only in the source machine's continuations and are rejected by `Convert`. The only externs compiled are the
 standard I/O ones; the model's harness (`mk_input`, …) is not compiled. `fold_imm` and the owned
 folds that pointer reversal does not cover recurse on the Wasm stack (Stack). Closures of

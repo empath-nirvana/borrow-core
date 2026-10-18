@@ -135,6 +135,7 @@ for-data-div 3 0 0 17 9 6 # the two arrays and the cell the views are lent from
 for-finite 0 0 0 0 0 0
 for-never 0 0 0 0 0 0
 for-return 1 0 0 9 5 4
+for-yield-branch 0 0 0 0 0 0
 format 1 0 0 38 31 37 # the string, built at its capacity
 gen-adapters 5 0 0 30 30 0 # the nodes of the lists `chunks` builds; each generator one state machine, each stored generator one handler site, each `yield` to a `for` a direct call
 gen-adapters-fail 8 0 0 48 48 0 # the nodes of the lists `chunks` and `lines` build

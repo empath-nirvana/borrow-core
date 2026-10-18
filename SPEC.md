@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.71 · 2026-10-17
+Version 0.72 · 2026-10-18
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1578,7 +1578,9 @@ with a static name `n` of its own (§18, §19):
 
 When the body performs nothing else, the clause resumes in tail position, and the operation is a
 direct call of the clause (§19, *Lowering*): `corpus/gen-produce.bc`, `gen-fib.bc` and
-`gen-pipeline.bc` allocate nothing and dispatch no call.
+`gen-pipeline.bc` allocate nothing and dispatch no call. A body that branches resumes at the end
+of each arm, and is a direct call too; a body with `break` or `return` in an arm cancels there,
+and is a suspension (`corpus/for-yield-branch.bc`).
 
 ### A generator's body
 
@@ -2255,6 +2257,11 @@ each in source order; the library's own are not printed:
   `K[(ℓ, r)]` with `s'` in the cell.
 - **Handling is the fold of the clauses** (`handle_fold`): the handler is the state-passing fold
   of its clauses over the operations performed.
+- **A resume in every arm** (`tail_resumes`, `TailResumes.step`). A control clause whose every
+  path ends in one resume `R N` in tail position, through `case` arms, `let (x, y)` bodies and
+  sequences, runs step for step as the clause with its resumes removed, then one resume: when
+  that answers `r`, the clause reaches `R r` at the same memory. It is the clause whose resume
+  is its last call, which §19 lowers as a direct call.
 
 The file's abort laws (`abort_passes`, `return_resumes`, `loop_abort`) are about the sum schema
 that errors elaborated to before §19; errors are now §19's abortive operations, whose meaning is
@@ -3213,8 +3220,14 @@ code).
 **A tail-resumptive operation is a direct call.** When every handler of a name whose body may
 perform an operation has the same closed clause for it (the specialisation: the handler is known
 statically), the clause
-resumes `κ` once, in tail position, with an answer computed without `κ`, and it neither suspends nor
-raises, a `perform` of the operation calls the clause's code with its resume removed. Nothing
+resumes `κ` once on every path, in tail position, with an answer computed without `κ`, and it
+neither suspends nor raises, a `perform` of the operation calls the clause's code with its resumes
+removed. A path runs through the arms of a `case` and the bodies of `let`s; each must end in
+`k.resume y` and use `κ` nowhere else. A clause with an arm that raises out of it, cancels or drops
+`κ`, stores `κ`, resumes it twice, or resumes it under a `catch` or finaliser frame is not
+tail-resumptive: it is a state machine. An error raised and caught inside the clause is a branch
+inside it and does not end a path. The resume commutes out of the arms (§18 *Laws*,
+`tail_resumes`), so such a clause is one whose resume is its last call. Nothing
 suspends or resumes, and no continuation is materialised. A clause that captures values, or
 whose handlers differ, is a state machine like any other: resumed in tail position, it still
 runs in constant stack.
@@ -7083,6 +7096,10 @@ no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the chec
 
 ## Changelog
 
+- **0.72** (2026-10-18) — §19, *Lowering* (#544): a clause is tail-resumptive when every path
+  through it ends in one resume of `κ` in tail position, each arm of a `case` with its own, not
+  only when its last call is the resume. §18, *Laws*: the resume commutes out of the arms
+  (`tail_resumes`, `Core/Handlers.lean`). `corpus/for-yield-branch.bc`.
 - **0.71** (2026-10-17) — §40 (new, #529): the native target. `bcc compile --target native`
   prints LLVM IR from the flat IR, `bcc run --native` builds it with `clang` beside a C runtime
   (the allocator with the Wasm runtime's semantics, the POSIX platform of §11 and §34) and runs
