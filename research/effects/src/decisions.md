@@ -8,10 +8,57 @@ These bound the design space. Each is quoted at the strength the user gave it. T
 - **Row variables are in the kernel** (decision 62).
 - **Handlers are deep** (decision 62).
 - **Cancellation is what SPEC §19 builds** (decision 62).
-- **No step-indexing** (decision 7).
+- **Recursion and codata are typed without step-indexing** (decision 7): least and greatest fixed points, `fixD`. This is not a ban on step-indexed proofs. User, 2026-10-18: "i'm not averse to step indexing entirely, that was a remnent of the original BoLo proof work which did _not_ use it, following the original paper. If we absolutely need it for something we can discuss the trade offs."
 - **Effect handling is erased at runtime.** No function colouring; effects may appear in types.
+- **No run-time dispatch to handlers** (2026-10-18). "I also don't think we should be dispatching at runtime to handlers or this won't work as a language." Every `perform` resolves statically to its clause. Run-time choice is allowed only where the equivalent hand-written Rust program dispatches too (#541).
+- **Code size is not a goal** (2026-10-18). "smaller code is not even a goal right now, shouldn't be taken into consideration outside of degenerate blowups." Specialise per definition, handler site and closure code of a function argument, as Rust monomorphises closures (#542).
 - **Divergence is an effect** (codata). Totality is not a goal.
 - **Errors are a control-flow effect** (`raise`). No API returns a sum for failure.
 - **Binary laws are optional** unless safety needs them (2026-10-02).
 - **Threads are required eventually.** Keep the door open.
 - **Higher-order operations: not now** (decision 57).
+
+## The decided algebra
+
+These are the equations and semantic choices every unit must preserve. A unit may prove them,
+restate a target to match them, or report that one does not hold. It may not change them.
+
+- **Handler laws** (deep handlers, Plotkin–Pretnar): a handler's return clause meets `return v`;
+  an operation clause meets `op(v)` with the continuation re-wrapped in the same handler; an
+  operation of another name passes the handler (forwarding).
+- **Algebraicity**: `op(v) to x. P = op(v; y. (k y to x. P))`; an abortive operation absorbs its
+  continuation: `raise e to x. P = raise e`.
+- **Static per-site names** (SPEC §19, *Names*): an operation reaches the handler site it names;
+  no accidental handling.
+- **Continuations are linear or affine; `unr` is tolerated, never designed for.** An affine `κ`
+  is consumed by exactly one of resume or cancel; a linear `κ` has no cancel.
+- **Cancel is not interceptable** (SPEC §19, *Cancels*): the cancelled region's handlers are dead
+  and catch nothing; the canceller sees `()`.
+- **Finalisers follow `finally`'s law**: `(raise e) then x. N unwind D = D (); raise e`. A
+  finaliser's raise of a name handled outside the cancelled region propagates to the live
+  handlers, and the canceller sees it as an ordinary raise. A finaliser's raise of a name handled
+  only inside the region is a **type error**. Not a runtime seal, not a stuck state. Every
+  finaliser runs, so the teardown completes. Which of several finaliser errors wins is a policy,
+  not part of the algebra.
+- **Safety means every operation that is performed or raised has a live handler**. A stuck state
+  or a silently dropped error is never a semantics.
+- **Effect handling is erased**: tail-resumptive → call, abortive → branch, suspension → state
+  machine; zero-size cells cost nothing.
+- **Nothing breaks the borrow calculus**, as above.
+
+### Hard stop
+
+Before committing, a unit **stops that step and reports** if its change would:
+
+1. change an equation or semantic choice listed above;
+2. change the observable behaviour of an existing kernel or corpus program, or remove one
+   (`corpus/kernel-counts.expected`, the corpus goldens), including by making it stuck;
+3. add a runtime rule whose job is to block a behaviour (a seal, a stuck state, a suppression)
+   instead of a typing rule that excludes it;
+4. reject a program that the algebra gives a meaning to, unless a decision records that rejection
+   as a deliberate restriction;
+5. weaken a target beyond what the decided calculus needs, to make a proof go through.
+
+The report names the law, the change, and the programs affected. The step's work is kept
+uncommitted (stashed) and the unit moves on. Restatements that bring a target *into line with*
+this algebra are not a stop.
