@@ -75,10 +75,12 @@ def Pins.assurance : Pins → String
       | xs => some s!"{r} at {", ".intercalate xs}"
     s!"assurance: PinLaw ({"; ".intercalate parts})"
 
-/-- What `bcc check` prints, and the checked `main`. -/
+/-- What `bcc check` prints, the checked `main`, and the elaborated program the checker checked:
+the backend reads the program, and whether `main` is served `Fail[DivError]` (SPEC §39), from it. -/
 structure Report where
   lines : List String
   main : Option Checked
+  el : Frontend.Elab.Elaborated
 
 /-- The depth bound for checking a term. -/
 def checkFuel : Nat := 1 <<< 20
@@ -173,7 +175,8 @@ def checkDecl (ds : Array Decl) (k : Nat) : Decl → Except Error (String × Opt
       pure (s!"main : {ppCTy c.C}", some c)
 
 /-- Check a program, after elaborating it (`Frontend.Elab.elaborate`: the sugar of SPEC §11 and
-§14, then the typed IR and its lowering): the checker sees only the elaborated program. The lines
+§14, then the typed IR and its lowering): the checker sees only the elaborated program, which the
+report carries, so that nothing after the check elaborates the program again. The lines
 of the libraries, when they are included, are not reported. An error in code generated for a
 sugar names the sugar (`Frontend.Elab.renderError`). A checked program is then rejected if it
 copies recursive data implicitly (`Frontend.Elab.implicitCopy`): such a use is written
@@ -183,11 +186,12 @@ def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := 
   let el ← Frontend.Elab.elaborate p
   let ds := el.prog.decls.toArray
   let lib := el.lib
-  let r : Except Error Report := (List.range ds.size).foldlM (init := (⟨[], none⟩ : Report))
+  let r : Except Error Report := (List.range ds.size).foldlM (init := (⟨[], none, el⟩ : Report))
     fun acc k => match (ds[k]? : Option Decl) with
       | some d => do
           let (line, m) ← checkDecl ds k d
-          pure (⟨if k < lib then acc.lines else acc.lines ++ [line], m <|> acc.main⟩ : Report)
+          pure { acc with lines := if k < lib then acc.lines else acc.lines ++ [line],
+                          main := m <|> acc.main }
       | none => pure acc
   let rep ← r.mapError (Frontend.Elab.renderError el.origins)
   -- What the elaboration reports about the program's loops (SPEC §16): total or div, and code

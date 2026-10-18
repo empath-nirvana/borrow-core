@@ -41,9 +41,9 @@ def wasmtimeArgs : Array String :=
 /-- The fuel of every interpreter. -/
 def runFuel : Nat := 100000000
 
-/-- A checked program: the source, `main`, and its capabilities if it has any; `exits` when the
-`main` is served `Fail[DivError]` by `main_div_error`, so that its value `inr ()` is an exit
-status (SPEC §39). -/
+/-- A checked program: the elaborated program the checker checked, `main`, and its capabilities
+if it has any; `exits` when the `main` is served `Fail[DivError]` by `main_div_error`, so that its
+value `inr ()` is an exit status (SPEC §39). -/
 structure CheckedProg where
   prog : Frontend.Program
   main : Frontend.Check.Checked
@@ -55,18 +55,12 @@ def checkedOf (file src : String) : Except String CheckedProg := do
   let p₀ ← match Frontend.parseProgram src with
     | .ok p => pure p
     | .error e => throw s!"{file}:{e.render}"
-  -- The checker elaborates the program as parsed: its explicit copies (`clone(x)`) are known
-  -- only there.
   let r ← match Frontend.Check.checkProgram p₀ with
     | .ok r => pure r
     | .error e => throw s!"{file}:{e.render}"
-  let (p, os) ← match Frontend.Sugar.elaborateO p₀ with
-    | .ok (p, _, os) => pure (p, os)
-    | .error e => throw s!"{file}:{e.render}"
   let some c := r.main | throw s!"{file}: no `main`"
-  let exits := os.any (·.2 == Frontend.Sugar.exitTag)
-  match Frontend.Check.ioMainOf p c with
-  | .ok io => pure ⟨p, c, io, exits⟩
+  match Frontend.Check.ioMainOf r.el.prog c with
+  | .ok io => pure ⟨r.el.prog, c, io, r.el.exits⟩
   | .error e => throw s!"{file}: {e}"
 
 /-- The host implementation of each extern, in declaration order. -/
@@ -241,13 +235,9 @@ def compileWatTimed (file src : String) : IO (Except String String) := do
       match Frontend.Check.checkProgram p₀ with
         | .ok r => pure r
         | .error e => throw s!"{file}:{e.render}"
-    let p ← ExceptT.mk <| stage "elaborate" (fun (p : Frontend.Program) => s!"{p.decls.length} declarations")
-      fun _ => match Frontend.Sugar.elaborate p₀ with
-        | .ok (p, _) => pure p
-        | .error e => throw s!"{file}:{e.render}"
     let some c := r.main | throw s!"{file}: no `main`"
     let io ← ExceptT.mk <| stage "io main" (fun _ => "") fun _ =>
-      match Frontend.Check.ioMainOf p c with
+      match Frontend.Check.ioMainOf r.el.prog c with
         | .ok io => pure io
         | .error e => throw s!"{file}: {e}"
     let clos ← ExceptT.mk <| stage "convert" (fun (q : Clos.Prog) =>
@@ -395,10 +385,7 @@ def trusted (file src : String) : Except String String := do
     | .ok r => pure r
     | .error e => throw s!"{file}:{e.render}"
   let typing := (r.main.map typingReport).toList
-  let p ← match Frontend.Sugar.elaborate p with
-    | .ok (p, _) => pure p
-    | .error e => throw s!"{file}:{e.render}"
-  let xs ← match Frontend.Check.externs p.decls.toArray with
+  let xs ← match Frontend.Check.externs r.el.prog.decls.toArray with
     | .ok xs => pure xs
     | .error e => throw s!"{file}:{e.render}"
   -- The externs `main`'s erasure uses: a library's extern that the program never reaches is not

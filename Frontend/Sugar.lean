@@ -2032,11 +2032,6 @@ def fuseChecked (V : Val) (x : Ident) (M : Comp) (y : Ident) (N : Comp) : Option
     pure (.bind s₁ ta A₁ Ma (.bind s₂ tb A₂ Mb (.case s₃ h q OK' u ERR') l₂) l₁)
   | _ => none
 
-/-- The origin that records that `main` is served `Fail[DivError]` by `main_div_error` (SPEC
-§39): it answers `inr ()` when a division's error reached it, and the program then exits with
-status 1. -/
-def exitTag : String := "§exit"
-
 def isHoleTy : VTy → Bool
   | .name _ "_" => true
   | _ => false
@@ -5568,9 +5563,10 @@ def polyDecls (ds : List Decl) : Except Error (List Decl × PolyTab × List (Dec
     | d => out := out ++ [d]
   pure (out, tab, pairs)
 
-/-- The program with its sugar elaborated, and the number of library declarations it begins
-with, recording the origins of generated code.  `[spec §11, §14]` -/
-def elaborateS (p : Program) : SM (Program × Nat) := do
+/-- The program with its sugar elaborated, the number of library declarations it begins with,
+and whether `main` is served `Fail[DivError]` by `main_div_error` (SPEC §39), recording the
+origins of generated code.  `[spec §11, §14]` -/
+def elaborateS (p : Program) : SM (Program × Nat × Bool) := do
   let libRaw (m : String) : Except Error (List Decl) :=
     match library m with
     | some (.ok src) => match parseProgram src with
@@ -5644,7 +5640,6 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let hide := decls₀.filter (fun d => ioRef.contains d) ++ divDecls ++ wasiDecls
   let fxr ← (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls : Except Error _)
   let (decls, fx, perTurn, pcaps) := (fxr.decls, fxr.reports, fxr.perTurn, fxr.platform)
-  if fxr.exits then note .none exitTag
   -- The platform elaborated for `main` is the library's: its externs and its handlers' clauses
   -- come first, before the program's own declarations.
   let platNames := wasiDecls.filterMap fun
@@ -5729,18 +5724,26 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
     | .def_ sp n ps A V mk => return .def_ sp n ps A (← V.elab false) mk
     | .main sp C M => return .main sp C (← M.elab false)
     | d => pure d
-  pure (⟨decls⟩, lib.length + ioN)
+  pure (⟨decls⟩, lib.length + ioN, fxr.exits)
 
-/-- The program with its sugar elaborated, the number of library declarations it begins with,
-and the origins of its generated code. -/
-def elaborateO (p : Program) : Except Error (Program × Nat × Origins) := do
-  let ((q, n), os) ← (elaborateS p).run []
-  pure (q, n, os)
+/-- A program with its sugar elaborated: its declarations, the number of library declarations it
+begins with, the origins of its generated code, and whether `main` is served `Fail[DivError]`
+by `main_div_error`, so that its value `inr ()` is an exit status (SPEC §39). -/
+structure Sugared where
+  prog : Program
+  lib : Nat
+  origins : Origins
+  exits : Bool
+
+/-- The program with its sugar elaborated, with the origins of its generated code. -/
+def elaborateO (p : Program) : Except Error Sugared := do
+  let ((q, n, x), os) ← (elaborateS p).run []
+  pure ⟨q, n, os, x⟩
 
 /-- The program with its sugar elaborated, and the number of library declarations it begins
 with.  `[spec §11, §14]` -/
 def elaborate (p : Program) : Except Error (Program × Nat) := do
-  let (q, n, _) ← elaborateO p
-  pure (q, n)
+  let s ← elaborateO p
+  pure (s.prog, s.lib)
 
 end Frontend.Sugar

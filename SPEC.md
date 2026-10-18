@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.72 · 2026-10-18
+Version 0.73 · 2026-10-18
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -6630,9 +6630,10 @@ cell) and answers `inr ()`. `Frontend/Elab/Effects.lean`, `divMain`:
   `main_div_error` (`corpus/div-innermost.bc`). Only an instance `main` leaves unhandled is
   served; a program's own `Fail[E]` unhandled at `main` is §18's error, as before.
 - The unwind runs the finalisers of what `main` built (§19), and the run ends with `live 0`.
-- **The exit status.** The elaboration records that `main` is served (`exitTag`); its value
-  `inl v` is reported as `v`, and `inr ()` as no value, the live count, and exit status `1`
-  (`Backend/Value.lean`, `reportExit`). Every stage does the same: the source stage's model run
+- **The exit status.** The elaboration records that `main` is served (`Sugar.Sugared.exits`,
+  `Elab.Elaborated.exits`), and the checker's report carries it with the program it checked
+  (`Check.Report.el`); its value `inl v` is reported as `v`, and `inr ()` as no value, the live
+  count, and exit status `1` (`Backend/Value.lean`, `reportExit`). Every stage does the same: the source stage's model run
   (`ioOutputN`), the closure IR (`Clos.Prog.exits`), the flat IR (`Stmt.status`, `entryFn`) and
   Wasm (`$exit`, WASI `proc_exit`, the entry's last act). `bcc interp` and `bcc run` exit with it;
   `bcc-counts` checks that the flat IR and Wasm end with the same status.
@@ -6728,7 +6729,7 @@ included (§34).
   keep their form.
 - A message naming where the division was; an exit status other than `1`.
 - The platform's handler for `Exhausted` at `main` (#228), by the same mechanism (`divMain`,
-  `exitTag`, `reportExit`).
+  `Elaborated.exits`, `reportExit`).
 
 ## 40. Entry 39 — the native target: LLVM IR from the flat IR
 
@@ -7090,7 +7091,7 @@ Entry 38 (§39) is implemented in `lib/arith.bc` (`DivError`, `div_euclid`, `rem
 operators, `divCanFail`, `safeDivisor`, `Found`); `Frontend/Elab/Divisions.lean` (the rewrite);
 `Frontend/Elab/Effects.lean` (`divMain`, `splitDiv`, `divLib`, `platform`, a `with`'s row with its
 clauses' answering effects, a written row's check); `Frontend/Sugar.lean` (`surfOp`, `divCase`,
-`divUnchecked`, `divChecked`, `fuseChecked`, the libraries brought in, `exitTag`); and `Backend/`
+`divUnchecked`, `divChecked`, `fuseChecked`, the libraries brought in, `Sugared.exits`); and `Backend/`
 (`Output.status` and `reportExit` at every stage, `Clos.Prog.exits`, `Flat.Stmt.status`, the
 runtime's `$exit`, `divTest`, the constant locals and the fused `case` of the flat IR), with the
 harness's `<name>.status`; no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the checker's
@@ -7113,6 +7114,12 @@ no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the chec
 
 ## Changelog
 
+- **0.73** (2026-10-18) — §39, *The exit status* (#558): the elaboration's record that `main` is
+  served `Fail[DivError]` is a field of the elaborated program (`Elaborated.exits`), not an
+  origin string, and the checker's `Report` carries the elaborated program it checked
+  (`Report.el`). The backend reads `main`'s program and `exits` from it and does not elaborate
+  the program a second time. No change to `CDerives`, the relation, the checker's rules, a kernel
+  program, or any program's output, goldens or counts.
 - **0.72** (2026-10-18) — §19, *Lowering* (#544): a clause is tail-resumptive when every path
   through it ends in one resume of `κ` in tail position, each arm of a `case` with its own, not
   only when its last call is the resume. §18, *Laws*: the resume commutes out of the arms
