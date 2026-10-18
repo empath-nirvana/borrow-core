@@ -14,3 +14,7 @@ rule (a Lean theorem concluding a `CDerives` judgment). The tables cite the Lean
 Where the checker goes beyond or falls short of the specification, `Frontend/README.md` lists
 it: the parser's choices where the syntax is ambiguous, and the checker's known incompleteness.
 When "section N" appears below, it refers to a section of `docs/syntax-core.md`.
+
+The reference covers the core. The surface language of the guide elaborates into it; its forms
+are specified by the entries of `SPEC.md` that the guide cites, and `bcc desugar` shows the core
+form of any program ([How it elaborates](../elaboration/overview.md)).

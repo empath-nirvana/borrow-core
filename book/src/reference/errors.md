@@ -13,9 +13,10 @@ The parser rejects programs outside the grammar before any checking. Examples, f
 | program | error |
 |---|---|
 | `main : F 1 = force f (g x)` | ``expected a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`), found `(` `` (application takes variables only) |
-| `main : F 1 = return (); return ()` | ``expected a declaration …, found `;` `` (no free-standing sequencing) |
+| `main : F 1 = force (f)` | ``expected a variable (`force` takes a variable), found `(` `` |
 | `def f : 1 => 1 = fun (x : 1) -> return x` | ``expected a value, found `fun` `` (a function value is `thunkv fun …`) |
-| `def t : 1 = ((), (), ())` | ``expected `)`, found `,` `` (tuples are pairs) |
+| `main : F 1 = (force p).3` | ``expected `1` or `2` after `.`, found integer `3` `` (a lazy pair has two components) |
+| `main -> i32 = n = 2; n` | `` `n` is assigned, but it is not declared `let mut` `` |
 | `main : 1 + 1 = return (inl ())` | this is a value type, but a computation type is expected here |
 | `type T = F A * B` | `` `F A` is a computation type, but a value type is expected here `` |
 | `main : F 1 = case v { inr y -> return y \| inl x -> return x }` | ``expected `inl`, found `inr` `` |
@@ -33,7 +34,7 @@ main : F (i32 * i32) =
 
 **Implicit deep copy.** A persistent variable of a type that holds recursive data is used again
 after a use that would therefore copy it; that use is written `clone(x)` (see [Ownership and
-borrows](../guide/ownership-and-borrows.md)). The message names the use after it.
+borrows](../guide/ownership.md)). The message names the use after it.
 
 **Not consumed.** A variable is left unused and cannot be dropped: its type has no destructor,
 it is declared `linear`, or it cannot be dropped where its scope ends (inside a value, where no

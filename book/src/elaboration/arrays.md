@@ -194,8 +194,11 @@ lifetime: that is a view through a pointer, and the model excludes it
 nothing in it owns anything. `array_get` takes one of those views out and forgets the rest, so a
 view of an element at `'y` is sound (`SPEC.md` §9, `Core/Arrays.lean`).
 
-## Not yet
+## Beyond this chapter
 
-Splitting an array at a run-time index, iterating over one, a growable `Vec`, and strings are
-planned. An array cannot yet be borrowed without a cell, and there is no `mut` view of a single
-element.
+This chapter borrows an array through a cell, with the family constants. SPEC §9's slice borrows
+lend an owned array directly as a view, `array_imm 'x A` or `array_mut 'x A`, which can be split
+at a run-time index, and whose elements can be replaced, swapped or lent singly
+(`slice_get_mut`); the surface's `borrow imm a { v -> … }`, `for` over arrays and views, and
+`lib/slice.bc` are written over them ([Data and generics](../guide/data.md#arrays)). Growable
+buffers and strings are `lib/buf.bc` and `lib/text.bc` (SPEC §17).

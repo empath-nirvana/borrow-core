@@ -1,8 +1,21 @@
 # Effects and handlers
 
-An **effect** is a set of operations; a **handler** gives each operation a clause over a state of
-its own; `with h(e) { … }` runs a block with `h` handling the effect. An operation is called like
-a function. Spellings are provisional (SPEC §18, decisions 51 and 55).
+An **effect** is a set of operations; a **handler** gives each operation a meaning; `with h { … }`
+runs a block with `h` handling the effect. An operation is called like a function. Errors
+([Errors](errors.md)), I/O ([Input and output](io.md)), generators ([Iteration](iteration.md)) and
+tasks ([Async tasks](async.md)) are all effects of this one kind, declared in the library; this
+chapter is the mechanism they share.
+
+There are no colored functions. A function that performs an effect is called like any other; its
+row, the effects it performs, is inferred, and the handler that serves them is the one around
+the call. Handlers are compiled away: an operation that answers at once is a direct call of its
+clause, an error is a branch after the call, and a computation that suspends is a state machine.
+There is no handler stack and no run-time search.
+
+## Answering operations
+
+An operation declared `fn` answers its caller at once. Its handler has a state, its `mut`
+parameter, which each clause may read and assign:
 
 ```bc
 -- answer: i32[12]
@@ -27,14 +40,14 @@ program you would write by hand in capability-passing style:
   the **capability**, the borrow;
 - each `tick()` is a call of `count__tick` on the capability, which is bound again after it.
 
-So a handler adds nothing at run time: no handler stack, no search, no dispatch. `bcc check`
-reports each handler's shape and, per call site, which clause an operation calls.
+So an answering handler adds nothing at run time: no handler stack, no search, no dispatch.
+`bcc check` reports each handler's shape and, per call site, which clause an operation calls.
 
 ## Functions that perform effects
 
 A function that calls an operation, or calls a function that does, has the effect in its
-**row**, which is inferred, never written. It runs under whichever handler is in scope where it
-is called: it is elaborated once per handler, as a generic function is once per type.
+**row**, which is inferred. It runs under whichever handler is in scope where it is called: it
+is elaborated once per handler, as a generic function is once per type.
 
 ```bc
 -- answer: (i32[3], i32[30])
@@ -62,64 +75,76 @@ main -> i32 * i32 =
 block. `walk` is copied twice, `walk__count` and `walk__summed`, each calling its handler's
 clause directly.
 
-## Control effects and errors
+A row may be written after the result type, `fn f(…) -> T with Log, Fail[i32]`: a promise the
+checker holds the function to. An effect is either answering or control (below), never both.
 
-An operation declared `ctl` is a **control** operation: its handler receives the rest of the
-computation, its continuation, and decides whether and how to go on (SPEC §19). Each `with` of a
-control handler is a handler of its own, and an operation goes to the innermost one of its
-instance, the effect at its type arguments (below).
-An operation that answers `never` cannot be resumed: it is **abortive**, and its clause receives
-only its argument.
+## Control operations and their continuation
 
-Errors are such an effect, `Fail[E]`, declared in the library (`include fail`) with three
-handlers: `to_result` answers `inl` the value or `inr` the error, `default(d)` the value or
-`d`, and `map_err(f)` raises `f(e)` to the handler around it. A function that raises writes its
-error type in its row, `with Fail[E]`, unless the raised value's type or a function it calls gives
-it. There is no
-`?`: a call of a function that raises propagates the error by itself.
+An operation declared `ctl` is a **control** operation: its clause receives the rest of the
+computation, its continuation `k`, and decides whether and how to go on (SPEC §19). `k(v)`
+resumes the body with `v` as the operation's answer, and answers what the handler answers for
+the rest of the body. The qualifier says how often the continuation may be resumed:
+
+| declared | the clause |
+|---|---|
+| `ctl op(…) -> B` | resumes `k` at most once; if it does not, the rest of the body is cancelled |
+| `linear ctl op(…) -> B` | resumes `k` exactly once |
+| `ctl op(…) -> never` | receives no `k`: the operation is **abortive**, as `raise` is |
+
+A control handler names the type of the body it handles and what it answers, `Peek, i32 -> i32`
+below, and its `return(a)` clause receives the body's value. Here the handler resumes while the
+values are small and abandons the body at the first large one:
 
 ```bc
--- answer: (inl i32[60], (inr i32[2], i32[0]))
-include slice
-include fail
+effect Peek { ctl peek(x: i32) -> bool }
 
--- The sum of the elements; a negative one raises its index.
-fn checked<'a>(v: array_imm 'a i32) -> i32 with Fail[i32] =
-  let mut s = 0;
-  let mut i = 0;
-  for p in v { let x = *p; if x < 0 { raise(i) } else { () }; s = s + x; i = i + 1 };
-  s
-
--- A function that calls one that raises raises too: its row is inferred.
-fn twice<'a>(v: array_imm 'a i32) -> i32 = checked(v) * 2
-
-fn good(i: i32) -> i32 = i * 10
-fn bad(i: i32) -> i32 = if i == 2 { 0 - 1 } else { i }
-
-main -> (i32 + i32) * ((i32 + i32) * i32) =
-  let a = array_new[i32] (3, good);
-  let b = array_new[i32] (3, bad);
-  let x: i32 + i32 = borrow imm a { v -> with to_result { twice(v) } };
-  let y: i32 + i32 = borrow imm b { v -> with to_result { twice(v) } };
-  let z: i32 = borrow imm b { v -> with default(0) { twice(v) } };
-  (x, (y, z))
-```
-
-A handler is an ordinary declaration. `to_result` is
-
-```bc,ignore
-effect Fail[E] { ctl raise(e: E) -> never }
-
-handler to_result[E, A]: Fail[E], A -> A + E = {
-  return(a) = inl a;
-  raise(e) = inr e
+-- Resumes with `true` while the value is small; at the first large one, stops the body there.
+handler until_large: Peek, i32 -> i32 = {
+  return(a) = a;
+  peek(x, k) = if x < 100 { k(true) } else { 0 - x }
 }
+
+fn walk(n: i32) -> i32 =
+  let c = alloc(0);
+  let mut s = 0;
+  for i in 0..n { if peek(i * i) { s = s + 1 } else { () } };
+  s + free(c)
+
+main -> i32 * i32 = (with until_large { walk(5) }, with until_large { walk(20) })
+-- answer: (i32[5], i32[4294967196])
 ```
 
-`Fail[E], A -> A + E` says that it handles `Fail[E]` around a body of type `A`, and answers
-`A + E`. Every operation of `Fail` is abortive, so a clause runs at most once, after the handler:
-what a handler is given is an ordinary value, such as `default`'s fallback, owned and dropped when
-the body answers, and a clause may use the capabilities in scope at the `with`.
+When the clause does not resume, the rest of `walk` is cancelled: what it owns, the cell `c`, is
+freed by its destructor, and the run ends with `live 0`.
+
+A clause may run many times, once per operation, so what it uses is the handler's **state**: its
+parameters (`mut` ones may be assigned) and the capabilities its clauses use, passed to each
+clause and, at each resume, to the rest of the body.
+
+```bc
+effect Ask { ctl ask() -> i32 }
+
+-- Answers each `ask` with the cell's content, which it then increments.
+handler asking(mut c: ref i32): Ask, i32 -> i32 = {
+  return(a) = a + free(c);
+  ask(k) = { let v = free(c); c = alloc(v + 1); k(v) }
+}
+
+main -> i32 = with asking(alloc(5)) { let x = ask(); let y = ask(); x * 10 + y }
+-- answer: i32[63]
+```
+
+The two `ask`s read 5 and 6, and the return clause adds the cell's last content, 7.
+
+An abort unwinds: what the abandoned code owned is dropped by its destructors, and a borrow it
+was inside ends, the place going back to its owner. A value with no destructor (a thunk, a
+capability) cannot be live where an abort may leave: the checker names it. A `raise` in the body
+of a counted `for` leaves the loop by its exit and is raised again after it.
+
+Each `with` of a control handler is a handler of its own, with a static name the compiler
+assigns, and each operation is resolved at compile time to the innermost one around it. An
+operation that may suspend compiles to a state machine: the code after it is a resume point of
+the function's machine, as an `async fn` is in Rust.
 
 ## Several instances, and names
 
@@ -157,54 +182,6 @@ A generic function keeps its meaning at every instance: in `f[E]` with the row
 inside `f` does not catch a `Fail[ParseError]` that passes it at that instance
 (`corpus/effects-abstraction.bc`).
 
-An operation that resumes passes its continuation `k` to its clause, and `k(v)` resumes it: the
-body goes on with `v` as the operation's answer, and `k(v)` answers what the handler answers for
-the rest of the body. Such a clause may run many times, once per operation, so what it uses is
-the handler's **state**: its parameters (`mut` ones may be assigned) and the capabilities its
-clauses use, passed to each clause and, at each resume, to the rest of the body.
-
-```bc
-effect Ask { ctl ask() -> i32 }
-
--- Answers each `ask` with the cell's content, which it then increments.
-handler asking(mut c: ref i32): Ask, i32 -> i32 = {
-  return(a) = a + free(c);
-  ask(k) = { let v = free(c); c = alloc(v + 1); k(v) }
-}
-
-main -> i32 = with asking(alloc(5)) { let x = ask(); let y = ask(); x * 10 + y }
--- answer: i32[63]
-```
-
-The two `ask`s read 5 and 6, and the return clause adds the cell's last content, 7.
-
-An abort unwinds: what the abandoned code owned is dropped by its destructors, and a borrow it
-was inside ends, the place going back to its owner. A value with no destructor (a thunk, a
-capability) cannot be live where an abort may leave: the checker names it. A `raise` in the body
-of a counted `for` leaves the loop by its exit and is raised again after it.
-
-## Division that has no answer
-
-`a / b` and `a % b` at `i32`, `i64` and `u8` truncate toward zero, the remainder taking the
-dividend's sign. A division with no answer raises `Fail[DivError]`: a zero divisor, and `MIN / -1`
-at a signed width (`DivError` is `1 + 1`, `inl ()` the zero divisor; `div_by_zero` and
-`div_overflow` name the two). It is one more instance of `Fail`, so `to_result`, `default` and
-`map_err` handle it, and a function may raise its own `Fail[E]` and divide: the two are two
-entries of its row. A function that divides by a variable has it in its row with nothing written;
-a division by a nonzero literal cannot fail, and performs nothing. An error that reaches `main`
-unwinds, is written on standard error, and the program exits with status 1. `checked_div` and
-`checked_rem` answer the sum instead (SPEC §39).
-
-```bc
--- answer: (i32[0], (inl i32[3], i32[4294967293]))
-fn mean(sum: i32, n: i32) -> i32 = sum / n
-
-main -> i32 * ((i32 + DivError) * i32) =
-  let a = with default(0) { mean(7, 0) };
-  let b = with to_result { mean(9, 3) };
-  (a, (b, (0 - 7) / 2))
-```
-
 ## Blocks that perform effects
 
 A closure passed to a function at a parameter of function type is a **block**. Its type names no
@@ -234,37 +211,68 @@ never stored or returned (SPEC §30).
 A block may use a handler's capability, or yield to a `for` it is written inside: it takes what it
 uses at each call and hands it back, and the function's copy passes it along (SPEC §32).
 
-## Async tasks
+## Computation parameters and `|>`
 
-`lib/async.bc` is a scheduler written with these pieces (SPEC §30). `await()` is an ordinary
-control operation; `with spawn { … }` runs a block to its first `await` and answers the task, its
-continuation kept; `run_until_empty` resumes the queued tasks round robin until none is pending.
+Sometimes the function *should* handle what its argument does: `retry` catches the errors of the
+attempt it is given, a timeout stops it. A parameter whose function type carries a row,
+`f: !(i32 => A with Fail[i32])`, is a **computation parameter**: the callee serves the listed
+effects of each call `f(…)`, with the handlers around that call in the callee. Every other effect
+of the argument still goes where the argument is written (SPEC §33).
 
 ```bc
--- answer: inr (i32[111], inr (i32[22], inl ()))
-include async
+include fail
 
-fn ticker(tag: i32, n: i32) -> i32 with Async =
-  let mut acc = 0;
-  for _ in 0..n { acc = acc * 10 + tag; await() };
-  acc * 10 + tag
+effect Wait { fn pause(ms: i32) }
 
-main -> List[i32] =
-  let q = queue[i32]();
-  let q = push(q, with spawn { ticker(1, 2) });
-  let q = push(q, with spawn { ticker(2, 1) });
-  run_until_empty(q)
+handler fake_wait(mut waited: i32): Wait = { pause(ms) = { waited = waited + ms; () } }
+
+-- A flaky service: unavailable until its third attempt.
+fn call(attempt: i32) -> i32 with Fail[i32] = if attempt < 2 { raise(503) } else { 200 }
+
+-- `f(0)`, `f(1)`, … until one answers, pausing `base`, `2 * base`, … between attempts; after
+-- `times` failures, the last error is raised.
+fn retry[A](times: i32, base: i32, f: !(i32 => A with Fail[i32])) -> A with Fail[i32], Wait =
+  let mut gap = base;
+  let mut last = 0;
+  let r = for attempt in 0..times {
+    match with to_result { f(attempt) } {
+      inl a -> break (inl a : A + 1)
+    | inr e -> last = e; if attempt + 1 < times { pause(gap); gap = gap * 2 } else { () }
+    }
+  } else { (inr () : A + 1) };
+  match r { inl a -> a | inr u -> raise(last) }
+
+fn with_budget(times: i32) -> (i32 + i32) * i32 =
+  let c = alloc(0);
+  let r = with fake_wait(&mut c) {
+    with to_result { retry(times, 10, !{ attempt -> call(attempt) }) }
+  };
+  (r, free(c))
+
+main -> ((i32 + i32) * i32) * ((i32 + i32) * i32) = (with_budget(5), with_budget(2))
+-- answer: ((inl i32[200], i32[30]), (inr i32[503], i32[10]))
 ```
 
-`ticker` names no scheduler: its row is `Async`, and it runs under whichever site spawns it. A
-task may lend a cell it owns across an `await` (SPEC §29: `bcc check` reports it under `PinLaw`),
-log to the scheduler (`spawn_logged`, `run_logged`), be cancelled while it holds a lend, and,
-spawned by `spawn_in` inside a scope below a borrow, hold that borrow across its `await`s
-(SPEC §32).
+With five attempts the third answers 200 after waits of 10 and 20; with two, both fail and the
+last error reaches the caller. Written as a plain block parameter, `f: !(i32 => A)`, the block's
+`raise` would go to the `to_result` in `with_budget`, where it is written, and nothing would be
+retried. A named function passed at either kind of parameter means the same as the block that
+calls it: `retry(3, 10, call)` is `retry(3, 10, !{ a -> call(a) })`.
+
+`e |> h` applies a stage to a computation: when `h` is a handler, `e |> h(…)` is
+`with h(…) { e }`, and when `h` is a function whose first parameter is a computation parameter,
+it is `h(!{ () -> e }, …)`. A chain reads in the order it runs, innermost first:
+`step() |> timeout |> retry(3, 10) |> logged` (`corpus/reconcile-chain.bc`,
+`corpus/pipe-handlers.bc`). For any other function, `e |> f(a)` is `f(e, a)`
+([Iteration](iteration.md#pipelines)).
 
 ## Not yet
 
-An operation inside a stored closure or a fold's algebra, functions over computations (`retry`,
-`|>` into a handler), renaming a handler to serve an entry of another name, and operations that
-answer a borrow into the handler's state are later stages (SPEC §18 *Open*, §30 *Open*, §38 *Not
-provided*).
+- An operation inside a closure that is stored or returned rather than called (a stored
+  callback with a row, #161), or inside a fold's algebra (#178).
+- An effect with both answering and control operations; type parameters on an answering effect;
+  an answering operation performed inside a clause of an answering handler.
+- A computation parameter called both inside and outside the callee's own handler of its effect,
+  and an argument that uses a capability under the callee's handler (#487).
+- Renaming a handler to serve a row entry of another name; an operation that answers a borrow
+  into the handler's state (#160). SPEC §18 *Open*, §30 *Open*, §33 *Open* and §38 list the rest.

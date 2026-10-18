@@ -1,4 +1,64 @@
-# Generators
+# Iteration
+
+There are three kinds of loop. A `for` over data (a range of integers, an array, a view) runs
+once per element and always finishes. A `while` or `loop` may run forever. A `for` over a
+generator runs its body at each value the generator yields. The compiler tells the first kind
+from the other two, and that is how it knows which functions terminate.
+
+## `for` over data
+
+`for x in a..b` counts from `a` up to `b - 1`. A `for` over an array or a view visits its
+elements, chosen by the source's type as Rust's `IntoIterator` chooses: an owned array's elements
+are copied out and the array is dropped after the loop; `&a` lends each element `imm` and hands
+the array back; a view lends each of its elements.
+
+```bc
+fn tab(i: i32) -> i32 = (i + 1) * 10
+
+main -> i32 * (i32 * i32) =
+  let a = array_new[i32](5, tab);
+  let first = for x in &a { let v = *x; if v > 25 { break v } else { () } } else { 0 };
+  let mut odd = 0;
+  for i in 0..10 { if i % 2 == 0 { continue } else { () }; odd = odd + i };
+  let mut sum = 0;
+  for x in a { sum = sum + x };
+  (first, (odd, sum))
+-- answer: (i32[30], (i32[25], i32[150]))
+```
+
+- `break` leaves the loop, and `break v` leaves it with the loop's value `v`; `else { e }` after
+  the loop gives the value when the source ends without a `break`.
+- `continue` goes on to the next element.
+- `return e` returns from the enclosing function.
+- A `let mut` variable assigned in the body is carried from one turn to the next and is there
+  after the loop.
+
+## Loops that may not end
+
+`while c { … }` and `loop { … }` may run forever, so a function with one is *div*: it may
+diverge. Divergence is inferred, never written, and it is an effect like the others: a function
+that calls a div function is div. Marking a function `total` asks the compiler to check that it
+terminates:
+
+```bc
+total fn sum_to(n: i32) -> i32 =
+  let mut s = 0;
+  for i in 0..n { s = s + i };
+  s
+
+main -> i32 = sum_to(10)
+-- answer: i32[45]
+```
+
+A `total fn` with a `while` is rejected. A div computation can be run for a bounded number of
+steps by `div_fuel`, and code that does so is total again ([Divergence](../elaboration/divergence.md)
+has the details, and what a closed total program is proved to do).
+
+A higher-order function written for a total callback serves a div one too: given a div function,
+the compiler makes a copy of it at the callback's type, and the copy is div. So functions do not
+come in two colors.
+
+## Generators
 
 A generator is a function that yields a sequence of values, then returns. Yielding is an
 ordinary effect, `Yield[T]`, declared in the library (`include yield`) with one operation,
@@ -29,7 +89,7 @@ the loop's variables travel through the operation, so the body is the handler's 
 resumes the generator at its end. When the body does nothing else, each `yield` compiles to a
 direct call of the body: the program above allocates nothing and dispatches no call.
 
-A generator's `while` and `loop` are loops of a div body (see [Divergence](divergence.md)),
+A generator's `while` and `loop` are loops of a div body (see [Divergence](../elaboration/divergence.md)),
 whose every turn may yield: one turn per observation, so every observation terminates. A `for`
 over a generator that loops is div; over one that does not, it is total.
 
@@ -53,7 +113,7 @@ main -> i32 =
 
 Over `&a` it is rejected: the lend of `a` would be held across a `yield` (#172).
 
-## Leaving early: `break` and `return`
+### Leaving early: `break` and `return`
 
 `break` in a `for`'s body stops the generator: what it holds is finalised, its owned values
 dropped, as a cancelled continuation's are. `return e` returns from the function around the
@@ -88,7 +148,7 @@ main -> i32 =
   acc + first_above(5)
 ```
 
-## The value of a loop
+### The value of a loop
 
 A generator returns a value. `let r = for x in g(…) { … }; …` keeps it, or, after `break e`,
 keeps `e`:
@@ -109,7 +169,7 @@ main -> i32 =
   acc + r + s + 2
 ```
 
-## Calling a generator
+### Calling a generator
 
 A generator that calls another passes on what it yields, and goes on with what it returns: the
 callee's `yield` reaches the handler the caller's reaches. A call of a function that loops runs
@@ -136,7 +196,7 @@ main -> i32 =
   acc * 10 + r
 ```
 
-## Stored generators
+### Stored generators
 
 A call of a generator where a value of type `U (pull A B R)` is expected (an argument at a
 parameter of that type, or a binding with that type written) is the generator stored: its
@@ -195,11 +255,53 @@ main -> i32 =
   acc
 ```
 
-## What a generator cannot do yet
+### Pipelines
 
-`yield` may be cancelled (`break`, or closing a stored generator), and what a generator holds
-across it is then dropped. A capability, such as the input or the output, has no destructor and
-must be handed back, so a generator cannot hold one across a `yield`: a generator over the input
-is not provided yet. A body of a loop may use them; the loop's variables are passed through the
-operation. A block that yields to the `for` over its generator would be passed those variables
-and hand them back at each call, which is not built yet (SPEC §30 *Open*).
+`e |> f(a, …)` is `f(e, a, …)`: the value on the left is the first argument of the call on the
+right, so a chain of adapters reads left to right. A generator's call piped into an adapter is
+stored there, as above.
+
+```bc
+include adapters
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+main -> i32 =
+  let mut b = 0;
+  for y in range(0, 10) |> map(!{ x -> x * x }) |> filter(!{ x -> x > 5 }) |> take(3) {
+    b = b + y
+  };
+  b
+-- answer: i32[50]
+```
+
+`|>` into a handler is `with`: `e |> to_result` is `with to_result { e }`
+([Effects and handlers](effects.md#computation-parameters-and-)).
+
+The generators compile to state machines, one per generator body, and a `for` over a call of a
+generator whose body does nothing else compiles each `yield` to a direct call of the loop's body:
+the programs above allocate nothing.
+
+## Borrows and loops
+
+A borrow lasts for one computation, and a loop runs one step at a time, so a borrow block around
+a loop lends the place again at each step, at no run-time cost. What the loop carries from one
+step to the next must not hold the borrow: an iterator that holds it is rejected with a message
+that says so ([Divergence](../elaboration/divergence.md#borrows-around-a-loop)). Holding a
+borrow across the turns of a generator (the *spanning lend*) is not provided (#172): a `for` over
+`&a` whose body yields is rejected for that reason.
+
+## Not yet
+
+- A generator cannot use a capability (the input, the output, a handler's state) across a
+  `yield`: `yield` may be cancelled, by `break` or by closing a stored generator, and a
+  capability has no destructor to run then. A `for` over a generator that performs `Stdin`, say,
+  is refused with a message saying so. The *body* of the `for` may use capabilities, and a block
+  given to a function may yield to a `for` it is written inside (SPEC §32).
+- The spanning lend: a borrow held across a generator's turns (#172), above.
+- A `for` over the view of a borrow block written inline in some shapes (#501), a `for` that
+  lends a variable inside an `if` arm (#502), and a recursive call inside a counted `for` that
+  threads an array (#492) are refused; each issue has the shape and the workaround.

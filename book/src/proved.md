@@ -31,7 +31,7 @@ then closed runs to a value and leaves memory empty (`drive_runs_unit`, `drive_r
 to the proofs of its premises. `checkProgram_sound` in
 [`Frontend/Check/Program.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Frontend/Check/Program.lean) states it, and `checked_sem` and
 `checked_runs` apply the two theorems above to the checked program. The drops that the checker
-inserts ([Implicit destructors](guide/implicit-destructors.md)) are part of the derivation.
+inserts ([Implicit destructors](elaboration/implicit-destructors.md)) are part of the derivation.
 
 **Elaborated handlers mean what their clauses say.** A surface handler (SPEC §18) is defined by
 its elaboration into core terms ([Effects and handlers](guide/effects.md)), so a handled program is safe by the theorems
@@ -40,10 +40,12 @@ clause has its law, about the machine's runs of the terms the elaboration emits
 ([`Core/Handlers.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/Handlers.lean)).
 An answering operation is its clause run on the handler's state in place, the rest of the body
 resumed once with the answer (`op_tail`, `op_answer`), and a handled body that performs
-operations runs the clauses one after the other on the threaded state (`handle_fold`). An abort
-passes every branch around it, running none of the rest, and reaches the handler as `inr e`
-(`abort_passes`), also from inside a loop, whose exit it takes (`loop_abort`); a value runs the
-rest (`return_resumes`).
+operations runs the clauses one after the other on the threaded state (`handle_fold`). Control
+operations, errors among them, are the kernel's handlers below, and their laws (a value reaches
+the return clause, an operation its clause with the continuation, an operation of another name
+passes the handler) are machine lemmas in
+[`Core/EffMachine.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffMachine.lean)
+(`catch_unr`, `catch_cell`, `catch_fwd`, `fwd_resume`, `fwd_abort`).
 
 **Handlers in the kernel.** SPEC §19 adds to the kernel the primitives `perform`, `raise`, `hnd`,
 `ubind` (a finaliser frame), `ccatch` and `cfin` (a cancel's catchers), and the effectful returner
@@ -69,7 +71,8 @@ borrow, an infinite loop that logs, early exit from a producer that holds a cell
 cancelling a stored continuation) are closed derivations in
 [`Core/EffPrograms.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffPrograms.lean), each with its every-run theorem
 (`logOutside_answers`, `reborrowRaise_answers`, `tickProg_runs`, `takeProg_runs`,
-`storeCancel_runs`, …). The surface does not reach these primitives yet (#188).
+`storeCancel_runs`, …). The surface's control handlers, `raise` and `await` elaborate to these
+primitives (SPEC §18), so the theorems cover them with no case of their own.
 
 **Arithmetic is a parameter.** The machine performs integer operations through a *host*, and
 every theorem above holds for every host. Nothing about arithmetic is assumed.
@@ -101,7 +104,7 @@ about the elaborated program, with no case of their own.
 performs operations and handles them, terminates on every run: there is no infinite run of it (`total_no_infinite_run` in
 [`Core/Totality.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/Totality.lean)),
 and under every allocator its run reaches a value (`total_every_alloc`). Divergence shows in the
-type, as a loop the program returns ([Divergence](guide/divergence.md)); a total function that
+type, as a loop the program returns ([Divergence](elaboration/divergence.md)); a total function that
 runs a loop under a fuel bound is still of type `F A`, and covered.
 
 **The baseline is preserved.** The paper's calculus (BoCa) and its logic (BoLo) embed into the
@@ -131,6 +134,12 @@ text.
   model is tested on the corpus, not proved. `bcc trusted` lists each boundary with its level.
 
 ## What is not claimed
+
+- A program that holds a borrow across a suspension (a task that lends its own cell across
+  `await`, SPEC §29) is covered under `PinLaw`, a hypothesis stated in Lean
+  ([`Core/PinLaw.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/PinLaw.lean))
+  and not proved: `fundamentalC_pin` and `adequacyD_pin` assume it. `bcc check` prints
+  `assurance: PinLaw (R1 at L:C)` for such a program and `assurance: unconditional` otherwise.
 
 - A loop (`delay`, `loop`, a div function) is not claimed to terminate; its type says it may not.
   The same holds for a computation that performs operations forever: it is typed as a loop whose

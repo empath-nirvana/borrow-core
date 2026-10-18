@@ -1,8 +1,9 @@
-# Command-line tools
+# Standard I/O as capabilities
 
-A program talks to the world through **capabilities**: values it is given, one per effect.
-Standard input, standard output and standard error are three of them, `stdin`, `stdout` and
-`stderr` (SPEC §11). In `main` they are in scope by name. Everywhere else a function that does
+The guide's [Input and output](../guide/io.md) performs I/O as effects (SPEC §34). Underneath,
+and still usable directly, a program talks to the world through **capabilities**: values it is
+given, one per stream. Standard input, standard output and standard error are three of them,
+`stdin`, `stdout` and `stderr` (SPEC §11). In `main` they are in scope by name. Everywhere else a function that does
 I/O takes the capability it uses, so its type says what it can touch.
 
 Here is `cat`:
@@ -276,12 +277,10 @@ and nothing is claimed about them.
 
 ## Not yet
 
-- A `for` has no early exit; `io-guess.bc` keeps a flag instead, and `io-sections.bc` writes its
-  line reader as a loop in core. A `for` over a finite source, allowed in total code, is not
-  provided (#59); neither are `|>` pipelines.
 - A line reader over the stream: an observation must terminate, so a line of unbounded length is
   a loop of its own. Keep the line in a buffer in the loop's state (`corpus/fields.bc`), or read
   the whole input with `read_all` and split it into line views.
 - I/O errors are not modeled: a read error is the end of the input.
-- Command-line arguments, environment variables, the exit status, files and the network are
-  designed as more capabilities of the same kind (SPEC §11) but not built.
+- Environment variables, the exit status, files and the network are designed as more
+  capabilities of the same kind (SPEC §11, §34) but not built. The clock and the arguments are
+  built, as effects ([Input and output](../guide/io.md)).

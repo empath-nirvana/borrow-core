@@ -192,8 +192,7 @@ one prefix at a time: every finite part of its run is safe.
 
 ## Not yet
 
-- `for` runs over the input, which may not end; a `for` over a finite source, allowed in total
-  code, is not provided.
-- A `for` body is one step of its loop and must be total: no `for` or div call inside it.
+- A `for` body over the input is one step of its loop and must be total: a counted `for` inside
+  it is fine, a div call is not (#503 for its message).
 - Specialization covers a named function given a named callback; a callback held in a closure or
   a variable of the caller is not specialized.

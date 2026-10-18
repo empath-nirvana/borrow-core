@@ -12,6 +12,10 @@
 
 {{#include ../../../docs/syntax-core.md:arrays}}
 
+## Counted loops and the bounded fixed point
+
+{{#include ../../../docs/syntax-core.md:counted}}
+
 ## Derived forms
 
 {{#include ../../../docs/syntax-core.md:derived}}
