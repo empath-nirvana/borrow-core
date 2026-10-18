@@ -218,7 +218,12 @@ union its fields as separate SSA values, of `switch` LLVM's `switch`, and of a t
 `Native/Lower.lean` prints LLVM IR text from the flat IR, as `Wasm/Lower.lean` builds Wasm from
 it: the two are implementations of SPEC, and neither is the other's reference. `bcc run --native`
 writes the IR and the runtime (`Native/Runtime.lean`, C) to a temporary directory and builds them
-with `clang -O2` (no `opt` or `llc` is needed).
+with `clang -O2` (no `opt` or `llc` is needed). The compiler is `Backend.nativeCC` (`bcc cc`
+prints it): `$BC_CC` when set; else on macOS `xcrun clang`, the Xcode toolchain's `clang` with
+the SDK `xcrun` finds; else the first `clang` on `PATH` outside a Lean toolchain. It is not
+`clang` by `PATH` order, since `lake exe` and `lake env` put the Lean toolchain's `bin` first,
+whose `clang` has no C library headers; `scripts/compile-native.sh` runs a program under
+`lake env` to keep it so.
 
 **Functions.** Each flat-IR function is an `internal` LLVM function of the C calling convention
 over `i64` parameters. Locals are `alloca`s of the entry block, initialised as the
@@ -311,8 +316,8 @@ on a thread of a 512 MiB stack (`BC_STACK` sets another), past Wasm's 64 MiB, so
 calibrated against Wasm (`bounded`'s budget, `fold_imm`) run natively; overflow is not detected
 (SPEC §40 *Open*).
 
-**Checked.** `scripts/compile-native.sh`, a step of the gate (skipped with a notice when `clang`
-is not installed): every corpus program built natively prints its golden standard output and
+**Checked.** `scripts/compile-native.sh`, a step of the gate (which passes with a notice when
+there is no C compiler): every corpus program built natively prints its golden standard output and
 standard error and exits with its golden status, which `compile-corpus.sh` checks the flat IR
 against; `bcc-counts --native` requires the native build's counts to equal the flat IR's; every
 kernel program prints at native what it prints at the flat IR; `bcc hostops`; and the tail-call

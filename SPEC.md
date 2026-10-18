@@ -6718,6 +6718,9 @@ Everything here is backend: no change to the language, the kernel, the checker o
   target; `bcc run --native <file> [arg…]` builds it with `clang -O2`, beside the native runtime,
   and runs it. `bcc kernel run --native <name>` does the same for a kernel program and
   `bcc-counts --native <file>` compares the native build's counts with the flat IR's.
+- The C compiler is `$BC_CC` when set; else on macOS `xcrun clang` (the Xcode toolchain's, with
+  its SDK); else the first `clang` on `PATH` outside a Lean toolchain, whose own `clang`
+  (first on `PATH` under `lake exe`) has no C headers. `bcc cc` prints it.
 - A flat-IR function is an LLVM function of the C convention; a tail call is `musttail`, which
   guarantees a jump between functions of one prototype, so the functions joined by tail calls
   share one: the most parameters of any of them, the missing ones `poison` (a tail call passes
@@ -6743,14 +6746,15 @@ Everything here is backend: no change to the language, the kernel, the checker o
 
 ### Tests
 
-`scripts/compile-native.sh`, a step of `make gate` (skipped with a notice without `clang`, as the
-book build is without `mdbook`): every corpus program built natively matches its golden standard
+`scripts/compile-native.sh`, a step of `make gate` (passing with a notice when there is no C
+compiler, as the book build is skipped without `mdbook`): every corpus program built natively matches its golden standard
 output, standard error, exit status and `live`, which the flat IR is checked against, and
 `bcc-counts --native` agrees with the flat IR; every kernel program prints what it prints at the
 flat IR; every host operation, on a table of operands read at run time, answers what the Lean host
 (`flatHost`, the flat-IR interpreter's) answers (`bcc hostops`), a NaN that arithmetic answers
 compared as a NaN only; and loops of tail calls run in a stack of 64 KiB (`bcc tailcalls` at
-10⁸ turns, the kernel program `loop-tail`, `corpus/deep-list.bc`).
+10⁸ turns, the kernel program `loop-tail`, `corpus/deep-list.bc`). A program is also built and run under
+`lake env`'s `PATH`, where the Lean toolchain's `clang` comes first.
 
 ### Baseline
 

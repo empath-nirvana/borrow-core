@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# The native target (SPEC §40, Backend/Native/), checked against the flat IR. Needs clang; without
-# it the script says so and passes, as the gate does for mdbook.
+# The native target (SPEC §40, Backend/Native/), checked against the flat IR. Needs a C compiler
+# that builds LLVM IR (`bcc cc`); without one the script says so and passes, as the gate does for
+# mdbook.
 #
 #   * Every corpus program (the programs scripts/compile-corpus.sh runs) is built with
 #     `bcc run --native` and run on `<name>.in` with `<name>.args`: its standard output, standard
@@ -18,8 +19,11 @@
 #     scripts/compile-native.sh [file.bc…]   every check, or the corpus programs named only
 set -euo pipefail
 cd "$(dirname "$0")/.."
-command -v clang >/dev/null || { echo "clang is not on PATH: the native target is not checked"; exit 0; }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
+# The C compiler is the one `bcc` builds with (`bcc cc`, Backend.nativeCC): `$BC_CC`, else
+# `xcrun clang` on macOS, else a clang on PATH outside a Lean toolchain.
+cc=$(.lake/build/bin/bcc cc 2>/dev/null) || { echo "no C compiler for the native target: it is not checked"; exit 0; }
+echo "C compiler: $cc"
 . scripts/par.sh
 export bcc=.lake/build/bin/bcc
 export bccCounts=.lake/build/bin/bcc-counts
@@ -83,6 +87,16 @@ if [ "$named" = 0 ]; then
     echo "hostops: native differs from the Lean host:"
     diff "$tmp/flat" "$tmp/native" | head -10 | sed 's/^/  /' || true
     bad=$((bad + 1))
+  fi
+
+  # Under `lake env` (as `lake exe bcc run --native` runs), PATH starts with the Lean toolchain's
+  # bin, whose clang has no C headers: the build must not take it.
+  rc=0
+  lake env "$bcc" run --native corpus/div-unhandled.bc > "$tmp/out" 2> "$tmp/err" || rc=$?
+  if [ "$rc" = 1 ] && cmp -s "$tmp/out" corpus/div-unhandled.out; then
+    echo "corpus/div-unhandled.bc: native under lake env's PATH"
+  else
+    echo "corpus/div-unhandled.bc: native under lake env's PATH fails ($rc): $(head -3 "$tmp/err")"; bad=$((bad + 1))
   fi
 
   # Constant stack: loops of tail calls on a stack of 64 KiB (`BC_STACK`), where a frame per call
