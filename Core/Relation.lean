@@ -10,6 +10,7 @@ import Core.Types
 import Core.FrameRecords
 import Core.World
 import Core.EffDefs
+import Core.DivDefs
 
 /-!
 # Core — Relation  `[spec §3, §6, §7]`
@@ -163,10 +164,10 @@ def cC : CTy → List SRec → LSub → Expr → WProp
   | .nu C, ls, δ, e => fun ρ => C.NuOk →
       ∃ R : CPred, R.Le (fun ls' e' => cB (some (nuEnv C R)) C ls' δ e') ∧ R ls e ρ
   | .eff n i q A B fin C, ls, δ, e =>
-      ewpTS ls e (opTable (OpTab.ext n i
+      effWp (CTy.eff n i q A B fin C).divAt (OpTab.ext n i
         ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
           fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none⟩
-          (effTab C δ))) (effRet C δ)
+          (effTab C δ)) (effRet C δ) ls e
 /-- The operation table of a row `F_Σ R`'s layers, each capturable entry with its cancel row's
 obligation.  `[spec §19, §27]` -/
 def effTab : CTy → LSub → OpTab
@@ -205,10 +206,10 @@ def cB : Option (Nat → TEnt) → CTy → List SRec → LSub → Expr → WProp
   | η, .amp C D, ls, δ, e => fun ρ =>
       cB η C ls δ (.app e (.val (.inj₁ .unit))) ρ ∧ cB η D ls δ (.app e (.val (.inj₂ .unit))) ρ
   | η, .eff n i q A B fin C, ls, δ, e =>
-      ewpTS ls e (opTable (OpTab.ext n i
+      effWp (CTy.eff n i q A B fin C).divAt (OpTab.ext n i
         ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
           fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none⟩
-          (effTab C δ))) (effRetE η C δ)
+          (effTab C δ)) (effRetE η C δ) ls e
   | η, .arr A D, ls, δ, e => fun ρ =>
       ∀ v, (vCE none true A ls δ v ─⋆ cB η D ls δ (.app e (.val v))) ρ
   | _, .top, _, _, _ | _, .all _ _ _, _, _, _ | _, .nu _, _, _, _ =>

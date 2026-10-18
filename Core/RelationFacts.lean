@@ -958,6 +958,27 @@ theorem CTyEq.nuLeaf_iff : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ 
   | .top, C', _, _, h | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
       cases C' <;> simp_all [CTyEq, CTy.NuLeaf]
 
+theorem TyEq.isUnitB_eq (A : VTy) {A' : VTy} {δ δ' : LSub} (h : TyEq A δ A' δ') :
+    A.isUnitB = A'.isUnitB := by
+  cases A <;> cases A' <;> simp_all [TyEq, VTy.isUnitB]
+
+theorem TyEq.isNextB_eq (A : VTy) {A' : VTy} {δ δ' : LSub} (h : TyEq A δ A' δ') :
+    A.isNextB = A'.isNextB := by
+  cases A <;> cases A' <;> simp only [TyEq] at h <;> simp only [VTy.isNextB]
+  rw [TyEq.isUnitB_eq _ h.1, TyEq.isUnitB_eq _ h.2]
+
+/-- Holding `Div` is invariant under `CTyEq`. -/
+theorem CTyEq.divAt_eq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' →
+    C.divAt = C'.divAt
+  | .eff n i q A B fin C, C', δ, δ', h => by
+      cases C' <;> simp only [CTyEq] at h
+      obtain ⟨rfl, rfl, rfl, hA, hB, -, hC⟩ := h
+      simp only [CTy.divAt, tickB, TyEq.isUnitB_eq A hA, TyEq.isNextB_eq B hB,
+        CTyEq.divAt_eq C hC]
+  | .ret _, C', _, _, h | .arr _ _, C', _, _, h | .amp _ _, C', _, _, h | .top, C', _, _, h
+  | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
+      cases C' <;> simp only [CTyEq] at h <;> rfl
+
 /-- Positivity is invariant under `CTyEq`. -/
 theorem CTyEq.nuOk_iff {C C' : CTy} {δ δ' : LSub} (h : CTyEq C δ C' δ') : C.NuOk ↔ C'.NuOk := by
   cases C <;> cases C' <;> simp only [CTyEq] at h <;> simp only [CTy.NuOk]
@@ -1099,7 +1120,9 @@ theorem cC_tyEq_aux : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
       have hT := effTab_tyEq C hC
       have hR := effRet_tyEq C hC
       have hz := TyEq.isZero_eq B hB
-      intro ls; funext e; simp only [cC, ihA, ihB, ihF, hT, hR, hz]; rw [capB_congr hz]
+      have hd := CTyEq.divAt_eq (.eff n i q A B fin C) (C' := .eff _ _ _ _ _ _ _)
+        ⟨rfl, rfl, rfl, hA, hB, hF, hC⟩
+      intro ls; funext e; simp only [cC, ihA, ihB, ihF, hT, hR, hz, hd]; rw [capB_congr hz]
 theorem effTab_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' →
     effTab C δ = effTab C' δ'
   | .eff n i q A B fin C, C', δ, δ', h => by
@@ -1175,7 +1198,9 @@ theorem cB_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' �
       have hT := effTab_tyEq C hC
       have hR := effRetE_tyEq C hC η η' hη
       have hz := TyEq.isZero_eq B hB
-      funext e; simp only [cB, ihA, ihB, ihF, hT, hR, hz]; rw [capB_congr hz]
+      have hd := CTyEq.divAt_eq (.eff n i q A B fin C) (C' := .eff _ _ _ _ _ _ _)
+        ⟨rfl, rfl, rfl, hA, hB, hF, hC⟩
+      funext e; simp only [cB, ihA, ihB, ihF, hT, hR, hz, hd]; rw [capB_congr hz]
   | .arr A D, C', _, _, h, η, η', hη, ls => by
       cases C' <;> simp only [CTyEq] at h
       have ihA := vCE_tyEq A none none h.1 (envEq_none _ _) true ls

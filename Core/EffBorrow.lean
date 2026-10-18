@@ -1,4 +1,5 @@
 import Core.EffRules
+import Core.DivRules
 import Core.FoldImm
 import Core.Slices
 
@@ -139,6 +140,10 @@ theorem OpSig.B_zero {o : OpSig} (h : o.abort = true) : o.B = .zero := by
 
 theorem Row.Unwind.nz {S : Row} {x : LifeVar} (hS : S.Unwind x) : S.NZ :=
   fun o ho => (hS o ho).2.1
+
+/-- **`tick` cannot cross a borrow**: an unwind-only row does not hold `Div`.  `[spec §14, §19]` -/
+theorem Row.Unwind.divB {S : Row} {x : LifeVar} (hS : S.Unwind x) : Row.divB S = false :=
+  Row.divB_of_abort fun o ho => (hS o ho).1
 
 theorem Row.Unwind.abort {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) :
     (Row.tab S δ).AbortOnly := by
@@ -293,7 +298,7 @@ theorem withbor2U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
   intro vf ρ₂ τ hvf hc₂
   let T := Row.tab S δ
   have hA : T.AbortOnly := hS.abort δ
-  refine (cC_effOf S _ ls₁ δ _ τ).mpr (withborUE_beta (opTable_mono _) hdc (.loc ℓ) rfl vf ?_)
+  refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr (withborUE_beta (opTable_mono _) hdc (.loc ℓ) rfl vf ?_)
   -- the source handed back at every end of the callback
   let Fr : List SRec → WProp := fun ls => vP (.ref A) ls δ (.loc ℓ)
   let Q₁ : List SRec → Val → WProp := fun ls v => vP B ls δ v
@@ -332,7 +337,7 @@ theorem withbor2U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
   have hlt : LtLife δ Δ.meetOfDom α := ⟨m, hm, lt_of_lt_of_le hα inf_le_right⟩
   have hcb := (hvf ls₁ (Ext.refl _ _) α PMap.empty ρ₂ ⟨rfl, hlt⟩ (ResU.comp_empty_right ρ₂))
     (.loc ℓ) ρm σ' hmut' hcm
-  rw [cC_effOf, hS.tab_extend δ α] at hcb
+  rw [cC_effOf (hS := hS.divB), hS.tab_extend δ α] at hcb
   refine ewp_box_end hA (hS.out δ α) _ ?_ ?_ hcb
   · -- a return: the answer leaves `['x]`, and the source joins it
     rintro ls'' v'' ρ'' ⟨α', hα', hB, hout⟩
@@ -375,7 +380,7 @@ theorem withbor3U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
   intro vf ρ₂ τ hvf hc₂
   let T := Row.tab S δ
   have hA : T.AbortOnly := hS.abort δ
-  refine (cC_effOf S _ ls₁ δ _ τ).mpr (withborUE_beta (opTable_mono _) hdc (.loc ℓ) rfl vf ?_)
+  refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr (withborUE_beta (opTable_mono _) hdc (.loc ℓ) rfl vf ?_)
   -- the borrow handed back at every end of the callback
   let Fr : List SRec → WProp := fun ls => vP (.mut a A) ls δ (.loc ℓ)
   let Q₁ : List SRec → Val → WProp := fun ls v => vP B ls δ v
@@ -411,7 +416,7 @@ theorem withbor3U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
   have hlt : LtLife δ Δ.meetOfDom α := ⟨m, hm, lt_of_lt_of_le hα inf_le_right⟩
   have hcb := (hvf ls₁ (Ext.refl _ _) α PMap.empty ρ₂ ⟨rfl, hlt⟩ (ResU.comp_empty_right ρ₂))
     (.loc ℓ) ρm σ' hmut' hcm
-  rw [cC_effOf, hS.tab_extend δ α] at hcb
+  rw [cC_effOf (hS := hS.divB), hS.tab_extend δ α] at hcb
   refine ewp_box_end hA (hS.out δ α) _ ?_ ?_ hcb
   · rintro ls'' v'' ρ'' ⟨α', hα', hB, hout⟩
     rw [interp_ext_self] at hα'
@@ -465,7 +470,7 @@ theorem withbor1U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
   let T := Row.tab S δ
   have hA : T.AbortOnly := hS.abort δ
   have hL : T.Local := Row.tab_local S δ
-  refine (cC_effOf S _ ls₁ δ _ τ).mpr (withborUE_beta (opTable_mono _) hdc (.loc ℓ) rfl vf ?_)
+  refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr (withborUE_beta (opTable_mono _) hdc (.loc ℓ) rfl vf ?_)
   let Fr : List SRec → WProp := fun ls => vP (.ref A) ls δ (.loc ℓ)
   let Q₁ : List SRec → Val → WProp := fun ls v => vP B ls δ v
   refine ewp_unwind T hA hL (Row.tab_zero hS.nz δ) _ _ Fr
@@ -507,7 +512,7 @@ theorem withbor1U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
   have hlt : LtLife δ Δ.meetOfDom α := ⟨m, hm, lt_of_lt_of_le hα inf_le_right⟩
   have hcb := (hvf ls' (ext_add hadd hout₂) α PMap.empty ρ₂ ⟨rfl, hlt⟩
     (ResU.comp_empty_right ρ₂)) (.loc ℓ) ρm σ' himm' hcm
-  rw [cC_effOf, hS.tab_extend δ α] at hcb
+  rw [cC_effOf (hS := hS.divB), hS.tab_extend δ α] at hcb
   refine ewp_box_end hA (hS.out δ α) _ ?_ ?_ hcb
   · rintro ls'' v'' ρ'' ⟨α', hα', hB, hout⟩
     rw [interp_ext_self] at hα'
@@ -562,7 +567,7 @@ theorem withloadU_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
   intro vf ρ₂ τ hvf hc₂
   let T := Row.tab S δ
   have hA : T.AbortOnly := hS.abort δ
-  refine (cC_effOf S _ ls₁ δ _ τ).mpr (withload_beta (opTable_mono _) ℓ vf ?_)
+  refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr (withload_beta (opTable_mono _) ℓ vf ?_)
   refine ewp_fold (opTable_mono _)
     (wpG_bind_pure (.appR (.app (.val vf) (.val .unit)) .hole) (eLoad ℓ) ls₁ _ τ ?_)
   -- `wp-load-I`
@@ -609,7 +614,7 @@ theorem withloadU_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A B
   have hlt : LtLife δ Δ.meetOfDom β := ⟨m, hm, lt_of_lt_of_le hβ inf_le_left⟩
   have hcb := (hvf ls₁ (Ext.refl _ _) β PMap.empty ρ₂ ⟨rfl, hlt⟩ (ResU.comp_empty_right ρ₂))
     vℓ σ ρpc hreb hpc
-  rw [cC_effOf, hS.tab_extend δ β] at hcb
+  rw [cC_effOf (hS := hS.divB), hS.tab_extend δ β] at hcb
   refine ewp_box_end hA (hS.out δ β) _ ?_ ?_ hcb
   · rintro ls'' v'' ρ'' ⟨α', hα', hB, hout⟩
     rw [interp_ext_self] at hα'
@@ -663,7 +668,7 @@ theorem sliceBorrowMU_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
   intro vf ρ₂ τ hvf hc₂
   let T := Row.tab S δ
   have hA : T.AbortOnly := hS.abort δ
-  refine (cC_effOf S _ ls₁ δ _ τ).mpr
+  refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr
     (withborUE_beta (opTable_mono _) hdc (Val.arr ℓ n) (arr_closed ℓ n) vf ?_)
   let Fr : List SRec → WProp := fun ls => vP (.array A) ls δ (Val.arr ℓ n)
   let Q₁ : List SRec → Val → WProp := fun ls v => vP B ls δ v
@@ -714,7 +719,7 @@ theorem sliceBorrowMU_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
   have hlt : LtLife δ Δ.meetOfDom α := ⟨m, hm, lt_of_lt_of_le hα inf_le_right⟩
   have hcb := (hvf ls₁ (Ext.refl _ _) α PMap.empty ρ₂ ⟨rfl, hlt⟩ (ResU.comp_empty_right ρ₂))
     (Val.arr ℓ n) ρm σ' hmut' hcm
-  rw [cC_effOf, hS.tab_extend δ α] at hcb
+  rw [cC_effOf (hS := hS.divB), hS.tab_extend δ α] at hcb
   refine ewp_end hA _ ?_ (fun ls'' t ρ'' hst harg => Or.inr ⟨hst, harg⟩) hcb
   rintro ls'' v'' ρ'' ⟨α', hα', hBδ', -⟩
   rw [interp_ext_self] at hα'
@@ -746,7 +751,7 @@ theorem sliceBorrowIU_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
   let T := Row.tab S δ
   have hA : T.AbortOnly := hS.abort δ
   have hL : T.Local := Row.tab_local S δ
-  refine (cC_effOf S _ ls₁ δ _ τ).mpr
+  refine (cC_effOf S _ ls₁ δ _ τ hS.divB).mpr
     (withborUE_beta (opTable_mono _) hdc (Val.arr ℓ n) (arr_closed ℓ n) vf ?_)
   let Fr : List SRec → WProp := fun ls => vP (.array A) ls δ (Val.arr ℓ n)
   let Q₁ : List SRec → Val → WProp := fun ls v => vP B ls δ v
@@ -797,7 +802,7 @@ theorem sliceBorrowIU_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
   have hlt : LtLife δ Δ.meetOfDom α := ⟨m, hm, lt_of_lt_of_le hα inf_le_right⟩
   have hcb := (hvf ls' hext α PMap.empty ρ₂ ⟨rfl, hlt⟩ (ResU.comp_empty_right ρ₂))
     (Val.arr ℓ n) ρm σ' himm' hcm
-  rw [cC_effOf, hS.tab_extend δ α] at hcb
+  rw [cC_effOf (hS := hS.divB), hS.tab_extend δ α] at hcb
   refine ewp_end hA _ ?_ (fun ls'' t ρ'' hst harg => Or.inr ⟨hst, harg⟩) hcb
   rintro ls'' v'' ρ'' ⟨α', hα', hBδ', -⟩
   rw [interp_ext_self] at hα'

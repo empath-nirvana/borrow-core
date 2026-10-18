@@ -64,6 +64,13 @@ theorem Table.Abortive.mono {Tb : Table} (h : Tb.Abortive) : Tb.Mono :=
 /-- The empty table: nothing may stop. -/
 def Table.bot : Table := fun _ _ _ _ => False
 
+/-- Two tables, either of which may stop the run. -/
+def orTab (A B : Table) : Table := fun ls t Φ => BoLo.or (A ls t Φ) (B ls t Φ)
+
+/-- A table that owes nothing to the run's least fixed point: its stops do not read the
+continuations they are given. -/
+def Table.Const (Px : Table) : Prop := ∀ ls t Φ Φ' ρ, Px ls t Φ ρ → Px ls t Φ' ρ
+
 /-- One unfolding: run to a value in `Q`, or to a stop `Π` allows, owing `P`. -/
 def ewpStep (Tb : Table) (Q : List SRec → Val → WProp) (P : List SRec → Expr → WProp) :
     List SRec → Expr → WProp :=

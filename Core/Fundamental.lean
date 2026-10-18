@@ -10,6 +10,7 @@ import Core.EffFin
 import Core.EffBorrow
 import Core.EffBoxed
 import Core.PolyLet
+import Core.DivHandle
 import Support.LogicalRelation.Adequacy
 
 /-!
@@ -224,6 +225,22 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   computation type.  `[spec §20]` -/
   | boundedFix {Δ Γ} (A : VTy) (C : CTy) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val (.prim .boundedFix)) (.val (boundedFixTy A C))
+  /-- `iterate : !U(!U(S ⊸ F_Σ(B ⊕ S) & F_Σ R) ⊗ S ⊸ F_Σ(B ⊕ R))` at a row holding `Div`, the
+  step `iterate`: the loop that ticks at each back edge.  `[spec §14]` -/
+  | iterate {Δ Γ} (S : Row) (St B R : VTy) (hS : Row.divB S = true) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val (.prim .iterate)) (.val (iterTy S St B R))
+  /-- `div_fuel : !U(U(F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)`, `Σ` without `Div`'s name: the handler of
+  `Div` that answers *next* to the first ticks, as many as the budget, and *close* after.
+  `[spec §14]` -/
+  | divFuel {Δ Γ} (S : Row) (A : VTy) (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val divFuelV) (.val (divFuelTy S A))
+  /-- `reify_res : !U(U(F_{tick, Σ}(B ⊕ R)) ⊸ F_Σ U(Loop_Σ B R))`, `Σ` without `Div`'s name, at
+  the residual of a result `res : !U(B ⊸ F_Σ R)`, a closed term: the handler of `Div` that makes
+  a loop value of a computation.  `[spec §14]` -/
+  | reify {Δ Γ} (S : Row) (B R : VTy) (res : Val) (hS : ∀ o ∈ S, o.n ≠ divEff)
+      (hcl : closedAt 0 res.1 = true) (hres : CDerives Δ [] (.val res) (.val (resTy S B R)))
+      (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val (reifyV res)) (.val (reifyTy S B R))
   /-- `slice_borrow_mut : Array A ⊸ (∀'x ⊏ ⊓Δ. [Mut 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`, the term
   `withbor`'s: an owned array lent as a family of `mut` leaves, with no cell; its side conditions
   non-strict.  `[spec §9, §23]` -/
@@ -389,25 +406,29 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   perform when a continuation captured in `M` is cancelled is recorded in that operation's cancel
   row.  `Γ₂` is persistent where `Σ` has an unrestricted operation at some depth of its cancel
   rows (`Row.UnrD`), since the finaliser runs in the cancels below it, and the errors pending at the
-  finaliser are persistent where `Σ_D` has one.  `[then]` at option A, the finaliser at `F 1`, is
-  `CDerives.effThenA`.  `[spec §19, §24, §27]` -/
+  finaliser are persistent where `Σ_D` has one.  The finaliser's row does not hold `Div`
+  (decision 68).  `[then]` at option A, the finaliser at `F 1`, is `CDerives.effThenA`.
+  `[spec §14, §19, §24, §27]` -/
   | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
       (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
       (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
         capB o.q o.B = true → ThenLe o.fin SD o'.fin)
-      (hP : SD.UnrD → SM.PendPers)
+      (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
       (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf SM A)))
       (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
       (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
       CDerives Δ Γ (thenE N D M) (.comp (CTy.effOf S B))
   /-- `[handle]`: `handle_n e with H`, the handler's pair `H = (h_ret, hs)` a value form over a
   part of the context whose live slots are persistent, `n` not in `Σ`.  The `j`-th operation's
-  cancel row is `fs j`, and its clause's `κ` has its cancel branch at `cancelTy Σ (fs j)`.  At two
-  variables and empty cancel rows it is `hndTerm` (`CDerives.effHandle`).  `[spec §19, §24, §27]` -/
+  cancel row is `fs j`, and its clause's `κ` has its cancel branch at `cancelTy Σ (fs j)`.  The
+  handled row does not hold `Div`: a handler of `Div`, or of another name around a computation
+  that ticks, is `effHandleT` (decision 68).  At two variables and empty cancel rows it is
+  `hndTerm` (`CDerives.effHandle`).  `[spec §14, §19, §24, §27]` -/
   | effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
       {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
       (hc : CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))))
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+      (hdv : Row.divB (Row.ofEff n E 0 fs ++ S) = false)
       (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
       CDerives Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
   /-- BOXED-κ: `[handle]` whose capturing clauses receive their continuation boxed, `κ : [@d] K`
@@ -419,9 +440,23 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hH : H.ValFormIn Γ₁)
       (hc : CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs))))
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+      (hdv : Row.divB (Row.ofEff n E 0 fs ++ S) = false)
       (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)))
       (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs ++ S)) :
       CDerives Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
+  /-- `[handle]` at clauses that resume `κ` in tail position: `handle_n e with (h_ret, gs)`, the
+  clauses written out from a tuple `gs` of answering functions (`tailTuple`), each at a row `Σ_N`
+  of linear operations below `Σ`; an abortive operation's clause is its function itself.  The
+  handled row may hold `Div` (decision 68).  `[spec §14, §19]` -/
+  | effHandleT {Δ Γ Γ₁ Γ₂ Hr Hc e} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+      {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
+      (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
+      (hc : CDerives Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
+      (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+      (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
+      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
+      CDerives Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) e)
+        (.comp (CTy.effOf S R))
   /-- `[let-poly]`: `let x = λy. b in N` for a closed λ-value, from `N` with the λ-value for `x`,
   `x`'s slot dead.  Each occurrence of the λ-value in `N` is typed on its own, at its own row: the
   kernel's row polymorphism, with the value restriction.  `[spec §24]` -/
@@ -440,7 +475,7 @@ theorem CDerives.effThenA {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row} (hs : Ctx.Spli
     CDerives Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
   .effThen (SD := []) hs hNZ hUq hU (RowLe.refl S) (RowLe.nil S)
     (fun _ _ o _ hf hf' _ => by rw [hf] at hf'; cases hf'; exact ThenLe.nil o.fin)
-    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hM hN hD
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) rfl hM hN hD
 
 /-- `[handle]` at two variables: `handle_n e with (h_ret, hs)`, `h_ret` and `hs` variables of
 slots at their types.  An instance of `effHandleV`: `(h_ret, hs)` is a value form, typed by
@@ -449,6 +484,7 @@ theorem CDerives.effHandle {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qu
     {n : UInt32} {A R : VTy} {ir ic : Nat} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc)
     (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : Row.divB (Row.ofEff n E 0 ++ S) = false)
     (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
     CDerives Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) := by
   obtain ⟨sr, hsr, hlr⟩ := hr.live
@@ -457,7 +493,7 @@ theorem CDerives.effHandle {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qu
   obtain ⟨sc', hsc', hlc'⟩ := hs₁.live_right hsc hlc
   exact .effHandleV hs
     (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E finsNil)))
-    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen he
+    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
 
 /-! ### The delay, stream and finite iterator instances  `[spec §7]`
 
@@ -575,6 +611,9 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | countFold _ hΓ => exact countFold_compatX hΓ
   | countTry _ _ hΓ => exact countTry_compatX hΓ
   | boundedFix _ _ hΓ => exact boundedFix_compatX hΓ
+  | iterate _ _ _ _ hS hΓ => exact iterate_compatX hS hΓ
+  | divFuel _ _ hS hΓ => exact divFuel_compatX hS hΓ
+  | reify _ _ _ _ hS hcl _ hΓ ihres => exact reify_compatX hS hcl ihres hΓ
   | sliceBorrowM x hΓ hA hB hf₁ hf₂ => exact sliceBorrowM_compatX x hΓ hA hB hf₁ hf₂
   | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ => exact sliceBorrowI_compatX x hΓ hsc hA hB hf₁ hf₂
   | sliceGetM _ _ hΓ => exact sliceGetM_compatX hΓ
@@ -614,12 +653,14 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | effPerform hf hna _ ih => exact perform_compatC hf hna ih
   | effRaise hf ha hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_drop hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatC hs hW hU ihM ihN
-  | effThen hs hNZ _ hU hMS hDS hfin hP _ _ _ ihM ihN ihD =>
-      exact then_compatC hs hNZ hU hMS hDS hfin hP ihM ihN ihD
-  | effHandleV hs hd hH _ hn0 hnS hlen _ ihc ihe =>
-      exact handleV_compatC hs hd hH ihc hn0 hnS hlen ihe
-  | effHandleVB hs hd hH _ hn0 hnS hlen _ hΓd hSd ihc ihe =>
-      exact handleV_compatCB hs hd hH ihc hn0 hnS hlen ihe hΓd hSd
+  | effThen hs hNZ _ hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
+      exact then_compatC hs hNZ hU hMS hDS hfin hP hSD ihM ihN ihD
+  | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
+      exact handleV_compatC hs hd hH ihc hn0 hnS hlen hdv ihe
+  | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+      exact handleV_compatCB hs hd hH ihc hn0 hnS hlen hdv ihe hΓd hSd
+  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+      exact handleT_compatC hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN
 
 /-- **The stop lemma** (BOXED-κ's premise, `[spec §28]`): a computation typed at `F_Σ A` under
@@ -628,9 +669,9 @@ continuation's share in `Res_{δ(d)}` at every stop, at every `δ`. No premise a
 open at a stop: `CDerives` types a lend's callback at the pure row or at a row of abortive
 operations, and `wpG`'s `↭` already excludes a lend open at a stop. -/
 theorem stop_lemma {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {S : Row} {A : VTy}
-    {d : Lifetime.Life} (hder : CDerives Δ Γ M (.comp (CTy.effOf S A)))
+    {d : Lifetime.Life} (hSd : Row.divB S = false) (hder : CDerives Δ Γ M (.comp (CTy.effOf S A)))
     (hΓ : CtxOutlives Δ Γ d) (hS : Row.AnsOutlives Δ d S) : SemCS Δ Γ M S A d :=
-  stop_sem (fundamentalC hder) hΓ hS
+  stop_sem hSd (fundamentalC hder) hΓ hS
 
 /-! ### Adequacy -/
 

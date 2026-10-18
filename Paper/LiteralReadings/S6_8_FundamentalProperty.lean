@@ -500,6 +500,7 @@ theorem step_beta_inv {μ μ' : Heap} {b : Expr} {v : Val} {e' : Expr}
     | count => simp at hE
     | countTry => simp at hE
     | boundedFix => simp at hE
+    | iterate => simp at hE
     | hret => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE] at hE
     | hop => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE] at hE
     | hunwind => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE] at hE
@@ -541,6 +542,7 @@ theorem step_load_inv {μ μ' : Heap} {ℓ : Loc} {e' : Expr}
     | count => simp at hE
     | countTry => simp at hE
     | boundedFix => simp at hE
+    | iterate => simp at hE
     | hret => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE] at hE
     | hop => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE] at hE
     | hunwind => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE] at hE
@@ -583,6 +585,7 @@ theorem step_store_inv {μ μ' : Heap} {ℓ : Loc} {v : Val} {e' : Expr}
     | count => simp at hE
     | countTry => simp at hE
     | boundedFix => simp at hE
+    | iterate => simp at hE
     | hret => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE] at hE
     | hop => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE] at hE
     | hunwind => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE] at hE

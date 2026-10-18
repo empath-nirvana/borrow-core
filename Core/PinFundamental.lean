@@ -83,6 +83,9 @@ theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | countFold a0 a1 => exact CDerivesP.countFold a0 a1
   | countTry a0 a1 a2 => exact CDerivesP.countTry a0 a1 a2
   | boundedFix a0 a1 a2 => exact CDerivesP.boundedFix a0 a1 a2
+  | iterate a0 a1 a2 a3 a4 a5 => exact CDerivesP.iterate a0 a1 a2 a3 a4 a5
+  | divFuel a0 a1 a2 a3 => exact CDerivesP.divFuel a0 a1 a2 a3
+  | reify a0 a1 a2 a3 a4 a5 a6 a7 ih0 => exact CDerivesP.reify a0 a1 a2 a3 a4 a5 ih0 a7
   | sliceBorrowM a0 a1 a2 a3 a4 a5 => exact CDerivesP.sliceBorrowM a0 a1 a2 a3 a4 a5
   | sliceBorrowI a0 a1 a2 a3 a4 a5 a6 => exact CDerivesP.sliceBorrowI a0 a1 a2 a3 a4 a5 a6
   | sliceGetM a0 a1 a2 => exact CDerivesP.sliceGetM a0 a1 a2
@@ -119,9 +122,10 @@ theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | effPerform a0 a1 a2 ih0 => exact CDerivesP.effPerform a0 a1 ih0
   | effRaise a0 a1 a2 a3 ih0 => exact CDerivesP.effRaise a0 a1 a2 ih0
   | effLet a0 a1 a2 a3 a4 ih0 ih1 => exact CDerivesP.effLet a0 a1 a2 ih0 ih1
-  | effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0 ih1 ih2 => exact CDerivesP.effThen a0 a1 a2 a3 a4 a5 a6 a7 ih0 ih1 ih2
-  | effHandleV a0 a1 a2 a3 a4 a5 a6 a7 ih0 ih1 => exact CDerivesP.effHandleV a0 a1 a2 ih0 a4 a5 a6 ih1
-  | effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0 ih1 => exact CDerivesP.effHandleVB a0 a1 a2 ih0 a4 a5 a6 ih1 a8 a9
+  | effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2 => exact CDerivesP.effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 ih1 ih2
+  | effHandleV a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 ih1 => exact CDerivesP.effHandleV a0 a1 a2 ih0 a4 a5 a6 a7 ih1
+  | effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0 ih1 => exact CDerivesP.effHandleVB a0 a1 a2 ih0 a4 a5 a6 a7 ih1 a9 a10
+  | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 => exact CDerivesP.effHandleT a0 a1 a2 a3 ih0 a5 a6 a7 a8 a9 a10 ih1
   | letPoly a0 a1 a2 a3 ih0 ih1 => exact CDerivesP.letPoly a0 a1 ih0 ih1
 
 /-- **The Fundamental Property under `PinLaw`.** -/
@@ -181,6 +185,9 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | countFold _ hΓ => exact countFold_compatX hΓ
   | countTry _ _ hΓ => exact countTry_compatX hΓ
   | boundedFix _ _ hΓ => exact boundedFix_compatX hΓ
+  | iterate _ _ _ _ hS hΓ => exact iterate_compatX hS hΓ
+  | divFuel _ _ hS hΓ => exact divFuel_compatX hS hΓ
+  | reify _ _ _ _ hS hcl _ hΓ ihres => exact reify_compatX hS hcl ihres hΓ
   | sliceBorrowM x hΓ hA hB hf₁ hf₂ => exact sliceBorrowM_compatX x hΓ hA hB hf₁ hf₂
   | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ => exact sliceBorrowI_compatX x hΓ hsc hA hB hf₁ hf₂
   | sliceGetM _ _ hΓ => exact sliceGetM_compatX hΓ
@@ -220,12 +227,14 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | effPerform hf hna _ ih => exact perform_compatC hf hna ih
   | effRaise hf ha hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_drop hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatC hs hW hU ihM ihN
-  | effThen hs hNZ _ hU hMS hDS hfin hP _ _ _ ihM ihN ihD =>
-      exact then_compatC hs hNZ hU hMS hDS hfin hP ihM ihN ihD
-  | effHandleV hs hd hH _ hn0 hnS hlen _ ihc ihe =>
-      exact handleV_compatC hs hd hH ihc hn0 hnS hlen ihe
-  | effHandleVB hs hd hH _ hn0 hnS hlen _ hΓd hSd ihc ihe =>
-      exact handleV_compatCB hs hd hH ihc hn0 hnS hlen ihe hΓd hSd
+  | effThen hs hNZ _ hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
+      exact then_compatC hs hNZ hU hMS hDS hfin hP hSD ihM ihN ihD
+  | effHandleV hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
+      exact handleV_compatC hs hd hH ihc hn0 hnS hlen hdv ihe
+  | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+      exact handleV_compatCB hs hd hH ihc hn0 hnS hlen hdv ihe hΓd hSd
+  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+      exact handleT_compatC hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN
   | lendR hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc _ hM ihd _ =>
       exact hPin.stop _ _ _ _ _ _ _ _ hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc ihd hM

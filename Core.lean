@@ -13,6 +13,9 @@ import Core.ReborrowShapes
 import Core.Reborrow
 import Core.FrameRules
 import Core.EffWp
+import Core.DivDefs
+import Core.DivWp
+import Core.DivRules
 import Core.EffCancel
 import Core.EffCancelTyped
 import Core.Persistent
