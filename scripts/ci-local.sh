@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The project's gate: every check CI would run, run locally. Run before opening or merging a PR,
-# and paste the final summary into the PR. Needs elan and wasmtime; mdbook is optional (skipped
-# with a notice if absent).
+# and paste the final summary into the PR. Needs elan and wasmtime; mdbook and clang are optional
+# (the book build and the native target are skipped with a notice if absent).
 #
 #     scripts/ci-local.sh             the full gate: the merge requirement (`make gate`)
 #     scripts/ci-local.sh --source    the full gate with the source stage on every program
@@ -74,6 +74,7 @@ steps=(
   "check corpus"     "scripts/check-corpus.sh"
   "compile corpus"   "scripts/compile-corpus.sh"
   "compile kernel"   "scripts/compile-kernel.sh"
+  "native"           "scripts/compile-native.sh"
   "sugar pairs"      "scripts/check-sugar.sh"
   "typed IR"         "scripts/check-elab.sh"
   "book doc-tests"   "scripts/book-doctest.sh"
@@ -98,7 +99,7 @@ if [ "$changed" = 1 ]; then
   done
   if [ "$lean" = 0 ]; then
     all=0
-    corpus=("parse corpus" "check corpus" "compile corpus" "sugar pairs" "typed IR")
+    corpus=("parse corpus" "check corpus" "compile corpus" "sugar pairs" "typed IR" "native")
     for f in $files; do
       case "$f" in
         corpus/kernel-counts.expected) add "compile kernel" ;;
@@ -110,6 +111,7 @@ if [ "$changed" = 1 ]; then
         scripts/check-corpus.sh) add "check corpus" ;;
         scripts/compile-corpus.sh) add "compile corpus" ;;
         scripts/compile-kernel.sh) add "compile kernel" ;;
+        scripts/compile-native.sh) add "native" ;;
         scripts/compile-scaling.sh) add "compile scaling" ;;
         scripts/check-sugar.sh) add "sugar pairs" ;;
         scripts/check-elab.sh) add "typed IR" ;;
@@ -135,11 +137,13 @@ built=$fail
 if wanted "compile scaling"; then step "compile scaling" scripts/compile-scaling.sh --guard; fi
 
 mdbook=1; command -v mdbook >/dev/null || mdbook=0
+clang=1; command -v clang >/dev/null || clang=0
 names=(); pids=()
 for ((i = 0; i < ${#steps[@]}; i += 2)); do
   name=${steps[i]}; cmd=${steps[i + 1]}
   wanted "$name" || continue
   if [ "$name" = "book build" ] && [ "$mdbook" = 0 ]; then continue; fi
+  if [ "$name" = "native" ] && [ "$clang" = 0 ]; then continue; fi
   if [ "$built" = 0 ]; then
     k=${#names[@]}
     $cmd > "$out/$k.log" 2>&1 &
@@ -155,6 +159,7 @@ for ((k = 0; k < ${#names[@]}; k++)); do
   if [ "$rc" = 0 ]; then printf '    ok: %s\n' "${names[k]}"; else printf '    FAILED: %s\n' "${names[k]}"; fail=1; fi
 done
 if [ "$mdbook" = 0 ] && wanted "book build"; then echo "==> book build: skipped (mdbook not installed)"; fi
+if [ "$clang" = 0 ] && wanted "native"; then echo "==> native: skipped (clang not installed)"; fi
 if [ "$all" = 0 ]; then
   skipped=""
   for s in "${everyStep[@]}"; do wanted "$s" || skipped="$skipped${skipped:+, }$s"; done

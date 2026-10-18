@@ -139,6 +139,7 @@ def genPrim : Op → List Var → GM Key
       emit (.elem (.inj true h) r)
       pure r
   | .nullLoc, [] => do holding (.loc (← freshKey))
+  | .dataAddr _, [] => pure .none
   | .drop, [v] => do
       let f ← freshKey
       emit (.proj (.var v) 0 f)

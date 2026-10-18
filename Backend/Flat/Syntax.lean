@@ -53,6 +53,9 @@ inductive Exp where
   /-- A run's counter: `0` the allocations so far, `1` the dispatched calls so far, `2` the
   copies of a variable at a non-trivial type so far. -/
   | stat (k : Nat)
+  /-- The address of byte `off` of the program's data (`Prog.data`): `dataBase + off` in Wasm's
+  memory and the flat-IR interpreter's, the address of a global natively. -/
+  | data (off : Nat)
   deriving Repr, Inhabited
 
 inductive Stmt where

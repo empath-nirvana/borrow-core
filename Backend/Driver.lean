@@ -14,6 +14,8 @@ import Backend.Flat.Lower
 import Backend.Flat.Interp
 import Backend.Wasm.Lower
 import Backend.Wasm.Print
+import Backend.Native.Lower
+import Backend.Native.Runtime
 
 /-!
 # Backend — driver
@@ -118,6 +120,35 @@ def flatOf (file src : String) (counts : Bool := false) : Except String Flat.Pro
 the report. -/
 def compileWat (file src : String) (counts : Bool := false) : Except String String := do
   pure (Wasm.printModule (Wasm.lowerProg (← flatOf file src counts) counts))
+
+/-! ### The native target  `[spec §40]`
+
+`bcc compile --target native` prints the program's LLVM IR (`Backend/Native/Lower.lean`), for
+the host's target; `bcc run --native` builds it with `clang`, beside the runtime
+(`Backend/Native/Runtime.lean`), and runs it. -/
+
+/-- The target the native code is built for: the host's. -/
+def nativeTriple : String := System.Platform.target
+
+/-- The program as LLVM IR; with `counts`, it counts dispatched calls and copies and writes the
+run's counts after the report. -/
+def compileLL (file src : String) (counts : Bool := false) : Except String String := do
+  Native.printProg (← flatOf file src counts) nativeTriple counts
+
+/-- The flags `clang` builds a native program with. -/
+def clangArgs : Array String := #["-O2", "-w", "-pthread"]
+
+/-- Build the LLVM IR `ll` and the runtime in `dir` with `clang`: the executable's path, or
+`clang`'s error. -/
+def buildNative (ll : String) (dir : System.FilePath) : IO (Except String System.FilePath) := do
+  IO.FS.writeFile (dir / "main.ll") ll
+  IO.FS.writeFile (dir / "runtime.c") Native.runtimeC
+  let exe := dir / "main"
+  let r ← IO.Process.output
+    { cmd := "clang", args := clangArgs ++
+        #[(dir / "main.ll").toString, (dir / "runtime.c").toString, "-o", exe.toString] }
+  if r.exitCode != 0 then return .error s!"clang failed ({r.exitCode}):\n{r.stderr}"
+  pure (.ok exe)
 
 /-! ### Timings
 
@@ -292,6 +323,11 @@ def closTypesOfExpr (e : BoCa.Expr) : Except String (Clos.Prog × Option Clos.Ty
 def compileWatExpr (e : BoCa.Expr) (counts : Bool := false) : Except String String := do
   let (p, T) ← closTypesOfExpr e
   pure (Wasm.printModule (Wasm.lowerProg (← Flat.lower p counts T) counts))
+
+/-- A kernel program's LLVM IR. -/
+def compileLLExpr (e : BoCa.Expr) (counts : Bool := false) : Except String String := do
+  let (p, T) ← closTypesOfExpr e
+  Native.printProg (← Flat.lower p counts T) nativeTriple counts
 
 /-- A kernel program at stage `stage`'s interpreter. -/
 def interpStageExpr (stage : String) (e : BoCa.Expr) : Except String Output := do

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.70 · 2026-10-17
+Version 0.71 · 2026-10-17
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -6700,6 +6700,86 @@ included (§34).
 - The platform's handler for `Exhausted` at `main` (#228), by the same mechanism (`divMain`,
   `exitTag`, `reportExit`).
 
+## 40. Entry 39 — the native target: LLVM IR from the flat IR
+
+### Motivation
+
+#529, part of #21: the language targets native code through `clang`, and Wasm stays the target
+the proofs are run against. Both are implementations of SPEC's operations (§8, §37), neither of
+the other: no Wasm quirk is carried into native code. The flat IR (`Backend/Flat/Syntax.lean`)
+was built for this: 64-bit words, numbered locals, explicit allocation and free, direct calls of
+several results, `switch`, explicit tail calls.
+
+Everything here is backend: no change to the language, the kernel, the checker or any program.
+
+### The target
+
+- `bcc compile --target native <file> -o <out.ll>` prints the program's LLVM IR for the host's
+  target; `bcc run --native <file> [arg…]` builds it with `clang -O2`, beside the native runtime,
+  and runs it. `bcc kernel run --native <name>` does the same for a kernel program and
+  `bcc-counts --native <file>` compares the native build's counts with the flat IR's.
+- A flat-IR function is an LLVM function of the C convention; a tail call is `musttail`, which
+  guarantees a jump between functions of one prototype, so the functions joined by tail calls
+  share one: the most parameters of any of them, the missing ones `poison` (a tail call passes
+  the caller's results on, so the results agree). `tailcc`, which lets prototypes differ, is
+  miscompiled by Apple clang 21 on AArch64 (`Backend/README.md`, Native). A function returns one word as an `i64`, up to the
+  target's registers for results (8 on AArch64, 4 on x86-64) as a struct by value, and more
+  through a pointer the caller passes and a tail call passes on (LLVM refuses its own `sret`
+  demotion under `musttail`).
+- Words are real pointers. The program's data is a global; the flat IR names its addresses
+  (`Flat.Exp.data`, from the closure IR's `Op.dataAddr`), which Wasm places at `16384` and
+  native code at the global. Frame slots (§35) are an `alloca` of the function's frame.
+- Every host operation computes SPEC's answer with no undefined behaviour or poison: shifts mask
+  the amount (§8), `clz`/`ctz` of zero is the width, a division and `trunc` with no answer branch
+  to a trap that no run reaches (the flat IR tests first, §39), `MIN % -1` is `0`, `trunc_sat`
+  saturates (`llvm.fpto[su]i.sat`), `min`/`max` propagate NaN (`llvm.minimum`/`maximum`),
+  `nearest` rounds ties to even; no instruction has `nsw`, `nuw` or fast-math flags. The table
+  per operation is `Backend/README.md`, Native.
+- The runtime (`Backend/Native/Runtime.lean`, C, trusted) is the allocator with the Wasm
+  runtime's specification and algorithm, so `live` and the counts agree, and the POSIX platform
+  of §11 and §34: `read`/`write` on the descriptors, unbuffered; the arguments from `argv`;
+  `CLOCK_MONOTONIC` and `nanosleep`; the exit status of §39. The entry runs on a thread of a
+  512 MiB stack.
+
+### Tests
+
+`scripts/compile-native.sh`, a step of `make gate` (skipped with a notice without `clang`, as the
+book build is without `mdbook`): every corpus program built natively matches its golden standard
+output, standard error, exit status and `live`, which the flat IR is checked against, and
+`bcc-counts --native` agrees with the flat IR; every kernel program prints what it prints at the
+flat IR; every host operation, on a table of operands read at run time, answers what the Lean host
+(`flatHost`, the flat-IR interpreter's) answers (`bcc hostops`), a NaN that arithmetic answers
+compared as a NaN only; and loops of tail calls run in a stack of 64 KiB (`bcc tailcalls` at
+10⁸ turns, the kernel program `loop-tail`, `corpus/deep-list.bc`).
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the host's operations, `Paper/`, `Support/`,
+`Core/`, the frontend or the checker. The closure IR's literal address is `Op.dataAddr` where it
+was an `i32` literal, and the flat IR's `Exp.data`: every corpus program's WAT is unchanged, byte
+for byte, and every output, golden and count is unchanged.
+
+### Not provided
+
+- Performance tuning: native output is unbuffered, as Wasm's is, and no optimization is aimed at
+  native code (#530).
+- Aliasing attributes from the borrow invariants (`noalias`, `readonly`, #531).
+- Detection of stack overflow, debug information, linking with C (#532).
+- A target other than the host's: the IR has no triple, and `clang` builds it for the host.
+
+### Open
+
+- **NaN payloads and the proofs (§37 *Open*).** The native target does not canonicalise: an
+  arithmetic NaN is the hardware's (AArch64: the default NaN or a propagated payload), except
+  where `clang` folds an operation on constants, whose NaN is LLVM's choice and need not be the
+  hardware's. A run's choice is then not a function of the operation and its operands, so native
+  code is the engine §37 *Open* names: it is not the machine at one conforming host, and no
+  theorem of §37's *What the proofs cover* is about its runs until the host step is a relation.
+  What holds is tested: every corpus golden at native, and every host operation against the Lean
+  host on operands read at run time (so unfolded), an arithmetic NaN compared as a NaN only.
+- **Stack depth.** The native stack is sized (512 MiB) rather than bounded: `bounded`'s budget
+  (§20) is calibrated against Wasm's 64 MiB, and a native frame is not the same size (#532).
+
 ---
 
 ## Status
@@ -6989,9 +7069,26 @@ float operation at a resolution, `NaNEq` and its lemmas), `Support/Dynamics/Host
 `Backend/Flat/Lower.lean` (`hostVals` without the NaN test); no change to `CDerives`, the relation,
 the machine, `Core/`, `Paper/` or the checker.
 
+Entry 39 (§40) is implemented in `Backend/Native/Lower.lean` (the LLVM IR), `Backend/Native/Runtime.lean`
+(the runtime), `Backend/Native/Tests.lean` (`bcc hostops`, `bcc tailcalls`), `Backend/Driver.lean`
+(`compileLL`, `buildNative`), `Frontend/Main.lean` and `Backend/Counts.lean` (the commands),
+`Op.dataAddr` and `Exp.data` in the closure IR and the flat IR, and `scripts/compile-native.sh`;
+no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the checker.
+
 ---
 
 ## Changelog
+
+- **0.71** (2026-10-17) — §40 (new, #529): the native target. `bcc compile --target native`
+  prints LLVM IR from the flat IR, `bcc run --native` builds it with `clang` beside a C runtime
+  (the allocator with the Wasm runtime's semantics, the POSIX platform of §11 and §34) and runs
+  it. Tail calls are `musttail` between functions of one prototype per tail-call class; several results a struct by value, through a
+  pointer when wider than the target's result registers; words are real pointers and the data a
+  global (`Op.dataAddr`, `Exp.data`). No host operation is undefined or poison where SPEC gives
+  an answer. `scripts/compile-native.sh` joins the gate: the corpus, the kernel programs and
+  every host operation native against the flat IR, counts agreeing, tail-call loops in 64 KiB of
+  stack. No change to `CDerives`, the relation, a kernel program, or any program's output, WAT
+  or counts.
 
 - **0.70** (2026-10-17) — §8 and §37 restated (#528, decision 66): the integer and float
   operations are the language's own, defined on bit-vectors as `wasmHost` computes them; Wasm and

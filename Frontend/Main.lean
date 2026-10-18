@@ -3,6 +3,7 @@ import Frontend.Print
 import Frontend.Check.Program
 import Backend.Driver
 import Backend.FalsifyTests
+import Backend.Native.Tests
 /-!
 # Frontend — `bcc`
 
@@ -13,9 +14,14 @@ import Backend.FalsifyTests
                                 compile a closed `main` to WebAssembly text (`Backend/`); with
                                 `--timings`, write each stage's time and output size to
                                 standard error
+    lake exe bcc compile --target native <file> -o <out.ll>
+                                compile to LLVM IR for the host (`Backend/Native/`, SPEC §40)
     lake exe bcc run <file> [arg…]
                                 compile, and run under `wasmtime` with the arguments: `main`'s
                                 value, then the number of live objects after it is dropped
+    lake exe bcc run --native <file> [arg…]
+                                compile to LLVM IR, build it with `clang` beside the native
+                                runtime, and run it with the arguments
     lake exe bcc interp [--stage S] <file>
                                 run `main` in the interpreter of stage `S` (`Backend/`):
                                 `source` (the default), `clos`, `flat`; a program that
@@ -33,8 +39,13 @@ import Backend.FalsifyTests
     lake exe bcc erase <file>   print the erasure of the checked `main`
     lake exe bcc trusted <file> list the program's externs with their contracts, host
                                 implementations and assurance levels (SPEC §11)
+    lake exe bcc hostops (flat | native)
+                                every host operation on a table of operands, at the flat-IR
+                                interpreter or built natively (`Backend.Native.Tests.lean`)
+    lake exe bcc tailcalls <n>  `n` turns of a loop of tail calls, built natively and run on a
+                                stack of 64 KiB
     lake exe bcc kernel (list | negatives | interp [--stage S | --check M | --alloc least] <name>
-                          | compile <name> -o <out.wat> | run <name>)
+                          | compile <name> -o <out.wat> | run [--native] <name>)
                                 the kernel programs of `Backend/Kernel.lean`, which the surface
                                 cannot spell (SPEC §19), at a stage, compiled, or run
 
@@ -180,6 +191,78 @@ def run (file : String) (args : List String) : IO UInt32 := do
     IO.FS.removeDirAll dir
     return (if code == 0 then 0 else 1)
 
+/-- Write `file`'s LLVM IR to `out`.  `[spec §40]` -/
+def compileNative (file out : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match Backend.compileLL file src with
+  | .ok ll => IO.FS.writeFile out ll; return 0
+  | .error e => IO.eprintln e; return 1
+
+/-- Build LLVM IR with `clang` and run it, with this process's standard input, output and
+error: as `run`, exit code 1 when the program's is not 0.  `[spec §40]` -/
+def runLL (ll : Except String String) (args : List String) : IO UInt32 := do
+  match ll with
+  | .error e => IO.eprintln e; return 1
+  | .ok ll =>
+    let dir ← IO.FS.createTempDir
+    match ← Backend.buildNative ll dir with
+    | .error e => IO.FS.removeDirAll dir; IO.eprintln e; return 1
+    | .ok exe =>
+      let child ← IO.Process.spawn
+        { cmd := exe.toString, args := args.toArray,
+          stdin := .inherit, stdout := .inherit, stderr := .inherit }
+      let code ← child.wait
+      IO.FS.removeDirAll dir
+      return (if code == 0 then 0 else 1)
+
+/-- Compile `file` natively and run it. -/
+def runNative (file : String) (args : List String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  runLL (Backend.compileLL file src) args
+
+/-- `bcc hostops flat|native`: every host operation on a table of operands, at the flat-IR
+interpreter (the Lean host) or built natively (`Backend.Native.Tests.lean`).  `[spec §40]` -/
+def hostops (stage : String) : IO UInt32 := do
+  let (p, input) := Backend.Native.Tests.hostTest
+  match stage with
+  | "flat" =>
+    match Backend.Flat.interp Backend.runFuel p input.toList with
+    | .ok o => (← IO.getStdout).write o.out; return 0
+    | .error e => IO.eprintln e; return 1
+  | "native" =>
+    match Backend.Native.printProg p Backend.nativeTriple with
+    | .error e => IO.eprintln e; return 1
+    | .ok ll =>
+      let dir ← IO.FS.createTempDir
+      match ← Backend.buildNative ll dir with
+      | .error e => IO.FS.removeDirAll dir; IO.eprintln e; return 1
+      | .ok exe =>
+        IO.FS.writeBinFile (dir / "in") input
+        let r ← IO.Process.output { cmd := "sh", args := #["-c", s!"'{exe}' < '{dir / "in"}'"] }
+        IO.FS.removeDirAll dir
+        IO.print r.stdout
+        IO.eprint r.stderr
+        return (if r.exitCode == 0 then 0 else 1)
+  | _ => IO.eprintln "usage: bcc hostops flat|native"; return 2
+
+/-- `bcc tailcalls n`: `n` turns of a loop of tail calls, built natively and run on a stack of
+64 KiB (`Backend/Native/Tests.lean`).  `[spec §40]` -/
+def tailcalls (n : Nat) : IO UInt32 := do
+  match Backend.Native.printProg (Backend.Native.Tests.tailTest n) Backend.nativeTriple with
+  | .error e => IO.eprintln e; return 1
+  | .ok ll =>
+    let dir ← IO.FS.createTempDir
+    match ← Backend.buildNative ll dir with
+    | .error e => IO.FS.removeDirAll dir; IO.eprintln e; return 1
+    | .ok exe =>
+      let r ← IO.Process.output { cmd := exe.toString, env := #[("BC_STACK", some "65536")] }
+      IO.FS.removeDirAll dir
+      let want := Backend.Native.Tests.tailExpected n
+      if r.exitCode == 0 && r.stdout == want then
+        IO.println s!"{n} tail calls at each width, in a stack of 64 KiB"; return 0
+      IO.eprintln s!"tail calls: exit {r.exitCode}, wrote {r.stdout.quote}, expected {want.quote}\n{r.stderr}"
+      return 1
+
 /-! ### Kernel programs -/
 
 /-- A kernel program by name (`Backend.kernelPrograms`), or a negative test of the falsifier
@@ -258,6 +341,7 @@ def kernel (args : List String) : IO UInt32 := do
       return 2
   | ["compile", name, "-o", out] => withProg name (kernelCompile · out)
   | ["run", name] => withProg name kernelRun
+  | ["run", "--native", name] => withProg name fun e => runLL (Backend.compileLLExpr e) []
   | _ =>
     IO.eprintln "usage: bcc kernel (list | interp [--stage S] <name> | compile <name> -o <out.wat> | run <name>)"
     return 2
@@ -276,6 +360,9 @@ def main (argv : List String) : IO UInt32 := do
   | "kernel" :: args => kernel args
   | ["compile", file, "-o", out] => compile file out
   | ["compile", "--timings", file, "-o", out] => compileTimed file out
+  | ["compile", "--target", "native", file, "-o", out] => compileNative file out
+  | ["compile", "--target", "wasm", file, "-o", out] => compile file out
+  | "run" :: "--native" :: file :: args => runNative file args
   | "run" :: file :: args => run file args
   | "interp" :: rest =>
     match parseInterpArgs rest {} with
@@ -288,6 +375,10 @@ def main (argv : List String) : IO UInt32 := do
     | _ =>
       IO.eprintln "usage: bcc interp [--stage S | --check fresh|tags | --alloc least] [--stats] <file>"
       return 2
+  | ["hostops", stage] => hostops stage
+  | ["tailcalls", n] => match n.toNat? with
+    | some n => tailcalls n
+    | none => IO.eprintln "usage: bcc tailcalls <n>"; return 2
   | ["trusted", file] => trusted file
   | ["desugar", file] => desugar file
   | ["tir", file] => tir file

@@ -10,11 +10,15 @@ from it (`Clos/Types.lean`), and every stage from the flat IR on lays values out
 
     lake exe bcc compile <file> -o <out.wat>   compile to WAT
     lake exe bcc run <file>                    compile, run under `wasmtime -W tail-call=y`
+    lake exe bcc compile --target native <file> -o <out.ll>
+                                               compile to LLVM IR for the host (Native)
+    lake exe bcc run --native <file>           compile to LLVM IR, build with clang, run
     lake exe bcc interp [--stage S] <file>     interpret stage S: source (default), clos, flat
     lake exe bcc trusted <file>                the program's externs: contracts, host code, levels
     lake exe bcc-counts <file>                 allocations, indirect calls and deep copies of a run
     lake exe bcc-counts --sites <file>         the closure calls: direct, dispatched; recursive types
     scripts/compile-corpus.sh                  the corpus, compiled against the interpreter
+    scripts/compile-native.sh                  the corpus, built natively, against the flat IR
     lake exe bcc compile --timings <file> -o <out.wat>
                                                each stage's time and output size, on stderr
     scripts/compile-scaling.sh                 compile time against program size, per stage
@@ -41,6 +45,7 @@ runtime's `$exit`).
 | flat IR | `Flat/Syntax.lean`, `Flat/Lower.lean` | functions over words, locals, allocation, calls and tail calls of several results, `ite`; target-neutral | `Flat/Interp.lean` (at `wasmHostAt .payload`) |
 | Wasm | `Wasm/Syntax.lean`, `Wasm/Lower.lean` | the Wasm subset, as an AST | `wasmtime` |
 | WAT | `Wasm/Print.lean`, `Wasm/Runtime.lean` | text; the runtime inserted as written | — |
+| LLVM IR | `Native/Lower.lean`, `Native/Runtime.lean` | text from the flat IR, beside the native runtime in C, built by `clang` | — |
 
 All passes are structural recursion (the interpreters take fuel); `Driver.lean` composes them.
 
@@ -57,7 +62,8 @@ directly, compiling `let` as a binding, cancelling the copy and drop inside `swa
 the Z combinator's fixed point natively, building codata thunks eagerly, merging equal codes,
 compiling owned folds by pointer reversal (Stack), placing scoped cells in frame slots and
 capability cells in the data (Representation). The WAT printer and the runtime are the only
-steps no Lean interpreter observes.
+steps no Lean interpreter observes, and natively the LLVM IR printer, the native runtime and
+`clang`.
 
 **Closure conversion** (`Clos/Convert.lean`). De Bruijn indices become variables, and each
 intermediate result is named, in the machine's evaluation order: pairs left to right, an
@@ -205,7 +211,112 @@ nested blocks. There is no function table and no `call_indirect`. `_start` runs 
 prints through WASI `fd_write`. The LLVM counterpart of a multi-value function is a function
 returning a struct by value (an `sret` pointer when it is wide), of a flattened pair or closure
 union its fields as separate SSA values, of `switch` LLVM's `switch`, and of a tail call a
-`musttail` call (decision 25).
+`musttail` call (decision 25): the native target (Native) is that counterpart.
+
+## Native (LLVM, SPEC §40)
+
+`Native/Lower.lean` prints LLVM IR text from the flat IR, as `Wasm/Lower.lean` builds Wasm from
+it: the two are implementations of SPEC, and neither is the other's reference. `bcc run --native`
+writes the IR and the runtime (`Native/Runtime.lean`, C) to a temporary directory and builds them
+with `clang -O2` (no `opt` or `llc` is needed).
+
+**Functions.** Each flat-IR function is an `internal` LLVM function of the C calling convention
+over `i64` parameters. Locals are `alloca`s of the entry block, initialised as the
+flat-IR interpreter initialises them (parameters, then `0`), which `mem2reg` promotes; every
+expression is computed as an `i64` word in the interpreter's evaluation order, a 32-bit operand
+as the word's low half and a 32-bit result zero-extended. `ite` is a branch on the word `≠ 0`,
+`switch` LLVM's `switch` on the word, a frame (`Flat.Fn.frame`) one `alloca` of its words: frame
+slots are on the native stack, given back by the return or tail call that ends the frame, so the
+runtime keeps no stack of its own.
+
+**Tail calls: one prototype per tail-call class, and `musttail`.** A flat-IR tail call passes
+the caller's results on, but its callee may take other parameters. Under the C convention LLVM's
+`musttail` guarantees a jump when the prototypes match, so the functions joined by tail calls (a
+*class*, the components of the tail-call graph, `classArity`) share one: each takes the class's
+most parameters, a call passing `poison` for those it lacks, and their results agree already. A
+tail call's stack arguments are then the caller's incoming ones, and every call's arguments are
+popped by its caller. A `poison` argument is never materialised, so the padding costs nothing
+in a class whose parameters fit the argument registers (eight on AArch64); a wider class reserves
+stack for its widest member at each call.
+
+The conventions that let prototypes differ, `tailcc` and `swifttailcc`, are not used: under them the callee pops its stack arguments, and Apple clang 21 miscompiles
+that on AArch64. At `-O0` a call whose callee tail-calls a function of fewer stack arguments
+reloads its spills from a stack pointer the callee has already moved (a function of 21 parameters
+that tail-calls one of 3, called twice from a function with locals, faults); at `-O2`, two corpus
+programs whose state machines tail-call between functions of 9 and 13 parameters
+(`gen-adapters`, `list-generic`) returned to address `0`. Both run at every level from `-O0` to
+`-O3` with the shared prototypes (#535).
+
+`bcc tailcalls` runs 10⁸ turns of a loop of tail calls between functions of two and four
+parameters, at nine results and at two, on a stack of 64 KiB; `corpus/deep-list.bc` and the
+kernel program `loop-tail` run in 64 KiB too (`scripts/compile-native.sh`).
+
+**Several results.** A function of one result returns an `i64`, of two to eight an anonymous
+struct of `i64`s by value, which AArch64 returns in `x0`–`x7` (`regResults`: four on x86-64,
+in `rax`, `rdx`, `rcx`, `r8`). A wider function returns `void` and writes its results through a
+pointer, its first parameter: the caller passes an `alloca` of its entry block, and a tail call
+passes its own pointer on, since the callee's results are the caller's. LLVM would itself demote
+a wide struct return to a hidden `sret` pointer, but `musttail` forbids that demotion ("the return
+type must not undergo automatic conversion to an `sret` pointer"), so the pointer is explicit.
+
+**Addresses.** Words are real pointers (`inttoptr`, `ptrtoint`): there is no linear memory. The
+program's data is the global `@bc_data`, and its addresses are the flat IR's `Exp.data off`
+(the closure IR's `Op.dataAddr`, a literal's address, and a capability cell's): `@bc_data + off`
+natively, `dataBase + off` in Wasm and in the flat-IR interpreter. The data is writable, since a
+capability's cell is a word of it; `bc_free` skips an address in it, as Wasm's `$free` skips one
+below the heap.
+
+**Host operations, with no undefined behaviour or poison.** Each `HostOp` is emitted as follows
+(`Native/Lower.lean`, `hostOp`), with no `nsw`, `nuw`, `exact` or fast-math flag anywhere:
+
+| operation | LLVM | where LLVM is undefined or poison, and why it is not reached |
+|---|---|---|
+| `add`, `sub`, `mul`, `and`, `or`, `xor` | the instruction | wrapping: no flags |
+| `shl`, `shr_s`, `shr_u` | `shl`, `ashr`, `lshr` of the amount `and` 31 or 63 | an amount ≥ the width is poison: masked (SPEC §8) |
+| `rotl`, `rotr` | `llvm.fshl`, `llvm.fshr` of `a, a, b` | none: the funnel shifts take the amount modulo the width |
+| `div_s` | `sdiv` after a branch to `llvm.trap` when `b = 0` or `a = MIN ∧ b = -1` | both are undefined: the flat IR tests them first (SPEC §39), and the branch makes any other path a trap |
+| `div_u`, `rem_u` | `udiv`, `urem` after a branch to `llvm.trap` when `b = 0` | as above |
+| `rem_s` | `srem a (b = -1 ? 1 : b)` after a branch to `llvm.trap` when `b = 0` | `MIN srem -1` is undefined, and SPEC's answer is `0`, `x % 1`'s |
+| `clz`, `ctz`, `popcnt` | `llvm.ctlz`, `llvm.cttz` with `is_zero_poison = false`, `llvm.ctpop` | zero is the width, not poison |
+| `extend8_s`, `extend16_s`, `extend_s`, `extend32_s` | `trunc` then `sext` | none |
+| `wrap`, `extend_u`, `wrap8`, `extend8_u` | `and` | none |
+| `eqz`, the comparisons | `icmp`, `zext` | none |
+| float `add`, `sub`, `mul`, `div` | `fadd`, `fsub`, `fmul`, `fdiv` | none in the default environment (round to nearest); a NaN's payload is unspecified, as SPEC leaves it |
+| `min`, `max` | `llvm.minimum`, `llvm.maximum` | none: NaN-propagating, `-0 < +0`, as SPEC (`llvm.minnum` would differ at NaN) |
+| `copysign`, `abs`, `neg` | `llvm.copysign`, `llvm.fabs`, `fneg` | none: they act on the bits |
+| `sqrt`, `ceil`, `floor`, `trunc`, `nearest` | `llvm.sqrt`, `llvm.ceil`, `llvm.floor`, `llvm.trunc`, `llvm.roundeven` | none (`nearest` is ties-to-even: `llvm.round` would differ) |
+| float comparisons | `fcmp oeq`, `une`, `olt`, `ogt`, `ole`, `oge` | none |
+| `convert` | `sitofp`, `uitofp` | none |
+| `trunc` (partial) | the range test of `Flat.truncRange`, a branch to `llvm.trap` outside it, then `llvm.fpto[su]i.sat` | `fptosi`/`fptoui` out of range is poison: never emitted; the flat IR tests first |
+| `trunc_sat` | `llvm.fpto[su]i.sat` | none: NaN is `0` and the rest saturate |
+| `demote`, `promote` | `fptrunc`, `fpext` | none |
+| `reinterpret` | the word | none |
+
+`bcc hostops flat|native` runs every operation (138, at every width) on a table of operands read
+from standard input (so that `clang` cannot fold them): 58 thousand cases, at the flat-IR
+interpreter, whose operations are `flatHost`'s (`wasmHost` at a NaN resolution, §37), and natively; `scripts/compile-native.sh`
+requires the same text. A partial operation is applied where it has an answer; a NaN that an
+arithmetic operation answers prints as `nan`, its payload being unspecified (SPEC §37), and the
+operations on bits print theirs.
+
+**The runtime** (`Native/Runtime.lean`, trusted as the Wasm runtime is) is the allocator with the
+Wasm runtime's specification and algorithm (a size word before each range, a free list per size
+below 1024 words, a bump arena of 1 MiB chunks; a larger range is a `malloc` of its own, and is
+given back to `free`), so `live` and `bcc-counts` agree with the flat IR and Wasm; and the POSIX
+platform: `read(2)`/`write(2)` on the descriptors, unbuffered as WASI's are, `SIGPIPE` ignored so
+a write's error is dropped as Wasm's is; the arguments' stream from `argv` (counted as one
+allocation at its first read, as `$args`); `clock_gettime(CLOCK_MONOTONIC)` and `nanosleep`; the
+exit status `bc_status` sets, returned from `main` once the entry returns. `main` runs the entry
+on a thread of a 512 MiB stack (`BC_STACK` sets another), past Wasm's 64 MiB, so the recursions
+calibrated against Wasm (`bounded`'s budget, `fold_imm`) run natively; overflow is not detected
+(SPEC §40 *Open*).
+
+**Checked.** `scripts/compile-native.sh`, a step of the gate (skipped with a notice when `clang`
+is not installed): every corpus program built natively prints its golden standard output and
+standard error and exits with its golden status, which `compile-corpus.sh` checks the flat IR
+against; `bcc-counts --native` requires the native build's counts to equal the flat IR's; every
+kernel program prints at native what it prints at the flat IR; `bcc hostops`; and the tail-call
+runs above.
 
 ## Representation
 
@@ -521,7 +632,8 @@ copy; a copy at a trivial type is the words themselves and is not counted. `scri
 nothing and makes no indirect call; frame slots and capability cells are not counted (they are no
 allocation); what remains is cells, arrays, boxed recursive fields (a
 list's nodes), and the heap environments of the few recursive closure types (Open), whose calls
-are the only dispatched ones. `bcc-counts --sites <file>` prints the program's closure calls: how
+are the only dispatched ones. `bcc-counts --native <file>` runs the native build (Native) in place of `wasmtime`, and requires
+the same counts and exit status as the flat IR. `bcc-counts --sites <file>` prints the program's closure calls: how
 many are direct because the union has one code, how many more because the flow analysis finds
 one, how many are dispatched; the recursive closure types; the owned folds, how many are
 compiled by pointer reversal and how many recurse; and the scoped cells, how many are frame
