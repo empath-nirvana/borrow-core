@@ -725,15 +725,14 @@ structure OState where
   frame : Nat := 0
   emitted : Nat := 0
   unstable : Std.HashSet Nat := {}
-  /-- The most statements the function may hold while a copied continuation is being tried
-  (`cpsTry`); past it the try is abandoned. -/
+  /-- The most statements the function may hold while a copy is tried (`tryCopy`); past it the
+  try is abandoned. -/
   limit : Nat := 0
   /-- The function is built without copied continuations (it came to more than `budget`
   statements with them): a call's continuation follows it once, and an `ite`'s too. -/
   modest : Bool := false
   /-- The most statements expanded while a copy is tried. -/
   workLimit : Nat := 0
-  log : Array String := #[]
   /-- The statements expanded for the function being built: past `workMax`, nothing more is
   inlined or copied. -/
   work : Nat := 0
@@ -741,13 +740,10 @@ structure OState where
   exit that reached it, or `none` when the call was kept as a call. -/
   leaves : Std.HashMap Nat (Option (List (List Exp))) := {}
   frames : Nat := 0
-  /-- For each call whose continuation is copied into its exits: the copies made. -/
-  copies : Std.HashMap Nat Nat := {}
 
 structure Env where
   fns : Array Fn
   info : Array Info
-  trace : Bool := false
 
 abbrev OM := ReaderT Env (StateT OState (Except String))
 
@@ -761,13 +757,8 @@ def contMax : Nat := 48
 /-- A continuation is copied into each exit of a call when the copies come to at most this many
 statements. -/
 def cpsMax : Nat := 600
-/-- The most statements a call's copied continuations may come to before the call is expanded
-with one continuation after it instead. -/
-def cpsTry : Nat := 3000
 /-- The most statements the copy of a continuation into one exit may come to. -/
 def copyMax : Nat := 200
-/-- The most exits of one call that take a copy of its continuation; the others share one. -/
-def copyLimit : Nat := 8
 /-- The most statements expanded for one try of a copy (`tryCopy`). -/
 def copyWork : Nat := 2000
 
@@ -800,10 +791,8 @@ def specOf (f : Nat) (pat : Pattern) : OM (Option Nat) := do
   let n := s.specN[f]?.getD 0
   if n ≥ specMax then return none
   let o := s.outFns.size
-  let nm := (((← read).fns[f]?).map (fun (x : Fn) => x.name)).getD "?"
   set { s with outFns := s.outFns.push default, specOf := s.specOf.insert (f, pat) o,
-               specN := s.specN.insert f (n + 1), jobs := s.jobs.push ⟨o, f, pat⟩,
-               log := s.log.push s!"spec {nm} o{o} {pat.map fun (x : Nat × Bool × UInt64) => (x.1, x.2.2)}" }
+               specN := s.specN.insert f (n + 1), jobs := s.jobs.push ⟨o, f, pat⟩ }
   return some o
 
 def Ctx.look (c : Ctx) (i : Nat) : Exp :=
@@ -820,10 +809,6 @@ def Ctx.look (c : Ctx) (i : Nat) : Exp :=
     | none => .loc o
 
 def Ctx.sub (c : Ctx) (e : Exp) : Exp := subE c.look c.fbase e
-
-/-- The error that abandons copying the continuation of the call of frame `id` into its exits:
-more than `copyLimit` exits reached it. -/
-def tooManyCopies (id : Nat) : String := s!"flat IR: more than {copyLimit} copies for frame {id}"
 
 /-- The error that abandons a try of copied continuations whose limit is `l`. -/
 def abandon (l : Nat) : String := s!"flat IR: continuations past {l} statements"
@@ -858,20 +843,6 @@ def tryCopy (bound : Nat) (act : OM (List Stmt)) : OM (Option (List Stmt)) := do
     return none
   catch e =>
     if e == abandon l then set { s₀ with work := s₀.work + copyWork }; return none
-    throw e
-
-/-- `act` with at most `cpsTry` more statements emitted, or `none` (and nothing it did) when it
-emits more. -/
-def tryWithin (act : OM α) : OM (Option α) := do
-  let s₀ ← get
-  let l := if s₀.limit > 0 then min s₀.limit (s₀.emitted + cpsTry) else s₀.emitted + cpsTry
-  set { s₀ with limit := l }
-  try
-    let r ← act
-    modify fun s => { s with limit := s₀.limit }
-    return some r
-  catch e =>
-    if e == abandon l then set s₀; return none
     throw e
 
 /-- Record that input local `i` now holds `e` (an output expression already set into its output
@@ -1005,10 +976,9 @@ def simpList : Nat → Ctx → List Stmt → Kont → Join → OM (List Stmt)
             if kontTests k r then t.insert d else t) (testedIn info head)
           let wants := wantsOf tested head ds k
           let es := expandedSize info rest
-          -- The continuation is copied into each exit when that is cheap, or when it is short and
-          -- at most `copyLimit` exits take it (past them the call is expanded again, with the
-          -- continuation once after it).
-          -- Each copy of the continuation also copies what the continuations it returns to copy.
+          -- The continuation, when it tests the call's results, is copied into each exit when the
+          -- copies are cheap; each copy also copies what the continuations it returns to copy.
+          -- Otherwise it follows the call once, and each exit tries a copy of its own (`join`).
           let kc := kontCost info 8 k
           let exits := ((info[f]?.map (·.exits)).getD 1)
           let modest := (← get).modest
@@ -1136,9 +1106,6 @@ def retTo : Nat → List Exp → Kont → OM (List Stmt)
         { st with leaves := st.leaves.insert fr.id (prev.map (· ++ [es])) }
       return sets
     | some (actx, rest) =>
-      -- Past `copyLimit` copies, an exit sets the destinations and the statements after the
-      -- call follow it once.
-
       -- The continuation follows in this exit: an atom is known, any other word set.
       let mut a := actx
       let mut st : Array Stmt := #[]
@@ -1169,8 +1136,7 @@ def doCall : Nat → Ctx → Nat → List Exp → Kont → OM (List Stmt)
         c := c'
         pre := pre ++ st.toArray
       emit pre.size
-      let mark := if env.trace then [Stmt.status (.c64 (f.toUInt64 + 1000000 * (if k.isEmpty then 1 else match k.head!.after with | some _ => 2 | none => 3)))] else []
-      return mark ++ pre.toList ++ (← simpList n c fn.body k {})
+      return pre.toList ++ (← simpList n c fn.body k {})
     -- Not inlined: a call of the function, or of its specialization at the literal arguments.
     let info := env.info[f]!
     let lits := as.zipIdx.filterMap fun (a, i) =>
@@ -1234,8 +1200,6 @@ def runJob (j : Job) : OM Unit := do
     set { s₀ with modest := true }
     simpList fuel c fn.body [] {}
   modify fun s => { s with modest := false }
-  let s ← get
-  set { s with log := s.log.push s!"job {fn.name} o{j.out} emitted {s.emitted} work {s.work} pattern {j.pattern.length}" }
   let s ← get
   let name := if j.pattern.isEmpty then fn.name else s!"{fn.name}_s{j.out}"
   let f : Fn := { name, params := np, results := fn.results, locals := s.next - np,
@@ -1567,31 +1531,5 @@ def optimize (p : Prog) : Except String Prog := do
   let mut fns := s.outFns.map dropDeadSets
   for _ in [0:3] do fns := (dropDeadParams fns entry).map dropDeadSets
   pure { p with fns := fns.map (compact ∘ mergeExits), entry }
-
-def optimizeTrace (p : Prog) : Except String Prog := do
-  let env : Env := { fns := p.fns, info := infos p.fns, trace := true }
-  let act : OM Nat := do
-    let e ← outOf p.entry
-    for _ in [0:1 <<< 20] do
-      let s ← get
-      let some j := s.jobs.back? | break
-      set { s with jobs := s.jobs.pop }
-      runJob j
-    pure e
-  let (entry, s) ← (act.run env).run {}
-  pure { p with fns := s.outFns, entry }
-
-def optimizeLog (p : Prog) : Except String (Array String) := do
-  let env : Env := { fns := p.fns, info := infos p.fns }
-  let act : OM Nat := do
-    let e ← outOf p.entry
-    for _ in [0:1 <<< 20] do
-      let s ← get
-      let some j := s.jobs.back? | break
-      set { s with jobs := s.jobs.pop }
-      runJob j
-    pure e
-  let (_, s) ← (act.run env).run {}
-  pure s.log
 
 end Backend.Flat.Opt

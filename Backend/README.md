@@ -43,6 +43,7 @@ runtime's `$exit`).
 | layout types | `Clos/Types.lean` | a layout type for every closure-IR variable, code and constructor; each type's layout; each closure type's union of codes | — |
 | closure flow | `Clos/Flow.lean` | a 0-CFA: the codes each call may call | — |
 | flat IR | `Flat/Syntax.lean`, `Flat/Lower.lean` | functions over words, locals, allocation, calls and tail calls of several results, `ite`; target-neutral | `Flat/Interp.lean` (at `wasmHostAt .payload`) |
+| specialized flat IR | `Flat/Opt.lean` | the flat IR with known calls inlined, known tags folded, loops specialized at their states' tags and dead words removed (*Loops as loops*, below) | `Flat/Interp.lean` |
 | Wasm | `Wasm/Syntax.lean`, `Wasm/Lower.lean` | the Wasm subset, as an AST | `wasmtime` |
 | WAT | `Wasm/Print.lean`, `Wasm/Runtime.lean` | text; the runtime inserted as written | — |
 | LLVM IR | `Native/Lower.lean`, `Native/Runtime.lean` | text from the flat IR, beside the native runtime in C, built by `clang` | — |
@@ -61,7 +62,7 @@ No stage optimizes beyond choosing layouts, defunctionalizing closures, calling 
 directly, compiling `let` as a binding, cancelling the copy and drop inside `swap`, compiling
 the Z combinator's fixed point natively, building codata thunks eagerly, merging equal codes,
 compiling owned folds by pointer reversal (Stack), placing scoped cells in frame slots and
-capability cells in the data (Representation). The WAT printer and the runtime are the only
+capability cells in the data (Representation), and the flat IR's specializer (*Loops as loops*). The WAT printer and the runtime are the only
 steps no Lean interpreter observes, and natively the LLVM IR printer, the native runtime and
 `clang`.
 
@@ -205,6 +206,55 @@ so a `let` whose value's words are already in locals (a variable, a component, a
 binds its variable to those locals, and moves no word; only words computed there get locals of
 their own.
 
+**Loops as loops** (`Flat/Opt.lean`, SPEC §41). The flat IR from `Lower` runs a loop that may
+diverge (a `while`, a `loop`, a generator's body, `main`'s state machine, SPEC §14) one observation
+at a time: the entry's `drive` calls the codata's code, which runs one turn of the step and
+answers the next state as a closure in the loop type's union, padded to its widest member, and
+`drive` passes those words back to itself. A stored generator's pull (§15) is a resumption of a
+suspended state machine in the same way. Every tag in such a state is a literal where it is
+built: a sum's arm, a resumption point's variant, a closure's code (`Exp.tag`). The specializer
+is a partial evaluator over the flat IR that meets those literals with the tests that take them
+apart:
+
+- **Inlining.** A call is replaced by its callee's body (parameters bound to the arguments,
+  locals renamed, frame slots moved into the caller's frame) when the callee does not call
+  itself, is not already being inlined on the path more than once, and is small (120
+  statements), has one call site, or meets a literal tag at a parameter it tests. A `ret` of the
+  body sets the call's destinations, or, inlined in tail position, stays a `ret`.
+- **Known words.** A local set to an atom (a literal, a tag, a data address, a local that is not
+  set again) is that atom where it is read, and its set is made only where a join needs it. An
+  `ite` or a `switch` whose test is known keeps one branch; a `switch` case knows its operand.
+- **Continuations into exits (case-of-case).** When the statements after a call test its results,
+  they are copied into each exit of the inlined callee where that is cheap, so that each exit's
+  literal tag decides the test; each copy also counts what the continuations it returns to copy.
+  Otherwise they follow the call once, each exit trying a copy specialized to what it knows that
+  ends the function in a few statements (`tryCopy`), as after an `ite` or a `switch` whose
+  branches set what the statements after it test.
+- **Call-pattern specialization.** A call of a function on a cycle of the call graph (`drive`, a
+  loop of tail calls, a handler's drive) with tags among its arguments is a call of the
+  function's copy for those tags, made once per function and pattern (`specMax` per function).
+  `drive`'s self-call on the next state's tags is then a self tail call of the copy for that
+  state, whose body keeps only that state's code: a loop of tail calls in its own function. A
+  nested loop is a state of its own, so the copy for an inner loop's state runs that loop alone.
+- **Narrowing.** A set whose local nothing reads, of a word with no effect, is removed; so is a
+  parameter that no function reads (one only passed on to the same parameter of a self-call is
+  not read), at every call. Where two branches end in a tail call of one function (or both
+  `ret`), the call is made once after them on the words they set (one back edge for a loop).
+
+What a loop passes from turn to turn is then the words its state uses. In `bench/chain-yield`
+and `bench/chain-gen` (`range |> map |> filter`, summed by `for`, three stored generators) a turn
+is one self tail call of five words; in `bench/sieve` the strike loop's is one of twelve (its
+own four and the enclosing loops' live words, passed unchanged). Where nothing literal reaches a
+loop's state, `drive` still runs it as written, its padding words `Exp.undef`.
+
+The pass is semantics-preserving by construction: it removes only computation whose results no
+run reads and tests whose answers are known, and an inlined body runs the same statements in the
+same order, so a run's output, allocations, memory accesses, copies and bounds checks are what
+they were. A dispatched call (`apply`) whose closure's tag becomes a literal is a direct call, and
+is no longer counted as dispatched (`corpus/counts.expected`'s `indirect` drops). It is bounded:
+a function past `budget` statements is built again without copied continuations, a try of a copy
+stops past `copyWork` statements expanded, and nesting stops at `depthMax`.
+
 **Wasm** (`Wasm/Lower.lean`). One Wasm function per flat-IR function, `i64` locals, several
 results as a multi-value function, tail calls as `return_call`, a `switch` as `br_table` over
 nested blocks. There is no function table and no `call_indirect`. `_start` runs the entry, which
@@ -334,7 +384,7 @@ word is an `i64` local; `|A|` is the number of words of `A`.
 | `i32`, `i64`, `u8` | 1 | the integer (an `i32` or a `u8` zero-extended) |
 | `f32`, `f64` | 1 | the float's bits (an `f32`'s zero-extended); a float operation reinterprets its operands as `f32`/`f64` and its result back (`Wasm/Lower.lean`), and is the target's float instruction alone: a NaN result's sign and payload are the target's (SPEC §37) |
 | `A ⊗ B` | `\|A\| + \|B\|` | `A`'s words, then `B`'s |
-| `A ⊕ B` | `1 + max \|A\| \|B\|` | a tag word (`0` for `inl`), then the payload's words, padded |
+| `A ⊕ B` | `1 + max \|A\| \|B\|` | a tag word (`0` for `inl`), then the payload's words, padded (padding is `Exp.undef`) |
 | `⊕[A₀, …, Aₙ₋₁]` | `1 + maxᵢ \|Aᵢ\|` | a tag word `i`, then variant `i`'s payload's words, padded: a suspended computation's state, an operation's payload |
 | `loc A` | 1 | the address of the cell's contents |
 | `fn(A; C, D)` | `1 + max_c \|env c\|` | a closure: its code's tag in the type's union, then the captured values' words, padded |
@@ -448,7 +498,8 @@ callee answers the caller's words. What runs in constant stack:
 - **Loops.** Every `ν`-type program, `unfold`, `fixd`, `div_bind` and the `for` loop: an
   observation runs the step once and returns the next state inside the rest, so the depth does
   not grow with the number of observations. The loop driver (`drive`) calls the loop and then
-  tail-calls itself.
+  tail-calls itself; specialized (*Loops as loops*), each state's copy of `drive` tail-calls
+  itself, or the copy of the next state.
 - **Counted loops.** `count_fold` (SPEC §16) is a generated loop of tail calls (`count_loop`),
   one call of the step per count, allocating nothing; `div_fuel` is one.
   A left fold is written as a loop whose state is the rest of the structure and the accumulator
