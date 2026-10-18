@@ -1,0 +1,9 @@
+-- expect: 6:3: `spin` is declared `total`, but it has a `while` (SPEC §14)
+-- A function declared `total` must not loop: a `while` is div (#527). The message names the
+-- `while` the program has.
+total fn spin(n: i32) -> i32 =
+  let mut i = 0;
+  while i < n { i = i + 1 };
+  i
+
+main -> i32 = spin(3)

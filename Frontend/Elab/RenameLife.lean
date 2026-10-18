@@ -188,7 +188,7 @@ def Comp.renameLife (f : Span → String → Life) : Comp → Comp
   | .nuIn s M => .nuIn s (M.renameLife f)
   | .nuOut s M => .nuOut s (M.renameLife f)
   | .ascribe s M C => .ascribe s (M.renameLife f) (C.renameLife f)
-  | .for_ s x V M N => .for_ s (x.renameLife f) (V.renameLife f) (M.renameLife f) (N.renameLife f)
+  | .loop s ℓ src V M N => .loop s ℓ src (V.renameLife f) (M.renameLife f) (N.renameLife f)
   | .perform s n i V => .perform s n i (V.renameLife f)
   | .abort s n i V => .abort s n i (V.renameLife f)
   | .handle s n hr hc M => .handle s n (hr.renameLife f) (hc.renameLife f) (M.renameLife f)

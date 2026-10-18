@@ -50,7 +50,19 @@ main -> i32 = sum_to(10)
 -- answer: i32[45]
 ```
 
-A `total fn` with a `while` is rejected. A div computation can be run for a bounded number of
+A `total fn` with a `while` is rejected:
+
+```bc,reject
+total fn spin(n: i32) -> i32 =
+  let mut i = 0;
+  while i < n { i = i + 1 };
+  i
+
+main -> i32 = spin(3)
+-- expect: 3:3: `spin` is declared `total`, but it has a `while` (SPEC §14)
+```
+
+A div computation can be run for a bounded number of
 steps by `div_fuel`, and code that does so is total again ([Divergence](../elaboration/divergence.md)
 has the details, and what a closed total program is proved to do).
 

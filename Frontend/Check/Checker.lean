@@ -429,8 +429,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
         | .error e, _ => throw e
       | A, _ => err V.span s!"`case V` needs a `+` type, but `V : {E.ppV A}`"
     | .absurd sp _ => err sp "the type of `absurd V` cannot be synthesized: ascribe it, `(absurd V : C)`"
-    | .for_ sp _ _ _ _ => err sp ("`for` is elaborated before checking, on the spine of a " ++
-        "function's body or of `main` (SPEC §14)")
+    | .loop sp _ src _ _ _ => err sp (s!"{src.what} is elaborated before checking, on the spine " ++
+        "of a function's body or of `main` (SPEC §14)")
     | .lamL sp x b M => do
       let bl ← E.elabL Δ b
       let v := Δ.freshVar

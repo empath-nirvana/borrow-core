@@ -185,7 +185,7 @@ def Comp.subst (σ : TySubst) : Comp → Comp
   | .nuIn sp M => .nuIn sp (M.subst σ)
   | .nuOut sp M => .nuOut sp (M.subst σ)
   | .ascribe sp M C => .ascribe sp (M.subst σ) (C.subst σ)
-  | .for_ sp x V M N => .for_ sp x (V.subst σ) (M.subst σ) (N.subst σ)
+  | .loop sp ℓ src V M N => .loop sp ℓ src (V.subst σ) (M.subst σ) (N.subst σ)
   | .perform sp n i V => .perform sp n i (V.subst σ)
   | .abort sp n i V => .abort sp n i (V.subst σ)
   | .handle sp n hr hc M => .handle sp n hr hc (M.subst σ)

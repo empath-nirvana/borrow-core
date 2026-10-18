@@ -132,11 +132,15 @@ def _root_.Frontend.Comp.hyg (glob : String → Bool) (ρ : Ren) : Comp → HM C
   | .nuIn sp M => do pure (.nuIn sp (← M.hyg glob ρ))
   | .nuOut sp M => do pure (.nuOut sp (← M.hyg glob ρ))
   | .ascribe sp M C => do pure (.ascribe sp (← M.hyg glob ρ) C)
-  | .for_ sp x V M N => do
+  | .loop sp ℓ (.each x) V M N => do
     let V' ← V.hyg glob ρ
     let (x', ρx) ← bind glob ρ x
     let M' ← M.hyg glob ρx
-    pure (.for_ sp x' V' M' (← N.hyg glob ρ))
+    pure (.loop sp ℓ (.each x') V' M' (← N.hyg glob ρ))
+  | .loop sp ℓ src V M N => do
+    let V' ← V.hyg glob ρ
+    let M' ← M.hyg glob ρ
+    pure (.loop sp ℓ src V' M' (← N.hyg glob ρ))
   | .perform sp n i V => do pure (.perform sp n i (← V.hyg glob ρ))
   | .abort sp n i V => do pure (.abort sp n i (← V.hyg glob ρ))
   | .handle sp n hr hc M => do pure (.handle sp n (lookI ρ hr) (lookI ρ hc) (← M.hyg glob ρ))

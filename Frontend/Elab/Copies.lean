@@ -53,7 +53,7 @@ def Head.scopeOf (h : Head) (bs : List Binder) (i : Nat) : List Binder :=
   | .comp (.bind ..), 1 | .comp (.lam ..), 0 | .comp (.letPair ..), 1 => bs
   | .comp (.case ..), 1 => bs.take 1
   | .comp (.case ..), 2 => bs.drop 1
-  | .comp (.for_ ..), 1 => bs
+  | .comp (.loop ..), 1 => bs
   | _, _ => []
 
 /-- The parts of node `h` that run in sequence, as groups of its children's indices, in the order
@@ -64,7 +64,7 @@ def Head.parts : Head → List (List Nat)
   | .val (.app ..) => [[1], [0]]
   | .comp (.bind ..) | .comp (.letUnit ..) | .comp (.letPair ..) => [[0], [1]]
   | .comp (.case ..) => [[0], [1, 2]]
-  | .comp (.for_ ..) => [[0], [1], [2]]
+  | .comp (.loop ..) => [[0], [1], [2]]
   | _ => []
 
 mutual

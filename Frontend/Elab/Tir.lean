@@ -111,7 +111,7 @@ def Head.kids : Head → List Head
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
     | .nuOut _ M | .ascribe _ M _ => [.comp M]
     | .letUnit _ V M | .letPair _ _ _ V M => [.val V, .comp M]
-    | .case _ V _ M _ N | .for_ _ _ V M N => [.val V, .comp M, .comp N]
+    | .case _ V _ M _ N | .loop _ _ _ V M N => [.val V, .comp M, .comp N]
     | .perform _ _ _ V | .abort _ _ _ V => [.val V]
     | .handle _ _ _ _ M => [.comp M]
     | .unwind _ _ _ M D N => [.comp M, .comp D, .comp N]
@@ -159,7 +159,7 @@ def Head.rebuild : Head → List Head → Option Head
     | .letUnit sp _ _, [.val V, .comp M] => some (.comp (.letUnit sp V M))
     | .letPair sp x y _ _, [.val V, .comp M] => some (.comp (.letPair sp x y V M))
     | .case sp _ x _ y _, [.val V, .comp M, .comp N] => some (.comp (.case sp V x M y N))
-    | .for_ sp x _ _ _, [.val V, .comp M, .comp N] => some (.comp (.for_ sp x V M N))
+    | .loop sp ℓ src _ _ _, [.val V, .comp M, .comp N] => some (.comp (.loop sp ℓ src V M N))
     | .perform sp k i _, [.val V] => some (.comp (.perform sp k i V))
     | .abort sp k i _, [.val V] => some (.comp (.abort sp k i V))
     | .handle sp k hr hc _, [.comp M] => some (.comp (.handle sp k hr hc M))

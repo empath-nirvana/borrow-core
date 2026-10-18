@@ -388,9 +388,6 @@ inductive VSugar where
   | borrow (k : BorrowKind) (x : String)
   /-- `*e`: the content of a borrow or a cell, applied to it. -/
   | deref
-  /-- `while c { M }; N`: the condition, applied to it, as the source of a `for` (`Comp.for_`)
-  whose variable is not used. -/
-  | while_
   /-- `break` in a loop's body: the loop ends. -/
   | brk
   /-- `continue` in a loop's body: the rest of the body is skipped, and the loop goes on. -/
@@ -398,8 +395,6 @@ inductive VSugar where
   /-- `a..b`, applied to the pair of its ends: the count `a, a + 1, …, b − 1`, a source of `for`
   (SPEC §16). -/
   | count
-  /-- `loop { M }`: the condition of a `while` that never fails. -/
-  | forever
   /-- `return e` in a loop's body, applied to the value: the function returns it, from any depth
   of its loops. -/
   | retE
@@ -436,6 +431,36 @@ inductive VSugar where
   by `Frontend.Elab.Effects`.  `[spec §33]` -/
   | pipe
   deriving DecidableEq, Repr, Inhabited
+
+/-- What a loop walks, as the program writes it (`docs/loops.md` §2.1), with the loop's value
+`V` (`Comp.loop`). Which source an `each` walks, a count, data, a generator's call or a drain,
+is decided from `V` and its type. -/
+inductive LoopSrc where
+  /-- `for x in V`: `V` is the source, and `x` its element, bound in the body. -/
+  | each (x : Ident)
+  /-- `while V`: `V` is the condition, tested before each turn. -/
+  | while_
+  /-- `loop`: no source, so the loop ends only by an exit. `V` is `()`. -/
+  | forever
+  deriving DecidableEq, Repr, Inhabited
+
+/-- The construct a loop is written as: `for`, `while` or `loop`, in backticks, for messages. -/
+def LoopSrc.what : LoopSrc → String
+  | .each _ => "`for`"
+  | .while_ => "`while`"
+  | .forever => "`loop`"
+
+/-- The element a loop binds in its body: `for`'s variable. -/
+def LoopSrc.var? : LoopSrc → Option Ident
+  | .each x => some x
+  | _ => none
+
+/-- The name of `for`'s variable, or none. -/
+def LoopSrc.bound (s : LoopSrc) : List String := s.var?.toList.map (·.name)
+
+def LoopSrc.strip : LoopSrc → LoopSrc
+  | .each x => .each x.strip
+  | s => s
 
 mutual
 /-- Value-judged expressions (syntax-core §6.1), checked at a value type. -/
@@ -516,9 +541,10 @@ inductive Comp where
   | nuOut (sp : Span) (M : Comp)
   /-- `(M : C)`. -/
   | ascribe (sp : Span) (M : Comp) (C : CTy)
-  /-- `for x in V { M }; N`, at the end of a `main` with ambient capabilities, elaborated away
-  before checking (SPEC §11). -/
-  | for_ (sp : Span) (x : Ident) (V : Val) (M N : Comp)
+  /-- A loop, `for x in V { M }; N`, `while V { M }; N` or `loop { M }; N` by its source `src`,
+  labelled `ℓ` when the program writes `'ℓ:` before it (`docs/loops.md` §2.1, §2.8). An exit
+  names the innermost loop. Elaborated away before checking (SPEC §14, §16). -/
+  | loop (sp : Span) (ℓ : Option Ident) (src : LoopSrc) (V : Val) (M N : Comp)
   /-- `perform[n.i] V`: the non-abortive operation `i` of the name `n` of the current row
   (`[perform]`).  `[spec §19]` -/
   | perform (sp : Span) (n i : Nat) (V : Val)
@@ -818,7 +844,7 @@ def Comp.strip : Comp → Comp
   | .nuIn _ M => .nuIn .none M.strip
   | .nuOut _ M => .nuOut .none M.strip
   | .ascribe _ M C => .ascribe .none M.strip C.strip
-  | .for_ _ x V M N => .for_ .none x.strip V.strip M.strip N.strip
+  | .loop _ ℓ src V M N => .loop .none (ℓ.map Ident.strip) src.strip V.strip M.strip N.strip
   | .perform _ n i V => .perform .none n i V.strip
   | .abort _ n i V => .abort .none n i V.strip
   | .handle _ n hr hc M => .handle .none n hr.strip hc.strip M.strip
@@ -875,7 +901,7 @@ def Comp.span : Comp → Span
   | .ret sp _ | .bind sp _ _ _ _ _ | .force sp _ | .lam sp _ _ _ | .app sp _ _ | .with_ sp _ _
   | .proj sp _ _ | .top sp | .letUnit sp _ _ | .letPair sp _ _ _ _ | .case sp _ _ _ _ _
   | .absurd sp _ | .lamL sp _ _ _ | .inst sp _ _ | .nuIn sp _ | .nuOut sp _
-  | .ascribe sp _ _ | .for_ sp _ _ _ _ | .perform sp _ _ _ | .abort sp _ _ _ | .handle sp _ _ _ _
+  | .ascribe sp _ _ | .loop sp _ _ _ _ _ | .perform sp _ _ _ | .abort sp _ _ _ | .handle sp _ _ _ _
   | .unwind sp _ _ _ _ _ | .withbor2r sp _ _ _ _ _ _ _ _ => sp
 
 def Life.span : Life → Span

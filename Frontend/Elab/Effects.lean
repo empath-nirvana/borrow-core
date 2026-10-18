@@ -755,11 +755,11 @@ def rowC (env : Env) : Nat → Comp → List Inst
     | .letUnit _ V M | .letPair _ _ _ V M => env.union (rowV env n V) (rowC env n M)
     | .case _ V _ M _ N =>
       env.union (rowV env n V) (env.union (rowC env n M) (rowC env n N))
-    | .for_ _ _ V M N =>
+    | .loop _ _ src V M N =>
       -- A `for` over a call that performs an iteration effect handles it.
-      let src := match env.iterCall? V with
-        | some (_, _, i, _, _) => without (rowV env n V) i.eff
-        | none => rowV env n V
+      let src := match src, env.iterCall? V with
+        | .each _, some (_, _, i, _, _) => without (rowV env n V) i.eff
+        | _, _ => rowV env n V
       env.union src (env.union (rowC env n M) (rowC env n N))
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
     | .nuOut _ M | .ascribe _ M _ => rowC env n M
@@ -887,8 +887,8 @@ def chain : List Bind → Comp → EM Comp
 def mayLoop : Nat → Comp → Bool
   | 0, _ => true
   | k + 1, M => match M with
-    | .for_ _ _ (.app _ (.sugar _ .count) _) B N => mayLoop k B || mayLoop k N
-    | .for_ .. => true
+    | .loop _ _ (.each _) (.app _ (.sugar _ .count) _) B N => mayLoop k B || mayLoop k N
+    | .loop .. => true
     | .bind _ _ _ M N _ | .with_ _ M N => mayLoop k M || mayLoop k N
     | .letUnit _ _ M | .letPair _ _ _ _ M | .lam _ _ _ M | .lamL _ _ _ M => mayLoop k M
     | .case _ _ _ M _ N => mayLoop k M || mayLoop k N
@@ -946,7 +946,7 @@ def refsC : Nat → Comp → List String
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
     | .nuOut _ M | .ascribe _ M _ | .handle _ _ _ _ M => refsC n M
     | .letUnit _ V M | .letPair _ _ _ V M => refsV n V ++ refsC n M
-    | .case _ V _ M _ N | .for_ _ _ V M N => refsV n V ++ refsC n M ++ refsC n N
+    | .case _ V _ M _ N | .loop _ _ _ V M N => refsV n V ++ refsC n M ++ refsC n N
     | .unwind _ _ _ M D N => refsC n M ++ refsC n D ++ refsC n N
     | .withbor2r _ _ _ _ _ _ _ _ M => refsC n M
     | .force .. | .top _ => []
@@ -973,7 +973,7 @@ def unboxesC (k : String) : Nat → Comp → Bool
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
     | .nuOut _ M | .ascribe _ M _ | .handle _ _ _ _ M => unboxesC k n M
     | .letUnit _ V M | .letPair _ _ _ V M => unboxesV k n V || unboxesC k n M
-    | .case _ V _ M _ N | .for_ _ _ V M N => unboxesV k n V || unboxesC k n M || unboxesC k n N
+    | .case _ V _ M _ N | .loop _ _ _ V M N => unboxesV k n V || unboxesC k n M || unboxesC k n N
     | .unwind _ _ _ M D N => unboxesC k n M || unboxesC k n D || unboxesC k n N
     | .withbor2r _ _ _ _ _ _ _ _ M => unboxesC k n M
     | .force .. | .top _ => false
@@ -1110,7 +1110,7 @@ def Cx.givenC (cx : Cx) : Nat → Comp → List Cap
     | .bind _ _ _ M N _ | .with_ _ M N => cx.givenC n M ++ cx.givenC n N
     | .letUnit _ V M | .letPair _ _ _ V M => cx.givenV n V ++ cx.givenC n M
     | .case _ V _ M _ N => cx.givenV n V ++ cx.givenC n M ++ cx.givenC n N
-    | .for_ _ _ V M N => cx.givenV n V ++ cx.givenC n M ++ cx.givenC n N
+    | .loop _ _ _ V M N => cx.givenV n V ++ cx.givenC n M ++ cx.givenC n N
     | _ => []
 end
 
@@ -1564,7 +1564,8 @@ where
         (isPullTy A && (env.iterCall? V).isSome) || withInV env k V || withInC k N
       | .bind _ _ _ M N _ | .with_ _ M N => withInC k M || withInC k N
       | .letUnit _ V M | .letPair _ _ _ V M => withInV env k V || withInC k M
-      | .for_ _ _ V M N => (env.iterCall? V).isSome || withInV env k V || withInC k M || withInC k N
+      | .loop _ _ src V M N => (src matches .each _ && (env.iterCall? V).isSome) || withInV env k V ||
+        withInC k M || withInC k N
       | .case _ V _ M _ N => withInV env k V || withInC k M || withInC k N
       | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
       | .nuOut _ M | .ascribe _ M _ => withInC k M
@@ -1622,7 +1623,7 @@ def wrapTerms (f : Comp → Comp) : Comp → Comp
   | .letUnit sp V M => .letUnit sp V (wrapTerms f M)
   | .letPair sp x y V M => .letPair sp x y V (wrapTerms f M)
   | .case sp V x M y N => .case sp V x (wrapTerms f M) y (wrapTerms f N)
-  | .for_ sp x V M N => .for_ sp x V M (wrapTerms f N)
+  | .loop sp ℓ src V M N => .loop sp ℓ src V M (wrapTerms f N)
   | T => f T
 
 mutual
@@ -1670,11 +1671,11 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
     | .case sp V x M y N =>
       let (bs, V') ← trV n cx cs V
       chain bs (.case sp V' x (← trC n cx cs wrap M) y (← trC n cx cs wrap N))
-    | .for_ sp x V M N =>
-      match cx.env.iterCall? V with
-      | some (g, gs, i, f, W) =>
+    | .loop sp ℓ src V M N =>
+      match src, cx.env.iterCall? V with
+      | .each x, some (g, gs, i, f, W) =>
         if (cx.ctl (rowC cx.env fuel M)).isEmpty && !mayLoop fuel M then
-          forSite n cx cs wrap sp x g gs i f W M N
+          forSite n cx cs wrap sp ℓ x g gs i f W M N
         else
           -- A body that performs a control operation would hold the continuation across it,
           -- which has no destructor (its cancel performs at the site's row), and one that loops
@@ -1682,11 +1683,11 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
           let (bs, V') ← pullSite n cx cs sp g gs i f W
           report sp "lowering" (s!"for over {g}: its body performs a control operation or " ++
             "loops, so it drains the stored generator")
-          chain bs (.for_ sp x V' (← trC n cx [] false M) (← trC n cx cs wrap N))
-      | none =>
+          chain bs (.loop sp ℓ src V' (← trC n cx [] false M) (← trC n cx cs wrap N))
+      | _, _ =>
         let (bs, V') ← trV n cx cs V
         -- The body rebinds the capabilities it uses by name, and the loop threads them.
-        chain bs (.for_ sp x V' (← trC n cx [] false M) (← trC n cx cs wrap N))
+        chain bs (.loop sp ℓ src V' (← trC n cx [] false M) (← trC n cx cs wrap N))
     | .absurd sp V =>
       let (bs, V') ← trV n cx cs V
       chain bs (.absurd sp V')
@@ -2676,10 +2677,10 @@ first and hands it back first, and `op(v)` is `w <- perform[n.0] (v, w)` in it).
 assembled where the types are known (`VSugar.forSite`): `w` is then the tuple of the variables the
 body reads or assigns, and the body is the operation's clause. The body runs outside the site:
 its operations go to the sites around the `for`. -/
-def forSite : Nat → Cx → List Cap → Bool → Span → Ident → String → FSig → Inst → Val → Val →
-    Comp → Comp → EM Comp
-  | 0, _, _, _, sp, _, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: a body nested too deeply"⟩
-  | k + 1, cx, cs, wrap, sp, x, gname, g, i, f, W, M, N => do
+def forSite : Nat → Cx → List Cap → Bool → Span → Option Ident → Ident → String → FSig → Inst →
+    Val → Val → Comp → Comp → EM Comp
+  | 0, _, _, _, sp, _, _, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: a body nested too deeply"⟩
+  | k + 1, cx, cs, wrap, sp, ℓ, x, gname, g, i, f, W, M, N => do
     let some As := i.args
       | throw ⟨sp, s!"`{gname}` performs `{i.eff}`, and its type arguments are not determined: " ++
           s!"write them, `with {i.eff}[…]`"⟩
@@ -2712,7 +2713,7 @@ def forSite : Nat → Cx → List Cap → Bool → Span → Ident → String →
     let M' ← trC k cx [] false M
     let N' ← trC k cx cs wrap N
     let call := Val.app sp f' (capsTuple sp [tcap] W')
-    chain bs (.for_ sp x (.app sp (.sugar sp (.forSite ⟨n, T, w, gname⟩)) call) M' N')
+    chain bs (.loop sp ℓ (.each x) (.app sp (.sugar sp (.forSite ⟨n, T, w, gname⟩)) call) M' N')
 
 /-- The stored generator of `g(W)`, `g` performing the iteration effect `i` (SPEC §15): a handler
 site of its own for `i`, assembled where the types are known (`VSugar.pullSite`), whose clause
@@ -3199,8 +3200,8 @@ def clauseDef (env : Env) (h : HSig) (o : OpDecl) (c : Clause) : EM Decl := do
 def hasWhile : Nat → Comp → Bool
   | 0, _ => false
   | k + 1, M => match M with
-    | .for_ _ _ (.app _ (.sugar _ .while_) _) _ _ => true
-    | .for_ _ _ _ B N => hasWhile k B || hasWhile k N
+    | .loop _ _ .while_ _ _ _ | .loop _ _ .forever _ _ _ => true
+    | .loop _ _ _ _ B N => hasWhile k B || hasWhile k N
     | .bind _ _ _ M N _ | .with_ _ M N => hasWhile k M || hasWhile k N
     | .letUnit _ _ M | .letPair _ _ _ _ M | .lam _ _ _ M | .lamL _ _ _ M => hasWhile k M
     | .case _ _ _ M _ N => hasWhile k M || hasWhile k N
@@ -3253,8 +3254,8 @@ def compParamsOf (sp : Span) (name : String) (A : VTy) (V : Val) :
 def forOverParam (xs : List String) : Nat → Comp → Option Span
   | 0, _ => none
   | k + 1, M => match M with
-    | .for_ sp _ V B N =>
-      if (match V with | .app _ f _ => (headName f).any xs.contains | _ => false) then some sp
+    | .loop sp _ src V B N =>
+      if (match src, V with | .each _, .app _ f _ => (headName f).any xs.contains | _, _ => false) then some sp
       else (forOverParam xs k B).orElse fun _ => forOverParam xs k N
     | .bind _ _ _ M N _ | .with_ _ M N | .case _ _ _ M _ N =>
       (forOverParam xs k M).orElse fun _ => forOverParam xs k N
@@ -3479,7 +3480,7 @@ def pipesC (pe : PipeEnv) : Nat → Comp → EM Comp
     | .nuIn sp M => do pure (.nuIn sp (← pipesC pe k M))
     | .nuOut sp M => do pure (.nuOut sp (← pipesC pe k M))
     | .ascribe sp M C => do pure (.ascribe sp (← pipesC pe k M) C)
-    | .for_ sp x V M N => do pure (.for_ sp x (← pipesV pe k V) (← pipesC pe k M) (← pipesC pe k N))
+    | .loop sp ℓ src V M N => do pure (.loop sp ℓ src (← pipesV pe k V) (← pipesC pe k M) (← pipesC pe k N))
     | .perform sp n i V => do pure (.perform sp n i (← pipesV pe k V))
     | .abort sp n i V => do pure (.abort sp n i (← pipesV pe k V))
     | .handle sp n hr hc M => do pure (.handle sp n hr hc (← pipesC pe k M))
@@ -3581,10 +3582,10 @@ def splitDiv (env : Env) : Nat → Comp → (Comp → Comp) × Comp
       if perfV V then (id, M) else
         let (K, R) := splitDiv env k N
         (fun H => .letUnit sp V (K H), R)
-    | .for_ sp x V M₁ N =>
+    | .loop sp ℓ src V M₁ N =>
       if perfV V || perf M₁ then (id, M) else
         let (K, R) := splitDiv env k N
-        (fun H => .for_ sp x V M₁ (K H), R)
+        (fun H => .loop sp ℓ src V M₁ (K H), R)
     | M => (id, M)
 
 /-- `main` with `main_div_error` (`lib/arith.bc`) around its body when the body performs

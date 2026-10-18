@@ -322,7 +322,11 @@ def walkC (d : Decls) (owner : String) (names : List String) : Nat → TCx → C
         | _ => (none, none)
       walkC d owner names n (c.push x.name A) M
       walkC d owner names n (c.push y.name B) N
-    | .for_ _ x V M N => do
+    | .loop _ _ .while_ V M N | .loop _ _ .forever V M N => do
+      walkV d owner names n c V
+      walkC d owner names n c M
+      walkC d owner names n c N
+    | .loop _ _ (.each x) V M N => do
       walkV d owner names n c V
       -- An iterator's or a generator's element; over a borrowed array, a borrow of an element
       -- (`*x` is what the walk needs of it); over a count `a..b`, an `i32` (SPEC §16).

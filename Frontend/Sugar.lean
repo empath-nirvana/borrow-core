@@ -147,9 +147,9 @@ def _root_.Frontend.Comp.elab (lend : Bool) : Comp → Except Error Comp
   | .nuIn sp M => return .nuIn sp (← M.elab lend)
   | .nuOut sp M => return .nuOut sp (← M.elab lend)
   | .ascribe sp M C => return .ascribe sp (← M.elab lend) C
-  | .for_ sp _ _ _ _ => throw ⟨sp, "`for` may appear only on the spine of a function's body " ++
-      "or of `main`: not inside a value, the head of `x <- M; N`, or the body of another `for` " ++
-      "(SPEC §14)"⟩
+  | .loop sp _ src _ _ _ => throw ⟨sp, s!"{src.what} may appear only on the spine of a function's " ++
+      "body or of `main`: not inside a value, the head of `x <- M; N`, or the body of a `for` " ++
+      "that is one total step (SPEC §14)"⟩
   | .perform sp k i V => return .perform sp k i (← V.elab lend)
   | .abort sp k i V => return .abort sp k i (← V.elab lend)
   | .handle sp k hr hc M => return .handle sp k hr hc (← M.elab false)
@@ -204,7 +204,7 @@ def _root_.Frontend.Comp.fill (hv : String → Option Val) (hc : String → Opti
   | .handle sp k hr hc' M => .handle sp k hr hc' (M.fill hv hc)
   | .unwind sp x A M D N => .unwind sp x A (M.fill hv hc) (D.fill hv hc) (N.fill hv hc)
   | .withbor2r sp x b A B r p m M => .withbor2r sp x b A B r p m (M.fill hv hc)
-  | .for_ sp x V M N => .for_ sp x (V.fill hv hc) (M.fill hv hc) (N.fill hv hc)
+  | .loop sp ℓ src V M N => .loop sp ℓ src (V.fill hv hc) (M.fill hv hc) (N.fill hv hc)
   | M => M
 end
 
@@ -217,7 +217,7 @@ def wrapTail (f : Comp → Comp) : Comp → Comp
   | .letUnit sp V M => .letUnit sp V (wrapTail f M)
   | .letPair sp x y V M => .letPair sp x y V (wrapTail f M)
   | .case sp V x M y N => .case sp V x (wrapTail f M) y (wrapTail f N)
-  | .for_ sp x V M N => .for_ sp x V M (wrapTail f N)
+  | .loop sp ℓ src V M N => .loop sp ℓ src V M (wrapTail f N)
   | .unwind sp x A M D N => .unwind sp x A M D (wrapTail f N)
   | T => f T
 
@@ -451,7 +451,9 @@ def loopsAt (c : TCx) (B : Option CVTy) : Comp → Option (Span × String)
     let (Ax, Ay) := sumTys c V
     ((callIn c divFuel none V).map fun (sp, f) => callMsg sp f).orElse fun _ =>
       (loopsAt (c.push x.name Ax) B M).orElse fun _ => loopsAt (c.push y.name Ay) B N
-  | .for_ sp .. => some (sp, "it has a `for` over an unbounded source (a drain)")
+  | .loop sp _ src .. => some (sp, match src with
+    | .each _ => "it has a `for` over an unbounded source (a drain)"
+    | _ => s!"it has a {src.what}")
   | T => headLoops c B T
 
 mutual
@@ -472,7 +474,7 @@ def _root_.Frontend.Comp.names (n : String) : Comp → Bool
   | .nuOut _ M | .ascribe _ M _ => M.names n
   | .letUnit _ V M | .letPair _ _ _ V M => V.names n || M.names n
   | .case _ V _ M _ N => V.names n || M.names n || N.names n
-  | .for_ _ _ V M N => V.names n || M.names n || N.names n
+  | .loop _ _ _ V M N => V.names n || M.names n || N.names n
   | .perform _ _ _ V | .abort _ _ _ V => V.names n
   | .handle _ _ hr hc M => hr.name == n || hc.name == n || M.names n
   | .unwind _ _ _ M D N => M.names n || D.names n || N.names n
@@ -503,7 +505,7 @@ def isLinear (A : CVTy) : Bool := Class.of A == .linear
 /-- The variables a terminal `return V` of the body puts in each component of the result that
 has no destructor. -/
 def termParts (parts : List CVTy) : Comp → Option (List (List (String × CVTy)))
-  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N | .for_ _ _ _ _ N => termParts parts N
+  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N => termParts parts N
   | .case _ _ _ M _ N => (termParts parts M).orElse fun _ => termParts parts N
   | .ret _ (.app _ (.sugar _ .retE) V) | .ret _ V =>
     ((parts.zip (alignV parts V)).filter (isLinear ·.1)).mapM fun (A, v) => v.bind (varsFor A)
@@ -583,7 +585,7 @@ def _root_.Frontend.Comp.hasFor : Comp → Bool
   | .handle _ _ _ _ M => M.hasFor
   | .unwind _ _ _ M D N => M.hasFor || D.hasFor || N.hasFor
   | .withbor2r _ _ _ _ _ _ _ _ M => M.hasFor
-  | .for_ .. => true
+  | .loop .. => true
   | _ => false
 
 mutual
@@ -604,7 +606,7 @@ def _root_.Frontend.Comp.exitAt : Comp → Option Span
   | .nuOut _ M | .ascribe _ M _ => M.exitAt
   | .letUnit _ V M | .letPair _ _ _ V M => V.exitAt.orElse fun _ => M.exitAt
   | .case _ V _ M _ N => V.exitAt.orElse fun _ => M.exitAt.orElse fun _ => N.exitAt
-  | .for_ _ _ V M N => V.exitAt.orElse fun _ => M.exitAt.orElse fun _ => N.exitAt
+  | .loop _ _ _ V M N => V.exitAt.orElse fun _ => M.exitAt.orElse fun _ => N.exitAt
   | .perform _ _ _ V | .abort _ _ _ V => V.exitAt
   | .handle _ _ _ _ M => M.exitAt
   | .unwind _ _ _ M D N => M.exitAt.orElse fun _ => D.exitAt.orElse fun _ => N.exitAt
@@ -636,7 +638,7 @@ def _root_.Frontend.Comp.anySugar (p : VSugar → Bool) : Comp → Bool
   | .nuOut _ M | .ascribe _ M _ => M.anySugar p
   | .letUnit _ V M | .letPair _ _ _ V M => V.anySugar p || M.anySugar p
   | .case _ V _ M _ N => V.anySugar p || M.anySugar p || N.anySugar p
-  | .for_ _ _ V M N => V.anySugar p || M.anySugar p || N.anySugar p
+  | .loop _ _ _ V M N => V.anySugar p || M.anySugar p || N.anySugar p
   | .perform _ _ _ V | .abort _ _ _ V => V.anySugar p
   | .handle _ _ _ _ M => M.anySugar p
   | .unwind _ _ _ M D N => M.anySugar p || D.anySugar p || N.anySugar p
@@ -662,7 +664,7 @@ def _root_.Frontend.Comp.sugarAt (p : VSugar → Bool) : Comp → Option Span
   | .nuOut _ M | .ascribe _ M _ => M.sugarAt p
   | .letUnit _ V M | .letPair _ _ _ V M => (V.sugarAt p).orElse fun _ => M.sugarAt p
   | .case _ V _ M _ N => ((V.sugarAt p).orElse fun _ => M.sugarAt p).orElse fun _ => N.sugarAt p
-  | .for_ _ _ V M N => ((V.sugarAt p).orElse fun _ => M.sugarAt p).orElse fun _ => N.sugarAt p
+  | .loop _ _ _ V M N => ((V.sugarAt p).orElse fun _ => M.sugarAt p).orElse fun _ => N.sugarAt p
   | .perform _ _ _ V | .abort _ _ _ V => V.sugarAt p
   | .handle _ _ _ _ M => M.sugarAt p
   | .unwind _ _ _ M D N => ((M.sugarAt p).orElse fun _ => D.sugarAt p).orElse fun _ => N.sugarAt p
@@ -682,14 +684,14 @@ def _root_.Frontend.Comp.isExit : Comp → Bool
 
 /-- A `break` on the spine outside every loop. -/
 def _root_.Frontend.Comp.spineBreak : Comp → Option Span
-  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N | .for_ _ _ _ _ N => N.spineBreak
+  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N => N.spineBreak
   | .case _ _ _ M _ N => M.spineBreak.orElse fun _ => N.spineBreak
   | .ret sp (.sugar _ .brk) | .ret sp (.app _ (.sugar _ .brk) _) => some sp
   | _ => none
 
 /-- The `break`s on the spine outside every inner loop, with their values. -/
 def _root_.Frontend.Comp.spineBreaks : Comp → List (Span × Option Val)
-  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N | .for_ _ _ _ _ N => N.spineBreaks
+  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N => N.spineBreaks
   | .case _ _ _ M _ N => M.spineBreaks ++ N.spineBreaks
   | .ret sp (.sugar _ .brk) => [(sp, none)]
   | .ret sp (.app _ (.sugar _ .brk) e) => [(sp, some e)]
@@ -758,12 +760,12 @@ def normExits : Nat → Comp → Except Error Comp
       capture [y, z]
       normExits n (.letPair lsp y z V (.bind sp x A M₁ N lin))
     | .letUnit lsp V M₁ => normExits n (.letUnit lsp V (.bind sp x A M₁ N lin))
-    | .for_ fsp y V M₁ M₂ => normExits n (.for_ fsp y V M₁ (.bind sp x A M₂ N lin))
+    | .loop fsp ℓ src V M₁ M₂ => normExits n (.loop fsp ℓ src V M₁ (.bind sp x A M₂ N lin))
     | _ => pure (.bind sp x A M (← normExits n N) lin)
   | n + 1, .letUnit sp V M => do pure (.letUnit sp V (← normExits n M))
   | n + 1, .letPair sp x y V M => do pure (.letPair sp x y V (← normExits n M))
   | n + 1, .case sp V x M y N => do pure (.case sp V x (← normExits n M) y (← normExits n N))
-  | n + 1, .for_ sp x V M N => do pure (.for_ sp x V M (← normExits n N))
+  | n + 1, .loop sp ℓ src V M N => do pure (.loop sp ℓ src V M (← normExits n N))
   | _, T => pure T
 
 /-! #### Elaborating a div body -/
@@ -799,7 +801,7 @@ def _root_.Frontend.Comp.rebindsN (y : String) : Comp → Bool
   | .letUnit _ _ M => M.rebindsN y
   | .letPair _ a b _ M => a.name == y || b.name == y || M.rebindsN y
   | .case _ _ _ M _ N => M.rebindsN y || N.rebindsN y
-  | .for_ _ _ _ M N => M.rebindsN y || N.rebindsN y
+  | .loop _ _ _ _ M N => M.rebindsN y || N.rebindsN y
   | _ => false
 
 /-- A computation binds `y` on its spine: a `let mut` variable assigned in it. The wildcard `_`
@@ -839,6 +841,9 @@ it is a stored generator, what it finishes and closes with), the capability the 
 from, the loop's value when it is bound, what follows the loop, the `else` value, and whether the
 source never ends. -/
 structure LoopPlan where
+  /-- What the loop walks, as written. -/
+  src : LoopSrc
+  /-- A `while`'s condition. -/
   cond : Option Val
   V : Val
   it : Option (CVTy × CVTy × Bool × CVTy × CVTy)
@@ -853,10 +858,11 @@ structure LoopPlan where
   follows the loop runs only after `break`. -/
   never : Bool := false
 
-/-- `for x in V { M }; N` or `while c { M }; N` in a div body of context `cx`, planned. -/
-def loopPlan (cx : LoopCx) (c : TCx) (x : Ident) (V : Val) (M N : Comp) : SM LoopPlan := do
-  let cond := match V with
-    | .app _ (.sugar _ .while_) b => some b
+/-- `for x in V { M }; N`, `while c { M }; N` or `loop { M }; N` in a div body of context `cx`,
+planned. -/
+def loopPlan (cx : LoopCx) (c : TCx) (src : LoopSrc) (V : Val) (M N : Comp) : SM LoopPlan := do
+  let cond := match src with
+    | .while_ => some V
     | _ => none
   let M ← normExits divFuel M
   let V := V.takeLends.1
@@ -866,9 +872,9 @@ def loopPlan (cx : LoopCx) (c : TCx) (x : Ident) (V : Val) (M N : Comp) : SM Loo
     | none, some (r, A, N₀) => (some r, A, none, N₀)
     | none, none => (none, none, none, N)
   -- The source: its type, whether it is a stored generator, and what it finishes and closes with.
-  let it ← match cond with
-    | some _ => pure none
-    | none => do
+  let it ← match src with
+    | .while_ | .forever => pure none
+    | .each _ => do
       let Vt ← match c.tyV V with
         | some Vt => pure Vt
         | none => throw ⟨V.span, "the type of the source of this `for` is not determined"⟩
@@ -879,9 +885,9 @@ def loopPlan (cx : LoopCx) (c : TCx) (x : Ident) (V : Val) (M N : Comp) : SM Loo
           s!"a stored generator `U (pull A B R)` or a call of a function that performs an " ++
           s!"iteration effect, but this has type `{ppT Vt}`"⟩
   let cs := cx.capNames
-  let cap ← match cond with
-    | some _ => pure none
-    | none => match cs.filter (mentionsV · V) with
+  let cap ← match src with
+    | .while_ | .forever => pure none
+    | .each _ => match cs.filter (mentionsV · V) with
       | [] => pure none
       | [c] => pure (some c)
       | _ => throw ⟨V.span, "the source of a `for` is made from at most one capability"⟩
@@ -907,21 +913,21 @@ def loopPlan (cx : LoopCx) (c : TCx) (x : Ident) (V : Val) (M N : Comp) : SM Loo
       | none, none =>
         if Q != .zero then pure (some (r.name, Q)) else
         match (M.spineBreaks.filterMap (·.2)).head? with
-        | some e => match (c.push x.name (some E)).tyV e with
+        | some e => match (src.bound.foldl (·.push · (some E)) c).tyV e with
           | some T => pure (some (r.name, T))
           | none => throw ⟨e.span, s!"the type of this loop's value is not determined: write it, " ++
               s!"`let {r.name} : T = for …`"⟩
         | none => pure (some (r.name, .zero))
-    | some r, none => throw ⟨r.span, "a `while` has no value"⟩
+    | some r, none => throw ⟨r.span, s!"a {src.what} has no value"⟩
   checkBreaks M (keep.map (·.2))
   if M.hasRet then if let some c := cap then
     throw ⟨V.span, s!"a `return` inside a `for` over a source made from `{c}` cannot hand `{c}` " ++
       "back: the source holds it until the loop ends. `break`, and `return` after the loop"⟩
-  let never := match cond, it with
-    | some (.sugar _ .forever), _ => true
+  let never := match src, it with
+    | .forever, _ => true
     | _, some (_, _, _, Q, _) => Q == .zero
     | _, _ => false
-  pure { cond, V, it, cap, keep, rest := N, els, never }
+  pure { src, cond, V, it, cap, keep, rest := N, els, never }
 
 /-- The names a `fn`'s body binds from its parameter before the rest (`paramPrefix`), with their
 types. -/
@@ -1254,7 +1260,7 @@ def mWalk (m : MCx) : Nat → TCx → Comp → MM Comp
       return (← mWalk m n c (chain bs (.case sp V' x M y N)))
     let (Ax, Ay) := sumTys c V
     return .case sp V x (← mWalk m n (c.push x.name Ax) M) y (← mWalk m n (c.push y.name Ay) N)
-  | n + 1, c, .for_ sp x V M N => mLoop m n c sp x V M N
+  | n + 1, c, .loop sp _ src V M N => mLoop m n c sp src V M N
   | _ + 1, _, .ret sp (.app _ (.sugar _ .retE) v) => do
     if v.hasExit then throw (exitOffSpine (v.exitAt.getD v.span))
     -- `return e` from inside loops: every loop it leaves closes its source, and the body finishes.
@@ -1315,12 +1321,12 @@ def mCall (m : MCx) : Nat → TCx → TCx → Span → Ident → Option VTy → 
     let go ← mGoto m sp d
     pure (.bind sp ⟨v, sp⟩ none call go false)
 
-/-- `for x in V { M }; N` or `while c { M }; N`: a point at its head, and a join after it when its
-body has a `break`. -/
-def mLoop (m : MCx) : Nat → TCx → Span → Ident → Val → Comp → Comp → MM Comp
+/-- `for x in V { M }; N`, `while c { M }; N` or `loop { M }; N`: a point at its head, and a join
+after it when its body has a `break`. -/
+def mLoop (m : MCx) : Nat → TCx → Span → LoopSrc → Val → Comp → Comp → MM Comp
   | 0, _, sp, _, _, _, _ => throw ⟨sp, "internal error: a body nested too deeply"⟩
-  | n + 1, c, sp, x, V, M, N => do
-    let P ← (loopPlan m.L c x V M N : SM LoopPlan)
+  | n + 1, c, sp, src, V, M, N => do
+    let P ← (loopPlan m.L c src V M N : SM LoopPlan)
     let M ← (normExits divFuel M : Except Error Comp)
     let N := P.rest
     let cr := match P.keep with
@@ -1328,7 +1334,8 @@ def mLoop (m : MCx) : Nat → TCx → Span → Ident → Val → Comp → Comp �
       | none => c
     let caps := m.L.capNames
     let needs := ((latest c.locals).map (·.1)).filter fun y => !caps.contains y &&
-      ((y != x.name && mentionsC y M) || (P.cond.map (mentionsV y)).getD false || mentionsC y (m.restOf N))
+      ((!src.bound.contains y && mentionsC y M) || (P.cond.map (mentionsV y)).getD false ||
+        mentionsC y (m.restOf N))
     let k := (← get).pts.size
     let own : Option MHeld := P.it.map fun (Vt, _, _, _, Q') =>
       { v := s!"io_it{k}", T := Vt, closeSrc := s!"io_c <- (nu_out (force io_it{k})).2;\n{bindCap P.cap Q' "io_c"}",
@@ -1339,7 +1346,7 @@ def mLoop (m : MCx) : Nat → TCx → Span → Ident → Val → Comp → Comp �
       | some T => pure (y, T)
       | none => (throw ⟨sp, s!"the loop threads `{y}`, whose type is not determined: ascribe it"⟩ : MM _)
     let vars := held.reverse.map (fun h => (h.v, h.T)) ++ m.L.caps.filter (!hcaps.contains ·.1) ++ needVars
-    let what := if P.cond.isSome then "`while`" else "`for`"
+    let what := src.what
     let h ← mNew sp what true true vars
     let ph ← mPt h
     let join ← if M.spineBreaks.isEmpty then pure none else do
@@ -1347,9 +1354,9 @@ def mLoop (m : MCx) : Nat → TCx → Span → Ident → Val → Comp → Comp �
       pure (some (← mNew sp what false true jv))
     let ml : MLoop := { head := h, held := own, needs, keep := P.keep, join }
     let mb : MCx := { m with loops := ml :: m.loops, held := held, cur := some ph.pos, pre := false }
-    let cb := match P.it with
-      | some (_, E, _, _, _) => c.push x.name (some E)
-      | none => c
+    let cb := match P.it, src with
+      | some (_, E, _, _, _), .each x => c.push x.name (some E)
+      | _, _ => c
     let body ← mWalk mb n cb M
     let after ← match join with
       | some j => do
@@ -1361,8 +1368,8 @@ def mLoop (m : MCx) : Nat → TCx → Span → Ident → Val → Comp → Comp �
       -- A loop that never ends, with no `break`: what follows it does not run.
       | none => if P.never then pure (.top sp) else mWalk { m with cur := some ph.pos, pre := false } n cr N
     let skip := m.skip sp (mInj sp h vars)
-    let code ← match P.it, P.cond with
-      | some (_, _, isGen, Q, _), _ => do
+    let code ← match P.it, src with
+      | some (_, _, isGen, Q, _), .each x => do
         let v := s!"io_it{k}"
         let ended := if Q == .zero then "absurd io_q" else match P.keep, P.els with
           | some (r, _), some _ =>
@@ -1375,12 +1382,12 @@ def mLoop (m : MCx) : Nat → TCx → Span → Ident → Val → Comp → Comp �
         let src := s!"io_o <- (nu_out (force {v})).1;\ncase io_o \{ inl io_p -> let ({x.name}, {v}) = io_p; force io_hole_body | inr io_d -> {fin} }"
         mTemplate sp what src [("io_hole_k", skip)]
           ([("io_hole_body", body), ("io_hole_after", after)] ++ (P.els.map ("io_hole_else", ·)).toList)
-      | none, some (.sugar _ .forever) => do
+      | none, .forever => do
         mTemplate sp what "force io_hole_body" [] [("io_hole_body", body)]
-      | none, some cnd => do
+      | none, .while_ => do
         mTemplate sp what "case io_hole_c { inl io_f -> force io_hole_after | inr io_t -> force io_hole_body }"
-          [("io_hole_c", cnd)] [("io_hole_body", body), ("io_hole_after", after)]
-      | none, none => throw ⟨sp, "internal error: a loop with neither iterator nor condition"⟩
+          [("io_hole_c", V)] [("io_hole_body", body), ("io_hole_after", after)]
+      | _, _ => throw ⟨sp, "internal error: a `for` without a source, or a `while` with one"⟩
     mSet h code (← mClose { m with pre := false } sp what held)
     let go ← mGoto m sp h
     match own with
@@ -1435,7 +1442,7 @@ def mResC (inj : Nat → Option (Nat × Nat)) : Comp → Comp
   | .nuIn sp M => .nuIn sp (mResC inj M)
   | .nuOut sp M => .nuOut sp (mResC inj M)
   | .ascribe sp M C => .ascribe sp (mResC inj M) C
-  | .for_ sp x V M N => .for_ sp x (mResV inj V) (mResC inj M) (mResC inj N)
+  | .loop sp ℓ src V M N => .loop sp ℓ src (mResV inj V) (mResC inj M) (mResC inj N)
   | .perform sp k i V => .perform sp k i (mResV inj V)
   | .abort sp k i V => .abort sp k i (mResV inj V)
   | .handle sp k hr hc M => .handle sp k hr hc (mResC inj M)
@@ -2844,7 +2851,7 @@ def opsC (c : TCx) : Nat → Comp → List (Nat × Nat)
     | .unwind _ _ _ M D N => opsC c k M ++ opsC c k D ++ opsC c k N
     | .withbor2r _ _ _ _ _ _ _ _ M => opsC c k M
     | .letUnit _ V M | .letPair _ _ _ V M => opsV c k V ++ opsC c k M
-    | .case _ V _ M _ N | .for_ _ _ V M N => opsV c k V ++ opsC c k M ++ opsC c k N
+    | .case _ V _ M _ N | .loop _ _ _ V M N => opsV c k V ++ opsC c k M ++ opsC c k N
     | .app _ M _ | .proj _ _ M | .inst _ M _ | .nuIn _ M | .nuOut _ M | .ascribe _ M _ | .lamL _ _ _ M
     | .lam _ _ _ M => opsC c k M
     | _ => []
@@ -3022,7 +3029,7 @@ def rmSelfInC : Comp → Bool
   | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => rmSelfIn V
   | .bind _ _ _ M N _ | .with_ _ M N => rmSelfInC M || rmSelfInC N
   | .letUnit _ V M | .letPair _ _ _ V M => rmSelfIn V || rmSelfInC M
-  | .case _ V _ M _ N | .for_ _ _ V M N => rmSelfIn V || rmSelfInC M || rmSelfInC N
+  | .case _ V _ M _ N | .loop _ _ _ V M N => rmSelfIn V || rmSelfInC M || rmSelfInC N
   | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
   | .nuOut _ M | .ascribe _ M _ | .handle _ _ _ _ M => rmSelfInC M
   | .unwind _ _ _ M D N => rmSelfInC M || rmSelfInC D || rmSelfInC N
@@ -3943,23 +3950,31 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .nuIn sp M => do pure (.nuIn sp (← surfC n c (exp.bind fun | .nu B => some B.unroll | _ => none) M))
     | .nuOut sp M => do pure (.nuOut sp (← surfC n c none M))
     | .ascribe sp M C => do pure (.ascribe sp (← surfC n c (c.E.elabC c.Δ C).toOption M) C)
-    | .for_ sp x V M N => do
-      let V' ← match V with
-        | .app _ (.sugar _ .count) _ | .lend .. | .app _ (.sugar _ (.forSite _)) _ => pure V
-        | _ => surfV n c none V
+    | .loop sp ℓ src V M N => do
+      let V' ← match src, V with
+        | .each _, .app _ (.sugar _ .count) _ | .each _, .lend .. | .each _, .app _ (.sugar _ (.forSite _)) _ =>
+          pure V
+        | _, _ => surfV n c none V
       let c ← refresh c
-      -- Over a call of a function that performs an iteration effect: a handler site (SPEC §15).
-      if let .app _ (.sugar _ (.forSite i)) call := V then return ← forYield n c exp sp x i call M N
-      -- Over data: a counted loop, total (SPEC §16).
-      if let some L ← forData n c exp sp x V V' M N then return L
-      -- Otherwise a drain of a generator or an iterator, div (SPEC §14, §15).
-      let T := c.tyV V'.takeLends.1
-      if let .app _ (.sugar _ .while_) _ := V then pure () else if (← get).quiet then pure () else
+      if let .each x := src then
+        -- Over a call of a function that performs an iteration effect: a handler site (SPEC §15).
+        if let .app _ (.sugar _ (.forSite i)) call := V then return ← forYield n c exp sp x i call M N
+        -- Over data: a counted loop, total (SPEC §16).
+        if let some L ← forData n c exp sp x V V' M N then return L
+      -- Otherwise a drain of a generator or an iterator, a `while` or a `loop`: div (SPEC §14,
+      -- §15).
+      let T := match src with
+        | .each _ => c.tyV V'.takeLends.1
+        | _ => none
+      if let .each _ := src then if !(← get).quiet then
         report sp (s!"`for` is div: its source{(T.map fun T => s!", of type `{ppT T}`,").getD ""} " ++
           "is unbounded (a drain)")
       let el := T.bind elemOf
       modify fun s => { s with exits := .drain :: s.exits }
-      let M' ← surfC n (c.push x.name el) none M
+      let cM := match src with
+        | .each x => c.push x.name el
+        | _ => c
+      let M' ← surfC n cM none M
       modify fun s => { s with exits := s.exits.drop 1 }
       -- A source that never ends (it finishes with `0`): what follows runs only after `break`.
       if (T.bind finOf) == some .zero && M.spineBreaks.isEmpty then
@@ -3978,15 +3993,15 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         let c' ← refresh c
         let rT := (A.bind c.elabV).orElse fun _ => resultOfC (c'.tyC d')
         let N₀' ← surfC n (c.push r.name rT) exp N₀
-        pure (.for_ sp x V' M' (.bind N.span r A (.ret r.span (.app r.span (.sugar r.span .forRes)
+        pure (.loop sp ℓ src V' M' (.bind N.span r A (.ret r.span (.app r.span (.sugar r.span .forRes)
           (.thunk d.span d'))) N₀' false))
       | none, some (r, A, N₀) =>
         let rT := (A.bind c.elabV).orElse fun _ => (T.bind finOf).bind fun B =>
           -- A source that never ends: the loop's value is `break e`'s.
           if B == .zero then none else some B
         let N₀' ← surfC n (c.push r.name rT) exp N₀
-        pure (.for_ sp x V' M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀' false))
-      | none, none => pure (.for_ sp x V' M' (← surfC n c exp N))
+        pure (.loop sp ℓ src V' M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀' false))
+      | none, none => pure (.loop sp ℓ src V' M' (← surfC n c exp N))
     | .perform sp k i V => do
       let e := (Frontend.Check.findOp c.E sp "perform" k i).toOption.map (·.2.1.A)
       pure (.perform sp k i (← surfV n c e V))
@@ -5414,15 +5429,17 @@ def specC : Nat → TCx → Comp → DM Comp
     | .nuIn sp M => do pure (.nuIn sp (← specC n c M))
     | .nuOut sp M => do pure (.nuOut sp (← specC n c M))
     | .ascribe sp M C => do pure (.ascribe sp (← specC n c M) C)
-    | .for_ sp x V M N => do
-      let el := (c.tyV V).bind elemOf
-      let M' ← specC n (c.push x.name el) M
+    | .loop sp ℓ src V M N => do
+      let cM := match src with
+        | .each x => c.push x.name ((c.tyV V).bind elemOf)
+        | _ => c
+      let M' ← specC n cM M
       match N.forRes? with
       | some (r, A, N₀) =>
         let rT := (A.bind c.elabV).orElse fun _ => (c.tyV V.takeLends.1).bind finOf
         let N₀' ← specC n (c.push r.name rT) N₀
-        pure (.for_ sp x (← specV n c V) M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀' false))
-      | none => pure (.for_ sp x (← specV n c V) M' (← specC n c N))
+        pure (.loop sp ℓ src (← specV n c V) M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀' false))
+      | none => pure (.loop sp ℓ src (← specV n c V) M' (← specC n c N))
     | .perform sp k i V => do pure (.perform sp k i (← specV n c V))
     | .abort sp k i V => do pure (.abort sp k i (← specV n c V))
     | .handle sp k hr hc M => do pure (.handle sp k hr hc (← specC n c M))

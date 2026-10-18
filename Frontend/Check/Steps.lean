@@ -499,7 +499,7 @@ def mentionsC (x : String) : Comp → Bool
   | .letPair _ y z V M => mentionsV x V || (y.name != x && z.name != x && mentionsC x M)
   | .case _ V y M z N => mentionsV x V || (y.name != x && mentionsC x M) ||
       (z.name != x && mentionsC x N)
-  | .for_ _ y V M N => mentionsV x V || (y.name != x && mentionsC x M) || mentionsC x N
+  | .loop _ _ src V M N => mentionsV x V || (!src.bound.contains x && mentionsC x M) || mentionsC x N
   | .perform _ _ _ V | .abort _ _ _ V => mentionsV x V
   | .handle _ _ hr hc M => hr.name == x || hc.name == x || mentionsC x M
   | .unwind _ y _ M D N => mentionsC x M || mentionsC x D || (y.name != x && mentionsC x N)

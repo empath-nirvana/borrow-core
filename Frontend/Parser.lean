@@ -810,7 +810,7 @@ def Comp.lentNames (vars : Bool := false) : Comp → List String
   | .ret _ V | .absurd _ V => V.lentNames vars
   | .bind _ _ _ M N _ => M.lentNames vars ++ N.lentNames vars
   | .letUnit _ V M | .letPair _ _ _ V M => V.lentNames vars ++ M.lentNames vars
-  | .case _ V _ M _ N | .for_ _ _ V M N => V.lentNames vars ++ M.lentNames vars ++ N.lentNames vars
+  | .case _ V _ M _ N | .loop _ _ _ V M N => V.lentNames vars ++ M.lentNames vars ++ N.lentNames vars
   | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.lentNames vars
   | .perform _ _ _ V | .abort _ _ _ V => V.lentNames vars
   | .handle _ _ _ _ M => M.lentNames vars
@@ -842,7 +842,7 @@ def Comp.withPlaces (loc : List String) : Comp → List String
   | .letPair _ x y V M => V.withPlaces loc ++ M.withPlaces (x.name :: y.name :: loc)
   | .case _ V x M y N =>
     V.withPlaces loc ++ M.withPlaces (x.name :: loc) ++ N.withPlaces (y.name :: loc)
-  | .for_ _ x V M N => V.withPlaces loc ++ M.withPlaces (x.name :: loc) ++ N.withPlaces loc
+  | .loop _ _ src V M N => V.withPlaces loc ++ M.withPlaces (src.bound ++ loc) ++ N.withPlaces loc
   | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.withPlaces loc
   | .perform _ _ _ V | .abort _ _ _ V => V.withPlaces loc
   | .handle _ _ _ _ M => M.withPlaces loc
@@ -855,7 +855,7 @@ def Comp.boundNames : Comp → List String
   | .bind _ x _ M N _ => x.name :: (M.boundNames ++ N.boundNames)
   | .letPair _ x y _ M => x.name :: y.name :: M.boundNames
   | .case _ _ x M y N => x.name :: y.name :: (M.boundNames ++ N.boundNames)
-  | .for_ _ x _ M N => x.name :: (M.boundNames ++ N.boundNames)
+  | .loop _ _ src _ M N => src.bound ++ (M.boundNames ++ N.boundNames)
   | .lam _ x _ M => x.name :: M.boundNames
   | .letUnit _ _ M | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M =>
     M.boundNames
@@ -976,7 +976,7 @@ def wrapTerms (f : Comp → Comp) : Comp → Comp
   | .letUnit sp V M => .letUnit sp V (wrapTerms f M)
   | .letPair sp x y V M => .letPair sp x y V (wrapTerms f M)
   | .case sp V x M y N => .case sp V x (wrapTerms f M) y (wrapTerms f N)
-  | .for_ sp x V M N => .for_ sp x V M (wrapTerms f N)
+  | .loop sp ℓ src V M N => .loop sp ℓ src V M (wrapTerms f N)
   | T => f T
 
 /-- The tuple of the variables `xs`. -/
@@ -1468,52 +1468,14 @@ def compG : Nat → Bool → P Comp
       expectSym ";"
       let N ← comp n
       pure (.bind (← spanFrom st) ⟨x, xt.span⟩ A M N true)
-    | .kw "for", _ =>
-      discard bump
-      let x ← ident
-      expectKw "in"
-      let V ← val n
-      expectSym "{"
-      let M ← withLoop (comp n)
-      expectSym "}"
-      -- `else { d }`: the loop's value when its source ends (`VSugar.forRes`).
-      let els ← forElse n
-      let sp₀ ← spanFrom st
-      -- A `for` last in a body is a statement: what follows it is `()`, or, with `else`, the
-      -- loop's value.
-      let r ← if els.isSome then freshName "io_fr" else pure ""
-      if ← isSym ";" then
-        discard bump
-        let N ← comp n
-        let sp ← spanFrom st
-        pure (.for_ sp x V M (match els with
-          | some d => .bind sp ⟨r, sp⟩ none (.ret sp (forResOf sp (some d))) N false
-          | none => N))
-      else
-        pure (.for_ sp₀ x V M (match els with
-          | some d => .bind sp₀ ⟨r, sp₀⟩ none (.ret sp₀ (forResOf sp₀ (some d))) (.ret sp₀ (.var sp₀ r)) false
-          | none => .ret sp₀ (.unit sp₀)))
-    | .kw "while", _ =>
-      -- `while c { M }; N`: a `for` whose iterator is the condition (a generator's loop).
-      discard bump
-      let c ← val n
-      expectSym "{"
-      let M ← withLoop (comp n)
-      expectSym "}"
-      -- Last in a body, what follows it is `()`.
-      let N ← if ← isSym ";" then do discard bump; comp n else pure (.ret t.span (.unit t.span))
-      let sp ← spanFrom st
-      pure (.for_ sp ⟨"io_while", t.span⟩ (.app c.span (.sugar t.span .while_) c) M N)
-    | .kw "loop", .sym "{" =>
-      -- `loop { M }`: a `while` whose condition never fails (`VSugar.forever`). What follows it
-      -- runs only after a `break`.
-      discard bump
-      expectSym "{"
-      let M ← withLoop (comp n)
-      expectSym "}"
-      let N ← if ← isSym ";" then do discard bump; comp n else pure (.ret t.span (.unit t.span))
-      let sp ← spanFrom st
-      pure (.for_ sp ⟨"io_while", t.span⟩ (.app t.span (.sugar t.span .while_) (.sugar t.span .forever)) M N)
+    | .kw "for", _ | .kw "while", _ | .kw "loop", .sym "{" => loopC n st none
+    | .life l, .sym ":" =>
+      -- `'ℓ: for …`, `'ℓ: while …`, `'ℓ: loop …`: a labelled loop.
+      discard bump; discard bump
+      let t₂ ← peek
+      unless t₂.tok == .kw "for" || t₂.tok == .kw "while" || t₂.tok == .kw "loop" do
+        failAt t.span s!"a label `'{l}:` comes before a `for`, a `while` or a `loop`"
+      loopC n st (some ⟨l, t.span⟩)
     | .kw "let", _ =>
       discard bump
       let isMut ← if ← isKw "mut" then do discard bump; pure true else pure false
@@ -1524,6 +1486,11 @@ def compG : Nat → Bool → P Comp
         | _ => failAt (← spanFrom st) "`let mut` binds a name"
       let A ← if ← isSym ":" then do discard bump; pure (some (← vty n)) else pure none
       expectSym "="
+      -- `let r = 'ℓ: for …`: the label, before the `for`.
+      let ℓ ← match (← peek).tok, (← peekAt 1).tok, (← peekAt 2).tok with
+        | .life l, .sym ":", .kw "for" => do
+          let lt ← bump; discard bump; pure (some (⟨l, lt.span⟩ : Ident))
+        | _, _, _ => pure none
       if (← peek).tok == .kw "for" then
         -- `let r = for x in V { M }; N`: the loop's value, what its iterator finishes with or
         -- what a `break e` gives, bound in what follows it.
@@ -1541,7 +1508,7 @@ def compG : Nat → Bool → P Comp
         expectSym ";"
         let N ← comp n
         let sp ← spanFrom st
-        return .for_ sp x V M (.bind sp r A (.ret sp (forResOf sp els)) N false)
+        return .loop sp ℓ (.each x) V M (.bind sp r A (.ret sp (forResOf sp els)) N false)
       if (← peek).tok == .kw "match" || (← peek).tok == .kw "if" then
         let M ← compPrefix n
         expectSym ";"
@@ -1799,6 +1766,60 @@ def forElse : Nat → P (Option Comp)
     let d ← inClosure (blockBody n)
     expectSym "}"
     pure (some d)
+
+/-- A loop, from its keyword (`for`, `while` or `loop`), labelled `ℓ`; `st` is where it starts
+(at its label when it has one). -/
+def loopC : Nat → Pos → Option Ident → P Comp
+  | 0, _, _ => outOfFuel
+  | n + 1, st, ℓ => do
+    let t ← peek
+    match t.tok with
+    | .kw "for" =>
+      discard bump
+      let x ← ident
+      expectKw "in"
+      let V ← val n
+      expectSym "{"
+      let M ← withLoop (comp n)
+      expectSym "}"
+      -- `else { d }`: the loop's value when its source ends (`VSugar.forRes`).
+      let els ← forElse n
+      let sp₀ ← spanFrom st
+      -- A `for` last in a body is a statement: what follows it is `()`, or, with `else`, the
+      -- loop's value.
+      let r ← if els.isSome then freshName "io_fr" else pure ""
+      if ← isSym ";" then
+        discard bump
+        let N ← comp n
+        let sp ← spanFrom st
+        pure (.loop sp ℓ (.each x) V M (match els with
+          | some d => .bind sp ⟨r, sp⟩ none (.ret sp (forResOf sp (some d))) N false
+          | none => N))
+      else
+        pure (.loop sp₀ ℓ (.each x) V M (match els with
+          | some d => .bind sp₀ ⟨r, sp₀⟩ none (.ret sp₀ (forResOf sp₀ (some d))) (.ret sp₀ (.var sp₀ r)) false
+          | none => .ret sp₀ (.unit sp₀)))
+    | .kw "while" =>
+      -- `while c { M }; N`: the condition is tested before each turn.
+      discard bump
+      let c ← val n
+      expectSym "{"
+      let M ← withLoop (comp n)
+      expectSym "}"
+      -- Last in a body, what follows it is `()`.
+      let N ← if ← isSym ";" then do discard bump; comp n else pure (.ret t.span (.unit t.span))
+      let sp ← spanFrom st
+      pure (.loop sp ℓ .while_ c M N)
+    | .kw "loop" =>
+      -- `loop { M }`: no source, so what follows it runs only after a `break`.
+      discard bump
+      expectSym "{"
+      let M ← withLoop (comp n)
+      expectSym "}"
+      let N ← if ← isSym ";" then do discard bump; comp n else pure (.ret t.span (.unit t.span))
+      let sp ← spanFrom st
+      pure (.loop sp ℓ .forever (.unit t.span) M N)
+    | _ => expected "`for`, `while` or `loop`"
 
 /-- A computation atom: `force x`, `<>`, `<M, N>`, `case V { … }`, `match V { … }`, `if`,
     `(M)`, `(M : C)`. -/
