@@ -6,23 +6,28 @@
 
 # The language
 
-- [Values and computations](guide/values-and-computations.md)
-- [Ownership and borrows](guide/ownership-and-borrows.md)
-- [Structs as blocks, family borrows](guide/blocks-and-families.md)
-- [Recursive data and folds](guide/recursive-data.md)
-- [Codata: iterators, streams, delay](guide/codata.md)
-- [Integers](guide/integers.md)
-- [Arrays](guide/arrays.md)
-- [Implicit destructors](guide/implicit-destructors.md)
-- [Command-line tools](guide/command-line-tools.md)
-- [Divergence](guide/divergence.md)
-- [Generators](guide/generators.md)
+- [Values, functions and numbers](guide/basics.md)
+- [Ownership and borrows](guide/ownership.md)
+- [Data and generics](guide/data.md)
+- [Errors](guide/errors.md)
+- [Input and output](guide/io.md)
+- [Iteration](guide/iteration.md)
 - [Effects and handlers](guide/effects.md)
-- [Planned features](guide/planned/README.md)
-  - [Pipelines](guide/planned/pipelines.md)
-  - [Effects](guide/planned/effects.md)
-  - [Async](guide/planned/async.md)
-  - [Unsafe code](guide/planned/unsafe.md)
+- [Async tasks](guide/async.md)
+
+# How it elaborates
+
+- [The core, and `bcc desugar`](elaboration/overview.md)
+  - [Values and computations](elaboration/values-and-computations.md)
+  - [Cells and borrows](elaboration/ownership-and-borrows.md)
+  - [Blocks and families](elaboration/blocks-and-families.md)
+  - [Recursive data and folds](elaboration/recursive-data.md)
+  - [Codata: iterators, streams, delay](elaboration/codata.md)
+  - [Integers and host operations](elaboration/integers.md)
+  - [Arrays](elaboration/arrays.md)
+  - [Implicit destructors](elaboration/implicit-destructors.md)
+  - [Standard I/O as capabilities](elaboration/standard-io.md)
+  - [Divergence](elaboration/divergence.md)
 
 # Reference
 
@@ -38,6 +43,7 @@
 
 # About the project
 
+- [Status](status.md)
 - [What is proved](proved.md)
 - [Contributing](contributing.md)
 - [Design decisions](decisions.md)
