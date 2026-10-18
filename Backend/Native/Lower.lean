@@ -490,6 +490,7 @@ def stmt (fp : String) (results : Nat) : Stmt → EM Unit
     deadBlock
   | .tick => do if (← read).cnt then bump "@bc_indirect"
   | .tickCopy => do if (← read).cnt then bump "@bc_copies"
+  | .tickBound => pure ()
   | .status c => do ins s!"call void @bc_status(i64 {← expr fp c})"
   | .trap => do
     ins "call void @llvm.trap()"

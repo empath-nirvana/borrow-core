@@ -1,0 +1,40 @@
+-- Mandelbrot (the Benchmarks Game's): the points of an n×n grid over [-1.5, 0.5] × [-1, 1]
+-- that stay within |z| ≤ 2 for 50 iterations of z ← z² + c. Prints how many do.
+include textio
+include io
+include float
+
+-- The first argument as a number, or `d` when there is none or it is not one.
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+-- Whether `c = (cr, ci)` stays bounded for 50 iterations.
+fn inside(cr: f64, ci: f64) -> bool =
+  let mut zr = 0.0;
+  let mut zi = 0.0;
+  let mut tr = 0.0;
+  let mut ti = 0.0;
+  for i in 0..50 {
+    if tr + ti > 4.0 { break false } else { () };
+    zi = 2.0 * zr * zi + ci;
+    zr = tr - ti + cr;
+    tr = zr * zr;
+    ti = zi * zi
+  } else { tr + ti <= 4.0 }
+
+main -> i32 =
+  let n = arg_i32(200);
+  let fn_ = f64_of_i32(n);
+  let mut count = 0;
+  for y in 0..n {
+    let ci = 2.0 * f64_of_i32(y) / fn_ - 1.0;
+    for x in 0..n {
+      let cr = 2.0 * f64_of_i32(x) / fn_ - 1.5;
+      if inside(cr, ci) { count = count + 1 } else { () }
+    }
+  };
+  print_dec(count);
+  print_byte(b'\n');
+  0

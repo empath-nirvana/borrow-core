@@ -89,6 +89,10 @@ inductive Stmt where
   | tick
   /-- Count a copy of a variable at a non-trivial type: a generated copy that allocates. -/
   | tickCopy
+  /-- Count a bounds check: the test of an index against an array's length that an access (`idx`,
+  `split`, a literal's byte) makes. Emitted in the counting build only; no target runs anything
+  for it, and the flat-IR interpreter counts it. -/
+  | tickBound
   /-- End the run with the exit status `code` once the entry returns (SPEC §39). -/
   | status (code : Exp)
   | trap

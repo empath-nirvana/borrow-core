@@ -1,0 +1,29 @@
+include textio
+include slice
+include io
+
+-- The first argument as a number, or `d` when there is none or it is not one.
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+fn value(i: i32) -> i64 = host[extend_s]((i * 7919) % 1000)
+
+fn sum<'a>(v: array_imm 'a i64) -> i64 =
+  let mut s = i64[0];
+  for p in v { s = s + *p };
+  s
+
+main -> i32 =
+  let n = arg_i32(1000);
+  let reps = arg_i32(1);
+  let a = array_new[i64](n, value);
+  let mut acc = i64[0];
+  for r in 0..reps {
+    let s = borrow imm a { v -> sum(v) };
+    acc = acc + s
+  };
+  print_dec64(acc);
+  print_byte(b'\n');
+  0

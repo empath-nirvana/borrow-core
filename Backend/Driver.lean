@@ -308,6 +308,12 @@ def interpStage (stage file src : String) (input : List UInt8) (args : List UInt
   | "flat-counts" => Flat.interp runFuel (← flatOf file src true) input args
   | _ => throw s!"unknown stage `{stage}`"
 
+/-- The counting build at the flat IR, with `input` and `args` as `interpStage`'s: its output
+and its memory operations (`Flat.interpMem`). -/
+def flatMemCounts (file src : String) (input : List UInt8) (args : List UInt8 := []) :
+    Except String (Output × Flat.MemCounts) := do
+  Flat.interpMem runFuel (← flatOf file src true) input args
+
 /-! ### The falsifier
 
 `bcc interp --check fresh|tags` and `--alloc least` (`Backend/Falsify.lean`,

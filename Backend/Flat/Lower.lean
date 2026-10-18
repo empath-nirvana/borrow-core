@@ -91,6 +91,8 @@ structure Ctx where
   litCode : Option Nat := none
   /-- The scoped cells placed in a frame slot (`frameScopes`). -/
   frameScopes : Std.HashSet Nat := {}
+  /-- The counting build: each bounds check is marked by a `tickBound` before it. -/
+  counts : Bool := false
 
 structure LState where
   vars : Std.HashMap Var (List Nat) := {}
@@ -118,6 +120,10 @@ def fresh (k : Nat) : LM (List Nat) :=
   modifyGet fun s => (List.range' s.next k, { s with next := s.next + k })
 
 def fresh1 : LM Nat := modifyGet fun s => (s.next, { s with next := s.next + 1 })
+
+/-- The mark of a bounds check, in the counting build (`Stmt.tickBound`). -/
+def boundTick : LM (List Stmt) := do
+  return if (← read).counts then [.tickBound] else []
 
 def locs (ls : List Nat) : List Exp := ls.map .loc
 
@@ -592,8 +598,9 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       let n := (← vals n).headD 0
       let i := (← vals i).headD 0
       let r ← fresh1
-      return [.ite (ltu64 (.loc i) (.loc n)) [.set r (.load8 (add64 (.loc a) (.loc i)))]
-        [.set r (.c64 0)]] ++ (← emit d [.loc r])
+      return (← boundTick) ++
+        [.ite (ltu64 (.loc i) (.loc n)) [.set r (.load8 (add64 (.loc a) (.loc i)))]
+          [.set r (.c64 0)]] ++ (← emit d [.loc r])
   | .idx, [v], d => do
       let T ← T
       let h := (T.field (← vty v) 0).1
@@ -602,7 +609,7 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       | [b, n, i] =>
         let t₀ ← fresh1
         let t₁ ← fresh1
-        return [.ite (ltu64 (.loc i) (.loc n))
+        return (← boundTick) ++ [.ite (ltu64 (.loc i) (.loc n))
             [.set t₀ (.c64 0), .set t₁ (add64 (.loc b) (mul64 (.loc i) (.c64 w.toUInt64)))]
             [.set t₀ (.c64 1), .set t₁ (.c64 0)]] ++ (← emit d [.loc t₀, .loc t₁])
       | _ => throw "flat IR: idx of a non-array"
@@ -621,7 +628,8 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
         let (s₃, vr) ← mkInj r true [.loc b, .loc n]
         let ts ← fresh (vl.length)
         let sets (vs : List Exp) : List Stmt := (ts.zip vs).map fun (t, e) => .set t e
-        return [.ite (ltu64 (.loc n) (.loc i)) (s₃ ++ sets vr) (s₁ ++ s₂ ++ sets vl)] ++
+        return (← boundTick) ++
+          [.ite (ltu64 (.loc n) (.loc i)) (s₃ ++ sets vr) (s₁ ++ s₂ ++ sets vl)] ++
           (← emit d (locs ts))
       | _ => throw "flat IR: split of a non-array"
   | .nullLoc, [], d => emit d [.c64 0]
@@ -1595,7 +1603,7 @@ def lower (p : Clos.Prog) (counts : Bool := false) (types : Option Types := none
                        | some #[c] => some c
                        | _ => none,
                      litCode := p.litCode,
-                     frameScopes := frameScopes p }
+                     frameScopes := frameScopes p, counts }
   let act : LM (List Fn) := do
     let codes ← p.codes.toList.zipIdx.mapM fun (c, k) => lowerCode k c
     let main ← lowerMain p.main

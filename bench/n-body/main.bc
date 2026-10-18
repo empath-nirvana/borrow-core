@@ -1,0 +1,163 @@
+-- N-body (the Benchmarks Game's): the Jovian planets and the sun, advanced `n` steps of 0.01
+-- days by the symplectic integrator. A body is seven `f64`s in one array (there are no records
+-- yet): its position, its velocity and its mass, at `7·i + 0…6`. Prints the energy before and
+-- after, times 10⁹ and truncated, so that every side prints the same digits.
+include textio
+include io
+include float
+include buf
+
+-- The first argument as a number, or `d` when there is none or it is not one.
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+def pi : f64 = 3.141592653589793
+def days : f64 = 365.24
+
+fn solar_mass() -> f64 = 4.0 * pi * pi
+
+fn zero(i: i32) -> f64 = 0.0
+
+-- Body `i` set from its position, its velocity in units per day, and its mass in solar masses.
+fn put(b: array f64, i: i32, p: f64 * (f64 * f64), v: f64 * (f64 * f64), m: f64) -> array f64 =
+  let (x, (y, z)) = p;
+  let (vx, (vy, vz)) = v;
+  let k = 7 * i;
+  let b = array_set(b, k, x);
+  let b = array_set(b, k + 1, y);
+  let b = array_set(b, k + 2, z);
+  let b = array_set(b, k + 3, vx * days);
+  let b = array_set(b, k + 4, vy * days);
+  let b = array_set(b, k + 5, vz * days);
+  array_set(b, k + 6, m * solar_mass())
+
+fn bodies() -> array f64 =
+  let b = array_new[f64](35, zero);
+  let b = put(b, 0, (0.0, (0.0, 0.0)), (0.0, (0.0, 0.0)), 1.0);
+  let b = put(b, 1,
+    (4.84143144246472090e+00, (0.0 - 1.16032004402742839e+00, 0.0 - 1.03622044471123109e-01)),
+    (1.66007664274403694e-03, (7.69901118419740425e-03, 0.0 - 6.90460016972063023e-05)),
+    9.54791938424326609e-04);
+  let b = put(b, 2,
+    (8.34336671824457987e+00, (4.12479856412430479e+00, 0.0 - 4.03523417114321381e-01)),
+    (0.0 - 2.76742510726862411e-03, (4.99852801234917238e-03, 2.30417297573763929e-05)),
+    2.85885980666130812e-04);
+  let b = put(b, 3,
+    (1.28943695621391310e+01, (0.0 - 1.51111514016986312e+01, 0.0 - 2.23307578892655734e-01)),
+    (2.96460137564761618e-03, (2.37847173959480950e-03, 0.0 - 2.96589568540237556e-05)),
+    4.36624404335156298e-05);
+  put(b, 4,
+    (1.53796971148509165e+01, (0.0 - 2.59193146099879641e+01, 1.79258772950371181e-01)),
+    (2.68067772490389322e-03, (1.62824170038242295e-03, 0.0 - 9.51592254519715870e-05)),
+    5.15138902046611451e-05)
+
+-- The sun's velocity set so that the total momentum is zero.
+fn offset_momentum(b: array f64) -> array f64 =
+  let mut b = b;
+  let mut px = 0.0;
+  let mut py = 0.0;
+  let mut pz = 0.0;
+  for i in 0..5 {
+    let k = 7 * i;
+    let m = at(&b, k + 6, 0.0);
+    let vx = at(&b, k + 3, 0.0);
+    let vy = at(&b, k + 4, 0.0);
+    let vz = at(&b, k + 5, 0.0);
+    px = px + vx * m;
+    py = py + vy * m;
+    pz = pz + vz * m
+  };
+  let b = array_set(b, 3, 0.0 - px / solar_mass());
+  let b = array_set(b, 4, 0.0 - py / solar_mass());
+  array_set(b, 5, 0.0 - pz / solar_mass())
+
+fn energy(b: array f64) -> array f64 * f64 =
+  let mut b = b;
+  let mut e = 0.0;
+  for i in 0..5 {
+    let k = 7 * i;
+    let x = at(&b, k, 0.0);
+    let y = at(&b, k + 1, 0.0);
+    let z = at(&b, k + 2, 0.0);
+    let vx = at(&b, k + 3, 0.0);
+    let vy = at(&b, k + 4, 0.0);
+    let vz = at(&b, k + 5, 0.0);
+    let m = at(&b, k + 6, 0.0);
+    e = e + 0.5 * m * (vx * vx + vy * vy + vz * vz);
+    let lo = i + 1;
+    for j in lo..5 {
+      let l = 7 * j;
+      let xj = at(&b, l, 0.0);
+      let yj = at(&b, l + 1, 0.0);
+      let zj = at(&b, l + 2, 0.0);
+      let dx = x - xj;
+      let dy = y - yj;
+      let dz = z - zj;
+      let mj = at(&b, l + 6, 0.0);
+      e = e - m * mj / sqrt_f64(dx * dx + dy * dy + dz * dz)
+    }
+  };
+  (b, e)
+
+fn advance(b: array f64, dt: f64) -> array f64 =
+  let mut b = b;
+  for i in 0..5 {
+    let k = 7 * i;
+    let lo = i + 1;
+    for j in lo..5 {
+      let l = 7 * j;
+      let xi = at(&b, k, 0.0);
+      let yi = at(&b, k + 1, 0.0);
+      let zi = at(&b, k + 2, 0.0);
+      let xj = at(&b, l, 0.0);
+      let yj = at(&b, l + 1, 0.0);
+      let zj = at(&b, l + 2, 0.0);
+      let dx = xi - xj;
+      let dy = yi - yj;
+      let dz = zi - zj;
+      let d2 = dx * dx + dy * dy + dz * dz;
+      let mag = dt / (d2 * sqrt_f64(d2));
+      let mi = at(&b, k + 6, 0.0);
+      let mj = at(&b, l + 6, 0.0);
+      let vix = at(&b, k + 3, 0.0);
+      let viy = at(&b, k + 4, 0.0);
+      let viz = at(&b, k + 5, 0.0);
+      b = array_set(b, k + 3, vix - dx * mj * mag);
+      b = array_set(b, k + 4, viy - dy * mj * mag);
+      b = array_set(b, k + 5, viz - dz * mj * mag);
+      let vjx = at(&b, l + 3, 0.0);
+      let vjy = at(&b, l + 4, 0.0);
+      let vjz = at(&b, l + 5, 0.0);
+      b = array_set(b, l + 3, vjx + dx * mi * mag);
+      b = array_set(b, l + 4, vjy + dy * mi * mag);
+      b = array_set(b, l + 5, vjz + dz * mi * mag)
+    }
+  };
+  for i in 0..5 {
+    let k = 7 * i;
+    let x = at(&b, k, 0.0);
+    let y = at(&b, k + 1, 0.0);
+    let z = at(&b, k + 2, 0.0);
+    let vx = at(&b, k + 3, 0.0);
+    let vy = at(&b, k + 4, 0.0);
+    let vz = at(&b, k + 5, 0.0);
+    b = array_set(b, k, x + dt * vx);
+    b = array_set(b, k + 1, y + dt * vy);
+    b = array_set(b, k + 2, z + dt * vz)
+  };
+  b
+
+main -> i32 =
+  let n = arg_i32(1000);
+  let b = offset_momentum(bodies());
+  let (b, e0) = energy(b);
+  print_dec64(i64_of_f64_sat(e0 * 1000000000.0));
+  print_byte(b'\n');
+  let mut b = b;
+  for s in 0..n { b = advance(b, 0.01) };
+  let (b, e1) = energy(b);
+  print_dec64(i64_of_f64_sat(e1 * 1000000000.0));
+  print_byte(b'\n');
+  0

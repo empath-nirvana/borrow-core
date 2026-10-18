@@ -9,8 +9,13 @@ import Backend.Driver
     lake exe bcc-counts --native <file> [-- arg…]
 
 Run the program at the flat IR (`Backend/Flat/Interp.lean`) and under `wasmtime`, each built to
-count, and print `allocs N indirect M copies K`: the objects the run allocates, the indirect calls
-it makes, and the copies of a variable at a non-trivial type it makes. The two stages must agree. A program that declares `stdin` reads all of standard input
+count, and print `allocs N indirect M copies K loads L stores S bounds B`: the objects the run
+allocates, the indirect calls it makes, and the copies of a variable at a non-trivial type it
+makes, on which the two stages must agree; and, at the flat IR only, its loads (each `load` and
+`load8` evaluated), its stores (each `store` and `store8` run, heap and frame slots alike) and its
+bounds checks (each test of an index against an array's length that an access makes, `idx`,
+`split` or a literal's byte, marked by `tickBound` in the counting build; the tests that end a
+loop are not among them). A program that declares `stdin` reads all of standard input
 first and gives it to both, and the words after `--` are the program's arguments at both
 (SPEC §34). `scripts/compile-corpus.sh` compares the counts with
 `corpus/counts.expected`. An indirect call is a dispatched one: a closure call whose code a
@@ -153,8 +158,8 @@ def main (argv : List String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   let input ← if Backend.readsInput file src then readAllIn (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
-  let (flat, status) ← match Backend.interpStage "flat-counts" file src input.toList (Backend.argsBytes args) with
-    | .ok o => pure (String.fromUTF8! o.out, o.status)
+  let (flat, status, mem) ← match Backend.flatMemCounts file src input.toList (Backend.argsBytes args) with
+    | .ok (o, m) => pure (String.fromUTF8! o.out, o.status, m)
     | .error e => IO.eprintln e; return 1
   let wat ← match Backend.compileWat file src true with
     | .ok w => pure w
@@ -174,7 +179,8 @@ def main (argv : List String) : IO UInt32 := do
   match countsOf flat, countsOf r.stdout with
   | some (a, i, c), some (a', i', c') =>
     if a == a' && i == i' && c == c' then
-      IO.println s!"allocs {a} indirect {i} copies {c}"; return 0
+      IO.println (s!"allocs {a} indirect {i} copies {c} " ++
+        s!"loads {mem.loads} stores {mem.stores} bounds {mem.bounds}"); return 0
     else
       IO.eprintln (s!"{file}: the flat IR counts allocs {a} indirect {i} copies {c}, " ++
         s!"wasm allocs {a'} indirect {i'} copies {c'}")

@@ -1,0 +1,49 @@
+include textio
+include buf
+include io
+include float
+
+-- The next argument as a number, or `d` when there is none or it is not one.
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+fn ina(k: i32) -> f64 = f64_of_i32(k % 7)
+fn inb(k: i32) -> f64 = f64_of_i32(k % 5 - 2)
+fn zero(k: i32) -> f64 = 0.0
+
+-- Row `i` of `a` times column `j` of `b`, both `n` by `n`.
+fn dot(a: array f64, b: array f64, i: i32, j: i32, n: i32) -> array f64 * (array f64 * f64) =
+  let mut s = 0.0;
+  for k in 0..n {
+    let x = at(&a, i * n + k, 0.0);
+    let y = at(&b, k * n + j, 0.0);
+    s = s + x * y
+  };
+  (a, (b, s))
+
+-- Row `i` of the product written into `c`.
+fn row(a: array f64, b: array f64, c: array f64, i: i32, n: i32) -> array f64 * (array f64 * array f64) =
+  let mut a = a;
+  let mut b = b;
+  let mut c = c;
+  for j in 0..n {
+    let (a2, (b2, x)) = dot(a, b, i, j, n);
+    a = a2;
+    b = b2;
+    c = array_set(c, i * n + j, x)
+  };
+  (a, (b, c))
+
+main -> i32 =
+  let n = arg_i32(10);
+  let mut a = array_new[f64](n * n, ina);
+  let mut b = array_new[f64](n * n, inb);
+  let mut c = array_new[f64](n * n, zero);
+  for i in 0..n { let (a2, (b2, c2)) = row(a, b, c, i, n); a = a2; b = b2; c = c2 };
+  let mut s = 0.0;
+  for x in &c { s = s + *x };
+  print_dec64(i64_of_f64_sat(s));
+  print_byte(b'\n');
+  0

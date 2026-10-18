@@ -1,0 +1,68 @@
+-- Handlers as dependency injection: `work` reads a clock at every step and writes a log entry at
+-- every eighth, through two effects it names in its row; which logger serves it is chosen at run
+-- time (the third argument), and a fake clock serves the time. The handlers' states are cells the
+-- caller owns, read after the run. (#538: one function per logger, since lending the cells in
+-- both arms of an `if` is refused.)
+
+include textio
+include io
+
+-- The first argument as a number, or `d` when there is none or it is not one.
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+effect Log { fn log(x: i64) }
+effect Ticks { fn now_ns() -> i64 }
+
+-- A logger that adds up its entries.
+handler summing(mut s: i64): Log = { log(x) = { s = s + x; () } }
+
+-- A logger that keeps a checksum of its entries, in order.
+handler hashing(mut h: i64): Log = { log(x) = { h = h * 31 + x; () } }
+
+-- A clock that advances 3 ns at every reading.
+handler fake_clock(mut t: i64): Ticks = { now_ns() = { t = t + 3; t } }
+
+fn value(k: i32) -> i64 = host[extend_s]((k * 7919) % 1000)
+
+fn work(n: i32) -> i64 with Log, Ticks =
+  let mut acc = i64[0];
+  for i in 0..n {
+    let t = now_ns();
+    let v = value(i);
+    if host[and32](i, 7) == 0 { log(t + v) } else { () };
+    acc = acc + v
+  };
+  acc
+
+-- One run of `work` under each logger, with the cells handed back.
+fn run_summing(logc: ref i64, clk: ref i64, n: i32) -> (ref i64 * ref i64) * i64 =
+  let a = with summing(&mut logc) { with fake_clock(&mut clk) { work(n) } };
+  ((logc, clk), a)
+
+fn run_hashing(logc: ref i64, clk: ref i64, n: i32) -> (ref i64 * ref i64) * i64 =
+  let a = with hashing(&mut logc) { with fake_clock(&mut clk) { work(n) } };
+  ((logc, clk), a)
+
+main -> i32 =
+  let n = arg_i32(1000);
+  let reps = arg_i32(1);
+  let mode = arg_i32(0);
+  let mut cells = (alloc(i64[0]), alloc(i64[0]));
+  let mut acc = i64[0];
+  for r in 0..reps {
+    let (logc, clk) = cells;
+    let (cs, a) = if mode == 0 { run_summing(logc, clk, n) } else { run_hashing(logc, clk, n) };
+    cells = cs;
+    acc = acc + a
+  };
+  let (logc, clk) = cells;
+  print_dec64(acc);
+  print_byte(b' ');
+  print_dec64(free(logc));
+  print_byte(b' ');
+  print_dec64(free(clk));
+  print_byte(b'\n');
+  0
