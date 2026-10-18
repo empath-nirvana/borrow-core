@@ -1,0 +1,60 @@
+include textio
+include slice
+include io
+include rec
+
+-- The next argument as a number, or `d` when there is none or it is not one.
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+-- Element `i` of the input: bits 16…30 of an LCG step, centred on 0.
+fn data(i: i32) -> i32 =
+  let x = host[and32](host[add32](host[mul32](i, 1103515245), 12345), 2147483647);
+  host[shr_u32](x, 16) - 16384
+
+-- Lomuto's partition of `[lo, hi]` around its middle element, moved to `hi` first: the elements
+-- below it go to the front, and it goes to the first slot after them, which is returned.
+fn partition<'a>(v: array_mut 'a i32, lo: i32, hi: i32) -> array_mut 'a i32 * i32 =
+  let mut v = swap_at(v, lo + (hi - lo) / 2, hi);
+  let (w, p) = peek(v, hi, 0);
+  v = w;
+  let mut i = lo;
+  for j in lo..hi {
+    let (u, x) = peek(v, j, 0);
+    v = u;
+    if x < p { v = swap_at(v, i, j); i = i + 1 } else { () }
+  };
+  (swap_at(v, i, hi), i)
+
+-- `[lo, hi]` sorted in place.
+fn quicksort<'a>(v: array_mut 'a i32, lo: i32, hi: i32) -> array_mut 'a i32 =
+  if lo < hi {
+    let (v, p) = partition(v, lo, hi);
+    let v = quicksort(v, lo, p - 1);
+    quicksort(v, p + 1, hi)
+  } else { v }
+
+main -> i32 =
+  let n = arg_i32(2000);
+  let reps = arg_i32(1);
+  let mut bad = 0;
+  let mut check = 0;
+  for r in 0..reps {
+    let mut a = array_new[i32](n, data);
+    borrow mut a { v ->
+      match with exhausted_to_option { quicksort(v, 0, n - 1) } { inl v -> discard_mut(v) | inr u -> () } };
+    for i in 1..n {
+      let x = at(&a, i - 1, 0);
+      let y = at(&a, i, 0);
+      if y < x { bad = bad + 1 } else { () }
+    };
+    let m = at(&a, n / 2, 0);
+    check = check + m
+  };
+  print_dec(bad);
+  print_byte(b' ');
+  print_dec(check);
+  print_byte(b'\n');
+  0

@@ -1,0 +1,66 @@
+include textio
+include map
+
+-- The words of standard input (runs of bytes between spaces and newlines) counted in a hash map
+-- keyed by views of the input: the number of words and of distinct words, and the highest count.
+
+-- The `k` bytes of `t` from `i` on.
+fn slice<'t>(t: text 't, i: i32, k: i32) -> text 't =
+  match split_at(t, i) {
+    inl (h, r) -> array_forget['t, u8](h);
+      match split_at(r, k) { inl (w, rest) -> array_forget['t, u8](rest); w | inr r -> r }
+  | inr t -> t
+  }
+
+-- The word `w` counted once more; its count.
+fn bump<'t>(m: Map[text 't, i32], w: text 't) -> Map[text 't, i32] * i32 =
+  let mut m = m;
+  let (w, k) = array_copy['t, u8] w;
+  let old = map_lookup(&m, k);
+  let c = match old { inl c -> c + 1 | inr u -> 1 };
+  let prev = map_insert(&mut m, w, c);
+  (m, c)
+
+-- Each word of `t` counted.
+fn count_words<'t>(t: text 't) -> Map[text 't, i32] * (i32 * i32) =
+  let (t, u) = array_copy['t, u8] t;
+  let n = len(u);
+  let mut t = t;
+  let mut m = map_new[text 't, i32](1024);
+  let mut words = 0;
+  let mut most = 0;
+  let mut start = 0;
+  for i in 0..n + 1 {
+    let (t2, w) = array_copy['t, u8] t;
+    t = t2;
+    let b = at(w, i, b' ');
+    if b == b' ' || b == b'\n' {
+      if start < i {
+        let (t2, w) = array_copy['t, u8] t;
+        t = t2;
+        let word = slice(w, start, i - start);
+        let (m2, c) = bump(m, word);
+        m = m2;
+        if most < c { most = c } else { () };
+        words = words + 1
+      } else { () };
+      start = i + 1
+    } else { () }
+  };
+  array_forget['t, u8](t);
+  (m, (words, most))
+
+main -> i32 =
+  let s = read_input();
+  let r = borrow imm s { t ->
+    let (m, (words, most)) = count_words(t);
+    let distinct = map_len(&m);
+    (words, (distinct, most)) };
+  let (words, (distinct, most)) = r;
+  print_dec(words);
+  print_byte(b' ');
+  print_dec(distinct);
+  print_byte(b' ');
+  print_dec(most);
+  print_byte(b'\n');
+  0

@@ -1,0 +1,53 @@
+-- `raise` four levels deep inside counted loops, with a small error (an `i32`). The keys
+-- `0 .. chunks·len` are summed in `chunks` chunks of `len`; a key whose value is `0` (one in
+-- 100003) is an error, raised from `check` through `scale` and `chunk_sum` to `run_all`, whose
+-- handler drops that chunk and adds the error to a tally. Errors are rare: the run measures what
+-- the error path costs the path that does not take it.
+
+include textio
+include io
+include fail
+
+-- The first argument as a number, or `d` when there is none or it is not one.
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+fn value(k: i32) -> i32 = (k * 7919) % 100003
+
+-- Level 4: the key's value, or an error.
+fn check(k: i32) -> i64 with Fail[i32] =
+  let x = value(k);
+  if x == 0 { raise(k) } else { host[extend_s](x) }
+
+-- Level 3.
+fn scale(k: i32) -> i64 with Fail[i32] = check(k) * 3 + 1
+
+-- Level 2: one chunk's sum.
+fn chunk_sum(c: i32, len: i32) -> i64 with Fail[i32] =
+  let mut s = i64[0];
+  for j in 0..len { s = s + scale(c * len + j) };
+  s
+
+-- Level 1: the sum of the chunks without an error, and the tally of the errors.
+fn run_all(chunks: i32, len: i32) -> i64 * i64 =
+  let mut sum = i64[0];
+  let mut errs = i64[0];
+  for c in 0..chunks {
+    match with to_result { chunk_sum(c, len) } {
+      inl s -> sum = sum + s
+    | inr e -> errs = errs + host[extend_s](e)
+    }
+  };
+  (sum, errs)
+
+main -> i32 =
+  let chunks = arg_i32(10);
+  let len = arg_i32(100);
+  let (sum, errs) = run_all(chunks, len);
+  print_dec64(sum);
+  print_byte(b' ');
+  print_dec64(errs);
+  print_byte(b'\n');
+  0

@@ -1,0 +1,27 @@
+include textio
+include io
+include adapters
+
+-- A map/filter/fold chain as a pipeline of generators: the numbers below `n`, each `3x + 1`,
+-- those not divisible by 7, summed.
+
+-- The next argument as a number, or `d` when there is none or it is not one.
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+fn range(lo: i64, hi: i64) -> 1 with Yield[i64] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+main -> i32 =
+  let n = arg_i32(1000);
+  let mut s = i64[0];
+  for y in range(i64[0], host[extend_s](n)) |> map(!{ x -> x * 3 + 1 }) |> filter(!{ x -> x % 7 != 0 }) {
+    s = s + y
+  };
+  print_dec64(s);
+  print_byte(b'\n');
+  0

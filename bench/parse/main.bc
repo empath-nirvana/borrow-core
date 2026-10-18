@@ -1,0 +1,15 @@
+include textio
+include io
+
+-- The numbers of standard input, one per line: their count and their sum. The input is read
+-- whole (`read_input`) and the numbers folded out of it (`fold_i64s`).
+
+main -> i32 =
+  let s = read_input();
+  let r = borrow imm s { t -> fold_i64s(t, !{ (x, (k, acc)) -> (k + 1, acc + x) }, (0, i64[0])) };
+  let (k, acc) = r;
+  print_dec(k);
+  print_byte(b' ');
+  print_dec64(acc);
+  print_byte(b'\n');
+  0

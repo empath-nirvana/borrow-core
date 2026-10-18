@@ -1,0 +1,42 @@
+include textio
+include buf
+include io
+
+-- The next argument as a number, or `d` when there is none or it is not one.
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+fn one(i: i32) -> u8 = u8[1]
+
+-- The multiples of `i` from `i * i` below `n` struck out.
+fn strike(a: array u8, i: i32, n: i32) -> array u8 =
+  let mut a = a;
+  let mut j = i * i;
+  while j < n { a = array_set(a, j, u8[0]); j = j + i };
+  a
+
+-- The number of primes below `n`: the sieve of Eratosthenes over a flag per number.
+fn sieve(n: i32) -> i32 =
+  let mut a = array_new[u8](n, one);
+  let mut i = 2;
+  while i * i < n {
+    let f = at(&a, i, u8[0]);
+    let k = i;
+    i = i + 1;
+    if f == u8[1] { a = strike(a, k, n) } else { () }
+  };
+  let mut count = 0;
+  for f in &a { if *f == u8[1] { count = count + 1 } else { () } };
+  count - 2
+
+main -> i32 =
+  let n = arg_i32(1000);
+  let reps = arg_i32(1);
+  let mut c = 0;
+  let mut r = 0;
+  while r < reps { c = sieve(n); r = r + 1 };
+  print_dec(c);
+  print_byte(b'\n');
+  0

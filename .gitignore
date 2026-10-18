@@ -1,3 +1,4 @@
 .lake/
 book/book/
 experiments/HandlersAsBorrows/refs/
+bench/out/

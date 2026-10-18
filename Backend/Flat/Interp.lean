@@ -46,6 +46,12 @@ structure FState where
   indirect : Nat := 0
   /-- Copies of a variable at a non-trivial type so far. -/
   copies : Nat := 0
+  /-- Memory reads so far: each `load` and `load8` evaluated. -/
+  loads : Nat := 0
+  /-- Memory writes so far: each `store` and `store8` run. -/
+  stores : Nat := 0
+  /-- Bounds checks so far: each `tickBound` run (the counting build marks every one). -/
+  bounds : Nat := 0
   /-- The end of the read-only data: an address below it is not freed. -/
   staticEnd : Nat := 0
   /-- Live frame slots: start ↦ length in words. They are not ranges: `live` does not count
@@ -211,8 +217,14 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
     | .loc i => getLocal fr i
     | .c64 k => pure k
     | .c32 k => pure k.toUInt64
-    | .load a off => do readWord ((← evalExp p n fr a).toNat + 8 * off)
-    | .load8 a => do readByte (← evalExp p n fr a).toNat
+    | .load a off => do
+        let a ← evalExp p n fr a
+        modify fun st => { st with loads := st.loads + 1 }
+        readWord (a.toNat + 8 * off)
+    | .load8 a => do
+        let a ← evalExp p n fr a
+        modify fun st => { st with loads := st.loads + 1 }
+        readByte a.toNat
     | .op o args => do liftE (evalOp o (← evalArgs p n fr args))
     | .alloc w => do allocRange (← evalExp p n fr w).toNat
     | .slot off w => startSlot off w
@@ -296,11 +308,13 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
     | .store a off v => do
         let a ← evalExp p n fr a
         let v ← evalExp p n fr v
+        modify fun st => { st with stores := st.stores + 1 }
         writeWord (a.toNat + 8 * off) v
         pure (fr, none)
     | .store8 a v => do
         let a ← evalExp p n fr a
         let v ← evalExp p n fr v
+        modify fun st => { st with stores := st.stores + 1 }
         writeByte a.toNat v
         pure (fr, none)
     | .free a => do freeRange (← evalExp p n fr a).toNat; pure (fr, none)
@@ -354,6 +368,9 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
     | .tickCopy => do
         modify fun st => { st with copies := st.copies + 1 }
         pure (fr, none)
+    | .tickBound => do
+        modify fun st => { st with bounds := st.bounds + 1 }
+        pure (fr, none)
     | .status e => do
         let c ← evalExp p n fr e
         modify fun st => { st with status := c.toUInt32 }
@@ -361,9 +378,16 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
     | .trap => throw "flat IR: trap"
 end
 
-/-- Run the entry function on the standard input `input`: what it writes. -/
-def interp (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []) :
-    Except String Output := do
+/-- The memory operations of a run: its loads, its stores and its bounds checks. -/
+structure MemCounts where
+  loads : Nat
+  stores : Nat
+  bounds : Nat
+
+/-- Run the entry function on the standard input `input`: what it writes, and its memory
+operations. -/
+def interpMem (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []) :
+    Except String (Output × MemCounts) := do
   -- The read-only data, word by word, little-endian; the heap past it.
   let L := p.data.size
   let mem : Std.HashMap Nat (Option UInt64) := (List.range ((L + 7) / 8)).foldl (fun m k =>
@@ -374,6 +398,11 @@ def interp (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []
   let (_, s) ← (callFn p fuel p.entry [] (some 0)).run
     { mem, ranges := {}, next, input, args, out := .empty, err := .empty,
       staticEnd := if L == 0 then 0 else staticEnd L }
-  pure ⟨s.out, s.err, s.status⟩
+  pure (⟨s.out, s.err, s.status⟩, ⟨s.loads, s.stores, s.bounds⟩)
+
+/-- Run the entry function on the standard input `input`: what it writes. -/
+def interp (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []) :
+    Except String Output :=
+  (·.1) <$> interpMem fuel p input args
 
 end Backend.Flat

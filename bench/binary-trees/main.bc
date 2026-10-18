@@ -1,0 +1,60 @@
+-- Binary trees (the Benchmarks Game's): complete binary trees built bottom-up and counted,
+-- many short-lived ones at each depth from 4 to `n` in steps of 2, beside one long-lived tree.
+-- A node is one box (SPEC §35); counting a tree consumes it, freeing each node as it is
+-- visited.
+include textio
+include io
+include rec
+
+-- The first argument as a number, or `d` when there is none or it is not one.
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+type Tree = mu X. 1 + (X * X)
+
+fn make(d: i32) -> Tree =
+  if d == 0 { roll inr (roll inl (), roll inl ()) }
+  else { roll inr (make(d - 1), make(d - 1)) }
+
+-- The number of nodes.
+fn check(t: Tree) -> i32 =
+  match unroll t {
+    inl u -> 0
+  | inr (l, r) -> 1 + check(l) + check(r)
+  }
+
+fn made_and_checked(d: i32) -> i32 = with on_exhausted(!{ u -> 0 - 1 }) { check(make(d)) }
+
+fn tabbed(l: lit) -> 1 = print_byte(u8[9]); print_lit(l)
+
+main -> i32 =
+  let n = arg_i32(10);
+  let min_depth = 4;
+  let max_depth = if min_depth + 2 > n { min_depth + 2 } else { n };
+  print_lit("stretch tree of depth ");
+  print_dec(max_depth + 1);
+  tabbed(" check: ");
+  print_dec(made_and_checked(max_depth + 1));
+  print_byte(b'\n');
+  let long_lived = with on_exhausted(!{ u -> roll inl () }) { make(max_depth) };
+  let steps = (max_depth - min_depth) / 2 + 1;
+  for k in 0..steps {
+    let d = min_depth + 2 * k;
+    let iterations = host[shl32](1, max_depth - d + min_depth);
+    let mut c = 0;
+    for i in 0..iterations { c = c + made_and_checked(d) };
+    print_dec(iterations);
+    tabbed(" trees of depth ");
+    print_dec(d);
+    tabbed(" check: ");
+    print_dec(c);
+    print_byte(b'\n')
+  };
+  print_lit("long lived tree of depth ");
+  print_dec(max_depth);
+  tabbed(" check: ");
+  print_dec(with on_exhausted(!{ u -> 0 - 1 }) { check(long_lived) });
+  print_byte(b'\n');
+  0

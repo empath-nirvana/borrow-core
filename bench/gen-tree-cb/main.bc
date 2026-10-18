@@ -1,0 +1,44 @@
+-- A recursive generator: the in-order walk of the balanced search tree over the keys `0 .. n`
+-- (the root is the middle key, its subtrees the halves on either side), yielding each key's
+-- value, summed by a `for`, `reps` times; the value depends on the round, so no round repeats
+-- another's work. The tree is implicit (each node is its range), so the run measures the
+-- generator and nothing else: no node is allocated on either side.
+
+include textio
+include io
+include rec
+include yield
+
+-- The first argument as a number, or `d` when there is none or it is not one.
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+fn value(k: i32, r: i32) -> i32 = (k * 7919 + r) % 1000
+
+-- The keys of `[lo, hi)` in order, each as its value in round `r`.
+fn walk(lo: i32, hi: i32, r: i32) -> 1 with Yield[i32], Exhausted =
+  if lo < hi {
+    let m = lo + (hi - lo) / 2;
+    walk(lo, m, r);
+    yield(value(m, r));
+    walk(m + 1, hi, r)
+  } else { () }
+
+fn total_of(n: i32, r: i32) -> i64 with Exhausted =
+  let mut s = i64[0];
+  for x in walk(0, n, r) { s = s + host[extend_s](x) };
+  s
+
+main -> i32 =
+  let n = arg_i32(1000);
+  let reps = arg_i32(1);
+  let mut acc = i64[0];
+  for r in 0..reps {
+    let s = with on_exhausted(!{ u -> i64[0] }) { total_of(n, r) };
+    acc = acc + s
+  };
+  print_dec64(acc);
+  print_byte(b'\n');
+  0

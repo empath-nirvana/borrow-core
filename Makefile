@@ -15,7 +15,7 @@ ifeq (run,$(firstword $(MAKECMDGOALS)))
   $(eval $(RUN_ARGS):;@:)
 endif
 
-.PHONY: bcc run tools gate gate-full gate-fast goldens
+.PHONY: bcc run tools gate gate-full gate-fast goldens bench
 
 # Build the `bcc` compiler.
 bcc: $(CACHE_STAMP) | tools
@@ -38,6 +38,11 @@ gate-full: | tools
 # While iterating: the steps the changes since origin/main reach, never the source stage.
 gate-fast: | tools
 	scripts/ci-local.sh --changed
+
+# The benchmarks against Rust and C (bench/README.md): build each, time it, write the table to
+# bench/out/results.md. Not part of the gate. `make bench BENCH_ARGS="--only sum --runs 5"`.
+bench: bcc
+	python3 bench/bench.py $(BENCH_ARGS)
 
 # Rewrite every corpus golden (`.out`, `.err`, `.status`) from `Support`'s interpreter.
 goldens: | tools

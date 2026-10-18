@@ -39,12 +39,16 @@
 # which must agree): the objects it allocates, the indirect calls it makes (the closure
 # calls whose code a `switch` on the closure's tag chooses at run time), and the copies it makes of
 # a variable at a non-trivial type (deep copies the ownership discipline inserts where a variable
-# is used twice; Backend/README.md, Memory discipline). Each must be at most the
-# program's entry in `corpus/counts.expected` (`name allocs indirect copies`, the name the file's path
+# is used twice; Backend/README.md, Memory discipline); and, at the flat IR only, its loads and
+# stores (each `load`/`load8` evaluated and each `store`/`store8` run, heap and frame slots alike)
+# and its bounds checks (each test of an index against an array's length that an access makes:
+# `idx`, `split`, a literal's byte; the counting build marks each with `tickBound`). Each must be
+# at most the program's entry in `corpus/counts.expected`
+# (`name allocs indirect copies loads stores bounds`, the name the file's path
 # under `corpus/`, as `io-wc`, `surface/io-wc`, `axes/data-effects` or `aoc/2022-01`); a count
 # above it fails, one below it is reported so the file can be lowered. `--write-counts` rewrites the entries of the
 # programs run (every program, when none is named) with this run's counts, keeping the comment an
-# entry ends with (`# …`).
+# entry ends with (`# …`) and the file's header.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 usage() { echo "usage: scripts/compile-corpus.sh [--source | --write-goldens | --write-counts] [file.bc…]"; exit 2; }
@@ -127,26 +131,31 @@ bad=0
 : > "$tmp/counts"
 # The counts of file $1 on input $2, checked against the expected ones; appended to the table.
 counts() {
-  local name got a i c want wa wi wc note
+  local name got a i c l s b want wa wi wc wl ws wb note
   name=${1#corpus/}; name=${name%.bc}
   argsOf "$1"
   if ! got=$("$bccCounts" "$1" -- "${args[@]+"${args[@]}"}" < "$2" 2>&1); then echo "$1: counts: $got"; return 1; fi
   a=$(echo "$got" | awk '{print $2}'); i=$(echo "$got" | awk '{print $4}')
   c=$(echo "$got" | awk '{print $6}')
+  l=$(echo "$got" | awk '{print $8}'); s=$(echo "$got" | awk '{print $10}')
+  b=$(echo "$got" | awk '{print $12}')
   # An entry may end with a comment (`# …`), kept when the file is rewritten.
   note=$(awk -v n="$name" '$1 == n { sub(/^[^#]*/, ""); print }' "$expected" 2>/dev/null || true)
-  echo "$name $a $i $c${note:+ $note}" >> "$tmp/counts"
-  cnt="allocs $a, indirect $i, copies $c"
+  echo "$name $a $i $c $l $s $b${note:+ $note}" >> "$tmp/counts"
+  cnt="allocs $a, indirect $i, copies $c, loads $l, stores $s, bounds $b"
   [ "$write" = 1 ] && return 0
-  want=$(awk -v n="$name" '$1 == n {print $2, $3, $4}' "$expected" 2>/dev/null || true)
+  want=$(awk -v n="$name" '$1 == n { sub(/#.*/, ""); print $2, $3, $4, $5, $6, $7 }' "$expected" 2>/dev/null || true)
   if [ -z "$want" ]; then echo "$1: no entry in $expected ($cnt)"; return 1; fi
-  read -r wa wi wc <<< "$want"
+  read -r wa wi wc wl ws wb <<< "$want"
   if [ -z "$wc" ]; then echo "$1: $expected's entry has no copies column"; return 1; fi
-  if [ "$a" -gt "$wa" ] || [ "$i" -gt "$wi" ] || [ "$c" -gt "$wc" ]; then
-    echo "$1: counts regressed: $cnt, expected at most allocs $wa, indirect $wi, copies $wc"; return 1
+  if [ -z "$wb" ]; then echo "$1: $expected's entry has no loads, stores and bounds columns"; return 1; fi
+  if [ "$a" -gt "$wa" ] || [ "$i" -gt "$wi" ] || [ "$c" -gt "$wc" ] ||
+     [ "$l" -gt "$wl" ] || [ "$s" -gt "$ws" ] || [ "$b" -gt "$wb" ]; then
+    echo "$1: counts regressed: $cnt, expected at most allocs $wa, indirect $wi, copies $wc, loads $wl, stores $ws, bounds $wb"; return 1
   fi
-  if [ "$a" -lt "$wa" ] || [ "$i" -lt "$wi" ] || [ "$c" -lt "$wc" ]; then
-    cnt="$cnt (below $expected's $wa, $wi, $wc: lower it)"
+  if [ "$a" -lt "$wa" ] || [ "$i" -lt "$wi" ] || [ "$c" -lt "$wc" ] ||
+     [ "$l" -lt "$wl" ] || [ "$s" -lt "$ws" ] || [ "$b" -lt "$wb" ]; then
+    cnt="$cnt (below $expected's $wa, $wi, $wc, $wl, $ws, $wb: lower it)"
   fi
 }
 # Run stage $1 of file $2 on input $3 into $w/out and $w/err; it fails unless it ends with the
@@ -238,9 +247,8 @@ fi
 if [ "$write" = 1 ]; then
   # Keep the entries of the programs not named.
   [ "$named" = 0 ] || awk 'NR == FNR { run[$1] = 1; next } /^#/ { next } !($1 in run)' "$tmp/counts" "$expected" >> "$tmp/counts"
-  { echo "# Allocations, indirect (dispatched) calls and copies at a non-trivial type per run of each corpus program (scripts/compile-corpus.sh)."
-    echo "# name allocs indirect copies"
-    sort "$tmp/counts"; } > "$expected"
+  { grep '^#' "$expected"; sort "$tmp/counts"; } > "$tmp/expected"
+  mv "$tmp/expected" "$expected"
   echo "wrote $expected"
 fi
 case "$BCC_SOURCE" in

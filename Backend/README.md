@@ -15,7 +15,7 @@ from it (`Clos/Types.lean`), and every stage from the flat IR on lays values out
     lake exe bcc run --native <file>           compile to LLVM IR, build with clang, run
     lake exe bcc interp [--stage S] <file>     interpret stage S: source (default), clos, flat
     lake exe bcc trusted <file>                the program's externs: contracts, host code, levels
-    lake exe bcc-counts <file>                 allocations, indirect calls and deep copies of a run
+    lake exe bcc-counts <file>                 allocations, indirect calls, deep copies, loads, stores, bounds checks of a run
     lake exe bcc-counts --sites <file>         the closure calls: direct, dispatched; recursive types
     scripts/compile-corpus.sh                  the corpus, compiled against the interpreter
     scripts/compile-native.sh                  the corpus, built natively, against the flat IR
@@ -631,9 +631,24 @@ makes and the deep copies it makes; the two stages must agree. An indirect call 
 one: a call of a type's `apply`, whose code the `switch` on the tag chooses at run time. There is
 no other kind of indirect call. A deep copy is a `copy` of the closure IR (Memory discipline: a
 variable used by two sequential parts) at a non-trivial type, which calls the type's generated
-copy; a copy at a trivial type is the words themselves and is not counted. `scripts/compile-corpus.sh` checks every corpus program's counts against
-`corpus/counts.expected`: a count above the file fails the gate, one below it is reported, and
-`--write-counts` rewrites the file. A pure arithmetic program (`int-arith`, `int-ops`) allocates
+copy; a copy at a trivial type is the words themselves and is not counted.
+
+It also prints, from the flat IR only, the run's memory operations: `loads L` (every `load` and
+`load8` the interpreter evaluates), `stores S` (every `store` and `store8` it runs; heap words and
+frame slots alike, never a local) and `bounds B`, its bounds checks: every test of an index
+against an array's length that an access makes, which the counting build marks with a
+`tickBound` before it (`Flat.Lower`, `boundTick`). The accesses that test are `idx` (`array_get`,
+`slice_get_mut`, and the terms over it: `array_replace`, `slice_replace_mut`, `slice_swap_mut`,
+`at`, `peek`, `set`, …), `split` (`slice_split_imm`/`_mut`) and `litByte` (a byte of a literal).
+The tests that end a loop (`tab`, `drop`, `count`, `count_try`) and the clamp of a length to
+`2³¹` are not bounds checks. A replace-and-restore read through a `mut` view (`peek`) shows as two
+stores per read, and a check that is not removed as one bound per access. The flat IR is before
+LLVM: these count what the lowering emits, not what reaches the machine. Wasm and native code
+emit nothing for `tickBound`, so their code is the same with and without it.
+
+`scripts/compile-corpus.sh` checks every corpus program's counts against
+`corpus/counts.expected` (`name allocs indirect copies loads stores bounds`): a count above the
+file fails the gate, one below it is reported, and `--write-counts` rewrites the file. A pure arithmetic program (`int-arith`, `int-ops`) allocates
 nothing and makes no indirect call; frame slots and capability cells are not counted (they are no
 allocation); what remains is cells, arrays, boxed recursive fields (a
 list's nodes), and the heap environments of the few recursive closure types (Open), whose calls
