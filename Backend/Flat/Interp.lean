@@ -64,6 +64,9 @@ structure FState where
   argsRead : Bool := false
   /-- The exit status the run ends with (SPEC §39). -/
   status : UInt32 := 0
+  /-- With `profile`, each function's calls so far and the words passed to them. -/
+  profile : Bool := false
+  calls : Std.HashMap Nat (Nat × Nat) := {}
 
 abbrev FM := StateT FState (Except String)
 
@@ -275,6 +278,10 @@ def callFn (p : Prog) : Nat → Nat → List UInt64 → Option Nat → FM (List 
   | n + 1, f, args, results => do
     let some fn := p.fns[f]? | throw s!"flat IR: no function {f}"
     if args.length != fn.params then throw s!"flat IR: {fn.name} takes {fn.params} arguments"
+    if (← get).profile then
+      modify fun st =>
+        let (c, w) := st.calls.getD f (0, 0)
+        { st with calls := st.calls.insert f (c + 1, w + args.length) }
     if let some k := results then
       if k != fn.results then throw s!"flat IR: {fn.name} answers {fn.results} results, not {k}"
     let fr := (args ++ List.replicate fn.locals 0).toArray
@@ -401,6 +408,23 @@ def interpMem (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 :=
     { mem, ranges := {}, next, input, args, out := .empty, err := .empty,
       staticEnd := if L == 0 then 0 else staticEnd L }
   pure (⟨s.out, s.err, s.status⟩, ⟨s.loads, s.stores, s.bounds⟩)
+
+/-- Run the entry function on the standard input `input`: each function called, with its calls
+and the words passed to them, most called first. -/
+def interpCalls (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []) :
+    Except String (List (String × Nat × Nat × Nat)) := do
+  let L := p.data.size
+  let mem : Std.HashMap Nat (Option UInt64) := (List.range ((L + 7) / 8)).foldl (fun m k =>
+    let w := (List.range 8).foldl (fun acc j =>
+      acc ||| ((p.data.getD (8 * k + j) 0).toUInt64 <<< (8 * j).toUInt64)) (0 : UInt64)
+    m.insert (dataBase + 8 * k) (some w)) {}
+  let next := if L == 0 then 8 else staticEnd L + 8
+  let (_, s) ← (callFn p fuel p.entry [] (some 0)).run
+    { mem, ranges := {}, next, input, args, out := .empty, err := .empty,
+      staticEnd := if L == 0 then 0 else staticEnd L, profile := true }
+  let rows := s.calls.toList.map fun (f, (c, w)) =>
+    (((p.fns[f]?).map (·.name)).getD "?", f, c, w)
+  pure (rows.mergeSort fun a b => a.2.2.1 ≥ b.2.2.1)
 
 /-- Run the entry function on the standard input `input`: what it writes. -/
 def interp (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []) :

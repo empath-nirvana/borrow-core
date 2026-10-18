@@ -314,6 +314,11 @@ def flatMemCounts (file src : String) (input : List UInt8) (args : List UInt8 :=
     Except String (Output × Flat.MemCounts) := do
   Flat.interpMem runFuel (← flatOf file src true) input args
 
+/-- The flat IR's calls of a run, by function (`Flat.interpCalls`). -/
+def flatCalls (file src : String) (input : List UInt8) (args : List UInt8 := []) :
+    Except String (List (String × Nat × Nat × Nat)) := do
+  Flat.interpCalls runFuel (← flatOf file src) input args
+
 /-! ### The falsifier
 
 `bcc interp --check fresh|tags` and `--alloc least` (`Backend/Falsify.lean`,

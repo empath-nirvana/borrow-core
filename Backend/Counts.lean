@@ -7,6 +7,7 @@ import Backend.Driver
     lake exe bcc-counts --sites <file>
     lake exe bcc-counts --kernel [--sites] <name>
     lake exe bcc-counts --native <file> [-- arg…]
+    lake exe bcc-counts --calls <file> [-- arg…]
 
 Run the program at the flat IR (`Backend/Flat/Interp.lean`) and under `wasmtime`, each built to
 count, and print `allocs N indirect M copies K loads L stores S bounds B`: the objects the run
@@ -34,6 +35,11 @@ may suspend (the others are handlers' bodies that answer `inl` alone).
 
 With `--native`, the second run is the native build (`bcc run --native`, SPEC §40) instead of
 `wasmtime`'s, and the two must agree on the counts and the exit status.
+
+With `--calls`, print the flat IR's calls of the run by function, most called first: each
+function's calls and the words passed to them (`Flat.interpCalls`). A loop that the specializer
+made a loop (`Backend/README.md`, *Loops as loops*) is one function called once per turn, and
+the words per call are its state's.
 
 With `--kernel`, the program is the kernel program `name` (`Backend/Kernel.lean`).
 -/
@@ -149,6 +155,16 @@ def main (argv : List String) : IO UInt32 := do
     | [] => return ← nativeMain file []
     | "--" :: args => return ← nativeMain file args
     | _ => IO.eprintln "usage: bcc-counts --native <file> [-- arg…]"; return 2
+  if let "--calls" :: file :: rest := argv then
+    let args := match rest with | "--" :: a => a | _ => []
+    let src ← IO.FS.readFile file
+    let input ← if Backend.readsInput file src then readAllIn (← IO.getStdin) (1 <<< 16) .empty
+      else pure .empty
+    match Backend.flatCalls file src input.toList (Backend.argsBytes args) with
+    | .ok rows =>
+      for (name, f, c, w) in rows do IO.println s!"{c} calls {w} words f{f} {name}"
+      return 0
+    | .error e => IO.eprintln e; return 1
   if let ["--kernel", name] := argv then return ← kernelMain false name
   if let ["--kernel", "--sites", name] := argv then return ← kernelMain true name
   if let ["--sites", file] := argv then
