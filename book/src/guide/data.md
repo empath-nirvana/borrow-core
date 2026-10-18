@@ -43,12 +43,10 @@ constant names of the core are reserved, and cannot name a function.
 
 ## Recursion
 
-A function that calls itself runs with a budget of depth instead of an unbounded stack. When the
-budget is spent, the recursion raises `Exhausted`, an error like any other, which a handler
-around the call decides what to do with: `with on_exhausted(f) { … }` answers `f(())` instead,
-and `with deep { … }` runs the recursion with its pending calls on the heap, with no limit but
-memory. Both come from `include rec`. A recursive call that nothing handles is an error that says
-so. The budget is 10000 levels.
+In short: a function that calls itself runs with a budget of depth (10000 levels) instead of an
+unbounded stack. `with on_exhausted(f) { … }` answers `f(())` when the budget is spent, and
+`with deep { … }` runs the recursion with its pending calls on the heap, limited only by memory.
+Both come from `include rec`. The details:
 
 A function may call itself, and functions may call one another: they form a recursive group, and
 a **driver** runs it (SPEC §20, §21). The group is the fixed point of its *generator*, the members'
