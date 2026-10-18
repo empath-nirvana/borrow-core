@@ -33,9 +33,6 @@ import Backend.Native.Tests
                                 with the least-free allocator (`least`); a failed check is an
                                 error; `--stats` writes the run's counts to standard error
     lake exe bcc desugar <file> print the program with its I/O sugar elaborated (SPEC §11)
-    lake exe bcc tir <file>     print the typed IR of the elaborated program: each
-                                declaration's binders with their types and classes
-                                (docs/typed-elaboration.md)
     lake exe bcc erase <file>   print the erasure of the checked `main`
     lake exe bcc trusted <file> list the program's externs with their contracts, host
                                 implementations and assurance levels (SPEC §11)
@@ -69,9 +66,10 @@ def readAll (h : IO.FS.Stream) : Nat → ByteArray → IO ByteArray
 the report, and its standard error. -/
 def interp (stage file : String) (args : List String) : IO UInt32 := do
   let src ← IO.FS.readFile file
-  let input ← if Backend.readsInput file src then readAll (← IO.getStdin) (1 <<< 16) .empty
+  let k := Backend.checkedOf file src
+  let input ← if Backend.readsInput k then readAll (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
-  match Backend.interpStage stage file src input.toList (Backend.argsBytes args) with
+  match Backend.interpStage stage file k input.toList (Backend.argsBytes args) with
   | .ok o =>
     let out ← IO.getStdout
     out.write o.out
@@ -86,10 +84,11 @@ def interp (stage file : String) (args : List String) : IO UInt32 := do
 statistics with `stats`. A check that fails is an error. -/
 def interpChecked (mode file : String) (stats : Bool) (args : List String) : IO UInt32 := do
   let src ← IO.FS.readFile file
-  let input ← if Backend.readsInput file src then readAll (← IO.getStdin) (1 <<< 16) .empty
+  let k := Backend.checkedOf file src
+  let input ← if Backend.readsInput k then readAll (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
   let r := do
-    Backend.interpChecked (← Backend.falsifyOpts mode) file src input.toList
+    Backend.interpChecked (← Backend.falsifyOpts mode) file (← k) input.toList
       (Backend.argsBytes args)
   match r with
   | .ok (o, st) =>
@@ -131,21 +130,6 @@ def desugar (file : String) : IO UInt32 := do
   | .ok p => match Frontend.Elab.elaborate p with
     | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
     | .ok el => IO.print el.prog.pp; return 0
-
-/-- Print `file`'s typed IR: for each declaration with a body, its node count, the nodes whose
-type is not known, and its binders with their types and classes. Exit code 1 when a node is not
-typed or lowering does not give back the elaborated program. -/
-def tir (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
-  match parseProgram src with
-  | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
-  | .ok p => match Frontend.Elab.tirReport p with
-    | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
-    | .ok (lines, ok) =>
-      for l in lines do IO.println l
-      if ok then return 0
-      IO.eprintln s!"{file}: the typed IR has untyped nodes, or does not lower to the program"
-      return 1
 
 /-- Print the erasure of `file`'s checked `main`. -/
 def erase (file : String) : IO UInt32 := do
@@ -385,7 +369,6 @@ def main (argv : List String) : IO UInt32 := do
     | none => IO.eprintln "usage: bcc tailcalls <n>"; return 2
   | ["trusted", file] => trusted file
   | ["desugar", file] => desugar file
-  | ["tir", file] => tir file
   | ["erase", file] => erase file
   | [cmd, file] =>
     if cmd != "parse" && cmd != "print" && cmd != "check" then
@@ -415,5 +398,5 @@ def main (argv : List String) : IO UInt32 := do
         IO.println s!"{file}: ok, {p.decls.length} declarations"
         return 0
   | _ =>
-    IO.eprintln "usage: bcc (parse | print | check | run | trusted | desugar | tir | erase | interp [--stage S]) <file>\n       bcc compile <file> -o <out.wat>"
+    IO.eprintln "usage: bcc (parse | print | check | run | trusted | desugar | erase | interp [--stage S]) <file>\n       bcc compile <file> -o <out.wat>"
     return 2

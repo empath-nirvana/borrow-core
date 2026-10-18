@@ -41,14 +41,13 @@ def wasmtimeArgs : Array String :=
 /-- The fuel of every interpreter. -/
 def runFuel : Nat := 100000000
 
-/-- A checked program: the elaborated program the checker checked, `main`, and its capabilities
-if it has any; `exits` when the `main` is served `Fail[DivError]` by `main_div_error`, so that its
-value `inr ()` is an exit status (SPEC §39). -/
+/-- A checked program: the elaborated program the checker checked, `main` (its typed term, and
+whether it is served `Fail[DivError]` by `main_div_error`, SPEC §39), and its capabilities if it
+has any. Every stage below takes it, so a command checks its program once. -/
 structure CheckedProg where
   prog : Frontend.Program
   main : Frontend.Check.Checked
   io : Option Frontend.Check.IOMain
-  exits : Bool := false
 
 /-- Parse and check `src`; a `main` with externs must be a standard I/O program (SPEC §11). -/
 def checkedOf (file src : String) : Except String CheckedProg := do
@@ -60,7 +59,7 @@ def checkedOf (file src : String) : Except String CheckedProg := do
     | .error e => throw s!"{file}:{e.render}"
   let some c := r.main | throw s!"{file}: no `main`"
   match Frontend.Check.ioMainOf r.el.prog c with
-  | .ok io => pure ⟨r.el.prog, c, io, r.el.exits⟩
+  | .ok io => pure ⟨r.el.prog, c, io⟩
   | .error e => throw s!"{file}: {e}"
 
 /-- The host implementation of each extern, in declaration order. -/
@@ -77,11 +76,15 @@ def extImpls (m : Frontend.Check.IOMain) : Except String (List Clos.ExtImpl) :=
     | .harness => throw s!"extern `{x.name}` is the model's harness and is not compiled"
 
 /-- The program reads standard input. -/
-def readsInput (file src : String) : Bool :=
-  match checkedOf file src with
-  | .ok k => match k.io with
-    | some m => m.caps.any (·.name == "stdin")
-    | none => false
+def CheckedProg.readsInput (k : CheckedProg) : Bool :=
+  match k.io with
+  | some m => m.caps.any (·.name == "stdin")
+  | none => false
+
+/-- The checked program, if it checks, reads standard input. -/
+def readsInput (k : Except String CheckedProg) : Bool :=
+  match k with
+  | .ok k => k.readsInput
   | .error _ => false
 
 /-- A converted program with its effects lowered and its codata collapsed, and its layout types
@@ -94,26 +97,40 @@ def lowerEffects (p : Clos.Prog) : Except String (Clos.Prog × Option Clos.Types
   let r' := (← (← p.capture (wrapAnswers := true)).unwind).collapseT
   pure (if r'.2.isSome then r' else r)
 
-/-- The closure IR, and its layout types when collapsing found them. -/
-def closTypesOf (file src : String) : Except String (Clos.Prog × Option Clos.Types) := do
-  let k ← checkedOf file src
+/-- The closure IR of a checked program, and its layout types when collapsing found them. -/
+def CheckedProg.closTypes (k : CheckedProg) : Except String (Clos.Prog × Option Clos.Types) := do
   let p ← match k.io with
     | none => Clos.convert k.main.e
     | some m => Clos.convertMain (← extImpls m) m.loopB.isSome k.main.e
   let (p, T) ← lowerEffects p
-  pure ({ p with exits := k.exits }, T)
+  pure ({ p with exits := k.main.exits }, T)
 
-def closOf (file src : String) : Except String Clos.Prog := return (← closTypesOf file src).1
+/-- The closure IR of a checked program. -/
+def CheckedProg.clos (k : CheckedProg) : Except String Clos.Prog := return (← k.closTypes).1
 
 /-- The flat IR; with `counts`, the entry writes the run's counts after the report. -/
-def flatOf (file src : String) (counts : Bool := false) : Except String Flat.Prog := do
-  let (p, T) ← closTypesOf file src
+def CheckedProg.flat (k : CheckedProg) (counts : Bool := false) : Except String Flat.Prog := do
+  let (p, T) ← k.closTypes
   Flat.lower p counts T
 
 /-- The program as WAT; with `counts`, it counts dispatched calls and writes the run's counts after
 the report. -/
+def CheckedProg.wat (k : CheckedProg) (counts : Bool := false) : Except String String := do
+  pure (Wasm.printModule (Wasm.lowerProg (← k.flat counts) counts))
+
+/-- The closure IR of a source file, and its layout types. -/
+def closTypesOf (file src : String) : Except String (Clos.Prog × Option Clos.Types) := do
+  (← checkedOf file src).closTypes
+
+def closOf (file src : String) : Except String Clos.Prog := return (← closTypesOf file src).1
+
+/-- The flat IR of a source file. -/
+def flatOf (file src : String) (counts : Bool := false) : Except String Flat.Prog := do
+  (← checkedOf file src).flat counts
+
+/-- A source file as WAT. -/
 def compileWat (file src : String) (counts : Bool := false) : Except String String := do
-  pure (Wasm.printModule (Wasm.lowerProg (← flatOf file src counts) counts))
+  (← checkedOf file src).wat counts
 
 /-! ### The native target  `[spec §40]`
 
@@ -126,8 +143,12 @@ def nativeTriple : String := System.Platform.target
 
 /-- The program as LLVM IR; with `counts`, it counts dispatched calls and copies and writes the
 run's counts after the report. -/
+def CheckedProg.ll (k : CheckedProg) (counts : Bool := false) : Except String String := do
+  Native.printProg (← k.flat counts) nativeTriple counts
+
+/-- A source file as LLVM IR. -/
 def compileLL (file src : String) (counts : Bool := false) : Except String String := do
-  Native.printProg (← flatOf file src counts) nativeTriple counts
+  (← checkedOf file src).ll counts
 
 /-- The flags `clang` builds a native program with. -/
 def clangArgs : Array String := #["-O2", "-w", "-pthread"]
@@ -280,29 +301,29 @@ def ioRunOf (file : String) (k : CheckedProg) (m : Frontend.Check.IOMain)
   | .ok r => pure r
   | .error e => throw s!"{file}: {e}"
 
-/-- A stage's output on a source file, with `input` as standard input and `args` as the
-arguments' stream (each argument followed by `0`, SPEC §34). -/
-def interpStage (stage file src : String) (input : List UInt8) (args : List UInt8 := []) :
-    Except String Output := do
+/-- A stage's output on a source file, checked (`checkedOf file src`), with `input` as standard
+input and `args` as the arguments' stream (each argument followed by `0`, SPEC §34). -/
+def interpStage (stage file : String) (k : Except String CheckedProg) (input : List UInt8)
+    (args : List UInt8 := []) : Except String Output := do
   match stage with
   | "source" =>
-    let k ← checkedOf file src
+    let k ← k
     match k.io with
     | none => interpSource runFuel k.main.e
     | some m =>
       let r ← ioRunOf file k m args
-      if r.loops then interpIOLoop runFuel (r.expr input) k.exits
-      else interpIO runFuel (r.expr input) k.exits
-  | "clos" => Clos.interp runFuel (← closOf file src) input args
-  | "flat" => Flat.interp runFuel (← flatOf file src) input args
-  | "flat-counts" => Flat.interp runFuel (← flatOf file src true) input args
+      if r.loops then interpIOLoop runFuel (r.expr input) k.main.exits
+      else interpIO runFuel (r.expr input) k.main.exits
+  | "clos" => Clos.interp runFuel (← (← k).clos) input args
+  | "flat" => Flat.interp runFuel (← (← k).flat) input args
+  | "flat-counts" => Flat.interp runFuel (← (← k).flat true) input args
   | _ => throw s!"unknown stage `{stage}`"
 
-/-- The counting build at the flat IR, with `input` and `args` as `interpStage`'s: its output
-and its memory operations (`Flat.interpMem`). -/
-def flatMemCounts (file src : String) (input : List UInt8) (args : List UInt8 := []) :
+/-- The counting build at the flat IR of a checked program, with `input` and `args` as
+`interpStage`'s: its output and its memory operations (`Flat.interpMem`). -/
+def flatMemCounts (k : CheckedProg) (input : List UInt8) (args : List UInt8 := []) :
     Except String (Output × Flat.MemCounts) := do
-  Flat.interpMem runFuel (← flatOf file src true) input args
+  Flat.interpMem runFuel (← k.flat true) input args
 
 /-! ### The falsifier
 
@@ -317,16 +338,15 @@ def falsifyOpts : String → Except String Falsify.Opts
   | "tags" => pure ⟨.fresh, true⟩
   | m => throw s!"unknown check `{m}` (expected `fresh` or `tags`, or `--alloc least`)"
 
-/-- The source stage of a source file, on the falsifier's machine under `o`. -/
-def interpChecked (o : Falsify.Opts) (file src : String) (input : List UInt8)
+/-- The source stage of a checked program, on the falsifier's machine under `o`. -/
+def interpChecked (o : Falsify.Opts) (file : String) (k : CheckedProg) (input : List UInt8)
     (args : List UInt8 := []) : Except String (Output × String) := do
-  let k ← checkedOf file src
   match k.io with
   | none => Falsify.interpSource o runFuel k.main.e
   | some m =>
     let r ← ioRunOf file k m args
-    if r.loops then Falsify.interpIOLoop o runFuel (r.expr input) k.exits
-    else Falsify.interpIO o runFuel (r.expr input) k.exits
+    if r.loops then Falsify.interpIOLoop o runFuel (r.expr input) k.main.exits
+    else Falsify.interpIO o runFuel (r.expr input) k.main.exits
 
 /-- A closed term on the falsifier's machine under `o`. -/
 def interpCheckedExpr (o : Falsify.Opts) (e : BoCa.Expr) : Except String (Output × String) :=

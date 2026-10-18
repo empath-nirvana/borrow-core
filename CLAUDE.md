@@ -60,7 +60,7 @@ without it.
 
 Goldens are the oracle. Every corpus program has a `<name>.out` and every book `bc` block an
 `-- answer:`: the output of `Support`'s interpreter (`bcc interp`), the reference semantics.
-`make gate` checks the build, hygiene, axioms, parse, check, sugar, typed IR, kernel programs,
+`make gate` checks the build, hygiene, axioms, parse, check, sugar, kernel programs,
 counts, `live 0`, and the clos, flat and wasm stages against every golden; it runs the
 interpreter itself (minutes on the largest programs) only on the corpus programs and book blocks
 that are new or changed since the merge base with origin/main. `make gate-full`

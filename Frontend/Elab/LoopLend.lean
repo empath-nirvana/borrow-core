@@ -240,7 +240,7 @@ def Env.lendCall (E : Env) : Comp → LM Comp
 where
   /-- `W` with its one occurrence of the variable `b` (at a tuple position) replaced by `L`. -/
   replaceOnce (b : String) (L : Val) : Val → Option Val
-    | .var _ y => if y == b then some L else none
+    | .var _ y | .clone _ y => if y == b then some L else none
     | .pair sp V W =>
       match mentionsV b V, mentionsV b W with
       | true, false => (replaceOnce b L V).map (.pair sp · W)

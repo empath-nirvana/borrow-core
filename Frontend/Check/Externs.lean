@@ -440,7 +440,7 @@ theorem IORun.loop_every_run (r : IORun) (hp : r.c.pins = []) (hl : r.loops = tr
       ∃ ls δ, BoCa.Fig16.LogRel.Core.vCE none true (.sum r.R r.R') ls δ v
         BoCa.Fig16.PMap.empty := by
   have h := r.c.deriv hp
-  rw [r.hC, ioType, hl, r.he] at h
+  rw [r.hC, ioType, hl, show r.c.t.erase = _ from r.he] at h
   exact io_loop_every_run h r.hR r.hR' r.hγ inp n hs
 
 end

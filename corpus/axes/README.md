@@ -18,7 +18,7 @@ naturally write that the language cannot express yet, one per current limit.
 and runs at every stage (`bcc interp`, the closure and flat IRs, and wasm under wasmtime) with
 the same answer and `live 0`, against its golden `<name>.out` where it has one, and within its
 line in `corpus/counts.expected` (`scripts/parse-corpus.sh`, `check-corpus.sh`,
-`compile-corpus.sh`, `check-elab.sh`). Every `corpus/pending/*.bc` names its blocker on a
+`compile-corpus.sh`). Every `corpus/pending/*.bc` names its blocker on a
 `-- pending:` line and records today's error on its `-- now:` line; `scripts/check-corpus.sh`
 checks that it still fails with exactly that error. When a feature lands and a pending program
 checks, the gate fails with "checks now: move it into the corpus with its golden output". The

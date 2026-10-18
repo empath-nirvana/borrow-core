@@ -390,7 +390,7 @@ def convC (E : Env) (sp : Span) (C : CCTy) : (Σ D : CCTy, Res Δ T (.comp D)) �
     | some (S', A'), some (S, _) =>
       if hD : effOf S' A' = D then
         if hC : effOf S A' = C then
-          if hle : rowLeB S' S = true then pure (hC ▸ rEffSub hle (hD ▸ r))
+          if hle : rowLeB S' S = true then pure (hC ▸ rEffSub (at_ sp) hle (hD ▸ r))
           else throw ⟨sp, s!"type mismatch: expected `{E.ppC C}`, but this has type " ++
             s!"`{E.ppC D}`: its row `{ppRow E S'}` is not within `{ppRow E S}`"⟩
         else throw (mismatch sp (E.ppC C) (E.ppC D))
@@ -409,9 +409,9 @@ def popD {A : CVTy} {P : List Bool → Prop} (sp : Span) (F : Fam (A :: T) P) :
   | some F' => pure F'
   | none => throw ⟨sp, "internal error: a dead binder is used"⟩
 
-def withPop {j : Jdg} {e : CExpr} {s : CRow} {p : Pins} (sp : Span)
-    (F : Fam (withT T) (fun L => TiedDer p s Δ (mkCtx (withT T) L) e j)) :
-    Except Error (Fam T (fun L => TiedDer p s Δ (BoCa.Fig16.LogRel.Core.withCtx (mkCtx T L)) e j)) :=
+def withPop {j : Jdg} {t : TExpr} {s : CRow} {p : Pins} (sp : Span)
+    (F : Fam (withT T) (fun L => TTied p s Δ (mkCtx (withT T) L) t j)) :
+    Except Error (Fam T (fun L => TTied p s Δ (BoCa.Fig16.LogRel.Core.withCtx (mkCtx T L)) t j)) :=
   match popWith F with
   | some F' => pure F'
   | none => throw ⟨sp, "internal error: a dead binder is used"⟩
@@ -476,7 +476,7 @@ variable {Δ : LifeCtx} {T : List CVTy}
 mutual
 /-- `x` occurs free in a value-judged expression. -/
 def mentionsV (x : String) : Val → Bool
-  | .var _ y => y == x
+  | .var _ y | .clone _ y => y == x
   | .defApp .. | .unit _ | .const .. | .sugar .. => false
   | .pair _ V W | .app _ V W => mentionsV x V || mentionsV x W
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
@@ -529,7 +529,7 @@ def dropOne {C : CCTy} (sp : Span) (i : Nat) (r : Res Δ T (.comp C)) :
     if hA : hasDtorB A = true then
       if hE : (BoCa.Fig16.LogRel.Core.dtorE A).effFree = true then
         if h : overlapOK T (oneL T i) r.F.u = true then
-          pure (rDrop i A hi (hasDtorB_sound hA) hE r h)
+          pure (rDrop (at_ sp) (at_ sp) i A hi (hasDtorB_sound hA) hE r h)
         else throw ⟨sp, "internal error: a dropped slot is used"⟩
       else throw ⟨sp, "internal error: a destructor performs or handles an operation"⟩
     else throw ⟨sp, "internal error: an owed slot has no destructor"⟩
@@ -547,7 +547,7 @@ end
 def boxIt {A : CVTy} (E : Env) (T : List CVTy) (sp : Span) (a : CLife) (r : Res Δ T (.val A)) :
     Except Error (Res Δ T (.val (.box a A))) :=
   if hwf : a.wf Δ = true then
-    if hs : usedSat (outlivesB Δ a) T r.F.u = true then pure (rBoxI a hwf r hs)
+    if hs : usedSat (outlivesB Δ a) T r.F.u = true then pure (rBoxI (at_ sp) a hwf r hs)
     else match firstBad (outlivesB Δ a) T r.F.u with
       | some i => throw ⟨sp, s!"`boxed[{E.ppL a}]`: {E.slotName i}, of type `{E.slotTy T i}`, " ++
           s!"is used inside, and it cannot be shown to outlive `{E.ppL a}`"⟩
@@ -562,7 +562,7 @@ def appIt {A : CVTy} {C : CCTy} (E : Env) (T : List CVTy) (sp : Span) (x : Ident
       "in scope; bind it first"⟩
   | some i =>
     if hi : T[i]? = some A then
-      if h : overlapOK T rM.F.u (oneL T i) = true then pure (rApp rM i hi h)
+      if h : overlapOK T rM.F.u (oneL T i) = true then pure (rApp { sp, name := x.name } rM i hi h)
       else throw (splitErr E T sp rM.F.u (oneL T i))
     else throw (mismatch x.span (E.ppV A) (E.slotTy T i))
 
@@ -572,7 +572,7 @@ def withIt {C D : CCTy} (E : Env) (T : List CVTy) (sp : Span) (r₁ : Res Δ (wi
   let F₁ ← withPop sp r₁.F
   let F₂ ← withPop sp r₂.F
   if s₁ : subL F₁.u (orL F₂.u F₂.w) = true then
-    if s₂ : subL F₂.u (orL F₁.u F₁.w) = true then pure (rWith r₁.e r₂.e (F₁.merge F₂ s₁ s₂))
+    if s₂ : subL F₂.u (orL F₁.u F₁.w) = true then pure (rWith (at_ sp) r₁.t r₂.t (F₁.merge F₂ s₁ s₂))
     else throw (mergeErr E T sp "the first component" "the second" "in this `<M, N>`, "
       F₁.u F₁.w F₂.u F₂.w)
   else throw (mergeErr E T sp "the first component" "the second" "in this `<M, N>`, "
@@ -587,7 +587,7 @@ def caseIt {A B : CVTy} {C : CCTy} (E : Env) (T : List CVTy) (sp : Span) (x y : 
   if s₁ : subL F₁.u (orL F₂.u F₂.w) = true then
     if s₂ : subL F₂.u (orL F₁.u F₁.w) = true then
       let F := F₁.merge F₂ s₁ s₂
-      if h : overlapOK T rV.F.u F.u = true then pure (rSumE rV F h)
+      if h : overlapOK T rV.F.u F.u = true then pure (rSumE (at_ sp) rV F h)
       else throw (splitErr E T sp rV.F.u F.u)
     else throw (mergeErr E T sp "the `inl` arm" "the `inr` arm" "in this `case`, " F₁.u F₁.w F₂.u F₂.w)
   else throw (mergeErr E T sp "the `inl` arm" "the `inr` arm" "in this `case`, " F₁.u F₁.w F₂.u F₂.w)
@@ -599,7 +599,7 @@ def funIt {v : LifeVar} {bl : CLife} {C : CCTy} (E : Env) (T : List CVTy) (sp : 
   if hbx : bl.mentions v = false then
     if hΔx : boundsAvoidB Δ v = true then
       let F ← popD sp rM.F
-      if hs : usedSat (fun A => !vfreeB v A) T F.u = true then pure (rAllI hbx hΔx F hs)
+      if hs : usedSat (fun A => !vfreeB v A) T F.u = true then pure (rAllI (at_ sp) hbx hΔx F hs)
       else match firstBad (fun A => !vfreeB v A) T F.u with
         | some i => throw ⟨sp, s!"`Fun '{name}`: {E.slotName i}, of type `{E.slotTy T i}`, is " ++
             s!"used inside, and its type mentions `'{name}` ({ppLVar v})"⟩
@@ -609,33 +609,33 @@ def funIt {v : LifeVar} {bl : CLife} {C : CCTy} (E : Env) (T : List CVTy) (sp : 
 
 /-- `fun (x : 1) -> M` at `1 -o F_Σ B` whose body does not use `x`: `[λ-dead]`, the binder's
 slot closed dead.  `[spec §26]` -/
-def lamDeadIt {S : CRow} {B : CVTy} (rM : Res Δ (.unit :: T) (.comp (effOf S B))) :
+def lamDeadIt (sp : Span) {S : CRow} {B : CVTy} (rM : Res Δ (.unit :: T) (.comp (effOf S B))) :
     Option (Res Δ T (.comp (.arr .unit (effOf S B)))) :=
-  rM.F.popDead.map rLamDead
+  rM.F.popDead.map (rLamDead (at_ sp))
 
 /-- `fun (x : A) -> M`, `M` checked under the binder's slot: `[λ-dead]` (SPEC §26) when `A` is `1`,
 `M`'s type is a returner chain `F_Σ B` and `M` does not use `x`; `[λ]` otherwise, the binder's
 slot closed live. -/
-def lamIt {A : CVTy} {C : CCTy} (E : Env) (x : Ident) (rM : Res Δ (A :: T) (.comp C)) :
+def lamIt {A : CVTy} {C : CCTy} (E : Env) (sp : Span) (x : Ident) (rM : Res Δ (A :: T) (.comp C)) :
     Except Error (Res Δ T (.comp (.arr A C))) :=
   match A, rM with
   | .unit, rM =>
     match effRow? C with
     | some (S, B) =>
       if hC : effOf S B = C then
-        match lamDeadIt (hC ▸ rM) with
+        match lamDeadIt sp (hC ▸ rM) with
         | some r => pure (hC ▸ r)
-        | none => rLam <$> popL E x.span x.name rM.F
-      else rLam <$> popL E x.span x.name rM.F
-    | none => rLam <$> popL E x.span x.name rM.F
-  | _, rM => rLam <$> popL E x.span x.name rM.F
+        | none => rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
+      else rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
+    | none => rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
+  | _, rM => rLam { sp, name := x.name } <$> popL E x.span x.name rM.F
 
 /-! ### Effectful bindings  `[spec §19]` -/
 
 /-- A computation at the row `S′`, at the row `S` by `[sub]`. -/
 def liftRow (E : Env) (sp : Span) {S' : CRow} {A : CVTy} (S : CRow)
     (r : Res Δ T (.comp (effOf S' A))) : Except Error (Res Δ T (.comp (effOf S A))) :=
-  if hle : rowLeB S' S = true then pure (rEffSub hle r)
+  if hle : rowLeB S' S = true then pure (rEffSub (at_ sp) hle r)
   else throw ⟨sp, s!"this computation performs the operations `{ppRow E S'}`, which are not " ++
     s!"within the row `{ppRow E S}` here"⟩
 
@@ -658,7 +658,7 @@ def finalOf (E : Env) (sp : Span) (_S : CRow) (u : List Bool) :
     Except Error (Res Δ (.unit :: T) (.comp (effOf [] .unit))) := do
   let idx := (List.range T.length).filter fun i =>
     u.getD i false && !((T[i]?.map (·.persistent)).getD true)
-  let r0 : Res Δ (.unit :: T) (.comp (.ret .unit)) := rRet rUnit
+  let r0 : Res Δ (.unit :: T) (.comp (.ret .unit)) := rRet (at_ sp) (rUnit (at_ sp))
   let r ← idx.foldlM (init := r0) fun r i => do
     match T[i]? with
     | some A =>
@@ -670,9 +670,9 @@ def finalOf (E : Env) (sp : Span) (_S : CRow) (u : List Bool) :
   pure r
 
 /-- `[then]` at the row `S`: `N` (its binder closed) and the finaliser `D` at one context. -/
-def thenIt (E : Env) (sp : Span) {S : CRow} {A B : CVTy} {eN : CExpr} {sN : CRow} {pN : Pins}
+def thenIt (E : Env) (sp : Span) {S : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow} {pN : Pins}
     (rM : Res Δ T (.comp (effOf S A)))
-    (FN : Fam T (fun L => TiedDer pN sN Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B))))
+    (FN : Fam T (fun L => TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B))))
     (rD : Res Δ (.unit :: T) (.comp (effOf [] .unit))) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
   if hNZ : Row.nzB S = true then
@@ -681,8 +681,8 @@ def thenIt (E : Env) (sp : Span) {S : CRow} {A B : CVTy} {eN : CExpr} {sN : CRow
       if s₁ : subL FN.u (orL FD.u FD.w) = true then
         if s₂ : subL FD.u (orL FN.u FN.w) = true then
           let F := FN.merge FD s₁ s₂
-          let F' : Fam T (fun L => (TiedDer pN sN Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B)) ∧
-              TiedDer rD.pins rD.sigs Δ (mkCtx (.unit :: T) (false :: L)) rD.e
+          let F' : Fam T (fun L => (TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B)) ∧
+              TTied rD.pins rD.sigs Δ (mkCtx (.unit :: T) (false :: L)) rD.t
                 (.comp (effOf [] .unit))) ∧
               (S.UnrD → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T L))) ←
             if hu : Row.unrDB S = true then
@@ -695,7 +695,7 @@ def thenIt (E : Env) (sp : Span) {S : CRow} {A B : CVTy} {eN : CExpr} {sN : CRow
                 | none => throw ⟨sp, "internal error: an unrestricted row"⟩
             else pure (F.map fun _ h => ⟨h, fun hU => absurd (Row.unrDB_iff.mpr hU) (by simp [hu])⟩)
           if h : overlapOK T rM.F.u F'.u = true then
-            pure (rEffThen (Row.nzB_sound hNZ) (Row.uniqB_sound hUq) rM F' h)
+            pure (rEffThen (at_ sp) (Row.nzB_sound hNZ) (Row.uniqB_sound hUq) rM F' h)
           else throw (splitErr E T sp rM.F.u F'.u)
         else throw (mergeErr E T sp "the finaliser" "the rest" "after this computation, "
           FD.u FD.w FN.u FN.w)
@@ -725,9 +725,9 @@ def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVT
             rcases this.2 with h' | h'
             · exact absurd (Row.unrB_iff.mpr hU) (by simp [h'])
             · exact h')⟩ :
-          TiedDer rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.e (.comp (effOf S B)) ∧
+          TTied rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.t (.comp (effOf S B)) ∧
             (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
-      if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet rM FN' h)
+      if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet (at_ sp) rM FN' h)
       else throw (splitErr E T sp rM.F.u FN'.u)
     else
       let rD ← finalOf E sp S FN.u
@@ -736,9 +736,9 @@ def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVT
     let FN' := FN.map fun _ h =>
       (⟨h, fun hW => absurd (Row.weakB_iff.mpr hW) (by simp [hw]),
         fun hU => absurd (Row.weakB_iff.mpr (Row.weak_of_unr hU)) (by simp [hw])⟩ :
-        TiedDer rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.e (.comp (effOf S B)) ∧
+        TTied rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.t (.comp (effOf S B)) ∧
           (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
-    if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet rM FN' h)
+    if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet (at_ sp) rM FN' h)
     else throw (splitErr E T sp rM.F.u FN'.u)
 
 end

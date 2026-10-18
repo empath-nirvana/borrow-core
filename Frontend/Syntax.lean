@@ -467,6 +467,9 @@ mutual
 inductive Val where
   /-- A lower-case name: a term variable or a `def` without arguments. -/
   | var (sp : Span) (x : String)
+  /-- `clone(x)`: the variable `x`, its use written as an explicit copy (SPEC §10): checked as
+  `x`, and its typed node records that the program writes the copy. -/
+  | clone (sp : Span) (x : String)
   /-- `name[A, …]`: a `def` at value-type arguments. -/
   | defApp (sp : Span) (name : String) (args : List VTy)
   | unit (sp : Span)
@@ -802,6 +805,7 @@ def VSugar.strip : VSugar → VSugar
 mutual
 def Val.strip : Val → Val
   | .var _ x => .var .none x
+  | .clone _ x => .clone .none x
   | .defApp _ n args => .defApp .none n (args.map VTy.strip)
   | .unit _ => .unit .none
   | .pair _ V W => .pair .none V.strip W.strip
@@ -890,7 +894,7 @@ def Program.strip (p : Program) : Program := ⟨p.decls.map Decl.strip⟩
 
 /-- The span of a value-judged expression. -/
 def Val.span : Val → Span
-  | .var sp _ | .defApp sp _ _ | .unit sp | .pair sp _ _ | .inl sp _ | .inr sp _
+  | .var sp _ | .clone sp _ | .defApp sp _ _ | .unit sp | .pair sp _ _ | .inl sp _ | .inr sp _
   | .thunk sp _ | .thunkv sp _ | .bangThunk sp _ | .bangThunkv sp _ | .unbang sp _
   | .boxed sp _ _ | .unbox sp _ | .sub sp _ _ | .roll sp _ | .unroll sp _ | .run sp _
   | .app sp _ _ | .inst sp _ _ | .ascribe sp _ _ | .const sp _ | .shorten sp _ _ _ _

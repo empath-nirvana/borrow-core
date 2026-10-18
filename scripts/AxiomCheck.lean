@@ -4,6 +4,7 @@ import Examples
 import Core
 import Frontend.Check.Externs
 import Frontend.Check.Program
+import Frontend.Check.TFacts
 /-! The theorems `SPEC.md` names, with their axioms. -/
 #print axioms BoCa.Fig16.LogRel.Typed.fundamentalProperty
 #print axioms BoCa.Fig16.LogRel.Typed.adequacy
@@ -288,6 +289,17 @@ import Frontend.Check.Program
 #print axioms Frontend.Check.checkProgram_tied
 #print axioms Frontend.Check.checkProgram_tiedAt
 #print axioms Frontend.Check.checkProgram_sound
+#print axioms Frontend.Check.checkProgram_typed
+#print axioms Frontend.Check.checkProgram_typedAt
+#print axioms Frontend.Check.TTied.tied
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.erase
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.erase
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.toP
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.jdg_eq
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.jdg_eq
+#print axioms BoCa.Fig16.LogRel.Core.Check.TExpr.isLam_sound
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.split_mask_free
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.withbor2_witness_free
 -- SPEC §19, *Typing*: the names a run raises, and the errors a cancel keeps
 #print axioms BoCa.Fig16.LogRel.Core.raiseOK_head
 #print axioms BoCa.Fig16.LogRel.Core.raiseOK_step1

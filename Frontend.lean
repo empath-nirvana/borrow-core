@@ -8,10 +8,15 @@ import Frontend.Check.Decide
 import Frontend.Check.Fam
 import Frontend.Check.Elab
 import Frontend.Check.Tied
+import Frontend.Check.TExpr
+import Frontend.Check.TDerives
+import Frontend.Check.TTied
+import Frontend.Check.TFacts
 import Frontend.Check.Rules
 import Frontend.Check.Steps
 import Frontend.Check.Consts
 import Frontend.Check.Checker
+import Frontend.Check.Copies
 import Frontend.Check.Program
 import Frontend.Check.CrossCheck
 import Frontend.Check.Externs
@@ -22,5 +27,4 @@ import Frontend.Elab.Tir
 import Frontend.Elab.Infer
 import Frontend.Elab.Meta
 import Frontend.Elab.Pipeline
-import Frontend.Elab.Copies
 import Frontend.Elab.LoopLend

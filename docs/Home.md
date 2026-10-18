@@ -20,7 +20,7 @@ below are design and research notes.
 - [Surface syntax](surface-cbpv.md) — draft 0 of the surface: CBPV at the surface, with sugar only
   for shifts that cancel (#54).
 - [Typed elaboration](typed-elaboration.md) — how the surface is elaborated to core on inferred
-  types, through the typed IR that `bcc tir` prints.
+  types.
 - [Properties worth proving](dream-properties.md) — the list of candidate theorems, including
   "can run useful programs".
 - [`Core/README.md`](../Core/README.md), [`Frontend/README.md`](../Frontend/README.md),

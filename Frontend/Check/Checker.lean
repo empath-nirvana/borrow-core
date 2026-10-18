@@ -34,7 +34,7 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
       match lookupVar x E.vars with
       | some i =>
         match h : T[i]? with
-        | some A => pure ⟨A, rVar i A h⟩
+        | some A => pure ⟨A, rVar { sp, name := x } i A h⟩
         | none => err sp "internal error: variable out of range"
       | none =>
         match E.scope.findDef x with
@@ -50,6 +50,14 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
             let r ← tryCatch (chkV n E' Δ T d.body A) (fun e => throw (inDef x sp e))
             pure ⟨A, r⟩
           else err sp s!"`{x}` takes {d.params.length} type argument(s): write `{x}[…]`"
+    | .clone sp x =>
+      -- `clone(x)`: the variable, its node recording the written copy (SPEC §10).
+      match lookupVar x E.vars with
+      | some i =>
+        match h : T[i]? with
+        | some A => pure ⟨A, rVar { sp, name := x, clone := true } i A h⟩
+        | none => err sp "internal error: variable out of range"
+      | none => synV n E Δ T (.var sp x)
     | .defApp sp x args =>
       match E.scope.findDef x with
       | none => err sp s!"unknown definition `{x}`"
@@ -61,46 +69,46 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
           let r ← tryCatch (chkV n E' Δ T d.body A) (fun e => throw (inDef x sp e))
           pure ⟨A, r⟩
         else err sp s!"`{x}` takes {d.params.length} type argument(s), not {args.length}"
-    | .unit _ => pure ⟨.unit, rUnit⟩
+    | .unit sp => pure ⟨.unit, rUnit (at_ sp)⟩
     | .pair sp V W => do
       let ⟨_, r₁⟩ ← synV n E Δ T V
       let ⟨_, r₂⟩ ← synV n E Δ T W
-      if h : overlapOK T r₁.F.u r₂.F.u = true then pure ⟨_, rPair r₁ r₂ h⟩
+      if h : overlapOK T r₁.F.u r₂.F.u = true then pure ⟨_, rPair (at_ sp) r₁ r₂ h⟩
       else throw (splitErr E T sp r₁.F.u r₂.F.u)
     | .inl sp _ => err sp "the type of `inl V` cannot be synthesized: ascribe it, `(inl V : A + B)`"
     | .inr sp _ => err sp "the type of `inr V` cannot be synthesized: ascribe it, `(inr V : A + B)`"
     | .thunk sp M => do
       let ⟨C, r⟩ ← synC n (E.push none) Δ (.unit :: T) M
       match C, r with
-      | .ret _, r => match rThunkF r with
+      | .ret _, r => match rThunkF (at_ sp) r with
         | some r' => pure ⟨_, r'⟩
         | none => err sp "internal error: a dead binder is used"
       | C, _ => err sp s!"`thunk M` needs `M : F A`, but `M : {E.ppC C}`; use `thunkv`"
     | .thunkv sp N => do
       let ⟨C, r⟩ ← synC n E Δ T N
       if hC : C.isRet = false then
-        match rThunkV hC r with
+        match rThunkV (at_ sp) hC r with
         | some r' => pure ⟨_, r'⟩
         | none => err sp thunkvLam
       else err sp s!"`thunkv N` needs `N` not of type `F A`, but `N : {E.ppC C}`; use `thunk`"
     | .bangThunk sp M => do
       let ⟨C, r⟩ ← synC n (E.push none) Δ (.unit :: T) M
       match C, r with
-      | .ret _, r => match rBangThunkF r with
+      | .ret _, r => match rBangThunkF (at_ sp) r with
         | .ok r' => pure ⟨_, r'⟩
         | .error i => throw (notBang E T sp i)
       | C, _ => err sp s!"`!thunk M` needs `M : F A`, but `M : {E.ppC C}`; use `!thunkv`"
     | .bangThunkv sp N => do
       let ⟨C, r⟩ ← synC n E Δ T N
       if hC : C.isRet = false then
-        match rBangThunkV hC r with
+        match rBangThunkV (at_ sp) hC r with
         | .ok r' => pure ⟨_, r'⟩
         | .error i => throw (notBang E T sp i)
       else err sp s!"`!thunkv N` needs `N` not of type `F A`, but `N : {E.ppC C}`; use `!thunk`"
     | .unbang sp V => do
       let ⟨A, r⟩ ← synV n E Δ T V
       match A, r with
-      | .bang _, r => pure ⟨_, rBangE r⟩
+      | .bang _, r => pure ⟨_, rBangE (at_ sp) r⟩
       | A, _ => err sp s!"`unbang V` needs `V : !A`, but `V : {E.ppV A}`"
     | .boxed sp a V => do
       let al ← E.elabL Δ a
@@ -109,36 +117,36 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
     | .unbox sp V => do
       let ⟨A, r⟩ ← synV n E Δ T V
       match A, r with
-      | .box _ _, r => pure ⟨_, rBoxE r⟩
+      | .box _ _, r => pure ⟨_, rBoxE (at_ sp) r⟩
       | A, _ => err sp s!"`unbox V` needs `V : box @ A`, but `V : {E.ppV A}`"
     | .sub sp V a => do
       let al ← E.elabL Δ a
       let ⟨A, r⟩ ← synV n E Δ T V
       match A, r with
       | .imm b _, r =>
-        if h : leB Δ al b = true then pure ⟨_, rImmSub al h r⟩
+        if h : leB Δ al b = true then pure ⟨_, rImmSub (at_ sp) al h r⟩
         else err sp s!"cannot show `{E.ppL al}` ⊑ `{E.ppL b}` from the lifetime context"
       | .mut b _, r =>
-        if h : leB Δ al b = true then pure ⟨_, rMutSub al h r⟩
+        if h : leB Δ al b = true then pure ⟨_, rMutSub (at_ sp) al h r⟩
         else err sp s!"cannot show `{E.ppL al}` ⊑ `{E.ppL b}` from the lifetime context"
       | A, _ => err sp s!"`(V :> @)` needs `V : imm @ A` or `mut @ A`, but `V : {E.ppV A}`"
     | .roll sp _ => err sp "the type of `roll V` cannot be synthesized: ascribe it, `(roll V : mu X. A)`"
     | .unroll sp V => do
       let ⟨A, r⟩ ← synV n E Δ T V
       match A, r with
-      | .mu _, r => pure ⟨_, rUnroll r⟩
+      | .mu _, r => pure ⟨_, rUnroll (at_ sp) r⟩
       | A, _ => err sp s!"`unroll V` needs `V : mu X. A`, but `V : {E.ppV A}`"
     | .run sp M => do
       let ⟨C, r⟩ ← synC n E Δ T M
       match C, r with
-      | .ret _, r => pure ⟨_, rOfRet r⟩
+      | .ret _, r => pure ⟨_, rOfRet (at_ sp) r⟩
       | C, _ => err sp s!"`run M` needs `M : F A`, but `M : {E.ppC C}`"
     | .app sp V W => do
       let ⟨A, rf⟩ ← synV n E Δ T V
       match A, rf with
       | .thunk (.arr A (.ret _)), rf => do
         let ra ← chkV n E Δ T W A
-        if h : overlapOK T ra.F.u rf.F.u = true then pure ⟨_, rLolliE rf ra h⟩
+        if h : overlapOK T ra.F.u rf.F.u = true then pure ⟨_, rLolliE (at_ sp) rf ra h⟩
         else throw (splitErr E T sp ra.F.u rf.F.u)
       | A, _ => err V.span s!"this is applied, so it must have a type `A => B`, but it has type `{E.ppV A}`"
     | .inst sp V a => do
@@ -146,7 +154,7 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
       let ⟨A, r⟩ ← synV n E Δ T V
       match A, r with
       | .thunk (.all _ b (.ret _)), r =>
-        if h : ltB Δ al b = true then pure ⟨_, rAllEV al h r⟩
+        if h : ltB Δ al b = true then pure ⟨_, rAllEV (at_ sp) al h r⟩
         else err sp s!"cannot show `{E.ppL al}` ⊏ `{E.ppL b}` from the lifetime context"
       | A, _ => err V.span s!"this is instantiated, so it must have a type `all 'x < @. A`, but it has type `{E.ppV A}`"
     | .ascribe _ V A => do
@@ -173,22 +181,22 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
       | .tensor A B => do
         let r₁ ← chkV n E Δ T V A
         let r₂ ← chkV n E Δ T W B
-        if h : overlapOK T r₁.F.u r₂.F.u = true then pure (rPair r₁ r₂ h)
+        if h : overlapOK T r₁.F.u r₂.F.u = true then pure (rPair (at_ sp) r₁ r₂ h)
         else throw (splitErr E T sp r₁.F.u r₂.F.u)
       | A => err sp s!"a pair is checked against `{E.ppV A}`, which is not a `*` type"
     | .inl sp V =>
       match A with
-      | .sum A B => do pure (rInl B (← chkV n E Δ T V A))
+      | .sum A B => do pure (rInl (at_ sp) B (← chkV n E Δ T V A))
       | A => err sp s!"`inl V` is checked against `{E.ppV A}`, which is not a `+` type"
     | .inr sp V =>
       match A with
-      | .sum A B => do pure (rInr A (← chkV n E Δ T V B))
+      | .sum A B => do pure (rInr (at_ sp) A (← chkV n E Δ T V B))
       | A => err sp s!"`inr V` is checked against `{E.ppV A}`, which is not a `+` type"
     | .thunk sp M =>
       match A with
       | .thunk (.ret A) => do
         let r ← chkC n (E.push none) Δ (.unit :: T) M (.ret A)
-        match rThunkF r with
+        match rThunkF (at_ sp) r with
         | some r' => pure r'
         | none => err sp "internal error: a dead binder is used"
       | A => err sp s!"`thunk M` is checked against `{E.ppV A}`, which is not `U (F A)`"
@@ -197,7 +205,7 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
       | .thunk C =>
         if hC : C.isRet = false then do
           let r ← chkC n E Δ T N C
-          match rThunkV hC r with
+          match rThunkV (at_ sp) hC r with
           | some r' => pure r'
           | none => err sp thunkvLam
         else err sp s!"`thunkv N` is checked against `{E.ppV A}`: use `thunk` at `U (F A)`"
@@ -206,7 +214,7 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
       match A with
       | .bang (.thunk (.ret A)) => do
         let r ← chkC n (E.push none) Δ (.unit :: T) M (.ret A)
-        match rBangThunkF r with
+        match rBangThunkF (at_ sp) r with
         | .ok r' => pure r'
         | .error i => throw (notBang E T sp i)
       | A => err sp s!"`!thunk M` is checked against `{E.ppV A}`, which is not `!U (F A)`"
@@ -215,12 +223,12 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
       | .bang (.thunk C) =>
         if hC : C.isRet = false then do
           let r ← chkC n E Δ T N C
-          match rBangThunkV hC r with
+          match rBangThunkV (at_ sp) hC r with
           | .ok r' => pure r'
           | .error i => throw (notBang E T sp i)
         else err sp s!"`!thunkv N` is checked against `{E.ppV A}`: use `!thunk` at `!U (F A)`"
       | A => err sp s!"`!thunkv N` is checked against `{E.ppV A}`, which is not a `!U` type"
-    | .unbang _ V => do pure (rBangE (← chkV n E Δ T V (.bang A)))
+    | .unbang sp V => do pure (rBangE (at_ sp) (← chkV n E Δ T V (.bang A)))
     | .boxed sp a V =>
       match A with
       | .box b A => do
@@ -235,11 +243,11 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
       | .mu A =>
         if hA : VTy.noMutB 0 A = true then
           if hc : VTy.clB 0 (.mu A) = true then do
-            pure (rRoll hA hc (← chkV n E Δ T V (BoCa.Fig16.LogRel.Core.VTy.inst (.mu A) A)))
+            pure (rRoll (at_ sp) hA hc (← chkV n E Δ T V (BoCa.Fig16.LogRel.Core.VTy.inst (.mu A) A)))
           else err sp s!"`roll` at `{E.ppV (.mu A)}`, which is not closed"
         else err sp s!"`roll` at `{E.ppV (.mu A)}`, whose variable occurs under `mut`"
       | A => err sp s!"`roll V` is checked against `{E.ppV A}`, which is not a `mu` type"
-    | .run _ M => do pure (rOfRet (← chkC n E Δ T M (.ret A)))
+    | .run sp M => do pure (rOfRet (at_ sp) (← chkC n E Δ T M (.ret A)))
     | v => do convV E v.span A (← synV n E Δ T v)
 
 /-- Synthesize the type of a computation. -/
@@ -251,16 +259,16 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let ⟨C, r⟩ ← synC n E.clearOwn Δ T m
       pure ⟨C, ← dropOwed E m.span r⟩
     else match m with
-    | .ret _ V => do
+    | .ret sp V => do
       let ⟨_, r⟩ ← synV n E Δ T V
-      pure ⟨_, rRet r⟩
+      pure ⟨_, rRet (at_ sp) r⟩
     | .bind sp x oA M N lin => do
       let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
       match S', rM with
       | [], rM =>
         let ⟨C, rN⟩ ← synC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N
         let FN ← popL E x.span x.name rN.F lin
-        if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rBind rM FN h⟩
+        if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rBind (at_ sp) rM FN h⟩
         else throw (splitErr E T sp rM.F.u FN.u)
       | o :: os, rM =>
         -- The head performs operations (SPEC §19): the binding is at the current row.
@@ -283,7 +291,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let ⟨_, o, hf⟩ ← findOp E sp "perform" k i
       if hna : o.abort = false then
         let rV ← chkV n E Δ T V o.A
-        pure ⟨_, rPerform hf hna rV⟩
+        pure ⟨_, rPerform (at_ sp) hf hna rV⟩
       else err sp s!"the operation {k}.{i} is abortive: write `abort[{k}.{i}]`"
     | .abort sp k i V => do
       let ⟨_, r⟩ ← abortIt n E Δ T sp k i V .zero
@@ -316,7 +324,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                         if hso : usedSat (outlivesB Δ d) T rM.F.u = true then
                           if h₁ : overlapOK T (oneL T ir) (oneL T ic) = true then
                             if h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true then
-                              pure ⟨_, rEffHandleB ir ic (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hwf hSd
+                              pure ⟨_, rEffHandleB (at_ sp) { sp := hr.span, name := hr.name }
+                                { sp := hc.span, name := hc.name } ir ic (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hwf hSd
                                 rM hso h₁ h₂⟩
                             else throw (splitErr E T sp (orL (oneL T ir) (oneL T ic)) rM.F.u)
                           else throw (splitErr E T sp (oneL T ir) (oneL T ic))
@@ -347,7 +356,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                       (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) A)
                     if h₁ : overlapOK T (oneL T ir) (oneL T ic) = true then
                       if h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true then
-                        pure ⟨_, rEffHandle ir ic (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen rM h₁ h₂⟩
+                        pure ⟨_, rEffHandle (at_ sp) { sp := hr.span, name := hr.name }
+                          { sp := hc.span, name := hc.name } ir ic (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen rM h₁ h₂⟩
                       else throw (splitErr E T sp (orL (oneL T ir) (oneL T ic)) rM.F.u)
                     else throw (splitErr E T sp (oneL T ir) (oneL T ic))
                   else err sp "a handler has at most 2^32 operations"
@@ -359,14 +369,14 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       match lookupVar x.name E.vars with
       | some i =>
         match h : T[i]? with
-        | some (.thunk C) => pure ⟨C, rForce i C h⟩
+        | some (.thunk C) => pure ⟨C, rForce { sp, name := x.name } i C h⟩
         | some A => err sp s!"`force {x.name}` needs a `U` type, but `{x.name} : {E.ppV A}`"
         | none => err sp "internal error: variable out of range"
       | none => err x.span s!"`force` takes a variable, and `{x.name}` is not one in scope; bind it first"
-    | .lam _ x A M => do
+    | .lam sp x A M => do
       let A' ← E.elabV Δ A
       let ⟨_, rM⟩ ← synC n (E.pushOwn x.name A') Δ (A' :: T) M
-      pure ⟨_, ← lamIt E x rM⟩
+      pure ⟨_, ← lamIt E sp x rM⟩
     | .app sp M x => do
       let ⟨C, rM⟩ ← synC n E Δ T M
       match C, rM with
@@ -379,13 +389,13 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     | .proj sp i M => do
       let ⟨C, r⟩ ← synC n E Δ T M
       match C, r with
-      | .amp _ _, r => if i then pure ⟨_, rProj₁ r⟩ else pure ⟨_, rProj₂ r⟩
+      | .amp _ _, r => if i then pure ⟨_, rProj₁ (at_ sp) r⟩ else pure ⟨_, rProj₂ (at_ sp) r⟩
       | C, _ => err sp s!"a projection needs a `&` type, but this has type `{E.ppC C}`"
-    | .top _ => pure ⟨.top, rTop⟩
+    | .top sp => pure ⟨.top, rTop (at_ sp)⟩
     | .letUnit sp V M => do
       let rV ← chkV n E Δ T V .unit
       let ⟨C, rM⟩ ← synC n (E.minus rV.F.u) Δ T M
-      if h : overlapOK T rV.F.u rM.F.u = true then pure ⟨C, rUnitE rV rM h⟩
+      if h : overlapOK T rV.F.u rM.F.u = true then pure ⟨C, rUnitE (at_ sp) rV rM h⟩
       else throw (splitErr E T sp rV.F.u rM.F.u)
     | .letPair sp x y V M => do
       let ⟨A, rV⟩ ← synV n E Δ T V
@@ -395,7 +405,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
           (B :: A :: T) M
         let F₁ ← popL E y.span y.name rM.F
         let F₂ ← popL E x.span x.name F₁
-        if h : overlapOK T rV.F.u F₂.u = true then pure ⟨C, rTensorE rV F₂ h⟩
+        if h : overlapOK T rV.F.u F₂.u = true then pure ⟨C, rTensorE (at_ sp) rV F₂ h⟩
         else throw (splitErr E T sp rV.F.u F₂.u)
       | A, _ => err V.span s!"`let (x, y) = V` needs a `*` type, but `V : {E.ppV A}`"
     | .case sp V x M y N => do
@@ -442,7 +452,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let ⟨C, r⟩ ← synC n E Δ T M
       match C, r with
       | .all _ b _, r =>
-        if h : ltB Δ al b = true then pure ⟨_, rAllE al h r⟩
+        if h : ltB Δ al b = true then pure ⟨_, rAllE (at_ sp) al h r⟩
         else err sp s!"cannot show `{E.ppL al}` ⊏ `{E.ppL b}` from the lifetime context"
       | C, _ => err M.span s!"this is instantiated, so it must have a type `forall 'x < @. C`, but it has type `{E.ppC C}`"
     | .nuIn sp M => do
@@ -450,14 +460,14 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       match (CTy.nuThunks C).find? (fun B => CTy.nuOkB B && decide (B.unroll = C)) with
       | some B =>
         if h : CTy.nuOkB B = true ∧ B.unroll = C then
-          pure ⟨_, rNuIn (CTy.nuOkB_sound B h.1) (h.2 ▸ r)⟩
+          pure ⟨_, rNuIn (at_ sp) (CTy.nuOkB_sound B h.1) (h.2 ▸ r)⟩
         else err sp s!"`nu_in M` needs `M` at the unrolling of a `nu` type, but `M : {E.ppC C}`"
       | none => err sp s!"`nu_in M` needs `M` at the unrolling of a `nu` type, but `M : {E.ppC C}`"
     | .nuOut sp M => do
       let ⟨C, r⟩ ← synC n E Δ T M
       match C, r with
       | .nu B, r =>
-        if h : CTy.nuOkB B = true then pure ⟨_, rNuOut (CTy.nuOkB_sound B h) r⟩
+        if h : CTy.nuOkB B = true then pure ⟨_, rNuOut (at_ sp) (CTy.nuOkB_sound B h) r⟩
         else err sp s!"`nu_out M` needs a positive `nu` type, but `M : {E.ppC (.nu B)}`"
       | C, _ => err sp s!"`nu_out M` needs `M` at a `nu` type, but `M : {E.ppC C}`"
     | .ascribe _ M C => do
@@ -483,7 +493,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                 let ⟨hside⟩ ← outlivesWitness sp bl A'
                 if hS : Row.resumeOB S v = true then
                   if hBn : noThunkB B' = true then
-                    let ⟨hdt, hdc⟩ ← finaliser sp (.ref A')
+                    let ⟨hdt, hdc, _⟩ ← finaliser sp (.ref A')
                     let E' : Env :=
                       { E with vars := [], own := [], nExt := 0, lenv := (x.name, v) :: E.lenv,
                                row := some S }
@@ -493,7 +503,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                       if hM1 : BoCa.Fig16.LogRel.Core.closedAt 1 rM.e = true then
                         if hcb : BoCa.Fig16.LogRel.Core.closedAt 0 (BoCa.Fig16.LogRel.Core.lendCb rM.e).1 = true then
                           if h : overlapOK T (Fam.deadStrict T).u (oneL T i) = true then
-                            pure ⟨_, rLendR ⟨"R1", sp.start.line, sp.start.col⟩ v bl i (hA ▸ hi)
+                            pure ⟨_, rLendR (at_ sp) ⟨"R1", sp.start.line, sp.start.col⟩ v bl i (hA ▸ hi)
                               (defines_of_wf hwf) hx hbx (boundsAvoidB_sound hΔx) hT hB
                               (noThunkB_sound hBn) hside (Row.resumeOB_sound hS) hdt hdc rM hL hM1
                               hcb h⟩
@@ -547,7 +557,7 @@ def abortIt : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Na
     if ha : o.abort = true then
       if hd : dropB o.A = true then
         let rV ← chkV n E Δ T V o.A
-        pure ⟨S, rRaise B hf ha hd rV⟩
+        pure ⟨S, rRaise (at_ sp) B hf ha hd rV⟩
       else err sp s!"the argument of the abortive operation {k}.{i}, of type `{E.ppV o.A}`, does not drop"
     else err sp s!"the operation {k}.{i} is not abortive: write `perform[{k}.{i}]`"
 
@@ -563,13 +573,13 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
     else match m with
     | .ret sp V =>
       match C with
-      | .ret A => do pure (rRet (← chkV n E Δ T V A))
+      | .ret A => do pure (rRet (at_ sp) (← chkV n E Δ T V A))
       | C =>
         match effRow? C with
         | some (S, A) =>
           if hC : effOf S A = C then do
-            let r : Res Δ T (.comp (effOf [] A)) := rRet (← chkV n E Δ T V A)
-            pure (hC ▸ rEffSub (S := []) rfl r)
+            let r : Res Δ T (.comp (effOf [] A)) := rRet (at_ sp) (← chkV n E Δ T V A)
+            pure (hC ▸ rEffSub (at_ sp) (S := []) rfl r)
           else err sp "internal error: a returner chain"
         | none => err sp s!"`return V` is checked against `{E.ppC C}`, which is not an `F` type"
     | .bind sp x oA M N lin => do
@@ -578,7 +588,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       | [], rM =>
         let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N C
         let FN ← popL E x.span x.name rN.F lin
-        if h : overlapOK T rM.F.u FN.u = true then pure (rBind rM FN h)
+        if h : overlapOK T rM.F.u FN.u = true then pure (rBind (at_ sp) rM FN h)
         else throw (splitErr E T sp rM.F.u FN.u)
       | o :: os, rM =>
         -- The head performs operations (SPEC §19): the binding is at the row of `C`.
@@ -617,7 +627,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
         let A' ← E.elabV Δ A
         if hA : A' = A₀ then do
           let rM ← chkC n (E.pushOwn x.name A') Δ (A' :: T) M C
-          pure (hA ▸ (← lamIt E x rM))
+          pure (hA ▸ (← lamIt E sp x rM))
         else err A.span s!"the binder is annotated `{E.ppV A'}`, but the expected type is `{E.ppV A₀} -o …`"
       | C => err sp s!"`fun` is checked against `{E.ppC C}`, which is not a `-o` type"
     | .with_ sp M N =>
@@ -629,12 +639,12 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       | C => err sp s!"`<M, N>` is checked against `{E.ppC C}`, which is not a `&` type"
     | .top sp =>
       match C with
-      | .top => pure rTop
+      | .top => pure (rTop (at_ sp))
       | C => err sp s!"`<>` has type `top`, but `{E.ppC C}` is expected"
     | .letUnit sp V M => do
       let rV ← chkV n E Δ T V .unit
       let rM ← chkC n (E.minus rV.F.u) Δ T M C
-      if h : overlapOK T rV.F.u rM.F.u = true then pure (rUnitE rV rM h)
+      if h : overlapOK T rV.F.u rM.F.u = true then pure (rUnitE (at_ sp) rV rM h)
       else throw (splitErr E T sp rV.F.u rM.F.u)
     | .letPair sp x y V M => do
       let ⟨A, rV⟩ ← synV n E Δ T V
@@ -644,7 +654,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           (B :: A :: T) M C
         let F₁ ← popL E y.span y.name rM.F
         let F₂ ← popL E x.span x.name F₁
-        if h : overlapOK T rV.F.u F₂.u = true then pure (rTensorE rV F₂ h)
+        if h : overlapOK T rV.F.u F₂.u = true then pure (rTensorE (at_ sp) rV F₂ h)
         else throw (splitErr E T sp rV.F.u F₂.u)
       | A, _ => err V.span s!"`let (x, y) = V` needs a `*` type, but `V : {E.ppV A}`"
     | .case sp V x M y N => do
@@ -658,7 +668,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       | A, _ => err V.span s!"`case V` needs a `+` type, but `V : {E.ppV A}`"
     | .absurd sp V => do
       let rV ← chkV n E Δ T V .zero
-      if h : overlapOK T rV.F.u (Fam.top T).u = true then pure (rZeroE C rV h)
+      if h : overlapOK T rV.F.u (Fam.top T).u = true then pure (rZeroE (at_ sp) C rV h)
       else err sp "internal error: absurd"
     | .lamL sp x b M =>
       match C with
@@ -674,7 +684,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       match C with
       | .nu B =>
         if h : CTy.nuOkB B = true then do
-          pure (rNuIn (CTy.nuOkB_sound B h) (← chkC n E Δ T M B.unroll))
+          pure (rNuIn (at_ sp) (CTy.nuOkB_sound B h) (← chkC n E Δ T M B.unroll))
         else err sp s!"`nu_in M` is checked against `{E.ppC C}`, which is not a positive `nu` type"
       | C => err sp s!"`nu_in M` is checked against `{E.ppC C}`, which is not a `nu` type"
     | m => do convC E m.span C (← synC n E Δ T m)

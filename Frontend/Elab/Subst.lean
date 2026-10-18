@@ -140,6 +140,7 @@ def HInfo.subst (σ : TySubst) (i : HInfo) : HInfo :=
 mutual
 def Val.subst (σ : TySubst) : Val → Val
   | .var sp x => .var sp x
+  | .clone sp x => .clone sp x
   | .defApp sp n args => .defApp sp n (args.map (VTy.subst σ))
   | .unit sp => .unit sp
   | .pair sp V W => .pair sp (V.subst σ) (W.subst σ)

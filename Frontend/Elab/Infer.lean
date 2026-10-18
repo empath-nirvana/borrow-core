@@ -3,7 +3,7 @@ import Frontend.Elab.Tir
 /-!
 # Frontend — Elab — inference  `[#54, docs/typed-elaboration.md §2.1]`
 
-`inferV`/`inferC` build the typed IR of a term, bidirectionally: a node checked against an
+`inferV`/`inferC` type a term for the sugar (`TCx.tyV`, `Frontend/Elab/Meta.lean`), bidirectionally: a node checked against an
 expected type has that type, and its children are given the expected types the checker's rule
 gives them. A synthesized node's type comes from its children's types, by the rule's
 conclusion. The environment is extended at each binder exactly as the checker extends it
@@ -14,7 +14,7 @@ Where a type needs one of the core's substitutions (instantiating a lifetime, un
 or a `ν`, shortening a family), inference asks the checker's own synthesis (`synV`, `synC`) for
 it, on that node alone. The checker is not changed and its derivation is discarded: it is used
 as a function from terms to types. A node inference cannot type has type `none`; nothing fails
-here, since the checker checks the lowered program in any case.
+here, since the checker checks the elaborated program in any case.
 
 Every variable a node binds gets an identity, numbered in order through the program.
 -/
@@ -90,7 +90,7 @@ def valLends : Val → Bool
   | _ => false
 
 mutual
-/-- The typed IR of a value, checked against `exp` when it is given. -/
+/-- The inference nodes of a value, checked against `exp` when it is given. -/
 def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → IM TNode
   | 0, _, _, _, exp, v => pure (.mk (.val v) (tyV exp) [] [])
   | n + 1, E, Δ, T, exp, v => do
@@ -98,7 +98,7 @@ def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → I
     let E := { E with row := none }
     let node (A : Option CVTy) (ks : List TNode) : TNode := .mk (.val v) (tyV (exp <|> A)) [] ks
     match v with
-    | .var _ x => pure (node (varTy E Δ T x) [])
+    | .var _ x | .clone _ x => pure (node (varTy E Δ T x) [])
     | .defApp _ x args => pure (node (defAppTy E Δ T x args) [])
     | .unit _ => pure (node (some .unit) [])
     | .lend _ x _ => pure (node (varTy E Δ T x.name) [])
@@ -185,7 +185,7 @@ def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → I
       let a ← inferV n E Δ T none V
       pure (node (askV E Δ T v) [a])
 
-/-- The typed IR of a computation, checked against `exp` when it is given. -/
+/-- The inference nodes of a computation, checked against `exp` when it is given. -/
 def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → IM TNode
   | 0, _, _, _, exp, m => pure (.mk (.comp m) (tyC exp) [] [])
   | n + 1, E, Δ, T, exp, m => do
@@ -355,7 +355,7 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       pure (node (do pure (effOf (← S) (.tensor (.ref (← A')) (← B')))) [body] [bm])
 end
 
-/-! ### Programs -/
+/-! ### Externs -/
 
 /-- The externs declared before index `upto`, in declaration order, elaborated as the checker
 elaborates them (`Frontend.Check.externs`). -/
@@ -367,32 +367,5 @@ def externsBefore (ds : Array Decl) (upto : Nat) : List (String × CVTy) :=
       | .ok A' => acc ++ [(n.name, A')]
       | .error _ => acc
     | _ => acc
-
-/-- The typed IR of one declaration, in the environment the checker checks it in
-(`Frontend.Check.checkDecl`, `checkMain`). -/
-def inferDecl (ds : Array Decl) (k : Nat) : Decl → IM TDecl
-  | .def_ sp n [] A V mk => do
-    let xs := externsBefore ds k
-    let T := (xs.map (·.2)).reverse
-    let vars := (xs.map (fun (x, B) => if B.persistent then some x else none)).reverse
-    let E : Env := Env.mk ⟨ds, k⟩ vars [] [] [] xs.length none
-    let A' := (E.elabV LifeCtx.empty A).toOption
-    pure (.def_ sp n A (← inferV inferFuel E LifeCtx.empty T A' V) mk)
-  | .main sp C M => do
-    let xs := externsBefore ds ds.size
-    let T := (xs.map (·.2)).reverse
-    let E : Env := Env.mk ⟨ds, k⟩ (xs.map (some ·.1)).reverse [] [] [] xs.length none
-    let C' := (E.elabC LifeCtx.empty C).toOption
-    pure (.main sp C (← inferC inferFuel E LifeCtx.empty T C' M))
-  | d => pure (.plain d)
-
-/-- The typed IR of a program, declaration by declaration, in order. -/
-def inferProgram (p : Program) : TProgram :=
-  let ds := p.decls.toArray
-  let go : IM (List TDecl) := (List.range ds.size).mapM fun k =>
-    match (ds[k]? : Option Decl) with
-    | some d => inferDecl ds k d
-    | none => pure (.plain (.main Span.none (.top Span.none) (.top Span.none)))
-  ⟨(go.run' 0)⟩
 
 end Frontend.Elab

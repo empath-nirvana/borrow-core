@@ -7,8 +7,8 @@ file.bc ──parse──▶ AST ──check──▶ Expr + proof of CDerives �
 | stage | code | command |
 |---|---|---|
 | parse | `Frontend/Lexer.lean`, `Frontend/Parser.lean` | `lake exe bcc parse file.bc`, `lake exe bcc print file.bc` |
-| elaborate | `Frontend/Elab/Effects.lean` (handlers, SPEC §18), `Frontend/Sugar.lean`, `Frontend/Elab/` (the typed IR, `docs/typed-elaboration.md`) | `lake exe bcc desugar file.bc`, `lake exe bcc tir file.bc` |
-| check | `Frontend/Check/` | `lake exe bcc check file.bc`, `lake exe bcc erase file.bc`, `lake exe bcc trusted file.bc` |
+| elaborate | `Frontend/Elab/Effects.lean` (handlers, SPEC §18), `Frontend/Sugar.lean`, `Frontend/Elab/` (`docs/typed-elaboration.md`) | `lake exe bcc desugar file.bc` |
+| check | `Frontend/Check/`: returns the typed term (`Check/TExpr.lean`), whose erasure is compiled | `lake exe bcc check file.bc`, `lake exe bcc erase file.bc`, `lake exe bcc trusted file.bc` |
 | compile | `Backend/` (closure IR → flat IR → Wasm AST → WAT) | `lake exe bcc compile file.bc -o out.wat` |
 | run | wasmtime, with tail calls | `lake exe bcc run file.bc` |
 | interpret | `Support`'s interpreter, or a backend stage's | `lake exe bcc interp [--stage source\|clos\|flat] file.bc` |
@@ -34,7 +34,6 @@ one.
 |---|---|
 | `scripts/parse-corpus.sh` | every corpus file parses and round-trips; each `corpus/fail/` file fails with its expected message |
 | `scripts/check-corpus.sh` | every corpus file checks; each `corpus/reject/` file is rejected with its expected message |
-| `scripts/check-elab.sh` | every checked corpus program and sugar pair has a fully typed IR that lowers back to the elaborated program; each `corpus/tir/*.tir` matches `bcc tir` |
 | `scripts/compile-corpus.sh` | every corpus `main` prints its golden `<name>.out` (the reference interpreter's output) at the clos, flat and wasm stages, with `live 0`, and at the source stage when that runs (below); its counts are at most its entry in `corpus/counts.expected`; `--write-goldens` writes the goldens from the reference interpreter |
 | `scripts/compile-kernel.sh` | every kernel program gives the same value at every stage and in WebAssembly, with `live 0`; its counts are at most its entry in `corpus/kernel-counts.expected` |
 | `scripts/compile-scaling.sh` | compile time against program size; with `--guard`, the 8× program compiles within a bound times the 1× program's time |
