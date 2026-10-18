@@ -37,6 +37,9 @@ below are design and research notes.
 - [Effect polymorphism](effect-polymorphism.md) — functions over effectful computations (#161):
   copies over static names, provided and tunneled rows, site freshness, stored callbacks. A design;
   nothing is built.
+- [Effect lowering](effect-lowering.md) — the backend's lowering of effects (#541): every
+  dispatched call classified, a lowering per handler law, state machines last. A design; nothing
+  is built.
 - [Async with capabilities](async-capabilities.md) — a spec entry draft (#52): tasks that borrow
   across `await` with no `Pin`, by ghost end; two relaxed rules and one named hypothesis,
   `PinLaw`, over typed programs; `experiments/AsyncCap` proves the Fundamental Property and
