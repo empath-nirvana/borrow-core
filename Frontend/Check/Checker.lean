@@ -9,7 +9,7 @@ import Frontend.Check.Kinds
 builder of `Frontend/Check/Rules.lean` (or `Consts.lean`) to the checked premises, so a success
 is a `Res`: the erasure with its `CDerives` derivations. Names are resolved on the way: a
 variable to its de Bruijn slot (§6.3), a lifetime name to its `LifeVar` (§3), a `def` to its
-body, re-checked at the use (§10). Variables owed to the computation being checked (`Env.own`,
+key's checked body, placed at the use (`useDef`, SPEC §3). Variables owed to the computation being checked (`Env.own`,
 SPEC §12) are passed to its tail positions and dropped before each terminal computation that
 leaves them unused (`dropOwed`).
 
@@ -28,13 +28,67 @@ def divHandleMsg : String :=
   "a handler around a computation that may tick (`Div`) is typed only when its clauses " ++
     "resume `κ` in tail"
 
+/-! ### `def`s, checked once per key  `[spec §10]`
+
+A `def` is checked once per key: the declaration, its type arguments, the lifetime context, and the
+context `Tc` of externs it is checked at. A use whose context is `Tc` under more slots places the
+checked body there (`rUse`), the slots between the externs and the use unused by the body and
+absorbed where its absorption holds (`TExpr.absF`). The cache holds each key's checked body; it
+is state threaded through the checker (`CheckM`), and an alternative that fails leaves it as it
+was (`attempt`). -/
+
+/-- A `def`'s body checked at a key. -/
+structure DefEntry where
+  decl : Nat
+  targs : List CVTy
+  Δ : LifeCtx
+  Tc : List CVTy
+  A : CVTy
+  r : Res Δ Tc (.val A)
+  ab : Option AbsF
+  hab : ab = r.t.absF Δ
+
+/-- The checked bodies of the program's `def`s, by key. -/
+abbrev DefCache := List DefEntry
+
+/-- The checker's monad: an error, or a result with the cache. -/
+abbrev CheckM := StateT DefCache (Except Error)
+
+/-- Run `x`; on an error, the cache as it was before. -/
+def attempt {α : Type} (x : CheckM α) : CheckM (Except Error α) := fun c =>
+  match x c with
+  | .ok (a, c') => .ok (.ok a, c')
+  | .error e => .ok (.error e, c)
+
+/-- A key's checked body, found for a use at `T`: its context `Tc` is `T` with `m` slots dropped. -/
+structure DefHit (Δ : LifeCtx) (T : List CVTy) where
+  A : CVTy
+  Tc : List CVTy
+  m : Nat
+  hT : T.drop m = Tc
+  r : Res Δ Tc (.val A)
+  ab : Option AbsF
+  hab : ab = r.t.absF Δ
+
+/-- The entry, when it is the key's at the use's context `T`. -/
+def DefEntry.hit? (e : DefEntry) (decl : Nat) (targs : List CVTy) (Δ : LifeCtx) (T : List CVTy) :
+    Option (DefHit Δ T) :=
+  if e.decl == decl && e.targs == targs then
+    if hΔ : e.Δ = Δ then
+      if hT : T.drop (T.length - e.Tc.length) = e.Tc then
+        some ⟨e.A, e.Tc, _, hT, hΔ ▸ e.r, e.ab, by subst hΔ; exact e.hab⟩
+      else none
+    else none
+  else none
+
 /-! ### The checker -/
 
+set_option maxHeartbeats 400000 in
 mutual
 
 /-- Synthesize the type of a value-judged expression. -/
 def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
-    Except Error (Σ A : CVTy, Res Δ T (.val A))
+    CheckM (Σ A : CVTy, Res Δ T (.val A))
   | 0, _, _, _, v => err v.span "expression nested too deeply"
   | n + 1, E, Δ, T, v => let E := E.forVal; match v with
     | .var sp x =>
@@ -51,11 +105,7 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
               "externs; take the capability as an argument (SPEC §11)")
           else err sp s!"unknown variable `{x}`"
         | some d =>
-          if d.params.isEmpty then do
-            let E' := E.forDef T d []
-            let A ← E'.elabV Δ d.ty
-            let r ← tryCatch (chkV n E' Δ T d.body A) (fun e => throw (inDef x sp e))
-            pure ⟨A, r⟩
+          if d.params.isEmpty then useDef n E Δ T sp x d [] []
           else err sp s!"`{x}` takes {d.params.length} type argument(s): write `{x}[…]`"
     | .clone sp x =>
       -- `clone(x)`: the variable, its node recording the written copy (SPEC §10).
@@ -70,11 +120,8 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
       | none => err sp s!"unknown definition `{x}`"
       | some d =>
         if d.params.length = args.length then do
-          let targs ← args.mapM (E.elabV Δ)
-          let E' := E.forDef T d ((d.params.map (·.name)).zip targs)
-          let A ← E'.elabV Δ d.ty
-          let r ← tryCatch (chkV n E' Δ T d.body A) (fun e => throw (inDef x sp e))
-          pure ⟨A, r⟩
+          let targs ← liftM (m := Except Error) (args.mapM (E.elabV Δ))
+          useDef n E Δ T sp x d ((d.params.map (·.name)).zip targs) targs
         else err sp s!"`{x}` takes {d.params.length} type argument(s), not {args.length}"
     | .unit sp => pure ⟨.unit, rUnit (at_ sp)⟩
     | .pair sp V W => do
@@ -177,10 +224,13 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
     | .lend sp x m => err sp (s!"`{if m == .mut then "&mut " else "&"}{x.name}` lends a place to " ++
         "one call: it may appear only in the head `M` of `y <- M; N` (SPEC §11)")
     | .sugar sp _ => err sp "internal error: a surface form was not elaborated before checking"
+    | .mark sp k V => do
+      let ⟨A, r⟩ ← synV n E Δ T V
+      pure ⟨A, ← markIt sp k r⟩
 
 /-- Check a value-judged expression against a type. -/
 def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : CVTy) →
-    Except Error (Res Δ T (.val A))
+    CheckM (Res Δ T (.val A))
   | 0, _, _, _, v, _ => err v.span "expression nested too deeply"
   | n + 1, E, Δ, T, v, A => let E := E.forVal; match v with
     | .pair sp V W =>
@@ -255,11 +305,12 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
         else err sp s!"`roll` at `{E.ppV (.mu A)}`, whose variable occurs under `mut`"
       | A => err sp s!"`roll V` is checked against `{E.ppV A}`, which is not a `mu` type"
     | .run sp M => do pure (rOfRet (at_ sp) (← chkC n E Δ T M (.ret A)))
+    | .mark sp k V => do markIt sp k (← chkV n E Δ T V A)
     | v => do convV E v.span A (← synV n E Δ T v)
 
 /-- Synthesize the type of a computation. -/
 def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
-    Except Error (Σ C : CCTy, Res Δ T (.comp C))
+    CheckM (Σ C : CCTy, Res Δ T (.comp C))
   | 0, _, _, _, m => err m.span "expression nested too deeply"
   | n + 1, E, Δ, T, m =>
     if m.terminal && E.own.any id then do
@@ -428,26 +479,26 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       | .sum A B, rV => do
         let E' := E.minus rV.F.u
         let ⟨C, r₁⟩ ← synC n (E'.pushOwn x.name A) Δ (A :: T) M
-        let plain : Except Error (Σ C : CCTy, Res Δ T (.comp C)) := do
+        let plain : CheckM (Σ C : CCTy, Res Δ T (.comp C)) := do
           let r₂ ← chkC n (E'.pushOwn y.name B) Δ (B :: T) N C
           pure ⟨_, ← caseIt E T sp x y rV r₁ r₂⟩
-        match plain, E.row with
+        match ← attempt plain, E.row with
         | .ok r, _ => pure r
         | .error e, some S@(_ :: _) =>
           -- Inside a computation at the row `S`: the arms at `F[S] B`, the first arm's value
           -- type `B`, or else the second's (the first may be an abort, of any type).
-          let first : Except Error (Σ C : CCTy, Res Δ T (.comp C)) := do
+          let first : CheckM (Σ C : CCTy, Res Δ T (.comp C)) := do
             let ⟨B₁, r₁'⟩ ← atRow E M.span S ⟨C, r₁⟩
             let r₂ ← chkC n (E'.pushOwn y.name B) Δ (B :: T) N (effOf S B₁)
             pure ⟨_, ← caseIt E T sp x y rV r₁' r₂⟩
-          match first with
+          match ← attempt first with
           | .ok r => pure r
           | .error _ =>
-            let second : Except Error (Σ C : CCTy, Res Δ T (.comp C)) := do
+            let second : CheckM (Σ C : CCTy, Res Δ T (.comp C)) := do
               let ⟨B₂, r₂⟩ ← atRow E N.span S (← synC n (E'.pushOwn y.name B) Δ (B :: T) N)
               let r₁' ← chkC n (E'.pushOwn x.name A) Δ (A :: T) M (effOf S B₂)
               pure ⟨_, ← caseIt E T sp x y rV r₁' r₂⟩
-            match second with
+            match ← attempt second with
             | .ok r => pure r
             | .error _ => throw e
         | .error e, _ => throw e
@@ -507,7 +558,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                 let ⟨hside⟩ ← outlivesWitness sp bl A'
                 if hS : Row.resumeOB S v = true then
                   if hBn : noThunkB B' = true then
-                    let ⟨hdt, hdc, _⟩ ← finaliser sp (.ref A')
+                    let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A')
                     let E' : Env :=
                       { E with vars := [], own := [], nExt := 0, lenv := (x.name, v) :: E.lenv,
                                row := some S, vals := [] }
@@ -519,7 +570,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                           if h : overlapOK T (Fam.deadStrict T).u (oneL T i) = true then
                             pure ⟨_, rLendR (at_ sp) ⟨"R1", sp.start.line, sp.start.col⟩ v bl i (hA ▸ hi)
                               (defines_of_wf hwf) hx hbx (boundsAvoidB_sound hΔx) hT hB
-                              (noThunkB_sound hBn) hside (Row.resumeOB_sound hS) hdt hdc rM hL hM1
+                              (noThunkB_sound hBn) hside (Row.resumeOB_sound hS) hdt hdc hde rM hL hM1
                               hcb h⟩
                           else err sp "internal error: a relaxed lend's place"
                         else err sp "internal error: a relaxed lend's body is not closed"
@@ -540,13 +591,13 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
 checks it at `F A`, or, at a row that has operations and when it does not check at `F A`, at
 `F_Σ A`. -/
 def bindHead : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Option VTy → Comp →
-    Except Error (Σ A : CVTy, Σ S : CRow, Res Δ T (.comp (effOf S A)))
+    CheckM (Σ A : CVTy, Σ S : CRow, Res Δ T (.comp (effOf S A)))
   | 0, _, _, _, sp, _, _ => err sp "expression nested too deeply"
   | n + 1, E, Δ, T, _, some A, M => do
     let A' ← E.elabV Δ A
     match E.row with
     | some (o :: os) =>
-      match chkC n E Δ T M (.ret A') with
+      match ← attempt (chkC n E Δ T M (.ret A')) with
       | .ok r => pure ⟨A', [], r⟩
       | .error _ =>
         let r ← chkC n E Δ T M (effOf (o :: os) A')
@@ -564,7 +615,7 @@ def bindHead : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → O
 
 /-- `abort[k.i] V` at the answer `B`: an abortive operation of the current row (SPEC §19's abortive rule). -/
 def abortIt : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Nat → Nat → Val → (B : CVTy) →
-    Except Error (Σ S : CRow, Res Δ T (.comp (effOf S B)))
+    CheckM (Σ S : CRow, Res Δ T (.comp (effOf S B)))
   | 0, _, _, _, sp, _, _, _, _ => err sp "expression nested too deeply"
   | n + 1, E, Δ, T, sp, k, i, V, B => do
     let ⟨S, o, hf⟩ ← findOp E sp "abort" k i
@@ -577,7 +628,7 @@ def abortIt : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Na
 
 /-- Check a computation against a type. -/
 def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : CCTy) →
-    Except Error (Res Δ T (.comp C))
+    CheckM (Res Δ T (.comp C))
   | 0, _, _, _, m, _ => err m.span "expression nested too deeply"
   | n + 1, E, Δ, T, m, C =>
     let E := E.atC C
@@ -702,6 +753,30 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
         else err sp s!"`nu_in M` is checked against `{E.ppC C}`, which is not a positive `nu` type"
       | C => err sp s!"`nu_in M` is checked against `{E.ppC C}`, which is not a `nu` type"
     | m => do convC E m.span C (← synC n E Δ T m)
+
+
+/-- A use of the `def` `d`, named `x`, at the type arguments `targs` (`tps` binding its
+parameters): its key's checked body, placed at the use. A body whose derivation cannot be placed at
+a wider context (the relaxed rules, SPEC §29) is checked at the use itself. -/
+def useDef : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → String → DefInfo →
+    List (String × CVTy) → List CVTy → CheckM (Σ A : CVTy, Res Δ T (.val A))
+  | 0, _, _, _, sp, _, _, _, _ => err sp "expression nested too deeply"
+  | n + 1, E, Δ, T, sp, x, d, tps, targs => do
+    let h ← match (← get).findSome? (·.hit? d.scope.upto targs Δ T) with
+      | some h => pure h
+      | none => do
+        let m := T.length - E.nExt
+        let E' := ({ E with vars := E.vars.drop m } : Env).forDef (T.drop m) d tps
+        let A ← E'.elabV Δ d.ty
+        let r ← tryCatch (chkV n E' Δ (T.drop m) d.body A) (fun e => throw (inDef x sp e))
+        modify (⟨d.scope.upto, targs, Δ, T.drop m, A, r, r.t.absF Δ, rfl⟩ :: ·)
+        pure (⟨A, T.drop m, m, rfl, r, r.t.absF Δ, rfl⟩ : DefHit Δ T)
+    match h with
+    | ⟨A, _, m, hT, r, some f, hab⟩ =>
+      pure ⟨A, rUse { sp } x d.scope.upto targs m hT r f hab.symm⟩
+    | ⟨A, _, _, _, _, none, _⟩ => do
+      let r ← tryCatch (chkV n (E.forDef T d tps) Δ T d.body A) (fun e => throw (inDef x sp e))
+      pure ⟨A, rUseAt { sp } x d.scope.upto targs r⟩
 
 end
 

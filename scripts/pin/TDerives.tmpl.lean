@@ -1,4 +1,4 @@
-import Frontend.Check.TExpr
+import Frontend.Check.TShift
 import Core.Tied
 import Core.PinFundamental
 
@@ -19,7 +19,14 @@ ones its rule was applied at, and its judgment is the derivation's (`TDerivesP.j
   case for case. So FP, adequacy, `PinLaw`'s theorems and decision R's apply to the typed term's
   erasure unchanged.
 * `TDerivesAt.toP`: a tied typed derivation is one of `TDerivesP` at the same node.
-* `scheme`: a closed term with a `CDerivesAt` (resp. `CDerives`) derivation.
+* the derived nodes: each a fixed scheme at a consumed context, its premises the ones of the
+  `Core/` lemma that types it, and its projection that lemma (`dtor_wf`, `d_allocS`, `d_freeS`,
+  `withborSM_wf`, `withborSI_wf`, `withborM2_wf`, `withborI2_wf`), tied as `CDerivesAt.ofEffFree`
+  ties a term with no operation; and the derived nodes over a marked scheme's typed term
+  (`litFn`), whose premises are that term's derivation and the equation saying which instance of
+  the scheme its erasure is.
+* `use`: a `def`'s body at the use, its derivation the body's, and its absorption field the body's
+  (`TExpr.absF`).
 
 The node's `TInfo` is not constrained: it is where the node was checked from.
 -/
@@ -34,37 +41,152 @@ open BoCa.Lifetime (LifeCtx LifeVar)
 /-- **`CDerivesAt Ξ` over the typed term**.  `[spec §19]` -/
 inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
 --@AT_RULES@
-  /-- A closed term typed by a lemma of `Core/`. -/
-  | scheme {Δ Γ e j} {info : TInfo} (h : CDerivesAt Ξ Δ Γ e j) :
-      TDerivesAt Ξ Δ Γ (TExpr.scheme info j e) j
+  /-- **Derived**: the destructor of `A` (`dtor_wf`). -/
+  | dtor {Δ Γ A} {info : TInfo} (hA : HasDtor A) (hc : closedAt 0 (dtorE A) = true)
+      (he : (dtorE A).effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.dtor info (.val (.lolli A .unit)) A) (.val (.lolli A .unit))
+  /-- **Derived**: a block's allocation (`d_allocS`). -/
+  | allocS {Δ Γ} {info : TInfo} (σ : Shape) (he : (allocS σ).effFree = true)
+      (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.allocS info (.val (.lolli σ.valTy σ.refTy)) σ) (.val (.lolli σ.valTy σ.refTy))
+  /-- **Derived**: a block's release (`d_freeS`). -/
+  | freeS {Δ Γ} {info : TInfo} (σ : Shape) (he : (freeS σ).effFree = true)
+      (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.freeS info (.val (.lolli σ.refTy σ.valTy)) σ) (.val (.lolli σ.refTy σ.valTy))
+  /-- **Derived**: a block borrow, `mut` (`withborSM_wf`). -/
+  | withborSM {Δ Γ} {info : TInfo} (σ : Shape) (c : LifeVar) (T : VTy) (hσ : σ.plain = true)
+      (hT : plainV T = true) (hΔ : Δ.Ok) (hc : Δ.find? c = none)
+      (hcl : closedAt 0 (withborS σ) = true) (he : (withborS σ).effFree = true)
+      (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.withborSM info (.val (wTy mutM c Δ.meetOfDom σ T)) σ c T)
+        (.val (wTy mutM c Δ.meetOfDom σ T))
+  /-- **Derived**: a block borrow, `imm` (`withborSI_wf`). -/
+  | withborSI {Δ Γ} {info : TInfo} (σ : Shape) (c : LifeVar) (T : VTy) (hσ : σ.plain = true)
+      (hT : plainV T = true) (hΔ : Δ.Ok) (hc : Δ.find? c = none)
+      (hcl : closedAt 0 (withborS σ) = true) (he : (withborS σ).effFree = true)
+      (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.withborSI info (.val (wTy immM c Δ.meetOfDom σ T)) σ c T)
+        (.val (wTy immM c Δ.meetOfDom σ T))
+  /-- **Derived**: a family's two-lifetime borrow, `mut` (`withborM2_wf`). -/
+  | withborF2M {Δ Γ} {info : TInfo} {c x y : LifeVar} {A B T : VTy}
+      (s : FamSide mutM Δ c x y A B T) (hA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+      (hBo : VOutlives (FD₁ Δ x) (.var x) B) (hTo : VOutlives (FD₁ Δ x) (.var x) T)
+      (he : withborF2.effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.withborF2M info (.val (withborF2Ty mutM c Δ.meetOfDom A B T)) c x y A B T)
+        (.val (withborF2Ty mutM c Δ.meetOfDom A B T))
+  /-- **Derived**: a family's two-lifetime borrow, `imm` (`withborI2_wf`). -/
+  | withborF2I {Δ Γ} {info : TInfo} {c x y : LifeVar} {A B T : VTy}
+      (s : FamSide immM Δ c x y A B T) (hA : VScoped Δ A) (hB : VScoped Δ B)
+      (hBo : VOutlives (FD₁ Δ x) (.var x) B) (hTo : VOutlives (FD₁ Δ x) (.var x) T)
+      (he : withborF2.effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.withborF2I info (.val (withborF2Ty immM c Δ.meetOfDom A B T)) c x y A B T)
+        (.val (withborF2Ty immM c Δ.meetOfDom A B T))
+  /-- **Derived**: a string literal's table, the bytes `bs`: its typed term's erasure is `litFnE bs`. -/
+  | litFn {Δ Γ j} {info : TInfo} {bs : List Nat} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j)
+      (hb : t.erase = litFnE bs) (hcl : closedAt 0 (litFnE bs) = true) :
+      TDerivesAt Ξ Δ Γ (TExpr.litFn info j bs t) j
+  /-- A `def`'s body at its use. -/
+  | use {Δ Γ j} {info : TInfo} {name : String} {decl : Nat} {targs : List VTy} {ab : Option AbsF}
+      {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j) (hab : ab = t.absF Δ) :
+      TDerivesAt Ξ Δ Γ (TExpr.use info j name decl targs ab t) j
 
 /-- **`CDerivesP` over the typed term**.  `[spec §29]` -/
 inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
 --@P_RULES@
-  /-- A closed term typed by a lemma of `Core/`. -/
-  | scheme {Δ Γ e j} {info : TInfo} (h : CDerives Δ Γ e j) :
-      TDerivesP Δ Γ (TExpr.scheme info j e) j
+  /-- **Derived**: the destructor of `A` (`dtor_wf`). -/
+  | dtor {Δ Γ A} {info : TInfo} (hA : HasDtor A) (hc : closedAt 0 (dtorE A) = true)
+      (he : (dtorE A).effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesP Δ Γ (TExpr.dtor info (.val (.lolli A .unit)) A) (.val (.lolli A .unit))
+  /-- **Derived**: a block's allocation (`d_allocS`). -/
+  | allocS {Δ Γ} {info : TInfo} (σ : Shape) (he : (allocS σ).effFree = true)
+      (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesP Δ Γ (TExpr.allocS info (.val (.lolli σ.valTy σ.refTy)) σ) (.val (.lolli σ.valTy σ.refTy))
+  /-- **Derived**: a block's release (`d_freeS`). -/
+  | freeS {Δ Γ} {info : TInfo} (σ : Shape) (he : (freeS σ).effFree = true)
+      (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesP Δ Γ (TExpr.freeS info (.val (.lolli σ.refTy σ.valTy)) σ) (.val (.lolli σ.refTy σ.valTy))
+  /-- **Derived**: a block borrow, `mut` (`withborSM_wf`). -/
+  | withborSM {Δ Γ} {info : TInfo} (σ : Shape) (c : LifeVar) (T : VTy) (hσ : σ.plain = true)
+      (hT : plainV T = true) (hΔ : Δ.Ok) (hc : Δ.find? c = none)
+      (hcl : closedAt 0 (withborS σ) = true) (he : (withborS σ).effFree = true)
+      (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesP Δ Γ (TExpr.withborSM info (.val (wTy mutM c Δ.meetOfDom σ T)) σ c T)
+        (.val (wTy mutM c Δ.meetOfDom σ T))
+  /-- **Derived**: a block borrow, `imm` (`withborSI_wf`). -/
+  | withborSI {Δ Γ} {info : TInfo} (σ : Shape) (c : LifeVar) (T : VTy) (hσ : σ.plain = true)
+      (hT : plainV T = true) (hΔ : Δ.Ok) (hc : Δ.find? c = none)
+      (hcl : closedAt 0 (withborS σ) = true) (he : (withborS σ).effFree = true)
+      (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesP Δ Γ (TExpr.withborSI info (.val (wTy immM c Δ.meetOfDom σ T)) σ c T)
+        (.val (wTy immM c Δ.meetOfDom σ T))
+  /-- **Derived**: a family's two-lifetime borrow, `mut` (`withborM2_wf`). -/
+  | withborF2M {Δ Γ} {info : TInfo} {c x y : LifeVar} {A B T : VTy}
+      (s : FamSide mutM Δ c x y A B T) (hA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+      (hBo : VOutlives (FD₁ Δ x) (.var x) B) (hTo : VOutlives (FD₁ Δ x) (.var x) T)
+      (he : withborF2.effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesP Δ Γ (TExpr.withborF2M info (.val (withborF2Ty mutM c Δ.meetOfDom A B T)) c x y A B T)
+        (.val (withborF2Ty mutM c Δ.meetOfDom A B T))
+  /-- **Derived**: a family's two-lifetime borrow, `imm` (`withborI2_wf`). -/
+  | withborF2I {Δ Γ} {info : TInfo} {c x y : LifeVar} {A B T : VTy}
+      (s : FamSide immM Δ c x y A B T) (hA : VScoped Δ A) (hB : VScoped Δ B)
+      (hBo : VOutlives (FD₁ Δ x) (.var x) B) (hTo : VOutlives (FD₁ Δ x) (.var x) T)
+      (he : withborF2.effFree = true) (hΓ : BoCa.Ctx.Dead Γ) :
+      TDerivesP Δ Γ (TExpr.withborF2I info (.val (withborF2Ty immM c Δ.meetOfDom A B T)) c x y A B T)
+        (.val (withborF2Ty immM c Δ.meetOfDom A B T))
+  /-- **Derived**: a string literal's table, the bytes `bs`: its typed term's erasure is `litFnE bs`. -/
+  | litFn {Δ Γ j} {info : TInfo} {bs : List Nat} {t : TExpr} (h : TDerivesP Δ Γ t j)
+      (hb : t.erase = litFnE bs) (hcl : closedAt 0 (litFnE bs) = true) :
+      TDerivesP Δ Γ (TExpr.litFn info j bs t) j
+  /-- A `def`'s body at its use. -/
+  | use {Δ Γ j} {info : TInfo} {name : String} {decl : Nat} {targs : List VTy} {ab : Option AbsF}
+      {t : TExpr} (h : TDerivesP Δ Γ t j) (hab : ab = t.absF Δ) :
+      TDerivesP Δ Γ (TExpr.use info j name decl targs ab t) j
 
 /-- **A typed derivation is a derivation of the erasure**, tied.  `[spec §19]` -/
 theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
     (h : TDerivesAt Ξ Δ Γ t j) : CDerivesAt Ξ Δ Γ t.erase j := by
   induction h with
 --@AT_ERASE@
-  | scheme h => exact h
+  | dtor hA _ he hΓ => exact CDerivesAt.ofEffFree (dtor_wf hA hΓ) he
+  | allocS σ he hΓ => exact CDerivesAt.ofEffFree (d_allocS σ hΓ) he
+  | freeS σ he hΓ => exact CDerivesAt.ofEffFree (d_freeS σ hΓ) he
+  | withborSM σ c _ hσ hT hΔ hc _ he hΓ => exact CDerivesAt.ofEffFree (withborSM_wf hσ c hT hΔ hc hΓ) he
+  | withborSI σ c _ hσ hT hΔ hc _ he hΓ => exact CDerivesAt.ofEffFree (withborSI_wf hσ c hT hΔ hc hΓ) he
+  | withborF2M s hA hBo hTo he hΓ => exact CDerivesAt.ofEffFree (withborM2_wf s hA hBo hTo hΓ) he
+  | withborF2I s hA hB hBo hTo he hΓ =>
+      exact CDerivesAt.ofEffFree (withborI2_wf s hA hB hBo hTo hΓ) he
+  | litFn _ _ _ ih => exact ih
+  | use _ _ ih => exact ih
 
 /-- **A typed derivation is a derivation of the erasure**, in `CDerivesP`.  `[spec §29]` -/
 theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
     (h : TDerivesP Δ Γ t j) : CDerivesP Δ Γ t.erase j := by
   induction h with
 --@P_ERASE@
-  | scheme h => exact CDerivesP.ofC h
+  | dtor hA _ _ hΓ => exact CDerivesP.ofC (dtor_wf hA hΓ)
+  | allocS σ _ hΓ => exact CDerivesP.ofC (d_allocS σ hΓ)
+  | freeS σ _ hΓ => exact CDerivesP.ofC (d_freeS σ hΓ)
+  | withborSM σ c _ hσ hT hΔ hc _ _ hΓ => exact CDerivesP.ofC (withborSM_wf hσ c hT hΔ hc hΓ)
+  | withborSI σ c _ hσ hT hΔ hc _ _ hΓ => exact CDerivesP.ofC (withborSI_wf hσ c hT hΔ hc hΓ)
+  | withborF2M s hA hBo hTo _ hΓ => exact CDerivesP.ofC (withborM2_wf s hA hBo hTo hΓ)
+  | withborF2I s hA hB hBo hTo _ hΓ => exact CDerivesP.ofC (withborI2_wf s hA hB hBo hTo hΓ)
+  | litFn _ _ _ ih => exact ih
+  | use _ _ ih => exact ih
 
 /-- A tied typed derivation is one of `TDerivesP`, at the same node. -/
 theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
     (h : TDerivesAt Ξ Δ Γ t j) : TDerivesP Δ Γ t j := by
   induction h with
 --@TOP_CASES@
-  | scheme h => exact .scheme h.toCDerives
+  | dtor hA hc he hΓ => exact .dtor hA hc he hΓ
+  | allocS σ he hΓ => exact .allocS σ he hΓ
+  | freeS σ he hΓ => exact .freeS σ he hΓ
+  | withborSM σ c T hσ hT hΔ hc hcl he hΓ => exact .withborSM σ c T hσ hT hΔ hc hcl he hΓ
+  | withborSI σ c T hσ hT hΔ hc hcl he hΓ => exact .withborSI σ c T hσ hT hΔ hc hcl he hΓ
+  | withborF2M s hA hBo hTo he hΓ => exact .withborF2M s hA hBo hTo he hΓ
+  | withborF2I s hA hB hBo hTo he hΓ => exact .withborF2I s hA hB hBo hTo he hΓ
+  | litFn _ hb hcl ih => exact .litFn ih hb hcl
+  | use _ hab ih => exact .use ih hab
 
 /-- A typed derivation's judgment is its node's. -/
 theorem TDerivesAt.jdg_eq {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}

@@ -1,6 +1,8 @@
 import Frontend.Syntax
 import Core.PinDerives
 import Core.ClauseKinds
+import Core.BlockBorrow
+import Core.Dtor
 
 /-!
 # Frontend — Check — the typed term  `[spec §3, §29]`
@@ -26,8 +28,20 @@ term of a program is `t.erase` (`Checked.e`), so the compiled term is the checke
 definition. `TDerivesAt`/`TDerivesP` (`Frontend/Check/TDerives.lean`) are the derivations over
 `TExpr`, and project to `CDerivesAt`/`CDerivesP` at `t.erase`.
 
-`scheme` is the one node that is not a rule: a closed term typed at a consumed context by a lemma
-of `Core/` (a derived constant, a destructor), its derivation a premise of the typed rule.
+The nodes that are not rules:
+
+* **derived nodes**, one per fixed scheme that `Core/` types by a lemma at a consumed context: a
+  destructor (`dtor`, `dtor_wf`), a block's allocation and release (`allocS`, `freeS`,
+  `d_allocS`, `d_freeS`), a block borrow (`withborSM`, `withborSI`, `withborSM_wf`,
+  `withborSI_wf`) and a family's two-lifetime borrow (`withborF2M`, `withborF2I`,
+  `withborM2_wf`, `withborI2_wf`). Each erases to the scheme's term, and its typed rule's premises
+  are its lemma's (`Frontend/Check/TDerives.lean`); and one per fixed scheme the elaborator writes
+  and marks (`Frontend.Val.mark`): a string literal's table (`litFn`). Such a node is over the
+  marked value's typed term, and its rule says what scheme that term's erasure is (`litFnE`);
+* `use`: a use of a `def` (SPEC §10): the definition's name, its type arguments, and its body `t`,
+  checked once per key and placed at the use (`Frontend/Check/TShift.lean`); it erases to `t`'s
+  erasure. Its field `ab` is the body's absorption (`TExpr.absF`): which unused live slots the
+  body's derivation can be given at the use.
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Check
@@ -44,6 +58,51 @@ structure TInfo where
   name : String := ""
   clone : Bool := false
   deriving Inhabited
+
+/-- What an unused live slot of a type must satisfy for a derivation to be given it: one atom of a
+premise on the context's live slots.  `[spec §10]` -/
+inductive Atom where
+  /-- The type is persistent (`Ctx.DeadP`, `Ctx.SoloP`, `Ctx.SplitP`'s `dup`). -/
+  | pers
+  /-- A `!` type (`Persistent`). -/
+  | bang
+  /-- `VTy.Drop`, as `dropB` decides it (`Ctx.Drops`). -/
+  | drop
+  /-- The lifetime variable is not free in it (`∀I`'s premise). -/
+  | nfree (x : LifeVar)
+  /-- It outlives `@a` under `Δ`, as `outlivesB` decides it (`CtxOutlives`). -/
+  | outl (Δ : LifeCtx) (a : Lifetime.Life)
+  deriving DecidableEq, Inhabited
+
+/-- A disjunction of conjunctions of atoms: `[]` is false, `[[]]` true. -/
+abbrev AbsF := List (List Atom)
+
+/-! ### The schemes the elaborator writes -/
+
+/-- A byte of a literal: `u8[b]`. -/
+def litByteE (b : Nat) : Expr := .val ⟨.prim (.lit (.u8 (UInt8.ofNat b))), .prim⟩
+
+/-- `lt_u32 (i, k)`, the index `i` the variable at depth `d`. -/
+def litLtE (d k : Nat) : Expr :=
+  .app (.val (.prim (.host (.rel .w32 .lt_u)))) (.pair (.var d) (.val ⟨.prim (.lit (.i32 (UInt32.ofNat k))), .prim⟩))
+
+/-- The bytes at the indices `[lo, hi)`, under `d` binders: a search on the index, halving the
+range down to one byte. -/
+def litTreeE (bs : Array Nat) : Nat → Nat → Nat → Nat → Expr
+  | 0, _, lo, _ => litByteE (bs.getD lo 0)
+  | f + 1, d, lo, hi =>
+    if hi ≤ lo + 1 then litByteE (bs.getD lo 0)
+    else
+      let mid := (lo + hi) / 2
+      .case (litLtE d mid) (litTreeE bs f (d + 1) mid hi) (litTreeE bs f (d + 1) lo mid)
+
+/-- **A string literal's table** (SPEC §17): the erasure of the `!` function from an index to the
+bytes `bs`, `0` past the end, that the elaborator writes for the literal
+(`Frontend.Sugar.litValue`). -/
+def litFnE (bs : List Nat) : Expr :=
+  let n := bs.length
+  .val (.lam (if n == 0 then litByteE 0
+    else .case (litLtE 0 n) (litByteE 0) (litTreeE bs.toArray n 1 0 n)))
 
 /-- **The typed term**: one node per rule application of the checked derivation.  `[spec §3]` -/
 inductive TExpr where
@@ -146,8 +205,27 @@ inductive TExpr where
   | lendR (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (T : VTy) (B : VTy) (S : Row) (td tM : TExpr)
   | lendLoopR (info : TInfo) (jdg : Jdg) (x : LifeVar) (A : VTy) (S : VTy) (B : VTy) (R : VTy) (tN tK ts0 : TExpr)
   | nilDead (info : TInfo) (jdg : Jdg) (j : Jdg) (t : TExpr)
-  /-- A closed term typed at a consumed context by a lemma of `Core/`. -/
-  | scheme (info : TInfo) (jdg : Jdg) (e : Expr)
+  /-- **Derived**: the destructor of `A` (`dtorE`, SPEC §12), a finaliser or a drop. -/
+  | dtor (info : TInfo) (jdg : Jdg) (A : VTy)
+  /-- **Derived**: a block's allocation at the shape `σ` (`allocS`, SPEC §5). -/
+  | allocS (info : TInfo) (jdg : Jdg) (σ : Shape)
+  /-- **Derived**: a block's release at the shape `σ` (`freeS`, SPEC §5). -/
+  | freeS (info : TInfo) (jdg : Jdg) (σ : Shape)
+  /-- **Derived**: a block borrow at the shape `σ`, `mut`, at the lifetime `c`, its result `T`
+  (`withborS`, SPEC §5). -/
+  | withborSM (info : TInfo) (jdg : Jdg) (σ : Shape) (c : LifeVar) (T : VTy)
+  /-- **Derived**: a block borrow at the shape `σ`, `imm`. -/
+  | withborSI (info : TInfo) (jdg : Jdg) (σ : Shape) (c : LifeVar) (T : VTy)
+  /-- **Derived**: a family's borrow at two lifetimes, `mut` (`withborF2`, SPEC §5). -/
+  | withborF2M (info : TInfo) (jdg : Jdg) (c x y : LifeVar) (A B T : VTy)
+  /-- **Derived**: a family's borrow at two lifetimes, `imm`. -/
+  | withborF2I (info : TInfo) (jdg : Jdg) (c x y : LifeVar) (A B T : VTy)
+  /-- **Derived**: a string literal's table at the bytes `bs` (`litFnE`), over its typed term. -/
+  | litFn (info : TInfo) (jdg : Jdg) (bs : List Nat) (t : TExpr)
+  /-- A use of the `def` `name`, the declaration `decl` of the program, at the type arguments
+  `targs`: its body `t`, at the use's context, and the body's absorption `ab`. -/
+  | use (info : TInfo) (jdg : Jdg) (name : String) (decl : Nat) (targs : List VTy) (ab : Option AbsF)
+      (t : TExpr)
 
 /-- **The erasure**: the term the node's rule concludes with. -/
 def TExpr.erase : TExpr → Expr
@@ -250,7 +328,13 @@ def TExpr.erase : TExpr → Expr
   | .lendR _ _ _ _ _ _ _ td tM => (.app (.app (.val (withborUV (td.erase))) (.var 0)) (.val (lendCb (tM.erase))))
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase))
   | .nilDead _ _ _ t => t.erase
-  | .scheme _ _ e => e
+  | .dtor _ _ A => dtorE A
+  | .allocS _ _ σ => BoCa.Fig16.LogRel.Core.allocS σ
+  | .freeS _ _ σ => BoCa.Fig16.LogRel.Core.freeS σ
+  | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => withborS σ
+  | .withborF2M .. | .withborF2I .. => withborF2
+  | .litFn _ _ _ t => t.erase
+  | .use _ _ _ _ _ _ t => t.erase
 
 /-- The node's source. -/
 def TExpr.info : TExpr → TInfo
@@ -353,7 +437,9 @@ def TExpr.info : TExpr → TInfo
   | .lendR i _ _ _ _ _ _ _ _ => i
   | .lendLoopR i _ _ _ _ _ _ _ _ _ => i
   | .nilDead i _ _ _ => i
-  | .scheme i _ _ => i
+  | .dtor i _ _ | .allocS i _ _ | .freeS i _ _ | .withborSM i _ _ _ _ | .withborSI i _ _ _ _
+  | .withborF2M i _ _ _ _ _ _ _ | .withborF2I i _ _ _ _ _ _ _ | .litFn i _ _ _ => i
+  | .use i _ _ _ _ _ _ => i
 
 /-- The node's judgment. -/
 def TExpr.jdg : TExpr → Jdg
@@ -456,7 +542,9 @@ def TExpr.jdg : TExpr → Jdg
   | .lendR _ j _ _ _ _ _ _ _ => j
   | .lendLoopR _ j _ _ _ _ _ _ _ _ => j
   | .nilDead _ j _ _ => j
-  | .scheme _ j _ => j
+  | .dtor _ j _ | .allocS _ j _ | .freeS _ j _ | .withborSM _ j _ _ _ | .withborSI _ j _ _ _
+  | .withborF2M _ j _ _ _ _ _ _ | .withborF2I _ j _ _ _ _ _ _ | .litFn _ j _ _ => j
+  | .use _ j _ _ _ _ _ => j
 
 /-- How a child's context is formed from its node's, as the child's premise has it. -/
 inductive TScope where
@@ -567,7 +655,10 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .lendR _ _ _ _ _ _ _ td tM => [(.fresh 0, td), (.fresh 1, tM)]
   | .lendLoopR _ _ _ _ _ _ _ tN tK ts0 => [(.fresh 1, tN), (.fresh 1, tK), (.fresh 0, ts0)]
   | .nilDead _ _ _ t => [(.fresh 0, t)]
-  | .scheme _ _ _ => []
+  | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
+  | .withborF2I .. => []
+  | .litFn _ _ _ t => [(.push 0, t)]
+  | .use _ _ _ _ _ _ t => [(.push 0, t)]
 
 /-- Whether the node erases to a `λ` (`thunkv N`'s premise): read off the rule's term where its
 head is a constructor, and through the child where the rule keeps its premise's term, so that the
@@ -672,7 +763,13 @@ def TExpr.isLam : TExpr → Bool
   | .lendR _ _ _ _ _ _ _ _ _ => false
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (((lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase)) : Expr) matches .lam _)
   | .nilDead _ _ _ t => t.isLam
-  | .scheme _ _ e => (e matches .lam _)
+  | .dtor _ _ A => (dtorE A matches .lam _)
+  | .allocS _ _ σ => (BoCa.Fig16.LogRel.Core.allocS σ matches .lam _)
+  | .freeS _ _ σ => (BoCa.Fig16.LogRel.Core.freeS σ matches .lam _)
+  | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => (withborS σ matches .lam _)
+  | .withborF2M .. | .withborF2I .. => (withborF2 matches .lam _)
+  | .litFn _ _ _ t => t.isLam
+  | .use _ _ _ _ _ _ t => t.isLam
 
 /-- `isLam` is the erasure's head. -/
 theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
@@ -775,7 +872,10 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .lendR _ _ _ _ _ _ _ _ _ => rfl
   | .lendLoopR _ _ _ _ _ _ _ _ _ _ => rfl
   | .nilDead _ _ _ t => isLam_eq t
-  | .scheme _ _ _ => rfl
+  | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
+  | .withborF2I .. => rfl
+  | .litFn _ _ _ t => isLam_eq t
+  | .use _ _ _ _ _ _ t => isLam_eq t
 
 theorem TExpr.isLam_sound (t : TExpr) (h : t.isLam = true) : ∃ N, t.erase = .val (.lam N) := by
   rw [isLam_eq] at h

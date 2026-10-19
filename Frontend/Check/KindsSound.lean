@@ -186,6 +186,7 @@ theorem clauseBody?_sound {c tM : TExpr} (h : clauseBody? c = some tM) :
   unfold clauseBody? at h
   split at h
   · cases h; rfl
+  · cases h; rfl
   · cases h
 
 /-- **The kind the checker records gives its law's premise** at the clause the handler runs: an

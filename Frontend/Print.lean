@@ -159,6 +159,7 @@ def isHole : VTy → Bool
   | _ => false
 
 def Val.level : Val → Nat
+  | .mark _ _ V => V.level
   | .thunkv _ (.lam _ _ A _) | .bangThunkv _ (.lam _ _ A _) => if isHole A then 2 else 0
   | .app _ (.sugar _ (.op _)) _ => 3
   -- `alloc(e)`, `clone(x)`: an application, parenthesized as an argument.
@@ -265,6 +266,8 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .sugar _ .cont => "continue"
     | .sugar _ (.named n op) => n ++ "." ++ op
     | .sugar _ s => s!"<{reprStr s}>"
+    -- A marked scheme prints as the value it marks: the mark is the checker's, not the source's.
+    | .mark _ _ V => V.pp 0 k
 
 /-- A computation at level `lvl`, indented by `k` after each line break. -/
 def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=

@@ -74,13 +74,14 @@ variable {Δ : LifeCtx} {T : List CVTy}
 
 /-- **R1** (`CDerivesP.lendR`) at the slot `k : ref A`, its body `rM` checked at `Δ, 'x ⊏ @b`
 and the view alone: the λ over the rule's node at the empty context, placed by `nilDead` and
-applied to the slot. The finaliser is the owner's destructor, a `scheme` node.  `[spec §29]` -/
+applied to the slot. The finaliser is the owner's destructor, its derived node.  `[spec §29]` -/
 def rLendR (i : TInfo) {A B : CVTy} {S : CRow} (q : Pin) (x : LifeVar) (b : CLife) (k : Nat)
     (hk : T[k]? = some (.ref A)) (hb : Δ.Defines b) (hx : Δ.find? x = none)
     (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
     (hT : ¬ VFree x A) (hB : ¬ VFree x B) (hBn : NoThunkT B)
     (hside : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' A) (hS : Row.ResumeO S x)
     (hdt : HasDtor (.ref A)) (hdc : closedAt 0 (dtorE (.ref A)) = true)
+    (hde : (dtorE (.ref A)).effFree = true)
     (rM : Res (Δ.extend x b) [.mut (.var x) A] (.comp (effOf S (.box (.var x) B))))
     (hL : subL (allL [.mut (.var x) A]) (orL rM.F.u rM.F.w) = true)
     (hM1 : closedAt 1 rM.e = true) (hcb : closedAt 0 (lendCb rM.e).1 = true)
@@ -89,9 +90,9 @@ def rLendR (i : TInfo) {A B : CVTy} {S : CRow} (q : Pin) (x : LifeVar) (b : CLif
   let dM := (rM.F.d _ (btw_allL _ _ _ rM.F.hu rM.F.hw hL)).2
   let J : Jdg := .comp (effOf S (.tensor (.ref A) B))
   let JL : Jdg := .comp (.arr (.ref A) (effOf S (.tensor (.ref A) B)))
-  let tR : TExpr := .lendR i J x b A B S (.scheme i (.val (.lolli (.ref A) .unit)) (dtorE (.ref A))) rM.t
+  let tR : TExpr := .lendR i J x b A B S (.dtor i (.val (.lolli (.ref A) .unit)) (.ref A)) rM.t
   let hR1 : TDerivesP Δ [⟨.ref A, true⟩] tR J :=
-    .lendR hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc (.scheme (dtor_wf hdt .nil)) dM
+    .lendR hb hx hbx hΔx hT hB hBn hside hS hM1 hcb hdc (.dtor hdt hdc hde .nil) dM
   let rL : Res Δ T JL :=
     ⟨.nilDead i JL JL (.lam i JL (.ref A) (effOf S (.tensor (.ref A) B)) tR), rM.sigs, q :: rM.pins,
       (Fam.deadStrict T).map fun _ hd => TTied.pinned q (.nilDead hd (.lam hR1))⟩

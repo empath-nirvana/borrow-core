@@ -198,7 +198,8 @@ every host), and `checked_runs` adequacy for a closed `main : F 1`, both at `hp`
         CDerivesAt c.Ξ LifeCtx.empty c.ctx (.app (.val (.lam (c.t.erase.unfill b 0))) (.val (.lam b)))
           (.comp c.C)
 
-A `def` is checked at each of its uses (§10), so `main`'s erasure holds a function at each use:
+A `def` is checked once per key and placed at each of its uses by a `use` node (SPEC §3), which
+erases to its body, so `main`'s erasure holds a function at each use:
 the copy, which is `[let-poly]`'s premise term (SPEC §18 *Rows*, §24 *Theorems*). For a closed
 λ-value typed at the empty context, the theorem gives the rule's derivation of the let that binds
 it once, its body `main`'s erasure with the λ-value's occurrences replaced by the bound variable

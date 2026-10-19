@@ -56,6 +56,92 @@ def rTop : Res Δ T (.comp .top) :=
 def rForce (k : Nat) (C : CCTy) (h : T[k]? = some (.thunk C)) : Res Δ T (.comp C) :=
   ⟨.force i (.comp C) k C, [], [], (Fam.var T k _ h).map fun _ hs => TTied.force i hs⟩
 
+/-! ### A `def` at its use  `[spec §10]`
+
+A `def`'s body is checked once per key at a context `Tc` of persistent externs, and placed at a use
+whose context `T` is `Tc` under `m` more slots (`T.drop m = Tc`): the use's slots before `Tc` are
+unused by the body, and each may be given to it, live, where the body's absorption holds of its
+type (`TTied.weaken`). -/
+
+theorem btw_append : ∀ {u₁ w₁ u₂ w₂ L : List Bool}, u₁.length = w₁.length →
+    Btw (u₁ ++ u₂) (w₁ ++ w₂) L → ∃ L₁ L₂, L = L₁ ++ L₂ ∧ L₁.length = u₁.length ∧ Btw u₁ w₁ L₁ ∧
+      Btw u₂ w₂ L₂
+  | [], [], _, _, L, _, h => ⟨[], L, rfl, rfl, .nil, h⟩
+  | _ :: _, _ :: _, _, _, _ :: _, hl, .cons h₁ h₂ h => by
+      simp only [List.length_cons, Nat.add_right_cancel_iff] at hl
+      obtain ⟨L₁, L₂, rfl, hl₁, b₁, b₂⟩ := btw_append hl h
+      exact ⟨_ :: L₁, L₂, rfl, by simp [hl₁], .cons h₁ h₂ b₁, b₂⟩
+  | [], _ :: _, _, _, _, hl, _ => by simp at hl
+  | _ :: _, [], _, _, _, hl, _ => by simp at hl
+
+theorem mkCtx_append : ∀ {T₁ : List CVTy} {L₁ : List Bool} (T₂ : List CVTy) (L₂ : List Bool),
+    L₁.length = T₁.length → mkCtx (T₁ ++ T₂) (L₁ ++ L₂) = mkCtx T₁ L₁ ++ mkCtx T₂ L₂
+  | [], [], _, _, _ => rfl
+  | _ :: T₁, _ :: L₁, T₂, L₂, h => by
+      simp only [List.length_cons, Nat.add_right_cancel_iff] at h
+      simp only [List.cons_append, mkCtx, mkCtx_append T₂ L₂ h]
+  | [], _ :: _, _, _, h => by simp at h
+  | _ :: _, [], _, _, h => by simp at h
+
+theorem mkCtx_length : ∀ {T : List CVTy} {L : List Bool}, L.length = T.length →
+    (mkCtx T L).length = T.length
+  | [], [], _ => rfl
+  | _ :: T, _ :: L, h => by
+      simp only [List.length_cons, Nat.add_right_cancel_iff] at h
+      simp [mkCtx, mkCtx_length h]
+  | [], _ :: _, h => by simp at h
+  | _ :: _, [], h => by simp at h
+
+theorem liveP_of_btw (p : CVTy → Bool) : ∀ {T : List CVTy} {L : List Bool},
+    Btw (noneL T) (T.map p) L → LiveP p (mkCtx T L)
+  | [], [], _ => fun _ hs => by simp [mkCtx] at hs
+  | A :: T, l :: L, .cons _ h₂ h => by
+      intro s hs hl
+      simp only [mkCtx, List.mem_cons] at hs
+      rcases hs with rfl | hs
+      · rcases h₂ hl with h | h
+        · simp at h
+        · simpa using h
+      · exact liveP_of_btw p h s hs hl
+
+/-- **A `def`'s body at its use**: the body `r`, checked at `Tc`, at the use's context `T`, its
+`m` slots before `Tc` unused and absorbed where the body's absorption `f` holds. -/
+def rUse (name : String) (decl : Nat) (targs : List CVTy) {Tc : List CVTy} {A : CVTy}
+    (m : Nat) (hT : T.drop m = Tc) (r : Res Δ Tc (.val A)) (f : AbsF)
+    (hf : r.t.absF Δ = some f) : Res Δ T (.val A) :=
+  have hT' : T = T.take m ++ Tc := by rw [← hT, List.take_append_drop]
+  have hl : (noneL (T.take m)).length = ((T.take m).map f.eval).length := by
+    simp [noneL]
+  hT' ▸ ⟨.use i (.val A) name decl targs (some f) (r.t.shift (T.take m).length 0), r.sigs, r.pins,
+    ⟨noneL (T.take m) ++ r.F.u, (T.take m).map f.eval ++ r.F.w,
+      by simp [noneL, r.F.hu], by simp [r.F.hw],
+      fun L hb => by
+        obtain ⟨L₁, L₂, rfl, hl₁, b₁, b₂⟩ := btw_append hl hb
+        rw [noneL_length] at hl₁
+        have hw := TTied.weaken (Γa := []) (Γp := mkCtx (T.take m) L₁) (r.F.d L₂ b₂) hf
+          (liveP_of_btw f.eval b₁)
+        rw [mkCtx_length hl₁] at hw
+        rw [mkCtx_append Tc L₂ hl₁]
+        have hu := TTied.use (i := i) name decl targs hw
+        rwa [TExpr.absF_shift, hf] at hu⟩⟩
+
+/-- A `def`'s body checked at the use's own context, under its `use` node. -/
+def rUseAt (name : String) (decl : Nat) (targs : List CVTy) {A : CVTy} (r : Res Δ T (.val A)) :
+    Res Δ T (.val A) :=
+  ⟨.use i (.val A) name decl targs (r.t.absF Δ) r.t, r.sigs, r.pins,
+    r.F.map fun _ h => TTied.use i name decl targs h⟩
+
+/-! ### Marked schemes  `[spec §3]` -/
+
+/-- A string literal's table, the bytes `bs`: the derived node over its checked term `r`, when
+`r`'s erasure is `litFnE bs`. -/
+def rLitFn {j : Jdg} (bs : List Nat) (r : Res Δ T j) : Option (Res Δ T j) :=
+  if hb : r.t.erase = litFnE bs then
+    if hcl : BoCa.Fig16.LogRel.Core.closedAt 0 (litFnE bs) = true then
+      some ⟨.litFn i j bs r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.litFn i hb hcl h⟩
+    else none
+  else none
+
 /-! ### Structural value rules -/
 
 def rPair {A B : CVTy} (r₁ : Res Δ T (.val A)) (r₂ : Res Δ T (.val B))
@@ -236,13 +322,14 @@ def rSumE {A B : CVTy} {C : CCTy} {t₁ t₂ : TExpr} {s₁ s₂ : CRow} {p₁ p
 `TTied.drop`, as `drop_derives`: `unitE` over `lolliE` of the variable and the destructor. The
 variable's node has the source `ix`. -/
 def rDrop (ix : TInfo) {C : CCTy} (k : Nat) (A : CVTy) (hk : T[k]? = some A) (hA : HasDtor A)
-    (hE : (dtorE A).effFree = true) (r : Res Δ T (.comp C))
+    (hc : BoCa.Fig16.LogRel.Core.closedAt 0 (dtorE A) = true) (hE : (dtorE A).effFree = true)
+    (r : Res Δ T (.comp C))
     (h : overlapOK T (oneL T k) r.F.u = true) : Res Δ T (.comp C) :=
   ⟨.unitE i (.comp C) C (oneL T k)
       (.lolliE ix (.val .unit) A .unit (oneL T k) (.var ix (.val A) k A)
-        (.scheme ix (.val (.lolli A .unit)) (dtorE A))) r.t,
+        (.dtor ix (.val (.lolli A .unit)) A)) r.t,
     r.sigs, r.pins, ((Fam.var T k A hk).split r.F h).map fun _ ⟨_, _, hs, hx, hM⟩ =>
-      TTied.drop i ix (oneL T k) hs hx hA hE hM⟩
+      TTied.drop i ix (oneL T k) hs hx hA hc hE hM⟩
 
 /-- `absurd V`: the rest of the context is absorbed. -/
 def rZeroE (C : CCTy) (rV : Res Δ T (.val .zero)) (h : overlapOK T rV.F.u (Fam.top T).u = true) :

@@ -89,14 +89,6 @@ def cDeadStrict {A : CVTy} (mk : Jdg → TExpr)
     Except Error (Σ B : CVTy, Res Δ T (.val B)) :=
   pure ⟨A, mk (.val A), [], [], (Fam.deadStrict T).map fun _ hd => TTied.ofAt (h hd)⟩
 
-/-- A derived form stated at `Ctx.Dead`, typed by its lemma: a `scheme` node, tied. -/
-def cStrict {A : CVTy} (i : TInfo) (sp : Span) (e : CExpr)
-    (h : ∀ {Γ}, Ctx.Dead Γ → CDerives Δ Γ e (.val A)) :
-    Except Error (Σ B : CVTy, Res Δ T (.val B)) :=
-  if he : e.effFree = true then
-    pure ⟨A, .scheme i (.val A) e, [], [], (Fam.deadStrict T).map fun _ hd => TTied.scheme i (h hd) he⟩
-  else err sp "internal error: a derived form performs or handles an operation"
-
 /-- `'x` fresh for `Δ` and free in neither `A` nor `B`. -/
 def freshFor (sp : Span) (x : LifeVar) (A B : CVTy) :
     Except Error (PLift (Δ.find? x = none ∧ ¬ VFree x A ∧ ¬ VFree x B)) :=
@@ -118,6 +110,10 @@ def outlivesWitness (sp : Span) (b : CLife) (A : CVTy) :
 
 def needB (sp : Span) (b : Bool) (msg : String) : Except Error (PLift (b = true)) :=
   if h : b = true then pure ⟨h⟩ else err sp msg
+
+/-- A derived form performs or handles no operation, decided. -/
+def effFreeD (sp : Span) (e : CExpr) : Except Error (PLift (e.effFree = true)) :=
+  needB sp e.effFree "internal error: a derived form performs or handles an operation"
 
 /-- `FamSide`: the freshness and renaming facts of `withbor_f2`, decided. -/
 def famSide (sp : Span) (M : CLife → CVTy → CVTy) (c x y : LifeVar) (A B T' : CVTy) :
@@ -155,8 +151,8 @@ def finaliser (sp : Span) (src : CVTy) :
   else err sp (s!"the source `{ppVTy src}` has no destructor, so it cannot be finalised when " ++
     "the callback aborts")
 
-/-- The finaliser's node: the source's destructor, a `scheme`. -/
-def finNode (sp : Span) (src : CVTy) : TExpr := .scheme (at_ sp) (.val (.lolli src .unit)) (dtorE src)
+/-- The finaliser's node: the source's destructor. -/
+def finNode (sp : Span) (src : CVTy) : TExpr := .dtor (at_ sp) (.val (.lolli src .unit)) src
 
 /-- The row of an unwinding callback: `Row.Unwind`.  `[spec §19]` -/
 def unwindRow (sp : Span) (x : LifeVar) (S : CRow) : Except Error (PLift (S.Unwind x)) :=
@@ -186,7 +182,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A)
       (cDeadStrict (fun j => .withbor1U (at_ sp) j A B S x (finNode sp (.ref A))) fun hd _ =>
         .withbor1U x hd.toP hx (scopedB_sound hsc) h₁ h₂ hS hdc
-          (.scheme (CDerivesAt.ofEffFree (dtor_wf hdt hd) hde)))
+          (.dtor hdt hdc hde hd))
   | .withbor2U _ b A B r => do
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A
@@ -199,7 +195,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A)
       (cDeadStrict (fun j => .withbor2U (at_ sp) j A B S x (finNode sp (.ref A))) fun hd _ =>
         .withbor2U x hd.toP hx hside h₁ h₂ hS hdc
-          (.scheme (CDerivesAt.ofEffFree (dtor_wf hdt hd) hde)))
+          (.dtor hdt hdc hde hd))
   | .withbor3U a _ A B r => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
@@ -211,7 +207,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.mut a A)
       (cDeadStrict (fun j => .withbor3U (at_ sp) j a A B S x (finNode sp (.mut a A))) fun hd _ =>
         .withbor3U x hd.toP hx h₁ h₂ hS hdc
-          (.scheme (CDerivesAt.ofEffFree (dtor_wf hdt hd) hde)))
+          (.dtor hdt hdc hde hd))
   | .withloadU a _ A B r => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
@@ -235,7 +231,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.fam (.ref A))
       (cDeadStrict (fun j => .sliceBorrowMU (at_ sp) j A B S x (finNode sp (.fam (.ref A))))
         fun hd _ => .sliceBorrowMU x hd.toP hA hB h₁ h₂ hS hdc
-          (.scheme (CDerivesAt.ofEffFree (dtor_wf hdt hd) hde)))
+          (.dtor hdt hdc hde hd))
   | .sliceBorrowImmU _ b A B r => do
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A
@@ -250,7 +246,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.fam (.ref A))
       (cDeadStrict (fun j => .sliceBorrowIU (at_ sp) j A B S x (finNode sp (.fam (.ref A))))
         fun hd _ => .sliceBorrowIU x hd.toP (scopedB_sound hsc) hA hB h₁ h₂ hS hdc
-          (.scheme (CDerivesAt.ofEffFree (dtor_wf hdt hd) hde)))
+          (.dtor hdt hdc hde hd))
   | _ => err sp "internal error: not an unwinding borrow"
 
 
@@ -364,10 +360,12 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
   | .host op => (cDead (fun j => .hostOp (at_ sp) j op) fun hd _ => .hostOp op hd)
   | .allocS σ => do
       let s ← E.elabS Δ σ
-      (cStrict (at_ sp) sp _ fun hd => d_allocS s hd)
+      let ⟨he⟩ ← effFreeD sp (BoCa.Fig16.LogRel.Core.allocS s)
+      (cDeadStrict (fun j => .allocS (at_ sp) j s) fun hd _ => .allocS s he hd)
   | .freeS σ => do
       let s ← E.elabS Δ σ
-      (cStrict (at_ sp) sp _ fun hd => d_freeS s hd)
+      let ⟨he⟩ ← effFreeD sp (BoCa.Fig16.LogRel.Core.freeS s)
+      (cDeadStrict (fun j => .freeS (at_ sp) j s) fun hd _ => .freeS s he hd)
   | .withborS m σ _ T' => do
       let s ← E.elabS Δ σ
       let T' ← E.elabV Δ T'
@@ -376,11 +374,13 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hΔ⟩ ← needB sp (okB Δ.entries) "the lifetime context is not well scoped"
       let c := Δ.freshVar
       let ⟨hc⟩ ← needB sp (Δ.find? c).isNone s!"{ppLVar c} is already bound"
+      let ⟨hcl⟩ ← needB sp (closedAt 0 (BoCa.Fig16.LogRel.Core.withborS s)) "internal error: a block borrow is not closed"
+      let ⟨he⟩ ← effFreeD sp (BoCa.Fig16.LogRel.Core.withborS s)
       match m with
-      | .mut => (cStrict (at_ sp) sp _ fun hd =>
-          withborSM_wf hσ c hT (by simpa [LifeCtx.Ok] using hΔ) (by simpa using hc) hd)
-      | .imm => (cStrict (at_ sp) sp _ fun hd =>
-          withborSI_wf hσ c hT (by simpa [LifeCtx.Ok] using hΔ) (by simpa using hc) hd)
+      | .mut => (cDeadStrict (fun j => .withborSM (at_ sp) j s c T') fun hd _ =>
+          .withborSM s c T' hσ hT (by simpa [LifeCtx.Ok] using hΔ) (by simpa using hc) hcl he hd)
+      | .imm => (cDeadStrict (fun j => .withborSI (at_ sp) j s c T') fun hd _ =>
+          .withborSI s c T' hσ hT (by simpa [LifeCtx.Ok] using hΔ) (by simpa using hc) hcl he hd)
   | .withborF2Mut _ _ _ w A B T' => do
       let w ← E.elabL Δ w
       let A ← E.elabV Δ A
@@ -395,8 +395,9 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
         s!"`{ppVTy B}` must outlive the family's outer borrow"
       let ⟨hTo⟩ ← needB sp (outlivesB (FD₁ Δ x) (.var x) T')
         s!"`{ppVTy T'}` must outlive the family's outer borrow"
-      (cStrict (at_ sp) sp _ fun hd => withborM2_wf s hA (outlivesB_sound _ _ _ hBo)
-        (outlivesB_sound _ _ _ hTo) hd)
+      let ⟨he⟩ ← effFreeD sp BoCa.Fig16.LogRel.Core.withborF2
+      (cDeadStrict (fun j => .withborF2M (at_ sp) j c x y A B T') fun hd _ =>
+        .withborF2M s hA (outlivesB_sound _ _ _ hBo) (outlivesB_sound _ _ _ hTo) he hd)
   | .arrayNew A => do
       let A ← E.elabV Δ A
       (cDead (fun j => .arrNew (at_ sp) j A) fun hd _ => .arrNew A hd)
@@ -501,8 +502,10 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
         s!"`{ppVTy B}` must outlive the family's outer borrow"
       let ⟨hTo⟩ ← needB sp (outlivesB (FD₁ Δ x) (.var x) T')
         s!"`{ppVTy T'}` must outlive the family's outer borrow"
-      (cStrict (at_ sp) sp _ fun hd => withborI2_wf s (scopedB_sound hA) (scopedB_sound hB)
-        (outlivesB_sound _ _ _ hBo) (outlivesB_sound _ _ _ hTo) hd)
+      let ⟨he⟩ ← effFreeD sp BoCa.Fig16.LogRel.Core.withborF2
+      (cDeadStrict (fun j => .withborF2I (at_ sp) j c x y A B T') fun hd _ =>
+        .withborF2I s (scopedB_sound hA) (scopedB_sound hB) (outlivesB_sound _ _ _ hBo)
+          (outlivesB_sound _ _ _ hTo) he hd)
   | c@(.withbor1U ..) | c@(.withbor2U ..) | c@(.withbor3U ..) | c@(.withloadU ..)
   | c@(.sliceBorrowMutU ..) | c@(.sliceBorrowImmU ..) => synConstU E Δ T sp c
 

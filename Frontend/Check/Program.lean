@@ -7,9 +7,11 @@ import Frontend.Check.KindsSound
 # Frontend — Check — programs
 
 `checkProgram` checks the declarations in order (syntax-core §10): each `type` and `shape`
-elaborates at `Δ = ∅`; each `def` without parameters is checked once at its declaration, at
-`Δ = ∅` and the empty context (and again at every use); a `def` with type parameters is checked
-only at its uses; `main` is checked at `Δ = ∅` and the context of the externs, the last declared
+elaborates at `Δ = ∅`; each `def` without parameters is checked at its declaration, at `Δ = ∅`
+and the persistent externs before it, which is its key's check there; a `def` is checked once per
+key (`DefEntry`: the declaration, its type arguments, the lifetime context and the externs), and
+each use places its key's body (`useDef`); a `def` with type parameters is checked only at its
+uses; `main` is checked at `Δ = ∅` and the context of the externs, the last declared
 at index `0`, all live.
 
 **Soundness.** A successful check of `main` returns a `Checked`: the typed term `c.t` of `main`
@@ -143,7 +145,7 @@ def sigsErr (s : CRow) : String :=
 
 /-- Check `main : C = M`. -/
 def checkMain (ds : Array Decl) (k : Nat) (sp : Span) (C : CTy) (M : Comp) :
-    Except Error Checked := do
+    CheckM Checked := do
   let xs ← externs ds
   let T := (xs.map (·.2)).reverse
   let E : Env := { Env.top ds k with vars := (xs.map (some ·.1)).reverse, nExt := xs.length }
@@ -160,9 +162,10 @@ def checkMain (ds : Array Decl) (k : Nat) (sp : Span) (C : CTy) (M : Comp) :
     | none => throw ⟨sp, "internal error: main"⟩
 
 /-- Check one declaration; the line `bcc check` prints for it, `main`'s result, and the typed term
-of a `def` without parameters checked at its declaration, at its context's length. -/
+of a `def` without parameters checked at its declaration, at its context's length. That check is
+its key's at `Δ = ∅` and the externs before it (`DefEntry`), which its uses read. -/
 def checkDecl (ds : Array Decl) (k : Nat) :
-    Decl → Except Error (String × Option Checked × List (Nat × TExpr))
+    Decl → CheckM (String × Option Checked × List (Nat × TExpr))
   | .type _ n [] [] A => do
       let A' ← (Env.top ds k).elabV LifeCtx.empty A
       pure (s!"type {n.name} = {ppVTy A'}", none, [])
@@ -184,6 +187,7 @@ def checkDecl (ds : Array Decl) (k : Nat) :
           nExt := xs.length }
         let A' ← E.elabV LifeCtx.empty A
         let r ← chkV checkFuel E LifeCtx.empty T V A'
+        modify (⟨k, [], LifeCtx.empty, T, A', r, r.t.absF LifeCtx.empty, rfl⟩ :: ·)
         pure (s!"def {n.name} : {ppVTy A'}", none, [(T.length, r.t)])
       else
         pure (s!"def {n.name}[{", ".intercalate (ps.map (·.name))}] : checked at each use", none, [])
@@ -212,13 +216,13 @@ def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := 
   let ds := el.prog.decls.toArray
   let lib := el.lib
   let r : Except Error (Report × List (Nat × TExpr)) :=
-    (List.range ds.size).foldlM (init := ((⟨[], none, el, []⟩ : Report), [])) fun (acc, ts) k =>
+    ((List.range ds.size).foldlM (init := ((⟨[], none, el, []⟩ : Report), [])) fun (acc, ts) k =>
       match (ds[k]? : Option Decl) with
       | some d => do
           let (line, m, t) ← checkDecl ds k d
           pure ({ acc with lines := if k < lib then acc.lines else acc.lines ++ [line],
                            main := m <|> acc.main }, ts ++ t)
-      | none => pure (acc, ts)
+      | none => pure (acc, ts) : CheckM _).run' []
   let (rep, terms) ← r.mapError (Frontend.Elab.renderError el.origins)
   -- `main`'s exit status (SPEC §39), as the elaboration records it.
   let rep := { rep with main := rep.main.map fun (c : Checked) => { c with exits := el.exits } }

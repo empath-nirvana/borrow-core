@@ -135,9 +135,12 @@ def classifyBody (tM : TExpr) : ClauseKind :=
   else if onPaths (stateFnB onceB) 0 tM then .resumeOnce true
   else .stored
 
-/-- A control clause `!thunkv λp. let (x, κ) = p; M`: its body `M`. -/
+/-- A control clause `!thunkv λp. let (x, κ) = p; M`: its body `M`; through a `def`'s `use`,
+which erases to its body. -/
 def clauseBody? : TExpr → Option TExpr
   | .bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => some tM
+  | .use _ _ _ _ _ _ (.bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM))) =>
+    some tM
   | _ => none
 
 /-- **The kind of the clause `c` of the operation `o`**, with the operation's qualifier: abortive
@@ -150,11 +153,12 @@ def classifyClause (o : Qual × VTy × VTy) (c : Option TExpr) : HKind :=
     | none => .stored⟩
 
 /-- The components of a clause tuple `(c₀, (c₁, … ()))`, `n` of them: `[⊗I]`'s children, through
-the nodes that keep their premise's term. -/
+the nodes that keep their premise's term and a `def`'s `use`. -/
 def clauseParts : Nat → TExpr → List (Option TExpr)
   | 0, _ => []
   | n + 1, .tensorI _ _ _ _ _ c t => some c :: clauseParts n t
   | n + 1, .ret _ _ _ t => clauseParts (n + 1) t
+  | n + 1, .use _ _ _ _ _ _ t => clauseParts (n + 1) t
   | n + 1, _ => List.replicate (n + 1) none
 
 /-- The kinds of a handler's clauses, from the typed term its clauses variable is bound to. -/

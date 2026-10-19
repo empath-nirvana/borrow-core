@@ -115,6 +115,7 @@ def _root_.Frontend.Val.elab (lend : Bool) : Val → Except Error Val
   | .bangThunk sp M => return .bangThunk sp (← M.elab false)
   | .bangThunkv sp M => return .bangThunkv sp (← M.elab false)
   | .run sp M => return .run sp (← M.elab lend)
+  | .mark sp k V => return .mark sp k (← V.elab lend)
   | V@(.var ..) | V@(.clone ..) | V@(.defApp ..) | V@(.unit ..) | V@(.const ..) | V@(.sugar ..) => pure V
 
 /-- Elaborate `&c` in a computation: in `x <- M; N`, one `&c` in `M` becomes
@@ -2052,7 +2053,8 @@ def need {α} (sp : Span) (what : String) : Option α → DM α
 
 /-- The literal `"…"` of the bytes `bs`: the persistent value `(n, t)` of `lit`, `n` its length
 and `t` the `!` function from an index to its byte, `0` past the end. `t` compares the index with
-the length, then halves the range of indices down to one byte (design §5.7). -/
+the length, then halves the range of indices down to one byte (design §5.7). `t` is marked as the
+literal's table, which the checker's derived node records (`TExpr.litFn`, SPEC §3). -/
 def litValue (sp : Span) (bs : List Nat) : Val :=
   let arr := bs.toArray
   let u : Ident := ⟨"io_lu", sp⟩
@@ -2070,7 +2072,8 @@ def litValue (sp : Span) (bs : List Nat) : Val :=
   let n := bs.length
   let body := if n == 0 then .ret sp (litAt sp .w8 0)
     else .case sp (lt n) u (.ret sp (litAt sp .w8 0)) u (tree n 0 n)
-  .pair sp (litAt sp .w32 n) (.bangThunkv sp (.lam sp ⟨"io_li", sp⟩ (.int sp .w32) body))
+  .pair sp (litAt sp .w32 n)
+    (.mark sp (.litFn bs) (.bangThunkv sp (.lam sp ⟨"io_li", sp⟩ (.int sp .w32) body)))
 
 /-- The filler of a buffer's unused slots at the element type `A` (design §5.4): `0` at an
 integer width, the empty view at a borrowed family, an empty array at an owned one (which
