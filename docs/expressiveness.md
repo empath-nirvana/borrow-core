@@ -40,7 +40,16 @@ kill criterion.
 
 ## 0. Summary
 
-**Read §12–§15 first.** The target set was widened on 2026-10-19 (Are We Fast Yet, the Benchmarks
+**Read §16–§19 first.** The second pass (2026-10-19) re-scores every program against the
+zero-cost target: natural form, and counts at most Rust's, or within reach of that by a named fix
+that does not change the language. Of 95 programs, 7 are zero cost, 67 within reach and 21 out of
+reach (§17.9). §18 re-ranks the blockers by programs kept out of reach: B2, B1, B14, B11, B4, B17
+(north star), then B5 (T1), B13, #174, SPEC §36's lookup, B12, #9, an `Aff` with by-value state.
+§19's build units end the document; each is done when named programs reach zero cost. §16.1
+corrects the thread claim: async tasks run on one thread, and "disjoint `mut` halves,
+`unconditional`" is about `PinLaw`, not parallelism.
+
+**§12–§15** are the widened catalogue's first pass. The target set was widened on 2026-10-19 (Are We Fast Yet, the Benchmarks
 Game, Advent of Code, the north star end to end, Lox, data structures, concurrency). §12 is the
 catalogue over it, §13 the ways for the new blockers B11–B17, §14 the re-ranking by programs gated,
 and §15 the revised build units that end the document. The summary below is the first pass, kept
@@ -617,7 +626,7 @@ foundation its fix is. Every count is from §2.
    store per read (measured), while its machine code has single loads (recorded,
    `bench/README.md`). That is why L-1 is a lowering law, not a calculus change.
 
-## 9. Build units (first pass, superseded by §15)
+## 9. Build units (first pass, superseded by §15 and §19)
 
 A fixed, ordered list. Each unit names the blocker it removes, its acceptance programs (each added
 to the corpus with its golden, from the target set where one applies), and when it is done. Spikes
@@ -2095,7 +2104,7 @@ only the reading of the per-turn lend.
 - The clox dispatch `while` is already a flat loop at the flat IR, with no allocation or indirect
   call per instruction (measured).
 
-## 15. Build units, revised for the widened target set
+## 15. Build units, revised for the widened target set (superseded by §19)
 
 This list supersedes §9. It is fixed and ordered. Each unit names the blocker it removes, its
 acceptance programs (added to the corpus with goldens, drawn from §12's set and §2.2's), and a
@@ -2175,3 +2184,408 @@ limit.
 stored callbacks with rows (#161 B); ports beyond the shared service (`comp-param-two-sites`,
 `comp-param-for`); explicit RC; interior mutability beyond the region of C-1/C-2 (#119's
 `RefCell`-like projections, #160).
+
+## 16. The second pass: zero cost, or within reach of it
+
+The user, 2026-10-19: "we need to do a second pass on the inventory. What is zero cost because that
+is the target." Then: "I don't think we need 'zero' zero cost but at least within reach of it and a
+reasonable path to getting there."
+
+§2 and §12 counted a program as expressible when it ran "in some shape, workarounds included".
+That hid three things: the cost of T1 (borrows across suspensions), the cost of borrow ergonomics
+and of each workaround, and the gap between async tasks on one thread and OS threads. This pass
+re-scores every program those sections wrote or ran against the zero-cost target.
+
+**The zero-cost target.** A program allocates, calls indirectly, copies or checks only where the
+equivalent hand-written C or Rust would.
+
+**The three tests.**
+1. **Natural form.** The program is written as its functionality is naturally written, with no
+   workaround in the source. Workarounds that count:
+   - hand-split borrows at `await`;
+   - ownership plumbing (`let (x, r) = f(x, …)`);
+   - arenas with integer handles where the functionality *is* a pointer structure;
+   - a hand-written scheduler;
+   - nested data inlined into one `mu`;
+   - libraries written inside the program;
+   - `for … break` standing in for `while`, renamed binders, `array_copy` or `clone` per use,
+     `peek`/`len_mut`;
+   - tags standing in for function values.
+
+   A borrow-free form counts as natural only if it really is how that functionality is written.
+   - **Natural:** a VM's value stack indexed by integers; index handles for a *benchmark's* graph,
+     which is the performance idiom in Rust (petgraph, rustc); a push parser for HTTP (httparse,
+     llhttp and picohttpparser are push parsers).
+   - **Workaround:** an arena standing in for a doubly linked list, a Lox environment chain shared
+     by closures, or clox's upvalues into the stack.
+2. **Counts at most Rust's**: allocations, indirect calls and copies exactly; bounds checks and
+   loads/stores by order.
+   - Ours are `bcc-counts` from the C3c binaries.
+   - Rust's allocations are measured with a counting `#[global_allocator]` on the same input and
+     sizes. Its indirect calls, `Rc`/`RefCell` operations and checks are read from the source.
+3. **Time**, where a bench exists. It is reported but is not the bar: it depends on the new
+   backend (`docs/compiler.md`'s N units).
+
+**Verdicts.**
+- **zero cost**: natural form, and counts at most Rust's.
+- **cost, within reach**: the natural form runs, and every excess has a *named* fix that changes
+  neither the language nor its proofs. A named fix is one of:
+  - a backend item: an N unit of `docs/compiler.md` §6.1, or an L item of §5;
+  - a library change;
+  - an elaboration change that is already planned: loops U2–U4, ergonomics E1/E2, the write rule
+    of #586, or #58.
+- **cost, out of reach**: some excess has no such fix; the doc names what it would need.
+- **ceremony, within reach**: a planned or nameable sugar or elaboration unit removes the
+  workaround.
+- **ceremony, out of reach**: the workaround reflects a real limit; the doc names it.
+- **blocked**: it does not run. A program blocked only by a planned elaboration unit is counted
+  *within reach*.
+
+Combinations are written with `+`. "Out of reach" wins over "within reach" for the program's
+overall verdict.
+
+**Method.** Three subagents of this session scored the programs, and I re-ran the load-bearing
+claims. The Rust references and the raw counts are in `docs/expressiveness-probes/zero-cost/`:
+`bench/` (the #537 rows and T01–T14), `awfybg/` (Are We Fast Yet and the Game) and `rest/` (AoC,
+data structures, Lox, concurrency and the north star).
+- `bcc-counts` runs the flat-IR interpreter, so programs ran at reduced sizes. The Rust side ran at
+  the same sizes; the sizes are in `bench/sizes.txt` and each program's header.
+- Fixed start-up allocations are subtracted on both sides: Rust's std runtime makes 3 before
+  `main`, plus one per argument and one for stdout.
+- Every Rust reference prints the same answer as ours.
+
+**The Rust bar where it is ambiguous.**
+- **Graphs in benchmarks (Richards, DeltaBlue, Havlak, CD): the index form.** It is
+  `Vec<T>` plus `usize` links, the performance idiom; AWFY's own Havlak already keeps
+  DFS-indexed arrays. The `Rc<RefCell>` form's counts are given beside it, estimated.
+- **jlox: `Rc<RefCell<Environment>>`.** Lox closures capture scopes whose lifetimes do not nest.
+- **clox: the index form.** It is the stricter of the two forms (9 allocations against 20).
+- **Async: a std-only executor.** It is a `VecDeque<Pin<Box<dyn Future>>>` with a no-op waker:
+  one `Box::pin` per task, and one dyn poll per resume (counted at run time).
+- **pidigits and regex-redux:** hand-written in Rust with the same design as ours (no GMP, no
+  `regex` crate).
+
+### 16.1 Async tasks are not OS threads
+
+The first pass blurred two things.
+- **What every async program here runs on.** `lib/async.bc`'s tasks interleave cooperatively on
+  **one thread**.
+- **What "two tasks hold disjoint `mut` halves, `unconditional`" means.** It is a fact about the
+  *typing*: R1's relaxed lend and its `PinLaw` assumption are not used. It says nothing about two
+  cores.
+- **What parallel functionality needs.** OS threads (B12, #212), and a soundness argument for a
+  parallel run that is open: #212's reordering theorem, or a named assumption.
+- **Where the corrections are.** §12.6, §12.7 and §13.3 are corrected in place, and every
+  parallel row below is **blocked (B12)**.
+
+### 16.2 T1, scored honestly
+
+Under the premise of limited borrows plus linearity, the question for every borrow-across-a-
+suspension workaround is: is the borrow-free form the natural one? Measured, it often is not.
+- **A function that loops with a `while` over a borrowed view is refused.** T03's parser and T04's
+  inner `while` hit "a borrow at `'t` cannot stay open across its steps: it may take one borrow of
+  a cell" (SPEC §14). Their workaround is to own the data and use counted loops, and that is a
+  workaround: Rust writes the loop over `&[u8]`.
+- **A `for` over a generator inside its source's borrow is refused** (`parse-recover-gen`).
+- **A task that opens a borrow and keeps it across `await` needs R1, or a hand split**
+  (`bank-split.bc`, `async-bank-inbox`).
+
+So T1 keeps five programs out of reach (§18). The first pass's "lending cursor" and "lend split"
+fix two of them by elaboration. A deeper candidate covers the loop and generator cases:
+- **Where they meet T1.** In both, the operation the borrow crosses (a `while`'s `tick` under the
+  runtime's driver, a `for`'s `yield` into a tail-resumptive clause) is **tail-resumptive**. The
+  clause resumes at once and no continuation is stored, so after erasure it is a direct call.
+- **The candidate.** A borrow held across such an operation is a borrow held across a call. Call it
+  "T1 at tail-resumptive operations". It is a hypothesis, put to spike S-T (§19). It would not
+  cover `await`, whose clause stores `κ`; R1 and the lend split stay the routes there.
+
+## 17. The verdict table
+
+`a/i/c` is allocations, indirect calls and copies for the program body. The Rust reference is the
+measured one unless marked *est*.
+
+### 17.1 The #537 bench rows (24)
+
+| program | natural? | ours a/i/c | Rust a/i/c | excess, and its fix | verdict |
+|---|---|---|---|---|---|
+| chain-for, mandelbrot, raise-small, raise-large | yes | 0/0/0 | 0/0/0 | none (time: raise-small 1.30×, N2) | **zero cost** |
+| binary-trees | yes | 25774/0/0 | 25774/0/0 | a budget test per call (NEW-b); 4-word nodes (N1 layouts, niche) | cost, within reach (N1; NEW-b, §18) |
+| gen-tree, gen-tree-dyn, gen-tree-cb | yes | 0/0/0 | 6, 2048 (+≈10⁴ dyn), 0 | below Rust; budget test per call (NEW-b); 1.72× and 1.96× (L-5/N2) | cost, within reach (N2; NEW-b) |
+| sum | yes | 1/0/0, bounds 1 per element | 1/0/0, 0 bounds | bounds (L-3); 1.88× (L-4/N5) | cost, within reach (N1, N5) |
+| chain-yield, chain-gen | yes | 0/0/0 | 0/0/0 | driven state machine: 2.10×, 21.5× | cost, within reach (N4, N2, LIR §3.3) |
+| parse | yes | 0/0/0 (body) | 0 | ≈1.17 checks per byte: `buf`'s `grow` moves element by element | cost, within reach (library block move; L-3) |
+| async-tree | yes | 12312/4100/0 | 8198/45108 dyn polls | +4114: 3 objects per `await` | cost, within reach (N3) |
+| prefix | nearly (`modify` for `*x += s`) | 1/0/0 | 1/0/0 | bounds (L-3) | cost + ceremony, within reach (N1; E2) |
+| sieve, sieve-for, matmul, spectral-norm | inner loops extracted (#503); arrays threaded; two lends per call | 2–3/0/0 | 2–3/0/0 | bounds (L-3); sieve 5.63× (N4) | cost + ceremony, within reach (A1, C-5, C-7; N1, N4) |
+| wordcount | `array_copy` per use; a function per update (#502) | 6/0/0 | 3/0/0 | +3: `lib/map.bc` is two arrays and grows at half full | cost + ceremony, within reach (library map; A1, C-5, C-8) |
+| handlers-di, handlers-di-generic | handler state in `alloc`'d cells (E1 not built); one function per logger (#538) | 2/0/0 | 1 (est. 2250 dyn), 0 | +1–2 cells (E1, then N5 frame slots); a load/store per step (L-7) | cost + ceremony, within reach (E1, N5, N2) |
+| n-body | bodies as 7 `f64`s in one array (no records) | 1/0/0 | 0/0/0 (`[Body; 5]`) | +1 heap array (NEW-a); ≈247 checks per step at computed indices | cost + ceremony, within reach (B-4 records, NEW-a) |
+| quicksort, sort-generic | `peek`, view threading, a dummy filler | 2/0/0, 2 stores per read | 2/0/0 | stores (L-1, N2); a check per step (L-3); 8-byte slots (L-6); NEW-b | cost within reach (N1, N2) + ceremony, **out of reach** (`get` through `mut` needs #174) |
+
+### 17.2 T01–T14 (14)
+
+| T | ours a/i | Rust a/i | excess, and its fix | verdict |
+|---|---|---|---|---|
+| T01, T02, T09 | 1/0 | 0/0 | +1 heap array for literal data (NEW-a) | cost + ceremony, within reach (NEW-a; E2, A3, B-4) |
+| T03 | 2/0 | 1/0 | +1 owned copy, because a `while` over the view is refused (§14) | cost + ceremony, **out of reach** (B5: S-T or the lending cursor) |
+| T04 | 2/0 | 0/0 | +2 arrays (NEW-a); stores per `peek` (L-1) | cost within reach + ceremony **out of reach** (#174; B5 for the `while` over the view) |
+| T05 | 12/0 | 6/0 | +2 arrays (NEW-a); +4 owned copies the probe chose (a view version runs at Rust's 4) | cost + ceremony, within reach (NEW-a; C-5, A1) |
+| T06 | 4/0 | 3/0 | +1 two-array map | cost + ceremony, within reach (library; C-5, A1, C-8) |
+| T07 | 1/0 | 0/0 | the owned copy is avoidable: the loop over the literal's view runs inside a function (0 allocations) | ceremony, within reach (B-4, A1) |
+| T08 | 7/0 | 2/0 | +1 state cell (E1+N5); +4 map layout and growth | cost + ceremony, within reach (E1, N5, library; C-8, A2) |
+| T10, T11 | 0/0, 2/0 | 0/0, 2/0 | none | ceremony, within reach (A1, B-4, C-5) |
+| T12 | 4/0 | 1/0 | +2 handler cells (A2+N5); +1 box for the stored counter's state, where Rust's closure holds it inline | cost + ceremony, **out of reach** for the stored counter (an `Aff` with its state by value; no unit) |
+| T13 | 30/6 | 3/≈10 | +27: user cells (E1+N5), 3 objects per `await` (N3), list-based queue (library) | cost + ceremony, within reach (N3, E1, library; A2) |
+| T14 | 3/0 | 0/0 | +2 handler cells (E1+N5); +1 buffer (NEW-a) | cost + ceremony, within reach (E1, N5, NEW-a; C-7) |
+
+### 17.3 Are We Fast Yet (14)
+
+| program | natural? | ours a/i/c | Rust a/i/c | excess, and its fix | verdict |
+|---|---|---|---|---|---|
+| Mandelbrot | yes | 2/0/0 | (bench) | 1.01× | **zero cost** |
+| NBody, Sieve | as the bench rows | — | — | §17.1 | cost + ceremony, within reach |
+| Richards | arena without records (stride-10 `array i32`), field reads threaded, `for … break` | 2/0/0 | 2/0/0 (index); Rc ≈16–22 est | none | ceremony, within reach (C-1, B-4, A1) |
+| DeltaBlue | the same; two `imm` views refused | 416/0/0 | 418/0/0 (index); Rc ≈620 est | none | ceremony, within reach (C-1, B-4, A1, C-5) |
+| Havlak | arena, explicit DFS stack (#492), take-and-put of `buf`s | 1806/0/0 | 889/0/0 (index) | +917: `box buf[i32](2)` allocates when empty (≈1020); a fresh pool per header (≈252) | cost + ceremony, within reach (library: an empty `buf` that does not allocate; A1, A4, C-1, B-4) |
+| CD (the tree) | arena with parent links; values in a second `f64` array | 2/0/0 | 1/0/0 | +1: no records mixing `i32` and `f64` | cost + ceremony, within reach (B-4; C-1, A1) |
+| Json | values and lists inlined into one `mu`; cons-cell lists | 36/0/0 | 13/0/0 | +23: a box per element, where Rust keeps a `Vec<Json>` (an array of `mu`: B14) | cost **out of reach** (B14) + ceremony within reach (B-4, B-5, C-5) |
+| Bounce | yes | 1/0/0 | 1/0/0 | bounds (L-3) | cost, within reach (N1) |
+| List | `clone` per extra use | 75374/0/9830 | 31/0/0 | +75343 allocations and 9830 deep copies: no shared immutable walk | cost + ceremony, within reach (C-5, if the borrowed walk needs no kernel rule) |
+| Permute, Queens | array threaded by value, not `&mut` | 1/0/0, 40/0/0 | 1/0/0, 40/0/0 | none | ceremony, within reach (C-7) |
+| Storage | four children as a tuple, not an array | 5461/0/0 | 5461/0/0 | none | ceremony, **out of reach** (B14) |
+| Towers | yes | 86383/0/0 | 13/0/0 | +86370: moving a `mu` value out of an array slot and back reallocates its spine (NEW-c, measured: a 4-element list costs 4 allocations per round trip) | cost, within reach (N1: NEW-c, cause not found) |
+
+### 17.4 The Benchmarks Game (10)
+
+| program | natural? | ours a/i/c | Rust a/i/c | excess, and its fix | verdict |
+|---|---|---|---|---|---|
+| mandelbrot | yes | 2/0/0 | (bench) | 1.01× | **zero cost** |
+| binary-trees, n-body, spectral-norm | §17.1 | — | — | §17.1; output is not the Game's (`%.9f`, B16) | cost (+ ceremony), within reach |
+| fannkuch-redux | `for … break` | 5/0/0 | 6/0/0 | bounds where Rust uses `copy_from_slice`/`reverse` (L-3) | cost + ceremony, within reach (A1; N1) |
+| fasta | constant tables built with `array_set` chains | 7/0/0 | 5/0/0 | +2 heap tables (NEW-a) | cost, within reach (NEW-a) |
+| k-nucleotide | `array_copy`; hand-written lookup; insertion sort; integer `%.3f` | 41/0/0 | 28/0/0 | +13: two-array map (≈+7+7, est); +5 query strings from the lookup workaround | cost within reach (library) + ceremony **out of reach** (lookup by a key at another lifetime: SPEC §36's kernel constant) |
+| pidigits | sign and division written in the program | 533/0/0 (n=30) | 25/0/0 | +508: every bignum result allocates fresh | cost + ceremony, within reach (library: in-place bignum, C-9) |
+| regex-redux | Pike VM written in the program | 591769/0/0 | 124/0/0 | the probe allocates per step; with buffers reused it is **124**, equal (measured, `regex_reuse.bc`) | cost + ceremony, within reach (C-9 regex library) |
+| reverse-complement | binder renamed (defect 2); `peek`; #502 | 6/0/0 | 16/0/0 | stores ≈12 per byte against ≈3 (L-1) | cost + ceremony, within reach (A3; N2) |
+
+### 17.5 Advent of Code (14)
+
+Rust is maneatingape's own solutions, run on our inputs with a counting allocator (every answer
+matches). Indirect calls and copies are 0 on both sides.
+
+| program | natural? | ours a | Rust a | excess, and its fix | verdict |
+|---|---|---|---|---|---|
+| 2020-08, 2021-15, 2022-12, 2022-21, 2023-01, 2023-03, 2024-02 | records as sums (#489); plumbing (E1); `for … break` (U2–U4); `array_copy` (#58) | 6, 8, 6, 12, 1, 7, 2 | 10, 32, 18, 12, 6, 16, 3 | none | ceremony, within reach |
+| 2021-10, 2022-01 | the same | 5, 4 | 8, 6 | `sort` through `mut`: checks and stores (L-3, L-1) | cost + ceremony, within reach |
+| 2024-01 | yes | 5 | 6 | the same `sort` costs | cost, within reach (N1, N2) |
+| 2021-06 | yes | 4 | 1 | +3: 9-slot tallies on the heap, `[u64; 9]` in Rust (NEW-a) | cost, within reach (NEW-a) |
+| 2024-11 | plumbing; `for … break` | 271 | 38 | +233: the port allocates fresh buffers per blink; reusing them gives **15** (measured) | cost + ceremony, within reach (the program's own reuse; A1, E1) |
+| 2023-07 | the rank threaded through the fold because a `!` closure cannot capture an `i32` (#9) | 7 | 9 | `sort` costs | cost within reach + ceremony **out of reach** (#9: SPEC §10 *Open*, a kernel premise) |
+| 2020-07 (pending) | — | — | 3 | — | blocked, within reach (A1, A4) |
+
+### 17.6 Data structures (8)
+
+| program | natural? | ours a | Rust a | excess, and its fix | verdict |
+|---|---|---|---|---|---|
+| hash map | yes, but lookups build an owned key | 12 | 8 (`HashMap`) | +2 two-array layout (library); +2 owned keys, where Rust looks up by `&str` | cost **out of reach** (lookup at another lifetime, SPEC §36) |
+| B-tree | arena standing in for boxed nodes | 57 | 57 (same design); `BTreeMap` 279 | none | ceremony, **out of reach** (B14) |
+| LRU cache | the index form is natural (Rust LRUs use it); four buffers, plumbing | 8 | 3 (index); 5 (`Rc`) | +5: split layout (+4), map (+1) | cost + ceremony, within reach (records B-4, library map, E1) |
+| doubly linked list | arena standing in for the pointer form | 2 | 1 (index), 5 (`LinkedList`) | +1 | ceremony, **out of reach** (B13) |
+| union-find, ring buffer, arena allocator | natural; plumbing | 4, 5, 7 | 4, 5, 7 | ring: checks (L-3) | ceremony, within reach (E1, A1) |
+| priority queue | heap written in the program | 17 | 17 (`BinaryHeap`) | checks (L-3) | cost + ceremony, within reach (#497 library heap, C-5, N1) |
+
+### 17.7 Lox (2)
+
+| program | natural? | ours a | Rust a | excess, and its fix | verdict |
+|---|---|---|---|---|---|
+| jlox | environments in an arena; state handed back; the AST as a nested sum; bodies copied per call | 124 | 84 (`Rc<RefCell<Env>>`) | +54: a deep copy of the function body per call (C-5's borrowed walk) | cost within reach (C-5) + ceremony **out of reach** (B13: a shared, mutated environment is refused) |
+| clox | the value stack and the dispatch loop are natural; upvalues as indices; the chunk built as a list | 99 | 9 (index), 20 (`Rc`) | +89: one cell per bytecode byte from building the chunk as a list (direct pushes fix it); the dispatch loop allocates 0 | cost within reach (the program; library map; N1, N2) + ceremony **out of reach** (B13) |
+
+### 17.8 Concurrency (3) and the north star (6)
+
+| program | natural? | ours a/i | Rust a/i | excess, and its fix | verdict |
+|---|---|---|---|---|---|
+| stage pipeline (generators with `\|>`) | yes | 0/0 | 0/0 (iterator chain) | none | **zero cost** |
+| stage pipeline as tasks over channels | — | — | 8/15 | — | blocked, **out of reach** (B1) |
+| worker pool with channels | a hand-written scheduler (`worker-pool-port`) | 10/34 | 7/7 | +27 indirect (N3), +3 lists | cost within reach + ceremony **out of reach** (B1) |
+| parallel map-reduce | — | one thread only | 5 (`thread::scope`) | — | blocked, **out of reach** (B12) |
+| HTTP client and server; a watch stream | — | — | — | — | blocked, **out of reach** (B11; B4 for the pull decoder) |
+| JSON and YAML | inlined `mu`; an explicit indentation stack | 36, 46 | 13, 5 (+2 reallocs) | a box per element (B14) | cost **out of reach** (B14) + ceremony within reach (B-4, A1) |
+| retries with backoff | stateless: natural (`retry-backoff2`) | 0/0 | 0/0 | none | **zero cost** for a stateless call; blocked, **out of reach**, with a stateful service (B17) |
+| timers and cancellation | natural; the task's loop is a counted `for` because a `while` under `spawn` is B2 | 15/4 (`timer-cancel`), 40/5 (`async-timers`) | 6/4, 5/7 | `run_in`'s cons-list queue rebuilt every round (library); per-`await` objects (N3) | cost within reach (library, N3) + ceremony **out of reach until #564** (B2) |
+| reconcilers sharing a client and a cache | — | — | ≈7/12 est | — | blocked, **out of reach** (B1, B2) |
+| cancellation | natural (`async-cancel`, `timer-cancel`) | as above | as above | as above | cost, within reach |
+
+### 17.9 Verdict counts
+
+| category | zero cost | within reach | out of reach |
+|---|---|---|---|
+| bench rows (24) | 4 | 18 | 2 (quicksort, sort-generic: #174) |
+| T01–T14 (14) | 0 | 11 | 3 (T03, T04: B5/#174; T12: `Aff` state) |
+| Are We Fast Yet (14) | 1 | 11 | 2 (Json, Storage: B14) |
+| Benchmarks Game (10) | 1 | 8 | 1 (k-nucleotide: SPEC §36) |
+| Advent of Code (14) | 0 | 13 | 1 (2023-07: #9) |
+| data structures (8) | 0 | 5 | 3 (hash map: §36; B-tree: B14; doubly linked list: B13) |
+| Lox (2) | 0 | 0 | 2 (B13) |
+| concurrency (3) | 1 (the generator pipeline) | 0 | 2 (worker pool: B1; parallel map-reduce: B12) |
+| north star (6 parts) | 0 | 1 (cancellation) | 5 (HTTP: B11; JSON/YAML: B14; watch stream: B11, B4; retries, backoff and timers: B17 for a stateful service and B2 for the timer's task loop, though a stateless retry alone is zero cost; reconcilers: B1, B2) |
+| **total (95)** | **7** | **67** | **21** |
+
+## 18. Re-ranking: the blockers that keep programs out of reach
+
+Each blocker is ranked by how many programs it keeps **out of reach**. North-star blockers come
+first, and ties go to the better foundation. The within-reach fixes are not ranked here; they
+become acceptance rows on the units in §19.
+
+| rank | blocker | north star? | programs kept out of reach | n |
+|---|---|---|---|---|
+| 1 | **B2** div under a handler (#564's proof) | yes | operator-reconcile, the reconcilers, timers' task loop, YAML over the input (`on_exhausted`), `async-fanout`, `split-halves`'/`async-workers-scoped`'s task loops | 6 |
+| 2 | **B1** one service shared by tasks | yes | operator-reconcile (3 tasks), the reconcilers' cache, the worker pool, the task pipeline, `informer-cache`, `informer-borrow` | 6 |
+| 3 | **B14** recursive data under arrays | yes (JSON, YAML) | JSON, YAML, AWFY Json, Storage, B-tree | 5 |
+| 4 | **B11** network | yes | HTTP client, server, watch stream | 3 |
+| 5 | **B4** a suspended computation owning a capability | yes | the watch decoder's pull form, `http-gen` | 2 |
+| 6 | **B17** a capability in a computation parameter | yes | retries around a stateful client | 1 |
+| 7 | **B5** borrows across a resuming operation (T1) | no | T03, T04's `while` over a view, `parse-recover-gen`, `bank-split`, `async-bank-inbox` | 5 |
+| 8 | **B13** aliased mutable graphs where the functionality is the pointer structure | no | jlox, clox, the doubly linked list, `lru-cells`, `dll-cells` | 5 |
+| 9 | **#174** `imm` reborrow of a `mut` view | no | quicksort, sort-generic, T04 | 3 |
+| 10 | **SPEC §36's constant** lookup by a key at another lifetime | no | k-nucleotide, hash map | 2 |
+| 11 | **B12** OS threads | no | parallel map-reduce (and a worker pool on several cores) | 1 |
+| 12 | **#9** a `!` closure capturing a persistent value | no | 2023-07 | 1 |
+| 13 | an `Aff` closure with its state by value | no | T12's stored counter | 1 |
+
+**Within reach, by the units that reach them.**
+- **Backend:** N1 (layouts, checks by typing, NEW-c), N2 (L-1, L-5, L-7), N3 (per-`await`
+  objects), N4 (loops), N5 (frame slots, addressing).
+- **New backend items:**
+  - NEW-a: constant-length, non-escaping arrays in frame slots, #496's second option. It is a
+    lowering, since SPEC §35 already places cells by rule.
+  - NEW-b: the recursion budget as one stack-pointer compare per call (SPEC §20 *Open*: "a global
+    check (the stack pointer…) makes it one"). It comes within one predictable branch of Rust.
+    Exact parity is out of reach while the budget stays observable.
+  - NEW-c: a recursive value moved through an array slot without re-allocating its spine.
+- **Libraries:**
+  - a one-array `Map` with a 7/8 load factor;
+  - an empty `buf` that does not allocate;
+  - `grow` as a block move;
+  - a queue in `lib/async.bc` that is a buffer and stops when no task is pending;
+  - an in-place bignum;
+  - regex;
+  - a comparator heap and an O(n log n) sort over owned elements.
+- **Elaboration and sugar:** A1–A4, E1, E2, #58 (C-5), records (B-4), lends per call (C-7),
+  generic effects (C-8).
+
+**What changed from the first pass.**
+- **The count of what is fine.** "Runs" covered nearly every program; zero cost covers 7 of 95, and
+  within reach 67.
+- **Twenty-one programs are out of reach.** Their blockers are mostly not the ones §14 ranked by
+  "gated".
+- **B7 drops out of the ranking.** It was ranked first by programs gated, but every program it
+  gates is within reach: its units are planned.
+- **The same holds for B3 (records, newtypes):** data declarations are an elaboration with no
+  kernel change.
+- **B14 rises to third.** JSON's cost (a box per element where Rust has a `Vec` of values) cannot
+  be removed by inlining into one `mu`: the cost is in the inlining.
+- **T1 (B5) now keeps five programs out of reach, where §14 gave two.** A `while` over a borrowed
+  view, and a borrow block across `await`, are workarounds in the natural form, not natural
+  borrow-free code.
+- **B13 is split.** For a benchmark's graph, the index form is Rust's own performance idiom, and
+  ours matches its counts (Richards 2 against 2, DeltaBlue 416 against 418). So Richards,
+  DeltaBlue, Havlak and CD are ceremony within reach (C-1 with records). Where the functionality
+  *is* the pointer structure (Lox environments, upvalues, the doubly linked list), the arena is a
+  workaround, and that is out of reach.
+- **Threads were overstated.** §16.1 corrects them.
+- **Excess the first pass did not see:**
+  - Towers' O(depth) re-allocation (NEW-c);
+  - heap arrays for constant-length data (NEW-a, in 9 programs);
+  - the per-call budget test (NEW-b);
+  - the library's map layout (in 6 programs).
+- **Excess that came from our own probes, not the language:**
+  - regex-redux's 591769 allocations (124 with reuse);
+  - 2024-11's 271 (15 with reuse);
+  - T05's and T07's owned copies.
+
+## 19. Build units, revised for the zero-cost target
+
+This list supersedes §9 and §15, and ends the document. Each unit's "done when" is that named
+programs **reach zero cost**: natural form, and counts at most Rust's, measured by the scripts in
+`docs/expressiveness-probes/zero-cost/`. A unit whose programs still carry a lowering-only excess
+is done when that excess is the only one left and is listed against its N unit. Spikes keep a
+yes/no question, the program they unblock and a kill path. The order of the tracks is the ranking
+of §18: the north star first, then by programs kept out of reach. The within-reach rows are the
+acceptance of the units that reach them.
+
+**Track 1: the north star's out-of-reach blockers.**
+
+| # | unit | removes | these programs reach zero cost |
+|---|---|---|---|
+| 1 | **`handle_general`** (#564) and the surface's §21 restriction lifted | B2 | `operator-one-task` (`op-e.bc`); `timer-cancel` and `async-workers-scoped` with `while` in their tasks; YAML with one `on_exhausted` around its input loop; `async-fanout` (task-loop ceremony gone; their remaining counts go to units 15 and 18) |
+| 2 | **spike S-B**: yes/no — is the per-turn task type derivable from §22's affine closure with an argument and §32's threading, with no new compatibility lemma? Kill path: the port as a library (it runs today, `conc/worker-pool-port.bc`) | B1 (form) | — |
+| 3 | **the shared service** (the per-turn lend, or the port) | B1 | `operator-reconcile.bc` with three tasks; the worker pool and the task pipeline over channels; `informer-cache`; `io-two-tasks`. Each within Rust's executor counts after unit 18 (allocations) and N3 (indirect) |
+| 4 | **data declarations** (#489 part 1) | B3 | T07, T09, T10, T11; Richards, DeltaBlue, CD (records, with C-5's view copies); union-find, the arena allocator, the LRU cache's nodes; n-body's bodies |
+| 5 | **spike S-H**: yes/no — is a destructor and fold for `mu` with `X` under `array` one more `FShape` case of `foldOwn`? Kill path: kernel nested `mu` and arrays of it as their own SPEC entry (#182), because B14 is out of reach without one of them | B14 | — |
+| 6 | **recursive data under arrays**, by S-H's answer, and nested declarations (S-D) | B14 | AWFY Json at Rust's 13 allocations (a `Vec` of values, not a box per element); Storage with its children in an array; the boxed B-tree; YAML |
+| 7 | **JSON and YAML libraries** over units 4 and 6, raising across the input's borrow (unit 8) | B3, B14, B10 | `json-roundtrip`, `yaml-roundtrip` within a Rust reference's counts (an `enum` with `Vec` children, hand-written parser) |
+| 8 | **aborts across buffer and literal borrows**; `fold_lines` over `count_try` | B10 | `abort1.bc`, `config-parse` |
+| 9 | **`Net`**: the platform's effect, linear connections, externs over libc and WASI sockets | B11 | `net-echo` (client and server in the language) |
+| 10 | **close with a residual** for generators | B4 | `gen-digits`, `gen-lines`, `gen-lazy`, `gen-adapters-io`; `http-gen` (the pull parser over a socket) |
+| 11 | **lifetime binders up to renaming, then R2a** | B17 | `retry-backoff` with a stateful service |
+| 12 | **HTTP library, then the operator end to end** | — | `http-get`; `corpus/operator.bc` (watch, informer cache, three reconcilers, retries, timers, cancellation), each part within its Rust executor reference |
+
+**Track 2: the remaining out-of-reach blockers.**
+
+| # | unit | removes | these programs reach zero cost |
+|---|---|---|---|
+| 13 | **spike S-T**: yes/no — is `[handle]` at a tail-resumptive clause sound for a body that holds a lend across the operation, by the frame lemmas of a call (no K1)? This covers a `while`'s `tick` under the driver and a `for`'s `yield` into a tail-resumptive clause. Kill path: the lending cursor (S-C) for generators, and no `while` over a borrowed view, documented as a limit of the premise | B5 (loops, generators) | — |
+| 14 | **T1 at tail-resumptive operations** (if S-T says yes), else **the lending cursor**; and **the lend split at `await`** for tasks | B5 | T03 and T04 with `while` over their views (no owned copy); `parse-recover-gen`; `bank-split` and `async-bank-inbox` as written (borrow block across `await`), `unconditional` |
+| 15 | **`Arena[T]`/`Id[T]` and the `region` elaboration**, then **spike S-G** (#119's branded handles: is in-bounds by the region-length fact one lemma?). Kill path: checked indices, documented as the arena's cost | B13 | Richards, DeltaBlue, Havlak, CD in the index form without ceremony (with units 4 and 16); with S-G, their per-access checks gone. jlox, clox and the doubly linked list reach *within reach*, not zero: their natural form (a shared, mutated environment; pointers into the stack) stays refused under the premise unless #119's region accepts it, which S-G's program must show |
+| 16 | **#58 and #142, and a borrowed walk of `mu`** (C-5) | B9 (copies, walks) | List at Rust's 31 allocations and 0 copies; jlox without the per-call body copy; T05, wordcount, the AoC ports without `array_copy` |
+| 17 | **spike S-F** (#174), then K2′ if yes. Kill path: `mut`-taking read functions stay the API, and quicksort, sort-generic and T04 stay "ceremony, out of reach", documented | B9 (reborrow) | quicksort, sort-generic, T04 with `get` and `len` through `&*v` |
+| 18 | **libraries**: a one-array `Map` at 7/8 load; an empty `buf` that does not allocate; `grow` as a block move; a buffer queue in `lib/async.bc` that stops when idle; an in-place signed bignum; regex (#225); a comparator heap and O(n log n) sort over owned elements (#497); `%.Nf`; map iteration over owned keys | B16 | wordcount, T06, T08, the LRU cache, hash map (bar the lookup), k-nucleotide (bar the lookup), Havlak's +917, pidigits at Rust's 25, regex-redux at Rust's 124, parse, `async-timers`, `timer-cancel`, `split-halves`, T13 |
+| 19 | **SPEC §36's shortened family**: lookup by a key at another lifetime | §36 | k-nucleotide, the hash map with `&str`-style lookups |
+| 20 | **fork-join** (#212): `join`/`par_for` over a split context, sound by a named assumption (`ParLaw`) at first | B12 | parallel map-reduce (`thread::scope` reference, 5 allocations); parallel quicksort |
+| 21 | **#9**: promotion over persistent contexts (SPEC §10 *Open*) | #9 | 2023-07 without threading its rank |
+| 22 | **an `Aff` closure with its state by value** (the mutation report's D6, with `aff {}` sugar) | — | T12's stored counter at Rust's 1 allocation |
+
+**Track 3: the within-reach elaboration units** (the ceremony of most programs; already planned).
+
+| # | unit | these programs reach zero cost (with their backend items) |
+|---|---|---|
+| 23 | loops U2–U4 (A1) | sieve, matmul, fannkuch, the AoC ports' `for … break`, unionfind, queens' and permute's loops, Richards' and DeltaBlue's `while`s, `aoc-2020-07` (with 26) |
+| 24 | the write rule and E1 (A2), E2 sugar (`+=`, tuple assignment) | T01, T02, T08, T12 (handler cells), T13, T14, handlers-di, prefix, the AoC ports' plumbing |
+| 25 | binding hygiene and early lends (A3) | reverse-complement, T02, `lend-arith`, `mut-name-capture`, `arm-stdout` |
+| 26 | #492 (A4) | Havlak's recursive DFS, `aoc-2020-07`, `lc-0039` |
+| 27 | lends per call (C-7) and spike S-E | Permute, Queens, matmul, spectral-norm, T04, T14 |
+| 28 | generic answering effects and `update_with` (C-8) | T06, T08, wordcount's single probe |
+
+**Track N: the backend items, on the new backend** (`docs/compiler.md`). Nothing here is a
+recovery pass. #540 was stopped as one, so native loops come from `iterate` and the erasure pass in
+N4.
+
+| item | unit | these programs reach zero cost |
+|---|---|---|
+| L-1 reads and writes through `mut` at persistent contents as loads and stores (a derived node, an erasure rule proved over Core) | N2 | quicksort and sort-generic stores, reverse-complement, the sorts in 2021-10, 2022-01, 2023-07, 2024-01 |
+| L-2 `while`, `loop` and generator bodies as native loops | N4 | sieve (5.63×), chain-yield, chain-gen; the clox dispatch loop |
+| L-3 checks removed where the index is the loop's counter | N1 | sum, prefix, Bounce, fannkuch, the ring buffer, the priority queue |
+| L-4 typed pointers and aligned arrays | N5 | sum's vectorised loop |
+| L-5 the `Exhausted` pass-through as a tail call | N2 | gen-tree, gen-tree-cb |
+| L-6 4-byte `i32` slots | N1 | quicksort's footprint |
+| L-7 handler state as a local variable for a `with` | N2 | handlers-di, handlers-di-generic |
+| N3's one object per task, not three per `await` | N3 | async-tree, T13, `bank-split` |
+| **NEW-a** constant-length, non-escaping arrays in frame slots (#496) | N5 (frame slots by rule) | T01, T02, T04, T05, T09, T14, n-body, fasta, 2021-06 |
+| **NEW-b** the recursion budget as one stack-pointer compare per call (SPEC §20 *Open*) | N1, with SPEC §20 | binary-trees, gen-tree*, quicksort, T08: within one branch per call of Rust |
+| **NEW-c** a recursive value moved through an array slot without reallocating its spine (cause not yet found; `probe-variants/arrb4.bc`: 4 allocations per round trip of a 4-element list) | N1 (moves from masks, layouts from types) | Towers at Rust's 13, and `richards_mu.bc` |
+
+**Order.**
+- Units 1–12 first: the north star reaches zero cost or within reach of it.
+- Then 13–22, in §18's order.
+- Track 3 runs beside them, since most acceptance programs need it to be written naturally; 23–25
+  are the prerequisites of everything after unit 1.
+- Track N runs with the N units.
+
+Each spike ends in a unit or a documented limit.
+
+**Outside the target set** (no unit): multi-shot search; allocation tracking; folds with `X` under
+`U`; digging and same-lifetime boxing; an external iterator over a borrowed list (#57); K1 (#172),
+since spike S-T is the narrower question the targets need; stored callbacks with rows (#161 B);
+ports beyond the shared service; explicit RC; `RefCell`-like projections (#160); tasks across
+threads.
