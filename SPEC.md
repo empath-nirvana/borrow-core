@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.82 · 2026-10-19
+Version 0.83 · 2026-10-19
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -193,7 +193,9 @@ The checker returns a **typed term** `t : TExpr` with its derivation, not an era
   them;
 - at `[handle]` (`effHandleV`, `effHandleVB`), each operation's qualifier and the kind of its
   clause, as the checker classifies it (`ks`, §19 *Clause kinds*), and at every `handle` node the
-  site as the elaboration of effects records it (`site`, §19 *Handler sites*);
+  site as the elaboration of effects records it (`site`, §19 *Handler sites*) and the frames its
+  handled computation holds (`inside`, §19 *The clause's names in the continuation*), which the
+  typed rule pins (`inside = te.erase.hin`);
 - its source (`TInfo`): the span it was checked from; at a variable its name and whether the
   program writes the use `clone(x)` (§10); at a binding (`x <- M`, `let (x, y) = V`, a `case`'s
   arms) the names it binds;
@@ -3563,10 +3565,47 @@ raise, the names of its row `Σ` (`UnhandledIn Σ K`, over `Kont.Catches`, which
 handler frame of the name). The rows decide it when `Σ` is empty (`unhandledIn_nil`), and not
 otherwise (`unhandled_not_decided`): one `[handle]` node, the same tail-resumptive clause, the same
 rows and types, over two typed handled computations whose `K` holds no handler of a name of `Σ` in
-one and a handler of one in the other. What decides it is the names of the handlers `K` may hold:
-the static names of the `handle` nodes between the `perform` and the handler over the call graph.
-*Open*: a record at `[handle]` of the names handled inside the handled computation, and the run
-invariant that every handler frame a run reaches is a `handle` node's of the program.
+one and a handler of one in the other. What decides it is the frames `K` may hold
+(`Core/HandledNames.lean`, `Frontend/Check/Handled.lean`):
+
+- **A set of frames** (`HIn`) is the names of handler frames, whether a finaliser (`ubind`,
+  `cfin`, which catch every raise) and whether a handler whose name is not a literal; `ccatch`
+  holds the name `0`. `Expr.hin e` is every frame `e` holds.
+- **The record at `[handle]`**: the node's `inside`, its handled computation's erasure's frames,
+  through the bodies of `use` nodes and a recursive group's generator. The typed rule pins it
+  (`TDerivesAt.inside_eq`, `TDerivesP.inside_eq`).
+- **The record at the program**: `Checked.flows`, what may flow in a run of `main`
+  (`ClauseKinds.flows`): the frames of every `λ` that is not applied in place (a `def`'s body, a
+  recursive group's generator, a clause, a closure), of every handled computation (a continuation
+  captures them), the name of every handler a continuation may capture (a name the program
+  performs, and `Div`'s), and `0`. A `λ` applied in place, `(λx. N) M`, runs where it stands.
+  Code that flows into a handled computation from outside it (a closure bound before it, a
+  continuation captured at another handler, a recursive call, a value read from memory) holds
+  only frames of this record, so the record covers the call graph and recursion without unique
+  names: a second handler of a name that a recursive call puts into `K` is one of its frames.
+- **The run invariant** (`steps_frame_of_node`, `Checked.frame_of_node`): in a run of `main` from
+  the empty memory, every handler frame of every configuration has the name of a handle node of
+  `main`'s erasure, or `0`, or `main` holds a handler whose name is not a literal. Its proof is
+  that no step leaves the frames of `main` and `0` (`steps_hin`): a step's head reduction builds
+  frames only from its redex and the values it reads, and a continuation only from the frames it
+  captures.
+- **The theorem** (`steps_unhandledIn`, `Checked.unhandledIn`): in such a run, at every
+  configuration that holds `hnd H K[p]` (at an operation it catches, where its clause runs), a
+  row `Σ` none of whose names `Checked.flows` may catch (`cond2B`) is unhandled in `K`. Its proof
+  is the flow invariant (`steps_flowInv`): what flows from a configuration and its memory stay
+  within `flows`, and the names it performs within those `main` performs and `Div`'s.
+
+What the record does not decide: a name of `Σ` caught by a finaliser of `K`, or by a handler of
+the same name that may run inside, makes condition 2 fail where the clause itself raises nothing
+(the backend's direct call then rests on its own premise, that the clause neither suspends nor
+raises). The record is not per node: a bound on the code that flows into one handled computation
+would need a typing invariant of the run (a value of a type with no `U` holds no code) and that a
+clause that keeps no `κ` never lets `κ` leave it (`Frontend/Check/TFacts.lean`). `bcc handled
+<file>` prints `main`'s flow record and each `handle` node's `inside`, outer row and whether
+condition 2 holds; `scripts/check-handled.sh` pins them for the corpus, with each operation the
+backend lowers, in `corpus/handled.expected`: every direct call of a clause the backend makes is
+one where condition 2 holds, except where a finaliser of the handled computation may catch a name
+of the clause's row (`tree-map.bc`'s two).
 
 **Handler sites.** The elaboration of effects records each handler site it makes
 (`Frontend.SiteRec`): the effect it serves and its type arguments, the handler (a control
@@ -7504,6 +7543,15 @@ no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the chec
 
 ## Changelog
 
+- **0.83** (2026-10-19) — §19, *The clause's names in the continuation* (#575): condition 2 of the
+  direct call of a tail-resumptive clause is a checked fact. Each `handle` node records the frames
+  its handled computation holds (`inside`), pinned by its typed rule; the program's flow record
+  (`Checked.flows`) holds what may flow in a run of `main`. Run invariant: every handler frame a
+  run reaches is of a handle node of the program (`Checked.frame_of_node`). Theorem: a row none
+  of whose names the flow record may catch is unhandled in every continuation between a handler
+  and an operation it catches (`Checked.unhandledIn`). `bcc handled`; `corpus/handled.expected`
+  (`scripts/check-handled.sh`, a gate step). No change to `CDerives`, the relation, the machine, a
+  checker rule's acceptance, or any program's erasure, run output, goldens or counts.
 - **0.82** (2026-10-19) — §18, *Control effects*, and §19, *Clause kinds* (#574): the
   elaboration writes a handler site's clauses inline in its `handle` node,
   `handle_with[n]((V_r : T_r), (V_c : T_c)) M`, in place of binding them to variables first, so

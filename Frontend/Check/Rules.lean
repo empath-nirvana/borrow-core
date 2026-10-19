@@ -511,8 +511,8 @@ def rEffHandle {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R T
     (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = false)
     (rM : Res Δ T (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
     (h : overlapOK T rH.F.u rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
-  ⟨.effHandleV i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R (Masks.of rH.F.u rM.F.u) ks site rH.t
-      rM.t,
+  ⟨.effHandleV i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R (Masks.of rH.F.u rM.F.u) ks site
+      rM.t.erase.hin rH.t rM.t,
     (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ (rH.sigs ∪ rM.sigs), rH.pins ++ rM.pins,
     ((rH.F.restrict BoCa.Fig16.LogRel.Core.VTy.persistent hp).withUse.split rM.F h).map
       fun _ ⟨_, _, hs, hm, ⟨⟨hH, hl⟩, hsub, hlen'⟩, he⟩ => by
@@ -536,7 +536,7 @@ def rEffHandleB {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R 
     (hso : usedSat (outlivesB Δ d) T rM.F.u = true)
     (h : overlapOK T rH.F.u rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
   ⟨.effHandleVB i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R d (Masks.of rH.F.u rM.F.u) ks site
-      rH.t rM.t,
+      rM.t.erase.hin rH.t rM.t,
     (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ (rH.sigs ∪ rM.sigs), rH.pins ++ rM.pins,
     ((rH.F.restrict BoCa.Fig16.LogRel.Core.VTy.persistent hp).withUse.split (rM.F.restrict (outlivesB Δ d) hso) h).map
       fun _ ⟨_, _, hs, hm, ⟨⟨hH, hl⟩, hsub, hlen'⟩, he, ho⟩ => by

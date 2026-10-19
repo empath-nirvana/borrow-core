@@ -204,12 +204,12 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .effThen i j A B S SM SD u tM tN tD =>
       .effThen i j A B S SM SD (u.ins d c) (tM.shift d c) (tN.shift d (c + 1))
         (tD.shift d (c + 1))
-  | .effHandleV i j S E fs n A R u ks st tc te =>
-      .effHandleV i j S E fs n A R (u.ins d c) ks st (tc.shift d c) (te.shift d c)
-  | .effHandleVB i j S E fs n A R a u ks st tc te =>
-      .effHandleVB i j S E fs n A R a (u.ins d c) ks st (tc.shift d c) (te.shift d c)
-  | .effHandleT i j S SN E fs n A R u st tc te =>
-      .effHandleT i j S SN E fs n A R (u.ins d c) st (tc.shift d c) (te.shift d c)
+  | .effHandleV i j S E fs n A R u ks st ins tc te =>
+      .effHandleV i j S E fs n A R (u.ins d c) ks st ins (tc.shift d c) (te.shift d c)
+  | .effHandleVB i j S E fs n A R a u ks st ins tc te =>
+      .effHandleVB i j S E fs n A R a (u.ins d c) ks st ins (tc.shift d c) (te.shift d c)
+  | .effHandleT i j S SN E fs n A R u st ins tc te =>
+      .effHandleT i j S SN E fs n A R (u.ins d c) st ins (tc.shift d c) (te.shift d c)
   | .letPoly i j C j' tV tN => .letPoly i j C j' tV (tN.shift d (c + 1))
   | .use i j n k τ ab t => .use i j n k τ ab (t.shift d c)
   | .litFn i j bs t => .litFn i j bs (t.shift d c)
@@ -306,9 +306,9 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .effThen _ _ _ _ S _ _ _ tM tN tD =>
       AbsF.orO (tM.absF Δ) (AbsF.withO (if Row.unrDB S then .atom .bang else .tt)
         (AbsF.andO (tN.absF Δ) (tD.absF Δ)))
-  | .effHandleV _ _ _ _ _ _ _ _ _ _ _ tc te =>
+  | .effHandleV _ _ _ _ _ _ _ _ _ _ _ _ tc te =>
       AbsF.orO (AbsF.withO (.atom .pers) (tc.absF Δ)) (te.absF Δ)
-  | .effHandleVB _ _ _ _ _ _ _ _ d _ _ _ tc te =>
+  | .effHandleVB _ _ _ _ _ _ _ _ d _ _ _ _ tc te =>
       AbsF.orO (AbsF.withO (.atom .pers) (tc.absF Δ)) (AbsF.withO (.atom (.outl Δ d)) (te.absF Δ))
   | .lendR .. | .lendLoopR .. | .nilDead .. => none
   -- Not placed at a wider context: rules the checker does not apply (the tail-resumptive

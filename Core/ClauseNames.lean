@@ -19,12 +19,11 @@ may perform (§2.3's condition 2). The names `M` may perform are its row's, the 
   computations at the same row, the operation performed in the hole of `K`: in one `K` is empty,
   and in the other `K` holds a handler of the name `2` of `Σ`.
 
-What would decide it is the names of the handlers `K` may hold: the static names of the `handle`
-nodes between the `perform` and the handler over the call graph, which the typed term holds (each
-`handle` node's `n`, through the bodies of `use` nodes). It is not on the node: it needs a record
-at `[handle]` of the names handled inside the handled computation, and a run invariant that every
-handler frame of a continuation the run reaches is one of a `handle` node's of the program, so that
-its name is among those recorded.
+What decides it is the frames `K` may hold: those of the handled computation and of the code that
+flows into it. `Core/HandledNames.lean` records them (`Expr.hin`, `flows`), with the run invariant
+that every handler frame a run reaches is one of a `handle` node's of the program
+(`steps_frame_of_node`) and the theorem that a row none of whose names `flows` may catch is
+unhandled in every `K` a run reaches (`steps_unhandledIn`).
 -/
 
 namespace BoCa.Fig16.LogRel.Core.ClauseKinds

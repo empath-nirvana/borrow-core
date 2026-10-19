@@ -283,9 +283,11 @@ For each kind of continuation: the law, the lowering, and what must be known at 
   runs inside `K`, so this is the law only when two conditions hold:
   1. `M` uses `κ` exactly once on every path, as the resume in tail position: in every arm of a
      `case`, not only as the body's last call (chain-yield, §1.5);
-  2. the names `M` performs or raises are handled nowhere in `K`. Today's rule is stronger: `M`
-     neither suspends nor raises. Static names (item 3) make the weaker condition decidable: `K`'s
-     handlers are the sites lexically between the `perform` and site `n`, over the call graph.
+  2. the names `M` performs or raises are handled nowhere in `K`. The old backend's rule is
+     stronger: `M` neither suspends nor raises. The checker decides the weaker condition (SPEC
+     §19, *The clause's names in the continuation*): no name of the clause's row is one the
+     program's flow record may catch (`cond2B`, `Checked.unhandledIn`), the frames of the handled
+     computations and of the code that flows into them, recursion and continuations included.
 - **Needed at the `perform`.** The site (a literal), its clause code, and the clause's shape.
 - **A tail-resumptive clause of a handler with a state.** The clause needs the instance's state.
   Pass the state as a capability: a cell lent for the site's duration, the clause a direct call on

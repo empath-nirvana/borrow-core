@@ -1,6 +1,7 @@
 import Frontend.Parser
 import Frontend.Print
 import Frontend.Check.Program
+import Frontend.Check.Handled
 import Backend.Driver
 import Backend.FalsifyTests
 import Backend.Native.Tests
@@ -157,6 +158,37 @@ def kinds (file : String) : IO UInt32 := do
       for h in r.handles do
         let ks := (List.range h.ks.length).zip h.ks |>.map fun (i, k) => k.render h.n i
         IO.println s!"{h.sp.start.render}: handle {h.n}{if h.boxed then " (boxed κ)" else ""}: {"; ".intercalate ks}"
+      return 0
+
+/-- A set of frames as `bcc handled` prints it: its handler names, sorted, then whether it holds a
+finaliser and whether a handler of any name. -/
+def renderHIn (h : BoCa.Fig16.LogRel.Core.ClauseKinds.HIn) : String :=
+  let ns := (h.names.eraseDups.map (·.toNat)).mergeSort (· ≤ ·)
+  s!"[{", ".intercalate (ns.map toString)}]" ++ (if h.fin then ", finaliser" else "") ++
+    (if h.any then ", any" else "")
+
+/-- Each `handle` node of `file`'s checked `main`, with the frames its handled computation holds
+(`inside`), its outer row's names and whether condition 2 holds for its clauses at `main`'s flow
+record (`Checked.flows`, SPEC §19): `sp: handle n: inside …; row […]; ops …; condition 2 …`, after
+the flow record and whether `main` holds a handler whose name is not a literal. -/
+def handled (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match parseProgram src with
+  | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+  | .ok p =>
+    match Check.checkProgram p with
+    | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+    | .ok r =>
+      let some c := r.main | return 0
+      let V := c.flows
+      IO.println s!"flows {renderHIn V}; main {renderHIn c.e.hin}"
+      for h in (c.t.handleSites Check.copiesFuel).eraseDups do
+        let ops := (List.range h.ks.length).zip h.ks |>.map fun (i, k) => s!"{h.n}.{i} {k.kind.tag}"
+        let caught := h.row.filter (V.catchesB ·)
+        let c2 := if caught.isEmpty then "holds" else
+          s!"fails at {", ".intercalate (caught.map toString)}"
+        let row := s!"[{", ".intercalate (h.row.map toString)}]"
+        IO.println s!"{h.sp.start.render}: handle {h.n}: inside {renderHIn h.inside}; row {row}; ops {", ".intercalate ops}; condition 2 {c2}"
       return 0
 
 /-- What the elaboration of effects records of each `handle` node's site (`HSite`), with the
@@ -408,6 +440,7 @@ def main (argv : List String) : IO UInt32 := do
     | none => IO.eprintln "usage: bcc tailcalls <n>"; return 2
   | ["trusted", file] => trusted file
   | ["kinds", file] => kinds file
+  | ["handled", file] => handled file
   | ["sites", file] => sites file
   | ["desugar", file] => desugar file
   | ["erase", file] => erase file

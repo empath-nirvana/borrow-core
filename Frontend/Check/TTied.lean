@@ -328,12 +328,13 @@ theorem effHandle (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKin
     (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = false)
     (he : TTied p₂ s₂ Δ Γ₂ te (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A))) :
     TTied (p₁ ++ p₂) ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ (s₁ ∪ s₂)) Δ Γ
-      (.effHandleV i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R u ks site tc te)
+      (.effHandleV i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R u ks site
+        te.erase.hin tc te)
       (.comp (effOf S R)) :=
   ⟨fun hn Ξ h => .effHandleV (rowAt_of_union_left h) hs hm hd hH
       (hc.1 (nilL hn) Ξ (sigsAt_union_left (sigsAt_union_right h))) hn0 hnS hlen hdv
-      (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))),
-    .effHandleV hs hm hd hH hc.2 hn0 hnS hlen hdv he.2⟩
+      (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) rfl,
+    .effHandleV hs hm hd hH hc.2 hn0 hnS hlen hdv he.2 rfl⟩
 
 /-- BOXED-κ reads its handled row, as `CDerivesAt.effHandleB`.  `[spec §28]` -/
 theorem effHandleB (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind)
@@ -349,12 +350,13 @@ theorem effHandleB (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKi
     (hΓd : CtxOutlives Δ Γ₂ d)
     (hSd : BoCa.Fig16.LogRel.Core.Row.AnsOutlives Δ d (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S)) :
     TTied (p₁ ++ p₂) ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ (s₁ ∪ s₂)) Δ Γ
-      (.effHandleVB i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R d u ks site tc te)
+      (.effHandleVB i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R d u ks site
+        te.erase.hin tc te)
       (.comp (effOf S R)) :=
   ⟨fun hn Ξ h => .effHandleVB (rowAt_of_union_left h) hs hm hd hH
       (hc.1 (nilL hn) Ξ (sigsAt_union_left (sigsAt_union_right h))) hn0 hnS hlen hdv
-      (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) hΓd hSd,
-    .effHandleVB hs hm hd hH hc.2 hn0 hnS hlen hdv he.2 hΓd hSd⟩
+      (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) hΓd hSd rfl,
+    .effHandleVB hs hm hd hH hc.2 hn0 hnS hlen hdv he.2 hΓd hSd rfl⟩
 
 /-- `iterate` reads its row, which holds `Div`.  `[spec §14]` -/
 theorem iterate (S : CRow) (St B R : CVTy) (hS : BoCa.Fig16.LogRel.Core.Row.divB S = true)
@@ -398,12 +400,13 @@ theorem effHandleT (u : Masks) (site : Option HSite) {p₁ p₂ : Pins} {s₁ s�
     (he : TTied p₂ s₂ Δ Γ₂ te
       (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) A))) :
     TTied (p₁ ++ p₂) ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) ∪ (s₁ ∪ s₂)) Δ Γ
-      (.effHandleT i (.comp (effOf S R)) S SN E fs n A R u site tc te) (.comp (effOf S R)) :=
+      (.effHandleT i (.comp (effOf S R)) S SN E fs n A R u site te.erase.hin tc te)
+      (.comp (effOf S R)) :=
   ⟨fun hn Ξ hΞ => .effHandleT (rowAt_of_union_left hΞ) hs hm hd hHr hHc
       (hc.1 (nilL hn) Ξ (sigsAt_union_left (sigsAt_union_right hΞ))) qc
       hn0 hnd hnS hlen hSN hLin
-      (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right hΞ))),
-    .effHandleT hs hm hd hHr hHc hc.2 qc hn0 hnd hnS hlen hSN hLin he.2⟩
+      (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right hΞ))) rfl,
+    .effHandleT hs hm hd hHr hHc hc.2 qc hn0 hnd hnS hlen hSN hLin he.2 rfl⟩
 
 /-! ### Derived forms -/
 
