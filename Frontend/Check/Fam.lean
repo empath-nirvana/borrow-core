@@ -1,4 +1,5 @@
 import Frontend.Check.Decide
+import Frontend.Check.Masks
 
 /-!
 # Frontend — Check — families of contexts
@@ -19,7 +20,7 @@ the enclosing rule instead of threaded. `Fam T P` packages the masks and the fam
 | operation | rule premise it discharges |
 |---|---|
 | `Fam.dead`, `Fam.deadStrict`, `Fam.var`, `Fam.top` | `Ctx.DeadP`, `Ctx.Dead`, `Ctx.SoloP`, none |
-| `Fam.split` | `Ctx.SplitP Γ Γ₁ Γ₂` (a persistent slot used on both sides goes to both) |
+| `Fam.split` | `Ctx.SplitP Γ Γ₁ Γ₂` (a persistent slot used on both sides goes to both), and the parts' masks related to their contexts (`SplitMasks`) |
 | `Fam.merge` | the same context for both `case` arms or both `⟨,⟩` components |
 | `Fam.popLive`, `Fam.popDead` | a binder's slot, live or dead |
 | `Fam.restrict` | a premise on every live slot: `CtxOutlives`, `Persistent`, `allI`'s `hΓx` |
@@ -182,6 +183,24 @@ def Fam.map {T : List VTy} {P Q : List Bool → Prop} (f : ∀ L, P L → Q L) (
     Fam T Q :=
   ⟨F.u, F.w, F.hu, F.hw, fun L h => f L (F.d L h)⟩
 
+/-- Transport, at each liveness with its bounds. -/
+def Fam.mapB {T : List VTy} {P Q : List Bool → Prop} (F : Fam T P)
+    (f : ∀ L, Btw F.u F.w L → P L → Q L) : Fam T Q :=
+  ⟨F.u, F.w, F.hu, F.hw, fun L h => f L h (F.d L h)⟩
+
+/-- The slots a family uses are live at each of its livenesses. -/
+theorem btw_usedLive : ∀ {T : List VTy} {u w L : List Bool}, u.length = T.length → Btw u w L →
+    UsedLive u (mkCtx T L)
+  | [], [], [], [], _, .nil => ⟨rfl, fun k hk => by simp at hk⟩
+  | A :: T, a :: u, _ :: w, l :: L, hl, .cons h₁ _ h => by
+      simp only [List.length_cons, Nat.add_right_cancel_iff] at hl
+      have ih := btw_usedLive hl h
+      refine ⟨by simp [mkCtx, ih.1], fun k hk => ?_⟩
+      cases k with
+      | zero => simpa [mkCtx, liveAt] using h₁ (by simpa using hk)
+      | succ k => simpa [mkCtx, liveAt] using ih.2 k (by simpa using hk)
+  | [], _ :: _, _, _, hl, _ => by simp at hl
+
 /-! ### Splitting -/
 
 /-- The split of one slot: both sides at a slot both use, else the user, else the side that
@@ -201,17 +220,18 @@ theorem split_lemma : ∀ (T : List VTy) (u₁ w₁ u₂ w₂ L : List Bool),
     u₁.length = T.length → w₁.length = T.length → u₂.length = T.length → w₂.length = T.length →
     overlapOK T u₁ u₂ = true → Btw (orL u₁ u₂) (orL w₁ w₂) L →
     Ctx.SplitP (mkCtx T L) (mkCtx T (chooseL u₁ u₂ w₁ L).1) (mkCtx T (chooseL u₁ u₂ w₁ L).2) ∧
+    SplitMasks (mkCtx T (chooseL u₁ u₂ w₁ L).1) (mkCtx T (chooseL u₁ u₂ w₁ L).2) u₁ u₂ ∧
     Btw u₁ w₁ (chooseL u₁ u₂ w₁ L).1 ∧ Btw u₂ w₂ (chooseL u₁ u₂ w₁ L).2
-  | [], [], [], [], [], [], _, _, _, _, _, .nil => ⟨.nil, .nil, .nil⟩
+  | [], [], [], [], [], [], _, _, _, _, _, .nil => ⟨.nil, .nil, .nil, .nil⟩
   | A :: T, a :: u₁, c :: w₁, b :: u₂, d :: w₂, l :: L, h1, h2, h3, h4, hov, hb => by
       simp only [List.length_cons, Nat.add_right_cancel_iff] at h1 h2 h3 h4
       simp only [overlapOK, Bool.and_eq_true] at hov
       simp only [orL] at hb
       cases hb with
       | cons k₁ k₂ hb =>
-      obtain ⟨ih₁, ih₂, ih₃⟩ := split_lemma T u₁ w₁ u₂ w₂ L h1 h2 h3 h4 hov.2 hb
+      obtain ⟨ih₁, ihm, ih₂, ih₃⟩ := split_lemma T u₁ w₁ u₂ w₂ L h1 h2 h3 h4 hov.2 hb
       simp only [chooseL, mkCtx]
-      refine ⟨?_, .cons ?_ ?_ ih₂, .cons ?_ ?_ ih₃⟩ <;>
+      refine ⟨?_, .cons ?_ ?_ ?_ ihm, .cons ?_ ?_ ih₂, .cons ?_ ?_ ih₃⟩ <;>
         cases a <;> cases b <;> cases c <;> cases d <;> cases l <;>
         simp_all [choose]
       all_goals first
@@ -229,14 +249,17 @@ theorem split_lemma : ∀ (T : List VTy) (u₁ w₁ u₂ w₂ L : List Bool),
   | _ :: _, _ :: _, _ :: _, _ :: _, _ :: _, [], _, _, _, _, _, hb => by
       simp only [orL] at hb; cases hb
 
-/-- `Ctx.SplitP`: the uses of the two sides are disjoint up to persistent slots. -/
+/-- `Ctx.SplitP`: the uses of the two sides are disjoint up to persistent slots; each side gets the
+slots it uses, a slot neither uses goes to one side, and a slot goes to both only when both use it
+(`SplitMasks`). -/
 def Fam.split {T : List VTy} {P Q : List Bool → Prop} (F₁ : Fam T P) (F₂ : Fam T Q)
     (hov : overlapOK T F₁.u F₂.u = true) :
-    Fam T (fun L => ∃ L₁ L₂, Ctx.SplitP (mkCtx T L) (mkCtx T L₁) (mkCtx T L₂) ∧ P L₁ ∧ Q L₂) :=
+    Fam T (fun L => ∃ L₁ L₂, Ctx.SplitP (mkCtx T L) (mkCtx T L₁) (mkCtx T L₂) ∧
+      SplitMasks (mkCtx T L₁) (mkCtx T L₂) F₁.u F₂.u ∧ P L₁ ∧ Q L₂) :=
   ⟨orL F₁.u F₂.u, orL F₁.w F₂.w, by rw [orL_length (F₁.hu.trans F₂.hu.symm)]; exact F₁.hu,
     by rw [orL_length (F₁.hw.trans F₂.hw.symm)]; exact F₁.hw, fun L hb => by
-      obtain ⟨hs, h₁, h₂⟩ := split_lemma T F₁.u F₁.w F₂.u F₂.w L F₁.hu F₁.hw F₂.hu F₂.hw hov hb
-      exact ⟨_, _, hs, F₁.d _ h₁, F₂.d _ h₂⟩⟩
+      obtain ⟨hs, hm, h₁, h₂⟩ := split_lemma T F₁.u F₁.w F₂.u F₂.w L F₁.hu F₁.hw F₂.hu F₂.hw hov hb
+      exact ⟨_, _, hs, hm, F₁.d _ h₁, F₂.d _ h₂⟩⟩
 
 /-! ### Merging -/
 

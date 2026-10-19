@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.78 · 2026-10-19
+Version 0.79 · 2026-10-19
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -189,12 +189,14 @@ The checker returns a **typed term** `t : TExpr` with its derivation, not an era
 - its rule's arguments other than its contexts, its proofs and the terms its premises type: binder
   types, rows, operation signatures, lifetimes and lifetime variables, a handler's name, qualifiers
   and cancel rows, constants' type arguments;
-- at a split (`Ctx.SplitP`), the use mask of its left part, as the checker computed it;
+- at a split (`Ctx.SplitP`), the use masks of its two parts (`Masks`), as the checker computed
+  them;
 - at `[handle]` (`effHandleV`, `effHandleVB`), each operation's qualifier and the kind of its
   clause, as the checker classifies it (`ks`, §19 *Clause kinds*), and at every `handle` node the
   site as the elaboration of effects records it (`site`, §19 *Handler sites*);
-- its source (`TInfo`): the span it was checked from, and at a variable its name and whether the
-  program writes the use `clone(x)` (§10);
+- its source (`TInfo`): the span it was checked from; at a variable its name and whether the
+  program writes the use `clone(x)` (§10); at a binding (`x <- M`, `let (x, y) = V`, a `case`'s
+  arms) the names it binds;
 - one child per premise, in the rule's order.
 
 `TExpr.erase` is the term the node's rule concludes with, from its children's erasures. The
@@ -208,8 +210,16 @@ node, and every theorem below, and §19's and §29's, holds of `t.erase` as stat
 the derivations, the projections and the erasure are generated from `CDerivesAt` and `CDerivesP`
 by `scripts/gen-pin.py`, so a rule added to `CDerives` is picked up by rerunning it.
 
-Three facts are on the term without being fixed by its derivation: a split's use mask (the split
-is chosen at each liveness by `Fam`, after the node is built), the witness of a side condition
+**A split's masks are fixed by its derivation.** A typed rule at a split has one premise its
+`CDerives` rule does not: the node's masks are the ones its parts' contexts have
+(`SplitMasks Γ₁ Γ₂ u₁ u₂`): a slot a part uses is live in that part's context, and a slot live in
+both is used by both. The split is chosen at each liveness by `Fam`, after the node is built, and
+`Fam.split` proves the relation at each (`split_lemma`): it gives a slot neither part uses to one
+part, never both. So the slots a split gives to both parts, which `Ctx.SplitP` admits only at a
+persistent type, are exactly those both masks hold (`TDerivesAt.split_masks`, `TDerivesP.copies`):
+that is the copy set, and §10's check reads it off the masks.
+
+Two facts are on the term without being fixed by its derivation: the witness of a side condition
 stated as `∃ b, …` (`withbor2`'s, the unwinding and slice borrows', R1's), which is not an
 argument of the rule and not a field, and the clause kinds at `[handle]`, which the checker reads
 off the clauses' binding, not the rule's premise (`TDerivesAt.kinds_free`,
@@ -282,6 +292,24 @@ Its handle has type `refTy σ`, defined as the family of its leaf references, so
 `refTy (node σ₁ σ₂) = refTy σ₁ ⊗ refTy σ₂`: splitting a handle is the identity. An owned pointer to a
 struct (`Box<struct>`) is the block form; the one-cell `Ref (A ⊗ B)` remains a separate type.
 Blocks are allocated and freed whole (`allocS`, `freeS`).
+
+### Cell classes
+
+A cell's contents change type at `swap` (`Ref A ⊸ B ⊸ Ref B ⊗ A`), so a cell is as wide as the
+widest contents it holds over its lifetime. The checker carries, for each type `main` allocates a
+cell at (`alloc A`, a leaf of `allocS σ`), its **class**: that type and every type a chain of the
+program's swaps reaches from it, lifetimes erased (`Checked.cells`, `Frontend/Check/Cells.lean`).
+Only `swap` of an owned `Ref` changes a cell's type: `withswap`, the slice swap and
+`array_replace` keep it, and an array's slots are never owned `Ref`s. The edges are the typed
+term's `swap A B` nodes, whose types the derivation fixes, and `fold_reuse`'s emptying swap
+(§6), which puts `1` into a cell holding the recursive type. The class is closed under them
+(`Checked.cells_closed`), so it holds every type such a cell can be given by the program's
+swaps; that a cell holds only its class's types at run time is not proved
+(`Frontend/Check/TFacts.lean`). It is an upper bound: it joins the cells of one type.
+`scripts/check-cells.sh` compares the classes with the cell widths of the closure IR's layout
+types (`Backend/Clos/Types.lean`) on the corpus and pins the table in `corpus/cells.expected`:
+they agree on every program but three, where a class is wider (an `i32` cell, three words where
+the layout types give one, because a cell holding `1` is refilled with a list elsewhere).
 
 ### Family borrows
 
@@ -809,7 +837,9 @@ decision 39). `clone(x)` elaborates to the core form `clone(x)`, which the check
 its typed node records the written copy. A copy at a type that copies as words (`I32`, `1 + 1`,
 their products) stays implicit. The check runs after the checker, on the typed terms it returns
 (`main`'s, and each `def`'s without parameters, checked at its declaration), so it only rejects
-more programs: `checkProgram_sound` and every theorem are unchanged.
+more programs: `checkProgram_sound` and every theorem are unchanged. Which variables a split
+copies is read off its node's masks (§3): the slots both parts use, which the derivation gives to
+both.
 
 ### Open
 
@@ -7369,6 +7399,17 @@ each node beside its derivation; `Checked.t` and `Checked.e := t.erase`, with `c
 change to `CDerives`, `Core/`, the relation, the machine, a rule of the checker, or any program's
 erasure, output, goldens or counts.
 
+§3's split masks and §5's cell classes are implemented in `Frontend/Check/Masks.lean` (`Masks`,
+`SplitMasks`, `SplitMasks.both_iff`, `SplitMasks.both_persistent`, `SplitMasks.ins`), the generated
+typed rules (`scripts/gen-pin.py`: the `u.Rel` premise at a split, `TExpr.masks?`,
+`TDerivesAt.split_masks`, `TDerivesP.split_masks`, `TDerivesP.copies`), `Frontend/Check/Fam.lean`
+(`split_lemma`, `Fam.split`, `Fam.mapB`), the builders at a split (`Rules.lean`, `TTied.lean`,
+`Weaken.lean`'s `splitP_route`), §10's check on the masks (`Frontend/Check/Copies.lean`),
+`Frontend/Check/Cells.lean` (`VTy.eraseLife`, `TExpr.cells`, `cellClasses`, `cellsOkB_sound`),
+`Checked.cells` and `Checked.cells_closed`, `Backend/Cells.lean` (`bcc-counts --cells`) and
+`scripts/check-cells.sh`. No change to `CDerives`, `Core/`, the relation, the machine, or any
+program's erasure, output, goldens or counts.
+
 §3's derived nodes and `use` nodes are implemented in the templates of `scripts/gen-pin.py`
 (`scripts/pin/TExpr.tmpl.lean`, `TDerives.tmpl.lean`: the nodes, `litFnE`, their rules and
 projections), `Frontend/Check/TShift.lean` (`TExpr.shift`, `AbsF`, `TExpr.absF`,
@@ -7390,6 +7431,14 @@ no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the chec
 
 ## Changelog
 
+- **0.79** (2026-10-19) — §3, *What the checker returns* (#570): a node at a split carries both
+  parts' use masks, and its typed rule relates them to the parts' contexts (`SplitMasks`), so the
+  copy set of a split is its masks' (`TDerivesP.copies`), which §10's check reads; a binding's
+  node records the names it binds. §5, *Cell classes* (new): the checker carries each allocation
+  type's class, the types a cell of it may hold over its lifetime, closed under the typed term's
+  swaps; `scripts/check-cells.sh` compares them with the layout types' cell widths. No change to
+  `CDerives`, `Core/`, the relation, the machine, or any program's erasure, output, goldens or
+  counts.
 - **0.78** (2026-10-19) — §18, *Laws*: `TailResumes` has the right unit `(λx. R₀) X`, `R₀`
   answering `x`, and the `β`-step of a `let` of a closed value; `tail_resumes` reaches the resume
   under right-unit frames (`RetFrames`), which hand its answer on (`tail_resumes_answer`). §19,

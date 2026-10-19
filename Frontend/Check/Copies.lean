@@ -13,15 +13,16 @@ writes that copy by accident, so it is not made by accident here either. Such a 
 
 A copy at a type whose copy is its words (`i32`, `bool`, a pair of them) stays implicit.
 
-**Which uses copy.** This reads the checked typed term (`Frontend/Check/TExpr.lean`): every use is
-a node, its variable a slot of the node's context with the slot's type, and a written copy is the
-use's `TInfo.clone`. It follows closure conversion's ownership plan on the term, node for node:
-the parts of a node run in sequence (a pair's components, an application's argument and then its
-function, `M x`'s argument and then `M`, a binding's head and body, a `case`'s scrutinee and then
-its arms, a `[then]`'s head and then its body or finaliser), the two arms of a `case` and the two
-components of `<M, N>` are one part (only one runs), and a variable used in a part and in a later
-part is copied for the earlier one. Every use of it in the earlier part receives a copy on its
-path, so each must be written `clone(x)`. The program's externs are not variables of the term.
+**Which uses copy.** This reads the checked typed term (`Frontend/Check/TExpr.lean`). A node at a
+split carries the use masks of its two parts (`TExpr.masks?`), and the typed derivation makes the
+slots both masks hold exactly the slots the split gives to both parts (`TDerivesP.copies`): the
+copy set, read off the masks, not recomputed. The parts of such a node run in sequence (a pair's
+components, an application's argument and then its function, `M x`'s argument and then `M`, a
+binding's head and body, a `case`'s scrutinee and then its arms, a `[then]`'s head and then its
+body or finaliser), and the value goes to the earlier part as a copy. Every use of it in the
+earlier part receives a copy on its path, so each must be written `clone(x)`. A use is a node: its
+variable a slot of the node's context with the slot's type, and a written copy is the use's
+`TInfo.clone`. The program's externs are not variables of the term.
 
 **Recursive data** is a persistent type with a `μ` in it, also under `⊗`, `⊕`, `[@a]` and `!`
 (`deepData`): the backend boxes a `μ`'s recursive fields, and its generated copy allocates each
@@ -65,25 +66,36 @@ def _root_.BoCa.Fig16.LogRel.Core.Check.TExpr.srcChildren (t : TExpr) : List (TS
   | .lolliE .. => t.children.reverse
   | _ => t.children
 
-/-- The parts of a node that run in sequence, as groups of its children's indices
-(`TExpr.children`), in the order they run. A node with no group has no sequential parts; `M x`'s
-own use runs before its child (`scanT`). -/
-def _root_.BoCa.Fig16.LogRel.Core.Check.TExpr.parts : TExpr → List (List Nat)
-  | .tensorI .. | .lolliE .. | .bind .. | .effLet .. | .unitE .. | .tensorE .. => [[0], [1]]
-  | .sumE .. | .effThen .. => [[0], [1, 2]]
-  | _ => []
+/-- Which part of a node at a split runs first: `M x`'s argument (its right part) runs before `M`;
+every other split's left part runs first. `none` at a node whose parts are not sequential (a
+handler's clauses and the computation they handle, `absurd`). -/
+def _root_.BoCa.Fig16.LogRel.Core.Check.TExpr.firstPart? : TExpr → Option Bool
+  | .tensorI .. | .lolliE .. | .bind .. | .effLet .. | .unitE .. | .tensorE .. | .sumE ..
+  | .effThen .. => some true
+  | .app .. => some false
+  | _ => none
 
-/-- The uses of `earlier` that are copied because `later` uses the same variable, with a use in
-`later` for each; the uses written `clone(x)` excepted, and those of the slots below `b`, the
-program's externs. -/
-def copiedUses (b : Nat) (earlier later : List Use) : List (Use × Use) :=
+/-- The children of a node in each part of its split: the left part's and the right part's, as
+indices into `TExpr.children`. `M x`'s right part is its own use (`TExpr.ownUse`). -/
+def _root_.BoCa.Fig16.LogRel.Core.Check.TExpr.partKids : TExpr → List Nat × List Nat
+  | .sumE .. | .effThen .. => ([0], [1, 2])
+  | .app .. => ([0], [])
+  | _ => ([0], [1])
+
+/-- The uses of `earlier` at a slot of the copy set `copied` (a level), each with a use of the same
+variable in `later` (or the node's span when the later part's use of it is not a variable's); the
+uses written `clone(x)` excepted, and those of the slots below `b`, the program's externs. -/
+def copiedUses (b : Nat) (copied : Nat → Bool) (sp : Span) (earlier later : List Use) :
+    List (Use × Use) :=
   earlier.filterMap fun u =>
-    if u.clone || u.lvl < b then none else (later.find? (·.lvl == u.lvl)).map (u, ·)
+    if u.clone || u.lvl < b || !copied u.lvl then none
+    else some (u, (later.find? (·.lvl == u.lvl)).getD { u with sp })
 
 /-- One pass over a node at a context of `d` slots whose `b` outermost slots are the externs: the
 uses free in it (those of the variables a child binds dropped, and none from a child at a context
 of its own), and every earlier use that is copied implicitly, with a later use of the same
-variable, in the node and its children. -/
+variable, in the node and its children. A node's copy set is its masks' `both`: the slots both
+masks hold, the slot at index `i` of its context at level `d - 1 - i`. -/
 def scanT : Nat → Nat → Nat → TExpr →
     List Use × List (Use × Use)
   | 0, _, _, _ => ([], [])
@@ -92,11 +104,18 @@ def scanT : Nat → Nat → Nat → TExpr →
       | .push m => let (us, cs) := scanT n b (d + m) k; (us.filter (·.lvl < d), cs)
       | .fresh m => ([], (scanT n 0 m k).2)
     let group (is : List Nat) : List Use := is.flatMap fun i => (ks.getD i ([], [])).1
-    let groups := match t with
-      | .app .. => [(t.ownUse d).toList, group [0]]
-      | _ => t.parts.map group
-    let here := (List.range groups.length).flatMap fun i =>
-      copiedUses b (groups.getD i []) (groups.drop (i + 1)).flatten
+    let here := match t.masks?, t.firstPart? with
+      | some m, some first =>
+        let copied (l : Nat) : Bool :=
+          l < d && m.both (d - 1 - l)
+        let (l, r) := t.partKids
+        let left := group l
+        let right := match t with
+          | .app .. => (t.ownUse d).toList
+          | _ => group r
+        if first then copiedUses b copied t.info.sp left right
+        else copiedUses b copied t.info.sp right left
+      | _, _ => []
     let src := match t with
       | .lolliE .. => ks.reverse
       | _ => ks

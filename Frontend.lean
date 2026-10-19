@@ -5,6 +5,7 @@ import Frontend.Parser
 import Frontend.Print
 import Frontend.Tests
 import Frontend.Check.Decide
+import Frontend.Check.Masks
 import Frontend.Check.Fam
 import Frontend.Check.Elab
 import Frontend.Check.Tied
@@ -19,6 +20,7 @@ import Frontend.Check.Steps
 import Frontend.Check.Consts
 import Frontend.Check.Checker
 import Frontend.Check.Copies
+import Frontend.Check.Cells
 import Frontend.Check.Program
 import Frontend.Check.CrossCheck
 import Frontend.Check.Externs
