@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.74 · 2026-10-18
+Version 0.75 · 2026-10-18
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1547,11 +1547,101 @@ A closed div-free program terminates on every run (`Core/Totality.lean`). For
 a loop it holds is observed a finite number of times (by `div_fuel`, or not at all). A program
 whose `main` loops is covered one prefix at a time instead (§11, `externs_loop_every_run`).
 
+### The effect `Div` in the kernel
+
+Divergence is also an effect the kernel handles (decision 67; `docs/pipeline-architecture.md`
+§3.2). The kernel has it; the frontend keeps the elaboration above, with no `Div` in any row it
+writes, until B2 (#563's successor) elaborates loops to it.
+
+**The effect.** `Div` is the reserved name `divEff = 2³² − 1` with one linear operation
+
+    tick : 1 ↠^lin Next        Next = 1 ⊕ 1        next = inl (),  close = inr ()
+
+(`Core/DivDefs.lean`, `tickSig`). A row **holds `Div`** when the operation it finds at
+`(divEff, 0)` has `tick`'s signature (`CTy.divAt`, `Row.divB`). `tick`'s continuation is linear:
+it has no cancel, so closing a loop is a resume with *close*. `tick` is not abortive, so it is in
+no unwind-only row, and no borrow callback's row holds it (`Row.Unwind.divB`).
+
+**The constants** (`Core/Fundamental.lean`, each a rule of `CDerives`):
+
+    iterate   : !U(!U(S ⊸ F_Σ(B ⊕ S) & F_Σ R) ⊗ S ⊸ F_Σ(B ⊕ R))        Σ holds Div
+    div_fuel  : !U(U(1 ⊸ F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)                  Div ∉ Σ
+    reify_res : !U(U(1 ⊸ F_{tick, Σ}(B ⊕ R)) ⊸ F_Σ U(Loop_Σ B R))      Div ∉ Σ,  res : !U(B ⊸ F_Σ R)
+
+- **`iterate`** is a primitive with one machine step, `iterate (f, s) ↦ iterNext f s`
+  (`Support/Dynamics/Iterate.lean`):
+
+      (f s).1 to r. case r { inl b → inl b
+                           | inr s′ → tick () to n. case n { inl _ → iterate (f, s′)
+                                                           | inr _ → (λq. inr q) ((f s′).2) } }
+
+  The step is `unfold`'s: one turn, or the close handing back the residual `R` (*The residual*).
+  The primitive ticks at each back edge, so every turn after the first is guarded whoever wrote
+  the step. The backend replaces it by its fixed point before conversion (`expandIter`).
+- **`div_fuel (t, k)`** is a term (`divFuelV`): a deep handler of `Div` around `t ()` answering
+  *next* to the first `k` ticks, the budget read unsigned, and *close* to every tick after. Its
+  counter is `bounded_fix`'s (§20), counted by the machine.
+- **`reify_res t`** (`reifyV res`) makes a loop value of `t ()`: a deep handler of `Div` whose
+  clause answers the loop at the tick, its *next* resuming `κ` with *next* and its *close*
+  resuming it with *close* and then closing what follows. `res` hands back the residual of a
+  finished result; it is a closed term of the constant, typed by a premise at the empty context.
+- The callbacks are `U(1 ⊸ F_{tick, Σ} A)`, the kernel's form of a thunk of a computation at a row
+  (§26).
+
+**The relation.** `ewpTS` is a least fixed point, so a computation that ticks forever is not in
+it. At a row that holds `Div` the relation is a greatest fixed point over **segments**
+(`Core/DivDefs.lean`):
+
+    cwp T Q   ≜  gfp W. ewpTS · (opTable T∖tick ∨ Π_W) Q
+    Π_W(tick)  =  λ_. λκ. ∀ n : Next. W (κ n) ∧ Closing (κ n)
+    Closing   ≜  ewpTS · (opTable T, tick answered close only) Q
+
+A segment, up to the next tick, is an `ewpTS` run; a tick stops it and owes its continuation, at
+each answer, to the candidate and to `Closing`. `Closing` says that after a close the computation
+reaches its end through finitely many ticks, each answered *close*: it is what `div_fuel`'s
+totality and `reify`'s close read. Without it the candidate admits `Ω = fix self. tick (); self ()`,
+which ignores every answer (S0's `omega_cwp0`), and `div_fuel` would not be total. No step index is used. The relation at an
+effectful type is `effWp` (`Core/Relation.lean`): `cwp` at a row that holds `Div`, `ewpTS`
+elsewhere, so every clause at a row without `Div` is §19's unchanged.
+
+**The rules at a row that holds `Div`.** `[sub]`, `[perform]` (of `tick` and of other names),
+`[raise]`, `[let]` and bind are proved at `cwp` (`Core/DivRules.lean`, `Core/EffFin.lean`). Core's
+frame lemmas are stated once at a table `opTable T ∨ Π`: `ewp_frame_plain_or`, `ewp_frame_then_or`
+and `ewp_handle_or` (`Core/EffRules.lean`, `Core/EffFin.lean`), with `ewp_frame_plain`,
+`ewp_frame_then` and `ewp_handle` their instances at `Π = ⊥`.
+
+- **`[then]`** at a row holding `Div` (`cwp_then`): finalisers are total (decision 69). The typing
+  rule that ensures it is that the finaliser's row `Σ_D` does not hold `Div` (`effThen`'s `hSD`).
+  A finaliser may still perform operations and raise.
+- **`[handle]` of another name around a computation that ticks** is typed only when its clauses
+  resume `κ` in tail position (decision 68, a temporary restriction #564 lifts): `effHandleT`
+  (`Core/DivHandle.lean`) writes the clauses out from a tuple `gs` of answering functions
+  `g : !U(A ⊸ F_{Σ_N} B)`, `Σ_N ≤ Σ` a row of linear operations, as `λ(x, κ). (λw. κ.1 w) (g x)`,
+  and an abortive operation's clause as `g : !U(A ⊸ F_Σ R)`. `effHandleV` and `effHandleVB` ask
+  the handled row not to hold `Div`. A handler whose clauses are all abortive is `effHandleT` at
+  an η-expanded clause tuple.
+
+**What is proved.**
+
+- `fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD` and `total_every_run` keep their
+  statements, and cover the new rules.
+- `divFuel_every_run` (`Core/DivPrograms.lean`): for a closed callback `t` at the row of `Div`
+  alone and every budget, every run of `div_fuel (t, k)` continues to a value.
+- `runtime_every_run` (`Core/DivRuntime.lean`): a closed `M` typed at `F_{Div} A`, under the
+  runtime's clause `λ((), κ). κ next`, from the empty memory: every configuration a run reaches is
+  an answer or takes a step. The run is infinite in general; the proof is an invariant of
+  configurations.
+- `divResidual` (`Core/DivPrograms.lean`, kernel program `div-residual`): a loop whose state is a
+  cell, closed by `div_fuel 3`, which hands the cell back. Its derivation is tied
+  (`dAt_divResidual`), every run continues to a value (`divResidual_runs`), and each stage prints
+  `3` and `live 0`.
+
 ### Baseline
 
-No `CDerives` rule, relation clause, machine step or kernel type is added. `fundamentalC`,
-`adequacyC`, `fundamentalD` and `adequacyD` keep their statements, and every theorem of §§1–13 is
-preserved. The runtime's obligation for a looping `main` is §11's.
+The constants of *The effect `Div` in the kernel* are the rules and the relation clause added;
+the rest of this entry adds none. `fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD` and
+`total_every_run` keep their statements, and every theorem of §§1–13 is preserved. The runtime's
+obligation for a looping `main` is §11's.
 
 ### Open
 
@@ -1568,6 +1658,15 @@ preserved. The runtime's obligation for a looping `main` is §11's.
   functions*), and its instance is specialized as any function is, so a div function may be
   generic (a `fn f[A](g: U (pull A 1 1)) -> …` that drains `g`).
 - **`div_fuel` is `driveE`** by construction, not by a proved equation.
+- **`[handle]` of another name at a clause given `κ`** around a computation that ticks
+  (`handle_general`, #564).
+- **Finalisers are total, as a theorem** (decision 69): every run of a finaliser terminates, the
+  handler clauses its operations reach included. `[then]`'s premise keeps the finaliser's own row
+  free of `Div`, so its own run is a least fixed point (`ewpTS`): it performs finitely many
+  operations, each segment finite. A clause it reaches runs at the handler's outer row: at
+  `effHandleV` and `effHandleVB` that row is free of `Div` and the clause's run is a least fixed
+  point too, but an `effHandleT` clause's answering function is at a row `Σ_N` that may hold
+  `Div`, and may tick without end. Not proved.
 - The model interpreter (`bcc interp`) copies the remaining input on every read.
 
 ---
@@ -2746,6 +2845,9 @@ Six rules, over `CDerives` with its context premises (§10):
     persistent, the clause of the `j`-th operation at index `j` (`Row.ofEff`, `clausesTy`), and
     `n ≠ 0` (`CDerives.effHandleV`, §24); `h_ret` and the clauses as two variables is its
     instance (`CDerives.effHandle`).
+  - at a handled row that holds `Div` (§14), `[handle]` is `effHandleT`, whose clauses resume `κ`
+    in tail position; `effHandleV` and `effHandleVB` ask the handled row not to hold `Div`, and
+    `[then]` asks it of the finaliser's row (decisions 68 and 69).
 - **The linear `κ`** is the same `&` pair as the others, its cancel branch at `⊤`, so the clause
   can only resume it. The machine builds `κ` by the operation's qualifier (§25): at `lin` and `aff`
   it owns a cell, and a linear `κ`'s cancel branch has no step.
@@ -2859,7 +2961,8 @@ Six rules, over `CDerives` with its context premises (§10):
 
   It is written in `Prop`, as §6's `μ`. A computation performs finitely many operations before
   it answers: total correctness, as `wpTS`.
-- **The relation.** `cC (F_Σ A) ls δ e ≜ ewpTS ls e Π_Σ (λ ls″. 𝒱⟦A⟧(ls″)δ)`, and `cC (F A) = wpTS`
+- **The relation.** `cC (F_Σ A) ls δ e ≜ ewpTS ls e Π_Σ (λ ls″. 𝒱⟦A⟧(ls″)δ)` at a row `Σ` that
+  does not hold `Div`, and `cwp` at `Σ`'s table at one that does (`effWp`, §14); `cC (F A) = wpTS`
   is unchanged.
 
 ### Finalisers that perform operations (K3, #162)
@@ -2905,8 +3008,11 @@ Richer policies are K3 (#162), and *Open*:
   - each observation terminates;
   - a run that reaches a value reaches it at empty memory.
 
-  There is no second fixed point: a greatest-fixed-point `ewp` would be a second mechanism for
-  what `ν` already is.
+  At a row without `Div` this is the whole story. At a row that holds `Div` (§14, *The effect
+  `Div` in the kernel*) the relation is the greatest fixed point over segments, `cwp`, with
+  `Closing`: a computation that ticks forever is in it, each segment between two ticks a finite
+  `ewpTS` run. `ν` stays the relation of loop *values* (`Loop_Σ`, `reify`'s answer); `cwp` is the
+  relation of a computation that loops, at the type `F_Σ A`.
 - **Acceptance (3)** is a `Loop` whose observation logs by an answering call, with the `Log`
   state in the loop's state.
 - **As built** (`Core/Types.lean`, `Core/Relation.lean`, `Core/NuRel.lean`, `Core/Nu.lean`):
@@ -2936,6 +3042,8 @@ Richer policies are K3 (#162), and *Open*:
      - an operation of another name passing outward, where the stop configuration of the whole
        is `(hnd (n, H) K)[perform (m, v)]` or `(hnd (n, H) K)[raise (m, v)]`, and the
        continuation's obligation is the induction hypothesis. This case is the forwarding.
+   - At a row that holds `Div`, the same cases at `cwp`'s segments (`ewp_handle_or`): a forwarded
+     tick is the coinductive case, its continuation the candidate's (`cwp_handle_tail`, §14).
 2. **Every existing rule's compatibility at `F_Σ A`**, through `cC_head`, `cC_step` and `cC_bind`
    at `F_Σ` (`ewp_head`, `ewp_step`, `ewp_bind_pure`). Every lemma at `F A` is unchanged, and
    `ewpTS Π_∅ = wpTS` (`ewp_bot`).
@@ -6865,8 +6973,10 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 `Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`. Entry 12
 (§13) is implemented in `Core/Alloc.lean`, `Core/World.lean`, `Core/Demonic.lean` and
 `Core/Stale.lean`. Entry 13 (§14) is implemented in `lib/div.bc`, `lib/lend.bc`, `Frontend/Sugar.lean`,
-`Frontend/Elab/LoopLend.lean` and `Core/Totality.lean`, with no change to `CDerives`; each div
-body is one state machine. Entry 14 (§15) is implemented in `lib/yield.bc`, `lib/adapters.bc`,
+`Frontend/Elab/LoopLend.lean` and `Core/Totality.lean`; each div body is one state machine.
+Its effect `Div` is in the kernel (`Core/DivDefs.lean` to `Core/DivRuntime.lean`, the rules
+`iterate`, `divFuel`, `reify` and `effHandleT` of `CDerives`), and the backend replaces `iterate`
+by its fixed point (`Backend/Clos/Convert.lean`); the frontend does not elaborate to it yet. Entry 14 (§15) is implemented in `lib/yield.bc`, `lib/adapters.bc`,
 `Frontend/Elab/Effects.lean` (the sites), `Frontend/Sugar.lean` (`forYield`, `pullView`, the
 machine at a row) and `Frontend/Elab/Subst.lean`, with no change to `CDerives`, and lowered by
 `Backend/Clos/Capture.lean` and `Backend/Clos/Convert.lean`. Entry 15 (§16) is implemented in
@@ -7160,6 +7270,21 @@ no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the chec
 
 ## Changelog
 
+- **0.75** (2026-10-18) — §14, *The effect `Div` in the kernel* (new, #563): `Div`, the reserved
+  name `divEff` with `tick : 1 ↠^lin Next`, and the constants `iterate` (one machine step),
+  `div_fuel` and `reify_res`, each a rule of `CDerives`. The relation at a row that holds `Div` is
+  `cwp`, the greatest fixed point over segments with `Closing` (`effWp`). `ewp_frame_plain`,
+  `ewp_frame_then` and `ewp_handle` are stated once at `opTable T ∨ Π`. `[handle]` around a
+  computation that ticks is `effHandleT`, at clauses that resume `κ` in tail position (decision
+  68); `effHandleV` and `effHandleVB` ask their rows not to hold `Div`. Finalisers are total
+  (decision 69): `[then]`'s finaliser row does not hold `Div`, and the theorem is open.
+  `fundamentalC`, `adequacyC` and `total_every_run` keep their statements; `divFuel_every_run`,
+  `runtime_every_run`, and the kernel program `div-residual` (`3`, `live 0` at every stage). §19,
+  *Divergence*: the greatest fixed point at a row that holds `Div` replaces "there is no second
+  fixed point". The typed term (§3) has a generated node per new rule, `iterate`, `divFuel`, `reify`
+  and `effHandleT`, each with its `TTied` builder. The backend replaces `iterate` by its fixed
+  point (`expandIter`). The frontend
+  writes no `Div`; every corpus output, golden and count is unchanged.
 - **0.74** (2026-10-18) — §3, *What the checker returns: the typed term* (#559): the checker
   returns a typed term with one node per rule application and a generated typed derivation that
   projects to `CDerivesAt`/`CDerivesP`; the checked term is its erasure. §10: `clone(x)` is a core

@@ -149,9 +149,6 @@ theorem plug_cmp : ∀ (K K' : Kont) {e e' : Expr}, ¬ IsVal e → ¬ IsVal e' �
           · exact .inr ⟨K'', h₁, by rw [h₂]; rfl⟩
       | _ => simp [Kont.plug] at h
 
-theorem _root_.BoCa.BoLo.Kont.comp_hole (K : Kont) : K.comp .hole = K := by
-  induction K <;> simp_all [BoCa.BoLo.Kont.comp]
-
 theorem comp_eq_hole {K K' : Kont} (h : K.comp K' = .hole) : K = .hole ∧ K' = .hole := by
   cases K <;> simp_all [Kont.comp]
 

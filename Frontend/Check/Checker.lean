@@ -21,6 +21,12 @@ open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
 open BoCa.Fig16.LogRel.Core (CDerives Jdg)
 
+/-- A handler of another name around a computation that may tick is typed only by the kernel's
+tail-resuming rule, which the frontend does not elaborate to (decision 68). -/
+def divHandleMsg : String :=
+  "a handler around a computation that may tick (`Div`) is typed only when its clauses " ++
+    "resume `κ` in tail"
+
 /-! ### The checker -/
 
 mutual
@@ -317,6 +323,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
               if hn0 : nm ≠ 0 then
                 if hnS : ∀ o ∈ S, o.n ≠ nm then
                   if hlen : Es.length ≤ 2 ^ 32 then
+                   if hdv : BoCa.Fig16.LogRel.Core.Row.divB
+                       (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) = false then
                     if hwf : d.wf Δ = true then
                       let Sh := BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S
                       if hSd : ansOutlivesB Δ d Sh = true then
@@ -325,8 +333,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                           if h₁ : overlapOK T (oneL T ir) (oneL T ic) = true then
                             if h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true then
                               pure ⟨_, rEffHandleB (at_ sp) { sp := hr.span, name := hr.name }
-                                { sp := hc.span, name := hc.name } ir ic (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hwf hSd
-                                rM hso h₁ h₂⟩
+                                { sp := hc.span, name := hc.name } ir ic (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hdv
+                                hwf hSd rM hso h₁ h₂⟩
                             else throw (splitErr E T sp (orL (oneL T ir) (oneL T ic)) rM.F.u)
                           else throw (splitErr E T sp (oneL T ir) (oneL T ic))
                         else match firstBad (outlivesB Δ d) T rM.F.u with
@@ -342,6 +350,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                             s!"be shown to outlive `{E.ppL d}`")
                         | none => err sp "internal error: boxed continuation"
                     else err hc.span s!"the clauses box `κ` at `{E.ppL d}`, which is not defined here"
+                   else err sp divHandleMsg
                   else err sp "a handler has at most 2^32 operations"
                 else err sp s!"the name {k} is already in the row `{ppRow E S}` of the handler's answer"
               else err sp "a handler's name is not 0"
@@ -352,14 +361,18 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
               if hn0 : nm ≠ 0 then
                 if hnS : ∀ o ∈ S, o.n ≠ nm then
                   if hlen : Es.length ≤ 2 ^ 32 then
+                   if hdv : BoCa.Fig16.LogRel.Core.Row.divB
+                       (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) = false then
                     let rM ← chkC n E Δ T M
                       (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) A)
                     if h₁ : overlapOK T (oneL T ir) (oneL T ic) = true then
                       if h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true then
                         pure ⟨_, rEffHandle (at_ sp) { sp := hr.span, name := hr.name }
-                          { sp := hc.span, name := hc.name } ir ic (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen rM h₁ h₂⟩
+                          { sp := hc.span, name := hc.name } ir ic (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hdv
+                          rM h₁ h₂⟩
                       else throw (splitErr E T sp (orL (oneL T ir) (oneL T ic)) rM.F.u)
                     else throw (splitErr E T sp (oneL T ir) (oneL T ic))
+                   else err sp divHandleMsg
                   else err sp "a handler has at most 2^32 operations"
                 else err sp s!"the name {k} is already in the row `{ppRow E S}` of the handler's answer"
               else err sp "a handler's name is not 0"

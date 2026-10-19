@@ -1,3 +1,8 @@
+> **Where the code is.** Promoted into the library by B1 (#563): `Core/DivDefs.lean` through
+> `Core/DivRuntime.lean` (SPEC §14). This experiment's code is at commit `f661c7b`; check it out to
+> build it (`lake build DivEffect`). Its `omega_cwp0` and `omega_not_closing`, the reason for
+> `Closing`, and the open `handle_general` and `sim_loop` are there.
+
 # DivEffect: `Div` as a handled effect, the kernel unknowns (S0, #554)
 
 **Question** (`docs/pipeline-architecture.md` §4.1). `Div` is an effect with one linear

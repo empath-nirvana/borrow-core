@@ -941,6 +941,17 @@ theorem raiseOK_head (hP0 : ¬ P 0) {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ
       · exact trivial
       · exact (raiseOK_primApp (by decide) (by decide) _).2
           ⟨raiseOK_val_shift hs 1 0, raiseOK_lit _, trivial⟩
+  | iterate f s' =>
+      have h1 := (raiseOK_primApp (by decide) (by decide) _).1 ha
+      have hf : f.1.RaiseOK P := h1.1
+      have hs : s'.1.RaiseOK P := h1.2
+      have hf3 := raiseOK_val_shift hf 3 0
+      have htick : tickE.RaiseOK P :=
+        (raiseOK_primApp (by decide) (by decide) _).2 ⟨raiseOK_lit _, raiseOK_lit _, trivial⟩
+      refine ⟨⟨raiseOK_app_val (raiseOK_app_val hf hs) trivial, trivial, raiseOK_app_val
+        ⟨trivial, (raiseOK_primApp (by decide) (by decide) _).2 ⟨hf3, trivial⟩,
+          raiseOK_app_val trivial (raiseOK_app_val (raiseOK_app_val hf3 trivial) trivial)⟩ htick⟩,
+        hμ⟩
   | hret n qs hr hs w =>
       obtain ⟨hH, hw⟩ := raiseOK_hndE.1 ha
       exact ⟨raiseOK_app_val (raiseOK_hndVal.1 hH).2.1 hw, hμ⟩
@@ -1353,6 +1364,74 @@ theorem rcE_fill {b : Expr} (hb : rcE q b = true) (hc : closedAt 0 (Val.lam b).1
         rw [rcE.eq_9 q _ _ hq, rcE.eq_9 q a c (fun m r h₁ h₂ => hp ⟨m, r, h₁, h₂⟩),
           rcE_fill hb hc a j, rcE_fill hb hc c j]
 
+theorem shift_prim_inv {d c : Nat} {p : Prim} : ∀ {x : Expr}, x.shift d c = .prim p → x = .prim p
+  | .var i, h => by simp only [Expr.shift] at h; split_ifs at h
+  | .prim _, h => h
+  | .unit, h | .pair _ _, h | .inj₁ _, h | .inj₂ _, h | .lam _, h | .loc _, h | .seq _ _, h
+  | .letpair _ _, h | .case _ _ _, h | .app _ _, h => by simp [Expr.shift] at h
+
+theorem shift_pair_inv {d c : Nat} {u w : Expr} : ∀ {x : Expr}, x.shift d c = .pair u w →
+    ∃ x₁ x₂, x = .pair x₁ x₂ ∧ x₁.shift d c = u ∧ x₂.shift d c = w
+  | .var i, h => by simp only [Expr.shift] at h; split_ifs at h
+  | .pair x₁ x₂, h => by
+      simp only [Expr.shift, Expr.pair.injEq] at h
+      exact ⟨x₁, x₂, rfl, h.1, h.2⟩
+  | .unit, h | .prim _, h | .inj₁ _, h | .inj₂ _, h | .lam _, h | .loc _, h | .seq _ _, h
+  | .letpair _ _, h | .case _ _ _, h | .app _ _, h => by simp [Expr.shift] at h
+
+/-- **A shift leaves `rcE` as it was**: it makes and unmakes no raise. -/
+theorem rcE_shift (d : Nat) : ∀ (N : Expr) (c : Nat), rcE q (N.shift d c) = rcE q N
+  | .var i, c => by simp only [Expr.shift]; split_ifs <;> rfl
+  | .unit, _ => rfl
+  | .loc _, _ => rfl
+  | .prim _, _ => rfl
+  | .pair a b, c => by simp only [Expr.shift, rcE, rcE_shift d a c, rcE_shift d b c]
+  | .seq a b, c => by simp only [Expr.shift, rcE, rcE_shift d a c, rcE_shift d b c]
+  | .letpair a b, c => by simp only [Expr.shift, rcE, rcE_shift d a c, rcE_shift d b (c + 2)]
+  | .case a b e, c => by
+      simp only [Expr.shift, rcE, rcE_shift d a c, rcE_shift d b (c + 1), rcE_shift d e (c + 1)]
+  | .inj₁ a, c => by simp only [Expr.shift, rcE, rcE_shift d a c]
+  | .inj₂ a, c => by simp only [Expr.shift, rcE, rcE_shift d a c]
+  | .lam a, c => by simp only [Expr.shift, rcE, rcE_shift d a (c + 1)]
+  | .app a b, c => by
+      by_cases hp : ∃ m r, a = .prim .raise ∧ b = .pair (.prim (.lit (.i32 m))) r
+      · obtain ⟨m, r, rfl, rfl⟩ := hp
+        simp only [Expr.shift, rcE, rcE_shift d r c]
+      · have hq : ∀ (m : UInt32) (r : Expr), a.shift d c = .prim .raise →
+            b.shift d c = .pair (.prim (.lit (.i32 m))) r → False := by
+          intro m r ha hb
+          obtain ⟨x₁, x₂, rfl, h₁, -⟩ := shift_pair_inv hb
+          exact hp ⟨m, x₂, shift_prim_inv ha, by rw [shift_prim_inv h₁]⟩
+        show rcE q (.app (a.shift d c) (b.shift d c)) = _
+        rw [rcE.eq_9 q _ _ hq, rcE.eq_9 q a b (fun m r h₁ h₂ => hp ⟨m, r, h₁, h₂⟩),
+          rcE_shift d a c, rcE_shift d b c]
+
+theorem rcE_pickE : ∀ (j : Nat) {t : Expr}, rcE q t = true → rcE q (pickE j t) = true
+  | 0, t, h => by simp [pickE, rcE, h]
+  | j + 1, t, h => by simp only [pickE, rcE, h, Bool.true_and]; exact rcE_pickE j rfl
+
+theorem rcE_tailTuple {Hc : Expr} (h : rcE q Hc = true) :
+    ∀ (E : List (Qual × VTy × VTy)) (j : Nat), rcE q (tailTuple E j Hc) = true
+  | [], _ => rfl
+  | (_, _, _) :: E, j => by
+      simp only [tailTuple, rcE, rcE_tailTuple h E (j + 1), Bool.and_true]
+      unfold tailClause
+      split
+      · have := rcE_pickE (q := q) j (t := Hc.shift 1 0) (by rw [rcE_shift]; exact h)
+        show rcE q (.app (pickE j (Hc.shift 1 0)) (.var 0)) = true
+        rw [rcE_app this]; rfl
+      · have := rcE_pickE (q := q) j (t := Hc.shift 3 0) (by rw [rcE_shift]; exact h)
+        simp [rcE, rcE_app this, resumeB, Val.lam]
+
+theorem rcE_reifyV {res : Val} (h : rcE q res.1 = true) : rcE q (reifyV res).1 = true := by
+  simp [reifyV, rkV, dlX, reifyH, reifyR, reifyC, tlX, closeKV, clV, BoCa.BoLo.hndE,
+    BoCa.BoLo.hndVal, rcE, rcE_app, rcE_qualsVal, rcE_selfV, clB, Val.pair, Val.i32, nextV,
+    closeV, h]
+
+theorem rcE_divFuelV : rcE q divFuelV.1 = true := by
+  simp [divFuelV, fuelH, fuelR, fuelC, fuelBody, spentV, fuelStep, BoCa.BoLo.hndE,
+    BoCa.BoLo.hndVal, rcE, rcE_qualsVal, Val.pair, Val.i32, nextV, closeV]
+
 end Decide
 
 /-! ### A tied term raises only its effect context's names -/
@@ -1397,8 +1476,13 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
       simp only [BoCa.BoLo.raiseE, opArgE, Expr.val, Val.prim, Val.i32, rcE, ih,
         names_of_rowAt hAt hf, Bool.and_true, Bool.true_and]
       rfl
-  | effHandleV _ _ _ _ _ _ _ _ _ ihc ihe | effHandleVB _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleV _ _ _ _ _ _ _ _ _ _ ihc ihe | effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       simp [hndExpr, Val.i32, rcE, rcE_app, rcE_qualsVal, ihc, ihe]
+  | effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+      simp only [rcE, Bool.and_eq_true] at ihc
+      simp [hndExpr, Val.i32, rcE, rcE_app, rcE_qualsVal, ihc.1, ihe, rcE_tailTuple ihc.2]
+  | reify _ _ _ _ _ _ _ _ _ ihres => exact rcE_reifyV ihres
+  | divFuel => exact rcE_divFuelV
   | @letPoly _ _ N _ _ b hcl _ _ ihV ihN =>
       have hb : rcE Ξ.names b = true := ihV
       rw [rcE_fill hb hcl N 0] at ihN

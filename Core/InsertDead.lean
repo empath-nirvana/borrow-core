@@ -362,6 +362,16 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
   | countTry S E hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .countTry S E (deadP_insert hd Γa hΓ)
   | boundedFix A C hΓ =>
       intro Γa Γb hΓ'; subst hΓ'; exact .boundedFix A C (deadP_insert hd Γa hΓ)
+  | iterate S St B R hS hΓ =>
+      intro Γa Γb hΓ'; subst hΓ'; exact .iterate S St B R hS (deadP_insert hd Γa hΓ)
+  | divFuel S A hS hΓ =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 divFuelV_closed]
+      exact .divFuel S A hS (deadP_insert hd Γa hΓ)
+  | reify S B R res hS hcl hres hΓ _ =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (reifyV_closed hcl)]
+      exact .reify S B R res hS hcl hres (deadP_insert hd Γa hΓ)
   | sliceBorrowM x hΓ hA hB hf₁ hf₂ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := withbor) (by rfl)]
@@ -484,15 +494,15 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN
       exact .effLet hs' (fun hw => live_insert hd (P := fun s => s.ty.Drop) (hW hw))
         (fun hu => live_insert hd (hU hu)) eM eN
-  | effThen hs hNZ hUq hU hMS hDS hfin hP _ _ _ ihM ihN ihD =>
+  | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have eM := ihM Γa₁ Γb₁ rfl
       have eN := ihN (_ :: Γa₂) Γb₂ rfl
       have eD := ihD (_ :: Γa₂) Γb₂ rfl
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN eD
-      exact .effThen hs' hNZ hUq (fun hu => live_insert hd (hU hu)) hMS hDS hfin hP eM eN eD
-  | effHandleV hs hdd hH _ hn0 hnS hlen _ ihc ihe =>
+      exact .effThen hs' hNZ hUq (fun hu => live_insert hd (hU hu)) hMS hDS hfin hP hSD eM eN eD
+  | effHandleV hs hdd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -500,8 +510,8 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       have hH' := valFormIn_insert (Γd := Γd) Γa₁ hH
       rw [h₁] at ec hH'; rw [h₂] at ee
       rw [shift_hndExpr]
-      exact .effHandleV hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen ee
-  | effHandleVB hs hdd hH _ hn0 hnS hlen _ hΓd hSd ihc ihe =>
+      exact .effHandleV hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen hdv ee
+  | effHandleVB hs hdd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -509,8 +519,19 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       have hH' := valFormIn_insert (Γd := Γd) Γa₁ hH
       rw [h₁] at ec hH'; rw [h₂] at ee
       rw [shift_hndExpr]
-      exact .effHandleVB hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen ee
+      exact .effHandleVB hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen hdv ee
         ⟨hΓd.1, live_insert hd hΓd.2⟩ hSd
+  | effHandleT hs hdd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+      intro Γa Γb hΓ; subst hΓ
+      obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
+      have ec := ihc Γa₁ Γb₁ rfl
+      have ee := ihe Γa₂ Γb₂ rfl
+      have hHr' := valFormIn_insert (Γd := Γd) Γa₁ hHr
+      have hHc' := valFormIn_insert (Γd := Γd) Γa₁ hHc
+      rw [h₁] at ec hHr' hHc'; rw [h₂] at ee
+      rw [shift_hndExpr]
+      simp only [Expr.shift, tailTuple_shift]
+      exact .effHandleT hs' (deadP_insert hd Γa₁ hdd) hHr' hHc' ec hn0 hnd hnS hlen hSN hLin ee
   | @letPoly _ _ N _ _ b hcl hV _ _ ihN =>
       intro Γa Γb hΓ; subst hΓ
       have eN := ihN (⟨.unit, false⟩ :: Γa) Γb rfl
@@ -681,6 +702,16 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
   | countTry S E hΓ => intro Γa Γb hΓ'; subst hΓ'; exact .countTry S E (deadP_insert hd Γa hΓ)
   | boundedFix A C hΓ =>
       intro Γa Γb hΓ'; subst hΓ'; exact .boundedFix A C (deadP_insert hd Γa hΓ)
+  | iterate S St B R hAt hS hΓ =>
+      intro Γa Γb hΓ'; subst hΓ'; exact .iterate S St B R hAt hS (deadP_insert hd Γa hΓ)
+  | divFuel S A hAt hS hΓ =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 divFuelV_closed]
+      exact .divFuel S A hAt hS (deadP_insert hd Γa hΓ)
+  | reify S B R res hAt hS hcl hres hΓ _ =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (reifyV_closed hcl)]
+      exact .reify S B R res hAt hS hcl hres (deadP_insert hd Γa hΓ)
   | sliceBorrowM x hΓ hA hB hf₁ hf₂ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := withbor) (by rfl)]
@@ -803,15 +834,15 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN
       exact .effLet hs' (fun hw => live_insert hd (P := fun s => s.ty.Drop) (hW hw))
         (fun hu => live_insert hd (hU hu)) eM eN
-  | effThen hs hNZ hUq hU hMS hDS hfin hP _ _ _ ihM ihN ihD =>
+  | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ihM ihN ihD =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have eM := ihM Γa₁ Γb₁ rfl
       have eN := ihN (_ :: Γa₂) Γb₂ rfl
       have eD := ihD (_ :: Γa₂) Γb₂ rfl
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN eD
-      exact .effThen hs' hNZ hUq (fun hu => live_insert hd (hU hu)) hMS hDS hfin hP eM eN eD
-  | effHandleV hAt hs hdd hH _ hn0 hnS hlen _ ihc ihe =>
+      exact .effThen hs' hNZ hUq (fun hu => live_insert hd (hU hu)) hMS hDS hfin hP hSD eM eN eD
+  | effHandleV hAt hs hdd hH _ hn0 hnS hlen hdv _ ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -819,8 +850,8 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       have hH' := valFormIn_insert (Γd := Γd) Γa₁ hH
       rw [h₁] at ec hH'; rw [h₂] at ee
       rw [shift_hndExpr]
-      exact .effHandleV hAt hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen ee
-  | effHandleVB hAt hs hdd hH _ hn0 hnS hlen _ hΓd hSd ihc ihe =>
+      exact .effHandleV hAt hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen hdv ee
+  | effHandleVB hAt hs hdd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have ec := ihc Γa₁ Γb₁ rfl
@@ -828,8 +859,20 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       have hH' := valFormIn_insert (Γd := Γd) Γa₁ hH
       rw [h₁] at ec hH'; rw [h₂] at ee
       rw [shift_hndExpr]
-      exact .effHandleVB hAt hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen ee
+      exact .effHandleVB hAt hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen hdv ee
         ⟨hΓd.1, live_insert hd hΓd.2⟩ hSd
+  | effHandleT hAt hs hdd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+      intro Γa Γb hΓ; subst hΓ
+      obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
+      have ec := ihc Γa₁ Γb₁ rfl
+      have ee := ihe Γa₂ Γb₂ rfl
+      have hHr' := valFormIn_insert (Γd := Γd) Γa₁ hHr
+      have hHc' := valFormIn_insert (Γd := Γd) Γa₁ hHc
+      rw [h₁] at ec hHr' hHc'; rw [h₂] at ee
+      rw [shift_hndExpr]
+      simp only [Expr.shift, tailTuple_shift]
+      exact .effHandleT hAt hs' (deadP_insert hd Γa₁ hdd) hHr' hHc' ec hn0 hnd hnS hlen hSN hLin
+        ee
   | @letPoly _ _ N _ _ b hcl hV _ _ ihN =>
       intro Γa Γb hΓ; subst hΓ
       have eN := ihN (⟨.unit, false⟩ :: Γa) Γb rfl

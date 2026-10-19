@@ -484,7 +484,7 @@ theorem not_thenAbort_compatC : ¬ ThenAbortCompat (ℍ := ℍ) := by
   have hs := semC_thenProg h LSub.empty [] [] PMap.empty Adequacy.models_empty (gDenC_nil _ _)
   have he : substAll [] thenProg = thenProg := Adequacy.psub_nil 0 _
   rw [he] at hs
-  have hE := (cC_effOf S₁₂ .unit [] LSub.empty thenProg PMap.empty).mp hs
+  have hE := (cC_effOf S₁₂ .unit [] LSub.empty thenProg PMap.empty rfl).mp hs
   have hW := ewp_unfold (opTable_mono _) hE
   have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
   obtain ⟨ρ', ρp, fρ', fρ'p, π, t, μ, μ', ps', ls', -, h₂, h₃, -, h₆, -, ⟨k', hrun⟩, -, -, -,

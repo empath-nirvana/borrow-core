@@ -159,15 +159,17 @@ theorem SemCS.semC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {S : Row} {A : VTy}
     SemC Δ Γ M (CTy.effOf S A) := by
   intro δ γ ls ρ hδ hg
   obtain ⟨α, ha⟩ := hd δ hδ
-  exact (cC_effOf S A ls δ _ ρ).mpr (ewpS_ewp (h δ γ ls ρ α hδ ha hg))
+  exact (cC_effOf_wp S A ls δ _ ρ).mpr (effWp_of_ewp (Row.keyNA_of_divB δ)
+    (ewpS_ewp (h δ γ ls ρ α hδ ha hg)))
 
-/-- **The stop lemma at `SemC`.** -/
+/-- **The stop lemma at `SemC`**, at a row that does not hold `Div`: `SemCS` is a least fixed
+point, which a computation that ticks forever is not in. -/
 theorem stop_sem {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {S : Row} {A : VTy}
-    {d : Lifetime.Life} (hM : SemC Δ Γ M (CTy.effOf S A)) (hΓ : CtxOutlives Δ Γ d)
-    (hS : Row.AnsOutlives Δ d S) : SemCS Δ Γ M S A d := by
+    {d : Lifetime.Life} (hSd : Row.divB S = false) (hM : SemC Δ Γ M (CTy.effOf S A))
+    (hΓ : CtxOutlives Δ Γ d) (hS : Row.AnsOutlives Δ d S) : SemCS Δ Γ M S A d := by
   intro δ γ ls ρ α hδ hd hg
   exact ewp_stratify (Row.ansIn_of_ansOutlives hδ hd hS)
-    ((cC_effOf S A ls δ _ ρ).mp (hM δ γ ls ρ hδ hg))
+    ((cC_effOf S A ls δ _ ρ hSd).mp (hM δ γ ls ρ hδ hg))
     (gSepC_outlives hδ hd hΓ.2 (gDenC_iff.mp hg).2)
 
 /-! ### The handler at the stratified table -/
@@ -337,7 +339,7 @@ handled computation in `ewpTS` at the stratified table at `α = δ(d)`. `κ`'s r
 `vC_kTy_of_kapRel`'s; its share in `Res_α` makes it `[@d] K`. -/
 theorem ewp_handle_valsB {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
     {A R : VTy} {d : Lifetime.Life} {α : Life} {δ : LSub} {ls₀ : List SRec} {vr vc : Val}
-    (hd : d.interp δ = some α) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
+    (hd : d.interp δ = some α) (hS : Row.divB S = false) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
     (hlen : E.length ≤ 2 ^ 32) (hVr : vC true (retTy S A R) ls₀ δ vr PMap.empty)
     (hVc : vC true (clausesTyB S R d E fs) ls₀ δ vc PMap.empty) {ls : List SRec} {e : Expr}
     {ρ : WRes}
@@ -366,7 +368,7 @@ theorem ewp_handle_valsB {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat →
       simp only [hnT, Bool.false_eq_true, if_false]
   · intro ls' v σ hv
     have hf := (hVr.2 ls' (ext_empty' ls₀ ls')) v σ σ hv (compS_empty_left σ)
-    exact (cC_effOf S R ls' δ _ σ).mp hf
+    exact (cC_effOf S R ls' δ _ σ hS).mp hf
   · intro i en hT
     obtain ⟨j, hj, hji, hi, rfl⟩ := Row.tab_ofEff_self hnS hlen hT
     obtain ⟨c, hcl, hVcl⟩ := clausesTyB_at E fs hVc j hj
@@ -383,14 +385,14 @@ theorem ewp_handle_valsB {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat →
       have hκB : vC true (.box d (kTy S R q B' (fs j))) ls' δ κ σk := ⟨α, hd, hκ, hσk⟩
       have hf := (hVcl.2 ls' (ext_empty' ls₀ ls')) (Val.pair v κ) σ σ
         ⟨v, κ, pure_sep_mk rfl ⟨σa, σk, hck, hA', hκB⟩⟩ (compS_empty_left σ)
-      exact (cC_effOf S R ls' δ _ σ).mp hf
+      exact (cC_effOf S R ls' δ _ σ hS).mp hf
     · intro ha ls' v σ hσ
       generalize hEj : E[j] = t at hVcl ha hσ
       obtain ⟨q, A', B'⟩ := t
       simp only [OpSig.ent, OpSig.abort] at ha hσ
       simp only [clauseTyB, ha] at hVcl
       have hf := (hVcl.2 ls' (ext_empty' ls₀ ls')) v σ σ hσ (compS_empty_left σ)
-      exact (cC_effOf S R ls' δ _ σ).mp hf
+      exact (cC_effOf S R ls' δ _ σ hS).mp hf
 
 /-- **BOXED-κ at variables** (`handle_compatC` with `κ : [@d] K`): the clauses at `clausesTyB`,
 and the handled computation's context and answer types outliving `@d`. -/
@@ -400,10 +402,12 @@ theorem handle_compatCB {Δ : LifeCtx} {Γ Γ₁ Γ₂ Γr Γc : Ctx VTy} {e : E
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hsp₁ : Ctx.SplitP Γ₁ Γr Γc)
     (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTyB S R d E fs))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : Row.divB (Row.ofEff n E 0 fs ++ S) = false)
     (he : SemC Δ Γ₂ e (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))
     (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs ++ S)) :
     SemC Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (CTy.effOf S R) := by
-  have heS := stop_sem he hΓd hSd
+  have hS := Row.divB_of_ofEff hnS hdv
+  have heS := stop_sem hdv he hΓd hSd
   intro δ γ ls ρ hδ hg
   obtain ⟨α, hd⟩ := hΓd.1 δ hδ
   obtain ⟨ρ₁, ρ₂, hc12, hg₁, hg₂⟩ := gDenC_split hsp hg
@@ -424,7 +428,7 @@ theorem handle_compatCB {Δ : LifeCtx} {Γ Γ₁ Γ₂ Γr Γc : Ctx VTy} {e : E
     simp only [hndTerm, substAll, Expr.psub, Expr.val, Val.prim, Val.i32, psub_qualsVal]
   show cC _ ls δ (substAll γ (hndTerm n (E.map Prod.fst) ir ic e)) ρ₂
   rw [hsub, substAll_var_some hvr, substAll_var_some hvc]
-  exact (cC_effOf S R ls δ _ ρ₂).mpr (ewp_handle_valsB hd hn0 hnS hlen hVr hVc
+  exact (cC_effOf S R ls δ _ ρ₂ hS).mpr (ewp_handle_valsB hd hS hn0 hnS hlen hVr hVc
     (heS δ γ ls ρ₂ α hδ hd hg₂))
 
 /-- **BOXED-κ** (`handleV_compatC` with `κ : [@d] K`): `handle_n e with H`, `H` a value form over
@@ -436,10 +440,12 @@ theorem handleV_compatCB {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {H e : Expr} 
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
     (hc : SemV Δ Γ₁ H (.tensor (retTy S A R) (clausesTyB S R d E fs)))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : Row.divB (Row.ofEff n E 0 fs ++ S) = false)
     (he : SemC Δ Γ₂ e (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))
     (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs ++ S)) :
     SemC Δ Γ (hndExpr n (E.map Prod.fst) H e) (CTy.effOf S R) := by
-  have heS := stop_sem he hΓd hSd
+  have hS := Row.divB_of_ofEff hnS hdv
+  have heS := stop_sem hdv he hΓd hSd
   intro δ γ ls ρ hδ hg
   obtain ⟨α, hdα⟩ := hΓd.1 δ hδ
   obtain ⟨ρ₁, ρ₂, hc12, hg₁, hg₂⟩ := gDenC_split hsp hg
@@ -453,7 +459,7 @@ theorem handleV_compatCB {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {H e : Expr} 
   show cC _ ls δ (Expr.psub 0 γ (hndExpr n (E.map Prod.fst) H e)) ρ₂
   rw [psub_hndExpr]
   show cC _ ls δ (hndExpr n (E.map Prod.fst) (substAll γ H) (substAll γ e)) ρ₂
-  refine (cC_effOf S R ls δ _ ρ₂).mpr (ewp_fold (opTable_mono _) ?_)
+  refine (cC_effOf S R ls δ _ ρ₂ hS).mpr (ewp_fold (opTable_mono _) ?_)
   intro ρf fρ ps hf hcf hT htg Al k
   obtain ⟨ls', ρ', -, hv⟩ := wpTS_val_post (v := ⟨substAll γ H, hval⟩) hH'
     (ResU.hash_empty_right (hash_valid_comp hf hcf)) (ResU.comp_empty_right fρ) hT htg
@@ -470,7 +476,7 @@ theorem handleV_compatCB {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {H e : Expr} 
   subst hσ₁ hσ₂
   have hHe : substAll γ H = (Val.pair vr vc).1 := congrArg Subtype.val hpair
   rw [hHe]
-  exact ewp_unfold (opTable_mono _) (ewp_handle_valsB hdα hn0 hnS hlen hVr hVc hE')
+  exact ewp_unfold (opTable_mono _) (ewp_handle_valsB hdα hS hn0 hnS hlen hVr hVc hE')
     ρf fρ ps hf hcf hT htg Al k
 
 end BoCa.Fig16.LogRel.Core

@@ -1,4 +1,5 @@
 import Core.Compatibility
+import Core.DivWp
 
 /-!
 # Core — the relation at `νX. C`  `[spec §7]`
@@ -66,8 +67,7 @@ theorem cB_mono (C : CTy) {R R' : CPred} (h : R.Le R') :
   | .amp D₁ D₂, hD, ls, δ, e => fun ρ ⟨h₁, h₂⟩ =>
       ⟨cB_mono C h hD.1 ls δ _ ρ h₁, cB_mono C h hD.2 ls δ _ ρ h₂⟩
   | .eff n i q A B fin D, hD, ls, δ, e => fun ρ h' =>
-      ewp_mono (opTable_mono _) (fun _ _ _ _ h => h)
-        (fun ls' v σ hv => effRetE_mono C h (D := D) hD.2.2 δ ls' v σ hv) h'
+      effWp_post (fun ls' v σ hv => effRetE_mono C h (D := D) hD.2.2 δ ls' v σ hv) h'
   | .arr _ D, hD, ls, δ, e => fun ρ h' v ρ₁ ρ₂ hv hc =>
       cB_mono C h (D := D) hD.2 ls δ _ ρ₂ (h' v ρ₁ ρ₂ hv hc)
 
@@ -143,8 +143,10 @@ theorem cB_unroll (C : CTy) (δ : LSub) : ∀ {D : CTy}, D.NuLeaf → ∀ (ls : 
       rw [cB_unroll C δ hD.1, cB_unroll C δ hD.2]
   | .eff n i q A B fin D, hD, ls => by
       funext e
-      show ewpTS ls e _ _ = ewpTS ls e _ _
-      rw [effRetE_unroll C δ (D := D) hD.2.2, ← effTab_instT (.thunk (.nu C)) δ D]
+      show effWp _ _ _ ls e = effWp _ _ _ ls e
+      rw [effRetE_unroll C δ (D := D) hD.2.2, ← effTab_instT (.thunk (.nu C)) δ D,
+        ← CTy.divAt_instT (.thunk (.nu C)) (.eff n i q A B fin D)]
+      rfl
   | .arr A D, hD, ls => by
       funext e ρ
       show (∀ v, (vC true A ls δ v ─⋆ cB _ D ls δ (.app e (.val v))) ρ)

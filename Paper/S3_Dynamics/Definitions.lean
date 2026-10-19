@@ -3,6 +3,7 @@ import Paper.S1_Syntax.Definitions
 import Support.Syntax.Terms
 import Support.Dynamics.Host
 import Support.Dynamics.Arrays
+import Support.Dynamics.Iterate
 
 /-!
 # [TR] §3 Dynamics  (physical pp. 3–4)
@@ -307,6 +308,12 @@ answers `idxAns`; `split` answers `splitAns`; `drop` continues as `dropFill`
 `inj₁ ()` at `k = 0` (the budget is spent) and `inj₂ (λx. bounded_fix (s, (k − 1, x)))` otherwise.
 The budget is the machine's, counted down by the machine, so the recursion is total at every
 host.
+
+### — no printed counterpart — the loop · `[spec §14]`
+
+`iterate (f, s)` continues as `iterNext`: the turn `(f s).1`; at its `inj₂ s′` the tick
+`perform (divEff, (0, ()))`, then `iterate (f, s′)` at *next* or `inj₂ ((f s′).2)` at *close*
+(`Support/Dynamics/Iterate.lean`).
 -/
 /-!
 ### — no printed counterpart — handlers, operations and finalisers · `[spec §19]`
@@ -552,6 +559,9 @@ inductive Head {ℍ : Host} [HostIs ℍ] : Heap → Expr → Heap → Expr → P
   | boundedFix (μ : Heap) (s : Val) (k : UInt32) (a : Val) :
       Head μ (.app (.val (.prim .boundedFix)) (.val (.pair s (.pair (.i32 k) a)))) μ
         (boundedFixNext s k a)
+  /-- `(μ, iterate (f, s)) ↦ (μ, iterNext f s)`.  `[spec §14]` -/
+  | iterate (μ : Heap) (f s : Val) :
+      Head μ (.app (.val (.prim .iterate)) (.val (.pair f s))) μ (iterNext f s)
   /-- `[ret]`: `hnd (n, (qs, (h_ret, hs))) v ↦ h_ret v`.  `[spec §19]` -/
   | hret (μ : Heap) (n : UInt32) (qs hr hs w : Val) :
       Head μ (hndE (hndVal n qs hr hs) (.val w)) μ (.app (.val hr) (.val w))

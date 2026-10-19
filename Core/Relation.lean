@@ -10,6 +10,7 @@ import Core.Types
 import Core.FrameRecords
 import Core.World
 import Core.EffDefs
+import Core.DivDefs
 
 /-!
 # Core — Relation  `[spec §3, §6, §7]`
@@ -150,7 +151,9 @@ def vCE : Option (Nat → TEnt) → Bool → VTy → List SRec → LSub → Val 
       sepRange (fun m => vCE η b L ls δ (.loc m)) ℓ c.toNat
 /-- `𝒞⟦C⟧(ls)δ(e)`, curried on the connective.  At `νX. C` the greatest fixed point
 `⋃{R | R ⊆ cB (nuEnv C R) C}`, written in `Prop` as `∃ R` (`docs/scope-recursion.md` §3.1), and
-trivial unless `C` is positive (`CTy.NuOk`).  `[spec §3, §7]` -/
+trivial unless `C` is positive (`CTy.NuOk`).  At `F_Σ A` the relation at the row's table is
+`effWp`: `cwp`, the greatest fixed point over segments, where the row holds `Div`, and `ewpTS`
+elsewhere.  `[spec §3, §7, §14, §19]` -/
 def cC : CTy → List SRec → LSub → Expr → WProp
   | .ret A, ls, δ, e => wpTS ls e (fun ls'' => vCE none true A ls'' δ)
   | .arr A C, ls, δ, e => fun ρ =>
@@ -163,10 +166,10 @@ def cC : CTy → List SRec → LSub → Expr → WProp
   | .nu C, ls, δ, e => fun ρ => C.NuOk →
       ∃ R : CPred, R.Le (fun ls' e' => cB (some (nuEnv C R)) C ls' δ e') ∧ R ls e ρ
   | .eff n i q A B fin C, ls, δ, e =>
-      ewpTS ls e (opTable (OpTab.ext n i
+      effWp (CTy.eff n i q A B fin C).divAt (OpTab.ext n i
         ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
           fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none⟩
-          (effTab C δ))) (effRet C δ)
+          (effTab C δ)) (effRet C δ) ls e
 /-- The operation table of a row `F_Σ R`'s layers, each capturable entry with its cancel row's
 obligation.  `[spec §19, §27]` -/
 def effTab : CTy → LSub → OpTab
@@ -205,10 +208,10 @@ def cB : Option (Nat → TEnt) → CTy → List SRec → LSub → Expr → WProp
   | η, .amp C D, ls, δ, e => fun ρ =>
       cB η C ls δ (.app e (.val (.inj₁ .unit))) ρ ∧ cB η D ls δ (.app e (.val (.inj₂ .unit))) ρ
   | η, .eff n i q A B fin C, ls, δ, e =>
-      ewpTS ls e (opTable (OpTab.ext n i
+      effWp (CTy.eff n i q A B fin C).divAt (OpTab.ext n i
         ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
           fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none⟩
-          (effTab C δ))) (effRetE η C δ)
+          (effTab C δ)) (effRetE η C δ) ls e
   | η, .arr A D, ls, δ, e => fun ρ =>
       ∀ v, (vCE none true A ls δ v ─⋆ cB η D ls δ (.app e (.val v))) ρ
   | _, .top, _, _, _ | _, .all _ _ _, _, _, _ | _, .nu _, _, _, _ =>

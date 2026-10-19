@@ -142,7 +142,8 @@ theorem not_forget_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
       · simp only [OtherLam, copy, swap, withbor, withload, withswap, sizeV, replaceV, arrLenV,
           swapV,
           foldImmV, foldOwnV, foldReuseV, unfoldV, Expr.val, Val.lam, lam2, elet, unit', v0, v1, v2,
-          v3, Expr.lam.injEq, reduceCtorEq, exists_false, or_self] at ho
+          v3, divFuelV, reifyV, rkV, BoCa.BoLo.hndE, Expr.lam.injEq, reduceCtorEq, exists_false,
+          or_self] at ho
   · -- `[app]`: `forget` at `κ ⊸ C`, typed at `κ`'s slot
     cases hi
     obtain rfl := hΓ A (splitP_le_right hs _ _ (soloP_le hx))
@@ -515,7 +516,7 @@ theorem d_at08Once : CDerives LifeCtx.empty [] at08Once (.comp (.ret .unit)) := 
   refine .bind (.right .nil) (.ret (d_hrS (.cons .nil))) ?_
   exact .effHandle (S := []) (E := [(.lin, .unit, .unit)]) (n := 5) (A := .unit) (R := .unit)
     (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
-    (by decide) (by simp) (by simp) (.effPerform (o := fooSig) rfl rfl (.unitI (by cdead)))
+    (by decide) (by simp) (by simp) rfl (.effPerform (o := fooSig) rfl rfl (.unitI (by cdead)))
 
 /-- **AT08 with the copy used once runs**: every run, under every allocator, ends at `()` with the
 empty memory. -/

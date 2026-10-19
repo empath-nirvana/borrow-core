@@ -1,5 +1,6 @@
 import Support.Dynamics.Completeness
 import Support.Dynamics.Interpreter
+import Support.Dynamics.Iterate
 import Support.Dynamics.Machine
 import Support.Dynamics.PrintedWp
 import Support.Lifetimes.Interpretation

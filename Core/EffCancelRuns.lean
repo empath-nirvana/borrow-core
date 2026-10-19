@@ -1669,7 +1669,8 @@ theorem finAlone_of_derives {S : Row} {FR : UInt32 → Prop}
     rw [he] at hwp
     exact hwp
   obtain ⟨W, hT, hlow, hh⟩ := ownWorld hfin
-  have hw := ewp_unfold (opTable_mono _) ((cC_effOf S .unit [] LSub.empty D PMap.empty).mp hrel)
+  have hw := ewp_unfold (opTable_mono _) ((cC_effOf S .unit [] LSub.empty D PMap.empty
+    (Row.divB_of_find_abort fun n i o hf => (hS n i o hf).1)).mp hrel)
   obtain ⟨t, μ', ls', ρ', hrest, hΦ⟩ := wpG_seg hw (fun _ _ _ hp => post_irr hp)
     (ResU.hash_symm hh) (ResU.comp_empty_right W) hT (fun x hx => absurd hx List.not_mem_nil) hlow
     hs
@@ -1971,7 +1972,7 @@ theorem dAt_then₂ {Δ : LifeCtx} :
       (.comp (CTy.effOf [rSig 2, pSig 1 (finR 2)] .unit)) := by
   show CDerivesAt Ξ₁₂ Δ [] (thenE (.var 0) (raiseU 2) (performU 1)) _
   refine .effThen (Γ₁ := []) (Γ₂ := []) (A := .unit) (SM := [pSig 1 (.ret .unit)])
-    (SD := [rSig 2]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
+    (SD := [rSig 2]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ rfl ?_ ?_ ?_
   · intro o ho
     simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
     rcases ho with rfl | rfl <;> decide
@@ -2014,7 +2015,7 @@ theorem dAt_inner₂ {Δ : LifeCtx} :
     (rowAt_two _) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_idV _ .unit)
       (.tensorI .nil (d_constC_raise _ (.unitI (.cons .nil))) (.unitI .nil))) rfl)
-    (by decide) (by simp [pSig]) (by simp) dAt_then₂
+    (by decide) (by simp [pSig]) (by simp) rfl dAt_then₂
 
 /-- **`progT` is typed by a tied derivation** at `Ξ₁₂`, at the row holding `2` (`d_progT`). -/
 theorem dAt_progT {Δ : LifeCtx} : CDerivesAt Ξ₁₂ Δ [] progT (.comp (CTy.effOf [rSig 2] .unit)) := by
@@ -2024,7 +2025,7 @@ theorem dAt_progT {Δ : LifeCtx} : CDerivesAt Ξ₁₂ Δ [] progT (.comp (CTy.e
     (rowAt_two' _) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_idV _ .unit)
       (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil))) rfl)
-    (by decide) (by simp [rSig]) (by simp) ?_
+    (by decide) (by simp [rSig]) (by simp) rfl ?_
   · refine RowLe.of_mem fun o ho => ?_
     rw [show (finR 2).rowOf ++ [rSig 2] = [rSig 2, rSig 2] from rfl] at ho
     simp only [List.mem_cons, List.not_mem_nil, or_false, or_self] at ho
@@ -2045,7 +2046,7 @@ theorem dAt_progOutT {Δ : LifeCtx} :
     rowAt_r2 .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_injlV _ .unit .unit)
       (.tensorI .nil (d_constC_raise _ (.sumI₂ (.unitI (.cons .nil)))) (.unitI .nil))) rfl)
-    (by decide) (by simp) (by simp) dAt_progT
+    (by decide) (by simp) (by simp) rfl dAt_progT
 
 /-- The canceller's context in `progOutT`: the live handler of `2`. -/
 abbrev K₂ₒ : Kont := hF (hU 2 injlV (constC (Val.inj₂ Val.unit))) .hole
@@ -2137,7 +2138,7 @@ theorem dAt_then₂A {Δ : LifeCtx} :
       (.comp (CTy.effOf [rSigA 2, pSig 1 (finRA 2)] .unit)) := by
   show CDerivesAt Ξ₁₂A Δ [] (thenE (.var 0) (raiseU 2) (performU 1)) _
   refine .effThen (Γ₁ := []) (Γ₂ := []) (A := .unit) (SM := [pSig 1 (.ret .unit)])
-    (SD := [rSigA 2]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
+    (SD := [rSigA 2]) .nil ?_ ?_ ?_ ?_ ?_ ?_ ?_ rfl ?_ ?_ ?_
   · intro o ho
     simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
     rcases ho with rfl | rfl <;> decide
@@ -2182,7 +2183,7 @@ theorem dAt_inner₂A {Δ : LifeCtx} :
     (rowAt_twoA _) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_idV _ .unit)
       (.tensorI .nil (d_constC_raise _ (.unitI (.cons .nil))) (.unitI .nil))) rfl)
-    (by decide) (by simp [pSig]) (by simp) dAt_then₂A
+    (by decide) (by simp [pSig]) (by simp) rfl dAt_then₂A
 
 /-- **`progTA` is typed by a tied derivation** at `Ξ₁₂A`, at the row holding the affine `2`. -/
 theorem dAt_progTA {Δ : LifeCtx} :
@@ -2193,7 +2194,7 @@ theorem dAt_progTA {Δ : LifeCtx} :
     (rowAt_twoA' _) .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_idV _ .unit)
       (.tensorI .nil (d_cancelCT rfl ?_) (.unitI .nil))) rfl)
-    (by decide) (by simp [rSigA]) (by simp) ?_
+    (by decide) (by simp [rSigA]) (by simp) rfl ?_
   · refine RowLe.of_mem fun o ho => ?_
     rw [show (finRA 2).rowOf ++ [rSigA 2] = [rSigA 2, rSigA 2] from rfl] at ho
     simp only [List.mem_cons, List.not_mem_nil, or_false, or_self] at ho
@@ -2214,7 +2215,7 @@ theorem dAt_progOutTA {Δ : LifeCtx} :
     rowAt_r2A .nil .nil (.pair (.val _) (.pair (.val _) (.val _)))
     (CDerivesAt.ofEffFree (.tensorI .nil (d_injlV _ .unit .unit)
       (.tensorI .nil (d_constC_raise _ (.sumI₂ (.unitI (.cons .nil)))) (.unitI .nil))) rfl)
-    (by decide) (by simp) (by simp) dAt_progTA
+    (by decide) (by simp) (by simp) rfl dAt_progTA
 
 /-- The canceller's context in `progOutTA`: the live affine handler of `2`. -/
 abbrev K₂ₒA : Kont := hF (hQ 2 .aff injlV (constC (Val.inj₂ Val.unit))) .hole

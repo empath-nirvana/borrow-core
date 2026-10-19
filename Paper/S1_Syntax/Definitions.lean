@@ -43,7 +43,8 @@ abbrev Loc := Nat
 /-- The four nullary productions of `[TR]` p. 1's `Prim`; `store v` is row 1.15.
     `lit` and `host` are the integer constants of `SPEC.md` §8; `tab`, `idx` and `drop` the
     array primitives of §9 with the split `split`; `count` the counted loop of §16,
-    `countTry` the counted loop with an exit and `boundedFix` the fuelled fixed point of §20. -/
+    `countTry` the counted loop with an exit, `boundedFix` the fuelled fixed point of §20 and
+    `iterate` the loop of §14 that ticks `Div` at each back edge. -/
 inductive Prim where
   | alloc | free | load | store
   /-- An integer literal.  `[spec §8]` -/
@@ -69,6 +70,9 @@ inductive Prim where
   /-- The fuelled fixed point: `bounded_fix (s, (k, a))` runs `s (self, a)`, `self` the fixed
       point at `k − 1`, or `inj₁ ()` once the budget is spent.  `[spec §20]` -/
   | boundedFix
+  /-- The loop: `iterate (f, s)` runs the turn `(f s).1`; on `inj₂ s′` it ticks `Div` and goes on
+      from `s′` at *next*, or answers `inj₂` of the residual `(f s′).2` at *close*.  `[spec §14]` -/
+  | iterate
   /-- A control operation: `perform (n, (i, v))` asks the nearest handler named `n` for its
       operation `i` at `v`, and is resumed with its answer.  `[spec §19]` -/
   | perform

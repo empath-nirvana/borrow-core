@@ -44,6 +44,14 @@ def RowAt (Ξ : EffCtx) (S : Row) : Prop :=
   ∀ n i o, Row.find S n i = some o →
     n ≠ 0 ∧ (Ξ n).length ≤ 2 ^ 32 ∧ (Ξ n)[i.toNat]? = some (o.q, o.A, o.B)
 
+/-- A row tied to an effect context that gives `Div`'s name no operation does not hold `Div`. -/
+theorem Row.divB_of_rowAt {Ξ : EffCtx} {S : Row} (hAt : RowAt Ξ S) (hΞ : Ξ divEff = []) :
+    Row.divB S = false :=
+  Row.divB_false_of_find fun o hf => by
+    have := (hAt _ _ o hf).2.2
+    rw [hΞ] at this
+    simp at this
+
 /-! ### The tied judgment -/
 
 /-- **`CDerives` with its operations' and handlers' rows tied to `Ξ`** (decision R): the
@@ -193,6 +201,19 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   computation type.  `[spec §20]` -/
   | boundedFix {Δ Γ} (A : VTy) (C : CTy) (hΓ : Ctx.DeadP Γ) :
       CDerivesAt Ξ Δ Γ (.val (.prim .boundedFix)) (.val (boundedFixTy A C))
+  /-- `iterate` at a row holding `Div`, the row tied to `Ξ`.  `[spec §14]` -/
+  | iterate {Δ Γ} (S : Row) (St B R : VTy) (hAt : RowAt Ξ S) (hS : Row.divB S = true)
+      (hΓ : Ctx.DeadP Γ) :
+      CDerivesAt Ξ Δ Γ (.val (.prim .iterate)) (.val (iterTy S St B R))
+  /-- `div_fuel`, the handled row tied to `Ξ`.  `[spec §14]` -/
+  | divFuel {Δ Γ} (S : Row) (A : VTy) (hAt : RowAt Ξ (tickSig :: S)) (hS : ∀ o ∈ S, o.n ≠ divEff)
+      (hΓ : Ctx.DeadP Γ) :
+      CDerivesAt Ξ Δ Γ (.val divFuelV) (.val (divFuelTy S A))
+  /-- `reify_res`, the handled row tied to `Ξ`.  `[spec §14]` -/
+  | reify {Δ Γ} (S : Row) (B R : VTy) (res : Val) (hAt : RowAt Ξ (tickSig :: S))
+      (hS : ∀ o ∈ S, o.n ≠ divEff) (hcl : closedAt 0 res.1 = true)
+      (hres : CDerivesAt Ξ Δ [] (.val res) (.val (resTy S B R))) (hΓ : Ctx.DeadP Γ) :
+      CDerivesAt Ξ Δ Γ (.val (reifyV res)) (.val (reifyTy S B R))
   /-- `slice_borrow_mut : Array A ⊸ (∀'x ⊏ ⊓Δ. [Mut 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`, the term
   `withbor`'s: an owned array lent as a family of `mut` leaves, with no cell; its side conditions
   non-strict.  `[spec §9, §23]` -/
@@ -369,7 +390,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
       (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
         capB o.q o.B = true → ThenLe o.fin SD o'.fin)
-      (hP : SD.UnrD → SM.PendPers)
+      (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
       (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A)))
       (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
       (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
@@ -384,6 +405,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
       (hc : CDerivesAt Ξ Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))))
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+      (hdv : Row.divB (Row.ofEff n E 0 fs ++ S) = false)
       (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
       CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
   /-- BOXED-κ, the handled row tied to `Ξ`.  `[spec §28]` -/
@@ -392,9 +414,21 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
       (hc : CDerivesAt Ξ Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs))))
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+      (hdv : Row.divB (Row.ofEff n E 0 fs ++ S) = false)
       (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)))
       (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs ++ S)) :
       CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
+  /-- `[handle]` at clauses that resume `κ` in tail position, the handled row tied to `Ξ`.
+  `[spec §14, §19]` -/
+  | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+      {n : UInt32} {A R : VTy} (hAt : RowAt Ξ (Row.ofEff n E 0 fs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
+      (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
+      (hc : CDerivesAt Ξ Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
+      (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+      (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
+      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
+      CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) e)
+        (.comp (CTy.effOf S R))
   /-- `[let-poly]`: `let x = λy. b in N` for a closed λ-value, from `N` with the λ-value for `x`,
   `x`'s slot dead.  Each occurrence of the λ-value in `N` is typed on its own, at its own row: the
   kernel's row polymorphism, with the value restriction.  `[spec §24]` -/
@@ -502,12 +536,17 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | effPerform _ hf hna _ ih1 => exact .effPerform hf hna ih1
   | effRaise _ hf ha hd _ ih1 => exact .effRaise hf ha hd ih1
   | effLet hs hW hU _ _ ih1 ih2 => exact .effLet hs hW hU ih1 ih2
-  | effThen hs hNZ hUq hU hMS hDS hfin hP _ _ _ ih1 ih2 ih3 =>
-      exact .effThen hs hNZ hUq hU hMS hDS hfin hP ih1 ih2 ih3
-  | effHandleV _ hs hd hH _ hn0 hnS hlen _ ihc ihe =>
-      exact .effHandleV hs hd hH ihc hn0 hnS hlen ihe
-  | effHandleVB _ hs hd hH _ hn0 hnS hlen _ hΓd hSd ihc ihe =>
-      exact .effHandleVB hs hd hH ihc hn0 hnS hlen ihe hΓd hSd
+  | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>
+      exact .effThen hs hNZ hUq hU hMS hDS hfin hP hSD ih1 ih2 ih3
+  | effHandleV _ hs hd hH _ hn0 hnS hlen hdv _ ihc ihe =>
+      exact .effHandleV hs hd hH ihc hn0 hnS hlen hdv ihe
+  | effHandleVB _ hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
+      exact .effHandleVB hs hd hH ihc hn0 hnS hlen hdv ihe hΓd hSd
+  | effHandleT _ hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+      exact .effHandleT hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
+  | iterate S St B R _ hS hΓ => exact .iterate S St B R hS hΓ
+  | divFuel S A _ hS hΓ => exact .divFuel S A hS hΓ
+  | reify S B R res _ hS hcl _ hΓ ih => exact .reify S B R res hS hcl ih hΓ
   | letPoly b hcl _ _ ihV ihN => exact .letPoly b hcl ihV ihN
 
 /-- `[then]` with its finaliser at the pure row (§24, option A), tied: `effThen` at `Σ_M = Σ` and
@@ -520,7 +559,7 @@ theorem CDerivesAt.effThenA {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row
     CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
   .effThen (SD := []) hs hNZ hUq hU (RowLe.refl S) (RowLe.nil S)
     (fun _ _ o _ hf hf' _ => by rw [hf] at hf'; cases hf'; exact ThenLe.nil o.fin)
-    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hM hN hD
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) rfl hM hN hD
 
 /-- `[handle]` at two variables, tied: `CDerives.effHandle` with the handled row tied to `Ξ`.
 `[spec §19]` -/
@@ -529,6 +568,7 @@ theorem CDerivesAt.effHandle {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Ro
     (hAt : RowAt Ξ (Row.ofEff n E 0 ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc)
     (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : Row.divB (Row.ofEff n E 0 ++ S) = false)
     (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
     CDerivesAt Ξ Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) := by
   obtain ⟨sr, hsr, hlr⟩ := hr.live
@@ -537,7 +577,7 @@ theorem CDerivesAt.effHandle {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Ro
   obtain ⟨sc', hsc', hlc'⟩ := hs₁.live_right hsc hlc
   exact .effHandleV hAt hs
     (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E finsNil)))
-    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen he
+    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
 
 /-- BOXED-κ at two variables, tied: `CDerivesAt.effHandle` with the clauses at `clausesTyB`.
 `[spec §28]` -/
@@ -546,6 +586,7 @@ theorem CDerivesAt.effHandleB {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : R
     (hAt : RowAt Ξ (Row.ofEff n E 0 ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc)
     (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTyB S R d E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : Row.divB (Row.ofEff n E 0 ++ S) = false)
     (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A)))
     (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 ++ S)) :
     CDerivesAt Ξ Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R)) := by
@@ -556,7 +597,7 @@ theorem CDerivesAt.effHandleB {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : R
   exact .effHandleVB hAt hs
     (hs₁.deadP (hr.deadP (retTy_persistent S A R))
       (hc.deadP (clausesTyB_persistent S R d E finsNil)))
-    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen he
+    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he
     hΓd hSd
 
 /-! ### Tied rows -/
@@ -721,10 +762,10 @@ theorem hndTags_of_rowAt {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy × VT
 
 /-! ### Terms with no operation -/
 
-/-- The term holds no `perform`, `raise` or `hnd`: none of its parts is typed by a rule that reads
-an operation's signature off a row. -/
+/-- The term holds no `perform`, `raise`, `hnd` or `iterate`: none of its parts is typed by a rule
+that reads an operation's signature off a row. -/
 def _root_.BoCa.Expr.effFree : Expr → Bool
-  | .prim p => p != .perform && p != .raise && p != .hnd
+  | .prim p => p != .perform && p != .raise && p != .hnd && p != .iterate
   | .var _ | .unit | .loc _ => true
   | .pair a b | .seq a b | .letpair a b | .app a b => a.effFree && b.effFree
   | .inj₁ a | .inj₂ a | .lam a => a.effFree
@@ -868,10 +909,15 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | effPerform => simp [BoCa.BoLo.performE, Expr.effFree, Expr.val, Val.prim] at he
   | effRaise => simp [BoCa.BoLo.raiseE, Expr.effFree, Expr.val, Val.prim] at he
   | effLet hs hW hU _ _ ih1 ih2 => exact .effLet hs hW hU (ih1 (by eff_free)) (ih2 (by eff_free))
-  | effThen hs hNZ hUq hU hMS hDS hfin hP _ _ _ ih1 ih2 ih3 =>
-      exact .effThen hs hNZ hUq hU hMS hDS hfin hP (ih1 (by eff_free)) (ih2 (by eff_free))
+  | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>
+      exact .effThen hs hNZ hUq hU hMS hDS hfin hP hSD (ih1 (by eff_free)) (ih2 (by eff_free))
         (ih3 (by eff_free))
-  | effHandleV | effHandleVB => simp [hndExpr, Expr.effFree, Expr.val, Val.prim] at he
+  | effHandleV | effHandleVB | effHandleT =>
+      simp [hndExpr, Expr.effFree, Expr.val, Val.prim] at he
+  | iterate => simp [Expr.effFree, Expr.val, Val.prim] at he
+  | divFuel => simp [divFuelV, fuelH, BoCa.BoLo.hndVal, BoCa.BoLo.hndE, Expr.effFree, Expr.val, Val.prim,
+      Val.lam] at he
+  | reify => simp [reifyV, BoCa.BoLo.hndE, Expr.effFree, Expr.val, Val.prim, Val.lam] at he
   | @letPoly _ _ N _ _ b hcl _ _ ihV ihN =>
       simp only [Expr.effFree, Expr.val, Val.lam, Bool.and_eq_true] at he
       exact .letPoly b hcl (ihV he.2)

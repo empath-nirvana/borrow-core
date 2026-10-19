@@ -616,6 +616,60 @@ theorem hasVar_fill {V : Val} (hV : closedAt 0 V.1 = true) :
       · exact .inr (.inr (hasVar_fill hV c (j + 1) (m + 1) (by omega) hk))
   | .unit, _, _, _, hk | .loc _, _, _, _, hk | .prim _, _, _, _, hk => hk.elim
 
+/-- A variable of a shifted term past the shift's cutoff is one of the term's. -/
+theorem hasVar_shift_inv (d : Nat) : ∀ (e : Expr) (c k : Nat), c ≤ k →
+    (e.shift d c).HasVar (k + d) → e.HasVar k
+  | .var i, c, k, hck, h => by
+      simp only [Expr.shift] at h
+      split at h <;> simp only [Expr.HasVar] at h ⊢ <;> omega
+  | .pair a b, c, k, hck, h | .seq a b, c, k, hck, h | .app a b, c, k, hck, h => by
+      simp only [Expr.shift, Expr.HasVar] at h ⊢
+      exact h.imp (hasVar_shift_inv d a c k hck) (hasVar_shift_inv d b c k hck)
+  | .inj₁ a, c, k, hck, h | .inj₂ a, c, k, hck, h => hasVar_shift_inv d a c k hck h
+  | .lam b, c, k, hck, h => by
+      simp only [Expr.shift, Expr.HasVar] at h ⊢
+      exact hasVar_shift_inv d b (c + 1) (k + 1) (by omega) (by rwa [show k + 1 + d = k + d + 1 by omega])
+  | .letpair a b, c, k, hck, h => by
+      simp only [Expr.shift, Expr.HasVar] at h ⊢
+      exact h.imp (hasVar_shift_inv d a c k hck)
+        (fun h => hasVar_shift_inv d b (c + 2) (k + 2) (by omega) (by rwa [show k + 2 + d = k + d + 2 by omega]))
+  | .case a b₁ b₂, c, k, hck, h => by
+      simp only [Expr.shift, Expr.HasVar] at h ⊢
+      exact h.imp (hasVar_shift_inv d a c k hck) (Or.imp
+        (fun h => hasVar_shift_inv d b₁ (c + 1) (k + 1) (by omega) (by rwa [show k + 1 + d = k + d + 1 by omega]))
+        (fun h => hasVar_shift_inv d b₂ (c + 1) (k + 1) (by omega) (by rwa [show k + 1 + d = k + d + 1 by omega])))
+  | .unit, _, _, _, h | .loc _, _, _, _, h | .prim _, _, _, _, h => h.elim
+
+theorem hasVar_pickE : ∀ (j : Nat) {t : Expr} {k : Nat}, (pickE j t).HasVar k → t.HasVar k
+  | 0, t, k, h => by
+      simp only [pickE, Expr.HasVar] at h
+      exact h.resolve_right (by omega)
+  | j + 1, t, k, h => by
+      simp only [pickE, Expr.HasVar] at h
+      exact h.resolve_right fun h' => by have := hasVar_pickE j h'; simp [Expr.HasVar] at this
+
+/-- A variable of the clauses written out from `Hc` is one of `Hc`'s. -/
+theorem hasVar_tailTuple {Hc : Expr} : ∀ (E : List (Qual × VTy × VTy)) (j k : Nat),
+    (tailTuple E j Hc).HasVar k → Hc.HasVar k
+  | [], _, _, h => by simp [tailTuple, Expr.HasVar, Val.unit] at h
+  | (q, A, B) :: E, j, k, h => by
+      simp only [tailTuple, Expr.HasVar] at h
+      rcases h with h | h
+      · unfold tailClause at h
+        split at h
+        · simp only [Expr.HasVar] at h
+          rcases h with h | h
+          · exact hasVar_shift_inv 1 Hc 0 k (Nat.zero_le _) (hasVar_pickE j h)
+          · simp [Expr.HasVar] at h
+        · simp only [Expr.HasVar, resumeB, Expr.val, Val.lam, Val.inj₁, Val.unit] at h
+          rcases h with h | (h | h) | h | h
+          · simp at h
+          all_goals first
+            | (simp at h)
+            | exact hasVar_shift_inv 3 Hc 0 k (Nat.zero_le _)
+                (by rw [show k + 3 = k + 1 + 2 by omega]; exact hasVar_pickE j h)
+      · exact hasVar_tailTuple E (j + 1) k h
+
 theorem slot_succ {Γ : Ctx VTy} {s : Slot VTy} {k : Nat} {T : VTy}
     (h : (s :: Γ)[k + 1]? = some ⟨T, true⟩) : Γ[k]? = some ⟨T, true⟩ := by simpa using h
 
@@ -701,20 +755,31 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       simp only [BoCa.BoLo.performE, BoCa.BoLo.raiseE, opArgE, Expr.val, Val.prim, Val.i32,
         Expr.HasVar, false_or] at hk
       exact ih k hk
-  | effThen hs _ _ _ _ _ _ _ _ _ _ ihM ihN ihD =>
+  | effThen hs _ _ _ _ _ _ _ _ _ _ _ ihM ihN ihD =>
       intro k hk
       simp only [thenE, Expr.val, Val.prim, Val.lam, Expr.HasVar, false_or] at hk
       rcases hk with (hk | hk) | hk
       · obtain ⟨T, hT⟩ := ihN (k + 1) hk; exact ⟨T, splitP_le_right hs k T (slot_succ hT)⟩
       · obtain ⟨T, hT⟩ := ihD (k + 1) hk; exact ⟨T, splitP_le_right hs k T (slot_succ hT)⟩
       · obtain ⟨T, hT⟩ := ihM k hk; exact ⟨T, splitP_le_left hs k T hT⟩
-  | effHandleV hs _ _ _ _ _ _ _ ihc ihe | effHandleVB hs _ _ _ _ _ _ _ _ _ ihc ihe =>
+  | effHandleV hs _ _ _ _ _ _ _ _ ihc ihe | effHandleVB hs _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       intro k hk
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.HasVar, false_or] at hk
       rcases hk with (hk | hk) | hk
       · exact absurd hk (qualsVal_noVar _)
       · obtain ⟨T, hT⟩ := ihc k hk; exact ⟨T, splitP_le_left hs k T hT⟩
       · obtain ⟨T, hT⟩ := ihe k hk; exact ⟨T, splitP_le_right hs k T hT⟩
+  | effHandleT hs _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+      intro k hk
+      simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.HasVar, false_or] at hk
+      rcases hk with (hk | hk | hk) | hk
+      · exact absurd hk (qualsVal_noVar _)
+      · obtain ⟨T, hT⟩ := ihc k (Or.inl hk); exact ⟨T, splitP_le_left hs k T hT⟩
+      · obtain ⟨T, hT⟩ := ihc k (Or.inr (hasVar_tailTuple _ 0 k hk))
+        exact ⟨T, splitP_le_left hs k T hT⟩
+      · obtain ⟨T, hT⟩ := ihe k hk; exact ⟨T, splitP_le_right hs k T hT⟩
+  | divFuel => intro k hk; exact absurd hk (not_hasVar_closed divFuelV_closed)
+  | reify _ _ _ _ _ hcl => intro k hk; exact absurd hk (not_hasVar_closed (reifyV_closed hcl))
   | letPoly b hcl _ _ _ ihN =>
       intro k hk
       rcases hk with hk | hk
@@ -737,7 +802,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
 rule whose conclusion's term has another head is told apart. -/
 macro "cd_terms" : tactic => `(tactic| (try simp_all [withPair, absurdE, copy, forget, swap,
     withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, forgetV, emptyFamV, swapV,
-    Val.arr, withborUE, foldImmV, foldOwnV, foldReuseV, unfoldV, BoCa.BoLo.performE,
+    Val.arr, withborUE, foldImmV, foldOwnV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
     BoCa.BoLo.raiseE, opArgE, thenE, hndTerm, hndExpr, Expr.val, Val.lam, Val.prim, Val.unit,
     Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store']))
 
@@ -751,14 +816,14 @@ theorem forceE_var {C : CTy} {i : Nat} {e : Expr} (h : forceE C (.var i) = e) :
 /-- The same, at one hypothesis alone. -/
 macro "cd_at " h:ident : tactic => `(tactic| (simp [withPair, absurdE, copy, forget, swap,
     withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, forgetV, emptyFamV, swapV,
-    Val.arr, withborUE, foldImmV, foldOwnV, foldReuseV, unfoldV, BoCa.BoLo.performE,
+    Val.arr, withborUE, foldImmV, foldOwnV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
     BoCa.BoLo.raiseE, opArgE, thenE, hndTerm, hndExpr, Expr.val, Val.lam, Val.prim, Val.unit,
     Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store'] at $h:ident))
 
 /-- The primitives that have a rule of their own. -/
 def PrimRule : Prim → Prop
   | .alloc | .free | .host _ | .lit _ | .tab | .drop | .idx | .count | .countTry | .boundedFix
-  | .split => True
+  | .split | .iterate => True
   | _ => False
 
 /-- **A primitive is typed only by its own rule.** -/
@@ -1098,7 +1163,7 @@ theorem der_app {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro X Y he; cases he
       exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
         (.inl ⟨_, rfl⟩))))))))))), .refl⟩
-  | effHandleV | effHandleVB =>
+  | effHandleV | effHandleVB | effHandleT =>
       intro X Y he; cases he
       exact ⟨_, .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
         (.inr ⟨_, rfl⟩))))))))))), .refl⟩
@@ -1233,7 +1298,7 @@ theorem der_then {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
     ∀ N D M, e = thenE N D M → ∃ Γ₁ Γ₂ A j₁ j₂, Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerives Δ Γ₁ M j₁ ∧
       CDerives Δ (⟨A, true⟩ :: Γ₂) N j₂ := by
   induction h with
-  | effThen hs _ _ _ _ _ _ _ hM hN _ => intro N D M he; cases he; exact ⟨_, _, _, _, _, hs, hM, hN⟩
+  | effThen hs _ _ _ _ _ _ _ _ hM hN _ => intro N D M he; cases he; exact ⟨_, _, _, _, _, hs, hM, hN⟩
   | force => intro N D M he; rcases forceE_var he with h | h <;> simp [thenE] at h
   | lolliE _ _ hf =>
       intro N D M he; simp only [thenE, Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
@@ -1288,21 +1353,30 @@ consumed context. -/
 theorem der_hnd {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ (n : UInt32) (Q H M : Expr),
       e = .app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) (.pair Q H))) M →
-      ∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
+      (∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
         (ob : Option Lifetime.Life),
         Ctx.SplitP Γ Γ₁ Γ₂ ∧ Ctx.DeadP Γ₁ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧
-        CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyO S R ob E fs))) := by
+        CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyO S R ob E fs)))) ∨
+      (∃ (Γ₁ Γ₂ : Ctx VTy) (S SN : Row) (E : List (Qual × VTy × VTy)) (A R : VTy) (Hr Hc : Expr),
+        Ctx.SplitP Γ Γ₁ Γ₂ ∧ Ctx.DeadP Γ₁ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧
+        H = .pair Hr (tailTuple E 0 Hc) ∧
+        CDerives Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E)))) := by
   induction h with
   | effHandleV hs hd _ hc _ _ _ _ =>
       intro n Q H M he
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.app.injEq, Expr.pair.injEq] at he
       obtain ⟨⟨-, -, rfl, rfl⟩, -⟩ := he
-      exact ⟨_, _, _, _, _, _, _, none, hs, hd, rfl, hc⟩
+      exact .inl ⟨_, _, _, _, _, _, _, none, hs, hd, rfl, hc⟩
   | effHandleVB hs hd _ hc _ _ _ _ =>
       intro n Q H M he
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.app.injEq, Expr.pair.injEq] at he
       obtain ⟨⟨-, -, rfl, rfl⟩, -⟩ := he
-      exact ⟨_, _, _, _, _, _, _, some _, hs, hd, rfl, hc⟩
+      exact .inl ⟨_, _, _, _, _, _, _, some _, hs, hd, rfl, hc⟩
+  | effHandleT hs hd _ _ hc =>
+      intro n Q H M he
+      simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.app.injEq, Expr.pair.injEq] at he
+      obtain ⟨⟨-, -, rfl, rfl⟩, -⟩ := he
+      exact .inr ⟨_, _, _, _, _, _, _, _, _, hs, hd, rfl, rfl, hc⟩
   | force => intro n Q H M he; rcases forceE_var he with h | h <;> simp at h
   | lolliE _ _ hf =>
       intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
@@ -1336,7 +1410,8 @@ def WithborUTy (T : VTy) : Prop :=
 def OtherLam (e : Expr) : Prop :=
   e = copy ∨ e = swap ∨ e = withbor ∨ e = withload ∨ e = withswap ∨ e = sizeV.1 ∨
     e = replaceV.1 ∨ e = arrLenV.1 ∨ e = swapV.1 ∨ (∃ F, e = (foldImmV F).1) ∨
-    (∃ F, e = (foldOwnV F).1) ∨ (∃ F, e = (foldReuseV F).1) ∨ (∃ C, e = (unfoldV C).1)
+    (∃ F, e = (foldOwnV F).1) ∨ (∃ F, e = (foldReuseV F).1) ∨ (∃ C, e = (unfoldV C).1) ∨
+    e = divFuelV.1 ∨ (∃ res, e = (reifyV res).1)
 
 /-- A λ-constant, read at the views of its axiom's type. -/
 def LamAx (e : Expr) (j : Jdg) : Prop :=
@@ -1508,7 +1583,17 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro M he
       exact LamInv.ofAx (he ▸ lamAx_other
         (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
-          (.inr ⟨_, rfl⟩)))))))))))) _)
+          (.inr (.inl ⟨_, rfl⟩))))))))))))) _)
+  | divFuel =>
+      intro M he
+      exact LamInv.ofAx (he ▸ lamAx_other
+        (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
+          (.inr (.inr (.inl rfl)))))))))))))) _)
+  | reify =>
+      intro M he
+      exact LamInv.ofAx (he ▸ lamAx_other
+        (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
+          (.inr (.inr (.inr ⟨_, rfl⟩)))))))))))))) _)
   | forgetBang => intro M he; exact LamInv.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inl ⟨_, rfl⟩⟩))
   | forgetImm =>
       intro M he; exact LamInv.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inr (.inl ⟨_, _, rfl⟩)⟩))
@@ -1732,7 +1817,8 @@ theorem not_der_load_app {Δ : LifeCtx} {Γ : Ctx VTy} {X : Expr} {j : Jdg} :
 /-- A term is no λ-constant, by unfolding. -/
 macro "not_const" : tactic => `(tactic| (simp only [NotConst, OtherLam, forget, copy, swap, withbor,
     withload, withswap, sizeV, replaceV, arrLenV, swapV, foldImmV, foldOwnV, foldReuseV, unfoldV,
-    withborUE, Expr.val, Val.lam, lam2, elet, unit', v0, v1, v2, v3, load', store', thenE, ne_eq,
+    withborUE, divFuelV, reifyV, rkV, BoCa.BoLo.hndE,
+    Expr.val, Val.lam, lam2, elet, unit', v0, v1, v2, v3, load', store', thenE, ne_eq,
     bindE, hndTerm, hndExpr, Val.unit, Val.prim, Val.i32, Val.inj₁, Val.inj₂, Val.pair,
     BoCa.BoLo.performE, opArgE, free', alloc',
     Expr.lam.injEq, reduceCtorEq, not_false_eq_true, not_exists, not_or, forall_const, and_self,
@@ -1742,7 +1828,8 @@ macro "not_const" : tactic => `(tactic| (simp only [NotConst, OtherLam, forget, 
 /-- A hypothesis that a term is one of the other λ-constants is refuted by unfolding. -/
 macro "not_other " h:ident : tactic => `(tactic| (simp [OtherLam, copy, swap, withbor, withload,
     withswap, sizeV, replaceV, arrLenV, swapV, foldImmV, foldOwnV, foldReuseV, unfoldV, Expr.val,
-    Val.lam, lam2, elet, unit', v0, v1, v2, v3, withborUE, thenE, load', store', Val.prim,
+    divFuelV, reifyV, rkV, BoCa.BoLo.hndE, Val.lam, lam2, elet, unit', v0, v1, v2, v3, withborUE,
+    thenE, load', store', Val.prim,
     Val.unit] at $h:ident))
 
 /-- A term is no `⟨M, N⟩`, by unfolding. -/
@@ -1902,7 +1989,11 @@ theorem hnd_clauses {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {qs : List Qual} 
     {j : Jdg} (h : CDerives Δ Γ (hndExpr n qs (.pair X (.var 1)) M) j) :
     ∃ T S R E fs ob, Γ[1]? = some ⟨T, true⟩ ∧ VView T (clausesTyO S R ob E fs) ∧
       E.map Prod.fst = qs := by
-  obtain ⟨Γ₁, Γ₂, S, E, fs, A, R, ob, hs, -, hQ, hH⟩ := der_hnd h n _ _ M rfl
+  obtain ⟨Γ₁, Γ₂, S, E, fs, A, R, ob, hs, -, hQ, hH⟩ | ⟨_, _, _, _, E, _, _, _, _, -, -, -, hH, -⟩ :=
+    der_hnd h n _ _ M rfl
+  swap
+  · simp only [Expr.pair.injEq] at hH
+    cases E <;> simp [tailTuple, Val.unit] at hH
   have hE : E.map Prod.fst = qs := (qualsVal_inj hQ).symm
   rcases der_pair hH X (.var 1) rfl with ⟨Γ₁₁, Γ₁₂, A', B', hs', -, hv, hc⟩ | he
   · obtain ⟨-, rfl⟩ := vview_tensor hc
@@ -2012,12 +2103,18 @@ theorem JR.rowLe {S S' : Row} {Y Y' : VTy}
 
 /-- `[handle]`'s premises, at its conclusion `j₀`. -/
 def HndBase (Δ : LifeCtx) (Γ : Ctx VTy) (n : UInt32) (Q H M : Expr) (j₀ : Jdg) : Prop :=
-  ∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
+  (∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
     (ob : Option Lifetime.Life),
     Ctx.SplitP Γ Γ₁ Γ₂ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧
     CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyO S R ob E fs))) ∧
     CDerives Δ Γ₂ M (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) ∧
-    (∀ o ∈ S, o.n ≠ n) ∧ j₀ = .comp (CTy.effOf S R)
+    (∀ o ∈ S, o.n ≠ n) ∧ j₀ = .comp (CTy.effOf S R)) ∨
+  (∃ (Γ₁ Γ₂ : Ctx VTy) (S SN : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
+    (Hr Hc : Expr),
+    Ctx.SplitP Γ Γ₁ Γ₂ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧ H = .pair Hr (tailTuple E 0 Hc) ∧
+    CDerives Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))) ∧
+    CDerives Δ Γ₂ M (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) ∧
+    (∀ o ∈ S, o.n ≠ n) ∧ j₀ = .comp (CTy.effOf S R))
 
 /-- **A handler term is `[handle]`'s, then the same-term rules**: the handled body at the handler's
 signature row before the outer row `Σ`, the clauses at `Σ`, and the term read at a row the
@@ -2027,20 +2124,27 @@ theorem der_hndJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       e = .app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) (.pair Q H))) M →
       ∃ j₀, HndBase Δ Γ n Q H M j₀ ∧ JR j₀ j := by
   induction h with
-  | effHandleV hs _ _ hc _ hnS _ he =>
+  | effHandleV hs _ _ hc _ hnS _ _ he =>
       intro n Q H M he'
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.app.injEq, Expr.pair.injEq] at he'
       obtain ⟨⟨-, hn, rfl, rfl⟩, rfl⟩ := he'
       simp only [Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at hn
       subst hn
-      exact ⟨_, ⟨_, _, _, _, _, _, _, none, hs, rfl, hc, he, hnS, rfl⟩, .refl⟩
-  | effHandleVB hs _ _ hc _ hnS _ he =>
+      exact ⟨_, .inl ⟨_, _, _, _, _, _, _, none, hs, rfl, hc, he, hnS, rfl⟩, .refl⟩
+  | effHandleVB hs _ _ hc _ hnS _ _ he =>
       intro n Q H M he'
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.app.injEq, Expr.pair.injEq] at he'
       obtain ⟨⟨-, hn, rfl, rfl⟩, rfl⟩ := he'
       simp only [Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at hn
       subst hn
-      exact ⟨_, ⟨_, _, _, _, _, _, _, some _, hs, rfl, hc, he, hnS, rfl⟩, .refl⟩
+      exact ⟨_, .inl ⟨_, _, _, _, _, _, _, some _, hs, rfl, hc, he, hnS, rfl⟩, .refl⟩
+  | effHandleT hs _ _ _ hc _ _ hnS _ _ _ he =>
+      intro n Q H M he'
+      simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.app.injEq, Expr.pair.injEq] at he'
+      obtain ⟨⟨-, hn, rfl, rfl⟩, rfl⟩ := he'
+      simp only [Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at hn
+      subst hn
+      exact ⟨_, .inr ⟨_, _, _, _, _, _, _, _, _, _, hs, rfl, rfl, hc, he, hnS, rfl⟩, .refl⟩
   | force => intro n Q H M he; rcases forceE_var he with h | h <;> simp at h
   | lolliE _ _ hf =>
       intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
@@ -2089,6 +2193,31 @@ theorem der_hndJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       exact ⟨j₀, hb, hr.tail (JS.val (VS.unroll _))⟩
   | _ => intro n Q H M he; cd_at he
 
+/-- **A handler whose clause tuple is no tail-resuming handler's** is `[handle]`'s at bare or boxed
+`κ`, then the same-term rules. -/
+theorem der_hndJ₁ {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} {n : UInt32} {Q H M : Expr}
+    (h : CDerives Δ Γ (.app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) (.pair Q H))) M) j)
+    (hT : ∀ Hr E Hc, H ≠ .pair Hr (tailTuple E 0 Hc)) :
+    ∃ j₀, (∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
+      (ob : Option Lifetime.Life),
+      Ctx.SplitP Γ Γ₁ Γ₂ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧
+      CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyO S R ob E fs))) ∧
+      CDerives Δ Γ₂ M (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) ∧
+      (∀ o ∈ S, o.n ≠ n) ∧ j₀ = .comp (CTy.effOf S R)) ∧ JR j₀ j := by
+  obtain ⟨j₀, hb | ⟨_, _, _, _, E, _, _, _, Hr, Hc, -, -, hH, -⟩, hr⟩ := der_hndJ h n Q H M rfl
+  · exact ⟨j₀, hb, hr⟩
+  · exact absurd hH (hT Hr E Hc)
+
+/-- A clause tuple of named clauses is no tail-resuming handler's, by unfolding. -/
+macro "not_tail" "[" xs:Lean.Parser.Tactic.simpLemma,* "]" : tactic => `(tactic| (
+    intro Hr E Hc h
+    rcases E with _ | ⟨⟨q, A, B⟩, E⟩ <;>
+      simp only [tailTuple, Expr.pair.injEq, Expr.val, reduceCtorEq, false_and, and_false] at h
+    obtain ⟨-, h, -⟩ := h
+    unfold tailClause at h
+    split at h <;>
+      simp [pickE, resumeB, Expr.val, Val.lam, Val.unit, Val.inj₁, Val.inj₂, $xs,*] at h))
+
 /-- `[then]`'s premises, at its conclusion `j₀`. -/
 def ThenBase (Δ : LifeCtx) (Γ : Ctx VTy) (D M : Expr) (j₀ : Jdg) : Prop :=
   ∃ (Γ₁ Γ₂ : Ctx VTy) (A B : VTy) (S SM SD : Row), Ctx.SplitP Γ Γ₁ Γ₂ ∧
@@ -2105,7 +2234,7 @@ its cancel row (`ThenLe`). -/
 theorem der_thenJ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ N D M, e = thenE N D M → ∃ j₀, ThenBase Δ Γ D M j₀ ∧ JR j₀ j := by
   induction h with
-  | effThen hs _ _ _ hMS hDS hfin _ hM _ hD _ _ _ =>
+  | effThen hs _ _ _ hMS hDS hfin _ _ hM _ hD _ _ _ =>
       intro N D M he; cases he
       exact ⟨_, ⟨_, _, _, _, _, _, _, hs, hMS, hDS, hfin, hM, hD, rfl⟩, .refl⟩
   | force => intro N D M he; rcases forceE_var he with h | h <;> simp [thenE] at h

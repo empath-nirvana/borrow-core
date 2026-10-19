@@ -1,5 +1,6 @@
 import Core.NuRel
 import Core.EffWp
+import Core.DivWp
 
 /-!
 # Core — Computations  `[spec §3]`
@@ -202,7 +203,7 @@ theorem cB_step (η : Option (Nat → TEnt)) : ∀ (C : CTy) {e e' : Expr},
   | .amp C D, _, _, h, ls, δ => fun _ ⟨h₁, h₂⟩ =>
       ⟨cB_step η C (fun μ => (h μ).plug (Kont.appL .hole _)) ls δ _ h₁,
        cB_step η D (fun μ => (h μ).plug (Kont.appL .hole _)) ls δ _ h₂⟩
-  | .eff _ _ _ _ _ _ _, _, _, h, ls, _ => ewp_step (opTable_mono _) h ls _
+  | .eff _ _ _ _ _ _ _, _, _, h, ls, _ => effWp_step h ls
   | .arr _ C, _, _, h, ls, δ => fun _ h' v ρ₁ ρ₂ hv hc =>
       cB_step η C (fun μ => (h μ).plug (Kont.appL .hole v)) ls δ _ (h' v ρ₁ ρ₂ hv hc)
   | .top, _, _, _, _, _ | .all _ _ _, _, _, _, _, _
@@ -223,7 +224,7 @@ theorem cC_step : ∀ (C : CTy) {e e' : Expr}, (∀ μ : Heap, Step1N μ e μ e'
         (h' α ρ₁ ρ₂ hp hc)
   | .nu C, _, _, h, ls, δ => fun ρ h' hC =>
       ((cC_nu_unfold hC ls δ _ ρ).mpr (cB_step _ C h ls δ ρ ((cC_nu_unfold hC ls δ _ ρ).mp h'))) hC
-  | .eff _ _ _ _ _ _ _, _, _, h, ls, _ => ewp_step (opTable_mono _) h ls _
+  | .eff _ _ _ _ _ _ _, _, _, h, ls, _ => effWp_step h ls
 
 /-- One head step in front of `𝒞⟦C⟧`. -/
 theorem cC_head (C : CTy) {e e' : Expr} (h : ∀ μ : Heap, Head μ e μ e') (hn : e.allocs = false)
@@ -243,7 +244,7 @@ theorem cB_bind (η : Option (Nat → TEnt)) : ∀ (C : CTy) (K : Kont) (M : Exp
       ⟨cB_bind η C (.appL K _) M ls δ P R hR (fun ls' hls w σ hσ => (h ls' hls w σ hσ).1) ρ hρ,
        cB_bind η D (.appL K _) M ls δ P R hR (fun ls' hls w σ hσ => (h ls' hls w σ hσ).2) ρ hρ⟩
   | .eff _ _ _ _ _ _ _, K, M, ls, _, P, R, hR, h =>
-      ewp_bind_pure_frame (opTable_mono _) K M ls P R _ hR h
+      effWp_bind_pure_frame K M ls P R hR h
   | .arr A C, K, M, ls, δ, P, R, hR, h => by
       rintro ρ ⟨ρ₁, ρ₂, hc, hw, hr⟩ v a x ha hx
       obtain ⟨y, hy, hyx⟩ := compS_reassoc hc hx
@@ -292,7 +293,7 @@ theorem cC_bind : ∀ (C : CTy) (K : Kont) (M : Expr) (ls : List SRec) (δ : LSu
       ((cC_nu_unfold hC ls δ _ ρ).mpr (cB_bind _ C K M ls δ P R hR
         (fun ls' hls w σ hσ => (cC_nu_unfold hC ls' δ _ σ).mp (h ls' hls w σ hσ)) ρ hρ)) hC
   | .eff _ _ _ _ _ _ _, K, M, ls, _, P, R, hR, h =>
-      ewp_bind_pure_frame (opTable_mono _) K M ls P R _ hR h
+      effWp_bind_pure_frame K M ls P R hR h
 
 /-- A dead slot contributes nothing. -/
 theorem gDenC_dead_cons {ls : List SRec} {δ : LSub} {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}

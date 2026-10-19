@@ -1,4 +1,5 @@
 import Core.EffRules
+import Core.DivRules
 
 /-!
 # Core — finalisers with effects: cancel rows  `[spec §27]`
@@ -738,22 +739,23 @@ theorem seqRaiseK_catches (p : Val) (n : UInt32) : (seqRaiseK p).Catches n = fal
 raise's argument holding nothing where `E` may stop at an unrestricted operation.  `D`'s answer lets
 the raise go on; `D`'s raise supersedes it; `D`'s operation keeps it in its continuation, whose
 cancel passes it as a plain frame (`ent_plain`).  `[spec §19, §27]` -/
-theorem seq_raise_run (δ : LSub) (S E : Row) (hES : RowLe E S) {n i : UInt32} {v : Val}
-    {en : OpEnt} (hTn : Row.tab S δ n i = some en) (ha : en.abort = true)
+theorem seq_raise_run (δ : LSub) (S E : Row) (hES : RowLe E S) (er : Bool)
+    (hEk : er = true → Row.find E divEff 0 = none) {n i : UInt32} {v : Val}
+    {en : OpEnt} (hTn : OpTab.eraseIf er (Row.tab S δ) n i = some en) (ha : en.abort = true)
     {Qd : List SRec → Val → WProp} (hQd : ∀ ls v ρ, Qd ls v ρ → v = .unit ∧ NoOwn ρ)
     {Q : List SRec → Val → WProp} :
     ∀ {ls : List SRec} {d : Expr} {ρ : WRes}, ewpTS ls d (opTable (Row.tab E δ)) Qd ρ →
       ∀ {σp ρ' : WRes}, (en.PA ls v σp ∧ NoOwn σp) → (E.UnrD → σp = PMap.empty) →
         ResU.CompS ρ σp ρ' →
-        ewpTS ls (.seq d (raiseE (.val (opPayload n i v)))) (opTable (Row.tab S δ)) Q ρ' := by
+        ewpTS ls (.seq d (raiseE (.val (opPayload n i v)))) (opTable (OpTab.eraseIf er (Row.tab S δ))) Q ρ' := by
   intro ls d ρ h
   refine ewp_ind (fun ls d ρ => ∀ {σp ρ' : WRes}, (en.PA ls v σp ∧ NoOwn σp) →
     (E.UnrD → σp = PMap.empty) → ResU.CompS ρ σp ρ' →
-    ewpTS ls (.seq d (raiseE (.val (opPayload n i v)))) (opTable (Row.tab S δ)) Q ρ') ?_ h
+    ewpTS ls (.seq d (raiseE (.val (opPayload n i v)))) (opTable (OpTab.eraseIf er (Row.tab S δ))) Q ρ') ?_ h
   intro ls d ρ hs σp ρ' hp hu hc
   refine ewp_fold (opTable_mono _) (wpG_bind (seqRaiseK (opPayload n i v)) d ls _ ρ' ?_)
   have h₁ := wpG_frame (e := d) (fun ls τ => τ = σp ∧ en.PA ls v τ ∧ NoOwn τ)
-    (fun ls' hs' τ h => ⟨h.1, (Row.tab_local S δ n i en hTn _ ls' v τ (ext_of_same hs' τ)).1 h.2.1,
+    (fun ls' hs' τ h => ⟨h.1, (Row.tab_local S δ n i en (OpTab.eraseIf_some hTn).1 _ ls' v τ (ext_of_same hs' τ)).1 h.2.1,
       h.2.2⟩) ρ' ⟨ρ, σp, hc, hs, rfl, hp⟩
   refine wpG_mono (fun ls' t τ ht => ?_) h₁
   obtain ⟨τ₁, τ₂, hcτ, hq, rfl, hp'⟩ := ht
@@ -771,7 +773,8 @@ theorem seq_raise_run (δ : LSub) (S E : Row) (hES : RowLe E S) {n i : UInt32} {
     obtain ⟨o', hf', hle⟩ := hES m j o hf
     obtain ⟨ρk', hk', hcσ'⟩ := compS_reassoc hcak hcτ
     refine Or.inl ⟨(seqRaiseK (opPayload n i v)).comp K₁, m, j, w, o'.ent δ,
-      pure_sep_mk ⟨(Kont.plug_comp _ _ _).symm, ?_, Row.tab_find hf',
+      pure_sep_mk ⟨(Kont.plug_comp _ _ _).symm, ?_, OpTab.eraseIf_of (Row.tab_find hf')
+        (fun her ⟨hm, hj⟩ => by subst hm hj; rw [hEk her] at hf; cases hf),
         (show o'.abort = false by rw [← hle.1.abort_eq]; exact ha₁)⟩
         ⟨ρa, ρk', hcσ', by simpa only [OpSig.ent, hle.1.2.2.2.1] using hA, ?_⟩⟩
     · rw [hasHnd_comp, hK₁]; rfl
@@ -782,7 +785,7 @@ theorem seq_raise_run (δ : LSub) (S E : Row) (hES : RowLe E S) {n i : UInt32} {
     · obtain ⟨z, hz, hcz⟩ := compS_exch hk' hcτ'
       rw [Kont.plug_comp]
       exact (hcont ls'' (hext.left hk')).1 w' τ₃ z hB hz
-        ⟨(Row.tab_local S δ n i en hTn _ ls'' v τ₂ (hext.right hk')).1 hp'.1, hp'.2⟩ hu hcz
+        ⟨(Row.tab_local S δ n i en (OpTab.eraseIf_some hTn).1 _ ls'' v τ₂ (hext.right hk')).1 hp'.1, hp'.2⟩ hu hcz
     · exact ent_plain δ (seqRaiseK (opPayload n i v)) (seqRaiseK_hasHnd _) (seqRaiseK_catches _ 0)
         hp'.2 o ((hcont ls'' (hext.left hk')).2 hq) hk'
   · -- a raise of the finaliser supersedes the pending one
@@ -791,7 +794,8 @@ theorem seq_raise_run (δ : LSub) (S E : Row) (hES : RowLe E S) {n i : UInt32} {
     obtain ⟨o', hf', hle⟩ := hES m j o hf
     obtain ⟨z, hz, hcz⟩ := compS_reassoc hcan hcτ
     refine Or.inr ⟨(seqRaiseK (opPayload n i v)).comp K₁, m, j, w, o'.ent δ,
-      pure_sep_mk ⟨(Kont.plug_comp _ _ _).symm, ?_, Row.tab_find hf',
+      pure_sep_mk ⟨(Kont.plug_comp _ _ _).symm, ?_, OpTab.eraseIf_of (Row.tab_find hf')
+        (fun her ⟨hm, hj⟩ => by subst hm hj; rw [hEk her] at hf; cases hf),
         (show o'.abort = true by rw [← hle.1.abort_eq]; exact ha₁)⟩
         ⟨ρa, z, hcz, ⟨by simpa only [OpSig.ent, hle.1.2.2.2.1] using hPA, hnA⟩,
           noOwn_compS hz hnn hp'.2⟩⟩
@@ -802,9 +806,11 @@ of `[then]` (SPEC §27): `M` at `Σ_M ≤ Σ`, `D` at `Σ_D ≤ Σ`, each captur
 `Σ(o).fin ≥ Σ_M(o).fin ⋈ Σ_D`.  A stop of `M` at an operation keeps the frame in its continuation;
 its cancel passes the frame and fires `D` (`then_cancel`).  An abortive stop runs `D` first
 (`[finalise]`, `seq_raise_run`).  The frame, which `D` consumes, holds nothing where `Σ` may stop at
-an unrestricted operation; a pending error holds nothing where `Σ_D` may.  `[spec §19, §27]` -/
-theorem ewp_frame_then (δ : LSub) (S SM SD : Row) (hNZ : S.NZ) (hMS : RowLe SM S)
-    (hDS : RowLe SD S)
+an unrestricted operation; a pending error holds nothing where `Σ_D` may.  At `opTable Σ_M` with a
+table `Px` beside it whose stops owe nothing to the least fixed point, the frame joins `Px`'s stops
+as `hPx` says: a tick at a row holding `Div` (`cwp_then`).  `[spec §14, §19, §27]` -/
+theorem ewp_frame_then_or (δ : LSub) (S SM SD : Row) (hNZ : S.NZ) (hMS : RowLe SM S)
+    (hDS : RowLe SD S) (er : Bool) (hSD : er = true → Row.find SD divEff 0 = none)
     (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
       capB o.q o.B = true → ThenLe o.fin SD o'.fin)
     (hP : SD.UnrD → SM.PendPers) (Nv Dv : Val) (Fr : List SRec → WProp)
@@ -814,35 +820,43 @@ theorem ewp_frame_then (δ : LSub) (S SM SD : Row) (hNZ : S.NZ) (hMS : RowLe SM 
     {Qd : List SRec → Val → WProp} (hQd : ∀ ls v ρ, Qd ls v ρ → v = .unit ∧ NoOwn ρ)
     (hD : ∀ ls, Entails (Fr ls)
       (ewpTS ls (.app (.val Dv) (.val .unit)) (opTable (Row.tab SD δ)) Qd))
+    (Px Px' : Table) (hPx' : Px'.Mono)
+    (hPx : ∀ ls t Φ Φ' σ₁ σ₂ σ, Px ls t Φ σ₁ → Fr ls σ₂ → ResU.CompS σ₁ σ₂ σ →
+      Px' ls ((ubindK Nv Dv).plug t) Φ' σ)
     (Q₁ Q : List SRec → Val → WProp)
     (hk : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls)
-      (ewpTS ls ((ubindK Nv Dv).plug (.val v)) (opTable (Row.tab S δ)) Q)) :
-    ∀ {ls : List SRec} {e : Expr} {ρ : WRes}, ewpTS ls e (opTable (Row.tab SM δ)) Q₁ ρ →
+      (ewpTS ls ((ubindK Nv Dv).plug (.val v)) (orTab (opTable (OpTab.eraseIf er (Row.tab S δ))) Px') Q)) :
+    ∀ {ls : List SRec} {e : Expr} {ρ : WRes}, ewpTS ls e (orTab (opTable (OpTab.eraseIf er (Row.tab SM δ))) Px) Q₁ ρ →
       ∀ {ρ₂ ρ' : WRes}, Fr ls ρ₂ → ResU.CompS ρ ρ₂ ρ' →
-        ewpTS ls ((ubindK Nv Dv).plug e) (opTable (Row.tab S δ)) Q ρ' := by
+        ewpTS ls ((ubindK Nv Dv).plug e) (orTab (opTable (OpTab.eraseIf er (Row.tab S δ))) Px') Q ρ' := by
+  have hM := orTab_mono (opTable_mono (OpTab.eraseIf er (Row.tab S δ))) hPx'
   have hNZD : ∀ n i o, Row.find SD n i = some o → o.n ≠ 0 := by
     intro n i o hf
     obtain ⟨o', hf', hle⟩ := hDS n i o hf
     rw [hle.1.1]; exact hNZ o' (Row.find_mem hf').1
   intro ls e ρ h
   refine ewp_ind (fun ls e ρ => ∀ {ρ₂ ρ' : WRes}, Fr ls ρ₂ → ResU.CompS ρ ρ₂ ρ' →
-    ewpTS ls ((ubindK Nv Dv).plug e) (opTable (Row.tab S δ)) Q ρ') ?_ h
+    ewpTS ls ((ubindK Nv Dv).plug e) (orTab (opTable (OpTab.eraseIf er (Row.tab S δ))) Px') Q ρ') ?_ h
   intro ls e ρ hs ρ₂ ρ' hF hc
-  refine ewp_fold (opTable_mono _) (wpG_bind (ubindK Nv Dv) e ls _ ρ' ?_)
+  refine ewp_fold hM (wpG_bind (ubindK Nv Dv) e ls _ ρ' ?_)
   have h₁ := wpG_frame (e := e) Fr (hFs ls) ρ' ⟨ρ, ρ₂, hc, hs, hF⟩
   refine wpG_mono (fun ls' t σ ht => ?_) h₁
   obtain ⟨σ₁, σ₂, hcσ, hp, hF'⟩ := ht
-  rcases hp with ⟨v, rfl, hv⟩ | hp
-  · exact ewp_unfold (opTable_mono _) (hk ls' v σ ⟨σ₁, σ₂, hcσ, hv, hF'⟩)
+  rcases hp with ⟨v, rfl, hv⟩ | hp | hp
+  · exact ewp_unfold hM (hk ls' v σ ⟨σ₁, σ₂, hcσ, hv, hF'⟩)
+  swap
+  · -- a stop of the table beside: the frame joins it
+    exact wpG_here _ _ _ σ (Or.inr (Or.inr (hPx ls' t _ _ σ₁ σ₂ σ hp hF' hcσ)))
   rcases hp with ⟨K₁, n, i, v, en, hp⟩ | ⟨K₁, n, i, v, en, hp⟩
   · -- a `perform`: the frame joins the continuation's share; its cancel fires `D`
-    refine wpG_here _ _ _ σ (Or.inr ?_)
+    refine wpG_here _ _ _ σ (Or.inr (Or.inl ?_))
     obtain ⟨⟨rfl, hK₁, hTn, ha⟩, ρa, ρk, hcak, hA, hu, hcont⟩ := pure_sep_iff.mp hp
-    obtain ⟨o, hf, rfl⟩ := Row.tab_some hTn
+    obtain ⟨hTn₀, hkn⟩ := OpTab.eraseIf_some hTn
+    obtain ⟨o, hf, rfl⟩ := Row.tab_some hTn₀
     obtain ⟨o', hf', hle⟩ := hMS n i o hf
     obtain ⟨ρk', hk', hcσ'⟩ := compS_reassoc hcak hcσ
     refine Or.inl ⟨(ubindK Nv Dv).comp K₁, n, i, v, o'.ent δ,
-      pure_sep_mk ⟨(Kont.plug_comp _ _ _).symm, ?_, Row.tab_find hf',
+      pure_sep_mk ⟨(Kont.plug_comp _ _ _).symm, ?_, OpTab.eraseIf_of (Row.tab_find hf') hkn,
         (show o'.abort = false by rw [← hle.1.abort_eq]; exact ha)⟩
       ⟨ρa, ρk', hcσ', by simpa only [OpSig.ent, hle.1.2.2.2.1] using hA, ?_,
         fun ls'' he => ⟨?_, fun hq => ?_⟩⟩⟩
@@ -873,36 +887,296 @@ theorem ewp_frame_then (δ : LSub) (S SM SD : Row) (hNZ : S.NZ) (hMS : RowLe SM 
         (hFe ls' ls'' σ₂ (he.right hk') hF') hk'
   · -- a `raise`: the finaliser runs, then the `raise` goes on
     obtain ⟨⟨rfl, hK₁, hTn, ha⟩, ρa, ρn, hcan, ⟨hPA, hnA⟩, hn⟩ := pure_sep_iff.mp hp
-    obtain ⟨o, hf, rfl⟩ := Row.tab_some hTn
+    obtain ⟨hTn₀, hkn⟩ := OpTab.eraseIf_some hTn
+    obtain ⟨o, hf, rfl⟩ := Row.tab_some hTn₀
     obtain ⟨o', hf', hle⟩ := hMS n i o hf
     have hn0 : n ≠ 0 := by
       rw [← (Row.find_mem hf).2.1, hle.1.1]; exact hNZ o' (Row.find_mem hf').1
     refine wpG_head (fun μ => Head.ufin μ Nv Dv n i v K₁ hn0 hK₁) rfl _ _ σ (ewp_unfold
-      (opTable_mono _) ?_)
+      hM ?_)
     obtain ⟨z, hz, hcz⟩ := compS_reassoc hcan hcσ
     obtain ⟨y, hy, hcy⟩ := compS_lcomm hz hcz
-    refine ewp_absorb (opTable_mono _) ?_ hn (ResU.CompS.comm hcy)
+    refine ewp_absorb hM ?_ hn (ResU.CompS.comm hcy)
     have hPA' : (o'.ent δ).PA ls' v ρa := by simpa only [OpSig.ent, hle.1.2.2.2.1] using hPA
-    exact seq_raise_run δ S SD hDS (Row.tab_find hf')
+    refine ewp_mono hM (fun _ _ _ _ h => Or.inl h) (fun _ _ _ h => h) ?_
+    exact seq_raise_run δ S SD hDS er hSD (OpTab.eraseIf_of (Row.tab_find hf') hkn)
       (show o'.abort = true by rw [← hle.1.abort_eq]; exact ha) hQd (hD ls' σ₂ hF') ⟨hPA', hnA⟩
       (fun hu => vP_empty_of_persistent (((hP hu) o (Row.find_mem hf).1).1 ha) hPA)
       (ResU.CompS.comm hy)
 
+/-- **The finaliser frame around an effectful computation** (`ewp_frame_then_or` with nothing
+beside the tables).  `[spec §19, §27]` -/
+theorem ewp_frame_then (δ : LSub) (S SM SD : Row) (hNZ : S.NZ) (hMS : RowLe SM S)
+    (hDS : RowLe SD S)
+    (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
+      capB o.q o.B = true → ThenLe o.fin SD o'.fin)
+    (hP : SD.UnrD → SM.PendPers) (Nv Dv : Val) (Fr : List SRec → WProp)
+    (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr ls) (Fr ls'))
+    (hFe : ∀ ls ls' ρ, Ext ls ls' ρ → Fr ls ρ → Fr ls' ρ)
+    (hU : S.UnrD → ∀ ls ρ, Fr ls ρ → ρ = PMap.empty)
+    {Qd : List SRec → Val → WProp} (hQd : ∀ ls v ρ, Qd ls v ρ → v = .unit ∧ NoOwn ρ)
+    (hD : ∀ ls, Entails (Fr ls)
+      (ewpTS ls (.app (.val Dv) (.val .unit)) (opTable (Row.tab SD δ)) Qd))
+    (Q₁ Q : List SRec → Val → WProp)
+    (hk : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls)
+      (ewpTS ls ((ubindK Nv Dv).plug (.val v)) (opTable (Row.tab S δ)) Q)) :
+    ∀ {ls : List SRec} {e : Expr} {ρ : WRes}, ewpTS ls e (opTable (Row.tab SM δ)) Q₁ ρ →
+      ∀ {ρ₂ ρ' : WRes}, Fr ls ρ₂ → ResU.CompS ρ ρ₂ ρ' →
+        ewpTS ls ((ubindK Nv Dv).plug e) (opTable (Row.tab S δ)) Q ρ' := by
+  intro ls e ρ h ρ₂ ρ' hF hc
+  exact (ewp_orBot (opTable_mono _)).mp (ewp_frame_then_or δ S SM SD hNZ hMS hDS false
+    (fun h => by cases h) hfin hP Nv Dv Fr
+    hFs hFe hU hQd hD Table.bot Table.bot Table.bot_const.mono (fun _ _ _ _ _ _ _ h => h.elim) Q₁ Q
+    (fun ls v σ hσ => (ewp_orBot (opTable_mono _)).mpr (hk ls v σ hσ))
+    ((ewp_orBot (opTable_mono _)).mpr h) hF hc)
+
+/-! ### Rows that hold `Div` -/
+
+/-- A row holding `Div` holds it after growing (`[sub]` keeps the operation at each key).
+`[spec §14]` -/
+theorem Row.divB_le {S S' : Row} (hle : RowLe S S') (h : Row.divB S = true) :
+    Row.divB S' = true := by
+  obtain ⟨o, hf, ho⟩ := Row.divB_find h
+  obtain ⟨o', hf', hs, -⟩ := hle _ _ _ hf
+  refine Row.divB_iff.mpr ⟨o', hf', ?_⟩
+  rw [← hs.2.2.1, ← hs.2.2.2.1, ← hs.2.2.2.2]
+  exact ho
+
+/-- Below a row holding `Div`, a row's operation at `Div`'s key is `tick`, if it has one. -/
+theorem Row.divOK_of_le {S S' : Row} (hle : RowLe S S') (h : Row.divB S' = true) (δ : LSub) :
+    (Row.tab S δ).DivOK := by
+  intro en hT
+  obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
+  obtain ⟨o', hf', hs, -⟩ := hle _ _ _ hf
+  obtain ⟨o'', hf'', ho⟩ := Row.divB_find h
+  rw [hf''] at hf'; cases hf'
+  refine OpSig.isTick_ent δ ?_
+  rw [hs.2.2.1, hs.2.2.2.1, hs.2.2.2.2]; exact ho
+
+/-- Below a row holding `Div`, a row that does not hold it has nothing at `Div`'s key. -/
+theorem Row.find_key_none {S S' : Row} (hle : RowLe S S') (h : Row.divB S' = true)
+    (hS : Row.divB S = false) : Row.find S divEff 0 = none := by
+  cases hf : Row.find S divEff 0 with
+  | none => rfl
+  | some o =>
+      exfalso
+      obtain ⟨o', hf', hs, -⟩ := hle _ _ _ hf
+      obtain ⟨o'', hf'', ho⟩ := Row.divB_find h
+      rw [hf''] at hf'; cases hf'
+      have : Row.divB S = true := Row.divB_iff.mpr ⟨o, hf, by
+        rw [hs.2.2.1, hs.2.2.2.1, hs.2.2.2.2]; exact ho⟩
+      rw [hS] at this; cases this
+
+theorem Row.keyNA_of_divB {S : Row} (δ : LSub) : Row.divB S = true → (Row.tab S δ).KeyNA :=
+  fun h => (Row.divOK_of_divB h δ).keyNA
+
+/-- **The relation at a row grows with the row** (`[sub]`), `Div` or not.  `[spec §14, §19]` -/
+theorem effWp_sub {S S' : Row} (hle : RowLe S S') {δ : LSub} {Q : List SRec → Val → WProp}
+    {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : effWp (Row.divB S) (Row.tab S δ) Q ls e ρ) :
+    effWp (Row.divB S') (Row.tab S' δ) Q ls e ρ := by
+  cases hS : Row.divB S <;> cases hS' : Row.divB S' <;> rw [hS] at h
+  · exact ewp_sub (Row.tab_le δ hle) h
+  · exact cwp_of_ewp (Row.keyNA_of_divB δ hS') (ewp_sub (Row.tab_le δ hle) h)
+  · rw [Row.divB_le hle hS] at hS'; cases hS'
+  · exact cwp_sub (Row.tab_le δ hle) h
+
+/-- A stack of layers holds `Div` as its row does. -/
+theorem CTy.divB_rowOf : ∀ C : CTy, Row.divB C.rowOf = C.divAt
+  | .eff n i q A B fin C => by
+      simp only [CTy.rowOf, Row.divB, CTy.effOf, CTy.divAt]
+      rw [show (CTy.effOf C.rowOf .unit).divAt = Row.divB C.rowOf from rfl, CTy.divB_rowOf C]
+  | .ret _ | .arr _ _ | .amp _ _ | .top | .all _ _ _ | .nu _ => rfl
+
+/-! ### `Closing` at a row -/
+
+/-- `tick` answered *close* only: `tick : 1 ↠ 0 ⊕ 1`. -/
+def closeSig : OpSig := ⟨divEff, 0, .lin, .unit, .sum .zero .unit, .ret .unit⟩
+
+/-- `tick`'s entry answered *close* only is the closing signature's. -/
+theorem closeSig_ent {en : OpEnt} (ht : en.IsTick) (δ : LSub) : en.closeOnly.Le (closeSig.ent δ) ∧
+    (closeSig.ent δ).Le en.closeOnly := by
+  have hPA : en.PA = fun ls v => vC true .unit ls δ v := by
+    funext ls v ρ; exact propext ((ht.2.2.1 ls v ρ).trans vC_unit_iff.symm)
+  have hPB : en.closeOnly.PB = fun ls v => vC true (.sum .zero .unit) ls δ v := by
+    funext ls w ρ
+    refine propext ⟨fun ⟨hb, hw⟩ => ?_, fun h => ?_⟩
+    · obtain ⟨-, rfl⟩ := (ht.2.2.2 ls w ρ).mp hb
+      subst hw
+      exact Or.inr ⟨.unit, PMap.empty, PMap.empty, ResU.comp_empty_right _, ⟨rfl, rfl⟩, ⟨rfl, rfl⟩⟩
+    · rcases h with ⟨v, ρ₁, ρ₂, hc, ⟨rfl, -⟩, hz⟩ | ⟨v, ρ₁, ρ₂, hc, ⟨rfl, rfl⟩, ⟨rfl, rfl⟩⟩
+      · exact hz.elim
+      · exact ⟨(ht.2.2.2 ls _ _).mpr ⟨Or.inr rfl, eq_of_compS_empty_left hc⟩, rfl⟩
+  have hq : en.closeOnly.q = (closeSig.ent δ).q := ht.1
+  have ha : en.closeOnly.abort = (closeSig.ent δ).abort := ht.2.1
+  have hA : en.closeOnly.PA = (closeSig.ent δ).PA := hPA
+  have hB : en.closeOnly.PB = (closeSig.ent δ).PB := hPB
+  exact ⟨⟨hq, ha, hA, hB, fun _ h => absurd ht.1 h⟩,
+    ⟨hq.symm, ha.symm, hA.symm, hB.symm, fun _ h => absurd rfl h⟩⟩
+
+theorem find_closeSig (S : Row) (n i : UInt32) :
+    Row.find (closeSig :: S) n i = if n = divEff ∧ i = 0 then some closeSig else Row.find S n i := by
+  by_cases h : n = divEff ∧ i = 0
+  · rw [if_pos h]; simp [Row.find, List.find?, closeSig, h]
+  · rw [if_neg h]
+    have : decide (n = closeSig.n ∧ i = closeSig.i) = false := by
+      simp only [closeSig]; exact decide_eq_false h
+    simp [Row.find, List.find?, this]
+
+/-- **`Closing` at a row is `ewpTS` at the row with the closing signature in front.** -/
+theorem closing_to_row {S : Row} {δ : LSub} (hT : (Row.tab S δ).DivOK)
+    {Q : List SRec → Val → WProp} {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : Closing (Row.tab S δ) Q ls e ρ) :
+    ewpTS ls e (opTable (Row.tab (closeSig :: S) δ)) Q ρ := by
+  refine ewp_sub (fun n i en hT' => ?_) h
+  unfold OpTab.closeAt at hT'
+  by_cases hk : n = divEff ∧ i = 0
+  · rw [if_pos hk] at hT'
+    obtain ⟨rfl, rfl⟩ := hk
+    cases h₀ : Row.tab S δ divEff 0 with
+    | none => rw [h₀] at hT'; cases hT'
+    | some en₀ =>
+        rw [h₀] at hT'; cases hT'
+        exact ⟨closeSig.ent δ, Row.tab_find (by rw [find_closeSig, if_pos ⟨rfl, rfl⟩]),
+          (closeSig_ent (hT en₀ h₀) δ).1⟩
+  · rw [if_neg hk] at hT'
+    exact ⟨en, by simp only [Row.tab, find_closeSig, if_neg hk]; exact hT', OpEnt.Le.refl en⟩
+
+theorem closing_of_row {S : Row} {δ : LSub} {en₀ : OpEnt} (h₀ : Row.tab S δ divEff 0 = some en₀)
+    (ht : en₀.IsTick) {Q : List SRec → Val → WProp} {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : ewpTS ls e (opTable (Row.tab (closeSig :: S) δ)) Q ρ) : Closing (Row.tab S δ) Q ls e ρ := by
+  refine ewp_sub (fun n i en hT' => ?_) h
+  by_cases hk : n = divEff ∧ i = 0
+  · obtain ⟨rfl, rfl⟩ := hk
+    simp only [Row.tab, find_closeSig, if_pos (And.intro rfl rfl), Option.map_some] at hT'
+    cases hT'
+    exact ⟨en₀.closeOnly, by rw [OpTab.closeAt_key, h₀]; rfl, (closeSig_ent ht δ).2⟩
+  · simp only [Row.tab, find_closeSig, if_neg hk] at hT'
+    exact ⟨en, by rw [OpTab.closeAt_ne hk]; exact hT', OpEnt.Le.refl en⟩
+
+theorem divEff_ne_zero : divEff ≠ 0 := by decide
+
+/-! ### `[then]` at a row holding `Div` -/
+
+section
+variable {δ : LSub} {S SM SD : Row} (hSd : Row.divB S = true) (hSDd : Row.divB SD = false)
+  (hNZ : S.NZ) (hMS : RowLe SM S) (hDS : RowLe SD S)
+  (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
+    capB o.q o.B = true → ThenLe o.fin SD o'.fin)
+  (hP : SD.UnrD → SM.PendPers) (Nv Dv : Val) (Fr : List SRec → WProp)
+  (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr ls) (Fr ls'))
+  (hFe : ∀ ls ls' ρ, Ext ls ls' ρ → Fr ls ρ → Fr ls' ρ)
+  (hU : S.UnrD → ∀ ls ρ, Fr ls ρ → ρ = PMap.empty)
+  {Qd : List SRec → Val → WProp} (hQd : ∀ ls v ρ, Qd ls v ρ → v = .unit ∧ NoOwn ρ)
+  (hD : ∀ ls, Entails (Fr ls)
+    (ewpTS ls (.app (.val Dv) (.val .unit)) (opTable (Row.tab SD δ)) Qd))
+  (Q₁ Q : List SRec → Val → WProp)
+
+include hSd hSDd hNZ hMS hDS hfin hP hFs hFe hU hQd hD in
+/-- **`Closing` under the finaliser frame**: Core's `ewp_frame_then` at the rows with the closing
+signature in front. -/
+theorem closing_then
+    (hk : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls) (Closing (Row.tab S δ) Q ls ((ubindK Nv Dv).plug (.val v))))
+    {ls : List SRec} {e : Expr} {ρ : WRes} (h : Closing (Row.tab SM δ) Q₁ ls e ρ)
+    {ρ₂ ρ' : WRes} (hF : Fr ls ρ₂) (hc : ResU.CompS ρ ρ₂ ρ') :
+    Closing (Row.tab S δ) Q ls ((ubindK Nv Dv).plug e) ρ' := by
+  obtain ⟨o, hf, ho⟩ := Row.divB_find hSd
+  have h₀ : Row.tab S δ divEff 0 = some (o.ent δ) := Row.tab_find hf
+  have ht := OpSig.isTick_ent δ ho
+  have hDk := Row.find_key_none hDS hSd hSDd
+  refine closing_of_row h₀ ht ?_
+  refine ewp_frame_then δ (closeSig :: S) (closeSig :: SM) SD ?_ ?_ ?_ ?_ ?_ Nv Dv Fr hFs hFe ?_ hQd hD
+    Q₁ Q (fun ls v σ hσ => closing_to_row (Row.divOK_of_divB hSd δ) (hk ls v σ hσ))
+    (closing_to_row (Row.divOK_of_le hMS hSd δ) h) hF hc
+  · intro o' ho'
+    simp only [List.mem_cons] at ho'
+    rcases ho' with rfl | ho'
+    · exact divEff_ne_zero
+    · exact hNZ o' ho'
+  · intro n i o' hf'
+    rw [find_closeSig] at hf' ⊢
+    split at hf'
+    · rw [if_pos (by assumption)]; cases hf'; exact ⟨_, rfl, OpSig.LeF.refl _⟩
+    · rw [if_neg (by assumption)]; exact hMS n i o' hf'
+  · intro n i o' hf'
+    rw [find_closeSig]
+    by_cases hk : n = divEff ∧ i = 0
+    · obtain ⟨rfl, rfl⟩ := hk; rw [hDk] at hf'; cases hf'
+    · rw [if_neg hk]; exact hDS n i o' hf'
+  · intro n i o₁ o₂ hf₁ hf₂ hcap
+    rw [find_closeSig] at hf₁ hf₂
+    split at hf₁
+    · cases hf₁; exact absurd hcap (by decide)
+    · rw [if_neg (by assumption)] at hf₂; exact hfin n i o₁ o₂ hf₁ hf₂ hcap
+  · intro hu o' ho'
+    simp only [List.mem_cons] at ho'
+    rcases ho' with rfl | ho'
+    · exact ⟨fun h => absurd h (by decide), fun h => absurd h (by decide)⟩
+    · exact hP hu o' ho'
+  · rintro ⟨o', ho', hu⟩
+    simp only [List.mem_cons] at ho'
+    rcases ho' with rfl | ho'
+    · rcases hu with hu | ⟨hcap, -⟩
+      · cases hu
+      · exact absurd hcap (by decide)
+    · exact hU ⟨o', ho', hu⟩
+
+include hSd hSDd hNZ hMS hDS hfin hP hFs hFe hU hQd hD in
+/-- **`[then]` at `cwp`**, by coinduction up to `cwp`: each segment is `ewp_frame_then_or` at
+the tables without the tick; a tick inside the frame owes the frame around its continuation, in
+the candidate and, by `closing_then`, in `Closing`.  `[spec §14, §19, §27]` -/
+theorem cwp_then
+    (hk : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls) (cwp (Row.tab S δ) Q ls ((ubindK Nv Dv).plug (.val v))))
+    {ls : List SRec} {e : Expr} {ρ : WRes} (h : cwp (Row.tab SM δ) Q₁ ls e ρ)
+    {ρ₂ ρ' : WRes} (hF : Fr ls ρ₂) (hc : ResU.CompS ρ ρ₂ ρ') :
+    cwp (Row.tab S δ) Q ls ((ubindK Nv Dv).plug e) ρ' := by
+  have hTM := Row.divOK_of_le hMS hSd δ
+  have hDk := Row.find_key_none hDS hSd hSDd
+  have hcl := fun {ls e ρ} (h : Closing (Row.tab SM δ) Q₁ ls e ρ) {ρ₂ ρ'} (hF : Fr ls ρ₂)
+      (hc : ResU.CompS ρ ρ₂ ρ') =>
+    closing_then hSd hSDd hNZ hMS hDS hfin hP Nv Dv Fr hFs hFe hU hQd hD Q₁ Q
+      (fun ls v σ hσ => closing_of_cwp (hk ls v σ hσ)) h hF hc
+  let W : List SRec → Expr → WProp := fun ls x ρ' => ∃ e ρ ρ₂, x = (ubindK Nv Dv).plug e ∧
+    cwp (Row.tab SM δ) Q₁ ls e ρ ∧ Fr ls ρ₂ ∧ ResU.CompS ρ ρ₂ ρ'
+  have hW' : ∀ ls x ρ, W ls x ρ →
+      cwpF (Row.tab S δ) Q (fun ls e ρ => W ls e ρ ∨ cwp (Row.tab S δ) Q ls e ρ) ls x ρ := by
+    rintro ls x ρ' ⟨e, ρ, ρ₂, rfl, he, hF, hc⟩
+    refine ewp_frame_then_or δ S SM SD hNZ hMS hDS true (fun _ => hDk) hfin hP Nv Dv Fr hFs hFe hU
+      hQd hD _ _ (Table.Const.mono fun _ _ _ _ _ h => h) ?_ Q₁ Q
+      (fun ls v σ hσ => cwpF_mono (fun _ _ _ h => Or.inr h) (cwp_out (hk ls v σ hσ)))
+      (cwp_out he) hF hc
+    intro ls' t Φ Φ' σ₁ σ₂ σ hp hF' hcσ
+    obtain ⟨K₁, en, rfl, hK₁, hT0, ht, hcont⟩ := tickStop_inv hTM hp
+    obtain ⟨o, hf, ho⟩ := Row.divB_find hSd
+    have h₀ : Row.tab S δ divEff 0 = some (o.ent δ) := Row.tab_find hf
+    rw [← Kont.plug_comp]
+    refine tickStop_mk h₀ (OpSig.isTick_ent δ ho) ((ubindK Nv Dv).comp K₁)
+      (by rw [hasHnd_comp, hK₁]; simp [Kont.HasHnd, Expr.val, Val.pair]) fun ls'' he w hw => ?_
+    have ho' := hcont ls'' (he.left hcσ) w hw
+    have hF'' := hFe ls' ls'' σ₂ (he.right hcσ) hF'
+    rw [Kont.plug_comp]
+    exact ⟨Or.inl ⟨_, _, σ₂, rfl, ho'.1, hF'', hcσ⟩, hcl ho'.2 hF'' hcσ⟩
+  exact cwp_coind_up hW' ⟨e, ρ, ρ₂, rfl, h, hF, hc⟩
+
+end
+
 /-! ### Compatibility of `[sub]`, `[perform]`, `[raise]`, `[let]` and `[then]` -/
 
-/-- `[sub]`: a row may grow, its entries' cancel rows with it.  `[spec §19, §27]` -/
+/-- `[sub]`: a row may grow, its entries' cancel rows with it; a row that holds `Div` holds it
+after growing.  `[spec §14, §19, §27]` -/
 theorem sub_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {S S' : Row} {A : VTy}
     (hle : RowLe S S') (h : SemC Δ Γ e (CTy.effOf S A)) : SemC Δ Γ e (CTy.effOf S' A) := by
   intro δ γ ls ρ hδ hg
-  exact (cC_effOf S' A ls δ _ ρ).mpr (ewp_sub (Row.tab_le δ hle)
-    ((cC_effOf S A ls δ _ ρ).mp (h δ γ ls ρ hδ hg)))
+  exact (cC_effOf_wp S' A ls δ _ ρ).mpr (effWp_sub hle
+    ((cC_effOf_wp S A ls δ _ ρ).mp (h δ γ ls ρ hδ hg)))
 
-/-- `[perform]`, at any cancel row.  `[spec §19, §27]` -/
+/-- `[perform]`, at any cancel row: the operation stops at once, so it is in the least fixed
+point, and in the greatest where the row holds `Div` (`cwp_of_ewp`).  `[spec §14, §19, §27]` -/
 theorem perform_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : OpSig}
     (hf : Row.find S o.n o.i = some o) (hna : o.abort = false) (h : SemV Δ Γ V o.A) :
     SemC Δ Γ (performE (opArgE o.n o.i V)) (CTy.effOf S o.B) := by
   intro δ γ ls ρ hδ hg
-  refine (cC_effOf S o.B ls δ _ ρ).mpr ?_
+  refine (cC_effOf_wp S o.B ls δ _ ρ).mpr (effWp_of_ewp (Row.keyNA_of_divB δ) ?_)
   change ewpTS ls ((Kont.appR (.val (.prim .perform))
     (.pairR (Val.i32 o.n) (.pairR (Val.i32 o.i) .hole))).plug (substAll γ V)) _ _ ρ
   refine ewp_bind_pure_frame (opTable_mono _) _ _ ls (fun ls v => vC true o.A ls δ v)
@@ -913,13 +1187,13 @@ theorem perform_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : 
   exact ewp_perform_here (en := o.ent δ) (Row.tab_find hf) hna (ent_start δ o) (fun _ _ _ h => h) hv
 
 /-- `[raise]`: an abortive operation, at any answer type, its argument holding nothing owned.
-`[spec §19]` -/
+`[spec §14, §19]` -/
 theorem raise_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : OpSig} {B : VTy}
     (hf : Row.find S o.n o.i = some o) (ha : o.abort = true)
     (hd : ∀ ls δ v ρ, vC true o.A ls δ v ρ → NoOwn ρ) (h : SemV Δ Γ V o.A) :
     SemC Δ Γ (raiseE (opArgE o.n o.i V)) (CTy.effOf S B) := by
   intro δ γ ls ρ hδ hg
-  refine (cC_effOf S B ls δ _ ρ).mpr ?_
+  refine (cC_effOf_wp S B ls δ _ ρ).mpr (effWp_of_ewp (Row.keyNA_of_divB δ) ?_)
   change ewpTS ls ((Kont.appR (.val (.prim .raise))
     (.pairR (Val.i32 o.n) (.pairR (Val.i32 o.i) .hole))).plug (substAll γ V)) _ _ ρ
   refine ewp_bind_pure_frame (opTable_mono _) _ _ ls (fun ls v => vC true o.A ls δ v)
@@ -931,78 +1205,131 @@ theorem raise_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : Op
 
 /-- `[let]` at a row: `M to x. N`, the context of `N` dropping at a row with weakening and
 persistent at an unrestricted row.  A cancel passing the frame leaves it behind
-(`ent_plain`).  `[spec §19, §27]` -/
+(`ent_plain`).  At a row holding `Div`, bind at `cwp` (`cwp_bind`).  `[spec §14, §19, §27]` -/
 theorem let_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy} {S : Row}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hW : S.Weak → Γ₂.Drops) (hU : S.Unr → Persistent Γ₂)
     (hM : SemC Δ Γ₁ M (CTy.effOf S A)) (hN : SemC Δ (⟨A, true⟩ :: Γ₂) N (CTy.effOf S B)) :
     SemC Δ Γ (.app (.val (.lam N)) M) (CTy.effOf S B) := by
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenC_split hsp hg
-  refine (cC_effOf S B ls δ _ ρ).mpr ?_
-  refine ewp_frame_plain (Row.tab S δ) (.appR (.val (.lam (Expr.psub 1 γ N))) .hole)
-    (fun n => by simp [Kont.HasHnd]) (fun n => by simp [Kont.Catches])
-    (fun ls => gDenC ls δ Γ₂ γ) (fun _ _ hs σ h => gDenC_same hs h)
-    (fun _ _ _ he h => gDenC_local he h) ?_ ?_ ?_ (fun ls v => vC true A ls δ v) _ ?_
-    ((cC_effOf S A ls δ _ ρ₁).mp (hM δ γ ls ρ₁ hδ hg₁)) hg₂ hc
-  · intro n i en hT ha ls' σ h
+  have hW' : ∀ n i en, Row.tab S δ n i = some en → en.abort = true →
+      ∀ ls ρ, gDenC ls δ Γ₂ γ ρ → NoOwn ρ := by
+    intro n i en hT ha ls' σ h
     obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
     exact gDenC_noOwn (hW ⟨o, (Row.find_mem hf).1, OpSig.weak_of_ent (Or.inr ha)⟩) h
-  · intro n i en hT hq ls' σ h
+  have hU' : ∀ n i en, Row.tab S δ n i = some en → en.q = .unr →
+      ∀ ls ρ, gDenC ls δ Γ₂ γ ρ → ρ = PMap.empty := by
+    intro n i en hT hq ls' σ h
     obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
     exact gDenC_persistent (hU ⟨o, (Row.find_mem hf).1, hq⟩) h
-  · intro n i en hT ha hq ls' K₁ ρ' σ ρ'' hcan hσ hc'
+  have hK' : ∀ n i en, Row.tab S δ n i = some en → en.abort = false → en.q ≠ .lin →
+      ∀ ls K₁ ρ σ ρ', cancelOK en ls K₁ ρ → gDenC ls δ Γ₂ γ σ → ResU.CompS ρ σ ρ' →
+        cancelOK en ls ((Kont.appR (.val (.lam (Expr.psub 1 γ N))) .hole).comp K₁) ρ' := by
+    intro n i en hT ha hq ls' K₁ ρ' σ ρ'' hcan hσ hc'
     obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
     exact ent_plain δ _ (fun n => by simp [Kont.HasHnd]) (by simp [Kont.Catches])
       (gDenC_noOwn (hW ⟨o, (Row.find_mem hf).1, OpSig.weak_of_ent (Or.inl hq)⟩) hσ) o hcan hc'
-  · rintro ls' v σ ⟨σ₁, σ₂, hcσ, hv, hg₂'⟩
+  have hk : ∀ ls' v, Entails ((fun ls v => vC true A ls δ v) ls' v ⋆ gDenC ls' δ Γ₂ γ)
+      (effWp (Row.divB S) (Row.tab S δ) (fun ls v => vC true B ls δ v) ls'
+        ((Kont.appR (.val (.lam (Expr.psub 1 γ N))) .hole).plug (.val v))) := by
+    rintro ls' v σ ⟨σ₁, σ₂, hcσ, hv, hg₂'⟩
     obtain ⟨hlen, hgs⟩ := gDenC_iff.mp hg₂'
-    refine ewp_step (opTable_mono _)
-      (fun μ => Step1N.head (Head.beta μ (Expr.psub 1 γ N) v) rfl) ls' _ σ ?_
+    refine effWp_step (fun μ => Step1N.head (Head.beta μ (Expr.psub 1 γ N) v) rfl) ls' σ ?_
     rw [← substAll_cons_psub]
-    exact (cC_effOf S B ls' δ _ σ).mp
+    exact (cC_effOf_wp S B ls' δ _ σ).mp
       (hN δ (v :: γ) ls' σ hδ (gDenC_mk (by simpa using hlen) ⟨σ₁, σ₂, hcσ, hv, hgs⟩))
+  have hM' := (cC_effOf_wp S A ls δ _ ρ₁).mp (hM δ γ ls ρ₁ hδ hg₁)
+  refine (cC_effOf_wp S B ls δ _ ρ).mpr ?_
+  cases hS : Row.divB S <;> rw [hS] at hM' hk
+  · exact ewp_frame_plain (Row.tab S δ) (.appR (.val (.lam (Expr.psub 1 γ N))) .hole)
+      (fun n => by simp [Kont.HasHnd]) (fun n => by simp [Kont.Catches])
+      (fun ls => gDenC ls δ Γ₂ γ) (fun _ _ hs σ h => gDenC_same hs h)
+      (fun _ _ _ he h => gDenC_local he h) hW' hU' hK' (fun ls v => vC true A ls δ v) _ hk
+      hM' hg₂ hc
+  · exact cwp_bind (Row.divOK_of_divB hS δ) (.appR (.val (.lam (Expr.psub 1 γ N))) .hole)
+      (fun n => by simp [Kont.HasHnd]) (fun n => by simp [Kont.Catches])
+      (fun ls => gDenC ls δ Γ₂ γ) (fun _ _ hs σ h => gDenC_same hs h)
+      (fun _ _ _ he h => gDenC_local he h) hW' hU' hK' (fun ls v => vC true A ls δ v) _ hk
+      hM' hg₂ hc
 
 /-- **`[then]`**, SPEC §27: `M then x. N unwind D` at `Σ`, `M` at `Σ_M ≤ Σ`, the finaliser at
 `Σ_D ≤ Σ`, and each capturable operation of `Σ_M` with `Σ(o).fin ≥ Σ_M(o).fin ⋈ Σ_D`; the errors
-pending at the finaliser persistent where `Σ_D` has an unrestricted operation.  `[spec §19, §27]` -/
+pending at the finaliser persistent where `Σ_D` has an unrestricted operation.  The finaliser's
+row does not hold `Div` (`hSD`): a finaliser does not tick.  At a row holding `Div`, `[then]` at
+`cwp` (`cwp_then`).  `[spec §14, §19, §27]` -/
 theorem then_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A B : VTy}
     {S SM SD : Row} (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hU : S.UnrD → Persistent Γ₂)
     (hMS : RowLe SM S) (hDS : RowLe SD S)
     (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
       capB o.q o.B = true → ThenLe o.fin SD o'.fin)
-    (hP : SD.UnrD → SM.PendPers)
+    (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
     (hM : SemC Δ Γ₁ M (CTy.effOf SM A)) (hN : SemC Δ (⟨A, true⟩ :: Γ₂) N (CTy.effOf S B))
     (hD : SemC Δ (⟨.unit, false⟩ :: Γ₂) D (CTy.effOf SD .unit)) :
     SemC Δ Γ (thenE N D M) (CTy.effOf S B) := by
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenC_split hsp hg
-  refine (cC_effOf S B ls δ _ ρ).mpr ?_
-  change ewpTS ls ((ubindK (Val.lam (Expr.psub 1 γ N)) (Val.lam (Expr.psub 1 γ D))).plug
-    (substAll γ M)) _ _ ρ
-  refine ewp_frame_then δ S SM SD hNZ hMS hDS hfin hP _ _
-    (fun ls => gDenC ls δ Γ₂ γ) (fun _ _ hs σ h => gDenC_same hs h)
-    (fun _ _ _ he h => gDenC_local he h)
-    (fun hu _ _ h => gDenC_persistent (hU hu) h) (Qd := fun ls v => vC true .unit ls δ v) ?_ ?_
-    (fun ls v => vC true A ls δ v) _ ?_
-    ((cC_effOf SM A ls δ _ ρ₁).mp (hM δ γ ls ρ₁ hδ hg₁)) hg₂ hc
-  · intro ls' v σ h
+  have hQd : ∀ ls v ρ, (fun ls v => vC true .unit ls δ v) ls v ρ → v = .unit ∧ NoOwn ρ := by
+    intro ls' v σ h
     obtain ⟨rfl, rfl⟩ := h
     exact ⟨rfl, noOwn_empty⟩
-  · intro ls' σ h
+  have hD' : ∀ ls, Entails (gDenC ls δ Γ₂ γ) (ewpTS ls (.app (.val (Val.lam (Expr.psub 1 γ D)))
+      (.val .unit)) (opTable (Row.tab SD δ)) (fun ls v => vC true .unit ls δ v)) := by
+    intro ls' σ h
     refine ewp_step (opTable_mono _)
       (fun μ => Step1N.head (Head.beta μ (Expr.psub 1 γ D) Val.unit) rfl) ls' _ σ ?_
     rw [← substAll_cons_psub]
-    exact (cC_effOf SD .unit ls' δ _ σ).mp
+    exact (cC_effOf SD .unit ls' δ _ σ hSD).mp
       (hD δ (Val.unit :: γ) ls' σ hδ (gDenC_dead_cons .unit Val.unit h))
-  · rintro ls' v σ ⟨σ₁, σ₂, hcσ, hv, hg₂'⟩
+  have hk : ∀ ls' v, Entails ((fun ls v => vC true A ls δ v) ls' v ⋆ gDenC ls' δ Γ₂ γ)
+      (effWp (Row.divB S) (Row.tab S δ) (fun ls v => vC true B ls δ v) ls'
+        ((ubindK (Val.lam (Expr.psub 1 γ N)) (Val.lam (Expr.psub 1 γ D))).plug (.val v))) := by
+    rintro ls' v σ ⟨σ₁, σ₂, hcσ, hv, hg₂'⟩
     obtain ⟨hlen, hgs⟩ := gDenC_iff.mp hg₂'
-    refine ewp_step (opTable_mono _)
-      (fun μ => Step1N.head (Head.uthen μ _ _ v) rfl) ls' _ σ ?_
-    refine ewp_step (opTable_mono _)
-      (fun μ => Step1N.head (Head.beta μ (Expr.psub 1 γ N) v) rfl) ls' _ σ ?_
+    refine effWp_step (fun μ => Step1N.head (Head.uthen μ _ _ v) rfl) ls' σ ?_
+    refine effWp_step (fun μ => Step1N.head (Head.beta μ (Expr.psub 1 γ N) v) rfl) ls' σ ?_
     rw [← substAll_cons_psub]
-    exact (cC_effOf S B ls' δ _ σ).mp
+    exact (cC_effOf_wp S B ls' δ _ σ).mp
       (hN δ (v :: γ) ls' σ hδ (gDenC_mk (by simpa using hlen) ⟨σ₁, σ₂, hcσ, hv, hgs⟩))
+  have hM' := (cC_effOf_wp SM A ls δ _ ρ₁).mp (hM δ γ ls ρ₁ hδ hg₁)
+  refine (cC_effOf_wp S B ls δ _ ρ).mpr ?_
+  change effWp _ _ _ ls ((ubindK (Val.lam (Expr.psub 1 γ N)) (Val.lam (Expr.psub 1 γ D))).plug
+    (substAll γ M)) ρ
+  cases hS : Row.divB S <;> rw [hS] at hk
+  · have hSM : Row.divB SM = false := by
+      cases h' : Row.divB SM
+      · rfl
+      · rw [Row.divB_le hMS h'] at hS; cases hS
+    rw [hSM] at hM'
+    exact ewp_frame_then δ S SM SD hNZ hMS hDS hfin hP _ _
+      (fun ls => gDenC ls δ Γ₂ γ) (fun _ _ hs σ h => gDenC_same hs h)
+      (fun _ _ _ he h => gDenC_local he h)
+      (fun hu _ _ h => gDenC_persistent (hU hu) h) hQd hD' (fun ls v => vC true A ls δ v) _ hk
+      hM' hg₂ hc
+  · have hM'' : cwp (Row.tab SM δ) (fun ls v => vC true A ls δ v) ls (substAll γ M) ρ₁ := by
+      cases hSM : Row.divB SM <;> rw [hSM] at hM'
+      · exact cwp_of_ewp (Row.divOK_of_le hMS hS δ).keyNA hM'
+      · exact hM'
+    exact cwp_then hS hSD hNZ hMS hDS hfin hP _ _
+      (fun ls => gDenC ls δ Γ₂ γ) (fun _ _ hs σ h => gDenC_same hs h)
+      (fun _ _ _ he h => gDenC_local he h)
+      (fun hu _ _ h => gDenC_persistent (hU hu) h) hQd hD' (fun ls v => vC true A ls δ v) _ hk
+      hM'' hg₂ hc
+
+/-- A handled row that does not hold `Div`, around a row without the handler's name: the outer
+row does not hold it either. -/
+theorem Row.divB_of_ofEff {S : Row} {n : UInt32} {E : List (Qual × VTy × VTy)} {k : Nat}
+    {fs : Nat → CTy} (hnS : ∀ o ∈ S, o.n ≠ n) (h : Row.divB (Row.ofEff n E k fs ++ S) = false) :
+    Row.divB S = false := by
+  cases hd : Row.divB S with
+  | false => rfl
+  | true =>
+      exfalso
+      obtain ⟨o, hf, ho⟩ := Row.divB_find hd
+      obtain ⟨hm, hon, -⟩ := Row.find_mem hf
+      have hne : divEff ≠ n := fun h' => hnS o hm (hon.trans h')
+      have : Row.divB (Row.ofEff n E k fs ++ S) = true := Row.divB_iff.mpr ⟨o, by
+        rw [Row.find_append, Row.find_ofEff_ne n E k fs _ _ hne]; exact hf, ho⟩
+      rw [h] at this; cases this
 
 /-! ### Compatibility of `[handle]` -/
 
@@ -1021,14 +1348,16 @@ theorem vC_kTy_of_kapRel {S : Row} {R B : VTy} {q : Qual} {F : CTy} {δ : LSub} 
   have hres : ∀ ls', Ext ls ls' ρ →
       cC (.arr B (CTy.effOf S R)) ls' δ (.app κ.1 (.val (Val.inj₁ .unit))) ρ := by
     intro ls' he w σ₁ σ₂ hB hc
-    exact (cC_effOf S R ls' δ _ σ₂).mpr ((hk ls' he).1 w σ₁ σ₂ hB hc)
+    exact (cC_effOf_wp S R ls' δ _ σ₂).mpr (effWp_of_ewp (Row.keyNA_of_divB δ)
+      ((hk ls' he).1 w σ₁ σ₂ hB hc))
   have hcan : q ≠ .lin → ∀ ls', Ext ls ls' ρ →
       cC (cancelTy S F) ls' δ (.app κ.1 (.val (Val.inj₂ .unit))) ρ := by
     intro hq ls' he
     unfold cancelTy
     cases hT : F.isTop
     · simp only [Bool.false_eq_true, if_false]
-      refine (cC_effOf _ .unit ls' δ _ ρ).mpr ((hk ls' he).2 hq _ ?_)
+      refine (cC_effOf_wp _ .unit ls' δ _ ρ).mpr (effWp_of_ewp (Row.keyNA_of_divB δ)
+        ((hk ls' he).2 hq _ ?_))
       simp [cancelTabOf, hT]
     · simp only [if_true]; trivial
   cases q with
@@ -1047,7 +1376,8 @@ computation at `Σ` extended by the handler's name, which `Σ` does not hold, th
 the cancel row `fs j`.  The handler's tags are its effect's qualifiers; `κ`'s cancel branch is at
 `cancelTy Σ (fs j)`.  `[spec §19, §25, §27]` -/
 theorem ewp_handle_vals {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
-    {A R : VTy} {δ : LSub} {ls₀ : List SRec} {vr vc : Val} (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
+    {A R : VTy} {δ : LSub} {ls₀ : List SRec} {vr vc : Val} (hS : Row.divB S = false)
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
     (hlen : E.length ≤ 2 ^ 32) (hVr : vC true (retTy S A R) ls₀ δ vr PMap.empty)
     (hVc : vC true (clausesTy S R E fs) ls₀ δ vc PMap.empty) {ls : List SRec} {e : Expr}
     {ρ : WRes}
@@ -1076,7 +1406,7 @@ theorem ewp_handle_vals {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → 
       simp only [hnT, Bool.false_eq_true, if_false]
   · intro ls' v σ hv
     have hf := (hVr.2 ls' (ext_empty' ls₀ ls')) v σ σ hv (compS_empty_left σ)
-    exact (cC_effOf S R ls' δ _ σ).mp hf
+    exact (cC_effOf S R ls' δ _ σ hS).mp hf
   · intro i en hT
     obtain ⟨j, hj, hji, hi, rfl⟩ := Row.tab_ofEff_self hnS hlen hT
     obtain ⟨c, hcl, hVcl⟩ := clausesTy_at E fs hVc j hj
@@ -1092,14 +1422,14 @@ theorem ewp_handle_vals {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → 
         (UInt32.ofNat (0 + j)) hK
       have hf := (hVcl.2 ls' (ext_empty' ls₀ ls')) (Val.pair v κ) σ σ
         ⟨v, κ, pure_sep_mk rfl ⟨σa, σk, hck, hA', hκ⟩⟩ (compS_empty_left σ)
-      exact (cC_effOf S R ls' δ _ σ).mp hf
+      exact (cC_effOf S R ls' δ _ σ hS).mp hf
     · intro ha ls' v σ hσ
       generalize hEj : E[j] = t at hVcl ha hσ
       obtain ⟨q, A', B'⟩ := t
       simp only [OpSig.ent, OpSig.abort] at ha hσ
       simp only [clauseTy, ha] at hVcl
       have hf := (hVcl.2 ls' (ext_empty' ls₀ ls')) v σ σ hσ (compS_empty_left σ)
-      exact (cC_effOf S R ls' δ _ σ).mp hf
+      exact (cC_effOf S R ls' δ _ σ hS).mp hf
 
 /-- `[handle]`: the clauses and `h_ret` at `Σ`, the handled computation at `Σ` extended by the
 handler's name, which `Σ` does not hold, its operations at the cancel rows `fs`.
@@ -1109,8 +1439,10 @@ theorem handle_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ Γr Γc : Ctx VTy} {e : Ex
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hsp₁ : Ctx.SplitP Γ₁ Γr Γc)
     (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E fs))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : Row.divB (Row.ofEff n E 0 fs ++ S) = false)
     (he : SemC Δ Γ₂ e (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) :
     SemC Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (CTy.effOf S R) := by
+  have hS := Row.divB_of_ofEff hnS hdv
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc12, hg₁, hg₂⟩ := gDenC_split hsp hg
   obtain ⟨ρr, ρcl, hcrc, hgr, hgc⟩ := gDenC_split hsp₁ hg₁
@@ -1130,8 +1462,8 @@ theorem handle_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ Γr Γc : Ctx VTy} {e : Ex
     simp only [hndTerm, substAll, Expr.psub, Expr.val, Val.prim, Val.i32, psub_qualsVal]
   show cC _ ls δ (substAll γ (hndTerm n (E.map Prod.fst) ir ic e)) ρ₂
   rw [hsub, substAll_var_some hvr, substAll_var_some hvc]
-  exact (cC_effOf S R ls δ _ ρ₂).mpr (ewp_handle_vals hn0 hnS hlen hVr hVc
-    ((cC_effOf _ A ls δ _ ρ₂).mp (he δ γ ls ρ₂ hδ hg₂)))
+  exact (cC_effOf S R ls δ _ ρ₂ hS).mpr (ewp_handle_vals hS hn0 hnS hlen hVr hVc
+    ((cC_effOf _ A ls δ _ ρ₂ hdv).mp (he δ γ ls ρ₂ hδ hg₂)))
 
 /-- **The general `[handle]`**: `handle_n e with H`, `H` a value form over a context whose live
 slots are persistent, typed at the answer clause's and the clauses' types, the `j`-th clause's `κ`
@@ -1144,8 +1476,10 @@ theorem handleV_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {H e : Expr} {
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
     (hc : SemV Δ Γ₁ H (.tensor (retTy S A R) (clausesTy S R E fs)))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (hdv : Row.divB (Row.ofEff n E 0 fs ++ S) = false)
     (he : SemC Δ Γ₂ e (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) :
     SemC Δ Γ (hndExpr n (E.map Prod.fst) H e) (CTy.effOf S R) := by
+  have hS := Row.divB_of_ofEff hnS hdv
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc12, hg₁, hg₂⟩ := gDenC_split hsp hg
   obtain ⟨hlw₁, hs₁⟩ := gDenC_iff.mp hg₁
@@ -1154,11 +1488,11 @@ theorem handleV_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {H e : Expr} {
   rw [eq_of_compS_empty_left hc12]
   have hval : IsVal (substAll γ H) := isVal_psub_valFormIn hlw₁ hH
   have hH' := hc δ γ ls PMap.empty hδ hg₁
-  have hE' := (cC_effOf _ A ls δ _ ρ₂).mp (he δ γ ls ρ₂ hδ hg₂)
+  have hE' := (cC_effOf _ A ls δ _ ρ₂ hdv).mp (he δ γ ls ρ₂ hδ hg₂)
   show cC _ ls δ (Expr.psub 0 γ (hndExpr n (E.map Prod.fst) H e)) ρ₂
   rw [psub_hndExpr]
   show cC _ ls δ (hndExpr n (E.map Prod.fst) (substAll γ H) (substAll γ e)) ρ₂
-  refine (cC_effOf S R ls δ _ ρ₂).mpr (ewp_fold (opTable_mono _) ?_)
+  refine (cC_effOf S R ls δ _ ρ₂ hS).mpr (ewp_fold (opTable_mono _) ?_)
   intro ρf fρ ps hf hcf hT htg Al k
   obtain ⟨ls', ρ', -, hv⟩ := wpTS_val_post (v := ⟨substAll γ H, hval⟩) hH'
     (ResU.hash_empty_right (hash_valid_comp hf hcf)) (ResU.comp_empty_right fρ) hT htg
@@ -1174,7 +1508,7 @@ theorem handleV_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {H e : Expr} {
   subst hσ₁ hσ₂
   have hHe : substAll γ H = (Val.pair vr vc).1 := congrArg Subtype.val hpair
   rw [hHe]
-  exact ewp_unfold (opTable_mono _) (ewp_handle_vals hn0 hnS hlen hVr hVc hE')
+  exact ewp_unfold (opTable_mono _) (ewp_handle_vals hS hn0 hnS hlen hVr hVc hE')
     ρf fρ ps hf hcf hT htg Al k
 
 end BoCa.Fig16.LogRel.Core
