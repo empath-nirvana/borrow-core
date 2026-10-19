@@ -170,21 +170,21 @@ blocker. "Runs (shape)" means it runs only in a shape the language forces, named
 
 | functionality | program | today | target |
 |---|---|---|---|
-| one call lending a borrowed separator and the output capability | `corpus/pending/lend-two.bc` | refused (measured: a type mismatch) | T14 |
+| one call lending a borrowed separator and the output capability | `corpus/pending/lend-two.bc` | refused (measured: a type mismatch) | outside |
 | a looping function that takes two borrows | `reject/lend-div-two.bc` | refused by design (recorded) | T04 (two-view form) |
-| a `&mut` buffer filled by a function that also uses injected services | T14 | §18 *Not provided* (by inspection); §2.2 | T14 |
+| a buffer filled by a function that also uses injected services | T14 | `fill(&mut b)` refused under the services' `with`s (measured); a `borrow mut` outside them works (measured, §2.2) | T14 |
 | one place lent `mut` twice to one call | `corpus/pending/two-writers.bc` | refused, as Rust refuses it (measured) | outside |
 
 **B7: elaboration refusals** (each a filed issue; §4.3).
 
 | functionality | program | today | target |
 |---|---|---|---|
-| a `while` inside a counted `for`; nested counted loops in some nests; a div call in a counted body | `reject/while-in-counted-for.bc`, #503, `docs/loops.md` S1/S2 | refused (recorded) | T03, T04, sieve's forced shape |
-| a lend in one arm of an `if` | `for-in-if-lend` (#502), #538 | refused (measured) | T03, T06 |
-| a loop-local name equal to a threaded variable | `loop-shadow-*`, `loop-handler-binder` (#493) | refused (measured) | quicksort's forced shape |
-| a recursive call inside a counted `for` that threads an array | `rec-in-for-linear`, `lc-0039` (#492) | refused (measured) | outside |
-| a write to a captured `let mut` from a block or `run` | #586 | **runs with a silent wrong answer** (recorded on the issue) | T12 |
-| an owner borrowed inside another borrow block | `borrow-nested-handback` (#495) | refused (measured) | outside |
+| nested loops where an inner loop is unbounded or a looping function is called per element (sieve's strike loop inside its passes; a scan inside a sort's outer loop) — written today as separate functions | `reject/while-in-counted-for.bc`, #503, `docs/loops.md` S1/S2 | refused (recorded) | T03, T04, sieve's forced shape |
+| a loop that updates a collection only on some elements (append when a test passes) — the update is a lend in one arm | `for-in-if-lend` (#502), #538 | refused (measured) | T03, T06 |
+| a loop body that reuses a name the enclosing code also uses (an innocent local shadowing an owner) | `loop-shadow-*`, `loop-handler-binder` (#493) | refused (measured) | quicksort's forced shape |
+| backtracking: a loop over candidates that recurses, pushing and popping a path | `rec-in-for-linear`, `lc-0039` (#492) | refused (measured) | outside |
+| a callback or block that updates a local of its caller (a visitor accumulating a sum) | #586 | **runs with a silent wrong answer** (recorded on the issue) | T12 |
+| borrowing a value while already working inside another borrow, then using the outer value after | `borrow-nested-handback` (#495) | refused (measured) | outside |
 
 **B8: generic stateful services.**
 
@@ -272,6 +272,11 @@ candidate (the user's "structure plus a mode"), then the recommendation.
   *relation* (a change to the relation or the world, with FP and adequacy re-proved), *open* (no
   known route).
 - **Ergonomics** is what the program reads like.
+
+The full list of ways the brief names (Rust's feature, linear ownership transfer, threading,
+handler-owned state, codata or generators, lexical lends, arenas, explicit RC, SILL-style shared
+processes, structure plus modes) is judged in full at B1 (§4.2), where all of them bear. At the
+other blockers a way that cannot provide the functionality is left out of the table.
 
 ### 4.1 B2: a div computation under a handler
 
@@ -424,6 +429,7 @@ borrow block's body uses `n`, which is outside it").
 | Rust's way: `Pin` and borrows across `await`; self-borrowing generators are not stable Rust | parity | open: K1, the spanning lend (#172), has no model ("does not close in this model") | good | not for the target set |
 | R1 widened (a body that reads other variables) | parity | assumption: `PinLaw` grows | good | possible for `async-bank`; it enlarges an asserted fact |
 | linear ownership transfer: pass the owned value in and out (`async-bank-inbox`'s shape) | parity | none | fair | works today |
+| lend from outside: the spawning scope lends the place to a task of `spawn_in`, which holds the borrow as a parameter across `await` (SPEC §34 *Tasks*) | parity | none | good | works today, `unconditional` (measured, T13 §2.2); the form to teach |
 | **lending cursor**: a generator whose state across `yield` is owned (an index, a stack of indices) and which is lent its source at each pull; what it yields lives for that pull | parity: Rust's hand-written cursor is the same code | none if the generator is elaborated to a step function `(S, view) → (Tok 'v, S)` (hypothesis); lemma if it stays a stored generator, since its observation's argument is lifetime-polymorphic (§22 *Open*) | good | **recommended** for parsers and tree walks |
 | **lend split at each suspension** (the per-turn lend inside one task): a borrow block whose body awaits is elaborated as one lend per turn, ended before each `await` and opened again after it, when nothing borrowed from the view is live across the `await` | parity | none: the split program is accepted today, `unconditional`, with no `PinLaw` (measured, `bank-split.bc`) | good: the program as written in `async-bank.bc` | **recommended** for tasks; it also shrinks what R1 and `PinLaw` must cover |
 
@@ -456,7 +462,7 @@ across the `await` keeps the program under R1 or T1.
 | Rust's way: any number of disjoint borrows per call, checked by NLL | parity | n/a | good | the target, for disjoint places |
 | **nested lends at the call**: `f(&mut a, &b)` elaborates to `withbor2 a (λm. withbor1 b (λi. f(m, i)))`, both hand-backs threaded through the result | parity | none (the lends exist; hypothesis that the hand-back threading is the only missing piece, as `lend-two`'s header says) | good | **recommended** (#54) |
 | per-step re-lend of a tuple of places (lifts `lend-div-two`) | parity | lemma: §14's rule at a pair of cells, as `withborF2` is at a pair | good | **recommended**, after a spike on the lemma |
-| §18's rows (a lend in a capability-threading call; a capability through `for … in &a`) | parity | none or lemma (unknown; SPEC records them only as not provided) | good | **recommended** (the mutation report's O7) |
+| §18's rows (a lend in a capability-threading call; a capability through `for … in &a`) | parity | none (hypothesis): T14 runs today with the `borrow mut` moved outside the services' `with`s (measured, §2.2), so the elaborator can place the lend there itself | good | **recommended** (the mutation report's O7) |
 | contraction `Mut ⊸ Mut ⊗ Mut` | — | relation | — | rejected, as Rust rejects it |
 
 ### 4.8 B10: an abort across a buffer or literal borrow; early exit from a kernel fold
