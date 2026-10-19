@@ -68,11 +68,11 @@ first; within them, the one whose fix is the deeper foundation comes first.
 
 | blocker | recommended way | Rust's way? |
 |---|---|---|
-| B2 div under a handler | `Div` as a handled effect (S0, #554; #564), already in flight | no: Rust has no totality to keep |
+| B2 div under a handler | `Div` as a handled effect: S0's spike (#554, PR #562) and `Div` in the kernel (`bed4c8e`) have landed; what remains is #564's `handle_general` (a handler that keeps `κ` around a ticking body) and the surface's use of it | no: Rust has no totality to keep |
 | B1 shared service across tasks | **a per-turn lend**: the scheduler owns the service and lends it to the task it resumes, for one turn, which hands it back at its `await`. It reuses §14's per-observation lend with the turn as the step, read as Balzer–Pfenning's acquire/release; that it needs no new lemma is a hypothesis, settled by spike S-B (§9) | no. Rust uses `Rc<RefCell<_>>` (run-time flag) or `Arc<Mutex<_>>`; ours is static and free on one thread |
 | B7 elaboration refusals | the already-designed units: loops U2–U4, ergonomics E1, #586's write rule | n/a |
 | B3 records, variants, nested data | data declarations (#489) whose nested containers **elaborate to one recursive type**, as Lean elaborates nested inductives into mutual ones | partly: Rust's enums and structs, without its `Box` ceremony |
-| B4 suspended computations owning capabilities | the cancel-with-residual that S0 already has to settle ("the residual a loop closed early hands back, by a resume with `close`") | no: Rust relies on `Drop`; we have no destructor for a capability |
+| B4 suspended computations owning capabilities | the close-with-residual that S0 proved for loops ("unknown 2: the residual … proved", `experiments/DivEffect/README.md`: a loop closed early hands back its residual by a resume with `close`, not a cancel), applied to generators | no: Rust relies on `Drop`; we have no destructor for a capability |
 | B5 borrows across a suspension | for tasks, **the lend split at each `await`** (measured: the split program runs `unconditional`, with no `PinLaw`); for generators, **a lending cursor**, whose state is owned (an index) and which is lent the source at each pull. The spanning lend K1 (#172) is not needed for the target set | Rust's own answer for generators is the same index cursor; its self-borrowing generators are not stable |
 
 **The research threads** (§7): used — handler-owned state, SILL_S manifest sharing (as the reading
@@ -290,14 +290,14 @@ loop of `main` (§39, #517).
 | way | performance | proof cost | ergonomics | verdict |
 |---|---|---|---|---|
 | Rust's way: no totality; every loop is a CFG loop; a handler is a function | parity | n/a: we would lose `total_every_run` | best | not available: totality is a theorem here (SPEC §13), and decision 67 makes `Div` an effect |
-| **`Div` as a handled effect** (S0 #554, then #564's `handle_general`): a loop performs `tick`; a handler around a ticking body forwards the ticks; the runtime's driver is the outermost handler | parity once loops lower as loops (#540) | relation: one clause for rows with `Div` (S0's spike settles its form) | best: nothing is written | **recommended**; already planned |
+| **`Div` as a handled effect** (S0 #554 and `Div` in the kernel, landed; then #564's `handle_general`): a loop performs `tick`; a handler around a ticking body forwards the ticks; the runtime's driver is the outermost handler | parity once loops lower as loops (#540) | relation: S0 proved the tail-resumptive case (`handle_tail`); the general case, a clause that keeps `κ`, is #564's open proof (parametrised coinduction or step-indexing at ticks) | best: nothing is written | **recommended**; already planned |
 | bound every task's loop (`for _ in 0..n { … break }`), as the measured variant does | parity | none | poor: an invented bound in every task | today's workaround |
 | run the scheduler outside every handler, the tasks' services passed in | parity | none | poor: inverts the program | rejected: it moves B1, does not remove it |
 
 **Elaboration candidate.** None is needed at the surface: the program already says what it means.
 The structure is in the kernel's effect, which is where decision 67 put it.
 
-**Recommendation.** Land S0 and #564 as planned. Acceptance: `op-e.bc` (one task, `while`, a shared
+**Recommendation.** Land #564 as planned, then lift the surface's restriction. Acceptance: `op-e.bc` (one task, `while`, a shared
 service) runs; then `async-fanout` and `async-stream`'s second cause.
 
 ### 4.2 B1: several interleaved tasks sharing one stateful service
@@ -407,13 +407,13 @@ drop; a capability has no destructor and must be handed back; a cancel answers `
 |---|---|---|---|---|
 | Rust's way: the iterator owns the handle; `Drop` closes it | parity | n/a: a capability has no destructor by design (§12) | good | not available as is |
 | give the capability a destructor | parity | lemma; changes §12's class 3 | fair: a dropped stream silently closes the input | rejected: the user's linear-obligation goals (#209, #210) want the capability back |
-| **close hands back a residual**: cancelling the generator resumes it with `close`, and it returns what it owns | parity | relation: the same item S0 settles for loops ("the residual a loop closed early hands back, by a resume with `close`, not a cancel", `docs/pipeline-architecture.md` §0) | best | **recommended**: one mechanism with B2 |
+| **close hands back a residual**: cancelling the generator resumes it with `close`, and it returns what it owns | parity | lemma or less: S0 proved it for loops (unknown 2, `experiments/DivEffect/README.md`); generators need the same close at their `yield`'s observation | best | **recommended**: one mechanism with B2 |
 | a `linear ctl` iteration effect (no `break`) | parity | lemma | poor: no early exit | a fallback named by SPEC §15 |
 | pass the capability per pull (the per-turn lend of B1) | parity | none or lemma (as B1) | fair | the same mechanism as B1; good where the consumer owns the capability anyway |
 
 **Elaboration candidate.** *Writes:* `for b in digits(&mut stdin) { … break … }`. *Elaborates to:*
 a stored generator whose `close` observation answers its residual (`ref input`), which the `for`'s
-exit hands back to the lender. *Checked by:* S0's clause for the residual. *Memory at the surface:*
+exit hands back to the lender. *Checked by:* the residual close S0 proved (`Residual.lean`), carried to a generator's `close` observation. *Memory at the surface:*
 none.
 
 ### 4.6 B5: a borrow held across a resuming operation
@@ -541,7 +541,7 @@ foundation its fix is. Every count is from §2.
 
 | rank | blocker | gates (target set) | gates (outside) | foundation quality of the recommended fix |
 |---|---|---|---|---|
-| 1 | B2 div under a handler | north star (first cause) | `async-fanout`, `async-stream`, `rec-loop`, #517 | high: decision 67's plan; one relation clause; also unblocks B4 (the residual) |
+| 1 | B2 div under a handler | north star (first cause) | `async-fanout`, `async-stream`, `rec-loop`, #517 | high: decision 67's plan; S0 landed, #564 is the remaining proof; S0's residual also serves B4 |
 | 2 | B1 shared service across tasks | north star (second, and last, cause) | `io-two-tasks`, `async-channel`, `async-progress` | high: §14's per-observation lend reused; no new former (hypothesis until spike S-B) |
 | 3 | B7 elaboration refusals | T02, T03, T07, T12, most bench "forced shapes" | 13 pending programs (#491–#495, #501–#504, #538, #586) | high: the designs exist and are agreed |
 | 4 | B3 data declarations, nested data | JSON round-trip (north star stage 1), T09, T11, n-body | `data-box-tree`, every `inl`/`inr` site (2197, `docs/ergonomics.md` M1) | high: pure elaboration if spike S-D holds |
@@ -605,7 +605,7 @@ which programs are accepted gets its SPEC entry first, and the algebra hard stop
 
 | # | unit | removes | acceptance | done when |
 |---|---|---|---|---|
-| 1 | **S0 and `handle_general`** (#554, #564): `Div` as a handled effect; a handler around a ticking body | B2 | `op-e.bc` (one reconcile task with `while`, a shared service; §10.2) as `corpus/operator-one-task.bc`; `async-fanout`; `async-stream`'s second cause | `operator-one-task` runs with its golden, and SPEC §21 *Open*'s "a handler around a div computation" is removed |
+| 1 | **`handle_general`** (#564, on S0 and `Div` in the kernel, landed): a handler that keeps `κ` around a ticking body, and the surface's §21 restriction lifted | B2 | `op-e.bc` (one reconcile task with `while`, a shared service; §10.2) as `corpus/operator-one-task.bc`; `async-fanout`; `async-stream`'s second cause | `operator-one-task` runs with its golden, and SPEC §21 *Open*'s "a handler around a div computation" is removed |
 | 2 | **spike S-B**: yes/no — is a task type whose observation takes the service `Mut 'x S` and answers it back, `box 'd U(νX. (Mut 'x S ⊸ F(Mut 'x S ⊗ (A + box 'd U X))) & F 1)` with `'x` fixed at the `with`, derivable from §22's affine closure with an argument and §32's capability threading, with no new compatibility lemma? | B1 (decides its form) | `operator-reconcile.bc` written against a hand-built `spawn_with` in core text | **yes**: unit 3 as designed. **Kill** (a new lemma or relation change is needed): unit 3 builds the actor route instead (a request-response task type, one lemma at §22), with the same acceptance |
 | 3 | **the per-turn lend** (`spawn_with`): a scheduler that owns a service and lends it to each task for one turn; the surface `with h(&mut s) { … with spawn { … } … }` elaborates to it when a task uses `h`'s capability | B1 | `corpus/pending/operator-reconcile.bc` (golden `[3, 4, 2]` and the converged cluster, from its header), `io-two-tasks.bc`, `async-channel.bc`, `async-progress.bc` | `operator-reconcile.bc` moves from `pending/` to `corpus/` with its golden, and SPEC §34 *Open*'s "concurrent writers" is removed |
 
