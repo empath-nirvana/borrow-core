@@ -1,0 +1,7 @@
+include textio
+include io
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+main -> i32 = let n = arg_i32(3); let m = arg_i32(4); print_dec(n); print_byte(b'\n'); 0

@@ -1,0 +1,3 @@
+include textio
+include io
+main -> i32 = let s = read_input(); let n = borrow imm s { t -> len(t) }; print_dec(n); print_byte(b'\n'); 0

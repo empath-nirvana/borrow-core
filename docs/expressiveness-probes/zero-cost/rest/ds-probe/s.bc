@@ -1,0 +1,5 @@
+include textio
+main -> i32 =
+  let s = string_of_lit("apple");
+  let s = print_string(s);
+  0

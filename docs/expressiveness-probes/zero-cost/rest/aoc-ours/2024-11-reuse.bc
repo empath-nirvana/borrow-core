@@ -1,0 +1,129 @@
+-- check: no-source
+-- Advent of Code 2024, day 11, ported from `src/year2024/day11.rs` of
+-- maneatingape/advent-of-code-rust. Copyright © 2023-2026 maneatingape. MIT License:
+-- `corpus/aoc/LICENSE.md`.
+--
+-- The puzzle: a row of stones, each engraved with a number, changes at every blink: a 0 becomes
+-- 1, a number with an even count of digits splits into its two halves, and any other is
+-- multiplied by 2024. Part 1 is the number of stones after 25 blinks, part 2 after 75, far past
+-- `i32`.
+--
+-- The port, as the Rust, never keeps the row: stones with the same number behave alike, so it
+-- numbers each distinct value the first time it is seen, in a map from value to index, and keeps
+-- a count of stones per index. Each blink computes, for each value new in the last blink, the
+-- indices it turns into (`stones`), then spreads the counts along them. The map is `lib/map.bc`'s
+-- hash map, keyed by the `hash` and `equal` of `i64` (`lib/key.bc`, SPEC §36): `map_new[K, V](cap)`,
+-- `map_insert(&mut m, k, v)` answering the value it displaces, `map_lookup(&m, k)` a copy of a
+-- persistent value, and `map_len(&m)`. A hash map, 64-bit arithmetic, and buffers.
+--
+-- Answer on `2024-11.in`, as the Rust solution gives: `165417` and `196622497563392`, one per line,
+-- then `(i64[165417], i64[196622497563392])`.
+--
+-- The source interpreter takes about half an hour over it (`check: no-source`): its golden is that
+-- interpreter's output, written once from it, and the other stages run it.
+
+include textio
+include map
+
+-- The number of decimal digits of `n > 0`, and `10` to the power of half of them.
+fn digits(n: i64) -> i32 * i64 =
+  let mut d = 0;
+  let mut p = i64[1];
+  for _ in 0..20 { if n < p { break } else { d = d + 1; p = p * i64[10] } };
+  let mut half = i64[1];
+  for _ in 0..host[shr_u32](d, 1) { half = half * i64[10] };
+  (d, half)
+
+fn quot64(a: i64, b: i64) -> i64 = match host[div_u64](a, b) { inl q -> q | inr u -> i64[0] }
+
+fn rem64(a: i64, b: i64) -> i64 = match host[rem_u64](a, b) { inl r -> r | inr u -> i64[0] }
+
+-- The index of `n`: its own if it has been seen, or the next one, and `n` queued in `todo` to be
+-- worked out at the next blink.
+fn index_of(seen: Map[i64, i32], todo: buf i64, n: i64) -> (Map[i64, i32] * buf i64) * i32 =
+  let mut seen = seen;
+  let o = map_lookup(&seen, n);
+  match o {
+    inl i -> ((seen, todo), i)
+  | inr _ ->
+      let k = map_len(&seen);
+      map_insert(&mut seen, n, k);
+      let (todo, _) = push(todo, n);
+      ((seen, todo), k)
+  }
+
+-- The number of stones after `blinks` blinks.
+fn count<'t>(t: text 't, blinks: i32) -> i64 =
+  let mut seen : Map[i64, i32] = map_new[i64, i32](5000);
+  let mut todo = box buf[i64](5000);
+  let mut current = box buf[i64](5000);
+  let mut stones = box buf[i32 * i32](5000);
+  let (seen0, (todo0, current0)) = fold_i64s(t, !{ (n, (seen, (todo, current))) ->
+    let ((seen, todo), i) = index_of(seen, todo, n);
+    let (cur, m) = len_of(current);
+    let (a, _) = cur;
+    if i < m { let c = at(&a, i, i64[0]); ((seen, (todo, (array_set(a, i, c + i64[1]), m)))) }
+    else { let (cur, _) = push((a, m), i64[1]); (seen, (todo, cur)) } },
+    (seen, (todo, current)));
+  seen = seen0;
+  todo = todo0;
+  current = current0;
+  let mut spare = box buf[i64](5000);
+  let mut nextb = box buf[i64](5000);
+  for _ in 0..blinks {
+    let numbers = todo;
+    todo = clear(spare);
+    let (ns, k) = len_of(numbers);
+    let (na, _) = ns;
+    for j in 0..k {
+      let n = at(&na, j, i64[0]);
+      let mut first = 0;
+      let mut second = 0 - 1;
+      if n == i64[0] {
+        let ((s, q), i) = index_of(seen, todo, i64[1]); seen = s; todo = q; first = i
+      } else {
+        let (d, half) = digits(n);
+        if host[and32](d, 1) == 0 {
+          let ((s, q), i) = index_of(seen, todo, quot64(n, half)); seen = s; todo = q; first = i;
+          let ((s, q), i) = index_of(seen, todo, rem64(n, half)); seen = s; todo = q; second = i
+        } else {
+          let ((s, q), i) = index_of(seen, todo, n * i64[2024]); seen = s; todo = q; first = i
+        }
+      };
+      let (st, _) = push(stones, (first, second));
+      stones = st
+    };
+    spare = (na, k);
+    let size = map_len(&seen);
+    let mut nb = clear(nextb);
+    for _ in 0..size { let (b2, _) = push(nb, i64[0]); nb = b2 };
+    let (next0, _) = nb;
+    let mut next = next0;
+    let (sa, m) = stones;
+    let (ca, cm) = current;
+    for i in 0..m {
+      let (first, second) = at(&sa, i, (0, 0));
+      let amount = at(&ca, i, i64[0]);
+      let x = at(&next, first, i64[0]);
+      next = array_set(next, first, x + amount);
+      if 0 <= second {
+        let y = at(&next, second, i64[0]);
+        next = array_set(next, second, y + amount)
+      } else { () }
+    };
+    stones = (sa, m);
+    nextb = (ca, cm);
+    current = (next, size)
+  };
+  let (ca, m) = current;
+  let mut sum = i64[0];
+  for i in 0..m { let c = at(&ca, i, i64[0]); sum = sum + c };
+  sum
+
+main -> i64 * i64 =
+  let s = read_input();
+  let r = borrow imm s { 't, t -> let (t, u) = array_copy['t, u8] t; (count(t, 25), count(u, 75)) };
+  let (p1, p2) = r;
+  print_dec64(p1); print_byte(b'\n');
+  print_dec64(p2); print_byte(b'\n');
+  r

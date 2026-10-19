@@ -1,0 +1,11 @@
+[package]
+name = "aoc-harness"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# a checkout of maneatingape/advent-of-code-rust (MIT) beside this repository
+aoc = { path = "../../../../../../advent-of-code-rust" }
+
+[profile.release]
+debug = false

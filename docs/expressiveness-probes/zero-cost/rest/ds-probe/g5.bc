@@ -1,0 +1,8 @@
+include textio
+include buf
+main -> i32 =
+  let mut g = box buf[i32](4);
+  for i in 0..5 { let (g2, _) = push(g, i); g = g2 };
+  let (g, n) = len_of(g);
+  print_dec(n);
+  0

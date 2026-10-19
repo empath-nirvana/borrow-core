@@ -1,0 +1,18 @@
+include text
+-- T07 over the view of the literal inside a function taking the view.
+fn turnstile<'t>(evs: text 't) -> bool * (i32 * (i32 * i32)) =
+  let mut st = false;
+  let mut passed = 0;
+  let mut rejected = 0;
+  let mut wasted = 0;
+  for p in evs {
+      let e = *p;
+      let next = if st {
+        if e == b'p' { passed = passed + 1; false } else { wasted = wasted + 1; true }
+      } else {
+        if e == b'c' { true } else { rejected = rejected + 1; false }
+      };
+      st = next
+  };
+  (st, (passed, (rejected, wasted)))
+main -> bool * (i32 * (i32 * i32)) = borrow imm "cpppccpcp" { t -> turnstile(t) }

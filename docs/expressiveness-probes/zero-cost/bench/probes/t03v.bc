@@ -1,0 +1,23 @@
+include slice
+include buf
+include text
+include io
+-- T03's parse over the view of the literal: the view held across the outer `while`.
+fn is_digit(b: u8) -> bool = 48 <= b && b <= 57
+fn parse<'t>(s: text 't) -> buf i32 * i32 =
+  let (s, s1) = array_copy['t, u8] s;
+  let n = len(s1);
+  let mut s = s;
+  let mut pos = 0;
+  let mut vals = buf_new[i32](4);
+  let mut errs = 0;
+  while pos < n {
+    let (s2, w) = array_copy['t, u8] s;
+    s = s2;
+    let c = at(w, pos, 0);
+    if c == b',' { errs = errs + 1 } else { () };
+    pos = pos + 1
+  };
+  array_forget['t, u8](s);
+  (vals, errs)
+main -> i32 = let (vals, errs) = borrow imm "12,-3, 40,x,7" { t -> parse(t) }; errs

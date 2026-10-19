@@ -1,0 +1,24 @@
+sum|1000 10
+prefix|1000 10
+sieve|10000 2
+sieve-for|10000 2
+matmul|30
+quicksort|2000 2
+chain-for|10000
+chain-yield|10000
+chain-gen|10000
+sort-generic|2000 2
+parse|<parse.txt
+binary-trees|8
+n-body|100
+mandelbrot|50
+spectral-norm|50
+wordcount|<wc.txt
+gen-tree|1024 2
+gen-tree-dyn|1024 2
+gen-tree-cb|1024 2
+async-tree|1024 4
+raise-small|100 2000
+raise-large|100 2000
+handlers-di|1000 2 0
+handlers-di-generic|1000 2 1
