@@ -17,6 +17,14 @@ fixed by the derivation, because the rule's statement or `Fam` keeps them out of
   unwinding and slice borrows', and R1's) is a `Prop`: the lifetime the source writes is checked
   and is not an argument of the rule, so it is not a field of the node
   (`TDerivesAt.withbor2_witness_free`).
+
+A third is a field the checker adds to a node that its rule does not have:
+
+* **The clause kinds at `[handle]`** (`ks`). The checker classifies each clause from the typed
+  term of the value its clauses variable is bound to (`Frontend/Check/Kinds.lean`), and each kind
+  gives its law's premise at that clause (`classify_sound`). The rule's premise is the clauses
+  variable, not its binding, so the derivation does not constrain the kinds
+  (`TDerivesAt.kinds_free`).
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Check
@@ -43,5 +51,15 @@ theorem TDerivesAt.withbor2_witness_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx 
       TDerivesAt Ξ Δ Γ (.withbor2 i (.val (axWithbor2Ty x Δ.meetOfDom A B)) A B x)
         (.val (axWithbor2Ty x Δ.meetOfDom A B)) :=
   ⟨.withbor2 x hΓ hx ⟨b₁, h₁⟩ hfree₁ hfree₂, .withbor2 x hΓ hx ⟨b₂, h₂⟩ hfree₁ hfree₂⟩
+
+/-- **The clause kinds are the checker's, not the derivation's**: a typed derivation of a
+`handle` node is one at any kinds. -/
+theorem TDerivesAt.kinds_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J : Jdg}
+    {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
+    {u : List Bool} {ks : List ClauseKinds.HKind} (ks' : List ClauseKinds.HKind) {tc te : TExpr}
+    (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks tc te) J) :
+    TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks' tc te) J := by
+  cases h with
+  | effHandleV hAt hs hd hH hc hn0 hnS hlen hdv he => exact .effHandleV hAt hs hd hH hc hn0 hnS hlen hdv he
 
 end BoCa.Fig16.LogRel.Core.Check

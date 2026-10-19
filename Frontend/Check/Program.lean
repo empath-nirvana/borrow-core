@@ -1,6 +1,7 @@
 import Frontend.Check.Checker
 import Frontend.Elab.Pipeline
 import Frontend.Check.Copies
+import Frontend.Check.KindsSound
 
 /-!
 # Frontend — Check — programs
@@ -100,11 +101,14 @@ structure Report where
   lines : List String
   main : Option Checked
   el : Frontend.Elab.Elaborated
+  /-- The `handle` nodes of the checked terms, each once: their static names and clause kinds
+  (SPEC §19, *Clause kinds*). -/
+  handles : List HandleSite := []
 
 /-- The depth bound for checking a term. -/
 def checkFuel : Nat := 1 <<< 20
 
-def Env.top (ds : Array Decl) (k : Nat) : Env := ⟨⟨ds, k⟩, [], [], [], [], 0, none⟩
+def Env.top (ds : Array Decl) (k : Nat) : Env := ⟨⟨ds, k⟩, [], [], [], [], 0, none, []⟩
 
 /-- The externs, in declaration order, each elaborated in the declarations before it. -/
 def externs (ds : Array Decl) : Except Error (List (String × CVTy)) :=
@@ -208,7 +212,7 @@ def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := 
   let ds := el.prog.decls.toArray
   let lib := el.lib
   let r : Except Error (Report × List (Nat × TExpr)) :=
-    (List.range ds.size).foldlM (init := ((⟨[], none, el⟩ : Report), [])) fun (acc, ts) k =>
+    (List.range ds.size).foldlM (init := ((⟨[], none, el, []⟩ : Report), [])) fun (acc, ts) k =>
       match (ds[k]? : Option Decl) with
       | some d => do
           let (line, m, t) ← checkDecl ds k d
@@ -220,20 +224,24 @@ def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := 
   let rep := { rep with main := rep.main.map fun (c : Checked) => { c with exits := el.exits } }
   -- What the elaboration reports about the program's loops (SPEC §16): total or div, and code
   -- that does not run after a loop that never ends.
-  let loops := el.origins.filterMap fun (_, w) =>
-    if w.startsWith Frontend.Sugar.reportTag then some ("loop " ++ w.drop Frontend.Sugar.reportTag.length)
-    else none
+  let loops := el.origins.filterMap fun (_, o) => match o with
+    | .loop m => some ("loop " ++ m)
+    | _ => none
   -- What the elaboration of effects reports (SPEC §18): each function's row, each handler's
-  -- shape, and each operation's call.
-  let fx := el.origins.filterMap fun (_, w) =>
-    if w.startsWith Frontend.Sugar.effectsTag then some (w.drop Frontend.Sugar.effectsTag.length).toString
-    else none
+  -- shape, and each operation's call; and at each handler site, its operations' lowering, read
+  -- from the kinds the checker gave their clauses at the `handle` nodes of its name (SPEC §19).
+  let handles := (terms.flatMap fun (_, t) => t.handleSites copiesFuel).eraseDups
+  let fx := el.origins.filterMap fun (sp, o) => match o with
+    | .effects (.line k m) => some s!"{k} {sp.start.render}: {m}"
+    | .effects (.site n head ops tail) =>
+      some s!"lowering {sp.start.render}: {head}; {siteOps handles n ops}{tail}"
+    | _ => none
   -- The assurance of `main`'s derivation (SPEC §29): unconditional, or under `PinLaw` at the
   -- relaxed rules it uses.
   let assurance := match rep.main with
     | some c => [c.pins.assurance]
     | none => []
-  let rep := { rep with lines := rep.lines ++ loops.eraseDups ++ fx.eraseDups ++ assurance }
+  let rep := { rep with lines := rep.lines ++ loops.eraseDups ++ fx.eraseDups ++ assurance, handles }
   if !copies then return rep
   match implicitCopy terms with
   | some e => throw (Frontend.Elab.renderError el.origins e)

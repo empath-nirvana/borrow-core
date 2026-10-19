@@ -284,12 +284,21 @@ structure RSelf where
   group's machine source, which the typed elaboration turns into a request (`recMachine`). -/
   deep : Bool := false
 
+/-- A report for `bcc check` (SPEC §18, #126). A line of its kind (`effect`, `row`, `lowering`,
+`call`) says what the elaboration did. A handler site says what it is, its static name and its
+operations, and its operations' lowering is rendered from the kinds the checker gives their
+clauses at the `handle` nodes of that name (`Frontend/Check/Program.lean`, SPEC §19). -/
+inductive Report where
+  | line (kind msg : String)
+  | site (n : Nat) (head : String) (ops : List String) (tail : String)
+  deriving BEq, Inhabited
+
 /-- The state of the elaboration: counters for fresh names and site names, the reports for
 `bcc check`, and the copies made (finished ones in `made`, in the order they were finished). -/
 structure St where
   fresh : Nat := 0
   site : Nat := 1
-  reports : Array (Span × String) := #[]
+  reports : Array (Span × Report) := #[]
   made : Array (String × Decl) := #[]
   started : List String := []
   /-- Elaborating a library declaration: nothing is reported. -/
@@ -320,7 +329,12 @@ def freshSite : EM Nat := modifyGet fun s => (s.site, { s with site := s.site + 
 /-- A report for `bcc check` (SPEC §18, #126): its kind (`effect`, `row`, `lowering`, `call`) and
 its text, at `sp`. -/
 def report (sp : Span) (kind : String) (msg : String) : EM Unit :=
-  modify fun s => if s.quiet then s else { s with reports := s.reports.push (sp, kind ++ " " ++ msg) }
+  modify fun s => if s.quiet then s else { s with reports := s.reports.push (sp, .line kind msg) }
+
+/-- A handler site's report: `head`, then each operation of `ops` with its clause's lowering,
+then `tail`. -/
+def reportSite (sp : Span) (n : Nat) (head : String) (ops : List String) (tail : String) : EM Unit :=
+  modify fun s => if s.quiet then s else { s with reports := s.reports.push (sp, .site n head ops tail) }
 
 /-- The handler that serves `main` a division's error it handles nowhere (SPEC §39). -/
 def mainDivHandler : String := "main_div_error"
@@ -2442,17 +2456,12 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     -- `main`'s handler of a division's error is reported by `divMain`, as the platform's handlers
     -- of the system interface are by `platformMain`.
     let plat := ch.name.name == mainDivHandler
-    quietIf plat <| report ksp "lowering" (s!"with {ch.name.name} ({e}): a handler, the static name {n}; " ++
-      ", ".intercalate (((cx.env.eff? e).map (·.ops)).getD [] |>.map fun o =>
-        s!"{o.name.name} {if o.abortive then "abortive: a branch per call (final ctl)"
-          else match o.qual with
-            | .lin => "linear: resumed exactly once"
-            | .aff => "affine: resumed or cancelled"
-            | .unr => "unrestricted: its continuation copied"}") ++
+    quietIf plat <| reportSite ksp n s!"with {ch.name.name} ({e}): a handler, the static name {n}"
+      ((((cx.env.eff? e).map (·.ops)).getD []).map (·.name.name))
       (if boxK then "; the clauses receive the continuation boxed at " ++
         (match ch.lps.head? with
           | some (a, _) => s!"its lifetime `'{a.name}`, the meet of the lifetimes in scope here"
-          | none => "`top`") ++ " (BOXED-κ), so what they answer may keep it" else ""))
+          | none => "`top`") ++ " (BOXED-κ), so what they answer may keep it" else "")
     -- The body, with this site innermost for `e`.
     let cxB : Cx := { cx with sites := site :: cx.sites,
                               caps := cx.caps.map fun c => (csM.find? (·.var == c.var)).getD c }
@@ -2706,9 +2715,9 @@ def forSite : Nat → Cx → List Cap → Bool → Span → Option Ident → Ide
       | some (_, A, _) => A
       | none => .unit sp
     let opName := (((cx.env.eff? i.eff).map (·.ops)).getD [] |>.head?.map (·.name.name)).getD "?"
-    report sp "lowering" (s!"for over {gname} ({i.eff}): a handler, the static name {n}; " ++
-      s!"{opName} affine: the body is its clause, the variables the body uses threaded through " ++
-      "the operation; `break` and `return` cancel the continuation")
+    reportSite sp n s!"for over {gname} ({i.eff}): a handler, the static name {n}" [opName]
+      ("; the body is its clause, the variables the body uses threaded through the operation; " ++
+        "`break` and `return` cancel the continuation")
     report sp "call" s!"{gname} → `{name}`, threading the `for`'s variables"
     let M' ← trC k cx [] false M
     let N' ← trC k cx cs wrap N
@@ -2743,9 +2752,10 @@ def pullSite : Nat → Cx → List Cap → Span → String → FSig → Inst →
     let T := match (cx.env.siteOps site).head? with
       | some (_, A, _) => A
       | none => .unit sp
-    report sp "lowering" (s!"stored generator of {gname} ({i.eff}): a handler, the static name " ++
-      s!"{n}; its clause keeps the continuation (affine) as the rest, resumed by the next " ++
-      "observation and cancelled by `close`")
+    let opName := (((cx.env.eff? i.eff).map (·.ops)).getD [] |>.head?.map (·.name.name)).getD "?"
+    reportSite sp n s!"stored generator of {gname} ({i.eff}): a handler, the static name {n}" [opName]
+      ("; its clause keeps the continuation as the rest, resumed by the next observation and " ++
+        "cancelled by `close`")
     report sp "call" s!"{gname} → `{name}`, stored"
     -- Bound before the value it is in: making the stored generator is a computation.
     let v ← fresh "fx_g"
@@ -3624,7 +3634,7 @@ turn at a time, the capabilities `main` lends to the platform, whether `main` an
 division's error (SPEC §39), and whether `divLib` and `platform` were elaborated with the program. -/
 structure Result where
   decls : List Decl
-  reports : List (Span × String)
+  reports : List (Span × Report)
   perTurn : List Nat
   platform : List String
   exits : Bool := false

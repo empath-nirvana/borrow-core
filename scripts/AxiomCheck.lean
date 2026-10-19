@@ -29,6 +29,17 @@ import Frontend.Check.TFacts
 #print axioms BoCa.Fig16.LogRel.Core.handleV_compatCB
 #print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.effHandleB
 #print axioms BoCa.Fig16.LogRel.Core.Check.ansOutlivesB_sound
+#print axioms BoCa.Fig16.LogRel.Core.Handlers.tail_resumes
+#print axioms BoCa.Fig16.LogRel.Core.Handlers.TailResumes.step
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.TailResumesAt.subst_kappa
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.TailResumesAt.kappa_free
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.OnPaths.tailResumes
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.clauseTy_abortive
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.clauseTy_control
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.tailClause_premise
+#print axioms BoCa.Fig16.LogRel.Core.Check.classify_sound
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.kinds_free
+#print axioms BoCa.Fig16.LogRel.Core.Check.classifyHandler_quals
 #print axioms BoCa.Fig16.LogRel.Core.wpTS_angelic
 #print axioms BoCa.Fig16.LogRel.Core.wpTS_demonic
 #print axioms BoCa.Fig16.LogRel.Core.wpTSD_safe

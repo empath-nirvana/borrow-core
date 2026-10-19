@@ -334,7 +334,8 @@ needs it.
   "the checker", made concrete. The clause must be in reach: `effHandleV` admits value forms
   (`ValFormIn`, `Core/EffRules.lean:1201–1204`), so the elaborator can emit the clauses in the
   node. Otherwise the classifier follows the variable to its binding. Which of the two is used is
-  decided in unit C3 (§6).
+  decided in unit C3 (§6): C3 follows the variable to its binding (the checker keeps the typed
+  term of each `x <- return V`), since emitting the clauses in the node changes the erasure.
 - **`use` and sharing.** Two uses of `d` at the same `τ` and the same site assignment have bodies
   whose erasures differ only if they use externs at different indices. A `def` sees only
   persistent externs (`Env.forDef`, `Steps.lean:452–456`). One code per key is sound when the

@@ -320,7 +320,7 @@ def rEffThen {S : CRow} {A B : CVTy} {tN tD : TExpr} {sN sD : CRow} {pN pD : Pin
 /-- `[handle]`: `handle_n e with (h_ret, hs)`, the answer clause and the clauses the slots `kr`
 and `kc`, the variables' nodes with the sources `ir` and `ic`. It reads the handled row. -/
 def rEffHandle (ir ic : TInfo) {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32}
-    {A R : CVTy} (kr kc : Nat) (hkr : T[kr]? = some (BoCa.Fig16.LogRel.Core.retTy S A R))
+    {A R : CVTy} (kr kc : Nat) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind) (hkr : T[kr]? = some (BoCa.Fig16.LogRel.Core.retTy S A R))
     (hkc : T[kc]? = some (BoCa.Fig16.LogRel.Core.clausesTy S R E)) (hn0 : n ≠ 0)
     (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = false)
@@ -328,19 +328,19 @@ def rEffHandle (ir ic : TInfo) {S : CRow} {E : List (CQual × CVTy × CVTy)} {n 
     (h₁ : overlapOK T (oneL T kr) (oneL T kc) = true)
     (h₂ : overlapOK T (orL (oneL T kr) (oneL T kc)) rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
   ⟨.effHandleV i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R
-      (orL (oneL T kr) (oneL T kc))
+      (orL (oneL T kr) (oneL T kc)) ks
       (TTied.hndPair ir ic (BoCa.Fig16.LogRel.Core.retTy S A R)
         (BoCa.Fig16.LogRel.Core.clausesTy S R E) kr kc (oneL T kr)) rM.t,
     (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ rM.sigs, rM.pins,
     (((Fam.var T kr _ hkr).split (Fam.var T kc _ hkc) h₁).split rM.F h₂).map
-      fun _ ⟨_, _, hs, ⟨_, _, hs₁, hr, hc⟩, he⟩ => TTied.effHandle i ir ic _ _ hs hs₁ hr hc hn0 hnS hlen hdv he⟩
+      fun _ ⟨_, _, hs, ⟨_, _, hs₁, hr, hc⟩, he⟩ => TTied.effHandle i ir ic _ _ ks hs hs₁ hr hc hn0 hnS hlen hdv he⟩
 
 /-- BOXED-κ: `handle_n e with (h_ret, hs)`, the clauses at `clausesTyB S R d E`, each capturing
 clause's `κ` boxed at `@d`; `@d` defined, every live slot `e` uses outliving it, and every
 non-abortive answer type of the handled row outliving it. It reads the handled row.
 `[spec §28]` -/
 def rEffHandleB (ir ic : TInfo) {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32}
-    {A R : CVTy} {d : CLife} (kr kc : Nat)
+    {A R : CVTy} {d : CLife} (kr kc : Nat) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind)
     (hkr : T[kr]? = some (BoCa.Fig16.LogRel.Core.retTy S A R))
     (hkc : T[kc]? = some (BoCa.Fig16.LogRel.Core.clausesTyB S R d E)) (hn0 : n ≠ 0)
     (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
@@ -352,13 +352,13 @@ def rEffHandleB (ir ic : TInfo) {S : CRow} {E : List (CQual × CVTy × CVTy)} {n
     (h₁ : overlapOK T (oneL T kr) (oneL T kc) = true)
     (h₂ : overlapOK T (orL (oneL T kr) (oneL T kc)) rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
   ⟨.effHandleVB i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R d
-      (orL (oneL T kr) (oneL T kc))
+      (orL (oneL T kr) (oneL T kc)) ks
       (TTied.hndPair ir ic (BoCa.Fig16.LogRel.Core.retTy S A R)
         (BoCa.Fig16.LogRel.Core.clausesTyB S R d E) kr kc (oneL T kr)) rM.t,
     (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ rM.sigs, rM.pins,
     (((Fam.var T kr _ hkr).split (Fam.var T kc _ hkc) h₁).split (rM.F.restrict (outlivesB Δ d) hso)
       h₂).map fun _ ⟨_, _, hs, ⟨_, _, hs₁, hr, hc⟩, he, ho⟩ =>
-        TTied.effHandleB i ir ic _ _ hs hs₁ hr hc hn0 hnS hlen hdv he
+        TTied.effHandleB i ir ic _ _ ks hs hs₁ hr hc hn0 hnS hlen hdv he
           ⟨defines_of_wf hwf, fun s hsm hl => outlivesB_sound Δ d s.ty (ho s hsm hl)⟩
           (ansOutlivesB_sound hSd)⟩
 

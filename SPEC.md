@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.75 · 2026-10-18
+Version 0.76 · 2026-10-18
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -191,6 +191,8 @@ destructor). A node holds
   types, rows, operation signatures, lifetimes and lifetime variables, a handler's name, qualifiers
   and cancel rows, constants' type arguments;
 - at a split (`Ctx.SplitP`), the use mask of its left part, as the checker computed it;
+- at `[handle]` (`effHandleV`, `effHandleVB`), each operation's qualifier and the kind of its
+  clause, as the checker classifies it (`ks`, §19 *Clause kinds*);
 - its source (`TInfo`): the span it was checked from, and at a variable its name and whether the
   program writes the use `clone(x)` (§10);
 - one child per premise, in the rule's order.
@@ -206,10 +208,12 @@ node, and every theorem below, and §19's and §29's, holds of `t.erase` as stat
 the derivations, the projections and the erasure are generated from `CDerivesAt` and `CDerivesP`
 by `scripts/gen-pin.py`, so a rule added to `CDerives` is picked up by rerunning it.
 
-Two facts are on the term without being fixed by its derivation: a split's use mask (the split is
-chosen at each liveness by `Fam`, after the node is built), and the witness of a side condition
+Three facts are on the term without being fixed by its derivation: a split's use mask (the split
+is chosen at each liveness by `Fam`, after the node is built), the witness of a side condition
 stated as `∃ b, …` (`withbor2`'s, the unwinding and slice borrows', R1's), which is not an
-argument of the rule and not a field (`Frontend/Check/TFacts.lean`).
+argument of the rule and not a field, and the clause kinds at `[handle]`, which the checker reads
+off the clauses' binding, not the rule's premise (`TDerivesAt.kinds_free`,
+`Frontend/Check/TFacts.lean`).
 
 ### Baseline, restated
 
@@ -2391,7 +2395,7 @@ each in source order; the library's own are not printed:
 |---|---|
 | `effect L:C: E: op, …` | an effect and its operations, with their kind and qualifier |
 | `row L:C: f: E, Fail[X]` | a function's inferred row, with the instances' type arguments |
-| `lowering L:C: …` | each handler: an answering handler is a **call** (`fun`); a control `with` is a handler site with its static name, each operation abortive (a branch per call, `final ctl`), linear, affine or unrestricted; each copy made for a handler or site |
+| `lowering L:C: …` | each handler: an answering handler is a **call** (`fun`); a control `with` (and a `for`'s or a stored generator's site) is a handler site with its static name, each operation abortive (a branch per call, `final ctl`) or with its qualifier and its clause's kind, read from the checked `handle` nodes of its name (§19 *Clause kinds*); each copy made for a handler or site |
 | `call L:C: …` | per call site (decision 49): which clause or copy an operation or an effectful call calls, and each control operation's name and site |
 
 `corpus/reports/*.txt` pin the reports of the effect programs, and the gate compares them
@@ -2409,8 +2413,8 @@ each in source order; the library's own are not printed:
 - **Handling is the fold of the clauses** (`handle_fold`): the handler is the state-passing fold
   of its clauses over the operations performed.
 - **A resume in every arm** (`tail_resumes`, `TailResumes.step`). A control clause whose every
-  path ends in one resume `R N` in tail position, through `case` arms, `let (x, y)` bodies and
-  sequences, runs step for step as the clause with its resumes removed, then one resume: when
+  path ends in one resume `R N` in tail position, through `case` arms, `let (x, y)` bodies,
+  sequences and `let x = e` bodies, runs step for step as the clause with its resumes removed, then one resume: when
   that answers `r`, the clause reaches `R r` at the same memory. It is the clause whose resume
   is its last call, which §19 lowers as a direct call.
 
@@ -3391,6 +3395,47 @@ inside it and does not end a path. The resume commutes out of the arms (§18 *La
 suspends or resumes, and no continuation is materialised. A clause that captures values, or
 whose handlers differ, is a state machine like any other: resumed in tail position, it still
 runs in constant stack.
+
+**Clause kinds.** At `[handle]` the checker classifies each operation's clause and records the
+kind, with the operation's qualifier, on the `handle` node (`ks`; `Frontend/Check/Kinds.lean`).
+The clauses are the components of the value the clauses variable is bound to by `x <- return V`,
+whose typed term the checker keeps for the slot (`Env.vals`): the classification follows the
+variable to its binding and reads the derivation there. An abortive operation is one whose
+signature gives its clause no `κ` (`clauseTy_abortive`). A control clause is
+`!thunkv λp. let (x, κ) = p; M`, and its kind is how `M` uses `κ` on its paths, through `[⊕E]`,
+`[⊗E]`, `[1E]` and `[let]`, to `[app]` of `[&E₁]` of `[force]` at `κ`'s slot (the resume) or
+`[&E₂]` of it (the cancel). A handler with a state (§21) answers `λs. S`, and `S` resumes, then
+applies the function it answers to the new state. The first kind that holds, from the most
+particular:
+
+| kind | the paths of `M` | premise (`Core/ClauseKinds.lean`) | law |
+|---|---|---|---|
+| `abortive` | — (no `κ`) | `isAbortive o` | `catch_abort`, `abort_absorbs`, `unwind_prefix` |
+| `tail` | each ends in one resume in tail position; `κ` used nowhere else | `TailResumesAt 0 M M'`, which with `κ` closed is `TailResumes` (`TailResumesAt.subst_kappa`); `M'` does not use `κ` (`kappa_free`) | `tail_resumes`, `op_tail` |
+| `tail+state` | each answers `λs. S`, and each path of `S` resumes, then applies the answer to the new state in tail position | `OnPaths (StateFn StateLeaf) 0 M` | `handle_fold`'s equation for the hnd encoding, stated in its unit |
+| `resume-or-cancel` (± state) | each resumes in tail position, or cancels `κ` and goes on without it | `OnPaths (TailLeaf ∨ CancelLeaf)` | `kappa_cancel_steps`, `cancel_prefix` |
+| `once` (± state) | each resumes or cancels `κ` once, in evaluation position, never under a `λ` | `OnPaths Once` | its own law and unit |
+| `stored` | anything else: `κ` may be kept | — | the state machines |
+
+`classify_sound` (`Frontend/Check/KindsSound.lean`): the kind recorded gives its premise at the
+clause's erasure. There is one definition of tail-resumptive: `effHandleT`'s clauses (§14,
+`tailClause`, `λ(x, κ). (λw. κ.1 w) (g x)`) meet the `tail` kind's premise, and an abortive one the
+`abortive` kind's (`tailClause_premise`), so an `effHandleT` node's kinds are read off its rule
+(`tailKind`), not classified. `classifyHandler_quals`: the qualifiers recorded are the signature's. The
+derivation does not constrain the kinds (`TDerivesAt.kinds_free`): the rule's premise is the
+clauses variable, not its binding. `bcc kinds <file>` prints every `handle` node with its kinds;
+`bcc check`'s report of each handler site is rendered from them (§18 *Reports*). `tick` (§14) is
+not a kind yet; the inductive `ClauseKind` and its premises are where it goes.
+
+The backend does not read the kinds yet: it still recognises tail-resumptive clauses itself
+(`tailClause?`) and builds a cancel arm for every `κ`. The gate compares the two for every
+operation of every corpus program (`scripts/check-kinds.sh`, pinned in `corpus/kinds.expected`):
+`abortive` against a branch per call, `tail` at every handler of the name against a direct call,
+any other kind against a machine. The disagreements are the backend's stricter conditions: a
+clause that captures values is a machine (*Open*), and so is an operation whose name has two
+handlers with different clause codes. The backend never makes a direct call of a clause whose
+kind is not `tail`. A clause that reaches `κ` through an alias (`kk <- return (unbox k)`, the
+BOXED-κ clauses of `lib/async.bc`) is classified `stored`: the premises have no alias step.
 
 **Abortive payloads.** A `raise`'s argument is carried as a variant of the program's abortive
 operations when it has more than one (`wrapRaise`), and a handler's clause takes it out of its
@@ -7270,6 +7315,18 @@ no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the chec
 
 ## Changelog
 
+- **0.76** (2026-10-18) — §19, *Clause kinds* (#561): at `[handle]` the checker classifies each
+  operation's clause (abortive, tail-resumptive, tail-resumptive with state, resume or cancel,
+  resume once, stored) from the typed term of the clauses' binding, and records the kinds with
+  the qualifiers on the `handle` node; each kind gives its law's premise at the clause's erasure
+  (`classify_sound`, `Core/ClauseKinds.lean`). §18, *Laws*: `TailResumes` runs through the body
+  of `let x = e` too. §18, *Reports*: a handler site's operations are rendered from the checked
+  kinds; the report channel among the elaboration's origins is typed (`Origin`), not tagged text.
+  §3: the kinds are a field of the node the derivation does not constrain. The gate compares the
+  kinds with the backend's lowering (`scripts/check-kinds.sh`, `corpus/kinds.expected`). §14:
+  `effHandleT`'s clauses are an instance of the `tail` kind (`tailClause_premise`). No change
+  to `CDerives`, the relation, the machine, a checker rule, or any program's erasure, output,
+  goldens or counts.
 - **0.75** (2026-10-18) — §14, *The effect `Div` in the kernel* (new, #563): `Div`, the reserved
   name `divEff` with `tick : 1 ↠^lin Next`, and the constants `iterate` (one machine step),
   `div_fuel` and `reify_res`, each a rule of `CDerives`. The relation at a row that holds `Div` is

@@ -6,8 +6,8 @@ lowering 19:1: copy `quiet__n2`: `quiet` for the site 2 of `Async`
 lowering 23:1: main: `Stdout` is served by the platform's `wasi_stdout` on the cell `stdout`, which each operation lends
 lowering 26:11: borrow block: the tasks spawned in it are given the capabilities of `Stdout`, lent for the block
 lowering 28:24: with spawn_in: its body is given the capability of `Stdout`, which goes with the task it answers
-lowering 28:24: with spawn_in (Async): a handler, the static name 3; await affine: resumed or cancelled, log affine: resumed or cancelled; the clauses receive the continuation boxed at its lifetime `'d`, the meet of the lifetimes in scope here (BOXED-κ), so what they answer may keep it
-lowering 29:24: with spawn_in (Async): a handler, the static name 2; await affine: resumed or cancelled, log affine: resumed or cancelled; the clauses receive the continuation boxed at its lifetime `'d`, the meet of the lifetimes in scope here (BOXED-κ), so what they answer may keep it
+lowering 28:24: with spawn_in (Async): a handler, the static name 3; await affine: its continuation may be kept, log affine: its continuation may be kept; the clauses receive the continuation boxed at its lifetime `'d`, the meet of the lifetimes in scope here (BOXED-κ), so what they answer may keep it
+lowering 29:24: with spawn_in (Async): a handler, the static name 2; await affine: its continuation may be kept, log affine: its continuation may be kept; the clauses receive the continuation boxed at its lifetime `'d`, the meet of the lifetimes in scope here (BOXED-κ), so what they answer may keep it
 lowering 30:5: with on_exhausted: every operation abortive, so its clauses run after the handler, in the scope of the `with`
 lowering 30:5: with on_exhausted (Exhausted): a handler, the static name 1; exhausted abortive: a branch per call (final ctl)
 call 16:19: print_byte (Stdout) → `wasi_stdout__print_byte`, on the state of `wasi_stdout`

@@ -1,4 +1,5 @@
 import Frontend.Check.Pin
+import Frontend.Check.Kinds
 
 /-!
 # Frontend — Check — the bidirectional checker
@@ -272,7 +273,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
       match S', rM with
       | [], rM =>
-        let ⟨C, rN⟩ ← synC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N
+        let ⟨C, rN⟩ ← synC n (((E.minus rM.F.u).bindVal rM.t).pushOwn x.name A lin) Δ (A :: T) N
         let FN ← popL E x.span x.name rN.F lin
         if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rBind (at_ sp) rM FN h⟩
         else throw (splitErr E T sp rM.F.u FN.u)
@@ -333,7 +334,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                           if h₁ : overlapOK T (oneL T ir) (oneL T ic) = true then
                             if h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true then
                               pure ⟨_, rEffHandleB (at_ sp) { sp := hr.span, name := hr.name }
-                                { sp := hc.span, name := hc.name } ir ic (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hdv
+                                { sp := hc.span, name := hc.name } ir ic (classifyHandler Es (E.valOf ic)) (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hdv
                                 hwf hSd rM hso h₁ h₂⟩
                             else throw (splitErr E T sp (orL (oneL T ir) (oneL T ic)) rM.F.u)
                           else throw (splitErr E T sp (oneL T ir) (oneL T ic))
@@ -368,7 +369,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                     if h₁ : overlapOK T (oneL T ir) (oneL T ic) = true then
                       if h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true then
                         pure ⟨_, rEffHandle (at_ sp) { sp := hr.span, name := hr.name }
-                          { sp := hc.span, name := hc.name } ir ic (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hdv
+                          { sp := hc.span, name := hc.name } ir ic (classifyHandler Es (E.valOf ic)) (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hdv
                           rM h₁ h₂⟩
                       else throw (splitErr E T sp (orL (oneL T ir) (oneL T ic)) rM.F.u)
                     else throw (splitErr E T sp (oneL T ir) (oneL T ic))
@@ -509,7 +510,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                     let ⟨hdt, hdc, _⟩ ← finaliser sp (.ref A')
                     let E' : Env :=
                       { E with vars := [], own := [], nExt := 0, lenv := (x.name, v) :: E.lenv,
-                               row := some S }
+                               row := some S, vals := [] }
                     let rM ← chkC n (E'.pushOwn m.name (.mut (.var v) A')) (Δ.extend v bl)
                       [.mut (.var v) A'] M (effOf S (.box (.var v) B'))
                     if hL : subL (allL [.mut (.var v) A']) (orL rM.F.u rM.F.w) = true then
@@ -599,7 +600,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
       match S', rM with
       | [], rM =>
-        let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N C
+        let rN ← chkC n (((E.minus rM.F.u).bindVal rM.t).pushOwn x.name A lin) Δ (A :: T) N C
         let FN ← popL E x.span x.name rN.F lin
         if h : overlapOK T rM.F.u FN.u = true then pure (rBind (at_ sp) rM FN h)
         else throw (splitErr E T sp rM.F.u FN.u)

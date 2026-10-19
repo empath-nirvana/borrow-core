@@ -222,6 +222,13 @@ structure Prog where
   /-- The control operations, as `(name, operation)`, that `Capture` lowered as direct calls of
   their clause (tail-resumptive). -/
   tailOps : List (UInt32 × UInt32) := []
+  /-- The control operations and the abortive operations the program performs, as `(name,
+  operation)`: `Capture`'s lowering of each, beside `tailOps`, for the gate's comparison with the
+  checker's clause kinds (`bcc-counts --lowering`). -/
+  ctlOps : List (UInt32 × UInt32) := []
+  abortOps : List (UInt32 × UInt32) := []
+  /-- Why each other control operation is not a direct call. -/
+  notTail : List ((UInt32 × UInt32) × String) := []
   /-- The codes `Capture` made machines, which answer an outcome: those that may suspend, and the
   handlers' bodies, which answer `inl` alone when they cannot. -/
   machines : Nat := 0

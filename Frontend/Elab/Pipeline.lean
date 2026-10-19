@@ -39,9 +39,10 @@ def elaborate (p : Program) : Except Error Elaborated := do
 /-- An error, with a note naming the sugar whose generated code it is in, when its span is the
 span of one. -/
 def renderError (os : Sugar.Origins) (e : Error) : Error :=
-  match os.find? (fun (s, w) => s == e.span && !w.startsWith Sugar.reportTag &&
-      !w.startsWith Sugar.effectsTag) with
-  | some (_, what) =>
+  match os.findSome? (fun (s, o) => match o with
+      | .sugar what => if s == e.span then some what else none
+      | _ => none) with
+  | some what =>
     { e with msg := s!"{e.msg}\n  in the core generated for {what} here (`bcc desugar` shows it)" }
   | none => e
 
