@@ -1,0 +1,10 @@
+-- A `let mut` variable assigned in an arm of an `if` that heads a `let` is handed on to what
+-- follows the binding, beside the `if`'s value (typed elaboration §5.2; #581).
+--
+-- Answer: i32[52]: the `then` arm sets `x` to 5 and answers 2. Without the join, what follows
+-- sees `x` as 1 and gives i32[12].
+
+main -> i32 =
+  let mut x = 1;
+  let a = if x == 1 { x = 5; 2 } else { 3 };
+  x * 10 + a

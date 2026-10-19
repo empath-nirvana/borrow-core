@@ -191,6 +191,16 @@ def inClosure {α} (p : P α) : P α := do
   modify fun s => { s with inLoop := l₀ }
   pure r
 
+/-- Parse the head of a binding: its computation, and the enclosing `let mut` variables it
+assigns, in the order they were declared. The `let mut`s it declares are its own. -/
+def headOf (p : P α) : P (α × List String) := do
+  let s₀ ← get
+  set { s₀ with assigned := [] }
+  let M ← p
+  let a := (← get).assigned
+  modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned ++ a }
+  pure (M, (s₀.muts.filter a.contains).reverse)
+
 /-- Parse a loop's body: in a function's body, a statement `return e` in it returns from the
 function (`VSugar.retE`). -/
 def withLoop {α} (p : P α) : P α := do
@@ -994,6 +1004,31 @@ def joinArms (xs : List String) : Comp → Comp
     .case sp V x (wrapTerms hand M) y (wrapTerms hand N)
   | M => M
 
+/-- A head of a binding (`let p = M; N`, `x <- M; N`) whose computation assigns the enclosing
+`let mut` variables `xs`: each terminal of `M` ends by handing them on beside its value, typed
+`A`, and the binding takes the pair apart, binding the value by `p` and rebinding the variables
+before `N` (the join; typed elaboration §5.2). -/
+def joinHead (sp : Span) (n : Nat) (xs : List String) (A : Option VTy) (M : Comp) (p : Pat)
+    (N : Comp) : P Comp := do
+  let hand (T : Comp) : Comp :=
+    .bind T.span ⟨"io_jr", T.span⟩ A T
+      (.ret T.span (.pair T.span (.var T.span "io_jr") (varTuple T.span xs))) false
+  let j ← freshName "io_j"
+  return .bind sp ⟨j, sp⟩ none (wrapTerms hand M)
+    (← bindPat sp n (.pair sp p (varPat sp xs)) (.var sp j) N) false
+
+/-- `x <- M; N`, `x : A <- M; N` or `linear x <- M; N`, with the finaliser `unwind (D)` when it has
+one. A head that assigns the enclosing `let mut` variables `xs` hands them on (`joinHead`), and
+`x` is bound to its value. -/
+def bindHead (sp : Span) (n : Nat) (x : Ident) (A : Option VTy) (M : Comp) (D : Option Comp)
+    (N : Comp) (lin : Bool) (xs : List String) : P Comp := do
+  let mk (M : Comp) : Comp := match D with
+    | some D => .unwind sp x A M D N
+    | none => .bind sp x A M N lin
+  if xs.isEmpty then return mk M
+  let v ← freshName "io_jv"
+  joinHead sp n xs A M (.var ⟨v, sp⟩) (mk (.ret sp (.var sp v)))
+
 /-- The loop's value, bound after it (`let r = for …`): `forRes`, applied to the thunk of the
 `else` value when there is one. -/
 def forResOf (sp : Span) : Option Comp → Val
@@ -1419,27 +1454,23 @@ def compG : Nat → Bool → P Comp
     match t.tok, t1.tok with
     | .ident x, .sym "<-" =>
       discard bump; discard bump
-      let M ← compG n true
+      let (M, xs) ← headOf (compG n true)
       -- `x <- M unwind (D); N` (SPEC §19).
       let D ← unwindOf n
       expectSym ";"
       let N ← comp n
       let sp ← spanFrom st
-      pure (match D with
-        | some D => .unwind sp ⟨x, t.span⟩ none M D N
-        | none => .bind sp ⟨x, t.span⟩ none M N false)
+      bindHead sp n ⟨x, t.span⟩ none M D N false xs
     | .ident x, .sym ":" =>
       discard bump; discard bump
       let A ← vty n
       expectSym "<-"
-      let M ← compG n true
+      let (M, xs) ← headOf (compG n true)
       let D ← unwindOf n
       expectSym ";"
       let N ← comp n
       let sp ← spanFrom st
-      pure (match D with
-        | some D => .unwind sp ⟨x, t.span⟩ (some A) M D N
-        | none => .bind sp ⟨x, t.span⟩ (some A) M N false)
+      bindHead sp n ⟨x, t.span⟩ (some A) M D N false xs
     | .ident x, .sym "=" =>
       -- `x = e`: a `let mut` variable rebound (typed elaboration §5.2).
       discard bump; discard bump
@@ -1464,10 +1495,10 @@ def compG : Nat → Bool → P Comp
       let xt ← bump
       let A ← if ← isSym ":" then do discard bump; pure (some (← vty n)) else pure none
       expectSym "<-"
-      let M ← compG n true
+      let (M, xs) ← headOf (compG n true)
       expectSym ";"
       let N ← comp n
-      pure (.bind (← spanFrom st) ⟨x, xt.span⟩ A M N true)
+      bindHead (← spanFrom st) n ⟨x, xt.span⟩ A M none N true xs
     | .kw "for", _ | .kw "while", _ | .kw "loop", .sym "{" => loopC n st none
     | .life l, .sym ":" =>
       -- `'ℓ: for …`, `'ℓ: while …`, `'ℓ: loop …`: a labelled loop.
@@ -1510,10 +1541,12 @@ def compG : Nat → Bool → P Comp
         let sp ← spanFrom st
         return .loop sp ℓ (.each x) V M (.bind sp r A (.ret sp (forResOf sp els)) N false)
       if (← peek).tok == .kw "match" || (← peek).tok == .kw "if" then
-        let M ← compPrefix n
+        let (M, xs) ← headOf (compPrefix n)
         expectSym ";"
         let N ← comp n
         let sp ← spanFrom st
+        -- The `let mut` variables its arms assign are handed on to what follows.
+        unless xs.isEmpty do return ← joinHead sp n xs A M p N
         match p with
         | .var x => return .bind sp x A M N false
         | p =>
@@ -1849,18 +1882,21 @@ def compAtom : Nat → P Comp
       pure (.with_ (← spanFrom st) M N)
     | .kw "case" =>
       discard bump
+      let outer := (← get).muts
       let V ← val n
       expectSym "{"
       expectKw "inl"
       let x ← ident
       expectSym "->"
-      let M ← comp n
+      let (M, a₁) ← armOf n
       expectSym "|"
       expectKw "inr"
       let y ← ident
       expectSym "->"
-      let N ← comp n
+      let (N, a₂) ← armOf n
       expectSym "}"
+      -- In the order the variables were declared.
+      modify fun s => { s with joined := (outer.filter (a₁ ++ a₂).contains).reverse }
       pure (.case (← spanFrom st) V x M y N)
     | .kw "match" =>
       discard bump

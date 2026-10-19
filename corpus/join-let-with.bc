@@ -1,0 +1,16 @@
+-- An `if` that heads a `let` in the body of a `with`: the arm's assignment reaches the rest of
+-- the body, and the body hands the variable back after the `with` (#581).
+--
+-- Answer: i32[5052]: `tick()` answers 1, so the arm sets `x` to 5; the body answers 5 * 10 + 2,
+-- and `x` is 5 after the `with`. Without the join, i32[1012].
+
+effect Count { fn tick() -> i32 }
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+
+main -> i32 =
+  let mut x = 1;
+  let r = with count(0) {
+    let a = if tick() == 1 { x = 5; 2 } else { 3 };
+    x * 10 + a
+  };
+  x * 1000 + r

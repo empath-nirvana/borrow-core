@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.80 · 2026-10-19
+Version 0.81 · 2026-10-19
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -7488,6 +7488,13 @@ no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the chec
 ---
 
 ## Changelog
+
+- **0.81** (2026-10-19) — The joins at `match`/`if` (0.16; typed elaboration §5.2) at the head of
+  a binding (#581): in `let p = M; N`, `x <- M; N`, `x : A <- M; N` and `linear x <- M; N`, each
+  terminal of `M` hands on the enclosing `let mut` variables `M` assigns beside its value, and
+  they are rebound before `N`; a core `case` joins as a `match` does. Before, an assignment in an
+  arm of a head was lost after the binding. No kernel, rule or checker change; no existing
+  program's output, golden or count changes.
 
 - **0.80** (2026-10-19) — §3 (#570): four marked derived nodes, `divLit` (§39), `walk` (§16),
   `selfCall` (§20) and `lendCell` (§35), each over its scheme's typed term, the first two with

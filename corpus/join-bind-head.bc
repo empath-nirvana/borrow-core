@@ -1,0 +1,25 @@
+-- The binding forms `x <- M; N`, `x : A <- M; N` and `linear x <- M; N` with an `if` or `match`
+-- as `M`, and a core `case` as a statement: the `let mut` variables their arms assign are handed
+-- on, as at the head of a `let` (#581).
+--
+-- Answer: `(i32[624], (i32[52], i32[5]))`: `x` is 5 after the `if` and 6 after the `match`, beside
+-- 2 and 4; the `linear` head sets `x` to 5 beside 2; the `case` sets `x` to 5. Without the joins,
+-- `(i32[124], (i32[12], i32[1]))`.
+
+fn arrows() -> i32 =
+  let mut x = 1;
+  a <- if x == 1 { x = 5; return 2 } else { return 3 };
+  b : i32 <- match (inl () : 1 + 1) { inl u -> x = x + 1; return 4 | inr u -> return 0 };
+  x * 100 + a * 10 + b
+
+fn lin() -> i32 =
+  let mut x = 1;
+  linear a <- if x == 1 { x = 5; return 2 } else { return 3 };
+  x * 10 + a
+
+fn cases() -> i32 =
+  let mut x = 1;
+  case (inl () : 1 + 1) { inl u -> x = 5 | inr u -> () };
+  x
+
+main -> i32 * (i32 * i32) = (arrows(), (lin(), cases()))

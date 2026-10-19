@@ -198,6 +198,15 @@ iter-mut 1 0 0 16 16 17
 iter-mut-count 1 0 0 12 8 8
 iter-mut-slice 1 0 0 12 8 14
 iter-range 0 0 0 0 0 0
+join-bind-head 0 0 0 0 0 0
+join-if-statement 0 0 0 0 0 0
+join-let-arm-reads 0 0 0 0 0 0
+join-let-both-arms 0 0 0 0 0 0
+join-let-if 0 0 0 0 0 0
+join-let-loop 0 0 0 0 0 0
+join-let-match 0 0 0 0 0 0
+join-let-nested 0 0 0 0 0 0
+join-let-with 0 0 0 2 2 0
 json-tokens 1 0 0 5275 4098 5090 # the input string; tokens are views, literal views read-only data
 key-value 2 0 0 4547 4162 4529 # the input string and the buffer of view pairs
 labels-json 2 0 0 359 159 339 # the output string and the one escaped string (the owned side of the sum)
