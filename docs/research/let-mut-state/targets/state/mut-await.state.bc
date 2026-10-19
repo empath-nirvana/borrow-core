@@ -1,0 +1,24 @@
+-- `mut-await.bc` with its `let mut`s as instances of the ordinary control effect `State`, the state the
+-- handler's parameter: the form #611's translation would give before its state-passing transformation.
+effect State[T] { linear ctl get() -> T; linear ctl put(v: T) }
+
+handler state[T, A](mut s: T): State[T], A -> A * T = {
+  return(a) = (a, s);
+  get(k) = k(s);
+  put(v, k) = { s = v; k(()) }
+}
+
+effect Pause { ctl pause() }
+
+handler resuming[A]: Pause, A -> A = { return(a) = a; pause(k) = k(()) }
+
+fn ticker(tag: i32) -> i32 with Pause =
+  let (v, s) = with acc = state[i32, i32](tag) {
+    pause();
+    acc.put(acc.get() * 10 + tag);
+    pause();
+    acc.get() * 10 + tag
+  };
+  v
+
+main -> i32 = with resuming { ticker(1) }

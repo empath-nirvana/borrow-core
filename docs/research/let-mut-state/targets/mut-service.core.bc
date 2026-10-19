@@ -1,0 +1,36 @@
+-- `mut-service.bc` as its elaboration should read: written by hand in core.
+def summing__log : !(all 'l < top. mut 'l i32 * i32 => mut 'l i32 * 1) =
+  !thunkv Fun 'l < top.
+    return (thunkv fun (p : mut 'l i32 * i32) ->
+      let (c, x) = p;
+      w <- return withswap['l, i32, 1] c (thunkv fun (s : i32) ->
+            s <- return (unbang host[add32]) (s, x);
+            return (s, ()));
+      let (c, r) = w;
+      return (c, r))
+
+def work__summing : !(all 'l < top. mut 'l i32 * i32 => mut 'l i32 * i32) =
+  !thunkv Fun 'l < top.
+    return (thunkv fun (p : mut 'l i32 * i32) ->
+      let (c, n) = p;
+      acc <- return i32[0];
+      return (unbang count_fold[mut 'l i32 * i32]) (!thunkv fun (q : i32 * (mut 'l i32 * i32)) ->
+          let (i, s) = q;
+          let (c, acc) = s;
+          b <- case (unbang host[eq32]) ((unbang host[and32]) (i, i32[1]), i32[0]) {
+              inl u -> return (c, ())
+            | inr u -> return (unbang summing__log) ['l] (c, i)
+            };
+          let (c, u) = b;
+          acc <- return (unbang host[add32]) (acc, i);
+          return (c, acc), (n, (i32[0], (c, acc)))))
+
+main : F (i32 * i32) =
+  c <- return alloc[i32] i32[0];
+  r <- return withbor2['l, dom, i32, i32] c (thunkv Fun 'l < dom.
+        return (thunkv fun (m : mut 'l i32) ->
+            t <- return (unbang work__summing) ['l] (m, i32[5]);
+            let (m, a) = t;
+            return boxed['l] a));
+  let (c, a) = r;
+  return (a, free[i32] c)

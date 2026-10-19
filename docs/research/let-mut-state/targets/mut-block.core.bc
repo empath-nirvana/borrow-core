@@ -1,0 +1,14 @@
+-- `mut-block.bc` as its elaboration should read: written by hand in core.
+def ap__x : !(!(i32 * i32 => i32 * i32) * i32 => i32 * i32) =
+  !thunkv fun (p : !(i32 * i32 => i32 * i32) * i32) ->
+    let (f, x) = p;
+    return (unbang f) (x, i32[1])
+
+main : F i32 =
+  x <- return i32[1];
+  r <- return (unbang ap__x) (!thunkv fun (q : i32 * i32) ->
+        let (x, u) = q;
+        x <- return i32[5];
+        return (x, (unbang host[add32]) (u, i32[1])), x);
+  let (x, a) = r;
+  return (unbang host[add32]) ((unbang host[mul32]) (x, i32[10]), a)

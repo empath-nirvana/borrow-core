@@ -1,0 +1,15 @@
+-- `mut-await.bc` as its elaboration should read: written by hand in core.
+def ticker__n1 : !U (i32 -o F[1.0 aff 1 ~> 1] i32) =
+  !thunkv fun (tag : i32) ->
+    acc <- return tag;
+    u <- perform[1.0] ();
+    acc <- return (unbang host[add32]) ((unbang host[mul32]) (acc, i32[10]), tag);
+    u <- perform[1.0] ();
+    return (unbang host[add32]) ((unbang host[mul32]) (acc, i32[10]), tag)
+
+main : F i32 =
+  handle_with[1](((!thunkv fun (a : i32) -> return a) : !(i32 => i32)),
+    ((!thunkv fun (p : 1 * U ((1 -o F i32) & F 1)) ->
+        let (u, k) = p;
+        force k.1 u, ()) : !(1 * U ((1 -o F i32) & F 1) => i32) * 1))
+    (g <- return unbang ticker__n1; t <- return i32[1]; force g t)

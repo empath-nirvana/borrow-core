@@ -1,0 +1,16 @@
+-- A generator's `let mut`s live across `yield`, and a `for`'s `let mut` assigned in its body.
+-- Target: `mut-yield.core.bc`: the generator's loop state holds its variables and the `for`'s
+-- `sum`, which each `yield` passes out and is answered back; the `for` handles one turn per
+-- observation.
+-- Answer: i32[12].
+include yield
+
+fn evens(n: i32) -> 1 with Yield[i32] =
+  let mut i = 0;
+  let mut k = 0;
+  while k < n { yield(i); i = i + 2; k = k + 1 }
+
+main -> i32 =
+  let mut sum = 0;
+  for v in evens(4) { sum = sum + v };
+  sum

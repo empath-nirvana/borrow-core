@@ -1,0 +1,19 @@
+-- `mut-heads.bc` as its elaboration should read: written by hand in core.
+main : F i32 =
+  x <- return i32[1];
+  y <- return i32[1];
+  j <- case (unbang host[eq32]) (x, i32[1]) {
+      inl u -> y <- return i32[8];
+        return (i32[4], (x, y))
+    | inr u -> k <- case (inl () : 1 + 1) {
+            inl u -> x <- return i32[5];
+              return (i32[2], x)
+          | inr u -> return (i32[3], x)
+          };
+        let (t, x) = k;
+        return ((unbang host[mul32]) (t, i32[10]), (x, y))
+    };
+  let (a, s) = j;
+  let (x, y) = s;
+  return (unbang host[add32]) ((unbang host[add32]) ((unbang host[mul32]) (x, i32[1000]),
+    (unbang host[mul32]) (y, i32[100])), a)
