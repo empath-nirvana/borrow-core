@@ -87,6 +87,24 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
   | litFn {Δ Γ j} {info : TInfo} {bs : List Nat} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j)
       (hb : t.erase = litFnE bs) (hcl : closedAt 0 (litFnE bs) = true) :
       TDerivesAt Ξ Δ Γ (TExpr.litFn info j bs t) j
+  /-- **Derived**: a division by a literal at which it cannot fail: its typed term's erasure is the
+  scheme (`divLitB`), at a safe literal (`safeDivB`). -/
+  | divLit {Δ Γ j} {info : TInfo} {op : HostOp} {c : IntLit} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j)
+      (hb : divLitB op c t.erase = true) (hs : safeDivB op c = true) :
+      TDerivesAt Ξ Δ Γ (TExpr.divLit info j op c t) j
+  /-- **Derived**: a counted walk of a view: its typed term's erasure is a `count_try` (`walkB`). -/
+  | walk {Δ Γ j} {info : TInfo} {m : Bool} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j)
+      (hb : walkB t.erase = true) :
+      TDerivesAt Ξ Δ Γ (TExpr.walk info j m t) j
+  /-- **Derived**: a recursive group's self-reference: its typed term's erasure is a variable
+  (`selfCallB`). -/
+  | selfCall {Δ Γ j} {info : TInfo} {k n : Nat} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j)
+      (hb : selfCallB t.erase = true) :
+      TDerivesAt Ξ Δ Γ (TExpr.selfCall info j k n t) j
+  /-- **Derived**: the lend of a cell allocated for it (`lendCellB`). -/
+  | lendCell {Δ Γ j} {info : TInfo} {m : Bool} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j)
+      (hb : lendCellB t.erase = true) :
+      TDerivesAt Ξ Δ Γ (TExpr.lendCell info j m t) j
   /-- A `def`'s body at its use. -/
   | use {Δ Γ j} {info : TInfo} {name : String} {decl : Nat} {targs : List VTy} {ab : Option AbsF}
       {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j) (hab : ab = t.absF Δ) :
@@ -139,6 +157,24 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
   | litFn {Δ Γ j} {info : TInfo} {bs : List Nat} {t : TExpr} (h : TDerivesP Δ Γ t j)
       (hb : t.erase = litFnE bs) (hcl : closedAt 0 (litFnE bs) = true) :
       TDerivesP Δ Γ (TExpr.litFn info j bs t) j
+  /-- **Derived**: a division by a literal at which it cannot fail: its typed term's erasure is the
+  scheme (`divLitB`), at a safe literal (`safeDivB`). -/
+  | divLit {Δ Γ j} {info : TInfo} {op : HostOp} {c : IntLit} {t : TExpr} (h : TDerivesP Δ Γ t j)
+      (hb : divLitB op c t.erase = true) (hs : safeDivB op c = true) :
+      TDerivesP Δ Γ (TExpr.divLit info j op c t) j
+  /-- **Derived**: a counted walk of a view: its typed term's erasure is a `count_try` (`walkB`). -/
+  | walk {Δ Γ j} {info : TInfo} {m : Bool} {t : TExpr} (h : TDerivesP Δ Γ t j)
+      (hb : walkB t.erase = true) :
+      TDerivesP Δ Γ (TExpr.walk info j m t) j
+  /-- **Derived**: a recursive group's self-reference: its typed term's erasure is a variable
+  (`selfCallB`). -/
+  | selfCall {Δ Γ j} {info : TInfo} {k n : Nat} {t : TExpr} (h : TDerivesP Δ Γ t j)
+      (hb : selfCallB t.erase = true) :
+      TDerivesP Δ Γ (TExpr.selfCall info j k n t) j
+  /-- **Derived**: the lend of a cell allocated for it (`lendCellB`). -/
+  | lendCell {Δ Γ j} {info : TInfo} {m : Bool} {t : TExpr} (h : TDerivesP Δ Γ t j)
+      (hb : lendCellB t.erase = true) :
+      TDerivesP Δ Γ (TExpr.lendCell info j m t) j
   /-- A `def`'s body at its use. -/
   | use {Δ Γ j} {info : TInfo} {name : String} {decl : Nat} {targs : List VTy} {ab : Option AbsF}
       {t : TExpr} (h : TDerivesP Δ Γ t j) (hab : ab = t.absF Δ) :
@@ -158,6 +194,7 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
   | withborF2I s hA hB hBo hTo he hΓ =>
       exact CDerivesAt.ofEffFree (withborI2_wf s hA hB hBo hTo hΓ) he
   | litFn _ _ _ ih => exact ih
+  | divLit _ _ _ ih | walk _ _ ih | selfCall _ _ ih | lendCell _ _ ih => exact ih
   | use _ _ ih => exact ih
 
 /-- **A typed derivation is a derivation of the erasure**, in `CDerivesP`.  `[spec §29]` -/
@@ -173,6 +210,7 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | withborF2M s hA hBo hTo _ hΓ => exact CDerivesP.ofC (withborM2_wf s hA hBo hTo hΓ)
   | withborF2I s hA hB hBo hTo _ hΓ => exact CDerivesP.ofC (withborI2_wf s hA hB hBo hTo hΓ)
   | litFn _ _ _ ih => exact ih
+  | divLit _ _ _ ih | walk _ _ ih | selfCall _ _ ih | lendCell _ _ ih => exact ih
   | use _ _ ih => exact ih
 
 /-- A tied typed derivation is one of `TDerivesP`, at the same node. -/
@@ -188,6 +226,10 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | withborF2M s hA hBo hTo he hΓ => exact .withborF2M s hA hBo hTo he hΓ
   | withborF2I s hA hB hBo hTo he hΓ => exact .withborF2I s hA hB hBo hTo he hΓ
   | litFn _ hb hcl ih => exact .litFn ih hb hcl
+  | divLit _ hb hs ih => exact .divLit ih hb hs
+  | walk _ hb ih => exact .walk ih hb
+  | selfCall _ hb ih => exact .selfCall ih hb
+  | lendCell _ hb ih => exact .lendCell ih hb
   | use _ hab ih => exact .use ih hab
 
 /-- **A split node's masks are its parts'**: a typed derivation of a node at a split splits its

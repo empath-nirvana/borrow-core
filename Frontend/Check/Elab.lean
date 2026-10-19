@@ -63,6 +63,8 @@ structure Scope where
   upto : Nat
   /-- The handler sites the elaboration of effects made (`SiteRec`), read at `[handle]`. -/
   sites : List SiteRec := []
+  /-- The key of each `def` the elaboration generates (`DefKey`), read at its uses. -/
+  keys : List DefKey := []
 
 /-- A `type` declaration in scope: its type and lifetime parameters, body and own scope. -/
 structure TypeInfo where

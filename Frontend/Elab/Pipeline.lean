@@ -28,11 +28,14 @@ structure Elaborated where
   lib : Nat
   origins : Sugar.Origins
   sites : List SiteRec
+  /-- The key of each `def` the elaboration generates (`DefKey`). -/
+  keys : List DefKey := []
 
 /-- Elaborate a parsed program for the checker. -/
 def elaborate (p : Program) : Except Error Elaborated := do
   let s ← Sugar.elaborateO p
-  pure ⟨s.prog, s.lib, s.origins, s.sites⟩
+  let keys := s.origins.filterMap fun | (_, .defKey k) => some k | _ => none
+  pure ⟨s.prog, s.lib, s.origins, s.sites, keys⟩
 
 /-! ### Errors -/
 

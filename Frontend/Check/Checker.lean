@@ -94,6 +94,28 @@ def siteOf (E : Env) (sp : Span) (n : Nat) (Es : List (CQual × CVTy × CVTy)) :
   pure (some { eff := r.eff, args := r.args, handler := r.handler, slot := r.slot, kind := r.kind,
                state := r.state })
 
+/-- The entry, placed at a larger lifetime context `Δ` (`TTied.weakenΔ`): when it has no rule
+that reads `⊓Δ` (`TExpr.domFree`), `Δ` extends its context away from its binders (`extΔB`), its
+type is the one the `def`'s type elaborates to at `Δ` (`A`), and the slots the use places it under
+mention none of its binders, so that its absorption there is the one a check at `Δ` gives. -/
+def DefEntry.lift? (e : DefEntry) (decl : Nat) (targs : List CVTy) (Δ : LifeCtx) (T : List CVTy)
+    (A : CVTy) : Option (DefHit Δ T) :=
+  if e.decl == decl && e.targs == targs && e.A == A then
+    if hT : T.drop (T.length - e.Tc.length) = e.Tc then
+      if hd : e.r.t.domFree = true then
+        if he : extΔB e.Δ Δ e.r.t.lifeBinders = true then
+          if (T.take (T.length - e.Tc.length)).all fun B =>
+              e.r.t.lifeBinders.all fun x => !vfreeB x B then
+            let r : Res Δ e.Tc (.val e.A) :=
+              ⟨e.r.t.reAb Δ, e.r.sigs, e.r.pins,
+                e.r.F.map fun _ h => TTied.weakenΔ h (extΔB_sound he) hd⟩
+            some ⟨e.A, e.Tc, _, hT, r, r.t.absF Δ, rfl⟩
+          else none
+        else none
+      else none
+    else none
+  else none
+
 /-! ### The checker -/
 
 set_option maxHeartbeats 400000 in
@@ -777,21 +799,26 @@ def useDef : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Str
     List (String × CVTy) → List CVTy → CheckM (Σ A : CVTy, Res Δ T (.val A))
   | 0, _, _, _, sp, _, _, _, _ => err sp "expression nested too deeply"
   | n + 1, E, Δ, T, sp, x, d, tps, targs => do
+    let m := T.length - E.nExt
+    let E' := ({ E with vars := E.vars.drop m } : Env).forDef (T.drop m) d tps
     let h ← match (← get).findSome? (·.hit? d.scope.upto targs Δ T) with
       | some h => pure h
       | none => do
-        let m := T.length - E.nExt
-        let E' := ({ E with vars := E.vars.drop m } : Env).forDef (T.drop m) d tps
         let A ← E'.elabV Δ d.ty
-        let r ← tryCatch (chkV n E' Δ (T.drop m) d.body A) (fun e => throw (inDef x sp e))
-        modify (⟨d.scope.upto, targs, Δ, T.drop m, A, r, r.t.absF Δ, rfl⟩ :: ·)
-        pure (⟨A, T.drop m, m, rfl, r, r.t.absF Δ, rfl⟩ : DefHit Δ T)
+        match (← get).findSome? (·.lift? d.scope.upto targs Δ T A) with
+        | some h => pure h
+        | none => do
+          let r ← tryCatch (chkV n E' Δ (T.drop m) d.body A) (fun e => throw (inDef x sp e))
+          modify (⟨d.scope.upto, targs, Δ, T.drop m, A, r, r.t.absF Δ, rfl⟩ :: ·)
+          pure (⟨A, T.drop m, m, rfl, r, r.t.absF Δ, rfl⟩ : DefHit Δ T)
+    -- The use records the elaborator's key of the `def`, when the elaboration generated it.
+    let info : TInfo := { sp, key := E.scope.keys.find? (·.name == x) }
     match h with
     | ⟨A, _, m, hT, r, some f, hab⟩ =>
-      pure ⟨A, rUse { sp } x d.scope.upto targs m hT r f hab.symm⟩
+      pure ⟨A, rUse info x d.scope.upto targs m hT r f hab.symm⟩
     | ⟨A, _, _, _, _, none, _⟩ => do
       let r ← tryCatch (chkV n (E.forDef T d tps) Δ T d.body A) (fun e => throw (inDef x sp e))
-      pure ⟨A, rUseAt { sp } x d.scope.upto targs r⟩
+      pure ⟨A, rUseAt info x d.scope.upto targs r⟩
 
 end
 

@@ -182,6 +182,7 @@ def _root_.Frontend.Val.fill (hv : String → Option Val) (hc : String → Optio
   | .bangThunk sp M => .bangThunk sp (M.fill hv hc)
   | .bangThunkv sp M => .bangThunkv sp (M.fill hv hc)
   | .run sp M => .run sp (M.fill hv hc)
+  | .mark sp k V => .mark sp k (V.fill hv hc)
   | V => V
 
 def _root_.Frontend.Comp.fill (hv : String → Option Val) (hc : String → Option Comp) : Comp → Comp
@@ -333,7 +334,7 @@ def children (c : TCx) (exp : Option CVTy) : Val → List (Option CVTy × Val)
   | .inr _ V => [(match exp with | some (.sum _ B) => some B | _ => none, V)]
   | .ascribe _ V A => [(c.elabV A, V)]
   | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V | .unroll _ V
-  | .inst _ V _ | .shorten _ _ _ _ V => [(none, V)]
+  | .inst _ V _ | .shorten _ _ _ _ V | .mark _ _ V => [(none, V)]
   | _ => []
 
 /-- A call run in direct style in a value, at any depth outside nested computations: its span
@@ -465,7 +466,7 @@ def _root_.Frontend.Val.names (n : String) : Val → Bool
   | .var _ x | .clone _ x | .defApp _ x _ => x == n
   | .pair _ V W | .app _ V W => V.names n || W.names n
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.names n
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.names n
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.names n
   | _ => false
 
@@ -565,6 +566,8 @@ inductive Origin where
   | sugar (what : String)
   | loop (msg : String)
   | effects (r : Elab.Effects.Report)
+  /-- The key of a `def` the elaboration generates (`DefKey`). -/
+  | defKey (k : DefKey)
   deriving BEq, Inhabited
 
 /-- Where generated code came from, and what the elaboration reports: per span, its origins. -/
@@ -602,7 +605,7 @@ def _root_.Frontend.Val.exitAt : Val → Option Span
   | .sugar sp .brk | .sugar sp .cont | .app sp (.sugar _ .retE) _ => some sp
   | .pair _ V W | .app _ V W => V.exitAt.orElse fun _ => W.exitAt
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.exitAt
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.exitAt
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.exitAt
   | _ => none
 
@@ -634,7 +637,7 @@ def _root_.Frontend.Val.anySugar (p : VSugar → Bool) : Val → Bool
   | .sugar _ s => p s
   | .pair _ V W | .app _ V W => V.anySugar p || W.anySugar p
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.anySugar p
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.anySugar p
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.anySugar p
   | _ => false
 
@@ -660,7 +663,7 @@ def _root_.Frontend.Val.sugarAt (p : VSugar → Bool) : Val → Option Span
   | .sugar sp s => if p s then some sp else none
   | .pair _ V W | .app _ V W => (V.sugarAt p).orElse fun _ => W.sugarAt p
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.sugarAt p
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.sugarAt p
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.sugarAt p
   | _ => none
 
@@ -1432,6 +1435,7 @@ def mResV (inj : Nat → Option (Nat × Nat)) : Val → Val
   | .bangThunk sp M => .bangThunk sp (mResC inj M)
   | .bangThunkv sp M => .bangThunkv sp (mResC inj M)
   | .run sp M => .run sp (mResC inj M)
+  | .mark sp k V => .mark sp k (mResV inj V)
   | V => V
 
 def mResC (inj : Nat → Option (Nat × Nat)) : Comp → Comp
@@ -1996,9 +2000,13 @@ def divCase (sp : Span) (w : BoCa.Width) (o : SurfOp) (a b : Val) (ok : Val → 
       false) false
 
 /-- `a o b` at `w` by a divisor at which it cannot fail (`safeDivisor`): its `inr` arm is never
-taken, and answers `0` only to be typed. -/
+taken, and answers `0` only to be typed. The value is marked as the scheme (`SchemeMark.divLit`),
+whose derived node records the operation and the literal (SPEC §3). -/
 def divUnchecked (sp : Span) (w : BoCa.Width) (o : SurfOp) (a b : Val) : Val :=
-  .run sp (divCase sp w o a b (.ret sp) (fun _ => .ret sp (litAt sp w 0)))
+  let V := Val.run sp (divCase sp w o a b (.ret sp) (fun _ => .ret sp (litAt sp w 0)))
+  match b with
+  | .const _ (.lit c) => .mark sp (.divLit (divHost w o) c) V
+  | _ => V
 
 /-- `checked_div(a, b)` or `checked_rem(a, b)` at `w`: `inl q`, or `inr e`, `e : DivError`:
 `inl ()` for a zero divisor, `inr ()` for `MIN / -1`. -/
@@ -2211,7 +2219,7 @@ def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
     -- A value: a cell scoped to the call.
     let cell : Val := .app sp (.const sp (.alloc As)) place
     pure (.run sp (.letPair sp ⟨"io_sc", sp⟩ ⟨"io_sr", sp⟩
-      (.app sp (.app sp (.const sp C) cell) cb)
+      (.mark sp (.lendCell (m == .mut)) (.app sp (.app sp (.const sp C) cell) cb))
       (.ret sp (.pair sp (.app sp (.const sp (.free As)) (.var sp "io_sc")) (.var sp "io_sr")))))
 
 /-- The body of a borrow callback: `r <- M; return (boxed['l] r)`. -/
@@ -2319,7 +2327,7 @@ made while elaborating the declaration it is in). -/
 def refresh (c : TCx) : DM TCx := do
   let st ← get
   let ds := (st.lib ++ st.out ++ st.caps).toArray
-  pure { c with E := { c.E with scope := ⟨ds, ds.size, []⟩ } }
+  pure { c with E := { c.E with scope := ⟨ds, ds.size, [], []⟩ } }
 
 /-! #### The total `for` over data  `[spec §16]`
 
@@ -2872,7 +2880,7 @@ def opsV (c : TCx) : Nat → Val → List (Nat × Nat)
         own ++ opsV c k f ++ opsV c k W
       | .pair _ V W => opsV c k V ++ opsV c k W
       | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-      | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => opsV c k V
+      | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => opsV c k V
       | .run _ M | .thunkv _ M => opsC c k M
       | _ => []
 end
@@ -2923,6 +2931,8 @@ def unwindingC? (sp : Span) : Val → Option Comp
       some (.bind sp k none (.ret sp (.const ksp C)) (.bind sp p none (.ret sp P)
         (.bind sp f cbTy (.ret sp cb) (.app sp (.app sp (.force sp k) p) f) false) false) false)
     | _ => none
+  -- A lent cell's mark is the plain borrow's scheme, not the unwinding form's.
+  | .mark _ _ V => unwindingC? sp V
   | _ => none
 where
   ty (x : Ident) (L B : VTy) (r : Frontend.Row) : VTy :=
@@ -2937,6 +2947,7 @@ def relaxedC? (sp : Span) : Val → Option (Ident × Comp)
       (.thunkv _ (.lamL _ _ _ (.ret _ (.thunkv _ (.lam _ m _ M))))) =>
     let p : Ident := ⟨s!"io_rp{sp.start.line}_{sp.start.col}", sp⟩
     some (m, .bind sp p none (.ret sp P) (.withbor2r sp x b A B r p m M) false)
+  | .mark _ _ V => relaxedC? sp V
   | _ => none
 
 /-- A borrow block, as written. -/
@@ -3022,7 +3033,7 @@ def rmSelfIn : Val → Bool
   | V@(.app _ f W) => (rmSelfApp? V).isSome || rmSelfIn f || rmSelfIn W
   | .pair _ V W => rmSelfIn V || rmSelfIn W
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => rmSelfIn V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => rmSelfIn V
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => rmSelfInC M
   | _ => false
 
@@ -3428,8 +3439,13 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           | some r => do pure ((Const.unwinding (← (surfRow c ksp r : Except Error Frontend.Row)) C).getD C)
           | none => pure C
         let Tbs := if k == .imm then VTy.imm lsp (.var lsp x) As else .mut lsp (.var lsp x) As
-        pure (.app sp (.app sp₂ (.const ksp C) P') (.thunkv tsp (.lamL lsp xi (.dom lsp)
-          (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
+        let blk : Val := .app sp (.app sp₂ (.const ksp C) P') (.thunkv tsp (.lamL lsp xi (.dom lsp)
+          (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S'))))))
+        -- A cell allocated for the block (a handler's state given as a value) is the scheme of a
+        -- lent cell (SPEC §35).
+        pure (match P with
+          | .app _ (.sugar _ (.call "alloc")) _ => .mark sp (.lendCell (k == .mut)) blk
+          | _ => blk)
       | .mut, .mut a A => do
         -- A `mut` borrow reborrowed for the block (`withbor3`): the place gets it back after.
         let dom ← need lsp "the block's bound" (c.elabL (.dom lsp))
@@ -3755,6 +3771,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
     | .bangThunkv sp M => do
       pure (.bangThunkv sp (← surfC n c (exp.bind fun | .bang (.thunk C) => some C | _ => none) M))
     | .run sp M => do pure (.run sp (← surfC n c (exp.map .ret) M))
+    | .mark sp k V => do pure (.mark sp k (← surfV n c exp V))
     | V => pure V
 
 /-- A binary operator applied to `a` and `b`, at the width of its operands; with `checked`,
@@ -4377,9 +4394,16 @@ io_fb{sfx} <- return (unbang bounded_fix[{At}, {FR}]);
 io_fa{sfx} <- return (io_gs{sfx}, (io_nb{sfx}, ({i0}, {stateS})));
 {rname} <- force io_fb{sfx} io_fa{sfx};
 "
+    -- A counted walk of a view is the scheme its derived node records (SPEC §3, §16): the
+    -- `count_try` is parsed apart and put in the loop marked.
+    let walkOf : Option Bool := if rowLoop then none else match src with
+      | .view m _ _ | .lend _ m _ => some m
+      | .owned _ => some false
+      | _ => none
+    let ctSrc := s!"count_try[{St}, {stepT}](!\{ (io_i{sfx}, io_s{sfx}) ->
+  {destructSrc s!"io_s{sfx}" (curN ++ wsN)}{wrapStep elem} }, {bound}, {i0}, {stateS})"
     let core := (if rowLoop then rowCore else
-      s!"{pre}{rname} <- return count_try[{St}, {stepT}](!\{ (io_i{sfx}, io_s{sfx}) ->
-  {destructSrc s!"io_s{sfx}" (curN ++ wsN)}{wrapStep elem} }, {bound}, {i0}, {stateS});
+      s!"{pre}{rname} <- return {if walkOf.isSome then "io_hole_walk" else ctSrc};
 ") ++ s!"{reabort}io_j{sfx} : {Jt} <- case io_r{sfx} \{
     inl io_s{sfx} -> {destructSrc s!"io_s{sfx}" (curN ++ wsN)}return ({jEnded})
   | inr io_e{sfx} -> let (io_w{sfx}, io_o{sfx}) = io_e{sfx};
@@ -4411,6 +4435,14 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
       else s!"let (io_jw{sfx}, io_ob{sfx}) = io_j{sfx};\n{destructSrc s!"io_jw{sfx}" outN}{value}force io_hole_rest"
     let what := "a `for` over data (a counted loop)"
     let L ← (template sp what (loopSrc ++ after) : SM Comp)
+    let L ← match walkOf with
+      | some m => do
+        let W ← ((parseComp s!"return {ctSrc}").mapError (internalError sp what) : Except Error Comp)
+        match W.respan sp with
+        | .ret _ ct => pure (L.fill (fun h => if h == "io_hole_walk" then some (.mark sp (.walk m) ct)
+            else none) (fun _ => none))
+        | _ => throw ⟨sp, "internal error: a counted walk's loop"⟩
+      | none => pure L
     -- The body: its terminals go on, and its exits leave with the threaded variables.
     let st (tsp : Span) : Val := tupleVal tsp (curN ++ wsN)
     let exitV (tsp : Span) (o : Val) : Val := .inr tsp (.pair tsp (tupleVal tsp wsN) o)
@@ -4993,6 +5025,8 @@ def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) → Option 
     let inst := Decl.def_ tsp ⟨name, tn.span⟩ [] A' V' mk'
     let inst := Elab.fillDecl (st.lib ++ st.out) st.caps inst
     let libNames := if st.libNames.contains tn.name then name :: st.libNames else st.libNames
+    (modify (· ++ [(sp, Origin.defKey { name, origin := tn.name, targs := key.2, body := name })]) :
+      SM Unit)
     let st' ← (elabDecl n { st with insts := (key, name) :: st.insts, libNames } inst : SM DivSt)
     set { st' with quiet := st.quiet }
     return (name, extras)
@@ -5401,6 +5435,7 @@ def specV : Nat → TCx → Val → DM Val
     | .bangThunk sp M => do pure (.bangThunk sp (← specC n c.pushDead M))
     | .bangThunkv sp M => do pure (.bangThunkv sp (← specC n c M))
     | .run sp M => do pure (.run sp (← specC n c M))
+    | .mark sp k V => do pure (.mark sp k (← specV n c V))
     | V => pure V
 
 /-- A computation with its calls of higher-order functions specialized. -/
@@ -5646,6 +5681,8 @@ def elaborateS (p : Program) : SM (Program × Nat × List SiteRec) := do
   let hide := decls₀.filter (fun d => ioRef.contains d) ++ divDecls ++ wasiDecls
   let fxr ← (Elab.Effects.elaborate decls₀ libFns hide divDecls wasiDecls : Except Error _)
   let (decls, fx, perTurn, pcaps) := (fxr.decls, fxr.reports, fxr.perTurn, fxr.platform)
+  for k in fxr.keys do
+    modify (· ++ [(Span.none, .defKey k)])
   -- The platform elaborated for `main` is the library's: its externs and its handlers' clauses
   -- come first, before the program's own declarations.
   let platNames := wasiDecls.filterMap fun

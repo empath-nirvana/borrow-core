@@ -691,10 +691,10 @@ def finalOf (E : Env) (sp : Span) (_S : CRow) (u : List Bool) :
   pure r
 
 /-- A marked scheme's derived node, over its checked term (SPEC §3). -/
-def markIt {j : Jdg} (sp : Span) : SchemeMark → Res Δ T j → Except Error (Res Δ T j)
-  | .litFn bs, r => match rLitFn (at_ sp) bs r with
-    | some r' => pure r'
-    | none => err sp "internal error: a string literal's table is not the scheme of its bytes"
+def markIt {j : Jdg} (sp : Span) (k : SchemeMark) (r : Res Δ T j) : Except Error (Res Δ T j) :=
+  match rMarked (at_ sp) k r with
+  | some r' => pure r'
+  | none => err sp s!"internal error: a marked scheme ({repr k}) is not the scheme's term"
 
 /-- `[then]` at the row `S`: `N` (its binder `x` closed) and the finaliser `D` at one context. -/
 def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow} {pN : Pins}

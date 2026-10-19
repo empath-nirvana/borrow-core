@@ -261,6 +261,27 @@ EXTRA = {"effHandleV": [("ks", "List ClauseKinds.HKind"), ("site", "Option HSite
          "effHandleT": [("site", "Option HSite")]}
 
 
+# Rule arguments that are terms but are determined by an equation on a child's erasure: the node
+# does not hold them, and its erasure reads them off the child's (`Expr.pairL`, `Expr.toVal`, …,
+# `scripts/pin/TExpr.tmpl.lean`). No node holds an untyped term (`lint_texpr`).
+DERIVED = {
+    "effHandleT": {"Hr": "(Expr.pairL (tc.erase))", "Hc": "(Expr.pairR (tc.erase))"},
+    "reify": {"res": "(Expr.toVal (tres.erase))"},
+    "letPoly": {"b": "(Expr.lamBody (tV.erase))", "N": "(Expr.letBody (tN.erase) (tV.erase))"},
+}
+# The projections of those rules: after each equation is rewritten in its premise and in the goal,
+# the read-off arguments are the rule's (`Expr.toVal_val`, `Expr.letBody_shift`, `subst_unfill`).
+PROJ_TAIL = {
+    "reify": ["rw [Expr.toVal_val]"],
+}
+PROJ_LETPOLY = """  | letPoly a0 a1 a2 a3 a4 a5 ih0 ih1 =>
+      dsimp only [TExpr.erase]
+      rw [a3] at ih0
+      rw [a5] at ih1
+      rw [a3, a5, Expr.letBody_shift, Expr.lamBody_lam]
+      exact JN.letPoly a0 a1 ih0 (by rw [subst_unfill a1]; exact ih1)"""
+
+
 def kid_name(h):
     return "t" + h[1:] if h.startswith("h") else "t_" + h
 
@@ -328,6 +349,7 @@ class Rule:
                 self.pass_kid, self.pass_eq = same[0][1], True
             else:
                 self.erase = subst(self.cexpr, self.sigma)
+        self.erase = subst(self.erase, DERIVED.get(name, {}))
         used = idents(self.erase)
         self.fields = []
         for nm, kind, t in self.order:
@@ -335,7 +357,7 @@ class Rule:
                 continue
             if kind == "(" and t not in DATA_TY:
                 continue  # a proof or a premise
-            if t == "Expr" and nm not in used:
+            if (t == "Expr" and nm not in used) or nm in DERIVED.get(name, {}):
                 continue  # determined by an equation; an index of the typed rule only
             self.fields.append((nm, t))
         # at a split, the use masks of its two parts: the slots each uses, as the checker found
@@ -435,6 +457,13 @@ def typed_rule(r, fieldsof):
         if not keep:
             continue
         o, c = kind, {"(": ")", "{": "}", "[": "]"}[kind]
+        if ty is None:
+            # a term the node does not hold is an index of the typed rule: give it its type
+            typed = [n for n in keep if n in DERIVED.get(r.name, {})]
+            keep = [n for n in keep if n not in typed]
+            out += [f"{o}{n} : {next(t for m, _, t in r.order if m == n)}{c}" for n in typed]
+            if not keep:
+                continue
         tys = f" : {subst(ty, sig)}" if ty else ""
         out.append(f"{o}{' '.join(keep)}{tys}{c}")
         if r.split and ty == r.split[1] and names == r.split[0]:
@@ -478,6 +507,11 @@ def typed_rule(r, fieldsof):
                     rws.append(f"rw [{q}] at {ih}")
                     if r.pass_eq and p[1] == r.pass_kid:
                         rws.append(f"rw [{q}]")
+    if r.name == "letPoly":
+        return ctor, PROJ_LETPOLY.replace("JN", jn)
+    if r.name in DERIVED:
+        rws += [x.split(" at ")[0] for x in rws if x.startswith("rw [") and " at " in x]
+        rws += PROJ_TAIL.get(r.name, [])
     lines = [f"  | {' '.join([r.name] + pat + ihs)} =>", "      dsimp only [TExpr.erase]"]
     lines += [f"      {x}" for x in rws]
     lines.append(f"      exact {jn}.{r.name} {' '.join(args)}".rstrip())
@@ -557,9 +591,138 @@ for tag, rules in (("AT", rulesAt), ("P", rulesP)):
     tder = tder.replace(f"--@{tag}_RULES@", "\n".join(c for c, _ in pairs))
     tder = tder.replace(f"--@{tag}_ERASE@", "\n".join(p for _, p in pairs))
 
+def lint_texpr(txt):
+    """The nodes that hold an untyped term (`Expr`, `Val`, a surface term): none may."""
+    lines = txt.splitlines()
+    i = next(k for k, l in enumerate(lines) if l.startswith("inductive TExpr "))
+    j = next(k for k in range(i + 1, len(lines)) if lines[k] and not lines[k].startswith(" "))
+    body = strip_comments("\n".join(lines[i + 1:j]))
+    bad = []
+    for m in re.finditer(r"^  \| (\S+)(.*?)(?=^  \| |\Z)", body, re.S | re.M):
+        groups, _ = binders(m.group(2) + " :")
+        for _, names, ty in groups:
+            if ty and re.search(r"(?<![\w.])(BoCa\.)?(Expr|Val|Comp|Frontend\.Val|Frontend\.Comp)(?![\w.])", ty):
+                bad.append(f"{m.group(1)} ({' '.join(names)} : {ty})")
+    return bad
+
+
+untyped = lint_texpr(tex)
+if untyped:
+    print("gen-pin: typed nodes hold an untyped term: " + "; ".join(untyped))
+    sys.exit(1)
+
+# --- a typed derivation at a wider lifetime context (`Frontend/Check/TLife.lean`) ----------------
+# A rule whose node's type or premises are read at `⊓Δ` (the borrows), or that takes a fresh
+# lifetime variable (`Δ.find? x = none`), is kept at its `Δ`: a body that holds one is checked at
+# each lifetime context. Every other premise on `Δ` is kept by a larger `Δ` (`LeΔ`), and the
+# freshness of a binder from the larger context's bounds is the extension's (`ExtΔ`).
+MONO = [
+    (r"^Δ\.EntailsLt ", "(LeΔ.entailsLt he.1 {a})"),
+    (r"^Δ\.EntailsLe ", "(LeΔ.entailsLe he.1 {a})"),
+    (r"^∀ y u, Δ\.find\? y = some u → u\.mentions x = false$",
+     "(ExtΔ.avoid he (by simp [TExpr.lifeBinders]) {a})"),
+    (r"^CtxOutlives Δ ", "(LeΔ.ctxOutlives he.1 {a})"),
+    (r"^Row\.AnsOutlives Δ ", "(LeΔ.ansOutlives he.1 {a})"),
+]
+
+
+def mentions_delta(ty):
+    return re.search(r"(?<![\w'])Δ(?![\w'])", ty) is not None
+
+
+def is_dom(r):
+    txt = " ".join(ty or "" for _, _, ty in r.groups) + " " + r.cjdg
+    return "meetOfDom" in txt or "find? x = none" in txt or "find? c = none" in txt
+
+
+def life_cases(r, tag):
+    """`TExpr.lifeBinders`, `TExpr.domFree`, `TExpr.reAb` cases at `r`, and its `weakenΔ` case."""
+    names = ["ii", "jj"] + [n for n, _ in r.fields] + r.kids
+    pat = " ".join(names)
+    binders = []
+    kidΔ = {}
+    for p in r.prem:
+        g = norm(p[2])
+        kidΔ[p[1]] = g
+        m = re.fullmatch(r"\(Δ\.extend (\S+) .*\)", g)
+        if m:
+            binders.append(f"[{m.group(1)}]")
+        elif g != "Δ":
+            sys.exit(f"gen-pin: {r.name}: a premise at the lifetime context {g}")
+    kids_b = [f"{k}.lifeBinders" for k in r.kids]
+    bcase = f"  | .{r.name} {pat} => " + (" ++ ".join(binders + kids_b) if binders or kids_b else "[]")
+    dom = is_dom(r)
+    dcase = f"  | .{r.name} {pat} => " + ("false" if dom else
+        (" && ".join(f"{k}.domFree" for k in r.kids) if r.kids else "true"))
+    args = ["ii", "jj"] + [n for n, _ in r.fields] + \
+        [f"({k}.reAb {kidΔ[k].replace('Δ', 'Δr')})" for k in r.kids]
+    rcase = f"  | .{r.name} {pat} => .{r.name} {' '.join(args)}"
+    return bcase, dcase, rcase
+
+
+def weaken_life_case(r):
+    jn = r.judg.split()[0]
+    tj = "T" + jn[1:]
+    if is_dom(r):
+        return f"  | {r.name} => intro _ _ hd; simp [TExpr.domFree] at hd"
+    pat, args, ihs = [], [], []
+    n = 0
+    for kind, names, ty in r.groups:
+        if kind != "(":
+            continue
+        for nm in names:
+            v = f"a{n}"
+            n += 1
+            pat.append(v)
+            p = next((p for p in r.prem if p[0] == nm), None) if ty and ty.startswith(jn + " ") else None
+            if p is None:
+                t = norm(ty or "")
+                if any(k in idents(subst(t, r.sigma)) for k in r.kids):
+                    args.append(f"(by rw [TExpr.reAb_erase]; exact {v})")
+                elif mentions_delta(t):
+                    m = next((f for rx, f in MONO if re.search(rx, t)), None)
+                    if m is None:
+                        sys.exit(f"gen-pin: {r.name}: a premise on Δ not kept by a larger one: {t}")
+                    args.append(m.format(a=v))
+                else:
+                    args.append(v)
+                if r.split and ty == r.split[1]:
+                    pat.append(f"a{n}")
+                    args.append(f"a{n}")
+                    n += 1
+            else:
+                ih = f"ih{len(ihs)}"
+                ihs.append(ih)
+                g = norm(p[2])
+                if g == "Δ":
+                    dd, ext = "Δ'", "(ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz]))"
+                else:
+                    m = re.fullmatch(r"\(Δ\.extend (\S+) (.*)\)", g)
+                    dd = "_"
+                    ext = "(ExtΔ.extend he (fun z hz => by simp [TExpr.lifeBinders, hz]))"
+                args.append(f"({ih} {dd} {ext} (by simp_all [TExpr.domFree]))")
+                if not p[6]:
+                    q = f"a{n}"
+                    n += 1
+                    pat.append(q)
+                    args.append(f"(by rw [TExpr.reAb_erase]; exact {q})")
+    lines = [f"  | {' '.join([r.name] + pat + ihs)} =>", "      intro Δ' he hd",
+             f"      exact {tj}.{r.name} {' '.join(args)}".rstrip()]
+    return "\n".join(lines)
+
+
+tlife = (TMPL / "TLife.tmpl.lean").read_text()
+lc = [life_cases(r, "P") for r in rulesP]
+tlife = tlife.replace("--@BINDERS@", "\n".join(a for a, _, _ in lc))
+tlife = tlife.replace("--@DOMFREE@", "\n".join(b for _, b, _ in lc))
+tlife = tlife.replace("--@REAB@", "\n".join(c for _, _, c in lc))
+tlife = tlife.replace("--@P_WEAKENL@", "\n".join(weaken_life_case(r) for r in rulesP))
+tlife = tlife.replace("--@AT_WEAKENL@", "\n".join(weaken_life_case(r) for r in rulesAt))
+
 stale = []
 outs = (("Core/PinDerives.lean", der), ("Core/PinFundamental.lean", fun),
-        ("Frontend/Check/TExpr.lean", tex), ("Frontend/Check/TDerives.lean", tder))
+        ("Frontend/Check/TExpr.lean", tex), ("Frontend/Check/TDerives.lean", tder),
+        ("Frontend/Check/TLife.lean", tlife))
 for name, txt in outs:
     path = ROOT / name
     if CHECK:
@@ -572,6 +735,6 @@ if CHECK:
         print("stale: " + ", ".join(stale) + " (run python3 scripts/gen-pin.py)")
         sys.exit(1)
     print(", ".join(n for n, _ in outs) + f" up to date ({len(ctors)} constructors, "
-          f"{len(rulesP)} typed nodes)")
+          f"{len(rulesP)} typed nodes, none holding an untyped term)")
 else:
     print(f"{len(ctors)} constructors copied, {len(rulesP)} typed nodes")

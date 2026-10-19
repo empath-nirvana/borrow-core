@@ -377,6 +377,26 @@ structure SiteRec where
   state : List (String × VTy) := []
   deriving Repr, Inhabited
 
+/-- **The elaborator's key of a `def` it generates** (SPEC §3): the template, function or group it
+is a copy of (`origin`), a template instance's type arguments (`targs`), and a copy's keys: the
+handlers that serve its effects, the static names of the sites that do (`n…`), and its blocks'
+(`keys`). Copies that differ only in their sites' names are one body (`body`: the origin and its
+keys but the sites'). -/
+structure DefKey where
+  name : String
+  origin : String
+  targs : List VTy := []
+  keys : List String := []
+  body : String
+  deriving DecidableEq, Repr, Inhabited
+
+/-- A copy's key that is a site's static name (`n7`). -/
+def DefKey.isSite (k : String) : Bool := k.startsWith "n" && (k.drop 1).all Char.isDigit && k.length > 1
+
+/-- The key of a copy of `origin` at `keys`, named `name`. -/
+def DefKey.copy (name origin : String) (keys : List String) : DefKey :=
+  { name, origin, keys, body := origin ++ "__" ++ "_".intercalate (keys.filter (!DefKey.isSite ·)) }
+
 /-- A handler site of an iteration effect (SPEC §15), as `Frontend.Elab.Effects` leaves it for the
 typed elaboration: the site's static name, the type of the element its operation passes, the
 variable a `for`'s site threads through the operation (its copy of the callee takes it first and
@@ -493,6 +513,18 @@ checks the value as written and builds the scheme's derived node over it (SPEC �
 inductive SchemeMark where
   /-- A string literal's table (SPEC §17): the `!` function from an index to the bytes `bs`. -/
   | litFn (bs : List Nat)
+  /-- A division by the literal `c` at which it cannot fail, by the host operation `op`
+  (SPEC §39). -/
+  | divLit (op : BoCa.HostOp) (c : BoCa.IntLit)
+  /-- A counted walk of a view (SPEC §16): `count_try` over the view's length; `m` the view is
+  `mut`. -/
+  | walk (m : Bool)
+  /-- The record of a recursive group's members, read off its self-reference to call member `j`
+  of `n` (SPEC §20). -/
+  | selfCall (j n : Nat)
+  /-- The lend of a cell allocated for it (SPEC §35): `withbor (alloc v) cb`; `m` the lend is
+  `mut`. -/
+  | lendCell (m : Bool)
   deriving DecidableEq, Repr, Inhabited
 
 mutual

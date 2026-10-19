@@ -60,6 +60,7 @@ def goV (ks : List Key) (owner : String) : Val → Val
   | .bangThunk sp M => .bangThunk sp (goC ks owner M)
   | .bangThunkv sp M => .bangThunkv sp (goC ks owner M)
   | .run sp M => .run sp (goC ks owner M)
+  | .mark sp k V => .mark sp k (goV ks owner V)
   | V => V
 
 /-- The divisions of a computation that can fail, written to raise. -/
@@ -115,7 +116,7 @@ def candV : Val → Bool
   | .app _ (.sugar _ (.op o)) (.pair _ a b) => candidate o a b || candV a || candV b
   | .pair _ V W | .app _ V W => candV V || candV W
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => candV V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => candV V
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => candC M
   | _ => false
 

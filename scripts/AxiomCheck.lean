@@ -5,6 +5,7 @@ import Core
 import Frontend.Check.Externs
 import Frontend.Check.Program
 import Frontend.Check.TFacts
+import Frontend.Check.Derived
 /-! The theorems `SPEC.md` names, with their axioms. -/
 #print axioms BoCa.Fig16.LogRel.Typed.fundamentalProperty
 #print axioms BoCa.Fig16.LogRel.Typed.adequacy
@@ -335,6 +336,23 @@ import Frontend.Check.TFacts
 #print axioms BoCa.Fig16.LogRel.Core.Check.SplitMasks.ins
 #print axioms BoCa.Fig16.LogRel.Core.Check.cellsOkB_sound
 #print axioms Frontend.Check.Checked.cells_closed
+#print axioms BoCa.Fig16.LogRel.Core.Check.divLitB_shift
+#print axioms BoCa.Fig16.LogRel.Core.Check.walkB_shift
+#print axioms BoCa.Fig16.LogRel.Core.Check.selfCallB_shift
+#print axioms BoCa.Fig16.LogRel.Core.Check.lendCellB_shift
+#print axioms BoCa.Fig16.LogRel.Core.Check.divLit_some32
+#print axioms BoCa.Fig16.LogRel.Core.Check.divLit_some64
+#print axioms BoCa.Fig16.LogRel.Core.Check.divLit_some8
+#print axioms BoCa.Fig16.LogRel.Core.Check.walk_index_lt
+#print axioms BoCa.Fig16.LogRel.Core.Check.walk_get_leaf
+#print axioms BoCa.Fig16.LogRel.Core.Check.walk_split_first
+#print axioms BoCa.Fig16.LogRel.Core.Check.Expr.toVal_val
+#print axioms BoCa.Fig16.LogRel.Core.Check.Expr.letBody_shift
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.weakenΔ
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.weakenΔ
+#print axioms BoCa.Fig16.LogRel.Core.Check.TExpr.reAb_erase
+#print axioms BoCa.Fig16.LogRel.Core.Check.extΔB_sound
+#print axioms Frontend.Check.TTied.weakenΔ
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.withbor2_witness_free
 -- SPEC §19, *Typing*: the names a run raises, and the errors a cancel keeps
 #print axioms BoCa.Fig16.LogRel.Core.raiseOK_head

@@ -319,6 +319,8 @@ structure St where
   exits : Bool := false
   /-- Each handler site made, for the checker to read at its `handle` nodes (`SiteRec`). -/
   sites : Array SiteRec := #[]
+  /-- The key of each copy made (`DefKey`), for the checker's `use` nodes. -/
+  keys : Array DefKey := #[]
 
 abbrev EM := StateT St (Except Error)
 
@@ -340,6 +342,10 @@ def reportSite (sp : Span) (n : Nat) (head : String) (ops : List String) (tail :
 
 /-- Record the handler site `r` for the checker, library code's too. -/
 def recordSite (r : SiteRec) : EM Unit := modify fun s => { s with sites := s.sites.push r }
+
+/-- Record a copy's key, once. -/
+def recordKey (k : DefKey) : EM Unit :=
+  modify fun s => if s.keys.any (·.name == k.name) then s else { s with keys := s.keys.push k }
 
 /-- The handler that serves `main` a division's error it handles nowhere (SPEC §39). -/
 def mainDivHandler : String := "main_div_error"
@@ -760,7 +766,7 @@ def rowV (env : Env) : Nat → Val → List Inst
       | none => (env.cbRows.lookup x).getD []
     | .pair _ V W => env.union (rowV env n V) (rowV env n W)
     | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => rowV env n V
+    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => rowV env n V
     | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => rowC env n M
     | _ => []
 
@@ -952,7 +958,7 @@ def refsV : Nat → Val → List String
     | .var _ x | .defApp _ x _ => [x]
     | .pair _ V W | .app _ V W => refsV n V ++ refsV n W
     | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => refsV n V
+    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => refsV n V
     | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => refsC n M
     | _ => []
 
@@ -979,7 +985,7 @@ def unboxesV (k : String) : Nat → Val → Bool
     | .unbox _ (.var _ x) => x == k
     | .pair _ V W | .app _ V W => unboxesV k n V || unboxesV k n W
     | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => unboxesV k n V
+    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => unboxesV k n V
     | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => unboxesC k n M
     | _ => false
 
@@ -1118,7 +1124,7 @@ def Cx.givenV (cx : Cx) : Nat → Val → List Cap
     | .app _ (.app _ (.sugar _ (.borrow ..)) _) _ => []
     | .app _ f W | .pair _ f W => cx.givenV n f ++ cx.givenV n W
     | .inl _ V | .inr _ V | .ascribe _ V _ | .roll _ V | .unroll _ V | .boxed _ _ V
-    | .unbox _ V | .unbang _ V | .inst _ V _ | .sub _ V _ | .shorten _ _ _ _ V => cx.givenV n V
+    | .unbox _ V | .unbang _ V | .inst _ V _ | .sub _ V _ | .shorten _ _ _ _ V | .mark _ _ V => cx.givenV n V
     | .run _ M => cx.givenC n M
     | _ => []
 /-- `Cx.givenV` of a computation. -/
@@ -1571,7 +1577,7 @@ def withInV (env : Env) : Nat → Val → Bool
       pull || comp || withInV env k f || withInV env k W
     | .pair _ f W => withInV env k f || withInV env k W
     | .inl _ V | .inr _ V | .ascribe _ V _ | .roll _ V | .unroll _ V | .boxed _ _ V
-    | .unbox _ V | .unbang _ V | .inst _ V _ | .sub _ V _ | .shorten _ _ _ _ V => withInV env k V
+    | .unbox _ V | .unbang _ V | .inst _ V _ | .sub _ V _ | .shorten _ _ _ _ V | .mark _ _ V => withInV env k V
     | .run _ M | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M => withInC k M
     | _ => false
 where
@@ -1936,6 +1942,7 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
     | .inst sp V l => do let (b, V') ← goV k cx cs V; pure (b, .inst sp V' l)
     | .sub sp V l => do let (b, V') ← goV k cx cs V; pure (b, .sub sp V' l)
     | .shorten sp m σ l V => do let (b, V') ← goV k cx cs V; pure (b, .shorten sp m σ l V')
+    | .mark sp m V => do let (b, V') ← goV k cx cs V; pure (b, .mark sp m V')
     | .run sp M => do
       let csM := cx.needC M
       if csM.isEmpty && !cx.ctlC M then return ([], .run sp (← trC k cx [] false M))
@@ -1983,7 +1990,7 @@ def blockResult : Nat → Cx → Span → Val → List Cap → EM (List Bind × 
 /-- The call of member `j` through the function `g` of a self-reference, on `W` with the
 environment: `f <- return unbang g; z <- return (); a <- return (E, W); (force f z).j a`. -/
 def memberCall (sp : Span) (rs : RSelf) (j : Nat) (g f z a : String) (W : Val) : Comp :=
-  .bind sp ⟨f, sp⟩ none (.ret sp (.unbang sp (.var sp g)))
+  .bind sp ⟨f, sp⟩ none (.ret sp (.mark sp (.selfCall j rs.members.length) (.unbang sp (.var sp g))))
     (.bind sp ⟨z, sp⟩ none (.ret sp (.unit sp))
       (.bind sp ⟨a, sp⟩ none (.ret sp (capsTuple sp rs.env W))
         (.app sp (projAt sp j rs.members.length (.app sp (.force sp ⟨f, sp⟩) ⟨z, sp⟩)) ⟨a, sp⟩)
@@ -2829,7 +2836,10 @@ def copyFor : Nat → Cx → Span → String → FSig → List Inst → List Blk
     keys := keys ++ blockKeys blks
     if let some (gn, _) := g.group then
       let env := { cx.env with inLayers := [] }
-      return ← groupCopy k env sp gn (cx.rowOf g) cx.env.inLayers hs ss (keys ++ cx.env.inLayers) x blks
+      let nm ← groupCopy k env sp gn (cx.rowOf g) cx.env.inLayers hs ss (keys ++ cx.env.inLayers) x blks
+      recordKey (.copy nm x (keys ++ cx.env.inLayers))
+      return nm
+    recordKey (.copy (copyName x keys) x keys)
     copyOf k { cx.env with inLayers := [] } sp g hs ss (copyName x keys) blks
 
 /-- The layer `L` made for the group `G` (SPEC §20): a transformer of its generator, applied before
@@ -3477,6 +3487,7 @@ def pipesV (pe : PipeEnv) : Nat → Val → EM Val
     | .roll sp V => do pure (.roll sp (← pipesV pe k V))
     | .unroll sp V => do pure (.unroll sp (← pipesV pe k V))
     | .run sp M => do pure (.run sp (← pipesC pe k M))
+    | .mark sp m V => do pure (.mark sp m (← pipesV pe k V))
     | .app sp V W => do pure (.app sp (← pipesV pe k V) (← pipesV pe k W))
     | .inst sp V a => do pure (.inst sp (← pipesV pe k V) a)
     | .ascribe sp V A => do pure (.ascribe sp (← pipesV pe k V) A)
@@ -3655,6 +3666,7 @@ structure Result where
   withDivLib : Bool := false
   withPlatform : Bool := false
   sites : List SiteRec := []
+  keys : List DefKey := []
 
 /-- The program with its effects elaborated, and the reports for `bcc check`: the effect and
 handler declarations are removed, each answering handler's clauses become functions, each
@@ -3880,7 +3892,8 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
   match go.run {} with
   | .ok ((ds, spliced), st) =>
     pure { decls := ds, reports := st.reports.toList, perTurn := st.perTurn, platform := st.platform,
-           exits := st.exits, withDivLib, withPlatform := spliced, sites := st.sites.toList }
+           exits := st.exits, withDivLib, withPlatform := spliced, sites := st.sites.toList,
+           keys := st.keys.toList }
   | .error e => throw e
 
 end Frontend.Elab.Effects
