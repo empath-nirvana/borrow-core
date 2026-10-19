@@ -118,7 +118,7 @@ def checkFuel : Nat := 1 <<< 20
 /-- The environment at the top of the declaration `k`, with the handler sites the elaboration
 made (`SiteRec`). -/
 def Env.top (ds : Array Decl) (k : Nat) (sites : List SiteRec := []) : Env :=
-  ⟨⟨ds, k, sites⟩, [], [], [], [], 0, none, []⟩
+  ⟨⟨ds, k, sites⟩, [], [], [], [], 0, none⟩
 
 /-- The externs, in declaration order, each elaborated in the declarations before it. -/
 def externs (ds : Array Decl) : Except Error (List (String × CVTy)) :=

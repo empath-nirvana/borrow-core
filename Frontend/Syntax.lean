@@ -326,31 +326,6 @@ inductive BorrowKind where
   | modify
   deriving DecidableEq, Repr, Inhabited
 
-/-- A handler site of a control effect, as `Frontend.Elab.Effects` leaves it for the typed
-elaboration (SPEC §19): the handler, the site's static name, its operations `(q, A, B)` in order
-(closed), the handler's type parameters still to be determined and those already known, its
-parameters, the type of its return clause's binder and its answer type (each over the type
-parameters). A site whose operations are all abortive answers `inl` the body's value or `inr` an
-operation's argument, and its clauses run after it (SPEC §19): `after` is then the handler's own
-answer type, which the typed elaboration gives the type name `fx_res{n}` once its type parameters
-are determined. A clause that takes its continuation out of a box (`unbox k`) receives it boxed
-at `top`, `[@⊤] K` (`boxK`, SPEC §28's BOXED-κ, §30). -/
-structure HInfo where
-  name : String
-  n : Nat
-  ents : List (Qual × VTy × VTy)
-  tps : List String
-  known : List (String × VTy)
-  params : List (String × VTy)
-  retA : VTy
-  res : VTy
-  after : Option VTy := none
-  boxK : Bool := false
-  /-- The handler's lifetime parameters (SPEC §32): instantiated at the site at the meet of the
-  lifetimes in scope (`dom`); `κ`, when boxed, is boxed at the first, else at `top`. -/
-  lives : List String := []
-  deriving DecidableEq, Repr
-
 /-- What a handler site is, as `Frontend.Elab.Effects` makes it: a `with` of a control handler, a
 `for`'s site of an iteration effect, whose clause is the loop's body (`VSugar.forSite`), or a stored
 generator's, whose clause keeps the continuation (`VSugar.pullSite`).  `[spec §15, §19]` -/
@@ -375,7 +350,32 @@ structure SiteRec where
   kind : SiteKind := .handler
   ents : List (Qual × VTy × VTy)
   state : List (String × VTy) := []
-  deriving Repr, Inhabited
+  deriving DecidableEq, Repr, Inhabited
+
+/-- A handler site of a control effect, as `Frontend.Elab.Effects` leaves it for the typed
+elaboration (SPEC §19): the handler, the site's static name, its operations `(q, A, B)` in order
+(closed), the handler's type parameters still to be determined and those already known, its
+parameters, the type of its return clause's binder and its answer type (each over the type
+parameters). A site whose operations are all abortive answers `inl` the body's value or `inr` an
+operation's argument, and its clauses run after it (SPEC §19): `after` is then the handler's own
+answer type, which the typed elaboration gives the type name `fx_res{n}` once its type parameters
+are determined. A clause that takes its continuation out of a box (`unbox k`) receives it boxed
+at `top`, `[@⊤] K` (`boxK`, SPEC §28's BOXED-κ, §30). -/
+structure HInfo where
+  name : String
+  n : Nat
+  ents : List (Qual × VTy × VTy)
+  tps : List String
+  known : List (String × VTy)
+  params : List (String × VTy)
+  retA : VTy
+  res : VTy
+  after : Option VTy := none
+  boxK : Bool := false
+  /-- The handler's lifetime parameters (SPEC §32): instantiated at the site at the meet of the
+  lifetimes in scope (`dom`); `κ`, when boxed, is boxed at the first, else at `top`. -/
+  lives : List String := []
+  deriving DecidableEq, Repr
 
 /-- A handler site of an iteration effect (SPEC §15), as `Frontend.Elab.Effects` leaves it for the
 typed elaboration: the site's static name, the type of the element its operation passes, the
@@ -590,8 +590,11 @@ inductive Comp where
   /-- `abort[n.i] V`: the abortive operation `i` of the name `n` (SPEC §19's abortive rule).  `[spec §19]` -/
   | abort (sp : Span) (n i : Nat) (V : Val)
   /-- `handle_with[n](hr, hc) M`: `M` under the handler of the name `n` whose answer clause is
-  the variable `hr` and whose clauses are the tuple `hc` (`[handle]`).  `[spec §19]` -/
-  | handle (sp : Span) (n : Nat) (hr hc : Ident) (M : Comp)
+  the value `hr` and whose clauses are the tuple `hc` (`[handle]`), each a value form: the
+  elaboration writes both inline, a program may write variables. `site` is the elaboration's
+  record of the handler site, with its types in the frame of this node's code; none when the
+  program writes the node.  `[spec §19]` -/
+  | handle (sp : Span) (n : Nat) (site : Option SiteRec) (hr hc : Val) (M : Comp)
   /-- `x <- M unwind (D); N` (`x : A <- …` with the annotation): `M then x. N unwind D`, the
   finaliser `D` under one dead binder (`[then]`).  `[spec §19]` -/
   | unwind (sp : Span) (x : Ident) (A : Option VTy) (M D N : Comp)
@@ -829,6 +832,13 @@ def Const.strip : Const → Const
   | .sliceBorrowMutU x b A B r => .sliceBorrowMutU x.strip b.strip A.strip B.strip r.strip
   | .sliceBorrowImmU x b A B r => .sliceBorrowImmU x.strip b.strip A.strip B.strip r.strip
 
+/-- The record with `f` applied to each of its types. -/
+def SiteRec.mapTy (f : VTy → VTy) (r : SiteRec) : SiteRec :=
+  { r with args := r.args.map f, ents := r.ents.map (fun (q, A, B) => (q, f A, f B)),
+           state := r.state.map (fun (x, A) => (x, f A)) }
+
+def SiteRec.strip (r : SiteRec) : SiteRec := r.mapTy VTy.strip
+
 /-- A surface form with the spans of its types erased. -/
 def VSugar.strip : VSugar → VSugar
   | .handle h x As n => .handle h x (As.map VTy.strip) n
@@ -888,7 +898,7 @@ def Comp.strip : Comp → Comp
   | .loop _ ℓ src V M N => .loop .none (ℓ.map Ident.strip) src.strip V.strip M.strip N.strip
   | .perform _ n i V => .perform .none n i V.strip
   | .abort _ n i V => .abort .none n i V.strip
-  | .handle _ n hr hc M => .handle .none n hr.strip hc.strip M.strip
+  | .handle _ n st hr hc M => .handle .none n (st.map SiteRec.strip) hr.strip hc.strip M.strip
   | .unwind _ x A M D N => .unwind .none x.strip (A.map VTy.strip) M.strip D.strip N.strip
   | .withbor2r _ x b A B r p m M =>
       .withbor2r .none x.strip b.strip A.strip B.strip r.strip p.strip m.strip M.strip
@@ -942,7 +952,7 @@ def Comp.span : Comp → Span
   | .ret sp _ | .bind sp _ _ _ _ _ | .force sp _ | .lam sp _ _ _ | .app sp _ _ | .with_ sp _ _
   | .proj sp _ _ | .top sp | .letUnit sp _ _ | .letPair sp _ _ _ _ | .case sp _ _ _ _ _
   | .absurd sp _ | .lamL sp _ _ _ | .inst sp _ _ | .nuIn sp _ | .nuOut sp _
-  | .ascribe sp _ _ | .loop sp _ _ _ _ _ | .perform sp _ _ _ | .abort sp _ _ _ | .handle sp _ _ _ _
+  | .ascribe sp _ _ | .loop sp _ _ _ _ _ | .perform sp _ _ _ | .abort sp _ _ _ | .handle sp _ _ _ _ _
   | .unwind sp _ _ _ _ _ | .withbor2r sp _ _ _ _ _ _ _ _ => sp
 
 def Life.span : Life → Span

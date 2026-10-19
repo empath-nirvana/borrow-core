@@ -81,27 +81,27 @@ main : F U loop i32 1 =
   io_l21_3 : U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1) <- return (unbang upto__n1__g0) (fx_w1, (i32[10], i32[4]));
   io_hwf21_3 : !(U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1) => U loop (i32 * i32 + i32 * 1) 1) <- return (!thunkv fun (io_hl21_3 : U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)) ->
         io_hf21_3 <- return unbang unfold[loop (i32 * i32 + i32 * 1) 1, U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)] (!thunkv fun (io_hs21_3 : U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)) ->
-              < io_hr21_3 : !U (i32 * i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1) -o F ((i32 * i32 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) <- return (!thunkv fun (io_hv21_3 : i32 * i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)) ->
+              <                 handle_with[1](
+                    ((!thunkv fun (io_hv21_3 : i32 * i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)) ->
                       case io_hv21_3 {
                         inl io_ha21_3 -> return inl inl io_ha21_3
                       | inr io_hl21_3 -> return inr io_hl21_3
-                      });
-                io_hc21_3 : !U ((i32 * i32) * U ((i32 -o F ((i32 * i32 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) & F 1) -o F ((i32 * i32 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) * 1 <- return (!thunkv fun (io_hp21_3 : (i32 * i32) * U ((i32 -o F ((i32 * i32 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) & F 1)) ->
+                      }) : !U (i32 * i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1) -o F ((i32 * i32 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)))),
+                    ((!thunkv fun (io_hp21_3 : (i32 * i32) * U ((i32 -o F ((i32 * i32 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) & F 1)) ->
                       let (io_hxw21_3, io_k21_3) = io_hp21_3;
                       let (x, io_hw21_3) = io_hxw21_3;
                       acc <- return io_hw21_3;
                       acc <- return (unbang host[add32]) (acc, x);
                       io_u <- return ();
                       io_wv21_3 <- return acc;
-                      force io_k21_3.1 io_wv21_3, ());
-                handle_with[1](io_hr21_3, io_hc21_3) (nu_out force io_hs21_3).1,
-                io_chr21_3 : !U (1 -o F 1) <- return (!thunkv fun (io_cv21_3 : 1) ->
-                      return io_cv21_3);
-                io_chc21_3 : !U ((i32 * i32) * U ((i32 -o F 1) & F 1) -o F 1) * 1 <- return (!thunkv fun (io_cp21_3 : (i32 * i32) * U ((i32 -o F 1) & F 1)) ->
+                      force io_k21_3.1 io_wv21_3, ()) : !U ((i32 * i32) * U ((i32 -o F ((i32 * i32 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) & F 1) -o F ((i32 * i32 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) * 1)) (nu_out force io_hs21_3).1,
+                handle_with[1](
+                    ((!thunkv fun (io_cv21_3 : 1) ->
+                      return io_cv21_3) : !U (1 -o F 1)),
+                    ((!thunkv fun (io_cp21_3 : (i32 * i32) * U ((i32 -o F 1) & F 1)) ->
                       let (io_cxw21_3, io_ck21_3) = io_cp21_3;
                       let (io_cx21_3, io_cw21_3) = io_cxw21_3;
-                      force io_ck21_3.1 io_cw21_3, ());
-                handle_with[1](io_chr21_3, io_chc21_3) (nu_out force io_hs21_3).2 >);
+                      force io_ck21_3.1 io_cw21_3, ()) : !U ((i32 * i32) * U ((i32 -o F 1) & F 1) -o F 1) * 1)) (nu_out force io_hs21_3).2 >);
         return (thunkv nu_in < (nu_out force io_hf21_3 io_hl21_3).1,
             (nu_out force io_hf21_3 io_hl21_3).2 >));
   io_d0 <- return (unbang io_hwf21_3) io_l21_3;

@@ -14,10 +14,12 @@ def check : !U (i32 -o F[1.0 aff i32 ~> 0] i32) =
     }
 
 main : F ((i32 + i32) * (i32 + i32)) =
-  hr : !U (i32 -o F (i32 + i32)) <- return (!thunkv fun (v : i32) -> return (inl v));
-  hc : !U (i32 -o F (i32 + i32)) * 1 <- return ((!thunkv fun (e : i32) -> return (inr e)), ());
   a <- return i32[5];
-  r1 <- handle_with[1](hr, hc) (f <- return (unbang check); force f a);
+  r1 <- handle_with[1](
+      ((!thunkv fun (v : i32) -> return (inl v)) : !U (i32 -o F (i32 + i32))),
+      (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (f <- return (unbang check); force f a);
   b <- return i32[0];
-  r2 <- handle_with[1](hr, hc) (g <- return (unbang check); force g b);
+  r2 <- handle_with[1](
+      ((!thunkv fun (v : i32) -> return (inl v)) : !U (i32 -o F (i32 + i32))),
+      (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (g <- return (unbang check); force g b);
   return (r1, r2)

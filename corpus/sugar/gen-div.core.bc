@@ -95,27 +95,27 @@ main : F U loop i32 1 =
   io_l40_3 : U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1) <- return (unbang steps__n1__g0) (fx_w1, i32[27]);
   io_hwf40_3 : !(U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1) => U loop (i32 * 1 + i32 * 1) 1) <- return (!thunkv fun (io_hl40_3 : U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)) ->
         io_hf40_3 <- return unbang unfold[loop (i32 * 1 + i32 * 1) 1, U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)] (!thunkv fun (io_hs40_3 : U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)) ->
-              < io_hr40_3 : !U (i32 * 1 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1) -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) <- return (!thunkv fun (io_hv40_3 : i32 * 1 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)) ->
+              <                 handle_with[1](
+                    ((!thunkv fun (io_hv40_3 : i32 * 1 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)) ->
                       case io_hv40_3 {
                         inl io_ha40_3 -> return inl inl io_ha40_3
                       | inr io_hl40_3 -> return inr io_hl40_3
-                      });
-                io_hc40_3 : !U ((i32 * i32) * U ((i32 -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) & F 1) -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) * 1 <- return (!thunkv fun (io_hp40_3 : (i32 * i32) * U ((i32 -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) & F 1)) ->
+                      }) : !U (i32 * 1 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1) -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)))),
+                    ((!thunkv fun (io_hp40_3 : (i32 * i32) * U ((i32 -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) & F 1)) ->
                       let (io_hxw40_3, io_k40_3) = io_hp40_3;
                       let (k, io_hw40_3) = io_hxw40_3;
                       acc <- return io_hw40_3;
                       acc <- return (unbang host[add32]) (acc, k);
                       io_u <- return ();
                       io_wv40_3 <- return acc;
-                      force io_k40_3.1 io_wv40_3, ());
-                handle_with[1](io_hr40_3, io_hc40_3) (nu_out force io_hs40_3).1,
-                io_chr40_3 : !U (1 -o F 1) <- return (!thunkv fun (io_cv40_3 : 1) ->
-                      return io_cv40_3);
-                io_chc40_3 : !U ((i32 * i32) * U ((i32 -o F 1) & F 1) -o F 1) * 1 <- return (!thunkv fun (io_cp40_3 : (i32 * i32) * U ((i32 -o F 1) & F 1)) ->
+                      force io_k40_3.1 io_wv40_3, ()) : !U ((i32 * i32) * U ((i32 -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) & F 1) -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) * 1)) (nu_out force io_hs40_3).1,
+                handle_with[1](
+                    ((!thunkv fun (io_cv40_3 : 1) ->
+                      return io_cv40_3) : !U (1 -o F 1)),
+                    ((!thunkv fun (io_cp40_3 : (i32 * i32) * U ((i32 -o F 1) & F 1)) ->
                       let (io_cxw40_3, io_ck40_3) = io_cp40_3;
                       let (io_cx40_3, io_cw40_3) = io_cxw40_3;
-                      force io_ck40_3.1 io_cw40_3, ());
-                handle_with[1](io_chr40_3, io_chc40_3) (nu_out force io_hs40_3).2 >);
+                      force io_ck40_3.1 io_cw40_3, ()) : !U ((i32 * i32) * U ((i32 -o F 1) & F 1) -o F 1) * 1)) (nu_out force io_hs40_3).2 >);
         return (thunkv nu_in < (nu_out force io_hf40_3 io_hl40_3).1,
             (nu_out force io_hf40_3 io_hl40_3).2 >));
   io_d0 <- return (unbang io_hwf40_3) io_l40_3;

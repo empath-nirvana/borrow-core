@@ -16,6 +16,8 @@ open BoCa.Fig16.LogRel.Core.Handlers (Returns0)
 
 theorem TExpr.unSub_erase (t : TExpr) : t.unSub.erase = t.erase := by
   fun_induction TExpr.unSub t <;> simp_all [TExpr.erase]
+theorem TExpr.unUse_erase (t : TExpr) : t.unUse.erase = t.erase := by
+  fun_induction TExpr.unUse t <;> simp_all [TExpr.erase]
 theorem returns0B_isVar0 {t : TExpr} (h : returns0B.isVar0 t = true) : t.erase = .var 0 := by
   unfold returns0B.isVar0 at h; split at h <;> simp_all [TExpr.erase]
 theorem returns0B_sound {t : TExpr} (h : returns0B t = true) : Returns0 t.erase := by
@@ -206,13 +208,6 @@ theorem classifyBody_sound (tM : TExpr) : (classifyBody tM).BodyPremise tM.erase
   · next h => exact onPaths_sound (fun _ _ h => stateFnB_sound (fun _ _ h => onceB_sound h) h) h
   trivial
 
-theorem clauseBody?_sound {c tM : TExpr} (h : clauseBody? c = some tM) :
-    c.erase = .val (.lam (.letpair (.var 0) tM.erase)) := by
-  fun_induction clauseBody? c with
-  | case1 => cases h; rfl
-  | case2 => rename_i ih; simp only [TExpr.erase]; exact ih h
-  | case3 => cases h
-
 /-- **The kind the checker records gives its law's premise** at the clause the handler runs: an
 abortive operation's clause takes no `κ`; a control clause is `λp. let (x, κ) = p; M` and `M`
 meets the kind's premise (`ClauseKind.Premise`).  `[spec §19]` -/
@@ -223,12 +218,13 @@ theorem classify_sound (o : Qual × VTy × VTy) (c : TExpr) :
   · simp only [ha, if_true]; exact ha
   · have ha' : isAbortive o = false := by simpa using ha
     simp only [ha', if_false, Bool.false_eq_true]
-    cases hb : clauseBody? c with
-    | none => simp [Option.bind, hb, ClauseKind.Premise]
-    | some tM =>
-      simp only [Option.bind, hb]
+    split
+    · rename_i tM heq
       have hP := classifyBody_sound tM
-      have he := clauseBody?_sound hb
+      have he : c.erase = .val (.lam (.letpair (.var 0) tM.erase)) := by
+        rw [← TExpr.unUse_erase c]
+        simp only [Option.map_some, Option.some.injEq] at heq
+        rw [heq]; rfl
       have hne : classifyBody tM ≠ .abortive := by
         unfold classifyBody; split_ifs <;> simp
       revert hP hne
@@ -241,6 +237,8 @@ theorem classify_sound (o : Qual × VTy × VTy) (c : TExpr) :
       | tailState => exact ⟨ha', _, he, hP⟩
       | resumeOrCancel s => cases s <;> exact ⟨ha', _, he, hP⟩
       | resumeOnce s => cases s <;> exact ⟨ha', _, he, hP⟩
+    · simp [ClauseKind.Premise]
+
 theorem zipWith_fst_append {α β : Type} (E : List α) (f : α → β → HKind) (g : α → Qual)
     (hf : ∀ a b, (f a b).q = g a) : ∀ (xs ys : List β), E.length ≤ ys.length →
     (E.zipWith f (xs ++ ys)).map (·.q) = E.map g := by
@@ -262,8 +260,8 @@ theorem zipWith_fst_append {α β : Type} (E : List α) (f : α → β → HKind
 
 /-- **The qualifiers travel with the kinds**: the `handle` node's `ks` has one entry per
 operation, carrying that operation's qualifier, the one `E` gives it.  `[spec §19, §25]` -/
-theorem classifyHandler_quals (E : List (Qual × VTy × VTy)) (cls : Option TExpr) :
-    (classifyHandler E cls).map (·.q) = E.map Prod.fst := by
+theorem classifyHandler_quals (E : List (Qual × VTy × VTy)) (tH : TExpr) :
+    (classifyHandler E tH).map (·.q) = E.map Prod.fst := by
   unfold classifyHandler
   exact zipWith_fst_append E _ Prod.fst (fun _ _ => rfl) _ _ (by simp)
 

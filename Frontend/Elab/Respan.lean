@@ -196,7 +196,9 @@ def Comp.respan (sp : Span) : Comp → Comp
     .loop sp (ℓ.map (·.respan sp)) (src.respan sp) (V.respan sp) (M.respan sp) (N.respan sp)
   | .perform _ n i V => .perform sp n i (V.respan sp)
   | .abort _ n i V => .abort sp n i (V.respan sp)
-  | .handle _ n hr hc M => .handle sp n (hr.respan sp) (hc.respan sp) (M.respan sp)
+  | .handle _ n st hr hc M =>
+    .handle sp n (st.map (SiteRec.mapTy (VTy.respan sp)))
+      (hr.respan sp) (hc.respan sp) (M.respan sp)
   | .unwind _ x A M D N =>
       .unwind sp (x.respan sp) (A.map (VTy.respan sp)) (M.respan sp) (D.respan sp) (N.respan sp)
   | .withbor2r _ x b A B r p m M =>

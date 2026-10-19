@@ -21,17 +21,16 @@ def step : !U (i32 -o F[3.0 lin 1 ~> i32] (i32 + i32) & F[3.0 lin 1 ~> i32] 1) =
       return () >
 
 main : F i32 =
-  hr : !U (i32 -o F i32) <- return (!thunkv fun (v : i32) -> return v);
-  hc : !U (1 * U ((i32 -o F i32) & top) -o F i32) * 1 <- return
-    ((!thunkv fun (p : 1 * U ((i32 -o F i32) & top)) ->
-        let (u, k) = p;
-        let () = u;
-        x <- return i32[5];
-        (force k).1 x), ());
   f <- return (unbang (unfold[nu X. F[3.0 lin 1 ~> i32] (i32 + U X) & F[3.0 lin 1 ~> i32] 1, i32] step));
   z <- return i32[1];
   t0 <- return (thunkv nu_in < (nu_out (force f z)).1, (nu_out (force f z)).2 >);
-  handle_with[3](hr, hc) (
+  handle_with[3](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (p : 1 * U ((i32 -o F i32) & top)) ->
+        let (u, k) = p;
+        let () = u;
+        x <- return i32[5];
+        (force k).1 x), ()) : !U (1 * U ((i32 -o F i32) & top) -o F i32) * 1)) (
     o1 <- (nu_out (force t0)).1;
     case o1 {
       inl a -> return a

@@ -173,9 +173,6 @@ structure Env where
   checked has, set where a computation is checked against one; `none` in a value, where a
   computation is synthesized with no type expected. `[spec §19]` -/
   row : Option CRow
-  /-- The typed values the slots are bound to by `x <- return V`, each at its slot's level (the
-  number of slots below it): where `[handle]` reads its clauses (SPEC §19, *Clause kinds*). -/
-  vals : List (Nat × BoCa.Fig16.LogRel.Core.Check.TExpr) := []
 
 /-- The depth bound for elaborating a type. -/
 def tyFuel : Nat := 65536
@@ -429,22 +426,6 @@ def lookupVar (x : String) : List (Option String) → Option Nat
 /-- A slot that is not owed: a dead binder, or `linear`. -/
 def Env.push (E : Env) (x : Option String) : Env := { E with vars := x :: E.vars, own := false :: E.own }
 
-/-- The typed value the slot `i` is bound to, when it is bound by `x <- return V`. -/
-def Env.valOf (E : Env) (i : Nat) : Option BoCa.Fig16.LogRel.Core.Check.TExpr :=
-  if i < E.vars.length then (E.vals.find? (·.1 == E.vars.length - 1 - i)).map (·.2) else none
-
-/-- Record the typed value of the slot pushed next, when its binding's head is `return V`; a
-variable is its own binding's value. -/
-def Env.bindVal (E : Env) (t : BoCa.Fig16.LogRel.Core.Check.TExpr) : Env :=
-  let rec val? : BoCa.Fig16.LogRel.Core.Check.TExpr → Option BoCa.Fig16.LogRel.Core.Check.TExpr
-    | .ret _ _ _ (.var _ _ i _) => E.valOf i
-    | .ret _ _ _ v => some v
-    | .effSub _ _ _ _ _ t => val? t
-    | _ => none
-  match val? t with
-  | some v => { E with vals := (E.vars.length, v) :: E.vals }
-  | none => E
-
 /-- A binder's live slot `x : A`, owed to its scope when `A` has a destructor, is not persistent
 and the binder is not `linear` (SPEC §12). -/
 def Env.pushOwn (E : Env) (x : String) (A : CVTy) (lin : Bool := false) : Env :=
@@ -472,7 +453,7 @@ def Env.forDef (E : Env) (T : List CVTy) (d : DefInfo) (tps : List (String × CV
   let n := E.vars.length
   let vars := (List.range n).map fun i =>
     if n ≤ i + E.nExt && (T[i]?.map (·.persistent)).getD false then E.vars.getD i none else none
-  ⟨d.scope, vars, [], tps, [], E.nExt, none, []⟩
+  ⟨d.scope, vars, [], tps, [], E.nExt, none⟩
 
 def inDef (x : String) (sp : Span) (e : Error) : Error :=
   { e with msg := s!"{e.msg}\n  in the body of `{x}`, used at {sp.start.render}" }
@@ -520,7 +501,7 @@ def mentionsC (x : String) : Comp → Bool
       (z.name != x && mentionsC x N)
   | .loop _ _ src V M N => mentionsV x V || (!src.bound.contains x && mentionsC x M) || mentionsC x N
   | .perform _ _ _ V | .abort _ _ _ V => mentionsV x V
-  | .handle _ _ hr hc M => hr.name == x || hc.name == x || mentionsC x M
+  | .handle _ _ _ hr hc M => mentionsV x hr || mentionsV x hc || mentionsC x M
   | .unwind _ y _ M D N => mentionsC x M || mentionsC x D || (y.name != x && mentionsC x N)
   | .withbor2r _ _ _ _ _ _ p m M => p.name == x || (m.name != x && mentionsC x M)
 end
