@@ -1,0 +1,21 @@
+include rec
+type Json = mu X. 1 + (i32 + (mu Y. 1 + (X * Y)))
+type Arr = mu Y. 1 + (Json * Y)
+
+fn sum(j: Json) -> i32 =
+  match unroll j {
+    inl u -> 0
+  | inr v -> match v { inl n -> n | inr xs -> sum_list(xs) }
+  }
+fn sum_list(xs: Arr) -> i32 =
+  match unroll xs { inl u -> 0 | inr (h, t) -> sum(h) + sum_list(t) }
+
+fn num(n: i32) -> Json = roll inr (inl n)
+fn arr(xs: Arr) -> Json = roll inr (inr xs)
+fn acons(x: Json, xs: Arr) -> Arr = roll inr (x, xs)
+fn anil() -> Arr = roll inl ()
+
+main -> i32 =
+  let inner = arr(acons(num(4), anil()));
+  let j = arr(acons(num(3), acons(inner, anil())));
+  with on_exhausted(!{ u -> 0 }) { sum(j) }

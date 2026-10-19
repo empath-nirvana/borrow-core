@@ -1,0 +1,76 @@
+-- An arena allocator, generic over the element type: slots `1 + T` in a growable buffer (`inl ()`
+-- a free slot), a free list of slot indices (a stack), and the count of live slots. `Id` is an
+-- index; with no nominal types (no `data`, #489) it is an alias of `i32`, so ids of two arenas
+-- are not told apart by the checker.
+include textio
+include buf
+
+type Id = i32
+type Arena[T] = (buf (1 + T) * buf i32) * i32
+
+fn arena_new[T](cap: i32) -> Arena[T] = ((box buf[1 + T](cap), box buf[i32](8)), 0)
+
+-- `x` stored in a free slot, reused from the free list or pushed; its id.
+fn arena_alloc[T](a: Arena[T], x: T) -> Arena[T] * Id =
+  let ((slots, fl), live) = a;
+  let (fl, tp) = pop(fl);
+  match tp {
+    inl i ->
+      let (sa, sn) = slots;
+      let (sa, old) = array_replace[1 + T] (sa, i, inr x);
+      -- the slot was free: `old` is `inl (inl ())`
+      ((((sa, sn), fl), live + 1), i)
+  | inr u ->
+      let (slots, i) = len_of(slots);
+      let (slots, _) = push(slots, inr x);
+      (((slots, fl), live + 1), i)
+  }
+
+-- The element at `id` taken out and its slot put on the free list; `inr ()` for a free slot.
+fn arena_free[T](a: Arena[T], id: Id) -> Arena[T] * (T + 1) =
+  let ((slots, fl), live) = a;
+  let (sa, sn) = slots;
+  let (sa, old) = array_replace[1 + T] (sa, id, inl ());
+  let o : (1 + T) = match old { inl o -> o | inr o -> o };
+  match o {
+    inl u -> ((((sa, sn), fl), live), inr ())
+  | inr x -> let (fl, _) = push(fl, id); ((((sa, sn), fl), live - 1), inl x)
+  }
+
+-- The element at `id` lent to `f` (taken out, given to `f`, put back), and `f`'s answer.
+fn arena_with[T, R](a: Arena[T], id: Id, f: !(T => T * R), d: R) -> Arena[T] * R =
+  let ((slots, fl), live) = a;
+  let (sa, sn) = slots;
+  let (sa, old) = array_replace[1 + T] (sa, id, inl ());
+  let o : (1 + T) = match old { inl o -> o | inr o -> o };
+  match o {
+    inl u -> ((((sa, sn), fl), live), d)
+  | inr x -> let (x, r) = f(x); let (sa, _) = array_replace[1 + T] (sa, id, inr x); ((((sa, sn), fl), live), r)
+  }
+
+fn arena_live[T](a: Arena[T]) -> Arena[T] * i32 = let (s, live) = a; ((s, live), live)
+
+-- The number of slots, free or live.
+fn arena_slots[T](a: Arena[T]) -> Arena[T] * i32 =
+  let ((slots, fl), live) = a;
+  let (slots, n) = len_of(slots);
+  (((slots, fl), live), n)
+
+main -> i32 =
+  -- an arena of owned strings: three allocated, one freed, its slot reused
+  let mut a = arena_new[string](4);
+  let (a1, x) = arena_alloc(a, string_of_lit("one"));
+  let (a2, y) = arena_alloc(a1, string_of_lit("two"));
+  let (a3, z) = arena_alloc(a2, string_of_lit("three"));
+  let (a4, got) = arena_free(a3, y);
+  let a5 = match got { inl s -> let s = print_string(s); a4 | inr u -> a4 };
+  print_byte(b' ');
+  let (a6, w) = arena_alloc(a5, string_of_lit("four"));
+  let (a7, n) = arena_with(a6, w, !{ s -> let (s, _) = push_lit(s, "!"); let (s, k) = len_of(s); (s, k) }, 0);
+  let (a8, live) = arena_live(a7);
+  let (a9, slots) = arena_slots(a8);
+  print_dec(w); print_byte(b' ');
+  print_dec(n); print_byte(b' ');
+  print_dec(live); print_byte(b' ');
+  print_dec(slots); print_byte(b'\n');
+  0

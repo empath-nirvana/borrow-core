@@ -1,0 +1,7 @@
+-- The OO shape: one task control block (a cell) reachable from the task list and the task table.
+type Tcb = ref (i32 * i32)
+main -> i32 =
+  let t = alloc((1, 1000));
+  let list = (t, 0);
+  let table = (t, 1);
+  0

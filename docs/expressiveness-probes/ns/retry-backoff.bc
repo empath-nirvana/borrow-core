@@ -1,0 +1,28 @@
+-- (c) Retry with exponential backoff around a raising block, on the platform clock (`Clock.sleep`,
+-- lib/sys), the block a computation parameter (SPEC §33) as in corpus/retry-block.bc. A flaky
+-- service with state (an answering handler counting calls) fails twice with 503.
+-- retry-backoff2.bc: the same with the service stateless (fails on attempts 0 and 1).
+include fail
+include io
+
+effect Svc { fn hit() -> i32 }
+handler flaky(mut n: i32): Svc = { hit() = { n = n + 1; n } }
+
+fn call() -> i32 with Fail[i32], Svc = let k = hit(); if k < 3 { raise(503) } else { 200 }
+
+fn retry[A](times: i32, base_ms: i32, f: !(i32 => A with Fail[i32])) -> A with Fail[i32], Clock =
+  let mut pause = base_ms;
+  let mut last = 0;
+  let r = for attempt in 0..times {
+    match with to_result { f(attempt) } {
+      inl a -> break (inl a : A + 1)
+    | inr e -> last = e; if attempt + 1 < times { sleep(ns_of_ms(pause)); pause = pause * 2 } else { () }
+    }
+  } else { (inr () : A + 1) };
+  match r { inl a -> a | inr u -> raise(last) }
+
+main -> (i32 + i32) * bool =
+  let t0 = now();
+  let r = with flaky(0) { with to_result { retry(5, 10, !{ a -> call() }) } };
+  let dt = now() - t0;
+  (r, dt >= ns_of_ms(30))

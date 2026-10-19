@@ -1,0 +1,5 @@
+-- The same, using its argument.
+fn idle(x: i32) -> i32 = x + 1
+fn dbl(x: i32) -> i32 = x * 2
+fn mk(i: i32) -> !(i32 => i32) = if i == 0 { idle } else { dbl }
+main -> i32 = let f = mk(1); f(5)

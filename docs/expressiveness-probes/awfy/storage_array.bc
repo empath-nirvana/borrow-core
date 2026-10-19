@@ -1,0 +1,50 @@
+-- AWFY Storage: a tree of arrays built recursively (depth 7, four children a level, a leaf an
+-- array of 1..10 elements sized by AWFY's Random); counts the arrays made, 5461.
+-- A node owns an array of its children: `mu X. array i32 + array X`.
+include rec
+include buf
+include slice
+
+type S = mu X. array i32 + array X
+
+fn next(seed: i32) -> i32 = host[and32](seed * 1309 + 13849, 65535)
+
+-- A tree consumed by hand: it has no destructor (`X` under `array`, #182).
+fn drop_s(t: S) -> 1 with Exhausted =
+  match unroll t {
+    inl a -> ()
+  | inr kids ->
+      let mut kids = kids;
+      for i in 0..4 {
+        let (k1, o) = array_replace[S](kids, i, roll inl array_new[i32](0, !{ j -> 0 }));
+        kids = k1;
+        match o { inl x -> drop_s(x) | inr x -> drop_s(x) }
+      };
+      array_free[S](!{ x -> with on_exhausted(!{ u -> () }) { drop_s(x) } }, kids)
+  }
+
+fn build(depth: i32, seed: i32, count: i32) -> (S * i32) * i32 with Exhausted =
+  let count = count + 1;
+  if depth == 1 {
+    let s = next(seed);
+    ((roll inl array_new[i32](s % 10 + 1, !{ i -> 0 }), s), count)
+  } else {
+    let mut kids = array_new[S](4, !{ i -> roll inl array_new[i32](0, !{ j -> 0 }) });
+    let mut seed = seed;
+    let mut count = count;
+    for i in 0..4 {
+      let ((k, s), c) = build(depth - 1, seed, count);
+      let (kids1, old) = array_replace[S](kids, i, k);
+      kids = kids1;
+      match old { inl o -> drop_s(o) | inr o -> drop_s(o) };
+      seed = s;
+      count = c
+    };
+    ((roll inr kids, seed), count)
+  }
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let ((t, s), c) = build(7, 74755, 0);
+  drop_s(t);
+  c
+}

@@ -1,0 +1,18 @@
+-- Natural clox upvalue: an open upvalue is a pointer into the value stack (here a `mut` borrow of
+-- a slot, from a view of the stack), kept while the VM keeps pushing onto the same stack.
+include slice
+include buf
+
+main -> i32 =
+  let mut stack = box buf[i32](8);
+  let (s, _) = push(stack, 41);
+  stack = s;
+  let r = borrow mut stack { 'v, v ->
+    match get_mut(v, 0) {
+      inl up ->
+        let (s2, _) = push(stack, 7);
+        stack = s2;
+        modify up { x -> (x + 1, x) }
+    | inr u -> 0
+    } };
+  r

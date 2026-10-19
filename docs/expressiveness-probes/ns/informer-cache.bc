@@ -1,0 +1,29 @@
+-- (f) A shared informer cache: a watch task writes observed replicas into the cache, two
+-- reconciler tasks read it, all interleaved by the scheduler. The cache is an answering effect
+-- whose handler owns the state, handled around the scheduler.
+include async
+
+effect Cache { fn observe(name: i32, r: i32); fn cached(name: i32) -> i32 }
+
+handler cache(mut st: i32 * i32): Cache = {
+  observe(name, r) = { let (a, b) = st; if name == 1 { st = (r, b) } else { st = (a, r) }; () };
+  cached(name) = { let (a, b) = st; st = (a, b); if name == 1 { a } else { b } }
+}
+
+fn watch(n: i32) -> i32 with Async, Cache = for i in 0..n { observe(1, i); observe(2, i * 2); await() }; n
+fn reconciler(name: i32, rounds: i32) -> i32 with Async, Cache =
+  let mut seen = 0;
+  for _ in 0..rounds { seen = seen + cached(name); await() };
+  seen
+
+main -> List[i32] =
+  let d = alloc(());
+  let r = with cache((0, 0)) {
+    borrow mut d { 'd, e ->
+      let q = queue_in[i32]();
+      let q = push_in(q, with spawn_in { watch(3) });
+      let q = push_in(q, with spawn_in { reconciler(1, 3) });
+      let q = push_in(q, with spawn_in { reconciler(2, 3) });
+      with on_exhausted(!{ u -> nil[i32]() }) { run_in(q, 10) } } };
+  let _ = free(d);
+  r

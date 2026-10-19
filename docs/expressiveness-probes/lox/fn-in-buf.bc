@@ -1,0 +1,5 @@
+include buf
+fn double(n: i32) -> i32 = n + n
+main -> i32 =
+  let (b, _) = push(box buf[!(i32 => i32)](4), double);
+  0

@@ -1,0 +1,17 @@
+-- Host functions stored in a list (method table) and called by index.
+type Fs = mu X. 1 + (!(i32 => i32) * X)
+fn double(n: i32) -> i32 = n + n
+fn succ(n: i32) -> i32 = n + 1
+fn nth(fs: Fs, k: i32) -> !(i32 => i32) + 1 =
+  let mut cur = fs;
+  let mut res : !(i32 => i32) + 1 = inr ();
+  for i in 0..k + 1 {
+    match unroll cur {
+      inl u -> cur = (roll inl () : Fs)
+    | inr (f, r) -> if i == k { res = (inl f : !(i32 => i32) + 1) } else { () }; cur = r
+    }
+  };
+  res
+main -> i32 =
+  let fs : Fs = roll inr (double, roll inr (succ, roll inl ()));
+  match nth(fs, 0) { inl f -> f(20) | inr u -> 0 }

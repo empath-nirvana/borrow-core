@@ -1,0 +1,145 @@
+-- A doubly linked list as an arena, and an LRU cache built on it. The list: node `i`'s `prev[i]`,
+-- `next[i]` are node indices, node 0 a sentinel (a circular list: `next[0]` the first node,
+-- `prev[0]` the last). The cache: a map from key to node index, the list in recency order (the
+-- front the most recent), and each node's key and value; a full cache evicts the last node and
+-- reuses its slot.
+include textio
+include map
+
+fn gi(b: buf i32, i: i32) -> buf i32 * i32 = let (a, n) = b; let x = at(&a, i, 0); ((a, n), x)
+fn si(b: buf i32, i: i32, x: i32) -> buf i32 = let (a, n) = b; (array_set(a, i, x), n)
+
+-- prev, next
+type Links = buf i32 * buf i32
+
+fn links_new() -> Links =
+  let (p, _) = push(box buf[i32](8), 0);
+  let (n, _) = push(box buf[i32](8), 0);
+  (p, n)
+
+-- A fresh node, unlinked; its index.
+fn new_node(l: Links) -> Links * i32 =
+  let (p, n) = l;
+  let (p, i) = len_of(p);
+  let (p, _) = push(p, i);
+  let (n, _) = push(n, i);
+  ((p, n), i)
+
+fn unlink(l: Links, i: i32) -> Links =
+  let (p, n) = l;
+  let (p, a) = gi(p, i);
+  let (n, b) = gi(n, i);
+  (si(p, b, a), si(n, a, b))
+
+-- `i` put after `at`.
+fn link_after(l: Links, at0: i32, i: i32) -> Links =
+  let (p, n) = l;
+  let (n, b) = gi(n, at0);
+  let n = si(si(n, at0, i), i, b);
+  let p = si(si(p, b, i), i, at0);
+  (p, n)
+
+fn push_front(l: Links, i: i32) -> Links = link_after(l, 0, i)
+
+fn push_back(l: Links, i: i32) -> Links =
+  let (p, n) = l;
+  let (p, last) = gi(p, 0);
+  link_after((p, n), last, i)
+
+fn first(l: Links) -> Links * i32 = let (p, n) = l; let (n, x) = gi(n, 0); ((p, n), x)
+fn last(l: Links) -> Links * i32 = let (p, n) = l; let (p, x) = gi(p, 0); ((p, n), x)
+
+-- The node indices front to back (`fwd`) or back to front, printed.
+fn print_walk(l: Links, fwd: bool) -> Links =
+  let (p, n) = l;
+  let (p, cap) = len_of(p);
+  let mut p = p;
+  let mut n = n;
+  let mut i = 0;
+  for _ in 0..cap {
+    let (p2, a) = gi(p, i);
+    let (n2, b) = gi(n, i);
+    p = p2; n = n2;
+    if fwd { i = b } else { i = a };
+    if i == 0 { break } else { print_dec(i); print_byte(b' ') }
+  };
+  print_byte(b'\n');
+  (p, n)
+
+-- ### The cache
+
+-- map, links, keys, values, capacity
+type Lru = ((Map[i32, i32] * Links) * (buf i32 * buf i32)) * i32
+
+fn lru_new(cap: i32) -> Lru =
+  let (k, _) = push(box buf[i32](8), 0);
+  let (v, _) = push(box buf[i32](8), 0);
+  (((map_new[i32, i32](cap), links_new()), (k, v)), cap)
+
+-- The value at `k`, which becomes the most recent.
+fn lru_get(c: Lru, k: i32) -> Lru * (i32 + 1) =
+  let (((m, l), (ks, vs)), cap) = c;
+  let mut m = m;
+  let o = map_lookup(&m, k);
+  match o {
+    inl i ->
+      let l = push_front(unlink(l, i), i);
+      let (vs, v) = gi(vs, i);
+      ((((m, l), (ks, vs)), cap), inl v)
+  | inr u -> ((((m, l), (ks, vs)), cap), inr ())
+  }
+
+-- `v` at `k`, the most recent; the least recent evicted when the cache is full.
+fn lru_put(c: Lru, k: i32, v: i32) -> Lru =
+  let (((m, l), (ks, vs)), cap) = c;
+  let mut m = m;
+  let o = map_lookup(&m, k);
+  match o {
+    inl i -> (((m, push_front(unlink(l, i), i)), (ks, si(vs, i, v))), cap)
+  | inr u ->
+      let size = map_len(&m);
+      if size < cap {
+        let (l, i) = new_node(l);
+        let (ks, _) = push(ks, k);
+        let (vs, _) = push(vs, v);
+        let prev = map_insert(&mut m, k, i);
+        (((m, push_front(l, i)), (ks, vs)), cap)
+      } else {
+        let (l, t) = last(l);
+        let l = unlink(l, t);
+        let (ks, old) = gi(ks, t);
+        let gone = map_remove(&mut m, old);
+        let prev = map_insert(&mut m, k, t);
+        (((m, push_front(l, t)), (si(ks, t, k), si(vs, t, v))), cap)
+      }
+  }
+
+fn show(o: i32 + 1) -> 1 = match o { inl v -> print_dec(v); print_byte(b' ') | inr u -> print_lit("- ") }
+
+main -> i32 =
+  -- the list: 1 2 3 4 at the back, 3 removed, 5 at the front
+  let l = links_new();
+  let (l, a) = new_node(l);
+  let (l, b) = new_node(l);
+  let (l, c) = new_node(l);
+  let (l, d) = new_node(l);
+  let l = push_back(push_back(push_back(push_back(l, a), b), c), d);
+  let l = unlink(l, c);
+  let (l, e) = new_node(l);
+  let l = push_front(l, e);
+  let l = print_walk(l, true);
+  let l = print_walk(l, false);
+  -- LeetCode 146's example: capacity 2
+  let c = lru_new(2);
+  let c = lru_put(c, 1, 1);
+  let c = lru_put(c, 2, 2);
+  let (c, r1) = lru_get(c, 1);
+  let c = lru_put(c, 3, 3);
+  let (c, r2) = lru_get(c, 2);
+  let c = lru_put(c, 4, 4);
+  let (c, r3) = lru_get(c, 1);
+  let (c, r4) = lru_get(c, 3);
+  let (c, r5) = lru_get(c, 4);
+  show(r1); show(r2); show(r3); show(r4); show(r5);
+  print_byte(b'\n');
+  0

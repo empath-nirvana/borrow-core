@@ -1,0 +1,25 @@
+-- AWFY Permute: all permutations of a 6-element array by swaps, recursively; counts the calls.
+-- The loop over `i` from n-1 down to 0 is a second recursive function, `each`, since a recursive
+-- call inside a counted `for` that threads the array is refused (#492, permute_natural.bc).
+-- Answer: 8660, AWFY's reference.
+include rec
+include buf
+include slice
+fn swp(v: array i32, i: i32, j: i32) -> array i32 =
+  let mut v = v;
+  let a = at(&v, i, 0);
+  let b = at(&v, j, 0);
+  array_set(array_set(v, i, b), j, a)
+fn permute(v: array i32, n: i32, count: i32) -> array i32 * i32 with Exhausted =
+  let count = count + 1;
+  if n == 0 { (v, count) } else {
+    let (v, c) = permute(v, n - 1, count);
+    each(v, n - 1, n - 1, c)
+  }
+fn each(v: array i32, n1: i32, i: i32, c: i32) -> array i32 * i32 with Exhausted =
+  if i < 0 { (v, c) } else {
+    let (v, c) = permute(swp(v, n1, i), n1, c);
+    each(swp(v, n1, i), n1, i - 1, c)
+  }
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let (v, c) = permute(array_new[i32](6, !{ i -> 0 }), 6, 0); c }

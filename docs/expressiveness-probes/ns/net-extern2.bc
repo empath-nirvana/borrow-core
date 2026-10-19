@@ -1,0 +1,4 @@
+-- (a) A user-declared extern over an existing opaque kind (input) under a new name.
+extern sock_read : !(all 'a < top. mut 'a input => mut 'a input * (u8 + 1))
+extern sock : ref input
+main -> i32 = let (s, b) = sock_read(&mut sock); 0

@@ -1,0 +1,44 @@
+-- AWFY Bounce: 100 balls in a 500x500 box, each with a position and a velocity from AWFY's Random,
+-- moved 50 times; a ball that hits a wall bounces, and the bounces are counted. Each ball is an
+-- owned record in an array; the array is lent `mut` around each pass and each ball is updated in
+-- place by `modify`, which hands out bounce()'s flag beside the new ball.
+-- Answer: the number of bounces, 1331 for AWFY's reference.
+
+include slice
+include buf
+
+type Ball = i32 * (i32 * (i32 * i32))
+
+fn abs(x: i32) -> i32 = if x < 0 { 0 - x } else { x }
+
+fn next(seed: i32) -> i32 = host[and32](seed * 1309 + 13849, 65535)
+
+fn bounce(b: Ball) -> Ball * bool =
+  let (x, (y, (xv, yv))) = b;
+  let x = x + xv;
+  let y = y + yv;
+  let (x, xv, b1) = if x > 500 { (500, 0 - abs(xv), true) } else { (x, xv, false) };
+  let (x, xv, b2) = if x < 0 { (0, abs(xv), true) } else { (x, xv, b1) };
+  let (y, yv, b3) = if y > 500 { (500, 0 - abs(yv), true) } else { (y, yv, b2) };
+  let (y, yv, b4) = if y < 0 { (0, abs(yv), true) } else { (y, yv, b3) };
+  ((x, (y, (xv, yv))), b4)
+
+main -> i32 =
+  let mut balls = array_new[Ball](100, !{ i -> (0, (0, (0, 0))) });
+  let mut seed = 74755;
+  for i in 0..100 {
+    let s1 = next(seed);
+    let s2 = next(s1);
+    let s3 = next(s2);
+    let s4 = next(s3);
+    seed = s4;
+    balls = array_set(balls, i, (s1 % 500, (s2 % 500, ((s3 % 300) - 150, (s4 % 300) - 150))))
+  };
+  let mut bounces = 0;
+  for k in 0..50 {
+    for b in &mut balls {
+      let hit = modify b { ball -> bounce(ball) };
+      if hit { bounces = bounces + 1 } else { () }
+    }
+  };
+  bounces

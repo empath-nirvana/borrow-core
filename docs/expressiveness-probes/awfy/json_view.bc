@@ -1,0 +1,13 @@
+-- A member lookup on a borrowed list (mu), without consuming it.
+include rec
+type L = mu X. 1 + (i32 * (i32 * X))
+fn find<'a>(l: imm 'a L, k: i32) -> i32 with Exhausted =
+  match unroll l {
+    inl u -> 0 - 1
+  | inr (kk, (v, rest)) -> if kk == k { v } else { find(rest, k) }
+  }
+main -> i32 =
+  let l = alloc((roll inr (1, (10, roll inr (2, (20, roll inl ())))) : L));
+  let r = borrow imm l { 'x, v -> with on_exhausted(!{ u -> 0 - 1 }) { find(v, 2) } };
+  let x = free(l);
+  r

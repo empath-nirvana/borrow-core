@@ -1,0 +1,45 @@
+-- T03: a cursor as loop state, numbers pushed into an owned buffer by `&mut`.
+-- Workaround: the input is an owned string (a `while` may not keep a view open across its
+-- steps, SPEC §14), every read is `at(&s, …)` let-bound before its test (a lend may only head a
+-- `let`), so each inner `while` with a read in its condition is a `loop` with `break`; and the
+-- conditional push threads the buffer by hand (`push(&mut vals, x)` in an `if` arm inside a
+-- `while` is refused: "`vals` is used twice here", cf. pending/for-in-if-lend.bc, #502).
+include slice
+include buf
+include text
+include io
+
+fn is_digit(b: u8) -> bool = 48 <= b && b <= 57
+
+fn parse(s: string) -> buf i32 * i32 =
+  let (arr, n) = s;
+  let mut arr = arr;
+  let mut pos = 0;
+  let mut vals = buf_new[i32](4);
+  let mut errs = 0;
+  while pos < n {
+    loop { let c = at(&arr, pos, 0); if pos < n && c == b' ' { pos = pos + 1 } else { break } };
+    let c = at(&arr, pos, 0);
+    let neg = pos < n && c == b'-';
+    if neg { pos = pos + 1 } else { () };
+    let start = pos;
+    let mut k = 0;
+    loop {
+      let c = at(&arr, pos, 0);
+      if pos < n && is_digit(c) { k = k * 10 + to_i32(c) - 48; pos = pos + 1 } else { break }
+    };
+    let x = if neg { 0 - k } else { k };
+    let (v, u) = if pos == start { errs = errs + 1; (vals, ()) } else { push(vals, x) };
+    vals = v;
+    loop { let c = at(&arr, pos, 0); if pos < n && c != b',' { pos = pos + 1 } else { break } };
+    pos = pos + 1
+  };
+  (vals, errs)
+
+main -> i32 =
+  let (vals, errs) = parse(string_of_lit("12,-3, 40,x,7"));
+  let (arr0, k) = vals;
+  let arr : array i32 = arr0;
+  for i in 0..k { let x = at(&arr, i, 0); print_dec(x); print_byte(b' ') };
+  print_byte(b'\n');
+  errs

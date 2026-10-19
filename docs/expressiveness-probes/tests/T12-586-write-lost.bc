@@ -1,0 +1,6 @@
+-- RUNS but WRONG (#586): prints 12, not 52.
+fn ap(f: !(i32 => i32)) -> i32 = f(1)
+main -> i32 =
+  let mut x = 1;
+  let a = ap(!{ u -> x = 5; u + 1 });
+  x * 10 + a

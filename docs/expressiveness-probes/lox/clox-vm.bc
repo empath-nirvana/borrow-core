@@ -1,0 +1,172 @@
+-- clox, arena shape: a chunk (byte code + constant pool), a value stack, call frames, a `while`
+-- dispatch loop matching on the opcode, globals in a hash map, and upvalues: an upvalue object
+-- is (slot, value), open while `slot >= 0` (it names a stack slot) and closed (`slot = -1`, the
+-- value moved into the object) when its frame returns. Two closures capturing one local share one
+-- upvalue object (the open-upvalue search), so they see each other's writes after it closes.
+include map
+include io
+include slice
+
+-- Num | Closure(id) | Nil
+type Val = i32 + (i32 + 1)
+fn nilv() -> Val = inr (inr ())
+fn num_of(v: Val) -> i32 = match v { inl n -> n | inr u -> 0 }
+fn clo_of(v: Val) -> i32 = match v { inl n -> 0 - 1 | inr c -> match c { inl i -> i | inr u -> 0 - 1 } }
+
+fn bget[A](b: buf A, i: i32, d: A) -> buf A * A = let (a, n) = b; let x = at(&a, i, d); ((a, n), x)
+fn bset[A](b: buf A, i: i32, x: A) -> buf A = let (a, n) = b; (array_set(a, i, x), n)
+fn bpush[A](b: buf A, x: A) -> buf A = let (b, _) = push(b, x); b
+fn bpop(b: buf Val) -> buf Val * Val = let (b, o) = pop(b); match o { inl v -> (b, v) | inr u -> (b, nilv()) }
+
+type List3 = mu X. 1 + (i32 * X)
+
+fn emit(c: buf u8, xs: List3) -> buf u8 =
+  let mut acc = c;
+  let mut cur = xs;
+  for _ in 0..64 {
+    match unroll cur {
+      inl u -> cur = (roll inl () : List3)
+    | inr (x, r) -> let (d, _) = push(acc, to_u8(x)); acc = d; cur = r
+    }
+  };
+  match unroll cur { inl u -> acc | inr (x, r) -> acc }
+
+fn l(x: i32, r: List3) -> List3 = roll inr (x, r)
+fn e() -> List3 = roll inl ()
+
+-- Opcodes.
+-- 0 CONST k | 1 GET_GLOBAL g | 3 DEFINE_GLOBAL g | 4 GET_LOCAL s | 6 GET_UPVAL u | 7 SET_UPVAL u
+-- 8 ADD | 9 PRINT | 10 POP | 11 CLOSURE f n (isLocal idx)* | 12 CALL argc | 13 RETURN | 15 HALT
+-- Functions: 0 script, 1 makeCounter, 2 count, 3 peek. Consts: k0 = 0, k1 = 1, k2 = nil.
+-- Globals: g0 makeCounter, g1 c1, g2 c2, g3 c3, g4 peek.
+fn chunk() -> buf u8 * buf i32 =
+  let mut c = box buf[u8](128);
+  let mut fs = box buf[i32](4);
+  -- script
+  let (cc, n) = len_of(c); c = cc; fs = bpush(fs, n);
+  c = emit(c, l(11, l(1, l(0, l(3, l(0, l(1, l(0, l(12, l(0, l(3, l(1, e()))))))))))));
+  c = emit(c, l(1, l(1, l(3, l(2, l(1, l(1, l(12, l(0, l(10, l(1, l(2, l(12, l(0, l(10, e())))))))))))))));
+  c = emit(c, l(1, l(4, l(12, l(0, l(10, e()))))));
+  c = emit(c, l(1, l(0, l(12, l(0, l(3, l(3, l(1, l(3, l(12, l(0, l(10, e()))))))))))));
+  c = emit(c, l(1, l(1, l(12, l(0, l(10, l(1, l(4, l(12, l(0, l(10, l(15, e()))))))))))));
+  -- makeCounter: slot 0 the closure, slot 1 `i`, slot 2 `count`
+  let (cc, n) = len_of(c); c = cc; fs = bpush(fs, n);
+  c = emit(c, l(0, l(0, l(11, l(2, l(1, l(1, l(1, l(11, l(3, l(1, l(1, l(1, l(3, l(4, l(4, l(2, l(13, e()))))))))))))))))));
+  -- count: i = i + 1; print i; return nil
+  let (cc, n) = len_of(c); c = cc; fs = bpush(fs, n);
+  c = emit(c, l(6, l(0, l(0, l(1, l(8, l(7, l(0, l(10, l(6, l(0, l(9, l(0, l(2, l(13, e())))))))))))))));
+  -- peek: print i; return nil
+  let (cc, n) = len_of(c); c = cc; fs = bpush(fs, n);
+  c = emit(c, l(6, l(0, l(9, l(0, l(2, l(13, e())))))));
+  (c, fs)
+
+main -> i32 =
+  let (code, fstart) = chunk();
+  let (ca, cn) = code;
+  let mut consts = bpush(bpush(bpush(box buf[Val](4), inl 0), inl 1), nilv());
+  let mut fstart = fstart;
+  let mut stack = box buf[Val](64);
+  let mut frames = box buf[i32 * (i32 * i32)](16);
+  let mut globals = map_new[i32, Val](8);
+  let mut upv = box buf[i32 * Val](8);
+  let mut clo = box buf[i32 * (i32 * i32)](8);
+  let mut cupv = box buf[i32](8);
+  -- the script's closure (id 0) in slot 0, its frame
+  clo = bpush(clo, (0, (0, 0)));
+  stack = bpush(stack, inr (inl 0));
+  frames = bpush(frames, (0, (0, 0)));
+  let mut ip = 0;
+  let mut base = 0;
+  let mut cur = 0;
+  let mut steps = 0;
+  let mut running = true;
+  while running {
+    steps = steps + 1;
+    let op_b = at(&ca, ip, 15); let op = to_i32(op_b);
+    let arg_b = at(&ca, ip + 1, 0); let arg = to_i32(arg_b);
+    if op == 0 {
+      let (cs, v) = bget(consts, arg, nilv()); consts = cs; stack = bpush(stack, v); ip = ip + 2
+    } else { if op == 1 {
+      let (g, r) = map_lookup(globals, arg); globals = g;
+      let v = match r { inl v -> v | inr u -> nilv() };
+      stack = bpush(stack, v); ip = ip + 2
+    } else { if op == 3 {
+      let (s, v) = bpop(stack); stack = s;
+      let (g, old) = map_insert(globals, arg, v); globals = g; ip = ip + 2
+    } else { if op == 4 {
+      let (s, v) = bget(stack, base + arg, nilv()); stack = bpush(s, v); ip = ip + 2
+    } else { if op == 6 || op == 7 {
+      -- the closure's upvalue `arg`: an index into `upv`
+      let (cl, ent) = bget(clo, cur, (0, (0, 0))); clo = cl;
+      let (f, (first, cnt)) = ent;
+      let (cu, ui) = bget(cupv, first + arg, 0); cupv = cu;
+      let (us, uo) = bget(upv, ui, (0 - 1, nilv())); upv = us;
+      let (slot, cv) = uo;
+      if op == 6 {
+        let (s, v) = if 0 <= slot { bget(stack, slot, nilv()) } else { (stack, cv) };
+        stack = bpush(s, v)
+      } else {
+        let (s, sp) = len_of(stack);
+        let (s, v) = bget(s, sp - 1, nilv());
+        if 0 <= slot { stack = bset(s, slot, v) } else { stack = s; upv = bset(upv, ui, (0 - 1, v)) }
+      };
+      ip = ip + 2
+    } else { if op == 8 {
+      let (s, b) = bpop(stack); let (s, a) = bpop(s);
+      stack = bpush(s, inl (num_of(a) + num_of(b))); ip = ip + 1
+    } else { if op == 9 {
+      let (s, v) = bpop(stack); stack = s; print_dec(num_of(v)); print_byte(b' '); ip = ip + 1
+    } else { if op == 10 {
+      let (s, v) = bpop(stack); stack = s; ip = ip + 1
+    } else { if op == 11 {
+      -- CLOSURE f n (isLocal idx)*: capture each local, reusing an open upvalue on its slot
+      let n_b = at(&ca, ip + 2, 0); let n = to_i32(n_b);
+      let (cu, first) = len_of(cupv); cupv = cu;
+      let (cl, id) = len_of(clo); clo = bpush(cl, (arg, (first, n)));
+      for j in 0..n {
+        let is_local_b = at(&ca, ip + 3 + 2 * j, 0); let is_local = to_i32(is_local_b);
+        let idx_b = at(&ca, ip + 4 + 2 * j, 0); let idx = to_i32(idx_b);
+        if is_local == 1 {
+          let slot = base + idx;
+          let (us6, un) = len_of(upv); upv = us6;
+          let mut found = 0 - 1;
+          for k in 0..un {
+            let (us2, uo) = bget(upv, k, (0 - 1, nilv())); upv = us2;
+            let (s4, v4) = uo;
+            if s4 == slot { found = k; break } else { () }
+          };
+          if found < 0 { upv = bpush(upv, (slot, nilv())); cupv = bpush(cupv, un) } else { cupv = bpush(cupv, found) }
+        } else {
+          let (cl5, ent) = bget(clo, cur, (0, (0, 0))); clo = cl5;
+          let (f, (pf, pc)) = ent;
+          let (cu5, ui) = bget(cupv, pf + idx, 0); cupv = cu5; cupv = bpush(cupv, ui)
+        }
+      };
+      stack = bpush(stack, inr (inl id));
+      ip = ip + 3 + 2 * n
+    } else { if op == 12 {
+      let (s, sp) = len_of(stack);
+      let (s, callee) = bget(s, sp - 1 - arg, nilv()); stack = s;
+      let id = clo_of(callee);
+      let (cl, ent) = bget(clo, id, (0, (0, 0))); clo = cl;
+      let (f, rest) = ent;
+      let (fs, start) = bget(fstart, f, 0); fstart = fs;
+      frames = bpush(frames, (cur, (ip + 2, base)));
+      cur = id; base = sp - 1 - arg; ip = start
+    } else { if op == 13 {
+      -- RETURN: close the open upvalues at or above `base`, pop the frame
+      let (s, result) = bpop(stack); stack = s;
+      let (us, un) = len_of(upv); upv = us;
+      for k in 0..un {
+        let (us2, uo) = bget(upv, k, (0 - 1, nilv())); upv = us2;
+        let (slot, v) = uo;
+        if base <= slot { let (s3, sv) = bget(stack, slot, nilv()); stack = s3; upv = bset(upv, k, (0 - 1, sv)) } else { () }
+      };
+      stack = truncate(stack, base);
+      stack = bpush(stack, result);
+      let (fr, o) = pop(frames); frames = fr;
+      match o { inl (c, (rip, rbase)) -> cur = c; ip = rip; base = rbase | inr u -> running = false }
+    } else { running = false } } } } } } } } } } }
+  };
+  print_byte(b'\n');
+  steps

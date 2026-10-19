@@ -1,0 +1,23 @@
+-- Richards' per-task `fn` field: the task functions stored in an array and called by task id,
+-- each taking and handing back the scheduler state (here an i32 arena).
+include slice
+include buf
+type Fn = !(array i32 * i32 => array i32 * i32)
+fn idle(s: array i32 * i32) -> array i32 * i32 = let (a, w) = s; (array_set(a, 0, w + 1), 1)
+fn work(s: array i32 * i32) -> array i32 * i32 = let (a, w) = s; (array_set(a, 1, w * 2), 0)
+main -> i32 =
+  let (fb, _) = push(box buf[Fn](2), idle);
+  let (fb, _) = push(fb, work);
+  let (fns, nf) = fb;
+  let mut fns = fns;
+  let mut a = array_new[i32](2, !{ i -> 0 });
+  let mut cur = 0;
+  for k in 0..10 {
+    let f = at(&fns, cur, idle);
+    let (a1, nx) = f((a, k));
+    a = a1;
+    cur = nx
+  };
+  let x = at(&a, 0, 0);
+  let y = at(&a, 1, 0);
+  x * 1000 + y

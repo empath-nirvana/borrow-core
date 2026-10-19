@@ -1,0 +1,21 @@
+-- Stage pipeline as generators composed with |>: stage1 produces 1..n, stage2 squares (and
+-- keeps a running count in its own state), stage3 drops odd values; the consumer sums.
+include yield
+
+fn stage1(n: i32) -> 1 with Yield[i32] =
+  for i in 1..n + 1 { yield(i) };
+  ()
+
+fn stage2[K, R](it: U (pull i32 K R)) -> K with Yield[i32] =
+  let mut seen = 0;
+  let k = for x in it { seen = seen + 1; yield(x * x + seen * 0) };
+  k
+
+fn stage3[K, R](it: U (pull i32 K R)) -> K with Yield[i32] =
+  let k = for x in it { if host[and32](x, 1) == 0 { yield(x) } else { () } };
+  k
+
+main -> i32 =
+  let mut s = 0;
+  for y in stage1(6) |> stage2 |> stage3 { s = s + y };
+  s

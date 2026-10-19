@@ -1,0 +1,10 @@
+-- A tree node whose child points back at it: the child holds an `imm` view of the parent's cell,
+-- and the parent then owns the child.
+type Node = ref i32
+main -> i32 =
+  let parent = alloc(7);
+  let r = borrow imm parent { 'x, v ->
+    let child = (v, 1);
+    let both = (parent, child);
+    0 };
+  r

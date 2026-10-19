@@ -1,0 +1,4 @@
+include io
+main -> i32 =
+  let x : i32 + i32 = inr 3;
+  match x { inl u -> 0 | inr v -> print_dec(v); 1 }

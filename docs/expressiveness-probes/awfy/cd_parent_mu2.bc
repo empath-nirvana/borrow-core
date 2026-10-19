@@ -1,0 +1,4 @@
+-- A mu tree with a back pointer: `mu X. 1 + (X * (i32 * (X * imm 'p X)))` needs the parent
+-- named by a lifetime at its own type.
+type T<'p> = mu X. 1 + (X * (i32 * (X * imm 'p X)))
+main -> i32 = 0

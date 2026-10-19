@@ -1,0 +1,100 @@
+-- (e) YAML block mappings into a JSON-shaped tree, by a stack of indentation levels. Lines are
+-- `key: value` (a scalar) or `key:` (a nested mapping on the following, deeper lines); keys are
+-- one letter and scalars one digit. A dedent pops frames, each finished mapping attached to the
+-- frame below as the value of its key. The tree is printed as JSON.
+include io
+include rec
+
+-- A JSON-shaped node: a scalar, or a mapping as a chain of entries (key, value, rest) ending in
+-- the empty mapping. One `mu` (nested ones must be closed).
+type J = mu X. i32 + (1 + ((i32 * X) * X))
+
+fn scalar(v: i32) -> J = roll inl v
+fn empty() -> J = roll inr (inl ())
+fn entry(k: i32, v: J, rest: J) -> J = roll inr (inr ((k, v), rest))
+
+-- A frame: its indentation, the key its mapping is the value of, its entries (last first).
+type Frame = i32 * (i32 * J)
+type Stk = mu X. 1 + (Frame * X)
+
+-- Entries in reverse order.
+fn rev_entries(m: J, acc: J) -> J =
+  match unroll m {
+    inl v -> acc
+  | inr e -> match e { inl u -> acc | inr ((k, v), rest) -> rev_entries(rest, entry(k, v, acc)) }
+  }
+
+-- Pop the top frame and attach its mapping to the frame below; the root (indent -1) stays.
+fn pop_attach(s: Stk) -> Stk =
+  match unroll s {
+    inl u -> roll inl ()
+  | inr (f, below) -> let (ind, (k, es)) = f;
+      if ind < 0 { roll inr ((ind, (k, es)), below) } else {
+        match unroll below {
+          inl u -> roll inl ()
+        | inr (g, rest) -> let (gi, (gk, ges)) = g;
+            roll inr ((gi, (gk, entry(k, rev_entries(es, empty()), ges))), rest)
+        }
+      }
+  }
+
+fn top_indent(s: Stk) -> Stk * i32 =
+  match unroll s { inl u -> (roll inl (), 0 - 1) | inr (f, r) -> let (i, kv) = f; (roll inr ((i, kv), r), i) }
+
+-- One line: dedent (pop while the top is at least as deep), then add a scalar or open a frame.
+fn line(s: Stk, ind: i32, k: i32, v: i32, depth: i32) -> Stk =
+  let mut st = s;
+  for _ in 0..depth + 1 {
+    let (s2, ti) = top_indent(st);
+    if ti >= ind { st = pop_attach(s2) } else { st = s2; break }
+  };
+  if v >= 0 {
+    match unroll st {
+      inl u -> roll inl ()
+    | inr (f, r) -> let (i, (fk, es)) = f; roll inr ((i, (fk, entry(k, scalar(v), es))), r)
+    }
+  } else { roll inr ((ind, (k, empty())), st) }
+
+fn show(j: J) -> 1 =
+  match unroll j {
+    inl v -> print_dec(v)
+  | inr e -> print_byte(b'{'); show_entries((roll inr e : J), true); print_byte(b'}')
+  }
+
+fn show_entries(j: J, first: bool) -> 1 =
+  match unroll j {
+    inl v -> ()
+  | inr e -> match e {
+      inl u -> ()
+    | inr ((k, v), rest) ->
+        if first { () } else { print_byte(b',') };
+        print_byte(b'"'); print_byte(to_u8(k)); print_byte(b'"'); print_byte(b':');
+        show(v); show_entries(rest, false)
+    }
+  }
+
+main -> i32 =
+  let mut st : Stk = roll inr ((0 - 1, (0, empty())), roll inl ());
+  let mut ind = 0;
+  let mut k = 0;
+  let mut v = 0 - 1;
+  let mut at_start = true;
+  let mut lines = 0;
+  for b in bytes(&mut stdin) {
+    if b == 10 {
+      st = with on_exhausted(!{ u -> (roll inl () : Stk) }) { line(st, ind, k, v, lines) };
+      lines = lines + 1; ind = 0; k = 0; v = 0 - 1; at_start = true
+    } else { if b == 32 { if at_start { ind = ind + 1 } else { () } }
+    else { if b == 58 { () }
+    else { if at_start { k = to_i32(b); at_start = false } else { v = to_i32(b) - 48 } } } }
+  };
+  let r = with on_exhausted(!{ u -> 0 - 1 }) {
+    let mut s = st;
+    for _ in 0..lines { s = pop_attach(s) };
+    match unroll s {
+      inl u -> print_byte(b'?'); 0
+    | inr (f, rest) -> let (i, (fk, es)) = f; show(rev_entries(es, empty())); 1
+    }
+  };
+  print_byte(b'\n');
+  r

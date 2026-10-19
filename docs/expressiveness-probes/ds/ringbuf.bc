@@ -1,0 +1,70 @@
+-- A ring buffer of fixed capacity, generic over the element type (owned elements too): an array
+-- of `cap` slots, the index of the oldest element, and the count. Pushing onto a full ring is
+-- refused (the element is handed back); `ring_push_over` overwrites the oldest instead.
+include textio
+include buf
+
+type Ring[A] = array A * (i32 * i32)
+
+fn ring_new[A](cap: i32) -> Ring[A] = (array_new[A](cap, !{ i -> filler[A] }), (0, 0))
+
+fn wrap_at(i: i32, cap: i32) -> i32 = if cap <= i { i - cap } else { i }
+
+-- `x` at the back, or `x` back when the ring is full.
+fn ring_push[A](r: Ring[A], x: A) -> Ring[A] * (1 + A) =
+  let (a, (h, n)) = r;
+  let (a, cap) = array_size[A](a);
+  if n == cap { ((a, (h, n)), inr x) } else {
+    let (a, _) = array_replace[A] (a, wrap_at(h + n, cap), x);
+    ((a, (h, n + 1)), inl ())
+  }
+
+-- The front element taken out, or `inr ()` when empty.
+fn ring_pop[A](r: Ring[A]) -> Ring[A] * (A + 1) =
+  let (a, (h, n)) = r;
+  let (a, cap) = array_size[A](a);
+  if n == 0 { ((a, (h, n)), inr ()) } else {
+    let (a, o) = array_replace[A] (a, h, filler[A]);
+    match o {
+      inl x -> ((a, (wrap_at(h + 1, cap), n - 1)), inl x)
+    | inr x -> ((a, (h, n)), inr ())
+    }
+  }
+
+-- `x` at the back; a full ring drops its oldest element first.
+fn ring_push_over[A](r: Ring[A], x: A) -> Ring[A] =
+  let (a, (h, n)) = r;
+  let (a, cap) = array_size[A](a);
+  if n == cap {
+    let (a, _) = array_replace[A] (a, h, x);
+    (a, (wrap_at(h + 1, cap), n))
+  } else {
+    let (a, _) = array_replace[A] (a, wrap_at(h + n, cap), x);
+    (a, (h, n + 1))
+  }
+
+fn ring_len[A](r: Ring[A]) -> Ring[A] * i32 = let (a, (h, n)) = r; ((a, (h, n)), n)
+
+main -> i32 =
+  -- integers: 1..6 into a ring of 4 with overwrite; then drained
+  let mut r = ring_new[i32](4);
+  for i in 1..7 { r = ring_push_over(r, i) };
+  let (r, n) = ring_len(r);
+  print_dec(n); print_byte(b':');
+  let mut r = r;
+  for _ in 0..n {
+    let (r2, o) = ring_pop(r);
+    r = r2;
+    match o { inl x -> print_byte(b' '); print_dec(x) | inr u -> () }
+  };
+  print_byte(b'\n');
+  -- owned strings: a full ring hands the pushed one back
+  let s = ring_new[string](2);
+  let (s, a) = ring_push(s, string_of_lit("a"));
+  let (s, b) = ring_push(s, string_of_lit("b"));
+  let (s, c) = ring_push(s, string_of_lit("c"));
+  match c { inl u -> () | inr back -> let back = print_string(back); () };
+  let (s, f) = ring_pop(s);
+  match f { inl x -> let x = print_string(x); () | inr u -> () };
+  print_byte(b'\n');
+  0

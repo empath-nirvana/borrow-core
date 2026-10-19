@@ -40,6 +40,30 @@ kill criterion.
 
 ## 0. Summary
 
+**Read §12–§15 first.** The target set was widened on 2026-10-19 (Are We Fast Yet, the Benchmarks
+Game, Advent of Code, the north star end to end, Lox, data structures, concurrency). §12 is the
+catalogue over it, §13 the ways for the new blockers B11–B17, §14 the re-ranking by programs gated,
+and §15 the revised build units that end the document. The summary below is the first pass, kept
+as written; where §14 and §15 differ from it, they hold.
+
+**The widened set in brief** (§12):
+- Nearly everything runs today in some shape. Every Are We Fast Yet program, every Benchmarks Game
+  program and all 13 AoC ports run; the object-graph programs (Richards, DeltaBlue, Havlak, CD,
+  LRU, the doubly linked list, both Loxes) run as arenas with integer handles.
+- **Blocked outright**: the network (B11: no `Net` capability), and real parallelism (B12: no
+  threads).
+- **Blocked in the natural shape**: several tasks sharing a channel, cache or client (B1; the
+  worker pool runs with a scheduler written in the program that serves the queue), aliased mutable
+  graphs (B13), recursive data under arrays (B14), containers of `!` functions (B15).
+- **Libraries, not language** (B16): pidigits and regex-redux run with a bignum and a Pike VM
+  written in the program.
+- **Ranked by programs gated** (§14): B7, B3, B2, B1, B11, B4, B10, B17 (the north-star tier), then
+  B13, B16, B9, B14, B6, B8, B12, B15, B5.
+- **New defects**: an assignment inside a `modify` block is lost silently (`(6, 0)` for `(6, 7)`);
+  a callee's `let mut` name changes its caller's check.
+
+**The first pass:**
+
 **The target set** (proposed by the coordinator for the user; §1):
 1. **North star**: `corpus/pending/operator-reconcile.bc`, and a JSON round-trip of a resource once
    data declarations exist.
@@ -593,7 +617,7 @@ foundation its fix is. Every count is from §2.
    store per read (measured), while its machine code has single loads (recorded,
    `bench/README.md`). That is why L-1 is a lowering law, not a calculus change.
 
-## 9. Build units
+## 9. Build units (first pass, superseded by §15)
 
 A fixed, ordered list. Each unit names the blocker it removes, its acceptance programs (each added
 to the corpus with its golden, from the target set where one applies), and when it is done. Spikes
@@ -1759,3 +1783,392 @@ main -> i32 * (i32 * i32) =
   print_byte(b'\n');
   (again, (n, sum))
 ```
+
+## 12. The widened target set (2026-10-19)
+
+The user found §1's set too small ("the scope might have been a little bit too small in terms of
+target programs if you're just having it look at what we currently have in pending"), and agreed
+the set recorded on #587:
+
+1. **Are We Fast Yet**, all 14 (Marr et al.);
+2. **the Benchmarks Game**, 10;
+3. **an Advent-of-Code subset** from `maneatingape/advent-of-code-rust` (grids, graphs, BFS and
+   Dijkstra, parsing, simulation, memo);
+4. **the north star end to end**: an HTTP client and server, JSON and YAML, a watch stream,
+   retries with backoff and timers, several concurrent reconcilers sharing a client and a cache,
+   cancellation;
+5. **Lox**, as a tree-walker and a bytecode VM;
+6. **data structures**: hash map, B-tree, LRU cache, union-find, priority queue, ring buffer, arena
+   allocator, doubly linked list;
+7. **concurrency**: parallel map-reduce, a worker pool with channels, a stage pipeline.
+
+§1–§11 stay as written. The T01–T14 programs and the #537 bench rows stay in the set. This section
+and the next three extend the document; §15, the revised build units, ends it.
+
+**Method.** Three subagents of this session each wrote the *hard part* of every program in a
+category in today's surface, ran it, and recorded the exact refusal of each natural shape that
+fails. I re-ran the load-bearing ones (measured, §12.8). Every program is in
+`docs/expressiveness-probes/<category>/`, runnable as `$B run FILE` (with `< FILE.in` where an
+`.in` exists). The status words are:
+- **natural**: the functionality in a reasonable shape;
+- **workaround**: it runs in a shape a refusal forced (the refusal is quoted);
+- **blocked**: no shape found; the best attempt's message is quoted.
+
+### 12.1 Are We Fast Yet
+
+Every one runs; four need an arena for an object graph.
+
+| program | what it does | status | the refusal, or the workaround | blocker | allocs / indirect | probe |
+|---|---|---|---|---|---|---|
+| Richards | a scheduler over task records in a linked list, packets in linked queues; tasks change other tasks' state | workaround: task records in an arena (`array i32`, links are indices); packets owned, moved queue to queue (`richards_mu.bc`) | the shared record: "`t` is used twice here, and its type `ref (i32 * i32)` is not persistent"; the per-task function field: "`i` is not consumed in its scope, and it cannot be dropped where its scope ends" (an array of `!` functions); a div helper in an `if` arm returning an owned array, refused in generated code | B13, B15, B7 | 2 / 0 | `awfy/richards.bc` (23246 / 9297, the reference counts) |
+| DeltaBlue | a constraint graph: variables and constraints point at each other; the planner walks and mutates strengths | workaround: arena | a constraint in two variables' lists: the same "used twice"; two `imm` views of one cell: "`v` is used twice here, and its type `imm 'a i32` is not persistent" | B13, B9 | 416 / 0 | `awfy/deltablue.bc` (chain test: 100 of 100, plan length 101) |
+| Havlak | loop recognition: a CFG with edge lists, DFS numbering, union-find, a loop forest with parent pointers | workaround: arena, explicit DFS stack | the recursive DFS inside the `for` over out-edges: "in this `case`, `last` is consumed in the `inr` arm but not in the `inl` arm" (#492) | B13, B7 | 1806 / 0 | `awfy/havlak.bc` |
+| CD | collision detection over a red-black tree keyed by call sign (parent pointers, rotations) | workaround: arena tree with a sentinel | a child holding its parent: "`parent` is used twice here, and its type `ref i32` is not persistent" | B13 | 2 / 0 | `awfy/cd_rbtree.bc` (the tree part only) |
+| Json | parse JSON into a tree and print it | natural | a lookup returning a view into the tree: "`unroll V` needs `V : mu X. A`, but `V : imm 'a (mu X. …)`" | B3, B9 | 36 / 0 | `awfy/json.bc` |
+| NBody, Mandelbrot, Sieve | — | natural | `bench/` (recorded) | — | — | `bench/n-body`, `bench/mandelbrot`, `bench/sieve` |
+| Bounce | balls in an array, mutated in place | natural | `for b in &mut balls { modify b { … } }` | — | 1 / 0 | `awfy/bounce.bc` |
+| List | build lists, compare lengths, Takeuchi over lists | workaround: `clone` per extra use (9830 copies) | "`y` is used again …, so this use copies it, and its type … holds recursive data: the copy allocates every node" | B9 (shared immutable data) | 75374 / 0 | `awfy/list.bc` |
+| Permute, Queens | recursive search over arrays | natural | — | — | 1 / 0, 40 / 0 | `awfy/permute_natural.bc`, `awfy/queens.bc` |
+| Storage | a tree of arrays of arrays, built recursively | workaround: four children as a tuple | children in an array: "`io_d23` is not consumed in its scope, and its type … has no destructor" | B14 | 5461 / 0 | `awfy/storage.bc`, `awfy/storage_array.bc` |
+| Towers | Hanoi with piles as linked lists | natural | — | — (cost: a box per push) | 86383 / 0 | `awfy/towers.bc` |
+
+### 12.2 The Benchmarks Game
+
+Every one runs. Two needed libraries written by hand.
+
+| program | status | the refusal, or the workaround | blocker | allocs / indirect | probe |
+|---|---|---|---|---|---|
+| binary-trees, mandelbrot, n-body, spectral-norm | natural (`bench/`, 0.40×, 1.01×, 1.78×, 0.99× of Rust, recorded) | output is a count or a scaled integer, not the Game's PBM or `%.9f` | B16 (float formatting) | — | `bench/` |
+| fannkuch-redux | natural | `for … break` in place of `while` (#503) | B7 | 5 / 0 | `bg/fannkuch.bc` |
+| fasta | natural; byte-identical to the reference | — | — | 7 / 0 | `bg/fasta.bc` |
+| k-nucleotide | workaround | a lookup by a literal's view: "this argument of `map_lookup` has type `array_imm 'l1 u8`, which is not `K`" (SPEC §36 *Not provided*: a lookup by a key at another lifetime); sorting entries that hold views: "`x` is used twice here, and its type `array_imm 'io_q0 u8 * i32` is not persistent" | B16, B9 | 41 / 0 | `bg/knuc.bc` |
+| pidigits | workaround: `lib/float.bc`'s unsigned `Big` plus a sign and a small division written in the program | — | B16 (a signed bignum library) | 533 / 0 | `bg/pidigits.bc` (1000 digits correct) |
+| regex-redux | natural, with a Pike VM written in the program (about 230 lines); all counts and replacements match Python's `re` | — | B16 (a regex library, #225) | 591769 / 0 | `bg/regex.bc` |
+| reverse-complement | workaround | a lend in an `if` arm (#502); and **a callee's `let mut tbl` makes its caller's `tbl` "used twice"** (new, §12.7) | B7 | 6 / 0 | `bg/revcomp.bc`, `bg/mut-name-capture.bc` |
+
+### 12.3 Advent of Code
+
+All 13 ports in `corpus/aoc/` check today (measured, §12.8). They cover grids (2022-12, 2023-03),
+graphs with BFS and Dijkstra over a binary heap (2022-12, 2021-15), parsing (2022-01, 2023-01,
+2024-02), simulation (2020-08, 2021-06), maps keyed by views (2022-21, 2024-01, 2024-11), and a stack
+(2021-10). The one pending port, `corpus/pending/aoc-2020-07.bc` (memoised recursion over a map
+keyed by views), is refused by #491 and #492, both B7. So the AoC subset gates only B7; memo by a
+`memo` layer is B8.
+
+### 12.4 The north star, end to end
+
+| part | status | the refusal, or the workaround | blocker | probe |
+|---|---|---|---|---|
+| HTTP client and server | **blocked** | no network capability: the platform's externs are `read_byte`, `write_byte`, `write_all`, `read_into`, `clock_now`, `clock_sleep`, `read_arg` (`lib/wasi.bc`); `Net` is "designed, not built" (SPEC §11, §34 *Open*, #66). A user extern over a new kind: "expected a type, found name `socket`" | **B11** (new) | `ns/net-extern.bc` |
+| HTTP response parsing | workaround: a push parser fed byte by byte from `for b in bytes(&mut stdin)` | the pull form, a generator holding the input: B4's message | B4 | `ns/http-parse.bc`, `ns/http-gen.bc` |
+| JSON | natural for the tree (`awfy/json.bc`); names need B3 | — | B3 | — |
+| YAML | workaround: an explicit stack of indentation frames | `while` inside `for` (#503); `on_exhausted` cannot wrap the div `for` over the input (B2); a `match` inside a control `with` whose arms differ in printing: "in this `case`, `stdout` is consumed in the `inr` arm but not in the `inl` arm" (new) | B7, B2 | `ns/yaml-indent.bc` |
+| a watch stream | blocked: needs B11's socket; its decoding is B4's pull parser | — | B11, B4 | — |
+| retries with backoff on the clock | natural for a stateless call (`ns/retry-backoff2.bc`); `corpus/retry-block.bc` now retries (measured: `((inl 200, 30), (inr 503, 10))`), so #479's defect is gone | with a stateful service used inside the retried block: "the computation parameter `f` uses the capability of `Svc` and is called inside `with to_result`, whose body is lent the capability anew: not provided (SPEC §33 *Open*)" | **B17** (new to this document; #487) | `ns/retry-backoff.bc` |
+| timers and cancellation | natural: a task polls `Clock` and another cancels it; its cell is freed (`live 0`) | — | — | `ns/timer-cancel.bc` |
+| concurrent reconcilers sharing a client and a cache | blocked in the natural form | the cache as an effect: "two tasks spawned in this block are given the capability of `Cache` …"; as a borrow (watch `mut`, readers `imm`): "type mismatch: expected `imm (…) i32`, but this has type `mut 'r i32`" | B1, B2 | `ns/informer-cache.bc`, `ns/informer-borrow.bc` |
+
+### 12.5 Lox
+
+| program | status | the refusal, or the workaround | blocker | allocs / indirect | probe |
+|---|---|---|---|---|---|
+| tree-walker (jlox) | workaround: environments in an arena (a parent index per environment); a closure is (function id, environment index); instances index a field table. `makeCounter` twice, aliasing a closure, bound methods: output `1 2 1 3 11 12` | two closures sharing one captured variable: "`ml` is used twice here, and its type `mut 'x i32` is not persistent"; a buffer of AST nodes: "`mu X. …` has no filler" | B13, B14 | 124 / 0 | `lox/tree-arena.bc`, `lox/natural-shared-env.bc` |
+| bytecode VM (clox) | workaround: arena indices for upvalues, frames, globals; the dispatch `while` is a flat loop (about 1.5 loads and 1.5 bounds checks per instruction, no allocation) | an upvalue pointing into the growing stack: "`stack` is used twice here, and its type `array i32 * i32` is not persistent"; native functions in a table (B15) | B13, B15 | 99 / 0 | `lox/clox-vm.bc`, `lox/natural-upvalue.bc` |
+
+### 12.6 Data structures and concurrency
+
+| program | status | the refusal, or the workaround | blocker | probe |
+|---|---|---|---|---|
+| hash map | natural (`lib/map.bc`: generic, insert, lookup, remove, a view by `map_get`, iteration) | iterating a map whose keys are owned strings: "type mismatch: expected `array u8 * i32`, but this has type `array_imm 'y u8 * i32`" (at `lib/map.bc:230`) | B16 | `ds/hashmap.bc` |
+| B-tree | workaround: arena, generic with a comparator (2000 keys, height 6) | nodes owning arrays of children: "`e` is not consumed in its scope, and its type `1 + (mu X. …)` has no destructor" | B14 | `ds/btree.bc`, `ds/btree-boxed.bc` |
+| LRU cache | workaround: arena list with a sentinel plus `Map[i32, i32]`; LeetCode 146's example | the classic map-to-node plus linked nodes: "`n` is used twice here, and its type `ref (mu X. (i32 * i32) * (1 + ref X) * (1 + ref X))` is not persistent" | B13 | `ds/lru-arena.bc`, `ds/lru-cells.bc` |
+| doubly linked list | workaround: arena | linking cells both ways: "`a` is used twice here …" | B13 | `ds/dll-cells.bc` |
+| union-find, ring buffer, arena allocator | natural | ids are aliases, not distinct types (no `data`) | B3 | `ds/unionfind.bc`, `ds/ringbuf.bc`, `ds/arena.bc` |
+| priority queue | natural with a heap written in the program; `lib/buf.bc`'s heap takes an `i32` priority and persistent elements: "`x` is used twice here, and its type `i32 * array u8 * i32` is not persistent" | — | B16 | `ds/pq.bc` |
+| parallel map-reduce | workaround: two `spawn_in` tasks over disjoint `split_at_mut` halves, interleaved on one thread; `unconditional` | no threads | **B12** (#212) | `conc/split-halves.bc` |
+| worker pool with channels | workaround: **a scheduler written in the program serves the job queue and the results** (control operations `take_job`, `send_res`, `wait_turn`; the decision-57 port). Two workers, five jobs | the natural form, tasks sharing a channel effect: "two tasks spawned in this block are given the capability of `Chan` …" | B1 | `conc/worker-pool-port.bc`, `conc/worker-pool.bc` |
+| stage pipeline | natural as generators composed with `\|>`; blocked as tasks over channels (B1's message) | — | B1 | `conc/pipeline-gen.bc`, `conc/pipeline-tasks.bc` |
+
+### 12.7 New blockers and defects
+
+**New blockers** (each with a program that needs it):
+
+- **B11, no network capability.** HTTP client, server, watch stream; the operator end to end. The
+  only missing piece of the north star that has no workaround.
+- **B12, no threads.** Parallel map-reduce; a worker pool on several cores. The borrow structure
+  already checks: disjoint `mut` halves held by two tasks across `await` is `unconditional`
+  (measured, `conc/split-halves.bc`).
+- **B13, aliased mutable object graphs.** Richards, DeltaBlue, Havlak, CD, LRU, the doubly linked
+  list, both Loxes. Every one runs as an arena (index handles); the natural shape (a node reachable
+  from two places and mutated) is refused with "used twice". The premise's limited checker refuses
+  it by design, as Rust's does without `Rc<RefCell<_>>`.
+- **B14, recursive data under an array.** Storage, a B-tree whose nodes own child arrays, a buffer
+  of AST nodes, `lc-0208-trie-boxed`: no destructor and no filler for `mu X. … array X …` (#182).
+- **B15, containers of `!` functions.** Richards' task functions, Lox's native functions: "`i` is
+  not consumed in its scope, and it cannot be dropped where its scope ends" at `array_new[!(i32 =>
+  i32)](n, !{ i -> f })`, and "`io_else` is not consumed …" at `if c { f } else { g }` with a `!`
+  result. A pair of `!` functions, and a `mu` list of them, work. By inspection this is SPEC §26
+  *Open*: "weakening by an unused live slot of a persistent type, as a derived rule of the kernel:
+  not derived" (hypothesis that it is the same gap; `i` is a dead `i32` binder at a `!` result).
+- **B16, missing libraries.** A signed bignum with big×big and division (pidigits), a regex engine
+  (regex-redux, #225), fixed-precision float formatting (n-body, spectral-norm, k-nucleotide's
+  output), an O(n log n) sort and a heap with a comparator over owned elements (#497), map lookup by
+  a key at another lifetime, iteration over owned keys. Each was written in a program, so each is
+  a library gap, except the lookup by another lifetime, which SPEC §36 says needs "a family
+  shortened, a kernel constant".
+- **B17, a capability used by a computation parameter under its callee's handler** (#487, SPEC §33
+  *Open*). Retries around a stateful service.
+
+**New defects** (elaboration, joining B7; none is filed by this unit):
+
+1. **A silent wrong answer: an assignment inside a `modify` block is lost.**
+   `let mut x = 5; let mut n = 0; modify &mut x { v -> n = 7; v + 1 }; (x, n)` gives `(6, 0)`
+   (measured, `awfy/modify_assign.bc`). It is #586's class in a new place.
+2. **A callee's `let mut` name changes its caller's check.** A function with `let mut tbl = tbl`
+   makes a caller's `let mut tbl` threaded through an `if` refuse: "`tbl` is used twice here"
+   (measured, `bg/mut-name-capture.bc`); renaming the callee's binder fixes it.
+3. A div call in one arm of an `if` whose other arm returns an owned value is refused in generated
+   code (`awfy/div_arm.bc`); the components of a div call's result have type `1` at a generic call
+   (`awfy/div_generic.bc`).
+4. A lend nested in an expression is not refused at the lend but typed `1`, failing later and far
+   away (`bg/lend-arith.bc`); the same for a type used before its declaration.
+5. A `match` inside a control `with` whose arms differ in printing is refused (`ns/arm-stdout.bc`).
+6. A program's function with a library function's name silently resolves to the library's
+   (`awfy/name_clash.bc`).
+
+### 12.8 Re-run here
+
+`B=~/repos/borrow-core-c3c/.lake/build/bin/bcc`, from `docs/expressiveness-probes/` (measured):
+
+```
+awfy/richards.bc: (i32[23246], i32[9297])
+awfy/deltablue.bc: (i32[100], i32[101])
+awfy/havlak.bc: (i32[75], (i32[74], i32[122]))
+awfy/cd_rbtree.bc: (i32[877], (i32[1], f64[…]))
+awfy/json.bc: i32[12]
+awfy/fn_array.bc: fn_array.bc:5:44: `i` is not consumed in its scope, and it cannot be dropped where its scope ends
+awfy/modify_assign.bc: (i32[6], i32[0])
+bg/mut-name-capture.bc: mut-name-capture.bc:14:14: `tbl` is used twice here, and its type `array u8` is not persistent
+bg/mut-name-capture-renamed.bc: runs
+bg/pidigits.bc: runs
+ds/lru-cells.bc: lru-cells.bc:14:3: `n` is used twice here, and its type `ref (mu X. (i32 * i32) * (1 + ref X) * (1 + ref X))` is not persistent
+ds/dll-cells.bc: dll-cells.bc:19:3: `a` is used twice here, and its type `ref (mu X. i32 * (1 + ref X) * (1 + ref X))` is not persistent
+ds/btree-boxed.bc: btree-boxed.bc:80:46: `e` is not consumed in its scope, and its type `1 + (mu X. (array i32 * i32) * array (1 + X) * i32)` has no destructor
+ds/lru-arena.bc: runs
+conc/worker-pool-port.bc: ((i32[3], i32[2]), inr (i32[51], inr (i32[42], inr (i32[31], inr (i32[22], inr (i32[11], inl ()))))))
+lox/tree-arena.bc, lox/clox-vm.bc, ns/yaml-indent.bc: run
+corpus/aoc/*.bc (13 files): all check
+```
+
+## 13. Every way to unblock the new blockers
+
+### 13.1 B11: a network capability
+
+| way | performance | proof cost | ergonomics | verdict |
+|---|---|---|---|---|
+| Rust's way: `std::net` over OS sockets, `Drop` closes | parity | n/a | good | its *surface* is not ours: a socket here is a linear capability, and its close returns the error (#210) |
+| **`Net` as an effect served by the platform's outermost handler** (SPEC §34's model for `Stdout`), a connection a linear handle (no destructor; `close` hands back the error), the extern contract proved as stdio's is (`externs_loop_every_run`, SPEC §11) | parity: a direct call to the host (`effect handling is erased`) | lemma per extern, by the stdio pattern | good | **recommended** |
+| session-typed HTTP over it (#209) | parity | relation (sessions) | best | later; not needed to run the operator |
+
+The elaboration candidate: `with net { let c = connect(addr); … }` elaborates to the platform's
+handler of `Net` and its externs, as `print_byte` elaborates to `wasi_stdout`. Memory at the
+surface: none. The WASI target needs WASI sockets; the native target uses libc.
+
+### 13.2 B13: aliased mutable object graphs
+
+What fails: a node reachable from two places and mutated through either (measured, eight
+programs). What works today: every one as an arena with integer handles (measured).
+
+| way | performance | proof cost | ergonomics | verdict |
+|---|---|---|---|---|
+| Rust's way: `Rc<RefCell<Node>>` with `Weak` for back edges | a count update per clone and drop, a flag test per borrow; a heap object per node | relation (RC is explicit and deferred, memory "No GC"); `RefCell` is a run-time check | fair | **not the best way here**: the AWFY graph programs' work is all index arithmetic in the arena form, with no counts |
+| Rust's other way: an arena with typed indices (`slotmap`, `petgraph`) | an index computation and a bounds check per access | none: it runs today | good once ids are distinct types (B3) | **recommended now**, as a library `Arena[T]` with an `Id[T]` newtype |
+| handler-owned region with branded handles (#119; GhostCell's split of permission and data) | index arithmetic with **no** bounds check: a handle of brand `'r` is below the region's length by the region-length Kripke fact | lemma: the `Cell<'r, T>` clause and the monotone length fact (#119) | good: handles are copyable data; get/set are operations, copy in and out | **recommended next**, behind spike S-G; it is the arena with its bounds check removed by typing |
+| codata cells (an object as a handler with operations) | a call per access | none | fair | for objects with behaviour (Lox instances), on the same region |
+| SILL_S shared processes | a message per access | relation | poor for data structures | set aside |
+| explicit RC | as Rust | relation | fair | set aside for the target set; no program needs unstructured lifetime |
+
+**The elaboration candidate.** *Writes:* `region g { let a = g.new(Node{…}); let b = g.new(Node{…});
+a.next = b; b.prev = a; … }`. *Elaborates to:* an answering handler owning `buf Node`, handles as
+indices of brand `'g`, field reads and writes as its operations (`withswap` on the slot, §18).
+*Checked by:* the answering-handler rules, with no new rule for the unbranded version; the branded
+version adds #119's lemma. *Memory at the surface:* none; the region frees everything at its end,
+as an arena does.
+
+### 13.3 B12: threads
+
+| way | performance | proof cost | ergonomics | verdict |
+|---|---|---|---|---|
+| Rust's way: scoped threads and rayon's `join` over `split_at_mut`; `Send`/`Sync` | parity | n/a | good | its structure is ours: the split already types (measured) |
+| **fork-join `join`/`par_for` over a split context**, sequential on Wasm and on a work-stealing pool natively (#212); soundness at first a named assumption, as R1's is under `PinLaw` (#212's Route 0) | parity | an assumption now; #212's routes B or C later | good | **recommended**: the research thread "fork-join with a named assumption", now used |
+| tasks on a thread pool (async across threads) | — | relation | — | after fork-join; outside this set's programs |
+
+### 13.4 B14: recursive data under an array
+
+| way | performance | proof cost | ergonomics | verdict |
+|---|---|---|---|---|
+| Rust's way: `Vec<Box<Node>>` with `Drop` | parity | n/a | good | the target |
+| **a destructor and fold for `mu` with `X` under `array`** (#182 item 2) | parity | lemma: one more `FShape` case for `foldOwn` and its destructor | good | **recommended**, behind spike S-H |
+| children as a tuple, or in an arena | parity | none | fair | today's workaround |
+
+### 13.5 B15: containers of `!` functions
+
+| way | performance | proof cost | ergonomics | verdict |
+|---|---|---|---|---|
+| Rust's way: `Vec<fn(i32) -> i32>`, or `Box<dyn Fn>` | an indirect call | n/a | good | the target |
+| **derive the weakening of a dead persistent binder** (SPEC §26 *Open*) or elaborate the tabulator so it does not need it | an indirect call, or none after specialisation | lemma (§26) | good | **recommended** |
+| a tag and a `match` (defunctionalisation) | a branch | none | fair | today's workaround, and what the backend makes of a known set anyway |
+
+### 13.6 B16: libraries
+
+Each is a library unit, written in the language, with its corpus program: a signed bignum
+(`lib/float.bc`'s `Big` extended), a regex engine (Pike VM, #225), `%.Nf` formatting, an O(n log
+n) sort and a heap with comparators over owned elements (reading through views, #497), map
+iteration over owned keys. The one language item is lookup by a key at another lifetime, which
+needs SPEC §36's "family shortened" constant. Rust's way (generic `Borrow<Q>`) is the functionality
+to match.
+
+### 13.7 B17: a capability used by a computation parameter under its callee's handler
+
+SPEC §33 *Open* records the cause: the argument should take its capabilities at lifetimes of its
+own, `!U(∀'x. Mut 'x S ⊗ A ⊸ F_Σ (Mut 'x S ⊗ B))` (decision 57, R2a). That was built and taken out
+because "the checker compares types without α-conversion of lifetime binders" (*Incompleteness*
+2). The way is to make the checker compare lifetime binders up to renaming, then restore R2a. Proof
+cost: none in the kernel (it is the checker's completeness). Rust's equivalent (`FnMut(&mut S)`,
+higher-ranked) is the same idea.
+
+## 14. Re-ranking every blocker by target programs gated
+
+A program is *gated* when its natural shape is refused or it cannot be written at all. North-star
+blockers come first, each tier ordered by count; ties go to the better foundation.
+
+| rank | blocker | north star? | programs gated (natural shape) | count |
+|---|---|---|---|---|
+| 1 | B7 elaboration refusals and silent defects | yes (YAML) | T02, T03, T04, T06, T07, T10, T12; Havlak, Richards, fannkuch, reverse-complement, YAML, B-tree, AoC 2020-07, clox (#493), the `modify` write defect | 16 |
+| 2 | B3 data declarations, nested data | yes (JSON, YAML) | JSON round-trip, YAML, AWFY Json, Lox ASTs (2), T07, T09, T11, arena ids (union-find, arena, B-tree) | 11 |
+| 3 | B2 div under a handler | yes | operator-reconcile, the watch task and the server's accept loop (by inspection: tasks whose loop is unbounded), YAML over the input, the reconcilers | 5 |
+| 4 | B1 a service shared by tasks | yes | operator-reconcile, the reconcilers' cache, the worker pool, the task pipeline, `io-two-tasks` | 5 |
+| 5 | B11 network capability | yes | HTTP client, HTTP server, watch stream, the operator end to end | 4 |
+| 6 | B4 suspended computations owning capabilities | yes | HTTP response pull parser, watch stream decoder | 2 |
+| 7 | B10 aborts across buffer borrows | yes | JSON parse errors, YAML parse errors | 2 |
+| 8 | B17 capability in a computation parameter | yes | retries around a stateful client | 1 |
+| 9 | B13 aliased mutable graphs | no | Richards, DeltaBlue, Havlak, CD, LRU, doubly linked list, jlox, clox | 8 |
+| 10 | B16 libraries | no | pidigits, regex-redux, k-nucleotide, n-body and spectral-norm output, priority queue | 6 |
+| 11 | B9 `imm` duplication, borrowed walks, `imm` reborrow | no | List, AWFY Json lookup, DeltaBlue's views, k-nucleotide's sort, T04, T05 | 6 |
+| 12 | B14 data under arrays | no | Storage, B-tree, jlox's AST buffer | 3 |
+| 13 | B6 lends per call | no | T04, T09, T14 | 3 |
+| 14 | B8 generic answering effects | no | T06, T08, AoC memo by layer | 3 |
+| 15 | B12 threads | no | parallel map-reduce, worker pool on cores, parallel quicksort | 3 |
+| 16 | B15 containers of `!` functions | no | Richards, clox natives | 2 |
+| 17 | B5 borrows across a resuming operation | no | T03's generator form, `parse-recover-gen` | 2 |
+
+**What changed from §6.** The first pass ranked B2 and B1 first because one program gated them.
+Counted over the wider set, the elaboration refusals (B7) and data declarations (B3) gate the most
+programs, and both are prerequisites of the north star's JSON and YAML. B13 (graphs) is the largest
+blocker outside the north star, and it already has a working encoding.
+
+**Outside the target set** after widening: multi-shot search; allocation tracking (`noalloc`);
+folds with `X` under `U` (`fold-under-u`); digging and same-lifetime boxing (`dig-bang`, `box-dup`);
+a borrowed list's external iterator (#57, beyond B9's borrowed walk); K1 itself (#172); stored
+callbacks with rows (#161 B: `callbacks-in-data`, `map-div-fold`, `div-in-adapter`), which no
+target program needs once B15 holds; ports beyond B1 (`comp-param-two-sites`, `comp-param-for`).
+
+**Research threads, revised.** Two threads §7 set aside are now used:
+- **codata cells and #119's handler-owned region**, for B13 (C-1, C-2);
+- **fork-join with a named assumption** (#212's Route 0), for B12 (C-10).
+
+The **BoLo semantic seam** is used as well. The region's `Cell<'r, T>` clause (C-2) is a library
+primitive proved against the relation, which is the DRFCaml and RustBelt style. **SILL_S** stays
+only the reading of the per-turn lend.
+
+**Surprises, revised.**
+- §8 item 2 said the actor route "is not free today". It is writable today, as a scheduler in the
+  program that serves the shared state through control operations whose resumption takes the
+  answer (`conc/worker-pool-port.bc`, measured). `lib/async.bc` cannot host it, but user code can.
+  B-2's kill path is therefore a library, not a lemma.
+- `corpus/retry-block.bc` now retries (measured), so #479's "does not retry" no longer holds.
+- Permute's recursion inside a counted `for` threading an array runs, while #492 refuses Havlak's
+  conditional DFS. #492 fires only in some shapes.
+- The clox dispatch `while` is already a flat loop at the flat IR, with no allocation or indirect
+  call per instruction (measured).
+
+## 15. Build units, revised for the widened target set
+
+This list supersedes §9. It is fixed and ordered. Each unit names the blocker it removes, its
+acceptance programs (added to the corpus with goldens, drawn from §12's set and §2.2's), and a
+one-line "done when". A spike has a yes/no question, the program it unblocks and a kill path, and
+it ends in a build unit or a documented limit. Every unit that changes which programs are accepted
+gets its SPEC entry first; the algebra hard stop applies. The probe programs named are in
+`docs/expressiveness-probes/`.
+
+**Track A: elaboration first** (B7; it gates the most programs, and every later acceptance program
+is written naturally only after it).
+
+| # | unit | removes | acceptance | done when |
+|---|---|---|---|---|
+| A1 | **loops U2, U3, U4** (#549, #550, #551) | B7 (loops) | `docs/loops.md` §5.1's programs; T02, T07, T10; `fannkuch`, `yaml-indent` and `havlak` with `while` where the probes use `for … break`; `corpus/pending/for-*`, `loop-*` | those run as written and the pending ones move to `corpus/` |
+| A2 | **the write rule** (#586, #504; the mutation report's D2 with its abort column) covering `modify` blocks (§12.7 defect 1), and **ergonomics E1** (#582) | B7 (writes) | T01, T03, T12 (52 and 5102); `awfy/modify_assign.bc` gives `(6, 7)` or a refusal; `borrow-nested-handback` | no assignment anywhere elaborates to a dead rebinding (each #586 form and defect 1 gives its D2 answer or refusal) |
+| A3 | **binding hygiene and early lends**: a callee's binders never reach its caller (§12.7 defect 2); a lend nested in an expression is lifted to a binding (#510, #525) or refused at the lend; a div call's result typed at a generic call; the `match`-in-`with` arm case (defects 3–5); name clashes with the library reported | B7 (hygiene) | `bg/mut-name-capture.bc`, `bg/lend-arith.bc`, `awfy/div_arm.bc`, `awfy/div_generic.bc`, `ns/arm-stdout.bc`, `awfy/name_clash.bc` | each runs or gets a message at its cause, and `reverse-complement` runs with its callee's binder named `tbl` |
+| A4 | **#492**: a recursive call inside a counted `for` that threads an array | B7 | `havlak_dfs_rec.bc`, `rec-in-for-linear`, `lc-0039`, `aoc-2020-07` (with A1's #491) | those run with goldens |
+
+**Track B: the north star.**
+
+| # | unit | removes | acceptance | done when |
+|---|---|---|---|---|
+| B-1 | **`handle_general`** (#564, on S0 and `Div` in the kernel, landed) and the surface's §21 restriction lifted | B2 | `op-e.bc` as `corpus/operator-one-task.bc`; `yaml-indent.bc` with one `on_exhausted` around its loop over the input; `async-fanout` | those run, and SPEC §21 *Open*'s "a handler around a div computation" is removed |
+| B-2 | **spike S-B**: yes/no — is the per-turn task type `box 'd U(νX. (Mut 'x S ⊸ F(Mut 'x S ⊗ (A + box 'd U X))) & F 1)` derivable from §22's affine closure with an argument and §32's threading, with no new compatibility lemma? | B1 (its form) | `operator-reconcile.bc` against a hand-written `spawn_with` | **yes**: B-3 builds the per-turn lend. **Kill**: B-3 builds the port instead, as a library: a scheduler that serves the shared state through control operations, which already runs (`conc/worker-pool-port.bc`) |
+| B-3 | **the shared service**: per-turn lend (or the port), with the surface `with h(&mut s) { … with spawn { … } … }` elaborating to it | B1 | `operator-reconcile.bc` (golden `[3, 4, 2]` and the converged cluster); `io-two-tasks`, `async-channel`, `conc/worker-pool.bc`, `conc/pipeline-tasks.bc`, `ns/informer-cache.bc` | `operator-reconcile.bc` moves to `corpus/`, and SPEC §34 *Open*'s "concurrent writers" is removed |
+| B-4 | **data declarations** (#489 part 1, #54 stage 8): records, variants, newtypes, patterns, field update through `mut` | B3 | T07, T09, T11; `data-box-tree`; union-find, the arena and the B-tree with distinct `Id` types; n-body's bodies as records | they run as written (spellings aside) and n-body's bench row is no slower |
+| B-5 | **spike S-D**: yes/no — does a declaration whose variant holds `List[Self]` elaborate to one `mu`, the list's functions specialised at it, accepted by today's checker? | B3 (nesting) | `data Json = … Arr(List[Json]) \| Obj(List[string * Json])` | **yes**: B-7 uses it. **Kill**: kernel nested `mu` (#182) as its own SPEC entry before B-7 |
+| B-6 | **aborts across buffer and literal borrows**: emit `sliceBorrowIU`/`MU`; `fold_lines` over `count_try` | B10 | `abort1.bc`, `config-parse.bc` | both run, and SPEC §18's "a borrow of a buffer or a literal crossed by an abort" is removed |
+| B-7 | **JSON and YAML libraries**: parse (raising on malformed input) and print, over B-4's declarations | B3, B10 | `corpus/json-roundtrip.bc` (a Deployment-like resource read, `replicas` changed, printed byte for byte); `corpus/yaml-roundtrip.bc` (the same resource in YAML, to JSON); malformed inputs raising across the input's borrow | both run at every stage and pass `scripts/falsify.sh` |
+| B-8 | **`Net`**: an effect served by the platform's outermost handler; connections as linear handles whose `close` returns its error; externs over libc (native) and WASI sockets | B11 | `corpus/net-echo.bc`: a server and a client, both in the language, exchanging a line over localhost | the echo runs natively, and SPEC §11's `Net` moves from *Designed* to built |
+| B-9 | **close with a residual** for generators, on S0's residual | B4 | `gen-digits`, `gen-lines`, `gen-lazy`, `gen-adapters-io`; `ns/http-gen.bc` (a pull parser over a socket after B-8) | those move to `corpus/` |
+| B-10 | **lifetime binders compared up to renaming**, then decision 57's R2a | B17 | `ns/retry-backoff.bc` (retry with a stateful service); `comp-param-capability.bc` | both run, and SPEC §33 *Open*'s R2a row is removed |
+| B-11 | **HTTP/1.1 client and server library** over B-8 (request, response, chunked bodies) | B11 | `corpus/http-get.bc`: the client fetches a JSON document from a server written in the language | the client prints the document byte for byte |
+| B-12 | **the operator, end to end**: a watch task decoding a stream into an informer cache; N reconcilers sharing the client and cache (B-3); retries with backoff (B-10), timers and cancellation | — | `corpus/operator.bc` against a fake API server written in the language (B-11) | the operator converges three objects, survives a conflict, and cancels its tasks on shutdown with `live 0` |
+
+**Track C: graphs, data and the rest of the set.**
+
+| # | unit | removes | acceptance | done when |
+|---|---|---|---|---|
+| C-1 | **`Arena[T]` with `Id[T]` newtypes** in `lib/`, and the `region` elaboration of §13.2 in its unbranded form | B13 | Richards, DeltaBlue, Havlak, CD, LRU, the doubly linked list, jlox, clox, the B-tree, each as a corpus program over the library | all ten run with goldens, and none indexes a raw `array i32` by hand |
+| C-2 | **spike S-G** (#119): yes/no — do branded handles into a handler-owned region make every access in bounds by the region-length Kripke fact, as one lemma with no change to the relation? | B13 (bounds) | DeltaBlue over C-1 with its bounds checks gone | **yes**: build it; `bcc-counts` bounds per access drop to 0. **Kill**: checked indices stay, documented as the arena's cost |
+| C-3 | **spike S-H**: yes/no — is a destructor and fold for `mu` with `X` under `array` one more `FShape` case of `foldOwn`, one lemma? | B14 | `awfy/storage_array.bc`, `ds/btree-boxed.bc`, `lc-0208-trie-boxed` | **yes**: build it and the three run. **Kill**: tuple children and arenas are the way, documented in SPEC §6 |
+| C-4 | **containers of `!` functions**: SPEC §26's weakening by a dead persistent binder, or an elaboration of the tabulator that does not need it | B15 | `awfy/fn_array.bc`, `richards_fnfield.bc`, `lox/fn-in-array.bc`, `lox/map-closures.bc` | those run |
+| C-5 | **#58 and #142, implicit copies of `imm`**, and **a borrowed walk of `mu`** (`unroll` at an `imm` view) | B9 | List without `clone`; AWFY Json's lookup returning a view; DeltaBlue's two views; T05 | those run, and List's `copies` are 0 |
+| C-6 | **spike S-F** (#174): yes/no — does `axWithborMITy` follow from the anti-frame and a variant of `wpTS_I_frameX` with `hQ` stated at the drop step? | B9 | T04 with `len(&v)` at a `mut` parameter | **yes**: build K2′. **Kill**: `mut`-taking read functions stay the API |
+| C-7 | **lends per call**, and **spike S-E** for a looping callee's second borrow | B6 | T04, T14 (`fill(&mut buf)` under the services), `lend-two`; `lend-div-two` if S-E says yes | those run; S-E's kill keeps one borrow per looping callee, documented in SPEC §14 |
+| C-8 | **generic answering effects** and `update_with` | B8 | T06, T08, `effects-generic-store`, `lc-0070` | those run |
+| C-9 | **libraries**: signed bignum, regex (#225), `%.Nf`, O(n log n) comparator sort and comparator heap over owned elements (#497), map iteration over owned keys; lookup at another lifetime by SPEC §36's constant | B16 | pidigits, regex-redux, k-nucleotide (Game output exactly), n-body and spectral-norm with `%.9f`, `ds/pq.bc` over strings | the Benchmarks Game programs print the Game's exact output |
+| C-10 | **fork-join** (#212): `join` and `par_for` over a split context, sequential on Wasm, a work-stealing pool natively; soundness as a named assumption (`ParLaw`, as `PinLaw` is) | B12 | parallel map-reduce (`conc/split-halves.bc` with `join`), parallel quicksort, the worker pool on cores | each gives the same answer on Wasm and native, and runs faster on native with more than one core |
+| C-11 | **lend split at suspensions** (tasks) | B5 | `async-bank.bc` as written; T13 in the report's shape | `async-bank.bc` moves to `corpus/`, `unconditional` |
+| C-12 | **spike S-C**, then **the lending cursor** | B5 | `parse-recover-gen.bc`; T03's generator form | **yes**: both run. **Kill**: the hand-written cursor (`json-tokens.bc`'s shape) is the way |
+| C-13 | **the benchmarks as bench rows**: the 14 AWFY and 10 Game programs in `bench/` with their Rust sides, measured by `make bench` | — | `bench/out/results.md` with every row | every row is within the bound the user sets |
+
+**Track N: lowering, on the new backend** (`docs/compiler.md`'s N1–N5). The first pass's L-1 to L-7
+become items of those units. Nothing here is a recovery pass: #540 was stopped by the user as one,
+so native loops come by construction from `iterate` and the erasure pass, not from L2b.
+
+| item | was | belongs to | how, by construction | acceptance |
+|---|---|---|---|---|
+| reads and writes through `mut` at persistent contents as loads and stores | L-1 | N2 | a derived node on the typed term ("contents persistent", as C2b's `divLit`), and an erasure rule with its proof over Core | quicksort and sort-generic within the bound; `bcc-counts` shows no store per read |
+| `while`, `loop` and generator bodies as native loops | L-2 | N4 | `iterate` is an LIR loop with loop-carried variables; `tick`'s clause is tail-resumptive, so the erasure pass makes it a direct back edge | sieve ≤ 1.4×, chain-yield ≤ 1.2× (`docs/compiler.md` §5.3); the clox dispatch loop with no `drive` |
+| bounds checks where the index is the loop's counter over the view | L-3 | N1 | the typed term carries "counter below `len`" for `count_try` over a view; LIR emits the access unchecked | n-body, sieve-for, quicksort, the AWFY array programs |
+| typed pointers, `getelementptr`, aligned arrays | L-4 | N5 | as `docs/compiler.md` §3.4 | sum's loop vectorises |
+| the `Exhausted` pass-through as a tail call | L-5 | N2 | the abortive rule's identity (#537 fix 3, merged into N2) | gen-tree, gen-tree-cb ≤ 1.4× |
+| 4-byte `i32` slots | L-6 | N1 | layouts from types | quicksort's footprint halves |
+| handler state a local variable for a `with` | L-7 | N2 / LIR §3.3 | the handler's scope is one code | handlers-di ≤ 0.9× |
+| arena handles without bounds checks | new | N1 (after C-2) | the brand's fact carried on the typed term | DeltaBlue, Richards over C-1 |
+| a node reused in place when a list is rebuilt (Towers' re-roll on push) | new | N1 | `foldReuse` (SPEC §6) chosen where the source is owned and dead | Towers' allocations per move fall to 0 |
+
+**Order.** A1–A4; then B-1 to B-12 (the north star runs end to end); C-1 to C-13 in the order
+listed. N items go with their N units, beside the other tracks. Any track may run while another is
+in progress; within a track the order holds. Every spike ends in a build unit or a documented
+limit.
+
+**Outside the target set** (no unit): multi-shot search; allocation tracking; folds with `X` under
+`U`; digging and same-lifetime boxing; an external iterator over a borrowed list (#57); K1 (#172);
+stored callbacks with rows (#161 B); ports beyond the shared service (`comp-param-two-sites`,
+`comp-param-for`); explicit RC; interior mutability beyond the region of C-1/C-2 (#119's
+`RefCell`-like projections, #160).

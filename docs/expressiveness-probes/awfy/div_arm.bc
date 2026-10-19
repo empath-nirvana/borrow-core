@@ -1,0 +1,9 @@
+-- A call of a div function (a `while`) in one arm of an `if`, threading an owned array.
+include slice
+fn spin(p: array i32, n: i32) -> array i32 * i32 =
+  let mut k = n;
+  while k > 0 { k = k - 1 };
+  (p, k)
+fn f(p: array i32, x: i32) -> array i32 * i32 =
+  if x < 0 { (p, 0) } else { let (p, y) = spin(p, x); (p, y + 1) }
+main -> i32 = let p = array_new[i32](3, !{ i -> 0 }); let (p, r) = f(p, 5); r

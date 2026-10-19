@@ -1,0 +1,84 @@
+-- fasta: three sequences: ALU repeated, then two random ones drawn from cumulative-probability
+-- tables with the benchmark's LCG; 60 bytes a line, output through one buffer flushed in blocks.
+include textio
+include io
+include float
+include buf
+
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+def alu : lit = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
+
+-- The output buffer: flushed when it holds 8 KiB or more.
+fn out_byte(o: string, b: u8) -> string =
+  let (o, _) = push_byte(o, b);
+  let (o, n) = len_of(o);
+  if 8192 <= n { clear_str(print_string(o)) } else { o }
+
+fn repeat_fasta(o: string, s: lit, n: i32) -> string =
+  let (m, f) = s;
+  let mut o = o;
+  let mut k = 0;
+  for i in 0..n {
+    o = out_byte(o, f(k));
+    k = k + 1;
+    if k == m { k = 0 } else { () };
+    if (i + 1) - ((i + 1) / 60) * 60 == 0 { o = out_byte(o, b'\n') } else { () }
+  };
+  if n - (n / 60) * 60 != 0 { out_byte(o, b'\n') } else { o }
+
+-- The LCG: the next seed and its value scaled to [0, max).
+def im : i32 = 139968
+fn next_rand(seed: i32, max: f64) -> i32 * f64 =
+  let s = host[rem_u32](seed * 3877 + 29573, im);
+  let s = match s { inl x -> x | inr u -> 0 };
+  (s, max * f64_of_i32(s) / f64_of_i32(im))
+
+-- The table: symbols and cumulative probabilities.
+fn cumulative(p: array f64) -> array f64 =
+  let (p, n) = array_size[f64](p);
+  let mut p = p;
+  let mut acc = 0.0;
+  for i in 0..n { let x = at(&p, i, 0.0); acc = acc + x; p = array_set(p, i, acc) };
+  p
+
+fn random_fasta(o: string, seed: i32, syms: array u8, cum: array f64, n: i32) -> (string * i32) * (array u8 * array f64) =
+  let (cum, k) = array_size[f64](cum);
+  let mut o = o;
+  let mut seed = seed;
+  let mut cum = cum;
+  let mut syms = syms;
+  for i in 0..n {
+    let (s, r) = next_rand(seed, 1.0);
+    seed = s;
+    let mut j = k - 1;
+    for t in 0..k { let c = at(&cum, t, 0.0); if r < c { j = t; break } else { () } };
+    let b = at(&syms, j, b'?');
+    o = out_byte(o, b);
+    if (i + 1) - ((i + 1) / 60) * 60 == 0 { o = out_byte(o, b'\n') } else { () }
+  };
+  let o = if n - (n / 60) * 60 != 0 { out_byte(o, b'\n') } else { o };
+  ((o, seed), (syms, cum))
+
+fn of_lit(l: lit) -> array u8 = let (m, f) = l; array_new[u8](m, !{ i -> f(i) })
+
+fn put_lit(o: string, l: lit) -> string = let (o, _) = push_lit(o, l); o
+
+main -> i32 =
+  let n = arg_i32(1000);
+  let o = string_new(16384);
+  let o = put_lit(o, ">ONE Homo sapiens alu\n");
+  let o = repeat_fasta(o, alu, 2 * n);
+  let o = put_lit(o, ">TWO IUB ambiguity codes\n");
+  let p = array_new[f64](15, !{ i -> 0.02 });
+  let p = array_set(array_set(array_set(array_set(p, 0, 0.27), 1, 0.12), 2, 0.12), 3, 0.27);
+  let ((o, seed), (s1, c1)) = random_fasta(o, 42, of_lit("acgtBDHKMNRSVWY"), cumulative(p), 3 * n);
+  let o = put_lit(o, ">THREE Homo sapiens frequency\n");
+  let q = array_new[f64](4, !{ i -> 0.0 });
+  let q = array_set(array_set(array_set(array_set(q, 0, 0.3029549426680), 1, 0.1979883004921), 2, 0.1975473066391), 3, 0.3015094502008);
+  let ((o, seed), (s2, c2)) = random_fasta(o, seed, of_lit("acgt"), cumulative(q), 5 * n);
+  let o = print_string(o);
+  0

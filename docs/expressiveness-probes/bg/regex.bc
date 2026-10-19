@@ -1,0 +1,279 @@
+-- regex-redux: a small regex engine (a Pike VM, leftmost-first) over byte strings, enough for the
+-- benchmark's patterns: literals, `.`, `[...]` and `[^...]`, `*`, tp-level `|`, `\` escapes.
+-- The input is cleaned (`>.*\n|\n` removed), the nine variant patterns are counted, and five
+-- replacements are made; the three lengths are printed.
+--
+-- A program is a `buf i32`, three slots an instruction: op, x, y. Ops: 0 byte x; 1 class x;
+-- 2 any but newline; 3 split (x first, then y); 4 jump x; 5 match. Classes are 256 `bool`s each,
+-- in one `buf bool`. The VM's thread lists are `buf i32`s and a mark per instruction.
+include textio
+include io
+include buf
+
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+fn geti(b: buf i32, i: i32) -> buf i32 * i32 = let (a, n) = b; let x = at(&a, i, 0); ((a, n), x)
+fn seti(b: buf i32, i: i32, x: i32) -> buf i32 = let (a, n) = b; (array_set(a, i, x), n)
+fn pushi(b: buf i32, x: i32) -> buf i32 = let (b, _) = push(b, x); b
+fn getb(b: buf bool, i: i32) -> buf bool * bool = let (a, n) = b; let x = at(&a, i, false); ((a, n), x)
+fn byte_at(s: string, i: i32) -> string * u8 = let b = borrow imm s { v -> at(v, i, 0) }; (s, b)
+
+type Re = buf i32 * buf bool
+
+fn emit(p: buf i32, op: i32, x: i32, y: i32) -> buf i32 = pushi(pushi(pushi(p, op), x), y)
+fn pc_of(p: buf i32) -> buf i32 * i32 = let (p, n) = len_of(p); (p, n / 3)
+
+-- The class at `[` at `i` of the pattern compiled: a new class index, and the index past `]`.
+fn compile_class(cs: buf bool, l: lit, i: i32) -> (buf bool * i32) * i32 =
+  let (m, f) = l;
+  let neg = f(i + 1) == b'^';
+  let start = if neg { i + 2 } else { i + 1 };
+  let (cs, base) = len_of(cs);
+  let mut cs = cs;
+  for _ in 0..256 { let (c2, _) = push(cs, neg); cs = c2 };
+  let mut j = start;
+  for _ in 0..m {
+    if f(j) == b']' { break } else {
+      let (a, n) = cs;
+      cs = (array_set(a, base + to_i32(f(j)), not(neg)), n);
+      j = j + 1
+    }
+  };
+  ((cs, base / 256), j + 1)
+
+-- One atom at `i` and its `*` if any, emitted; the index after it.
+fn compile_atom(re: Re, l: lit, i: i32) -> Re * i32 =
+  let (p, cs) = re;
+  let (m, f) = l;
+  let c = f(i);
+  -- the atom's end, and whether a `*` follows
+  let (cs, (cls, after)) =
+    if c == b'[' { let ((cs, k), e) = compile_class(cs, l, i); (cs, (k, e)) }
+    else { if c == 92 { (cs, (0 - 1, i + 2)) } else { (cs, (0 - 1, i + 1)) } };
+  let star = after < m && f(after) == b'*';
+  let (p, l0) = pc_of(p);
+  let p = if star { emit(p, 3, l0 + 1, 0 - 1) } else { p };
+  let p = if c == b'[' { emit(p, 1, cls, 0) } else {
+    if c == b'.' { emit(p, 2, 0, 0) } else {
+      if c == 92 { emit(p, 0, to_i32(f(i + 1)), 0) } else { emit(p, 0, to_i32(c), 0) } } };
+  if star {
+    let p = emit(p, 4, l0, 0);
+    let (p, out) = pc_of(p);
+    ((seti(p, 3 * l0 + 2, out), cs), after + 1)
+  } else { ((p, cs), after) }
+
+-- The pattern compiled.
+fn compile(l: lit) -> Re =
+  let (m, f) = l;
+  let mut re : Re = (box buf[i32](64), box buf[bool](256));
+  let mut jumps = box buf[i32](8);
+  let mut split_at = 0 - 1;
+  let mut i = 0;
+  -- the first alternative's split, if there is a `|` to come, is emitted at each alternative's
+  -- start: the pattern is scanned for a tp-level `|` from `i`.
+  for _ in 0..m + 1 {
+    if i < m {
+      -- does a `|` follow, in this alternative?
+      let mut more = false;
+      let mut j = i;
+      let mut in_class = false;
+      for _ in 0..m {
+        if m <= j { break } else {
+          let c = f(j);
+          if c == 92 { j = j + 2 } else {
+            if in_class { if c == b']' { in_class = false } else { () }; j = j + 1 } else {
+              if c == b'[' { in_class = true; j = j + 1 } else {
+                if c == b'|' { more = true; break } else { j = j + 1 } } } }
+        }
+      };
+      let (p, cs) = re;
+      let (p, here) = pc_of(p);
+      let p = if more { emit(p, 3, here + 1, 0 - 1) } else { p };
+      re = (p, cs);
+      for _ in 0..m {
+        if j <= i { break } else { let (r2, k) = compile_atom(re, l, i); re = r2; i = k }
+      };
+      if more {
+        let (p, cs) = re;
+        let (p, jpc) = pc_of(p);
+        jumps = pushi(jumps, jpc);
+        let p = emit(p, 4, 0 - 1, 0);
+        let (p, next) = pc_of(p);
+        re = (seti(p, 3 * here + 2, next), cs);
+        i = j + 1
+      } else { i = m }
+    } else { break }
+  };
+  let (p, cs) = re;
+  let (p, end) = pc_of(p);
+  let (jumps, nj) = len_of(jumps);
+  let mut p = p;
+  let mut jumps = jumps;
+  for k in 0..nj { let (js, jpc) = geti(jumps, k); jumps = js; p = seti(p, 3 * jpc + 1, end) };
+  let (ja, jn) = jumps;
+  (emit(p, 5, 0, 0), cs)
+
+-- `pc` and what it reaches through jumps and splits added to the list, in priority order; each
+-- instruction once per step (`mark[pc] = gen`).
+fn add_thread(re: Re, lst: buf i32, mark: array i32, gen: i32, pc: i32) -> (Re * buf i32) * array i32 =
+  let (p, cs) = re;
+  let (p, plen) = pc_of(p);
+  let mut p = p;
+  let mut lst = lst;
+  let mut mark = mark;
+  let mut stack = pushi(box buf[i32](8), pc);
+  for _ in 0..2 * plen + 2 {
+    let (st, tp) = pop(stack);
+    stack = st;
+    match tp {
+      inl q ->
+        let seen = at(&mark, q, 0);
+        if seen == gen { () } else {
+          mark = array_set(mark, q, gen);
+          let (p1, op) = geti(p, 3 * q);
+          let (p2, x) = geti(p1, 3 * q + 1);
+          let (p3, y) = geti(p2, 3 * q + 2);
+          p = p3;
+          if op == 4 { stack = pushi(stack, x) } else {
+            if op == 3 { stack = pushi(pushi(stack, y), x) } else { lst = pushi(lst, q) } }
+        }
+    | inr u -> break
+    }
+  };
+  let (sa, sn) = stack;
+  (((p, cs), lst), mark)
+
+-- The end of the leftmost-first match starting at `s`, or -1.
+fn match_at(re: Re, t: string, s: i32, mark: array i32, gen: i32) -> ((Re * string) * (array i32 * i32)) * i32 =
+  let (t, n) = len_of(t);
+  let mut t = t;
+  let mut gen = gen + 1;
+  let ((re0, cl0), mark0) = add_thread(re, box buf[i32](16), mark, gen, 0);
+  let mut re = re0;
+  let mut mark = mark0;
+  let mut clist = cl0;
+  let mut found = 0 - 1;
+  for i in s..n + 1 {
+    let (cl, cn) = len_of(clist);
+    clist = cl;
+    if cn == 0 { break } else { () };
+    let (t2, b) = byte_at(t, i);
+    t = t2;
+    gen = gen + 1;
+    let mut nlist = box buf[i32](16);
+    for k in 0..cn {
+      let (cl2, pc) = geti(clist, k);
+      clist = cl2;
+      let (p, cs) = re;
+      let (p1, op) = geti(p, 3 * pc);
+      let (p2, x) = geti(p1, 3 * pc + 1);
+      re = (p2, cs);
+      if op == 5 { found = i; break } else {
+        let ok = if i < n {
+          if op == 0 { to_i32(b) == x } else {
+            if op == 2 { b != b'\n' } else {
+              let (p, cs) = re;
+              let (cs, inset) = getb(cs, 256 * x + to_i32(b));
+              re = (p, cs);
+              inset } }
+        } else { false };
+        if ok {
+          let ((r2, nl), mk) = add_thread(re, nlist, mark, gen, pc + 1);
+          re = r2; nlist = nl; mark = mk
+        } else { () }
+      }
+    };
+    let (ca, cn2) = clist;
+    clist = nlist
+  };
+  let (ca, cn) = clist;
+  (((re, t), (mark, gen)), found)
+
+-- The number of non-overlapping matches.
+fn count_matches(l: lit, t: string) -> string * i32 =
+  let re = compile(l);
+  let (p, cs) = re;
+  let (p, plen) = pc_of(p);
+  let mut re = (p, cs);
+  let (t, n) = len_of(t);
+  let mut t = t;
+  let mut mark = array_new[i32](plen, !{ i -> 0 });
+  let mut gen = 0;
+  let mut c = 0;
+  let mut s = 0;
+  for _ in 0..n + 1 {
+    if n < s { break } else { () };
+    let (((r2, t2), (mk, g)), e) = match_at(re, t, s, mark, gen);
+    re = r2; t = t2; mark = mk; gen = g;
+    if s < e { c = c + 1; s = e } else { s = s + 1 }
+  };
+  let ((pa, pn), (ca, cn)) = re;
+  (t, c)
+
+-- Every non-overlapping match replaced by `r`.
+fn replace_all(l: lit, r: lit, t: string) -> string =
+  let re = compile(l);
+  let (p, cs) = re;
+  let (p, plen) = pc_of(p);
+  let mut re = (p, cs);
+  let (t, n) = len_of(t);
+  let mut t = t;
+  let mut out = string_new(n);
+  let mut mark = array_new[i32](plen, !{ i -> 0 });
+  let mut gen = 0;
+  let mut s = 0;
+  for _ in 0..n + 1 {
+    if n <= s { break } else { () };
+    let (((r2, t2), (mk, g)), e) = match_at(re, t, s, mark, gen);
+    re = r2; t = t2; mark = mk; gen = g;
+    if s < e { let (o, _) = push_lit(out, r); out = o; s = e } else {
+      let (t3, b) = byte_at(t, s);
+      t = t3;
+      let (o, _) = push_byte(out, b);
+      out = o;
+      s = s + 1
+    }
+  };
+  let ((pa, pn), (ca, cn)) = re;
+  let (ta, tn) = t;
+  out
+
+fn report(l: lit, t: string) -> string =
+  let (t, c) = count_matches(l, t);
+  print_lit(l);
+  print_byte(b' ');
+  print_dec(c);
+  print_byte(b'\n');
+  t
+
+main -> i32 =
+  let inp = read_input();
+  let (inp, ilen) = len_of(inp);
+  let seq = replace_all(">.*\n|\n", "", inp);
+  let (seq, clen) = len_of(seq);
+  let seq = report("agggtaaa|tttaccct", seq);
+  let seq = report("[cgt]gggtaaa|tttaccc[acg]", seq);
+  let seq = report("a[act]ggtaaa|tttacc[agt]t", seq);
+  let seq = report("ag[act]gtaaa|tttac[agt]ct", seq);
+  let seq = report("agg[act]taaa|ttta[agt]cct", seq);
+  let seq = report("aggg[acg]aaa|ttt[cgt]ccct", seq);
+  let seq = report("agggt[cgt]aa|tt[acg]accct", seq);
+  let seq = report("agggta[cgt]a|t[acg]taccct", seq);
+  let seq = report("agggtaa[cgt]|[acg]ttaccct", seq);
+  let s1 = replace_all("tHa[Nt]", "<4>", seq);
+  let s2 = replace_all("aND|caN|Ha[DS]|WaS", "<3>", s1);
+  let s3 = replace_all("a[NSt]|BY", "<2>", s2);
+  let s4 = replace_all("<[^>]*>", "|", s3);
+  let s5 = replace_all("\\|[^|][^|]*\\|", "-", s4);
+  let (s5, rlen) = len_of(s5);
+  print_byte(b'\n');
+  print_dec(ilen);
+  print_byte(b'\n');
+  print_dec(clen);
+  print_byte(b'\n');
+  print_dec(rlen);
+  print_byte(b'\n');
+  0

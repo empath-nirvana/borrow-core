@@ -1,0 +1,35 @@
+-- lib/map.bc's hash map at owned keys and owned values: insert, lookup, get by view, remove,
+-- iterate, len.
+include textio
+include map
+
+main -> i32 =
+  -- owned string keys, i32 values
+  let mut m = map_new[string, i32](4);
+  map_insert(&mut m, string_of_lit("apple"), 1);
+  map_insert(&mut m, string_of_lit("pear"), 2);
+  map_insert(&mut m, string_of_lit("plum"), 3);
+  let old = map_insert(&mut m, string_of_lit("pear"), 20);
+  let o = match old { inl x -> x | inr u -> 0 - 1 };
+  print_dec(o); print_byte(b' ');
+  let f = map_lookup(&m, string_of_lit("pear"));
+  let fv = match f { inl x -> x | inr u -> 0 - 1 };
+  print_dec(fv); print_byte(b' ');
+  let r = map_remove(&mut m, string_of_lit("apple"));
+  let rv = match r { inl x -> x | inr u -> 0 - 1 };
+  print_dec(rv); print_byte(b' ');
+  let n = map_len(&m);
+  print_dec(n); print_byte(b'\n');
+  -- i32 keys, owned (non-persistent) string values, read by view and iterated
+  let mut w = map_new[i32, string](4);
+  map_insert(&mut w, 7, string_of_lit("seven"));
+  map_insert(&mut w, 3, string_of_lit("three"));
+  borrow imm w { 'x, r ->
+    for e in map_iter(r) {
+      let (k, v) = e;
+      print_dec(k); print_byte(b'=');
+      borrow imm *v { 'y, s -> print_str(key_prefix(s)) };
+      print_byte(b' ')
+    } };
+  print_byte(b'\n');
+  0

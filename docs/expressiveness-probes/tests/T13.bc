@@ -1,0 +1,33 @@
+-- T13, the Rust shape: `main` owns the accounts and lends each `mut` to a scoped teller task
+-- (`spawn_in`, SPEC §32), which reads its transactions from an argument across `await`s.
+-- `c2` and `d` are handed back by hand out of the outer block (#495).
+include async
+
+fn teller<'a>(a: mut 'a i32, txs: List[i32], n: i32) -> i32 with Async =
+  let mut rest = txs;
+  let mut r = 0;
+  for _ in 0..n {
+    match unroll rest {
+      inl u -> rest = nil[i32]()
+    | inr (t, more) ->
+        rest = more;
+        let ok = modify a { b -> if b + t < 0 { (b, false) } else { (b + t, true) } };
+        if ok { () } else { r = r + 1 };
+        await()
+    }
+  };
+  r
+
+main -> List[i32] * (i32 * i32) =
+  let c1 = alloc(100);
+  let c2 = alloc(50);
+  let d = alloc(());
+  let (c2, (d, v)) = borrow mut c1 { 'r, m1 -> let r = borrow mut c2 { 's, m2 ->
+    let v = borrow mut d { 'd, e ->
+      let q = queue_in[i32]();
+      let q = push_in(q, with spawn_in { teller(m1, cons(50, cons(0 - 20, nil())), 2) });
+      let q = push_in(q, with spawn_in { teller(m2, cons(0 - 30, cons(0 - 40, nil())), 2) });
+      with on_exhausted(!{ u -> nil() }) { run_in(q, 4) } };
+    (d, v) }; (c2, r) };
+  let _ = free(d);
+  (v, (free(c1), free(c2)))

@@ -1,0 +1,73 @@
+-- T11: a configuration updated field by field from command-line style options, then frozen.
+-- Workarounds: the record is a nested pair `width * (height * (title * verbose))` (no records,
+-- #141), so each field update destructures and rebuilds it; the options are words of a literal
+-- cut out by index (as T06); `parse_i32`'s error is handled with `default` (the old width kept);
+-- the per-option update is a function threading the configuration.
+include textio
+include text
+include fail
+
+type Cfg = i32 * (i32 * (string * bool))
+
+fn slice<'t>(t: text 't, i: i32, k: i32) -> text 't =
+  match split_at(t, i) {
+    inl (h, r) -> array_forget['t, u8](h);
+      match split_at(r, k) { inl (w, rest) -> array_forget['t, u8](rest); w | inr r -> r }
+  | inr t -> t
+  }
+
+-- The option `a` applied: the configuration, and 1 when the option is unknown.
+fn apply<'t>(cfg: Cfg, a: text 't) -> Cfg * i32 =
+  let (width, (height, (title, verbose))) = cfg;
+  let (a, a1) = array_copy['t, u8] a;
+  let (a, a2) = array_copy['t, u8] a;
+  let n = len(a1);
+  let w = slice(a2, 0, 8);
+  let (a, a3) = array_copy['t, u8] a;
+  let t = slice(a3, 0, 8);
+  if eq_lit(w, "--width=") {
+    let v = slice(a, 8, n - 8);
+    let width = with default(width) { parse_i32(v) };
+    ((width, (height, (title, verbose))), 0)
+  } else if eq_lit(t, "--title=") {
+    let v = slice(a, 8, n - 8);
+    let title = to_string(v);
+    ((width, (height, (title, verbose))), 0)
+  } else if eq_lit(a, "-v") {
+    ((width, (height, (title, true))), 0)
+  } else { ((width, (height, (title, verbose))), 1) }
+
+fn parse<'t>(t: text 't, cfg: Cfg) -> Cfg * i32 =
+  let (t, u0) = array_copy['t, u8] t;
+  let n = len(u0);
+  let mut t = t;
+  let mut cfg = cfg;
+  let mut unknown = 0;
+  let mut start = 0;
+  for i in 0..n + 1 {
+    let (t2, w) = array_copy['t, u8] t;
+    t = t2;
+    let b = at(w, i, b' ');
+    let (t2, w) = array_copy['t, u8] t;
+    t = t2;
+    let word = slice(w, start, i - start);
+    let (c, k) = if b == b' ' && start < i { apply(cfg, word) }
+                 else { array_forget['t, u8](word); (cfg, 0) };
+    cfg = c;
+    unknown = unknown + k;
+    if b == b' ' { start = i + 1 } else { () }
+  };
+  array_forget['t, u8](t);
+  (cfg, unknown)
+
+main -> (i32 * (i32 * bool)) * (i32 * i32) =
+  let cfg0 = (40, (25, (string_of_lit("untitled"), false)));
+  let r = borrow imm "--width=80 --title=demo -v --frob" { t -> parse(t, cfg0) };
+  let (cfg, unknown) = r;
+  let (width, (height, (title, verbose))) = cfg;
+  let height = if verbose { height * 2 } else { height };
+  let cfg = (width, (height, (title, verbose)));
+  let (width, (height, (title, verbose))) = cfg;
+  let title = print_string(title);
+  print_lit("\n");
+  ((width, (height, verbose)), (width * height, unknown))

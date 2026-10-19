@@ -1,0 +1,14 @@
+-- A component of a div call's result (a `loop`) passed to a generic function (`array_set[A]`).
+include slice
+include buf
+fn last(p: array i32, q: i32) -> array i32 * i32 =
+  let mut n = q;
+  loop { let nx = at(&p, n, 0); if nx < 0 { break } else { n = nx } };
+  (p, n)
+fn add_last(p: array i32, k: i32, q: i32) -> array i32 * i32 =
+  let (p1, n) = last(p, q);
+  (array_set(p1, n, k), q)
+main -> i32 =
+  let p = array_new[i32](8, !{ i -> 0 - 1 });
+  let (p, x) = add_last(p, 2, 3);
+  x

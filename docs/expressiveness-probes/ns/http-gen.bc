@@ -1,0 +1,15 @@
+-- (b') Pull form: a generator over the input capability yielding header lines' lengths
+-- (the shape a streaming response reader / watch-stream decoder has); main pulls from it.
+include yield
+
+fn lines(c: In) -> In with Yield[i32] =
+  let mut n = 0;
+  for b in bytes(c) {
+    if b == 10 { yield(n); n = 0 } else { n = n + 1 }
+  };
+  c
+
+main -> i32 =
+  let mut s = 0;
+  let stdin = for l in lines(stdin) { s = s * 100 + l };
+  s

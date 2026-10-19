@@ -1,0 +1,25 @@
+-- AWFY's doDFS as written: a recursion inside the loop over a block's out-edges, threading the
+-- `number` and `last` arrays. Out-edges are a flat arena, block b's at 4b..4b+3 (-1 for none).
+include slice
+include buf
+include rec
+fn dfs(outs: array i32, number: array i32, last: array i32, b: i32, cur: i32) -> ((array i32 * array i32) * array i32) * i32 with Exhausted =
+  let mut number = array_set(number, b, cur);
+  let mut outs = outs;
+  let mut last = last;
+  let mut lastid = cur;
+  for e in 0..4 {
+    let t = at(&outs, 4 * b + e, 0);
+    let seen = at(&number, t, 0);
+    if 0 <= t && seen < 0 {
+      let (((o, nm), ls), l) = dfs(outs, number, last, t, lastid + 1);
+      outs = o; number = nm; last = ls; lastid = l
+    } else { () }
+  };
+  (((outs, number), array_set(last, cur, lastid)), lastid)
+main -> i32 =
+  let outs = array_new[i32](12, !{ i -> 0 - 1 });
+  let outs = array_set(array_set(array_set(outs, 0, 1), 4, 2), 8, 0);
+  let (((o, n), l), r) = with on_exhausted(!{ u -> (((array_new[i32](0, !{ i -> 0 }), array_new[i32](0, !{ i -> 0 })), array_new[i32](0, !{ i -> 0 })), 0 - 1) }) {
+    dfs(outs, array_new[i32](3, !{ i -> 0 - 1 }), array_new[i32](3, !{ i -> 0 }), 0, 0) };
+  r

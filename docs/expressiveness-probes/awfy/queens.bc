@@ -1,0 +1,60 @@
+-- AWFY Queens: eight queens by backtracking over three boolean arrays (isfree rows, isfree
+-- diagonals both ways) and the queens' rows; AWFY runs it 10 times and checks each succeeds.
+-- The recursion is inside the counted `for` over rows, which threads the arrays and exits early.
+-- Answer: (successes of 10, the sum of queenRows[r] * 8^r of the last solution).
+include rec
+include buf
+include slice
+
+type B = (array bool * array bool) * (array bool * array i32)
+
+fn get_rc(b: B, r: i32, c: i32) -> B * bool =
+  let ((rows, maxs), (mins, qs)) = b;
+  let mut rows = rows;
+  let mut maxs = maxs;
+  let mut mins = mins;
+  let x = at(&rows, r, false);
+  let y = at(&maxs, c + r, false);
+  let z = at(&mins, c - r + 7, false);
+  (((rows, maxs), (mins, qs)), x && y && z)
+
+fn set_rc(b: B, r: i32, c: i32, v: bool) -> B =
+  let ((rows, maxs), (mins, qs)) = b;
+  ((array_set(rows, r, v), array_set(maxs, c + r, v)), (array_set(mins, c - r + 7, v), qs))
+
+fn place(b: B, c: i32) -> B * bool with Exhausted =
+  let mut b = b;
+  let mut ok = false;
+  for r in 0..8 {
+    let (b1, isfree) = get_rc(b, r, c);
+    b = b1;
+    if isfree {
+      let ((rows, maxs), (mins, qs)) = b;
+      b = set_rc(((rows, maxs), (mins, array_set(qs, r, c))), r, c, false);
+      if c == 7 { ok = true; break } else { () };
+      let (b2, done) = place(b, c + 1);
+      b = b2;
+      if done { ok = true; break } else { () };
+      b = set_rc(b, r, c, true)
+    } else { () }
+  };
+  (b, ok)
+
+fn fresh() -> B =
+  ((array_new[bool](8, !{ i -> true }), array_new[bool](16, !{ i -> true })),
+   (array_new[bool](16, !{ i -> true }), array_new[i32](8, !{ i -> 0 - 1 })))
+
+main -> i32 * i32 = with on_exhausted(!{ u -> (0 - 1, 0) }) {
+  let mut good = 0;
+  let mut code = 0;
+  for k in 0..10 {
+    let (b, ok) = place(fresh(), 0);
+    if ok { good = good + 1 } else { () };
+    let ((rows, maxs), (mins, qs)) = b;
+    let mut qs = qs;
+    let mut s = 0;
+    for r in 0..8 { let q = at(&qs, 7 - r, 0); s = s * 8 + q };
+    code = s
+  };
+  (good, code)
+}

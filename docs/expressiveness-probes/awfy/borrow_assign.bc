@@ -1,0 +1,7 @@
+-- An assignment to an outer `let mut` inside a `borrow` block, for comparison with `modify`.
+main -> i32 =
+  let c = alloc(5);
+  let mut n = 0;
+  let r = borrow imm c { 'x, v -> n = 7; 1 };
+  let z = free(c);
+  n + r

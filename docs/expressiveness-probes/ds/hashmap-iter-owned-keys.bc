@@ -1,0 +1,12 @@
+include textio
+include map
+-- Iterating a map whose keys are owned strings.
+main -> i32 =
+  let mut m = map_new[string, i32](4);
+  map_insert(&mut m, string_of_lit("apple"), 1);
+  map_insert(&mut m, string_of_lit("pear"), 2);
+  let mut s = 0;
+  borrow imm m { 'x, r ->
+    for e in map_iter(r) { let (k, v) = e; s = s + *v } };
+  print_dec(s);
+  0

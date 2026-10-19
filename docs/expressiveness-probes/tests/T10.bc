@@ -1,0 +1,22 @@
+-- T10: simultaneous updates. Workaround: no tuple assignment or `let (mut a, mut b)`; each
+-- update reads the old values into a pair first, then assigns each variable. The remainder is
+-- `checked_rem` with its error arm written: `p % q` in the `while` of `main` puts the rest of `main`
+-- under `main_div_error` (SPEC §39), refused: "the type of the type of the body `main_div_error`
+-- handles is not determined here: ascribe it"; as a `fn gcd … with Fail[DivError]` holding the
+-- `while`, `main` gets the div function's loop type in its result (type mismatch).
+main -> i32 * (i32 * (i32 * (i32 * i32))) =
+  let mut a = 0;
+  let mut b = 1;
+  for _ in 0..20 { let (na, nb) = (b, a + b); a = na; b = nb };
+  let mut x = 1;
+  let mut y = 2;
+  let mut z = 3;
+  for _ in 0..4 { let (nx, ny, nz) = (y, z, x); x = nx; y = ny; z = nz };
+  let mut p = 1071;
+  let mut q = 462;
+  while q != 0 {
+    let r = match checked_rem(p, q) { inl r -> r | inr e -> 0 };
+    p = q;
+    q = r
+  };
+  (a, (x, (y, (z, p))))

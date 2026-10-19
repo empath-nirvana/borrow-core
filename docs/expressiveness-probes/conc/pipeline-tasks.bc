@@ -1,0 +1,38 @@
+-- Stage pipeline as tasks: stage1 -> c1 -> stage2 -> c2 -> stage3, each stage a spawn_in task;
+-- each channel an answering effect whose handler owns its buffer, handled around the scheduler.
+include async
+
+effect C1 { fn put1(x: i32); fn get1() -> i32 + 1 }
+effect C2 { fn put2(x: i32); fn get2() -> i32 + 1 }
+
+handler chan1(mut b: List[i32]): C1 = {
+  put1(x) = { b = cons(x, b); () };
+  get1() = { match unroll b { inl u -> b = nil[i32](); inr () | inr (x, r) -> b = r; inl x } }
+}
+handler chan2(mut b: List[i32]): C2 = {
+  put2(x) = { b = cons(x, b); () };
+  get2() = { match unroll b { inl u -> b = nil[i32](); inr () | inr (x, r) -> b = r; inl x } }
+}
+
+fn stage1(n: i32) -> i32 with Async, C1 = for i in 0..n { put1(i); await() }; n
+fn stage2(n: i32) -> i32 with Async, C1, C2 =
+  let mut got = 0;
+  for _ in 0..4 * n { if got < n { match get1() { inl x -> put2(x * x); got = got + 1 | inr u -> () }; await() } else { () } };
+  got
+fn stage3(n: i32) -> i32 with Async, C2 =
+  let mut got = 0;
+  let mut s = 0;
+  for _ in 0..4 * n { if got < n { match get2() { inl x -> s = s + x; got = got + 1 | inr u -> () }; await() } else { () } };
+  s
+
+main -> List[i32] =
+  let d = alloc(());
+  let r = with chan1(nil[i32]()) { with chan2(nil[i32]()) {
+    borrow mut d { 'd, e ->
+      let q = queue_in[i32]();
+      let q = push_in(q, with spawn_in { stage1(4) });
+      let q = push_in(q, with spawn_in { stage2(4) });
+      let q = push_in(q, with spawn_in { stage3(4) });
+      with on_exhausted(!{ u -> nil[i32]() }) { run_in(q, 30) } } } };
+  let _ = free(d);
+  r

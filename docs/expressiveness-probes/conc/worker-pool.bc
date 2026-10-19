@@ -1,0 +1,41 @@
+-- Worker pool: two workers take jobs from one shared job queue and send results to one shared
+-- results channel. The channel is an answering effect whose handler owns both queues (jobs and
+-- results), handled once around the scheduler; the tasks are spawn_in tasks (bounded, so they may
+-- hold borrows) with counted loops (no `while`, SPEC §21).
+include async
+
+effect Chan { fn take_job() -> i32 + 1; fn send_result(x: i32) }
+
+handler pool(mut st: List[i32] * i32): Chan = {
+  take_job() = {
+    let (jobs, acc) = st;
+    match unroll jobs {
+      inl u -> st = (nil[i32](), acc); inr ()
+    | inr (j, rest) -> st = (rest, acc); inl j
+    }
+  };
+  send_result(x) = { let (jobs, acc) = st; st = (jobs, acc + x); () }
+}
+
+fn worker(id: i32) -> i32 with Async, Chan =
+  let mut done = 0;
+  for _ in 0..100 {
+    match take_job() {
+      inl j -> send_result(j * j); done = done + 1; await()
+    | inr u -> break
+    }
+  };
+  done
+
+main -> List[i32] * i32 =
+  let st = alloc((cons(1, cons(2, cons(3, cons(4, cons(5, nil[i32]()))))), 0));
+  let d = alloc(());
+  let counts = with pool(&mut st) {
+    borrow mut d { 'd, e ->
+      let q = queue_in[i32]();
+      let q = push_in(q, with spawn_in { worker(1) });
+      let q = push_in(q, with spawn_in { worker(2) });
+      with on_exhausted(!{ u -> nil[i32]() }) { run_in(q, 20) } } };
+  let _ = free(d);
+  let (jobs, sum) = free(st);
+  (counts, sum)

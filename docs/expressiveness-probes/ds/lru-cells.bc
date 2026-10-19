@@ -1,0 +1,18 @@
+-- The classic LRU: a hash map from key to the list node, and the node also linked in the recency
+-- list. The node cell is held by the map and by the list at once.
+include textio
+include map
+
+-- key, value, prev, next
+type Node = mu X. (i32 * i32) * ((1 + ref X) * (1 + ref X))
+
+main -> i32 =
+  let mut m = map_new[i32, 1 + ref Node](4);
+  let n0 : Node = roll ((1, 10), (inl (), inl ()));
+  let n = alloc(n0);
+  -- the list's head is the node
+  let head : 1 + ref Node = inr n;
+  -- and the map's entry for key 1 is the same node
+  let prev = map_insert(&mut m, 1, (inr n : 1 + ref Node));
+  print_dec(1);
+  0
