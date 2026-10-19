@@ -1885,7 +1885,7 @@ keyed by views), is refused by #491 and #492, both B7. So the AoC subset gates o
 | doubly linked list | workaround: arena | linking cells both ways: "`a` is used twice here …" | B13 | `ds/dll-cells.bc` |
 | union-find, ring buffer, arena allocator | natural | ids are aliases, not distinct types (no `data`) | B3 | `ds/unionfind.bc`, `ds/ringbuf.bc`, `ds/arena.bc` |
 | priority queue | natural with a heap written in the program; `lib/buf.bc`'s heap takes an `i32` priority and persistent elements: "`x` is used twice here, and its type `i32 * array u8 * i32` is not persistent" | — | B16 | `ds/pq.bc` |
-| parallel map-reduce | workaround: two `spawn_in` tasks over disjoint `split_at_mut` halves, interleaved on one thread; `unconditional` | no threads | **B12** (#212) | `conc/split-halves.bc` |
+| parallel map-reduce | blocked as parallelism: two `spawn_in` tasks over disjoint `split_at_mut` halves run *interleaved on one thread* (`unconditional` means only that no `PinLaw` assumption is used; it says nothing about running on two cores) | no OS threads | **B12** (#212) | `conc/split-halves.bc` |
 | worker pool with channels | workaround: **a scheduler written in the program serves the job queue and the results** (control operations `take_job`, `send_res`, `wait_turn`; the decision-57 port). Two workers, five jobs | the natural form, tasks sharing a channel effect: "two tasks spawned in this block are given the capability of `Chan` …" | B1 | `conc/worker-pool-port.bc`, `conc/worker-pool.bc` |
 | stage pipeline | natural as generators composed with `\|>`; blocked as tasks over channels (B1's message) | — | B1 | `conc/pipeline-gen.bc`, `conc/pipeline-tasks.bc` |
 
@@ -1895,9 +1895,12 @@ keyed by views), is refused by #491 and #492, both B7. So the AoC subset gates o
 
 - **B11, no network capability.** HTTP client, server, watch stream; the operator end to end. The
   only missing piece of the north star that has no workaround.
-- **B12, no threads.** Parallel map-reduce; a worker pool on several cores. The borrow structure
-  already checks: disjoint `mut` halves held by two tasks across `await` is `unconditional`
-  (measured, `conc/split-halves.bc`).
+- **B12, no OS threads.** Parallel map-reduce; a worker pool on several cores. *Correction
+  (second pass):* the first version said the borrow structure "already checks" because two
+  `spawn_in` tasks holding disjoint `mut` halves across `await` are `unconditional`. That is a
+  fact about *async tasks on one thread*, and about R1: the typing needs no `PinLaw`. It is not
+  evidence that a parallel run is sound. Parallel soundness is #212's open question (a reordering
+  theorem or a named assumption), and it is unproved.
 - **B13, aliased mutable object graphs.** Richards, DeltaBlue, Havlak, CD, LRU, the doubly linked
   list, both Loxes. Every one runs as an arena (index handles); the natural shape (a node reachable
   from two places and mutated) is refused with "used twice". The premise's limited checker refuses
@@ -1999,7 +2002,7 @@ as an arena does.
 
 | way | performance | proof cost | ergonomics | verdict |
 |---|---|---|---|---|
-| Rust's way: scoped threads and rayon's `join` over `split_at_mut`; `Send`/`Sync` | parity | n/a | good | its structure is ours: the split already types (measured) |
+| Rust's way: scoped threads and rayon's `join` over `split_at_mut`; `Send`/`Sync` | parity | n/a | good | its structure matches ours: the context split exists (`Ctx.SplitP`, #212). That one-thread tasks over split halves type `unconditional` (measured) shows only that the split types; it is not a parallel result |
 | **fork-join `join`/`par_for` over a split context**, sequential on Wasm and on a work-stealing pool natively (#212); soundness at first a named assumption, as R1's is under `PinLaw` (#212's Route 0) | parity | an assumption now; #212's routes B or C later | good | **recommended**: the research thread "fork-join with a named assumption", now used |
 | tasks on a thread pool (async across threads) | — | relation | — | after fork-join; outside this set's programs |
 
