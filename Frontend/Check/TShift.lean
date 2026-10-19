@@ -208,13 +208,15 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
       .effHandleV i j S E fs n A R (u.ins d c) ks st (tc.shift d c) (te.shift d c)
   | .effHandleVB i j S E fs n A R a u ks st tc te =>
       .effHandleVB i j S E fs n A R a (u.ins d c) ks st (tc.shift d c) (te.shift d c)
-  | .effHandleT i j Hr Hc S SN E fs n A R u st tc te =>
-      .effHandleT i j (Hr.shift d c) (Hc.shift d c) S SN E fs n A R (u.ins d c) st (tc.shift d c)
-        (te.shift d c)
-  | .letPoly i j N C j' b tV tN =>
-      .letPoly i j (N.shift d (c + 1)) C j' (b.shift d (c + 1)) tV (tN.shift d (c + 1))
+  | .effHandleT i j S SN E fs n A R u st tc te =>
+      .effHandleT i j S SN E fs n A R (u.ins d c) st (tc.shift d c) (te.shift d c)
+  | .letPoly i j C j' tV tN => .letPoly i j C j' tV (tN.shift d (c + 1))
   | .use i j n k τ ab t => .use i j n k τ ab (t.shift d c)
   | .litFn i j bs t => .litFn i j bs (t.shift d c)
+  | .divLit i j op k t => .divLit i j op k (t.shift d c)
+  | .walk i j m t => .walk i j m (t.shift d c)
+  | .selfCall i j k n t => .selfCall i j k n (t.shift d c)
+  | .lendCell i j m t => .lendCell i j m (t.shift d c)
   | t@(.unitI ..) => t
   | t@(.topI ..) => t
   | t@(.copyBang ..) => t
@@ -284,7 +286,8 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .allE _ _ _ _ _ _ t | .bangE _ _ _ t | .boxE _ _ _ _ t | .immSub _ _ _ _ _ t
   | .mutSub _ _ _ _ _ t | .allEV _ _ _ _ _ _ t | .ofRet _ _ _ t | .roll _ _ _ t
   | .unroll _ _ _ t | .nuIn _ _ _ t | .nuOut _ _ _ t | .effSub _ _ _ _ _ t
-  | .effPerform _ _ _ _ t | .effRaise _ _ _ _ _ t | .litFn _ _ _ t => t.absF Δ
+  | .effPerform _ _ _ _ t | .effRaise _ _ _ _ _ t | .litFn _ _ _ t | .divLit _ _ _ _ t
+  | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t => t.absF Δ
   | .bind _ _ _ _ _ t₁ t₂ | .unitE _ _ _ _ t₁ t₂ | .tensorE _ _ _ _ _ _ t₁ t₂
   | .lolliE _ _ _ _ _ t₁ t₂ => AbsF.orO (t₁.absF Δ) (t₂.absF Δ)
   | .app _ _ _ _ _ _ tM => AbsF.orO (tM.absF Δ) (some (.atom .pers))
@@ -303,12 +306,14 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .effThen _ _ _ _ S _ _ _ tM tN tD =>
       AbsF.orO (tM.absF Δ) (AbsF.withO (if Row.unrDB S then .atom .bang else .tt)
         (AbsF.andO (tN.absF Δ) (tD.absF Δ)))
-  | .effHandleV _ _ _ _ _ _ _ _ _ _ _ tc te | .effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ tc te =>
+  | .effHandleV _ _ _ _ _ _ _ _ _ _ _ tc te =>
       AbsF.orO (AbsF.withO (.atom .pers) (tc.absF Δ)) (te.absF Δ)
   | .effHandleVB _ _ _ _ _ _ _ _ d _ _ _ tc te =>
       AbsF.orO (AbsF.withO (.atom .pers) (tc.absF Δ)) (AbsF.withO (.atom (.outl Δ d)) (te.absF Δ))
-  | .letPoly _ _ _ _ _ _ _ tN => tN.absF Δ
   | .lendR .. | .lendLoopR .. | .nilDead .. => none
+  -- Not placed at a wider context: rules the checker does not apply (the tail-resumptive
+  -- `[handle]` of `Div`'s rows, and `[let-poly]`, whose copies are `use` nodes).
+  | .effHandleT .. | .letPoly .. => none
   | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => some .ff
   | .use _ _ _ _ _ ab _ => ab

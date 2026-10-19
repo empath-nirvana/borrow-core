@@ -746,34 +746,10 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
   | reify S B R res hS hcl hres qres hΓ _ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.reify S B R res hS hcl hres qres (deadP_ins (live_eval_atom hf hp) Γa hΓ),
-        (shift_closed0 (reifyV_closed hcl) _ _).symm⟩
-  | effHandleT hs hm hdd hHr hHc _ qc hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
-      intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
-      obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, Γp₁, Γp₂, rfl, rfl, ha₁, ha₂, hl₁, hl₂, q₁, q₂, hs', pm⟩ :=
-        splitP_route hp' Γa hs
-      obtain ⟨f', hf', hpe, q₁'⟩ := live_withO hf₁ q₁
-      obtain ⟨dc, ec⟩ := ihc Γa₁ Γb₁ Γp₁ f' rfl hf' q₁'
-      obtain ⟨de, ee⟩ := ihe Γa₂ Γb₂ Γp₂ f₂ rfl hf₂ q₂
-      have hHr' := valFormIn_insert (Γd := Γp₁) Γa₁ hHr
-      have hHc' := valFormIn_insert (Γd := Γp₁) Γa₁ hHc
-      rw [ha₁, hl₁] at dc ec hHr' hHc'; rw [ha₂, hl₂] at de ee
-      exact ⟨.effHandleT hs' (hm.ins ha₁ ha₂ pm) (deadP_ins (live_atom hpe) Γa₁ hdd) hHr' hHc' dc
-        (by rw [ec, qc]; rfl) hn0 hnd hnS hlen hSN hLin de, by
-        rw [TExpr.shift, TExpr.erase, TExpr.erase, shift_hndExpr, ee]
-        simp only [Expr.shift, tailTuple_shift]⟩
-  | @letPoly _ _ N _ _ tV tN _ b hcl hV qV _ qN _ ihN =>
-      intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      obtain ⟨dN, eN⟩ := ihN (_ :: Γa) Γb Γp f rfl hf hp
-      rw [List.length_cons] at dN eN
-      have hb : b.shift Γp.length (Γa.length + 1) = b :=
-        shift_closedAt (k := 1) b _ (by simpa [closedAt, Expr.val, Val.lam] using hcl)
-          (Nat.le_add_left 1 _)
-      refine ⟨?_, ?_⟩
-      · simp only [TExpr.shift, hb]
-        refine .letPoly b hcl hV qV dN ?_
-        rw [eN, qN, fill_shift hcl Γp.length N 0 Γa.length (Nat.zero_le _)]
-      · simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, hb]
+        by simp only [TExpr.shift, TExpr.erase, qres, Expr.toVal_val]
+           exact (shift_closed0 (reifyV_closed hcl) _ _).symm⟩
+  | effHandleT => intro _ _ _ _ _ hf _; cases hf
+  | letPoly => intro _ _ _ _ _ hf _; cases hf
   | lendR => intro _ _ _ _ _ hf _; cases hf
   | lendLoopR => intro _ _ _ _ _ hf _; cases hf
   | nilDead => intro _ _ _ _ _ hf _; cases hf
@@ -808,6 +784,22 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.litFn d (by rw [e, hb, shift_closed0 hcl]) hcl, e⟩
+  | divLit _ hb hs ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.divLit d (by rw [e]; exact divLitB_shift hb _ _) hs, e⟩
+  | walk _ hb ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.walk d (by rw [e]; exact walkB_shift hb _ _), e⟩
+  | selfCall _ hb ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.selfCall d (by rw [e]; exact selfCallB_shift hb _ _), e⟩
+  | lendCell _ hb ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.lendCell d (by rw [e]; exact lendCellB_shift hb _ _), e⟩
   | use _ hab ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ (hab ▸ hf) hp
@@ -1289,34 +1281,10 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
   | reify S B R res hAt hS hcl hres qres hΓ _ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.reify S B R res hAt hS hcl hres qres (deadP_ins (live_eval_atom hf hp) Γa hΓ),
-        (shift_closed0 (reifyV_closed hcl) _ _).symm⟩
-  | effHandleT hAt hs hm hdd hHr hHc _ qc hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
-      intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      obtain ⟨f₁, f₂, hf₁, hf₂, hp'⟩ := live_orO hf hp
-      obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, Γp₁, Γp₂, rfl, rfl, ha₁, ha₂, hl₁, hl₂, q₁, q₂, hs', pm⟩ :=
-        splitP_route hp' Γa hs
-      obtain ⟨f', hf', hpe, q₁'⟩ := live_withO hf₁ q₁
-      obtain ⟨dc, ec⟩ := ihc Γa₁ Γb₁ Γp₁ f' rfl hf' q₁'
-      obtain ⟨de, ee⟩ := ihe Γa₂ Γb₂ Γp₂ f₂ rfl hf₂ q₂
-      have hHr' := valFormIn_insert (Γd := Γp₁) Γa₁ hHr
-      have hHc' := valFormIn_insert (Γd := Γp₁) Γa₁ hHc
-      rw [ha₁, hl₁] at dc ec hHr' hHc'; rw [ha₂, hl₂] at de ee
-      exact ⟨.effHandleT hAt hs' (hm.ins ha₁ ha₂ pm) (deadP_ins (live_atom hpe) Γa₁ hdd) hHr' hHc' dc
-        (by rw [ec, qc]; rfl) hn0 hnd hnS hlen hSN hLin de, by
-        rw [TExpr.shift, TExpr.erase, TExpr.erase, shift_hndExpr, ee]
-        simp only [Expr.shift, tailTuple_shift]⟩
-  | @letPoly _ _ N _ _ tV tN _ b hcl hV qV _ qN _ ihN =>
-      intro Γa Γb Γp f hΓ hf hp; subst hΓ
-      obtain ⟨dN, eN⟩ := ihN (_ :: Γa) Γb Γp f rfl hf hp
-      rw [List.length_cons] at dN eN
-      have hb : b.shift Γp.length (Γa.length + 1) = b :=
-        shift_closedAt (k := 1) b _ (by simpa [closedAt, Expr.val, Val.lam] using hcl)
-          (Nat.le_add_left 1 _)
-      refine ⟨?_, ?_⟩
-      · simp only [TExpr.shift, hb]
-        refine .letPoly b hcl hV qV dN ?_
-        rw [eN, qN, fill_shift hcl Γp.length N 0 Γa.length (Nat.zero_le _)]
-      · simp only [TExpr.shift, TExpr.erase, Expr.shift, Expr.val, Val.lam, hb]
+        by simp only [TExpr.shift, TExpr.erase, qres, Expr.toVal_val]
+           exact (shift_closed0 (reifyV_closed hcl) _ _).symm⟩
+  | effHandleT => intro _ _ _ _ _ hf _; cases hf
+  | letPoly => intro _ _ _ _ _ hf _; cases hf
   | dtor hA hc he hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.dtor hA hc he (dead_ins (live_eval_ff hf hp) Γa hΓ), (shift_closed0 hc _ _).symm⟩
@@ -1348,6 +1316,22 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.litFn d (by rw [e, hb, shift_closed0 hcl]) hcl, e⟩
+  | divLit _ hb hs ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.divLit d (by rw [e]; exact divLitB_shift hb _ _) hs, e⟩
+  | walk _ hb ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.walk d (by rw [e]; exact walkB_shift hb _ _), e⟩
+  | selfCall _ hb ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.selfCall d (by rw [e]; exact selfCallB_shift hb _ _), e⟩
+  | lendCell _ hb ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.lendCell d (by rw [e]; exact lendCellB_shift hb _ _), e⟩
   | use _ hab ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ (hab ▸ hf) hp

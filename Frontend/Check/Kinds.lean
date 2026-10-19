@@ -209,7 +209,7 @@ def TExpr.handleSites : Nat → TExpr → List HandleSite
       | .effHandleV i _ _ _ _ n _ _ _ ks st _ _ => [⟨i.sp, n, ks, false, st⟩]
       | .effHandleVB i _ _ _ _ n _ _ _ _ ks st _ _ => [⟨i.sp, n, ks, true, st⟩]
       -- `effHandleT`'s clauses are tail-resumptive by its rule (`tailClause_premise`).
-      | .effHandleT i _ _ _ _ _ E _ n _ _ _ st _ _ => [⟨i.sp, n, E.map tailKind, false, st⟩]
+      | .effHandleT i _ _ _ E _ n _ _ _ st _ _ => [⟨i.sp, n, E.map tailKind, false, st⟩]
       | _ => []
     here ++ t.children.flatMap fun (_, k) => TExpr.handleSites f k
 

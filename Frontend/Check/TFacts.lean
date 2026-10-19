@@ -25,6 +25,32 @@ A second is a fact the checker carries beside the term (`Checked.cells`, `Fronte
   owned `Ref`). The class is an upper bound: it joins the cells of one type, so a cell can be
   given a type another cell of its type is swapped to (`corpus/cells.expected`).
 
+Three marked derived nodes (`Frontend/Check/Derived.lean`) record what the elaborator's scheme
+means beside the shape their rule fixes (`walkB`, `selfCallB`, `lendCellB`):
+
+* **A counted walk's view.** The rule fixes that the term is a `count_try`, and
+  `walk_index_lt`/`walk_get_leaf`/`walk_split_first` that its step runs below the bound and that
+  below its length a view's read answers a leaf. That the step reads, at the step's index, the
+  view the bound was taken from is the scheme's: `forData` threads the view in the loop's state
+  and reads it there. A lemma over the step's reduction (the state's view component handed on
+  unchanged by every tail of the step) would pin it.
+* **A self-call's member.** The rule fixes that the term is a variable; that it is the recursive
+  group's self-reference, and that the call reads member `j` of `n`, is the elaborator's
+  (`Frontend.Elab.Effects.memberCall`). The projections that read member `j` are rule nodes after
+  it; the group's generator binds the variable (`boundedFix`'s step), which a check of the
+  variable against the generator's binder would pin.
+* **A lent cell's release.** The rule fixes that the term is a borrow of a cell it allocates; that
+  the owner it hands back is freed in the same code, after the lend, is the owner's slot's use (an
+  explicit `free`, or the destructor the checker inserts), which the derivation fixes at that
+  use but the node does not point to.
+
+The `use` node's `TInfo.key` is the elaborator's key of the `def` it uses (`Frontend.DefKey`): the
+template and type arguments of an instance, or the function and keys of a copy for its handlers
+and sites. Copies whose keys differ only in their sites' names share a `body`. That they are one
+body, the same term up to the renaming of those sites' static names, is the elaboration's: a
+renaming of a typed derivation's effect names (rows, operation signatures, `handle` names) would
+pin it, and the checker would then check one copy and rename it for the others.
+
 A third is a field the checker adds to a node that its rule does not have:
 
 * **The clause kinds at `[handle]`** (`ks`). The checker classifies each clause from the typed

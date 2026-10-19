@@ -145,6 +145,30 @@ def rLitFn {j : Jdg} (bs : List Nat) (r : Res Δ T j) : Option (Res Δ T j) :=
     else none
   else none
 
+/-- A marked scheme's derived node over its checked term `r`, when `r`'s erasure is the scheme's
+(`divLitB`, `walkB`, `selfCallB`, `lendCellB`): `none` otherwise. -/
+def rMarked {j : Jdg} (k : Frontend.SchemeMark) (r : Res Δ T j) : Option (Res Δ T j) :=
+  match k with
+  | .litFn bs => rLitFn i bs r
+  | .divLit op c =>
+    if hb : divLitB op c r.t.erase = true then
+      if hs : safeDivB op c = true then
+        some ⟨.divLit i j op c r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.divLit i hb hs h⟩
+      else none
+    else none
+  | .walk m =>
+    if hb : walkB r.t.erase = true then
+      some ⟨.walk i j m r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.walk i m hb h⟩
+    else none
+  | .selfCall k n =>
+    if hb : selfCallB r.t.erase = true then
+      some ⟨.selfCall i j k n r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.selfCall i k n hb h⟩
+    else none
+  | .lendCell m =>
+    if hb : lendCellB r.t.erase = true then
+      some ⟨.lendCell i j m r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.lendCell i m hb h⟩
+    else none
+
 /-! ### Structural value rules -/
 
 def rPair {A B : CVTy} (r₁ : Res Δ T (.val A)) (r₂ : Res Δ T (.val B))

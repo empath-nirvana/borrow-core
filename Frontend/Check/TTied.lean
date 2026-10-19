@@ -1,5 +1,6 @@
 import Frontend.Check.Tied
 import Frontend.Check.Weaken
+import Frontend.Check.TLife
 
 /-!
 # Frontend — Check — tied derivations of the typed term  `[spec §19, §29]`
@@ -395,7 +396,7 @@ theorem reify {p : Pins} {s : CRow} {t : TExpr} (S : CRow) (B R : CVTy) (res : B
     (h : TTied p s Δ [] t (.val (BoCa.Fig16.LogRel.Core.resTy S B R))) (q : t.erase = .val res)
     (hΓ : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) :
     TTied p ((BoCa.Fig16.LogRel.Core.tickSig :: S) ∪ s) Δ Γ
-      (.reify i (.val (BoCa.Fig16.LogRel.Core.reifyTy S B R)) S B R res t)
+      (.reify i (.val (BoCa.Fig16.LogRel.Core.reifyTy S B R)) S B R t)
       (.val (BoCa.Fig16.LogRel.Core.reifyTy S B R)) :=
   ⟨fun hn Ξ hΞ => .reify S B R res (rowAt_of_union_left hΞ) hS hcl
       (h.1 hn Ξ (sigsAt_union_right hΞ)) q hΓ,
@@ -416,7 +417,7 @@ theorem effHandleT (u : Masks) (site : Option HSite) {p₁ p₂ : Pins} {s₁ s�
     (he : TTied p₂ s₂ Δ Γ₂ te
       (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) A))) :
     TTied (p₁ ++ p₂) ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) ∪ (s₁ ∪ s₂)) Δ Γ
-      (.effHandleT i (.comp (effOf S R)) Hr Hc S SN E fs n A R u site tc te) (.comp (effOf S R)) :=
+      (.effHandleT i (.comp (effOf S R)) S SN E fs n A R u site tc te) (.comp (effOf S R)) :=
   ⟨fun hn Ξ hΞ => .effHandleT (rowAt_of_union_left hΞ) hs hm hd hHr hHc
       (hc.1 (nilL hn) Ξ (sigsAt_union_left (sigsAt_union_right hΞ))) qc
       hn0 hnd hnS hlen hSN hLin
@@ -519,6 +520,29 @@ theorem litFn {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} {bs : List Nat}
     (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.litFn i j bs t) j :=
   ⟨fun hn Ξ hΞ => .litFn (h.1 hn Ξ hΞ) hb hcl, .litFn h.2 hb hcl⟩
 
+/-- **A division by a literal at which it cannot fail** (SPEC §39): the derived node over the
+scheme's typed term. -/
+theorem divLit {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} {op : BoCa.HostOp} {c : BoCa.IntLit}
+    (hb : divLitB op c t.erase = true) (hs : safeDivB op c = true) (h : TTied p s Δ Γ t j) :
+    TTied p s Δ Γ (.divLit i j op c t) j :=
+  ⟨fun hn Ξ hΞ => .divLit (h.1 hn Ξ hΞ) hb hs, .divLit h.2 hb hs⟩
+
+/-- **A counted walk of a view** (SPEC §16): the derived node over the loop's typed term. -/
+theorem walk {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (m : Bool) (hb : walkB t.erase = true)
+    (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.walk i j m t) j :=
+  ⟨fun hn Ξ hΞ => .walk (h.1 hn Ξ hΞ) hb, .walk h.2 hb⟩
+
+/-- **A recursive group's self-reference read for a member** (SPEC §20). -/
+theorem selfCall {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (k n : Nat)
+    (hb : selfCallB t.erase = true) (h : TTied p s Δ Γ t j) :
+    TTied p s Δ Γ (.selfCall i j k n t) j :=
+  ⟨fun hn Ξ hΞ => .selfCall (h.1 hn Ξ hΞ) hb, .selfCall h.2 hb⟩
+
+/-- **The lend of a cell allocated for it** (SPEC §35). -/
+theorem lendCell {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (m : Bool)
+    (hb : lendCellB t.erase = true) (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.lendCell i j m t) j :=
+  ⟨fun hn Ξ hΞ => .lendCell (h.1 hn Ξ hΞ) hb, .lendCell h.2 hb⟩
+
 /-- **A `def`'s body at its use**: the `use` node over the body, its absorption the body's.
 `[spec §10]` -/
 theorem use {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (name : String) (decl : Nat)
@@ -533,6 +557,13 @@ theorem weaken {p : Pins} {s : CRow} {Γa Γb Γp : Ctx CVTy} {t : TExpr} {j : J
     TTied p s Δ (Γa ++ Γp ++ Γb) (t.shift Γp.length Γa.length) j :=
   ⟨fun hn Ξ hΞ => ((h.1 hn Ξ hΞ).weaken Γa Γb Γp f rfl hf hp).1,
     (h.2.weaken Γa Γb Γp f rfl hf hp).1⟩
+
+/-- **A checked derivation at a larger lifetime context** (`TDerivesAt.weakenΔ`,
+`TDerivesP.weakenΔ`).  `[spec §10]` -/
+theorem weakenΔ {p : Pins} {s : CRow} {Δ' : LifeCtx} {t : TExpr} {j : Jdg}
+    (h : TTied p s Δ Γ t j) (he : ExtΔ Δ Δ' t.lifeBinders) (hd : t.domFree = true) :
+    TTied p s Δ' Γ (t.reAb Δ') j :=
+  ⟨fun hn Ξ hΞ => (h.1 hn Ξ hΞ).weakenΔ Δ' he hd, h.2.weakenΔ Δ' he hd⟩
 
 end TTied
 

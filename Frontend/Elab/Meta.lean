@@ -57,7 +57,7 @@ def TCx.ofScope (scope : List Decl) (all : Bool) : TCx :=
   let ds := scope.toArray
   let xs := externsBefore ds ds.size
   let vars := (xs.map (fun (x, B) => if all || B.persistent then some x else none)).reverse
-  { E := Env.mk ⟨ds, ds.size, []⟩ vars [] [] [] xs.length none [], T := (xs.map (·.2)).reverse }
+  { E := Env.mk ⟨ds, ds.size, [], []⟩ vars [] [] [] xs.length none [], T := (xs.map (·.2)).reverse }
 
 /-- A written type, elaborated. -/
 def TCx.elabV (c : TCx) (A : VTy) : Option CVTy := (c.E.elabV c.Δ A).toOption
@@ -176,6 +176,7 @@ def _root_.Frontend.Val.takeLends : Val → Val × List Ident
   | .ascribe sp V A => let (V', a) := V.takeLends; (.ascribe sp V' A, a)
   | .shorten sp m σ l V => let (V', a) := V.takeLends; (.shorten sp m σ l V', a)
   | .run sp M => let (M', a) := M.takeLends; (.run sp M', a)
+  | .mark sp k V => let (V', a) := V.takeLends; (.mark sp k V', a)
   | V => (V, [])
 
 /-- The `&c` of the head of a bind, outside nested binders. -/
@@ -203,6 +204,7 @@ def _root_.Frontend.Val.synthInj : Val → Bool
   | .pair _ V W => V.synthInj || W.synthInj
   | .unbang _ V | .unbox _ V | .unroll _ V | .inst _ V _ | .sub _ V _ | .boxed _ _ V => V.synthInj
   | .run _ M => M.synthInj
+  | .mark _ _ V => V.synthInj
   | _ => false
 
 /-- An injection in a position of a computation whose type the checker synthesizes: the value

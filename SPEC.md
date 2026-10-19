@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.79 · 2026-10-19
+Version 0.80 · 2026-10-19
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -234,8 +234,31 @@ and release (`allocS`, `freeS`, `d_allocS`, `d_freeS`), a block borrow (`withbor
 elaborator writes is marked on the value it writes (the core form `Val.mark`, printed as the value
 it marks, so `bcc desugar` shows the value): the checker checks `V` as written and builds the scheme's node over its typed term, with the
 equation saying which instance of the scheme the term's erasure is. A string literal's table
-(§17) is such a node (`litFn`, the bytes and `litFnE`). The fixed points of folds, `unfold`,
-`count_fold`, `count_try` and `bounded_fix`, and `swap`, are rule nodes already.
+(§17) is such a node (`litFn`, the bytes and `litFnE`), and so are four more, each over the
+marked value's typed term with the rule that its erasure is the scheme's:
+
+- `divLit op c`: a division by a literal at which it cannot fail (§39, `divLitB`, `safeDivB`); at
+  a conforming host the operation answers at every dividend (`divLit_some32`, `divLit_some64`,
+  `divLit_some8`), so the scheme's error arm is never taken;
+- `walk m`: a counted walk of a view (§16), the `count_try` over its length (`walkB`); its step
+  runs only below the bound (`walk_index_lt`), and below a view's length its read answers a leaf
+  (`walk_get_leaf`, `walk_split_first`), from §16's completeness lemmas;
+- `selfCall j n`: a recursive group's self-reference read for member `j` of `n` (§20, `selfCallB`);
+- `lendCell m`: the lend of a cell allocated for it, `withbor (alloc v) cb` (§35, `lendCellB`),
+  the one scheme of the three emitters of a scoped cell (a value lent to a call, `modify` of a
+  value, a handler's state given as a value).
+
+What each of the last three leaves to the scheme is recorded in `Frontend/Check/TFacts.lean`. The
+fixed points of folds, `unfold`, `count_fold`, `count_try` and `bounded_fix`, and `swap`, are rule
+nodes already. A drop is the rule nodes `unitE` over `lolliE` of the variable and the destructor's
+derived node (`dtor`), and a finaliser the `[then]` node's third child, built of drops.
+
+**No node holds an untyped term.** A rule argument that is a term fixed by an equation on a
+child's erasure (`effHandleT`'s clauses, `reify`'s residual, `[let-poly]`'s value and body) is not a
+field: the erasure reads it off the child's (`Expr.pairL`, `Expr.toVal`, `Expr.letBody`). So
+`[let-poly]`'s node holds its value's and its copy's typed terms only, and its erasure is the let
+of the copy unfilled (`Expr.unfill`). `scripts/gen-pin.py --check`, a gate step, fails if a node
+has a field of type `Expr`, `Val` or a surface term.
 
 ### A `def` at its uses
 
@@ -254,6 +277,28 @@ the use's slots, and its derivation projects to one of that term at the use's co
 (`TDerivesAt.use_projects`, `TDerivesP.use_projects`): the term and derivation checking the body at
 the use gives. A body that holds a relaxed lend (§29), whose rules are at fixed contexts, is
 checked at each use.
+
+**A larger lifetime context.** A key's body is placed at a use whose lifetime context is larger than
+the one it was checked at (a use under a lifetime binder, or inside a borrow) by
+`TDerivesAt.weakenΔ`/`TDerivesP.weakenΔ` (`Frontend/Check/TLife.lean`), not checked again, when
+the larger context has every binding of the smaller and its other bounds mention none of the
+body's binders (`ExtΔ`), the body has no rule that reads `⊓Δ` or takes a fresh variable
+(`TExpr.domFree`), its type elaborates the same at the use, and the slots it is placed under
+mention none of its binders. Two kinds of body are still checked once per lifetime context:
+
+- one with a borrow, whose type `∀'x ⊏ ⊓Δ. …` the context changes (the borrow rules' type reads
+  `⊓Δ`, so no derivation at a smaller context is one at a larger);
+- one whose type has a lifetime binder: the binder is numbered from the context (`Δ.freshVar`), so
+  the type elaborated at the use is another `VTy` than the one checked, and the checker compares
+  types as they are. A renaming of typed derivations' lifetime binders would place it.
+
+In #509's reproduction (`print_f64` twice) that is 179 keys and 249 checks, of which 36 are bodies
+with a borrow and 34 bodies whose type has a binder.
+
+**The elaborator's keys.** A `use` node records the elaborator's key of the `def` (`TInfo.key`,
+`Frontend.DefKey`), when the elaboration generated it: a template instance's template and type
+arguments, or a copy's function and keys (the handlers and sites that serve its effects, its
+blocks'). Copies whose keys differ only in their sites' names have one `body`.
 
 ### Baseline, restated
 
@@ -7410,6 +7455,19 @@ typed rules (`scripts/gen-pin.py`: the `u.Rel` premise at a split, `TExpr.masks?
 `scripts/check-cells.sh`. No change to `CDerives`, `Core/`, the relation, the machine, or any
 program's erasure, output, goldens or counts.
 
+§3's marked derived nodes, typed `[let-poly]`, `[handle]` at tail clauses and `reify`, the lint,
+the lifetime weakening and the key table are implemented in `scripts/gen-pin.py` (`DERIVED`,
+`lint_texpr`, the `TLife` cases) and its templates (`scripts/pin/TExpr.tmpl.lean`:
+`divLitB`, `safeDivB`, `walkB`, `selfCallB`, `lendCellB`, `Expr.pairL`, `Expr.toVal`,
+`Expr.letBody`; `TDerives.tmpl.lean`; `TLife.tmpl.lean`: `LeΔ`, `ExtΔ`, `TExpr.domFree`,
+`TExpr.reAb`, `weakenΔ`), `Frontend/Check/Derived.lean`, `Frontend/Check/Rules.lean`
+(`rMarked`), `Frontend/Check/Checker.lean` (`DefEntry.lift?`), the elaborator's marks
+(`Frontend/Sugar.lean`: `divUnchecked`, `forData`, `lendBorrow` and the borrow block of a cell;
+`Frontend/Elab/Effects.lean`: `memberCall`) and keys (`DefKey`, `recordKey`, `Origin.defKey`,
+`Elaborated.keys`). No change to `CDerives`, `Core/`, the relation, the machine, or any program's
+erasure, run output, goldens or counts; `bcc check` reports a `def` with type parameters as
+`checked once per instance`.
+
 §3's derived nodes and `use` nodes are implemented in the templates of `scripts/gen-pin.py`
 (`scripts/pin/TExpr.tmpl.lean`, `TDerives.tmpl.lean`: the nodes, `litFnE`, their rules and
 projections), `Frontend/Check/TShift.lean` (`TExpr.shift`, `AbsF`, `TExpr.absF`,
@@ -7431,6 +7489,15 @@ no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the chec
 
 ## Changelog
 
+- **0.80** (2026-10-19) — §3 (#570): four marked derived nodes, `divLit` (§39), `walk` (§16),
+  `selfCall` (§20) and `lendCell` (§35), each over its scheme's typed term, the first two with
+  their facts about the run; no node holds an untyped term (`[let-poly]`, tail-clause `[handle]`
+  and `reify` read them off their children), checked by `gen-pin.py --check`; a `def`'s body
+  checked at one lifetime context is placed at a larger one by `weakenΔ` when it has no borrow and
+  its type no binder; a `use` node records the elaborator's key of its `def`. `bcc check` reports
+  a `def` with type parameters as `checked once per instance` (was `checked at each use`). No
+  change to `CDerives`, `Core/`, the relation, the machine, or any program's erasure, run output,
+  goldens or counts.
 - **0.79** (2026-10-19) — §3, *What the checker returns* (#570): a node at a split carries both
   parts' use masks, and its typed rule relates them to the parts' contexts (`SplitMasks`), so the
   copy set of a split is its masks' (`TDerivesP.copies`), which §10's check reads; a binding's

@@ -4,6 +4,8 @@ import Core.ClauseKinds
 import Core.BlockBorrow
 import Core.Dtor
 import Frontend.Check.Masks
+import Core.LetCopy
+import Support.Dynamics.Interpreter
 
 /-!
 # Frontend — Check — the typed term  `[spec §3, §29]`
@@ -57,12 +59,15 @@ open BoCa.Lifetime (LifeCtx LifeVar)
 
 /-- What a node records of its source: the span it was checked from; at a variable (and at the
 argument of `M x`), the variable's name, and whether the program writes the use `clone(x)`; at a
-binding (`x <- M`, `let (x, y) = V`, a `case`'s arms), the names it binds, in the source's order. -/
+binding (`x <- M`, `let (x, y) = V`, a `case`'s arms), the names it binds, in the source's order;
+at a `use`, the elaborator's key of the `def` it uses. -/
 structure TInfo where
   sp : Frontend.Span
   name : String := ""
   clone : Bool := false
   binders : List String := []
+  /-- At a `use` of a `def` the elaboration generates, its key (`Frontend.DefKey`). -/
+  key : Option Frontend.DefKey := none
   deriving Inhabited
 
 /-- What an unused live slot of a type must satisfy for a derivation to be given it: one atom of a
@@ -127,6 +132,128 @@ structure HSite where
   state : List (String × Frontend.VTy)
   deriving Inhabited
 
+/-! ### The schemes of the marked derived nodes
+
+Each recognises the erasure of the value the elaborator marks (`Frontend.Val.mark`), and is kept by
+moving the term's variables (`TExpr.shift`), so a `def`'s body keeps its marked nodes at a use. -/
+
+/-- The body of a division by the literal `c` by the host operation `op` whose error arm is never
+taken, under the dividend's binder (`Frontend.Sugar.divUnchecked`): the divisor bound, the
+operation at both (a byte's widened by `extend8_u`), the quotient or remainder (a byte's
+narrowed by `wrap8`), and `0` in the arm that is not taken.  `[spec §39]` -/
+def divLitBody (op : HostOp) (c : IntLit) : Expr :=
+  let u8 := match c with | .u8 _ => true | _ => false
+  let wide (i : Nat) : Expr := if u8 then .app (.prim (.host .extend8_u)) (.var i) else .var i
+  let q : Expr := if u8 then .app (.prim (.host .wrap8)) (.var 0) else .var 0
+  let z : IntLit := match c with | .u8 _ => .u8 0 | .i64 _ => .i64 0 | _ => .i32 0
+  .app (.lam (.case (.app (.prim (.host op)) (.pair (wide 1) (wide 0))) q (.prim (.lit z))))
+    (.prim (.lit c))
+
+/-- The term is a division by the literal `c` by `op`: `(λa. divLitBody op c) e`. -/
+def divLitB (op : HostOp) (c : IntLit) : Expr → Bool
+  | .app (.lam B) _ => B == divLitBody op c
+  | _ => false
+
+/-- The literal is one at which `op` cannot fail: nonzero, and not `-1` for a signed `/` (a byte's
+division is the unsigned one at `i32`, on the widened operands).  `[spec §39]` -/
+def safeDivB : HostOp → IntLit → Bool
+  | .div .w32 o, .i32 n => n != 0 && (o != .div_s || n != 0xFFFFFFFF)
+  | .div .w64 o, .i64 n => n != 0 && (o != .div_s || n != 0xFFFFFFFFFFFFFFFF)
+  | .div .w32 .div_u, .u8 n | .div .w32 .rem_u, .u8 n => n != 0
+  | _, _ => false
+
+/-- The term is a `count_try` at a step, a bound, a first index and a state. -/
+def walkB : Expr → Bool
+  | .app (.prim .countTry) (.pair _ (.pair _ (.pair _ _))) => true
+  | _ => false
+
+/-- The term is a variable. -/
+def selfCallB : Expr → Bool
+  | .var _ => true
+  | _ => false
+
+/-- The term is a borrow of a cell it allocates: `withbor (alloc v) cb`. -/
+def lendCellB : Expr → Bool
+  | .app (.app _ (.app (.prim .alloc) _)) _ => true
+  | _ => false
+
+theorem divLitBody_closed (op : HostOp) (c : IntLit) : closedAt 1 (divLitBody op c) = true := by
+  cases c <;> simp [divLitBody, closedAt]
+
+theorem divLitB_shift {op : HostOp} {c : IntLit} {e : Expr} (h : divLitB op c e = true)
+    (d k : Nat) : divLitB op c (e.shift d k) = true := by
+  match e, h with
+  | .app (.lam B) a, h =>
+      simp only [divLitB, beq_iff_eq] at h
+      subst h
+      simp only [Expr.shift, divLitB, beq_iff_eq]
+      exact shift_closedAt (k := 1) _ _ (divLitBody_closed op c) (Nat.le_add_left 1 _)
+
+theorem walkB_shift {e : Expr} (h : walkB e = true) (d k : Nat) : walkB (e.shift d k) = true := by
+  match e, h with
+  | .app (.prim .countTry) (.pair _ (.pair _ (.pair _ _))), _ => rfl
+
+theorem selfCallB_shift {e : Expr} (h : selfCallB e = true) (d k : Nat) :
+    selfCallB (e.shift d k) = true := by
+  match e, h with
+  | .var i, _ => simp only [Expr.shift]; split <;> rfl
+
+theorem lendCellB_shift {e : Expr} (h : lendCellB e = true) (d k : Nat) :
+    lendCellB (e.shift d k) = true := by
+  match e, h with
+  | .app (.app _ (.app (.prim .alloc) _)) _, _ => rfl
+
+/-! ### Terms a node's erasure reads off a child's
+
+A rule argument that is a term determined by an equation on a child's erasure (`effHandleT`'s
+clause pair, `reify`'s residual, `[let-poly]`'s value and body) is not a field: the erasure reads
+it off the child's (`scripts/gen-pin.py`, `DERIVED`), so no node holds an untyped term. -/
+
+/-- The left of a pair, a term otherwise itself. -/
+def Expr.pairL : Expr → Expr
+  | .pair a _ => a
+  | e => e
+
+/-- The right of a pair, a term otherwise itself. -/
+def Expr.pairR : Expr → Expr
+  | .pair _ b => b
+  | e => e
+
+theorem isValB_of_isVal : ∀ {e : Expr}, IsVal e → isValB e = true
+  | _, .unit => rfl
+  | _, .pair h₁ h₂ => by simp [isValB, isValB_of_isVal h₁, isValB_of_isVal h₂]
+  | _, .inj₁ h => by simp [isValB, isValB_of_isVal h]
+  | _, .inj₂ h => by simp [isValB, isValB_of_isVal h]
+  | _, .lam => rfl
+  | _, .loc => rfl
+  | _, .prim => rfl
+  | _, .storeV h => by simp [isValB, isValB_of_isVal h]
+
+/-- A term as a value; `()` at a term that is not one. -/
+def Expr.toVal (e : Expr) : Val :=
+  if h : isValB e = true then ⟨e, isVal_of_isValB e h⟩ else Val.unit
+
+theorem Expr.toVal_val (v : Val) : Expr.toVal v.1 = v := by
+  unfold Expr.toVal
+  rw [dif_pos (isValB_of_isVal v.2)]
+
+/-- The body of a λ, a term otherwise itself. -/
+def Expr.lamBody : Expr → Expr
+  | .lam b => b
+  | e => e
+
+theorem Expr.lamBody_lam (b : Expr) : Expr.lamBody ((.val (.lam b)) : Expr) = b := rfl
+
+/-- `[let-poly]`'s body, from its premise's term `eN` (the copy, under the bound slot) and the
+λ-value `eV`: the copy with the slot dropped and the λ-value's occurrences replaced by the bound
+variable (`Expr.unfill`). -/
+def Expr.letBody (eN eV : Expr) : Expr := (eN.subst 0 Val.unit).unfill (Expr.lamBody eV) 0
+
+theorem Expr.letBody_shift (M b : Expr) :
+    Expr.letBody (M.shift 1 0) ((.val (.lam b)) : Expr) = M.unfill b 0 := by
+  simp only [Expr.letBody, subst_shift_one]
+  rfl
+
 /-- **The typed term**: one node per rule application of the checked derivation.  `[spec §3]` -/
 inductive TExpr where
   | var (info : TInfo) (jdg : Jdg) (i : Nat) (A : VTy)
@@ -183,7 +310,7 @@ inductive TExpr where
   | boundedFix (info : TInfo) (jdg : Jdg) (A : VTy) (C : CTy)
   | iterate (info : TInfo) (jdg : Jdg) (S : Row) (St : VTy) (B : VTy) (R : VTy)
   | divFuel (info : TInfo) (jdg : Jdg) (S : Row) (A : VTy)
-  | reify (info : TInfo) (jdg : Jdg) (S : Row) (B : VTy) (R : VTy) (res : Val) (tres : TExpr)
+  | reify (info : TInfo) (jdg : Jdg) (S : Row) (B : VTy) (R : VTy) (tres : TExpr)
   | sliceBorrowM (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (x : LifeVar)
   | sliceBorrowI (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (x : LifeVar)
   | sliceGetM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
@@ -223,8 +350,8 @@ inductive TExpr where
   | effThen (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (SM : Row) (SD : Row) (u : Masks) (tM tN tD : TExpr)
   | effHandleV (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite) (tc te : TExpr)
   | effHandleVB (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (d : Lifetime.Life) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite) (tc te : TExpr)
-  | effHandleT (info : TInfo) (jdg : Jdg) (Hr : Expr) (Hc : Expr) (S : Row) (SN : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (site : Option HSite) (tc te : TExpr)
-  | letPoly (info : TInfo) (jdg : Jdg) (N : Expr) (C : CTy) (j : Jdg) (b : Expr) (tV tN : TExpr)
+  | effHandleT (info : TInfo) (jdg : Jdg) (S : Row) (SN : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (site : Option HSite) (tc te : TExpr)
+  | letPoly (info : TInfo) (jdg : Jdg) (C : CTy) (j : Jdg) (tV tN : TExpr)
   | lendR (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (T : VTy) (B : VTy) (S : Row) (td tM : TExpr)
   | lendLoopR (info : TInfo) (jdg : Jdg) (x : LifeVar) (A : VTy) (S : VTy) (B : VTy) (R : VTy) (tN tK ts0 : TExpr)
   | nilDead (info : TInfo) (jdg : Jdg) (j : Jdg) (t : TExpr)
@@ -245,6 +372,17 @@ inductive TExpr where
   | withborF2I (info : TInfo) (jdg : Jdg) (c x y : LifeVar) (A B T : VTy)
   /-- **Derived**: a string literal's table at the bytes `bs` (`litFnE`), over its typed term. -/
   | litFn (info : TInfo) (jdg : Jdg) (bs : List Nat) (t : TExpr)
+  /-- **Derived**: a division by the literal `c` by the host operation `op` at which it cannot
+  fail (`divLitB`, `safeDivB`), over its typed term. -/
+  | divLit (info : TInfo) (jdg : Jdg) (op : HostOp) (c : IntLit) (t : TExpr)
+  /-- **Derived**: a counted walk of a view, `mut` when `m` (`walkB`), over its typed term. -/
+  | walk (info : TInfo) (jdg : Jdg) (m : Bool) (t : TExpr)
+  /-- **Derived**: a recursive group's self-reference read to call member `j` of `n`
+  (`selfCallB`), over its typed term. -/
+  | selfCall (info : TInfo) (jdg : Jdg) (j n : Nat) (t : TExpr)
+  /-- **Derived**: the lend of a cell allocated for it, `mut` when `m` (`lendCellB`), over its
+  typed term. -/
+  | lendCell (info : TInfo) (jdg : Jdg) (m : Bool) (t : TExpr)
   /-- A use of the `def` `name`, the declaration `decl` of the program, at the type arguments
   `targs`: its body `t`, at the use's context, and the body's absorption `ab`. -/
   | use (info : TInfo) (jdg : Jdg) (name : String) (decl : Nat) (targs : List VTy) (ab : Option AbsF)
@@ -306,7 +444,7 @@ def TExpr.erase : TExpr → Expr
   | .boundedFix _ _ _ _ => (.val (.prim .boundedFix))
   | .iterate _ _ _ _ _ _ => (.val (.prim .iterate))
   | .divFuel _ _ _ _ => (.val divFuelV)
-  | .reify _ _ _ _ _ res _ => (.val (reifyV res))
+  | .reify _ _ _ _ _ tres => (.val (reifyV (Expr.toVal (tres.erase))))
   | .sliceBorrowM _ _ _ _ _ => withbor
   | .sliceBorrowI _ _ _ _ _ => withbor
   | .sliceGetM _ _ _ _ => (.val (.prim .idx))
@@ -346,8 +484,8 @@ def TExpr.erase : TExpr → Expr
   | .effThen _ _ _ _ _ _ _ _ tM tN tD => (thenE (tN.erase) (tD.erase) (tM.erase))
   | .effHandleV _ _ _ E _ n _ _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (tc.erase) (te.erase))
   | .effHandleVB _ _ _ E _ n _ _ _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (tc.erase) (te.erase))
-  | .effHandleT _ _ Hr Hc _ _ E _ n _ _ _ _ _ te => (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) (te.erase))
-  | .letPoly _ _ N _ _ b _ _ => (.app (.val (.lam N)) (.val (.lam b)))
+  | .effHandleT _ _ _ _ E _ n _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (.pair (Expr.pairL (tc.erase)) (tailTuple E 0 (Expr.pairR (tc.erase)))) (te.erase))
+  | .letPoly _ _ _ _ tV tN => (.app (.val (.lam (Expr.letBody (tN.erase) (tV.erase)))) (.val (.lam (Expr.lamBody (tV.erase)))))
   | .lendR _ _ _ _ _ _ _ td tM => (.app (.app (.val (withborUV (td.erase))) (.var 0)) (.val (lendCb (tM.erase))))
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase))
   | .nilDead _ _ _ t => t.erase
@@ -357,6 +495,7 @@ def TExpr.erase : TExpr → Expr
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => withborS σ
   | .withborF2M .. | .withborF2I .. => withborF2
   | .litFn _ _ _ t => t.erase
+  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t => t.erase
   | .use _ _ _ _ _ _ t => t.erase
 
 /-- The node's source. -/
@@ -415,7 +554,7 @@ def TExpr.info : TExpr → TInfo
   | .boundedFix i _ _ _ => i
   | .iterate i _ _ _ _ _ => i
   | .divFuel i _ _ _ => i
-  | .reify i _ _ _ _ _ _ => i
+  | .reify i _ _ _ _ _ => i
   | .sliceBorrowM i _ _ _ _ => i
   | .sliceBorrowI i _ _ _ _ => i
   | .sliceGetM i _ _ _ => i
@@ -455,13 +594,14 @@ def TExpr.info : TExpr → TInfo
   | .effThen i _ _ _ _ _ _ _ _ _ _ => i
   | .effHandleV i _ _ _ _ _ _ _ _ _ _ _ _ => i
   | .effHandleVB i _ _ _ _ _ _ _ _ _ _ _ _ _ => i
-  | .effHandleT i _ _ _ _ _ _ _ _ _ _ _ _ _ _ => i
-  | .letPoly i _ _ _ _ _ _ _ => i
+  | .effHandleT i _ _ _ _ _ _ _ _ _ _ _ _ => i
+  | .letPoly i _ _ _ _ _ => i
   | .lendR i _ _ _ _ _ _ _ _ => i
   | .lendLoopR i _ _ _ _ _ _ _ _ _ => i
   | .nilDead i _ _ _ => i
   | .dtor i _ _ | .allocS i _ _ | .freeS i _ _ | .withborSM i _ _ _ _ | .withborSI i _ _ _ _
   | .withborF2M i _ _ _ _ _ _ _ | .withborF2I i _ _ _ _ _ _ _ | .litFn i _ _ _ => i
+  | .divLit i _ _ _ _ | .walk i _ _ _ | .selfCall i _ _ _ _ | .lendCell i _ _ _ => i
   | .use i _ _ _ _ _ _ => i
 
 /-- The node's judgment. -/
@@ -520,7 +660,7 @@ def TExpr.jdg : TExpr → Jdg
   | .boundedFix _ j _ _ => j
   | .iterate _ j _ _ _ _ => j
   | .divFuel _ j _ _ => j
-  | .reify _ j _ _ _ _ _ => j
+  | .reify _ j _ _ _ _ => j
   | .sliceBorrowM _ j _ _ _ => j
   | .sliceBorrowI _ j _ _ _ => j
   | .sliceGetM _ j _ _ => j
@@ -560,13 +700,14 @@ def TExpr.jdg : TExpr → Jdg
   | .effThen _ j _ _ _ _ _ _ _ _ _ => j
   | .effHandleV _ j _ _ _ _ _ _ _ _ _ _ _ => j
   | .effHandleVB _ j _ _ _ _ _ _ _ _ _ _ _ _ => j
-  | .effHandleT _ j _ _ _ _ _ _ _ _ _ _ _ _ _ => j
-  | .letPoly _ j _ _ _ _ _ _ => j
+  | .effHandleT _ j _ _ _ _ _ _ _ _ _ _ _ => j
+  | .letPoly _ j _ _ _ _ => j
   | .lendR _ j _ _ _ _ _ _ _ => j
   | .lendLoopR _ j _ _ _ _ _ _ _ _ => j
   | .nilDead _ j _ _ => j
   | .dtor _ j _ | .allocS _ j _ | .freeS _ j _ | .withborSM _ j _ _ _ | .withborSI _ j _ _ _
   | .withborF2M _ j _ _ _ _ _ _ | .withborF2I _ j _ _ _ _ _ _ | .litFn _ j _ _ => j
+  | .divLit _ j _ _ _ | .walk _ j _ _ | .selfCall _ j _ _ _ | .lendCell _ j _ _ => j
   | .use _ j _ _ _ _ _ => j
 
 /-- How a child's context is formed from its node's, as the child's premise has it. -/
@@ -633,7 +774,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .boundedFix _ _ _ _ => []
   | .iterate _ _ _ _ _ _ => []
   | .divFuel _ _ _ _ => []
-  | .reify _ _ _ _ _ _ tres => [(.fresh 0, tres)]
+  | .reify _ _ _ _ _ tres => [(.fresh 0, tres)]
   | .sliceBorrowM _ _ _ _ _ => []
   | .sliceBorrowI _ _ _ _ _ => []
   | .sliceGetM _ _ _ _ => []
@@ -673,14 +814,15 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .effThen _ _ _ _ _ _ _ _ tM tN tD => [(.push 0, tM), (.push 1, tN), (.push 1, tD)]
   | .effHandleV _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
   | .effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
-  | .effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
-  | .letPoly _ _ _ _ _ _ tV tN => [(.fresh 0, tV), (.push 1, tN)]
+  | .effHandleT _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
+  | .letPoly _ _ _ _ tV tN => [(.fresh 0, tV), (.push 1, tN)]
   | .lendR _ _ _ _ _ _ _ td tM => [(.fresh 0, td), (.fresh 1, tM)]
   | .lendLoopR _ _ _ _ _ _ _ tN tK ts0 => [(.fresh 1, tN), (.fresh 1, tK), (.fresh 0, ts0)]
   | .nilDead _ _ _ t => [(.fresh 0, t)]
   | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => []
   | .litFn _ _ _ t => [(.push 0, t)]
+  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t => [(.push 0, t)]
   | .use _ _ _ _ _ _ t => [(.push 0, t)]
 
 /-- The use masks of a node at a split: its two parts' (`Masks`). -/
@@ -697,7 +839,7 @@ def TExpr.masks? : TExpr → Option Masks
   | .effThen _ _ _ _ _ _ _ u _ _ _ => some u
   | .effHandleV _ _ _ _ _ _ _ _ u _ _ _ _ => some u
   | .effHandleVB _ _ _ _ _ _ _ _ _ u _ _ _ _ => some u
-  | .effHandleT _ _ _ _ _ _ _ _ _ _ _ u _ _ _ => some u
+  | .effHandleT _ _ _ _ _ _ _ _ _ u _ _ _ => some u
   | _ => none
 
 /-- Whether the node erases to a `λ` (`thunkv N`'s premise): read off the rule's term where its
@@ -758,7 +900,7 @@ def TExpr.isLam : TExpr → Bool
   | .boundedFix _ _ _ _ => false
   | .iterate _ _ _ _ _ _ => false
   | .divFuel _ _ _ _ => (((.val divFuelV) : Expr) matches .lam _)
-  | .reify _ _ _ _ _ res _ => (((.val (reifyV res)) : Expr) matches .lam _)
+  | .reify _ _ _ _ _ tres => (((.val (reifyV (Expr.toVal (tres.erase)))) : Expr) matches .lam _)
   | .sliceBorrowM _ _ _ _ _ => ((withbor : Expr) matches .lam _)
   | .sliceBorrowI _ _ _ _ _ => ((withbor : Expr) matches .lam _)
   | .sliceGetM _ _ _ _ => false
@@ -798,8 +940,8 @@ def TExpr.isLam : TExpr → Bool
   | .effThen _ _ _ _ _ _ _ _ tM tN tD => (((thenE (tN.erase) (tD.erase) (tM.erase)) : Expr) matches .lam _)
   | .effHandleV _ _ _ E _ n _ _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (tc.erase) (te.erase)) : Expr) matches .lam _)
   | .effHandleVB _ _ _ E _ n _ _ _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (tc.erase) (te.erase)) : Expr) matches .lam _)
-  | .effHandleT _ _ Hr Hc _ _ E _ n _ _ _ _ _ te => (((hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) (te.erase)) : Expr) matches .lam _)
-  | .letPoly _ _ _ _ _ _ _ _ => false
+  | .effHandleT _ _ _ _ E _ n _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (.pair (Expr.pairL (tc.erase)) (tailTuple E 0 (Expr.pairR (tc.erase)))) (te.erase)) : Expr) matches .lam _)
+  | .letPoly _ _ _ _ _ _ => false
   | .lendR _ _ _ _ _ _ _ _ _ => false
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (((lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase)) : Expr) matches .lam _)
   | .nilDead _ _ _ t => t.isLam
@@ -809,6 +951,7 @@ def TExpr.isLam : TExpr → Bool
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => (withborS σ matches .lam _)
   | .withborF2M .. | .withborF2I .. => (withborF2 matches .lam _)
   | .litFn _ _ _ t => t.isLam
+  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t => t.isLam
   | .use _ _ _ _ _ _ t => t.isLam
 
 /-- `isLam` is the erasure's head. -/
@@ -867,7 +1010,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .boundedFix _ _ _ _ => rfl
   | .iterate _ _ _ _ _ _ => rfl
   | .divFuel _ _ _ _ => rfl
-  | .reify _ _ _ _ _ _ _ => rfl
+  | .reify _ _ _ _ _ _ => rfl
   | .sliceBorrowM _ _ _ _ _ => rfl
   | .sliceBorrowI _ _ _ _ _ => rfl
   | .sliceGetM _ _ _ _ => rfl
@@ -907,14 +1050,15 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .effThen _ _ _ _ _ _ _ _ _ _ _ => rfl
   | .effHandleV _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
   | .effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
-  | .effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
-  | .letPoly _ _ _ _ _ _ _ _ => rfl
+  | .effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
+  | .letPoly _ _ _ _ _ _ => rfl
   | .lendR _ _ _ _ _ _ _ _ _ => rfl
   | .lendLoopR _ _ _ _ _ _ _ _ _ _ => rfl
   | .nilDead _ _ _ t => isLam_eq t
   | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => rfl
   | .litFn _ _ _ t => isLam_eq t
+  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t => isLam_eq t
   | .use _ _ _ _ _ _ t => isLam_eq t
 
 theorem TExpr.isLam_sound (t : TExpr) (h : t.isLam = true) : ∃ N, t.erase = .val (.lam N) := by
