@@ -12,9 +12,11 @@ The classification reads the derivation: an abortive operation is one whose sign
 clause no `κ` (`clauseTy`); a control clause is `!thunkv λp. let (x, κ) = p; M`, and `M`'s paths
 run through the rules `[⊕E]`, `[⊗E]`, `[1E]`, `[let]` and `[let]` at a row, to the uses of `κ`:
 `[app]` of `[&E₁]` of `[force]` at `κ`'s slot, of the type `(B ⊸ F_Σ R) & C`, is its resume;
-`[&E₂]` is its cancel. A state-passing clause (§21) answers `[thunkV]` of `λs. S`, and `S` resumes,
-then forces the answer at the type `St ⊸ F_Σ R` on the new state. Where a use's absence matters,
-it is read off the premise's term (`mentions` of its erasure).
+`[&E₂]` is its cancel; `[let]` of the resume whose body answers its variable is the resume under
+the right unit; `[let]` of `return κ` is an alias of `κ`. A state-passing clause (§21) answers
+`[thunkV]` of `λs. S`, and `S` resumes, then forces the answer at the type `St ⊸ F_Σ R` on the new
+state. Where a use's absence matters, it is read off the premise's term (`mentions` of its
+erasure).
 
 `classify_sound`: each kind the classifier returns gives the premise of that kind's law
 (`ClauseKind.Premise`, `Core/ClauseKinds.lean`) at the clause's erasure, the term the handler
@@ -65,6 +67,13 @@ where
     | .ret _ _ _ (.var _ _ 0 _) => true
     | _ => false
 
+/-- `t` is the resume of `κ` in the slot `k` in tail position (`resumeB`), or such a resume under
+the right unit: `[let]` of it whose body answers its variable (`returns0B`). -/
+def tailLeafB (k : Nat) : TExpr → Bool
+  | t@(.bind _ _ _ _ _ tM tN) => resumeB k t || (tailLeafB k tM && returns0B tN)
+  | t@(.effLet _ _ _ _ _ _ tM tN) => resumeB k t || (tailLeafB k tM && returns0B tN)
+  | t => resumeB k t
+
 /-- `t` is `[force]` at the slot `g`, of a `⊸` type. -/
 def forceArrB (g : Nat) (t : TExpr) : Bool :=
   match t.unSub with
@@ -101,8 +110,14 @@ def onceB (k : Nat) : TExpr → Bool
 
 /-! ### Paths -/
 
+/-- The erased term is the variable `k`. -/
+def isVarB (k : Nat) : Expr → Bool
+  | .var i => i == k
+  | _ => false
+
 /-- Every path of `t` ends in a leaf `leaf`, through `[⊕E]`, `[⊗E]`, `[1E]` and `[let]`, with `κ`
-(the slot `k`) not used on the way. -/
+(the slot `k`) not used on the way; a `[let]` of `return κ` (through the nodes that keep their
+premise's term, as `unbox`) moves `κ` to its binder's slot, its body not using the old one. -/
 def onPaths (leaf : Nat → TExpr → Bool) : Nat → TExpr → Bool
   | k, t@(.sumE _ _ _ _ _ _ tV t₁ t₂) =>
       leaf k t || (!mentions k tV.erase && onPaths leaf (k + 1) t₁ && onPaths leaf (k + 1) t₂)
@@ -110,9 +125,11 @@ def onPaths (leaf : Nat → TExpr → Bool) : Nat → TExpr → Bool
       leaf k t || (!mentions k tV.erase && onPaths leaf (k + 2) tM)
   | k, t@(.unitE _ _ _ _ tV tM) => leaf k t || (!mentions k tV.erase && onPaths leaf k tM)
   | k, t@(.bind _ _ _ _ _ tM tN) =>
-      leaf k t || (!mentions k tM.erase && onPaths leaf (k + 1) tN)
+      leaf k t || (!mentions k tM.erase && onPaths leaf (k + 1) tN) ||
+        (isVarB k tM.erase && !mentions (k + 1) tN.erase && onPaths leaf 0 tN)
   | k, t@(.effLet _ _ _ _ _ _ tM tN) =>
-      leaf k t || (!mentions k tM.erase && onPaths leaf (k + 1) tN)
+      leaf k t || (!mentions k tM.erase && onPaths leaf (k + 1) tN) ||
+        (isVarB k tM.erase && !mentions (k + 1) tN.erase && onPaths leaf 0 tN)
   | k, t@(.effSub _ _ _ _ _ t') => leaf k t || onPaths leaf k t'
   | k, t => leaf k t
 
@@ -127,20 +144,19 @@ def stateFnB (leaf : Nat → TExpr → Bool) (k : Nat) : TExpr → Bool
 /-- The kind of a control clause's body `M`, `κ` in its slot `0`: the first kind whose premise
 the paths meet, from the most particular. -/
 def classifyBody (tM : TExpr) : ClauseKind :=
-  if onPaths resumeB 0 tM then .tail
+  if onPaths tailLeafB 0 tM then .tail
   else if onPaths (stateFnB stateLeafB) 0 tM then .tailState
-  else if onPaths (fun k t => resumeB k t || cancelB k t) 0 tM then .resumeOrCancel false
+  else if onPaths (fun k t => tailLeafB k t || cancelB k t) 0 tM then .resumeOrCancel false
   else if onPaths (stateFnB fun k t => stateLeafB k t || cancelB k t) 0 tM then .resumeOrCancel true
   else if onPaths onceB 0 tM then .resumeOnce false
   else if onPaths (stateFnB onceB) 0 tM then .resumeOnce true
   else .stored
 
-/-- A control clause `!thunkv λp. let (x, κ) = p; M`: its body `M`; through a `def`'s `use`,
-which erases to its body. -/
+/-- A control clause `!thunkv λp. let (x, κ) = p; M`: its body `M`; through `use` nodes, at any
+depth, each of which erases to its body. -/
 def clauseBody? : TExpr → Option TExpr
   | .bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => some tM
-  | .use _ _ _ _ _ _ (.bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM))) =>
-    some tM
+  | .use _ _ _ _ _ _ t => clauseBody? t
   | _ => none
 
 /-- **The kind of the clause `c` of the operation `o`**, with the operation's qualifier: abortive
@@ -170,8 +186,8 @@ def classifyHandler (E : List (Qual × VTy × VTy)) (cls : Option TExpr) : List 
 
 /-! ### The handler sites of a typed term -/
 
-/-- A `handle` node of a typed term: its source, its static name, its clauses' kinds, and whether
-its clauses receive `κ` boxed (BOXED-κ, §28). At `effHandleV` and `effHandleVB` the kinds are the
+/-- A `handle` node of a typed term: its source, its static name, its clauses' kinds, whether
+its clauses receive `κ` boxed (BOXED-κ, §28), and its site as the elaboration records it. At `effHandleV` and `effHandleVB` the kinds are the
 checker's classification (`ks`); at `effHandleT` they are its rule's, `tail` or `abortive`
 (`tailKind`), which `tailClause_premise` shows are the same `tail` kind. -/
 structure HandleSite where
@@ -179,19 +195,40 @@ structure HandleSite where
   n : UInt32
   ks : List HKind
   boxed : Bool
-  deriving DecidableEq, Inhabited
+  site : Option HSite
+  deriving Inhabited
+
+/-- Two `handle` nodes report alike when their sources, names, kinds and boxing agree. -/
+instance : BEq HandleSite := ⟨fun a b => a.sp == b.sp && a.n == b.n && a.ks == b.ks && a.boxed == b.boxed⟩
 
 /-- The `handle` nodes of `t`, outermost first, within the depth `fuel`. -/
 def TExpr.handleSites : Nat → TExpr → List HandleSite
   | 0, _ => []
   | f + 1, t =>
     let here : List HandleSite := match t with
-      | .effHandleV i _ _ _ _ n _ _ _ ks _ _ => [⟨i.sp, n, ks, false⟩]
-      | .effHandleVB i _ _ _ _ n _ _ _ _ ks _ _ => [⟨i.sp, n, ks, true⟩]
+      | .effHandleV i _ _ _ _ n _ _ _ ks st _ _ => [⟨i.sp, n, ks, false, st⟩]
+      | .effHandleVB i _ _ _ _ n _ _ _ _ ks st _ _ => [⟨i.sp, n, ks, true, st⟩]
       -- `effHandleT`'s clauses are tail-resumptive by its rule (`tailClause_premise`).
-      | .effHandleT i _ _ _ _ _ E _ n _ _ _ _ _ => [⟨i.sp, n, E.map tailKind, false⟩]
+      | .effHandleT i _ _ _ _ _ E _ n _ _ _ st _ _ => [⟨i.sp, n, E.map tailKind, false, st⟩]
       | _ => []
     here ++ t.children.flatMap fun (_, k) => TExpr.handleSites f k
+
+/-- **The site kind the elaboration claims, against the clause kinds** at the `handle` nodes of
+each name: a `for`'s site runs the loop's body as its clause, resumed or cancelled in place, so no
+clause of it keeps `κ` (`stored`); a stored generator's site keeps `κ` as the rest of the
+generator, so a clause of it does. The first name whose nodes contradict their site's claim, with
+the claim. -/
+def siteKindMismatch (hs : List HandleSite) : Option (HandleSite × String) :=
+  hs.findSome? fun h => match h.site with
+    | some s =>
+      let nodes := hs.filter (·.n == h.n)
+      let stored := nodes.any fun h' => h'.ks.any (·.kind == .stored)
+      match s.kind with
+      | .forSite => if stored then some (h, "a `for`'s site whose clause may keep `κ`") else none
+      | .pullSite =>
+          if stored then none else some (h, "a stored generator's site whose clauses keep no `κ`")
+      | .handler => none
+    | none => none
 
 /-- The qualifier as SPEC writes it. -/
 def qualWord : Qual → String

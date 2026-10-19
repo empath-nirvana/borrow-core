@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.77 · 2026-10-19
+Version 0.78 · 2026-10-19
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -191,7 +191,8 @@ The checker returns a **typed term** `t : TExpr` with its derivation, not an era
   and cancel rows, constants' type arguments;
 - at a split (`Ctx.SplitP`), the use mask of its left part, as the checker computed it;
 - at `[handle]` (`effHandleV`, `effHandleVB`), each operation's qualifier and the kind of its
-  clause, as the checker classifies it (`ks`, §19 *Clause kinds*);
+  clause, as the checker classifies it (`ks`, §19 *Clause kinds*), and at every `handle` node the
+  site as the elaboration of effects records it (`site`, §19 *Handler sites*);
 - its source (`TInfo`): the span it was checked from, and at a variable its name and whether the
   program writes the use `clone(x)` (§10);
 - one child per premise, in the rule's order.
@@ -2445,9 +2446,12 @@ each in source order; the library's own are not printed:
   of its clauses over the operations performed.
 - **A resume in every arm** (`tail_resumes`, `TailResumes.step`). A control clause whose every
   path ends in one resume `R N` in tail position, through `case` arms, `let (x, y)` bodies,
-  sequences and `let x = e` bodies, runs step for step as the clause with its resumes removed, then one resume: when
-  that answers `r`, the clause reaches `R r` at the same memory. It is the clause whose resume
-  is its last call, which §19 lowers as a direct call.
+  sequences, `let x = e` bodies, the right unit `let x = R N in return x` and a `let` of a closed
+  value (its `β`-step), runs as the clause with its resumes removed, then one resume: each step of
+  the one is matched by steps of the other at the same memory, and when that answers `r`, the
+  clause reaches `R r` under right-unit frames (`RetFrames`), which hand on `R r`'s answer
+  unchanged (`RetFrames.answer`, `tail_resumes_answer`). It is the clause whose resume is its last
+  call, which §19 lowers as a direct call.
 
 The file's abort laws (`abort_passes`, `return_resumes`, `loop_abort`) are about the sum schema
 that errors elaborated to before §19; errors are now §19's abortive operations, whose meaning is
@@ -3434,15 +3438,18 @@ whose typed term the checker keeps for the slot (`Env.vals`): the classification
 variable to its binding and reads the derivation there. An abortive operation is one whose
 signature gives its clause no `κ` (`clauseTy_abortive`). A control clause is
 `!thunkv λp. let (x, κ) = p; M`, and its kind is how `M` uses `κ` on its paths, through `[⊕E]`,
-`[⊗E]`, `[1E]` and `[let]`, to `[app]` of `[&E₁]` of `[force]` at `κ`'s slot (the resume) or
-`[&E₂]` of it (the cancel). A handler with a state (§21) answers `λs. S`, and `S` resumes, then
-applies the function it answers to the new state. The first kind that holds, from the most
-particular:
+`[⊗E]`, `[1E]` and `[let]`, to `[app]` of `[&E₁]` of `[force]` at `κ`'s slot (the resume), that
+resume under the right unit (`x <- κ.1 v; return x`, which is how a named handler's `k(v)` in
+tail elaborates), or `[&E₂]` of it (the cancel). A `[let]` of `return κ` (`kk <- return (unbox k)`,
+a BOXED-κ clause's) is an alias: `κ` moves to the new binder, and the body must not use the old
+slot (`OnPaths.rebind`, `TailResumesAt.rebind`). A handler with a state (§21) answers `λs. S`, and
+`S` resumes, then applies the function it answers to the new state. The first kind that holds,
+from the most particular:
 
 | kind | the paths of `M` | premise (`Core/ClauseKinds.lean`) | law |
 |---|---|---|---|
 | `abortive` | — (no `κ`) | `isAbortive o` | `catch_abort`, `abort_absorbs`, `unwind_prefix` |
-| `tail` | each ends in one resume in tail position; `κ` used nowhere else | `TailResumesAt 0 M M'`, which with `κ` closed is `TailResumes` (`TailResumesAt.subst_kappa`); `M'` does not use `κ` (`kappa_free`) | `tail_resumes`, `op_tail` |
+| `tail` | each ends in one resume in tail position, or under the right unit; `κ` used nowhere else | `TailResumesAt 0 M M'`, which with `κ` closed is `TailResumes` (`TailResumesAt.subst_kappa`); `M'` does not use `κ` (`kappa_free`) | `tail_resumes`, `op_tail` |
 | `tail+state` | each answers `λs. S`, and each path of `S` resumes, then applies the answer to the new state in tail position | `OnPaths (StateFn StateLeaf) 0 M` | `handle_fold`'s equation for the hnd encoding, stated in its unit |
 | `resume-or-cancel` (± state) | each resumes in tail position, or cancels `κ` and goes on without it | `OnPaths (TailLeaf ∨ CancelLeaf)` | `kappa_cancel_steps`, `cancel_prefix` |
 | `once` (± state) | each resumes or cancels `κ` once, in evaluation position, never under a `λ` | `OnPaths Once` | its own law and unit |
@@ -3464,9 +3471,35 @@ operation of every corpus program (`scripts/check-kinds.sh`, pinned in `corpus/k
 `abortive` against a branch per call, `tail` at every handler of the name against a direct call,
 any other kind against a machine. The disagreements are the backend's stricter conditions: a
 clause that captures values is a machine (*Open*), and so is an operation whose name has two
-handlers with different clause codes. The backend never makes a direct call of a clause whose
-kind is not `tail`. A clause that reaches `κ` through an alias (`kk <- return (unbox k)`, the
-BOXED-κ clauses of `lib/async.bc`) is classified `stored`: the premises have no alias step.
+handlers with different clause codes, or whose clause resumes under the right unit. The backend
+never makes a direct call of a clause whose kind is not `tail`.
+
+**The clause's names in the continuation** (`Core/ClauseNames.lean`). A tail-resumptive clause run
+as a direct call at the `perform` runs its work inside the continuation `K` between the `perform`
+and its handler. That is H-op only when no frame of `K` catches a name the clause may perform or
+raise, the names of its row `Σ` (`UnhandledIn Σ K`, over `Kont.Catches`, which holds at every
+handler frame of the name). The rows decide it when `Σ` is empty (`unhandledIn_nil`), and not
+otherwise (`unhandled_not_decided`): one `[handle]` node, the same tail-resumptive clause, the same
+rows and types, over two typed handled computations whose `K` holds no handler of a name of `Σ` in
+one and a handler of one in the other. What decides it is the names of the handlers `K` may hold:
+the static names of the `handle` nodes between the `perform` and the handler over the call graph.
+*Open*: a record at `[handle]` of the names handled inside the handled computation, and the run
+invariant that every handler frame a run reaches is a `handle` node's of the program.
+
+**Handler sites.** The elaboration of effects records each handler site it makes by its static
+name (`Frontend.SiteRec`, `Elab.Elaborated.sites`): the effect it serves and its type arguments,
+the handler (a control handler's name, or the function a `for` or a stored generator runs), the
+name the `with` gives it (§38), the kind of site (a control handler's `with`, a `for`'s site, a
+stored generator's), its operations, and the handler's state, the parameters its clauses are
+passed as a state (§19 *Handler state*). The checker reads the record at each `handle` node of the
+name and puts it on the node (`site`, `HSite`), with its types as the elaboration writes them, in
+the frame of the code the site is in. A `handle_with` the program writes in core has none. The
+record is checked against the checked term, and a mismatch is an internal error: its operations
+against the node's `E`, their number and qualifiers (`siteOf`); a `for`'s site against the kinds
+at the nodes of its name, none `stored` (the loop's body is the clause, resumed or cancelled in
+place), and a stored generator's site against them, one `stored` (`siteKindMismatch`). The
+derivation does not constrain the record (`TDerivesAt.site_free`). `bcc sites <file>` prints every
+`handle` node's site with its kinds.
 
 **Abortive payloads.** A `raise`'s argument is carried as a variant of the program's abortive
 operations when it has more than one (`wrapRaise`), and a handler's clause takes it out of its
@@ -6849,8 +6882,8 @@ cell) and answers `inr ()`. `Frontend/Elab/Effects.lean`, `divMain`:
   `main_div_error` (`corpus/div-innermost.bc`). Only an instance `main` leaves unhandled is
   served; a program's own `Fail[E]` unhandled at `main` is §18's error, as before.
 - The unwind runs the finalisers of what `main` built (§19), and the run ends with `live 0`.
-- **The exit status.** The elaboration records that `main` is served (`Sugar.Sugared.exits`,
-  `Elab.Elaborated.exits`), and the checked `main` carries it (`Check.Checked.exits`); its value `inl v` is reported as `v`, and `inr ()` as no value, the live
+- **The exit status.** `main` is served when its typed term has a `handle` node whose site is
+  `main_div_error`'s for `Fail` (`Check.Checked.exitsOnDivError`, §19 *Handler sites*); its value `inl v` is reported as `v`, and `inr ()` as no value, the live
   count, and exit status `1` (`Backend/Value.lean`, `reportExit`). Every stage does the same: the source stage's model run
   (`ioOutputN`), the closure IR (`Clos.Prog.exits`), the flat IR (`Stmt.status`, `entryFn`) and
   Wasm (`$exit`, WASI `proc_exit`, the entry's last act). `bcc interp` and `bcc run` exit with it;
@@ -6947,7 +6980,7 @@ included (§34).
   keep their form.
 - A message naming where the division was; an exit status other than `1`.
 - The platform's handler for `Exhausted` at `main` (#228), by the same mechanism (`divMain`,
-  `Elaborated.exits`, `reportExit`).
+  the site of its `handle` node, `reportExit`).
 
 ## 40. Entry 39 — the native target: LLVM IR from the flat IR
 
@@ -7311,7 +7344,7 @@ Entry 38 (§39) is implemented in `lib/arith.bc` (`DivError`, `div_euclid`, `rem
 operators, `divCanFail`, `safeDivisor`, `Found`); `Frontend/Elab/Divisions.lean` (the rewrite);
 `Frontend/Elab/Effects.lean` (`divMain`, `splitDiv`, `divLib`, `platform`, a `with`'s row with its
 clauses' answering effects, a written row's check); `Frontend/Sugar.lean` (`surfOp`, `divCase`,
-`divUnchecked`, `divChecked`, `fuseChecked`, the libraries brought in, `Sugared.exits`); and `Backend/`
+`divUnchecked`, `divChecked`, `fuseChecked`, the libraries brought in); and `Backend/`
 (`Output.status` and `reportExit` at every stage, `Clos.Prog.exits`, `Flat.Stmt.status`, the
 runtime's `$exit`, `divTest`, the constant locals and the fused `case` of the flat IR), with the
 harness's `<name>.status`; no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the checker's
@@ -7357,6 +7390,20 @@ no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the chec
 
 ## Changelog
 
+- **0.78** (2026-10-19) — §18, *Laws*: `TailResumes` has the right unit `(λx. R₀) X`, `R₀`
+  answering `x`, and the `β`-step of a `let` of a closed value; `tail_resumes` reaches the resume
+  under right-unit frames (`RetFrames`), which hand its answer on (`tail_resumes_answer`). §19,
+  *Clause kinds* (#571): `TailResumesAt` and `TailLeaf` have the right unit, and `OnPaths` and
+  `TailResumesAt` the alias `let k' = κ`; the classifier reads both (`tailLeafB`, `isVarB`), and
+  `classify_sound` keeps its statement; a clause is read through `use` nodes at any depth. Reclassified: a named handler's `k(v)` in tail position
+  (`once` → `tail`; `resume-or-cancel` where a path cancels, as `deadline`), and the BOXED-κ `log`
+  of `lib/async.bc` (`stored` → `tail`). New: *The clause's names in the continuation*
+  (`UnhandledIn`; the rows do not decide it, `unhandled_not_decided`). New: *Handler sites*: the
+  elaboration's record of each site on its `handle` node (`HSite`), checked against the node;
+  `bcc sites`. §39: the exit status is read from the site of `main_div_error`'s `handle` node, and
+  `Checked.exits` is gone. No change to `CDerives`, the relation, the machine, a checker rule, or
+  any program's erasure, compiled code, run output, goldens or counts; `bcc check`'s report of a
+  handler site changes where its kinds do.
 - **0.77** (2026-10-19) — §3, *Derived nodes* and *A `def` at its uses* (#560): a `def` is checked
   once per key and placed at each use by a `use` node, its derivation there by weakening with the
   live slots its absorption takes (`TDerivesAt.weaken`, `TDerivesP.weaken`); fixed schemes typed

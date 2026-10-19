@@ -342,7 +342,10 @@ needs it.
   (`ValFormIn`, `Core/EffRules.lean:1201–1204`), so the elaborator can emit the clauses in the
   node. Otherwise the classifier follows the variable to its binding. Which of the two is used is
   decided in unit C3 (§6): C3 follows the variable to its binding (the checker keeps the typed
-  term of each `x <- return V`), since emitting the clauses in the node changes the erasure.
+  term of each `x <- return V`), since emitting the clauses in the node changes the erasure. C3b
+  keeps that: the premises gain the right unit and the alias of `κ` (SPEC §18, §19), and each
+  `handle` node carries the elaboration's record of its site (`HSite`: effect, type arguments,
+  handler, slot, site kind, handler state), checked against the node.
 - **`use` and sharing.** Two uses of `d` at the same `τ` and the same site assignment have bodies
   whose erasures differ only if they use externs at different indices. A `def` sees only
   persistent externs (`Env.forDef`, `Steps.lean:452–456`). One code per key is sound when the
@@ -645,6 +648,7 @@ programs, `counts.expected` and the desugar diff. A unit that touches `Core/`, `
 | C1 | **The typed term.** `TExpr`, `erase`, `TDerivesAt`/`TDerivesP` and projections generated (`gen-pin.py` extended, `--check` in the gate); `Res.t`; `Checked.e := t.erase`; `Program.lean`'s theorems at `t.erase`; the TIR on core deleted, `implicitCopy` on `t` | C0 | `bcc erase` byte-identical on the corpus; `CrossCheck` unchanged; axioms within the three; kill criteria 1, 2 |
 | C2 | **`use` and derived nodes.** `use d τ`; the derived nodes for fixed schemes, each with its typing lemma; optionally (choice 7) one check per key with `CDerives.append_dead` for the context | C1 | `erase` unchanged; one derived node per recogniser of §1.2 (L1, L2, L4, B3, B7) |
 | C3 | **Clause kinds**, classified by the checker at `[handle]`, each with the lemma that gives its law's premise | C1, B2 if `tick` | every handler of the corpus classified; the report rendered from the field (`docs/pipeline-architecture.md` §9.2 defect 3) |
+| C3b (#571) | **Kinds complete, sites on the node**: right-unit and alias steps in the premises and laws; site names, site kind and handler state on the `handle` node, cross-checked; `exits` from the platform handler's site; condition 2 stated over the rows | C3 | `kinds.expected` changes only by the new laws; every other output unchanged |
 | S0 (#554) | **running** | — | its own |
 | B1 | `Div` in the kernel, as `docs/pipeline-architecture.md` §3.7 | S0 | as there |
 | B2 | the `Div` elaboration as typed schemes; the remaining templates converted (no `parseComp` on the elaboration path) | B1, U1, C1 | as there; `template`/`mTemplate` deleted |

@@ -57,7 +57,7 @@ def TCx.ofScope (scope : List Decl) (all : Bool) : TCx :=
   let ds := scope.toArray
   let xs := externsBefore ds ds.size
   let vars := (xs.map (fun (x, B) => if all || B.persistent then some x else none)).reverse
-  { E := Env.mk ⟨ds, ds.size⟩ vars [] [] [] xs.length none [], T := (xs.map (·.2)).reverse }
+  { E := Env.mk ⟨ds, ds.size, []⟩ vars [] [] [] xs.length none [], T := (xs.map (·.2)).reverse }
 
 /-- A written type, elaborated. -/
 def TCx.elabV (c : TCx) (A : VTy) : Option CVTy := (c.E.elabV c.Δ A).toOption

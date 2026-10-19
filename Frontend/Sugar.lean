@@ -2319,7 +2319,7 @@ made while elaborating the declaration it is in). -/
 def refresh (c : TCx) : DM TCx := do
   let st ← get
   let ds := (st.lib ++ st.out ++ st.caps).toArray
-  pure { c with E := { c.E with scope := ⟨ds, ds.size⟩ } }
+  pure { c with E := { c.E with scope := ⟨ds, ds.size, []⟩ } }
 
 /-! #### The total `for` over data  `[spec §16]`
 
@@ -5570,9 +5570,9 @@ def polyDecls (ds : List Decl) : Except Error (List Decl × PolyTab × List (Dec
   pure (out, tab, pairs)
 
 /-- The program with its sugar elaborated, the number of library declarations it begins with,
-and whether `main` is served `Fail[DivError]` by `main_div_error` (SPEC §39), recording the
-origins of generated code.  `[spec §11, §14]` -/
-def elaborateS (p : Program) : SM (Program × Nat × Bool) := do
+and the handler sites the elaboration of effects made (`SiteRec`), recording the origins of
+generated code.  `[spec §11, §14]` -/
+def elaborateS (p : Program) : SM (Program × Nat × List SiteRec) := do
   let libRaw (m : String) : Except Error (List Decl) :=
     match library m with
     | some (.ok src) => match parseProgram src with
@@ -5728,16 +5728,16 @@ def elaborateS (p : Program) : SM (Program × Nat × Bool) := do
     | .def_ sp n ps A V mk => return .def_ sp n ps A (← V.elab false) mk
     | .main sp C M => return .main sp C (← M.elab false)
     | d => pure d
-  pure (⟨decls⟩, lib.length + ioN, fxr.exits)
+  pure (⟨decls⟩, lib.length + ioN, fxr.sites)
 
 /-- A program with its sugar elaborated: its declarations, the number of library declarations it
-begins with, the origins of its generated code, and whether `main` is served `Fail[DivError]`
-by `main_div_error`, so that its value `inr ()` is an exit status (SPEC §39). -/
+begins with, the origins of its generated code, and the handler sites the elaboration of effects
+made (`SiteRec`). -/
 structure Sugared where
   prog : Program
   lib : Nat
   origins : Origins
-  exits : Bool
+  sites : List SiteRec
 
 /-- The program with its sugar elaborated, with the origins of its generated code. -/
 def elaborateO (p : Program) : Except Error Sugared := do

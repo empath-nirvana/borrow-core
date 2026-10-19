@@ -103,7 +103,7 @@ def CheckedProg.closTypes (k : CheckedProg) : Except String (Clos.Prog × Option
     | none => Clos.convert k.main.e
     | some m => Clos.convertMain (← extImpls m) m.loopB.isSome k.main.e
   let (p, T) ← lowerEffects p
-  pure ({ p with exits := k.main.exits }, T)
+  pure ({ p with exits := k.main.exitsOnDivError }, T)
 
 /-- The closure IR of a checked program. -/
 def CheckedProg.clos (k : CheckedProg) : Except String Clos.Prog := return (← k.closTypes).1
@@ -312,8 +312,8 @@ def interpStage (stage file : String) (k : Except String CheckedProg) (input : L
     | none => interpSource runFuel k.main.e
     | some m =>
       let r ← ioRunOf file k m args
-      if r.loops then interpIOLoop runFuel (r.expr input) k.main.exits
-      else interpIO runFuel (r.expr input) k.main.exits
+      if r.loops then interpIOLoop runFuel (r.expr input) k.main.exitsOnDivError
+      else interpIO runFuel (r.expr input) k.main.exitsOnDivError
   | "clos" => Clos.interp runFuel (← (← k).clos) input args
   | "flat" => Flat.interp runFuel (← (← k).flat) input args
   | "flat-counts" => Flat.interp runFuel (← (← k).flat true) input args
@@ -345,8 +345,8 @@ def interpChecked (o : Falsify.Opts) (file : String) (k : CheckedProg) (input : 
   | none => Falsify.interpSource o runFuel k.main.e
   | some m =>
     let r ← ioRunOf file k m args
-    if r.loops then Falsify.interpIOLoop o runFuel (r.expr input) k.main.exits
-    else Falsify.interpIO o runFuel (r.expr input) k.main.exits
+    if r.loops then Falsify.interpIOLoop o runFuel (r.expr input) k.main.exitsOnDivError
+    else Falsify.interpIO o runFuel (r.expr input) k.main.exitsOnDivError
 
 /-- A closed term on the falsifier's machine under `o`. -/
 def interpCheckedExpr (o : Falsify.Opts) (e : BoCa.Expr) : Except String (Output × String) :=

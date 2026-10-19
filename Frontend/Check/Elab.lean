@@ -61,6 +61,8 @@ def pullTy (A B R : CVTy) : CCTy :=
 structure Scope where
   decls : Array Decl
   upto : Nat
+  /-- The handler sites the elaboration of effects made (`SiteRec`), read at `[handle]`. -/
+  sites : List SiteRec := []
 
 /-- A `type` declaration in scope: its type and lifetime parameters, body and own scope. -/
 structure TypeInfo where
@@ -76,7 +78,7 @@ where
   go : Nat → Option TypeInfo
     | 0 => none
     | k + 1 => match s.decls[k]? with
-      | some (.type _ m ps ls A) => if m.name == n then some ⟨ps, ls, A, ⟨s.decls, k⟩⟩ else go k
+      | some (.type _ m ps ls A) => if m.name == n then some ⟨ps, ls, A, { s with upto := k }⟩ else go k
       | _ => go k
 
 /-- The latest `shape` declaration named `n` in scope, with its own scope. -/
@@ -86,7 +88,7 @@ where
   go : Nat → Option (Shape × Scope)
     | 0 => none
     | k + 1 => match s.decls[k]? with
-      | some (.shape _ m σ) => if m.name == n then some (σ, ⟨s.decls, k⟩) else go k
+      | some (.shape _ m σ) => if m.name == n then some (σ, { s with upto := k }) else go k
       | _ => go k
 
 /-- A `def` in scope: its parameters, type, body and own scope. -/
@@ -103,7 +105,7 @@ where
   go : Nat → Option DefInfo
     | 0 => none
     | k + 1 => match s.decls[k]? with
-      | some (.def_ _ m ps A V _) => if m.name == n then some ⟨ps, A, V, ⟨s.decls, k⟩⟩ else go k
+      | some (.def_ _ m ps A V _) => if m.name == n then some ⟨ps, A, V, { s with upto := k }⟩ else go k
       | _ => go k
 
 /-- An `extern` named `n` is in scope. -/

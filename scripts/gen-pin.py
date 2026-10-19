@@ -254,9 +254,11 @@ def idents(text):
 
 # Fields a node carries that are not its rule's arguments: facts the checker establishes at the
 # node, which the typed derivation does not constrain (`Frontend/Check/TFacts.lean`). At
-# `[handle]`, each operation's qualifier and its clause's kind (SPEC §19, *Clause kinds*).
-EXTRA = {"effHandleV": [("ks", "List ClauseKinds.HKind")],
-         "effHandleVB": [("ks", "List ClauseKinds.HKind")]}
+# `[handle]`, each operation's qualifier and its clause's kind (SPEC §19, *Clause kinds*), and what
+# the elaboration of effects records of the site (`HSite`).
+EXTRA = {"effHandleV": [("ks", "List ClauseKinds.HKind"), ("site", "Option HSite")],
+         "effHandleVB": [("ks", "List ClauseKinds.HKind"), ("site", "Option HSite")],
+         "effHandleT": [("site", "Option HSite")]}
 
 
 def kid_name(h):

@@ -317,6 +317,8 @@ structure St where
   /-- `main` is served `Fail[DivError]` by `main_div_error` (SPEC §39): it answers `inr ()` when a
   division's error reached it, which the runtime reports as the exit status. -/
   exits : Bool := false
+  /-- Each handler site made, for the checker to read at its `handle` nodes (`SiteRec`). -/
+  sites : Array SiteRec := #[]
 
 abbrev EM := StateT St (Except Error)
 
@@ -335,6 +337,9 @@ def report (sp : Span) (kind : String) (msg : String) : EM Unit :=
 then `tail`. -/
 def reportSite (sp : Span) (n : Nat) (head : String) (ops : List String) (tail : String) : EM Unit :=
   modify fun s => if s.quiet then s else { s with reports := s.reports.push (sp, .site n head ops tail) }
+
+/-- Record the handler site `r` for the checker, library code's too. -/
+def recordSite (r : SiteRec) : EM Unit := modify fun s => { s with sites := s.sites.push r }
 
 /-- The handler that serves `main` a division's error it handles nowhere (SPEC §39). -/
 def mainDivHandler : String := "main_div_error"
@@ -2494,6 +2499,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       let info : HInfo := ⟨ch.name.name, n, ents, rest, σ,
         ch.params.map (fun (x, A) => (x.name, A.subst σr)), rA.subst σr, .sum sp (rA.subst σr) pay,
         some (ch.res.subst σr), false, ch.lps.map (·.1.name)⟩
+      recordSite { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents }
       let clsV := injCls.foldr (fun c t => Val.pair sp c t) (.unit sp)
       let (bsP, P') ← goV k cx cs P
       let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) P')
@@ -2599,6 +2605,8 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
         cls := cls ++ [.thunkv csp (.lam csp ⟨p, csp⟩ (holeTy csp) body)]
       let info : HInfo := ⟨ch.name.name, n, ents, rest, σ, [], rA.subst σr, ansT, none, false,
         ch.lps.map (·.1.name)⟩
+      recordSite { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents,
+                   state := ch.params.map fun (x, A) => (x.name, A.subst σr) }
       let (bsP, P') ← goV k cx cs P
       let pv ← fresh "fx_hp"
       let args : Bind := fun N => pure (.bind sp ⟨pv, sp⟩ none (.ret sp P') N false)
@@ -2643,6 +2651,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     let info₀ : HInfo := ⟨ch.name.name, n, ents, rest, σ,
       ch.params.map fun (x, A) => (x.name, A.subst σr), rA.subst σr, ch.res.subst σr, none, false, []⟩
     let info : HInfo := { info₀ with boxK := boxK, lives := ch.lps.map (·.1.name) }
+    recordSite { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents }
     let (bsP, P') ← goV k cx cs P
     let clsV := cls.foldr (fun c t => Val.pair sp c t) (.unit sp)
     let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) P')
@@ -2715,6 +2724,8 @@ def forSite : Nat → Cx → List Cap → Bool → Span → Option Ident → Ide
       | some (_, A, _) => A
       | none => .unit sp
     let opName := (((cx.env.eff? i.eff).map (·.ops)).getD [] |>.head?.map (·.name.name)).getD "?"
+    recordSite { n, eff := i.eff, args := As, handler := gname, kind := .forSite,
+                 ents := cx.env.siteOps { site with thr := none } }
     reportSite sp n s!"for over {gname} ({i.eff}): a handler, the static name {n}" [opName]
       ("; the body is its clause, the variables the body uses threaded through the operation; " ++
         "`break` and `return` cancel the continuation")
@@ -2753,6 +2764,8 @@ def pullSite : Nat → Cx → List Cap → Span → String → FSig → Inst →
       | some (_, A, _) => A
       | none => .unit sp
     let opName := (((cx.env.eff? i.eff).map (·.ops)).getD [] |>.head?.map (·.name.name)).getD "?"
+    recordSite { n, eff := i.eff, args := As, handler := gname, kind := .pullSite,
+                 ents := cx.env.siteOps site }
     reportSite sp n s!"stored generator of {gname} ({i.eff}): a handler, the static name {n}" [opName]
       ("; its clause keeps the continuation as the rest, resumed by the next observation and " ++
         "cancelled by `close`")
@@ -3631,7 +3644,8 @@ def divMain (env : Env) (sp : Span) (C : CTy) (M : Comp) : EM (CTy × Comp) := d
 
 /-- What `elaborate` gives: the declarations, the reports for `bcc check`, the sites observed one
 turn at a time, the capabilities `main` lends to the platform, whether `main` answers `inr ()` on a
-division's error (SPEC §39), and whether `divLib` and `platform` were elaborated with the program. -/
+division's error (SPEC §39), whether `divLib` and `platform` were elaborated with the program, and
+the handler sites made (`SiteRec`). -/
 structure Result where
   decls : List Decl
   reports : List (Span × Report)
@@ -3640,6 +3654,7 @@ structure Result where
   exits : Bool := false
   withDivLib : Bool := false
   withPlatform : Bool := false
+  sites : List SiteRec := []
 
 /-- The program with its effects elaborated, and the reports for `bcc check`: the effect and
 handler declarations are removed, each answering handler's clauses become functions, each
@@ -3865,7 +3880,7 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
   match go.run {} with
   | .ok ((ds, spliced), st) =>
     pure { decls := ds, reports := st.reports.toList, perTurn := st.perTurn, platform := st.platform,
-           exits := st.exits, withDivLib, withPlatform := spliced }
+           exits := st.exits, withDivLib, withPlatform := spliced, sites := st.sites.toList }
   | .error e => throw e
 
 end Frontend.Elab.Effects

@@ -366,7 +366,7 @@ def externsBefore (ds : Array Decl) (upto : Nat) : List (String × CVTy) :=
   (List.range upto).foldl (init := []) fun acc k =>
     match (ds[k]? : Option Decl) with
     | some (.extern _ n A) =>
-      match (⟨⟨ds, k⟩, [], [], [], [], 0, none, []⟩ : Env).elabV LifeCtx.empty A with
+      match (⟨⟨ds, k, []⟩, [], [], [], [], 0, none, []⟩ : Env).elabV LifeCtx.empty A with
       | .ok A' => acc ++ [(n.name, A')]
       | .error _ => acc
     | _ => acc

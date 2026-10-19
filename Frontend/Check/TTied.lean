@@ -319,7 +319,8 @@ abbrev hndPair (ir ic : TInfo) (A B : CVTy) (kr kc : Nat) (u : List Bool) : TExp
   .tensorI ir (.val (.tensor A B)) A B u (.var ir (.val A) kr A) (.var ic (.val B) kc B)
 
 /-- `[handle]` at two variables reads its handled row, as `CDerivesAt.effHandle`.  `[spec §19]` -/
-theorem effHandle (ir ic : TInfo) (u u₁ : List Bool) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind) {p : Pins} {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {te : TExpr}
+theorem effHandle (ir ic : TInfo) (u u₁ : List Bool) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind)
+    (site : Option HSite) {p : Pins} {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {te : TExpr}
     {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {kr kc : Nat}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂)
     (hs₁ : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ₁ Γr Γc)
@@ -329,7 +330,7 @@ theorem effHandle (ir ic : TInfo) (u u₁ : List Bool) (ks : List BoCa.Fig16.Log
     (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = false)
     (he : TTied p s Δ Γ₂ te (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A))) :
     TTied p ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ s) Δ Γ
-      (.effHandleV i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R u ks
+      (.effHandleV i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R u ks site
         (hndPair ir ic (BoCa.Fig16.LogRel.Core.retTy S A R)
           (BoCa.Fig16.LogRel.Core.clausesTy S R E) kr kc u₁) te)
       (.comp (effOf S R)) := by
@@ -345,7 +346,8 @@ theorem effHandle (ir ic : TInfo) (u u₁ : List Bool) (ks : List BoCa.Fig16.Log
     .effHandleV hs hd hH (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen hdv he.2⟩
 
 /-- BOXED-κ at two variables reads its handled row, as `CDerivesAt.effHandleB`.  `[spec §28]` -/
-theorem effHandleB (ir ic : TInfo) (u u₁ : List Bool) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind) {p : Pins} {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {te : TExpr}
+theorem effHandleB (ir ic : TInfo) (u u₁ : List Bool) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind)
+    (site : Option HSite) {p : Pins} {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {te : TExpr}
     {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {kr kc : Nat} {d : CLife}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂)
     (hs₁ : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ₁ Γr Γc)
@@ -357,7 +359,7 @@ theorem effHandleB (ir ic : TInfo) (u u₁ : List Bool) (ks : List BoCa.Fig16.Lo
     (hΓd : CtxOutlives Δ Γ₂ d)
     (hSd : BoCa.Fig16.LogRel.Core.Row.AnsOutlives Δ d (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S)) :
     TTied p ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ s) Δ Γ
-      (.effHandleVB i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R d u ks
+      (.effHandleVB i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R d u ks site
         (hndPair ir ic (BoCa.Fig16.LogRel.Core.retTy S A R)
           (BoCa.Fig16.LogRel.Core.clausesTyB S R d E) kr kc u₁) te)
       (.comp (effOf S R)) := by
@@ -401,7 +403,7 @@ theorem reify {p : Pins} {s : CRow} {t : TExpr} (S : CRow) (B R : CVTy) (res : B
 
 /-- `[handle]` at clauses that resume `κ` in tail position reads its handled row, as
 `CDerivesAt.effHandleT`.  `[spec §14, §19]` -/
-theorem effHandleT (u : List Bool) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy}
+theorem effHandleT (u : List Bool) (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy}
     {tc te : TExpr} {Hr Hc : BoCa.Expr} {S SN : CRow} {E : List (CQual × CVTy × CVTy)}
     {fs : Nat → CCTy} {n : UInt32} {A R : CVTy}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hd : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ₁)
@@ -414,7 +416,7 @@ theorem effHandleT (u : List Bool) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ 
     (he : TTied p₂ s₂ Δ Γ₂ te
       (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) A))) :
     TTied (p₁ ++ p₂) ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) ∪ (s₁ ∪ s₂)) Δ Γ
-      (.effHandleT i (.comp (effOf S R)) Hr Hc S SN E fs n A R u tc te) (.comp (effOf S R)) :=
+      (.effHandleT i (.comp (effOf S R)) Hr Hc S SN E fs n A R u site tc te) (.comp (effOf S R)) :=
   ⟨fun hn Ξ hΞ => .effHandleT (rowAt_of_union_left hΞ) hs hd hHr hHc
       (hc.1 (nilL hn) Ξ (sigsAt_union_left (sigsAt_union_right hΞ))) qc
       hn0 hnd hnS hlen hSN hLin

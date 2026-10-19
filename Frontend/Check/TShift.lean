@@ -207,12 +207,12 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .effThen i j A B S SM SD u tM tN tD =>
       .effThen i j A B S SM SD (insMask d c u) (tM.shift d c) (tN.shift d (c + 1))
         (tD.shift d (c + 1))
-  | .effHandleV i j S E fs n A R u ks tc te =>
-      .effHandleV i j S E fs n A R (insMask d c u) ks (tc.shift d c) (te.shift d c)
-  | .effHandleVB i j S E fs n A R a u ks tc te =>
-      .effHandleVB i j S E fs n A R a (insMask d c u) ks (tc.shift d c) (te.shift d c)
-  | .effHandleT i j Hr Hc S SN E fs n A R u tc te =>
-      .effHandleT i j (Hr.shift d c) (Hc.shift d c) S SN E fs n A R (insMask d c u) (tc.shift d c)
+  | .effHandleV i j S E fs n A R u ks st tc te =>
+      .effHandleV i j S E fs n A R (insMask d c u) ks st (tc.shift d c) (te.shift d c)
+  | .effHandleVB i j S E fs n A R a u ks st tc te =>
+      .effHandleVB i j S E fs n A R a (insMask d c u) ks st (tc.shift d c) (te.shift d c)
+  | .effHandleT i j Hr Hc S SN E fs n A R u st tc te =>
+      .effHandleT i j (Hr.shift d c) (Hc.shift d c) S SN E fs n A R (insMask d c u) st (tc.shift d c)
         (te.shift d c)
   | .letPoly i j N C j' b tV tN =>
       .letPoly i j (N.shift d (c + 1)) C j' (b.shift d (c + 1)) tV (tN.shift d (c + 1))
@@ -306,9 +306,9 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .effThen _ _ _ _ S _ _ _ tM tN tD =>
       AbsF.orO (tM.absF Δ) (AbsF.withO (if Row.unrDB S then .atom .bang else .tt)
         (AbsF.andO (tN.absF Δ) (tD.absF Δ)))
-  | .effHandleV _ _ _ _ _ _ _ _ _ _ tc te | .effHandleT _ _ _ _ _ _ _ _ _ _ _ _ tc te =>
+  | .effHandleV _ _ _ _ _ _ _ _ _ _ _ tc te | .effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ tc te =>
       AbsF.orO (AbsF.withO (.atom .pers) (tc.absF Δ)) (te.absF Δ)
-  | .effHandleVB _ _ _ _ _ _ _ _ d _ _ tc te =>
+  | .effHandleVB _ _ _ _ _ _ _ _ d _ _ _ tc te =>
       AbsF.orO (AbsF.withO (.atom .pers) (tc.absF Δ)) (AbsF.withO (.atom (.outl Δ d)) (te.absF Δ))
   | .letPoly _ _ _ _ _ _ _ tN => tN.absF Δ
   | .lendR .. | .lendLoopR .. | .nilDead .. => none
