@@ -159,6 +159,31 @@ def kinds (file : String) : IO UInt32 := do
         IO.println s!"{h.sp.start.render}: handle {h.n}{if h.boxed then " (boxed κ)" else ""}: {"; ".intercalate ks}"
       return 0
 
+/-- What the elaboration of effects records of each `handle` node's site (`HSite`), with the
+clause kinds: `sp: handle n: kind eff[args] by handler (as slot), state (x: A, …); kinds`. -/
+def sites (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match parseProgram src with
+  | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+  | .ok p =>
+    match Check.checkProgram p with
+    | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+    | .ok r =>
+      for h in r.handles do
+        let ks := (List.range h.ks.length).zip h.ks |>.map fun (i, k) => k.render h.n i
+        let site := match h.site with
+          | none => "no site"
+          | some s =>
+            let kind := match s.kind with
+              | .handler => "handler" | .forSite => "for" | .pullSite => "pull"
+            let args := if s.args.isEmpty then "" else s!"[{", ".intercalate (s.args.map fun (A : Frontend.VTy) => A.pp)}]"
+            let slot := match s.slot with | some x => s!" as {x}" | none => ""
+            let st := if s.state.isEmpty then "" else
+              s!", state ({", ".intercalate (s.state.map fun (p : String × Frontend.VTy) => s!"{p.1}: {p.2.pp}")})"
+            s!"{kind} {s.eff}{args} by {s.handler}{slot}{st}"
+        IO.println s!"{h.sp.start.render}: handle {h.n}: {site}; {"; ".intercalate ks}"
+      return 0
+
 /-- Write `file`'s WAT to `out`. -/
 def compile (file out : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
@@ -383,6 +408,7 @@ def main (argv : List String) : IO UInt32 := do
     | none => IO.eprintln "usage: bcc tailcalls <n>"; return 2
   | ["trusted", file] => trusted file
   | ["kinds", file] => kinds file
+  | ["sites", file] => sites file
   | ["desugar", file] => desugar file
   | ["erase", file] => erase file
   | [cmd, file] =>

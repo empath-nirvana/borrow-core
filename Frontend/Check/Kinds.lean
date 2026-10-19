@@ -196,19 +196,40 @@ structure HandleSite where
   n : UInt32
   ks : List HKind
   boxed : Bool
-  deriving DecidableEq, Inhabited
+  site : Option HSite
+  deriving Inhabited
+
+/-- Two `handle` nodes report alike when their sources, names, kinds and boxing agree. -/
+instance : BEq HandleSite := ⟨fun a b => a.sp == b.sp && a.n == b.n && a.ks == b.ks && a.boxed == b.boxed⟩
 
 /-- The `handle` nodes of `t`, outermost first, within the depth `fuel`. -/
 def TExpr.handleSites : Nat → TExpr → List HandleSite
   | 0, _ => []
   | f + 1, t =>
     let here : List HandleSite := match t with
-      | .effHandleV i _ _ _ _ n _ _ _ ks _ _ => [⟨i.sp, n, ks, false⟩]
-      | .effHandleVB i _ _ _ _ n _ _ _ _ ks _ _ => [⟨i.sp, n, ks, true⟩]
+      | .effHandleV i _ _ _ _ n _ _ _ ks st _ _ => [⟨i.sp, n, ks, false, st⟩]
+      | .effHandleVB i _ _ _ _ n _ _ _ _ ks st _ _ => [⟨i.sp, n, ks, true, st⟩]
       -- `effHandleT`'s clauses are tail-resumptive by its rule (`tailClause_premise`).
-      | .effHandleT i _ _ _ _ _ E _ n _ _ _ _ _ => [⟨i.sp, n, E.map tailKind, false⟩]
+      | .effHandleT i _ _ _ _ _ E _ n _ _ _ st _ _ => [⟨i.sp, n, E.map tailKind, false, st⟩]
       | _ => []
     here ++ t.children.flatMap fun (_, k) => TExpr.handleSites f k
+
+/-- **The site kind the elaboration claims, against the clause kinds** at the `handle` nodes of
+each name: a `for`'s site runs the loop's body as its clause, resumed or cancelled in place, so no
+clause of it keeps `κ` (`stored`); a stored generator's site keeps `κ` as the rest of the
+generator, so a clause of it does. The first name whose nodes contradict their site's claim, with
+the claim. -/
+def siteKindMismatch (hs : List HandleSite) : Option (HandleSite × String) :=
+  hs.findSome? fun h => match h.site with
+    | some s =>
+      let nodes := hs.filter (·.n == h.n)
+      let stored := nodes.any fun h' => h'.ks.any (·.kind == .stored)
+      match s.kind with
+      | .forSite => if stored then some (h, "a `for`'s site whose clause may keep `κ`") else none
+      | .pullSite =>
+          if stored then none else some (h, "a stored generator's site whose clauses keep no `κ`")
+      | .handler => none
+    | none => none
 
 /-- The qualifier as SPEC writes it. -/
 def qualWord : Qual → String

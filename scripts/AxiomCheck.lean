@@ -50,6 +50,7 @@ import Frontend.Check.TFacts
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.tailClause_premise
 #print axioms BoCa.Fig16.LogRel.Core.Check.classify_sound
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.kinds_free
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.site_free
 #print axioms BoCa.Fig16.LogRel.Core.Check.classifyHandler_quals
 #print axioms BoCa.Fig16.LogRel.Core.wpTS_angelic
 #print axioms BoCa.Fig16.LogRel.Core.wpTS_demonic

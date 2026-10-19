@@ -351,6 +351,32 @@ structure HInfo where
   lives : List String := []
   deriving DecidableEq, Repr
 
+/-- What a handler site is, as `Frontend.Elab.Effects` makes it: a `with` of a control handler, a
+`for`'s site of an iteration effect, whose clause is the loop's body (`VSugar.forSite`), or a stored
+generator's, whose clause keeps the continuation (`VSugar.pullSite`).  `[spec §15, §19]` -/
+inductive SiteKind where
+  | handler
+  | forSite
+  | pullSite
+  deriving DecidableEq, Repr, Inhabited
+
+/-- A handler site as `Frontend.Elab.Effects` records it for the checker, by its static name `n`:
+the effect it serves and its type arguments there, the handler (a control handler's name, or the
+function a `for` or a stored generator runs), the name the `with` gives it (`with n = h(…)`,
+SPEC §38), what kind of site it is, its operations `(q, A, B)` at the site, and the handler's
+state: its parameters, when its clauses are passed them as a state (SPEC §19, *Handler state*),
+else none. The checker reads it at the `handle` nodes of the name.  `[spec §19]` -/
+structure SiteRec where
+  n : Nat
+  eff : String
+  args : List VTy
+  handler : String
+  slot : Option String := none
+  kind : SiteKind := .handler
+  ents : List (Qual × VTy × VTy)
+  state : List (String × VTy) := []
+  deriving Repr, Inhabited
+
 /-- A handler site of an iteration effect (SPEC §15), as `Frontend.Elab.Effects` leaves it for the
 typed elaboration: the site's static name, the type of the element its operation passes, the
 variable a `for`'s site threads through the operation (its copy of the callee takes it first and

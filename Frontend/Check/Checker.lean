@@ -81,6 +81,19 @@ def DefEntry.hit? (e : DefEntry) (decl : Nat) (targs : List CVTy) (Δ : LifeCtx)
     else none
   else none
 
+/-- **The site of the `handle` node of the name `n`**, from the record the elaboration of effects
+made of it (`SiteRec`); `none` at a node no record names (one the program writes in core). The
+record's operations are checked against the node's `E`: as many, at the same qualifiers. A
+mismatch is an internal error.  `[spec §19]` -/
+def siteOf (E : Env) (sp : Span) (n : Nat) (Es : List (CQual × CVTy × CVTy)) :
+    Except Error (Option HSite) := do
+  let some r := E.scope.sites.find? (·.n == n) | return none
+  unless r.ents.map (·.1.toCore) == Es.map (·.1) do
+    throw ⟨sp, s!"internal error: the site {n} (`{r.handler}`, `{r.eff}`) as the elaboration of " ++
+      "effects records it does not have its `handle` node's operations"⟩
+  pure (some { eff := r.eff, args := r.args, handler := r.handler, slot := r.slot, kind := r.kind,
+               state := r.state })
+
 /-! ### The checker -/
 
 set_option maxHeartbeats 400000 in
@@ -380,12 +393,13 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                     if hwf : d.wf Δ = true then
                       let Sh := BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S
                       if hSd : ansOutlivesB Δ d Sh = true then
+                        let site ← siteOf E sp k Es
                         let rM ← chkC n E Δ T M (effOf Sh A)
                         if hso : usedSat (outlivesB Δ d) T rM.F.u = true then
                           if h₁ : overlapOK T (oneL T ir) (oneL T ic) = true then
                             if h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true then
                               pure ⟨_, rEffHandleB (at_ sp) { sp := hr.span, name := hr.name }
-                                { sp := hc.span, name := hc.name } ir ic (classifyHandler Es (E.valOf ic)) (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hdv
+                                { sp := hc.span, name := hc.name } ir ic (classifyHandler Es (E.valOf ic)) site (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hdv
                                 hwf hSd rM hso h₁ h₂⟩
                             else throw (splitErr E T sp (orL (oneL T ir) (oneL T ic)) rM.F.u)
                           else throw (splitErr E T sp (oneL T ir) (oneL T ic))
@@ -415,12 +429,13 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                   if hlen : Es.length ≤ 2 ^ 32 then
                    if hdv : BoCa.Fig16.LogRel.Core.Row.divB
                        (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) = false then
+                    let site ← siteOf E sp k Es
                     let rM ← chkC n E Δ T M
                       (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) A)
                     if h₁ : overlapOK T (oneL T ir) (oneL T ic) = true then
                       if h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true then
                         pure ⟨_, rEffHandle (at_ sp) { sp := hr.span, name := hr.name }
-                          { sp := hc.span, name := hc.name } ir ic (classifyHandler Es (E.valOf ic)) (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hdv
+                          { sp := hc.span, name := hc.name } ir ic (classifyHandler Es (E.valOf ic)) site (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hdv
                           rM h₁ h₂⟩
                       else throw (splitErr E T sp (orL (oneL T ir) (oneL T ic)) rM.F.u)
                     else throw (splitErr E T sp (oneL T ir) (oneL T ic))

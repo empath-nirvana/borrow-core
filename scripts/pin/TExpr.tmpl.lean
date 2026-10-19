@@ -20,7 +20,8 @@ is one rule application: one constructor per `CDerivesP` rule, of the same name,
   binder types, rows, operation signatures, lifetimes, the handler's qualifiers and cancel rows,
   constants' type arguments;
 * at `[handle]`, each operation's qualifier and the kind of its clause, as the checker classifies
-  it (`ks`, `Frontend/Check/Kinds.lean`), a fact the derivation does not constrain;
+  it (`ks`, `Frontend/Check/Kinds.lean`), and what the elaboration of effects records of the site
+  (`site`, `HSite`), facts the derivation does not constrain;
 * one child per premise, in the rule's order.
 
 `TExpr.erase` gives the term the rule concludes with, from its children's erasures. The checked
@@ -103,6 +104,23 @@ def litFnE (bs : List Nat) : Expr :=
   let n := bs.length
   .val (.lam (if n == 0 then litByteE 0
     else .case (litLtE 0 n) (litByteE 0) (litTreeE bs.toArray n 1 0 n)))
+
+/-- What the elaboration of effects records of a handler site (`Frontend.SiteRec`), at its `handle`
+node: the effect it serves and its type arguments there, the handler (a control handler's name,
+or the function a `for` or a stored generator runs), the name the `with` gives it (SPEC §38), the
+kind of site the elaboration claims, and the handler's state: the parameters its clauses are
+passed as a state (SPEC §19, *Handler state*), each with its type, none when it has no state.
+The types are as the elaboration of effects writes them, in the frame of the code the site is in
+(a type parameter by its name). The checker reads it at `[handle]` and checks it against the node
+(`Frontend/Check/Checker.lean`, `siteOf`).  `[spec §19]` -/
+structure HSite where
+  eff : String
+  args : List Frontend.VTy
+  handler : String
+  slot : Option String
+  kind : Frontend.SiteKind
+  state : List (String × Frontend.VTy)
+  deriving Inhabited
 
 /-- **The typed term**: one node per rule application of the checked derivation.  `[spec §3]` -/
 inductive TExpr where

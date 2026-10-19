@@ -37,10 +37,8 @@ open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt CDerivesP Jdg SemC fundamentalC
 
 /-- A checked `main`: its context, typed term and type, the rows its derivation reads at
 `[perform]`, `[raise]` and `[handle]`, which give each operation one signature (`sigsOkB`), the
-relaxed rules its derivation uses (SPEC §29), the derivation of the typed term: of `TDerivesP`,
-and, when it uses no relaxed rule, tied at every effect context at which those rows are; and
-whether `main` is served `Fail[DivError]` by `main_div_error`, so that its value `inr ()` is an exit
-status (SPEC §39), as the elaborated program records it. -/
+relaxed rules its derivation uses (SPEC §29), and the derivation of the typed term: of `TDerivesP`,
+and, when it uses no relaxed rule, tied at every effect context at which those rows are. -/
 structure Checked where
   ctx : Ctx CVTy
   t : TExpr
@@ -49,7 +47,14 @@ structure Checked where
   ok : sigsOkB sigs = true
   pins : Pins
   tied : TTied pins sigs LifeCtx.empty ctx t (.comp C)
-  exits : Bool := false
+
+/-- **`main` answers an exit status**: it is served `Fail[DivError]` by the platform's handler
+`main_div_error`, read from the site of a `handle` node of its typed term (`HSite`), so that its
+value `inr ()` is an exit status (SPEC §39). -/
+def Checked.exitsOnDivError (c : Checked) : Bool :=
+  (c.t.handleSites copiesFuel).any fun h => match h.site with
+    | some s => s.handler == Frontend.Elab.Effects.mainDivHandler && s.eff == "Fail"
+    | none => false
 
 /-- **The checked term**: the typed term's erasure, the term the derivation types and the backend
 compiles. -/
@@ -110,7 +115,10 @@ structure Report where
 /-- The depth bound for checking a term. -/
 def checkFuel : Nat := 1 <<< 20
 
-def Env.top (ds : Array Decl) (k : Nat) : Env := ⟨⟨ds, k⟩, [], [], [], [], 0, none, []⟩
+/-- The environment at the top of the declaration `k`, with the handler sites the elaboration
+made (`SiteRec`). -/
+def Env.top (ds : Array Decl) (k : Nat) (sites : List SiteRec := []) : Env :=
+  ⟨⟨ds, k, sites⟩, [], [], [], [], 0, none, []⟩
 
 /-- The externs, in declaration order, each elaborated in the declarations before it. -/
 def externs (ds : Array Decl) : Except Error (List (String × CVTy)) :=
@@ -144,11 +152,11 @@ def sigsErr (s : CRow) : String :=
       | none => "internal error: the operations' signatures"
 
 /-- Check `main : C = M`. -/
-def checkMain (ds : Array Decl) (k : Nat) (sp : Span) (C : CTy) (M : Comp) :
+def checkMain (ds : Array Decl) (k : Nat) (sites : List SiteRec) (sp : Span) (C : CTy) (M : Comp) :
     CheckM Checked := do
   let xs ← externs ds
   let T := (xs.map (·.2)).reverse
-  let E : Env := { Env.top ds k with vars := (xs.map (some ·.1)).reverse, nExt := xs.length }
+  let E : Env := { Env.top ds k sites with vars := (xs.map (some ·.1)).reverse, nExt := xs.length }
   let C' ← E.elabC LifeCtx.empty C
   let r ← chkC checkFuel E LifeCtx.empty T M C'
   if h : subL (allL T) (orL r.F.u r.F.w) = true then
@@ -164,7 +172,7 @@ def checkMain (ds : Array Decl) (k : Nat) (sp : Span) (C : CTy) (M : Comp) :
 /-- Check one declaration; the line `bcc check` prints for it, `main`'s result, and the typed term
 of a `def` without parameters checked at its declaration, at its context's length. That check is
 its key's at `Δ = ∅` and the externs before it (`DefEntry`), which its uses read. -/
-def checkDecl (ds : Array Decl) (k : Nat) :
+def checkDecl (ds : Array Decl) (k : Nat) (sites : List SiteRec) :
     Decl → CheckM (String × Option Checked × List (Nat × TExpr))
   | .type _ n [] [] A => do
       let A' ← (Env.top ds k).elabV LifeCtx.empty A
@@ -182,7 +190,7 @@ def checkDecl (ds : Array Decl) (k : Nat) :
         -- At the persistent externs declared before it (SPEC §11).
         let xs ← externs (ds.extract 0 k)
         let T := (xs.map (·.2)).reverse
-        let E : Env := { Env.top ds k with
+        let E : Env := { Env.top ds k sites with
           vars := (xs.map fun (x, B) => if B.persistent then some x else none).reverse,
           nExt := xs.length }
         let A' ← E.elabV LifeCtx.empty A
@@ -200,7 +208,7 @@ def checkDecl (ds : Array Decl) (k : Nat) :
       let A' ← (Env.top ds k).elabV LifeCtx.empty A
       pure (s!"extern {n.name} : {ppVTy A'}", none, [])
   | .main sp C M => do
-      let c ← checkMain ds k sp C M
+      let c ← checkMain ds k sites sp C M
       pure (s!"main : {ppCTy c.C}", some c, [(c.ctx.length, c.t)])
 
 /-- Check a program, after elaborating it (`Frontend.Elab.elaborate`: the sugar of SPEC §11 and
@@ -219,13 +227,11 @@ def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := 
     ((List.range ds.size).foldlM (init := ((⟨[], none, el, []⟩ : Report), [])) fun (acc, ts) k =>
       match (ds[k]? : Option Decl) with
       | some d => do
-          let (line, m, t) ← checkDecl ds k d
+          let (line, m, t) ← checkDecl ds k el.sites d
           pure ({ acc with lines := if k < lib then acc.lines else acc.lines ++ [line],
                            main := m <|> acc.main }, ts ++ t)
       | none => pure (acc, ts) : CheckM _).run' []
   let (rep, terms) ← r.mapError (Frontend.Elab.renderError el.origins)
-  -- `main`'s exit status (SPEC §39), as the elaboration records it.
-  let rep := { rep with main := rep.main.map fun (c : Checked) => { c with exits := el.exits } }
   -- What the elaboration reports about the program's loops (SPEC §16): total or div, and code
   -- that does not run after a loop that never ends.
   let loops := el.origins.filterMap fun (_, o) => match o with
@@ -235,6 +241,9 @@ def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := 
   -- shape, and each operation's call; and at each handler site, its operations' lowering, read
   -- from the kinds the checker gave their clauses at the `handle` nodes of its name (SPEC §19).
   let handles := (terms.flatMap fun (_, t) => t.handleSites copiesFuel).eraseDups
+  -- The kind of site the elaboration of effects claims, checked against the clause kinds.
+  if let some (h, what) := siteKindMismatch handles then
+    throw ⟨h.sp, s!"internal error: the site {h.n} is {what}"⟩
   let fx := el.origins.filterMap fun (sp, o) => match o with
     | .effects (.line k m) => some s!"{k} {sp.start.render}: {m}"
     | .effects (.site n head ops tail) =>
