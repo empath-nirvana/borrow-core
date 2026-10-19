@@ -4,6 +4,7 @@ import Examples
 import Core
 import Frontend.Check.Externs
 import Frontend.Check.Program
+import Frontend.Check.Handled
 import Frontend.Check.TFacts
 import Frontend.Check.Derived
 /-! The theorems `SPEC.md` names, with their axioms. -/
@@ -46,12 +47,41 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.unhandledIn_nil
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.resumeCT_tail
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.unhandled_not_decided
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.fl_le_hin
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.hin_subst
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.fl_subst
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.pn_subst
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.plug_le
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.plug_hin_le
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.plug_pn_le
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.catches_hin
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.hasHnd_hin
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.kappaAt_le
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.head_hin
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.head_pn
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.head_fl
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.head_heap
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.step1_flowInv
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.steps_flowInv
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.steps_flows
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.steps_unhandledIn
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.steps_hin
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.steps_frame_of_node
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.clauseTy_abortive
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.clauseTy_control
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.tailClause_premise
 #print axioms BoCa.Fig16.LogRel.Core.Check.classify_sound
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.kinds_free
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.site_free
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.inside_eq
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.inside_eqB
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.inside_eqT
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.inside_eq
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.inside_eqB
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.inside_eqT
+#print axioms Frontend.Check.cond2B_sound
+#print axioms Frontend.Check.Checked.unhandledIn
+#print axioms Frontend.Check.Checked.frame_of_node
 #print axioms BoCa.Fig16.LogRel.Core.Check.classifyHandler_quals
 #print axioms BoCa.Fig16.LogRel.Core.Check.classifyHandler_sound
 #print axioms BoCa.Fig16.LogRel.Core.Check.clauseParts_erase

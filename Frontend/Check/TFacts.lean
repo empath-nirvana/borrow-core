@@ -62,7 +62,25 @@ A third is a field the checker adds to a node that its rule does not have:
   checker writes `classifyHandler E tc` at each node it builds is its construction
   (`rEffHandle`'s argument at `[handle]`), not a statement about every typed term.
 
-A fourth is a field the elaboration of effects gives a node, which the checker reads and checks:
+A fourth is a field the checker adds to a node and its typed rule pins:
+
+* **The frames inside a handled computation at `[handle]`** (`inside`,
+  `Frontend/Check/Handled.lean`): the typed rule's premise `inside = te.erase.hin`
+  (`TDerivesAt.inside_eq`, `TDerivesP.inside_eq`, and at `effHandleVB` and `effHandleT`). It is
+  the frames the handled computation holds as written, through `use` bodies and a recursive
+  group's generator. It is not a bound on the frames a run puts between a `perform` and the
+  handler: code that flows into the handled computation puts frames there too (a closure bound
+  outside it, a continuation captured at another handler and resumed inside, a value read from
+  memory). The bound the theorem reads is the program's (`Checked.flows`), which holds all such
+  code at once, and so every node's `inside`. A bound per node would be pinned by a bound on the
+  code that flows into the handled computation: an invariant of the run, from the typing, that a
+  value of a type with no `U` holds no code, so that only the handled computation's free
+  variables, its operations' answers and the cells it reads at types with a `U` bring code in;
+  and that a clause whose kind keeps no `κ` (`tail`, `tail+state`, `resume-or-cancel`, `once`)
+  never lets its `κ` leave the clause, so that only a site whose clause stores `κ` adds its
+  handled computation's frames to what flows.
+
+A fifth is a field the elaboration of effects gives a node, which the checker reads and checks:
 
 * **The site at `[handle]`** (`site`, `HSite`): the effect, its type arguments, the handler, the
   name the `with` gives it, the kind of site and the handler's state. The elaboration of effects
@@ -109,23 +127,23 @@ theorem TDerivesAt.withbor2_witness_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx 
 theorem TDerivesAt.kinds_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J : Jdg}
     {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     {u : Masks} {ks : List ClauseKinds.HKind} (ks' : List ClauseKinds.HKind)
-    {site : Option HSite} {tc te : TExpr}
-    (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site tc te) J) :
-    TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks' site tc te) J := by
+    {site : Option HSite} {ins : ClauseKinds.HIn} {tc te : TExpr}
+    (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site ins tc te) J) :
+    TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks' site ins tc te) J := by
   cases h with
-  | effHandleV hAt hs hm hd hH hc hn0 hnS hlen hdv he =>
-      exact .effHandleV hAt hs hm hd hH hc hn0 hnS hlen hdv he
+  | effHandleV hAt hs hm hd hH hc hn0 hnS hlen hdv he hins =>
+      exact .effHandleV hAt hs hm hd hH hc hn0 hnS hlen hdv he hins
 
 /-- **The site is the elaboration's, not the derivation's**: a typed derivation of a `handle`
 node is one at any site record. -/
 theorem TDerivesAt.site_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J : Jdg}
     {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     {u : Masks} {ks : List ClauseKinds.HKind} {site : Option HSite} (site' : Option HSite)
-    {tc te : TExpr}
-    (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site tc te) J) :
-    TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site' tc te) J := by
+    {ins : ClauseKinds.HIn} {tc te : TExpr}
+    (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site ins tc te) J) :
+    TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site' ins tc te) J := by
   cases h with
-  | effHandleV hAt hs hm hd hH hc hn0 hnS hlen hdv he =>
-      exact .effHandleV hAt hs hm hd hH hc hn0 hnS hlen hdv he
+  | effHandleV hAt hs hm hd hH hc hn0 hnS hlen hdv he hins =>
+      exact .effHandleV hAt hs hm hd hH hc hn0 hnS hlen hdv he hins
 
 end BoCa.Fig16.LogRel.Core.Check

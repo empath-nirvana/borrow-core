@@ -1,6 +1,7 @@
 import Frontend.Syntax
 import Core.PinDerives
 import Core.ClauseKinds
+import Core.HandledNames
 import Core.BlockBorrow
 import Core.Dtor
 import Frontend.Check.Masks
@@ -26,7 +27,9 @@ is one rule application: one constructor per `CDerivesP` rule, of the same name,
   the typed rule relates to the parts' contexts;
 * at `[handle]`, each operation's qualifier and the kind of its clause, as the checker classifies
   it (`ks`, `Frontend/Check/Kinds.lean`), and what the elaboration of effects records of the site
-  (`site`, `HSite`), facts the derivation does not constrain;
+  (`site`, `HSite`), facts the derivation does not constrain; and the frames the handled
+  computation holds (`inside`, `Core/HandledNames.lean`), which the typed rule pins to its
+  erasure's;
 * one child per premise, in the rule's order.
 
 `TExpr.erase` gives the term the rule concludes with, from its children's erasures. The checked
@@ -348,9 +351,9 @@ inductive TExpr where
   | effRaise (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (B : VTy) (t : TExpr)
   | effLet (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (u : Masks) (tM tN : TExpr)
   | effThen (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (SM : Row) (SD : Row) (u : Masks) (tM tN tD : TExpr)
-  | effHandleV (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite) (tc te : TExpr)
-  | effHandleVB (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (d : Lifetime.Life) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite) (tc te : TExpr)
-  | effHandleT (info : TInfo) (jdg : Jdg) (S : Row) (SN : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (site : Option HSite) (tc te : TExpr)
+  | effHandleV (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
+  | effHandleVB (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (d : Lifetime.Life) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
+  | effHandleT (info : TInfo) (jdg : Jdg) (S : Row) (SN : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
   | letPoly (info : TInfo) (jdg : Jdg) (C : CTy) (j : Jdg) (tV tN : TExpr)
   | lendR (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (T : VTy) (B : VTy) (S : Row) (td tM : TExpr)
   | lendLoopR (info : TInfo) (jdg : Jdg) (x : LifeVar) (A : VTy) (S : VTy) (B : VTy) (R : VTy) (tN tK ts0 : TExpr)
@@ -482,9 +485,9 @@ def TExpr.erase : TExpr → Expr
   | .effRaise _ _ _ o _ t => (BoCa.BoLo.raiseE (opArgE o.n o.i (t.erase)))
   | .effLet _ _ _ _ _ _ tM tN => (.app (.val (.lam (tN.erase))) (tM.erase))
   | .effThen _ _ _ _ _ _ _ _ tM tN tD => (thenE (tN.erase) (tD.erase) (tM.erase))
-  | .effHandleV _ _ _ E _ n _ _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (tc.erase) (te.erase))
-  | .effHandleVB _ _ _ E _ n _ _ _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (tc.erase) (te.erase))
-  | .effHandleT _ _ _ _ E _ n _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (.pair (Expr.pairL (tc.erase)) (tailTuple E 0 (Expr.pairR (tc.erase)))) (te.erase))
+  | .effHandleV _ _ _ E _ n _ _ _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (tc.erase) (te.erase))
+  | .effHandleVB _ _ _ E _ n _ _ _ _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (tc.erase) (te.erase))
+  | .effHandleT _ _ _ _ E _ n _ _ _ _ _ tc te => (hndExpr n (E.map Prod.fst) (.pair (Expr.pairL (tc.erase)) (tailTuple E 0 (Expr.pairR (tc.erase)))) (te.erase))
   | .letPoly _ _ _ _ tV tN => (.app (.val (.lam (Expr.letBody (tN.erase) (tV.erase)))) (.val (.lam (Expr.lamBody (tV.erase)))))
   | .lendR _ _ _ _ _ _ _ td tM => (.app (.app (.val (withborUV (td.erase))) (.var 0)) (.val (lendCb (tM.erase))))
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase))
@@ -592,9 +595,9 @@ def TExpr.info : TExpr → TInfo
   | .effRaise i _ _ _ _ _ => i
   | .effLet i _ _ _ _ _ _ _ => i
   | .effThen i _ _ _ _ _ _ _ _ _ _ => i
-  | .effHandleV i _ _ _ _ _ _ _ _ _ _ _ _ => i
-  | .effHandleVB i _ _ _ _ _ _ _ _ _ _ _ _ _ => i
-  | .effHandleT i _ _ _ _ _ _ _ _ _ _ _ _ => i
+  | .effHandleV i _ _ _ _ _ _ _ _ _ _ _ _ _ => i
+  | .effHandleVB i _ _ _ _ _ _ _ _ _ _ _ _ _ _ => i
+  | .effHandleT i _ _ _ _ _ _ _ _ _ _ _ _ _ => i
   | .letPoly i _ _ _ _ _ => i
   | .lendR i _ _ _ _ _ _ _ _ => i
   | .lendLoopR i _ _ _ _ _ _ _ _ _ => i
@@ -698,9 +701,9 @@ def TExpr.jdg : TExpr → Jdg
   | .effRaise _ j _ _ _ _ => j
   | .effLet _ j _ _ _ _ _ _ => j
   | .effThen _ j _ _ _ _ _ _ _ _ _ => j
-  | .effHandleV _ j _ _ _ _ _ _ _ _ _ _ _ => j
-  | .effHandleVB _ j _ _ _ _ _ _ _ _ _ _ _ _ => j
-  | .effHandleT _ j _ _ _ _ _ _ _ _ _ _ _ => j
+  | .effHandleV _ j _ _ _ _ _ _ _ _ _ _ _ _ => j
+  | .effHandleVB _ j _ _ _ _ _ _ _ _ _ _ _ _ _ => j
+  | .effHandleT _ j _ _ _ _ _ _ _ _ _ _ _ _ => j
   | .letPoly _ j _ _ _ _ => j
   | .lendR _ j _ _ _ _ _ _ _ => j
   | .lendLoopR _ j _ _ _ _ _ _ _ _ => j
@@ -812,9 +815,9 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .effRaise _ _ _ _ _ t => [(.push 0, t)]
   | .effLet _ _ _ _ _ _ tM tN => [(.push 0, tM), (.push 1, tN)]
   | .effThen _ _ _ _ _ _ _ _ tM tN tD => [(.push 0, tM), (.push 1, tN), (.push 1, tD)]
-  | .effHandleV _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
-  | .effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
-  | .effHandleT _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
+  | .effHandleV _ _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
+  | .effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
+  | .effHandleT _ _ _ _ _ _ _ _ _ _ _ _ tc te => [(.push 0, tc), (.push 0, te)]
   | .letPoly _ _ _ _ tV tN => [(.fresh 0, tV), (.push 1, tN)]
   | .lendR _ _ _ _ _ _ _ td tM => [(.fresh 0, td), (.fresh 1, tM)]
   | .lendLoopR _ _ _ _ _ _ _ tN tK ts0 => [(.fresh 1, tN), (.fresh 1, tK), (.fresh 0, ts0)]
@@ -837,9 +840,9 @@ def TExpr.masks? : TExpr → Option Masks
   | .lolliE _ _ _ _ u _ _ => some u
   | .effLet _ _ _ _ _ u _ _ => some u
   | .effThen _ _ _ _ _ _ _ u _ _ _ => some u
-  | .effHandleV _ _ _ _ _ _ _ _ u _ _ _ _ => some u
-  | .effHandleVB _ _ _ _ _ _ _ _ _ u _ _ _ _ => some u
-  | .effHandleT _ _ _ _ _ _ _ _ _ u _ _ _ => some u
+  | .effHandleV _ _ _ _ _ _ _ _ u _ _ _ _ _ => some u
+  | .effHandleVB _ _ _ _ _ _ _ _ _ u _ _ _ _ _ => some u
+  | .effHandleT _ _ _ _ _ _ _ _ _ u _ _ _ _ => some u
   | _ => none
 
 /-- Whether the node erases to a `λ` (`thunkv N`'s premise): read off the rule's term where its
@@ -938,9 +941,9 @@ def TExpr.isLam : TExpr → Bool
   | .effRaise _ _ _ o _ t => (((BoCa.BoLo.raiseE (opArgE o.n o.i (t.erase))) : Expr) matches .lam _)
   | .effLet _ _ _ _ _ _ _ _ => false
   | .effThen _ _ _ _ _ _ _ _ tM tN tD => (((thenE (tN.erase) (tD.erase) (tM.erase)) : Expr) matches .lam _)
-  | .effHandleV _ _ _ E _ n _ _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (tc.erase) (te.erase)) : Expr) matches .lam _)
-  | .effHandleVB _ _ _ E _ n _ _ _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (tc.erase) (te.erase)) : Expr) matches .lam _)
-  | .effHandleT _ _ _ _ E _ n _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (.pair (Expr.pairL (tc.erase)) (tailTuple E 0 (Expr.pairR (tc.erase)))) (te.erase)) : Expr) matches .lam _)
+  | .effHandleV _ _ _ E _ n _ _ _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (tc.erase) (te.erase)) : Expr) matches .lam _)
+  | .effHandleVB _ _ _ E _ n _ _ _ _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (tc.erase) (te.erase)) : Expr) matches .lam _)
+  | .effHandleT _ _ _ _ E _ n _ _ _ _ _ tc te => (((hndExpr n (E.map Prod.fst) (.pair (Expr.pairL (tc.erase)) (tailTuple E 0 (Expr.pairR (tc.erase)))) (te.erase)) : Expr) matches .lam _)
   | .letPoly _ _ _ _ _ _ => false
   | .lendR _ _ _ _ _ _ _ _ _ => false
   | .lendLoopR _ _ _ A _ B R tN tK ts0 => (((lendLoopApp A B R (tN.erase) (tK.erase) (ts0.erase)) : Expr) matches .lam _)
@@ -1048,9 +1051,9 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .effRaise _ _ _ _ _ _ => rfl
   | .effLet _ _ _ _ _ _ _ _ => rfl
   | .effThen _ _ _ _ _ _ _ _ _ _ _ => rfl
-  | .effHandleV _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
-  | .effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
-  | .effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
+  | .effHandleV _ _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
+  | .effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
+  | .effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ _ => rfl
   | .letPoly _ _ _ _ _ _ => rfl
   | .lendR _ _ _ _ _ _ _ _ _ => rfl
   | .lendLoopR _ _ _ _ _ _ _ _ _ _ => rfl

@@ -1,6 +1,7 @@
 import Frontend.Syntax
 import Core.PinDerives
 import Core.ClauseKinds
+import Core.HandledNames
 import Core.BlockBorrow
 import Core.Dtor
 import Frontend.Check.Masks
@@ -26,7 +27,9 @@ is one rule application: one constructor per `CDerivesP` rule, of the same name,
   the typed rule relates to the parts' contexts;
 * at `[handle]`, each operation's qualifier and the kind of its clause, as the checker classifies
   it (`ks`, `Frontend/Check/Kinds.lean`), and what the elaboration of effects records of the site
-  (`site`, `HSite`), facts the derivation does not constrain;
+  (`site`, `HSite`), facts the derivation does not constrain; and the frames the handled
+  computation holds (`inside`, `Core/HandledNames.lean`), which the typed rule pins to its
+  erasure's;
 * one child per premise, in the rule's order.
 
 `TExpr.erase` gives the term the rule concludes with, from its children's erasures. The checked

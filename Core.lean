@@ -98,6 +98,7 @@ import Core.Stdio
 import Core.Handlers
 import Core.ClauseKinds
 import Core.ClauseNames
+import Core.HandledNames
 import Core.Aff
 import Core.AffRules
 import Core.AffPrograms

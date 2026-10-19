@@ -416,7 +416,7 @@ Each rule is a handler law applied at a known site. The pass reads only the node
 
 | clause kind (on the `handle` node) | rewrite | law |
 |---|---|---|
-| tail-resumptive on every path | a direct call of the clause at the `perform` | `op_tail`, `tail_resumes` |
+| tail-resumptive on every path, its row unhandled inside (`cond2B` at `Checked.flows`) | a direct call of the clause at the `perform` | `op_tail`, `tail_resumes`, `Checked.unhandledIn` |
 | tail-resumptive, with handler state | the state in a local cell of the handler's scope | `handle_fold` (equation stated and proved in its unit) |
 | abortive (`raise`, a loop exit) | a jump to the handler's join point | `catch_abort`, `abort_absorbs`, `unwind_prefix` |
 | `tick` under the runtime / `div_fuel` | the back edge / a counter test | S0's laws (`docs/pipeline-architecture.md` §4.2) |

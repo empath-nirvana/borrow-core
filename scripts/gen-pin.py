@@ -253,12 +253,18 @@ def idents(text):
 
 
 # Fields a node carries that are not its rule's arguments: facts the checker establishes at the
-# node, which the typed derivation does not constrain (`Frontend/Check/TFacts.lean`). At
-# `[handle]`, each operation's qualifier and its clause's kind (SPEC §19, *Clause kinds*), and what
-# the elaboration of effects records of the site (`HSite`).
-EXTRA = {"effHandleV": [("ks", "List ClauseKinds.HKind"), ("site", "Option HSite")],
-         "effHandleVB": [("ks", "List ClauseKinds.HKind"), ("site", "Option HSite")],
-         "effHandleT": [("site", "Option HSite")]}
+# node (`Frontend/Check/TFacts.lean`). At `[handle]`, each operation's qualifier and its clause's
+# kind (SPEC §19, *Clause kinds*), what the elaboration of effects records of the site (`HSite`),
+# and the frames the handled computation holds (`inside`, `Core/HandledNames.lean`).
+EXTRA = {"effHandleV": [("ks", "List ClauseKinds.HKind"), ("site", "Option HSite"),
+                        ("inside", "ClauseKinds.HIn")],
+         "effHandleVB": [("ks", "List ClauseKinds.HKind"), ("site", "Option HSite"),
+                         ("inside", "ClauseKinds.HIn")],
+         "effHandleT": [("site", "Option HSite"), ("inside", "ClauseKinds.HIn")]}
+
+# Premises the typed rule adds to its rule's, which pin a field of `EXTRA` to the node's children:
+# `inside` is the handled computation's frames. The projection to `CDerives` drops them.
+EXTRA_PREM = {r: [("hins", "inside = Expr.hin e")] for r in ("effHandleV", "effHandleVB", "effHandleT")}
 
 
 # Rule arguments that are terms but are determined by an equation on a child's erasure: the node
@@ -370,6 +376,8 @@ class Rule:
         # facts the checker records on the node that are not arguments of the rule (`EXTRA`)
         self.fields += EXTRA.get(name, [])
         self.kids = [p[1] for p in self.prem]
+        # premises of the typed rule only, after the rule's own
+        self.groups = self.groups + [("(", [nm], ty) for nm, ty in EXTRA_PREM.get(name, [])]
 
     def texpr_ctor(self):
         fs = " ".join(f"({n} : {t})" for n, t in self.fields)
@@ -492,7 +500,8 @@ def typed_rule(r, fieldsof):
             pat.append(v)
             p = next((p for p in r.prem if p[0] == nm), None) if ty and ty.startswith(jn + " ") else None
             if p is None:
-                args.append(v)
+                if nm not in {q for q, _ in EXTRA_PREM.get(r.name, [])}:
+                    args.append(v)
                 if r.split and ty == r.split[1]:
                     pat.append(f"a{n}")  # the masks' premise, which the projection drops
                     n += 1
