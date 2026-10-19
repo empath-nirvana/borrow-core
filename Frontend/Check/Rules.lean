@@ -433,51 +433,116 @@ def rEffThen {S : CRow} {A B : CVTy} {tN tD : TExpr} {sN sD : CRow} {pN pD : Pin
     rM.pins ++ (pN ++ pD), (rM.F.split F h).map
     fun _ ⟨_, _, hs, hm, h₁, ⟨hN, hD⟩, hU⟩ => TTied.effThenA i _ hs hm.rel_of hNZ hUq hU h₁ hN hD⟩
 
-/-- `[handle]`: `handle_n e with (h_ret, hs)`, the answer clause and the clauses the slots `kr`
-and `kc`, the variables' nodes with the sources `ir` and `ic`. It reads the handled row. -/
-def rEffHandle (ir ic : TInfo) {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32}
-    {A R : CVTy} (kr kc : Nat) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind)
-    (site : Option HSite) (hkr : T[kr]? = some (BoCa.Fig16.LogRel.Core.retTy S A R))
-    (hkc : T[kc]? = some (BoCa.Fig16.LogRel.Core.clausesTy S R E)) (hn0 : n ≠ 0)
-    (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+/-! ### `[handle]`  `[spec §19]` -/
+
+/-- The erasure `e` is a value form whose variables are slots of `u`. -/
+def valFormB (u : List Bool) : CExpr → Bool
+  | .var k => u[k]? == some true
+  | .unit | .lam _ | .loc _ | .prim _ => true
+  | .pair a b => valFormB u a && valFormB u b
+  | .inj₁ a => valFormB u a
+  | .inj₂ a => valFormB u a
+  | _ => false
+
+theorem btw_subL : ∀ {u w L : List Bool}, Btw u w L → subL u L = true
+  | [], [], [], .nil => rfl
+  | _ :: _, _ :: _, _ :: _, .cons h₁ _ h => by
+      rename_i a _ _ l _ _
+      simp only [BoCa.Fig16.LogRel.Core.Check.subL, Bool.and_eq_true]
+      exact ⟨by cases a <;> cases l <;> simp_all, btw_subL h⟩
+
+theorem mkCtx_live_of_subL : ∀ {T : List CVTy} {u L : List Bool} {k : Nat},
+    u.length = T.length → L.length = T.length → subL u L = true → u[k]? = some true →
+    ∃ s, (mkCtx T L)[k]? = some s ∧ s.live = true
+  | A :: T, a :: u, l :: L, 0, _, _, hs, hk => by
+      simp only [List.getElem?_cons_zero, Option.some.injEq] at hk
+      subst hk
+      simp only [BoCa.Fig16.LogRel.Core.Check.subL, Bool.not_true, Bool.false_or, Bool.and_eq_true] at hs
+      exact ⟨⟨A, l⟩, rfl, hs.1⟩
+  | A :: T, a :: u, l :: L, k + 1, hu, hL, hs, hk => by
+      simp only [List.length_cons, Nat.add_right_cancel_iff] at hu hL
+      simp only [BoCa.Fig16.LogRel.Core.Check.subL, Bool.and_eq_true] at hs
+      simpa [mkCtx] using mkCtx_live_of_subL hu hL hs.2 (by simpa using hk)
+  | [], [], _, _, _, _, _, hk => by simp at hk
+  | [], _ :: _, _, _, hu, _, _, _ => by simp at hu
+  | _ :: _, [], _, _, hu, _, _, _ => by simp at hu
+  | _ :: _, _ :: _, [], _, _, hL, _, _ => by simp at hL
+
+theorem valFormB_sound {T : List CVTy} {u L : List Bool} (hu : u.length = T.length)
+    (hL : L.length = T.length) (hs : subL u L = true) :
+    ∀ {e : CExpr}, valFormB u e = true → e.ValFormIn (mkCtx T L)
+  | .var k, h => by
+      simp only [valFormB, beq_iff_eq] at h
+      obtain ⟨_, hk, hl⟩ := mkCtx_live_of_subL hu hL hs h
+      exact .var hk hl
+  | .unit, _ => .val ⟨_, .unit⟩
+  | .lam _, _ => .val ⟨_, .lam⟩
+  | .loc _, _ => .val ⟨_, .loc⟩
+  | .prim _, _ => .val ⟨_, .prim⟩
+  | .pair a b, h => by
+      simp only [valFormB, Bool.and_eq_true] at h
+      exact .pair (valFormB_sound hu hL hs h.1) (valFormB_sound hu hL hs h.2)
+  | .inj₁ a, h => .inj₁ (valFormB_sound hu hL hs (by simpa [valFormB] using h))
+  | .inj₂ a, h => .inj₂ (valFormB_sound hu hL hs (by simpa [valFormB] using h))
+  | .app _ _, h | .letpair _ _, h | .seq _ _, h | .case _ _ _, h => by simp [valFormB] at h
+
+/-- A context whose live slots are persistent is consumed up to them. -/
+theorem deadP_of_live : ∀ {Γ : Ctx CVTy}, (∀ s ∈ Γ, s.live = true → s.ty.persistent = true) →
+    BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ
+  | [], _ => .nil
+  | ⟨_, false⟩ :: _, h => .cons (deadP_of_live fun s hs => h s (List.mem_cons_of_mem _ hs))
+  | ⟨_, true⟩ :: _, h =>
+      .drop (h _ List.mem_cons_self rfl) (deadP_of_live fun s hs => h s (List.mem_cons_of_mem _ hs))
+
+/-- The family, with each liveness it holds at using the slots `u`. -/
+def _root_.BoCa.Fig16.LogRel.Core.Check.Fam.withUse {P : List Bool → Prop} (F : Fam T P) :
+    Fam T (fun L => P L ∧ subL F.u L = true ∧ L.length = T.length) :=
+  ⟨F.u, F.w, F.hu, F.hw, fun L hb => ⟨F.d L hb, btw_subL hb, hb.length.trans F.hu⟩⟩
+
+/-- **`[handle]`**: `handle_n e with H`, the handler's pair `H` checked (`rH`), its erasure a
+value form over the slots it uses (`hv`), each of which is persistent (`hp`). It reads the handled
+row. The node records the clause kinds `ks` and the site `site`. -/
+def rEffHandle {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R Tr Tc : CVTy}
+    (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind) (site : Option HSite)
+    (hr : BoCa.Fig16.LogRel.Core.retTy S A R = Tr) (hc : BoCa.Fig16.LogRel.Core.clausesTy S R E = Tc)
+    (rH : Res Δ T (.val (.tensor Tr Tc)))
+    (hp : usedSat BoCa.Fig16.LogRel.Core.VTy.persistent T rH.F.u = true) (hv : valFormB rH.F.u rH.t.erase = true)
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = false)
     (rM : Res Δ T (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
-    (h₁ : overlapOK T (oneL T kr) (oneL T kc) = true)
-    (h₂ : overlapOK T (orL (oneL T kr) (oneL T kc)) rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
-  ⟨.effHandleV i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R
-      (Masks.of (orL (oneL T kr) (oneL T kc)) rM.F.u) ks site
-      (TTied.hndPair ir ic (BoCa.Fig16.LogRel.Core.retTy S A R)
-        (BoCa.Fig16.LogRel.Core.clausesTy S R E) kr kc (Masks.of (oneL T kr) (oneL T kc))) rM.t,
-    (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ rM.sigs, rM.pins,
-    (((Fam.var T kr _ hkr).split (Fam.var T kc _ hkc) h₁).split rM.F h₂).map
-      fun _ ⟨_, _, hs, hm, ⟨_, _, hs₁, hm₁, hr, hc⟩, he⟩ =>
-        TTied.effHandle i ir ic _ _ ks site hs hm.rel_of hs₁ hm₁.rel_of hr hc hn0 hnS hlen hdv he⟩
+    (h : overlapOK T rH.F.u rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
+  ⟨.effHandleV i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R (Masks.of rH.F.u rM.F.u) ks site rH.t
+      rM.t,
+    (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ (rH.sigs ∪ rM.sigs), rH.pins ++ rM.pins,
+    ((rH.F.restrict BoCa.Fig16.LogRel.Core.VTy.persistent hp).withUse.split rM.F h).map
+      fun _ ⟨_, _, hs, hm, ⟨⟨hH, hl⟩, hsub, hlen'⟩, he⟩ => by
+        subst hr hc
+        exact TTied.effHandle i _ ks site hs hm.rel_of (deadP_of_live hl)
+          (valFormB_sound rH.F.hu hlen' hsub hv) hH hn0 hnS hlen hdv he⟩
 
-/-- BOXED-κ: `handle_n e with (h_ret, hs)`, the clauses at `clausesTyB S R d E`, each capturing
-clause's `κ` boxed at `@d`; `@d` defined, every live slot `e` uses outliving it, and every
-non-abortive answer type of the handled row outliving it. It reads the handled row.
-`[spec §28]` -/
-def rEffHandleB (ir ic : TInfo) {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32}
-    {A R : CVTy} {d : CLife} (kr kc : Nat) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind)
-    (site : Option HSite)
-    (hkr : T[kr]? = some (BoCa.Fig16.LogRel.Core.retTy S A R))
-    (hkc : T[kc]? = some (BoCa.Fig16.LogRel.Core.clausesTyB S R d E)) (hn0 : n ≠ 0)
-    (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+/-- BOXED-κ: `[handle]` at the clauses `clausesTyB S R d E`, each capturing clause's `κ` boxed at
+`@d`; `@d` defined, every live slot `e` uses outliving it, and every non-abortive answer type of
+the handled row outliving it. It reads the handled row.  `[spec §28]` -/
+def rEffHandleB {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R Tr Tc : CVTy}
+    {d : CLife} (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind) (site : Option HSite)
+    (hr : BoCa.Fig16.LogRel.Core.retTy S A R = Tr)
+    (hc : BoCa.Fig16.LogRel.Core.clausesTyB S R d E = Tc) (rH : Res Δ T (.val (.tensor Tr Tc)))
+    (hp : usedSat BoCa.Fig16.LogRel.Core.VTy.persistent T rH.F.u = true) (hv : valFormB rH.F.u rH.t.erase = true)
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (hdv : BoCa.Fig16.LogRel.Core.Row.divB (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = false)
     (hwf : d.wf Δ = true)
     (hSd : ansOutlivesB Δ d (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) = true)
     (rM : Res Δ T (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
     (hso : usedSat (outlivesB Δ d) T rM.F.u = true)
-    (h₁ : overlapOK T (oneL T kr) (oneL T kc) = true)
-    (h₂ : overlapOK T (orL (oneL T kr) (oneL T kc)) rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
-  ⟨.effHandleVB i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R d
-      (Masks.of (orL (oneL T kr) (oneL T kc)) rM.F.u) ks site
-      (TTied.hndPair ir ic (BoCa.Fig16.LogRel.Core.retTy S A R)
-        (BoCa.Fig16.LogRel.Core.clausesTyB S R d E) kr kc (Masks.of (oneL T kr) (oneL T kc))) rM.t,
-    (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ rM.sigs, rM.pins,
-    (((Fam.var T kr _ hkr).split (Fam.var T kc _ hkc) h₁).split (rM.F.restrict (outlivesB Δ d) hso)
-      h₂).map fun _ ⟨_, _, hs, hm, ⟨_, _, hs₁, hm₁, hr, hc⟩, he, ho⟩ =>
-        TTied.effHandleB i ir ic _ _ ks site hs hm.rel_of hs₁ hm₁.rel_of hr hc hn0 hnS hlen hdv he
+    (h : overlapOK T rH.F.u rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
+  ⟨.effHandleVB i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R d (Masks.of rH.F.u rM.F.u) ks site
+      rH.t rM.t,
+    (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ (rH.sigs ∪ rM.sigs), rH.pins ++ rM.pins,
+    ((rH.F.restrict BoCa.Fig16.LogRel.Core.VTy.persistent hp).withUse.split (rM.F.restrict (outlivesB Δ d) hso) h).map
+      fun _ ⟨_, _, hs, hm, ⟨⟨hH, hl⟩, hsub, hlen'⟩, he, ho⟩ => by
+        subst hr hc
+        exact TTied.effHandleB i _ ks site hs hm.rel_of (deadP_of_live hl)
+          (valFormB_sound rH.F.hu hlen' hsub hv) hH hn0 hnS hlen hdv he
           ⟨defines_of_wf hwf, fun s hsm hl => outlivesB_sound Δ d s.ty (ho s hsm hl)⟩
           (ansOutlivesB_sound hSd)⟩
 

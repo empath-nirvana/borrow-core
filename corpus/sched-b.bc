@@ -98,16 +98,15 @@ def task2 : !(all 'r < top. imm 'r i32 => U (1 -o F[1.0 aff 1 ~> 1] i32)) =
 -- `1`.
 def spawn : Sp =
   !thunkv Fun 'd < top. return (thunkv fun (tb : box 'd Code) ->
-    hr_ : !U (i32 -o F E<'d>) <- return (!thunkv fun (v : i32) ->
-      return (boxed['d] (thunkv nu_in < return (inl v), return () >)));
-    hc_ : !U (1 * box 'd U ((1 -o F E<'d>) & F 1) -o F E<'d>) * 1 <- return
-      ((!thunkv fun (p : 1 * box 'd U ((1 -o F E<'d>) & F 1)) ->
-        let (u, bk) = p;
-        let () = u;
-        return (boxed['d] (thunkv nu_in <
-          k <- return (unbox bk); x <- return (); r <- (force k).1 x; return (inr r),
-          k <- return (unbox bk); (force k).2 >)), ()));
-    handle_with[1](hr_, hc_) (k <- return (unbox tb); u <- return (); force k u))
+    handle_with[1](
+        ((!thunkv fun (v : i32) ->
+          return (boxed['d] (thunkv nu_in < return (inl v), return () >))) : !U (i32 -o F E<'d>)),
+        (((!thunkv fun (p : 1 * box 'd U ((1 -o F E<'d>) & F 1)) ->
+          let (u, bk) = p;
+          let () = u;
+          return (boxed['d] (thunkv nu_in <
+            k <- return (unbox bk); x <- return (); r <- (force k).1 x; return (inr r),
+            k <- return (unbox bk); (force k).2 >)), ())) : !U (1 * box 'd U ((1 -o F E<'d>) & F 1) -o F E<'d>) * 1)) (k <- return (unbox tb); u <- return (); force k u))
 
 def close_alg : !(all 'd < top. 1 + (E<'d> * 1) => 1) =
   !thunkv Fun 'd < top. return (thunkv fun (r : 1 + (E<'d> * 1)) ->

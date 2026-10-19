@@ -176,10 +176,10 @@ def sites (file : String) : IO UInt32 := do
           | some s =>
             let kind := match s.kind with
               | .handler => "handler" | .forSite => "for" | .pullSite => "pull"
-            let args := if s.args.isEmpty then "" else s!"[{", ".intercalate (s.args.map fun (A : Frontend.VTy) => A.pp)}]"
+            let args := if s.args.isEmpty then "" else s!"[{", ".intercalate (s.args.map Check.ppVTy)}]"
             let slot := match s.slot with | some x => s!" as {x}" | none => ""
             let st := if s.state.isEmpty then "" else
-              s!", state ({", ".intercalate (s.state.map fun (p : String × Frontend.VTy) => s!"{p.1}: {p.2.pp}")})"
+              s!", state ({", ".intercalate (s.state.map fun ((x : String), A) => s!"{x}: {Check.ppVTy A}")})"
             s!"{kind} {s.eff}{args} by {s.handler}{slot}{st}"
         IO.println s!"{h.sp.start.render}: handle {h.n}: {site}; {"; ".intercalate ks}"
       return 0

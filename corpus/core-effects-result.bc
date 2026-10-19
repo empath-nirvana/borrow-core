@@ -1,7 +1,7 @@
 -- SPEC §19 in the core text: an abortive operation `1.0 aff i32 ~> 0` (a `Fail` over `i32`), and
 -- its handler `to_result` turning an abort into a sum. `check` aborts with `7` at `0` and answers
 -- its argument otherwise; it is a function at the row of the operation, called under
--- `handle_with[1]`, whose answer clause is `hr` and whose clauses are the tuple `hc`.
+-- `handle_with[1]`, which holds its answer clause and the tuple of its clauses.
 --
 -- Answer: (inl i32[5], inr i32[7]): the call at `5` returns, the call at `0` aborts.
 
@@ -14,10 +14,12 @@ def check : !U (i32 -o F[1.0 aff i32 ~> 0] i32) =
     }
 
 main : F ((i32 + i32) * (i32 + i32)) =
-  hr : !U (i32 -o F (i32 + i32)) <- return (!thunkv fun (v : i32) -> return (inl v));
-  hc : !U (i32 -o F (i32 + i32)) * 1 <- return ((!thunkv fun (e : i32) -> return (inr e)), ());
   a <- return i32[5];
-  r1 <- handle_with[1](hr, hc) (f <- return (unbang check); force f a);
+  r1 <- handle_with[1](
+      ((!thunkv fun (v : i32) -> return (inl v)) : !U (i32 -o F (i32 + i32))),
+      (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (f <- return (unbang check); force f a);
   b <- return i32[0];
-  r2 <- handle_with[1](hr, hc) (g <- return (unbang check); force g b);
+  r2 <- handle_with[1](
+      ((!thunkv fun (v : i32) -> return (inl v)) : !U (i32 -o F (i32 + i32))),
+      (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (g <- return (unbang check); force g b);
   return (r1, r2)

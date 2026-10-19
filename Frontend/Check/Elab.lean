@@ -61,8 +61,6 @@ def pullTy (A B R : CVTy) : CCTy :=
 structure Scope where
   decls : Array Decl
   upto : Nat
-  /-- The handler sites the elaboration of effects made (`SiteRec`), read at `[handle]`. -/
-  sites : List SiteRec := []
   /-- The key of each `def` the elaboration generates (`DefKey`), read at its uses. -/
   keys : List DefKey := []
 

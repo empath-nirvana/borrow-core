@@ -135,7 +135,8 @@ def HInfo.subst (σ : TySubst) (i : HInfo) : HInfo :=
   { i with ents := i.ents.map fun (q, A, B) => (q, A.subst σ, B.subst σ),
            known := i.known.map fun (x, A) => (x, A.subst σ),
            params := i.params.map fun (x, A) => (x, A.subst σ),
-           retA := i.retA.subst σ, res := i.res.subst σ, after := i.after.map (·.subst σ) }
+           retA := i.retA.subst σ, res := i.res.subst σ, after := i.after.map (·.subst σ),
+           site := i.site.mapTy (·.subst σ) }
 
 mutual
 def Val.subst (σ : TySubst) : Val → Val
@@ -190,7 +191,9 @@ def Comp.subst (σ : TySubst) : Comp → Comp
   | .loop sp ℓ src V M N => .loop sp ℓ src (V.subst σ) (M.subst σ) (N.subst σ)
   | .perform sp n i V => .perform sp n i (V.subst σ)
   | .abort sp n i V => .abort sp n i (V.subst σ)
-  | .handle sp n hr hc M => .handle sp n hr hc (M.subst σ)
+  | .handle sp n st hr hc M =>
+    .handle sp n (st.map (SiteRec.mapTy (VTy.subst σ)))
+      (hr.subst σ) (hc.subst σ) (M.subst σ)
   | .unwind sp x A M D N => .unwind sp x (A.map (VTy.subst σ)) (M.subst σ) (D.subst σ) (N.subst σ)
   | .withbor2r sp x b A B r p m M =>
       .withbor2r sp x b (A.subst σ) (B.subst σ) (r.subst σ) p m (M.subst σ)

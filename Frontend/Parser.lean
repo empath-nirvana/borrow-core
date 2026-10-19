@@ -823,7 +823,7 @@ def Comp.lentNames (vars : Bool := false) : Comp → List String
   | .case _ V _ M _ N | .loop _ _ _ V M N => V.lentNames vars ++ M.lentNames vars ++ N.lentNames vars
   | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.lentNames vars
   | .perform _ _ _ V | .abort _ _ _ V => V.lentNames vars
-  | .handle _ _ _ _ M => M.lentNames vars
+  | .handle _ _ _ hr hc M => hr.lentNames vars ++ hc.lentNames vars ++ M.lentNames vars
   | .unwind _ _ _ M D N => M.lentNames vars ++ D.lentNames vars ++ N.lentNames vars
   | _ => []
 end
@@ -855,7 +855,7 @@ def Comp.withPlaces (loc : List String) : Comp → List String
   | .loop _ _ src V M N => V.withPlaces loc ++ M.withPlaces (src.bound ++ loc) ++ N.withPlaces loc
   | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.withPlaces loc
   | .perform _ _ _ V | .abort _ _ _ V => V.withPlaces loc
-  | .handle _ _ _ _ M => M.withPlaces loc
+  | .handle _ _ _ hr hc M => hr.withPlaces loc ++ hc.withPlaces loc ++ M.withPlaces loc
   | .unwind _ x _ M D N => M.withPlaces loc ++ D.withPlaces loc ++ N.withPlaces (x.name :: loc)
   | _ => []
 end
@@ -869,7 +869,7 @@ def Comp.boundNames : Comp → List String
   | .lam _ x _ M => x.name :: M.boundNames
   | .letUnit _ _ M | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M =>
     M.boundNames
-  | .handle _ _ _ _ M => M.boundNames
+  | .handle _ _ _ _ _ M => M.boundNames
   | .unwind _ x _ M D N => x.name :: (M.boundNames ++ D.boundNames ++ N.boundNames)
   | _ => []
 
@@ -1689,7 +1689,7 @@ def compPrefix : Nat → P Comp
       let sp ← spanFrom st
       pure (if t.tok == .kw "perform" then .perform sp k i V else .abort sp k i V)
     | .kw "handle_with" =>
-      -- `handle_with[n](hr, hc) M` (SPEC §19).
+      -- `handle_with[n](V, W) M` (SPEC §19): the answer clause and the clauses, values.
       discard bump
       expectSym "["
       let k ← match (← peek).tok with
@@ -1697,12 +1697,15 @@ def compPrefix : Nat → P Comp
         | _ => expected "the name `n` of a handler"
       expectSym "]"
       expectSym "("
-      let hr ← ident "the variable of the answer clause"
+      let angle := (← get).angle
+      modify fun s => { s with angle := false }
+      let hr ← val n
       expectSym ","
-      let hc ← ident "the variable of the clauses"
+      let hc ← val n
       expectSym ")"
+      modify fun s => { s with angle }
       let M ← compPrefix n
-      pure (.handle (← spanFrom st) k hr hc M)
+      pure (.handle (← spanFrom st) k none hr hc M)
     | .kw "withbor2r" =>
       -- `withbor2r['x, @b, A, B, [ROW]](p, m) M`, the relaxed lend (SPEC §29).
       discard bump

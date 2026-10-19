@@ -6,11 +6,10 @@
 -- Answer: inr i32[42], and `live 0`: the cell is freed by the unwind.
 
 main : F (i32 + i32) =
-  hr : !U (ref i32 * i32 -o F (i32 + i32)) <- return
-    (!thunkv fun (p : ref i32 * i32) -> let (r, v) = p; return (inl v));
-  hc : !U (i32 -o F (i32 + i32)) * 1 <- return ((!thunkv fun (e : i32) -> return (inr e)), ());
   c <- return (alloc[i32] i32[1]);
-  handle_with[1](hr, hc) (
+  handle_with[1](
+      ((!thunkv fun (p : ref i32 * i32) -> let (r, v) = p; return (inl v)) : !U (ref i32 * i32 -o F (i32 + i32))),
+      (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (
     w <- return withbor2u['x, top, i32, i32, [1.0 aff i32 ~> 0]];
     cb : U (forall 'x < dom. mut 'x i32 -o F[1.0 aff i32 ~> 0] (box 'x i32)) <- return
       (thunkv Fun 'x < dom. fun (m : mut 'x i32) -> abort[1.0] i32[42]);

@@ -26,10 +26,12 @@ def use_cell : !U (i32 -o F[1.0 aff i32 ~> 0] i32) =
     return (plus (v, x))
 
 main : F ((i32 + i32) * (i32 + i32)) =
-  hr : !U (i32 -o F (i32 + i32)) <- return (!thunkv fun (v : i32) -> return (inl v));
-  hc : !U (i32 -o F (i32 + i32)) * 1 <- return ((!thunkv fun (e : i32) -> return (inr e)), ());
   a <- return i32[5];
-  r1 <- handle_with[1](hr, hc) (f <- return (unbang use_cell); force f a);
+  r1 <- handle_with[1](
+      ((!thunkv fun (v : i32) -> return (inl v)) : !U (i32 -o F (i32 + i32))),
+      (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (f <- return (unbang use_cell); force f a);
   b <- return i32[0];
-  r2 <- handle_with[1](hr, hc) (g <- return (unbang use_cell); force g b);
+  r2 <- handle_with[1](
+      ((!thunkv fun (v : i32) -> return (inl v)) : !U (i32 -o F (i32 + i32))),
+      (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (g <- return (unbang use_cell); force g b);
   return (r1, r2)

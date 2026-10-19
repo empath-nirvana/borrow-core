@@ -317,8 +317,6 @@ structure St where
   /-- `main` is served `Fail[DivError]` by `main_div_error` (SPEC §39): it answers `inr ()` when a
   division's error reached it, which the runtime reports as the exit status. -/
   exits : Bool := false
-  /-- Each handler site made, for the checker to read at its `handle` nodes (`SiteRec`). -/
-  sites : Array SiteRec := #[]
   /-- The key of each copy made (`DefKey`), for the checker's `use` nodes. -/
   keys : Array DefKey := #[]
 
@@ -339,9 +337,6 @@ def report (sp : Span) (kind : String) (msg : String) : EM Unit :=
 then `tail`. -/
 def reportSite (sp : Span) (n : Nat) (head : String) (ops : List String) (tail : String) : EM Unit :=
   modify fun s => if s.quiet then s else { s with reports := s.reports.push (sp, .site n head ops tail) }
-
-/-- Record the handler site `r` for the checker, library code's too. -/
-def recordSite (r : SiteRec) : EM Unit := modify fun s => { s with sites := s.sites.push r }
 
 /-- Record a copy's key, once. -/
 def recordKey (k : DefKey) : EM Unit :=
@@ -969,7 +964,8 @@ def refsC : Nat → Comp → List String
     | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => refsV n V
     | .bind _ _ _ M N _ | .with_ _ M N => refsC n M ++ refsC n N
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
-    | .nuOut _ M | .ascribe _ M _ | .handle _ _ _ _ M => refsC n M
+    | .nuOut _ M | .ascribe _ M _ => refsC n M
+    | .handle _ _ _ hr hc M => refsV n hr ++ refsV n hc ++ refsC n M
     | .letUnit _ V M | .letPair _ _ _ V M => refsV n V ++ refsC n M
     | .case _ V _ M _ N | .loop _ _ _ V M N => refsV n V ++ refsC n M ++ refsC n N
     | .unwind _ _ _ M D N => refsC n M ++ refsC n D ++ refsC n N
@@ -996,7 +992,8 @@ def unboxesC (k : String) : Nat → Comp → Bool
     | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => unboxesV k n V
     | .bind _ _ _ M N _ | .with_ _ M N => unboxesC k n M || unboxesC k n N
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
-    | .nuOut _ M | .ascribe _ M _ | .handle _ _ _ _ M => unboxesC k n M
+    | .nuOut _ M | .ascribe _ M _ => unboxesC k n M
+    | .handle _ _ _ hr hc M => unboxesV k n hr || unboxesV k n hc || unboxesC k n M
     | .letUnit _ V M | .letPair _ _ _ V M => unboxesV k n V || unboxesC k n M
     | .case _ V _ M _ N | .loop _ _ _ V M N => unboxesV k n V || unboxesC k n M || unboxesC k n N
     | .unwind _ _ _ M D N => unboxesC k n M || unboxesC k n D || unboxesC k n N
@@ -2505,8 +2502,8 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       -- them beside its own answer, for the clauses after it.
       let info : HInfo := ⟨ch.name.name, n, ents, rest, σ,
         ch.params.map (fun (x, A) => (x.name, A.subst σr)), rA.subst σr, .sum sp (rA.subst σr) pay,
-        some (ch.res.subst σr), false, ch.lps.map (·.1.name)⟩
-      recordSite { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents }
+        some (ch.res.subst σr), false, ch.lps.map (·.1.name),
+        { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents }⟩
       let clsV := injCls.foldr (fun c t => Val.pair sp c t) (.unit sp)
       let (bsP, P') ← goV k cx cs P
       let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) P')
@@ -2611,9 +2608,9 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
           pure (.letPair csp ⟨q, csp⟩ kv (.var csp p) (← bindParams csp q c.params.dropLast th))
         cls := cls ++ [.thunkv csp (.lam csp ⟨p, csp⟩ (holeTy csp) body)]
       let info : HInfo := ⟨ch.name.name, n, ents, rest, σ, [], rA.subst σr, ansT, none, false,
-        ch.lps.map (·.1.name)⟩
-      recordSite { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents,
-                   state := ch.params.map fun (x, A) => (x.name, A.subst σr) }
+        ch.lps.map (·.1.name),
+        { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents,
+          state := ch.params.map fun (x, A) => (x.name, A.subst σr) }⟩
       let (bsP, P') ← goV k cx cs P
       let pv ← fresh "fx_hp"
       let args : Bind := fun N => pure (.bind sp ⟨pv, sp⟩ none (.ret sp P') N false)
@@ -2656,9 +2653,9 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
         pure (.letPair csp ⟨q, csp⟩ kv (.var csp p) (← bindParams csp q xs body))
       cls := cls ++ [.thunkv csp (.lam csp ⟨p, csp⟩ (holeTy csp) body)]
     let info₀ : HInfo := ⟨ch.name.name, n, ents, rest, σ,
-      ch.params.map fun (x, A) => (x.name, A.subst σr), rA.subst σr, ch.res.subst σr, none, false, []⟩
+      ch.params.map fun (x, A) => (x.name, A.subst σr), rA.subst σr, ch.res.subst σr, none, false, [],
+      { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents }⟩
     let info : HInfo := { info₀ with boxK := boxK, lives := ch.lps.map (·.1.name) }
-    recordSite { n, eff := e, args := effArgs, handler := ch.name.name, slot := nm, ents }
     let (bsP, P') ← goV k cx cs P
     let clsV := cls.foldr (fun c t => Val.pair sp c t) (.unit sp)
     let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) P')
@@ -2731,8 +2728,8 @@ def forSite : Nat → Cx → List Cap → Bool → Span → Option Ident → Ide
       | some (_, A, _) => A
       | none => .unit sp
     let opName := (((cx.env.eff? i.eff).map (·.ops)).getD [] |>.head?.map (·.name.name)).getD "?"
-    recordSite { n, eff := i.eff, args := As, handler := gname, kind := .forSite,
-                 ents := cx.env.siteOps { site with thr := none } }
+    let siteR : SiteRec := { n, eff := i.eff, args := As, handler := gname, kind := .forSite,
+                             ents := cx.env.siteOps { site with thr := none } }
     reportSite sp n s!"for over {gname} ({i.eff}): a handler, the static name {n}" [opName]
       ("; the body is its clause, the variables the body uses threaded through the operation; " ++
         "`break` and `return` cancel the continuation")
@@ -2740,7 +2737,7 @@ def forSite : Nat → Cx → List Cap → Bool → Span → Option Ident → Ide
     let M' ← trC k cx [] false M
     let N' ← trC k cx cs wrap N
     let call := Val.app sp f' (capsTuple sp [tcap] W')
-    chain bs (.loop sp ℓ (.each x) (.app sp (.sugar sp (.forSite ⟨n, T, w, gname⟩)) call) M' N')
+    chain bs (.loop sp ℓ (.each x) (.app sp (.sugar sp (.forSite ⟨n, T, w, gname, siteR⟩)) call) M' N')
 
 /-- The stored generator of `g(W)`, `g` performing the iteration effect `i` (SPEC §15): a handler
 site of its own for `i`, assembled where the types are known (`VSugar.pullSite`), whose clause
@@ -2771,15 +2768,15 @@ def pullSite : Nat → Cx → List Cap → Span → String → FSig → Inst →
       | some (_, A, _) => A
       | none => .unit sp
     let opName := (((cx.env.eff? i.eff).map (·.ops)).getD [] |>.head?.map (·.name.name)).getD "?"
-    recordSite { n, eff := i.eff, args := As, handler := gname, kind := .pullSite,
-                 ents := cx.env.siteOps site }
+    let siteR : SiteRec := { n, eff := i.eff, args := As, handler := gname, kind := .pullSite,
+                             ents := cx.env.siteOps site }
     reportSite sp n s!"stored generator of {gname} ({i.eff}): a handler, the static name {n}" [opName]
       ("; its clause keeps the continuation as the rest, resumed by the next observation and " ++
         "cancelled by `close`")
     report sp "call" s!"{gname} → `{name}`, stored"
     -- Bound before the value it is in: making the stored generator is a computation.
     let v ← fresh "fx_g"
-    let pv : Val := .app sp (.sugar sp (.pullSite ⟨n, T, "", gname⟩)) (.app sp f' W')
+    let pv : Val := .app sp (.sugar sp (.pullSite ⟨n, T, "", gname, siteR⟩)) (.app sp f' W')
     let bind : Bind := fun N => pure (.bind sp ⟨v, sp⟩ none (.ret sp pv) N false)
     pure (bs ++ [bind], .var sp v)
 
@@ -3517,7 +3514,10 @@ def pipesC (pe : PipeEnv) : Nat → Comp → EM Comp
     | .loop sp ℓ src V M N => do pure (.loop sp ℓ src (← pipesV pe k V) (← pipesC pe k M) (← pipesC pe k N))
     | .perform sp n i V => do pure (.perform sp n i (← pipesV pe k V))
     | .abort sp n i V => do pure (.abort sp n i (← pipesV pe k V))
-    | .handle sp n hr hc M => do pure (.handle sp n hr hc (← pipesC pe k M))
+    | .handle sp n st hr hc M => do
+      let hr' ← pipesV pe k hr
+      let hc' ← pipesV pe k hc
+      pure (.handle sp n st hr' hc' (← pipesC pe k M))
     | .unwind sp x A M D N => do
       pure (.unwind sp x A (← pipesC pe k M) (← pipesC pe k D) (← pipesC pe k N))
     | M => pure M
@@ -3655,8 +3655,8 @@ def divMain (env : Env) (sp : Span) (C : CTy) (M : Comp) : EM (CTy × Comp) := d
 
 /-- What `elaborate` gives: the declarations, the reports for `bcc check`, the sites observed one
 turn at a time, the capabilities `main` lends to the platform, whether `main` answers `inr ()` on a
-division's error (SPEC §39), whether `divLib` and `platform` were elaborated with the program, and
-the handler sites made (`SiteRec`). -/
+division's error (SPEC §39), and whether `divLib` and `platform` were elaborated with the
+program. -/
 structure Result where
   decls : List Decl
   reports : List (Span × Report)
@@ -3665,7 +3665,6 @@ structure Result where
   exits : Bool := false
   withDivLib : Bool := false
   withPlatform : Bool := false
-  sites : List SiteRec := []
   keys : List DefKey := []
 
 /-- The program with its effects elaborated, and the reports for `bcc check`: the effect and
@@ -3892,7 +3891,7 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
   match go.run {} with
   | .ok ((ds, spliced), st) =>
     pure { decls := ds, reports := st.reports.toList, perTurn := st.perTurn, platform := st.platform,
-           exits := st.exits, withDivLib, withPlatform := spliced, sites := st.sites.toList,
+           exits := st.exits, withDivLib, withPlatform := spliced,
            keys := st.keys.toList }
   | .error e => throw e
 

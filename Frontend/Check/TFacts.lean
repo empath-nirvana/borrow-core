@@ -53,24 +53,39 @@ pin it, and the checker would then check one copy and rename it for the others.
 
 A third is a field the checker adds to a node that its rule does not have:
 
-* **The clause kinds at `[handle]`** (`ks`). The checker classifies each clause from the typed
-  term of the value its clauses variable is bound to (`Frontend/Check/Kinds.lean`), and each kind
-  gives its law's premise at that clause (`classify_sound`). The rule's premise is the clauses
-  variable, not its binding, so the derivation does not constrain the kinds
-  (`TDerivesAt.kinds_free`).
+* **The clause kinds at `[handle]`** (`ks`). The node holds its handler's pair `(h_ret, hs)`, the
+  clauses inline (`tc`), and the checker classifies each clause from it: `ks` is
+  `classifyHandler E tc` (`Frontend/Check/Kinds.lean`), a function of the node's own fields, and
+  each kind gives its law's premise at the clause of the node's erasure the handler runs for the
+  operation (`classifyHandler_sound`, from `classify_sound`). The rule's premises type `tc` and
+  have no kinds, so the derivation does not constrain `ks` (`TDerivesAt.kinds_free`); that the
+  checker writes `classifyHandler E tc` at each node it builds is its construction
+  (`rEffHandle`'s argument at `[handle]`), not a statement about every typed term.
 
 A fourth is a field the elaboration of effects gives a node, which the checker reads and checks:
 
 * **The site at `[handle]`** (`site`, `HSite`): the effect, its type arguments, the handler, the
-  name the `with` gives it, the kind of site and the handler's state, as `Frontend.Elab.Effects`
-  records the site of the node's name (`SiteRec`). The rule has none of them, so the derivation
-  does not constrain them (`TDerivesAt.site_free`). The checker checks the operations the record
-  gives the site against the node's `E`, their number and qualifiers (`Frontend/Check/Checker.lean`,
-  `siteOf`): a site whose record does not match its node is an internal error. The types are the
-  elaboration's, in the frame of the code the site is in. Pinning the rest needs the effect
-  declarations in the checker, with the record's types at the checker's frame, so that `E` is the
-  declared operations of `eff` at `args`; and the elaboration of a state-passing clause stated as
-  a rule, so that the state is the domain of the answer the node's `R` is a function of.
+  name the `with` gives it, the kind of site and the handler's state. The elaboration of effects
+  records it (`SiteRec`) on the site's sugar; it travels with the code it is in, through the
+  instances of a template, to the `handle` node the typed elaboration assembles, which carries it
+  with its types in the frame of the node's code (a `for`'s or a stored generator's site resolves
+  them at its callee's type arguments, `siteAtCall`). The checker elaborates them there to core
+  types (`siteOf`), checks that the record names the node, and that its operations are the
+  node's `E`, the operations the derivation handles (at a `for`'s site with the threaded
+  variables beside each argument and as each answer, `recOps`): a record that does not is an
+  internal error, and `siteOf_ops` states what a site the checker gives a node satisfies. The rule
+  has no site, so the derivation does not constrain it (`TDerivesAt.site_free`). What is not
+  pinned:
+  - that the operations are the declared operations of `eff` at `args`: the effect declarations
+    are elaborated away before the checker, so it has neither, and the record's operations are
+    the declaration's as the elaboration of effects instantiates it;
+  - the handler, the slot and the kind are names; the kind is checked against the clause kinds
+    of the nodes of the name (`siteKindMismatch`), the others not at all;
+  - the handler's state: that the state is the domain of the function the node's `R` answers
+    needs the elaboration of a state-passing clause stated as a rule;
+  - at a `for`'s site, the threaded type is the node's, not the record's;
+  - a `handle` node the elaboration writes that is no site of its own, as a counted loop's
+    handler of the abortive operations of a site around it, has no record.
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Check

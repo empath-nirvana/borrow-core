@@ -55,7 +55,7 @@ def pull_step : !U (U (nu X. F[1.0 aff i32 ~> 1] (1 + U X) & F[1.0 aff i32 ~> 1]
   !thunkv fun (s : U (nu X. F[1.0 aff i32 ~> 1] (1 + U X) & F[1.0 aff i32 ~> 1] 1)
       + U (nu Y. F (i32 * U Y + (1 + U (nu X. F[1.0 aff i32 ~> 1] (1 + U X) & F[1.0 aff i32 ~> 1] 1))) & F 1)) ->
     < r <- case s {
-            inl l -> hr_ <- return pull_hr; hc_ <- return pull_hc; handle_with[1](hr_, hc_) ((nu_out (force l)).1)
+            inl l -> handle_with[1](pull_hr, pull_hc) ((nu_out (force l)).1)
           | inr q -> (nu_out (force q)).1
           };
       case r {
@@ -66,7 +66,7 @@ def pull_step : !U (U (nu X. F[1.0 aff i32 ~> 1] (1 + U X) & F[1.0 aff i32 ~> 1]
         }
       },
       case s {
-        inl l -> hr_ <- return close_hr; hc_ <- return close_hc; handle_with[1](hr_, hc_) ((nu_out (force l)).2)
+        inl l -> handle_with[1](close_hr, close_hc) ((nu_out (force l)).2)
       | inr q -> (nu_out (force q)).2
       } >
 
@@ -124,8 +124,8 @@ def m_chc : !U ((i32 * i32) * U ((i32 -o F i32) & F 1) -o F i32) * 1 =
 def main_step : !U (U (nu X. F[2.0 aff i32 * i32 ~> i32] (i32 + U X) & F[2.0 aff i32 * i32 ~> i32] i32)
     -o F (i32 + U (nu X. F[2.0 aff i32 * i32 ~> i32] (i32 + U X) & F[2.0 aff i32 * i32 ~> i32] i32)) & F 1) =
   !thunkv fun (g : U (nu X. F[2.0 aff i32 * i32 ~> i32] (i32 + U X) & F[2.0 aff i32 * i32 ~> i32] i32)) ->
-    < hr_ <- return m_hr; hc_ <- return m_hc; handle_with[2](hr_, hc_) ((nu_out (force g)).1),
-      hr_ <- return m_chr; hc_ <- return m_chc; w <- handle_with[2](hr_, hc_) ((nu_out (force g)).2); return () >
+    < handle_with[2](m_hr, m_hc) ((nu_out (force g)).1),
+      w <- handle_with[2](m_chr, m_chc) ((nu_out (force g)).2); return () >
 
 main : F (U (nu X. F (i32 + U X) & F 1)) =
   f <- return (unbang (unfold[nu X. F (i32 + U X) & F 1, U (nu X. F[2.0 aff i32 * i32 ~> i32] (i32 + U X) & F[2.0 aff i32 * i32 ~> i32] i32)] main_step));
