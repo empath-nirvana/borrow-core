@@ -54,7 +54,7 @@ kill criterion.
 | 2 | a task, a handler body or a recursion whose loop is unbounded (`while`, a nested scheduler, a drain) | `operator-reconcile`, `async-fanout`, `async-stream`, `reject/rec-loop` | **B2** no handler wraps a div computation |
 | 3 | a JSON-like document: a recursive value whose arrays and objects hold values, with named variants and fields | JSON round-trip (north star), T09, T11, n-body | **B3** no data declarations, and no nested recursion (`mu Y` inside `mu X` must be closed) |
 | 4 | a stream or generator that reads from, or writes to, a capability it owns (decode a watch stream from a socket, yield lines of input) | `gen-digits`, `gen-lines`, `gen-lazy`, `gen-adapters-io`; north-star stage 3 | **B4** a suspended computation cannot own a capability: a cancel hands nothing back |
-| 5 | a generator over a borrowed input, consumed by a `for` inside the borrow (a tokenizer yielding views); a teller task holding a `mut` account across `await` while reading its other variables | `parse-recover-gen`, `async-bank`, T03, T13 | **B5** a borrow cannot be held across a resuming operation (T1, #172) |
+| 5 | a generator over a borrowed input, consumed by a `for` inside the borrow (a tokenizer yielding views); a task that opens a borrow of its own state and keeps it across `await` while reading its other variables | `parse-recover-gen`, `async-bank`, T03's generator form | **B5** a borrow cannot be held across a resuming operation (T1, #172) |
 | 6 | a function that takes two borrows and loops, or a call with two lends, or a `&mut` lend in a call that also uses a handler's service | `lend-div-two`, `lend-two`, T04, T09, T14 | **B6** one lend per call; one borrow per looping callee; §18's rows |
 | 7 | nested loops, a lend in one arm of an `if`, a loop-local shadowing name, a recursive call inside a counted loop, a write to a captured `let mut` | #491–#493, #501–#503, #538, #586, T07, T12 | **B7** elaboration refusals (not missing mechanism) |
 | 8 | a memo table or store generic in its value type, as a handler's state | `effects-generic-store`, `lc-0070-…-memo`, T06, T08 | **B8** no type parameters on an answering effect; map gaps |
@@ -92,9 +92,13 @@ primitive the kernel cannot type).
   `i32[7]`). The blocker is nested `mu` and naming, not recursion.
 - An error escaping a borrow of a literal is refused, but the kernel already has the unwinding
   forms of slice borrows (`sliceBorrowIU`, SPEC §19). B10 is a surface gap.
+- **All fourteen test programs run today**, T01 as written and thirteen with workarounds
+  (measured, §2.2). Their gaps are elaboration refusals, sugar, records, and two calculus items
+  (#174, #58); none is missing functionality.
 - T13's Rust shape (a teller holding its account `mut` across `await` while reading its other
-  variables) runs today, `unconditional` and with no `PinLaw`, once the lend is split at each
-  `await` by hand (measured). Its blocker is elaboration, not T1.
+  variables) runs today, `unconditional` and with no `PinLaw`, when `main` lends the account to a
+  task of `spawn_in` (measured); a borrow block opened inside the task runs once it is split at
+  each `await` by hand (measured). Its blocker is elaboration, not T1.
 - The per-observation lend that §14 already proves for loops is the mechanism B1 and B5 need for
   tasks and generators (hypothesis for B1 until spike S-B). One rule, three uses.
 
@@ -107,7 +111,7 @@ needs it, or says **outside the target set**.
 |---|---|
 | `operator-reconcile.bc` | B2, then B1 (measured with B2 worked around, §8 item 1). Its other refusals were worked around in the file already (its header) |
 | JSON round-trip of a resource | B3 (data declarations; nested recursion), B10 (a parse error raised across the input's borrow); maps of string keys exist (SPEC §36, `bench/wordcount`) |
-| T01–T14 | B7 for most; B6 (T04, T09, T14), B3 (T09, T11), B8 (T06, T08), B9 (T04, T05), B5 (T03's generator form, T13's Rust shape); see §2.2 |
+| T01–T14 | B7 for most; B6 (T04, T09, T14), B3 (T09, T11), B8 (T06, T08), B9 (T04, T05), B5 (T03's generator form); see §2.2. All fourteen run today with workarounds (measured, §2.2) |
 | the #537 bench rows | §5's lowering units only; B3's fixed-size records for n-body's last factor against Rust |
 
 ## 2. The catalogue
@@ -158,7 +162,7 @@ blocker. "Runs (shape)" means it runs only in a shape the language forces, named
 | functionality | program | today | target |
 |---|---|---|---|
 | a tokenizer generator over a borrowed source, consumed by a `for` inside the borrow | `corpus/pending/parse-recover-gen.bc` | refused: "the iterator of this `for` holds the borrow of `v`" (measured); pulling by hand runs (`corpus/gen-borrowed.bc`, recorded) | T03 (generator form) |
-| a teller task holding its account `mut` across `await` while reading its other variables | `corpus/pending/async-bank.bc`, T13 | refused by R1's closed-body premise (measured); **with the lend split at each `await` by hand it runs, `unconditional`, no `PinLaw`** (measured, `bank-split.bc`) | T13 |
+| a teller task that opens a `mut` borrow of its own account and keeps it across `await` while reading its other variables | `corpus/pending/async-bank.bc` | refused by R1's closed-body premise (measured); **with the lend split at each `await` by hand it runs, `unconditional`, no `PinLaw`** (measured, `bank-split.bc`); with the account lent from outside to a task of `spawn_in`, it runs too (T13, measured) | outside (T13 runs) |
 | an iterator over a borrowed list yielding its elements in order | `corpus/pending/print-borrowed-list.bc` (#57) | refused (measured: `iter` does not parse as a value) | outside |
 | a function over a borrowed view whose helper loops (a text walker) | `aoc-2020-07`, `for-view-local` (#491) | refused, but this is B7: the source is untyped when the loop is classified (recorded) | — |
 
@@ -214,7 +218,32 @@ is accepted), `closure-captures-int` (#9), `callbacks-in-data`, `map-div-fold`, 
 (#54), `div-answering-clause`, `state-machine-audit` (§14), `async-worker-pool`,
 `async-borrow` (#52).
 
-@@T-TABLE@@
+### 2.2 The 14 test programs, today
+
+A subagent of this session wrote each of T01–T14 (`docs/research/mutation-paradigms.md` §4) in today's surface,
+with the same behaviour, and ran it; I re-ran all fourteen (measured; programs in §11). **All
+fourteen run with the right output.** T01 runs as written (bar `+=`); the other thirteen need a
+workaround. So no T program is functionality we cannot express: each is a target for the *natural*
+form, and its workarounds are what the units of §9 remove. The expected outputs printed in the
+report for T01, T02, T07, T09 and T10 are correct; T08's and T14's were checked against Python.
+
+| T | output today | workaround forced, and the message that forces it | blocker | allocs / indirect |
+|---|---|---|---|---|
+| T01 | `(220, (3, 10))` | none but `x = x + …` (no `+=`, E2 #583) and arrays built by `array_new` (no array literals) | sugar | 1 / 0 |
+| T02 | `(3, (-1, (false, 2)))` | a lend inside an expression: "`&hy0_xs` lends a place to one call: it may appear only in the head `M` of `y <- M; N` (SPEC §11)"; hoisted with `let` | B7 (#525, #510) | 1 / 0 |
+| T03 | `[12, -3, 40, 7]`, 1 | a looping function with a view parameter (§14 message); reads in `while` conditions; `push(&mut vals, …)` in an `if` arm inside a `while` ("`vals` is used twice", #502); `push(&mut v, if …)` does not parse | B7 | 2 / 0 |
+| T04 | 6 swaps, sorted, reversed | `get` on `array_mut` refused, so `peek`; `len(&v)` at a `mut` view refused, so `len_mut`; a `while` over a `mut` view parameter (§14 message); `loop` inside a `for` (S1) | B9 (#174), B7, L-1 | 2 / 0 |
+| T05 | `(3, (-1, (3, 4)))` | owned index reads by `at(&a, i, d)`, each let-bound; no tuple assignment; a shared view used in an inner `for` each row ("`cs` is used twice"), so `array_copy` | B9 (#58/#142), sugar | 12 / 0 |
+| T06 | `the:3,cat:1,and:2,hat:1,bat:1` | two probes per word; a conditional `push_byte(&mut out, …)` heading `;` (§11); the per-word update moved into a function ("`hy0_freq` is used twice") | B8 (upsert), B7 | 4 / 0 |
+| T07 | `Locked 3 2 1` | states as `bool` (no variants); `st = if …` does not parse; a `for` over a lent literal's view (§14 message), so an owned string | B3, B7 | 1 / 0 |
+| T08 | best `(27, 112)`, 27 hits, 139 entries | state as a pair in `handler memo(mut s)`; assigning an outer `let mut` inside `with on_exhausted` refused ("a control handler's body may be abandoned"), so the budget handler is per call. Assigning inside the answering `with memo(&mut cache)` works | B8, B7 | 7 / 0 |
+| T09 | `[10, 92, 55]`, 11 | a particle as a pair; one `modify` per element in place of field updates | B3 | 1 / 0 |
+| T10 | `6765 2 3 1 21` | no tuple assignment; `p % q` in `main`'s `while` ("the type of the body `main_div_error` handles is not determined", #517), so `checked_rem` | sugar, B7 | 0 / 0 |
+| T11 | `80 50 demo true`, 4000, 1 | the record as a nested pair, rebuilt per update | B3 | 2 / 0 |
+| T12 | 52, 15, `[0..5]`, 9, 6 | #586 in two faces: a write-only assignment in a block is lost (12, not 52); one that also reads is refused with "`!thunk` promotes only over `!` types"; the state moved into an answering handler; the counter as a hand-built `Aff` | B7 (#586) | 4 / 0 |
+| T13 | balances 130 and 20, refused `[0, 1]` | **the Rust shape runs**: `main` lends each account `mut` to a teller of `spawn_in` inside `borrow mut d { 'd, … }`; the teller reads its `txs` argument across `await`; `bcc trusted`: "unconditional" (measured). Only the hand-back of a nested borrow is by hand (#495). The report's shape, a borrow *block inside* the task spanning `await` while reading `txs`, is refused by R1 | B5 only for the block form | 30 / 6 |
+| T14 | buffer `[49, 1, 37, 29, 24, 61]`, again 45, 1 log, sum 61 | `fill(&mut b)` inside the `with`s refused: "a place is lent (`&mut x`) in the arguments of `fill`, which also threads a capability: lend it in a call of its own"; `borrow mut b { v -> … }` *outside* the `with`s, with `fill` over an `array_mut` view, works | B6 (§18's row: an ordering constraint, not a missing capability) | 3 / 0 |
+
 
 ## 3. The blockers, exactly
 
@@ -348,7 +377,7 @@ What works (measured): the same document with arrays encoded in the one `mu` (`j
 | way | performance | proof cost | ergonomics | verdict |
 |---|---|---|---|---|
 | Rust's way: `enum`/`struct`, `Box` and `Vec` for recursion | the layout Rust has | n/a | good, with `Box` ceremony | adopt the declarations, not the `Box`: SPEC §35 already places one box per node by the elaborator |
-| **data declarations elaborating to `mu` and pairs/sums** (#489, #54 stage 8), with nested containers elaborated to one recursive type: `Arr(List[Json])` becomes the container's constructors inlined into `Json`'s `mu`, and the container's functions specialised at it | one box per node, as today | none for the declarations (the core types exist); for nesting, none if the inlining is done by the elaborator (hypothesis), lemma-level if instead the kernel lifts "must be closed" (#182, #32) | good | **recommended**. Lean 4 elaborates nested inductives into mutual ones the same way (cited as prior art; our encoding of mutual recursion is one `mu` with a tag) |
+| **data declarations elaborating to `mu` and pairs/sums** (#489, #54 stage 8), with nested containers elaborated to one recursive type: `Arr(List[Json])` becomes the container's constructors inlined into `Json`'s `mu`, and the container's functions specialised at it | one box per node, as today | none for the declarations (the core types exist); for nesting, none if the inlining is done by the elaborator (hypothesis), lemma-level if instead the kernel lifts "must be closed" (#182, #32) | good | **recommended**. Lean 4 reduces nested inductive types to mutual ones the same way (prior art from background knowledge, not verified this session; our encoding of mutual recursion is one `mu` with a tag) |
 | kernel nested `mu` (#182 item 2, #32) | the same | relation: folds beyond `FShape` | good | the fallback if the elaboration's specialisation of library containers does not hold |
 | fixed-size arrays (#72) | constant trip counts, as Rust's `[T; N]` | relation (sized types) | good | for the bench, after records; outside the north star |
 
@@ -507,11 +536,11 @@ foundation its fix is. Every count is from §2.
 | rank | blocker | gates (target set) | gates (outside) | foundation quality of the recommended fix |
 |---|---|---|---|---|
 | 1 | B2 div under a handler | north star (first cause) | `async-fanout`, `async-stream`, `rec-loop`, #517 | high: decision 67's plan; one relation clause; also unblocks B4 (the residual) |
-| 2 | B1 shared service across tasks | north star (second, and last, cause) | `io-two-tasks`, `async-channel`, `async-progress`, T13's Rust shape | high: §14's per-observation lend reused; no new former (hypothesis until spike S-B) |
+| 2 | B1 shared service across tasks | north star (second, and last, cause) | `io-two-tasks`, `async-channel`, `async-progress` | high: §14's per-observation lend reused; no new former (hypothesis until spike S-B) |
 | 3 | B7 elaboration refusals | T02, T03, T07, T12, most bench "forced shapes" | 13 pending programs (#491–#495, #501–#504, #538, #586) | high: the designs exist and are agreed |
 | 4 | B3 data declarations, nested data | JSON round-trip (north star stage 1), T09, T11, n-body | `data-box-tree`, every `inl`/`inr` site (2197, `docs/ergonomics.md` M1) | high: pure elaboration if spike S-D holds |
 | 5 | B4 suspended computations owning capabilities | north-star stage 3 (watch stream); not in `operator-reconcile` | `gen-digits`, `gen-lines`, `gen-lazy`, `gen-adapters-io` | high: the same mechanism as S0's residual |
-| 6 | B5 borrows across a resuming operation | T03 (generator form), T13 (Rust shape) | `parse-recover-gen`, `async-bank`, `print-borrowed-list` (#57) | medium: the cursor is elaboration; K1 stays open and is not needed |
+| 6 | B5 borrows across a resuming operation | T03 (generator form) | `parse-recover-gen`, `async-bank`, `print-borrowed-list` (#57) | medium: the cursor is elaboration; K1 stays open and is not needed |
 | 7 | B6 lends per call | T04, T09, T14 | `lend-two`, `lend-div-two` | high for nested lends (elaboration); medium for the tuple re-lend (a lemma) |
 | 8 | B10 abort across buffer borrows; K4 | JSON parse errors | `config-parse`, `raise-in-fold` | high: the kernel forms exist |
 | 9 | B8 generic answering effects | T06, T08 | `effects-generic-store`, `lc-0070` | high: monomorphisation as decided for functions |
@@ -546,12 +575,15 @@ foundation its fix is. Every count is from §2.
    `mu` runs (measured, `json3.bc`); `mu Y` inside `mu X` is refused (measured, `json2.bc`).
 4. **B10 is a surface gap.** The kernel has `sliceBorrowIU`/`MU` (SPEC §19); the surface refuses
    to use them for literals and buffers.
-5. **T13's Rust shape needs no relaxed lend.** `async-bank.bc` with the lend split at each `await`
+5. **All of T01–T14 run.** The mutation report graded several "X" (refused); each has a working
+   form today (§2.2). T14's §18 row is an ordering constraint: the same buffer lent by a
+   `borrow mut` outside the `with`s is filled through a function that performs both services.
+6. **T13's Rust shape needs no relaxed lend.** `async-bank.bc` with the lend split at each `await`
    runs, and `bcc trusted` reports it `unconditional` (measured, `bank-split.bc`).
-6. **One rule, three uses.** §14's per-observation lend (a borrow scope over a loop is lent again at
+7. **One rule, three uses.** §14's per-observation lend (a borrow scope over a loop is lent again at
    each step, so the loop's state must not hold it) is the mechanism B1 (per turn) and B5 (per
    pull) need. Neither needs K1.
-7. **The read-through-`mut` cost is visible only before LLVM.** quicksort's `bcc-counts` shows a
+8. **The read-through-`mut` cost is visible only before LLVM.** quicksort's `bcc-counts` shows a
    store per read (measured), while its machine code has single loads (recorded,
    `bench/README.md`). That is why L-1 is a lowering law, not a calculus change.
 
@@ -603,7 +635,7 @@ intended).
 | # | unit | removes | acceptance | done when |
 |---|---|---|---|---|
 | 15 | **close with a residual** for generators, on S0's residual (unit 1) | B4 | `gen-digits`, `gen-lines`, `gen-lazy`, `gen-adapters-io` | all four move to `corpus/` with goldens |
-| 16 | **lend split at suspensions** (tasks): a borrow block whose body awaits is one lend per turn, by U3's live variables | B5 (tasks) | `corpus/pending/async-bank.bc` as written; T13 in its Rust shape | `async-bank.bc` moves to `corpus/` with its golden and `bcc trusted` reports it `unconditional` |
+| 16 | **lend split at suspensions** (tasks): a borrow block whose body awaits is one lend per turn, by U3's live variables | B5 (tasks) | `corpus/pending/async-bank.bc` as written; T13 in the report's shape (the borrow block inside the teller) | `async-bank.bc` moves to `corpus/` with its golden and `bcc trusted` reports it `unconditional` |
 | 17 | **spike S-C**: yes/no — when no variable live across a `yield` holds the borrow except the source parameter, does the generator elaborate to a step function over its owned live set that the checker accepts inside the source's borrow block, unchanged? | B5 (generators) | `parse-recover-gen.bc` | **yes**: unit 18. **Kill**: the cursor stays hand-written (`corpus/json-tokens.bc`'s shape), documented as the way |
 | 18 | **the lending cursor**: that elaboration | B5 | `parse-recover-gen.bc`; T03's generator form | both run with goldens |
 
@@ -932,3 +964,792 @@ sum: allocs 4 indirect 0 copies 0 loads 2043 stores 1034 bounds 1036
 ```
 
 The counts are at the default argument sizes and are not the timed runs.
+
+## 11. Appendix: the T01–T14 programs as they run today
+
+Each was run with `$B run FILE`; its output is in §2.2. The refused variants follow, with the
+message each gives in its header or in §2.2. Each program's header comment names its workaround.
+
+### `T01.bc`
+
+```bc
+-- T01: loop-carried accumulators over a borrowed array.
+fn xs(i: i32) -> i32 =
+  if i == 0 { 3 } else if i == 1 { 8 } else if i == 2 { 0 - 2 } else if i == 3 { 7 }
+  else if i == 4 { 10 } else if i == 5 { 5 } else if i == 6 { 0 - 6 } else { 4 }
+
+main -> i32 * (i32 * i32) =
+  let xs = array_new[i32](8, xs);
+  let mut sq = 0;
+  let mut odd = 0;
+  let mut best = 0 - 2147483647 - 1;
+  for p in &xs {
+    let x = *p;
+    if x % 2 == 0 { sq = sq + x * x } else { odd = odd + 1 };
+    if x > best { best = x } else { () }
+  };
+  (sq, (odd, best))
+```
+
+### `T02.bc`
+
+```bc
+-- T02: `break e` / `for … else`, and a `while` with a bare `break` and its variables read after.
+include iters
+include slice
+
+fn xs(i: i32) -> i32 =
+  if i == 0 { 4 } else if i == 1 { 1 } else if i == 2 { 0 - 3 } else if i == 3 { 9 }
+  else if i == 4 { 2 } else { 8 }
+
+fn first_over<'a>(xs: array_imm 'a i32, limit: i32) -> i32 =
+  let mut acc = 0;
+  for e in enumerate(elems(xs)) {
+    let (i, p) = e;
+    acc = acc + *p;
+    if acc > limit { break i } else { () }
+  } else { 0 - 1 }
+
+main -> i32 * (i32 * (bool * i32)) =
+  let xs = array_new[i32](6, xs);
+  let mut i = 0;
+  let mut all_pos = true;
+  let n = len(&xs);
+  while i < n { let x = at(&xs, i, 0); if x < 0 { all_pos = false; break } else { () }; i = i + 1 };
+  let f10 = first_over(&xs, 10);
+  let f100 = first_over(&xs, 100);
+  (f10, (f100, (all_pos, i)))
+```
+
+### `T03.bc`
+
+```bc
+-- T03: a cursor as loop state, numbers pushed into an owned buffer by `&mut`.
+-- Workaround: the input is an owned string (a `while` may not keep a view open across its
+-- steps, SPEC §14), every read is `at(&s, …)` let-bound before its test (a lend may only head a
+-- `let`), so each inner `while` with a read in its condition is a `loop` with `break`; and the
+-- conditional push threads the buffer by hand (`push(&mut vals, x)` in an `if` arm inside a
+-- `while` is refused: "`vals` is used twice here", cf. pending/for-in-if-lend.bc, #502).
+include slice
+include buf
+include text
+include io
+
+fn is_digit(b: u8) -> bool = 48 <= b && b <= 57
+
+fn parse(s: string) -> buf i32 * i32 =
+  let (arr, n) = s;
+  let mut arr = arr;
+  let mut pos = 0;
+  let mut vals = buf_new[i32](4);
+  let mut errs = 0;
+  while pos < n {
+    loop { let c = at(&arr, pos, 0); if pos < n && c == b' ' { pos = pos + 1 } else { break } };
+    let c = at(&arr, pos, 0);
+    let neg = pos < n && c == b'-';
+    if neg { pos = pos + 1 } else { () };
+    let start = pos;
+    let mut k = 0;
+    loop {
+      let c = at(&arr, pos, 0);
+      if pos < n && is_digit(c) { k = k * 10 + to_i32(c) - 48; pos = pos + 1 } else { break }
+    };
+    let x = if neg { 0 - k } else { k };
+    let (v, u) = if pos == start { errs = errs + 1; (vals, ()) } else { push(vals, x) };
+    vals = v;
+    loop { let c = at(&arr, pos, 0); if pos < n && c != b',' { pos = pos + 1 } else { break } };
+    pos = pos + 1
+  };
+  (vals, errs)
+
+main -> i32 =
+  let (vals, errs) = parse(string_of_lit("12,-3, 40,x,7"));
+  let (arr0, k) = vals;
+  let arr : array i32 = arr0;
+  for i in 0..k { let x = at(&arr, i, 0); print_dec(x); print_byte(b' ') };
+  print_byte(b'\n');
+  errs
+```
+
+### `T04.bc`
+
+```bc
+-- T04: insertion sort through a `mut` view, then reversing a copy in a `borrow mut` block.
+-- Workarounds: the view is threaded (`v = …`) rather than lent per call; reads through it are
+-- `peek` (`get` needs `array_imm`, and there is no imm reborrow of a `mut` view); its length is
+-- `len_mut`; the inner `while` is a counted `for` with `break` (a looping function may not
+-- hold a view across its steps, SPEC §14, and `loop` may not sit in a `for` body); the copy is an `array_new` reading the sorted array with `at(&a, …)`.
+include slice
+include io
+include buf
+
+fn a0(i: i32) -> i32 =
+  if i == 0 { 5 } else if i == 1 { 2 } else if i == 2 { 9 } else if i == 3 { 1 } else if i == 4 { 5 } else { 6 }
+
+fn insertion_sort<'a>(v: array_mut 'a i32) -> array_mut 'a i32 * i32 =
+  let (v, n) = len_mut(v);
+  let mut v = v;
+  let mut swaps = 0;
+  for i in 1..n {
+    let mut j = i;
+    for _ in 0..i {
+      let (w, x) = peek(v, j - 1, 0);
+      let (w, y) = peek(w, j, 0);
+      v = w;
+      if j > 0 && x > y { v = swap_at(v, j - 1, j); swaps = swaps + 1; j = j - 1 } else { break }
+    }
+  };
+  (v, swaps)
+
+fn print_arr(a: array i32, n: i32) -> array i32 =
+  for i in 0..n { let x = at(&a, i, 0); print_dec(x); print_byte(b' ') };
+  print_byte(b'\n');
+  a
+
+main -> i32 =
+  let mut a = array_new[i32](6, a0);
+  let swaps = borrow mut a { v -> let (v, s) = insertion_sort(v); discard_mut(v); s };
+  let mut b = array_new[i32](6, !{ i -> 0 });
+  for i in 0..6 { let x = at(&a, i, 0); b = array_set(b, i, x) };
+  let mut lo = 0;
+  let nb = len(&b);
+  let mut hi = nb - 1;
+  borrow mut b { v ->
+    let mut v = v;
+    while lo < hi { v = swap_at(v, lo, hi); lo = lo + 1; hi = hi - 1 };
+    discard_mut(v) };
+  let a = print_arr(a, 6);
+  let b = print_arr(b, 6);
+  swaps
+```
+
+### `T05.bc`
+
+```bc
+-- T05: dynamic programming on owned arrays: coin change, and LCS with two rows swapped by name.
+-- Workarounds: each index read is `at(&a, i, d)` (a lend per read, let-bound), each write
+-- `array_set` (`array_replace`); the coin view is copied per row (`array_copy`, #142: a view is
+-- not persistent, so an inner `for` over it is refused: "`cs` is used twice here"); the row swap is three rebindings (no tuple assignment).
+include slice
+include buf
+include text
+
+def big : i64 = 9223372036854775807
+
+fn min64(x: i64, y: i64) -> i64 = if x < y { x } else { y }
+fn max(x: i32, y: i32) -> i32 = if x < y { y } else { x }
+
+fn coins<'c>(cs: array_imm 'c i32, amount: i32) -> i64 =
+  let mut dp = array_new[i64](amount + 1, !{ i -> big });
+  dp = array_set(dp, 0, i64[0]);
+  let mut cs = cs;
+  for a in 1..amount + 1 {
+    let (cs1, row) = array_copy['c, i32] cs;
+    cs = cs1;
+    for p in row {
+      let c = *p;
+      if c <= a {
+        let prev = at(&dp, a - c, big);
+        let cur = at(&dp, a, big);
+        if prev != big { dp = array_set(dp, a, min64(cur, prev + i64[1])) } else { () }
+      } else { () }
+    }
+  };
+  array_forget['c, i32](cs);
+  let r = at(&dp, amount, big);
+  if r == big { i64[0] - i64[1] } else { r }
+
+fn lcs(x: string, y: string) -> i32 =
+  let (xa, m) = x;
+  let (ya, n) = y;
+  let mut xa = xa;
+  let mut ya = ya;
+  let mut prev = array_new[i32](n + 1, !{ i -> 0 });
+  let mut cur = array_new[i32](n + 1, !{ i -> 0 });
+  for i in 1..m + 1 {
+    for j in 1..n + 1 {
+      let a = at(&xa, i - 1, 0);
+      let b = at(&ya, j - 1, 0);
+      let d = at(&prev, j - 1, 0);
+      let u = at(&prev, j, 0);
+      let l = at(&cur, j - 1, 0);
+      let v = if a == b { d + 1 } else { max(u, l) };
+      cur = array_set(cur, j, v)
+    };
+    let t = prev;
+    prev = cur;
+    cur = t
+  };
+  let r = at(&prev, n, 0);
+  r
+
+fn c3(i: i32) -> i32 = if i == 0 { 1 } else if i == 1 { 2 } else { 5 }
+
+main -> i64 * (i64 * (i32 * i32)) =
+  let cs = array_new[i32](3, c3);
+  let two = array_new[i32](1, !{ i -> 2 });
+  let r1 = borrow imm cs { v -> coins(v, 11) };
+  let r2 = borrow imm two { v -> coins(v, 3) };
+  let l1 = lcs(string_of_lit("abcde"), string_of_lit("ace"));
+  let l2 = lcs(string_of_lit("AGGTAB"), string_of_lit("GXTXAYB"));
+  (r1, (r2, (l1, l2)))
+```
+
+### `T06.bc`
+
+```bc
+-- T06: word frequencies in first-seen order, with `lib/map.bc` keyed by views of the text.
+-- Workarounds: words are cut out by index (`split_at`; there is no word splitter yielding views),
+-- and the view is copied (`array_copy`) for each use (#142); the upsert is two probes
+-- (`map_lookup` then `map_insert`); each conditional push threads its buffer by hand (a lend
+-- `push(&mut out, …)` in an `if` arm that heads `;` is refused, SPEC §11), and the per-word
+-- update is a function threading the map and buffer (lends in a nested `if` inside the `for`:
+-- "`hy0_freq` is used twice here", #502); the first-seen order is a buffer of views read with `view_at`.
+include textio
+include map
+include text
+
+fn slice<'t>(t: text 't, i: i32, k: i32) -> text 't =
+  match split_at(t, i) {
+    inl (h, r) -> array_forget['t, u8](h);
+      match split_at(r, k) { inl (w, rest) -> array_forget['t, u8](rest); w | inr r -> r }
+  | inr t -> t
+  }
+
+-- The word counted once more, and appended to `order` when it is new.
+fn bump<'t>(freq: Map[text 't, i32], order: buf (text 't), word: text 't)
+    -> Map[text 't, i32] * buf (text 't) =
+  let mut freq = freq;
+  let mut order = order;
+  let (word, k) = array_copy['t, u8] word;
+  let old = map_lookup(&freq, k);
+  let c = match old { inl c -> c | inr u -> 0 };
+  let (word, k2) = array_copy['t, u8] word;
+  let (o, u) = if c == 0 { push(order, k2) } else { array_forget['t, u8](k2); (order, ()) };
+  let prev = map_insert(&mut freq, word, c + 1);
+  (freq, o)
+
+-- (`u0`: named `u`, the first view clashed with the `inr u` of the last loop: "`u` is used
+-- twice here, and its type `array_imm 't u8` is not persistent"; not minimised.)
+fn freq<'t>(t: text 't) -> string =
+  let (t, u0) = array_copy['t, u8] t;
+  let n = len(u0);
+  let mut t = t;
+  let mut freq = map_new[text 't, i32](16);
+  let mut order = buf_new[text 't](8);
+  let mut start = 0;
+  for i in 0..n + 1 {
+    let (t2, w) = array_copy['t, u8] t;
+    t = t2;
+    let b = at(w, i, b' ');
+    let (t2, w) = array_copy['t, u8] t;
+    t = t2;
+    let word = slice(w, start, i - start);
+    let (f, o) = if b == b' ' && start < i { bump(freq, order, word) }
+                 else { array_forget['t, u8](word); (freq, order) };
+    freq = f;
+    order = o;
+    if b == b' ' { start = i + 1 } else { () }
+  };
+  array_forget['t, u8](t);
+  let (order, k) = len_of(order);
+  let mut order = order;
+  let mut out = string_new(32);
+  for i in 0..k {
+    let (o2, w) = view_at(order, i);
+    order = o2;
+    let o = if i > 0 { let (o, u) = push_byte(out, b','); o } else { out };
+    out = o;
+    let (w, w2) = array_copy['t, u8] w;
+    push_str(&mut out, w2);
+    push_byte(&mut out, b':');
+    let c = map_lookup(&freq, w);
+    let c = match c { inl c -> c | inr u -> 0 };
+    push_dec(&mut out, c)
+  };
+  out
+
+main -> i32 =
+  let out = borrow imm "the cat and the hat and the bat" { t -> freq(t) };
+  let out = print_string(out);
+  print_lit("\n");
+  0
+```
+
+### `T07.bc`
+
+```bc
+-- T07: a turnstile driven by the bytes of a literal; the arms update counters.
+-- Workarounds: states are `bool`, Open = true (no named variants, #141; `==` is integer-only); the `match` on a pair is nested `if`s;
+-- the events are an owned string iterated by `&evs` (a `for` over the view of a lent literal is
+-- refused: "the iterator of this `for` holds the borrow of `v`", SPEC §14); the next state is let-bound and then assigned (`st = if …` does not parse).
+include text
+
+fn locked() -> bool = false
+fn open() -> bool = true
+
+main -> bool * (i32 * (i32 * i32)) =
+  let mut st = locked();
+  let mut passed = 0;
+  let mut rejected = 0;
+  let mut wasted = 0;
+  let (evs, k) = string_of_lit("cpppccpcp");
+  for p in &evs {
+      let e = *p;
+      let next = if st {
+        if e == b'p' { passed = passed + 1; locked() } else { wasted = wasted + 1; open() }
+      } else {
+        if e == b'c' { open() } else { rejected = rejected + 1; locked() }
+      };
+      st = next
+  };
+  (st, (passed, (rejected, wasted)))
+```
+
+### `T08.bc`
+
+```bc
+-- T08: a memo table as an answering handler's state (a map and a hit count), consulted by a
+-- non-structural recursion (Collatz chain lengths) run under a budget (`on_exhausted`).
+-- `best` is assigned inside the answering `with memo` body (accepted). The budget handler is put
+-- around each call (`chain_top`): the body of `with on_exhausted` may not assign a `let mut`
+-- declared outside it (see T08-best-answered.bc for the other arrangement).
+include map
+include rec
+
+effect Memo { fn lookup(n: i64) -> i32 + 1; fn store(n: i64, l: i32) }
+
+handler memo(mut s: Map[i64, i32] * i32): Memo = {
+  lookup(n) = {
+    let (m, h) = s;
+    let (m, o) = map_lookup(m, n);
+    match o { inl l -> s = (m, h + 1); inl l | inr u -> s = (m, h); inr () }
+  };
+  store(n, l) = { let (m, h) = s; let (m, o) = map_insert(m, n, l); s = (m, h); () }
+}
+
+fn collatz(n: i64) -> i64 = if n % i64[2] == i64[0] { n / i64[2] } else { i64[3] * n + i64[1] }
+
+fn chain(n: i64) -> i32 with Memo, Exhausted =
+  if n == i64[1] { 1 } else {
+    match lookup(n) {
+      inl l -> l
+    | inr u -> let l = 1 + chain(collatz(n)); store(n, l); l
+    }
+  }
+
+fn chain_top(n: i64) -> i32 with Memo = with on_exhausted(!{ u -> 0 }) { chain(n) }
+
+main -> (i32 * i32) * (i32 * i32) =
+  let cache = alloc((map_new[i64, i32](64), 0));
+  let mut bn = 0;
+  let mut bl = 0;
+  with memo(&mut cache) {
+    for n in 1..30 {
+      let l = chain_top(host[extend_s](n));
+      if l > bl { bn = n; bl = l } else { () }
+    } };
+  let (m, hits) = free(cache);
+  let k = map_len(&m);
+  ((bn, bl), (hits, k))
+```
+
+### `T09.bc`
+
+```bc
+-- T09: particles bouncing in [0, 100], updated in place through a `mut` lend of the world.
+-- Workarounds: a particle is a pair `(x, v)` (no records, #141); the per-particle update is one
+-- `modify` answering `(new, bounced)`, in place of field updates `p.x += …`.
+include io
+
+fn w0(i: i32) -> i32 * i32 = if i == 0 { (10, 7) } else if i == 1 { (50, 0 - 3) } else { (99, 11) }
+
+fn step<'a>(ps: array_mut 'a (i32 * i32)) -> i32 =
+  let mut b = 0;
+  for p in ps {
+    let r = modify p { e ->
+      let (x, v) = e;
+      let x = x + v;
+      if x < 0 || x > 100 { ((x - 2 * v, 0 - v), 1) } else { ((x, v), 0) } };
+    b = b + r
+  };
+  b
+
+main -> i32 =
+  let mut world = array_new[i32 * i32](3, w0);
+  let mut bounces = 0;
+  for _ in 0..50 { let k = step(&mut world); bounces = bounces + k };
+  for p in &world { let (x, v) = *p; print_dec(x); print_byte(b' ') };
+  print_byte(b'\n');
+  bounces
+```
+
+### `T10.bc`
+
+```bc
+-- T10: simultaneous updates. Workaround: no tuple assignment or `let (mut a, mut b)`; each
+-- update reads the old values into a pair first, then assigns each variable. The remainder is
+-- `checked_rem` with its error arm written: `p % q` in the `while` of `main` puts the rest of `main`
+-- under `main_div_error` (SPEC §39), refused: "the type of the type of the body `main_div_error`
+-- handles is not determined here: ascribe it"; as a `fn gcd … with Fail[DivError]` holding the
+-- `while`, `main` gets the div function's loop type in its result (type mismatch).
+main -> i32 * (i32 * (i32 * (i32 * i32))) =
+  let mut a = 0;
+  let mut b = 1;
+  for _ in 0..20 { let (na, nb) = (b, a + b); a = na; b = nb };
+  let mut x = 1;
+  let mut y = 2;
+  let mut z = 3;
+  for _ in 0..4 { let (nx, ny, nz) = (y, z, x); x = nx; y = ny; z = nz };
+  let mut p = 1071;
+  let mut q = 462;
+  while q != 0 {
+    let r = match checked_rem(p, q) { inl r -> r | inr e -> 0 };
+    p = q;
+    q = r
+  };
+  (a, (x, (y, (z, p))))
+```
+
+### `T11.bc`
+
+```bc
+-- T11: a configuration updated field by field from command-line style options, then frozen.
+-- Workarounds: the record is a nested pair `width * (height * (title * verbose))` (no records,
+-- #141), so each field update destructures and rebuilds it; the options are words of a literal
+-- cut out by index (as T06); `parse_i32`'s error is handled with `default` (the old width kept);
+-- the per-option update is a function threading the configuration.
+include textio
+include text
+include fail
+
+type Cfg = i32 * (i32 * (string * bool))
+
+fn slice<'t>(t: text 't, i: i32, k: i32) -> text 't =
+  match split_at(t, i) {
+    inl (h, r) -> array_forget['t, u8](h);
+      match split_at(r, k) { inl (w, rest) -> array_forget['t, u8](rest); w | inr r -> r }
+  | inr t -> t
+  }
+
+-- The option `a` applied: the configuration, and 1 when the option is unknown.
+fn apply<'t>(cfg: Cfg, a: text 't) -> Cfg * i32 =
+  let (width, (height, (title, verbose))) = cfg;
+  let (a, a1) = array_copy['t, u8] a;
+  let (a, a2) = array_copy['t, u8] a;
+  let n = len(a1);
+  let w = slice(a2, 0, 8);
+  let (a, a3) = array_copy['t, u8] a;
+  let t = slice(a3, 0, 8);
+  if eq_lit(w, "--width=") {
+    let v = slice(a, 8, n - 8);
+    let width = with default(width) { parse_i32(v) };
+    ((width, (height, (title, verbose))), 0)
+  } else if eq_lit(t, "--title=") {
+    let v = slice(a, 8, n - 8);
+    let title = to_string(v);
+    ((width, (height, (title, verbose))), 0)
+  } else if eq_lit(a, "-v") {
+    ((width, (height, (title, true))), 0)
+  } else { ((width, (height, (title, verbose))), 1) }
+
+fn parse<'t>(t: text 't, cfg: Cfg) -> Cfg * i32 =
+  let (t, u0) = array_copy['t, u8] t;
+  let n = len(u0);
+  let mut t = t;
+  let mut cfg = cfg;
+  let mut unknown = 0;
+  let mut start = 0;
+  for i in 0..n + 1 {
+    let (t2, w) = array_copy['t, u8] t;
+    t = t2;
+    let b = at(w, i, b' ');
+    let (t2, w) = array_copy['t, u8] t;
+    t = t2;
+    let word = slice(w, start, i - start);
+    let (c, k) = if b == b' ' && start < i { apply(cfg, word) }
+                 else { array_forget['t, u8](word); (cfg, 0) };
+    cfg = c;
+    unknown = unknown + k;
+    if b == b' ' { start = i + 1 } else { () }
+  };
+  array_forget['t, u8](t);
+  (cfg, unknown)
+
+main -> (i32 * (i32 * bool)) * (i32 * i32) =
+  let cfg0 = (40, (25, (string_of_lit("untitled"), false)));
+  let r = borrow imm "--width=80 --title=demo -v --frob" { t -> parse(t, cfg0) };
+  let (cfg, unknown) = r;
+  let (width, (height, (title, verbose))) = cfg;
+  let height = if verbose { height * 2 } else { height };
+  let cfg = (width, (height, (title, verbose)));
+  let (width, (height, (title, verbose))) = cfg;
+  let title = print_string(title);
+  print_lit("\n");
+  ((width, (height, verbose)), (width * height, unknown))
+```
+
+### `T12.bc`
+
+```bc
+-- T12: (1) a block that writes a captured variable, (2) a block passed down a recursion that
+-- accumulates, (3) a stored counter closure.
+-- Workarounds: (1) and (2) keep their state in an answering handler's state, lent from a cell
+-- (`with h(&mut c)`), and the blocks perform its operations (SPEC §32): a `let mut` written in a
+-- block is lost when the block only writes it (#586: `x * 10 + a` is 12) and refused when it also
+-- reads it ("`!thunk` promotes only over `!` types, but `x`, of type `i32`, is used inside").
+-- (3) is an `Aff` over its own cell (SPEC §22) called through `aff_call`; its close answers `1`,
+-- so the residual count is the last call's answer.
+include buf
+include rec
+include aff
+include io
+include slice
+
+effect Cell { fn put(v: i32) }
+handler cellh(mut s: i32): Cell = { put(v) = { s = v; () } }
+
+effect Visit { fn visit(k: i32) }
+handler collect(mut s: i32 * buf i32): Visit = {
+  visit(k) = { let (sum, b) = s; let (b, u) = push(b, k); s = (sum + k, b); () }
+}
+
+fn ap(f: !(i32 => i32)) -> i32 = f(1)
+
+fn walk(lo: i32, hi: i32, f: !(i32 => 1)) -> 1 with Exhausted =
+  if lo < hi { let m = (lo + hi) / 2; walk(lo, m, f); f(m); walk(m + 1, hi, f) } else { () }
+
+-- A counter from `start` by `step`: each call answers the new count.
+fn aff_counter<'c>(start: i32, step: i32) -> box 'c Aff[1, i32]<'c> =
+  aff_new_boxed[ref (i32 * i32), 1, i32]['c](alloc((start, step)), !thunkv fun (s : ref (i32 * i32)) ->
+    < fun (a : 1) ->
+        cx <- return (swap[i32 * i32, i32 * i32] s (0, 0));
+        let (c, x) = cx;
+        let (n, k) = x;
+        cu <- return (swap[i32 * i32, i32 * i32] c (n + k, k));
+        let (c1, u) = cu;
+        return (n + k, c1),
+      n <- return (free[i32 * i32] s); return () >)
+
+main -> i32 * (i32 * (i32 * i32)) =
+  -- (1)
+  let xc = alloc(1);
+  let a = with cellh(&mut xc) { ap(!{ u -> put(5); u + 1 }) };
+  let x = free(xc);
+  -- (2)
+  let sc = alloc((0, buf_new[i32](8)));
+  with collect(&mut sc) { with on_exhausted(!{ u -> () }) { walk(0, 6, !{ k -> visit(k) }) } };
+  let (sum, seen) = free(sc);
+  let (arr, k) = seen;
+  for i in 0..k { let e = at(&arr, i, 0); print_dec(e); print_byte(b' ') };
+  print_byte(b'\n');
+  -- (3)
+  let tick = aff_counter(0, 3);
+  let (t1, tick) = aff_call(tick, ());
+  let (t2, tick) = aff_call(tick, ());
+  aff_close(tick);
+  (x * 10 + a, (sum, (t1 + t2, t2)))
+```
+
+### `T13.bc`
+
+```bc
+-- T13, the Rust shape: `main` owns the accounts and lends each `mut` to a scoped teller task
+-- (`spawn_in`, SPEC §32), which reads its transactions from an argument across `await`s.
+-- `c2` and `d` are handed back by hand out of the outer block (#495).
+include async
+
+fn teller<'a>(a: mut 'a i32, txs: List[i32], n: i32) -> i32 with Async =
+  let mut rest = txs;
+  let mut r = 0;
+  for _ in 0..n {
+    match unroll rest {
+      inl u -> rest = nil[i32]()
+    | inr (t, more) ->
+        rest = more;
+        let ok = modify a { b -> if b + t < 0 { (b, false) } else { (b + t, true) } };
+        if ok { () } else { r = r + 1 };
+        await()
+    }
+  };
+  r
+
+main -> List[i32] * (i32 * i32) =
+  let c1 = alloc(100);
+  let c2 = alloc(50);
+  let d = alloc(());
+  let (c2, (d, v)) = borrow mut c1 { 'r, m1 -> let r = borrow mut c2 { 's, m2 ->
+    let v = borrow mut d { 'd, e ->
+      let q = queue_in[i32]();
+      let q = push_in(q, with spawn_in { teller(m1, cons(50, cons(0 - 20, nil())), 2) });
+      let q = push_in(q, with spawn_in { teller(m2, cons(0 - 30, cons(0 - 40, nil())), 2) });
+      with on_exhausted(!{ u -> nil() }) { run_in(q, 4) } };
+    (d, v) }; (c2, r) };
+  let _ = free(d);
+  (v, (free(c1), free(c2)))
+```
+
+### `T14.bc`
+
+```bc
+-- T14: a random-number service and a logger as answering handlers with state, and a buffer
+-- filled through `&mut` in a call that also uses both capabilities.
+-- Workaround: the lend is a `borrow mut b` block with the handlers installed inside it, and the
+-- RNG handler installed again on its cell for the read after: `fill(&mut b)` inside the `with`s
+-- is refused, "a place is lent (`&mut x`) in the arguments of `fill`, which also threads a
+-- capability: lend it in a call of its own" (SPEC §18; T14-lend-refused.bc), and a borrow block
+-- inside the `with`s is refused (T14-borrow-block.bc). T14-owned.bc passes the buffer owned.
+include buf
+include slice
+include io
+
+effect Rng { fn next() -> i32 }
+handler lcg(mut s: i32): Rng = {
+  next() = { s = host[add32](host[mul32](s, 1103515245), 12345); host[shr_u32](s, 16) % 100 }
+}
+
+effect Logger { fn log(x: i32) }
+handler logger(mut l: i32 * i32): Logger = { log(x) = { let (n, t) = l; l = (n + 1, t + x); () } }
+
+fn fill<'a>(v: array_mut 'a i32) -> 1 with Rng, Logger =
+  for p in v { let x = next(); modify p { e -> x }; if x > 50 { log(x) } else { () } }
+
+main -> i32 * (i32 * i32) =
+  let lg = alloc((0, 0));
+  let sc = alloc(42);
+  let mut b = array_new[i32](6, !{ i -> 0 });
+  borrow mut b { v -> with lcg(&mut sc) { with logger(&mut lg) { fill(v) } } };
+  let again = with lcg(&mut sc) { next() };
+  let (n, sum) = free(lg);
+  let s = free(sc);
+  for p in &b { print_dec(*p); print_byte(b' ') };
+  print_byte(b'\n');
+  (again, (n, sum))
+```
+
+### `T12-586-write-lost.bc`
+
+```bc
+-- RUNS but WRONG (#586): prints 12, not 52.
+fn ap(f: !(i32 => i32)) -> i32 = f(1)
+main -> i32 =
+  let mut x = 1;
+  let a = ap(!{ u -> x = 5; u + 1 });
+  x * 10 + a
+```
+
+### `T12-586-read-refused.bc`
+
+```bc
+-- REFUSED (#586 read+write form).
+fn ap(f: !(i32 => i32)) -> i32 = f(1)
+main -> i32 =
+  let mut x = 1;
+  let a = ap(!{ u -> x = x + 5; u + 1 });
+  x * 10 + a
+```
+
+### `T13-txs-outside.bc`
+
+```bc
+-- REFUSED attempt (kept for its message).
+-- T13, the doc's shape: the teller's borrow block reads `txs`, a variable outside it, across `await`.
+include async
+include fail
+
+fn teller(acct: i32, txs: List[i32]) -> i32 * i32 with Async =
+  let cell = alloc(acct);
+  let refused = borrow mut cell { a ->
+    let mut r = 0;
+    let mut rest = txs;
+    for _ in 0..2 {
+      match unroll rest {
+        inl u -> rest = nil[i32]()
+      | inr (t, more) ->
+          rest = more;
+          let ok = modify a { b -> if b + t < 0 { (b, false) } else { (b + t, true) } };
+          if ok { () } else { r = r + 1 };
+          await()
+      }
+    };
+    r };
+  (free(cell), refused)
+
+main -> List[i32 * i32] =
+  let q = queue[i32 * i32]();
+  let q = push(q, with spawn { teller(100, cons(50, cons(0 - 20, nil()))) });
+  let q = push(q, with spawn { teller(50, cons(0 - 30, cons(0 - 40, nil()))) });
+  run_until_empty(q)
+```
+
+### `T14-lend-refused.bc`
+
+```bc
+-- REFUSED attempt (kept for its message).
+-- T14: a random-number service and a logger as answering handlers with state, and a buffer
+-- filled through `&mut` in a call that also uses both capabilities.
+include buf
+include slice
+include io
+
+effect Rng { fn next() -> i32 }
+handler lcg(mut s: i32): Rng = {
+  next() = { s = host[add32](host[mul32](s, 1103515245), 12345); host[shr_u32](s, 16) % 100 }
+}
+
+effect Logger { fn log(x: i32) }
+handler logger(mut l: i32 * i32): Logger = { log(x) = { let (n, t) = l; l = (n + 1, t + x); () } }
+
+fn fill(buf: array i32) -> array i32 with Rng, Logger =
+  let mut buf = buf;
+  for i in 0..6 { let x = next(); buf = array_set(buf, i, x); if x > 50 { log(x) } else { () } };
+  buf
+
+main -> i32 * (i32 * i32) =
+  let lg = alloc((0, 0));
+  let sc = alloc(42);
+  let mut b = array_new[i32](6, !{ i -> 0 });
+  let again = with lcg(&mut sc) {
+    with logger(&mut lg) { fill(&mut b) };
+    next() };
+  let (n, sum) = free(lg);
+  let s = free(sc);
+  for p in &b { print_dec(*p); print_byte(b' ') };
+  print_byte(b'\n');
+  (again, (n, sum))
+```
+
+### `T14-borrow-block.bc`
+
+```bc
+-- REFUSED attempt (kept for its message).
+-- T14: a random-number service and a logger as answering handlers with state, and a buffer
+-- filled through `&mut` in a call that also uses both capabilities.
+include buf
+include slice
+include io
+
+effect Rng { fn next() -> i32 }
+handler lcg(mut s: i32): Rng = {
+  next() = { s = host[add32](host[mul32](s, 1103515245), 12345); host[shr_u32](s, 16) % 100 }
+}
+
+effect Logger { fn log(x: i32) }
+handler logger(mut l: i32 * i32): Logger = { log(x) = { let (n, t) = l; l = (n + 1, t + x); () } }
+
+fn fill<'a>(v: array_mut 'a i32) -> 1 with Rng, Logger =
+  for p in v { let x = next(); modify p { e -> x }; if x > 50 { log(x) } else { () } }
+
+main -> i32 * (i32 * i32) =
+  let lg = alloc((0, 0));
+  let sc = alloc(42);
+  let mut b = array_new[i32](6, !{ i -> 0 });
+  let again = with lcg(&mut sc) {
+    with logger(&mut lg) { borrow mut b { v -> fill(v) } };
+    next() };
+  let (n, sum) = free(lg);
+  let s = free(sc);
+  for p in &b { print_dec(*p); print_byte(b' ') };
+  print_byte(b'\n');
+  (again, (n, sum))
+```
