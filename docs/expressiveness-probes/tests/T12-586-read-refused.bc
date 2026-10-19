@@ -1,0 +1,6 @@
+-- REFUSED (#586 read+write form).
+fn ap(f: !(i32 => i32)) -> i32 = f(1)
+main -> i32 =
+  let mut x = 1;
+  let a = ap(!{ u -> x = x + 5; u + 1 });
+  x * 10 + a

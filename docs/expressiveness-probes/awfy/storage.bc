@@ -1,0 +1,30 @@
+-- AWFY Storage: a tree of arrays built recursively (depth 7, four children a level, a leaf an
+-- array of 1..10 elements sized by AWFY's Random); counts the nodes made, 5461.
+-- Workaround: the four children are a tuple, `mu X. array i32 + (X * (X * (X * X)))`. With the
+-- children in an array (`mu X. array i32 + array X`, storage_array.bc) the tree has no destructor
+-- (#182) and cannot be consumed by hand (the recursion has to run inside array_free's consumer).
+include rec
+include buf
+include slice
+
+type S = mu X. array i32 + (X * (X * (X * X)))
+
+fn next(seed: i32) -> i32 = host[and32](seed * 1309 + 13849, 65535)
+
+fn build(depth: i32, seed: i32, count: i32) -> (S * i32) * i32 with Exhausted =
+  let count = count + 1;
+  if depth == 1 {
+    let s = next(seed);
+    ((roll inl array_new[i32](s % 10 + 1, !{ i -> 0 }), s), count)
+  } else {
+    let ((a, s), c) = build(depth - 1, seed, count);
+    let ((b, s), c) = build(depth - 1, s, c);
+    let ((d, s), c) = build(depth - 1, s, c);
+    let ((e, s), c) = build(depth - 1, s, c);
+    ((roll inr (a, (b, (d, e))), s), c)
+  }
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let ((t, s), c) = build(7, 74755, 0);
+  c
+}

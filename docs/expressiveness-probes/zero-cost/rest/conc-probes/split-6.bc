@@ -1,0 +1,37 @@
+-- Parallel-map shape: an owned array split into two disjoint `mut` halves (split_at_mut), each
+-- half squared in place by its own task, awaiting after each element; the scheduler interleaves
+-- them (cooperative, one thread). Then the owner sums the array.
+include async
+include slice
+include buf
+
+fn square_half<'a>(v: array_mut 'a i32) -> i32 with Async =
+  let (v, n) = len_mut(v);
+  let mut w = v;
+  for i in 0..n {
+    let (w2, x) = peek(w, i, 0);
+    w = set(w2, i, x * x);
+    await()
+  };
+  discard_mut(w);
+  n
+
+main -> List[i32] * i32 =
+  let a = array_new[i32] (6, !{ i -> i + 1 });
+  let d = alloc(());
+  let mut arr = a;
+  let (d, r) = borrow mut arr { 'r, v ->
+    let r = borrow mut d { 'd, e ->
+      match split_at_mut(v, 3) {
+        inl (lo, hi) ->
+          let q = queue_in[i32]();
+          let q = push_in(q, with spawn_in { square_half(lo) });
+          let q = push_in(q, with spawn_in { square_half(hi) });
+          with on_exhausted(!{ u -> nil[i32]() }) { run_in(q, 100) }
+      | inr v -> discard_mut(v); nil[i32]()
+      } };
+    (d, r) };
+  let _ = free(d);
+  let mut s = 0;
+  for i in 0..6 { let x = at(&arr, i, 0); s = s + x };
+  (r, s)

@@ -1,0 +1,7 @@
+include textio
+-- lib/buf.bc's heap at an owned element type.
+main -> i32 =
+  let h = box buf[i32 * string](4);
+  let h = heap_push(h, 3, string_of_lit("c"));
+  print_dec(1);
+  0

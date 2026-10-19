@@ -1,0 +1,70 @@
+-- fannkuch-redux: every permutation of 0..n-1, each flipped (prefix reversal up to perm[0])
+-- until perm[0] = 0; prints the checksum and the max flip count.
+include textio
+include io
+include slice
+
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+fn fact(n: i32) -> i32 =
+  let mut f = 1;
+  for i in 1..n + 1 { f = f * i };
+  f
+
+-- The first `k + 1` elements reversed, through a mutable view.
+fn flip(p: array i32, k: i32) -> array i32 =
+  let mut p = p;
+  borrow mut p { v ->
+    match split_at_mut(v, k + 1) {
+      inl (h, t) -> discard_mut(reverse(h)); discard_mut(t)
+    | inr v -> discard_mut(v)
+    } };
+  p
+
+main -> i32 =
+  let n = arg_i32(7);
+  let nperm = fact(n);
+  let mut perm1 = array_new[i32](n, !{ i -> i });
+  let mut count = array_new[i32](n, !{ i -> 0 });
+  let mut perm = array_new[i32](n, !{ i -> 0 });
+  let mut r = n;
+  let mut maxflips = 0;
+  let mut checksum = 0;
+  for pc in 0..nperm {
+    for _ in 0..n { if r == 1 { break } else { count = array_set(count, r - 1, r); r = r - 1 } };
+    for i in 0..n { let x = at(&perm1, i, 0); perm = array_set(perm, i, x) };
+    let mut flips = 0;
+    let mut k = at(&perm, 0, 0);
+    for _ in 0..nperm {
+      if k == 0 { break } else {
+        perm = flip(perm, k);
+        flips = flips + 1;
+        k = at(&perm, 0, 0)
+      }
+    };
+    if maxflips < flips { maxflips = flips } else { () };
+    if host[and32](pc, 1) == 0 { checksum = checksum + flips } else { checksum = checksum - flips };
+    -- next permutation
+    for _ in 0..n {
+      if r == n { break } else {
+        let p0 = at(&perm1, 0, 0);
+        for i in 0..r { let x = at(&perm1, i + 1, 0); perm1 = array_set(perm1, i, x) };
+        perm1 = array_set(perm1, r, p0);
+        let c0 = at(&count, r, 0);
+        let c = c0 - 1;
+        count = array_set(count, r, c);
+        if 0 < c { break } else { r = r + 1 }
+      }
+    }
+  };
+  print_dec(checksum);
+  print_byte(b'\n');
+  print_lit("Pfannkuchen(");
+  print_dec(n);
+  print_lit(") = ");
+  print_dec(maxflips);
+  print_byte(b'\n');
+  0

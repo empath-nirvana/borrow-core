@@ -1,0 +1,25 @@
+-- T07: a turnstile driven by the bytes of a literal; the arms update counters.
+-- Workarounds: states are `bool`, Open = true (no named variants, #141; `==` is integer-only); the `match` on a pair is nested `if`s;
+-- the events are an owned string iterated by `&evs` (a `for` over the view of a lent literal is
+-- refused: "the iterator of this `for` holds the borrow of `v`", SPEC §14); the next state is let-bound and then assigned (`st = if …` does not parse).
+include text
+
+fn locked() -> bool = false
+fn open() -> bool = true
+
+main -> bool * (i32 * (i32 * i32)) =
+  let mut st = locked();
+  let mut passed = 0;
+  let mut rejected = 0;
+  let mut wasted = 0;
+  let (evs, k) = string_of_lit("cpppccpcp");
+  for p in &evs {
+      let e = *p;
+      let next = if st {
+        if e == b'p' { passed = passed + 1; locked() } else { wasted = wasted + 1; open() }
+      } else {
+        if e == b'c' { open() } else { rejected = rejected + 1; locked() }
+      };
+      st = next
+  };
+  (st, (passed, (rejected, wasted)))

@@ -1,0 +1,76 @@
+-- T06: word frequencies in first-seen order, with `lib/map.bc` keyed by views of the text.
+-- Workarounds: words are cut out by index (`split_at`; there is no word splitter yielding views),
+-- and the view is copied (`array_copy`) for each use (#142); the upsert is two probes
+-- (`map_lookup` then `map_insert`); each conditional push threads its buffer by hand (a lend
+-- `push(&mut out, …)` in an `if` arm that heads `;` is refused, SPEC §11), and the per-word
+-- update is a function threading the map and buffer (lends in a nested `if` inside the `for`:
+-- "`hy0_freq` is used twice here", #502); the first-seen order is a buffer of views read with `view_at`.
+include textio
+include map
+include text
+
+fn slice<'t>(t: text 't, i: i32, k: i32) -> text 't =
+  match split_at(t, i) {
+    inl (h, r) -> array_forget['t, u8](h);
+      match split_at(r, k) { inl (w, rest) -> array_forget['t, u8](rest); w | inr r -> r }
+  | inr t -> t
+  }
+
+-- The word counted once more, and appended to `order` when it is new.
+fn bump<'t>(freq: Map[text 't, i32], order: buf (text 't), word: text 't)
+    -> Map[text 't, i32] * buf (text 't) =
+  let mut freq = freq;
+  let mut order = order;
+  let (word, k) = array_copy['t, u8] word;
+  let old = map_lookup(&freq, k);
+  let c = match old { inl c -> c | inr u -> 0 };
+  let (word, k2) = array_copy['t, u8] word;
+  let (o, u) = if c == 0 { push(order, k2) } else { array_forget['t, u8](k2); (order, ()) };
+  let prev = map_insert(&mut freq, word, c + 1);
+  (freq, o)
+
+-- (`u0`: named `u`, the first view clashed with the `inr u` of the last loop: "`u` is used
+-- twice here, and its type `array_imm 't u8` is not persistent"; not minimised.)
+fn freq<'t>(t: text 't) -> string =
+  let (t, u0) = array_copy['t, u8] t;
+  let n = len(u0);
+  let mut t = t;
+  let mut freq = map_new[text 't, i32](16);
+  let mut order = buf_new[text 't](8);
+  let mut start = 0;
+  for i in 0..n + 1 {
+    let (t2, w) = array_copy['t, u8] t;
+    t = t2;
+    let b = at(w, i, b' ');
+    let (t2, w) = array_copy['t, u8] t;
+    t = t2;
+    let word = slice(w, start, i - start);
+    let (f, o) = if b == b' ' && start < i { bump(freq, order, word) }
+                 else { array_forget['t, u8](word); (freq, order) };
+    freq = f;
+    order = o;
+    if b == b' ' { start = i + 1 } else { () }
+  };
+  array_forget['t, u8](t);
+  let (order, k) = len_of(order);
+  let mut order = order;
+  let mut out = string_new(32);
+  for i in 0..k {
+    let (o2, w) = view_at(order, i);
+    order = o2;
+    let o = if i > 0 { let (o, u) = push_byte(out, b','); o } else { out };
+    out = o;
+    let (w, w2) = array_copy['t, u8] w;
+    push_str(&mut out, w2);
+    push_byte(&mut out, b':');
+    let c = map_lookup(&freq, w);
+    let c = match c { inl c -> c | inr u -> 0 };
+    push_dec(&mut out, c)
+  };
+  out
+
+main -> i32 =
+  let out = borrow imm "the cat and the hat and the bat" { t -> freq(t) };
+  let out = print_string(out);
+  print_lit("\n");
+  0

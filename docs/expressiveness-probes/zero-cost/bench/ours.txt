@@ -1,0 +1,24 @@
+sum [1000 10] (1s): allocs 4 indirect 0 copies 0 loads 11064 stores 1040 bounds 10048 
+prefix [1000 10] (0s): allocs 4 indirect 0 copies 0 loads 11077 stores 11040 bounds 20059 
+sieve [10000 2] (2s): allocs 5 indirect 0 copies 0 loads 74215 stores 53998 bounds 54202 
+sieve-for [10000 2] (1s): allocs 5 indirect 0 copies 0 loads 74216 stores 53999 bounds 54202 
+matmul [30] (1s): allocs 5 indirect 0 copies 0 loads 58528 stores 3620 bounds 55822 
+quicksort [2000 2] (0s): allocs 5 indirect 0 copies 0 loads 175033 stores 167015 bounds 171022 
+chain-for [10000] (1s): allocs 2 indirect 0 copies 0 loads 45 stores 23 bounds 28 
+chain-yield [10000] (0s): allocs 2 indirect 0 copies 0 loads 45 stores 23 bounds 28 
+chain-gen [10000] (3s): allocs 2 indirect 0 copies 0 loads 45 stores 23 bounds 28 
+sort-generic [2000 2] (1s): allocs 5 indirect 0 copies 0 loads 348763 stores 332743 bounds 170398 
+parse [<parse.txt] (4s): allocs 7 indirect 0 copies 0 loads 1184191 stores 1036290 bounds 1184190 
+binary-trees [8] (1s): allocs 25776 indirect 0 copies 0 loads 103308 stores 103115 bounds 20 
+n-body [100] (0s): allocs 3 indirect 0 copies 0 loads 24795 stores 7595 bounds 24732 
+mandelbrot [50] (1s): allocs 2 indirect 0 copies 0 loads 31 stores 21 bounds 22 
+spectral-norm [50] (1s): allocs 5 indirect 0 copies 0 loads 102288 stores 2171 bounds 102122 
+wordcount [<wc.txt] (6s): allocs 12 indirect 0 copies 0 loads 1696540 stores 744514 bounds 1235281 
+gen-tree [1024 2] (1s): allocs 3 indirect 0 copies 0 loads 61 stores 39 bounds 46 
+gen-tree-dyn [1024 2] (0s): allocs 3 indirect 0 copies 0 loads 61 stores 39 bounds 46 
+gen-tree-cb [1024 2] (0s): allocs 3 indirect 0 copies 0 loads 61 stores 39 bounds 46 
+async-tree [1024 4] (1s): allocs 12315 indirect 4100 copies 0 loads 463641 stores 500511 bounds 46 
+raise-small [100 2000] (2s): allocs 3 indirect 0 copies 0 loads 78 stores 41 bounds 50 
+raise-large [100 2000] (2s): allocs 3 indirect 0 copies 0 loads 78 stores 41 bounds 50 
+handlers-di [1000 2 0] (0s): allocs 6 indirect 0 copies 0 loads 2345 stores 2308 bounds 66 
+handlers-di-generic [1000 2 1] (0s): allocs 6 indirect 0 copies 0 loads 2358 stores 2308 bounds 66 

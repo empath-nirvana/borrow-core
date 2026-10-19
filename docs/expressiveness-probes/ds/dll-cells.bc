@@ -1,0 +1,24 @@
+-- A doubly linked list in the natural form: each node a heap cell holding its value and links
+-- to its previous and next nodes. Two nodes `a <-> b`: `b`'s `prev` is `a`, and `a`'s `next` is
+-- `b`, so each cell is reachable from two places.
+include textio
+
+-- A node: value, prev, next; a link is `inl ()` (none) or a cell.
+type Node = mu X. i32 * ((1 + ref X) * (1 + ref X))
+
+fn none() -> 1 + ref Node = inl ()
+
+-- The node's `next` set to `b`; its value. (The old `next` is dropped.)
+fn set_next<'a>(m: mut 'a Node, b: ref Node) -> i32 =
+  modify m { v -> let (x, (p, q)) = unroll v; let w : Node = roll (x, (p, inr b)); (w, x) }
+
+main -> i32 =
+  let a0 : Node = roll (1, (none(), none()));
+  let a = alloc(a0);
+  -- b.prev = a
+  let b0 : Node = roll (2, (inr a, none()));
+  let b = alloc(b0);
+  -- a.next = b: `a` has moved into `b`
+  let n = set_next(&mut a, b);
+  print_dec(n);
+  0

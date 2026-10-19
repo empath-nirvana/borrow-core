@@ -1,0 +1,13 @@
+include rec
+include buf
+include slice
+type Pile = mu X. 1 + (i32 * X)
+main -> i32 =
+  let mut a = array_new[Pile](3, !{ i -> roll inl () });
+  for k in 0..16 {
+    let (a1, o) = array_replace[Pile](a, 0, roll inl ());
+    let x = match o { inl x -> x | inr x -> x };
+    let (a2, o2) = array_replace[Pile](a1, 0, roll inr (k, x));
+    a = a2
+  };
+  0

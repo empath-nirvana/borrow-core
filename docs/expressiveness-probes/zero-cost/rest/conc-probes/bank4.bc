@@ -1,0 +1,62 @@
+-- A bank simulation in which each account carries its inbox of pending transactions. A teller
+-- task owns an account and lends it `mut` for the whole of its work, across its `await`s (R1,
+-- SPEC §29): through the borrow it takes the next transaction from the inbox, applies it to the
+-- balance, and awaits. A withdrawal that would overdraw raises `Fail[i32]`, handled inside the
+-- borrow; the teller counts the refusals. The tellers run under `lib/async.bc`'s scheduler,
+-- interleaved.
+--
+-- The borrow block's body sees only its view (R1's premise): what the teller works on is inside
+-- the account, not in other variables of `teller`. `async-bank.bc` (pending) is the program with
+-- the transactions passed to `teller` as an argument.
+--
+-- Exercises: a `mut` borrow held across suspensions inside a task of `spawn`, `modify` through
+-- it, `Fail` handled inside the borrow block, a counted loop at the row `Async` inside the
+-- block, generic lists.
+--
+-- Answer: `inr ((i32[130], i32[0]), inr ((i32[20], i32[1]), inl ()))`: teller 1 deposits 50 and
+-- withdraws 20 from 100; teller 2 withdraws 30 from 50 and is refused its withdrawal of 40.
+-- `assurance: PinLaw (R1 at …)`; `live 0`. A teller whose borrow lost a write across an `await`
+-- gives another balance.
+
+include async
+include fail
+
+-- An account: its balance, the number of transactions in its inbox, and the inbox (a deposit is
+-- positive, a withdrawal negative).
+type Account = i32 * (i32 * List[i32])
+
+fn apply(balance: i32, t: i32) -> i32 with Fail[i32] =
+  if balance + t < 0 { raise(t) } else { balance + t }
+
+-- One transaction from the inbox applied: whether it was refused.
+fn step(acct: Account) -> Account * i32 =
+  let (balance, (n, inbox)) = acct;
+  match unroll inbox {
+    inl u -> ((balance, (n, nil())), 0)
+  | inr (t, rest) ->
+      match with to_result { apply(balance, t) } {
+        inl b -> ((b, (n - 1, rest)), 0)
+      | inr e -> ((balance, (n - 1, rest)), 1)
+      }
+  }
+
+fn teller(acct: Account) -> i32 * i32 with Async =
+  let cell = alloc(acct);
+  let refused = borrow mut cell { a ->
+    let n = modify a { s -> let (b, (k, xs)) = s; ((b, (k, xs)), k) };
+    let mut refused = 0;
+    for _ in 0..n {
+      let r = modify a { s -> step(s) };
+      refused = refused + r;
+      await()
+    };
+    refused
+  };
+  let (balance, rest) = free(cell);
+  (balance, refused)
+
+main -> List[i32 * i32] =
+  let q = queue[i32 * i32]();
+  let q = push(q, with spawn { teller((100, (4, cons(50, cons(0 - 20, cons(1, cons(1, nil()))))))) });
+  let q = push(q, with spawn { teller((50, (4, cons(0 - 30, cons(0 - 40, cons(1, cons(1, nil()))))))) });
+  run_until_empty(q)

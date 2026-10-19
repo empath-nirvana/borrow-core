@@ -1,0 +1,14 @@
+-- Host functions stored in an array, without an `if` choosing the function.
+include slice
+include buf
+fn double(n: i32) -> i32 = n + n
+fn succ(n: i32) -> i32 = n + 1
+main -> i32 =
+  let t = array_new[!(i32 => i32)] (2, !{ _ -> double });
+  let (t, f) = array_replace[!(i32 => i32)] (t, 0, succ);
+  let r = match f { inl g -> g(20) | inr g -> 0 };
+  let (t, f2) = array_replace[!(i32 => i32)] (t, 1, succ);
+  let s = match f2 { inl g -> g(1) | inr g -> 0 };
+  let (t, f3) = array_replace[!(i32 => i32)] (t, 1, succ);
+  let s3 = match f3 { inl g -> g(1) | inr g -> 0 };
+  r + s + s3

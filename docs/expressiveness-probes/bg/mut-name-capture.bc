@@ -1,0 +1,17 @@
+include textio
+-- A callee that rebinds its parameter `tbl` as `let mut tbl = tbl`.
+fn f(o: string, tbl: array u8) -> string * array u8 =
+  let mut tbl = tbl;
+  (o, tbl)
+main -> i32 =
+  let mut o = string_new(4);
+  let mut tbl = array_new[u8](4, !{ i -> 0 });
+  for i in 0..3 {
+    if i == 1 {
+      let (o2, t2) = f(o, tbl);
+      o = o2; tbl = t2;
+      ()
+    } else { () };
+    ()
+  };
+  print_dec(1); 0

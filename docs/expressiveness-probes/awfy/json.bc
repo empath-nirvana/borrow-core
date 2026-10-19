@@ -1,0 +1,161 @@
+-- AWFY Json (in miniature): a recursive-descent parser of JSON text into a tree of owned values,
+-- objects as lists of (key, value) members, arrays as lists; a lookup of an object's member by
+-- key; and printing the tree back as text.
+--
+-- One `mu` holds the values and the lists (nested `mu` must be closed): a value is null, a bool,
+-- a number (an i32), a string, an array (its element list), or an object (its member list); a
+-- list is nil, a cons of a value and a list, or a member (key, value, rest).
+-- Answer: the printed tree, then (number of values, the number at key "b"'s second element).
+
+include rec
+include fail
+include textio
+include slice
+include buf
+
+type J = mu X. 1 + (bool + (i32 + (string + (X + (X + (1 + ((X * X) + (string * (X * X)))))))))
+
+fn jnull() -> J = roll inl ()
+fn jbool(b: bool) -> J = roll inr (inl b)
+fn jnum(n: i32) -> J = roll inr (inr (inl n))
+fn jstr(s: string) -> J = roll inr (inr (inr (inl s)))
+fn jarr(l: J) -> J = roll inr (inr (inr (inr (inl l))))
+fn jobj(l: J) -> J = roll inr (inr (inr (inr (inr (inl l)))))
+fn jnil() -> J = roll inr (inr (inr (inr (inr (inr (inl ()))))))
+fn jcons(v: J, l: J) -> J = roll inr (inr (inr (inr (inr (inr (inr (inl (v, l))))))))
+fn jmem(k: string, v: J, l: J) -> J = roll inr (inr (inr (inr (inr (inr (inr (inr (k, (v, l)))))))))
+
+-- The byte at `i`, or 0 past the end.
+fn byte(s: string, i: i32) -> string * u8 = let (a, n) = s; let mut a = a; let b = at(&a, i, u8[0]); ((a, n), b)
+
+fn skip_ws(s: string, i: i32) -> string * i32 =
+  let (a, n) = s;
+  let mut a = a;
+  let mut i = i;
+  for k in 0..n {
+    let b = at(&a, i, u8[0]);
+    if b == b' ' || b == b'\n' || b == b'\t' || b == b'\r' { i = i + 1 } else { break }
+  };
+  ((a, n), i)
+
+fn parse_str(s: string, i: i32) -> (string * string) * i32 =
+  let (a, n) = s;
+  let mut a = a;
+  let mut out = string_new(8);
+  let mut i = i + 1;
+  for k in 0..n {
+    let b = at(&a, i, u8[34]);
+    i = i + 1;
+    if b == u8[34] { break } else { let (o, _) = push_byte(out, b); out = o }
+  };
+  (((a, n), out), i)
+
+fn parse_num(s: string, i: i32) -> (string * i32) * i32 =
+  let (a, n) = s;
+  let mut a = a;
+  let mut i = i;
+  let mut v = 0;
+  let mut neg = false;
+  let b0 = at(&a, i, u8[0]);
+  if b0 == b'-' { neg = true; i = i + 1 } else { () };
+  for k in 0..n {
+    let b = at(&a, i, u8[0]);
+    if b'0' <= b && b <= b'9' { v = v * 10 + to_i32(b) - 48; i = i + 1 } else { break }
+  };
+  let r = if neg { 0 - v } else { v };
+  (((a, n), r), i)
+
+fn value(s: string, i: i32) -> (string * J) * i32 with Fail[i32], Exhausted =
+  let (s, i) = skip_ws(s, i);
+  let (s, b) = byte(s, i);
+  if b == b'{' { let ((s, l), i) = members(s, i + 1); ((s, jobj(l)), i) } else {
+  if b == b'[' { let ((s, l), i) = elements(s, i + 1); ((s, jarr(l)), i) } else {
+  if b == u8[34] { let ((s, t), i) = parse_str(s, i); ((s, jstr(t)), i) } else {
+  if b == b't' { ((s, jbool(true)), i + 4) } else {
+  if b == b'f' { ((s, jbool(false)), i + 5) } else {
+  if b == b'n' { ((s, jnull()), i + 4) } else {
+  if b == b'-' || (b'0' <= b && b <= b'9') { let ((s, v), i) = parse_num(s, i); ((s, jnum(v)), i) } else {
+  raise(i) } } } } } } }
+
+-- The elements of an array after its `[`, through its `]`.
+fn elements(s: string, i: i32) -> (string * J) * i32 with Fail[i32], Exhausted =
+  let (s, i) = skip_ws(s, i);
+  let (s, b) = byte(s, i);
+  if b == b']' { ((s, jnil()), i + 1) } else {
+    let ((s, v), i) = value(s, i);
+    let (s, i) = skip_ws(s, i);
+    let (s, c) = byte(s, i);
+    if c == b',' { let ((s, rest), i) = elements(s, i + 1); ((s, jcons(v, rest)), i) } else {
+      if c == b']' { ((s, jcons(v, jnil())), i + 1) } else { raise(i) } }
+  }
+
+fn members(s: string, i: i32) -> (string * J) * i32 with Fail[i32], Exhausted =
+  let (s, i) = skip_ws(s, i);
+  let (s, b) = byte(s, i);
+  if b == b'}' { ((s, jnil()), i + 1) } else {
+    let ((s, k), i) = parse_str(s, i);
+    let (s, i) = skip_ws(s, i);
+    let ((s, v), i) = value(s, i + 1);
+    let (s, i) = skip_ws(s, i);
+    let (s, c) = byte(s, i);
+    if c == b',' { let ((s, rest), i) = members(s, i + 1); ((s, jmem(k, v, rest)), i) } else {
+      if c == b'}' { ((s, jmem(k, v, jnil())), i + 1) } else { raise(i) } }
+  }
+
+-- The tree printed onto `o`, and the number of values in it.
+fn print_j(o: string, j: J) -> string * i32 with Exhausted =
+  match unroll j {
+    inl u -> let (o, _) = push_lit(o, "null"); (o, 1)
+  | inr j1 -> match j1 {
+    inl b -> let (o, _) = if b { push_lit(o, "true") } else { push_lit(o, "false") }; (o, 1)
+  | inr j2 -> match j2 {
+    inl n -> let (o, _) = push_dec(o, n); (o, 1)
+  | inr j3 -> match j3 {
+    inl t -> let (o, _) = push_byte(o, u8[34]); let (o, _) = borrow imm t { v -> push_str(o, v) }; let (o, _) = push_byte(o, u8[34]); (o, 1)
+  | inr j4 -> match j4 {
+    inl l -> let (o, _) = push_byte(o, b'['); let (o, c) = print_list(o, l, true); let (o, _) = push_byte(o, b']'); (o, c + 1)
+  | inr j5 -> match j5 {
+    inl l -> let (o, _) = push_byte(o, b'{'); let (o, c) = print_list(o, l, true); let (o, _) = push_byte(o, b'}'); (o, c + 1)
+  | inr j6 -> (o, 0) } } } } } }
+
+fn print_list(o: string, l: J, first: bool) -> string * i32 with Exhausted =
+  match unroll l {
+    inl u -> (o, 0)
+  | inr j1 -> match j1 {
+    inl b -> (o, 0)
+  | inr j2 -> match j2 {
+    inl n -> (o, 0)
+  | inr j3 -> match j3 {
+    inl t -> (o, 0)
+  | inr j4 -> match j4 {
+    inl x -> (o, 0)
+  | inr j5 -> match j5 {
+    inl x -> (o, 0)
+  | inr j6 -> match j6 {
+    inl u -> (o, 0)
+  | inr j7 -> match j7 {
+    inl (v, rest) ->
+      let (o, _) = if first { (o, ()) } else { push_byte(o, b',') };
+      let (o, c) = print_j(o, v);
+      let (o, d) = print_list(o, rest, false);
+      (o, c + d)
+  | inr (k, (v, rest)) ->
+      let (o, _) = if first { (o, ()) } else { push_byte(o, b',') };
+      let (o, _) = push_byte(o, u8[34]);
+      let (o, _) = borrow imm k { t -> push_str(o, t) };
+      let (o, _) = push_byte(o, u8[34]);
+      let (o, _) = push_byte(o, b':');
+      let (o, c) = print_j(o, v);
+      let (o, d) = print_list(o, rest, false);
+      (o, c + d)
+  } } } } } } } }
+
+main -> i32 =
+  let src = string_of_lit("{ \"a\": [1, true, null], \"b\": {\"c\": \"hi\", \"d\": [10, -20, 30]}, \"e\": false }");
+  let r = with on_exhausted(!{ u -> 0 - 1 }) { with default(0 - 2) {
+    let ((src, j), i) = value(src, 0);
+    let (o, c) = print_j(string_new(16), j);
+    let o = print_string(o);
+    print_byte(b'\n');
+    c } };
+  r

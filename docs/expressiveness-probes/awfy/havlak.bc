@@ -1,0 +1,284 @@
+-- AWFY Havlak, arena form: loop recognition (Havlak's algorithm as in AWFY's HavlakLoopFinder)
+-- over a control-flow graph built by AWFY's buildStraight / buildDiamond / buildConnect /
+-- buildBaseLoop.
+--
+-- Every object is an integer handle into an arena:
+--   basic block b: its out-edges and in-edges, `outs, ins : array (buf i32)`;
+--   union-find node w (by DFS number): `uf : array i32` = parent (dfs number), block, loop;
+--   per DFS number: number[], last[], header[], type[], backPreds / nonBackPreds as
+--   `array (buf i32)`;
+--   loop l: `lp : array i32` = parent loop, header block, reducible; the root loop is 0.
+-- The DFS is an explicit stack: a recursion inside the `for` over a block's out-edges, threading
+-- the arrays, is #492.
+-- Answer: (loops found, loops whose parent is not the root, nesting depth sum) for K base loops in
+-- an outer loop: 3K + 1 loops.
+
+include slice
+include buf
+
+def unvisited : i32 = 2147483647
+
+fn g(a: array i32, i: i32) -> array i32 * i32 = let mut a = a; let x = at(&a, i, 0); (a, x)
+
+fn take_b(a: array (buf i32), i: i32) -> array (buf i32) * buf i32 =
+  let (a, o) = array_replace[buf i32](a, i, filler[buf i32]);
+  match o { inl l -> (a, l) | inr l -> (a, l) }
+
+fn put_b(a: array (buf i32), i: i32, l: buf i32) -> array (buf i32) =
+  let (a, o) = array_replace[buf i32](a, i, l); a
+
+fn ab_push(a: array (buf i32), i: i32, x: i32) -> array (buf i32) =
+  let (a, l) = take_b(a, i);
+  let (l, _) = push(l, x);
+  put_b(a, i, l)
+
+fn ab_len(a: array (buf i32), i: i32) -> array (buf i32) * i32 =
+  let (a, l) = take_b(a, i);
+  let (l, n) = len_of(l);
+  (put_b(a, i, l), n)
+
+fn ab_get(a: array (buf i32), i: i32, j: i32) -> array (buf i32) * i32 =
+  let (a, l) = take_b(a, i);
+  let (la, n) = l;
+  let (la, x) = g(la, j);
+  (put_b(a, i, (la, n)), x)
+
+fn ab_contains(a: array (buf i32), i: i32, x: i32) -> array (buf i32) * bool =
+  let (a, l) = take_b(a, i);
+  let (la, n) = l;
+  let mut la = la;
+  let mut found = false;
+  for j in 0..n { let y = at(&la, j, 0); if y == x { found = true; break } else { () } };
+  (put_b(a, i, (la, n)), found)
+
+-- The CFG: out-edges, in-edges, and the number of blocks.
+type Cfg = (array (buf i32) * array (buf i32)) * i32
+
+fn connect(c: Cfg, f: i32, t: i32) -> Cfg =
+  let ((outs, ins), n) = c;
+  let outs = ab_push(outs, f, t);
+  let ins = ab_push(ins, t, f);
+  let m = if f + 1 > n { f + 1 } else { n };
+  let m = if t + 1 > m { t + 1 } else { m };
+  ((outs, ins), m)
+
+fn num(c: Cfg) -> Cfg * i32 = let (e, n) = c; ((e, n), n)
+
+fn straight(c: Cfg, start: i32, k: i32) -> Cfg * i32 =
+  let mut c = c;
+  for i in 0..k { c = connect(c, start + i, start + i + 1) };
+  (c, start + k)
+
+fn diamond(c: Cfg, start: i32) -> Cfg * i32 =
+  let c = connect(c, start, start + 1);
+  let c = connect(c, start, start + 2);
+  let c = connect(c, start + 1, start + 3);
+  let c = connect(c, start + 2, start + 3);
+  (c, start + 3)
+
+fn base_loop(c: Cfg, from: i32) -> Cfg * i32 =
+  let (c, header) = straight(c, from, 1);
+  let (c, d1) = diamond(c, header);
+  let (c, d11) = straight(c, d1, 1);
+  let (c, d2) = diamond(c, d11);
+  let (c, footer) = straight(c, d2, 1);
+  let c = connect(c, d2, d11);
+  let c = connect(c, d1, header);
+  let c = connect(c, footer, from);
+  straight(c, footer, 1)
+
+-- Union-find: `uf` holds the parent (by DFS number) at 3w, the block at 3w+1, the loop at 3w+2.
+fn find_set(uf: array i32, w: i32) -> array i32 * i32 =
+  let mut uf = uf;
+  let mut r = w;
+  for i in 0..1000000 { let p = at(&uf, 3 * r, 0); if p == r { break } else { r = p } };
+  let mut x = w;
+  for i in 0..1000000 {
+    let p = at(&uf, 3 * x, 0);
+    if p == x { break } else { uf = array_set(uf, 3 * x, r); x = p }
+  };
+  (uf, r)
+
+-- Depth-first numbering from block 0, by an explicit stack: number[b], and for each dfs number
+-- its block (uf) and `last`.
+fn dfs(c: Cfg, number: array i32, last: array i32, uf: array i32) -> ((Cfg * array i32) * (array i32 * array i32)) * i32 =
+  let ((outs, ins), nb) = c;
+  let mut outs = outs;
+  let mut number = array_set(number, 0, 0);
+  let mut uf = array_set(array_set(uf, 0, 0), 1, 0);
+  let mut last = last;
+  let (sb, _) = push(box buf[i32](16), 0);
+  let (se, _) = push(box buf[i32](16), 0);
+  let mut sb = sb;
+  let mut se = se;
+  let mut cur = 0;
+  for step in 0..10000000 {
+    let (s1, depth) = len_of(sb);
+    sb = s1;
+    if depth == 0 { break } else { () };
+    let (s1, tp) = pop(sb);
+    let (s2, eo) = pop(se);
+    let b = match tp { inl b -> b | inr u -> 0 };
+    let e = match eo { inl e -> e | inr u -> 0 };
+    let (o1, ne) = ab_len(outs, b);
+    outs = o1;
+    if e < ne {
+      let (o1, t) = ab_get(outs, b, e);
+      outs = o1;
+      let (s1, _) = push(s1, b);
+      let (s2, _) = push(s2, e + 1);
+      let seen = at(&number, t, 0);
+      if seen == unvisited {
+        cur = cur + 1;
+        number = array_set(number, t, cur);
+        uf = array_set(uf, 3 * cur, cur);
+        uf = array_set(uf, 3 * cur + 1, t);
+        let (s1, _) = push(s1, t);
+        let (s2, _) = push(s2, 0);
+        sb = s1;
+        se = s2
+      } else { sb = s1; se = s2 }
+    } else {
+      -- `b` is finished: its subtree's numbers end at `cur`.
+      let nbr = at(&number, b, 0);
+      last = array_set(last, nbr, cur);
+      sb = s1;
+      se = s2
+    }
+  };
+  (((((outs, ins), nb), number), (last, uf)), cur + 1)
+
+fn find_loops(c: Cfg) -> i32 * (i32 * i32) =
+  let (c, n) = num(c);
+  let number = array_new[i32](n, !{ i -> unvisited });
+  let last = array_new[i32](n, !{ i -> 0 });
+  let uf = array_new[i32](3 * n, !{ i -> 0 - 1 });
+  let (((c, number), (last, uf)), size) = dfs(c, number, last, uf);
+  let ((outs, ins), nb) = c;
+  let mut ins = ins;
+  let mut uf = uf;
+  let mut number = number;
+  let mut last = last;
+  let mut back = array_new[buf i32](size, !{ i -> box buf[i32](2) });
+  let mut nonback = array_new[buf i32](size, !{ i -> box buf[i32](2) });
+  let mut header = array_new[i32](size, !{ i -> 0 });
+  let mut kind = array_new[i32](size, !{ i -> 0 });
+  -- identifyEdges: a predecessor v of w is a back edge when w is v's ancestor.
+  for w in 0..size {
+    let nw = at(&uf, 3 * w + 1, 0);
+    let (i1, np) = ab_len(ins, nw);
+    ins = i1;
+    let lw = at(&last, w, 0);
+    for j in 0..np {
+      let (i2, pv) = ab_get(ins, nw, j);
+      ins = i2;
+      let v = at(&number, pv, 0);
+      if v != unvisited {
+        if w <= v && v <= lw { back = ab_push(back, w, v) } else { nonback = ab_push(nonback, w, v) }
+      } else { () }
+    }
+  };
+  -- loops: parent at 3l, header block at 3l+1, reducible at 3l+2; the root is loop 0.
+  let mut loops = array_new[i32](3 * (size + 1), !{ i -> 0 - 1 });
+  let mut nloops = 1;
+  for k in 0..size {
+    let w = size - 1 - k;
+    let mut pool = box buf[i32](4);
+    let (b1_1, nbk) = ab_len(back, w);
+    back = b1_1;
+    for j in 0..nbk {
+      let (b1_2, v) = ab_get(back, w, j);
+      back = b1_2;
+      if v != w {
+        let (u1_1, r) = find_set(uf, v);
+        uf = u1_1;
+        let (p_1, _) = push(pool, r);
+        pool = p_1
+      } else { kind = array_set(kind, w, 1) }
+    };
+    let (p1_1, psz) = len_of(pool);
+    pool = p1_1;
+    if psz != 0 { kind = array_set(kind, w, 2) } else { () };
+    -- The worklist: pool's members from `head` on.
+    let mut head = 0;
+    for step in 0..1000000 {
+      let (p1_2, psz2) = len_of(pool);
+      pool = p1_2;
+      if head >= psz2 { break } else { () };
+      let (pa_1, pn_1) = pool;
+      let mut pa_1 = pa_1;
+      let x = at(&pa_1, head, 0);
+      pool = (pa_1, pn_1);
+      head = head + 1;
+      let (nb1_1, nnb) = ab_len(nonback, x);
+      nonback = nb1_1;
+      for j in 0..nnb {
+        let (nb1_2, y) = ab_get(nonback, x, j);
+        nonback = nb1_2;
+        let (u1_2, yd) = find_set(uf, y);
+        uf = u1_2;
+        let lw = at(&last, w, 0);
+        if w <= yd && yd <= lw {
+          let (pa_2, pn_2) = pool;
+          let mut pa_2 = pa_2;
+          let mut dup = yd == w;
+          for q in 0..pn_2 { let z = at(&pa_2, q, 0); if z == yd { dup = true; break } else { () } };
+          pool = (pa_2, pn_2);
+          if dup { () } else { let (p_2, _) = push(pool, yd); pool = p_2 }
+        } else {
+          kind = array_set(kind, w, 3);
+          nonback = ab_push(nonback, w, yd)
+        }
+      }
+    };
+    let (p1_3, psz3) = len_of(pool);
+    pool = p1_3;
+    let kw = at(&kind, w, 0);
+    if psz3 > 0 || kw == 1 {
+      -- createNewLoop, setLoopAttributes: each pool member joins w's set, and its loop (if any)
+      -- gets this loop as its parent.
+      let l = nloops;
+      nloops = nloops + 1;
+      let bw = at(&uf, 3 * w + 1, 0);
+      loops = array_set(loops, 3 * l + 1, bw);
+      let red = if kw != 3 { 1 } else { 0 };
+      loops = array_set(loops, 3 * l + 2, red);
+      uf = array_set(uf, 3 * w + 2, l);
+      let (pa_3, pn_3) = pool;
+      let mut pa_3 = pa_3;
+      for q in 0..pn_3 {
+        let xm = at(&pa_3, q, 0);
+        header = array_set(header, xm, w);
+        uf = array_set(uf, 3 * xm, w);
+        let xl = at(&uf, 3 * xm + 2, 0);
+        if xl >= 0 { loops = array_set(loops, 3 * xl, l) } else { () }
+      };
+      pool = (pa_3, pn_3)
+    } else { () }
+  };
+  -- Loops with no parent hang off the root; count the nested ones and the depth sum.
+  let mut nested = 0;
+  let mut depth = 0;
+  for l in 1..nloops {
+    let p = at(&loops, 3 * l, 0);
+    if p >= 0 { nested = nested + 1 } else { () };
+    let mut x = l;
+    for i in 0..1000 {
+      let p = at(&loops, 3 * x, 0);
+      if p < 0 { break } else { depth = depth + 1; x = p }
+    }
+  };
+  (nloops - 1, (nested, depth))
+
+fn build(k: i32) -> Cfg =
+  let cap = 20 * k + 10;
+  let c = ((array_new[buf i32](cap, !{ i -> box buf[i32](2) }), array_new[buf i32](cap, !{ i -> box buf[i32](2) })), 0);
+  let c = connect(c, 0, 1);
+  let (c, tp) = straight(c, 1, 1);
+  let mut c = c;
+  let mut n = tp;
+  for i in 0..k { let (c1, m) = base_loop(c, n); c = c1; n = m };
+  let (c, bottom) = straight(c, n, 1);
+  connect(c, n, tp)
+
+main -> i32 * (i32 * i32) = find_loops(build(25))

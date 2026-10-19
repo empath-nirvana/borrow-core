@@ -1,0 +1,3 @@
+include textio
+include io
+main -> i32 = print_dec(5); print_byte(b'\n'); 0

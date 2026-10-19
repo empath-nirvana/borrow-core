@@ -1,0 +1,208 @@
+-- k-nucleotide: the sequence THREE of a FASTA input, upper-cased; the frequencies of its 1- and
+-- 2-mers, most frequent first, and the counts of five given k-mers. Each count is a hash map
+-- keyed by views of the sequence (`text 't`).
+include textio
+include map
+
+fn slice<'t>(t: text 't, i: i32, k: i32) -> text 't =
+  match split_at(t, i) {
+    inl (h, r) -> array_forget['t, u8](h);
+      match split_at(r, k) { inl (w, rest) -> array_forget['t, u8](rest); w | inr r -> r }
+  | inr t -> t
+  }
+
+-- Every k-mer of `t` counted.
+fn count<'t>(t: text 't, k: i32) -> Map[text 't, i32] =
+  let (t, u) = array_copy['t, u8] t;
+  let n = len(u);
+  let mut t = t;
+  let mut m = map_new[text 't, i32](1024);
+  for i in 0..n - k + 1 {
+    let (t2, w) = array_copy['t, u8] t;
+    t = t2;
+    let key = slice(w, i, k);
+    let (key, kc) = array_copy['t, u8] key;
+    let old = map_lookup(&m, kc);
+    let c = match old { inl c -> c + 1 | inr u -> 1 };
+    map_insert(&mut m, key, c)
+  };
+  array_forget['t, u8](t);
+  m
+
+-- Higher count first, then the key in byte order.
+fn by_freq<'t>(a: text 't * i32, b: text 't * i32) -> i32 =
+  let (ka, ca) = a;
+  let (kb, cb) = b;
+  if cb < ca { 0 - 1 } else { if ca < cb { 1 } else { order[text 't](ka, kb) } }
+
+-- A copy of the entry at `i`, which stays: taken out, its view copied, put back. (`at` copies with
+-- `*`, which a view is not: see sort-views.bc.)
+fn entry_at<'t>(b: buf (text 't * i32), i: i32) -> buf (text 't * i32) * (text 't * i32) =
+  let (a, n) = b;
+  let (a, o) = array_replace[text 't * i32] (a, i, (slice_empty_imm['t, u8], 0));
+  match o {
+    inl (x, c) -> let (x, y) = array_copy['t, u8] x;
+             let (a, _) = array_replace[text 't * i32] (a, i, (x, c));
+             ((a, n), (y, c))
+  | inr e -> ((a, n), e)
+  }
+
+fn swap_entries<'t>(b: buf (text 't * i32), i: i32, j: i32) -> buf (text 't * i32) =
+  let (a, n) = b;
+  let (a, x) = array_replace[text 't * i32] (a, i, (slice_empty_imm['t, u8], 0));
+  match x {
+    inl x -> let (a, y) = array_replace[text 't * i32] (a, j, x);
+             match y { inl y -> let (a, _) = array_replace[text 't * i32] (a, i, y); (a, n)
+                     | inr y -> let (a, _) = array_replace[text 't * i32] (a, i, y); (a, n) }
+  | inr x -> (a, n)
+  }
+
+-- Insertion sort by a comparator, on entries holding views (lib/slice.bc's `sort` needs
+-- persistent elements).
+fn sort_entries<'t>(b: buf (text 't * i32), c: !((text 't * i32) * (text 't * i32) => i32)) -> buf (text 't * i32) =
+  let (b, n) = len_of(b);
+  let mut b = b;
+  for i in 1..n {
+    for k in 0..i {
+      let j = i - k;
+      let (b1, x) = entry_at(b, j - 1);
+      let (b2, y) = entry_at(b1, j);
+      if 0 < c(x, y) { b = swap_entries(b2, j - 1, j) } else { b = b2; break }
+    }
+  };
+  b
+
+-- `x / 1000` as a decimal with three places (there is no fixed-precision float formatting).
+fn print_milli(x: i32) -> 1 =
+  print_dec(x / 1000);
+  print_byte(b'.');
+  let f = x - (x / 1000) * 1000;
+  if f < 100 { print_byte(b'0') } else { () };
+  if f < 10 { print_byte(b'0') } else { () };
+  print_dec(f)
+
+fn frequencies<'t>(t: text 't, k: i32) -> 1 =
+  let (t, u) = array_copy['t, u8] t;
+  let tot = len(u) - k + 1;
+  let m = count(t, k);
+  let mut es = box buf[text 't * i32](16);
+  borrow imm m { 'x, r ->
+    for e in map_iter(r) {
+      let (key, c) = e;
+      let cv = *c;
+      let (b, _) = push(es, (key, cv));
+      es = b
+    } };
+  let es = sort_entries(es, !{ (a, b) -> by_freq(a, b) });
+  let (es, n) = len_of(es);
+  let mut es = es;
+  for i in 0..n {
+    let (e2, (key, c)) = entry_at(es, i);
+    es = e2;
+    print_str(key);
+    print_byte(b' ');
+    -- percentage to three places, rounded: c * 100 / tot
+    let p = match host[div_s64](host[extend_s](c) * i64[100000] + host[extend_s](tot / 2), host[extend_s](tot)) { inl q -> host[wrap](q) | inr u -> 0 };
+    print_milli(p);
+    print_byte(b'\n')
+  };
+  print_byte(b'\n')
+
+-- The value at the key equal to `q`, a view at a lifetime of its own (`map_lookup` takes a `K`,
+-- here `text 't`, so a view of a literal is refused: see knuc-lookup-refused.bc). The probe of
+-- lib/map.bc's `map_probe`, written for view keys: `equal` and `hash` at views do not depend on the
+-- lifetime.
+fn lookup_text<'t, 'q>(m: Map[text 't, i32], q: text 'q) -> Map[text 't, i32] * (i32 + 1) =
+  let ((keys, vals), n) = m;
+  let (q, q0) = array_copy['q, u8] q;
+  let h = map_slot_hash(hash[text 'q](q0));
+  let mut q = q;
+  let mut res : i32 + 1 = inr ();
+  let mut keys = keys;
+  let mut vals = vals;
+  borrow imm keys { 'k, ks ->
+    let (ks, k0) = array_copy['k, 1 + (i32 * text 't)](ks);
+    let cap = len(k0);
+    let mut i = host[and32](h, cap - 1);
+    let mut rest = ks;
+    for _ in 0..cap {
+      let (r, r0) = array_copy['k, 1 + (i32 * text 't)](rest);
+      rest = r;
+      let (q1, q2) = array_copy['q, u8] q;
+      q = q1;
+      match get(r0, i) {
+        inl g ->
+          let found = borrow imm *g { 'y, s -> match s {
+              inl u -> array_forget['q, u8](q2); 0
+            | inr (hs, kv) ->
+                if hs == h { if key_equal_elems[u8](kv, q2) { 1 } else { 2 } }
+                else { array_forget['q, u8](q2); 2 } } };
+          if found == 0 { break } else {
+            if found == 1 { let v = at(&vals, i, 0); res = (inl v : i32 + 1); break }
+            else { i = host[and32](i + 1, cap - 1) } }
+      | inr u -> array_forget['q, u8](q2); break
+      }
+    };
+    array_forget['k, 1 + (i32 * text 't)](rest) };
+  array_forget['q, u8](q);
+  (((keys, vals), n), res)
+
+-- The count of the k-mer `q`.
+fn count_of<'t>(t: text 't, q: lit) -> 1 =
+  let k = lit_len(q);
+  let m = count(t, k);
+  let s = string_of_lit(q);
+  let c = borrow imm s { qv -> let (m, c) = lookup_text(m, qv); c };
+  let cn = match c { inl x -> x | inr u -> 0 };
+  print_dec(cn);
+  print_byte(u8[9]);
+  let s = print_string(s);
+  print_byte(b'\n')
+
+-- The bytes of sequence THREE, upper-cased, without newlines.
+fn three<'a>(t: text 'a) -> string =
+  let (t, u) = array_copy['a, u8] t;
+  let n = len(u);
+  let mut t = t;
+  let mut s = string_new(n);
+  let mut state = 0;
+  let mut line_start = true;
+  for i in 0..n {
+    let (t2, w) = array_copy['a, u8] t;
+    t = t2;
+    let b = at(w, i, 0);
+    if state == 2 {
+      if b == b'>' { break } else { () };
+      if b == b'\n' { () } else { let (s2, _) = push_byte(s, b - 32); s = s2 }
+    } else {
+      if line_start && b == b'>' {
+        let (t2, w2) = array_copy['a, u8] t;
+        t = t2;
+        let h = slice(w2, i, 6);
+        if eq_lit(h, ">THREE") { state = 1 } else { () }
+      } else { () };
+      if b == b'\n' && state == 1 { state = 2 } else { () }
+    };
+    line_start = b == b'\n'
+  };
+  array_forget['a, u8](t);
+  s
+
+main -> i32 =
+  let inp = read_input();
+  let seq = borrow imm inp { t -> three(t) };
+  borrow imm seq { 't, t ->
+    let (t, a) = array_copy['t, u8] t;
+    frequencies(a, 1);
+    let (t, b) = array_copy['t, u8] t;
+    frequencies(b, 2);
+    let (t, c) = array_copy['t, u8] t;
+    count_of(c, "GGT");
+    let (t, c) = array_copy['t, u8] t;
+    count_of(c, "GGTA");
+    let (t, c) = array_copy['t, u8] t;
+    count_of(c, "GGTATT");
+    let (t, c) = array_copy['t, u8] t;
+    count_of(c, "GGTATTTTAATT");
+    count_of(t, "GGTATTTTAATTTATAGT") };
+  0

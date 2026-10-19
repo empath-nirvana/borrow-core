@@ -1,0 +1,13 @@
+-- `modify` handing a result out beside the new contents (SPEC §18's `modify c { s -> M; (s, r) }`).
+include slice
+fn step(b: i32) -> i32 * bool = (b + 1, b > 3)
+main -> i32 * i32 =
+  let mut x = 5;
+  let r = modify &mut x { v -> (v + 1, 9) };
+  let mut a = array_new[i32](10, !{ i -> i });
+  let mut n = 0;
+  for b in &mut a {
+    let f = modify b { v -> step(v) };
+    if f { n = n + 1 } else { () }
+  };
+  (r, n)

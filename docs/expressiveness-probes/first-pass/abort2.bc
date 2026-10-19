@@ -1,0 +1,4 @@
+include text
+include fail
+main -> i32 =
+  borrow imm "12x" { v -> with default(0 - 1) { parse_i32(v) } }

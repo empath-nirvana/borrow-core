@@ -1,0 +1,67 @@
+-- T05: dynamic programming on owned arrays: coin change, and LCS with two rows swapped by name.
+-- Workarounds: each index read is `at(&a, i, d)` (a lend per read, let-bound), each write
+-- `array_set` (`array_replace`); the coin view is copied per row (`array_copy`, #142: a view is
+-- not persistent, so an inner `for` over it is refused: "`cs` is used twice here"); the row swap is three rebindings (no tuple assignment).
+include slice
+include buf
+include text
+
+def big : i64 = 9223372036854775807
+
+fn min64(x: i64, y: i64) -> i64 = if x < y { x } else { y }
+fn max(x: i32, y: i32) -> i32 = if x < y { y } else { x }
+
+fn coins<'c>(cs: array_imm 'c i32, amount: i32) -> i64 =
+  let mut dp = array_new[i64](amount + 1, !{ i -> big });
+  dp = array_set(dp, 0, i64[0]);
+  let mut cs = cs;
+  for a in 1..amount + 1 {
+    let (cs1, row) = array_copy['c, i32] cs;
+    cs = cs1;
+    for p in row {
+      let c = *p;
+      if c <= a {
+        let prev = at(&dp, a - c, big);
+        let cur = at(&dp, a, big);
+        if prev != big { dp = array_set(dp, a, min64(cur, prev + i64[1])) } else { () }
+      } else { () }
+    }
+  };
+  array_forget['c, i32](cs);
+  let r = at(&dp, amount, big);
+  if r == big { i64[0] - i64[1] } else { r }
+
+fn lcs(x: string, y: string) -> i32 =
+  let (xa, m) = x;
+  let (ya, n) = y;
+  let mut xa = xa;
+  let mut ya = ya;
+  let mut prev = array_new[i32](n + 1, !{ i -> 0 });
+  let mut cur = array_new[i32](n + 1, !{ i -> 0 });
+  for i in 1..m + 1 {
+    for j in 1..n + 1 {
+      let a = at(&xa, i - 1, 0);
+      let b = at(&ya, j - 1, 0);
+      let d = at(&prev, j - 1, 0);
+      let u = at(&prev, j, 0);
+      let l = at(&cur, j - 1, 0);
+      let v = if a == b { d + 1 } else { max(u, l) };
+      cur = array_set(cur, j, v)
+    };
+    let t = prev;
+    prev = cur;
+    cur = t
+  };
+  let r = at(&prev, n, 0);
+  r
+
+fn c3(i: i32) -> i32 = if i == 0 { 1 } else if i == 1 { 2 } else { 5 }
+
+main -> i64 * (i64 * (i32 * i32)) =
+  let cs = array_new[i32](3, c3);
+  let two = array_new[i32](1, !{ i -> 2 });
+  let r1 = borrow imm cs { v -> coins(v, 11) };
+  let r2 = borrow imm two { v -> coins(v, 3) };
+  let l1 = lcs(string_of_lit("abcde"), string_of_lit("ace"));
+  let l2 = lcs(string_of_lit("AGGTAB"), string_of_lit("GXTXAYB"));
+  (r1, (r2, (l1, l2)))

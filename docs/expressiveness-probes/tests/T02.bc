@@ -1,0 +1,25 @@
+-- T02: `break e` / `for … else`, and a `while` with a bare `break` and its variables read after.
+include iters
+include slice
+
+fn xs(i: i32) -> i32 =
+  if i == 0 { 4 } else if i == 1 { 1 } else if i == 2 { 0 - 3 } else if i == 3 { 9 }
+  else if i == 4 { 2 } else { 8 }
+
+fn first_over<'a>(xs: array_imm 'a i32, limit: i32) -> i32 =
+  let mut acc = 0;
+  for e in enumerate(elems(xs)) {
+    let (i, p) = e;
+    acc = acc + *p;
+    if acc > limit { break i } else { () }
+  } else { 0 - 1 }
+
+main -> i32 * (i32 * (bool * i32)) =
+  let xs = array_new[i32](6, xs);
+  let mut i = 0;
+  let mut all_pos = true;
+  let n = len(&xs);
+  while i < n { let x = at(&xs, i, 0); if x < 0 { all_pos = false; break } else { () }; i = i + 1 };
+  let f10 = first_over(&xs, 10);
+  let f100 = first_over(&xs, 100);
+  (f10, (f100, (all_pos, i)))

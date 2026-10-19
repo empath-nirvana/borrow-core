@@ -1,0 +1,233 @@
+-- jlox tree-walker, arena shape. AST is a recursive sum; environments live in an arena
+-- (`envs`: parent index per environment; `vars`: (env, name, value) entries); a closure is
+-- (function index, environment index); a Lox function body lives in a function table and is
+-- cloned per call. Classes: an instance is an index into `cls_of`, its fields in `fields`;
+-- methods in `meths` (class, name, fid); `obj.m` binds `this` in a fresh environment.
+--
+-- Probe: makeCounter called twice; `c2 = c1` aliases one closure, so c1() and c2() share `i`.
+include io
+include buf
+include rec
+include slice
+
+-- Num | Closure(fid, env) | Instance(id) | Nil
+type Val = i32 + ((i32 * i32) + (i32 + 1))
+
+-- Num | Var | Assign | Decl | Add | Seq | Print | Fun | Call | New | Get | SetF
+type Expr = mu X. i32 + (i32 + ((i32 * X) + ((i32 * X) + ((X * X) + ((X * X) + (X + (i32 + (X + (i32 + ((X * i32) + ((X * i32) * X)))))))))))
+
+fn num(n: i32) -> Expr = roll inl n
+fn var(n: i32) -> Expr = roll inr (inl n)
+fn assign(n: i32, e: Expr) -> Expr = roll inr (inr (inl (n, e)))
+fn decl(n: i32, e: Expr) -> Expr = roll inr (inr (inr (inl (n, e))))
+fn add(a: Expr, b: Expr) -> Expr = roll inr (inr (inr (inr (inl (a, b)))))
+fn seq(a: Expr, b: Expr) -> Expr = roll inr (inr (inr (inr (inr (inl (a, b))))))
+fn prnt(a: Expr) -> Expr = roll inr (inr (inr (inr (inr (inr (inl a))))))
+fn fun_(f: i32) -> Expr = roll inr (inr (inr (inr (inr (inr (inr (inl f)))))))
+fn call(a: Expr) -> Expr = roll inr (inr (inr (inr (inr (inr (inr (inr (inl a))))))))
+fn new_(c: i32) -> Expr = roll inr (inr (inr (inr (inr (inr (inr (inr (inr (inl c)))))))))
+fn get_(a: Expr, n: i32) -> Expr = roll inr (inr (inr (inr (inr (inr (inr (inr (inr (inr (inl (a, n)))))))))))
+fn setf(a: Expr, n: i32, v: Expr) -> Expr = roll inr (inr (inr (inr (inr (inr (inr (inr (inr (inr (inr ((a, n), v)))))))))))
+
+fn nilv() -> Val = inr (inr (inr ()))
+
+type V3 = i32 * (i32 * Val)
+
+-- The arena: env parents, variable entries, function bodies, instance classes, fields, methods.
+type St = buf i32 * (buf V3 * (array Expr * (buf i32 * (buf V3 * buf (i32 * (i32 * i32))))))
+
+-- The entry index of `name` visible from `env`, or -1: walk the parent chain.
+fn resolve(envs: buf i32, vars: buf V3, env: i32, name: i32) -> (buf i32 * buf V3) * i32 =
+  let (pa, pn) = envs;
+  let (va, vn) = vars;
+  let mut e = env;
+  let mut res = 0 - 1;
+  for _ in 0..pn + 1 {
+    for j in 0..vn {
+      let k = vn - 1 - j;
+      let ent = at(&va, k, (0 - 1, (0, nilv())));
+      let (ee, (nm, v)) = ent;
+      if ee == e && nm == name { res = k; break } else { () }
+    };
+    if 0 <= res || e == 0 { break } else { () };
+    let p = at(&pa, e, 0);
+    e = p
+  };
+  (((pa, pn), (va, vn)), res)
+
+fn env_get(st: St, env: i32, name: i32) -> St * Val =
+  let (envs, (vars, rest)) = st;
+  let ((envs, vars), k) = resolve(envs, vars, env, name);
+  let (va, vn) = vars;
+  let ent = at(&va, k, (0, (0, nilv())));
+  let (ee, (nm, v)) = ent;
+  ((envs, ((va, vn), rest)), v)
+
+fn env_set(st: St, env: i32, name: i32, v: Val) -> St =
+  let (envs, (vars, rest)) = st;
+  let ((envs, vars), k) = resolve(envs, vars, env, name);
+  let (va, vn) = vars;
+  let ent = at(&va, k, (0, (0, nilv())));
+  let (ee, old) = ent;
+  (envs, ((array_set(va, k, (ee, (name, v))), vn), rest))
+
+fn env_def(st: St, env: i32, name: i32, v: Val) -> St =
+  let (envs, (vars, rest)) = st;
+  let (vars, _) = push(vars, (env, (name, v)));
+  (envs, (vars, rest))
+
+fn new_env(st: St, parent: i32) -> St * i32 =
+  let (envs, rest) = st;
+  let (envs, n) = len_of(envs);
+  let (envs, _) = push(envs, parent);
+  ((envs, rest), n)
+
+fn fbody(st: St, f: i32) -> St * Expr =
+  let (envs, (vars, (funs, rest))) = st;
+  let b = at(&funs, f, num(0));
+  ((envs, (vars, (funs, rest))), b)
+
+-- The field entry of `name` in instance `id`, or -1.
+fn field_ix(fs: buf V3, id: i32, name: i32) -> buf V3 * i32 =
+  let (fa, fnn) = fs;
+  let mut res = 0 - 1;
+  for k in 0..fnn {
+    let ent = at(&fa, k, (0 - 1, (0, nilv())));
+    let (ii, (nm, v)) = ent;
+    if ii == id && nm == name { res = k; break } else { () }
+  };
+  ((fa, fnn), res)
+
+fn set_field(st: St, id: i32, name: i32, v: Val) -> St =
+  let (envs, (vars, (funs, (cls, (fs, ms))))) = st;
+  let (fs, k) = field_ix(fs, id, name);
+  let fs = if k < 0 { let (fs, _) = push(fs, (id, (name, v))); fs }
+           else { let (fa, fnn) = fs; (array_set(fa, k, (id, (name, v))), fnn) };
+  (envs, (vars, (funs, (cls, (fs, ms)))))
+
+-- `obj.name`: a field, else a method of the instance's class bound to `this` (name 6) in a
+-- fresh environment whose parent is the global one.
+fn get_prop(st: St, id: i32, name: i32) -> St * Val =
+  let (envs, (vars, (funs, (cls, (fs, ms))))) = st;
+  let (fs, k) = field_ix(fs, id, name);
+  let (fa, fnn) = fs;
+  let ent = at(&fa, k, (0, (0, nilv())));
+  let (ii, (nm, fv)) = ent;
+  let (ca, cn) = cls;
+  let c = at(&ca, id, 0);
+  let (ma, mn) = ms;
+  let mut fid = 0 - 1;
+  for j in 0..mn {
+    let m = at(&ma, j, (0 - 1, (0, 0)));
+    let (mc, (mname, mf)) = m;
+    if mc == c && mname == name { fid = mf; break } else { () }
+  };
+  let st = (envs, (vars, (funs, ((ca, cn), ((fa, fnn), (ma, mn))))));
+  if 0 <= k { (st, fv) } else {
+    if fid < 0 { (st, nilv()) } else {
+      let (st, ne) = new_env(st, 0);
+      let st = env_def(st, ne, 6, inr (inr (inl id)));
+      (st, inr (inl (fid, ne)))
+    }
+  }
+
+fn eval(e: Expr, st: St, env: i32) -> St * Val =
+  match unroll e {
+    inl n -> (st, inl n)
+  | inr e1 -> match e1 {
+    inl n -> env_get(st, env, n)
+  | inr e2 -> match e2 {
+    inl (n, x) -> let (st, v) = eval(x, st, env); (env_set(st, env, n, v), v)
+  | inr e3 -> match e3 {
+    inl (n, x) -> let (st, v) = eval(x, st, env); (env_def(st, env, n, v), nilv())
+  | inr e4 -> match e4 {
+    inl (a, b) ->
+      let (st, x) = eval(a, st, env);
+      let (st, y) = eval(b, st, env);
+      match x { inl i -> match y { inl j -> (st, inl (i + j)) | inr u -> (st, nilv()) } | inr u -> (st, nilv()) }
+  | inr e5 -> match e5 {
+    inl (a, b) -> let (st, x) = eval(a, st, env); eval(b, st, env)
+  | inr e6 -> match e6 {
+    inl a ->
+      let (st, x) = eval(a, st, env);
+      match x { inl i -> print_dec(i); print_byte(b' ') | inr u -> print_byte(b'?') };
+      (st, nilv())
+  | inr e7 -> match e7 {
+    inl f -> (st, inr (inl (f, env)))
+  | inr e8 -> match e8 {
+    inl a ->
+      let (st, c) = eval(a, st, env);
+      match c {
+        inl i -> (st, nilv())
+      | inr c2 -> match c2 {
+          inl (f, cenv) ->
+            let (st, ne) = new_env(st, cenv);
+            let (st, b) = fbody(st, f);
+            eval(b, st, ne)
+        | inr u -> (st, nilv())
+        }
+      }
+  | inr e9 -> match e9 {
+    inl c ->
+      let (envs, (vars, (funs, (cls, rest)))) = st;
+      let (cls, id) = len_of(cls);
+      let (cls, _) = push(cls, c);
+      ((envs, (vars, (funs, (cls, rest)))), inr (inr (inl id)))
+  | inr e10 -> match e10 {
+    inl (a, n) ->
+      let (st, o) = eval(a, st, env);
+      match o {
+        inl i -> (st, nilv())
+      | inr o2 -> match o2 {
+          inl c -> (st, nilv())
+        | inr o3 -> match o3 { inl id -> get_prop(st, id, n) | inr u -> (st, nilv()) }
+        }
+      }
+  | inr ((a, n), x) ->
+      let (st, o) = eval(a, st, env);
+      let (st, v) = eval(x, st, env);
+      match o {
+        inl i -> (st, nilv())
+      | inr o2 -> match o2 {
+          inl c -> (st, nilv())
+        | inr o3 -> match o3 { inl id -> (set_field(st, id, n, v), v) | inr u -> (st, nilv()) }
+        }
+      }
+  }}}}}}}}}}}
+
+-- makeCounter = fun 0; count = fun 1. Names: i=0 count=1 c1=2 c2=3 c3=4 makeCounter=5.
+fn fun0() -> Expr = seq(decl(0, num(0)), seq(decl(1, fun_(1)), var(1)))
+fn fun1() -> Expr = seq(assign(0, add(var(0), num(1))), prnt(var(0)))
+
+-- class Counter { inc() { this.n = this.n + 1; print this.n; } }  (fun 2; this=6 n=7 inc=10)
+fn fun2() -> Expr = seq(setf(var(6), 7, add(get_(var(6), 7), num(1))), prnt(get_(var(6), 7)))
+
+-- var o = Counter(); o.n = 10; var m = o.inc; m(); o.inc();  (o=8 m=9)
+fn program2() -> Expr =
+  seq(decl(8, new_(0)),
+  seq(setf(var(8), 7, num(10)),
+  seq(decl(9, get_(var(8), 10)),
+  seq(call(var(9)), call(get_(var(8), 10))))))
+
+fn program() -> Expr =
+  seq(decl(5, fun_(0)),
+  seq(decl(2, call(var(5))),
+  seq(decl(3, var(2)),
+  seq(call(var(2)),
+  seq(call(var(3)),
+  seq(decl(4, call(var(5))),
+  seq(call(var(4)), call(var(2)))))))))
+
+fn ms0() -> buf (i32 * (i32 * i32)) = let (m, _) = push(box buf[i32 * (i32 * i32)](4), (0, (10, 2))); m
+
+main -> i32 =
+  let (envs, _) = push(box buf[i32](8), 0);
+  let funs = array_new[Expr] (3, !{ i -> if i == 0 { fun0() } else { if i == 1 { fun1() } else { fun2() } } });
+  let st : St = (envs, (box buf[V3](8), (funs, (box buf[i32](4), (box buf[V3](4), ms0())))));
+  let r = with on_exhausted(!{ u -> 0 - 1 }) {
+
+
+    0
+  };
+  print_byte(b'\n');
+  r

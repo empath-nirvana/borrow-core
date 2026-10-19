@@ -1,0 +1,28 @@
+-- REFUSED attempt (kept for its message).
+-- T13, the doc's shape: the teller's borrow block reads `txs`, a variable outside it, across `await`.
+include async
+include fail
+
+fn teller(acct: i32, txs: List[i32]) -> i32 * i32 with Async =
+  let cell = alloc(acct);
+  let refused = borrow mut cell { a ->
+    let mut r = 0;
+    let mut rest = txs;
+    for _ in 0..2 {
+      match unroll rest {
+        inl u -> rest = nil[i32]()
+      | inr (t, more) ->
+          rest = more;
+          let ok = modify a { b -> if b + t < 0 { (b, false) } else { (b + t, true) } };
+          if ok { () } else { r = r + 1 };
+          await()
+      }
+    };
+    r };
+  (free(cell), refused)
+
+main -> List[i32 * i32] =
+  let q = queue[i32 * i32]();
+  let q = push(q, with spawn { teller(100, cons(50, cons(0 - 20, nil()))) });
+  let q = push(q, with spawn { teller(50, cons(0 - 30, cons(0 - 40, nil()))) });
+  run_until_empty(q)

@@ -1,0 +1,16 @@
+include rec
+include buf
+include slice
+type Pile = mu X. 1 + (i32 * X)
+fn mk(n: i32) -> Pile with Exhausted = if n == 0 { roll inl () } else { roll inr (n, mk(n - 1)) }
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let mut a = array_new[Pile](3, !{ i -> roll inl () });
+  let (a0, o0) = array_replace[Pile](a, 0, mk(4));
+  let mut a = a0;
+  for k in 0..10 {
+    let (a1, o) = array_replace[Pile](a, 0, roll inl ());
+    let x = match o { inl x -> x | inr x -> x };
+    let (a2, o2) = array_replace[Pile](a1, 0, x);
+    a = a2
+  };
+  0 }

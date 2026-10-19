@@ -1,0 +1,51 @@
+-- (b) An HTTP/1.1 response parsed incrementally from a byte stream: a push parser, a state value
+-- fed one byte at a time by `main`'s `for b in bytes(&mut stdin)`. It reads the status code, finds
+-- `Content-Length` (case-insensitive) among the headers, and counts the body bytes up to it,
+-- stopping the read there (`break`), so a stream that keeps going is not consumed further.
+-- Answer: code * 10000 + content-length * 100 + body bytes counted.
+include slice
+
+-- phase (0 status, 1 headers, 2 body), spaces on the status line, code, name match index
+-- (-1 failed), in value of content-length, content-length, body bytes, bytes on this line
+type P = i32 * (i32 * (i32 * (i32 * (i32 * (i32 * (i32 * i32))))))
+
+fn lower(b: u8) -> u8 = if 65 <= b && b <= 90 { b + 32 } else { b }
+
+fn name_at(i: i32) -> u8 = borrow imm "content-length" { v -> at(v, i, 0) }
+
+fn is_digit(b: u8) -> bool = 48 <= b && b <= 57
+
+fn p0(ph: i32, sp: i32, code: i32, mi: i32, inv: i32, cl: i32, body: i32, ll: i32) -> P =
+  (ph, (sp, (code, (mi, (inv, (cl, (body, ll)))))))
+
+fn feed(p: P, b: u8) -> P =
+  let (ph, (sp, (code, (mi, (inv, (cl, (body, ll))))))) = p;
+  if ph == 0 {
+    if b == 10 { (1, (sp, (code, (0, (0, (cl, (body, 0))))))) }
+    else { if b == 32 { (0, (sp + 1, (code, (mi, (inv, (cl, (body, ll))))))) }
+    else { if sp == 1 && is_digit(b) { (0, (sp, (code * 10 + to_i32(b) - 48, (mi, (inv, (cl, (body, ll))))))) }
+    else { p0(ph, sp, code, mi, inv, cl, body, ll) } } }
+  } else { if ph == 1 {
+    if b == 10 {
+      if ll == 0 { (2, (sp, (code, (mi, (0, (cl, (body, 0))))))) } else { (1, (sp, (code, (0, (0, (cl, (body, 0))))))) }
+    } else { if b == 13 { p0(ph, sp, code, mi, inv, cl, body, ll) }
+    else { if inv == 1 {
+      if is_digit(b) { (1, (sp, (code, (mi, (1, (cl * 10 + to_i32(b) - 48, (body, ll + 1))))))) } else { (1, (sp, (code, (mi, (inv, (cl, (body, ll + 1))))))) }
+    } else { if b == 58 {
+      let v = if mi == 14 { 1 } else { 0 };
+      (1, (sp, (code, (0 - 1, (v, (cl, (body, ll + 1)))))))
+    } else {
+      let m2 = if 0 <= mi && mi < 14 && lower(b) == name_at(mi) { mi + 1 } else { 0 - 1 };
+      (1, (sp, (code, (m2, (inv, (cl, (body, ll + 1)))))))
+    } } } }
+  } else { (ph, (sp, (code, (mi, (inv, (cl, (body + 1, ll))))))) } }
+
+main -> i32 =
+  let mut p : P = (0, (0, (0, (0, (0, (0, (0, 0)))))));
+  for b in bytes(&mut stdin) {
+    p = feed(p, b);
+    let (ph, (sp, (code, (mi, (inv, (cl, (body, ll))))))) = p;
+    if ph == 2 && body >= cl { break } else { () }
+  };
+  let (ph, (sp, (code, (mi, (inv, (cl, (body, ll))))))) = p;
+  code * 10000 + cl * 100 + body

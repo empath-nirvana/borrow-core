@@ -1,0 +1,47 @@
+-- AWFY Towers: Towers of Hanoi with 13 discs; each pile is an owned linked list of discs
+-- (`mu X. 1 + (i32 * X)`), the three piles in an array; a move pops the top disc off one pile
+-- and pushes it onto another, checking the size order. Answer: moves done, 8191.
+include rec
+include buf
+include slice
+include fail
+
+type Pile = mu X. 1 + (i32 * X)
+
+fn take_p(p: array Pile, i: i32) -> array Pile * Pile =
+  let (p, o) = array_replace[Pile](p, i, roll inl ());
+  match o { inl x -> (p, x) | inr x -> (p, x) }
+
+fn put_p(p: array Pile, i: i32, x: Pile) -> array Pile = let (p, o) = array_replace[Pile](p, i, x); p
+
+fn push_disk(p: array Pile, size: i32, i: i32) -> array Pile with Fail[i32] =
+  let (p, tp) = take_p(p, i);
+  match unroll tp {
+    inl u -> put_p(p, i, roll inr (size, roll inl ()))
+  | inr (s, rest) -> if size >= s { raise(size) } else { put_p(p, i, roll inr (size, roll inr (s, rest))) }
+  }
+
+fn pop_disk(p: array Pile, i: i32) -> array Pile * i32 with Fail[i32] =
+  let (p, tp) = take_p(p, i);
+  match unroll tp {
+    inl u -> raise(0 - 1)
+  | inr (s, rest) -> (put_p(p, i, rest), s)
+  }
+
+fn move_top(st: array Pile * i32, from: i32, to: i32) -> array Pile * i32 with Fail[i32] =
+  let (p, moves) = st;
+  let (p, d) = pop_disk(p, from);
+  (push_disk(p, d, to), moves + 1)
+
+fn move_disks(st: array Pile * i32, disks: i32, from: i32, to: i32) -> array Pile * i32 with Fail[i32], Exhausted =
+  if disks == 1 { move_top(st, from, to) } else {
+    let other = 3 - from - to;
+    let st = move_disks(st, disks - 1, from, other);
+    let st = move_top(st, from, to);
+    move_disks(st, disks - 1, other, to)
+  }
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) { with default(0 - 2) {
+  let mut p = array_new[Pile](3, !{ i -> roll inl () });
+  for k in 0..4 { p = push_disk(p, 100 - k, 0) };
+  0 } }

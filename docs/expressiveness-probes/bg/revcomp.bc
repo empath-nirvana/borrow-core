@@ -1,0 +1,89 @@
+-- reverse-complement: read FASTA from stdin; for each sequence print its header, then the
+-- sequence reverse-complemented in place through a lookup table, 60 bytes a line.
+include textio
+include io
+include slice
+include buf
+
+-- The complement of each byte (upper and lower case IUB codes; others unchanged).
+fn comp(b: u8) -> u8 =
+  if b == b'A' || b == b'a' { b'T' } else {
+  if b == b'C' || b == b'c' { b'G' } else {
+  if b == b'G' || b == b'g' { b'C' } else {
+  if b == b'T' || b == b't' || b == b'U' || b == b'u' { b'A' } else {
+  if b == b'M' || b == b'm' { b'K' } else {
+  if b == b'R' || b == b'r' { b'Y' } else {
+  if b == b'W' || b == b'w' { b'W' } else {
+  if b == b'S' || b == b's' { b'S' } else {
+  if b == b'Y' || b == b'y' { b'R' } else {
+  if b == b'K' || b == b'k' { b'M' } else {
+  if b == b'V' || b == b'v' { b'B' } else {
+  if b == b'H' || b == b'h' { b'D' } else {
+  if b == b'D' || b == b'd' { b'H' } else {
+  if b == b'B' || b == b'b' { b'V' } else {
+  if b == b'N' || b == b'n' { b'N' } else { b } } } } } } } } } } } } } } }
+
+-- The sequence reverse-complemented in place: a mutable view, swapped from both ends.
+fn revcomp_in_place<'a>(v: array_mut 'a u8, tbl: array u8) -> array_mut 'a u8 * array u8 =
+  let (v, n) = len_mut(v);
+  let mut v = v;
+  let mut t = tbl;
+  let h = (n + 1) / 2;
+  for i in 0..h {
+    let j = n - 1 - i;
+    let (w, x) = peek(v, i, 0);
+    let (w, y) = peek(w, j, 0);
+    let cx = at(&t, to_i32(x), 0);
+    let cy = at(&t, to_i32(y), 0);
+    v = set(set(w, i, cy), j, cx)
+  };
+  (v, t)
+
+-- The sequence written 60 bytes a line into the output buffer.
+fn wrap_out(o: string, s: string) -> string * string =
+  let (s, n) = len_of(s);
+  let mut o = o;
+  let mut s = s;
+  for i in 0..n {
+    let b = borrow imm s { v -> at(v, i, 0) };
+    let (o2, _) = push_byte(o, b);
+    o = o2;
+    if (i + 1) - ((i + 1) / 60) * 60 == 0 { let (o3, _) = push_byte(o, b'\n'); o = o3 } else { () }
+  };
+  let o = if n - (n / 60) * 60 != 0 { let (o3, _) = push_byte(o, b'\n'); o3 } else { o };
+  (o, s)
+
+fn flush_seq(o: string, s: string, tbl: array u8) -> (string * string) * array u8 =
+  let mut s = s;
+  -- named `tb`, not `tbl`: see mut-name-capture.bc
+  let mut tb = tbl;
+  borrow mut s { v -> let (v, t) = revcomp_in_place(v, tb); tb = t; discard_mut(v) };
+  let (o, s) = wrap_out(o, s);
+  ((o, clear_str(s)), tb)
+
+main -> i32 =
+  let inp = read_input();
+  let tbl0 = array_new[u8](256, !{ i -> comp(to_u8(i)) });
+  let (inp, n) = len_of(inp);
+  let mut inp = inp;
+  let mut o = string_new(n + n / 60 + 16);
+  let mut seq = string_new(n);
+  let mut tbl = tbl0;
+  let mut header = false;
+  for i in 0..n {
+    let b = borrow imm inp { v -> at(v, i, 0) };
+    if b == b'>' {
+      let ((o2, s2), t2) = flush_seq(o, seq, tbl);
+      o = o2; seq = s2; tbl = t2;
+      header = true
+    } else { () };
+    if header {
+      let (o2, _) = push_byte(o, b); o = o2;
+      if b == b'\n' { header = false } else { () }
+    } else {
+      if b == b'\n' { () } else { let (s2, _) = push_byte(seq, b); seq = s2 }
+    }
+  };
+  let ((o, seq), tbl) = flush_seq(o, seq, tbl);
+  let o = print_string(o);
+  0

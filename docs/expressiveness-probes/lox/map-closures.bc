@@ -1,0 +1,19 @@
+-- A Lox value `Fn(closure)` stored in a map: (a) the arena value (fid, env) in Map[i32, Val];
+-- (b) a host persistent function `!(i32 => i32)` as the map's value type.
+include map
+
+type Val = i32 + ((i32 * i32) + (i32 + 1))
+
+fn double(n: i32) -> i32 = n + n
+
+main -> i32 =
+  let mut g = map_new[i32, Val](8);
+  let _ = map_insert(&mut g, 5, (inr (inl (1, 0)) : Val));
+  let _ = map_insert(&mut g, 6, (inl 42 : Val));
+  let r = map_lookup(&mut g, 5);
+  let a = match r { inl v -> match v { inl n -> 0 | inr c -> match c { inl (f, e) -> f * 10 + e | inr u -> 0 } } | inr u -> 0 - 1 };
+  let mut h = map_new[i32, !(i32 => i32)](8);
+  let _ = map_insert(&mut h, 1, double);
+  let f = map_lookup(&mut h, 1);
+  let b = match f { inl f -> f(21) | inr u -> 0 };
+  a * 1000 + b

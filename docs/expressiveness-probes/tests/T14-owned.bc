@@ -1,0 +1,35 @@
+-- T14: a random-number service and a logger as answering handlers with state, and a buffer
+-- filled through `&mut` in a call that also uses both capabilities.
+-- Workaround: the buffer is passed owned and handed back (`fill(b)` returns it): `fill(&mut b)`
+-- is refused, "a place is lent (`&mut x`) in the arguments of `fill`, which also threads a
+-- capability: lend it in a call of its own" (SPEC §18 Not provided; T14-lend-refused.bc), and a
+-- `borrow mut b { v -> fill(v) }` inside the `with` is refused too (T14-borrow-block.bc).
+include buf
+include slice
+include io
+
+effect Rng { fn next() -> i32 }
+handler lcg(mut s: i32): Rng = {
+  next() = { s = host[add32](host[mul32](s, 1103515245), 12345); host[shr_u32](s, 16) % 100 }
+}
+
+effect Logger { fn log(x: i32) }
+handler logger(mut l: i32 * i32): Logger = { log(x) = { let (n, t) = l; l = (n + 1, t + x); () } }
+
+fn fill(buf: array i32) -> array i32 with Rng, Logger =
+  let mut buf = buf;
+  for i in 0..6 { let x = next(); buf = array_set(buf, i, x); if x > 50 { log(x) } else { () } };
+  buf
+
+main -> i32 * (i32 * i32) =
+  let lg = alloc((0, 0));
+  let sc = alloc(42);
+  let r = with lcg(&mut sc) {
+    let b = with logger(&mut lg) { fill(array_new[i32](6, !{ i -> 0 })) };
+    (b, next()) };
+  let (b, again) = r;
+  let (n, sum) = free(lg);
+  let s = free(sc);
+  for p in &b { print_dec(*p); print_byte(b' ') };
+  print_byte(b'\n');
+  (again, (n, sum))

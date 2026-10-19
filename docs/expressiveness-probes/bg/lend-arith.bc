@@ -1,0 +1,8 @@
+include io
+include slice
+include buf
+main -> i32 =
+  let mut a = array_new[i32](5, !{ i -> i + 10 });
+  let c = at(&a, 2, 0) - 1;
+  print_dec(c);
+  0

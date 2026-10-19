@@ -1,0 +1,18 @@
+-- JSON-like value with arrays encoded in the same mu: 0 null | 1 num | 2 end-of-array | 3 element(head, rest)
+include rec
+type Json = mu X. 1 + (i32 + (1 + (X * X)))
+
+fn sum(j: Json) -> i32 =
+  match unroll j {
+    inl u -> 0
+  | inr v -> match v { inl n -> n | inr w -> match w { inl e -> 0 | inr (h, t) -> sum(h) + sum(t) } }
+  }
+
+fn num(n: i32) -> Json = roll inr (inl n)
+fn cell(x: Json, xs: Json) -> Json = roll inr (inr (inr (x, xs)))
+fn end() -> Json = roll inr (inr (inl ()))
+
+main -> i32 =
+  let inner = cell(num(4), end());
+  let j = cell(num(3), cell(inner, end()));
+  with on_exhausted(!{ u -> 0 }) { sum(j) }

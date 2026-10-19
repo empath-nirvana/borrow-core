@@ -1,0 +1,196 @@
+-- AWFY CD's RedBlackTree (CLRS insertion with parent pointers and rotations), arena form, keyed by
+-- a call sign (an i32), with a Vector3D value per node in an `array f64` (three slots per node).
+-- Node k's fields are at 8 + 6k: key, left, right, parent, colour (1 red, 0 black), and node 0 is
+-- the sentinel nil (black). t[0] is the root, t[1] the number of nodes.
+-- The traversal is AWFY's forEach, done as successor walks along parent pointers.
+-- Answer: (nodes visited in order, whether the keys came out sorted and the tree is a valid
+-- red-black tree (1), the sum of the x components).
+
+include slice
+include buf
+
+fn g(a: array i32, i: i32) -> array i32 * i32 = let mut a = a; let x = at(&a, i, 0); (a, x)
+fn f(t: array i32, k: i32, fld: i32) -> array i32 * i32 = g(t, 8 + 6 * k + fld)
+fn s(t: array i32, k: i32, fld: i32, x: i32) -> array i32 = array_set(t, 8 + 6 * k + fld, x)
+
+fn left_rotate(t: array i32, x: i32) -> array i32 =
+  let (t, y) = f(t, x, 2);
+  let (t, yl) = f(t, y, 1);
+  let t = s(t, x, 2, yl);
+  let t = if yl != 0 { s(t, yl, 3, x) } else { t };
+  let (t, xp) = f(t, x, 3);
+  let t = s(t, y, 3, xp);
+  let (t, xpl) = f(t, xp, 1);
+  let t = if xp == 0 { array_set(t, 0, y) } else { if x == xpl { s(t, xp, 1, y) } else { s(t, xp, 2, y) } };
+  let t = s(t, y, 1, x);
+  s(t, x, 3, y)
+
+fn right_rotate(t: array i32, x: i32) -> array i32 =
+  let (t, y) = f(t, x, 1);
+  let (t, yr) = f(t, y, 2);
+  let t = s(t, x, 1, yr);
+  let t = if yr != 0 { s(t, yr, 3, x) } else { t };
+  let (t, xp) = f(t, x, 3);
+  let t = s(t, y, 3, xp);
+  let (t, xpr) = f(t, xp, 2);
+  let t = if xp == 0 { array_set(t, 0, y) } else { if x == xpr { s(t, xp, 2, y) } else { s(t, xp, 1, y) } };
+  let t = s(t, y, 2, x);
+  s(t, x, 3, y)
+
+fn fixup(t: array i32, z: i32) -> array i32 =
+  let mut t = t;
+  let mut z = z;
+  for i in 0..100000 {
+    let (t1, zp) = f(t, z, 3);
+    let (t1, zpc) = f(t1, zp, 4);
+    t = t1;
+    if zpc == 0 { break } else { () };
+    let (t1, zpp) = f(t, zp, 3);
+    let (t1, zppl) = f(t1, zpp, 1);
+    t = t1;
+    if zp == zppl {
+      let (t1, y) = f(t, zpp, 2);
+      let (t1, yc) = f(t1, y, 4);
+      t = t1;
+      if yc == 1 {
+        t = s(s(s(t, zp, 4, 0), y, 4, 0), zpp, 4, 1);
+        z = zpp
+      } else {
+        let (t1, zpr) = f(t, zp, 2);
+        t = t1;
+        if z == zpr { z = zp; t = left_rotate(t, zp) } else { () };
+        let (t1, zp2) = f(t, z, 3);
+        let (t1, zpp2) = f(t1, zp2, 3);
+        t = right_rotate(s(s(t1, zp2, 4, 0), zpp2, 4, 1), zpp2)
+      }
+    } else {
+      let y = zppl;
+      let (t1, yc) = f(t, y, 4);
+      t = t1;
+      if yc == 1 {
+        t = s(s(s(t, zp, 4, 0), y, 4, 0), zpp, 4, 1);
+        z = zpp
+      } else {
+        let (t1, zpl) = f(t, zp, 1);
+        t = t1;
+        if z == zpl { z = zp; t = right_rotate(t, zp) } else { () };
+        let (t1, zp2) = f(t, z, 3);
+        let (t1, zpp2) = f(t1, zp2, 3);
+        t = left_rotate(s(s(t1, zp2, 4, 0), zpp2, 4, 1), zpp2)
+      }
+    }
+  };
+  let (t, r) = g(t, 0);
+  s(t, r, 4, 0)
+
+-- put(key, (x, y, z)): a new node, or the value replaced.
+fn put(m: array i32 * array f64, key: i32, x: f64, y: f64, zz: f64) -> array i32 * array f64 =
+  let (t, v) = m;
+  let mut t = t;
+  let mut p = 0;
+  let mut cur = at(&t, 0, 0);
+  let mut found = 0 - 1;
+  for i in 0..100000 {
+    if cur == 0 { break } else { () };
+    p = cur;
+    let k = at(&t, 8 + 6 * cur, 0);
+    if key < k { cur = at(&t, 8 + 6 * cur + 1, 0) } else {
+      if k < key { cur = at(&t, 8 + 6 * cur + 2, 0) } else { found = cur; break } }
+  };
+  if found >= 0 {
+    (t, array_set(array_set(array_set(v, 3 * found, x), 3 * found + 1, y), 3 * found + 2, zz))
+  } else {
+    let (t, n) = g(t, 1);
+    let z = n + 1;
+    let t = array_set(t, 1, z);
+    let t = s(s(s(s(s(t, z, 0, key), z, 1, 0), z, 2, 0), z, 3, p), z, 4, 1);
+    let (t, pk) = f(t, p, 0);
+    let t = if p == 0 { array_set(t, 0, z) } else { if key < pk { s(t, p, 1, z) } else { s(t, p, 2, z) } };
+    let v = array_set(array_set(array_set(v, 3 * z, x), 3 * z + 1, y), 3 * z + 2, zz);
+    (fixup(t, z), v)
+  }
+
+fn minimum(t: array i32, x: i32) -> array i32 * i32 =
+  let mut t = t;
+  let mut x = x;
+  for i in 0..100000 {
+    let l = at(&t, 8 + 6 * x + 1, 0);
+    if l == 0 { break } else { x = l }
+  };
+  (t, x)
+
+-- The in-order successor, by parent pointers.
+fn successor(t: array i32, x: i32) -> array i32 * i32 =
+  let (t, r) = f(t, x, 2);
+  if r != 0 { minimum(t, r) } else {
+    let mut t = t;
+    let mut x = x;
+    let mut y = at(&t, 8 + 6 * x + 3, 0);
+    for i in 0..100000 {
+      let yr = at(&t, 8 + 6 * y + 2, 0);
+      if y == 0 || x != yr { break } else { x = y; y = at(&t, 8 + 6 * y + 3, 0) }
+    };
+    (t, y)
+  }
+
+-- The number of black nodes on every path from x down, or -1 when the paths disagree or a red
+-- node has a red child. Explicit: the tree is checked by the in-order walk, each leaf's black
+-- count compared with the leftmost's.
+fn black_height_to_root(t: array i32, x: i32) -> array i32 * i32 =
+  let mut t = t;
+  let mut x = x;
+  let mut h = 0;
+  for i in 0..100000 {
+    if x == 0 { break } else { () };
+    let c = at(&t, 8 + 6 * x + 4, 0);
+    let p = at(&t, 8 + 6 * x + 3, 0);
+    let pc = at(&t, 8 + 6 * p + 4, 0);
+    if c == 1 && pc == 1 { h = 0 - 1000000 } else { () };
+    if c == 0 { h = h + 1 } else { () };
+    x = p
+  };
+  (t, h)
+
+fn main_tree(n: i32) -> i32 * (i32 * f64) =
+  let t = array_new[i32](8 + 6 * (n + 2), !{ i -> 0 });
+  let v = array_new[f64](3 * (n + 2), !{ i -> 0.0 });
+  let mut m = (t, v);
+  let mut seed = 74755;
+  for i in 0..n {
+    seed = host[and32](seed * 1309 + 13849, 65535);
+    let fs = host[f64_convert_i32_s](seed);
+    m = put(m, seed % 1000, fs, 0.0, 1.0)
+  };
+  let (t, v) = m;
+  let (t, root) = g(t, 0);
+  let (t, first) = minimum(t, root);
+  let mut t = t;
+  let mut v = v;
+  let mut x = first;
+  let mut count = 0;
+  let mut ok = 1;
+  let mut prev = 0 - 1;
+  let mut bh = 0 - 1;
+  let mut sum = 0.0;
+  for i in 0..n + 1 {
+    if x == 0 { break } else { () };
+    count = count + 1;
+    let k = at(&t, 8 + 6 * x, 0);
+    if k <= prev { ok = 0 } else { () };
+    prev = k;
+    let vx = at(&v, 3 * x, 0.0);
+    sum = sum + vx;
+    let l = at(&t, 8 + 6 * x + 1, 0);
+    let r = at(&t, 8 + 6 * x + 2, 0);
+    if l == 0 || r == 0 {
+      let (t1, h) = black_height_to_root(t, x);
+      t = t1;
+      if bh < 0 { bh = h } else { if h != bh { ok = 0 } else { () } }
+    } else { () };
+    let (t1, nx) = successor(t, x);
+    t = t1;
+    x = nx
+  };
+  (count, (ok, sum))
+
+main -> i32 * (i32 * f64) = main_tree(2000)

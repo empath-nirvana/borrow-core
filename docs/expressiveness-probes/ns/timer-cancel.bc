@@ -1,0 +1,26 @@
+-- (d) A task waiting on a (real, platform) timer is cancelled by another task. The victim owns a
+-- cell and polls the clock until its deadline, awaiting between polls; the killer awaits twice
+-- and cancels it, which frees the victim's cell (`live 0`). Only the victim uses `Clock`.
+include async
+include io
+
+fn victim(ms: i32) -> i32 with Async, Clock =
+  let cell = alloc(7);
+  let t0 = now();
+  let mut fired = 0;
+  for _ in 0..1000000 {
+    if now() - t0 >= ns_of_ms(ms) { fired = 1; break } else { await() }
+  };
+  free(cell) + fired
+
+fn killer<'d>(t: TaskIn[i32]<'d>) -> i32 with Async = await(); await(); cancel_in(t); 2
+
+main -> List[i32] =
+  let d = alloc(());
+  let v = borrow mut d { 'd, e ->
+    let t = with spawn_in { victim(10000) };
+    let q = queue_in[i32]();
+    let q = push_in(q, with spawn_in { killer(t) });
+    with on_exhausted(!{ u -> nil[i32]() }) { run_in(q, 5) } };
+  let _ = free(d);
+  v

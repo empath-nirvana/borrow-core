@@ -1,0 +1,32 @@
+-- AWFY List with tail sharing its arguments (no clone).
+-- AWFY List with tail sharing its arguments (no clone).
+-- AWFY List with tail sharing its arguments (no clone).
+-- AWFY List with tail sharing its arguments (no clone).
+-- Answer: the length, 10.
+
+include rec
+
+type L = mu X. 1 + (i32 * X)
+
+fn make(n: i32) -> L with Exhausted = if n == 0 { roll inl () } else { roll inr (n, make(n - 1)) }
+
+fn length(l: L) -> i32 with Exhausted = match unroll l { inl u -> 0 | inr (x, r) -> 1 + length(r) }
+
+-- isShorterThan(x, y), consuming copies.
+fn shorter(x: L, y: L) -> bool with Exhausted =
+  match unroll y {
+    inl u -> false
+  | inr (b, yr) -> match unroll x { inl u -> true | inr (a, xr) -> shorter(xr, yr) }
+  }
+
+fn next(l: L) -> L = match unroll l { inl u -> roll inl () | inr (x, r) -> r }
+
+fn tail(x: L, y: L, z: L) -> L with Exhausted =
+  if shorter(y, x) {
+    let a = tail(next(x), y, z);
+    let b = tail(next(y), z, x);
+    let c = tail(next(z), x, y);
+    tail(a, b, c)
+  } else { z }
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) { length(tail(make(15), make(10), make(6))) }

@@ -1,0 +1,4 @@
+include text
+include fail
+main -> i32 + ParseError =
+  with to_result { borrow imm "12x" { v -> parse_i32(v) } }

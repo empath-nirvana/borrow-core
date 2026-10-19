@@ -1,0 +1,16 @@
+-- T01: loop-carried accumulators over a borrowed array.
+fn xs(i: i32) -> i32 =
+  if i == 0 { 3 } else if i == 1 { 8 } else if i == 2 { 0 - 2 } else if i == 3 { 7 }
+  else if i == 4 { 10 } else if i == 5 { 5 } else if i == 6 { 0 - 6 } else { 4 }
+
+main -> i32 * (i32 * i32) =
+  let xs = array_new[i32](8, xs);
+  let mut sq = 0;
+  let mut odd = 0;
+  let mut best = 0 - 2147483647 - 1;
+  for p in &xs {
+    let x = *p;
+    if x % 2 == 0 { sq = sq + x * x } else { odd = odd + 1 };
+    if x > best { best = x } else { () }
+  };
+  (sq, (odd, best))

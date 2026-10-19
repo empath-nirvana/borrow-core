@@ -1,0 +1,4 @@
+-- A program's own `fn take` beside `include buf`'s `take`.
+include buf
+fn take(x: i32) -> i32 = x + 1
+main -> i32 = take(1)

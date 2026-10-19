@@ -1,0 +1,243 @@
+-- AWFY Richards, arena form. Task control blocks are ten i32 fields at 10*id in `t`
+-- (link, id, pri, input, packetPending, taskWaiting, taskHolding, kind, data1, data2); the
+-- scheduler's globals at 60.. (taskList, current, currentId, queueCount, holdCount). Packets are
+-- eight i32 fields at 8*k in `p` (link, id, kind, datum, data[4]). -1 is NO_TASK / NO_WORK.
+-- Each task's "function" is dispatched on its kind tag instead of a stored closure.
+-- Answer: queuePacketCount * 100000 + holdCount: 23246 and 9297 for AWFY's reference run.
+
+include slice
+include buf
+
+type S = array i32 * array i32
+
+fn g(a: array i32, i: i32) -> array i32 * i32 = let mut a = a; let x = at(&a, i, 0); (a, x)
+
+-- addLast: `k` appended to the queue `q`; the new head.
+fn add_last(p: array i32, k: i32, q: i32) -> array i32 * i32 =
+  let mut p = array_set(p, 8 * k, 0 - 1);
+  if q < 0 { (p, k) } else {
+    let mut n = q;
+    for i in 0..100 {
+      let nx = at(&p, 8 * n, 0);
+      if nx < 0 { break } else { n = nx }
+    };
+    (array_set(p, 8 * n, k), q)
+  }
+
+fn pkt(p: array i32, k: i32, link: i32, id: i32, kind: i32) -> array i32 =
+  let p = array_set(p, 8 * k, link);
+  let p = array_set(p, 8 * k + 1, id);
+  array_set(p, 8 * k + 2, kind)
+
+fn task(t: array i32, id: i32, pri: i32, wkq: i32, pp: i32, tw: i32, kind: i32, d1: i32, d2: i32) -> array i32 =
+  let b = 10 * id;
+  let (t, list) = g(t, 60);
+  let t = array_set(t, b, list);
+  let t = array_set(t, b + 1, id);
+  let t = array_set(t, b + 2, pri);
+  let t = array_set(t, b + 3, wkq);
+  let t = array_set(t, b + 4, pp);
+  let t = array_set(t, b + 5, tw);
+  let t = array_set(t, b + 6, 0);
+  let t = array_set(t, b + 7, kind);
+  let t = array_set(t, b + 8, d1);
+  let t = array_set(t, b + 9, d2);
+  array_set(t, 60, b)
+
+fn hold_self(t: array i32) -> array i32 * i32 =
+  let (t, hc) = g(t, 64);
+  let t = array_set(t, 64, hc + 1);
+  let (t, c) = g(t, 61);
+  let t = array_set(t, c + 6, 1);
+  g(t, c)
+
+fn mark_waiting(t: array i32) -> array i32 * i32 =
+  let (t, c) = g(t, 61);
+  (array_set(t, c + 5, 1), c)
+
+fn release(t: array i32, id: i32) -> array i32 * i32 =
+  let b = 10 * id;
+  let t = array_set(t, b + 6, 0);
+  let (t, pr) = g(t, b + 2);
+  let (t, c) = g(t, 61);
+  let (t, cp) = g(t, c + 2);
+  if pr > cp { (t, b) } else { (t, c) }
+
+-- addInputAndCheckPriority on task `b`, from the current task `c`.
+fn add_input(s: S, b: i32, k: i32, c: i32) -> S * i32 =
+  let (t, p) = s;
+  let (t, inp) = g(t, b + 3);
+  if inp < 0 {
+    let t = array_set(t, b + 3, k);
+    let t = array_set(t, b + 4, 1);
+    let (t, pr) = g(t, b + 2);
+    let (t, cp) = g(t, c + 2);
+    if pr > cp { ((t, p), b) } else { ((t, p), c) }
+  } else {
+    let (p, q) = add_last(p, k, inp);
+    ((array_set(t, b + 3, q), p), c)
+  }
+
+fn queue_packet(s: S, k: i32) -> S * i32 =
+  let (t, p) = s;
+  let (p, id) = g(p, 8 * k + 1);
+  let (t, n) = g(t, 63);
+  let t = array_set(t, 63, n + 1);
+  let p = array_set(p, 8 * k, 0 - 1);
+  let (t, cid) = g(t, 62);
+  let p = array_set(p, 8 * k + 1, cid);
+  let (t, c) = g(t, 61);
+  add_input((t, p), 10 * id, k, c)
+
+fn idler(s: S, b: i32) -> S * i32 =
+  let (t, p) = s;
+  let (t, count) = g(t, b + 9);
+  let t = array_set(t, b + 9, count - 1);
+  if count - 1 == 0 { let (t, n) = hold_self(t); ((t, p), n) } else {
+    let (t, control) = g(t, b + 8);
+    if control % 2 == 0 {
+      let t = array_set(t, b + 8, control / 2);
+      let (t, n) = release(t, 4);
+      ((t, p), n)
+    } else {
+      let t = array_set(t, b + 8, host[xor32](control / 2, 53256));
+      let (t, n) = release(t, 5);
+      ((t, p), n)
+    }
+  }
+
+fn worker(s: S, b: i32, w: i32) -> S * i32 =
+  let (t, p) = s;
+  if w < 0 { let (t, n) = mark_waiting(t); ((t, p), n) } else {
+    let (t, dst) = g(t, b + 8);
+    let d = if dst == 2 { 3 } else { 2 };
+    let t = array_set(t, b + 8, d);
+    let p = array_set(p, 8 * w + 1, d);
+    let p = array_set(p, 8 * w + 3, 0);
+    let mut t = t;
+    let mut p = p;
+    for i in 0..4 {
+      let (t1, c) = g(t, b + 9);
+      let c1 = if c + 1 > 26 { 1 } else { c + 1 };
+      t = array_set(t1, b + 9, c1);
+      p = array_set(p, 8 * w + 4 + i, c1)
+    };
+    queue_packet((t, p), w)
+  }
+
+fn handler_t(s: S, b: i32, w: i32) -> S * i32 =
+  let (t, p) = s;
+  let (t, p) = if w < 0 { (t, p) } else {
+    let (p, kind) = g(p, 8 * w + 2);
+    if kind == 1 {
+      let (t, wi) = g(t, b + 8);
+      let (p, q) = add_last(p, w, wi);
+      (array_set(t, b + 8, q), p)
+    } else {
+      let (t, di) = g(t, b + 9);
+      let (p, q) = add_last(p, w, di);
+      (array_set(t, b + 9, q), p)
+    }
+  };
+  let (t, wi) = g(t, b + 8);
+  if wi < 0 { let (t, n) = mark_waiting(t); ((t, p), n) } else {
+    let (p, count) = g(p, 8 * wi + 3);
+    if count < 4 {
+      let (t, di) = g(t, b + 9);
+      if di < 0 { let (t, n) = mark_waiting(t); ((t, p), n) } else {
+        let (p, dl) = g(p, 8 * di);
+        let t = array_set(t, b + 9, dl);
+        let (p, x) = g(p, 8 * wi + 4 + count);
+        let p = array_set(p, 8 * di + 3, x);
+        let p = array_set(p, 8 * wi + 3, count + 1);
+        queue_packet((t, p), di)
+      }
+    } else {
+      let (p, wl) = g(p, 8 * wi);
+      let t = array_set(t, b + 8, wl);
+      queue_packet((t, p), wi)
+    }
+  }
+
+fn device(s: S, b: i32, w: i32) -> S * i32 =
+  let (t, p) = s;
+  if w < 0 {
+    let (t, pend) = g(t, b + 8);
+    if pend < 0 { let (t, n) = mark_waiting(t); ((t, p), n) } else {
+      let t = array_set(t, b + 8, 0 - 1);
+      queue_packet((t, p), pend)
+    }
+  } else {
+    let t = array_set(t, b + 8, w);
+    let (t, n) = hold_self(t);
+    ((t, p), n)
+  }
+
+-- runTask on task `b`.
+fn run_task(s: S, b: i32) -> S * i32 =
+  let (t, p) = s;
+  let (t, pp) = g(t, b + 4);
+  let (t, tw) = g(t, b + 5);
+  let (t, th) = g(t, b + 6);
+  let (t, p, msg) = if pp == 1 && tw == 1 && th == 0 {
+    let (t, m) = g(t, b + 3);
+    let (p, nx) = g(p, 8 * m);
+    let t = array_set(t, b + 3, nx);
+    let t = if nx < 0 { array_set(t, b + 4, 0) } else { array_set(t, b + 4, 1) };
+    let t = array_set(t, b + 5, 0);
+    let t = array_set(t, b + 6, 0);
+    (t, p, m)
+  } else { (t, p, 0 - 1) };
+  let (t, kind) = g(t, b + 7);
+  if kind == 0 { idler((t, p), b) } else {
+    if kind == 1 { worker((t, p), b, msg) } else {
+      if kind == 2 { handler_t((t, p), b, msg) } else { device((t, p), b, msg) } } }
+
+fn schedule(s: S) -> S =
+  let (t, p) = s;
+  let (t, l) = g(t, 60);
+  let mut s = (t, p);
+  let mut cur = l;
+  while 0 <= cur {
+    let (t, p) = s;
+    let (t, pp) = g(t, cur + 4);
+    let (t, tw) = g(t, cur + 5);
+    let (t, th) = g(t, cur + 6);
+    if th == 1 || (pp == 0 && tw == 1) {
+      let (t, nx) = g(t, cur);
+      s = (t, p);
+      cur = nx
+    } else {
+      let (t, id) = g(t, cur + 1);
+      let t = array_set(t, 62, id);
+      let t = array_set(t, 61, cur);
+      let (s1, nx) = run_task((t, p), cur);
+      s = s1;
+      cur = nx
+    }
+  };
+  s
+
+main -> i32 * i32 =
+  let t = array_new[i32](70, !{ i -> 0 - 1 });
+  let t = array_set(t, 63, 0);
+  let t = array_set(t, 64, 0);
+  let p = array_new[i32](80, !{ i -> 0 });
+  let t = task(t, 0, 0, 0 - 1, 0, 0, 0, 1, 10000);
+  let p = pkt(p, 0, 0 - 1, 1, 1);
+  let p = pkt(p, 1, 0, 1, 1);
+  let t = task(t, 1, 1000, 1, 1, 1, 1, 2, 0);
+  let p = pkt(p, 2, 0 - 1, 4, 0);
+  let p = pkt(p, 3, 2, 4, 0);
+  let p = pkt(p, 4, 3, 4, 0);
+  let t = task(t, 2, 2000, 4, 1, 1, 2, 0 - 1, 0 - 1);
+  let p = pkt(p, 5, 0 - 1, 5, 0);
+  let p = pkt(p, 6, 5, 5, 0);
+  let p = pkt(p, 7, 6, 5, 0);
+  let t = task(t, 3, 3000, 7, 1, 1, 2, 0 - 1, 0 - 1);
+  let t = task(t, 4, 4000, 0 - 1, 0, 1, 3, 0 - 1, 0);
+  let t = task(t, 5, 5000, 0 - 1, 0, 1, 3, 0 - 1, 0);
+  let (t, p) = schedule((t, p));
+  let (t, q) = g(t, 63);
+  let (t, h) = g(t, 64);
+  (q, h)

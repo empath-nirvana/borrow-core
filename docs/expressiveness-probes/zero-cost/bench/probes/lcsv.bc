@@ -1,0 +1,40 @@
+include slice
+include buf
+include text
+-- T05's lcs over two views of literals instead of two owned strings.
+fn max(x: i32, y: i32) -> i32 = if x < y { y } else { x }
+fn lcs<'x, 'y>(x: text 'x, y: text 'y) -> i32 =
+  let (x, x1) = array_copy['x, u8] x;
+  let m = len(x1);
+  let (y, y1) = array_copy['y, u8] y;
+  let n = len(y1);
+  let mut x = x;
+  let mut y = y;
+  let mut prev = array_new[i32](n + 1, !{ i -> 0 });
+  let mut cur = array_new[i32](n + 1, !{ i -> 0 });
+  for i in 1..m + 1 {
+    for j in 1..n + 1 {
+      let (x2, xa) = array_copy['x, u8] x;
+      x = x2;
+      let (y2, ya) = array_copy['y, u8] y;
+      y = y2;
+      let a = at(xa, i - 1, 0);
+      let b = at(ya, j - 1, 0);
+      let d = at(&prev, j - 1, 0);
+      let u = at(&prev, j, 0);
+      let l = at(&cur, j - 1, 0);
+      let v = if a == b { d + 1 } else { max(u, l) };
+      cur = array_set(cur, j, v)
+    };
+    let t = prev;
+    prev = cur;
+    cur = t
+  };
+  array_forget['x, u8](x);
+  array_forget['y, u8](y);
+  let r = at(&prev, n, 0);
+  r
+main -> i32 * i32 =
+  let l1 = borrow imm "abcde" { x -> borrow imm "ace" { y -> lcs(x, y) } };
+  let l2 = borrow imm "AGGTAB" { x -> borrow imm "GXTXAYB" { y -> lcs(x, y) } };
+  (l1, l2)

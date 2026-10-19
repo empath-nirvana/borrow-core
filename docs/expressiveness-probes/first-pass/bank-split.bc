@@ -1,0 +1,50 @@
+-- pending: SPEC §29 (R1's body is closed but for the view: a relaxed lend whose body reads the function's other variables)
+-- now: 32:17: this borrow block's body uses `n`, which is outside it, and performs the operation 1.0, which resumes: a borrow held across a resumption sees only its view (R1, SPEC §29)
+-- A bank simulation: each teller task owns an account and works through its queue of
+-- transactions, holding a `mut` borrow of the account across its `await`s, so that the balance it
+-- updates is the one it borrowed. A withdrawal that would overdraw is refused: it raises
+-- `Fail[i32]`, handled inside the borrow, and the teller counts it. The tellers run under
+-- `lib/async.bc`'s scheduler, interleaved.
+--
+-- Exercises: a `mut` borrow held across a suspension inside a task of `spawn` (R1, SPEC §29),
+-- `modify` through the borrow, `Fail` handled inside the borrow block, a counted loop over a
+-- generic list of transactions, and the scheduler's interleaving.
+--
+-- Blocked by: a relaxed lend (R1) whose body uses variables of the function outside it. The
+-- `borrow mut acct` block awaits, so it is R1 (SPEC §29), whose premise is that the body is closed
+-- but for the view; the body reads `txns` and `n`. The message names the operation `1.0` where it
+-- means `await`. `corpus/async-bank-inbox.bc` keeps the transactions inside the account, and runs.
+--
+-- Once it lands: `[(130, 0), (20, 1)]`: teller 1 deposits 50 and withdraws 20 from 100;
+-- teller 2 withdraws 30 from 50, and its second withdrawal of 40 is refused.
+
+include async
+include fail
+
+-- A transaction: a deposit (positive) or a withdrawal (negative).
+type Txn = i32
+
+fn apply(balance: i32, t: Txn) -> i32 with Fail[i32] =
+  if balance + t < 0 { raise(t) } else { balance + t }
+
+fn teller(start: i32, txns: List[Txn], n: i32) -> i32 * i32 with Async =
+  let acct = alloc(start);
+  let mut refused = 0;
+  let mut rest = txns;
+  for _ in 0..n {
+    match unroll rest {
+      inl u -> rest = nil[Txn]()
+    | inr (t, more) ->
+        rest = more;
+        let ok = borrow mut acct { a -> modify a { b -> match with to_result { apply(b, t) } { inl b2 -> (b2, true) | inr e -> (b, false) } } };
+        if ok { () } else { refused = refused + 1 };
+        await()
+    }
+  };
+  (free(acct), refused)
+
+main -> List[i32 * i32] =
+  let q = queue[i32 * i32]();
+  let q = push(q, with spawn { teller(100, cons(50, cons(0 - 20, nil())), 2) });
+  let q = push(q, with spawn { teller(50, cons(0 - 30, cons(0 - 40, nil())), 2) });
+  run_until_empty(q)

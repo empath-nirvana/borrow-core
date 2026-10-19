@@ -1,0 +1,24 @@
+sum [1000 10]: 4995000 rust allocs 11 (alloc 11 + realloc 0) frees 6 
+prefix [1000 10]: 8011345927751420968 rust allocs 11 (alloc 11 + realloc 0) frees 6 
+sieve [10000 2]: 1229 rust allocs 12 (alloc 12 + realloc 0) frees 7 
+sieve-for [10000 2]: 1229 rust allocs 12 (alloc 12 + realloc 0) frees 7 
+matmul [30]: 0 rust allocs 12 (alloc 12 + realloc 0) frees 7 
+quicksort [2000 2]: 0 -20 rust allocs 12 (alloc 12 + realloc 0) frees 7 
+chain-for [10000]: 128558571 rust allocs 9 (alloc 9 + realloc 0) frees 4 
+chain-yield [10000]: 128558571 rust allocs 9 (alloc 9 + realloc 0) frees 4 
+chain-gen [10000]: 128558571 rust allocs 9 (alloc 9 + realloc 0) frees 4 
+sort-generic [2000 2]: 0 2097100 rust allocs 12 (alloc 12 + realloc 0) frees 7 
+parse [<parse.txt]: 20000 -908593 rust allocs 21 (alloc 8 + realloc 13) frees 1 
+binary-trees [8]: stretch tree of depth 9	 check: 1023 256	 trees of depth 4	 check: 7936 64	 trees of depth 6	 check: 8128 16	 trees of depth 8	 check: 8176 long lived tree of depth 8	 check: 511 rust allocs 25782 (alloc 25782 + realloc 0) frees 25777 
+n-body [100]: -169075163 -169050762 rust allocs 8 (alloc 8 + realloc 0) frees 3 
+mandelbrot [50]: 992 rust allocs 8 (alloc 8 + realloc 0) frees 3 
+spectral-norm [50]: 1274193836 rust allocs 11 (alloc 11 + realloc 0) frees 6 
+wordcount [<wc.txt]: 20000 3688 1276 rust allocs 23 (alloc 11 + realloc 12) frees 4 
+gen-tree [1024 2]: 1022312 rust allocs 16 (alloc 12 + realloc 4) frees 7 
+gen-tree-dyn [1024 2]: 1022312 rust allocs 2058 (alloc 2058 + realloc 0) frees 2053 
+gen-tree-cb [1024 2]: 1022312 rust allocs 10 (alloc 10 + realloc 0) frees 5 
+async-tree [1024 4]: 511144 511168 511192 511216 rust allocs 8208 (alloc 8208 + realloc 0) frees 8203 
+raise-small [100 2000]: 29400377914 100003 rust allocs 10 (alloc 10 + realloc 0) frees 5 
+raise-large [100 2000]: 29400377914 800080 rust allocs 10 (alloc 10 + realloc 0) frees 5 
+handlers-di [1000 2 0]: 999000 871750 6000 rust allocs 12 (alloc 12 + realloc 0) frees 7 
+handlers-di-generic [1000 2 1]: 999000 5372274584827604120 6000 rust allocs 11 (alloc 11 + realloc 0) frees 6 

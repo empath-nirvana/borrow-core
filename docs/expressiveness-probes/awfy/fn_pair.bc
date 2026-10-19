@@ -1,0 +1,8 @@
+-- A `!` function stored in a pair and in a cell, then called.
+fn idle(x: i32) -> i32 = x + 1
+main -> i32 =
+  let p = (idle, 3);
+  let (f, k) = p;
+  let c = alloc(idle);
+  let g = free(c);
+  f(k) + g(1)

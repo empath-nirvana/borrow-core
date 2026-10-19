@@ -1,0 +1,11 @@
+include rec
+type Pile = mu X. 1 + (i32 * X)
+fn push1(p: Pile, size: i32) -> Pile = roll inr (size, p)
+fn push2(p: Pile, size: i32) -> Pile =
+  match unroll p { inl u -> roll inr (size, roll inl ()) | inr (s, rest) -> roll inr (size, roll inr (s, rest)) }
+main -> i32 =
+  let mut p : Pile = roll inl ();
+  for k in 0..4 { p = push1(p, k) };
+  let mut q : Pile = roll inl ();
+  for k in 0..4 { q = push2(q, k) };
+  0

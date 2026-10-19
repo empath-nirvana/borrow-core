@@ -1,0 +1,80 @@
+-- Worker pool, served at the scheduler (a port): the job queue and the results are the
+-- scheduler's state, and a task asks for a job / sends a result with control operations that
+-- stop it, as `async-timers.bc`'s `sleep` does. Every resumption takes an `i32 + 1` (a job, or
+-- none; ignored after `await` and `send`). Two workers, five jobs.
+include list
+
+effect Work { ctl wait_turn(); ctl take_job() -> i32 + 1; ctl send_res(x: i32) }
+
+-- What a task stopped at: 0 await, 1 take, 2 send x.
+type Tag = 1 + (1 + i32)
+type K = box top U (nu X. ((i32 + 1) -o F (i32 + (Tag * box top U X))) & F 1)
+type Step = i32 + (Tag * K)
+
+handler stepper: Work, i32 -> Step = {
+  return(v) = inl v;
+  wait_turn(k) = inr (inl (), boxed[top] (thunkv nu_in <
+    fun (a : i32 + 1) -> kk <- return (unbox k); u <- return (); (force kk).1 u,
+    kk <- return (unbox k); (force kk).2 >));
+  take_job(k) = inr (inr (inl ()), boxed[top] (thunkv nu_in <
+    fun (a : i32 + 1) -> kk <- return (unbox k); (force kk).1 a,
+    kk <- return (unbox k); (force kk).2 >));
+  send_res(x, k) = inr (inr (inr x), boxed[top] (thunkv nu_in <
+    fun (a : i32 + 1) -> kk <- return (unbox k); u <- return (); (force kk).1 u,
+    kk <- return (unbox k); (force kk).2 >))
+}
+
+fn wake(t: K, a: i32 + 1) -> Step = g <- return (unbox t); (nu_out (force g)).1 a
+fn kill(t: K) -> 1 = g <- return (unbox t); (nu_out (force g)).2
+
+fn worker(id: i32) -> i32 with Work =
+  let mut done = 0;
+  for _ in 0..100 {
+    match take_job() {
+      inl j -> send_res(j * 10 + id); done = done + 1; wait_turn()
+    | inr u -> break
+    }
+  };
+  done
+
+-- One task's turn: run it past its sends and takes until it awaits or ends, serving it from
+-- `jobs` and appending to `out`. Bounded by 8 stops per turn.
+fn turn(s: Step, jobs: List[i32], out: List[i32]) -> (Step * List[i32]) * List[i32] =
+  let mut cur = s;
+  let mut js = jobs;
+  let mut o = out;
+  for _ in 0..8 {
+    match cur {
+      inl v -> cur = (inl v : Step); break
+    | inr (tag, k) -> match tag {
+        inl u -> cur = (inr (inl (), k) : Step); break
+      | inr t2 -> match t2 {
+          inl u -> match unroll js {
+              inl e -> js = nil[i32](); cur = wake(k, inr ())
+            | inr (j, rest) -> js = rest; cur = wake(k, inl j)
+            }
+        | inr x -> o = cons(x, o); cur = wake(k, inr ())
+        }
+      }
+    }
+  };
+  ((cur, js), o)
+
+-- Resume a task stopped at `await`.
+fn kick(s: Step) -> Step =
+  match s { inl v -> inl v | inr (tag, k) -> match tag { inl u -> wake(k, inr ()) | inr t -> inr ((inr t : Tag), k) } }
+
+fn finish(s: Step) -> i32 = match s { inl v -> v | inr (t, k) -> kill(k); 0 - 1 }
+
+main -> (i32 * i32) * List[i32] =
+  let jobs = cons(1, cons(2, cons(3, cons(4, cons(5, nil[i32]())))));
+  let mut a = with stepper { worker(1) };
+  let mut b = with stepper { worker(2) };
+  let mut js = jobs;
+  let mut out = nil[i32]();
+  for _ in 0..10 {
+    let ((a2, j2), o2) = turn(a, js, out);
+    let ((b2, j3), o3) = turn(b, j2, o2);
+    a = kick(a2); b = kick(b2); js = j3; out = o3
+  };
+  ((finish(a), finish(b)), out)

@@ -1,0 +1,43 @@
+-- T08: a memo table as an answering handler's state (a map and a hit count), consulted by a
+-- non-structural recursion (Collatz chain lengths) run under a budget (`on_exhausted`).
+-- `best` is assigned inside the answering `with memo` body (accepted). The budget handler is put
+-- around each call (`chain_top`): the body of `with on_exhausted` may not assign a `let mut`
+-- declared outside it (see T08-best-answered.bc for the other arrangement).
+include map
+include rec
+
+effect Memo { fn lookup(n: i64) -> i32 + 1; fn store(n: i64, l: i32) }
+
+handler memo(mut s: Map[i64, i32] * i32): Memo = {
+  lookup(n) = {
+    let (m, h) = s;
+    let (m, o) = map_lookup(m, n);
+    match o { inl l -> s = (m, h + 1); inl l | inr u -> s = (m, h); inr () }
+  };
+  store(n, l) = { let (m, h) = s; let (m, o) = map_insert(m, n, l); s = (m, h); () }
+}
+
+fn collatz(n: i64) -> i64 = if n % i64[2] == i64[0] { n / i64[2] } else { i64[3] * n + i64[1] }
+
+fn chain(n: i64) -> i32 with Memo, Exhausted =
+  if n == i64[1] { 1 } else {
+    match lookup(n) {
+      inl l -> l
+    | inr u -> let l = 1 + chain(collatz(n)); store(n, l); l
+    }
+  }
+
+fn chain_top(n: i64) -> i32 with Memo = with on_exhausted(!{ u -> 0 }) { chain(n) }
+
+main -> (i32 * i32) * (i32 * i32) =
+  let cache = alloc((map_new[i64, i32](64), 0));
+  let mut bn = 0;
+  let mut bl = 0;
+  with memo(&mut cache) {
+    for n in 1..30 {
+      let l = chain_top(host[extend_s](n));
+      if l > bl { bn = n; bl = l } else { () }
+    } };
+  let (m, hits) = free(cache);
+  let k = map_len(&m);
+  ((bn, bl), (hits, k))

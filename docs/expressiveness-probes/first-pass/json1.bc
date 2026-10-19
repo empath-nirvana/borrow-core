@@ -1,0 +1,22 @@
+-- A JSON-like value: null, a number, or an array of values (nested recursion through List).
+include list
+include rec
+type Json = mu X. 1 + (i32 + List[X])
+
+fn sum(j: Json) -> i32 =
+  match unroll j {
+    inl u -> 0
+  | inr v -> match v { inl n -> n | inr xs -> sum_list(xs) }
+  }
+fn sum_list(xs: List[Json]) -> i32 =
+  match unroll xs { inl u -> 0 | inr (h, t) -> sum(h) + sum_list(t) }
+
+fn num(n: i32) -> Json = roll inr (inl n)
+fn arr(xs: List[Json]) -> Json = roll inr (inr xs)
+
+main -> i32 =
+  let e = nil[Json]();
+  let e2 = nil[Json]();
+  let inner = arr(cons(num(4), e));
+  let j = arr(cons(num(3), cons(inner, e2)));
+  with on_exhausted(!{ u -> 0 }) { sum(j) }

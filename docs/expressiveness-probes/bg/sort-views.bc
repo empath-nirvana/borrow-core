@@ -1,0 +1,15 @@
+include textio
+-- The generic comparator sort of lib/slice.bc at an element type holding a view.
+main -> i32 =
+  let s = string_of_lit("hello world");
+  borrow imm s { 't, t ->
+    let mut es = box buf[text 't * i32](4);
+    let (t, a) = array_copy['t, u8] t;
+    let (e1, _) = push(es, (a, 1));
+    es = e1;
+    let (e2, _) = push(es, (t, 2));
+    es = e2;
+    borrow mut es { v -> discard_mut(sort(v, !{ (x, y) -> let (kx, cx) = x; let (ky, cy) = y; array_forget['t, u8](kx); array_forget['t, u8](ky); cy - cx }, (slice_empty_imm['t, u8], 0))) };
+    let (b, n) = es;
+    print_dec(n) };
+  0

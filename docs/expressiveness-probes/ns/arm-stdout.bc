@@ -1,0 +1,9 @@
+-- A `match` in `main` with one arm printing and the other not; (a) inside a control `with`,
+-- (b) at top level of `main`.
+include io
+include rec
+main -> i32 =
+  let x : i32 + i32 = inr 3;
+  with on_exhausted(!{ u -> 0 - 1 }) {
+    match x { inl u -> 0 | inr v -> print_dec(v); 1 }
+  }

@@ -1,0 +1,6 @@
+-- Two `mut` borrows of one cell at once: the current task and the task being released.
+fn bump<'a, 'b>(x: mut 'a i32, y: mut 'b i32) -> mut 'a i32 * mut 'b i32 = (x, y)
+main -> i32 =
+  let c = alloc(5);
+  let r = borrow mut c { 'x, m -> borrow mut c { 'y, n -> let (m, n) = bump(m, n); 0 } };
+  free(c) + r

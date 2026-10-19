@@ -1,0 +1,16 @@
+T01: allocs 1 indirect 0 copies 0 loads 16 stores 8 bounds 8
+T02: allocs 1 indirect 0 copies 0 loads 19 stores 6 bounds 13
+T03: allocs 2 indirect 0 copies 0 loads 90 stores 35 bounds 75
+T04: allocs 2 indirect 0 copies 0 loads 117 stores 73 bounds 84
+T05: allocs 12 indirect 0 copies 0 loads 580 stores 174 bounds 536
+T06: allocs 4 indirect 0 copies 0 loads 703 stores 338 bounds 359
+T07: allocs 1 indirect 0 copies 0 loads 36 stores 18 bounds 36
+T08: allocs 7 indirect 0 copies 0 loads 10948 stores 8585 bounds 2125
+T09: allocs 1 indirect 0 copies 0 loads 323 stores 307 bounds 353
+T10: allocs 0 indirect 0 copies 0 loads 0 stores 0 bounds 0
+T11: allocs 2 indirect 0 copies 0 loads 161 stores 25 bounds 214
+T12: allocs 4 indirect 0 copies 0 loads 74 stores 55 bounds 12
+T13: allocs 30 indirect 6 copies 0 loads 536 stores 530 bounds 0
+T14: allocs 3 indirect 0 copies 0 loads 49 stores 25 bounds 19
+lcsv: allocs 4 indirect 0 copies 0 loads 389 stores 81 bounds 344
+t07v: allocs 0 indirect 0 copies 0 loads 18 stores 0 bounds 9

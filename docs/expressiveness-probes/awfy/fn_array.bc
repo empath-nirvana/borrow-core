@@ -1,0 +1,8 @@
+-- An array of `!` functions (Richards' per-task `fn` field), tabulated.
+include slice
+fn idle(x: i32) -> i32 = x + 1
+main -> i32 =
+  let fns = array_new[!(i32 => i32)](2, !{ i -> idle });
+  let mut fns = fns;
+  let f = at(&fns, 1, idle);
+  f(5)

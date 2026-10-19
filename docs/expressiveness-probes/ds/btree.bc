@@ -1,0 +1,206 @@
+-- A B-tree of minimum degree 3 (at most 5 keys a node), generic over a persistent key type with a
+-- comparator, as an arena: node `u`'s keys are `keys[5u ..]`, its children `kids[6u ..]` (node
+-- indices), its key count `cnt[u]`, whether it is a leaf `leaf[u]`. Insertion is CLRS's: a full
+-- root is split first, and each full child is split before the descent enters it, so the descent
+-- is a loop, not a recursion. Search walks down the same way.
+include textio
+include buf
+
+def mt : i32 = 3
+def maxk : i32 = 5
+
+type BTree[K] = ((buf K * buf i32) * (buf i32 * buf bool)) * i32
+
+fn gk[K](b: buf K, i: i32) -> buf K * K = let (a, n) = b; let x = at(&a, i, filler[K]); ((a, n), x)
+fn sk[K](b: buf K, i: i32, x: K) -> buf K = let (a, n) = b; (array_set(a, i, x), n)
+
+-- A new node: its slots pushed onto every buffer; its index.
+fn new_node[K](t: BTree[K], is_leaf: bool) -> BTree[K] * i32 =
+  let (((ks, kids), (cnt, lf)), root) = t;
+  let (cnt, u) = len_of(cnt);
+  let mut ks = ks;
+  let mut kids = kids;
+  for _ in 0..maxk { let (k2, _) = push(ks, filler[K]); ks = k2 };
+  for _ in 0..maxk + 1 { let (k2, _) = push(kids, 0); kids = k2 };
+  let (cnt, _) = push(cnt, 0);
+  let (lf, _) = push(lf, is_leaf);
+  ((((ks, kids), (cnt, lf)), root), u)
+
+fn btree_new[K]() -> BTree[K] =
+  let t : BTree[K] = (((box buf[K](16), box buf[i32](16)), (box buf[i32](4), box buf[bool](4))), 0);
+  let (t, u) = new_node(t, true);
+  t
+
+-- The full child `kids[x][i]` split in two, its middle key moved up into `x`.
+fn split_child[K](t: BTree[K], x: i32, i: i32) -> BTree[K] =
+  let (((ks, kids), (cnt, lf)), root) = t;
+  let (kids, y) = gk(kids, (maxk + 1) * x + i);
+  let (lf, yl) = gk(lf, y);
+  let (t, z) = new_node((((ks, kids), (cnt, lf)), root), yl);
+  let (((ks0, kids0), (cnt0, lf)), root) = t;
+    let mut sks = ks0;
+  let mut skids = kids0;
+  let mut scnt = cnt0;
+  for j in 0..mt - 1 { let (k2, v) = gk(sks, maxk * y + j + mt); sks = sk(k2, maxk * z + j, v) };
+  if yl { () } else {
+    for j in 0..mt { let (k2, v) = gk(skids, (maxk + 1) * y + j + mt); skids = sk(k2, (maxk + 1) * z + j, v) }
+  };
+  scnt = sk(sk(scnt, z, mt - 1), y, mt - 1);
+  let (c2, xn) = gk(scnt, x);
+  scnt = c2;
+  -- the children of x after i shifted right, z put at i + 1
+  for d in 0..xn - i {
+    let j = xn - d;
+    let (k2, v) = gk(skids, (maxk + 1) * x + j);
+    skids = sk(k2, (maxk + 1) * x + j + 1, v)
+  };
+  skids = sk(skids, (maxk + 1) * x + i + 1, z);
+  -- the keys of x from i shifted right, the median put at i
+  for d in 0..xn - i {
+    let j = xn - 1 - d;
+    let (k2, v) = gk(sks, maxk * x + j);
+    sks = sk(k2, maxk * x + j + 1, v)
+  };
+  let (k2, med) = gk(sks, maxk * y + mt - 1);
+  sks = sk(k2, maxk * x + i, med);
+  scnt = sk(scnt, x, xn + 1);
+  (((sks, skids), (scnt, lf)), root)
+
+-- `k` added (a duplicate is added again).
+fn btree_insert[K](t: BTree[K], k: K, c: !(K * K => i32)) -> BTree[K] =
+  -- names bound here are not rebound in the loop below (loop-local shadowing, #493)
+  let (((rks, rkids), (rcnt, rlf)), rt) = t;
+  let (rcnt, rn) = gk(rcnt, rt);
+  let t = (((rks, rkids), (rcnt, rlf)), rt);
+  -- a full root: a new root above it, and the old one split
+  let t = if rn == maxk {
+    let (t, s) = new_node(t, false);
+    let (((sks, skids), (scnt, slf)), sroot) = t;
+    let skids = sk(skids, (maxk + 1) * s, sroot);
+    split_child((((sks, skids), (scnt, slf)), s), s, 0)
+  } else { t };
+  let (d, root) = t;
+  let mut d = d;
+  let mut x = root;
+  for _ in 0..64 {
+    let ((ks, kids), (cnt0, lf0)) = d;
+    let (lf, xl) = gk(lf0, x);
+    let (cnt, xn) = gk(cnt0, x);
+    if xl {
+      -- shift the larger keys right and put k in place
+      let mut lk = ks;
+      let mut i = xn - 1;
+      for _ in 0..xn {
+        let (k2, v) = gk(lk, maxk * x + i);
+        if 0 < c(v, k) { lk = sk(k2, maxk * x + i + 1, v); i = i - 1 } else { lk = k2; break }
+      };
+      lk = sk(lk, maxk * x + i + 1, k);
+      d = ((lk, kids), (sk(cnt, x, xn + 1), lf));
+      break
+    } else {
+      let mut nk = ks;
+      let mut i = xn - 1;
+      for _ in 0..xn {
+        let (k2, v) = gk(nk, maxk * x + i);
+        nk = k2;
+        if 0 < c(v, k) { i = i - 1 } else { break }
+      };
+      let ks5 = nk;
+      i = i + 1;
+      let (kids1, ch) = gk(kids, (maxk + 1) * x + i);
+      let (cnt1, chn) = gk(cnt, ch);
+      if chn == maxk {
+        let (d2, r2) = split_child((((ks5, kids1), (cnt1, lf)), root), x, i);
+        let ((ks3, kids3), (cnt3, lf3)) = d2;
+        let (ks4, med) = gk(ks3, maxk * x + i);
+        let j = if 0 < c(k, med) { i + 1 } else { i };
+        let (kids4, nx) = gk(kids3, (maxk + 1) * x + j);
+        d = ((ks4, kids4), (cnt3, lf3));
+        x = nx
+      } else { d = ((ks5, kids1), (cnt1, lf)); x = ch }
+    }
+  };
+  (d, root)
+
+-- Whether `k` is in the tree.
+fn btree_contains[K](t: BTree[K], k: K, c: !(K * K => i32)) -> BTree[K] * bool =
+  let (d, root) = t;
+  let mut d = d;
+  let mut x = root;
+  let mut found = false;
+  for _ in 0..64 {
+    let ((ks, kids), (cnt, lf)) = d;
+    let (lf, xl) = gk(lf, x);
+    let (cnt, xn) = gk(cnt, x);
+    let mut ks = ks;
+    let mut i = 0;
+    let mut r = 1;
+    for _ in 0..xn {
+      let (k2, v) = gk(ks, maxk * x + i);
+      ks = k2;
+      r = c(k, v);
+      if r <= 0 { break } else { i = i + 1 }
+    };
+    if r == 0 && i < xn { found = true; d = ((ks, kids), (cnt, lf)); break } else {
+    if xl { d = ((ks, kids), (cnt, lf)); break } else {
+      let (kids, ch) = gk(kids, (maxk + 1) * x + i);
+      d = ((ks, kids), (cnt, lf));
+      x = ch
+    } }
+  };
+  ((d, root), found)
+
+-- The depth (every leaf is at the same depth).
+fn btree_height[K](t: BTree[K]) -> BTree[K] * i32 =
+  let (((ks, kids), (cnt, lf)), root) = t;
+  let mut kids = kids;
+  let mut lf = lf;
+  let mut x = root;
+  let mut h = 1;
+  for _ in 0..64 {
+    let (l2, xl) = gk(lf, x);
+    lf = l2;
+    if xl { break } else { let (k2, ch) = gk(kids, (maxk + 1) * x); kids = k2; x = ch; h = h + 1 }
+  };
+  ((((ks, kids), (cnt, lf)), root), h)
+
+fn cmp_i32(a: i32, b: i32) -> i32 = if a < b { 0 - 1 } else { if b < a { 1 } else { 0 } }
+
+-- Pairs ordered by the second field, then the first.
+fn cmp_pair(a: i32 * i32, b: i32 * i32) -> i32 =
+  let (a1, a2) = a;
+  let (b1, b2) = b;
+  let c = cmp_i32(a2, b2);
+  if c == 0 { cmp_i32(a1, b1) } else { c }
+
+main -> i32 =
+  let mut t = btree_new[i32]();
+  let mut x = 1;
+  for i in 0..2000 {
+    x = host[and32](host[add32](host[mul32](x, 1103515245), 12345), 2147483647);
+    t = btree_insert(t, host[shr_u32](x, 8), !{ (a, b) -> cmp_i32(a, b) })
+  };
+  -- every inserted key is found; a sample of absent ones is not
+  let mut x = 1;
+  let mut hits = 0;
+  for i in 0..2000 {
+    x = host[and32](host[add32](host[mul32](x, 1103515245), 12345), 2147483647);
+    let (t2, f) = btree_contains(t, host[shr_u32](x, 8), !{ (a, b) -> cmp_i32(a, b) });
+    t = t2;
+    if f { hits = hits + 1 } else { () }
+  };
+  let (t, f) = btree_contains(t, 0 - 5, !{ (a, b) -> cmp_i32(a, b) });
+  let (t, h) = btree_height(t);
+  print_dec(hits); print_byte(b' ');
+  let fi = if f { 1 } else { 0 };
+  print_dec(fi); print_byte(b' ');
+  print_dec(h); print_byte(b'\n');
+  -- the same tree code at pair keys with another comparator
+  let mut p = btree_new[i32 * i32]();
+  for i in 0..100 { p = btree_insert(p, (i, 100 - i), !{ (a, b) -> cmp_pair(a, b) }) };
+  let (p, g) = btree_contains(p, (40, 60), !{ (a, b) -> cmp_pair(a, b) });
+  let (p, g2) = btree_contains(p, (40, 61), !{ (a, b) -> cmp_pair(a, b) });
+  let gi = if g { 1 } else { 0 };
+  let gj = if g2 { 1 } else { 0 };
+  print_dec(gi); print_dec(gj); print_byte(b'\n');
+  0

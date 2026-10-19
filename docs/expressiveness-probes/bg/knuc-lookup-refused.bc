@@ -1,0 +1,117 @@
+-- k-nucleotide: the sequence THREE of a FASTA input, upper-cased; the frequencies of its 1- and
+-- 2-mers, most frequent first, and the counts of five given k-mers. Each count is a hash map
+-- keyed by views of the sequence (`text 't`).
+include textio
+include map
+
+fn slice<'t>(t: text 't, i: i32, k: i32) -> text 't =
+  match split_at(t, i) {
+    inl (h, r) -> array_forget['t, u8](h);
+      match split_at(r, k) { inl (w, rest) -> array_forget['t, u8](rest); w | inr r -> r }
+  | inr t -> t
+  }
+
+-- Every k-mer of `t` counted.
+fn count<'t>(t: text 't, k: i32) -> Map[text 't, i32] =
+  let (t, u) = array_copy['t, u8] t;
+  let n = len(u);
+  let mut t = t;
+  let mut m = map_new[text 't, i32](1024);
+  for i in 0..n - k + 1 {
+    let (t2, w) = array_copy['t, u8] t;
+    t = t2;
+    let key = slice(w, i, k);
+    let (key, kc) = array_copy['t, u8] key;
+    let old = map_lookup(&m, kc);
+    let c = match old { inl c -> c + 1 | inr u -> 1 };
+    map_insert(&mut m, key, c)
+  };
+  array_forget['t, u8](t);
+  m
+
+-- Higher count first, then the key in byte order.
+fn by_freq<'t>(a: text 't * i32, b: text 't * i32) -> i32 =
+  let (ka, ca) = a;
+  let (kb, cb) = b;
+  if cb < ca { 0 - 1 } else { if ca < cb { 1 } else { order[text 't](ka, kb) } }
+
+-- `x / 1000` as a decimal with three places (there is no fixed-precision float formatting).
+fn print_milli(x: i32) -> 1 =
+  print_dec(x / 1000);
+  print_byte(b'.');
+  let f = x - (x / 1000) * 1000;
+  if f < 100 { print_byte(b'0') } else { () };
+  if f < 10 { print_byte(b'0') } else { () };
+  print_dec(f)
+
+fn frequencies<'t>(t: text 't, k: i32) -> 1 =
+  let (t, u) = array_copy['t, u8] t;
+  let tot = len(u) - k + 1;
+  let m = count(t, k);
+  let mut es = box buf[text 't * i32](16);
+  borrow imm m { 'x, r ->
+    for e in map_iter(r) {
+      let (key, c) = e;
+      let (b, _) = push(es, (key, *c));
+      es = b
+    } };
+  borrow mut es { v -> discard_mut(sort(v, !{ (a, b) -> by_freq(a, b) }, (slice_empty_imm['t, u8], 0))) };
+  let (a, n) = es;
+  for i in 0..n {
+    let (key, c) = at(&a, i, (slice_empty_imm['t, u8], 0));
+    print_str(key);
+    print_byte(b' ');
+    -- percentage to three places, rounded: c * 100 / tot
+    let p = host[wrap](host[div_s64](host[extend_s](c) * i64[100000] + host[extend_s](tot / 2), host[extend_s](tot)));
+    print_milli(p);
+    print_byte(b'\n')
+  };
+  print_byte(b'\n')
+
+-- The count of the k-mer `q`, looked up by a view of the literal.
+fn count_of<'t>(t: text 't, q: lit) -> 1 =
+  let k = lit_len(q);
+  let m = count(t, k);
+  let s = string_of_lit(q);
+  let c = borrow imm s { 'q, qv -> map_lookup(&m, qv) };
+  0
+
+-- The bytes of sequence THREE, upper-cased, without newlines.
+fn three<'a>(t: text 'a) -> string =
+  let (t, u) = array_copy['a, u8] t;
+  let n = len(u);
+  let mut t = t;
+  let mut s = string_new(n);
+  let mut state = 0;
+  let mut line_start = true;
+  for i in 0..n {
+    let (t2, w) = array_copy['a, u8] t;
+    t = t2;
+    let b = at(w, i, 0);
+    if state == 2 {
+      if b == b'>' { break } else { () };
+      if b == b'\n' { () } else { let (s2, _) = push_byte(s, b - 32); s = s2 }
+    } else {
+      if line_start && b == b'>' {
+        let (t2, w2) = array_copy['a, u8] t;
+        t = t2;
+        let h = slice(w2, i, 6);
+        if eq_lit(h, ">THREE") { state = 1 } else { () }
+      } else { () };
+      if b == b'\n' && state == 1 { state = 2 } else { () }
+    };
+    line_start = b == b'\n'
+  };
+  array_forget['a, u8](t);
+  s
+
+main -> i32 =
+  let inp = read_input();
+  let seq = borrow imm inp { t -> three(t) };
+  borrow imm seq { 't, t ->
+    let (t, a) = array_copy['t, u8] t;
+    frequencies(a, 1);
+    let (t, b) = array_copy['t, u8] t;
+    frequencies(b, 2);
+    count_of(t, "GGT") };
+  0

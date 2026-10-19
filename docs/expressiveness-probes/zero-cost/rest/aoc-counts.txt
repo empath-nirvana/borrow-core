@@ -1,0 +1,28 @@
+2020-07 rust: input allocs 1 reallocs 0 | solve allocs 4 reallocs 0 (incl. 2 to_string)
+2020-08 rust: input allocs 1 reallocs 0 | solve allocs 5 reallocs 6 (incl. 2 to_string)
+2020-08 ours: allocs 6 indirect 0 copies 0 loads 10216 stores 7451 bounds 7579
+2021-06 rust: input allocs 1 reallocs 0 | solve allocs 2 reallocs 0 (incl. 2 to_string)
+2021-06 ours: allocs 4 indirect 0 copies 0 loads 6409 stores 4779 bounds 6364
+2021-10 rust: input allocs 1 reallocs 0 | solve allocs 4 reallocs 5 (incl. 2 to_string)
+2021-10 ours: allocs 5 indirect 0 copies 0 loads 13182 stores 8140 bounds 13219
+2021-15 rust: input allocs 1 reallocs 0 | solve allocs 27 reallocs 6 (incl. 2 to_string)
+2021-15 ours: allocs 8 indirect 0 copies 0 loads 411123 stores 385610 bounds 223710
+2022-01 rust: input allocs 1 reallocs 0 | solve allocs 3 reallocs 4 (incl. 2 to_string)
+2022-01 ours: allocs 4 indirect 0 copies 0 loads 8449 stores 6900 bounds 8660
+2022-12 rust: input allocs 1 reallocs 0 | solve allocs 8 reallocs 11 (incl. 2 to_string)
+2022-12 ours: allocs 6 indirect 0 copies 0 loads 31567 stores 14904 bounds 23849
+2022-21 rust: input allocs 1 reallocs 0 | solve allocs 7 reallocs 6 (incl. 2 to_string)
+2022-21 ours: allocs 12 indirect 0 copies 0 loads 33325 stores 17589 bounds 19372
+2023-01 rust: input allocs 1 reallocs 0 | solve allocs 3 reallocs 4 (incl. 2 to_string)
+2023-01 ours: allocs 1 indirect 0 copies 0 loads 26413 stores 4098 bounds 30923
+2023-03 rust: input allocs 1 reallocs 0 | solve allocs 7 reallocs 10 (incl. 2 to_string)
+2023-03 ours: allocs 7 indirect 0 copies 0 loads 11998 stores 8593 bounds 10501
+2023-07 rust: input allocs 1 reallocs 0 | solve allocs 5 reallocs 5 (incl. 2 to_string)
+2023-07 ours: allocs 7 indirect 0 copies 0 loads 114731 stores 108142 bounds 80684
+2024-01 rust: input allocs 1 reallocs 0 | solve allocs 7 reallocs 0 (incl. 2 to_string)
+2024-01 ours: allocs 5 indirect 0 copies 0 loads 141583 stores 135261 bounds 128486
+2024-02 rust: input allocs 1 reallocs 0 | solve allocs 3 reallocs 1 (incl. 2 to_string)
+2024-02 ours: allocs 2 indirect 0 copies 0 loads 8382 stores 4899 bounds 8513
+2024-11 rust: input allocs 1 reallocs 0 | solve allocs 15 reallocs 24 (incl. 2 to_string)
+2024-11 ours: allocs 271 indirect 0 copies 0 loads 1960768 stores 844134 bounds 1228669
+2024-11-reuse ours: allocs 15 indirect 0 copies 0 loads 2179630 stores 1062996 bounds 1673618

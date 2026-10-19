@@ -1,0 +1,8 @@
+-- DeltaBlue's shape with owned cells: one constraint's direction cell listed by both of its
+-- variables. Two `imm` views of it can be held (the first `let`), but the planner then writes
+-- the direction through one of them.
+fn both<'a>(v: imm 'a i32) -> (imm 'a i32 * i32) * (imm 'a i32 * i32) = ((v, 1), (v, 2))
+main -> i32 =
+  let c = alloc(0);
+  let r = borrow imm c { 'x, v -> let (a, b) = both(v); let (va, ia) = a; let (u, old) = swap[i32, i32] va 1; old };
+  free(c) + r

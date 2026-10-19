@@ -1,0 +1,4 @@
+-- A function whose result is a `!` function, ignoring its i32 argument.
+fn idle(x: i32) -> i32 = x + 1
+fn mk(i: i32) -> !(i32 => i32) = idle
+main -> i32 = let f = mk(0); f(1)

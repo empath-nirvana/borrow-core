@@ -1,0 +1,22 @@
+-- (f') The informer cache as a cell: the watch task holds `mut` of it, the reconcilers `imm`.
+include async
+
+fn watch<'c>(c: mut 'c i32, n: i32) -> i32 with Async =
+  let mut m = c;
+  for i in 0..n { modify m { x -> (i, ()) }; await() };
+  forget_mut['c, i32](m); n
+fn reader<'c>(c: imm 'c i32) -> i32 with Async = await(); *c
+
+main -> List[i32] =
+  let cell = alloc(0);
+  let d = alloc(());
+  let (d, r) = borrow mut cell { 'r, m ->
+    let r = borrow mut d { 'd, e ->
+      let q = queue_in[i32]();
+      let q = push_in(q, with spawn_in { watch(m, 3) });
+      let q = push_in(q, with spawn_in { reader(m) });
+      with on_exhausted(!{ u -> nil[i32]() }) { run_in(q, 10) } };
+    (d, r) };
+  let _ = free(d);
+  let _ = free(cell);
+  r

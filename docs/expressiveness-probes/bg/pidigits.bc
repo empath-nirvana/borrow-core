@@ -1,0 +1,101 @@
+-- pidigits: the first n digits of pi by the unbounded spigot (the benchmark's algorithm), on
+-- arbitrary-precision integers. The naturals are lib/float.bc's `Big` (32-bit limbs in a
+-- `buf i64`), which float printing uses: add, subtract, multiply by a small number, compare,
+-- copy. The spigot's `acc` goes below zero, so a sign is put on (`SBig`, below). The division
+-- the spigot needs has a quotient below 10, so it is repeated subtraction.
+include textio
+include io
+include float
+
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+-- A signed integer: whether it is negative, and its magnitude. Zero is never negative.
+type SBig = bool * Big
+
+fn is_zero(b: Big) -> Big * bool = let (b, n) = len_of(b); (b, n == 0)
+
+-- `-a`.
+fn sneg(a: SBig) -> SBig =
+  let (neg, m) = a;
+  let (m, z) = is_zero(m);
+  if z { (false, m) } else { (not(neg), m) }
+
+-- `a + x` for a natural `x`.
+fn sadd(a: SBig, x: Big) -> SBig =
+  let (neg, m) = a;
+  if neg {
+    let ((m, x), c) = big_cmp(m, x);
+    if c < 0 { let (r, m) = big_sub(x, m); (false, r) }
+    else { let (r, x) = big_sub(m, x); let (r, z) = is_zero(r); (not(z), r) }
+  } else { let (r, x) = big_add(m, x); (false, r) }
+
+-- `a - x` for a natural `x`.
+fn ssub(a: SBig, x: Big) -> SBig = sneg(sadd(sneg(a), x))
+
+-- `a * k` for a small `k > 0`.
+fn smul(a: SBig, k: i64) -> SBig = let (neg, m) = a; (neg, big_mul_add(m, k, i64[0]))
+
+fn scopy(a: SBig) -> SBig * SBig = let (neg, m) = a; let (m, c) = big_copy(m); ((neg, m), (neg, c))
+
+-- `⌊(num * m + acc) / den⌋`, below 10, for `num * m + acc >= 0`; the three back.
+fn extract(num: Big, acc: SBig, den: Big, m: i64) -> ((Big * SBig) * Big) * i32 =
+  let (num, t) = big_copy(num);
+  let (acc, a) = scopy(acc);
+  let (neg, t) = sadd(a, big_mul_add(t, m, i64[0]));
+  let mut t = t;
+  let mut den = den;
+  let mut q = 0;
+  for _ in 0..10 {
+    let ((t2, d2), c) = big_cmp(t, den);
+    if c < 0 { t = t2; den = d2; break } else {
+      let (t3, d3) = big_sub(t2, d2);
+      t = t3; den = d3; q = q + 1
+    }
+  };
+  let (ta, tn) = t;
+  (((num, acc), den), q)
+
+main -> i32 =
+  let n = arg_i32(30);
+  let mut acc : SBig = (false, big_of(i64[0]));
+  let mut den = big_of(i64[1]);
+  let mut num = big_of(i64[1]);
+  let mut k = 0;
+  let mut i = 0;
+  for _ in 0..100 * n + 100 {
+    if i == n { break } else { () };
+    k = k + 1;
+    let k2 = host[extend_u](2 * k + 1);
+    -- the next term
+    let (num1, nc) = big_copy(num);
+    acc = smul(sadd(acc, big_mul_add(nc, i64[2], i64[0])), k2);
+    den = big_mul_add(den, k2, i64[0]);
+    num = big_mul_add(num1, host[extend_u](k), i64[0]);
+    -- num > acc?
+    let (neg, am) = acc;
+    let ((n2, a2), c) = big_cmp(num, am);
+    num = n2;
+    acc = (neg, a2);
+    if neg || 0 < c { () } else {
+      let (((n3, a3), d3), d) = extract(num, acc, den, i64[3]);
+      let (((n4, a4), d4), e) = extract(n3, a3, d3, i64[4]);
+      num = n4; acc = a4; den = d4;
+      if d == e {
+        print_byte(to_u8(48 + d));
+        i = i + 1;
+        if i - (i / 10) * 10 == 0 { print_byte(u8[9]); print_byte(b':'); print_dec(i); print_byte(b'\n') } else { () };
+        -- the digit eliminated
+        let (d5, dc) = big_copy(den);
+        den = d5;
+        acc = smul(ssub(acc, big_mul_add(dc, host[extend_u](d), i64[0])), i64[10]);
+        num = big_mul_add(num, i64[10], i64[0])
+      } else { () }
+    }
+  };
+  let (an, (aa, al)) = acc;
+  let (da, dn) = den;
+  let (na, nn) = num;
+  0
