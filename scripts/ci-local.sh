@@ -73,6 +73,7 @@ steps=(
   "axiom report"     "lake env lean scripts/AxiomCheck.lean"
   "parse corpus"     "scripts/parse-corpus.sh"
   "check corpus"     "scripts/check-corpus.sh"
+  "clause kinds"     "scripts/check-kinds.sh"
   "compile corpus"   "scripts/compile-corpus.sh"
   "compile kernel"   "scripts/compile-kernel.sh"
   "native"           "scripts/compile-native.sh"
@@ -99,7 +100,7 @@ if [ "$changed" = 1 ]; then
   done
   if [ "$lean" = 0 ]; then
     all=0
-    corpus=("parse corpus" "check corpus" "compile corpus" "sugar pairs" "native")
+    corpus=("parse corpus" "check corpus" "clause kinds" "compile corpus" "sugar pairs" "native")
     for f in $files; do
       case "$f" in
         corpus/kernel-counts.expected) add "compile kernel" ;;
@@ -109,6 +110,7 @@ if [ "$changed" = 1 ]; then
         scripts/ci-local.sh|scripts/par.sh) add "${everyStep[@]}" ;;
         scripts/parse-corpus.sh) add "parse corpus" ;;
         scripts/check-corpus.sh) add "check corpus" ;;
+        scripts/check-kinds.sh) add "clause kinds" ;;
         scripts/compile-corpus.sh) add "compile corpus" ;;
         scripts/compile-kernel.sh) add "compile kernel" ;;
         scripts/compile-native.sh) add "native" ;;

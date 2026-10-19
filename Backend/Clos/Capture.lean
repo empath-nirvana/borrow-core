@@ -707,24 +707,39 @@ def directCalls (O : Ops) (direct : Std.HashMap OpKey Nat) : Tm → KM Tm
   | .fin p dd b => return .fin p dd (← directCalls O direct b)
   | t => pure t
 
-/-- The operations whose clause, at every handler of their name, is one closed tail-resumptive
-code that neither suspends nor raises: each with that code without its resume. -/
-def tailResumptive (O : Ops) (F : SFacts) (codes : Array Code) (hs : Array HInfo) :
-    List (OpKey × Code) := Id.run do
+/-- Each control operation, with its clause's code without its resume when, at every handler of
+its name, the clause is one closed tail-resumptive code that neither suspends nor raises, and
+otherwise why it is not. -/
+def tailResumptiveWhy (O : Ops) (F : SFacts) (codes : Array Code) (hs : Array HInfo) :
+    List (OpKey × Except String Code) := Id.run do
   let mut out := []
   for n in O.ctl do
     let sites := hs.toList.filter (·.n == n)
     for (idx, j) in O.keysOf n do
+      let key := (n, j.toUInt32)
       -- The handlers whose body may perform the operation: another's clause never runs for it.
       let sites := sites.filter fun h => (F.skeys[h.body]?.getD []).contains idx
       let cs := (sites.flatMap fun h =>
         F.S.clausesAt (F.S.num.idx (.var h.dVars[1]!)) j).eraseDups
-      let [c] := cs | continue
-      let some tc := codes[c]?.bind tailClause? | continue
-      if !(sKeysOf O F c [] tc.body).isEmpty then continue
-      if !Raises.isEmpty (F.U.raises tc.body) then continue
-      out := out ++ [((n, j.toUInt32), tc)]
+      let [c] := cs | out := out ++ [(key, .error s!"the handlers of the name have {cs.length} clauses for it")]; continue
+      if !(codes[c]?.map (·.env.isEmpty)).getD false then
+        out := out ++ [(key, .error "the clause captures values")]; continue
+      let some tc := codes[c]?.bind tailClause? |
+        out := out ++ [(key, .error "a path of the clause does not end in one resume in tail position")]; continue
+      if !(sKeysOf O F c [] tc.body).isEmpty then
+        out := out ++ [(key, .error "the clause suspends")]; continue
+      if !Raises.isEmpty (F.U.raises tc.body) then
+        out := out ++ [(key, .error "the clause may raise")]; continue
+      out := out ++ [(key, .ok tc)]
   return out
+
+/-- The operations whose clause, at every handler of their name, is one closed tail-resumptive
+code that neither suspends nor raises: each with that code without its resume. -/
+def tailResumptive (O : Ops) (F : SFacts) (codes : Array Code) (hs : Array HInfo) :
+    List (OpKey × Code) :=
+  (tailResumptiveWhy O F codes hs).filterMap fun (k, r) => match r with
+    | .ok c => some (k, c)
+    | .error _ => none
 
 /-! ### Machines -/
 
@@ -1099,6 +1114,7 @@ def Prog.capture (p : Prog) (wrapAnswers : Bool := false) : Except String Prog :
     let hs := (← get).hs
     let F₀ ← liftE (SFacts.of O q₀ hs)
     -- Tail-resumptive operations become direct calls; then the analysis again.
+    let why := tailResumptiveWhy O F₀ q₀.codes hs
     let direct := tailResumptive O F₀ q₀.codes hs
     let (main, q₀, F) ← if direct.isEmpty then pure (main, q₀, F₀) else do
       let mut tcs : Std.HashMap OpKey Nat := {}
@@ -1153,7 +1169,11 @@ def Prog.capture (p : Prog) (wrapAnswers : Bool := false) : Except String Prog :
       else kset k { c with body := ← liftE ((plainCode F c.body).mapError (s!"in code {k}: " ++ ·)) }
     let main ← liftE ((plainCode F main).mapError ("in main: " ++ ·))
     pure { p with main, codes := (← get).codes, suspendedScopes := crossed.eraseDups,
-                  tailOps := direct.map (·.1), machines, suspending }
+                  tailOps := direct.map (·.1), ctlOps := O.keys.toList, abortOps := O.aborts,
+                  notTail := why.filterMap fun (k, r) => match r with
+                    | .error e => some (k, e)
+                    | .ok _ => none,
+                  machines, suspending }
   act.run' ⟨next, p.codes, #[]⟩
 where
   liftE {α} (x : Except String α) : KM α := match x with

@@ -153,8 +153,8 @@ bodies of a `let`. This is the step that makes such a clause the tail-resumptive
 `op_tail` whose single resume is its last call (`Backend/Clos/Capture.lean`, `tailClause?`). -/
 
 /-- `B` resumes with `R` on every path, in tail position, and `B'` is `B` with each resume
-`R N` replaced by its answer `N`: through the arms of a `case`, the body of a `let (x, y)`, and
-the rest of a sequence. -/
+`R N` replaced by its answer `N`: through the arms of a `case`, the body of a `let (x, y)`, the
+rest of a sequence, and the body of a `let x = e`, `(λx. B) e`. -/
 inductive TailResumes (R : Expr) : Expr → Expr → Prop where
   | resume (N : Expr) : TailResumes R (.app R N) N
   | case (e : Expr) {B₁ B₂ B₁' B₂' : Expr} :
@@ -163,6 +163,8 @@ inductive TailResumes (R : Expr) : Expr → Expr → Prop where
   | letpair (e : Expr) {B B' : Expr} : TailResumes R B B' →
       TailResumes R (.letpair e B) (.letpair e B')
   | seq (e : Expr) {B B' : Expr} : TailResumes R B B' → TailResumes R (.seq e B) (.seq e B')
+  | bind (e : Expr) {B B' : Expr} : TailResumes R B B' →
+      TailResumes R (.app (.val (.lam B)) e) (.app (.val (.lam B')) e)
 
 /-- A substitution keeps the shape, `R` being closed. -/
 theorem TailResumes.subst {R : Expr} (hR : closedAt 0 R = true) {B B' : Expr}
@@ -175,6 +177,7 @@ theorem TailResumes.subst {R : Expr} (hR : closedAt 0 R = true) {B B' : Expr}
   | case e _ _ ih₁ ih₂ => intro j v; exact .case _ (ih₁ _ _) (ih₂ _ _)
   | letpair e _ ih => intro j v; exact .letpair _ (ih _ _)
   | seq e _ ih => intro j v; exact .seq _ (ih _ _)
+  | bind e _ ih => intro j v; exact .bind _ (ih _ _)
 
 /-- `case v {…}`, `v` a value, steps only by its head step. -/
 theorem step1_case_val_inv {μ μ₁ : Heap} {v : Val} {e₁ e₂ E : Expr}
@@ -254,6 +257,12 @@ theorem TailResumes.step {R : Expr} (hR : closedAt 0 R = true) {B B' : Expr}
         exact ⟨_, .head (Head.seq _ _), hB⟩
       · obtain ⟨e', rfl, he⟩ := step1_plug_inv (.seq .hole _) (by simp [Kont.Plain]) hv hs
         exact ⟨_, he.plug (.seq .hole _), .seq e' hB⟩
+  | bind e hB _ =>
+      by_cases hv : IsVal e
+      · obtain ⟨rfl, rfl⟩ := step1_beta_inv (ℍ := ℍ) (v := ⟨e, hv⟩) hs
+        exact ⟨_, .head (Head.beta _ _ ⟨e, hv⟩), hB.subst hR 0 ⟨e, hv⟩⟩
+      · obtain ⟨e', rfl, he⟩ := step1_plug_inv (.appR (.lam _) .hole) (by simp [Kont.Plain]) hv hs
+        exact ⟨_, he.plug (.appR (.lam _) .hole), .bind e' hB⟩
 
 /-- **The resume commutes out of the arms, every run.** A run of the clause without its resumes
 is matched, step for step and at the same memories, by a run of the clause. -/
@@ -282,6 +291,7 @@ theorem tail_resumes {R B B' : Expr} (hR : closedAt 0 R = true) (h : TailResumes
   | case => exact absurd hv (by simp)
   | letpair => exact absurd hv (by simp)
   | seq => exact absurd hv (by simp)
+  | bind => exact absurd hv (by simp [Expr.val])
 
 /-- The shape is met by a `case` with a resume in each arm, as a `for` body's `if` elaborates. -/
 example (R e N₁ N₂ : Expr) :

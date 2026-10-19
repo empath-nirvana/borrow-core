@@ -32,6 +32,10 @@ and those allocated; and `Capture`'s lowering: the control operations `(name, op
 direct calls of their tail-resumptive clause, the codes it made machines, and how many of those
 may suspend (the others are handlers' bodies that answer `inl` alone).
 
+With `--lowering`, print `Capture`'s lowering of each operation the program performs: `direct`,
+`machine` with the reason it is not a direct call, or `branch` (`scripts/check-kinds.sh` compares
+it with the checker's clause kinds, SPEC §19).
+
 With `--native`, the second run is the native build (`bcc run --native`, SPEC §40) instead of
 `wasmtime`'s, and the two must agree on the counts and the exit status.
 
@@ -66,6 +70,17 @@ def sites (file src : String) : Except String String := do
     s!"recursive-types {recs.length} {recs} owned-folds reversed {rev} recursive {rc} " ++
     s!"scoped-cells framed {sf} allocated {sa} " ++
     s!"tail-resumptive {p.tailOps} machines {p.machines} suspending {p.suspending}")
+
+/-- `Capture`'s lowering of each operation the program performs (`--lowering`): a control
+operation's `perform` a direct call of its clause (`direct`) or a suspension driven by its
+handler's machine (`machine`), an abortive operation's `raise` a branch per call (`branch`). -/
+def lowering (file src : String) : Except String String := do
+  let p ← Backend.closOf file src
+  let ls := p.ctlOps.map (fun (n, i) =>
+      if p.tailOps.contains (n, i) then s!"{n}.{i} direct"
+      else s!"{n}.{i} machine{((p.notTail.lookup (n, i)).map (": " ++ ·)).getD ""}") ++
+    p.abortOps.map fun (n, i) => s!"{n}.{i} branch"
+  pure ("\n".intercalate ls)
 
 /-- The call-site report of `--sites` for a closure-IR program. -/
 def sitesOfProg (p : Backend.Clos.Prog) : Except String String := do
@@ -152,6 +167,12 @@ def main (argv : List String) : IO UInt32 := do
     | _ => IO.eprintln "usage: bcc-counts --native <file> [-- arg…]"; return 2
   if let ["--kernel", name] := argv then return ← kernelMain false name
   if let ["--kernel", "--sites", name] := argv then return ← kernelMain true name
+  if let ["--lowering", file] := argv then
+    match lowering file (← IO.FS.readFile file) with
+    | .ok s =>
+      unless s.isEmpty do IO.println s
+      return 0
+    | .error e => IO.eprintln e; return 1
   if let ["--sites", file] := argv then
     match sites file (← IO.FS.readFile file) with
     | .ok s => IO.println s; return 0

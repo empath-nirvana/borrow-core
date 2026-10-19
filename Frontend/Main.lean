@@ -145,6 +145,20 @@ def trusted (file : String) : IO UInt32 := do
   | .ok s => IO.print s; return 0
   | .error e => IO.eprintln e; return 1
 
+/-- Each `handle` node of `file`'s checked terms, with its clauses' kinds (SPEC §19). -/
+def kinds (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match parseProgram src with
+  | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+  | .ok p =>
+    match Check.checkProgram p with
+    | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+    | .ok r =>
+      for h in r.handles do
+        let ks := (List.range h.ks.length).zip h.ks |>.map fun (i, k) => k.render h.n i
+        IO.println s!"{h.sp.start.render}: handle {h.n}{if h.boxed then " (boxed κ)" else ""}: {"; ".intercalate ks}"
+      return 0
+
 /-- Write `file`'s WAT to `out`. -/
 def compile (file out : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
@@ -368,6 +382,7 @@ def main (argv : List String) : IO UInt32 := do
     | some n => tailcalls n
     | none => IO.eprintln "usage: bcc tailcalls <n>"; return 2
   | ["trusted", file] => trusted file
+  | ["kinds", file] => kinds file
   | ["desugar", file] => desugar file
   | ["erase", file] => erase file
   | [cmd, file] =>

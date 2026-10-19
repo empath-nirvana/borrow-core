@@ -13,7 +13,7 @@ lowering 41:1: copy `twice__b0n4`: `twice` for its block `f` at the site 4 of `F
 lowering 53:1: copy `two__n2`: `two` for the site 2 of `Ask`
 lowering 56:32: with default: every operation abortive, so its clauses run after the handler, in the scope of the `with`
 lowering 56:32: with default (Fail): a handler, the static name 1; raise abortive: a branch per call (final ctl)
-lowering 56:54: with scaled (Ask): a handler, the static name 2; ask affine: resumed or cancelled
+lowering 56:54: with scaled (Ask): a handler, the static name 2; ask affine: resumed in tail position or cancelled on each path, with the handler's state
 lowering 56:54: with scaled: a handler with a state, its parameters, passed to each clause and to the continuation at each resume
 lowering 58:1: main: `Stderr` is served by the platform's `wasi_stderr` on the cell `stderr`, which each operation lends
 lowering 58:1: main: `Fail[DivError]` is served by `main_div_error`: a division's error unwinds, is written on standard error, and the program exits with status 1

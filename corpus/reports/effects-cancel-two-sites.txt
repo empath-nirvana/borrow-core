@@ -6,7 +6,7 @@ lowering 24:3: with to_result: every operation abortive, so its clauses run afte
 lowering 24:3: with to_result (Fail): a handler, the static name 1; raise abortive: a branch per call (final ctl)
 lowering 24:36: with to_result (Fail): a handler, the static name 2; raise abortive: a branch per call (final ctl)
 lowering 24:36: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
-lowering 24:53: with scaled (Ask): a handler, the static name 3; ask affine: resumed or cancelled
+lowering 24:53: with scaled (Ask): a handler, the static name 3; ask affine: resumed in tail position or cancelled on each path, with the handler's state
 lowering 24:53: with scaled: a handler with a state, its parameters, passed to each clause and to the continuation at each resume
 call 18:45: raise (Fail) → abort[2.0], handled by `with to_result` at 24:36: abortive, it never resumes
 call 18:63: k → the continuation resumed, at the handler's state

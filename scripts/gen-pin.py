@@ -252,6 +252,13 @@ def idents(text):
             if not (m.start() > 0 and text[m.start() - 1] == ".")}
 
 
+# Fields a node carries that are not its rule's arguments: facts the checker establishes at the
+# node, which the typed derivation does not constrain (`Frontend/Check/TFacts.lean`). At
+# `[handle]`, each operation's qualifier and its clause's kind (SPEC §19, *Clause kinds*).
+EXTRA = {"effHandleV": [("ks", "List ClauseKinds.HKind")],
+         "effHandleVB": [("ks", "List ClauseKinds.HKind")]}
+
+
 def kid_name(h):
     return "t" + h[1:] if h.startswith("h") else "t_" + h
 
@@ -333,6 +340,8 @@ class Rule:
         # (`Fam.u`); the split itself is chosen at each liveness, and is not a field
         if any(kind == "(" and ty and ty.startswith("Ctx.SplitP ") for kind, _, ty in self.groups):
             self.fields.append(("u", "List Bool"))
+        # facts the checker records on the node that are not arguments of the rule (`EXTRA`)
+        self.fields += EXTRA.get(name, [])
         self.kids = [p[1] for p in self.prem]
 
     def texpr_ctor(self):
@@ -424,6 +433,7 @@ def typed_rule(r, fieldsof):
         tys = f" : {subst(ty, sig)}" if ty else ""
         out.append(f"{o}{' '.join(keep)}{tys}{c}")
     impl = "{info : TInfo}" + (" {u : List Bool}" if ("u", "List Bool") in r.fields else "") + \
+        "".join(f" {{{n} : {t}}}" for n, t in EXTRA.get(r.name, [])) + \
         (f" {{{' '.join(r.kids)} : TExpr}}" if r.kids else "")
     J = subst(r.cjdg, sig)
     flds = fieldsof[r.name]

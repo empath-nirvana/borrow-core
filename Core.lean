@@ -96,6 +96,7 @@ import Core.EffTier1Programs
 import Core.Stale
 import Core.Stdio
 import Core.Handlers
+import Core.ClauseKinds
 import Core.Aff
 import Core.AffRules
 import Core.AffPrograms

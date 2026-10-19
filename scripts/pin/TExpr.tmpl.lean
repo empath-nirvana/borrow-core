@@ -1,5 +1,6 @@
 import Frontend.Syntax
 import Core.PinDerives
+import Core.ClauseKinds
 
 /-!
 # Frontend — Check — the typed term  `[spec §3, §29]`
@@ -16,6 +17,8 @@ is one rule application: one constructor per `CDerivesP` rule, of the same name,
 * the rule's arguments other than its contexts, its proofs and the terms its premises type:
   binder types, rows, operation signatures, lifetimes, the handler's qualifiers and cancel rows,
   constants' type arguments;
+* at `[handle]`, each operation's qualifier and the kind of its clause, as the checker classifies
+  it (`ks`, `Frontend/Check/Kinds.lean`), a fact the derivation does not constrain;
 * one child per premise, in the rule's order.
 
 `TExpr.erase` gives the term the rule concludes with, from its children's erasures. The checked
