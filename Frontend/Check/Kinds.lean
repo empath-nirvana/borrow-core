@@ -12,9 +12,11 @@ The classification reads the derivation: an abortive operation is one whose sign
 clause no `κ` (`clauseTy`); a control clause is `!thunkv λp. let (x, κ) = p; M`, and `M`'s paths
 run through the rules `[⊕E]`, `[⊗E]`, `[1E]`, `[let]` and `[let]` at a row, to the uses of `κ`:
 `[app]` of `[&E₁]` of `[force]` at `κ`'s slot, of the type `(B ⊸ F_Σ R) & C`, is its resume;
-`[&E₂]` is its cancel. A state-passing clause (§21) answers `[thunkV]` of `λs. S`, and `S` resumes,
-then forces the answer at the type `St ⊸ F_Σ R` on the new state. Where a use's absence matters,
-it is read off the premise's term (`mentions` of its erasure).
+`[&E₂]` is its cancel; `[let]` of the resume whose body answers its variable is the resume under
+the right unit; `[let]` of `return κ` is an alias of `κ`. A state-passing clause (§21) answers
+`[thunkV]` of `λs. S`, and `S` resumes, then forces the answer at the type `St ⊸ F_Σ R` on the new
+state. Where a use's absence matters, it is read off the premise's term (`mentions` of its
+erasure).
 
 `classify_sound`: each kind the classifier returns gives the premise of that kind's law
 (`ClauseKind.Premise`, `Core/ClauseKinds.lean`) at the clause's erasure, the term the handler
@@ -65,6 +67,13 @@ where
     | .ret _ _ _ (.var _ _ 0 _) => true
     | _ => false
 
+/-- `t` is the resume of `κ` in the slot `k` in tail position (`resumeB`), or such a resume under
+the right unit: `[let]` of it whose body answers its variable (`returns0B`). -/
+def tailLeafB (k : Nat) : TExpr → Bool
+  | t@(.bind _ _ _ _ _ tM tN) => resumeB k t || (tailLeafB k tM && returns0B tN)
+  | t@(.effLet _ _ _ _ _ _ tM tN) => resumeB k t || (tailLeafB k tM && returns0B tN)
+  | t => resumeB k t
+
 /-- `t` is `[force]` at the slot `g`, of a `⊸` type. -/
 def forceArrB (g : Nat) (t : TExpr) : Bool :=
   match t.unSub with
@@ -101,8 +110,14 @@ def onceB (k : Nat) : TExpr → Bool
 
 /-! ### Paths -/
 
+/-- The erased term is the variable `k`. -/
+def isVarB (k : Nat) : Expr → Bool
+  | .var i => i == k
+  | _ => false
+
 /-- Every path of `t` ends in a leaf `leaf`, through `[⊕E]`, `[⊗E]`, `[1E]` and `[let]`, with `κ`
-(the slot `k`) not used on the way. -/
+(the slot `k`) not used on the way; a `[let]` of `return κ` (through the nodes that keep their
+premise's term, as `unbox`) moves `κ` to its binder's slot, its body not using the old one. -/
 def onPaths (leaf : Nat → TExpr → Bool) : Nat → TExpr → Bool
   | k, t@(.sumE _ _ _ _ _ _ tV t₁ t₂) =>
       leaf k t || (!mentions k tV.erase && onPaths leaf (k + 1) t₁ && onPaths leaf (k + 1) t₂)
@@ -110,9 +125,11 @@ def onPaths (leaf : Nat → TExpr → Bool) : Nat → TExpr → Bool
       leaf k t || (!mentions k tV.erase && onPaths leaf (k + 2) tM)
   | k, t@(.unitE _ _ _ _ tV tM) => leaf k t || (!mentions k tV.erase && onPaths leaf k tM)
   | k, t@(.bind _ _ _ _ _ tM tN) =>
-      leaf k t || (!mentions k tM.erase && onPaths leaf (k + 1) tN)
+      leaf k t || (!mentions k tM.erase && onPaths leaf (k + 1) tN) ||
+        (isVarB k tM.erase && !mentions (k + 1) tN.erase && onPaths leaf 0 tN)
   | k, t@(.effLet _ _ _ _ _ _ tM tN) =>
-      leaf k t || (!mentions k tM.erase && onPaths leaf (k + 1) tN)
+      leaf k t || (!mentions k tM.erase && onPaths leaf (k + 1) tN) ||
+        (isVarB k tM.erase && !mentions (k + 1) tN.erase && onPaths leaf 0 tN)
   | k, t@(.effSub _ _ _ _ _ t') => leaf k t || onPaths leaf k t'
   | k, t => leaf k t
 
@@ -127,9 +144,9 @@ def stateFnB (leaf : Nat → TExpr → Bool) (k : Nat) : TExpr → Bool
 /-- The kind of a control clause's body `M`, `κ` in its slot `0`: the first kind whose premise
 the paths meet, from the most particular. -/
 def classifyBody (tM : TExpr) : ClauseKind :=
-  if onPaths resumeB 0 tM then .tail
+  if onPaths tailLeafB 0 tM then .tail
   else if onPaths (stateFnB stateLeafB) 0 tM then .tailState
-  else if onPaths (fun k t => resumeB k t || cancelB k t) 0 tM then .resumeOrCancel false
+  else if onPaths (fun k t => tailLeafB k t || cancelB k t) 0 tM then .resumeOrCancel false
   else if onPaths (stateFnB fun k t => stateLeafB k t || cancelB k t) 0 tM then .resumeOrCancel true
   else if onPaths onceB 0 tM then .resumeOnce false
   else if onPaths (stateFnB onceB) 0 tM then .resumeOnce true

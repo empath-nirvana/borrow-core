@@ -7,11 +7,12 @@ import Frontend.Check.Kinds
 the premise of that kind's law (`ClauseKind.Premise`, `Core/ClauseKinds.lean`) at the clause's
 erasure, the term the handler runs. Each decision of the classifier on the typed term is matched
 by a constructor of the premise on the erasure: `onPaths` by `OnPaths`, `resumeB` by
-`TailLeaf`, `cancelB` by `CancelLeaf`, `stateLeafB` by `StateLeaf`, `onceB` by `Once`.
+`TailLeaf` (`tailLeafB`, with the right unit), `cancelB` by `CancelLeaf`, `stateLeafB` by `StateLeaf`, `onceB` by `Once`.
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Check
 open BoCa BoCa.Fig16 BoCa.Fig16.LogRel.Core BoCa.Fig16.LogRel.Core.ClauseKinds
+open BoCa.Fig16.LogRel.Core.Handlers (Returns0)
 
 theorem TExpr.unSub_erase (t : TExpr) : t.unSub.erase = t.erase := by
   fun_induction TExpr.unSub t <;> simp_all [TExpr.erase]
@@ -24,7 +25,8 @@ theorem returns0B_sound {t : TExpr} (h : returns0B t = true) : Returns0 t.erase 
     | exact .var
     | (have := returns0B_isVar0 h.1; rw [TExpr.unSub_erase] at this; rw [this]; exact .bind (by assumption))
 
-theorem resumeB_sound {k : Nat} {t : TExpr} (h : resumeB k t = true) : TailLeaf k t.erase := by
+theorem resumeB_sound' {k : Nat} {t : TExpr} (h : resumeB k t = true) :
+    ∃ N, t.erase = .app (resumeAt k) N ∧ mentions k N = false := by
   rw [← TExpr.unSub_erase]
   unfold resumeB at h
   split at h
@@ -35,6 +37,27 @@ theorem resumeB_sound {k : Nat} {t : TExpr} (h : resumeB k t = true) : TailLeaf 
     obtain ⟨rfl, hy⟩ := h
     exact ⟨_, rfl, by simpa [mentions] using hy⟩
   next => exact absurd h (by simp)
+
+theorem resumeB_sound {k : Nat} {t : TExpr} (h : resumeB k t = true) : TailLeaf k t.erase := by
+  obtain ⟨N, hN, hm⟩ := resumeB_sound' h
+  rw [hN]; exact .resume hm
+
+theorem tailLeafB_sound {k : Nat} {t : TExpr} (h : tailLeafB k t = true) : TailLeaf k t.erase := by
+  fun_induction tailLeafB k t
+  case case1 ih =>
+    simp only [Bool.or_eq_true, Bool.and_eq_true] at h
+    rcases h with h | ⟨h₁, h₂⟩
+    · exact resumeB_sound h
+    · simp only [TExpr.erase]; exact .ret (ih h₁) (returns0B_sound h₂)
+  case case2 ih =>
+    simp only [Bool.or_eq_true, Bool.and_eq_true] at h
+    rcases h with h | ⟨h₁, h₂⟩
+    · exact resumeB_sound h
+    · simp only [TExpr.erase]; exact .ret (ih h₁) (returns0B_sound h₂)
+  case case3 => exact resumeB_sound h
+
+theorem isVarB_sound {k : Nat} {e : Expr} (h : isVarB k e = true) : e = .var k := by
+  unfold isVarB at h; split at h <;> simp_all
 
 theorem cancelHeadB_sound {k : Nat} {t : TExpr} (h : cancelHeadB k t = true) :
     t.erase = cancelAt k := by
@@ -93,10 +116,10 @@ theorem stateLeafB_sound {k : Nat} {t : TExpr} (h : stateLeafB k t = true) :
   unfold stateLeafB at h
   split at h
   · simp only [Bool.and_eq_true] at h
-    obtain ⟨N, hN, hm⟩ := resumeB_sound h.1
+    obtain ⟨N, hN, hm⟩ := resumeB_sound' h.1
     exact ⟨N, _, by simp [TExpr.erase, hN], hm, appliesB_sound h.2⟩
   · simp only [Bool.and_eq_true] at h
-    obtain ⟨N, hN, hm⟩ := resumeB_sound h.1
+    obtain ⟨N, hN, hm⟩ := resumeB_sound' h.1
     exact ⟨N, _, by simp [TExpr.erase, hN], hm, appliesB_sound h.2⟩
   · exact absurd h (by simp)
 
@@ -112,7 +135,7 @@ theorem onceB_sound {k : Nat} {t : TExpr} (h : onceB k t = true) : Once k t.eras
   case case4 =>
     simp only [Bool.or_eq_true] at h
     rcases h with h | h
-    · obtain ⟨N, hN, hm⟩ := resumeB_sound h; rw [hN]; exact .resume hm
+    · obtain ⟨N, hN, hm⟩ := resumeB_sound' h; rw [hN]; exact .resume hm
     · rw [cancelHeadB_sound h]; exact .cancel
 
 theorem onPaths_sound {leaf : Nat → TExpr → Bool} {L : Nat → Expr → Prop}
@@ -134,16 +157,18 @@ theorem onPaths_sound {leaf : Nat → TExpr → Bool} {L : Nat → Expr → Prop
     rcases h with h | ⟨h₀, h₁⟩
     · exact .leaf (hl _ _ h)
     · simp only [TExpr.erase]; exact .seq h₀ (ih h₁)
-  case case4 ih =>
+  case case4 ih ih' =>
     simp only [Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
-    rcases h with h | ⟨h₀, h₁⟩
+    rcases h with (h | ⟨h₀, h₁⟩) | ⟨⟨h₀, h₁⟩, h₂⟩
     · exact .leaf (hl _ _ h)
     · simp only [TExpr.erase]; exact .bind h₀ (ih h₁)
-  case case5 ih =>
+    · simp only [TExpr.erase, isVarB_sound h₀]; exact .rebind h₁ (ih' h₂)
+  case case5 ih ih' =>
     simp only [Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true'] at h
-    rcases h with h | ⟨h₀, h₁⟩
+    rcases h with (h | ⟨h₀, h₁⟩) | ⟨⟨h₀, h₁⟩, h₂⟩
     · exact .leaf (hl _ _ h)
     · simp only [TExpr.erase]; exact .bind h₀ (ih h₁)
+    · simp only [TExpr.erase, isVarB_sound h₀]; exact .rebind h₁ (ih' h₂)
   case case6 ih =>
     simp only [Bool.or_eq_true] at h
     rcases h with h | h
@@ -162,14 +187,14 @@ theorem stateFnB_sound {leaf : Nat → TExpr → Bool} {L : Nat → Expr → Pro
 theorem classifyBody_sound (tM : TExpr) : (classifyBody tM).BodyPremise tM.erase := by
   unfold classifyBody
   split
-  · next h => exact (onPaths_sound (fun _ _ h => resumeB_sound h) h).tailResumes
+  · next h => exact (onPaths_sound (fun _ _ h => tailLeafB_sound h) h).tailResumes
   split
   · next h => exact onPaths_sound (fun _ _ h => stateFnB_sound (fun _ _ h => stateLeafB_sound h) h) h
   split
   · next h =>
       refine onPaths_sound (fun _ _ h => ?_) h
       simp only [Bool.or_eq_true] at h
-      exact h.elim (fun h => .inl (resumeB_sound h)) (fun h => .inr (cancelB_sound h))
+      exact h.elim (fun h => .inl (tailLeafB_sound h)) (fun h => .inr (cancelB_sound h))
   split
   · next h =>
       refine onPaths_sound (fun _ _ h => stateFnB_sound (fun _ _ h => ?_) h) h

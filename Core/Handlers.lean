@@ -21,10 +21,12 @@ in the cell (`op_answer`). The continuation is resumed once, in place, with the 
 is captured or allocated, and `K` is never inspected.
 
 **A resume in every arm (`tail_resumes`).** A control clause whose every path ends in one
-resume `R N` in tail position, through the arms of `case`s and the bodies of `let`s and
-sequences (`TailResumes`), runs as the clause with its resumes removed followed by one resume:
-each step of the one is a step of the other at the same memory (`TailResumes.step`), and when
-the clause without its resumes answers `r`, the clause reaches `R r`. So it is the clause whose
+resume `R N` in tail position, through the arms of `case`s, the bodies of `let`s and sequences,
+the right unit `let x = R N in return x` and a `let` of a value (`TailResumes`), runs as the
+clause with its resumes removed followed by one resume: each step of the one is matched by steps
+of the other at the same memory (`TailResumes.step`), and when the clause without its resumes
+answers `r`, the clause reaches `R r` under right-unit frames (`RetFrames`), which hand on the
+answer of `R r` unchanged (`RetFrames.answer`, `tail_resumes_answer`). So it is the clause whose
 resume is its last call, which the backend lowers as a direct call (`Backend/Clos/Capture.lean`,
 `tailClause?`).
 
@@ -152,9 +154,113 @@ resumes removed followed by one resume: the resume commutes out of the arms of a
 bodies of a `let`. This is the step that makes such a clause the tail-resumptive clause `g` of
 `op_tail` whose single resume is its last call (`Backend/Clos/Capture.lean`, `tailClause?`). -/
 
+/-- `R` answers its variable `0`, through `let`s that rebind it: `return x`, `let y = x in R'`. -/
+inductive Returns0 : Expr → Prop where
+  | var : Returns0 (.var 0)
+  | bind {R : Expr} : Returns0 R → Returns0 (.app (.val (.lam R)) (.var 0))
+
+/-- A term that answers its variable `0` mentions no other variable. -/
+theorem Returns0.subst_succ {R : Expr} (h : Returns0 R) : ∀ (j : Nat) (v : Val),
+    R.subst (j + 1) v = R := by
+  induction h with
+  | var => intro j v; simp [Expr.subst]
+  | bind _ ih =>
+      intro j v
+      simp [Expr.subst, Expr.val, Val.lam, ih]
+
+/-- **The right unit.** `(λx. R) w`, `R` answering `x`, runs to `w`. -/
+theorem Returns0.run {R : Expr} (h : Returns0 R) (μ : Heap) (w : Val) :
+    Steps (ℍ := ℍ) μ (.app (.val (.lam R)) w.1) μ w.1 := by
+  induction h with
+  | var =>
+      refine .more (.head (Head.beta μ _ w)) ?_
+      simp only [Expr.subst, if_true]; exact .refl _ _
+  | @bind R _ ih =>
+      refine .more (.head (Head.beta μ _ w)) ?_
+      simp only [Expr.subst, Expr.val, Val.lam, if_true]
+      rw [show R.subst (0 + 1) (w.shift 1 0) = R from ‹Returns0 R›.subst_succ 0 _]
+      exact ih
+
+/-- `E` is `X` under right-unit frames `(λx. R) [·]`, each `R` answering `x` (`Returns0`). -/
+inductive RetFrames (X : Expr) : Expr → Prop where
+  | here : RetFrames X X
+  | ret {E R₀ : Expr} : RetFrames X E → Returns0 R₀ → RetFrames X (.app (.val (.lam R₀)) E)
+
+/-- **Right-unit frames hand the answer on**: when `X` runs to `w`, so does `X` under them. -/
+theorem RetFrames.answer {X E : Expr} (h : RetFrames X E) {μ μ' : Heap} {w : Val}
+    (hX : Steps (ℍ := ℍ) μ X μ' w.1) : Steps (ℍ := ℍ) μ E μ' w.1 := by
+  induction h with
+  | here => exact hX
+  | ret _ hR ih =>
+      exact (ih.plug (.appR (.lam _) .hole)).trans (hR.run μ' w)
+
+/-- **Substitutions commute** past a closed value: substituting `v` for `c` after `w` for
+`j + c + 1` is substituting `w` for `j + c` after `v` for `c`. -/
+theorem subst_comm_closed {v : Val} (hv : closedAt 0 v.1 = true) : ∀ (e : Expr) (c j : Nat)
+    (w : Val), (e.subst (j + c + 1) (w.shift (c + 1) 0)).subst c v =
+      (e.subst c v).subst (j + c) (w.shift c 0) := by
+  have hsh : ∀ (w : Val) (a : Nat), (w.shift a 0).shift 1 0 = w.shift (a + 1) 0 := by
+    intro w a; rw [Val.shift_shift, Nat.add_comm]
+  have hvs : v.shift 1 0 = v := val_shift_closed hv 1 0
+  have hvs2 : v.shift 2 0 = v := val_shift_closed hv 2 0
+  have hvs' : ∀ k (s : Val), Expr.subst k s v.1 = v.1 := fun k s => subst_closedAt v.1 s hv (Nat.zero_le k)
+  have hsh2 : ∀ (w : Val) (a : Nat), (w.shift a 0).shift 2 0 = w.shift (a + 2) 0 := by
+    intro w a; rw [Val.shift_shift, Nat.add_comm]
+  intro e
+  induction e with
+  | var i =>
+      intro c j w
+      by_cases h₁ : i = j + c + 1
+      · subst h₁
+        have : (Expr.subst c v (w.shift (c + 1) 0).1) = (w.shift c 0).1 := by
+          have := Expr.subst_shift c 0 c v w.1 (Nat.zero_le _) (by omega)
+          simpa [Val.shift] using this
+        simp only [Expr.subst, if_true, show ¬ (j + c + 1 = c) from by omega,
+          show j + c + 1 > c from by omega, if_false, Nat.add_sub_cancel]
+        simpa [Expr.val] using this
+      · by_cases h₂ : i > j + c + 1
+        · simp only [Expr.subst, if_neg h₁, if_pos h₂, show ¬ (i - 1 = c) from by omega,
+            show i - 1 > c from by omega, show ¬ (i = c) from by omega, show i > c from by omega,
+            if_true, if_false, show ¬ (i - 1 = j + c) from by omega,
+            show i - 1 > j + c from by omega]
+        · by_cases h₃ : i = c
+          · subst h₃
+            simp only [Expr.subst, if_neg h₁, if_neg h₂, if_true]; exact (hvs' _ _).symm
+          · by_cases h₄ : i > c
+            · simp only [Expr.subst, if_neg h₁, if_neg h₂, if_neg h₃, if_pos h₄,
+                if_neg (show ¬ (i - 1 = j + c) from by omega),
+                if_neg (show ¬ (i - 1 > j + c) from by omega)]
+            · simp only [Expr.subst, if_neg h₁, if_neg h₂, if_neg h₃, if_neg h₄,
+                if_neg (show ¬ (i = j + c) from by omega), if_neg (show ¬ (i > j + c) from by omega)]
+  | unit | loc _ | prim _ => intro c j w; rfl
+  | pair a b iha ihb | seq a b iha ihb | app a b iha ihb =>
+      intro c j w; simp only [Expr.subst, iha, ihb]
+  | inj₁ a ih | inj₂ a ih => intro c j w; simp only [Expr.subst, ih]
+  | lam b ih =>
+      intro c j w
+      have := ih (c + 1) j w
+      simp only [Expr.subst, hsh, hvs]
+      rw [show j + c + 1 + 1 = j + (c + 1) + 1 from by omega, this,
+        show j + c + 1 = j + (c + 1) from by omega]
+  | letpair a b iha ihb =>
+      intro c j w
+      have := ihb (c + 2) j w
+      simp only [Expr.subst, iha, hsh2, hvs2]
+      rw [show j + c + 1 + 2 = j + (c + 2) + 1 from by omega, this,
+        show j + c + 2 = j + (c + 2) from by omega]
+  | case e a b ihe iha ihb =>
+      intro c j w
+      have ha := iha (c + 1) j w
+      have hb := ihb (c + 1) j w
+      simp only [Expr.subst, ihe, hsh, hvs]
+      rw [show j + c + 1 + 1 = j + (c + 1) + 1 from by omega, ha, hb,
+        show j + c + 1 = j + (c + 1) from by omega]
+
 /-- `B` resumes with `R` on every path, in tail position, and `B'` is `B` with each resume
 `R N` replaced by its answer `N`: through the arms of a `case`, the body of a `let (x, y)`, the
-rest of a sequence, and the body of a `let x = e`, `(λx. B) e`. -/
+rest of a sequence, the body of a `let x = e`, `(λx. B) e`, the right unit `(λx. R₀) X`, `R₀`
+answering `x` (`Returns0`), whose frames `B'` drops, and a `let` of a closed value, `(λx. B) v`,
+which `B'` takes as its `β`-step `B[v/x]`. -/
 inductive TailResumes (R : Expr) : Expr → Expr → Prop where
   | resume (N : Expr) : TailResumes R (.app R N) N
   | case (e : Expr) {B₁ B₂ B₁' B₂' : Expr} :
@@ -165,6 +271,10 @@ inductive TailResumes (R : Expr) : Expr → Expr → Prop where
   | seq (e : Expr) {B B' : Expr} : TailResumes R B B' → TailResumes R (.seq e B) (.seq e B')
   | bind (e : Expr) {B B' : Expr} : TailResumes R B B' →
       TailResumes R (.app (.val (.lam B)) e) (.app (.val (.lam B')) e)
+  | ret {X X' R₀ : Expr} : TailResumes R X X' → Returns0 R₀ →
+      TailResumes R (.app (.val (.lam R₀)) X) X'
+  | beta (v : Val) {B B' : Expr} : closedAt 0 v.1 = true → TailResumes R (B.subst 0 v) B' →
+      TailResumes R (.app (.val (.lam B)) v.1) B'
 
 /-- A substitution keeps the shape, `R` being closed. -/
 theorem TailResumes.subst {R : Expr} (hR : closedAt 0 R = true) {B B' : Expr}
@@ -178,6 +288,16 @@ theorem TailResumes.subst {R : Expr} (hR : closedAt 0 R = true) {B B' : Expr}
   | letpair e _ ih => intro j v; exact .letpair _ (ih _ _)
   | seq e _ ih => intro j v; exact .seq _ (ih _ _)
   | bind e _ ih => intro j v; exact .bind _ (ih _ _)
+  | ret _ h₀ ih =>
+      intro j v
+      have := TailResumes.ret (ih j v) h₀
+      simpa only [Expr.subst, Expr.val, Val.lam, h₀.subst_succ] using this
+  | @beta u B B' hu _ ih =>
+      intro j v
+      have hc := subst_comm_closed hu B 0 j v
+      simp only [Nat.add_zero, Val.shift_zero] at hc
+      have := TailResumes.beta (R := R) u hu (B := B.subst (j + 1) (v.shift 1 0)) (hc ▸ ih j v)
+      simpa only [Expr.subst, Expr.val, Val.lam, subst_closedAt u.1 v hu (Nat.zero_le _)] using this
 
 /-- `case v {…}`, `v` a value, steps only by its head step. -/
 theorem step1_case_val_inv {μ μ₁ : Heap} {v : Val} {e₁ e₂ E : Expr}
@@ -222,50 +342,56 @@ theorem step1_seq_val_inv {μ μ₁ : Heap} {v : Val} {e E : Expr}
   | _ => simp_all [BoLo.hndE, BoLo.ubindE, BoLo.ccatchE, BoLo.cfinE]
 
 /-- **The resume commutes out of the arms, one step.** Each step of the clause without its
-resumes is matched by one step of the clause, at the same memory, and the shape is kept. -/
+resumes is matched by steps of the clause, at the same memory, and the shape is kept. -/
 theorem TailResumes.step {R : Expr} (hR : closedAt 0 R = true) {B B' : Expr}
     (h : TailResumes R B B') {μ μ₁ : Heap} {E' : Expr} (hs : Step1 (ℍ := ℍ) μ B' μ₁ E') :
-    ∃ E, Step1 (ℍ := ℍ) μ B μ₁ E ∧ TailResumes R E E' := by
+    ∃ E, Steps (ℍ := ℍ) μ B μ₁ E ∧ TailResumes R E E' := by
   induction h generalizing E' with
-  | resume N => exact ⟨_, hs.plug (.appR R .hole), .resume E'⟩
+  | resume N => exact ⟨_, .more (hs.plug (.appR R .hole)) (.refl _ _), .resume E'⟩
   | case e h₁ h₂ _ _ =>
       by_cases hv : IsVal e
       · obtain ⟨rfl, ⟨u, hu, rfl⟩ | ⟨u, hu, rfl⟩⟩ :=
           step1_case_val_inv (ℍ := ℍ) (v := ⟨e, hv⟩) hs
         · have he : e = (Val.inj₁ u).1 := congrArg Subtype.val hu
           subst he
-          exact ⟨_, .head (Head.case₁ _ u _ _), h₁.subst hR 0 u⟩
+          exact ⟨_, .more (.head (Head.case₁ _ u _ _)) (.refl _ _), h₁.subst hR 0 u⟩
         · have he : e = (Val.inj₂ u).1 := congrArg Subtype.val hu
           subst he
-          exact ⟨_, .head (Head.case₂ _ u _ _), h₂.subst hR 0 u⟩
+          exact ⟨_, .more (.head (Head.case₂ _ u _ _)) (.refl _ _), h₂.subst hR 0 u⟩
       · obtain ⟨e', rfl, he⟩ := step1_plug_inv (.case .hole _ _) (by simp [Kont.Plain]) hv hs
-        exact ⟨_, he.plug (.case .hole _ _), .case e' h₁ h₂⟩
+        exact ⟨_, .more (he.plug (.case .hole _ _)) (.refl _ _), .case e' h₁ h₂⟩
   | letpair e hB _ =>
       by_cases hv : IsVal e
       · obtain ⟨v₁, v₂, hp, rfl, rfl⟩ := step1_letpair_inv (ℍ := ℍ) (v := ⟨e, hv⟩) hs
         have he : e = (Val.pair v₁ v₂).1 := congrArg Subtype.val hp
         subst he
-        exact ⟨_, .head (Head.letpair _ v₁ v₂ _),
+        exact ⟨_, .more (.head (Head.letpair _ v₁ v₂ _)) (.refl _ _),
           (hB.subst hR 0 (v₂.shift 1 0)).subst hR 0 v₁⟩
       · obtain ⟨e', rfl, he⟩ := step1_plug_inv (.letpair .hole _) (by simp [Kont.Plain]) hv hs
-        exact ⟨_, he.plug (.letpair .hole _), .letpair e' hB⟩
+        exact ⟨_, .more (he.plug (.letpair .hole _)) (.refl _ _), .letpair e' hB⟩
   | seq e hB _ =>
       by_cases hv : IsVal e
       · obtain ⟨hu, rfl, rfl⟩ := step1_seq_val_inv (ℍ := ℍ) (v := ⟨e, hv⟩) hs
         have he : e = Val.unit.1 := congrArg Subtype.val hu
         subst he
-        exact ⟨_, .head (Head.seq _ _), hB⟩
+        exact ⟨_, .more (.head (Head.seq _ _)) (.refl _ _), hB⟩
       · obtain ⟨e', rfl, he⟩ := step1_plug_inv (.seq .hole _) (by simp [Kont.Plain]) hv hs
-        exact ⟨_, he.plug (.seq .hole _), .seq e' hB⟩
+        exact ⟨_, .more (he.plug (.seq .hole _)) (.refl _ _), .seq e' hB⟩
   | bind e hB _ =>
       by_cases hv : IsVal e
       · obtain ⟨rfl, rfl⟩ := step1_beta_inv (ℍ := ℍ) (v := ⟨e, hv⟩) hs
-        exact ⟨_, .head (Head.beta _ _ ⟨e, hv⟩), hB.subst hR 0 ⟨e, hv⟩⟩
+        exact ⟨_, .more (.head (Head.beta _ _ ⟨e, hv⟩)) (.refl _ _), hB.subst hR 0 ⟨e, hv⟩⟩
       · obtain ⟨e', rfl, he⟩ := step1_plug_inv (.appR (.lam _) .hole) (by simp [Kont.Plain]) hv hs
-        exact ⟨_, he.plug (.appR (.lam _) .hole), .bind e' hB⟩
+        exact ⟨_, .more (he.plug (.appR (.lam _) .hole)) (.refl _ _), .bind e' hB⟩
+  | ret _ h₀ ih =>
+      obtain ⟨E, hE, h'⟩ := ih hs
+      exact ⟨_, hE.plug (.appR (.lam _) .hole), .ret h' h₀⟩
+  | beta v hv _ ih =>
+      obtain ⟨E, hE, h'⟩ := ih hs
+      exact ⟨E, .more (.head (Head.beta _ _ v)) hE, h'⟩
 
 /-- **The resume commutes out of the arms, every run.** A run of the clause without its resumes
-is matched, step for step and at the same memories, by a run of the clause. -/
+is matched, at the same memories, by a run of the clause. -/
 theorem TailResumes.steps {R : Expr} (hR : closedAt 0 R = true) {μ μ' : Heap} {X E' : Expr}
     (hs : Steps (ℍ := ℍ) μ X μ' E') : ∀ {B : Expr}, TailResumes R B X →
     ∃ E, Steps (ℍ := ℍ) μ B μ' E ∧ TailResumes R E E' := by
@@ -275,23 +401,44 @@ theorem TailResumes.steps {R : Expr} (hR : closedAt 0 R = true) {μ μ' : Heap} 
       intro B h
       obtain ⟨E₁, hE₁, h'⟩ := h.step hR h₁
       obtain ⟨E, hE, h''⟩ := ih h'
-      exact ⟨E, .more hE₁ hE, h''⟩
+      exact ⟨E, hE₁.trans hE, h''⟩
+
+/-- When the clause without its resumes is a value `Y`, the clause reaches the resume `R Y`
+under right-unit frames, at the same memory. -/
+theorem TailResumes.finish {R E Y : Expr} (h : TailResumes R E Y) (hY : IsVal Y) (μ : Heap) :
+    ∃ E₂, Steps (ℍ := ℍ) μ E μ E₂ ∧ RetFrames (.app R Y) E₂ := by
+  induction h with
+  | resume => exact ⟨_, .refl _ _, .here⟩
+  | case => exact absurd hY (by simp)
+  | letpair => exact absurd hY (by simp)
+  | seq => exact absurd hY (by simp)
+  | bind => exact absurd hY (by simp [Expr.val])
+  | ret _ h₀ ih =>
+      obtain ⟨E₂, hE, hF⟩ := ih hY
+      exact ⟨_, hE.plug (.appR (.lam _) .hole), .ret hF h₀⟩
+  | beta v _ _ ih =>
+      obtain ⟨E₂, hE, hF⟩ := ih hY
+      exact ⟨E₂, .more (.head (Head.beta _ _ v)) hE, hF⟩
 
 /-- **A clause that resumes in every arm** (`TailResumes`). When the clause without its resumes
-runs to the answer `r`, the clause runs, at the same memories, to the one resume `R r`: it is
-the clause `λ…. let y = B' in R y` whose resume is its last call. -/
+runs to the answer `r`, the clause runs, at the same memories, to the one resume `R r`, under
+right-unit frames (`RetFrames`): it is the clause `λ…. let y = B' in R y` whose resume is its
+last call. -/
 theorem tail_resumes {R B B' : Expr} (hR : closedAt 0 R = true) (h : TailResumes R B B')
     {μ μ' : Heap} {r : Val} (hs : Steps (ℍ := ℍ) μ B' μ' r.1) :
-    Steps (ℍ := ℍ) μ B μ' (.app R r.1) := by
+    ∃ E, Steps (ℍ := ℍ) μ B μ' E ∧ RetFrames (.app R r.1) E := by
   obtain ⟨E, hE, h'⟩ := h.steps hR hs
-  have hv : IsVal r.1 := r.2
-  generalize r.1 = Y at h' hv ⊢
-  cases h' with
-  | resume => exact hE
-  | case => exact absurd hv (by simp)
-  | letpair => exact absurd hv (by simp)
-  | seq => exact absurd hv (by simp)
-  | bind => exact absurd hv (by simp [Expr.val])
+  obtain ⟨E₂, hE₂, hF⟩ := h'.finish r.2 μ'
+  exact ⟨E₂, hE.trans hE₂, hF⟩
+
+/-- **The answer of a clause that resumes in every arm** is its one resume's: when the clause
+without its resumes runs to `r` and `R r` runs to `w`, the clause runs to `w`, at the same
+memories. -/
+theorem tail_resumes_answer {R B B' : Expr} (hR : closedAt 0 R = true) (h : TailResumes R B B')
+    {μ μ' μ'' : Heap} {r w : Val} (hs : Steps (ℍ := ℍ) μ B' μ' r.1)
+    (hw : Steps (ℍ := ℍ) μ' (.app R r.1) μ'' w.1) : Steps (ℍ := ℍ) μ B μ'' w.1 := by
+  obtain ⟨E, hE, hF⟩ := tail_resumes hR h hs
+  exact hE.trans (hF.answer hw)
 
 /-- The shape is met by a `case` with a resume in each arm, as a `for` body's `if` elaborates. -/
 example (R e N₁ N₂ : Expr) :
