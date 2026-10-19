@@ -239,6 +239,71 @@ theorem classify_sound (o : Qual × VTy × VTy) (c : TExpr) :
       | resumeOnce s => cases s <;> exact ⟨ha', _, he, hP⟩
     · simp [ClauseKind.Premise]
 
+/-- The `j`-th component of a tuple `(e₀, (e₁, …))`. -/
+def tupleAt : Nat → Expr → Option Expr
+  | 0, .pair a _ => some a
+  | j + 1, .pair _ b => tupleAt j b
+  | _, _ => none
+
+/-- The clause of the operation `j` in a handler's pair `(h_ret, (c₀, (c₁, …)))`. -/
+def clauseAt (j : Nat) : Expr → Option Expr
+  | .pair _ cs => tupleAt j cs
+  | _ => none
+
+theorem getElem?_replicate_none {α : Type} {n j : Nat} {c : α} :
+    (List.replicate n (none : Option α))[j]? ≠ some (some c) := by
+  rw [List.getElem?_replicate]; split <;> simp
+
+/-- A component `clauseParts` reads is the tuple's component in the erasure. -/
+theorem clauseParts_erase : ∀ (n : Nat) (t : TExpr) (j : Nat) (c : TExpr),
+    (clauseParts n t)[j]? = some (some c) → tupleAt j t.erase = some c.erase
+  | 0, _, _, _, h => by simp [clauseParts] at h
+  | n + 1, t, j, c, h => by
+    unfold clauseParts at h
+    rw [← TExpr.unUse_erase t]
+    split at h
+    · rename_i c' t' heq
+      rw [heq]
+      cases j with
+      | zero => simp at h; subst h; rfl
+      | succ j => simpa [TExpr.erase, tupleAt] using clauseParts_erase n t' j c (by simpa using h)
+    · exact absurd h getElem?_replicate_none
+
+/-- **The kinds a `handle` node records give their laws' premises at the clauses the node
+holds**: the kind of the operation `j` gives that kind's premise (`ClauseKind.Premise`) at the
+`j`-th clause of the erasure of the node's own pair `tH`, the clause the handler runs for it.
+`[spec §19]` -/
+theorem classifyHandler_sound (E : List (Qual × VTy × VTy)) (tH : TExpr) {j : Nat}
+    {o : Qual × VTy × VTy} {k : HKind} {e : Expr} (ho : E[j]? = some o)
+    (hk : (classifyHandler E tH)[j]? = some k) (he : clauseAt j tH.erase = some e) :
+    k.kind.Premise o e := by
+  unfold classifyHandler at hk
+  rw [List.getElem?_zipWith, ho] at hk
+  generalize hp : (_ : List (Option TExpr))[j]? = p at hk
+  cases p with
+  | none => simp at hk
+  | some p =>
+    simp only [Option.some.injEq] at hk
+    subst hk
+    by_cases ha : isAbortive o = true
+    · simp [classifyClause, ha, ClauseKind.Premise]
+    · cases p with
+      | none => simp [classifyClause, ha, ClauseKind.Premise]
+      | some c =>
+        have hc : clauseAt j tH.erase = some c.erase := by
+          split at hp
+          · rename_i tc
+            rw [List.getElem?_append] at hp
+            split at hp
+            · simp only [TExpr.erase, clauseAt]
+              exact clauseParts_erase _ _ _ _ hp
+            · exact absurd hp getElem?_replicate_none
+          · rw [List.getElem?_append] at hp
+            split at hp <;> exact absurd hp getElem?_replicate_none
+        rw [he, Option.some.injEq] at hc
+        subst hc
+        exact classify_sound o c
+
 theorem zipWith_fst_append {α β : Type} (E : List α) (f : α → β → HKind) (g : α → Qual)
     (hf : ∀ a b, (f a b).q = g a) : ∀ (xs ys : List β), E.length ≤ ys.length →
     (E.zipWith f (xs ++ ys)).map (·.q) = E.map g := by

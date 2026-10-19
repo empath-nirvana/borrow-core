@@ -81,18 +81,74 @@ def DefEntry.hit? (e : DefEntry) (decl : Nat) (targs : List CVTy) (Δ : LifeCtx)
     else none
   else none
 
-/-- **The site of the `handle` node of the name `n`**, from the record the elaboration of effects
-made of it (`SiteRec`); `none` at a node no record names (one the program writes in core). The
-record's operations are checked against the node's `E`: as many, at the same qualifiers. A
-mismatch is an internal error.  `[spec §19]` -/
-def siteOf (E : Env) (sp : Span) (n : Nat) (Es : List (CQual × CVTy × CVTy)) :
-    Except Error (Option HSite) := do
-  let some r := E.scope.sites.find? (·.n == n) | return none
-  unless r.ents.map (·.1.toCore) == Es.map (·.1) do
-    throw ⟨sp, s!"internal error: the site {n} (`{r.handler}`, `{r.eff}`) as the elaboration of " ++
-      "effects records it does not have its `handle` node's operations"⟩
-  pure (some { eff := r.eff, args := r.args, handler := r.handler, slot := r.slot, kind := r.kind,
-               state := r.state })
+/-- An internal error at a site whose record does not fit its node. -/
+def siteErr (sp : Span) (r : SiteRec) (what : String) : Error :=
+  ⟨sp, s!"internal error: the site {r.n} (`{r.handler}`, `{r.eff}`) as the elaboration of " ++
+    s!"effects records it {what}"⟩
+
+/-- A type of the record `r`, elaborated in the frame of its node's code. -/
+def siteTy (E : Env) (Δ : LifeCtx) (sp : Span) (r : SiteRec) (A : VTy) : Except Error CVTy :=
+  (E.elabV Δ A).mapError fun e => siteErr sp r s!"has a type that is not one here: {e.msg}"
+
+/-- The record's operations, elaborated. -/
+def siteEnts (E : Env) (Δ : LifeCtx) (sp : Span) (r : SiteRec) :
+    Except Error (List (CQual × CVTy × CVTy)) :=
+  r.ents.mapM fun (q, A, B) => do pure (q.toCore, ← siteTy E Δ sp r A, ← siteTy E Δ sp r B)
+
+/-- The operations a site of the kind `k` whose effect's operations are `ents` handles, among the
+node's `Es`: a `for`'s site threads the variables its body uses, `W`, through its operations, each
+passing them beside its argument and answering them (SPEC §15); any other, `ents`. -/
+def recOps (k : SiteKind) (ents Es : List (CQual × CVTy × CVTy)) : List (CQual × CVTy × CVTy) :=
+  match k, Es.head? with
+  | .forSite, some (_, _, W) => ents.map fun (q, A, _) => (q, .tensor A W, W)
+  | _, _ => ents
+
+/-- **The site of a `handle` node**, from the record of the elaboration of effects the node
+carries (`SiteRec`), its types elaborated here, in the frame of the node's code; `none` at a node
+with no record (one the program writes in core). The record names the node's name, and its
+operations are the node's `E`, the operations the derivation handles (`recOps`,
+`siteOf_ops`): a record that does not is an internal error.  `[spec §19]` -/
+def siteOf (E : Env) (Δ : LifeCtx) (sp : Span) (n : Nat) (st : Option SiteRec)
+    (Es : List (CQual × CVTy × CVTy)) : Except Error (Option HSite) := do
+  let some r := st | return none
+  unless r.n == n do throw (siteErr sp r s!"is at the `handle` node of the name {n}")
+  let ents ← siteEnts E Δ sp r
+  unless recOps r.kind ents Es == Es do
+    throw (siteErr sp r "does not have its `handle` node's operations")
+  let args ← r.args.mapM (siteTy E Δ sp r)
+  let state ← r.state.mapM fun (x, A) => do pure (x, ← siteTy E Δ sp r A)
+  pure (some { eff := r.eff, args, handler := r.handler, slot := r.slot, kind := r.kind, state })
+
+/-- **A site's record has its node's operations**: when `siteOf` gives the node a site, the
+record the node carries names the node, and its operations, elaborated in the node's frame, are
+the node's `E` (at a `for`'s site, with the threaded variables).  `[spec §19]` -/
+theorem siteOf_ops {E : Env} {Δ : LifeCtx} {sp : Span} {n : Nat} {st : Option SiteRec}
+    {Es : List (CQual × CVTy × CVTy)} {s : HSite} (h : siteOf E Δ sp n st Es = .ok (some s)) :
+    ∃ r ents, st = some r ∧ r.n = n ∧ siteEnts E Δ sp r = .ok ents ∧
+      recOps r.kind ents Es = Es ∧ s.kind = r.kind ∧ s.eff = r.eff := by
+  cases st with
+  | none => simp [siteOf, pure, Except.pure] at h
+  | some r =>
+    simp only [siteOf] at h
+    split at h
+    · rename_i hn
+      cases he : siteEnts E Δ sp r with
+      | error e => simp [he, bind, Except.bind] at h
+      | ok ents =>
+        simp only [he, bind, Except.bind] at h
+        split at h
+        · rename_i ho
+          refine ⟨r, ents, rfl, (by simpa using hn), he, (by simpa using ho), ?_⟩
+          cases ha : r.args.mapM (siteTy E Δ sp r) with
+          | error e => simp [ha] at h
+          | ok args =>
+            simp only [ha] at h
+            split at h
+            · simp at h
+            · simp only [pure, Except.pure, Except.ok.injEq, Option.some.injEq] at h
+              subst h; exact ⟨rfl, rfl⟩
+        · simp [throw, throwThe, MonadExceptOf.throw] at h
+    · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
 
 /-! ### The checker -/
 
@@ -367,7 +423,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     | .abort sp k i V => do
       let ⟨_, r⟩ ← abortIt n E Δ T sp k i V .zero
       pure ⟨_, r⟩
-    | .handle sp k _ hr hc M => do
+    | .handle sp k st hr hc M => do
       -- The handler's pair: the answer clause and the clauses, values checked here, whose
       -- slots are persistent (`[handle]`'s `Γ₁`).
       let what (V : Val) (d : String) : String := match V with
@@ -399,7 +455,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                         if hwf : d.wf Δ = true then
                           let Sh := BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S
                           if hSd : ansOutlivesB Δ d Sh = true then
-                            let site ← siteOf E sp k Es
+                            let site ← siteOf E Δ sp k st Es
                             let rM ← chkC n E Δ T M (effOf Sh A)
                             if hso : usedSat (outlivesB Δ d) T rM.F.u = true then
                               if h₂ : overlapOK T rH.F.u rM.F.u = true then
@@ -432,7 +488,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                       if hlen : Es.length ≤ 2 ^ 32 then
                        if hdv : BoCa.Fig16.LogRel.Core.Row.divB
                            (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) = false then
-                        let site ← siteOf E sp k Es
+                        let site ← siteOf E Δ sp k st Es
                         let rM ← chkC n E Δ T M
                           (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) A)
                         if h₂ : overlapOK T rH.F.u rM.F.u = true then

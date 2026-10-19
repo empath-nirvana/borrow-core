@@ -103,7 +103,7 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
     read as `F T`, and the printer writes an empty row so. `lin`, `aff` and `unr` are read as
     qualifiers inside a row only, and are not reserved; `~>` is a token. The computations are
     `perform[n.i] V` and `abort[n.i] V` (prefix forms, operands as `return`'s),
-    `handle_with[n](hr, hc) M` (`M` an operand: a binding form is parenthesized) and the binding
+    `handle_with[n](V, W) M` (`V` and `W` values, `M` an operand: a binding form is parenthesized) and the binding
     `x <- M unwind (D); N` (also `x : A <- M unwind (D); N`). The unwinding borrows take the
     callback's row as their last bracket argument, `[n.i q A ~> B, …]`: `withbor1u['x, A, B, [ROW]]`,
     `withbor2u['x, @b, A, B, [ROW]]`, `withbor3u[@a, 'x, A, B, [ROW]]`,
@@ -319,9 +319,10 @@ borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowL
   with no destructor there is an error naming it. An annotated head `x : A <- M` at a nonempty
   row is checked at `F A` first, and at `F_Σ A` only when that fails. `x <- M unwind (D); N` is
   `[then]` with the `D` written; both `N` and `D` are owed what the binding is owed.
-* **Handlers.** `handle_with[n](hr, hc) M` reads `A`, `Σ` and `R` off `hr : !U(A -o F_Σ R)`
-  (`retRead`) and the operations `E` off the clauses' type (`clausesRead`, checked equal to
-  `clausesTy Σ R E`); an abortive clause `!U(A -o F_Σ R)` is read as the affine operation
+* **Handlers.** `handle_with[n](hr, hc) M` checks the pair `(hr, hc)` of values, a value form
+  over slots that are persistent (`valFormB`, `rEffHandle`), reads `A`, `Σ` and `R` off
+  `hr : !U(A -o F_Σ R)` (`retRead`) and the operations `E` off the clauses' type (`clausesRead`,
+  checked equal to `clausesTy Σ R E`); an abortive clause `!U(A -o F_Σ R)` is read as the affine operation
   `A ↠^aff 0` (`aff` and `unr` give it the same clause type). `M` is checked at
   `F_{ofEff n E 0 ++ Σ} A`. When a clause's argument is `A ⊗ [@d] κ`, `κ` a continuation's type,
   the clauses are read as BOXED-κ's first (`clausesReadBoxed`, `clausesTyB Σ R d E`; SPEC §28):

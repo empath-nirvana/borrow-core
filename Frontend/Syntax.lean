@@ -340,7 +340,9 @@ the effect it serves and its type arguments there, the handler (a control handle
 function a `for` or a stored generator runs), the name the `with` gives it (`with n = h(…)`,
 SPEC §38), what kind of site it is, its operations `(q, A, B)` at the site, and the handler's
 state: its parameters, when its clauses are passed them as a state (SPEC §19, *Handler state*),
-else none. The checker reads it at the `handle` nodes of the name.  `[spec §19]` -/
+else none. It travels with the site's sugar (`HInfo.site`, `ItInfo.site`) to the `handle` node the
+typed elaboration assembles, whose `site` it is, with its types in the frame of that node's code;
+the checker reads it there.  `[spec §19]` -/
 structure SiteRec where
   n : Nat
   eff : String
@@ -375,17 +377,22 @@ structure HInfo where
   /-- The handler's lifetime parameters (SPEC §32): instantiated at the site at the meet of the
   lifetimes in scope (`dom`); `κ`, when boxed, is boxed at the first, else at `top`. -/
   lives : List String := []
+  /-- The elaboration's record of the site, its types in the frame of the site's code, over the
+  type parameters still to be determined (`tps`) and the lifetime parameters (`lives`). -/
+  site : SiteRec
   deriving DecidableEq, Repr
 
 /-- A handler site of an iteration effect (SPEC §15), as `Frontend.Elab.Effects` leaves it for the
 typed elaboration: the site's static name, the type of the element its operation passes, the
 variable a `for`'s site threads through the operation (its copy of the callee takes it first and
-hands it back first), and the callee as written, for messages. -/
+hands it back first), the callee as written, for messages, and the elaboration's record of the
+site, its types in the frame of the callee's declaration (over its type parameters). -/
 structure ItInfo where
   n : Nat
   T : VTy
   w : String
   callee : String
+  site : SiteRec
   deriving DecidableEq, Repr
 
 /-- A surface form that needs types to elaborate (docs/typed-elaboration.md §5): a leaf, applied
@@ -845,7 +852,8 @@ def VSugar.strip : VSugar → VSugar
   | .hndCtl i => .hndCtl { i with
       ents := i.ents.map (fun (q, A, B) => (q, A.strip, B.strip)),
       known := i.known.map (fun (x, A) => (x, A.strip)),
-      params := i.params.map (fun (x, A) => (x, A.strip)), retA := i.retA.strip, res := i.res.strip }
+      params := i.params.map (fun (x, A) => (x, A.strip)), retA := i.retA.strip, res := i.res.strip,
+      site := i.site.strip }
   | s => s
 
 mutual

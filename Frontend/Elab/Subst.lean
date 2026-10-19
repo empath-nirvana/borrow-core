@@ -135,7 +135,8 @@ def HInfo.subst (σ : TySubst) (i : HInfo) : HInfo :=
   { i with ents := i.ents.map fun (q, A, B) => (q, A.subst σ, B.subst σ),
            known := i.known.map fun (x, A) => (x, A.subst σ),
            params := i.params.map fun (x, A) => (x, A.subst σ),
-           retA := i.retA.subst σ, res := i.res.subst σ, after := i.after.map (·.subst σ) }
+           retA := i.retA.subst σ, res := i.res.subst σ, after := i.after.map (·.subst σ),
+           site := i.site.mapTy (·.subst σ) }
 
 mutual
 def Val.subst (σ : TySubst) : Val → Val

@@ -6,8 +6,8 @@ import Frontend.Check.TExpr
 At `[handle]` the checker classifies each operation's clause from its typed term, and records
 the kinds on the `handle` node (`TExpr.effHandleV`'s `ks`). The clauses are the components of the
 node's own handler pair `(h_ret, hs)`: the elaboration writes them inline, so the node holds the
-term the handler runs. A clause the node does not hold, a variable a program writes in core, is
-`stored`.
+term the handler runs. A clause a program names by a `def` is the `def`'s body at the use (its
+`use` node). A clause the node does not hold, a variable a program writes in core, is `stored`.
 
 The classification reads the derivation: an abortive operation is one whose signature gives its
 clause no `κ` (`clauseTy`); a control clause is `!thunkv λp. let (x, κ) = p; M`, and `M`'s paths

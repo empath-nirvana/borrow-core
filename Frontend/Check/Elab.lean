@@ -61,8 +61,6 @@ def pullTy (A B R : CVTy) : CCTy :=
 structure Scope where
   decls : Array Decl
   upto : Nat
-  /-- The handler sites the elaboration of effects made (`SiteRec`), read at `[handle]`. -/
-  sites : List SiteRec := []
 
 /-- A `type` declaration in scope: its type and lifetime parameters, body and own scope. -/
 structure TypeInfo where

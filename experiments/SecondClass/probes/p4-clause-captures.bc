@@ -26,9 +26,10 @@ def count__tick : !(all 'l < top. mut 'l i32 * 1 => mut 'l i32 * i32) =
 main : F i32 =
   q <- return withbor2['h, dom, i32, i32] (alloc[i32] i32[0]) (thunkv Fun 'h < dom.
         return (thunkv fun (c : mut 'h i32) ->
-            hr : !U (i32 -o F (U (ref i32 * mut 'h i32 -o F (i32 * (ref i32 * mut 'h i32))))) <- return (!thunkv fun (a : i32) ->
-                  return (thunkv fun (s : ref i32 * mut 'h i32) -> return (a, s)));
-            hc : !U ((1 * U ((i32 -o F (U (ref i32 * mut 'h i32 -o F (i32 * (ref i32 * mut 'h i32))))) & F 1)) -o F (U (ref i32 * mut 'h i32 -o F (i32 * (ref i32 * mut 'h i32))))) * 1 <- return (!thunkv fun (qk : 1 * U ((i32 -o F (U (ref i32 * mut 'h i32 -o F (i32 * (ref i32 * mut 'h i32))))) & F 1)) ->
+            g : U (ref i32 * mut 'h i32 -o F (i32 * (ref i32 * mut 'h i32))) <- handle_with[1](
+                ((!thunkv fun (a : i32) ->
+                  return (thunkv fun (s : ref i32 * mut 'h i32) -> return (a, s))) : !U (i32 -o F (U (ref i32 * mut 'h i32 -o F (i32 * (ref i32 * mut 'h i32)))))),
+                ((!thunkv fun (qk : 1 * U ((i32 -o F (U (ref i32 * mut 'h i32 -o F (i32 * (ref i32 * mut 'h i32))))) & F 1)) ->
                   let (u, k) = qk;
                   let () = u;
                   return (thunkv fun (s : ref i32 * mut 'h i32) ->
@@ -39,8 +40,7 @@ main : F i32 =
                       let (c, n) = t;
                       g <- force k.1 v;
                       s2 <- return (cell, c);
-                      force g s2), ());
-            g : U (ref i32 * mut 'h i32 -o F (i32 * (ref i32 * mut 'h i32))) <- handle_with[1](hr, hc) (
+                      force g s2), ()) : !U ((1 * U ((i32 -o F (U (ref i32 * mut 'h i32 -o F (i32 * (ref i32 * mut 'h i32))))) & F 1)) -o F (U (ref i32 * mut 'h i32 -o F (i32 * (ref i32 * mut 'h i32))))) * 1)) (
                 a <- perform[1.0] ();
                 b <- perform[1.0] ();
                 return ((unbang host[add32]) ((unbang host[mul32]) (a, i32[10]), b) : i32));
@@ -53,10 +53,10 @@ main : F i32 =
             t : mut 'h i32 * i32 <- return (unbang count__tick) ['h] (c, ());
             let (c, n) = t;
             ra <- return ((unbang host[add32]) ((unbang host[add32]) (r, v), n) : i32);
-            er : !U (i32 -o F (i32 + 1)) <- return (!thunkv fun (a : i32) -> return inl a);
-            ec : !U (1 -o F (i32 + 1)) * 1 <- return (!thunkv fun (e : 1) -> return inr e, ());
             cell2 <- return alloc[i32] i32[100];
-            o : i32 + 1 <- handle_with[2](er, ec) (
+            o : i32 + 1 <- handle_with[2](
+                ((!thunkv fun (a : i32) -> return inl a) : !U (i32 -o F (i32 + 1))),
+                ((!thunkv fun (e : 1) -> return inr e, ()) : !U (1 -o F (i32 + 1)) * 1)) (
                 z <- (abort[2.0] () : F[2.0 aff 1 ~> 0] i32);
                 return z);
             rb <- case o {

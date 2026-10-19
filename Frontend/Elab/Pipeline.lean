@@ -21,18 +21,17 @@ open Frontend.Check
 /-! ### The pipeline -/
 
 /-- An elaborated program: the core the checker checks, the number of library declarations it
-begins with, the origins of its generated code, and the handler sites the elaboration of effects
-made, which the checker reads at their `handle` nodes (`SiteRec`). -/
+begins with, and the origins of its generated code. The handler sites the elaboration of effects
+made are on their `handle` nodes (`SiteRec`). -/
 structure Elaborated where
   prog : Program
   lib : Nat
   origins : Sugar.Origins
-  sites : List SiteRec
 
 /-- Elaborate a parsed program for the checker. -/
 def elaborate (p : Program) : Except Error Elaborated := do
   let s ← Sugar.elaborateO p
-  pure ⟨s.prog, s.lib, s.origins, s.sites⟩
+  pure ⟨s.prog, s.lib, s.origins⟩
 
 /-! ### Errors -/
 

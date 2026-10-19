@@ -1,7 +1,7 @@
 -- SPEC §19 in the core text: an abortive operation `1.0 aff i32 ~> 0` (a `Fail` over `i32`), and
 -- its handler `to_result` turning an abort into a sum. `check` aborts with `7` at `0` and answers
 -- its argument otherwise; it is a function at the row of the operation, called under
--- `handle_with[1]`, whose answer clause is `hr` and whose clauses are the tuple `hc`.
+-- `handle_with[1]`, which holds its answer clause and the tuple of its clauses.
 --
 -- Answer: (inl i32[5], inr i32[7]): the call at `5` returns, the call at `0` aborts.
 

@@ -4,16 +4,16 @@
 -- yielded values, 5+4+3+2+1+0 + 10*(0+1+2+3+4+5) = 165. With a budget of 3 the recursion raises
 -- `exhausted`, whose handler answers 99999.
 main : F i32 =
-  er : !U (i32 -o F i32) <- return (!thunkv fun (a : i32) -> return a);
-  ec : !U (1 -o F i32) * 1 <- return (!thunkv fun (u : 1) -> return i32[99999], ());
-  handle_with[2](er, ec) (
-    hr : !U (1 -o F[2.0 aff 1 ~> 0] i32) <- return (!thunkv fun (u : 1) -> return i32[0]);
-    hc : !U (i32 * U ((1 -o F[2.0 aff 1 ~> 0] i32) & F[2.0 aff 1 ~> 0] 1) -o F[2.0 aff 1 ~> 0] i32) * 1 <- return (!thunkv fun (q : i32 * U ((1 -o F[2.0 aff 1 ~> 0] i32) & F[2.0 aff 1 ~> 0] 1)) ->
+  handle_with[2](
+      ((!thunkv fun (a : i32) -> return a) : !U (i32 -o F i32)),
+      ((!thunkv fun (u : 1) -> return i32[99999], ()) : !U (1 -o F i32) * 1)) (
+    handle_with[1](
+        ((!thunkv fun (u : 1) -> return i32[0]) : !U (1 -o F[2.0 aff 1 ~> 0] i32)),
+        ((!thunkv fun (q : i32 * U ((1 -o F[2.0 aff 1 ~> 0] i32) & F[2.0 aff 1 ~> 0] 1)) ->
           let (v, k) = q;
           w <- return ();
           r <- force k.1 w;
-          return (unbang host[add32]) (v, r), ());
-    handle_with[1](hr, hc) (
+          return (unbang host[add32]) (v, r), ()) : !U (i32 * U ((1 -o F[2.0 aff 1 ~> 0] i32) & F[2.0 aff 1 ~> 0] 1) -o F[2.0 aff 1 ~> 0] i32) * 1)) (
       st : !U ((1 + !U (i32 -o F[1.0 aff i32 ~> 1, 2.0 aff 1 ~> 0] 1)) * i32 -o F[1.0 aff i32 ~> 1, 2.0 aff 1 ~> 0] 1) <- return (!thunkv fun (p : (1 + !U (i32 -o F[1.0 aff i32 ~> 1, 2.0 aff 1 ~> 0] 1)) * i32) ->
           let (self, n) = p;
           u <- perform[1.0] n;

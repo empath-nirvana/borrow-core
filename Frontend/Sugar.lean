@@ -161,57 +161,72 @@ def _root_.Frontend.Comp.elab (lend : Bool) : Comp → Except Error Comp
   | .withbor2r sp x b A B r p m M => return .withbor2r sp x b A B r p m (← M.elab false)
 end
 
-/-! ### Filling a template's holes -/
+/-! ### Filling a template's holes
+
+A template's holes are the variables `hv` names and the `force`s `hc` names; a `handle` node of a
+name that `hs` gives a record for has that record as its site. -/
 
 mutual
-def _root_.Frontend.Val.fill (hv : String → Option Val) (hc : String → Option Comp) : Val → Val
+def _root_.Frontend.Val.fillS (hv : String → Option Val) (hc : String → Option Comp)
+    (hs : Nat → Option SiteRec) : Val → Val
   | V@(.var _ x) => (hv x).getD V
   | V@(.clone ..) => V
-  | .pair sp V W => .pair sp (V.fill hv hc) (W.fill hv hc)
-  | .app sp V W => .app sp (V.fill hv hc) (W.fill hv hc)
-  | .inl sp V => .inl sp (V.fill hv hc)
-  | .inr sp V => .inr sp (V.fill hv hc)
-  | .unbang sp V => .unbang sp (V.fill hv hc)
-  | .boxed sp l V => .boxed sp l (V.fill hv hc)
-  | .unbox sp V => .unbox sp (V.fill hv hc)
-  | .sub sp V l => .sub sp (V.fill hv hc) l
-  | .roll sp V => .roll sp (V.fill hv hc)
-  | .unroll sp V => .unroll sp (V.fill hv hc)
-  | .inst sp V l => .inst sp (V.fill hv hc) l
-  | .ascribe sp V A => .ascribe sp (V.fill hv hc) A
-  | .shorten sp m σ l V => .shorten sp m σ l (V.fill hv hc)
-  | .thunk sp M => .thunk sp (M.fill hv hc)
-  | .thunkv sp M => .thunkv sp (M.fill hv hc)
-  | .bangThunk sp M => .bangThunk sp (M.fill hv hc)
-  | .bangThunkv sp M => .bangThunkv sp (M.fill hv hc)
-  | .run sp M => .run sp (M.fill hv hc)
+  | .pair sp V W => .pair sp (V.fillS hv hc hs) (W.fillS hv hc hs)
+  | .app sp V W => .app sp (V.fillS hv hc hs) (W.fillS hv hc hs)
+  | .inl sp V => .inl sp (V.fillS hv hc hs)
+  | .inr sp V => .inr sp (V.fillS hv hc hs)
+  | .unbang sp V => .unbang sp (V.fillS hv hc hs)
+  | .boxed sp l V => .boxed sp l (V.fillS hv hc hs)
+  | .unbox sp V => .unbox sp (V.fillS hv hc hs)
+  | .sub sp V l => .sub sp (V.fillS hv hc hs) l
+  | .roll sp V => .roll sp (V.fillS hv hc hs)
+  | .unroll sp V => .unroll sp (V.fillS hv hc hs)
+  | .inst sp V l => .inst sp (V.fillS hv hc hs) l
+  | .ascribe sp V A => .ascribe sp (V.fillS hv hc hs) A
+  | .shorten sp m σ l V => .shorten sp m σ l (V.fillS hv hc hs)
+  | .thunk sp M => .thunk sp (M.fillS hv hc hs)
+  | .thunkv sp M => .thunkv sp (M.fillS hv hc hs)
+  | .bangThunk sp M => .bangThunk sp (M.fillS hv hc hs)
+  | .bangThunkv sp M => .bangThunkv sp (M.fillS hv hc hs)
+  | .run sp M => .run sp (M.fillS hv hc hs)
   | V => V
 
-def _root_.Frontend.Comp.fill (hv : String → Option Val) (hc : String → Option Comp) : Comp → Comp
+def _root_.Frontend.Comp.fillS (hv : String → Option Val) (hc : String → Option Comp)
+    (hs : Nat → Option SiteRec) : Comp → Comp
   | M@(.force _ x) => (hc x.name).getD M
-  | .ret sp V => .ret sp (V.fill hv hc)
-  | .absurd sp V => .absurd sp (V.fill hv hc)
-  | .bind sp x A M N lin => .bind sp x A (M.fill hv hc) (N.fill hv hc) lin
-  | .lam sp x A M => .lam sp x A (M.fill hv hc)
-  | .app sp M x => .app sp (M.fill hv hc) x
-  | .with_ sp M N => .with_ sp (M.fill hv hc) (N.fill hv hc)
-  | .proj sp i M => .proj sp i (M.fill hv hc)
-  | .letUnit sp V M => .letUnit sp (V.fill hv hc) (M.fill hv hc)
-  | .letPair sp x y V M => .letPair sp x y (V.fill hv hc) (M.fill hv hc)
-  | .case sp V x M y N => .case sp (V.fill hv hc) x (M.fill hv hc) y (N.fill hv hc)
-  | .lamL sp x b M => .lamL sp x b (M.fill hv hc)
-  | .inst sp M a => .inst sp (M.fill hv hc) a
-  | .nuIn sp M => .nuIn sp (M.fill hv hc)
-  | .nuOut sp M => .nuOut sp (M.fill hv hc)
-  | .ascribe sp M C => .ascribe sp (M.fill hv hc) C
-  | .perform sp k i V => .perform sp k i (V.fill hv hc)
-  | .abort sp k i V => .abort sp k i (V.fill hv hc)
-  | .handle sp k st hr hc' M => .handle sp k st (hr.fill hv hc) (hc'.fill hv hc) (M.fill hv hc)
-  | .unwind sp x A M D N => .unwind sp x A (M.fill hv hc) (D.fill hv hc) (N.fill hv hc)
-  | .withbor2r sp x b A B r p m M => .withbor2r sp x b A B r p m (M.fill hv hc)
-  | .loop sp ℓ src V M N => .loop sp ℓ src (V.fill hv hc) (M.fill hv hc) (N.fill hv hc)
+  | .ret sp V => .ret sp (V.fillS hv hc hs)
+  | .absurd sp V => .absurd sp (V.fillS hv hc hs)
+  | .bind sp x A M N lin => .bind sp x A (M.fillS hv hc hs) (N.fillS hv hc hs) lin
+  | .lam sp x A M => .lam sp x A (M.fillS hv hc hs)
+  | .app sp M x => .app sp (M.fillS hv hc hs) x
+  | .with_ sp M N => .with_ sp (M.fillS hv hc hs) (N.fillS hv hc hs)
+  | .proj sp i M => .proj sp i (M.fillS hv hc hs)
+  | .letUnit sp V M => .letUnit sp (V.fillS hv hc hs) (M.fillS hv hc hs)
+  | .letPair sp x y V M => .letPair sp x y (V.fillS hv hc hs) (M.fillS hv hc hs)
+  | .case sp V x M y N => .case sp (V.fillS hv hc hs) x (M.fillS hv hc hs) y (N.fillS hv hc hs)
+  | .lamL sp x b M => .lamL sp x b (M.fillS hv hc hs)
+  | .inst sp M a => .inst sp (M.fillS hv hc hs) a
+  | .nuIn sp M => .nuIn sp (M.fillS hv hc hs)
+  | .nuOut sp M => .nuOut sp (M.fillS hv hc hs)
+  | .ascribe sp M C => .ascribe sp (M.fillS hv hc hs) C
+  | .perform sp k i V => .perform sp k i (V.fillS hv hc hs)
+  | .abort sp k i V => .abort sp k i (V.fillS hv hc hs)
+  | .handle sp k st hr hc' M =>
+    .handle sp k (st.orElse fun _ => hs k) (hr.fillS hv hc hs) (hc'.fillS hv hc hs) (M.fillS hv hc hs)
+  | .unwind sp x A M D N => .unwind sp x A (M.fillS hv hc hs) (D.fillS hv hc hs) (N.fillS hv hc hs)
+  | .withbor2r sp x b A B r p m M => .withbor2r sp x b A B r p m (M.fillS hv hc hs)
+  | .loop sp ℓ src V M N => .loop sp ℓ src (V.fillS hv hc hs) (M.fillS hv hc hs) (N.fillS hv hc hs)
   | M => M
 end
+
+/-- A template's holes filled, with no site records. -/
+def _root_.Frontend.Val.fill (hv : String → Option Val) (hc : String → Option Comp) (V : Val) : Val :=
+  V.fillS hv hc fun _ => none
+
+/-- A template's holes filled, with no site records. -/
+def _root_.Frontend.Comp.fill (hv : String → Option Val) (hc : String → Option Comp) (M : Comp) :
+    Comp :=
+  M.fillS hv hc fun _ => none
 
 /-! ### Ambient capabilities in `main` -/
 
@@ -1808,6 +1823,9 @@ structure DivSt where
   templates : List Decl := []
   /-- The instances made, by template and type arguments. -/
   insts : List ((String × List VTy) × String) := []
+  /-- The calls of instances, newest first: the instance, its template's type parameters and the
+  call's type arguments, in the frame of the call. -/
+  instCalls : List (String × List String × List CVTy) := []
   /-- The loops around the code being elaborated, innermost first: how a `return` in the body of
   a counted loop inside them leaves (`forData`).  `[spec §16]` -/
   exits : List LoopExit := []
@@ -2323,7 +2341,7 @@ made while elaborating the declaration it is in). -/
 def refresh (c : TCx) : DM TCx := do
   let st ← get
   let ds := (st.lib ++ st.out ++ st.caps).toArray
-  pure { c with E := { c.E with scope := ⟨ds, ds.size, []⟩ } }
+  pure { c with E := { c.E with scope := ⟨ds, ds.size⟩ } }
 
 /-! #### The total `for` over data  `[spec §16]`
 
@@ -4036,6 +4054,18 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       pure (.unwind sp x A M' D' N')
     | M => pure M
 
+/-- The record of a `for`'s or a stored generator's site, whose types are in the frame of its
+callee's declaration, in the frame `c` of the site's code: at the type arguments of the call of
+the instance `g` (`DivSt.instCalls`), or as it is when `g` is no instance of a template.
+`[spec §15, §19]` -/
+def siteAtCall (c : TCx) (sp : Span) (g : String) (r : SiteRec) : DM SiteRec := do
+  match (← get).instCalls.find? (·.1 == g) with
+  | none => pure r
+  | some (_, names, ts) =>
+    let σ ← (names.zip ts).mapM fun (x, t) => do
+      pure (x, ← (c.surface sp t : Except Error VTy))
+    pure (r.mapTy (·.subst σ))
+
 /-- A handler site of a control effect (SPEC §19): its arguments bound, its body elaborated
 with the site's operations innermost in the row, the handler's type parameters matched against
 its arguments' types and the body's, and its clauses as `!` closures at the types `[handle]`
@@ -4120,8 +4150,10 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     let hrTy ← (cP.surface sp (BoCa.Fig16.LogRel.Core.retTy S A Rc) : Except Error VTy)
     let hcTy ← (cP.surface sp (if i.boxK then BoCa.Fig16.LogRel.Core.clausesTyB S Rc kBound ops
       else BoCa.Fig16.LogRel.Core.clausesTy S Rc ops) : Except Error VTy)
-    -- The node holds its clauses, each at its type.
-    let hd : Comp := .handle sp i.n none (.ascribe sp hr hrTy) (.ascribe sp hcV hcTy) M'
+    -- The node holds its clauses, each at its type, and the site's record, at the handler's
+    -- lifetimes and type arguments here.
+    let site := i₀.site.mapTy fun A => (lv A).subst σ
+    let hd : Comp := .handle sp i.n (some site) (.ascribe sp hr hrTy) (.ascribe sp hcV hcTy) M'
     -- A site whose clauses run after it answers its arguments beside its own answer.
     let core ← if i.after.isNone then pure hd else do
       let r : Ident := ⟨s!"io_ar{i.n}", sp⟩
@@ -4735,12 +4767,13 @@ io_hwf{sfx} : !({Lg} => U ({Lw})) <- return (!thunkv fun (io_hl{sfx} : {Lg}) ->
 io_j{sfx} : {Jt} <- return ((unbang io_hwf{sfx}) io_l{sfx});
 "
     let what := "a `for` over a generator"
+    let site ← siteAtCall cw sp g i.site
     let L ← (template sp what (core ++ join ++ after) : SM Comp)
     let hc (h : String) : Option Comp :=
       if h == "io_hole_body" then some body else if h == "io_hole_rest" then some (restOf N)
       else if h == "io_hole_call" then some (.ret sp call')
       else if h == "io_hole_ret" then some (retOut sp (.var sp s!"io_rv{sfx}")) else none
-    let L := L.fill (fun _ => none) hc
+    let L := L.fillS (fun _ => none) hc fun k => if k == i.n then some site else none
     if !(← get).quiet then
       report sp (if looping then s!"`for` is div: `{i.callee}` loops" else
         s!"`for` is total: `{i.callee}` does not loop")
@@ -4860,8 +4893,10 @@ io_pf{sfx} <- return (unbang (unfold[pull ({Tt}) ({Bt}) 1, {St}] (!thunkv fun (i
     | inr io_pq{sfx} -> (nu_out (force io_pq{sfx})).2
     } >)));
 return (thunkv nu_in < (nu_out (force io_pf{sfx} io_ps{sfx})).1, (nu_out (force io_pf{sfx} io_ps{sfx})).2 >)"
+    let site ← siteAtCall c sp g i.site
     let L ← (template sp "a stored generator" src : SM Comp)
-    let L := L.fill (fun _ => none) fun h => if h == "io_hole_call" then some (.ret sp call') else none
+    let L := L.fillS (fun _ => none) (fun h => if h == "io_hole_call" then some (.ret sp call') else none)
+      fun k => if k == i.n then some site else none
     surfC n c none L
 
 /-- A declaration with its surface forms elaborated, in the context the checker checks it in. -/
@@ -4957,7 +4992,9 @@ def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) → Option 
       σs := σs ++ [(x, ← c'.surface sp t)]
     let key := (tn.name, σs.map (·.2.strip))
     let st ← get
-    if let some name := st.insts.lookup key then return (name, extras)
+    if let some name := st.insts.lookup key then
+      modify fun st => { st with instCalls := (name, names, ts₀) :: st.instCalls }
+      return (name, extras)
     -- An instance of a generic recursive group's machine source keeps the suffix that makes it a
     -- machine (`recMachine`): `g__gN__mach_src`, whose machine is `g__gN__mach`.  `[spec §31]`
     let name := if tn.name.endsWith "__mach_src" then
@@ -4997,7 +5034,7 @@ def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) → Option 
     let inst := Elab.fillDecl (st.lib ++ st.out) st.caps inst
     let libNames := if st.libNames.contains tn.name then name :: st.libNames else st.libNames
     let st' ← (elabDecl n { st with insts := (key, name) :: st.insts, libNames } inst : SM DivSt)
-    set { st' with quiet := st.quiet }
+    set { st' with quiet := st.quiet, instCalls := (name, names, ts₀) :: st'.instCalls }
     return (name, extras)
 
 /-- The instance of the case of the family `fam` at `T` (SPEC §36): its name, and the lifetimes
@@ -5575,10 +5612,9 @@ def polyDecls (ds : List Decl) : Except Error (List Decl × PolyTab × List (Dec
     | d => out := out ++ [d]
   pure (out, tab, pairs)
 
-/-- The program with its sugar elaborated, the number of library declarations it begins with,
-and the handler sites the elaboration of effects made (`SiteRec`), recording the origins of
-generated code.  `[spec §11, §14]` -/
-def elaborateS (p : Program) : SM (Program × Nat × List SiteRec) := do
+/-- The program with its sugar elaborated and the number of library declarations it begins with,
+recording the origins of generated code.  `[spec §11, §14]` -/
+def elaborateS (p : Program) : SM (Program × Nat) := do
   let libRaw (m : String) : Except Error (List Decl) :=
     match library m with
     | some (.ok src) => match parseProgram src with
@@ -5734,21 +5770,19 @@ def elaborateS (p : Program) : SM (Program × Nat × List SiteRec) := do
     | .def_ sp n ps A V mk => return .def_ sp n ps A (← V.elab false) mk
     | .main sp C M => return .main sp C (← M.elab false)
     | d => pure d
-  pure (⟨decls⟩, lib.length + ioN, fxr.sites)
+  pure (⟨decls⟩, lib.length + ioN)
 
 /-- A program with its sugar elaborated: its declarations, the number of library declarations it
-begins with, the origins of its generated code, and the handler sites the elaboration of effects
-made (`SiteRec`). -/
+begins with, and the origins of its generated code. -/
 structure Sugared where
   prog : Program
   lib : Nat
   origins : Origins
-  sites : List SiteRec
 
 /-- The program with its sugar elaborated, with the origins of its generated code. -/
 def elaborateO (p : Program) : Except Error Sugared := do
-  let ((q, n, x), os) ← (elaborateS p).run []
-  pure ⟨q, n, os, x⟩
+  let ((q, n), os) ← (elaborateS p).run []
+  pure ⟨q, n, os⟩
 
 /-- The program with its sugar elaborated, and the number of library declarations it begins
 with.  `[spec §11, §14]` -/

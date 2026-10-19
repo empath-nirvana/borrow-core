@@ -345,7 +345,10 @@ needs it.
   term of each `x <- return V`), since emitting the clauses in the node changes the erasure. C3b
   keeps that: the premises gain the right unit and the alias of `κ` (SPEC §18, §19), and each
   `handle` node carries the elaboration's record of its site (`HSite`: effect, type arguments,
-  handler, slot, site kind, handler state), checked against the node.
+  handler, slot, site kind, handler state), checked against the node. C3c (#574) emits the
+  clauses in the node: each handler's erasure loses its two clause `β`-redexes, the classifier
+  reads the node's own pair, and the site record travels with the site to its node, where the
+  checker elaborates it to core types and checks its operations against the node's `E`.
 - **`use` and sharing.** Two uses of `d` at the same `τ` and the same site assignment have bodies
   whose erasures differ only if they use externs at different indices. A `def` sees only
   persistent externs (`Env.forDef`, `Steps.lean:452–456`). One code per key is sound when the
@@ -649,6 +652,7 @@ programs, `counts.expected` and the desugar diff. A unit that touches `Core/`, `
 | C2 | **`use` and derived nodes.** `use d τ`; the derived nodes for fixed schemes, each with its typing lemma; optionally (choice 7) one check per key with `CDerives.append_dead` for the context | C1 | `erase` unchanged; one derived node per recogniser of §1.2 (L1, L2, L4, B3, B7) |
 | C3 | **Clause kinds**, classified by the checker at `[handle]`, each with the lemma that gives its law's premise | C1, B2 if `tick` | every handler of the corpus classified; the report rendered from the field (`docs/pipeline-architecture.md` §9.2 defect 3) |
 | C3b (#571) | **Kinds complete, sites on the node**: right-unit and alias steps in the premises and laws; site names, site kind and handler state on the `handle` node, cross-checked; `exits` from the platform handler's site; condition 2 stated over the rows | C3 | `kinds.expected` changes only by the new laws; every other output unchanged |
+| C3c (#574) | **Self-contained handler sites**: the clauses inline in `hnd`, read by the classifier from the node (no chase through `Env.vals`); the site record at core types in the frame of its node, its operations checked equal to the node's `E` | C3b | `erase` changes only by removing the clause `β`-redexes; every run output, golden and count unchanged |
 | S0 (#554) | **running** | — | its own |
 | B1 | `Div` in the kernel, as `docs/pipeline-architecture.md` §3.7 | S0 | as there |
 | B2 | the `Div` elaboration as typed schemes; the remaining templates converted (no `parseComp` on the elaboration path) | B1, U1, C1 | as there; `template`/`mTemplate` deleted |

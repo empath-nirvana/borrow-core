@@ -5,16 +5,16 @@
 -- `flip` answers the old state and stores its negation. Starting from `inl ()`, the first
 -- closure sees `inl ()` and the second `inr ()`. Answer: i32[1] when the two answers differ.
 main : F i32 =
-  hr : !U ((1 + 1) * (1 + 1) -o F (U (1 + 1 -o F (((1 + 1) * (1 + 1)) * (1 + 1))))) <- return (!thunkv fun (r : (1 + 1) * (1 + 1)) ->
-        return (thunkv fun (s : 1 + 1) -> return (r, s)));
-  hc : !U ((1 * U (((1 + 1) -o F (U (1 + 1 -o F (((1 + 1) * (1 + 1)) * (1 + 1))))) & F 1)) -o F (U (1 + 1 -o F (((1 + 1) * (1 + 1)) * (1 + 1))))) * 1 <- return (!thunkv fun (qk : 1 * U (((1 + 1) -o F (U (1 + 1 -o F (((1 + 1) * (1 + 1)) * (1 + 1))))) & F 1)) ->
+  g : U (1 + 1 -o F (((1 + 1) * (1 + 1)) * (1 + 1))) <- handle_with[1](
+      ((!thunkv fun (r : (1 + 1) * (1 + 1)) ->
+        return (thunkv fun (s : 1 + 1) -> return (r, s))) : !U ((1 + 1) * (1 + 1) -o F (U (1 + 1 -o F (((1 + 1) * (1 + 1)) * (1 + 1)))))),
+      ((!thunkv fun (qk : 1 * U (((1 + 1) -o F (U (1 + 1 -o F (((1 + 1) * (1 + 1)) * (1 + 1))))) & F 1)) ->
         let (u, k) = qk;
         let () = u;
         return (thunkv fun (s : 1 + 1) ->
             s2 : 1 + 1 <- case s { inl a -> return inr () | inr b -> return inl () };
             g <- force k.1 s;
-            force g s2), ());
-  g : U (1 + 1 -o F (((1 + 1) * (1 + 1)) * (1 + 1))) <- handle_with[1](hr, hc) (
+            force g s2), ()) : !U ((1 * U (((1 + 1) -o F (U (1 + 1 -o F (((1 + 1) * (1 + 1)) * (1 + 1))))) & F 1)) -o F (U (1 + 1 -o F (((1 + 1) * (1 + 1)) * (1 + 1))))) * 1)) (
       blocks : !U (1 -o F[1.0 aff 1 ~> 1 + 1] (1 + 1)) * !U (1 -o F[1.0 aff 1 ~> 1 + 1] (1 + 1)) <- return
         (!thunkv fun (u : 1) -> perform[1.0] u, !thunkv fun (u : 1) -> perform[1.0] u);
       let (f1, f2) = blocks;
