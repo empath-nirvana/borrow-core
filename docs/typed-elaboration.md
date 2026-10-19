@@ -464,7 +464,8 @@ in the head of a bind", because the A-normal form of §2.4 gives every call a bi
 - **Joins.** A `case`/`if` whose arms assign `let mut` variables returns them. Lowering makes
   the `case` a bind that yields the tuple of the variables its arms assign, typed from the TIR,
   and rebinds them. This is SSA conversion: what `io-wc.bc` writes by hand
-  (`lines : i32 <- case … { … return lines … }`).
+  (`lines : i32 <- case … { … return lines … }`). At the head of a binding (`let a = if …;`,
+  `x <- match …;`) each arm returns its value beside the variables, and both are bound.
 - **Loops.** A `for` threads the `let mut` variables its body assigns, and those it reads that
   are linear, and rebinds them after the loop.
 - **Borrowed.** `&mut x` / `&x` on a `let mut` value is a cell scoped to that one construct

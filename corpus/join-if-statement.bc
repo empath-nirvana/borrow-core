@@ -1,0 +1,9 @@
+-- An `if` as a statement, `S; N`, hands the `let mut` variables its arms assign on to `N`; the
+-- statement form of the joins `join-let-if.bc` tests at the head of a `let` (#581).
+--
+-- Answer: i32[50].
+
+main -> i32 =
+  let mut x = 1;
+  if x == 1 { x = 5 } else { () };
+  x * 10

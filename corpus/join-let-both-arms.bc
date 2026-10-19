@@ -1,0 +1,12 @@
+-- Both arms of an `if` that heads a `let` assign the same `let mut` variable, each its own value;
+-- the arm that runs decides what follows sees (#581).
+--
+-- Answer: i32[5273]: `f(true)` is 5 * 10 + 2, `f(false)` 7 * 10 + 3. Without the join, `x` stays 1
+-- after the binding and the answer is i32[1213].
+
+fn f(b: bool) -> i32 =
+  let mut x = 1;
+  let a = if b { x = 5; 2 } else { x = 7; 3 };
+  x * 10 + a
+
+main -> i32 = f(true) * 100 + f(false)
