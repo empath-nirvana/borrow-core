@@ -339,7 +339,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       | [], rM =>
         let ⟨C, rN⟩ ← synC n (((E.minus rM.F.u).bindVal rM.t).pushOwn x.name A lin) Δ (A :: T) N
         let FN ← popL E x.span x.name rN.F lin
-        if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rBind (at_ sp) rM FN h⟩
+        if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rBind (atB sp [x.name]) rM FN h⟩
         else throw (splitErr E T sp rM.F.u FN.u)
       | o :: os, rM =>
         -- The head performs operations (SPEC §19): the binding is at the current row.
@@ -357,7 +357,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
         (effOf [] .unit)
       let FN ← popL E x.span x.name rN.F
-      pure ⟨_, ← thenIt E sp rM' FN rD⟩
+      pure ⟨_, ← thenIt E sp x.name rM' FN rD⟩
     | .perform sp k i V => do
       let ⟨_, o, hf⟩ ← findOp E sp "perform" k i
       if hna : o.abort = false then
@@ -485,7 +485,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
           (B :: A :: T) M
         let F₁ ← popL E y.span y.name rM.F
         let F₂ ← popL E x.span x.name F₁
-        if h : overlapOK T rV.F.u F₂.u = true then pure ⟨C, rTensorE (at_ sp) rV F₂ h⟩
+        if h : overlapOK T rV.F.u F₂.u = true then pure ⟨C, rTensorE (atB sp [x.name, y.name]) rV F₂ h⟩
         else throw (splitErr E T sp rV.F.u F₂.u)
       | A, _ => err V.span s!"`let (x, y) = V` needs a `*` type, but `V : {E.ppV A}`"
     | .case sp V x M y N => do
@@ -668,7 +668,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       | [], rM =>
         let rN ← chkC n (((E.minus rM.F.u).bindVal rM.t).pushOwn x.name A lin) Δ (A :: T) N C
         let FN ← popL E x.span x.name rN.F lin
-        if h : overlapOK T rM.F.u FN.u = true then pure (rBind (at_ sp) rM FN h)
+        if h : overlapOK T rM.F.u FN.u = true then pure (rBind (atB sp [x.name]) rM FN h)
         else throw (splitErr E T sp rM.F.u FN.u)
       | o :: os, rM =>
         -- The head performs operations (SPEC §19): the binding is at the row of `C`.
@@ -691,7 +691,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
             (effOf [] .unit)
           let FN ← popL E x.span x.name rN.F
-          pure (hC ▸ (← thenIt E sp rM' FN rD))
+          pure (hC ▸ (← thenIt E sp x.name rM' FN rD))
         else err sp "internal error: a returner chain"
       | none => err sp s!"`x <- M unwind (D); N` is checked against `{E.ppC C}`, which is not `F[…] B`"
     | .abort sp k i V =>
@@ -734,7 +734,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           (B :: A :: T) M C
         let F₁ ← popL E y.span y.name rM.F
         let F₂ ← popL E x.span x.name F₁
-        if h : overlapOK T rV.F.u F₂.u = true then pure (rTensorE (at_ sp) rV F₂ h)
+        if h : overlapOK T rV.F.u F₂.u = true then pure (rTensorE (atB sp [x.name, y.name]) rV F₂ h)
         else throw (splitErr E T sp rV.F.u F₂.u)
       | A, _ => err V.span s!"`let (x, y) = V` needs a `*` type, but `V : {E.ppV A}`"
     | .case sp V x M y N => do

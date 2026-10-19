@@ -1,4 +1,5 @@
 import Backend.Driver
+import Backend.Cells
 
 /-!
 # Backend — `bcc-counts`
@@ -7,6 +8,7 @@ import Backend.Driver
     lake exe bcc-counts --sites <file>
     lake exe bcc-counts --kernel [--sites] <name>
     lake exe bcc-counts --native <file> [-- arg…]
+    lake exe bcc-counts --cells <file>
 
 Run the program at the flat IR (`Backend/Flat/Interp.lean`) and under `wasmtime`, each built to
 count, and print `allocs N indirect M copies K loads L stores S bounds B`: the objects the run
@@ -35,6 +37,9 @@ may suspend (the others are handlers' bodies that answer `inl` alone).
 With `--lowering`, print `Capture`'s lowering of each operation the program performs: `direct`,
 `machine` with the reason it is not a direct call, or `branch` (`scripts/check-kinds.sh` compares
 it with the checker's clause kinds, SPEC §19).
+
+With `--cells`, print how the checker's cell classes compare with the layout types' cell widths
+(`Backend/Cells.lean`; `scripts/check-cells.sh` pins them), and nothing when neither grows.
 
 With `--native`, the second run is the native build (`bcc run --native`, SPEC §40) instead of
 `wasmtime`'s, and the two must agree on the counts and the exit status.
@@ -172,6 +177,11 @@ def main (argv : List String) : IO UInt32 := do
     | .ok s =>
       unless s.isEmpty do IO.println s
       return 0
+    | .error e => IO.eprintln e; return 1
+  if let ["--cells", file] := argv then
+    match Backend.checkedOf file (← IO.FS.readFile file) >>= Backend.Cells.report with
+    | .ok (some s) => IO.println s; return 0
+    | .ok none => return 0
     | .error e => IO.eprintln e; return 1
   if let ["--sites", file] := argv then
     match sites file (← IO.FS.readFile file) with

@@ -12,7 +12,7 @@ use:
 
 * `TExpr.shift d c t` is `t` with `d` slots inserted at position `c` of its context: each
   variable at or past `c` moved past them, each use mask given `d` unused slots there
-  (`insMask`), as `Expr.shift` moves the erasure's (`Frontend/Check/Weaken.lean` proves the
+  (`Masks.ins`), as `Expr.shift` moves the erasure's (`Frontend/Check/Weaken.lean` proves the
   erasure of the shifted term is the shifted erasure).
 * `TExpr.absF Δ t` is the body's **absorption**: a formula over a slot's type (`AbsF`) that says
   when an unused live slot of that type can be given to `t`'s derivation. It is read off the
@@ -151,33 +151,30 @@ def AbsF.withO (f : AbsF) : Option AbsF → Option AbsF
 
 /-! ### Shifting -/
 
-/-- `d` unused slots inserted at position `c` of a use mask. -/
-def insMask (d c : Nat) (u : List Bool) : List Bool := u.take c ++ List.replicate d false ++ u.drop c
-
 /-- **The typed term at a wider context**: `d` slots inserted at position `c` of its context. A
 child at a context of its own (`letPoly`'s value, the relaxed rules') is left as it is. -/
 def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .var i j k A => .var i j (sIdx d c k) A
-  | .tensorI i j A B u t₁ t₂ => .tensorI i j A B (insMask d c u) (t₁.shift d c) (t₂.shift d c)
+  | .tensorI i j A B u t₁ t₂ => .tensorI i j A B (u.ins d c) (t₁.shift d c) (t₂.shift d c)
   | .sumI₁ i j A B t => .sumI₁ i j A B (t.shift d c)
   | .sumI₂ i j A B t => .sumI₂ i j A B (t.shift d c)
   | .thunkF i j A t => .thunkF i j A (t.shift d (c + 1))
   | .thunkV i j C t => .thunkV i j C (t.shift d c)
   | .ret i j A t => .ret i j A (t.shift d c)
-  | .bind i j A C u tM tN => .bind i j A C (insMask d c u) (tM.shift d c) (tN.shift d (c + 1))
+  | .bind i j A C u tM tN => .bind i j A C (u.ins d c) (tM.shift d c) (tN.shift d (c + 1))
   | .force i j k C => .force i j (sIdx d c k) C
   | .lam i j A C t => .lam i j A C (t.shift d (c + 1))
   | .lamDead i j S B t => .lamDead i j S B (t.shift d (c + 1))
-  | .app i j k A C u tM => .app i j (sIdx d c k) A C (insMask d c u) (tM.shift d c)
+  | .app i j k A C u tM => .app i j (sIdx d c k) A C (u.ins d c) (tM.shift d c)
   | .withI i j C D tM tN => .withI i j C D (tM.shift d (c + 2)) (tN.shift d (c + 2))
   | .proj₁ i j C D t => .proj₁ i j C D (t.shift d c)
   | .proj₂ i j C D t => .proj₂ i j C D (t.shift d c)
-  | .unitE i j C u tV tM => .unitE i j C (insMask d c u) (tV.shift d c) (tM.shift d c)
+  | .unitE i j C u tV tM => .unitE i j C (u.ins d c) (tV.shift d c) (tM.shift d c)
   | .tensorE i j A B C u tV tM =>
-      .tensorE i j A B C (insMask d c u) (tV.shift d c) (tM.shift d (c + 2))
+      .tensorE i j A B C (u.ins d c) (tV.shift d c) (tM.shift d (c + 2))
   | .sumE i j A B C u tV t₁ t₂ =>
-      .sumE i j A B C (insMask d c u) (tV.shift d c) (t₁.shift d (c + 1)) (t₂.shift d (c + 1))
-  | .zeroE i j C u tV => .zeroE i j C (insMask d c u) (tV.shift d c)
+      .sumE i j A B C (u.ins d c) (tV.shift d c) (t₁.shift d (c + 1)) (t₂.shift d (c + 1))
+  | .zeroE i j C u tV => .zeroE i j C (u.ins d c) (tV.shift d c)
   | .allI i j x b S C t => .allI i j x b S C (t.shift d (c + 1))
   | .allE i j x b a C t => .allE i j x b a C (t.shift d c)
   | .bangThunkF i j A t => .bangThunkF i j A (t.shift d (c + 1))
@@ -192,7 +189,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .withbor3U i j a A B S x td => .withbor3U i j a A B S x (td.shift d c)
   | .sliceBorrowMU i j A B S x td => .sliceBorrowMU i j A B S x (td.shift d c)
   | .sliceBorrowIU i j A B S x td => .sliceBorrowIU i j A B S x (td.shift d c)
-  | .lolliE i j A B u ta tf => .lolliE i j A B (insMask d c u) (ta.shift d c) (tf.shift d c)
+  | .lolliE i j A B u ta tf => .lolliE i j A B (u.ins d c) (ta.shift d c) (tf.shift d c)
   | .allEV i j x b a A t => .allEV i j x b a A (t.shift d c)
   | .ofRet i j A t => .ofRet i j A (t.shift d c)
   | .roll i j A t => .roll i j A (t.shift d c)
@@ -203,16 +200,16 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .effPerform i j S o t => .effPerform i j S o (t.shift d c)
   | .effRaise i j S o B t => .effRaise i j S o B (t.shift d c)
   | .effLet i j A B S u tM tN =>
-      .effLet i j A B S (insMask d c u) (tM.shift d c) (tN.shift d (c + 1))
+      .effLet i j A B S (u.ins d c) (tM.shift d c) (tN.shift d (c + 1))
   | .effThen i j A B S SM SD u tM tN tD =>
-      .effThen i j A B S SM SD (insMask d c u) (tM.shift d c) (tN.shift d (c + 1))
+      .effThen i j A B S SM SD (u.ins d c) (tM.shift d c) (tN.shift d (c + 1))
         (tD.shift d (c + 1))
   | .effHandleV i j S E fs n A R u ks st tc te =>
-      .effHandleV i j S E fs n A R (insMask d c u) ks st (tc.shift d c) (te.shift d c)
+      .effHandleV i j S E fs n A R (u.ins d c) ks st (tc.shift d c) (te.shift d c)
   | .effHandleVB i j S E fs n A R a u ks st tc te =>
-      .effHandleVB i j S E fs n A R a (insMask d c u) ks st (tc.shift d c) (te.shift d c)
+      .effHandleVB i j S E fs n A R a (u.ins d c) ks st (tc.shift d c) (te.shift d c)
   | .effHandleT i j Hr Hc S SN E fs n A R u st tc te =>
-      .effHandleT i j (Hr.shift d c) (Hc.shift d c) S SN E fs n A R (insMask d c u) st (tc.shift d c)
+      .effHandleT i j (Hr.shift d c) (Hc.shift d c) S SN E fs n A R (u.ins d c) st (tc.shift d c)
         (te.shift d c)
   | .letPoly i j N C j' b tV tN =>
       .letPoly i j (N.shift d (c + 1)) C j' (b.shift d (c + 1)) tV (tN.shift d (c + 1))

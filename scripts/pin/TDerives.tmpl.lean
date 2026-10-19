@@ -13,7 +13,9 @@ conclusion's term the node `t`; `TDerivesP Δ Γ t j` is `CDerivesP` the same wa
 types a term built from other arguments (`thunkV`'s `λN`, `letPoly`'s) carries the equation
 between the child's erasure and that term. The node's fields are the rule's arguments, so a
 derivation fixes every field: the types, rows, lifetimes and qualifiers a node carries are the
-ones its rule was applied at, and its judgment is the derivation's (`TDerivesP.jdg_eq`).
+ones its rule was applied at, and its judgment is the derivation's (`TDerivesP.jdg_eq`). A rule
+at a split has one premise `CDerives` does not: its node's use masks are the ones its parts'
+contexts have (`SplitMasks`), so a slot both parts receive is one both masks hold.
 
 * `TDerivesAt.erase`, `TDerivesP.erase`: each projects to `CDerivesAt`/`CDerivesP` at `t.erase`,
   case for case. So FP, adequacy, `PinLaw`'s theorems and decision R's apply to the typed term's
@@ -187,6 +189,35 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | withborF2I s hA hB hBo hTo he hΓ => exact .withborF2I s hA hB hBo hTo he hΓ
   | litFn _ hb hcl ih => exact .litFn ih hb hcl
   | use _ hab ih => exact .use ih hab
+
+/-- **A split node's masks are its parts'**: a typed derivation of a node at a split splits its
+context into two parts whose contexts the node's masks are related to (`SplitMasks`).
+`[spec §3]` -/
+theorem TDerivesAt.split_masks {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
+    {m : Masks} (h : TDerivesAt Ξ Δ Γ t j) (hm : t.masks? = some m) :
+    ∃ Γ₁ Γ₂, Ctx.SplitP Γ Γ₁ Γ₂ ∧ m.Rel Γ₁ Γ₂ := by
+  cases h <;> simp only [TExpr.masks?, Option.some.injEq, reduceCtorEq] at hm <;>
+    (subst hm; exact ⟨_, _, ‹_›, ‹_›⟩)
+
+/-- `TDerivesAt.split_masks`, in `TDerivesP`.  `[spec §3, §29]` -/
+theorem TDerivesP.split_masks {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg} {m : Masks}
+    (h : TDerivesP Δ Γ t j) (hm : t.masks? = some m) :
+    ∃ Γ₁ Γ₂, Ctx.SplitP Γ Γ₁ Γ₂ ∧ m.Rel Γ₁ Γ₂ := by
+  cases h <;> simp only [TExpr.masks?, Option.some.injEq, reduceCtorEq] at hm <;>
+    (subst hm; exact ⟨_, _, ‹_›, ‹_›⟩)
+
+/-- **The copy set of a split is its masks' both**: the slots a typed derivation of a split node
+gives to both parts are exactly those both of its masks hold (`Masks.both`), and each is live in
+the node's context at a persistent type.  `[spec §3, §10]` -/
+theorem TDerivesP.copies {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg} {m : Masks}
+    (h : TDerivesP Δ Γ t j) (hm : t.masks? = some m) :
+    ∃ Γ₁ Γ₂, Ctx.SplitP Γ Γ₁ Γ₂ ∧
+      (∀ k, (liveAt Γ₁ k = true ∧ liveAt Γ₂ k = true) ↔
+        (m.u₁.getD k false = true ∧ m.u₂.getD k false = true)) ∧
+      (∀ k, m.u₁.getD k false = true → m.u₂.getD k false = true →
+        ∃ s, Γ[k]? = some s ∧ s.live = true ∧ s.ty.Persistent) := by
+  obtain ⟨Γ₁, Γ₂, hs, hr⟩ := h.split_masks hm
+  exact ⟨Γ₁, Γ₂, hs, hr.both_iff, SplitMasks.both_persistent hs hr⟩
 
 /-- A typed derivation's judgment is its node's. -/
 theorem TDerivesAt.jdg_eq {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}

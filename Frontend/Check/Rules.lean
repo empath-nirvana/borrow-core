@@ -39,6 +39,9 @@ def Res.e {Δ : LifeCtx} {T : List CVTy} {j : Jdg} (r : Res Δ T j) : CExpr := r
 /-- A node's source: its span. -/
 abbrev at_ (sp : Span) : TInfo := { sp }
 
+/-- A binding's source: its span and the names it binds. -/
+abbrev atB (sp : Span) (bs : List String) : TInfo := { sp, binders := bs }
+
 section
 variable {Δ : LifeCtx} {T : List CVTy} (i : TInfo)
 
@@ -146,8 +149,9 @@ def rLitFn {j : Jdg} (bs : List Nat) (r : Res Δ T j) : Option (Res Δ T j) :=
 
 def rPair {A B : CVTy} (r₁ : Res Δ T (.val A)) (r₂ : Res Δ T (.val B))
     (h : overlapOK T r₁.F.u r₂.F.u = true) : Res Δ T (.val (.tensor A B)) :=
-  ⟨.tensorI i (.val (.tensor A B)) A B r₁.F.u r₁.t r₂.t, r₁.sigs ∪ r₂.sigs, r₁.pins ++ r₂.pins,
-    (r₁.F.split r₂.F h).map fun _ ⟨_, _, hs, h₁, h₂⟩ => TTied.tensorI i r₁.F.u hs h₁ h₂⟩
+  ⟨.tensorI i (.val (.tensor A B)) A B (Masks.of r₁.F.u r₂.F.u) r₁.t r₂.t, r₁.sigs ∪ r₂.sigs,
+    r₁.pins ++ r₂.pins,
+    (r₁.F.split r₂.F h).map fun _ ⟨_, _, hs, hm, h₁, h₂⟩ => TTied.tensorI i _ hs hm.rel_of h₁ h₂⟩
 
 def rInl {A : CVTy} (B : CVTy) (r : Res Δ T (.val A)) : Res Δ T (.val (.sum A B)) :=
   ⟨.sumI₁ i (.val (.sum A B)) A B r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.sumI₁ i h⟩
@@ -238,8 +242,8 @@ def rOfRet {A : CVTy} (r : Res Δ T (.comp (.ret A))) : Res Δ T (.val A) :=
 /-- `V W`: the argument on the left of the split, as `lolliE` has it. -/
 def rLolliE {A B : CVTy} (rf : Res Δ T (.val (.lolli A B))) (ra : Res Δ T (.val A))
     (h : overlapOK T ra.F.u rf.F.u = true) : Res Δ T (.val B) :=
-  ⟨.lolliE i (.val B) A B ra.F.u ra.t rf.t, ra.sigs ∪ rf.sigs, ra.pins ++ rf.pins,
-    (ra.F.split rf.F h).map fun _ ⟨_, _, hs, ha, hf⟩ => TTied.lolliE i ra.F.u hs ha hf⟩
+  ⟨.lolliE i (.val B) A B (Masks.of ra.F.u rf.F.u) ra.t rf.t, ra.sigs ∪ rf.sigs, ra.pins ++ rf.pins,
+    (ra.F.split rf.F h).map fun _ ⟨_, _, hs, hm, ha, hf⟩ => TTied.lolliE i _ hs hm.rel_of ha hf⟩
 
 def rAllEV {x : LifeVar} {b : CLife} {A : CVTy} (a : CLife) (hlt : ltB Δ a b = true)
     (r : Res Δ T (.val (.all x b A))) : Res Δ T (.val (A.instLife x a)) :=
@@ -256,8 +260,8 @@ def rBind {A : CVTy} {C : CCTy} {tN : TExpr} {sN : CRow} {pN : Pins}
     (rM : Res Δ T (.comp (.ret A)))
     (FN : Fam T (fun L => TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp C)))
     (h : overlapOK T rM.F.u FN.u = true) : Res Δ T (.comp C) :=
-  ⟨.bind i (.comp C) A C rM.F.u rM.t tN, rM.sigs ∪ sN, rM.pins ++ pN,
-    (rM.F.split FN h).map fun _ ⟨_, _, hs, h₁, h₂⟩ => TTied.bind i rM.F.u hs h₁ h₂⟩
+  ⟨.bind i (.comp C) A C (Masks.of rM.F.u FN.u) rM.t tN, rM.sigs ∪ sN, rM.pins ++ pN,
+    (rM.F.split FN h).map fun _ ⟨_, _, hs, hm, h₁, h₂⟩ => TTied.bind i _ hs hm.rel_of h₁ h₂⟩
 
 def rLam {A : CVTy} {C : CCTy} {tM : TExpr} {sM : CRow} {pM : Pins}
     (FM : Fam T (fun L => TTied pM sM Δ (mkCtx (A :: T) (true :: L)) tM (.comp C))) :
@@ -274,8 +278,9 @@ def rLamDead {S : CRow} {B : CVTy} {tM : TExpr} {sM : CRow} {pM : Pins}
 /-- `M x`: the node's name is the argument's. -/
 def rApp {A : CVTy} {C : CCTy} (rM : Res Δ T (.comp (.arr A C))) (k : Nat)
     (hk : T[k]? = some A) (h : overlapOK T rM.F.u (oneL T k) = true) : Res Δ T (.comp C) :=
-  ⟨.app i (.comp C) k A C rM.F.u rM.t, rM.sigs, rM.pins,
-    (rM.F.split (Fam.var T k A hk) h).map fun _ ⟨_, _, hs, h₁, h₂⟩ => TTied.app i rM.F.u hs h₁ h₂⟩
+  ⟨.app i (.comp C) k A C (Masks.of rM.F.u (oneL T k)) rM.t, rM.sigs, rM.pins,
+    (rM.F.split (Fam.var T k A hk) h).map fun _ ⟨_, _, hs, hm, h₁, h₂⟩ =>
+      TTied.app i _ hs hm.rel_of h₁ h₂⟩
 
 /-- The two dead slots of `⟨M, N⟩`'s components (`withCtx`). -/
 abbrev withT (T : List CVTy) : List CVTy := .unit :: .sum .unit .unit :: T
@@ -300,23 +305,23 @@ def rProj₂ {C D : CCTy} (r : Res Δ T (.comp (.amp C D))) : Res Δ T (.comp D)
 
 def rUnitE {C : CCTy} (rV : Res Δ T (.val .unit)) (rM : Res Δ T (.comp C))
     (h : overlapOK T rV.F.u rM.F.u = true) : Res Δ T (.comp C) :=
-  ⟨.unitE i (.comp C) C rV.F.u rV.t rM.t, rV.sigs ∪ rM.sigs, rV.pins ++ rM.pins,
-    (rV.F.split rM.F h).map fun _ ⟨_, _, hs, h₁, h₂⟩ => TTied.unitE i rV.F.u hs h₁ h₂⟩
+  ⟨.unitE i (.comp C) C (Masks.of rV.F.u rM.F.u) rV.t rM.t, rV.sigs ∪ rM.sigs, rV.pins ++ rM.pins,
+    (rV.F.split rM.F h).map fun _ ⟨_, _, hs, hm, h₁, h₂⟩ => TTied.unitE i _ hs hm.rel_of h₁ h₂⟩
 
 def rTensorE {A B : CVTy} {C : CCTy} {tM : TExpr} {sM : CRow} {pM : Pins}
     (rV : Res Δ T (.val (.tensor A B)))
     (FM : Fam T (fun L => TTied pM sM Δ (mkCtx (B :: A :: T) (true :: true :: L)) tM (.comp C)))
     (h : overlapOK T rV.F.u FM.u = true) : Res Δ T (.comp C) :=
-  ⟨.tensorE i (.comp C) A B C rV.F.u rV.t tM, rV.sigs ∪ sM, rV.pins ++ pM,
-    (rV.F.split FM h).map fun _ ⟨_, _, hs, h₁, h₂⟩ => TTied.tensorE i rV.F.u hs h₁ h₂⟩
+  ⟨.tensorE i (.comp C) A B C (Masks.of rV.F.u FM.u) rV.t tM, rV.sigs ∪ sM, rV.pins ++ pM,
+    (rV.F.split FM h).map fun _ ⟨_, _, hs, hm, h₁, h₂⟩ => TTied.tensorE i _ hs hm.rel_of h₁ h₂⟩
 
 def rSumE {A B : CVTy} {C : CCTy} {t₁ t₂ : TExpr} {s₁ s₂ : CRow} {p₁ p₂ : Pins}
     (rV : Res Δ T (.val (.sum A B)))
     (F : Fam T (fun L => TTied p₁ s₁ Δ (mkCtx (A :: T) (true :: L)) t₁ (.comp C) ∧
       TTied p₂ s₂ Δ (mkCtx (B :: T) (true :: L)) t₂ (.comp C)))
     (h : overlapOK T rV.F.u F.u = true) : Res Δ T (.comp C) :=
-  ⟨.sumE i (.comp C) A B C rV.F.u rV.t t₁ t₂, rV.sigs ∪ (s₁ ∪ s₂), rV.pins ++ (p₁ ++ p₂),
-    (rV.F.split F h).map fun _ ⟨_, _, hs, h₁, h₂, h₃⟩ => TTied.sumE i rV.F.u hs h₁ h₂ h₃⟩
+  ⟨.sumE i (.comp C) A B C (Masks.of rV.F.u F.u) rV.t t₁ t₂, rV.sigs ∪ (s₁ ∪ s₂), rV.pins ++ (p₁ ++ p₂),
+    (rV.F.split F h).map fun _ ⟨_, _, hs, hm, h₁, h₂, h₃⟩ => TTied.sumE i _ hs hm.rel_of h₁ h₂ h₃⟩
 
 /-- `dtorE A xᵢ; M`: the destructor of slot `k` before `M`, which does not use it (SPEC §12).
 `TTied.drop`, as `drop_derives`: `unitE` over `lolliE` of the variable and the destructor. The
@@ -325,17 +330,17 @@ def rDrop (ix : TInfo) {C : CCTy} (k : Nat) (A : CVTy) (hk : T[k]? = some A) (hA
     (hc : BoCa.Fig16.LogRel.Core.closedAt 0 (dtorE A) = true) (hE : (dtorE A).effFree = true)
     (r : Res Δ T (.comp C))
     (h : overlapOK T (oneL T k) r.F.u = true) : Res Δ T (.comp C) :=
-  ⟨.unitE i (.comp C) C (oneL T k)
-      (.lolliE ix (.val .unit) A .unit (oneL T k) (.var ix (.val A) k A)
+  ⟨.unitE i (.comp C) C (Masks.of (oneL T k) r.F.u)
+      (.lolliE ix (.val .unit) A .unit (Masks.of (oneL T k) (noUse (oneL T k))) (.var ix (.val A) k A)
         (.dtor ix (.val (.lolli A .unit)) A)) r.t,
-    r.sigs, r.pins, ((Fam.var T k A hk).split r.F h).map fun _ ⟨_, _, hs, hx, hM⟩ =>
-      TTied.drop i ix (oneL T k) hs hx hA hc hE hM⟩
+    r.sigs, r.pins, ((Fam.var T k A hk).split r.F h).map fun _ ⟨_, _, hs, hm, hx, hM⟩ =>
+      TTied.drop i ix (oneL T k) r.F.u hs hm hx hA hc hE hM⟩
 
 /-- `absurd V`: the rest of the context is absorbed. -/
 def rZeroE (C : CCTy) (rV : Res Δ T (.val .zero)) (h : overlapOK T rV.F.u (Fam.top T).u = true) :
     Res Δ T (.comp C) :=
-  ⟨.zeroE i (.comp C) C rV.F.u rV.t, rV.sigs, rV.pins,
-    (rV.F.split (Fam.top T) h).map fun _ ⟨_, _, hs, h₁, _⟩ => TTied.zeroE i rV.F.u hs h₁⟩
+  ⟨.zeroE i (.comp C) C (Masks.of rV.F.u (Fam.top T).u) rV.t, rV.sigs, rV.pins,
+    (rV.F.split (Fam.top T) h).map fun _ ⟨_, _, hs, hm, h₁, _⟩ => TTied.zeroE i _ hs hm.rel_of h₁⟩
 
 /-- `Fun 'x < @b. M`: the body at `Δ, 'x ⊏ @b` under one dead slot, no live slot mentioning
 `'x`. -/
@@ -389,8 +394,8 @@ def rEffLet {S : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow} {pN : Pins}
     (FN : Fam T (fun L => TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B)) ∧
       (S.Weak → (mkCtx T L).Drops) ∧ (S.Unr → Persistent (mkCtx T L))))
     (h : overlapOK T rM.F.u FN.u = true) : Res Δ T (.comp (effOf S B)) :=
-  ⟨.effLet i (.comp (effOf S B)) A B S rM.F.u rM.t tN, rM.sigs ∪ sN, rM.pins ++ pN, (rM.F.split FN h).map
-    fun _ ⟨_, _, hs, h₁, h₂, hW, hU⟩ => TTied.effLet i rM.F.u hs hW hU h₁ h₂⟩
+  ⟨.effLet i (.comp (effOf S B)) A B S (Masks.of rM.F.u FN.u) rM.t tN, rM.sigs ∪ sN, rM.pins ++ pN,
+    (rM.F.split FN h).map fun _ ⟨_, _, hs, hm, h₁, h₂, hW, hU⟩ => TTied.effLet i _ hs hm.rel_of hW hU h₁ h₂⟩
 
 /-- `[then]`: `M then x. N unwind D`, `N` and the finaliser `D` at one context. -/
 def rEffThen {S : CRow} {A B : CVTy} {tN tD : TExpr} {sN sD : CRow} {pN pD : Pins} (hNZ : S.NZ)
@@ -400,9 +405,9 @@ def rEffThen {S : CRow} {A B : CVTy} {tN tD : TExpr} {sN sD : CRow} {pN pD : Pin
         (.comp (effOf [] .unit))) ∧
       (S.UnrD → Persistent (mkCtx T L))))
     (h : overlapOK T rM.F.u F.u = true) : Res Δ T (.comp (effOf S B)) :=
-  ⟨.effThen i (.comp (effOf S B)) A B S S [] rM.F.u rM.t tN tD, rM.sigs ∪ (sN ∪ sD),
+  ⟨.effThen i (.comp (effOf S B)) A B S S [] (Masks.of rM.F.u F.u) rM.t tN tD, rM.sigs ∪ (sN ∪ sD),
     rM.pins ++ (pN ++ pD), (rM.F.split F h).map
-    fun _ ⟨_, _, hs, h₁, ⟨hN, hD⟩, hU⟩ => TTied.effThenA i rM.F.u hs hNZ hUq hU h₁ hN hD⟩
+    fun _ ⟨_, _, hs, hm, h₁, ⟨hN, hD⟩, hU⟩ => TTied.effThenA i _ hs hm.rel_of hNZ hUq hU h₁ hN hD⟩
 
 /-- `[handle]`: `handle_n e with (h_ret, hs)`, the answer clause and the clauses the slots `kr`
 and `kc`, the variables' nodes with the sources `ir` and `ic`. It reads the handled row. -/
@@ -416,12 +421,13 @@ def rEffHandle (ir ic : TInfo) {S : CRow} {E : List (CQual × CVTy × CVTy)} {n 
     (h₁ : overlapOK T (oneL T kr) (oneL T kc) = true)
     (h₂ : overlapOK T (orL (oneL T kr) (oneL T kc)) rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
   ⟨.effHandleV i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R
-      (orL (oneL T kr) (oneL T kc)) ks site
+      (Masks.of (orL (oneL T kr) (oneL T kc)) rM.F.u) ks site
       (TTied.hndPair ir ic (BoCa.Fig16.LogRel.Core.retTy S A R)
-        (BoCa.Fig16.LogRel.Core.clausesTy S R E) kr kc (oneL T kr)) rM.t,
+        (BoCa.Fig16.LogRel.Core.clausesTy S R E) kr kc (Masks.of (oneL T kr) (oneL T kc))) rM.t,
     (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ rM.sigs, rM.pins,
     (((Fam.var T kr _ hkr).split (Fam.var T kc _ hkc) h₁).split rM.F h₂).map
-      fun _ ⟨_, _, hs, ⟨_, _, hs₁, hr, hc⟩, he⟩ => TTied.effHandle i ir ic _ _ ks site hs hs₁ hr hc hn0 hnS hlen hdv he⟩
+      fun _ ⟨_, _, hs, hm, ⟨_, _, hs₁, hm₁, hr, hc⟩, he⟩ =>
+        TTied.effHandle i ir ic _ _ ks site hs hm.rel_of hs₁ hm₁.rel_of hr hc hn0 hnS hlen hdv he⟩
 
 /-- BOXED-κ: `handle_n e with (h_ret, hs)`, the clauses at `clausesTyB S R d E`, each capturing
 clause's `κ` boxed at `@d`; `@d` defined, every live slot `e` uses outliving it, and every
@@ -441,13 +447,13 @@ def rEffHandleB (ir ic : TInfo) {S : CRow} {E : List (CQual × CVTy × CVTy)} {n
     (h₁ : overlapOK T (oneL T kr) (oneL T kc) = true)
     (h₂ : overlapOK T (orL (oneL T kr) (oneL T kc)) rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
   ⟨.effHandleVB i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R d
-      (orL (oneL T kr) (oneL T kc)) ks site
+      (Masks.of (orL (oneL T kr) (oneL T kc)) rM.F.u) ks site
       (TTied.hndPair ir ic (BoCa.Fig16.LogRel.Core.retTy S A R)
-        (BoCa.Fig16.LogRel.Core.clausesTyB S R d E) kr kc (oneL T kr)) rM.t,
+        (BoCa.Fig16.LogRel.Core.clausesTyB S R d E) kr kc (Masks.of (oneL T kr) (oneL T kc))) rM.t,
     (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ rM.sigs, rM.pins,
     (((Fam.var T kr _ hkr).split (Fam.var T kc _ hkc) h₁).split (rM.F.restrict (outlivesB Δ d) hso)
-      h₂).map fun _ ⟨_, _, hs, ⟨_, _, hs₁, hr, hc⟩, he, ho⟩ =>
-        TTied.effHandleB i ir ic _ _ ks site hs hs₁ hr hc hn0 hnS hlen hdv he
+      h₂).map fun _ ⟨_, _, hs, hm, ⟨_, _, hs₁, hm₁, hr, hc⟩, he, ho⟩ =>
+        TTied.effHandleB i ir ic _ _ ks site hs hm.rel_of hs₁ hm₁.rel_of hr hc hn0 hnS hlen hdv he
           ⟨defines_of_wf hwf, fun s hsm hl => outlivesB_sound Δ d s.ty (ho s hsm hl)⟩
           (ansOutlivesB_sound hSd)⟩
 

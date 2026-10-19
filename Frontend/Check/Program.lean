@@ -2,6 +2,7 @@ import Frontend.Check.Checker
 import Frontend.Elab.Pipeline
 import Frontend.Check.Copies
 import Frontend.Check.KindsSound
+import Frontend.Check.Cells
 
 /-!
 # Frontend — Check — programs
@@ -47,6 +48,10 @@ structure Checked where
   ok : sigsOkB sigs = true
   pins : Pins
   tied : TTied pins sigs LifeCtx.empty ctx t (.comp C)
+  /-- Each type a cell of `main` is allocated at, with every type such a cell may hold
+  (`Frontend/Check/Cells.lean`). -/
+  cells : List CellClass
+  cellsOk : cellsOkB t.cells.1 t.cells.2 cells = true
 
 /-- **`main` answers an exit status**: it is served `Fail[DivError]` by the platform's handler
 `main_div_error`, read from the site of a `handle` node of its typed term (`HSite`), so that its
@@ -161,8 +166,11 @@ def checkMain (ds : Array Decl) (k : Nat) (sites : List SiteRec) (sp : Span) (C 
   let r ← chkC checkFuel E LifeCtx.empty T M C'
   if h : subL (allL T) (orL r.F.u r.F.w) = true then
     if hs : sigsOkB r.sigs = true then
-      pure { ctx := mkCtx T (allL T), t := r.t, C := C', sigs := r.sigs, ok := hs, pins := r.pins,
-             tied := r.F.d _ (btw_allL T _ _ r.F.hu r.F.hw h) }
+      let cs := cellClasses r.t.cells.1 r.t.cells.2
+      if hc : cellsOkB r.t.cells.1 r.t.cells.2 cs = true then
+        pure { ctx := mkCtx T (allL T), t := r.t, C := C', sigs := r.sigs, ok := hs, pins := r.pins,
+               tied := r.F.d _ (btw_allL T _ _ r.F.hu r.F.hw h), cells := cs, cellsOk := hc }
+      else throw ⟨sp, "internal error: the cell classes of `main` are not closed"⟩
     else throw ⟨sp, sigsErr r.sigs⟩
   else match firstUnconsumed r.F.u r.F.w with
     | some i => throw ⟨sp, s!"`main` does not consume the extern {E.slotName i}, of type " ++
@@ -308,6 +316,16 @@ theorem checkProgram_letPoly {p : Program} {r : Report} {c : Checked}
     CDerivesAt c.Ξ LifeCtx.empty c.ctx
       (.app (.val (.lam (c.t.erase.unfill b 0))) (.val (.lam b))) (.comp c.C) :=
   BoCa.Fig16.LogRel.Core.CDerivesAt.letPoly_copy b hcl hV (c.derivAt hp)
+
+/-- **A cell's class is closed under the program's swaps** (SPEC §5): every type `main` allocates a
+cell at has a class in `c.cells`, which holds it and every type a `swap` node of `main`'s typed
+term (or `fold_reuse`'s emptying swap) puts into a cell holding a type of the class. The swap
+nodes' types are their rule's arguments, fixed by the derivation (`checkProgram_typed`).
+`[spec §3, §5]` -/
+theorem Checked.cells_closed (c : Checked) :
+    (∀ A ∈ c.t.cells.1, ∃ cl ∈ c.cells, cl.root = A) ∧
+      ∀ cl ∈ c.cells, cl.root ∈ cl.tys ∧ ∀ e ∈ c.t.cells.2, e.1 ∈ cl.tys → e.2 ∈ cl.tys :=
+  cellsOkB_sound c.cellsOk
 
 /-- **Soundness of the checker.** If `bcc` accepts a program and reports `assurance:
 unconditional`, its `main`'s typed term erases to an `Expr` with a `CDerives` derivation at

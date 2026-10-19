@@ -4,19 +4,26 @@ import Frontend.Check.TDerives
 # Frontend — Check — what the typed term does not fix  `[spec §3]`
 
 A node holds its rule's arguments, and a typed derivation fixes each of them (`TDerivesAt`,
-`Frontend/Check/TDerives.lean`). Two facts the checker computes are on the term without being
-fixed by the derivation, because the rule's statement or `Fam` keeps them out of it:
+`Frontend/Check/TDerives.lean`). A split's use masks are fixed too: the typed rule at a split
+relates them to its parts' contexts (`SplitMasks`, `TDerivesAt.split_masks`). One fact the checker
+computes is on the term without being fixed by the derivation, because the rule's statement keeps
+it out of it:
 
-* **A split's use mask.** The checker decides each split from the masks of `Fam`
-  (`Frontend/Check/Fam.lean`), and builds a derivation at every liveness the enclosing rule may
-  choose: the split's contexts `Γ₁`, `Γ₂` are chosen per liveness, after the node is built. A
-  node at a split carries the mask of its left part as the checker computed it (`Fam.u`), and the
-  derivation does not constrain it (`TDerivesAt.split_mask_free`). Relating the mask to `Γ₁`
-  needs `Fam.split` to return the parts' masks with its family.
 * **A side condition's witness.** `withbor2`'s premise `∃ b, Δ ⊨ @b ∧ Δ ⊢ A ⊒ @b` (and the
   unwinding and slice borrows', and R1's) is a `Prop`: the lifetime the source writes is checked
   and is not an argument of the rule, so it is not a field of the node
   (`TDerivesAt.withbor2_witness_free`).
+
+A second is a fact the checker carries beside the term (`Checked.cells`, `Frontend/Check/Cells.lean`):
+
+* **A cell's class.** For each type `main` allocates a cell at, every type such a cell may hold:
+  the class is closed under the typed term's `swap` nodes, whose types the derivation fixes
+  (`Checked.cells_closed`). That at run time a cell holds only types of its class is not proved.
+  It would be pinned by a lemma over the machine: in a run of a term with a derivation, the
+  contents of a location allocated at `A` are, at every step, of a type a chain of the
+  derivation's `swap` applications reaches from `A` (from `swap`'s typing and the location's one
+  owned `Ref`). The class is an upper bound: it joins the cells of one type, so a cell can be
+  given a type another cell of its type is swapped to (`corpus/cells.expected`).
 
 A third is a field the checker adds to a node that its rule does not have:
 
@@ -44,15 +51,6 @@ namespace BoCa.Fig16.LogRel.Core.Check
 open BoCa BoCa.Fig16.LogRel.Core
 open BoCa.Lifetime (LifeCtx LifeVar)
 
-/-- **A split's use mask is the checker's, not the derivation's**: a typed derivation of a pair
-is one at any mask. -/
-theorem TDerivesAt.split_mask_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J : Jdg}
-    {A B : VTy} {u : List Bool} (u' : List Bool) {t₁ t₂ : TExpr}
-    (h : TDerivesAt Ξ Δ Γ (.tensorI i J A B u t₁ t₂) J) :
-    TDerivesAt Ξ Δ Γ (.tensorI i J A B u' t₁ t₂) J := by
-  cases h with
-  | tensorI hs h₁ h₂ => exact .tensorI hs h₁ h₂
-
 /-- **A side condition's witness is not on the node**: `withbor2`'s node is the same at every
 lifetime that witnesses its side condition. -/
 theorem TDerivesAt.withbor2_witness_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo}
@@ -69,22 +67,24 @@ theorem TDerivesAt.withbor2_witness_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx 
 `handle` node is one at any kinds. -/
 theorem TDerivesAt.kinds_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J : Jdg}
     {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
-    {u : List Bool} {ks : List ClauseKinds.HKind} (ks' : List ClauseKinds.HKind)
+    {u : Masks} {ks : List ClauseKinds.HKind} (ks' : List ClauseKinds.HKind)
     {site : Option HSite} {tc te : TExpr}
     (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site tc te) J) :
     TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks' site tc te) J := by
   cases h with
-  | effHandleV hAt hs hd hH hc hn0 hnS hlen hdv he => exact .effHandleV hAt hs hd hH hc hn0 hnS hlen hdv he
+  | effHandleV hAt hs hm hd hH hc hn0 hnS hlen hdv he =>
+      exact .effHandleV hAt hs hm hd hH hc hn0 hnS hlen hdv he
 
 /-- **The site is the elaboration's, not the derivation's**: a typed derivation of a `handle`
 node is one at any site record. -/
 theorem TDerivesAt.site_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J : Jdg}
     {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
-    {u : List Bool} {ks : List ClauseKinds.HKind} {site : Option HSite} (site' : Option HSite)
+    {u : Masks} {ks : List ClauseKinds.HKind} {site : Option HSite} (site' : Option HSite)
     {tc te : TExpr}
     (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site tc te) J) :
     TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site' tc te) J := by
   cases h with
-  | effHandleV hAt hs hd hH hc hn0 hnS hlen hdv he => exact .effHandleV hAt hs hd hH hc hn0 hnS hlen hdv he
+  | effHandleV hAt hs hm hd hH hc hn0 hnS hlen hdv he =>
+      exact .effHandleV hAt hs hm hd hH hc hn0 hnS hlen hdv he
 
 end BoCa.Fig16.LogRel.Core.Check

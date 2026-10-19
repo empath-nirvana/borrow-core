@@ -338,10 +338,13 @@ class Rule:
             if t == "Expr" and nm not in used:
                 continue  # determined by an equation; an index of the typed rule only
             self.fields.append((nm, t))
-        # at a split, the use mask of its left part: the slots it uses, as the checker found them
-        # (`Fam.u`); the split itself is chosen at each liveness, and is not a field
-        if any(kind == "(" and ty and ty.startswith("Ctx.SplitP ") for kind, _, ty in self.groups):
-            self.fields.append(("u", "List Bool"))
+        # at a split, the use masks of its two parts: the slots each uses, as the checker found
+        # them (`Fam.u`); the split itself is chosen at each liveness, and is not a field, and
+        # the typed rule relates the masks to its parts' contexts (`SplitMasks`)
+        self.split = next(((names, ty) for kind, names, ty in self.groups
+                           if kind == "(" and ty and ty.startswith("Ctx.SplitP ")), None)
+        if self.split:
+            self.fields.append(("u", "Masks"))
         # facts the checker records on the node that are not arguments of the rule (`EXTRA`)
         self.fields += EXTRA.get(name, [])
         self.kids = [p[1] for p in self.prem]
@@ -434,7 +437,10 @@ def typed_rule(r, fieldsof):
         o, c = kind, {"(": ")", "{": "}", "[": "]"}[kind]
         tys = f" : {subst(ty, sig)}" if ty else ""
         out.append(f"{o}{' '.join(keep)}{tys}{c}")
-    impl = "{info : TInfo}" + (" {u : List Bool}" if ("u", "List Bool") in r.fields else "") + \
+        if r.split and ty == r.split[1] and names == r.split[0]:
+            g = top_split(ty)
+            out.append(f"(hm : u.Rel {g[2]} {g[3]})")
+    impl = "{info : TInfo}" + (" {u : Masks}" if ("u", "Masks") in r.fields else "") + \
         "".join(f" {{{n} : {t}}}" for n, t in EXTRA.get(r.name, [])) + \
         (f" {{{' '.join(r.kids)} : TExpr}}" if r.kids else "")
     J = subst(r.cjdg, sig)
@@ -458,6 +464,9 @@ def typed_rule(r, fieldsof):
             p = next((p for p in r.prem if p[0] == nm), None) if ty and ty.startswith(jn + " ") else None
             if p is None:
                 args.append(v)
+                if r.split and ty == r.split[1]:
+                    pat.append(f"a{n}")  # the masks' premise, which the projection drops
+                    n += 1
             else:
                 ih = f"ih{len(ihs)}"
                 ihs.append(ih)
@@ -487,6 +496,8 @@ def typed_explicit(r):
         for nm in names:
             p = next((p for p in r.prem if p[0] == nm), None) if ty and ty.startswith(jn + " ") else None
             out.append((nm, p is not None))
+            if r.split and ty == r.split[1]:
+                out.append(("hm", False))
             if p is not None and not p[6]:
                 out.append(("q" + p[1][1:], False))
     return out
@@ -525,6 +536,15 @@ tex = tex.replace("--@JDG_CASES@", "\n".join(
     for r in rulesP))
 
 tex = tex.replace("--@CHILDREN_CASES@", "\n".join(r.children_case() for r in rulesP))
+
+
+def masks_case(r):
+    pats = ["_"] * r.arity()
+    pats[2 + [n for n, _ in r.fields].index("u")] = "u"
+    return f"  | .{r.name} {' '.join(pats)} => some u"
+
+
+tex = tex.replace("--@MASKS_CASES@", "\n".join(masks_case(r) for r in rulesP if r.split))
 lams = [r.lam_case() for r in rulesP]
 tex = tex.replace("--@ISLAM_CASES@", "\n".join(a for a, _ in lams))
 tex = tex.replace("--@ISLAM_EQ@", "\n".join(b for _, b in lams))
