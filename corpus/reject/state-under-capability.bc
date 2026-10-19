@@ -1,0 +1,30 @@
+-- expect: 18:16: `boxed['fx_rl6]`: `fx_rb36`, of type `i32 => i32 * i32`, is used inside, and it cannot be shown to outlive `'fx_rl6`
+-- A `let mut` as an instance of `State` (#611) inside a function served by an answering handler
+-- (`Log`): the state-passing site's answer, a function of the state, is used inside the boxed
+-- result of the capability's borrow and does not outlive it.
+effect State[T] { linear ctl get() -> T; linear ctl put(v: T) }
+
+handler state[T, A](mut s: T): State[T], A -> A * T = {
+  return(a) = (a, s);
+  get(k) = k(s);
+  put(v, k) = { s = v; k(()) }
+}
+
+effect Log { fn log(x: i32) }
+
+handler summing(mut s: i32): Log = { log(x) = { s = s + x; () } }
+
+fn work(n: i32) -> i32 with Log =
+  let (v, s) = with acc = state[i32, i32](0) {
+    for i in 0..n {
+      if host[and32](i, 1) == 0 { log(i) } else { () };
+      acc.put(acc.get() + i)
+    };
+    acc.get()
+  };
+  v
+
+main -> i32 * i32 =
+  let mut c = alloc(0);
+  let a = with summing(&mut c) { work(5) };
+  (a, free(c))

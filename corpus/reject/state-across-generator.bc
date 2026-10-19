@@ -1,0 +1,26 @@
+-- expect: 18:13: the type of the type of the body `state` handles is not determined here: ascribe it
+-- A generator's `let mut` as an instance of `State` (#611), live across `yield`: the generator's
+-- loop is div, and no handler wraps a div computation (§21 *Open*). The state is carried in the
+-- loop's state, as the generator's variables are.
+effect State[T] { linear ctl get() -> T; linear ctl put(v: T) }
+
+handler state[T, A](mut s: T): State[T], A -> A * T = {
+  return(a) = (a, s);
+  get(k) = k(s);
+  put(v, k) = { s = v; k(()) }
+}
+
+include yield
+
+fn evens(n: i32) -> 1 with Yield[i32] =
+  let (u, s) = with i = state[i32, 1](0) {
+    let (u, s) = with k = state[i32, 1](0) {
+      while k.get() < n { yield(i.get()); i.put(i.get() + 2); k.put(k.get() + 1) }
+    };
+    u
+  };
+  u
+
+main -> i32 =
+  let (v, s) = with sum = state[i32, i32](0) { for v in evens(4) { sum.put(sum.get() + v) }; sum.get() };
+  v
