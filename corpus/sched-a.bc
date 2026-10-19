@@ -108,9 +108,7 @@ def spawn_hc : !U (1 * box top U ((1 -o F E) & F 1) -o F E) * 1 =
 -- `spawn tb`: run the task code under the handler, up to its first `await` or its end.
 def spawn : Sp =
   !thunkv fun (tb : box top Code) ->
-    hr_ <- return spawn_hr;
-    hc_ <- return spawn_hc;
-    handle_with[1](hr_, hc_) (k <- return (unbox tb); u <- return (); force k u)
+    handle_with[1](spawn_hr, spawn_hc) (k <- return (unbox tb); u <- return (); force k u)
 
 -- Close every task of a list (each task's `close` cancels its continuation).
 def close_alg : !(1 + (E * 1) => 1) =

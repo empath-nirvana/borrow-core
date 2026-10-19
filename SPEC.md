@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.81 · 2026-10-19
+Version 0.82 · 2026-10-19
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1828,7 +1828,7 @@ with a static name `n` of its own (§18, §19):
 - **When `g`'s body does not loop**, the `for` is one handled call: total. When it loops, `g`'s
   call is its loop (below), whose observations perform the operation; the `for` is a call of a
   div function in direct style (§14) of the loop that handles each of `g`'s observations
-  (`io_hwf`): its observation is `handle_with[n](hr, hc) ((nu_out l).1)`, and its close closes
+  (`io_hwf`): its observation is `handle_with[n](V_r, V_c) ((nu_out l).1)`, and its close closes
   `g`'s loop under a handler of its own.
 - **A body that performs a control operation, or may loop** (a `while`, a `loop`, or a `for`
   over anything but a count), is not a clause: the clause would hold the continuation across the
@@ -2443,9 +2443,11 @@ each arm of a `match` or `if` that uses it, out of a borrow block, and through a
 **Control effects** are §19's. Each `with` of a control handler is a **handler site** with a
 static name `n` of its own, and an operation is resolved lexically to the innermost site of its
 instance (§38): `perform[n.i](v)`, or `abort[n.i](v)` for an abortive operation. The site is
-`handle_with[n](hr, hc) M`: the return clause and the operation clauses as `!` closures, at the
-types `[handle]` gives them, the handler's type parameters matched against the body's type and its
-arguments' types. The clauses run outside the site: their operations go to the sites around the
+`handle_with[n]((V_r : T_r), (V_c : T_c)) M`: the return clause `V_r` and the tuple `V_c` of the
+operation clauses, `!` closures at the types `[handle]` gives them (`T_r`, `T_c`), the handler's type
+parameters matched against the body's type and its arguments' types. The node holds its clauses:
+its erasure is `hnd (n, (qs, (V_r, V_c))) e`, and the clauses are the `handle` node's own
+(§19 *Clause kinds*). The clauses run outside the site: their operations go to the sites around the
 `with`.
 
 **Rows.** A function's **row** is the set of effect instances it performs: those of the operations
@@ -3508,9 +3510,12 @@ runs in constant stack.
 
 **Clause kinds.** At `[handle]` the checker classifies each operation's clause and records the
 kind, with the operation's qualifier, on the `handle` node (`ks`; `Frontend/Check/Kinds.lean`).
-The clauses are the components of the value the clauses variable is bound to by `x <- return V`,
-whose typed term the checker keeps for the slot (`Env.vals`): the classification follows the
-variable to its binding and reads the derivation there. An abortive operation is one whose
+The clauses are the components of the node's own handler pair `(h_ret, hs)`, which the elaboration
+writes inline (§18), so the classification reads the derivation of the node's own premise; a
+clause a program names by a `def` is read through its `use` node, the `def`'s body at the use. A
+clause the node does not hold, a variable that a program writing core binds to it, is `stored`.
+`handle_with[n](hr, hc) M` takes values: the elaboration writes the clauses, a program in core may
+write variables. An abortive operation is one whose
 signature gives its clause no `κ` (`clauseTy_abortive`). A control clause is
 `!thunkv λp. let (x, κ) = p; M`, and its kind is how `M` uses `κ` on its paths, through `[⊕E]`,
 `[⊗E]`, `[1E]` and `[let]`, to `[app]` of `[&E₁]` of `[force]` at `κ`'s slot (the resume), that
@@ -3531,12 +3536,14 @@ from the most particular:
 | `stored` | anything else: `κ` may be kept | — | the state machines |
 
 `classify_sound` (`Frontend/Check/KindsSound.lean`): the kind recorded gives its premise at the
-clause's erasure. There is one definition of tail-resumptive: `effHandleT`'s clauses (§14,
+clause's erasure. `classifyHandler_sound`: at a `handle` node, the kind of the operation `j` gives
+its premise at the `j`-th clause of the erasure of the node's pair, the clause the handler runs for
+it. There is one definition of tail-resumptive: `effHandleT`'s clauses (§14,
 `tailClause`, `λ(x, κ). (λw. κ.1 w) (g x)`) meet the `tail` kind's premise, and an abortive one the
 `abortive` kind's (`tailClause_premise`), so an `effHandleT` node's kinds are read off its rule
 (`tailKind`), not classified. `classifyHandler_quals`: the qualifiers recorded are the signature's. The
-derivation does not constrain the kinds (`TDerivesAt.kinds_free`): the rule's premise is the
-clauses variable, not its binding. `bcc kinds <file>` prints every `handle` node with its kinds;
+derivation does not constrain the kinds (`TDerivesAt.kinds_free`): the rule's premises type the
+pair and carry no kinds. `bcc kinds <file>` prints every `handle` node with its kinds;
 `bcc check`'s report of each handler site is rendered from them (§18 *Reports*). `tick` (§14) is
 not a kind yet; the inductive `ClauseKind` and its premises are where it goes.
 
@@ -3561,20 +3568,28 @@ the static names of the `handle` nodes between the `perform` and the handler ove
 *Open*: a record at `[handle]` of the names handled inside the handled computation, and the run
 invariant that every handler frame a run reaches is a `handle` node's of the program.
 
-**Handler sites.** The elaboration of effects records each handler site it makes by its static
-name (`Frontend.SiteRec`, `Elab.Elaborated.sites`): the effect it serves and its type arguments,
-the handler (a control handler's name, or the function a `for` or a stored generator runs), the
-name the `with` gives it (§38), the kind of site (a control handler's `with`, a `for`'s site, a
-stored generator's), its operations, and the handler's state, the parameters its clauses are
-passed as a state (§19 *Handler state*). The checker reads the record at each `handle` node of the
-name and puts it on the node (`site`, `HSite`), with its types as the elaboration writes them, in
-the frame of the code the site is in. A `handle_with` the program writes in core has none. The
-record is checked against the checked term, and a mismatch is an internal error: its operations
-against the node's `E`, their number and qualifiers (`siteOf`); a `for`'s site against the kinds
-at the nodes of its name, none `stored` (the loop's body is the clause, resumed or cancelled in
-place), and a stored generator's site against them, one `stored` (`siteKindMismatch`). The
-derivation does not constrain the record (`TDerivesAt.site_free`). `bcc sites <file>` prints every
-`handle` node's site with its kinds.
+**Handler sites.** The elaboration of effects records each handler site it makes
+(`Frontend.SiteRec`): the effect it serves and its type arguments, the handler (a control
+handler's name, or the function a `for` or a stored generator runs), the name the `with` gives it
+(§38), the kind of site (a control handler's `with`, a `for`'s site, a stored generator's), its
+operations, and the handler's state, the parameters its clauses are passed as a state (§19
+*Handler state*). The record travels with the site's sugar (`HInfo.site`, `ItInfo.site`), so an
+instance of a template carries it at the instance's types, to the `handle` node the typed
+elaboration assembles, which carries it (`Comp.handle`'s `site`) with its types in the frame of
+the node's code: a control handler's at the handler's lifetimes and type arguments there, and a
+`for`'s or a stored generator's, written over its callee's type parameters, at the type
+arguments of the callee's instance at the call (`siteAtCall`). A `handle_with` the program writes
+in core has none, and neither has a handler a counted loop makes of the abortive operations of a
+site around it. The checker elaborates the record at the node to core types and puts it on the
+node (`site`, `HSite`), and checks it against the node: it names the node, and its operations are
+the node's `E` (a `for`'s site's with the threaded variables beside each argument and as each
+answer, `recOps`; `siteOf_ops`). A `for`'s site is checked against the kinds at the nodes of its
+name, none `stored` (the loop's body is the clause, resumed or cancelled in place), and a stored
+generator's site against them, one `stored` (`siteKindMismatch`). A mismatch is an internal
+error. The derivation does not constrain the record (`TDerivesAt.site_free`), and the checker has no
+effect declarations, so that the operations are `eff`'s at `args` is the elaboration's
+(`Frontend/Check/TFacts.lean`). `bcc sites <file>` prints every `handle` node's site with its
+kinds.
 
 **Abortive payloads.** A `raise`'s argument is carried as a variant of the program's abortive
 operations when it has more than one (`wrapRaise`), and a handler's clause takes it out of its
@@ -4858,7 +4873,7 @@ untyped: `not_der_progT`, `not_der_progNCrecT`, `not_der_e7c` (`Core/EffCancelTy
 
 ### Checker
 
-`handle_with[n](hr, hc) M` (§19) reads the clauses' type as BOXED-κ's when it can
+`handle_with[n](V_r, V_c) M` (§19) reads the clauses' type as BOXED-κ's when it can
 (`clausesReadBoxed`: the lifetime of the first clause whose argument is `A ⊗ [@d] κ`, `κ` a
 continuation's type, then `clausesReadB`; `Frontend/Check/Steps.lean`), and as `[handle]`'s
 otherwise. `clausesRead` would read a clause `!U(A ⊗ [@d] κ ⊸ F_Σ R)` as an abortive operation's,
@@ -7489,6 +7504,21 @@ no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the chec
 
 ## Changelog
 
+- **0.82** (2026-10-19) — §18, *Control effects*, and §19, *Clause kinds* (#574): the
+  elaboration writes a handler site's clauses inline in its `handle` node,
+  `handle_with[n]((V_r : T_r), (V_c : T_c)) M`, in place of binding them to variables first, so
+  each handler's erasure is `hnd (n, (qs, (V_r, V_c))) e` where it was
+  `(λhr. (λhc. hnd (n, (qs, (hr, hc))) e) V_c) V_r`. `handle_with` takes values; the checker
+  types the pair as `[handle]`'s value form over persistent slots (`rEffHandle`, `valFormB`). The
+  clause kinds read the node's own pair, through a `def`'s `use` node: `Env.vals` and the chase
+  through it are gone; `classify_sound` keeps its statement, and `classifyHandler_sound` gives
+  each kind's premise at the node's clause. The core programs that bound their clauses write them
+  inline. §19, *Handler sites*: the record travels with the site's sugar to its node, with its types
+  in the frame of the node's code (a generic stored generator's at the call's type arguments), the
+  checker elaborates it to core types and checks its operations against the node's `E`
+  (`siteOf_ops`); a counted loop's handler of a site's abortive operations has no record. No change
+  to `CDerives`, the relation, the machine, a checker rule, or any program's run output, goldens or
+  counts.
 - **0.81** (2026-10-19) — The joins at `match`/`if` (0.16; typed elaboration §5.2) at the head of
   a binding (#581): in `let p = M; N`, `x <- M; N`, `x : A <- M; N` and `linear x <- M; N`, each
   terminal of `M` hands on the enclosing `let mut` variables `M` assigns beside its value, and

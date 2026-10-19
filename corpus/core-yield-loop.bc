@@ -33,25 +33,22 @@ def range : !U (i32 * (i32 * i32) -o F (U (nu X. F[1.0 aff i32 * i32 ~> i32] (i3
 def main_step : !U (U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32)
     -o F (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32)) & F 1) =
   !thunkv fun (g : U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32)) ->
-    < hr : !U (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32)
-               -o F (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32))) <-
-        return (!thunkv fun (v : i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32)) -> return v);
-      hc : !U ((i32 * i32) * U ((i32 -o F (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32))) & F 1)
-               -o F (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32))) * 1 <-
-        return ((!thunkv fun (p : (i32 * i32) * U ((i32 -o F (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32))) & F 1)) ->
-          let (xw, k) = p;
-          let (x, w) = xw;
-          c <- return (lt (i32[10], x));
-          case c {
-            inl le -> w <- return (plus (w, x)); (force k).1 w
-          | inr gt -> u <- (force k).2; return (inl w)
-          }), ());
-      handle_with[1](hr, hc) ((nu_out (force g)).1),
-      hr : !U (i32 -o F i32) <- return (!thunkv fun (v : i32) -> return v);
-      hc : !U ((i32 * i32) * U ((i32 -o F i32) & F 1) -o F i32) * 1 <- return
-        ((!thunkv fun (p : (i32 * i32) * U ((i32 -o F i32) & F 1)) ->
-          let (xw, k) = p; let (x, w) = xw; r <- (force k).1 w; return r), ());
-      w <- handle_with[1](hr, hc) ((nu_out (force g)).2);
+    < handle_with[1](
+          ((!thunkv fun (v : i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32)) -> return v) : !U (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32)
+            -o F (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32)))),
+          (((!thunkv fun (p : (i32 * i32) * U ((i32 -o F (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32))) & F 1)) ->
+            let (xw, k) = p;
+            let (x, w) = xw;
+            c <- return (lt (i32[10], x));
+            case c {
+              inl le -> w <- return (plus (w, x)); (force k).1 w
+            | inr gt -> u <- (force k).2; return (inl w)
+            }), ()) : !U ((i32 * i32) * U ((i32 -o F (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32))) & F 1)
+                 -o F (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32))) * 1)) ((nu_out (force g)).1),
+      w <- handle_with[1](
+          ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+          (((!thunkv fun (p : (i32 * i32) * U ((i32 -o F i32) & F 1)) ->
+            let (xw, k) = p; let (x, w) = xw; r <- (force k).1 w; return r), ()) : !U ((i32 * i32) * U ((i32 -o F i32) & F 1) -o F i32) * 1)) ((nu_out (force g)).2);
       return () >
 
 main : F (U (nu X. F (i32 + U X) & F 1)) =

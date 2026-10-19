@@ -81,18 +81,74 @@ def DefEntry.hit? (e : DefEntry) (decl : Nat) (targs : List CVTy) (Δ : LifeCtx)
     else none
   else none
 
-/-- **The site of the `handle` node of the name `n`**, from the record the elaboration of effects
-made of it (`SiteRec`); `none` at a node no record names (one the program writes in core). The
-record's operations are checked against the node's `E`: as many, at the same qualifiers. A
-mismatch is an internal error.  `[spec §19]` -/
-def siteOf (E : Env) (sp : Span) (n : Nat) (Es : List (CQual × CVTy × CVTy)) :
-    Except Error (Option HSite) := do
-  let some r := E.scope.sites.find? (·.n == n) | return none
-  unless r.ents.map (·.1.toCore) == Es.map (·.1) do
-    throw ⟨sp, s!"internal error: the site {n} (`{r.handler}`, `{r.eff}`) as the elaboration of " ++
-      "effects records it does not have its `handle` node's operations"⟩
-  pure (some { eff := r.eff, args := r.args, handler := r.handler, slot := r.slot, kind := r.kind,
-               state := r.state })
+/-- An internal error at a site whose record does not fit its node. -/
+def siteErr (sp : Span) (r : SiteRec) (what : String) : Error :=
+  ⟨sp, s!"internal error: the site {r.n} (`{r.handler}`, `{r.eff}`) as the elaboration of " ++
+    s!"effects records it {what}"⟩
+
+/-- A type of the record `r`, elaborated in the frame of its node's code. -/
+def siteTy (E : Env) (Δ : LifeCtx) (sp : Span) (r : SiteRec) (A : VTy) : Except Error CVTy :=
+  (E.elabV Δ A).mapError fun e => siteErr sp r s!"has a type that is not one here: {e.msg}"
+
+/-- The record's operations, elaborated. -/
+def siteEnts (E : Env) (Δ : LifeCtx) (sp : Span) (r : SiteRec) :
+    Except Error (List (CQual × CVTy × CVTy)) :=
+  r.ents.mapM fun (q, A, B) => do pure (q.toCore, ← siteTy E Δ sp r A, ← siteTy E Δ sp r B)
+
+/-- The operations a site of the kind `k` whose effect's operations are `ents` handles, among the
+node's `Es`: a `for`'s site threads the variables its body uses, `W`, through its operations, each
+passing them beside its argument and answering them (SPEC §15); any other, `ents`. -/
+def recOps (k : SiteKind) (ents Es : List (CQual × CVTy × CVTy)) : List (CQual × CVTy × CVTy) :=
+  match k, Es.head? with
+  | .forSite, some (_, _, W) => ents.map fun (q, A, _) => (q, .tensor A W, W)
+  | _, _ => ents
+
+/-- **The site of a `handle` node**, from the record of the elaboration of effects the node
+carries (`SiteRec`), its types elaborated here, in the frame of the node's code; `none` at a node
+with no record (one the program writes in core). The record names the node's name, and its
+operations are the node's `E`, the operations the derivation handles (`recOps`,
+`siteOf_ops`): a record that does not is an internal error.  `[spec §19]` -/
+def siteOf (E : Env) (Δ : LifeCtx) (sp : Span) (n : Nat) (st : Option SiteRec)
+    (Es : List (CQual × CVTy × CVTy)) : Except Error (Option HSite) := do
+  let some r := st | return none
+  unless r.n == n do throw (siteErr sp r s!"is at the `handle` node of the name {n}")
+  let ents ← siteEnts E Δ sp r
+  unless recOps r.kind ents Es == Es do
+    throw (siteErr sp r "does not have its `handle` node's operations")
+  let args ← r.args.mapM (siteTy E Δ sp r)
+  let state ← r.state.mapM fun (x, A) => do pure (x, ← siteTy E Δ sp r A)
+  pure (some { eff := r.eff, args, handler := r.handler, slot := r.slot, kind := r.kind, state })
+
+/-- **A site's record has its node's operations**: when `siteOf` gives the node a site, the
+record the node carries names the node, and its operations, elaborated in the node's frame, are
+the node's `E` (at a `for`'s site, with the threaded variables).  `[spec §19]` -/
+theorem siteOf_ops {E : Env} {Δ : LifeCtx} {sp : Span} {n : Nat} {st : Option SiteRec}
+    {Es : List (CQual × CVTy × CVTy)} {s : HSite} (h : siteOf E Δ sp n st Es = .ok (some s)) :
+    ∃ r ents, st = some r ∧ r.n = n ∧ siteEnts E Δ sp r = .ok ents ∧
+      recOps r.kind ents Es = Es ∧ s.kind = r.kind ∧ s.eff = r.eff := by
+  cases st with
+  | none => simp [siteOf, pure, Except.pure] at h
+  | some r =>
+    simp only [siteOf] at h
+    split at h
+    · rename_i hn
+      cases he : siteEnts E Δ sp r with
+      | error e => simp [he, bind, Except.bind] at h
+      | ok ents =>
+        simp only [he, bind, Except.bind] at h
+        split at h
+        · rename_i ho
+          refine ⟨r, ents, rfl, (by simpa using hn), he, (by simpa using ho), ?_⟩
+          cases ha : r.args.mapM (siteTy E Δ sp r) with
+          | error e => simp [ha] at h
+          | ok args =>
+            simp only [ha] at h
+            split at h
+            · simp at h
+            · simp only [pure, Except.pure, Except.ok.injEq, Option.some.injEq] at h
+              subst h; exact ⟨rfl, rfl⟩
+        · simp [throw, throwThe, MonadExceptOf.throw] at h
+    · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
 
 /-- The entry, placed at a larger lifetime context `Δ` (`TTied.weakenΔ`): when it has no rule
 that reads `⊓Δ` (`TExpr.domFree`), `Δ` extends its context away from its binders (`extΔB`), its
@@ -359,7 +415,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
       match S', rM with
       | [], rM =>
-        let ⟨C, rN⟩ ← synC n (((E.minus rM.F.u).bindVal rM.t).pushOwn x.name A lin) Δ (A :: T) N
+        let ⟨C, rN⟩ ← synC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N
         let FN ← popL E x.span x.name rN.F lin
         if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rBind (atB sp [x.name]) rM FN h⟩
         else throw (splitErr E T sp rM.F.u FN.u)
@@ -389,84 +445,90 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     | .abort sp k i V => do
       let ⟨_, r⟩ ← abortIt n E Δ T sp k i V .zero
       pure ⟨_, r⟩
-    | .handle sp k hr hc M => do
-      let some ir := lookupVar hr.name E.vars
-        | err hr.span s!"`{hr.name}` is not a variable in scope"
-      let some ic := lookupVar hc.name E.vars
-        | err hc.span s!"`{hc.name}` is not a variable in scope"
-      match hTr : T[ir]?, hTc : T[ic]? with
-      | some Tr, some Tc =>
-        match retRead Tr with
-        | none => err hr.span (s!"the answer clause `{hr.name}` must have a type " ++
-            s!"`!U(A -o F[…] R)`, but it has type `{E.ppV Tr}`")
-        | some ⟨S, A, R, hr'⟩ =>
-          match clausesReadBoxed S R Tc, clausesRead S R Tc with
-          | none, none => err hc.span (s!"the clauses `{hc.name}` must have the type of a " ++
-              s!"handler's clauses at `F{ppRow E S} {E.ppV R}`, but they have type `{E.ppV Tc}`")
-          | some ⟨d, Es, hc'⟩, _ =>
-            -- BOXED-κ (SPEC §28): the clauses receive `κ` boxed at `@d`.
-            if k < 2 ^ 32 ∧ k ≠ 0 then
-              let nm := UInt32.ofNat k
-              if hn0 : nm ≠ 0 then
-                if hnS : ∀ o ∈ S, o.n ≠ nm then
-                  if hlen : Es.length ≤ 2 ^ 32 then
-                   if hdv : BoCa.Fig16.LogRel.Core.Row.divB
-                       (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) = false then
-                    if hwf : d.wf Δ = true then
-                      let Sh := BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S
-                      if hSd : ansOutlivesB Δ d Sh = true then
-                        let site ← siteOf E sp k Es
-                        let rM ← chkC n E Δ T M (effOf Sh A)
-                        if hso : usedSat (outlivesB Δ d) T rM.F.u = true then
-                          if h₁ : overlapOK T (oneL T ir) (oneL T ic) = true then
-                            if h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true then
-                              pure ⟨_, rEffHandleB (at_ sp) { sp := hr.span, name := hr.name }
-                                { sp := hc.span, name := hc.name } ir ic (classifyHandler Es (E.valOf ic)) site (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hdv
-                                hwf hSd rM hso h₁ h₂⟩
-                            else throw (splitErr E T sp (orL (oneL T ir) (oneL T ic)) rM.F.u)
-                          else throw (splitErr E T sp (oneL T ir) (oneL T ic))
-                        else match firstBad (outlivesB Δ d) T rM.F.u with
-                          | some i => err sp (s!"the clauses box `κ` at `{E.ppL d}`, so the " ++
-                              s!"handled computation's context must outlive it: {E.slotName i}, " ++
-                              s!"of type `{E.slotTy T i}`, is used inside, and it cannot be " ++
-                              s!"shown to outlive `{E.ppL d}`")
-                          | none => err sp "internal error: boxed continuation"
-                      else match Sh.find? (fun o => !(o.abort || outlivesB Δ d o.B)) with
-                        | some o => err sp (s!"the clauses box `κ` at `{E.ppL d}`, so every " ++
-                            s!"operation the handled computation resumes at must answer a type " ++
-                            s!"that outlives it: {o.n}.{o.i} answers `{E.ppV o.B}`, which cannot " ++
-                            s!"be shown to outlive `{E.ppL d}`")
-                        | none => err sp "internal error: boxed continuation"
-                    else err hc.span s!"the clauses box `κ` at `{E.ppL d}`, which is not defined here"
-                   else err sp divHandleMsg
-                  else err sp "a handler has at most 2^32 operations"
-                else err sp s!"the name {k} is already in the row `{ppRow E S}` of the handler's answer"
-              else err sp "a handler's name is not 0"
-            else err sp s!"a handler's name is between 1 and 2^32 - 1, not {k}"
-          | none, some ⟨Es, hc'⟩ =>
-            if k < 2 ^ 32 ∧ k ≠ 0 then
-              let nm := UInt32.ofNat k
-              if hn0 : nm ≠ 0 then
-                if hnS : ∀ o ∈ S, o.n ≠ nm then
-                  if hlen : Es.length ≤ 2 ^ 32 then
-                   if hdv : BoCa.Fig16.LogRel.Core.Row.divB
-                       (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) = false then
-                    let site ← siteOf E sp k Es
-                    let rM ← chkC n E Δ T M
-                      (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) A)
-                    if h₁ : overlapOK T (oneL T ir) (oneL T ic) = true then
-                      if h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true then
-                        pure ⟨_, rEffHandle (at_ sp) { sp := hr.span, name := hr.name }
-                          { sp := hc.span, name := hc.name } ir ic (classifyHandler Es (E.valOf ic)) site (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen hdv
-                          rM h₁ h₂⟩
-                      else throw (splitErr E T sp (orL (oneL T ir) (oneL T ic)) rM.F.u)
-                    else throw (splitErr E T sp (oneL T ir) (oneL T ic))
-                   else err sp divHandleMsg
-                  else err sp "a handler has at most 2^32 operations"
-                else err sp s!"the name {k} is already in the row `{ppRow E S}` of the handler's answer"
-              else err sp "a handler's name is not 0"
-            else err sp s!"a handler's name is between 1 and 2^32 - 1, not {k}"
-      | _, _ => err sp "internal error: variable out of range"
+    | .handle sp k st hr hc M => do
+      -- The handler's pair: the answer clause and the clauses, values checked here, whose
+      -- slots are persistent (`[handle]`'s `Γ₁`).
+      let what (V : Val) (d : String) : String := match V with
+        | .var _ x => s!"`{x}`"
+        | _ => d
+      let ⟨Tr, rr⟩ ← synV n E Δ T hr
+      let ⟨Tc, rc⟩ ← synV n E Δ T hc
+      match retRead Tr with
+      | none => err hr.span (s!"the answer clause {what hr "of the handler"} must have a type " ++
+          s!"`!U(A -o F[…] R)`, but it has type `{E.ppV Tr}`")
+      | some ⟨S, A, R, hr'⟩ =>
+        if hov : overlapOK T rr.F.u rc.F.u = true then
+          let rH := rPair (at_ sp) rr rc hov
+          if hp : usedSat BoCa.Fig16.LogRel.Core.VTy.persistent T rH.F.u = true then
+            if hv : valFormB rH.F.u rH.t.erase = true then
+              match clausesReadBoxed S R Tc, clausesRead S R Tc with
+              | none, none => err hc.span (s!"the clauses {what hc "of the handler"} must have " ++
+                  s!"the type of a handler's clauses at `F{ppRow E S} {E.ppV R}`, but they have " ++
+                  s!"type `{E.ppV Tc}`")
+              | some ⟨d, Es, hc'⟩, _ =>
+                -- BOXED-κ (SPEC §28): the clauses receive `κ` boxed at `@d`.
+                if k < 2 ^ 32 ∧ k ≠ 0 then
+                  let nm := UInt32.ofNat k
+                  if hn0 : nm ≠ 0 then
+                    if hnS : ∀ o ∈ S, o.n ≠ nm then
+                      if hlen : Es.length ≤ 2 ^ 32 then
+                       if hdv : BoCa.Fig16.LogRel.Core.Row.divB
+                           (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) = false then
+                        if hwf : d.wf Δ = true then
+                          let Sh := BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S
+                          if hSd : ansOutlivesB Δ d Sh = true then
+                            let site ← siteOf E Δ sp k st Es
+                            let rM ← chkC n E Δ T M (effOf Sh A)
+                            if hso : usedSat (outlivesB Δ d) T rM.F.u = true then
+                              if h₂ : overlapOK T rH.F.u rM.F.u = true then
+                                pure ⟨_, rEffHandleB (at_ sp) (classifyHandler Es rH.t) site hr' hc' rH
+                                  hp hv hn0 hnS hlen hdv hwf hSd rM hso h₂⟩
+                              else throw (splitErr E T sp rH.F.u rM.F.u)
+                            else match firstBad (outlivesB Δ d) T rM.F.u with
+                              | some i => err sp (s!"the clauses box `κ` at `{E.ppL d}`, so the " ++
+                                  s!"handled computation's context must outlive it: {E.slotName i}, " ++
+                                  s!"of type `{E.slotTy T i}`, is used inside, and it cannot be " ++
+                                  s!"shown to outlive `{E.ppL d}`")
+                              | none => err sp "internal error: boxed continuation"
+                          else match Sh.find? (fun o => !(o.abort || outlivesB Δ d o.B)) with
+                            | some o => err sp (s!"the clauses box `κ` at `{E.ppL d}`, so every " ++
+                                s!"operation the handled computation resumes at must answer a type " ++
+                                s!"that outlives it: {o.n}.{o.i} answers `{E.ppV o.B}`, which cannot " ++
+                                s!"be shown to outlive `{E.ppL d}`")
+                            | none => err sp "internal error: boxed continuation"
+                        else err hc.span s!"the clauses box `κ` at `{E.ppL d}`, which is not defined here"
+                       else err sp divHandleMsg
+                      else err sp "a handler has at most 2^32 operations"
+                    else err sp s!"the name {k} is already in the row `{ppRow E S}` of the handler's answer"
+                  else err sp "a handler's name is not 0"
+                else err sp s!"a handler's name is between 1 and 2^32 - 1, not {k}"
+              | none, some ⟨Es, hc'⟩ =>
+                if k < 2 ^ 32 ∧ k ≠ 0 then
+                  let nm := UInt32.ofNat k
+                  if hn0 : nm ≠ 0 then
+                    if hnS : ∀ o ∈ S, o.n ≠ nm then
+                      if hlen : Es.length ≤ 2 ^ 32 then
+                       if hdv : BoCa.Fig16.LogRel.Core.Row.divB
+                           (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) = false then
+                        let site ← siteOf E Δ sp k st Es
+                        let rM ← chkC n E Δ T M
+                          (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) A)
+                        if h₂ : overlapOK T rH.F.u rM.F.u = true then
+                          pure ⟨_, rEffHandle (at_ sp) (classifyHandler Es rH.t) site hr' hc' rH hp hv
+                            hn0 hnS hlen hdv rM h₂⟩
+                        else throw (splitErr E T sp rH.F.u rM.F.u)
+                       else err sp divHandleMsg
+                      else err sp "a handler has at most 2^32 operations"
+                    else err sp s!"the name {k} is already in the row `{ppRow E S}` of the handler's answer"
+                  else err sp "a handler's name is not 0"
+                else err sp s!"a handler's name is between 1 and 2^32 - 1, not {k}"
+            else err sp (s!"the handler's clauses must be values: variables, pairs, injections " ++
+              "and functions")
+          else match firstBad BoCa.Fig16.LogRel.Core.VTy.persistent T rH.F.u with
+            | some i => err sp (s!"a handler's clauses use only persistent variables: {E.slotName i}, " ++
+                s!"of type `{E.slotTy T i}`, is not persistent")
+            | none => err sp "internal error: a handler's clauses"
+        else throw (splitErr E T sp rr.F.u rc.F.u)
     | .force sp x =>
       match lookupVar x.name E.vars with
       | some i =>
@@ -598,7 +660,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                     let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A')
                     let E' : Env :=
                       { E with vars := [], own := [], nExt := 0, lenv := (x.name, v) :: E.lenv,
-                               row := some S, vals := [] }
+                               row := some S }
                     let rM ← chkC n (E'.pushOwn m.name (.mut (.var v) A')) (Δ.extend v bl)
                       [.mut (.var v) A'] M (effOf S (.box (.var v) B'))
                     if hL : subL (allL [.mut (.var v) A']) (orL rM.F.u rM.F.w) = true then
@@ -688,7 +750,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
       match S', rM with
       | [], rM =>
-        let rN ← chkC n (((E.minus rM.F.u).bindVal rM.t).pushOwn x.name A lin) Δ (A :: T) N C
+        let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N C
         let FN ← popL E x.span x.name rN.F lin
         if h : overlapOK T rM.F.u FN.u = true then pure (rBind (atB sp [x.name]) rM FN h)
         else throw (splitErr E T sp rM.F.u FN.u)

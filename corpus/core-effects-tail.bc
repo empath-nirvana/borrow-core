@@ -14,13 +14,12 @@ def twice : !U (1 -o F[2.0 lin 1 ~> i32] i32) =
     return (plus (a, b))
 
 main : F i32 =
-  hr : !U (i32 -o F i32) <- return (!thunkv fun (v : i32) -> return v);
-  hc : !U (1 * U ((i32 -o F i32) & top) -o F i32) * 1 <- return
-    ((!thunkv fun (p : 1 * U ((i32 -o F i32) & top)) ->
+  f <- return (unbang twice);
+  u <- return ();
+  handle_with[2](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (p : 1 * U ((i32 -o F i32) & top)) ->
         let (u, k) = p;
         let () = u;
         x <- return i32[10];
-        (force k).1 x), ());
-  f <- return (unbang twice);
-  u <- return ();
-  handle_with[2](hr, hc) (force f u)
+        (force k).1 x), ()) : !U (1 * U ((i32 -o F i32) & top) -o F i32) * 1)) (force f u)

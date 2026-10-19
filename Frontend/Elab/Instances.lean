@@ -303,8 +303,12 @@ def walkC (d : Decls) (owner : String) (names : List String) : Nat → TCx → C
       match c.elabL b with
       | some b => walkC d owner names n (c.pushLife x.name b) M
       | none => walkC d owner names n c.pushDead M
-    | .app _ M _ | .proj _ _ M | .inst _ M _ | .nuIn _ M | .nuOut _ M | .ascribe _ M _
-    | .handle _ _ _ _ M => walkC d owner names n c M
+    | .app _ M _ | .proj _ _ M | .inst _ M _ | .nuIn _ M | .nuOut _ M | .ascribe _ M _ =>
+      walkC d owner names n c M
+    | .handle _ _ _ hr hc M => do
+      walkV d owner names n c hr
+      walkV d owner names n c hc
+      walkC d owner names n c M
     | .with_ _ M N => do
       walkC d owner names n c.pushDead.pushDead M
       walkC d owner names n c.pushDead.pushDead N

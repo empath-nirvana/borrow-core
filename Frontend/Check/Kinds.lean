@@ -5,8 +5,9 @@ import Frontend.Check.TExpr
 
 At `[handle]` the checker classifies each operation's clause from its typed term, and records
 the kinds on the `handle` node (`TExpr.effHandleV`'s `ks`). The clauses are the components of the
-value the handler's clauses variable is bound to, which the checker checked there
-(`Frontend/Check/Checker.lean`, `Env.vals`).
+node's own handler pair `(h_ret, hs)`: the elaboration writes them inline, so the node holds the
+term the handler runs. A clause a program names by a `def` is the `def`'s body at the use (its
+`use` node). A clause the node does not hold, a variable a program writes in core, is `stored`.
 
 The classification reads the derivation: an abortive operation is one whose signature gives its
 clause no `κ` (`clauseTy`); a control clause is `!thunkv λp. let (x, κ) = p; M`, and `M`'s paths
@@ -152,36 +153,35 @@ def classifyBody (tM : TExpr) : ClauseKind :=
   else if onPaths (stateFnB onceB) 0 tM then .resumeOnce true
   else .stored
 
-/-- A control clause `!thunkv λp. let (x, κ) = p; M`: its body `M`; through `use` nodes, at any
-depth, each of which erases to its body. -/
-def clauseBody? : TExpr → Option TExpr
-  | .bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => some tM
-  | .use _ _ _ _ _ _ t => clauseBody? t
-  | _ => none
+/-- A `def`'s use nodes removed: the node of a `def` named in place of a value is the `def`'s
+body, checked at the use, which is the term it erases to. -/
+def TExpr.unUse : TExpr → TExpr
+  | .use _ _ _ _ _ _ t => t.unUse
+  | t => t
 
 /-- **The kind of the clause `c` of the operation `o`**, with the operation's qualifier: abortive
-when the signature gives the clause no `κ`; otherwise the kind of its body, or `stored` when the
-clause is not in reach or not of the clause's form. -/
+when the signature gives the clause no `κ`; the kind of its body `M` when it is a control clause
+`!thunkv λp. let (x, κ) = p; M`; otherwise `stored`. -/
 def classifyClause (o : Qual × VTy × VTy) (c : Option TExpr) : HKind :=
   ⟨o.1, if isAbortive o then .abortive else
-    match c.bind clauseBody? with
-    | some tM => classifyBody tM
-    | none => .stored⟩
+    match c.map TExpr.unUse with
+    | some (.bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM))) =>
+        classifyBody tM
+    | _ => .stored⟩
 
-/-- The components of a clause tuple `(c₀, (c₁, … ()))`, `n` of them: `[⊗I]`'s children, through
-the nodes that keep their premise's term and a `def`'s `use`. -/
+/-- The components of a clause tuple `(c₀, (c₁, … ()))`, `n` of them: `[⊗I]`'s children. -/
 def clauseParts : Nat → TExpr → List (Option TExpr)
   | 0, _ => []
-  | n + 1, .tensorI _ _ _ _ _ c t => some c :: clauseParts n t
-  | n + 1, .ret _ _ _ t => clauseParts (n + 1) t
-  | n + 1, .use _ _ _ _ _ _ t => clauseParts (n + 1) t
-  | n + 1, _ => List.replicate (n + 1) none
+  | n + 1, t => match t.unUse with
+    | .tensorI _ _ _ _ _ c t => some c :: clauseParts n t
+    | _ => List.replicate (n + 1) none
 
-/-- The kinds of a handler's clauses, from the typed term its clauses variable is bound to. -/
-def classifyHandler (E : List (Qual × VTy × VTy)) (cls : Option TExpr) : List HKind :=
-  let parts := match cls with
-    | some t => clauseParts E.length t
-    | none => List.replicate E.length none
+/-- The kinds of a handler's clauses, from the handler's pair `tH`, the `handle` node's own
+`(h_ret, hs)`. -/
+def classifyHandler (E : List (Qual × VTy × VTy)) (tH : TExpr) : List HKind :=
+  let parts := match tH with
+    | .tensorI _ _ _ _ _ _ tc => clauseParts E.length tc
+    | _ => List.replicate E.length none
   E.zipWith (fun o c => classifyClause o c) (parts ++ List.replicate E.length none)
 
 /-! ### The handler sites of a typed term -/
@@ -201,7 +201,8 @@ structure HandleSite where
 /-- Two `handle` nodes report alike when their sources, names, kinds and boxing agree. -/
 instance : BEq HandleSite := ⟨fun a b => a.sp == b.sp && a.n == b.n && a.ks == b.ks && a.boxed == b.boxed⟩
 
-/-- The `handle` nodes of `t`, outermost first, within the depth `fuel`. -/
+/-- The `handle` nodes of `t`, in the order of the source, within the depth `fuel`: a node's
+clauses, which are written before it, then the node, then its handled computation. -/
 def TExpr.handleSites : Nat → TExpr → List HandleSite
   | 0, _ => []
   | f + 1, t =>
@@ -211,7 +212,10 @@ def TExpr.handleSites : Nat → TExpr → List HandleSite
       -- `effHandleT`'s clauses are tail-resumptive by its rule (`tailClause_premise`).
       | .effHandleT i _ _ _ E _ n _ _ _ st _ _ => [⟨i.sp, n, E.map tailKind, false, st⟩]
       | _ => []
-    here ++ t.children.flatMap fun (_, k) => TExpr.handleSites f k
+    match here, t.children with
+    | _ :: _, (_, tc) :: rest =>
+        TExpr.handleSites f tc ++ here ++ rest.flatMap fun (_, k) => TExpr.handleSites f k
+    | _, ks => here ++ ks.flatMap fun (_, k) => TExpr.handleSites f k
 
 /-- **The site kind the elaboration claims, against the clause kinds** at the `handle` nodes of
 each name: a `for`'s site runs the loop's body as its clause, resumed or cancelled in place, so no

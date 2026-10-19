@@ -321,16 +321,17 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       let o := (findOp E sp "abort" k i).toOption
       let a ← inferV n E Δ T (o.map (·.2.1.A)) V
       pure (node (o.map fun ⟨S, _, _⟩ => effOf S .zero) [a])
-    | .handle _ k hr hc M => do
-      let ty (x : Ident) : Option CVTy := (lookupVar x.name E.vars).bind (T[·]?)
+    | .handle _ k _ hr hc M => do
+      let ar ← inferV n E Δ T none hr
+      let ac ← inferV n E Δ T none hc
       let sig : Option (CRow × CVTy × CVTy × List (CQual × CVTy × CVTy)) := do
-        let ⟨S, A, R, _⟩ ← retRead (← ty hr)
-        let ⟨Es, _⟩ ← clausesRead S R (← ty hc)
+        let ⟨S, A, R, _⟩ ← retRead (← ar.ty.v?)
+        let ⟨Es, _⟩ ← clausesRead S R (← ac.ty.v?)
         pure (S, A, R, Es)
       let e := sig.map fun (S, A, _, Es) =>
         effOf (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A
       let a ← inferC n E Δ T e M
-      pure (node (sig.map fun (S, _, R, _) => effOf S R) [a])
+      pure (node (sig.map fun (S, _, R, _) => effOf S R) [ar, ac, a])
     | .unwind _ x oA M D N => do
       let A' := oA.bind fun A => (E.elabV Δ A).toOption
       let hd ← inferC n E Δ T (A'.map (effOf (E.row.getD []))) M
@@ -366,7 +367,7 @@ def externsBefore (ds : Array Decl) (upto : Nat) : List (String × CVTy) :=
   (List.range upto).foldl (init := []) fun acc k =>
     match (ds[k]? : Option Decl) with
     | some (.extern _ n A) =>
-      match (⟨⟨ds, k, [], []⟩, [], [], [], [], 0, none, []⟩ : Env).elabV LifeCtx.empty A with
+      match (⟨⟨ds, k, []⟩, [], [], [], [], 0, none⟩ : Env).elabV LifeCtx.empty A with
       | .ok A' => acc ++ [(n.name, A')]
       | .error _ => acc
     | _ => acc

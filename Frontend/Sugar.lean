@@ -153,63 +153,81 @@ def _root_.Frontend.Comp.elab (lend : Bool) : Comp → Except Error Comp
       "that is one total step (SPEC §14)"⟩
   | .perform sp k i V => return .perform sp k i (← V.elab lend)
   | .abort sp k i V => return .abort sp k i (← V.elab lend)
-  | .handle sp k hr hc M => return .handle sp k hr hc (← M.elab false)
+  | .handle sp k st hr hc M => do
+    let hr' ← hr.elab false
+    let hc' ← hc.elab false
+    return .handle sp k st hr' hc' (← M.elab false)
   | .unwind sp x A M D N => return .unwind sp x A (← M.elab false) (← D.elab false) (← N.elab false)
   | .withbor2r sp x b A B r p m M => return .withbor2r sp x b A B r p m (← M.elab false)
 end
 
-/-! ### Filling a template's holes -/
+/-! ### Filling a template's holes
+
+A template's holes are the variables `hv` names and the `force`s `hc` names; a `handle` node of a
+name that `hs` gives a record for has that record as its site. -/
 
 mutual
-def _root_.Frontend.Val.fill (hv : String → Option Val) (hc : String → Option Comp) : Val → Val
+def _root_.Frontend.Val.fillS (hv : String → Option Val) (hc : String → Option Comp)
+    (hs : Nat → Option SiteRec) : Val → Val
   | V@(.var _ x) => (hv x).getD V
   | V@(.clone ..) => V
-  | .pair sp V W => .pair sp (V.fill hv hc) (W.fill hv hc)
-  | .app sp V W => .app sp (V.fill hv hc) (W.fill hv hc)
-  | .inl sp V => .inl sp (V.fill hv hc)
-  | .inr sp V => .inr sp (V.fill hv hc)
-  | .unbang sp V => .unbang sp (V.fill hv hc)
-  | .boxed sp l V => .boxed sp l (V.fill hv hc)
-  | .unbox sp V => .unbox sp (V.fill hv hc)
-  | .sub sp V l => .sub sp (V.fill hv hc) l
-  | .roll sp V => .roll sp (V.fill hv hc)
-  | .unroll sp V => .unroll sp (V.fill hv hc)
-  | .inst sp V l => .inst sp (V.fill hv hc) l
-  | .ascribe sp V A => .ascribe sp (V.fill hv hc) A
-  | .shorten sp m σ l V => .shorten sp m σ l (V.fill hv hc)
-  | .thunk sp M => .thunk sp (M.fill hv hc)
-  | .thunkv sp M => .thunkv sp (M.fill hv hc)
-  | .bangThunk sp M => .bangThunk sp (M.fill hv hc)
-  | .bangThunkv sp M => .bangThunkv sp (M.fill hv hc)
-  | .run sp M => .run sp (M.fill hv hc)
-  | .mark sp k V => .mark sp k (V.fill hv hc)
+  | .pair sp V W => .pair sp (V.fillS hv hc hs) (W.fillS hv hc hs)
+  | .app sp V W => .app sp (V.fillS hv hc hs) (W.fillS hv hc hs)
+  | .inl sp V => .inl sp (V.fillS hv hc hs)
+  | .inr sp V => .inr sp (V.fillS hv hc hs)
+  | .unbang sp V => .unbang sp (V.fillS hv hc hs)
+  | .boxed sp l V => .boxed sp l (V.fillS hv hc hs)
+  | .unbox sp V => .unbox sp (V.fillS hv hc hs)
+  | .sub sp V l => .sub sp (V.fillS hv hc hs) l
+  | .roll sp V => .roll sp (V.fillS hv hc hs)
+  | .unroll sp V => .unroll sp (V.fillS hv hc hs)
+  | .inst sp V l => .inst sp (V.fillS hv hc hs) l
+  | .ascribe sp V A => .ascribe sp (V.fillS hv hc hs) A
+  | .shorten sp m σ l V => .shorten sp m σ l (V.fillS hv hc hs)
+  | .thunk sp M => .thunk sp (M.fillS hv hc hs)
+  | .thunkv sp M => .thunkv sp (M.fillS hv hc hs)
+  | .bangThunk sp M => .bangThunk sp (M.fillS hv hc hs)
+  | .bangThunkv sp M => .bangThunkv sp (M.fillS hv hc hs)
+  | .run sp M => .run sp (M.fillS hv hc hs)
+  | .mark sp k V => .mark sp k (V.fillS hv hc hs)
   | V => V
 
-def _root_.Frontend.Comp.fill (hv : String → Option Val) (hc : String → Option Comp) : Comp → Comp
+def _root_.Frontend.Comp.fillS (hv : String → Option Val) (hc : String → Option Comp)
+    (hs : Nat → Option SiteRec) : Comp → Comp
   | M@(.force _ x) => (hc x.name).getD M
-  | .ret sp V => .ret sp (V.fill hv hc)
-  | .absurd sp V => .absurd sp (V.fill hv hc)
-  | .bind sp x A M N lin => .bind sp x A (M.fill hv hc) (N.fill hv hc) lin
-  | .lam sp x A M => .lam sp x A (M.fill hv hc)
-  | .app sp M x => .app sp (M.fill hv hc) x
-  | .with_ sp M N => .with_ sp (M.fill hv hc) (N.fill hv hc)
-  | .proj sp i M => .proj sp i (M.fill hv hc)
-  | .letUnit sp V M => .letUnit sp (V.fill hv hc) (M.fill hv hc)
-  | .letPair sp x y V M => .letPair sp x y (V.fill hv hc) (M.fill hv hc)
-  | .case sp V x M y N => .case sp (V.fill hv hc) x (M.fill hv hc) y (N.fill hv hc)
-  | .lamL sp x b M => .lamL sp x b (M.fill hv hc)
-  | .inst sp M a => .inst sp (M.fill hv hc) a
-  | .nuIn sp M => .nuIn sp (M.fill hv hc)
-  | .nuOut sp M => .nuOut sp (M.fill hv hc)
-  | .ascribe sp M C => .ascribe sp (M.fill hv hc) C
-  | .perform sp k i V => .perform sp k i (V.fill hv hc)
-  | .abort sp k i V => .abort sp k i (V.fill hv hc)
-  | .handle sp k hr hc' M => .handle sp k hr hc' (M.fill hv hc)
-  | .unwind sp x A M D N => .unwind sp x A (M.fill hv hc) (D.fill hv hc) (N.fill hv hc)
-  | .withbor2r sp x b A B r p m M => .withbor2r sp x b A B r p m (M.fill hv hc)
-  | .loop sp ℓ src V M N => .loop sp ℓ src (V.fill hv hc) (M.fill hv hc) (N.fill hv hc)
+  | .ret sp V => .ret sp (V.fillS hv hc hs)
+  | .absurd sp V => .absurd sp (V.fillS hv hc hs)
+  | .bind sp x A M N lin => .bind sp x A (M.fillS hv hc hs) (N.fillS hv hc hs) lin
+  | .lam sp x A M => .lam sp x A (M.fillS hv hc hs)
+  | .app sp M x => .app sp (M.fillS hv hc hs) x
+  | .with_ sp M N => .with_ sp (M.fillS hv hc hs) (N.fillS hv hc hs)
+  | .proj sp i M => .proj sp i (M.fillS hv hc hs)
+  | .letUnit sp V M => .letUnit sp (V.fillS hv hc hs) (M.fillS hv hc hs)
+  | .letPair sp x y V M => .letPair sp x y (V.fillS hv hc hs) (M.fillS hv hc hs)
+  | .case sp V x M y N => .case sp (V.fillS hv hc hs) x (M.fillS hv hc hs) y (N.fillS hv hc hs)
+  | .lamL sp x b M => .lamL sp x b (M.fillS hv hc hs)
+  | .inst sp M a => .inst sp (M.fillS hv hc hs) a
+  | .nuIn sp M => .nuIn sp (M.fillS hv hc hs)
+  | .nuOut sp M => .nuOut sp (M.fillS hv hc hs)
+  | .ascribe sp M C => .ascribe sp (M.fillS hv hc hs) C
+  | .perform sp k i V => .perform sp k i (V.fillS hv hc hs)
+  | .abort sp k i V => .abort sp k i (V.fillS hv hc hs)
+  | .handle sp k st hr hc' M =>
+    .handle sp k (st.orElse fun _ => hs k) (hr.fillS hv hc hs) (hc'.fillS hv hc hs) (M.fillS hv hc hs)
+  | .unwind sp x A M D N => .unwind sp x A (M.fillS hv hc hs) (D.fillS hv hc hs) (N.fillS hv hc hs)
+  | .withbor2r sp x b A B r p m M => .withbor2r sp x b A B r p m (M.fillS hv hc hs)
+  | .loop sp ℓ src V M N => .loop sp ℓ src (V.fillS hv hc hs) (M.fillS hv hc hs) (N.fillS hv hc hs)
   | M => M
 end
+
+/-- A template's holes filled, with no site records. -/
+def _root_.Frontend.Val.fill (hv : String → Option Val) (hc : String → Option Comp) (V : Val) : Val :=
+  V.fillS hv hc fun _ => none
+
+/-- A template's holes filled, with no site records. -/
+def _root_.Frontend.Comp.fill (hv : String → Option Val) (hc : String → Option Comp) (M : Comp) :
+    Comp :=
+  M.fillS hv hc fun _ => none
 
 /-! ### Ambient capabilities in `main` -/
 
@@ -480,7 +498,7 @@ def _root_.Frontend.Comp.names (n : String) : Comp → Bool
   | .case _ V _ M _ N => V.names n || M.names n || N.names n
   | .loop _ _ _ V M N => V.names n || M.names n || N.names n
   | .perform _ _ _ V | .abort _ _ _ V => V.names n
-  | .handle _ _ hr hc M => hr.name == n || hc.name == n || M.names n
+  | .handle _ _ _ hr hc M => hr.names n || hc.names n || M.names n
   | .unwind _ _ _ M D N => M.names n || D.names n || N.names n
   | .withbor2r _ _ _ _ _ _ p m M => p.name == n || m.name == n || M.names n
   | .force .. | .top _ => false
@@ -593,7 +611,7 @@ def _root_.Frontend.Comp.hasFor : Comp → Bool
   | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
   | .nuOut _ M | .ascribe _ M _ | .letUnit _ _ M | .letPair _ _ _ _ M => M.hasFor
   | .case _ _ _ M _ N => M.hasFor || N.hasFor
-  | .handle _ _ _ _ M => M.hasFor
+  | .handle _ _ _ _ _ M => M.hasFor
   | .unwind _ _ _ M D N => M.hasFor || D.hasFor || N.hasFor
   | .withbor2r _ _ _ _ _ _ _ _ M => M.hasFor
   | .loop .. => true
@@ -619,7 +637,7 @@ def _root_.Frontend.Comp.exitAt : Comp → Option Span
   | .case _ V _ M _ N => V.exitAt.orElse fun _ => M.exitAt.orElse fun _ => N.exitAt
   | .loop _ _ _ V M N => V.exitAt.orElse fun _ => M.exitAt.orElse fun _ => N.exitAt
   | .perform _ _ _ V | .abort _ _ _ V => V.exitAt
-  | .handle _ _ _ _ M => M.exitAt
+  | .handle _ _ _ hr hc M => hr.exitAt.orElse fun _ => hc.exitAt.orElse fun _ => M.exitAt
   | .unwind _ _ _ M D N => M.exitAt.orElse fun _ => D.exitAt.orElse fun _ => N.exitAt
   | .withbor2r _ _ _ _ _ _ _ _ M => M.exitAt
   | .force .. | .top _ => none
@@ -651,7 +669,7 @@ def _root_.Frontend.Comp.anySugar (p : VSugar → Bool) : Comp → Bool
   | .case _ V _ M _ N => V.anySugar p || M.anySugar p || N.anySugar p
   | .loop _ _ _ V M N => V.anySugar p || M.anySugar p || N.anySugar p
   | .perform _ _ _ V | .abort _ _ _ V => V.anySugar p
-  | .handle _ _ _ _ M => M.anySugar p
+  | .handle _ _ _ hr hc M => hr.anySugar p || hc.anySugar p || M.anySugar p
   | .unwind _ _ _ M D N => M.anySugar p || D.anySugar p || N.anySugar p
   | .withbor2r _ _ _ _ _ _ _ _ M => M.anySugar p
   | .force .. | .top _ => false
@@ -677,7 +695,8 @@ def _root_.Frontend.Comp.sugarAt (p : VSugar → Bool) : Comp → Option Span
   | .case _ V _ M _ N => ((V.sugarAt p).orElse fun _ => M.sugarAt p).orElse fun _ => N.sugarAt p
   | .loop _ _ _ V M N => ((V.sugarAt p).orElse fun _ => M.sugarAt p).orElse fun _ => N.sugarAt p
   | .perform _ _ _ V | .abort _ _ _ V => V.sugarAt p
-  | .handle _ _ _ _ M => M.sugarAt p
+  | .handle _ _ _ hr hc M =>
+    ((hr.sugarAt p).orElse fun _ => hc.sugarAt p).orElse fun _ => M.sugarAt p
   | .unwind _ _ _ M D N => ((M.sugarAt p).orElse fun _ => D.sugarAt p).orElse fun _ => N.sugarAt p
   | .withbor2r _ _ _ _ _ _ _ _ M => M.sugarAt p
   | .force .. | .top _ => none
@@ -1457,7 +1476,7 @@ def mResC (inj : Nat → Option (Nat × Nat)) : Comp → Comp
   | .loop sp ℓ src V M N => .loop sp ℓ src (mResV inj V) (mResC inj M) (mResC inj N)
   | .perform sp k i V => .perform sp k i (mResV inj V)
   | .abort sp k i V => .abort sp k i (mResV inj V)
-  | .handle sp k hr hc M => .handle sp k hr hc (mResC inj M)
+  | .handle sp k st hr hc M => .handle sp k st (mResV inj hr) (mResV inj hc) (mResC inj M)
   | .unwind sp x A M D N => .unwind sp x A (mResC inj M) (mResC inj D) (mResC inj N)
   | M => M
 end
@@ -1808,6 +1827,9 @@ structure DivSt where
   templates : List Decl := []
   /-- The instances made, by template and type arguments. -/
   insts : List ((String × List VTy) × String) := []
+  /-- The calls of instances, newest first: the instance, its template's type parameters and the
+  call's type arguments, in the frame of the call. -/
+  instCalls : List (String × List String × List CVTy) := []
   /-- The loops around the code being elaborated, innermost first: how a `return` in the body of
   a counted loop inside them leaves (`forData`).  `[spec §16]` -/
   exits : List LoopExit := []
@@ -2327,7 +2349,7 @@ made while elaborating the declaration it is in). -/
 def refresh (c : TCx) : DM TCx := do
   let st ← get
   let ds := (st.lib ++ st.out ++ st.caps).toArray
-  pure { c with E := { c.E with scope := ⟨ds, ds.size, [], []⟩ } }
+  pure { c with E := { c.E with scope := ⟨ds, ds.size, []⟩ } }
 
 /-! #### The total `for` over data  `[spec §16]`
 
@@ -2854,7 +2876,7 @@ def opsC (c : TCx) : Nat → Comp → List (Nat × Nat)
   | 0, _ => []
   | k + 1, M => match M with
     | .perform _ n i V | .abort _ n i V => (n, i) :: opsV c k V
-    | .handle _ n _ _ M => (opsC c k M).filter (·.1 != n)
+    | .handle _ n _ hr hc M => opsV c k hr ++ opsV c k hc ++ (opsC c k M).filter (·.1 != n)
     | .ret _ V | .absurd _ V => opsV c k V
     | .bind _ _ _ M N _ | .with_ _ M N => opsC c k M ++ opsC c k N
     | .unwind _ _ _ M D N => opsC c k M ++ opsC c k D ++ opsC c k N
@@ -3044,7 +3066,8 @@ def rmSelfInC : Comp → Bool
   | .letUnit _ V M | .letPair _ _ _ V M => rmSelfIn V || rmSelfInC M
   | .case _ V _ M _ N | .loop _ _ _ V M N => rmSelfIn V || rmSelfInC M || rmSelfInC N
   | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
-  | .nuOut _ M | .ascribe _ M _ | .handle _ _ _ _ M => rmSelfInC M
+  | .nuOut _ M | .ascribe _ M _ => rmSelfInC M
+  | .handle _ _ _ hr hc M => rmSelfIn hr || rmSelfIn hc || rmSelfInC M
   | .unwind _ _ _ M D N => rmSelfInC M || rmSelfInC D || rmSelfInC N
   | .withbor2r _ _ _ _ _ _ _ _ M => rmSelfInC M
   | _ => false
@@ -4026,14 +4049,16 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .abort sp k i V => do
       let e := (Frontend.Check.findOp c.E sp "abort" k i).toOption.map (·.2.1.A)
       pure (.abort sp k i (← surfV n c e V))
-    | .handle sp k hr hc M => do
-      let ty (x : Ident) : Option CVTy := (Frontend.Check.lookupVar x.name c.E.vars).bind (c.T[·]?)
+    | .handle sp k st hr hc M => do
+      let hr' ← surfV n c none hr
+      let hc' ← surfV n c none hc
+      let c ← refresh c
       let e : Option CCTy := do
-        let ⟨S, A, R, _⟩ ← Frontend.Check.retRead (← ty hr)
-        let ⟨Es, _⟩ ← Frontend.Check.clausesRead S R (← ty hc)
+        let ⟨S, A, R, _⟩ ← Frontend.Check.retRead (← c.tyV hr')
+        let ⟨Es, _⟩ ← Frontend.Check.clausesRead S R (← c.tyV hc')
         pure (Frontend.Check.effOf
           (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A)
-      pure (.handle sp k hr hc (← surfC n c e M))
+      pure (.handle sp k st hr' hc' (← surfC n c e M))
     | .unwind sp x A M D N => do
       let M' ← surfC n c ((A.bind c.elabV).map (Frontend.Check.effOf (c.E.row.getD []))) M
       let c ← refresh c
@@ -4045,6 +4070,18 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let N' ← surfC n (c.push x.name ((A.bind c.elabV) <|> hd.map (·.2))) exp N
       pure (.unwind sp x A M' D' N')
     | M => pure M
+
+/-- The record of a `for`'s or a stored generator's site, whose types are in the frame of its
+callee's declaration, in the frame `c` of the site's code: at the type arguments of the call of
+the instance `g` (`DivSt.instCalls`), or as it is when `g` is no instance of a template.
+`[spec §15, §19]` -/
+def siteAtCall (c : TCx) (sp : Span) (g : String) (r : SiteRec) : DM SiteRec := do
+  match (← get).instCalls.find? (·.1 == g) with
+  | none => pure r
+  | some (_, names, ts) =>
+    let σ ← (names.zip ts).mapM fun (x, t) => do
+      pure (x, ← (c.surface sp t : Except Error VTy))
+    pure (r.mapTy (·.subst σ))
 
 /-- A handler site of a control effect (SPEC §19): its arguments bound, its body elaborated
 with the site's operations innermost in the row, the handler's type parameters matched against
@@ -4130,16 +4167,15 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     let hrTy ← (cP.surface sp (BoCa.Fig16.LogRel.Core.retTy S A Rc) : Except Error VTy)
     let hcTy ← (cP.surface sp (if i.boxK then BoCa.Fig16.LogRel.Core.clausesTyB S Rc kBound ops
       else BoCa.Fig16.LogRel.Core.clausesTy S Rc ops) : Except Error VTy)
-    let hrN : Ident := ⟨s!"io_hr{i.n}", sp⟩
-    let hcN : Ident := ⟨s!"io_hc{i.n}", sp⟩
+    -- The node holds its clauses, each at its type, and the site's record, at the handler's
+    -- lifetimes and type arguments here.
+    let site := i₀.site.mapTy fun A => (lv A).subst σ
+    let hd : Comp := .handle sp i.n (some site) (.ascribe sp hr hrTy) (.ascribe sp hcV hcTy) M'
     -- A site whose clauses run after it answers its arguments beside its own answer.
-    let hd : Comp := .handle sp i.n hrN hcN M'
-    let hd ← if i.after.isNone then pure hd else do
+    let core ← if i.after.isNone then pure hd else do
       let r : Ident := ⟨s!"io_ar{i.n}", sp⟩
       pure (.bind sp r none hd (.ret sp (binds.foldr (fun (x, _, _) t => Val.pair sp (.var sp x.name) t)
         (.var sp r.name))) false)
-    let core : Comp := .bind sp hrN (some hrTy) (.ret sp hr)
-      (.bind sp hcN (some hcTy) (.ret sp hcV) hd false) false
     pure (binds.foldr (fun (x, T, a) K => Comp.bind sp x (some T) (.ret sp a) K false) core)
 
 /-- `for x in V' { M }; N` over a sized source (`dataSrcOf`), `V'` elaborated: a counted loop,
@@ -4345,13 +4381,11 @@ case io_so{sfx} \{
             let hrT := if (rowAt[h]?.getD "").isEmpty then s!"!({if h == 0 then T else R} => {R})"
               else arrow (if h == 0 then T else R) h
             let hr := if h == 0 then
-                s!"io_ahr{x} : {hrT} <- return (!thunkv fun (io_av{x} : {T}) ->
-    case io_av{x} \{ inl io_ax{x} -> return (inl io_ax{x}) | inr io_ax{x} -> return (inr (inl io_ax{x})) });"
-              else s!"io_ahr{x} : {hrT} <- return (!thunkv fun (io_av{x} : {R}) -> return io_av{x});"
+                s!"(!thunkv fun (io_av{x} : {T}) ->
+    case io_av{x} \{ inl io_ax{x} -> return (inl io_ax{x}) | inr io_ax{x} -> return (inr (inl io_ax{x})) })"
+              else s!"(!thunkv fun (io_av{x} : {R}) -> return io_av{x})"
             let e' := if h == 0 then e else s!"({e})"
-            e := s!"{hr}
-  io_ahc{x} : {clsT} <- return {clsV};
-  handle_with[{k}](io_ahr{x}, io_ahc{x}) {if h == 0 then s!"({e})" else e'}"
+            e := s!"handle_with[{k}](({hr} : {hrT}), ({clsV} : {clsT})) {if h == 0 then s!"({e})" else e'}"
           return e
         let rec reab : List ((Nat × Nat) × String) → String → String
           | [], _ => "absurd ()"
@@ -4699,12 +4733,12 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let hrBody := if looping then
         s!"case io_hv{sfx} \{ inl io_ha{sfx} -> return (inl (inl io_ha{sfx})) | inr io_hl{sfx} -> return (inr io_hl{sfx}) }"
       else s!"return (inl io_hv{sfx})"
-    let handler := s!"io_hr{sfx} : !U ({hrIn} -o {← F Ot}) <- return (!thunkv fun (io_hv{sfx} : {hrIn}) -> {hrBody});
-io_hc{sfx} : ({clT}) * 1 <- return ((!thunkv fun (io_hp{sfx} : (({Tt}) * ({Wt})) * {K}) ->
-  let (io_hxw{sfx}, io_k{sfx}) = io_hp{sfx};
-  let ({x.name}, io_hw{sfx}) = io_hxw{sfx};
-  {destructSrc s!"io_hw{sfx}" wsN}force io_hole_body), ());
-"
+    -- The site's handler pair, written inline in its `handle_with`.
+    let handler := s!"((!thunkv fun (io_hv{sfx} : {hrIn}) -> {hrBody}) : !U ({hrIn} -o {← F Ot})),
+  (((!thunkv fun (io_hp{sfx} : (({Tt}) * ({Wt})) * {K}) ->
+    let (io_hxw{sfx}, io_k{sfx}) = io_hp{sfx};
+    let ({x.name}, io_hw{sfx}) = io_hxw{sfx};
+    {destructSrc s!"io_hw{sfx}" wsN}force io_hole_body), ()) : ({clT}) * 1)"
     -- The body: its terminals resume, and its exits cancel the rest of `g` and leave.
     let leave (tsp : Span) (o : Val) : Comp :=
       let ex : Val := .inr tsp (.pair tsp (tupleVal tsp wsN) o)
@@ -4743,7 +4777,7 @@ io_hc{sfx} : ({clT}) * 1 <- return ((!thunkv fun (io_hp{sfx} : (({Tt}) * ({Wt}))
 | inr io_rv{sfx} -> force io_hole_ret }"
       else s!"let (io_jx{sfx}, io_v{sfx}) = io_jj{sfx};\n{destructSrc s!"io_jx{sfx}" wsN}{r}force io_hole_rest"
     let bindW := s!"{i.w} : {Wt} <- return {tupleSrc wsN};\n"
-    let plain := s!"{bindW}{handler}io_j{sfx} : {Jt} <- handle_with[{i.n}](io_hr{sfx}, io_hc{sfx}) (force io_hole_call);\n"
+    let plain := s!"{bindW}io_j{sfx} : {Jt} <- handle_with[{i.n}]({handler}) (force io_hole_call);\n"
     let core ← if !looping then pure plain else do
       let some (_, _, Rg) := loopRowOf Res | throw ⟨sp, "internal error: a generator's loop"⟩
       let Rgs ← pp Rg
@@ -4751,27 +4785,27 @@ io_hc{sfx} : ({clT}) * 1 <- return ((!thunkv fun (io_hp{sfx} : (({Tt}) * ({Wt}))
       let fCl ← F Rgs
       let Lw := if S.isEmpty then s!"loop ({Jt}) ({Rgs})" else s!"nu X. {fOb} & {fCl}"
       let Kc ← do pure s!"U (({Wt} -o {← F Rgs}) & {← F "1"})"
-      let closer := s!"io_chr{sfx} : !U ({Rgs} -o {← F Rgs}) <- return (!thunkv fun (io_cv{sfx} : {Rgs}) -> return io_cv{sfx});
-io_chc{sfx} : (!U ((({Tt}) * ({Wt})) * {Kc} -o {← F Rgs})) * 1 <- return ((!thunkv fun (io_cp{sfx} : (({Tt}) * ({Wt})) * {Kc}) ->
-  let (io_cxw{sfx}, io_ck{sfx}) = io_cp{sfx};
-  let (io_cx{sfx}, io_cw{sfx}) = io_cxw{sfx};
-  (force io_ck{sfx}).1 io_cw{sfx}), ());
-"
+      let closer := s!"((!thunkv fun (io_cv{sfx} : {Rgs}) -> return io_cv{sfx}) : !U ({Rgs} -o {← F Rgs})),
+  (((!thunkv fun (io_cp{sfx} : (({Tt}) * ({Wt})) * {Kc}) ->
+    let (io_cxw{sfx}, io_ck{sfx}) = io_cp{sfx};
+    let (io_cx{sfx}, io_cw{sfx}) = io_cxw{sfx};
+    (force io_ck{sfx}).1 io_cw{sfx}), ()) : (!U ((({Tt}) * ({Wt})) * {Kc} -o {← F Rgs})) * 1)"
       pure s!"{bindW}io_l{sfx} : {Lg} <- force io_hole_call;
 io_hwf{sfx} : !({Lg} => U ({Lw})) <- return (!thunkv fun (io_hl{sfx} : {Lg}) ->
   io_hf{sfx} <- return (unbang (unfold[{Lw}, {Lg}] (!thunkv fun (io_hs{sfx} : {Lg}) ->
-    < {handler}handle_with[{i.n}](io_hr{sfx}, io_hc{sfx}) ((nu_out (force io_hs{sfx})).1),
-      {closer}handle_with[{i.n}](io_chr{sfx}, io_chc{sfx}) ((nu_out (force io_hs{sfx})).2) >)));
+    < handle_with[{i.n}]({handler}) ((nu_out (force io_hs{sfx})).1),
+      handle_with[{i.n}]({closer}) ((nu_out (force io_hs{sfx})).2) >)));
   return (thunkv nu_in < (nu_out (force io_hf{sfx} io_hl{sfx})).1, (nu_out (force io_hf{sfx} io_hl{sfx})).2 >));
 io_j{sfx} : {Jt} <- return ((unbang io_hwf{sfx}) io_l{sfx});
 "
     let what := "a `for` over a generator"
+    let site ← siteAtCall cw sp g i.site
     let L ← (template sp what (core ++ join ++ after) : SM Comp)
     let hc (h : String) : Option Comp :=
       if h == "io_hole_body" then some body else if h == "io_hole_rest" then some (restOf N)
       else if h == "io_hole_call" then some (.ret sp call')
       else if h == "io_hole_ret" then some (retOut sp (.var sp s!"io_rv{sfx}")) else none
-    let L := L.fill (fun _ => none) hc
+    let L := L.fillS (fun _ => none) hc fun k => if k == i.n then some site else none
     if !(← get).quiet then
       report sp (if looping then s!"`for` is div: `{i.callee}` loops" else
         s!"`for` is total: `{i.callee}` does not loop")
@@ -4821,11 +4855,11 @@ def pullView : Nat → TCx → Span → ItInfo → Val → DM Comp
       let R := s!"(({Tt}) * U ({Q})) + ({Bt})"
       let K := s!"U ((1 -o F ({R})) & F 1)"
       pure s!"io_pq{sfx} : U ({Q}) <- return (thunkv nu_in <
-    io_phr{sfx} : !({Bt} => {R}) <- return (!thunkv fun (io_pv{sfx} : {Bt}) -> return (inr io_pv{sfx}));
-    io_phc{sfx} : (!(({Tt}) * {K} => {R})) * 1 <- return ((!thunkv fun (io_pp{sfx} : ({Tt}) * {K}) ->
-      let (io_px{sfx}, io_pk{sfx}) = io_pp{sfx};
-      return (inl (io_px{sfx}, thunkv nu_in < io_pu{sfx} <- return (); (force io_pk{sfx}).1 io_pu{sfx}, (force io_pk{sfx}).2 >))), ());
-    handle_with[{i.n}](io_phr{sfx}, io_phc{sfx}) (force io_hole_call),
+    handle_with[{i.n}](((!thunkv fun (io_pv{sfx} : {Bt}) -> return (inr io_pv{sfx})) : !({Bt} => {R})),
+      (((!thunkv fun (io_pp{sfx} : ({Tt}) * {K}) ->
+        let (io_px{sfx}, io_pk{sfx}) = io_pp{sfx};
+        return (inl (io_px{sfx}, thunkv nu_in < io_pu{sfx} <- return (); (force io_pk{sfx}).1 io_pu{sfx}, (force io_pk{sfx}).2 >))), ()) :
+        (!(({Tt}) * {K} => {R})) * 1)) (force io_hole_call),
     return () >);
 io_pf{sfx} <- return (unbang (unfold[pull ({Tt}) ({Bt}) 1, U ({Q})] (!thunkv fun (io_pa{sfx} : U ({Q})) ->
   < io_po{sfx} <- (nu_out (force io_pa{sfx})).1;
@@ -4851,11 +4885,12 @@ io_pf{sfx} <- return (unbang (unfold[pull ({Tt}) ({Bt}) 1, {St}] (!thunkv fun (i
   < -- One turn of the generator's loop, handled: one handler site, so that the continuation it
     -- keeps is of one code.
     io_pob{sfx} : !({Lg} => {R}) <- return (!thunkv fun (io_pl{sfx} : {Lg}) ->
-      io_phr{sfx} : !(({Bt}) + {Lg} => {R}) <- return (!thunkv fun (io_pv{sfx} : ({Bt}) + {Lg}) -> return (inr io_pv{sfx}));
-      io_phc{sfx} : (!(({Tt}) * {K} => {R})) * 1 <- return ((!thunkv fun (io_pp{sfx} : ({Tt}) * {K}) ->
-        let (io_px{sfx}, io_pk{sfx}) = io_pp{sfx};
-        return (inl (io_px{sfx}, thunkv nu_in < io_pu{sfx} <- return (); (force io_pk{sfx}).1 io_pu{sfx}, (force io_pk{sfx}).2 >))), ());
-      handle_with[{i.n}](io_phr{sfx}, io_phc{sfx}) ((nu_out (force io_pl{sfx})).1));
+      handle_with[{i.n}](((!thunkv fun (io_pv{sfx} : ({Bt}) + {Lg}) -> return (inr io_pv{sfx})) :
+          !(({Bt}) + {Lg} => {R})),
+        (((!thunkv fun (io_pp{sfx} : ({Tt}) * {K}) ->
+          let (io_px{sfx}, io_pk{sfx}) = io_pp{sfx};
+          return (inl (io_px{sfx}, thunkv nu_in < io_pu{sfx} <- return (); (force io_pk{sfx}).1 io_pu{sfx}, (force io_pk{sfx}).2 >))), ()) :
+          (!(({Tt}) * {K} => {R})) * 1)) ((nu_out (force io_pl{sfx})).1));
     io_po{sfx} : {R} <- case io_pa{sfx} \{
         inl io_pg{sfx} -> return ((unbang io_pob{sfx}) io_pg{sfx})
       | inr io_pq{sfx} ->
@@ -4879,18 +4914,21 @@ io_pf{sfx} <- return (unbang (unfold[pull ({Tt}) ({Bt}) 1, {St}] (!thunkv fun (i
     },
     case io_pa{sfx} \{
       inl io_pg{sfx} ->
-        io_chr{sfx} : !({Rgs} => {Rgs}) <- return (!thunkv fun (io_cv{sfx} : {Rgs}) -> return io_cv{sfx});
-        io_chc{sfx} : (!(({Tt}) * {Kc} => {Rgs})) * 1 <- return ((!thunkv fun (io_cp{sfx} : ({Tt}) * {Kc}) ->
-          let (io_cx{sfx}, io_ck{sfx}) = io_cp{sfx};
-          io_cu{sfx} <- return ();
-          (force io_ck{sfx}).1 io_cu{sfx}), ());
-        io_cz{sfx} <- handle_with[{i.n}](io_chr{sfx}, io_chc{sfx}) ((nu_out (force io_pg{sfx})).2);
+        io_cz{sfx} <- handle_with[{i.n}](((!thunkv fun (io_cv{sfx} : {Rgs}) -> return io_cv{sfx}) :
+            !({Rgs} => {Rgs})),
+          (((!thunkv fun (io_cp{sfx} : ({Tt}) * {Kc}) ->
+            let (io_cx{sfx}, io_ck{sfx}) = io_cp{sfx};
+            io_cu{sfx} <- return ();
+            (force io_ck{sfx}).1 io_cu{sfx}), ()) : (!(({Tt}) * {Kc} => {Rgs})) * 1))
+          ((nu_out (force io_pg{sfx})).2);
         return ()
     | inr io_pq{sfx} -> (nu_out (force io_pq{sfx})).2
     } >)));
 return (thunkv nu_in < (nu_out (force io_pf{sfx} io_ps{sfx})).1, (nu_out (force io_pf{sfx} io_ps{sfx})).2 >)"
+    let site ← siteAtCall c sp g i.site
     let L ← (template sp "a stored generator" src : SM Comp)
-    let L := L.fill (fun _ => none) fun h => if h == "io_hole_call" then some (.ret sp call') else none
+    let L := L.fillS (fun _ => none) (fun h => if h == "io_hole_call" then some (.ret sp call') else none)
+      fun k => if k == i.n then some site else none
     surfC n c none L
 
 /-- A declaration with its surface forms elaborated, in the context the checker checks it in. -/
@@ -4986,7 +5024,9 @@ def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) → Option 
       σs := σs ++ [(x, ← c'.surface sp t)]
     let key := (tn.name, σs.map (·.2.strip))
     let st ← get
-    if let some name := st.insts.lookup key then return (name, extras)
+    if let some name := st.insts.lookup key then
+      modify fun st => { st with instCalls := (name, names, ts₀) :: st.instCalls }
+      return (name, extras)
     -- An instance of a generic recursive group's machine source keeps the suffix that makes it a
     -- machine (`recMachine`): `g__gN__mach_src`, whose machine is `g__gN__mach`.  `[spec §31]`
     let name := if tn.name.endsWith "__mach_src" then
@@ -5028,7 +5068,7 @@ def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) → Option 
     (modify (· ++ [(sp, Origin.defKey { name, origin := tn.name, targs := key.2, body := name })]) :
       SM Unit)
     let st' ← (elabDecl n { st with insts := (key, name) :: st.insts, libNames } inst : SM DivSt)
-    set { st' with quiet := st.quiet }
+    set { st' with quiet := st.quiet, instCalls := (name, names, ts₀) :: st'.instCalls }
     return (name, extras)
 
 /-- The instance of the case of the family `fam` at `T` (SPEC §36): its name, and the lifetimes
@@ -5478,7 +5518,10 @@ def specC : Nat → TCx → Comp → DM Comp
       | none => pure (.loop sp ℓ src (← specV n c V) M' (← specC n c N))
     | .perform sp k i V => do pure (.perform sp k i (← specV n c V))
     | .abort sp k i V => do pure (.abort sp k i (← specV n c V))
-    | .handle sp k hr hc M => do pure (.handle sp k hr hc (← specC n c M))
+    | .handle sp k st hr hc M => do
+      let hr' ← specV n c hr
+      let hc' ← specV n c hc
+      pure (.handle sp k st hr' hc' (← specC n c M))
     | .unwind sp x A M D N => do
       let t := bindTy c A M
       pure (.unwind sp x A (← specC n c M) (← specC n c.pushDead D) (← specC n (c.push x.name t) N))
@@ -5604,10 +5647,9 @@ def polyDecls (ds : List Decl) : Except Error (List Decl × PolyTab × List (Dec
     | d => out := out ++ [d]
   pure (out, tab, pairs)
 
-/-- The program with its sugar elaborated, the number of library declarations it begins with,
-and the handler sites the elaboration of effects made (`SiteRec`), recording the origins of
-generated code.  `[spec §11, §14]` -/
-def elaborateS (p : Program) : SM (Program × Nat × List SiteRec) := do
+/-- The program with its sugar elaborated and the number of library declarations it begins with,
+recording the origins of generated code.  `[spec §11, §14]` -/
+def elaborateS (p : Program) : SM (Program × Nat) := do
   let libRaw (m : String) : Except Error (List Decl) :=
     match library m with
     | some (.ok src) => match parseProgram src with
@@ -5765,21 +5807,19 @@ def elaborateS (p : Program) : SM (Program × Nat × List SiteRec) := do
     | .def_ sp n ps A V mk => return .def_ sp n ps A (← V.elab false) mk
     | .main sp C M => return .main sp C (← M.elab false)
     | d => pure d
-  pure (⟨decls⟩, lib.length + ioN, fxr.sites)
+  pure (⟨decls⟩, lib.length + ioN)
 
 /-- A program with its sugar elaborated: its declarations, the number of library declarations it
-begins with, the origins of its generated code, and the handler sites the elaboration of effects
-made (`SiteRec`). -/
+begins with, and the origins of its generated code. -/
 structure Sugared where
   prog : Program
   lib : Nat
   origins : Origins
-  sites : List SiteRec
 
 /-- The program with its sugar elaborated, with the origins of its generated code. -/
 def elaborateO (p : Program) : Except Error Sugared := do
-  let ((q, n, x), os) ← (elaborateS p).run []
-  pure ⟨q, n, os, x⟩
+  let ((q, n), os) ← (elaborateS p).run []
+  pure ⟨q, n, os⟩
 
 /-- The program with its sugar elaborated, and the number of library declarations it begins
 with.  `[spec §11, §14]` -/
