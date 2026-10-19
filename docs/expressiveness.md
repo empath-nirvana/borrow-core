@@ -1808,7 +1808,7 @@ and the next three extend the document; §15, the revised build units, ends it.
 **Method.** Three subagents of this session each wrote the *hard part* of every program in a
 category in today's surface, ran it, and recorded the exact refusal of each natural shape that
 fails. I re-ran the load-bearing ones (measured, §12.8). Every program is in
-`docs/expressiveness-probes/<category>/`, runnable as `$B run FILE` (with `< FILE.in` where an
+`docs/expressiveness-probes/<category>/` (the first pass's probes are in `first-pass/`, and T01–T14 in `tests/`), runnable as `$B run FILE` (with `< FILE.in` where an
 `.in` exists). The status words are:
 - **natural**: the functionality in a reasonable shape;
 - **workaround**: it runs in a shape a refusal forced (the refusal is quoted);
