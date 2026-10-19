@@ -418,7 +418,7 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   row.  `Γ₂` is persistent where `Σ` has an unrestricted operation at some depth of its cancel
   rows (`Row.UnrD`), since the finaliser runs in the cancels below it, and the errors pending at the
   finaliser are persistent where `Σ_D` has one.  The finaliser's row does not hold `Div`: a
-  finaliser runs to its end in a cancel (SPEC §14, *Open*).  `[then]` at option A, the finaliser at `F 1`, is `CDerivesP.effThenA`.
+  finaliser must terminate (decision 69).  `[then]` at option A, the finaliser at `F 1`, is `CDerivesP.effThenA`.
   `[spec §14, §19, §24, §27]` -/
   | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
       (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)

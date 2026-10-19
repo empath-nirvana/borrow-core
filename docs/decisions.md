@@ -882,3 +882,8 @@ Each entry: the decision, and why. Newest last.
     - No program that runs today is rejected: the frontend writes no `Div` in any row until B2, and
       every kernel program's handled rows are without `Div`. `operator-reconcile.bc` is already
       pending.
+69. **A finaliser does not tick (#563; the user's decision of 2026-10-18).**
+    - In the user's words: "I think no div in a finalizer is a feature not a bug."
+    - A finaliser's row may not hold `Div`, by design: a finaliser runs during cleanup and must
+      terminate. `[then]` asks it as a premise (`effThen`'s `hSD : Row.divB SD = false`).
+    - It is not a temporary restriction, and #564 does not lift it.

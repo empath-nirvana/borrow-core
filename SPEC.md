@@ -1611,7 +1611,8 @@ and `ewp_handle_or` (`Core/EffRules.lean`, `Core/EffFin.lean`), with `ewp_frame_
 `ewp_frame_then` and `ewp_handle` their instances at `Π = ⊥`.
 
 - **`[then]`** at a row holding `Div` (`cwp_then`): the finaliser's row `Σ_D` does not hold `Div`
-  (*Open*).
+  (`effThen`'s `hSD`), by design (decision 69): a finaliser runs during cleanup and must
+  terminate.
 - **`[handle]` of another name around a computation that ticks** is typed only when its clauses
   resume `κ` in tail position (decision 68, a temporary restriction #564 lifts): `effHandleT`
   (`Core/DivHandle.lean`) writes the clauses out from a tuple `gs` of answering functions
@@ -1657,9 +1658,6 @@ obligation for a looping `main` is §11's.
   functions*), and its instance is specialized as any function is, so a div function may be
   generic (a `fn f[A](g: U (pull A 1 1)) -> …` that drains `g`).
 - **`div_fuel` is `driveE`** by construction, not by a proved equation.
-- **A finaliser at a row that holds `Div`.** `[then]`'s finaliser row does not hold `Div`
-  (`effThen`'s `hSD`): a finaliser runs to its end in a cancel, a least fixed point, and a ticking
-  one would need the cancel's obligation to be a greatest fixed point too.
 - **`[handle]` of another name at a clause given `κ`** around a computation that ticks
   (`handle_general`, #564).
 - The model interpreter (`bcc interp`) copies the remaining input on every read.
@@ -2842,7 +2840,7 @@ Six rules, over `CDerives` with its context premises (§10):
     instance (`CDerives.effHandle`).
   - at a handled row that holds `Div` (§14), `[handle]` is `effHandleT`, whose clauses resume `κ`
     in tail position; `effHandleV` and `effHandleVB` ask the handled row not to hold `Div`, and
-    `[then]` asks it of the finaliser's row (decision 68, §14 *Open*).
+    `[then]` asks it of the finaliser's row (decisions 68 and 69).
 - **The linear `κ`** is the same `&` pair as the others, its cancel branch at `⊤`, so the clause
   can only resume it. The machine builds `κ` by the operation's qualifier (§25): at `lin` and `aff`
   it owns a cell, and a linear `κ`'s cancel branch has no step.
@@ -7271,7 +7269,8 @@ no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the chec
   `cwp`, the greatest fixed point over segments with `Closing` (`effWp`). `ewp_frame_plain`,
   `ewp_frame_then` and `ewp_handle` are stated once at `opTable T ∨ Π`. `[handle]` around a
   computation that ticks is `effHandleT`, at clauses that resume `κ` in tail position (decision
-  68); `effHandleV`, `effHandleVB` and `[then]`'s finaliser ask their rows not to hold `Div`.
+  68); `effHandleV` and `effHandleVB` ask their rows not to hold `Div`, and `[then]`'s finaliser
+  row does not hold `Div`, by design (decision 69).
   `fundamentalC`, `adequacyC` and `total_every_run` keep their statements; `divFuel_every_run`,
   `runtime_every_run`, and the kernel program `div-residual` (`3`, `live 0` at every stage). §19,
   *Divergence*: the greatest fixed point at a row that holds `Div` replaces "there is no second
