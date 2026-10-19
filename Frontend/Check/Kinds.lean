@@ -201,7 +201,8 @@ structure HandleSite where
 /-- Two `handle` nodes report alike when their sources, names, kinds and boxing agree. -/
 instance : BEq HandleSite := ⟨fun a b => a.sp == b.sp && a.n == b.n && a.ks == b.ks && a.boxed == b.boxed⟩
 
-/-- The `handle` nodes of `t`, outermost first, within the depth `fuel`. -/
+/-- The `handle` nodes of `t`, in the order of the source, within the depth `fuel`: a node's
+clauses, which are written before it, then the node, then its handled computation. -/
 def TExpr.handleSites : Nat → TExpr → List HandleSite
   | 0, _ => []
   | f + 1, t =>
@@ -211,7 +212,10 @@ def TExpr.handleSites : Nat → TExpr → List HandleSite
       -- `effHandleT`'s clauses are tail-resumptive by its rule (`tailClause_premise`).
       | .effHandleT i _ _ _ _ _ E _ n _ _ _ st _ _ => [⟨i.sp, n, E.map tailKind, false, st⟩]
       | _ => []
-    here ++ t.children.flatMap fun (_, k) => TExpr.handleSites f k
+    match here, t.children with
+    | _ :: _, (_, tc) :: rest =>
+        TExpr.handleSites f tc ++ here ++ rest.flatMap fun (_, k) => TExpr.handleSites f k
+    | _, ks => here ++ ks.flatMap fun (_, k) => TExpr.handleSites f k
 
 /-- **The site kind the elaboration claims, against the clause kinds** at the `handle` nodes of
 each name: a `for`'s site runs the loop's body as its clause, resumed or cancelled in place, so no

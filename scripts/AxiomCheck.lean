@@ -54,8 +54,8 @@ import Frontend.Check.TFacts
 #print axioms BoCa.Fig16.LogRel.Core.Check.classifyHandler_quals
 #print axioms BoCa.Fig16.LogRel.Core.Check.classifyHandler_sound
 #print axioms BoCa.Fig16.LogRel.Core.Check.clauseParts_erase
-#print axioms BoCa.Fig16.LogRel.Core.Check.TTied.effHandle
-#print axioms BoCa.Fig16.LogRel.Core.Check.TTied.effHandleB
+#print axioms Frontend.Check.TTied.effHandle
+#print axioms Frontend.Check.TTied.effHandleB
 #print axioms Frontend.Check.valFormB_sound
 #print axioms Frontend.Check.deadP_of_live
 #print axioms Frontend.Check.siteOf_ops
