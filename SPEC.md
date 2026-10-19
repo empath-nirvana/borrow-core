@@ -1610,9 +1610,9 @@ frame lemmas are stated once at a table `opTable T ∨ Π`: `ewp_frame_plain_or`
 and `ewp_handle_or` (`Core/EffRules.lean`, `Core/EffFin.lean`), with `ewp_frame_plain`,
 `ewp_frame_then` and `ewp_handle` their instances at `Π = ⊥`.
 
-- **`[then]`** at a row holding `Div` (`cwp_then`): the finaliser's row `Σ_D` does not hold `Div`
-  (`effThen`'s `hSD`), by design (decision 69): a finaliser runs during cleanup and must
-  terminate.
+- **`[then]`** at a row holding `Div` (`cwp_then`): finalisers are total (decision 69). The typing
+  rule that ensures it is that the finaliser's row `Σ_D` does not hold `Div` (`effThen`'s `hSD`).
+  A finaliser may still perform operations and raise.
 - **`[handle]` of another name around a computation that ticks** is typed only when its clauses
   resume `κ` in tail position (decision 68, a temporary restriction #564 lifts): `effHandleT`
   (`Core/DivHandle.lean`) writes the clauses out from a tuple `gs` of answering functions
@@ -1660,6 +1660,13 @@ obligation for a looping `main` is §11's.
 - **`div_fuel` is `driveE`** by construction, not by a proved equation.
 - **`[handle]` of another name at a clause given `κ`** around a computation that ticks
   (`handle_general`, #564).
+- **Finalisers are total, as a theorem** (decision 69): every run of a finaliser terminates, the
+  handler clauses its operations reach included. `[then]`'s premise keeps the finaliser's own row
+  free of `Div`, so its own run is a least fixed point (`ewpTS`): it performs finitely many
+  operations, each segment finite. A clause it reaches runs at the handler's outer row: at
+  `effHandleV` and `effHandleVB` that row is free of `Div` and the clause's run is a least fixed
+  point too, but an `effHandleT` clause's answering function is at a row `Σ_N` that may hold
+  `Div`, and may tick without end. Not proved.
 - The model interpreter (`bcc interp`) copies the remaining input on every read.
 
 ---
@@ -7269,12 +7276,14 @@ no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the chec
   `cwp`, the greatest fixed point over segments with `Closing` (`effWp`). `ewp_frame_plain`,
   `ewp_frame_then` and `ewp_handle` are stated once at `opTable T ∨ Π`. `[handle]` around a
   computation that ticks is `effHandleT`, at clauses that resume `κ` in tail position (decision
-  68); `effHandleV` and `effHandleVB` ask their rows not to hold `Div`, and `[then]`'s finaliser
-  row does not hold `Div`, by design (decision 69).
+  68); `effHandleV` and `effHandleVB` ask their rows not to hold `Div`. Finalisers are total
+  (decision 69): `[then]`'s finaliser row does not hold `Div`, and the theorem is open.
   `fundamentalC`, `adequacyC` and `total_every_run` keep their statements; `divFuel_every_run`,
   `runtime_every_run`, and the kernel program `div-residual` (`3`, `live 0` at every stage). §19,
   *Divergence*: the greatest fixed point at a row that holds `Div` replaces "there is no second
-  fixed point". The backend replaces `iterate` by its fixed point (`expandIter`). The frontend
+  fixed point". The typed term (§3) has a generated node per new rule, `iterate`, `divFuel`, `reify`
+  and `effHandleT`, each with its `TTied` builder. The backend replaces `iterate` by its fixed
+  point (`expandIter`). The frontend
   writes no `Div`; every corpus output, golden and count is unchanged.
 - **0.74** (2026-10-18) — §3, *What the checker returns: the typed term* (#559): the checker
   returns a typed term with one node per rule application and a generated typed derivation that

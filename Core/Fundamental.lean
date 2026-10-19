@@ -448,7 +448,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   clauses written out from a tuple `gs` of answering functions (`tailTuple`), each at a row `Σ_N`
   of linear operations below `Σ`; an abortive operation's clause is its function itself.  The
   handled row may hold `Div` (decision 68).  `[spec §14, §19]` -/
-  | effHandleT {Δ Γ Γ₁ Γ₂ Hr Hc e} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+  | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
       {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
       (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
       (hc : CDerives Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
