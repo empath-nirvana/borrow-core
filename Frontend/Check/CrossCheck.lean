@@ -54,6 +54,7 @@ deriving instance ToExpr for Frontend.HInfo
 deriving instance ToExpr for Frontend.ItInfo
 deriving instance ToExpr for Frontend.VSugar
 deriving instance ToExpr for Frontend.LoopSrc
+deriving instance ToExpr for Frontend.SchemeMark
 deriving instance ToExpr for Frontend.Val, Frontend.Comp
 deriving instance ToExpr for Frontend.Mark
 deriving instance ToExpr for Frontend.OpKind
@@ -83,7 +84,7 @@ def defErasure (p : Program) (k : Nat) : Option BoCa.Expr :=
     let E := Env.top ds k
     match E.elabV BoCa.Lifetime.LifeCtx.empty A with
     | .error _ => none
-    | .ok A' => match chkV checkFuel E BoCa.Lifetime.LifeCtx.empty [] V A' with
+    | .ok A' => match (chkV checkFuel E BoCa.Lifetime.LifeCtx.empty [] V A').run' [] with
       | .ok r => some r.e
       | .error _ => none
   | _ => none

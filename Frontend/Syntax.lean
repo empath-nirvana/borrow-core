@@ -462,6 +462,13 @@ def LoopSrc.strip : LoopSrc → LoopSrc
   | .each x => .each x.strip
   | s => s
 
+/-- A fixed scheme the elaborator writes, recorded on the value it wrote (`Val.mark`): the checker
+checks the value as written and builds the scheme's derived node over it (SPEC §3). -/
+inductive SchemeMark where
+  /-- A string literal's table (SPEC §17): the `!` function from an index to the bytes `bs`. -/
+  | litFn (bs : List Nat)
+  deriving DecidableEq, Repr, Inhabited
+
 mutual
 /-- Value-judged expressions (syntax-core §6.1), checked at a value type. -/
 inductive Val where
@@ -508,6 +515,9 @@ inductive Val where
   | lend (sp : Span) (x : Ident) (m : Mode)
   /-- A surface form that needs types, elaborated away before checking. -/
   | sugar (sp : Span) (s : VSugar)
+  /-- `V`, a fixed scheme the elaborator wrote, marked `k`: checked as `V`, its typed node the
+  scheme's derived node (SPEC §3). It is printed as `V`. -/
+  | mark (sp : Span) (k : SchemeMark) (V : Val)
 
 /-- Computations (syntax-core §6.2), checked at a computation type. -/
 inductive Comp where
@@ -829,6 +839,7 @@ def Val.strip : Val → Val
   | .shorten _ m σ a V => .shorten .none m σ.strip a.strip V.strip
   | .lend _ x m => .lend .none x.strip m
   | .sugar _ s => .sugar .none s.strip
+  | .mark _ k V => .mark .none k V.strip
 
 def Comp.strip : Comp → Comp
   | .ret _ V => .ret .none V.strip
@@ -898,7 +909,7 @@ def Val.span : Val → Span
   | .thunk sp _ | .thunkv sp _ | .bangThunk sp _ | .bangThunkv sp _ | .unbang sp _
   | .boxed sp _ _ | .unbox sp _ | .sub sp _ _ | .roll sp _ | .unroll sp _ | .run sp _
   | .app sp _ _ | .inst sp _ _ | .ascribe sp _ _ | .const sp _ | .shorten sp _ _ _ _
-  | .lend sp _ _ | .sugar sp _ => sp
+  | .lend sp _ _ | .sugar sp _ | .mark sp _ _ => sp
 
 /-- The span of a computation. -/
 def Comp.span : Comp → Span

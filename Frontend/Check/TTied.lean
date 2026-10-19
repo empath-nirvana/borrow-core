@@ -1,5 +1,5 @@
 import Frontend.Check.Tied
-import Frontend.Check.TDerives
+import Frontend.Check.Weaken
 
 /-!
 # Frontend — Check — tied derivations of the typed term  `[spec §19, §29]`
@@ -41,11 +41,6 @@ variable {Δ : LifeCtx} {Γ : Ctx CVTy} (i : TInfo)
 /-- A rule that reads no row, at a node with no premise: tied at every effect context. -/
 theorem ofAt {t : TExpr} {j : Jdg} (h : ∀ Ξ, TDerivesAt Ξ Δ Γ t j) : TTied [] [] Δ Γ t j :=
   ⟨fun _ Ξ _ => h Ξ, (h fun _ => []).toP⟩
-
-/-- A closed term typed by a lemma of `Core/`, with no operation. -/
-theorem scheme {e : BoCa.Expr} {j : Jdg} (h : CDerives Δ Γ e j) (he : e.effFree = true) :
-    TTied [] [] Δ Γ (.scheme i j e) j :=
-  ⟨fun _ _ _ => .scheme (CDerivesAt.ofEffFree h he), .scheme h⟩
 
 /-- A derivation that uses a relaxed rule: its tie is not claimed. -/
 theorem pinned {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (q : Pin) (h : TDerivesP Δ Γ t j) :
@@ -429,15 +424,18 @@ theorem effHandleT (u : List Bool) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ 
 /-! ### Derived forms -/
 
 /-- `dtorE T xᵢ; M`, as `drop_derives`: `unitE` over `lolliE` of the variable and the
-destructor, a `scheme`.  `[spec §12]` -/
+destructor's derived node.  `[spec §12]` -/
 theorem drop (ix : TInfo) (u : List Bool) {p : Pins} {s : CRow} {Γ₁ Γ₂ : Ctx CVTy} {k : Nat} {T : CVTy} {t : TExpr}
     {C : CCTy} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂)
     (hx : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γ₁ k T) (hT : HasDtor T)
-    (hE : (dtorE T).effFree = true) (h : TTied p s Δ Γ₂ t (.comp C)) :
+    (hc : BoCa.Fig16.LogRel.Core.closedAt 0 (dtorE T) = true) (hE : (dtorE T).effFree = true)
+    (h : TTied p s Δ Γ₂ t (.comp C)) :
     TTied p s Δ Γ (.unitE i (.comp C) C u
         (.lolliE ix (.val .unit) T .unit u (.var ix (.val T) k T)
-          (.scheme ix (.val (.lolli T .unit)) (dtorE T))) t) (.comp C) := by
-  have hd := scheme (Δ := Δ) ix (dtor_wf hT (BoCa.Fig16.LogRel.Core.kill_dead Γ₁)) hE
+          (.dtor ix (.val (.lolli T .unit)) T)) t) (.comp C) := by
+  have hd : TTied [] [] Δ (BoCa.Fig16.LogRel.Core.kill Γ₁) (.dtor ix (.val (.lolli T .unit)) T)
+      (.val (.lolli T .unit)) :=
+    ofAt fun _ => .dtor hT hc hE (BoCa.Fig16.LogRel.Core.kill_dead Γ₁)
   have hl := lolliE (Δ := Δ) ix u (BoCa.Fig16.LogRel.Core.split_kill' Γ₁).toP (var ix hx) hd
   simpa using unitE i u hs hl h
 
@@ -492,6 +490,29 @@ theorem shorten {M : CLife → CVTy → CVTy} {leaf : TInfo → CLife → CLife 
             (var i (.here (.cons (BoCa.Fig16.LogRel.Core.kill_dead Γ)))) hle))))
       exact of_sigs (s' := s ∪ []) (fun _ hΞ o ho => hΞ o (by simpa using ho))
         (by simpa [shortenT, BoCa.Fig16.LogRel.Core.Shape.famTy] using hr)
+
+/-- **A string literal's table** (SPEC §17): the derived node over the literal's typed term, whose
+erasure is the table of the bytes `bs`. -/
+theorem litFn {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} {bs : List Nat}
+    (hb : t.erase = BoCa.Fig16.LogRel.Core.Check.litFnE bs)
+    (hcl : BoCa.Fig16.LogRel.Core.closedAt 0 (BoCa.Fig16.LogRel.Core.Check.litFnE bs) = true)
+    (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.litFn i j bs t) j :=
+  ⟨fun hn Ξ hΞ => .litFn (h.1 hn Ξ hΞ) hb hcl, .litFn h.2 hb hcl⟩
+
+/-- **A `def`'s body at its use**: the `use` node over the body, its absorption the body's.
+`[spec §10]` -/
+theorem use {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (name : String) (decl : Nat)
+    (targs : List CVTy) (h : TTied p s Δ Γ t j) :
+    TTied p s Δ Γ (.use i j name decl targs (t.absF Δ) t) j :=
+  ⟨fun hn Ξ hΞ => .use (h.1 hn Ξ hΞ) rfl, .use h.2 rfl⟩
+
+/-- **Weakening of a checked derivation** by slots inserted inside its context, every live one at a
+type the term's absorption holds of (`TDerivesAt.weaken`, `TDerivesP.weaken`).  `[spec §10]` -/
+theorem weaken {p : Pins} {s : CRow} {Γa Γb Γp : Ctx CVTy} {t : TExpr} {j : Jdg} {f : AbsF}
+    (h : TTied p s Δ (Γa ++ Γb) t j) (hf : t.absF Δ = some f) (hp : LiveP f.eval Γp) :
+    TTied p s Δ (Γa ++ Γp ++ Γb) (t.shift Γp.length Γa.length) j :=
+  ⟨fun hn Ξ hΞ => ((h.1 hn Ξ hΞ).weaken Γa Γb Γp f rfl hf hp).1,
+    (h.2.weaken Γa Γb Γp f rfl hf hp).1⟩
 
 end TTied
 

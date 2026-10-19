@@ -81,8 +81,9 @@ agreed on #552, and loops U1–U4 are taken as decided and placed in the new pip
 - **Defects** (§7.2). Eight, each with its root fix. The largest:
   - the checker discards the types it computes;
   - the checker re-checks a `def`'s body at every use and never emits `[let-poly]`. That is the
-    root of #509 and of most of the check time of `corpus/float-arith.bc` (measured: `check`
-    44.6 s of 65.8 s);
+    root of #509 and of most of the check time of `corpus/float-arith.bc` (measured in C2: the
+    `check` stage 898 ms of 1217 ms, and 325 ms of 634 ms once each `def` is checked once per
+    key; the 44.6 s of 65.8 s first given here did not reproduce);
   - every copy and drop is inferred from free variables;
   - the stack-slot decision re-derives T1.
 
@@ -123,14 +124,20 @@ agreed on #552, and loops U1–U4 are taken as decided and placed in the new pip
   - The backend's unification (`Backend/Clos/Types.lean:26–39`).
 
   `checkedOf` runs `checkProgram`, which elaborates (`Program.lean:183`), and then
-  `Sugar.elaborateO` again for `ioMainOf` (`Driver.lean:63`). Measured on `bench/sieve`: `check`
-  2590 ms and the second `elaborate` 1907 ms, of 6753 ms in all.
-- **Defs at each use.** The checker resolves a `def` to its body and re-checks it at the use
+  `Sugar.elaborateO` again for `ioMainOf` (`Driver.lean:63`). C0 removed the second elaboration.
+  Measured in C2 (`bcc compile --timings`, median of 5 interleaved runs, load average 1.7) on
+  `bench/sieve`: `check` 43 ms of 78 ms before C2, 39 ms of 74 ms after. The 2590 ms and
+  1907 ms of 6753 ms first given here were taken at a load average of 25–33 and did not
+  reproduce.
+- **Defs at each use.** The checker resolved a `def` to its body and re-checked it at the use
   (`Checker.lean:46–51`, `:53–62`), so `main`'s erasure holds a copy per use. It never emits
   `[let-poly]`. `checkProgram_letPoly` recovers that rule from the copies (`Program.lean:240–246`;
-  `Frontend/README.md:199`). Measured on `corpus/float-arith.bc`: `check` 44596 ms (of which the
-  second elaboration's 3650 ms is the elaboration share), `total` 65848 ms, 2080 codes and
-  142937 nodes after conversion.
+  `Frontend/README.md:199`). C2 checks each `def` once per key and places the body at each use
+  (a `use` node, SPEC §3); the erasure still holds a copy per use. Measured in C2 on
+  `corpus/float-arith.bc` (`bcc compile --timings`, median of 5 interleaved runs, load average
+  1.7): `check` 898 ms of 1217 ms before C2, 325 ms of 634 ms after, 2080 codes and 142937
+  nodes after conversion either way. The 44596 ms of 65848 ms first given here did not reproduce
+  (C0 measured 783 ms).
 - **Kernel programs carry no `Checked`.** `bcc kernel` converts a bare `Expr`
   (`Driver.lean:351–352`, `Backend/Kernel.lean:171–212`), and "the cancels and the shapes are not
   typed" (`Kernel.lean:35`).
@@ -341,6 +348,16 @@ needs it.
   persistent externs (`Env.forDef`, `Steps.lean:452–456`). One code per key is sound when the
   body is closed, which is `[let-poly]`'s premise (`closedAt`, `CDerives.letPoly`'s `hcl`). That
   is a check on data, not a reconstruction.
+- **Weakening at a use** (C2). Weakening by dead slots (`CDerives.append_dead`,
+  `CDerives.insert_dead`) is not enough to place a body checked once at its uses: the checker
+  lets a body absorb an unused live slot of the use's context wherever its rules can (a
+  persistent slot at a leaf, any slot at `⟨⟩`), and a program can need it to (`x <- return 5;
+  return k` with `def k : 1 = ()` is accepted, `x` absorbed by `k`'s body). C2 proves weakening by
+  inserted slots whose live ones satisfy the body's absorption (`TDerivesAt.weaken`,
+  `TDerivesP.weaken`), read off the typed term's rules (`TExpr.absF`) and recorded on the `use`
+  node. The key includes the lifetime context: the checker numbers lifetime binders from it
+  (`Δ.freshVar`), so a body's typed term and type differ by it. A use under a lifetime binder or
+  a borrow is a key of its own.
 - **Spans.** Every node of the core syntax has a span (`Frontend/Syntax.lean:442–536`). Keeping
   them costs one field and gives #532 its source locations.
 
@@ -601,7 +618,9 @@ N2 and N3. (a) and (d) are unchanged.
    changing a `CDerives` rule or a theorem's statement beyond `e := t.erase`. Stop and report: the
    recommendation of §2.3 is wrong there.
 2. **Check time** (C1): the corpus check time rises by more than 25%. Re-examine the node
-   representation before going on.
+   representation before going on. Measured in C2 (`bcc check` on every program, median of 5
+   interleaved runs, load average 1.4–3.5): the corpus (579 programs) 41.8 s before C2 and
+   38.1 s after; `bench/` (24 programs) 4.8 s and 3.2 s.
 3. **The inventory is incomplete**: a new-backend stage needs a fact that is neither on the typed
    term nor the 0-CFA's. The fact is added to the typed term (§2.4) and a row to §1.2. It is not
    recovered in the backend. Three such additions after N2 mean the inventory method was wrong.
@@ -694,7 +713,8 @@ lowers some counts (§5.1). §8 choice 5.
 2. **The checker re-checks each `def` at every use and never emits `[let-poly]`**
    (`Checker.lean:46–62`; `Frontend/README.md:199`). Every use is a copy in the erasure. That is
    the root of #509 (the backend README's "a definition is substituted at each use") and the
-   likely cause of most of `float-arith`'s check time. Root fix: C2's `use` node and choice 7.
+   likely cause of most of `float-arith`'s check time. Root fix: C2's `use` node and choice 7
+   (landed: each `def` checked once per key; the erasure keeps a copy per use until N1).
 3. **Every copy and drop is inferred from free variables** (`plan2`, `Convert.lean:199–210`), not
    read from the derivation's splits. Whether a copy does anything is decided by layout
    triviality (`Types.lean:757–769`), and `imm` against `mut` is never consulted. Correct for a

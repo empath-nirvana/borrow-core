@@ -167,6 +167,7 @@ def Val.subst (σ : TySubst) : Val → Val
   | .sugar sp (.pullSite i) => .sugar sp (.pullSite { i with T := i.T.subst σ })
   | .sugar sp (.hndCtl i) => .sugar sp (.hndCtl (i.subst σ))
   | .sugar sp s => .sugar sp s
+  | .mark sp k V => .mark sp k (V.subst σ)
 
 def Comp.subst (σ : TySubst) : Comp → Comp
   | .ret sp V => .ret sp (V.subst σ)

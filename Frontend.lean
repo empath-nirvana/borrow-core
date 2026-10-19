@@ -9,7 +9,9 @@ import Frontend.Check.Fam
 import Frontend.Check.Elab
 import Frontend.Check.Tied
 import Frontend.Check.TExpr
+import Frontend.Check.TShift
 import Frontend.Check.TDerives
+import Frontend.Check.Weaken
 import Frontend.Check.TTied
 import Frontend.Check.TFacts
 import Frontend.Check.Rules

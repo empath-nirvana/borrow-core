@@ -308,6 +308,12 @@ import Frontend.Check.TFacts
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.toP
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.jdg_eq
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.jdg_eq
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.weaken
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.weaken
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.use_projects
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.use_projects
+#print axioms BoCa.Fig16.LogRel.Core.Check.TExpr.absF_shift
+#print axioms Frontend.Check.TTied.weaken
 #print axioms BoCa.Fig16.LogRel.Core.Check.TExpr.isLam_sound
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.split_mask_free
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.withbor2_witness_free

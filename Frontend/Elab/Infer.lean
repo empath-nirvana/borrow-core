@@ -52,13 +52,13 @@ def Ty.c? : Ty → Option CCTy
 
 /-- The checker's synthesis of a value's type. -/
 def askV (E : Env) (Δ : LifeCtx) (T : List CVTy) (v : Val) : Option CVTy :=
-  match synV inferFuel E.clearOwn Δ T v with
+  match (synV inferFuel E.clearOwn Δ T v).run' [] with
   | .ok ⟨A, _⟩ => some A
   | .error _ => none
 
 /-- The checker's synthesis of a computation's type. -/
 def askC (E : Env) (Δ : LifeCtx) (T : List CVTy) (M : Comp) : Option CCTy :=
-  match synC inferFuel E.clearOwn Δ T M with
+  match (synC inferFuel E.clearOwn Δ T M).run' [] with
   | .ok ⟨C, _⟩ => some C
   | .error _ => none
 
@@ -86,7 +86,7 @@ def valLends : Val → Bool
   | .lend .. => true
   | .pair _ V W | .app _ V W => valLends V || valLends W
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => valLends V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => valLends V
   | _ => false
 
 mutual
@@ -103,6 +103,9 @@ def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → I
     | .unit _ => pure (node (some .unit) [])
     | .lend _ x _ => pure (node (varTy E Δ T x.name) [])
     | .sugar .. => pure (node none [])
+    | .mark _ _ V => do
+      let a ← inferV n E Δ T exp V
+      pure (node a.ty.v? [a])
     | .const sp c =>
       pure (node (match synConst E Δ T sp c with | .ok ⟨A, _⟩ => some A | .error _ => none) [])
     | .pair _ V W => do

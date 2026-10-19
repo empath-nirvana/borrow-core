@@ -499,7 +499,7 @@ def mentionsV (x : String) : Val → Bool
   | .defApp .. | .unit _ | .const .. | .sugar .. => false
   | .pair _ V W | .app _ V W => mentionsV x V || mentionsV x W
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => mentionsV x V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => mentionsV x V
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => mentionsC x M
   | .lend _ y _ => y.name == x
 
@@ -547,9 +547,11 @@ def dropOne {C : CCTy} (sp : Span) (i : Nat) (r : Res Δ T (.comp C)) :
   | some A =>
     if hA : hasDtorB A = true then
       if hE : (BoCa.Fig16.LogRel.Core.dtorE A).effFree = true then
-        if h : overlapOK T (oneL T i) r.F.u = true then
-          pure (rDrop (at_ sp) (at_ sp) i A hi (hasDtorB_sound hA) hE r h)
-        else throw ⟨sp, "internal error: a dropped slot is used"⟩
+        if hc : BoCa.Fig16.LogRel.Core.closedAt 0 (BoCa.Fig16.LogRel.Core.dtorE A) = true then
+          if h : overlapOK T (oneL T i) r.F.u = true then
+            pure (rDrop (at_ sp) (at_ sp) i A hi (hasDtorB_sound hA) hc hE r h)
+          else throw ⟨sp, "internal error: a dropped slot is used"⟩
+        else throw ⟨sp, "internal error: a destructor is not closed"⟩
       else throw ⟨sp, "internal error: a destructor performs or handles an operation"⟩
     else throw ⟨sp, "internal error: an owed slot has no destructor"⟩
   | none => throw ⟨sp, "internal error: an owed slot is out of range"⟩
@@ -687,6 +689,12 @@ def finalOf (E : Env) (sp : Span) (_S : CRow) (u : List Bool) :
         "computation would abandon it"⟩
     | none => throw ⟨sp, "internal error: a slot is out of range"⟩
   pure r
+
+/-- A marked scheme's derived node, over its checked term (SPEC §3). -/
+def markIt {j : Jdg} (sp : Span) : SchemeMark → Res Δ T j → Except Error (Res Δ T j)
+  | .litFn bs, r => match rLitFn (at_ sp) bs r with
+    | some r' => pure r'
+    | none => err sp "internal error: a string literal's table is not the scheme of its bytes"
 
 /-- `[then]` at the row `S`: `N` (its binder closed) and the finaliser `D` at one context. -/
 def thenIt (E : Env) (sp : Span) {S : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow} {pN : Pins}

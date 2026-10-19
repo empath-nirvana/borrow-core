@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.76 · 2026-10-18
+Version 0.77 · 2026-10-19
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -182,9 +182,8 @@ record machinery (`Imm̲ (U C) = Unk`).
 
 The checker returns a **typed term** `t : TExpr` with its derivation, not an erased term alone
 (`docs/compiler.md` §2.3). `TExpr` has one node per rule application: one constructor per rule of
-`CDerivesP` (so per rule of `CDerives`, and R1, R2 and `nilDead` of §29), of the same name, and
-`scheme`, a closed term typed at a consumed context by a lemma of `Core/` (a derived constant, a
-destructor). A node holds
+`CDerivesP` (so per rule of `CDerives`, and R1, R2 and `nilDead` of §29), of the same name; one
+**derived node** per fixed scheme; and the `use` node of a `def` (below). A node holds
 
 - its judgment, a value type or a computation type;
 - its rule's arguments other than its contexts, its proofs and the terms its premises type: binder
@@ -214,6 +213,36 @@ stated as `∃ b, …` (`withbor2`'s, the unwinding and slice borrows', R1's), w
 argument of the rule and not a field, and the clause kinds at `[handle]`, which the checker reads
 off the clauses' binding, not the rule's premise (`TDerivesAt.kinds_free`,
 `Frontend/Check/TFacts.lean`).
+
+**Derived nodes.** A fixed scheme is a node of its own, whose erasure is the scheme's term and
+whose typed rule is the lemma that types it, its side conditions the lemma's premises: the
+destructor of a type (`dtor`, `dtor_wf`; a recursive type's is a fixed point), a block's allocation
+and release (`allocS`, `freeS`, `d_allocS`, `d_freeS`), a block borrow (`withborSM`,
+`withborSI`, `withborSM_wf`, `withborSI_wf`) and a family's two-lifetime borrow (`withborF2M`,
+`withborF2I`, `withborM2_wf`, `withborI2_wf`), each at a consumed context. A scheme the
+elaborator writes is marked on the value it writes (the core form `Val.mark`, printed as the value
+it marks, so `bcc desugar` shows the value): the checker checks `V` as written and builds the scheme's node over its typed term, with the
+equation saying which instance of the scheme the term's erasure is. A string literal's table
+(§17) is such a node (`litFn`, the bytes and `litFnE`). The fixed points of folds, `unfold`,
+`count_fold`, `count_try` and `bounded_fix`, and `swap`, are rule nodes already.
+
+### A `def` at its uses
+
+A `def` is checked once per key: the declaration, its type arguments, the lifetime context, and the
+context of externs it is checked at (the persistent externs it may name, §11). Each use is a `use`
+node over the key's checked body, placed at the use (`Frontend/Check/TShift.lean`): its variables
+moved past the slots bound between the externs and the use (`TExpr.shift`), which the body does
+not name. The body's derivation is one there (`TDerivesAt.weaken`, `TDerivesP.weaken`): a slot
+the body does not use may be live at the use, and the body's derivation takes it where its rules
+can, as a leaf drops a persistent slot and `⟨⟩` takes any. Which slots it can take is the body's
+**absorption** (`TExpr.absF`), read off its rules' premises on the context's live slots and
+recorded on the `use` node; the use is given those, as the premises that checking the body at
+the use's own context decides give them. Every program of the corpus checks as it did when the
+checker checked each use apart, with the same output. A `use` node erases to its body's erasure, the body's erasure with its variables moved past
+the use's slots, and its derivation projects to one of that term at the use's context
+(`TDerivesAt.use_projects`, `TDerivesP.use_projects`): the term and derivation checking the body at
+the use gives. A body that holds a relaxed lend (§29), whose rules are at fixed contexts, is
+checked at each use.
 
 ### Baseline, restated
 
@@ -864,7 +893,8 @@ So a function's type shows which capabilities it can use: a helper that writes t
 takes neither performs no I/O. A `def` may use the persistent externs declared before it (the
 operations, which carry no authority), but never a capability: a capability is not persistent,
 so it is visible only in `main`, and a helper that does I/O takes it as an argument. The `def`
-is re-checked at each use, where the extern is `main`'s slot, as for any `def`.
+is checked once per key and placed at each use (§3), where the extern is `main`'s slot, as for
+any `def`.
 
 `stdout` and `stderr` share the type `Output`: a writer is given an output stream, and which one
 is its caller's choice. The bundle is split and lent with the existing machinery (§5): `main`
@@ -2174,7 +2204,8 @@ capacity (`read_into`) and runs until the input ends (a div function, §14).
 A string literal `"…"` is the persistent value `(n, t)` of `lit`: `n` its length in bytes and `t`
 a `!` function with no captures from an index to its byte (`0` past the end). The elaborator
 writes `t` as a compare of the index with the length, then a search on the index down to one
-byte (`Frontend.Sugar.litValue`): an ordinary core term, typed by the checker. A literal holds no
+byte (`Frontend.Sugar.litValue`): an ordinary core term, typed by the checker, and marked as the
+literal's table, so that its typed node is the derived node of the bytes (§3, `litFn`). A literal holds no
 resource, so it is copied and dropped freely, and an array or a buffer holds literals with no
 lifetime. `'c'` is a character, the `i32` scalar value.
 
@@ -7305,6 +7336,17 @@ each node beside its derivation; `Checked.t` and `Checked.e := t.erase`, with `c
 change to `CDerives`, `Core/`, the relation, the machine, a rule of the checker, or any program's
 erasure, output, goldens or counts.
 
+§3's derived nodes and `use` nodes are implemented in the templates of `scripts/gen-pin.py`
+(`scripts/pin/TExpr.tmpl.lean`, `TDerives.tmpl.lean`: the nodes, `litFnE`, their rules and
+projections), `Frontend/Check/TShift.lean` (`TExpr.shift`, `AbsF`, `TExpr.absF`,
+`TExpr.absF_shift`), `Frontend/Check/Weaken.lean` (`TDerivesP.weaken`, `TDerivesAt.weaken`,
+`TDerivesAt.use_projects`, `TDerivesP.use_projects`), `Frontend/Check/TTied.lean` (`TTied.use`,
+`TTied.weaken`, `TTied.litFn`), `Frontend/Check/Rules.lean` (`rUse`, `rUseAt`, `rLitFn`), the
+checker's cache of checked bodies (`DefEntry`, `CheckM`, `useDef`, `Frontend/Check/Checker.lean`)
+and the core form `Val.mark` (`Frontend/Syntax.lean`, printed as the value it marks). No change to
+`CDerives`, `Core/`, the relation, the machine, or any program's erasure, output, goldens or
+counts.
+
 Entry 39 (§40) is implemented in `Backend/Native/Lower.lean` (the LLVM IR), `Backend/Native/Runtime.lean`
 (the runtime), `Backend/Native/Tests.lean` (`bcc hostops`, `bcc tailcalls`), `Backend/Driver.lean`
 (`compileLL`, `buildNative`), `Frontend/Main.lean` and `Backend/Counts.lean` (the commands),
@@ -7315,6 +7357,13 @@ no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the chec
 
 ## Changelog
 
+- **0.77** (2026-10-19) — §3, *Derived nodes* and *A `def` at its uses* (#560): a `def` is checked
+  once per key and placed at each use by a `use` node, its derivation there by weakening with the
+  live slots its absorption takes (`TDerivesAt.weaken`, `TDerivesP.weaken`); fixed schemes typed
+  by a `Core/` lemma are derived nodes, replacing `scheme`; the elaborator marks a string
+  literal's table (`Val.mark`), and the checker builds its derived node (§17). §11: a `def` that
+  names an extern is checked once per key. No change to `CDerives`, `Core/`, the relation, the
+  machine, or any program's erasure, `bcc check` output, goldens or counts.
 - **0.76** (2026-10-18) — §19, *Clause kinds* (#561): at `[handle]` the checker classifies each
   operation's clause (abortive, tail-resumptive, tail-resumptive with state, resume or cancel,
   resume once, stored) from the typed term of the clauses' binding, and records the kinds with
@@ -7592,7 +7641,7 @@ no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the chec
   (`CDerives.letPoly_copy`, `CDerivesAt.letPoly_copy`); E1's, E2d's and E10's copies unfill to
   their lets' bodies (`threeUses_unfill`, `sumGenUses_unfill`, `timeoutUses_unfill`). §18 *Rows*
   and *Baseline*, §24
-  *Baseline*: the checker's copies, a `def` checked at each use, are that premise term, and a
+  *Baseline*: the checker's copies, a `def`'s body at each use, are that premise term, and a
   checked program's derivation gives the let's (`checkProgram_letPoly`); the checker does not emit
   `[let-poly]`. §18 *Open* and §24 *Open*: the effect properties E1, E2d and E6 from source wait for
   effectful callbacks (#161), recorded as pending programs (`corpus/pending/effects-hof-two-rows.bc`,
