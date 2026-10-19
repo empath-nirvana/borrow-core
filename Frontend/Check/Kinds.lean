@@ -152,12 +152,11 @@ def classifyBody (tM : TExpr) : ClauseKind :=
   else if onPaths (stateFnB onceB) 0 tM then .resumeOnce true
   else .stored
 
-/-- A control clause `!thunkv λp. let (x, κ) = p; M`: its body `M`; through a `def`'s `use`,
-which erases to its body. -/
+/-- A control clause `!thunkv λp. let (x, κ) = p; M`: its body `M`; through `use` nodes, at any
+depth, each of which erases to its body. -/
 def clauseBody? : TExpr → Option TExpr
   | .bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => some tM
-  | .use _ _ _ _ _ _ (.bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM))) =>
-    some tM
+  | .use _ _ _ _ _ _ t => clauseBody? t
   | _ => none
 
 /-- **The kind of the clause `c` of the operation `o`**, with the operation's qualifier: abortive

@@ -208,11 +208,10 @@ theorem classifyBody_sound (tM : TExpr) : (classifyBody tM).BodyPremise tM.erase
 
 theorem clauseBody?_sound {c tM : TExpr} (h : clauseBody? c = some tM) :
     c.erase = .val (.lam (.letpair (.var 0) tM.erase)) := by
-  unfold clauseBody? at h
-  split at h
-  · cases h; rfl
-  · cases h; rfl
-  · cases h
+  fun_induction clauseBody? c with
+  | case1 => cases h; rfl
+  | case2 => rename_i ih; simp only [TExpr.erase]; exact ih h
+  | case3 => cases h
 
 /-- **The kind the checker records gives its law's premise** at the clause the handler runs: an
 abortive operation's clause takes no `κ`; a control clause is `λp. let (x, κ) = p; M` and `M`
