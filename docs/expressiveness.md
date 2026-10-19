@@ -69,11 +69,11 @@ first; within them, the one whose fix is the deeper foundation comes first.
 | blocker | recommended way | Rust's way? |
 |---|---|---|
 | B2 div under a handler | `Div` as a handled effect (S0, #554; #564), already in flight | no: Rust has no totality to keep |
-| B1 shared service across tasks | **a per-turn lend**: the scheduler owns the service and lends it to the task it resumes, for one turn, which hands it back at its `await`. This is §14's per-observation lend applied to tasks, and Balzer–Pfenning's acquire/release | no. Rust uses `Rc<RefCell<_>>` (run-time flag) or `Arc<Mutex<_>>`; ours is static and free on one thread |
+| B1 shared service across tasks | **a per-turn lend**: the scheduler owns the service and lends it to the task it resumes, for one turn, which hands it back at its `await`. It reuses §14's per-observation lend with the turn as the step, read as Balzer–Pfenning's acquire/release; that it needs no new lemma is a hypothesis, settled by spike S-B (§9) | no. Rust uses `Rc<RefCell<_>>` (run-time flag) or `Arc<Mutex<_>>`; ours is static and free on one thread |
 | B7 elaboration refusals | the already-designed units: loops U2–U4, ergonomics E1, #586's write rule | n/a |
 | B3 records, variants, nested data | data declarations (#489) whose nested containers **elaborate to one recursive type**, as Lean elaborates nested inductives into mutual ones | partly: Rust's enums and structs, without its `Box` ceremony |
 | B4 suspended computations owning capabilities | the cancel-with-residual that S0 already has to settle ("the residual a loop closed early hands back, by a resume with `close`") | no: Rust relies on `Drop`; we have no destructor for a capability |
-| B5 borrows across a suspension | **a lending cursor**: a generator whose state is owned (an index) and which is lent the source at each pull. The spanning lend K1 (#172) is not needed for the target set | Rust's own answer is the same index cursor; its self-borrowing generators are not stable |
+| B5 borrows across a suspension | for tasks, **the lend split at each `await`** (measured: the split program runs `unconditional`, with no `PinLaw`); for generators, **a lending cursor**, whose state is owned (an index) and which is lent the source at each pull. The spanning lend K1 (#172) is not needed for the target set | Rust's own answer for generators is the same index cursor; its self-borrowing generators are not stable |
 
 **The research threads** (§7): used — handler-owned state, SILL_S manifest sharing (as the reading
 of the per-turn lend), the Links soundness hazard (as the check on it), the mutation report's
@@ -87,13 +87,16 @@ primitive the kernel cannot type).
 - The north-star program's real blocker is not the one its header names. With the `while`
   replaced by a bounded `for` and `spawn` by `spawn_in`, one task runs (measured). Three tasks are
   refused with "two tasks spawned in this block are given the capability of `Api`" (measured). So
-  after B2, the north star waits on exactly one thing: B1.
+  with B2 worked around, the north star meets exactly one more refusal: B1.
 - A JSON-shaped value is expressible today when its arrays are encoded in the same `mu` (measured,
   `i32[7]`). The blocker is nested `mu` and naming, not recursion.
 - An error escaping a borrow of a literal is refused, but the kernel already has the unwinding
   forms of slice borrows (`sliceBorrowIU`, SPEC §19). B10 is a surface gap.
-- The per-observation lend that §14 already proves for loops is the same mechanism B1 and B5
-  need for tasks and generators. One rule, three uses.
+- T13's Rust shape (a teller holding its account `mut` across `await` while reading its other
+  variables) runs today, `unconditional` and with no `PinLaw`, once the lend is split at each
+  `await` by hand (measured). Its blocker is elaboration, not T1.
+- The per-observation lend that §14 already proves for loops is the mechanism B1 and B5 need for
+  tasks and generators (hypothesis for B1 until spike S-B). One rule, three uses.
 
 ## 1. The target set, and how entries map onto it
 
@@ -102,7 +105,7 @@ needs it, or says **outside the target set**.
 
 | target | what it needs from this document |
 |---|---|
-| `operator-reconcile.bc` | B2, then B1 (measured, §8 item 1). Nothing else: its other refusals were worked around in the file already (its header) |
+| `operator-reconcile.bc` | B2, then B1 (measured with B2 worked around, §8 item 1). Its other refusals were worked around in the file already (its header) |
 | JSON round-trip of a resource | B3 (data declarations; nested recursion), B10 (a parse error raised across the input's borrow); maps of string keys exist (SPEC §36, `bench/wordcount`) |
 | T01–T14 | B7 for most; B6 (T04, T09, T14), B3 (T09, T11), B8 (T06, T08), B9 (T04, T05), B5 (T03's generator form, T13's Rust shape); see §2.2 |
 | the #537 bench rows | §5's lowering units only; B3's fixed-size records for n-body's last factor against Rust |
@@ -212,6 +215,21 @@ is accepted), `closure-captures-int` (#9), `callbacks-in-data`, `map-div-fold`, 
 `async-borrow` (#52).
 
 @@T-TABLE@@
+
+## 3. The blockers, exactly
+
+| blocker | the exact reason | where it is decided |
+|---|---|---|
+| B1 | a capability is a `mut` borrow; a task of `spawn_in` is given it until it ends, so two tasks cannot both use it; a task of `spawn` cannot hold a borrow (`κ` boxed at `top`); a task's observations have the empty row, so it cannot perform an outer control effect | SPEC §34 *Tasks* (PROPOSED), §30 *Open*; `lib/async.bc:31`; measured `op-a`, `op-d` |
+| B2 | a handler around a div computation is not provided | SPEC §21 *Open*; measured `op-e` |
+| B3 | no `data` declarations; a `mu` nested in a `mu` must be closed; record fields and variants in place are limited | parser; SPEC §5 *Open*, §31 *Open*; #182, #32, #19; measured `json2` |
+| B4 | `yield` is affine; what is live across it must drop; a capability has no destructor; a cancel answers `()` | SPEC §15 *Open*, §19 `[let]`; measured `gen-*` |
+| B5 | a resuming operation cannot cross a borrow (T1); R1 relaxes it only for a body closed but for its view | SPEC §19 *Open* (T1, #172), §29; measured `parse-recover-gen`, `async-bank` |
+| B6 | a call lends one place; a looping callee takes one borrow, re-lent each step; a lend in a capability-threading call, and a capability through `for … in &a`, are not provided | SPEC §14 *Open*, §18 *Not provided* and *Open* |
+| B7 | elaboration decisions taken too early or by name (loop class before typing, threaded variables by name, assignments outside joins) | `docs/loops.md` §1; `docs/ergonomics.md` §7.1; #586 |
+| B8 | no type parameters on an answering effect; no layer of its own state; map upsert and lookups at other lifetimes | SPEC §18 *Not provided*, §21 *Open*, §36 *Not provided* |
+| B9 | no `imm` reborrow of a `mut` family (K2′); `imm` borrows are not copied implicitly | SPEC §9 *Open*, §16 *Open*; #174, #58, #142 |
+| B10 | the surface has no unwinding form for a buffer's or literal's lend (the kernel does); a kernel fold cannot stop early | `Frontend/Sugar.lean:3910–3912`; SPEC §19 *As built*, §18 *Open* (K4); measured `abort1` |
 
 ## 4. Every way to provide each blocked functionality
 
@@ -515,7 +533,7 @@ foundation its fix is. Every count is from §2.
 
 ## 8. Surprises
 
-1. **The north star waits on one thing after B2.** `operator-reconcile.bc`'s header names "a task
+1. **With B2 worked around, the north star meets one more refusal.** `operator-reconcile.bc`'s header names "a task
    whose loop is a `while`" and "a task performing an answering effect handled outside its
    `spawn`". With a bounded loop and `spawn_in` under a unit cell's scope, one reconcile task runs
    and gives the right answer (measured, `op-b.bc`). Three are refused because "a capability is
@@ -528,10 +546,12 @@ foundation its fix is. Every count is from §2.
    `mu` runs (measured, `json3.bc`); `mu Y` inside `mu X` is refused (measured, `json2.bc`).
 4. **B10 is a surface gap.** The kernel has `sliceBorrowIU`/`MU` (SPEC §19); the surface refuses
    to use them for literals and buffers.
-5. **One rule, three uses.** §14's per-observation lend (a borrow scope over a loop is lent again at
+5. **T13's Rust shape needs no relaxed lend.** `async-bank.bc` with the lend split at each `await`
+   runs, and `bcc trusted` reports it `unconditional` (measured, `bank-split.bc`).
+6. **One rule, three uses.** §14's per-observation lend (a borrow scope over a loop is lent again at
    each step, so the loop's state must not hold it) is the mechanism B1 (per turn) and B5 (per
    pull) need. Neither needs K1.
-6. **The read-through-`mut` cost is visible only before LLVM.** quicksort's `bcc-counts` shows a
+7. **The read-through-`mut` cost is visible only before LLVM.** quicksort's `bcc-counts` shows a
    store per read (measured), while its machine code has single loads (recorded,
    `bench/README.md`). That is why L-1 is a lowering law, not a calculus change.
 
@@ -609,4 +629,306 @@ as library code); threads (#212); multi-shot search; allocation tracking (`noall
 whose nodes own arrays of children (`lc-0208-trie-boxed`, #182); a borrowed list's iterator (#57);
 K1 itself (#172).
 
-@@REPRO@@
+## 10. Reproduction
+
+Binary: `B=~/repos/borrow-core-c3c/.lake/build/bin/bcc` (built from `57da9d0`; `lib/` identical to
+this tree's). Every program below was run with `$B run FILE` (or `$B check`), and the last lines of
+the output are quoted.
+
+### 10.1 Every `corpus/pending/` program, today
+
+`for f in corpus/pending/*.bc; do $B check $f | head -1; done`, first line of each, cut at 160
+characters (measured; every one is still refused):
+
+```
+aoc-2020-07.bc: aoc-2020-07.bc:34:1: `words` loops, so it is called in direct style one step at a time, and a borrow at `'t` cannot stay open acr
+async-bank.bc: async-bank.bc:32:17: this borrow block's body uses `n`, which is outside it, and performs the operation 1.0, which resumes: a borr
+async-borrow.bc: async-borrow.bc:41:12: expected `[`, found name `l`
+async-channel.bc: async-channel.bc:65:21: the clauses box `κ` at `top`, so the handled computation's context must outlive it: `fx_c10`, of type `
+async-fanout.bc: async-fanout.bc:30:16: this argument of `push` has type `i32 * (mu X. 1 + ((mu X1. 1 + i32 * X1) + box top U (nu X. F ((mu X. 1 
+async-progress.bc: async-progress.bc:39:19: the body of `with spawn` assigns a `let mut` variable declared outside it, or lends a place declared 
+async-stream.bc: async-stream.bc:35:4: `sensor` performs `Exhausted`, which its written row does not list
+async-worker-pool.bc: async-worker-pool.bc:46:51: `clone` copies a persistent value, and `U (delay (mu X. 1 + i32 * X))` is not persistent
+backtrack-multishot.bc: backtrack-multishot.bc:34:1: expected a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main
+borrow-nested-handback.bc: borrow-nested-handback.bc:16:3: `q` is used twice here, and its type `array u8 * i32` is not persistent
+box-dup.bc: box-dup.bc:30:63: `boxed['a]`: `x`, of type `box 'l0 i32`, is used inside, and it cannot be shown to outlive `'a`
+callbacks-in-data.bc: callbacks-in-data.bc:28:52: type mismatch: expected `!(i32 => i32)`, but this has type `!(i32 => U (delay i32))`
+closure-captures-int.bc: closure-captures-int.bc:28:41: `!thunk` promotes only over `!` types, but `n`, of type `i32`, is used inside
+closure-lend.bc: closure-lend.bc:42:11: `let (x, y) = V` needs a `*` type, but `V : ref output`
+comp-param-capability.bc: comp-param-capability.bc:13:56: the computation parameter `g` uses the capability of `Counter` and is called inside `wi
+comp-param-for.bc: comp-param-for.bc:14:3: a `for` over a call of a computation parameter of `any`: not provided (its loop's variables would be t
+comp-param-two-sites.bc: comp-param-two-sites.bc:11:65: `with to_result` serves `Fail` for a call of the computation parameter `f`, which is call
+config-parse.bc: config-parse.bc:277:5: an operation of `Fail` is performed inside a closure or block that is not run in place, and no handler of
+data-box-tree.bc: data-box-tree.bc:23:1: expected a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`), found na
+dig-bang.bc: dig-bang.bc:22:65: expected `thunk`, `thunkv` or `{` after `!`, found name `x`
+div-answering-clause.bc: div-answering-clause.bc:10:3: the clause `add` of `shares` performs an operation of `Fail`: a clause of an answering han
+div-in-adapter.bc: div-in-adapter.bc:17:29: an operation of `Fail` is performed inside a closure or block that is not run in place: it cannot rea
+effects-generic-store.bc: effects-generic-store.bc:31:9: `assoc`: an answering handler is `handler h(mut s: S): E = { op(x) = e; … }` (or `handle
+fold-under-u.bc: fold-under-u.bc:34:8: the type of the closure's parameter `o` is not determined here: pass it where a function type is expected,
+for-buf-borrow.bc: for-buf-borrow.bc:16:55: the iterator of this `for` holds the borrow of `v`: a borrow block over a loop lends its place again 
+for-in-if-lend.bc: for-in-if-lend.bc:15:3: `a` is used twice here, and its type `array i32` is not persistent
+for-view-effect-copy.bc: for-view-effect-copy.bc:16:1: `show__wasi_stdout_cell` loops, so it is called in direct style one step at a time, and a 
+for-view-local.bc: for-view-local.bc:14:1: `count` loops, so it is called in direct style one step at a time, and a borrow at `'a` cannot stay op
+gen-adapters-io.bc: gen-adapters-io.bc:16:56: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abor
+gen-digits.bc: gen-digits.bc:18:27: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its
+gen-lazy.bc: gen-lazy.bc:22:5: `o`, of type `ref output`, is live across a computation that may abort, and its type has no destructor: an abortiv
+gen-lines.bc: gen-lines.bc:23:18: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its t
+io-two-tasks.bc: io-two-tasks.bc:22:11: two tasks spawned in this block are given the capability of `Stdout`: a capability is lent to one task at
+lc-0039-combination-sum.bc: lc-0039-combination-sum.bc:58:28: in this `case`, `out` is consumed in the `inr` arm but not in the `inl` arm
+lc-0070-climbing-stairs-memo.bc: lc-0070-climbing-stairs-memo.bc:38:32: no handler `memo` is declared before this `with`
+lc-0208-trie-boxed.bc: lc-0208-trie-boxed.bc:97:56: `io_d23` is not consumed in its scope, and its type `(1 + (mu X. (1 + 1) * array (1 + X))) + 
+lend-nested.bc: lend-nested.bc:33:38: type mismatch: expected `i32`, but this has type `ref array i32 * i32`
+lend-two.bc: lend-two.bc:31:14: type mismatch: expected `ref output`, but this has type `imm 'io_lb31_3 i32`
+loop-handler-binder.bc: loop-handler-binder.bc:18:3: `e` is used twice here, and its type `array_imm 'a u8` is not persistent
+loop-shadow-linear.bc: loop-shadow-linear.bc:21:5: `w` is used twice here, and its type `array_imm 'a i32` is not persistent
+loop-shadow-owner.bc: loop-shadow-owner.bc:17:42: type mismatch: expected `array u8 * i32`, but this has type `i32`
+map-div-fold.bc: map-div-fold.bc:60:93: type mismatch: expected `i32`, but this has type `U (delay i32)`
+noalloc.bc: noalloc.bc:30:1: expected a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`), found name `noalloc`
+operator-reconcile.bc: operator-reconcile.bc:97:34: type mismatch: expected `mut 'fx_rl134 ((mu X. 1 + (i32 * i32) * X) * (1 + 1)) * i32`, but th
+parse-recover-gen.bc: parse-recover-gen.bc:136:7: the iterator of this `for` holds the borrow of `v`: a borrow block over a loop lends its place 
+print-borrowed-list.bc: print-borrowed-list.bc:37:12: expected a value, found `iter`
+raise-in-fold.bc: raise-in-fold.bc:70:69: `sum_alg` performs `Fail` and is passed as a value: it can only be called (effectful callbacks, #161)
+rec-in-for-linear.bc: rec-in-for-linear.bc:19:20: in this `case`, `a` is consumed in the `inr` arm but not in the `inl` arm
+state-machine-audit.bc: state-machine-audit.bc:72:1: this borrow block's result has type `mut 'fx_l_audit (i32 * i32 * i32) * i32`, which has the
+two-writers.bc: two-writers.bc:42:9: `io_lm42_3` is used twice here, and its type `mut 'io_lb42_3 output` is not persistent
+```
+
+### 10.2 The probes
+
+**`op-a.bc`, `op-b.bc`, `op-e.bc`: the north star.** Each is `corpus/pending/operator-reconcile.bc`
+lines 1–77 (everything before `fn reconcile`), then:
+
+```bc
+-- variant A: bounded for with break, spawn_in under a unit cell's scope inside the handler
+fn reconcile(name: i32, want: i32) -> i32 with Async, Api =
+  let mut updates = 0;
+  for i in 0..10 {
+    let have = observed(name);
+    if have == want { break };
+    let ok = with to_result { try_update(name, toward(have, want)) };
+    match ok { inl u -> updates = updates + 1 | inr e -> () };
+    await()
+  };
+  updates
+
+fn desired() -> List[Obj] = cons((1, 3), cons((2, 0), cons((3, 2), nil())))
+fn initial() -> List[Obj] = cons((2, 4), nil())
+
+main -> List[i32] * List[Obj] =
+  let st = alloc((initial(), true));
+  let d = alloc(());
+  let (d, counts) = with fake_api(&mut st) {
+    let counts = borrow mut d { 'd, e ->
+      let q = queue_in[i32]();
+      let q = push_in(q, with spawn_in { reconcile(1, 3) });
+      let q = push_in(q, with spawn_in { reconcile(2, 0) });
+      let q = push_in(q, with spawn_in { reconcile(3, 2) });
+      with on_exhausted(!{ u -> nil() }) { run_in(q, 20) } };
+    (d, counts) };
+  let _ = free(d);
+  let (cluster, c) = free(st);
+  (counts, cluster)
+```
+
+`op-a.bc` gives `op-a.bc:97:18: two tasks spawned in this block are given the capability of `Api`: a
+capability is lent to one task at a time, which holds it until it ends (SPEC §34 *Open*)`.
+
+`op-b.bc` is `op-a.bc` without the second and third `push_in` lines. It gives
+`(inr (i32[3], inl ()), inr ((i32[2], i32[4]), inr ((i32[1], i32[3]), inl ())))` and `live 0`:
+one task, three updates, deployment 1 at 3 replicas.
+
+`op-e.bc` is `op-b.bc` with the header's `reconcile` (the `while`):
+
+```bc
+fn reconcile(name: i32, want: i32) -> i32 with Async, Api =
+  let mut updates = 0;
+  let mut have = observed(name);
+  while have != want {
+    let ok = with to_result { try_update(name, toward(have, want)) };
+    match ok { inl u -> updates = updates + 1 | inr e -> () };
+    await();
+    have = observed(name)
+  };
+  updates
+```
+
+It gives `op-e.bc:99:42: type mismatch: expected `mut 'fx_gl60 (…) * i32`, but this has type `U (nu
+X. F[4.0 aff 1 ~> 1, 4.1 aff i32 ~> 1] (…) & F[…] 1)``.
+
+**`op-d.bc`: the service as control operations handled outside the scheduler.** `op-a.bc`'s
+reconcile, with
+
+```bc
+effect Api {
+  ctl observed(name: i32) -> i32;
+  ctl update(name: i32, replicas: i32) -> bool
+}
+
+-- The replicas of `name`, or 0 when it is absent.
+fn lookup(xs: List[Obj], name: i32) -> i32 =
+  match unroll xs {
+    inl u -> 0
+  | inr (o, rest) -> let (n, r) = o; if n == name { r } else { lookup(rest, name) }
+  }
+
+-- `xs` with `name` at `r` replicas.
+fn store(xs: List[Obj], name: i32, r: i32) -> List[Obj] =
+  match unroll xs {
+    inl u -> cons((name, r), nil())
+  | inr (o, rest) ->
+      let (n, q) = o;
+      if n == name { cons((n, r), rest) } else { cons((n, q), store(rest, name, r)) }
+  }
+
+fn get_or_0(xs: List[Obj], name: i32) -> i32 = with on_exhausted(!{ u -> 0 }) { lookup(xs, name) }
+
+fn put(xs: List[Obj], name: i32, r: i32) -> List[Obj] =
+  with on_exhausted(!{ u -> nil() }) { store(xs, name, r) }
+
+-- The cluster, and whether the next update of deployment 2 conflicts.
+type Cluster = List[Obj] * bool
+
+handler fake_api[A](mut st: Cluster): Api, A -> A * Cluster = {
+  return(a) = (a, st);
+  observed(name, k) = { let (xs, c) = st; let r = get_or_0(clone(xs), name); st = (xs, c); k(r) };
+  update(name, replicas, k) = {
+    let (xs, c) = st;
+    if c && name == 2 { st = (xs, false); k(false) } else { st = (put(xs, name, replicas), c); k(true) }
+  }
+}
+```
+
+and
+
+```bc
+main -> List[i32] * List[Obj] =
+  let r = with fake_api((initial(), true)) {
+      let q = queue[i32]();
+      let q = push(q, with spawn { reconcile(1, 3) });
+      let q = push(q, with spawn { reconcile(2, 0) });
+      let q = push(q, with spawn { reconcile(3, 2) });
+      run_until_empty(q) };
+  let (counts, cl) = r;
+  let (cluster, c) = cl;
+  (counts, cluster)
+```
+
+It gives `op-d.bc:45:50: this computation performs the operations `[3.0 aff i32 ~> i32, 3.1 aff
+i32 * i32 ~> 1 + 1]`, which are not within the row `[]` here` (the position is in `lib/async.bc`,
+printed under the user's file, #479's B11). The same with `spawn_in` under a unit cell's lend
+(`op-c.bc`) gives the R1 message "the row of a relaxed lend's body has only operations that resume
+once …".
+
+**`json2.bc`, `json3.bc`: a JSON-shaped value.**
+
+```bc
+include rec
+type Json = mu X. 1 + (i32 + (mu Y. 1 + (X * Y)))
+type Arr = mu Y. 1 + (Json * Y)
+
+fn sum(j: Json) -> i32 =
+  match unroll j {
+    inl u -> 0
+  | inr v -> match v { inl n -> n | inr xs -> sum_list(xs) }
+  }
+fn sum_list(xs: Arr) -> i32 =
+  match unroll xs { inl u -> 0 | inr (h, t) -> sum(h) + sum_list(t) }
+
+fn num(n: i32) -> Json = roll inr (inl n)
+fn arr(xs: Arr) -> Json = roll inr (inr xs)
+fn acons(x: Json, xs: Arr) -> Arr = roll inr (x, xs)
+fn anil() -> Arr = roll inl ()
+
+main -> i32 =
+  let inner = arr(acons(num(4), anil()));
+  let j = arr(acons(num(3), acons(inner, anil())));
+  with on_exhausted(!{ u -> 0 }) { sum(j) }
+```
+
+gives `json2.bc:2:31: `mu Y. …` must be closed: it mentions an enclosing type variable`.
+
+```bc
+-- JSON-like value with arrays encoded in the same mu: 0 null | 1 num | 2 end-of-array | 3 element(head, rest)
+include rec
+type Json = mu X. 1 + (i32 + (1 + (X * X)))
+
+fn sum(j: Json) -> i32 =
+  match unroll j {
+    inl u -> 0
+  | inr v -> match v { inl n -> n | inr w -> match w { inl e -> 0 | inr (h, t) -> sum(h) + sum(t) } }
+  }
+
+fn num(n: i32) -> Json = roll inr (inl n)
+fn cell(x: Json, xs: Json) -> Json = roll inr (inr (inr (x, xs)))
+fn end() -> Json = roll inr (inr (inl ()))
+
+main -> i32 =
+  let inner = cell(num(4), end());
+  let j = cell(num(3), cell(inner, end()));
+  with on_exhausted(!{ u -> 0 }) { sum(j) }
+```
+
+gives `i32[7]`, `live 0`.
+
+**`abort1.bc`, `abort2.bc`: an error across a literal's borrow.**
+
+```bc
+include text
+include fail
+main -> i32 + ParseError =
+  with to_result { borrow imm "12x" { v -> parse_i32(v) } }
+```
+
+gives `abort1.bc:4:20: this borrow block's body performs an abortive operation, and its place (a
+buffer or a literal) has no unwinding form here: not provided`.
+
+```bc
+include text
+include fail
+main -> i32 =
+  borrow imm "12x" { v -> with default(0 - 1) { parse_i32(v) } }
+```
+
+gives `i32[4294967295]` (that is, −1; `main`'s value is printed unsigned), `live 0`.
+
+**`bank-split.bc`: the teller with its lend split at each `await`.**
+`corpus/pending/async-bank.bc` with `teller` replaced by
+
+```bc
+fn teller(start: i32, txns: List[Txn], n: i32) -> i32 * i32 with Async =
+  let acct = alloc(start);
+  let mut refused = 0;
+  let mut rest = txns;
+  for _ in 0..n {
+    match unroll rest {
+      inl u -> rest = nil[Txn]()
+    | inr (t, more) ->
+        rest = more;
+        let ok = borrow mut acct { a -> modify a { b -> match with to_result { apply(b, t) } { inl b2 -> (b2, true) | inr e -> (b, false) } } };
+        if ok { () } else { refused = refused + 1 };
+        await()
+    }
+  };
+  (free(acct), refused)
+```
+
+gives `inr ((i32[130], i32[0]), inr ((i32[20], i32[1]), inl ()))`, `live 0`; `$B trusted
+bank-split.bc` gives `typing: unconditional: a CDerives derivation (fundamentalC, adequacyD)` and
+`unproved boundaries: 0`.
+
+### 10.3 Counts
+
+`bcc-counts bench/<b>/main.bc`, last line (measured):
+
+```
+sieve: allocs 4 indirect 0 copies 0 loads 3479 stores 2443 bounds 2475
+chain-gen: allocs 2 indirect 0 copies 0 loads 27 stores 18 bounds 18
+chain-yield: allocs 2 indirect 0 copies 0 loads 27 stores 18 bounds 18
+quicksort: allocs 4 indirect 0 copies 0 loads 87529 stores 83522 bounds 85524
+gen-tree: allocs 3 indirect 0 copies 0 loads 43 stores 34 bounds 36
+handlers-di: allocs 6 indirect 0 copies 0 loads 1199 stores 1177 bounds 54
+n-body: allocs 3 indirect 0 copies 0 loads 245285 stores 75092 bounds 245226
+sum: allocs 4 indirect 0 copies 0 loads 2043 stores 1034 bounds 1036
+```
+
+The counts are at the default argument sizes and are not the timed runs.
