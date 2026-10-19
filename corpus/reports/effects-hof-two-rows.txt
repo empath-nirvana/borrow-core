@@ -4,7 +4,7 @@ lowering 20:1: copy `hof__b0n1`: `hof` for its block `g` at the site 1 of `Wait`
 lowering 20:1: copy `hof__b0n2`: `hof` for its block `g` at the site 2 of `Fail`
 lowering 24:11: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
 lowering 24:11: with to_result (Fail): a handler, the static name 2; raise abortive: a branch per call (final ctl)
-lowering 25:11: with resumer (Wait): a handler, the static name 1; wait affine: resumed or cancelled once on each path, not all in tail position
+lowering 25:11: with resumer (Wait): a handler, the static name 1; wait affine: tail-resumptive on every path
 call 17:13: k → the continuation resumed
 call 20:35: g → the block, performing at the site 1 of `Wait`
 call 20:35: g → the block, performing at the site 2 of `Fail`

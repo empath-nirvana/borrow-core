@@ -351,7 +351,8 @@ borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowL
 `checkProgram` first elaborates the program (`Elab.elaborate`, which runs `Sugar.elaborate`).
 Its `Report` carries that elaboration (`Report.el`): the backend reads the program the checker
 checked from it, and never elaborates again. Whether `main` is served `Fail[DivError]` (SPEC §39)
-is on the checked `main` (`Checked.exits`). In the sugar, a program that declares no externs and whose `main` names a capability gets `lib/io.bc` (read when `bcc` starts: `Sugar.library`), the
+is read from the checked `main`'s typed term, the site of `main_div_error`'s `handle` node
+(`Checked.exitsOnDivError`). In the sugar, a program that declares no externs and whose `main` names a capability gets `lib/io.bc` (read when `bcc` starts: `Sugar.library`), the
 capability externs, and a `main` that hands them back at every terminal; `for x in bytes c { M };
 N` becomes a loop by `unfold` built from a template whose holes are filled with the program's own
 syntax, and whose own nodes carry the span of the `for`; `&mut c` becomes a binding that rebinds

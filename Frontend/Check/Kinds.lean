@@ -187,8 +187,8 @@ def classifyHandler (E : List (Qual × VTy × VTy)) (cls : Option TExpr) : List 
 
 /-! ### The handler sites of a typed term -/
 
-/-- A `handle` node of a typed term: its source, its static name, its clauses' kinds, and whether
-its clauses receive `κ` boxed (BOXED-κ, §28). At `effHandleV` and `effHandleVB` the kinds are the
+/-- A `handle` node of a typed term: its source, its static name, its clauses' kinds, whether
+its clauses receive `κ` boxed (BOXED-κ, §28), and its site as the elaboration records it. At `effHandleV` and `effHandleVB` the kinds are the
 checker's classification (`ks`); at `effHandleT` they are its rule's, `tail` or `abortive`
 (`tailKind`), which `tailClause_premise` shows are the same `tail` kind. -/
 structure HandleSite where

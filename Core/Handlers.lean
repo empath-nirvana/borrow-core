@@ -445,6 +445,10 @@ example (R e N₁ N₂ : Expr) :
     TailResumes R (.case e (.app R N₁) (.app R N₂)) (.case e N₁ N₂) :=
   .case e (.resume N₁) (.resume N₂)
 
+/-- The right unit, as a named handler's `k(v)` in tail position elaborates: `let x = R N in x`. -/
+example (R N : Expr) : TailResumes R (.app (.val (.lam (.var 0))) (.app R N)) N :=
+  .ret (.resume N) .var
+
 /-! ### The abort class -/
 
 /-- The error arm of the branch after a call that can raise: `inr e`, handed on. -/
