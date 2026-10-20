@@ -1134,8 +1134,9 @@ shortened family (unit 19).
 
 ## 11. Decision menu
 
-Each item gives the options, the trade-offs and a recommendation. Item 13 is decided; the others
-await the user.
+Each item gives the options, the trade-offs and a recommendation. **All items are decided,
+2026-10-20.** Item 13 was decided first; the user then accepted every other recommendation, and
+the additions A1–A8 below: "Let's just go with that menu as is."
 
 1. **Syntax paradigm** (§5).
    - Options: A, ML (companion modules); B, Rust (`impl`, `pub` fields); C, record-first
@@ -1207,3 +1208,43 @@ await the user.
 16. **Units** (§10).
     - **Recommended**: U1–U3 as #593; U4–U5 as a new unit (codata declarations and interfaces);
       U6–U7 as #65, with derive split out first; U8 as #595.
+
+
+### 11.1 Additions (decided 2026-10-20)
+
+Added after the Bend deep dive (`docs/research/prior-art-bend.md`, PR #620) and the law-system
+discussion (#624).
+
+- **A1. A fold's recursive positions are unordered.** A fold promises no left-to-right order between
+  its recursive positions, and allocation order is not output. Fold algebras are `F_∅`, so results
+  cannot observe the order. Gated counts are those of the sequential order. This keeps parallel
+  folds open.
+- **A2. A `fold` block in which the recursive fields arrive already folded.** It is sugar into the
+  kernel's proved folds. It is available inside the declaration, and exported to clients only as an
+  observation the type chooses to give.
+- **A3. Unfold (anamorphism) for data**, paired with `unfold` for codata. Data is built by unfold and
+  consumed by fold; codata is built by unfold and consumed by observation. A data unfold carries a
+  depth bound, or `Div` in its row. It needs stack-overflow detection first. An unfold whose results
+  are folded at once is a hylomorphism and builds nothing.
+- **A4. A match compiler**: nested and multi-scrutinee patterns, with exhaustiveness and redundancy
+  reports.
+- **A5. Three names for three concepts:**
+  - `fold`: the structural catamorphism, one per declared type, positions unordered;
+  - `for`: ordered iteration with an accumulator;
+  - `reduce`: an associative combine licensed by a law (#620, #624).
+
+  There is no foldl/foldr pair. foldr on a cons list is its `fold`, and foldl is iteration. No
+  library function over iterators is named `fold`.
+- **A6. A type's boundary is where its invariants are checked**, at runtime in debug and test builds
+  (#624), on entry to and exit from the declaration's own functions.
+- **A7. No automatic boxing anywhere.** SPEC §35's one box per node for recursive types written in
+  core is removed too, so every heap allocation is written.
+- **A8. `&` is inserted automatically at ordinary call arguments, for shared borrows only.** Mutable
+  lends stay written, as in pre-NLL Rust. This extends item 8 from receivers to every argument.
+
+Names follow formal terms (fold/catamorphism, unfold/anamorphism, hylomorphism), not another
+language's in-house names.
+
+**Sequencing.** U1 starts when #626 (`let mut` as a place) reports, because field update through
+`mut` depends on it. Its elaboration is written as a rule table from the start, under CLAUDE.md's
+`STOP: KERNEL WORK`, in its own elaborator module.
