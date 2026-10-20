@@ -24,7 +24,7 @@ under `corpus/` (and the probes under `docs/expressiveness-probes/` with `--prob
 named. It fails on any difference, and prints each. `--alpha` renames with another build than the
 one checked, to run the check on a build that has no `bcc alpha`.
 """
-import argparse, os, re, subprocess, sys, tempfile
+import argparse, os, re, shutil, subprocess, sys, tempfile
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -198,6 +198,7 @@ def main():
                 print(f"{f}: differs under renaming")
                 for d in diffs:
                     print("  " + d.replace("\n", "\n  "))
+    shutil.rmtree(tmp, ignore_errors=True)
     print(f"alpha-check: {len(files)} program(s), {bad} difference(s)")
     sys.exit(1 if bad else 0)
 

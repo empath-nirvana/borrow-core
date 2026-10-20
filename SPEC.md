@@ -1619,8 +1619,10 @@ form, before the other sugar, with no kernel or checker change:
   `f : !(all 'a < b. all 'b < c. … P => Q)` and no lend in `W`, is `(unbang f) ['l] ['m] … W`
   with each lifetime the one `W`'s type gives its parameter in `P` (§15, *Generic functions*).
 
-It applies when what the loop holds between steps outlives `'x`. Otherwise it reports where it
-does not: an iterator that holds the borrow; a stretch before the loop that hands on something
+The borrow is the block's parameter and every copy of it or of its parts on the block's spine
+(`let b2 = b`, `let mut v = v`, the pattern's names; §41 *Binder identity*): each block of the
+rewrite binds them again at its start. It applies when what the loop holds between steps outlives
+`'x`. Otherwise it reports where it does not: an iterator that holds the borrow; a stretch before the loop that hands on something
 with `'x` in its type; a div call that takes the borrow other than as its own argument; a div
 function with more than one borrow at its lifetime; a name the block binds again and that is read
 after it (the rewrite puts the block's bindings in the enclosing body).
@@ -7249,6 +7251,10 @@ each name as it reads it (`Frontend/Parser.lean`, `bindName`, `lookName`):
   `case` arm, a `for`'s variable, `withbor2r`'s view.
 - **An occurrence resolves to the innermost binder of its name in scope,** or to a declaration
   when none is.
+- **A binder spelt as a generated name is a new variable too.** The elaboration binds and
+  recognises names of its own (`io_…`, `fx_…`, `hy{n}…`); a source binder with such a name gets a
+  fresh name outside them (`Parser.generatedName`), so generated code never takes it for its own
+  (`corpus/generated-names.bc`: a `let io_bt` stopped a borrow block handing back its writes).
 - **Except:** a capability (`stdin`, `stdout`, `stderr`, `clock`, `args`) is a place the
   platform names, passed and handed back by name (§11): a binder of its name rebinds it. Core text
   (`def`, `main : C`) is not resolved: it has no assignment, and a binding of a name in scope is
@@ -7354,6 +7360,11 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/mut-lend-arm.bc` | `&mut x` in an arm (R2) | `i32[12]` (was `2`, the lend's write lost) |
 | `corpus/for-in-if-lend.bc` | #502, from `corpus/pending/` | `i32[3]` |
 | `corpus/reject/mut-control-with.bc` | a control handler's body that writes | refused (§18 *Not provided*) |
+| `corpus/lend-copy.bc` | copies of a borrow block's borrow over a loop: `let b2 = b`, `let mut v = v` (T04's form), a copy after a statement | `(i32[30], (i32[321], i32[6]))` (was refused) |
+| `corpus/binder-copies.bc` | a copy of a block parameter, of a clause's continuation, and a copy of a copy | `(i32[4294967291], (i32[103], i32[22]))` (was refused) |
+| `corpus/div-residual-copy.bc` | a div function's residual handed back by a copy, `let j = i`, and by `let i = i` | `i32[4]` on `abc` (was refused; `let i = i` ran before R1) |
+| `corpus/loop-handler-binder.bc` | #493's handler-clause binder, from `corpus/pending/` | `i32[42]` (was refused) |
+| `corpus/generated-names.bc` | a source binder named `io_bt` | `i32[62]` (was `61`) |
 
 `scripts/mut-combos.py` checks the rules on generated nestings (*Acceptance* below).
 `corpus/sugar/mut-heads.bc` and `mut-modify.bc` pin the elaboration beside the core written by
@@ -7393,10 +7404,14 @@ core with the binder renamed (`bcc desugar`). Changed:
   `ds/btree`, `tests/T14*`), and the module's renamed one (`cmp_i32'lib`) where it is listed.
 - `corpus/reject/lend-shadow.bc` is core text (`main : F i32`), where names are not resolved.
 - `corpus/pending/config-parse.bc` is refused at the block given to `fold_lines` (`f` is passed in
-  the fold's state, which §30 refuses), before the `raise` it was refused at.
-- `docs/expressiveness-probes/tests/T04.bc` reverses its copy with a borrow per step: its
-  `let mut v = v` inside a borrow block over a loop is a variable of its own, a `mut` view held
-  across the loop's steps, which §14 refuses.
+  the fold's state, which §30 refuses), before the `raise` it was refused at. The earlier message
+  came from the step's pattern binder of the state's block, also named `f`, taken for the block
+  parameter by its name: with `lib/` renamed, the build before R1 gives today's message
+  (*Binder identity*).
+- `docs/expressiveness-probes/tests/T04.bc` is in its original form: its `let mut v = v` inside a
+  borrow block over a loop is a copy of the borrow (*Binder identity*).
+- `corpus/reject/lend-escape.bc`'s witness is a pair holding the borrow, `let q = (b, 3)`: its
+  `let b2 = b` is a copy of the borrow, which the loop may use.
 - Each declaration's `let mut`s are its own: before, `main` and a `def` saw the names of the
   function before them, and a borrow block in `main` handed back a variable of that name
   (`corpus/leetcode/strings/0647`: `let (sum, sum) = …`; same output).
@@ -7404,6 +7419,63 @@ core with the binder renamed (`bcc desugar`). Changed:
   reads the operations of a `!thunkv` block too, which the copy it is given to performs.
 - The typed elaboration types a binding's computation, and a borrow block's body, with its lends
   elaborated (`TCx.tyCL`, `TCx.tyVL`): a lend's result is its call's, as `Comp.elab` makes it.
+
+### Binder identity
+
+R1 makes every binder of a surface body a name of its own; what the elaboration recognises by a
+binder, it recognises by that binder **followed through its copies**, never by a name (#617). A
+**copy** is `x <- return V` where `V` is a variable, ascribed or cloned (`Val.copyOf?`): `let y =
+x`, `let mut v = v`, `let y = (x : T)`. One rule, at every analysis that gives a binder a meaning
+of its own:
+
+| what | identified by | a copy of it |
+|---|---|---|
+| a borrow block's borrow over a loop (§14, `LoopLend`) | the block's parameter | a copy, or a destructuring of it or of a part (`Binding.of?`), anywhere on the block's spine, is one of the block's aliases from there on, bound again at the start of each block the rewrite makes; a copy passed to a div function is the place lent (`lendCall`) |
+| a block parameter of a §30 copy, a computation parameter's port (§33) | the copy's `cbs`, `cbRows`, `ports` | is the parameter (`Cx.copy`, `rowC`, `forOverParam`) |
+| a clause's continuation (§19), a layer's `call` (§20) | `ResumeK.k`, `LCall.name` | is it (`Cx.copy`; `unboxesC` for BOXED-κ) |
+| a div function's residual (§14, *The residual by name*) | the names the terminal hands back | a copy made after the last loop is the binder it copies (`termParts`) |
+
+Two more rules keep generated code and the user's apart, so that no analysis that compares names
+can take one for the other:
+
+- **A control handler's code has names of its own.** Its clauses run in the scope of a `with`,
+  or as closures built there, so every binder of a control handler (its parameters, its clauses'
+  parameters, the binders of its clauses' bodies and its return clause) gets a fresh name,
+  `hy{n}c{h}_{x}` (`Decl.hyg`). A `for` in the body of a `with default(0) { … }` chose the
+  variables it threads by name and took `default`'s clause binder `e` for the function's own `e`
+  (#493's `loop-handler-binder`, now `corpus/loop-handler-binder.bc`, `i32[42]`). Messages name
+  these binders as written (`Hygiene.written`, in `unrename`).
+- **A capability variable is one per effect and slot** (`capVar`, `capLife`): `Log` and `LOG`,
+  or `Log_a` and the slot `a` of `Log`, shared one variable.
+
+A block's `let mut` capabilities key its copy by position (`m0`, `m1`, `blockKeys`), not by the
+caller's names: callers whose blocks write variables of other names share the copy
+(`ap__b0m0`).
+
+**The renaming check** (`scripts/alpha-check.py`, a gate step) renames every program of the corpus
+α-equivalently, with `bcc alpha`: each binder of a surface body gets a name of its own (`{x}q{k}`,
+from the parser's record of what each name resolved to, `resolutionOf`), so no binder shadows
+another and no two variables share a name. `bcc check` must print the same up to the renaming and
+`bcc erase` the same erasure, and the same with every module of `lib/` renamed (`BCC_LIB`). On the
+corpus it finds 0 differences. Run on the build before R1 (`--bcc`, renaming with this one's
+`--alpha`), it finds 19: each program of #504, #493 and #590, `T04`, `config-parse` and others
+whose meaning depended on two names coinciding.
+
+**Justified: what is still identified by a name.**
+
+- A **capability** (`stdin`, `stdout`, …) is a place the platform names (§11); its binder rebinds
+  it (R1's exception), and a copy of one is refused (§34).
+- **Core text** (`def`, `main : C`) and **generated templates** are not resolved: a binding of a
+  name in scope is how they pass a variable on.
+- A **handler's name** (`with n = h(…)`, `n.op`, a row's `src: E`) names a site, not a variable
+  (§38): the innermost of a name is meant.
+- A **declaration** (a function, an operation, a recursive group's member) is found by its name;
+  Hygiene keeps every local from sharing one. A copy of a function, `let g = f`, is a value, and of
+  an effectful or recursive function refused (§18, §20).
+- **`let (x, q) = f(…, x, …)`** rebinds the place written as the argument (R2); `f(y)` with `y` a
+  copy of `x` binds a new `x`.
+- A **`let mut` variable** threaded by a loop, an arm or a block is identified by its resolved
+  binder (R2): unique, so its name is its binder.
 
 ### Open
 
@@ -7413,10 +7485,16 @@ core with the binder renamed (`bcc desugar`). Changed:
 - **The target pairs** that are not met (`docs/research/let-mut-state/README.md`): what separates
   each is the counted loop (§16), the state machine of a div body (§14), §32's calling convention,
   a function's parameters and effects' elaboration (§18, §19), none of it this entry's.
-- **Names the elaboration still reads.** §14's per-observation lend (`LoopLend`) identifies the
-  borrow by the block's binder, so a copy of it bound in the block is not the borrow (T04 above);
-  §30 identifies a block parameter by its name, so one passed through a fold's state is taken as
-  stored (config-parse above). Both were met before only when the names coincided.
+- **Lifetimes are not resolved.** A borrow block's `'a` inside another's `'a` is the same name in
+  a type, and a type that mentions the outer one reads as the inner one (a refusal, "expected `imm
+  'a i32`, but this has type `imm 'a i32`"). R1 for lifetime binders, and in the types and
+  instantiations that name them, is not built.
+- **A copy of the residual between two loops** of a div function is not followed: the states
+  before the copy hold the copied binder, those after it the copy (`termParts` follows copies
+  after the last loop only); it is refused where a state names the moved binder.
+- **A block that writes, passed through a closure** in its callee (`{ x -> f(x) }` given to
+  another block parameter), is refused with a message about `!thunk` promotion: the copy's row
+  for a block parameter (`cbRows`) does not carry its `let mut` capabilities.
 
 ---
 
@@ -7768,11 +7846,25 @@ Entry 40 (§41) is implemented in `Frontend/Parser.lean` (R1: `bindName`, `lookN
 `Frontend/Elab/Hygiene.lean` (`Decl.renameDecls`), `Frontend/Elab/Effects.lean` (`mutCap`,
 `escapingWriter`), `Frontend/Sugar.lean` (a program's declarations shadow a module's;
 `modifyBody`, `TCx.tyCL`) and `scripts/mut-combos.py`; no change to `CDerives`, `Core/`, `Paper/`,
-`Support/` or the checker.
+`Support/` or the checker. Its binder identity is `Val.copyOf?` (`Frontend/Syntax.lean`),
+`Frontend/Elab/LoopLend.lean` (`Binding.of?`, `spineAliases`, `Env.walk`), `Frontend/Elab/Effects.lean`
+(`Cx.copy`, `rowC`, `unboxesC`, `forOverParam`, `capKey`, `blockKeys`), `Frontend/Sugar.lean`
+(`termParts`), `Frontend/Elab/Hygiene.lean` (a control handler's code), `Frontend/Parser.lean`
+(`generatedName`, `pushBinder`, `resolutionOf`, `unrename`), `Frontend/Main.lean` (`bcc alpha`)
+and `scripts/alpha-check.py`.
 
 ---
 
 ## Changelog
+
+- **0.87** (2026-10-20) — §41 (#617): binder identity. What the elaboration recognises by a binder
+  (a borrow block's borrow over a loop, a block parameter, a port, a continuation, a layer's
+  `call`, a div function's residual) it follows through copies (`Val.copyOf?`); a control
+  handler's code has fresh names (#493's last program lands); a source binder spelt as a generated
+  name is renamed; capability variables are one per effect and slot; a block's `let mut`
+  capabilities key its copy by position. The renaming check (`bcc alpha`,
+  `scripts/alpha-check.py`) is a gate step. T04 back to its original form; `lend-escape`'s witness
+  changes; five new corpus programs. No kernel, `CDerives` or checker change.
 
 - **0.86** (2026-10-19) — §41 (#613): a join's terminal value is handed on as it is, a loop turn's
   `()` is not bound, and `modify` of a `let mut` value runs its body in place rather than through a
