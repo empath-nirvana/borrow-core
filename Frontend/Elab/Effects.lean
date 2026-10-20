@@ -692,10 +692,10 @@ def argComps : Nat → VTy → Val → List (VTy × Val)
   | _, P, W => [(P, W)]
 
 /-- The names of a function's parameters, in order, read off its body `body` as the parser binds
-them from the parameter tuple `p`: `let (x, io_pN) = p; let (y, z) = io_pN; …`, `x <- return p`,
-or none. -/
+them from the parameter tuple `p`: `let (x, io_pN) = p; let (y, z) = io_pN; …`, or none; a `p`
+the parser did not generate is the one parameter itself (`Parser.paramVar`). -/
 def paramNamesIn (p : String) (body : Comp) : List String :=
-  go fuel p body
+  if !p.startsWith "io_p" then [p] else go fuel p body
 where
   go : Nat → String → Comp → List String
     | 0, _, _ => []
@@ -904,12 +904,32 @@ def isExit : Val → Bool
   | .sugar _ .brk | .app _ (.sugar _ .brk) _ | .app _ (.sugar _ .retE) _ | .sugar _ .cont => true
   | _ => false
 
-/-- A binding put before a value: the computation that follows it is its argument. -/
-abbrev Bind := Comp → EM Comp
+/-- A binding put before a value: the computation that follows it is its argument. A call's
+binding says what it binds, so that the value it is the whole of takes the call's place
+(`trRet`, `trBind`). -/
+inductive Bind where
+  /-- `x <- M; N` (`bindFlat` when `flat`): the call's answer is `x`. -/
+  | one (sp : Span) (x : String) (A : Option VTy) (M : Comp) (flat : Bool)
+  /-- `t <- M; let (c₁, …, x) = t; N` (`bindFlat` when `flat`): the call hands back the
+  capabilities `cs` first, then its answer `x`; `post` comes before `N`. -/
+  | caps (sp : Span) (t : String) (A : Option VTy) (M : Comp) (cs : List Cap) (x : String)
+      (flat : Bool) (post : Comp → Comp)
+  /-- Any other binding. -/
+  | k (f : Comp → EM Comp)
+
+/-- `x <- M; N`, flattened (`bindFlat`) when `flat`. -/
+def Bind.bindAt (sp : Span) (x : String) (A : Option VTy) (M N : Comp) (flat : Bool) : Comp :=
+  if flat then bindFlat sp x A M N else .bind sp ⟨x, sp⟩ A M N false
+
+def Bind.run : Bind → Comp → EM Comp
+  | .one sp x A M flat, N => pure (Bind.bindAt sp x A M N flat)
+  | .caps sp t A M cs x flat post, N => do
+    pure (Bind.bindAt sp t A M (← unpack sp cs x t (post N)) flat)
+  | .k f, N => f N
 
 def chain : List Bind → Comp → EM Comp
   | [], M => pure M
-  | b :: bs, M => do b (← chain bs M)
+  | b :: bs, M => do b.run (← chain bs M)
 
 /-- A computation may loop: it has a `while` or `loop`, or a `for` whose source is not a count
 `a..b` (a loop over a view is total too, but its source's type is not known here). -/
@@ -924,7 +944,7 @@ def mayLoop : Nat → Comp → Bool
     | _ => false
 
 /-- `w <- perform[n.i] (V, w)`: an operation at a `for`'s site, which threads `w`. -/
-def threadedPerform (sp : Span) (n i : Nat) (V : Val) (w : String) : Bind := fun N =>
+def threadedPerform (sp : Span) (n i : Nat) (V : Val) (w : String) : Bind := .k fun N =>
   pure (.bind sp ⟨w, sp⟩ none (.perform sp n i (.pair sp V (.var sp w))) N false)
 
 /-- The plain calls of a value, bound first in the order its evaluation runs them in (leftmost
@@ -942,7 +962,7 @@ def liftCalls : Nat → Val → StateT (List Bind) EM Val
         pure (.app sp f (← liftCalls n W))
       | _ =>
         let x ← (fresh "fx_n" : EM String)
-        modify (· ++ [fun N => pure (.bind sp ⟨x, sp⟩ none (.ret sp (.app sp f W)) N false)])
+        modify (· ++ [.one sp x none (.ret sp (.app sp f W)) false])
         pure (.var sp x)
     | .pair sp V W => do pure (.pair sp (← liftCalls n V) (← liftCalls n W))
     | .inl sp V => do pure (.inl sp (← liftCalls n V))
@@ -1696,7 +1716,7 @@ def noLend (sp : Span) (what : String) (W : Val) : EM Unit := do
 /-- `bindParams`: the parameters `xs` bound from the tuple `p`. -/
 def bindParams (sp : Span) (p : String) : List Ident → Comp → EM Comp
   | [], M => pure (.letUnit sp (.var sp p) M)
-  | [x], M => pure (.bind sp x none (.ret sp (.var sp p)) M false)
+  | [x], M => pure (if x.name == p then M else .bind sp x none (.ret sp (.var sp p)) M false)
   | [x, y], M => pure (.letPair sp x y (.var sp p) M)
   | x :: xs, M => do
     let r ← fresh "fx_p"
@@ -1710,6 +1730,21 @@ def wrapTerms (f : Comp → Comp) : Comp → Comp
   | .case sp V x M y N => .case sp V x (wrapTerms f M) y (wrapTerms f N)
   | .loop sp ℓ src V M N => .loop sp ℓ src V M (wrapTerms f N)
   | T => f T
+
+/-- `x <- return V'; N` after the bindings `bs` of `V'`'s calls. A value that is one call's answer
+binds `x` as the call's binding does: `x` is the call's answer.  `[spec §18]` -/
+def bindValue (sp : Span) (x : Ident) (A : Option VTy) (rsp : Span) (bs : List Bind) (V' : Val)
+    (N : Comp) (lin : Bool) : EM Comp := do
+  if !lin then
+    match bs.getLast?, V' with
+    | some (.one bsp y B M flat), .var _ z =>
+      if y == z then return ← chain (bs.dropLast ++ [.one bsp x.name (A <|> B) M flat]) N
+    | some (.caps bsp t B M cs y flat post), .var _ z =>
+      if y == z && (A.isNone || B.isNone) then
+        let B' := B <|> A.map (capsTy sp cs)
+        return ← chain (bs.dropLast ++ [.caps bsp t B' M cs x.name flat post]) N
+    | _, _ => pure ()
+  chain bs (.bind sp x A (.ret rsp V') N lin)
 
 mutual
 /-- `M` with its operations resolved, handing the capabilities `cs` back beside its result: each
@@ -1818,11 +1853,11 @@ def trBind : Nat → Cx → List Cap → Bool → Span → Ident → Option VTy 
       if let .ret rsp V := M then
         -- A value: its effectful calls bound before the binding, which keeps its form.
         let (bs, V') ← trV n cx [] V
-        chain bs (.bind sp x A (.ret rsp V') N' lin)
+        bindValue sp x A rsp bs V' N' lin
       else pure (.bind sp x A (← trC n cx [] false M) N' lin)
     else if let .ret rsp V := M then
       let (bs, V') ← trV n cx cs V
-      chain bs (.bind sp x A (.ret rsp V') N' lin)
+      bindValue sp x A rsp bs V' N' lin
     else
       -- `M` hands back the capabilities it uses, which are bound again for `N`.
       let t ← fresh "fx_b"
@@ -1847,7 +1882,24 @@ def trRet : Nat → Cx → List Cap → Bool → Span → Val → EM Comp
   | 0, _, _, _, sp, _ => throw ⟨sp, "internal error: a body nested too deeply"⟩
   | n + 1, cx, cs, wrap, sp, V => do
     let (bs, V') ← trV n cx cs V
-    let T := if isExit V' || !wrap then Comp.ret sp V' else .ret sp (capsTuple sp cs V')
+    let plain := isExit V' || !wrap || cs.isEmpty
+    -- A value that is one call's answer is the call, in tail position: its answer is this one's
+    -- when it hands back the capabilities this computation hands back, or none are. A binding
+    -- annotated with the call's type (whose type is not known otherwise) ascribes the call's value, or,
+    -- at a computation, stays.
+    let typed : Option VTy → Comp → Option Comp
+      | none, M => some M
+      | some A, .ret rsp W => some (.ret rsp (.ascribe rsp W A))
+      | some _, _ => none
+    match bs.getLast?, V' with
+    | some (.one _ x A M _), .var _ y =>
+      if let (true, some M') := (x == y && plain, typed A M) then return ← chain bs.dropLast M'
+    | some (.caps _ _ A M cs' x _ _), .var _ y =>
+      if let (true, some M') := (x == y && ((cs'.isEmpty && plain) ||
+          (wrap && cs'.map (·.var) == cs.map (·.var))), typed A M) then
+        return ← chain bs.dropLast M'
+    | _, _ => pure ()
+    let T := if plain then Comp.ret sp V' else .ret sp (capsTuple sp cs V')
     chain bs T
 
 /-- A value with its effectful calls lifted out before it, as bindings (that thread the
@@ -1888,7 +1940,7 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
           report ksp "lowering" s!"with {h}: the recursive groups called in its body are driven by `{h}`"
           let M' ← trC k { cx with driver := some h } [] false M
           let r ← fresh "fx_v"
-          let bind : Bind := fun N => pure (bindFlat sp r none M' N)
+          let bind : Bind := .one sp r none M' true
           pure ([bind], .var sp r)
         else if (cx.env.layer? h).isSome then do
           -- `with L { M }` of a layer: `M`, its recursive groups' generators transformed by `L`.
@@ -1899,7 +1951,7 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
           let M' ← trC k cxL csM true M
           let t ← fresh "fx_b"
           let r ← fresh "fx_v"
-          let bind : Bind := fun N => do pure (bindFlat sp t none M' (← unpack sp csM r t N))
+          let bind : Bind := .caps sp t none M' csM r true id
           pure ([bind], .var sp r)
         else throw ⟨ksp, s!"no handler `{h}` is declared before this `with`"⟩
     | .app sp (.app sp₂ (.sugar ksp k'@(.borrow ..)) P) (.thunkv tsp (.lam lsp b A M)) => do
@@ -2020,7 +2072,7 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
       let M' ← trC k cx csM true M
       let t ← fresh "fx_b"
       let r ← fresh "fx_v"
-      let bind : Bind := fun N => do pure (bindFlat sp t none M' (← unpack sp csM r t N))
+      let bind : Bind := .caps sp t none M' csM r true id
       pure ([bind], .var sp r)
     | .thunk sp M | .thunkv sp M | .bangThunk sp M | .bangThunkv sp M => do
       let row := rowC cx.env fuel M
@@ -2050,10 +2102,10 @@ def blockResult : Nat → Cx → Span → Val → List Cap → EM (List Bind × 
     let q ← fresh "fx_q"
     let r ← fresh "fx_v"
     if csM.isEmpty then
-      let bind : Bind := fun N =>
+      let bind : Bind := .k fun N =>
         pure (.bind sp ⟨t, sp⟩ none (.ret sp blk) (.letPair sp ⟨pl, sp⟩ ⟨q, sp⟩ (.var sp t) N) false)
       return ([bind], .pair sp (.var sp pl) (.var sp q))
-    let bind : Bind := fun N => do
+    let bind : Bind := .k fun N => do
       let rest ← unpack sp csM r q N
       pure (.bind sp ⟨t, sp⟩ none (.ret sp blk) (.letPair sp ⟨pl, sp⟩ ⟨q, sp⟩ (.var sp t) rest) false)
     pure ([bind], .pair sp (.var sp pl) (.var sp r))
@@ -2112,8 +2164,8 @@ def selfCall : Nat → Cx → List Cap → Span → RSelf → String → Nat →
     let call : Comp := .case sp (.var sp rs.self) ⟨u, sp⟩
       (.ascribe sp (.abort sp rs.e 0 (.unit sp)) res) ⟨g, sp⟩
       (memberCall sp rs j g f z a W')
-    let bind : Bind := fun N => do
-      pure (.bind sp ⟨t, sp⟩ none call (← unpack sp rs.env r t N) false)
+    -- A call of the recursive group's own member stays bound, as the tail rule of `trC` leaves it.
+    let bind : Bind := .k (Bind.caps sp t none call rs.env r false id).run
     pure (b ++ [bind], .var sp r)
 
 /-- `k(W)` in a clause of an operation that resumes (SPEC §19): the continuation resumed,
@@ -2129,18 +2181,15 @@ def resumeCall : Nat → Cx → List Cap → Span → ResumeK → Val → EM (Li
     report sp "call" (s!"{rk.k} → the continuation resumed" ++
       (if rk.stateful then ", at the handler's state" else ""))
     if !rk.stateful then
-      let bind : Bind := fun N => pure (.bind sp ⟨a, sp⟩ none (.ret sp W') (.bind sp ⟨r, sp⟩ none res N false) false)
-      return (b ++ [bind], .var sp r)
+      return (b ++ [.one sp a none (.ret sp W') false, .one sp r none res false], .var sp r)
     let g ← fresh "fx_kg"
     let sv ← fresh "fx_ks"
     let t ← fresh "fx_kt"
     let st : Val := capsTuple sp cx.caps (paramsTuple sp rk.params)
-    let bind : Bind := fun N => do
-      let after ← unpack sp cx.caps r t N
-      pure (.bind sp ⟨a, sp⟩ none (.ret sp W') (.bind sp ⟨g, sp⟩ none res
-        (.bind sp ⟨sv, sp⟩ none (.ret sp st) (.bind sp ⟨t, sp⟩ none (.app sp (.force sp ⟨g, sp⟩) ⟨sv, sp⟩)
-          after false) false) false) false)
-    pure (b ++ [bind], .var sp r)
+    let bind : List Bind := [.one sp a none (.ret sp W') false, .one sp g none res false,
+      .one sp sv none (.ret sp st) false,
+      .caps sp t none (.app sp (.force sp ⟨g, sp⟩) ⟨sv, sp⟩) cx.caps r false id]
+    pure (b ++ bind, .var sp r)
 
 /-- `call(W)` in a layer's body made for member `j` (SPEC §20): the member's call through the
 self-reference, passing the environment and binding it again after. -/
@@ -2155,8 +2204,7 @@ def layerSelfCall : Nat → Cx → List Cap → Span → LCall → Val → EM (L
     let z ← fresh "fx_z"
     let a ← fresh "fx_a"
     report sp "call" s!"{lc.name} → the member's call, through the self-reference"
-    let bind : Bind := fun N => do
-      pure (.bind sp ⟨t, sp⟩ none (memberCall sp lc.rs lc.j lc.g f z a W') (← unpack sp lc.rs.env r t N) false)
+    let bind : Bind := .k (Bind.caps sp t none (memberCall sp lc.rs lc.j lc.g f z a W') lc.rs.env r false id).run
     pure (b ++ [bind], .var sp r)
 
 /-- A plain application, its parts elaborated. `return e` from a loop's body in a copy hands the
@@ -2202,16 +2250,13 @@ def opCall : Nat → Cx → List Cap → Span → String → OpSig → Val → O
         (.letPair sp ⟨m₂, sp⟩ ⟨r, sp⟩ (.var sp q) (.ret sp (.var sp r))) false
       let blk : Val := .app sp (.app sp (.sugar sp (.borrow .mut l)) (.var sp c.var))
         (.thunkv sp (.lam sp ⟨m, sp⟩ (holeTy sp) inner))
-      let bind : Bind := fun N => pure (.bind sp ⟨t, sp⟩ none (.ret sp blk)
-        (.letPair sp ⟨c.var, sp⟩ ⟨r, sp⟩ (.var sp t) N) false)
+      let bind : Bind := .caps sp t none (.ret sp blk) [c] r false id
       return (b ++ [bind], .var sp r)
     let call := Val.app sp (.var sp (clauseName c.h.name x)) (.pair sp (.var sp c.var) W')
     report sp "call" (s!"{x} ({o.eff}) → `{clauseName c.h.name x}`, on the state of `{c.h.name}`" ++
       ((c.name.map (s!" named `{·}`")).getD ""))
-    let bind : Bind := fun N => do
-      pure (.bind sp ⟨t, sp⟩ (if o.decl.lives.isEmpty then some (capsTy sp [c] o.decl.res) else none)
-        (.ret sp call)
-        (← unpack sp [c] r t N) false)
+    let bind : Bind := .caps sp t (if o.decl.lives.isEmpty then some (capsTy sp [c] o.decl.res) else none)
+      (.ret sp call) [c] r false id
     pure (b ++ [bind], .var sp r)
 
 /-- `op(W)` of a control effect: the kernel's operation, at the static name of the innermost site
@@ -2230,11 +2275,11 @@ def ctlCall : Nat → Cx → List Cap → Span → String → OpSig → Val → 
       (if abortive then ": abortive, it never resumes" else ""))
     let bind : Bind := if abortive then
         -- What follows an abort does not run.
-        fun _ => pure (.abort sp s.n o.idx W')
+        .k fun _ => pure (.abort sp s.n o.idx W')
       else match s.thrVar with
         -- A `for`'s site threads its variable through the operation, which answers it again.
         | some w => threadedPerform sp s.n o.idx W' w
-        | none => fun N => pure (.bind sp ⟨r, sp⟩ none (.perform sp s.n o.idx W') N false)
+        | none => .one sp r none (.perform sp s.n o.idx W') false
     let v : Val := if abortive || s.thr.isSome then .unit sp else .var sp r
     pure (b ++ [bind], v)
 
@@ -2270,9 +2315,7 @@ def fnCall : Nat → Cx → List Cap → Span → Val → String → FSig → Va
     let N' (N : Comp) : Comp := if ann.isSome || used.isEmpty then N else
       used.foldr (fun c K => .bind sp ⟨c.var, sp⟩ (some (c.ty sp))
         (.ret sp (.var sp c.var)) K false) N
-    let bind : Bind := fun N => do
-      pure (.bind sp ⟨t, sp⟩ ann (.ret sp (.app sp f' (capsTuple sp used W')))
-        (← unpack sp used r t (N' N)) false)
+    let bind : Bind := .caps sp t ann (.ret sp (.app sp f' (capsTuple sp used W'))) used r false N'
     pure (b ++ [bind], .var sp r)
 
 /-- A call's arguments elaborated, a block parameter passed on as it is (SPEC §30). -/
@@ -2314,12 +2357,11 @@ def blockParamCall : Nat → Cx → List Cap → Span → Val → String → Lis
         s!"served here by {sitesText provd}") ++
       (if bcs.isEmpty then "" else ", passing the capabilities"))
     if bcs.isEmpty then
-      let bind : Bind := fun N => pure (.bind sp ⟨r, sp⟩ none (.ret sp (.app sp f W')) N false)
+      let bind : Bind := .one sp r none (.ret sp (.app sp f W')) false
       return (b ++ [bind], .var sp r)
     -- The capabilities the block uses are passed with the call and handed back (SPEC §32).
     let t ← fresh "fx_b"
-    let bind : Bind := fun N => do
-      pure (.bind sp ⟨t, sp⟩ none (.ret sp (.app sp f (capsTuple sp bcs W'))) (← unpack sp bcs r t N) false)
+    let bind : Bind := .caps sp t none (.ret sp (.app sp f (capsTuple sp bcs W'))) bcs r false id
     pure (b ++ [bind], .var sp r)
 
 /-- `g(W)` passing effectful blocks `blks` (SPEC §30): each block written here is elaborated where
@@ -2396,9 +2438,7 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
     let N' (N : Comp) : Comp := if ann.isSome || typed.isEmpty then N else
       typed.foldr (fun c K => .bind sp ⟨c.var, sp⟩ (some (c.ty sp))
         (.ret sp (.var sp c.var)) K false) N
-    let bind : Bind := fun N => do
-      pure (.bind sp ⟨t, sp⟩ ann (.ret sp (.app sp f' (capsTuple sp used W')))
-        (← unpack sp used r t (N' N)) false)
+    let bind : Bind := .caps sp t ann (.ret sp (.app sp f' (capsTuple sp used W'))) used r false N'
     pure (bs ++ [bind], .var sp r)
 
 /-- `with h(P) { 'l, c -> M }` of an answering handler: a borrow block of the state's cell whose
@@ -2592,7 +2632,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       let rn ← fresh "fx_ar"
       let pv ← fresh "fx_hp"
       let rv : Val := .var sp rn
-      let params : Bind := fun N => do
+      let params : Bind := .k fun N => do
         pure (.bind sp ⟨pv, sp⟩ none (.ret sp hv)
           (← bindParams sp pv (ch.params.map (·.1) ++ [⟨rn, sp⟩]) N) false)
       -- The clauses, after the handler.
@@ -2624,7 +2664,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
         "after the handler, in the scope of the `with`")
       -- Its type is the handler's answer, which the typed elaboration names `fx_res{n}`.
       let resT : VTy := capsTy sp csA (.name sp s!"fx_res{n}")
-      let bind : Bind := fun N => do pure (bindFlat sp t (some resT) after' (← unpack sp csA r t N))
+      let bind : Bind := .caps sp t (some resT) after' csA r true id
       return (bsP ++ bsH ++ [params, bind], .var sp r)
     -- The capabilities the clauses use: the handler holds them between operations, in its state.
     let csCl := cx.need (ch.clauses.foldl (fun r c => envH.union r (rowC envH fuel c.body))
@@ -2693,7 +2733,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
           state := ch.params.map fun (x, A) => (x.name, A.subst σr) }⟩
       let (bsP, P') ← goV k cx cs P
       let pv ← fresh "fx_hp"
-      let args : Bind := fun N => pure (.bind sp ⟨pv, sp⟩ none (.ret sp P') N false)
+      let args : Bind := .one sp pv none (.ret sp P') false
       let clsV := cls.foldr (fun c t => Val.pair sp c t) (.unit sp)
       let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) (.unit sp))
         hr) clsV) (.thunk sp M')
@@ -2701,15 +2741,13 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       -- The site's answer applied to the initial state; the capabilities bound again after.
       let g ← fresh "fx_hg"; let sv ← fresh "fx_hs"; let t ← fresh "fx_ht"
       let r ← fresh "fx_v"
-      let run : Bind := fun N => do
-        let after ← unpack sp csCl r t N
-        pure (.bind sp ⟨g, sp⟩ none (.ret sp gv)
-          (.bind sp ⟨sv, sp⟩ none (.ret sp (capsTuple sp csCl (.var sp pv)))
-            (.bind sp ⟨t, sp⟩ none (.app sp (.force sp ⟨g, sp⟩) ⟨sv, sp⟩) after false) false) false)
+      let run : List Bind := [.one sp g none (.ret sp gv) false,
+        .one sp sv none (.ret sp (capsTuple sp csCl (.var sp pv))) false,
+        .caps sp t none (.app sp (.force sp ⟨g, sp⟩) ⟨sv, sp⟩) csCl r false id]
       report ksp "lowering" (s!"with {ch.name.name}: a handler with a state, its parameters" ++
         (if csCl.isEmpty then "" else " and the capabilities its clauses use") ++
         ", passed to each clause and to the continuation at each resume")
-      return (bsP ++ [args] ++ bsH ++ [run], .var sp r)
+      return (bsP ++ [args] ++ bsH ++ run, .var sp r)
     -- The clauses run outside the handler: their operations go to the sites of the handler's row.
     let cxH : Cx := { env := envH, caps := [], sites := outerR }
     let rM' ← trC k cxH [] false (rM.subst σr)
@@ -2751,7 +2789,7 @@ def reborrowed : Nat → Span → Span → Val → List Cap → EM (List Bind ×
   | _ + 1, sp, ksp, hnd, csM => do
     let r ← fresh "fx_v"
     if csM.isEmpty then
-      let bind : Bind := fun N => pure (.bind sp ⟨r, sp⟩ none (.ret sp hnd) N false)
+      let bind : Bind := .one sp r none (.ret sp hnd) false
       return ([bind], .var sp r)
     let mut blk : Comp := .ret sp hnd
     for c in csM.reverse do
@@ -2760,7 +2798,7 @@ def reborrowed : Nat → Span → Span → Val → List Cap → EM (List Bind ×
       let inner : Comp := .bind sp ⟨t, sp⟩ none blk (.ret sp (.var sp t)) false
       blk := .ret sp (.app sp (.app sp (.sugar ksp (.borrow .mut l)) (.var sp c.var))
         (.thunkv sp (.lam sp ⟨c.var, sp⟩ (holeTy sp) inner)))
-    let bind : Bind := fun N => do
+    let bind : Bind := .k fun N => do
       -- The capabilities bound again from the nested pairs `(c₁, (c₂, … r))`.
       let rec unwrap : List Cap → String → Comp → EM Comp
         | [], v, K => pure (.bind sp ⟨r, sp⟩ none (.ret sp (.var sp v)) K false)
@@ -2857,7 +2895,7 @@ def pullSite : Nat → Cx → List Cap → Span → String → FSig → Inst →
     -- Bound before the value it is in: making the stored generator is a computation.
     let v ← fresh "fx_g"
     let pv : Val := .app sp (.sugar sp (.pullSite ⟨n, T, "", gname, siteR⟩)) (.app sp f' W')
-    let bind : Bind := fun N => pure (.bind sp ⟨v, sp⟩ none (.ret sp pv) N false)
+    let bind : Bind := .one sp v none (.ret sp pv) false
     pure (bs ++ [bind], .var sp v)
 
 /-- The arguments of a call of `x` with each call at a stored generator's parameter that performs
@@ -3275,14 +3313,16 @@ def clauseDef (env : Env) (h : HSig) (o : OpDecl) (c : Clause) : EM Decl := do
   let v ← fresh "fx_v"
   let w ← fresh "fx_w"
   -- The clause's answer at the operation's result type; a terminal that lends a place is bound
-  -- first, since a lend cannot be in an annotated binding.
+  -- first, since a lend cannot be in an annotated binding, and any other computation is bound
+  -- at that type.
   let body := wrapTerms (fun T =>
     let hand := Comp.ret T.span (.pair T.span (.var T.span st) (.var T.span v))
     match T with
     | .ret _ V => if V.lends then
         .bind T.span ⟨w, T.span⟩ none T
           (.bind T.span ⟨v, T.span⟩ (some o.res) (.ret T.span (.var T.span w)) hand false) false
-      else .bind T.span ⟨v, T.span⟩ (some o.res) T hand false
+      -- A value is handed on as itself, at the operation's result type.
+      else .ret T.span (.pair T.span (.var T.span st) (.ascribe T.span V o.res))
     | _ => .bind T.span ⟨v, T.span⟩ (some o.res) T hand false) c.body
   let modifyV : Val := .app sp (.app sp (.sugar sp (.borrow .modify "")) (.var sp cv))
     (.thunkv sp (.lam sp h.st (.name sp "_") body))
@@ -3294,7 +3334,10 @@ def clauseDef (env : Env) (h : HSig) (o : OpDecl) (c : Clause) : EM Decl := do
   let inner : Comp := if h.lent then .bind sp h.st none (.ret sp (.var sp cv)) body false else
     .bind sp ⟨b, sp⟩ none (.ret sp modifyV)
       (.letPair sp ⟨cv, sp⟩ ⟨r, sp⟩ (.var sp b) (.ret sp (.pair sp (.var sp cv) (.var sp r)))) false
-  let p ← fresh "fx_p"
+  -- One parameter is the component itself (`Parser.paramVar`).
+  let p ← match c.params with
+    | [x] => pure x.name
+    | _ => fresh "fx_p"
   let inner ← bindParams sp p c.params inner
   let pp ← fresh "fx_pp"
   let cap : Cap := ⟨h.eff, cv, l, h, none, false, none, false⟩

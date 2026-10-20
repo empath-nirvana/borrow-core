@@ -283,7 +283,7 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
   | divLit {Δ Γ j} {info : TInfo} {op : HostOp} {c : IntLit} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j)
       (hb : divLitB op c t.erase = true) (hs : safeDivB op c = true) :
       TDerivesAt Ξ Δ Γ (TExpr.divLit info j op c t) j
-  /-- **Derived**: a counted walk of a view: its typed term's erasure is a `count_try` (`walkB`). -/
+  /-- **Derived**: a counted walk of a view: its typed term's erasure is a `count_fold` or a `count_try` (`walkB`). -/
   | walk {Δ Γ j} {info : TInfo} {m : Bool} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j)
       (hb : walkB t.erase = true) :
       TDerivesAt Ξ Δ Γ (TExpr.walk info j m t) j
@@ -550,7 +550,7 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
   | divLit {Δ Γ j} {info : TInfo} {op : HostOp} {c : IntLit} {t : TExpr} (h : TDerivesP Δ Γ t j)
       (hb : divLitB op c t.erase = true) (hs : safeDivB op c = true) :
       TDerivesP Δ Γ (TExpr.divLit info j op c t) j
-  /-- **Derived**: a counted walk of a view: its typed term's erasure is a `count_try` (`walkB`). -/
+  /-- **Derived**: a counted walk of a view: its typed term's erasure is a `count_fold` or a `count_try` (`walkB`). -/
   | walk {Δ Γ j} {info : TInfo} {m : Bool} {t : TExpr} (h : TDerivesP Δ Γ t j)
       (hb : walkB t.erase = true) :
       TDerivesP Δ Γ (TExpr.walk info j m t) j

@@ -1,4 +1,7 @@
 -- `mut-while-flag.bc` as its elaboration should read: written by hand in core.
+-- The step is bound in `main` before the machine is built from the first state (SPEC §14,
+-- *Moves*); the program's own bindings and writes of `i` and `found` stay, and the close binds the
+-- state's variables by name.
 def true : 1 + 1 = inr ()
 
 def false : 1 + 1 = inl ()
@@ -16,23 +19,25 @@ def to_i32 : !(u8 => i32) =
 def to_u8 : !(i32 => u8) =
   !thunkv fun (i : i32) -> return (unbang host[wrap8]) i
 
-def turn : !U (i32 * (1 + 1) -o F (i32 * (1 + 1) + i32 * (1 + 1)) & F 1) =
-  !thunkv fun (s : i32 * (1 + 1)) ->
+main : F U loop (i32 * (1 + 1)) 1 =
+  turn : !U (i32 * (1 + 1) -o F (i32 * (1 + 1) + i32 * (1 + 1)) & F 1) <- return (!thunkv fun (s : i32 * (1 + 1)) ->
     < let (i, found) = s;
-      c <- case (unbang host[lt_s32]) (i, i32[10]) {
+      case run case (unbang host[lt_s32]) (i, i32[10]) {
           inl u -> return false
         | inr u -> return (unbang not) found
-        };
-      case c {
+        } {
         inl u -> return inl (i, found)
       | inr u -> case (unbang host[gt_s32]) ((unbang host[mul32]) (i, i), i32[20]) {
-            inl u -> return inr ((unbang host[add32]) (i, i32[1]), found)
-          | inr u -> return inr (i, true)
+            inl u -> i <- return (unbang host[add32]) (i, i32[1]);
+              return inr (i, found)
+          | inr u -> found <- return true;
+              return inr (i, found)
           }
       },
-      return () >
-
-main : F U loop (i32 * (1 + 1)) 1 =
+      let (i, found) = s;
+      return () >);
+  i <- return i32[0];
+  found <- return false;
   f <- return unbang unfold[loop (i32 * (1 + 1)) 1, i32 * (1 + 1)] turn;
-  s <- return (i32[0], false);
+  s <- return (i, found);
   return (thunkv nu_in < (nu_out force f s).1, (nu_out force f s).2 >)

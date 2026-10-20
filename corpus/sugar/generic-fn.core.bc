@@ -2,8 +2,7 @@
 -- its lifetime an `all 'a` around it and a `Fun 'a` around its body, `*g` a `withload`; the call
 -- `(unbang first[i32]) ['x] V`.
 def tab : !(i32 => i32) =
-  !thunkv fun (p : i32) ->
-    i <- return p;
+  !thunkv fun (i : i32) ->
     return ((unbang host[add32]) (i, i32[10]))
 
 def first[A] : !(all 'a < top. array_imm 'a A * A => A) =

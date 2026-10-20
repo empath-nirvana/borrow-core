@@ -9,18 +9,19 @@
   messages. `experiments/LetMutState` states the borrow case in Lean.
 - `scripts/mut-combos.py`: the combination check of SPEC §41, a gate step.
 
-## The pairs not yet met
+## The pair not yet met
 
-Every surface program here answers what its target answers. What separates each elaboration from
-its target, by the part of the elaboration it is in:
+`mut-for-acc`, `mut-shadow`, `mut-while-flag`, `mut-block`, `mut-await` and `mut-service` are met
+(#618) and are in `corpus/sugar/`. `mut-yield` answers what its target answers; what separates
+its elaboration from the target, by the rule it is in:
 
-| target | what differs | where |
-|---|---|---|
-| `mut-for-acc`, `mut-shadow` | `count_try` with the start in the state and an exit test after it, where the target has `count_fold` from the start; the loop is bound and its state rebound, where the target is the loop in tail position | the counted loop (§16, `forData`) |
-| `mut-while-flag` | a step function, a close and a constructor of the loop (`io_run_0`, `io_step`, `io_mk`), where the target has one `turn` | the state machine of a div body (§14, `mAssemble`) |
-| `mut-block` | the copy takes the block's variable first, `ap__…((x, f))`, as §32's capabilities are taken, where the target has `ap__x(f, x)`; the copy's call of the block is bound and its pair rebound, where the target calls it in tail position; the parameter is bound again (`f <- return io_p0`) | §32's calling convention (a rule: the target, or the rule, is the user's choice), and the copy's body (§30) |
-| `mut-await` | the parameter bound again (`tag <- return io_p2`), an operation's answer bound twice, the clause's continuation call and `main`'s handler bound before they are returned | a function's parameters (the parser), and effects' elaboration of operations, clauses and handler sites (§18, §19) |
-| `mut-yield`, `mut-service` | the generator's machine and the `for`'s handler of it; the handler's copies | §15's generator sites, §18's copies |
+| what differs | where |
+|---|---|
+| the target runs the generator's code up to its loop when it is called, and starts at the loop's state; the elaboration starts at a state holding the parameter and runs nothing when called. The target is wrong here: at a row a body runs nothing when called (SPEC §14, *Moves*), which is what makes a call of a generator perform none of its operations. | §14 at a row; the target, to be corrected |
+| with that start state, the loop's head is called by a forward move and by its own arm, so it is a function (`io_run_1`) and the call is the core's `force` of a variable | §14 *Moves*: a point a move calls has a function |
+| a state of one variable is bound from the step's argument again (`fx_pp1 <- return io_a`) | §14 `mAssemble`: each point binds its tuple from `io_a`, one variable included |
+| `yield(i);` binds its value `()` (`io_s0 <- return ()`) | the statement's binding (parser); the target, to be corrected: the statement's own value is `()` beside the threaded `sum` |
+| the target's `for` handles the generator in one loop whose return clause runs what follows the loop (`inl sum`); the elaboration's `for` site is a loop of its own, which `main`'s machine observes as a call of a div function, with the join of the loop's ending and its exits (`io_j`, `io_jj`) after it | §15's `for` site and §14's call point: the target merges the code after the loop into the site's return clause, which a rest with a point of its own cannot be; and a loop with no exit still has an exit summand in its answer, which §16's `count_fold` rule does not yet have a §15 counterpart for |
+| the site's clause binds the frame's variable from the payload by name (`sum <- return io_hw`), and the resume's argument (`io_wv <- return sum`) | §15's `for` site: the payload's variables are not bound by their pattern; the resume's argument is bound by the core's syntax (`M x` takes a variable) |
 
-None of these is the threading of `let mut`'s variables: the parts of SPEC §41 (resolution, the
-writes, the hand-on of a frame) elaborate them as the targets do.
+None of these is the threading of `let mut`'s variables.

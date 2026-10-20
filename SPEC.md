@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.86 · 2026-10-19
+Version 0.88 · 2026-10-20
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -242,8 +242,8 @@ marked value's typed term with the rule that its erasure is the scheme's:
 - `divLit op c`: a division by a literal at which it cannot fail (§39, `divLitB`, `safeDivB`); at
   a conforming host the operation answers at every dividend (`divLit_some32`, `divLit_some64`,
   `divLit_some8`), so the scheme's error arm is never taken;
-- `walk m`: a counted walk of a view (§16), the `count_try` over its length (`walkB`); its step
-  runs only below the bound (`walk_index_lt`), and below a view's length its read answers a leaf
+- `walk m`: a counted walk of a view (§16), the `count_fold` or `count_try` over its length
+  (`walkB`); its step runs only below the bound (`walk_fold_index_lt`, `walk_index_lt`), and below a view's length its read answers a leaf
   (`walk_get_leaf`, `walk_split_first`), from §16's completeness lemmas;
 - `selfCall j n`: a recursive group's self-reference read for member `j` of `n` (§20, `selfCallB`);
 - `lendCell m`: the lend of a cell allocated for it, `withbor (alloc v) cb` (§35, `lendCellB`),
@@ -1525,15 +1525,18 @@ point; the end of a loop's body moves back to its head; `break` closes the sourc
 code after the loop, its **join**; `return e` closes the sources of the loops it leaves and
 finishes; a terminal finishes.
 
-**Moves.** The code of each head and call, and of each join, is a `!` function of its state,
-defined before the step. A move to a join calls its function. At the empty row every move to a
-summand is a skip: each observation is one iteration, or one observation of a callee, as with the
-delay bind, and `div_fuel` counts the same observations; the body runs its code up to its first
-state when called and returns the machine there. At a row (a generator, §15) the observations
-perform the row's operations; a move forward, from the step's own code or to a later point, is a
-call, and a move back to a loop's head a skip, so each observation runs one turn of a loop; the
-body runs nothing when called, its first state holding the parameter. A function calls only the
-functions of points after it in the body, so none calls itself and every observation ends.
+**Moves.** The code of a point that a move calls is a `!` function of its state, defined before
+the step; the code of any other point is its arm of the step. A move to a join calls its
+function. At the empty row every move to a summand is a skip: each observation is one iteration,
+or one observation of a callee, as with the delay bind, and `div_fuel` counts the same
+observations; no move calls a summand, so each summand's code is its arm. The body runs its code
+up to its first state when called, and a move there is the machine at that state (the `unfold`
+of the step, from the state). At a row (a generator, §15) the observations perform the row's
+operations; a move forward, from the step's own code or to a later point, is a call, and a move
+back to a loop's head a skip, so each observation runs one turn of a loop; the body runs nothing
+when called, its first state holding the parameter. A function calls only the functions of
+points after it in the body, so none calls itself and every observation ends. A terminal that is
+a value finishes with it (`inl V`).
 
 **The residual by name.** Each state's `close` closes what the state holds, innermost first: the
 callee's loop (turning its residual into the body's: the lent capability, `()`, the body's own
@@ -2085,11 +2088,13 @@ on a copy of the closure, test the answer's tag, tail-call with `i + 1` on `inl`
 `IntoIterator`), and the loop calls its `next` at each step, with `break`, `continue` and
 `return`. It is pull. A source whose type holds the data it came from is **sized**: the loop is
 `count_try` over the length of that data, computed when the loop starts, calling `next` at each
-step, and it is total (`forData`, `Frontend/Sugar.lean`; all of it elaboration into core):
+step, and it is total (`forData`, `Frontend/Sugar.lean`; all of it elaboration into core). With
+no exit it is `count_fold` (*The step and its exits*, below):
 
 | source, by type | the bound | the element at step `i` |
 |---|---|---|
-| a count `a..b` (syntax; `i32`s) | `b − a` | `a + i` |
+| a count `a..b` (syntax; `i32`s) | `b − a`, from index `0` | `a + i` |
+| a count `k..b`, `k` a literal in `[0, 2³¹)` | `b`, from index `k` | `i` |
 | a view `array_imm @a A` | its length, `array_len` | the leaf `i`, by `idx` (`array_get`) |
 | a view `array_mut @a A` | its length, `slice_len_mut` | the first leaf of the rest, by `split` at `1` |
 | `&a`, `&mut a` of `a : array A` | as the view `slice_borrow_imm`/`_mut` lends around the loop (§9) | as the view's |
@@ -2103,12 +2108,24 @@ a **drain**, the loop of §14, and div. `total` rejects a function that drains, 
 over a generator that loops (`corpus/reject/for-free-bound.bc`: `take(g, 10)` of a stored
 generator `g` is a generator that loops).
 
+A count counted from a literal start is counted by the machine's counter itself: the counter is
+the element, and the count's start is not in the loop's state. Any other start is counted from
+`0` over the count's length, as the machine's counter is unsigned (`len`, above) and a negative
+start would be past every bound. At every count `k..b` whose length `b − k` does not overflow
+the two agree, and where it overflows (`1..-2147483648`) the count from `k` is the empty loop,
+as the count is.
+
 **The step and its exits.** The loop's state is the source's cursor and the variables the body
 reads or assigns (a capability the body uses included: an effect of the body is the function's,
-and the loop hands the capability back). The step answers `inl` of the next state at the end of
-the body and at `continue`; `break e` and `return e` answer `inr` of the threaded variables and
-the way out. After the loop the threaded variables are rebound and the loop's value is `e`, or
-the `else` value when the source ended. `return e` in the body of a loop of a surface `fn` (or
+and the loop hands the capability back). The step binds the counter and the state's variables
+from its argument. A step with no exit (no `break` or `return e` in the body, no abortive
+operation, and a source that does not end before its bound: every source but a sized iterator)
+is `count_fold`'s: it answers the next state at the end of the body and at `continue`, and after
+the loop the threaded variables are bound from its last state (one variable directly, as
+`x <- loop`). Any exit makes the loop `count_try`: the step answers `inl` of the next state at
+the end of the body and at `continue`; `break e` and `return e` answer `inr` of the threaded
+variables and the way out. After the loop the threaded variables are rebound and the loop's value
+is `e`, or the `else` value when the source ended. `return e` in the body of a loop of a surface `fn` (or
 `main ->`) returns from the function from any depth of its loops: each counted loop leaves by its
 exit, and the loop around it by its own (`DivSt.exits`); the loop is first moved onto the
 function's spine (`normExits`). A core `def`'s `return V` is the core's. `break` and `continue`
@@ -2464,6 +2481,17 @@ first and hands them back first, and its type has the sites' operations as its r
 `g <- return f; a <- return v; (force g) a`. A function with a row that is never called is not
 elaborated. Resolution is lexical: an operation goes to the innermost handler of its instance around
 it, or to what the enclosing function's copy was given (§38).
+
+**A call's binding.** A call lifted out of the value it is in is bound before it: `r <- C`, or,
+when it hands back capabilities, `t <- C; let (c₁, (…, r)) = t`, and the value refers to `r`.
+When the value is the call's answer alone, the call takes its place: `x <- return V` binds `x`
+as the call's binding binds `r`, and a terminal `return V` in tail position is the call itself,
+when the call hands back the capabilities the computation hands back (in order) or the
+computation hands back none. This holds at every call that is bound so: a function's copy, a
+block parameter (§32), an answering operation, a resume (§19), a handler site, a stored
+generator's site. A parameter that is the function's only one is its lambda's binder, not bound
+again from a tuple (`Parser.paramVar`), as is an answering clause's only parameter; a clause's
+value terminal is handed on as itself, `(s, (V : B))`.
 
 The checker checks a copy, as any `def`, at each of its uses, so a program holding a closed
 function at its uses is §24's `[let-poly]` read by substitution: the program's derivation gives the
@@ -7857,6 +7885,17 @@ and `scripts/alpha-check.py`.
 
 ## Changelog
 
+- **0.88** (2026-10-20) — #618: each construct's rule emits the target's shape. §16: a step with
+  no exit is `count_fold`'s, and a count from a literal in `[0, 2³¹)` is counted from it, the
+  counter the element (`walkB` takes `count_fold`; `walk_fold_index_lt`, `countFold_runs`). §14:
+  a point no move calls is its arm of the step, a move from the code before the first point is
+  the machine at that state (no `io_mk`), and a value terminal finishes as `inl V`. §18: a call's
+  binding is structured, so that a value that is one call's answer is the call, in tail position
+  or bound to the binding's own name; a lone parameter is its function's binder. The backend's
+  search for the fields that close a cycle enters it at a sum, so a list's box is at its
+  recursive position whatever the node order. Six `let mut` target pairs are met and join
+  `corpus/sugar/`, five targets corrected; clauses whose resume is in tail position are
+  classified `tail` (`corpus/kinds.expected`); 13 programs' counts fall; no result changes.
 - **0.87** (2026-10-20) — §41 (#617): binder identity. What the elaboration recognises by a binder
   (a borrow block's borrow over a loop, a block parameter, a port, a continuation, a layer's
   `call`, a div function's residual) it follows through copies (`Val.copyOf?`); a control

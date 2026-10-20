@@ -9,7 +9,7 @@ aff-counter 2 0 0 29 29 0 # the cell the closure is stored in, and the counter's
 aff-depth 2 0 0 49 49 0 # as aff-counter: four calls through three functions and a reborrow, all direct
 aff-drop 3 0 0 5 5 0 # three counters' cells, each freed by its `close`
 aff-higher 2 6 0 8 8 0 # two counters' cells; the indirect calls are `runner`'s calls of its argument, which closures built at two sites reach: the flow analysis is monovariant, and the argument's code is chosen at run time, as a `dyn` call's is
-answers-two-types 1 2 0 8 9 0 # the heap environment of the continuation `journal` forwards `attempt` through, whose closure type is recursive (`bcc-counts --sites`); the indirect calls are of `fake_api`'s answer, a function of its state (SPEC §19, *Handler state*)
+answers-two-types 0 2 0 0 0 0 # nothing: `journal`'s clause resumes in tail position, so `attempt` is forwarded by a direct call and no continuation is built; the indirect calls are of `fake_api`'s answer, a function of its state (SPEC §19, *Handler state*)
 aoc/2020-08 6 0 0 10216 7451 7579
 aoc/2021-06 4 0 0 6409 4779 6364
 aoc/2021-10 5 0 0 13182 8140 13219
@@ -29,11 +29,11 @@ array-refs 5 0 0 8 8 1
 array-replace 2 0 0 12 12 5
 array-sum 1 0 0 3000 3000 2024
 ascii-upper 1 0 0 4285 4178 4292 # the string the input is read into; the stdin and stdout cells are words of the program's data
-async-bank-inbox 36 6 0 598 530 0 # the two accounts' cells and inboxes, the scheduler's list nodes; one indirect call per resume of a stored task
-async-cancel 10 3 0 203 200 0 # the victim's `buf` and `extra`, freed by its cancel, and the scheduler's list nodes; an indirect call per resume or cancel of a stored task
-async-lend-slots 22 6 0 342 330 0 # the scheduler's list nodes and the result list's: every scoped cell is a frame slot; an indirect call per resume of a stored task
-async-logged 22 4 0 246 228 0 # the two tasks' cells, and the scheduler's and the log's list nodes; an indirect call per resume of a stored task
-async-map 29 4 0 316 302 0 # the input and result lists' nodes, the scheduler's, and an object per level of `map`'s recursion the task suspends through (SPEC §19 Lowering); one indirect call per resume of the stored task
+async-bank-inbox 36 6 0 566 498 0 # the two accounts' cells and inboxes, the scheduler's list nodes; one indirect call per resume of a stored task
+async-cancel 10 3 0 179 176 0 # the victim's `buf` and `extra`, freed by its cancel, and the scheduler's list nodes; an indirect call per resume or cancel of a stored task
+async-lend-slots 22 6 0 310 298 0 # the scheduler's list nodes and the result list's: every scoped cell is a frame slot; an indirect call per resume of a stored task
+async-logged 22 4 0 230 212 0 # the two tasks' cells, and the scheduler's and the log's list nodes; an indirect call per resume of a stored task
+async-map 29 4 0 296 282 0 # the input and result lists' nodes, the scheduler's, and an object per level of `map`'s recursion the task suspends through (SPEC §19 Lowering); one indirect call per resume of the stored task
 async-mapreduce 57 9 1 610 606 0 # the documents' and results' list nodes, the scheduler's, and an object per level of `sum_slowly`'s recursion a task suspends through; the copy is the written `clone(sums)`
 async-r1-cancel 4 5 0 5 5 0 # the two tasks' `buf` and `extra`; a task's state is a record of the state machine, its lent cell out of line
 async-r1-cancel-finaliser-writes 1 0 0 2 2 0 # the lent cell
@@ -43,11 +43,11 @@ async-r1-generator 1 3 0 4 4 0 # the lent cell
 async-r1-local-borrows 2 4 0 7 7 0 # the two tasks' cells, each lent across its task's suspension and out of line
 async-r1-nested 2 3 0 4 4 0 # the two lent cells
 async-race 3 15 0 3 3 0 # the three tasks' buffers; one indirect call per resume or cancel of a task, whose code `race` does not know
-async-scheduler 24 6 0 458 452 0 # the scheduler's list nodes, four per round of `run_until_empty`; one indirect call per resume of a stored task, whose code the queue does not know
-async-scoped 25 4 0 323 313 0 # the read cell `cfg`, the scheduler's list nodes, rebuilt at each round, and the result list's; the scope's unit cell `d` takes no words; an indirect call per resume of a stored task
-async-timers 40 5 0 468 450 0 # the pending and finished lists' nodes; one indirect call per wake or cancel of a stored task
+async-scheduler 24 6 0 418 412 0 # the scheduler's list nodes, four per round of `run_until_empty`; one indirect call per resume of a stored task, whose code the queue does not know
+async-scoped 25 4 0 283 273 0 # the read cell `cfg`, the scheduler's list nodes, rebuilt at each round, and the result list's; the scope's unit cell `d` takes no words; an indirect call per resume of a stored task
+async-timers 40 5 0 440 422 0 # the pending and finished lists' nodes; one indirect call per wake or cancel of a stored task
 async-try-join 28 17 0 498 492 0 # the groups' list nodes and the jobs' cells; one indirect call per resume or cancel of a task
-async-workers-scoped 43 7 1 864 848 0
+async-workers-scoped 43 7 1 792 776 0
 axes/borrow-across-loop 2 0 0 30 13 4
 axes/codata-coeffects 2 0 0 27 10 16
 axes/codata-effects 0 0 0 11 1 0
@@ -138,6 +138,7 @@ for-finite 0 0 0 0 0 0
 for-in-if-lend 1 0 0 4 2 2
 for-never 0 0 0 0 0 0
 for-return 1 0 0 9 5 4
+for-view-effect-copy 1 0 0 11 5 9 # the string the view lends
 for-yield-branch 0 0 0 0 0 0
 format 1 0 0 38 31 37 # the string, built at its capacity
 gen-adapters 5 0 0 30 30 0 # the nodes of the lists `chunks` builds; each generator one state machine, each stored generator one handler site, each `yield` to a `for` a direct call
@@ -331,7 +332,7 @@ poly-operators 0 0 0 0 0 0 # a case of an operator is a direct call; nothing is 
 poly-providers 2 0 0 90 48 69 # the two strings; the comparisons read views and allocate nothing
 print-borrowed-array 1 0 0 17 4 3
 quicksort 2 0 0 96889 88843 94775 # the data and the range stack; the output capability's cell is a word of the program's data
-rec-await-exhausted 3 0 0 19 17 0 # the two list cells, and the continuation of the one `await`, an object per level it suspends through
+rec-await-exhausted 2 0 0 9 6 0 # the two list cells; the one `await`'s clause resumes in tail position, a direct call
 rec-deep 30040 0 0 3097088 2169488 436560 # the tree, one object per node (its payload, boxed at the sum), and each group's buffer of frames growing by doubling
 rec-emit 6 0 0 216 252 0 # the frames of the continuation `summed` resumes in the middle of the recursion, as in the probe P2
 rec-even-odd 0 0 0 0 0 0
@@ -347,8 +348,8 @@ rec-overflow 10101 0 0 10101 10101 0 # the cells, one per level: 100, and 10001 
 rec-parser 17 0 0 51 51 0 # the token lists and the tokens put back
 rec-tree 127 0 0 635 635 0 # the tree only, one object per node (its payload, boxed at the sum; an empty child is none)
 rec-yield 0 0 0 0 0 0
-reconcile-chain 28 3 0 524 536 0 # the journals' list nodes, and the continuations the clock's, the service's and the journal's clauses resume before they answer; the indirect calls are of `service`'s answer, a function of its state built by its return clause or by its `request` clause (SPEC §19, *Handler state*)
-reconcile-clock 33 8 0 457 445 0 # the fake clock's cells, the journals' list nodes, and the continuations the clauses resume before they answer; the platform's clock cell is a word of the program's data; the indirect calls are of `on_clock`'s answer, a function of its state (the clock capability) built by its return clause or by its `pause` clause (SPEC §19, *Handler state*)
+reconcile-chain 19 3 0 457 458 0 # the journals' list nodes, and the continuations the clauses that resume before they answer capture (those resuming in tail position are direct calls); the indirect calls are of `service`'s answer, a function of its state built by its return clause or by its `request` clause (SPEC §19, *Handler state*)
+reconcile-clock 25 8 0 397 377 0 # the fake clock's cells, the journals' list nodes, and the continuations the clauses that resume before they answer capture; the platform's clock cell is a word of the program's data; the indirect calls are of `on_clock`'s answer, a function of its state (the clock capability) built by its return clause or by its `pause` clause (SPEC §19, *Handler state*)
 retry-block 2 0 0 5 5 0 # the clock cells
 reverse-bytes 1 0 0 132 91 41
 sched-a 63 18 0 1558 897 0

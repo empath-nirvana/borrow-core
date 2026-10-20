@@ -1,7 +1,6 @@
 -- `generic-infer.bc` written by hand in core: the call `(unbang last[u8]) ['x] (v, u8[0])`.
 def tab : !(i32 => u8) =
-  !thunkv fun (p : i32) ->
-    i <- return p;
+  !thunkv fun (i : i32) ->
     return ((unbang host[wrap8]) ((unbang host[add32]) (i, i32[65])))
 
 def last[A] : !(all 'a < top. array_imm 'a A * A => A) =

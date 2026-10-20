@@ -1,0 +1,16 @@
+-- `mut-block.bc` as its elaboration should read: written by hand in core. The copy of `ap` for
+-- the block takes the block's capabilities first, then its parameter (SPEC §32's calling
+-- convention), and the block's call is in its tail position.
+def ap__x : !(i32 * !(i32 * i32 => i32 * i32) => i32 * i32) =
+  !thunkv fun (p : i32 * !(i32 * i32 => i32 * i32)) ->
+    let (x, f) = p;
+    return (unbang f) (x, i32[1])
+
+main : F i32 =
+  x <- return i32[1];
+  r <- return (unbang ap__x) (x, !thunkv fun (q : i32 * i32) ->
+        let (x, u) = q;
+        x <- return i32[5];
+        return (x, (unbang host[add32]) (u, i32[1])));
+  let (x, a) = r;
+  return (unbang host[add32]) ((unbang host[mul32]) (x, i32[10]), a)

@@ -1,49 +1,26 @@
--- `for-count.bc` written by hand in core: each loop is `count_try` over the count's length from
--- index 0, its element the start plus the index; its state the start, and the variables the
--- body reads or assigns. The step goes on (`inl`) at the end of the body; after the loop the
--- variables are bound again, from the last state or from an exit (none here: `1 + 1`, the end
--- and a bare `break`, is the way out).
+-- `for-count.bc` written by hand in core: each loop is `count_fold`, its step having no exit.
+-- The outer count starts at the literal `0`, so the machine's counter is the element, counted
+-- from `0` to `n`; the inner count starts at `i`, so it is counted from index 0 over its length
+-- `n − i`, its element the start plus the index, the start in its state. The state is the
+-- variables the body reads or assigns; after each loop they are bound again from its last state.
 total def tri : !(i32 => i32) =
-  !thunkv fun (p : i32) ->
-    n <- return p;
+  !thunkv fun (n : i32) ->
     acc <- return i32[0];
-    lo <- return i32[0];
-    hi <- return n;
-    len <- return (unbang host[sub32]) (hi, lo);
-    r <- return (unbang count_try[i32 * i32 * i32, (i32 * i32) * (1 + 1)]) (!thunkv fun (q : i32 * i32 * i32 * i32) ->
-        let (k, s) = q;
-        let (lo, s2) = s;
-        let (n, acc) = s2;
-        i <- return (unbang host[add32]) (lo, k);
+    r <- return (unbang count_fold[i32 * i32]) (!thunkv fun (q : i32 * i32 * i32) ->
+        let (i, s) = q;
+        let (n, acc) = s;
         lo2 <- return i;
         hi2 <- return n;
         len2 <- return (unbang host[sub32]) (hi2, lo2);
-        r2 <- return (unbang count_try[i32 * i32, i32 * (1 + 1)]) (!thunkv fun (q2 : i32 * i32 * i32) ->
+        r2 <- return (unbang count_fold[i32 * i32]) (!thunkv fun (q2 : i32 * i32 * i32) ->
             let (k2, t) = q2;
             let (lo2, acc) = t;
             j <- return (unbang host[add32]) (lo2, k2);
             acc <- return (unbang host[add32]) (acc, j);
-            return inl (lo2, acc), (len2, (i32[0], (lo2, acc))));
-        j2 : i32 * (1 + 1) <- case r2 {
-            inl t -> let (lo2, acc) = t;
-              return (acc, inl ())
-          | inr e -> let (w, o) = e;
-              acc <- return w;
-              return (acc, o)
-          };
-        let (w2, ob2) = j2;
-        acc <- return w2;
-        return inl (lo, (n, acc)), (len, (i32[0], (lo, (n, acc)))));
-    j : (i32 * i32) * (1 + 1) <- case r {
-        inl s -> let (lo, s2) = s;
-          let (n, acc) = s2;
-          return ((n, acc), inl ())
-      | inr e -> let (w, o) = e;
-          let (n, acc) = w;
-          return ((n, acc), o)
-      };
-    let (w, ob) = j;
-    let (n, acc) = w;
+            return (lo2, acc), (len2, (i32[0], (lo2, acc))));
+        let (lo2, acc) = r2;
+        return (n, acc), (n, (i32[0], (n, acc))));
+    let (n, acc) = r;
     return acc
 
 main : F i32 =

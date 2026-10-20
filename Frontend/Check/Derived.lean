@@ -11,9 +11,9 @@ the value the elaborator marks, and its typed rule says the term's erasure is th
 * **A division by a safe literal cannot fail** (`divLit_some32`, `divLit_some64`,
   `divLit_some8`): at a host that conforms (`Host.Conforms`), the operation at every dividend
   and the literal the node records answers a quotient, so the scheme's error arm is never taken.
-* **A counted walk reads below its view's length** (`walk_index_lt`, `walk_get_leaf`,
-  `walk_split_first`): `count_try` runs its step at an index only when the index is below the
-  bound (`countTryNext`), the bound is the view's length (`arrLen n ≤ n`), and below it the shared
+* **A counted walk reads below its view's length** (`walk_index_lt`, `walk_fold_index_lt`,
+  `walk_get_leaf`, `walk_split_first`): `count_try` and `count_fold` run their step at an index
+  only when the index is below the bound (`countTryNext`, `countNext`), the bound is the view's length (`arrLen n ≤ n`), and below it the shared
   view's `idx` answers its leaf and the exclusive view's split its first leaf, so the `inr` arms
   of the step's `array_get`/`slice_split_mut` are never taken. That the step reads the view the
   bound was taken from is the scheme's (`Frontend.Sugar.forData` threads it in the loop's state);
@@ -35,6 +35,13 @@ theorem arrLen_le (n : UInt32) : arrLen n ≤ n := by
 theorem walk_index_lt (f : Val) (n i : UInt32) (s : Val) (h : ¬ i < arrLen n) :
     BoCa.countTryNext f n i s = .val (.inj₁ s) := by
   unfold BoCa.countTryNext
+  rw [if_neg h]
+
+/-- **A step of a counted walk with no exit runs below the bound**: `count_fold (f, (n, (i, s)))`
+applies `f` at `i` exactly when `i < len(n)`, and otherwise answers its state. -/
+theorem walk_fold_index_lt (f : Val) (n i : UInt32) (s : Val) (h : ¬ i < arrLen n) :
+    BoCa.countNext f n i s = .val s := by
+  unfold BoCa.countNext
   rw [if_neg h]
 
 /-- **A shared view's element below the bound is its leaf.** -/

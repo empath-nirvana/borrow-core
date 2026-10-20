@@ -1,5 +1,5 @@
 -- pending: SPEC §30 Open (tasks capturing outer borrows: a task performing an answering effect handled outside its spawn), SPEC §21 Open (a div task under a handler)
--- now: 65:21: the clauses box `κ` at `top`, so the handled computation's context must outlive it: `fx_c10`, of type `mut 'fx_rl51 (mu X. 1 + i32 * X)`, is used inside, and it cannot be shown to outlive `top`
+-- now: 65:21: the clauses box `κ` at `top`, so the handled computation's context must outlive it: `fx_c8`, of type `mut 'fx_rl50 (mu X. 1 + i32 * X)`, is used inside, and it cannot be shown to outlive `top`
 -- Producer and consumer over a channel. The channel is an effect whose handler owns the buffer:
 -- `send` appends, `try_recv` takes the oldest item or answers `inr ()` when the buffer is empty.
 -- The producer sends five squares, awaiting after each; the consumer takes items until it has
