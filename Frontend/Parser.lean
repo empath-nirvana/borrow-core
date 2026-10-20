@@ -1128,6 +1128,11 @@ def varTuple (sp : Span) : List String → Val
   | [x] => .var sp x
   | x :: xs => .pair sp (.var sp x) (varTuple sp xs)
 
+/-- An exit of a loop's body as the parser writes it: `break`, `break e`, `continue`, `return e`. -/
+def Val.isExit : Val → Bool
+  | .sugar _ .brk | .sugar _ .cont | .app _ (.sugar _ .brk) _ | .app _ (.sugar _ .retE) _ => true
+  | _ => false
+
 /-- How a frame hands on what it writes (SPEC §41, rule R3): the frame's value bound at each
 terminal (`t`, typed `A`), and the value beside the variables, or the variables alone when the
 value is dropped (`keep`). -/
@@ -1135,16 +1140,25 @@ structure HandOn where
   t : String
   A : Option VTy := none
   keep : Bool := true
+  /-- A terminal that is a value hands it on as it is, with no binding: a join's. A frame whose
+  later elaboration reads the binding (`io_bt`: a borrow block, `with`, `modify`, `run`) keeps it. -/
+  direct : Bool := false
 
 /-- The frame `M` handing on the `let mut` variables `xs` it writes (SPEC §41, rule R3): each
 terminal reached through tail positions ends by handing them on (`HandOn`). This is the one way
 a frame's writes leave it: an arm and a binding's head (the joins of typed elaboration §5.2), a
 borrow block, `with`, `modify` and `run`. -/
 def handOn (h : HandOn) (xs : List String) (M : Comp) : Comp :=
-  wrapTerms (fun T =>
+  let bound (T : Comp) : Comp :=
     .bind T.span ⟨h.t, T.span⟩ h.A T
       (.ret T.span (if h.keep then .pair T.span (.var T.span h.t) (varTuple T.span xs)
-        else varTuple T.span xs)) false) M
+        else varTuple T.span xs)) false
+  wrapTerms (fun T => match h.direct, h.keep, h.A, T with
+    | true, true, none, .ret sp V =>
+      -- An exit (`break`, `continue`, `return e` in a loop) stays a terminal of its own.
+      if V.isExit then bound T else .ret sp (.pair sp V (varTuple sp xs))
+    | true, false, _, .ret sp (.unit _) => .ret sp (varTuple sp xs)
+    | _, _, _, T => bound T) M
 
 /-- `M` handing on `xs`, bound before `N` (`j <- M; N`): the pattern `p` of its value, beside
 the variables bound again, or the variables alone when there is no value (`p` none). -/
@@ -1159,7 +1173,7 @@ def joinBind (sp : Span) (n : Nat) (xs : List String) (p : Option Pat) (M : Comp
 /-- A `match`'s or `if`'s arms handing on the variables `xs` alone (a statement's join). -/
 def handArms (xs : List String) : Comp → Comp
   | .case sp V x M y N =>
-    let h : HandOn := { t := "io_ju", keep := false }
+    let h : HandOn := { t := "io_ju", keep := false, direct := true }
     .case sp V x (handOn h xs M) y (handOn h xs N)
   | M => M
 
@@ -1173,7 +1187,8 @@ def bindForm (sp : Span) (n : Nat) (x : Ident) (A : Option VTy) (M : Comp) (D : 
     | none => .bind sp x A M N lin
   if xs.isEmpty then return mk M
   let v ← freshName "io_jv"
-  joinBind sp n xs (some (.var ⟨v, sp⟩)) (handOn { t := "io_jr", A } xs M) (mk (.ret sp (.var sp v)))
+  joinBind sp n xs (some (.var ⟨v, sp⟩)) (handOn { t := "io_jr", A, direct := true } xs M)
+    (mk (.ret sp (.var sp v)))
 
 /-- The loop's value, bound after it (`let r = for …`): `forRes`, applied to the thunk of the
 `else` value when there is one. -/
@@ -1748,7 +1763,8 @@ def compG : Nat → Bool → P Comp
         let N ← comp n
         let sp ← spanFrom st
         -- The `let mut` variables its arms assign are handed on to what follows.
-        unless xs.isEmpty do return ← joinBind sp n xs (some p) (handOn { t := "io_jr", A } xs M) N
+        unless xs.isEmpty do
+          return ← joinBind sp n xs (some p) (handOn { t := "io_jr", A, direct := true } xs M) N
         match p with
         | .var x => return .bind sp x A M N false
         | p =>

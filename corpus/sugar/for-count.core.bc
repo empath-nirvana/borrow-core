@@ -23,7 +23,6 @@ total def tri : !(i32 => i32) =
             let (lo2, acc) = t;
             j <- return (unbang host[add32]) (lo2, k2);
             acc <- return (unbang host[add32]) (acc, j);
-            u <- return ();
             return inl (lo2, acc), (len2, (i32[0], (lo2, acc))));
         j2 : i32 * (1 + 1) <- case r2 {
             inl t -> let (lo2, acc) = t;
@@ -34,7 +33,6 @@ total def tri : !(i32 => i32) =
           };
         let (w2, ob2) = j2;
         acc <- return w2;
-        u <- return ();
         return inl (lo, (n, acc)), (len, (i32[0], (lo, (n, acc)))));
     j : (i32 * i32) * (1 + 1) <- case r {
         inl s -> let (lo, s2) = s;

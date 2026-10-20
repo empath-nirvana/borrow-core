@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.85 · 2026-10-19
+Version 0.86 · 2026-10-19
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -7290,7 +7290,14 @@ a callback, a block, a loop's turn), passes that part's writes `W` in and back o
   after it, and hands them back first. This is §32's rule for a block's capabilities: a variable a
   block writes is one of its capabilities (`Effects.mutCap`), its type a parameter of the copy.
 - **Out.** The part hands back `W` at each terminal, beside its value or alone (`Parser.handOn`),
-  and the construct's binding takes the tuple apart, rebinding `W` (`joinBind`, `letVal`).
+  and the construct's binding takes the tuple apart, rebinding `W` (`joinBind`, `letVal`). A
+  join's terminal that is a value hands it on as it is, `return (V, W)` (`return W` for `()`), and
+  a loop's turn that ends in `()` goes on with no binding of it (`Sugar.thenGo`); only a frame whose
+  later elaboration reads its terminal's binding (`io_bt`: a borrow block, `with`, `modify`,
+  `run`) binds it.
+- **A `let mut` value is no place.** `modify &mut x { v -> S }` of a `let mut` value `x` (not a
+  cell `ref A`) runs `S` on `x`'s value in place, `run (let (v, u) = (x, ()); S)`, its new content
+  rebinding `x` as the lend does; a cell is `modify`'d through `withswap`.
 - **Refused,** each by a message that names the rule: a closure that writes and is not given at a
   block parameter of a call, stored or returned (`Effects.escapingWriter`); a `run` that writes
   inside an expression (`checkRun`); a control handler's body that writes (it may be abandoned,
@@ -7314,7 +7321,7 @@ what its parts write and has no boundary of its own.
 | `let p = if/match …`, `x <- M` (a head) | `W(M)` | each terminal hands on `(value, W)`; the binding takes it apart (`bindForm`) |
 | `for x in V { M }`, `while`, `loop`, `for` over a generator | `W(M)` | a turn: the loop's state is `W` and the variables it reads (§14, §15, §16); each turn hands it on |
 | `borrow k P { b -> S }` | `{P} ∪ W(S)` | the callback hands back `(result, W)` beside the places it lends; the binding rebinds `P` and `W` |
-| `modify P { v -> S }` | `{P} ∪ W(S)` | the callback hands back `(c, (r, W))`, the new content `c` and the result `r` (`()` when there is none; `Sugar.modifyBody`) |
+| `modify P { v -> S }` | `{P} ∪ W(S)` | the callback hands back `(c, (r, W))`, the new content `c` and the result `r` (`()` when there is none; `Sugar.modifyBody`); of a `let mut` value, the body runs in place |
 | `with h(e) { S }`, answering | `W(S)` | as a borrow block of the state's cell (§18) |
 | `with h(…) { S }`, control | — | refused when `W(S)` is not empty |
 | `run M` | `W(M)` | `M` hands back `(value, W)` where it is bound; inside an expression, refused |
@@ -7349,6 +7356,8 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/reject/mut-control-with.bc` | a control handler's body that writes | refused (§18 *Not provided*) |
 
 `scripts/mut-combos.py` checks the rules on generated nestings (*Acceptance* below).
+`corpus/sugar/mut-heads.bc` and `mut-modify.bc` pin the elaboration beside the core written by
+hand (#611's targets).
 
 ### Acceptance
 
@@ -7401,7 +7410,9 @@ core with the binder renamed (`bcc desugar`). Changed:
 - **A control handler's body that writes**, and a `run` that writes inside an expression, are
   refused. The first needs the handler's clauses to hand the variables back when the body is
   abandoned; the second, the expression's calls lifted in order around it.
-- **The target pairs** (`docs/research/let-mut-state/targets/`): see #613.
+- **The target pairs** that are not met (`docs/research/let-mut-state/README.md`): what separates
+  each is the counted loop (§16), the state machine of a div body (§14), §32's calling convention,
+  a function's parameters and effects' elaboration (§18, §19), none of it this entry's.
 - **Names the elaboration still reads.** §14's per-observation lend (`LoopLend`) identifies the
   borrow by the block's binder, so a copy of it bound in the block is not the borrow (T04 above);
   §30 identifies a block parameter by its name, so one passed through a fold's state is taken as
@@ -7762,6 +7773,13 @@ Entry 40 (§41) is implemented in `Frontend/Parser.lean` (R1: `bindName`, `lookN
 ---
 
 ## Changelog
+
+- **0.86** (2026-10-19) — §41 (#613): a join's terminal value is handed on as it is, a loop turn's
+  `()` is not bound, and `modify` of a `let mut` value runs its body in place rather than through a
+  scoped cell. The elaborated core of the corpus changes shape (no result changes; three
+  programs' loads and stores fall); `corpus/sugar/`'s core forms lose the bindings, and #611's
+  `mut-heads` and `mut-modify` pairs join them, `mut-modify`'s target corrected to the in-place
+  form.
 
 - **0.85** (2026-10-19) — §41 (#613): R3, the boundary rule, and the rule table. A part that
   runs in another frame hands back what it writes (`handOn`): an arm, a binding's head, a borrow

@@ -40,7 +40,6 @@ def count : Src => U loop (Src * i32) (ref input * 1) =
             case io_o {
               inl io_p -> let (b, io_it0) = io_p;
                 n <- return (unbang host[add32]) (n, i32[1]);
-                io_u <- return ();
                 return inr (io_it0, n)
             | inr io_d -> io_q <- return io_d;
                 c <- return io_q;

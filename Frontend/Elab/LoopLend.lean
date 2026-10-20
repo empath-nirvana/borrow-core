@@ -205,8 +205,10 @@ def Env.forBody (E : Env) (scope : List String) (sp : Span) (ys : List String) (
   if !E.usesC M then return M
   let ws := (spineNames fuel M).eraseDups.filter fun z =>
     scope.contains z && !E.aliases.contains z && !ys.contains z
-  let body := spliceTail (fun T => .bind T.span ⟨"io_u", T.span⟩ none T
-    (.ret T.span (tupleVal T.span ws)) false) fuel M
+  -- A terminal `()` is dropped, not bound.
+  let body := spliceTail (fun T => match T with
+    | .ret _ (.unit _) => .ret T.span (tupleVal T.span ws)
+    | T => .bind T.span ⟨"io_u", T.span⟩ none T (.ret T.span (tupleVal T.span ws)) false) fuel M
   E.blockBind sp body ws (.ret sp (.unit sp))
 
 /-- A terminal of the block's body, after the stretch `s`: the block's result `(place, r)`. -/

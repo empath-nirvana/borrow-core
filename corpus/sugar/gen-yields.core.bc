@@ -22,7 +22,6 @@ main : F i32 =
         let (x, io_hw16_3) = io_hxw16_3;
         acc <- return io_hw16_3;
         acc <- return (unbang host[add32]) (acc, x);
-        io_u <- return ();
         io_wv16_3 <- return acc;
         force io_k16_3.1 io_wv16_3, ()) : !U ((i32 * i32) * U ((i32 -o F (i32 * 1 + i32 * 1)) & F 1) -o F (i32 * 1 + i32 * 1)) * 1)) (io_fg16_3 <- return unbang produce__n1__g0;
     io_fa16_3 <- return (fx_w1, ());

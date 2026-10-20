@@ -11,11 +11,10 @@ main : F (i32 * i32) =
   n <- return i32[5];
   k <- return i32[0];
   j <- case (unbang host[gt_s32]) (n, i32[3]) {
-         inl e -> k <- return i32[2]; u <- return (); return (n, k)
+         inl e -> k <- return i32[2]; return (n, k)
        | inr t ->
            n <- return ((unbang host[mul32]) (n, i32[2]));
            k <- return i32[1];
-           u <- return ();
            return (n, k)
        };
   let (n, k) = j;

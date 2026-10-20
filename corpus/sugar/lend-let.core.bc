@@ -42,11 +42,9 @@ main : F U loop i32 1 =
             io_lb28_12_0 <- return withbor1['io_ll28_12, array i32, i32] t (thunkv Fun 'io_ll28_12 < dom.
                   return (thunkv fun (tb : imm 'io_ll28_12 array i32) ->
                       acc <- return (unbang host[add32]) (acc, (unbang get) ['io_ll28_12] (tb, i));
-                      io_u <- return ();
                       return boxed['io_ll28_12] acc));
             let (t, io_lr28_12_1) = io_lb28_12_0;
             acc <- return io_lr28_12_1;
-            io_u <- return ();
             return inr (io_it0, (t, acc))
         | inr io_d -> io_q <- return io_d;
             io_lv28_12 <- return (t, acc);
