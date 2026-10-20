@@ -751,6 +751,127 @@ theorem retsG_caseV {Q : Val → Prop} {G : Expr → Prop} {e₁ e₂ : Expr} {v
           exact perform_not_isVal _ (K₂.isVal_of_plug (by rw [← he.1]; exact v.2))
       | _ => simp [perfAt, Kont.plug, performE] at he
 
+theorem pairV_inj {a b c d : Val} (h : Val.pair a b = Val.pair c d) : a = c ∧ b = d :=
+  valPair_inj (congrArg Subtype.val h)
+
+/-! ### Primitives at one argument -/
+
+/-- `p v`, `p` not `perform`, is not a stop. -/
+theorem app1_ne_perfAt {p : Prim} (hp : p ≠ .perform) (x : Val) (K : Kont) (n i : UInt32)
+    (v : Val) : Expr.app (.val (.prim p)) (.val x) ≠ perfAt K n i v := by
+  intro he
+  cases K with
+  | hole =>
+      simp only [perfAt, Kont.plug, performE, Expr.app.injEq] at he
+      exact hp (by simpa [Expr.val, Val.prim] using he.1)
+  | appR f K₂ =>
+      simp only [perfAt, Kont.plug, Expr.app.injEq] at he
+      exact perform_not_isVal _ (K₂.isVal_of_plug (by rw [← he.2]; exact x.2))
+  | appL K₂ w =>
+      simp only [perfAt, Kont.plug, Expr.app.injEq] at he
+      exact perform_not_isVal _ (K₂.isVal_of_plug (by rw [← he.1]; exact IsVal.prim))
+  | _ => simp [perfAt, Kont.plug] at he
+
+/-- A step of `p v`, all values, is its head step. -/
+theorem step1_app1_head {μ μ₁ : Heap} {p : Prim} {x : Val} {E : Expr}
+    (h : Step1 (ℍ := ℍ) μ (.app (.val (.prim p)) (.val x)) μ₁ E) :
+    Head (ℍ := ℍ) μ (.app (.val (.prim p)) (.val x)) μ₁ E := by
+  obtain ⟨K', a, a', he, rfl, hh⟩ := h
+  cases K' with
+  | hole => simp only [Kont.plug] at he ⊢; subst he; exact hh
+  | appR f K₂ =>
+      simp only [Kont.plug, Expr.app.injEq] at he
+      exact absurd (K₂.isVal_of_plug (by rw [← he.2]; exact x.2)) hh.not_isVal
+  | appL K₂ w =>
+      simp only [Kont.plug, Expr.app.injEq] at he
+      exact absurd (K₂.isVal_of_plug (by rw [← he.1]; exact IsVal.prim)) hh.not_isVal
+  | _ => simp [Kont.plug] at he
+
+/-- `count_try` steps only at `(f, (n, (i, s)))`, to `countTryNext f n i s`. -/
+theorem step1_countTry_inv {μ μ₁ : Heap} {x : Val} {E : Expr}
+    (h : Step1 (ℍ := ℍ) μ (.app (.val (.prim .countTry)) (.val x)) μ₁ E) :
+    ∃ f n i s, x = Val.pair f (Val.pair (Val.i32 n) (Val.pair (Val.i32 i) s)) ∧ μ₁ = μ ∧
+      E = countTryNext f n i s := by
+  have hh := step1_app1_head h
+  generalize hE : Expr.app (.val (.prim .countTry)) (.val x) = X at hh
+  cases hh with
+  | countTry f n i s =>
+      simp only [Expr.app.injEq, true_and] at hE
+      exact ⟨f, n, i, s, Subtype.ext hE, rfl, rfl⟩
+  | _ => exfalso; simp_all [BoCa.BoLo.hndE, ubindE, BoCa.BoLo.ccatchE, cfinE, Expr.val, Val.prim]
+
+/-! ### The counted loop -/
+
+/-- The answers of a counted loop: `inj₁` of a state in `P`, or `inj₂` of an exit in `X`. -/
+def CountQ (P X : Val → Prop) (y : Val) : Prop :=
+  (∃ s, y = Val.inj₁ s ∧ P s) ∨ (∃ x, y = Val.inj₂ x ∧ X x)
+
+/-- **The counted loop keeps its invariant**: a step that maps states of `P` to `CountQ P X`
+makes `count_try` answer `CountQ P X`, by induction on the turns left. -/
+theorem retsG_countTry {G : Expr → Prop} {P X : Val → Prop} (f : Val) (n : UInt32)
+    (hf : ∀ (i : UInt32) s, P s →
+      RetsG (ℍ := ℍ) (CountQ P X) (fun _ => False) (.app (.val f) (.val (Val.pair (Val.i32 i) s)))) :
+    ∀ (k : Nat) (i : UInt32) (s : Val), (arrLen n).toNat - i.toNat = k → P s →
+      RetsG (ℍ := ℍ) (CountQ P X) G (.app (.val (.prim .countTry))
+        (.val (Val.pair f (Val.pair (Val.i32 n) (Val.pair (Val.i32 i) s))))) := by
+  intro k
+  induction k with
+  | zero =>
+      intro i s hk hs
+      refine retsG_step' ⟨fun _ => none, _, _, Step1.head (Head.countTry _ f n i s)⟩
+        (fun μ μ₁ t₁ hst => ?_)
+      obtain ⟨f', n', i', s', hx, -, rfl⟩ := step1_countTry_inv hst
+      obtain ⟨hf', hx⟩ := pairV_inj hx
+      obtain ⟨hn, hx⟩ := pairV_inj hx
+      obtain ⟨hi, hs'⟩ := pairV_inj hx
+      subst hf' hs'
+      have hn' : n' = n := by simpa [Val.i32] using (congrArg Subtype.val hn).symm
+      have hi' : i' = i := by simpa [Val.i32] using (congrArg Subtype.val hi).symm
+      subst hn' hi'
+      have hi : ¬ i' < arrLen n' := by rw [UInt32.lt_iff_toNat_lt]; omega
+      unfold countTryNext
+      rw [if_neg hi]
+      exact retsG_val (.inl ⟨_, rfl, hs⟩)
+  | succ k ih =>
+      intro i s hk hs
+      refine retsG_step' ⟨fun _ => none, _, _, Step1.head (Head.countTry _ f n i s)⟩
+        (fun μ μ₁ t₁ hst => ?_)
+      obtain ⟨f', n', i', s', hx, -, rfl⟩ := step1_countTry_inv hst
+      obtain ⟨hf', hx⟩ := pairV_inj hx
+      obtain ⟨hn, hx⟩ := pairV_inj hx
+      obtain ⟨hi, hs'⟩ := pairV_inj hx
+      subst hf' hs'
+      have hn' : n' = n := by simpa [Val.i32] using (congrArg Subtype.val hn).symm
+      have hi' : i' = i := by simpa [Val.i32] using (congrArg Subtype.val hi).symm
+      subst hn' hi'
+      have hlt : i' < arrLen n' := by rw [UInt32.lt_iff_toNat_lt]; omega
+      have hb := arrLen_bound n'
+      have hi1 : (i' + 1).toNat = i'.toNat + 1 := by
+        rw [UInt32.toNat_add]
+        have : i'.toNat < (arrLen n').toNat := UInt32.lt_iff_toNat_lt.mp hlt
+        simp only [UInt32.toNat_one]
+        exact Nat.mod_eq_of_lt (by omega)
+      unfold countTryNext
+      rw [if_pos hlt]
+      refine retsG_plain (K := .case .hole _ _) rfl
+        (retsG_mono (fun _ h => h) (fun _ (h : False) => h.elim) (hf i' s hs)) ?_
+      rintro y (⟨s'', rfl, hs''⟩ | ⟨x, rfl, hx⟩)
+      · refine retsG_case₁ .hole ?_
+        simp only [Kont.plug]
+        rw [countTry_cont_subst]
+        exact ih (i' + 1) s'' (by omega) hs''
+      · refine retsG_case₂ .hole ?_
+        exact retsG_val (w := Val.inj₂ x) (.inr ⟨x, rfl, hx⟩)
+
+/-- `count_try` at an argument that is not `(f, (n, (i, s)))` is stuck. -/
+theorem retsG_countTry_stuck {Q : Val → Prop} {G : Expr → Prop} {x : Val}
+    (hx : ¬ ∃ f n i s, x = Val.pair f (Val.pair (Val.i32 n) (Val.pair (Val.i32 i) s))) :
+    RetsG (ℍ := ℍ) Q G (.app (.val (.prim .countTry)) (.val x)) := by
+  refine retsG_stuck (fun μ μ₂ t₂ hst => ?_) ?_ (fun K n i v => app1_ne_perfAt (by decide) x K n i v)
+  · obtain ⟨f, n, i, s, h, -⟩ := step1_countTry_inv hst
+    exact hx ⟨f, n, i, s, h⟩
+  · intro h; simp at h
+
 end BoCa.Fig16.LogRel.Core.Frames
 
 end
