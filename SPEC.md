@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.86 · 2026-10-19
+Version 0.88 · 2026-10-20
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -7885,6 +7885,17 @@ and `scripts/alpha-check.py`.
 
 ## Changelog
 
+- **0.88** (2026-10-20) — #618: each construct's rule emits the target's shape. §16: a step with
+  no exit is `count_fold`'s, and a count from a literal in `[0, 2³¹)` is counted from it, the
+  counter the element (`walkB` takes `count_fold`; `walk_fold_index_lt`, `countFold_runs`). §14:
+  a point no move calls is its arm of the step, a move from the code before the first point is
+  the machine at that state (no `io_mk`), and a value terminal finishes as `inl V`. §18: a call's
+  binding is structured, so that a value that is one call's answer is the call, in tail position
+  or bound to the binding's own name; a lone parameter is its function's binder. The backend's
+  search for the fields that close a cycle enters it at a sum, so a list's box is at its
+  recursive position whatever the node order. Six `let mut` target pairs are met and join
+  `corpus/sugar/`, five targets corrected; clauses whose resume is in tail position are
+  classified `tail` (`corpus/kinds.expected`); 13 programs' counts fall; no result changes.
 - **0.87** (2026-10-20) — §41 (#617): binder identity. What the elaboration recognises by a binder
   (a borrow block's borrow over a loop, a block parameter, a port, a continuation, a layer's
   `call`, a div function's residual) it follows through copies (`Val.copyOf?`); a control
