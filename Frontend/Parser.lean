@@ -1342,7 +1342,9 @@ def slotCodeWrite (sp : Span) (y : String) : P Unit := do
 it. The binder, and the slot when it is one. -/
 def slotBinder (x : Ident) : P (Ident × Option String) := do
   let s ← get
-  if s.frameMode then
+  -- A slot is in scope only under the flag: `frameMode` is read only where one is, so that the
+  -- elaboration of a program without one reduces in the kernel (`Frontend/Tests.lean`).
+  if !s.slots.isEmpty then
     if let some (y, b) := s.scope.lookup x.name then
       if s.slots.contains y then
         slotCodeWrite x.span y
@@ -1356,7 +1358,7 @@ slots is a frame inside the lend: it hands back the slots it uses beside its res
 variables `thr` the block hands back, and the binding takes them apart (`blockThreads`). Outside
 the flag, or when the body uses no slot, the block's own hand-on of `thr`. -/
 def callbackSlots (M : Comp) (thr : List String) : P (Comp × List String) := do
-  if (← get).frameMode && !(M.boundNames.contains "io_bt") then
+  if !(← get).slots.isEmpty && !(M.boundNames.contains "io_bt") then
     let ps ← slotsOf M
     unless ps.isEmpty do
       let thr := thr ++ ps
@@ -1367,7 +1369,7 @@ def callbackSlots (M : Comp) (thr : List String) : P (Comp × List String) := do
 `Frames.wrapLends`); `mk` builds the innermost value. -/
 def slotLendsV (V : Val) (mk : Val → Val := id) (except : List String := []) : P Val := do
   let s ← get
-  if !s.frameMode then return mk V
+  if s.slots.isEmpty then return mk V
   let ys := Frames.lentSlots (s.slots.filter (!except.contains ·)) V
   if ys.isEmpty then return mk V
   runFM (Frames.wrapLends V.span mk ys V)
@@ -1375,7 +1377,7 @@ def slotLendsV (V : Val) (mk : Val → Val := id) (except : List String := []) :
 /-- A tail value bound before it is returned when it lends (`frameMode`): a lend is made in the
 head of a binding, and what is around the tail (a turn's state, a join's slots) pairs it. -/
 def slotTail (sp : Span) (S : Comp) : P Comp := do
-  if !(← get).frameMode || (← get).slots.isEmpty then return S
+  if (← get).slots.isEmpty then return S
   match S with
   | .ret _ V =>
     if V.lends || (match V with | .app _ (.app _ (.sugar _ (.borrow .modify _)) _) _ => true | _ => false) then
@@ -1533,7 +1535,7 @@ def valPrefix : Nat → P Val
         modify fun s => { s with inCode := false }
         frame (compPrefix n))
       let sp ← spanFrom st
-      if (← get).frameMode && w.isEmpty then
+      if w.isEmpty && !(← get).slots.isEmpty then
         let ps ← slotsOf M
         unless ps.isEmpty do
           modify fun s => { s with blockThreads := ps, joined := [], pendingRun := some sp }
@@ -1950,7 +1952,7 @@ def valAtom : Nat → P Val
       else
         let y ← lookName s t.span
         -- A read of a slot is a load (`frameMode`, `Frames.slotLoads`).
-        if (← get).frameMode && (← get).slots.contains y then return Frames.mark t.span y
+        if (← get).slots.contains y then return Frames.mark t.span y
         pure (.var t.span y)
     | .int k => discard bump; pure (.sugar t.span (.lit k))
     | .flt x => discard bump; let (m, e) := decOfText x; pure (.sugar t.span (.flit m e))
@@ -2078,7 +2080,7 @@ def compG : Nat → Bool → P Comp
       let M ← match M with
         | .ret rsp V => do pure (Comp.ret rsp (← slotLendsV V))
         | M => pure M
-      if (← get).frameMode && M.hasArms && D.isNone then
+      if M.hasArms && D.isNone && !(← get).slots.isEmpty then
         let ps ← slotsOf M
         unless ps.isEmpty do return ← slotJoin sp n ps (some (.var x)) M N
       bindForm sp n x none M D N false xs
@@ -2097,7 +2099,7 @@ def compG : Nat → Bool → P Comp
       let M ← match M with
         | .ret rsp V => do pure (Comp.ret rsp (← slotLendsV V))
         | M => pure M
-      if (← get).frameMode && M.hasArms && D.isNone then
+      if M.hasArms && D.isNone && !(← get).slots.isEmpty then
         let ps ← slotsOf M
         unless ps.isEmpty do
           let j ← freshName "io_fj"
@@ -2110,7 +2112,7 @@ def compG : Nat → Bool → P Comp
       -- resolves to (SPEC §41, rule R2).
       discard bump; discard bump
       let x ← lookName x₀ t.span
-      if (← get).frameMode && (← get).slots.contains x then
+      if (← get).slots.contains x then
         return ← slotStore n st head x t.span
       unless (← get).muts.contains x do
         failAt t.span s!"`{x₀}` is assigned, but it is not declared `let mut`"
@@ -2141,7 +2143,7 @@ def compG : Nat → Bool → P Comp
       let (x, sl) ← slotBinder ⟨x, xt.span⟩
       let N ← comp n
       let N ← slotStored (← spanFrom st) x.name sl N
-      if (← get).frameMode && M.hasArms then
+      if M.hasArms && !(← get).slots.isEmpty then
         let ps ← slotsOf M
         unless ps.isEmpty do
           let sp ← spanFrom st
@@ -2232,7 +2234,7 @@ def compG : Nat → Bool → P Comp
         let p ← bindP
         let N ← comp n
         let sp ← spanFrom st
-        if (← get).frameMode && M.hasArms then
+        if M.hasArms && !(← get).slots.isEmpty then
           let ps ← slotsOf M
           unless ps.isEmpty do return ← slotJoin sp n ps (some p) M N
         -- The `let mut` variables its arms assign are handed on to what follows.
@@ -2258,26 +2260,25 @@ def compG : Nat → Bool → P Comp
       checkRun V
       expectSym ";"
       let V ← slotLendsV V
-      if (← get).frameMode then
-        -- `let mut x = V; N`: a slot (the rule `new`).
-        if isMut then
-          if let .var x := p then
-            if !capabilityNames.contains x.name then
-              let x ← bindName x
-              let sp ← spanFrom st
-              let V := match A with | some A => Val.ascribe sp V A | none => V
-              return ← slotScope n sp x V
-        -- `let (x, q) = f(…, x, …)` of a slot: the swap `modify &mut x { o -> f(…, o, …) }`.
-        if let (.pair _ (.var x) q, .app _ _ args) := (p, V) then
-          if let some (y, b) := (← get).scope.lookup x.name then
-            if (← get).slots.contains y && (argsOf args).any (Frames.mark? · == some y) then
-              slotCodeWrite x.span y
-              noteOcc x.span x.name y b
-              let o ← freshName "io_fo"
-              let q ← bindPatNames q
-              let N ← comp n
-              let sp ← spanFrom st
-              return ← letVal sp n q A (Frames.swapV sp y o (.ret sp (Frames.vReads y o V))) N thr
+      -- `let mut x = V; N`: a slot (the rule `new`).
+      if isMut && (← get).frameMode then
+        if let .var x := p then
+          if !capabilityNames.contains x.name then
+            let x ← bindName x
+            let sp ← spanFrom st
+            let V := match A with | some A => Val.ascribe sp V A | none => V
+            return ← slotScope n sp x V
+      -- `let (x, q) = f(…, x, …)` of a slot: the swap `modify &mut x { o -> f(…, o, …) }`.
+      if let (.pair _ (.var x) q, .app _ _ args) := (p, V) then
+        if let some (y, b) := (← get).scope.lookup x.name then
+          if (← get).slots.contains y && (argsOf args).any (Frames.mark? · == some y) then
+            slotCodeWrite x.span y
+            noteOcc x.span x.name y b
+            let o ← freshName "io_fo"
+            let q ← bindPatNames q
+            let N ← comp n
+            let sp ← spanFrom st
+            return ← letVal sp n q A (Frames.swapV sp y o (.ret sp (Frames.vReads y o V))) N thr
       let p ← bindP (some V)
       let N ← comp n
       letVal (← spanFrom st) n p A V N thr
@@ -2474,7 +2475,7 @@ def statement : Nat → Pos → Bool → P Comp
       if !joined.isEmpty then
         return ← joinBind sp n joined none (handArms joined S) N
       -- A construct whose arms use slots hands them back (`frameMode`, the rule `case`).
-      if (← get).frameMode && S.hasArms then
+      if S.hasArms && !(← get).slots.isEmpty then
         let ps ← slotsOf S
         unless ps.isEmpty do return ← slotJoin sp n ps none S N
       match frameV with

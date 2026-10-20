@@ -3893,9 +3893,9 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         -- `Frontend.Elab.Frames`) that is neither a cell nor an array is lent through a cell
         -- allocated for it, as a value is (SPEC §35); the content comes back by its `free`
         -- (SPEC §43).
-        if framesEnv && (k == .imm || k == .mut) then
+        if k == .imm || k == .mut then
           if let .var vsp v := P then
-            if v.startsWith "io_fbv" then
+            if v.startsWith "io_fbv" && framesEnv then
               let blk : Val := .app sp (.app sp₂ (.sugar ksp (.borrow k x))
                   (.app vsp (.sugar vsp (.call "alloc")) P))
                 (.thunkv tsp (.lam lsp b (.name lsp "_") S))
