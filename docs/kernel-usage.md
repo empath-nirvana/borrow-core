@@ -124,7 +124,7 @@ baseline).
 | 11 | [`lam`](../Core/Fundamental.lean#L111) | §3 | 366 | 12830 | 32372 | erasure only (`Convert.lean:842`) | **A** | — |
 | 12 | [`lamDead`](../Core/Fundamental.lean#L114) | §26 | 53 | 85 | 96 | erasure only | **A** | — |
 | 13 | [`app`](../Core/Fundamental.lean#L117) | §3 | 273 | 3143 | 3555 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:161`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
-| 14 | [`withI`](../Core/Fundamental.lean#L121) | §3 | 209 | 1428 | 1513 | the new backend reads the code's kind from the node's type (`Backend2/Convert.lean:996`, `mkAmp`); the old re-infers it by shape | **A** | — |
+| 14 | [`withI`](../Core/Fundamental.lean#L121) | §3 | 209 | 1428 | 1513 | the new backend reads the code's kind from the node's type (`Backend2/Convert.lean:1033`, `mkAmp`); the old re-infers it by shape | **A** | — |
 | 15 | [`proj₁`](../Core/Fundamental.lean#L124) | §3 | 232 | 1589 | 1716 | erasure only | **A** | — |
 | 16 | [`proj₂`](../Core/Fundamental.lean#L126) | §3 | 216 | 1412 | 1507 | erasure only | **A** | — |
 | 17 | [`topI`](../Core/Fundamental.lean#L129) | §3 | 0 | 0 | 0 | — | **C** | nothing (CBPV basis; the checker has the rule, `Frontend/Check/Rules.lean:57`, and no program reaches it) |
@@ -155,7 +155,7 @@ baseline).
 | 42 | [`arrNew`](../Core/Fundamental.lean#L193) | §9 | 176 | 880 | 2877 | erasure only (`tab`, `Flat/Lower.lean:567`) | **A** | — |
 | 43 | [`arrFree`](../Core/Fundamental.lean#L196) | §9 | 5 | 10 | 10 | erasure only (`drop`, `Flat/Lower.lean:637`) | **A** | — |
 | 44 | [`arrSize`](../Core/Fundamental.lean#L199) | §9 | 124 | 400 | 1970 | erasure only | **A** | — |
-| 45 | [`arrReplace`](../Core/Fundamental.lean#L201) | §9 | 134 | 902 | 6253 | the new backend lowers it from the node as a slot swap: the old contents moved out, the new moved in, no copy and no drop (`Backend2/Convert.lean:1229`, `Backend2/Lower.lean:540`; #608) | **A** | N6 |
+| 45 | [`arrReplace`](../Core/Fundamental.lean#L201) | §9 | 134 | 902 | 6253 | the new backend lowers it from the node as a slot swap: the old contents moved out, the new moved in, no copy and no drop (`Backend2/Convert.lean:1299`, `Backend2/Lower.lean:540`; #608) | **A** | N6 |
 | 46 | [`arrLen`](../Core/Fundamental.lean#L204) | §9 | 131 | 211 | 784 | erasure only | **A** | — |
 | 47 | [`arrGet`](../Core/Fundamental.lean#L207) | §9 | 152 | 335 | 1685 | erasure only (`idx`, `Flat/Lower.lean:604`), bounds-checked at every access | **A** | — |
 | 48 | [`arrCopy`](../Core/Fundamental.lean#L210) | §9 | 143 | 1202 | 1675 | erasure only | **A** | — |
@@ -193,8 +193,8 @@ baseline).
 | 80 | [`roll`](../Core/Fundamental.lean#L352) | §6 | 67 | 471 | 920 | erasure only (identity) | **A** | — |
 | 81 | [`unroll`](../Core/Fundamental.lean#L355) | §6 | 48 | 215 | 287 | erasure only (identity) | **A** | — |
 | 82 | [`foldImm`](../Core/Fundamental.lean#L362) | §6 | 11 | 15 | 17 | no recogniser: compiled as the generic Z fixed point (`fixBody?`, `Convert.lean:303`) | **A** | — |
-| 83 | [`foldOwn`](../Core/Fundamental.lean#L368) | §6 | 15 | 23 | 28 | the new backend reads `F` and `R` from the node: the fold is a function generated from the shape (`genFoldFns`, `travF`, `Backend2/Convert.lean:482`); no pointer reversal yet (B6) | **A** | B6: pointer reversal from the node |
-| 84 | [`foldReuse`](../Core/Fundamental.lean#L373) | §6 | 3 | 3 | 3 | as `foldOwn`: the emptied cell handed to the algebra as the node's type says (`travF`'s reuse, `Backend2/Convert.lean:435`) | **A** | B6 |
+| 83 | [`foldOwn`](../Core/Fundamental.lean#L368) | §6 | 15 | 23 | 28 | the new backend reads `F` and `R` from the node: the fold is a function generated from the shape (`genFoldFns`, `travF`, `Backend2/Convert.lean:486`); no pointer reversal yet (B6) | **A** | B6: pointer reversal from the node |
+| 84 | [`foldReuse`](../Core/Fundamental.lean#L373) | §6 | 3 | 3 | 3 | as `foldOwn`: the emptied cell handed to the algebra as the node's type says (`travF`'s reuse, `Backend2/Convert.lean:439`) | **A** | B6 |
 | 85 | [`nuIn`](../Core/Fundamental.lean#L377) | §7 | 204 | 768 | 814 | erasure only; the codata scheme is re-recognised on the closure IR (`collapse?`, `Backend/Clos/Collapse.lean:74`) | **B** | N4 (codata and loops) |
 | 86 | [`nuOut`](../Core/Fundamental.lean#L379) | §7 | 204 | 2434 | 2604 | as `nuIn` | **B** | N4 |
 | 87 | [`unfoldN`](../Core/Fundamental.lean#L383) | §7 | 197 | 634 | 663 | as `nuIn` | **B** | N4 |
@@ -223,19 +223,19 @@ ones have their run facts (`Frontend/Check/Derived.lean`).
 
 | # | rule | §  | progs | static | expanded | read by the backend | class | what would change it |
 |---|---|---|---|---|---|---|---|---|
-| 100 | [`dtor`](../Frontend/Check/TExpr.lean#L364) | §12 | 288 | 3498 | 6213 | the new backend reads `A` from the node: the destructor `dtorAt` gives, a cell freed, a `μ` by its fold, `close` at codata (`genDtor`, `Backend2/Convert.lean:679`) | **A** | — |
+| 100 | [`dtor`](../Frontend/Check/TExpr.lean#L364) | §12 | 288 | 3498 | 6213 | the new backend reads `A` from the node: the destructor `dtorAt` gives, a cell freed, a `μ` by its fold, `close` at codata (`genDtor`, `Backend2/Convert.lean:683`) | **A** | — |
 | 101 | [`allocS`](../Frontend/Check/TExpr.lean#L366) | §5 | 13 | 15 | 43 | erasure only (no recogniser for `allocS`) | **B** | N5: frame slots by rule |
 | 102 | [`freeS`](../Frontend/Check/TExpr.lean#L368) | §5 | 1 | 1 | 1 | erasure only | **B** | N5 |
 | 103 | [`withborSM`](../Frontend/Check/TExpr.lean#L371) | §5 | 1 | 1 | 1 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5 |
 | 104 | [`withborSI`](../Frontend/Check/TExpr.lean#L373) | §5 | 0 | 0 | 0 | — | **C** | nothing (checker producer `Frontend/Check/Consts.lean:382`; no program writes an `imm` block borrow) — or U4 (#593): records over blocks |
 | 105 | [`withborF2M`](../Frontend/Check/TExpr.lean#L375) | §5 | 2 | 2 | 2 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5 |
 | 106 | [`withborF2I`](../Frontend/Check/TExpr.lean#L377) | §5 | 0 | 0 | 0 | — | **C** | nothing (checker producer `Consts.lean:506`, unreached) |
-| 107 | [`litFn`](../Frontend/Check/TExpr.lean#L379) | §17 | 53 | 159 | 181 | the new backend reads the bytes from the node: the program's data and a code that reads them (`litCode`, `Backend2/Convert.lean:836`); literal views from it (`Backend2/LitViews.lean`) | **A** | — |
-| 108 | [`divLit`](../Frontend/Check/TExpr.lean#L382) | §39 | 10 | 15 | 17 | the new backend reads the operation and the divisor from the node: the division with no error arm (`convDivLit`, `Backend2/Convert.lean:1169`; `divLitVals`, `Backend2/Lower.lean:360`) | **A** | — |
+| 107 | [`litFn`](../Frontend/Check/TExpr.lean#L379) | §17 | 53 | 159 | 181 | the new backend reads the bytes from the node: the program's data and a code that reads them (`litCode`, `Backend2/Convert.lean:840`); literal views from it (`Backend2/LitViews.lean`) | **A** | — |
+| 108 | [`divLit`](../Frontend/Check/TExpr.lean#L382) | §39 | 10 | 15 | 17 | the new backend reads the operation and the divisor from the node: the division with no error arm (`convDivLit`, `Backend2/Convert.lean:1227`; `divLitVals`, `Backend2/Lower.lean:360`) | **A** | — |
 | 109 | [`walk`](../Frontend/Check/TExpr.lean#L384) | §16 | 60 | 78 | 122 | erasure only: the node's fact (`walk_index_lt`, `Derived.lean:14`: every index is below the view's length) is not read; each access is bounds-checked (`tickBound`, `Flat/Lower.lean:124`) | **B** | N5: bounds checks elided from the node |
 | 110 | [`selfCall`](../Frontend/Check/TExpr.lean#L387) | §21 | 51 | 219 | 281 | re-derived: the fixed point is re-recognised (`fixBody?`, `Convert.lean:303`) | **B** | N2 (every self-call is under `bounded_fix` and `Exhausted`, outside N1's fragment), then direct self-calls from the node |
 | 111 | [`lendCell`](../Frontend/Check/TExpr.lean#L390) | §35, §41 | 26 | 52 | 74 | re-derived: the scoped cell is re-recognised (`markScoped`, `Convert.lean:544`) | **D** | N5 (framing from the node); its producers are workarounds (see class D): `lendBorrow`'s value branch (`Frontend/Sugar.lean:2276`, ergonomics N1) and `withBlk`'s state cell (`Sugar.lean:3526`) → #626/#632 |
-| 112 | [`use`](../Frontend/Check/TExpr.lean#L393) | §3 | 347 | 10571 | 19615 | the new backend converts each key's body once and instantiates it at later uses; a body that takes a closure at each use (`convUse`, `Backend2/Convert.lean:1136`) | **A** | #541: keys with the argument codes |
+| 112 | [`use`](../Frontend/Check/TExpr.lean#L393) | §3 | 347 | 10571 | 19615 | the new backend converts each key's body once and instantiates it at later uses; a body that takes a closure at each use (`convUse`, `Backend2/Convert.lean:1194`) | **A** | #541: keys with the argument codes |
 
 ## 6. Type formers
 
