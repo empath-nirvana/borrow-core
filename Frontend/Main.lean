@@ -567,6 +567,12 @@ def main (argv : List String) : IO UInt32 := do
   | ["erase", file] => erase file
   | ["lir", "--typed", file] => typedDump file
   | ["lir", file] => lirDump file
+  | ["lir", "--layout", file] => do
+    let src ← IO.FS.readFile file
+    match Backend.checkedOf file src >>= Backend2.layoutReport with
+    | .error e => IO.eprintln e; return 1
+    | .ok ls => for l in ls do IO.println l
+                return 0
   | ["alpha", file] => alpha false file
   | ["alpha", "--map", file] => alpha true file
   | [cmd, file] =>

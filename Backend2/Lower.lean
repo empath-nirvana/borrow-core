@@ -47,6 +47,8 @@ structure LCtx where
   counts : Bool
   /-- The offset in the data of the capabilities' static words. -/
   staticBase : Nat
+  /-- The code of each call's function variable, where the closure flow finds one. -/
+  known : Std.HashMap Var Nat := {}
 
 structure LState where
   locals : Std.HashMap Var (List Nat) := {}
@@ -274,11 +276,18 @@ def codeFn (c j : Nat) : LM Nat := do
 
 /-- The function and arguments of a call of the closure in `ls` (class node `n`), at component
 `j`, on `args`: the code's function directly when the class has one code, else the dispatcher. -/
-def callTarget (n j : Nat) (ls : List Nat) (args : List Exp) : LM (List Stmt × Nat × List Exp) := do
+def callTarget (n j : Nat) (ls : List Nat) (args : List Exp) (g : Option Var := none) :
+    LM (List Stmt × Nat × List Exp) := do
   let L ← L
   let u := L.unionOf n
-  if u.size == 1 then
-    let c := u[0]!
+  let km := (← read).known
+  let known := match g with
+    | some g => match km[g]? with
+      | some c => if u.contains c then some c else none
+      | none => none
+    | none => none
+  let known := if u.size == 1 then u[0]? else known
+  if let some c := known then
     let (s, env) ← envOf n c ls
     return (s, ← codeFn c j, env ++ args)
   let tick := if (← read).counts then [Stmt.tick] else []
@@ -583,17 +592,17 @@ def lowerTm (fuel : Nat) (t : Tm) (n : Nat) (d : Dest) : LM (List Stmt) := do
   | .app g a => do
     let gn ← nodeV g
     let (_, _, res) ← classOf gn
-    let (pre, fn, args) ← callTarget gn 0 (← vals g) (locs (← vals a))
+    let (pre, fn, args) ← callTarget gn 0 (← vals g) (locs (← vals a)) (some g)
     lowerCall pre fn args (← wordsN (res.headD n)) d
   | .app0 g => do
     let gn ← nodeV g
     let (_, _, res) ← classOf gn
-    let (pre, fn, args) ← callTarget gn 0 (← vals g) []
+    let (pre, fn, args) ← callTarget gn 0 (← vals g) [] (some g)
     lowerCall pre fn args (← wordsN (res.headD n)) d
   | .sel g j => do
     let gn ← nodeV g
     let (_, _, res) ← classOf gn
-    let (pre, fn, args) ← callTarget gn j (← vals g) []
+    let (pre, fn, args) ← callTarget gn j (← vals g) [] (some g)
     lowerCall pre fn args (← wordsN (res.getD j n)) d
   | .call fn as => do
     let ws ← as.mapM vals
@@ -878,11 +887,12 @@ def entryFn (fMain : Nat) : LM Backend.Flat.Fn := do
   pure { name := "entry", params := 0, results := 0, locals := nloc, body }
 
 /-- The word IR of a program at its layouts; with `counts`, the counting build. -/
-def lowerProg (p : Prog) (L : Layouts) (counts : Bool) : Except String Backend.Flat.Prog := do
+def lowerProg (p : Prog) (L : Layouts) (known : Std.HashMap Var Nat) (counts : Bool) :
+    Except String Backend.Flat.Prog := do
   let nf := p.fns.size
   let fMain := 1 + nf
   let pad := (8 - p.data.size % 8) % 8
-  let ctx : LCtx := { L, p, helperBase := fMain + 2, counts, staticBase := p.data.size + pad }
+  let ctx : LCtx := { L, p, helperBase := fMain + 2, counts, staticBase := p.data.size + pad, known }
   let act : LM (List Backend.Flat.Fn) := do
     let fns ← p.fns.toList.zipIdx.mapM fun (fd, i) => lowerFn i fd
     let k := L.w L.mainNode

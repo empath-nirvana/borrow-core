@@ -3,6 +3,7 @@ import Backend2.Convert
 import Backend2.Print
 import Backend2.Interp
 import Backend2.Lower
+import Backend2.Flow
 
 /-!
 # Backend2 — driver
@@ -47,10 +48,22 @@ def layoutsOf (k : Backend.CheckedProg) (p : Prog) : Except String Lay.Layouts :
   let (g, m) ← Lay.places p
   pure (Lay.resolve p g m (cellsOf k))
 
+/-- The closure classes of a program's layouts, one a line: its codes, its width, whether its
+environment is on the heap (`bcc lir --layout`). -/
+def layoutReport (k : Backend.CheckedProg) : Except String (List String) := do
+  let (p, _) ← lirOf k
+  let L ← layoutsOf k p
+  let cls := (L.union.toList.filter (!·.2.isEmpty)).map fun (r, cs) =>
+    s!"class {r}: codes {cs.toList} width {L.w r}{if L.isRec r then " heap" else ""} : " ++
+      (p.codes[cs[0]!]?.map (fun c => (c.ty.pp.take 100).toString)).getD ""
+  let boxes := L.boxed.toList.map fun (v, i) => s!"boxed {v}.{i}"
+  pure (cls ++ boxes)
+
 /-- The word IR of a checked program by the new backend; with `counts`, the counting build. -/
 def flatOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String Backend.Flat.Prog := do
   let (p, _) ← lirOf k
-  Low.lowerProg p (← layoutsOf k p) counts
+  let L ← layoutsOf k p
+  Low.lowerProg p L (Flow.known p L) counts
 
 /-- The program as WAT by the new backend. -/
 def watOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String String := do

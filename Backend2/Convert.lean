@@ -846,6 +846,33 @@ def spineOf : Nat → TExpr → List (Masks × TExpr) × TExpr
     ((u, ta) :: as, h)
   | _, t => ([], t)
 
+mutual
+/-- The type holds a closure. -/
+def holdsClos : Nat → LTy → Bool
+  | 0, _ => true
+  | f + 1, t => match t with
+    | .thunk _ => true
+    | .pair a b | .sum a b => holdsClos f a || holdsClos f b
+    | .mu a | .ref a | .imm a | .mut a | .fam a => holdsClos f a
+    | _ => false
+/-- A value of the type takes a closure as an argument: a higher-order function, or a value holding
+one. -/
+def takesClos : Nat → LTy → Bool
+  | 0, _ => true
+  | f + 1, t => match t with
+    | .thunk k => takesClosK f k
+    | .pair a b | .sum a b => takesClos f a || takesClos f b
+    | _ => false
+def takesClosK : Nat → LCTy → Bool
+  | 0, _ => true
+  | f + 1, k => match k with
+    | .arr a k => holdsClos f a || takesClosK f k
+    | .all k | .nu k => takesClosK f k
+    | .amp k₁ k₂ => takesClosK f k₁ || takesClosK f k₂
+    | .ret a => takesClos f a
+    | .top => false
+end
+
 /-- The key of a `use`: the declaration, its type arguments and the elaborator's key. -/
 def useKey (decl : Nat) (targs : List VTy) (info : TInfo) (j : Jdg) : String :=
   s!"{decl}|{", ".intercalate (targs.map ppVT)}|{reprStr info.key}|{ppJ j}"
@@ -1049,6 +1076,11 @@ def convUse (fuel : Nat) (ctx : Ctx) (info : TInfo) (j : Jdg) (decl : Nat) (targ
     (body : TExpr) : CM Tm := do
   let key := useKey decl targs info j
   let slots : List (Nat × Var) := ctx.zipIdx.filterMap fun (s, i) => s.map (i, ·)
+  -- A body that takes a closure is specialised to each use, as it is to each set of argument codes
+  -- (docs/compiler.md §3.1): its codes would join the closures of every use otherwise.
+  if takesClos 64 (← repJ j) then
+    readFact "use.perUse"
+    return ← conv fuel ctx body
   match (← get).uses[key]? with
   | some tp =>
     -- The slots the template reads must be live here; any other live slot is dropped.

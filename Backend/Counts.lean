@@ -1,5 +1,6 @@
 import Backend.Driver
 import Backend.Cells
+import Backend2.Driver
 
 /-!
 # Backend — `bcc-counts`
@@ -45,6 +46,9 @@ With `--native`, the second run is the native build (`bcc run --native`, SPEC §
 `wasmtime`'s, and the two must agree on the counts and the exit status.
 
 With `--kernel`, the program is the kernel program `name` (`Backend/Kernel.lean`).
+
+With `--backend new` first, the program is compiled by the new backend (`Backend2/`, the pure
+fragment): its word IR and its Wasm or native build, counted the same way.
 -/
 
 /-- All of standard input, read in at most `fuel` chunks of 64 KiB. -/
@@ -129,15 +133,17 @@ def kernelMain (sitesOnly : Bool) (name : String) : IO UInt32 := do
   | _, _ => IO.eprintln s!"{name}: no counts"; return 1
 
 /-- `bcc-counts --native <file>`: the flat IR's counts against the native build's.  `[spec §40]` -/
-def nativeMain (file : String) (args : List String) : IO UInt32 := do
+def nativeMain (new : Bool) (file : String) (args : List String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   let k := Backend.checkedOf file src
   let input ← if Backend.readsInput k then readAllIn (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
-  let (flat, status) ← match Backend.interpStage "flat-counts" file k input.toList (Backend.argsBytes args) with
+  let flatR := if new then Backend2.interpStage "lflat-counts" k input.toList (Backend.argsBytes args)
+    else Backend.interpStage "flat-counts" file k input.toList (Backend.argsBytes args)
+  let (flat, status) ← match flatR with
     | .ok o => pure (String.fromUTF8! o.out, o.status)
     | .error e => IO.eprintln e; return 1
-  let ll ← match k >>= (·.ll true) with
+  let ll ← match k >>= (fun k => if new then Backend2.llOf k true else k.ll true) with
     | .ok w => pure w
     | .error e => IO.eprintln e; return 1
   let dir ← IO.FS.createTempDir
@@ -164,11 +170,15 @@ def nativeMain (file : String) (args : List String) : IO UInt32 := do
   | none, _ => IO.eprintln s!"{file}: the flat IR wrote no counts"; return 1
   | _, none => IO.eprintln s!"{file}: native wrote no counts: {r.stderr}"; return 1
 
-def main (argv : List String) : IO UInt32 := do
+def main (argv₀ : List String) : IO UInt32 := do
+  let (new, argv) := match argv₀ with
+    | "--backend" :: "new" :: rest => (true, rest)
+    | "--backend" :: "old" :: rest => (false, rest)
+    | _ => (false, argv₀)
   if let "--native" :: file :: rest := argv then
     match rest with
-    | [] => return ← nativeMain file []
-    | "--" :: args => return ← nativeMain file args
+    | [] => return ← nativeMain new file []
+    | "--" :: args => return ← nativeMain new file args
     | _ => IO.eprintln "usage: bcc-counts --native <file> [-- arg…]"; return 2
   if let ["--kernel", name] := argv then return ← kernelMain false name
   if let ["--kernel", "--sites", name] := argv then return ← kernelMain true name
@@ -195,10 +205,13 @@ def main (argv : List String) : IO UInt32 := do
   let k := Backend.checkedOf file src
   let input ← if Backend.readsInput k then readAllIn (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
-  let (flat, status, mem) ← match k >>= fun k => Backend.flatMemCounts k input.toList (Backend.argsBytes args) with
+  let memR := k >>= fun k => if new then do
+      Backend.Flat.interpMem Backend.runFuel (← Backend2.flatOf k true) input.toList (Backend.argsBytes args)
+    else Backend.flatMemCounts k input.toList (Backend.argsBytes args)
+  let (flat, status, mem) ← match memR with
     | .ok (o, m) => pure (String.fromUTF8! o.out, o.status, m)
     | .error e => IO.eprintln e; return 1
-  let wat ← match k >>= (·.wat true) with
+  let wat ← match k >>= (fun k => if new then Backend2.watOf k true else k.wat true) with
     | .ok w => pure w
     | .error e => IO.eprintln e; return 1
   let dir ← IO.FS.createTempDir
