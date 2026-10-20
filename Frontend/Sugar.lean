@@ -533,12 +533,18 @@ def varsFor (A : CVTy) : Val → Option (List (String × CVTy))
 def isLinear (A : CVTy) : Bool := Class.of A == .linear
 
 /-- The variables a terminal `return V` of the body puts in each component of the result that
-has no destructor. -/
-def termParts (parts : List CVTy) : Comp → Option (List (List (String × CVTy)))
-  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N => termParts parts N
-  | .case _ _ _ M _ N => (termParts parts M).orElse fun _ => termParts parts N
+has no destructor, as the loops' states hold them: a variable the terminal names by a copy made
+after the last loop, `x1 <- return x`, is `x` there. The residual is identified by its binder,
+followed through its copies, not by the name the terminal gives it (SPEC §41, #617). -/
+def termParts (parts : List CVTy) (ρ : List (String × String)) :
+    Comp → Option (List (List (String × CVTy)))
+  | .bind _ x _ (.ret _ (.var _ y)) N _ => termParts parts ((x.name, (ρ.lookup y).getD y) :: ρ) N
+  | .loop _ _ _ _ _ N => termParts parts [] N
+  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N => termParts parts ρ N
+  | .case _ _ _ M _ N => (termParts parts ρ M).orElse fun _ => termParts parts ρ N
   | .ret _ (.app _ (.sugar _ .retE) V) | .ret _ V =>
-    ((parts.zip (alignV parts V)).filter (isLinear ·.1)).mapM fun (A, v) => v.bind (varsFor A)
+    ((parts.zip (alignV parts V)).filter (isLinear ·.1)).mapM fun (A, v) =>
+      (v.bind (varsFor A)).map (·.map fun (z, T) => ((ρ.lookup z).getD z, T))
   | _ => none
 
 /-- What a div body is elaborated at: its result `B`, its residual `R = K * 1` (or `1`), `K`, and
@@ -577,7 +583,7 @@ def loopCxOf (sp : Span) (B : CVTy) (M : Comp) (bare : Bool := false) : Except E
   let lin := parts.filter isLinear
   if lin.isEmpty then return ⟨B, .unit, .unit, [], true⟩
   let K := tupleT lin
-  match termParts parts M with
+  match termParts parts [] M with
   | some ps => pure (if bare then ⟨B, K, K, ps, false⟩ else ⟨B, .tensor K .unit, K, ps, true⟩)
   | none => throw ⟨sp, s!"a div function whose result holds `{ppT K}`, which has no destructor, " ++
       "must hand it back by name: `return (c, …)` (SPEC §14)"⟩
