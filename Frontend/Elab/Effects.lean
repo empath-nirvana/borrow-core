@@ -1884,13 +1884,20 @@ def trRet : Nat → Cx → List Cap → Bool → Span → Val → EM Comp
     let (bs, V') ← trV n cx cs V
     let plain := isExit V' || !wrap || cs.isEmpty
     -- A value that is one call's answer is the call, in tail position: its answer is this one's
-    -- when it hands back the capabilities this computation hands back, or none are.
+    -- when it hands back the capabilities this computation hands back, or none are. A binding
+    -- annotated with the call's type (whose type is not known otherwise) ascribes the call's value, or,
+    -- at a computation, stays.
+    let typed : Option VTy → Comp → Option Comp
+      | none, M => some M
+      | some A, .ret rsp W => some (.ret rsp (.ascribe rsp W A))
+      | some _, _ => none
     match bs.getLast?, V' with
-    | some (.one _ x _ M _), .var _ y =>
-      if x == y && plain then return ← chain bs.dropLast M
-    | some (.caps _ _ _ M cs' x _ _), .var _ y =>
-      if x == y && ((cs'.isEmpty && plain) || (wrap && cs'.map (·.var) == cs.map (·.var))) then
-        return ← chain bs.dropLast M
+    | some (.one _ x A M _), .var _ y =>
+      if let (true, some M') := (x == y && plain, typed A M) then return ← chain bs.dropLast M'
+    | some (.caps _ _ A M cs' x _ _), .var _ y =>
+      if let (true, some M') := (x == y && ((cs'.isEmpty && plain) ||
+          (wrap && cs'.map (·.var) == cs.map (·.var))), typed A M) then
+        return ← chain bs.dropLast M'
     | _, _ => pure ()
     let T := if plain then Comp.ret sp V' else .ret sp (capsTuple sp cs V')
     chain bs T

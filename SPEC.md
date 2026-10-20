@@ -2482,6 +2482,17 @@ first and hands them back first, and its type has the sites' operations as its r
 elaborated. Resolution is lexical: an operation goes to the innermost handler of its instance around
 it, or to what the enclosing function's copy was given (§38).
 
+**A call's binding.** A call lifted out of the value it is in is bound before it: `r <- C`, or,
+when it hands back capabilities, `t <- C; let (c₁, (…, r)) = t`, and the value refers to `r`.
+When the value is the call's answer alone, the call takes its place: `x <- return V` binds `x`
+as the call's binding binds `r`, and a terminal `return V` in tail position is the call itself,
+when the call hands back the capabilities the computation hands back (in order) or the
+computation hands back none. This holds at every call that is bound so: a function's copy, a
+block parameter (§32), an answering operation, a resume (§19), a handler site, a stored
+generator's site. A parameter that is the function's only one is its lambda's binder, not bound
+again from a tuple (`Parser.paramVar`), as is an answering clause's only parameter; a clause's
+value terminal is handed on as itself, `(s, (V : B))`.
+
 The checker checks a copy, as any `def`, at each of its uses, so a program holding a closed
 function at its uses is §24's `[let-poly]` read by substitution: the program's derivation gives the
 rule's derivation of the let that binds the function once (`checkProgram_letPoly`, §24
