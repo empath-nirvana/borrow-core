@@ -157,6 +157,11 @@ end
 
 /-! ### The parser monad -/
 
+/-- `BCC_MUT=place`: the place elaboration of `let mut` (#626, a prototype behind a flag). A
+`let mut x = e` of a surface body is a scoped cell lent `mut` over its scope; `x` names the borrow,
+read by a load and written by a store (`docs/research/let-mut-as-place.md`). -/
+initialize placeEnv : Bool ← do return (← IO.getEnv "BCC_MUT") == some "place"
+
 structure PState where
   toks : Array Token
   pos : Nat
@@ -201,6 +206,13 @@ structure PState where
   written, and the number of its binder, one per binder of the source (`resolutionOf`,
   `bcc alpha`). -/
   occs : List (Pos × String × String × Nat) := []
+  /-- The place elaboration of `let mut` (`placeEnv`), in a resolved source. -/
+  placeMode : Bool := false
+  /-- The `let mut` places in scope (`placeMode`): each name is the `mut` borrow of its cell. -/
+  places : List String := []
+  /-- `x <- M` of a place binds a fresh variable, stored into the place after it (`placeMode`):
+  each such variable and its place. -/
+  stores : List (String × String) := []
 
 abbrev P := StateT PState (Except Error)
 
@@ -308,6 +320,10 @@ def notePlaceWrite (x : String) : P Unit := do
 def bindOrAssign (x : Ident) : P Ident := do
   match ← mutOf? x.name with
   | some y =>
+    if (← get).placeMode && (← get).places.contains y then
+      let t ← modifyGet fun s => (s!"io_pt{s.fresh}", { s with fresh := s.fresh + 1 })
+      modify fun s => { s with assigned := y :: s.assigned, stores := (t, y) :: s.stores }
+      return { x with name := t }
     modify fun s => { s with assigned := y :: s.assigned }
     if let some (_, b) := (← get).scope.lookup x.name then noteOcc x.span x.name y b
     pure { x with name := y }
@@ -333,7 +349,8 @@ def frame (p : P α) : P (α × List String) := do
   let M ← p
   let a := (← get).assigned
   modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned ++ a, joined := s₀.joined,
-                           blockThreads := s₀.blockThreads, pendingRun := s₀.pendingRun }
+                           blockThreads := s₀.blockThreads, pendingRun := s₀.pendingRun,
+                           places := s₀.places }
   pure (M, (s₀.muts.filter a.contains).reverse)
 
 /-- Parse a loop's body: in a function's body, a statement `return e` in it returns from the
@@ -1156,6 +1173,12 @@ rule R3); itself when it writes none. -/
 def writesOf (sp : Span) (xs : List String) (V : Val) : Val :=
   if xs.isEmpty then V else .app sp (.sugar sp (.writes xs)) V
 
+/-- `writesOf` with the places (`placeMode`) left out: a closure that uses a place captures its
+token, which the kernel types, and the boundary rule does not pass it in and out. -/
+def writesOfP (sp : Span) (xs : List String) (V : Val) : P Val := do
+  let ps := (← get).places
+  pure (writesOf sp (xs.filter (!ps.contains ·)) V)
+
 /-- The tuple of the variables `xs`. -/
 def varTuple (sp : Span) : List String → Val
   | [] => .unit sp
@@ -1233,6 +1256,252 @@ def forResOf (sp : Span) : Option Comp → Val
 /-- A binder type to be filled by the elaborator (a closure's, a borrow callback's). -/
 def holeTy (sp : Span) : VTy := .name sp "_"
 
+/-! ### `let mut` as a place (`placeMode`, #626)
+
+A place `x` is a scoped cell lent `mut` over the scope of its `let mut`: `x` names the borrow
+(the token). Each construct on it is one rule, and each is a kernel term the checker derives:
+
+- a read of `x` is a load, `withswap` with the identity that copies (`modify x { v -> (v, v) }`);
+- `x = e` is a store, `withswap` whose callback is `e` with `x` read as the old content;
+- `let (x, q) = f(…, x, …)` is the swap `modify x { v -> f(…, v, …) }`;
+- a lend `&mut x`, a borrow block of `x` and `modify x` reborrow it (`withbor3`, `withswap`).
+
+Every use rebinds the token, so a construct that uses `x` hands it on as R2 and R3 hand on a
+variable they write. The elaborator inserts the loads; the kernel decides whether each use is
+allowed (a load of a linear content, a token captured by a closure, a borrow that escapes). -/
+
+/-- The mark of a read of the place `y` (the parser writes it, `placeLoads` binds it). -/
+def placeMark (sp : Span) (y : String) : Val := .app sp (.sugar sp .deref) (.var sp y)
+
+/-- The place a value is the read mark of. -/
+def placeMark? : Val → Option String
+  | .app _ (.sugar _ .deref) (.var _ y) => some y
+  | _ => none
+
+/-- `modify y { b -> M }` on the token `y`: the `withswap` of the place. -/
+def placeModify (sp : Span) (y b : String) (M : Comp) : Val :=
+  .app sp (.app sp (.sugar sp (.borrow .modify "")) (.var sp y))
+    (.thunkv sp (.lam sp ⟨b, sp⟩ (.name sp "_") M))
+
+/-- What a value's evaluation does before it, in order, for the place being bound: a load into a
+variable (`clone` when the read is `clone(x)`), or a call that captures the place in a closure,
+which must run at its position among the loads. -/
+inductive PlacePre where
+  | load (v : String) (cl : Bool) (sp : Span)
+  | call (v : String) (V : Val)
+
+mutual
+/-- Whether the value names the variable `y` inside a closure or a `run`. -/
+def Val.closesOver (y : String) : Val → Bool
+  | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.namesV y
+  | .pair _ V W | .app _ V W => V.closesOver y || W.closesOver y
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.closesOver y
+  | _ => false
+
+/-- Whether `y` occurs in the value, at any depth. -/
+def Val.namesV (y : String) : Val → Bool
+  | .var _ x | .clone _ x => x == y
+  | .lend _ x _ => x.name == y
+  | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.namesV y
+  | .pair _ V W | .app _ V W => V.namesV y || W.namesV y
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.namesV y
+  | _ => false
+
+/-- Whether `y` occurs in the computation, at any depth. -/
+def Comp.namesV (y : String) : Comp → Bool
+  | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => V.namesV y
+  | .bind _ _ _ M N _ => M.namesV y || N.namesV y
+  | .force _ x => x.name == y
+  | .lam _ _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M | .nuOut _ M | .ascribe _ M _
+  | .proj _ _ M => M.namesV y
+  | .app _ M x => M.namesV y || x.name == y
+  | .with_ _ M N => M.namesV y || N.namesV y
+  | .letUnit _ V M => V.namesV y || M.namesV y
+  | .letPair _ _ _ V M => V.namesV y || M.namesV y
+  | .case _ V _ M _ N => V.namesV y || M.namesV y || N.namesV y
+  | .loop _ _ _ V M N => V.namesV y || M.namesV y || N.namesV y
+  | .handle _ _ _ hr hc M => hr.namesV y || hc.namesV y || M.namesV y
+  | .unwind _ _ _ M D N => M.namesV y || D.namesV y || N.namesV y
+  | .withbor2r _ _ _ _ _ _ p m M => p.name == y || m.name == y || M.namesV y
+  | .top _ => false
+end
+
+/-- A call's head is a function, not a construct of the surface (an operator, a block, a borrow
+block): only such a call is bound before a load that follows it. -/
+def Val.isCallHead : Val → Bool
+  | .var .. | .clone .. | .defApp .. | .const .. | .unbang .. | .inst .. => true
+  | _ => false
+
+/-- The bindings a value's reads of the place `y` make (`PlacePre`), in order, before `M`. -/
+def chainPre (y : String) (ps : List PlacePre) (M : Comp) : Comp :=
+  ps.foldr (fun p K => match p with
+    | .load v cl sp =>
+      let c := s!"{v}c"
+      let r : Val := if cl then .app sp (.sugar sp (.call "clone")) (.var sp c) else .var sp c
+      let d : Ident := ⟨s!"{v}d", sp⟩
+      .bind sp d none (.ret sp (placeModify sp y c (.ret sp (.pair sp (.var sp c) r))))
+        (.letPair sp ⟨y, sp⟩ ⟨v, sp⟩ (.var sp d.name) K) false
+    | .call v V => .bind V.span ⟨v, V.span⟩ none (.ret V.span V) K false) M
+
+mutual
+/-- The value `V` with the reads of the place `y` outside closures and `run`s bound before it, in
+the order its evaluation reads them (`PlacePre`); closures and `run`s are bound inside. -/
+def placeLoadsV (y : String) : Val → StateT (List PlacePre) P Val
+  | .app sp (.sugar csp (.call "clone")) W =>
+    if placeMark? W == some y then do
+      let v ← freshName "io_lv"
+      modify (· ++ [.load v true sp])
+      pure (.var sp v)
+    else do pure (.app sp (.sugar csp (.call "clone")) (← placeLoadsV y W))
+  | .app sp f W => do
+    if placeMark? (.app sp f W) == some y then
+      let v ← freshName "io_lv"
+      modify (· ++ [.load v false sp])
+      return .var sp v
+    let f' ← placeLoadsV y f
+    let W' ← placeLoadsV y W
+    if f.isCallHead && W.closesOver y then
+      let v ← freshName "io_lc"
+      modify (· ++ [.call v (.app sp f' W')])
+      return .var sp v
+    pure (.app sp f' W')
+  | .pair sp V W => return .pair sp (← placeLoadsV y V) (← placeLoadsV y W)
+  | .inl sp V => return .inl sp (← placeLoadsV y V)
+  | .inr sp V => return .inr sp (← placeLoadsV y V)
+  | .unbang sp V => return .unbang sp (← placeLoadsV y V)
+  | .boxed sp l V => return .boxed sp l (← placeLoadsV y V)
+  | .unbox sp V => return .unbox sp (← placeLoadsV y V)
+  | .sub sp V l => return .sub sp (← placeLoadsV y V) l
+  | .roll sp V => return .roll sp (← placeLoadsV y V)
+  | .unroll sp V => return .unroll sp (← placeLoadsV y V)
+  | .inst sp V l => return .inst sp (← placeLoadsV y V) l
+  | .ascribe sp V A => return .ascribe sp (← placeLoadsV y V) A
+  | .shorten sp m σ l V => return .shorten sp m σ l (← placeLoadsV y V)
+  | .mark sp k V => return .mark sp k (← placeLoadsV y V)
+  | .thunk sp M => return .thunk sp (← placeLoads y M)
+  | .thunkv sp M => return .thunkv sp (← placeLoads y M)
+  | .bangThunk sp M => return .bangThunk sp (← placeLoads y M)
+  | .bangThunkv sp M => return .bangThunkv sp (← placeLoads y M)
+  | .run sp M => return .run sp (← placeLoads y M)
+  | V => pure V
+
+/-- The computation `M` with each read of the place `y` bound by a load where it is evaluated:
+before the construct whose value reads it, inside the closure or the `run` that reads it, and at
+each turn of a `while` whose condition reads it. -/
+def placeLoads (y : String) : Comp → P Comp
+  | .ret sp V => do
+    let (V', ps) ← (placeLoadsV y V).run []
+    pure (chainPre y ps (.ret sp V'))
+  | .absurd sp V => do
+    let (V', ps) ← (placeLoadsV y V).run []
+    pure (chainPre y ps (.absurd sp V'))
+  | .perform sp k i V => do
+    let (V', ps) ← (placeLoadsV y V).run []
+    pure (chainPre y ps (.perform sp k i V'))
+  | .abort sp k i V => do
+    let (V', ps) ← (placeLoadsV y V).run []
+    pure (chainPre y ps (.abort sp k i V'))
+  | .bind sp x A (.ret rsp V) N lin => do
+    let N' ← placeLoads y N
+    let (V', ps) ← (placeLoadsV y V).run []
+    pure (chainPre y ps (.bind sp x A (.ret rsp V') N' lin))
+  | .bind sp x A M N lin => return .bind sp x A (← placeLoads y M) (← placeLoads y N) lin
+  | .unwind sp x A M D N =>
+    return .unwind sp x A (← placeLoads y M) (← placeLoads y D) (← placeLoads y N)
+  | .letUnit sp V M => do
+    let M' ← placeLoads y M
+    let (V', ps) ← (placeLoadsV y V).run []
+    pure (chainPre y ps (.letUnit sp V' M'))
+  | .letPair sp a b V M => do
+    let M' ← placeLoads y M
+    let (V', ps) ← (placeLoadsV y V).run []
+    pure (chainPre y ps (.letPair sp a b V' M'))
+  | .case sp V a M b N => do
+    let M' ← placeLoads y M
+    let N' ← placeLoads y N
+    let (V', ps) ← (placeLoadsV y V).run []
+    pure (chainPre y ps (.case sp V' a M' b N'))
+  | .loop sp ℓ .while_ V M N => do
+    let M' ← placeLoads y M
+    let N' ← placeLoads y N
+    if V.namesV y then
+      -- The condition is read at each turn: `loop { if V { M } else { break } }`.
+      let t : Ident := ⟨← freshName "io_wt", sp⟩
+      let f : Ident := ⟨← freshName "io_wf", sp⟩
+      let (V', ps) ← (placeLoadsV y V).run []
+      let body := chainPre y ps (.case sp V' f (.ret sp (.sugar sp .brk)) t M')
+      return .loop sp ℓ .forever (.unit sp) body N'
+    pure (.loop sp ℓ .while_ V M' N')
+  | .loop sp ℓ src V M N => do
+    let M' ← placeLoads y M
+    let N' ← placeLoads y N
+    let (V', ps) ← (placeLoadsV y V).run []
+    pure (chainPre y ps (.loop sp ℓ src V' M' N'))
+  | .handle sp k st hr hc M => do
+    let M' ← placeLoads y M
+    let (hr', p₁) ← (placeLoadsV y hr).run []
+    let (hc', p₂) ← (placeLoadsV y hc).run []
+    pure (chainPre y (p₁ ++ p₂) (.handle sp k st hr' hc' M'))
+  | .lam sp x A M => return .lam sp x A (← placeLoads y M)
+  | .lamL sp x b M => return .lamL sp x b (← placeLoads y M)
+  | .app sp M x => return .app sp (← placeLoads y M) x
+  | .with_ sp M N => return .with_ sp (← placeLoads y M) (← placeLoads y N)
+  | .proj sp i M => return .proj sp i (← placeLoads y M)
+  | .inst sp M a => return .inst sp (← placeLoads y M) a
+  | .nuIn sp M => return .nuIn sp (← placeLoads y M)
+  | .nuOut sp M => return .nuOut sp (← placeLoads y M)
+  | .ascribe sp M C => return .ascribe sp (← placeLoads y M) C
+  | .withbor2r sp x b A B r p m M => return .withbor2r sp x b A B r p m (← placeLoads y M)
+  | M@(.force ..) | M@(.top ..) => pure M
+end
+
+/-- `V` with the reads of the place `y` outside closures replaced by the variable `o` (a store's
+old content). -/
+def Val.readsAs (y o : String) : Val → Val
+  | V@(.app sp f W) =>
+    if placeMark? V == some y then .var sp o else .app sp (f.readsAs y o) (W.readsAs y o)
+  | .pair sp V W => .pair sp (V.readsAs y o) (W.readsAs y o)
+  | .inl sp V => .inl sp (V.readsAs y o)
+  | .inr sp V => .inr sp (V.readsAs y o)
+  | .unbang sp V => .unbang sp (V.readsAs y o)
+  | .boxed sp l V => .boxed sp l (V.readsAs y o)
+  | .unbox sp V => .unbox sp (V.readsAs y o)
+  | .sub sp V l => .sub sp (V.readsAs y o) l
+  | .roll sp V => .roll sp (V.readsAs y o)
+  | .unroll sp V => .unroll sp (V.readsAs y o)
+  | .inst sp V l => .inst sp (V.readsAs y o) l
+  | .ascribe sp V A => .ascribe sp (V.readsAs y o) A
+  | .shorten sp m σ l V => .shorten sp m σ l (V.readsAs y o)
+  | .mark sp k V => .mark sp k (V.readsAs y o)
+  | V => V
+
+/-- The place a call's arguments read, where `let (x, q) = f(…, x, …)` binds `x` (`placeMode`). -/
+def placeArg? (x : Ident) (A : Val) : P (Option String) := do
+  let s ← get
+  if !s.placeMode then return none
+  let some (y, _) := s.scope.lookup x.name | return none
+  if !s.places.contains y then return none
+  pure (if (argsOf A).any (placeMark? · == some y) then some y else none)
+
+/-- `x = V` of the place `x` (`placeMode`): the store `modify x { o -> V }`, `V` reading `x` as
+`o`, the old content; then `N`. What `V` writes of the enclosing places and variables (`w`) is
+handed back beside it. -/
+def placeStore (n : Nat) (sp : Span) (x : String) (V : Val) (w : List String) (N : Comp) :
+    P Comp := do
+  let o ← freshName "io_po"
+  let V' := V.readsAs x o
+  let w := w.filter (· != x)
+  let body : Comp := if w.isEmpty then .ret sp V' else handOn { t := "io_bt" } w (.ret sp V')
+  letVal sp n (.wild sp) none (placeModify sp x o body) N w
+
+/-- `N` after the store of `x <- M`'s variable into its place, when `x` is one (`stores`). -/
+def placeStored (n : Nat) (x : Ident) (N : Comp) : P Comp := do
+  match (← get).stores.lookup x.name with
+  | some y => placeStore n x.span y (.var x.span x.name) [] N
+  | none => pure N
+
 mutual
 /-- A value-judged expression: a binding form (`thunk`, `thunkv`, `!thunk`, `!thunkv`), which
     extends as far right as possible, a block `{ … }` or `!{ … }`, or an operator expression. -/
@@ -1308,7 +1577,7 @@ def closureOf : Nat → Pos → (Span → Comp → Val) → P Val
   | n + 1, st, k => do
     let (M, w) ← inClosure (frame (comp n))
     let sp ← spanFrom st
-    pure (writesOf sp w (k sp M))
+    writesOfP sp w (k sp M)
 
 /-- A block: `{ S }`, or a closure `{ p -> S }`; `!` before it makes it persistent. -/
 def brace : Nat → Pos → Bool → P Val
@@ -1333,12 +1602,12 @@ def brace : Nat → Pos → Bool → P Val
           let x : Ident := ⟨← freshName "io_c", sp⟩
           pure (x, ← bindPat sp n p (.var sp x.name) M)
       let lam := Comp.lam sp x (holeTy sp) M
-      pure (writesOf sp w (if bang then .bangThunkv sp lam else .thunkv sp lam))
+      writesOfP sp w (if bang then .bangThunkv sp lam else .thunkv sp lam)
     | none =>
       let (M, w) ← frame (comp n)
       expectSym "}"
       let sp ← spanFrom st
-      pure (writesOf sp w (.app sp (.sugar sp .brace) (if bang then .bangThunk sp M else .thunk sp M)))
+      writesOfP sp w (.app sp (.sugar sp .brace) (if bang then .bangThunk sp M else .thunk sp M))
 
 /-- A prefix keyword applied to a prefix expression, or a spine. -/
 def valPrefix : Nat → P Val
@@ -1427,6 +1696,12 @@ def borrowBlock : Nat → P Val
       else if ← isKw "mut" then discard bump; pure .mut
       else expected "`imm` or `mut` after `borrow`"
     let place ← valPrefix n
+    -- A borrow block of a place borrows its token (`placeMode`).
+    let ps := (← get).places
+    let place := match placeMark? place, place with
+      | some y, _ => if ps.contains y then Val.var place.span y else place
+      | none, .lend psp y .mut => if ps.contains y.name then Val.var psp y.name else place
+      | none, _ => place
     -- A borrow block rebinds its place: a write of a `let mut` place (SPEC §41, rule R2).
     if let .var _ x := place then notePlaceWrite x
     let k := match k, place with
@@ -1565,7 +1840,13 @@ def valAtom : Nat → P Val
         let As ← tyList n (fuelPerToken * ((← get).toks.size + 1))
         expectSym "]"
         pure (.defApp (← spanFrom st) s As)
-      else pure (.var t.span (← lookName s t.span))
+      else
+        let y ← lookName s t.span
+        -- A read of a place is a load (`placeLoads`); it uses the place's token.
+        if (← get).placeMode && (← get).places.contains y then
+          notePlaceWrite y
+          return placeMark t.span y
+        pure (.var t.span y)
     | .int k => discard bump; pure (.sugar t.span (.lit k))
     | .flt x => discard bump; let (m, e) := decOfText x; pure (.sugar t.span (.flit m e))
     | .str bs => discard bump; pure (.sugar t.span (.str bs))
@@ -1678,7 +1959,7 @@ def compG : Nat → Bool → P Comp
       expectSym ";"
       withScope do
       let x ← bindOrAssign ⟨x, t.span⟩
-      let N ← comp n
+      let N ← placeStored n x (← comp n)
       let sp ← spanFrom st
       bindForm sp n x none M D N false xs
     | .ident x, .sym ":" =>
@@ -1690,7 +1971,7 @@ def compG : Nat → Bool → P Comp
       expectSym ";"
       withScope do
       let x ← bindOrAssign ⟨x, t.span⟩
-      let N ← comp n
+      let N ← placeStored n x (← comp n)
       let sp ← spanFrom st
       bindForm sp n x (some A) M D N false xs
     | .ident x₀, .sym "=" =>
@@ -1701,6 +1982,15 @@ def compG : Nat → Bool → P Comp
       unless (← get).muts.contains x do
         failAt t.span s!"`{x₀}` is assigned, but it is not declared `let mut`"
       modify fun s => { s with assigned := x :: s.assigned, blockThreads := [], pendingRun := none }
+      if (← get).placeMode && (← get).places.contains x then
+        let (V, w) ← frame (val n)
+        checkRun V
+        if !head && (← isSym ";") then
+          discard bump
+          let N ← comp n
+          return ← placeStore n (← spanFrom st) x V w N
+        let sp ← spanFrom st
+        return ← placeStore n sp x V w (.ret sp (.unit sp))
       let V ← val n
       let thr := (← get).blockThreads
       checkRun V
@@ -1725,7 +2015,7 @@ def compG : Nat → Bool → P Comp
       expectSym ";"
       withScope do
       let x ← bindOrAssign ⟨x, xt.span⟩
-      let N ← comp n
+      let N ← placeStored n x (← comp n)
       bindForm (← spanFrom st) n x A M none N true xs
     | .kw "for", _ | .kw "while", _ | .kw "loop", .sym "{" => loopC n st none
     | .life l, .sym ":" =>
@@ -1811,7 +2101,21 @@ def compG : Nat → Bool → P Comp
       let thr := (← get).blockThreads
       checkRun V
       expectSym ";"
+      -- `let (x, q) = f(…, x, …)` of a place: the swap `modify x { o -> f(…, o, …) }`.
+      if let (.pair _ (.var x) q, .app _ _ args) := (p, V) then
+        if let some y ← placeArg? x args then
+          let o ← freshName "io_po"
+          let q ← bindPatNames q
+          let N ← comp n
+          let sp ← spanFrom st
+          return ← letVal sp n q A (placeModify sp y o (.ret sp (V.readsAs y o))) N thr
       let p ← bindP (some V)
+      if isMut && (← get).placeMode && thr.isEmpty then
+        if let .var x := p then
+          if !capabilityNames.contains x.name then
+            let sp ← spanFrom st
+            let V := match A with | some A => Val.ascribe sp V A | none => V
+            return ← placeScope n sp x V
       let N ← comp n
       letVal (← spanFrom st) n p A V N thr
     | .kw "fun", _ =>
@@ -1835,6 +2139,36 @@ def compG : Nat → Bool → P Comp
       let M ← comp n
       pure (.lamL (← spanFrom st) x b M)
     | _, _ => statement n st head
+
+/-- The scope of the place `x` (`placeMode`, #626): `let mut x = V; N` is the cell `alloc(V)`
+lent `mut` over `N` as the borrow `x`, `borrow mut alloc(V) { x -> N }`, and the cell freed after
+it. The borrow block hands back what `N` writes of the enclosing places and variables, as any
+borrow block does (SPEC §41, rule R3); the scope's value is `N`'s. The cell is scoped to one
+borrow, so it is a frame slot (SPEC §35). -/
+def placeScope : Nat → Span → Ident → Val → P Comp
+  | 0, _, _, _ => outOfFuel
+  | n + 1, sp, x, V => do
+    modify fun s => { s with places := x.name :: s.places }
+    let (N, w) ← frame (comp n)
+    let N ← placeLoads x.name N
+    let bound := x.name :: N.boundNames
+    let caps := ["stdin", "stdout", "stderr"].filter (N.lentNames true).contains
+    let thr := ((w.filter (· != x.name)) ++ (N.lentNames.filter (fun z => !bound.contains z)) ++
+      N.withPlaces [x.name] ++ caps).eraseDups
+    let N := if thr.isEmpty then N else handOn { t := "io_bt" } thr N
+    let l ← freshName "io_l"
+    let blk : Val := .app sp (.app sp (.sugar sp (.borrow .mut l))
+        (.app sp (.sugar sp (.call "alloc")) V))
+      (.thunkv sp (.lam sp x (holeTy sp) N))
+    let b ← freshName "io_pb"
+    let c ← freshName "io_pc"
+    let r ← freshName "io_pr"
+    let d ← freshName "io_d"
+    let rest : Comp := .bind sp ⟨d, sp⟩ none (.ret sp (.app sp (.sugar sp (.call "free")) (.var sp c)))
+      (.ret sp (.var sp r)) false
+    let q : Pat := if thr.isEmpty then .var ⟨r, sp⟩ else .pair sp (.var ⟨r, sp⟩) (varPat sp thr)
+    pure (.bind sp ⟨b, sp⟩ none (.ret sp blk) (← bindPat sp n (.pair sp (.var ⟨c, sp⟩) q) (.var sp b) rest)
+      false)
 
 /-- A statement: a computation, a force `t!` or `f!(e)`, or an expression `e`, which is returned.
     Outside the head of a binding, `S; N` sequences it (its result is dropped), and a borrow
@@ -2713,7 +3047,8 @@ def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) :
   let taken := if resolve then toks.toList.filterMap (fun t => match t.tok with
     | .ident s => some s
     | _ => none) |>.eraseDups else []
-  go.run { toks, pos := 0, lastStop := ⟨1, 1⟩, resolve, taken }
+  go.run { toks, pos := 0, lastStop := ⟨1, 1⟩, resolve, taken,
+           placeMode := resolve && placeEnv }
 
 def runP {α} (p : Nat → P α) (src : String) (resolve : Bool := false) : Except Error α :=
   (·.1) <$> runPS p src resolve

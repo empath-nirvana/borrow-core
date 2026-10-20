@@ -2287,7 +2287,15 @@ def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
   let place := Val.lend sp x m
   match c.tyV (.var sp x.name) with
   | some (.ref _) => pure (.app sp (.app sp (.const sp C) place) cb)
-  | some (.mut ..) | some (.imm ..) =>
+  | some (.mut a _) =>
+    -- A `mut` borrow lent `mut` is reborrowed for the call (`withbor3`); the borrow is handed back
+    -- after it. This is the lend of a place's token (`BCC_MUT=place`, #626).
+    if m == .mut then
+      return .app sp (.app sp (.const sp (.withbor3 (← (c.surfaceL sp a : Except Error Frontend.Life))
+        li As Bs)) place) cb
+    throw ⟨x.span, s!"`&{x.name}` lends `{x.name}` `imm`, but it is a `mut` borrow: the kernel has " ++
+      "no `imm` reborrow of a `mut` borrow"⟩
+  | some (.imm ..) =>
     throw ⟨x.span, s!"`{x.name}` is a borrow; lend it by passing it (a reborrow is not provided)"⟩
   | _ =>
     -- A value: a cell scoped to the call.
@@ -2395,6 +2403,29 @@ def lendCall (c : TCx) (sp : Span) (f W : Val)
       "be handed back after it"⟩
   some <$> lendBorrow c sp x m A Q fun l mv =>
     boxedResult sp l (.ret sp (.app sp (applied l) (replaceLend mv W)))
+
+/-- `f(…, &mut x, …)` at an owned parameter, with `x` a `mut` borrow `mut @a A` (a place's token,
+`BCC_MUT=place`, #626): the call takes the content and hands it back first, `f : … A … => A * R`,
+so it is the swap `withswap x (v -> f(…, v, …))`, which hands back the borrow and `R`. `none` when
+the lent place is not a `mut` borrow or the call's type is not of that form. -/
+def lendSwap (c : TCx) (sp : Span) (f W : Val) : DM (Option Val) := do
+  let rec lent : Val → Option (Ident × Mode)
+    | .lend _ x m => some (x, m)
+    | .pair _ V W => (lent V).orElse fun _ => lent W
+    | _ => none
+  let some (x, .mut) := lent W | return none
+  let some (.mut a A) := c.tyV (.var sp x.name) | return none
+  let (bang, R) ← match c.tyV f with
+    | some (.bang (.thunk (.arr _ (.ret (.tensor A' R))))) => if A' == A then pure (true, R) else return none
+    | some (.thunk (.arr _ (.ret (.tensor A' R)))) => if A' == A then pure (false, R) else return none
+    | _ => return none
+  let v := s!"io_sw{sp.start.line}_{sp.start.col}"
+  let As ← (c.surface sp A : Except Error VTy)
+  let Rs ← (c.surface sp R : Except Error VTy)
+  let f' := if bang then Val.unbang f.span f else f
+  let C : Const := .withswap (← (c.surfaceL sp a : Except Error Frontend.Life)) As Rs
+  pure (some (.app sp (.app sp (.const sp C) (.lend sp x .mut))
+    (.thunkv sp (.lam sp ⟨v, sp⟩ As (.ret sp (.app sp f' (replaceLend v W)))))))
 
 /-- The typing context `c` with the declarations made so far in scope (the instances and copies
 made while elaborating the declaration it is in). -/
@@ -3748,6 +3779,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       let f' ← surfV n c none f
       if W.lends then
         if let some V' ← lendCall c sp f' (← surfV n c none W) then return V'
+        if let some V' ← lendSwap c sp f' W then return V'
       let tf := c.tyV f'
       let (f', pW) := match tf with
         | some (.bang (.thunk (.arr A _))) => (Val.unbang f.span f', some A)
