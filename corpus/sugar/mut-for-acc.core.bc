@@ -1,4 +1,7 @@
 -- `mut-for-acc.bc` as its elaboration should read: written by hand in core.
+-- The loop's last state is bound to `acc` and returned: the `for` rule binds the threaded
+-- variables after the loop and runs what follows (SPEC §16), and the write `acc = acc + i` binds
+-- `acc` before the step goes on.
 main : F i32 =
   acc <- return i32[0];
   acc <- return (unbang count_fold[i32]) (!thunkv fun (q : i32 * i32) ->

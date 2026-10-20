@@ -1,4 +1,5 @@
 -- `mut-shadow.bc` as its elaboration should read: written by hand in core.
+-- The loop's last state is bound to `n`, then what follows runs (SPEC §16).
 main : F i32 =
   n <- return i32[0];
   n <- return (unbang count_fold[i32]) (!thunkv fun (q : i32 * i32) ->

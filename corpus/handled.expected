@@ -9,7 +9,7 @@ corpus/answers-two-types.bc flows [0, 1, 2, 4294967295]; main [1, 2]
 corpus/answers-two-types.bc 23:21: handle 1: inside [2]; row []; ops 1.0 tail+state; condition 2 holds
 corpus/answers-two-types.bc 23:40: handle 2: inside []; row [1]; ops 2.0 tail; condition 2 fails at 1
 corpus/answers-two-types.bc 1.0 tail+state: machine; condition 2 holds; -
-corpus/answers-two-types.bc 2.0 tail: machine; condition 2 fails; -
+corpus/answers-two-types.bc 2.0 tail: direct; condition 2 fails; disagree
 corpus/aoc/2020-08.bc flows [0, 4294967295]; main []
 corpus/aoc/2021-06.bc flows [0, 4294967295]; main []
 corpus/aoc/2021-10.bc flows [0, 4294967295]; main []
@@ -229,7 +229,7 @@ corpus/bytes-upper.bc flows [0, 4294967295]; main []
 corpus/capture-await-raise.bc flows [0, 1, 2, 4294967295]; main [1, 2]
 corpus/capture-await-raise.bc 13:21: handle 1: inside [2]; row []; ops 1.0 tail; condition 2 holds
 corpus/capture-await-raise.bc 13:33: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 fails at 1
-corpus/capture-await-raise.bc 1.0 tail: machine; condition 2 holds; -
+corpus/capture-await-raise.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/capture-await-raise.bc 2.0 abortive: branch; condition 2 fails; -
 corpus/capture-log-hand.bc flows [0, 4294967295]; main []
 corpus/capture-store-cancel-hand.bc flows [0, 4294967295]; main []
@@ -245,10 +245,10 @@ corpus/capture-tick-hand.bc flows [0, 4294967295]; main []
 corpus/clause-captures.bc flows [0, 1, 2, 3, 4294967295]; main [1, 2, 3]
 corpus/clause-captures.bc 40:13: handle 3: inside []; row []; ops 3.0 abortive; condition 2 holds
 corpus/clause-captures.bc 41:13: handle 2: inside []; row []; ops 2.0 abortive; condition 2 holds
-corpus/clause-captures.bc 42:13: handle 1: inside []; row []; ops 1.0 once+state; condition 2 holds
+corpus/clause-captures.bc 42:13: handle 1: inside []; row []; ops 1.0 tail+state; condition 2 holds
 corpus/clause-captures.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/clause-captures.bc 2.0 abortive: branch; condition 2 holds; -
-corpus/clause-captures.bc 1.0 once+state: machine; condition 2 holds; -
+corpus/clause-captures.bc 1.0 tail+state: machine; condition 2 holds; -
 corpus/clone-reuse.bc flows [0, 4294967295]; main []
 corpus/comp-param.bc flows [0, 3, 5, 4294967295]; main [2, 3, 4, 5, 6]
 corpus/comp-param.bc 21:56: handle 6: inside []; row []; ops 6.0 abortive; condition 2 holds
@@ -428,7 +428,7 @@ corpus/effects-hof-two-rows.bc flows [0, 1, 4294967295]; main [1, 2]
 corpus/effects-hof-two-rows.bc 24:11: handle 2: inside []; row []; ops 2.0 abortive; condition 2 holds
 corpus/effects-hof-two-rows.bc 25:11: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
 corpus/effects-hof-two-rows.bc 2.0 abortive: branch; condition 2 holds; -
-corpus/effects-hof-two-rows.bc 1.0 tail: machine; condition 2 holds; -
+corpus/effects-hof-two-rows.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/effects-instances.bc flows [0, 1, 2, 3, 4, 5, 6, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6], finaliser
 corpus/effects-instances.bc 46:3: handle 1: inside [1, 2, 3, 4], finaliser; row []; ops 1.0 abortive; condition 2 holds
 corpus/effects-instances.bc 46:43: handle 2: inside [1, 3, 4], finaliser; row [1]; ops 2.0 abortive; condition 2 fails at 1
@@ -509,6 +509,7 @@ corpus/for-never.bc 17:3: handle 1: inside []; row []; ops 1.0 resume-or-cancel;
 corpus/for-never.bc 17:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
 corpus/for-never.bc 1.0 resume-or-cancel,tail: machine; condition 2 holds; -
 corpus/for-return.bc flows [0, 4294967295]; main []
+corpus/for-view-effect-copy.bc flows [0, 4294967295]; main []
 corpus/for-yield-branch.bc flows [0, 1, 2, 3, 4294967295]; main [1, 2, 3]
 corpus/for-yield-branch.bc 26:3: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
 corpus/for-yield-branch.bc 31:3: handle 3: inside []; row []; ops 3.0 resume-or-cancel; condition 2 holds
@@ -773,7 +774,7 @@ corpus/hygiene-clause-global.bc flows [0, 1, 4294967295]; main [1, 2]
 corpus/hygiene-clause-global.bc 14:11: handle 2: inside []; row []; ops 2.0 abortive; condition 2 holds
 corpus/hygiene-clause-global.bc 15:11: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
 corpus/hygiene-clause-global.bc 2.0 abortive: branch; condition 2 holds; -
-corpus/hygiene-clause-global.bc 1.0 tail: machine; condition 2 holds; -
+corpus/hygiene-clause-global.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/hygiene-clause-name.bc flows [0, 4294967295]; main []
 corpus/hygiene-for-global.bc flows [0, 4294967295]; main []
 corpus/hygiene-handler-after.bc flows [0, 4294967295]; main [1]
@@ -1125,7 +1126,7 @@ corpus/quicksort.bc flows [0, 4294967295]; main []
 corpus/rec-await-exhausted.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
 corpus/rec-await-exhausted.bc 16:13: handle 1: inside [2], finaliser; row []; ops 1.0 tail; condition 2 holds
 corpus/rec-await-exhausted.bc 16:25: handle 2: inside [], finaliser; row [1]; ops 2.0 abortive; condition 2 fails at 1
-corpus/rec-await-exhausted.bc 1.0 tail: machine; condition 2 holds; -
+corpus/rec-await-exhausted.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/rec-await-exhausted.bc 2.0 abortive: branch; condition 2 fails; -
 corpus/rec-deep.bc flows [0, 4294967295]; main []
 corpus/rec-emit.bc flows [0, 2, 4294967295]; main [1, 2]
@@ -1210,42 +1211,42 @@ corpus/reconcile-chain.bc 10.0 abortive: branch; condition 2 fails; -
 corpus/reconcile-chain.bc 11.0 abortive: branch; condition 2 fails; -
 corpus/reconcile-chain.bc 12.0 resume-or-cancel: machine; condition 2 fails; -
 corpus/reconcile-clock.bc flows [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 4294967295]; main [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
-corpus/reconcile-clock.bc 92:17: handle 1: inside [2, 3, 4, 5]; row []; ops 1.0 once+state; condition 2 holds
+corpus/reconcile-clock.bc 92:17: handle 1: inside [2, 3, 4, 5]; row []; ops 1.0 tail+state; condition 2 holds
 corpus/reconcile-clock.bc 92:33: handle 2: inside [3, 4, 5]; row [1]; ops 2.0 once; condition 2 fails at 1
 corpus/reconcile-clock.bc 92:48: handle 3: inside [4, 5]; row [2, 1]; ops 3.0 abortive; condition 2 fails at 2, 1
 corpus/reconcile-clock.bc 66:11: handle 4: inside []; row [1, 3, 2]; ops 4.0 abortive; condition 2 fails at 1, 3, 2
 corpus/reconcile-clock.bc 52:61: handle 5: inside []; row [4, 2]; ops 5.0 resume-or-cancel; condition 2 fails at 4, 2
-corpus/reconcile-clock.bc 94:17: handle 6: inside [7, 8, 9, 10]; row []; ops 6.0 once+state; condition 2 holds
+corpus/reconcile-clock.bc 94:17: handle 6: inside [7, 8, 9, 10]; row []; ops 6.0 tail+state; condition 2 holds
 corpus/reconcile-clock.bc 94:33: handle 7: inside [8, 9, 10]; row [6]; ops 7.0 once; condition 2 fails at 6
 corpus/reconcile-clock.bc 94:48: handle 8: inside [9, 10]; row [7, 6]; ops 8.0 abortive; condition 2 fails at 7, 6
 corpus/reconcile-clock.bc 66:11: handle 9: inside []; row [6, 8, 7]; ops 9.0 abortive; condition 2 fails at 6, 8, 7
 corpus/reconcile-clock.bc 52:61: handle 10: inside []; row [9, 7]; ops 10.0 resume-or-cancel; condition 2 fails at 9, 7
-corpus/reconcile-clock.bc 92:17: handle 11: inside [12, 13, 14, 15]; row []; ops 11.0 once+state; condition 2 holds
+corpus/reconcile-clock.bc 92:17: handle 11: inside [12, 13, 14, 15]; row []; ops 11.0 tail+state; condition 2 holds
 corpus/reconcile-clock.bc 92:33: handle 12: inside [13, 14, 15]; row [11]; ops 12.0 once; condition 2 fails at 11
 corpus/reconcile-clock.bc 92:48: handle 13: inside [14, 15]; row [12, 11]; ops 13.0 abortive; condition 2 fails at 12, 11
 corpus/reconcile-clock.bc 66:11: handle 14: inside []; row [11, 13, 12]; ops 14.0 abortive; condition 2 fails at 11, 13, 12
 corpus/reconcile-clock.bc 52:61: handle 15: inside []; row [14, 12]; ops 15.0 resume-or-cancel; condition 2 fails at 14, 12
-corpus/reconcile-clock.bc 94:17: handle 16: inside [17, 18, 19, 20]; row []; ops 16.0 once+state; condition 2 holds
+corpus/reconcile-clock.bc 94:17: handle 16: inside [17, 18, 19, 20]; row []; ops 16.0 tail+state; condition 2 holds
 corpus/reconcile-clock.bc 94:33: handle 17: inside [18, 19, 20]; row [16]; ops 17.0 once; condition 2 fails at 16
 corpus/reconcile-clock.bc 94:48: handle 18: inside [19, 20]; row [17, 16]; ops 18.0 abortive; condition 2 fails at 17, 16
 corpus/reconcile-clock.bc 66:11: handle 19: inside []; row [16, 18, 17]; ops 19.0 abortive; condition 2 fails at 16, 18, 17
 corpus/reconcile-clock.bc 52:61: handle 20: inside []; row [19, 17]; ops 20.0 resume-or-cancel; condition 2 fails at 19, 17
-corpus/reconcile-clock.bc 1.0 once+state: machine; condition 2 holds; -
+corpus/reconcile-clock.bc 1.0 tail+state: machine; condition 2 holds; -
 corpus/reconcile-clock.bc 2.0 once: machine; condition 2 fails; -
 corpus/reconcile-clock.bc 3.0 abortive: branch; condition 2 fails; -
 corpus/reconcile-clock.bc 4.0 abortive: branch; condition 2 fails; -
 corpus/reconcile-clock.bc 5.0 resume-or-cancel: machine; condition 2 fails; -
-corpus/reconcile-clock.bc 6.0 once+state: machine; condition 2 holds; -
+corpus/reconcile-clock.bc 6.0 tail+state: machine; condition 2 holds; -
 corpus/reconcile-clock.bc 7.0 once: machine; condition 2 fails; -
 corpus/reconcile-clock.bc 8.0 abortive: branch; condition 2 fails; -
 corpus/reconcile-clock.bc 9.0 abortive: branch; condition 2 fails; -
 corpus/reconcile-clock.bc 10.0 resume-or-cancel: machine; condition 2 fails; -
-corpus/reconcile-clock.bc 11.0 once+state: machine; condition 2 holds; -
+corpus/reconcile-clock.bc 11.0 tail+state: machine; condition 2 holds; -
 corpus/reconcile-clock.bc 12.0 once: machine; condition 2 fails; -
 corpus/reconcile-clock.bc 13.0 abortive: branch; condition 2 fails; -
 corpus/reconcile-clock.bc 14.0 abortive: branch; condition 2 fails; -
 corpus/reconcile-clock.bc 15.0 resume-or-cancel: machine; condition 2 fails; -
-corpus/reconcile-clock.bc 16.0 once+state: machine; condition 2 holds; -
+corpus/reconcile-clock.bc 16.0 tail+state: machine; condition 2 holds; -
 corpus/reconcile-clock.bc 17.0 once: machine; condition 2 fails; -
 corpus/reconcile-clock.bc 18.0 abortive: branch; condition 2 fails; -
 corpus/reconcile-clock.bc 19.0 abortive: branch; condition 2 fails; -
@@ -1309,14 +1310,14 @@ corpus/sugar/gen-div.bc flows [0, 1, 4294967295]; main [1]
 corpus/sugar/gen-div.bc 40:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
 corpus/sugar/gen-div.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/gen-div.core.bc flows [0, 1, 4294967295]; main [1]
-corpus/sugar/gen-div.core.bc 90:17: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
-corpus/sugar/gen-div.core.bc 101:17: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/gen-div.core.bc 88:17: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/gen-div.core.bc 99:17: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
 corpus/sugar/gen-div.core.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/gen-from.bc flows [0, 1, 4294967295]; main [1]
 corpus/sugar/gen-from.bc 21:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
 corpus/sugar/gen-from.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/gen-from.core.bc flows [0, 1, 4294967295]; main [1]
-corpus/sugar/gen-from.core.bc 31:39: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/gen-from.core.bc 30:39: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
 corpus/sugar/gen-from.core.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/gen-range.bc flows [0, 1, 4294967295]; main [1]
 corpus/sugar/gen-range.bc 19:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
@@ -1364,10 +1365,26 @@ corpus/sugar/lend.bc flows [0, 4294967295]; main []
 corpus/sugar/lend.core.bc flows [0, 4294967295]; main []
 corpus/sugar/loop-main.bc flows [0, 4294967295]; main []
 corpus/sugar/loop-main.core.bc flows [0, 4294967295]; main []
+corpus/sugar/mut-await.bc flows [0, 1, 4294967295]; main [1]
+corpus/sugar/mut-await.bc 16:15: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/mut-await.bc 1.0 tail: direct; condition 2 holds; agree
+corpus/sugar/mut-await.core.bc flows [0, 1, 4294967295]; main [1]
+corpus/sugar/mut-await.core.bc 13:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/mut-await.core.bc 1.0 tail: direct; condition 2 holds; agree
+corpus/sugar/mut-block.bc flows [0, 4294967295]; main []
+corpus/sugar/mut-block.core.bc flows [0, 4294967295]; main []
+corpus/sugar/mut-for-acc.bc flows [0, 4294967295]; main []
+corpus/sugar/mut-for-acc.core.bc flows [0, 4294967295]; main []
 corpus/sugar/mut-heads.bc flows [0, 4294967295]; main []
 corpus/sugar/mut-heads.core.bc flows [0, 4294967295]; main []
 corpus/sugar/mut-modify.bc flows [0, 4294967295]; main []
 corpus/sugar/mut-modify.core.bc flows [0, 4294967295]; main []
+corpus/sugar/mut-service.bc flows [0, 4294967295]; main []
+corpus/sugar/mut-service.core.bc flows [0, 4294967295]; main []
+corpus/sugar/mut-shadow.bc flows [0, 4294967295]; main []
+corpus/sugar/mut-shadow.core.bc flows [0, 4294967295]; main []
+corpus/sugar/mut-while-flag.bc flows [0, 4294967295]; main []
+corpus/sugar/mut-while-flag.core.bc flows [0, 4294967295]; main []
 corpus/sugar/residual-alias.bc flows [0, 4294967295]; main []
 corpus/sugar/residual-alias.core.bc flows [0, 4294967295]; main []
 corpus/sugar/surface-bool.bc flows [0, 4294967295]; main []

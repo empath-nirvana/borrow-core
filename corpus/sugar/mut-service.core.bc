@@ -1,4 +1,5 @@
 -- `mut-service.bc` as its elaboration should read: written by hand in core.
+-- The counted loop's last state is bound and returned with the capability (SPEC §16).
 def summing__log : !(all 'l < top. mut 'l i32 * i32 => mut 'l i32 * 1) =
   !thunkv Fun 'l < top.
     return (thunkv fun (p : mut 'l i32 * i32) ->

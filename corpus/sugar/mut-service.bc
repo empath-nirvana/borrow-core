@@ -1,5 +1,6 @@
 -- A `let mut` in a function served by a stateful answering handler (handlers-di's shape).
--- Target: `mut-service.core.bc`: the loop's state is the capability and the accumulator.
+-- `mut-service.core.bc` is its elaboration, written by hand: the loop's state is the capability and
+-- the accumulator.
 -- Answer: (i32[10], i32[6]).
 effect Log { fn log(x: i32) }
 

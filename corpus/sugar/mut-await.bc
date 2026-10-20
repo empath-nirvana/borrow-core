@@ -1,5 +1,6 @@
 -- A `let mut` live across a control operation that captures its continuation and resumes it
--- (`await`'s shape, under a handler that resumes at once). Target: `mut-await.core.bc`.
+-- (`await`'s shape, under a handler that resumes at once). `mut-await.core.bc` is its elaboration,
+-- written by hand.
 -- Answer: i32[111].
 effect Pause { ctl pause() }
 

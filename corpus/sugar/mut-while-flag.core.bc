@@ -1,4 +1,7 @@
 -- `mut-while-flag.bc` as its elaboration should read: written by hand in core.
+-- The step is bound in `main` before the machine is built from the first state (SPEC §14,
+-- *Moves*); the program's own bindings and writes of `i` and `found` stay, and the close binds the
+-- state's variables by name.
 def true : 1 + 1 = inr ()
 
 def false : 1 + 1 = inl ()

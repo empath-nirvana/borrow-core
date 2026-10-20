@@ -1,7 +1,0 @@
--- A counted loop with an accumulator. Target: `mut-for-acc.core.bc`, a `count_fold` whose state is
--- the accumulator alone.
--- Answer: i32[10].
-main -> i32 =
-  let mut acc = 0;
-  for i in 0..5 { acc = acc + i };
-  acc
