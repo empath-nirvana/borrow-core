@@ -2378,8 +2378,9 @@ def lendCall (c : TCx) (sp : Span) (f W : Val)
   let some (x, m, Px) := lendParam P W | return none
   -- A place's token is reborrowed only at a `mut` borrow of its content; any other lend of it is
   -- through its swap (`BCC_MUT=place`).
-  if let (true, some (.mut _ Ax)) := (placeEnv, c.tyV (.var x.span x.name)) then
-    unless m == .mut && (match Px with | .mut _ A => A == Ax | _ => false) do return none
+  if let some (.mut _ Ax) := c.tyV (.var x.span x.name) then
+    if placeEnv then
+      unless m == .mut && (match Px with | .mut _ A => A == Ax | _ => false) do return none
   let (pm, w, A, fam) ← match Px with
     | .mut (.var w) A => pure (Mode.mut, w, A, false)
     | .imm (.var w) A => pure (Mode.imm, w, A, false)
@@ -3553,9 +3554,9 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       -- A borrow block of a place's token (`BCC_MUT=place`, #626) that lends something other
       -- than its whole content `mut` (an array's elements, a buffer, an `imm` borrow): the content
       -- swapped out (`withswap`), lent by the rules for a value, and swapped back.  `[spec §42]`
-      if let (true, .mut _ A, true) := (placeEnv, tP, k == .imm || k == .mut) then
+      if let .mut _ A := tP then
         let arrayish := match A with | .fam _ | .tensor .. => true | _ => false
-        if k == .imm || arrayish then
+        if (k == .imm || (k == .mut && arrayish)) && placeEnv then
           let id (s : String) : Ident := ⟨s, sp⟩
           let v := s!"io_sv{sp.start.line}_{sp.start.col}"
           let inner : Val := if arrayish then .var sp v else .app sp (.sugar sp (.call "alloc")) (.var sp v)
@@ -3814,31 +3815,33 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       if let (some o, .pair psp a b) := (Elab.Instances.checkedOp? c f, W) then
         return ← surfOp n c exp sp f.span psp o true a b
       -- A place's token lent `&mut x` at a `mut` borrow of its content: reborrowed (`withbor3`).
-      if let (true, some (x, .mut)) := (placeEnv, lentOf W) then
+      if let some (x, .mut) := lentOf W then
         if let some (.mut _ _) := c.tyV (.var x.span x.name) then
-          if let some f' ← (try some <$> surfV n c none f catch _ => pure none) then
-            if let some V' ← (try lendCall c sp f' (← surfV n c none W) catch _ => pure none) then
-              return V'
+          if placeEnv then
+            if let some f' ← (try some <$> surfV n c none f catch _ => pure none) then
+              if let some V' ← (try lendCall c sp f' (← surfV n c none W) catch _ => pure none) then
+                return V'
       -- A place's token (`BCC_MUT=place`, #626) lent at a parameter other than a `mut` borrow
       -- of its content: the content swapped out (`withswap`), lent to the call as a value
       -- (`f(&v)`, `f(&mut v)` by the rules for a value), and swapped back.  `[spec §42]`
-      if let (true, some (x, m)) := (placeEnv, lentOf W) then
+      if let some (x, m) := lentOf W then
         if let some (.mut a A) := c.tyV (.var x.span x.name) then
-          let v := s!"io_sv{sp.start.line}_{sp.start.col}"
-          let r : Ident := ⟨s!"io_sr{sp.start.line}_{sp.start.col}", sp⟩
-          let body : Comp := .bind sp r none (.ret sp (.app sp f (relend v W)))
-            (.ret sp (.pair sp (.var sp v) (.var sp r.name))) false
-          let body' ← surfC n (c.push v (some A)) none body
-          let X ← need sp "the call's result"
-            (resultOfC (((← refresh c).push v (some A)).tyCL body'))
-          let B ← match X with
-            | .tensor _ B => pure B
-            | _ => throw ⟨sp, "internal error: a lend through a place's swap"⟩
-          let _ := m
-          let As ← c.surface sp A
-          let C := Const.withswap (← c.surfaceL sp a) As (← c.surface sp B)
-          return .app sp (.app sp (.const sp C) (.lend x.span x .mut))
-            (.thunkv sp (.lam sp ⟨v, sp⟩ As body'))
+          if placeEnv then
+            let v := s!"io_sv{sp.start.line}_{sp.start.col}"
+            let r : Ident := ⟨s!"io_sr{sp.start.line}_{sp.start.col}", sp⟩
+            let body : Comp := .bind sp r none (.ret sp (.app sp f (relend v W)))
+              (.ret sp (.pair sp (.var sp v) (.var sp r.name))) false
+            let body' ← surfC n (c.push v (some A)) none body
+            let X ← need sp "the call's result"
+              (resultOfC (((← refresh c).push v (some A)).tyCL body'))
+            let B ← match X with
+              | .tensor _ B => pure B
+              | _ => throw ⟨sp, "internal error: a lend through a place's swap"⟩
+            let _ := m
+            let As ← c.surface sp A
+            let C := Const.withswap (← c.surfaceL sp a) As (← c.surface sp B)
+            return .app sp (.app sp (.const sp C) (.lend x.span x .mut))
+              (.thunkv sp (.lam sp ⟨v, sp⟩ As body'))
       -- A call of a generic function: its type and lifetime arguments filled.
       if let some V' ← genericCall n c sp exp f W none then return V'
       let f' ← surfV n c none f

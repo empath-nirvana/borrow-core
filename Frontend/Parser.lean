@@ -324,7 +324,7 @@ def notePlaceWrite (x : String) : P Unit := do
 def bindOrAssign (x : Ident) : P Ident := do
   match ← mutOf? x.name with
   | some y =>
-    if (← get).placeMode && (← get).places.contains y then
+    if (← get).places.contains y then
       let t ← modifyGet fun s => (s!"io_pt{s.fresh}", { s with fresh := s.fresh + 1 })
       modify fun s => { s with assigned := y :: s.assigned, stores := (t, y) :: s.stores }
       if let some (_, b) := (← get).scope.lookup x.name then noteOcc x.span x.name y b
@@ -1545,7 +1545,6 @@ def spineTail : Comp → Option ((Comp → Comp) × Val × List String)
 /-- The place a call's arguments read, where `let (x, q) = f(…, x, …)` binds `x` (`placeMode`). -/
 def placeArg? (x : Ident) (A : Val) : P (Option String) := do
   let s ← get
-  if !s.placeMode then return none
   let some (y, _) := s.scope.lookup x.name | return none
   if !s.places.contains y then return none
   pure (if (argsOf A).any (placeMark? · == some y) then some y else none)
@@ -1908,7 +1907,7 @@ def valAtom : Nat → P Val
       else
         let y ← lookName s t.span
         -- A read of a place is a load (`placeLoads`); it uses the place's token.
-        if (← get).placeMode && (← get).places.contains y then
+        if (← get).places.contains y then
           notePlaceWrite y
           return placeMark t.span y
         pure (.var t.span y)
@@ -2047,7 +2046,7 @@ def compG : Nat → Bool → P Comp
       unless (← get).muts.contains x do
         failAt t.span s!"`{x₀}` is assigned, but it is not declared `let mut`"
       modify fun s => { s with assigned := x :: s.assigned, blockThreads := [], pendingRun := none }
-      if (← get).placeMode && (← get).places.contains x then
+      if (← get).places.contains x then
         let (V, w) ← frame (val n)
         checkRun V
         if !head && (← isSym ";") then

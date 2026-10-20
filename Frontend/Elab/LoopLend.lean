@@ -307,7 +307,7 @@ def Env.forBody (E : Env) (scope : List String) (sp : Span) (ys : List String) (
   if !E.usesC M then return M
   let ws := (spineNames fuel M).eraseDups.filter fun z =>
     scope.contains z && !E.aliases.contains z && !ys.contains z
-  if Frontend.placeEnv && exitsOnSpine fuel M then
+  if exitsOnSpine fuel M && Frontend.placeEnv then
     -- What the stretches lend (a capability lent to a call) is handed on as what they assign.
     let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
     let lent := (M.lentNames ++ caps).eraseDups.filter fun z =>
@@ -513,10 +513,24 @@ def lendBind₁ (c : TCx) (divCall : Val → Bool) (fin' : TCx → Finite) (sp :
     | _, _ => fun T => .bind sp x A T N lin
   pure (some (bindP (spliceTail rest fuel L)))
 
+/-- Whether a place's scope (`BCC_MUT=place`, the parser's `io_pb…`/`io_pq…` binding) is a
+binding on the body's spine.  `[spec §42]` -/
+def placeScopeOnSpine : Nat → Comp → Bool
+  | 0, _ => false
+  | n + 1, .bind _ y _ _ K _ =>
+    y.name.startsWith "io_pb" || y.name.startsWith "io_pq" || placeScopeOnSpine n K
+  | n + 1, .letUnit _ _ K | n + 1, .letPair _ _ _ _ K => placeScopeOnSpine n K
+  | _, _ => false
+
 /-- `lendBind₁`, with the nested blocks over a loop on the body's spine rewritten first. -/
 def lendBind (c : TCx) (divCall : Val → Bool) (fin' : TCx → Finite) (sp : Span) (x : Ident)
     (A : Option VTy) (V : Val) (N : Comp) (lin : Bool) : Except Error (Option Comp) :=
-  lendBindD 8 c divCall fin' sp x A V N lin
+  match Block.of? V with
+  | none => pure none
+  | some B =>
+    -- Only a place's scope (`BCC_MUT=place`) nests blocks for the split to take apart.
+    if placeScopeOnSpine fuel B.S then lendBindD 8 c divCall fin' sp x A V N lin
+    else lendBind₁ c divCall fin' sp x A V N lin id
 where
   /-- `lendBind` with each nested block over a loop on the body's spine rewritten first, to the
   depth `d` (`preSplit`): blocks nest when a body holds several places (`BCC_MUT=place`). -/
@@ -525,7 +539,6 @@ where
   | 0, c, divCall, fin', sp, x, A, V, N, lin => lendBind₁ c divCall fin' sp x A V N lin id
   | d + 1, c, divCall, fin', sp, x, A, V, N, lin => do
     let some B := Block.of? V | return none
-    if !Frontend.placeEnv then return ← lendBind₁ c divCall fin' sp x A V N lin id
     let rec preSplit : Nat → Comp → Except Error Comp
       | 0, S => pure S
       | k + 1, .bind bsp y Ay (.ret rsp W) K l => do
