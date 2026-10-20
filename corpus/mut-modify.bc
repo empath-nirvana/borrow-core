@@ -1,0 +1,16 @@
+-- `modify` whose body assigns an enclosing `let mut` (#586's comment): the callback hands `n` back
+-- beside the place's new content (SPEC §41, rule R3), on a value lent as a scoped cell and on a
+-- `mut` borrow.
+--
+-- Answer: ((i32[6], i32[7]), i32[120]).
+fn bump<'l>(m: mut 'l i32, k: i32) -> mut 'l i32 * i32 =
+  let mut seen = 0;
+  modify m { v -> seen = v; v + k };
+  (m, seen)
+main -> (i32 * i32) * i32 =
+  let mut x = 5;
+  let mut n = 0;
+  modify &mut x { v -> n = 7; v + 1 };
+  let mut c = alloc(10);
+  let s = borrow mut c { 'l, m -> let (m, seen) = bump(m, 1); forget_mut['l, i32](m); seen };
+  ((x, n), free(c) * 10 + s)

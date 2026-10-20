@@ -133,6 +133,7 @@ for-adapters 1 0 0 12 6 7
 for-data 1 0 0 47 6 27
 for-data-div 3 0 0 17 9 6 # the two arrays and the cell the views are lent from
 for-finite 0 0 0 0 0 0
+for-in-if-lend 1 0 0 4 2 2
 for-never 0 0 0 0 0 0
 for-return 1 0 0 9 5 4
 for-yield-branch 0 0 0 0 0 0
@@ -307,7 +308,12 @@ main-lifetime 0 0 0 0 0 0 # main's lifetime and the unit cell `u` are cells of n
 map-reuse 7 0 0 48 48 0
 map-views 24 0 0 12182 8849 3059 # the eight values' buffers; the first map's arrays and one doubling; the second map's arrays and five doublings (16 to 512 slots for 200 keys)
 mut-bind-arm 0 0 0 0 0 0
+mut-block 0 0 0 0 0 0
+mut-block-nested 0 0 0 0 0 0
+mut-lend-arm 0 0 0 4 4 0
+mut-modify 1 0 0 4 4 0
 mut-name-capture 2 0 0 10 9 8
+mut-run 0 0 0 0 0 0
 mut-shadow-arms 0 0 0 0 0 0
 name-clash 0 0 0 0 0 0
 nats-sum 0 0 0 0 0 0

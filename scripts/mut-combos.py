@@ -36,7 +36,18 @@ handler resuming[A]: Pause, A -> A = { return(a) = a; pause(k) = k(()) }
 
 fn ap(f: !(i32 => i32)) -> i32 = f(1) * 10 + f(2)
 
+fn aploop(f: !(i32 => i32)) -> i32 =
+  let mut s = 0;
+  for i in 1..3 { s = s * 10 + f(i) };
+  s
+
+fn apg[T](f: !(T => i32), y: T, z: T) -> i32 = f(y) * 10 + f(z)
+
 fn bump(x: i32) -> i32 * i32 = (x + 1, x)
+
+effect Tally { fn tally(x: i32) }
+
+handler adder(mut s: i32): Tally = { tally(x) = { s = s + x; () } }
 '''
 
 GEN_HEAD = '''include yield
@@ -48,17 +59,26 @@ fn upto(n: i32) -> 1 with Yield[i32] =
 
 # The constructs, the statements among them, those that nest, and those the State form expresses.
 ALL = ['assign', 'bindassign', 'rebind', 'shadow', 'pause', 'if', 'lethead', 'match', 'for',
-       'block', 'while', 'modify', 'borrow', 'with', 'gen', 'run']
+       'block', 'while', 'modify', 'borrow', 'with', 'cwith', 'gen', 'run']
 STATEMENTS = ['assign', 'bindassign', 'rebind', 'shadow', 'pause']
-NESTING = ['if', 'lethead', 'match', 'for', 'block', 'while', 'modify', 'borrow', 'with', 'gen',
-           'run']
+NESTING = ['if', 'lethead', 'match', 'for', 'block', 'while', 'modify', 'borrow', 'with', 'cwith',
+           'gen', 'run']
+# The State form expresses these; a body that loops (`while`, a `for` over a generator) is a div
+# computation, which no handler wraps (SPEC §21), so it is not.
 STATE_OK = {'assign', 'bindassign', 'rebind', 'shadow', 'pause', 'if', 'lethead', 'match', 'for',
-            'block', 'with', 'run'}
+            'block', 'cwith', 'run'}
+# Loops observed one turn at a time: on the spine only (SPEC §14), and in a body with no operation
+# that resumes (a handler does not wrap a div computation, SPEC §21).
+DIV = {'while', 'gen'}
 
 # The gate's rows: each a set of constructs, nested to `--depth`.
 ROWS = [
     ('joins', ['assign', 'bindassign', 'rebind', 'shadow', 'pause', 'if', 'lethead', 'match',
                'for']),
+    ('frames', ['assign', 'bindassign', 'rebind', 'shadow', 'pause', 'if', 'lethead', 'match',
+                'for', 'block', 'modify', 'borrow', 'with', 'cwith', 'run']),
+    ('loops', ['assign', 'bindassign', 'rebind', 'shadow', 'if', 'lethead', 'match', 'for',
+               'block', 'while', 'gen', 'modify', 'borrow', 'with', 'run']),
 ]
 
 M32 = 0xffffffff
@@ -77,6 +97,12 @@ class Gen:
         self.rng, self.depth, self.n = rng, depth, 0
         self.constructs = constructs
         self.kinds = set()
+        # Inside a borrow's callback (a borrow block, `modify`), no operation that resumes: a
+        # continuation is not held across a lend (T1, #172).
+        self.lent = 0
+        # On the spine of the body (SPEC §14): its statements, and a loop's body that is on it.
+        self.spine = True
+        self.inctl = False
 
     def fresh(self, p):
         self.n += 1
@@ -104,13 +130,29 @@ class Gen:
     def without(self, scope, muts, x):
         return scope - {x}, [m for m in muts if m != x]
 
+    def sub(self, d, scope, muts, spine=None, lent=False):
+        """The statements of a construct's part: on the spine when the construct passes it on
+        (`spine` None) or not, inside a borrow's callback (`lent`) or not."""
+        s0, l0 = self.spine, self.lent
+        if spine is not None:
+            self.spine = self.spine and spine
+        self.lent += 1 if lent else 0
+        try:
+            return self.stmts(d, scope, muts)
+        finally:
+            self.spine, self.lent = s0, l0
+
     def stmt(self, d, scope, muts):
         r = self.rng
-        choices = [c for c in STATEMENTS if c in self.constructs]
+        choices = [c for c in STATEMENTS if c in self.constructs and not (c == 'pause' and self.lent)]
         if 'assign' in choices:
             choices.append('assign')
         if d > 0:
-            choices += [c for c in NESTING if c in self.constructs]
+            # The cell is lent once at a time; a control handler's body lends nothing declared
+            # outside it (SPEC §18 *Not provided*).
+            choices += [c for c in NESTING if c in self.constructs and
+                        not (c in DIV and not self.spine) and not (c == 'cwith' and self.lent) and
+                        not (c == 'borrow' and (self.lent or self.inctl))]
         c = r.choice(choices)
         if c in ('assign', 'bindassign', 'rebind', 'modify') and not muts:
             c = 'shadow'
@@ -131,16 +173,16 @@ class Gen:
             return ('let', v, self.expr(scope)), s2 | {v}, m2
         cond = (self.expr(scope), r.randint(0, 20))
         if c == 'if':
-            t, _ = self.stmts(d - 1, scope, muts)
-            f, _ = self.stmts(d - 1, scope, muts)
+            t, _ = self.sub(d - 1, scope, muts, spine=False)
+            f, _ = self.sub(d - 1, scope, muts, spine=False)
             return ('if', cond, t, f), scope, muts
         if c in ('lethead', 'match', 'block', 'borrow', 'run'):
             x = self.binder('t')
             s2, m2 = self.without(scope, muts, x)
             s2 = s2 | {x}
         if c == 'lethead':
-            t, te = self.stmts(d - 1, scope, muts)
-            f, fe = self.stmts(d - 1, scope, muts)
+            t, te = self.sub(d - 1, scope, muts, spine=False)
+            f, fe = self.sub(d - 1, scope, muts, spine=False)
             return ('lethead', x, cond, t, self.expr(te), f, self.expr(fe)), s2, m2
         if c == 'match':
             # The arm's binder is `()`: inside the arm its name is no integer.
@@ -148,43 +190,58 @@ class Gen:
             sp, mp = self.without(scope, muts, p)
             if not sp:
                 p = self.fresh('p'); sp, mp = scope, muts
-            t, te = self.stmts(d - 1, sp, mp)
-            f, fe = self.stmts(d - 1, sp, mp)
+            t, te = self.sub(d - 1, sp, mp, spine=False)
+            f, fe = self.sub(d - 1, sp, mp, spine=False)
             side = r.choice(['inl', 'inr'])
             return ('match', x, side, p, t, self.expr(te), f, self.expr(fe)), s2, m2
         if c in ('for', 'gen'):
             i = self.binder('i')
             si, mi = self.without(scope, muts, i)
-            b, _ = self.stmts(d - 1, si | {i}, mi)
+            # A counted `for` is one total step: a div loop is not inside it (SPEC §16).
+            b, _ = self.sub(d - 1, si | {i}, mi, spine=(c == 'gen'))
             return (c, i, r.randint(0, 3), b), scope, muts
         if c == 'while':
-            b, _ = self.stmts(d - 1, scope, muts)
+            b, _ = self.sub(d - 1, scope, muts)
             return ('while', self.fresh('w'), r.randint(0, 3), b), scope, muts
         if c == 'block':
+            # A persistent closure captures only `!` values: its body reads its parameter, and
+            # the variables it assigns are passed to it (SPEC §41, rule R3).
             u = self.binder('u')
-            su, mu = self.without(scope, muts, u)
-            b, be = self.stmts(d - 1, su | {u}, mu)
-            return ('block', x, u, b, self.expr(be)), s2, m2
+            mu = [m for m in muts if m != u]
+            b, be = self.sub(d - 1, {u}, mu, spine=False)
+            # The callee: each calls the block at 1, then at 2.
+            g = r.choice(['ap', 'aploop', 'apg'])
+            return ('block', x, u, b, self.expr(be), g), s2, m2
         if c == 'modify':
             # The place is lent to the callback: its body does not name it.
             v = r.choice(muts)
             u = self.binder('u')
             su, mu = self.without(scope, muts, v)
             su, mu = self.without(su, mu, u)
-            b, _ = self.stmts(d - 1, su | {u}, mu)
+            b, _ = self.sub(d - 1, su | {u}, mu, spine=False, lent=True)
             return ('modify', v, u, b, r.randint(0, 9)), scope, muts
         if c == 'borrow':
             m = self.binder('m')
             sm, mm = self.without(scope, muts, m)
             if not sm:
                 m = self.fresh('m'); sm, mm = scope, muts
-            b, be = self.stmts(d - 1, sm, mm)
+            b, be = self.sub(d - 1, sm, mm, spine=False, lent=True)
             return ('borrow', x, m, b, self.expr(be)), s2, m2
         if c == 'with':
-            b, _ = self.stmts(d - 1, scope, muts)
-            return ('with', b), scope, muts
+            # An answering handler's body: a borrow block of its state's cell (SPEC §18), whose
+            # `tally(v)` adds to the state.
+            b, _ = self.sub(d - 1, scope, muts, spine=False, lent=True)
+            return ('with', b, self.expr(scope)), scope, muts
+        if c == 'cwith':
+            # A control handler's body hands back nothing it writes (SPEC §18 *Not provided*): it
+            # reads and pauses.
+            c0 = self.inctl
+            self.inctl = True
+            b, _ = self.sub(d - 1, scope, [], spine=False)
+            self.inctl = c0
+            return ('cwith', b), scope, muts
         if c == 'run':
-            b, be = self.stmts(d - 1, scope, muts)
+            b, be = self.sub(d - 1, scope, muts, spine=False)
             return ('run', x, b, self.expr(be)), s2, m2
         raise AssertionError(c)
 
@@ -282,8 +339,10 @@ class Render:
             w, n, b = s[1:]
             return f'let mut {w} = 0; while {w} < {n} {{ {w} = {w} + 1; {self.seq(b, spell)} }}', spell
         if k == 'block':
-            x, u, b, be = s[1:]
-            return f'let {x} = ap(!{{ {u} -> {self.seq(b, bind(u), be)} }})', bind(x)
+            x, u, b, be, g = s[1:]
+            blk = f'!{{ {u} -> {self.seq(b, bind(u), be)} }}'
+            call = f'apg({blk}, 1, 2)' if g == 'apg' else f'{g}({blk})'
+            return f'let {x} = {call}', bind(x)
         if k == 'modify':
             v, u, b, kk = s[1:]
             su = drop(v); su[u] = u
@@ -293,6 +352,9 @@ class Render:
             x, m, b, be = s[1:]
             return f'let {x} = borrow mut cell {{ {m} -> {self.seq(b, drop(m), be)} }}', bind(x)
         if k == 'with':
+            return (f'with adder(0) {{ tally({self.expr(s[2], spell)}); {self.seq(s[1], spell)} }}',
+                    spell)
+        if k == 'cwith':
             return f'with resuming {{ {self.seq(s[1], spell)} }}', spell
         if k == 'run':
             x, b, be = s[1:]
@@ -308,12 +370,15 @@ def render(body, state):
     fa, fb = sp2['a'], sp2['b']
     head = HEAD + (GEN_HEAD if uses(body, 'gen') else '')
     cell = uses(body, 'borrow')
-    pre = '  let cell = alloc(0);\n' if cell else ''
+    pre = '  let mut cell = alloc(0);\n' if cell else ''
     post = '  let _ = free(cell);\n' if cell else ''
+    # A body that loops is a div computation, which no handler wraps (SPEC §21): it pauses nowhere.
+    div = any(uses(body, k) for k in DIV)
+    row, main = ('', 'body()') if div else (' with Pause', 'with resuming { body() }')
     if not state:
-        return (head + 'fn body() -> i32 * i32 with Pause =\n  let mut a = 1;\n  let mut b = 2;\n'
+        return (head + f'fn body() -> i32 * i32{row} =\n  let mut a = 1;\n  let mut b = 2;\n'
                 + pre + f'  {text};\n' + post +
-                f'  ({fa}, {fb})\n\nmain -> i32 * i32 = with resuming {{ body() }}\n')
+                f'  ({fa}, {fb})\n\nmain -> i32 * i32 = {main}\n')
     return (head + 'fn body() -> i32 * i32 with Pause =\n'
             '  let (r, b) = with hb = state[i32, (i32 * i32) * i32](2) {\n'
             '    with ha = state[i32, i32 * i32](1) {\n'
@@ -391,7 +456,7 @@ class Eval:
                 self.seq(s[3], env)
             return env
         if k == 'block':
-            x, u, b, be = s[1:]
+            x, u, b, be, _ = s[1:]
 
             def call(arg):
                 e2 = dict(env); e2[u] = Cell(arg)
@@ -408,6 +473,10 @@ class Eval:
             x, m, b, be = s[1:]
             return bind(x, self.seq(b, drop(m), be))
         if k == 'with':
+            self.expr(s[2], env)
+            self.seq(s[1], env)
+            return env
+        if k == 'cwith':
             self.seq(s[1], env)
             return env
         if k == 'run':
@@ -431,6 +500,7 @@ def run(bcc, path):
 def check(bcc, d, k, body, kinds):
     pm = os.path.join(d, f'c{k}.bc')
     open(pm, 'w').write(render(body, False))
+    open(pm[:-3] + '.tree', 'w').write(repr(body))
     want = Eval().program(body)
     vm, em = run(bcc, pm)
     st = None

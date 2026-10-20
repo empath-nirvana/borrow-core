@@ -1,0 +1,8 @@
+-- expect: 7:13: this `run` assigns an enclosing `let mut` variable inside an expression, where what it writes cannot be handed back: bind it first, `let r = run …;` (SPEC §41, rule R3)
+-- `run M` that assigns an enclosing `let mut` inside an argument (#586): what it writes is handed
+-- back where it is bound, so it is bound first (`corpus/mut-run.bc`).
+fn g(v: i32) -> i32 = v
+main -> i32 =
+  let mut x = 1;
+  let a = g(run if x == 1 { x = 5; return 2 } else { return 3 });
+  x * 1000 + a

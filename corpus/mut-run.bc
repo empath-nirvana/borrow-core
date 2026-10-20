@@ -1,0 +1,12 @@
+-- `run M` that assigns an enclosing `let mut` (#586) hands `x` back beside its value, and its
+-- binding takes them apart (SPEC §41, rule R3).
+--
+-- Answer: (i32[52], i32[5102]).
+fn g(v: i32) -> i32 = v
+main -> i32 * i32 =
+  let mut x = 1;
+  let a = run (x = 5; return 2);
+  let mut y = 1;
+  let r = run if y == 1 { y = 5; return 2 } else { return 3 };
+  let b = g(r);
+  (x * 10 + a, y * 1000 + 100 + b)

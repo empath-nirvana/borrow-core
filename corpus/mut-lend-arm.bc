@@ -1,0 +1,10 @@
+-- A lend of a `let mut` place inside an arm (`&mut x`) rebinds the place: the arm writes it, and
+-- the join hands it on (SPEC §41, rule R2).
+--
+-- Answer: i32[12].
+fn add<'a>(c: mut 'a i32, k: i32) -> 1 = modify c { v -> v + k }; forget_mut['a, i32](c)
+main -> i32 =
+  let mut x = 1;
+  if x == 1 { add(&mut x, 10); () } else { () };
+  add(&mut x, 1);
+  x
