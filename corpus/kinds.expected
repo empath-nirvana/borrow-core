@@ -180,45 +180,38 @@ corpus/effects-tunnel.bc 3.0 affine abortive: -; agree
 corpus/effects-tunnel.bc 2.0 affine abortive: branch; agree
 corpus/float-roundtrip.bc 1.0 affine abortive: branch; agree
 corpus/float-roundtrip.bc 2.0 affine abortive: branch; agree
+corpus/for-data-div.bc 2.0 affine tail: direct; agree
 corpus/for-data-div.bc 3.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/for-data-div.bc 4.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/for-data-div.bc 2.0 affine tail: direct; agree
 corpus/for-data-div.bc 1.0 affine tail: direct; agree
 corpus/for-never.bc 1.0 affine resume-or-cancel,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/for-never.bc 2.0 affine tail: -; agree
-corpus/for-yield-branch.bc 3.0 affine resume-or-cancel,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/for-yield-branch.bc 2.0 affine tail: direct; agree
+corpus/for-yield-branch.bc 3.0 affine resume-or-cancel,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/for-yield-branch.bc 1.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 23.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters-fail.bc 22.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters-fail.bc 21.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 20.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters-fail.bc 19.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 18.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters-fail.bc 17.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 16.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters-fail.bc 15.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 13.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters-fail.bc 14.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters-fail.bc 12.0 affine tail: direct; agree
+corpus/gen-adapters-fail.bc 4.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 3.0 affine tail: direct; agree
+corpus/gen-adapters-fail.bc 6.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 5.0 affine tail: direct; agree
+corpus/gen-adapters-fail.bc 8.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 7.0 affine tail: direct; agree
 corpus/gen-adapters-fail.bc 10.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-adapters-fail.bc 11.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-adapters-fail.bc 9.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 8.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters-fail.bc 7.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 6.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters-fail.bc 5.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 4.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters-fail.bc 3.0 affine tail: direct; agree
+corpus/gen-adapters-fail.bc 13.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 14.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 12.0 affine tail: direct; agree
+corpus/gen-adapters-fail.bc 16.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 15.0 affine tail: direct; agree
+corpus/gen-adapters-fail.bc 18.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 17.0 affine tail: direct; agree
+corpus/gen-adapters-fail.bc 20.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 19.0 affine tail: direct; agree
+corpus/gen-adapters-fail.bc 23.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 22.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 21.0 affine tail: direct; agree
 corpus/gen-adapters-fail.bc 2.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-adapters-fail.bc 1.0 affine tail: direct; agree
-corpus/gen-adapters.bc 15.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters.bc 14.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters.bc 19.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters.bc 18.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters.bc 17.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters.bc 16.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters.bc 13.0 affine tail: direct; agree
 corpus/gen-adapters.bc 9.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-adapters.bc 8.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-adapters.bc 11.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
@@ -226,6 +219,13 @@ corpus/gen-adapters.bc 12.0 affine stored,tail: machine: a path of the clause do
 corpus/gen-adapters.bc 10.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-adapters.bc 7.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-adapters.bc 6.0 affine tail: direct; agree
+corpus/gen-adapters.bc 15.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 14.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 19.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 18.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 17.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 16.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 13.0 affine tail: direct; agree
 corpus/gen-adapters.bc 5.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-adapters.bc 4.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-adapters.bc 3.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
@@ -244,8 +244,8 @@ corpus/gen-fib.bc 1.0 affine tail: direct; agree
 corpus/gen-from.bc 3.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-from.bc 2.0 affine tail: direct; agree
 corpus/gen-from.bc 1.0 affine tail: direct; agree
-corpus/gen-nested.bc 3.0 affine tail: direct; agree
 corpus/gen-nested.bc 2.0 affine tail: direct; agree
+corpus/gen-nested.bc 3.0 affine tail: direct; agree
 corpus/gen-nested.bc 1.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-pipeline-adapters.bc 5.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-pipeline-adapters.bc 4.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
@@ -266,15 +266,15 @@ corpus/gen-pipeline.bc 3.0 affine stored,tail: machine: a path of the clause doe
 corpus/gen-pipeline.bc 2.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-pipeline.bc 1.0 affine tail: direct; agree
 corpus/gen-produce.bc 1.0 affine tail: direct; agree
-corpus/gen-return.bc 3.0 affine tail: machine: the clause captures values; disagree
 corpus/gen-return.bc 2.0 affine tail: machine: the clause captures values; disagree
+corpus/gen-return.bc 3.0 affine tail: machine: the clause captures values; disagree
 corpus/gen-return.bc 1.0 affine tail: direct; agree
 corpus/gen-tokenize-parse.bc 3.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-tokenize-parse.bc 1.0 affine abortive: branch; agree
 corpus/gen-tokenize-parse.bc 2.0 affine abortive: branch; agree
-corpus/gen-value.bc 4.0 affine resume-or-cancel,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-value.bc 3.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-value.bc 2.0 affine tail: direct; agree
+corpus/gen-value.bc 4.0 affine resume-or-cancel,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-value.bc 1.0 affine tail: direct; agree
 corpus/hygiene-clause-global.bc 2.0 affine abortive: branch; agree
 corpus/hygiene-clause-global.bc 1.0 affine tail: machine: a path of the clause does not end in one resume in tail position; disagree

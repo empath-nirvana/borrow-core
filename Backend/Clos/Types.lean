@@ -727,7 +727,14 @@ def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (main
     | _ => m) {}
   let succA := succ.map List.toArray
   let fieldsOf (v : Nat) : Array Nat := if recFn.contains v then #[] else succA[v]!
-  let roots := (List.range n).filter fun v => rep[v]! == v
+  -- The search enters each cycle at a sum when it holds one: a value of a recursive type ends at
+  -- a sum's base case, and the field that closes the cycle is then the one back to the sum, the
+  -- recursive position, whatever the nodes' order.
+  let reps := (List.range n).filter fun v => rep[v]! == v
+  let isSum (v : Nat) : Bool := match shape[v]! with
+    | .sum .. | .sumN _ => true
+    | _ => false
+  let roots := reps.filter isSum ++ reps.filter (!isSum ·)
   let back := backEdges n fieldsOf roots {}
   let comp := (sccs ((Array.range n).map fun v => (fieldsOf v).toList)).2
   let mut color : Array Nat := Array.replicate n 0
