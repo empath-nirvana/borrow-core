@@ -1,0 +1,23 @@
+-- expect: 17:13: the type of the type of the body `state` handles is not determined here: ascribe it
+-- A `let mut` as an instance of `State` (#611), assigned in a `while`: the loop is div, a loop
+-- value observed one turn at a time (SPEC §14), and no handler wraps a div computation (§21 *Open*;
+-- in the kernel, a handler around ticking code has the stateless clauses of `effHandleT`, decision
+-- 68). The handler is installed per observation, with its state in the loop's state (§19).
+effect State[T] { linear ctl get() -> T; linear ctl put(v: T) }
+
+handler state[T, A](mut s: T): State[T], A -> A * T = {
+  return(a) = (a, s);
+  get(k) = k(s);
+  put(v, k) = { s = v; k(()) }
+}
+
+main -> i32 * bool =
+  let (v, s) = with i = state[i32, i32 * bool](0) {
+    let (v, f) = with found = state[bool, i32 * bool](false) {
+      while i.get() < 10 && not(found.get()) { if i.get() * i.get() > 20 { found.put(true) } else { i.put(i.get() + 1) } };
+      let r: i32 * bool = (i.get(), found.get());
+      r
+    };
+    v
+  };
+  v

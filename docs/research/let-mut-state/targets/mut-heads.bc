@@ -1,0 +1,8 @@
+-- Nested `if` and `match` heads that assign (#581). Target: `mut-heads.core.bc`, each arm
+-- answering its value beside the variables the head assigns.
+-- Answer: i32[5120].
+main -> i32 =
+  let mut x = 1;
+  let mut y = 1;
+  let a = if x == 1 { let t = match (inl () : 1 + 1) { inl u -> x = 5; 2 | inr u -> 3 }; t * 10 } else { y = 8; 4 };
+  x * 1000 + y * 100 + a

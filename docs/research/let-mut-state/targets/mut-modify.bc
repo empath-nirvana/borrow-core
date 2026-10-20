@@ -1,0 +1,8 @@
+-- A `modify` block that assigns an outer `let mut` (#586's comment). Target: `mut-modify.core.bc`,
+-- the swap's callback handing `n` back beside the new value.
+-- Answer: (i32[6], i32[7]). Today: (i32[6], i32[0]), the write lost.
+main -> i32 * i32 =
+  let mut x = 5;
+  let mut n = 0;
+  modify &mut x { v -> n = 7; v + 1 };
+  (x, n)

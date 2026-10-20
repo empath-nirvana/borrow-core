@@ -180,3 +180,8 @@ name = "AsyncCap"
 srcDir = "experiments/AsyncCap"
 roots = ["AsyncCap"]
 
+
+[[lean_lib]]
+name = "LetMutState"
+srcDir = "experiments/LetMutState"
+roots = ["LetMutState"]

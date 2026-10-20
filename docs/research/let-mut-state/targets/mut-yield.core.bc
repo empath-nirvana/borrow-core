@@ -1,0 +1,45 @@
+-- `mut-yield.bc` as its elaboration should read: written by hand in core.
+type UG = U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)
+
+def evens__n1 : !(i32 * i32 => UG) =
+  !thunkv fun (p : i32 * i32) ->
+    let (sum, n) = p;
+    turn : !U (i32 * (i32 * (i32 * i32)) -o F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + i32 * (i32 * (i32 * i32))) & F[1.0 aff i32 * i32 ~> i32] 1) <- return (!thunkv fun (s : i32 * (i32 * (i32 * i32))) ->
+          < let (sum, t) = s;
+            let (n, ik) = t;
+            let (i, k) = ik;
+            case (unbang host[lt_s32]) (k, n) {
+              inl u -> return inl (sum, ())
+            | inr u -> sum <- perform[1.0] (i, sum);
+                return inr (sum, (n, ((unbang host[add32]) (i, i32[2]), (unbang host[add32]) (k, i32[1]))))
+            },
+            return () >);
+    f <- return unbang unfold[nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1, i32 * (i32 * (i32 * i32))] turn;
+    s <- return (sum, (n, (i32[0], i32[0])));
+    return (thunkv nu_in < (nu_out force f s).1, (nu_out force f s).2 >)
+
+main : F U loop i32 1 =
+  sum <- return i32[0];
+  g <- return (unbang evens__n1) (sum, i32[4]);
+  step : !U (UG -o F (i32 + UG) & F 1) <- return (!thunkv fun (h : UG) ->
+        < handle_with[1](
+            ((!thunkv fun (r : i32 * 1 + UG) ->
+                case r {
+                  inl a -> let (sum, u) = a; return inl sum
+                | inr h -> return inr h
+                }) : !U (i32 * 1 + UG -o F (i32 + UG))),
+            ((!thunkv fun (p : (i32 * i32) * U ((i32 -o F (i32 + UG)) & F 1)) ->
+                let (vs, k) = p;
+                let (v, sum) = vs;
+                sum <- return (unbang host[add32]) (sum, v);
+                force k.1 sum, ()) : !U ((i32 * i32) * U ((i32 -o F (i32 + UG)) & F 1) -o F (i32 + UG)) * 1))
+            (nu_out force h).1,
+          handle_with[1](
+            ((!thunkv fun (u : 1) -> return u) : !U (1 -o F 1)),
+            ((!thunkv fun (p : (i32 * i32) * U ((i32 -o F 1) & F 1)) ->
+                let (vs, k) = p;
+                let (v, sum) = vs;
+                force k.1 sum, ()) : !U ((i32 * i32) * U ((i32 -o F 1) & F 1) -o F 1) * 1))
+            (nu_out force h).2 >);
+  f <- return unbang unfold[loop i32 1, UG] step;
+  return (thunkv nu_in < (nu_out force f g).1, (nu_out force f g).2 >)

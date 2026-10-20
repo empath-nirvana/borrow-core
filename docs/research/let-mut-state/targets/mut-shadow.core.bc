@@ -1,0 +1,8 @@
+-- `mut-shadow.bc` as its elaboration should read: written by hand in core.
+main : F i32 =
+  n <- return i32[0];
+  return (unbang count_fold[i32]) (!thunkv fun (q : i32 * i32) ->
+      let (i, n) = q;
+      n <- return (unbang host[add32]) (n, i);
+      n1 <- return (unbang host[mul32]) (n, i32[100]);
+      return n, (i32[3], (i32[0], n)))

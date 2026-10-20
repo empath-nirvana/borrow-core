@@ -1,0 +1,38 @@
+-- `mut-while-flag.bc` as its elaboration should read: written by hand in core.
+def true : 1 + 1 = inr ()
+
+def false : 1 + 1 = inl ()
+
+def not : !(1 + 1 => 1 + 1) =
+  !thunkv fun (b : 1 + 1) ->
+    case b {
+      inl u -> return true
+    | inr u -> return false
+    }
+
+def to_i32 : !(u8 => i32) =
+  !thunkv fun (b : u8) -> return (unbang host[extend8_u]) b
+
+def to_u8 : !(i32 => u8) =
+  !thunkv fun (i : i32) -> return (unbang host[wrap8]) i
+
+def turn : !U (i32 * (1 + 1) -o F (i32 * (1 + 1) + i32 * (1 + 1)) & F 1) =
+  !thunkv fun (s : i32 * (1 + 1)) ->
+    < let (i, found) = s;
+      c <- case (unbang host[lt_s32]) (i, i32[10]) {
+          inl u -> return false
+        | inr u -> return (unbang not) found
+        };
+      case c {
+        inl u -> return inl (i, found)
+      | inr u -> case (unbang host[gt_s32]) ((unbang host[mul32]) (i, i), i32[20]) {
+            inl u -> return inr ((unbang host[add32]) (i, i32[1]), found)
+          | inr u -> return inr (i, true)
+          }
+      },
+      return () >
+
+main : F U loop (i32 * (1 + 1)) 1 =
+  f <- return unbang unfold[loop (i32 * (1 + 1)) 1, i32 * (1 + 1)] turn;
+  s <- return (i32[0], false);
+  return (thunkv nu_in < (nu_out force f s).1, (nu_out force f s).2 >)

@@ -1,0 +1,23 @@
+-- expect: 19:5: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a continuation held across a lend is T1, #172)
+-- A `let mut` as an instance of the ordinary control effect `State` (#611), its state the
+-- handler's parameter: an assignment inside a borrow block is an operation of the handler inside the
+-- borrow's callback. Every borrow callback's row is empty, unwind-only (every operation abortive) or,
+-- under R1, answers `1` at every operation; `get` is none of these (T1, #172;
+-- `experiments/LetMutState`). So the state crosses a borrow only as data. `corpus/parse-int.bc`
+-- assigns `sum` this way.
+effect State[T] { linear ctl get() -> T; linear ctl put(v: T) }
+
+handler state[T, A](mut s: T): State[T], A -> A * T = {
+  return(a) = (a, s);
+  get(k) = k(s);
+  put(v, k) = { s = v; k(()) }
+}
+
+main -> i32 =
+  let (v, s) = with sum = state[i32, i32](0) {
+    let line = alloc(5);
+    borrow imm line { v -> sum.put(sum.get() + 1) };
+    let _ = free(line);
+    sum.get()
+  };
+  v
