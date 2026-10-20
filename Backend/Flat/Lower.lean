@@ -397,23 +397,6 @@ def emit : Dest → List Exp → LM (List Stmt)
     bindVals x ls.toList
     return ss.toList
 
-/-- A float constant, given by its bits, at a float operation's operand: an `f32` is 32 bits. -/
-def fconst (f : FWidth) (b32 : UInt32) (b64 : UInt64) : Exp :=
-  match f with
-  | .f32 => .c32 b32
-  | .f64 => .c64 b64
-
-/-- `trunc`'s range at `f` (Wasm's): the integer part of `x` fits `i` read by `sx` exactly when
-`x` compares above the lower bound (`>`, or `≥` where the bound is a float of the format) and
-below the upper. Both comparisons are false at a NaN. -/
-def truncRange (i : IWidth) (f : FWidth) (sx : Sx) : FRelOp × Exp × Exp :=
-  match i, sx, f with
-  | .i32, .s, .f64 => (.gt, .c64 0xC1E0000000200000, .c64 0x41E0000000000000)
-  | .i32, .s, .f32 => (.ge, .c32 0xCF000000, .c32 0x4F000000)
-  | .i64, .s, f => (.ge, fconst f 0xDF000000 0xC3E0000000000000, fconst f 0x5F000000 0x43E0000000000000)
-  | .i32, .u, f => (.gt, fconst f 0xBF800000 0xBFF0000000000000, fconst f 0x4F800000 0x41F0000000000000)
-  | .i64, .u, f => (.gt, fconst f 0xBF800000 0xBFF0000000000000, fconst f 0x5F800000 0x43F0000000000000)
-
 /-- The integer division `o` on its operands' words `ls` (§8): where Wasm traps, the test that
 holds there, and the quotient or remainder's word where it does not. A divisor that is a constant
 at which the division has an answer (`LState.consts`) has no test: the bare instruction

@@ -76,7 +76,7 @@ def ops : List (HostOp × Nat) :=
 
 /-- The operands of an operation's width. -/
 def operands (o : HostOp) : List UInt64 :=
-  match Clos.hostArgWidth o with
+  match Flat.hostArgWidth o with
   | .f32 => f32s
   | .f64 => f64s
   | .w32 => ints.map (· &&& 0xffffffff) ++ [0xdeadbeef00000005]

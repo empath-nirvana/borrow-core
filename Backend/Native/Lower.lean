@@ -1,5 +1,5 @@
 import Backend.Flat.Syntax
-import Backend.Flat.Lower
+import Backend.Flat.Host
 
 /-!
 # Backend — flat IR to LLVM IR  `[spec §40]`

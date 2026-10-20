@@ -1,5 +1,5 @@
 import Backend.Flat.Syntax
-import Backend.Clos.Types
+import Backend.Flat.Host
 import Backend.Wasm.Syntax
 
 /-!
@@ -24,14 +24,14 @@ def fname (k : Nat) : String := s!"$f{k}"
 /-- The float operations' operands and results are a float's bits in the flat IR: an operand is
 reinterpreted as a float when pushed, and a float result as its bits (SPEC §37). -/
 def floatIn (o : HostOp) : List Instr :=
-  match Clos.hostArgWidth o, o with
+  match Flat.hostArgWidth o, o with
   | _, .reinterpret_i _ | _, .reinterpret_f _ => []
   | w, _ => match w.float? with
     | some f => [.num (.reinterpret_f f)]
     | none => []
 
 def floatOut (o : HostOp) : List Instr :=
-  match Clos.hostResKind o, o with
+  match Flat.hostResKind o, o with
   | _, .reinterpret_i _ | _, .reinterpret_f _ => []
   | .int w, _ => match w.float? with
     | some f => [.num (.reinterpret_i f)]
