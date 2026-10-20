@@ -36,7 +36,6 @@ main : F i32 =
         let (x, io_hw21_3) = io_hxw21_3;
         acc <- return io_hw21_3;
         acc <- return (unbang host[add32]) ((unbang host[mul32]) (acc, i32[10]), x);
-        io_u <- return ();
         io_wv21_3 <- return acc;
         force io_k21_3.1 io_wv21_3, ()) : !U ((i32 * i32) * U ((i32 -o F (i32 * i32 + i32 * i32)) & F 1) -o F (i32 * i32 + i32 * i32)) * 1)) (io_fg21_3 <- return unbang around__n1__g0;
     io_fa21_3 <- return (fx_w1, ());

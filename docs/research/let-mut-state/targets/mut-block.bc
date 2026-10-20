@@ -1,6 +1,6 @@
 -- A block that assigns an outer `let mut` (#586). Target: `mut-block.core.bc`, the block taking `x`
 -- and handing it back, through the copy of `ap` for that block.
--- Answer: i32[52]. Today: i32[12], the write lost.
+-- Answer: i32[52].
 fn ap(f: !(i32 => i32)) -> i32 = f(1)
 
 main -> i32 =

@@ -1,7 +1,7 @@
 -- expect: 16:26: the operation 1.1 is not in the row `[]`
--- An assignment to an outer `let mut` inside a `modify` block, with the `let mut` an instance
--- of `State` (#611): `modify` is `withswap`, whose callback's row is empty, so the operation has no
--- typing there. The state crosses the callback only as data.
+-- An assignment to an outer `let mut` inside a `modify` block of a cell, with the `let mut` an
+-- instance of `State` (#611): `modify` of a cell is `withswap`, whose callback's row is empty, so
+-- the operation has no typing there. The state crosses the callback only as data.
 effect State[T] { linear ctl get() -> T; linear ctl put(v: T) }
 
 handler state[T, A](mut s: T): State[T], A -> A * T = {
@@ -12,8 +12,8 @@ handler state[T, A](mut s: T): State[T], A -> A * T = {
 
 main -> i32 * i32 =
   let (v, n) = with n = state[i32, i32 * i32](0) {
-    let mut x = 5;
+    let mut x = alloc(5);
     modify &mut x { v -> n.put(7); v + 1 };
-    (x, n.get())
+    (free(x), n.get())
   };
   v

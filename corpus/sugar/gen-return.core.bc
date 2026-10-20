@@ -14,7 +14,6 @@ def upto__n1__g0 : !(i32 * i32 * i32 => U (nu X. F[1.0 aff i32 * i32 ~> i32] (i3
                     fx_w1 <- perform[1.0] (i, fx_w1);
                     io_s0 <- return ();
                     i <- return (unbang host[add32]) (i, i32[1]);
-                    io_u <- return ();
                     return inr inr (fx_w1, (n, (stop, i)))
                 | inr io_then -> io_v : i32 * i32 <- return (fx_w1, i);
                     return inl io_v
@@ -92,7 +91,6 @@ main : F U loop i32 1 =
                       let (x, io_hw21_3) = io_hxw21_3;
                       acc <- return io_hw21_3;
                       acc <- return (unbang host[add32]) (acc, x);
-                      io_u <- return ();
                       io_wv21_3 <- return acc;
                       force io_k21_3.1 io_wv21_3, ()) : !U ((i32 * i32) * U ((i32 -o F ((i32 * i32 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) & F 1) -o F ((i32 * i32 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * i32 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) * 1)) (nu_out force io_hs21_3).1,
                 handle_with[1](

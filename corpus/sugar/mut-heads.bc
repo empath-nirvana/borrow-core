@@ -1,5 +1,6 @@
--- Nested `if` and `match` heads that assign (#581). Target: `mut-heads.core.bc`, each arm
--- answering its value beside the variables the head assigns.
+-- Nested `if` and `match` heads that assign (#581): each arm answers its value beside the
+-- variables the head writes (SPEC §41, the rule table). `mut-heads.core.bc` is its elaboration,
+-- written by hand.
 -- Answer: i32[5120].
 main -> i32 =
   let mut x = 1;

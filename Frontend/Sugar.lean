@@ -1077,12 +1077,18 @@ def mTemplate (sp : Span) (what src : String) (vs : List (String × Val)) (cs : 
   let L ← (template sp what src : SM Comp)
   pure (L.fill (fun v => vs.lookup v) (fun v => cs.lookup v))
 
+/-- The terminal `T` of a loop's turn, then `K`, which goes on: `T`'s value is dropped, and a
+terminal `()` is not bound at all (SPEC §41, rule R3: a turn hands on its state). -/
+def thenGo (T K : Comp) : Comp := match T with
+  | .ret _ (.unit _) => K
+  | T => .bind T.span ⟨"io_u", T.span⟩ none T K false
+
 /-- `M` with each terminal that goes on (the end of a loop's body, or a `break`) also naming
 `needs`: what a point inside the loop must carry for the loop's next iteration. -/
 def augment (needs : List String) (M : Comp) : Comp :=
   if needs.isEmpty then M else wrapTail (fun
     | T@(.ret _ (.app _ (.sugar _ .retE) _)) => T
-    | T => .bind T.span ⟨"io_u", T.span⟩ none T (.ret T.span (tupleVal T.span needs)) false) M
+    | T => thenGo T (.ret T.span (tupleVal T.span needs))) M
 
 def MCx.restOf (m : MCx) (M : Comp) : Comp := match m.loops with
   | [] => M
@@ -1297,7 +1303,7 @@ def mWalk (m : MCx) : Nat → TCx → Comp → MM Comp
     | some l =>
       -- The end of a loop's body: back to its head.
       let go ← mGoto m T.span l.head
-      pure (.bind T.span ⟨"io_u", T.span⟩ none T go false)
+      pure (thenGo T go)
     | none => mFinish m T
 
 /-- `x <- M; N` where `M` computes a call's loop, of type `Tm`, finishing with `Bf` and closed with
@@ -2174,10 +2180,8 @@ def unitTail (S : Comp) : Comp :=
     | T => .bind T.span ⟨"io_mv", T.span⟩ none T
         (.ret T.span (.pair T.span (.var T.span "io_mv") (.unit T.span))) false) S
 
-/-- A `modify` body that hands back the `let mut` variables it writes (`Parser.handOn`, SPEC §41,
-rule R3): `(c, W)` at each terminal, `c` the place's new content, made `(c, ((), W))`; or
-`((c, r), W)`, with a result `r`, made `(c, (r, W))`. The result is beside the variables. -/
-def handBackResult (withResult : Bool) (S : Comp) : Comp :=
+/-- `handBackResult` at a terminal that hands back a bound value. -/
+def handBackTerm (withResult : Bool) (S : Comp) : Comp :=
   wrapTail (fun
     | .ret sp (.pair psp (.var vsp "io_bt") Wt) =>
       if withResult then
@@ -2185,6 +2189,24 @@ def handBackResult (withResult : Bool) (S : Comp) : Comp :=
           (.ret sp (.pair psp (.var sp "io_bn") (.pair psp (.var sp "io_br") Wt)))
       else .ret sp (.pair psp (.var vsp "io_bt") (.pair psp (.unit sp) Wt))
     | T => T) S
+
+/-- A `modify` body that hands back the `let mut` variables it writes (`Parser.handOn`, SPEC §41,
+rule R3): `(c, W)` at each terminal, `c` the place's new content, made `(c, ((), W))`; or
+`((c, r), W)`, with a result `r`, made `(c, (r, W))`. The result is beside the variables. -/
+def handBackResult (withResult : Bool) : Comp → Comp
+  -- A terminal value is handed on as it is.
+  | .bind _ ⟨"io_bt", _⟩ none (.ret _ V) (.ret sp (.pair psp (.var _ "io_bt") Wt)) _ =>
+    if withResult then
+      .letPair sp ⟨"io_bn", sp⟩ ⟨"io_br", sp⟩ V
+        (.ret sp (.pair psp (.var sp "io_bn") (.pair psp (.var sp "io_br") Wt)))
+    else .ret sp (.pair psp V (.pair psp (.unit sp) Wt))
+  | .bind sp x A M N lin => .bind sp x A M (handBackResult withResult N) lin
+  | .letUnit sp V M => .letUnit sp V (handBackResult withResult M)
+  | .letPair sp x y V M => .letPair sp x y V (handBackResult withResult M)
+  | .case sp V x M y N => .case sp V x (handBackResult withResult M) y (handBackResult withResult N)
+  | .loop sp ℓ src V M N => .loop sp ℓ src V M (handBackResult withResult N)
+  | .unwind sp x A M D N => .unwind sp x A M D (handBackResult withResult N)
+  | S => handBackTerm withResult S
 
 /-- A `modify` body at the place's content `A`, its type `X`: the body with its value made the new
 content and a result, and the result's type. A body that hands back what it writes (`hands`) has
@@ -3409,6 +3431,10 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       let S' ← surfC n (c.push b.name (some A)) none S
       let X ← need tsp "`modify`'s body" (resultOfC (((← refresh c).push b.name (some A)).tyCL S'))
       let (S'', B) := modifyBody (S.boundNames.contains "io_bt") A X S'
+      -- A `let mut` value is not a place a borrow is needed for: its new content is its next
+      -- value, the body run on it in place, `(c, r)` rebinding it as the lend does.
+      if !(c.tyV (.var psp px.name) matches some (.ref _)) then
+        return .run sp (.letPair sp b ⟨"io_mu", sp⟩ (.pair sp (.lend psp px .mut) (.unit sp)) S'')
       let As ← (c.surface ksp A : Except Error VTy)
       let Bs ← (c.surface ksp B : Except Error VTy)
       lendBorrow c sp px .mut A B fun l mv =>
@@ -4490,7 +4516,7 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
       | .ret tsp (.app _ (.sugar _ .brk) e) => .ret tsp (exitV tsp (brk tsp e))
       | .ret tsp (.sugar _ .cont) => .ret tsp (.inl tsp (st tsp))
       | .ret tsp (.app _ (.sugar _ .retE) v) => .ret tsp (exitV tsp (.inr tsp (.inr tsp v)))
-      | T => .bind T.span ⟨"io_u", T.span⟩ none T (.ret T.span (.inl T.span (st T.span))) false) M
+      | T => thenGo T (.ret T.span (.inl T.span (st T.span)))) M
     let (lo, hi) := match src with
       | .count a b => (some a, some b)
       | _ => (none, none)
@@ -4757,7 +4783,7 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
       | .ret tsp (.app _ (.sugar _ .brk) e) => leave tsp (brk tsp e)
       | .ret tsp (.sugar _ .cont) => resume tsp
       | .ret tsp (.app _ (.sugar _ .retE) v) => leave tsp (.inr tsp v)
-      | T => .bind T.span ⟨"io_u", T.span⟩ none T (resume T.span) false) M
+      | T => thenGo T (resume T.span)) M
     -- The loop's value and the threaded variables after it.
     let valEnd := if keep.isSome then s!"io_jg{sfx}" else "()"
     let JJt := if hasRet then s!"(({Wt}) * ({Vs})) + ({Rts})" else s!"({Wt}) * ({Vs})"

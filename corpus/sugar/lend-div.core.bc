@@ -44,11 +44,9 @@ def total_at : !(ref array i32 => U loop (ref array i32 * i32) 1) =
                 io_lb29_40_0 <- return withbor1['a, array i32, i32] io_own_total_at (thunkv Fun 'a < dom.
                       return (thunkv fun (b : imm 'a array i32) ->
                           acc <- return (unbang host[add32]) (acc, (unbang get) ['a] (b, i));
-                          io_u <- return ();
                           return boxed['a] acc));
                 let (io_own_total_at, io_lr29_40_1) = io_lb29_40_0;
                 acc <- return io_lr29_40_1;
-                io_u <- return ();
                 return inr (io_it0, (io_own_total_at, acc))
             | inr io_d -> io_q <- return io_d;
                 io_v : ref array i32 * i32 <- return (io_own_total_at, acc);

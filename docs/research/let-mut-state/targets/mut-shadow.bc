@@ -1,7 +1,7 @@
 -- A `let` that shadows a `let mut` inside a loop's body (#504's class). Target: `mut-shadow.core.bc`,
 -- the shadow a variable of its own, the loop's state the outer `n`.
--- Answer: i32[3]. Today: i32[10200], the loop's state taken from the shadow.
--- Assigning after the shadow is refused: `reject/mut-shadow-assign.bc` (today accepted, #504).
+-- Answer: i32[3].
+-- Assigning after the shadow is refused: `corpus/fail/mut-shadow-assign-loop.bc` (#504).
 main -> i32 =
   let mut n = 0;
   for i in 0..3 { n = n + i; let n = n * 100; () };

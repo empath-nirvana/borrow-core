@@ -45,11 +45,9 @@ main : F U loop i32 1 =
             io_lb30_11_3 <- return withbor1['io_l2, array i32, i32] t (thunkv Fun 'io_l2 < dom.
                   return (thunkv fun (b : imm 'io_l2 array i32) ->
                       acc <- return (unbang host[add32]) ((unbang host[add32]) (acc, first), (unbang get) ['io_l2] (b, i));
-                      io_u <- return ();
                       return boxed['io_l2] acc));
             let (t, io_lr30_11_4) = io_lb30_11_3;
             acc <- return io_lr30_11_4;
-            io_u <- return ();
             return inr (io_it0, (t, (first, acc)))
         | inr io_d -> io_q <- return io_d;
             io_b3 <- return withbor1['io_l2, array i32, i32] t (thunkv Fun 'io_l2 < dom.
