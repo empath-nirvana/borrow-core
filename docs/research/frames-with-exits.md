@@ -1,7 +1,8 @@
-# Frames with typed exits: an exhaustive accounting of returns (#632, step 1)
+# Frames with typed exits: an exhaustive accounting of returns (#632)
 
-Step 1 of #632: the laws, the target statements in Lean, and the design. Nothing in the library
-is built or changed. The Lean is `experiments/Frames/` (`lake build Frames`, not a default
+Step 1 of #632: the laws, the target statements in Lean, and the design (§0–§12). Step 2 proves
+them and tries them on the language behind a flag (§13: every statement proved, the prototype's
+measurements, what frames resolve and what they create). The Lean is `experiments/Frames/` (`lake build Frames`, not a default
 target). Claims are marked **proved** (in Lean, no `sorry`), **stated** (in Lean, with an
 enumerated `sorry`), **by inspection** (read off code or SPEC, cited) or **hypothesis**.
 
@@ -126,8 +127,8 @@ disagree with `[unwind]`/`[finalise]`. They *are* those rules, applied to the el
 
 ## 2. The Lean targets
 
-`experiments/Frames/`. `lake build Frames` succeeds with 30 enumerated `sorry`s, each with a note
-on what it needs. Every proved result's axioms are `[propext, Classical.choice, Quot.sound]` or a
+`experiments/Frames/`. Step 1 stated these with 30 enumerated `sorry`s; step 2 proves every one
+(§13.1), and the statuses below are step 1's. Every proved result's axioms are `[propext, Classical.choice, Quot.sound]` or a
 subset.
 
 | name | statement | status |
@@ -500,3 +501,421 @@ PDFs'.
   `sumTy_get`: within `[propext, Classical.choice, Quot.sound]`.
 - `grep -cE '^\s*sorry\s*$' experiments/Frames/Frames/Theorems.lean` counts the enumerated
   `sorry`s (30), each after its note.
+
+## 13. Step 2: proved, and tried on the language
+
+Step 2 of #632, on the working assumptions D1–D6 of the issue's last comment. Part A proves the
+statements of §2; Part B elaborates `let mut` by the frame rules behind a flag and measures it
+beside §41's threading and #626's place model.
+
+### 13.1 Part A: the theorems
+
+- **Proved, with no `sorry`.** `lake build Frames`; every result's axioms are within
+  `[propext, Classical.choice, Quot.sound]` (`FDerives.elab`, `accounting`, `block_returns`,
+  `core_conservative`, `frame_handled`, `frame_unwind_leakfree`, `frame_adequacy`,
+  `frame_sound`, `nested_returns`, `not_returns_swap`). The 30 enumerated `sorry`s of step 1 are
+  discharged.
+- **O1 was already proved.** `CDerives.shift_dead` is Core's `CDerives.insert_dead` at an empty
+  prefix (`Core/InsertDead.lean`): no new lemma over `CDerives`, none of the ~90 cases step 1
+  costed.
+- **Lines.** 2,451 lines added and 191 removed (about 2,260 net; `experiments/Frames` goes from 902
+  to 3,158 lines) against the estimate of about 1,500, with O1 costing nothing: `Frames/Elab.lean`
+  609 (one lemma per rule), `Frames/Runs.lean` 957 (the run invariant and its composition lemmas),
+  `Frames/Accounting.lean` 692 (one lemma per rule), and the changes to `Defs`, `Rules` and
+  `Theorems`. Most of the overrun is the machine reasoning of `Runs.lean`:
+  run splitting under a `[then]` frame, the unwinding forms, which never reach a value whatever
+  their finaliser does, and the two loops.
+- **The invariant is coinductive up to a hypothesis.** `Rets` is the invariant `RetsG Q G` at
+  `G = ∅` (`rets_of_retsG`). The div loop proves its invariant up to `G`, the states it resumes
+  into after a tick (`TickG`), and closes it (`retsG_close`, `retsG_iterate`): a loop that ticks
+  forever satisfies it, as step 1 required.
+
+**Requirement 2 holds.** No lemma mentions two frame rules. Every case of `elab` and of
+`accounting` is one lemma of `Elab.lean` or `Accounting.lean` naming its own rule, Core's rules,
+and the hypotheses of its premises. What they share is generic in the term:
+
+| shared lemma | what it is about |
+|---|---|
+| `retsG_plain` | any context with no catcher frame, any term in it |
+| `retsG_ubind` | a `[then]` frame, any body, any finaliser |
+| `retsG_seq`, `retsG_raise`, `retsG_cfin`, `retsG_perform` | the unwinding forms, a stop |
+| `retsG_step'`, `retsG_ctx_det`, `retsG_beta`, `retsG_letpair`, `retsG_case₁₂`, `retsG_caseV` | one administrative step, in any context |
+| `retsG_countTry`, `retsG_iterate` | `count_try`, `iterate`: the loop primitives, each over any step |
+| `retsG_withborU'` | the unwinding borrow constant, any callback |
+| `retsG_call`, `retsG_call2` | a premise's frame called on the slots |
+| `Chain`, `dropCtx_derives`, `chain_dropCtx` | the drop glue of a skipped continuation |
+
+The cases most likely to need a pair (a `break` inside a lend inside a loop, an exit past a loop,
+a raise inside a `use`) are each the general theorem: the `lend` case passes its premise's answer
+out of the callback unread, the loop cases read the turn's answer whatever produced it, and a
+raise is `retsG_ubind`'s unwinding, whatever the frame around it is. Depth: `nested_returns` is
+`accounting` at a depth-4 nesting, with no case of its own.
+
+**The statements needed facts the design did not state.** Each is a premise or a term of one
+rule, recorded in `Rules.lean`/`Defs.lean`; none is a case for an exit kind:
+
+| rule | what was missing | why |
+|---|---|---|
+| `bind`, `catch` | the drop glue of the skipped continuation: `dropCtxE`, and the premise `CtxDtor Γ₂` (`bind`: `E = [] ∨ CtxDtor Γ₂`; `catch`: always) | an exit that skips `N` (or the normal end of `M`, which skips `H`) leaves `N`'s context unconsumed; its linear Core values must be destroyed there, so every live slot of it needs a destructor |
+| `bind` at `E = []` | the arm is `(π', inr (absurd e))`, not `absurd e` | `Rets` is a property of runs, not of types: it cannot see that the arm is dead, so the arm must hand back the slots too |
+| `use`, `lend` | `SlotOk src.ty` | the unwinding constant's finaliser is the head slot's destructor |
+| `lend` | `Δ.Ok`, and `VOutlives (Δ, 'x) 'x` of the slots and of `A ⊕ ⊕E` | `allI`'s side conditions and the callback's box `['x](Π ⊗ (A ⊕ ⊕E))` |
+| `callBlock` | the block's typing at the call's `Δ`; a block is a closed `λ` | under a `lend` the context is `Δ, 'x`, and a typing at the program's `Δ` does not transfer (the borrow constants' types read `⊓Δ`; there is no weakening of `Δ`) |
+
+**Kill criteria: none fired.** No lemma needs two constructs; there is no per-exit-kind patch
+(the two changes to `bind`'s exit arm are on the path every exit takes, the drop glue and the
+empty row); no new relation (D2's reading); no effect equation touched.
+
+### 13.2 Part B: the prototype
+
+`BCC_FRAMES=1` (SPEC §43; `BCC_FRAMES_LIB=thread` keeps the library modules on §41). The rules are
+those of SPEC §43's table, in `Frontend/Elab/Frames.lean` (399 lines) with hooks in
+`Frontend/Parser.lean` (about 300 lines changed; #626's touched 456), and one typed fallback in
+`Frontend/Sugar.lean` (a scalar slot content lent to a borrow block
+through a cell allocated for it). For a slot, R2's write sets, R3's hand-on, `mutCap` and
+`escapingWriter` do not run: a slot is no `let mut` variable, so nothing of §41 sees it. With the
+library threaded, the library's own `let mut`s still use §41.
+
+What the prototype takes from the frame rules and what it leaves:
+
+- **taken:** a slot is a cell the frame owns (`new`); each use is one lend of it (`use`); arms and
+  heads hand back the slots they mention (`case`, `bind`); a callback that uses slots hands them
+  back (`lend`); a loop's state holds the cells (`loopCount`, `loopIter`); the exits drop what they
+  skip (§12's destructors, the drop glue of `bind`/`catch`);
+- **interim:** the loops and the exits (`break`, `continue`, `return`) are §14's and §16's
+  lowering with the cells in their state, not `catch`/`exit` terms: the parser has no types, and
+  the exit row's sums need them. The shapes coincide (the state `Π ⊗ S₀`, the loop's exit sum);
+- **not built:** a closure that writes a slot (`callBlock`, D4) is refused.
+
+### 13.3 Measurements
+
+`scripts/frames-measure.sh` (`#626`'s `mut-place-measure.sh` with the flag): every program
+`compile-corpus.sh` runs, in WebAssembly, against its goldens, then `bcc-counts` against
+`corpus/counts.expected`. #626's columns are its own measurements (`docs/research/let-mut-as-place.md`
+on `mut-place`, 374 programs on an older `main`); this corpus has 380.
+
+**The corpus.**
+
+| | same | wrong | refused | counts as expected |
+|---|---|---|---|---|
+| threading (§41, today) | 380 | 0 | 0 | 379 (`data-config` already differs on `main`) |
+| #626 places, the library threaded | 237 of 374 | **0** | 137 | 164 |
+| #626 places, the library too | 191 of 374 | **0** | 183 | — |
+| **frames, the library threaded** | **273** | **0** | **107** | 167 |
+| **frames, the library too** | **215** | **0** | **165** | 150 |
+
+On the 374 programs both measured (the library threaded): 230 run under both, 97 are refused by
+both, **40 run under frames and were refused by places** (16 of #626's 21 A1, 8 B1, 5 B3, 5 B5,
+3 B4, 2 B6, 1 A4), and **7 run under places and are refused by frames** (5 G2, 1 N2,
+`hygiene-borrow-loop`). No program that writes no `let mut` changes: each of them runs as it does
+without the flag.
+
+**`scripts/mut-combos.py --gate`** (`BCC_FRAMES=1 BCC_FRAMES_LIB=thread`), agree / differ /
+refused:
+
+| row | seed 611 | seeds 1, 2, 3 | #626 places, seed 611 |
+|---|---|---|---|
+| `joins` | **200 / 0 / 0** | 600 / 0 / 0 | 84 / 0 / 116 (A1) |
+| `frames` | 56 / 0 / 144 | 193 / 0 / 407 | 50 / 0 / 150 |
+| `loops` | 56 / 0 / 144 | 186 / 0 / 414 | 70 / 0 / 130 |
+
+**0 differences in 2,400 programs.** The `joins` row, whose programs `pause` (a resuming
+operation) between the uses of the places, runs entirely: the per-use lend is D5's acceptance.
+The `State` form oracle is refused in 27 programs under the flag (each "performs the operations
+… not within the row `[]`", N2), never wrong. The refusals: 545 a block that writes a slot (D4),
+238 a `let mut` holding a cell (A4), 212 a cell captured twice by the handler elaboration (G2),
+95 inference through the frame (B1), 13 effects inside a use (N2), 6 `!` promotion over a cell.
+
+**The target pairs**: 7 of 9 answer as their targets (threading 9, #626's places 5): `mut-for-acc`,
+`mut-heads`, `mut-modify`, `mut-shadow`, `mut-while-flag`, **`mut-await`** (`i32[111]`) and
+**`mut-yield`** (`i32[12]`), both of which places refused (A1). Refused: `mut-block` (D4) and
+`mut-service` (A4).
+
+**The programs of #504, #586 and #590**: every accepted one gives the threaded answer;
+`mut-modify` runs (places refused it, A4); `reject/mut-stored-thunk` is refused (D4; places ran it
+correctly); `loop-shadow-linear` (A3b), `lend-shadow` (G2), `generated-names` (G2),
+`mut-block`, `mut-block-nested` (D4) and `mut-name-capture` (A3a) are refused;
+`reject/mut-control-with` is refused by the kernel's linearity instead of R3's message.
+
+**The renaming check** (`BCC_FRAMES=1 BCC_FRAMES_LIB=thread scripts/alpha-check.py`): 649
+programs, **0 differences**.
+
+**Counts.** 167 of the 273 accepted programs count as expected; **the other 106 all allocate,
+load and store more**: 7,787 allocations against 465, 417,448 loads against 298,331, 310,438
+stores against 225,091 (flat IR). A slot is a heap cell lent once per use, so §35's scoped cell
+(one lend, a frame slot) does not apply; a call's lend of a slot allocates a cell for the
+swapped-out content, and a scalar slot's borrow block another. #626's L1/L2 (a cell no other code
+addresses is a local; a cell lent per observation lives in the state by value) are what would
+bring them back; they are not built. #626's lowering table, at the flat IR (allocations, loads,
+stores):
+
+| program | threaded | frames |
+|---|---|---|
+| `0070-climbing-stairs` | 7 / 4,386 / 4,230 | 10 / 4,431 / 4,268 |
+| `0198-house-robber` | 7 / 4,347 / 4,217 | 22 / 4,512 / 4,306 |
+| `0371-sum-of-two-integers` | 1 / 4,213 / 4,098 | 18 / 4,711 / 4,297 |
+| `io-break` | 0 / 16 / 2 | 2 / 26 / 12 |
+| `mut-while-flag` | 0 / 0 / 0 | 2 / 34 / 8 |
+| `mut-for-acc` | 0 / 0 / 0 | 1 / 6 / 6 |
+
+### 13.4 The refusals, by class
+
+The library threaded, 107 programs (the appendix lists each):
+
+| class | programs | what | kind |
+|---|---|---|---|
+| **A3a** a linear content moved out of a slot | 55 | `let (s, x) = pop(stack); stack = s`, `f(acc)` of an owned value: a load copies, and a slot has no hole | a borrow rule (no holes, #626's K2) |
+| **A3b** a view read twice | 22 | an `imm`/`mut` view in a slot read as a value | a borrow rule (#58's copy of a view) |
+| **B2** a control handler's body that uses a slot | 7 | §41's refusal of a body that may be abandoned, which now sees the slots the body hands back | the existing R3 refusal |
+| **G2** a slot captured twice by generated code | 6 | a `for` over a generator, a div body's state machine, a handler's body: elaboration written for threaded values, which were persistent, copies what it threads | **new** (a prototype gap the threading never met) |
+| **N2** an effect inside a use | 4 | an abortive operation inside a swap's callback, which is pure (`withswap`); the rule `use` allows an unwinding row, its surface form does not | **new** |
+| **D4** a closure that writes a slot | 4 | `callBlock` not built | a prototype gap (D4) |
+| **B1** inference through the frame | 3 | a type the frame's tuples do not determine | a prototype gap |
+| **A4** a `let mut` holding a cell | 2 | the cell is the slot's content, read as a value | a borrow rule (write `let c = alloc(…)`) |
+| other | 4 | an `outlives` the frame's box asks, a field of a slot, a `break` off the spine after the frame's join, a borrow of a unit | prototype gaps |
+
+D3: no refusal is a div loop kept on LoopLend. A slot needs no LoopLend (each use is its own lend);
+the user's borrow blocks over div loops are LoopLend's as before.
+
+With the library as frames, 165: A3a 126 (`textio`'s readers and `async`'s lists move linear
+values out of `let mut`s, as #626 found), B2 15, G2 6, A3b 4, D4 4, B1 3, N2 3, other 4.
+
+### 13.5 What frames resolved, and what they created
+
+**Resolved:**
+
+- **The joins are the rules'.** No write set, no hand-on by name: a construct passes the slots it
+  mentions, by the rules `case`, `bind` and `lend`. A join the elaboration got wrong would be a
+  linearity refusal, never a stale value: 0 wrong answers in 380 corpus programs, 2,400
+  generated ones and the bug programs.
+- **A1 is gone by design.** A resuming operation between the uses of a slot crosses no lend
+  (D5): the `joins` row runs 800 of 800 (places: 84 of 200), `mut-await` and `mut-yield` run, and
+  16 of #626's 21 A1 programs run.
+- **`mutCap` and `escapingWriter` are not needed** for the program's own `let mut`s: a writing
+  closure is the kernel's question (`callBlock`), not a copy of its callee.
+- **The exits are accounted once, for every exit**, in the kernel's proof: one invariant, one
+  induction, no case per exit kind or per nesting.
+- **More programs run than under places**: 273 of 380 against 237 of 374, and 40 that places
+  refused.
+
+**Created:**
+
+- **N1, exits need destructors.** Every exit that skips a continuation destroys what the
+  continuation would have consumed (`bind`/`catch`'s drop glue, `CtxDtor`). A linear Core value
+  with no destructor (a linear closure, a capability) live across a construct that may exit is
+  refused; under threading it was handed on. A slot whose content has no destructor (a
+  capability in a `let mut`) cannot be left by `break` or `return`.
+- **N2, no effect inside a use.** The rule `use` takes only an unwinding row, and its surface
+  form, `withswap`, takes none: `x = e` with an operation in `e` that reads `x`, a borrow block of
+  a slot that performs, and the `State` oracle programs are refused. A swap at an unwinding row (a
+  `withswapU`, the form §19 gives `withbor`) would take abortive operations; a resuming one is T1.
+- **N3, every slot is a heap cell.** 106 accepted programs allocate, load and store more; 0
+  fewer. Without #626's L1/L2 (and an L2 for per-use lends) frames cost more than threading
+  everywhere a `let mut` is.
+- **N4, elaboration written for persistent threaded values.** A `for` over a generator, a div
+  body's state machine and a handler's body copy what they thread; a slot is a linear cell, so
+  they are refused (G2), in 7 programs that threading and places run.
+- **N5, holes stay the largest class.** A3a and A3b are 77 of the 107 refusals (126 of 165 with
+  the library as frames). Frames do not touch them: a slot whose linear content is moved out has
+  no state for the rules to hand on. #626's K2 (an `out @a A` former) or a move out at a slot's
+  last use is needed before frames or places can replace threading for linear contents.
+- **N6, writing blocks need D4.** `callBlock` with a block generic in its slots (a slot-row
+  variable, D4) is not built at the surface, so `mut-block` and `mut-stored-thunk` are refused,
+  where threading runs them (through `mutCap`) and places ran `mut-stored-thunk`.
+- **In the kernel's statements:** the five missing facts of §13.1, each a premise of one rule.
+
+### 13.6 Recommendation
+
+Adopt the frame rules as the kernel's theory of exits: they are proved as designed, exhaustive by
+construction, with no pairwise lemma and no case per exit kind, and they subsume #626's K1. Do
+not switch the surface to them yet. The measured gain over places is real (A1 gone, 273 against
+237 corpus programs, 0 wrong answers), but the switch is blocked by what frames do not address, in
+this order of what it costs the corpus:
+
+1. **holes** (A3a/A3b, 77 of 107): K2, or a move out of a slot at its last use;
+2. **promotion** (N3, every count-differing program): L1/L2, so that a slot costs what a threaded
+   variable does;
+3. **D4** (writing blocks) and **N4** (the generator and handler elaboration over linear cells);
+4. **N2** (effects in a use): an unwinding swap.
+
+Each is a unit of its own; none needs a change to the frame rules or their proofs.
+
+### 13.7 Reproduction
+
+- `lake build Frames`; the axioms with `#print axioms` on the names of §13.1.
+- corpus: `BCC_FRAMES_LIB=thread scripts/frames-measure.sh`, and `scripts/frames-measure.sh` for the
+  library as frames; `BCC_FRAMES=0 scripts/frames-measure.sh` is the baseline.
+- combos: `BCC_FRAMES=1 BCC_FRAMES_LIB=thread scripts/mut-combos.py --gate [--seed N]`.
+- renaming: `BCC_FRAMES=1 BCC_FRAMES_LIB=thread scripts/alpha-check.py`.
+- the pairs: `BCC_FRAMES=1 BCC_FRAMES_LIB=thread bcc interp corpus/sugar/mut-*.bc` and
+  `docs/research/let-mut-state/targets/mut-yield.bc`.
+
+### Appendix: every refused corpus program (the library threaded)
+
+#### A3a a linear content moved out of a slot (55)
+
+| program | the refusal |
+|---|---|
+| `aoc/2020-08.bc` | `*` copies the content, and `array (i32 + i32 + i32) * i32` is not persistent |
+| `aoc/2021-10.bc` | `*` copies the content, and `array u8 * i32` is not persistent |
+| `aoc/2021-15.bc` | `*` copies the content, and `array u8 * i32` is not persistent |
+| `aoc/2022-12.bc` | `*` copies the content, and `array u8 * i32` is not persistent |
+| `aoc/2023-03.bc` | `*` copies the content, and `array u8 * i32` is not persistent |
+| `aoc/2023-07.bc` | `*` copies the content, and `array (i64 * i32) * i32` is not persistent |
+| `aoc/2024-01.bc` | `*` copies the content, and `array i32 * i32` is not persistent |
+| `aoc/2024-11.bc` | `*` copies the content, and `array i64 * i32` is not persistent |
+| `async-timers.bc` | `*` copies the content, and `mu X. 1 + (i32 * i32 * i32 * box top U (nu X. F (i32 + i32 * box top U X) & F 1)) * X` is not persistent |
+| `axes/data-effects.bc` | `*` copies the content, and `mu X. 1 + ref u8 * ref X` is not persistent |
+| `effects-named.bc` | `*` copies the content, and `array (i32 * i32) * i32` is not persistent |
+| `float-arith.bc` | `*` copies the content, and `array (f64 * u8) * i32` is not persistent |
+| `float-ordered.bc` | `*` copies the content, and `array f64 * i32` is not persistent |
+| `float-roundtrip.bc` | `*` copies the content, and `array i32 * i32` is not persistent |
+| `iter-mut-slice.bc` | `*` copies the content, and `array i32` is not persistent |
+| `leetcode/arrays/0015-3sum.bc` | `*` copies the content, and `array (i32 * i32 * i32) * i32` is not persistent |
+| `leetcode/dp/0039-combination-sum.bc` | `*` copies the content, and `array i32 * i32` is not persistent |
+| `leetcode/dp/0300-longest-increasing-subsequence.bc` | `*` copies the content, and `array i32 * i32` is not persistent |
+| `leetcode/graphs/0128-longest-consecutive-sequence.bc` | `*` copies the content, and `array (array i32 * i32)` is not persistent |
+| `leetcode/graphs/0133-clone-graph.bc` | `*` copies the content, and `array (array i32 * i32)` is not persistent |
+| `leetcode/graphs/0200-number-of-islands.bc` | `*` copies the content, and `array (array i32 * i32)` is not persistent |
+| `leetcode/graphs/0207-course-schedule.bc` | `*` copies the content, and `array (array i32 * i32)` is not persistent |
+| `leetcode/graphs/0261-graph-valid-tree.bc` | `*` copies the content, and `array i32 * array i32` is not persistent |
+| `leetcode/graphs/0323-number-of-connected-components.bc` | `*` copies the content, and `array i32 * array i32` is not persistent |
+| `leetcode/graphs/0417-pacific-atlantic-water-flow.bc` | `*` copies the content, and `array (array i32 * i32)` is not persistent |
+| `leetcode/heaps/0347-top-k-frequent-elements.bc` | `*` copies the content, and `array (i32 * i32) * i32` is not persistent |
+| `leetcode/intervals/0056-merge-intervals.bc` | `*` copies the content, and `array (i32 * i32) * i32` is not persistent |
+| `leetcode/intervals/0057-insert-interval.bc` | `*` copies the content, and `array (i32 * i32) * i32` is not persistent |
+| `leetcode/intervals/0252-meeting-rooms.bc` | `*` copies the content, and `array (i32 * i32) * i32` is not persistent |
+| `leetcode/intervals/0253-meeting-rooms-ii.bc` | `*` copies the content, and `array (i32 * i32) * i32` is not persistent |
+| `leetcode/intervals/0435-non-overlapping-intervals.bc` | `*` copies the content, and `array (i32 * i32) * i32` is not persistent |
+| `leetcode/lists/0019-remove-nth-node-from-end-of-list.bc` | `*` copies the content, and `array (array i32 * i32)` is not persistent |
+| `leetcode/lists/0021-merge-two-sorted-lists.bc` | `*` copies the content, and `array (array i32 * i32)` is not persistent |
+| `leetcode/lists/0141-linked-list-cycle.bc` | `*` copies the content, and `array i32` is not persistent |
+| `leetcode/lists/0143-reorder-list.bc` | `*` copies the content, and `mu X. 1 + i32 * ref X` is not persistent |
+| `leetcode/lists/0206-reverse-linked-list.bc` | `*` copies the content, and `array (array i32 * i32)` is not persistent |
+| `leetcode/matrix/0054-spiral-matrix.bc` | `*` copies the content, and `array i32 * i32` is not persistent |
+| `leetcode/strings/0020-valid-parentheses.bc` | `*` copies the content, and `array u8 * i32` is not persistent |
+| `leetcode/strings/0076-minimum-window-substring.bc` | `*` copies the content, and `array i32` is not persistent |
+| `leetcode/trees/0098-validate-binary-search-tree.bc` | `*` copies the content, and `array (i32 + 1) * i32` is not persistent |
+| `leetcode/trees/0100-same-tree.bc` | `*` copies the content, and `array (i32 + 1) * i32` is not persistent |
+| `leetcode/trees/0102-binary-tree-level-order-traversal.bc` | `*` copies the content, and `array (i32 + 1) * i32` is not persistent |
+| `leetcode/trees/0104-maximum-depth-of-binary-tree.bc` | `*` copies the content, and `array (i32 + 1) * i32` is not persistent |
+| `leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-traversal.bc` | `*` copies the content, and `array (i32 + 1) * i32` is not persistent |
+| `leetcode/trees/0124-binary-tree-maximum-path-sum.bc` | `*` copies the content, and `array (i32 + 1) * i32` is not persistent |
+| `leetcode/trees/0212-word-search-ii.bc` | `*` copies the content, and `array u8 * i32` is not persistent |
+| `leetcode/trees/0226-invert-binary-tree.bc` | `*` copies the content, and `array (i32 + 1) * i32` is not persistent |
+| `leetcode/trees/0230-kth-smallest-element-in-a-bst.bc` | `*` copies the content, and `array (i32 + 1) * i32` is not persistent |
+| `leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree.bc` | `*` copies the content, and `array (i32 + 1) * i32` is not persistent |
+| `leetcode/trees/0297-serialize-and-deserialize-binary-tree.bc` | `*` copies the content, and `array (i32 + 1) * i32` is not persistent |
+| `leetcode/trees/0572-subtree-of-another-tree.bc` | `*` copies the content, and `array (i32 + 1) * i32` is not persistent |
+| `mut-name-capture.bc` | `*` copies the content, and `array u8` is not persistent |
+| `reverse-bytes.bc` | `*` copies the content, and `array u8` is not persistent |
+| `sort-numbers.bc` | `*` copies the content, and `array i32` is not persistent |
+| `split-at-mut.bc` | `*` copies the content, and `array u8` is not persistent |
+
+#### A3b an imm/mut view in a slot read twice (22)
+
+| program | the refusal |
+|---|---|
+| `aoc/2023-01.bc` | `*` copies the content, and `array_imm 'l0 u8` is not persistent |
+| `data-config.bc` | `*` copies the content, and `array_imm 'l0 u8` is not persistent |
+| `gen-borrowed.bc` | `*` copies the content, and `array_imm 'l0 i32` is not persistent |
+| `io-laws.bc` | `*` copies the content, and `array_imm 'l1 u8` is not persistent |
+| `leetcode/dp/0139-word-break.bc` | `*` copies the content, and `array_imm 'l0 u8` is not persistent |
+| `leetcode/dp/1143-longest-common-subsequence.bc` | `*` copies the content, and `array_imm 'l1 u8` is not persistent |
+| `leetcode/graphs/0269-alien-dictionary.bc` | `*` copies the content, and `array_imm 'l0 u8` is not persistent |
+| `leetcode/heaps/0295-find-median-from-data-stream-f64.bc` | `*` copies the content, and `array_imm 'l0 u8` is not persistent |
+| `leetcode/heaps/0295-find-median-from-data-stream.bc` | `*` copies the content, and `array_imm 'l0 u8` is not persistent |
+| `leetcode/matrix/0048-rotate-image.bc` | `*` copies the content, and `array_mut 'l0 i32` is not persistent |
+| `leetcode/strings/0003-longest-substring-without-repeating-characters.bc` | `*` copies the content, and `array_imm 'l1 u8` is not persistent |
+| `leetcode/strings/0005-longest-palindromic-substring.bc` | `*` copies the content, and `array_imm 'l0 u8` is not persistent |
+| `leetcode/strings/0049-group-anagrams.bc` | `*` copies the content, and `array_imm 'l0 u8` is not persistent |
+| `leetcode/strings/0125-valid-palindrome.bc` | `*` copies the content, and `array_imm 'l0 u8` is not persistent |
+| `leetcode/strings/0242-valid-anagram.bc` | `*` copies the content, and `array_imm 'l1 u8` is not persistent |
+| `leetcode/strings/0271-encode-and-decode-strings.bc` | `*` copies the content, and `array_imm 'l0 u8` is not persistent |
+| `leetcode/strings/0424-longest-repeating-character-replacement.bc` | `*` copies the content, and `array_imm 'l0 u8` is not persistent |
+| `leetcode/strings/0647-palindromic-substrings.bc` | `*` copies the content, and `array_imm 'l0 u8` is not persistent |
+| `leetcode/trees/0208-implement-trie.bc` | `*` copies the content, and `array_imm 'l0 u8` is not persistent |
+| `leetcode/trees/0211-design-add-and-search-words-data-structure.bc` | `*` copies the content, and `array_imm 'l0 u8` is not persistent |
+| `loop-handler-binder.bc` | `*` copies the content, and `array_imm 'l0 u8` is not persistent |
+| `loop-shadow-linear.bc` | `*` copies the content, and `array_imm 'l0 i32` is not persistent |
+
+#### B2  a control handler body that uses a slot (existing R3 refusal) (7)
+
+| program | the refusal |
+|---|---|
+| `effects-fold.bc` | the body of `with map_err` assigns a `let mut` variable declared outside it, or lends a place declared outside it: a control handler's body may be aba… |
+| `leetcode/lists/0023-merge-k-sorted-lists.bc` | the body of `with exhausted_to_option` assigns a `let mut` variable declared outside it, or lends a place declared outside it: a control handler's bod… |
+| `leetcode/matrix/0079-word-search.bc` | the body of `with exhausted_to_option` assigns a `let mut` variable declared outside it, or lends a place declared outside it: a control handler's bod… |
+| `parse-int.bc` | the body of `with map_err` assigns a `let mut` variable declared outside it, or lends a place declared outside it: a control handler's body may be aba… |
+| `parse-recover.bc` | the body of `with to_result` assigns a `let mut` variable declared outside it, or lends a place declared outside it: a control handler's body may be a… |
+| `state-machine.bc` | the body of `with to_result` assigns a `let mut` variable declared outside it, or lends a place declared outside it: a control handler's body may be a… |
+| `tree-map.bc` | the body of `with to_result` assigns a `let mut` variable declared outside it, or lends a place declared outside it: a control handler's body may be a… |
+
+#### G2  a slot captured twice by generated code (for over a generator, handler body, div body) (6)
+
+| program | the refusal |
+|---|---|
+| `axes/borrow-across-loop.bc` | `acc` is used twice here, and its type `ref i32` is not persistent |
+| `generated-names.bc` | `x` is used twice here, and its type `ref i32` is not persistent |
+| `lend-config.bc` | `acc` is used twice here, and its type `ref i32` is not persistent |
+| `lend-mut.bc` | `k` is used twice here, and its type `ref i32` is not persistent |
+| `lend-pipeline.bc` | `acc` is used twice here, and its type `ref i32` is not persistent |
+| `lend-shadow.bc` | `acc` is used twice here, and its type `ref i32` is not persistent |
+
+#### N2  an effect inside a use of a slot (a swap callback is pure) (4)
+
+| program | the refusal |
+|---|---|
+| `div-infer.bc` | the operation 3.0 is not in the row `[]` |
+| `div-recover.bc` | this computation performs the operations `[1.0 aff 1 + 1 ~> 0]`, which are not within the row `[]` here |
+| `effects-instances.bc` | this computation performs the operations `[6.0 aff 1 + u8 + 1 ~> 0]`, which are not within the row `[]` here |
+| `loop-row-answer.bc` | this computation performs the operations `[1.0 aff i32 ~> i32]`, which are not within the row `[]` here |
+
+#### D4  a closure/block that writes a slot (callBlock not built) (4)
+
+| program | the refusal |
+|---|---|
+| `lend-div.bc` | frames (BCC_FRAMES=1): this closure, block or callback assigns the slot `acc`. A body that writes a slot is a frame-typed block (`callBlock`, generic … |
+| `lend-server.bc` | frames (BCC_FRAMES=1): this closure, block or callback assigns the slot `acc`. A body that writes a slot is a frame-typed block (`callBlock`, generic … |
+| `mut-block-nested.bc` | frames (BCC_FRAMES=1): this closure, block or callback assigns the slot `x`. A body that writes a slot is a frame-typed block (`callBlock`, generic in… |
+| `mut-block.bc` | frames (BCC_FRAMES=1): this closure, block or callback assigns the slot `x`. A body that writes a slot is a frame-typed block (`callBlock`, generic in… |
+
+#### B1  inference through the frame (ascription needed) (3)
+
+| program | the refusal |
+|---|---|
+| `data-option.bc` | the type `A` of `pop` is not determined by its arguments: write them, `pop[…](…)` |
+| `for-never.bc` | the type of this loop's value is not determined: write it, `let r : T = for …` |
+| `lend-copy.bc` | the type of the block's result is not determined here: ascribe it |
+
+#### A4  a let mut holding a cell (its content read as a value) (2)
+
+| program | the refusal |
+|---|---|
+| `effects-log-fail.bc` | `*` copies the content, and `ref i32` is not persistent |
+| `text-wordfreq.bc` | `*` copies the content, and `ref output` is not persistent |
+
+#### O   other (1)
+
+| program | the refusal |
+|---|---|
+| `aoc/2022-21.bc` | cannot show that `(array (1 + i32 * array_imm 'l0 u8) * array i32) * i32` outlives `top` |
+
+#### O   other (1)
+
+| program | the refusal |
+|---|---|
+| `data-particles.bc` | `.x` reads a field of `P`, but this has type `1` |
+
+#### O   other (1)
+
+| program | the refusal |
+|---|---|
+| `hygiene-borrow-loop.bc` | `break`, `continue` and `return` may appear only on the spine of a loop's body (the tail positions of binds, `let`s, `match` arms and loops): not insi… |
+
+#### O   other (1)
+
+| program | the refusal |
+|---|---|
+| `iter-mut.bc` | this borrow block's place has type `1`: `borrow imm`/`borrow mut` take a cell `ref A` or an array (a pair of cells for a family), `modify` a `mut` bor… |
+
