@@ -21,3 +21,10 @@ def not : !(1 + 1 => 1 + 1) =
 def to_i32 : !(u8 => i32) = !thunkv fun (b : u8) -> return ((unbang host[extend8_u]) b)
 
 def to_u8 : !(i32 => u8) = !thunkv fun (i : i32) -> return ((unbang host[wrap8]) i)
+
+-- An optional value (SPEC §42): `T + 1`, `Some` the `inl`, as `map_get` and a buffer's fillers
+-- have it (SPEC §17, §36).
+data Option[T] = Some(T) | None
+
+-- A vector: a buffer (SPEC §17), so the buffer library's functions apply to it.
+data Vec[T] = Vec(buf T)

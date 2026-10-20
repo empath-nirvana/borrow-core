@@ -1,0 +1,115 @@
+-- An LRU cache over an arena of nodes (SPEC §42): `docs/expressiveness-probes/ds/lru-arena.bc`
+-- with each node one record, its links, key and value together, in one buffer, where the probe
+-- keeps four buffers of `i32`. Node 0 is a sentinel of a circular list (`next` of it the most
+-- recent node, `prev` of it the least); a full cache evicts the least recent node and reuses it.
+include textio
+include map
+
+data Node = { prev: i32, next: i32, key: i32, value: i32 }
+
+fn blank(i: i32) -> Node = Node { prev: i, next: i, key: 0, value: 0 }
+
+fn gn(b: buf Node, i: i32) -> buf Node * Node = let (a, n) = b; let x = at(&a, i, blank(0)); ((a, n), x)
+fn sn(b: buf Node, i: i32, x: Node) -> buf Node = let (a, n) = b; (array_set(a, i, x), n)
+
+-- `i` taken out of the list.
+fn unlink(b: buf Node, i: i32) -> buf Node =
+  let (b, x) = gn(b, i);
+  let (b, pn) = gn(b, x.prev);
+  let mut pn = pn;
+  pn.next = x.next;
+  let b = sn(b, x.prev, pn);
+  let (b, nn) = gn(b, x.next);
+  let mut nn = nn;
+  nn.prev = x.prev;
+  sn(b, x.next, nn)
+
+-- `i` put after `at0`.
+fn link_after(b: buf Node, at0: i32, i: i32) -> buf Node =
+  let (b, a) = gn(b, at0);
+  let nx = a.next;
+  let mut a = a;
+  a.next = i;
+  let b = sn(b, at0, a);
+  let (b, x) = gn(b, i);
+  let mut x = x;
+  x.prev = at0;
+  x.next = nx;
+  let b = sn(b, i, x);
+  let (b, c) = gn(b, nx);
+  let mut c = c;
+  c.prev = i;
+  sn(b, nx, c)
+
+data Lru = { map: Map[i32, i32], nodes: buf Node, cap: i32 }
+
+fn lru_new(cap: i32) -> Lru =
+  let (b, _) = push(box buf[Node](8), blank(0));
+  Lru { map: map_new[i32, i32](cap), nodes: b, cap: cap }
+
+-- The value at `k`, which becomes the most recent.
+fn lru_get(c: Lru, k: i32) -> Lru * Option[i32] =
+  match c {
+    Lru { map, nodes, cap } ->
+      let mut m = map;
+      let o = map_lookup(&m, k);
+      match o {
+        Some(i) ->
+          let b = link_after(unlink(nodes, i), 0, i);
+          let (b, x) = gn(b, i);
+          (Lru { map: m, nodes: b, cap: cap }, Some(x.value))
+      | None -> (Lru { map: m, nodes: nodes, cap: cap }, None)
+      }
+  }
+
+-- `v` at `k`, the most recent; the least recent evicted when the cache is full.
+fn lru_put(c: Lru, k: i32, v: i32) -> Lru =
+  match c {
+    Lru { map, nodes, cap } ->
+      let mut m = map;
+      let o = map_lookup(&m, k);
+      match o {
+        Some(i) ->
+          let (b, x) = gn(nodes, i);
+          let mut x = x;
+          x.value = v;
+          Lru { map: m, nodes: link_after(unlink(sn(b, i, x), i), 0, i), cap: cap }
+      | None ->
+          let size = map_len(&m);
+          if size < cap {
+            let (b, i) = len_of(nodes);
+            let (b, _) = push(b, Node { prev: i, next: i, key: k, value: v });
+            let prev = map_insert(&mut m, k, i);
+            Lru { map: m, nodes: link_after(b, 0, i), cap: cap }
+          } else {
+            let (b, s) = gn(nodes, 0);
+            let t = s.prev;
+            let b = unlink(b, t);
+            let (b, x) = gn(b, t);
+            let gone = map_remove(&mut m, x.key);
+            let prev = map_insert(&mut m, k, t);
+            let mut x = x;
+            x.key = k;
+            x.value = v;
+            Lru { map: m, nodes: link_after(sn(b, t, x), 0, t), cap: cap }
+          }
+      }
+  }
+
+fn show(o: Option[i32]) -> 1 = match o { Some(v) -> print_dec(v); print_byte(b' ') | None -> print_lit("- ") }
+
+main -> i32 =
+  -- LeetCode 146's example: capacity 2
+  let c = lru_new(2);
+  let c = lru_put(c, 1, 1);
+  let c = lru_put(c, 2, 2);
+  let (c, r1) = lru_get(c, 1);
+  let c = lru_put(c, 3, 3);
+  let (c, r2) = lru_get(c, 2);
+  let c = lru_put(c, 4, 4);
+  let (c, r3) = lru_get(c, 1);
+  let (c, r4) = lru_get(c, 3);
+  let (c, r5) = lru_get(c, 4);
+  show(r1); show(r2); show(r3); show(r4); show(r5);
+  print_byte(b'\n');
+  0

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.89 · 2026-10-20
+Version 0.90 · 2026-10-20
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -7555,6 +7555,284 @@ whose meaning depended on two names coinciding.
 
 ---
 
+## 42. Entry 41 — data declarations: records, variants, recursion under `box`, match compilation
+
+### Motivation
+
+#593 (`docs/data-declarations.md` §10, unit U1; the decision menu of §11 and its additions §11.1,
+decided 2026-10-20). The corpus writes its data as structural types: records are nested pairs,
+variants nested `inl`/`inr`, and recursive types `mu X. …` (B3, `docs/expressiveness.md` §3). A
+`data` declaration names a type and its parts. It is a name plus an isomorphism to a structural
+type of `⊗`, `⊕` and `μ` (#141, decision 1); every rule below is sugar into existing core terms,
+and the kernel sees nothing new: no type former, rule, constant or derived form is added, so
+`fundamentalC` and `adequacyC` cover every program a declaration elaborates to (decision 26's
+argument, as §36 states it for `poly`).
+
+This entry is the data face of `docs/data-declarations.md` §3.1, for transparent declarations.
+Faces and dot (U2), abstraction (U3), codata (U4, U5), derive (U6, U7), the `fold` block and data
+unfolds (§11.1 A2, A3) are later units.
+
+### Declarations
+
+    data N[P, …]<'l, …> = C₁ | C₂(A, …) | C₃(f: A, …) | …      -- a variant
+    data N[P, …]<'l, …> = { f₁: A₁, …, fₙ: Aₙ }                  -- a record
+
+A record is one constructor, named `N`, whose fields are named. A constructor's fields are
+positional (`C(A, B)`) or named (`C(f: A, g: B)`). Type and lifetime parameters are as `type`'s
+(§7, §22): substituted at each use. `data` is a declaration only where a declaration may begin and
+an upper-case name follows it; elsewhere it is a name.
+
+The declaration elaborates to a `type` declaration of the same name and parameters
+(`Frontend/Elab/Data.lean`, `typeDecls`), in place:
+
+- a constructor with no fields is `1`, with one field the field's type, with several the
+  right-nested `⊗` of their types in declaration order (§5: no trailing `1`);
+- the constructors are the right-nested `⊕` of their payloads in declaration order; one
+  constructor is its payload alone (a newtype `data Id = Id(i32)` is `i32`);
+- a field of type `box A` is a cell, `ref A` (typed elaboration §5.3's `box A`; `box @ A` with a
+  lifetime is the lifetime box of §23, unchanged);
+- a recursive declaration is `μX. S` with `X` at its recursive occurrences (below).
+
+The name, its constructors and its fields live in the elaborator's table (`Data.Table`), which the
+parser holds, read before the module is parsed: a declaration is in scope in the whole module that
+declares it and in every program that includes that module, and the prelude's in every program.
+Its `type` declaration is placed where the group's first member is, so a type declared later is
+named only after it.
+
+### Recursion: blocks and a written `box`
+
+Decided (#489, §6.11, item 13 of §11): every heap allocation of a recursive declaration is
+written.
+
+- **A block** is a constructor of a recursive declaration with a field in which the root of its
+  group (below; a declaration recursive alone is its own root) occurs other than under `box`. Each field of a block is a cell, `ref A`, and the block is
+  allocated whole: `box C(e, …)`. `data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)` is
+  `μX. 1 ⊕ (ref X ⊗ (ref i32 ⊗ ref X))`, the corpus's `Tree` of blocks, with
+  `shape Tree_Node = node (leaf Tree) (node (leaf i32) (leaf Tree))`.
+- **A field written `box A`** is a cell of its own; a constructor whose recursion is only under
+  written boxes is not a block (`data L = { v: i32, next: Option[box L] }` is
+  `μX. i32 ⊗ (ref X ⊕ 1)`).
+- **Refused, asking for `box`**: a block's field whose type holds a member of the group inside
+  another type (`tail: Option[List]`, a cell `ref (X ⊕ 1)` outside §6's `FShape`), at the
+  declaration; and a block constructor written without `box`, at the construction (E3).
+- **Regular recursion**: inside its group a parameterised member occurs at its own parameters.
+  A nested datatype (`Tree[(T, T)]`, D2) is refused: not provided.
+
+**Mutual recursion: the single-root rule** (#141, decision 5). The declarations that mention each
+other form a group (a strongly connected component of the declarations' references, by name).
+A group of several members elaborates to one `μ` when one member, the root, lies on every cycle:
+the root is `μX. S_R`, with every other member's structure substituted for its name and `X` for
+the root's; every other member is its own structure, the root and the other members named, each
+`type` declared after the members it names. The first member in declaration order that is on every cycle is the root; a group
+with none is refused: "the declarations … are mutually recursive with no member on every cycle:
+not provided (the single-root rule)". Only the root rolls and unrolls.
+
+### The rule table
+
+One rule per construct; every rule is sugar into existing core terms, and the kernel checks what
+it gives. "Parser" rules need only the table; "typed" rules need the types of their operands and
+run in the typed elaboration (`Frontend/Sugar.lean`, with the rule in `Frontend/Elab/Data.lean`).
+
+| # | construct | elaborates to | where |
+|---|---|---|---|
+| D1 | `data N … = …` | `type N[P, …]<'l, …> = T`, and for a monomorphic declaration a `shape N_C` per block | parser (table), sugar (in place) |
+| D2 | `box A`, a field's type | `ref ⟦A⟧` | parser |
+| D3 | a recursive declaration, a group | `μX. S`, the single-root rule; a block's fields cells | parser |
+| E1 | `C`, `C(e₁, …, eₖ)` | `inj_i (payload)`, `roll`ed when `N` is a `μ` (its root), ascribed `: N` when `N` has no parameters; the payload `()`, `e₁`, or `(e₁, (…, eₖ))` | parser |
+| E2 | `box C(e₁, …)` | for a block, `inj_i (alloc_s[N_C] (payload))` (a generic declaration's block is `(alloc(e₁), (…, alloc(eₖ)))`, the leafwise form `alloc_s` is, §5); for any other constructor, `alloc(⟦C(e₁, …)⟧)` | parser |
+| E3 | `C(…)` of a block, without `box` | refused: "`C` builds a block, one cell per field: allocate it with `box C(…)`" (typed elaboration §5.3's reassembly from cells is not provided, *Not provided*) | parser |
+| E4 | `N { f: e, … }`, `box N { … }` | E1/E2 with the fields in declaration order; each field once, all of them; when the written order differs, the values are bound in the written order first | parser |
+| E5 | `e.f` | a field of a one-constructor declaration, by the receiver's type (*Fields*) | typed |
+| E6 | `x.f = e;` | `modify &mut x { r -> … }` (`x` a `let mut`), `modify x { r -> … }` otherwise: `r`'s fields bound, `e` with `x.g` read as `r`'s field `g`, the record rebuilt with `f`'s new value; the old one is dropped (§12) | parser, typed |
+| M1 | `match e { p₁ -> M₁ \| … }` | a decision tree (*Match compilation*) | parser |
+| M2 | `match (e₁, …, eₙ) { (p₁, …, pₙ) -> M \| … }` | M1 over the columns `e₁ … eₙ`, each bound once, no pair built | parser |
+| M3 | `let p = e; N` with a constructor pattern | M1 with one arm | parser |
+| M4 | the arms of M1–M3 | reports: refused when not exhaustive or when an arm is never reached | parser |
+
+The constructors of `N` with `n` constructors inject as the summands of their ⊕: `inj₁ v = inl v`,
+`inj_i v = inr (inj_{i-1} v)`, the last `inr^{n-1} v`. A match's `case` is the same spine.
+
+`match` with exactly the two arms `inl p | inr q` of patterns without constructors is the form of
+draft 0, unchanged; every other `match` is M1.
+
+### Patterns
+
+    p ::= x | _ | () | (p, …) | C | C(p, …) | box C(p, …) | N { f: p, … } | N { f, … }
+        | n | u8[n] | 'c' | true | false | inl p | inr p
+
+`N { f, … }` is `N { f: f, … }`; a field left out of a record pattern is `_`. An integer, a byte
+and a character literal match by `==`; `true` and `false` are `bool`'s two constructors (`1 + 1`,
+§5.4 of typed elaboration: `inl ()` is false); `inl` and `inr` are a sum's.
+
+**What a constructor pattern binds** (typed elaboration §5.3, `docs/data-declarations.md` §6.11):
+
+- `C(p, …)` of a constructor that is not a block binds the payload's components, as `let`
+  destructures them: values on an owned scrutinee, views on a view (§5, `Imm̲` fieldwise);
+- `C(x, …)` of a block binds the cells, `ref A` on an owned scrutinee, and on a view the cells'
+  views, `imm 'x A`;
+- `box C(p, …)` of a block frees the block (`free` of each cell, the leafwise `free_s`) and
+  matches the values; a nested pattern under a block's cell needs it.
+
+### Match compilation (§11.1 A4)
+
+The compiler is Maranget's (*Compiling Pattern Matching to Good Decision Trees*, ML Workshop
+2008; *Warnings for pattern matching*, JFP 17(3), 2007): `Frontend/Elab/Data.lean`, `compile`,
+`useful`. A clause matrix `P → A` has a row per arm and a column per occurrence (a variable of
+the generated code), and
+
+- **a row of wildcards first**: its arm, with each variable pattern bound to its occurrence;
+- **otherwise** the leftmost column whose first row is not a wildcard is tested:
+  - a constructor column of `N` (or `bool`, or a sum): `case (unroll o)` (`case o` when `N` is not a
+    `μ`) along `N`'s ⊕ spine, one arm per constructor, each with the matrix specialised to it and
+    the payload's components bound to fresh occurrences; a constructor no row names takes the
+    default matrix (the rows with a wildcard there);
+  - a tuple column: `let (o₁, o₂) = o`, and the matrix specialised;
+  - a literal column: `if o == l { … } else { … }` per literal, in the order of first
+    appearance, the default matrix last.
+
+An arm reached on several paths is elaborated once per path. **Exhaustiveness**: the vector of
+wildcards must not be useful after the last row (`useful P (_, …)`); otherwise the match is
+refused: "this `match` is not exhaustive: `<p>` is not matched", `<p>` a witness built by
+`useful`. **Redundancy**: an arm `pᵢ` not useful after the rows before it is refused: "this arm is
+never reached: the arms before it match everything it matches". A literal column is never
+complete; a column of wildcards only is matched by the default matrix. The compiler needs the
+constructors of each column, which the constructor names give: no type.
+
+### Fields
+
+`e.f` names the field `f` of a one-constructor declaration with a field so named
+(`Data.fieldCands`: each such declaration in scope, with its fields' names, the field's index and
+whether it is a `μ`). The receiver's type chooses (`Sugar.resolveField`): a declaration fits when
+its fields fit the record type's components and the record type matches the declaration's named
+type with its parameters placeholders (`Elab/Match.lean`'s first-order matching, as a generic
+call's); the declarations that fit must agree on the field's place, or the access is refused as
+ambiguous, "ascribe the record". A block's fields are cells, read by matching the block. A field's
+name may be a word the core reserves (`val`, `free`, `input`): after a `.` and before a `:` it is a
+field's. The read is a typed rule
+(`Sugar.fieldRead`), by the receiver's type:
+
+| receiver | `e.f` | |
+|---|---|---|
+| owned, persistent (§10) | `run (let (x₀, (…, x_{k-1})) = e; return x_j)`, unrolled first when the declaration is a `μ` | `e` stays usable |
+| `imm 'a N`, `N` persistent | the record copied out, `*e` (§36's load at the identity), and projected | the borrow is used |
+| `imm 'a N`, otherwise | `withload` around the projection of its view, the field's view the result: the field persistent | the borrow is used |
+| `mut 'a N`, at a binding `let y = x.f;` | `withswap` whose body takes the record apart and answers it rebuilt and the field: the field persistent | `x` rebound by the lend |
+| owned, not persistent, at a binding `let y = x.f;` | the value taken apart and put back in place, as `modify` runs on a `let mut` value (§41): `run (let (r, u) = (&x, ()); …)` answering the record rebuilt and the field, the field persistent | `x` rebound by the lend |
+| owned, not persistent, any other expression | the projection, which consumes it | |
+
+At a binding `let y = x.f;` the parser gives the read the place `&x` (it is a write of a `let mut`
+`x`, §41's R2); a persistent receiver drops it. Elsewhere a `mut` borrow, or a variable that is
+not persistent, is refused: "`.f` reads a field of a `mut` borrow (or: of a value that is not
+persistent): bind it, `let y = x.f;`, which lends the place for the read". `x.f = e` (E6) is
+`modify`'s lend (§41's rule table: it writes `x`); its body takes the record `r` apart into `r_g`
+for each field `g`, `x.g` in `e` is `r_g`, and the record is rebuilt with `e` at `f`. When the
+declarations with a field `f` agree on its place, the parser takes the record apart, so that the
+passes before the typed one (effects, §18) see `r_g` bound; otherwise the typed rule does, after
+the receiver's type chooses (`VSugar.update`, printed `(r).{f = e}`). No rule decides an alias, a lend's extent or an escape: each lend is lexical, the
+statement's, and the kernel checks it.
+
+### Folds: unordered positions (§11.1 A1)
+
+A fold (§6) promises no order between its recursive positions. Allocation order is not output,
+and a fold's algebra is `F_∅`, so no result observes the order. The counts the gate records
+(`corpus/counts.expected`) are those of the sequential order. This keeps parallel folds open.
+
+### The library
+
+`lib/prelude.bc` declares `data Option[T] = Some(T) | None`, which is `T + 1` with `Some` the
+`inl` (the convention of §17's fillers and of `map_get`), and `data Vec[T] = Vec(buf T)`, a
+newtype, so `Vec[T]` is `buf T` and the buffer library's functions apply to it. The prelude's
+declarations are in every program's table; a program whose types name `Option` or `Vec` gets the
+`type` declaration.
+
+### No automatic boxing (§11.1 A7)
+
+Not built in this entry. A declared type's recursion is boxed as written (blocks and `box`), and
+the backend's one box a node (§35) finds nothing to add to it. For a recursive type written in
+core, removing the rule makes its layout infinite, so every such program must write its boxes:
+41 compiled programs of the corpus and the benchmarks, through `lib/list.bc`, `lib/async.bc`,
+`lib/io.bc` and `lib/adapters.bc` (`docs/expressiveness-probes/zero-cost/data/a7-programs.txt`).
+Written with the kernel's forms today, their counts rise or they are refused:
+
+- a child cell each, `μX. 1 ⊕ (ref X ⊗ (A ⊗ ref X))`, is two objects a node and one an empty child
+  where the rule boxes the sum's payload, one object a node (`rec-tree`: 254 where it is 127);
+- the payload in one cell, `μX. 1 ⊕ ref (X ⊗ (A ⊗ X))`, keeps the count, but `ref` of a type that
+  is not `X` is outside §6's `FShape`, so the type has no fold and no destructor (§12), and a
+  program that drops one implicitly is refused;
+- a block, `box Node(…)`, is allocated cell by cell (*Open*): three objects a node.
+
+So A7 waits for a block to be lowered as one object (N1, layouts from types): the block form is in
+`FShape`, has its destructor, and is then one object a node, the rule's count.
+
+### Programs
+
+| program | what it shows | answer |
+|---|---|---|
+| `corpus/data-box-tree.bc` | a tree declared with `data`, built with `box Node(…)`, summed by a recursive match whose `box` pattern frees each node | `i32[6]`, `live 0` |
+| `corpus/data-particles.bc` | T09: particles as records in an array, their fields updated and read through each slot's `mut` borrow, read through the `imm` borrows of a `for` | `10 92 55`, `i32[11]` |
+| `corpus/data-turnstile.bc` | T07: a state machine whose step is a match over two columns, a variant and a byte | `Locked 3 2 1` |
+| `corpus/data-config.bc` | T11: a record with a string field updated field by field in a loop's match arms, then read; a variant with views of the input; `let Cfg { title } = cfg;` (M3) | `demo`, `((i32[80], (i32[50], inr ())), (i32[4000], i32[1]))` |
+| `corpus/data-group.bc` | the single-root rule: `Expr` and `Bind`, rooted at `Expr` | `i32[17]` |
+| `corpus/data-option.bc` | the prelude's `Option` and `Vec`; the generic `List[T]` and `Pair[A, B]` | `i32[30]` |
+| `corpus/fail/data-no-box.bc` | a block built without `box` | refused, asking for `box` |
+| `corpus/fail/data-not-exhaustive.bc`, `data-not-exhaustive-nested.bc` | matches missing a constructor, one over two columns with a nested pattern | refused, with the witness |
+| `corpus/fail/data-redundant.bc` | an arm after a wildcard | refused |
+| `corpus/reject/data-field-box.bc` | a recursive field under another type | refused, asking for `box` |
+| `corpus/reject/data-no-root.bc` | mutual recursion with no member on every cycle | refused |
+| `corpus/pending/data-fold-block.bc` | the tree summed through a borrow by a fold block | pending on §11.1 A2 |
+
+Each rule is pinned beside its elaboration written by hand (`scripts/check-sugar.sh`):
+`corpus/sugar/data-forms.bc` and `data-update.bc` beside core forms, and `data-box-tree`,
+`data-particles`, `data-turnstile` and `data-config` beside a surface program with no declaration
+(`corpus/sugar/<name>.lowered.bc`, `-- lowers: corpus/<name>.bc`), which must erase to the same
+term.
+
+T10 has no declaration: its form as written is tuple assignment and `let (mut a, mut b)`,
+`let mut` sugar outside this entry (#626, #632).
+
+### Baseline
+
+No change to `CDerives`, `Core/`, `Paper/`, `Support/`, the relation, the machine or the checker.
+Every corpus program that was accepted elaborates as it did: its goldens, exit status,
+`corpus/counts.expected`, `kernel-counts.expected` and `cells.expected` are unchanged; new
+programs get rows.
+
+### Not provided
+
+- **Nominal identity.** The elaborator types a declared type by its structure (a `type`
+  abbreviation): two transparent declarations of one structure are interchangeable, and a field
+  is chosen by the receiver's structure (*Fields*). Nominal identity in the elaborator's types, which decision 1
+  asks for, comes with faces (U2), where resolution by the receiver's type needs it; until then a
+  newtype (`data Id = Id(i32)`) is its field's type to the checker.
+- **A match on an `imm` borrow.** Load it first, `borrow imm *b { v -> match v { … } }`. A
+  recursion over a borrowed recursive value is §6's fold (the `fold` block is A2): a load's view
+  is at a lifetime shorter than the borrow's, and a group's members recurse at their own
+  lifetimes (§20).
+- **A generic block's construction** needs its fields' types from the arguments (`alloc(e)`): an
+  injection without its type is to be ascribed.
+- Field paths through several records (`d.spec.replicas = …`), update syntax `N { f: e, ..r }`,
+  and variant payloads updated in place (#19).
+- **A block reassembled from its cells** without `box` (typed elaboration §5.3's `Node(c₁, c₂,
+  c₃)`, for `fold_reuse`): every block written without `box` is refused, asking for it. It comes
+  with the `fold` block (A2), which binds the emptied cells.
+- **A field read through a `mut` borrow inside an expression**, and an implicit copy of an `imm`
+  borrow so that it can be read twice (#58): a read through a borrow is a binding of its own, and
+  it uses an `imm` borrow.
+
+### Open
+
+- **One box a node** (§35) is still the backend's rule for recursive types written in core
+  (*No automatic boxing*).
+- **A block is allocated cell by cell** by the backend (§5 *Open*, block provenance): `box Node(l,
+  v, r)` is three objects where Rust's `Box<Node>` is one (a tree of depth 7: 381 where `rec-tree`
+  is 127). The excess is the lowering's: N1.
+- **A record read out of an array or through a borrow is copied whole**, and an update through a
+  `mut` borrow is a `withswap` of the whole record: loads and stores where Rust touches one field
+  (the ports of `docs/expressiveness-probes/zero-cost/data/`, L-1: N2). The allocations are the
+  probes'.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -7914,6 +8192,12 @@ and `scripts/alpha-check.py`.
 
 ## Changelog
 
+- **0.90** (2026-10-20) — §42 (#593, unit U1 of `docs/data-declarations.md`): `data`
+  declarations, records and variants, monomorphic and generic, transparent; recursion under a
+  written `box` (blocks); the single-root rule; constructors, record literals, fields and field
+  update through `modify`; `match` compiled to decision trees with exhaustiveness and
+  redundancy reports; `Option` and `Vec` in the prelude; a fold's positions are unordered (A1).
+  No change to `CDerives`, the relation, the machine or the checker.
 - **0.89** (2026-10-20) — §19, *The clause's names in the continuation* (#610): condition 2 of the
   direct call of a tail-resumptive clause is over the names the clause's own code performs or
   raises (`Expr.own`, `handlerNames`), not over its row; over its row where it may run code it

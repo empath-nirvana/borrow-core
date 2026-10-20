@@ -205,6 +205,29 @@ def VTy.sizedExpand (sp : Span) (D S A : VTy) : VTy :=
     (.tensor sp (.tensor sp D S) (.sum sp A (.sum sp (.unit sp) (.unit sp)))))))
 deriving instance Repr for VTy, CTy, Row, Shape
 
+/-- A field of a `data` constructor: its name when it is written (`C(f: A)`, a record's), and its
+type as written; `box A` is a cell of its own (SPEC §42).  `[spec §42]` -/
+structure DField where
+  name : Option Ident
+  ty : VTy
+  deriving DecidableEq, Repr
+
+/-- A constructor of a `data` declaration, its fields in order.  `[spec §42]` -/
+structure DCon where
+  name : Ident
+  fields : List DField
+  deriving DecidableEq, Repr
+
+/-- `data N[P, …]<'l, …> = C₁(…) | …`, or a record `data N[…] = { f: A, … }`, which is one
+constructor named `N` (`record`).  `[spec §42]` -/
+structure DataDecl where
+  name : Ident
+  tps : List Ident
+  lps : List Ident
+  record : Bool
+  cons : List DCon
+  deriving DecidableEq, Repr
+
 /-- One bracket argument of a constant or derived form. -/
 inductive Arg where
   | ty (A : VTy)
@@ -415,6 +438,17 @@ structure ItInfo where
   site : SiteRec
   deriving DecidableEq, Repr
 
+/-- A declaration a field `e.f` may be of (SPEC §42, *Fields*): its name and type parameters, its
+fields' names in order (`""` for a field with none), the field's index, and whether the
+declaration is a `μ`.  `[spec §42]` -/
+structure FieldCand where
+  decl : String
+  tps : List String
+  names : List String
+  idx : Nat
+  rolls : Bool
+  deriving DecidableEq, Repr, Inhabited
+
 /-- A surface form that needs types to elaborate (docs/typed-elaboration.md §5): a leaf, applied
 to its operands as values, and elaborated to core by the typed pass of `Frontend/Sugar.lean`. -/
 inductive VSugar where
@@ -488,6 +522,14 @@ inductive VSugar where
   out at each call of it; anywhere else it is refused. Elaborated away by `Frontend.Elab.Effects`.
   `[spec §41]` -/
   | writes (xs : List String)
+  /-- `e.f`, applied to the receiver: the field `f` of one of the declarations `cands` that have
+  one, the receiver's type choosing which and how it is read (SPEC §42, *Fields*); a receiver
+  `&x` is the place `x`, read at a binding `let y = x.f;`, which rebinds it.  `[spec §42]` -/
+  | field (f : String) (cands : List FieldCand)
+  /-- `x.f = e`'s record rebuilt: applied to the pair of the record `r` and `e`, in which the
+  variable `r_g` is the record's field `g`; the record's declaration is one of `cands`, as
+  `field`'s.  `[spec §42]` -/
+  | update (f : String) (cands : List FieldCand)
   deriving DecidableEq, Repr, Inhabited
 
 /-- What a loop walks, as the program writes it (`docs/loops.md` §2.1), with the loop's value
@@ -749,6 +791,9 @@ inductive Decl where
   `thunk S`). An operator's family is named for it, `(+)` as `op_add`.  `[spec §36]` -/
   | poly (sp : Span) (n : Ident) (tps : List Ident) (lps : List Ident) (head : Option VTy)
       (A : VTy) (V : Val)
+  /-- A `data` declaration (SPEC §42): elaborated to `type` and `shape` declarations
+  (`Frontend.Data.typeDecls`) after the program's modules are in. -/
+  | data (sp : Span) (d : DataDecl)
   deriving DecidableEq, Repr
 
 /-- A source file: its declarations in order. -/
@@ -983,6 +1028,8 @@ def Decl.strip : Decl → Decl
         lps := h.lps.map fun (a, b) => (a.strip, b.strip) }
   | .poly _ n tps lps H A V => .poly .none n.strip (tps.map Ident.strip) (lps.map Ident.strip)
       (H.map VTy.strip) A.strip V.strip
+  | .data _ d => .data .none (DataDecl.mk d.name.strip (d.tps.map Ident.strip) (d.lps.map Ident.strip)
+      d.record (d.cons.map fun c => DCon.mk c.name.strip (c.fields.map fun f => DField.mk (f.name.map Ident.strip) f.ty.strip)))
 
 def Program.strip (p : Program) : Program := ⟨p.decls.map Decl.strip⟩
 

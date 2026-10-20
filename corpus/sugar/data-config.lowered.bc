@@ -1,0 +1,89 @@
+-- lowers: corpus/data-config.bc
+-- `corpus/data-config.bc` (T11) with its declarations, constructors, matches and fields written out
+-- by SPEC §42's rules, in the surface: `Cfg` the nested pairs of its fields and `Opt` the sum of its
+-- payloads (D1); `Width(v)` and the rest injections (E1); the match a `case` along the sum's spine
+-- (M1); `cfg.f = e` a `modify &mut cfg { … }` that takes the record apart and rebuilds it (E6); and
+-- `let y = cfg.f;` of the record, which is not persistent, a `modify` that answers the field and puts
+-- the record back (E5).
+include textio
+include text
+include fail
+
+type Cfg = i32 * (i32 * (string * bool))
+
+type Opt<'t> = text 't + (text 't + (1 + 1))
+
+fn slice<'t>(t: text 't, i: i32, k: i32) -> text 't =
+  match split_at(t, i) {
+    inl (h, r) -> array_forget['t, u8](h);
+      match split_at(r, k) { inl (w, rest) -> array_forget['t, u8](rest); w | inr r -> r }
+  | inr t -> t
+  }
+
+-- The option a word is.
+fn option_of<'t>(a: text 't) -> Opt<'t> =
+  let (a, a1) = array_copy['t, u8] a;
+  let (a, a2) = array_copy['t, u8] a;
+  let n = len(a1);
+  let w = slice(a2, 0, 8);
+  let (a, a3) = array_copy['t, u8] a;
+  let t = slice(a3, 0, 8);
+  if eq_lit(w, "--width=") { inl slice(a, 8, n - 8) }
+  else if eq_lit(t, "--title=") { inr (inl slice(a, 8, n - 8)) }
+  else if eq_lit(a, "-v") { inr (inr (inl ())) }
+  else { inr (inr (inr ())) }
+
+-- The options of the words of `t`, applied to `cfg` field by field; the unknown options counted.
+fn parse<'t>(t: text 't, cfg: Cfg) -> Cfg * i32 =
+  let (t, u0) = array_copy['t, u8] t;
+  let n = len(u0);
+  let mut t = t;
+  let mut cfg = cfg;
+  let mut unknown = 0;
+  let mut start = 0;
+  for i in 0..n + 1 {
+    let (t2, w) = array_copy['t, u8] t;
+    t = t2;
+    let b = at(w, i, b' ');
+    let (t2, w) = array_copy['t, u8] t;
+    t = t2;
+    let word = slice(w, start, i - start);
+    if b == b' ' && start < i {
+      o <- return option_of(word);
+      case o {
+        inl o1 -> let v = o1; modify &mut cfg { r -> let (w, q) = r; let (h, q2) = q; let (t, b) = q2;
+          ((with default(w) { parse_i32(v) }, (h, (t, b))), ()) }
+      | inr o2 -> case o2 {
+          inl o4 -> let v = o4; modify &mut cfg { r -> let (w, q) = r; let (h, q2) = q; let (t, b) = q2;
+            ((w, (h, (to_string(v), b))), ()) }
+        | inr o3 -> case o3 {
+            inl u -> let () = u; modify &mut cfg { r -> let (w, q) = r; let (h, q2) = q; let (t, b) = q2;
+              ((w, (h, (t, true))), ()) }
+          | inr u -> let () = u; unknown = unknown + 1
+          }
+        }
+      }
+    } else { array_forget['t, u8](word) };
+    if b == b' ' { start = i + 1 } else { () }
+  };
+  array_forget['t, u8](t);
+  (cfg, unknown)
+
+main -> (i32 * (i32 * bool)) * (i32 * i32) =
+  let cfg0 = ((40, (25, (string_of_lit("untitled"), false))) : Cfg);
+  let r = borrow imm "--width=80 --title=demo -v --frob" { t -> parse(t, cfg0) };
+  let (cfg, unknown) = r;
+  let mut cfg = cfg;
+  let verbose = modify &mut cfg { r -> let (w, q) = r; let (h, q2) = q; let (t, b) = q2; ((w, (h, (t, b))), b) };
+  if verbose { modify &mut cfg { r -> let (w, q) = r; let (h, q2) = q; let (t, b) = q2; ((w, (h * 2, (t, b))), ()) } };
+  let cfg = cfg;
+  let width = modify &mut cfg { r -> let (w, q) = r; let (h, q2) = q; let (t, b) = q2; ((w, (h, (t, b))), w) };
+  let height = modify &mut cfg { r -> let (w, q) = r; let (h, q2) = q; let (t, b) = q2; ((w, (h, (t, b))), h) };
+  let verbose = modify &mut cfg { r -> let (w, q) = r; let (h, q2) = q; let (t, b) = q2; ((w, (h, (t, b))), b) };
+  let (w, q) = cfg;
+  let (h, q2) = q;
+  let (t, b) = q2;
+  let title = t;
+  let title = print_string(title);
+  print_lit("\n");
+  ((width, (height, verbose)), (width * height, unknown))

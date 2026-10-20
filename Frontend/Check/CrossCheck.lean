@@ -54,6 +54,7 @@ deriving instance ToExpr for Frontend.SiteKind
 deriving instance ToExpr for Frontend.SiteRec
 deriving instance ToExpr for Frontend.HInfo
 deriving instance ToExpr for Frontend.ItInfo
+deriving instance ToExpr for Frontend.FieldCand
 deriving instance ToExpr for Frontend.VSugar
 deriving instance ToExpr for Frontend.LoopSrc
 deriving instance ToExpr for Frontend.SchemeMark
@@ -63,6 +64,9 @@ deriving instance ToExpr for Frontend.OpKind
 deriving instance ToExpr for Frontend.OpDecl
 deriving instance ToExpr for Frontend.Clause
 deriving instance ToExpr for Frontend.CHandler
+deriving instance ToExpr for Frontend.DField
+deriving instance ToExpr for Frontend.DCon
+deriving instance ToExpr for Frontend.DataDecl
 deriving instance ToExpr for Frontend.Decl
 deriving instance ToExpr for Frontend.Program
 

@@ -1,0 +1,22 @@
+-- The single-root rule (SPEC §42): `Expr` and `Bind` name each other, and `Expr` lies on every
+-- cycle, so the group is one `mu` rooted at `Expr`, with `Bind`'s structure substituted in it;
+-- `Bind` is its own structure, `Expr` named. `Add` and `Bind` hold the root, so they are blocks,
+-- built with `box` and freed by `box` patterns; `Num` and `Let` are not.
+--
+-- Answer: i32[17]: 10 + (1 + 2) + 4.
+include rec
+
+data Expr = Num(i32) | Add(Expr, Expr) | Let(Bind)
+
+data Bind = Bind(name: i32, value: Expr, body: Expr)
+
+fn eval(e: Expr) -> i32 =
+  match e {
+    Num(n) -> n
+  | box Add(a, b) -> eval(a) + eval(b)
+  | Let(box Bind(n, v, b)) -> n + eval(v) + eval(b)
+  }
+
+main -> i32 =
+  with on_exhausted(!{ u -> 0 - 1 }) {
+    eval(Let(box Bind(10, box Add(Num(1), Num(2)), Num(4)))) }

@@ -1,0 +1,29 @@
+-- lowers: corpus/data-box-tree.bc
+-- `corpus/data-box-tree.bc` with its declaration, constructors and match written out by SPEC §42's
+-- rules, in the surface: `Tree` its `type` and `Node`'s `shape` (D1, D3), `box Node(l, v, r)` the
+-- block allocated whole and injected and rolled (E2), `Leaf` the rolled `inl ()` (E1), and the
+-- match a `case` on the unrolled tree whose `box` pattern frees the block's cells (M1).
+include rec
+
+type Tree = mu X. 1 + (ref X * (ref i32 * ref X))
+
+shape Tree_Node = node (leaf Tree) (node (leaf i32) (leaf Tree))
+
+fn branch(l: Tree, v: i32, r: Tree) -> Tree = (roll (inr (alloc_s[Tree_Node] (l, (v, r)))) : Tree)
+
+fn sum(t: Tree) -> i32 =
+  case (unroll t) {
+    inl e -> let () = e; 0
+  | inr b ->
+      let (cl, rest) = b;
+      let (cv, cr) = rest;
+      let l = free(cl);
+      let v = free(cv);
+      let r = free(cr);
+      sum(l) + v + sum(r)
+  }
+
+main -> i32 =
+  with on_exhausted(!{ u -> 0 - 1 }) {
+    sum(branch(branch((roll (inl ()) : Tree), 1, (roll (inl ()) : Tree)), 2,
+      branch((roll (inl ()) : Tree), 3, (roll (inl ()) : Tree)))) }

@@ -1,21 +1,20 @@
--- pending: #54, stage 8
+-- pending: §11.1 A2 of docs/data-declarations.md (the `fold` block)
 -- A binary tree declared with `data`, built with `box`, and summed through a borrow by a fold
 -- block with constructor patterns.
 --
 -- Axes: data × coeffects × scope. Recursive data (`mu`), each node one block with a cell per
 -- field, read through an `imm` borrow by `fold_imm`.
 --
--- Blocked by: the surface (#54, stage 8). The program is expressible in core today, and runs:
--- the declaration is `type Tree = mu X. 1 + (ref X * (ref i32 * ref X))` with a `shape`, `box
--- Node(…)` is `roll inr alloc_s[…]`, and the fold is `fold_imm` with its algebra written out
--- (`corpus/sum-i32.bc` is the list case). Not built: `data` declarations, `box` construction,
--- constructor patterns, and fold blocks (`docs/typed-elaboration.md` §5.3, decision 1 of its
--- §8). `fn` with a lifetime parameter is not provided either (decision 37).
+-- Blocked by: the `fold` block (§11.1 A2), in which the recursive fields arrive already folded.
+-- The declaration, `box Node(…)` and constructor patterns are built (SPEC §42): the tree and its
+-- sum by a recursive match that consumes it run as `corpus/data-box-tree.bc`. A recursion over a
+-- borrowed tree is the fold's: a load's view is at a lifetime shorter than the borrow's, and a
+-- group's members recurse at their own lifetimes (SPEC §20).
 --
 -- Spelling: `docs/typed-elaboration.md` §5.3's, which the user decided (a node is one block,
 -- the allocation is written `box`); the fold block is draft 0's (`docs/surface-cbpv.md` §2.7).
 --
--- Today: the parser stops at `data`, which is not a declaration.
+-- Today: `fold_imm` is the core constant, which takes its bracket arguments.
 --
 -- Once it lands: the tree 1 ← 2 → 3 sums to 6. Golden: `i32[6]`, `live 0` (the tree's
 -- destructor frees its three nodes).
@@ -31,4 +30,4 @@ main -> i32 =
   let t = branch(branch(Leaf, 1, Leaf), 2, branch(Leaf, 3, Leaf));
   let n = sum(&t);
   n
--- now: 23:1: expected a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`), found name `data`
+-- now: 27:12: expected `[`, found name `t`

@@ -1,0 +1,18 @@
+-- Field update and field reads (SPEC §42, E5, E6) beside `data-update.core.bc`, which writes their
+-- elaboration by hand: `p.x = e` of a `let mut` record is `modify &mut p { … }`, run in place,
+-- whose body takes the record apart, reads `p.v` as its field, and rebuilds it; through the `mut`
+-- borrow of a cell, `q.x = e` is `modify q { … }`, a `withswap`, and `let r = q.x;` a `withswap`
+-- that reads the field and puts the record back, the borrow handed back by the lend.
+--
+-- Answer: i32[8]: (1 + 2) + (2 + 3).
+
+data P = { x: i32, v: i32 }
+
+main -> i32 =
+  let mut p = P { x: 1, v: 2 };
+  p.x = p.x + p.v;
+  let y = p.x;
+  let c = alloc(P { x: 2, v: 3 });
+  let k = borrow mut c { q -> q.x = q.x + q.v; let r = q.x; r };
+  let d = free(c);
+  y + k

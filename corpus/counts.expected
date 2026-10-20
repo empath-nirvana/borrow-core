@@ -92,6 +92,12 @@ count-down 0 0 0 0 0 0
 count-down-exact 6 0 0 18 12 0
 count-fold 0 0 0 0 0 0
 count-try 0 0 0 0 0 0
+data-box-tree 9 0 0 27 27 0
+data-config 2 0 0 209 49 214
+data-group 5 0 0 21 21 0
+data-option 5 0 0 16 16 4
+data-particles 1 0 0 667 651 353
+data-turnstile 1 0 0 51 19 36
 deep-list 100000 0 0 450000 450000 0
 div-abstraction 0 0 0 0 0 0
 div-euclid 0 0 0 1 1 0

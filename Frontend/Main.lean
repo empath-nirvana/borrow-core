@@ -129,10 +129,10 @@ def parseInterpArgs : List String → InterpArgs → Option InterpArgs
 /-- Print `file` with its I/O sugar elaborated. -/
 def desugar (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
-  match parseProgram src with
-  | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
+  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
   | .ok p => match Frontend.Elab.elaborate p with
-    | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
+    | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
     | .ok el => IO.print el.prog.pp; return 0
 
 /-- Print the erasure of `file`'s checked `main`. -/
@@ -152,11 +152,11 @@ def trusted (file : String) : IO UInt32 := do
 /-- Each `handle` node of `file`'s checked terms, with its clauses' kinds (SPEC §19). -/
 def kinds (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
-  match parseProgram src with
-  | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
+  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
   | .ok p =>
     match Check.checkProgram p with
-    | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
+    | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
     | .ok r =>
       for h in r.handles do
         let ks := (List.range h.ks.length).zip h.ks |>.map fun (i, k) => k.render h.n i
@@ -178,11 +178,11 @@ holds for its clauses over those names at `main`'s flow record (`Checked.flows`,
 whether `main` holds a handler whose name is not a literal. -/
 def handled (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
-  match parseProgram src with
-  | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
+  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
   | .ok p =>
     match Check.checkProgram p with
-    | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
+    | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
     | .ok r =>
       let some c := r.main | return 0
       let V := c.flows
@@ -204,11 +204,11 @@ def handled (file : String) : IO UInt32 := do
 clause kinds: `sp: handle n: kind eff[args] by handler (as slot), state (x: A, …); kinds`. -/
 def sites (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
-  match parseProgram src with
-  | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
+  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
   | .ok p =>
     match Check.checkProgram p with
-    | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
+    | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
     | .ok r =>
       for h in r.handles do
         let ks := (List.range h.ks.length).zip h.ks |>.map fun (i, k) => k.render h.n i
@@ -424,7 +424,7 @@ def alphaRename (src : String) :
   let writtenAt (p : Pos) (x : String) : Bool :=
     p.line ≥ 1 && p.line ≤ lines.size &&
       ((lines[p.line - 1]!.toList.drop (p.col - 1)).take x.length == x.toList)
-  let occs := (← resolutionOf src).filter fun (p, x, _) => writtenAt p x
+  let occs := (← resolutionOf src Frontend.Sugar.libSrc).filter fun (p, x, _) => writtenAt p x
   let toks ← lex src
   let taken := toks.toList.filterMap fun t => match t.tok with
     | .ident s => some s
@@ -441,6 +441,8 @@ def alphaRename (src : String) :
     k := k + 1
     fresh := (y, c) :: fresh
   let edits := occs.map fun (p, x, v, y) => (p.line, p.col, x, (fresh.lookup y).getD x, v)
+  -- A field written by its name alone, `N { f }`, keeps the field's name: `N { f: f' }`.
+  let short := shorthandsOf src Frontend.Sugar.libSrc
   let mut out := lines
   -- Edits on one line apply right to left, so each column is the source's.
   let byPos := edits.mergeSort fun (l₁, c₁, _) (l₂, c₂, _) => l₁ < l₂ || (l₁ == l₂ && c₁ ≥ c₂)
@@ -449,6 +451,7 @@ def alphaRename (src : String) :
     let cs := out[l - 1]!.toList
     if (cs.drop (c - 1)).take x.length != x.toList then
       throw ⟨Span.none, s!"alpha: `{x}` is not written at {l}:{c}"⟩
+    let x' := if short.contains ⟨l, c⟩ && x' != x then s!"{x}: {x'}" else x'
     out := out.set! (l - 1) (String.ofList (cs.take (c - 1) ++ x'.toList ++ cs.drop (c - 1 + x.length)))
   pure ("\n".intercalate out.toList, edits)
 
@@ -456,7 +459,7 @@ def alphaRename (src : String) :
 def alpha (map : Bool) (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match alphaRename src with
-  | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
+  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
   | .ok (out, edits) =>
     if map then
       for (l, c, x, x', v) in edits do IO.println s!"{l} {c} {x} {x'} {v}"
@@ -467,7 +470,7 @@ def alpha (map : Bool) (file : String) : IO UInt32 := do
 program's names are already its binders (SPEC §41), so it is read back without resolving them. -/
 def roundTrip (p : Program) : Except String Unit := do
   let out := p.pp
-  match parseProgram out (resolve := false) with
+  match parseProgram out (resolve := false) (lib := Frontend.Sugar.libSrc) with
   | .error e => throw s!"the printed program does not parse: {e.render}\n{out}"
   | .ok q =>
     if q.strip == p.strip then pure ()
@@ -512,9 +515,9 @@ def main (argv : List String) : IO UInt32 := do
     if cmd != "parse" && cmd != "print" && cmd != "check" then
       IO.eprintln s!"unknown command `{cmd}`"; return 2
     let src ← IO.FS.readFile file
-    match parseProgram src with
+    match parseProgram src (lib := Frontend.Sugar.libSrc) with
     | .error e =>
-      IO.eprintln s!"{file}:{e.renderIn src}"
+      IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
       return 1
     | .ok p =>
       if cmd == "print" then
@@ -523,10 +526,10 @@ def main (argv : List String) : IO UInt32 := do
       if cmd == "check" then
         match Check.checkProgram p with
         | .error e =>
-          IO.eprintln s!"{file}:{e.renderIn src}"
+          IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
           return 1
         | .ok r =>
-          let rs := renamesOf src
+          let rs := renamesOf src Frontend.Sugar.libSrc
           for l in r.lines do
             IO.println (unrename rs l)
           return 0

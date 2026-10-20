@@ -1,7 +1,9 @@
 # Data declarations, faces and interfaces: design (#489)
 
-Status: design only. Nothing here is implemented, and nothing here is decided beyond what §1.3
-lists as already decided; its item 9, recursion's layout, was decided on 2026-10-20. **Every
+Status: decided (§11, 2026-10-20). U1 is built: SPEC §42 (`data` declarations, transparent,
+monomorphic and generic; blocks and `box`; the single-root rule; constructors, record literals,
+fields; the match compiler), except §11.1 A7, which waits for a block lowered as one object
+(SPEC §42, *No automatic boxing*). The rest of this document is the design as decided. **Every
 spelling is provisional.** The user asked to see several syntax paradigms side by side (an
 explicit exception to "mechanism before syntax"), so §5 shows four, all over the one mechanism of
 §3–§4.
@@ -29,7 +31,7 @@ Checked at `9aa27c3` (SPEC 0.86).
 
 | feature | state | where | what it gives this design |
 |---|---|---|---|
-| `data` declarations | **absent**: the parser stops at `data` | `corpus/pending/data-box-tree.bc` | the thing to build |
+| `data` declarations | built in U1 (SPEC §42); this table is as of the design | `corpus/data-box-tree.bc` | the thing to build |
 | `type N[T]<'a> = A` | built: transparent, parameterised, substituted at each use | SPEC §22 *The checker*; decision 60 | the structural target every declaration elaborates to |
 | records and variants | derived forms over `⊗`, `⊕`; no labels in the core | SPEC §5 | records and constructors with no kernel former |
 | `μX. A`, `roll`/`unroll` | built; folds at `FShape` (closed leaf, `Ref X`, `X`, `⊗`, `⊕`) | SPEC §6 | recursive declarations; `X` under an array is outside `FShape` (B14) |

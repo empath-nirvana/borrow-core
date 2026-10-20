@@ -1,0 +1,121 @@
+-- N-body (the Benchmarks Game's), the bodies as records (SPEC §42): `bench/n-body/main.bc` with a
+-- body `Body` in an array of five, read with `at` (a body is persistent: seven `f64`s) and written
+-- back with `array_set`, its fields updated in place on a `let mut` copy.
+include textio
+include io
+include float
+include buf
+
+data Body = { x: f64, y: f64, z: f64, vx: f64, vy: f64, vz: f64, m: f64 }
+
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+def pi : f64 = 3.141592653589793
+def days : f64 = 365.24
+
+fn solar_mass() -> f64 = 4.0 * pi * pi
+
+fn none(i: i32) -> Body = Body { x: 0.0, y: 0.0, z: 0.0, vx: 0.0, vy: 0.0, vz: 0.0, m: 0.0 }
+
+fn body(x: f64, y: f64, z: f64, vx: f64, vy: f64, vz: f64, m: f64) -> Body =
+  Body { x: x, y: y, z: z, vx: vx * days, vy: vy * days, vz: vz * days, m: m * solar_mass() }
+
+fn bodies() -> array Body =
+  let b = array_new[Body](5, none);
+  let b = array_set(b, 0, body(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0));
+  let b = array_set(b, 1, body(4.84143144246472090e+00, 0.0 - 1.16032004402742839e+00,
+    0.0 - 1.03622044471123109e-01, 1.66007664274403694e-03, 7.69901118419740425e-03,
+    0.0 - 6.90460016972063023e-05, 9.54791938424326609e-04));
+  let b = array_set(b, 2, body(8.34336671824457987e+00, 4.12479856412430479e+00,
+    0.0 - 4.03523417114321381e-01, 0.0 - 2.76742510726862411e-03, 4.99852801234917238e-03,
+    2.30417297573763929e-05, 2.85885980666130812e-04));
+  let b = array_set(b, 3, body(1.28943695621391310e+01, 0.0 - 1.51111514016986312e+01,
+    0.0 - 2.23307578892655734e-01, 2.96460137564761618e-03, 2.37847173959480950e-03,
+    0.0 - 2.96589568540237556e-05, 4.36624404335156298e-05));
+  array_set(b, 4, body(1.53796971148509165e+01, 0.0 - 2.59193146099879641e+01,
+    1.79258772950371181e-01, 2.68067772490389322e-03, 1.62824170038242295e-03,
+    0.0 - 9.51592254519715870e-05, 5.15138902046611451e-05))
+
+fn offset_momentum(b: array Body) -> array Body =
+  let mut b = b;
+  let mut px = 0.0;
+  let mut py = 0.0;
+  let mut pz = 0.0;
+  for i in 0..5 {
+    let bi = at(&b, i, none(0));
+    px = px + bi.vx * bi.m;
+    py = py + bi.vy * bi.m;
+    pz = pz + bi.vz * bi.m
+  };
+  let (qx, qy, qz) = (0.0 - px / solar_mass(), 0.0 - py / solar_mass(), 0.0 - pz / solar_mass());
+  let mut sun = at(&b, 0, none(0));
+  sun.vx = qx;
+  sun.vy = qy;
+  sun.vz = qz;
+  array_set(b, 0, sun)
+
+fn energy(b: array Body) -> array Body * f64 =
+  let mut b = b;
+  let mut e = 0.0;
+  for i in 0..5 {
+    let bi = at(&b, i, none(0));
+    e = e + 0.5 * bi.m * (bi.vx * bi.vx + bi.vy * bi.vy + bi.vz * bi.vz);
+    let lo = i + 1;
+    for j in lo..5 {
+      let bj = at(&b, j, none(0));
+      let dx = bi.x - bj.x;
+      let dy = bi.y - bj.y;
+      let dz = bi.z - bj.z;
+      e = e - bi.m * bj.m / sqrt_f64(dx * dx + dy * dy + dz * dz)
+    }
+  };
+  (b, e)
+
+fn advance(b: array Body, dt: f64) -> array Body =
+  let mut b = b;
+  for i in 0..5 {
+    let lo = i + 1;
+    for j in lo..5 {
+      let mut bi = at(&b, i, none(0));
+      let mut bj = at(&b, j, none(0));
+      let dx = bi.x - bj.x;
+      let dy = bi.y - bj.y;
+      let dz = bi.z - bj.z;
+      let d2 = dx * dx + dy * dy + dz * dz;
+      let mag = dt / (d2 * sqrt_f64(d2));
+      let mi = bi.m;
+      let mj = bj.m;
+      bi.vx = bi.vx - dx * mj * mag;
+      bi.vy = bi.vy - dy * mj * mag;
+      bi.vz = bi.vz - dz * mj * mag;
+      bj.vx = bj.vx + dx * mi * mag;
+      bj.vy = bj.vy + dy * mi * mag;
+      bj.vz = bj.vz + dz * mi * mag;
+      b = array_set(b, i, bi);
+      b = array_set(b, j, bj)
+    }
+  };
+  for i in 0..5 {
+    let mut bi = at(&b, i, none(0));
+    bi.x = bi.x + dt * bi.vx;
+    bi.y = bi.y + dt * bi.vy;
+    bi.z = bi.z + dt * bi.vz;
+    b = array_set(b, i, bi)
+  };
+  b
+
+main -> i32 =
+  let n = arg_i32(1000);
+  let b = offset_momentum(bodies());
+  let (b, e0) = energy(b);
+  print_dec64(i64_of_f64_sat(e0 * 1000000000.0));
+  print_byte(b'\n');
+  let mut b = b;
+  for s in 0..n { b = advance(b, 0.01) };
+  let (b, e1) = energy(b);
+  print_dec64(i64_of_f64_sat(e1 * 1000000000.0));
+  print_byte(b'\n');
+  0

@@ -1,0 +1,7 @@
+-- A `match` that does not match every value (SPEC §42, M4): refused with a witness.
+-- expect: 5:25: this `match` is not exhaustive: `Open` is not matched
+data State = Locked | Open
+
+fn f(s: State) -> i32 = match s { Locked -> 1 }
+
+main -> i32 = f(Open)

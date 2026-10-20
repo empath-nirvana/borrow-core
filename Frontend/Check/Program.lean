@@ -212,6 +212,7 @@ def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey) :
   | .handler sp n _ _ _ _ _ => throw ⟨sp, s!"internal error: `handler {n.name}` was not elaborated"⟩
   | .chandler sp h => throw ⟨sp, s!"internal error: `handler {h.name.name}` was not elaborated"⟩
   | .poly sp n _ _ _ _ _ => throw ⟨sp, s!"internal error: `poly {n.name}` was not elaborated"⟩
+  | .data sp d => throw ⟨sp, s!"internal error: `data {d.name.name}` was not elaborated"⟩
   | .extern _ n A => do
       let A' ← (Env.top ds k).elabV LifeCtx.empty A
       pure (s!"extern {n.name} : {ppVTy A'}", none, [])
