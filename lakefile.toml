@@ -91,21 +91,6 @@ srcDir = "experiments/CBPVMu"
 roots = ["CBPVMu"]
 
 [[lean_lib]]
-name = "Optics"
-srcDir = "experiments/Optics"
-roots = ["Optics"]
-
-[[lean_lib]]
-name = "FrameTheorems"
-srcDir = "experiments/FrameTheorems"
-roots = ["FrameTheorems"]
-
-[[lean_lib]]
-name = "TwoRun"
-srcDir = "experiments/TwoRun"
-roots = ["TwoRun"]
-
-[[lean_lib]]
 name = "Grades"
 srcDir = "experiments/Grades"
 roots = ["Grades"]
@@ -114,11 +99,6 @@ roots = ["Grades"]
 name = "Affine"
 srcDir = "experiments/Affine"
 roots = ["Affine"]
-
-[[lean_lib]]
-name = "Coeffects"
-srcDir = "experiments/Coeffects"
-roots = ["Coeffects"]
 
 [[lean_lib]]
 name = "CoeffectsStrict"
