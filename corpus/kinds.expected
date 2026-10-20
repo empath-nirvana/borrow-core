@@ -111,6 +111,12 @@ corpus/core-effects-tail.bc 2.0 linear tail: direct; agree
 corpus/core-yield-loop.bc 1.0 affine resume-or-cancel,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/core-yield-pull.bc 1.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/core-yield-pull.bc 2.0 affine tail: direct; agree
+corpus/data-box-tree.bc 1.0 affine abortive: branch; agree
+corpus/data-config.bc 1.0 affine abortive: branch; agree
+corpus/data-config.bc 3.0 affine abortive: branch; agree
+corpus/data-config.bc 2.0 affine abortive: branch; agree
+corpus/data-group.bc 1.0 affine abortive: branch; agree
+corpus/data-option.bc 1.0 affine abortive: branch; agree
 corpus/div-abstraction.bc 2.0 affine abortive: branch; agree
 corpus/div-abstraction.bc 1.0 affine abortive: branch; agree
 corpus/div-abstraction.bc 3.0 affine abortive: branch; agree
@@ -422,6 +428,10 @@ corpus/sched-b.bc 1.0 affine stored: machine: the handlers of the name have 2 cl
 corpus/sort-lines.bc 1.0 affine abortive: branch; agree
 corpus/state-machine.bc 2.0 affine abortive: branch; agree
 corpus/state-machine.bc 1.0 affine resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/sugar/data-box-tree.lowered.bc 1.0 affine abortive: branch; agree
+corpus/sugar/data-config.lowered.bc 1.0 affine abortive: branch; agree
+corpus/sugar/data-config.lowered.bc 3.0 affine abortive: branch; agree
+corpus/sugar/data-config.lowered.bc 2.0 affine abortive: branch; agree
 corpus/sugar/for-value.bc 1.0 affine tail: direct; agree
 corpus/sugar/for-value.bc 2.0 affine resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/sugar/for-value.core.bc 1.0 affine tail: direct; agree

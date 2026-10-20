@@ -303,6 +303,25 @@ corpus/count-down-exact.bc flows [0, 4294967295]; main []
 corpus/count-down.bc flows [0, 4294967295]; main []
 corpus/count-fold.bc flows [0, 4294967295]; main []
 corpus/count-try.bc flows [0, 4294967295]; main []
+corpus/data-box-tree.bc flows [0, 4294967295], finaliser; main [1], finaliser
+corpus/data-box-tree.bc 27:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-box-tree.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/data-config.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
+corpus/data-config.bc 56:33: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-config.bc 390:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-config.bc 393:15: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/data-config.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/data-config.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/data-config.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/data-config.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/data-group.bc flows [0, 4294967295], finaliser; main [1], finaliser
+corpus/data-group.bc 21:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-group.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/data-option.bc flows [0, 4294967295]; main [1]
+corpus/data-option.bc 38:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-option.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/data-particles.bc flows [0, 4294967295]; main []
+corpus/data-turnstile.bc flows [0, 4294967295]; main []
 corpus/deep-list.bc flows [0, 4294967295]; main []
 corpus/div-abstraction.bc flows [0, 2, 4294967295]; main [1, 2, 3]
 corpus/div-abstraction.bc 26:3: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
@@ -1282,6 +1301,23 @@ corpus/state-machine.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/state-machine.bc 1.0 resume-or-cancel: machine; condition 2 holds; -
 corpus/sugar/ambient.bc flows [0, 4294967295]; main []
 corpus/sugar/ambient.core.bc flows [0, 4294967295]; main []
+corpus/sugar/data-box-tree.lowered.bc flows [0, 4294967295], finaliser; main [1], finaliser
+corpus/sugar/data-box-tree.lowered.bc 27:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/sugar/data-box-tree.lowered.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/sugar/data-config.lowered.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
+corpus/sugar/data-config.lowered.bc 55:13: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/sugar/data-config.lowered.bc 390:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/sugar/data-config.lowered.bc 393:15: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/sugar/data-config.lowered.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/sugar/data-config.lowered.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/sugar/data-config.lowered.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/sugar/data-config.lowered.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/sugar/data-forms.bc flows [0, 4294967295]; main []
+corpus/sugar/data-forms.core.bc flows [0, 4294967295]; main []
+corpus/sugar/data-particles.lowered.bc flows [0, 4294967295]; main []
+corpus/sugar/data-turnstile.lowered.bc flows [0, 4294967295]; main []
+corpus/sugar/data-update.bc flows [0, 4294967295]; main []
+corpus/sugar/data-update.core.bc flows [0, 4294967295]; main []
 corpus/sugar/div-annotated.bc flows [0, 4294967295]; main []
 corpus/sugar/div-infer.bc flows [0, 4294967295]; main []
 corpus/sugar/div-infer.core.bc flows [0, 4294967295]; main []
