@@ -1,6 +1,7 @@
 import Frontend.Lexer
 import Frontend.Consts
 import Frontend.FloatLit
+import Frontend.Elab.Hygiene
 /-!
 # Frontend — Parser
 
@@ -183,9 +184,11 @@ structure PState where
   /-- Resolution (SPEC §41, rule R1): on for a program's source, off for the elaborator's
   templates, whose rebindings are threading it generated. -/
   resolve : Bool := false
-  /-- The variables in scope: each name as written, and the binder it resolves to, innermost
-  first. -/
-  scope : List (String × String) := []
+  /-- The variables in scope: each name as written, the binder it resolves to, and the binder's
+  number (`occs`), innermost first. -/
+  scope : List (String × String × Nat) := []
+  /-- The number of the next binder. -/
+  nextBinder : Nat := 0
   /-- The names a renamed binder may not take: every name the source writes, and the binders
   renamed so far. -/
   taken : List String := []
@@ -194,43 +197,73 @@ structure PState where
   /-- A `run` just read that hands back what it writes (`blockThreads`): its binding must take
   them apart (SPEC §41, rule R3). -/
   pendingRun : Option Span := none
+  /-- Each name of the source that resolution resolved to a variable: where it is written, as
+  written, and the number of its binder, one per binder of the source (`resolutionOf`,
+  `bcc alpha`). -/
+  occs : List (Pos × String × String × Nat) := []
 
 abbrev P := StateT PState (Except Error)
-
-/-- The binder an occurrence of the name `x` resolves to: the innermost in scope, or `x` itself
-(a declaration, or a name the source does not bind). -/
-def lookName (x : String) : P String := return ((← get).scope.lookup x).getD x
-
-/-- `x` resolved, as an `Ident`. -/
-def lookIdent (x : Ident) : P Ident := return { x with name := ← lookName x.name }
 
 /-- The capabilities, which are passed and handed back by name (SPEC §11). -/
 def capabilityNames : List String := ["stdin", "stdout", "stderr", "clock", "args"]
 
+/-- Record that the name written `x` at `sp` resolved to the variable `y`, the binder numbered
+`b`. -/
+def noteOcc (sp : Span) (x y : String) (b : Nat) : P Unit := do
+  let s ← get
+  if s.resolve && s.surf && sp != Span.none && !capabilityNames.contains x then
+    set { s with occs := (sp.start, x, y, b) :: s.occs }
+
+/-- A binder written `x` at `sp`, resolved to the variable `y`, in scope from here: a binder of
+the source of its own (`occs`). -/
+def pushBinder (x : Ident) (y : String) : P Unit := do
+  let b := (← get).nextBinder
+  modify fun s => { s with scope := (x.name, y, b) :: s.scope, nextBinder := b + 1 }
+  noteOcc x.span x.name y b
+
+/-- The binder an occurrence of the name `x` (written at `sp`) resolves to: the innermost in
+scope, or `x` itself (a declaration, or a name the source does not bind). -/
+def lookName (x : String) (sp : Span := Span.none) : P String := do
+  match (← get).scope.lookup x with
+  | some (y, b) => noteOcc sp x y b; pure y
+  | none => pure x
+
+/-- `x` resolved, as an `Ident`. -/
+def lookIdent (x : Ident) : P Ident := return { x with name := ← lookName x.name x.span }
+
 /-- A name for a binder that shadows `x`: `x1`, `x2`, …, the first no source name or earlier
-renamed binder has. -/
-def freshVar (x : String) : P String := do
+renamed binder has; messages name it as `written`. -/
+def freshVar (x : String) (written : String := x) : P String := do
   let s ← get
   let rec go : Nat → Nat → String
     | 0, k => s!"{x}{k}"
     | f + 1, k => let c := s!"{x}{k}"; if s.taken.contains c then go f (k + 1) else c
   let y := go (s.taken.length + 1) 1
-  set { s with taken := y :: s.taken, renamed := (y, x) :: s.renamed }
+  set { s with taken := y :: s.taken, renamed := (y, written) :: s.renamed }
   pure y
 
+/-- A name the elaboration generates names with: `io_…`, `fx_…`, `hy{n}…` (Hygiene). Generated
+code binds and recognises these names, so a binder of the source never has one. -/
+def generatedName (x : String) : Bool :=
+  x.startsWith "io_" || x.startsWith "fx_" ||
+    (x.startsWith "hy" && ((x.toList.drop 2).head?.map Char.isDigit).getD false)
+
 /-- A binder of the name `x`, in scope from here to the end of the enclosing `withScope`: its own
-name, or a fresh one when a binder of `x` is already in scope, so that no binder shadows another
-(SPEC §41, rule R1). -/
+name, or a fresh one when a binder of `x` is already in scope, so that no binder shadows another,
+or when `x` is a name the elaboration generates (`generatedName`), so that no binder is taken for
+generated code's (SPEC §41, rule R1). -/
 def bindName (x : Ident) : P Ident := do
   let s ← get
   -- Core text has no assignment: a binding of a name in scope is how it passes a variable on.
   if !s.resolve || !s.surf || x.name == "_" then return x
   -- A capability is a place named by the platform: a binder of its name rebinds it (SPEC §11).
   if capabilityNames.contains x.name then
-    modify fun s => { s with scope := (x.name, x.name) :: s.scope }
+    pushBinder x x.name
     return x
-  let y ← if s.scope.any (·.1 == x.name) then freshVar x.name else pure x.name
-  modify fun s => { s with scope := (x.name, y) :: s.scope }
+  let y ← if s.scope.any (·.1 == x.name) then freshVar x.name
+    else if generatedName x.name then freshVar ("u" ++ x.name) x.name
+    else pure x.name
+  pushBinder x y
   pure { x with name := y }
 
 /-- Run `p` with the scope as it is now restored after it: the binders `p` makes are local to it. -/
@@ -244,7 +277,7 @@ def withScope {α} (p : P α) : P α := do
 def mutOf? (x : String) : P (Option String) := do
   let s ← get
   if !s.resolve || !s.surf then return none
-  let y := (s.scope.lookup x).getD x
+  let y := ((s.scope.lookup x).map (·.1)).getD x
   pure (if s.muts.contains y then some y else none)
 
 /-- The components of a call's argument, a right-nested tuple. -/
@@ -258,7 +291,7 @@ first. The variable, when it does. -/
 def rebindOf? (x : Ident) (V : Val) : P (Option String) := do
   let s ← get
   if !s.resolve || !s.surf then return none
-  let some y := s.scope.lookup x.name | return none
+  let some (y, _) := s.scope.lookup x.name | return none
   match V with
   | .app _ _ A => pure (if (argsOf A).any (fun | .var _ z => z == y | _ => false) then some y else none)
   | _ => pure none
@@ -276,6 +309,7 @@ def bindOrAssign (x : Ident) : P Ident := do
   match ← mutOf? x.name with
   | some y =>
     modify fun s => { s with assigned := y :: s.assigned }
+    if let some (_, b) := (← get).scope.lookup x.name then noteOcc x.span x.name y b
     pure { x with name := y }
   | none => bindName x
 
@@ -1531,7 +1565,7 @@ def valAtom : Nat → P Val
         let As ← tyList n (fuelPerToken * ((← get).toks.size + 1))
         expectSym "]"
         pure (.defApp (← spanFrom st) s As)
-      else pure (.var t.span (← lookName s))
+      else pure (.var t.span (← lookName s t.span))
     | .int k => discard bump; pure (.sugar t.span (.lit k))
     | .flt x => discard bump; let (m, e) := decOfText x; pure (.sugar t.span (.flit m e))
     | .str bs => discard bump; pure (.sugar t.span (.str bs))
@@ -1663,7 +1697,7 @@ def compG : Nat → Bool → P Comp
       -- `x = e`: a `let mut` variable rebound (typed elaboration §5.2), the variable the name
       -- resolves to (SPEC §41, rule R2).
       discard bump; discard bump
-      let x ← lookName x₀
+      let x ← lookName x₀ t.span
       unless (← get).muts.contains x do
         failAt t.span s!"`{x₀}` is assigned, but it is not declared `let mut`"
       modify fun s => { s with assigned := x :: s.assigned, blockThreads := [], pendingRun := none }
@@ -1719,9 +1753,11 @@ def compG : Nat → Bool → P Comp
               -- `let (x, q) = f(…, x, …)`: the place `x` moved and rebound (typed elaboration
               -- §5.1), so `x` is the variable it was, and an assignment when it is `let mut`
               -- (SPEC §41, rule R2).
-              modify fun s => { s with scope := (x.name, y) :: s.scope,
+              let b := (((← get).scope.lookup x.name).map (·.2)).getD 0
+              modify fun s => { s with scope := (x.name, y, b) :: s.scope,
                                        assigned := if s.muts.contains y then y :: s.assigned
                                          else s.assigned }
+              noteOcc x.span x.name y b
               pure (.pair psp (.var { x with name := y }) (← bindPatNames q))
             | none => bindPatNames p
           | p, _ => bindPatNames p
@@ -1822,7 +1858,7 @@ def statement : Nat → Pos → Bool → P Comp
         else pure (← compPrefix n, none)
       | .ident f₀, .sym "!" =>
         discard bump; discard bump
-        let f ← lookName f₀
+        let f ← lookName f₀ t.span
         if ← isSym "(" then
           let V ← valAtom n
           let sp ← spanFrom st
@@ -1964,7 +2000,7 @@ def compSuffixes : Nat → Pos → Comp → P Comp
     match t.tok with
     | .ident x =>
       discard bump
-      compSuffixes n st (.app (← spanFrom st) M ⟨← lookName x, t.span⟩)
+      compSuffixes n st (.app (← spanFrom st) M ⟨← lookName x t.span, t.span⟩)
     | .sym "." =>
       discard bump
       let i ← peek
@@ -2380,6 +2416,10 @@ def decl (n : Nat) : P Decl := do
     let row ← if ← isKw "with" then do discard bump; rowList n else pure []
     expectSym "="
     expectSym "{"
+    -- The handler's parameters: one binder each, in scope in every clause.
+    modify fun s => { s with surf := true, scope := [] }
+    for x in ps.toList.map (·.1) do pushBinder x x.name
+    let pScope := (← get).scope
     let mut cs : Array Clause := #[]
     let mut ret : Option (Ident × Comp) := none
     for _ in [0:n] do
@@ -2395,9 +2435,8 @@ def decl (n : Nat) : P Decl := do
         if ← isSym "," then discard bump
       expectSym ")"
       expectSym "="
-      modify fun s => { s with muts := mutPs, assigned := [], surf := true,
-                               scope := (ps.toList.map (·.1.name) ++ xs.toList.map (·.name)).reverse.map
-                                 fun x => (x, x) }
+      modify fun s => { s with muts := mutPs, assigned := [], surf := true, scope := pScope }
+      for x in xs.toList do pushBinder x x.name
       let M ← if ← isSym "{" then do
           discard bump
           let M ← comp n
@@ -2411,6 +2450,7 @@ def decl (n : Nat) : P Decl := do
       else cs := cs.push ⟨o, xs.toList, M⟩
       if ← isSym ";" then discard bump
     expectSym "}"
+    modify fun s => { s with surf := false, scope := [] }
     let sp ← spanFrom st
     match sig with
     | some (A, R) =>
@@ -2505,8 +2545,8 @@ where
     let ns := if nes.all (·.1.isNone) then [] else nes.map (·.1)
     let bs ← whereBounds tps (lives.map (·.1.name))
     expectSym "="
-    modify fun s => { s with muts := [], assigned := [], surf := true,
-                             scope := (ps.map (·.1.name)).reverse.map fun x => (x, x) }
+    modify fun s => { s with muts := [], assigned := [], surf := true, scope := [] }
+    for x in ps.map (·.1) do pushBinder x x.name
     let M ← comp n
     modify fun s => { s with surf := false, scope := [] }
     let sp ← spanFrom st
@@ -2693,14 +2733,20 @@ def renamesOf (src : String) : List (String × String) :=
   | .ok (_, s) => s.renamed
   | .error _ => []
 
-/-- `s` with each word that is a renamed binder of `rs` replaced by the name the source writes it
-with. A fresh name is no name of the source, so a word spelt as one is that binder. -/
+/-- Each name of `src` that resolution resolved to a variable (SPEC §41, rule R1): where it is
+written, as written, the variable, and the number of its binder, in the order of the source. -/
+def resolutionOf (src : String) : Except Error (List (Pos × String × String × Nat)) := do
+  let (_, s) ← runPS (fun n => decls n n []) src true
+  pure s.occs.reverse
+
+/-- `s` with each word that is a renamed binder of `rs`, or a binder Hygiene renamed
+(`Hygiene.written`), replaced by the name the source writes it with. A fresh name is no name of
+the source, so a word spelt as one is that binder. -/
 def unrename (rs : List (String × String)) (s : String) : String :=
-  if rs.isEmpty then s else
   let isW (c : Char) : Bool := c.isAlphanum || c == '_' || c == '\''
   let flush (w out : List Char) : List Char :=
     let ws := String.ofList w.reverse
-    (((rs.lookup ws).getD ws).toList.reverse) ++ out
+    ((Hygiene.written ((rs.lookup ws).getD ws)).toList.reverse) ++ out
   let (w, out) := s.toList.foldl (fun (w, out) c =>
     if isW c then (c :: w, out) else ([], c :: flush w out)) ([], [])
   String.ofList (flush w out).reverse

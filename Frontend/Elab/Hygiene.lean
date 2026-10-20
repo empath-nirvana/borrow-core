@@ -24,8 +24,12 @@ elaboration, and establishes two facts that rule out both captures:
   The capabilities `stdin`, `stdout` and `stderr` are not renamed: they are passed and handed
   back by name (a function's capability parameter has the capability's name, SPEC §11), so a
   local of that name is the capability.
-* **A control handler's parameters have fresh names.** They are bound at each `with` around the
-  body the user wrote, so they get names no user code mentions.
+* **A control handler's code has fresh names.** Its parameters are bound at each `with` around
+  the body the user wrote, and its clauses run in the scope of the `with` (or as closures built
+  there), so every binder of the handler, its parameters, its clauses' parameters and the
+  binders of their bodies, gets a name no user code mentions, `hy{n}c{h}_{x}` for the handler
+  `h`. A user's variable is then never taken for one of the handler's, nor the other way round,
+  by an elaboration that identifies variables by name (a loop's threaded variables, #493).
 
 Renaming a bound variable consistently in its scope is α-conversion: the program means what it
 did. A fresh name is `hy{n}_{x}`, `n` counting the renamings of one declaration, so the renaming
@@ -39,8 +43,9 @@ namespace Frontend.Hygiene
 /-- The renamings in force: a name as written and the name it has in the program. -/
 abbrev Ren := List (String × String)
 
-/-- The number of the next fresh name of the declaration. -/
-abbrev HM := StateM Nat
+/-- The number of the next fresh name of the declaration, and what follows the number in its
+fresh names: `c{h}` in the code of the control handler `h`, else nothing. -/
+abbrev HM := StateM (Nat × String)
 
 /-- What a binder named `x` is called in its scope. A binder of a name already renamed keeps
 the new name: it shadows it as `x` shadowed `x`, and an assignment, elaborated as a binding of the
@@ -51,7 +56,7 @@ def bind (glob : String → Bool) (ρ : Ren) (x : Ident) (force : Bool := false)
   | some y => pure ({ x with name := y }, ρ)
   | none =>
     if force || glob x.name then do
-      let y ← modifyGet fun n => (s!"hy{n}_{x.name}", n + 1)
+      let y ← modifyGet fun (n, sfx) => (s!"hy{n}{sfx}_{x.name}", (n + 1, sfx))
       pure (⟨y, x.span⟩, (x.name, y) :: ρ)
     else pure (x, ρ)
 
@@ -174,7 +179,7 @@ def _root_.Frontend.Clause.hyg (glob : String → Bool) (ρ : Ren) (c : Clause) 
 /-- A declaration with its locals renamed (the module comment): the locals named as a
 declaration by `glob`, and a control handler's parameters. -/
 def _root_.Frontend.Decl.hyg (glob : String → Bool) (d : Decl) : Decl :=
-  (go d).run' 0
+  (go d).run' (0, "")
 where
   go : Decl → HM Decl
     | .def_ sp n ps A V mk => do pure (.def_ sp n ps A (← V.hyg glob []) mk)
@@ -183,11 +188,14 @@ where
       let (st', ρ) ← bind glob [] st
       pure (.handler sp n st' S e (← cs.mapM (Clause.hyg glob ρ)) l)
     | .chandler sp h => do
-      let (ps, ρ) ← bindAll glob [] (h.params.map (·.1)) (force := true)
+      -- Every binder of the handler's code is renamed (the module comment).
+      set (0, s!"c{h.name.name.replace "_" "U"}")
+      let all : String → Bool := fun _ => true
+      let (ps, ρ) ← bindAll all [] (h.params.map (·.1))
       let (rx, rA, rM) := h.ret
-      let (rx', ρr) ← bind glob ρ rx
-      let rM' ← rM.hyg glob ρr
-      let cs ← h.clauses.mapM (Clause.hyg glob ρ)
+      let (rx', ρr) ← bind all ρ rx
+      let rM' ← rM.hyg all ρr
+      let cs ← h.clauses.mapM (Clause.hyg all ρ)
       pure (.chandler sp { h with params := ps.zip (h.params.map (·.2)), ret := (rx', rA, rM'),
                                   clauses := cs })
     | d => pure d
@@ -199,7 +207,7 @@ def _root_.Frontend.Decl.renameDecls (ρ : Ren) (d : Decl) : Decl :=
   if ρ.isEmpty then d else
   let n' (n : Ident) : Ident := { n with name := look ρ n.name }
   match d with
-  | .def_ sp n ps A V mk => .def_ sp (n' n) ps A ((V.hygD ρ (fun _ => false) ρ).run' 0) mk
+  | .def_ sp n ps A V mk => .def_ sp (n' n) ps A ((V.hygD ρ (fun _ => false) ρ).run' (0, "")) mk
   | .extern sp n A => .extern sp (n' n) A
   | d => d
 
@@ -219,11 +227,14 @@ where
     | _ :: cs => dunder cs
     | [] => false
 
-/-- The name as the user wrote it, for messages: a fresh name `hy{n}_{x}` is shown as `x`. -/
+/-- The name as the user wrote it, for messages: a fresh name `hy{n}_{x}` (`hy{n}c{h}_{x}`) is
+shown as `x`. -/
 def written (x : String) : String :=
   match x.splitOn "_" with
   | p :: rest@(_ :: _) =>
-    if p.startsWith "hy" && p.length > 2 && (p.drop 2).all Char.isDigit then "_".intercalate rest
+    let tl := (p.toList.drop 2)
+    if p.startsWith "hy" && (tl.head?.map Char.isDigit).getD false && tl.all Char.isAlphanum then
+      "_".intercalate rest
     else x
   | _ => x
 

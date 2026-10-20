@@ -1063,4 +1063,13 @@ def Comp.anySugar (p : VSugar → Bool) : Comp → Bool
   | .force .. | .top _ => false
 end
 
+/-- The variable a value copies, up to an ascription or a clone: `a`, `(a : T)`, `clone a`. A
+binding `x <- return V` of such a value is a copy: what the elaboration identifies by a binder
+(a borrow, a block parameter, a continuation, a residual) it follows through copies, never by a
+name (SPEC §41, #617). -/
+def Val.copyOf? : Val → Option String
+  | .var _ a | .clone _ a => some a
+  | .ascribe _ V _ => V.copyOf?
+  | _ => none
+
 end Frontend

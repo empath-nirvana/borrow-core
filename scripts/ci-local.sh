@@ -81,6 +81,7 @@ steps=(
   "native"           "scripts/compile-native.sh"
   "sugar pairs"      "scripts/check-sugar.sh"
   "let mut combos"   "scripts/mut-combos.py --gate --count 400"
+  "renaming"         "scripts/alpha-check.py"
   "book doc-tests"   "scripts/book-doctest.sh"
   "book build"       "mdbook build book"
 )
@@ -103,7 +104,7 @@ if [ "$changed" = 1 ]; then
   done
   if [ "$lean" = 0 ]; then
     all=0
-    corpus=("parse corpus" "check corpus" "clause kinds" "handled names" "cell classes" "compile corpus" "sugar pairs" "native")
+    corpus=("parse corpus" "check corpus" "clause kinds" "handled names" "cell classes" "compile corpus" "sugar pairs" "native" "renaming")
     for f in $files; do
       case "$f" in
         corpus/kernel-counts.expected) add "compile kernel" ;;
@@ -122,6 +123,7 @@ if [ "$changed" = 1 ]; then
         scripts/compile-scaling.sh) add "compile scaling" ;;
         scripts/check-sugar.sh) add "sugar pairs" ;;
         scripts/mut-combos.py) add "let mut combos" ;;
+        scripts/alpha-check.py) add "renaming" ;;
         scripts/book-doctest.sh) add "book doc-tests" ;;
         scripts/source-stage.sh) add "compile corpus" "book doc-tests" ;;
       esac

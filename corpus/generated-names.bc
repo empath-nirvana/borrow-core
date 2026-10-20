@@ -1,0 +1,11 @@
+-- A binder of the source named as the elaboration names its own (`io_bt`, the binding a borrow
+-- block's body hands back through) is a variable of its own: R1 renames it out of the
+-- elaboration's names (`Parser.generatedName`, SPEC §41, #617). Taken for the generated binding,
+-- it stopped the block handing back `x`, and the write was lost (`61`).
+--
+-- Answer: i32[62].
+main -> i32 =
+  let c = alloc(5);
+  let mut x = 1;
+  borrow mut c { b -> let io_bt = 1; x = 2; modify b { v -> v + 1 } };
+  free(c) * 10 + x

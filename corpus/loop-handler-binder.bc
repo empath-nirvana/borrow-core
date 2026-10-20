@@ -1,13 +1,11 @@
--- pending: refused #493
--- now: 18:3: `e` is used twice here, and its type `array_imm 'a u8` is not persistent
---
 -- A `with default(d) { … }` inside a `for`'s body, in a function with a linear variable named
--- `e`, consumed before the loop. `default`'s clause `raise(e) = d` (`lib/fail.bc`) binds `e`;
--- the loop chooses the variables it threads by name, so it threads the outer `e` too, a second
--- use of it. The name is the library's, invisible at the use. With the variable renamed the
--- program answers as below.
+-- `e`, consumed before the loop (#493). `default`'s clause `raise(e) = d` (`lib/fail.bc`) binds
+-- `e`, and the clause runs in the scope of the `with`. Every binder of a control handler's code
+-- has a fresh name (`Frontend/Elab/Hygiene.lean`, SPEC §41), so the loop, which chooses the
+-- variables it threads by name, does not take the clause's `e` for the function's (it threaded
+-- the outer `e` too, a second use of it: "`e` is used twice here").
 --
--- Once it lands: `i32[42]`, `live 0`.
+-- Answer: i32[42].
 
 include text
 
