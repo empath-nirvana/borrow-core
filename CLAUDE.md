@@ -34,6 +34,24 @@ a printed statement, no new mathematics) do not apply here. The growth rules bel
 guidance for choosing between designs, not bans.
 <!-- ANCHOR_END: changing-core -->
 
+## The elaborator never does the kernel's work
+
+<!-- ANCHOR: elaborator-scope -->
+The elaborator turns surface programs into core terms that the kernel checks. It may do
+ergonomics, inference and sugar: inserting `&`, inferring an annotation, expanding a form into
+existing core terms. It must never do the borrow calculus's work, and must never work around it.
+
+- **In scope:** sugar into existing core terms, inference, hygiene (resolution to binders),
+  ergonomic insertions the kernel then checks, and error messages.
+- **Hard stop:** stop and report `STOP: KERNEL WORK` before writing an elaboration rule that
+  - decides what the kernel should decide (aliasing, mutation, ownership, lend extents, escape);
+  - threads, copies or rebuilds state so that a program the borrow rules would refuse, or could
+    not express, gets through;
+  - refuses a program on borrow grounds itself instead of letting the kernel's rules refuse it.
+- **When the kernel cannot express a program it should run,** change the kernel (Changing Core).
+  An elaborator workaround is never the fix.
+<!-- ANCHOR_END: elaborator-scope -->
+
 ## Growth discipline
 
 <!-- ANCHOR: growth -->
