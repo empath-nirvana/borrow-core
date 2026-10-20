@@ -159,7 +159,7 @@ end
 
 /-- `BCC_MUT=place`: the place elaboration of `let mut` (#626, a prototype behind a flag). A
 `let mut x = e` of a surface body is a scoped cell lent `mut` over its scope; `x` names the borrow,
-read by a load and written by a store (`docs/research/let-mut-as-place.md`). -/
+read by a load and written by a store (`docs/research/let-mut-as-place.md`).  `[spec §42]` -/
 initialize placeEnv : Bool ← do return (← IO.getEnv "BCC_MUT") == some "place"
 
 /-- `BCC_MUT_LIB=thread`: the library modules keep the threading elaboration under `BCC_MUT=place`,
@@ -2210,7 +2210,7 @@ def compG : Nat → Bool → P Comp
 lent `mut` over `N` as the borrow `x`, `borrow mut alloc(V) { x -> N }`, and the cell freed after
 it. The borrow block hands back what `N` writes of the enclosing places and variables, as any
 borrow block does (SPEC §41, rule R3); the scope's value is `N`'s. The cell is scoped to one
-borrow, so it is a frame slot (SPEC §35). -/
+borrow, so it is a frame slot (SPEC §35).  `[spec §42]` -/
 def placeScope : Nat → Span → Ident → Val → P Comp
   | 0, _, _, _ => outOfFuel
   | n + 1, sp, x, V => do

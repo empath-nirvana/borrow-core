@@ -3552,7 +3552,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       let tP ← need P.span "the borrowed place" (c.tyV P')
       -- A borrow block of a place's token (`BCC_MUT=place`, #626) that lends something other
       -- than its whole content `mut` (an array's elements, a buffer, an `imm` borrow): the content
-      -- swapped out (`withswap`), lent by the rules for a value, and swapped back.
+      -- swapped out (`withswap`), lent by the rules for a value, and swapped back.  `[spec §42]`
       if let (true, .mut _ A, true) := (placeEnv, tP, k == .imm || k == .mut) then
         let arrayish := match A with | .fam _ | .tensor .. => true | _ => false
         if k == .imm || arrayish then
@@ -3821,7 +3821,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
               return V'
       -- A place's token (`BCC_MUT=place`, #626) lent at a parameter other than a `mut` borrow
       -- of its content: the content swapped out (`withswap`), lent to the call as a value
-      -- (`f(&v)`, `f(&mut v)` by the rules for a value), and swapped back.
+      -- (`f(&v)`, `f(&mut v)` by the rules for a value), and swapped back.  `[spec §42]`
       if let (true, some (x, m)) := (placeEnv, lentOf W) then
         if let some (.mut a A) := c.tyV (.var x.span x.name) then
           let v := s!"io_sv{sp.start.line}_{sp.start.col}"

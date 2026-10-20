@@ -252,7 +252,8 @@ def pushAfter : Nat → Comp → (Comp → Comp) → Comp
 /-- A loop body with exits among its terminals, inside the block (`BCC_MUT=place`, where a place's
 scope holds a loop whose body exits): each stretch that uses the borrow in a borrow block of its
 own, handing on the variables in `ws` it assigns and the names what follows reads; an exit, and
-an arm that leads to one, outside every block, so that it stays on the loop body's spine. -/
+an arm that leads to one, outside every block, so that it stays on the loop body's spine.
+`[spec §42]` -/
 def Env.exitBody (E : Env) (ws : List String) : Nat → Seg → Comp → LM Comp
   | 0, _, M => pure M
   | n + 1, s, S@(.bind sp z A M N lin) =>

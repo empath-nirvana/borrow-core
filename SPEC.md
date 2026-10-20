@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.88 · 2026-10-20
+Version 0.89 · 2026-10-20
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -7526,6 +7526,48 @@ whose meaning depended on two names coinciding.
 
 ---
 
+## 42. Entry 41 — `let mut` as a place, behind a flag (prototype, #626)
+
+### Motivation
+
+#626, the user's direction: `let mut` goes through the borrow calculus. This entry builds the
+place elaboration beside §41's threading, selected by `BCC_MUT=place`, so that the two can be
+compared. Design, measurements, refusals and kernel needs: `docs/research/let-mut-as-place.md`.
+The default is unchanged.
+
+### Language (under `BCC_MUT=place`)
+
+- `let mut x = e; N` in a surface body is `borrow mut alloc(e) { x -> N' }` with the cell freed
+  after it: `x` names the `mut` borrow of the cell (the place's token) over the scope, and `N'` is
+  `N` without its last value, which is evaluated after the lend and reads the cell's final content
+  (`Parser.placeScope`).
+- A read of `x` is a load (`withswap` with a copy), bound before the construct whose value reads
+  it, in evaluation order (`placeLoads`); `x = e` is a store whose callback reads `x` in `e` as the
+  old content; `x <- M` stores `M`'s value; `let (x, q) = f(…, x, …)` is one swap.
+- A lend of the token at a `mut` borrow of its content is a reborrow (`withbor3`); any other lend,
+  and a borrow block of an array, a buffer or `imm`, lends the content as a value through the
+  token's swap (`Sugar.lendBorrow`, the `.app` case, the borrow block case).
+- A construct that uses the token hands it on as §41's R2 and R3 hand on a written variable; a
+  closure that uses it captures it, with no `writes` mark, so R3's copy of the callee and its
+  escape refusal do not apply: the kernel types the closure.
+- A borrow block over a div loop is lent per observation (§14); nested blocks over one loop are
+  split innermost first, and a turn with an exit is split at the exit (`LoopLend.lendBind`,
+  `Env.exitBody`).
+- `BCC_MUT_LIB=thread` keeps the library modules' threading.
+
+### Baseline
+
+Without the flag nothing changes: every corpus program, golden and count as before. With it, no
+change to `CDerives`, `Core/`, `Paper/`, `Support/`, the relation, the machine or the checker:
+every term it writes is a kernel term the checker derives.
+
+### Open
+
+The refusals under the flag (the research document's §7) and the kernel needs K1–K4 (its §6);
+the lowering of a place to a native local and its check (its §4); the switch-over.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -7885,6 +7927,9 @@ and `scripts/alpha-check.py`.
 
 ## Changelog
 
+- **0.89** (2026-10-20) — §42 (#626): `let mut` as a place, behind `BCC_MUT=place`: a scoped
+  cell lent `mut` over its scope, loads and stores through its borrow, lends as reborrows or
+  through its swap. The default elaboration is unchanged.
 - **0.88** (2026-10-20) — #618: each construct's rule emits the target's shape. §16: a step with
   no exit is `count_fold`'s, and a count from a literal in `[0, 2³¹)` is counted from it, the
   counter the element (`walkB` takes `count_fold`; `walk_fold_index_lt`, `countFold_runs`). §14:
