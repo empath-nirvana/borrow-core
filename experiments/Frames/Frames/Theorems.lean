@@ -154,17 +154,22 @@ theorem core_embeds {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {S : Row} {A : VTy}
 
 /-! ### 3. Accounting -/
 
-/-- **The slots come back.** Every run from `t` that reaches a value reaches `(π, x)`, the slots
-`π` themselves beside an exit tag; and every run that stops at an operation no handler in it
-handles (a `Div` tick, an outer handler's operation) is resumed into a computation of which the
-same holds. A run that stops at a `raise` leaves by §19's unwinding (`frame_unwind_leakfree`). -/
-inductive Rets (π : Val) : Expr → Prop where
-  | intro {t : Expr}
-      (hval : ∀ (μ μ' : Heap) (w : Val), Steps μ t μ' (.val w) → ∃ x : Val, w = Val.pair π x)
-      (hstop : ∀ (μ μ' : Heap) (K : Kont) (n i : UInt32) (v : Val),
-        Steps μ t μ' (K.plug (performE (.val (opPayload n i v)))) → K.HasHnd n = false →
-        ∀ w : Val, Rets π (K.plug (.val w))) :
-      Rets π t
+/-- One step of the accounting invariant `R` at `t`: every run from `t` that reaches a value
+reaches `(π, x)`, the slots `π` themselves beside an exit tag; and every run that stops at an
+operation no handler in it handles (a `Div` tick, an outer handler's operation) is resumed, at
+every answer, into a term of `R`. A run that stops at a `raise` leaves by §19's unwinding
+(`frame_unwind_leakfree`). -/
+def RetsStep (π : Val) (R : Expr → Prop) (t : Expr) : Prop :=
+  (∀ (μ μ' : Heap) (w : Val), Steps μ t μ' (.val w) → ∃ x : Val, w = Val.pair π x) ∧
+  (∀ (μ μ' : Heap) (K : Kont) (n i : UInt32) (v : Val),
+    Steps μ t μ' (K.plug (performE (.val (opPayload n i v)))) → K.HasHnd n = false →
+    ∀ w : Val, R (K.plug (.val w)))
+
+/-- **The slots come back**, coinductively: `t` is in an invariant closed under `RetsStep`. It is
+a greatest fixed point because a div loop stops at a tick at every turn, forever. A unary
+property of machine runs at one value `π`; it reads no type and no resource. -/
+def Rets (π : Val) (t : Expr) : Prop :=
+  ∃ R : Expr → Prop, R t ∧ ∀ t', R t' → RetsStep π R t'
 
 /-- A frame term hands back the slots it is given, whatever they are. -/
 def Returns (e : Expr) : Prop := ∀ π : Val, Rets π (.app e (.val π))
@@ -183,17 +188,17 @@ theorem accounting {Δ : LifeCtx} {Γ : Ctx VTy} {Φ : List FBlock} {Ps : List V
     (h : FDerives Δ Γ Φ Ps e S E A) : ∀ γ : List Val, Returns (substAll γ e) := by
   induction h with
   | core hS hP hN =>
-      -- β, then `[then]`: `N` runs under `ubind`; at a value `x` the continuation answers
-      -- `(π, inl x)`; at a stop the continuation is `ubind (…) K` with `π` in its body, so the
-      -- resumption is again of this shape (an inner induction on the stop, not on rules).
+      -- β, then `[then]`: the invariant is `{ubind ((π, inl ·), dtor π) t | every t}`; at a value
+      -- `x` the continuation answers `(π, inl x)`; at a stop of `t` the resumption is
+      -- `ubind (…) K_t[w]`, again in the invariant. No induction on `N`.
       sorry
   | exit hk hV =>
       -- β; the payload is a value term (ANF) once closed, so the answer is `(π, inr (inj_k v))`;
       -- a value-judgment term's call-by-value calls (`lolliE`) do not see `π`.
       sorry
   | bind hs hW hU hM hN ihM ihN =>
-      -- `ihM` at `π`: `M` answers `(π, r)`; `inl a`: `ihN` at `π` (the same `π`); `inr e`:
-      -- `(π, inr e)`. Stops: `ihM`'s resumptions under the `let` frame, then `ihN`'s.
+      -- the invariant is `ihM`'s invariant under the `let` frame, union `ihN`'s at each answer:
+      -- `M` answers `(π, r)`; `inl a`: `ihN` at `π` (the same `π`); `inr e`: `(π, inr e)`.
       sorry
   | case hs hV h₁ h₂ ih₁ ih₂ =>
       -- the scrutinee is a value; the arm's hypothesis at `π`.
@@ -221,8 +226,9 @@ theorem accounting {Δ : LifeCtx} {Γ : Ctx VTy} {Φ : List FBlock} {Ps : List V
       -- holds `π` at every turn.
       sorry
   | loopIter hdiv hs hp hS₀ hs0 hM ih =>
-      -- `iterate`'s head step unfolds a turn; a tick is a stop resumed into the next turn
-      -- (the `hstop` clause); each turn is `ih` at `π`; `close` answers `(π, ())`.
+      -- the invariant: `iterate` at a state `(π, s)`, and each turn under it (`ih`'s invariant);
+      -- a tick is a stop resumed into the next turn; `close` answers `(π, ())`. The greatest
+      -- fixed point is what lets a loop that ticks forever satisfy it.
       sorry
   | callBlock hk hj =>
       -- `hΦ` at the block and the argument `γ[j]`.
