@@ -165,6 +165,7 @@ def Val.level : Val → Nat
   -- `alloc(e)`, `clone(x)`: an application, parenthesized as an argument.
   | .app _ (.sugar _ (.call _)) _ => 2
   | .app _ (.sugar _ .deref) _ => 2
+  | .app _ (.sugar _ (.field ..)) _ => 3
   | .app _ (.sugar _ .retE) _ | .app _ (.sugar _ (.forSite _)) _ | .app _ (.sugar _ (.pullSite _)) _ => 1
   | .app _ (.sugar _ (.writes _)) _ => 1
   | .app _ (.sugar _ .brace) _
@@ -228,6 +229,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .app _ (.sugar _ .count) (.pair _ a b) => "(" ++ a.pp 2 k ++ ".." ++ b.pp 2 k ++ ")"
     | .app _ (.sugar _ .pipe) (.pair _ a s) => "(" ++ a.pp 1 k ++ " |> " ++ s.pp 2 k ++ ")"
     | .app _ (.sugar _ .deref) V => "*" ++ V.pp 3 k
+    | .app _ (.sugar _ (.field f _ _ _)) V => "(" ++ V.pp 0 k ++ ")." ++ f
     | .app _ (.sugar _ .retE) V => "return " ++ V.pp 1 k
     | .app _ (.sugar _ (.writes xs)) V => "writes(" ++ ", ".intercalate xs ++ ") " ++ V.pp 1 k
     | .app _ (.sugar _ (.forSite i)) V => s!"for_site[{i.n}] " ++ V.pp 1 k
@@ -376,6 +378,17 @@ def Decl.pp : Decl → String
     "handler " ++ n.name ++ (if l then "(&mut " else "(mut ") ++ st.name ++ ": " ++ S.pp ++ "): " ++ e.name ++ " = {" ++
       String.join (cs.map fun c => nl 2 ++ cl c ++ ";") ++ nl 0 ++ "}"
   | .poly _ n tps lps H A V => Decl.ppPoly n tps lps H A V
+  | .data _ d =>
+    let field (f : DField) : String := (match f.name with
+      | some x => x.name ++ ": "
+      | none => "") ++ f.ty.pp
+    let params := if d.tps.isEmpty then "" else "[" ++ ", ".intercalate (d.tps.map (·.name)) ++ "]"
+    let lives := if d.lps.isEmpty then "" else "<" ++ ", ".intercalate (d.lps.map ("'" ++ ·.name)) ++ ">"
+    "data " ++ d.name.name ++ params ++ lives ++ " = " ++
+      (if d.record then
+        "{ " ++ ", ".intercalate ((d.cons.head?.map (·.fields)).getD [] |>.map field) ++ " }"
+      else " | ".intercalate (d.cons.map fun c => c.name.name ++
+        (if c.fields.isEmpty then "" else "(" ++ ", ".intercalate (c.fields.map field) ++ ")")))
   | .chandler _ h =>
     let tys (As : List VTy) : String :=
       if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]"

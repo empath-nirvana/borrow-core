@@ -72,6 +72,12 @@ initialize libSources : List (String × Except String String) ← do
 is no module `m`. -/
 def library (m : String) : Option (Except String String) := libSources.lookup m
 
+/-- The source of the library module `m`, when it is read: what the parser reads a module's `data`
+declarations from (SPEC §42). -/
+def libSrc (m : String) : Option String := match library m with
+  | some (.ok src) => some src
+  | _ => none
+
 /-- The capabilities `main` may be given, in its order: the standard streams (SPEC §11), the clock
 and the arguments (SPEC §34). -/
 def capNames : List String := ["stdin", "stdout", "stderr", "clock", "args"]
@@ -2300,6 +2306,91 @@ def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
 def boxedResult (sp : Span) (l : String) (M : Comp) : Comp :=
   .bind sp ⟨"io_lr", sp⟩ none M (.ret sp (.boxed sp (.var sp l) (.var sp "io_lr"))) false
 
+/-! #### Fields  `[spec §42]` -/
+
+/-- The `k` components of a record's type `A`, unrolled first when its declaration is a `μ`. -/
+def recordComps (rolls : Bool) (k : Nat) (A : CVTy) : Option (List CVTy) := do
+  let A ← if rolls then (match A with
+      | .mu B => some (BoCa.Fig16.LogRel.Core.VTy.inst (.mu B) B)
+      | _ => none) else some A
+  let rec spine : Nat → CVTy → Option (List CVTy)
+    | 0, _ => some []
+    | 1, A => some [A]
+    | n + 2, .tensor A B => do pure (A :: (← spine (n + 1) B))
+    | _, _ => none
+  spine k A
+
+/-- `W`'s field `j` of `k`: `W` taken apart (unrolled first when `rolls`), the field's variable
+handed to `K`. -/
+def projectField (sp : Span) (rolls : Bool) (j k : Nat) (W : Val) (K : Val → Comp) : Comp :=
+  let pre := s!"io_fp{sp.start.line}_{sp.start.col}_"
+  let vars := Data.fieldVars pre k
+  let W := if rolls then Val.unroll sp W else W
+  Data.letTuple sp W vars (K (.var sp ((vars[j]?).getD (pre ++ "0")))) (· ++ "r")
+
+/-- A field read through the `imm` borrow `b` of a record of type `A` (SPEC §42, E5): `withload`
+around the projection of its view, the field's view the result. -/
+def loadField (sp : Span) (a : Frontend.Life) (As Bs : VTy) (rolls : Bool) (j k : Nat) (b : Val) :
+    Val :=
+  let y : Ident := ⟨s!"io_fy{sp.start.line}_{sp.start.col}", sp⟩
+  .app sp (.app sp (.const sp (.withload a y As Bs)) b)
+    (.thunkv sp (.lamL sp y (.dom sp) (.ret sp (.thunkv sp (.lam sp ⟨"io_fv", sp⟩
+      (.view sp (.var sp y.name) As)
+      (projectField sp rolls j k (.var sp "io_fv") fun v => .ret sp (.boxed sp (.var sp y.name) v)))))))
+
+/-- `R.f`, the field `j` of `k` of a one-constructor declaration (`rolls` when it is a `μ`), the
+receiver `R` of type `T` (SPEC §42, E5): its components, when it is persistent; through
+`withload`, when it is an `imm` borrow; at a binding `let y = x.f;` (`head` the place `x`), through
+`withswap` when it is a `mut` borrow, and through `x` lent `&x` otherwise. A field read through a
+borrow copies it: the field is persistent.  `[spec §42]` -/
+def fieldRead (c : TCx) (sp fsp : Span) (f : String) (j k : Nat) (rolls : Bool) (R : Val)
+    (head : Option Ident) (T : CVTy) : DM Val := do
+  let fieldTy (A : CVTy) : DM CVTy := do
+    match (recordComps rolls k A).bind (·[j]?) with
+    | some B => pure B
+    | none => throw ⟨fsp, s!"`.{f}` reads a field of a record, but this has type `{ppT A}`"⟩
+  let copied (B : CVTy) : DM Unit := do
+    unless Class.of B == .persistent do
+      throw ⟨fsp, s!"`.{f}` through a borrow copies the field, and its type `{ppT B}` is not " ++
+        "persistent: match the record instead"⟩
+  let bindIt (what : String) : Error := ⟨sp, s!"`.{f}` reads a field of {what}: bind it, " ++
+    s!"`let y = x.{f};`, which lends the place for the read"⟩
+  match T with
+  | .imm a A => do
+    let B ← fieldTy A
+    copied B
+    pure (loadField fsp (← c.surfaceL fsp a) (← c.surface fsp A) (← c.surface fsp B) rolls j k R)
+  | .mut a A => do
+    let some x := head | throw (bindIt "a `mut` borrow")
+    let B ← fieldTy A
+    copied B
+    let As ← c.surface fsp A
+    let Bs ← c.surface fsp B
+    -- `withswap` that reads the field and puts the record back: `x` rebound by the lend.
+    let pre := s!"io_fw{fsp.start.line}_{fsp.start.col}_"
+    let vars := Data.fieldVars pre k
+    let r := s!"io_fr{fsp.start.line}_{fsp.start.col}"
+    let rebuilt : Val := Data.tupleV fsp (vars.map (Val.var fsp ·))
+    let rebuilt := if rolls then .ascribe fsp (.roll fsp rebuilt) As else rebuilt
+    let body := Data.letTuple fsp (if rolls then .unroll fsp (.var fsp r) else .var fsp r) vars
+      (.ret fsp (.pair fsp rebuilt (.var fsp ((vars[j]?).getD r)))) (· ++ "r")
+    pure (.app sp (.app sp (.const fsp (.withswap (← c.surfaceL fsp a) As Bs)) (.lend x.span x .mut))
+      (.thunkv fsp (.lam fsp ⟨r, fsp⟩ As body)))
+  | T => do
+    if Class.of T == .persistent then
+      return .run sp (projectField fsp rolls j k R fun v => .ret fsp v)
+    match head with
+    | some x => do
+      let B ← fieldTy T
+      copied B
+      let Ts ← c.surface fsp T
+      let Bs ← c.surface fsp B
+      lendBorrow c fsp x .imm T B fun l mv =>
+        boxedResult fsp l (.ret fsp (loadField fsp (.var fsp l) Ts Bs rolls j k (.var fsp mv)))
+    | none => match R with
+      | .var .. => throw (bindIt "a value that is not persistent")
+      | R => pure (.run sp (projectField fsp rolls j k R fun v => .ret fsp v))
+
 /-- An owned array `x : array A` lent as its view (`array_mut 'l A` with `&mut x`, `array_imm 'l A`
 with `&x`) to the call `call l v`, whose result has type `Q` with the parameter's lifetime `v`:
 `slice_borrow_mut` or `slice_borrow_imm` around it, with no cell (SPEC §9), the array rebound
@@ -3418,6 +3509,17 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       -- Ascribed its loop type, it is the loop as a value, not a call run in direct style.
       pure (.ascribe sp (.app sp (.defApp sp "div_defer" [Bs, Rs]) (.thunkv sp (.with_ sp M'' abort)))
         (.thunk sp (.loop sp Bs Rs)))
+    | .app sp (.sugar fsp (.field f j k rolls)) R => do
+      -- `e.f` (SPEC §42, E5), by the receiver's type; `&x` at a binding `let y = x.f;`.
+      let (R', head) ← match R with
+        | .lend lsp x _ => pure (Val.var lsp x.name, some x)
+        | R => do pure (← surfV n c none R, none)
+      let T ← need R.span "the record whose field is read" ((← refresh c).tyV R')
+      let V' ← fieldRead c sp fsp f j k rolls R' head T
+      -- A projection is elaborated as any `run` is.
+      match V' with
+      | .run .. => surfV n c exp V'
+      | V' => pure V'
     | .app sp (.sugar dsp .deref) V => do
       let V' ← surfV n c none V
       -- `*e`: `withload` at the identity, reading a persistent content (its view is itself).
@@ -5672,7 +5774,7 @@ def expandIncludes : Nat → List Decl → List Decl × List String →
       match library m.name with
       | some (.error e) => throw ⟨sp, e⟩
       | some (.ok src) => do
-        let l ← match parseProgram src with
+        let l ← match parseProgram src (lib := libSrc) with
           | .ok l => pure l.decls
           | .error e => throw ⟨e.span, s!"lib/{m.name}.bc: {e.msg}"⟩
         match fuel with
@@ -5681,6 +5783,42 @@ def expandIncludes : Nat → List Decl → List Decl × List String →
       | none => throw ⟨sp, s!"no library module `{m.name}`: the modules are " ++
           ", ".intercalate libNames⟩
     | d => pure (acc ++ [d], inc)
+
+/-! ### `data` declarations  `[spec §42]` -/
+
+/-- The declaration mentions the type name `n`, in a type or in a term's annotations. -/
+def _root_.Frontend.Decl.mentionsTy (n : String) (d : Decl) : Bool :=
+  let σ : TySubst := [(n, .zero .none)]
+  let vt (A : VTy) : Bool := A.subst σ != A
+  let v (V : Val) : Bool := V.subst σ != V
+  let c (M : Comp) : Bool := M.subst σ != M
+  match d with
+  | .type _ _ _ _ A | .extern _ _ A => vt A
+  | .def_ _ _ _ A V _ | .poly _ _ _ _ _ A V => vt A || v V
+  | .main _ C M => C.subst σ != C || c M
+  | .data _ e => e.cons.any fun k => k.fields.any (vt ·.ty)
+  | .handler _ _ _ S _ cs _ => vt S || cs.any (c ·.body)
+  | .effect _ _ _ ops => ops.any fun o => vt o.res || o.params.any (vt ·.2)
+  | .chandler _ h => vt h.res || h.params.any (vt ·.2) || c h.ret.2.2 || h.clauses.any (c ·.body)
+  | _ => false
+
+/-- The program's `data` declarations elaborated to `type` and `shape` declarations, in place
+(`Data.typeDecls`), the prelude's that the program names first (SPEC §42, D1–D3). -/
+def dataDecls (ds : List Decl) : Except Error (List Decl) := do
+  let own : Data.Table := ds.filterMap fun | .data _ d => some d | _ => none
+  let prelude : Data.Table := match libSrc "prelude" with
+    | some src => match parseProgram src with
+      | .ok p => p.decls.filterMap fun | .data _ d => some d | _ => none
+      | .error _ => []
+    | none => []
+  let named := prelude.filter fun d =>
+    !own.any (·.name.name == d.name.name) && ds.any (·.mentionsTy d.name.name)
+  let tab := named ++ own
+  let pre ← named.flatMapM (Data.typeDecls tab Span.none)
+  let rest ← ds.flatMapM fun
+    | .data sp d => Data.typeDecls tab sp d
+    | d => pure [d]
+  pure (pre ++ rest)
 
 /-! ### `poly` declarations  `[spec §36]` -/
 
@@ -5750,8 +5888,9 @@ recording the origins of generated code.  `[spec §11, §14]` -/
 def elaborateS (p : Program) : SM (Program × Nat) := do
   let libRaw (m : String) : Except Error (List Decl) :=
     match library m with
-    | some (.ok src) => match parseProgram src with
-      | .ok l => pure l.decls
+    | some (.ok src) => match parseProgram src (lib := libSrc) with
+      -- A module's `data` declarations are the program's (`dataDecls`).
+      | .ok l => pure (l.decls.filter fun | .data .. => false | _ => true)
       | .error e => throw ⟨e.span, s!"lib/{m}.bc: {e.msg}"⟩
     | some (.error e) => throw ⟨Span.none, e⟩
     | none => throw ⟨Span.none, s!"no library module `{m}`"⟩
@@ -5771,6 +5910,8 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let (ioDecls, incl₀) ← (if ioFirst then expandIncludes libNames.length
       [Decl.include Span.none ⟨"io", Span.none⟩] ([], []) else pure ([], []) : Except Error _)
   let (decls₀, incl) ← expandIncludes libNames.length p.decls (ioDecls, incl₀)
+  -- `data` declarations (SPEC §42): `type` and `shape` declarations, in place.
+  let decls₀ ← (dataDecls decls₀ : Except Error _)
   -- A program's declaration shadows an included module's of the same name (SPEC §41, rule R1):
   -- the module's is renamed, and so is every use of it in the module's own declarations.
   let declName : Decl → Option String

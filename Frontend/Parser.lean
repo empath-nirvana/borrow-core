@@ -2,6 +2,7 @@ import Frontend.Lexer
 import Frontend.Consts
 import Frontend.FloatLit
 import Frontend.Elab.Hygiene
+import Frontend.Elab.Data
 /-!
 # Frontend — Parser
 
@@ -201,6 +202,12 @@ structure PState where
   written, and the number of its binder, one per binder of the source (`resolutionOf`,
   `bcc alpha`). -/
   occs : List (Pos × String × String × Nat) := []
+  /-- The `data` declarations in scope (SPEC §42): the prelude's, the included modules', and the
+  program's own, wherever they are in it. -/
+  data : Data.Table := []
+  /-- In the value of a field update `x.f = e` (SPEC §42, E6): the variable `x` resolves to, and
+  the variables `x`'s fields are bound to, by index; `x.g` in `e` reads `g`'s. -/
+  updating : Option (String × List String) := none
 
 abbrev P := StateT PState (Except Error)
 
@@ -358,6 +365,13 @@ def bump : P Token := do
   modify fun s => { s with pos := if t.tok == .eof then s.pos else s.pos + 1,
                            lastStop := t.span.stop }
   pure t
+
+/-- The next tokens begin a `data` declaration, `data N`, which ends the declaration before it
+(SPEC §42). -/
+def dataStart : P Bool := do
+  let t ← peek
+  let t1 ← peekAt 1
+  pure (t.tok == .ident "data" && (match t1.tok with | .uident _ => true | _ => false))
 
 def startPos : P Pos := return (← peek).span.start
 
@@ -606,7 +620,16 @@ def rtyPrefix : Nat → P RTy
       let a ← lifeAtom n
       let sp ← spanFrom st
       pure (if t.tok == .ident "text" then .arrayImm sp a (.int sp .w8) else .arrayMut sp a (.int sp .w8))
-    | .kw "box" => withLife .box
+    -- `box @ A` is the lifetime box (§23); `box A`, with no lifetime, is a cell, `ref A`: a
+    -- `data` field's (SPEC §42, typed elaboration §5.3).
+    | .kw "box" =>
+      let isLife (k : Tok) : Bool := match k with
+        | .life _ | .kw "top" | .kw "dom" => true
+        | _ => false
+      let t1 ← peekAt 1
+      let t2 ← peekAt 2
+      if isLife t1.tok || (t1.tok == .sym "(" && isLife t2.tok) then withLife .box
+      else unary .ref
     | .kw "view" => withLife .view
     | .kw "block" =>
       discard bump
@@ -873,6 +896,24 @@ def nestPat (sp : Span) : List Pat → Pat
   | [] => .unit sp
   | [p] => p
   | p :: ps => .pair sp p (nestPat sp ps)
+
+/-- A pattern with no constructor, literal or `box` (`Data.MPat.plain`), as `let` reads it. -/
+def plainPat : Data.MPat → Pat
+  | .var x => .var x
+  | .wild sp => .wild sp
+  | .tuple sp ps => nestPat sp (go ps)
+  | p => .wild p.span
+where
+  go : List Data.MPat → List Pat
+    | [] => []
+    | p :: ps => plainPat p :: go ps
+
+/-- The `k` components of a right-nested tuple `(V₁, (…, Vₖ))`. -/
+def splitTuple : Nat → Val → List Val
+  | 0, _ => []
+  | 1, V => [V]
+  | k + 2, .pair _ V W => V :: splitTuple (k + 1) W
+  | _, V => [V]
 
 mutual
 /-- A pattern. -/
@@ -1209,6 +1250,9 @@ def handArms (xs : List String) : Comp → Comp
   | .case sp V x M y N =>
     let h : HandOn := { t := "io_ju", keep := false, direct := true }
     .case sp V x (handOn h xs M) y (handOn h xs N)
+  -- A compiled `match` (SPEC §42): its terminals, through the bindings of its decision tree.
+  | M@(.bind ..) | M@(.letPair ..) | M@(.letUnit ..) =>
+    handOn { t := "io_ju", keep := false, direct := true } xs M
   | M => M
 
 /-- `x <- M; N`, `x : A <- M; N` or `linear x <- M; N`, with the finaliser `unwind (D)` when it has
@@ -1414,6 +1458,167 @@ def valPrefix : Nat → P Val
       let V ← valAtom n
       valSuffixes n st V
 
+/-- The result of an elaboration rule of `Frontend/Elab/Data.lean`. -/
+def liftE {α} : Except Error α → P α
+  | .ok a => pure a
+  | .error e => throw e
+
+/-- `V.f.g…`: the fields `f`, `g`, … of `V` (SPEC §42, E5), each a typed sugar node at its field's
+layout. In a field update's value (`updating`), `x.f` is the variable `f` is bound to. -/
+def fieldSuffixes (st : Pos) (V : Val) : P Val := do
+  let mut V := V
+  for _ in [0:(← get).toks.size] do
+    let t ← peek
+    let t1 ← peekAt 1
+    unless t.tok == .sym "." && !t.spaced && !t1.spaced do break
+    let f ← match t1.tok with
+      | .ident f | .kw f => pure f
+      | _ => break
+    discard bump
+    discard bump
+    let (j, k, r) ← match Data.fieldOf (← get).data f with
+      | .ok l => pure l
+      | .error m => failAt t1.span m
+    let sp ← spanFrom st
+    V := match (← get).updating, V with
+      | some (y, vars), .var _ x =>
+        if x == y && vars.length == k then .var sp (vars[j]?.getD x)
+        else .app sp (.sugar t1.span (.field f j k r)) V
+      | _, _ => .app sp (.sugar t1.span (.field f j k r)) V
+  pure V
+
+/-- A pattern of `match` (SPEC §42): a name, `_`, `()`, `(p, …)`, `C`, `C(p, …)`, `box C(p, …)`,
+`N { f: p, … }`, `N { f, … }`, an integer, byte or character literal, `true`, `false`, `inl p`,
+`inr p`. -/
+def mpat : Nat → P Data.MPat
+  | 0 => outOfFuel
+  | n + 1 => do
+    let st ← startPos
+    let t ← peek
+    match t.tok with
+    | .ident "_" => discard bump; pure (.wild t.span)
+    | .ident "true" => discard bump; pure (.bool t.span true)
+    | .ident "false" => discard bump; pure (.bool t.span false)
+    | .ident x => discard bump; pure (.var ⟨x, t.span⟩)
+    | .kw "inl" | .kw "inr" =>
+      discard bump
+      let p ← mpat n
+      pure (.inj (← spanFrom st) (t.tok == .kw "inl") p)
+    | .int k => discard bump; pure (.lit t.span (.sugar t.span (.lit k)) s!"{k}")
+    | .kw "i32" | .kw "i64" | .kw "u8" =>
+      let V ← valAtom n
+      pure (.lit (← spanFrom st) V (match V.strip with
+        | .const _ (.lit c) => s!"{reprStr c}"
+        | _ => s!"{reprStr V.strip}"))
+    | .sym "(" =>
+      discard bump
+      if ← isSym ")" then discard bump; return .tuple (← spanFrom st) []
+      let mut ps : Array Data.MPat := #[]
+      for _ in [0:n] do
+        ps := ps.push (← mpat n)
+        if ← isSym "," then discard bump else break
+      expectSym ")"
+      match ps.toList with
+      | [p] => pure p
+      | qs => pure (.tuple (← spanFrom st) qs)
+    | .kw "box" =>
+      discard bump
+      let c ← uident "a constructor (`box C(…)`)"
+      conPat n st c true
+    | .uident c => discard bump; conPat n st ⟨c, t.span⟩ false
+    | _ => expected "a pattern: a name, `_`, `()`, `(p, …)`, a constructor, or a literal"
+
+/-- A constructor pattern after its name: `C`, `C(p, …)`, or a record's `N { f: p, … }`, its fields
+in the declaration's order and those left out `_`. -/
+def conPat : Nat → Pos → Ident → Bool → P Data.MPat
+  | 0, _, _, _ => outOfFuel
+  | n + 1, st, c, b => do
+    if ← isSym "(" then
+      discard bump
+      let mut ps : Array Data.MPat := #[]
+      for _ in [0:n] do
+        if ← isSym ")" then break
+        ps := ps.push (← mpat n)
+        if ← isSym "," then discard bump else break
+      expectSym ")"
+      return .con (← spanFrom st) c.name b ps.toList
+    if ← isSym "{" then
+      let some d := (← get).data.decl? c.name
+        | failAt c.span s!"no `data` declaration `{c.name}`"
+      let [k] := d.cons | failAt c.span s!"`{c.name}` has several constructors: match one of them"
+      discard bump
+      let mut fs : List (String × Data.MPat) := []
+      for _ in [0:n] do
+        if ← isSym "}" then break
+        let x ← ident "a field name"
+        let p ← if ← isSym ":" then do discard bump; mpat n else pure (.var x)
+        unless k.fields.any (·.name.map (·.name) == some x.name) do
+          failAt x.span s!"`{c.name}` has no field `{x.name}`"
+        fs := fs ++ [(x.name, p)]
+        if ← isSym "," then discard bump else break
+      expectSym "}"
+      let sp ← spanFrom st
+      let ps := k.fields.map fun f => match f.name.bind (fs.lookup ·.name) with
+        | some p => p
+        | none => Data.MPat.wild sp
+      return .con sp k.name.name b ps
+    pure (.con (← spanFrom st) c.name b [])
+
+/-- A pattern's binders, each in scope from here (`bindName`), in order. -/
+def bindMPatNames : Nat → Data.MPat → P Data.MPat
+  | 0, p => pure p
+  | n + 1, p => match p with
+    | .var x => return .var (← bindName x)
+    | .tuple sp ps => return .tuple sp (← ps.mapM (bindMPatNames n))
+    | .con sp c b ps => return .con sp c b (← ps.mapM (bindMPatNames n))
+    | .inj sp l q => return .inj sp l (← bindMPatNames n q)
+    | .free sp q => return .free sp (← bindMPatNames n q)
+    | p => pure p
+
+/-- A constructor `C`, `C(e, …)`, or a record literal `N { f: e, … }`, after its name; `boxed`
+after `box` (SPEC §42, E1, E2, E4). -/
+def dataValue : Nat → Pos → Ident → Bool → P Val
+  | 0, _, _, _ => outOfFuel
+  | n + 1, st, c, boxed => do
+    let tab := (← get).data
+    let t1 ← peek
+    let t2 ← peekAt 1
+    let t3 ← peekAt 2
+    let isRec := t1.tok == .sym "{" && (tab.decl? c.name).isSome && (match t2.tok, t3.tok with
+      | .ident _, .sym ":" | .ident _, .sym "," | .ident _, .sym "}" => true
+      | _, _ => false)
+    let angle := (← get).angle
+    modify fun s => { s with angle := false }
+    let V ← if isRec then do
+        discard bump
+        let mut fs : Array (Ident × Val) := #[]
+        for _ in [0:n] do
+          if ← isSym "}" then break
+          let x ← ident "a field name"
+          let V ← if ← isSym ":" then do discard bump; val n
+            else pure (Val.var x.span (← lookName x.name x.span))
+          fs := fs.push (x, V)
+          if ← isSym "," then discard bump else break
+        expectSym "}"
+        let sp ← spanFrom st
+        let mut vars : List (String × String) := []
+        for (x, _) in fs do vars := vars ++ [(x.name, ← freshName "io_rf")]
+        liftE (Data.recordVal tab sp c.name boxed fs.toList fun f => (vars.lookup f).getD f)
+      else do
+        let args ← if ← isSym "(" then do
+            discard bump
+            let mut vs : Array Val := #[]
+            for _ in [0:n] do
+              if ← isSym ")" then break
+              vs := vs.push (← val n)
+              if ← isSym "," then discard bump else break
+            expectSym ")"
+            pure vs.toList
+          else pure []
+        liftE (Data.conVal tab (← spanFrom st) c.name boxed args)
+    modify fun s => { s with angle }
+    pure V
+
 /-- A borrow block: `borrow imm V { 'x, p -> S }`, `borrow mut V { … }`, `borrow mut (V, W)
 { … }` (a family), or `modify V { p -> S }`. The lifetime `'x` may be left out. -/
 def borrowBlock : Nat → P Val
@@ -1537,7 +1742,7 @@ def valSuffixes : Nat → Pos → Val → P Val
       let a ← life n
       expectSym "]"
       valSuffixes n st (.inst (← spanFrom st) V a)
-    else if startsValAtom t.tok then
+    else if startsValAtom t.tok && !(← dataStart) then
       let W ← valAtom n
       valSuffixes n st (.app (← spanFrom st) V W)
     else pure V
@@ -1553,10 +1758,15 @@ def valAtom : Nat → P Val
     | .ident s =>
       discard bump
       let nx ← peek
-      -- `n.op`: the operation `op` at the handler named `n` (SPEC §38).
+      -- `x.f`: a field of the variable `x` (SPEC §42); `n.op`: the operation `op` at the handler
+      -- named `n` (SPEC §38), which is no variable.
       if nx.tok == .sym "." && !nx.spaced then
         if let .ident op := (← peekAt 1).tok then
           if !(← peekAt 1).spaced then
+            let ps ← get
+            if ps.resolve && ps.surf && (ps.scope.lookup s).isSome then
+              let x ← lookName s t.span
+              return ← fieldSuffixes st (.var t.span x)
             discard bump
             discard bump
             return .sugar (← spanFrom st) (.named s op)
@@ -1571,9 +1781,16 @@ def valAtom : Nat → P Val
     | .str bs => discard bump; pure (.sugar t.span (.str bs))
     -- `box buf[A](cap)`, `box string(cap)`, `box array(n, f)`: the allocating constructors of the
     -- buffer and text libraries (`buf_new[A]`, `string_new`, `array_tab`).
+    | .uident c =>
+      -- A constructor or a record literal (SPEC §42).
+      discard bump
+      dataValue n st ⟨c, t.span⟩ false
     | .kw "box" =>
       discard bump
       let k ← peek
+      if let .uident c := k.tok then
+        discard bump
+        return ← dataValue n st ⟨c, k.span⟩ true
       let callee : Val ← match k.tok with
         | .ident "buf" =>
           discard bump
@@ -1631,7 +1848,8 @@ def valAtom : Nat → P Val
           pure (.sub (← spanFrom st) V a)
         | _ => expected "`)`, `,`, `:` or `:>`"
       modify fun s => { s with angle }
-      pure r
+      -- `(V).f`: a field of `V` (SPEC §42).
+      fieldSuffixes st r
     | .sym "&" =>
       discard bump
       let m ← if ← isKw "mut" then do discard bump; pure Mode.mut else pure Mode.imm
@@ -1808,6 +2026,15 @@ def compG : Nat → Bool → P Comp
           return .bind sp ⟨tv, sp⟩ A M (← bindPat sp n p (.var sp tv) N) false
       modify fun s => { s with blockThreads := [], pendingRun := none }
       let V ← val n
+      -- `let y = x.f;`: the place `x` lent for the read, and rebound (SPEC §42, E5).
+      let V ← match p, V with
+        | .var _, .app sp (.sugar fsp (.field f j k r)) (.var vsp x) => do
+          let ps ← get
+          if ps.resolve && ps.surf && ps.scope.any (·.2.1 == x) then
+            notePlaceWrite x
+            pure (Val.app sp (.sugar fsp (.field f j k r)) (.lend vsp ⟨x, vsp⟩ .imm))
+          else pure V
+        | _, V => pure V
       let thr := (← get).blockThreads
       checkRun V
       expectSym ";"
@@ -1835,6 +2062,46 @@ def compG : Nat → Bool → P Comp
       let M ← comp n
       pure (.lamL (← spanFrom st) x b M)
     | _, _ => statement n st head
+
+/-- `x.f = e`, a field update (SPEC §42, E6): `modify &mut x { r -> … }` of a `let mut` `x`, or
+`modify x { r -> … }`, whose body takes `r` apart into its fields, reads `x.g` in `e` as the field
+`g`, and rebuilds the record with `e` at `f`. `none` when the statement is not one. -/
+def fieldUpdate : Nat → P (Option Val)
+  | 0 => outOfFuel
+  | n + 1 => do
+    let ps ← get
+    let t ← peek
+    let t1 ← peekAt 1
+    let t2 ← peekAt 2
+    let t3 ← peekAt 3
+    let .ident x₀ := t.tok | return none
+    let .ident f := t2.tok | return none
+    unless t1.tok == .sym "." && !t1.spaced && !t2.spaced && t3.tok == .sym "=" do return none
+    unless ps.resolve && ps.surf && (ps.scope.lookup x₀).isSome do return none
+    let st ← startPos
+    discard bump; discard bump; discard bump; discard bump
+    let y ← lookName x₀ t.span
+    let (j, k, rolls) ← match Data.fieldOf ps.data f with
+      | .ok l => pure l
+      | .error m => failAt t2.span m
+    let mut vars : List String := []
+    for _ in [0:k] do vars := vars ++ [← freshName "io_fd"]
+    let saved := (← get).updating
+    modify fun s => { s with updating := some (y, vars) }
+    let (e, w) ← frame (val n)
+    modify fun s => { s with updating := saved }
+    unless w.isEmpty do
+      failAt (← spanFrom st) "the value of a field update assigns a `let mut` variable: bind it first, `let v = …;`"
+    let sp ← spanFrom st
+    let r ← freshName "io_fr"
+    let body := Data.updateBody sp r j rolls vars e (· ++ "r")
+    let place : Val := if (← get).muts.contains y then .lend t.span ⟨y, t.span⟩ .mut
+      else .var t.span y
+    -- The update rebinds its place: a write of a `let mut` place (SPEC §41, rule R2).
+    notePlaceWrite y
+    modify fun s => { s with blockThreads := [], joined := [] }
+    pure (some (.app sp (.app sp (.sugar t.span (.borrow .modify "")) place)
+      (.thunkv sp (.lam sp ⟨r, sp⟩ (holeTy sp) body))))
 
 /-- A statement: a computation, a force `t!` or `f!(e)`, or an expression `e`, which is returned.
     Outside the head of a binding, `S; N` sequences it (its result is dropped), and a borrow
@@ -1881,6 +2148,7 @@ def statement : Nat → Pos → Bool → P Comp
             | .inl M => pure (M, none)
             -- Neither: report the attempt that got further.
             | .inr e₂ => throw (if e₂.span.start.later e₁.span.start then e₂ else e₁)
+        else if let some V ← fieldUpdate n then pure (Comp.ret (← spanFrom st) V, V.rebinds)
         else do
           let V ← val n
           pure (Comp.ret (← spanFrom st) V, V.rebinds)
@@ -1999,6 +2267,7 @@ def compSuffixes : Nat → Pos → Comp → P Comp
     let t ← peek
     match t.tok with
     | .ident x =>
+      if ← dataStart then return M
       discard bump
       compSuffixes n st (.app (← spanFrom st) M ⟨← lookName x t.span, t.span⟩)
     | .sym "." =>
@@ -2152,33 +2421,54 @@ def compAtom : Nat → P Comp
       let outer := (← get).muts
       let V ← val n
       expectSym "{"
-      expectKw "inl"
-      let p ← pat n
-      expectSym "->"
-      let (p, M, a₁) ← withScope do
-        let p ← bindPatNames p
-        let (M, a) ← frame (comp n)
-        pure (p, M, a)
-      expectSym "|"
-      expectKw "inr"
-      let q ← pat n
-      expectSym "->"
-      let (q, N, a₂) ← withScope do
-        let q ← bindPatNames q
-        let (N, a) ← frame (comp n)
-        pure (q, N, a)
+      if ← isSym "|" then discard bump
+      let mut arms : Array (Data.MPat × Comp) := #[]
+      let mut as_ : List String := []
+      for _ in [0:n] do
+        let p ← mpat n
+        expectSym "->"
+        let (p, M, a) ← withScope do
+          let p ← bindMPatNames n p
+          let (M, a) ← frame (comp n)
+          pure (p, M, a)
+        arms := arms.push (p, M)
+        as_ := as_ ++ a
+        if ← isSym "|" then discard bump else break
       expectSym "}"
       -- In the order the variables were declared.
-      modify fun s => { s with joined := (outer.filter (a₁ ++ a₂).contains).reverse }
+      modify fun s => { s with joined := (outer.filter as_.contains).reverse }
       let sp ← spanFrom st
-      let arm (p : Pat) (M : Comp) : P (Ident × Comp) := match p with
-        | .var x => pure (x, M)
-        | p => do
-          let x : Ident := ⟨← freshName "io_m", sp⟩
-          pure (x, ← bindPat sp n p (.var sp x.name) M)
-      let (x, M) ← arm p M
-      let (y, N) ← arm q N
-      pure (.case sp V x M y N)
+      -- Draft 0's form, `inl p -> M | inr q -> N` with no constructor in `p` or `q`.
+      if let [(.inj _ true p, M), (.inj _ false q, N)] := arms.toList then
+        if p.plain && q.plain then
+          let arm (p : Data.MPat) (M : Comp) : P (Ident × Comp) := match p with
+            | .var x => pure (x, M)
+            | p => do
+              let x : Ident := ⟨← freshName "io_m", sp⟩
+              pure (x, ← bindPat sp n (plainPat p) (.var sp x.name) M)
+          let (x, M) ← arm p M
+          let (y, N) ← arm q N
+          return .case sp V x M y N
+      -- Match compilation (SPEC §42, M1, M2): the columns are a written tuple's components
+      -- when every arm is a tuple of them.
+      let arity := arms.toList.findSome? fun (p, _) => match p with
+        | .tuple _ ps => some ps.length
+        | _ => none
+      let split := match V, arity with
+        | .pair .., some k => k ≥ 2 && arms.all fun (p, _) => match p with
+          | .tuple _ ps => ps.length == k
+          | .wild _ => true
+          | _ => false
+        | _, _ => false
+      let (cols, rows) := if split then
+          let k := arity.getD 1
+          (splitTuple k V, arms.toList.map fun (p, M) => match p with
+            | .tuple _ ps => (ps, M)
+            | p => ((List.range k).map (fun _ => Data.MPat.wild p.span), M))
+        else ([V], arms.toList.map fun (p, M) => ([p], M))
+      let (M, fresh) ← liftE (Data.matchComp (← get).data sp cols rows (← get).fresh)
+      modify fun s => { s with fresh }
+      pure M
     | .kw "if" =>
       -- `if V { S₁ } else { S₂ }`: `inr ()` is true (typed elaboration §5.4).
       discard bump
@@ -2221,6 +2511,66 @@ def compAtom : Nat → P Comp
 end
 
 /-! ### Declarations (syntax-core §10) -/
+
+/-- The fields of a `data` constructor, `f: A` or `A`, or of a record, `f: A` (`named`): up to
+the closing bracket, a trailing `,` allowed.  `[spec §42]` -/
+def dataFields (n : Nat) (named : Bool) (close : String) : P (List DField) := do
+  let mut fs : Array DField := #[]
+  for _ in [0:n] do
+    if ← isSym close then break
+    let t ← peek
+    let t1 ← peekAt 1
+    -- A field's name may be a word the core reserves (`val`): it is only ever a field's.
+    let f ← match t.tok, t1.tok with
+      | .ident x, .sym ":" | .kw x, .sym ":" => do
+        discard bump
+        expectSym ":"
+        pure (DField.mk (some ⟨x, t.span⟩) (← vty n))
+      | _, _ =>
+        if named then expected "a field `f: A`"
+        else pure (DField.mk none (← vty n))
+    fs := fs.push f
+    if ← isSym "," then discard bump else break
+  pure fs.toList
+
+/-- `data N[P, …]<'l, …> = C₁ | C₂(A, …) | C₃(f: A, …) | …`, or a record
+`data N[…] = { f: A, … }`, read from its `data` (SPEC §42).  `[spec §42]` -/
+def dataDecl (n : Nat) : P DataDecl := do
+  discard bump
+  let x ← uident "the declared type's name"
+  let mut tps : List Ident := []
+  if ← isSym "[" then
+    discard bump
+    for _ in [0:n] do
+      tps := tps ++ [← uident "a type parameter"]
+      if ← isSym "," then discard bump else break
+    expectSym "]"
+  let mut lps : List Ident := []
+  if ← isSym "<" then
+    discard bump
+    for _ in [0:n] do
+      lps := lps ++ [← lifeVar]
+      if ← isSym "," then discard bump else break
+    expectSym ">"
+  expectSym "="
+  if ← isSym "{" then
+    discard bump
+    let fs ← dataFields n true "}"
+    expectSym "}"
+    return ⟨x, tps, lps, true, [⟨x, fs⟩]⟩
+  if ← isSym "|" then discard bump
+  let mut cons : Array DCon := #[]
+  for _ in [0:n] do
+    let c ← uident "a constructor"
+    let fs ← if ← isSym "(" then do
+        discard bump
+        let fs ← dataFields n false ")"
+        expectSym ")"
+        pure fs
+      else pure []
+    cons := cons.push ⟨c, fs⟩
+    if ← isSym "|" then discard bump else break
+  pure ⟨x, tps, lps, false, cons.toList⟩
 
 def decl (n : Nat) : P Decl := do
   let st ← startPos
@@ -2320,6 +2670,11 @@ def decl (n : Nat) : P Decl := do
     discard bump
     let x ← ident "the name of a library module"
     pure (.include (← spanFrom st) x)
+  | .ident "data" =>
+    unless (match (← peekAt 1).tok with | .uident _ => true | _ => false) do
+      expected "a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`)"
+    let d ← dataDecl n
+    pure (.data (← spanFrom st) d)
   | .kw "effect" =>
     -- `effect E[T, …] { fn op(x: A, …) -> B; ctl op(…) -> B; … }` (SPEC §18, §19); `-> B` left
     -- out is `-> 1`. `ctl` is affine; `linear ctl` linear, `multi ctl` unrestricted.
@@ -2702,7 +3057,7 @@ def decls (n : Nat) : Nat → List Decl → P (List Decl)
 /-- Run a parser over the tokens of `src`, requiring it to consume all of them. With `resolve`,
 each name is resolved to its binder (SPEC §41, rule R1), and no fresh binder is named as a name
 of the source. -/
-def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) :
+def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data : Data.Table := []) :
     Except Error (α × PState) := do
   let toks ← lex src
   let fuel := fuelPerToken * (toks.size + 1)
@@ -2713,15 +3068,63 @@ def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) :
   let taken := if resolve then toks.toList.filterMap (fun t => match t.tok with
     | .ident s => some s
     | _ => none) |>.eraseDups else []
-  go.run { toks, pos := 0, lastStop := ⟨1, 1⟩, resolve, taken }
+  go.run { toks, pos := 0, lastStop := ⟨1, 1⟩, resolve, taken, data }
+
+/-- The `data` declarations written in the tokens `toks`, each read where it is (SPEC §42): a
+declaration is in scope in its whole module. A declaration that does not read is left to the
+parse proper, which reports it. -/
+def dataIn (toks : Array Token) : List DataDecl := Id.run do
+  let fuel := fuelPerToken * (toks.size + 1)
+  let mut out : List DataDecl := []
+  for i in [0:toks.size] do
+    let isData := toks[i]!.tok == .ident "data" &&
+      (match toks[i + 1]?.map Token.tok with | some (Tok.uident _) => true | _ => false)
+    if isData then
+      match (dataDecl fuel).run { toks, pos := i, lastStop := ⟨1, 1⟩ } with
+      | .ok (d, _) => out := out ++ [d]
+      | .error _ => pure ()
+  out
+
+/-- The modules the tokens `toks` include. -/
+def includesIn (toks : Array Token) : List String := Id.run do
+  let mut out : List String := []
+  for i in [0:toks.size] do
+    if toks[i]!.tok == .kw "include" then
+      if let some (Tok.ident m) := toks[i + 1]?.map Token.tok then out := out ++ [m]
+  out
+
+/-- The `data` declarations of the modules `ms` and of the modules they include, each once,
+`lib` giving a module's source: what has been read, and the modules read. -/
+def dataOfModules (lib : String → Option String) : Nat → List String → List String →
+    Data.Table × List String
+  | 0, _, seen => ([], seen)
+  | _ + 1, [], seen => ([], seen)
+  | k + 1, m :: ms, seen =>
+    if seen.contains m then dataOfModules lib k ms seen else
+    match (lib m).map lex with
+    | some (.ok toks) =>
+      let (inner, seen) := dataOfModules lib k (includesIn toks) (m :: seen)
+      let (rest, seen) := dataOfModules lib k ms seen
+      (inner ++ dataIn toks ++ rest, seen)
+    | _ => dataOfModules lib k ms (m :: seen)
 
 def runP {α} (p : Nat → P α) (src : String) (resolve : Bool := false) : Except Error α :=
   (·.1) <$> runPS p src resolve
 
+/-- The `data` declarations in scope in the source `src` (SPEC §42): the prelude's, the included
+modules', and its own, `lib` giving a module's source. -/
+def dataOf (lib : String → Option String) (src : String) : Data.Table :=
+  match lex src with
+  | .ok toks => (dataOfModules lib 64 ("prelude" :: includesIn toks) []).1 ++ dataIn toks
+  | .error _ => []
+
 /-- The declarations of a source file. At most one `main` is accepted. Its names are resolved
 (`resolve`) unless it is code the elaborator generated. -/
-def parseProgram (src : String) (resolve : Bool := true) : Except Error Program := do
-  let ds ← runP (fun n => decls n n []) src resolve
+def parseProgram (src : String) (resolve : Bool := true)
+    (lib : String → Option String := fun _ => none) : Except Error Program := do
+  -- The `data` declarations in scope (SPEC §42): the prelude's, the included modules', the
+  -- program's own.
+  let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src)
   let mains := ds.filter fun | .main .. => true | _ => false
   match mains with
   | _ :: .main sp _ _ :: _ => .error ⟨sp, "a program has at most one `main`"⟩
@@ -2734,15 +3137,17 @@ def parseCTy (src : String) : Except Error CTy := runP cty src
 
 /-- The binders resolution renamed in `src` (SPEC §41, rule R1), each with the name the source
 writes it with. -/
-def renamesOf (src : String) : List (String × String) :=
-  match runPS (fun n => decls n n []) src true with
+def renamesOf (src : String) (lib : String → Option String := fun _ => none) :
+    List (String × String) :=
+  match runPS (fun n => decls n n []) src true (dataOf lib src) with
   | .ok (_, s) => s.renamed
   | .error _ => []
 
 /-- Each name of `src` that resolution resolved to a variable (SPEC §41, rule R1): where it is
 written, as written, the variable, and the number of its binder, in the order of the source. -/
-def resolutionOf (src : String) : Except Error (List (Pos × String × String × Nat)) := do
-  let (_, s) ← runPS (fun n => decls n n []) src true
+def resolutionOf (src : String) (lib : String → Option String := fun _ => none) :
+    Except Error (List (Pos × String × String × Nat)) := do
+  let (_, s) ← runPS (fun n => decls n n []) src true (dataOf lib src)
   pure s.occs.reverse
 
 /-- `s` with each word that is a renamed binder of `rs`, or a binder Hygiene renamed
@@ -2759,7 +3164,8 @@ def unrename (rs : List (String × String)) (s : String) : String :=
 
 /-- An error about the program `src`, rendered with each renamed binder named as the source writes
 it (`unrename`). -/
-def Error.renderIn (src : String) (e : Error) : String :=
-  { e with msg := unrename (renamesOf src) e.msg }.render
+def Error.renderIn (src : String) (e : Error) (lib : String → Option String := fun _ => none) :
+    String :=
+  { e with msg := unrename (renamesOf src lib) e.msg }.render
 
 end Frontend
