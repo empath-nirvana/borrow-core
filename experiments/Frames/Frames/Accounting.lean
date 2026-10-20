@@ -600,6 +600,93 @@ theorem acc_loopCount {n s₀ eM : Expr}
       · fsimp
         exact retsG_val (w := Val.pair π (Val.inj₂ e)) ⟨_, rfl⟩
 
+/-! ### `loopIter` -/
+
+theorem acc_loopIter (S₀ : VTy) {s₀ eM : Expr}
+    (ih : ∀ γ : List Val, Returns (ℍ := ℍ) (substAll γ eM)) (γ : List Val) :
+    Returns (ℍ := ℍ) (substAll γ (loopIterE S₀ s₀ eM)) := by
+  intro π
+  apply rets_of_retsG
+  show RetsG _ _ (Kont.plug .hole (.app (substAll γ (loopIterE S₀ s₀ eM)) (.val π)))
+  simp only [substAll, loopIterE, Expr.psub]
+  refine retsG_betaE .hole π.2 ?_
+  fsimp
+  have hSv : IsVal (Expr.psub 0 γ (iterStepE S₀ eM)) := isVal_psub IsVal.lam 0 γ
+  refine retsG_betaE .hole hSv ?_
+  fsimp
+  refine retsG_beta (v := Val.prim .iterate) .hole ?_
+  fsimp
+  change RetsG _ _ ((Kont.appR (.lam _) (.pairR ⟨_, hSv⟩ (.pairR π .hole))).plug (Expr.psub 0 γ s₀))
+  refine retsG_plain (by simp [Kont.Plain]) (retsG_true _ _) (fun sv _ => ?_)
+  refine retsG_beta (v := Val.pair ⟨_, hSv⟩ (Val.pair π sv)) .hole ?_
+  fsimp
+  -- the turn and the residual of the step
+  have hturn : ∀ s, RestQ π s → RetsG (ℍ := ℍ) (TurnQ (RestQ π) (RestQ π)) (fun _ => False)
+      (.app (.app (.val ⟨_, hSv⟩) (.val s)) (.val nextV)) := by
+    rintro s ⟨s', rfl⟩
+    change RetsG _ _ ((Kont.appL .hole nextV).plug (.app (Expr.psub 0 γ (iterStepE S₀ eM)) _))
+    simp only [iterStepE, withPair, Expr.psub]
+    refine retsG_betaE _ (IsVal.pair π.2 s'.2) ?_
+    fsimp
+    refine retsG_letpair (v₁ := π) (v₂ := s') (.appL .hole nextV) ?_
+    fsimp
+    refine retsG_beta (v := nextV) .hole ?_
+    fsimp
+    refine retsG_case₁ (a := Val.unit) .hole ?_
+    fsimp
+    refine retsG_seqU .hole ?_
+    refine retsG_plain (K := .appR (.lam _) .hole) rfl (Q₁ := PairQ π) ?_ ?_
+    · have := retsG_call (G := fun _ => False) (π := π) (a := s') (γ := γ) (ih (s' :: γ))
+      fsimp_at this; exact this
+    rintro y ⟨r, rfl⟩
+    refine retsG_beta .hole ?_
+    fsimp
+    refine retsG_letpair (v₁ := π) (v₂ := r) .hole ?_
+    fsimp
+    refine retsG_caseV (fun a _ => ?_) (fun x _ => ?_)
+    · fsimp
+      exact retsG_val (w := Val.inj₂ (Val.pair π a)) (.inr ⟨_, rfl, a, rfl⟩)
+    · fsimp
+      exact retsG_val (w := Val.inj₁ (Val.pair π x)) (.inl ⟨_, rfl, x, rfl⟩)
+  have hclose : ∀ s, RestQ π s → RetsG (ℍ := ℍ) (RestQ π) (fun _ => False)
+      (.app (.app (.val ⟨_, hSv⟩) (.val s)) (.val closeV)) := by
+    rintro s ⟨s', rfl⟩
+    change RetsG _ _ ((Kont.appL .hole closeV).plug (.app (Expr.psub 0 γ (iterStepE S₀ eM)) _))
+    simp only [iterStepE, withPair, Expr.psub]
+    refine retsG_betaE _ (IsVal.pair π.2 s'.2) ?_
+    fsimp
+    refine retsG_letpair (v₁ := π) (v₂ := s') (.appL .hole closeV) ?_
+    fsimp
+    refine retsG_beta (v := closeV) .hole ?_
+    fsimp
+    refine retsG_case₂ (a := Val.unit) .hole ?_
+    fsimp
+    refine retsG_seqU .hole ?_
+    exact retsG_seq (retsG_val (w := Val.pair π Val.unit) ⟨_, rfl⟩)
+  change RetsG _ _ ((Kont.appR (.lam _) .hole).plug (.app (.val (.prim .iterate))
+    (.val (Val.pair ⟨_, hSv⟩ (Val.pair π sv)))))
+  refine retsG_plain (by simp [Kont.Plain]) (Q₁ := IterQ (RestQ π) (RestQ π))
+    (retsG_iterate (P := RestQ π) _ hturn hclose ⟨sv, rfl⟩) ?_
+  rintro y (⟨x, rfl, x', rfl⟩ | ⟨u, rfl, u', rfl⟩)
+  · refine retsG_beta .hole ?_
+    fsimp
+    refine retsG_case₁ (a := Val.pair π x') .hole ?_
+    fsimp
+    refine retsG_letpair (v₁ := π) (v₂ := x') .hole ?_
+    fsimp
+    refine retsG_caseV (fun b _ => ?_) (fun e _ => ?_)
+    · fsimp
+      exact retsG_val (w := Val.pair π (Val.inj₁ (Val.inj₁ b))) ⟨_, rfl⟩
+    · fsimp
+      exact retsG_val (w := Val.pair π (Val.inj₂ e)) ⟨_, rfl⟩
+  · refine retsG_beta .hole ?_
+    fsimp
+    refine retsG_case₂ (a := Val.pair π u') .hole ?_
+    fsimp
+    refine retsG_letpair (v₁ := π) (v₂ := u') .hole ?_
+    fsimp
+    exact retsG_val (w := Val.pair π (Val.inj₁ (Val.inj₂ Val.unit))) ⟨_, rfl⟩
+
 end BoCa.Fig16.LogRel.Core.Frames
 
 end
