@@ -61,7 +61,7 @@ def keywords : List String :=
     "thunk", "thunkv", "unbang",
     "boxed", "unbox", "roll", "unroll", "run", "absurd",
     "nu_in", "nu_out", "delay_in", "delay_out", "stream_in", "stream_out",
-    "perform", "abort", "handle_with", "unwind", "withbor2r",
+    "perform", "abort", "handle_with", "unwind", "withbor2r", "writes",
     -- types, lifetimes, shapes
     "ref", "imm", "mut", "box", "unk", "i32", "i64", "u8", "f32", "f64", "input", "output", "mu", "all", "forall", "top", "dom",
     "block", "val", "fam", "view", "nu", "delay", "loop", "stream", "str", "iter", "leaf", "sized",

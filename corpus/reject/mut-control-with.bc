@@ -1,0 +1,11 @@
+-- expect: 9:3: the body of `with resuming` assigns a `let mut` variable declared outside it, or lends a place declared outside it: a control handler's body may be abandoned, and does not hand them back; bind what the block answers instead
+-- An assignment inside the body of a control handler (SPEC §18 *Not provided*, §41 rule R3): the
+-- body may be abandoned, so it does not hand the variable back, and the assignment is refused.
+effect Pause { ctl pause() }
+handler resuming[A]: Pause, A -> A = { return(a) = a; pause(k) = k(()) }
+fn body() -> i32 with Pause =
+  let mut x = 1;
+  pause();
+  with resuming { x = 5; pause(); () };
+  x
+main -> i32 = with resuming { body() }

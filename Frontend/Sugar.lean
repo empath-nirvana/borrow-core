@@ -409,6 +409,14 @@ def chain (bs : List (Ident × Val)) (M : Comp) : Comp :=
 
 /-! #### Types of bound variables -/
 
+/-- The type a block's body synthesizes once its lends are elaborated (`Comp.elab`): a lend
+`y <- return f(&mut x)` gives `y` the call's result, as the lend rebinds `x` from the pair. -/
+def _root_.Frontend.Elab.TCx.tyCL (c : TCx) (M : Comp) : Option CCTy := c.tyC ((M.elab false).toOption.getD M)
+
+/-- `TCx.tyCL` of a value: a lend inside a computation it runs (`run M`) elaborated. -/
+def _root_.Frontend.Elab.TCx.tyVL (c : TCx) (V : Val) : Option CVTy := c.tyV ((V.elab false).toOption.getD V)
+
+
 /-- The type `x <- M` gives `x`: the annotation; else the result of a call run in direct style,
 the value's type, or the computation's result; with `&c` in `M`, the second component, since the
 call hands the capability back first (SPEC §11). -/
@@ -419,10 +427,10 @@ def bindTy (c : TCx) (A : Option VTy) (M : Comp) : Option CVTy :=
     let t := match M with
       | .ret _ V => match directCall c none V with
         | some (B, _) => some B
-        | none => c.tyV V
+        | none => c.tyVL V
       -- An operation answers its result type in the row (SPEC §19).
       | .perform sp k i _ => (Frontend.Check.findOp c.E sp "perform" k i).toOption.map (·.2.1.B)
-      | M => match (c.tyC M).bind Frontend.Check.effRow? with
+      | M => match (c.tyCL M).bind Frontend.Check.effRow? with
         | some (_, A) => some A
         | _ => none
     if M.takeLends.2.isEmpty then t else match t with
@@ -648,32 +656,6 @@ def _root_.Frontend.Val.hasExit (V : Val) : Bool := V.exitAt.isSome
 
 /-- An exit in a computation. -/
 def _root_.Frontend.Comp.hasExit (M : Comp) : Bool := M.exitAt.isSome
-
-mutual
-/-- A surface leaf satisfying `p` in a value. -/
-def _root_.Frontend.Val.anySugar (p : VSugar → Bool) : Val → Bool
-  | .sugar _ s => p s
-  | .pair _ V W | .app _ V W => V.anySugar p || W.anySugar p
-  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.anySugar p
-  | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.anySugar p
-  | _ => false
-
-/-- A surface leaf satisfying `p` in a computation. -/
-def _root_.Frontend.Comp.anySugar (p : VSugar → Bool) : Comp → Bool
-  | .ret _ V | .absurd _ V => V.anySugar p
-  | .bind _ _ _ M N _ | .with_ _ M N => M.anySugar p || N.anySugar p
-  | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
-  | .nuOut _ M | .ascribe _ M _ => M.anySugar p
-  | .letUnit _ V M | .letPair _ _ _ V M => V.anySugar p || M.anySugar p
-  | .case _ V _ M _ N => V.anySugar p || M.anySugar p || N.anySugar p
-  | .loop _ _ _ V M N => V.anySugar p || M.anySugar p || N.anySugar p
-  | .perform _ _ _ V | .abort _ _ _ V => V.anySugar p
-  | .handle _ _ _ hr hc M => hr.anySugar p || hc.anySugar p || M.anySugar p
-  | .unwind _ _ _ M D N => M.anySugar p || D.anySugar p || N.anySugar p
-  | .withbor2r _ _ _ _ _ _ _ _ M => M.anySugar p
-  | .force .. | .top _ => false
-end
 
 mutual
 /-- The first surface leaf satisfying `p` in a value. -/
@@ -2192,6 +2174,30 @@ def unitTail (S : Comp) : Comp :=
     | T => .bind T.span ⟨"io_mv", T.span⟩ none T
         (.ret T.span (.pair T.span (.var T.span "io_mv") (.unit T.span))) false) S
 
+/-- A `modify` body that hands back the `let mut` variables it writes (`Parser.handOn`, SPEC §41,
+rule R3): `(c, W)` at each terminal, `c` the place's new content, made `(c, ((), W))`; or
+`((c, r), W)`, with a result `r`, made `(c, (r, W))`. The result is beside the variables. -/
+def handBackResult (withResult : Bool) (S : Comp) : Comp :=
+  wrapTail (fun
+    | .ret sp (.pair psp (.var vsp "io_bt") Wt) =>
+      if withResult then
+        .letPair sp ⟨"io_bn", sp⟩ ⟨"io_br", sp⟩ (.var vsp "io_bt")
+          (.ret sp (.pair psp (.var sp "io_bn") (.pair psp (.var sp "io_br") Wt)))
+      else .ret sp (.pair psp (.var vsp "io_bt") (.pair psp (.unit sp) Wt))
+    | T => T) S
+
+/-- A `modify` body at the place's content `A`, its type `X`: the body with its value made the new
+content and a result, and the result's type. A body that hands back what it writes (`hands`) has
+them after its result (`handBackResult`). -/
+def modifyBody (hands : Bool) (A X : CVTy) (S : Comp) : Comp × CVTy :=
+  match hands, X with
+  | true, .tensor X₀ W =>
+    if X₀ = A then (handBackResult false S, .tensor .unit W) else match X₀ with
+      | .tensor A' R => if A' = A then (handBackResult true S, .tensor R W) else (unitTail S, .unit)
+      | _ => (unitTail S, .unit)
+  | false, .tensor A' B => if A' = A then (S, B) else (unitTail S, .unit)
+  | _, _ => (unitTail S, .unit)
+
 /-- The result type of a computation, as its tail gives it. -/
 def resultOfC : Option CCTy → Option CVTy
   | some C => (Frontend.Check.effRow? C).map (·.2)
@@ -2903,7 +2909,9 @@ def opsV (c : TCx) : Nat → Val → List (Nat × Nat)
       | .pair _ V W => opsV c k V ++ opsV c k W
       | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
       | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => opsV c k V
-      | .run _ M | .thunkv _ M => opsC c k M
+      -- A closure that performs an operation is a block given to a copy that calls it (SPEC §30):
+      -- the call performs what the block does, whether or not the copy's type is known here.
+      | .run _ M | .thunkv _ M | .bangThunkv _ M => opsC c k M
       | _ => []
 end
 
@@ -3399,10 +3407,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         | some A => pure A
         | none => throw ⟨psp, s!"the type of `{px.name}` is not determined here: ascribe it"⟩
       let S' ← surfC n (c.push b.name (some A)) none S
-      let X ← need tsp "`modify`'s body" (resultOfC (((← refresh c).push b.name (some A)).tyC S'))
-      let (S'', B) := match X with
-        | .tensor A' B => if A' = A then (S', B) else (unitTail S', .unit)
-        | _ => (unitTail S', .unit)
+      let X ← need tsp "`modify`'s body" (resultOfC (((← refresh c).push b.name (some A)).tyCL S'))
+      let (S'', B) := modifyBody (S.boundNames.contains "io_bt") A X S'
       let As ← (c.surface ksp A : Except Error VTy)
       let Bs ← (c.surface ksp B : Except Error VTy)
       lendBorrow c sp px .mut A B fun l mv =>
@@ -3430,7 +3436,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := A.immReborrow (.var v)
         let S' ← surfC n (c₁.push b.name (some Tb)) none S
-        let B ← need tsp "the block's result" (resultOfC ((← refresh c₁).push b.name (some Tb) |>.tyC S'))
+        let B ← need tsp "the block's result" (resultOfC ((← refresh c₁).push b.name (some Tb) |>.tyCL S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
@@ -3449,7 +3455,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := if k == .imm then .imm (.var v) A else .mut (.var v) A
         let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
-        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyC S'))
+        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
@@ -3476,7 +3482,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := .mut (.var v) A
         let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
-        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyC S'))
+        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
@@ -3497,7 +3503,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := .fam (if k == .imm then .imm (.var v) A else .mut (.var v) A)
         let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
-        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyC S'))
+        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
@@ -3521,7 +3527,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := .fam (if imm then .imm (.var v) A else .mut (.var v) A)
         let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
-        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyC S'))
+        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
@@ -3560,7 +3566,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let U8 : CVTy := .int .w8
         let Tb : CVTy := .fam (.imm (.var v) U8)
         let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
-        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyC S'))
+        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let U8s : VTy := .int ksp .w8
@@ -3618,7 +3624,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
             | _, _ => t
           | none => t) 0
         let S' ← surfC n (cx.push b.name (some rTy)) none S
-        let B ← need tsp "the block's result" (resultOfC ((← refresh cx).push b.name (some rTy) |>.tyC S'))
+        let B ← need tsp "the block's result" (resultOfC ((← refresh cx).push b.name (some rTy) |>.tyCL S'))
         for (v, i) in vs.zipIdx do
           if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
             throw (Frontend.Elab.LoopLend.escapeError tsp (lname i) (Frontend.Check.ppV cx.E.lenv 0 0 B))
@@ -3662,7 +3668,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := .tensor (.mut (.var v) A) (.mut (.var v) B)
         let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
-        let T ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyC S'))
+        let T ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v T then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 T))
         let As ← c.surface ksp A
@@ -3675,10 +3681,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
       | .modify, .mut a A => do
         let S' ← surfC n (c.push b.name (some A)) none S
-        let X ← need tsp "`modify`'s body" (resultOfC (((← refresh c).push b.name (some A)).tyC S'))
-        let (S'', B) := match X with
-          | .tensor A' B => if A' = A then (S', B) else (unitTail S', .unit)
-          | _ => (unitTail S', .unit)
+        let X ← need tsp "`modify`'s body" (resultOfC (((← refresh c).push b.name (some A)).tyCL S'))
+        let (S'', B) := modifyBody (S.boundNames.contains "io_bt") A X S'
         let C := Const.withswap (← c.surfaceL ksp a) (← c.surface ksp A) (← c.surface ksp B)
         pure (.app sp (.app sp₂ (.const ksp C) P')
           (.thunkv tsp (.lam lsp b (← c.surface lsp A) S'')))

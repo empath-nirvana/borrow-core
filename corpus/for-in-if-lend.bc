@@ -1,0 +1,17 @@
+-- A counted `for` that lends a linear `let mut` (`at(&a, i, 0)`) inside an `if` arm that is the
+-- head of `;` (#502): the lend writes `a` (SPEC §41, rule R2), so the arm hands it on, and the
+-- loop threads it.
+--
+-- Answer: i32[3].
+
+include slice
+
+fn sum_if(a: array i32, c: bool) -> array i32 * i32 =
+  let mut a = a;
+  let mut s = 0;
+  if c { for i in 0..2 { let x = at(&a, i, 0); s = s + x } } else { () };
+  (a, s)
+
+main -> i32 =
+  let (a, s) = sum_if(array_new[i32] (2, !{ i -> i + 1 }), true);
+  s

@@ -483,6 +483,11 @@ inductive VSugar where
   suspended, `f({ () -> e }, …)`; any other function takes `e` first, `f(e, …)`. Elaborated away
   by `Frontend.Elab.Effects`.  `[spec §33]` -/
   | pipe
+  /-- `writes(x, …) V`: the closure `V` assigns the enclosing body's `let mut` variables `x, …`
+  (SPEC §41, rule R3). It is given at a block parameter of a call, which passes them in and back
+  out at each call of it; anywhere else it is refused. Elaborated away by `Frontend.Elab.Effects`.
+  `[spec §41]` -/
+  | writes (xs : List String)
   deriving DecidableEq, Repr, Inhabited
 
 /-- What a loop walks, as the program writes it (`docs/loops.md` §2.1), with the loop's value
@@ -1031,5 +1036,31 @@ def VTy.rowEffs : VTy → List (Ident × List VTy)
 def VTy.ofRowEffs (sp : Span) (es : List (Ident × List VTy)) : VTy :=
   es.foldl (fun R (e, As) => .app sp R (As.foldl (fun G A => .app sp G A) (.name e.span e.name)))
     (.name sp "")
+
+mutual
+/-- A surface leaf satisfying `p` in a value. -/
+def Val.anySugar (p : VSugar → Bool) : Val → Bool
+  | .sugar _ s => p s
+  | .pair _ V W | .app _ V W => V.anySugar p || W.anySugar p
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.anySugar p
+  | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.anySugar p
+  | _ => false
+
+/-- A surface leaf satisfying `p` in a computation. -/
+def Comp.anySugar (p : VSugar → Bool) : Comp → Bool
+  | .ret _ V | .absurd _ V => V.anySugar p
+  | .bind _ _ _ M N _ | .with_ _ M N => M.anySugar p || N.anySugar p
+  | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
+  | .nuOut _ M | .ascribe _ M _ => M.anySugar p
+  | .letUnit _ V M | .letPair _ _ _ V M => V.anySugar p || M.anySugar p
+  | .case _ V _ M _ N => V.anySugar p || M.anySugar p || N.anySugar p
+  | .loop _ _ _ V M N => V.anySugar p || M.anySugar p || N.anySugar p
+  | .perform _ _ _ V | .abort _ _ _ V => V.anySugar p
+  | .handle _ _ _ hr hc M => hr.anySugar p || hc.anySugar p || M.anySugar p
+  | .unwind _ _ _ M D N => M.anySugar p || D.anySugar p || N.anySugar p
+  | .withbor2r _ _ _ _ _ _ _ _ M => M.anySugar p
+  | .force .. | .top _ => false
+end
 
 end Frontend

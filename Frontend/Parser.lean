@@ -191,6 +191,9 @@ structure PState where
   taken : List String := []
   /-- Each renamed binder, and the name the source writes it with. -/
   renamed : List (String × String) := []
+  /-- A `run` just read that hands back what it writes (`blockThreads`): its binding must take
+  them apart (SPEC §41, rule R3). -/
+  pendingRun : Option Span := none
 
 abbrev P := StateT PState (Except Error)
 
@@ -260,6 +263,13 @@ def rebindOf? (x : Ident) (V : Val) : P (Option String) := do
   | .app _ _ A => pure (if (argsOf A).any (fun | .var _ z => z == y | _ => false) then some y else none)
   | _ => pure none
 
+/-- A place `x` the construct being read rebinds (a lend, a borrow block's place): in a surface
+body, a write of `x` when it is a `let mut` variable (SPEC §41, rule R2). Core text, a printed
+program included, writes its joins out. -/
+def notePlaceWrite (x : String) : P Unit := do
+  let s ← get
+  if s.resolve && s.surf && s.muts.contains x then set { s with assigned := x :: s.assigned }
+
 /-- The binder of `x <- M`: when `x` resolves to a `let mut` variable, an assignment of it
 (SPEC §41, rule R2), else a new binder. -/
 def bindOrAssign (x : Ident) : P Ident := do
@@ -277,14 +287,19 @@ def inClosure {α} (p : P α) : P α := do
   modify fun s => { s with inLoop := l₀ }
   pure r
 
-/-- Parse the head of a binding: its computation, and the enclosing `let mut` variables it
-assigns, in the order they were declared. The `let mut`s it declares are its own. -/
-def headOf (p : P α) : P (α × List String) := do
+/-- A frame of the write rule (SPEC §41, rule R2): `p` read with a write set of its own, and the
+enclosing `let mut` variables it writes, in the order they were declared. What it writes, the
+enclosing frame writes too. The `let mut`s it declares are its own, and so is what its last
+construct leaves to be handed on (`joined`, `blockThreads`, `pendingRun`). Every construct
+whose parts write reads them in a frame: a binding's head, an arm, a block, a closure, a borrow
+block, `with`, `modify` and `run`. -/
+def frame (p : P α) : P (α × List String) := do
   let s₀ ← get
   set { s₀ with assigned := [] }
   let M ← p
   let a := (← get).assigned
-  modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned ++ a }
+  modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned ++ a, joined := s₀.joined,
+                           blockThreads := s₀.blockThreads, pendingRun := s₀.pendingRun }
   pure (M, (s₀.muts.filter a.contains).reverse)
 
 /-- Parse a loop's body: in a function's body, a statement `return e` in it returns from the
@@ -994,6 +1009,21 @@ def varPat (sp : Span) : List String → Pat
   | [x] => .var ⟨x, sp⟩
   | x :: xs => .pair sp (.var ⟨x, sp⟩) (varPat sp xs)
 
+/-- A frame that hands back what it writes beside its value, with no place to rebind: `run M`, and
+`modify &mut x { … }`, whose lend rebinds `x` (SPEC §41, rule R3). -/
+def Val.handsBack : Val → Bool
+  | .run .. => true
+  | .app _ (.app _ (.sugar _ (.borrow .modify _)) (.lend ..)) _ => true
+  | _ => false
+
+/-- A `run` that writes, read in the value `V` of a statement or binding, is `V` itself: inside an
+expression what it writes could not be handed back (SPEC §41, rule R3). -/
+def checkRun (V : Val) : P Unit := do
+  if let some sp := (← get).pendingRun then
+    unless V matches .run .. do
+      failAt sp ("this `run` assigns an enclosing `let mut` variable inside an expression, where " ++
+        "what it writes cannot be handed back: bind it first, `let r = run …;` (SPEC §41, rule R3)")
+
 /-- `p = V; M` for a value `V`: a borrow block or `modify` on a place rebinds the place, which the
 block hands back first; a value with a lent capability is bound first; the core forms
 `let () = V` and `let (x, y) = V` are kept. -/
@@ -1004,6 +1034,10 @@ def letVal (sp : Span) (n : Nat) (p : Pat) (A : Option VTy) (V : Val) (M : Comp)
     -- The variables the block hands back beside its result are rebound too.
     let p := if thr.isEmpty then p else .pair sp p (varPat sp thr)
     return .bind sp ⟨b, sp⟩ none (.ret sp V) (← bindPat sp n (.pair sp place p) (.var sp b) M) false
+  -- `run M` and `modify &mut x { … }` hand back what they write beside their value.
+  if !thr.isEmpty && V.handsBack then
+    let b ← freshName "io_b"
+    return .bind sp ⟨b, sp⟩ none (.ret sp V) (← bindPat sp n (.pair sp p (varPat sp thr)) (.var sp b) M) false
   match p, A with
   | .var x, _ => pure (.bind sp x A (.ret sp V) M false)
   | .wild sp', _ => pure (.bind sp ⟨← freshName "io_d", sp'⟩ A (.ret sp V) M false)
@@ -1083,45 +1117,63 @@ def wrapTerms (f : Comp → Comp) : Comp → Comp
   | .loop sp ℓ src V M N => .loop sp ℓ src V M (wrapTerms f N)
   | T => f T
 
+/-- A closure `V` that writes the enclosing `let mut` variables `xs`, marked with them (SPEC §41,
+rule R3); itself when it writes none. -/
+def writesOf (sp : Span) (xs : List String) (V : Val) : Val :=
+  if xs.isEmpty then V else .app sp (.sugar sp (.writes xs)) V
+
 /-- The tuple of the variables `xs`. -/
 def varTuple (sp : Span) : List String → Val
   | [] => .unit sp
   | [x] => .var sp x
   | x :: xs => .pair sp (.var sp x) (varTuple sp xs)
 
-/-- A `match` or `if` whose arms assign the `let mut` variables `xs`: each arm ends by handing
-them on (the join; typed elaboration §5.2). -/
-def joinArms (xs : List String) : Comp → Comp
+/-- How a frame hands on what it writes (SPEC §41, rule R3): the frame's value bound at each
+terminal (`t`, typed `A`), and the value beside the variables, or the variables alone when the
+value is dropped (`keep`). -/
+structure HandOn where
+  t : String
+  A : Option VTy := none
+  keep : Bool := true
+
+/-- The frame `M` handing on the `let mut` variables `xs` it writes (SPEC §41, rule R3): each
+terminal reached through tail positions ends by handing them on (`HandOn`). This is the one way
+a frame's writes leave it: an arm and a binding's head (the joins of typed elaboration §5.2), a
+borrow block, `with`, `modify` and `run`. -/
+def handOn (h : HandOn) (xs : List String) (M : Comp) : Comp :=
+  wrapTerms (fun T =>
+    .bind T.span ⟨h.t, T.span⟩ h.A T
+      (.ret T.span (if h.keep then .pair T.span (.var T.span h.t) (varTuple T.span xs)
+        else varTuple T.span xs)) false) M
+
+/-- `M` handing on `xs`, bound before `N` (`j <- M; N`): the pattern `p` of its value, beside
+the variables bound again, or the variables alone when there is no value (`p` none). -/
+def joinBind (sp : Span) (n : Nat) (xs : List String) (p : Option Pat) (M : Comp) (N : Comp) :
+    P Comp := do
+  let j ← freshName "io_j"
+  let q := match p with
+    | some p => .pair sp p (varPat sp xs)
+    | none => varPat sp xs
+  return .bind sp ⟨j, sp⟩ none M (← bindPat sp n q (.var sp j) N) false
+
+/-- A `match`'s or `if`'s arms handing on the variables `xs` alone (a statement's join). -/
+def handArms (xs : List String) : Comp → Comp
   | .case sp V x M y N =>
-    let hand (T : Comp) : Comp :=
-      .bind T.span ⟨"io_ju", T.span⟩ none T (.ret T.span (varTuple T.span xs)) false
-    .case sp V x (wrapTerms hand M) y (wrapTerms hand N)
+    let h : HandOn := { t := "io_ju", keep := false }
+    .case sp V x (handOn h xs M) y (handOn h xs N)
   | M => M
 
-/-- A head of a binding (`let p = M; N`, `x <- M; N`) whose computation assigns the enclosing
-`let mut` variables `xs`: each terminal of `M` ends by handing them on beside its value, typed
-`A`, and the binding takes the pair apart, binding the value by `p` and rebinding the variables
-before `N` (the join; typed elaboration §5.2). -/
-def joinHead (sp : Span) (n : Nat) (xs : List String) (A : Option VTy) (M : Comp) (p : Pat)
-    (N : Comp) : P Comp := do
-  let hand (T : Comp) : Comp :=
-    .bind T.span ⟨"io_jr", T.span⟩ A T
-      (.ret T.span (.pair T.span (.var T.span "io_jr") (varTuple T.span xs))) false
-  let j ← freshName "io_j"
-  return .bind sp ⟨j, sp⟩ none (wrapTerms hand M)
-    (← bindPat sp n (.pair sp p (varPat sp xs)) (.var sp j) N) false
-
 /-- `x <- M; N`, `x : A <- M; N` or `linear x <- M; N`, with the finaliser `unwind (D)` when it has
-one. A head that assigns the enclosing `let mut` variables `xs` hands them on (`joinHead`), and
-`x` is bound to its value. -/
-def bindHead (sp : Span) (n : Nat) (x : Ident) (A : Option VTy) (M : Comp) (D : Option Comp)
+one. A head that writes the enclosing `let mut` variables `xs` hands them on beside its value, and
+`x` is bound to the value. -/
+def bindForm (sp : Span) (n : Nat) (x : Ident) (A : Option VTy) (M : Comp) (D : Option Comp)
     (N : Comp) (lin : Bool) (xs : List String) : P Comp := do
   let mk (M : Comp) : Comp := match D with
     | some D => .unwind sp x A M D N
     | none => .bind sp x A M N lin
   if xs.isEmpty then return mk M
   let v ← freshName "io_jv"
-  joinHead sp n xs A M (.var ⟨v, sp⟩) (mk (.ret sp (.var sp v)))
+  joinBind sp n xs (some (.var ⟨v, sp⟩)) (handOn { t := "io_jr", A } xs M) (mk (.ret sp (.var sp v)))
 
 /-- The loop's value, bound after it (`let r = for …`): `forRes`, applied to the thunk of the
 `else` value when there is one. -/
@@ -1141,14 +1193,12 @@ def val : Nat → P Val
     let st ← startPos
     let t ← peek
     match t.tok with
-    | .kw "thunk" => discard bump; let M ← inClosure (comp n); pure (.thunk (← spanFrom st) M)
-    | .kw "thunkv" => discard bump; let M ← inClosure (comp n); pure (.thunkv (← spanFrom st) M)
+    | .kw "thunk" => discard bump; closureOf n st .thunk
+    | .kw "thunkv" => discard bump; closureOf n st .thunkv
     | .sym "!" =>
       discard bump
-      if ← isKw "thunk" then
-        discard bump; let M ← inClosure (comp n); pure (.bangThunk (← spanFrom st) M)
-      else if ← isKw "thunkv" then
-        discard bump; let M ← inClosure (comp n); pure (.bangThunkv (← spanFrom st) M)
+      if ← isKw "thunk" then discard bump; closureOf n st .bangThunk
+      else if ← isKw "thunkv" then discard bump; closureOf n st .bangThunkv
       else if ← isSym "{" then brace n st true
       else expected "`thunk`, `thunkv` or `{` after `!`"
     | .sym "{" => brace n st false
@@ -1202,6 +1252,15 @@ def rest : Nat → P (List Val)
     if ← isSym "," then discard bump; return W :: (← rest n)
     pure [W]
 
+/-- `thunk M`, `thunkv M` and their `!` forms (`k`): a closure, marked with the enclosing `let mut`
+variables it writes (`writesOf`). -/
+def closureOf : Nat → Pos → (Span → Comp → Val) → P Val
+  | 0, _, _ => outOfFuel
+  | n + 1, st, k => do
+    let (M, w) ← inClosure (frame (comp n))
+    let sp ← spanFrom st
+    pure (writesOf sp w (k sp M))
+
 /-- A block: `{ S }`, or a closure `{ p -> S }`; `!` before it makes it persistent. -/
 def brace : Nat → Pos → Bool → P Val
   | 0, _, _ => outOfFuel
@@ -1216,7 +1275,7 @@ def brace : Nat → Pos → Bool → P Val
     match p? with
     | some p => withScope do
       let p ← bindPatNames p
-      let M ← blockBody n
+      let (M, w) ← frame (comp n)
       expectSym "}"
       let sp ← spanFrom st
       let (x, M) ← match p with
@@ -1225,12 +1284,12 @@ def brace : Nat → Pos → Bool → P Val
           let x : Ident := ⟨← freshName "io_c", sp⟩
           pure (x, ← bindPat sp n p (.var sp x.name) M)
       let lam := Comp.lam sp x (holeTy sp) M
-      pure (if bang then .bangThunkv sp lam else .thunkv sp lam)
+      pure (writesOf sp w (if bang then .bangThunkv sp lam else .thunkv sp lam))
     | none =>
-      let M ← blockBody n
+      let (M, w) ← frame (comp n)
       expectSym "}"
       let sp ← spanFrom st
-      pure (.app sp (.sugar sp .brace) (if bang then .bangThunk sp M else .thunk sp M))
+      pure (writesOf sp w (.app sp (.sugar sp .brace) (if bang then .bangThunk sp M else .thunk sp M)))
 
 /-- A prefix keyword applied to a prefix expression, or a spine. -/
 def valPrefix : Nat → P Val
@@ -1257,9 +1316,29 @@ def valPrefix : Nat → P Val
       let V ← valPrefix n
       pure (.boxed (← spanFrom st) a V)
     | .kw "run" =>
+      -- `run M` hands back what `M` writes beside its value, which its binding takes apart
+      -- (SPEC §41, rule R3).
       discard bump
-      let M ← compPrefix n
-      pure (.run (← spanFrom st) M)
+      let (M, w) ← inClosure (frame (compPrefix n))
+      let sp ← spanFrom st
+      if w.isEmpty then return .run sp M
+      modify fun s => { s with blockThreads := w, joined := [], pendingRun := some sp }
+      pure (.run sp (handOn { t := "io_bt" } w M))
+    | .kw "writes" =>
+      -- `writes(x, …) V`, as `bcc print` writes a closure that assigns (SPEC §41, rule R3); in a
+      -- surface body the parser finds what a closure writes itself.
+      discard bump
+      if (← get).resolve && (← get).surf then
+        failAt t.span "`writes(…)` is the printed form of a closure that assigns; in a surface body it is not written"
+      expectSym "("
+      let mut xs : Array String := #[]
+      for _ in [0:n] do
+        if ← isSym ")" then break
+        xs := xs.push (← ident "a variable").name
+        if ← isSym "," then discard bump
+      expectSym ")"
+      let V ← valPrefix n
+      pure (.app (← spanFrom st) (.sugar t.span (.writes xs.toList)) V)
     | .kw "shorten_mut" | .kw "shorten_imm" =>
       discard bump
       expectSym "["
@@ -1299,6 +1378,8 @@ def borrowBlock : Nat → P Val
       else if ← isKw "mut" then discard bump; pure .mut
       else expected "`imm` or `mut` after `borrow`"
     let place ← valPrefix n
+    -- A borrow block rebinds its place: a write of a `let mut` place (SPEC §41, rule R2).
+    if let .var _ x := place then notePlaceWrite x
     let k := match k, place with
       | .mut, .pair .. => BorrowKind.famMut
       | k, _ => k
@@ -1308,31 +1389,25 @@ def borrowBlock : Nat → P Val
       else if k == .modify then pure "" else freshName "io_l"
     let p ← pat n
     expectSym "->"
-    let s₀ ← get
-    set { s₀ with assigned := [] }
-    let (p, M) ← withScope do
+    let ((p, M), w) ← frame (withScope do
       let p ← bindPatNames p
-      pure (p, ← comp n)
-    let assigned := (← get).assigned
-    modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned }
+      pure (p, ← comp n))
     expectSym "}"
     let sp ← spanFrom st
     -- The variables the block hands back beside its result, as a `for` hands back what its body
-    -- assigns: the enclosing `let mut` variables it assigns, the places it lends that it does not
+    -- assigns: the enclosing `let mut` variables it writes, the places it lends that it does not
     -- bind itself (a capability lent with `&mut stdout`, a buffer lent to `push`), and the
     -- standard capabilities it uses.
     let bound := M.boundNames ++ (match p with | .var b => [b.name] | _ => [])
     let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
-    let thr := ((s₀.muts.filter assigned.contains).reverse ++
-      (M.lentNames.filter (fun x => !bound.contains x)) ++ M.withPlaces (match p with | .var b => [b.name] | _ => []) ++ caps).eraseDups
-    -- A body already handing its variables back (a printed program read again) is kept.
-    let thr := if k == .modify || bound.contains "io_bt" then [] else thr
-    let M := if thr.isEmpty then M else
-      wrapTerms (fun T => .bind T.span ⟨"io_bt", T.span⟩ none T
-        (.ret T.span (.pair T.span (.var T.span "io_bt") (varTuple T.span thr))) false) M
-    -- The `let mut` variables the block hands back are assigned where the block is.
-    modify fun s => { s with blockThreads := thr, joined := [],
-                             assigned := s.assigned ++ thr.filter s₀.muts.contains }
+    let thr := (w ++ (M.lentNames.filter (fun x => !bound.contains x)) ++
+      M.withPlaces (match p with | .var b => [b.name] | _ => []) ++ caps).eraseDups
+    -- A body already handing its variables back (a printed program read again) is kept. A
+    -- `modify` hands back only the variables it writes: its body's value is the place's new
+    -- content.
+    let thr := if bound.contains "io_bt" then [] else if k == .modify then w else thr
+    let M := if thr.isEmpty then M else handOn { t := "io_bt" } thr M
+    modify fun s => { s with blockThreads := thr, joined := [] }
     let (b, M) ← match p with
       | .var b => pure (b, M)
       | p => do
@@ -1388,25 +1463,18 @@ def withBlock : Nat → P Val
         expectSym "->"
         pure (x.name, b)
       else pure (← freshName "fx_l", (⟨← freshName "fx_c", t.span⟩ : Ident))
-    let s₀ ← get
-    set { s₀ with assigned := [] }
-    let (b, M) ← withScope do
+    let ((b, M), w) ← frame (withScope do
       let b ← bindName b
-      pure (b, ← comp n)
-    let assigned := (← get).assigned
-    modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned }
+      pure (b, ← comp n))
     expectSym "}"
     let sp ← spanFrom st
     let bound := b.name :: M.boundNames
     let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
-    let thr := ((s₀.muts.filter assigned.contains).reverse ++
-      (M.lentNames.filter (fun x => !bound.contains x)) ++ M.withPlaces [b.name] ++ caps).eraseDups
+    let thr := (w ++ (M.lentNames.filter (fun x => !bound.contains x)) ++ M.withPlaces [b.name] ++
+      caps).eraseDups
     let thr := if bound.contains "io_bt" then [] else thr
-    let M := if thr.isEmpty then M else
-      wrapTerms (fun T => .bind T.span ⟨"io_bt", T.span⟩ none T
-        (.ret T.span (.pair T.span (.var T.span "io_bt") (varTuple T.span thr))) false) M
-    modify fun s => { s with blockThreads := thr, joined := [],
-                             assigned := s.assigned ++ thr.filter s₀.muts.contains }
+    let M := if thr.isEmpty then M else handOn { t := "io_bt" } thr M
+    modify fun s => { s with blockThreads := thr, joined := [] }
     pure (.app sp (.app sp (.sugar t.span (.handle h.name x As nm)) place)
       (.thunkv sp (.lam sp b (holeTy sp) M)))
 
@@ -1519,6 +1587,8 @@ def valAtom : Nat → P Val
       discard bump
       let m ← if ← isKw "mut" then do discard bump; pure Mode.mut else pure Mode.imm
       let x ← lookIdent (← ident "the name of a place")
+      -- A lend rebinds its place: a write of a `let mut` place (SPEC §41, rule R2).
+      notePlaceWrite x.name
       pure (.lend (← spanFrom st) x m)
     | tok =>
       match constKw? tok with
@@ -1553,7 +1623,7 @@ def compG : Nat → Bool → P Comp
     match t.tok, t1.tok with
     | .ident x, .sym "<-" =>
       discard bump; discard bump
-      let (M, xs) ← headOf (compG n true)
+      let (M, xs) ← frame (compG n true)
       -- `x <- M unwind (D); N` (SPEC §19).
       let D ← unwindOf n
       expectSym ";"
@@ -1561,19 +1631,19 @@ def compG : Nat → Bool → P Comp
       let x ← bindOrAssign ⟨x, t.span⟩
       let N ← comp n
       let sp ← spanFrom st
-      bindHead sp n x none M D N false xs
+      bindForm sp n x none M D N false xs
     | .ident x, .sym ":" =>
       discard bump; discard bump
       let A ← vty n
       expectSym "<-"
-      let (M, xs) ← headOf (compG n true)
+      let (M, xs) ← frame (compG n true)
       let D ← unwindOf n
       expectSym ";"
       withScope do
       let x ← bindOrAssign ⟨x, t.span⟩
       let N ← comp n
       let sp ← spanFrom st
-      bindHead sp n x (some A) M D N false xs
+      bindForm sp n x (some A) M D N false xs
     | .ident x₀, .sym "=" =>
       -- `x = e`: a `let mut` variable rebound (typed elaboration §5.2), the variable the name
       -- resolves to (SPEC §41, rule R2).
@@ -1581,31 +1651,33 @@ def compG : Nat → Bool → P Comp
       let x ← lookName x₀
       unless (← get).muts.contains x do
         failAt t.span s!"`{x₀}` is assigned, but it is not declared `let mut`"
-      modify fun s => { s with assigned := x :: s.assigned, blockThreads := [] }
+      modify fun s => { s with assigned := x :: s.assigned, blockThreads := [], pendingRun := none }
       let V ← val n
       let thr := (← get).blockThreads
+      checkRun V
+      let isFrame := V.rebinds.isSome || (!thr.isEmpty && V.handsBack)
       if !head && (← isSym ";") then
         discard bump
         let N ← comp n
         let sp ← spanFrom st
-        -- A block's value is rebound as `let x = …` binds it (`letVal`).
-        if V.rebinds.isSome then return ← letVal sp n (.var ⟨x, t.span⟩) none V N thr
+        -- A frame's value is rebound as `let x = …` binds it (`letVal`).
+        if isFrame then return ← letVal sp n (.var ⟨x, t.span⟩) none V N thr
         pure (.bind sp ⟨x, t.span⟩ none (.ret V.span V) N false)
       else
         let sp ← spanFrom st
-        if V.rebinds.isSome then return ← letVal sp n (.var ⟨x, t.span⟩) none V (.ret sp (.unit sp)) thr
+        if isFrame then return ← letVal sp n (.var ⟨x, t.span⟩) none V (.ret sp (.unit sp)) thr
         pure (.bind sp ⟨x, t.span⟩ none (.ret V.span V) (.ret sp (.unit sp)) false)
     | .kw "linear", .ident x =>
       discard bump
       let xt ← bump
       let A ← if ← isSym ":" then do discard bump; pure (some (← vty n)) else pure none
       expectSym "<-"
-      let (M, xs) ← headOf (compG n true)
+      let (M, xs) ← frame (compG n true)
       expectSym ";"
       withScope do
       let x ← bindOrAssign ⟨x, xt.span⟩
       let N ← comp n
-      bindHead (← spanFrom st) n x A M none N true xs
+      bindForm (← spanFrom st) n x A M none N true xs
     | .kw "for", _ | .kw "while", _ | .kw "loop", .sym "{" => loopC n st none
     | .life l, .sym ":" =>
       -- `'ℓ: for …`, `'ℓ: while …`, `'ℓ: loop …`: a labelled loop.
@@ -1670,21 +1742,22 @@ def compG : Nat → Bool → P Comp
         let sp ← spanFrom st
         return .loop sp ℓ (.each x) V M (.bind sp r A (.ret sp (forResOf sp els)) N false)
       if (← peek).tok == .kw "match" || (← peek).tok == .kw "if" then
-        let (M, xs) ← headOf (compPrefix n)
+        let (M, xs) ← frame (compPrefix n)
         expectSym ";"
         let p ← bindP
         let N ← comp n
         let sp ← spanFrom st
         -- The `let mut` variables its arms assign are handed on to what follows.
-        unless xs.isEmpty do return ← joinHead sp n xs A M p N
+        unless xs.isEmpty do return ← joinBind sp n xs (some p) (handOn { t := "io_jr", A } xs M) N
         match p with
         | .var x => return .bind sp x A M N false
         | p =>
           let tv ← freshName "io_t"
           return .bind sp ⟨tv, sp⟩ A M (← bindPat sp n p (.var sp tv) N) false
-      modify fun s => { s with blockThreads := [] }
+      modify fun s => { s with blockThreads := [], pendingRun := none }
       let V ← val n
       let thr := (← get).blockThreads
+      checkRun V
       expectSym ";"
       let p ← bindP (some V)
       let N ← comp n
@@ -1719,7 +1792,7 @@ def statement : Nat → Pos → Bool → P Comp
   | n + 1, st, head => do
     let t ← peek
     let t1 ← peekAt 1
-    modify fun s => { s with joined := [], blockThreads := [] }
+    modify fun s => { s with joined := [], blockThreads := [], pendingRun := none }
     -- A statement expression, and the place it rebinds.
     let (S, rebind) ← match t.tok, t1.tok with
       | .kw "return", _ =>
@@ -1761,29 +1834,34 @@ def statement : Nat → Pos → Bool → P Comp
           pure (Comp.ret (← spanFrom st) V, V.rebinds)
     let joined := (← get).joined
     let thr := (← get).blockThreads
+    -- A frame's value: a borrow block or `modify` on a place, which rebinds it, or a frame that
+    -- hands back what it writes beside its value.
+    let frameV : Option Val := match S with
+      | .ret _ V => if rebind.isSome || (!thr.isEmpty && V.handsBack) then some V else none
+      | _ => none
+    match S with
+    | .ret _ V => checkRun V
+    | _ => pure ()
     if !head && (← isSym ";") then
       discard bump
       let N ← comp n
       let sp ← spanFrom st
       -- A `match` or `if` that assigns `let mut` variables hands them on to what follows.
       if !joined.isEmpty then
-        let j ← freshName "io_j"
-        return .bind sp ⟨j, sp⟩ none (joinArms joined S)
-          (← bindPat sp n (varPat sp joined) (.var sp j) N) false
-      match S, rebind with
-      | .ret _ V, some _ =>
-        letVal sp n (.wild sp) none V N thr
-      | S, _ =>
+        return ← joinBind sp n joined none (handArms joined S) N
+      match frameV with
+      | some V => letVal sp n (.wild sp) none V N thr
+      | none =>
         let d ← freshName "io_s"
         pure (.bind sp ⟨d, sp⟩ none S N false)
     else
-      match S, rebind with
-      | .ret _ V, some _ =>
-        -- A tail borrow block hands back its result; the place is rebound, and dropped.
+      match frameV with
+      | some V =>
+        -- A tail frame hands back its result; the place is rebound, and dropped.
         let sp ← spanFrom st
         let v ← freshName "io_v"
         letVal sp n (.var ⟨v, sp⟩) none V (.ret sp (.var sp v)) thr
-      | S, _ => pure S
+      | none => pure S
 
 /-- A prefix keyword applied to its operand, or a spine. -/
 def compPrefix : Nat → P Comp
@@ -1885,38 +1963,6 @@ def compSuffixes : Nat → Pos → Comp → P Comp
       compSuffixes n st (.inst (← spanFrom st) M a)
     | _ => pure M
 
-/-- An arm of a `match` or `if`: its computation, and the `let mut` variables it assigns. The
-`let mut`s it declares are its own. -/
-def armOf : Nat → P (Comp × List String)
-  | 0 => outOfFuel
-  | n + 1 => do
-    let s₀ ← get
-    set { s₀ with assigned := [] }
-    let M ← comp n
-    let a := (← get).assigned
-    modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned ++ a }
-    pure (M, a)
-
-/-- `else if …`: an `if` as the arm, with what it assigns. -/
-def armIf : Nat → P (Comp × List String)
-  | 0 => outOfFuel
-  | n + 1 => do
-    let s₀ ← get
-    set { s₀ with assigned := [] }
-    let M ← compAtom n
-    let a := (← get).assigned
-    modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned ++ a }
-    pure (M, a)
-
-/-- A block's body: assignments inside it are not the enclosing arm's. -/
-def blockBody : Nat → P Comp
-  | 0 => outOfFuel
-  | n + 1 => do
-    let s₀ ← get
-    let M ← comp n
-    modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned }
-    pure M
-
 /-- The finaliser `unwind (D)` after the head of a binding, when it has one (SPEC §19). -/
 def unwindOf : Nat → P (Option Comp)
   | 0 => outOfFuel
@@ -1933,10 +1979,14 @@ def forElse : Nat → P (Option Comp)
   | 0 => outOfFuel
   | n + 1 => do
     unless ← isKw "else" do return none
+    let st ← startPos
     discard bump
     expectSym "{"
-    let d ← inClosure (blockBody n)
+    let (d, w) ← inClosure (frame (comp n))
     expectSym "}"
+    if let x :: _ := w then
+      failAt (← spanFrom st) (s!"this `else` value assigns `{x}`: a `for`'s `else` value is " ++
+        "not provided with an assignment of an enclosing `let mut` (SPEC §41, rule R3)")
     pure (some d)
 
 /-- A loop, from its keyword (`for`, `while` or `loop`), labelled `ℓ`; `st` is where it starts
@@ -2031,7 +2081,7 @@ def compAtom : Nat → P Comp
       expectSym "->"
       let (x, M, a₁) ← withScope do
         let x ← bindName x
-        let (M, a) ← armOf n
+        let (M, a) ← frame (comp n)
         pure (x, M, a)
       expectSym "|"
       expectKw "inr"
@@ -2039,7 +2089,7 @@ def compAtom : Nat → P Comp
       expectSym "->"
       let (y, N, a₂) ← withScope do
         let y ← bindName y
-        let (N, a) ← armOf n
+        let (N, a) ← frame (comp n)
         pure (y, N, a)
       expectSym "}"
       -- In the order the variables were declared.
@@ -2055,7 +2105,7 @@ def compAtom : Nat → P Comp
       expectSym "->"
       let (p, M, a₁) ← withScope do
         let p ← bindPatNames p
-        let (M, a) ← armOf n
+        let (M, a) ← frame (comp n)
         pure (p, M, a)
       expectSym "|"
       expectKw "inr"
@@ -2063,7 +2113,7 @@ def compAtom : Nat → P Comp
       expectSym "->"
       let (q, N, a₂) ← withScope do
         let q ← bindPatNames q
-        let (N, a) ← armOf n
+        let (N, a) ← frame (comp n)
         pure (q, N, a)
       expectSym "}"
       -- In the order the variables were declared.
@@ -2083,14 +2133,14 @@ def compAtom : Nat → P Comp
       let outer := (← get).muts
       let V ← val n
       expectSym "{"
-      let (M, a₁) ← armOf n
+      let (M, a₁) ← frame (comp n)
       expectSym "}"
       let (N, a₂) ← if ← isKw "else" then do
           discard bump
-          if ← isKw "if" then armIf n
+          if ← isKw "if" then frame (compAtom n)
           else do
             expectSym "{"
-            let r ← armOf n
+            let r ← frame (comp n)
             expectSym "}"
             pure r
         else do
@@ -2379,13 +2429,15 @@ def decl (n : Nat) : P Decl := do
         | .ok A => pure (CTy.ret A.span A)
         | .error _ => liftSort T.toC
       expectSym "="
-      modify fun s => { s with surf := true }
+      -- Each declaration's `let mut` variables are its own.
+      modify fun s => { s with surf := true, muts := [], assigned := [], scope := [] }
       let M ← comp n
       modify fun s => { s with surf := false }
       return .main (← spanFrom st) C M
     expectSym ":"
     let C ← cty n
     expectSym "="
+    modify fun s => { s with muts := [], assigned := [], scope := [] }
     let M ← comp n
     pure (.main (← spanFrom st) C M)
   | _ => expected "a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`)"
@@ -2407,6 +2459,7 @@ where
     expectSym ":"
     let A ← vty n
     expectSym "="
+    modify fun s => { s with muts := [], assigned := [], scope := [] }
     let V ← val n
     pure (.def_ (← spanFrom st) x ps A V mk)
   /-- A `fn` after its keyword (draft 0 §2.5): `name[P₁, …]<'a, …>(x₁: A₁, …, xₙ: Aₙ) -> T = S`,

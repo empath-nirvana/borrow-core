@@ -1294,6 +1294,27 @@ capability. -/
 def threadCap (sp : Span) (e w W : String) : Cap :=
   ⟨e, w, "", ⟨"", e, ⟨"", sp⟩, .unit sp, [], sp, false, false⟩, some W, false, none, false⟩
 
+/-- The capability of an enclosing `let mut` variable `x` that a block writes (SPEC §41, rule R3):
+passed with the block at each call and handed back, as a `for`'s threaded variable is, its type a
+parameter of the copy. -/
+def mutCap (sp : Span) (x : String) : Cap := threadCap sp ("mut " ++ x) x ("IoMut_" ++ x)
+
+/-- A capability of a `let mut` variable a block writes (`mutCap`). -/
+def Cap.isMut (c : Cap) : Bool := c.eff.startsWith "mut "
+
+/-- A closure marked with the enclosing `let mut` variables it writes (`VSugar.writes`), and the
+closure. -/
+def stripWrites : Val → List String × Val
+  | .app _ (.sugar _ (.writes xs)) V => (xs, V)
+  | V => ([], V)
+
+/-- A closure that writes the enclosing `let mut` variable `x` and is not given at a block
+parameter of a call (SPEC §41, rule R3). -/
+def escapingWriter (sp : Span) (x : String) : Error :=
+  ⟨sp, s!"this closure assigns `{x}`, a `let mut` variable of the body it is written in, and is " ++
+    "not given at a block parameter of a call, which would pass it in and back out at each call: " ++
+    "a closure that assigns is called where it is given (SPEC §41, rule R3)"⟩
+
 /-- The sites `ss` and those of `extra` not among them, by static name. -/
 def addSites (ss extra : List Site) : List Site :=
   extra.foldl (fun acc s => if acc.any (·.n == s.n) then acc else acc ++ [s]) ss
@@ -1317,7 +1338,9 @@ structure Blk where
 /-- A capability as a copy takes it: an answering handler's at the copy's own names, a `for`'s
 threaded variable as it is.  `[spec §32]` -/
 def Cap.canon (sp : Span) (c : Cap) : Cap := match c.thr with
-  | some W => { threadCap sp c.eff c.var W with blk := true }
+  -- A `let mut` variable is the copy's own variable, named so that no local of the copy is it.
+  | some W => if c.isMut then { threadCap sp c.eff ("fx_m_" ++ c.var) W with blk := true }
+    else { threadCap sp c.eff c.var W with blk := true }
   | none => ⟨c.eff, capVar c.eff c.name, capLife c.eff c.name, c.h, none, true, c.name, false⟩
 
 
@@ -1380,7 +1403,8 @@ def blkCaps (blks : List Blk) : List Cap := blks.foldl (fun acc b => addCaps acc
 answering handlers whose capabilities the block uses. -/
 def blockKeys (bs : List Blk) : List String :=
   bs.map fun b => s!"b{b.j}" ++ String.join (b.ss.map fun s => s!"n{s.n}") ++
-    String.join ((b.caps.filter (·.thr.isNone)).map fun c => c.h.key)
+    String.join ((b.caps.filter (·.thr.isNone)).map fun c => c.h.key) ++
+    String.join ((b.caps.filter (·.isMut)).map fun c => "m" ++ c.var)
 
 /-- The sites, as the reports name them. -/
 def sitesText (ss : List Site) : String :=
@@ -1438,8 +1462,13 @@ def blockArgs (cx : Cx) (x : String) (W : Val) : Except Error (List Blk) := do
   let some P := (cx.env.sigs.lookup x).bind paramTyOf | return []
   let cps := (cx.env.comps.lookup x).getD []
   let mut out : List Blk := []
-  for ((A, V), j) in (argComps fuel P W).zipIdx do
-    if (rowedFnTy .nil (unrowed A)).isNone then continue
+  for ((A, V₀), j) in (argComps fuel P W).zipIdx do
+    -- A closure that writes enclosing `let mut` variables takes them first and hands them back
+    -- first, as a block's capabilities (SPEC §41, rule R3).
+    let (ws, V) := stripWrites V₀
+    if (rowedFnTy .nil (unrowed A)).isNone then
+      if let x :: _ := ws then throw (escapingWriter V₀.span x)
+      continue
     -- A computation parameter's argument (SPEC §33): what the callee provides is served at its
     -- ports, the rest where the argument is written.
     let prov := ((cps.find? (·.1 == j)).map (·.2.2)).getD []
@@ -1463,9 +1492,9 @@ def blockArgs (cx : Cx) (x : String) (W : Val) : Except Error (List Blk) := do
       | V => rowV cx.env fuel V
     let row := cx.env.withoutAll row₀ prov
     let ctl := cx.ctl row
-    -- The capabilities it uses (an answering handler's state, a `for`'s threaded variables) are
-    -- passed with it at each call (SPEC §32).
-    let cs := cx.need row
+    -- The capabilities it uses (an answering handler's state, a `for`'s threaded variables, the
+    -- `let mut` variables it writes) are passed with it at each call (SPEC §32, §41).
+    let cs := cx.need row ++ ws.map (mutCap V₀.span)
     if ctl.isEmpty && cs.isEmpty && !isComp then continue
     match V with
     | .thunkv .. | .bangThunkv .. => pure ()
@@ -1797,7 +1826,12 @@ def trV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
     let ret := !cx.fnCaps.isEmpty && retIn fuel V
     -- A layer's `call` is the member's call, which threads the environment.
     let lcall := cx.lcallV V
-    if !needs && !unhandled && !ret && !lcall && !withInV cx.env fuel V then return ([], V)
+    -- A closure that writes is given at a block parameter, or refused (`goV`).
+    let writes := V.anySugar (· matches .writes _)
+    -- A call of a block parameter whose block takes capabilities passes them (`blockParamCall`).
+    let cbCall := cx.cbs.any fun (y, _, bcs) => !bcs.isEmpty && Frontend.Check.mentionsV y V
+    if !needs && !unhandled && !ret && !lcall && !writes && !cbCall && !withInV cx.env fuel V then
+      return ([], V)
     let (V, pre) ← if needs || lcall then (liftPlain cx fuel V).run [] else pure (V, [])
     let (bs, V') ← goV n cx cs V
     pure (pre ++ bs, V')
@@ -1860,6 +1894,8 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
       let M' ← trC k cx csM true M
       let blk := Val.app sp (.app sp₂ (.sugar ksp k') P') (.thunkv tsp (.lam lsp b A M'))
       blockResult k cx sp blk csM
+    -- A closure that writes and is not given at a block parameter (SPEC §41, rule R3).
+    | .app sp (.sugar _ (.writes xs)) _ => throw (escapingWriter sp (xs.headD "?"))
     -- `y.op(W)`: the operation at the handler named `y` (SPEC §38).
     | .app sp (.sugar osp (.named y x)) W => do
       let some o := cx.env.op? x
@@ -2267,8 +2303,9 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
     let ports : List (Nat × List (Site × Bool)) := if early then ((stP.ports.lookup name₀).getD []) else []
     let mut bs : List Bind := []
     let mut vs : List Val := []
-    for ((_, V), j) in (argComps fuel P W).zipIdx do
+    for ((_, V₀), j) in (argComps fuel P W).zipIdx do
       if let some blk := blks.find? (·.j == j) then
+        let V := (stripWrites V₀).2
         -- A block sees the sites where it is written, and the capabilities it uses, which it takes
         -- first and hands back first (SPEC §32); at a computation parameter, the ports of what
         -- the callee provides (SPEC §33).
@@ -2289,7 +2326,7 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
         | .bangThunkv tsp M => vs := vs ++ [.bangThunkv tsp (← body M)]
         | V => vs := vs ++ [V]
       else
-        let (b, V') ← goV k cx cs V
+        let (b, V') ← goV k cx cs V₀
         bs := bs ++ b
         vs := vs ++ [V']
     let rec tuple : List Val → Val
@@ -2299,8 +2336,10 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
     let W' := tuple vs
     let used := addCaps (cx.needIn row) (blkCaps blks)
     let name ← if early then pure name₀ else copyFor k cx sp x g row blks
+    -- A copy that takes `let mut` variables is generic in their types too, which the call's
+    -- arguments give: its type arguments are all inferred.
     let f' : Val := match f with
-      | .defApp fsp _ As => .defApp fsp name As
+      | .defApp fsp _ As => if (blkCaps blks).any (·.isMut) then .var f.span name else .defApp fsp name As
       | _ => .var f.span name
     let t ← fresh "fx_b"
     let r ← fresh "fx_v"
@@ -2312,9 +2351,12 @@ def blockCall : Nat → Cx → List Cap → Span → Val → String → FSig →
         ps.map fun (p, _) => s!"`{p.eff}` at the port {p.n} of `{x}`")
     report sp "call" (s!"{x} → `{name}`, " ++ ", ".intercalate blkT ++
       (if used.isEmpty then "" else ", passing the capabilities"))
-    let ann := if used.isEmpty then none else (closedResult g.decl).map (capsTy sp used)
-    let N' (N : Comp) : Comp := if ann.isSome || used.isEmpty then N else
-      used.foldr (fun c K => .bind sp ⟨c.var, sp⟩ (some (c.ty sp))
+    -- A `let mut` variable's type is a parameter of the copy, known where it is bound.
+    let typed := used.filter (!·.isMut)
+    let ann := if used.isEmpty || typed.length != used.length then none
+      else (closedResult g.decl).map (capsTy sp used)
+    let N' (N : Comp) : Comp := if ann.isSome || typed.isEmpty then N else
+      typed.foldr (fun c K => .bind sp ⟨c.var, sp⟩ (some (c.ty sp))
         (.ret sp (.var sp c.var)) K false) N
     let bind : Bind := fun N => do
       pure (.bind sp ⟨t, sp⟩ ann (.ret sp (.app sp f' (capsTuple sp used W')))
@@ -3355,7 +3397,9 @@ def Env.checkWritten (env : Env) (sp : Span) (f : String) (written : List (Ident
 def hasEffects (ds : List Decl) : Bool :=
   ds.any fun
     | .effect .. | .handler .. | .chandler .. => true
-    | .def_ _ _ _ _ _ mk => (match mk with | .row .. => true | _ => false)
+    | .def_ _ _ _ _ V mk => (match mk with | .row .. => true | _ => false) ||
+      V.anySugar (· matches .writes _)
+    | .main _ _ M => M.anySugar (· matches .writes _)
     | _ => false
 
 /-- The recursive group of the definitions `ms` declared (SPEC §20): each member a function of the

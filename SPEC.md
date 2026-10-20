@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.84 · 2026-10-19
+Version 0.85 · 2026-10-19
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -7215,7 +7215,9 @@ is three general rules, one per surface construct, in place of hand-written case
 3. **R3, the boundary:** one rule passes a construct's writes in and out of every construct that
    runs code in another frame; a writer that escapes is refused by a named rule.
 
-This version provides R1 and R2. R3 is *Open* below.
+Each is one function of the elaboration: R1 the parser's resolution (`bindName`, `lookName`), R2
+its write set (`frame`), R3 one hand-on (`handOn`) and one capability rule for blocks
+(`Elab.Effects`, `mutCap`).
 
 **Prior art.** The rules follow the translation of Ullrich and de Moura, *'do' Unchained:
 Embracing Local Imperativity in a Purely Functional Language* (ICFP 2022; read for this entry):
@@ -7268,13 +7270,61 @@ A construct **writes** a `let mut` variable when it is, or contains on its own f
 | `let (x, q) = f(…, x, …)` | the place `x` moved and rebound (typed elaboration §5.1): `x` is the variable it was, and a write when it is `let mut` |
 | any other binder of a name in scope | nothing: R1's new variable |
 
-What a `match`/`if` arm, a binding's head and a loop's body write is the union of what their parts
-write (the joins of 0.16 and 0.81, and §14's loops), now over resolved variables, so a shadowing
-`let` inside one is never taken for the variable it shadows.
+| a lend `&mut x`, `&x`; a borrow block's or `modify`'s place `x` | `x`, where `x` resolves to a `let mut` variable: the construct rebinds its place |
+
+**A construct's writes are its parts' writes** (`Parser.frame`): every construct whose parts
+write reads each part in a frame of its own, and what the part writes of the enclosing `let mut`
+variables, in the order they were declared, the construct writes too. The rule table below gives
+each construct's parts. Writes are of resolved variables (R1), so a shadowing `let` is never taken
+for the variable it shadows.
 
 ### R3: the boundary
 
-*Open* (below): the next version.
+A construct whose part runs in another frame, before the code after it (an arm, a binding's head,
+a callback, a block, a loop's turn), passes that part's writes `W` in and back out:
+
+- **In.** A part that runs where it is written sees the variables in scope: a callback, an arm or
+  `run M` reads them as they are. A part that runs elsewhere, a block called by its callee, takes
+  them as parameters: the block is `!U(W ⊗ A ⊸ F_r (W ⊗ B))` at the callee's copy, which takes `W`
+  after its own parameters, passes them at each call of the block parameter, binds them again
+  after it, and hands them back first. This is §32's rule for a block's capabilities: a variable a
+  block writes is one of its capabilities (`Effects.mutCap`), its type a parameter of the copy.
+- **Out.** The part hands back `W` at each terminal, beside its value or alone (`Parser.handOn`),
+  and the construct's binding takes the tuple apart, rebinding `W` (`joinBind`, `letVal`).
+- **Refused,** each by a message that names the rule: a closure that writes and is not given at a
+  block parameter of a call, stored or returned (`Effects.escapingWriter`); a `run` that writes
+  inside an expression (`checkRun`); a control handler's body that writes (it may be abandoned,
+  §18 *Not provided*); a `for`'s `else` value that writes. Koka's precedent is the escape
+  refusal: its `var` in a closure that escapes is a type error.
+
+### The rule table
+
+One rule per surface construct. "W" is what its parts write (R2). An unlisted construct writes
+what its parts write and has no boundary of its own.
+
+| construct | writes | boundary (R3) |
+|---|---|---|
+| `let mut x = e; N` | `W(e) ∪ W(N)` | declares `x`, a variable of its own (R1) |
+| `x = e` | `{x} ∪ W(e)` | — |
+| `x <- M` on a `let mut` | `{x} ∪ W(M)` | — |
+| `let (x, q) = f(…, x, …)` | `{x}` | — |
+| `let p = e; N`, `x <- M; N`, `S; N` | `W(e) ∪ W(N)` | — |
+| `&mut x`, `&x` | `{x}` | the lend rebinds `x` (typed elaboration §5.1) |
+| `if`, `match`, `case` (a statement) | `W(arm₁) ∪ W(arm₂)` | each arm hands on `W` (`handArms`); the statement rebinds it |
+| `let p = if/match …`, `x <- M` (a head) | `W(M)` | each terminal hands on `(value, W)`; the binding takes it apart (`bindForm`) |
+| `for x in V { M }`, `while`, `loop`, `for` over a generator | `W(M)` | a turn: the loop's state is `W` and the variables it reads (§14, §15, §16); each turn hands it on |
+| `borrow k P { b -> S }` | `{P} ∪ W(S)` | the callback hands back `(result, W)` beside the places it lends; the binding rebinds `P` and `W` |
+| `modify P { v -> S }` | `{P} ∪ W(S)` | the callback hands back `(c, (r, W))`, the new content `c` and the result `r` (`()` when there is none; `Sugar.modifyBody`) |
+| `with h(e) { S }`, answering | `W(S)` | as a borrow block of the state's cell (§18) |
+| `with h(…) { S }`, control | — | refused when `W(S)` is not empty |
+| `run M` | `W(M)` | `M` hands back `(value, W)` where it is bound; inside an expression, refused |
+| a closure: `{ p -> S }`, `!{ … }`, `{ S }`, `thunk`, `thunkv` and their `!` forms | `W(S)` | marked `writes(W) V` (`VSugar.writes`); at a block parameter of a call, the copy passes `W` in and out at each call; elsewhere refused |
+| a `for`'s `else { d }` | — | refused when `W(d)` is not empty |
+| a handler's clause | its `mut` parameters only | the state is threaded by §18 |
+| a declaration (`fn`, `main`, `def`, a `poly` case) | its own `let mut`s | no `let mut` reaches another declaration |
+
+`writes(x, …) V` is printed by `bcc print` for a closure that writes; in a surface body it is not
+written (the parser finds it), and in core text it is read as printed.
 
 ### Programs
 
@@ -7288,16 +7338,38 @@ write (the joins of 0.16 and 0.81, and §14's loops), now over resolved variable
 | `corpus/lend-shadow.bc` | a borrow block's `let mut acc` beside `main`'s `acc`, lent per observation | `i32[105]`; in core text still refused (`corpus/reject/lend-shadow.bc`) |
 | `corpus/name-clash.bc` | #590 (1): a program's `fn take` beside `include buf`'s | `i32[2]` (was refused) |
 | `corpus/mut-name-capture.bc` | #590 (2): a callee's `let mut tbl` beside its caller's | prints `1`, `i32[0]` (was refused) |
+| `corpus/mut-block.bc` | #586: a block that writes, at a block parameter called once, twice, and in a loop | `(i32[52], (i32[4036], i32[323]))` (was `(12, …)`) |
+| `corpus/mut-block-nested.bc` | a block inside a block, both writing | `(i32[13], i32[3])` |
+| `corpus/mut-run.bc` | #586: `run` that writes, bound | `(i32[52], i32[5102])` (was `12`) |
+| `corpus/fail/mut-run-nested.bc` | #586: `g(run if … { x = 5; … })`, a `run` that writes inside an argument | refused, R3 |
+| `corpus/reject/mut-stored-thunk.bc` | #586: a block that writes, stored and forced later | refused, R3 (was `12`, the write lost) |
+| `corpus/mut-modify.bc` | `modify` whose body writes, on a scoped cell and on a `mut` borrow | `((i32[6], i32[7]), i32[120])` (was `((6, 0), 110)`) |
+| `corpus/mut-lend-arm.bc` | `&mut x` in an arm (R2) | `i32[12]` (was `2`, the lend's write lost) |
+| `corpus/for-in-if-lend.bc` | #502, from `corpus/pending/` | `i32[3]` |
+| `corpus/reject/mut-control-with.bc` | a control handler's body that writes | refused (§18 *Not provided*) |
 
 `scripts/mut-combos.py` checks the rules on generated nestings (*Acceptance* below).
 
 ### Acceptance
 
-`scripts/mut-combos.py` (a gate step) generates nestings of `if`, `let` heads, `match`, counted
-`for`, shadowing `let`s and binders named as the variables at every binding position, and a
-resuming control operation, each assigning two outer `let mut`s; each program is run as written
-and with the variables as `State` instances (#611), and the two runs must agree, with no
-program refused.
+`scripts/mut-combos.py` (a gate step) generates nestings of the constructs, each assigning the two
+outer `let mut`s `a` and `b` by `=`, `<-` and a rebinding call, with shadowing `let`s and binders
+named `a` and `b` at every binding position (a `let` head, a `match` arm, a `for`'s variable, a
+block's, `modify`'s and a borrow block's parameter). Three rows of 400 programs, depth 3:
+
+| row | constructs |
+|---|---|
+| `joins` | `if`, `let` heads, `match`, counted `for`, a resuming operation |
+| `frames` | the above, blocks at a block parameter (of a callee that calls it twice, one that calls it in a counted loop, and a generic one), `modify`, borrow blocks, an answering handler's body, a control handler's body (reading only), `run` |
+| `loops` | the above without the resuming operation, with `while` and a `for` over a generator on the spine |
+
+Each program's answer is compared with the script's own evaluation of it (lexical scope, an
+assignment updating the variable it names) and, where the constructs allow it, with the program
+run with the variables as `State` instances (#611); the gate fails on any difference and on any
+refusal. The generator writes only programs the rest of the language accepts: no resuming
+operation inside a borrow's callback (T1), a block reads its parameter and the variables it
+writes (a persistent closure captures only `!` values), a div loop only on the spine and with no
+handler around it (§14, §21), one borrow of the cell at a time.
 
 ### Baseline
 
@@ -7316,15 +7388,20 @@ core with the binder renamed (`bcc desugar`). Changed:
 - `docs/expressiveness-probes/tests/T04.bc` reverses its copy with a borrow per step: its
   `let mut v = v` inside a borrow block over a loop is a variable of its own, a `mut` view held
   across the loop's steps, which §14 refuses.
+- Each declaration's `let mut`s are its own: before, `main` and a `def` saw the names of the
+  function before them, and a borrow block in `main` handed back a variable of that name
+  (`corpus/leetcode/strings/0647`: `let (sum, sum) = …`; same output).
+- A loop's decision that its body performs an operation that resumes (§16, *Effectful bodies*)
+  reads the operations of a `!thunkv` block too, which the copy it is given to performs.
+- The typed elaboration types a binding's computation, and a borrow block's body, with its lends
+  elaborated (`TCx.tyCL`, `TCx.tyVL`): a lend's result is its call's, as `Comp.elab` makes it.
 
 ### Open
 
-- **R3, the boundary rule** (#613's next part): a block at a block parameter (§30, §32), `modify`
-  and `withswap` callbacks, borrow callbacks, loop turns, generator bodies, handler bodies and
-  `run` pass their writes in and back out by one rule, and a closure that writes an outer `let mut`
-  and escapes is refused by name; the hand-written joins (`joinHead`, `bindHead`, `armOf`) and a
-  borrow block's hand-back become instances of it. Until then #586's forms still lose a block's
-  write.
+- **A control handler's body that writes**, and a `run` that writes inside an expression, are
+  refused. The first needs the handler's clauses to hand the variables back when the body is
+  abandoned; the second, the expression's calls lifted in order around it.
+- **The target pairs** (`docs/research/let-mut-state/targets/`): see #613.
 - **Names the elaboration still reads.** §14's per-observation lend (`LoopLend`) identifies the
   borrow by the block's binder, so a copy of it bound in the block is not the borrow (T04 above);
   §30 identifies a block parameter by its name, so one passed through a fold's state is taken as
@@ -7674,14 +7751,29 @@ Entry 39 (§40) is implemented in `Backend/Native/Lower.lean` (the LLVM IR), `Ba
 `Op.dataAddr` and `Exp.data` in the closure IR and the flat IR, and `scripts/compile-native.sh`;
 no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the checker.
 
-Entry 40 (§41) R1 and R2 are implemented in `Frontend/Parser.lean` (`bindName`, `lookName`,
-`bindOrAssign`, `rebindOf?`, `renamesOf`, `Error.renderIn`), `Frontend/Elab/Hygiene.lean`
-(`Decl.renameDecls`), `Frontend/Sugar.lean` (a program's declarations shadow a module's) and
-`scripts/mut-combos.py`; no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the checker.
+Entry 40 (§41) is implemented in `Frontend/Parser.lean` (R1: `bindName`, `lookName`,
+`bindOrAssign`, `rebindOf?`, `renamesOf`, `Error.renderIn`; R2: `frame`, `notePlaceWrite`; R3:
+`handOn`, `joinBind`, `handArms`, `bindForm`, `writesOf`, `checkRun`, `Val.handsBack`),
+`Frontend/Elab/Hygiene.lean` (`Decl.renameDecls`), `Frontend/Elab/Effects.lean` (`mutCap`,
+`escapingWriter`), `Frontend/Sugar.lean` (a program's declarations shadow a module's;
+`modifyBody`, `TCx.tyCL`) and `scripts/mut-combos.py`; no change to `CDerives`, `Core/`, `Paper/`,
+`Support/` or the checker.
 
 ---
 
 ## Changelog
+
+- **0.85** (2026-10-19) — §41 (#613): R3, the boundary rule, and the rule table. A part that
+  runs in another frame hands back what it writes (`handOn`): an arm, a binding's head, a borrow
+  block, `modify` (whose body's writes were dropped), an answering handler's body and `run`
+  (whose writes were dropped). A block that writes, given at a block parameter, takes the
+  variables first and hands them back first at each call of the callee's copy, as §32's
+  capabilities do (#586; the write was dropped). A closure that writes and is stored or
+  returned, a `run` that writes inside an expression, a control handler's body that writes and a
+  `for`'s `else` value that writes are refused by name. A lend or a borrow of a `let mut` place
+  writes it (its write in an arm was dropped). Each declaration's `let mut`s are its own. The
+  parser's joins are instances of one hand-on (`headOf`, `armOf`, `armIf`, `blockBody`,
+  `joinArms`, `joinHead` and `bindHead` deleted). No kernel, `CDerives` or checker change.
 
 - **0.84** (2026-10-19) — §41 (new, #613): `let mut`'s names resolved to their binders (R1) and
   its writes (R2). In a surface body a binder of a name in scope is a new variable with a fresh
