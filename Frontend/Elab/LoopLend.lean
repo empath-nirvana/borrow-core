@@ -134,6 +134,31 @@ def loopsOnSpine (divCall : Val → Bool) (fin : Finite) : Nat → Comp → Bool
   | n + 1, .loop _ _ src V M N => !src.fin fin V M N || loopsOnSpine divCall fin n N
   | _ + 1, T => isLoopHead divCall T
 
+/-- A binding of the borrow on a block's spine: a copy `let z = a` of a name `a` that holds the
+whole borrow, or a destructuring `let (y, z) = a` (`let () = a`) of a name that holds it or a part
+of it (the parser's form of a pattern). The names it binds hold the borrow as `a` does: a borrow is
+identified by its binder, followed through its copies and parts, never by a name (SPEC §14). -/
+structure Binding where
+  /-- The binding, around what follows it. -/
+  wrap : Comp → Comp
+  /-- The names it binds that hold a part of the borrow, and those that hold all of it. -/
+  parts : List String
+  whole : List String
+  /-- What follows. -/
+  rest : Comp
+
+/-- `M` as a binding of the borrow held by `aliases` (the whole of it by `copies`). -/
+def Binding.of? (aliases copies : List String) : Comp → Option Binding
+  | .bind sp z A M@(.ret _ (.var _ a)) N lin =>
+    if aliases.contains a then
+      some ⟨fun K => .bind sp z A M K lin, [z.name], if copies.contains a then [z.name] else [], N⟩
+    else none
+  | .letPair sp x y V@(.var _ a) N =>
+    if aliases.contains a then some ⟨fun K => .letPair sp x y V K, [x.name, y.name], [], N⟩ else none
+  | .letUnit sp V@(.var _ a) N =>
+    if aliases.contains a then some ⟨fun K => .letUnit sp V K, [], [], N⟩ else none
+  | _ => none
+
 /-- What the rewrite of one block works with. -/
 structure Env where
   B : Block
@@ -141,9 +166,11 @@ structure Env where
   place : Val
   /-- The names the place is rebound to. -/
   placeNames : List String
-  /-- The block's parameter and the names its pattern binds from it. -/
+  /-- The names that hold the borrow or a part of it (`Binding.of?`). -/
   aliases : List String
-  /-- The pattern's bindings, at the start of each block's body. -/
+  /-- The names that hold the whole borrow: the block's parameter and its copies. -/
+  copies : List String
+  /-- The bindings of the aliases, at the start of each block's body. -/
   pre : Comp → Comp
   /-- A call of a div function. -/
   divCall : Val → Bool
@@ -222,15 +249,16 @@ def Env.terminal (E : Env) (s : Seg) (T : Comp) : LM Comp := do
 
 /-- The block's borrow passed to a call of a div function, `f(b)` (or `f['x](b)`): the call lends
 the place instead, `f(&t)`, and the div function, elaborated to take the owner (`lentDef`), lends
-it at each step of its loop. Only the block's parameter itself, once, on a single place. -/
+it at each step of its loop. Only the whole borrow (the block's parameter or a copy of it), once,
+on a single place. -/
 def Env.lendCall (E : Env) : Comp → LM Comp
   | M@(.ret sp (.app asp f W)) => do
     if !E.usesC M then return M
-    let b := E.B.b.name
     let f := match f with
       | .inst _ g _ => g
       | g => g
-    let tooMuch := E.aliases.any (fun a => a != b && mentionsV a W) || mentionsV b f
+    let b := (E.copies.find? (mentionsV · W)).getD E.B.b.name
+    let tooMuch := E.aliases.any (fun a => a != b && mentionsV a W) || E.usesV f
     let m : Mode := if E.B.k == .mut then .mut else .imm
     match E.placeNames, tooMuch with
     | [t], false =>
@@ -274,23 +302,35 @@ def iterError (E : Env) (src : LoopSrc) (sp : Span) : Error :=
       "over a loop lends its place again at each step, to the loop's body only, not to its " ++
       "condition (SPEC §14, borrow scopes over loops)"⟩
 
+mutual
 /-- The block's body, rewritten: each stretch that uses the borrow in a block of its own, each
 `for` on the spine with its body lent per step. `scope` is the names in scope. -/
 def Env.walk (E : Env) : Nat → List String → Seg → Comp → LM Comp
   | 0, _, _, M => throw ⟨M.span, "internal error: a borrow block over a loop nested too deeply"⟩
-  | n + 1, scope, s, S@(.bind sp z A M N lin) => do
+  | n + 1, scope, s, S => do
+    let some bd := Binding.of? E.aliases E.copies S | E.step n scope s S
+    -- A binding of the borrow: bound at the start of each block from here on, its names aliases.
+    let pre ← E.flush S.span s S
+    let E' : Env := { E with aliases := E.aliases ++ bd.parts, copies := E.copies ++ bd.whole,
+                             pre := fun K => E.pre (bd.wrap K) }
+    pure (pre (← E'.walk n (scope ++ s.names ++ bd.parts) {} bd.rest))
+termination_by n _ _ _ => 2 * n
+
+/-- `walk` at a construct that is not a binding of the borrow. -/
+def Env.step (E : Env) : Nat → List String → Seg → Comp → LM Comp
+  | n, scope, s, S@(.bind sp z A M N lin) => do
     if isLoopHead E.divCall M then
       let M ← E.lendCall M
       let pre ← E.flush sp s S
       pure (pre (.bind sp z A M (← E.walk n (scope ++ s.names ++ [z.name]) {} N) lin))
     else
       E.walk n (scope ++ [z.name]) (s.push (fun K => .bind sp z A M K lin) [z.name] (E.usesC M)) N
-  | n + 1, scope, s, .letUnit sp V M =>
+  | n, scope, s, .letUnit sp V M =>
     E.walk n scope (s.push (fun K => .letUnit sp V K) [] (E.usesV V)) M
-  | n + 1, scope, s, .letPair sp y z V M =>
+  | n, scope, s, .letPair sp y z V M =>
     E.walk n (scope ++ [y.name, z.name])
       (s.push (fun K => .letPair sp y z V K) [y.name, z.name] (E.usesV V)) M
-  | n + 1, scope, s, .loop sp ℓ src V M N =>
+  | n, scope, s, .loop sp ℓ src V M N =>
     if src.fin E.fin V M N then
       -- A total `for` is one computation: a statement of the stretch it is in.
       E.walk n scope (s.push (fun K => .loop sp ℓ src V M K) (spineNames fuel M)
@@ -302,7 +342,7 @@ def Env.walk (E : Env) : Nat → List String → Seg → Comp → LM Comp
       let scope' := scope ++ s.names
       let M' ← E.forBody scope' sp src.bound M
       pure (pre (.loop sp ℓ src V M' (← E.walk n scope' {} N)))
-  | n + 1, scope, s, S@(.case sp V y M z N) => do
+  | n, scope, s, S@(.case sp V y M z N) => do
     if !(loopsOnSpine E.divCall E.fin fuel M || loopsOnSpine E.divCall E.fin fuel N) then
       return (← E.terminal s S)
     -- The scrutinee is computed in the stretch before the arms, which are rewritten on their own.
@@ -314,7 +354,7 @@ def Env.walk (E : Env) : Nat → List String → Seg → Comp → LM Comp
     let scope' := scope ++ s.names
     pure (pre (.case sp V y (← E.walk n (scope' ++ [y.name]) {} M) z
       (← E.walk n (scope' ++ [z.name]) {} N)))
-  | _ + 1, _, s, T => do
+  | _, _, s, T => do
     if isLoopHead E.divCall T then
       -- A call of a div function at the end: bound, then the place and its result.
       let T ← E.lendCall T
@@ -323,22 +363,21 @@ def Env.walk (E : Env) : Nat → List String → Seg → Comp → LM Comp
       return pre (.bind T.span ⟨r, T.span⟩ none T
         (.ret T.span (.pair T.span E.place (.var T.span r))) false)
     E.terminal s T
+termination_by n _ _ _ => 2 * n + 1
+end
 
-/-- The bindings of the block's pattern at the start of its body, `let (p, q) = b; …` (the
-parser's, for a pattern), whose names borrow as `b` does: the names, the bindings, and the rest. -/
-def patternPrefix : Nat → List String → Comp → List String × (Comp → Comp) × Comp
-  | 0, as, M => (as, id, M)
-  | n + 1, as, M@(.letPair sp x y (.var vsp v) N) =>
-    if as.contains v then
-      let (as', f, rest) := patternPrefix n (as ++ [x.name, y.name]) N
-      (as', fun K => .letPair sp x y (.var vsp v) (f K), rest)
-    else (as, id, M)
-  | n + 1, as, M@(.letUnit sp (.var vsp v) N) =>
-    if as.contains v then
-      let (as', f, rest) := patternPrefix n as N
-      (as', fun K => .letUnit sp (.var vsp v) (f K), rest)
-    else (as, id, M)
-  | _, as, M => (as, id, M)
+/-- The names that hold the borrow on a block's spine: `as`, and those its bindings of the borrow
+bind (`Binding.of?`), in arms and after loops too. -/
+def spineAliases : Nat → List String → List String → Comp → List String
+  | 0, as, _, _ => as
+  | n + 1, as, cs, M =>
+    match Binding.of? as cs M with
+    | some bd => spineAliases n (as ++ bd.parts) (cs ++ bd.whole) bd.rest
+    | none => match M with
+      | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N =>
+        spineAliases n as cs N
+      | .case _ _ _ M _ N => spineAliases n (spineAliases n as cs M) cs N
+      | _ => as
 
 /-- `x <- return B; N` where `B` is a borrow block whose body loops, rewritten per observation and
 spliced into the enclosing body: `none` when `B` is not such a block. `c` is the typing context at
@@ -371,7 +410,8 @@ def lendBind (c : TCx) (divCall : Val → Bool) (fin' : TCx → Finite) (sp : Sp
     | P =>
       let t := s!"io_lp{B.sp.start.line}_{B.sp.start.col}"
       (fun K => .bind P.span ⟨t, P.span⟩ none (.ret P.span P) K false, .var P.span t, [t])
-  let (aliases, pre, S) := patternPrefix fuel [B.b.name] B.S
+  let S := B.S
+  let aliases := spineAliases fuel [B.b.name] [B.b.name] S
   let outer := c.locals.map (·.1)
   -- The rewrite puts the block's loop, and what its stretches bind, in the enclosing body. A name
   -- of the enclosing body that the block binds again (a `let` or an assignment) and that is read
@@ -382,7 +422,7 @@ def lendBind (c : TCx) (divCall : Val → Bool) (fin' : TCx → Finite) (sp : Sp
         "the block is lent per observation in the enclosing body, where its bindings would " ++
         s!"reach the code after it. Rename `{y}` inside the block, or read it there (SPEC §14, " ++
         "borrow scopes over loops)"⟩
-  let E : Env := ⟨B, place, placeNames, aliases, pre, divCall, fin⟩
+  let E : Env := ⟨B, place, placeNames, [B.b.name], [B.b.name], id, divCall, fin⟩
   let (L, _) ← (E.walk fuel outer {} S).run 0
   -- `x <- B; return x` is `B`'s rewrite itself.
   let rest : Comp → Comp := match N, A with

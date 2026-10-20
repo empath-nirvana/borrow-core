@@ -38,7 +38,10 @@ main -> i32 =
   let mut lo = 0;
   let nb = len(&b);
   let mut hi = nb - 1;
-  while lo < hi { borrow mut b { v -> discard_mut(swap_at(v, lo, hi)) }; lo = lo + 1; hi = hi - 1 };
+  borrow mut b { v ->
+    let mut v = v;
+    while lo < hi { v = swap_at(v, lo, hi); lo = lo + 1; hi = hi - 1 };
+    discard_mut(v) };
   let a = print_arr(a, 6);
   let b = print_arr(b, 6);
   swaps
