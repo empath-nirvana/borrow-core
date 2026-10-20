@@ -20,8 +20,11 @@ step relation, for the loops the elaboration makes (`forData` in `Frontend/Sugar
   (`idxAns_lt`, `idxAns_ge`). An exclusive view's step splits the first leaf off the rest; after
   `i` steps the rest is `(ℓ + i, n − i)`, whose split answers the leaf `ℓ + i` while `i < n`
   (`splitFirst_lt`) and ends exactly at `i = n` (`splitFirst_end`).
+* **A loop with no exit** is `count_fold`, which visits the same indices (`countFold_runs`) and
+  answers the last state.
 * **A count** `a..b` is the loop over `len(b − a)` from `0`, whose element at index `i` is
-  `a + i`: the indices it visits are those of `countTry_runs`.
+  `a + i`, or, at a literal start `a` in `[0, 2³¹)`, the loop over `len(b)` from `a`, whose
+  element is the index: the indices it visits are those of `countTry_runs` or `countFold_runs`.
 
 So the bound equals the number of elements: every element is visited, and none is dropped.
 -/
@@ -93,6 +96,44 @@ theorem countTry_exit (f : Val) (n i : UInt32) (s e : Val) (μ μ' : Heap) (hi :
     (.pair (.val (.i32 n)) (.pair (.val (.i32 (i + 1))) (.var 0))))) (.inj₂ (.var 0))
   refine Steps.trans (Steps.plug K hf) (.more (.head (Head.case₂ _ e _ _)) ?_)
   exact .refl _ _
+
+/-- `count_fold` at a value: the redex. -/
+abbrev countE (f : Val) (n i : UInt32) (s : Val) : Expr :=
+  .app (.val (.prim .count)) (.val (Val.pair f (Val.pair (Val.i32 n) (Val.pair (Val.i32 i) s))))
+
+/-- **A loop with no exit visits every index below its bound, in order.** If at every index `j`
+from `i` to `len(n) − 1` the step runs from `(j, s)` to `F j s μ`'s state, in its memory,
+`count_fold` from `i` runs to the state after `F` at each of those indices, once each, in order.
+`[spec §16]` -/
+theorem countFold_runs (f : Val) (n : UInt32) (F : UInt32 → Val → Heap → Heap × Val)
+    (hF : ∀ (j : UInt32) (s : Val) (μ : Heap), j < arrLen n →
+      Steps μ (.app (.val f) (.val (Val.pair (Val.i32 j) s))) (F j s μ).1 (.val (F j s μ).2)) :
+    ∀ (k : Nat) (i : UInt32) (s : Val) (μ : Heap), (arrLen n).toNat - i.toNat = k →
+      Steps μ (countE f n i s) (countRun F k i s μ).1 (.val (countRun F k i s μ).2) := by
+  intro k
+  induction k with
+  | zero =>
+      intro i s μ hk
+      have hi : ¬ i < arrLen n := by rw [UInt32.lt_iff_toNat_lt]; omega
+      refine .more (.head (Head.count μ f n i s)) ?_
+      unfold countNext
+      rw [if_neg hi]
+      exact .refl _ _
+  | succ k ih =>
+      intro i s μ hk
+      have hi : i < arrLen n := by rw [UInt32.lt_iff_toNat_lt]; omega
+      have hb : (arrLen n).toNat < 2 ^ 32 := UInt32.toNat_lt _
+      have hi1 : (i + 1).toNat = i.toNat + 1 := by
+        rw [UInt32.toNat_add]
+        have : i.toNat < (arrLen n).toNat := UInt32.lt_iff_toNat_lt.mp hi
+        simp only [UInt32.toNat_one]
+        exact Nat.mod_eq_of_lt (by omega)
+      refine .more (.head (Head.count μ f n i s)) ?_
+      unfold countNext
+      rw [if_pos hi]
+      let K : Kont :=
+        .appR (.val (.prim .count)) (.pairR f (.pairR (Val.i32 n) (.pairR (Val.i32 (i + 1)) .hole)))
+      exact Steps.trans (Steps.plug K (hF i s μ hi)) (ih (i + 1) (F i s μ).2 (F i s μ).1 (by omega))
 
 /-- The indices `countRun` visits: `i, i + 1, …, i + k − 1`, each once, in order. -/
 theorem countRun_visits (F : UInt32 → Val → Heap → Heap × Val) :

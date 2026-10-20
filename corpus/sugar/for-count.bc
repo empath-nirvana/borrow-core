@@ -1,9 +1,11 @@
--- A total `for` over a count (SPEC §16): `a..b` is data, so `for i in a..b { M }` is `count_try`
--- over its length `b − a`, computed first, from index `0`, and the element at index `k` is
--- `a + k`. The loop's state is the variables the body reads or assigns, here `acc` and `n`, with
--- the count's start; after the loop they are bound again from its result. The inner `for` is a
--- counted loop inside the outer one's step, and `tri` is `total`. `for-count.core.bc` writes the
--- loops as `count_try` by hand.
+-- A total `for` over a count (SPEC §16): `a..b` is data, so `for i in a..b { M }` is a counted
+-- loop, `count_fold` when its step has no exit. A count whose start is a literal, `0..n`, is
+-- counted by the machine's counter from the start to `n`, the counter the element; any other,
+-- `i..n`, over its length `n − i`, computed first, from index `0`, the element at index `k`
+-- being `i + k` and the start in the loop's state. The loop's state is the variables the body
+-- reads or assigns, here `acc` and `n`; after the loop they are bound again from its last state.
+-- The inner `for` is a counted loop inside the outer one's step, and `tri` is `total`.
+-- `for-count.core.bc` writes the loops as `count_fold` by hand.
 -- Answer: i32[20]: the sum of `j` over 0 ≤ i ≤ j < 4, 0 + 1·2 + 2·3 + 3·4.
 
 total fn tri(n: i32) -> i32 =

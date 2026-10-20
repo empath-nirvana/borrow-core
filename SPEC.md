@@ -242,8 +242,8 @@ marked value's typed term with the rule that its erasure is the scheme's:
 - `divLit op c`: a division by a literal at which it cannot fail (§39, `divLitB`, `safeDivB`); at
   a conforming host the operation answers at every dividend (`divLit_some32`, `divLit_some64`,
   `divLit_some8`), so the scheme's error arm is never taken;
-- `walk m`: a counted walk of a view (§16), the `count_try` over its length (`walkB`); its step
-  runs only below the bound (`walk_index_lt`), and below a view's length its read answers a leaf
+- `walk m`: a counted walk of a view (§16), the `count_fold` or `count_try` over its length
+  (`walkB`); its step runs only below the bound (`walk_fold_index_lt`, `walk_index_lt`), and below a view's length its read answers a leaf
   (`walk_get_leaf`, `walk_split_first`), from §16's completeness lemmas;
 - `selfCall j n`: a recursive group's self-reference read for member `j` of `n` (§20, `selfCallB`);
 - `lendCell m`: the lend of a cell allocated for it, `withbor (alloc v) cb` (§35, `lendCellB`),
@@ -2085,11 +2085,13 @@ on a copy of the closure, test the answer's tag, tail-call with `i + 1` on `inl`
 `IntoIterator`), and the loop calls its `next` at each step, with `break`, `continue` and
 `return`. It is pull. A source whose type holds the data it came from is **sized**: the loop is
 `count_try` over the length of that data, computed when the loop starts, calling `next` at each
-step, and it is total (`forData`, `Frontend/Sugar.lean`; all of it elaboration into core):
+step, and it is total (`forData`, `Frontend/Sugar.lean`; all of it elaboration into core). With
+no exit it is `count_fold` (*The step and its exits*, below):
 
 | source, by type | the bound | the element at step `i` |
 |---|---|---|
-| a count `a..b` (syntax; `i32`s) | `b − a` | `a + i` |
+| a count `a..b` (syntax; `i32`s) | `b − a`, from index `0` | `a + i` |
+| a count `k..b`, `k` a literal in `[0, 2³¹)` | `b`, from index `k` | `i` |
 | a view `array_imm @a A` | its length, `array_len` | the leaf `i`, by `idx` (`array_get`) |
 | a view `array_mut @a A` | its length, `slice_len_mut` | the first leaf of the rest, by `split` at `1` |
 | `&a`, `&mut a` of `a : array A` | as the view `slice_borrow_imm`/`_mut` lends around the loop (§9) | as the view's |
@@ -2103,12 +2105,24 @@ a **drain**, the loop of §14, and div. `total` rejects a function that drains, 
 over a generator that loops (`corpus/reject/for-free-bound.bc`: `take(g, 10)` of a stored
 generator `g` is a generator that loops).
 
+A count counted from a literal start is counted by the machine's counter itself: the counter is
+the element, and the count's start is not in the loop's state. Any other start is counted from
+`0` over the count's length, as the machine's counter is unsigned (`len`, above) and a negative
+start would be past every bound. At every count `k..b` whose length `b − k` does not overflow
+the two agree, and where it overflows (`1..-2147483648`) the count from `k` is the empty loop,
+as the count is.
+
 **The step and its exits.** The loop's state is the source's cursor and the variables the body
 reads or assigns (a capability the body uses included: an effect of the body is the function's,
-and the loop hands the capability back). The step answers `inl` of the next state at the end of
-the body and at `continue`; `break e` and `return e` answer `inr` of the threaded variables and
-the way out. After the loop the threaded variables are rebound and the loop's value is `e`, or
-the `else` value when the source ended. `return e` in the body of a loop of a surface `fn` (or
+and the loop hands the capability back). The step binds the counter and the state's variables
+from its argument. A step with no exit (no `break` or `return e` in the body, no abortive
+operation, and a source that does not end before its bound: every source but a sized iterator)
+is `count_fold`'s: it answers the next state at the end of the body and at `continue`, and after
+the loop the threaded variables are bound from its last state (one variable directly, as
+`x <- loop`). Any exit makes the loop `count_try`: the step answers `inl` of the next state at
+the end of the body and at `continue`; `break e` and `return e` answer `inr` of the threaded
+variables and the way out. After the loop the threaded variables are rebound and the loop's value
+is `e`, or the `else` value when the source ended. `return e` in the body of a loop of a surface `fn` (or
 `main ->`) returns from the function from any depth of its loops: each counted loop leaves by its
 exit, and the loop around it by its own (`DivSt.exits`); the loop is first moved onto the
 function's spine (`normExits`). A core `def`'s `return V` is the core's. `break` and `continue`

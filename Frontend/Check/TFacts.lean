@@ -28,8 +28,9 @@ A second is a fact the checker carries beside the term (`Checked.cells`, `Fronte
 Three marked derived nodes (`Frontend/Check/Derived.lean`) record what the elaborator's scheme
 means beside the shape their rule fixes (`walkB`, `selfCallB`, `lendCellB`):
 
-* **A counted walk's view.** The rule fixes that the term is a `count_try`, and
-  `walk_index_lt`/`walk_get_leaf`/`walk_split_first` that its step runs below the bound and that
+* **A counted walk's view.** The rule fixes that the term is a `count_fold` or a `count_try`, and
+  `walk_fold_index_lt`/`walk_index_lt`/`walk_get_leaf`/`walk_split_first` that its step runs below
+  the bound and that
   below its length a view's read answers a leaf. That the step reads, at the step's index, the
   view the bound was taken from is the scheme's: `forData` threads the view in the loop's state
   and reads it there. A lemma over the step's reduction (the state's view component handed on

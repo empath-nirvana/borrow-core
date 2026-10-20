@@ -165,8 +165,9 @@ def safeDivB : HostOp → IntLit → Bool
   | .div .w32 .div_u, .u8 n | .div .w32 .rem_u, .u8 n => n != 0
   | _, _ => false
 
-/-- The term is a `count_try` at a step, a bound, a first index and a state. -/
+/-- The term is a `count_fold` or a `count_try` at a step, a bound, a first index and a state. -/
 def walkB : Expr → Bool
+  | .app (.prim .count) (.pair _ (.pair _ (.pair _ _))) => true
   | .app (.prim .countTry) (.pair _ (.pair _ (.pair _ _))) => true
   | _ => false
 
@@ -194,6 +195,7 @@ theorem divLitB_shift {op : HostOp} {c : IntLit} {e : Expr} (h : divLitB op c e 
 
 theorem walkB_shift {e : Expr} (h : walkB e = true) (d k : Nat) : walkB (e.shift d k) = true := by
   match e, h with
+  | .app (.prim .count) (.pair _ (.pair _ (.pair _ _))), _ => rfl
   | .app (.prim .countTry) (.pair _ (.pair _ (.pair _ _))), _ => rfl
 
 theorem selfCallB_shift {e : Expr} (h : selfCallB e = true) (d k : Nat) :

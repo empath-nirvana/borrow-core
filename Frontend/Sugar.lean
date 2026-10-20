@@ -4324,8 +4324,22 @@ def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val →
           [(v, s!"array_imm {a} ({A})")], s!"io_n{sfx}",
           s!"let ({v}, io_vg{sfx}) = array_copy[{a}, {A}]({v});
 case array_get[{a}, {A}](io_vg{sfx}, io_i{sfx}) \{ inl io_ve{sfx} -> {el}force io_hole_body | inr io_vu{sfx} -> io_hole_cont }")
+    -- A count whose start is a literal in `[0, 2³¹)` is counted by the machine's counter itself,
+    -- from the start to the end, and the counter is the element. Any other start is counted from
+    -- `0` over the count's length, the element the start plus the counter: the machine's counter
+    -- is unsigned, so a negative start is past every bound.
+    let litStart : Bool := !rowLoop && match src with
+      | .count (.const _ (.lit (.i32 k))) _ => k.toNat < 2 ^ 31
+      | .count (.sugar _ (.lit k)) _ => k < 2 ^ 31
+      | _ => false
+    -- The step's counter: the element itself for a count counted from its start.
+    let idx := if litStart then x.name else s!"io_i{sfx}"
     let (outerPre, wrap, pre, cur, bound, i0, elem, desc) ← match src with
-      | .count _ _ =>
+      | .count a b =>
+        if litStart then
+          pure ("", none, "", [], "io_hole_hi", "io_hole_lo", "force io_hole_body",
+            s!"len({a.pp 2}..{b.pp 2})")
+        else
         pure ("", none, s!"io_lo{sfx} <- return io_hole_lo;\nio_hi{sfx} <- return io_hole_hi;\n" ++
             s!"io_n{sfx} <- return (io_hi{sfx} - io_lo{sfx});\n",
           [(s!"io_lo{sfx}", "i32")], s!"io_n{sfx}", "0",
@@ -4363,13 +4377,6 @@ case io_so{sfx} \{
     let curN := cur.map (·.1)
     let St := tupleTySrc (cur.map (·.2) ++ (← ws.mapM fun (_, T) => pp T))
     let stateS := tupleSrc (curN ++ wsN)
-    let elem := elem.replace "io_hole_cont" s!"return (inl {stateS})"
-    let jEnded := if hasRet then s!"inl ({tupleSrc wsN}, inl ())" else s!"({tupleSrc wsN}, inl ())"
-    let jExit := if hasRet then
-        s!"case io_o{sfx} \{ inl io_q{sfx} -> return (inl ({tupleSrc wsN}, inl io_q{sfx}))
-    | inr io_b{sfx} -> case io_b{sfx} \{ inl io_bv{sfx} -> return (inl ({tupleSrc wsN}, inr io_bv{sfx}))
-      | inr io_rv{sfx} -> return (inr io_rv{sfx}) } }"
-      else s!"return ({tupleSrc wsN}, io_o{sfx})"
     -- An abortive operation in the body (SPEC §19): `count_try`'s step is pure, so the step
     -- handles the operations of their site itself, each leaving the loop by its exit, and after
     -- the loop the operation is performed again.
@@ -4377,6 +4384,19 @@ case io_so{sfx} \{
     let used := (opsC c divFuel M).eraseDups.filter fun (k, _) => S.any (·.n.toNat == k)
     -- A loop at the row performs its operations where they stand.
     let names := if rowLoop then [] else (used.map (·.1)).eraseDups
+    -- A step with no exit is `count_fold`'s: no `break` or `return` in the body, no abortive
+    -- operation, and a source that does not end before its bound. Any exit makes the loop
+    -- `count_try`, whose step answers `inl` to go on.
+    let fold := !rowLoop && breaks.isEmpty && !hasRet && names.isEmpty &&
+      !(match src with | .sized .. => true | _ => false)
+    let goOn (s : String) : String := if fold then s!"return {s}" else s!"return (inl {s})"
+    let elem := elem.replace "io_hole_cont" (goOn stateS)
+    let jEnded := if hasRet then s!"inl ({tupleSrc wsN}, inl ())" else s!"({tupleSrc wsN}, inl ())"
+    let jExit := if hasRet then
+        s!"case io_o{sfx} \{ inl io_q{sfx} -> return (inl ({tupleSrc wsN}, inl io_q{sfx}))
+    | inr io_b{sfx} -> case io_b{sfx} \{ inl io_bv{sfx} -> return (inl ({tupleSrc wsN}, inr io_bv{sfx}))
+      | inr io_rv{sfx} -> return (inr io_rv{sfx}) } }"
+      else s!"return ({tupleSrc wsN}, io_o{sfx})"
     let (stepT, wrapStep, reabort) ← match names with
       | [] => pure (Et, fun (e : String) => e, "")
       | ks => do
@@ -4472,10 +4492,23 @@ io_fa{sfx} <- return (io_gs{sfx}, (io_nb{sfx}, ({i0}, {stateS})));
       | .view m _ _ | .lend _ m _ => some m
       | .owned _ => some false
       | _ => none
-    let ctSrc := s!"count_try[{St}, {stepT}](!\{ (io_i{sfx}, io_s{sfx}) ->
-  {destructSrc s!"io_s{sfx}" (curN ++ wsN)}{wrapStep elem} }, {bound}, {i0}, {stateS})"
-    let core := (if rowLoop then rowCore else
-      s!"{pre}{rname} <- return {if walkOf.isSome then "io_hole_walk" else ctSrc};
+    -- The step binds the counter and the state's variables from its argument.
+    let stepArg := if (curN ++ wsN).isEmpty then
+        s!"let ({idx}, io_s{sfx}) = io_q{sfx};\nlet () = io_s{sfx};\n"
+      else destructSrc s!"io_q{sfx}" (idx :: curN ++ wsN)
+    let ctSrc := if fold then
+        s!"count_fold[{St}](!thunkv fun (io_q{sfx} : {At}) ->
+  {stepArg}{elem}, {bound}, {i0}, {stateS})"
+      else s!"count_try[{St}, {stepT}](!thunkv fun (io_q{sfx} : {At}) ->
+  {stepArg}{wrapStep elem}, {bound}, {i0}, {stateS})"
+    let loopV := if walkOf.isSome then "io_hole_walk" else ctSrc
+    -- With no exit the loop answers its last state, whose variables are bound from it.
+    let stN := curN ++ wsN
+    let foldCore := match stN with
+      | [y] => s!"{pre}{y} <- return {loopV};\n"
+      | _ => s!"{pre}io_r{sfx} <- return {loopV};\n{destructSrc s!"io_r{sfx}" stN}"
+    let core := if fold then foldCore else (if rowLoop then rowCore else
+      s!"{pre}{rname} <- return {loopV};
 ") ++ s!"{reabort}io_j{sfx} : {Jt} <- case io_r{sfx} \{
     inl io_s{sfx} -> {destructSrc s!"io_s{sfx}" (curN ++ wsN)}return ({jEnded})
   | inr io_e{sfx} -> let (io_w{sfx}, io_o{sfx}) = io_e{sfx};
@@ -4486,9 +4519,14 @@ io_fa{sfx} <- return (io_gs{sfx}, (io_nb{sfx}, ({i0}, {stateS})));
     -- `io_bt`, so the parser does not add the variables it hands back (`Parser.borrowBlock`),
     -- and the loop's threaded variables, capabilities included, come out in its result.
     let outN := wsN
-    let reshape := s!"io_bt <- return io_j{sfx};\nreturn io_bt"
+    let reshape := if fold then s!"io_bt <- return {tupleSrc wsN};\nreturn io_bt"
+      else s!"io_bt <- return io_j{sfx};\nreturn io_bt"
     let loopSrc := match wrap with
-      | some (open_, back) => s!"{outerPre}io_bl{sfx} <- return ({open_}{core}{reshape} });
+      | some (open_, back) => if fold then
+          s!"{outerPre}io_bl{sfx} <- return ({open_}{core}{reshape} });
+let ({back}, io_jw{sfx}) = io_bl{sfx};
+{destructSrc s!"io_jw{sfx}" outN}"
+        else s!"{outerPre}io_bl{sfx} <- return ({open_}{core}{reshape} });
 let ({back}, io_j{sfx}) = io_bl{sfx};
 "
       | none => core
@@ -4499,7 +4537,12 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
     let value := match r with
       | some r => s!"{r} : {Bt} <- case io_ob{sfx} \{ inl io_q{sfx} -> {if els.isSome then "force io_hole_else" else "return ()"} | inr io_bv{sfx} -> return io_bv{sfx} };\n"
       | none => ""
-    let after := if hasRet then
+    let after := if fold then
+        let v := match r with
+          | some r => s!"{r} : {Bt} <- {if els.isSome then "force io_hole_else" else "return ()"};\n"
+          | none => ""
+        s!"{v}force io_hole_rest"
+      else if hasRet then
         s!"case io_j{sfx} \{
   inl io_jv{sfx} -> let (io_jw{sfx}, io_ob{sfx}) = io_jv{sfx};
     {destructSrc s!"io_jw{sfx}" outN}{value}force io_hole_rest
@@ -4518,13 +4561,14 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
     -- The body: its terminals go on, and its exits leave with the threaded variables.
     let st (tsp : Span) : Val := tupleVal tsp (curN ++ wsN)
     let exitV (tsp : Span) (o : Val) : Val := .inr tsp (.pair tsp (tupleVal tsp wsN) o)
+    let go (tsp : Span) : Val := if fold then st tsp else .inl tsp (st tsp)
     let brk (tsp : Span) (e : Val) : Val := if hasRet then .inr tsp (.inl tsp e) else .inr tsp e
     let body := wrapTail (fun
       | .ret tsp (.sugar _ .brk) => .ret tsp (exitV tsp (brk tsp (.unit tsp)))
       | .ret tsp (.app _ (.sugar _ .brk) e) => .ret tsp (exitV tsp (brk tsp e))
-      | .ret tsp (.sugar _ .cont) => .ret tsp (.inl tsp (st tsp))
+      | .ret tsp (.sugar _ .cont) => .ret tsp (go tsp)
       | .ret tsp (.app _ (.sugar _ .retE) v) => .ret tsp (exitV tsp (.inr tsp (.inr tsp v)))
-      | T => thenGo T (.ret T.span (.inl T.span (st T.span)))) M
+      | T => thenGo T (.ret T.span (go T.span))) M
     let (lo, hi) := match src with
       | .count a b => (some a, some b)
       | _ => (none, none)

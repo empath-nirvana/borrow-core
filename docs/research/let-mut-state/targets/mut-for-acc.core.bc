@@ -1,6 +1,8 @@
 -- `mut-for-acc.bc` as its elaboration should read: written by hand in core.
 main : F i32 =
   acc <- return i32[0];
-  return (unbang count_fold[i32]) (!thunkv fun (q : i32 * i32) ->
+  acc <- return (unbang count_fold[i32]) (!thunkv fun (q : i32 * i32) ->
       let (i, acc) = q;
-      return (unbang host[add32]) (acc, i), (i32[5], (i32[0], acc)))
+      acc <- return (unbang host[add32]) (acc, i);
+      return acc, (i32[5], (i32[0], acc)));
+  return acc
