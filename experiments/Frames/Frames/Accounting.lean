@@ -19,6 +19,19 @@ open BoCa.Fig16.BoLo
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload ubindE cfinE cancelVal)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
+set_option linter.unusedSimpArgs false
+
+-- The substitution normaliser for elaborated terms: closing substitutions, β's substitutions,
+-- and the shifts they cancel.
+set_option hygiene false in
+macro "fsimp" : tactic => `(tactic| simp [Kont.plug, Expr.psub, Expr.subst, sh, psub_sh, Expr.val,
+  Val.lam, subst_shift_succ, Expr.shift_zero, Expr.shift_shift, subst_shift_expr, psub_dtor, subst_dtor])
+
+set_option hygiene false in
+macro "fsimp_at" h:ident : tactic => `(tactic| simp [Kont.plug, Expr.psub, Expr.subst, sh, psub_sh,
+  Expr.val, Val.lam, subst_shift_succ, Expr.shift_zero, Expr.shift_shift, subst_shift_expr, psub_dtor,
+  subst_dtor] at $h:ident)
+
 theorem psub_dtor (k : Nat) (γ : List Val) (T : VTy) : Expr.psub k γ (dtorE T) = dtorE T :=
   psub_closedAt _ γ (dtorAt_closed false T) (Nat.zero_le k)
 
@@ -229,6 +242,70 @@ theorem acc_bind {E : ExitRow} {Γ₂ : Ctx VTy} {eM eN : Expr}
         refine retsG_chain (((((((chain_dropCtx Γ₂ 5 _).psub 5 γ).subst 4 _).subst 3 _).subst 1 _).subst 1 _).subst 0 e) ?_
         simp [Expr.psub, Expr.subst]
         exact retsG_val (w := Val.pair π (Val.inj₂ e)) ⟨_, rfl⟩
+
+/-! ### `catch` -/
+
+theorem acc_catch {Γ₂ : Ctx VTy} {eM eH : Expr}
+    (ihM : ∀ γ : List Val, Returns (ℍ := ℍ) (substAll γ eM))
+    (ihH : ∀ γ : List Val, Returns (ℍ := ℍ) (substAll γ eH)) (γ : List Val) :
+    Returns (ℍ := ℍ) (substAll γ (catchE Γ₂ eM eH)) := by
+  intro π
+  apply rets_of_retsG
+  change RetsG (PairQ π) _ (Kont.plug .hole (.app (.val (.lam (Expr.psub 1 γ
+    (.app (.val (.lam (.letpair (.var 0)
+      (.case (.var 0)
+        (dropCtxE Γ₂ 5 (.pair (.var 2) (.inj₁ (.var 0))))
+        (.case (.var 0)
+          (.app (.app (sh 6 (.val (.lam eH))) (.var 0)) (.var 3))
+          (dropCtxE Γ₂ 6 (.pair (.var 3) (.inj₂ (.var 0))))))))) (.app (sh 1 eM) (.var 0))))))
+    (.val π)))
+  refine retsG_beta .hole ?_
+  simp [Kont.plug, Expr.psub, Expr.subst, sh, psub_sh, Expr.val, Val.lam,
+    subst_shift_succ, Expr.shift_zero]
+  refine retsG_plain (K := .appR (.lam _) .hole) rfl (retsG_of_rets (ihM γ π)) ?_
+  rintro v ⟨x, rfl⟩
+  refine retsG_beta .hole ?_
+  simp [Kont.plug, Expr.subst, subst_shift_succ]
+  refine retsG_letpair .hole ?_
+  simp [Kont.plug, Expr.subst, subst_shift_succ, Expr.shift_zero]
+  refine retsG_caseV (fun a _ => ?_) (fun e _ => ?_)
+  · refine retsG_chain (((((((chain_dropCtx Γ₂ 5 _).psub 5 γ).subst 4 _).subst 3 _).subst 1 _).subst 1 _).subst 0 a) ?_
+    simp [Expr.psub, Expr.subst]
+    exact retsG_val (w := Val.pair π (Val.inj₁ a)) ⟨_, rfl⟩
+  · simp [Expr.subst, subst_shift_succ, Expr.shift_zero]
+    refine retsG_caseV (fun b _ => ?_) (fun e' _ => ?_)
+    · have := retsG_call (G := fun _ => False) (π := π) (a := b) (ihH (b :: γ))
+      fsimp; fsimp_at this; exact this
+    · refine retsG_chain ((((((((chain_dropCtx Γ₂ 6 _).psub 6 γ).subst 5 _).subst 4 _).subst 2 _).subst 2 _).subst 1 _).subst 0 e') ?_
+      fsimp
+      exact retsG_val (w := Val.pair π (Val.inj₂ e')) ⟨_, rfl⟩
+
+/-! ### `under` -/
+
+theorem acc_under {Q : VTy} {eM : Expr}
+    (ih : ∀ γ : List Val, Returns (ℍ := ℍ) (substAll γ eM)) (γ : List Val) :
+    Returns (ℍ := ℍ) (substAll γ (underE Q eM)) := by
+  intro π
+  apply rets_of_retsG
+  change RetsG (PairQ π) _ (Kont.plug .hole (.app (.val (.lam (Expr.psub 1 γ
+    (.letpair (.var 0)
+      (thenE (.letpair (.var 0) (.pair (.pair (.var 4) (.var 1)) (.var 0)))
+        (.app (dtorE Q) (.var 2))
+        (.app (sh 3 eM) (.var 0))))))) (.val π)))
+  refine retsG_beta .hole ?_
+  simp [thenE, psub_dtor, subst_dtor]
+  fsimp
+  refine retsG_letpairV (fun q ρ hπ => ?_)
+  subst hπ
+  fsimp
+  refine retsG_ubind (N := Val.lam _) (D := Val.lam _) (Q₁ := PairQ ρ)
+    (retsG_of_rets (by simpa [substAll] using ih γ ρ)) (fun v hv => ?_)
+  obtain ⟨r, rfl⟩ := hv
+  refine retsG_beta .hole ?_
+  fsimp
+  refine retsG_letpair .hole ?_
+  fsimp
+  exact retsG_val (w := Val.pair (Val.pair q ρ) r) ⟨_, rfl⟩
 
 end BoCa.Fig16.LogRel.Core.Frames
 
