@@ -872,6 +872,86 @@ theorem retsG_countTry_stuck {Q : Val → Prop} {G : Expr → Prop} {x : Val}
     exact hx ⟨f, n, i, s, h⟩
   · intro h; simp at h
 
+/-! ### The div loop -/
+
+/-- `iterate` steps only at a pair, to `iterNext`. -/
+theorem step1_iterate_inv {μ μ₁ : Heap} {x : Val} {E : Expr}
+    (h : Step1 (ℍ := ℍ) μ (.app (.val (.prim .iterate)) (.val x)) μ₁ E) :
+    ∃ f s, x = Val.pair f s ∧ μ₁ = μ ∧ E = iterNext f s := by
+  have hh := step1_app1_head h
+  generalize hE : Expr.app (.val (.prim .iterate)) (.val x) = X at hh
+  cases hh with
+  | iterate f s =>
+      simp only [Expr.app.injEq, true_and] at hE
+      exact ⟨f, s, Subtype.ext hE, rfl, rfl⟩
+  | _ => exfalso; simp_all [BoCa.BoLo.hndE, ubindE, BoCa.BoLo.ccatchE, cfinE, Expr.val, Val.prim]
+
+/-- The answers of a turn: `inj₁` of a result in `X`, or `inj₂` of a next state in `P`. -/
+def TurnQ (P X : Val → Prop) (y : Val) : Prop :=
+  (∃ x, y = Val.inj₁ x ∧ X x) ∨ (∃ s, y = Val.inj₂ s ∧ P s)
+
+/-- The answers of a div loop: `inj₁` of a result in `X`, or `inj₂` of a residual in `R`. -/
+def IterQ (X R : Val → Prop) (y : Val) : Prop :=
+  (∃ x, y = Val.inj₁ x ∧ X x) ∨ (∃ r, y = Val.inj₂ r ∧ R r)
+
+/-- The states a div loop resumes into after a tick: the case on the tick's answer. -/
+def TickG (f : Val) (P : Val → Prop) (t : Expr) : Prop :=
+  ∃ s w, P s ∧ t = .app (.val (.lam ((iterTurn f).subst 1 (s.shift 1 0)))) (.val w)
+
+theorem divEff_tick : tickE = perfAt .hole divEff 0 .unit := rfl
+
+theorem subst_inrV (j : Nat) (s : Val) : Expr.subst j s inrV.1 = inrV.1 := by
+  simp [inrV, Val.lam, Expr.subst]
+
+theorem subst_closeV (j : Nat) (s : Val) : Expr.subst j s closeV.1 = closeV.1 := by
+  simp [closeV, Val.inj₂, Val.unit, Expr.subst]
+
+/-- **The div loop keeps its invariant**, coinductively: every turn answers `TurnQ P X`, and the
+step's residual answers `R`, so the loop answers `IterQ X R` on every run, through its ticks. -/
+theorem retsG_iterate {P X R : Val → Prop} (f : Val)
+    (hturn : ∀ s, P s →
+      RetsG (ℍ := ℍ) (TurnQ P X) (fun _ => False) (.app (.app (.val f) (.val s)) (.val nextV)))
+    (hclose : ∀ s, P s →
+      RetsG (ℍ := ℍ) R (fun _ => False) (.app (.app (.val f) (.val s)) (.val closeV)))
+    {s : Val} (hs : P s) :
+    RetsG (ℍ := ℍ) (IterQ X R) (fun _ => False) (.app (.val (.prim .iterate)) (.val (Val.pair f s))) := by
+  -- one turn, up to the ticks it resumes into
+  have hone : ∀ s, P s → RetsG (ℍ := ℍ) (IterQ X R) (TickG f P)
+      (.app (.val (.prim .iterate)) (.val (Val.pair f s))) := by
+    intro s hs
+    refine retsG_step' ⟨fun _ => none, _, _, Step1.head (Head.iterate _ f s)⟩ (fun μ μ₁ t₁ hst => ?_)
+    obtain ⟨f', s', hx, -, rfl⟩ := step1_iterate_inv hst
+    obtain ⟨hf', hs'⟩ := pairV_inj hx
+    subst hf' hs'
+    unfold iterNext
+    refine retsG_plain (K := .case .hole _ _) rfl
+      (retsG_mono (fun _ h => h) (fun _ (h : False) => h.elim) (hturn s hs)) ?_
+    rintro y (⟨x, rfl, hx⟩ | ⟨s'', rfl, hs''⟩)
+    · refine retsG_case₁ .hole ?_
+      exact retsG_val (w := Val.inj₁ x) (.inl ⟨x, rfl, hx⟩)
+    · refine retsG_case₂ .hole ?_
+      simp only [Kont.plug, Expr.subst, divEff_tick]
+      change RetsG _ _ (perfAt (.appR (.val (.lam ((iterTurn f).subst 1 (s''.shift 1 0)))) .hole)
+        divEff 0 .unit)
+      refine retsG_perform (by simp [Kont.HasHnd, Expr.val, Val.lam]) (fun w => .inr ⟨s'', w, hs'', rfl⟩)
+  -- a resumption after a tick
+  have hres : ∀ t, TickG f P t → RetsG (ℍ := ℍ) (IterQ X R) (TickG f P) t := by
+    rintro t ⟨s, w, hs, rfl⟩
+    refine retsG_beta .hole ?_
+    simp only [Kont.plug, iterTurn]
+    simp [Expr.subst, Expr.val, subst_shift_succ, Expr.shift_shift]
+    refine retsG_caseV (fun u _ => ?_) (fun u _ => ?_)
+    · simp [Expr.subst, subst_shift_expr]
+      exact hone s hs
+    · simp only [subst_inrV, subst_closeV]
+      simp only [Expr.subst, subst_shift_expr, subst_closeV]
+      refine retsG_plain (K := .appR (.val inrV) .hole) rfl (Q₁ := R)
+        (retsG_mono (fun _ h => h) (fun _ (h : False) => h.elim) (hclose s hs)) (fun r hr => ?_)
+      refine retsG_beta .hole ?_
+      simp only [Kont.plug, Expr.subst, if_true]
+      exact retsG_val (w := Val.inj₂ r) (.inr ⟨r, rfl, hr⟩)
+  exact retsG_close hres (hone s hs)
+
 end BoCa.Fig16.LogRel.Core.Frames
 
 end
