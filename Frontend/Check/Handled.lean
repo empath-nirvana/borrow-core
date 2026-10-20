@@ -92,6 +92,60 @@ theorem TDerivesP.inside_eqT {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : J
   cases h with
   | effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
 
+/-! ### The names a clause's own code performs or raises -/
+
+theorem tupleAt_eq_clauseExpr : ∀ (j : Nat) (e : Expr), tupleAt j e = clauseExpr e j
+  | 0, .pair _ _ => rfl
+  | j + 1, .pair _ b => tupleAt_eq_clauseExpr j b
+  | 0, .var _ | 0, .unit | 0, .inj₁ _ | 0, .inj₂ _ | 0, .lam _ | 0, .loc _ | 0, .prim _
+  | 0, .seq .. | 0, .letpair .. | 0, .case .. | 0, .app .. => rfl
+  | _ + 1, .var _ | _ + 1, .unit | _ + 1, .inj₁ _ | _ + 1, .inj₂ _ | _ + 1, .lam _
+  | _ + 1, .loc _ | _ + 1, .prim _ | _ + 1, .seq .. | _ + 1, .letpair .. | _ + 1, .case ..
+  | _ + 1, .app .. => rfl
+
+/-- A name list `handlerNames` records for the operation `j` is the names of the clause of the
+handler's pair the machine runs for it. -/
+theorem handlerNames_some {E : List (Qual × VTy × VTy)} {H : Expr} {j : Nat}
+    {o : Qual × VTy × VTy} {ns : List UInt32} (ho : E[j]? = some o)
+    (hn : (handlerNames E H)[j]? = some (some ns)) :
+    ∃ c, clauseAt j H = some c ∧ clauseNames o c = some ns := by
+  unfold handlerNames at hn
+  split at hn
+  · rename_i hr hs
+    rw [List.getElem?_map] at hn
+    have hj : j < E.length := (List.getElem?_eq_some_iff.mp ho).1
+    have hz : ((List.range E.length).zip E)[j]? = some (j, o) := by
+      rw [List.getElem?_zip_eq_some]
+      exact ⟨List.getElem?_range hj, ho⟩
+    rw [hz] at hn
+    simp only [Option.map_some, Option.some.injEq] at hn
+    obtain ⟨c, hc, hcn⟩ := Option.bind_eq_some_iff.mp hn
+    exact ⟨c, by simp only [clauseAt]; rw [tupleAt_eq_clauseExpr]; exact hc, hcn⟩
+  · rw [List.getElem?_map, ho] at hn
+    cases hn
+
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ] in
+/-- **A tail-resumptive clause's work performs and raises only its names.** At a `handle` node
+whose kind for the operation `j` is `tail` (`classifyHandler`) and whose names for it are `ns`
+(`handlerNames`), the clause of the node's pair is `λp. let (x, κ) = p; M`, `M'` is `M` without
+its resumes (`TailResumesAt 0 M M'`), and every run of the work `M'`, at any values of its
+variables, from any memory, performs and raises only names of `ns` (`tail_work_names`).
+`[spec §19]` -/
+theorem tail_clause_names (E : List (Qual × VTy × VTy)) (tH : TExpr) {j : Nat}
+    {o : Qual × VTy × VTy} {k : HKind} {ns : List UInt32} (ho : E[j]? = some o)
+    (hk : (classifyHandler E tH)[j]? = some k) (ht : k.kind = .tail)
+    (hn : (handlerNames E tH.erase)[j]? = some (some ns)) :
+    ∃ M M', clauseAt j tH.erase = some (.lam (.letpair (.var 0) M)) ∧ TailResumesAt 0 M M' ∧
+      ∀ {W : Expr}, SubstOf M' W → ∀ {μ μ' : BoLo.Heap} {e : Expr},
+        BoLo.Steps (ℍ := ℍ) μ W μ' e → ∀ {K : BoLo.Kont} {m i : UInt32} {v : Val},
+          (e = K.plug (BoLo.performE (.val (BoLo.opPayload m i v))) → m ∈ ns) ∧
+          (e = K.plug (BoLo.raiseE (.val (BoLo.opPayload m i v))) → m ∈ ns) := by
+  obtain ⟨c, hc, hcn⟩ := handlerNames_some ho hn
+  have hP := classifyHandler_sound E tH ho hk hc
+  rw [ht] at hP
+  obtain ⟨ha, M, rfl, M', hM⟩ := hP
+  simp only [clauseNames, ha, Bool.false_eq_true, if_false] at hcn
+  exact ⟨M, M', hc, hM, fun hW _ _ _ hs _ _ _ _ => tail_work_names hM hcn hW hs⟩
 
 end BoCa.Fig16.LogRel.Core.Check
 
@@ -114,6 +168,19 @@ theorem cond2B_sound {V : HIn} {S : CRow} (h : cond2B V (S.map (·.n)) = true) :
   rw [HIn.catchesB_iff.mpr hc] at this
   cases this
 
+/-- Condition 2, decided, is sound over names: no name it accepts is one the record may catch. -/
+theorem cond2B_names_sound {V : HIn} {ns : List UInt32} (h : cond2B V ns = true) :
+    ∀ m ∈ ns, ¬ V.Catches m := by
+  intro m hm hc
+  simp only [cond2B, List.all_eq_true, Bool.not_eq_true'] at h
+  have := h m hm
+  rw [HIn.catchesB_iff.mpr hc] at this
+  cases this
+
+/-- **The names condition 2 is over at a clause** (form (b), SPEC §19): the names its own code
+performs or raises (`clauseNames`), or, where it may run code it does not hold, its row's. -/
+def cond2Names (row : List UInt32) (ns : Option (List UInt32)) : List UInt32 := ns.getD row
+
 /-- **What may flow in a run of `main`**: `ClauseKinds.flows` of the checked term.  `[spec §19]` -/
 def Checked.flows (c : Checked) : HIn := ClauseKinds.flows c.e
 
@@ -131,6 +198,16 @@ theorem Checked.unhandledIn (c : Checked) {μ : BoLo.Heap} {e : BoCa.Expr}
     {p : BoCa.Expr} (he : e = K₀.plug (BoLo.hndE H (K.plug p))) {S : CRow}
     (hS : cond2B c.flows (S.map (·.n)) = true) : UnhandledIn S K :=
   steps_unhandledIn h emptyMem_clean he (cond2B_sound hS)
+
+/-- **Condition 2 over a clause's names, at a checked program.** In a run of `main` from the
+empty memory, at every configuration that holds a handler frame `hnd H K[p]`, names that
+`cond2B` accepts at `main`'s flow record are unhandled in `K`. At no names, they are unhandled in
+every `K` (`unhandledNames_nil`).  `[spec §19]` -/
+theorem Checked.unhandledNames (c : Checked) {μ : BoLo.Heap} {e : BoCa.Expr}
+    (h : BoLo.Steps (ℍ := ℍ) BoCa.Adequacy.emptyMem c.e μ e) {K₀ K : BoLo.Kont} {H : BoCa.Val}
+    {p : BoCa.Expr} (he : e = K₀.plug (BoLo.hndE H (K.plug p))) {ns : List UInt32}
+    (hS : cond2B c.flows ns = true) : UnhandledNames ns K :=
+  steps_unhandledNames h emptyMem_clean he (cond2B_names_sound hS)
 
 /-- **The run invariant at a checked program**: every handler frame a run of `main` from the
 empty memory reaches is of a handle node of `main`'s erasure: its name is one of a literal `hnd`

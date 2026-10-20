@@ -40,7 +40,7 @@ row() {
       c2 = ($0 ~ /; condition 2 holds$/) ? 1 : 0
       if (!(n in hold)) hold[n] = 1
       if (!c2) hold[n] = 0
-      ops = $0; sub(/.*; ops /, "", ops); sub(/; condition 2 .*/, "", ops)
+      ops = $0; sub(/.*; ops /, "", ops); sub(/; names .*/, "", ops)
       m = split(ops, os, ", ")
       for (j = 1; j <= m; j++) {
         split(os[j], w, " ")

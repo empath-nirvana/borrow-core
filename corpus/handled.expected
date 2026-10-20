@@ -6,30 +6,30 @@ corpus/aff-depth.bc flows [0, 4294967295]; main []
 corpus/aff-drop.bc flows [0, 4294967295]; main []
 corpus/aff-higher.bc flows [0, 4294967295]; main []
 corpus/answers-two-types.bc flows [0, 1, 2, 4294967295]; main [1, 2]
-corpus/answers-two-types.bc 23:21: handle 1: inside [2]; row []; ops 1.0 tail+state; condition 2 holds
-corpus/answers-two-types.bc 23:40: handle 2: inside []; row [1]; ops 2.0 tail; condition 2 fails at 1
+corpus/answers-two-types.bc 23:21: handle 1: inside [2]; row []; ops 1.0 tail+state; names 1.0 []; condition 2 holds
+corpus/answers-two-types.bc 23:40: handle 2: inside []; row [1]; ops 2.0 tail; names 2.0 []; condition 2 holds
 corpus/answers-two-types.bc 1.0 tail+state: machine; condition 2 holds; -
-corpus/answers-two-types.bc 2.0 tail: direct; condition 2 fails; disagree
+corpus/answers-two-types.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/aoc/2020-08.bc flows [0, 4294967295]; main []
 corpus/aoc/2021-06.bc flows [0, 4294967295]; main []
 corpus/aoc/2021-10.bc flows [0, 4294967295]; main []
 corpus/aoc/2021-15.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/aoc/2021-15.bc 90:1: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/aoc/2021-15.bc 64:3: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/aoc/2021-15.bc 72:11: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/aoc/2021-15.bc 37:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/aoc/2021-15.bc 90:1: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/aoc/2021-15.bc 64:3: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/aoc/2021-15.bc 72:11: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/aoc/2021-15.bc 37:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/aoc/2021-15.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/aoc/2022-01.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/aoc/2022-01.bc 22:23: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/aoc/2022-01.bc 390:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/aoc/2022-01.bc 393:15: handle 3: inside []; row [1]; ops 3.0 abortive; condition 2 fails at 1
-corpus/aoc/2022-01.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 fails at 1
+corpus/aoc/2022-01.bc 22:23: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/aoc/2022-01.bc 390:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/aoc/2022-01.bc 393:15: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/aoc/2022-01.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/aoc/2022-01.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/aoc/2022-01.bc 3.0 abortive: branch; condition 2 fails; -
-corpus/aoc/2022-01.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/aoc/2022-01.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/aoc/2022-01.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/aoc/2022-12.bc flows [0, 4294967295]; main []
 corpus/aoc/2022-21.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/aoc/2022-21.bc 134:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/aoc/2022-21.bc 134:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/aoc/2022-21.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/aoc/2023-01.bc flows [0, 4294967295]; main []
 corpus/aoc/2023-03.bc flows [0, 4294967295]; main []
@@ -43,97 +43,97 @@ corpus/array-refs.bc flows [0, 4294967295]; main []
 corpus/array-replace.bc flows [0, 4294967295]; main []
 corpus/array-sum.bc flows [0, 4294967295]; main []
 corpus/ascii-upper.bc flows [0, 1, 4294967295]; main [1]
-corpus/ascii-upper.bc 16:9: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/ascii-upper.bc 16:9: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/ascii-upper.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/async-bank-inbox.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/async-bank-inbox.bc 60:19: handle 3: inside [1], finaliser; row []; ops 3.0 stored, 3.1 tail; condition 2 holds
-corpus/async-bank-inbox.bc 37:13: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
-corpus/async-bank-inbox.bc 61:19: handle 2: inside [1], finaliser; row []; ops 2.0 stored, 2.1 tail; condition 2 holds
+corpus/async-bank-inbox.bc 60:19: handle 3: inside [1], finaliser; row []; ops 3.0 stored, 3.1 tail; names 3.0 [], 3.1 []; condition 2 holds
+corpus/async-bank-inbox.bc 37:13: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/async-bank-inbox.bc 61:19: handle 2: inside [1], finaliser; row []; ops 2.0 stored, 2.1 tail; names 2.0 [], 2.1 []; condition 2 holds
 corpus/async-bank-inbox.bc 3.0 stored: machine; condition 2 holds; -
 corpus/async-bank-inbox.bc 3.1 tail: -; condition 2 holds; -
 corpus/async-bank-inbox.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/async-bank-inbox.bc 2.0 stored: machine; condition 2 holds; -
 corpus/async-bank-inbox.bc 2.1 tail: -; condition 2 holds; -
 corpus/async-cancel.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
-corpus/async-cancel.bc 42:11: handle 2: inside [], finaliser; row []; ops 2.0 stored, 2.1 tail; condition 2 holds
-corpus/async-cancel.bc 44:19: handle 1: inside [], finaliser; row []; ops 1.0 stored, 1.1 tail; condition 2 holds
+corpus/async-cancel.bc 42:11: handle 2: inside [], finaliser; row []; ops 2.0 stored, 2.1 tail; names 2.0 [], 2.1 []; condition 2 holds
+corpus/async-cancel.bc 44:19: handle 1: inside [], finaliser; row []; ops 1.0 stored, 1.1 tail; names 1.0 [], 1.1 []; condition 2 holds
 corpus/async-cancel.bc 2.0 stored: machine; condition 2 holds; -
 corpus/async-cancel.bc 2.1 tail: -; condition 2 holds; -
 corpus/async-cancel.bc 1.0 stored: machine; condition 2 holds; -
 corpus/async-cancel.bc 1.1 tail: -; condition 2 holds; -
 corpus/async-lend-slots.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
-corpus/async-lend-slots.bc 35:19: handle 2: inside [], finaliser; row []; ops 2.0 stored, 2.1 tail; condition 2 holds
-corpus/async-lend-slots.bc 36:19: handle 1: inside [], finaliser; row []; ops 1.0 stored, 1.1 tail; condition 2 holds
+corpus/async-lend-slots.bc 35:19: handle 2: inside [], finaliser; row []; ops 2.0 stored, 2.1 tail; names 2.0 [], 2.1 []; condition 2 holds
+corpus/async-lend-slots.bc 36:19: handle 1: inside [], finaliser; row []; ops 1.0 stored, 1.1 tail; names 1.0 [], 1.1 []; condition 2 holds
 corpus/async-lend-slots.bc 2.0 stored: machine; condition 2 holds; -
 corpus/async-lend-slots.bc 2.1 tail: -; condition 2 holds; -
 corpus/async-lend-slots.bc 1.0 stored: machine; condition 2 holds; -
 corpus/async-lend-slots.bc 1.1 tail: -; condition 2 holds; -
 corpus/async-logged.bc flows [0, 1, 2, 3, 4, 4294967295], finaliser; main [1, 2, 3, 4], finaliser
-corpus/async-logged.bc 44:20: handle 1: inside [2], finaliser; row []; ops 1.0 stored, 1.1 stored; condition 2 holds
-corpus/async-logged.bc 31:13: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 fails at 1
-corpus/async-logged.bc 43:20: handle 3: inside [4], finaliser; row []; ops 3.0 stored, 3.1 stored; condition 2 holds
-corpus/async-logged.bc 31:13: handle 4: inside []; row [3]; ops 4.0 abortive; condition 2 fails at 3
+corpus/async-logged.bc 44:20: handle 1: inside [2], finaliser; row []; ops 1.0 stored, 1.1 stored; names 1.0 [], 1.1 []; condition 2 holds
+corpus/async-logged.bc 31:13: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/async-logged.bc 43:20: handle 3: inside [4], finaliser; row []; ops 3.0 stored, 3.1 stored; names 3.0 [], 3.1 []; condition 2 holds
+corpus/async-logged.bc 31:13: handle 4: inside []; row [3]; ops 4.0 abortive; names 4.0 []; condition 2 holds
 corpus/async-logged.bc 1.0 stored: machine; condition 2 holds; -
 corpus/async-logged.bc 1.1 stored: machine; condition 2 holds; -
-corpus/async-logged.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/async-logged.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/async-logged.bc 3.0 stored: machine; condition 2 holds; -
 corpus/async-logged.bc 3.1 stored: machine; condition 2 holds; -
-corpus/async-logged.bc 4.0 abortive: branch; condition 2 fails; -
+corpus/async-logged.bc 4.0 abortive: branch; condition 2 holds; -
 corpus/async-map.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/async-map.bc 29:14: handle 3: inside []; row []; ops 3.0 abortive; condition 2 holds
-corpus/async-map.bc 31:19: handle 1: inside [2], finaliser; row []; ops 1.0 stored, 1.1 tail; condition 2 holds
-corpus/async-map.bc 31:32: handle 2: inside [], finaliser; row [1]; ops 2.0 abortive; condition 2 fails at 1
+corpus/async-map.bc 29:14: handle 3: inside []; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/async-map.bc 31:19: handle 1: inside [2], finaliser; row []; ops 1.0 stored, 1.1 tail; names 1.0 [], 1.1 []; condition 2 holds
+corpus/async-map.bc 31:32: handle 2: inside [], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/async-map.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/async-map.bc 1.0 stored: machine; condition 2 holds; -
 corpus/async-map.bc 1.1 tail: -; condition 2 holds; -
-corpus/async-map.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/async-map.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/async-mapreduce.bc flows [0, 1, 3, 4, 4294967295], finaliser; main [1, 2, 3, 4], finaliser
-corpus/async-mapreduce.bc 32:13: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
-corpus/async-mapreduce.bc 27:11: handle 2: inside [3, 4], finaliser; row []; ops 2.0 abortive; condition 2 holds
-corpus/async-mapreduce.bc 29:15: handle 3: inside [4], finaliser; row []; ops 3.0 stored, 3.1 tail; condition 2 holds
-corpus/async-mapreduce.bc 29:28: handle 4: inside [], finaliser; row [3]; ops 4.0 abortive; condition 2 fails at 3
+corpus/async-mapreduce.bc 32:13: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/async-mapreduce.bc 27:11: handle 2: inside [3, 4], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/async-mapreduce.bc 29:15: handle 3: inside [4], finaliser; row []; ops 3.0 stored, 3.1 tail; names 3.0 [], 3.1 []; condition 2 holds
+corpus/async-mapreduce.bc 29:28: handle 4: inside [], finaliser; row [3]; ops 4.0 abortive; names 4.0 []; condition 2 holds
 corpus/async-mapreduce.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/async-mapreduce.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/async-mapreduce.bc 3.0 stored: machine; condition 2 holds; -
 corpus/async-mapreduce.bc 3.1 tail: -; condition 2 holds; -
-corpus/async-mapreduce.bc 4.0 abortive: branch; condition 2 fails; -
+corpus/async-mapreduce.bc 4.0 abortive: branch; condition 2 holds; -
 corpus/async-r1-cancel-finaliser-writes.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/async-r1-cancel-finaliser-writes.bc 17:3: handle 1: inside [], finaliser; row []; ops 1.0 resume-or-cancel; condition 2 holds
+corpus/async-r1-cancel-finaliser-writes.bc 17:3: handle 1: inside [], finaliser; row []; ops 1.0 resume-or-cancel; names 1.0 []; condition 2 holds
 corpus/async-r1-cancel-finaliser-writes.bc 1.0 resume-or-cancel: machine; condition 2 holds; -
 corpus/async-r1-cancel.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
-corpus/async-r1-cancel.bc 47:3: handle 1: inside [], finaliser; row []; ops 1.0 stored; condition 2 holds
-corpus/async-r1-cancel.bc 48:3: handle 2: inside [], finaliser; row []; ops 2.0 stored; condition 2 holds
+corpus/async-r1-cancel.bc 47:3: handle 1: inside [], finaliser; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
+corpus/async-r1-cancel.bc 48:3: handle 2: inside [], finaliser; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
 corpus/async-r1-cancel.bc 1.0 stored: machine; condition 2 holds; -
 corpus/async-r1-cancel.bc 2.0 stored: machine; condition 2 holds; -
 corpus/async-r1-drain.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/async-r1-drain.bc 29:11: handle 1: inside [], finaliser; row []; ops 1.0 stored; condition 2 holds
+corpus/async-r1-drain.bc 29:11: handle 1: inside [], finaliser; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
 corpus/async-r1-drain.bc 1.0 stored: machine; condition 2 holds; -
 corpus/async-r1-effects.bc flows [0, 1, 2, 3, 4, 4294967295], finaliser; main [1, 2, 3, 4], finaliser
-corpus/async-r1-effects.bc 44:3: handle 1: inside [2], finaliser; row []; ops 1.0 stored; condition 2 holds
-corpus/async-r1-effects.bc 24:13: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 fails at 1
-corpus/async-r1-effects.bc 45:3: handle 3: inside [4], finaliser; row []; ops 3.0 stored; condition 2 holds
-corpus/async-r1-effects.bc 24:13: handle 4: inside []; row [3]; ops 4.0 abortive; condition 2 fails at 3
+corpus/async-r1-effects.bc 44:3: handle 1: inside [2], finaliser; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
+corpus/async-r1-effects.bc 24:13: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/async-r1-effects.bc 45:3: handle 3: inside [4], finaliser; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/async-r1-effects.bc 24:13: handle 4: inside []; row [3]; ops 4.0 abortive; names 4.0 []; condition 2 holds
 corpus/async-r1-effects.bc 1.0 stored: machine; condition 2 holds; -
-corpus/async-r1-effects.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/async-r1-effects.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/async-r1-effects.bc 3.0 stored: machine; condition 2 holds; -
-corpus/async-r1-effects.bc 4.0 abortive: branch; condition 2 fails; -
+corpus/async-r1-effects.bc 4.0 abortive: branch; condition 2 holds; -
 corpus/async-r1-generator.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/async-r1-generator.bc 38:3: handle 1: inside [], finaliser; row []; ops 1.0 stored; condition 2 holds
+corpus/async-r1-generator.bc 38:3: handle 1: inside [], finaliser; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
 corpus/async-r1-generator.bc 1.0 stored: machine; condition 2 holds; -
 corpus/async-r1-local-borrows.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
-corpus/async-r1-local-borrows.bc 52:3: handle 1: inside [], finaliser; row []; ops 1.0 stored; condition 2 holds
-corpus/async-r1-local-borrows.bc 53:3: handle 2: inside [], finaliser; row []; ops 2.0 stored; condition 2 holds
+corpus/async-r1-local-borrows.bc 52:3: handle 1: inside [], finaliser; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
+corpus/async-r1-local-borrows.bc 53:3: handle 2: inside [], finaliser; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
 corpus/async-r1-local-borrows.bc 1.0 stored: machine; condition 2 holds; -
 corpus/async-r1-local-borrows.bc 2.0 stored: machine; condition 2 holds; -
 corpus/async-r1-nested.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/async-r1-nested.bc 37:3: handle 1: inside [], finaliser; row []; ops 1.0 stored; condition 2 holds
+corpus/async-r1-nested.bc 37:3: handle 1: inside [], finaliser; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
 corpus/async-r1-nested.bc 1.0 stored: machine; condition 2 holds; -
 corpus/async-race.bc flows [0, 1, 3, 4, 5, 4294967295], finaliser; main [1, 2, 3, 4, 5], finaliser
-corpus/async-race.bc 52:11: handle 5: inside [], finaliser; row []; ops 5.0 stored, 5.1 tail; condition 2 holds
-corpus/async-race.bc 53:11: handle 4: inside [], finaliser; row []; ops 4.0 stored, 4.1 tail; condition 2 holds
-corpus/async-race.bc 54:11: handle 3: inside [], finaliser; row []; ops 3.0 stored, 3.1 tail; condition 2 holds
-corpus/async-race.bc 55:3: handle 2: inside [1], finaliser; row []; ops 2.0 abortive; condition 2 holds
-corpus/async-race.bc 28:40: handle 1: inside []; row []; ops 1.0 stored, 1.1 tail; condition 2 holds
+corpus/async-race.bc 52:11: handle 5: inside [], finaliser; row []; ops 5.0 stored, 5.1 tail; names 5.0 [], 5.1 []; condition 2 holds
+corpus/async-race.bc 53:11: handle 4: inside [], finaliser; row []; ops 4.0 stored, 4.1 tail; names 4.0 [], 4.1 []; condition 2 holds
+corpus/async-race.bc 54:11: handle 3: inside [], finaliser; row []; ops 3.0 stored, 3.1 tail; names 3.0 [], 3.1 []; condition 2 holds
+corpus/async-race.bc 55:3: handle 2: inside [1], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/async-race.bc 28:40: handle 1: inside []; row []; ops 1.0 stored, 1.1 tail; names 1.0 [], 1.1 []; condition 2 holds
 corpus/async-race.bc 5.0 stored: machine; condition 2 holds; -
 corpus/async-race.bc 5.1 tail: -; condition 2 holds; -
 corpus/async-race.bc 4.0 stored: machine; condition 2 holds; -
@@ -144,50 +144,50 @@ corpus/async-race.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/async-race.bc 1.0 stored: machine; condition 2 holds; -
 corpus/async-race.bc 1.1 tail: -; condition 2 holds; -
 corpus/async-scheduler.bc flows [0, 1, 2, 4294967295]; main [1, 2]
-corpus/async-scheduler.bc 31:19: handle 2: inside []; row []; ops 2.0 stored, 2.1 tail; condition 2 holds
-corpus/async-scheduler.bc 32:19: handle 1: inside []; row []; ops 1.0 stored, 1.1 tail; condition 2 holds
+corpus/async-scheduler.bc 31:19: handle 2: inside []; row []; ops 2.0 stored, 2.1 tail; names 2.0 [], 2.1 []; condition 2 holds
+corpus/async-scheduler.bc 32:19: handle 1: inside []; row []; ops 1.0 stored, 1.1 tail; names 1.0 [], 1.1 []; condition 2 holds
 corpus/async-scheduler.bc 2.0 stored: machine; condition 2 holds; -
 corpus/async-scheduler.bc 2.1 tail: -; condition 2 holds; -
 corpus/async-scheduler.bc 1.0 stored: machine; condition 2 holds; -
 corpus/async-scheduler.bc 1.1 tail: -; condition 2 holds; -
 corpus/async-scoped.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/async-scoped.bc 30:26: handle 3: inside []; row []; ops 3.0 stored, 3.1 tail; condition 2 holds
-corpus/async-scoped.bc 31:26: handle 2: inside []; row []; ops 2.0 stored, 2.1 tail; condition 2 holds
-corpus/async-scoped.bc 32:7: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/async-scoped.bc 30:26: handle 3: inside []; row []; ops 3.0 stored, 3.1 tail; names 3.0 [], 3.1 []; condition 2 holds
+corpus/async-scoped.bc 31:26: handle 2: inside []; row []; ops 2.0 stored, 2.1 tail; names 2.0 [], 2.1 []; condition 2 holds
+corpus/async-scoped.bc 32:7: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/async-scoped.bc 3.0 stored: machine; condition 2 holds; -
 corpus/async-scoped.bc 3.1 tail: -; condition 2 holds; -
 corpus/async-scoped.bc 2.0 stored: machine; condition 2 holds; -
 corpus/async-scoped.bc 2.1 tail: -; condition 2 holds; -
 corpus/async-scoped.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/async-timers.bc flows [0, 1, 2, 3, 4, 4294967295], finaliser; main [1, 2, 3, 4], finaliser
-corpus/async-timers.bc 99:24: handle 4: inside []; row []; ops 4.0 stored; condition 2 holds
-corpus/async-timers.bc 100:25: handle 3: inside []; row []; ops 3.0 stored; condition 2 holds
-corpus/async-timers.bc 101:25: handle 2: inside []; row []; ops 2.0 stored; condition 2 holds
-corpus/async-timers.bc 102:3: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/async-timers.bc 105:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/async-timers.bc 99:24: handle 4: inside []; row []; ops 4.0 stored; names 4.0 []; condition 2 holds
+corpus/async-timers.bc 100:25: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/async-timers.bc 101:25: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
+corpus/async-timers.bc 102:3: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/async-timers.bc 105:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/async-timers.bc 4.0 stored: machine; condition 2 holds; -
 corpus/async-timers.bc 3.0 stored: machine; condition 2 holds; -
 corpus/async-timers.bc 2.0 stored: machine; condition 2 holds; -
 corpus/async-timers.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/async-try-join.bc flows [0, 1, 2, 4, 5, 6, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6], finaliser
-corpus/async-try-join.bc 30:51: handle 1: inside [2], finaliser; row []; ops 1.0 stored, 1.1 tail; condition 2 holds
-corpus/async-try-join.bc 30:64: handle 2: inside [], finaliser; row [1]; ops 2.0 abortive; condition 2 fails at 1
-corpus/async-try-join.bc 77:3: handle 3: inside [4, 5, 6], finaliser; row []; ops 3.0 abortive; condition 2 holds
-corpus/async-try-join.bc 78:13: handle 6: inside [], finaliser; row [3]; ops 6.0 abortive; condition 2 fails at 3
-corpus/async-try-join.bc 79:13: handle 5: inside [], finaliser; row [3]; ops 5.0 abortive; condition 2 fails at 3
-corpus/async-try-join.bc 80:13: handle 4: inside [], finaliser; row [3]; ops 4.0 abortive; condition 2 fails at 3
+corpus/async-try-join.bc 30:51: handle 1: inside [2], finaliser; row []; ops 1.0 stored, 1.1 tail; names 1.0 [], 1.1 []; condition 2 holds
+corpus/async-try-join.bc 30:64: handle 2: inside [], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/async-try-join.bc 77:3: handle 3: inside [4, 5, 6], finaliser; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/async-try-join.bc 78:13: handle 6: inside [], finaliser; row [3]; ops 6.0 abortive; names 6.0 []; condition 2 holds
+corpus/async-try-join.bc 79:13: handle 5: inside [], finaliser; row [3]; ops 5.0 abortive; names 5.0 []; condition 2 holds
+corpus/async-try-join.bc 80:13: handle 4: inside [], finaliser; row [3]; ops 4.0 abortive; names 4.0 []; condition 2 holds
 corpus/async-try-join.bc 1.0 stored: machine; condition 2 holds; -
 corpus/async-try-join.bc 1.1 tail: -; condition 2 holds; -
-corpus/async-try-join.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/async-try-join.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/async-try-join.bc 3.0 abortive: branch; condition 2 holds; -
-corpus/async-try-join.bc 6.0 abortive: branch; condition 2 fails; -
-corpus/async-try-join.bc 5.0 abortive: branch; condition 2 fails; -
-corpus/async-try-join.bc 4.0 abortive: branch; condition 2 fails; -
+corpus/async-try-join.bc 6.0 abortive: branch; condition 2 holds; -
+corpus/async-try-join.bc 5.0 abortive: branch; condition 2 holds; -
+corpus/async-try-join.bc 4.0 abortive: branch; condition 2 holds; -
 corpus/async-workers-scoped.bc flows [0, 1, 2, 3, 4, 4294967295], finaliser; main [1, 2, 3, 4], finaliser
-corpus/async-workers-scoped.bc 33:26: handle 4: inside []; row []; ops 4.0 stored, 4.1 tail; condition 2 holds
-corpus/async-workers-scoped.bc 34:26: handle 3: inside []; row []; ops 3.0 stored, 3.1 tail; condition 2 holds
-corpus/async-workers-scoped.bc 35:7: handle 2: inside [], finaliser; row []; ops 2.0 abortive; condition 2 holds
-corpus/async-workers-scoped.bc 39:13: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/async-workers-scoped.bc 33:26: handle 4: inside []; row []; ops 4.0 stored, 4.1 tail; names 4.0 [], 4.1 []; condition 2 holds
+corpus/async-workers-scoped.bc 34:26: handle 3: inside []; row []; ops 3.0 stored, 3.1 tail; names 3.0 [], 3.1 []; condition 2 holds
+corpus/async-workers-scoped.bc 35:7: handle 2: inside [], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/async-workers-scoped.bc 39:13: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/async-workers-scoped.bc 4.0 stored: machine; condition 2 holds; -
 corpus/async-workers-scoped.bc 4.1 tail: -; condition 2 holds; -
 corpus/async-workers-scoped.bc 3.0 stored: machine; condition 2 holds; -
@@ -209,9 +209,9 @@ corpus/axes/scope-codata-effects.bc flows [0, 4294967295]; main []
 corpus/axes/scope-data-effects.bc flows [0, 4294967295]; main []
 corpus/axes/scope-loop-lend.bc flows [0, 4294967295]; main []
 corpus/binder-copies.bc flows [0, 1, 2, 3, 4294967295]; main [1, 2, 3]
-corpus/binder-copies.bc 22:11: handle 3: inside []; row []; ops 3.0 stored; condition 2 holds
-corpus/binder-copies.bc 23:11: handle 2: inside []; row []; ops 2.0 tail+state; condition 2 holds
-corpus/binder-copies.bc 24:11: handle 1: inside []; row []; ops 1.0 stored; condition 2 holds
+corpus/binder-copies.bc 22:11: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/binder-copies.bc 23:11: handle 2: inside []; row []; ops 2.0 tail+state; names 2.0 []; condition 2 holds
+corpus/binder-copies.bc 24:11: handle 1: inside []; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
 corpus/binder-copies.bc 3.0 stored: machine; condition 2 holds; -
 corpus/binder-copies.bc 2.0 tail+state: machine; condition 2 holds; -
 corpus/binder-copies.bc 1.0 stored: machine; condition 2 holds; -
@@ -219,43 +219,43 @@ corpus/block-capability-inner.bc flows [0, 4294967295]; main []
 corpus/block-capability.bc flows [0, 4294967295]; main []
 corpus/block-swap.bc flows [0, 4294967295]; main []
 corpus/block-yield-inner.bc flows [0, 2, 3, 4294967295], finaliser; main [2, 3], finaliser
-corpus/block-yield-inner.bc 18:3: handle 3: inside []; row []; ops 3.0 stored; condition 2 holds
-corpus/block-yield-inner.bc 18:3: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
-corpus/block-yield-inner.bc 26:3: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
+corpus/block-yield-inner.bc 18:3: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/block-yield-inner.bc 18:3: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/block-yield-inner.bc 26:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
 corpus/block-yield-inner.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/block-yield-inner.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/borrow-in-scope.bc flows [0, 4294967295]; main []
 corpus/bytes-upper.bc flows [0, 4294967295]; main []
 corpus/capture-await-raise.bc flows [0, 1, 2, 4294967295]; main [1, 2]
-corpus/capture-await-raise.bc 13:21: handle 1: inside [2]; row []; ops 1.0 tail; condition 2 holds
-corpus/capture-await-raise.bc 13:33: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 fails at 1
+corpus/capture-await-raise.bc 13:21: handle 1: inside [2]; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/capture-await-raise.bc 13:33: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/capture-await-raise.bc 1.0 tail: direct; condition 2 holds; agree
-corpus/capture-await-raise.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/capture-await-raise.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/capture-log-hand.bc flows [0, 4294967295]; main []
 corpus/capture-store-cancel-hand.bc flows [0, 4294967295]; main []
 corpus/capture-store-raise.bc flows [0, 1, 2, 4294967295]; main [1, 2]
-corpus/capture-store-raise.bc 23:11: handle 1: inside [2]; row []; ops 1.0 stored; condition 2 holds
-corpus/capture-store-raise.bc 23:23: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 fails at 1
+corpus/capture-store-raise.bc 23:11: handle 1: inside [2]; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
+corpus/capture-store-raise.bc 23:23: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/capture-store-raise.bc 1.0 stored: machine; condition 2 holds; -
-corpus/capture-store-raise.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/capture-store-raise.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/capture-take-hand.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/capture-take-hand.bc 26:3: handle 1: inside [], finaliser; row []; ops 1.0 resume-or-cancel; condition 2 holds
+corpus/capture-take-hand.bc 26:3: handle 1: inside [], finaliser; row []; ops 1.0 resume-or-cancel; names 1.0 []; condition 2 holds
 corpus/capture-take-hand.bc 1.0 resume-or-cancel: machine; condition 2 holds; -
 corpus/capture-tick-hand.bc flows [0, 4294967295]; main []
 corpus/clause-captures.bc flows [0, 1, 2, 3, 4294967295]; main [1, 2, 3]
-corpus/clause-captures.bc 40:13: handle 3: inside []; row []; ops 3.0 abortive; condition 2 holds
-corpus/clause-captures.bc 41:13: handle 2: inside []; row []; ops 2.0 abortive; condition 2 holds
-corpus/clause-captures.bc 42:13: handle 1: inside []; row []; ops 1.0 tail+state; condition 2 holds
+corpus/clause-captures.bc 40:13: handle 3: inside []; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/clause-captures.bc 41:13: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/clause-captures.bc 42:13: handle 1: inside []; row []; ops 1.0 tail+state; names 1.0 row; condition 2 holds
 corpus/clause-captures.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/clause-captures.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/clause-captures.bc 1.0 tail+state: machine; condition 2 holds; -
 corpus/clone-reuse.bc flows [0, 4294967295]; main []
 corpus/comp-param.bc flows [0, 3, 5, 4294967295]; main [2, 3, 4, 5, 6]
-corpus/comp-param.bc 21:56: handle 6: inside []; row []; ops 6.0 abortive; condition 2 holds
-corpus/comp-param.bc 28:11: handle 4: inside [5]; row []; ops 4.0 abortive; condition 2 holds
-corpus/comp-param.bc 23:40: handle 5: inside []; row [4]; ops 5.0 abortive; condition 2 holds
-corpus/comp-param.bc 29:11: handle 2: inside [3]; row []; ops 2.0 abortive; condition 2 holds
-corpus/comp-param.bc 23:40: handle 3: inside []; row [2]; ops 3.0 abortive; condition 2 holds
+corpus/comp-param.bc 21:56: handle 6: inside []; row []; ops 6.0 abortive; names 6.0 []; condition 2 holds
+corpus/comp-param.bc 28:11: handle 4: inside [5]; row []; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/comp-param.bc 23:40: handle 5: inside []; row [4]; ops 5.0 abortive; names 5.0 []; condition 2 holds
+corpus/comp-param.bc 29:11: handle 2: inside [3]; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/comp-param.bc 23:40: handle 3: inside []; row [2]; ops 3.0 abortive; names 3.0 []; condition 2 holds
 corpus/comp-param.bc 6.0 abortive: branch; condition 2 holds; -
 corpus/comp-param.bc 4.0 abortive: branch; condition 2 holds; -
 corpus/comp-param.bc 5.0 abortive: -; condition 2 holds; -
@@ -263,40 +263,40 @@ corpus/comp-param.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/comp-param.bc 3.0 abortive: -; condition 2 holds; -
 corpus/core-callback-dead.bc flows [0, 4294967295]; main []
 corpus/core-effects-borrow-abort.bc flows [0, 4294967295], finaliser; main [1], finaliser
-corpus/core-effects-borrow-abort.bc 10:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/core-effects-borrow-abort.bc 10:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-effects-borrow-abort.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/core-effects-borrows.bc flows [0, 4294967295], finaliser; main [1], finaliser
-corpus/core-effects-borrows.bc 9:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/core-effects-borrows.bc 17:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/core-effects-borrows.bc 9:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/core-effects-borrows.bc 17:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-effects-borrows.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/core-effects-drop-glue.bc flows [0, 4294967295], finaliser; main [1], finaliser
-corpus/core-effects-drop-glue.bc 30:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/core-effects-drop-glue.bc 34:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/core-effects-drop-glue.bc 30:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/core-effects-drop-glue.bc 34:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-effects-drop-glue.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/core-effects-loop.bc flows [0, 3, 4294967295]; main [3]
-corpus/core-effects-loop.bc 27:3: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
+corpus/core-effects-loop.bc 27:3: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
 corpus/core-effects-loop.bc 3.0 tail: direct; condition 2 holds; agree
 corpus/core-effects-reborrows.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/core-effects-reborrows.bc 11:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/core-effects-reborrows.bc 20:10: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/core-effects-reborrows.bc 31:10: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/core-effects-reborrows.bc 11:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/core-effects-reborrows.bc 20:10: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/core-effects-reborrows.bc 31:10: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-effects-reborrows.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/core-effects-result.bc flows [0, 4294967295]; main [1]
-corpus/core-effects-result.bc 18:9: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
-corpus/core-effects-result.bc 22:9: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/core-effects-result.bc 18:9: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/core-effects-result.bc 22:9: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-effects-result.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/core-effects-tail.bc flows [0, 2, 4294967295]; main [2]
-corpus/core-effects-tail.bc 19:3: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
+corpus/core-effects-tail.bc 19:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
 corpus/core-effects-tail.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/core-yield-loop.bc flows [0, 1, 4294967295]; main [1]
-corpus/core-yield-loop.bc 36:7: handle 1: inside []; row []; ops 1.0 resume-or-cancel; condition 2 holds
-corpus/core-yield-loop.bc 48:12: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/core-yield-loop.bc 36:7: handle 1: inside []; row []; ops 1.0 resume-or-cancel; names 1.0 []; condition 2 holds
+corpus/core-yield-loop.bc 48:12: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/core-yield-loop.bc 1.0 resume-or-cancel,tail: machine; condition 2 holds; -
 corpus/core-yield-pull.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
-corpus/core-yield-pull.bc 127:7: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/core-yield-pull.bc 128:12: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/core-yield-pull.bc 58:22: handle 1: inside []; row []; ops 1.0 stored; condition 2 holds
-corpus/core-yield-pull.bc 69:18: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/core-yield-pull.bc 127:7: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/core-yield-pull.bc 128:12: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/core-yield-pull.bc 58:22: handle 1: inside []; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
+corpus/core-yield-pull.bc 69:18: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/core-yield-pull.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/core-yield-pull.bc 1.0 stored,tail: machine; condition 2 holds; -
 corpus/count-down-exact.bc flows [0, 4294967295]; main []
@@ -305,54 +305,54 @@ corpus/count-fold.bc flows [0, 4294967295]; main []
 corpus/count-try.bc flows [0, 4294967295]; main []
 corpus/deep-list.bc flows [0, 4294967295]; main []
 corpus/div-abstraction.bc flows [0, 2, 4294967295]; main [1, 2, 3]
-corpus/div-abstraction.bc 26:3: handle 1: inside [2]; row []; ops 1.0 abortive; condition 2 holds
-corpus/div-abstraction.bc 22:3: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 holds
-corpus/div-abstraction.bc 32:37: handle 3: inside []; row []; ops 3.0 abortive; condition 2 holds
+corpus/div-abstraction.bc 26:3: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/div-abstraction.bc 22:3: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/div-abstraction.bc 32:37: handle 3: inside []; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
 corpus/div-abstraction.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/div-abstraction.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/div-abstraction.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/div-euclid.bc flows [0, 4294967295]; main [1, 2]
-corpus/div-euclid.bc 26:11: handle 2: inside []; row []; ops 2.0 abortive; condition 2 holds
-corpus/div-euclid.bc 22:1: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/div-euclid.bc 26:11: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/div-euclid.bc 22:1: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/div-euclid.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/div-euclid.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/div-hof.bc flows [0, 4294967295]; main []
 corpus/div-infer.bc flows [0, 1, 2, 3, 4, 4294967295]; main [1, 2, 3, 4]
-corpus/div-infer.bc 58:1: handle 3: inside [1, 2, 3, 4]; row []; ops 3.0 abortive; condition 2 holds
-corpus/div-infer.bc 32:3: handle 3: inside []; row []; ops 3.0 abortive; condition 2 holds
-corpus/div-infer.bc 62:11: handle 4: inside []; row [3]; ops 4.0 abortive; condition 2 fails at 3
-corpus/div-infer.bc 56:32: handle 1: inside [2]; row []; ops 1.0 abortive; condition 2 holds
-corpus/div-infer.bc 56:54: handle 2: inside []; row [1]; ops 2.0 resume-or-cancel+state; condition 2 fails at 1
+corpus/div-infer.bc 58:1: handle 3: inside [1, 2, 3, 4]; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/div-infer.bc 32:3: handle 3: inside []; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/div-infer.bc 62:11: handle 4: inside []; row [3]; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/div-infer.bc 56:32: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/div-infer.bc 56:54: handle 2: inside []; row [1]; ops 2.0 resume-or-cancel+state; names 2.0 [1]; condition 2 fails at 1
 corpus/div-infer.bc 3.0 abortive: branch; condition 2 holds; -
-corpus/div-infer.bc 4.0 abortive: branch; condition 2 fails; -
+corpus/div-infer.bc 4.0 abortive: branch; condition 2 holds; -
 corpus/div-infer.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/div-infer.bc 2.0 resume-or-cancel+state: machine; condition 2 fails; -
 corpus/div-innermost.bc flows [0, 2, 3, 4294967295]; main [1, 2, 3]
-corpus/div-innermost.bc 12:1: handle 1: inside [2, 3]; row []; ops 1.0 abortive; condition 2 holds
-corpus/div-innermost.bc 14:11: handle 3: inside []; row [1]; ops 3.0 abortive; condition 2 holds
-corpus/div-innermost.bc 15:11: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 holds
+corpus/div-innermost.bc 12:1: handle 1: inside [2, 3]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/div-innermost.bc 14:11: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/div-innermost.bc 15:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/div-innermost.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/div-innermost.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/div-innermost.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/div-literal.bc flows [0, 4294967295]; main []
 corpus/div-overflow.bc flows [0, 2, 3, 4, 4294967295]; main [1, 2, 3, 4, 5]
-corpus/div-overflow.bc 27:11: handle 5: inside []; row []; ops 5.0 abortive; condition 2 holds
-corpus/div-overflow.bc 23:1: handle 1: inside [2, 3, 4]; row []; ops 1.0 abortive; condition 2 holds
-corpus/div-overflow.bc 29:11: handle 4: inside []; row [1]; ops 4.0 abortive; condition 2 holds
-corpus/div-overflow.bc 33:11: handle 3: inside []; row [1]; ops 3.0 abortive; condition 2 holds
-corpus/div-overflow.bc 34:11: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 holds
+corpus/div-overflow.bc 27:11: handle 5: inside []; row []; ops 5.0 abortive; names 5.0 []; condition 2 holds
+corpus/div-overflow.bc 23:1: handle 1: inside [2, 3, 4]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/div-overflow.bc 29:11: handle 4: inside []; row [1]; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/div-overflow.bc 33:11: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/div-overflow.bc 34:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/div-overflow.bc 5.0 abortive: branch; condition 2 holds; -
 corpus/div-overflow.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/div-overflow.bc 4.0 abortive: branch; condition 2 holds; -
 corpus/div-overflow.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/div-overflow.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/div-own-fail.bc flows [0, 2, 4, 6, 4294967295]; main [1, 2, 3, 4, 5, 6]
-corpus/div-own-fail.bc 24:3: handle 1: inside [2]; row []; ops 1.0 abortive; condition 2 holds
-corpus/div-own-fail.bc 24:30: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 holds
-corpus/div-own-fail.bc 27:3: handle 3: inside [4]; row []; ops 3.0 abortive; condition 2 holds
-corpus/div-own-fail.bc 27:30: handle 4: inside []; row [3]; ops 4.0 abortive; condition 2 holds
-corpus/div-own-fail.bc 32:11: handle 5: inside [6]; row []; ops 5.0 abortive; condition 2 holds
-corpus/div-own-fail.bc 32:38: handle 6: inside []; row [5]; ops 6.0 abortive; condition 2 holds
+corpus/div-own-fail.bc 24:3: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/div-own-fail.bc 24:30: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/div-own-fail.bc 27:3: handle 3: inside [4]; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/div-own-fail.bc 27:30: handle 4: inside []; row [3]; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/div-own-fail.bc 32:11: handle 5: inside [6]; row []; ops 5.0 abortive; names 5.0 []; condition 2 holds
+corpus/div-own-fail.bc 32:38: handle 6: inside []; row [5]; ops 6.0 abortive; names 6.0 []; condition 2 holds
 corpus/div-own-fail.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/div-own-fail.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/div-own-fail.bc 3.0 abortive: branch; condition 2 holds; -
@@ -360,118 +360,118 @@ corpus/div-own-fail.bc 4.0 abortive: branch; condition 2 holds; -
 corpus/div-own-fail.bc 5.0 abortive: branch; condition 2 holds; -
 corpus/div-own-fail.bc 6.0 abortive: branch; condition 2 holds; -
 corpus/div-recover.bc flows [0, 1, 4294967295], finaliser; main [1, 2, 3, 4, 5], finaliser
-corpus/div-recover.bc 34:11: handle 5: inside []; row []; ops 5.0 abortive; condition 2 holds
-corpus/div-recover.bc 35:11: handle 4: inside []; row []; ops 4.0 abortive; condition 2 holds
-corpus/div-recover.bc 36:11: handle 3: inside []; row []; ops 3.0 abortive; condition 2 holds
-corpus/div-recover.bc 37:11: handle 2: inside []; row []; ops 2.0 abortive; condition 2 holds
-corpus/div-recover.bc 31:9: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/div-recover.bc 23:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/div-recover.bc 34:11: handle 5: inside []; row []; ops 5.0 abortive; names 5.0 []; condition 2 holds
+corpus/div-recover.bc 35:11: handle 4: inside []; row []; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/div-recover.bc 36:11: handle 3: inside []; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/div-recover.bc 37:11: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/div-recover.bc 31:9: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/div-recover.bc 23:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/div-recover.bc 5.0 abortive: branch; condition 2 holds; -
 corpus/div-recover.bc 4.0 abortive: branch; condition 2 holds; -
 corpus/div-recover.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/div-recover.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/div-recover.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/div-recursive.bc flows [0, 2, 3, 4, 4294967295]; main [1, 2, 3, 4]
-corpus/div-recursive.bc 15:1: handle 1: inside [2, 3, 4]; row []; ops 1.0 abortive; condition 2 holds
-corpus/div-recursive.bc 16:4: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 holds
-corpus/div-recursive.bc 17:4: handle 3: inside [4]; row [1]; ops 3.0 abortive; condition 2 holds
-corpus/div-recursive.bc 17:21: handle 4: inside []; row [3, 1]; ops 4.0 abortive; condition 2 fails at 3
+corpus/div-recursive.bc 15:1: handle 1: inside [2, 3, 4]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/div-recursive.bc 16:4: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/div-recursive.bc 17:4: handle 3: inside [4]; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/div-recursive.bc 17:21: handle 4: inside []; row [3, 1]; ops 4.0 abortive; names 4.0 []; condition 2 holds
 corpus/div-recursive.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/div-recursive.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/div-recursive.bc 3.0 abortive: branch; condition 2 holds; -
-corpus/div-recursive.bc 4.0 abortive: branch; condition 2 fails; -
+corpus/div-recursive.bc 4.0 abortive: branch; condition 2 holds; -
 corpus/div-residual-copy.bc flows [0, 4294967295]; main []
 corpus/div-unhandled.bc flows [0, 4294967295], finaliser; main [1], finaliser
-corpus/div-unhandled.bc 27:1: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/div-unhandled.bc 27:1: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/div-unhandled.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/effects-abstraction.bc flows [0, 2, 4294967295]; main [1, 2, 3]
-corpus/effects-abstraction.bc 31:3: handle 1: inside [2]; row []; ops 1.0 abortive; condition 2 holds
-corpus/effects-abstraction.bc 27:3: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 holds
-corpus/effects-abstraction.bc 39:3: handle 3: inside []; row []; ops 3.0 abortive; condition 2 holds
+corpus/effects-abstraction.bc 31:3: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/effects-abstraction.bc 27:3: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/effects-abstraction.bc 39:3: handle 3: inside []; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
 corpus/effects-abstraction.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/effects-abstraction.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/effects-abstraction.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/effects-borrow-raise.bc flows [0, 4294967295], finaliser; main [1], finaliser
-corpus/effects-borrow-raise.bc 15:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/effects-borrow-raise.bc 15:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/effects-borrow-raise.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/effects-cancel-two-sites.bc flows [0, 2, 3, 4294967295]; main [1, 2, 3]
-corpus/effects-cancel-two-sites.bc 24:3: handle 1: inside [2, 3]; row []; ops 1.0 abortive; condition 2 holds
-corpus/effects-cancel-two-sites.bc 24:36: handle 2: inside [3]; row [1]; ops 2.0 abortive; condition 2 holds
-corpus/effects-cancel-two-sites.bc 24:53: handle 3: inside []; row [2, 1]; ops 3.0 resume-or-cancel+state; condition 2 fails at 2
+corpus/effects-cancel-two-sites.bc 24:3: handle 1: inside [2, 3]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/effects-cancel-two-sites.bc 24:36: handle 2: inside [3]; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/effects-cancel-two-sites.bc 24:53: handle 3: inside []; row [2, 1]; ops 3.0 resume-or-cancel+state; names 3.0 [2]; condition 2 fails at 2
 corpus/effects-cancel-two-sites.bc 1.0 abortive: -; condition 2 holds; -
 corpus/effects-cancel-two-sites.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/effects-cancel-two-sites.bc 3.0 resume-or-cancel+state: machine; condition 2 fails; -
 corpus/effects-fail-list.bc flows [0, 2, 3, 4294967295]; main [1, 2, 3]
-corpus/effects-fail-list.bc 27:70: handle 3: inside []; row []; ops 3.0 abortive; condition 2 holds
-corpus/effects-fail-list.bc 40:3: handle 1: inside [2, 3]; row []; ops 1.0 abortive; condition 2 holds
-corpus/effects-fail-list.bc 27:70: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 holds
+corpus/effects-fail-list.bc 27:70: handle 3: inside []; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/effects-fail-list.bc 40:3: handle 1: inside [2, 3]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/effects-fail-list.bc 27:70: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/effects-fail-list.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/effects-fail-list.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/effects-fail-list.bc 2.0 abortive: -; condition 2 holds; -
 corpus/effects-fold-sum.bc flows [0, 4294967295]; main []
 corpus/effects-fold.bc flows [0, 1, 2, 3, 4, 5, 4294967295], finaliser; main [1, 2, 3, 4, 5], finaliser
-corpus/effects-fold.bc 39:52: handle 1: inside [1, 2], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/effects-fold.bc 30:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/effects-fold.bc 33:9: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 fails at 1
-corpus/effects-fold.bc 42:49: handle 3: inside [3, 4], finaliser; row []; ops 3.0 abortive; condition 2 holds
-corpus/effects-fold.bc 30:3: handle 3: inside [4], finaliser; row []; ops 3.0 abortive; condition 2 holds
-corpus/effects-fold.bc 33:9: handle 4: inside []; row [3]; ops 4.0 abortive; condition 2 fails at 3
-corpus/effects-fold.bc 58:9: handle 5: inside [5], finaliser; row []; ops 5.0 abortive; condition 2 holds
-corpus/effects-fold.bc 48:3: handle 5: inside [], finaliser; row []; ops 5.0 abortive; condition 2 holds
+corpus/effects-fold.bc 39:52: handle 1: inside [1, 2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/effects-fold.bc 30:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/effects-fold.bc 33:9: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/effects-fold.bc 42:49: handle 3: inside [3, 4], finaliser; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/effects-fold.bc 30:3: handle 3: inside [4], finaliser; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/effects-fold.bc 33:9: handle 4: inside []; row [3]; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/effects-fold.bc 58:9: handle 5: inside [5], finaliser; row []; ops 5.0 abortive; names 5.0 []; condition 2 holds
+corpus/effects-fold.bc 48:3: handle 5: inside [], finaliser; row []; ops 5.0 abortive; names 5.0 []; condition 2 holds
 corpus/effects-fold.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/effects-fold.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/effects-fold.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/effects-fold.bc 3.0 abortive: branch; condition 2 holds; -
-corpus/effects-fold.bc 4.0 abortive: branch; condition 2 fails; -
+corpus/effects-fold.bc 4.0 abortive: branch; condition 2 holds; -
 corpus/effects-fold.bc 5.0 abortive: branch; condition 2 holds; -
 corpus/effects-generic.bc flows [0, 4294967295]; main []
 corpus/effects-hof-two-rows.bc flows [0, 1, 4294967295]; main [1, 2]
-corpus/effects-hof-two-rows.bc 24:11: handle 2: inside []; row []; ops 2.0 abortive; condition 2 holds
-corpus/effects-hof-two-rows.bc 25:11: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/effects-hof-two-rows.bc 24:11: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/effects-hof-two-rows.bc 25:11: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/effects-hof-two-rows.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/effects-hof-two-rows.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/effects-instances.bc flows [0, 1, 2, 3, 4, 5, 6, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6], finaliser
-corpus/effects-instances.bc 46:3: handle 1: inside [1, 2, 3, 4], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/effects-instances.bc 46:43: handle 2: inside [1, 3, 4], finaliser; row [1]; ops 2.0 abortive; condition 2 fails at 1
-corpus/effects-instances.bc 390:5: handle 1: inside [3, 4], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/effects-instances.bc 393:15: handle 4: inside []; row [1]; ops 4.0 abortive; condition 2 fails at 1
-corpus/effects-instances.bc 394:11: handle 3: inside []; row [1]; ops 3.0 abortive; condition 2 fails at 1
-corpus/effects-instances.bc 50:3: handle 5: inside [5, 6], finaliser; row []; ops 5.0 abortive; condition 2 holds
-corpus/effects-instances.bc 50:43: handle 6: inside [5, 6], finaliser; row [5]; ops 6.0 abortive; condition 2 fails at 5
-corpus/effects-instances.bc 38:3: handle 5: inside [6], finaliser; row []; ops 5.0 abortive; condition 2 holds
-corpus/effects-instances.bc 38:3: handle 6: inside [], finaliser; row [5]; ops 6.0 abortive; condition 2 fails at 5
+corpus/effects-instances.bc 46:3: handle 1: inside [1, 2, 3, 4], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/effects-instances.bc 46:43: handle 2: inside [1, 3, 4], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/effects-instances.bc 390:5: handle 1: inside [3, 4], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/effects-instances.bc 393:15: handle 4: inside []; row [1]; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/effects-instances.bc 394:11: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/effects-instances.bc 50:3: handle 5: inside [5, 6], finaliser; row []; ops 5.0 abortive; names 5.0 []; condition 2 holds
+corpus/effects-instances.bc 50:43: handle 6: inside [5, 6], finaliser; row [5]; ops 6.0 abortive; names 6.0 []; condition 2 holds
+corpus/effects-instances.bc 38:3: handle 5: inside [6], finaliser; row []; ops 5.0 abortive; names 5.0 []; condition 2 holds
+corpus/effects-instances.bc 38:3: handle 6: inside [], finaliser; row [5]; ops 6.0 abortive; names 6.0 []; condition 2 holds
 corpus/effects-instances.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/effects-instances.bc 2.0 abortive: branch; condition 2 fails; -
-corpus/effects-instances.bc 4.0 abortive: branch; condition 2 fails; -
-corpus/effects-instances.bc 3.0 abortive: branch; condition 2 fails; -
+corpus/effects-instances.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/effects-instances.bc 4.0 abortive: branch; condition 2 holds; -
+corpus/effects-instances.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/effects-instances.bc 5.0 abortive: branch; condition 2 holds; -
-corpus/effects-instances.bc 6.0 abortive: branch; condition 2 fails; -
+corpus/effects-instances.bc 6.0 abortive: branch; condition 2 holds; -
 corpus/effects-log-fail.bc flows [0, 1, 4294967295], finaliser; main [1, 2], finaliser
-corpus/effects-log-fail.bc 24:32: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
-corpus/effects-log-fail.bc 28:40: handle 2: inside [], finaliser; row []; ops 2.0 abortive; condition 2 holds
+corpus/effects-log-fail.bc 24:32: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/effects-log-fail.bc 28:40: handle 2: inside [], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/effects-log-fail.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/effects-log-fail.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/effects-map-fail.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/effects-map-fail.bc 28:13: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/effects-map-fail.bc 21:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/effects-map-fail.bc 28:13: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/effects-map-fail.bc 21:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/effects-map-fail.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/effects-map-hand.bc flows [0, 4294967295]; main []
 corpus/effects-map.bc flows [0, 4294967295]; main []
 corpus/effects-named.bc flows [0, 4294967295]; main []
 corpus/effects-row-inferred.bc flows [0, 4294967295]; main [1, 2]
-corpus/effects-row-inferred.bc 11:38: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
-corpus/effects-row-inferred.bc 11:67: handle 2: inside []; row []; ops 2.0 abortive; condition 2 holds
+corpus/effects-row-inferred.bc 11:38: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/effects-row-inferred.bc 11:67: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/effects-row-inferred.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/effects-row-inferred.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/effects-sum-gen.bc flows [0, 2, 3, 4294967295]; main [1, 2, 3]
-corpus/effects-sum-gen.bc 29:51: handle 3: inside []; row []; ops 3.0 once; condition 2 holds
-corpus/effects-sum-gen.bc 33:11: handle 1: inside [2]; row []; ops 1.0 abortive; condition 2 holds
-corpus/effects-sum-gen.bc 29:51: handle 2: inside []; row [1]; ops 2.0 once; condition 2 holds
+corpus/effects-sum-gen.bc 29:51: handle 3: inside []; row []; ops 3.0 once; names 3.0 []; condition 2 holds
+corpus/effects-sum-gen.bc 33:11: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/effects-sum-gen.bc 29:51: handle 2: inside []; row [1]; ops 2.0 once; names 2.0 []; condition 2 holds
 corpus/effects-sum-gen.bc 3.0 once: machine; condition 2 holds; -
 corpus/effects-sum-gen.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/effects-sum-gen.bc 2.0 once: machine; condition 2 holds; -
 corpus/effects-tunnel.bc flows [0, 3, 4294967295]; main [2, 3]
-corpus/effects-tunnel.bc 14:20: handle 2: inside [3]; row []; ops 2.0 abortive; condition 2 holds
-corpus/effects-tunnel.bc 12:37: handle 3: inside []; row [2]; ops 3.0 abortive; condition 2 holds
+corpus/effects-tunnel.bc 14:20: handle 2: inside [3]; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/effects-tunnel.bc 12:37: handle 3: inside []; row [2]; ops 3.0 abortive; names 3.0 []; condition 2 holds
 corpus/effects-tunnel.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/effects-tunnel.bc 3.0 abortive: -; condition 2 holds; -
 corpus/family-swap.bc flows [0, 4294967295]; main []
@@ -482,21 +482,21 @@ corpus/float-compare.bc flows [0, 4294967295]; main []
 corpus/float-convert.bc flows [0, 4294967295]; main []
 corpus/float-ordered.bc flows [0, 4294967295]; main []
 corpus/float-roundtrip.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
-corpus/float-roundtrip.bc 66:16: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/float-roundtrip.bc 592:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/float-roundtrip.bc 65:19: handle 2: inside [2], finaliser; row []; ops 2.0 abortive; condition 2 holds
-corpus/float-roundtrip.bc 592:5: handle 2: inside [], finaliser; row []; ops 2.0 abortive; condition 2 holds
+corpus/float-roundtrip.bc 66:16: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/float-roundtrip.bc 592:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/float-roundtrip.bc 65:19: handle 2: inside [2], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/float-roundtrip.bc 592:5: handle 2: inside [], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/float-roundtrip.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/float-roundtrip.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/fn-lifetime.bc flows [0, 4294967295]; main []
 corpus/for-adapters.bc flows [0, 4294967295]; main []
 corpus/for-data-div.bc flows [0, 1, 2, 3, 4, 4294967295], finaliser; main [1, 2, 3, 4], finaliser
-corpus/for-data-div.bc 51:3: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/for-data-div.bc 56:7: handle 3: inside []; row []; ops 3.0 stored; condition 2 holds
-corpus/for-data-div.bc 56:7: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
-corpus/for-data-div.bc 57:7: handle 4: inside []; row []; ops 4.0 stored; condition 2 holds
-corpus/for-data-div.bc 57:7: handle 4: inside []; row []; ops 4.0 tail; condition 2 holds
-corpus/for-data-div.bc 49:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/for-data-div.bc 51:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/for-data-div.bc 56:7: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/for-data-div.bc 56:7: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/for-data-div.bc 57:7: handle 4: inside []; row []; ops 4.0 stored; names 4.0 []; condition 2 holds
+corpus/for-data-div.bc 57:7: handle 4: inside []; row []; ops 4.0 tail; names 4.0 []; condition 2 holds
+corpus/for-data-div.bc 49:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/for-data-div.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/for-data-div.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/for-data-div.bc 4.0 stored,tail: machine; condition 2 holds; -
@@ -505,57 +505,57 @@ corpus/for-data.bc flows [0, 4294967295]; main []
 corpus/for-finite.bc flows [0, 4294967295]; main []
 corpus/for-in-if-lend.bc flows [0, 4294967295]; main []
 corpus/for-never.bc flows [0, 1, 4294967295]; main [1]
-corpus/for-never.bc 17:3: handle 1: inside []; row []; ops 1.0 resume-or-cancel; condition 2 holds
-corpus/for-never.bc 17:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/for-never.bc 17:3: handle 1: inside []; row []; ops 1.0 resume-or-cancel; names 1.0 []; condition 2 holds
+corpus/for-never.bc 17:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/for-never.bc 1.0 resume-or-cancel,tail: machine; condition 2 holds; -
 corpus/for-return.bc flows [0, 4294967295]; main []
 corpus/for-view-effect-copy.bc flows [0, 4294967295]; main []
 corpus/for-yield-branch.bc flows [0, 1, 2, 3, 4294967295]; main [1, 2, 3]
-corpus/for-yield-branch.bc 26:3: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/for-yield-branch.bc 31:3: handle 3: inside []; row []; ops 3.0 resume-or-cancel; condition 2 holds
-corpus/for-yield-branch.bc 31:3: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
-corpus/for-yield-branch.bc 22:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/for-yield-branch.bc 26:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/for-yield-branch.bc 31:3: handle 3: inside []; row []; ops 3.0 resume-or-cancel; names 3.0 []; condition 2 holds
+corpus/for-yield-branch.bc 31:3: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/for-yield-branch.bc 22:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/for-yield-branch.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/for-yield-branch.bc 3.0 resume-or-cancel,tail: machine; condition 2 holds; -
 corpus/for-yield-branch.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/format.bc flows [0, 4294967295]; main []
 corpus/gen-adapters-fail.bc flows [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23], finaliser
-corpus/gen-adapters-fail.bc 58:27: handle 4: inside []; row []; ops 4.0 stored; condition 2 holds
-corpus/gen-adapters-fail.bc 58:27: handle 4: inside []; row []; ops 4.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 58:3: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 60:25: handle 6: inside []; row []; ops 6.0 stored; condition 2 holds
-corpus/gen-adapters-fail.bc 60:25: handle 6: inside []; row []; ops 6.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 60:3: handle 5: inside []; row []; ops 5.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 62:30: handle 8: inside []; row []; ops 8.0 stored; condition 2 holds
-corpus/gen-adapters-fail.bc 62:30: handle 8: inside []; row []; ops 8.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 62:3: handle 7: inside []; row []; ops 7.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 64:26: handle 10: inside []; row []; ops 10.0 stored; condition 2 holds
-corpus/gen-adapters-fail.bc 64:26: handle 10: inside []; row []; ops 10.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 64:42: handle 11: inside []; row []; ops 11.0 stored; condition 2 holds
-corpus/gen-adapters-fail.bc 64:42: handle 11: inside []; row []; ops 11.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 64:3: handle 9: inside []; row []; ops 9.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 66:29: handle 13: inside []; row []; ops 13.0 stored; condition 2 holds
-corpus/gen-adapters-fail.bc 66:29: handle 13: inside []; row []; ops 13.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 66:53: handle 14: inside []; row []; ops 14.0 stored; condition 2 holds
-corpus/gen-adapters-fail.bc 66:53: handle 14: inside []; row []; ops 14.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 66:3: handle 12: inside []; row []; ops 12.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 68:25: handle 16: inside []; row []; ops 16.0 stored; condition 2 holds
-corpus/gen-adapters-fail.bc 68:25: handle 16: inside []; row []; ops 16.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 68:3: handle 15: inside []; row []; ops 15.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 70:27: handle 18: inside []; row []; ops 18.0 stored; condition 2 holds
-corpus/gen-adapters-fail.bc 70:27: handle 18: inside []; row []; ops 18.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 70:3: handle 17: inside []; row []; ops 17.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 72:26: handle 20: inside []; row []; ops 20.0 stored; condition 2 holds
-corpus/gen-adapters-fail.bc 72:26: handle 20: inside []; row []; ops 20.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 72:3: handle 19: inside []; row []; ops 19.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 76:30: handle 23: inside []; row []; ops 23.0 stored; condition 2 holds
-corpus/gen-adapters-fail.bc 76:30: handle 23: inside []; row []; ops 23.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 76:26: handle 22: inside []; row []; ops 22.0 stored; condition 2 holds
-corpus/gen-adapters-fail.bc 76:26: handle 22: inside []; row []; ops 22.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 76:3: handle 21: inside []; row []; ops 21.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 56:24: handle 2: inside []; row []; ops 2.0 stored; condition 2 holds
-corpus/gen-adapters-fail.bc 56:24: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/gen-adapters-fail.bc 56:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/gen-adapters-fail.bc 58:27: handle 4: inside []; row []; ops 4.0 stored; names 4.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 58:27: handle 4: inside []; row []; ops 4.0 tail; names 4.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 58:3: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 60:25: handle 6: inside []; row []; ops 6.0 stored; names 6.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 60:25: handle 6: inside []; row []; ops 6.0 tail; names 6.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 60:3: handle 5: inside []; row []; ops 5.0 tail; names 5.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 62:30: handle 8: inside []; row []; ops 8.0 stored; names 8.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 62:30: handle 8: inside []; row []; ops 8.0 tail; names 8.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 62:3: handle 7: inside []; row []; ops 7.0 tail; names 7.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 64:26: handle 10: inside []; row []; ops 10.0 stored; names 10.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 64:26: handle 10: inside []; row []; ops 10.0 tail; names 10.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 64:42: handle 11: inside []; row []; ops 11.0 stored; names 11.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 64:42: handle 11: inside []; row []; ops 11.0 tail; names 11.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 64:3: handle 9: inside []; row []; ops 9.0 tail; names 9.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 66:29: handle 13: inside []; row []; ops 13.0 stored; names 13.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 66:29: handle 13: inside []; row []; ops 13.0 tail; names 13.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 66:53: handle 14: inside []; row []; ops 14.0 stored; names 14.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 66:53: handle 14: inside []; row []; ops 14.0 tail; names 14.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 66:3: handle 12: inside []; row []; ops 12.0 tail; names 12.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 68:25: handle 16: inside []; row []; ops 16.0 stored; names 16.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 68:25: handle 16: inside []; row []; ops 16.0 tail; names 16.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 68:3: handle 15: inside []; row []; ops 15.0 tail; names 15.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 70:27: handle 18: inside []; row []; ops 18.0 stored; names 18.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 70:27: handle 18: inside []; row []; ops 18.0 tail; names 18.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 70:3: handle 17: inside []; row []; ops 17.0 tail; names 17.0 row; condition 2 holds
+corpus/gen-adapters-fail.bc 72:26: handle 20: inside []; row []; ops 20.0 stored; names 20.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 72:26: handle 20: inside []; row []; ops 20.0 tail; names 20.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 72:3: handle 19: inside []; row []; ops 19.0 tail; names 19.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 76:30: handle 23: inside []; row []; ops 23.0 stored; names 23.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 76:30: handle 23: inside []; row []; ops 23.0 tail; names 23.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 76:26: handle 22: inside []; row []; ops 22.0 stored; names 22.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 76:26: handle 22: inside []; row []; ops 22.0 tail; names 22.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 76:3: handle 21: inside []; row []; ops 21.0 tail; names 21.0 row; condition 2 holds
+corpus/gen-adapters-fail.bc 56:24: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 56:24: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 56:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-adapters-fail.bc 4.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-adapters-fail.bc 3.0 tail: direct; condition 2 holds; agree
 corpus/gen-adapters-fail.bc 6.0 stored,tail: machine; condition 2 holds; -
@@ -580,41 +580,41 @@ corpus/gen-adapters-fail.bc 21.0 tail: direct; condition 2 holds; agree
 corpus/gen-adapters-fail.bc 2.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-adapters-fail.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/gen-adapters.bc flows [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19], finaliser
-corpus/gen-adapters.bc 44:33: handle 9: inside []; row []; ops 9.0 stored; condition 2 holds
-corpus/gen-adapters.bc 44:33: handle 9: inside []; row []; ops 9.0 tail; condition 2 holds
-corpus/gen-adapters.bc 44:28: handle 8: inside []; row []; ops 8.0 stored; condition 2 holds
-corpus/gen-adapters.bc 44:28: handle 8: inside []; row []; ops 8.0 tail; condition 2 holds
-corpus/gen-adapters.bc 45:37: handle 11: inside []; row []; ops 11.0 stored; condition 2 holds
-corpus/gen-adapters.bc 45:37: handle 11: inside []; row []; ops 11.0 tail; condition 2 holds
-corpus/gen-adapters.bc 45:58: handle 12: inside []; row []; ops 12.0 stored; condition 2 holds
-corpus/gen-adapters.bc 45:58: handle 12: inside []; row []; ops 12.0 tail; condition 2 holds
-corpus/gen-adapters.bc 45:28: handle 10: inside []; row []; ops 10.0 stored; condition 2 holds
-corpus/gen-adapters.bc 45:28: handle 10: inside []; row []; ops 10.0 tail; condition 2 holds
-corpus/gen-adapters.bc 44:22: handle 7: inside []; row []; ops 7.0 stored; condition 2 holds
-corpus/gen-adapters.bc 44:22: handle 7: inside []; row []; ops 7.0 tail; condition 2 holds
-corpus/gen-adapters.bc 44:3: handle 6: inside []; row []; ops 6.0 tail; condition 2 holds
-corpus/gen-adapters.bc 50:22: handle 15: inside []; row []; ops 15.0 stored; condition 2 holds
-corpus/gen-adapters.bc 50:22: handle 15: inside []; row []; ops 15.0 tail; condition 2 holds
-corpus/gen-adapters.bc 50:16: handle 14: inside []; row []; ops 14.0 stored; condition 2 holds
-corpus/gen-adapters.bc 50:16: handle 14: inside []; row []; ops 14.0 tail; condition 2 holds
-corpus/gen-adapters.bc 51:38: handle 19: inside []; row []; ops 19.0 stored; condition 2 holds
-corpus/gen-adapters.bc 51:38: handle 19: inside []; row []; ops 19.0 tail; condition 2 holds
-corpus/gen-adapters.bc 51:27: handle 18: inside []; row []; ops 18.0 stored; condition 2 holds
-corpus/gen-adapters.bc 51:27: handle 18: inside []; row []; ops 18.0 tail; condition 2 holds
-corpus/gen-adapters.bc 51:20: handle 17: inside []; row []; ops 17.0 stored; condition 2 holds
-corpus/gen-adapters.bc 51:20: handle 17: inside []; row []; ops 17.0 tail; condition 2 holds
-corpus/gen-adapters.bc 51:16: handle 16: inside []; row []; ops 16.0 stored; condition 2 holds
-corpus/gen-adapters.bc 51:16: handle 16: inside []; row []; ops 16.0 tail; condition 2 holds
-corpus/gen-adapters.bc 50:3: handle 13: inside []; row []; ops 13.0 tail; condition 2 holds
-corpus/gen-adapters.bc 40:33: handle 5: inside []; row []; ops 5.0 stored; condition 2 holds
-corpus/gen-adapters.bc 40:33: handle 5: inside []; row []; ops 5.0 tail; condition 2 holds
-corpus/gen-adapters.bc 40:29: handle 4: inside []; row []; ops 4.0 stored; condition 2 holds
-corpus/gen-adapters.bc 40:29: handle 4: inside []; row []; ops 4.0 tail; condition 2 holds
-corpus/gen-adapters.bc 40:22: handle 3: inside []; row []; ops 3.0 stored; condition 2 holds
-corpus/gen-adapters.bc 40:22: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
-corpus/gen-adapters.bc 40:17: handle 2: inside []; row []; ops 2.0 stored; condition 2 holds
-corpus/gen-adapters.bc 40:17: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/gen-adapters.bc 40:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/gen-adapters.bc 44:33: handle 9: inside []; row []; ops 9.0 stored; names 9.0 []; condition 2 holds
+corpus/gen-adapters.bc 44:33: handle 9: inside []; row []; ops 9.0 tail; names 9.0 []; condition 2 holds
+corpus/gen-adapters.bc 44:28: handle 8: inside []; row []; ops 8.0 stored; names 8.0 []; condition 2 holds
+corpus/gen-adapters.bc 44:28: handle 8: inside []; row []; ops 8.0 tail; names 8.0 []; condition 2 holds
+corpus/gen-adapters.bc 45:37: handle 11: inside []; row []; ops 11.0 stored; names 11.0 []; condition 2 holds
+corpus/gen-adapters.bc 45:37: handle 11: inside []; row []; ops 11.0 tail; names 11.0 []; condition 2 holds
+corpus/gen-adapters.bc 45:58: handle 12: inside []; row []; ops 12.0 stored; names 12.0 []; condition 2 holds
+corpus/gen-adapters.bc 45:58: handle 12: inside []; row []; ops 12.0 tail; names 12.0 []; condition 2 holds
+corpus/gen-adapters.bc 45:28: handle 10: inside []; row []; ops 10.0 stored; names 10.0 []; condition 2 holds
+corpus/gen-adapters.bc 45:28: handle 10: inside []; row []; ops 10.0 tail; names 10.0 []; condition 2 holds
+corpus/gen-adapters.bc 44:22: handle 7: inside []; row []; ops 7.0 stored; names 7.0 []; condition 2 holds
+corpus/gen-adapters.bc 44:22: handle 7: inside []; row []; ops 7.0 tail; names 7.0 []; condition 2 holds
+corpus/gen-adapters.bc 44:3: handle 6: inside []; row []; ops 6.0 tail; names 6.0 []; condition 2 holds
+corpus/gen-adapters.bc 50:22: handle 15: inside []; row []; ops 15.0 stored; names 15.0 []; condition 2 holds
+corpus/gen-adapters.bc 50:22: handle 15: inside []; row []; ops 15.0 tail; names 15.0 []; condition 2 holds
+corpus/gen-adapters.bc 50:16: handle 14: inside []; row []; ops 14.0 stored; names 14.0 []; condition 2 holds
+corpus/gen-adapters.bc 50:16: handle 14: inside []; row []; ops 14.0 tail; names 14.0 []; condition 2 holds
+corpus/gen-adapters.bc 51:38: handle 19: inside []; row []; ops 19.0 stored; names 19.0 []; condition 2 holds
+corpus/gen-adapters.bc 51:38: handle 19: inside []; row []; ops 19.0 tail; names 19.0 []; condition 2 holds
+corpus/gen-adapters.bc 51:27: handle 18: inside []; row []; ops 18.0 stored; names 18.0 []; condition 2 holds
+corpus/gen-adapters.bc 51:27: handle 18: inside []; row []; ops 18.0 tail; names 18.0 []; condition 2 holds
+corpus/gen-adapters.bc 51:20: handle 17: inside []; row []; ops 17.0 stored; names 17.0 []; condition 2 holds
+corpus/gen-adapters.bc 51:20: handle 17: inside []; row []; ops 17.0 tail; names 17.0 []; condition 2 holds
+corpus/gen-adapters.bc 51:16: handle 16: inside []; row []; ops 16.0 stored; names 16.0 []; condition 2 holds
+corpus/gen-adapters.bc 51:16: handle 16: inside []; row []; ops 16.0 tail; names 16.0 []; condition 2 holds
+corpus/gen-adapters.bc 50:3: handle 13: inside []; row []; ops 13.0 tail; names 13.0 []; condition 2 holds
+corpus/gen-adapters.bc 40:33: handle 5: inside []; row []; ops 5.0 stored; names 5.0 []; condition 2 holds
+corpus/gen-adapters.bc 40:33: handle 5: inside []; row []; ops 5.0 tail; names 5.0 []; condition 2 holds
+corpus/gen-adapters.bc 40:29: handle 4: inside []; row []; ops 4.0 stored; names 4.0 []; condition 2 holds
+corpus/gen-adapters.bc 40:29: handle 4: inside []; row []; ops 4.0 tail; names 4.0 []; condition 2 holds
+corpus/gen-adapters.bc 40:22: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/gen-adapters.bc 40:22: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/gen-adapters.bc 40:17: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
+corpus/gen-adapters.bc 40:17: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/gen-adapters.bc 40:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-adapters.bc 9.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-adapters.bc 8.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-adapters.bc 11.0 stored,tail: machine; condition 2 holds; -
@@ -635,85 +635,85 @@ corpus/gen-adapters.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-adapters.bc 2.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-adapters.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/gen-borrowed.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
-corpus/gen-borrowed.bc 49:42: handle 2: inside []; row []; ops 2.0 stored; condition 2 holds
-corpus/gen-borrowed.bc 49:42: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/gen-borrowed.bc 49:7: handle 1: inside []; row []; ops 1.0 stored; condition 2 holds
-corpus/gen-borrowed.bc 49:7: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/gen-borrowed.bc 49:42: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
+corpus/gen-borrowed.bc 49:42: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/gen-borrowed.bc 49:7: handle 1: inside []; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
+corpus/gen-borrowed.bc 49:7: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-borrowed.bc 2.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-borrowed.bc 1.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-cell.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/gen-cell.bc 26:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/gen-cell.bc 26:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-cell.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/gen-close.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
-corpus/gen-close.bc 37:20: handle 2: inside []; row []; ops 2.0 stored; condition 2 holds
-corpus/gen-close.bc 37:20: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/gen-close.bc 37:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/gen-close.bc 37:20: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
+corpus/gen-close.bc 37:20: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/gen-close.bc 37:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-close.bc 2.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-close.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/gen-div.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/gen-div.bc 56:3: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
-corpus/gen-div.bc 55:18: handle 2: inside []; row []; ops 2.0 stored; condition 2 holds
-corpus/gen-div.bc 55:18: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/gen-div.bc 55:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/gen-div.bc 56:3: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/gen-div.bc 55:18: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
+corpus/gen-div.bc 55:18: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/gen-div.bc 55:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-div.bc 3.0 tail: direct; condition 2 holds; agree
 corpus/gen-div.bc 2.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-div.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/gen-fib.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
-corpus/gen-fib.bc 34:21: handle 2: inside []; row []; ops 2.0 stored; condition 2 holds
-corpus/gen-fib.bc 34:21: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/gen-fib.bc 34:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/gen-fib.bc 34:21: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
+corpus/gen-fib.bc 34:21: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/gen-fib.bc 34:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-fib.bc 2.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-fib.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/gen-from.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/gen-from.bc 28:3: handle 3: inside []; row []; ops 3.0 stored; condition 2 holds
-corpus/gen-from.bc 28:3: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
-corpus/gen-from.bc 34:3: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/gen-from.bc 33:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/gen-from.bc 28:3: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/gen-from.bc 28:3: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/gen-from.bc 34:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/gen-from.bc 33:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-from.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-from.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/gen-from.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/gen-nested.bc flows [0, 1, 2, 3, 4294967295]; main [1, 2, 3]
-corpus/gen-nested.bc 19:5: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/gen-nested.bc 22:17: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
-corpus/gen-nested.bc 18:3: handle 1: inside []; row []; ops 1.0 stored; condition 2 holds
-corpus/gen-nested.bc 18:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/gen-nested.bc 19:5: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/gen-nested.bc 22:17: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/gen-nested.bc 18:3: handle 1: inside []; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
+corpus/gen-nested.bc 18:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-nested.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/gen-nested.bc 3.0 tail: direct; condition 2 holds; agree
 corpus/gen-nested.bc 1.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-pipeline-adapters.bc flows [0, 1, 2, 3, 4, 5, 4294967295], finaliser; main [1, 2, 3, 4, 5], finaliser
-corpus/gen-pipeline-adapters.bc 24:38: handle 5: inside []; row []; ops 5.0 stored; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:38: handle 5: inside []; row []; ops 5.0 tail; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:28: handle 4: inside []; row []; ops 4.0 stored; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:28: handle 4: inside []; row []; ops 4.0 tail; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:24: handle 3: inside []; row []; ops 3.0 stored; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:24: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:17: handle 2: inside []; row []; ops 2.0 stored; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:17: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/gen-pipeline-adapters.bc 24:38: handle 5: inside []; row []; ops 5.0 stored; names 5.0 []; condition 2 holds
+corpus/gen-pipeline-adapters.bc 24:38: handle 5: inside []; row []; ops 5.0 tail; names 5.0 []; condition 2 holds
+corpus/gen-pipeline-adapters.bc 24:28: handle 4: inside []; row []; ops 4.0 stored; names 4.0 []; condition 2 holds
+corpus/gen-pipeline-adapters.bc 24:28: handle 4: inside []; row []; ops 4.0 tail; names 4.0 []; condition 2 holds
+corpus/gen-pipeline-adapters.bc 24:24: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/gen-pipeline-adapters.bc 24:24: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/gen-pipeline-adapters.bc 24:17: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
+corpus/gen-pipeline-adapters.bc 24:17: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/gen-pipeline-adapters.bc 24:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-pipeline-adapters.bc 5.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-pipeline-adapters.bc 4.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-pipeline-adapters.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-pipeline-adapters.bc 2.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-pipeline-adapters.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/gen-pipeline-pipe.bc flows [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], finaliser
-corpus/gen-pipeline-pipe.bc 28:12: handle 10: inside []; row []; ops 10.0 stored; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:12: handle 10: inside []; row []; ops 10.0 tail; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:12: handle 9: inside []; row []; ops 9.0 stored; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:12: handle 9: inside []; row []; ops 9.0 tail; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:12: handle 8: inside []; row []; ops 8.0 stored; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:12: handle 8: inside []; row []; ops 8.0 tail; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:12: handle 7: inside []; row []; ops 7.0 stored; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:12: handle 7: inside []; row []; ops 7.0 tail; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:3: handle 6: inside []; row []; ops 6.0 tail; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:12: handle 5: inside []; row []; ops 5.0 stored; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:12: handle 5: inside []; row []; ops 5.0 tail; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:12: handle 4: inside []; row []; ops 4.0 stored; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:12: handle 4: inside []; row []; ops 4.0 tail; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:12: handle 3: inside []; row []; ops 3.0 stored; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:12: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:12: handle 2: inside []; row []; ops 2.0 stored; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:12: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/gen-pipeline-pipe.bc 28:12: handle 10: inside []; row []; ops 10.0 stored; names 10.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 28:12: handle 10: inside []; row []; ops 10.0 tail; names 10.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 28:12: handle 9: inside []; row []; ops 9.0 stored; names 9.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 28:12: handle 9: inside []; row []; ops 9.0 tail; names 9.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 28:12: handle 8: inside []; row []; ops 8.0 stored; names 8.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 28:12: handle 8: inside []; row []; ops 8.0 tail; names 8.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 28:12: handle 7: inside []; row []; ops 7.0 stored; names 7.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 28:12: handle 7: inside []; row []; ops 7.0 tail; names 7.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 28:3: handle 6: inside []; row []; ops 6.0 tail; names 6.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 26:12: handle 5: inside []; row []; ops 5.0 stored; names 5.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 26:12: handle 5: inside []; row []; ops 5.0 tail; names 5.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 26:12: handle 4: inside []; row []; ops 4.0 stored; names 4.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 26:12: handle 4: inside []; row []; ops 4.0 tail; names 4.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 26:12: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 26:12: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 26:12: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 26:12: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 26:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-pipeline-pipe.bc 10.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-pipeline-pipe.bc 9.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-pipeline-pipe.bc 8.0 stored,tail: machine; condition 2 holds; -
@@ -725,39 +725,39 @@ corpus/gen-pipeline-pipe.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-pipeline-pipe.bc 2.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-pipeline-pipe.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/gen-pipeline.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/gen-pipeline.bc 31:30: handle 3: inside []; row []; ops 3.0 stored; condition 2 holds
-corpus/gen-pipeline.bc 31:30: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
-corpus/gen-pipeline.bc 31:22: handle 2: inside []; row []; ops 2.0 stored; condition 2 holds
-corpus/gen-pipeline.bc 31:22: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/gen-pipeline.bc 31:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/gen-pipeline.bc 31:30: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/gen-pipeline.bc 31:30: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/gen-pipeline.bc 31:22: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
+corpus/gen-pipeline.bc 31:22: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/gen-pipeline.bc 31:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-pipeline.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-pipeline.bc 2.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-pipeline.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/gen-produce.bc flows [0, 1, 4294967295]; main [1]
-corpus/gen-produce.bc 21:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/gen-produce.bc 21:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-produce.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/gen-return.bc flows [0, 1, 2, 3, 4294967295]; main [1, 2, 3]
-corpus/gen-return.bc 47:3: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/gen-return.bc 52:3: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
-corpus/gen-return.bc 46:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/gen-return.bc 47:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 row; condition 2 holds
+corpus/gen-return.bc 52:3: handle 3: inside []; row []; ops 3.0 tail; names 3.0 row; condition 2 holds
+corpus/gen-return.bc 46:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-return.bc 2.0 tail: machine; condition 2 holds; -
 corpus/gen-return.bc 3.0 tail: machine; condition 2 holds; -
 corpus/gen-return.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/gen-tokenize-parse.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/gen-tokenize-parse.bc 95:23: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/gen-tokenize-parse.bc 95:60: handle 2: inside [3], finaliser; row [1]; ops 2.0 abortive; condition 2 fails at 1
-corpus/gen-tokenize-parse.bc 89:3: handle 3: inside []; row []; ops 3.0 stored; condition 2 holds
-corpus/gen-tokenize-parse.bc 89:3: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
+corpus/gen-tokenize-parse.bc 95:23: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/gen-tokenize-parse.bc 95:60: handle 2: inside [3], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/gen-tokenize-parse.bc 89:3: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/gen-tokenize-parse.bc 89:3: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
 corpus/gen-tokenize-parse.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/gen-tokenize-parse.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/gen-tokenize-parse.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/gen-tokenize-parse.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-value.bc flows [0, 1, 2, 3, 4, 4294967295], finaliser; main [1, 2, 3, 4], finaliser
-corpus/gen-value.bc 34:29: handle 3: inside []; row []; ops 3.0 stored; condition 2 holds
-corpus/gen-value.bc 34:29: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
-corpus/gen-value.bc 34:3: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/gen-value.bc 35:3: handle 4: inside []; row []; ops 4.0 resume-or-cancel; condition 2 holds
-corpus/gen-value.bc 35:3: handle 4: inside []; row []; ops 4.0 tail; condition 2 holds
-corpus/gen-value.bc 33:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/gen-value.bc 34:29: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/gen-value.bc 34:29: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/gen-value.bc 34:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/gen-value.bc 35:3: handle 4: inside []; row []; ops 4.0 resume-or-cancel; names 4.0 []; condition 2 holds
+corpus/gen-value.bc 35:3: handle 4: inside []; row []; ops 4.0 tail; names 4.0 []; condition 2 holds
+corpus/gen-value.bc 33:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/gen-value.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-value.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/gen-value.bc 4.0 resume-or-cancel,tail: machine; condition 2 holds; -
@@ -771,31 +771,31 @@ corpus/hygiene-answering-state.bc flows [0, 4294967295]; main []
 corpus/hygiene-borrow-loop.bc flows [0, 4294967295]; main []
 corpus/hygiene-box-lib.bc flows [0, 4294967295]; main []
 corpus/hygiene-clause-global.bc flows [0, 1, 4294967295]; main [1, 2]
-corpus/hygiene-clause-global.bc 14:11: handle 2: inside []; row []; ops 2.0 abortive; condition 2 holds
-corpus/hygiene-clause-global.bc 15:11: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/hygiene-clause-global.bc 14:11: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/hygiene-clause-global.bc 15:11: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/hygiene-clause-global.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/hygiene-clause-global.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/hygiene-clause-name.bc flows [0, 4294967295]; main []
 corpus/hygiene-for-global.bc flows [0, 4294967295]; main []
 corpus/hygiene-handler-after.bc flows [0, 4294967295]; main [1]
-corpus/hygiene-handler-after.bc 9:11: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/hygiene-handler-after.bc 9:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/hygiene-handler-after.bc 1.0 abortive: -; condition 2 holds; -
 corpus/hygiene-handler-args.bc flows [0, 4294967295]; main [1]
-corpus/hygiene-handler-args.bc 10:3: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/hygiene-handler-args.bc 10:3: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/hygiene-handler-args.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/hygiene-handler-generic.bc flows [0, 4294967295]; main [1]
-corpus/hygiene-handler-generic.bc 10:3: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/hygiene-handler-generic.bc 10:3: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/hygiene-handler-generic.bc 1.0 abortive: -; condition 2 holds; -
 corpus/hygiene-handler-param.bc flows [0, 4294967295]; main [1]
-corpus/hygiene-handler-param.bc 8:14: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/hygiene-handler-param.bc 8:14: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/hygiene-handler-param.bc 1.0 abortive: -; condition 2 holds; -
 corpus/hygiene-handler-resume.bc flows [0, 1, 4294967295]; main [1, 2]
-corpus/hygiene-handler-resume.bc 13:11: handle 2: inside []; row []; ops 2.0 abortive; condition 2 holds
-corpus/hygiene-handler-resume.bc 15:11: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/hygiene-handler-resume.bc 13:11: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/hygiene-handler-resume.bc 15:11: handle 1: inside []; row []; ops 1.0 tail; names 1.0 row; condition 2 holds
 corpus/hygiene-handler-resume.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/hygiene-handler-resume.bc 1.0 tail: machine; condition 2 holds; -
 corpus/hygiene-handler-state.bc flows [0, 1, 4294967295]; main [1]
-corpus/hygiene-handler-state.bc 11:3: handle 1: inside []; row []; ops 1.0 tail+state; condition 2 holds
+corpus/hygiene-handler-state.bc 11:3: handle 1: inside []; row []; ops 1.0 tail+state; names 1.0 []; condition 2 holds
 corpus/hygiene-handler-state.bc 1.0 tail+state: machine; condition 2 holds; -
 corpus/hygiene-local-fn.bc flows [0, 4294967295]; main []
 corpus/implicit-drops.bc flows [0, 4294967295]; main []
@@ -818,9 +818,9 @@ corpus/io-laws.bc flows [0, 4294967295]; main []
 corpus/io-lines.bc flows [0, 4294967295]; main []
 corpus/io-sections.bc flows [0, 4294967295]; main []
 corpus/io-task.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/io-task.bc 28:24: handle 3: inside []; row []; ops 3.0 stored, 3.1 tail; condition 2 holds
-corpus/io-task.bc 29:24: handle 2: inside []; row []; ops 2.0 stored, 2.1 tail; condition 2 holds
-corpus/io-task.bc 30:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/io-task.bc 28:24: handle 3: inside []; row []; ops 3.0 stored, 3.1 tail; names 3.0 [], 3.1 []; condition 2 holds
+corpus/io-task.bc 29:24: handle 2: inside []; row []; ops 2.0 stored, 2.1 tail; names 2.0 [], 2.1 []; condition 2 holds
+corpus/io-task.bc 30:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/io-task.bc 3.0 stored: machine; condition 2 holds; -
 corpus/io-task.bc 3.1 tail: -; condition 2 holds; -
 corpus/io-task.bc 2.0 stored: machine; condition 2 holds; -
@@ -845,7 +845,7 @@ corpus/join-let-nested.bc flows [0, 4294967295]; main []
 corpus/join-let-with.bc flows [0, 4294967295]; main []
 corpus/json-tokens.bc flows [0, 4294967295]; main []
 corpus/key-value.bc flows [0, 1, 4294967295]; main [1]
-corpus/key-value.bc 37:9: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/key-value.bc 37:9: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/key-value.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/labels-json.bc flows [0, 4294967295]; main []
 corpus/leetcode/arrays/0001-two-sum.bc flows [0, 4294967295]; main []
@@ -864,12 +864,12 @@ corpus/leetcode/binary/0268-missing-number.bc flows [0, 4294967295]; main []
 corpus/leetcode/binary/0338-counting-bits.bc flows [0, 4294967295]; main []
 corpus/leetcode/binary/0371-sum-of-two-integers.bc flows [0, 4294967295]; main []
 corpus/leetcode/dp/0039-combination-sum.bc flows [0, 1, 4294967295]; main [1]
-corpus/leetcode/dp/0039-combination-sum.bc 61:9: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/dp/0039-combination-sum.bc 61:9: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/dp/0039-combination-sum.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/dp/0055-jump-game.bc flows [0, 4294967295]; main []
 corpus/leetcode/dp/0062-unique-paths.bc flows [0, 4294967295]; main []
 corpus/leetcode/dp/0070-climbing-stairs.bc flows [0, 1, 4294967295]; main [1]
-corpus/leetcode/dp/0070-climbing-stairs.bc 36:9: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/dp/0070-climbing-stairs.bc 36:9: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/dp/0070-climbing-stairs.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/dp/0091-decode-ways.bc flows [0, 4294967295]; main []
 corpus/leetcode/dp/0139-word-break.bc flows [0, 4294967295]; main []
@@ -881,40 +881,40 @@ corpus/leetcode/dp/1143-longest-common-subsequence.bc flows [0, 4294967295]; mai
 corpus/leetcode/graphs/0128-longest-consecutive-sequence.bc flows [0, 4294967295]; main []
 corpus/leetcode/graphs/0133-clone-graph.bc flows [0, 4294967295]; main []
 corpus/leetcode/graphs/0200-number-of-islands.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/graphs/0200-number-of-islands.bc 82:1: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/graphs/0200-number-of-islands.bc 87:3: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/graphs/0200-number-of-islands.bc 44:3: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/graphs/0200-number-of-islands.bc 53:7: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/graphs/0200-number-of-islands.bc 57:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/graphs/0200-number-of-islands.bc 82:1: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/graphs/0200-number-of-islands.bc 87:3: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/graphs/0200-number-of-islands.bc 44:3: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/graphs/0200-number-of-islands.bc 53:7: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/graphs/0200-number-of-islands.bc 57:9: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/graphs/0200-number-of-islands.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/graphs/0207-course-schedule.bc flows [0, 4294967295]; main []
 corpus/leetcode/graphs/0261-graph-valid-tree.bc flows [0, 4294967295]; main []
 corpus/leetcode/graphs/0269-alien-dictionary.bc flows [0, 4294967295]; main []
 corpus/leetcode/graphs/0323-number-of-connected-components.bc flows [0, 4294967295]; main []
 corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 100:1: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 105:3: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 54:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 62:3: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 67:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 90:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 100:1: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 105:3: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 54:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 62:3: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 67:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 90:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 75:31: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 390:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 393:15: handle 3: inside []; row [1]; ops 3.0 abortive; condition 2 fails at 1
-corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 fails at 1
+corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 75:31: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 390:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 393:15: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 3.0 abortive: branch; condition 2 fails; -
-corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/heaps/0295-find-median-from-data-stream.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 89:31: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 390:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 393:15: handle 3: inside []; row [1]; ops 3.0 abortive; condition 2 fails at 1
-corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 fails at 1
+corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 89:31: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 390:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 393:15: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 3.0 abortive: branch; condition 2 fails; -
-corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/heaps/0347-top-k-frequent-elements.bc flows [0, 4294967295]; main []
 corpus/leetcode/intervals/0056-merge-intervals.bc flows [0, 4294967295]; main []
 corpus/leetcode/intervals/0057-insert-interval.bc flows [0, 4294967295]; main []
@@ -922,26 +922,26 @@ corpus/leetcode/intervals/0252-meeting-rooms.bc flows [0, 4294967295]; main []
 corpus/leetcode/intervals/0253-meeting-rooms-ii.bc flows [0, 4294967295]; main []
 corpus/leetcode/intervals/0435-non-overlapping-intervals.bc flows [0, 4294967295]; main []
 corpus/leetcode/lists/0019-remove-nth-node-from-end-of-list.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/lists/0019-remove-nth-node-from-end-of-list.bc 81:11: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/lists/0019-remove-nth-node-from-end-of-list.bc 81:11: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/lists/0019-remove-nth-node-from-end-of-list.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/lists/0021-merge-two-sorted-lists.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/lists/0021-merge-two-sorted-lists.bc 85:11: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/lists/0021-merge-two-sorted-lists.bc 85:11: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/lists/0021-merge-two-sorted-lists.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/lists/0023-merge-k-sorted-lists.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/lists/0023-merge-k-sorted-lists.bc 118:11: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/lists/0023-merge-k-sorted-lists.bc 118:11: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/lists/0023-merge-k-sorted-lists.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/lists/0141-linked-list-cycle.bc flows [0, 4294967295]; main []
 corpus/leetcode/lists/0143-reorder-list.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/lists/0143-reorder-list.bc 118:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/lists/0143-reorder-list.bc 118:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/lists/0143-reorder-list.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/lists/0206-reverse-linked-list.bc flows [0, 1, 4294967295]; main [1]
-corpus/leetcode/lists/0206-reverse-linked-list.bc 82:24: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/lists/0206-reverse-linked-list.bc 82:24: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/lists/0206-reverse-linked-list.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/matrix/0048-rotate-image.bc flows [0, 4294967295]; main []
 corpus/leetcode/matrix/0054-spiral-matrix.bc flows [0, 4294967295]; main []
 corpus/leetcode/matrix/0073-set-matrix-zeroes.bc flows [0, 4294967295]; main []
 corpus/leetcode/matrix/0079-word-search.bc flows [0, 1, 4294967295]; main [1]
-corpus/leetcode/matrix/0079-word-search.bc 59:11: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/matrix/0079-word-search.bc 59:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/matrix/0079-word-search.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/strings/0003-longest-substring-without-repeating-characters.bc flows [0, 4294967295]; main []
 corpus/leetcode/strings/0005-longest-palindromic-substring.bc flows [0, 4294967295]; main []
@@ -951,111 +951,111 @@ corpus/leetcode/strings/0076-minimum-window-substring.bc flows [0, 4294967295]; 
 corpus/leetcode/strings/0125-valid-palindrome.bc flows [0, 4294967295]; main []
 corpus/leetcode/strings/0242-valid-anagram.bc flows [0, 4294967295]; main []
 corpus/leetcode/strings/0271-encode-and-decode-strings.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/leetcode/strings/0271-encode-and-decode-strings.bc 65:19: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/strings/0271-encode-and-decode-strings.bc 390:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/strings/0271-encode-and-decode-strings.bc 393:15: handle 3: inside []; row [1]; ops 3.0 abortive; condition 2 fails at 1
-corpus/leetcode/strings/0271-encode-and-decode-strings.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 fails at 1
+corpus/leetcode/strings/0271-encode-and-decode-strings.bc 65:19: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/strings/0271-encode-and-decode-strings.bc 390:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/strings/0271-encode-and-decode-strings.bc 393:15: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/leetcode/strings/0271-encode-and-decode-strings.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/leetcode/strings/0271-encode-and-decode-strings.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/leetcode/strings/0271-encode-and-decode-strings.bc 3.0 abortive: branch; condition 2 fails; -
-corpus/leetcode/strings/0271-encode-and-decode-strings.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/leetcode/strings/0271-encode-and-decode-strings.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/leetcode/strings/0271-encode-and-decode-strings.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 72:23: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 390:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 393:15: handle 3: inside []; row [1]; ops 3.0 abortive; condition 2 fails at 1
-corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 fails at 1
+corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 72:23: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 390:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 393:15: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 3.0 abortive: branch; condition 2 fails; -
-corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/strings/0647-palindromic-substrings.bc flows [0, 4294967295]; main []
 corpus/leetcode/trees/0098-validate-binary-search-tree.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/trees/0098-validate-binary-search-tree.bc 119:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/trees/0098-validate-binary-search-tree.bc 119:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/trees/0098-validate-binary-search-tree.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/trees/0100-same-tree.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/trees/0100-same-tree.bc 114:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/trees/0100-same-tree.bc 114:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/trees/0100-same-tree.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/trees/0102-binary-tree-level-order-traversal.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/trees/0102-binary-tree-level-order-traversal.bc 140:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/trees/0102-binary-tree-level-order-traversal.bc 140:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/trees/0102-binary-tree-level-order-traversal.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/trees/0104-maximum-depth-of-binary-tree.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/trees/0104-maximum-depth-of-binary-tree.bc 111:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/trees/0104-maximum-depth-of-binary-tree.bc 111:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/trees/0104-maximum-depth-of-binary-tree.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-traversal.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-traversal.bc 131:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-traversal.bc 131:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-traversal.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/trees/0124-binary-tree-maximum-path-sum.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/trees/0124-binary-tree-maximum-path-sum.bc 120:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/trees/0124-binary-tree-maximum-path-sum.bc 120:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/trees/0124-binary-tree-maximum-path-sum.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/trees/0208-implement-trie.bc flows [0, 4294967295]; main []
 corpus/leetcode/trees/0211-design-add-and-search-words-data-structure.bc flows [0, 4294967295]; main []
 corpus/leetcode/trees/0212-word-search-ii.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
-corpus/leetcode/trees/0212-word-search-ii.bc 170:1: handle 1: inside [1, 2], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/trees/0212-word-search-ii.bc 179:3: handle 1: inside [1, 2], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/trees/0212-word-search-ii.bc 183:25: handle 2: inside [1, 2], finaliser; row [1]; ops 2.0 abortive; condition 2 fails at 1
-corpus/leetcode/trees/0212-word-search-ii.bc 155:3: handle 2: inside [1], finaliser; row []; ops 2.0 abortive; condition 2 holds
-corpus/leetcode/trees/0212-word-search-ii.bc 155:3: handle 1: inside [], finaliser; row [2]; ops 1.0 abortive; condition 2 fails at 2
-corpus/leetcode/trees/0212-word-search-ii.bc 1.0 abortive: branch; condition 2 fails; -
-corpus/leetcode/trees/0212-word-search-ii.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/leetcode/trees/0212-word-search-ii.bc 170:1: handle 1: inside [1, 2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/trees/0212-word-search-ii.bc 179:3: handle 1: inside [1, 2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/trees/0212-word-search-ii.bc 183:25: handle 2: inside [1, 2], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/leetcode/trees/0212-word-search-ii.bc 155:3: handle 2: inside [1], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/leetcode/trees/0212-word-search-ii.bc 155:3: handle 1: inside [], finaliser; row [2]; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/trees/0212-word-search-ii.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/leetcode/trees/0212-word-search-ii.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/trees/0226-invert-binary-tree.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/trees/0226-invert-binary-tree.bc 105:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/trees/0226-invert-binary-tree.bc 105:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/trees/0226-invert-binary-tree.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/trees/0230-kth-smallest-element-in-a-bst.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
-corpus/leetcode/trees/0230-kth-smallest-element-in-a-bst.bc 127:24: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/leetcode/trees/0230-kth-smallest-element-in-a-bst.bc 103:3: handle 2: inside [], finaliser; row [1]; ops 2.0 resume-or-cancel; condition 2 fails at 1
+corpus/leetcode/trees/0230-kth-smallest-element-in-a-bst.bc 127:24: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/trees/0230-kth-smallest-element-in-a-bst.bc 103:3: handle 2: inside [], finaliser; row [1]; ops 2.0 resume-or-cancel; names 2.0 []; condition 2 holds
 corpus/leetcode/trees/0230-kth-smallest-element-in-a-bst.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/leetcode/trees/0230-kth-smallest-element-in-a-bst.bc 2.0 resume-or-cancel: machine; condition 2 fails; -
+corpus/leetcode/trees/0230-kth-smallest-element-in-a-bst.bc 2.0 resume-or-cancel: machine; condition 2 holds; -
 corpus/leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree.bc 120:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree.bc 120:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/trees/0297-serialize-and-deserialize-binary-tree.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/trees/0297-serialize-and-deserialize-binary-tree.bc 133:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/trees/0297-serialize-and-deserialize-binary-tree.bc 133:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/trees/0297-serialize-and-deserialize-binary-tree.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/trees/0572-subtree-of-another-tree.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/leetcode/trees/0572-subtree-of-another-tree.bc 147:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/leetcode/trees/0572-subtree-of-another-tree.bc 147:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/trees/0572-subtree-of-another-tree.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/lend-config.bc flows [0, 4294967295]; main []
 corpus/lend-copy.bc flows [0, 4294967295]; main []
 corpus/lend-div.bc flows [0, 1, 4294967295]; main [1]
-corpus/lend-div.bc 35:5: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/lend-div.bc 35:5: handle 1: inside []; row []; ops 1.0 tail; names 1.0 row; condition 2 holds
 corpus/lend-div.bc 1.0 tail: machine; condition 2 holds; -
 corpus/lend-lib-each.bc flows [0, 4294967295]; main []
 corpus/lend-lib-gen.bc flows [0, 4294967295]; main []
 corpus/lend-lib-loop.bc flows [0, 4294967295]; main []
 corpus/lend-mut.bc flows [0, 4294967295]; main []
 corpus/lend-pipeline.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/lend-pipeline.bc 43:32: handle 3: inside []; row []; ops 3.0 stored; condition 2 holds
-corpus/lend-pipeline.bc 43:32: handle 3: inside []; row []; ops 3.0 tail; condition 2 holds
-corpus/lend-pipeline.bc 43:24: handle 2: inside []; row []; ops 2.0 stored; condition 2 holds
-corpus/lend-pipeline.bc 43:24: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/lend-pipeline.bc 43:5: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/lend-pipeline.bc 43:32: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/lend-pipeline.bc 43:32: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/lend-pipeline.bc 43:24: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
+corpus/lend-pipeline.bc 43:24: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/lend-pipeline.bc 43:5: handle 1: inside []; row []; ops 1.0 tail; names 1.0 row; condition 2 holds
 corpus/lend-pipeline.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/lend-pipeline.bc 2.0 stored,tail: machine; condition 2 holds; -
 corpus/lend-pipeline.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/lend-server.bc flows [0, 4294967295]; main []
 corpus/lend-shadow.bc flows [0, 4294967295]; main []
 corpus/list-blocks.bc flows [0, 2, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/list-blocks.bc 22:12: handle 3: inside [], finaliser; row []; ops 3.0 abortive; condition 2 holds
-corpus/list-blocks.bc 19:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/list-blocks.bc 19:20: handle 2: inside [], finaliser; row [1]; ops 2.0 abortive; condition 2 fails at 1
+corpus/list-blocks.bc 22:12: handle 3: inside [], finaliser; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/list-blocks.bc 19:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/list-blocks.bc 19:20: handle 2: inside [], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/list-blocks.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/list-blocks.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/list-blocks.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/list-blocks.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/list-capability.bc flows [0, 1, 4294967295]; main [1]
-corpus/list-capability.bc 16:19: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/list-capability.bc 16:19: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/list-capability.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/list-generic.bc flows [0, 4294967295], finaliser; main [1], finaliser
-corpus/list-generic.bc 19:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/list-generic.bc 19:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/list-generic.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/loop-handler-binder.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/loop-handler-binder.bc 21:13: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/loop-handler-binder.bc 390:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/loop-handler-binder.bc 393:15: handle 3: inside []; row [1]; ops 3.0 abortive; condition 2 fails at 1
-corpus/loop-handler-binder.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 fails at 1
+corpus/loop-handler-binder.bc 21:13: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/loop-handler-binder.bc 390:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/loop-handler-binder.bc 393:15: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/loop-handler-binder.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/loop-handler-binder.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/loop-handler-binder.bc 3.0 abortive: branch; condition 2 fails; -
-corpus/loop-handler-binder.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/loop-handler-binder.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/loop-handler-binder.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/loop-labels.bc flows [0, 4294967295]; main []
 corpus/loop-row-answer.bc flows [0, 1, 4294967295]; main [1]
-corpus/loop-row-answer.bc 20:21: handle 1: inside []; row []; ops 1.0 once; condition 2 holds
+corpus/loop-row-answer.bc 20:21: handle 1: inside []; row []; ops 1.0 once; names 1.0 []; condition 2 holds
 corpus/loop-row-answer.bc 1.0 once: machine; condition 2 holds; -
 corpus/loop-shadow-linear.bc flows [0, 4294967295]; main []
 corpus/loop-shadow-owner.bc flows [0, 4294967295]; main []
@@ -1075,46 +1075,46 @@ corpus/name-clash.bc flows [0, 4294967295]; main []
 corpus/nats-sum.bc flows [0, 4294967295]; main []
 corpus/needs-stdout.bc flows [0, 4294967295]; main []
 corpus/operator-rounds.bc flows [0, 1, 2, 3, 4, 4294967295], finaliser; main [1, 2, 3, 4], finaliser
-corpus/operator-rounds.bc 102:7: handle 3: inside [1, 2, 3, 4], finaliser; row []; ops 3.0 abortive; condition 2 holds
-corpus/operator-rounds.bc 103:9: handle 3: inside [1, 2, 4], finaliser; row []; ops 3.0 abortive; condition 2 holds
-corpus/operator-rounds.bc 44:48: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
-corpus/operator-rounds.bc 79:11: handle 4: inside [2]; row []; ops 4.0 abortive; condition 2 holds
-corpus/operator-rounds.bc 47:3: handle 2: inside []; row []; ops 2.0 abortive; condition 2 holds
+corpus/operator-rounds.bc 102:7: handle 3: inside [1, 2, 3, 4], finaliser; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/operator-rounds.bc 103:9: handle 3: inside [1, 2, 4], finaliser; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/operator-rounds.bc 44:48: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/operator-rounds.bc 79:11: handle 4: inside [2]; row []; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/operator-rounds.bc 47:3: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/operator-rounds.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/operator-rounds.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/operator-rounds.bc 4.0 abortive: branch; condition 2 holds; -
 corpus/operator-rounds.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/parse-int.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
-corpus/parse-int.bc 47:15: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/parse-int.bc 27:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/parse-int.bc 30:15: handle 3: inside []; row [1]; ops 3.0 abortive; condition 2 fails at 1
-corpus/parse-int.bc 31:11: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 fails at 1
+corpus/parse-int.bc 47:15: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/parse-int.bc 27:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/parse-int.bc 30:15: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/parse-int.bc 31:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/parse-int.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/parse-int.bc 3.0 abortive: branch; condition 2 fails; -
-corpus/parse-int.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/parse-int.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/parse-int.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/parse-recover.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
-corpus/parse-recover.bc 135:3: handle 1: inside [1, 2], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/parse-recover.bc 121:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/parse-recover.bc 126:15: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 fails at 1
+corpus/parse-recover.bc 135:3: handle 1: inside [1, 2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/parse-recover.bc 121:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/parse-recover.bc 126:15: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/parse-recover.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/parse-recover.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/parse-recover.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/pipe-handlers.bc flows [0, 2, 4, 5, 6, 7, 8, 9, 10, 4294967295]; main [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-corpus/pipe-handlers.bc 39:11: handle 9: inside [10]; row []; ops 9.0 once; condition 2 holds
-corpus/pipe-handlers.bc 39:11: handle 10: inside []; row [9]; ops 10.0 abortive; condition 2 fails at 9
-corpus/pipe-handlers.bc 40:11: handle 7: inside [8]; row []; ops 7.0 once; condition 2 holds
-corpus/pipe-handlers.bc 40:26: handle 8: inside []; row [7]; ops 8.0 abortive; condition 2 fails at 7
-corpus/pipe-handlers.bc 33:68: handle 6: inside [5]; row []; ops 6.0 once; condition 2 holds
-corpus/pipe-handlers.bc 33:68: handle 5: inside []; row [6]; ops 5.0 abortive; condition 2 fails at 6
-corpus/pipe-handlers.bc 42:11: handle 3: inside [4]; row []; ops 3.0 abortive; condition 2 holds
-corpus/pipe-handlers.bc 42:11: handle 4: inside []; row [3]; ops 4.0 once; condition 2 holds
-corpus/pipe-handlers.bc 43:11: handle 1: inside [2]; row []; ops 1.0 abortive; condition 2 holds
-corpus/pipe-handlers.bc 43:11: handle 2: inside []; row [1]; ops 2.0 once; condition 2 holds
+corpus/pipe-handlers.bc 39:11: handle 9: inside [10]; row []; ops 9.0 once; names 9.0 []; condition 2 holds
+corpus/pipe-handlers.bc 39:11: handle 10: inside []; row [9]; ops 10.0 abortive; names 10.0 []; condition 2 holds
+corpus/pipe-handlers.bc 40:11: handle 7: inside [8]; row []; ops 7.0 once; names 7.0 []; condition 2 holds
+corpus/pipe-handlers.bc 40:26: handle 8: inside []; row [7]; ops 8.0 abortive; names 8.0 []; condition 2 holds
+corpus/pipe-handlers.bc 33:68: handle 6: inside [5]; row []; ops 6.0 once; names 6.0 []; condition 2 holds
+corpus/pipe-handlers.bc 33:68: handle 5: inside []; row [6]; ops 5.0 abortive; names 5.0 []; condition 2 holds
+corpus/pipe-handlers.bc 42:11: handle 3: inside [4]; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/pipe-handlers.bc 42:11: handle 4: inside []; row [3]; ops 4.0 once; names 4.0 []; condition 2 holds
+corpus/pipe-handlers.bc 43:11: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/pipe-handlers.bc 43:11: handle 2: inside []; row [1]; ops 2.0 once; names 2.0 []; condition 2 holds
 corpus/pipe-handlers.bc 9.0 once: machine; condition 2 holds; -
-corpus/pipe-handlers.bc 10.0 abortive: branch; condition 2 fails; -
+corpus/pipe-handlers.bc 10.0 abortive: branch; condition 2 holds; -
 corpus/pipe-handlers.bc 7.0 once: machine; condition 2 holds; -
-corpus/pipe-handlers.bc 8.0 abortive: branch; condition 2 fails; -
+corpus/pipe-handlers.bc 8.0 abortive: branch; condition 2 holds; -
 corpus/pipe-handlers.bc 6.0 once: machine; condition 2 holds; -
-corpus/pipe-handlers.bc 5.0 abortive: branch; condition 2 fails; -
+corpus/pipe-handlers.bc 5.0 abortive: branch; condition 2 holds; -
 corpus/pipe-handlers.bc 3.0 abortive: -; condition 2 holds; -
 corpus/pipe-handlers.bc 4.0 once: machine; condition 2 holds; -
 corpus/pipe-handlers.bc 1.0 abortive: branch; condition 2 holds; -
@@ -1124,160 +1124,160 @@ corpus/poly-providers.bc flows [0, 4294967295]; main []
 corpus/print-borrowed-array.bc flows [0, 4294967295]; main []
 corpus/quicksort.bc flows [0, 4294967295]; main []
 corpus/rec-await-exhausted.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
-corpus/rec-await-exhausted.bc 16:13: handle 1: inside [2], finaliser; row []; ops 1.0 tail; condition 2 holds
-corpus/rec-await-exhausted.bc 16:25: handle 2: inside [], finaliser; row [1]; ops 2.0 abortive; condition 2 fails at 1
+corpus/rec-await-exhausted.bc 16:13: handle 1: inside [2], finaliser; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/rec-await-exhausted.bc 16:25: handle 2: inside [], finaliser; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/rec-await-exhausted.bc 1.0 tail: direct; condition 2 holds; agree
-corpus/rec-await-exhausted.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/rec-await-exhausted.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/rec-deep.bc flows [0, 4294967295]; main []
 corpus/rec-emit.bc flows [0, 2, 4294967295]; main [1, 2]
-corpus/rec-emit.bc 23:15: handle 1: inside [2]; row []; ops 1.0 abortive; condition 2 holds
-corpus/rec-emit.bc 23:52: handle 2: inside []; row [1]; ops 2.0 once; condition 2 holds
+corpus/rec-emit.bc 23:15: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/rec-emit.bc 23:52: handle 2: inside []; row [1]; ops 2.0 once; names 2.0 []; condition 2 holds
 corpus/rec-emit.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-emit.bc 2.0 once: machine; condition 2 holds; -
 corpus/rec-even-odd.bc flows [0, 4294967295]; main [1]
-corpus/rec-even-odd.bc 14:23: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/rec-even-odd.bc 14:23: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/rec-even-odd.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-fib.bc flows [0, 4294967295]; main [1]
-corpus/rec-fib.bc 18:15: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/rec-fib.bc 18:15: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/rec-fib.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-generic-deep.bc flows [0, 4294967295]; main []
 corpus/rec-generic-layer.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/rec-generic-layer.bc 19:47: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/rec-generic-layer.bc 19:47: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/rec-generic-layer.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-generic-mutual.bc flows [0, 4294967295], finaliser; main [1], finaliser
-corpus/rec-generic-mutual.bc 17:34: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/rec-generic-mutual.bc 17:34: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/rec-generic-mutual.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-layer.bc flows [0, 1, 2, 4294967295]; main [1, 2]
-corpus/rec-layer.bc 29:47: handle 2: inside []; row []; ops 2.0 abortive; condition 2 holds
-corpus/rec-layer.bc 31:5: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/rec-layer.bc 29:47: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/rec-layer.bc 31:5: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/rec-layer.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/rec-layer.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-lifetimes.bc flows [0, 1, 2, 3, 4294967295]; main [1, 2, 3]
-corpus/rec-lifetimes.bc 33:35: handle 3: inside []; row []; ops 3.0 abortive; condition 2 holds
-corpus/rec-lifetimes.bc 34:35: handle 2: inside []; row []; ops 2.0 abortive; condition 2 holds
-corpus/rec-lifetimes.bc 35:35: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/rec-lifetimes.bc 33:35: handle 3: inside []; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/rec-lifetimes.bc 34:35: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/rec-lifetimes.bc 35:35: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/rec-lifetimes.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/rec-lifetimes.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/rec-lifetimes.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-log.bc flows [0, 1, 4294967295]; main [1]
-corpus/rec-log.bc 22:32: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/rec-log.bc 22:32: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/rec-log.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-mixed.bc flows [0, 4294967295]; main [1]
-corpus/rec-mixed.bc 15:3: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/rec-mixed.bc 15:3: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/rec-mixed.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-overflow.bc flows [0, 4294967295], finaliser; main [1, 2], finaliser
-corpus/rec-overflow.bc 25:15: handle 2: inside [], finaliser; row []; ops 2.0 abortive; condition 2 holds
-corpus/rec-overflow.bc 26:13: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/rec-overflow.bc 25:15: handle 2: inside [], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/rec-overflow.bc 26:13: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/rec-overflow.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/rec-overflow.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-parser.bc flows [0, 2, 3, 4294967295]; main [1, 2, 3]
-corpus/rec-parser.bc 63:37: handle 1: inside [2, 3]; row []; ops 1.0 abortive; condition 2 holds
-corpus/rec-parser.bc 64:11: handle 3: inside []; row [1]; ops 3.0 abortive; condition 2 holds
-corpus/rec-parser.bc 65:11: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 holds
+corpus/rec-parser.bc 63:37: handle 1: inside [2, 3]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/rec-parser.bc 64:11: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/rec-parser.bc 65:11: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/rec-parser.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-parser.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/rec-parser.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/rec-tree.bc flows [0, 4294967295], finaliser; main [1], finaliser
-corpus/rec-tree.bc 27:15: handle 1: inside [], finaliser; row []; ops 1.0 abortive; condition 2 holds
+corpus/rec-tree.bc 27:15: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/rec-tree.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-yield.bc flows [0, 2, 4294967295]; main [1, 2]
-corpus/rec-yield.bc 22:15: handle 1: inside [2]; row []; ops 1.0 abortive; condition 2 holds
-corpus/rec-yield.bc 19:3: handle 2: inside []; row [1]; ops 2.0 tail; condition 2 holds
+corpus/rec-yield.bc 22:15: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/rec-yield.bc 19:3: handle 2: inside []; row [1]; ops 2.0 tail; names 2.0 []; condition 2 holds
 corpus/rec-yield.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/rec-yield.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/reconcile-chain.bc flows [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 4294967295]; main [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-corpus/reconcile-chain.bc 99:4: handle 1: inside [2, 3, 4, 5, 6]; row []; ops 1.0 once; condition 2 holds
-corpus/reconcile-chain.bc 99:19: handle 2: inside [3, 4, 5, 6]; row [1]; ops 2.0 tail+state; condition 2 fails at 1
-corpus/reconcile-chain.bc 99:37: handle 3: inside [4, 5, 6]; row [2, 1]; ops 3.0 once; condition 2 fails at 2, 1
-corpus/reconcile-chain.bc 99:55: handle 4: inside [5, 6]; row [3, 2, 1]; ops 4.0 abortive; condition 2 fails at 3, 2, 1
-corpus/reconcile-chain.bc 79:11: handle 5: inside []; row [3, 4, 1, 2]; ops 5.0 abortive; condition 2 fails at 3, 4, 1, 2
-corpus/reconcile-chain.bc 72:61: handle 6: inside []; row [5, 1, 2, 3]; ops 6.0 resume-or-cancel; condition 2 fails at 5, 1, 2, 3
-corpus/reconcile-chain.bc 100:4: handle 7: inside [8, 9, 10, 11, 12]; row []; ops 7.0 once; condition 2 holds
-corpus/reconcile-chain.bc 100:19: handle 8: inside [9, 10, 11, 12]; row [7]; ops 8.0 tail+state; condition 2 fails at 7
-corpus/reconcile-chain.bc 100:37: handle 9: inside [10, 11, 12]; row [8, 7]; ops 9.0 once; condition 2 fails at 8, 7
-corpus/reconcile-chain.bc 100:55: handle 10: inside [11, 12]; row [9, 8, 7]; ops 10.0 abortive; condition 2 fails at 9, 8, 7
-corpus/reconcile-chain.bc 79:11: handle 11: inside []; row [9, 10, 7, 8]; ops 11.0 abortive; condition 2 fails at 9, 10, 7, 8
-corpus/reconcile-chain.bc 72:61: handle 12: inside []; row [11, 7, 8, 9]; ops 12.0 resume-or-cancel; condition 2 fails at 11, 7, 8, 9
+corpus/reconcile-chain.bc 99:4: handle 1: inside [2, 3, 4, 5, 6]; row []; ops 1.0 once; names 1.0 []; condition 2 holds
+corpus/reconcile-chain.bc 99:19: handle 2: inside [3, 4, 5, 6]; row [1]; ops 2.0 tail+state; names 2.0 []; condition 2 holds
+corpus/reconcile-chain.bc 99:37: handle 3: inside [4, 5, 6]; row [2, 1]; ops 3.0 once; names 3.0 []; condition 2 holds
+corpus/reconcile-chain.bc 99:55: handle 4: inside [5, 6]; row [3, 2, 1]; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/reconcile-chain.bc 79:11: handle 5: inside []; row [3, 4, 1, 2]; ops 5.0 abortive; names 5.0 []; condition 2 holds
+corpus/reconcile-chain.bc 72:61: handle 6: inside []; row [5, 1, 2, 3]; ops 6.0 resume-or-cancel; names 6.0 [5]; condition 2 fails at 5
+corpus/reconcile-chain.bc 100:4: handle 7: inside [8, 9, 10, 11, 12]; row []; ops 7.0 once; names 7.0 []; condition 2 holds
+corpus/reconcile-chain.bc 100:19: handle 8: inside [9, 10, 11, 12]; row [7]; ops 8.0 tail+state; names 8.0 []; condition 2 holds
+corpus/reconcile-chain.bc 100:37: handle 9: inside [10, 11, 12]; row [8, 7]; ops 9.0 once; names 9.0 []; condition 2 holds
+corpus/reconcile-chain.bc 100:55: handle 10: inside [11, 12]; row [9, 8, 7]; ops 10.0 abortive; names 10.0 []; condition 2 holds
+corpus/reconcile-chain.bc 79:11: handle 11: inside []; row [9, 10, 7, 8]; ops 11.0 abortive; names 11.0 []; condition 2 holds
+corpus/reconcile-chain.bc 72:61: handle 12: inside []; row [11, 7, 8, 9]; ops 12.0 resume-or-cancel; names 12.0 [11]; condition 2 fails at 11
 corpus/reconcile-chain.bc 1.0 once: machine; condition 2 holds; -
-corpus/reconcile-chain.bc 2.0 tail+state: machine; condition 2 fails; -
-corpus/reconcile-chain.bc 3.0 once: machine; condition 2 fails; -
-corpus/reconcile-chain.bc 4.0 abortive: branch; condition 2 fails; -
-corpus/reconcile-chain.bc 5.0 abortive: branch; condition 2 fails; -
+corpus/reconcile-chain.bc 2.0 tail+state: machine; condition 2 holds; -
+corpus/reconcile-chain.bc 3.0 once: machine; condition 2 holds; -
+corpus/reconcile-chain.bc 4.0 abortive: branch; condition 2 holds; -
+corpus/reconcile-chain.bc 5.0 abortive: branch; condition 2 holds; -
 corpus/reconcile-chain.bc 6.0 resume-or-cancel: machine; condition 2 fails; -
 corpus/reconcile-chain.bc 7.0 once: machine; condition 2 holds; -
-corpus/reconcile-chain.bc 8.0 tail+state: machine; condition 2 fails; -
-corpus/reconcile-chain.bc 9.0 once: machine; condition 2 fails; -
-corpus/reconcile-chain.bc 10.0 abortive: branch; condition 2 fails; -
-corpus/reconcile-chain.bc 11.0 abortive: branch; condition 2 fails; -
+corpus/reconcile-chain.bc 8.0 tail+state: machine; condition 2 holds; -
+corpus/reconcile-chain.bc 9.0 once: machine; condition 2 holds; -
+corpus/reconcile-chain.bc 10.0 abortive: branch; condition 2 holds; -
+corpus/reconcile-chain.bc 11.0 abortive: branch; condition 2 holds; -
 corpus/reconcile-chain.bc 12.0 resume-or-cancel: machine; condition 2 fails; -
 corpus/reconcile-clock.bc flows [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 4294967295]; main [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
-corpus/reconcile-clock.bc 92:17: handle 1: inside [2, 3, 4, 5]; row []; ops 1.0 tail+state; condition 2 holds
-corpus/reconcile-clock.bc 92:33: handle 2: inside [3, 4, 5]; row [1]; ops 2.0 once; condition 2 fails at 1
-corpus/reconcile-clock.bc 92:48: handle 3: inside [4, 5]; row [2, 1]; ops 3.0 abortive; condition 2 fails at 2, 1
-corpus/reconcile-clock.bc 66:11: handle 4: inside []; row [1, 3, 2]; ops 4.0 abortive; condition 2 fails at 1, 3, 2
-corpus/reconcile-clock.bc 52:61: handle 5: inside []; row [4, 2]; ops 5.0 resume-or-cancel; condition 2 fails at 4, 2
-corpus/reconcile-clock.bc 94:17: handle 6: inside [7, 8, 9, 10]; row []; ops 6.0 tail+state; condition 2 holds
-corpus/reconcile-clock.bc 94:33: handle 7: inside [8, 9, 10]; row [6]; ops 7.0 once; condition 2 fails at 6
-corpus/reconcile-clock.bc 94:48: handle 8: inside [9, 10]; row [7, 6]; ops 8.0 abortive; condition 2 fails at 7, 6
-corpus/reconcile-clock.bc 66:11: handle 9: inside []; row [6, 8, 7]; ops 9.0 abortive; condition 2 fails at 6, 8, 7
-corpus/reconcile-clock.bc 52:61: handle 10: inside []; row [9, 7]; ops 10.0 resume-or-cancel; condition 2 fails at 9, 7
-corpus/reconcile-clock.bc 92:17: handle 11: inside [12, 13, 14, 15]; row []; ops 11.0 tail+state; condition 2 holds
-corpus/reconcile-clock.bc 92:33: handle 12: inside [13, 14, 15]; row [11]; ops 12.0 once; condition 2 fails at 11
-corpus/reconcile-clock.bc 92:48: handle 13: inside [14, 15]; row [12, 11]; ops 13.0 abortive; condition 2 fails at 12, 11
-corpus/reconcile-clock.bc 66:11: handle 14: inside []; row [11, 13, 12]; ops 14.0 abortive; condition 2 fails at 11, 13, 12
-corpus/reconcile-clock.bc 52:61: handle 15: inside []; row [14, 12]; ops 15.0 resume-or-cancel; condition 2 fails at 14, 12
-corpus/reconcile-clock.bc 94:17: handle 16: inside [17, 18, 19, 20]; row []; ops 16.0 tail+state; condition 2 holds
-corpus/reconcile-clock.bc 94:33: handle 17: inside [18, 19, 20]; row [16]; ops 17.0 once; condition 2 fails at 16
-corpus/reconcile-clock.bc 94:48: handle 18: inside [19, 20]; row [17, 16]; ops 18.0 abortive; condition 2 fails at 17, 16
-corpus/reconcile-clock.bc 66:11: handle 19: inside []; row [16, 18, 17]; ops 19.0 abortive; condition 2 fails at 16, 18, 17
-corpus/reconcile-clock.bc 52:61: handle 20: inside []; row [19, 17]; ops 20.0 resume-or-cancel; condition 2 fails at 19, 17
+corpus/reconcile-clock.bc 92:17: handle 1: inside [2, 3, 4, 5]; row []; ops 1.0 tail+state; names 1.0 row; condition 2 holds
+corpus/reconcile-clock.bc 92:33: handle 2: inside [3, 4, 5]; row [1]; ops 2.0 once; names 2.0 []; condition 2 holds
+corpus/reconcile-clock.bc 92:48: handle 3: inside [4, 5]; row [2, 1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/reconcile-clock.bc 66:11: handle 4: inside []; row [1, 3, 2]; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/reconcile-clock.bc 52:61: handle 5: inside []; row [4, 2]; ops 5.0 resume-or-cancel; names 5.0 [4]; condition 2 fails at 4
+corpus/reconcile-clock.bc 94:17: handle 6: inside [7, 8, 9, 10]; row []; ops 6.0 tail+state; names 6.0 row; condition 2 holds
+corpus/reconcile-clock.bc 94:33: handle 7: inside [8, 9, 10]; row [6]; ops 7.0 once; names 7.0 []; condition 2 holds
+corpus/reconcile-clock.bc 94:48: handle 8: inside [9, 10]; row [7, 6]; ops 8.0 abortive; names 8.0 []; condition 2 holds
+corpus/reconcile-clock.bc 66:11: handle 9: inside []; row [6, 8, 7]; ops 9.0 abortive; names 9.0 []; condition 2 holds
+corpus/reconcile-clock.bc 52:61: handle 10: inside []; row [9, 7]; ops 10.0 resume-or-cancel; names 10.0 [9]; condition 2 fails at 9
+corpus/reconcile-clock.bc 92:17: handle 11: inside [12, 13, 14, 15]; row []; ops 11.0 tail+state; names 11.0 row; condition 2 holds
+corpus/reconcile-clock.bc 92:33: handle 12: inside [13, 14, 15]; row [11]; ops 12.0 once; names 12.0 []; condition 2 holds
+corpus/reconcile-clock.bc 92:48: handle 13: inside [14, 15]; row [12, 11]; ops 13.0 abortive; names 13.0 []; condition 2 holds
+corpus/reconcile-clock.bc 66:11: handle 14: inside []; row [11, 13, 12]; ops 14.0 abortive; names 14.0 []; condition 2 holds
+corpus/reconcile-clock.bc 52:61: handle 15: inside []; row [14, 12]; ops 15.0 resume-or-cancel; names 15.0 [14]; condition 2 fails at 14
+corpus/reconcile-clock.bc 94:17: handle 16: inside [17, 18, 19, 20]; row []; ops 16.0 tail+state; names 16.0 row; condition 2 holds
+corpus/reconcile-clock.bc 94:33: handle 17: inside [18, 19, 20]; row [16]; ops 17.0 once; names 17.0 []; condition 2 holds
+corpus/reconcile-clock.bc 94:48: handle 18: inside [19, 20]; row [17, 16]; ops 18.0 abortive; names 18.0 []; condition 2 holds
+corpus/reconcile-clock.bc 66:11: handle 19: inside []; row [16, 18, 17]; ops 19.0 abortive; names 19.0 []; condition 2 holds
+corpus/reconcile-clock.bc 52:61: handle 20: inside []; row [19, 17]; ops 20.0 resume-or-cancel; names 20.0 [19]; condition 2 fails at 19
 corpus/reconcile-clock.bc 1.0 tail+state: machine; condition 2 holds; -
-corpus/reconcile-clock.bc 2.0 once: machine; condition 2 fails; -
-corpus/reconcile-clock.bc 3.0 abortive: branch; condition 2 fails; -
-corpus/reconcile-clock.bc 4.0 abortive: branch; condition 2 fails; -
+corpus/reconcile-clock.bc 2.0 once: machine; condition 2 holds; -
+corpus/reconcile-clock.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/reconcile-clock.bc 4.0 abortive: branch; condition 2 holds; -
 corpus/reconcile-clock.bc 5.0 resume-or-cancel: machine; condition 2 fails; -
 corpus/reconcile-clock.bc 6.0 tail+state: machine; condition 2 holds; -
-corpus/reconcile-clock.bc 7.0 once: machine; condition 2 fails; -
-corpus/reconcile-clock.bc 8.0 abortive: branch; condition 2 fails; -
-corpus/reconcile-clock.bc 9.0 abortive: branch; condition 2 fails; -
+corpus/reconcile-clock.bc 7.0 once: machine; condition 2 holds; -
+corpus/reconcile-clock.bc 8.0 abortive: branch; condition 2 holds; -
+corpus/reconcile-clock.bc 9.0 abortive: branch; condition 2 holds; -
 corpus/reconcile-clock.bc 10.0 resume-or-cancel: machine; condition 2 fails; -
 corpus/reconcile-clock.bc 11.0 tail+state: machine; condition 2 holds; -
-corpus/reconcile-clock.bc 12.0 once: machine; condition 2 fails; -
-corpus/reconcile-clock.bc 13.0 abortive: branch; condition 2 fails; -
-corpus/reconcile-clock.bc 14.0 abortive: branch; condition 2 fails; -
+corpus/reconcile-clock.bc 12.0 once: machine; condition 2 holds; -
+corpus/reconcile-clock.bc 13.0 abortive: branch; condition 2 holds; -
+corpus/reconcile-clock.bc 14.0 abortive: branch; condition 2 holds; -
 corpus/reconcile-clock.bc 15.0 resume-or-cancel: machine; condition 2 fails; -
 corpus/reconcile-clock.bc 16.0 tail+state: machine; condition 2 holds; -
-corpus/reconcile-clock.bc 17.0 once: machine; condition 2 fails; -
-corpus/reconcile-clock.bc 18.0 abortive: branch; condition 2 fails; -
-corpus/reconcile-clock.bc 19.0 abortive: branch; condition 2 fails; -
+corpus/reconcile-clock.bc 17.0 once: machine; condition 2 holds; -
+corpus/reconcile-clock.bc 18.0 abortive: branch; condition 2 holds; -
+corpus/reconcile-clock.bc 19.0 abortive: branch; condition 2 holds; -
 corpus/reconcile-clock.bc 20.0 resume-or-cancel: machine; condition 2 fails; -
 corpus/retry-block.bc flows [0, 1, 2, 4294967295]; main [1, 2]
-corpus/retry-block.bc 50:5: handle 1: inside [2]; row []; ops 1.0 abortive; condition 2 holds
-corpus/retry-block.bc 40:11: handle 2: inside []; row []; ops 2.0 abortive; condition 2 holds
+corpus/retry-block.bc 50:5: handle 1: inside [2]; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/retry-block.bc 40:11: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/retry-block.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/retry-block.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/reverse-bytes.bc flows [0, 4294967295]; main []
 corpus/sched-a-div.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/sched-a-div.bc 91:5: handle 1: inside []; row []; ops 1.0 stored; condition 2 holds
+corpus/sched-a-div.bc 91:5: handle 1: inside []; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
 corpus/sched-a-div.bc 1.0 stored: machine; condition 2 holds; -
 corpus/sched-a.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/sched-a.bc 111:5: handle 1: inside []; row []; ops 1.0 stored; condition 2 holds
+corpus/sched-a.bc 111:5: handle 1: inside []; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
 corpus/sched-a.bc 1.0 stored: machine; condition 2 holds; -
 corpus/sched-b.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
-corpus/sched-b.bc 101:5: handle 1: inside []; row []; ops 1.0 stored; condition 2 holds
+corpus/sched-b.bc 101:5: handle 1: inside []; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
 corpus/sched-b.bc 1.0 stored: machine; condition 2 holds; -
 corpus/slice-imm.bc flows [0, 4294967295]; main []
 corpus/slice-lib.bc flows [0, 4294967295]; main []
 corpus/slice-mut.bc flows [0, 4294967295]; main []
 corpus/slice-split.bc flows [0, 4294967295]; main []
 corpus/sort-lines.bc flows [0, 1, 4294967295]; main [1]
-corpus/sort-lines.bc 34:9: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/sort-lines.bc 34:9: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/sort-lines.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/sort-numbers.bc flows [0, 4294967295]; main []
 corpus/split-at-mut.bc flows [0, 4294967295]; main []
 corpus/state-machine.bc flows [0, 1, 2, 4294967295]; main [1, 2]
-corpus/state-machine.bc 65:13: handle 2: inside []; row []; ops 2.0 abortive; condition 2 holds
-corpus/state-machine.bc 62:3: handle 1: inside []; row []; ops 1.0 resume-or-cancel; condition 2 holds
+corpus/state-machine.bc 65:13: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/state-machine.bc 62:3: handle 1: inside []; row []; ops 1.0 resume-or-cancel; names 1.0 row; condition 2 holds
 corpus/state-machine.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/state-machine.bc 1.0 resume-or-cancel: machine; condition 2 holds; -
 corpus/sugar/ambient.bc flows [0, 4294967295]; main []
@@ -1295,49 +1295,49 @@ corpus/sugar/for-count.bc flows [0, 4294967295]; main []
 corpus/sugar/for-count.core.bc flows [0, 4294967295]; main []
 corpus/sugar/for-untyped.bc flows [0, 4294967295]; main []
 corpus/sugar/for-value.bc flows [0, 1, 2, 4294967295]; main [1, 2]
-corpus/sugar/for-value.bc 19:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
-corpus/sugar/for-value.bc 21:3: handle 2: inside []; row []; ops 2.0 resume-or-cancel; condition 2 holds
+corpus/sugar/for-value.bc 19:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/sugar/for-value.bc 21:3: handle 2: inside []; row []; ops 2.0 resume-or-cancel; names 2.0 []; condition 2 holds
 corpus/sugar/for-value.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/for-value.bc 2.0 resume-or-cancel: machine; condition 2 holds; -
 corpus/sugar/for-value.core.bc flows [0, 1, 2, 4294967295]; main [1, 2]
-corpus/sugar/for-value.core.bc 26:39: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
-corpus/sugar/for-value.core.bc 49:39: handle 2: inside []; row []; ops 2.0 resume-or-cancel; condition 2 holds
+corpus/sugar/for-value.core.bc 26:39: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/sugar/for-value.core.bc 49:39: handle 2: inside []; row []; ops 2.0 resume-or-cancel; names 2.0 []; condition 2 holds
 corpus/sugar/for-value.core.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/for-value.core.bc 2.0 resume-or-cancel: machine; condition 2 holds; -
 corpus/sugar/for.bc flows [0, 4294967295]; main []
 corpus/sugar/for.core.bc flows [0, 4294967295]; main []
 corpus/sugar/gen-div.bc flows [0, 1, 4294967295]; main [1]
-corpus/sugar/gen-div.bc 40:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/gen-div.bc 40:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-div.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/gen-div.core.bc flows [0, 1, 4294967295]; main [1]
-corpus/sugar/gen-div.core.bc 88:17: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
-corpus/sugar/gen-div.core.bc 99:17: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/gen-div.core.bc 88:17: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/sugar/gen-div.core.bc 99:17: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-div.core.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/gen-from.bc flows [0, 1, 4294967295]; main [1]
-corpus/sugar/gen-from.bc 21:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/gen-from.bc 21:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-from.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/gen-from.core.bc flows [0, 1, 4294967295]; main [1]
-corpus/sugar/gen-from.core.bc 30:39: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/gen-from.core.bc 30:39: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-from.core.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/gen-range.bc flows [0, 1, 4294967295]; main [1]
-corpus/sugar/gen-range.bc 19:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/gen-range.bc 19:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-range.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/gen-range.core.bc flows [0, 1, 4294967295]; main [1]
-corpus/sugar/gen-range.core.bc 69:17: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
-corpus/sugar/gen-range.core.bc 80:17: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/gen-range.core.bc 69:17: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/sugar/gen-range.core.bc 80:17: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-range.core.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/gen-return.bc flows [0, 1, 4294967295]; main [1]
-corpus/sugar/gen-return.bc 21:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/gen-return.bc 21:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-return.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/gen-return.core.bc flows [0, 1, 4294967295]; main [1]
-corpus/sugar/gen-return.core.bc 74:17: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
-corpus/sugar/gen-return.core.bc 85:17: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/gen-return.core.bc 74:17: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/sugar/gen-return.core.bc 85:17: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-return.core.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/gen-yields.bc flows [0, 1, 4294967295]; main [1]
-corpus/sugar/gen-yields.bc 16:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/gen-yields.bc 16:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-yields.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/gen-yields.core.bc flows [0, 1, 4294967295]; main [1]
-corpus/sugar/gen-yields.core.bc 17:35: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/gen-yields.core.bc 17:35: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-yields.core.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/generic-fn.bc flows [0, 4294967295]; main []
 corpus/sugar/generic-fn.core.bc flows [0, 4294967295]; main []
@@ -1366,10 +1366,10 @@ corpus/sugar/lend.core.bc flows [0, 4294967295]; main []
 corpus/sugar/loop-main.bc flows [0, 4294967295]; main []
 corpus/sugar/loop-main.core.bc flows [0, 4294967295]; main []
 corpus/sugar/mut-await.bc flows [0, 1, 4294967295]; main [1]
-corpus/sugar/mut-await.bc 16:15: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/mut-await.bc 16:15: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/mut-await.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/mut-await.core.bc flows [0, 1, 4294967295]; main [1]
-corpus/sugar/mut-await.core.bc 13:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/sugar/mut-await.core.bc 13:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/mut-await.core.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/sugar/mut-block.bc flows [0, 4294967295]; main []
 corpus/sugar/mut-block.core.bc flows [0, 4294967295]; main []
@@ -1412,30 +1412,30 @@ corpus/surface/io-wc.bc flows [0, 4294967295]; main []
 corpus/surface/map-reuse.bc flows [0, 4294967295]; main []
 corpus/text-lend-lifetime.bc flows [0, 4294967295]; main []
 corpus/text-wordfreq.bc flows [0, 2, 4294967295], finaliser; main [1, 2], finaliser
-corpus/text-wordfreq.bc 102:11: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/text-wordfreq.bc 104:7: handle 2: inside [], finaliser; row []; ops 2.0 abortive; condition 2 holds
+corpus/text-wordfreq.bc 102:11: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/text-wordfreq.bc 104:7: handle 2: inside [], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/text-wordfreq.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/text-wordfreq.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/tree-map.bc flows [0, 2, 3, 4, 5, 4294967295], finaliser; main [1, 2, 3, 4, 5], finaliser
-corpus/tree-map.bc 67:3: handle 1: inside [2, 3, 4, 5], finaliser; row []; ops 1.0 abortive; condition 2 holds
-corpus/tree-map.bc 58:3: handle 5: inside [], finaliser; row [1]; ops 5.0 tail; condition 2 fails at 1
-corpus/tree-map.bc 63:3: handle 4: inside [], finaliser; row [1]; ops 4.0 tail; condition 2 fails at 1
-corpus/tree-map.bc 82:17: handle 3: inside []; row [1]; ops 3.0 abortive; condition 2 fails at 1
-corpus/tree-map.bc 84:19: handle 2: inside []; row [1]; ops 2.0 abortive; condition 2 fails at 1
+corpus/tree-map.bc 67:3: handle 1: inside [2, 3, 4, 5], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/tree-map.bc 58:3: handle 5: inside [], finaliser; row [1]; ops 5.0 tail; names 5.0 []; condition 2 holds
+corpus/tree-map.bc 63:3: handle 4: inside [], finaliser; row [1]; ops 4.0 tail; names 4.0 []; condition 2 holds
+corpus/tree-map.bc 82:17: handle 3: inside []; row [1]; ops 3.0 abortive; names 3.0 []; condition 2 holds
+corpus/tree-map.bc 84:19: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/tree-map.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/tree-map.bc 5.0 tail: direct; condition 2 fails; disagree
-corpus/tree-map.bc 4.0 tail: direct; condition 2 fails; disagree
-corpus/tree-map.bc 3.0 abortive: branch; condition 2 fails; -
-corpus/tree-map.bc 2.0 abortive: branch; condition 2 fails; -
+corpus/tree-map.bc 5.0 tail: direct; condition 2 holds; agree
+corpus/tree-map.bc 4.0 tail: direct; condition 2 holds; agree
+corpus/tree-map.bc 3.0 abortive: branch; condition 2 holds; -
+corpus/tree-map.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/trim-replace.bc flows [0, 1, 4294967295]; main [1]
-corpus/trim-replace.bc 58:9: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/trim-replace.bc 58:9: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/trim-replace.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/utf8-count.bc flows [0, 1, 4294967295]; main [1]
-corpus/utf8-count.bc 21:15: handle 1: inside []; row []; ops 1.0 abortive; condition 2 holds
+corpus/utf8-count.bc 21:15: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/utf8-count.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/yield-callback.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
-corpus/yield-callback.bc 23:12: handle 2: inside []; row []; ops 2.0 stored; condition 2 holds
-corpus/yield-callback.bc 23:12: handle 2: inside []; row []; ops 2.0 tail; condition 2 holds
-corpus/yield-callback.bc 27:3: handle 1: inside []; row []; ops 1.0 tail; condition 2 holds
+corpus/yield-callback.bc 23:12: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
+corpus/yield-callback.bc 23:12: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/yield-callback.bc 27:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/yield-callback.bc 2.0 stored,tail: machine; condition 2 holds; -
 corpus/yield-callback.bc 1.0 tail: direct; condition 2 holds; agree

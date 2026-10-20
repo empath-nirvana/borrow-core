@@ -1,4 +1,5 @@
 import Frontend.Check.TExpr
+import Core.ClauseOwn
 
 /-!
 # Frontend — Check — the clause kinds  `[spec §19]`
@@ -184,6 +185,51 @@ def classifyHandler (E : List (Qual × VTy × VTy)) (tH : TExpr) : List HKind :=
     | _ => List.replicate E.length none
   E.zipWith (fun o c => classifyClause o c) (parts ++ List.replicate E.length none)
 
+/-! ### The names a clause's own code performs or raises -/
+
+/-- **The names a clause's own code performs or raises** (`Expr.own`, SPEC §19 *The clause's
+names in the continuation*): an abortive clause `λx. M`'s body's; a control clause
+`λp. let (x, κ) = p; M`'s body's, `κ` its continuation slot. `none` where the clause may run code
+it does not hold, or is not of its operation's shape. -/
+def clauseNames (o : Qual × VTy × VTy) (c : Expr) : Option (List UInt32) :=
+  if isAbortive o then match c with
+    | .lam M => M.own []
+    | _ => none
+  else match c with
+    | .lam (.letpair (.var 0) M) => M.own [0]
+    | _ => none
+
+/-- The `j`-th component of a right-nested tuple of clauses. -/
+def clauseExpr : Expr → Nat → Option Expr
+  | .pair c _, 0 => some c
+  | .pair _ r, j + 1 => clauseExpr r j
+  | _, _ => none
+
+/-- The clause the machine runs for the operation `j` (`BoLo.clauseAt`, at `[op]` and
+`[unwind]`) is the tuple's component. -/
+theorem clauseExpr_of_clauseAt : ∀ {hs : Expr} {j : Nat} {c : Val},
+    BoLo.clauseAt hs j = some c → clauseExpr hs j = some c.1
+  | .pair c' _, 0, c, h => by
+      simp only [BoLo.clauseAt] at h
+      split at h
+      · cases h; rfl
+      · cases h
+  | .pair _ r, j + 1, c, h => by
+      simp only [BoLo.clauseAt] at h
+      exact clauseExpr_of_clauseAt (hs := r) h
+  | .var _, _, _, h | .unit, _, _, h | .inj₁ _, _, _, h | .inj₂ _, _, _, h | .lam _, _, _, h
+  | .loc _, _, _, h | .prim _, _, _, h | .seq .., _, _, h | .letpair .., _, _, h
+  | .case .., _, _, h | .app .., _, _, h => by simp [BoLo.clauseAt] at h
+
+/-- **The names of each clause of a handler** whose erasure is `H = (h_ret, hs)`: the clause the
+machine runs for the operation `j` (`clauseExpr hs j`, `BoLo.clauseAt` at `[op]` and
+`[unwind]`), read by `clauseNames`. -/
+def handlerNames (E : List (Qual × VTy × VTy)) (H : Expr) : List (Option (List UInt32)) :=
+  match H with
+  | .pair _ hs => ((List.range E.length).zip E).map fun (j, o) =>
+      (clauseExpr hs j).bind (clauseNames o)
+  | _ => E.map fun _ => none
+
 /-! ### The handler sites of a typed term -/
 
 /-- A `handle` node of a typed term: its source, its static name, its clauses' kinds, whether
@@ -201,6 +247,9 @@ structure HandleSite where
   row : List UInt32
   /-- The frames its handled computation holds (`inside`). -/
   inside : HIn
+  /-- The names each clause's own code performs or raises (`handlerNames`), at the clauses the
+  node's erasure holds. -/
+  names : List (Option (List UInt32))
   deriving Inhabited
 
 /-- Two `handle` nodes report alike when their sources, names, kinds and boxing agree. -/
@@ -212,13 +261,14 @@ def TExpr.handleSites : Nat → TExpr → List HandleSite
   | 0, _ => []
   | f + 1, t =>
     let here : List HandleSite := match t with
-      | .effHandleV i _ S _ _ n _ _ _ ks st ins _ _ =>
-          [⟨i.sp, n, ks, false, st, (S.map (·.n)).eraseDups, ins⟩]
-      | .effHandleVB i _ S _ _ n _ _ _ _ ks st ins _ _ =>
-          [⟨i.sp, n, ks, true, st, (S.map (·.n)).eraseDups, ins⟩]
+      | .effHandleV i _ S E _ n _ _ _ ks st ins tc _ =>
+          [⟨i.sp, n, ks, false, st, (S.map (·.n)).eraseDups, ins, handlerNames E tc.erase⟩]
+      | .effHandleVB i _ S E _ n _ _ _ _ ks st ins tc _ =>
+          [⟨i.sp, n, ks, true, st, (S.map (·.n)).eraseDups, ins, handlerNames E tc.erase⟩]
       -- `effHandleT`'s clauses are tail-resumptive by its rule (`tailClause_premise`).
-      | .effHandleT i _ S _ E _ n _ _ _ st ins _ _ =>
-          [⟨i.sp, n, E.map tailKind, false, st, (S.map (·.n)).eraseDups, ins⟩]
+      | .effHandleT i _ S _ E _ n _ _ _ st ins tc _ =>
+          [⟨i.sp, n, E.map tailKind, false, st, (S.map (·.n)).eraseDups, ins,
+            handlerNames E (.pair (Expr.pairL tc.erase) (tailTuple E 0 (Expr.pairR tc.erase)))⟩]
       | _ => []
     match here, t.children with
     | _ :: _, (_, tc) :: rest =>
