@@ -3888,7 +3888,23 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let C := Const.withswap (← c.surfaceL ksp a) (← c.surface ksp A) (← c.surface ksp B)
         pure (.app sp (.app sp₂ (.const ksp C) P')
           (.thunkv tsp (.lam lsp b (← c.surface lsp A) S'')))
-      | _, _ => throw ⟨P.span, s!"this borrow block's place has type `{ppT tP}`: `borrow imm`/" ++
+      | _, _ =>
+        -- `BCC_FRAMES=1` (#632): a slot's content swapped out for a borrow block (`io_fbv…`,
+        -- `Frontend.Elab.Frames`) that is neither a cell nor an array is lent through a cell
+        -- allocated for it, as a value is (SPEC §35); the content comes back by its `free`.
+        if framesEnv && (k == .imm || k == .mut) then
+          if let .var vsp v := P then
+            if v.startsWith "io_fbv" then
+              let blk : Val := .app sp (.app sp₂ (.sugar ksp (.borrow k x))
+                  (.app vsp (.sugar vsp (.call "alloc")) P))
+                (.thunkv tsp (.lam lsp b (.name lsp "_") S))
+              let M : Comp := .bind sp ⟨"io_fcb", sp⟩ none (.ret sp blk)
+                (.letPair sp ⟨"io_fcc", sp⟩ ⟨"io_fcr", sp⟩ (.var sp "io_fcb")
+                  (.bind sp ⟨"io_fcv", sp⟩ none
+                    (.ret sp (.app sp (.sugar sp (.call "free")) (.var sp "io_fcc")))
+                    (.ret sp (.pair sp (.var sp "io_fcv") (.var sp "io_fcr"))) false)) false
+              return ← surfV n c exp (.run sp M)
+        throw ⟨P.span, s!"this borrow block's place has type `{ppT tP}`: `borrow imm`/" ++
           "`borrow mut` take a cell `ref A` or an array (a pair of cells for a family), `modify` a `mut` " ++
           "borrow"⟩
     | .app sp f W => do
