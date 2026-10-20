@@ -34,51 +34,43 @@ def src_bytes : Src => U iter u8 Src Src =
 
 def count : Src => U loop (Src * i32) (ref input * 1) =
   thunkv fun (c : Src) ->
-      io_run_0 : !(U iter u8 (ref input) (ref input) * i32 => ref input * i32 + U iter u8 (ref input) (ref input) * i32) <- return (!thunkv fun (io_a : U iter u8 (ref input) (ref input) * i32) ->
-            let (io_it0, n) = io_a;
-            io_o <- (nu_out force io_it0).1;
-            case io_o {
-              inl io_p -> let (b, io_it0) = io_p;
-                n <- return (unbang host[add32]) (n, i32[1]);
-                return inr (io_it0, n)
-            | inr io_d -> io_q <- return io_d;
-                c <- return io_q;
-                io_v : ref input * i32 <- return (c, n);
-                return inl io_v
-            });
       io_step : !U (U iter u8 (ref input) (ref input) * i32 -o F (ref input * i32 + U iter u8 (ref input) (ref input) * i32) & F (ref input * 1)) <- return (!thunkv fun (io_a : U iter u8 (ref input) (ref input) * i32) ->
-            < return (unbang io_run_0) io_a,
+            < let (io_it0, n) = io_a;
+              io_o <- (nu_out force io_it0).1;
+              case io_o {
+                inl io_p -> let (b, io_it0) = io_p;
+                  n <- return (unbang host[add32]) (n, i32[1]);
+                  return inr (io_it0, n)
+              | inr io_d -> io_q <- return io_d;
+                  c <- return io_q;
+                  return inl (c, n)
+              },
               let (io_it0, n) = io_a;
               io_c <- (nu_out force io_it0).2;
               c <- return io_c;
               return (c, ()) >);
-      io_mk : !(U iter u8 (ref input) (ref input) * i32 => U loop (ref input * i32) (ref input * 1)) <- return (!thunkv fun (io_s0 : U iter u8 (ref input) (ref input) * i32) ->
-            io_f <- return unbang unfold[loop (ref input * i32) (ref input * 1), U iter u8 (ref input) (ref input) * i32] io_step;
-            return (thunkv nu_in < (nu_out force io_f io_s0).1,
-                (nu_out force io_f io_s0).2 >));
       n <- return i32[0];
       io_it0 <- return src_bytes c;
-      return (unbang io_mk) (io_it0, n)
+      io_f <- return unbang unfold[loop (ref input * i32) (ref input * 1), U iter u8 (ref input) (ref input) * i32] io_step;
+      io_s0 : U iter u8 (ref input) (ref input) * i32 <- return (io_it0, n);
+      return (thunkv nu_in < (nu_out force io_f io_s0).1,
+          (nu_out force io_f io_s0).2 >)
 
 main : F U loop (ref input * i32) (ref input * 1) =
-  io_run_0 : !(U loop (ref input * i32) (ref input * 1) => ref input * i32 + U loop (ref input * i32) (ref input * 1)) <- return (!thunkv fun (io_a : U loop (ref input * i32) (ref input * 1)) ->
-        io_d0 <- return io_a;
-        io_o <- (nu_out force io_d0).1;
-        case io_o {
-          inl io_b -> let (stdin, r) = io_b;
-            io_v : ref input * i32 <- return (stdin, r);
-            return inl io_v
-        | inr io_d0 -> return inr io_d0
-        });
   io_step : !U (U loop (ref input * i32) (ref input * 1) -o F (ref input * i32 + U loop (ref input * i32) (ref input * 1)) & F (ref input * 1)) <- return (!thunkv fun (io_a : U loop (ref input * i32) (ref input * 1)) ->
-        < return (unbang io_run_0) io_a,
+        < io_d0 <- return io_a;
+          io_o <- (nu_out force io_d0).1;
+          case io_o {
+            inl io_b -> let (stdin, r) = io_b;
+              return inl (stdin, r)
+          | inr io_d0 -> return inr io_d0
+          },
           io_d0 <- return io_a;
           io_r <- (nu_out force io_d0).2;
           let (stdin, io_ru) = io_r;
           return (stdin, ()) >);
-  io_mk : !(U loop (ref input * i32) (ref input * 1) => U loop (ref input * i32) (ref input * 1)) <- return (!thunkv fun (io_s0 : U loop (ref input * i32) (ref input * 1)) ->
-        io_f <- return unbang unfold[loop (ref input * i32) (ref input * 1), U loop (ref input * i32) (ref input * 1)] io_step;
-        return (thunkv nu_in < (nu_out force io_f io_s0).1,
-            (nu_out force io_f io_s0).2 >));
   io_d0 <- return count stdin;
-  return (unbang io_mk) io_d0
+  io_f <- return unbang unfold[loop (ref input * i32) (ref input * 1), U loop (ref input * i32) (ref input * 1)] io_step;
+  io_s0 : U loop (ref input * i32) (ref input * 1) <- return io_d0;
+  return (thunkv nu_in < (nu_out force io_f io_s0).1,
+      (nu_out force io_f io_s0).2 >)

@@ -252,26 +252,20 @@ def dec_each : !(i32 * !(u8 => 1) => 1) =
       let (x, put) = io_p22;
       n <- return x;
       io_j21 <- case (unbang host[lt_s32]) (x, i32[0]) {
-          inl io_else -> io_ju <- return ();
-            return n
+          inl io_else -> return n
         | inr io_then -> io_s18 <- return (unbang put) u8[45];
             n <- return (unbang host[sub32]) (i32[0], x);
-            io_ju <- return ();
             return n
         };
       n <- return io_j21;
       d <- return i32[1000000000];
       started <- return false;
-      io_lo102_3 <- return i32[0];
-      io_hi102_3 <- return i32[10];
-      io_n102_3 <- return (unbang host[sub32]) (io_hi102_3, io_lo102_3);
-      io_r102_3 <- return (unbang count_try[i32 * !(u8 => 1) * i32 * i32 * (1 + 1), (!(u8 => 1) * i32 * i32 * (1 + 1)) * (1 + 1)]) (!thunkv fun (io_c0 : i32 * i32 * !(u8 => 1) * i32 * i32 * (1 + 1)) ->
-            let (io_i102_3, io_s102_3) = io_c0;
-            let (io_lo102_3, io_s102_3_t) = io_s102_3;
-            let (put, io_s102_3_t_t) = io_s102_3_t;
-            let (n, io_s102_3_t_t_t) = io_s102_3_t_t;
-            let (d, started) = io_s102_3_t_t_t;
-            _ <- return (unbang host[add32]) (io_lo102_3, io_i102_3);
+      io_r102_3 <- return (unbang count_fold[!(u8 => 1) * i32 * i32 * (1 + 1)]) (!thunkv fun (io_q102_3 : i32 * !(u8 => 1) * i32 * i32 * (1 + 1)) ->
+            io_t0 <- return io_q102_3;
+            let (io_d1, io_q102_3_t) = io_t0;
+            let (put, io_q102_3_t_t) = io_q102_3_t;
+            let (n, io_q102_3_t_t_t) = io_q102_3_t_t;
+            let (d, started) = io_q102_3_t_t_t;
             q <- case (unbang host[div_u32]) (n, d) {
                 inl y -> return y
               | inr u -> return i32[0]
@@ -283,11 +277,9 @@ def dec_each : !(i32 * !(u8 => 1) => 1) =
                 inl io_sc -> return (unbang host[eq32]) (d, i32[1])
               | inr io_sc -> return (inr () : 1 + 1)
               } {
-                inl io_else -> io_ju <- return ();
-                  return started
+                inl io_else -> return started
               | inr io_then -> io_s19 <- return (unbang put) ((unbang to_u8) ((unbang host[add32]) (q, i32[48])));
                   started <- return true;
-                  io_ju <- return ();
                   return started
               };
             started <- return io_j20;
@@ -297,24 +289,10 @@ def dec_each : !(i32 * !(u8 => 1) => 1) =
               | inr u -> return i32[1]
               };
             d <- return d2;
-            io_u <- return ();
-            return inl (io_lo102_3, (put, (n, (d, started)))), (io_n102_3, (i32[0], (io_lo102_3, (put, (n, (d, started)))))));
-      io_j102_3 : (!(u8 => 1) * i32 * i32 * (1 + 1)) * (1 + 1) <- case io_r102_3 {
-          inl io_s102_3 -> let (io_lo102_3, io_s102_3_t) = io_s102_3;
-            let (put, io_s102_3_t_t) = io_s102_3_t;
-            let (n, io_s102_3_t_t_t) = io_s102_3_t_t;
-            let (d, started) = io_s102_3_t_t_t;
-            return ((put, (n, (d, started))), inl ())
-        | inr io_e102_3 -> let (io_w102_3, io_o102_3) = io_e102_3;
-            let (put, io_w102_3_t) = io_w102_3;
-            let (n, io_w102_3_t_t) = io_w102_3_t;
-            let (d, started) = io_w102_3_t_t;
-            return ((put, (n, (d, started))), io_o102_3)
-        };
-      let (io_jw102_3, io_ob102_3) = io_j102_3;
-      let (put, io_jw102_3_t) = io_jw102_3;
-      let (n, io_jw102_3_t_t) = io_jw102_3_t;
-      let (d, started) = io_jw102_3_t_t;
+            return (put, (n, (d, started))), (i32[10], (i32[0], (put, (n, (d, started))))));
+      let (put, io_r102_3_t) = io_r102_3;
+      let (n, io_r102_3_t_t) = io_r102_3_t;
+      let (d, started) = io_r102_3_t_t;
       return ()
 
 def ns_of_ms : !(i32 => i64) =
@@ -322,37 +300,81 @@ def ns_of_ms : !(i32 => i64) =
       ms <- return io_p25;
       return (unbang host[mul64]) ((unbang host[extend_s]) ms, i64[1000000])
 
+def dec64_each : !(i64 * !(u8 => 1) => 1) =
+  !thunkv fun (io_p30 : i64 * !(u8 => 1)) ->
+      let (x, put) = io_p30;
+      n <- return x;
+      io_j29 <- case (unbang host[lt_s64]) (x, i64[0]) {
+          inl io_else -> return n
+        | inr io_then -> io_s26 <- return (unbang put) u8[45];
+            n <- return (unbang host[sub64]) (i64[0], x);
+            return n
+        };
+      n <- return io_j29;
+      d <- return i64[1000000000000000000];
+      started <- return false;
+      io_r127_3 <- return (unbang count_fold[!(u8 => 1) * i64 * i64 * (1 + 1)]) (!thunkv fun (io_q127_3 : i32 * !(u8 => 1) * i64 * i64 * (1 + 1)) ->
+            io_t0 <- return io_q127_3;
+            let (io_d1, io_q127_3_t) = io_t0;
+            let (put, io_q127_3_t_t) = io_q127_3_t;
+            let (n, io_q127_3_t_t_t) = io_q127_3_t_t;
+            let (d, started) = io_q127_3_t_t_t;
+            q <- case (unbang host[div_u64]) (n, d) {
+                inl y -> return y
+              | inr u -> return i64[0]
+              };
+            io_j28 <- case run case run case started {
+                inl io_sc -> return (unbang host[ne64]) (q, i64[0])
+              | inr io_sc -> return (inr () : 1 + 1)
+              } {
+                inl io_sc -> return (unbang host[eq64]) (d, i64[1])
+              | inr io_sc -> return (inr () : 1 + 1)
+              } {
+                inl io_else -> return started
+              | inr io_then -> io_s27 <- return (unbang put) ((unbang to_u8) ((unbang host[add32]) ((unbang host[wrap]) q, i32[48])));
+                  started <- return true;
+                  return started
+              };
+            started <- return io_j28;
+            n <- return (unbang host[sub64]) (n, (unbang host[mul64]) (q, d));
+            d2 <- case (unbang host[div_u64]) (d, i64[10]) {
+                inl y -> return y
+              | inr u -> return i64[1]
+              };
+            d <- return d2;
+            return (put, (n, (d, started))), (i32[19], (i32[0], (put, (n, (d, started))))));
+      let (put, io_r127_3_t) = io_r127_3;
+      let (n, io_r127_3_t_t) = io_r127_3_t;
+      let (d, started) = io_r127_3_t_t;
+      return ()
+
 extern stdin : ref input
 
 extern stdout : ref output
 
 main : F U loop ((ref input * ref output) * i32) ((ref input * ref output) * 1) =
-  io_run_0 : !U (U iter u8 (ref input) (ref input) * ref output * i32 -o F ((ref input * ref output) * i32 + U iter u8 (ref input) (ref input) * ref output * i32)) <- return (!thunkv fun (io_a : U iter u8 (ref input) (ref input) * ref output * i32) ->
-        let (io_it0, io_a_t) = io_a;
-        let (stdout, n) = io_a_t;
-        io_o <- (nu_out force io_it0).1;
-        case io_o {
-          inl io_p -> let (b, io_it0) = io_p;
-            n : i32 <- return (unbang host[add32]) (n, i32[1]);
-            io_lend <- return (unbang putb) (stdout, b);
-            let (stdout, io_u) = io_lend;
-            return inr (io_it0, (stdout, n))
-        | inr io_d -> io_q <- return io_d;
-            stdin <- return io_q;
-            io_v : (ref input * ref output) * i32 <- return ((stdin, stdout), n);
-            return inl io_v
-        });
   io_step : !U (U iter u8 (ref input) (ref input) * ref output * i32 -o F ((ref input * ref output) * i32 + U iter u8 (ref input) (ref input) * ref output * i32) & F ((ref input * ref output) * 1)) <- return (!thunkv fun (io_a : U iter u8 (ref input) (ref input) * ref output * i32) ->
-        < return (unbang io_run_0) io_a,
+        < let (io_it0, io_a_t) = io_a;
+          let (stdout, n) = io_a_t;
+          io_o <- (nu_out force io_it0).1;
+          case io_o {
+            inl io_p -> let (b, io_it0) = io_p;
+              n : i32 <- return (unbang host[add32]) (n, i32[1]);
+              io_lend <- return (unbang putb) (stdout, b);
+              let (stdout, io_u) = io_lend;
+              return inr (io_it0, (stdout, n))
+          | inr io_d -> io_q <- return io_d;
+              stdin <- return io_q;
+              return inl ((stdin, stdout), n)
+          },
           let (io_it0, io_a_t) = io_a;
           let (stdout, n) = io_a_t;
           io_c <- (nu_out force io_it0).2;
           stdin <- return io_c;
           return ((stdin, stdout), ()) >);
-  io_mk : !(U iter u8 (ref input) (ref input) * ref output * i32 => U loop ((ref input * ref output) * i32) ((ref input * ref output) * 1)) <- return (!thunkv fun (io_s0 : U iter u8 (ref input) (ref input) * ref output * i32) ->
-        io_f <- return unbang unfold[loop ((ref input * ref output) * i32) ((ref input * ref output) * 1), U iter u8 (ref input) (ref input) * ref output * i32] io_step;
-        return (thunkv nu_in < (nu_out force io_f io_s0).1,
-            (nu_out force io_f io_s0).2 >));
   n : i32 <- return i32[0];
   io_it0 <- return bytes stdin;
-  return (unbang io_mk) (io_it0, (stdout, n))
+  io_f <- return unbang unfold[loop ((ref input * ref output) * i32) ((ref input * ref output) * 1), U iter u8 (ref input) (ref input) * ref output * i32] io_step;
+  io_s0 : U iter u8 (ref input) (ref input) * ref output * i32 <- return (io_it0, (stdout, n));
+  return (thunkv nu_in < (nu_out force io_f io_s0).1,
+      (nu_out force io_f io_s0).2 >)

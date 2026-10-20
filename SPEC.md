@@ -1525,15 +1525,18 @@ point; the end of a loop's body moves back to its head; `break` closes the sourc
 code after the loop, its **join**; `return e` closes the sources of the loops it leaves and
 finishes; a terminal finishes.
 
-**Moves.** The code of each head and call, and of each join, is a `!` function of its state,
-defined before the step. A move to a join calls its function. At the empty row every move to a
-summand is a skip: each observation is one iteration, or one observation of a callee, as with the
-delay bind, and `div_fuel` counts the same observations; the body runs its code up to its first
-state when called and returns the machine there. At a row (a generator, §15) the observations
-perform the row's operations; a move forward, from the step's own code or to a later point, is a
-call, and a move back to a loop's head a skip, so each observation runs one turn of a loop; the
-body runs nothing when called, its first state holding the parameter. A function calls only the
-functions of points after it in the body, so none calls itself and every observation ends.
+**Moves.** The code of a point that a move calls is a `!` function of its state, defined before
+the step; the code of any other point is its arm of the step. A move to a join calls its
+function. At the empty row every move to a summand is a skip: each observation is one iteration,
+or one observation of a callee, as with the delay bind, and `div_fuel` counts the same
+observations; no move calls a summand, so each summand's code is its arm. The body runs its code
+up to its first state when called, and a move there is the machine at that state (the `unfold`
+of the step, from the state). At a row (a generator, §15) the observations perform the row's
+operations; a move forward, from the step's own code or to a later point, is a call, and a move
+back to a loop's head a skip, so each observation runs one turn of a loop; the body runs nothing
+when called, its first state holding the parameter. A function calls only the functions of
+points after it in the body, so none calls itself and every observation ends. A terminal that is
+a value finishes with it (`inl V`).
 
 **The residual by name.** Each state's `close` closes what the state holds, innermost first: the
 callee's loop (turning its residual into the body's: the lent capability, `()`, the body's own

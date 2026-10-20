@@ -87,26 +87,22 @@ def once : i32 => U loop i32 1 =
           return () >)
 
 main : F (i32 + 1) =
-  l <- return (div_defer[i32, 1] (thunkv < io_run_0 : !(U delay i32 => i32 + U delay i32) <- return (!thunkv fun (io_a : U delay i32) ->
-              io_d0 <- return io_a;
-              io_o <- (nu_out force io_d0).1;
-              case io_o {
-                inl io_b -> io_t <- return io_b;
-                  io_v : i32 <- return io_t;
-                  return inl io_v
-              | inr io_d0 -> return inr io_d0
-              });
-        io_step : !U (U delay i32 -o F (i32 + U delay i32) & F 1) <- return (!thunkv fun (io_a : U delay i32) ->
-              < return (unbang io_run_0) io_a,
+  l <- return (div_defer[i32, 1] (thunkv < io_step : !U (U delay i32 -o F (i32 + U delay i32) & F 1) <- return (!thunkv fun (io_a : U delay i32) ->
+              < io_d0 <- return io_a;
+                io_o <- (nu_out force io_d0).1;
+                case io_o {
+                  inl io_b -> io_t <- return io_b;
+                    return inl io_t
+                | inr io_d0 -> return inr io_d0
+                },
                 io_d0 <- return io_a;
                 io_r <- (nu_out force io_d0).2;
                 let () = io_r;
                 return () >);
-        io_mk : !(U delay i32 => U loop i32 1) <- return (!thunkv fun (io_s0 : U delay i32) ->
-              io_f <- return unbang unfold[loop i32 1, U delay i32] io_step;
-              return (thunkv nu_in < (nu_out force io_f io_s0).1,
-                  (nu_out force io_f io_s0).2 >));
         io_d0 <- return once i32[4];
-        return (unbang io_mk) io_d0,
+        io_f <- return unbang unfold[loop i32 1, U delay i32] io_step;
+        io_s0 : U delay i32 <- return io_d0;
+        return (thunkv nu_in < (nu_out force io_f io_s0).1,
+            (nu_out force io_f io_s0).2 >),
         return () >) : U loop i32 1);
   return div_fuel[i32, 1] (l, i32[10])

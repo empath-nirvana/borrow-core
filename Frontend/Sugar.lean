@@ -993,7 +993,8 @@ then a call of known code: no closure is dispatched on, and no bind is nested in
   `return e` closes the sources of the loops it leaves and finishes; a terminal finishes.
 * **A move** to a summand is a skip: the observation returns the point's state, so each iteration
   of a loop is one observation, as with the delay bind. A move to a join calls the join's code
-  (`io_run_k`, a `!` function), defined before the step.
+  (`io_run_k`, a `!` function), defined before the step. A point no move calls has no function:
+  its code is its arm of the step.
 * **The residual** is handed back by name at every summand: its `close` closes what the state
   holds (the sources of the loops around it, or the call's loop), binding the capabilities they
   hand back, and returns the residual from the names.
@@ -1001,7 +1002,8 @@ then a call of known code: no closure is dispatched on, and no bind is nested in
   `Loop_Σ B R = νX. F_Σ(B ⊕ U X) & F_Σ R`: its observations perform the operations, and so does
   its code. Such a body **runs nothing when called**: its first state holds the parameter, and a
   call is the loop. A body at the empty row **runs its code up to its first point when called**,
-  and returns the machine at that point (`io_mk`), as `div_bind` did. -/
+  and returns the machine at that point (the `unfold` of the step from its state), as `div_bind`
+  did. -/
 
 /-- A resumption point of a body's machine, or a join. -/
 structure MPoint where
@@ -1011,7 +1013,8 @@ structure MPoint where
   pos : Nat
   /-- A summand of the state: the machine may stop here between observations. A join is not. -/
   summand : Bool
-  /-- It has a function of its own, `io_run_{id}`. -/
+  /-- A move may call it (a join, or at a row a head or a call): it has a function of its own,
+  `io_run_{id}`, when a move does (`MSt.called`). -/
   fn : Bool
   vars : List (String × CVTy)
   /-- The sugar it comes from, where errors in its code are reported. -/
@@ -1059,6 +1062,8 @@ def MCx.fSrc (m : MCx) (A : String) : String :=
 structure MSt where
   pts : Array MPoint := #[]
   pos : Nat := 0
+  /-- The points a move calls: each has a function of its own, `io_run_{id}`. -/
+  called : List Nat := []
 
 abbrev MM := StateT MSt SM
 
@@ -1148,6 +1153,7 @@ def mGoto (m : MCx) (sp : Span) (q : Nat) : MM Comp := do
     | some k => k < p.pos
   let call := p.fn && (!p.summand || (!m.row.isEmpty && later))
   if call then
+    modify fun st => { st with called := if st.called.contains q then st.called else q :: st.called }
     let f : Val := .unbang sp (.var sp s!"io_run_{q}")
     let a := tupleVal sp (p.vars.map (·.1))
     if m.row.isEmpty then return .ret sp (.app sp f a)
@@ -1166,6 +1172,8 @@ def mClose (m : MCx) (sp : Span) (what : String) (held : List MHeld) : MM Comp :
 /-- The machine's finish with the value `T` computes. -/
 def mFinish (m : MCx) (T : Comp) : MM Comp := do
   if m.pre then return (← (dret m.L T : SM Comp))
+  -- A value finishes as itself.
+  if let (.ret tsp V, []) := T.takeLends then return .ret tsp (.inl tsp V)
   let L ← mTemplate T.span "a body's result" s!"io_v : {m.pp m.L.B} <- force io_hole_t;\nreturn (inl io_v)"
     [] [("io_hole_t", T)]
   match T.takeLends.2, L with
@@ -1290,8 +1298,8 @@ def mWalk (m : MCx) : Nat → TCx → Comp → MM Comp
   | _ + 1, _, .ret sp (.app _ (.sugar _ .retE) v) => do
     if v.hasExit then throw (exitOffSpine (v.exitAt.getD v.span))
     -- `return e` from inside loops: every loop it leaves closes its source, and the body finishes.
-    mTemplate sp "`return`" (String.join (m.held.map (·.closeSrc)) ++
-      s!"io_v : {m.pp m.L.B} <- return io_hole_rv;\nreturn (inl io_v)") [("io_hole_rv", v)] []
+    mTemplate sp "`return`" (String.join (m.held.map (·.closeSrc)) ++ "return (inl io_hole_rv)")
+      [("io_hole_rv", v)] []
   | _ + 1, _, .ret sp (.sugar _ .brk) => mBreak m sp (.unit sp)
   | _ + 1, _, .ret sp (.sugar _ .cont) => do
     -- `continue`: back to the head of the innermost loop.
@@ -1504,23 +1512,24 @@ def mAssemble (m : MCx) (sp : Span) (st : MSt) (s0 : Option Val) (pre : Option C
   let Fs := m.fSrc
   let Cod := if m.row.isEmpty then s!"loop ({m.pp m.L.B}) ({m.pp m.L.R})"
     else s!"nu X. {Fs s!"({m.pp m.L.B}) + U X"} & {Fs (m.pp m.L.R)}"
-  let fns := (pts.filter (·.fn)).toArray.qsort (fun a b => a.pos > b.pos) |>.toList
+  -- A point a move calls has a function of its own; any other point's code is its arm of the
+  -- step.
+  let fns := (pts.filter (st.called.contains ·.id)).toArray.qsort (fun a b => a.pos > b.pos) |>.toList
   let defs := String.join (fns.map fun p =>
     s!"io_run_{p.id} : !U (({tyOf p}) -o {Fs Obs}) <-\n  return (!thunkv fun (io_a : {tyOf p}) -> force io_hole_c{p.id});\n")
   let arm (p : MPoint) : String :=
-    if !p.fn then s!"force io_hole_c{p.id}"
+    if !st.called.contains p.id then s!"force io_hole_c{p.id}"
     else if m.row.isEmpty then s!"return ((unbang io_run_{p.id}) io_a)"
     else s!"io_rf <- return (unbang io_run_{p.id}); force io_rf io_a"
   let carm (p : MPoint) : String := s!"force io_hole_k{p.id}"
   let obs := s!"(nu_out (force io_f io_s0)).1, (nu_out (force io_f io_s0)).2"
-  let tail := match s0 with
-    | some _ => s!"io_f <- return (unbang (unfold[{Cod}, {S}] io_step));
-io_s0 : {S} <- return io_hole_s0;
+  -- The machine at a state: the codata of the step from it.
+  let atState (h : String) : String := s!"io_f <- return (unbang (unfold[{Cod}, {S}] io_step));
+io_s0 : {S} <- return {h};
 return (thunkv nu_in < {obs} >)"
-    | none => s!"io_mk : !(({S}) => U ({Cod})) <- return (!thunkv fun (io_s0 : {S}) ->
-  io_f <- return (unbang (unfold[{Cod}, {S}] io_step));
-  return (thunkv nu_in < {obs} >));
-force io_hole_pre"
+  let tail := match s0 with
+    | some _ => atState "io_hole_s0"
+    | none => "force io_hole_pre"
   let src := defs ++ s!"io_step : !U ({S} -o {Fs Obs} & {Fs (m.pp m.L.R)}) <-
   return (!thunkv fun ({if sums.length == 1 then "io_a" else "io_s"} : {S}) -> < {mTree arm "io_s" sums}, {mTree carm "io_s" sums} >);
 " ++ tail
@@ -1531,6 +1540,13 @@ force io_hole_pre"
     pure (L.fill (fun _ => none) (fun v => if v == "io_hole_body" then some M else none))
   let codes ← pts.mapM fun p => do pure (s!"io_hole_c{p.id}", ← bound p p.code)
   let closes ← (pts.filter (·.summand)).mapM fun p => do pure (s!"io_hole_k{p.id}", ← bound p p.close)
+  -- A move from the code before the first point is the machine at the point's state, written
+  -- `io_mk V` until the state's type is known.
+  let mk ← template sp "a div body's state machine" (atState "io_hole_m")
+  let pre := pre.map (wrapTail fun
+    | .ret _ (.app _ (.unbang _ (.var _ "io_mk")) V) =>
+      mk.fill (fun v => if v == "io_hole_m" then some V else none) (fun _ => none)
+    | T => T)
   let L := L.fill (fun v => if v == "io_hole_s0" then s0 else none)
     (fun v => if v == "io_hole_pre" then pre else (codes.lookup v).orElse fun _ => closes.lookup v)
   let n := sums.length
