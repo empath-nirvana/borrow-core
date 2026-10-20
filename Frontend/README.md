@@ -84,12 +84,16 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
     `mu`-bound, an abbreviation or a `def` parameter. In a fold's `F` argument, `X` is such a
     name. In a surface body (a `fn`, `main -> T`, a handler's clause, a `poly` case) each name
     resolves to its binder as it is read, and a binder of a name already in scope gets a fresh
-    name (`x1`), so no binder shadows another (SPEC §41, rule R1); core text is read as written.
-    Before the sugar is elaborated, `Frontend/Elab/Hygiene.lean` renames every local named as a
-    declaration (other than the capabilities `stdin`, `stdout`, `stderr`) and every control
-    handler's parameter to a fresh `hy{n}_{x}`, so code the elaboration moves between scopes
-    neither captures a user's variable nor is captured by one (#481). `bcc parse` reads its
-    printed program back without resolving it: its names are already its binders.
+    name (`x1`), so no binder shadows another (SPEC §41, rule R1), as does a binder spelt as a
+    generated name (`io_…`, `fx_…`, `hy{n}…`); core text is read as written. Before the sugar is
+    elaborated, `Frontend/Elab/Hygiene.lean` renames every local named as a declaration (other
+    than the capabilities `stdin`, `stdout`, `stderr`) to a fresh `hy{n}_{x}`, and every binder of
+    a control handler's code to `hy{n}c{h}_{x}`, so code the elaboration moves between scopes
+    neither captures a user's variable nor is captured by one (#481, #493). What the elaboration
+    identifies by a binder it follows through copies (`Val.copyOf?`, SPEC §41 *Binder identity*);
+    `bcc alpha` renames every binder apart, and `scripts/alpha-check.py` checks that nothing
+    changes. `bcc parse` reads its printed program back without resolving it: its names are
+    already its binders.
 14. **Declarations.** At most one `main`; a library file may have none. Declaration order is
     not checked by the parser (the checker enforces "earlier" for `type`, `shape` and `def`).
     `def` parameters are upper-case names.
