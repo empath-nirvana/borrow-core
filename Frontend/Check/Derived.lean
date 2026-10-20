@@ -229,4 +229,41 @@ theorem nuEta_unfold {ℍ : Host} [HostIs ℍ] (C : CTy) (g sv : Val) (rb k : Bo
   refine ⟨(nuEta_obs rb k hf (by simpa using hs)).trans ?_, hN_steps C g sv⟩
   exact PureSteps.plug (.appL .hole _) (hN_steps C g sv)
 
+/-! ### A walk's read  `[spec §46]`
+
+A walk node with `read` (`walkReadB`) is, at a shared view, `let (v, c) = array_copy v₀;
+count (λq. S, (len c, (i, s)))` with `s`'s first component `v`, and its step `S` takes its argument
+apart, copies the view and reads the copy at the counter, each tail handing the view on
+(`walkStepB`, `walkTailsB`). The bound is the view's length (`walk_copy_len`); the step runs only
+below the bound (`walk_index_lt`, `walk_fold_index_lt`); below it, the view's read answers its
+leaf (`walk_get_leaf`). At a unique view the step splits one element off the view and reads it at
+`0`: the head of a split by one is one element long, so that read answers its leaf whatever the
+view (`walk_get_split`). -/
+
+/-- **A shared walk's bound is its view's length**: `array_copy` of the view answers the view
+twice, and `array_len` of it its length, by pure steps. -/
+theorem walk_copy_len {ℍ : Host} [HostIs ℍ] (ℓ : Loc) (n : UInt32) :
+    PureSteps (ℍ := ℍ) (.app (.val copyV) (.val (Val.arr ℓ n)))
+        (.val (Val.pair (Val.arr ℓ n) (Val.arr ℓ n))) ∧
+      PureSteps (ℍ := ℍ) (.app (.val arrLenV) (.val (Val.arr ℓ n))) (.val (Val.i32 n)) := by
+  constructor
+  · have := PureSteps.beta (ℍ := ℍ) (.pair (.var 0) (.var 0)) (Val.arr ℓ n)
+    simpa [copyV, Expr.subst] using this
+  · refine (PureSteps.beta (ℍ := ℍ) (.letpair (.var 0) (.var 0)) (Val.arr ℓ n)).trans ?_
+    simp only [Expr.subst]
+    have := PureSteps.head (ℍ := ℍ) (fun μ => BoCa.BoLo.Head.letpair μ (Val.loc ℓ) (Val.i32 n) (.var 0)) rfl
+    simpa [Val.arr, Expr.subst, Expr.shift, Val.i32] using this
+
+/-- **The head of a split by one is read in range**: when `split ((ℓ, n), 1)` answers its two
+parts, the first is `(ℓ, 1)`, whose element `0` is its leaf. -/
+theorem walk_get_split (ℓ : Loc) (n : UInt32) {h t : Val}
+    (hs : splitAns ℓ n 1 = .inj₁ (.pair h t)) : h = Val.arr ℓ 1 ∧ idxAns ℓ 1 0 = .inj₁ (.loc ℓ) := by
+  unfold splitAns at hs
+  split at hs
+  · simp only [Val.inj₁, Val.pair, Subtype.mk.injEq, Expr.inj₁.injEq, Expr.pair.injEq] at hs
+    refine ⟨Subtype.ext hs.1.symm, ?_⟩
+    have := idxAns_lt ℓ (n := 1) (i := 0) (by decide)
+    simpa using this
+  · simp [Val.inj₂, Val.inj₁] at hs
+
 end BoCa.Fig16.LogRel.Core.Check

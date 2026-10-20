@@ -4476,22 +4476,37 @@ def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val →
     -- The source: code before the loop, the cursor it threads, the bound, the first index, and
     -- the element at a step (which binds `x` and runs the body, or goes on or ends).
     let lv := s!"'io_l{sfx}"
+    -- A counted walk of a view is the scheme its derived node records (SPEC §3, §16, §46).
+    let walkOf : Option Bool := if rowLoop then none else match src with
+      | .view m _ _ | .lend _ m _ => some m
+      | .owned _ => some false
+      | _ => none
+    -- At a walk, the step's read of the view is the hole `io_hole_get`, filled with the read
+    -- marked (`walkGet`); a shared view's copy and length are taken inside the walk's marked
+    -- value, so that its node holds the bound with the view (SPEC §46). `view` answers the code
+    -- before the loop, the cursor, the bound, the element, the code inside the walk's value
+    -- before the loop, and the read.
     let view (m : Bool) (a A : String) (src : String) (el : String) :
-        String × List (String × String) × String × String :=
+        String × List (String × String) × String × String × String × String :=
       let v := s!"io_v{sfx}"
+      let w := walkOf.isSome
       if m then
+        let get := s!"slice_get_mut[{a}, {A}](io_vh{sfx}, 0)"
         (s!"let ({v}, io_n{sfx}) = slice_len_mut[{a}, {A}]({src});\n",
           [(v, s!"array_mut {a} ({A})")], s!"io_n{sfx}",
           s!"case slice_split_mut[{a}, {A}]({v}, 1) \{
   inl io_vp{sfx} -> let (io_vh{sfx}, {v}) = io_vp{sfx};
-    case slice_get_mut[{a}, {A}](io_vh{sfx}, 0) \{ inl {x.name} -> force io_hole_body | inr io_vu{sfx} -> io_hole_cont }
-| inr {v} -> io_hole_cont }")
+    case {if w then "io_hole_get" else get} \{ inl {x.name} -> force io_hole_body | inr io_vu{sfx} -> io_hole_cont }
+| inr {v} -> io_hole_cont }", "", get)
       else
-        (s!"{v} <- return {src};\nlet ({v}, io_vc{sfx}) = array_copy[{a}, {A}]({v});\n" ++
-          s!"io_n{sfx} <- return array_len[{a}, {A}](io_vc{sfx});\n",
-          [(v, s!"array_imm {a} ({A})")], s!"io_n{sfx}",
+        let get := s!"array_get[{a}, {A}](io_vg{sfx}, io_i{sfx})"
+        let copy := s!"let ({v}, io_vc{sfx}) = array_copy[{a}, {A}]({v});\n"
+        let len := s!"array_len[{a}, {A}](io_vc{sfx})"
+        (s!"{v} <- return {src};\n" ++ (if w then "" else copy ++ s!"io_n{sfx} <- return {len};\n"),
+          [(v, s!"array_imm {a} ({A})")], (if w then len else s!"io_n{sfx}"),
           s!"let ({v}, io_vg{sfx}) = array_copy[{a}, {A}]({v});
-case array_get[{a}, {A}](io_vg{sfx}, io_i{sfx}) \{ inl io_ve{sfx} -> {el}force io_hole_body | inr io_vu{sfx} -> io_hole_cont }")
+case {if w then "io_hole_get" else get} \{ inl io_ve{sfx} -> {el}force io_hole_body | inr io_vu{sfx} -> io_hole_cont }",
+          (if w then copy else ""), get)
     -- A count whose start is a literal in `[0, 2³¹)` is counted by the machine's counter itself,
     -- from the start to the end, and the counter is the element. Any other start is counted from
     -- `0` over the count's length, the element the start plus the counter: the machine's counter
@@ -4502,34 +4517,34 @@ case array_get[{a}, {A}](io_vg{sfx}, io_i{sfx}) \{ inl io_ve{sfx} -> {el}force i
       | _ => false
     -- The step's counter: the element itself for a count counted from its start.
     let idx := if litStart then x.name else s!"io_i{sfx}"
-    let (outerPre, wrap, pre, cur, bound, i0, elem, desc) ← match src with
+    let (outerPre, wrap, pre, cur, bound, i0, elem, desc, walkIn, walkGet) ← match src with
       | .count a b =>
         if litStart then
           pure ("", none, "", [], "io_hole_hi", "io_hole_lo", "force io_hole_body",
-            s!"len({a.pp 2}..{b.pp 2})")
+            s!"len({a.pp 2}..{b.pp 2})", "", "")
         else
         pure ("", none, s!"io_lo{sfx} <- return io_hole_lo;\nio_hi{sfx} <- return io_hole_hi;\n" ++
             s!"io_n{sfx} <- return (io_hi{sfx} - io_lo{sfx});\n",
           [(s!"io_lo{sfx}", "i32")], s!"io_n{sfx}", "0",
           s!"{x.name} <- return (io_lo{sfx} + io_i{sfx});\nforce io_hole_body",
-          match src with
+          (match src with
           | .count a b => s!"len({a.pp 2}..{b.pp 2})"
-          | _ => s!"len({V.pp})")
+          | _ => s!"len({V.pp})"), "", "")
       | .view m a A => do
         let a' ← c.surfaceL sp a
-        let (p, cu, b, e) := view m a'.pp (← pp A) "io_hole_src" s!"{x.name} <- return io_ve{sfx};\n"
-        pure ("", none, p, cu, b, "0", e, s!"len({V.pp})")
+        let (p, cu, b, e, wi, g) := view m a'.pp (← pp A) "io_hole_src" s!"{x.name} <- return io_ve{sfx};\n"
+        pure ("", none, p, cu, b, "0", e, s!"len({V.pp})", wi, g)
       | .lend a m A => do
-        let (p, cu, b, e) := view m lv (← pp A) s!"io_lv{sfx}" s!"{x.name} <- return io_ve{sfx};\n"
+        let (p, cu, b, e, wi, g) := view m lv (← pp A) s!"io_lv{sfx}" s!"{x.name} <- return io_ve{sfx};\n"
         pure ("", some (s!"borrow {if m then "mut" else "imm"} {a.name} \{ {lv}, io_lv{sfx} -> ",
-            a.name), p, cu, b, "0", e, s!"len({a.name})")
+            a.name), p, cu, b, "0", e, s!"len({a.name})", wi, g)
       | .owned A => do
         unless Class.of A == .persistent do
           throw ⟨V.span, s!"a `for` over an owned array copies each element, and `{ppT A}` is " ++
             "not persistent: iterate `&a` or `&mut a`"⟩
-        let (p, cu, b, e) := view false lv (← pp A) s!"io_lv{sfx}" s!"{x.name} <- return *io_ve{sfx};\n"
+        let (p, cu, b, e, wi, g) := view false lv (← pp A) s!"io_lv{sfx}" s!"{x.name} <- return *io_ve{sfx};\n"
         pure (s!"io_oa{sfx} <- return io_hole_src;\n", some (s!"borrow imm io_oa{sfx} \{ {lv}, io_lv{sfx} -> ",
-            s!"io_oa{sfx}"), p, cu, b, "0", e, s!"len({V.pp})")
+            s!"io_oa{sfx}"), p, cu, b, "0", e, s!"len({V.pp})", wi, g)
       | .sized D S A => do
         let stepT ← pp (.bang (.thunk (.arr (.tensor D S)
           (.ret (.tensor (.tensor D S) (.sum A (.sum .unit .unit)))))))
@@ -4541,7 +4556,7 @@ let (io_sd{sfx}, io_ss{sfx}) = io_sp{sfx};
 case io_so{sfx} \{
   inl {x.name} -> force io_hole_body
 | inr io_sq{sfx} -> case io_sq{sfx} \{ inl io_su{sfx} -> io_hole_cont | inr io_su{sfx} -> return (inr ({tupleSrc wsN}, inl ())) } }",
-          s!"len of the data of {V.pp}")
+          s!"len of the data of {V.pp}", "", "")
     let curN := cur.map (·.1)
     let St := tupleTySrc (cur.map (·.2) ++ (← ws.mapM fun (_, T) => pp T))
     let stateS := tupleSrc (curN ++ wsN)
@@ -4654,12 +4669,7 @@ io_fb{sfx} <- return (unbang bounded_fix[{At}, {FR}]);
 io_fa{sfx} <- return (io_gs{sfx}, (io_nb{sfx}, ({i0}, {stateS})));
 {rname} <- force io_fb{sfx} io_fa{sfx};
 "
-    -- A counted walk of a view is the scheme its derived node records (SPEC §3, §16): the
-    -- `count_try` is parsed apart and put in the loop marked.
-    let walkOf : Option Bool := if rowLoop then none else match src with
-      | .view m _ _ | .lend _ m _ => some m
-      | .owned _ => some false
-      | _ => none
+    -- A counted walk's `count_try` is parsed apart and put in the loop marked.
     -- The step binds the counter and the state's variables from its argument.
     let stepArg := if (curN ++ wsN).isEmpty then
         s!"let ({idx}, io_s{sfx}) = io_q{sfx};\nlet () = io_s{sfx};\n"
@@ -4720,8 +4730,13 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
     let L ← (template sp what (loopSrc ++ after) : SM Comp)
     let L ← match walkOf with
       | some m => do
-        let W ← ((parseComp s!"return {ctSrc}").mapError (internalError sp what) : Except Error Comp)
-        match W.respan sp with
+        let W ← ((parseComp s!"return run ({walkIn}return {ctSrc})").mapError (internalError sp what) :
+          Except Error Comp)
+        let G ← ((parseComp s!"return {walkGet}").mapError (internalError sp what) : Except Error Comp)
+        let .ret _ g := G.respan sp | throw ⟨sp, "internal error: a counted walk's read"⟩
+        let W := (W.respan sp).fill (fun h => if h == "io_hole_get" then some (.mark sp (.walkGet m) g)
+          else none) (fun _ => none)
+        match W with
         | .ret _ ct => pure (L.fill (fun h => if h == "io_hole_walk" then some (.mark sp (.walk m) ct)
             else none) (fun _ => none))
         | _ => throw ⟨sp, "internal error: a counted walk's loop"⟩

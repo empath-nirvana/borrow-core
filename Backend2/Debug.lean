@@ -52,7 +52,8 @@ def nodeFields : TExpr → String
   | .selfCall _ _ j n _ => s!"member {j} of {n}"
   | .litFn _ _ bs _ => s!"{bs.length} bytes"
   | .divLit _ _ op c _ => s!"{reprStr op} {reprStr c}"
-  | .walk _ _ m _ => s!"mut {m}"
+  | .walk _ _ m r _ => s!"mut {m} read {r}"
+  | .walkGet _ _ m _ => s!"mut {m}"
   | .lendCell _ _ m _ => s!"mut {m}"
   | .nuEta _ _ f s _ => "f #" ++ toString f ++ (match s with | some k => " s #" ++ toString k | none => "")
   | .dtor _ _ A => ppVT A

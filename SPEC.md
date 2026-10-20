@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.93 · 2026-10-20
+Version 0.94 · 2026-10-20
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -7909,10 +7909,7 @@ output or a kernel program. `corpus/counts.expected` and `kernel-counts.expected
 ### Open
 
 - **Codata observations dispatch**: resolved by §45.
-- **Bounds checks in a counted walk** (L-3): the `walk` node's rule fixes that its term is a
-  `count_try`/`count_fold`; that the step reads, at its index, the view the bound was taken from
-  is the elaboration's (`Frontend/Check/TFacts.lean`), not a fact of the typed term, so every read
-  keeps its check.
+- **Bounds checks in a counted walk** (L-3): resolved by §46.
 - **A block as one object** (§42 *Open*, A7): a block's cells are freed one by one by its type's
   destructor and by a match that binds them, so one object needs a way to free an interior cell.
 - The effectful programs (N2, N3), `bounded_fix`'s budget as a stack-pointer compare (NEW-b),
@@ -8022,6 +8019,66 @@ unchanged.
 
 - A `nuEta` node whose `f` is not bound to `unfold step` where it is built (a parameter) is
   compiled as its thunk.
+
+## 46. Entry 45 — a counted walk's read in range: the typed fact (N1 part 2, L-3)
+
+### Motivation
+
+A `for` over a view is a counted walk (`TExpr.walk`, §16): `count_try` or `count_fold` over the
+view's length, whose step reads the view at the counter. The walk node fixed only that its term is
+a counted loop; that the step reads, at its index, the view the bound was taken from was the
+elaboration's (§43 *Open*), so every read kept its bounds check. This entry puts that fact on the
+typed term.
+
+### Language
+
+No change to any type, rule, typing or semantics. The elaboration of a walk over a shared view
+changes shape, not meaning: the view's copy and its length are taken inside the walk's marked
+value, `run (let (v, c) = array_copy v₀; return count (step, (array_len c, (0, (v, …)))))`, where
+they were bound before it; and the step's read is marked.
+
+### The typed fact
+
+- **`walk m read t`** gains `read`: its typed rule (`TDerivesAt.walk`, `TDerivesP.walk`) has the
+  premise `read = true → walkReadB m t.erase = true`. `walkReadB`
+  (`scripts/pin/TExpr.tmpl.lean`) reads the term as its binders see it (`normAt`, so that the
+  fact is kept by moving variables: `walkReadB_shift`). At a shared view it fixes that the loop is
+  `let (v, c) = array_copy v₀; count (λq. S, (len c, (i, s)))`, the bound the view's length and
+  `s`'s first component the view; that the step `S` takes its argument apart, copies the view and
+  reads the copy at the counter (`walkStepB`); and that every tail of each arm hands the copy's
+  view on as its state's first component (`walkTailsB`). At a unique view it fixes that the step
+  splits one element off the view and reads that head at `0`.
+- **`walkGet m t`**, a derived node over the read the elaboration marks
+  (`Frontend.SchemeMark.walkGet`), its rule `walkGetB m t.erase`: `array_get (g, i)`, or
+  `slice_get_mut (h, 0)`. The checker sets `read` when `walkReadB` holds and the walk's term holds
+  one `walkGet` outside the walks inside it (`rMarked`, `walkGets`).
+- **The lemmas** (`Frontend/Check/Derived.lean`): the bound is the view's length
+  (`walk_copy_len`); the step runs only below the bound (`walk_index_lt`, `walk_fold_index_lt`);
+  below it a shared view's read answers its leaf (`walk_get_leaf`); the head of a split by one is
+  read in range whatever the view (`walk_get_split`).
+- **The lowering** (`Backend2/Convert.lean`): inside a walk with `read`, a `walkGet` node's read
+  is `idx` with no test.
+
+### Programs
+
+Every program of the fragment at its golden at every stage. The 33 programs of the fragment with
+a walk have no test at the walk's read; their bounds column goes down
+(`corpus/counts-backend2.expected`).
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine or a kernel program. Every output, golden and
+exit status unchanged. The old backend's counts are unchanged except `data-config`'s loads and
+stores, which go down (209 → 161, 49 → 25): the walk's copy and length inside its value.
+
+### Open
+
+- That a tail handing on the view's variable hands on its value in every run is fixed of the
+  term (`walkTailsB`), not proved of the runs: a lemma over the step's reduction would pin it.
+- At a unique view the split's own test stays: its range needs the view's length at step `i`,
+  `n − i`, which the same lemma over the step would give.
+- That the read the step makes is the one its `walkGet` node marks is the elaboration's mark,
+  counted by the checker.
 
 ---
 
@@ -8390,11 +8447,20 @@ the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Backend/Wasm
 `Frontend/Check/TShift.lean`, `Frontend/Check/Weaken.lean`, `Frontend/Check/TTied.lean`,
 `Frontend/Check/Rules.lean` (`rNuEta`), `Frontend/Check/Derived.lean` (`nuEta_obs`, `nuEta_var`,
 `nuEta_unfold`) and `Backend2/` (`isUnfoldApp`, the `nuEta` case, `litCode`, `Op.litByte`,
-`Op.tabLit`); no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the old backend.
+`Op.tabLit`); no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the old backend. Entry 45
+(§46) is implemented in `scripts/pin/` (`walkReadB`, `walkStepB`, `walkTailsB`, `normAt`,
+`walkGetB`, `TExpr.walk`'s `read`, `TExpr.walkGet`), `Frontend/Syntax.lean`
+(`SchemeMark.walkGet`), `Frontend/Sugar.lean` (`forData`'s `view`), `Frontend/Check/` (`rMarked`,
+`walkGets`, `TTied.walkGet`, the shift and weakening cases, `walk_copy_len`, `walk_get_split`) and
+`Backend2/Convert.lean`; no change to `CDerives`, `Core/`, `Paper/` or `Support/`.
 
 ---
 
 ## Changelog
+
+- **0.94** (2026-10-20) — §46 (#636, N1 part 2, L-3): a counted walk's read in range is a typed
+  fact: `walk`'s `read` (`walkReadB`) and the marked read `walkGet`; the new backend drops the
+  read's test. A shared view's copy and length are taken inside the walk's value.
 
 - **0.93** (2026-10-20) — §45 (#636, N1 part 2): codata's η-thunk is the derived node `nuEta`,
   built by the checker; at `f = unfold step` the new backend computes `f s` where the thunk is

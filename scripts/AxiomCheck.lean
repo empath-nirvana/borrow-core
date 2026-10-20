@@ -405,6 +405,11 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.Check.nuEta_obs
 #print axioms BoCa.Fig16.LogRel.Core.Check.nuEta_var
 #print axioms BoCa.Fig16.LogRel.Core.Check.nuEta_unfold
+#print axioms BoCa.Fig16.LogRel.Core.Check.normAt_shift
+#print axioms BoCa.Fig16.LogRel.Core.Check.walkReadB_shift
+#print axioms BoCa.Fig16.LogRel.Core.Check.walkGetB_shift
+#print axioms BoCa.Fig16.LogRel.Core.Check.walk_copy_len
+#print axioms BoCa.Fig16.LogRel.Core.Check.walk_get_split
 #print axioms BoCa.Fig16.LogRel.Core.Check.Expr.toVal_val
 #print axioms BoCa.Fig16.LogRel.Core.Check.Expr.letBody_shift
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.weakenΔ

@@ -512,9 +512,15 @@ theorem divLit {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} {op : BoCa.HostOp} {c
   ⟨fun hn Ξ hΞ => .divLit (h.1 hn Ξ hΞ) hb hs, .divLit h.2 hb hs⟩
 
 /-- **A counted walk of a view** (SPEC §16): the derived node over the loop's typed term. -/
-theorem walk {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (m : Bool) (hb : walkB t.erase = true)
-    (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.walk i j m t) j :=
-  ⟨fun hn Ξ hΞ => .walk (h.1 hn Ξ hΞ) hb, .walk h.2 hb⟩
+theorem walk {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (m read : Bool) (hb : walkB t.erase = true)
+    (hr : read = true → walkReadB m t.erase = true)
+    (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.walk i j m read t) j :=
+  ⟨fun hn Ξ hΞ => .walk (h.1 hn Ξ hΞ) hb hr, .walk h.2 hb hr⟩
+
+/-- **A walk's read of its view at its index** (SPEC §46). -/
+theorem walkGet {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (m : Bool) (hb : walkGetB m t.erase = true)
+    (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.walkGet i j m t) j :=
+  ⟨fun hn Ξ hΞ => .walkGet (h.1 hn Ξ hΞ) hb, .walkGet h.2 hb⟩
 
 /-- **A recursive group's self-reference read for a member** (SPEC §20). -/
 theorem selfCall {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (k n : Nat)

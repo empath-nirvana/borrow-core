@@ -573,6 +573,10 @@ inductive SchemeMark where
   /-- A counted walk of a view (SPEC §16): `count_try` over the view's length; `m` the view is
   `mut`. -/
   | walk (m : Bool)
+  /-- A counted walk's read of its view at its index (SPEC §46): `array_get(v, i)` of the shared
+  view's copy at the counter, or `slice_get_mut(h, 0)` of the head a split of one gives; `m` the
+  view is `mut`. -/
+  | walkGet (m : Bool)
   /-- The record of a recursive group's members, read off its self-reference to call member `j`
   of `n` (SPEC §20). -/
   | selfCall (j n : Nat)

@@ -789,10 +789,15 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.divLit d (by rw [e]; exact divLitB_shift hb _ _) hs, e⟩
-  | walk _ hb ih =>
+  | walk _ hb hr ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.walk d (by rw [e]; exact walkB_shift hb _ _), e⟩
+      exact ⟨.walk d (by rw [e]; exact walkB_shift hb _ _)
+        (fun h => by rw [e]; exact walkReadB_shift (hr h) _ _), e⟩
+  | walkGet _ hb ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.walkGet d (by rw [e]; exact walkGetB_shift hb _ _), e⟩
   | selfCall _ hb ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
@@ -1326,10 +1331,15 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.divLit d (by rw [e]; exact divLitB_shift hb _ _) hs, e⟩
-  | walk _ hb ih =>
+  | walk _ hb hr ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.walk d (by rw [e]; exact walkB_shift hb _ _), e⟩
+      exact ⟨.walk d (by rw [e]; exact walkB_shift hb _ _)
+        (fun h => by rw [e]; exact walkReadB_shift (hr h) _ _), e⟩
+  | walkGet _ hb ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.walkGet d (by rw [e]; exact walkGetB_shift hb _ _), e⟩
   | selfCall _ hb ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp

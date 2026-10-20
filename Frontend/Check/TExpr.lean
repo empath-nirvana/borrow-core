@@ -165,10 +165,114 @@ def safeDivB : HostOp → IntLit → Bool
   | .div .w32 .div_u, .u8 n | .div .w32 .rem_u, .u8 n => n != 0
   | _, _ => false
 
-/-- The term is a `count_fold` or a `count_try` at a step, a bound, a first index and a state. -/
+/-- The term is a `count_fold` or a `count_try` at a step, a bound, a first index and a state; at
+a shared view, after the view's copy (`let (v, c) = array_copy v₀; count_try (f, (len c, …))`,
+SPEC §46). -/
 def walkB : Expr → Bool
   | .app (.prim .count) (.pair _ (.pair _ (.pair _ _))) => true
   | .app (.prim .countTry) (.pair _ (.pair _ (.pair _ _))) => true
+  | .letpair _ (.app (.prim .count) (.pair _ (.pair _ (.pair _ _)))) => true
+  | .letpair _ (.app (.prim .countTry) (.pair _ (.pair _ (.pair _ _)))) => true
+  | _ => false
+
+/-- The term is the variable `k`. -/
+def walkVarB (k : Nat) : Expr → Bool
+  | .var j => j == k
+  | _ => false
+
+/-- The term is the variable `k`, or a pair whose first component is. -/
+def headVarB (k : Nat) : Expr → Bool
+  | .var j => j == k
+  | .pair a _ => walkVarB k a
+  | _ => false
+
+/-- Every tail of a walk's step hands on the variable `k` as its state's first component: `k` or
+`(k, _)` at `count_fold` (`fold`), `inj₁` of one at `count_try`, or at `count_try` any `inj₂`
+(an exit); through `case`s, `let`s, `x <- M; N`'s `N` and `;`.  `[spec §46]` -/
+def walkTailsB (fold : Bool) : Nat → Expr → Bool
+  | k, .var j => fold && j == k
+  | k, .pair a _ => fold && walkVarB k a
+  | k, .inj₁ a => !fold && headVarB k a
+  | _, .inj₂ _ => !fold
+  | k, .case _ a b => walkTailsB fold (k + 1) a && walkTailsB fold (k + 1) b
+  | k, .letpair _ b => walkTailsB fold (k + 2) b
+  | k, .app (.lam b) _ => walkTailsB fold (k + 1) b
+  | k, .seq _ b => walkTailsB fold k b
+  | _, _ => false
+
+/-- A variable's place in a walk step's argument `(i, (v, …))`: `(true, p)` the rest from
+position `p`, `(false, p)` the element at `p`. -/
+abbrev WalkRole := Option (Bool × Nat)
+
+/-- The variable `v` is the step's view: the element `1`, or the rest from `1`. -/
+def walkViewB (roles : List WalkRole) (v : Nat) : Bool :=
+  roles[v]? == some (some (false, 1)) || roles[v]? == some (some (true, 1))
+
+/-- **The read of a walk's step**  `[spec §46]`: after the step's argument is taken apart
+(`let (i, t) = q; let (v, t') = t; …`, `roles` each variable's place), at a shared view (`m`
+false) `let (v, g) = array_copy v; case array_get (g, i) {…}`, `v` the view and `i` the counter,
+each arm's every tail handing on the copy's `v` (`walkTailsB`); at a unique view
+`case slice_split_mut (v, 1) {inl p. let (h, v) = p; case slice_get_mut (h, 0) {…} | …}`. -/
+def walkStepB (m fold : Bool) : List WalkRole → Expr → Bool
+  | roles, .letpair (.var j) b =>
+    match roles[j]? with
+    | some (some (true, p)) => walkStepB m fold (some (true, p + 1) :: some (false, p) :: roles) b
+    | _ => false
+  | roles, .letpair (.app c (.var v)) (.case (.app (.prim .idx) (.pair (.var 0) (.var k))) x y) =>
+    !m && c == .val copyV && walkViewB roles v && 2 ≤ k && roles[k - 2]? == some (some (false, 0)) &&
+      walkTailsB fold 2 x && walkTailsB fold 2 y
+  | roles, .case (.app (.prim .split) (.pair (.var v) (.prim (.lit (.i32 a)))))
+      (.letpair (.var 0) (.case (.app (.prim .idx) (.pair (.var 1) (.prim (.lit (.i32 b))))) _ _)) _ =>
+    m && walkViewB roles v && a == 1 && b == 0
+  | _, _ => false
+
+/-- The loop is a counted one: `count_fold` (`some true`) or `count_try` (`some false`). -/
+def walkCntB : Prim → Option Bool
+  | .count => some true
+  | .countTry => some false
+  | _ => none
+
+/-- **A walk whose read is in range**  `[spec §46]`: at a shared view, the loop is
+`let (v, c) = array_copy v₀; count (λq. S, (len c, (i, s)))`, its bound the view's length and its
+state's first component the view; at either view the step reads the view at its index
+(`walkStepB`). -/
+def walkReadRaw (m : Bool) : Expr → Bool
+  | .letpair (.app c (.var _)) (.app (.prim p) (.pair (.lam st) (.pair (.app l (.var 0)) (.pair _ s)))) =>
+    match walkCntB p with
+    | some fold => !m && c == .val copyV && l == .val arrLenV &&
+        (s matches .var 1 || s matches .pair (.var 1) _) && walkStepB false fold [some (true, 0)] st
+    | none => false
+  | .app (.prim p) (.pair (.lam st) (.pair _ (.pair _ _))) =>
+    match walkCntB p with
+    | some fold => m && walkStepB true fold [some (true, 0)] st
+    | none => false
+  | _ => false
+
+/-- The term with every variable at or above `k` (free, under the term's `k` binders) made `k`:
+what a scheme that reads only its own binders sees of a term. -/
+def normAt : Nat → Expr → Expr
+  | k, .var j => .var (if j < k then j else k)
+  | _, .unit => .unit
+  | k, .pair a b => .pair (normAt k a) (normAt k b)
+  | k, .inj₁ a => .inj₁ (normAt k a)
+  | k, .inj₂ a => .inj₂ (normAt k a)
+  | k, .lam b => .lam (normAt (k + 1) b)
+  | _, .loc ℓ => .loc ℓ
+  | _, .prim p => .prim p
+  | k, .seq a b => .seq (normAt k a) (normAt k b)
+  | k, .letpair a b => .letpair (normAt k a) (normAt (k + 2) b)
+  | k, .case a b c => .case (normAt k a) (normAt (k + 1) b) (normAt (k + 1) c)
+  | k, .app f a => .app (normAt k f) (normAt k a)
+
+/-- **A walk whose read is in range**, of the term as its binders see it (`normAt`), so that the
+fact is kept by moving the term's variables (`walkReadB_shift`).  `[spec §46]` -/
+def walkReadB (m : Bool) (e : Expr) : Bool := walkReadRaw m (normAt 0 e)
+
+/-- The term is a read of a walk's view at its index: `array_get (g, i)`, or `slice_get_mut (h, 0)`
+when `m`.  `[spec §46]` -/
+def walkGetB (m : Bool) : Expr → Bool
+  | .app (.prim .idx) (.pair (.var _) (.var _)) => !m
+  | .app (.prim .idx) (.pair (.var _) (.prim (.lit (.i32 b)))) => m && b == 0
   | _ => false
 
 /-- The term is a variable. -/
@@ -197,6 +301,37 @@ theorem walkB_shift {e : Expr} (h : walkB e = true) (d k : Nat) : walkB (e.shift
   match e, h with
   | .app (.prim .count) (.pair _ (.pair _ (.pair _ _))), _ => rfl
   | .app (.prim .countTry) (.pair _ (.pair _ (.pair _ _))), _ => rfl
+  | .letpair _ (.app (.prim .count) (.pair _ (.pair _ (.pair _ _)))), _ => rfl
+  | .letpair _ (.app (.prim .countTry) (.pair _ (.pair _ (.pair _ _)))), _ => rfl
+
+theorem walkGetB_shift {m : Bool} {e : Expr} (h : walkGetB m e = true) (d k : Nat) :
+    walkGetB m (e.shift d k) = true := by
+  match e, h with
+  | .app (.prim .idx) (.pair (.var i) (.var j)), h =>
+    simp only [Expr.shift]; split <;> split <;> exact h
+  | .app (.prim .idx) (.pair (.var i) (.prim (.lit (.i32 b)))), h =>
+    simp only [Expr.shift]; split <;> exact h
+
+/-- A shift above `k` leaves what `normAt k` sees unchanged. -/
+theorem normAt_shift (d : Nat) : ∀ (e : Expr) (k c : Nat), k ≤ c → normAt k (e.shift d c) = normAt k e
+  | .var j, k, c, h => by
+    simp only [Expr.shift]; split <;> simp only [normAt] <;> congr 1 <;> split <;> split <;> omega
+  | .unit, _, _, _ | .loc _, _, _, _ | .prim _, _, _, _ => rfl
+  | .pair a b, k, c, h => by simp only [Expr.shift, normAt, normAt_shift d a k c h, normAt_shift d b k c h]
+  | .inj₁ a, k, c, h => by simp only [Expr.shift, normAt, normAt_shift d a k c h]
+  | .inj₂ a, k, c, h => by simp only [Expr.shift, normAt, normAt_shift d a k c h]
+  | .lam b, k, c, h => by simp only [Expr.shift, normAt, normAt_shift d b (k + 1) (c + 1) (by omega)]
+  | .seq a b, k, c, h => by simp only [Expr.shift, normAt, normAt_shift d a k c h, normAt_shift d b k c h]
+  | .letpair a b, k, c, h => by
+    simp only [Expr.shift, normAt, normAt_shift d a k c h, normAt_shift d b (k + 2) (c + 2) (by omega)]
+  | .case a b e, k, c, h => by
+    simp only [Expr.shift, normAt, normAt_shift d a k c h, normAt_shift d b (k + 1) (c + 1) (by omega),
+      normAt_shift d e (k + 1) (c + 1) (by omega)]
+  | .app f a, k, c, h => by simp only [Expr.shift, normAt, normAt_shift d f k c h, normAt_shift d a k c h]
+
+theorem walkReadB_shift {m : Bool} {e : Expr} (h : walkReadB m e = true) (d k : Nat) :
+    walkReadB m (e.shift d k) = true := by
+  simp only [walkReadB, normAt_shift d e 0 k (Nat.zero_le _)] at h ⊢; exact h
 
 theorem selfCallB_shift {e : Expr} (h : selfCallB e = true) (d k : Nat) :
     selfCallB (e.shift d k) = true := by
@@ -418,8 +553,12 @@ inductive TExpr where
   /-- **Derived**: a division by the literal `c` by the host operation `op` at which it cannot
   fail (`divLitB`, `safeDivB`), over its typed term. -/
   | divLit (info : TInfo) (jdg : Jdg) (op : HostOp) (c : IntLit) (t : TExpr)
-  /-- **Derived**: a counted walk of a view, `mut` when `m` (`walkB`), over its typed term. -/
-  | walk (info : TInfo) (jdg : Jdg) (m : Bool) (t : TExpr)
+  /-- **Derived**: a counted walk of a view, `mut` when `m` (`walkB`), over its typed term; `read`
+  when its step reads its view at its index (`walkReadB`, SPEC §46). -/
+  | walk (info : TInfo) (jdg : Jdg) (m read : Bool) (t : TExpr)
+  /-- **Derived**: a counted walk's read of its view at its index (`walkGetB`), over its typed term.
+  `[spec §46]` -/
+  | walkGet (info : TInfo) (jdg : Jdg) (m : Bool) (t : TExpr)
   /-- **Derived**: a recursive group's self-reference read to call member `j` of `n`
   (`selfCallB`), over its typed term. -/
   | selfCall (info : TInfo) (jdg : Jdg) (j n : Nat) (t : TExpr)
@@ -541,7 +680,7 @@ def TExpr.erase : TExpr → Expr
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => withborS σ
   | .withborF2M .. | .withborF2I .. => withborF2
   | .litFn _ _ _ t => t.erase
-  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => t.erase
+  | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => t.erase
   | .use _ _ _ _ _ _ t => t.erase
 
 /-- The node's source. -/
@@ -647,7 +786,7 @@ def TExpr.info : TExpr → TInfo
   | .nilDead i _ _ _ => i
   | .dtor i _ _ | .allocS i _ _ | .freeS i _ _ | .withborSM i _ _ _ _ | .withborSI i _ _ _ _
   | .withborF2M i _ _ _ _ _ _ _ | .withborF2I i _ _ _ _ _ _ _ | .litFn i _ _ _ => i
-  | .divLit i _ _ _ _ | .walk i _ _ _ | .selfCall i _ _ _ _ | .lendCell i _ _ _ | .nuEta i _ _ _ _ => i
+  | .divLit i _ _ _ _ | .walk i _ _ _ _ | .walkGet i _ _ _ | .selfCall i _ _ _ _ | .lendCell i _ _ _ | .nuEta i _ _ _ _ => i
   | .use i _ _ _ _ _ _ => i
 
 /-- The node's judgment. -/
@@ -753,7 +892,7 @@ def TExpr.jdg : TExpr → Jdg
   | .nilDead _ j _ _ => j
   | .dtor _ j _ | .allocS _ j _ | .freeS _ j _ | .withborSM _ j _ _ _ | .withborSI _ j _ _ _
   | .withborF2M _ j _ _ _ _ _ _ | .withborF2I _ j _ _ _ _ _ _ | .litFn _ j _ _ => j
-  | .divLit _ j _ _ _ | .walk _ j _ _ | .selfCall _ j _ _ _ | .lendCell _ j _ _ | .nuEta _ j _ _ _ => j
+  | .divLit _ j _ _ _ | .walk _ j _ _ _ | .walkGet _ j _ _ | .selfCall _ j _ _ _ | .lendCell _ j _ _ | .nuEta _ j _ _ _ => j
   | .use _ j _ _ _ _ _ => j
 
 /-- How a child's context is formed from its node's, as the child's premise has it. -/
@@ -868,7 +1007,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => []
   | .litFn _ _ _ t => [(.push 0, t)]
-  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => [(.push 0, t)]
+  | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => [(.push 0, t)]
   | .use _ _ _ _ _ _ t => [(.push 0, t)]
 
 /-- The use masks of a node at a split: its two parts' (`Masks`). -/
@@ -997,7 +1136,7 @@ def TExpr.isLam : TExpr → Bool
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => (withborS σ matches .lam _)
   | .withborF2M .. | .withborF2I .. => (withborF2 matches .lam _)
   | .litFn _ _ _ t => t.isLam
-  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => t.isLam
+  | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => t.isLam
   | .use _ _ _ _ _ _ t => t.isLam
 
 /-- `isLam` is the erasure's head. -/
@@ -1104,7 +1243,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => rfl
   | .litFn _ _ _ t => isLam_eq t
-  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => isLam_eq t
+  | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => isLam_eq t
   | .use _ _ _ _ _ _ t => isLam_eq t
 
 theorem TExpr.isLam_sound (t : TExpr) (h : t.isLam = true) : ∃ N, t.erase = .val (.lam N) := by

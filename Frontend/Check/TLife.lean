@@ -245,7 +245,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .nilDead ii jj j t => t.lifeBinders
   | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => []
-  | .litFn _ _ _ t | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t
+  | .litFn _ _ _ t | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t
   | .nuEta _ _ _ _ t
   | .use _ _ _ _ _ _ t => t.lifeBinders
 
@@ -353,7 +353,7 @@ def TExpr.domFree : TExpr → Bool
   | .nilDead ii jj j t => t.domFree
   | .dtor .. | .allocS .. | .freeS .. => true
   | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I .. => false
-  | .litFn _ _ _ t | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t
+  | .litFn _ _ _ t | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t
   | .nuEta _ _ _ _ t
   | .use _ _ _ _ _ _ t => t.domFree
 
@@ -462,7 +462,8 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | t@(.withborF2M ..) | t@(.withborF2I ..) => t
   | .litFn i j bs t => .litFn i j bs (t.reAb Δr)
   | .divLit i j op c t => .divLit i j op c (t.reAb Δr)
-  | .walk i j m t => .walk i j m (t.reAb Δr)
+  | .walk i j m r t => .walk i j m r (t.reAb Δr)
+  | .walkGet i j m t => .walkGet i j m (t.reAb Δr)
   | .selfCall i j k n t => .selfCall i j k n (t.reAb Δr)
   | .lendCell i j m t => .lendCell i j m (t.reAb Δr)
   | .nuEta i j f s t => .nuEta i j f s (t.reAb Δr)
@@ -757,7 +758,12 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Δ' he hd; exact .litFn (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb) hcl
   | divLit _ hb hs ih =>
       intro Δ' he hd; exact .divLit (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb) hs
-  | walk _ hb ih => intro Δ' he hd; exact .walk (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
+  | walk _ hb hr ih =>
+      intro Δ' he hd
+      exact .walk (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
+        (fun h => by rw [TExpr.reAb_erase]; exact hr h)
+  | walkGet _ hb ih =>
+      intro Δ' he hd; exact .walkGet (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
   | selfCall _ hb ih =>
       intro Δ' he hd; exact .selfCall (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
   | lendCell _ hb ih =>
@@ -1046,7 +1052,12 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
       intro Δ' he hd; exact .litFn (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb) hcl
   | divLit _ hb hs ih =>
       intro Δ' he hd; exact .divLit (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb) hs
-  | walk _ hb ih => intro Δ' he hd; exact .walk (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
+  | walk _ hb hr ih =>
+      intro Δ' he hd
+      exact .walk (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
+        (fun h => by rw [TExpr.reAb_erase]; exact hr h)
+  | walkGet _ hb ih =>
+      intro Δ' he hd; exact .walkGet (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
   | selfCall _ hb ih =>
       intro Δ' he hd; exact .selfCall (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
   | lendCell _ hb ih =>

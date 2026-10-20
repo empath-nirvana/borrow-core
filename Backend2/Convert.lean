@@ -73,6 +73,10 @@ structure CState where
   /-- The variables bound to `unfold step` (a `bind` whose value is the `unfoldN` constant applied
   to its step), and their copies and captures: the `f` a `nuEta` node may call (SPEC §45). -/
   unfolds : Std.HashSet Var := {}
+  /-- Inside a walk whose step reads its view at its index (`TExpr.walk`'s `read`, SPEC §46). -/
+  walkRead : Bool := false
+  /-- Converting a walk's read (`TExpr.walkGet`) inside such a walk: its index is in range. -/
+  inRange : Bool := false
 
 abbrev CM := StateT CState (Except String)
 
@@ -1092,7 +1096,24 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       pure (.clos c [o, n]))
   | .divLit _ j op c inner => convDivLit fuel ctx j op c inner
   | .lendCell _ _ _ c => convLendCell fuel ctx t c
-  | .walk _ _ _ c | .selfCall _ _ _ _ c => conv fuel ctx c
+  | .walk _ _ _ read c => do
+    -- A walk whose step reads its view at its index (`walkReadB`): its read has no test.  [spec §46]
+    let old := (← get).walkRead
+    if read then readFact "walk:read"
+    modify fun s => { s with walkRead := read }
+    let r ← conv fuel ctx c
+    modify fun s => { s with walkRead := old }
+    return r
+  | .walkGet _ _ _ c => do
+    -- The read of a walk's view at its index: below the bound (`walk_index_lt`), the bound the
+    -- view's length, so the read answers its leaf (`walk_get_leaf`, `walk_get_split`).  [spec §46]
+    let ok := (← get).walkRead
+    let old := (← get).inRange
+    modify fun s => { s with inRange := ok }
+    let r ← conv fuel ctx c
+    modify fun s => { s with inRange := old }
+    return r
+  | .selfCall _ _ _ _ c => conv fuel ctx c
   | .nuEta _ _ f s c => do
     -- The η-thunk of codata is the codata it observes (`nuEta_var`, `nuEta_unfold`)  [spec §45]:
     -- with no state, the variable itself; at `f = unfold step`, the call `f s`, made here.
@@ -1314,8 +1335,10 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     letpairM p fun a r => letpairM r fun i x => do
       readFact s!"{ruleName c}:slot swap"
       return .prim .replace [a, i, x]
-  | .arrGet .., [p] | .sliceGetM .., [p] =>
-    letpairM p fun v i => pure (.prim (.idx true) [v, i])
+  | .arrGet .., [p] | .sliceGetM .., [p] => do
+    let inRange := (← get).inRange
+    if inRange then readFact s!"{ruleName c}:in range"
+    letpairM p fun v i => pure (.prim (.idx (!inRange)) [v, i])
   | .sliceSplitI .., [p] | .sliceSplitM .., [p] =>
     letpairM p fun v i => pure (.prim (.split true) [v, i])
   | .sliceEmptyI .., [] | .sliceEmptyM .., [] => return .prim .emptyFam []

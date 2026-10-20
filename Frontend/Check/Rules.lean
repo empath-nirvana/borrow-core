@@ -145,6 +145,15 @@ def rLitFn {j : Jdg} (bs : List Nat) (r : Res Δ T j) : Option (Res Δ T j) :=
     else none
   else none
 
+/-- The walk reads (`TExpr.walkGet`) of a walk's typed term, outside the walks inside it (to a
+depth bound). -/
+def walkGets : Nat → TExpr → Nat
+  | 0, _ => 0
+  | f + 1, t => match t with
+    | .walkGet .. => 1
+    | .walk .. => 0
+    | t => (t.children.map fun (_, c) => walkGets f c).foldl (· + ·) 0
+
 /-- A marked scheme's derived node over its checked term `r`, when `r`'s erasure is the scheme's
 (`divLitB`, `walkB`, `selfCallB`, `lendCellB`): `none` otherwise. -/
 def rMarked {j : Jdg} (k : Frontend.SchemeMark) (r : Res Δ T j) : Option (Res Δ T j) :=
@@ -158,7 +167,12 @@ def rMarked {j : Jdg} (k : Frontend.SchemeMark) (r : Res Δ T j) : Option (Res �
     else none
   | .walk m =>
     if hb : walkB r.t.erase = true then
-      some ⟨.walk i j m r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.walk i m hb h⟩
+      let read := walkReadB m r.t.erase && walkGets 4096 r.t == 1
+      some ⟨.walk i j m read r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.walk i m read hb (fun h => (Bool.and_eq_true _ _ ▸ h).1) h⟩
+    else none
+  | .walkGet m =>
+    if hb : walkGetB m r.t.erase = true then
+      some ⟨.walkGet i j m r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.walkGet i m hb h⟩
     else none
   | .selfCall k n =>
     if hb : selfCallB r.t.erase = true then
