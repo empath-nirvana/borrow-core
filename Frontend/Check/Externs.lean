@@ -354,7 +354,7 @@ def ioWrapper (p : Program) (m : IOMain) (args : List UInt8 := []) : Except Stri
   let src := match m.loopB with
     | none => wrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A body args
     | some B => loopWrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A B body args
-  match parseProgram src with
+  match parseProgram src (resolve := false) with
   | .ok w => pure ⟨keep ++ w.decls⟩
   | .error e => throw s!"run_io: {e.render}\n{src}"
 

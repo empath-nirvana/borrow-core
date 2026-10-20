@@ -1,0 +1,7 @@
+-- expect: 6:35: `n` is assigned, but it is not declared `let mut`
+-- #504 inside a loop's body: the body's `let n` shadows the outer `let mut n`, so the assignment
+-- is of the `let`, which is not `let mut` (SPEC §41, rules R1 and R2).
+main -> i32 =
+  let mut n = 0;
+  for i in 0..3 { let n = 10 + i; n = n + 1 };
+  n

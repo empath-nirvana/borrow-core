@@ -272,7 +272,7 @@ def destructSrc (v : String) : List String → String
 
 /-- Parse the computation `src` as a `main` body. -/
 def parseComp (src : String) : Except Error Comp := do
-  let p ← parseProgram ("main : F 1 =\n" ++ src)
+  let p ← parseProgram ("main : F 1 =\n" ++ src) (resolve := false)
   match p.decls.findSome? (fun | .main _ _ M => some M | _ => none) with
   | some M => pure M
   | none => throw ⟨Span.none, "internal error: a template without main"⟩
@@ -5673,6 +5673,15 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let (ioDecls, incl₀) ← (if ioFirst then expandIncludes libNames.length
       [Decl.include Span.none ⟨"io", Span.none⟩] ([], []) else pure ([], []) : Except Error _)
   let (decls₀, incl) ← expandIncludes libNames.length p.decls (ioDecls, incl₀)
+  -- A program's declaration shadows an included module's of the same name (SPEC §41, rule R1):
+  -- the module's is renamed, and so is every use of it in the module's own declarations.
+  let declName : Decl → Option String
+    | .def_ _ n _ _ _ _ | .extern _ n _ => some n.name
+    | _ => none
+  let own := p.decls.filterMap declName
+  let shadowed := (decls₀.filter (!p.decls.contains ·)).filterMap declName |>.filter own.contains
+  let ρlib := shadowed.eraseDups.map fun n => (n, n ++ "'lib")
+  let decls₀ := decls₀.map fun d => if p.decls.contains d then d else d.renameDecls ρlib
   -- `poly` families and their cases (SPEC §36): templates, and the table that chooses a case.
   let (decls₀, polys, polyPairs) ← (polyDecls decls₀ : Except Error _)
   let p₀ : Program := ⟨p₀.decls.flatMap fun d => (polyPairs.lookup d).getD [d]⟩

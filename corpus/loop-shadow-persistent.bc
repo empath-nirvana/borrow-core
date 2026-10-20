@@ -1,0 +1,10 @@
+-- A `let` in a loop's body that shadows a variable outside the loop, which is not `let mut`: the
+-- body's `y` is a variable of its own (SPEC §41, rule R1), and the loop leaves the outer `y` as
+-- it is.
+--
+-- Answer: (i32[1], i32[3]).
+main -> i32 * i32 =
+  let y = 1;
+  let mut k = 0;
+  for i in 0..3 { let y = y + 1; k = k + y - 1 };
+  (y, k)

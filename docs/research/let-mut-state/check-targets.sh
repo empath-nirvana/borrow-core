@@ -12,6 +12,6 @@ for f in docs/research/let-mut-state/targets/*.bc; do
   if cmp -s <("$bcc" erase "$f" 2>&1) <("$bcc" erase "$c" 2>&1); then e=yes; else e=no; fi
   echo "$(basename "$f"): today $a, target $b, erases as the target: $e"
 done
-r=docs/research/let-mut-state/targets/reject/mut-shadow-assign.bc
+r=corpus/reject/mut-shadow-assign.bc
 if "$bcc" check "$r" > /dev/null 2>&1; then echo "$(basename "$r"): accepted (target: rejected)"
 else echo "$(basename "$r"): rejected"; fi

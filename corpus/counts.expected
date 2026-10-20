@@ -294,14 +294,22 @@ lend-lib-loop 3 0 0 34 22 4
 lend-mut 1 0 0 11 6 0
 lend-pipeline 2 0 0 121 103 6
 lend-server 1 0 0 16 3 0
+lend-shadow 2 0 0 33 13 5
 list-blocks 13 0 0 55 43 0
 list-capability 6 0 0 31 22 0
 list-generic 27 0 0 148 102 0 # the lists' nodes, one object each; no frame and no closure is allocated
 loop-labels 0 0 0 0 0 0
 loop-row-answer 0 0 0 0 0 0
+loop-shadow-linear 1 0 0 6 3 3
+loop-shadow-owner 1 0 0 11 7 10
+loop-shadow-persistent 0 0 0 0 0 0
 main-lifetime 0 0 0 0 0 0 # main's lifetime and the unit cell `u` are cells of no words: nothing is allocated
 map-reuse 7 0 0 48 48 0
 map-views 24 0 0 12182 8849 3059 # the eight values' buffers; the first map's arrays and one doubling; the second map's arrays and five doublings (16 to 512 slots for 200 keys)
+mut-bind-arm 0 0 0 0 0 0
+mut-name-capture 2 0 0 10 9 8
+mut-shadow-arms 0 0 0 0 0 0
+name-clash 0 0 0 0 0 0
 nats-sum 0 0 0 0 0 0
 needs-stdout 0 0 0 7 1 0 # nothing: the stdout cell is a word of the program's data
 operator-rounds 166 0 24 1551 823 0 # the cluster's and the desired state's list nodes, rebuilt per update; the copies are the written `clone`s of the cluster and the spec

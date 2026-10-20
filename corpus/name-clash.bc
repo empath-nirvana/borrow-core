@@ -1,0 +1,7 @@
+-- A program's own `fn take` beside `include buf`'s `take` (#590): the program's declaration
+-- shadows the module's, and the module's own code keeps calling its own (SPEC §41, rule R1).
+--
+-- Answer: i32[2].
+include buf
+fn take(x: i32) -> i32 = x + 1
+main -> i32 = take(1)

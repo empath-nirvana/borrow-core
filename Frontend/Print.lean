@@ -385,7 +385,8 @@ def Decl.pp : Decl → String
       (if h.lps.isEmpty then "" else "<" ++ ", ".intercalate (h.lps.map fun (a, b) =>
         (Life.var a.span a.name).pp ++ (match b with | .top _ => "" | b => " < " ++ b.pp)) ++ ">") ++
       (if h.params.isEmpty then "" else
-        "(" ++ ", ".intercalate (h.params.map fun (x, A) => x.name ++ ": " ++ A.pp) ++ ")") ++
+        "(" ++ ", ".intercalate (h.params.map fun (x, A) =>
+          (if h.mutPs.contains x.name then "mut " else "") ++ x.name ++ ": " ++ A.pp) ++ ")") ++
       ": " ++ h.eff.name ++ tys h.effArgs ++ ", " ++ rA.pp ++ " -> " ++ h.res.pp ++
       (if h.row.isEmpty then "" else " with " ++ ", ".intercalate (h.row.map fun (e, As) => e.name ++ tys As)) ++
       " = {" ++ nl 2 ++ cl "return" [rx] rM ++ ";" ++

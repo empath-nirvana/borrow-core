@@ -1,0 +1,10 @@
+-- `x <- M` where `x` is a `let mut` variable assigns it the value of `M` (SPEC §41, rule R2), in an
+-- arm as on the spine.
+--
+-- Answer: (i32[5], i32[3]).
+main -> i32 * i32 =
+  let mut x = 1;
+  if x == 1 { x <- return 5; () } else { () };
+  let mut n = 0;
+  for i in 0..3 { n <- return (n + 1); () };
+  (x, n)

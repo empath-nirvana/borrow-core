@@ -1,12 +1,8 @@
--- pending: refused #493
--- now: 21:5: `w` is used twice here, and its type `array_imm 'a i32` is not persistent
---
 -- A name bound in a `for`'s body that is the name of a linear variable outside the loop, already
--- consumed (`v = w`). The loop chooses the variables it threads by name, without the body's own
--- bindings, so it threads the outer `w` as well, a second use of it. With the local renamed the
--- program answers as below. The owner of a borrow block (#493's reproduction) is one case of it.
+-- consumed (`v = w`): the body's `w` is a variable of its own (SPEC §41, rule R1), so the loop
+-- threads `v` and `k` and not the outer `w` (#493).
 --
--- Once it lands: `i32[6]`, `live 0`.
+-- Answer: i32[6].
 
 include slice
 

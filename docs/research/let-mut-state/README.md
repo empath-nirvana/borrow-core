@@ -3,7 +3,7 @@
 - `targets/<name>.bc` beside `targets/<name>.core.bc`: a `let mut` program and the core its
   elaboration should be, written by hand. `check-targets.sh` runs both and compares today's
   elaboration's erasure with the target's. `targets/state/` holds the State-handler forms that
-  check; `targets/reject/mut-shadow-assign.bc` is #504, which should be refused.
+  check; `corpus/reject/mut-shadow-assign.bc` is #504, refused (SPEC §41).
 - `corpus/reject/state-*.bc`: the State-handler forms the checker refuses, pinned with their
   messages. `experiments/LetMutState` states the borrow case in Lean.
 - `scripts/mut-combos.py`: random nestings of `if`, `match`, `for`, blocks, shadowing `let`s and

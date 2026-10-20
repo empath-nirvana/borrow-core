@@ -1,5 +1,5 @@
 -- pending: K4 (an early exit from a kernel fold: a block that raises, given to lib/text.bc's fold_lines)
--- now: 277:5: an operation of `Fail` is performed inside a closure or block that is not run in place, and no handler of `Fail` is in scope
+-- now: 282:25: `f` is a block parameter given an effectful block: it can only be called, or passed on to a block parameter of a call; a block is not stored (SPEC §30)
 -- Parsing a configuration file: `key = value` lines read from a literal into a record of
 -- settings, starting from defaults. Each line is cut at its `=` and trimmed; the value is parsed
 -- as an integer by `lib/text.bc`'s `parse_i32`, whose `ParseError` is turned into the
