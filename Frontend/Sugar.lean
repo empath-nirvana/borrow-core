@@ -5824,7 +5824,7 @@ def expandIncludes : Nat → List Decl → List Decl × List String →
       match library m.name with
       | some (.error e) => throw ⟨sp, e⟩
       | some (.ok src) => do
-        let l ← match parseProgram src (lib := libSrc) with
+        let l ← match parseProgram src (lib := libSrc) (isLib := true) with
           | .ok l => pure l.decls
           | .error e => throw ⟨e.span, s!"lib/{m.name}.bc: {e.msg}"⟩
         match fuel with
@@ -5951,7 +5951,7 @@ recording the origins of generated code.  `[spec §11, §14]` -/
 def elaborateS (p : Program) : SM (Program × Nat) := do
   let libRaw (m : String) : Except Error (List Decl) :=
     match library m with
-    | some (.ok src) => match parseProgram src (lib := libSrc) with
+    | some (.ok src) => match parseProgram src (lib := libSrc) (isLib := true) with
       -- A module's `data` declarations are the program's (`dataDecls`).
       | .ok l => pure (l.decls.filter fun | .data .. => false | _ => true)
       | .error e => throw ⟨e.span, s!"lib/{m}.bc: {e.msg}"⟩
