@@ -9,7 +9,7 @@ import re, pathlib, sys
 BAD = re.compile(r"\b(sorry|axiom|native_decide|implemented_by|opaque|partial|unsafe)\b")
 hits = 0
 files = []
-for d in ("Paper", "Support", "Examples", "Core", "Frontend", "Backend"):
+for d in ("Paper", "Support", "Examples", "Core", "Frontend", "Backend", "Backend2"):
     files += sorted(pathlib.Path(d).glob("**/*.lean")) + [pathlib.Path(d + ".lean")]
 for p in files:
     src = p.read_text(encoding="utf-8")
@@ -28,10 +28,10 @@ for p in files:
 print(f"{hits} forbidden keyword(s) outside comments.")
 sys.exit(1 if hits else 0)
 PY
-# Frontend/ and Backend/ import only the library (and Lean's `Std`), never experiments/.
-if grep -rhE '^import ' Frontend Frontend.lean Backend Backend.lean \
-    | grep -vE '^import +(Frontend|Backend|Support|Paper|Examples|Core|Std)([. ]|$)'; then
-  echo "Frontend/ or Backend/ imports a module outside the library."; exit 1
+# Frontend/, Backend/ and Backend2/ import only the library (and Lean's `Std`), never experiments/.
+if grep -rhE '^import ' Frontend Frontend.lean Backend Backend.lean Backend2 Backend2.lean \
+    | grep -vE '^import +(Frontend|Backend|Backend2|Support|Paper|Examples|Core|Std)([. ]|$)'; then
+  echo "Frontend/, Backend/ or Backend2/ imports a module outside the library."; exit 1
 fi
 # The extended judgment of SPEC §29 and the typed term of SPEC §3 are generated from `CDerives`:
 # they must be up to date.

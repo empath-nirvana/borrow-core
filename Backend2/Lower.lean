@@ -353,7 +353,7 @@ def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
     let ok := and32 (.op (.frel f loOp) [x, lo]) (.op (.frel f .lt) [x, hi])
     pure ([.ite ok [.set t₀ (.c64 0), .set t₁ (word w (.op (.trunc_sat i f sx) [x]))]
             [.set t₀ (.c64 1), .set t₁ (.c64 0)]], [.loc t₀, .loc t₁])
-  | .trapping _, _ => throw "word IR: a partial operation that is neither a division nor a trunc"
+  | .trapping _, _ => throw "word IR: an operation with no answer somewhere that is neither a division nor a trunc"
 
 /-- A division whose divisor is a literal at which it cannot fail (`TExpr.divLit`): the operation
 alone, with no test (SPEC §39). A byte's division is the `i32` one, narrowed. -/
