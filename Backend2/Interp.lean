@@ -342,10 +342,10 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
   | .slotTake, [.fam b n, .int i] => do
     if i.toUInt32 ≥ n then bad "a slot past the array's end"
     let v ← readAt (b + i.toNat)
-    writeAt (b + i.toNat) none
+    if b < dataAt || b ≥ staticAt then writeAt (b + i.toNat) none
     pure (.pair (.fam b n) v)
   | .freeArr, [.fam b n] => do
-    if n == 0 then return .unit
+    if n == 0 || (b ≥ dataAt && b < staticAt) then return .unit
     for i in [0:n.toNat] do
       if ← isWritten (b + i) then bad "an array freed with a written slot"
     freeObj b n.toNat
@@ -430,6 +430,19 @@ def eval (p : Prog) : Nat → LTy → Tm → IM LV
     | .app0 g => do callClos p f (← takeV g) none 0
     | .sel g j => do callClos p f (← takeV g) none j
     | .call fn as => do callFn p f fn (← takeAll as)
+    | .prim (.tab fi) [g, n] => do
+      let vg ← takeV g
+      let .int k ← takeV n | bad "tab of a non-integer"
+      let arr ← if k.toUInt32 == 0 then pure (LV.fam 0 0) else
+        pure (LV.fam (← newObj k.toUInt32.toNat) k.toUInt32)
+      callFn p f fi [vg, arr, .int 0, .int k]
+    | .prim (.tabLit fi _ off len) [g, n] => do
+      let vg ← takeV g
+      let .int k ← takeV n | bad "tab of a non-integer"
+      if k.toNat ≤ len then return .fam (dataAt + off) k.toUInt32
+      let arr ← if k.toUInt32 == 0 then pure (LV.fam 0 0) else
+        pure (LV.fam (← newObj k.toUInt32.toNat) k.toUInt32)
+      callFn p f fi [vg, arr, .int 0, .int k]
     | .prim op as => evalOp (tyIn p) op as rt
     | .letv x e b => do
       let v ← eval p f (← tyIn p x) e

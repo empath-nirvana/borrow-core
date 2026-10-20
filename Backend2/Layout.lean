@@ -331,6 +331,12 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
       let o ← kid dst 1
       join (← kid o 0) c; join (← kid o 1) (← a 2); join c (← a 2)
     | .swapSlots => join dst (← a 0)
+    | .tab fi | .tabLit fi .. => do
+      let some fd := p.fns[fi]? | throw s!"layout: no function f{fi}"
+      match fd.params with
+      | [pf, pa, _, _] => join (← a 0) (← nv pf); join dst (← nv pa)
+      | _ => throw "layout: a tab loop's parameters"
+      join dst (← fnRetNode p fi)
     | .roll | .unroll => join dst (← a 0)
     | .io .readByte | .io .clockNow => join (← kid dst 0) (← a 0)
     | .io .writeByte | .io .writeAll | .io .clockSleep => join dst (← kid (← a 0) 0)

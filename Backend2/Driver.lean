@@ -5,6 +5,7 @@ import Backend2.Interp
 import Backend2.Lower
 import Backend2.Flow
 import Backend2.Frames
+import Backend2.LitViews
 
 /-!
 # Backend2 — driver
@@ -62,9 +63,11 @@ def layoutReport (k : Backend.CheckedProg) : Except String (List String) := do
 
 /-- The word IR of a checked program by the new backend; with `counts`, the counting build. -/
 def flatOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String Backend.Flat.Prog := do
-  let (p, _) ← lirOf k
+  let (p, cs) ← lirOf k
   let L ← layoutsOf k p
-  Low.lowerProg p L (Flow.known p L) (Frames.framed p) counts
+  let fs := Flow.solution p L
+  let p := LitViews.rewrite p cs.lits fs.sets
+  Low.lowerProg p L (Flow.known p L fs) (Frames.framed p) counts
 
 /-- The program as WAT by the new backend. -/
 def watOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String String := do

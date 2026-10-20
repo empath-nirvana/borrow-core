@@ -23,6 +23,7 @@ def ppOp : Op → String
   | .load => "load" | .take => "take" | .put => "put" | .newArr => "newArr"
   | .slotPut => "slotPut" | .slotTake => "slotTake" | .freeArr => "freeArr" | .size => "size"
   | .len => "len" | .emptyFam => "emptyFam" | .replace => "replace" | .swapSlots => "swapSlots"
+  | .tab fi => s!"tab[f{fi}]" | .tabLit fi c off len => s!"tabLit[f{fi},c{c},{off},{len}]"
   | .roll => "roll" | .unroll => "unroll" | .clampLen => "clampLen"
 
 def v (x : Var) : String := s!"x{x}"

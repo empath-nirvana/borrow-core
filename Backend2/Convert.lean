@@ -289,9 +289,7 @@ def genTab (aT fT : LTy) (p : Var) : CM Tm := do
   setFn fi { name := "tab", params := [f, a, i, n], body, ret := aT }
   letpairM p fun c f => do
     let n ← fresh i32T
-    let a ← fresh aT
-    return .letv n (.prim .clampLen [c]) (← dup n fun n n' => do
-      return .letv a (.prim .newArr [n']) (← lit32 0 fun z => pure (.call fi [f, a, z, n])))
+    return .letv n (.prim .clampLen [c]) (.prim (.tab fi) [f, n])
 
 /-- `drop (f, a)` (`array_free`): each slot's contents to `f`, in order, then the array freed. -/
 def genArrFree (fT aT : LTy) (p : Var) : CM Tm := do

@@ -368,6 +368,15 @@ def divLitVals (o : HostOp) (byte : Bool) (ls : List Nat) : LM (List Exp) := do
   return [if byte then and64 q (.c64 0xff) else q]
 
 
+/-- Call `f` on `args`, answering `k` words, to `d`. -/
+def lowerCall (pre : List Stmt) (f : Nat) (args : List Exp) (k : Nat) (d : Dest) : LM (List Stmt) := do
+  match d with
+  | .ret k' => if k' == k then return pre ++ [.tailCall f args] else pure ()
+  | .to ls => if ls.length == k then return pre ++ [.call ls f args] else pure ()
+  | .bind _ => pure ()
+  let ts ← fresh k
+  return pre ++ [.call ts f args] ++ (← emit d (locs ts))
+
 /-! ### Primitives -/
 
 def boundTick : LM (List Stmt) := do
@@ -447,6 +456,24 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let m := (← arg 0).headD 0
     if ← zeroCell pn then return ← emit d [.loc m]
     return (← storeCell pn (.loc m) (locs (← arg 1))) ++ (← emit d [.loc m])
+  | .tab fi | .tabLit fi .. => do
+    let leaf ← leafOf n
+    let st ← slotStride leaf
+    let fw ← arg 0
+    let k := (← arg 1).headD 0
+    let b ← fresh1
+    let bytes := mul64 (.loc k) (.c64 st.toUInt64)
+    let words := shr64 (add64 bytes (.c64 7)) (.c64 3)
+    let mk := [Stmt.ite (eqz64 (.loc k)) [.set b (.c64 0)] [.set b (.alloc words)]]
+    let args := locs fw ++ [.loc b, .loc k, .c64 0, .loc k]
+    match op with
+    | .tabLit _ _ off len => do
+      let ts ← fresh 2
+      let dr ← dropVals (← argN 0) fw
+      return [.ite (.op (.rel .w64 .le_u) [.loc k, .c64 len.toUInt64])
+          (dr ++ [.set (ts.headD 0) (.data off), .set (ts.getD 1 0) (.loc k)])
+          (mk ++ [.call ts (fnIndex fi) args])] ++ (← emit d (locs ts))
+    | _ => lowerCall mk (fnIndex fi) args 2 d
   | .newArr => do
     let leaf ← leafOf n
     let st ← slotStride leaf
@@ -585,15 +612,6 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
 def tmSimple : Tm → Bool
   | .letv .. | .letpair .. | .case .. | .copy .. | .drop .. | .absurd _ => false
   | _ => true
-
-/-- Call `f` on `args`, answering `k` words, to `d`. -/
-def lowerCall (pre : List Stmt) (f : Nat) (args : List Exp) (k : Nat) (d : Dest) : LM (List Stmt) := do
-  match d with
-  | .ret k' => if k' == k then return pre ++ [.tailCall f args] else pure ()
-  | .to ls => if ls.length == k then return pre ++ [.call ls f args] else pure ()
-  | .bind _ => pure ()
-  let ts ← fresh k
-  return pre ++ [.call ts f args] ++ (← emit d (locs ts))
 
 /-- The term `t`, whose value is at node `n`, its words to `d`. -/
 def lowerTm (fuel : Nat) (t : Tm) (n : Nat) (d : Dest) : LM (List Stmt) := do

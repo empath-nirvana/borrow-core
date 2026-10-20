@@ -28,6 +28,8 @@ inductive Use where
   | through (y : Var) (pairs : Bool)
   /-- `letpair a b x`. -/
   | split (a b : Var)
+  /-- The `k`-th argument of a direct call of `fn`. -/
+  | called (fn k : Nat)
   | freed
   | other
 
@@ -48,14 +50,14 @@ def usesOf : Nat → Tm → Option Var → Std.HashMap Var Use → Std.HashMap V
       | .free, [x], _ => set x .freed m
       | .allocLent, [x], _ => set x .other m
       | .lend, x :: rest, some y | .relend, x :: rest, some y | .swap, x :: rest, some y
-      | .take, x :: rest, some y => others rest (set x (.through y true) m)
+      | .take, x :: rest, some y | .size, x :: rest, some y => others rest (set x (.through y true) m)
       | .put, x :: rest, some y => others rest (set x (.through y false) m)
       | _, as, _ => others as m
     | .inj _ a => set a .other m
     | .clos _ env => others env m
     | .app g a => others [g, a] m
     | .app0 g | .sel g _ => set g .other m
-    | .call _ as => others as m
+    | .call fn as => as.zipIdx.foldl (fun m (x, k) => set x (.called fn k) m) m
     | .letv x e b => usesOf f b dst (usesOf f e (some x) m)
     | .letpair x y p b => usesOf f b dst (set p (.split x y) m)
     | .case s _ b₁ _ b₂ => usesOf f b₂ dst (usesOf f b₁ dst (set s .other m))
@@ -97,5 +99,28 @@ where
       | .letpair _ _ _ b | .copy _ _ b | .drop _ b => allocsOf f b acc
       | .case _ _ b₁ _ b₂ => allocsOf f b₂ (allocsOf f b₁ acc)
       | _ => acc
+
+
+/-- The array `x` (or its component `field`) is only read before its destructor: it is lent
+shared, its size taken, and then destroyed by a generated destructor (`array_dtor`, or
+`array_free`'s loop) or freed. -/
+def readOnly (p : Prog) (uses : Std.HashMap Var Use) : Nat → Var → Option Nat → Bool
+  | 0, _, _ => false
+  | f + 1, x, field => match uses[x]?, field with
+    | some (.moved y k), none => readOnly p uses f y k
+    | some (.moved y none), some k => readOnly p uses f y (some k)
+    | some (.through y true), none =>
+      -- A lend must be a shared one: its borrow a family of `imm` leaves.
+      let shared := match p.ty[y]? with
+        | some (.pair _ (.fam (.imm _))) => true
+        | some (.pair _ (.int _)) => true
+        | _ => false
+      shared && readOnly p uses f y (some 0)
+    | some (.split a b), some k => readOnly p uses f (if k == 0 then a else b) none
+    | some (.called fn k), none =>
+      match p.fns[fn]? with
+      | some fd => (fd.name == "array_dtor" && k == 0) || (fd.name == "array_free" && k == 1)
+      | none => false
+    | _, _ => false
 
 end Backend2.Frames

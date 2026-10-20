@@ -66,6 +66,14 @@ inductive Op where
   | put
   /-- `newArr n`: an array of `n` unwritten slots (`n` unsigned). -/
   | newArr
+  /-- `tab fi (f, n)` (`array_new`): an array of `n` slots, slot `i` filled with `f i` by the loop
+  function `fi`, called on `(f, a, 0, n)`. -/
+  | tab (fi : Nat)
+  /-- `tab fi (f, n)` where `f` is the closure of the literal table code `c`, whose `len` bytes are
+  at `off` in the data, and the array is only read before it is destroyed
+  (`Backend2/LitViews.lean`): at `n ≤ len` the array is the literal's bytes in the data, and
+  nothing is allocated; else `tab`'s. -/
+  | tabLit (fi c off len : Nat)
   /-- `slotPut a i v`: `v` moved into slot `i` of the array `a`, unwritten; the result is `a`. -/
   | slotPut
   /-- `slotTake a i`: slot `i`'s contents moved out, the slot left unwritten: `(a, contents)`. -/

@@ -86,6 +86,9 @@ def gen (p : Prog) (L : Layouts) (base : Nat) : Nat → Tm → Option Var → FM
       if let some d := dst then
         modify fun s => { s with out := s.out.insert (retVar base fn) ((s.out.getD (retVar base fn) #[]).push d) }
         addCodes d ((← get).sets.getD (retVar base fn) {}).toList
+    | .prim (.tab fi) as | .prim (.tabLit fi ..) as => do
+      if let (some fd, some g) := (p.fns[fi]?, as.head?) then
+        if let some pf := fd.params.head? then edge p g pf
     | .prim _ _ => if let some d := dst then coarse p L d
     | .letv x e b => do gen p L base f e (some x); gen p L base f b dst
     | .letpair x y _ b => do coarse p L x; coarse p L y; gen p L base f b dst
@@ -141,12 +144,15 @@ where
     | .thunk _ => true
     | _ => false
 
-/-- The known code of each call's function variable. -/
-def known (p : Prog) (L : Layouts) : Std.HashMap Var Nat := Id.run do
+/-- The solution: each closure variable's codes, and the call sites. -/
+def solution (p : Prog) (L : Layouts) : St :=
   let base := p.ty.fold (fun m x _ => max m (x + 1)) 0
   -- The pseudo-variables of the answers are closures where the function answers one.
   let p' := { p with ty := p.fns.toList.zipIdx.foldl (fun m (fd, i) => m.insert (base + i) fd.ret) p.ty }
-  let ((), s) := ((genFns p' L base) *> solve p' base (1 <<< 26)).run {}
+  (((genFns p' L base) *> solve p' base (1 <<< 26)).run {}).2
+
+/-- The known code of each call's function variable. -/
+def known (p : Prog) (L : Layouts) (s : St := solution p L) : Std.HashMap Var Nat := Id.run do
   let mut out : Std.HashMap Var Nat := {}
   for (x, _) in s.sites.toList do
     let cs := s.sets.getD x {}
