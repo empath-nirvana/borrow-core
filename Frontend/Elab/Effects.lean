@@ -770,6 +770,11 @@ def rowC (env : Env) : Nat → Comp → List Inst
   | 0, _ => []
   | n + 1, M => match M with
     | .ret _ V | .absurd _ V => rowV env n V
+    -- A copy of a block parameter is the block parameter (`Cx.copy`).
+    | .bind _ x _ (.ret _ (.var _ y)) N _ =>
+      match env.cbRows.lookup y with
+      | some r => rowC { env with cbRows := (x.name, r) :: env.cbRows } n N
+      | none => rowC env n N
     | .bind _ _ (some A) (.ret _ V) N _ => env.union (pullRow env n (isPullTy A) V) (rowC env n N)
     | .bind _ _ _ M N _ | .with_ _ M N => env.union (rowC env n M) (rowC env n N)
     | .letUnit _ V M | .letPair _ _ _ V M => env.union (rowV env n V) (rowC env n M)
@@ -990,6 +995,8 @@ def unboxesC (k : String) : Nat → Comp → Bool
   | 0, _ => false
   | n + 1, M => match M with
     | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => unboxesV k n V
+    -- A copy of the continuation is the continuation (`Cx.copy`).
+    | .bind _ x _ (.ret _ (.var _ y)) N _ => if y == k then unboxesC x.name n N else unboxesC k n N
     | .bind _ _ _ M N _ | .with_ _ M N => unboxesC k n M || unboxesC k n N
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
     | .nuOut _ M | .ascribe _ M _ => unboxesC k n M
@@ -1046,6 +1053,25 @@ structure Cx where
   it provides, the site its argument performs that effect at, and whether the site is a `with`
   of the copy (named by the port) rather than one of the copy's row.  `[spec §33]` -/
   ports : List (String × Site × Bool) := []
+
+/-- `x <- return y`, a copy: when `y` is a name the elaboration gives a meaning of its own (a
+block parameter, a computation parameter's port, a clause's continuation, a layer's `call`), the
+context in which `x` is that thing in `y`'s place. A thing is identified by its binder, followed
+through its copies, never by its name (SPEC §41, #617). -/
+def Cx.copy (cx : Cx) (x y : String) : Option Cx :=
+  let cbs := (cx.cbs.lookup y).map fun e => (x, e) :: cx.cbs
+  let ports := cx.ports.filterMap fun (z, p, own) => if z == y then some (x, p, own) else none
+  let resume := cx.resume.bind fun rk => if rk.k == y then some { rk with k := x } else none
+  let layer := cx.layerCall.bind fun lc => if lc.name == y then some { lc with name := x } else none
+  if cbs.isNone && resume.isNone && layer.isNone then none else
+  some { cx with
+    cbs := cbs.getD cx.cbs
+    ports := ports ++ cx.ports
+    resume := resume.orElse fun _ => cx.resume
+    layerCall := layer.orElse fun _ => cx.layerCall
+    env := match cx.env.cbRows.lookup y with
+      | some r => { cx.env with cbRows := (x, r) :: cx.env.cbRows }
+      | none => cx.env }
 
 /-- What a call of `g` performs here: its row, and for a member of a recursive group the rows of
 the layers its recursion runs under. -/
@@ -1400,11 +1426,13 @@ def slotsOf (sp : Span) (row : List Inst) (tps : List String) (hs : List HSig) (
 def blkCaps (blks : List Blk) : List Cap := blks.foldl (fun acc b => addCaps acc b.caps) []
 
 /-- The key of a copy for its blocks: `b{j}n{n}…` per block parameter `j`, followed by the
-answering handlers whose capabilities the block uses. -/
+answering handlers whose capabilities the block uses, and `m{i}` for each `let mut` variable it
+writes, by position: the copy takes them as parameters of types of its own (`mutCap`), so the
+caller's names are not the copy's (SPEC §41, R3). -/
 def blockKeys (bs : List Blk) : List String :=
   bs.map fun b => s!"b{b.j}" ++ String.join (b.ss.map fun s => s!"n{s.n}") ++
     String.join ((b.caps.filter (·.thr.isNone)).map fun c => c.h.key) ++
-    String.join ((b.caps.filter (·.isMut)).map fun c => "m" ++ c.var)
+    String.join (((b.caps.filter (·.isMut)).zipIdx).map fun (_, i) => s!"m{i}")
 
 /-- The sites, as the reports name them. -/
 def sitesText (ss : List Site) : String :=
@@ -1769,6 +1797,10 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
 def trBind : Nat → Cx → List Cap → Bool → Span → Ident → Option VTy → Comp → Comp → Bool → EM Comp
   | 0, _, _, _, sp, _, _, _, _, _ => throw ⟨sp, "internal error: a body nested too deeply"⟩
   | n + 1, cx, cs, wrap, sp, x, A, M, N, lin => do
+    -- `x <- return y`, a copy of a block parameter, a continuation or a layer's `call`.
+    if let .ret _ (.var _ y) := M then
+      if let some cx' := cx.copy x.name y then
+        return .bind sp x A M (← trC n cx' cs wrap N) lin
     -- `x : pull A B R <- return g(W)`: the stored generator of the call.
     if let (some A', .ret rsp V) := (A, M) then
       if let (true, some (g, gs, i, f, W)) := (isPullTy A', cx.env.iterCall? V) then
@@ -3329,6 +3361,8 @@ def forOverParam (xs : List String) : Nat → Comp → Option Span
     | .loop sp _ src V B N =>
       if (match src, V with | .each _, .app _ f _ => (headName f).any xs.contains | _, _ => false) then some sp
       else (forOverParam xs k B).orElse fun _ => forOverParam xs k N
+    | .bind _ x _ (.ret _ (.var _ y)) N _ =>
+      forOverParam (if xs.contains y then x.name :: xs else xs) k N
     | .bind _ _ _ M N _ | .with_ _ M N | .case _ _ _ M _ N =>
       (forOverParam xs k M).orElse fun _ => forOverParam xs k N
     | .letUnit _ _ M | .letPair _ _ _ _ M | .lam _ _ _ M | .lamL _ _ _ M => forOverParam xs k M

@@ -10,9 +10,13 @@
 -- type to another, `Fail` across a library fold, text views cut and trimmed without copying.
 --
 -- Blocked by: K4, an early exit from a kernel fold (SPEC §18 *Open*): `fold_lines` is a
--- `count_fold`, and its block raises. The message's position, 277:5, is a line of `lib/text.bc`
--- (`fold_lines`'s own block) printed under this file's name, and it says no handler of `Fail` is
--- in scope, where the handler is the `to_result` in `load`.
+-- `count_fold`, and its block raises. Before that, `fold_lines` passes its block parameter `f` in
+-- the fold's state, `(t, (f, s))`, which SPEC §30 refuses (a block is called, not stored;
+-- stored callbacks are §30 *Open*). The message's position, 282:25, is a line of `lib/text.bc`
+-- printed under this file's name. Its message was once K4's, "an operation of `Fail` is performed
+-- inside a closure … not run in place" at 277:5: only because the step's pattern binder of the
+-- state's block was also named `f`, and was taken for the block parameter by its name (#617;
+-- `scripts/alpha-check.py --bcc` on that build, with `lib/` renamed, gives today's message).
 --
 -- Once it lands: `(inl (i32[8080], (i32[4], i32[30])), inr i32[2])`: the first file sets
 -- the port and the workers and keeps the default timeout; the second has `workers = four`, the

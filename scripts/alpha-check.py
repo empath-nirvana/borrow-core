@@ -19,9 +19,10 @@ Two passes:
   compared only up to the line; names are mapped back as above, and the original's renamed
   binders (`x1`) to the name they are written with.
 
-`scripts/alpha-check.py [--jobs N] [--bcc BCC] [file…]`: every program under `corpus/` (and the
-probes under `docs/expressiveness-probes/` with `--probes`), or the files named. It fails on any
-difference, and prints each.
+`scripts/alpha-check.py [--jobs N] [--bcc BCC] [--alpha BCC] [--probes] [file…]`: every program
+under `corpus/` (and the probes under `docs/expressiveness-probes/` with `--probes`), or the files
+named. It fails on any difference, and prints each. `--alpha` renames with another build than the
+one checked, to run the check on a build that has no `bcc alpha`.
 """
 import argparse, os, re, subprocess, sys, tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -77,24 +78,55 @@ class Back:
             d += nl - ol
         return str(c - d)
 
-    def text(self, s):
-        s = POS.sub(lambda m: f"{m.group(1)}:{self.col(int(m.group(1)), int(m.group(2)))}", s)
-        s = GEN.sub(lambda m: f"{m.group(1)}{m.group(2)}_{self.col(int(m.group(2)), int(m.group(3)))}", s)
+    def text(self, s, cols=True):
+        if cols:
+            s = POS.sub(lambda m: f"{m.group(1)}:{self.col(int(m.group(1)), int(m.group(2)))}", s)
+            s = GEN.sub(lambda m: f"{m.group(1)}{m.group(2)}_{self.col(int(m.group(2)), int(m.group(3)))}", s)
+        elif not self.cols:
+            s = POS.sub(lambda m: f"{m.group(1)}:_", s)
+            s = GEN.sub(lambda m: f"{m.group(1)}{m.group(2)}__", s)
         return WORD.sub(lambda m: self.names.get(m.group(0), m.group(0)), s)
+
+
+def same(cf, cg, back, backF):
+    """The original's lines `cf` and the renamed program's `cg` agree up to the renaming. A
+    position may also agree as it is: a position in a module's code is printed under the
+    program's name, where the program's renaming does not apply."""
+    lf, lg = cf.split("\n"), cg.split("\n")
+    if len(lf) != len(lg):
+        return False
+    for a, b in zip(lf, lg):
+        a = backF.text(a)
+        if a == back.text(b):
+            continue
+        # Position by position: the text between positions up to the renaming, each position
+        # mapped back or as it is.
+        pa, pb = POS.split(a), POS.split(back.text(b, cols=False))
+        if len(pa) != len(pb):
+            return False
+        for i in range(0, len(pa), 3):
+            if pa[i] != pb[i]:
+                return False
+        for i in range(1, len(pa), 3):
+            l, c = int(pb[i]), int(pb[i + 1])
+            if pa[i] != pb[i] or pa[i + 1] not in (str(c), back.col(l, c)):
+                return False
+    return True
 
 
 def compare(bcc, f, g, back, envG=None, backF=None):
     """`check` and `erase` of `f` and of its renamed `g`: the differences."""
     diffs = []
+    backF = backF or Back([])
     rf, cf = run(bcc, ["check", f])
     rg, cg = run(bcc, ["check", g], envG)
-    cg = cg.replace(g, f)
-    cf2 = backF.text(cf) if backF else cf
-    if rf != rg or cf2 != back.text(cg):
-        diffs.append(f"check (exit {rf} / {rg}):\n--- {f}\n{cf2}--- renamed\n{back.text(cg)}")
+    # The file's name is no variable's.
+    cf, cg = cf.replace(f, "<file>"), cg.replace(g, "<file>")
+    if rf != rg or not same(cf, cg, back, backF):
+        diffs.append(f"check (exit {rf} / {rg}):\n--- {f}\n{backF.text(cf)}--- renamed\n{back.text(cg)}")
     if rf == 0:
-        ef = run(bcc, ["erase", f])[1]
-        eg = run(bcc, ["erase", g], envG)[1]
+        ef = run(bcc, ["erase", f])[1].replace(f, "<file>")
+        eg = run(bcc, ["erase", g], envG)[1].replace(g, "<file>")
         if ef != eg:
             diffs.append("erase: the erasures differ")
     return diffs
@@ -114,9 +146,11 @@ def main():
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--bcc", default=os.path.join(ROOT, ".lake/build/bin/bcc"))
     ap.add_argument("--probes", action="store_true")
+    ap.add_argument("--alpha", help="the bcc that renames (default: --bcc), to check another build")
     ap.add_argument("files", nargs="*")
     a = ap.parse_args()
     files = a.files or programs(a.probes)
+    ab = a.alpha or a.bcc
     tmp = tempfile.mkdtemp(prefix="alpha-")
 
     # The library renamed, and each module's renaming read backwards (names only).
@@ -127,12 +161,12 @@ def main():
         src = os.path.join("lib", m)
         if not m.endswith(".bc"):
             continue
-        rc, out = run(a.bcc, ["alpha", src])
+        rc, out = run(ab, ["alpha", src])
         if rc != 0:
             print(f"{src}: bcc alpha failed:\n{out}")
             sys.exit(1)
         open(os.path.join(lib, m), "w").write(out)
-        for (_, _, x, x2, v) in renaming(a.bcc, src) or []:
+        for (_, _, x, x2, v) in renaming(ab, src) or []:
             libNames[x2] = x
             if v != x:
                 libVars[v] = x
@@ -141,16 +175,18 @@ def main():
     def one(i_f):
         i, f = i_f
         diffs = []
-        edits = renaming(a.bcc, f)
+        edits = renaming(ab, f)
         if edits is not None:
             g = os.path.join(tmp, f"p{i}", os.path.basename(f))
             os.makedirs(os.path.dirname(g))
-            open(g, "w").write(run(a.bcc, ["alpha", f])[1])
+            open(g, "w").write(run(ab, ["alpha", f])[1])
             diffs += ["program pass: " + d for d in compare(a.bcc, f, g, Back(edits))]
         # The library pass: the original's messages from module code name renamed binders as the
         # module writes them (`x1`), the renamed library's as `{x}q{k}`: both to `x`.
         back = Back([], libNames, cols=False)
-        rf = Back([], libVars, cols=False)
+        # A word the program writes is the program's (`fn c3` beside a module's renamed `c3`).
+        own = set(WORD.findall(open(os.path.join(ROOT, f)).read()))
+        rf = Back([], {v: x for v, x in libVars.items() if v not in own}, cols=False)
         diffs += ["library pass: " + d for d in compare(a.bcc, f, f, back, envLib, rf)]
         return f, diffs
 
