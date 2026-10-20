@@ -5852,17 +5852,30 @@ def _root_.Frontend.Decl.mentionsTy (n : String) (d : Decl) : Bool :=
   | .chandler _ h => vt h.res || h.params.any (vt ·.2) || c h.ret.2.2 || h.clauses.any (c ·.body)
   | _ => false
 
+/-- The names of `lib/prelude.bc`'s `data` declarations (SPEC §42): a program that names one of
+them reads the prelude for its declaration. A program that names none is elaborated without
+reading the library, as the kernel evaluates the cross-checked programs
+(`Frontend/Check/CrossCheck.lean`). -/
+def preludeData : List String := ["Option", "Vec"]
+
 /-- The program's `data` declarations elaborated to `type` and `shape` declarations, in place
 (`Data.typeDecls`), the prelude's that the program names first (SPEC §42, D1–D3). -/
 def dataDecls (ds : List Decl) : Except Error (List Decl) := do
   let own : Data.Table := ds.filterMap fun | .data _ d => some d | _ => none
-  let prelude : Data.Table := match libSrc "prelude" with
+  let wanted := preludeData.filter fun n =>
+    !own.any (·.name.name == n) && ds.any (·.mentionsTy n)
+  let prelude : Data.Table ← if wanted.isEmpty then pure [] else
+    match libSrc "prelude" with
     | some src => match parseProgram src with
-      | .ok p => p.decls.filterMap fun | .data _ d => some d | _ => none
-      | .error _ => []
-    | none => []
-  let named := prelude.filter fun d =>
-    !own.any (·.name.name == d.name.name) && ds.any (·.mentionsTy d.name.name)
+      | .ok p =>
+        let pd := p.decls.filterMap fun | .data _ d => some d | _ => none
+        if let some d := pd.find? (!preludeData.contains ·.name.name) then
+          throw ⟨d.name.span, s!"internal error: lib/prelude.bc declares `{d.name.name}`, which " ++
+            "`Sugar.preludeData` does not list"⟩
+        pure pd
+      | .error e => throw ⟨e.span, s!"lib/prelude.bc: {e.msg}"⟩
+    | none => pure []
+  let named := prelude.filter (wanted.contains ·.name.name)
   let tab := named ++ own
   let pre ← named.flatMapM (Data.typeDecls tab Span.none)
   let rest ← ds.flatMapM fun
