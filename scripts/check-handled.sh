@@ -2,10 +2,12 @@
 # The names handled inside each handled computation, and condition 2 of the direct call of a
 # tail-resumptive clause (SPEC §19, *The clause's names in the continuation*). For every corpus
 # program that checks: `main`'s flow record and its frames (`bcc handled`); each `handle` node of
-# `main` with the frames its handled computation holds (`inside`), its outer row's names and
-# whether condition 2 holds for its clauses (no name of the row is one the flow record may catch,
-# `Checked.unhandledIn`); and each operation the backend lowers (`bcc-counts --lowering`), with
-# the kinds of its clauses and whether condition 2 holds at every `handle` node of its name.
+# `main` with the frames its handled computation holds (`inside`), its outer row's names, the
+# names each clause's own code performs or raises (`handlerNames`, `row` where it may run code it
+# does not hold) and whether condition 2 holds for its clauses (none of those names is one the
+# flow record may catch, `Checked.unhandledNames`); and each operation the backend lowers
+# (`bcc-counts --lowering`), with the kinds of its clauses and whether condition 2 holds at every
+# `handle` node of its name.
 #
 # A `direct` call of a clause assumes condition 2: the backend's own premise is stronger (the
 # clause neither suspends nor raises). The two agree at a direct call when condition 2 holds at
@@ -40,7 +42,7 @@ row() {
       c2 = ($0 ~ /; condition 2 holds$/) ? 1 : 0
       if (!(n in hold)) hold[n] = 1
       if (!c2) hold[n] = 0
-      ops = $0; sub(/.*; ops /, "", ops); sub(/; condition 2 .*/, "", ops)
+      ops = $0; sub(/.*; ops /, "", ops); sub(/; names .*/, "", ops)
       m = split(ops, os, ", ")
       for (j = 1; j <= m; j++) {
         split(os[j], w, " ")

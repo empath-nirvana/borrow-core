@@ -8,8 +8,10 @@ A tail-resumptive clause lowers to a direct call at the `perform` (`docs/effect-
 §2.3): its work `M` then runs inside the continuation `K` between the `perform` and its handler,
 where by H-op it runs outside `K`. That is the law only when what `M` performs or raises reaches
 the same frames from both places: no frame of `K` catches an operation or a raise of any name `M`
-may perform (§2.3's condition 2). The names `M` may perform are its row's, the handler's outer row
-`Σ` (`clauseTy`).
+may perform (§2.3's condition 2). The names `M` may perform are bounded by its row's, the
+handler's outer row `Σ` (`clauseTy`), and, where the clause runs only code it holds, by the names
+its own code performs or raises (`Core/ClauseOwn.lean`, `UnhandledNames`), over which condition 2
+is stated.
 
 * `UnhandledIn Σ K` states the condition: no frame of `K` catches a name of `Σ` (`Kont.Catches`,
   which holds at every handler frame of the name, `catches_of_hasHnd`, and at every finaliser).

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.88 · 2026-10-20
+Version 0.89 · 2026-10-20
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -195,7 +195,8 @@ The checker returns a **typed term** `t : TExpr` with its derivation, not an era
   clause, as the checker classifies it (`ks`, §19 *Clause kinds*), and at every `handle` node the
   site as the elaboration of effects records it (`site`, §19 *Handler sites*) and the frames its
   handled computation holds (`inside`, §19 *The clause's names in the continuation*), which the
-  typed rule pins (`inside = te.erase.hin`);
+  typed rule pins (`inside = te.erase.hin`); the names each clause's own code performs or raises
+  are read off the node's clauses (`handlerNames`);
 - its source (`TInfo`): the span it was checked from; at a variable its name and whether the
   program writes the use `clone(x)` (§10); at a binding (`x <- M`, `let (x, y) = V`, a `case`'s
   arms) the names it binds;
@@ -3588,15 +3589,42 @@ clause that captures values is a machine (*Open*), and so is an operation whose 
 handlers with different clause codes, or whose clause resumes under the right unit. The backend
 never makes a direct call of a clause whose kind is not `tail`.
 
-**The clause's names in the continuation** (`Core/ClauseNames.lean`). A tail-resumptive clause run
-as a direct call at the `perform` runs its work inside the continuation `K` between the `perform`
-and its handler. That is H-op only when no frame of `K` catches a name the clause may perform or
-raise, the names of its row `Σ` (`UnhandledIn Σ K`, over `Kont.Catches`, which holds at every
-handler frame of the name). The rows decide it when `Σ` is empty (`unhandledIn_nil`), and not
-otherwise (`unhandled_not_decided`): one `[handle]` node, the same tail-resumptive clause, the same
-rows and types, over two typed handled computations whose `K` holds no handler of a name of `Σ` in
-one and a handler of one in the other. What decides it is the frames `K` may hold
-(`Core/HandledNames.lean`, `Frontend/Check/Handled.lean`):
+**The clause's names in the continuation** (`Core/ClauseNames.lean`, `Core/ClauseOwn.lean`). A
+tail-resumptive clause run as a direct call at the `perform` runs its work inside the continuation
+`K` between the `perform` and its handler. That is H-op only when no frame of `K` catches a name
+the work performs or raises. Condition 2 is stated over those names, the names the clause's own
+code performs or raises, not over its row `Σ`:
+
+- **The clause's names** (`Expr.own`, `handlerNames`): the names of `perform` and `raise` at
+  literal names in the clause's body, through every `λ` it holds, the primitives that run no code
+  they are given (memory, integers and the host, an array's index and split, `primOwn`), and the
+  arguments of a call of `κ`, of an alias of it or of its resume's answer, whose code is the
+  continuation's. Where the clause may run code it does not hold (an application of another
+  variable or of a computed function, a primitive that runs a function it is given, an operation
+  at a name that is not a literal) it has no names of its own, and condition 2 is over its row.
+  They are read off the clause the node's erasure holds, the one `[op]` runs (`clauseExpr`,
+  `BoLo.clauseAt`).
+- **What they bound** (`tail_work_names`, `tail_clause_names`): `Fo N e`, *first-order at `N`*,
+  says that `e` applies only code it holds (a `λ` in place, those primitives, the curried
+  `store`) and performs and raises only literal names of `N`; a value is first-order whatever
+  code it holds in a data position, which the term never applies. `Fo` is closed under the
+  substitution of any value and under every step of the machine, from any memory (`Fo.subst`,
+  `Fo.steps`), and a first-order configuration performs and raises only names of `N`
+  (`Fo.perform_mem`, `Fo.raise_mem`). At a `handle` node whose kind for an operation is `tail`
+  and whose names for it are `ns`, the clause's work `M'`, its body without its resumes
+  (`TailResumesAt 0 M M'`), is first-order at `ns` (`fo_of_tail`): every run of the work, at any
+  values of its variables (the operation's argument and the handler's captures), from any
+  memory, performs and raises only names of `ns`. That is the code the direct call runs inside
+  `K`.
+- **The condition** (`UnhandledNames ns K`): no frame of `K` catches a name of `ns`. At no names
+  it holds in every `K` (`unhandledNames_nil`); otherwise the program's record decides it
+  (`steps_unhandledNames`, `Checked.unhandledNames`). Over a row's names it is `UnhandledIn Σ K`
+  (`unhandledIn_iff_names`, over `Kont.Catches`, which holds at every handler frame of the name).
+- **The rows do not decide it** when `Σ` is not empty (`unhandled_not_decided`): one `[handle]`
+  node, the same tail-resumptive clause, the same rows and types, over two typed handled
+  computations whose `K` holds no handler of a name of `Σ` in one and a handler of one in the
+  other. Where a clause has names, what decides it is the frames `K` may hold
+  (`Core/HandledNames.lean`, `Frontend/Check/Handled.lean`):
 
 - **A set of frames** (`HIn`) is the names of handler frames, whether a finaliser (`ubind`,
   `cfin`, which catch every raise) and whether a handler whose name is not a literal; `ccatch`
@@ -3625,17 +3653,18 @@ one and a handler of one in the other. What decides it is the frames `K` may hol
   is the flow invariant (`steps_flowInv`): what flows from a configuration and its memory stay
   within `flows`, and the names it performs within those `main` performs and `Div`'s.
 
-What the record does not decide: a name of `Σ` caught by a finaliser of `K`, or by a handler of
-the same name that may run inside, makes condition 2 fail where the clause itself raises nothing
-(the backend's direct call then rests on its own premise, that the clause neither suspends nor
-raises). The record is not per node: a bound on the code that flows into one handled computation
-would need a typing invariant of the run (a value of a type with no `U` holds no code) and that a
-clause that keeps no `κ` never lets `κ` leave it (`Frontend/Check/TFacts.lean`). `bcc handled
-<file>` prints `main`'s flow record and each `handle` node's `inside`, outer row and whether
-condition 2 holds; `scripts/check-handled.sh` pins them for the corpus, with each operation the
-backend lowers, in `corpus/handled.expected`: every direct call of a clause the backend makes is
-one where condition 2 holds, except where a finaliser of the handled computation may catch a name
-of the clause's row (`tree-map.bc`'s two).
+What the record does not decide: it is not per node. A bound per node is stated, not proved
+(`Checked.FramesPerNode`, `Frontend/Check/TFacts.lean`): the frames under a handler frame of a name
+within its nodes' `inside`, `0` and, where code flows in, the record of what may flow when only a
+clause that may keep `κ` lets its handled computation's frames flow (`Checked.flowsKept`). It needs
+that a clause that keeps no `κ` never lets `κ` leave it, and a typing invariant of the run (a
+value of a type with no `U` holds no code), which Core does not have. No direct call depends on it.
+`bcc handled <file>` prints `main`'s flow record and each `handle` node's `inside`, outer row,
+the names of each clause (`names n.i […]`, or `row`) and whether condition 2 holds over them;
+`scripts/check-handled.sh` pins them for the corpus, with each operation the backend lowers, in
+`corpus/handled.expected`: condition 2 holds at every direct call of a clause the backend makes,
+each of whose clauses performs and raises nothing. It fails at eight nodes, every one a clause
+that cancels `κ` and then raises (`deadline`, `scaled`), none a direct call.
 
 **Handler sites.** The elaboration of effects records each handler site it makes
 (`Frontend.SiteRec`): the effect it serves and its type arguments, the handler (a control
@@ -7885,6 +7914,16 @@ and `scripts/alpha-check.py`.
 
 ## Changelog
 
+- **0.89** (2026-10-20) — §19, *The clause's names in the continuation* (#610): condition 2 of the
+  direct call of a tail-resumptive clause is over the names the clause's own code performs or
+  raises (`Expr.own`, `handlerNames`), not over its row; over its row where it may run code it
+  does not hold. `Fo`, the first-order invariant, closed under substitution and every step from
+  any memory; `tail_work_names`: a tail-resumptive clause's work performs and raises only its
+  names. `UnhandledNames`, `Checked.unhandledNames`; a bound per node stated
+  (`Checked.FramesPerNode`). `bcc handled` prints each clause's names; `corpus/handled.expected`:
+  `answers-two-types` 2.0 and `tree-map` 4.0 and 5.0 agree, every direct call of the corpus.
+  No change to `CDerives`, the relation, the machine, a checker rule's acceptance, or any
+  program's erasure, run output, goldens or counts.
 - **0.88** (2026-10-20) — #618: each construct's rule emits the target's shape. §16: a step with
   no exit is `count_fold`'s, and a count from a literal in `[0, 2³¹)` is counted from it, the
   counter the element (`walkB` takes `count_fold`; `walk_fold_index_lt`, `countFold_runs`). §14:

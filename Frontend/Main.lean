@@ -171,9 +171,11 @@ def renderHIn (h : BoCa.Fig16.LogRel.Core.ClauseKinds.HIn) : String :=
     (if h.any then ", any" else "")
 
 /-- Each `handle` node of `file`'s checked `main`, with the frames its handled computation holds
-(`inside`), its outer row's names and whether condition 2 holds for its clauses at `main`'s flow
-record (`Checked.flows`, SPEC §19): `sp: handle n: inside …; row […]; ops …; condition 2 …`, after
-the flow record and whether `main` holds a handler whose name is not a literal. -/
+(`inside`), its outer row's names, the names each clause's own code performs or raises
+(`handlerNames`, `row` where the clause may run code it does not hold) and whether condition 2
+holds for its clauses over those names at `main`'s flow record (`Checked.flows`, SPEC §19):
+`sp: handle n: inside …; row […]; ops …; names …; condition 2 …`, after the flow record and
+whether `main` holds a handler whose name is not a literal. -/
 def handled (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match parseProgram src with
@@ -187,11 +189,15 @@ def handled (file : String) : IO UInt32 := do
       IO.println s!"flows {renderHIn V}; main {renderHIn c.e.hin}"
       for h in (c.t.handleSites Check.copiesFuel).eraseDups do
         let ops := (List.range h.ks.length).zip h.ks |>.map fun (i, k) => s!"{h.n}.{i} {k.kind.tag}"
-        let caught := h.row.filter (V.catchesB ·)
+        let names := (List.range h.ks.length).map fun i => (h.names[i]?).getD none
+        let rnd := fun (ns : List UInt32) => s!"[{", ".intercalate ((ns.eraseDups.map (·.toNat)).mergeSort (· ≤ ·) |>.map toString)}]"
+        let nms := (List.range names.length).zip names |>.map fun (i, ns) =>
+          s!"{h.n}.{i} {match ns with | some ns => rnd ns | none => "row"}"
+        let caught := (names.flatMap fun ns => (Check.cond2Names h.row ns).filter (V.catchesB ·)).eraseDups
         let c2 := if caught.isEmpty then "holds" else
           s!"fails at {", ".intercalate (caught.map toString)}"
         let row := s!"[{", ".intercalate (h.row.map toString)}]"
-        IO.println s!"{h.sp.start.render}: handle {h.n}: inside {renderHIn h.inside}; row {row}; ops {", ".intercalate ops}; condition 2 {c2}"
+        IO.println s!"{h.sp.start.render}: handle {h.n}: inside {renderHIn h.inside}; row {row}; ops {", ".intercalate ops}; names {", ".intercalate nms}; condition 2 {c2}"
       return 0
 
 /-- What the elaboration of effects records of each `handle` node's site (`HSite`), with the

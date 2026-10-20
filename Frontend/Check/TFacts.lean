@@ -1,4 +1,5 @@
 import Frontend.Check.TDerives
+import Frontend.Check.Handled
 
 /-!
 # Frontend — Check — what the typed term does not fix  `[spec §3]`
@@ -73,13 +74,31 @@ A fourth is a field the checker adds to a node and its typed rule pins:
   handler: code that flows into the handled computation puts frames there too (a closure bound
   outside it, a continuation captured at another handler and resumed inside, a value read from
   memory). The bound the theorem reads is the program's (`Checked.flows`), which holds all such
-  code at once, and so every node's `inside`. A bound per node would be pinned by a bound on the
-  code that flows into the handled computation: an invariant of the run, from the typing, that a
-  value of a type with no `U` holds no code, so that only the handled computation's free
-  variables, its operations' answers and the cells it reads at types with a `U` bring code in;
-  and that a clause whose kind keeps no `κ` (`tail`, `tail+state`, `resume-or-cancel`, `once`)
-  never lets its `κ` leave the clause, so that only a site whose clause stores `κ` adds its
-  handled computation's frames to what flows.
+  code at once, and so every node's `inside`.
+
+  Condition 2 is over the names a clause's own code performs or raises (`handlerNames`,
+  `Checked.unhandledNames`), and at a clause that performs and raises nothing it holds in every
+  `K` without a bound. Where a clause has names, a bound per node is stated, not proved
+  (`Checked.FramesPerNode`): the frames under a handler frame of the name `n` are within the
+  `inside` of the nodes of the name, `0`, and, where code flows into their handled computation,
+  the record of the code that may flow when only a clause that may keep `κ` lets its handled
+  computation's frames flow (`Checked.flowsKept`). Two facts would give it:
+  - that a clause whose kind keeps no `κ` (`tail`, `tail+state`, `resume-or-cancel`, `once`)
+    never lets its `κ` leave the clause, so that only a site whose clause stores `κ` adds its
+    handled computation's frames to what flows: `FramesPerNode` at `codeIn := fun _ => true`;
+  - an invariant of the run, from the typing, that a value of a type with no `U` holds no code,
+    so that only the handled computation's free variables, its operations' answers and the cells
+    it reads at types with a `U` bring code in: `FramesPerNode` at `codeIn n` false for a name
+    whose handled computations take in no code at a type with a `U`. Core has no typing of a
+    run's configurations (`CDerives` types no location, and the relation is stated over runs to
+    a value), which this needs.
+
+  Neither decides a direct call of the corpus: every direct call's clause performs and raises
+  nothing (`corpus/handled.expected`). Of the handle nodes where condition 2 fails at the
+  program's record, two hold at the first fact's bound (`div-infer` 2.0,
+  `effects-cancel-two-sites` 3.0); the six of `reconcile-chain` and `reconcile-clock` fail at
+  both, since `deadline`'s handled computation is `m(())`, a parameter of a `U` type, and the
+  code that may flow holds `retry`'s `to_result` handler, in its loop's body.
 
 A fifth is a field the elaboration of effects gives a node, which the checker reads and checks:
 
@@ -147,4 +166,82 @@ theorem TDerivesAt.site_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TI
   | effHandleV hAt hs hm hd hH hc hn0 hnS hlen hdv he hins =>
       exact .effHandleV hAt hs hm hd hH hc hn0 hnS hlen hdv he hins
 
+
+/-! ### A bound for each node, stated -/
+
+open BoCa.Fig16.LogRel.Core.ClauseKinds in
+/-- **What may flow from a term when only a handler of the names `st` lets its handled
+computation's frames flow**: `Expr.fl`, with a handled computation's frames counted at a name of
+`st`, and only what flows from it at any other.  `[spec §19]` -/
+def flKept (st : List UInt32) : Expr → HIn
+  | .var _ | .unit | .loc _ => {}
+  | .prim p => primHin p
+  | .lam b => b.hin
+  | .pair a b | .seq a b | .letpair a b => flKept st a ++ flKept st b
+  | .case a b c => flKept st a ++ flKept st b ++ flKept st c
+  | .inj₁ a | .inj₂ a => flKept st a
+  | .app f x => match f with
+      | .lam b => flKept st b ++ flKept st x
+      | .prim .hnd => match x with
+          | .pair (.prim (.lit (.i32 _))) X => flKept st X
+          | x => HIn.top ++ flKept st x
+      | .app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) X) =>
+          flKept st X ++ (if st.contains n then x.hin else flKept st x)
+      | .app (.prim .ubind) N => flKept st N ++ flKept st x
+      | .app (.prim .cfin) s => flKept st s ++ flKept st x
+      | .prim .ccatch => flKept st x
+      | f => flKept st f ++ flKept st x
+
 end BoCa.Fig16.LogRel.Core.Check
+
+namespace Frontend.Check
+open BoCa BoCa.Fig16.LogRel.Core
+open BoCa.Fig16.LogRel.Core.ClauseKinds
+open BoCa.Fig16.LogRel.Core.Check
+
+/-- The names of `main`'s `handle` nodes one of whose clauses may keep `κ` (`stored`). -/
+def Checked.storing (c : Checked) : List UInt32 :=
+  ((c.t.handleSites copiesFuel).filter fun h => h.ks.any (·.kind == .stored)).map (·.n)
+
+/-- **What may flow in a run of `main` when only a clause that may keep `κ` lets its handled
+computation's frames flow**: `flKept` at the storing names, the names performed of a storing
+handler (a continuation captured at one of the others never leaves its clause), `Div`'s and
+`0`.  `[spec §19]` -/
+def Checked.flowsKept (c : Checked) : HIn :=
+  flKept c.storing c.e ++ ⟨c.e.pn.names.filter c.storing.contains, false, c.e.pn.any⟩ ++
+    HIn.one divEff ++ HIn.one 0
+
+/-- The frames `inside` records at `main`'s `handle` nodes of the name `n`. -/
+def Checked.insideOf (c : Checked) (n : UInt32) : HIn :=
+  ((c.t.handleSites copiesFuel).filter (·.n == n)).foldl (fun a h => a ++ h.inside) {}
+
+/-- **A bound for each node, stated, not proved**  `[spec §19]`: in every run of `main` from the
+empty memory, the frames under a handler frame of the name `n`, between it and the operation its
+context is filled by, are within the `inside` of the nodes of the name, the name `0`, and, where
+`codeIn n` (code may flow into the handled computation), `flowsKept`. At `codeIn := fun _ => true`
+it is what a clause that keeps no `κ` never letting `κ` leave it gives; at `codeIn n` false for a
+name whose handled computations take in no code at a type with a `U`, it is what the typing
+invariant of the run (a value of a type with no `U` holds no code) gives. -/
+def Checked.FramesPerNode (c : Checked) (codeIn : UInt32 → Bool) : Prop :=
+  ∀ {ℍ : BoCa.Host} [BoCa.HostIs ℍ] {μ : BoLo.Heap} {e : BoCa.Expr},
+    BoLo.Steps (ℍ := ℍ) BoCa.Adequacy.emptyMem c.e μ e →
+    ∀ {K₀ K : BoLo.Kont} {n : UInt32} {qs hr hs : BoCa.Val} {p : BoCa.Expr},
+      e = K₀.plug (BoLo.hndE (BoLo.hndVal n qs hr hs) (K.plug p)) →
+      (K.plug p).hin ≤ c.insideOf n ++ HIn.one 0 ++ (if codeIn n then c.flowsKept else {})
+
+/-- **Condition 2 at a bound for each node**: where `FramesPerNode` holds, names none of which
+the node's bound may catch are unhandled in `K`.  `[spec §19]` -/
+theorem Checked.unhandledNames_perNode (c : Checked) {codeIn : UInt32 → Bool}
+    (hb : c.FramesPerNode codeIn) {ℍ : BoCa.Host} [BoCa.HostIs ℍ] {μ : BoLo.Heap} {e : BoCa.Expr}
+    (h : BoLo.Steps (ℍ := ℍ) BoCa.Adequacy.emptyMem c.e μ e) {K₀ K : BoLo.Kont} {n : UInt32}
+    {qs hr hs : BoCa.Val} {p : BoCa.Expr} (he : e = K₀.plug (BoLo.hndE (BoLo.hndVal n qs hr hs) (K.plug p)))
+    {ns : List UInt32}
+    (hS : cond2B (c.insideOf n ++ HIn.one 0 ++ (if codeIn n then c.flowsKept else {})) ns = true) :
+    UnhandledNames ns K := by
+  have hx := hb h he
+  intro m hm
+  cases hc : K.Catches m
+  · rfl
+  · exact absurd (HIn.Catches.mono hx (catches_hin p hc)) (cond2B_names_sound hS m hm)
+
+end Frontend.Check
