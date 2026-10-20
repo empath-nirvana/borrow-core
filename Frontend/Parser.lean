@@ -208,6 +208,10 @@ structure PState where
   /-- In the value of a field update `x.f = e` (SPEC §42, E6): the variable `x` resolves to, and
   the record `r` its body takes apart; `x.g` in `e` reads `r`'s field `g`, the variable `r_g`. -/
   updating : Option (String × String) := none
+  /-- Where a record's field is written by its name alone, `N { f }` for `N { f: f }`, in a
+  literal or a pattern (SPEC §42): the name there is a field's and a variable's, so a renaming of
+  the variable writes `f: f'` (`bcc alpha`). -/
+  shorthands : List Pos := []
 
 abbrev P := StateT PState (Except Error)
 
@@ -1570,7 +1574,9 @@ def conPat : Nat → Pos → Ident → Bool → P Data.MPat
       for _ in [0:n] do
         if ← isSym "}" then break
         let x ← fieldName
-        let p ← if ← isSym ":" then do discard bump; mpat n else pure (.var x)
+        let p ← if ← isSym ":" then do discard bump; mpat n else do
+          modify fun s => { s with shorthands := x.span.start :: s.shorthands }
+          pure (.var x)
         unless k.fields.any (·.name.map (·.name) == some x.name) do
           failAt x.span s!"`{c.name}` has no field `{x.name}`"
         fs := fs ++ [(x.name, p)]
@@ -1615,7 +1621,9 @@ def dataValue : Nat → Pos → Ident → Bool → P Val
           if ← isSym "}" then break
           let x ← fieldName
           let V ← if ← isSym ":" then do discard bump; val n
-            else pure (Val.var x.span (← lookName x.name x.span))
+            else do
+              modify fun s => { s with shorthands := x.span.start :: s.shorthands }
+              pure (Val.var x.span (← lookName x.name x.span))
           fs := fs.push (x, V)
           if ← isSym "," then discard bump else break
         expectSym "}"
@@ -3199,6 +3207,12 @@ def resolutionOf (src : String) (lib : String → Option String := fun _ => none
     Except Error (List (Pos × String × String × Nat)) := do
   let (_, s) ← runPS (fun n => decls n n []) src true (dataOf lib src)
   pure s.occs.reverse
+
+/-- Where the source `src` writes a record's field by its name alone (`PState.shorthands`). -/
+def shorthandsOf (src : String) (lib : String → Option String := fun _ => none) : List Pos :=
+  match runPS (fun n => decls n n []) src true (dataOf lib src) with
+  | .ok (_, s) => s.shorthands
+  | .error _ => []
 
 /-- `s` with each word that is a renamed binder of `rs`, or a binder Hygiene renamed
 (`Hygiene.written`), replaced by the name the source writes it with. A fresh name is no name of

@@ -1,5 +1,5 @@
 -- AWFY CD's RedBlackTree with declarations (SPEC §42): `docs/expressiveness-probes/awfy/cd_rbtree.bc`
--- with a node a record, `RbNode`, in an array, and a value a record `V3`. CLRS insertion with
+-- with a node a record, `RbNode`, in an array, its value a record `V3` held inline. CLRS insertion with
 -- parent pointers and rotations, keyed by a call sign (an i32); node 0 is the sentinel nil
 -- (black). A node is read with `at` (a record of `i32`s is persistent: copied out) and written
 -- back with `array_set`; a field update is on the copy. The traversal is AWFY's forEach, done as
@@ -10,15 +10,15 @@
 include slice
 include buf
 
-data RbNode = { key: i32, left: i32, right: i32, parent: i32, color: i32 }
-
 data V3 = { x: f64, y: f64, z: f64 }
+
+data RbNode = { key: i32, left: i32, right: i32, parent: i32, color: i32, value: V3 }
 
 data Rb = { nodes: array RbNode, root: i32, size: i32 }
 
-fn nil(i: i32) -> RbNode = RbNode { key: 0, left: 0, right: 0, parent: 0, color: 0 }
-
 fn zero3(i: i32) -> V3 = V3 { x: 0.0, y: 0.0, z: 0.0 }
+
+fn nil(i: i32) -> RbNode = RbNode { key: 0, left: 0, right: 0, parent: 0, color: 0, value: zero3(0) }
 
 fn get(t: array RbNode, k: i32) -> array RbNode * RbNode = let mut t = t; let n = at(&t, k, nil(0)); (t, n)
 
@@ -117,7 +117,7 @@ fn fixup(r: Rb, z: i32) -> Rb =
   Rb { nodes: set_color(nodes, root, 0), root: root, size: size }
 
 -- put(key, v): a new node, or the value replaced.
-fn put(r: Rb, v: array V3, key: i32, x: V3) -> Rb * array V3 =
+fn put(r: Rb, key: i32, x: V3) -> Rb =
   let Rb { nodes, root, size } = r;
   let mut t = nodes;
   let mut p = 0;
@@ -132,13 +132,16 @@ fn put(r: Rb, v: array V3, key: i32, x: V3) -> Rb * array V3 =
       if cn.key < key { cur = cn.right } else { found = cur; break } }
   };
   if found >= 0 {
-    (Rb { nodes: t, root: root, size: size }, array_set(v, found, x))
+    let (t, fn0) = get(t, found);
+    let mut fn0 = fn0;
+    fn0.value = x;
+    Rb { nodes: array_set(t, found, fn0), root: root, size: size }
   } else {
     let z = size + 1;
-    let t = array_set(t, z, RbNode { key: key, left: 0, right: 0, parent: p, color: 1 });
+    let t = array_set(t, z, RbNode { key: key, left: 0, right: 0, parent: p, color: 1, value: x });
     let (t, pn) = get(t, p);
     let (t, root) = if p == 0 { (t, z) } else { if key < pn.key { (set_left(t, p, z), root) } else { (set_right(t, p, z), root) } };
-    (fixup(Rb { nodes: t, root: root, size: z }, z), array_set(v, z, x))
+    fixup(Rb { nodes: t, root: root, size: z }, z)
   }
 
 fn minimum(t: array RbNode, x: i32) -> array RbNode * i32 =
@@ -185,16 +188,12 @@ fn black_height_to_root(t: array RbNode, x: i32) -> array RbNode * i32 =
 
 fn main_tree(n: i32) -> i32 * (i32 * f64) =
   let t = array_new[RbNode](n + 2, nil);
-  let v = array_new[V3](n + 2, zero3);
   let mut r = Rb { nodes: t, root: 0, size: 0 };
-  let mut v = v;
   let mut seed = 74755;
   for i in 0..n {
     seed = host[and32](seed * 1309 + 13849, 65535);
     let fs = host[f64_convert_i32_s](seed);
-    let (r1, v1) = put(r, v, seed % 1000, V3 { x: fs, y: 0.0, z: 1.0 });
-    r = r1;
-    v = v1
+    r = put(r, seed % 1000, V3 { x: fs, y: 0.0, z: 1.0 })
   };
   let Rb { nodes, root, size } = r;
   let (t, first) = minimum(nodes, root);
@@ -212,7 +211,7 @@ fn main_tree(n: i32) -> i32 * (i32 * f64) =
     t = t1;
     if xn.key <= prev { ok = 0 } else { () };
     prev = xn.key;
-    let vx = at(&v, x, zero3(0));
+    let vx = xn.value;
     sum = sum + vx.x;
     if xn.left == 0 || xn.right == 0 {
       let (t1, h) = black_height_to_root(t, x);

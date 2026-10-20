@@ -441,6 +441,8 @@ def alphaRename (src : String) :
     k := k + 1
     fresh := (y, c) :: fresh
   let edits := occs.map fun (p, x, v, y) => (p.line, p.col, x, (fresh.lookup y).getD x, v)
+  -- A field written by its name alone, `N { f }`, keeps the field's name: `N { f: f' }`.
+  let short := shorthandsOf src Frontend.Sugar.libSrc
   let mut out := lines
   -- Edits on one line apply right to left, so each column is the source's.
   let byPos := edits.mergeSort fun (l₁, c₁, _) (l₂, c₂, _) => l₁ < l₂ || (l₁ == l₂ && c₁ ≥ c₂)
@@ -449,6 +451,7 @@ def alphaRename (src : String) :
     let cs := out[l - 1]!.toList
     if (cs.drop (c - 1)).take x.length != x.toList then
       throw ⟨Span.none, s!"alpha: `{x}` is not written at {l}:{c}"⟩
+    let x' := if short.contains ⟨l, c⟩ && x' != x then s!"{x}: {x'}" else x'
     out := out.set! (l - 1) (String.ofList (cs.take (c - 1) ++ x'.toList ++ cs.drop (c - 1 + x.length)))
   pure ("\n".intercalate out.toList, edits)
 

@@ -6,9 +6,10 @@ import Frontend.Lexer
 
 The rules of SPEC §42's table that need only the declarations, not types: a `data` declaration
 and its group to `type` and `shape` declarations (D1–D3), constructors and record literals (E1,
-E2, E4), field update (E6), and `match` compiled to a decision tree with its exhaustiveness and
-redundancy reports (M1–M4). The parser holds the table and calls them; the typed rule of E5, a
-field read, is `Frontend/Sugar.lean`'s, over the declarations these rules give (`fieldCands`).
+E2, E4), the declarations a field may be of (E5, E6), and `match` compiled to a decision tree with
+its exhaustiveness and redundancy reports (M1–M4). The parser holds the table and calls them; the
+typed rules, a field read and a field update the declarations disagree on, are
+`Frontend/Sugar.lean`'s (`fieldRead`, `resolveField`).
 
 Every rule elaborates into existing core terms: `⊗`, `⊕`, `μ` with `roll`/`unroll`, `ref` cells,
 `alloc_s` and `free`, `case`, `let`, and the surface's `alloc(e)`, `free(e)`, `==` and `modify`.
@@ -531,13 +532,6 @@ def MPat.irrefutable : MPat → Bool
   | .wild _ | .var _ => true
   | .free _ p => p.irrefutable
   | _ => false
-
-/-- The binders of a pattern, in order. -/
-def MPat.binders : MPat → List Ident
-  | .var x => [x]
-  | .tuple _ ps | .con _ _ _ ps => ps.flatMap MPat.binders
-  | .inj _ _ p | .free _ p => p.binders
-  | _ => []
 
 /-- A pattern written with no constructor, literal or `box`: `match`'s draft-0 form takes it. -/
 def MPat.plain : MPat → Bool

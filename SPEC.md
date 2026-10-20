@@ -7594,16 +7594,18 @@ The declaration elaborates to a `type` declaration of the same name and paramete
 - a recursive declaration is `μX. S` with `X` at its recursive occurrences (below).
 
 The name, its constructors and its fields live in the elaborator's table (`Data.Table`), which the
-parser holds: a declaration is in scope after it, in the module that declares it and in every
-program that includes that module, and the prelude's in every program.
+parser holds, read before the module is parsed: a declaration is in scope in the whole module that
+declares it and in every program that includes that module, and the prelude's in every program.
+Its `type` declaration is placed where the group's first member is, so a type declared later is
+named only after it.
 
 ### Recursion: blocks and a written `box`
 
 Decided (#489, §6.11, item 13 of §11): every heap allocation of a recursive declaration is
 written.
 
-- **A block** is a constructor of a recursive declaration with a field in which a member of its
-  group occurs other than under `box`. Each field of a block is a cell, `ref A`, and the block is
+- **A block** is a constructor of a recursive declaration with a field in which the root of its
+  group (below; a declaration recursive alone is its own root) occurs other than under `box`. Each field of a block is a cell, `ref A`, and the block is
   allocated whole: `box C(e, …)`. `data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)` is
   `μX. 1 ⊕ (ref X ⊗ (ref i32 ⊗ ref X))`, the corpus's `Tree` of blocks, with
   `shape Tree_Node = node (leaf Tree) (node (leaf i32) (leaf Tree))`.
@@ -7612,8 +7614,7 @@ written.
   `μX. i32 ⊗ (ref X ⊕ 1)`).
 - **Refused, asking for `box`**: a block's field whose type holds a member of the group inside
   another type (`tail: Option[List]`, a cell `ref (X ⊕ 1)` outside §6's `FShape`), at the
-  declaration; and a block constructor applied without `box` to values that are not cells, at the
-  construction (below).
+  declaration; and a block constructor written without `box`, at the construction (E3).
 - **Regular recursion**: inside its group a parameterised member occurs at its own parameters.
   A nested datatype (`Tree[(T, T)]`, D2) is refused: not provided.
 
@@ -7621,8 +7622,8 @@ written.
 other form a group (a strongly connected component of the declarations' references, by name).
 A group of several members elaborates to one `μ` when one member, the root, lies on every cycle:
 the root is `μX. S_R`, with every other member's structure substituted for its name and `X` for
-the root's; every other member is its own structure, the root named, the other members
-substituted. The first member in declaration order that is on every cycle is the root; a group
+the root's; every other member is its own structure, the root and the other members named, each
+`type` declared after the members it names. The first member in declaration order that is on every cycle is the root; a group
 with none is refused: "the declarations … are mutually recursive with no member on every cycle:
 not provided (the single-root rule)". Only the root rolls and unrolls.
 
@@ -7639,7 +7640,7 @@ run in the typed elaboration (`Frontend/Sugar.lean`, with the rule in `Frontend/
 | D3 | a recursive declaration, a group | `μX. S`, the single-root rule; a block's fields cells | parser |
 | E1 | `C`, `C(e₁, …, eₖ)` | `inj_i (payload)`, `roll`ed when `N` is a `μ` (its root), ascribed `: N` when `N` has no parameters; the payload `()`, `e₁`, or `(e₁, (…, eₖ))` | parser |
 | E2 | `box C(e₁, …)` | for a block, `inj_i (alloc_s[N_C] (payload))` (a generic declaration's block is `(alloc(e₁), (…, alloc(eₖ)))`, the leafwise form `alloc_s` is, §5); for any other constructor, `alloc(⟦C(e₁, …)⟧)` | parser |
-| E3 | `C(c₁, …)` of a block, without `box` | the block reassembled from its cells, `inj_i (c₁, …)`, when every argument is a cell (typed elaboration §5.3); otherwise refused: "`C` builds a block, one cell per field: allocate it with `box C(…)`" | typed |
+| E3 | `C(…)` of a block, without `box` | refused: "`C` builds a block, one cell per field: allocate it with `box C(…)`" (typed elaboration §5.3's reassembly from cells is not provided, *Not provided*) | parser |
 | E4 | `N { f: e, … }`, `box N { … }` | E1/E2 with the fields in declaration order; each field once, all of them; when the written order differs, the values are bound in the written order first | parser |
 | E5 | `e.f` | a field of a one-constructor declaration, by the receiver's type (*Fields*) | typed |
 | E6 | `x.f = e;` | `modify &mut x { r -> … }` (`x` a `let mut`), `modify x { r -> … }` otherwise: `r`'s fields bound, `e` with `x.g` read as `r`'s field `g`, the record rebuilt with `f`'s new value; the old one is dropped (§12) | parser, typed |
