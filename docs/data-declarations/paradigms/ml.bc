@@ -1,0 +1,130 @@
+-- Paradigm A, ML/Haskell-style (docs/data-declarations.md §5.1). PROPOSED SURFACE: it does not
+-- parse, and every spelling is provisional. The mechanism is the one of §3.
+--
+-- What is ML-like here: sums with `|` and positional constructors; records with labels; functions
+-- are free, and a type's operations live in a module of the type's name (the companion module,
+-- `Stack.len`); abstraction is a signature that names the type without its definition; interfaces
+-- are signatures over a type parameter (a type class / OCaml module type), with instances given
+-- per type. Dot is not first-argument sugar in this paradigm: `Stack.len(s)`, `s |> Stack.len`.
+-- `deriving` is the explicit derive clause.
+
+include map
+include fail
+include yield
+
+-- ## A. A Kubernetes-style resource
+
+data Protocol = TCP | UDP
+data RestartPolicy = Always | OnFailure | Never
+data IntOrString = Int i32 | Str string                          deriving (Encode, Decode) @json(Untagged)
+data ConditionStatus = True | False | Unknown
+
+data Strategy = Recreate
+              | RollingUpdate { max_surge : IntOrString, max_unavailable : IntOrString }
+  deriving (Encode, Decode) @json(Adjacent("type", "rollingUpdate"))
+
+data ContainerPort = ContainerPort {
+    name : Option string,
+    container_port : i32 @schema(minimum = 1, maximum = 65535),
+    protocol : Protocol @default(TCP) }
+data EnvVar = EnvVar { name : string, value : string }
+data Container = Container {
+    name : string, image : string,
+    ports : Vec ContainerPort @default(Vec.empty),
+    env : Option (Vec EnvVar) }
+data PodSpec = PodSpec { containers : Vec Container, restart_policy : RestartPolicy @default(Always) }
+data ObjectMeta = ObjectMeta { name : string, namespace : Option string, labels : Map string string @default(Map.empty) }
+data DeploymentSpec = DeploymentSpec {
+    replicas : Option i32, selector : Map string string,
+    strategy : Option Strategy, template : PodSpec }
+data Condition = Condition { type_ : string @json(rename = "type"), status : ConditionStatus, reason : Option string }
+data DeploymentStatus = DeploymentStatus { replicas : i32, conditions : Vec Condition }
+
+data Deployment = Deployment {
+    api_version : string, kind : string, metadata : ObjectMeta,
+    spec : DeploymentSpec, status : Option DeploymentStatus }
+  deriving (Eq, Debug, Encode, Decode, Schema) @json(rename_all = Camel)
+
+module Deployment = {
+  fn replicas(d : imm Deployment) -> i32 = Option.or(d.spec.replicas, 1)
+  fn ready(d : imm Deployment) -> bool =
+    match d.status { Some s -> s.replicas == replicas(d) | None -> false }
+  fn scale(d : mut Deployment, n : i32) = d.spec.replicas := Some n
+}
+
+fn bump(text : text 't) -> string with Fail[DecodeError] =
+  let mut d = Deployment.decode(text);
+  Deployment.scale(&mut d, Deployment.replicas(&d) + 1);
+  Deployment.encode(&d)
+
+-- ## B. A recursive tree
+
+data Tree a = Leaf | Node (Tree a) a (Tree a)
+
+module Tree = {
+  fn empty() -> Tree a = Leaf
+  fn depth(t : imm Tree a) -> i32 = fold_imm t { Leaf -> 0 | Node l _ r -> 1 + max(l, r) }
+  fn contains(t : imm Tree a, x : imm a) -> bool = match t {
+      Leaf -> false
+    | Node l v r -> match order(x, v) { Less -> contains(l, x) | Greater -> contains(r, x) | Equal -> true } }
+  fn in_order(t : imm Tree a) with Yield[imm a] = match t {
+      Leaf -> () | Node l v r -> in_order(l); yield(v); in_order(r) }
+  fn insert(t : Tree a, x : a) -> Tree a = match t {
+      Leaf -> Node Leaf x Leaf
+    | Node l v r -> match order(&x, &v) { Less -> Node (insert(l, x)) v r | _ -> Node l v (insert(r, x)) } }
+}
+
+-- ## C. An enum with payloads, and a class that transposes it
+
+data Point = Point { x : i32, y : i32 }
+data Shape = Circle i32 | Rect i32 i32 | Polygon (Vec Point)
+
+module Shape = {
+  fn area(s : imm Shape) -> i32 = match s {
+      Circle r -> 3 * r * r | Rect w h -> w * h | Polygon ps -> shoelace(ps) }
+}
+
+class HasArea a = { area : imm a -> i32, name : imm a -> text 'static }   -- a signature over `a`
+data Square = Square i32
+instance HasArea Square = { area = fn q -> let Square s = q in s * s, name = fn _ -> "square" }
+
+-- An existential is how this paradigm says "any HasArea": Haskell's `data AnyShape = forall a.
+-- HasArea a => AnyShape a`. Here it is the codata value of the class (§4.2), no `forall` former.
+fn total(xs : imm Vec (exists HasArea)) -> i32 = Vec.fold(xs, 0, fn (n, x) -> n + area(x))
+
+-- ## D. A generic container, abstract by signature
+
+module Stack : {
+  type Stack a                                          -- the name only: abstract
+  fn new() -> Stack a
+  fn len(s : imm Stack a) -> i32
+  fn peek(s : imm Stack a) -> Option (imm a)
+  fn items(s : imm Stack a) with Yield[imm a]
+  fn push(s : mut Stack a, x : a)
+  fn pop(s : mut Stack a) -> Option a
+  fn into_buf(s : Stack a) -> buf a
+  instance Eq (Stack a)                                 -- provided inside, by the author
+  instance Encode (Stack a) via Vec a                   -- serde through a transparent view
+} = {
+  data Stack a = Stack { items : buf a }
+  fn new() = Stack { items = buf_new(4) }
+  fn len(s) = Buf.len(s.items)
+  fn peek(s) = Buf.last(s.items)
+  fn items(s) = for x in Buf.elems(s.items) { yield(x) }
+  fn push(s, x) = Buf.push(&mut s.items, x)
+  fn pop(s) = Buf.pop(&mut s.items)
+  fn into_buf(s) = s.items
+  instance Eq (Stack a) = { eq = fn (x, y) -> x.items == y.items }
+}
+
+class Sized a = { len : imm a -> i32 }
+instance Sized (Stack a) = { len = Stack.len }
+
+fn three_ways() -> i32 * (i32 * i32) =
+  let mut s = Stack.new();
+  Stack.push(&mut s, 1); Stack.push(&mut s, 2);
+  let a = Stack.len(&s);                                -- static
+  let o : exists Sized = pack(&s);                      -- by the value
+  let b = len(o);
+  let c = with z = s as Sized { z.len() };              -- by the context
+  (a, (b, c))

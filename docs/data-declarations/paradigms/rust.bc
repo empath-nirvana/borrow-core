@@ -1,0 +1,157 @@
+-- Paradigm B, Rust-style (docs/data-declarations.md §5.2). PROPOSED SURFACE: it does not parse,
+-- and every spelling is provisional. Rust's names appear only where this paradigm imitates its
+-- shapes; the mechanism is the one of §3, shared by every paradigm.
+--
+-- What is Rust-like here: `struct`/`enum`; an inherent `impl` block per type (the static face);
+-- `self`, `&self`, `&mut self` receivers; `trait` and `impl Trait for T` (interfaces, conformance
+-- declared apart from the type); `pub` per field (per-field abstraction); `dyn Trait` (the
+-- materialised codata value). Unlike Rust: derive is a typed `derives` clause, not a macro;
+-- attributes are typed (`@json(…)`), not token trees; recursion needs no `Box` (one box a node,
+-- §6.5); a trait method's provider is still one per type (§6.2).
+
+include map
+include fail
+include yield
+
+-- ## A. A Kubernetes-style resource
+
+pub enum Protocol { TCP, UDP }
+pub enum RestartPolicy { Always, OnFailure, Never }
+@json(tagging = Untagged) pub enum IntOrString { Int(i32), Str(string) }
+pub enum ConditionStatus { True, False, Unknown }
+
+@json(tagging = Adjacent(tag = "type", content = "rollingUpdate"))
+pub enum Strategy {
+  Recreate,
+  RollingUpdate { max_surge: IntOrString, max_unavailable: IntOrString },
+}
+
+pub struct ContainerPort {
+  pub name: Option[string],
+  @schema(minimum = 1, maximum = 65535) pub container_port: i32,
+  @default(TCP) pub protocol: Protocol,
+}
+pub struct EnvVar { pub name: string, pub value: string }
+pub struct Container {
+  pub name: string,
+  pub image: string,
+  @default(Vec::new()) pub ports: Vec[ContainerPort],
+  pub env: Option[Vec[EnvVar]],
+}
+pub struct PodSpec { pub containers: Vec[Container], @default(Always) pub restart_policy: RestartPolicy }
+pub struct ObjectMeta {
+  pub name: string,
+  pub namespace: Option[string],
+  @default(Map::new()) pub labels: Map[string, string],
+}
+pub struct DeploymentSpec {
+  pub replicas: Option[i32],
+  pub selector: Map[string, string],
+  pub strategy: Option[Strategy],
+  pub template: PodSpec,
+}
+pub struct Condition { @json(rename = "type") pub type_: string, pub status: ConditionStatus, pub reason: Option[string] }
+pub struct DeploymentStatus { pub replicas: i32, pub conditions: Vec[Condition] }
+
+@json(rename_all = Camel)
+pub struct Deployment derives eq, debug, encode, decode, schema {
+  pub api_version: string,
+  pub kind: string,
+  pub metadata: ObjectMeta,
+  pub spec: DeploymentSpec,
+  pub status: Option[DeploymentStatus],
+}
+
+impl Deployment {
+  pub fn replicas(&self) -> i32 { self.spec.replicas.unwrap_or(1) }
+  pub fn ready(&self) -> bool {
+    match &self.status { Some(s) => s.replicas == self.replicas(), None => false }
+  }
+  pub fn scale(&mut self, n: i32) { self.spec.replicas = Some(n) }
+}
+
+fn bump(text: &'t str) -> string with Fail[DecodeError] {
+  let mut d = Deployment::decode(text);
+  d.scale(d.replicas() + 1);
+  d.encode()
+}
+
+-- ## B. A recursive tree
+
+pub enum Tree[T] { Leaf, Node { left: Tree[T], value: T, right: Tree[T] } }   -- no `Box`
+
+impl[T] Tree[T] {
+  pub fn empty() -> Tree[T] { Leaf }
+  pub fn depth(&self) -> i32 { fold_imm self { Leaf => 0, Node { left, right, .. } => 1 + max(left, right) } }
+  pub fn contains(&self, x: &T) -> bool {
+    match self {
+      Leaf => false,
+      Node { left, value, right } => match order(x, value) {
+        Less => left.contains(x), Greater => right.contains(x), Equal => true },
+    }
+  }
+  pub fn in_order(&self) with Yield[&T] {
+    if let Node { left, value, right } = self { left.in_order(); yield(value); right.in_order() }
+  }
+  pub fn insert(self, x: T) -> Tree[T] {
+    match self {
+      Leaf => Node { left: Leaf, value: x, right: Leaf },
+      Node { left, value, right } => match order(&x, &value) {
+        Less => Node { left: left.insert(x), value, right },
+        _ => Node { left, value, right: right.insert(x) },
+      },
+    }
+  }
+}
+
+-- ## C. An enum with payloads, and the trait that transposes it
+
+pub struct Point { pub x: i32, pub y: i32 }
+pub enum Shape { Circle { r: i32 }, Rect { w: i32, h: i32 }, Polygon { points: Vec[Point] } }
+
+impl Shape {
+  pub fn area(&self) -> i32 {
+    match self { Circle { r } => 3 * r * r, Rect { w, h } => w * h, Polygon { points } => shoelace(points) }
+  }
+}
+
+pub trait HasArea { fn area(&self) -> i32; fn name(&self) -> &'static str; }
+
+pub struct Square(pub i32);
+impl HasArea for Square {                               -- conformance apart from the type: the
+  fn area(&self) -> i32 { self.0 * self.0 }             -- orphan question of §6.3
+  fn name(&self) -> &'static str { "square" }
+}
+
+fn total(xs: &Vec[dyn HasArea]) -> i32 {                -- `dyn`: the materialised value (F3 of §8)
+  let mut n = 0; for x in xs.iter() { n += x.area() }; n
+}
+
+-- ## D. A generic container
+
+pub struct Stack[T] { items: buf T }                    -- no `pub`: the field is hidden, so the
+                                                        -- struct is abstract outside its module
+impl[T] Stack[T] {
+  pub fn new() -> Stack[T] { Stack { items: buf_new(4) } }
+  pub fn len(&self) -> i32 { self.items.len() }
+  pub fn peek(&self) -> Option[&T] { self.items.last() }
+  pub fn items(&self) with Yield[&T] { for x in self.items.elems() { yield(x) } }
+  pub fn push(&mut self, x: T) { self.items.push(x) }
+  pub fn pop(&mut self) -> Option[T] { self.items.pop() }
+  pub fn into_buf(self) -> buf T { self.items }
+}
+
+impl[T] Eq for Stack[T] { fn eq(&self, other: &Stack[T]) -> bool { self.items == other.items } }
+                                                        -- a binary method: static only (F2 of §8)
+pub trait Sized { fn len(&self) -> i32; }
+impl[T] Sized for Stack[T] { fn len(&self) -> i32 { Stack::len(self) } }
+
+fn three_ways() -> (i32, i32, i32) {
+  let mut s = Stack::new();
+  s.push(1); s.push(2);
+  let a = s.len();                                      -- static
+  let o: &dyn Sized = &s;                               -- by the value
+  let b = o.len();
+  let c = with z = s as Sized { z.len() };              -- by the context: no Rust counterpart
+  (a, b, c)
+}

@@ -1,0 +1,128 @@
+-- Paradigm C, record-first, TypeScript-ish (docs/data-declarations.md §5.3). PROPOSED SURFACE: it
+-- does not parse, and every spelling is provisional. The mechanism is the one of §3.
+--
+-- What is record-first here: every declaration is a record or a union of records; an optional
+-- field is `name?: T` (`Option[T]`, absent on the wire); a variant is a record with a literal
+-- discriminant field (`kind: "RollingUpdate"`), which is also its wire tag; anonymous nested
+-- records are allowed and named after their position (#141 Q11); interfaces are record types of
+-- functions; methods are written in the record's body. Unlike TypeScript: identity is nominal
+-- (a `data` declaration is a name plus an iso, decided on #141), so two declarations with equal
+-- fields are different types; a structural alias stays `type`.
+
+include map
+include fail
+include yield
+
+-- ## A. A Kubernetes-style resource
+
+data Protocol = "TCP" | "UDP"                           -- a union of literal tags: a C-like enum
+data RestartPolicy = "Always" | "OnFailure" | "Never"
+data IntOrString = i32 | string                         -- an untagged union of two leaf types
+data ConditionStatus = "True" | "False" | "Unknown"
+
+-- A discriminated union: the tag field `type` is the variant, and the wire format.
+data Strategy =
+  | { type: "Recreate" }
+  | { type: "RollingUpdate", rollingUpdate: { maxSurge: IntOrString, maxUnavailable: IntOrString } }
+
+data ContainerPort = { name?: string, containerPort: i32 @schema(minimum = 1, maximum = 65535), protocol: Protocol = "TCP" }
+data EnvVar = { name: string, value: string }
+data Container = { name: string, image: string, ports: Vec[ContainerPort] = [], env?: Vec[EnvVar] }
+data PodSpec = { containers: Vec[Container], restartPolicy: RestartPolicy = "Always" }
+data ObjectMeta = { name: string, namespace?: string, labels: Map[string, string] = {} }
+data DeploymentSpec = { replicas?: i32, selector: Map[string, string], strategy?: Strategy, template: PodSpec }
+data Condition = { type: string, status: ConditionStatus, reason?: string }
+
+data Deployment derives eq, debug, encode, decode, schema = {
+  apiVersion: string,
+  kind: string,
+  metadata: ObjectMeta,
+  spec: DeploymentSpec,
+  status?: { replicas: i32, conditions: Vec[Condition] },  -- anonymous: `Deployment.status`
+                                                           -- names the declared type
+
+  -- methods in the body: the face. `this` is the receiver, its mode written before the name.
+  imm replicas(): i32 { return this.spec.replicas ?? 1 }
+  imm ready(): bool { return this.status?.replicas == this.replicas() }
+  mut scale(n: i32) { this.spec.replicas = n }
+}
+
+fn bump(text: text 't): string with Fail[DecodeError] {
+  let d = Deployment.decode(text);
+  d.scale(d.replicas() + 1);
+  return d.encode();
+}
+
+-- ## B. A recursive tree
+
+data Tree<T> =
+  | { kind: "Leaf" }
+  | { kind: "Node", left: Tree<T>, value: T, right: Tree<T> }
+  {
+    static empty(): Tree<T> { return { kind: "Leaf" } }
+    imm depth(): i32 { return fold_imm this { Leaf: 0, Node: (n) => 1 + max(n.left, n.right) } }
+    imm contains(x: imm T): bool {
+      match this {
+        Leaf: return false
+        Node: (n) => switch order(x, n.value) {
+          Less: return n.left.contains(x); Greater: return n.right.contains(x); Equal: return true }
+      }
+    }
+    imm inOrder() with Yield[imm T] { if this is Node(n) { n.left.inOrder(); yield(n.value); n.right.inOrder() } }
+    own insert(x: T): Tree<T> { … }
+  }
+
+-- ## C. A union with payloads, and an interface that transposes it
+
+data Point = { x: i32, y: i32 }
+data Shape =
+  | { kind: "Circle", r: i32 }
+  | { kind: "Rect", w: i32, h: i32 }
+  | { kind: "Polygon", points: Vec[Point] }
+  {
+    imm area(): i32 {
+      match this { Circle: (c) => 3 * c.r * c.r, Rect: (q) => q.w * q.h, Polygon: (p) => shoelace(p.points) }
+    }
+  }
+
+-- An interface is a record type of observations. Conformance: declared (`implements`), checked.
+interface HasArea { imm area(): i32; imm name(): text 'static }
+
+data Square implements HasArea = { side: i32 } {
+  imm area(): i32 { return this.side * this.side }
+  imm name(): text 'static { return "square" }
+}
+
+fn total(xs: imm Vec[HasArea]): i32 {                   -- interface-typed: materialised (F3, §8)
+  let n = 0; for x of xs { n += x.area() }; return n
+}
+
+-- ## D. A generic container, abstract
+
+-- `private` on a field hides it; a declaration with a private field has no public constructor.
+data Stack<T> implements Sized = {
+  private items: buf T
+
+  static new(): Stack<T> { return { items: buf_new(4) } }
+  imm len(): i32 { return this.items.len() }
+  imm peek(): Option<imm T> { return this.items.last() }
+  imm items() with Yield[imm T] { for x of this.items.elems() { yield(x) } }
+  mut push(x: T) { this.items.push(x) }
+  mut pop(): Option<T> { return this.items.pop() }
+  own intoBuf(): buf T { return this.items }
+
+  static equal(a: imm Stack<T>, b: imm Stack<T>): bool { return a.items == b.items }   -- the provider
+  static encodeVia: Vec<T> = (s) => s.items.asVec()                                    -- serde view
+}
+
+interface Sized { imm len(): i32 }
+
+fn threeWays(): [i32, i32, i32] {
+  let s = Stack.new<i32>();
+  s.push(1); s.push(2);
+  let a = s.len();                                      -- static
+  let o: Sized = s;                                     -- by the value: an implicit upcast (§6.8)
+  let b = o.len();
+  let c = with z = s as Sized { z.len() };              -- by the context
+  return [a, b, c];
+}
