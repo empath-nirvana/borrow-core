@@ -470,11 +470,16 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
       [Stmt.ite (eqz64 (.loc k)) [.set b (.c64 0)] [.set b (.alloc words)]]
     let args := locs fw ++ [.loc b, .loc k, .c64 0, .loc k]
     match op with
-    | .tabLit _ _ off len => do
+    | .tabLit _ => do
       let ts ← fresh 2
-      let dr ← dropVals (← argN 0) fw
-      return [.ite (.op (.rel .w64 .le_u) [.loc k, .c64 len.toUInt64])
-          (dr ++ [.set (ts.headD 0) (.data off), .set (ts.getD 1 0) (.loc k)])
+      let gn ← argN 0
+      let some c := (← L).unionOf gn |>.toList.head? | throw "word IR: tabLit of no code"
+      let (es, env) ← envOf gn c fw
+      let dr ← dropVals gn fw
+      let off := env.headD (.c64 0)
+      let len := env.getD 1 (.c64 0)
+      return es ++ [.ite (.op (.rel .w64 .le_u) [.loc k, len])
+          (dr ++ [.set (ts.headD 0) (add64 (.data 0) off), .set (ts.getD 1 0) (.loc k)])
           (mk ++ [.call ts (fnIndex fi) args])] ++ (← emit d (locs ts))
     | _ => lowerCall mk (fnIndex fi) args 2 d
   | .newArr => do
@@ -571,11 +576,14 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
       return (← boundTick) ++ (← boundTick) ++ [.ite ok (l₁ ++ l₂ ++ s₁ ++ s₂) []] ++ (← emit d [.loc b, .loc k])
     | _, _, _ => throw "word IR: swap of a non-family"
   | .roll | .unroll => do emit d (locs (← arg 0))
-  | .litByte off cnt => do
-    let i := (← arg 0).headD 0
+  | .litByte => do
+    let o := (← arg 0).headD 0
+    let cnt := (← arg 1).headD 0
+    let i := (← arg 2).headD 0
     let r ← fresh1
     return (← boundTick) ++
-      [.ite (ltu64 (.loc i) (.c64 cnt.toUInt64)) [.set r (.load8 (add64 (.data off) (.loc i)))]
+      [.ite (ltu64 (.loc i) (.loc cnt))
+        [.set r (.load8 (add64 (add64 (.data 0) (.loc o)) (.loc i)))]
         [.set r (.c64 0)]] ++ (← emit d [.loc r])
   | .litView _ => throw "word IR: litView is not built yet"
   | .io .readByte => do

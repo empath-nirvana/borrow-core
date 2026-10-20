@@ -126,4 +126,107 @@ theorem allI_inst {ℍ : Host} [HostIs ℍ] {i : TInfo} {j : Jdg} {x : Lifetime.
     have hu : Val.shift 1 0 Val.unit = Val.unit := rfl
     simpa [TExpr.erase, he, Expr.subst, hu] using this
 
+/-! ### Codata's η-thunk  `[spec §45]`
+
+A loop's codata is written as the η-thunk of an observation of `f s`
+(`thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >`, `nuEtaE`), since `thunkv`
+takes only a λ. Its two observations are the observations of `f s`: each is a β, a `case` and a
+`;` away (`nuEta_obs`). When `f` is `unfold step` (`hN`, the value `unfold step` steps to),
+`f s` is itself one β at every memory to the codata `etaN C g s` (`hN_steps`), so the thunk's every
+observation reaches the same observation of that value by pure steps (`nuEta_unfold`): the value
+may be computed where the thunk is built. With no state, the thunk's observations are those of
+`f` (`nuEta_var`). -/
+
+/-- An arm of the closed η-thunk at the observation `o`: `fv sv o`, `fv o` with no state; with
+`rb`, through a binding of `fv` first. -/
+def nuArmV (fv : Val) (sv : Option Val) (rb : Bool) (o : Val) : Expr :=
+  let body : Option Val → Expr
+    | some sv => .app (.app (.var 0) (.val sv)) (.val o)
+    | none => .app (.var 0) (.val o)
+  if rb then .app (.val (.lam (body sv))) (.val fv) else (body sv).subst 0 fv
+
+/-- `nuEtaE` at closed values: the `&` of the two arms. -/
+def nuEtaV (fv : Val) (sv : Option Val) (rb : Bool) : Expr :=
+  withPair (nuArmV fv sv rb (.inj₁ .unit)) (nuArmV fv sv rb (.inj₂ .unit))
+
+/-- The observation `fv sv o` (`fv o` with no state). -/
+def nuObsV (fv : Val) (sv : Option Val) (o : Val) : Expr :=
+  match sv with
+  | some sv => .app (.app (.val fv) (.val sv)) (.val o)
+  | none => .app (.val fv) (.val o)
+
+theorem nuArmV_closed {ℍ : Host} [HostIs ℍ] {fv : Val} {sv : Option Val} {rb : Bool} {o : Val}
+    (hf : closedAt 0 fv.1 = true) (hs : ∀ v ∈ sv, closedAt 0 v.1 = true)
+    (ho : closedAt 0 o.1 = true) :
+    closedAt 0 (nuArmV fv sv rb o) = true ∧ PureSteps (ℍ := ℍ) (nuArmV fv sv rb o) (nuObsV fv sv o) := by
+  cases sv with
+  | none =>
+    cases rb
+    · simp [nuArmV, nuObsV, Expr.subst, closed_subst ho, closedAt, hf, ho]; exact .refl
+    · refine ⟨by simp [nuArmV, closedAt, hf, closedAt_mono _ ho (Nat.zero_le _)], ?_⟩
+      have := PureSteps.beta (ℍ := ℍ) (.app (.var 0) (.val o)) fv
+      simpa [nuArmV, nuObsV, Expr.subst, closed_subst ho] using this
+  | some sv =>
+    have hs' := hs sv rfl
+    cases rb
+    · simp [nuArmV, nuObsV, Expr.subst, closed_subst ho, closed_subst hs', closedAt, hf, ho, hs']
+      exact .refl
+    · refine ⟨by simp [nuArmV, closedAt, hf, closedAt_mono _ ho (Nat.zero_le _),
+        closedAt_mono _ hs' (Nat.zero_le _)], ?_⟩
+      have := PureSteps.beta (ℍ := ℍ) (.app (.app (.var 0) (.val sv)) (.val o)) fv
+      simpa [nuArmV, nuObsV, Expr.subst, closed_subst ho, closed_subst hs'] using this
+
+/-- `⟨M, N⟩` observed at `inj₁ ()` is `M`, at `inj₂ ()` `N`, for closed `M`, `N`. -/
+theorem withPair_obs {ℍ : Host} [HostIs ℍ] {M N : Expr} (hM : closedAt 0 M = true)
+    (hN : closedAt 0 N = true) (k : Bool) :
+    PureSteps (ℍ := ℍ) (.app (withPair M N) (.val (if k then .inj₂ .unit else .inj₁ .unit)))
+      (if k then N else M) := by
+  refine (PureSteps.beta _ _).trans ?_
+  have eM : M.subst 1 (Val.shift 1 0 (if k then Val.inj₂ Val.unit else Val.inj₁ Val.unit)) = M :=
+    subst_closedAt M _ hM (Nat.zero_le _)
+  have eN : N.subst 1 (Val.shift 1 0 (if k then Val.inj₂ Val.unit else Val.inj₁ Val.unit)) = N :=
+    subst_closedAt N _ hN (Nat.zero_le _)
+  cases k
+  · simp only [Expr.subst] at eM eN ⊢
+    rw [eM, eN]
+    refine (PureSteps.head (fun μ => BoCa.BoLo.Head.case₁ μ Val.unit _ _) rfl).trans ?_
+    simp only [Expr.subst]
+    rw [subst_closedAt M _ hM (Nat.zero_le _)]
+    exact PureSteps.head (fun μ => BoCa.BoLo.Head.seq μ _) rfl
+  · simp only [Expr.subst] at eM eN ⊢
+    rw [eM, eN]
+    refine (PureSteps.head (fun μ => BoCa.BoLo.Head.case₂ μ Val.unit _ _) rfl).trans ?_
+    simp only [Expr.subst]
+    rw [subst_closedAt N _ hN (Nat.zero_le _)]
+    exact PureSteps.head (fun μ => BoCa.BoLo.Head.seq μ _) rfl
+
+/-- **The η-thunk's observations are `f s`'s**: at `inj₁ ()` and `inj₂ ()`, by pure steps. -/
+theorem nuEta_obs {ℍ : Host} [HostIs ℍ] {fv : Val} {sv : Option Val} (rb k : Bool)
+    (hf : closedAt 0 fv.1 = true) (hs : ∀ v ∈ sv, closedAt 0 v.1 = true) :
+    PureSteps (ℍ := ℍ) (.app (nuEtaV fv sv rb) (.val (if k then .inj₂ .unit else .inj₁ .unit)))
+      (nuObsV fv sv (if k then .inj₂ .unit else .inj₁ .unit)) := by
+  have h₁ := nuArmV_closed (ℍ := ℍ) (rb := rb) (o := .inj₁ .unit) hf hs rfl
+  have h₂ := nuArmV_closed (ℍ := ℍ) (rb := rb) (o := .inj₂ .unit) hf hs rfl
+  refine (withPair_obs h₁.1 h₂.1 k).trans ?_
+  cases k
+  · exact h₁.2
+  · exact h₂.2
+
+/-- **With no state, the η-thunk is its variable**: its observations are `f`'s. -/
+theorem nuEta_var {ℍ : Host} [HostIs ℍ] {fv : Val} (rb k : Bool) (hf : closedAt 0 fv.1 = true) :
+    PureSteps (ℍ := ℍ) (.app (nuEtaV fv none rb) (.val (if k then .inj₂ .unit else .inj₁ .unit)))
+      (.app (.val fv) (.val (if k then .inj₂ .unit else .inj₁ .unit))) :=
+  nuEta_obs rb k hf (by simp)
+
+/-- **At `f = unfold step`, the η-thunk is the codata `f s` computes**: its every observation
+reaches by pure steps the same observation of `etaN C g s`, which `f s` steps to by one β at
+every memory (`hN_steps`). -/
+theorem nuEta_unfold {ℍ : Host} [HostIs ℍ] (C : CTy) (g sv : Val) (rb k : Bool)
+    (hf : closedAt 0 (hN C g).1 = true) (hs : closedAt 0 sv.1 = true) :
+    PureSteps (ℍ := ℍ) (.app (nuEtaV (hN C g) (some sv) rb) (.val (if k then .inj₂ .unit else .inj₁ .unit)))
+      (.app (.val (etaN C g sv)) (.val (if k then .inj₂ .unit else .inj₁ .unit))) ∧
+    PureSteps (ℍ := ℍ) (.app (.val (hN C g)) (.val sv)) (.val (etaN C g sv)) := by
+  refine ⟨(nuEta_obs rb k hf (by simpa using hs)).trans ?_, hN_steps C g sv⟩
+  exact PureSteps.plug (.appL .hole _) (hN_steps C g sv)
+
 end BoCa.Fig16.LogRel.Core.Check

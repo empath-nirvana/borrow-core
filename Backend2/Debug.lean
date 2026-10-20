@@ -54,6 +54,7 @@ def nodeFields : TExpr → String
   | .divLit _ _ op c _ => s!"{reprStr op} {reprStr c}"
   | .walk _ _ m _ => s!"mut {m}"
   | .lendCell _ _ m _ => s!"mut {m}"
+  | .nuEta _ _ f s _ => "f #" ++ toString f ++ (match s with | some k => " s #" ++ toString k | none => "")
   | .dtor _ _ A => ppVT A
   | t => match t.masks? with
     | some m => ppMasks m

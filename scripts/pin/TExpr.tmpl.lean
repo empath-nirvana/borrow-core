@@ -208,6 +208,44 @@ theorem lendCellB_shift {e : Expr} (h : lendCellB e = true) (d k : Nat) :
   match e, h with
   | .app (.app _ (.app (.prim .alloc) _)) _, _ => rfl
 
+/-- An observation of codata through its variables, at the projection `o`: `f s o` (the state
+`s`), or `f o` with no state.  `[spec §45]` -/
+def nuObsE (f : Nat) (s : Option Nat) (o : Val) : Expr :=
+  match s with
+  | some s => .app (.app (.var f) (.var s)) (.val o)
+  | none => .app (.var f) (.val o)
+
+/-- An observation through `g`, bound to `f` first (`g <- return (unbang f); …`): `(λg. g s o) f`,
+or with no state `(λg. g o) f`.  `[spec §45]` -/
+def nuObsRE (f : Nat) (s : Option Nat) (o : Val) : Expr :=
+  .app (.val (.lam (nuObsE 0 (s.map (· + 1)) o))) (.var f)
+
+/-- **The η-thunk of codata**  `[spec §45]`: the erasure of
+`thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >` (and with no `s`,
+`< (nu_out (force f)).1, (nu_out (force f)).2 >`): the `&` of the two observations, under its two
+binders; with `rb`, each arm binds `f` to a name of its own first
+(`g <- return (unbang f); (nu_out (force g s)).k`). -/
+def nuEtaE (f : Nat) (s : Option Nat) (rb : Bool) : Expr :=
+  let obs := if rb then nuObsRE else nuObsE
+  withPair (obs (f + 2) (s.map (· + 2)) (.inj₁ .unit)) (obs (f + 2) (s.map (· + 2)) (.inj₂ .unit))
+
+/-- The term is the η-thunk of codata at the variables `f` and `s`, in either form. -/
+def nuEtaB (f : Nat) (s : Option Nat) (e : Expr) : Bool :=
+  e == nuEtaE f s false || e == nuEtaE f s true
+
+theorem nuEtaE_shift (f : Nat) (s : Option Nat) (rb : Bool) (d k : Nat) :
+    (nuEtaE f s rb).shift d k = nuEtaE (sIdx d k f) (s.map (sIdx d k)) rb := by
+  have hv (i : Nat) : (if i < k then Expr.var (i + 2) else Expr.var (i + 2 + d)) =
+      Expr.var (sIdx d k i + 2) := by
+    unfold sIdx; split <;> simp <;> omega
+  cases rb <;> cases s <;> simp [nuEtaE, nuObsE, nuObsRE, withPair, Expr.shift, hv] <;>
+    (try rfl) <;> (unfold sIdx; split <;> simp <;> omega)
+
+theorem nuEtaB_shift {f : Nat} {s : Option Nat} {e : Expr} (h : nuEtaB f s e = true) (d k : Nat) :
+    nuEtaB (sIdx d k f) (s.map (sIdx d k)) (e.shift d k) = true := by
+  simp only [nuEtaB, Bool.or_eq_true, beq_iff_eq] at h ⊢
+  rcases h with h | h <;> rw [h, nuEtaE_shift] <;> simp
+
 /-! ### Terms a node's erasure reads off a child's
 
 A rule argument that is a term determined by an equation on a child's erasure (`effHandleT`'s
@@ -290,6 +328,9 @@ inductive TExpr where
   /-- **Derived**: the lend of a cell allocated for it, `mut` when `m` (`lendCellB`), over its
   typed term. -/
   | lendCell (info : TInfo) (jdg : Jdg) (m : Bool) (t : TExpr)
+  /-- **Derived**: codata written as the η-thunk of an observation of `f s` (of `f`, with no `s`)
+  (`nuEtaB`), over its typed term.  `[spec §45]` -/
+  | nuEta (info : TInfo) (jdg : Jdg) (f : Nat) (s : Option Nat) (t : TExpr)
   /-- A use of the `def` `name`, the declaration `decl` of the program, at the type arguments
   `targs`: its body `t`, at the use's context, and the body's absorption `ab`. -/
   | use (info : TInfo) (jdg : Jdg) (name : String) (decl : Nat) (targs : List VTy) (ab : Option AbsF)
@@ -304,7 +345,7 @@ def TExpr.erase : TExpr → Expr
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => withborS σ
   | .withborF2M .. | .withborF2I .. => withborF2
   | .litFn _ _ _ t => t.erase
-  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t => t.erase
+  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => t.erase
   | .use _ _ _ _ _ _ t => t.erase
 
 /-- The node's source. -/
@@ -312,7 +353,7 @@ def TExpr.info : TExpr → TInfo
 --@INFO_CASES@
   | .dtor i _ _ | .allocS i _ _ | .freeS i _ _ | .withborSM i _ _ _ _ | .withborSI i _ _ _ _
   | .withborF2M i _ _ _ _ _ _ _ | .withborF2I i _ _ _ _ _ _ _ | .litFn i _ _ _ => i
-  | .divLit i _ _ _ _ | .walk i _ _ _ | .selfCall i _ _ _ _ | .lendCell i _ _ _ => i
+  | .divLit i _ _ _ _ | .walk i _ _ _ | .selfCall i _ _ _ _ | .lendCell i _ _ _ | .nuEta i _ _ _ _ => i
   | .use i _ _ _ _ _ _ => i
 
 /-- The node's judgment. -/
@@ -320,7 +361,7 @@ def TExpr.jdg : TExpr → Jdg
 --@JDG_CASES@
   | .dtor _ j _ | .allocS _ j _ | .freeS _ j _ | .withborSM _ j _ _ _ | .withborSI _ j _ _ _
   | .withborF2M _ j _ _ _ _ _ _ | .withborF2I _ j _ _ _ _ _ _ | .litFn _ j _ _ => j
-  | .divLit _ j _ _ _ | .walk _ j _ _ | .selfCall _ j _ _ _ | .lendCell _ j _ _ => j
+  | .divLit _ j _ _ _ | .walk _ j _ _ | .selfCall _ j _ _ _ | .lendCell _ j _ _ | .nuEta _ j _ _ _ => j
   | .use _ j _ _ _ _ _ => j
 
 /-- How a child's context is formed from its node's, as the child's premise has it. -/
@@ -337,7 +378,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => []
   | .litFn _ _ _ t => [(.push 0, t)]
-  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t => [(.push 0, t)]
+  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => [(.push 0, t)]
   | .use _ _ _ _ _ _ t => [(.push 0, t)]
 
 /-- The use masks of a node at a split: its two parts' (`Masks`). -/
@@ -356,7 +397,7 @@ def TExpr.isLam : TExpr → Bool
   | .withborSM _ _ σ _ _ | .withborSI _ _ σ _ _ => (withborS σ matches .lam _)
   | .withborF2M .. | .withborF2I .. => (withborF2 matches .lam _)
   | .litFn _ _ _ t => t.isLam
-  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t => t.isLam
+  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => t.isLam
   | .use _ _ _ _ _ _ t => t.isLam
 
 /-- `isLam` is the erasure's head. -/
@@ -365,7 +406,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => rfl
   | .litFn _ _ _ t => isLam_eq t
-  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t => isLam_eq t
+  | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => isLam_eq t
   | .use _ _ _ _ _ _ t => isLam_eq t
 
 theorem TExpr.isLam_sound (t : TExpr) (h : t.isLam = true) : ∃ N, t.erase = .val (.lam N) := by

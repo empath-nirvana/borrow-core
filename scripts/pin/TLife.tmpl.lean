@@ -148,6 +148,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => []
   | .litFn _ _ _ t | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t
+  | .nuEta _ _ _ _ t
   | .use _ _ _ _ _ _ t => t.lifeBinders
 
 /-- **No rule of the term reads `⊓Δ` or takes a fresh variable of `Δ`**: the borrows, the block
@@ -157,6 +158,7 @@ def TExpr.domFree : TExpr → Bool
   | .dtor .. | .allocS .. | .freeS .. => true
   | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I .. => false
   | .litFn _ _ _ t | .divLit _ _ _ _ t | .walk _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t
+  | .nuEta _ _ _ _ t
   | .use _ _ _ _ _ _ t => t.domFree
 
 /-- **The term at a larger lifetime context `D`**: each `use` node's absorption at its context. -/
@@ -169,6 +171,7 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .walk i j m t => .walk i j m (t.reAb Δr)
   | .selfCall i j k n t => .selfCall i j k n (t.reAb Δr)
   | .lendCell i j m t => .lendCell i j m (t.reAb Δr)
+  | .nuEta i j f s t => .nuEta i j f s (t.reAb Δr)
   | .use i j n k τ _ t => .use i j n k τ ((t.reAb Δr).absF Δr) (t.reAb Δr)
 
 theorem TExpr.reAb_erase : ∀ (t : TExpr) (Δr : LifeCtx), (t.reAb Δr).erase = t.erase := by
@@ -197,6 +200,8 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Δ' he hd; exact .selfCall (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
   | lendCell _ hb ih =>
       intro Δ' he hd; exact .lendCell (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
+  | nuEta _ hb ih =>
+      intro Δ' he hd; exact .nuEta (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
   | use _ _ ih => intro Δ' he hd; exact .use (ih Δ' he hd) rfl
 
 /-- **A typed derivation at a larger lifetime context**, tied.  `[spec §3, §10, §19]` -/
@@ -221,6 +226,8 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
       intro Δ' he hd; exact .selfCall (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
   | lendCell _ hb ih =>
       intro Δ' he hd; exact .lendCell (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
+  | nuEta _ hb ih =>
+      intro Δ' he hd; exact .nuEta (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
   | use _ _ ih => intro Δ' he hd; exact .use (ih Δ' he hd) rfl
 
 end BoCa.Fig16.LogRel.Core.Check

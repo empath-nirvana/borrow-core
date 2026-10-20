@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.92 · 2026-10-20
+Version 0.93 · 2026-10-20
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -7908,11 +7908,7 @@ output or a kernel program. `corpus/counts.expected` and `kernel-counts.expected
 
 ### Open
 
-- **Codata observations dispatch**: the η-expanded thunk the library and the elaboration write for
-  a loop (`thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >`) and `unfold`'s code
-  share a closure class, so each observation is a dispatched call (122 programs' `indirect` rise
-  against the old backend, which removed the thunk by a recogniser, `Collapse`). The fix is N4's:
-  a derived node for the scheme, whose value is `unfold step s` itself.
+- **Codata observations dispatch**: resolved by §45.
 - **Bounds checks in a counted walk** (L-3): the `walk` node's rule fixes that its term is a
   `count_try`/`count_fold`; that the step reads, at its index, the view the bound was taken from
   is the elaboration's (`Frontend/Check/TFacts.lean`), not a fact of the typed term, so every read
@@ -7967,6 +7963,65 @@ count counts.
 
 - The native run times of `parse` and `wordcount` are unchanged by it (`docs/n1-plan.md`, *As
   built*): LLVM had inlined the instantiations.
+
+## 45. Entry 44 — the new backend: codata's η-thunk as a derived node, one code for literal tables (N1 part 2)
+
+### Motivation
+
+A loop's codata is written `f <- return (unbang (unfold[C, S] step)); …;
+thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >`, by the library and the
+elaboration: `thunkv` takes only a λ, so the observation of `f s` is η-expanded. The thunk's code
+and `unfold`'s observation code reach the same places, so they share a closure class and every
+observation dispatched (§43 *Open*: 122 programs, 37 → about 2M indirect calls). The old backend
+removed the thunk with a recogniser over its closure IR (`Collapse`), which `docs/compiler.md`
+§3.6 deletes. And every string literal's table was a code of its own, so a function given two
+literals dispatched on each byte it read.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration or semantics. A program's erasure is unchanged.
+
+### The derived node
+
+- **`nuEta f s t`** (`TExpr.nuEta`, `scripts/pin/TExpr.tmpl.lean`), over the typed term `t` of a
+  `thunkv` at a `ν` type, with the variables `f` and (optionally) `s` it observes. Its typed rule
+  (`TDerivesAt.nuEta`, `TDerivesP.nuEta`) says the term's erasure is the scheme `nuEtaE f s rb`:
+  the `&` of `f s (inj₁ ())` and `f s (inj₂ ())` (with no `s`, of `f`), each arm optionally
+  binding `f` to a name of its own first (`g <- return (unbang f); …`). The checker builds it at
+  `thunkv` when the erasure is the scheme (`rNuEta`, `nuEtaOf?`, `Frontend/Check/Rules.lean`);
+  the node is kept by moving the term's variables (`nuEtaB_shift`, `TExpr.shift`).
+- **The fact** (`Frontend/Check/Derived.lean`): the thunk's observations are `f s`'s, by pure
+  steps (`nuEta_obs`); with no state, `f`'s (`nuEta_var`); and at `f = unfold step` (`hN C g`,
+  the value `unfold step` steps to), every observation reaches the same observation of
+  `etaN C g s`, which `f s` steps to by one β at every memory (`nuEta_unfold`, from `hN_steps`).
+  So the codata may be computed where the thunk is built.
+- **The lowering** (`Backend2/Convert.lean`): a `nuEta` node with no state is its variable; with
+  a state, when `f` is a variable a `bind` bound to the `unfoldN` constant applied to a step
+  (`isUnfoldApp`, read from the `bind` node's value; followed through copies and captures), it
+  is the call `f s`, made there. The codata of a loop is then only `unfold`'s code, and each
+  observation a direct call. Any other `nuEta` node is compiled as its thunk.
+
+### Literal tables
+
+Every literal's table is a closure of one code over its offset and length in the data
+(`litCode`, `Op.litByte`), so the tables of a program are one class of one code;
+`tabLit` reads the literal's offset and length from that closure's environment.
+
+### Programs
+
+Every program of the fragment at its golden at every stage; each program's `indirect` at most
+the old backend's (37 in all, equal on every program).
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the elaboration, the old backend's output or a
+kernel program, or any program's erasure. `corpus/counts.expected` and `kernel-counts.expected`
+unchanged.
+
+### Open
+
+- A `nuEta` node whose `f` is not bound to `unfold step` where it is built (a parameter) is
+  compiled as its thunk.
 
 ---
 
@@ -8330,11 +8385,21 @@ the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Backend/Wasm
 `scripts/check-backend2.sh` and `scripts/compile-backend2.sh`; no change to `CDerives`, `Core/`,
 `Paper/`, `Support/` or the checker. Entry 43 (§44) is implemented in `Frontend/Check/Derived.lean`
 (`allI_inst`), `Backend2/Types.lean` (`ofU`) and `Backend2/Convert.lean`; no change to `CDerives`,
-`Core/`, `Paper/`, `Support/`, the checker or the old backend.
+`Core/`, `Paper/`, `Support/`, the checker or the old backend. Entry 44 (§45) is implemented in
+`scripts/pin/` (`nuEtaE`, `nuEtaB`, `nuEtaB_shift`, `TExpr.nuEta` and its typed rules),
+`Frontend/Check/TShift.lean`, `Frontend/Check/Weaken.lean`, `Frontend/Check/TTied.lean`,
+`Frontend/Check/Rules.lean` (`rNuEta`), `Frontend/Check/Derived.lean` (`nuEta_obs`, `nuEta_var`,
+`nuEta_unfold`) and `Backend2/` (`isUnfoldApp`, the `nuEta` case, `litCode`, `Op.litByte`,
+`Op.tabLit`); no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the old backend.
 
 ---
 
 ## Changelog
+
+- **0.93** (2026-10-20) — §45 (#636, N1 part 2): codata's η-thunk is the derived node `nuEta`,
+  built by the checker; at `f = unfold step` the new backend computes `f s` where the thunk is
+  built (`nuEta_unfold`); one code for every literal table. Every program's `indirect` at most
+  the old backend's.
 
 - **0.92** (2026-10-20) — §44 (#636, N1 part 2): the new backend erases `Λ`: an `allI` whose body
   is a λ-value is that body (`allI_inst`, one β at every memory), an instantiation its operand,

@@ -189,13 +189,36 @@ def rThunkF {A : CVTy} (r : Res Δ (.unit :: T) (.comp (.ret A))) :
   let F ← r.F.popDead
   pure ⟨.thunkF i (.val (.thunk (.ret A))) A r.t, r.sigs, r.pins, F.map fun _ h => TTied.thunkF i h⟩
 
-/-- `thunkv N`: `N` erases to a λ. -/
+/-- The variables of the η-thunk of codata (`nuEtaE`), when the term is one. -/
+def nuEtaOf? : Expr → Option (Nat × Option Nat)
+  | .lam (.case (.var 0) (.seq (.var 0) (.app (.app (.var f) (.var s)) _)) _) =>
+    if 2 ≤ f && 2 ≤ s then some (f - 2, some (s - 2)) else none
+  | .lam (.case (.var 0) (.seq (.var 0) (.app (.lam (.app (.app (.var 0) (.var s)) _)) (.var f))) _) =>
+    if 2 ≤ f && 3 ≤ s then some (f - 2, some (s - 3)) else none
+  | .lam (.case (.var 0) (.seq (.var 0) (.app (.lam (.app (.var 0) _)) (.var f))) _) =>
+    if 2 ≤ f then some (f - 2, none) else none
+  | .lam (.case (.var 0) (.seq (.var 0) (.app (.var f) _)) _) =>
+    if 2 ≤ f then some (f - 2, none) else none
+  | _ => none
+
+/-- The η-thunk of codata as its derived node (SPEC §45), when the thunk's erasure is the scheme. -/
+def rNuEta {C : CCTy} (r : Res Δ T (.val (.thunk C))) : Res Δ T (.val (.thunk C)) :=
+  if C matches .nu _ then
+    match nuEtaOf? r.t.erase with
+    | some (f, s) =>
+      if hb : nuEtaB f s r.t.erase = true then
+        ⟨.nuEta i (.val (.thunk C)) f s r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.nuEta i f s hb h⟩
+      else r
+    | none => r
+  else r
+
+/-- `thunkv N`: `N` erases to a λ; the η-thunk of codata is its derived node (`rNuEta`). -/
 def rThunkV {C : CCTy} (hC : C.isRet = false) (r : Res Δ T (.comp C)) :
     Option (Res Δ T (.val (.thunk C))) :=
   if hl : r.t.isLam = true then
-    some ⟨.thunkV i (.val (.thunk C)) C r.t, r.sigs, r.pins, r.F.map fun _ h =>
+    some (rNuEta i ⟨.thunkV i (.val (.thunk C)) C r.t, r.sigs, r.pins, r.F.map fun _ h =>
       have ⟨_, q⟩ := TExpr.isLam_sound _ hl
-      TTied.thunkV i hC h q⟩
+      TTied.thunkV i hC h q⟩)
   else none
 
 /-- The first used slot failing `p`. -/

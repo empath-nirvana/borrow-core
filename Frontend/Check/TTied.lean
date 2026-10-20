@@ -527,6 +527,11 @@ theorem lendCell {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (m : Bool)
     (hb : lendCellB t.erase = true) (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.lendCell i j m t) j :=
   ⟨fun hn Ξ hΞ => .lendCell (h.1 hn Ξ hΞ) hb, .lendCell h.2 hb⟩
 
+/-- **Codata written as an η-thunk** (SPEC §45): the derived node over the thunk's typed term. -/
+theorem nuEta {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (f : Nat) (sv : Option Nat)
+    (hb : nuEtaB f sv t.erase = true) (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.nuEta i j f sv t) j :=
+  ⟨fun hn Ξ hΞ => .nuEta (h.1 hn Ξ hΞ) hb, .nuEta h.2 hb⟩
+
 /-- **A `def`'s body at its use**: the `use` node over the body, its absorption the body's.
 `[spec §10]` -/
 theorem use {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (name : String) (decl : Nat)

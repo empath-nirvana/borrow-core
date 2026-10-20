@@ -374,7 +374,8 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
       writeAt (b + j.toNat) (some x)
     pure (.fam b n)
   | .roll, [v] | .unroll, [v] => pure v
-  | .litByte off n, [.int i] => do
+  | .litByte, [.int off, .int n, .int i] => do
+    let off := off.toUInt32.toNat; let n := n.toUInt32.toNat
     let i := i.toUInt32
     if i.toNat < n then
       match (← get).data[off + i.toNat]? with
@@ -436,10 +437,11 @@ def eval (p : Prog) : Nat → LTy → Tm → IM LV
       let arr ← if k.toUInt32 == 0 then pure (LV.fam 0 0) else
         pure (LV.fam (← newObj k.toUInt32.toNat) k.toUInt32)
       callFn p f fi [vg, arr, .int 0, .int k]
-    | .prim (.tabLit fi _ off len) [g, n] => do
+    | .prim (.tabLit fi) [g, n] => do
       let vg ← takeV g
       let .int k ← takeV n | bad "tab of a non-integer"
-      if k.toNat ≤ len then return .fam (dataAt + off) k.toUInt32
+      let .clos _ [.int off, .int len] := vg | bad "tabLit of a closure that is not a literal's"
+      if k.toNat ≤ len.toUInt32.toNat then return .fam (dataAt + off.toUInt32.toNat) k.toUInt32
       let arr ← if k.toUInt32 == 0 then pure (LV.fam 0 0) else
         pure (LV.fam (← newObj k.toUInt32.toNat) k.toUInt32)
       callFn p f fi [vg, arr, .int 0, .int k]

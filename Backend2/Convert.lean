@@ -61,7 +61,7 @@ structure CState where
   uses : Std.HashMap String Template := {}
   data : Array UInt8 := #[]
   /-- The literal tables' codes, with their bytes' offset and length in the data. -/
-  lits : Array (Nat × Nat × Nat) := #[]
+  lits : Option Nat := none
   /-- What the conversion read of the typed term, by rule and fact (`bcc lir --census`). -/
   reads : Std.HashMap String Nat := {}
   /-- The static words for the capabilities' cells, in the data after the literals. -/
@@ -70,6 +70,9 @@ structure CState where
   census : Bool := false
   /-- The destructors of `μ` types, generated once per type (`genDtor`). -/
   dtors : Std.HashMap String Nat := {}
+  /-- The variables bound to `unfold step` (a `bind` whose value is the `unfoldN` constant applied
+  to its step), and their copies and captures: the `f` a `nuEta` node may call (SPEC §45). -/
+  unfolds : Std.HashSet Var := {}
 
 abbrev CM := StateT CState (Except String)
 
@@ -170,6 +173,7 @@ def splitCtx (ctx : Ctx) (m : Masks) (rule : String := "?") : CM ((Tm → Tm) ×
     | none, _, _ => throw "LIR: a mask uses a dead slot"
     | some x, true, true =>
       let x' ← freshLike x
+      if (← get).unfolds.contains x then modify fun st => { st with unfolds := st.unfolds.insert x' }
       pre := (fun t => .copy x x' t) :: pre
       c₁ := c₁.push (some x); c₂ := c₂.push (some x')
     | some x, true, false => c₁ := c₁.push (some x); c₂ := c₂.push none
@@ -200,6 +204,7 @@ def envOf (ctx : Ctx) : CM (List Var × List Var × Ctx) := do
     match s with
     | some x =>
       let x' ← freshLike x
+      if (← get).unfolds.contains x then modify fun st => { st with unfolds := st.unfolds.insert x' }
       outer := outer.push x; inner := inner.push x'; ctx' := ctx'.push (some x')
     | none => ctx' := ctx'.push none
   return (outer.toList, inner.toList, ctx'.toList)
@@ -810,13 +815,16 @@ def satTy (t : LTy) : Nat → CM LTy
     let (_, r) ← answerOf t
     satTy r n
 
-/-- A literal's table (`TExpr.litFn`): the code `λi. byte i` of the `n` bytes at `off` in the
-program's data, `0` past the end. -/
-def litCode (off n : Nat) : CM Nat := do
+/-- The literal tables' code (`TExpr.litFn`), made once: `λi. byte i` over the environment
+`(off, n)`, the `n` bytes at `off` in the program's data, `0` past the end.  `[spec §45]` -/
+def litCode : CM Nat := do
+  if let some c := (← get).lits then return c
   let fi ← reserveFn "literal"
-  let i ← fresh i32T
-  setFn fi { name := "literal", params := [i], body := .prim (.litByte off n) [i], ret := .int .w8 }
-  addCode { kind := .lam, fns := [fi], ty := .arr i32T (.ret (.int .w8)) }
+  let o ← fresh i32T; let n ← fresh i32T; let i ← fresh i32T
+  setFn fi { name := "literal", params := [o, n, i], body := .prim .litByte [o, n, i], ret := .int .w8 }
+  let c ← addCode { kind := .lam, fns := [fi], ty := .arr i32T (.ret (.int .w8)) }
+  modify fun s => { s with lits := some c }
+  return c
 
 /-- The number of arguments a constant takes before its operation runs; `none` at a node that is
 not a constant. -/
@@ -884,6 +892,13 @@ where
         | .allI _ _ _ _ _ _ body => some body
         | .use _ _ _ _ _ _ b => if tsize (inlineBound + 1) b ≤ inlineBound then allIOf f b else none
         | _ => none
+
+/-- The node is `unfold step`: through transparent nodes, the `unfoldN` constant applied to one
+argument.  `[spec §45]` -/
+def isUnfoldApp (t : TExpr) : Bool :=
+  match headOf 64 t with
+  | .lolliE _ _ _ _ _ _ tf => (headOf 64 tf matches .unfoldN ..)
+  | _ => false
 
 /-- The arguments of a spine of call-by-value applications, outermost first, with each split's
 masks; and the function. -/
@@ -1012,7 +1027,12 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       fun ctx' => conv fuel (none :: none :: ctx') tN]
   | .bind _ _ A _ u tM tN | .effLet _ _ A _ [] u tM tN => do
     let (pre, c₁, c₂) ← splitCtx ctx u "bind"
-    return pre (← bindTm (← conv fuel c₁ tM) (← vty A) fun x => conv fuel (some x :: c₂) tN)
+    let unf := isUnfoldApp tM
+    return pre (← bindTm (← conv fuel c₁ tM) (← vty A) fun x => do
+      if unf then
+        readFact "bind:unfold step"
+        modify fun st => { st with unfolds := st.unfolds.insert x }
+      conv fuel (some x :: c₂) tN)
   | .force _ j i C => do
     match ctx[i]? with
     | some (some x) =>
@@ -1066,13 +1086,30 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   | .litFn _ _ bs _ => do
     let off := (← get).data.size
     modify fun s => { s with data := s.data ++ (bs.map (·.toUInt8)).toArray }
-    let c ← litCode off bs.length
+    let c ← litCode
     readFact "litFn:bytes"
-    modify fun s => { s with lits := s.lits.push (c, off, bs.length) }
-    return leaf ctx none (.clos c [])
+    return leaf ctx none (← lit32 off.toUInt32 fun o => lit32 bs.length.toUInt32 fun n =>
+      pure (.clos c [o, n]))
   | .divLit _ j op c inner => convDivLit fuel ctx j op c inner
   | .lendCell _ _ _ c => convLendCell fuel ctx t c
   | .walk _ _ _ c | .selfCall _ _ _ _ c => conv fuel ctx c
+  | .nuEta _ _ f s c => do
+    -- The η-thunk of codata is the codata it observes (`nuEta_var`, `nuEta_unfold`)  [spec §45]:
+    -- with no state, the variable itself; at `f = unfold step`, the call `f s`, made here.
+    match ctx[f]?, s with
+    | some (some fv), none =>
+      readFact "nuEta:eta"
+      return leaf ctx (some f) (.var fv)
+    | some (some fv), some si =>
+      match ctx[si]? with
+      | some (some sv) =>
+        if (← get).unfolds.contains fv then
+          readFact "nuEta:unfold call"
+          let others := (ctx.zipIdx.filter fun (_, k) => k != f && k != si).filterMap (·.1)
+          return drops others (.app fv sv)
+        else conv fuel ctx c
+      | _ => conv fuel ctx c
+    | _, _ => conv fuel ctx c
   | .effPerform .. | .effRaise .. | .effHandleV .. | .effHandleVB .. | .effHandleT .. | .effThen ..
   | .effLet .. | .effSub .. | .lendR .. | .lendLoopR .. | .nilDead .. | .withbor1U .. | .withbor2U ..
   | .withbor3U .. | .withloadU .. | .sliceBorrowMU .. | .sliceBorrowIU .. | .iterate .. | .divFuel ..
