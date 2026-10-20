@@ -25,18 +25,22 @@ set_option linter.unusedSimpArgs false
 -- and the shifts they cancel.
 set_option hygiene false in
 macro "fsimp" : tactic => `(tactic| simp [Kont.plug, Expr.psub, Expr.subst, sh, psub_sh, Expr.val,
-  Val.lam, subst_shift_succ, Expr.shift_zero, Expr.shift_shift, subst_shift_expr, psub_dtor, subst_dtor])
+  Val.lam, subst_shift_succ, Expr.shift_zero, Expr.shift_shift, subst_shift_expr, psub_dtor, subst_dtor, psub_forget, subst_forget])
 
 set_option hygiene false in
 macro "fsimp_at" h:ident : tactic => `(tactic| simp [Kont.plug, Expr.psub, Expr.subst, sh, psub_sh,
   Expr.val, Val.lam, subst_shift_succ, Expr.shift_zero, Expr.shift_shift, subst_shift_expr, psub_dtor,
-  subst_dtor] at $h:ident)
+  subst_dtor, psub_forget, subst_forget] at $h:ident)
 
 theorem psub_dtor (k : Nat) (γ : List Val) (T : VTy) : Expr.psub k γ (dtorE T) = dtorE T :=
   psub_closedAt _ γ (dtorAt_closed false T) (Nat.zero_le k)
 
 theorem subst_dtor (j : Nat) (s : Val) (T : VTy) : Expr.subst j s (dtorE T) = dtorE T :=
   subst_closedAt _ s (dtorAt_closed false T) (Nat.zero_le j)
+
+theorem subst_forget (j : Nat) (s : Val) : Expr.subst j s forget = forget := rfl
+
+theorem psub_forget (k : Nat) (γ : List Val) : Expr.psub k γ forget = forget := rfl
 
 theorem psub_sh (d : Nat) (γ : List Val) (e : Expr) :
     Expr.psub d γ (Expr.shift d 0 e) = Expr.shift d 0 (Expr.psub 0 γ e) := by
@@ -117,6 +121,12 @@ theorem acc_exit (k : Nat) (V : Expr) (γ : List Val) :
     simp [Kont.plug, injK_plug, injAt_val, Val.pair, Val.inj₂, Expr.val]
   rw [e2]
   exact retsG_val ⟨_, rfl⟩
+
+/-- A β step at a value written as an expression. -/
+theorem retsG_betaE {Q : Val → Prop} {G : Expr → Prop} (K : Kont) {b e : Expr} (he : IsVal e)
+    (h : RetsG (ℍ := ℍ) Q G (K.plug (b.subst 0 ⟨e, he⟩))) :
+    RetsG (ℍ := ℍ) Q G (K.plug (.app (.lam b) e)) :=
+  retsG_beta (v := ⟨e, he⟩) K h
 
 /-! ### Calling a premise -/
 
@@ -320,9 +330,13 @@ theorem subst_withborU (j : Nat) (s : Val) (T : VTy) :
 /-- The answers `(p, b)`: the source `p` handed back beside a result. -/
 def SrcQ (p : Val) (y : Val) : Prop := ∃ b, y = Val.pair p b
 
-/-- `withborU d p f` answers `(p, b)`: the source it was given. -/
-theorem retsG_withborU {G : Expr → Prop} (T : VTy) (p f : Val) :
-    RetsG (ℍ := ℍ) (SrcQ p) G
+/-- The answers `(p, b)` with `b` satisfying `Qb`. -/
+def PairWith (p : Val) (Qb : Val → Prop) (y : Val) : Prop := ∃ b, y = Val.pair p b ∧ Qb b
+
+/-- `withborU d p f` answers `(p, b)`: the source it was given, beside what the callback answered. -/
+theorem retsG_withborU' {G : Expr → Prop} {Qb : Val → Prop} (T : VTy) (p f : Val)
+    (hf : RetsG (ℍ := ℍ) Qb (fun _ => False) (.app (.app (.val f) (.val .unit)) (.val p))) :
+    RetsG (ℍ := ℍ) (PairWith p Qb) G
       (.app (.app (withborUE (dtorE T)) (.val p)) (.val f)) := by
   change RetsG _ G ((Kont.appL .hole f).plug (.app (.val (.lam (.val (.lam (thenE (.pair (.var 2) (.var 0))
     (.app (dtorE T) (.var 2)) (.app (.app (.var 0) (.val .unit)) (.var 1))))))) (.val p)))
@@ -331,11 +345,18 @@ theorem retsG_withborU {G : Expr → Prop} (T : VTy) (p f : Val) :
   refine retsG_beta .hole ?_
   simp only [thenE]
   fsimp
-  refine retsG_ubind (N := Val.lam _) (D := Val.lam _) (Q₁ := fun _ => True) (retsG_true _ _)
-    (fun b _ => ?_)
+  refine retsG_ubind (N := Val.lam _) (D := Val.lam _) (Q₁ := Qb)
+    (retsG_mono (G := fun _ => False) (fun _ h => h) (fun _ (h : False) => h.elim)
+      (by simpa [Expr.val] using hf)) (fun b hb => ?_)
   refine retsG_beta .hole ?_
   fsimp
-  exact retsG_val (w := Val.pair p b) (Q := SrcQ p) ⟨_, rfl⟩
+  exact retsG_val (w := Val.pair p b) (Q := PairWith p Qb) ⟨_, rfl, hb⟩
+
+/-- `withborU d p f` answers `(p, b)`, whatever the callback does. -/
+theorem retsG_withborU {G : Expr → Prop} (T : VTy) (p f : Val) :
+    RetsG (ℍ := ℍ) (SrcQ p) G (.app (.app (withborUE (dtorE T)) (.val p)) (.val f)) :=
+  retsG_mono (fun _ ⟨b, h, _⟩ => ⟨b, h⟩) (fun _ h => h)
+    (retsG_withborU' (Qb := fun _ => True) T p f (retsG_true _ _))
 
 /-! ### `use` -/
 
@@ -375,6 +396,60 @@ theorem acc_use (src : LendSrc) (Ps : List VTy) (N : Expr) (γ : List Val) :
     refine retsG_letpair .hole ?_
     fsimp
     exact retsG_val (w := Val.pair (Val.pair p ρ) (Val.inj₁ b)) ⟨_, rfl⟩
+
+/-! ### `lend` -/
+
+/-- The answers `(ρ, r)`: the rest of the slots, beside a result. -/
+def RestQ (ρ : Val) (y : Val) : Prop := ∃ r, y = Val.pair ρ r
+
+theorem acc_lend (src : LendSrc) {eM : Expr}
+    (ih : ∀ γ : List Val, Returns (ℍ := ℍ) (substAll γ eM)) (γ : List Val) :
+    Returns (ℍ := ℍ) (substAll γ (lendE src eM)) := by
+  intro π
+  apply rets_of_retsG
+  show RetsG _ _ (Kont.plug .hole (.app (substAll γ (lendE src eM)) (.val π)))
+  simp only [substAll, lendE, Expr.psub, LendSrc.fin]
+  refine retsG_betaE .hole π.2 ?_
+  fsimp
+  simp only [psub_withborU, subst_withborU]
+  refine retsG_letpairV (fun p ρ hπ => ?_)
+  subst hπ
+  fsimp
+  simp only [subst_withborU]
+  refine retsG_betaE .hole IsVal.lam ?_
+  fsimp
+  simp only [subst_withborU]
+  refine retsG_betaE .hole IsVal.lam ?_
+  fsimp
+  refine retsG_plain (K := .appR (.lam _) .hole) rfl
+    (retsG_withborU' (Qb := RestQ ρ) (f := ⟨_, IsVal.lam⟩) src.ty p ?_) ?_
+  · -- the callback, on the slots `(p, ρ)`
+    refine retsG_betaE (.appL .hole p) IsVal.unit ?_
+    fsimp
+    refine retsG_betaE .hole p.2 ?_
+    fsimp
+    refine retsG_betaE .hole (IsVal.pair p.2 ρ.2) ?_
+    fsimp
+    refine retsG_plain (K := .appR (.lam _) .hole) rfl
+      (retsG_of_rets (by simpa [substAll] using ih γ (Val.pair p ρ))) ?_
+    rintro v ⟨r, rfl⟩
+    refine retsG_beta .hole ?_
+    fsimp
+    refine retsG_letpair (v₁ := Val.pair p ρ) (v₂ := r) .hole ?_
+    fsimp
+    refine retsG_letpair .hole ?_
+    fsimp
+    refine retsG_beta (.seq .hole _) ?_
+    refine retsG_seqU .hole ?_
+    exact retsG_val (w := Val.pair ρ r) ⟨_, rfl⟩
+  · rintro y ⟨b, rfl, r, rfl⟩
+    refine retsG_beta .hole ?_
+    fsimp
+    refine retsG_letpair (v₁ := p) (v₂ := Val.pair ρ r) .hole ?_
+    fsimp
+    refine retsG_letpair .hole ?_
+    fsimp
+    exact retsG_val (w := Val.pair (Val.pair p ρ) r) ⟨_, rfl⟩
 
 end BoCa.Fig16.LogRel.Core.Frames
 
