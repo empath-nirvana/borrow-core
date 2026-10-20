@@ -349,6 +349,171 @@ theorem elab_new {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Ps : List VTy} {V eM
       (.right (.left (.dead (deadSplit (.cons (.cons (.cons kd₂))))))) (.var (by csoloP))
       (.sumI₂ (.var (by csoloP)))))
 
+theorem elab_callBlock {Δ : LifeCtx} {Γ : Ctx VTy} {j : Nat} {b : FBlock} (hb : b.Wf Δ)
+    (hj : Ctx.SoloP Γ j b.B) :
+    CDerives Δ Γ (callE b.v j) (.comp (frTy b.S b.Ps b.E b.A)) := by
+  have kd := kill_dead Γ
+  have hv : CDerives Δ (kill (⟨slotsTy b.Ps, true⟩ :: Γ)) (.val b.v)
+      (.val (blockTy b.B b.S b.Ps b.E b.A)) := by
+    have h := shift_deadN _ (kill_dead (⟨slotsTy b.Ps, true⟩ :: Γ)) hb.2
+    rwa [List.append_nil, shift_closed0 hb.1] at h
+  refine .lam (.bind (A := .thunk (.arr b.B (frTy b.S b.Ps b.E b.A))) (splitP_right_all _)
+    (.ret (.bangE hv)) ?_)
+  refine .app (.left (.right (splitP_left_all Γ))) ?_ (.there (.here kd.toP))
+  exact .app (.left (.dead (splitP_right_all Γ)))
+    (.force (C := .arr b.B (frTy b.S b.Ps b.E b.A)) (.here (.cons kd.toP))) (.there (.there hj))
+
+theorem splitP_symm {Γ Γ₁ Γ₂ : Ctx VTy} (h : Ctx.SplitP Γ Γ₁ Γ₂) : Ctx.SplitP Γ Γ₂ Γ₁ := by
+  induction h with
+  | nil => exact .nil
+  | left _ ih => exact .right ih
+  | right _ ih => exact .left ih
+  | dead _ ih => exact .dead ih
+  | dup hT _ ih => exact .dup hT ih
+
+/-- The counted loop's step `λ(i, (π, s)). M[i, s] π to (π', r). …` over the persistent context of
+the turn. -/
+theorem countStep_derives {Δ : LifeCtx} {Γ₂ : Ctx VTy} {Ps : List VTy} {eM : Expr}
+    {E : ExitRow} {l : Nat} {S₀ B : VTy} (hp : Persistent Γ₂)
+    (hM : CDerives Δ (⟨S₀, true⟩ :: ⟨.int .w32, true⟩ :: Γ₂) eM
+      (.comp (frTy [] Ps ((l, B) :: E) S₀))) :
+    CDerives Δ Γ₂ (countStepE eM)
+      (.val (.bang (.lolli (.tensor (.int .w32) (.tensor (slotsTy Ps) S₀))
+        (.sum (.tensor (slotsTy Ps) S₀) (.tensor (slotsTy Ps) (exitsTy B E)))))) := by
+  have kd := kill_dead Γ₂
+  refine .bangThunkV hp rfl (.lam ?_)
+  refine .tensorE (.left (splitP_right_all Γ₂)) (.var (.here kd.toP)) ?_
+  refine .tensorE (.left (.right (.dead (splitP_right_all Γ₂)))) (.var (.here (.cons (.cons kd.toP)))) ?_
+  refine .bind (A := .tensor (slotsTy Ps) (exitsTy S₀ ((l, B) :: E))) (splitP_left_all _) ?_ ?_
+  · refine .app (A := slotsTy Ps) (.left (.right (.dead (.left (.dead (splitP_left_all Γ₂)))))) ?_ ?_
+    · refine .app (A := S₀) (.right (.dead (.dead (.left (.dead (splitP_left_all Γ₂)))))) ?_ ?_
+      · refine .app (A := .int .w32) (.dead (.dead (.dead (.right (.dead (splitP_left_all Γ₂))))))
+          (shift_deadN [⟨_, false⟩, ⟨_, false⟩, ⟨_, false⟩, ⟨_, false⟩, ⟨_, false⟩]
+            (.cons (.cons (.cons (.cons (.cons .nil))))) (.lam (.lam hM))) ?_
+        csoloP
+      · csoloP
+    · csoloP
+  · have kd' := kill_dead (⟨S₀, true⟩ :: ⟨slotsTy Ps, true⟩ :: ⟨.tensor (slotsTy Ps) S₀, false⟩ ::
+      ⟨.int .w32, true⟩ :: ⟨.tensor (.int .w32) (.tensor (slotsTy Ps) S₀), false⟩ :: Γ₂)
+    refine .tensorE (.left (deadSplit kd')) (.var (.here kd'.toP)) ?_
+    refine .sumE (.left (.right (.dead (deadSplit kd')))) (.var (by csoloP)) ?_ ?_
+    · exact .ret (.sumI₁ (.tensorI (.right (.dead (.left (.dead (deadSplit kd')))))
+        (.var (by csoloP)) (.var (by csoloP))))
+    · exact .ret (.sumI₂ (.tensorI (.right (.dead (.left (.dead (deadSplit kd')))))
+        (.var (by csoloP)) (.var (by csoloP))))
+
+theorem elab_loopCount {Δ : LifeCtx} {Γ Γ₁ Γn Γs Γ₂ : Ctx VTy} {Ps : List VTy} {n s₀ eM : Expr}
+    {E : ExitRow} {l : Nat} {S₀ B : VTy}
+    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γn Γs) (hp : Persistent Γ₂)
+    (hn : CDerives Δ Γn n (.val (.int .w32))) (hs0 : CDerives Δ Γs s₀ (.val S₀))
+    (hM : CDerives Δ (⟨S₀, true⟩ :: ⟨.int .w32, true⟩ :: Γ₂) eM
+      (.comp (frTy [] Ps ((l, B) :: E) S₀))) :
+    CDerives Δ Γ (loopCountE n s₀ eM) (.comp (frTy [] Ps E (.sum S₀ B))) := by
+  refine .lam (.bind (A := .sum (.tensor (slotsTy Ps) S₀) (.tensor (slotsTy Ps) (exitsTy B E)))
+    (splitP_left_all _) ?_ ?_)
+  · refine .ret (.lolliE (splitP_left_all _) ?_ (.bangE (.countTry _ _ (kill_dead _).toP)))
+    refine .tensorI (.right (splitP_symm hs)) (shift_dead _ (countStep_derives hp hM)) ?_
+    refine .tensorI (.right hs₁) (shift_dead _ hn) ?_
+    refine .tensorI (splitP_right_all _) (.lit (.i32 0) (kill_dead _).toP) ?_
+    exact .tensorI (.left (splitP_right_all Γs)) (.var (.here (kill_dead Γs).toP)) (shift_dead _ hs0)
+  · have kd := kill_dead (⟨slotsTy Ps, true⟩ :: Γ)
+    refine .sumE (.left (deadSplit kd)) (.var (.here kd.toP)) ?_ ?_
+    · refine .tensorE (.left (.dead (deadSplit kd))) (.var (by csoloP)) ?_
+      exact .ret (.tensorI (.right (.left (.dead (.dead (deadSplit kd))))) (.var (by csoloP))
+        (.sumI₁ (.sumI₁ (.var (by csoloP)))))
+    · refine .tensorE (.left (.dead (deadSplit kd))) (.var (by csoloP)) ?_
+      refine .sumE (.left (.right (.dead (.dead (deadSplit kd))))) (.var (by csoloP)) ?_ ?_
+      · exact .ret (.tensorI (.right (.dead (.left (.dead (.dead (deadSplit kd)))))) (.var (by csoloP))
+          (.sumI₁ (.sumI₂ (.var (by csoloP)))))
+      · exact .ret (.tensorI (.right (.dead (.left (.dead (.dead (deadSplit kd)))))) (.var (by csoloP))
+          (.sumI₂ (.var (by csoloP))))
+
+theorem deadP_of_persistent : ∀ {Γ : Ctx VTy}, Persistent Γ → Ctx.DeadP Γ
+  | [], _ => .nil
+  | ⟨T, false⟩ :: Γ, h => .cons (deadP_of_persistent fun s hs hl => h s (by simp [hs]) hl)
+  | ⟨T, true⟩ :: Γ, h => by
+      obtain ⟨A, hA⟩ := h ⟨T, true⟩ (by simp) rfl
+      simp only at hA
+      subst hA
+      exact .drop rfl (deadP_of_persistent fun s hs hl => h s (by simp [hs]) hl)
+
+/-- The div loop's step `λst. let (π, s) = st; ⟨turn, close⟩` over the persistent context of the
+turn. -/
+theorem iterStep_derives {Δ : LifeCtx} {Γ₂ : Ctx VTy} {Ps : List VTy} {eM : Expr} {S : Row}
+    {E : ExitRow} {l : Nat} {S₀ B : VTy} (hp : Persistent Γ₂) (hS₀ : HasDtor S₀)
+    (hM : CDerives Δ (⟨S₀, true⟩ :: Γ₂) eM (.comp (frTy S Ps ((l, B) :: E) S₀))) :
+    CDerives Δ Γ₂ (iterStepE S₀ eM)
+      (.val (iterStepTy S (.tensor (slotsTy Ps) S₀) (.tensor (slotsTy Ps) (exitsTy B E))
+        (.tensor (slotsTy Ps) .unit))) := by
+  have kd := kill_dead Γ₂
+  refine .bangThunkV hp rfl (.lam ?_)
+  refine .tensorE (.left (splitP_right_all Γ₂)) (.var (.here kd.toP)) ?_
+  refine .withI ?_ ?_
+  · refine .effLet (A := .tensor (slotsTy Ps) (exitsTy S₀ ((l, B) :: E))) (splitP_left_all _)
+      (fun _ => drops_dead (kill_dead _)) (fun _ => persistent_dead (kill_dead _)) ?_ ?_
+    · refine .app (A := slotsTy Ps) (.dead (.dead (.left (.right (.dead (splitP_left_all Γ₂))))))
+        ?_ (by csoloP)
+      exact .app (A := S₀) (.dead (.dead (.right (.dead (.dead (splitP_left_all Γ₂))))))
+        (shift_deadN [⟨_, false⟩, ⟨_, false⟩, ⟨_, false⟩, ⟨_, false⟩, ⟨_, false⟩]
+          (.cons (.cons (.cons (.cons (.cons .nil))))) (.lam hM)) (by csoloP)
+    · have kd' := kill_dead (withCtx (⟨S₀, true⟩ :: ⟨slotsTy Ps, true⟩ ::
+        ⟨.tensor (slotsTy Ps) S₀, false⟩ :: Γ₂))
+      refine .tensorE (.left (deadSplit kd')) (.var (.here kd'.toP)) ?_
+      refine .sumE (.left (.right (.dead (deadSplit kd')))) (.var (by csoloP)) ?_ ?_
+      · exact .effSub (RowLe.nil S) (.ret (.sumI₂ (.tensorI (.right (.dead (.left (.dead (deadSplit kd')))))
+          (.var (by csoloP)) (.var (by csoloP)))))
+      · exact .effSub (RowLe.nil S) (.ret (.sumI₁ (.tensorI (.right (.dead (.left (.dead (deadSplit kd')))))
+          (.var (by csoloP)) (.var (by csoloP)))))
+  · refine drop_derives (.dead (.dead (.left (.right (.dead (splitP_right_all Γ₂))))))
+      (by csoloP) hS₀ ?_
+    exact .effSub (RowLe.nil S) (.ret (.tensorI
+      (.dead (.dead (.dead (.left (.dead (splitP_right_all Γ₂))))))
+      (.var (by csoloP)) (.unitI (.cons (.cons (.cons (.cons (.cons (deadP_of_persistent hp)))))))))
+
+theorem elab_loopIter {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Ps : List VTy} {s₀ eM : Expr} {S : Row}
+    {E : ExitRow} {l : Nat} {S₀ B : VTy} (hdiv : Row.divB S = true) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
+    (hp : Persistent Γ₂) (hS₀ : HasDtor S₀) (hs0 : CDerives Δ Γ₁ s₀ (.val S₀))
+    (hM : CDerives Δ (⟨S₀, true⟩ :: Γ₂) eM (.comp (frTy S Ps ((l, B) :: E) S₀))) :
+    CDerives Δ Γ (loopIterE S₀ s₀ eM) (.comp (frTy S Ps E (.sum B .unit))) := by
+  refine .lam (.bind (.right (splitP_symm hs)) (.ret (shift_dead _ (iterStep_derives hp hS₀ hM))) ?_)
+  refine .bind (splitP_right_all _)
+    (.ret (.bangE (.iterate S (.tensor (slotsTy Ps) S₀) (.tensor (slotsTy Ps) (exitsTy B E))
+      (.tensor (slotsTy Ps) .unit) hdiv (kill_dead _).toP))) ?_
+  refine .bind (A := .tensor (iterStepTy S (.tensor (slotsTy Ps) S₀)
+      (.tensor (slotsTy Ps) (exitsTy B E)) (.tensor (slotsTy Ps) .unit)) (.tensor (slotsTy Ps) S₀))
+    (.right (.left (.left (splitP_left_all Γ₁))))
+    (.ret (.tensorI (.dead (.left (.right (splitP_right_all Γ₁))))
+      (.var (.there (.here (.cons (kill_dead Γ₁).toP))))
+      (.tensorI (.dead (.dead (.left (splitP_right_all Γ₁))))
+        (.var (.there (.there (.here (kill_dead Γ₁).toP))))
+        (shift_deadN [⟨_, false⟩, ⟨_, false⟩, ⟨_, false⟩] (.cons (.cons (.cons .nil))) hs0)))) ?_
+  refine .effLet (A := .sum (.tensor (slotsTy Ps) (exitsTy B E)) (.tensor (slotsTy Ps) .unit))
+    (splitP_left_all _) (fun _ => drops_dead (kill_dead _))
+    (fun _ => persistent_dead (kill_dead _))
+    (.app (.right (.left (deadSplit (.cons (.cons (kill_dead Γ₁))))))
+      (.force (C := .arr (.tensor (iterStepTy S (.tensor (slotsTy Ps) S₀)
+        (.tensor (slotsTy Ps) (exitsTy B E)) (.tensor (slotsTy Ps) .unit)) (.tensor (slotsTy Ps) S₀))
+        (CTy.effOf S (.sum (.tensor (slotsTy Ps) (exitsTy B E)) (.tensor (slotsTy Ps) .unit))))
+        (.there (.here (.cons (.cons (kill_dead Γ₁).toP)))))
+      (.here (.cons (.cons (.cons (kill_dead Γ₁).toP))))) ?_
+  have kd := kill_dead (⟨.tensor (iterStepTy S (.tensor (slotsTy Ps) S₀)
+      (.tensor (slotsTy Ps) (exitsTy B E)) (.tensor (slotsTy Ps) .unit)) (.tensor (slotsTy Ps) S₀), true⟩ ::
+    ⟨.thunk (.arr (.tensor (iterStepTy S (.tensor (slotsTy Ps) S₀)
+        (.tensor (slotsTy Ps) (exitsTy B E)) (.tensor (slotsTy Ps) .unit)) (.tensor (slotsTy Ps) S₀))
+        (CTy.effOf S (.sum (.tensor (slotsTy Ps) (exitsTy B E)) (.tensor (slotsTy Ps) .unit)))), true⟩ ::
+    ⟨iterStepTy S (.tensor (slotsTy Ps) S₀) (.tensor (slotsTy Ps) (exitsTy B E))
+      (.tensor (slotsTy Ps) .unit), false⟩ :: ⟨slotsTy Ps, false⟩ :: kill Γ₁)
+  refine .sumE (.left (deadSplit kd)) (.var (.here kd.toP)) ?_ ?_
+  · refine .tensorE (.left (.dead (deadSplit kd))) (.var (by csoloP)) ?_
+    refine .sumE (.left (.right (.dead (.dead (deadSplit kd))))) (.var (by csoloP)) ?_ ?_
+    · exact .effSub (RowLe.nil S) (.ret (.tensorI (.right (.dead (.left (.dead (.dead (deadSplit kd))))))
+        (.var (by csoloP)) (.sumI₁ (.sumI₁ (.var (by csoloP))))))
+    · exact .effSub (RowLe.nil S) (.ret (.tensorI (.right (.dead (.left (.dead (.dead (deadSplit kd))))))
+        (.var (by csoloP)) (.sumI₂ (.var (by csoloP)))))
+  · refine .tensorE (.left (.dead (deadSplit kd))) (.var (by csoloP)) ?_
+    exact .effSub (RowLe.nil S) (.ret (.tensorI (.right (.left (.dead (.dead (deadSplit kd)))))
+      (.var (by csoloP)) (.sumI₁ (.sumI₂ (.unitI (.drop rfl (.cons (.cons (.cons kd.toP)))))))))
+
 end BoCa.Fig16.LogRel.Core.Frames
 
 end
