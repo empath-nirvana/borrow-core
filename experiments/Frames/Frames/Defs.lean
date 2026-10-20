@@ -72,6 +72,10 @@ inductive SlotOk : VTy → Prop where
   | ref {A : VTy} (h : HasDtor A) : SlotOk (.ref A)
   | «mut» {a : Lifetime.Life} {A : VTy} : SlotOk (.mut a A)
 
+/-- Every live slot of a Core context has a destructor: what an exit's drop glue needs of the
+continuation it skips. -/
+def CtxDtor (Γ : Ctx VTy) : Prop := ∀ s ∈ Γ, s.live = true → HasDtor s.ty
+
 /-- Every slot of `Π` has a destructor. -/
 def SlotsOk (Ps : List VTy) : Prop := ∀ P ∈ Ps, SlotOk P
 
@@ -124,14 +128,29 @@ def coreE (Ps : List VTy) (N : Expr) : Expr :=
 def exitE (k : Nat) (V : Expr) : Expr :=
   .lam (.pair (.var 0) (.inj₂ (injAt k (sh 1 V))))
 
-/-- **`bind M (x. N)`**: `λπ. M π to (π', r). case r {inl a → N[a] π' | inr e → (π', inr e)}`.
-`eN` is `N`'s elaboration, under `a`.
+/-- **Drop glue for a skipped continuation.** `dropCtxE Γ i k`: the destructor of each live slot
+of `Γ`, the slot at index `i` onwards, then `k`. An exit that skips a continuation runs it on the
+continuation's context: the context's linear values are Core values, not slots, so §19's drop
+glue (`dropE`) disposes of them. -/
+def dropCtxE : Ctx VTy → Nat → Expr → Expr
+  | [], _, k => k
+  | ⟨T, true⟩ :: Γ, i, k => dropE T i (dropCtxE Γ (i + 1) k)
+  | ⟨_, false⟩ :: Γ, i, k => dropCtxE Γ (i + 1) k
+
+/-- The arm of an exit that skips a continuation: `absurd` when the row is empty (the payload is
+`0`), else the drop glue `d`. -/
+def exitArmE : ExitRow → Expr → Expr
+  | [], _ => absurdE (.var 0)
+  | _ :: _, d => d
+
+/-- **`bind M (x. N)`**: `λπ. M π to (π', r). case r {inl a → N[a] π' | inr e → drop Γ₂; (π', inr e)}`.
+`eN` is `N`'s elaboration, under `a`; `Γ₂` is `N`'s context, which the exit arm drops.
 After `let (π', r)`: `0 = r`, `1 = π'`, `2 = x`, `3 = π`, `4… = Γ`; in a branch one more. -/
-def bindE (eM eN : Expr) : Expr :=
+def bindE (E : ExitRow) (Γ₂ : Ctx VTy) (eM eN : Expr) : Expr :=
   seqE eM (.letpair (.var 0)
     (.case (.var 0)
       (.app (.app (sh 5 (.val (.lam eN))) (.var 0)) (.var 2))
-      (.pair (.var 2) (.inj₂ (.var 0)))))
+      (exitArmE E (dropCtxE Γ₂ 5 (.pair (.var 2) (.inj₂ (.var 0)))))))
 
 /-- **`case V (x. M₁) (y. M₂)`**: `λπ. case V↑ {inl x → M₁[x] π | inr y → M₂[y] π}`.
 In a branch: `0 = x`, `1 = π`, `2… = Γ`. -/
@@ -142,16 +161,16 @@ def caseE (V e₁ e₂ : Expr) : Expr :=
 
 /-- **`catch M (b. H)`**: run `M`, whose row has one more exit at its head; that exit is caught
 and `H` runs on its payload. Every other answer passes on, the row's tail re-indexed by the
-`case` itself:
-`λπ. M π to (π', r). case r {inl a → (π', inl a) | inr e → case e {inl b → H[b] π' | inr e' → (π', inr e')}}`.
+`case` itself, after the drop glue of `H`'s context `Γ₂`:
+`λπ. M π to (π', r). case r {inl a → drop Γ₂; (π', inl a) | inr e → case e {inl b → H[b] π' | inr e' → drop Γ₂; (π', inr e')}}`.
 In the inner branches: `0 = b`/`e'`, `1 = e`, `2 = r`, `3 = π'`, `4 = x`, `5 = π`, `6… = Γ`. -/
-def catchE (eM eH : Expr) : Expr :=
+def catchE (Γ₂ : Ctx VTy) (eM eH : Expr) : Expr :=
   seqE eM (.letpair (.var 0)
     (.case (.var 0)
-      (.pair (.var 2) (.inj₁ (.var 0)))
+      (dropCtxE Γ₂ 5 (.pair (.var 2) (.inj₁ (.var 0))))
       (.case (.var 0)
         (.app (.app (sh 6 (.val (.lam eH))) (.var 0)) (.var 3))
-        (.pair (.var 3) (.inj₂ (.var 0))))))
+        (dropCtxE Γ₂ 6 (.pair (.var 3) (.inj₂ (.var 0)))))))
 
 /-- **`under M`**: a frame over `Π` run in a frame over `Q :: Π`, the head slot held aside:
 `λπ. let (q, ρ) = π; M ρ then y. let (ρ', r) = y; ((q, ρ'), r) unwind dtor_Q q`.
@@ -278,9 +297,9 @@ def loopIterE (S₀ : VTy) (s₀ eM : Expr) : Expr :=
     (sh 1 (iterStepE S₀ eM)))
 
 /-- **`callBlock b V`**: call a frame-typed block (a closed value) on `V` with the current slots:
-`λπ. (b V↑) π`. ANF: `V` is a variable of the frame's context. -/
+`λπ. (λf. f V↑↑ π) b`. ANF: `V` is a variable of the frame's context. -/
 def callE (b : Val) (j : Nat) : Expr :=
-  .lam (.app (.app (.val b) (.var (j + 1))) (.var 0))
+  .lam (.app (.val (.lam (.app (.app (.var 0) (.var (j + 2))) (.var 1)))) (.val b))
 
 /-- **Row weakening**: `λπ. e↑ π`. -/
 def subE (e : Expr) : Expr := .lam (.app (sh 1 e) (.var 0))

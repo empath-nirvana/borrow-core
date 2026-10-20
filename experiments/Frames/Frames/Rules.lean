@@ -67,9 +67,10 @@ inductive FDerives : LifeCtx → Ctx VTy → List FBlock → List VTy → Expr �
   /-- Sequence: an exit of `M` skips `N`. -/
   | bind {Δ Γ Γ₁ Γ₂ Φ Ps eM eN S E A B} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hW : S.Weak → Γ₂.Drops) (hU : S.Unr → Persistent Γ₂)
+      (hX : E = [] ∨ CtxDtor Γ₂)
       (hM : FDerives Δ Γ₁ Φ Ps eM S E A)
       (hN : FDerives Δ (⟨A, true⟩ :: Γ₂) Φ Ps eN S E B) :
-      FDerives Δ Γ Φ Ps (bindE eM eN) S E B
+      FDerives Δ Γ Φ Ps (bindE E Γ₂ eM eN) S E B
   /-- A case whose arms are frames over the same slots: the join is the frame's. -/
   | case {Δ Γ Γs Γb Φ Ps V e₁ e₂ S E A B C} (hs : Ctx.SplitP Γ Γs Γb)
       (hV : CDerives Δ Γs V (.val (.sum A B)))
@@ -79,10 +80,10 @@ inductive FDerives : LifeCtx → Ctx VTy → List FBlock → List VTy → Expr �
   /-- Catch the head exit (a labelled block's exit, the function's `return`, a turn's
   `continue`). -/
   | catch {Δ Γ Γ₁ Γ₂ Φ Ps eM eH S E A} {l : Nat} {B : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
-      (hW : S.Weak → Γ₂.Drops) (hU : S.Unr → Persistent Γ₂)
+      (hW : S.Weak → Γ₂.Drops) (hU : S.Unr → Persistent Γ₂) (hX : CtxDtor Γ₂)
       (hM : FDerives Δ Γ₁ Φ Ps eM S ((l, B) :: E) A)
       (hH : FDerives Δ (⟨B, true⟩ :: Γ₂) Φ Ps eH S E A) :
-      FDerives Δ Γ Φ Ps (catchE eM eH) S E A
+      FDerives Δ Γ Φ Ps (catchE Γ₂ eM eH) S E A
   /-- A frame over `Π` inside a frame over `Q :: Π`. -/
   | under {Δ Γ Φ Ps eM S E A} {Q : VTy} (hS : FRow S) (hQ : SlotOk Q)
       (hM : FDerives Δ Γ Φ Ps eM S E A) :
@@ -90,15 +91,17 @@ inductive FDerives : LifeCtx → Ctx VTy → List FBlock → List VTy → Expr �
   /-- Lend the head slot to a Core callback (a statement that reads or writes the place). -/
   | use {Δ Γ Φ Ps N S E B} (src : LendSrc) (x : LifeVar) (hx : Δ.find? x = none)
       (hS : S.Unwind x) (hS' : FRow S) (hP : SlotsOk Ps) (hsrc : LendOk Δ x src)
-      (hB : ¬ VFree x B)
+      (hsrcD : SlotOk src.ty) (hB : ¬ VFree x B)
       (hN : CDerives Δ Γ N (.val (cbUTy x Δ.meetOfDom (.mut (.var x) src.payload) B S))) :
       FDerives Δ Γ Φ (src.ty :: Ps) (useE src Ps N) S E B
   /-- Reborrow the head slot at a fresh `'x` for a frame over `Mut 'x A :: Π`: a borrow block
   whose body is a frame, with its exits passed out of the lend. -/
-  | lend {Δ Γ Φ Ps eM S E A} (src : LendSrc) (x : LifeVar) (hx : Δ.find? x = none)
-      (hS : S.Unwind x) (hsrc : LendOk Δ x src)
+  | lend {Δ Γ Φ Ps eM S E A} (src : LendSrc) (x : LifeVar) (hΔ : Δ.Ok) (hx : Δ.find? x = none)
+      (hS : S.Unwind x) (hsrc : LendOk Δ x src) (hsrcD : SlotOk src.ty)
       (hΓx : ∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty)
       (hfree : ¬ VFree x (.tensor (slotsTy Ps) (exitsTy A E)))
+      (hout : VOutlives (Δ.extend x Δ.meetOfDom) (.var x) (slotsTy Ps) ∧
+        VOutlives (Δ.extend x Δ.meetOfDom) (.var x) (exitsTy A E))
       (hM : FDerives (Δ.extend x Δ.meetOfDom) Γ Φ (.mut (.var x) src.payload :: Ps) eM S E A) :
       FDerives Δ Γ Φ (src.ty :: Ps) (lendE src eM) S E A
   /-- `let mut`: a new slot for `M`; its last content is handed out at the normal exit. -/
