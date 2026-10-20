@@ -1,0 +1,7 @@
+richards | data: allocs 2 indirect 0 copies 0 loads 6554084 stores 2243890 bounds 696434 | probe: allocs 2 indirect 0 copies 0 loads 1650069 stores 520685 bounds 1649919
+deltablue | data: allocs 416 indirect 0 copies 0 loads 261216 stores 69823 bounds 61755 | probe: allocs 416 indirect 0 copies 0 loads 114852 stores 22381 bounds 107995
+cd | data: allocs 2 indirect 0 copies 0 loads 292068 stores 59897 bounds 56361 | probe: allocs 2 indirect 0 copies 0 loads 104049 stores 35556 bounds 86022
+union-find | data: allocs 4 indirect 0 copies 0 loads 19680 stores 11768 bounds 13664 | probe: allocs 4 indirect 0 copies 0 loads 19680 stores 11768 bounds 13664
+arena | data: allocs 7 indirect 0 copies 0 loads 128 stores 102 bounds 73 | probe: allocs 7 indirect 0 copies 0 loads 128 stores 102 bounds 73
+lru | data: allocs 3 indirect 0 copies 0 loads 510 stores 248 bounds 112 | probe: allocs 8 indirect 0 copies 0 loads 371 stores 208 bounds 176
+n-body | data: allocs 3 indirect 0 copies 0 loads 35381 stores 17599 bounds 5066 | probe: allocs 3 indirect 0 copies 0 loads 24795 stores 7595 bounds 24732

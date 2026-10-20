@@ -1,0 +1,228 @@
+-- AWFY CD's RedBlackTree with declarations (SPEC §42): `docs/expressiveness-probes/awfy/cd_rbtree.bc`
+-- with a node a record, `RbNode`, in an array, and a value a record `V3`. CLRS insertion with
+-- parent pointers and rotations, keyed by a call sign (an i32); node 0 is the sentinel nil
+-- (black). A node is read with `at` (a record of `i32`s is persistent: copied out) and written
+-- back with `array_set`; a field update is on the copy. The traversal is AWFY's forEach, done as
+-- successor walks along parent pointers.
+-- Answer: (nodes visited in order, whether the keys came out sorted and the tree is a valid
+-- red-black tree (1), the sum of the x components).
+
+include slice
+include buf
+
+data RbNode = { key: i32, left: i32, right: i32, parent: i32, color: i32 }
+
+data V3 = { x: f64, y: f64, z: f64 }
+
+data Rb = { nodes: array RbNode, root: i32, size: i32 }
+
+fn nil(i: i32) -> RbNode = RbNode { key: 0, left: 0, right: 0, parent: 0, color: 0 }
+
+fn zero3(i: i32) -> V3 = V3 { x: 0.0, y: 0.0, z: 0.0 }
+
+fn get(t: array RbNode, k: i32) -> array RbNode * RbNode = let mut t = t; let n = at(&t, k, nil(0)); (t, n)
+
+fn set_left(t: array RbNode, k: i32, v: i32) -> array RbNode =
+  let (t, n) = get(t, k); let mut n = n; n.left = v; array_set(t, k, n)
+fn set_right(t: array RbNode, k: i32, v: i32) -> array RbNode =
+  let (t, n) = get(t, k); let mut n = n; n.right = v; array_set(t, k, n)
+fn set_parent(t: array RbNode, k: i32, v: i32) -> array RbNode =
+  let (t, n) = get(t, k); let mut n = n; n.parent = v; array_set(t, k, n)
+fn set_color(t: array RbNode, k: i32, v: i32) -> array RbNode =
+  let (t, n) = get(t, k); let mut n = n; n.color = v; array_set(t, k, n)
+
+fn left_rotate(r: Rb, x: i32) -> Rb =
+  let Rb { nodes, root, size } = r;
+  let (t, xn) = get(nodes, x);
+  let y = xn.right;
+  let (t, yn) = get(t, y);
+  let yl = yn.left;
+  let t = set_right(t, x, yl);
+  let t = if yl != 0 { set_parent(t, yl, x) } else { t };
+  let xp = xn.parent;
+  let t = set_parent(t, y, xp);
+  let (t, xpn) = get(t, xp);
+  let (t, root) = if xp == 0 { (t, y) } else { if x == xpn.left { (set_left(t, xp, y), root) } else { (set_right(t, xp, y), root) } };
+  let t = set_left(t, y, x);
+  Rb { nodes: set_parent(t, x, y), root: root, size: size }
+
+fn right_rotate(r: Rb, x: i32) -> Rb =
+  let Rb { nodes, root, size } = r;
+  let (t, xn) = get(nodes, x);
+  let y = xn.left;
+  let (t, yn) = get(t, y);
+  let yr = yn.right;
+  let t = set_left(t, x, yr);
+  let t = if yr != 0 { set_parent(t, yr, x) } else { t };
+  let xp = xn.parent;
+  let t = set_parent(t, y, xp);
+  let (t, xpn) = get(t, xp);
+  let (t, root) = if xp == 0 { (t, y) } else { if x == xpn.right { (set_right(t, xp, y), root) } else { (set_left(t, xp, y), root) } };
+  let t = set_right(t, y, x);
+  Rb { nodes: set_parent(t, x, y), root: root, size: size }
+
+fn colors(r: Rb, a: i32, ca: i32, b: i32, cb: i32) -> Rb =
+  let Rb { nodes, root, size } = r;
+  Rb { nodes: set_color(set_color(nodes, a, ca), b, cb), root: root, size: size }
+
+fn fixup(r: Rb, z: i32) -> Rb =
+  let mut r = r;
+  let mut z = z;
+  for i in 0..100000 {
+    let Rb { nodes, root, size } = r;
+    let (t, zn) = get(nodes, z);
+    let zp = zn.parent;
+    let (t, zpn) = get(t, zp);
+    let zpp = zpn.parent;
+    let (t, zppn) = get(t, zpp);
+    r = Rb { nodes: t, root: root, size: size };
+    if zpn.color == 0 { break } else { () };
+    if zp == zppn.left {
+      let y = zppn.right;
+      let Rb { nodes, root, size } = r;
+      let (t, yn) = get(nodes, y);
+      r = Rb { nodes: t, root: root, size: size };
+      if yn.color == 1 {
+        r = colors(colors(r, zp, 0, y, 0), zpp, 1, zpp, 1);
+        z = zpp
+      } else {
+        if z == zpn.right { z = zp; r = left_rotate(r, zp) } else { () };
+        let Rb { nodes, root, size } = r;
+        let (t, zn2) = get(nodes, z);
+        let zp2 = zn2.parent;
+        let (t, zpn2) = get(t, zp2);
+        let zpp2 = zpn2.parent;
+        r = right_rotate(colors(Rb { nodes: t, root: root, size: size }, zp2, 0, zpp2, 1), zpp2)
+      }
+    } else {
+      let y = zppn.left;
+      let Rb { nodes, root, size } = r;
+      let (t, yn) = get(nodes, y);
+      r = Rb { nodes: t, root: root, size: size };
+      if yn.color == 1 {
+        r = colors(colors(r, zp, 0, y, 0), zpp, 1, zpp, 1);
+        z = zpp
+      } else {
+        if z == zpn.left { z = zp; r = right_rotate(r, zp) } else { () };
+        let Rb { nodes, root, size } = r;
+        let (t, zn2) = get(nodes, z);
+        let zp2 = zn2.parent;
+        let (t, zpn2) = get(t, zp2);
+        let zpp2 = zpn2.parent;
+        r = left_rotate(colors(Rb { nodes: t, root: root, size: size }, zp2, 0, zpp2, 1), zpp2)
+      }
+    }
+  };
+  let Rb { nodes, root, size } = r;
+  Rb { nodes: set_color(nodes, root, 0), root: root, size: size }
+
+-- put(key, v): a new node, or the value replaced.
+fn put(r: Rb, v: array V3, key: i32, x: V3) -> Rb * array V3 =
+  let Rb { nodes, root, size } = r;
+  let mut t = nodes;
+  let mut p = 0;
+  let mut cur = root;
+  let mut found = 0 - 1;
+  for i in 0..100000 {
+    if cur == 0 { break } else { () };
+    p = cur;
+    let (t1, cn) = get(t, cur);
+    t = t1;
+    if key < cn.key { cur = cn.left } else {
+      if cn.key < key { cur = cn.right } else { found = cur; break } }
+  };
+  if found >= 0 {
+    (Rb { nodes: t, root: root, size: size }, array_set(v, found, x))
+  } else {
+    let z = size + 1;
+    let t = array_set(t, z, RbNode { key: key, left: 0, right: 0, parent: p, color: 1 });
+    let (t, pn) = get(t, p);
+    let (t, root) = if p == 0 { (t, z) } else { if key < pn.key { (set_left(t, p, z), root) } else { (set_right(t, p, z), root) } };
+    (fixup(Rb { nodes: t, root: root, size: z }, z), array_set(v, z, x))
+  }
+
+fn minimum(t: array RbNode, x: i32) -> array RbNode * i32 =
+  let mut t = t;
+  let mut x = x;
+  for i in 0..100000 {
+    let (t1, xn) = get(t, x);
+    t = t1;
+    if xn.left == 0 { break } else { x = xn.left }
+  };
+  (t, x)
+
+-- The in-order successor, by parent pointers.
+fn successor(t: array RbNode, x: i32) -> array RbNode * i32 =
+  let (t, xn) = get(t, x);
+  if xn.right != 0 { minimum(t, xn.right) } else {
+    let mut t = t;
+    let mut x = x;
+    let mut y = xn.parent;
+    for i in 0..100000 {
+      let (t1, yn) = get(t, y);
+      t = t1;
+      if y == 0 || x != yn.right { break } else { x = y; y = yn.parent }
+    };
+    (t, y)
+  }
+
+-- The black nodes from `x` to the root, or a large negative count when a red node has a red
+-- parent: the tree is checked by the in-order walk, each leaf's count compared with the first's.
+fn black_height_to_root(t: array RbNode, x: i32) -> array RbNode * i32 =
+  let mut t = t;
+  let mut x = x;
+  let mut h = 0;
+  for i in 0..100000 {
+    if x == 0 { break } else { () };
+    let (t1, xn) = get(t, x);
+    let (t1, pn) = get(t1, xn.parent);
+    t = t1;
+    if xn.color == 1 && pn.color == 1 { h = 0 - 1000000 } else { () };
+    if xn.color == 0 { h = h + 1 } else { () };
+    x = xn.parent
+  };
+  (t, h)
+
+fn main_tree(n: i32) -> i32 * (i32 * f64) =
+  let t = array_new[RbNode](n + 2, nil);
+  let v = array_new[V3](n + 2, zero3);
+  let mut r = Rb { nodes: t, root: 0, size: 0 };
+  let mut v = v;
+  let mut seed = 74755;
+  for i in 0..n {
+    seed = host[and32](seed * 1309 + 13849, 65535);
+    let fs = host[f64_convert_i32_s](seed);
+    let (r1, v1) = put(r, v, seed % 1000, V3 { x: fs, y: 0.0, z: 1.0 });
+    r = r1;
+    v = v1
+  };
+  let Rb { nodes, root, size } = r;
+  let (t, first) = minimum(nodes, root);
+  let mut t = t;
+  let mut x = first;
+  let mut count = 0;
+  let mut ok = 1;
+  let mut prev = 0 - 1;
+  let mut bh = 0 - 1;
+  let mut sum = 0.0;
+  for i in 0..n + 1 {
+    if x == 0 { break } else { () };
+    count = count + 1;
+    let (t1, xn) = get(t, x);
+    t = t1;
+    if xn.key <= prev { ok = 0 } else { () };
+    prev = xn.key;
+    let vx = at(&v, x, zero3(0));
+    sum = sum + vx.x;
+    if xn.left == 0 || xn.right == 0 {
+      let (t1, h) = black_height_to_root(t, x);
+      t = t1;
+      if bh < 0 { bh = h } else { if h != bh { ok = 0 } else { () } }
+    } else { () };
+    let (t1, nx) = successor(t, x);
+    t = t1;
+    x = nx
+  };
+  (count, (ok, sum))
+
+main -> i32 * (i32 * f64) = main_tree(2000)

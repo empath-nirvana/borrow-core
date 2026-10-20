@@ -1,0 +1,81 @@
+-- Union-find with declarations (SPEC §42): `docs/expressiveness-probes/ds/unionfind.bc` with the
+-- structure a record of its two buffers. Parent and rank arrays, find with full path compression
+-- (two passes, both counted loops of at most `n` steps), union by rank; `uf_add` pushes a new
+-- singleton.
+include textio
+include buf
+
+data UF = { parent: buf i32, rank: buf i32 }
+
+fn gi(b: buf i32, i: i32) -> buf i32 * i32 = let (a, n) = b; let x = at(&a, i, 0); ((a, n), x)
+fn si(b: buf i32, i: i32, x: i32) -> buf i32 = let (a, n) = b; (array_set(a, i, x), n)
+
+fn uf_new(n: i32) -> UF =
+  UF { parent: buf_of_array(array_new[i32](n, !{ i -> i })), rank: buf_of_array(array_new[i32](n, !{ i -> 0 })) }
+
+-- A new singleton; its index.
+fn uf_add(u: UF) -> UF * i32 =
+  match u {
+    UF { parent, rank } ->
+      let (p, i) = len_of(parent);
+      let (p, _) = push(p, i);
+      let (r, _) = push(rank, 0);
+      (UF { parent: p, rank: r }, i)
+  }
+
+-- The root of `x`; every node on the path then points at it.
+fn uf_find(u: UF, x: i32) -> UF * i32 =
+  match u {
+    UF { parent, rank } ->
+      let (p, n) = len_of(parent);
+      let mut p = p;
+      let mut root = x;
+      for _ in 0..n {
+        let (p2, q) = gi(p, root);
+        p = p2;
+        if q == root { break } else { root = q }
+      };
+      let mut y = x;
+      for _ in 0..n {
+        let (p2, q) = gi(p, y);
+        if q == root { p = p2; break } else { p = si(p2, y, root); y = q }
+      };
+      (UF { parent: p, rank: rank }, root)
+  }
+
+-- `x`'s and `y`'s sets joined; whether they were apart.
+fn uf_union(u: UF, x: i32, y: i32) -> UF * bool =
+  let (u, a) = uf_find(u, x);
+  let (u, b) = uf_find(u, y);
+  if a == b { (u, false) } else {
+    match u {
+      UF { parent, rank } ->
+        let (r, ra) = gi(rank, a);
+        let (r, rb) = gi(r, b);
+        if ra < rb { (UF { parent: si(parent, a, b), rank: r }, true) } else {
+          if rb < ra { (UF { parent: si(parent, b, a), rank: r }, true) }
+          else { (UF { parent: si(parent, b, a), rank: si(r, a, ra + 1) }, true) } }
+    }
+  }
+
+main -> i32 =
+  let n = 1000;
+  let mut u = uf_new(n);
+  let mut comps = n;
+  -- join i and 2i+1 (mod n)
+  for i in 0..n {
+    let j = (2 * i + 1) - ((2 * i + 1) / n) * n;
+    let (u2, joined) = uf_union(u, i, j);
+    u = u2;
+    if joined { comps = comps - 1 } else { () }
+  };
+  let (u, extra) = uf_add(u);
+  let (u, r1) = uf_find(u, extra);
+  let (u, r2) = uf_find(u, 0);
+  let (u, r3) = uf_find(u, 999);
+  print_dec(comps); print_byte(b' ');
+  print_dec(extra); print_byte(b' ');
+  print_dec(r1); print_byte(b' ');
+  let same = if r2 == r3 { 1 } else { 0 };
+  print_dec(same); print_byte(b'\n');
+  0

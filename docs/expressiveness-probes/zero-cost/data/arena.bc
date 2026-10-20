@@ -1,0 +1,91 @@
+-- An arena allocator with declarations (SPEC §42): `docs/expressiveness-probes/ds/arena.bc` with
+-- the arena a record, its slots `Option[T]` (`None` a free slot), and ids a newtype `Id`. A
+-- transparent newtype is its field's type (SPEC §42, D1), so `Id` is `i32` to the checker: the ids
+-- of two arenas are not told apart until declarations are nominal (U2, U3).
+include textio
+include buf
+
+data Id = Id(i32)
+
+data Arena[T] = { slots: buf Option[T], free: buf i32, live: i32 }
+
+fn arena_new[T](cap: i32) -> Arena[T] =
+  Arena { slots: box buf[Option[T]](cap), free: box buf[i32](8), live: 0 }
+
+-- `x` stored in a free slot, reused from the free list or pushed; its id.
+fn arena_alloc[T](a: Arena[T], x: T) -> Arena[T] * Id =
+  match a {
+    Arena { slots, free: fr, live } ->
+      let (fl, tp) = pop(fr);
+      match tp {
+        Some(i) ->
+          let (sa, sn) = slots;
+          let (sa, old) = array_replace[Option[T]] (sa, i, Some(x));
+          (Arena { slots: (sa, sn), free: fl, live: live + 1 }, Id(i))
+      | None ->
+          let (slots, i) = len_of(slots);
+          let (slots, _) = push(slots, Some(x));
+          (Arena { slots: slots, free: fl, live: live + 1 }, Id(i))
+      }
+  }
+
+-- The element at `id` taken out and its slot put on the free list; `None` for a free slot.
+fn arena_free[T](a: Arena[T], id: Id) -> Arena[T] * Option[T] =
+  match a {
+    Arena { slots, free: fr, live } ->
+      let Id(i) = id;
+      let (sa, sn) = slots;
+      let (sa, old) = array_replace[Option[T]] (sa, i, None);
+      let o : Option[T] = match old { inl o -> o | inr o -> o };
+      match o {
+        None -> (Arena { slots: (sa, sn), free: fr, live: live }, None)
+      | Some(x) -> let (fl, _) = push(fr, i); (Arena { slots: (sa, sn), free: fl, live: live - 1 }, Some(x))
+      }
+  }
+
+-- The element at `id` lent to `f` (taken out, given to `f`, put back), and `f`'s answer.
+fn arena_with[T, R](a: Arena[T], id: Id, f: !(T => T * R), d: R) -> Arena[T] * R =
+  match a {
+    Arena { slots, free: fr, live } ->
+      let Id(i) = id;
+      let (sa, sn) = slots;
+      let (sa, old) = array_replace[Option[T]] (sa, i, None);
+      let o : Option[T] = match old { inl o -> o | inr o -> o };
+      match o {
+        None -> (Arena { slots: (sa, sn), free: fr, live: live }, d)
+      | Some(x) ->
+          let (x, r) = f(x);
+          let (sa, _) = array_replace[Option[T]] (sa, i, Some(x));
+          (Arena { slots: (sa, sn), free: fr, live: live }, r)
+      }
+  }
+
+fn arena_live[T](a: Arena[T]) -> Arena[T] * i32 = let n = a.live; (a, n)
+
+-- The number of slots, free or live.
+fn arena_slots[T](a: Arena[T]) -> Arena[T] * i32 =
+  match a {
+    Arena { slots, free: fr, live } ->
+      let (slots, n) = len_of(slots);
+      (Arena { slots: slots, free: fr, live: live }, n)
+  }
+
+main -> i32 =
+  -- an arena of owned strings: three allocated, one freed, its slot reused
+  let mut a = arena_new[string](4);
+  let (a1, x) = arena_alloc(a, string_of_lit("one"));
+  let (a2, y) = arena_alloc(a1, string_of_lit("two"));
+  let (a3, z) = arena_alloc(a2, string_of_lit("three"));
+  let (a4, got) = arena_free(a3, y);
+  let a5 = match got { Some(s) -> let s = print_string(s); a4 | None -> a4 };
+  print_byte(b' ');
+  let (a6, w) = arena_alloc(a5, string_of_lit("four"));
+  let (a7, n) = arena_with(a6, w, !{ s -> let (s, _) = push_lit(s, "!"); let (s, k) = len_of(s); (s, k) }, 0);
+  let (a8, live) = arena_live(a7);
+  let (a9, slots) = arena_slots(a8);
+  let Id(wi) = w;
+  print_dec(wi); print_byte(b' ');
+  print_dec(n); print_byte(b' ');
+  print_dec(live); print_byte(b' ');
+  print_dec(slots); print_byte(b'\n');
+  0

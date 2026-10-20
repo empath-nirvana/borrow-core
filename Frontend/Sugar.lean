@@ -2320,6 +2320,28 @@ def recordComps (rolls : Bool) (k : Nat) (A : CVTy) : Option (List CVTy) := do
     | _, _ => none
   spine k A
 
+/-- The declaration, of those `cands` with a field `f`, whose type the record's type `A` is
+(SPEC §42, *Fields*): its fields fit `A`'s components, and `A` matches its named type with its
+parameters placeholders (`Elab/Match.lean`). Declarations that fit and agree on the field's place
+are one; otherwise the access is refused as ambiguous.  `[spec §42]` -/
+def resolveField (c : TCx) (fsp : Span) (f : String) (cands : List FieldCand) (A : CVTy) :
+    DM FieldCand := do
+  let named (cd : FieldCand) : VTy :=
+    cd.tps.foldl (fun F p => .app fsp F (.name fsp p)) (.name fsp cd.decl)
+  let fits (cd : FieldCand) : Bool :=
+    (recordComps cd.rolls cd.names.length A).isSome &&
+      (match patOf c cd.tps (named cd) with
+        | some P => (matchV { ty := Array.replicate cd.tps.length none } 0 P A).isSome
+        | none => true)
+  let shown := ", ".intercalate (cands.map (s!"`{·.decl}`"))
+  match cands.filter fits with
+  | [] => throw ⟨fsp, s!"`.{f}` reads a field of {shown}, but this has type `{ppT A}`"⟩
+  | cd :: rest =>
+    if rest.all fun e => e.idx == cd.idx && e.names.length == cd.names.length && e.rolls == cd.rolls
+    then pure cd
+    else throw ⟨fsp, s!"`.{f}` is a field of {", ".intercalate ((cd :: rest).map (s!"`{·.decl}`"))}, " ++
+      s!"at different places, and the type `{ppT A}` fits each: ascribe the record"⟩
+
 /-- `W`'s field `j` of `k`: `W` taken apart (unrolled first when `rolls`), the field's variable
 handed to `K`. -/
 def projectField (sp : Span) (rolls : Bool) (j k : Nat) (W : Val) (K : Val → Comp) : Comp :=
@@ -3522,17 +3544,32 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       -- Ascribed its loop type, it is the loop as a value, not a call run in direct style.
       pure (.ascribe sp (.app sp (.defApp sp "div_defer" [Bs, Rs]) (.thunkv sp (.with_ sp M'' abort)))
         (.thunk sp (.loop sp Bs Rs)))
-    | .app sp (.sugar fsp (.field f j k rolls)) R => do
+    | .app sp (.sugar fsp (.field f cands)) R => do
       -- `e.f` (SPEC §42, E5), by the receiver's type; `&x` at a binding `let y = x.f;`.
       let (R', head) ← match R with
         | .lend lsp x _ => pure (Val.var lsp x.name, some x)
         | R => do pure (← surfV n c none R, none)
       let T ← need R.span "the record whose field is read" ((← refresh c).tyV R')
-      let V' ← fieldRead c sp fsp f j k rolls R' head T
+      let A := match T with
+        | .imm _ A | .mut _ A => A
+        | T => T
+      let cd ← resolveField c fsp f cands A
+      let V' ← fieldRead c sp fsp f cd.idx cd.names.length cd.rolls R' head T
       -- A projection is elaborated as any `run` is.
       match V' with
       | .run .. => surfV n c exp V'
       | V' => pure V'
+    | .app sp (.sugar fsp (.update f cands)) (.pair _ (.var rsp r) e) => do
+      -- `x.f = e`'s record rebuilt (SPEC §42, E6): `r` taken apart into `r_g`, `e` at `f`.
+      let A ← need rsp "the record a field update rebuilds" ((← refresh c).tyV (.var rsp r))
+      let cd ← resolveField c fsp f cands A
+      let vars := cd.names.zipIdx.map fun (g, i) => if g == "" then s!"{r}__{i}" else s!"{r}_{g}"
+      let As ← c.surface fsp A
+      let comps := vars.zipIdx.map fun (x, i) => if i == cd.idx then e else Val.var fsp x
+      let rebuilt := Data.tupleV fsp comps
+      let rebuilt := if cd.rolls then .ascribe fsp (.roll fsp rebuilt) As else rebuilt
+      let R : Val := if cd.rolls then .unroll fsp (.var rsp r) else .var rsp r
+      surfV n c exp (.run sp (Data.letTuple fsp R vars (.ret fsp (.pair fsp rebuilt (.unit fsp))) (· ++ "r")))
     | .app sp (.sugar dsp .deref) V => do
       let V' ← surfV n c none V
       -- `*e`: `withload` at the identity, reading a persistent content (its view is itself).

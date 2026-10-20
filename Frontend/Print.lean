@@ -165,7 +165,7 @@ def Val.level : Val → Nat
   -- `alloc(e)`, `clone(x)`: an application, parenthesized as an argument.
   | .app _ (.sugar _ (.call _)) _ => 2
   | .app _ (.sugar _ .deref) _ => 2
-  | .app _ (.sugar _ (.field ..)) _ => 3
+  | .app _ (.sugar _ (.field ..)) _ | .app _ (.sugar _ (.update ..)) _ => 3
   | .app _ (.sugar _ .retE) _ | .app _ (.sugar _ (.forSite _)) _ | .app _ (.sugar _ (.pullSite _)) _ => 1
   | .app _ (.sugar _ (.writes _)) _ => 1
   | .app _ (.sugar _ .brace) _
@@ -229,7 +229,8 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .app _ (.sugar _ .count) (.pair _ a b) => "(" ++ a.pp 2 k ++ ".." ++ b.pp 2 k ++ ")"
     | .app _ (.sugar _ .pipe) (.pair _ a s) => "(" ++ a.pp 1 k ++ " |> " ++ s.pp 2 k ++ ")"
     | .app _ (.sugar _ .deref) V => "*" ++ V.pp 3 k
-    | .app _ (.sugar _ (.field f _ _ _)) V => "(" ++ V.pp 0 k ++ ")." ++ f
+    | .app _ (.sugar _ (.field f _)) V => "(" ++ V.pp 0 k ++ ")." ++ f
+    | .app _ (.sugar _ (.update f _)) (.pair _ r e) => "(" ++ r.pp 0 k ++ ").{" ++ f ++ " = " ++ e.pp 0 k ++ "}"
     | .app _ (.sugar _ .retE) V => "return " ++ V.pp 1 k
     | .app _ (.sugar _ (.writes xs)) V => "writes(" ++ ", ".intercalate xs ++ ") " ++ V.pp 1 k
     | .app _ (.sugar _ (.forSite i)) V => s!"for_site[{i.n}] " ++ V.pp 1 k

@@ -7699,25 +7699,31 @@ constructors of each column, which the constructor names give: no type.
 
 ### Fields
 
-`e.f` names the field `f` of a one-constructor declaration that has it (`Data.fieldCands`). The
-receiver's type selects the declaration: its structure must match (`Elab/Match.lean`'s
-first-order matching, the declaration's parameters placeholders), and where several declarations
-with a field `f` match, they must agree on its position, or the access is refused as ambiguous.
-By the receiver:
+`e.f` names the field `f` of a one-constructor declaration with a field so named, at the place
+the declaration gives it (`Data.fieldOf`): its index among the `k` fields, and whether the
+declaration is a `μ`. The declarations in scope that have a field `f` must agree on it, or `e.f`
+is refused, naming two of them ("which is meant is decided by the type in a later unit"): faces
+and a namespace per type are U2's, and with nominal types the receiver's type will choose. A
+block's fields are cells, read by matching the block. A field's name may be a word the core
+reserves (`val`, `free`): after a `.` and before a `:` it is a field's. The read is a typed rule
+(`Sugar.fieldRead`), by the receiver's type:
 
 | receiver | `e.f` | |
 |---|---|---|
-| owned, persistent (§10) | `let (…, y, …) = e; y` | `e` stays usable |
-| a view `Imm̲ 'a N` | the same, fieldwise (§5) | |
-| `imm 'a N` | `withload` around the projection of its view: the field's view, which may not mention `'x` | the borrow is used |
-| `mut 'a N`, at a binding `let y = x.f;` | `withswap` that reads the field and puts the record back: the field persistent | `x` rebound |
-| owned, not persistent, at a binding `let y = x.f;` | `x` lent `&x` for the read, as `f(&x)` (typed elaboration §5.1): the `imm` case | `x` rebound |
+| owned, persistent (§10) | `run (let (x₀, (…, x_{k-1})) = e; return x_j)`, unrolled first when the declaration is a `μ` | `e` stays usable |
+| `imm 'a N`, `N` persistent | the record copied out, `*e` (§36's load at the identity), and projected | the borrow is used |
+| `imm 'a N`, otherwise | `withload` around the projection of its view, the field's view the result: the field persistent | the borrow is used |
+| `mut 'a N`, at a binding `let y = x.f;` | `withswap` whose body takes the record apart and answers it rebuilt and the field: the field persistent | `x` rebound by the lend |
+| owned, not persistent, at a binding `let y = x.f;` | the value taken apart and put back in place, as `modify` runs on a `let mut` value (§41): `run (let (r, u) = (&x, ()); …)` answering the record rebuilt and the field, the field persistent | `x` rebound by the lend |
+| owned, not persistent, any other expression | the projection, which consumes it | |
 
-Elsewhere a `mut` or a non-persistent owned receiver is refused: "`x.f` reads a field of `x`, a
-`mut` borrow (or: a value that is not persistent): bind it, `let y = x.f;`, which lends `x` for the
-read". `x.f = e` (E6) is `modify`'s lend (§41's rule table: it writes `x`). No rule decides an
-alias, a lend's extent or an escape: each lend is lexical, the call's or the statement's, and the
-kernel checks it.
+At a binding `let y = x.f;` the parser gives the read the place `&x` (it is a write of a `let mut`
+`x`, §41's R2); a persistent receiver drops it. Elsewhere a `mut` borrow, or a variable that is
+not persistent, is refused: "`.f` reads a field of a `mut` borrow (or: of a value that is not
+persistent): bind it, `let y = x.f;`, which lends the place for the read". `x.f = e` (E6) is
+`modify`'s lend (§41's rule table: it writes `x`); in `e`, `x.g` is the field `g` the body took
+apart. No rule decides an alias, a lend's extent or an escape: each lend is lexical, the
+statement's, and the kernel checks it.
 
 ### Folds: unordered positions (§11.1 A1)
 
@@ -7742,18 +7748,27 @@ core.
 
 | program | what it shows | answer |
 |---|---|---|
-| `corpus/data-box-tree.bc` | a tree declared with `data`, built with `box Node(…)`, summed by a match whose `box` pattern frees each node | `i32[6]`, `live 0` |
-| `corpus/data-records.bc` | T09: particles as records in an array, their fields updated through the element's `mut` borrow | `[10, 92, 55]`, `11` |
-| `corpus/data-turnstile.bc` | T07: a state machine whose step is a two-column match over a variant and a byte | `Locked 3 2 1` |
-| `corpus/data-config.bc` | T11: a record with a string field updated field by field, then read | `80 50 demo true`, `4000`, `1` |
-| `corpus/data-option.bc` | the prelude's `Option` and `Vec` | |
-| `corpus/data-group.bc` | the single-root rule: two mutually recursive declarations | |
-| `corpus/reject/data-no-box.bc` | a block built without `box` | refused, asking for `box` |
+| `corpus/data-box-tree.bc` | a tree declared with `data`, built with `box Node(…)`, summed by a recursive match whose `box` pattern frees each node | `i32[6]`, `live 0` |
+| `corpus/data-particles.bc` | T09: particles as records in an array, their fields updated and read through each slot's `mut` borrow, read through the `imm` borrows of a `for` | `10 92 55`, `i32[11]` |
+| `corpus/data-turnstile.bc` | T07: a state machine whose step is a match over two columns, a variant and a byte | `Locked 3 2 1` |
+| `corpus/data-config.bc` | T11: a record with a string field updated field by field in a loop's match arms, then read; a variant with views of the input; `let Cfg { title } = cfg;` (M3) | `demo`, `((i32[80], (i32[50], inr ())), (i32[4000], i32[1]))` |
+| `corpus/data-group.bc` | the single-root rule: `Expr` and `Bind`, rooted at `Expr` | `i32[17]` |
+| `corpus/data-option.bc` | the prelude's `Option` and `Vec`; the generic `List[T]` and `Pair[A, B]` | `i32[30]` |
+| `corpus/fail/data-no-box.bc` | a block built without `box` | refused, asking for `box` |
+| `corpus/fail/data-not-exhaustive.bc`, `data-not-exhaustive-nested.bc` | matches missing a constructor, one over two columns with a nested pattern | refused, with the witness |
+| `corpus/fail/data-redundant.bc` | an arm after a wildcard | refused |
 | `corpus/reject/data-field-box.bc` | a recursive field under another type | refused, asking for `box` |
-| `corpus/reject/data-not-exhaustive.bc` | a match missing a constructor | refused, with the witness |
-| `corpus/reject/data-redundant.bc` | an arm after a wildcard | refused |
+| `corpus/reject/data-no-root.bc` | mutual recursion with no member on every cycle | refused |
+| `corpus/pending/data-fold-block.bc` | the tree summed through a borrow by a fold block | pending on §11.1 A2 |
 
-`corpus/sugar/` pairs each program with the core written by hand, which `bcc desugar` must equal.
+Each rule is pinned beside its elaboration written by hand (`scripts/check-sugar.sh`):
+`corpus/sugar/data-forms.bc` and `data-update.bc` beside core forms, and `data-box-tree`,
+`data-particles`, `data-turnstile` and `data-config` beside a surface program with no declaration
+(`corpus/sugar/<name>.lowered.bc`, `-- lowers: corpus/<name>.bc`), which must erase to the same
+term.
+
+T10 has no declaration: its form as written is tuple assignment and `let (mut a, mut b)`,
+`let mut` sugar outside this entry (#626, #632).
 
 ### Baseline
 
@@ -7765,10 +7780,10 @@ programs get rows.
 ### Not provided
 
 - **Nominal identity.** The elaborator types a declared type by its structure (a `type`
-  abbreviation): two transparent declarations of one structure are interchangeable, and a
-  field is selected by its name and the receiver's structure. Nominal identity in the elaborator's
-  types, which decision 1 asks for, comes with faces (U2), where resolution by the receiver's type
-  needs it.
+  abbreviation): two transparent declarations of one structure are interchangeable, and a field
+  is selected by its name (*Fields*). Nominal identity in the elaborator's types, which decision 1
+  asks for, comes with faces (U2), where resolution by the receiver's type needs it; until then a
+  newtype (`data Id = Id(i32)`) is its field's type to the checker.
 - **A match on an `imm` borrow.** Load it first, `borrow imm *b { v -> match v { … } }`. A
   recursion over a borrowed recursive value is §6's fold (the `fold` block is A2): a load's view
   is at a lifetime shorter than the borrow's, and a group's members recurse at their own
@@ -7777,6 +7792,12 @@ programs get rows.
   injection without its type is to be ascribed.
 - Field paths through several records (`d.spec.replicas = …`), update syntax `N { f: e, ..r }`,
   and variant payloads updated in place (#19).
+- **A block reassembled from its cells** without `box` (typed elaboration §5.3's `Node(c₁, c₂,
+  c₃)`, for `fold_reuse`): every block written without `box` is refused, asking for it. It comes
+  with the `fold` block (A2), which binds the emptied cells.
+- **A field read through a `mut` borrow inside an expression**, and an implicit copy of an `imm`
+  borrow so that it can be read twice (#58): a read through a borrow is a binding of its own, and
+  it uses an `imm` borrow.
 
 ### Open
 

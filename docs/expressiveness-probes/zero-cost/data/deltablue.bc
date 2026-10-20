@@ -1,0 +1,271 @@
+-- AWFY DeltaBlue with declarations (SPEC §42): `docs/expressiveness-probes/awfy/deltablue.bc` with a
+-- variable a record `Var` and a constraint a record `Con`, each in an array by handle, and the
+-- planner a record `G` of the two arrays, each variable's constraint list (a buffer per variable)
+-- and the current mark. A record of `i32`s is persistent: it is read with `at` (copied out) and
+-- written back with `array_set`, a field updated on the copy. A constraint's kind is 0 stay, 1
+-- edit, 2 equality; its direction 0 NONE / unsatisfied, 1 FORWARD / satisfied, 2 BACKWARD.
+-- Strengths are AWFY's arithmetic values: REQUIRED 0 … WEAKEST 6; `stronger(a, b)` is `a < b`.
+-- Answer: the number of plan executions whose last variable came out right (100), and the plan's
+-- length (n + 1).
+
+include slice
+include buf
+
+data Var = { value: i32, det: i32, mark: i32, walk: i32, stay: i32 }
+
+data Con = { kind: i32, strength: i32, v1: i32, v2: i32, dir: i32 }
+
+data G = { vars: array Var, cons: array Con, lists: array (buf i32), cur: i32 }
+
+fn no_var(i: i32) -> Var = Var { value: 0, det: 0, mark: 0, walk: 0, stay: 0 }
+
+fn no_con(i: i32) -> Con = Con { kind: 0, strength: 0, v1: 0, v2: 0, dir: 0 }
+
+fn var(s: G, v: i32) -> G * Var =
+  let G { vars, cons, lists, cur } = s;
+  let mut vars = vars;
+  let x = at(&vars, v, no_var(0));
+  (G { vars: vars, cons: cons, lists: lists, cur: cur }, x)
+
+fn set_var(s: G, v: i32, x: Var) -> G =
+  let G { vars, cons, lists, cur } = s;
+  G { vars: array_set(vars, v, x), cons: cons, lists: lists, cur: cur }
+
+fn con(s: G, c: i32) -> G * Con =
+  let G { vars, cons, lists, cur } = s;
+  let mut cons = cons;
+  let x = at(&cons, c, no_con(0));
+  (G { vars: vars, cons: cons, lists: lists, cur: cur }, x)
+
+fn set_con(s: G, c: i32, x: Con) -> G =
+  let G { vars, cons, lists, cur } = s;
+  G { vars: vars, cons: array_set(cons, c, x), lists: lists, cur: cur }
+
+fn set_mark(s: G, v: i32, m: i32) -> G = let (s, x) = var(s, v); let mut x = x; x.mark = m; set_var(s, v, x)
+
+fn bget(b: buf i32, i: i32) -> buf i32 * i32 = let (a, n) = b; let mut a = a; let x = at(&a, i, 0); ((a, n), x)
+
+fn new_mark(s: G) -> G * i32 =
+  let G { vars, cons, lists, cur } = s;
+  (G { vars: vars, cons: cons, lists: lists, cur: cur + 1 }, cur + 1)
+
+fn weakest(a: i32, b: i32) -> i32 = if a > b { a } else { b }
+
+fn c_output(k: Con) -> i32 = if k.kind == 2 && k.dir == 1 { k.v2 } else { k.v1 }
+
+fn c_input(k: Con) -> i32 = if k.dir == 1 { k.v1 } else { k.v2 }
+
+fn choose_method(s: G, c: i32, mark: i32) -> G =
+  let (s, k) = con(s, c);
+  let (s, x1) = var(s, k.v1);
+  let mut k = k;
+  if k.kind < 2 {
+    let d = if x1.mark != mark && k.strength < x1.walk { 1 } else { 0 };
+    k.dir = d;
+    set_con(s, c, k)
+  } else {
+    let (s, x2) = var(s, k.v2);
+    let d = if x1.walk > x2.walk { if k.strength < x1.walk { 2 } else { 0 } }
+      else { if k.strength < x2.walk { 1 } else { 2 } };
+    k.dir = d;
+    set_con(s, c, k)
+  }
+
+-- Every satisfied constraint on `v` other than the one that determines it, onto `todo`.
+fn add_consuming(s: G, v: i32, todo: buf i32) -> G * buf i32 =
+  let (s, x) = var(s, v);
+  let G { vars, cons, lists, cur } = s;
+  let (lists, o) = array_replace[buf i32](lists, v, filler[buf i32]);
+  let l = match o { inl l -> l | inr l -> l };
+  let (la, ln) = l;
+  let mut la = la;
+  let mut cons = cons;
+  let mut todo = todo;
+  for j in 0..ln {
+    let c = at(&la, j, 0);
+    let k = at(&cons, c, no_con(0));
+    if c != x.det && k.dir != 0 { let (t, _) = push(todo, c); todo = t } else { () }
+  };
+  let (lists, _) = array_replace[buf i32](lists, v, (la, ln));
+  (G { vars: vars, cons: cons, lists: lists, cur: cur }, todo)
+
+fn recalculate(s: G, c: i32) -> G =
+  let (s, k) = con(s, c);
+  let out = c_output(k);
+  let (s, xo) = var(s, out);
+  let mut xo = xo;
+  if k.kind < 2 {
+    xo.walk = k.strength;
+    let y = if k.kind == 0 { 1 } else { 0 };
+    xo.stay = y;
+    set_var(s, out, xo)
+  } else {
+    let (s, xi) = var(s, c_input(k));
+    xo.walk = weakest(k.strength, xi.walk);
+    xo.stay = xi.stay;
+    if xi.stay == 1 { xo.value = xi.value } else { () };
+    set_var(s, out, xo)
+  }
+
+-- Whether the walk from `c` reaches no variable marked `mark` (no cycle).
+fn add_propagate(s: G, c: i32, mark: i32) -> G * bool =
+  let (todo, _) = push(box buf[i32](8), c);
+  let mut todo = todo;
+  let mut s = s;
+  let mut head = 0;
+  let mut ok = true;
+  for i in 0..1000000 {
+    let (t, n) = len_of(todo);
+    todo = t;
+    if head >= n { break } else { () };
+    let (t, d) = bget(todo, head);
+    todo = t;
+    head = head + 1;
+    let (s1, k) = con(s, d);
+    let out = c_output(k);
+    let (s1, xo) = var(s1, out);
+    s = s1;
+    if xo.mark == mark { ok = false; break } else { () };
+    let s2 = recalculate(s, d);
+    let (s3, t) = add_consuming(s2, out, todo);
+    s = s3;
+    todo = t
+  };
+  (s, ok)
+
+-- The constraint it overrides, or -1.
+fn satisfy(s: G, c: i32, mark: i32) -> G * i32 =
+  let s = choose_method(s, c, mark);
+  let (s, k) = con(s, c);
+  if k.dir == 0 { (s, 0 - 1) } else {
+    let s = if k.kind == 2 { set_mark(s, c_input(k), mark) } else { s };
+    let out = c_output(k);
+    let (s, xo) = var(s, out);
+    let ov = xo.det;
+    let s = if ov >= 0 { let (s, ko) = con(s, ov); let mut ko = ko; ko.dir = 0; set_con(s, ov, ko) } else { s };
+    let (s, xo) = var(s, out);
+    let mut xo = xo;
+    xo.det = c;
+    let s = set_var(s, out, xo);
+    let (s, ok) = add_propagate(s, c, mark);
+    (set_mark(s, out, mark), ov)
+  }
+
+fn incremental_add(s: G, c: i32) -> G =
+  let (s, mark) = new_mark(s);
+  let (s, ov) = satisfy(s, c, mark);
+  let mut s = s;
+  let mut ov = ov;
+  for i in 0..1000000 {
+    if ov < 0 { break } else { () };
+    let (s1, o) = satisfy(s, ov, mark);
+    s = s1;
+    ov = o
+  };
+  s
+
+fn attach(s: G, v: i32, c: i32) -> G =
+  let G { vars, cons, lists, cur } = s;
+  let (lists, o) = array_replace[buf i32](lists, v, filler[buf i32]);
+  let l = match o { inl l -> l | inr l -> l };
+  let (l, _) = push(l, c);
+  let (lists, _) = array_replace[buf i32](lists, v, l);
+  G { vars: vars, cons: cons, lists: lists, cur: cur }
+
+fn constraint(s: G, c: i32, kind: i32, st: i32, v1: i32, v2: i32) -> G =
+  let s = set_con(s, c, Con { kind: kind, strength: st, v1: v1, v2: v2, dir: 0 });
+  let s = attach(s, v1, c);
+  let s = if kind == 2 { attach(s, v2, c) } else { s };
+  incremental_add(s, c)
+
+fn inputs_known(s: G, k: Con, mark: i32) -> G * bool =
+  if k.kind < 2 { (s, true) } else {
+    let (s, xi) = var(s, c_input(k));
+    (s, xi.mark == mark || xi.stay == 1 || xi.det < 0)
+  }
+
+fn make_plan(s: G, todo: buf i32) -> G * buf i32 =
+  let (s, mark) = new_mark(s);
+  let mut s = s;
+  let mut todo = todo;
+  let mut plan = box buf[i32](8);
+  let mut head = 0;
+  for i in 0..1000000 {
+    let (t, n) = len_of(todo);
+    todo = t;
+    if head >= n { break } else { () };
+    let (t, c) = bget(todo, head);
+    todo = t;
+    head = head + 1;
+    let (s1, k) = con(s, c);
+    let out = c_output(k);
+    let (s1, xo) = var(s1, out);
+    let (s1, known) = inputs_known(s1, k, mark);
+    s = s1;
+    if xo.mark != mark && known {
+      let (p, _) = push(plan, c);
+      plan = p;
+      let s2 = set_mark(s, out, mark);
+      let (s3, t) = add_consuming(s2, out, todo);
+      s = s3;
+      todo = t
+    } else { () }
+  };
+  (s, plan)
+
+fn execute(s: G, plan: buf i32) -> G * buf i32 =
+  let (pa, pn) = plan;
+  let mut pa = pa;
+  let mut s = s;
+  for j in 0..pn {
+    let c = at(&pa, j, 0);
+    let (s1, k) = con(s, c);
+    s = s1;
+    if k.kind == 2 {
+      let (s1, xi) = var(s, c_input(k));
+      let (s1, xo) = var(s1, c_output(k));
+      let mut xo = xo;
+      xo.value = xi.value;
+      s = set_var(s1, c_output(k), xo)
+    } else { () }
+  };
+  (s, (pa, pn))
+
+fn chain_test(n: i32) -> i32 * i32 =
+  let vars = array_new[Var](n + 2, no_var);
+  let cons = array_new[Con](n + 2, no_con);
+  let lists = array_new[buf i32](n + 1, !{ i -> box buf[i32](2) });
+  let mut s = G { vars: vars, cons: cons, lists: lists, cur: 0 };
+  for v in 0..n + 1 {
+    let (s1, x) = var(s, v);
+    let mut x = x;
+    x.det = 0 - 1;
+    x.walk = 6;
+    s = set_var(s1, v, x)
+  };
+  for i in 0..n { s = constraint(s, i, 2, 0, i, i + 1) };
+  let s = constraint(s, n, 0, 3, n, 0);
+  let edit = n + 1;
+  let s = constraint(s, edit, 1, 2, 0, 0);
+  let (s, ke) = con(s, edit);
+  let (src, _) = push(box buf[i32](8), edit);
+  let src = if ke.dir != 0 { src } else { box buf[i32](8) };
+  let (s, plan) = make_plan(s, src);
+  let mut s = s;
+  let mut plan = plan;
+  let mut good = 0;
+  for i in 0..100 {
+    let (s1, x0) = var(s, 0);
+    let mut x0 = x0;
+    x0.value = i;
+    let s1 = set_var(s1, 0, x0);
+    let (s1, p) = execute(s1, plan);
+    plan = p;
+    let (s1, xn) = var(s1, n);
+    s = s1;
+    if xn.value == i { good = good + 1 } else { () }
+  };
+  let (plan, len) = len_of(plan);
+  (good, len)
+
+main -> i32 * i32 = chain_test(100)

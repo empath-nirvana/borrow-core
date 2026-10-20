@@ -1,0 +1,269 @@
+-- AWFY Richards with declarations (SPEC §42): `docs/expressiveness-probes/awfy/richards.bc` with a
+-- task control block a record `Tcb` in an array of six, by id, a packet a record `Pkt` in an array
+-- of eight, and the scheduler's globals a record `Sched`. A record of `i32`s is persistent: it is
+-- read with `at` (copied out) and written back with `array_set`, its fields updated on the copy.
+-- -1 is NO_TASK / NO_WORK; a task's link is a task id. Each task's "function" is dispatched on its
+-- kind tag.
+-- Answer: (queuePacketCount, holdCount): 23246 and 9297 for AWFY's reference run.
+
+include slice
+include buf
+
+data Tcb = { link: i32, id: i32, pri: i32, input: i32, pending: i32, waiting: i32, holding: i32,
+  kind: i32, d1: i32, d2: i32 }
+
+data Pkt = { link: i32, id: i32, kind: i32, datum: i32, a0: i32, a1: i32, a2: i32, a3: i32 }
+
+data Sched = { list: i32, current: i32, queued: i32, held: i32 }
+
+data S = { tasks: array Tcb, pkts: array Pkt, g: Sched }
+
+fn no_tcb(i: i32) -> Tcb = Tcb { link: 0 - 1, id: 0 - 1, pri: 0 - 1, input: 0 - 1, pending: 0 - 1,
+  waiting: 0 - 1, holding: 0 - 1, kind: 0 - 1, d1: 0 - 1, d2: 0 - 1 }
+
+fn no_pkt(i: i32) -> Pkt = Pkt { link: 0, id: 0, kind: 0, datum: 0, a0: 0, a1: 0, a2: 0, a3: 0 }
+
+fn tcb(t: array Tcb, i: i32) -> array Tcb * Tcb = let mut t = t; let x = at(&t, i, no_tcb(0)); (t, x)
+fn pkt(p: array Pkt, i: i32) -> array Pkt * Pkt = let mut p = p; let x = at(&p, i, no_pkt(0)); (p, x)
+
+fn data_at(k: Pkt, i: i32) -> i32 = if i == 0 { k.a0 } else if i == 1 { k.a1 } else if i == 2 { k.a2 } else { k.a3 }
+fn set_data(k: Pkt, i: i32, x: i32) -> Pkt =
+  let mut k = k;
+  if i == 0 { k.a0 = x } else if i == 1 { k.a1 = x } else if i == 2 { k.a2 = x } else { k.a3 = x };
+  k
+
+-- addLast: `k` appended to the queue `q`; the new head.
+fn add_last(p: array Pkt, k: i32, q: i32) -> array Pkt * i32 =
+  let (p, kp) = pkt(p, k);
+  let mut kp = kp;
+  kp.link = 0 - 1;
+  let mut p = array_set(p, k, kp);
+  if q < 0 { (p, k) } else {
+    let mut n = q;
+    for i in 0..100 {
+      let (p1, np) = pkt(p, n);
+      p = p1;
+      if np.link < 0 { break } else { n = np.link }
+    };
+    let (p, np) = pkt(p, n);
+    let mut np = np;
+    np.link = k;
+    (array_set(p, n, np), q)
+  }
+
+fn new_task(t: array Tcb, g: Sched, id: i32, pri: i32, wkq: i32, pp: i32, tw: i32, kind: i32, d1: i32, d2: i32) -> array Tcb * Sched =
+  let t = array_set(t, id, Tcb { link: g.list, id: id, pri: pri, input: wkq, pending: pp, waiting: tw,
+    holding: 0, kind: kind, d1: d1, d2: d2 });
+  let mut g = g;
+  g.list = id;
+  (t, g)
+
+fn hold_self(s: S) -> S * i32 =
+  let S { tasks, pkts, g } = s;
+  let mut g = g;
+  g.held = g.held + 1;
+  let (t, c) = tcb(tasks, g.current);
+  let mut c = c;
+  c.holding = 1;
+  let n = c.link;
+  (S { tasks: array_set(t, g.current, c), pkts: pkts, g: g }, n)
+
+fn mark_waiting(s: S) -> S * i32 =
+  let S { tasks, pkts, g } = s;
+  let (t, c) = tcb(tasks, g.current);
+  let mut c = c;
+  c.waiting = 1;
+  (S { tasks: array_set(t, g.current, c), pkts: pkts, g: g }, g.current)
+
+fn release(s: S, id: i32) -> S * i32 =
+  let S { tasks, pkts, g } = s;
+  let (t, b) = tcb(tasks, id);
+  let mut b = b;
+  b.holding = 0;
+  let t = array_set(t, id, b);
+  let (t, c) = tcb(t, g.current);
+  let n = if b.pri > c.pri { id } else { g.current };
+  (S { tasks: t, pkts: pkts, g: g }, n)
+
+-- addInputAndCheckPriority on task `id`, from the current task.
+fn add_input(s: S, id: i32, k: i32) -> S * i32 =
+  let S { tasks, pkts, g } = s;
+  let (t, b) = tcb(tasks, id);
+  if b.input < 0 {
+    let mut b = b;
+    b.input = k;
+    b.pending = 1;
+    let t = array_set(t, id, b);
+    let (t, c) = tcb(t, g.current);
+    let n = if b.pri > c.pri { id } else { g.current };
+    (S { tasks: t, pkts: pkts, g: g }, n)
+  } else {
+    let (p, q) = add_last(pkts, k, b.input);
+    let mut b = b;
+    b.input = q;
+    (S { tasks: array_set(t, id, b), pkts: p, g: g }, g.current)
+  }
+
+fn queue_packet(s: S, k: i32) -> S * i32 =
+  let S { tasks, pkts, g } = s;
+  let (p, kp) = pkt(pkts, k);
+  let id = kp.id;
+  let mut g = g;
+  g.queued = g.queued + 1;
+  let mut kp = kp;
+  kp.link = 0 - 1;
+  kp.id = g.current;
+  add_input(S { tasks: tasks, pkts: array_set(p, k, kp), g: g }, id, k)
+
+fn idler(s: S, id: i32) -> S * i32 =
+  let S { tasks, pkts, g } = s;
+  let (t, b) = tcb(tasks, id);
+  let mut b = b;
+  b.d2 = b.d2 - 1;
+  let t = array_set(t, id, b);
+  if b.d2 == 0 { hold_self(S { tasks: t, pkts: pkts, g: g }) } else {
+    let control = b.d1;
+    if control % 2 == 0 {
+      b.d1 = control / 2;
+      release(S { tasks: array_set(t, id, b), pkts: pkts, g: g }, 4)
+    } else {
+      b.d1 = host[xor32](control / 2, 53256);
+      release(S { tasks: array_set(t, id, b), pkts: pkts, g: g }, 5)
+    }
+  }
+
+fn worker(s: S, id: i32, w: i32) -> S * i32 =
+  if w < 0 { mark_waiting(s) } else {
+    let S { tasks, pkts, g } = s;
+    let (t, b) = tcb(tasks, id);
+    let d = if b.d1 == 2 { 3 } else { 2 };
+    let mut b = b;
+    b.d1 = d;
+    let (p, wp) = pkt(pkts, w);
+    let mut wp = wp;
+    wp.id = d;
+    wp.datum = 0;
+    for i in 0..4 {
+      let c1 = if b.d2 + 1 > 26 { 1 } else { b.d2 + 1 };
+      b.d2 = c1;
+      wp = set_data(wp, i, c1)
+    };
+    queue_packet(S { tasks: array_set(t, id, b), pkts: array_set(p, w, wp), g: g }, w)
+  }
+
+fn handler_t(s: S, id: i32, w: i32) -> S * i32 =
+  let S { tasks, pkts, g } = s;
+  let (t, b) = tcb(tasks, id);
+  let mut b = b;
+  let p = if w < 0 { pkts } else {
+    let (p, wp) = pkt(pkts, w);
+    if wp.kind == 1 {
+      let (p, q) = add_last(p, w, b.d1);
+      b.d1 = q;
+      p
+    } else {
+      let (p, q) = add_last(p, w, b.d2);
+      b.d2 = q;
+      p
+    }
+  };
+  let t = array_set(t, id, b);
+  let wi = b.d1;
+  if wi < 0 { mark_waiting(S { tasks: t, pkts: p, g: g }) } else {
+    let (p, wk) = pkt(p, wi);
+    let count = wk.datum;
+    if count < 4 {
+      let di = b.d2;
+      if di < 0 { mark_waiting(S { tasks: t, pkts: p, g: g }) } else {
+        let (p, dk) = pkt(p, di);
+        b.d2 = dk.link;
+        let t = array_set(t, id, b);
+        let mut dk = dk;
+        dk.datum = data_at(wk, count);
+        let p = array_set(p, di, dk);
+        let mut wk = wk;
+        wk.datum = count + 1;
+        queue_packet(S { tasks: t, pkts: array_set(p, wi, wk), g: g }, di)
+      }
+    } else {
+      b.d1 = wk.link;
+      queue_packet(S { tasks: array_set(t, id, b), pkts: p, g: g }, wi)
+    }
+  }
+
+fn device(s: S, id: i32, w: i32) -> S * i32 =
+  let S { tasks, pkts, g } = s;
+  let (t, b) = tcb(tasks, id);
+  let mut b = b;
+  if w < 0 {
+    let pend = b.d1;
+    if pend < 0 { mark_waiting(S { tasks: t, pkts: pkts, g: g }) } else {
+      b.d1 = 0 - 1;
+      queue_packet(S { tasks: array_set(t, id, b), pkts: pkts, g: g }, pend)
+    }
+  } else {
+    b.d1 = w;
+    hold_self(S { tasks: array_set(t, id, b), pkts: pkts, g: g })
+  }
+
+-- runTask on task `id`.
+fn run_task(s: S, id: i32) -> S * i32 =
+  let S { tasks, pkts, g } = s;
+  let (t, b) = tcb(tasks, id);
+  let (t, p, msg) = if b.pending == 1 && b.waiting == 1 && b.holding == 0 {
+    let m = b.input;
+    let (p, mp) = pkt(pkts, m);
+    let mut b = b;
+    b.input = mp.link;
+    let pd = if mp.link < 0 { 0 } else { 1 };
+    b.pending = pd;
+    b.waiting = 0;
+    b.holding = 0;
+    (array_set(t, id, b), p, m)
+  } else { (t, pkts, 0 - 1) };
+  let s = S { tasks: t, pkts: p, g: g };
+  if b.kind == 0 { idler(s, id) } else {
+    if b.kind == 1 { worker(s, id, msg) } else {
+      if b.kind == 2 { handler_t(s, id, msg) } else { device(s, id, msg) } } }
+
+fn schedule(s: S) -> S =
+  let g0 = s.g;
+  let mut cur = g0.list;
+  let mut s = s;
+  while 0 <= cur {
+    let S { tasks, pkts, g } = s;
+    let (t, b) = tcb(tasks, cur);
+    if b.holding == 1 || (b.pending == 0 && b.waiting == 1) {
+      s = S { tasks: t, pkts: pkts, g: g };
+      cur = b.link
+    } else {
+      let mut g = g;
+      g.current = cur;
+      let (s1, nx) = run_task(S { tasks: t, pkts: pkts, g: g }, cur);
+      s = s1;
+      cur = nx
+    }
+  };
+  s
+
+main -> i32 * i32 =
+  let t = array_new[Tcb](6, no_tcb);
+  let p = array_new[Pkt](8, no_pkt);
+  let g = Sched { list: 0 - 1, current: 0 - 1, queued: 0, held: 0 };
+  let (t, g) = new_task(t, g, 0, 0, 0 - 1, 0, 0, 0, 1, 10000);
+  let p = array_set(p, 0, Pkt { link: 0 - 1, id: 1, kind: 1, datum: 0, a0: 0, a1: 0, a2: 0, a3: 0 });
+  let p = array_set(p, 1, Pkt { link: 0, id: 1, kind: 1, datum: 0, a0: 0, a1: 0, a2: 0, a3: 0 });
+  let (t, g) = new_task(t, g, 1, 1000, 1, 1, 1, 1, 2, 0);
+  let p = array_set(p, 2, Pkt { link: 0 - 1, id: 4, kind: 0, datum: 0, a0: 0, a1: 0, a2: 0, a3: 0 });
+  let p = array_set(p, 3, Pkt { link: 2, id: 4, kind: 0, datum: 0, a0: 0, a1: 0, a2: 0, a3: 0 });
+  let p = array_set(p, 4, Pkt { link: 3, id: 4, kind: 0, datum: 0, a0: 0, a1: 0, a2: 0, a3: 0 });
+  let (t, g) = new_task(t, g, 2, 2000, 4, 1, 1, 2, 0 - 1, 0 - 1);
+  let p = array_set(p, 5, Pkt { link: 0 - 1, id: 5, kind: 0, datum: 0, a0: 0, a1: 0, a2: 0, a3: 0 });
+  let p = array_set(p, 6, Pkt { link: 5, id: 5, kind: 0, datum: 0, a0: 0, a1: 0, a2: 0, a3: 0 });
+  let p = array_set(p, 7, Pkt { link: 6, id: 5, kind: 0, datum: 0, a0: 0, a1: 0, a2: 0, a3: 0 });
+  let (t, g) = new_task(t, g, 3, 3000, 7, 1, 1, 2, 0 - 1, 0 - 1);
+  let (t, g) = new_task(t, g, 4, 4000, 0 - 1, 0, 1, 3, 0 - 1, 0);
+  let (t, g) = new_task(t, g, 5, 5000, 0 - 1, 0, 1, 3, 0 - 1, 0);
+  let s = schedule(S { tasks: t, pkts: p, g: g });
+  let S { tasks, pkts, g } = s;
+  (g.queued, g.held)

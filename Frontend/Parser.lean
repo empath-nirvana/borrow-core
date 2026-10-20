@@ -206,8 +206,8 @@ structure PState where
   program's own, wherever they are in it. -/
   data : Data.Table := []
   /-- In the value of a field update `x.f = e` (SPEC §42, E6): the variable `x` resolves to, and
-  the variables `x`'s fields are bound to, by index; `x.g` in `e` reads `g`'s. -/
-  updating : Option (String × List String) := none
+  the record `r` its body takes apart; `x.g` in `e` reads `r`'s field `g`, the variable `r_g`. -/
+  updating : Option (String × String) := none
 
 abbrev P := StateT PState (Except Error)
 
@@ -1471,29 +1471,40 @@ def liftE {α} : Except Error α → P α
   | .ok a => pure a
   | .error e => throw e
 
-/-- `V.f.g…`: the fields `f`, `g`, … of `V` (SPEC §42, E5), each a typed sugar node at its field's
-layout. In a field update's value (`updating`), `x.f` is the variable `f` is bound to. -/
-def fieldSuffixes (st : Pos) (V : Val) : P Val := do
-  let mut V := V
-  for _ in [0:(← get).toks.size] do
+/-- `V.f.g…`: the fields `f`, `g`, … of `V` (SPEC §42, E5), each a typed sugar node with the
+declarations it may be of. In a field update's value (`updating`), `x.f` is the variable `r_f` of
+the record `r` taken apart. `(r).{f = e}` is the printed form of a field update's rebuilt record
+(`VSugar.update`). -/
+def fieldSuffixes : Nat → Pos → Val → P Val
+  | 0, _, _ => outOfFuel
+  | n + 1, st, V => do
     let t ← peek
     let t1 ← peekAt 1
-    unless t.tok == .sym "." && !t.spaced && !t1.spaced do break
+    unless t.tok == .sym "." && !t.spaced && !t1.spaced do return V
+    if t1.tok == .sym "{" then
+      discard bump; discard bump
+      let x ← fieldName
+      expectSym "="
+      let e ← val n
+      expectSym "}"
+      let cands ← match Data.fieldCands (← get).data x.name with
+        | .ok cs => pure cs
+        | .error m => failAt x.span m
+      let sp ← spanFrom st
+      return ← fieldSuffixes n st (.app sp (.sugar x.span (.update x.name cands)) (.pair sp V e))
     let f ← match t1.tok with
       | .ident f | .kw f => pure f
-      | _ => break
+      | _ => return V
     discard bump
     discard bump
-    let (j, k, r) ← match Data.fieldOf (← get).data f with
-      | .ok l => pure l
+    let cands ← match Data.fieldCands (← get).data f with
+      | .ok cs => pure cs
       | .error m => failAt t1.span m
     let sp ← spanFrom st
-    V := match (← get).updating, V with
-      | some (y, vars), .var _ x =>
-        if x == y && vars.length == k then .var sp (vars[j]?.getD x)
-        else .app sp (.sugar t1.span (.field f j k r)) V
-      | _, _ => .app sp (.sugar t1.span (.field f j k r)) V
-  pure V
+    let V := match (← get).updating, V with
+      | some (y, r), .var _ x => if x == y then .var sp s!"{r}_{f}" else .app sp (.sugar t1.span (.field f cands)) V
+      | _, _ => .app sp (.sugar t1.span (.field f cands)) V
+    fieldSuffixes n st V
 
 /-- A pattern of `match` (SPEC §42): a name, `_`, `()`, `(p, …)`, `C`, `C(p, …)`, `box C(p, …)`,
 `N { f: p, … }`, `N { f, … }`, an integer, byte or character literal, `true`, `false`, `inl p`,
@@ -1768,16 +1779,19 @@ def valAtom : Nat → P Val
       let nx ← peek
       -- `x.f`: a field of the variable `x` (SPEC §42); `n.op`: the operation `op` at the handler
       -- named `n` (SPEC §38), which is no variable.
-      if nx.tok == .sym "." && !nx.spaced then
+      if nx.tok == .sym "." && !nx.spaced && !(← peekAt 1).spaced then
+        let ps ← get
+        let local_ := ps.resolve && ps.surf && (ps.scope.lookup s).isSome
+        match (← peekAt 1).tok with
+        | .ident _ | .kw _ | .sym "{" =>
+          if local_ then
+            let x ← lookName s t.span
+            return ← fieldSuffixes n st (.var t.span x)
+        | _ => pure ()
         if let .ident op := (← peekAt 1).tok then
-          if !(← peekAt 1).spaced then
-            let ps ← get
-            if ps.resolve && ps.surf && (ps.scope.lookup s).isSome then
-              let x ← lookName s t.span
-              return ← fieldSuffixes st (.var t.span x)
-            discard bump
-            discard bump
-            return .sugar (← spanFrom st) (.named s op)
+          discard bump
+          discard bump
+          return .sugar (← spanFrom st) (.named s op)
       if nx.tok == .sym "[" && !nx.spaced then
         discard bump
         let As ← tyList n (fuelPerToken * ((← get).toks.size + 1))
@@ -1857,7 +1871,7 @@ def valAtom : Nat → P Val
         | _ => expected "`)`, `,`, `:` or `:>`"
       modify fun s => { s with angle }
       -- `(V).f`: a field of `V` (SPEC §42).
-      fieldSuffixes st r
+      fieldSuffixes n st r
     | .sym "&" =>
       discard bump
       let m ← if ← isKw "mut" then do discard bump; pure Mode.mut else pure Mode.imm
@@ -2048,11 +2062,11 @@ def compG : Nat → Bool → P Comp
       let V ← val n
       -- `let y = x.f;`: the place `x` lent for the read, and rebound (SPEC §42, E5).
       let V ← match p, V with
-        | .var _, .app sp (.sugar fsp (.field f j k r)) (.var vsp x) => do
+        | .var _, .app sp (.sugar fsp (.field f cs)) (.var vsp x) => do
           let ps ← get
           if ps.resolve && ps.surf && ps.scope.any (·.2.1 == x) then
             notePlaceWrite x
-            pure (Val.app sp (.sugar fsp (.field f j k r)) (.lend vsp ⟨x, vsp⟩ .imm))
+            pure (Val.app sp (.sugar fsp (.field f cs)) (.lend vsp ⟨x, vsp⟩ .imm))
           else pure V
         | _, V => pure V
       let thr := (← get).blockThreads
@@ -2083,9 +2097,10 @@ def compG : Nat → Bool → P Comp
       pure (.lamL (← spanFrom st) x b M)
     | _, _ => statement n st head
 
-/-- `x.f = e`, a field update (SPEC §42, E6): `modify &mut x { r -> … }` of a `let mut` `x`, or
-`modify x { r -> … }`, whose body takes `r` apart into its fields, reads `x.g` in `e` as the field
-`g`, and rebuilds the record with `e` at `f`. `none` when the statement is not one. -/
+/-- `x.f = e`, a field update (SPEC §42, E6): `modify &mut x { r -> (r).{f = e} }` of a `let mut`
+`x`, or `modify x { r -> … }`, whose body rebuilds the record `r` with `e` at `f` (`VSugar.update`,
+a typed rule), `x.g` in `e` read as the field `g` of `r` taken apart (`r_g`). `none` when the
+statement is not one. -/
 def fieldUpdate : Nat → P (Option Val)
   | 0 => outOfFuel
   | n + 1 => do
@@ -2095,26 +2110,41 @@ def fieldUpdate : Nat → P (Option Val)
     let t2 ← peekAt 2
     let t3 ← peekAt 3
     let .ident x₀ := t.tok | return none
-    let .ident f := t2.tok | return none
+    let f ← match t2.tok with
+      | .ident f | .kw f => pure f
+      | _ => return none
     unless t1.tok == .sym "." && !t1.spaced && !t2.spaced && t3.tok == .sym "=" do return none
     unless ps.resolve && ps.surf && (ps.scope.lookup x₀).isSome do return none
     let st ← startPos
     discard bump; discard bump; discard bump; discard bump
     let y ← lookName x₀ t.span
-    let (j, k, rolls) ← match Data.fieldOf ps.data f with
-      | .ok l => pure l
+    let cands ← match Data.fieldCands ps.data f with
+      | .ok cs => pure cs
       | .error m => failAt t2.span m
-    let mut vars : List String := []
-    for _ in [0:k] do vars := vars ++ [← freshName "io_fd"]
+    let r ← freshName "io_fr"
     let saved := (← get).updating
-    modify fun s => { s with updating := some (y, vars) }
+    modify fun s => { s with updating := some (y, r) }
     let (e, w) ← frame (val n)
     modify fun s => { s with updating := saved }
     unless w.isEmpty do
       failAt (← spanFrom st) "the value of a field update assigns a `let mut` variable: bind it first, `let v = …;`"
     let sp ← spanFrom st
-    let r ← freshName "io_fr"
-    let body := Data.updateBody sp r j rolls vars e (· ++ "r")
+    -- When the declarations with a field `f` agree on its place, the record is taken apart here,
+    -- so that the passes before the typed one see `r_g` bound; otherwise the type chooses
+    -- (`VSugar.update`).
+    let body := match cands with
+      | cd :: rest =>
+        if rest.all (fun e => e.idx == cd.idx && e.names == cd.names && e.rolls == cd.rolls) then
+          let vars := cd.names.zipIdx.map fun (g, i) => if g == "" then s!"{r}__{i}" else s!"{r}_{g}"
+          let comps := vars.zipIdx.map fun (x, i) => if i == cd.idx then e else Val.var sp x
+          let rebuilt := Data.tupleV sp comps
+          let rebuilt := if cd.rolls then
+              (if cd.tps.isEmpty then Val.ascribe sp (.roll sp rebuilt) (.name sp cd.decl) else .roll sp rebuilt)
+            else rebuilt
+          let R : Val := if cd.rolls then .unroll sp (.var sp r) else .var sp r
+          Data.letTuple sp R vars (.ret sp (.pair sp rebuilt (.unit sp))) (· ++ "r")
+        else Comp.ret sp (.app sp (.sugar t2.span (.update f cands)) (.pair sp (.var sp r) e))
+      | [] => Comp.ret sp (.app sp (.sugar t2.span (.update f cands)) (.pair sp (.var sp r) e))
     let place : Val := if (← get).muts.contains y then .lend t.span ⟨y, t.span⟩ .mut
       else .var t.span y
     -- The update rebinds its place: a write of a `let mut` place (SPEC §41, rule R2).

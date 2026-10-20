@@ -470,25 +470,24 @@ def recordVal (t : Table) (sp : Span) (n : String) (boxed : Bool) (fs : List (Id
 
 /-! ### Fields: E5, E6 -/
 
-/-- The field `f`'s layout: its index among the fields, their number, and whether the
-declaration is a `μ`. The one-constructor declarations in scope with a field `f` must agree on
-it; a block's fields are cells, and are matched (`box`), not read.  `[spec §42]` -/
-def fieldOf (t : Table) (f : String) : Except String (Nat × Nat × Bool) := do
-  let mut found : List (String × Nat × Nat × Bool) := []
-  for d in t do
+/-- The declarations in scope that a field `f` may be of: the one-constructor declarations with a
+field so named (SPEC §42, *Fields*). A block's fields are cells, and are matched (`box`), not
+read.  `[spec §42]` -/
+def fieldCands (t : Table) (f : String) : Except String (List FieldCand) := do
+  let mut found : List FieldCand := []
+  let mut seen : List String := []
+  for d in t.reverse do
+    if seen.contains d.name.name then continue
+    seen := seen ++ [d.name.name]
     let [c] := d.cons | continue
     let some j := c.fields.findIdx? (fun x => x.name.map (·.name) == some f) | continue
     let i ← info t d.name.name
     if i.cons.any (·.block) then
       throw <| s!"the field `{f}` of `{d.name.name}` is a block's cell: match the block (`box`)"
-    found := found ++ [(d.name.name, j, c.fields.length, i.rolls)]
-  match found with
-  | [] => throw <| s!"no declaration has a field `{f}`"
-  | (n, j, k, r) :: rest =>
-    if let some (m, _) := rest.find? (fun (_, j', k', r') => (j', k', r') != (j, k, r)) then
-      throw <| s!"`{n}` and `{m}` both have a field `{f}`, at different places: which is meant is " ++
-        "decided by the type in a later unit; give the fields different names"
-    pure (j, k, r)
+    let names := c.fields.map fun x => (x.name.map (·.name)).getD ""
+    found := found ++ [FieldCand.mk d.name.name (d.tps.map (·.name)) names j i.rolls]
+  if found.isEmpty then throw <| s!"no declaration has a field `{f}`"
+  pure found
 
 /-- The occurrences a record's `k` fields are bound to: `pre0`, `pre1`, …. -/
 def fieldVars (pre : String) (k : Nat) : List String := (List.range k).map (s!"{pre}{·}")
@@ -501,17 +500,6 @@ def letTuple (sp : Span) (V : Val) : List String → Comp → (String → String
   | x :: xs, M, fresh =>
     let r := fresh x
     .letPair sp ⟨x, sp⟩ ⟨r, sp⟩ V (letTuple sp (.var sp r) xs M fresh)
-
-/-- The body of `x.f = e`'s `modify` (E6): the record `r` taken apart into its fields `vars`,
-`e` (whose reads of `x`'s fields are those variables), and the record rebuilt with `f`'s new
-value, the result `()`. -/
-def updateBody (sp : Span) (r : String) (j : Nat) (rolls : Bool) (vars : List String) (e : Val)
-    (fresh : String → String) : Comp :=
-  let R : Val := if rolls then .unroll sp (.var sp r) else .var sp r
-  let comps := vars.zipIdx.map fun (x, i) => if i == j then e else Val.var sp x
-  let rebuilt := tupleV sp comps
-  let rebuilt := if rolls then .roll sp rebuilt else rebuilt
-  letTuple sp R vars (.ret sp (.pair sp rebuilt (.unit sp))) fresh
 
 /-! ### Patterns and match compilation: M1–M4
 
