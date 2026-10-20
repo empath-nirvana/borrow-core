@@ -6,6 +6,7 @@ library. None of these libraries is a default target.
 
 | Directory | Library | Build | Status |
 |---|---|---|---|
+| `Frames/` | `Frames` | `lake build Frames` | #632 step 1: frames with typed exits as a derived type `Fr Σ Π E A ≜ Π ⊸ F_Σ(Π ⊗ (A ⊕ ⊕E))` and a closed judgment `FDerives` of 13 derived rules elaborating into `CDerives`; statements of elaboration, conservativity, the accounting theorem (`accounting`, one induction) and agreement with §19, 30 enumerated `sorry`s. Proved: a typed swap at the frame type fails the accounting (`not_returns_swap`); a depth-4 nesting is a frame (`nested_derives`). Design: `docs/research/frames-with-exits.md` |
 | `CBPVSplit/` | `Experiments` | `lake build Experiments` | ported |
 | `ModesLabels/` | `Experiments` | `lake build Experiments` | ported |
 | `Shifts/` | `Experiments` | `lake build Experiments` | ported |
