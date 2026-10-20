@@ -206,7 +206,7 @@ def slotStride (n : Nat) : LM Nat := do
   let L ← L
   match L.slotBytes[L.r n]? with
   | some b => pure b
-  | none => pure (8 * max 1 (L.cellWords.getD (L.r n) 1))
+  | none => pure (8 * L.cellWords.getD (L.r n) 1)
 
 /-- The cell at pointer node `n` takes no words. -/
 def zeroCell (n : Nat) : LM Bool := do
@@ -242,10 +242,12 @@ def leafOf (n : Nat) : LM Nat := do
 
 /-! ### Copies and drops -/
 
-def copyVals (n : Nat) (ls : List Nat) : LM (List Stmt × List Nat) := do
+/-- A copy of the words `ls` at node `n`; with `tick`, counted in the counting build (a copy the
+LIR makes; a copy inside a generated copy is part of it). -/
+def copyVals (n : Nat) (ls : List Nat) (tick : Bool := false) : LM (List Stmt × List Nat) := do
   if (← L).triv n then return ([], ls)
   let ts ← fresh (← wordsN n)
-  let tick := if (← read).counts then [Stmt.tickCopy] else []
+  let tick := if (← read).counts && tick then [Stmt.tickCopy] else []
   return (tick ++ [.call ts (← helper (.copy ((← L).r n))) (locs ls)], ts)
 
 def dropVals (n : Nat) (ls : List Nat) : LM (List Stmt) := do
@@ -464,7 +466,8 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let b ← fresh1
     let bytes := mul64 (.loc k) (.c64 st.toUInt64)
     let words := shr64 (add64 bytes (.c64 7)) (.c64 3)
-    let mk := [Stmt.ite (eqz64 (.loc k)) [.set b (.c64 0)] [.set b (.alloc words)]]
+    let mk := if st == 0 then [Stmt.set b (.c64 0)] else
+      [Stmt.ite (eqz64 (.loc k)) [.set b (.c64 0)] [.set b (.alloc words)]]
     let args := locs fw ++ [.loc b, .loc k, .c64 0, .loc k]
     match op with
     | .tabLit _ _ off len => do
@@ -481,6 +484,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let b ← fresh1
     let bytes := mul64 (.loc k) (.c64 st.toUInt64)
     let words := shr64 (add64 bytes (.c64 7)) (.c64 3)
+    if st == 0 then return [.set b (.c64 0)] ++ (← emit d [.loc b, .loc k])
     return [.ite (eqz64 (.loc k)) [.set b (.c64 0)] [.set b (.alloc words)]] ++ (← emit d [.loc b, .loc k])
   | .slotPut => do
     let leaf ← leafOf (← argN 0)
@@ -678,7 +682,7 @@ def lowerTm (fuel : Nat) (t : Tm) (n : Nat) (d : Dest) : LM (List Stmt) := do
     return [.ite (eqz64 (.loc (ls.headD 0))) (s₁ ++ t₁) (s₂ ++ t₂)]
   | .absurd _ => return [.trap]
   | .copy x x' b => do
-    let (s, ls) ← copyVals (← nodeV x) (← vals x)
+    let (s, ls) ← copyVals (← nodeV x) (← vals x) (tick := true)
     bindVals x' ls
     return s ++ (← lowerTm f b n d)
   | .drop x b => do
