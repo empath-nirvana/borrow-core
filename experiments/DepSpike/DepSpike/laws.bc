@@ -1,0 +1,10 @@
+-- The functions DepSpike states laws about, in the core syntax CrossCheck reads (syntax-core §13).
+
+-- max of two signed i32s: the second when the first is less.
+def max : !(i32 * i32 => i32) =
+  !thunkv fun (p : i32 * i32) ->
+    let (a, b) = p;
+    c <- return ((unbang host[lt_s32]) (a, b));
+    case c { inl u -> let () = u; return a | inr u -> let () = u; return b }
+
+main : F i32 = (unbang max) (i32[3], i32[7])
