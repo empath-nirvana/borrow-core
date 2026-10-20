@@ -42,6 +42,10 @@ theorem subst_forget (j : Nat) (s : Val) : Expr.subst j s forget = forget := rfl
 
 theorem psub_forget (k : Nat) (γ : List Val) : Expr.psub k γ forget = forget := rfl
 
+theorem psub_i32 (k : Nat) (γ : List Val) (c : UInt32) : Expr.psub k γ (Val.i32 c).1 = (Val.i32 c).1 := rfl
+
+theorem subst_i32 (j : Nat) (s : Val) (c : UInt32) : Expr.subst j s (Val.i32 c).1 = (Val.i32 c).1 := rfl
+
 theorem psub_sh (d : Nat) (γ : List Val) (e : Expr) :
     Expr.psub d γ (Expr.shift d 0 e) = Expr.shift d 0 (Expr.psub 0 γ e) := by
   simpa using Expr.psub_shift d γ e 0
@@ -138,6 +142,17 @@ theorem retsG_call {G : Expr → Prop} {π a : Val} {γ : List Val} {e : Expr}
   have := h π
   rw [substAll_cons_psub] at this
   exact retsG_of_rets this
+
+/-- A premise's frame under two binders, closed by `s :: i :: γ`, called on `π`. -/
+theorem retsG_call2 {G : Expr → Prop} {π i s : Val} {γ : List Val} {e : Expr}
+    (h : Returns (ℍ := ℍ) (substAll (s :: i :: γ) e)) :
+    RetsG (ℍ := ℍ) (PairQ π) G
+      (.app (.app (.app (.val (.lam (.val (.lam (Expr.psub 2 γ e))))) (.val i)) (.val s)) (.val π)) := by
+  refine retsG_beta (K := .appL (.appL .hole s) π) ?_
+  have e1 : (Expr.val (Val.lam (Expr.psub 2 γ e))).subst 0 i = .val (.lam (Expr.psub 1 (i :: γ) e)) := by
+    simp [Expr.val, Val.lam, Expr.subst, Expr.psub_cons 1 i γ e]
+  rw [e1]
+  exact retsG_call h
 
 /-! ### `sub` -/
 
@@ -510,6 +525,80 @@ theorem acc_callBlock {Δ : LifeCtx} {b : FBlock} {j : Nat} (hwf : b.Wf Δ)
   refine retsG_plain (K := .appL (.appR (.val b.v) .hole) π) (by rw [hbody]; rfl)
     (retsG_true _ _) (fun a _ => ?_)
   exact retsG_of_rets (hb a π)
+
+/-! ### `loopCount` -/
+
+theorem acc_loopCount {n s₀ eM : Expr}
+    (ih : ∀ γ : List Val, Returns (ℍ := ℍ) (substAll γ eM)) (γ : List Val) :
+    Returns (ℍ := ℍ) (substAll γ (loopCountE n s₀ eM)) := by
+  intro π
+  apply rets_of_retsG
+  show RetsG _ _ (Kont.plug .hole (.app (substAll γ (loopCountE n s₀ eM)) (.val π)))
+  simp only [substAll, loopCountE, Expr.psub]
+  refine retsG_betaE .hole π.2 ?_
+  fsimp
+  simp only [psub_i32, subst_i32]
+  have hSv : IsVal (Expr.psub 0 γ (countStepE eM)) := isVal_psub IsVal.lam 0 γ
+  -- the bound `n` and the initial state run first, as any Core code
+  change RetsG _ _ ((Kont.appR (.lam _) (.appR (.val (.prim .countTry))
+    (.pairR ⟨_, hSv⟩ (.pairL .hole _)))).plug (Expr.psub 0 γ n))
+  refine retsG_plain (by simp [Kont.Plain]) (retsG_true _ _) (fun nv _ => ?_)
+  change RetsG _ _ ((Kont.appR (.lam _) (.appR (.val (.prim .countTry))
+    (.pairR ⟨_, hSv⟩ (.pairR nv (.pairR (Val.i32 0) (.pairR π .hole)))))).plug (Expr.psub 0 γ s₀))
+  refine retsG_plain (by simp [Kont.Plain]) (retsG_true _ _) (fun sv _ => ?_)
+  -- one turn: the step on `(i, (π, s))` answers `inj₁ (π, s′)` or `inj₂ (π, x)`
+  have hf : ∀ (i : UInt32) (s : Val), RestQ π s →
+      RetsG (ℍ := ℍ) (CountQ (RestQ π) (RestQ π)) (fun _ => False)
+        (.app (.val ⟨_, hSv⟩) (.val (Val.pair (Val.i32 i) s))) := by
+    rintro i s ⟨s', rfl⟩
+    change RetsG _ _ (Kont.plug .hole (.app (Expr.psub 0 γ (countStepE eM)) _))
+    simp only [countStepE, Expr.psub]
+    refine retsG_betaE .hole (IsVal.pair (Val.i32 i).2 (IsVal.pair π.2 s'.2)) ?_
+    fsimp
+    refine retsG_letpair (v₁ := Val.i32 i) (v₂ := Val.pair π s') .hole ?_
+    fsimp
+    refine retsG_letpair (v₁ := π) (v₂ := s') .hole ?_
+    fsimp
+    refine retsG_plain (K := .appR (.lam _) .hole) rfl (Q₁ := PairQ π) ?_ ?_
+    · have := retsG_call2 (G := fun _ => False) (π := π) (i := Val.i32 i) (s := s') (γ := γ)
+        (ih (s' :: Val.i32 i :: γ))
+      fsimp_at this; exact this
+    rintro y ⟨r, rfl⟩
+    refine retsG_beta .hole ?_
+    fsimp
+    refine retsG_letpair (v₁ := π) (v₂ := r) .hole ?_
+    fsimp
+    refine retsG_caseV (fun a _ => ?_) (fun x _ => ?_)
+    · fsimp
+      exact retsG_val (w := Val.inj₁ (Val.pair π a)) (.inl ⟨_, rfl, a, rfl⟩)
+    · fsimp
+      exact retsG_val (w := Val.inj₂ (Val.pair π x)) (.inr ⟨_, rfl, x, rfl⟩)
+  change RetsG _ _ ((Kont.appR (.lam _) .hole).plug (.app (.val (.prim .countTry))
+    (.val (Val.pair ⟨_, hSv⟩ (Val.pair nv (Val.pair (Val.i32 0) (Val.pair π sv)))))))
+  refine retsG_plain (by simp [Kont.Plain]) (Q₁ := CountQ (RestQ π) (RestQ π)) ?_ ?_
+  · by_cases hn : ∃ m, nv = Val.i32 m
+    · obtain ⟨m, rfl⟩ := hn
+      exact retsG_countTry _ m hf _ 0 (Val.pair π sv) rfl ⟨sv, rfl⟩
+    · exact retsG_countTry_stuck (fun ⟨_, m, _, _, h⟩ => hn ⟨m, (pairV_inj (pairV_inj h).2).1⟩)
+  · rintro y (⟨s, rfl, s', rfl⟩ | ⟨x, rfl, x', rfl⟩)
+    · refine retsG_beta .hole ?_
+      fsimp
+      refine retsG_case₁ (a := Val.pair π s') .hole ?_
+      fsimp
+      refine retsG_letpair (v₁ := π) (v₂ := s') .hole ?_
+      fsimp
+      exact retsG_val (w := Val.pair π (Val.inj₁ (Val.inj₁ s'))) ⟨_, rfl⟩
+    · refine retsG_beta .hole ?_
+      fsimp
+      refine retsG_case₂ (a := Val.pair π x') .hole ?_
+      fsimp
+      refine retsG_letpair (v₁ := π) (v₂ := x') .hole ?_
+      fsimp
+      refine retsG_caseV (fun b _ => ?_) (fun e _ => ?_)
+      · fsimp
+        exact retsG_val (w := Val.pair π (Val.inj₁ (Val.inj₂ b))) ⟨_, rfl⟩
+      · fsimp
+        exact retsG_val (w := Val.pair π (Val.inj₂ e)) ⟨_, rfl⟩
 
 end BoCa.Fig16.LogRel.Core.Frames
 
