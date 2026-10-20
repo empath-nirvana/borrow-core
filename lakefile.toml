@@ -32,6 +32,12 @@ root = "Frontend.Main"
 name = "bcc-counts"
 root = "Backend.Counts"
 
+# Not a default target: the census of kernel nodes in the corpus (`docs/kernel-usage.md`).
+[[lean_exe]]
+name = "kernel-census"
+srcDir = "scripts"
+root = "KernelCensus"
+
 # Experiments: not default targets; the library never imports them.
 
 [[lean_lib]]
