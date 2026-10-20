@@ -1375,7 +1375,7 @@ def slotLendsV (V : Val) (mk : Val → Val := id) (except : List String := []) :
 /-- A tail value bound before it is returned when it lends (`frameMode`): a lend is made in the
 head of a binding, and what is around the tail (a turn's state, a join's slots) pairs it. -/
 def slotTail (sp : Span) (S : Comp) : P Comp := do
-  if !(← get).frameMode then return S
+  if !(← get).frameMode || (← get).slots.isEmpty then return S
   match S with
   | .ret _ V =>
     if V.lends || (match V with | .app _ (.app _ (.sugar _ (.borrow .modify _)) _) _ => true | _ => false) then
@@ -2075,6 +2075,9 @@ def compG : Nat → Bool → P Comp
       let N ← comp n
       let sp ← spanFrom st
       let N ← slotStored sp x.name sl N
+      let M ← match M with
+        | .ret rsp V => do pure (Comp.ret rsp (← slotLendsV V))
+        | M => pure M
       if (← get).frameMode && M.hasArms && D.isNone then
         let ps ← slotsOf M
         unless ps.isEmpty do return ← slotJoin sp n ps (some (.var x)) M N
@@ -2091,6 +2094,16 @@ def compG : Nat → Bool → P Comp
       let N ← comp n
       let sp ← spanFrom st
       let N ← slotStored sp x.name sl N
+      let M ← match M with
+        | .ret rsp V => do pure (Comp.ret rsp (← slotLendsV V))
+        | M => pure M
+      if (← get).frameMode && M.hasArms && D.isNone then
+        let ps ← slotsOf M
+        unless ps.isEmpty do
+          let j ← freshName "io_fj"
+          let v ← freshName "io_fv"
+          let N' := Comp.bind sp x (some A) (.ret sp (.var sp v)) N false
+          return ← slotJoin sp n ps (some (.var ⟨v, sp⟩)) M N'
       bindForm sp n x (some A) M D N false xs
     | .ident x₀, .sym "=" =>
       -- `x = e`: a `let mut` variable rebound (typed elaboration §5.2), the variable the name
@@ -2128,6 +2141,13 @@ def compG : Nat → Bool → P Comp
       let (x, sl) ← slotBinder ⟨x, xt.span⟩
       let N ← comp n
       let N ← slotStored (← spanFrom st) x.name sl N
+      if (← get).frameMode && M.hasArms then
+        let ps ← slotsOf M
+        unless ps.isEmpty do
+          let sp ← spanFrom st
+          let v ← freshName "io_fv"
+          let N' := Comp.bind sp x A (.ret sp (.var sp v)) N true
+          return ← slotJoin sp n ps (some (.var ⟨v, sp⟩)) M N'
       bindForm (← spanFrom st) n x A M none N true xs
     | .kw "for", _ | .kw "while", _ | .kw "loop", .sym "{" => loopC n st none
     | .life l, .sym ":" =>
