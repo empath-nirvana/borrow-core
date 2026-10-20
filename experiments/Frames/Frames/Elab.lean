@@ -514,6 +514,91 @@ theorem elab_loopIter {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Ps : List VTy} 
     exact .effSub (RowLe.nil S) (.ret (.tensorI (.right (.left (.dead (.dead (deadSplit kd)))))
       (.var (by csoloP)) (.sumI₁ (.sumI₂ (.unitI (.drop rfl (.cons (.cons (.cons kd.toP)))))))))
 
+theorem elab_lend {Δ : LifeCtx} {Γ : Ctx VTy} {Ps : List VTy} {eM : Expr} {S : Row}
+    {E : ExitRow} {A : VTy} (src : LendSrc) (x : LifeVar) (hΔ : Δ.Ok) (hx : Δ.find? x = none)
+    (hS : S.Unwind x) (hsrc : LendOk Δ x src) (hsrcD : SlotOk src.ty)
+    (hΓx : ∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty)
+    (hfree : ¬ VFree x (.tensor (slotsTy Ps) (exitsTy A E)))
+    (hout : VOutlives (Δ.extend x Δ.meetOfDom) (.var x) (slotsTy Ps) ∧
+      VOutlives (Δ.extend x Δ.meetOfDom) (.var x) (exitsTy A E))
+    (hM : CDerives (Δ.extend x Δ.meetOfDom) Γ eM
+      (.comp (frTy S (.mut (.var x) src.payload :: Ps) E A))) :
+    CDerives Δ Γ (lendE src eM) (.comp (frTy S (src.ty :: Ps) E A)) := by
+  have kd := kill_dead Γ
+  have hP : ¬ VFree x (slotsTy Ps) := fun h => hfree (Or.inl h)
+  -- the callback, at `Δ, 'x`
+  have hcb : CDerives Δ (⟨slotsTy Ps, true⟩ :: ⟨src.ty, false⟩ :: ⟨slotsTy (src.ty :: Ps), false⟩ :: Γ)
+      (.val (.lam (.val (.lam (.app (.val (.lam (.app (.val (.lam
+          (.letpair (.var 0) (.letpair (.var 1)
+            (.seq (.app forget (.var 1)) (.pair (.var 0) (.var 2)))))))
+          (.app (sh 6 eM) (.var 0)))))
+        (.pair (.var 0) (.var 2)))))))
+      (.val (cbUTy x Δ.meetOfDom (.mut (.var x) src.payload) (.tensor (slotsTy Ps) (exitsTy A E)) S)) := by
+    refine .thunkV rfl (.allI (S := .unit)
+      (Lifetime.Life.mentions_false_of_wf hx (Lifetime.meetOfDomL_wf Δ.entries))
+      (fun _ _ h => hΔ.bound_mentions_false hx h) ?_ (.lam ?_))
+    · intro s hs hl
+      simp only [List.mem_cons] at hs
+      rcases hs with rfl | rfl | rfl | hs
+      · exact hP
+      · cases hl
+      · cases hl
+      · exact hΓx s hs hl
+    refine .bind (A := slotsTy (.mut (.var x) src.payload :: Ps))
+      (.left (.dead (.left (.dead (.dead (splitP_right_all Γ))))))
+      (.ret (.tensorI (.left (.dead (.right (.dead (.dead (deadSplit kd))))))
+        (.var (.here (.cons (.cons (.cons (.cons kd.toP))))))
+        (.var (.there (.there (.here (.cons (.cons kd.toP)))))))) ?_
+    refine .effLet (A := .tensor (slotsTy (.mut (.var x) src.payload :: Ps)) (exitsTy A E))
+      (splitP_left_all _) (fun _ => drops_dead (kill_dead _))
+      (fun _ => persistent_dead (kill_dead _))
+      (.app (A := slotsTy (.mut (.var x) src.payload :: Ps))
+        (.right (.dead (.dead (.dead (.dead (.dead (splitP_left_all Γ)))))))
+        (shift_deadN [⟨_, false⟩, ⟨_, false⟩, ⟨_, false⟩, ⟨_, false⟩, ⟨_, false⟩, ⟨_, false⟩]
+          (.cons (.cons (.cons (.cons (.cons (.cons .nil)))))) hM)
+        (.here (.cons (.cons (.cons (.cons (.cons kd.toP))))))) ?_
+    have kd₂ := kill_dead (⟨slotsTy (.mut (.var x) src.payload :: Ps), true⟩ ::
+      ⟨.mut (.var x) src.payload, false⟩ :: ⟨.unit, false⟩ :: ⟨slotsTy Ps, false⟩ ::
+      ⟨src.ty, false⟩ :: ⟨slotsTy (src.ty :: Ps), false⟩ :: Γ)
+    refine .tensorE (.left (deadSplit kd₂)) (.var (.here kd₂.toP)) ?_
+    refine .tensorE (.right (.left (.dead (deadSplit kd₂)))) (.var (.there (.here (.cons kd₂.toP)))) ?_
+    refine .unitE (.right (.left (.right (deadSplit (.cons (.cons kd₂))))))
+      (.lolliE (splitP_left_all _) (.var (.there (.here (.cons (.cons (.cons kd₂.toP))))))
+        (.forgetMut (kill_dead _).toP)) ?_
+    refine .effSub (RowLe.nil S) (.ret (.boxI (.tensorI
+      (.left (.dead (.right (deadSplit (.cons (.cons kd₂))))))
+      (.var (.here (.cons (.cons (.cons (.cons kd₂.toP))))))
+      (.var (.there (.there (.here (.cons (.cons kd₂.toP))))))) ?_))
+    have hdef : (Δ.extend x Δ.meetOfDom).Defines (.var x) :=
+      LifeCtx.defines_of_wf (wf_var_self _ _ _)
+    exact .consLive hout.1 (.consDead (.consLive hout.2 (.consDead (.consDead
+      (ctxOutlives_dead hdef kd₂)))))
+  refine .lam (.tensorE (.left (splitP_right_all Γ)) (.var (.here kd.toP)) ?_)
+  refine .bind (.left (.right (.dead (splitP_left_all Γ)))) (.ret hcb) ?_
+  refine .bind (splitP_right_all _)
+    (.ret (withborU_src (B := .tensor (slotsTy Ps) (exitsTy A E)) src (kill_dead _) hx hS hsrc
+      hsrcD hfree)) ?_
+  have kd₃ := kill_dead Γ
+  refine .effLet (A := .tensor src.ty (.tensor (slotsTy Ps) (exitsTy A E))) (splitP_left_all _)
+    (fun _ => drops_dead (kill_dead _)) (fun _ => persistent_dead (kill_dead _)) ?_ ?_
+  · refine .app (.left (.right (.dead (.left (.dead (deadSplit kd₃))))))
+      ?_ (.there (.here (.cons (.cons (.cons kd₃.toP)))))
+    exact .app (.left (.dead (.dead (.right (.dead (deadSplit kd₃))))))
+      (.force (C := .arr src.ty (.arr _ _)) (.here (.cons (.cons (.cons (.cons kd₃.toP))))))
+      (.there (.there (.there (.here (.cons kd₃.toP)))))
+  · have kd₄ := kill_dead (⟨withborUTy src.ty (cbUTy x Δ.meetOfDom (.mut (.var x) src.payload)
+        (.tensor (slotsTy Ps) (exitsTy A E)) S) S (.tensor src.ty (.tensor (slotsTy Ps) (exitsTy A E))),
+        true⟩ :: ⟨cbUTy x Δ.meetOfDom (.mut (.var x) src.payload) (.tensor (slotsTy Ps) (exitsTy A E)) S,
+        true⟩ :: ⟨slotsTy Ps, false⟩ :: ⟨src.ty, true⟩ :: ⟨slotsTy (src.ty :: Ps), false⟩ :: kill Γ)
+    refine .tensorE (.left (deadSplit kd₄)) (.var (.here kd₄.toP)) ?_
+    refine .tensorE (.left (.right (.dead (deadSplit kd₄)))) (.var (.here (.cons (.cons kd₄.toP)))) ?_
+    exact .effSub (RowLe.nil S) (.ret (.tensorI
+      (.right (.left (.dead (.left (.dead (deadSplit kd₄))))))
+      (.tensorI (.dead (.right (.dead (.left (.dead (deadSplit kd₄))))))
+        (.var (.there (.there (.there (.here (.cons kd₄.toP))))))
+        (.var (.there (.here (.cons (.cons (.cons kd₄.toP)))))))
+      (.var (.here (.cons (.cons (.cons (.cons kd₄.toP))))))))
+
 end BoCa.Fig16.LogRel.Core.Frames
 
 end

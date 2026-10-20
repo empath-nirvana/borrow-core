@@ -1,4 +1,4 @@
-import Frames.Rules
+import Frames.Elab
 
 /-!
 # Frames — the target theorems
@@ -46,81 +46,48 @@ theorem CDerives.shift_dead {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (
 
 /-- **Elaboration**: a frame is a `CDerives` derivation at its frame type. -/
 theorem FDerives.elab {Δ : LifeCtx} {Γ : Ctx VTy} {Φ : List FBlock} {Ps : List VTy} {e : Expr}
-    {S : Row} {E : ExitRow} {A : VTy} (hΦ : ∀ b ∈ Φ, b.Wf Δ)
+    {S : Row} {E : ExitRow} {A : VTy}
     (h : FDerives Δ Γ Φ Ps e S E A) : CDerives Δ Γ e (.comp (frTy S Ps E A)) := by
   induction h with
-  | core hS hP hN =>
-      -- `lam` over `effThenA`: `M = N↑` by O1; the continuation `(π, inl x)` by `tensorI` and
-      -- `effSub` from `F`; the finaliser `dtor_Π π` by `dtor_wf` at `SlotsOk.hasDtor`.
-      sorry
-  | exit hk hV =>
-      -- `lam` over `effSub (RowLe.nil)` of `ret (tensorI (var 0) (inj₂ (injAt k V↑)))`, the
-      -- injection typed by induction on `k` against `E[k]? = some (l, B)` (`sumTy_get`); O1 for `V↑`.
-      sorry
-  | bind hs hW hU hM hN ihM ihN =>
-      -- `lam` over `effLet`: `M↑ π` by `app` and O1; the continuation by `tensorE`, `sumE`,
-      -- `app` twice on `N`'s elaboration shifted by 5 (O1, five times).
-      sorry
-  | case hs hV h₁ h₂ ih₁ ih₂ =>
-      -- `lam` over `sumE`, each arm `app` twice on the arm's elaboration shifted by 2 (O1).
-      sorry
-  | «catch» hs hW hU hM hH ihM ihH =>
-      -- as `bind`, with a second `sumE` on `⊕((l, B) :: E) = B ⊕ ⊕E`: the head summand to `H`.
-      sorry
-  | under hS hQ hM ih =>
-      -- `lam`, `tensorE` on `π`, `effThenA` with the finaliser `dtor_Q q`.
-      sorry
-  | use src x hx hS hS' hP hsrc hB hN =>
-      -- `withbor2U`/`withbor3U` at `src` (its `hS : S.Unwind x`, `LendOk`), `force` and `app`
-      -- twice, `effThenA` with `dtor_Π ρ`; `effThen` at `Σ_M = Σ`.
-      sorry
-  | lend src x hx hS hsrc hΓx hfree hM ih =>
-      -- the callback: `allI` at `'x` (`hΓx`), `lam`, the inner frame by `ih` under O1, `forget`
-      -- at `Mut 'x A`, `boxI` (`'x ⊏ ⊓Δ`, and `hfree`: the slots and exits do not mention `'x`);
-      -- then as `use`.
-      sorry
-  | new hs hA hV hM ih =>
-      -- `alloc`, `ret`, `effSub`; `effLet` over the pair `(c, π)`; `free` and `dtor_wf` at `Ref A`.
-      sorry
-  | loopCount hs hs₁ hp hn hs0 hM ih =>
-      -- `countTry (slots ⊗ S₀) (slots ⊗ (B ⊕ ⊕E))` and `lolliE`; the step by `bangThunkF` over
-      -- `Persistent Γ₂`, its body by `tensorE` twice and `app` thrice on `ih` under O1.
-      sorry
-  | loopIter hdiv hs hp hS₀ hs0 hM ih =>
-      -- `iterate S (slots ⊗ S₀) (slots ⊗ (B ⊕ ⊕E)) (slots ⊗ 1)` at `hdiv`; the step by
-      -- `bangThunkV`, `withI`, its `close` by `dtor_wf` at `S₀`.
-      sorry
-  | callBlock hk hj =>
-      -- `lam`, `app` twice: the block from `hΦ` (`FBlock.Wf`, `bangE`, closed so unshifted).
-      sorry
-  | sub hle h ih =>
-      -- `lam` over `effSub hle` of `e↑ π` (O1).
-      sorry
+  | core hS hP hN => exact elab_core hS hP hN
+  | exit hk hV => exact elab_exit hk hV
+  | bind hs hW hU hX _ _ ihM ihN => exact elab_bind hs hW hU hX ihM ihN
+  | case hs hV _ _ ih₁ ih₂ => exact elab_case hs hV ih₁ ih₂
+  | «catch» hs hW hU hX _ _ ihM ihH => exact elab_catch hs hW hU hX ihM ihH
+  | under hS hQ _ ih => exact elab_under hS hQ ih
+  | use src x hx hS hS' hP hsrc hsrcD hB hN => exact elab_use src x hx hS hS' hP hsrc hsrcD hB hN
+  | lend src x hΔ hx hS hsrc hsrcD hΓx hfree hout _ ih =>
+      exact elab_lend src x hΔ hx hS hsrc hsrcD hΓx hfree hout ih
+  | new hs hA hV _ ih => exact elab_new hs hA hV ih
+  | loopCount hs hs₁ hp hn hs0 _ ih => exact elab_loopCount hs hs₁ hp hn hs0 ih
+  | loopIter hdiv hs hp hS₀ hs0 _ ih => exact elab_loopIter hdiv hs hp hS₀ hs0 ih
+  | callBlock _ hb hj => exact elab_callBlock hb hj
+  | sub hle _ ih => exact elab_sub hle ih
 
 /-! ### 2. Conservativity -/
 
 /-- **Frames are sound** at Core's own relation: `fundamentalC` at the elaboration. Nothing in
 the relation, the model or `CDerives` is changed for frames. -/
 theorem frame_sound {Δ : LifeCtx} {Γ : Ctx VTy} {Φ : List FBlock} {Ps : List VTy} {e : Expr}
-    {S : Row} {E : ExitRow} {A : VTy} (hΦ : ∀ b ∈ Φ, b.Wf Δ)
+    {S : Row} {E : ExitRow} {A : VTy}
     (h : FDerives Δ Γ Φ Ps e S E A) : SemC Δ Γ e (frTy S Ps E A) :=
-  fundamentalC (FDerives.elab hΦ h)
+  fundamentalC (FDerives.elab h)
 
 /-- A closed frame over no slots, run on `()`. -/
 def runFrameE (e : Expr) : Expr := .app (.val (.lam (.app (sh 1 e) (.var 0)))) (.val .unit)
 
 /-- The run of a closed frame is a Core computation. -/
 theorem runFrame_derives {Φ : List FBlock} {e : Expr} {A : VTy}
-    (hΦ : ∀ b ∈ Φ, b.Wf LifeCtx.empty) (h : FDerives LifeCtx.empty [] Φ [] e [] [] A) :
+    (h : FDerives LifeCtx.empty [] Φ [] e [] [] A) :
     CDerives LifeCtx.empty [] (runFrameE e) (.comp (.ret (.tensor .unit (exitsTy A [])))) :=
   .bind (Γ₁ := []) (Γ₂ := []) .nil (.ret (.unitI .nil))
     (.app (Γ₁ := [⟨.unit, false⟩]) (Γ₂ := [⟨.unit, true⟩]) (.right .nil)
-      (CDerives.shift_dead .unit (FDerives.elab hΦ h)) (.here .nil))
+      (CDerives.shift_dead .unit (FDerives.elab h)) (.here .nil))
 
 /-- **Adequacy for frames**, `adequacyD_obs` unchanged: every run of a closed frame program at a
 persistent answer, from the empty memory, continues to a value at the empty memory. -/
 theorem frame_adequacy {Φ : List FBlock} {e : Expr} {A : VTy} (hA : A.Persistent)
-    (hΦ : ∀ b ∈ Φ, b.Wf LifeCtx.empty) (h : FDerives LifeCtx.empty [] Φ [] e [] [] A)
+    (h : FDerives LifeCtx.empty [] Φ [] e [] [] A)
     {μ₁ : Heap} {e₁ : Expr} (hs : Steps Adequacy.emptyMem (runFrameE e) μ₁ e₁) :
     ∃ v, Steps μ₁ e₁ Adequacy.emptyMem (.val v) ∧
       ∃ ls, vP (.tensor .unit (exitsTy A [])) ls LSub.empty v PMap.empty := by
@@ -128,7 +95,7 @@ theorem frame_adequacy {Φ : List FBlock} {e : Expr} {A : VTy} (hA : A.Persisten
     simp only [VTy.Persistent, VTy.persistent, exitsTy, ExitRow.sumTy, Bool.true_and,
       Bool.and_true]
     exact hA
-  exact EffPrograms.adequacyD_obs hp (runFrame_derives hΦ h) hs
+  exact EffPrograms.adequacyD_obs hp (runFrame_derives h) hs
 
 /-- **A Core computation is a frame, and runs as it did.** On every run, `core N` on the slots
 `π` reaches `(π, inl v)` exactly when `N` reaches `v`, at the same memory.
@@ -250,8 +217,7 @@ theorem block_returns {Δ : LifeCtx} {Φ : List FBlock} {B : VTy} {Ps : List VTy
 by `effHandleV`, so raise and abort out of a frame are §19's `[unwind]`/`[finalise]`, with no
 frame rule for them. -/
 theorem frame_handled {Φ : List FBlock} {e H : Expr} {S : Row} {Eff : List (Qual × VTy × VTy)}
-    {n : UInt32} {A R : VTy} (hΦ : ∀ b ∈ Φ, b.Wf LifeCtx.empty)
-    (h : FDerives LifeCtx.empty [] Φ [] e (Row.ofEff n Eff 0 ++ S) [] A)
+    {n : UInt32} {A R : VTy} (h : FDerives LifeCtx.empty [] Φ [] e (Row.ofEff n Eff 0 ++ S) [] A)
     (hH : H.ValFormIn [])
     (hc : CDerives LifeCtx.empty [] H
       (.val (.tensor (retTy S (.tensor .unit (exitsTy A [])) R) (clausesTy S R Eff finsNil))))
@@ -261,16 +227,19 @@ theorem frame_handled {Φ : List FBlock} {e H : Expr} {S : Row} {Eff : List (Qua
       (.comp (CTy.effOf S R)) := by
   -- `effHandleV` at the split `[] = [], []`, with the handled computation `runFrameE e`: the
   -- `[let]` of `()` at the handled row (`effLet`, nothing in its context) over `app` of the
-  -- elaboration under O1. `sorry`: that `effLet` at the row (`runFrame_derives` is its pure case).
-  sorry
+  -- elaboration under O1.
+  refine .effHandleV (fs := finsNil) .nil .nil hH hc hn0 hnS hlen hdv ?_
+  exact .effLet (Γ₁ := []) (Γ₂ := []) .nil (fun _ _ h => absurd h List.not_mem_nil)
+    (fun _ _ h => absurd h List.not_mem_nil) (.effSub (RowLe.nil _) (.ret (.unitI .nil)))
+    (.app (Γ₁ := [⟨.unit, false⟩]) (Γ₂ := [⟨.unit, true⟩]) (.right .nil)
+      (CDerives.shift_dead .unit (FDerives.elab h)) (.here .nil))
 
 /-- **Leak freedom across a raise.** Every run of a closed, handled frame program at a persistent
 answer, from the empty memory, continues to a value at the empty memory, whether or not the frame
 raised: every slot the frame owned was finalised, once, by §19's unwinding (the holders'
 `[then]` finalisers and the unwinding borrow constants). `adequacyD_obs` unchanged. -/
 theorem frame_unwind_leakfree {Φ : List FBlock} {e H : Expr} {Eff : List (Qual × VTy × VTy)}
-    {n : UInt32} {A R : VTy} (hR : R.Persistent) (hΦ : ∀ b ∈ Φ, b.Wf LifeCtx.empty)
-    (h : FDerives LifeCtx.empty [] Φ [] e (Row.ofEff n Eff 0) [] A)
+    {n : UInt32} {A R : VTy} (hR : R.Persistent) (h : FDerives LifeCtx.empty [] Φ [] e (Row.ofEff n Eff 0) [] A)
     (hH : H.ValFormIn [])
     (hc : CDerives LifeCtx.empty [] H
       (.val (.tensor (retTy [] (.tensor .unit (exitsTy A [])) R) (clausesTy [] R Eff finsNil))))
@@ -282,7 +251,7 @@ theorem frame_unwind_leakfree {Φ : List FBlock} {e H : Expr} {Eff : List (Qual 
   have h' : FDerives LifeCtx.empty [] Φ [] e (Row.ofEff n Eff 0 ++ []) [] A := by
     simpa using h
   exact EffPrograms.adequacyD_obs hR
-    (frame_handled hΦ h' hH hc hn0 (fun _ h => absurd h List.not_mem_nil) hlen hdv) hs
+    (frame_handled h' hH hc hn0 (fun _ h => absurd h List.not_mem_nil) hlen hdv) hs
 
 end BoCa.Fig16.LogRel.Core.Frames
 

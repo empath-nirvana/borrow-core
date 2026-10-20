@@ -123,8 +123,10 @@ inductive FDerives : LifeCtx → Ctx VTy → List FBlock → List VTy → Expr �
       (hS₀ : HasDtor S₀) (hs0 : CDerives Δ Γ₁ s₀ (.val S₀))
       (hM : FDerives Δ (⟨S₀, true⟩ :: Γ₂) Φ Ps eM S ((l, B) :: E) S₀) :
       FDerives Δ Γ Φ Ps (loopIterE S₀ s₀ eM) S E (.sum B .unit)
-  /-- Call a block of the program on a variable, with the current slots. -/
-  | callBlock {Δ Γ Φ j} {b : FBlock} {k : Nat} (hk : Φ[k]? = some b)
+  /-- Call a block of the program on a variable, with the current slots. The block is typed at
+  the call's lifetime context: under a `lend` that is the extended one, and a typing at the
+  program's context does not transfer (the borrow constants' types read `⊓Δ`). -/
+  | callBlock {Δ Γ Φ j} {b : FBlock} {k : Nat} (hk : Φ[k]? = some b) (hb : b.Wf Δ)
       (hj : Ctx.SoloP Γ j b.B) :
       FDerives Δ Γ Φ b.Ps (callE b.v j) b.S b.E b.A
   /-- Row weakening. -/

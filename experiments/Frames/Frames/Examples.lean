@@ -108,7 +108,8 @@ theorem nestedLoop_derives (Ps : List VTy) :
 the loop's answer dropped by the `catch`'s normal arm. -/
 def nested : Expr :=
   newE .unit (.val .unit)
-    (catchE (bindE nestedLoop (coreE [.ref .unit] (.val .unit))) (coreE [.ref .unit] (.val .unit)))
+    (catchE [] (bindE [(1, .unit)] [] nestedLoop (coreE [.ref .unit] (.val .unit)))
+      (coreE [.ref .unit] (.val .unit)))
 
 theorem frow_nil : FRow [] :=
   ⟨fun _ h => absurd h List.not_mem_nil, List.Pairwise.nil, fun ⟨_, h, _⟩ => absurd h List.not_mem_nil⟩
@@ -125,10 +126,10 @@ theorem nested_derives :
   refine .new (Γ₁ := []) (Γ₂ := []) .nil .unit (.unitI .nil) ?_
   refine .catch (Γ₁ := []) (Γ₂ := []) (l := 1) (B := .unit) .nil
     (fun _ => fun _ h => absurd h List.not_mem_nil) (fun _ => fun _ h => absurd h List.not_mem_nil)
-    ?_ ?_
+    (fun _ h => absurd h List.not_mem_nil) ?_ ?_
   · refine .bind (Γ₁ := []) (Γ₂ := []) .nil
       (fun _ => fun _ h => absurd h List.not_mem_nil) (fun _ => fun _ h => absurd h List.not_mem_nil)
-      (nestedLoop_derives _) ?_
+      (.inr fun _ h => absurd h List.not_mem_nil) (nestedLoop_derives _) ?_
     exact .core frow_nil slotsOk_cell (.ret (.unitI (.drop rfl .nil)))
   · exact .core frow_nil slotsOk_cell (.ret (.unitI (.drop rfl .nil)))
 
@@ -142,7 +143,7 @@ theorem nested_adequate {μ₁ : Heap} {e₁ : Expr}
     (hs : Steps Adequacy.emptyMem (runFrameE nested) μ₁ e₁) :
     ∃ v, Steps μ₁ e₁ Adequacy.emptyMem (.val v) ∧
       ∃ ls, vP (.tensor .unit (exitsTy (.tensor .unit .unit) [])) ls LSub.empty v PMap.empty :=
-  frame_adequacy rfl (fun _ h => absurd h List.not_mem_nil) nested_derives hs
+  frame_adequacy rfl nested_derives hs
 
 end BoCa.Fig16.LogRel.Core.Frames
 
