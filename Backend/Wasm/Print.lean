@@ -96,6 +96,8 @@ def printInstr (d : Nat) : Instr → List String
   | .i64Store off => [indent d ++ s!"i64.store offset={off}"]
   | .i64Load8U => [indent d ++ "i64.load8_u"]
   | .i64Store8 => [indent d ++ "i64.store8"]
+  | .i64Load32U => [indent d ++ "i64.load32_u"]
+  | .i64Store32 => [indent d ++ "i64.store32"]
   | .num o => [indent d ++ opName o]
   | .call f => [indent d ++ s!"call {f}"]
   | .returnCall f => [indent d ++ s!"return_call {f}"]

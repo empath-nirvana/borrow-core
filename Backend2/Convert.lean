@@ -455,8 +455,8 @@ def genFoldFns (k : FoldKind) (F : FShape) (muT cellT gT : LTy) : CM (Nat × Nat
   let r ← fresh rT
   let ans ← match k with
     | .imm => do
-      let .thunk (.all h) := gT | throw "LIR: fold_imm's algebra is not a `∀`"
-      let h' ← fresh (.thunk h)
+      let .thunk (.all (.ret hT)) := gT | throw "LIR: fold_imm's algebra is not a `∀`"
+      let h' ← fresh hT
       pure (Tm.letv h' (.app0 g) (.app h' r))
     | _ => pure (Tm.app g r)
   let hT ← match k, gT with
@@ -1284,6 +1284,7 @@ where
 def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) (ncaps : Nat)
     (loops : Bool) : Except String (Prog × CState) := do
   let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run {}
-  return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data }, s)
+  return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
+            statics := s.statics.size }, s)
 
 end Backend2

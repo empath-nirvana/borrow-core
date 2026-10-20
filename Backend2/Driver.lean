@@ -2,6 +2,7 @@ import Backend.Driver
 import Backend2.Convert
 import Backend2.Print
 import Backend2.Interp
+import Backend2.Lower
 
 /-!
 # Backend2 — driver
@@ -37,11 +38,36 @@ def lirOf (k : Backend.CheckedProg) : Except String (Prog × CState) := do
   let ctx := c.ctx.map fun s => (s.ty, s.live)
   convertProg exts ctx c.t c.C ncaps loops
 
-/-- A stage of the new backend on a checked program: `lir` is the LIR interpreter. -/
+/-- The checker's cell classes (`Checked.cells`) at LIR types. -/
+def cellsOf (k : Backend.CheckedProg) : List (List LTy) :=
+  k.main.cells.map fun c => c.tys.filterMap fun t => (ofV t).toOption
+
+/-- The layouts of a program's LIR. -/
+def layoutsOf (k : Backend.CheckedProg) (p : Prog) : Except String Lay.Layouts := do
+  let (g, m) ← Lay.places p
+  pure (Lay.resolve p g m (cellsOf k))
+
+/-- The word IR of a checked program by the new backend; with `counts`, the counting build. -/
+def flatOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String Backend.Flat.Prog := do
+  let (p, _) ← lirOf k
+  Low.lowerProg p (← layoutsOf k p) counts
+
+/-- The program as WAT by the new backend. -/
+def watOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String String := do
+  pure (Backend.Wasm.printModule (Backend.Wasm.lowerProg (← flatOf k counts) counts))
+
+/-- The program as LLVM IR by the new backend. -/
+def llOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String String := do
+  Backend.Native.printProg (← flatOf k counts) Backend.nativeTriple counts
+
+/-- A stage of the new backend on a checked program: `lir` is the LIR interpreter, `lflat` the
+word IR's interpreter at the new backend's lowering. -/
 def interpStage (stage : String) (k : Except String Backend.CheckedProg) (input : List UInt8)
     (args : List UInt8 := []) : Except String Backend.Output := do
   match stage with
   | "lir" => runLIR (← lirOf (← k)).1 Backend.runFuel input args
+  | "lflat" => Backend.Flat.interp Backend.runFuel (← flatOf (← k)) input args
+  | "lflat-counts" => Backend.Flat.interp Backend.runFuel (← flatOf (← k) true) input args
   | _ => throw s!"unknown stage `{stage}`"
 
 end Backend2

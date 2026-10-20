@@ -44,6 +44,7 @@ def lowerExp (fp : Nat) : Flat.Exp → List Instr
   | .c32 n => [.i32Const n]
   | .load a off => lowerExp fp a ++ [.num .wrap, .i64Load (8 * off)]
   | .load8 a => lowerExp fp a ++ [.num .wrap, .i64Load8U]
+  | .load32 a => lowerExp fp a ++ [.num .wrap, .i64Load32U]
   | .op o args => lowerOpArgs o args ++ [.num o] ++ floatOut o
   | .alloc w => lowerExp fp w ++ [.call "$alloc"]
   | .slot off _ => [.localGet fp, .i64Const (8 * off).toUInt64, .num (.bin .w64 .add)]
@@ -100,6 +101,7 @@ def lowerStmt (cnt : Bool) (fp frame : Nat) : Flat.Stmt → List Instr
   | .set i e => lowerExp fp e ++ [.localSet i]
   | .store a off v => lowerExp fp a ++ [.num .wrap] ++ lowerExp fp v ++ [.i64Store (8 * off)]
   | .store8 a v => lowerExp fp a ++ [.num .wrap] ++ lowerExp fp v ++ [.i64Store8]
+  | .store32 a v => lowerExp fp a ++ [.num .wrap] ++ lowerExp fp v ++ [.i64Store32]
   | .free a => lowerExp fp a ++ [.call "$free"]
   | .unslot _ => []
   | .out b => lowerExp fp b ++ [.call "$putc"]

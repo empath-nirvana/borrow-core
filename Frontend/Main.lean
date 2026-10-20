@@ -74,7 +74,7 @@ def interp (stage file : String) (args : List String) : IO UInt32 := do
   let k := Backend.checkedOf file src
   let input ← if Backend.readsInput k then readAll (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
-  let r := if stage == "lir" then Backend2.interpStage stage k input.toList (Backend.argsBytes args)
+  let r := if stage == "lir" || stage == "lflat" || stage == "lflat-counts" then Backend2.interpStage stage k input.toList (Backend.argsBytes args)
     else Backend.interpStage stage file k input.toList (Backend.argsBytes args)
   match r with
   | .ok o =>
@@ -265,6 +265,28 @@ input, output and error. -/
 def run (file : String) (args : List String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match Backend.compileWat file src with
+  | .error e => IO.eprintln e; return 1
+  | .ok wat =>
+    let dir ← IO.FS.createTempDir
+    let out := dir / "main.wat"
+    IO.FS.writeFile out wat
+    let child ← IO.Process.spawn
+      { cmd := "wasmtime", args := Backend.wasmtimeArgs.push out.toString ++ args.toArray,
+        stdin := .inherit, stdout := .inherit, stderr := .inherit }
+    let code ← child.wait
+    IO.FS.removeDirAll dir
+    return (if code == 0 then 0 else 1)
+
+/-- The new backend's WAT or LLVM IR of `file` (`Backend2/`, `docs/n1-plan.md`). -/
+def compile2 (native : Bool) (file : String) : IO (Except String String) := do
+  let src ← IO.FS.readFile file
+  return do
+    let k ← Backend.checkedOf file src
+    if native then Backend2.llOf k else Backend2.watOf k
+
+/-- Compile `file` by the new backend and run it under `wasmtime`. -/
+def run2 (file : String) (args : List String) : IO UInt32 := do
+  match ← compile2 false file with
   | .error e => IO.eprintln e; return 1
   | .ok wat =>
     let dir ← IO.FS.createTempDir
@@ -500,6 +522,19 @@ def roundTrip (p : Program) : Except String Unit := do
 def main (argv : List String) : IO UInt32 := do
   match argv with
   | "kernel" :: args => kernel args
+  | ["compile", "--backend", "new", file, "-o", out] => do
+    match ← compile2 false file with
+    | .ok wat => IO.FS.writeFile out wat; return 0
+    | .error e => IO.eprintln e; return 1
+  | ["compile", "--backend", "new", "--target", "native", file, "-o", out] => do
+    match ← compile2 true file with
+    | .ok ll => IO.FS.writeFile out ll; return 0
+    | .error e => IO.eprintln e; return 1
+  | ["compile", "--backend", "old", file, "-o", out] => compile file out
+  | "run" :: "--backend" :: "new" :: "--native" :: file :: args => do
+    runLL (← compile2 true file) args
+  | "run" :: "--backend" :: "new" :: file :: args => run2 file args
+  | "run" :: "--backend" :: "old" :: file :: args => run file args
   | ["compile", file, "-o", out] => compile file out
   | ["compile", "--timings", file, "-o", out] => compileTimed file out
   | ["compile", "--target", "native", file, "-o", out] => compileNative file out

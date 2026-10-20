@@ -146,6 +146,24 @@ def writeByte (a : Nat) (v : UInt64) : FM Unit := do
   let sh := (8 * (a % 8)).toUInt64
   writeWord wa ((old &&& ~~~(0xff <<< sh)) ||| ((v &&& 0xff) <<< sh))
 
+/-- The 4 bytes at `a` (a multiple of 4): half `a % 8 / 4` of the word holding them, which must be
+written. -/
+def readHalf (a : Nat) : FM UInt64 := do
+  if a % 4 != 0 then throw s!"flat IR: a 4-byte read at {a}, not a multiple of 4"
+  let w ← readWord (a - a % 8)
+  pure ((w >>> (8 * (a % 8)).toUInt64) &&& 0xffffffff)
+
+/-- Write the low 4 bytes of `v` at `a`, keeping the word's other half (`0` in an unwritten word). -/
+def writeHalf (a : Nat) (v : UInt64) : FM Unit := do
+  if a % 4 != 0 then throw s!"flat IR: a 4-byte write at {a}, not a multiple of 4"
+  let wa := a - a % 8
+  let old ← match (← get).mem[wa]? with
+    | some (some w) => pure w
+    | some none => pure 0
+    | none => throw s!"flat IR: write outside a live range at {a}"
+  let sh := (8 * (a % 8)).toUInt64
+  writeWord wa ((old &&& ~~~(0xffffffff <<< sh)) ||| ((v &&& 0xffffffff) <<< sh))
+
 def allocRange (n : Nat) : FM UInt64 := do
   if n == 0 then throw "flat IR: allocation of no words"
   let s ← get
@@ -225,6 +243,10 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
         let a ← evalExp p n fr a
         modify fun st => { st with loads := st.loads + 1 }
         readByte a.toNat
+    | .load32 a => do
+        let a ← evalExp p n fr a
+        modify fun st => { st with loads := st.loads + 1 }
+        readHalf a.toNat
     | .op o args => do liftE (evalOp o (← evalArgs p n fr args))
     | .alloc w => do allocRange (← evalExp p n fr w).toNat
     | .slot off w => startSlot off w
@@ -316,6 +338,12 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
         let v ← evalExp p n fr v
         modify fun st => { st with stores := st.stores + 1 }
         writeByte a.toNat v
+        pure (fr, none)
+    | .store32 a v => do
+        let a ← evalExp p n fr a
+        let v ← evalExp p n fr v
+        modify fun st => { st with stores := st.stores + 1 }
+        writeHalf a.toNat v
         pure (fr, none)
     | .free a => do freeRange (← evalExp p n fr a).toNat; pure (fr, none)
     | .unslot a => do endSlot (← evalExp p n fr a).toNat; pure (fr, none)

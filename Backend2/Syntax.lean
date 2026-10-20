@@ -171,6 +171,8 @@ structure Prog where
   ty : Std.HashMap Var LTy
   /-- The literals' bytes, the program's read-only data. -/
   data : Array UInt8 := #[]
+  /-- The number of capabilities' static cells (`Op.staticCell`). -/
+  statics : Nat := 0
   deriving Inhabited
 
 end Backend2
