@@ -400,6 +400,7 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.Check.walk_index_lt
 #print axioms BoCa.Fig16.LogRel.Core.Check.walk_get_leaf
 #print axioms BoCa.Fig16.LogRel.Core.Check.walk_split_first
+#print axioms BoCa.Fig16.LogRel.Core.Check.allI_inst
 #print axioms BoCa.Fig16.LogRel.Core.Check.Expr.toVal_val
 #print axioms BoCa.Fig16.LogRel.Core.Check.Expr.letBody_shift
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.weakenΔ

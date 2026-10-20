@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.91 · 2026-10-20
+Version 0.92 · 2026-10-20
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -7922,6 +7922,52 @@ output or a kernel program. `corpus/counts.expected` and `kernel-counts.expected
 - The effectful programs (N2, N3), `bounded_fix`'s budget as a stack-pointer compare (NEW-b),
   pointer reversal for owned folds (B6), frame slots and LLVM attributes by rule (N5).
 
+## 44. Entry 43 — the new backend: `Λ` erased (N1 part 2)
+
+### Motivation
+
+A `Λ` erases to `λ_. M` and an instantiation to `M ()` (§3). Compiled as written, every
+polymorphic function is a closure whose code returns the closure of its next `Λ`, and every use
+runs one call per lifetime argument before the call it is for (#636: the probe of a map's key
+called two such codes per probe). The typed term says more: the body of each `Λ` the checker
+builds erases to a λ-value, so an instantiation runs no code.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration or semantics.
+
+### The rule
+
+- **The fact** (`Frontend/Check/Derived.lean`, `allI_inst`): for an `allI` node whose body `t`
+  has `t.isLam` (`TExpr.isLam_eq`: its erasure is a λ-value), the instantiation
+  `(λ_. t.erase) ()` steps by one β, at every memory (`PureSteps`), to `t.erase` with the binder's
+  slot filled by `()`, a λ-value. No code runs and no memory is touched: an instantiation's value
+  is the body's. `allE` and `allEV` erase to the same `M ()`, and `force` at a `∀` to its
+  operand (`forceE`).
+- **The lowering** (`Backend2/Types.lean`, `Backend2/Convert.lean`): `∀'x. C` is `C` in the LIR's
+  types, so `U (∀'x. F A)` is `A` and `U (∀'x. C)` is `U C`; an `allI` node is its body,
+  converted with the binder's slot dead; an `allE` or `allEV` node is its operand. A borrow's
+  callback, `fold_imm`'s algebra and answer, and the I/O externs are at the erased types. An
+  `allI` whose body is not a λ-value is outside the new backend's fragment; the checked corpus has
+  none.
+
+### Programs
+
+Every program of the fragment at its golden at every stage; no `∀` type remains in any program's
+LIR.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the checker, the elaboration, the old backend's
+output or a kernel program. `corpus/counts.expected`, `kernel-counts.expected` and
+`corpus/counts-backend2.expected` unchanged: the instantiations were direct calls, which no
+count counts.
+
+### Open
+
+- The native run times of `parse` and `wordcount` are unchanged by it (`docs/n1-plan.md`, *As
+  built*): LLVM had inlined the instantiations.
+
 ---
 
 ## Status
@@ -8282,11 +8328,17 @@ LIR, its interpreter and lint, the closure flow, the layouts, the literal views,
 the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Backend/Wasm/` and
 `Backend/Native/`, `bcc`'s `--backend new` and `lir` commands, `bcc-counts --backend new`, and
 `scripts/check-backend2.sh` and `scripts/compile-backend2.sh`; no change to `CDerives`, `Core/`,
-`Paper/`, `Support/` or the checker.
+`Paper/`, `Support/` or the checker. Entry 43 (§44) is implemented in `Frontend/Check/Derived.lean`
+(`allI_inst`), `Backend2/Types.lean` (`ofU`) and `Backend2/Convert.lean`; no change to `CDerives`,
+`Core/`, `Paper/`, `Support/`, the checker or the old backend.
 
 ---
 
 ## Changelog
+
+- **0.92** (2026-10-20) — §44 (#636, N1 part 2): the new backend erases `Λ`: an `allI` whose body
+  is a λ-value is that body (`allI_inst`, one β at every memory), an instantiation its operand,
+  `∀'x. C` is `C` in the LIR's types.
 
 - **0.91** (2026-10-20) — §43 (#636, unit N1 of `docs/compiler.md`): the new backend's pure
   fragment, `Backend2/`: the typed term to a typed LIR (copies and drops from the split masks,

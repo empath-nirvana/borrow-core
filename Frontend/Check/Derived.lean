@@ -18,6 +18,10 @@ the value the elaborator marks, and its typed rule says the term's erasure is th
   of the step's `array_get`/`slice_split_mut` are never taken. That the step reads the view the
   bound was taken from is the scheme's (`Frontend.Sugar.forData` threads it in the loop's state);
   it is recorded in `Frontend/Check/TFacts.lean`.
+
+One rule node carries a fact the new backend reads (SPEC §44): a `Λ` whose body erases to a λ-value
+is instantiated by one β to that λ-value (`allI_inst`), so the backend compiles the `Λ` as its body
+and an instantiation as its operand.
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Check
@@ -98,5 +102,28 @@ theorem divLit_some8 {ℍ : Host} (hc : ℍ.Conforms) {o : DivOp} {n : UInt8}
     simp only [wasmHost, Option.isSome_map] <;>
     refine prim_div_some _ _ _ (fun h0 => h ?_) (fun ho => by cases ho) <;>
     (apply UInt8.toNat_inj.mp; have := congrArg BitVec.toNat h0; simpa using this)
+
+/-! ### Λ erased  `[spec §44]`
+
+A `Λ` erases to `λ_. M` and an instantiation to `M ()` (`TExpr.erase` at `allI`, `allE`,
+`allEV`). When `M` erases to a λ-value (`TExpr.isLam`), an instantiation is one β at every memory,
+to that λ-value with the binder's slot filled: no code runs, no memory is touched, and the answer
+is the body's value. So a `Λ` over such a body is represented by its body, an instantiation by
+its operand, and no instantiation is compiled. -/
+
+/-- **An instantiation of a `Λ` whose body is a λ-value is that λ-value**: one β, at every memory,
+to the body's erasure with the binder's (dead) slot filled by `()`.  `[spec §44]` -/
+theorem allI_inst {ℍ : Host} [HostIs ℍ] {i : TInfo} {j : Jdg} {x : Lifetime.LifeVar} {b : Lifetime.Life} {S : VTy} {C : CTy}
+    {t : TExpr} (h : t.isLam = true) :
+    ∃ N : Expr, t.erase = .lam N ∧
+      PureSteps (ℍ := ℍ) (.app (TExpr.allI i j x b S C t).erase (.val .unit)) (.lam (N.subst 1 Val.unit)) := by
+  have hl := TExpr.isLam_eq t
+  rw [h] at hl
+  match he : t.erase, hl with
+  | .lam N, _ =>
+    refine ⟨N, rfl, ?_⟩
+    have := PureSteps.beta (ℍ := ℍ) (.lam N) Val.unit
+    have hu : Val.shift 1 0 Val.unit = Val.unit := rfl
+    simpa [TExpr.erase, he, Expr.subst, hu] using this
 
 end BoCa.Fig16.LogRel.Core.Check

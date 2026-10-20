@@ -8,10 +8,12 @@ lifetimes, the lifetime box `[@a] A`, and `!A`. A value type `VTy` becomes an `L
 type `CTy` an `LCTy`, constructor for constructor (`ofV`, `ofC`): no type is inferred here, each is
 the image of a type the checker put on a node of the typed term.
 
-* `U C` is a closure, `thunk K`. A closure of `F A` or of `∀'x. C` takes no argument (the
-  erasure's `λ_. M`, applied to `()`), a closure of `A ⊸ C` takes an `A`, and a closure of `C & D`
-  is observed at one of its two components. `νX. C` is its unrolling: `U X` is the type variable
-  `0` of `C`'s value types, as in `VTy`.
+* `U C` is a closure, `thunk K`. A closure of `F A` takes no argument (the erasure's `λ_. M`,
+  applied to `()`), a closure of `A ⊸ C` takes an `A`, and a closure of `C & D` is observed at one
+  of its two components. `νX. C` is its unrolling: `U X` is the type variable `0` of `C`'s value
+  types, as in `VTy`.
+* `∀'x. C` is `C` (SPEC §44): a `Λ` is its body, a λ-value (`allI_inst`), so `U (∀'x. F A)` is
+  `A` and `U (∀'x. C)` is `U C`; no instantiation has run-time content.
 * `Ref A` is an owned cell, `Imm A` and `Mut A` borrows of one, `[L]` a family of leaves `L`
   (an array is `[Ref A]`).
 * A row has no run-time content in the pure fragment: a computation type with an operation is
@@ -56,15 +58,13 @@ inductive LCTy where
   | arr (a : LTy) (k : LCTy)
   | amp (k₁ k₂ : LCTy)
   | top
-  /-- `∀'x ⊏ @b. C`: run on no argument. -/
-  | all (k : LCTy)
   /-- `νX. C`, binding the type variable `0` (standing for `U (νX. C)`) in `C`'s value types. -/
   | nu (k : LCTy)
   deriving Inhabited, BEq, Hashable
 end
 
 mutual
-/-- The LIR type of a value type: lifetimes, `[@a]` and `!` erased. -/
+/-- The LIR type of a value type: lifetimes, `[@a]`, `!` and `∀` erased. -/
 def ofV : VTy → Except String LTy
   | .unit => pure .unit
   | .zero => pure .zero
@@ -81,15 +81,22 @@ def ofV : VTy → Except String LTy
   | .fam L => return .fam (← ofV L)
   | .opq k => pure (.opq k)
   | .unk => pure .unk
-  | .thunk C => return .thunk (← ofC C)
+  | .thunk C => ofU false C
 
-/-- The LIR type of a computation type. A row's operation is outside the pure fragment. -/
+/-- The LIR type of `U C`, under `∀`s when `under`: `U (∀'x. F A)` is `A`. -/
+def ofU (under : Bool) : CTy → Except String LTy
+  | .all _ _ C => ofU true C
+  | .ret A => if under then ofV A else return .thunk (.ret (← ofV A))
+  | C => return .thunk (← ofC C)
+
+/-- The LIR type of a computation type. A row's operation is outside the pure fragment. A `∀` is
+its body (SPEC §44). -/
 def ofC : CTy → Except String LCTy
   | .ret A => return .ret (← ofV A)
   | .arr A C => return .arr (← ofV A) (← ofC C)
   | .amp C D => return .amp (← ofC C) (← ofC D)
   | .top => pure .top
-  | .all _ _ C => return .all (← ofC C)
+  | .all _ _ C => ofC C
   | .nu C => return .nu (← ofC C)
   | .eff n i .. => throw s!"an operation ({n}, {i}) in a computation type: outside the pure fragment"
 end
@@ -123,7 +130,6 @@ def LCTy.lift (c : Nat) : LCTy → LCTy
   | .arr a k => .arr (a.lift c) (k.lift c)
   | .amp k₁ k₂ => .amp (k₁.lift c) (k₂.lift c)
   | .top => .top
-  | .all k => .all (k.lift c)
   | .nu k => .nu (k.lift (c + 1))
 end
 
@@ -145,7 +151,6 @@ def LCTy.subst (n : Nat) (S : LTy) : LCTy → LCTy
   | .arr a k => .arr (LTy.subst n S a) (LCTy.subst n S k)
   | .amp k₁ k₂ => .amp (LCTy.subst n S k₁) (LCTy.subst n S k₂)
   | .top => .top
-  | .all k => .all (LCTy.subst n S k)
   | .nu k => .nu (LCTy.subst (n + 1) (S.lift 0) k)
 end
 
@@ -187,7 +192,6 @@ def LCTy.pp : LCTy → String
   | .arr a k => s!"({a.pp} -o {k.pp})"
   | .amp k₁ k₂ => s!"({k₁.pp} & {k₂.pp})"
   | .top => "T"
-  | .all k => s!"(all. {k.pp})"
   | .nu k => s!"nu. {k.pp}"
 end
 

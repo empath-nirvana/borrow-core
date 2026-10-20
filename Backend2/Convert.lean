@@ -250,7 +250,6 @@ def answerOf : LTy → CM (Option LTy × LTy)
     match k.whnf 8 with
     | .arr a c => return (some a, ← repC c)
     | .ret a => return (none, a)
-    | .all c => return (none, ← repC c)
     | k => throw s!"LIR: a closure of {k} is not called"
   | t => throw s!"LIR: a call of a non-closure: {t}"
 where
@@ -386,27 +385,23 @@ def genCountTry (fT sT eT : LTy) (p : Var) : CM Tm := do
     let n ← fresh i32T
     return .letv n (.prim .clampLen [c]) (.call fi [f, n, i, st])
 
-/-- A borrow `withbor`'s way (SPEC §1): `(x, f () x)`, the owner `src` lent as the borrow the
-callback `cb` (a `∀` closure) is given, by `op` (`lend`, `relend`). -/
+/-- A borrow `withbor`'s way (SPEC §1): `(x, f [] x)`, the owner `src` lent as the borrow the
+callback `cb` (a `∀` closure, its instantiation erased: SPEC §44) is given, by `op` (`lend`,
+`relend`). -/
 def genLend (op : Op) (src : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm := do
-  let (_, gT) ← answerOf cbT
-  let (some bT, rT) ← answerOf gT | throw "LIR: a borrow's callback takes no borrow"
+  let (some bT, rT) ← answerOf cbT | throw "LIR: a borrow's callback takes no borrow"
   let pr ← fresh (.pair (← tyOf src) bT)
   let o ← freshLike src; let b ← fresh bT
   let r ← fresh rT
   readFact "lend"
   return .letv pr (.prim op [src]) (.letpair o b pr (.letv r (← call b) (.pair o r)))
 
-/-- The call of a borrow's callback `cb` (a `∀` closure) on `b`: `cb () b`. -/
-def callCb (cb : Var) (b : Var) : CM Tm := do
-  let (_, gT) ← answerOf (← tyOf cb)
-  let g ← fresh gT
-  return .letv g (.app0 cb) (.app g b)
+/-- The call of a borrow's callback `cb` on `b`: `cb [] b`, its instantiation erased (SPEC §44). -/
+def callCb (cb : Var) (b : Var) : CM Tm := pure (.app cb b)
 
 /-- `withload x f` (SPEC §1): `f () (load x)`, the contents read at the callback's argument type. -/
 def genWithload (x : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm := do
-  let (_, gT) ← answerOf cbT
-  let (some vT, _) ← answerOf gT | throw "LIR: withload's callback takes no argument"
+  let (some vT, _) ← answerOf cbT | throw "LIR: withload's callback takes no argument"
   let v ← fresh vT
   return .letv v (.prim .load [x]) (← call v)
 
@@ -474,11 +469,8 @@ def travF (k : FoldKind) (recV recL : Nat) (g : Var) : FShape → Var → CM (Tm
     let x ← fresh ra; let y ← fresh rb
     return (.case w a (.letv x ta (.inj false x)) b (.letv y tb (.inj true y)), .sum ra rb)
 where
-  /-- The algebra's answer: through its `∀` at `fold_imm`. -/
-  answerOf' (gT : LTy) : CM (Option LTy × LTy) := do
-    match gT with
-    | .thunk (.all (.ret h)) => answerOf h
-    | t => answerOf t
+  /-- The algebra's answer (its `∀` at `fold_imm` erased: SPEC §44). -/
+  answerOf' (gT : LTy) : CM (Option LTy × LTy) := answerOf gT
 
 /-- The recursive functions of a fold at the node's shape `F`: on a value of `μX. T` (`recV`), and
 at `fold_imm` on a borrow of one (`recL`, whose cell's contents it reads as `Imm̲`). `muT` is the
@@ -492,17 +484,8 @@ def genFoldFns (k : FoldKind) (F : FShape) (muT cellT gT : LTy) : CM (Nat × Nat
   let w ← fresh body.unrollMu
   let (tt, rT) ← travF k recV recL g F w
   let r ← fresh rT
-  let ans ← match k with
-    | .imm => do
-      let .thunk (.all (.ret hT)) := gT | throw "LIR: fold_imm's algebra is not a `∀`"
-      let h' ← fresh hT
-      pure (Tm.letv h' (.app0 g) (.app h' r))
-    | _ => pure (Tm.app g r)
-  let hT ← match k, gT with
-    | .imm, .thunk (.all (.ret h)) => pure h
-    | .imm, _ => throw "LIR: fold_imm's algebra is not a `∀`"
-    | _, _ => pure gT
-  let (_, R) ← answerOf hT
+  let ans := Tm.app g r
+  let (_, R) ← answerOf gT
   setFn recV { name := "fold", params := [g, u], ret := R,
                body := .letv w (.prim .unroll [u]) (.letv r tt ans) }
   if k == .imm then
@@ -792,8 +775,7 @@ def lendTree (v : Var) (bT : LTy) (k : Var → Var → CM Tm) : CM Tm := do
 /-- A block borrow (`withborS`, `withborF2`): every leaf lent, the borrows handed to the callback at
 one lifetime; `(handle, answer)`. -/
 def genLendTree (src : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm := do
-  let (_, gT) ← answerOf cbT
-  let (some bT, rT) ← answerOf gT | throw "LIR: a block borrow's callback takes no borrow"
+  let (some bT, rT) ← answerOf cbT | throw "LIR: a block borrow's callback takes no borrow"
   readFact "lend"
   lendTree src bT fun o b => do
     let r ← fresh rT
@@ -801,30 +783,23 @@ def genLendTree (src : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm := do
 
 /-! ### Externs -/
 
-/-- An I/O operation's closure at its extern's type: `Λ. … λm. op m`. -/
+/-- An I/O operation's closure at its extern's type: `λm. op m`, its `Λ`s erased (SPEC §44). -/
 def ioClos (fuel : Nat) (k : IOKind) (t : LTy) : CM Tm := do
   match fuel, t with
   | 0, _ => throw "LIR: an extern's type too deep"
-  | f + 1, .thunk (.all c) =>
-    let inner ← repOfK c
-    mkClos "extern" [] (.all c) none inner fun _ => ioClos f k inner
   | _, .thunk (.arr a (.ret b)) =>
     mkClos "extern" [] (.arr a (.ret b)) (some a) b fun ctx => do
       match ctx with
       | some p :: _ => return .prim (.io k) [p]
       | _ => throw "LIR: an extern's argument"
   | _, t => throw s!"LIR: an I/O extern at {t}"
-where
-  repOfK : LCTy → CM LTy
-    | .ret a => pure a
-    | k => pure (.thunk k)
 
 /-! ### The conversion -/
 
 /-- The value a closure of `k` answers when it is run. -/
 def repK : LCTy → CM LTy
   | .ret a => pure a
-  | .all k | .arr _ k => repK k
+  | .arr _ k => repK k
   | .top => pure .unit
   | k => pure (.thunk k)
 
@@ -939,7 +914,7 @@ def takesClosK : Nat → LCTy → Bool
   | 0, _ => true
   | f + 1, k => match k with
     | .arr a k => holdsClos f a || takesClosK f k
-    | .all k | .nu k => takesClosK f k
+    | .nu k => takesClosK f k
     | .amp k₁ k₂ => takesClosK f k₁ || takesClosK f k₂
     | .ret a => takesClos f a
     | .top => false
@@ -1022,10 +997,12 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       match ctx' with
       | some p :: rest => return .drop p (← conv fuel (none :: rest) c)
       | _ => throw "LIR: a dead λ's parameter"
-  | .allI _ j _ _ _ _ c => do
-    let .thunk k ← repJ j | throw "LIR: a Λ at a non-closure type"
-    let (_, r) ← answerOf (.thunk k)
-    mkClos "all" ctx k none r fun ctx' => conv fuel (none :: ctx') c
+  | .allI _ _ _ _ _ _ c => do
+    -- `Λ. M` is `M` (`allI_inst`)  [spec §44]: its body erases to a λ-value, so the binder's slot
+    -- is dead and no instantiation runs code.
+    unless c.isLam do throw "outside the pure fragment: a Λ whose body is not a λ-value (SPEC §44)"
+    readFact "allI:body a λ-value"
+    conv fuel (none :: ctx) c
   | .withI _ j _ _ tM tN => do
     let .thunk k ← repJ j | throw "LIR: a `&` at a non-closure type"
     let r₁ ← selTy (.thunk k) 0
@@ -1077,7 +1054,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let (pre, c₁, _) ← splitCtx ctx u "zeroE"
     return pre (← bindTm (← conv fuel c₁ tV) .zero fun v => pure (.absurd v))
   | .allE _ _ _ _ _ _ c | .allEV _ _ _ _ _ _ c => do
-    bindTm (← conv fuel ctx c) (← repJ c.jdg) fun f => pure (.app0 f)
+    -- An instantiation is its operand.  [spec §44]
+    readFact s!"{ruleName t}:erased"
+    conv fuel ctx c
   | .roll _ j _ c => do
     bindTm (← conv fuel ctx c) (← repJ c.jdg) fun x => pure (.prim .roll [x])
   | .unroll _ j _ c => do
@@ -1336,19 +1315,17 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
       | some x :: some g' :: _ => return .call recV [g', x]
       | _ => throw "LIR: a fold's environment"
   | .foldImm _ _ F y _ _, [g] => do
+    -- The answer's `∀'y` is erased (SPEC §44): a closure on the borrow.
     let .thunk fk := resT | throw "LIR: a fold's answer is not a closure"
-    let (_, hT) ← answerOf resT
-    let .thunk hk := hT | throw "LIR: fold_imm's inner closure"
-    let (some lT, R) ← answerOf hT | throw "LIR: fold_imm takes no borrow"
+    let (some lT, R) ← answerOf resT | throw "LIR: fold_imm takes no borrow"
     let .imm cellT := lT | throw "LIR: fold_imm's argument is not a borrow"
     let muT ← vty (VTy.immReborrow (.var y) (.mu F.ty))
     readFact s!"{ruleName c}:shape"
     let (_, recL) ← genFoldFns .imm F muT cellT (← tyOf g)
-    mkClos "fold_imm" [some g] fk none hT fun ctx' =>
-      mkClos "fold_imm" ctx' hk (some lT) R fun ctx'' => do
-        match ctx'' with
-        | some l :: some g' :: _ => return .call recL [g', l]
-        | _ => throw "LIR: fold_imm's environment"
+    mkClos "fold_imm" [some g] fk (some lT) R fun ctx' => do
+      match ctx' with
+      | some l :: some g' :: _ => return .call recL [g', l]
+      | _ => throw "LIR: fold_imm's environment"
   | .unfoldN _ _ C _, [g] => do
     let .thunk uk := resT | throw "LIR: unfold's answer is not a closure"
     let (some sT, _) ← answerOf resT | throw "LIR: unfold takes no state"
