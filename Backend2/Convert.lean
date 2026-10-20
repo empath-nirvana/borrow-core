@@ -388,28 +388,32 @@ def genCountTry (fT sT eT : LTy) (p : Var) : CM Tm := do
 
 /-- A borrow `withbor`'s way (SPEC §1): `(x, f () x)`, the owner `src` lent as the borrow the
 callback `cb` (a `∀` closure) is given, by `op` (`lend`, `relend`). -/
-def genLend (op : Op) (src cb : Var) : CM Tm := do
-  let (_, gT) ← answerOf (← tyOf cb)
+def genLend (op : Op) (src : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm := do
+  let (_, gT) ← answerOf cbT
   let (some bT, rT) ← answerOf gT | throw "LIR: a borrow's callback takes no borrow"
   let pr ← fresh (.pair (← tyOf src) bT)
   let o ← freshLike src; let b ← fresh bT
-  let g ← fresh gT; let r ← fresh rT
+  let r ← fresh rT
   readFact "lend"
-  return .letv pr (.prim op [src]) (.letpair o b pr
-    (.letv g (.app0 cb) (.letv r (.app g b) (.pair o r))))
+  return .letv pr (.prim op [src]) (.letpair o b pr (.letv r (← call b) (.pair o r)))
+
+/-- The call of a borrow's callback `cb` (a `∀` closure) on `b`: `cb () b`. -/
+def callCb (cb : Var) (b : Var) : CM Tm := do
+  let (_, gT) ← answerOf (← tyOf cb)
+  let g ← fresh gT
+  return .letv g (.app0 cb) (.app g b)
 
 /-- `withload x f` (SPEC §1): `f () (load x)`, the contents read at the callback's argument type. -/
-def genWithload (x cb : Var) : CM Tm := do
-  let (_, gT) ← answerOf (← tyOf cb)
+def genWithload (x : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm := do
+  let (_, gT) ← answerOf cbT
   let (some vT, _) ← answerOf gT | throw "LIR: withload's callback takes no argument"
   let v ← fresh vT
-  let g ← fresh gT
-  return .letv v (.prim .load [x]) (.letv g (.app0 cb) (.app g v))
+  return .letv v (.prim .load [x]) (← call v)
 
 /-- `withswap x f` (SPEC §1): `let (y, z) = f (load x); store x y; (x, z)`, the load's copy and the
 store's drop of the old contents cancelled: the contents moved out, and `y` moved in. -/
-def genWithswap (m f : Var) : CM Tm := do
-  let (some aT, rT) ← answerOf (← tyOf f) | throw "LIR: withswap's function takes no argument"
+def genWithswap (m : Var) (fT : LTy) (call : Var → CM Tm) : CM Tm := do
+  let (some aT, rT) ← answerOf fT | throw "LIR: withswap's function takes no argument"
   let .pair yT zT := rT | throw "LIR: withswap's function answers no pair"
   let mT ← tyOf m
   let pr ← fresh (.pair mT aT)
@@ -417,7 +421,7 @@ def genWithswap (m f : Var) : CM Tm := do
   let r ← fresh rT
   let y ← fresh yT; let z ← fresh zT
   let m'' ← fresh mT
-  return .letv pr (.prim .take [m]) (.letpair m' old pr (.letv r (.app f old)
+  return .letv pr (.prim .take [m]) (.letpair m' old pr (.letv r (← call old)
     (.letpair y z r (.letv m'' (.prim .put [m', y]) (.pair m'' z)))))
 
 /-! ### Folds (SPEC §6)
@@ -787,13 +791,13 @@ def lendTree (v : Var) (bT : LTy) (k : Var → Var → CM Tm) : CM Tm := do
 
 /-- A block borrow (`withborS`, `withborF2`): every leaf lent, the borrows handed to the callback at
 one lifetime; `(handle, answer)`. -/
-def genLendTree (src cb : Var) : CM Tm := do
-  let (_, gT) ← answerOf (← tyOf cb)
+def genLendTree (src : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm := do
+  let (_, gT) ← answerOf cbT
   let (some bT, rT) ← answerOf gT | throw "LIR: a block borrow's callback takes no borrow"
   readFact "lend"
   lendTree src bT fun o b => do
-    let g ← fresh gT; let r ← fresh rT
-    return .letv g (.app0 cb) (.letv r (.app g b) (.pair o r))
+    let r ← fresh rT
+    return .letv r (← call b) (.pair o r)
 
 /-! ### Externs -/
 
@@ -872,6 +876,39 @@ def headOf : Nat → TExpr → TExpr
         let h := headOf f b
         if (constArity h).isSome then h else t
       | _ => t
+
+/-- The nodes of a typed term, to a bound. -/
+def tsize : Nat → TExpr → Nat
+  | 0, _ => 0
+  | f + 1, t => 1 + (t.children.map (fun (_, c) => tsize f c)).foldl (· + ·) 0
+
+/-- A `use` body small enough to be converted at its use when it is applied there: the old
+backend's substitution of a small definition, with no copy of a large one (#509). -/
+def inlineBound : Nat := 200
+
+/-- A function position that is a λ once its lifetime abstractions are instantiated: `allEV`/`allE`
+of `allI`, through transparent nodes and a small `use`; the λ, and the dead slots the `allI`s push.
+Applying it is the λ's body at the arguments, with no closure made. -/
+def lamOf : Nat → TExpr → Option (Nat × TExpr)
+  | 0, _ => none
+  | f + 1, t => match transparent? t with
+    | some c => lamOf f c
+    | none => match t with
+      | .lam .. => some (0, t)
+      | .use _ _ _ _ _ _ b => if tsize (inlineBound + 1) b ≤ inlineBound then lamOf f b else none
+      | .allEV _ _ _ _ _ _ c | .allE _ _ _ _ _ _ c => match allIOf f c with
+        | some body => (lamOf f body).map fun (k, l) => (k + 1, l)
+        | none => none
+      | _ => none
+where
+  allIOf : Nat → TExpr → Option TExpr
+    | 0, _ => none
+    | f + 1, t => match transparent? t with
+      | some c => allIOf f c
+      | none => match t with
+        | .allI _ _ _ _ _ _ body => some body
+        | .use _ _ _ _ _ _ b => if tsize (inlineBound + 1) b ≤ inlineBound then allIOf f b else none
+        | _ => none
 
 /-- The arguments of a spine of call-by-value applications, outermost first, with each split's
 masks; and the function. -/
@@ -1077,8 +1114,28 @@ def convSpine (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   | fuel + 1 =>
   let (as, h) := spineOf 4096 t
   let resT ← repJ t.jdg
-  go fuel ctx as [] h resT
+  -- A borrow whose callback is a λ written there: the callback's body at the borrow, with no
+  -- closure made (the λ-value's construction does nothing).
+  match as, cbConst (headOf 64 h) with
+  | [(u₁, cb), (u₂, x)], true =>
+    match lamOf 64 cb with
+    | some (k, .lam _ _ _ _ body) => do
+      readFact "lolliE:callback beta"
+      let (pre₁, cA, cF) ← splitCtx ctx u₁ "lolliE"
+      let (pre₂, cX, cH) ← splitCtx cF u₂ "lolliE"
+      let xT ← repJ x.jdg
+      let cbT ← repJ cb.jdg
+      return pre₁ (pre₂ (← bindTm (← conv fuel cX x) xT fun xv => do
+        let body ← expandCb fuel (headOf 64 h) xv cbT
+          (fun b => conv fuel (some b :: (List.replicate k none ++ cA)) body) resT
+        return leaf cH none body))
+    | _ => go fuel ctx as [] h resT
+  | _, _ => go fuel ctx as [] h resT
 where
+  cbConst : TExpr → Bool
+    | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .sliceBorrowM ..
+    | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I .. => true
+    | _ => false
   go (fuel : Nat) (ctx : Ctx) : List (Masks × TExpr) → List Var → TExpr → LTy → CM Tm
     | (u, ta) :: rest, vs, h, resT => do
       let (pre, cA, cF) ← splitCtx ctx u "lolliE"
@@ -1098,12 +1155,13 @@ where
         let r ← fresh (← satTy (← repJ hd.jdg) n)
         return leaf ctx none (.letv r (← expand fuel hd first (← tyOf r)) (← applyAll r more))
       | none =>
-        match hd, vs with
-        | .lam _ _ _ _ body, a :: more => do
-          let lamT ← repJ hd.jdg
-          let (_, r) ← answerOf lamT
-          if more.isEmpty then conv fuel (some a :: ctx) body
-          else bindTm (← conv fuel (some a :: ctx) body) r fun g => applyAll g more
+        match lamOf 64 h, vs with
+        | some (k, .lam _ lj _ _ body), a :: more => do
+          readFact "lolliE:beta"
+          let (_, r) ← answerOf (← repJ lj)
+          let ctx' := some a :: (List.replicate k none ++ ctx)
+          if more.isEmpty then conv fuel ctx' body
+          else bindTm (← conv fuel ctx' body) r fun g => applyAll g more
         | _, _ => do
           let f ← fresh (← repJ h.jdg)
           return .letv f (← conv fuel ctx h) (← applyAll f vs)
@@ -1201,6 +1259,18 @@ where
         if k == 0 then expand fuel c got'.reverse.reverse rT
         else curry fuel c rT got' k
 
+/-- A borrowing constant applied to its first argument `x`, its callback's call given by `call`. -/
+def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM Tm) (resT : LTy) :
+    CM Tm := do
+  readFact s!"{ruleName c}:expand"
+  match c with
+  | .withbor1 .. | .withbor2 .. | .sliceBorrowM .. | .sliceBorrowI .. => genLend .lend x cbT call
+  | .withbor3 .. => genLend .relend x cbT call
+  | .withload .. => genWithload x cbT call
+  | .withswap .. => genWithswap x cbT call
+  | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I .. => genLendTree x cbT call
+  | c => throw s!"LIR: `{ruleName c}` is not a borrow (answer {resT})"
+
 /-- **A constant applied to its arguments**, `args` in the order they apply, its answer of type
 `resT`. -/
 def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
@@ -1245,16 +1315,16 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     let .sum sT eT := rT | throw "LIR: count_try's answer"
     genCountTry fT sT eT p
   | .withbor1 .., [x, cb] | .withbor2 .., [x, cb] | .sliceBorrowM .., [x, cb]
-  | .sliceBorrowI .., [x, cb] => genLend .lend x cb
-  | .withbor3 .., [m, cb] => genLend .relend m cb
-  | .withload .., [x, cb] => genWithload x cb
-  | .withswap .., [m, f] => genWithswap m f
+  | .sliceBorrowI .., [x, cb] => genLend .lend x (← tyOf cb) (callCb cb)
+  | .withbor3 .., [m, cb] => genLend .relend m (← tyOf cb) (callCb cb)
+  | .withload .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
+  | .withswap .., [m, f] => genWithswap m (← tyOf f) fun old => pure (.app f old)
   | .allocS .., [v] => allocTree v resT
   | .freeS _ j _, [v] => do
     let (_, vT) ← arrowOf (← repJ j)
     freeTree v vT
   | .withborSM .., [x, cb] | .withborSI .., [x, cb] | .withborF2M .., [x, cb]
-  | .withborF2I .., [x, cb] => genLendTree x cb
+  | .withborF2I .., [x, cb] => genLendTree x (← tyOf cb) (callCb cb)
   | .foldOwn _ _ F _, [g] | .foldReuse _ _ F _, [g] => do
     let k : FoldKind := match c with | .foldReuse .. => .reuse | _ => .own
     let .thunk fk := resT | throw "LIR: a fold's answer is not a closure"

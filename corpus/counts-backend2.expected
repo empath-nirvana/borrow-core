@@ -5,7 +5,7 @@ aff-coerce 1 4 0 3 3 0
 aff-counter 2 3 0 20 20 0
 aff-depth 2 5 0 34 34 0
 aff-drop 3 3 0 5 5 0
-aff-higher 2 17 0 8 8 0
+aff-higher 2 15 0 8 8 0
 aoc/2020-08 6 2 0 10216 7451 3481
 aoc/2021-06 4 2 0 6409 4779 2264
 aoc/2021-10 5 2 0 13182 8140 9071
