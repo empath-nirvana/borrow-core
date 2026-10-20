@@ -7,20 +7,20 @@ Four statements, each of them one induction over `FDerives` or a composition wit
 theorems:
 
 1. **Elaboration** (`FDerives.elab`): every frame's elaborated term is a `CDerives` derivation at
-   the frame type. One case per frame rule; it needs the dead-binder weakening of `CDerives`
-   (`CDerives.shift_dead`, obligation O1).
+   the frame type. One case per frame rule (`Elab.lean`); the dead-binder weakening it needs
+   (`CDerives.shift_dead`) is Core's `CDerives.insert_dead`.
 2. **Conservativity** (`frame_sound`, `frame_adequacy`, `core_conservative`): nothing of Core is
    changed, so `fundamentalC`, `adequacyC` and `adequacyD` cover every frame through its
    elaboration, and a Core computation embedded as a frame runs as it did.
 3. **Accounting** (`accounting`): every exit of a well-typed frame hands back each of its slots,
-   the same slot at the same position, exactly once; one induction over `FDerives`.
+   the same slot at the same position, exactly once; one induction over `FDerives`, one case
+   lemma per rule (`Accounting.lean`) over the run lemmas of `Runs.lean`.
 4. **Agreement with §19** (`frame_handled`, `frame_unwind_leakfree`): `raise` and abort leave a
    frame by §19's unwinding, through Core's own `[handle]` and `[then]`; the frame adds no rule
    for them.
 
-Proofs that are not cheap are enumerated `sorry`s, each with a note on what it needs. The rest
-are proved, to show the statements well-formed and not vacuous (`not_returns_swap`: a Core term
-at the frame type that swaps two slots satisfies the typing and fails the accounting).
+Everything is proved. The statements are not vacuous (`not_returns_swap`: a Core term at the
+frame type that swaps two slots satisfies the typing and fails the accounting).
 -/
 
 noncomputable section
@@ -184,8 +184,8 @@ theorem core_embeds {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {S : Row} {A : VTy}
 same slot at the same position. ONE induction over `FDerives`; each case uses only its premises'
 induction hypotheses. A rule added to `FDerives` fails this proof until its case is written.
 
-Each case's `sorry` names the machine facts it needs. None mentions two frame rules: a case
-needs its own term's steps and the hypothesis of each premise. -/
+Each case is one lemma of `Accounting.lean`, which names its own rule, the run lemmas of
+`Runs.lean` and the hypothesis of each premise; none mentions another frame rule. -/
 theorem accounting {Δ : LifeCtx} {Γ : Ctx VTy} {Φ : List FBlock} {Ps : List VTy} {e : Expr}
     {S : Row} {E : ExitRow} {A : VTy} (hΦ : ∀ b ∈ Φ, b.Returns)
     (h : FDerives Δ Γ Φ Ps e S E A) : ∀ γ : List Val, Returns (substAll γ e) := by
