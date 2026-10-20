@@ -160,7 +160,7 @@ end
 /-! ### The parser monad -/
 
 /-- `BCC_FRAMES=1`: `let mut` elaborated by the frame rules (#632, a prototype behind a flag): a
-`let mut` is a slot of its body's frame (`Frontend.Elab.Frames`). -/
+`let mut` is a slot of its body's frame (`Frontend.Elab.Frames`).  `[spec §43]` -/
 initialize framesEnv : Bool ← do return (← IO.getEnv "BCC_FRAMES") == some "1"
 
 /-- `BCC_FRAMES_LIB=thread`: the library modules keep the threading elaboration under
@@ -1299,7 +1299,7 @@ def forResOf (sp : Span) : Option Comp → Val
 /-- A binder type to be filled by the elaborator (a closure's, a borrow callback's). -/
 def holeTy (sp : Span) : VTy := .name sp "_"
 
-/-! ### `let mut` as a frame's slots (`frameMode`, #632)
+/-! ### `let mut` as a frame's slots (`frameMode`, #632)  `[spec §43]`
 
 The frame rules of `experiments/Frames`, applied to a surface body (`Frontend.Elab.Frames`): a
 `let mut` is a slot, each use of it is one lend of its cell, and a construct whose arms use slots

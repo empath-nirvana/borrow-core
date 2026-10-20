@@ -1,31 +1,34 @@
 import Frontend.Syntax
 
 /-!
-# Frontend — Elab — `let mut` as a frame's slots (`BCC_FRAMES=1`, #632, a prototype)
+# Frontend — Elab — `let mut` as a frame's slots (`BCC_FRAMES=1`, #632, a prototype)  `[spec §43]`
 
 The surface elaboration of `let mut` by the frame rules of `experiments/Frames`
-(`docs/research/frames-with-exits.md`). A `let mut x = e` of a surface body is a **slot** of the
-body's frame: the cell `alloc(e)` (the rule `new`), which the frame owns. Each use of `x` is the
-rule `use`: the cell lent for that one use, a load (`*x`), a store or a swap (`modify &mut x`), a
-lend to a call (`&mut x`, `&x`). Core code never sees a slot, so a read of `x` inside a value is
-loaded before the construct that evaluates the value (`slotLoads`), in evaluation order. The
-frame's slots `Π` are passed through each construct by its rule:
+(`docs/research/frames-with-exits.md`, SPEC §43). A `let mut x = e` of a surface body is a
+**slot** of the body's frame: the cell `alloc(e)` (the rule `new`), which the frame owns. Each use
+of `x` is the rule `use`, the cell lent for that one use: a load (`*x`), a store or a swap
+(`modify &mut x`), a lend to a call or a borrow block (the content swapped out and lent by the
+value's own rules, `wrapLends`). Core code never sees a slot, so a read of `x` inside a value is
+loaded before the construct that evaluates the value (`slotLoads`), in evaluation order; inside
+a borrow block's, a `with`'s or a writing `run`'s body, which is a frame inside the lend (the rule
+`lend`), it is loaded where it is. The frame's slots are passed through each construct by its
+rule:
 
-- `case`: the arms of an `if`, a `match` or a `case` whose arms use a slot are frames over the
-  same `Π`, each handing it back at its terminals (`handSlots`), and what follows takes it apart;
-- `bind`: a head `x <- M` / `let p = if …` the same;
-- the loops: the counted loop and the div loop thread the cells they use in their state, as §14
-  and §16 thread a loop's state (`Π ⊗ S₀`);
-- at the end of a slot's scope its last content is freed out (`new`'s normal exit, `slotEnd`); at
-  every other exit the cell is a linear value in scope, destroyed by §12's implicit destructor
-  (the drop glue the frame rules' `bind` and `catch` carry).
+- `case`: the arms of an `if`, a `match` or a `case` that mention a slot are frames over the same
+  slots, each handing them back at its terminals (`handSlots`), and what follows takes them apart;
+- `bind`: a head `x <- M`, `let p = if …` the same;
+- `lend`: a callback's body hands back the slots it uses beside its result;
+- the loops: §14's and §16's loops thread the cells they use in their state (`Π ⊗ S₀`);
+- `new`'s normal exit frees the cell and reads its last content (`slotEnd`); at every other exit
+  the cell is a linear value in scope, destroyed by §12's implicit destructor (the drop glue the
+  frame rules' `bind` and `catch` carry).
 
-No write set is computed and nothing is handed on by name: a construct passes the slots it
-mentions, whatever it does with them. Under the flag the parser does not run R2's write sets,
-R3's hand-on, `mutCap` or `escapingWriter` for a slot: a slot is no `let mut` variable to them.
+No write set is computed and nothing is handed on by name. For a slot the parser does not run
+R2's write sets, R3's hand-on, `mutCap` or `escapingWriter`: a slot is no `let mut` variable to
+them.
 
-**Not built** (a prototype gap, reported as such): a closure that writes a slot is a frame-typed
-block (`callBlock`), generic in its slots at its callee (D4); this prototype refuses it.
+**Not built** (a prototype gap): a closure that writes a slot is a frame-typed block
+(`callBlock`), generic in its slots at its callee (D4); this prototype refuses it.
 -/
 
 namespace Frontend.Frames

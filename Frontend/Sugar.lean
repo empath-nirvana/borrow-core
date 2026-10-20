@@ -3891,7 +3891,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       | _, _ =>
         -- `BCC_FRAMES=1` (#632): a slot's content swapped out for a borrow block (`io_fbv…`,
         -- `Frontend.Elab.Frames`) that is neither a cell nor an array is lent through a cell
-        -- allocated for it, as a value is (SPEC §35); the content comes back by its `free`.
+        -- allocated for it, as a value is (SPEC §35); the content comes back by its `free`
+        -- (SPEC §43).
         if framesEnv && (k == .imm || k == .mut) then
           if let .var vsp v := P then
             if v.startsWith "io_fbv" then

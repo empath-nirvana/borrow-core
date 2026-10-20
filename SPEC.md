@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.90 · 2026-10-20
+Version 0.91 · 2026-10-20
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -7833,6 +7833,48 @@ programs get rows.
 
 ---
 
+## 43. Entry 42 — `let mut` as a frame's slots, behind a flag (#632, a prototype)
+
+### Motivation
+
+#632 step 2. `experiments/Frames` proves the frame rules (`FDerives`, 13 derived rules over
+`CDerives`): each rule's elaboration is a `CDerives` derivation (`FDerives.elab`) and hands back
+the slots it is given on every run (`accounting`). This entry tries them on the surface, behind
+`BCC_FRAMES=1` (`BCC_FRAMES_LIB=thread` keeps the library modules' `let mut`s on §41), so that
+what they resolve and what they cost can be measured beside §41's threading and #626's place
+model (`docs/research/frames-with-exits.md` §13). Nothing changes without the flag.
+
+### The rules at the surface
+
+`Frontend/Elab/Frames.lean`, with hooks in `Frontend/Parser.lean`:
+
+| construct | under the flag |
+|---|---|
+| `let mut x = e; N` | the rule `new`: the cell `alloc(e)` is the slot `x`; at `N`'s normal end the cell is freed and its last content read where `N`'s value reads `x`; at any other exit the cell is a linear value in scope, destroyed by §12 |
+| a read of `x` | the rule `use`: a load `*x`, made before the construct that evaluates the read (Core code sees no slot); in a borrow block's, a `with`'s or a writing `run`'s body, where it is |
+| `x = e`, `x <- M`, `let (x, q) = f(…, x, …)` | the rule `use` with `withswap`: `modify &mut x { o -> … }`; a value that does not read `x` is evaluated first |
+| `&mut x`, `&x` at a call | the rule `use`: the content swapped out, lent by the value's own rules, swapped back |
+| `borrow k x { … }` | the content swapped out and borrowed by the value's own rules (an array as a family; any other value through a cell allocated for it) |
+| `if`, `match`, `case` (a statement or a head), `x <- M` | the rules `case` and `bind`: the arms hand back the slots they mention, and the binding takes them apart |
+| a borrow block's, a `with`'s, a `run`'s body that uses slots | the rule `lend`: the body hands back the slots it uses beside its result |
+| the loops | §14's and §16's loops, the cells they use in their state (`Π ⊗ S₀`) |
+| a closure that writes a slot | refused: a frame-typed block (`callBlock`), generic in its slots at its callee (D4), is not built |
+
+For a slot, §41's R2 write sets, R3's hand-on, `mutCap` and `escapingWriter` do not run: a slot
+is no `let mut` variable to them.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine or the checker. Without the flag the parser
+and the elaboration are as they were: every corpus program's erasure, run output, goldens and
+counts are unchanged.
+
+### Open
+
+The measured refusals and costs (`docs/research/frames-with-exits.md` §13): a linear content moved
+out of a slot (no holes), a view read twice, effects inside a use (a swap's callback is pure),
+blocks generic in their slots (D4), and the cells' allocations (#626's L1/L2).
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -8192,6 +8234,9 @@ and `scripts/alpha-check.py`.
 
 ## Changelog
 
+- **0.91** (2026-10-20) — §43 (#632 step 2): `let mut` as a frame's slots, behind `BCC_FRAMES=1`
+  (a prototype, `Frontend/Elab/Frames.lean`). No change without the flag; no change to
+  `CDerives`, the relation, the machine or the checker.
 - **0.90** (2026-10-20) — §42 (#593, unit U1 of `docs/data-declarations.md`): `data`
   declarations, records and variants, monomorphic and generic, transparent; recursion under a
   written `box` (blocks); the single-root rule; constructors, record literals, fields and field
