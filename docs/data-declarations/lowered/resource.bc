@@ -1,0 +1,431 @@
+-- A Kubernetes-style resource round-tripped through JSON, hand-lowered to today's language
+-- (docs/data-declarations.md §7). Not part of the gate; checked with `bcc check` and run with
+-- `bcc interp`.
+--
+-- The proposed source (native paradigm, spellings provisional), `docs/data-declarations/paradigms/native.bc`:
+--
+--     data Strategy derives encode, decode @json(tagging = Adjacent(tag = "type", content = "rollingUpdate"))
+--       = Recreate | RollingUpdate(max_surge: i32 @json(rename = "maxSurge"))
+--     data Port derives encode, decode = { name: string, container_port: i32 @json(rename = "containerPort") }
+--     data Container derives encode, decode = { name: string, image: string, ports: Vec[Port] }
+--     data Spec derives encode, decode = { replicas: Option[i32], strategy: Strategy, containers: Vec[Container] }
+--     data Label derives encode, decode = { key: string, value: string }
+--     data Meta derives encode, decode = { name: string, labels: Vec[Label] }
+--     data Deployment derives encode, decode = { metadata: Meta, spec: Spec }
+--
+-- Below, each declaration is its structure (a record is `⊗`, a variant `⊕`, `Option[A]` is
+-- `A + 1`, `Vec[A]` is `buf A`), and each function is what `poly encode` and `poly decode` would
+-- specialise to at that type: one function per type, field by field, keys as literals. The encoder
+-- takes each value and hands it back (the derived one takes a view; see §7.3); the decoder reads a
+-- cursor, fills one option slot per field in any key order, and raises `Fail[i32]` (the byte
+-- offset) on malformed input or a missing required field. No type former, rule or constant is used
+-- that the corpus does not already use.
+--
+-- Answer (`bcc interp`, about 30 s at the source stage): the resource encoded; decoded from that
+-- text, its replicas changed 3 → 5, and encoded again; then the error offset of an input whose
+-- `metadata` has no `labels` (a required field):
+--
+--     {"metadata":{"name":"web","labels":[{"key":"app","value":"web"}]},"spec":{"replicas":3,"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":1}},"containers":[{"name":"nginx","image":"nginx:1.27","ports":[{"name":"http","containerPort":80}]}]}}
+--     {"metadata":{"name":"web","labels":[{"key":"app","value":"web"}]},"spec":{"replicas":5,"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":1}},"containers":[{"name":"nginx","image":"nginx:1.27","ports":[{"name":"http","containerPort":80}]}]}}
+--     i32[26]
+--
+-- and `live 0`. `bcc-counts`: allocs 51, indirect 0, copies 0.
+
+include fail
+include rec
+include text
+include textio
+include slice
+include buf
+
+-- ## The structures
+
+type Strategy = 1 + i32                          -- Recreate | RollingUpdate(max_surge)
+type Port = string * i32                         -- { name, container_port }
+type Container = string * (string * buf Port)    -- { name, image, ports }
+type Spec = (i32 + 1) * (Strategy * buf Container)  -- { replicas, strategy, containers }
+type Label = string * string                     -- { key, value }
+type Meta = string * buf Label                   -- { name, labels }
+type Deployment = Meta * Spec                    -- { metadata, spec }
+
+-- ## Encoding: what `encode` specialises to
+
+fn put_lit(o: string, l: lit) -> string = let (o, _) = push_lit(o, l); o
+fn put_byte(o: string, b: u8) -> string = let (o, _) = push_byte(o, b); o
+fn put_dec(o: string, x: i32) -> string = let (o, _) = push_dec(o, x); o
+
+-- `"key":`, the key a literal: the field's label, renamed by `@json(rename)`.
+fn put_key(o: string, k: lit) -> string = put_byte(put_lit(put_byte(o, u8[34]), k), u8[34]) |> put_byte(b':')
+
+-- A string, quoted (the lowering's strings have no characters to escape).
+fn enc_string(o: string, s: string) -> string * string =
+  let o = put_byte(o, u8[34]);
+  let (o, _) = borrow imm s { v -> push_str(o, v) };
+  (put_byte(o, u8[34]), s)
+
+-- `encode` at `Vec[A]`: the case of the family at `buf A`, generic in the element's case.
+fn enc_vec[A](o: string, b: buf A, f: !(string * A => string * A)) -> string * buf A =
+  let (b, n) = len_of(b);
+  let mut o = put_byte(o, b'[');
+  let mut b = b;
+  for i in 0..n {
+    let (b1, x) = take(b, i);
+    match x {
+      inl e ->
+        let o1 = if i == 0 { o } else { put_byte(o, b',') };
+        let (o2, e) = f(o1, e);
+        let (a, m) = b1;
+        o = o2;
+        b = (array_set(a, i, e), m)
+    | inr u -> b = b1
+    }
+  };
+  (put_byte(o, b']'), b)
+
+fn enc_port(o: string, p: Port) -> string * Port =
+  let (name, cp) = p;
+  let o = put_key(put_byte(o, b'{'), "name");
+  let (o, name) = enc_string(o, name);
+  let o = put_dec(put_key(put_byte(o, b','), "containerPort"), cp);
+  (put_byte(o, b'}'), (name, cp))
+
+fn enc_container(o: string, c: Container) -> string * Container =
+  let (name, (image, ports)) = c;
+  let o = put_key(put_byte(o, b'{'), "name");
+  let (o, name) = enc_string(o, name);
+  let o = put_key(put_byte(o, b','), "image");
+  let (o, image) = enc_string(o, image);
+  let o = put_key(put_byte(o, b','), "ports");
+  let (o, ports) = enc_vec(o, ports, !{ (o, p) -> enc_port(o, p) });
+  (put_byte(o, b'}'), (name, (image, ports)))
+
+-- A variant with a payload, adjacently tagged: `{"type":"Recreate"}` or
+-- `{"type":"RollingUpdate","rollingUpdate":{"maxSurge":1}}`, Kubernetes' `DeploymentStrategy`.
+fn enc_strategy(o: string, s: Strategy) -> string * Strategy =
+  let o = put_key(put_byte(o, b'{'), "type");
+  match s {
+    inl u -> (put_byte(put_lit(o, "\"Recreate\""), b'}'), inl ())
+  | inr m ->
+      let o = put_lit(o, "\"RollingUpdate\"");
+      let o = put_key(put_byte(o, b','), "rollingUpdate");
+      let o = put_dec(put_key(put_byte(o, b'{'), "maxSurge"), m);
+      (put_byte(put_byte(o, b'}'), b'}'), inr m)
+  }
+
+-- An absent `Option` field is omitted (#141 Q8: absent, not `null`).
+fn enc_spec(o: string, s: Spec) -> string * Spec =
+  let (replicas, (strategy, containers)) = s;
+  let o = put_byte(o, b'{');
+  let (o, first) = match replicas {
+    inl r -> (put_byte(put_dec(put_key(o, "replicas"), r), b','), ())
+  | inr u -> (o, ())
+  };
+  let o = put_key(o, "strategy");
+  let (o, strategy) = enc_strategy(o, strategy);
+  let o = put_key(put_byte(o, b','), "containers");
+  let (o, containers) = enc_vec(o, containers, !{ (o, c) -> enc_container(o, c) });
+  (put_byte(o, b'}'), (replicas, (strategy, containers)))
+
+fn enc_label(o: string, l: Label) -> string * Label =
+  let (k, v) = l;
+  let o = put_key(put_byte(o, b'{'), "key");
+  let (o, k) = enc_string(o, k);
+  let o = put_key(put_byte(o, b','), "value");
+  let (o, v) = enc_string(o, v);
+  (put_byte(o, b'}'), (k, v))
+
+fn enc_meta(o: string, m: Meta) -> string * Meta =
+  let (name, labels) = m;
+  let o = put_key(put_byte(o, b'{'), "name");
+  let (o, name) = enc_string(o, name);
+  let o = put_key(put_byte(o, b','), "labels");
+  let (o, labels) = enc_vec(o, labels, !{ (o, l) -> enc_label(o, l) });
+  (put_byte(o, b'}'), (name, labels))
+
+fn enc_deployment(o: string, d: Deployment) -> string * Deployment =
+  let (meta, spec) = d;
+  let o = put_key(put_byte(o, b'{'), "metadata");
+  let (o, meta) = enc_meta(o, meta);
+  let o = put_key(put_byte(o, b','), "spec");
+  let (o, spec) = enc_spec(o, spec);
+  (put_byte(o, b'}'), (meta, spec))
+
+-- ## Decoding: what `decode` specialises to
+
+-- The input and the offset read to. (The natural form is a borrowed cursor over the input's
+-- view, raising across its borrow: #595's B10, `docs/expressiveness.md` unit 8.)
+type Cur = string * i32
+
+fn byte(c: Cur) -> Cur * u8 = let ((a, n), i) = c; let mut a = a; let b = at(&a, i, u8[0]); (((a, n), i), b)
+
+fn skip_ws(c: Cur) -> Cur =
+  let ((a, n), i) = c;
+  let mut a = a;
+  let mut i = i;
+  for k in 0..n {
+    let b = at(&a, i, u8[0]);
+    if b == b' ' || b == b'\n' { i = i + 1 } else { break }
+  };
+  ((a, n), i)
+
+fn expect(c: Cur, b: u8) -> Cur with Fail[i32] =
+  let ((s, i), x) = byte(skip_ws(c));
+  if x == b { (s, i + 1) } else { raise(i) }
+
+fn dec_string(c: Cur) -> Cur * string with Fail[i32] =
+  let ((a, n), i) = expect(c, u8[34]);
+  let mut a = a;
+  let mut out = string_new(8);
+  let mut i = i;
+  let mut closed = false;
+  for k in 0..n {
+    let b = at(&a, i, u8[0]);
+    i = i + 1;
+    if b == u8[34] { closed = true; break } else { let (o, _) = push_byte(out, b); out = o }
+  };
+  if closed { (((a, n), i), out) } else { raise(i) }
+
+fn dec_i32(c: Cur) -> Cur * i32 with Fail[i32] =
+  let ((a, n), i) = skip_ws(c);
+  let mut a = a;
+  let mut i = i;
+  let mut v = 0;
+  let start = i;
+  for k in 0..n {
+    let b = at(&a, i, u8[0]);
+    if b'0' <= b && b <= b'9' { v = v * 10 + to_i32(b) - 48; i = i + 1 } else { break }
+  };
+  if i == start { raise(i) } else { (((a, n), i), v) }
+
+-- After a member: `,` (another follows) or the closing byte `e` (none does).
+fn more(c: Cur, e: u8) -> Cur * bool with Fail[i32] =
+  let ((s, i), x) = byte(skip_ws(c));
+  if x == b',' { ((s, i + 1), true) } else { if x == e { ((s, i + 1), false) } else { raise(i) } }
+
+-- A key, as a string, and the `:` after it.
+fn dec_key(c: Cur) -> Cur * string with Fail[i32] =
+  let (c, k) = dec_string(c);
+  (expect(c, b':'), k)
+
+fn key_is(k: string, l: lit) -> string * bool = let r = borrow imm k { v -> eq_lit(v, l) }; (k, r)
+
+-- An empty slot: `None`.
+fn none[A]() -> A + 1 = inr ()
+
+-- A required field's slot at the end of its object: its value, or a raise at the offset.
+fn need[A](c: Cur, x: A + 1) -> Cur * A with Fail[i32] =
+  match x { inl v -> (c, v) | inr u -> let ((s, i), _) = byte(c); raise(i) }
+
+-- `decode` at `Vec[A]`: elements until `]`. The family's case at `buf A` is specialised at each
+-- element type, so each instance calls the element's case directly: a generic recursive function
+-- over a decoder passed as an argument is a recursive function with a computation parameter, which
+-- is not provided (SPEC §33), and is not what specialisation produces anyway.
+-- Each object: its fields in any order into option slots, then assembled.
+fn port_fields(c: Cur, name: string + 1, cp: i32 + 1) -> Cur * ((string + 1) * (i32 + 1)) with Fail[i32], Exhausted =
+  let (c, k) = dec_key(c);
+  let (k, is_name) = key_is(k, "name");
+  let (k, is_cp) = key_is(k, "containerPort");
+  let (c, name, cp) =
+    if is_name { let (c, v) = dec_string(c); (c, (inl v : string + 1), cp) } else {
+    if is_cp { let (c, v) = dec_i32(c); (c, name, (inl v : i32 + 1)) } else {
+    let ((s, i), _) = byte(c); raise(i) } };
+  let (c, again) = more(c, b'}');
+  if again { port_fields(c, name, cp) } else { (c, (name, cp)) }
+
+fn dec_port(c: Cur) -> Cur * Port with Fail[i32], Exhausted =
+  let c = expect(c, b'{');
+  let (c, (name, cp)) = port_fields(c, none[string](), none[i32]());
+  let (c, name) = need(c, name);
+  let (c, cp) = need(c, cp);
+  (c, (name, cp))
+
+fn dec_ports_rest(c: Cur, b: buf Port) -> Cur * buf Port with Fail[i32], Exhausted =
+  let (c, x) = dec_port(c);
+  let (b, _) = push(b, x);
+  let (c, again) = more(c, b']');
+  if again { dec_ports_rest(c, b) } else { (c, b) }
+
+fn dec_ports(c: Cur) -> Cur * buf Port with Fail[i32], Exhausted =
+  let c = expect(c, b'[');
+  let ((s, i), x) = byte(skip_ws(c));
+  if x == b']' { ((s, i + 1), buf_new[Port](0)) } else { dec_ports_rest((s, i), buf_new[Port](4)) }
+
+fn container_fields(c: Cur, name: string + 1, image: string + 1, ports: buf Port + 1)
+    -> Cur * ((string + 1) * ((string + 1) * (buf Port + 1))) with Fail[i32], Exhausted =
+  let (c, k) = dec_key(c);
+  let (k, is_name) = key_is(k, "name");
+  let (k, is_image) = key_is(k, "image");
+  let (k, is_ports) = key_is(k, "ports");
+  let (c, (name, (image, ports))) =
+    if is_name { let (c, v) = dec_string(c); (c, ((inl v : string + 1), (image, ports))) } else {
+    if is_image { let (c, v) = dec_string(c); (c, (name, ((inl v : string + 1), ports))) } else {
+    if is_ports { let (c, v) = dec_ports(c); (c, (name, (image, (inl v : buf Port + 1)))) } else {
+    let ((s, i), _) = byte(c); raise(i) } } };
+  let (c, again) = more(c, b'}');
+  if again { container_fields(c, name, image, ports) } else { (c, (name, (image, ports))) }
+
+fn dec_container(c: Cur) -> Cur * Container with Fail[i32], Exhausted =
+  let c = expect(c, b'{');
+  let (c, (name, (image, ports))) = container_fields(c, none[string](), none[string](), none[buf Port]());
+  let (c, name) = need(c, name);
+  let (c, image) = need(c, image);
+  let (c, ports) = need(c, ports);
+  (c, (name, (image, ports)))
+
+fn dec_containers_rest(c: Cur, b: buf Container) -> Cur * buf Container with Fail[i32], Exhausted =
+  let (c, x) = dec_container(c);
+  let (b, _) = push(b, x);
+  let (c, again) = more(c, b']');
+  if again { dec_containers_rest(c, b) } else { (c, b) }
+
+fn dec_containers(c: Cur) -> Cur * buf Container with Fail[i32], Exhausted =
+  let c = expect(c, b'[');
+  let ((s, i), x) = byte(skip_ws(c));
+  if x == b']' { ((s, i + 1), buf_new[Container](0)) } else { dec_containers_rest((s, i), buf_new[Container](4)) }
+
+-- `{"maxSurge": n}`, the content of `RollingUpdate`.
+fn dec_rolling(c: Cur) -> Cur * i32 with Fail[i32] =
+  let c = expect(c, b'{');
+  let (c, k) = dec_key(c);
+  let (k, ok) = key_is(k, "maxSurge");
+  if ok { let (c, m) = dec_i32(c); (expect(c, b'}'), m) } else { let ((s, i), _) = byte(c); raise(i) }
+
+-- Adjacently tagged: the tag and the content are fields in any order, so both are read into slots
+-- and the variant is chosen at the end, from the tag.
+fn strategy_fields(c: Cur, tag: string + 1, content: i32 + 1) -> Cur * ((string + 1) * (i32 + 1)) with Fail[i32], Exhausted =
+  let (c, k) = dec_key(c);
+  let (k, is_type) = key_is(k, "type");
+  let (k, is_ru) = key_is(k, "rollingUpdate");
+  let (c, tag, content) =
+    if is_type { let (c, v) = dec_string(c); (c, (inl v : string + 1), content) } else {
+    if is_ru { let (c, v) = dec_rolling(c); (c, tag, (inl v : i32 + 1)) } else {
+    let ((s, i), _) = byte(c); raise(i) } };
+  let (c, again) = more(c, b'}');
+  if again { strategy_fields(c, tag, content) } else { (c, (tag, content)) }
+
+fn dec_strategy(c: Cur) -> Cur * Strategy with Fail[i32], Exhausted =
+  let c = expect(c, b'{');
+  let (c, (tag, content)) = strategy_fields(c, none[string](), none[i32]());
+  let (c, tag) = need(c, tag);
+  let (tag, recreate) = key_is(tag, "Recreate");
+  let (tag, rolling) = key_is(tag, "RollingUpdate");
+  if recreate { (c, inl ()) } else {
+  if rolling { let (c, m) = need(c, content); (c, inr m) } else {
+  let ((s, i), _) = byte(c); raise(i) } }
+
+fn spec_fields(c: Cur, replicas: i32 + 1, strategy: Strategy + 1, containers: buf Container + 1)
+    -> Cur * ((i32 + 1) * ((Strategy + 1) * (buf Container + 1))) with Fail[i32], Exhausted =
+  let (c, k) = dec_key(c);
+  let (k, is_r) = key_is(k, "replicas");
+  let (k, is_s) = key_is(k, "strategy");
+  let (k, is_c) = key_is(k, "containers");
+  let (c, (replicas, (strategy, containers))) =
+    if is_r { let (c, v) = dec_i32(c); (c, ((inl v : i32 + 1), (strategy, containers))) } else {
+    if is_s { let (c, v) = dec_strategy(c); (c, (replicas, ((inl v : Strategy + 1), containers))) } else {
+    if is_c { let (c, v) = dec_containers(c); (c, (replicas, (strategy, (inl v : buf Container + 1)))) } else {
+    let ((s, i), _) = byte(c); raise(i) } } };
+  let (c, again) = more(c, b'}');
+  if again { spec_fields(c, replicas, strategy, containers) } else { (c, (replicas, (strategy, containers))) }
+
+-- `replicas` is an `Option`: a missing key is `None` (the slot as it is), not an error.
+fn dec_spec(c: Cur) -> Cur * Spec with Fail[i32], Exhausted =
+  let c = expect(c, b'{');
+  let (c, (replicas, (strategy, containers))) = spec_fields(c, none[i32](), none[Strategy](), none[buf Container]());
+  let (c, strategy) = need(c, strategy);
+  let (c, containers) = need(c, containers);
+  (c, (replicas, (strategy, containers)))
+
+fn label_fields(c: Cur, k0: string + 1, v0: string + 1) -> Cur * ((string + 1) * (string + 1)) with Fail[i32], Exhausted =
+  let (c, k) = dec_key(c);
+  let (k, is_k) = key_is(k, "key");
+  let (k, is_v) = key_is(k, "value");
+  let (c, k0, v0) =
+    if is_k { let (c, v) = dec_string(c); (c, (inl v : string + 1), v0) } else {
+    if is_v { let (c, v) = dec_string(c); (c, k0, (inl v : string + 1)) } else {
+    let ((s, i), _) = byte(c); raise(i) } };
+  let (c, again) = more(c, b'}');
+  if again { label_fields(c, k0, v0) } else { (c, (k0, v0)) }
+
+fn dec_label(c: Cur) -> Cur * Label with Fail[i32], Exhausted =
+  let c = expect(c, b'{');
+  let (c, (k, v)) = label_fields(c, none[string](), none[string]());
+  let (c, k) = need(c, k);
+  let (c, v) = need(c, v);
+  (c, (k, v))
+
+fn dec_labels_rest(c: Cur, b: buf Label) -> Cur * buf Label with Fail[i32], Exhausted =
+  let (c, x) = dec_label(c);
+  let (b, _) = push(b, x);
+  let (c, again) = more(c, b']');
+  if again { dec_labels_rest(c, b) } else { (c, b) }
+
+fn dec_labels(c: Cur) -> Cur * buf Label with Fail[i32], Exhausted =
+  let c = expect(c, b'[');
+  let ((s, i), x) = byte(skip_ws(c));
+  if x == b']' { ((s, i + 1), buf_new[Label](0)) } else { dec_labels_rest((s, i), buf_new[Label](4)) }
+
+fn meta_fields(c: Cur, name: string + 1, labels: buf Label + 1) -> Cur * ((string + 1) * (buf Label + 1)) with Fail[i32], Exhausted =
+  let (c, k) = dec_key(c);
+  let (k, is_n) = key_is(k, "name");
+  let (k, is_l) = key_is(k, "labels");
+  let (c, name, labels) =
+    if is_n { let (c, v) = dec_string(c); (c, (inl v : string + 1), labels) } else {
+    if is_l { let (c, v) = dec_labels(c); (c, name, (inl v : buf Label + 1)) } else {
+    let ((s, i), _) = byte(c); raise(i) } };
+  let (c, again) = more(c, b'}');
+  if again { meta_fields(c, name, labels) } else { (c, (name, labels)) }
+
+fn dec_meta(c: Cur) -> Cur * Meta with Fail[i32], Exhausted =
+  let c = expect(c, b'{');
+  let (c, (name, labels)) = meta_fields(c, none[string](), none[buf Label]());
+  let (c, name) = need(c, name);
+  let (c, labels) = need(c, labels);
+  (c, (name, labels))
+
+fn deployment_fields(c: Cur, meta: Meta + 1, spec: Spec + 1) -> Cur * ((Meta + 1) * (Spec + 1)) with Fail[i32], Exhausted =
+  let (c, k) = dec_key(c);
+  let (k, is_m) = key_is(k, "metadata");
+  let (k, is_s) = key_is(k, "spec");
+  let (c, meta, spec) =
+    if is_m { let (c, v) = dec_meta(c); (c, (inl v : Meta + 1), spec) } else {
+    if is_s { let (c, v) = dec_spec(c); (c, meta, (inl v : Spec + 1)) } else {
+    let ((s, i), _) = byte(c); raise(i) } };
+  let (c, again) = more(c, b'}');
+  if again { deployment_fields(c, meta, spec) } else { (c, (meta, spec)) }
+
+fn dec_deployment(c: Cur) -> Cur * Deployment with Fail[i32], Exhausted =
+  let c = expect(c, b'{');
+  let (c, (meta, spec)) = deployment_fields(c, none[Meta](), none[Spec]());
+  let (c, meta) = need(c, meta);
+  let (c, spec) = need(c, spec);
+  (c, (meta, spec))
+
+-- ## The round trip
+
+fn sample() -> Deployment =
+  let (ports, _) = push(buf_new[Port](1), (string_of_lit("http"), 80));
+  let (cs, _) = push(buf_new[Container](1), (string_of_lit("nginx"), (string_of_lit("nginx:1.27"), ports)));
+  let (labels, _) = push(buf_new[Label](1), (string_of_lit("app"), string_of_lit("web")));
+  ((string_of_lit("web"), labels), ((inl 3 : i32 + 1), ((inr 1 : Strategy), cs)))
+
+-- `d.spec.replicas = Some(n)`: field update, by destructuring and rebuilding (it erases).
+fn set_replicas(d: Deployment, n: i32) -> Deployment =
+  let (meta, (r, rest)) = d;
+  (meta, ((inl n : i32 + 1), rest))
+
+fn print_line(s: string) -> 1 = let s = print_string(s); print_byte(b'\n')
+
+main -> i32 =
+  let (text1, d) = enc_deployment(string_new(64), sample());
+  let text1 = print_string(text1);
+  print_byte(b'\n');
+  let r = with on_exhausted(!{ u -> 0 - 1 }) { with default(0 - 2) {
+    let (c, d2) = dec_deployment((text1, 0));
+    let (text2, d2) = enc_deployment(string_new(64), set_replicas(d2, 5));
+    print_line(text2);
+    0 } };
+  let bad = string_of_lit("{\"metadata\":{\"name\":\"web\"},\"spec\":{}}");
+  let e = with to_result { with on_exhausted(!{ u -> 0 - 1 }) {
+    let (c, d3) = dec_deployment((bad, 0));
+    0 } };
+  match e { inl z -> z | inr off -> off }

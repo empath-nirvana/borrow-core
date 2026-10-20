@@ -1,0 +1,183 @@
+-- Paradigm D, native to the calculus (docs/data-declarations.md §5.4). PROPOSED SURFACE: it does
+-- not parse, and every spelling is provisional. Every paradigm in this directory elaborates to the
+-- same core (§3), so the four files differ only in spelling.
+--
+-- What is native here:
+--   - `data` (constructors: `⊗`, `⊕`, `μ`) and `codata` (observations: `&`, `ν`) are the two
+--     declaration forms, duals, each with one meaning in the core;
+--   - a type's face is written as observations grouped by observation mode, `on imm x: T { … }`,
+--     `on mut x: T { … }`, `on x: T { … }` (consuming), and `on T { … }` for introductions, which
+--     have no receiver. The modes are the borrow calculus's own `imm`/`mut`/owned;
+--   - `x.m(a)` is an observation of `x`; the receiver's type says whether it is static (a named
+--     type's face), by the value (a `codata` value) or by the context (a handler name).
+
+include map
+include fail
+include yield
+
+-- ## A. A Kubernetes-style resource: nested records, optional fields, enums with payloads, lists, maps
+
+data Protocol = TCP | UDP
+data RestartPolicy = Always | OnFailure | Never
+data IntOrString @json(tagging = Untagged) = Int(i32) | Str(string)
+data ConditionStatus = True | False | Unknown
+
+data Strategy @json(tagging = Adjacent(tag = "type", content = "rollingUpdate"))
+  = Recreate
+  | RollingUpdate(max_surge: IntOrString, max_unavailable: IntOrString)
+
+data ContainerPort = {
+  name: Option[string],
+  container_port: i32 @schema(minimum = 1, maximum = 65535),
+  protocol: Protocol @default(TCP),
+}
+
+data EnvVar = { name: string, value: string }
+
+data Container = {
+  name: string,
+  image: string,
+  ports: Vec[ContainerPort] @default(Vec.new()),
+  env: Option[Vec[EnvVar]],
+}
+
+data PodSpec = { containers: Vec[Container], restart_policy: RestartPolicy @default(Always) }
+
+data ObjectMeta = {
+  name: string,
+  namespace: Option[string],
+  labels: Map[string, string] @default(Map.new()),
+}
+
+data DeploymentSpec = {
+  replicas: Option[i32],
+  selector: Map[string, string],
+  strategy: Option[Strategy],
+  template: PodSpec,
+}
+
+data Condition = { type: string @json(rename = "type"), status: ConditionStatus, reason: Option[string] }
+data DeploymentStatus = { replicas: i32, conditions: Vec[Condition] }
+
+-- `derives` is explicit (#141 decision 4); `@json(rename_all = Camel)` names the wire keys.
+data Deployment derives eq, debug, encode, decode, schema @json(rename_all = Camel) = {
+  api_version: string,
+  kind: string,
+  metadata: ObjectMeta,
+  spec: DeploymentSpec,
+  status: Option[DeploymentStatus],
+}
+
+-- The face: transparent, so constructors, patterns and fields stay visible too.
+on imm d: Deployment {
+  replicas() -> i32 = d.spec.replicas.or(1)            -- `Option.or` on a view: static
+  ready() -> bool = match d.status { Some(s) -> s.replicas == d.replicas() | None -> false }
+}
+on mut d: Deployment {
+  scale(n: i32) = { d.spec.replicas = Some(n) }        -- a field place through `mut` (§6.6)
+}
+
+fn bump(text: text 't) -> string with Fail[DecodeError] =
+  let mut d = Deployment.decode(text);                 -- `decode` raises; errors are `Fail`
+  d.scale(d.replicas() + 1);                           -- `d.scale(…)` is `scale(&mut d, …)`
+  d.encode()                                           -- `encode(&d)`
+
+-- ## B. A recursive tree
+
+-- `Node` has fields, so it is a block, and each node is allocated where it is built: `box Node(…)`.
+-- `Node(…)` without `box` is an error that asks for `box` (§6.11).
+data Tree[T] = Leaf | Node(left: Tree[T], value: T, right: Tree[T])
+
+on Tree[T] { empty() -> Tree[T] = Leaf }
+on imm t: Tree[T] {
+  depth() -> i32 = fold_imm t { Leaf -> 0 | Node(l, _, r) -> 1 + max(l, r) }
+  contains(x: imm T) -> bool = match t {                -- `order[T]`: one provider per type
+    Leaf -> false
+  | Node(l, v, r) -> match order(x, v) { Less -> l.contains(x) | Greater -> r.contains(x) | Equal -> true }
+  }
+  in_order() with Yield[imm T] = match t {              -- a generator over the borrowed tree
+    Leaf -> ()
+  | Node(l, v, r) -> l.in_order(); yield(v); r.in_order()
+  }
+}
+on t: Tree[T] {
+  insert(x: T) -> Tree[T] = match t {                   -- consuming: the tree is moved in and out
+    Leaf -> box Node(Leaf, x, Leaf)
+  | box Node(l, v, r) -> match order(&x, &v) {      -- `box Node(…)` frees the block it matches
+      Less -> box Node(l.insert(x), v, r) | _ -> box Node(l, v, r.insert(x)) }
+  }
+}
+
+-- ## C. An enum with payloads, and its transpose as codata
+
+data Point = { x: i32, y: i32 }
+data Shape = Circle(r: i32) | Rect(w: i32, h: i32) | Polygon(points: Vec[Point])
+
+on imm s: Shape {
+  area() -> i32 = match s {
+    Circle(r) -> 3 * r * r
+  | Rect(w, h) -> w * h
+  | Polygon(ps) -> shoelace(ps)
+  }
+}
+
+-- The same operations as an interface: a closed set of observations, open set of implementers.
+codata HasArea { area(imm) -> i32; name(imm) -> text 'static }
+
+data Square = Square(side: i32)
+on imm q: Square { area() -> i32 = q.side * q.side; name() -> text 'static = "square" }
+Square gives HasArea                                    -- checked: the face has both, at `imm`
+Shape gives HasArea                                     -- `name` missing: an error naming it
+
+-- Materialised values have one type whatever their state. Observing one through `imm` (here each
+-- element's view) is finding F3 of §8: today a codata value behind an `imm` borrow can only be
+-- forgotten, so this needs the objects persistent (`!`, state `i32`) or lent `mut`.
+fn total(xs: imm Vec[HasArea]) -> i32 =
+  let mut n = 0; for x in xs.items() { n = n + x.area() }; n   -- observation: dispatched
+
+main_c -> i32 =
+  let xs = Vec.of([Square(3) as HasArea, Square(4) as HasArea]);
+  total(&xs)
+
+-- ## D. A generic container, abstract
+
+-- `hidden`: the representation is visible only in this declaration's own `on` blocks and cases.
+data Stack[T] hidden = { items: buf T }
+
+on Stack[T] {
+  new() -> Stack[T] = Stack { items: buf_new(4) }
+  of(xs: Vec[T]) -> Stack[T] = Stack { items: xs.into_buf() }
+}
+on imm s: Stack[T] {
+  len() -> i32 = s.items.len()
+  peek() -> Option[imm T] = s.items.last()              -- a view through the stack lent (§36)
+  items() with Yield[imm T] = for x in s.items.elems() { yield(x) }
+}
+on mut s: Stack[T] {
+  push(x: T) = s.items.push(x)
+  pop() -> Option[T] = s.items.pop()
+}
+on s: Stack[T] { into_buf() -> buf T = s.items }        -- consuming observation
+
+-- A provider for an abstract type is written by its author, inside the boundary: the structural
+-- one would compare capacity.
+poly equal[T] at Stack[T] = x.items == y.items
+
+-- Serde across the boundary: through a transparent view and a constructor, never the
+-- representation (§7.4).
+data Stack[T] encode via Vec[T] by (s -> s.items.as_vec(), v -> Stack.of(v))
+
+-- Interfaces it meets, statically.
+codata Sized { len(imm) -> i32 }
+Stack[T] gives Sized
+
+-- The three binding times of one observation:
+main_d -> i32 * (i32 * i32) =
+  let mut s = Stack.new();
+  s.push(1); s.push(2);
+  let a = s.len();                                      -- static: `Stack.len(&s)`, a direct call
+  let o: Sized = (&s) as Sized;                         -- by the value: a codata value over `&s`
+  let b = o.len();                                      -- an observation: dispatched, or direct
+                                                        -- when the flow knows the one code
+  let c = with z = s as Sized { z.len() };              -- by the context: a handler named `z`
+  (a, (b, c))

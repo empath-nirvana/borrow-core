@@ -1,0 +1,106 @@
+-- One interface at three binding times, hand-lowered to today's language (docs/data-declarations.md
+-- §4). Not part of the gate; checked with `bcc check` and run with `bcc interp`.
+--
+-- The proposed source (native paradigm, spellings provisional):
+--
+--     codata Counter { add(mut self, n: i32) -> 1; get(imm self) -> i32 }
+--
+--     data Tally = Tally(i32)               gives Counter
+--     data Hist  = Hist(count: i32, sum: i32) gives Counter
+--
+--     on mut t: Tally { add(n: i32) -> 1 = … }    on imm t: Tally { get() -> i32 = … }
+--     on mut h: Hist  { add(n: i32) -> 1 = … }    on imm h: Hist  { get() -> i32 = … }
+--
+--     t.add(3)                      -- static: the receiver's type picks Tally's face, a direct call
+--     let o: Counter = h as Counter  -- by the value: the face materialised as a codata value
+--     o.add(3)                      -- an observation of the object
+--     with c = t as Counter { c.add(3); c.get() }   -- by the context: the face installed as a handler
+--
+-- What each line elaborates to is below. Nothing here is a new type former, rule or constant: the
+-- static face is functions, the object is `unfold` at a `nu` whose state type the `nu` hides, and
+-- the context binding is a lent handler (SPEC §18) whose clauses call the face.
+--
+-- Answer: `((i32[7], i32[10]), ((i32[7], i32[10]), (i32[7], i32[10])))`, `live 0`.
+
+-- The data face of each declaration: the structure (a newtype is its field, SPEC §5).
+type Tally = i32
+type Hist = i32 * i32
+
+-- The static faces. `imm`/`mut` receivers are the observation modes; a call is a direct call.
+fn tally_get<'a>(t: imm 'a Tally) -> i32 = *t
+fn hist_get<'a>(h: imm 'a Hist) -> i32 = let (c, s) = *h; s
+fn tally_add<'a>(t: mut 'a Tally, n: i32) -> 1 = modify t { x -> (x + n, ()) }
+fn hist_add<'a>(h: mut 'a Hist, n: i32) -> 1 = modify h { p -> let (c, s) = p; ((c + 1, s + n), ()) }
+
+-- The interface as a value type: two observations and `close`, the rest boxed at `'c` (SPEC §22).
+-- The state type does not appear: `Tally` and `Hist` objects have one type.
+type Counter<'c> = U (nu X. ((i32 -o F (box 'c U X)) & F (i32 * box 'c U X)) & F 1)
+
+-- Materialisation: `unfold` over a state, from the face's code at that state (taken and handed
+-- back, which is what the `mut`/`imm` receivers become inside a step).
+fn counter_raw[S]<'c>(s: S, step: !U (S -o ((i32 -o F (box 'c S)) & F (i32 * box 'c S)) & F 1)) -> Counter<'c> =
+  f <- return (unfold[nu X. ((i32 -o F (box 'c U X)) & F (i32 * box 'c U X)) & F 1, S] step);
+  thunkv nu_in < g <- return (unbang f); (nu_out (force g s)).1,
+                 g <- return (unbang f); (nu_out (force g s)).2 >
+
+fn tally_obj<'c>(t: Tally) -> box 'c Counter<'c> =
+  boxed['c] counter_raw[Tally]['c](t, !thunkv fun (s0 : Tally) ->
+    < < fun (n : i32) -> return (boxed['c] (s0 + n)),
+        return (s0, boxed['c] s0) >,
+      return () >)
+
+fn hist_obj<'c>(h: Hist) -> box 'c Counter<'c> =
+  boxed['c] counter_raw[Hist]['c](h, !thunkv fun (s0 : Hist) ->
+    < < fun (n : i32) -> let (c, s) = s0; return (boxed['c] (c + 1, s + n)),
+        let (c, s) = s0; return (s, boxed['c] (c, s)) >,
+      return () >)
+
+-- Observations of an object: `o.add(n)` and `o.get()`, each handing back the rest; `close`.
+fn obj_add<'c>(o: box 'c Counter<'c>, n: i32) -> box 'c Counter<'c> =
+  g <- return (unbox o); ((nu_out (force g)).1).1 n
+
+fn obj_get<'c>(o: box 'c Counter<'c>) -> i32 * box 'c Counter<'c> =
+  g <- return (unbox o); ((nu_out (force g)).1).2
+
+fn obj_close<'c>(o: box 'c Counter<'c>) -> 1 =
+  g <- return (unbox o); (nu_out (force g)).2
+
+-- A client of the value form: it names no state type, so one body serves both objects.
+fn drive<'c>(o: box 'c Counter<'c>) -> i32 =
+  let o = obj_add(o, 3);
+  let o = obj_add(o, 4);
+  let (v, o) = obj_get(o);
+  let u = obj_close(o);
+  v
+
+-- The interface as an effect, its receiver erased to the handler's state: the context binding.
+effect CounterE { fn add(n: i32); fn get() -> i32 }
+
+-- `t as Counter` installed: each clause is the face's function at the handler's lent state.
+handler tally_as(mut t: Tally): CounterE = { add(n) = tally_add(&mut t, n); get() = tally_get(&t) }
+handler hist_as(mut h: Hist): CounterE = { add(n) = hist_add(&mut h, n); get() = hist_get(&h) }
+
+-- A client of the context form: its row names the interface, not the type.
+fn client() -> i32 with CounterE = add(3); add(4); get()
+
+main -> (i32 * i32) * ((i32 * i32) * (i32 * i32)) =
+  -- static
+  let mut t = 0;
+  tally_add(&mut t, 3);
+  tally_add(&mut t, 4);
+  let a = tally_get(&t);
+  let mut h = (0, 3);
+  hist_add(&mut h, 3);
+  hist_add(&mut h, 4);
+  let b = hist_get(&h);
+  -- by the value
+  let x = drive(tally_obj(0));
+  let y = drive(hist_obj((0, 3)));
+  -- by the context
+  let ct = alloc(0);
+  let p = with tally_as(&mut ct) { client() };
+  let ch = alloc((0, 3));
+  let q = with hist_as(&mut ch) { client() };
+  let u = free(ct);
+  let w = free(ch);
+  ((a, b), ((x, y), (p, q)))
