@@ -134,7 +134,18 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
     handler (`VSugar.handle`'s last field); `n.op` with no space around the `.` is
     `VSugar.named n op`, applied to the operation's argument; a written row's entry may be named,
     `with src: E`, the names kept beside the entries (`Mark.row`'s third field). The printer writes
-    each back as it is read.
+    each back as it is read. In a surface body, `x.f` with `x` a variable in scope is a field
+    (choice 22).
+22. **`data` declarations (SPEC §42).** `data` begins a declaration where one may begin and an
+    upper-case name follows it, and ends the declaration before it; elsewhere it is a name. The
+    parser holds the table of the declarations in scope (`PState.data`): the prelude's, the included
+    modules' and the file's own, read before the file is parsed (`dataOf`), so a declaration is in
+    scope in its whole module. Constructors, record literals and `match` are elaborated as they are
+    read (`Frontend/Elab/Data.lean`); a field read `e.f` is `VSugar.field`, printed `(e).f`, and a
+    field update's rebuilt record, when the declarations disagree on the field's place,
+    `VSugar.update`, printed `(r).{f = e}`. The printed program is core text with the declarations
+    kept as written. `parseProgram` takes the library modules' sources (`lib`); without them only
+    the file's own declarations are in scope.
 
 ## The checker (`Frontend/Check/`)
 
@@ -167,6 +178,7 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Elab/Respan.lean` | `respan`: generated syntax at the span of the sugar that produced it |
 | `Elab/Meta.lean` | typing contexts for the sugar (`TCx`: the program as written, typed by inference), loops and iterators read off types, and metavariables that annotate bindings of injections (`fillProgram`) |
 | `Elab/Match.lean` | first-order matching of a type against a pattern whose placeholders are type parameters (generic calls, decision 45) |
+| `Elab/Data.lean` | `data` declarations (SPEC §42): the table the parser holds; declarations to `type` and `shape` declarations (blocks, the single-root rule); constructors and record literals; the declarations a field may be of; the match compiler, its exhaustiveness and redundancy reports |
 | `Elab/Instances.lean` | the type arguments of each operation's instance and of each template call, typed at the declaration's own types before effects are resolved (SPEC §38); the integer divisions that can fail, at their operands' width (SPEC §39) |
 | `Elab/Divisions.lean` | each division that can fail written as the checked division and a `raise` of `Fail[DivError]`, before rows are inferred (SPEC §39) |
 | `Elab/Effects.lean` | effects and handlers (SPEC §18–§21, §30–§34, §38): every operation resolved to the handler of its instance, rows, copies, handler sites |

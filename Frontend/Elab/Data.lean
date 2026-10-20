@@ -8,7 +8,7 @@ The rules of SPEC §42's table that need only the declarations, not types: a `da
 and its group to `type` and `shape` declarations (D1–D3), constructors and record literals (E1,
 E2, E4), field update (E6), and `match` compiled to a decision tree with its exhaustiveness and
 redundancy reports (M1–M4). The parser holds the table and calls them; the typed rule of E5, a
-field read, is `Frontend/Sugar.lean`'s, over the layout these rules give (`fieldOf`).
+field read, is `Frontend/Sugar.lean`'s, over the declarations these rules give (`fieldCands`).
 
 Every rule elaborates into existing core terms: `⊗`, `⊕`, `μ` with `roll`/`unroll`, `ref` cells,
 `alloc_s` and `free`, `case`, `let`, and the surface's `alloc(e)`, `free(e)`, `==` and `modify`.

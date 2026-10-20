@@ -7699,13 +7699,15 @@ constructors of each column, which the constructor names give: no type.
 
 ### Fields
 
-`e.f` names the field `f` of a one-constructor declaration with a field so named, at the place
-the declaration gives it (`Data.fieldOf`): its index among the `k` fields, and whether the
-declaration is a `μ`. The declarations in scope that have a field `f` must agree on it, or `e.f`
-is refused, naming two of them ("which is meant is decided by the type in a later unit"): faces
-and a namespace per type are U2's, and with nominal types the receiver's type will choose. A
-block's fields are cells, read by matching the block. A field's name may be a word the core
-reserves (`val`, `free`): after a `.` and before a `:` it is a field's. The read is a typed rule
+`e.f` names the field `f` of a one-constructor declaration with a field so named
+(`Data.fieldCands`: each such declaration in scope, with its fields' names, the field's index and
+whether it is a `μ`). The receiver's type chooses (`Sugar.resolveField`): a declaration fits when
+its fields fit the record type's components and the record type matches the declaration's named
+type with its parameters placeholders (`Elab/Match.lean`'s first-order matching, as a generic
+call's); the declarations that fit must agree on the field's place, or the access is refused as
+ambiguous, "ascribe the record". A block's fields are cells, read by matching the block. A field's
+name may be a word the core reserves (`val`, `free`, `input`): after a `.` and before a `:` it is a
+field's. The read is a typed rule
 (`Sugar.fieldRead`), by the receiver's type:
 
 | receiver | `e.f` | |
@@ -7721,8 +7723,11 @@ At a binding `let y = x.f;` the parser gives the read the place `&x` (it is a wr
 `x`, §41's R2); a persistent receiver drops it. Elsewhere a `mut` borrow, or a variable that is
 not persistent, is refused: "`.f` reads a field of a `mut` borrow (or: of a value that is not
 persistent): bind it, `let y = x.f;`, which lends the place for the read". `x.f = e` (E6) is
-`modify`'s lend (§41's rule table: it writes `x`); in `e`, `x.g` is the field `g` the body took
-apart. No rule decides an alias, a lend's extent or an escape: each lend is lexical, the
+`modify`'s lend (§41's rule table: it writes `x`); its body takes the record `r` apart into `r_g`
+for each field `g`, `x.g` in `e` is `r_g`, and the record is rebuilt with `e` at `f`. When the
+declarations with a field `f` agree on its place, the parser takes the record apart, so that the
+passes before the typed one (effects, §18) see `r_g` bound; otherwise the typed rule does, after
+the receiver's type chooses (`VSugar.update`, printed `(r).{f = e}`). No rule decides an alias, a lend's extent or an escape: each lend is lexical, the
 statement's, and the kernel checks it.
 
 ### Folds: unordered positions (§11.1 A1)
@@ -7741,8 +7746,22 @@ declarations are in every program's table; a program whose types name `Option` o
 
 ### No automatic boxing (§11.1 A7)
 
-See *Open*: the backend's one box a node (§35) still places boxes for recursive types written in
-core.
+Not built in this entry. A declared type's recursion is boxed as written (blocks and `box`), and
+the backend's one box a node (§35) finds nothing to add to it. For a recursive type written in
+core, removing the rule makes its layout infinite, so every such program must write its boxes:
+41 compiled programs of the corpus and the benchmarks, through `lib/list.bc`, `lib/async.bc`,
+`lib/io.bc` and `lib/adapters.bc` (`docs/expressiveness-probes/zero-cost/data/a7-programs.txt`).
+Written with the kernel's forms today, their counts rise or they are refused:
+
+- a child cell each, `μX. 1 ⊕ (ref X ⊗ (A ⊗ ref X))`, is two objects a node and one an empty child
+  where the rule boxes the sum's payload, one object a node (`rec-tree`: 254 where it is 127);
+- the payload in one cell, `μX. 1 ⊕ ref (X ⊗ (A ⊗ X))`, keeps the count, but `ref` of a type that
+  is not `X` is outside §6's `FShape`, so the type has no fold and no destructor (§12), and a
+  program that drops one implicitly is refused;
+- a block, `box Node(…)`, is allocated cell by cell (*Open*): three objects a node.
+
+So A7 waits for a block to be lowered as one object (N1, layouts from types): the block form is in
+`FShape`, has its destructor, and is then one object a node, the rule's count.
 
 ### Programs
 
@@ -7781,7 +7800,7 @@ programs get rows.
 
 - **Nominal identity.** The elaborator types a declared type by its structure (a `type`
   abbreviation): two transparent declarations of one structure are interchangeable, and a field
-  is selected by its name (*Fields*). Nominal identity in the elaborator's types, which decision 1
+  is chosen by the receiver's structure (*Fields*). Nominal identity in the elaborator's types, which decision 1
   asks for, comes with faces (U2), where resolution by the receiver's type needs it; until then a
   newtype (`data Id = Id(i32)`) is its field's type to the checker.
 - **A match on an `imm` borrow.** Load it first, `borrow imm *b { v -> match v { … } }`. A
@@ -7801,11 +7820,15 @@ programs get rows.
 
 ### Open
 
-- **One box a node** (§35) is still the backend's rule for recursive types written in core, whose
-  recursive positions have no `ref`. §11.1 A7 removes it, so that every heap allocation is
-  written; it touches every corpus program that writes such a type.
+- **One box a node** (§35) is still the backend's rule for recursive types written in core
+  (*No automatic boxing*).
 - **A block is allocated cell by cell** by the backend (§5 *Open*, block provenance): `box Node(l,
-  v, r)` is three objects where Rust's `Box<Node>` is one. The excess is the lowering's.
+  v, r)` is three objects where Rust's `Box<Node>` is one (a tree of depth 7: 381 where `rec-tree`
+  is 127). The excess is the lowering's: N1.
+- **A record read out of an array or through a borrow is copied whole**, and an update through a
+  `mut` borrow is a `withswap` of the whole record: loads and stores where Rust touches one field
+  (the ports of `docs/expressiveness-probes/zero-cost/data/`, L-1: N2). The allocations are the
+  probes'.
 
 ---
 
