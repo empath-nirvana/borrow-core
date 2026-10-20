@@ -1,4 +1,4 @@
-import Frames.Runs
+import Frames.Accounting
 
 /-!
 # Frames — the target theorems
@@ -31,7 +31,7 @@ namespace BoCa.Fig16.LogRel.Core.Frames
 open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
-open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload)
+open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload ubindE no_step_val)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-! ### O1: the weakening the elaboration needs -/
@@ -97,15 +97,77 @@ theorem frame_adequacy {Φ : List FBlock} {e : Expr} {A : VTy} (hA : A.Persisten
     exact hA
   exact EffPrograms.adequacyD_obs hp (runFrame_derives h) hs
 
+/-- `core N` on `π`, after its β step: `N` under the frame `[then]` that answers `(π, inl x)`. -/
+theorem coreE_beta (Ps : List VTy) (N : Expr) (π : Val) :
+    (thenE (.pair (.var 1) (.inj₁ (.var 0))) (.app (dtorE (slotsTy Ps)) (.var 1)) (sh 1 N)).subst 0 π =
+      ubindE (Val.pair (Val.lam (.pair (π.shift 1 0).1 (.inj₁ (.var 0))))
+        (Val.lam (.app (dtorE (slotsTy Ps)) (π.shift 1 0).1))) N := by
+  simp [thenE, ubindE, Expr.subst, subst_dtor, sh, subst_shift_expr, Val.pair, Val.lam, Expr.val]
+
 /-- **A Core computation is a frame, and runs as it did.** On every run, `core N` on the slots
-`π` reaches `(π, inl v)` exactly when `N` reaches `v`, at the same memory.
-`sorry`: `[then]`'s step (`Head.ubind` at a value) after the β step; the converse by
-determinism of the frames around `N` (`head_det_eff`) and `Kont` plugging. -/
+`π` reaches `(π, inl v)` exactly when `N` reaches `v`, at the same memory. -/
 theorem core_conservative (Ps : List VTy) (N : Expr) (hN : closedAt 0 N = true) (π : Val)
     (μ μ' : Heap) (v : Val) :
     Steps μ N μ' (.val v) ↔
       Steps μ (.app (coreE Ps N) (.val π)) μ' (.val (Val.pair π (Val.inj₁ v))) := by
-  sorry
+  set ND := Val.pair (Val.lam (.pair (π.shift 1 0).1 (.inj₁ (.var 0))))
+    (Val.lam (.app (dtorE (slotsTy Ps)) (π.shift 1 0).1)) with hND
+  have hβ : ∀ μ₀ μ₁ e₁, Step1 μ₀ (.app (coreE Ps N) (.val π)) μ₁ e₁ →
+      μ₁ = μ₀ ∧ e₁ = ubindE ND N := by
+    intro μ₀ μ₁ e₁ h
+    obtain ⟨rfl, rfl⟩ := step1_beta_inv (b := thenE (.pair (.var 1) (.inj₁ (.var 0)))
+      (.app (dtorE (slotsTy Ps)) (.var 1)) (sh 1 N)) (v := π) h
+    exact ⟨rfl, coreE_beta Ps N π⟩
+  have hret : (Expr.pair (π.shift 1 0).1 (.inj₁ (.var 0))).subst 0 v = .val (Val.pair π (Val.inj₁ v)) := by
+    simp [Expr.subst, Val.pair, Val.inj₁, Expr.val]
+  constructor
+  · intro hs
+    refine .more (Step1.head (Head.beta μ _ π)) ?_
+    rw [coreE_beta]
+    refine Steps.trans (Steps.plug (app2K .ubind ND) hs) ?_
+    refine .more (Step1.head (Head.uthen μ' _ _ v)) ?_
+    refine .more (Step1.head (Head.beta μ' _ v)) ?_
+    rw [hret]
+    exact .refl _ _
+  · intro hs
+    have hs' := steps_peel hs (by simp [coreE]) (fun μ₁ e₁ h => hβ μ μ₁ e₁ h)
+    rcases steps_plug_split (app2K .ubind ND) hs' with ⟨e', he, -⟩ | ⟨μ₁, t₁, h₁, hirr₁, h₂⟩
+    · exact absurd (isVal_eq he) (app2_not_isVal .ubind _ e')
+    · by_cases hv : IsVal t₁
+      · -- `N` reached a value: `[then]` and β, at the same memory
+        have h₃ := steps_peel (m := μ₁)
+          (e' := .app (.val (Val.lam (.pair (π.shift 1 0).1 (.inj₁ (.var 0))))) (.val ⟨t₁, hv⟩)) h₂
+          (app2_not_isVal .ubind _ _) (fun μ₂ e₂ h => by
+          rcases step1_app2 (p := .ubind) (x := ND) trivial h with ⟨e', -, he'⟩ | hh
+          · exact absurd he' (no_step_val (w := ⟨t₁, hv⟩))
+          · rcases head_ubind_inv hh with ⟨v', hv', rfl, rfl⟩ | ⟨hnv, -⟩
+            · simp only [Kont.plug] at hv'
+              subst hv'
+              exact ⟨rfl, rfl⟩
+            · exact absurd hv hnv)
+        have h₄ := steps_peel h₃ (by simp) (fun μ₂ e₂ h => step1_beta_inv (v := ⟨t₁, hv⟩) h)
+        have hret' : (Expr.pair (π.shift 1 0).1 (.inj₁ (.var 0))).subst 0 ⟨t₁, hv⟩ =
+            .val (Val.pair π (Val.inj₁ ⟨t₁, hv⟩)) := by
+          simp [Expr.subst, Val.pair, Val.inj₁, Expr.val]
+        rw [hret'] at h₄
+        obtain ⟨rfl, hw⟩ := steps_from_val h₄
+        obtain ⟨-, hw⟩ := pairV_inj hw
+        have : (⟨t₁, hv⟩ : Val) = v := by
+          have := congrArg Subtype.val hw
+          simp [Val.inj₁] at this
+          exact Subtype.ext this.symm
+        rw [← this]
+        exact h₁
+      · -- `N` unwound: the finaliser runs and no value is reached
+        exfalso
+        rcases steps_cases h₂ with ⟨-, h⟩ | ⟨μ₂, e₂, h₃, t₃⟩
+        · exact app2_not_isVal .ubind ND t₁ (isVal_eq (w := Val.pair π (Val.inj₁ v)) h)
+        · rcases head_ubind_inv (step1_appR_irred hv hirr₁ h₃) with ⟨w, rfl, -, -⟩ | ⟨-, hu⟩
+          · exact hv w.2
+          · rcases hu with ⟨p, rfl⟩ | ⟨s, rfl⟩
+            · exact (retsG_unfold (retsG_seq (Q := fun _ => False) (G := fun _ => False)
+                (retsG_raise p))).1 _ _ _ t₃
+            · exact (retsG_unfold (retsG_cfin (Q := fun _ => False) (G := fun _ => False) s _)).1 _ _ _ t₃
 
 /-- **No Core rule is touched**: the frame judgment's `core` rule takes every `CDerives`
 computation, so a program that uses no frame is its own `CDerives` derivation, and every Core
@@ -128,55 +190,19 @@ theorem accounting {Δ : LifeCtx} {Γ : Ctx VTy} {Φ : List FBlock} {Ps : List V
     {S : Row} {E : ExitRow} {A : VTy} (hΦ : ∀ b ∈ Φ, b.Returns)
     (h : FDerives Δ Γ Φ Ps e S E A) : ∀ γ : List Val, Returns (substAll γ e) := by
   induction h with
-  | core hS hP hN =>
-      -- β, then `[then]`: the invariant is `{ubind ((π, inl ·), dtor π) t | every t}`; at a value
-      -- `x` the continuation answers `(π, inl x)`; at a stop of `t` the resumption is
-      -- `ubind (…) K_t[w]`, again in the invariant. No induction on `N`.
-      sorry
-  | exit hk hV =>
-      -- β; the payload is a value term (ANF) once closed, so the answer is `(π, inr (inj_k v))`;
-      -- a value-judgment term's call-by-value calls (`lolliE`) do not see `π`.
-      sorry
-  | bind hs hW hU hM hN ihM ihN =>
-      -- the invariant is `ihM`'s invariant under the `let` frame, union `ihN`'s at each answer:
-      -- `M` answers `(π, r)`; `inl a`: `ihN` at `π` (the same `π`); `inr e`: `(π, inr e)`.
-      sorry
-  | case hs hV h₁ h₂ ih₁ ih₂ =>
-      -- the scrutinee is a value; the arm's hypothesis at `π`.
-      sorry
-  | «catch» hs hW hU hM hH ihM ihH =>
-      -- `ihM` at `π`, then `ihH` at `π` on the head exit; the other answers pass with `π`.
-      sorry
-  | under hS hQ hM ih =>
-      -- `π = (q, ρ)`; `ih` at `ρ` gives `(ρ, r)`; the answer `((q, ρ), r) = (π, r)`.
-      sorry
-  | use src x hx hS hS' hP hsrc hB hN =>
-      -- `π = (p, ρ)`; `withborU`'s term answers `(p, b)` with the source `p` itself
-      -- (`withborUE`'s body `(r, b)`); the answer `((p, ρ), inl b) = (π, inl b)`.
-      sorry
-  | lend src x hx hS hsrc hΓx hfree hM ih =>
-      -- `π = (p, ρ)`; in the callback `ih` at `(b, ρ)` gives `((b, ρ), r)`, so the callback
-      -- answers `(ρ, r)`; `withborU` hands back `p`; the answer `((p, ρ), r)`.
-      sorry
-  | new hs hA hV hM ih =>
-      -- `alloc` gives `c`; `ih` at `(c, π)` gives `((c, π), r)`; the answer `(π, _)`.
-      sorry
-  | loopCount hs hs₁ hp hn hs0 hM ih =>
-      -- induction on the steps left of `count_try` (`countTryNext`, `wpTS_countTry`'s head
-      -- step): each turn is `ih` at `π`, answering `inl (π, s')` or `inr (π, x)`, so the state
-      -- holds `π` at every turn.
-      sorry
-  | loopIter hdiv hs hp hS₀ hs0 hM ih =>
-      -- the invariant: `iterate` at a state `(π, s)`, and each turn under it (`ih`'s invariant);
-      -- a tick is a stop resumed into the next turn; `close` answers `(π, ())`. The greatest
-      -- fixed point is what lets a loop that ticks forever satisfy it.
-      sorry
-  | callBlock hk hj =>
-      -- `hΦ` at the block and the argument `γ[j]`.
-      sorry
-  | sub hle h ih =>
-      -- β; then `ih` at `π`: `subE e π` runs `e π`.
-      sorry
+  | core => exact acc_core _ _
+  | exit => exact acc_exit _ _
+  | bind _ _ _ _ _ _ ihM ihN => exact acc_bind (ihM hΦ) (ihN hΦ)
+  | case _ _ _ _ ih₁ ih₂ => exact acc_case (ih₁ hΦ) (ih₂ hΦ)
+  | «catch» _ _ _ _ _ _ ihM ihH => exact acc_catch (ihM hΦ) (ihH hΦ)
+  | under _ _ _ ih => exact acc_under (ih hΦ)
+  | use src => exact acc_use src _ _
+  | lend src _ _ _ _ _ _ _ _ _ _ ih => exact acc_lend src (ih hΦ)
+  | new _ _ _ _ ih => exact acc_new _ _ (ih hΦ)
+  | loopCount _ _ _ _ _ _ ih => exact acc_loopCount (ih hΦ)
+  | loopIter _ _ _ _ _ _ ih => exact acc_loopIter _ (ih hΦ)
+  | callBlock hk hb _ => exact acc_callBlock hb (hΦ _ (List.mem_of_getElem? hk))
+  | sub _ _ ih => exact acc_sub (ih hΦ)
 
 /-- Blocks built from frames return their slots: a block of the program typed by `FDerives`
 satisfies the hypothesis `accounting` asks of `Φ`. -/
@@ -185,7 +211,12 @@ theorem block_returns {Δ : LifeCtx} {Φ : List FBlock} {B : VTy} {Ps : List VTy
     (h : FDerives Δ [⟨B, true⟩] Φ Ps e S E A) :
     FBlock.Returns ⟨Val.lam e, B, S, Ps, E, A⟩ := by
   -- β at the argument `a`, then `accounting` at `γ = [a]` (`substAll [a] e = e[a/0]`).
-  sorry
+  intro a π
+  apply rets_of_retsG
+  refine retsG_beta (K := .appL .hole π) ?_
+  have hacc := accounting hΦ h [a] π
+  rw [substAll_cons_psub, Adequacy.psub_nil] at hacc
+  exact retsG_of_rets hacc
 
 /-! ### 4. Agreement with §19: raise and abort -/
 
