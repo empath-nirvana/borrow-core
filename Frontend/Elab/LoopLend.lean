@@ -304,7 +304,12 @@ def Env.forBody (E : Env) (scope : List String) (sp : Span) (ys : List String) (
   if !E.usesC M then return M
   let ws := (spineNames fuel M).eraseDups.filter fun z =>
     scope.contains z && !E.aliases.contains z && !ys.contains z
-  if Frontend.placeEnv && exitsOnSpine fuel M then return ← E.exitBody ws fuel {} M
+  if Frontend.placeEnv && exitsOnSpine fuel M then
+    -- What the stretches lend (a capability lent to a call) is handed on as what they assign.
+    let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
+    let lent := (M.lentNames ++ caps).eraseDups.filter fun z =>
+      !ys.contains z && !M.boundNames.contains z && !E.aliases.contains z && !ws.contains z
+    return ← E.exitBody (ws ++ lent) fuel {} M
   -- A terminal `()` is dropped, not bound.
   let body := spliceTail (fun T => match T with
     | .ret _ (.unit _) => .ret T.span (tupleVal T.span ws)

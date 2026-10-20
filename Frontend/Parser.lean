@@ -1358,6 +1358,7 @@ def Val.readsAs (y o : String) : Val → Val
   | .shorten sp m σ l V => .shorten sp m σ l (V.readsAs y o)
   | .mark sp k V => .mark sp k (V.readsAs y o)
   | .run sp M => .run sp (M.readsAs y o)
+  | V@(.lend sp z m) => if z.name == y then .lend sp ⟨o, z.span⟩ m else V
   | V => V
 
 /-- `Val.readsAs` in the values of a computation outside closures. -/
@@ -1503,6 +1504,18 @@ def placeLoads (y : String) (lift : Bool) : Comp → P Comp
   | .withbor2r sp x b A B r p m M => return .withbor2r sp x b A B r p m (← placeLoads y lift M)
   | M@(.force ..) | M@(.top ..) => pure M
 end
+
+/-- A computation's spine down to its last value: the bindings around it, the value, and the
+names the bindings bind. `none` when the spine ends in another computation (an arm, a loop). -/
+def spineTail : Comp → Option ((Comp → Comp) × Val × List String)
+  | .bind sp z A M K lin => (spineTail K).map fun (w, V, bs) =>
+      (fun T => .bind sp z A M (w T) lin, V, z.name :: bs)
+  | .letUnit sp W K => (spineTail K).map fun (w, V, bs) => (fun T => .letUnit sp W (w T), V, bs)
+  | .letPair sp a b W K => (spineTail K).map fun (w, V, bs) =>
+      (fun T => .letPair sp a b W (w T), V, a.name :: b.name :: bs)
+  | .loop sp ℓ src W M K => (spineTail K).map fun (w, V, bs) => (fun T => .loop sp ℓ src W M (w T), V, bs)
+  | .ret _ V => some (id, V, [])
+  | _ => none
 
 /-- The place a call's arguments read, where `let (x, q) = f(…, x, …)` binds `x` (`placeMode`). -/
 def placeArg? (x : Ident) (A : Val) : P (Option String) := do
@@ -2177,6 +2190,20 @@ def placeScope : Nat → Span → Ident → Val → P Comp
   | n + 1, sp, x, V => do
     modify fun s => { s with places := x.name :: s.places }
     let (N, w) ← frame (comp n)
+    -- The scope's last value is evaluated after the lend ends, reading the cell's final content (a
+    -- linear content moved out at the end, `let mut acc = …; …; acc`) and what the block hands
+    -- back. What it reads of the scope's bindings is handed out of the block.
+    let tail : Option ((Comp → Comp) × Val × List String) := match spineTail N with
+      | some (wrap, T, bs) =>
+        if !T.closesOver x.name then some (wrap, T, bs) else none
+      | none => none
+    let ps := (← get).places
+    let (N, after) : Comp × Option (List String × Val) := match tail with
+      | some (wrap, T, bs) =>
+        -- A place's token is handed back by what the block writes, not as a binding.
+        let vs := bs.eraseDups.filter fun z => T.namesV z && !ps.contains z
+        (wrap (.ret sp (varTuple sp vs)), some (vs, T))
+      | none => (N, none)
     let N ← placeLoads x.name true N
     let bound := x.name :: N.boundNames
     let caps := ["stdin", "stdout", "stderr"].filter (N.lentNames true).contains
@@ -2187,13 +2214,16 @@ def placeScope : Nat → Span → Ident → Val → P Comp
     let blk : Val := .app sp (.app sp (.sugar sp (.borrow .mut l))
         (.app sp (.sugar sp (.call "alloc")) V))
       (.thunkv sp (.lam sp x (holeTy sp) N))
-    let b ← freshName "io_pb"
+    let b ← freshName (if after.isSome then "io_pq" else "io_pb")
     let c ← freshName "io_pc"
     let r ← freshName "io_pr"
     let d ← freshName "io_d"
-    let rest : Comp := .bind sp ⟨d, sp⟩ none (.ret sp (.app sp (.sugar sp (.call "free")) (.var sp c)))
-      (.ret sp (.var sp r)) false
-    let q : Pat := if thr.isEmpty then .var ⟨r, sp⟩ else .pair sp (.var ⟨r, sp⟩) (varPat sp thr)
+    let free : Val := .app sp (.sugar sp (.call "free")) (.var sp c)
+    let (rest, rp) : Comp × Pat := match after with
+      | some (vs, T) => (.bind sp ⟨d, sp⟩ none (.ret sp free) (.ret sp (T.readsAs x.name d)) false,
+          varPat sp vs)
+      | none => (.bind sp ⟨d, sp⟩ none (.ret sp free) (.ret sp (.var sp r)) false, .var ⟨r, sp⟩)
+    let q : Pat := if thr.isEmpty then rp else .pair sp rp (varPat sp thr)
     pure (.bind sp ⟨b, sp⟩ none (.ret sp blk) (← bindPat sp n (.pair sp (.var ⟨c, sp⟩) q) (.var sp b) rest)
       false)
 
