@@ -281,7 +281,9 @@ where
   /-- `Env.flush`, also handing on the variables of `ws` the stretch assigns. -/
   flushW (sp : Span) (s : Seg) (rest : Comp) : LM (Comp → Comp) := do
     if !s.uses then return s.wrap
-    let vs := s.names.eraseDups.filter fun y =>
+    -- What the stretch lends (`f(&a)`) is rebound by the lend, so it is handed on as a binding.
+    let lent := ((s.wrap (.ret sp (.unit sp))).lentNames).filter (!s.names.contains ·)
+    let vs := (s.names ++ lent).eraseDups.filter fun y =>
       !E.aliases.contains y && (mentionsC y rest || ws.contains y)
     let k ← get
     let hole := s!"io_lk{E.B.sp.start.line}_{E.B.sp.start.col}_{k}"

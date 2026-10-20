@@ -1374,6 +1374,22 @@ def Comp.readsAs (y o : String) : Comp → Comp
   | M => M
 end
 
+/-- A bound on the loads `peelLoads` takes off a head. -/
+def fuelPeel : Nat := 64
+
+/-- The loads of the place `y` that `M` begins with, as a context, and the rest of `M`. -/
+def peelLoads (y : String) : Nat → Comp → (Comp → Comp) × Comp
+  | 0, M => (id, M)
+  | n + 1, M@(.bind sp d none (.ret rsp V) (.letPair psp a b (.var vsp d') K) false) =>
+    match V with
+    | .app _ (.app _ (.sugar _ (.borrow .modify _)) (.var _ z)) _ =>
+      if z == y && a.name == y && d' == d.name then
+        let (pre, K') := peelLoads y n K
+        (fun T => .bind sp d none (.ret rsp V) (.letPair psp a b (.var vsp d') (pre T)) false, K')
+      else (id, M)
+    | _ => (id, M)
+  | _ + 1, M => (id, M)
+
 /-- The bindings a value's reads of the place `y` make (`PlacePre`), in order, before `M`. -/
 def chainPre (y : String) (ps : List PlacePre) (M : Comp) : Comp :=
   ps.foldr (fun p K => match p with
@@ -1455,7 +1471,11 @@ def placeLoads (y : String) (lift : Bool) : Comp → P Comp
     let N' ← placeLoads y lift N
     let (V', ps) ← (placeLoadsV y lift V).run []
     pure (chainPre y ps (.bind sp x A (.ret rsp V') N' lin))
-  | .bind sp x A M N lin => return .bind sp x A (← placeLoads y lift M) (← placeLoads y lift N) lin
+  | .bind sp x A M N lin => do
+    -- The loads a head begins with (its scrutinee's, its first value's) are made before the
+    -- binding, so that the token they rebind reaches what follows it.
+    let (pre, M') := peelLoads y fuelPeel (← placeLoads y lift M)
+    return pre (.bind sp x A M' (← placeLoads y lift N) lin)
   | .unwind sp x A M D N =>
     return .unwind sp x A (← placeLoads y lift M) (← placeLoads y lift D) (← placeLoads y lift N)
   | .letUnit sp V M => do
