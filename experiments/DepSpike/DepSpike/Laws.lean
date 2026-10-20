@@ -17,7 +17,9 @@ argument, with no new machinery in `Core/`?
   the memory unchanged, and that run exists. It holds at every host that conforms to the
   language's integer operations (`Host.Conforms`), for every `a b : UInt32`.
 * `max_comm`, `max_ge_left`: the laws `max(a, b) == max(b, a)` and `max(a, b) >= a`, read as
-  statements about every run. The facts about `smax` are closed by `omega` through `toInt`.
+  statements about every run. `max_assoc` and `max_unit`: `max` and `i32[0x80000000]` are a
+  monoid, the law a parallel reduction needs (#620); nested calls compose through
+  `steps_plug_det`. The facts about `smax` are closed by `omega` through `toInt`.
   `bv_decide` closes them too, but its proofs depend on axioms it generates for native
   evaluation, outside `[propext, Classical.choice, Quot.sound]`, so it is not used.
 
@@ -278,8 +280,78 @@ theorem max_ge_left (hℍ : ℍ.Conforms) (a b : UInt32) {μ μ' : Heap} {w : Va
     simp only [h₁, if_true, if_false, Bool.false_eq_true] <;>
     simp [BitVec.sle_iff_toInt_le, BitVec.slt_iff_toInt_lt] at h₁ ⊢ <;> omega
 
+/-! ### A monoid law, as #620's parallel reduce asks for it -/
+
+/-- A run of `K[e]`, `K` plain, where every run of `e` to a value ends at `r` and one does: the
+runs of `K[e]` are those of `K[r]`. -/
+theorem steps_plug_det (K : Kont) (hK : K.Plain = true) {μ μ' : Heap} {e : Expr} {r w : Val}
+    (he : ∀ {μm : Heap} {v : Val}, Steps (ℍ := ℍ) μ e μm v.1 ↔ μm = μ ∧ v = r) :
+    Steps (ℍ := ℍ) μ (K.plug e) μ' w.1 ↔ Steps (ℍ := ℍ) μ (K.plug r.1) μ' w.1 := by
+  constructor
+  · intro hs
+    obtain ⟨μm, v, h₁, h₂⟩ :=
+      BoCa.Fig16.LogRel.Core.steps_plug_inv K hK hs rfl rfl
+    obtain ⟨rfl, rfl⟩ := he.mp h₁
+    exact h₂
+  · intro hs
+    exact ((he.mpr ⟨rfl, rfl⟩).plug K).trans hs
+
+/-- `max (max (a, b), c)`. -/
+def maxL (a b c : UInt32) : Expr :=
+  .app maxV.1 (.pair (.app maxV.1 (Val.pair (.i32 a) (.i32 b)).1) (Val.i32 c).1)
+
+/-- `max (a, max (b, c))`. -/
+def maxR (a b c : UInt32) : Expr :=
+  .app maxV.1 (.pair (Val.i32 a).1 (.app maxV.1 (Val.pair (.i32 b) (.i32 c)).1))
+
+/-- **`law max_assoc: max(max(a, b), c) == max(a, max(b, c))`**: the two terms have the same
+runs. With `max_unit`, `max` and `i32[0x80000000]` are a monoid, the premise a parallel
+reduction needs (#620). -/
+theorem max_assoc (hℍ : ℍ.Conforms) (a b c : UInt32) {μ μ' : Heap} {w : Val} :
+    Steps (ℍ := ℍ) μ (maxL a b c) μ' w.1 ↔ Steps (ℍ := ℍ) μ (maxR a b c) μ' w.1 := by
+  have hL : Steps (ℍ := ℍ) μ (maxL a b c) μ' w.1 ↔
+      Steps (ℍ := ℍ) μ (.app maxV.1 (Val.pair (.i32 (smax a b)) (.i32 c)).1) μ' w.1 :=
+    steps_plug_det (.appR maxV.1 (.pairL .hole (Val.i32 c).1)) (by simp [Kont.Plain, maxV, Val.lam])
+      (fun {_ _} => max_runs hℍ a b)
+  have hR : Steps (ℍ := ℍ) μ (maxR a b c) μ' w.1 ↔
+      Steps (ℍ := ℍ) μ (.app maxV.1 (Val.pair (.i32 a) (.i32 (smax b c))).1) μ' w.1 :=
+    steps_plug_det (.appR maxV.1 (.pairR (.i32 a) .hole)) (by simp [Kont.Plain, maxV, Val.lam])
+      (fun {_ _} => max_runs hℍ b c)
+  rw [hL, hR, max_runs hℍ, max_runs hℍ]
+  have : smax (smax a b) c = smax a (smax b c) := by
+    apply UInt32.toBitVec_inj.mp
+    simp only [smax, Prim.rel]
+    have hi : ∀ x y : UInt32, x.toBitVec.toInt = y.toBitVec.toInt → x.toBitVec = y.toBitVec :=
+      fun _ _ => BitVec.toInt_inj.mp
+    by_cases h₁ : a.toBitVec.slt b.toBitVec <;> by_cases h₂ : b.toBitVec.slt c.toBitVec <;>
+      by_cases h₃ : a.toBitVec.slt c.toBitVec <;>
+      simp only [h₁, h₂, h₃, if_true, if_false, Bool.false_eq_true] <;>
+      simp only [BitVec.slt_iff_toInt_lt, Bool.not_eq_true, decide_eq_false_iff_not,
+        decide_eq_true_eq] at h₁ h₂ h₃ ⊢ <;>
+      first | rfl | omega | exact hi _ _ (by omega)
+  rw [this]
+
+/-- **`law max_unit: max(i32[0x80000000], a) == a`**: the least signed `i32` is `max`'s unit. -/
+theorem max_unit (hℍ : ℍ.Conforms) (a : UInt32) {μ μ' : Heap} {w : Val} :
+    Steps (ℍ := ℍ) μ (.app maxV.1 (Val.pair (.i32 0x80000000) (.i32 a)).1) μ' w.1 ↔
+      μ' = μ ∧ w = .i32 a := by
+  rw [max_runs hℍ]
+  have : smax 0x80000000 a = a := by
+    apply UInt32.toBitVec_inj.mp
+    simp only [smax, Prim.rel]
+    by_cases h₁ : (0x80000000 : UInt32).toBitVec.slt a.toBitVec <;>
+      simp only [h₁, if_true, if_false, Bool.false_eq_true]
+    simp only [BitVec.slt_iff_toInt_lt, Bool.not_eq_true, decide_eq_false_iff_not] at h₁
+    apply BitVec.toInt_inj.mp
+    have hlo := BitVec.le_toInt a.toBitVec
+    have : (0x80000000 : UInt32).toBitVec.toInt = -2147483648 := by decide
+    omega
+  rw [this]
+
 end DepSpike
 
 #print axioms DepSpike.max_erasure
 #print axioms DepSpike.max_comm
 #print axioms DepSpike.max_ge_left
+#print axioms DepSpike.max_assoc
+#print axioms DepSpike.max_unit
