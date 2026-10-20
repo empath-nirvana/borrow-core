@@ -84,7 +84,9 @@ fn bump(text: text 't) -> string with Fail[DecodeError] =
 
 -- ## B. A recursive tree
 
-data Tree[T] = Leaf | Node(left: Tree[T], value: T, right: Tree[T])   -- one box a node (§6.5)
+-- `Node` has fields, so it is a block, and each node is allocated where it is built: `box Node(…)`.
+-- `Node(…)` without `box` is an error that asks for `box` (§6.11).
+data Tree[T] = Leaf | Node(left: Tree[T], value: T, right: Tree[T])
 
 on Tree[T] { empty() -> Tree[T] = Leaf }
 on imm t: Tree[T] {
@@ -100,9 +102,9 @@ on imm t: Tree[T] {
 }
 on t: Tree[T] {
   insert(x: T) -> Tree[T] = match t {                   -- consuming: the tree is moved in and out
-    Leaf -> Node(Leaf, x, Leaf)
-  | Node(l, v, r) -> match order(&x, &v) {
-      Less -> Node(l.insert(x), v, r) | _ -> Node(l, v, r.insert(x)) }
+    Leaf -> box Node(Leaf, x, Leaf)
+  | box Node(l, v, r) -> match order(&x, &v) {      -- `box Node(…)` frees the block it matches
+      Less -> box Node(l.insert(x), v, r) | _ -> box Node(l, v, r.insert(x)) }
   }
 }
 

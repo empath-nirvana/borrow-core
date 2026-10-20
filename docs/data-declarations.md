@@ -1,9 +1,10 @@
 # Data declarations, faces and interfaces: design (#489)
 
 Status: design only. Nothing here is implemented, and nothing here is decided beyond what §1.3
-lists as already decided. **Every spelling is provisional.** The user asked to see several syntax
-paradigms side by side (an explicit exception to "mechanism before syntax"), so §5 shows four, all
-over the one mechanism of §3–§4.
+lists as already decided; its item 9, recursion's layout, was decided on 2026-10-20. **Every
+spelling is provisional.** The user asked to see several syntax paradigms side by side (an
+explicit exception to "mechanism before syntax"), so §5 shows four, all over the one mechanism of
+§3–§4.
 
 Labels, as on #489: **E** established (a citation, or a program checked and run here), **B**
 believed, **NC** not checked.
@@ -48,7 +49,8 @@ Checked at `9aa27c3` (SPEC 0.86).
 | computation parameters, `\|>` | built: `e \|> f(a)` is `f(e, a)` | SPEC §33, decision 50 | first-argument application exists as `\|>` |
 | effect instances, names, abstraction safety | built | SPEC §38 | interfaces in the context form can have two instances in scope, told apart by name |
 | `f(&x)`, `f(&mut x)`, lent for the call | built | SPEC §35; #577's decisions | receiver modes need only the `&` inserted (§6.6) |
-| one box a node | built, in the backend: the back edges of a type's cycles are boxed, or a sum's payload when that boxes fewer | SPEC §35 | recursion without a written `box` (§6.11) |
+| one box a node | built, in the backend: the back edges of a type's cycles are boxed, or a sum's payload when that boxes fewer | SPEC §35 | not used by declarations: a declared recursive type writes its `box` (§6.11, decided) |
+| `box e`, a written heap allocation | specified: "the only surface heap allocation, apart from arrays" | `docs/typed-elaboration.md` §5.3 | the layout of recursive declarations (§6.11) |
 | cell classes | built: each cell as wide as the widest type its swaps reach | SPEC §5 *Cell classes*; #570 (C2b) | a declared type's cells are its structure's; declarations add no layout question at cells |
 | typed attributes, `derives`, `attr` | **absent** | #141 §8 | needed for serde |
 | `codata` declarations | **absent** | #141 §6 | needed for interfaces |
@@ -92,6 +94,10 @@ From #141 (2026-10-02), #489's comments (2026-10-16, -17, -19) and this pass's b
    - What differs is the binding time: static, by the value, or by the context.
    - There is one call syntax, and the type tells which binding time applies.
    - Codata materialises only for the binding time by the value.
+9. **Recursion's layout keeps a written `box`** (2026-10-20, on item 13 of §11): "I think heap
+   allocations should be explicit re:boxing." A recursive declaration elaborates as typed
+   elaboration §5.3 says, and building a recursive node without `box` is an error that asks for
+   it. One box a node, placed by rule, is not used for declarations (§6.11).
 
 ---
 
@@ -166,6 +172,23 @@ kernel change.
   it needs no module system;
 - serde of abstract types only through a transparent view and a constructor.
 
+**Decided**: recursion's layout keeps a written `box` (§6.11, 2026-10-20).
+
+**The cited papers, read in full for this pass (§9).** None changes the design's direction. They
+confirm the two faces, the three binding times, dot at every binding time and a namespace per
+type. They refine three things:
+
+- **F2 is about complex operations, not binary ones.** Cook separates a binary method from a
+  complex one, which inspects the representation of two values (§4.2 of his essay). Objects have
+  simple binary methods; *Codata in Action* types one (`Union : Set → Set → Set`, §2.3). So the
+  value form's lack of binary methods is `NuOk`'s restriction, not codata's. The recommendation
+  (keep them static) stands, with that reason (§4.5, item 15).
+- **The static face of an abstract type is an ADT, in Cook's sense; only the value form is an
+  object.** That is Cook's own reading of CLU, and it is why complex operations such as `equal`
+  can live inside the boundary (§3.2, §6.4).
+- **Attributions.** "`ν` hides the state, so no existential is needed" is Cook's §3.9, not
+  *Codata in Action*. Effekt's capabilities are second-class blocks, not stored objects (§6.3).
+
 ---
 
 ## 3. The mechanism every paradigm shares
@@ -206,13 +229,39 @@ a receiver at an **observation mode**:
 - **Inside the face, `x` has the data face**: constructors, patterns and fields. A client outside
   sees only the names and signatures.
 - This is CLU's cluster: a type's operations and its representation are declared together, and
-  only those operations reach the representation (Liskov et al., CACM 1977; recalled, NC).
+  only those operations reach the representation (Liskov et al. 1977, p. 565, requirement 2; E,
+  read). Inside the cluster `cvt` changes the viewpoint between the abstract type and its
+  representation, and it is "a change in viewpoint only; no computation is required" (p. 568,
+  fn. 4). That is §3.1's iso, which lowering erases.
+- CLU names an operation by its type, `wordbag$insert(wb, w)`, because "operations of two
+  different data abstractions may have the same name" (p. 567). That is §6.1's N1 and §6.9's
+  qualified introductions (`wordbag$create()`).
 
 **Why "codata".** To a client, `N` is known only by what its observations answer. The face is a
 record of observations, `&ₘ (mode_m N ⊗ Aₘ ⊸ F_Σₘ Bₘ)`, from which the elaborator selects
 statically. A static selection from a known record is a projection of a known `&`, which reduces
 to the component: a direct call. So the static face is the codata reading with the record **never
 built**. That is "reify late".
+
+**Cook's refinement** (*On Understanding Data Abstraction, Revisited*, 2009; E, read). Cook
+separates two kinds of data abstraction:
+
+- an **ADT** hides a representation behind a type name (type abstraction, §2), and its operations
+  may inspect the representation of several values at once (§2.2);
+- an **object** is known only through its interface (procedural abstraction, §3), and it can see
+  no other object's representation ("autognosis", §3.3).
+
+Read through that lens, the faces of §3 split as follows:
+
+- A hidden declaration's static face is an **ADT**. Cook places CLU's cluster on that side (§6),
+  and `poly equal at N` written inside the boundary inspects two representations, which only an
+  ADT may do.
+- The materialised value of §4.2 is the **object**.
+- A unary observation reads the same either way, so for unary observations the static face is
+  the codata reading with the record never built, as above.
+- Cook's §5.2 says the same of modern languages: "when a class name is used as a type, it
+  represents an abstract data type"; an interface used as a type is an object. That is the line
+  between §4.1 and §4.2.
 
 ### 3.3 Interfaces
 
@@ -268,8 +317,12 @@ result.
 
 - So a heterogeneous container of interface values (`Vec[Counter]`) is a container of one type,
   and a function over it is one body.
-- This is *Codata in Action*'s point that objects are codata and need no existential to hide their
-  state (recalled, NC).
+- Cook gives the correspondence (2009, §3.9; E, read): an implementation with hidden state,
+  `∃ rep. rep × (rep → F(rep))`, "is the encoding of a final coalgebra", and it "corresponds to the
+  greatest fixedpoint of F", the object type. `unfold` is that encoding read backwards.
+- *Codata in Action* (§2.3; E, read) names codata "the language-agnostic representation of
+  procedural abstraction", against ADTs as existential types (modules). It does not state the
+  point about existentials itself.
 - Here it is E: `lowered/faces.bc`'s `drive` is one definition, used at `Tally` and at `Hist`
   objects.
 
@@ -282,7 +335,8 @@ result.
 
 **Constraints from the kernel**, all from `NuOk` (SPEC §7, §22):
 
-- an observation's arguments may not mention `X`, so there is no binary method (F2, §4.5);
+- an observation's arguments may not mention `X`, so there is no binary method, even a simple
+  one (F2, §4.5);
 - the rest appears only under `⊗`, `⊕` and `[@a]`;
 - each observation's row has closed operation types (`EffLeaf`).
 
@@ -310,6 +364,10 @@ A handler of `E_I` is not a value: it cannot be stored or returned (decision 57 
 - Inside the handler's scope, its operations can be observed as a value only by wrapping them in a
   codata value whose observations perform the effect.
 - That is a stored callback with a row: SPEC §33 *Open*, #161 part B.
+- Effekt makes the same trade (Brachthäuser, Schuster and Ostermann 2020, §1.6; E, read). Blocks,
+  capabilities among them, "can neither be returned nor stored in data structures", and that is
+  what keeps effects safe with a light effect system. Its §7.2 lists what this costs: handlers that
+  return functions, schedulers that store continuations, operations that take blocks.
 
 So the four conversions stand as follows:
 
@@ -348,15 +406,24 @@ The friction, as the user put it on #489:
   - So "methods are codata" covers answering (`fn`) operations. `Yield`, `Async` and `Fail` stay
     effects.
   - An interface whose signature has a `ctl` operation has no static form and no value form.
-- **F2. Binary operations are static only.**
-  - `equal(x, other)` takes a second receiver of the same type. As codata it is an observation
-    whose argument mentions `X`, which is outside `NuOk` (SPEC §22 *Open*: "An argument mentioning
-    `X` (a sink of the codata itself) stays outside `NuOk`").
-  - It is also W. Cook's distinction between ADTs and objects (*On Understanding Data Abstraction,
-    Revisited*, OOPSLA 2009; recalled, NC): a binary method needs the representation of both
-    arguments, and only the data face has it.
-  - Lifting this restriction would be a kernel entry, and **is not recommended**. `equal`, `hash`
-    and `order` stay `poly` families, one case per type (§6.7).
+- **F2. Binary operations are static only.** Cook (2009, §4.2; E, read) splits these in two, and
+  the two halves have different causes:
+  - A **complex** operation inspects the representation of two values: `equal`, `order`, or a
+    `union` that merges two sorted lists. Cook: "Pure object-oriented programming does not
+    support complex operations". Only an ADT, here the data face inside the boundary, has both
+    representations. This is the ADT/object line, and no kernel change moves it.
+  - A **simple** binary operation takes a second value of the interface type and uses only its
+    observations: Cook's `union = λs. Union(this, s)` (§3, Fig. 8), or *Codata in Action*'s
+    `Union : Set → Set → Set`, whose implementations combine sets "because both definitions of
+    `Union` know nothing of the internal structure of the other `Set`" (§2.3). Objects have
+    these; they are where Cook places the object's flexibility (§3.4).
+  - Our value form has neither. A simple binary observation's argument mentions `X`, which is
+    outside `NuOk` (SPEC §22 *Open*: "An argument mentioning `X` (a sink of the codata itself)
+    stays outside `NuOk`"). That is a restriction of our kernel, not of codata. Cook's §3.9 notes
+    the same point: with `union`, the interface's functor "is not a covariant functor".
+  - Lifting it would be a kernel entry. **It is not recommended now**: the operations that bear an
+    invariant are complex, and stay `poly` families, one case per type (§6.7, F5). A simple binary
+    observation is worth the entry only when a program needs one.
 - **F3. A shared observation of a materialised value is not provided.**
   - `Imm̲` takes a thunk to `Unk` (SPEC §22 *Observable view*: "A closure behind an `Imm` borrow is
     only forgotten"). So `xs: imm Vec[HasArea]` cannot call `x.area()` on its elements.
@@ -367,7 +434,7 @@ The friction, as the user put it on #489:
   - **This is the one new kernel question the design raises.** B: the clause has not been stated,
     and whether the paper's clause (4) allows it is NC.
 - **F4. Implementations bound by the context are not storable.**
-  - This is by design (decision 57 R5).
+  - This is by design (decision 57 R5). Effekt pays the same price for the same reason (§4.4).
   - A program that wants a stored service uses the value form; one that wants scoped swapping
     uses the context form. The reading names the choice; it does not remove it.
 - **F5. Operations that bear an invariant have a fixed binding time.**
@@ -431,7 +498,7 @@ Each file in `data-declarations/paradigms/` writes the same four examples:
 - `dyn` is the materialised value.
 - `pub` is per field.
 - Kept different from Rust:
-  - no `Box` in recursive types (§6.11);
+  - a recursive node is allocated by `box` at its constructor, not by a `Box` field type (§6.11);
   - typed attributes in place of macro attributes;
   - explicit `derives`.
 - **Fit**: familiar, and receivers map exactly onto modes. It has two costs here:
@@ -523,6 +590,17 @@ construction (`Stack { items: … }`). Spellings stay provisional.
 the receiver's type is the key. Free functions remain callable as `f(x)` and as `x |> f`.
 Extensions by other packages are free functions (§6.3).
 
+Three of the papers read for §9 do the same (E, read):
+
+- CLU writes every operation with its type, `wordbag$insert(wb, w)`, and the authors "have found
+  in using CLU that the compound form enhances the readability of programs" (Liskov et al. 1977,
+  p. 567).
+- *Copatterns* overloads destructors across record types and resolves `t.d` by the type inferred
+  for `t` (Abel et al. 2013, §3.2, *Bidirectional Type Checking*), noting that "Overloading
+  projections is standard in object-oriented programming".
+- Binder et al. name a consumer function by its type, `cfun Expr:searchPos`, and call it with dot,
+  `e.searchPos(cnt)` (2020, §3.4, Fig. 3).
+
 ### 6.2 Resolution by receiver type, against "one provider per type"
 
 A face maps each name to one function, so a type has at most one `len`: one per type by
@@ -547,13 +625,18 @@ so its error appears at the instance. The `ability` layer, when built, moves it 
 |---|---|---|---|---|
 | **I1. A `codata` declaration, `gives` at the type** | `codata Sized { len(imm) -> i32 }` | `Stack[T] gives Sized`, written with the type's declaration and checked: the face has each observation at its mode | one per type by construction, with no orphan rule (as option D on #141); one declaration serves all three binding times | an interface written after a library type cannot be met by that type without a newtype |
 | I2. `ability` (the bounds layer) | a bundle of `poly` families | `gives`, `given` | already planned; static and coherent | static only: no value form, no context form |
-| I3. An effect signature as the interface (Effekt's capabilities as objects) | `effect Sized { fn len() -> i32 }` | handlers | already built, for the context form | no receiver, so no static form; `ctl` operations have no value form (F1) |
-| I4. Structural conformance (Go) | `codata Sized { … }` | any type whose face matches | no declaration needed | conformance by accident: "no correct by convention" argues against meaning by matching names |
+| I3. An effect signature as the interface (Effekt: a handler introduces a capability, passed as a second-class block) | `effect Sized { fn len() -> i32 }` | handlers | already built, for the context form | no receiver, so no static form; the capability cannot be stored, so no value form (Effekt §1.6; F4); `ctl` operations have no value form in any case (F1) |
+| I4. Structural conformance (Go; CLU's `where` clauses) | `codata Sized { … }` | any type whose face matches | no declaration needed | conformance by accident: "no correct by convention" argues against meaning by matching names. CLU's bounds match by name and signature, and its authors note that the laws are not checked: `lt` "must also define a … ordering" that the compiler cannot see (Liskov et al. 1977, p. 571) |
 
 **Recommendation: I1, with I2 as its static-only special case.**
 
 - An `ability` is the static reading of a `codata` declaration whose observations may be binary
-  (F2). An interface with a binary observation has no value form, and is exactly an `ability`.
+  (F2). An interface with a complex binary observation can have no value form in any language
+  (Cook 2009, §4.2), and one with a simple binary observation has none under `NuOk`. Either is
+  exactly an `ability`.
+- Effekt groups several operations under one effect signature (`effect Lexer { def peek() …;
+  def next() … }`, §6.3.1), which is I3's shape. Its formal calculus has one operation per
+  capability (§3.1).
 - Conformance is declared at the type, or by the library that declares a built-in head, until #63
   gives packages. Then the orphan question is #63's.
 - An interface whose observations all answer also gives its effect form `E_I` (§4.3). A `ctl`
@@ -578,6 +661,17 @@ boundary that needs no modules:
 | **G1. Per declaration** (`data N hidden = …`) | one bit per type; derive, match and serde each have one answer (§6.5) | "public data with one private field" is written as an abstract type plus accessor observations |
 | G2. Per field (Rust's `pub`) | half-transparent types | a type with one private field cannot be constructed or matched outside, so it is abstract with extra accessors anyway; and derive must say what it sees field by field |
 | G3. Per constructor | hides some constructors (smart construction of some variants) | rarely needed |
+
+**What the papers say** (E, read):
+
+- B1 is CLU's rule, and CLU enforces it by type checking. Only the code inside a cluster may use
+  `cvt` (Liskov et al. 1977, p. 570, §3.3), and "conventions are no substitute for enforced
+  constraints" (p. 575).
+- Cook calls what B1 builds an ADT, not an object (§3.2 above). He lists its strengths: complex
+  operations can be implemented efficiently, and it has sound proof techniques (§2.6).
+- He also gives its cost: one implementation of the abstraction per program, unless modules allow
+  more (§2.3–§2.4). G1 per declaration has that cost; the value form (§4.2) is how two
+  implementations of one interface meet.
 
 **Recommendation: B3 with G1.**
 
@@ -638,6 +732,12 @@ Should interface values have `equal` and `hash`?
 **Recommendation: P1, with P3 when a program needs it.** P3 is the key-projection pattern of
 #489's C5 at an interface type, and it keeps one provider per type.
 
+Cook supports both halves (E, read). An ADT has "no predefined notion of equality", so it must be
+written into the interface (2009, §2). And COM, the purest object model he cites, has "no
+built-in notion of equality" (§3.3). P3's `equal` compares two objects through an observation
+only, so it is a simple binary operation in Cook's sense (F2). A family case at the interface type
+gives it, with no `NuOk` change.
+
 ### 6.8 Is dot reserved for the function reading, or does it resolve at any binding time?
 
 Dot already means two things today:
@@ -652,6 +752,11 @@ Dot already means two things today:
 | D3. A sigil per binding time | the cost is visible at the site | three syntaxes for one idea, against the user's "one call syntax; the type tells which" |
 
 **Recommendation: D2**, which is the user's direction.
+
+Binder et al. (2020; E, read) type the two readings of dot by one rule. In `e.d(ē)`, `d` is a
+destructor of a codata type or a consumer function of a data type (Fig. 11, T-Dtor/Cfun). Their
+transposition turns one into the other while keeping the call's syntax (§6.3: it "happens to have
+the same syntax"). That is D2 for the static and value binding times.
 
 - Zero cost holds: the static case is a direct call, and the value case is reified only where a
   value of interface type is formed. That is `x as I`, or an implicit conversion at an expected
@@ -694,30 +799,56 @@ So this is a trait system in all but three respects:
 2. operations that must be coherent are families, not trait methods;
 3. every interface also has a context form.
 
+Cook (2009, §5.3; E, read) places Haskell's type classes on the ADT side. They are "based on
+algebraic signatures as in abstract data types" but "do not enforce any hiding of
+representations", and "a type can only be an instance of a class in one way". `poly` families
+and the `ability` layer are that side here, coherent because a type has one case (SPEC §36). The
+object side is `x as I` (§4.2). Rust's traits mix both: `impl Trait for T` with static dispatch is
+the first, and `dyn Trait` the second.
+
 **Recommendation**: say so plainly in the docs and the book. Whether to call `codata` declarations
 "traits" is a naming choice. Keeping our own names avoids importing Rust's rules along with the
 word (decision 60's practice).
 
-### 6.11 Recursion's representation: a written `box`, or one box a node
+### 6.11 Recursion's representation: a written `box` (decided)
 
-Two decisions pull apart:
+**Decided on 2026-10-20** (item 13 of §11): "I think heap allocations should be explicit
+re:boxing." A recursive declaration keeps a written `box`, as typed elaboration §5.3 has it.
+Automatic boxing, one box a node placed by rule, is rejected for declarations.
 
-- **Written `box`.** Typed elaboration §5.3, the user's decision: "`box e` is the only surface heap
-  allocation", and "`Cons(x, t)` without `box` is an error that asks for `box`". #141 §7.1: "An
-  occurrence under neither is an error at the declaration".
-- **One box a node.** SPEC §35, built since then: the backend places one box a node by rule, so
-  `μX. 1 + X ⊗ (A ⊗ X)` costs one object a node with no box written. `docs/expressiveness.md` §4.4
-  recommends "adopt the declarations, not the `Box`".
+**The rule**, from §5.3 and #141's answer 5 ("recursion under `box` or a block"):
 
-| option | for | against |
-|---|---|---|
-| X1. A written `box` at each recursive occurrence (§5.3, #141) | every allocation visible in the source | ceremony at every constructor; SPEC §35 now places the same boxes by rule |
-| X2. One box a node by rule (SPEC §35); the declaration says nothing | no ceremony; the allocation follows a rule the reader can apply (Backend README, *Representation*) | the allocation is not written at the site |
-| **X3. X2, keeping `box` for block nodes** (a cell per field, each a place) | both forms (#141 §7.1's table) | two forms to learn |
+- A constructor with fields is a **block**, one cell per field, each a place. In
+  `data Tree[T] = Leaf | Node(left: Tree[T], value: T, right: Tree[T])`, `Node` is a block.
+- Building a block node is written `box Node(l, v, r)`. That is one heap allocation a node,
+  visible where the node is built (§5.3: `box Cons(x, t)` is
+  `roll (inr (alloc_s[List_Cons] (x, t)))`).
+- `Node(l, v, r)` without `box` is **an error that asks for `box`**, never a silent promotion. The
+  one exception is §5.3's reassembly: `Node(c₁, c₂, c₃)` applied to existing cells rebuilds a node
+  without allocating, and it is taken only when the arguments are cells.
+- A constructor with no fields (`Leaf`) allocates nothing.
+- The pattern `box Node(l, v, r)` frees the block and binds the values. `Node(c₁, c₂, c₃)` on an
+  owned node binds its cells (§5.3), and on a view it binds the fields' views (SPEC §5, fieldwise).
+- A field may instead have type `box A`, a cell of its own. A recursive occurrence under neither a
+  block nor `box` is **an error at the declaration that asks for `box`**.
+- Recursion under an array (`Arr(Vec[Json])`) is under the array's allocation, the other written
+  heap allocation §5.3 names. It needs no `box`; its fold waits on B14 (§7.5). B.
 
-**Recommendation: X3.** It needs the user's decision, because it revises §5.3's "an error that
-asks for `box`". Cell classes (C2b) add nothing here: a declared type's cells are its structure's
-cells.
+**What it changes.**
+
+- The four `paradigms/` files build tree nodes with `box` (example B). Matching an owned tree
+  frees the node, and rebuilding allocates one. Both are written, so the allocation count can be
+  read off the source.
+- `lowered/` needed no change. `faces.bc` boxes its objects' state explicitly (`boxed['c]`), and
+  `resource.bc` has no recursive declaration.
+- SPEC §35's one box a node stays a backend rule for recursive types written in core. A declared
+  type's elaborated `μ` has a `ref` on every cycle already, so the rule finds nothing to add. B, to
+  check in U1 with `bcc-counts`.
+- Whether SPEC §35's rule should also go for core-written `μ` types, so that no recursive layout
+  allocates without a written `box`, is **not decided**. It touches the corpus's core-written
+  types, and is a question for the user, not settled by this item.
+
+Cell classes (C2b) add nothing here: a declared type's cells are its structure's cells.
 
 ### 6.12 Variants in place (#19)
 
@@ -861,7 +992,7 @@ the same view.
 |---|---|---|---|
 | none, for declarations, faces, interfaces, materialised values, the context binding, and serde of typed data | — | — | E (`faces.bc`, `resource.bc`); B for the parts not lowered |
 | **F3: an `imm` observation of a materialised codata value** | a relation clause for `Imm̲` at a `U(νX. C)` whose observations are shared | `xs: imm Vec[HasArea]` calling `x.area()` | **new**; not stated; NC whether sound |
-| F2: an observation whose argument mentions `X` | an extension of `NuOk` (SPEC §7 *Open*) | binary methods in the value form | not recommended (§4.5) |
+| F2: an observation whose argument mentions `X` | an extension of `NuOk` (SPEC §7 *Open*) | simple binary methods in the value form (Cook's `union`); complex ones need the representation and no kernel entry gives them | not recommended until a program needs one (§4.5) |
 | K2′: the `imm` reborrow of a `mut` family | a constant, with its proof (SPEC §9 *Open*, #174) | an `imm` method called inside a `mut` one, on an array-holding type | on the list, unit 17 |
 | a shortened family (`[Imm 'k A] ⊑ [Imm 'x A]`) | a constant (SPEC §36 *Not provided*) | `&'a self` views of a type holding two arrays at one lifetime (`MapRef<'k, 'x>` today) | on the list, unit 19 |
 | `FShape` over arrays, or nested `μ` | a lemma (S-H) or elaboration (S-D) | the untyped `Json`; trees whose children are a `Vec` | on the list, units 5–6 |
@@ -879,7 +1010,7 @@ the same view.
 §4.5 states each:
 
 - F1, control operations;
-- F2, binary operations;
+- F2, binary operations (complex ones are static by nature; simple ones by `NuOk`);
 - F3, a shared observation of an object;
 - F4, storing implementations bound by the context;
 - F5, operations that bear an invariant have a fixed binding time;
@@ -889,11 +1020,82 @@ the same view.
 
 ## 9. Prior art
 
-**Read for this pass**: the Koka book, at koka-lang.github.io, 2026-10-20.
+**Read in full for this pass, 2026-10-20** (E for what is quoted; PDFs fetched to the session's
+scratch directory):
 
-- §3.1.2 *Dot selection*: "the expression `s.encode(3)` does not select the `encode` method from
-  the string object, but it is simply syntactic sugar for the function call `encode(s,3)`".
-- §3.3.1 *Structs*: "Koka automatically generates accessor functions for each field".
+- **The Koka book**, at koka-lang.github.io.
+  - §3.1.2 *Dot selection*: "the expression `s.encode(3)` does not select the `encode` method from
+    the string object, but it is simply syntactic sugar for the function call `encode(s,3)`".
+  - §3.3.1 *Structs*: "Koka automatically generates accessor functions for each field".
+- **Barbara Liskov, Alan Snyder, Russell Atkinson and Craig Schaffert, *Abstraction Mechanisms in
+  CLU*, Communications of the ACM 20(8):564–576, August 1977** (13 pp.).
+  - Clusters: only a cluster's operations reach the representation (p. 565), through `cvt`, "a
+    change in viewpoint only" (p. 568, fn. 4; p. 575). That is §3.1's iso and §6.4's B1.
+  - Operations are named `type$op` (p. 567): §6.1's N1, §6.9's E1.
+  - `where t has lt, equal: proctype (t, t) returns (bool)` (p. 571): bounds checked at each use,
+    by name and signature, with the laws left unchecked (§6.3's I4).
+  - Iterators, `iter … yields`, several per abstraction, on the program stack (pp. 572, 575): the
+    generators of a face (`items() with Yield[imm T]`).
+  - "Conventions are no substitute for enforced constraints" (p. 575).
+- **William R. Cook, *On Understanding Data Abstraction, Revisited*, OOPSLA 2009, pp. 557–572**
+  (15 pp.).
+  - ADTs are type abstraction; objects are procedural abstraction, and know only themselves
+    (autognosis, §3.3). The static face of a hidden type is an ADT, and `x as I` an object (§3.2
+    above).
+  - Simple against complex binary operations (§4.2): F2 in §4.5.
+  - An ADT with only simple operations converts to objects without loss (§4.2, the `wrap`
+    construction). That is §4.2's "static → value, generated from the face", with the same
+    condition `NuOk` imposes.
+  - The ∃-encoding of an object's state is the greatest fixed point (§3.9): §4.2's "`ν` hides the
+    state".
+  - Type classes are ADT-side, one instance per type (§5.3): §6.10.
+  - The extensibility trade-off, new representations against new operations (§4.3): I1's cost in
+    §6.3.
+- **Paul Downen, Zachary Sullivan, Zena M. Ariola and Simon Peyton Jones, *Codata in Action*, ESOP
+  2019, LNCS 11423, pp. 119–146** (28 pp., the authors' version).
+  - Codata is the representation of procedural abstraction, against ADTs as existential types
+    (§2.3).
+  - Its codata observations may take the codata type as an argument (`Union : Set → Set → Set`,
+    §2.3; Fig. 3 puts no restriction on `τ`), so binary observations are codata's, and their
+    absence here is `NuOk`'s (F2).
+  - Intermezzo 1 (§2.4) asks for linear codata in which some observations take "full ownership of
+    the object itself" and others "merely borrow the object for the duration of the action", with
+    Rust's ownership as the model. That is §3.2's consuming and `imm`/`mut` observation modes.
+  - The visitor (data → codata, §3.2) and tabulation (codata → data, §3.3) are compositional
+    encodings. They are not the transposition of example C (Binder et al., §9, say the same).
+- **Andreas Abel, Brigitte Pientka, David Thibodeau and Anton Setzer, *Copatterns: Programming
+  Infinite Structures by Observations*, POPL 2013, pp. 27–38** (13 pp.).
+  - Definition by observation. A copattern's head is the hole of the function being defined
+    (`q ::= · | q p | q.d`, §3.3). So the copattern definition here is the materialised object's
+    (`(x as I).len() = N.len(&x)`, §4.2's `step`). The `on` blocks of paradigm D are consumer
+    functions of the data face (Binder et al.'s `cfun`), grouped by mode, not copatterns.
+  - Positive types (`1`, `×`, `μ`) and negative ones (`→`, `ν`), by focusing (§3.1): the kernel's
+    split, which the two faces follow.
+  - Destructors overloaded across record types, resolved by the type of the head (§3.2): N1.
+  - `docs/surface-cbpv.md` declined copattern definitions for steps; faces are a different use.
+- **David Binder, Julian Jabs, Ingo Skupin and Klaus Ostermann, *Decomposition Diversity with
+  Symmetric Data and Codata*, PACMPL 4 (POPL), Article 30, January 2020** (28 pp.).
+  - Constructorization and destructorization generalise defunctionalisation and
+    refunctionalisation into total, mutually inverse transpositions of a whole program (§2, §6,
+    Thm. 7.3–7.6). Example C (`Shape` and `HasArea`) is one. An automatic transposition is not
+    proposed here.
+  - Consumer functions, `cfun T:d`, are functions with a top-level match on their first argument,
+    called with dot (§3.4). That is the static face; generator functions are introductions.
+  - One typing rule for `e.d(ē)` over destructors and consumer functions (Fig. 11): D2.
+  - Their outlook (§8, *Separate Compilation*) raises importing a type as data or as codata, which
+    is §4's choice of binding time made at the boundary.
+- **Jonathan Immanuel Brachthäuser, Philipp Schuster and Klaus Ostermann, *Effects as
+  Capabilities: Effect Handlers and Lightweight Effect Polymorphism*, PACMPL 4 (OOPSLA), Article
+  126, November 2020** (30 pp.).
+  - Effect types are read as the capabilities a computation requires from its context (§3.2). A
+    handler introduces a capability, passed as an extra block argument in System Ξ (§4–§5, Fig. 4):
+    §4.3's context form.
+  - Blocks, capabilities included, are second class: "can neither be returned nor stored in data
+    structures" (§1.6), which is the price of effect safety. §7.2 lists the programs that costs.
+    That is F4 and §4.4's open conversion.
+  - One effect signature may group several operations (§6.3.1, `effect Lexer`); the calculus has
+    one per capability. "Capabilities as objects" is not this paper's phrasing.
+  - Accidental capture and lexical handling (§7.1) are what SPEC §38's named handlers address.
 
 **Quoted from repository documents**:
 
@@ -901,29 +1103,11 @@ the same view.
   Swift Codable and Lean 4's deriving;
 - as SPEC §38 cites them: Zhang and Myers, Helium and Effekt.
 
-**Recalled, not re-read (NC):**
+**Recalled, not read (NC):**
 
-- **Downen, Sullivan, Ariola and Peyton Jones, *Codata in Action*, ESOP 2019.** Objects are codata;
-  codata needs no existential to hide its state; the duality of data and codata is a design
-  principle. §4.2's "ν hides the state" is checked here by a program, not against the paper.
-- **Abel, Pientka, Thibodeau and Setzer, *Copatterns*, POPL 2013.** Definition by observation. The
-  native paradigm's `on` blocks are copattern definitions with the observation mode added.
-  `docs/surface-cbpv.md` declined copattern definitions for steps; faces are a different use.
-- **Binder, Jabs, Skupin and Ostermann, *Decomposition Diversity with Symmetric Data and Codata*,
-  POPL 2020.** Defunctionalisation and refunctionalisation transpose a data type and its functions
-  into a codata type and its implementations. Example C (`Shape` and `HasArea`) is that
-  transposition. An automatic transposition is not proposed.
-- **Liskov et al., CLU, CACM 1977.** Clusters: the representation is visible only to the cluster's
-  operations (§6.4's B1).
-- **W. Cook, *On Understanding Data Abstraction, Revisited*, OOPSLA 2009.** ADTs against objects,
-  and binary methods (F2).
-- **Brachthäuser, Schuster and Ostermann, *Effects as Capabilities*, OOPSLA 2020.** Capabilities as
-  objects, passed lexically (§4.3's context form; §6.3's I3).
 - **Koka's static overloading** (Leijen and Whiting, *Syntactic Implicits with Static
   Overloading*), known only from the Koka release notes.
 - **Go's method receivers and structural interfaces** (§6.3's I4).
-
----
 
 ## 10. Proposed units, after approval
 
@@ -933,7 +1117,7 @@ touches `Frontend/`.
 
 | # | unit | needs | refines | done when |
 |---|---|---|---|---|
-| U1 | **`data`, monomorphic and generic, transparent**: records, variants, `Option` and `Vec` as library declarations, constructors, record literals, `match`, fields, field update through `mut`, the single-root rule; recursion by §6.11's choice | — | #593 | `data-box-tree`, and T07, T09, T10, T11 as written; the #593 programs; `bcc desugar` of each equal to its hand lowering |
+| U1 | **`data`, monomorphic and generic, transparent**: records, variants, `Option` and `Vec` as library declarations, constructors, record literals, `match`, fields, field update through `mut`, the single-root rule; recursion under a written `box` (§6.11, decided): `box C(…)` builds a block node, and a recursive constructor or field without `box` is an error that asks for it | — | #593 | `data-box-tree`, and T07, T09, T10, T11 as written; the #593 programs; `bcc desugar` of each equal to its hand lowering; a tree built without `box` rejected with a message that asks for `box` |
 | U2 | **Faces and dot**: `on` blocks (or the chosen spelling), a namespace per type, dot at the static binding time, the `&` inserted by mode, introductions. `lib/map.bc`, `lib/buf.bc` and `lib/aff.bc` get faces; the old names stay as aliases until the corpus has moved | U1 | #593 | `m.insert(k, v)` and `m.len()` on the map; the D1 clash (`List.map` against `Iter.map`) accepted; counts unchanged |
 | U3 | **Abstraction**: `hidden`, with the face as the boundary (§6.4's B1) | U2 | #593 | `Map` and `Stack` abstract; a client's `match` on them rejected, with a message |
 | U4 | **`codata` declarations and interfaces**: observations with modes; `gives`, checked; `x as I` by `unfold`; dot on interface values; the frontend's five `CTy` abbreviations deleted for library declarations (#141 decision 6) | U2 | #141 D3 | `faces.bc` written in the surface, with the same core; `pull` and `iter` as library declarations; counts unchanged |
@@ -950,8 +1134,8 @@ shortened family (unit 19).
 
 ## 11. Decision menu
 
-Each item gives the options, the trade-offs and a recommendation. This document decides none of
-them.
+Each item gives the options, the trade-offs and a recommendation. Item 13 is decided; the others
+await the user.
 
 1. **Syntax paradigm** (§5).
    - Options: A, ML (companion modules); B, Rust (`impl`, `pub` fields); C, record-first
@@ -1002,18 +1186,24 @@ them.
     - Trade-off: familiarity, against importing orphan rules with the name.
     - **Recommended**: our names, and the book says plainly that this is a trait system with
       conformance at the type and a context form.
-13. **Recursion's representation** (§6.11).
-    - Options: X1, a written `box` (revises nothing); X2, one box a node by rule; X3, X2 plus `box`
-      for block nodes.
-    - **Recommended: X3.** It revises typed elaboration §5.3's "an error that asks for `box`".
+13. **Recursion's representation** (§6.11). **Decided, 2026-10-20: a written `box`.**
+    - The user: "I think heap allocations should be explicit re:boxing."
+    - So typed elaboration §5.3 stands: a recursive node is built `box C(…)`, and a recursive
+      declaration or constructor without `box` is an error that asks for it.
+    - Automatic boxing (one box a node by rule, and its variant that kept `box` for block nodes) is
+      rejected for declarations.
 14. **F3, a shared observation of objects** (§4.5, §8.1).
     - Options: spike it as a kernel clause; or keep materialised values observed by value or
       through `mut`.
     - **Recommended: spike it after U4**, and only if a program needs a shared container of
       objects.
 15. **Binary methods in the value form** (F2).
-    - Options: extend `NuOk`; or keep binary operations static.
-    - **Recommended: static** (families and `ability`).
+    - Complex binary operations (`equal`, `order`, a merging `union`) need two representations,
+      so they are static in any design (Cook 2009, §4.2).
+    - Options for simple ones (Cook's `union` through the other's observations): extend `NuOk`
+      to let an observation take the interface type; or keep them static.
+    - **Recommended: static** (families and `ability`), until a program needs a simple binary
+      observation.
 16. **Units** (§10).
     - **Recommended**: U1–U3 as #593; U4–U5 as a new unit (codata declarations and interfaces);
       U6–U7 as #65, with derive split out first; U8 as #595.

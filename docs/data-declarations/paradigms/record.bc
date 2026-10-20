@@ -57,7 +57,7 @@ fn bump(text: text 't): string with Fail[DecodeError] {
 
 data Tree<T> =
   | { kind: "Leaf" }
-  | { kind: "Node", left: Tree<T>, value: T, right: Tree<T> }
+  | { kind: "Node", left: Tree<T>, value: T, right: Tree<T> }    -- built `box { kind: "Node", … }` (§6.11)
   {
     static empty(): Tree<T> { return { kind: "Leaf" } }
     imm depth(): i32 { return fold_imm this { Leaf: 0, Node: (n) => 1 + max(n.left, n.right) } }
@@ -69,7 +69,14 @@ data Tree<T> =
       }
     }
     imm inOrder() with Yield[imm T] { if this is Node(n) { n.left.inOrder(); yield(n.value); n.right.inOrder() } }
-    own insert(x: T): Tree<T> { … }
+    own insert(x: T): Tree<T> {
+      match this {
+        Leaf: return box { kind: "Node", left: { kind: "Leaf" }, value: x, right: { kind: "Leaf" } }
+        box Node: (n) => switch order(&x, &n.value) {  -- `box Node` frees the block it matches
+          Less: return box { ...n, left: n.left.insert(x) }
+          default: return box { ...n, right: n.right.insert(x) } }
+      }
+    }
   }
 
 -- ## C. A union with payloads, and an interface that transposes it

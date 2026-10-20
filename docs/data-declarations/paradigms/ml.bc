@@ -59,7 +59,7 @@ fn bump(text : text 't) -> string with Fail[DecodeError] =
 
 -- ## B. A recursive tree
 
-data Tree a = Leaf | Node (Tree a) a (Tree a)
+data Tree a = Leaf | Node (Tree a) a (Tree a)      -- a node is built `box (Node l v r)` (§6.11)
 
 module Tree = {
   fn empty() -> Tree a = Leaf
@@ -70,8 +70,9 @@ module Tree = {
   fn in_order(t : imm Tree a) with Yield[imm a] = match t {
       Leaf -> () | Node l v r -> in_order(l); yield(v); in_order(r) }
   fn insert(t : Tree a, x : a) -> Tree a = match t {
-      Leaf -> Node Leaf x Leaf
-    | Node l v r -> match order(&x, &v) { Less -> Node (insert(l, x)) v r | _ -> Node l v (insert(r, x)) } }
+      Leaf -> box (Node Leaf x Leaf)
+    | box (Node l v r) -> match order(&x, &v) {
+        Less -> box (Node (insert(l, x)) v r) | _ -> box (Node l v (insert(r, x))) } }
 }
 
 -- ## C. An enum with payloads, and a class that transposes it

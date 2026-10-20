@@ -6,8 +6,9 @@
 -- `self`, `&self`, `&mut self` receivers; `trait` and `impl Trait for T` (interfaces, conformance
 -- declared apart from the type); `pub` per field (per-field abstraction); `dyn Trait` (the
 -- materialised codata value). Unlike Rust: derive is a typed `derives` clause, not a macro;
--- attributes are typed (`@json(…)`), not token trees; recursion needs no `Box` (one box a node,
--- §6.5); a trait method's provider is still one per type (§6.2).
+-- attributes are typed (`@json(…)`), not token trees; a recursive node is allocated by a written
+-- `box` at its constructor, not by a `Box` field type (§6.11); a trait method's provider is still
+-- one per type (§6.2).
 
 include map
 include fail
@@ -78,7 +79,7 @@ fn bump(text: &'t str) -> string with Fail[DecodeError] {
 
 -- ## B. A recursive tree
 
-pub enum Tree[T] { Leaf, Node { left: Tree[T], value: T, right: Tree[T] } }   -- no `Box`
+pub enum Tree[T] { Leaf, Node { left: Tree[T], value: T, right: Tree[T] } }   -- `Node` is a block, built with `box`
 
 impl[T] Tree[T] {
   pub fn empty() -> Tree[T] { Leaf }
@@ -95,10 +96,10 @@ impl[T] Tree[T] {
   }
   pub fn insert(self, x: T) -> Tree[T] {
     match self {
-      Leaf => Node { left: Leaf, value: x, right: Leaf },
-      Node { left, value, right } => match order(&x, &value) {
-        Less => Node { left: left.insert(x), value, right },
-        _ => Node { left, value, right: right.insert(x) },
+      Leaf => box Node { left: Leaf, value: x, right: Leaf },
+      box Node { left, value, right } => match order(&x, &value) {
+        Less => box Node { left: left.insert(x), value, right },
+        _ => box Node { left, value, right: right.insert(x) },
       },
     }
   }
