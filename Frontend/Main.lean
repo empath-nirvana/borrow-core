@@ -35,6 +35,9 @@ import Backend.Native.Tests
                                 error; `--stats` writes the run's counts to standard error
     lake exe bcc desugar <file> print the program with its I/O sugar elaborated (SPEC §11)
     lake exe bcc erase <file>   print the erasure of the checked `main`
+    lake exe bcc alpha [--map] <file>
+                                print the program with every variable renamed to a name of its
+                                own (`alphaRename`), or with `--map` the renaming
     lake exe bcc trusted <file> list the program's externs with their contracts, host
                                 implementations and assurance levels (SPEC §11)
     lake exe bcc hostops (flat | native)
@@ -402,6 +405,58 @@ def kernel (args : List String) : IO UInt32 := do
     IO.eprintln "usage: bcc kernel (list | interp [--stage S] <name> | compile <name> -o <out.wat> | run <name>)"
     return 2
 
+/-- `src` with every variable of its surface bodies renamed to a name of its own (SPEC §41, rule
+R1): each binder of the source gets `{x}q{k}`, `x` as written and `k` counting, a name the
+source does not write, and every name resolved to it the same. No binder then shadows another, and two variables
+never share a name, so the program is α-equivalent to `src`: every check of it and its erasure
+are `src`'s up to the renaming (`scripts/alpha-check.py`). With the renaming, each name as
+`line col written new variable`, the variable the name resolves to in `src`. -/
+def alphaRename (src : String) :
+    Except Error (String × List (Nat × Nat × String × String × String)) := do
+  let lines := (src.splitOn "\n").toArray
+  -- A binder the parser generates at a written construct (`with`'s callback) is not written.
+  let writtenAt (p : Pos) (x : String) : Bool :=
+    p.line ≥ 1 && p.line ≤ lines.size &&
+      ((lines[p.line - 1]!.toList.drop (p.col - 1)).take x.length == x.toList)
+  let occs := (← resolutionOf src).filter fun (p, x, _) => writtenAt p x
+  let toks ← lex src
+  let taken := toks.toList.filterMap fun t => match t.tok with
+    | .ident s => some s
+    | _ => none
+  -- Each binder's new name, in the order the source first names it.
+  let mut fresh : List (Nat × String) := []
+  let mut k := 0
+  for (_, x, _, y) in occs do
+    if (fresh.lookup y).isSome then continue
+    let mut c := s!"{x}q{k}"
+    while taken.contains c do
+      k := k + 1
+      c := s!"{x}q{k}"
+    k := k + 1
+    fresh := (y, c) :: fresh
+  let edits := occs.map fun (p, x, v, y) => (p.line, p.col, x, (fresh.lookup y).getD x, v)
+  let mut out := lines
+  -- Edits on one line apply right to left, so each column is the source's.
+  let byPos := edits.mergeSort fun (l₁, c₁, _) (l₂, c₂, _) => l₁ < l₂ || (l₁ == l₂ && c₁ ≥ c₂)
+  for (l, c, x, x', _) in byPos do
+    if l == 0 || l > out.size then throw ⟨Span.none, s!"alpha: no line {l}"⟩
+    let cs := out[l - 1]!.toList
+    if (cs.drop (c - 1)).take x.length != x.toList then
+      throw ⟨Span.none, s!"alpha: `{x}` is not written at {l}:{c}"⟩
+    out := out.set! (l - 1) (String.ofList (cs.take (c - 1) ++ x'.toList ++ cs.drop (c - 1 + x.length)))
+  pure ("\n".intercalate out.toList, edits)
+
+/-- Print `file` α-renamed (`alphaRename`), or with `map` its renaming. -/
+def alpha (map : Bool) (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match alphaRename src with
+  | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
+  | .ok (out, edits) =>
+    if map then
+      for (l, c, x, x', v) in edits do IO.println s!"{l} {c} {x} {x'} {v}"
+    else IO.print out
+    return 0
+
 /-- Parse `src`, print it, parse the output, and compare the two ASTs up to spans. The printed
 program's names are already its binders (SPEC §41), so it is read back without resolving them. -/
 def roundTrip (p : Program) : Except String Unit := do
@@ -445,6 +500,8 @@ def main (argv : List String) : IO UInt32 := do
   | ["sites", file] => sites file
   | ["desugar", file] => desugar file
   | ["erase", file] => erase file
+  | ["alpha", file] => alpha false file
+  | ["alpha", "--map", file] => alpha true file
   | [cmd, file] =>
     if cmd != "parse" && cmd != "print" && cmd != "check" then
       IO.eprintln s!"unknown command `{cmd}`"; return 2
