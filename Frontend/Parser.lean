@@ -327,6 +327,7 @@ def bindOrAssign (x : Ident) : P Ident := do
     if (← get).placeMode && (← get).places.contains y then
       let t ← modifyGet fun s => (s!"io_pt{s.fresh}", { s with fresh := s.fresh + 1 })
       modify fun s => { s with assigned := y :: s.assigned, stores := (t, y) :: s.stores }
+      if let some (_, b) := (← get).scope.lookup x.name then noteOcc x.span x.name y b
       return { x with name := t }
     modify fun s => { s with assigned := y :: s.assigned }
     if let some (_, b) := (← get).scope.lookup x.name then noteOcc x.span x.name y b
@@ -2168,6 +2169,7 @@ def compG : Nat → Bool → P Comp
       -- `let (x, q) = f(…, x, …)` of a place: the swap `modify x { o -> f(…, o, …) }`.
       if let (.pair _ (.var x) q, .app _ _ args) := (p, V) then
         if let some y ← placeArg? x args then
+          if let some (_, b) := (← get).scope.lookup x.name then noteOcc x.span x.name y b
           let o ← freshName "io_po"
           let q ← bindPatNames q
           let N ← comp n
