@@ -567,6 +567,11 @@ def main (argv : List String) : IO UInt32 := do
   | ["erase", file] => erase file
   | ["lir", "--typed", file] => typedDump file
   | ["lir", file] => lirDump file
+  | ["lir", "--lint", file] => do
+    let src ← IO.FS.readFile file
+    match Backend.checkedOf file src >>= Backend2.lintOf with
+    | .error e => IO.eprintln e; return 1
+    | .ok () => IO.println "lint: ok"; return 0
   | ["lir", "--layout", file] => do
     let src ← IO.FS.readFile file
     match Backend.checkedOf file src >>= Backend2.layoutReport with

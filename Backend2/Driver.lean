@@ -6,6 +6,7 @@ import Backend2.Lower
 import Backend2.Flow
 import Backend2.Frames
 import Backend2.LitViews
+import Backend2.Lint
 
 /-!
 # Backend2 — driver
@@ -40,6 +41,12 @@ def lirOf (k : Backend.CheckedProg) : Except String (Prog × CState) := do
     | some m => pure (← extsOf m, m.caps.length, m.loopB.isSome)
   let ctx := c.ctx.map fun s => (s.ty, s.live)
   convertProg exts ctx c.t c.C ncaps loops
+
+/-- Convert and lint a program (`bcc lir --lint`): an error outside the pure fragment, or the
+lint's. -/
+def lintOf (k : Backend.CheckedProg) : Except String Unit := do
+  let (p, _) ← lirOf k
+  Lint.lint p
 
 /-- The checker's cell classes (`Checked.cells`) at LIR types. -/
 def cellsOf (k : Backend.CheckedProg) : List (List LTy) :=
