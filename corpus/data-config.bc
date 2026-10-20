@@ -1,0 +1,81 @@
+-- T11 (`docs/research/mutation-paradigms.md` §4): a configuration updated field by field from
+-- command-line style options, then frozen. The configuration is a record with a string field
+-- (SPEC §42), so it is not persistent: `cfg.width = e` is `modify &mut cfg { … }`, whose body
+-- rebuilds the record with the new field (the old title is dropped, SPEC §12); `let w = cfg.width;`
+-- lends `cfg` for the read. The options are a variant with views of the input.
+--
+-- As written but for `+=`, the options cut out of a literal by index (as T06), `parse_i32`'s error
+-- handled with `default`, and the fields read at bindings (SPEC §42, *Fields*).
+--
+-- Answer: prints `demo`; ((i32[80], (i32[50], inr ())), (i32[4000], i32[1])).
+include textio
+include text
+include fail
+
+data Cfg = { width: i32, height: i32, title: string, verbose: bool }
+
+data Opt<'t> = Width(text 't) | Title(text 't) | Verbose | Other
+
+fn slice<'t>(t: text 't, i: i32, k: i32) -> text 't =
+  match split_at(t, i) {
+    inl (h, r) -> array_forget['t, u8](h);
+      match split_at(r, k) { inl (w, rest) -> array_forget['t, u8](rest); w | inr r -> r }
+  | inr t -> t
+  }
+
+-- The option a word is.
+fn option_of<'t>(a: text 't) -> Opt<'t> =
+  let (a, a1) = array_copy['t, u8] a;
+  let (a, a2) = array_copy['t, u8] a;
+  let n = len(a1);
+  let w = slice(a2, 0, 8);
+  let (a, a3) = array_copy['t, u8] a;
+  let t = slice(a3, 0, 8);
+  if eq_lit(w, "--width=") { Width(slice(a, 8, n - 8)) }
+  else if eq_lit(t, "--title=") { Title(slice(a, 8, n - 8)) }
+  else if eq_lit(a, "-v") { Verbose }
+  else { Other }
+
+-- The options of the words of `t`, applied to `cfg` field by field; the unknown options counted.
+fn parse<'t>(t: text 't, cfg: Cfg) -> Cfg * i32 =
+  let (t, u0) = array_copy['t, u8] t;
+  let n = len(u0);
+  let mut t = t;
+  let mut cfg = cfg;
+  let mut unknown = 0;
+  let mut start = 0;
+  for i in 0..n + 1 {
+    let (t2, w) = array_copy['t, u8] t;
+    t = t2;
+    let b = at(w, i, b' ');
+    let (t2, w) = array_copy['t, u8] t;
+    t = t2;
+    let word = slice(w, start, i - start);
+    if b == b' ' && start < i {
+      match option_of(word) {
+        Width(v) -> cfg.width = with default(cfg.width) { parse_i32(v) }
+      | Title(v) -> cfg.title = to_string(v)
+      | Verbose -> cfg.verbose = true
+      | Other -> unknown = unknown + 1
+      }
+    } else { array_forget['t, u8](word) };
+    if b == b' ' { start = i + 1 } else { () }
+  };
+  array_forget['t, u8](t);
+  (cfg, unknown)
+
+main -> (i32 * (i32 * bool)) * (i32 * i32) =
+  let cfg0 = Cfg { width: 40, height: 25, title: string_of_lit("untitled"), verbose: false };
+  let r = borrow imm "--width=80 --title=demo -v --frob" { t -> parse(t, cfg0) };
+  let (cfg, unknown) = r;
+  let mut cfg = cfg;
+  let verbose = cfg.verbose;
+  if verbose { cfg.height = cfg.height * 2 };
+  let cfg = cfg;
+  let width = cfg.width;
+  let height = cfg.height;
+  let verbose = cfg.verbose;
+  let Cfg { title } = cfg;
+  let title = print_string(title);
+  print_lit("\n");
+  ((width, (height, verbose)), (width * height, unknown))

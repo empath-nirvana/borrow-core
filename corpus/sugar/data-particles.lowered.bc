@@ -1,0 +1,33 @@
+-- lowers: corpus/data-particles.bc
+-- `corpus/data-particles.bc` (T09) with its record written out by SPEC §42's rules, in the
+-- surface: `P` the pair of its fields (D1); a record literal the pair, ascribed (E4); `p.x = e` a
+-- `modify` of the slot's `mut` borrow whose body takes the record apart and rebuilds it (E6);
+-- `let x = p.x;` a `modify` that puts the record back and answers the field (E5); `p.x` through
+-- the `imm` borrow a load of the record's view and its projection (E5).
+include io
+
+type P = i32 * i32
+
+fn w0(i: i32) -> P =
+  if i == 0 { ((10, 7) : P) } else if i == 1 { ((50, 0 - 3) : P) } else { ((99, 11) : P) }
+
+fn step<'a>(ps: array_mut 'a P) -> i32 =
+  let mut b = 0;
+  for p in ps {
+    modify p { r -> let (x, v) = r; ((x + v, v), ()) };
+    let x = modify p { r -> let (x, v) = r; ((x, v), x) };
+    if x < 0 || x > 100 {
+      modify p { r -> let (x, v) = r; ((x, 0 - v), ()) };
+      modify p { r -> let (x, v) = r; ((x + 2 * v, v), ()) };
+      b = b + 1
+    }
+  };
+  b
+
+main -> i32 =
+  let mut world = array_new[P](3, w0);
+  let mut bounces = 0;
+  for _ in 0..50 { let k = step(&mut world); bounces = bounces + k };
+  for p in &world { print_dec(run (let (x, v) = *p; return x)); print_byte(b' ') };
+  print_byte(b'\n');
+  bounces

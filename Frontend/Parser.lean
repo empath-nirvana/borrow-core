@@ -1458,6 +1458,14 @@ def valPrefix : Nat → P Val
       let V ← valAtom n
       valSuffixes n st V
 
+/-- A field's name: a name, or a word the core reserves (`val`, `free`), which is only ever a
+field's there (SPEC §42). -/
+def fieldName : P Ident := do
+  let t ← peek
+  match t.tok with
+  | .ident x | .kw x => discard bump; pure ⟨x, t.span⟩
+  | _ => expected "a field name"
+
 /-- The result of an elaboration rule of `Frontend/Elab/Data.lean`. -/
 def liftE {α} : Except Error α → P α
   | .ok a => pure a
@@ -1550,7 +1558,7 @@ def conPat : Nat → Pos → Ident → Bool → P Data.MPat
       let mut fs : List (String × Data.MPat) := []
       for _ in [0:n] do
         if ← isSym "}" then break
-        let x ← ident "a field name"
+        let x ← fieldName
         let p ← if ← isSym ":" then do discard bump; mpat n else pure (.var x)
         unless k.fields.any (·.name.map (·.name) == some x.name) do
           failAt x.span s!"`{c.name}` has no field `{x.name}`"
@@ -1594,7 +1602,7 @@ def dataValue : Nat → Pos → Ident → Bool → P Val
         let mut fs : Array (Ident × Val) := #[]
         for _ in [0:n] do
           if ← isSym "}" then break
-          let x ← ident "a field name"
+          let x ← fieldName
           let V ← if ← isSym ":" then do discard bump; val n
             else pure (Val.var x.span (← lookName x.name x.span))
           fs := fs.push (x, V)
@@ -1955,6 +1963,18 @@ def compG : Nat → Bool → P Comp
       loopC n st (some ⟨l, t.span⟩)
     | .kw "let", _ =>
       discard bump
+      -- `let C(p, …) = e; N`: a constructor pattern, a match of one arm (SPEC §42, M3).
+      if (match (← peek).tok with | .uident _ | .kw "box" => true | _ => false) then
+        let q ← mpat n
+        expectSym "="
+        let V ← val n
+        expectSym ";"
+        let (q, N) ← withScope do
+          let q ← bindMPatNames n q
+          pure (q, ← comp n)
+        let (M, fresh) ← liftE (Data.matchComp (← get).data (← spanFrom st) [V] [([q], N)] (← get).fresh)
+        modify fun s => { s with fresh }
+        return M
       let isMut ← if ← isKw "mut" then do discard bump; pure true else pure false
       let p ← pat n
       if isMut then

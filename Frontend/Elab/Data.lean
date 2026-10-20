@@ -879,17 +879,22 @@ def compile (t : Table) (sp : Span) (arms : Array Comp) (info? : String → Opti
           for (h', k) in sig do
             let .con _ ci := h' | continue
             let block := ((i.cons[ci]?).map (·.block)).getD false
-            let pv ← freshOcc
-            let subs ← fresh k block
+            -- The one constructor's payload of a declaration that is no `μ` is the scrutinee.
+            let pv ← if sig.length == 1 && !i.rolls then pure o else freshOcc
+            -- A payload of one field is the field itself.
+            let subs ← if k == 1 then pure [(pv, block)] else fresh k block
             let rb := RB.con ci i.n i.rolls asc (subs.map (.occ ·.1))
             let M ← branch h' k subs rb
-            arms' := arms' ++ [(pv, letTuple sp (.var sp pv) (subs.map (·.1)) M (· ++ "r"))]
+            arms' := arms' ++ [(pv, if k == 1 then M else
+              letTuple sp (.var sp pv) (subs.map (·.1)) M (· ++ "r"))]
           spine sp scrut arms'
 where
   /-- `case` along the ⊕ spine of the payloads' arms, the scrutinee `V`. -/
   spine (sp : Span) (V : Val) : List (String × Comp) → CM Comp
     | [] => pure (.absurd sp V)
-    | [(p, M)] => pure (.bind sp ⟨p, sp⟩ none (.ret sp V) M false)
+    | [(p, M)] => pure (match V with
+      | .var _ x => if x == p then M else .bind sp ⟨p, sp⟩ none (.ret sp V) M false
+      | V => .bind sp ⟨p, sp⟩ none (.ret sp V) M false)
     | [(p, M), (q, N)] => pure (.case sp V ⟨p, sp⟩ M ⟨q, sp⟩ N)
     | (p, M) :: arms => do
       let r ← freshOcc

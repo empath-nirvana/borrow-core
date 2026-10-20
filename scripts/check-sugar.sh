@@ -4,6 +4,10 @@
 # of each must erase to the same term (`bcc erase`). A core form must also be its own
 # elaboration: `bcc desugar` leaves it as it is. A sugared file whose first line is
 # `-- core: <other>.core.bc` is compared with that core form instead.
+#
+# A lowering. Every corpus/sugar/<name>.lowered.bc whose first line is `-- lowers: <program>`
+# writes that corpus program's declarations out by their elaboration rules (SPEC §42), in the
+# surface: both must check, and their checked `main`s must erase to the same term.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc >/dev/null
@@ -12,7 +16,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 bad=0
 for f in corpus/sugar/*.bc; do
-  case "$f" in *.core.bc) continue ;; esac
+  case "$f" in *.core.bc|*.lowered.bc) continue ;; esac
   core=${f%.bc}.core.bc
   named=$(sed -n '1s/^-- core: //p' "$f")
   [ -n "$named" ] && core="$(dirname "$f")/$named"
@@ -25,6 +29,17 @@ for f in corpus/sugar/*.bc; do
   if ! cmp -s "$tmp/a" "$tmp/b"; then echo "$f: its erasure differs from $core's"; bad=$((bad + 1))
   elif ! cmp -s "$tmp/c" "$tmp/d"; then echo "$core: has sugar left"; bad=$((bad + 1))
   else echo "$f: erases as $core"; fi
+done
+for f in corpus/sugar/*.lowered.bc; do
+  [ -e "$f" ] || continue
+  prog=$(sed -n '1s/^-- lowers: //p' "$f")
+  if [ -z "$prog" ] || [ ! -f "$prog" ]; then echo "$f: no \`-- lowers: <program>\` line"; bad=$((bad + 1)); continue; fi
+  if ! "$bcc" check "$prog" > /dev/null 2> "$tmp/err" || ! "$bcc" check "$f" > /dev/null 2>> "$tmp/err"; then
+    echo "$f: does not check: $(cat "$tmp/err")"; bad=$((bad + 1)); continue
+  fi
+  "$bcc" erase "$prog" > "$tmp/a"; "$bcc" erase "$f" > "$tmp/b"
+  if ! cmp -s "$tmp/a" "$tmp/b"; then echo "$f: its erasure differs from $prog's"; bad=$((bad + 1))
+  else echo "$prog: erases as $f"; fi
 done
 echo "$bad failure(s)."
 [ "$bad" -eq 0 ]

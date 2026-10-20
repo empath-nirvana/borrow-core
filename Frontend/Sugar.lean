@@ -2339,10 +2339,12 @@ def loadField (sp : Span) (a : Frontend.Life) (As Bs : VTy) (rolls : Bool) (j k 
       (projectField sp rolls j k (.var sp "io_fv") fun v => .ret sp (.boxed sp (.var sp y.name) v)))))))
 
 /-- `R.f`, the field `j` of `k` of a one-constructor declaration (`rolls` when it is a `μ`), the
-receiver `R` of type `T` (SPEC §42, E5): its components, when it is persistent; through
-`withload`, when it is an `imm` borrow; at a binding `let y = x.f;` (`head` the place `x`), through
-`withswap` when it is a `mut` borrow, and through `x` lent `&x` otherwise. A field read through a
-borrow copies it: the field is persistent.  `[spec §42]` -/
+receiver `R` of type `T` (SPEC §42, E5): its components, when it is persistent; when it is an
+`imm` borrow, the record copied out (`*R`) and projected when it is persistent, and through
+`withload` otherwise; at a binding `let y = x.f;` (`head` the place `x`), through `withswap` when
+it is a `mut` borrow, and otherwise by taking `x` apart and putting it back in place, as `modify`
+runs on a `let mut` value (SPEC §41), `x` rebound. A field read through a borrow, or that puts the
+record back, copies it: the field is persistent.  `[spec §42]` -/
 def fieldRead (c : TCx) (sp fsp : Span) (f : String) (j k : Nat) (rolls : Bool) (R : Val)
     (head : Option Ident) (T : CVTy) : DM Val := do
   let fieldTy (A : CVTy) : DM CVTy := do
@@ -2359,6 +2361,9 @@ def fieldRead (c : TCx) (sp fsp : Span) (f : String) (j k : Nat) (rolls : Bool) 
   | .imm a A => do
     let B ← fieldTy A
     copied B
+    -- A persistent record is copied out, `*e`, and projected.
+    if Class.of A == .persistent then
+      return .run sp (projectField fsp rolls j k (.app fsp (.sugar fsp .deref) R) fun v => .ret fsp v)
     pure (loadField fsp (← c.surfaceL fsp a) (← c.surface fsp A) (← c.surface fsp B) rolls j k R)
   | .mut a A => do
     let some x := head | throw (bindIt "a `mut` borrow")
@@ -2381,12 +2386,20 @@ def fieldRead (c : TCx) (sp fsp : Span) (f : String) (j k : Nat) (rolls : Bool) 
       return .run sp (projectField fsp rolls j k R fun v => .ret fsp v)
     match head with
     | some x => do
+      -- The value taken apart and put back, in place, as `modify` runs on a `let mut` value
+      -- (SPEC §41): `x` rebound by the lend.
       let B ← fieldTy T
       copied B
       let Ts ← c.surface fsp T
-      let Bs ← c.surface fsp B
-      lendBorrow c fsp x .imm T B fun l mv =>
-        boxedResult fsp l (.ret fsp (loadField fsp (.var fsp l) Ts Bs rolls j k (.var fsp mv)))
+      let pre := s!"io_fw{fsp.start.line}_{fsp.start.col}_"
+      let vars := Data.fieldVars pre k
+      let r := s!"io_fr{fsp.start.line}_{fsp.start.col}"
+      let rebuilt : Val := Data.tupleV fsp (vars.map (Val.var fsp ·))
+      let rebuilt := if rolls then .ascribe fsp (.roll fsp rebuilt) Ts else rebuilt
+      let body := Data.letTuple fsp (if rolls then .unroll fsp (.var fsp r) else .var fsp r) vars
+        (.ret fsp (.pair fsp rebuilt (.var fsp ((vars[j]?).getD r)))) (· ++ "r")
+      pure (.run sp (.letPair fsp ⟨r, fsp⟩ ⟨"io_mu", fsp⟩ (.pair fsp (.lend x.span x .mut) (.unit fsp))
+        body))
     | none => match R with
       | .var .. => throw (bindIt "a value that is not persistent")
       | R => pure (.run sp (projectField fsp rolls j k R fun v => .ret fsp v))

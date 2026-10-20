@@ -1,0 +1,19 @@
+-- The rules of SPEC §42's table that need no loop and no recursion, beside `data-forms.core.bc`,
+-- which writes their elaboration by hand: a block built with `box` (E2) and freed by a `box`
+-- pattern (M1), a record literal written out of order (E4), a field read (E5), and a match over
+-- two columns with a literal (M2).
+--
+-- Answer: i32[12]: 5, then 3 + 4.
+
+data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)
+
+data P = { x: i32, v: i32 }
+
+data State = Locked | Open
+
+main -> i32 =
+  let t = box Node(Leaf, 5, Leaf);
+  let n = match t { Leaf -> 0 | box Node(l, v, r) -> v };
+  let p = P { v: 4, x: 3 };
+  let s = match (Open, n) { (Locked, _) -> 0 | (Open, 5) -> p.x + p.v | (Open, _) -> 1 };
+  n + s

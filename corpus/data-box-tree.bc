@@ -1,0 +1,28 @@
+-- A binary tree declared with `data` (SPEC §42): `Node` has a field of the tree's own type, so it
+-- is a block, one cell per field, allocated whole where a node is built, `box Node(…)`. The sum
+-- consumes the tree: the pattern `box Node(l, v, r)` frees each node's block and binds its
+-- fields' values, and the recursion runs under `bounded` (SPEC §20).
+--
+-- `Tree` elaborates to `mu X. 1 + (ref X * (ref i32 * ref X))` with `shape Tree_Node`, `Leaf` to
+-- `roll (inl ())` and `box Node(l, v, r)` to `roll (inr (alloc_s[Tree_Node] (l, (v, r))))`
+-- (`corpus/sugar/data-box-tree.core.bc` writes it by hand). The fold block of the design, a sum
+-- through an `imm` borrow with constructor patterns, waits for §11.1's A2
+-- (`corpus/pending/data-fold-block.bc`).
+--
+-- Answer: i32[6], the tree 1 ← 2 → 3; `live 0`: the match frees every block. A sum that skips a
+-- node gives less, one that counts a node twice more.
+include rec
+
+data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)
+
+fn branch(l: Tree, v: i32, r: Tree) -> Tree = box Node(l, v, r)
+
+fn sum(t: Tree) -> i32 =
+  match t {
+    Leaf -> 0
+  | box Node(l, v, r) -> sum(l) + v + sum(r)
+  }
+
+main -> i32 =
+  with on_exhausted(!{ u -> 0 - 1 }) {
+    sum(branch(branch(Leaf, 1, Leaf), 2, branch(Leaf, 3, Leaf))) }
