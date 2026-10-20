@@ -36,14 +36,11 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-! ### O1: the weakening the elaboration needs -/
 
-/-- **O1.** A derivation stays one under a new dead binder at the front, its term shifted.
-`sorry` (O1): one induction over `CDerives`'s rules, each case its rule at the shifted context
-(`Ctx.SplitP.dead`, `Ctx.DeadP.cons`, `Ctx.SoloP.there`) and `Expr.shift`'s commutation with
-`subst` at `letPoly`; no inversion. Cost (growth discipline): one case per `CDerives` rule, stated
-in the PR. -/
+/-- **O1.** A derivation stays one under a new dead binder at the front, its term shifted: Core's
+`CDerives.insert_dead` at `Γa = []`, `Γd = [⟨T, false⟩]`. -/
 theorem CDerives.shift_dead {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (T : VTy)
-    (h : CDerives Δ Γ e j) : CDerives Δ (⟨T, false⟩ :: Γ) (e.shift 1 0) j := by
-  sorry
+    (h : CDerives Δ Γ e j) : CDerives Δ (⟨T, false⟩ :: Γ) (e.shift 1 0) j :=
+  Core.CDerives.insert_dead (Γd := [⟨T, false⟩]) (.cons .nil) h [] Γ rfl
 
 /-! ### 1. Elaboration -/
 
