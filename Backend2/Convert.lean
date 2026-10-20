@@ -296,14 +296,15 @@ def bin (op : HostOp) (a b : Var) (t : LTy) (k : Var → CM Tm) : CM Tm := do
   return .letv p (.pair a b) (.letv r (.prim (.host op) [p]) (← k r))
 
 /-- `yes` when `a < b` (unsigned), else `no`; `a` and `b` consumed. -/
-def ifLt (a b : Var) (yes no : CM Tm) : CM Tm :=
-  bin (.rel .w32 .lt_u) a b boolT fun c => do
-    let u₁ ← fresh .unit
-    let u₂ ← fresh .unit
-    return .case c u₁ (.drop u₁ (← no)) u₂ (.drop u₂ (← yes))
+def ifLt (a b : Var) (yes no : CM Tm) : CM Tm := do
+  let c ← fresh boolT
+  let u₁ ← fresh .unit
+  let u₂ ← fresh .unit
+  return .letv c (.prim .cntLt [a, b]) (.case c u₁ (.drop u₁ (← no)) u₂ (.drop u₂ (← yes)))
 
-def add1 (i : Var) (k : Var → CM Tm) : CM Tm :=
-  lit32 1 fun one => bin (.bin .w32 .add) i one i32T k
+def add1 (i : Var) (k : Var → CM Tm) : CM Tm := do
+  let j ← fresh i32T
+  return .letv j (.prim .cntSucc [i]) (← k j)
 
 def letpairM (p : Var) (k : Var → Var → CM Tm) : CM Tm := do
   match ← tyOf p with

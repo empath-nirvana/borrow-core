@@ -384,6 +384,9 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
     else pure (.int 0)
   | .litView _, _ => bad "litView is not built yet"
   | .io k, [v] => ioOp k v
+  | .cntLt, [.int i, .int n] =>
+    pure (.inj (decide (i.toUInt32 < n.toUInt32)) .unit)
+  | .cntSucc, [.int i] => pure (.int ((i + 1) &&& 0xFFFFFFFF))
   | .clampLen, [.int c] => pure (.int (if c.toUInt32 < 0x80000000 then c &&& 0xFFFFFFFF else 0))
   | .staticCell k, [v] => do
     let a := staticAt + k

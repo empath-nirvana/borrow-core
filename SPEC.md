@@ -7958,8 +7958,8 @@ count counts.
 
 ### Open
 
-- The native run times of `parse` and `wordcount` are unchanged by it (`docs/n1-plan.md`, *As
-  built*): LLVM had inlined the instantiations.
+- The native run times of `parse` and `wordcount` are unchanged by it: LLVM had inlined the
+  instantiations. The gap's cause was the counted loops' index (§46).
 
 ## 45. Entry 44 — the new backend: codata's η-thunk as a derived node, one code for literal tables (N1 part 2)
 
@@ -8058,6 +8058,16 @@ they were bound before it; and the step's read is marked.
   read in range whatever the view (`walk_get_split`).
 - **The lowering** (`Backend2/Convert.lean`): inside a walk with `read`, a `walkGet` node's read
   is `idx` with no test.
+
+### The counted loops' index
+
+The loops the new backend generates (`count_fold`, `count_try`, `array_new`'s, `array_free`'s, an
+array's destructor) run their index `i` below a bound under `2³¹` (`arrLen`, `clampLen`), and
+step it only after `i < n`. Both are `i32`s held zero-extended, so the test is a word compare and
+the step a word add that does not wrap (`Op.cntLt`, `Op.cntSucc`), where they were the 32-bit
+host operations with their truncations. This is the cause of the gap §44's measurement left:
+with it `parse` runs at the old backend's time (153 ms against 153 ms, Rust 127 ms) and
+`wordcount` within 4% of it (132 ms against 127 ms, Rust 104 ms), native, median of 11.
 
 ### Programs
 
@@ -8460,7 +8470,8 @@ the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Backend/Wasm
 
 - **0.94** (2026-10-20) — §46 (#636, N1 part 2, L-3): a counted walk's read in range is a typed
   fact: `walk`'s `read` (`walkReadB`) and the marked read `walkGet`; the new backend drops the
-  read's test. A shared view's copy and length are taken inside the walk's value.
+  read's test. A shared view's copy and length are taken inside the walk's value. The generated
+  counted loops test and step their index as words (`cntLt`, `cntSucc`).
 
 - **0.93** (2026-10-20) — §45 (#636, N1 part 2): codata's η-thunk is the derived node `nuEta`,
   built by the checker; at `f = unfold step` the new backend computes `f s` where the thunk is

@@ -112,6 +112,11 @@ inductive Op where
   | io (k : IOKind)
   /-- `len(c)`: `c` when `c < 2³¹`, else `0` (SPEC §9). -/
   | clampLen
+  /-- `i < n` of a counted loop's index and bound, the bound below `2³¹` (`arrLen`): `inr ()` when
+  it holds, else `inl ()`. Both are `i32`s, held zero-extended, so they are compared as words. -/
+  | cntLt
+  /-- `i + 1` of a counted loop's index below its bound: below `2³¹`, so it does not wrap. -/
+  | cntSucc
   /-- A capability's cell (SPEC §11, §34): the `k`-th static word of the program's data, holding
   the argument. Freeing it frees nothing. -/
   | staticCell (k : Nat)

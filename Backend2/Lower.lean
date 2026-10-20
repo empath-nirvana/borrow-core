@@ -399,6 +399,13 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
   | .divLit o => do
     let byte := (← L).sh (← argN 0) == .int .w8
     emit d (← divLitVals o byte ((← arg 0) ++ (← arg 1)))
+  | .cntLt => do
+    let i ← one (args.getD 0 0)
+    let k ← one (args.getD 1 0)
+    emit d [extendU (ltu64 i k)]
+  | .cntSucc => do
+    let i ← one (args.getD 0 0)
+    emit d [add64 i (.c64 1)]
   | .clampLen => do
     let c ← one (args.getD 0 0)
     let t ← fresh1
