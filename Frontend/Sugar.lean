@@ -1853,6 +1853,10 @@ structure DivSt where
   /-- The row of the callback of the borrow block being elaborated, when its body performs
   operations: the block is the unwinding form of its borrow (SPEC §19). -/
   cbRow : Option Frontend.Check.CRow := none
+  /-- The result type of the borrow block of a place's scope being elaborated (`BCC_MUT=place`,
+  #626): the scope's result, which its context expects, and the variables it hands back. Used
+  when the block's body does not synthesize its type (a loop on its spine). -/
+  placeRes : Option CVTy := none
   /-- The answer type of each handler site whose clauses run after it (`HInfo.after`), as the type
   name `fx_res{n}`: an annotation that names it is its type.  `[spec §19]` -/
   siteRes : List (String × VTy) := []
@@ -2288,6 +2292,8 @@ def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
   match c.tyV (.var sp x.name) with
   | some (.ref _) => pure (.app sp (.app sp (.const sp C) place) cb)
   | some (.mut a _) =>
+    if !placeEnv then
+      throw ⟨x.span, s!"`{x.name}` is a borrow; lend it by passing it (a reborrow is not provided)"⟩
     -- A `mut` borrow lent `mut` is reborrowed for the call (`withbor3`); the borrow is handed back
     -- after it. This is the lend of a place's token (`BCC_MUT=place`, #626).
     if m == .mut then
@@ -2370,6 +2376,10 @@ def lendCall (c : TCx) (sp : Span) (f W : Val)
     | none => return none
   if vs.isEmpty || (apps.isNone && vs.length != 1) then return none
   let some (x, m, Px) := lendParam P W | return none
+  -- A place's token is reborrowed only at a `mut` borrow of its content; any other lend of it is
+  -- through its swap (`BCC_MUT=place`).
+  if let (true, some (.mut _ Ax)) := (placeEnv, c.tyV (.var x.span x.name)) then
+    unless m == .mut && (match Px with | .mut _ A => A == Ax | _ => false) do return none
   let (pm, w, A, fam) ← match Px with
     | .mut (.var w) A => pure (Mode.mut, w, A, false)
     | .imm (.var w) A => pure (Mode.imm, w, A, false)
@@ -2404,28 +2414,17 @@ def lendCall (c : TCx) (sp : Span) (f W : Val)
   some <$> lendBorrow c sp x m A Q fun l mv =>
     boxedResult sp l (.ret sp (.app sp (applied l) (replaceLend mv W)))
 
-/-- `f(…, &mut x, …)` at an owned parameter, with `x` a `mut` borrow `mut @a A` (a place's token,
-`BCC_MUT=place`, #626): the call takes the content and hands it back first, `f : … A … => A * R`,
-so it is the swap `withswap x (v -> f(…, v, …))`, which hands back the borrow and `R`. `none` when
-the lent place is not a `mut` borrow or the call's type is not of that form. -/
-def lendSwap (c : TCx) (sp : Span) (f W : Val) : DM (Option Val) := do
-  let rec lent : Val → Option (Ident × Mode)
-    | .lend _ x m => some (x, m)
-    | .pair _ V W => (lent V).orElse fun _ => lent W
-    | _ => none
-  let some (x, .mut) := lent W | return none
-  let some (.mut a A) := c.tyV (.var sp x.name) | return none
-  let (bang, R) ← match c.tyV f with
-    | some (.bang (.thunk (.arr _ (.ret (.tensor A' R))))) => if A' == A then pure (true, R) else return none
-    | some (.thunk (.arr _ (.ret (.tensor A' R)))) => if A' == A then pure (false, R) else return none
-    | _ => return none
-  let v := s!"io_sw{sp.start.line}_{sp.start.col}"
-  let As ← (c.surface sp A : Except Error VTy)
-  let Rs ← (c.surface sp R : Except Error VTy)
-  let f' := if bang then Val.unbang f.span f else f
-  let C : Const := .withswap (← (c.surfaceL sp a : Except Error Frontend.Life)) As Rs
-  pure (some (.app sp (.app sp (.const sp C) (.lend sp x .mut))
-    (.thunkv sp (.lam sp ⟨v, sp⟩ As (.ret sp (.app sp f' (replaceLend v W)))))))
+/-- The place a value lends, and how. -/
+def lentOf : Val → Option (Ident × Mode)
+  | .lend _ x m => some (x, m)
+  | .pair _ V W => (lentOf V).orElse fun _ => lentOf W
+  | _ => none
+
+/-- The value with its lent place replaced by the value `v`, lent the same way. -/
+def relend (v : String) : Val → Val
+  | .lend sp _ m => .lend sp ⟨v, sp⟩ m
+  | .pair sp V W => .pair sp (relend v V) (relend v W)
+  | V => V
 
 /-- The typing context `c` with the declarations made so far in scope (the instances and copies
 made while elaborating the declaration it is in). -/
@@ -3368,6 +3367,27 @@ def recMachine (scope : List Decl) (d : Decl) : SM Decl := do
     (.tensor sp (.bang sp (.lolli sp A Out)) (.bang sp (.lolli sp (.tensor sp K B) Out)))
     (.pair sp start resume) .none)
 
+/-- The variables of a right-nested tuple of variables. -/
+def varsOfTuple : Val → List String
+  | .var _ y => [y]
+  | .pair _ (.var _ y) W => y :: varsOfTuple W
+  | _ => []
+
+/-- The variables a body hands back beside its value: `handOn`'s terminal `return (io_bt, W)`. -/
+def handedOn : Comp → List String
+  | .bind _ x _ _ N _ => match N with
+    | .ret _ (.pair _ (.var _ t) W) => if x.name == "io_bt" && t == "io_bt" then varsOfTuple W else []
+    | N => handedOn N
+  | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N => handedOn N
+  | .case _ _ _ M _ _ => handedOn M
+  | _ => []
+
+/-- The right-nested tuple of the types. -/
+def tupleT : List CVTy → CVTy
+  | [] => .unit
+  | [t] => t
+  | t :: ts => .tensor t (tupleT ts)
+
 mutual
 /-- A value with its surface forms elaborated; `exp` is the type expected of it, when known. -/
 def surfV : Nat → TCx → Option CVTy → Val → DM Val
@@ -3501,7 +3521,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
     | .app sp (.app sp₂ (.sugar ksp (.borrow k x)) P) (.thunkv tsp (.lam lsp b _ S)) => do
       -- The callback's row, when this block is an unwinding borrow; blocks inside are not.
       let cbr := (← get).cbRow
-      modify fun st => { st with cbRow := none }
+      let pres := (← get).placeRes
+      modify fun st => { st with cbRow := none, placeRes := none }
       -- `borrow imm *g { 'y, v -> S }`: the content of the `imm` borrow `g` read through
       -- `withload`, `v` its view at `'y`, whatever its content's type (`*g` copies a persistent
       -- one). Nothing is handed back: the block's value is `((), B)`.  `[spec §36]`
@@ -3529,14 +3550,32 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
       let P' ← surfV n c none P
       let tP ← need P.span "the borrowed place" (c.tyV P')
+      -- A borrow block of a place's token (`BCC_MUT=place`, #626) that lends something other
+      -- than its whole content `mut` (an array's elements, a buffer, an `imm` borrow): the content
+      -- swapped out (`withswap`), lent by the rules for a value, and swapped back.
+      if let (true, .mut _ A, true) := (placeEnv, tP, k == .imm || k == .mut) then
+        let arrayish := match A with | .fam _ | .tensor .. => true | _ => false
+        if k == .imm || arrayish then
+          let id (s : String) : Ident := ⟨s, sp⟩
+          let v := s!"io_sv{sp.start.line}_{sp.start.col}"
+          let inner : Val := if arrayish then .var sp v else .app sp (.sugar sp (.call "alloc")) (.var sp v)
+          let blk : Val := .app sp (.app sp₂ (.sugar ksp (.borrow k x)) inner)
+            (.thunkv tsp (.lam lsp b (.name lsp "_") S))
+          let back : Val := if arrayish then .var sp "io_bc" else
+            .app sp (.sugar sp (.call "free")) (.var sp "io_bc")
+          let body : Comp := .bind sp (id "io_bb") none (.ret sp blk)
+            (.letPair sp (id "io_bc") (id "io_br") (.var sp "io_bb")
+              (.ret sp (.pair sp back (.var sp "io_br")))) false
+          return ← surfV n c exp (.app sp (.app sp₂ (.sugar ksp (.borrow .modify "")) P)
+            (.thunkv tsp (.lam lsp (id v) (.name lsp "_") body)))
       match k, tP with
       | .imm, .ref A | .mut, .ref A => do
         let dom ← need lsp "the block's bound" (c.elabL (.dom lsp))
         let c₁ := c.pushLife x dom
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := if k == .imm then .imm (.var v) A else .mut (.var v) A
-        let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
-        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
+        let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) ((pres.map .ret)) S
+        let B ← need tsp "the block's result" ((resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S')).orElse fun _ => pres)
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
@@ -3779,7 +3818,26 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       let f' ← surfV n c none f
       if W.lends then
         if let some V' ← lendCall c sp f' (← surfV n c none W) then return V'
-        if let some V' ← lendSwap c sp f' W then return V'
+        -- A place's token (`BCC_MUT=place`, #626) lent at a parameter other than a `mut` borrow
+        -- of its content: the content swapped out (`withswap`), lent to the call as a value
+        -- (`f(&v)`, `f(&mut v)` by the rules for a value), and swapped back.
+        if let (true, some (x, m)) := (placeEnv, lentOf W) then
+          if let some (.mut a A) := c.tyV (.var x.span x.name) then
+            let v := s!"io_sv{sp.start.line}_{sp.start.col}"
+            let r : Ident := ⟨s!"io_sr{sp.start.line}_{sp.start.col}", sp⟩
+            let body : Comp := .bind sp r none (.ret sp (.app sp f (relend v W)))
+              (.ret sp (.pair sp (.var sp v) (.var sp r.name))) false
+            let body' ← surfC n (c.push v (some A)) none body
+            let X ← need sp "the call's result"
+              (resultOfC (((← refresh c).push v (some A)).tyCL body'))
+            let B ← match X with
+              | .tensor _ B => pure B
+              | _ => throw ⟨sp, "internal error: a lend through a place's swap"⟩
+            let _ := m
+            let As ← c.surface sp A
+            let C := Const.withswap (← c.surfaceL sp a) As (← c.surface sp B)
+            return .app sp (.app sp (.const sp C) (.lend x.span x .mut))
+              (.thunkv sp (.lam sp ⟨v, sp⟩ As body'))
       let tf := c.tyV f'
       let (f', pW) := match tf with
         | some (.bang (.thunk (.arr A _))) => (Val.unbang f.span f', some A)
@@ -4025,6 +4083,13 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       if let some L ← (Frontend.Elab.LoopLend.hook c (dataFor (← get).sizedFns) sp x A M N lin :
           Except Error (Option Comp)) then
         return (← surfC n c exp L)
+      -- A place's scope (`BCC_MUT=place`): its block's result is what the context expects of the
+      -- scope, beside the variables the block hands back.
+      if x.name.startsWith "io_pb" then
+        if let (some R, .ret _ (.app _ (.app _ (.sugar _ (.borrow .mut _)) _) (.thunkv _ (.lam _ _ _ S)))) :=
+            (resultOfC exp, M) then
+          let ts := (handedOn S).map fun y => (c.tyV (.var sp y)).getD .unit
+          modify fun st => { st with placeRes := some (if ts.isEmpty then R else .tensor R (tupleT ts)) }
       -- An annotated head that performs operations of the current row is at that row, as the
       -- checker reads it (`F_Σ A` when `F A` fails): a handler site inside it handles its body at
       -- the row around it.  `[spec §33]`
@@ -5704,7 +5769,7 @@ def expandIncludes : Nat → List Decl → List Decl × List String →
       match library m.name with
       | some (.error e) => throw ⟨sp, e⟩
       | some (.ok src) => do
-        let l ← match parseProgram src with
+        let l ← match parseProgram src (lib := true) with
           | .ok l => pure l.decls
           | .error e => throw ⟨e.span, s!"lib/{m.name}.bc: {e.msg}"⟩
         match fuel with
@@ -5782,7 +5847,7 @@ recording the origins of generated code.  `[spec §11, §14]` -/
 def elaborateS (p : Program) : SM (Program × Nat) := do
   let libRaw (m : String) : Except Error (List Decl) :=
     match library m with
-    | some (.ok src) => match parseProgram src with
+    | some (.ok src) => match parseProgram src (lib := true) with
       | .ok l => pure l.decls
       | .error e => throw ⟨e.span, s!"lib/{m}.bc: {e.msg}"⟩
     | some (.error e) => throw ⟨Span.none, e⟩

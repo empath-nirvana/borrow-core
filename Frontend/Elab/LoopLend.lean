@@ -229,12 +229,82 @@ def Env.flush (E : Env) (sp : Span) (s : Seg) (rest : Comp) : LM (Comp → Comp)
     | .force _ h => if h.name == hole then K else T
     | T => T) fuel L
 
+/-- Whether an exit (`break`, `continue`, `return e`) is a terminal of the body or of a binding's
+head on its spine. -/
+def exitsOnSpine : Nat → Comp → Bool
+  | 0, _ => false
+  | n + 1, .bind _ _ _ M N _ => exitsOnSpine n M || exitsOnSpine n N
+  | n + 1, .letUnit _ _ N | n + 1, .letPair _ _ _ _ N => exitsOnSpine n N
+  | n + 1, .case _ _ _ M _ N => exitsOnSpine n M || exitsOnSpine n N
+  | _ + 1, .ret _ V => V.isExit
+  | _, _ => false
+
+/-- `M` with `k` applied at each terminal that is not an exit. -/
+def pushAfter : Nat → Comp → (Comp → Comp) → Comp
+  | 0, M, _ => M
+  | n + 1, .bind sp z A M N lin, k => .bind sp z A M (pushAfter n N k) lin
+  | n + 1, .letUnit sp V M, k => .letUnit sp V (pushAfter n M k)
+  | n + 1, .letPair sp y z V M, k => .letPair sp y z V (pushAfter n M k)
+  | n + 1, .case sp V y M z N, k => .case sp V y (pushAfter n M k) z (pushAfter n N k)
+  | _ + 1, T@(.ret _ V), k => if V.isExit then T else k T
+  | _ + 1, T, k => k T
+
+/-- A loop body with exits among its terminals, inside the block (`BCC_MUT=place`, where a place's
+scope holds a loop whose body exits): each stretch that uses the borrow in a borrow block of its
+own, handing on the variables in `ws` it assigns and the names what follows reads; an exit, and
+an arm that leads to one, outside every block, so that it stays on the loop body's spine. -/
+def Env.exitBody (E : Env) (ws : List String) : Nat → Seg → Comp → LM Comp
+  | 0, _, M => pure M
+  | n + 1, s, S@(.bind sp z A M N lin) =>
+    if isLoopHead E.divCall M then terminal s S
+    -- A head that exits, `if c { break }; N`: what follows is in each arm that does not.
+    else if exitsOnSpine fuel M then E.exitBody ws n s (pushAfter fuel M fun T => .bind sp z A T N lin)
+    else E.exitBody ws n (s.push (fun K => .bind sp z A M K lin) [z.name] (E.usesC M)) N
+  | n + 1, s, .letUnit sp V M => E.exitBody ws n (s.push (fun K => .letUnit sp V K) [] (E.usesV V)) M
+  | n + 1, s, .letPair sp y z V M =>
+    E.exitBody ws n (s.push (fun K => .letPair sp y z V K) [y.name, z.name] (E.usesV V)) M
+  | n + 1, s, S@(.case sp V y M z N) => do
+    if !(exitsOnSpine fuel M || exitsOnSpine fuel N) then return ← terminal s S
+    let (s, V) ← if E.usesV V then do
+        let v ← E.fresh "ls"
+        pure (s.push (fun K => .bind sp ⟨v, sp⟩ none (.ret sp V) K false) [v] true, Val.var sp v)
+      else pure (s, V)
+    let pre ← flushW sp s (.case sp V y M z N)
+    pure (pre (.case sp V y (← E.exitBody ws n {} M) z (← E.exitBody ws n {} N)))
+  | _ + 1, s, T@(.ret sp V) => do
+    if V.isExit && !E.usesV V then
+      let pre ← flushW sp s T
+      return pre T
+    terminal s T
+  | _ + 1, s, T => terminal s T
+where
+  /-- `Env.flush`, also handing on the variables of `ws` the stretch assigns. -/
+  flushW (sp : Span) (s : Seg) (rest : Comp) : LM (Comp → Comp) := do
+    if !s.uses then return s.wrap
+    let vs := s.names.eraseDups.filter fun y =>
+      !E.aliases.contains y && (mentionsC y rest || ws.contains y)
+    let k ← get
+    let hole := s!"io_lk{E.B.sp.start.line}_{E.B.sp.start.col}_{k}"
+    set (k + 1)
+    let L ← E.blockBind sp (s.wrap (.ret sp (tupleVal sp vs))) vs (.force sp ⟨hole, sp⟩)
+    pure fun K => spliceTail (fun T => match T with
+      | .force _ h => if h.name == hole then K else T
+      | T => T) fuel L
+  /-- The last stretch and the terminal `T`: one block handing on `ws`. -/
+  terminal (s : Seg) (T : Comp) : LM Comp := do
+    if !s.uses && !E.usesC T then return s.wrap T
+    let body := s.wrap (spliceTail (fun T => match T with
+      | .ret _ (.unit _) => .ret T.span (tupleVal T.span ws)
+      | T => .bind T.span ⟨"io_u", T.span⟩ none T (.ret T.span (tupleVal T.span ws)) false) fuel T)
+    E.blockBind T.span body ws (.ret T.span (.unit T.span))
+
 /-- The body of a `for` inside the block: in a borrow block of its own when it uses the borrow,
 handing on the variables in scope that it assigns. -/
 def Env.forBody (E : Env) (scope : List String) (sp : Span) (ys : List String) (M : Comp) : LM Comp := do
   if !E.usesC M then return M
   let ws := (spineNames fuel M).eraseDups.filter fun z =>
     scope.contains z && !E.aliases.contains z && !ys.contains z
+  if Frontend.placeEnv && exitsOnSpine fuel M then return ← E.exitBody ws fuel {} M
   -- A terminal `()` is dropped, not bound.
   let body := spliceTail (fun T => match T with
     | .ret _ (.unit _) => .ret T.span (tupleVal T.span ws)
@@ -384,10 +454,12 @@ def spineAliases : Nat → List String → List String → Comp → List String
 
 /-- `x <- return B; N` where `B` is a borrow block whose body loops, rewritten per observation and
 spliced into the enclosing body: `none` when `B` is not such a block. `c` is the typing context at
-the binding.  `[spec §14]` -/
-def lendBind (c : TCx) (divCall : Val → Bool) (fin' : TCx → Finite) (sp : Span) (x : Ident)
-    (A : Option VTy) (V : Val) (N : Comp) (lin : Bool) : Except Error (Option Comp) := do
+the binding; the block's body `S` is taken as `body S`.  `[spec §14]` -/
+def lendBind₁ (c : TCx) (divCall : Val → Bool) (fin' : TCx → Finite) (sp : Span) (x : Ident)
+    (A : Option VTy) (V : Val) (N : Comp) (lin : Bool) (body : Comp → Comp) :
+    Except Error (Option Comp) := do
   let some B := Block.of? V | return none
+  let B := { B with S := body B.S }
   -- A `for` in the block's body is read in the body's context, where the block's borrow is bound:
   -- on an owned array it is a view, and a `for` over it a counted loop (SPEC §16).
   let cB : TCx := match c.tyV B.P, c.elabL (.dom B.lsp) with
@@ -432,6 +504,33 @@ def lendBind (c : TCx) (divCall : Val → Bool) (fin' : TCx → Finite) (sp : Sp
     | .ret _ (.var _ y), none => if y == x.name then id else fun T => .bind sp x A T N lin
     | _, _ => fun T => .bind sp x A T N lin
   pure (some (bindP (spliceTail rest fuel L)))
+
+/-- `lendBind₁`, with the nested blocks over a loop on the body's spine rewritten first. -/
+def lendBind (c : TCx) (divCall : Val → Bool) (fin' : TCx → Finite) (sp : Span) (x : Ident)
+    (A : Option VTy) (V : Val) (N : Comp) (lin : Bool) : Except Error (Option Comp) :=
+  lendBindD 8 c divCall fin' sp x A V N lin
+where
+  /-- `lendBind` with each nested block over a loop on the body's spine rewritten first, to the
+  depth `d` (`preSplit`): blocks nest when a body holds several places (`BCC_MUT=place`). -/
+  lendBindD : Nat → TCx → (Val → Bool) → (TCx → Finite) → Span → Ident → Option VTy → Val → Comp →
+      Bool → Except Error (Option Comp)
+  | 0, c, divCall, fin', sp, x, A, V, N, lin => lendBind₁ c divCall fin' sp x A V N lin id
+  | d + 1, c, divCall, fin', sp, x, A, V, N, lin => do
+    let some B := Block.of? V | return none
+    if !Frontend.placeEnv then return ← lendBind₁ c divCall fin' sp x A V N lin id
+    let rec preSplit : Nat → Comp → Except Error Comp
+      | 0, S => pure S
+      | k + 1, .bind bsp y Ay (.ret rsp W) K l => do
+        let K' ← preSplit k K
+        match ← lendBindD d c divCall fin' bsp y Ay W K' l with
+        | some L => pure L
+        | none => pure (.bind bsp y Ay (.ret rsp W) K' l)
+      | k + 1, .bind bsp y Ay M K l => return .bind bsp y Ay M (← preSplit k K) l
+      | k + 1, .letUnit lsp W K => return .letUnit lsp W (← preSplit k K)
+      | k + 1, .letPair lsp a b W K => return .letPair lsp a b W (← preSplit k K)
+      | _ + 1, S => pure S
+    let S' ← preSplit fuel B.S
+    lendBind₁ c divCall fin' sp x A V N lin (fun _ => S')
 
 /-- `let r = &x; S` (or `&mut x`), with `x` a name: the borrow block `borrow imm x { r -> S }`
 (`borrow mut`) over the rest of the body, after which `x` is rebound. The place may not be used
