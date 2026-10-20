@@ -228,11 +228,14 @@ structure Cap where
   slot : Bool := false
 
 /-- The variable holding a copy's capability of `e` (and of the slot named `x`), and its
-lifetime's name. -/
-def capVar (e : String) (x : Option String) : String :=
-  "fx_c_" ++ e.toLower ++ ((x.map ("_" ++ ·)).getD "")
-def capLife (e : String) (x : Option String) : String :=
-  "fx_l_" ++ e.toLower ++ ((x.map ("_" ++ ·)).getD "")
+lifetime's name: one per effect and slot. `e` has its first letter lowered (an effect's name starts
+with a capital, so no two effects share it); a slot's name follows the length of `e`'s, which
+says where `e` ends. -/
+def capKey (e : String) (x : Option String) : String := match x with
+  | none => "_" ++ e.decapitalize
+  | some x => s!"n{e.length}_{e.decapitalize}_{x}"
+def capVar (e : String) (x : Option String) : String := "fx_c" ++ capKey e x
+def capLife (e : String) (x : Option String) : String := "fx_l" ++ capKey e x
 
 /-- A capability's type: `mut 'l S`, or the threaded variable's `W`. -/
 def Cap.ty (sp : Span) (c : Cap) : VTy := match c.thr with

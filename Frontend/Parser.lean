@@ -232,19 +232,26 @@ def lookName (x : String) (sp : Span := Span.none) : P String := do
 def lookIdent (x : Ident) : P Ident := return { x with name := ← lookName x.name x.span }
 
 /-- A name for a binder that shadows `x`: `x1`, `x2`, …, the first no source name or earlier
-renamed binder has. -/
-def freshVar (x : String) : P String := do
+renamed binder has; messages name it as `written`. -/
+def freshVar (x : String) (written : String := x) : P String := do
   let s ← get
   let rec go : Nat → Nat → String
     | 0, k => s!"{x}{k}"
     | f + 1, k => let c := s!"{x}{k}"; if s.taken.contains c then go f (k + 1) else c
   let y := go (s.taken.length + 1) 1
-  set { s with taken := y :: s.taken, renamed := (y, x) :: s.renamed }
+  set { s with taken := y :: s.taken, renamed := (y, written) :: s.renamed }
   pure y
 
+/-- A name the elaboration generates names with: `io_…`, `fx_…`, `hy{n}…` (Hygiene). Generated
+code binds and recognises these names, so a binder of the source never has one. -/
+def generatedName (x : String) : Bool :=
+  x.startsWith "io_" || x.startsWith "fx_" ||
+    (x.startsWith "hy" && ((x.toList.drop 2).head?.map Char.isDigit).getD false)
+
 /-- A binder of the name `x`, in scope from here to the end of the enclosing `withScope`: its own
-name, or a fresh one when a binder of `x` is already in scope, so that no binder shadows another
-(SPEC §41, rule R1). -/
+name, or a fresh one when a binder of `x` is already in scope, so that no binder shadows another,
+or when `x` is a name the elaboration generates (`generatedName`), so that no binder is taken for
+generated code's (SPEC §41, rule R1). -/
 def bindName (x : Ident) : P Ident := do
   let s ← get
   -- Core text has no assignment: a binding of a name in scope is how it passes a variable on.
@@ -253,7 +260,9 @@ def bindName (x : Ident) : P Ident := do
   if capabilityNames.contains x.name then
     pushBinder x x.name
     return x
-  let y ← if s.scope.any (·.1 == x.name) then freshVar x.name else pure x.name
+  let y ← if s.scope.any (·.1 == x.name) then freshVar x.name
+    else if generatedName x.name then freshVar ("u" ++ x.name) x.name
+    else pure x.name
   pushBinder x y
   pure { x with name := y }
 
