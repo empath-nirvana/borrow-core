@@ -2325,16 +2325,30 @@ def slotStore : Nat → Pos → Bool → String → Span → P Comp
     slotCodeWrite xsp x
     let V ← val n
     let o ← freshName "io_fo"
-    let sw ← slotLendsV V (except := [x])
-      (fun V => Frames.swapV xsp x o (.ret xsp (.pair xsp (Frames.vReads x o V) (.unit xsp))))
     let d ← freshName "io_fs"
+    -- A value that does not read the slot is evaluated first, as Core code, and stored after:
+    -- the swap's callback then does nothing but the store. One that reads it takes the old
+    -- content `o` in the swap (`x = push(x, 1)` of a linear content).
+    let (pre, V) ← if Frames.vNames x V then pure (none, V) else do
+      let t ← freshName "io_fst"
+      pure (some t, V)
+    let sw ← match pre with
+      | some t => pure (Frames.swapV xsp x o (.ret xsp (.pair xsp (.var xsp t) (.unit xsp))))
+      | none =>
+        let mk : Val → Val := fun W => Frames.swapV xsp x o (.ret xsp (.pair xsp (Frames.vReads x o W) (.unit xsp)))
+        slotLendsV V (except := [x]) mk
+    let wrapPre (M : Comp) : P Comp := match pre with
+      | some t => do
+        let V' ← slotLendsV V
+        pure (.bind V.span ⟨t, V.span⟩ none (.ret V.span V') M false)
+      | none => pure M
     if !head && (← isSym ";") then
       discard bump
       let N ← comp n
       let sp ← spanFrom st
-      return .bind sp ⟨d, sp⟩ none (.ret sp sw) N false
+      return ← wrapPre (.bind sp ⟨d, sp⟩ none (.ret sp sw) N false)
     let sp ← spanFrom st
-    pure (.bind sp ⟨d, sp⟩ none (.ret sp sw) (.ret sp (.var sp d)) false)
+    wrapPre (.bind sp ⟨d, sp⟩ none (.ret sp sw) (.ret sp (.var sp d)) false)
 
 /-- `x.f = e`, a field update (SPEC §42, E6): `modify &mut x { r -> (r).{f = e} }` of a `let mut`
 `x`, or `modify x { r -> … }`, whose body rebuilds the record `r` with `e` at `f` (`VSugar.update`,
