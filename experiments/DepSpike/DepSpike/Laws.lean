@@ -19,7 +19,9 @@ argument, with no new machinery in `Core/`?
 * `max_comm`, `max_ge_left`: the laws `max(a, b) == max(b, a)` and `max(a, b) >= a`, read as
   statements about every run. `max_assoc` and `max_unit`: `max` and `i32[0x80000000]` are a
   monoid, the law a parallel reduction needs (#620); nested calls compose through
-  `steps_plug_det`. The facts about `smax` are closed by `omega` through `toInt`.
+  `steps_plug_det`.
+* `split_runs`, `split_whole`, `split_disjoint`: the machine's `split` (what `split_at_mut`
+  runs) answers two families whose leaves, in order, are the input's, and are distinct. The facts about `smax` are closed by `omega` through `toInt`.
   `bv_decide` closes them too, but its proofs depend on axioms it generates for native
   evaluation, outside `[propext, Classical.choice, Quot.sound]`, so it is not used.
 
@@ -132,6 +134,7 @@ theorem step1_seq_inv {μ μ₁ : Heap} {e e₁ : Expr}
 /-- Signed `max` on the bits, as the language's `lt_s` reads them. -/
 def smax (a b : UInt32) : UInt32 := if Prim.rel .lt_s a.toBitVec b.toBitVec then b else a
 
+omit [HostIs ℍ] in
 /-- The host's answer at `lt_s (a, b)`, at a conforming host. -/
 theorem call_lt (hℍ : ℍ.Conforms) (a b : UInt32) :
     ℍ.call (.rel .w32 .lt_s) (Val.pair (.i32 a) (.i32 b)) =
@@ -265,8 +268,8 @@ theorem max_comm (hℍ : ℍ.Conforms) (a b : UInt32) {μ μ' : Heap} {w : Val} 
       BitVec.toInt_inj.mp
     by_cases h₁ : a.toBitVec.slt b.toBitVec <;> by_cases h₂ : b.toBitVec.slt a.toBitVec <;>
       simp only [h₁, h₂, if_true, if_false, Bool.false_eq_true] <;>
-      simp only [BitVec.slt_iff_toInt_lt, Bool.not_eq_true, decide_eq_false_iff_not] at h₁ h₂ <;>
-      first | rfl | omega | exact hi (by omega) | exact (hi (by omega)).symm
+      simp only [BitVec.slt_iff_toInt_lt] at h₁ h₂ <;>
+      first | rfl | omega | exact hi (by omega)
   rw [this]
 
 /-- **`law max_ge_left: max(a, b) >= a`**, signed: every run's answer is at least `a`. -/
@@ -278,7 +281,7 @@ theorem max_ge_left (hℍ : ℍ.Conforms) (a b : UInt32) {μ μ' : Heap} {w : Va
   simp only [smax, Prim.rel]
   by_cases h₁ : a.toBitVec.slt b.toBitVec <;>
     simp only [h₁, if_true, if_false, Bool.false_eq_true] <;>
-    simp [BitVec.sle_iff_toInt_le, BitVec.slt_iff_toInt_lt] at h₁ ⊢ <;> omega
+    (simp [BitVec.sle_iff_toInt_le, BitVec.slt_iff_toInt_lt] at h₁ ⊢; all_goals omega)
 
 /-! ### A monoid law, as #620's parallel reduce asks for it -/
 
@@ -321,14 +324,11 @@ theorem max_assoc (hℍ : ℍ.Conforms) (a b c : UInt32) {μ μ' : Heap} {w : Va
   have : smax (smax a b) c = smax a (smax b c) := by
     apply UInt32.toBitVec_inj.mp
     simp only [smax, Prim.rel]
-    have hi : ∀ x y : UInt32, x.toBitVec.toInt = y.toBitVec.toInt → x.toBitVec = y.toBitVec :=
-      fun _ _ => BitVec.toInt_inj.mp
     by_cases h₁ : a.toBitVec.slt b.toBitVec <;> by_cases h₂ : b.toBitVec.slt c.toBitVec <;>
       by_cases h₃ : a.toBitVec.slt c.toBitVec <;>
       simp only [h₁, h₂, h₃, if_true, if_false, Bool.false_eq_true] <;>
-      simp only [BitVec.slt_iff_toInt_lt, Bool.not_eq_true, decide_eq_false_iff_not,
-        decide_eq_true_eq] at h₁ h₂ h₃ ⊢ <;>
-      first | rfl | omega | exact hi _ _ (by omega)
+      simp only [BitVec.slt_iff_toInt_lt] at h₁ h₂ h₃ ⊢ <;>
+      first | rfl | omega
   rw [this]
 
 /-- **`law max_unit: max(i32[0x80000000], a) == a`**: the least signed `i32` is `max`'s unit. -/
@@ -341,12 +341,69 @@ theorem max_unit (hℍ : ℍ.Conforms) (a : UInt32) {μ μ' : Heap} {w : Val} :
     simp only [smax, Prim.rel]
     by_cases h₁ : (0x80000000 : UInt32).toBitVec.slt a.toBitVec <;>
       simp only [h₁, if_true, if_false, Bool.false_eq_true]
-    simp only [BitVec.slt_iff_toInt_lt, Bool.not_eq_true, decide_eq_false_iff_not] at h₁
+    simp only [BitVec.slt_iff_toInt_lt] at h₁
     apply BitVec.toInt_inj.mp
     have hlo := BitVec.le_toInt a.toBitVec
     have : (0x80000000 : UInt32).toBitVec.toInt = -2147483648 := by decide
     omega
   rw [this]
+
+/-! ### `split_at_mut`: the halves are disjoint and together are the input -/
+
+/-- The only step of `split ((ℓ, n), i)` is the machine's `split`. -/
+theorem split_runs {μ μ' : Heap} {ℓ : Loc} {n i : UInt32} {w : Val} :
+    Steps (ℍ := ℍ) μ (.app (.prim .split) (Val.pair (Val.arr ℓ n) (.i32 i)).1) μ' w.1 ↔
+      μ' = μ ∧ w = splitAns ℓ n i := by
+  have hu : ∀ μ₁ e₁, Step1 (ℍ := ℍ) μ (.app (.prim .split) (Val.pair (Val.arr ℓ n) (.i32 i)).1)
+      μ₁ e₁ → μ₁ = μ ∧ e₁ = (splitAns ℓ n i).1 := by
+    intro μ₁ e₁ h
+    have hh := step1_top h fun K c hE hK => by
+      cases K with
+      | hole => exact absurd rfl hK
+      | appR f K =>
+          simp only [Kont.plug, Expr.app.injEq] at hE
+          exact K.isVal_of_plug (hE.2 ▸ (Val.pair (Val.arr ℓ n) (.i32 i)).2)
+      | appL K u =>
+          simp only [Kont.plug, Expr.app.injEq] at hE
+          exact K.isVal_of_plug (hE.1 ▸ IsVal.prim)
+      | _ => simp [Kont.plug] at hE
+    generalize hE : Expr.app (.prim .split) (Val.pair (Val.arr ℓ n) (.i32 i)).1 = E at hh
+    cases hh with
+    | split ℓ' n' i' =>
+        simp only [Expr.app.injEq, Expr.val, Val.prim, Val.pair, Val.arr, Val.i32, Val.loc,
+          Expr.pair.injEq, Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq, Expr.loc.injEq,
+          true_and] at hE
+        obtain ⟨⟨rfl, rfl⟩, rfl⟩ := hE
+        exact ⟨rfl, rfl⟩
+    | _ => simp_all [BoLo.hndE, BoLo.ubindE, BoLo.ccatchE, BoLo.cfinE, Expr.val]
+  constructor
+  · intro hs
+    exact steps_from_val (steps_peel hs (by simp [Val.pair, Val.arr, Val.i32, Val.loc]) hu)
+  · rintro ⟨rfl, rfl⟩
+    exact .more (Step1.head (.split μ' ℓ n i)) (.refl _ _)
+
+/-- The leaf locations of the family `(ℓ, n)`: `ℓ, ℓ + 1, …, ℓ + n − 1`. -/
+def leaves (ℓ : Loc) (n : Nat) : List Loc := (List.range n).map (ℓ + ·)
+
+/-- **`law split_whole`**: at `i ≤ n`, the two halves `split` answers are, in order, the leaves of
+the input. -/
+theorem split_whole {ℓ : Loc} {n i : UInt32} (h : i ≤ n) :
+    leaves ℓ i.toNat ++ leaves (ℓ + i.toNat) (n - i).toNat = leaves ℓ n.toNat := by
+  have hle : i.toNat ≤ n.toNat := UInt32.le_iff_toNat_le.mp h
+  obtain ⟨m, hm⟩ : ∃ m, n.toNat = i.toNat + m := ⟨n.toNat - i.toNat, by omega⟩
+  have hsub : (n - i).toNat = m := by rw [UInt32.toNat_sub_of_le n i h]; omega
+  rw [hsub, hm]
+  simp only [leaves, List.range_add, List.map_append, List.map_map]
+  congr 1
+  apply List.map_congr_left
+  intro k _
+  simp only [Function.comp, Nat.add_assoc]
+
+/-- **`law split_disjoint`**: the leaves of a family are distinct, so the halves share none. -/
+theorem split_disjoint {ℓ : Loc} {n i : UInt32} (h : i ≤ n) :
+    (leaves ℓ i.toNat ++ leaves (ℓ + i.toNat) (n - i).toNat).Nodup := by
+  rw [split_whole h]
+  exact List.Nodup.map (fun a b hab => Nat.add_left_cancel hab) List.nodup_range
 
 end DepSpike
 
@@ -355,3 +412,6 @@ end DepSpike
 #print axioms DepSpike.max_ge_left
 #print axioms DepSpike.max_assoc
 #print axioms DepSpike.max_unit
+#print axioms DepSpike.split_runs
+#print axioms DepSpike.split_whole
+#print axioms DepSpike.split_disjoint
