@@ -5,6 +5,7 @@ import Frontend.Check.Handled
 import Backend.Driver
 import Backend.FalsifyTests
 import Backend.Native.Tests
+import Backend2.Driver
 /-!
 # Frontend — `bcc`
 
@@ -73,7 +74,9 @@ def interp (stage file : String) (args : List String) : IO UInt32 := do
   let k := Backend.checkedOf file src
   let input ← if Backend.readsInput k then readAll (← IO.getStdin) (1 <<< 16) .empty
     else pure .empty
-  match Backend.interpStage stage file k input.toList (Backend.argsBytes args) with
+  let r := if stage == "lir" then Backend2.interpStage stage k input.toList (Backend.argsBytes args)
+    else Backend.interpStage stage file k input.toList (Backend.argsBytes args)
+  match r with
   | .ok o =>
     let out ← IO.getStdout
     out.write o.out
@@ -141,6 +144,24 @@ def erase (file : String) : IO UInt32 := do
   match Backend.checkedOf file src with
   | .error e => IO.eprintln e; return 1
   | .ok k => IO.println (reprStr k.main.e); return 0
+
+/-- Print `file`'s checked `main` as its typed term (`Backend2/Debug.lean`). -/
+def typedDump (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match Backend.checkedOf file src with
+  | .error e => IO.eprintln e; return 1
+  | .ok k =>
+    for l in Backend2.dumpT 100000 0 k.main.t do IO.println l
+    return 0
+
+/-- Print `file`'s LIR (`Backend2/`). -/
+def lirDump (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match Backend.checkedOf file src >>= Backend2.lirOf with
+  | .error e => IO.eprintln e; return 1
+  | .ok (p, _) =>
+    for l in p.pp do IO.println l
+    return 0
 
 /-- Print `file`'s trusted boundaries. -/
 def trusted (file : String) : IO UInt32 := do
@@ -509,6 +530,8 @@ def main (argv : List String) : IO UInt32 := do
   | ["sites", file] => sites file
   | ["desugar", file] => desugar file
   | ["erase", file] => erase file
+  | ["lir", "--typed", file] => typedDump file
+  | ["lir", file] => lirDump file
   | ["alpha", file] => alpha false file
   | ["alpha", "--map", file] => alpha true file
   | [cmd, file] =>
