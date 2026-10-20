@@ -1,8 +1,7 @@
 -- `generic-lifetimes.bc` written by hand in core: each lifetime parameter an `all` around the
 -- function and a `Fun` around its body, the call `(unbang lens) ['x] ['y] (v, w)`.
 def one : !(i32 => i32) =
-  !thunkv fun (p : i32) ->
-    i <- return p;
+  !thunkv fun (i : i32) ->
     return i32[1]
 
 def lens : !(all 'a < top. all 'b < top. array_imm 'a i32 * array_imm 'b i32 => i32) =

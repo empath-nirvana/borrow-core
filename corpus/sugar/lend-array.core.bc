@@ -2,13 +2,11 @@
 -- fresh lifetime; the view `double` hands back is bound and dropped inside the callback, whose
 -- result is `()`, and `a` is bound again from the pair.
 def three : !(i32 => i32) =
-  !thunkv fun (p : i32) ->
-    i <- return p;
+  !thunkv fun (i : i32) ->
     return i32[3]
 
 def double : !(all 'a < top. array_mut 'a i32 => array_mut 'a i32) =
-  !thunkv Fun 'a < top. return (thunkv fun (p : array_mut 'a i32) ->
-    v <- return p;
+  !thunkv Fun 'a < top. return (thunkv fun (v : array_mut 'a i32) ->
     case (unbang slice_get_mut['a, i32]) (v, i32[0]) {
       inl m ->
         r <- return withswap['a, i32, 1] m (thunkv fun (c : i32) ->
@@ -19,8 +17,7 @@ def double : !(all 'a < top. array_mut 'a i32 => array_mut 'a i32) =
     })
 
 def first : !(all 'a < top. array_imm 'a i32 => i32) =
-  !thunkv Fun 'a < top. return (thunkv fun (p : array_imm 'a i32) ->
-    v <- return p;
+  !thunkv Fun 'a < top. return (thunkv fun (v : array_imm 'a i32) ->
     case (unbang array_get['a, i32]) (v, i32[0]) {
       inl g -> withload['a, 'y, i32, i32] g (thunkv Fun 'y < dom. return (thunkv fun (d : view 'y i32) ->
           return boxed['y] d))

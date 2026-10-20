@@ -2308,7 +2308,7 @@ def decl (n : Nat) : P Decl := do
     let T ← rty n
     let sp ← spanFrom st
     let A := tupleTy sp (ps.map (·.2))
-    let pn ← freshName "io_p"
+    let pn ← paramVar (ps.map (·.1))
     let body ← bindParams sp pn (ps.map (·.1)) (.force sp ⟨"io_poly_body", sp⟩)
     let lam := Comp.lam sp ⟨pn, sp⟩ A body
     let fnTy ← match T.toV with
@@ -2551,7 +2551,7 @@ where
     modify fun s => { s with surf := false, scope := [] }
     let sp ← spanFrom st
     let A := tupleTy sp (ps.map (·.2))
-    let pn ← freshName "io_p"
+    let pn ← paramVar (ps.map (·.1))
     let body ← bindParams sp pn (ps.map (·.1)) M
     let lam := Comp.lam sp ⟨pn, sp⟩ A body
     let fnTy ← match T.toV with
@@ -2653,10 +2653,16 @@ where
     | [] => .unit sp
     | [A] => A
     | A :: As => .tensor sp A (tupleTy sp As)
-  /-- Bind the parameters from the tuple `p`. -/
+  /-- The variable a function's parameters arrive in: the one parameter itself, or a tuple
+  `io_pN` of none or several. -/
+  paramVar : List Ident → P String
+    | [x] => pure x.name
+    | _ => freshName "io_p"
+  /-- Bind the parameters from the tuple `p`: a parameter that is `p` itself is not bound
+  again. -/
   bindParams (sp : Span) (p : String) : List Ident → Comp → P Comp
     | [], M => pure (.letUnit sp (.var sp p) M)
-    | [x], M => pure (.bind sp x none (.ret sp (.var sp p)) M false)
+    | [x], M => pure (if x.name == p then M else .bind sp x none (.ret sp (.var sp p)) M false)
     | [x, y], M => pure (.letPair sp x y (.var sp p) M)
     | x :: xs, M => do
       let r ← freshName "io_p"

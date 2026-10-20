@@ -4,8 +4,7 @@
 -- `n − i`, its element the start plus the index, the start in its state. The state is the
 -- variables the body reads or assigns; after each loop they are bound again from its last state.
 total def tri : !(i32 => i32) =
-  !thunkv fun (p : i32) ->
-    n <- return p;
+  !thunkv fun (n : i32) ->
     acc <- return i32[0];
     r <- return (unbang count_fold[i32 * i32]) (!thunkv fun (q : i32 * i32 * i32) ->
         let (i, s) = q;

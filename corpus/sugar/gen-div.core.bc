@@ -36,8 +36,7 @@ def steps__n1__g0 : !(i32 * i32 => U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1
       io_step : !U (i32 * i32 + U delay i32 * i32 -o F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + i32 * i32 + U delay i32 * i32) & F[1.0 aff i32 * i32 ~> i32] 1) <- return (!thunkv fun (io_s : i32 * i32 + U delay i32 * i32) ->
             < case io_s {
                 inl io_a -> fx_pp1 <- return io_a;
-                  let (fx_w1, io_p1) = fx_pp1;
-                  n <- return io_p1;
+                  let (fx_w1, n) = fx_pp1;
                   io_d1 <- return collatz n;
                   io_rf1 <- return unbang io_run_1;
                   io_ra1 <- return (io_d1, fx_w1);
@@ -47,8 +46,7 @@ def steps__n1__g0 : !(i32 * i32 => U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1
               },
               case io_s {
                 inl io_a -> fx_pp1 <- return io_a;
-                  let (fx_w1, io_p1) = fx_pp1;
-                  n <- return io_p1;
+                  let (fx_w1, n) = fx_pp1;
                   return ()
               | inr io_a -> let (io_d1, fx_w1) = io_a;
                   io_r <- (nu_out force io_d1).2;

@@ -1709,7 +1709,7 @@ def elabDef (scope : List Decl) : Decl → SM (Decl × Option (String × VTy))
         -- At a row, the body runs nothing when called: its first state holds the parameter, and
         -- closed there it closes the sources it was given and hands back the residual.
         let some Pc := cl.elabV Ax | throw ⟨Ax.span, s!"the parameter type of `{n.name}` does not elaborate"⟩
-        let (closes, _) := closeGiven cx (paramsOf divFuel cP M)
+        let (closes, _) := closeGiven cx ((x.name, cl.elabV Ax) :: paramsOf divFuel cP M)
         let ab ← template sp "a div body's `close` before it starts" s!"{closes}return {cx.rSrc}"
         divMachine cx S cP [(x.name, Pc)] (paramPrefix M ab) M
       let Rs ← (cl.surface sp cx.R : Except Error VTy)
