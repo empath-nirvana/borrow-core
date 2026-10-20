@@ -1,4 +1,5 @@
 import Backend.Driver
+import Backend2.Driver
 
 /-!
 # Kernel census  (`docs/kernel-usage.md`)
@@ -21,7 +22,13 @@ given twice:
 `lib` is the part of `static` inside bodies of declarations the library declares (index below the
 elaborated program's `lib`). `progs` is the number of programs whose term has the node.
 
+It also converts each program by the new backend (`Backend2/`, docs/n1-plan.md) and counts what the
+conversion reads of the typed term, by rule and fact (`Backend2.readFact`): the facts a lowering
+reads beside a node's term (a split's masks, a constant's types, a derived node's data, a type
+former a layout is read from). A program outside the new backend's fragment reads nothing.
+
 Output: tab-separated lines `node <ctor> progs static lib expanded <first programs>`,
+`read <rule> <fact> progs count`,
 `former <ctor> progs nodes`, `qual <q> progs ops`, and `fail <file> <message>` for a program that
 does not check.
 -/
@@ -161,6 +168,14 @@ def census (lib : Nat) (main : TExpr) : Prog := Id.run do
     | some (_, c) => m.sum c | none => m) o.nodes
   pure { p with expanded := top }
 
+/-- What the new backend's conversion reads of a program's typed term, when the program is in its
+fragment. -/
+def backend2Reads (file : String) : IO (List (String × Nat)) := do
+  let src ← IO.FS.readFile file
+  match Backend.checkedOf file src >>= fun k => Backend2.lirOf k (census := true) with
+  | .ok (_, s) => return s.reads.toList
+  | .error _ => return []
+
 def checkFile (file : String) : IO (Except String (Nat × TExpr)) := do
   let src ← IO.FS.readFile file
   match Frontend.parseProgram src with
@@ -185,6 +200,9 @@ def main (files : List String) : IO UInt32 := do
   let mut qprogs : Counts := {}
   let mut qops : Counts := {}
   let mut firsts : Std.HashMap String (List String) := {}
+  let mut rprogs : Counts := {}
+  let mut rcount : Counts := {}
+  let mut inFrag : Nat := 0
   let mut fails : Nat := 0
   for f in files do
     match ← checkFile f with
@@ -192,6 +210,11 @@ def main (files : List String) : IO UInt32 := do
       IO.println s!"fail\t{f}\t{(e.splitOn "\n").headD ""}"
       fails := fails + 1
     | .ok (l, t) =>
+      let rs ← backend2Reads f
+      if !rs.isEmpty then inFrag := inFrag + 1
+      for (k, n) in rs do
+        rprogs := rprogs.add k
+        rcount := rcount.add k n
       let p := census l t
       for (k, n) in p.static.toList do
         progs := progs.add k
@@ -211,5 +234,8 @@ def main (files : List String) : IO UInt32 := do
     IO.println s!"former\t{k}\t{fprogs.getD k 0}\t{fnodes.getD k 0}"
   for k in ["lin", "aff", "unr"] do
     IO.println s!"qual\t{k}\t{qprogs.getD k 0}\t{qops.getD k 0}"
-  IO.println s!"programs\t{files.length - fails}\tfailed\t{fails}"
+  for (k, n) in (rcount.toList.mergeSort (fun a b => a.1 ≤ b.1)) do
+    let parts := k.splitOn ":"
+    IO.println s!"read\t{parts.headD k}\t{(parts.drop 1).headD ""}\t{rprogs.getD k 0}\t{n}"
+  IO.println s!"programs\t{files.length - fails}\tfailed\t{fails}\tbackend2\t{inFrag}"
   return 0

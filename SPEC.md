@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.90 · 2026-10-20
+Version 0.91 · 2026-10-20
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -7833,6 +7833,97 @@ programs get rows.
 
 ---
 
+## 43. Entry 42 — the new backend's pure fragment: compiling the typed term (N1)
+
+### Motivation
+
+`docs/compiler.md` (#555) found that the backend compiles the checked term's erasure and
+recomputes from it what the checker established: layouts by unification, copies and drops from
+occurrences, fixed schemes by recognisers. Unit N1 (#636, `docs/n1-plan.md`) is the new backend
+of §4.2 of that design, for the programs with no effect node: it compiles `Checked.t`, the typed
+term, and reads each fact from its node. The old backend stays `bcc`'s default and the
+differential oracle until N6.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration or semantics. Every program's kernel term is
+the one it was, and its output.
+
+### Lowering
+
+`Backend2/`, selected by `bcc compile|run --backend new` (and `bcc interp --stage lir|lflat`,
+`bcc-counts --backend new`). The fragment is the programs whose typed term has no effect node
+(`effPerform`, `effRaise`, `effHandle*`, `effThen`, `effLet` at a nonempty row, `effSub`,
+`lendR`, `lendLoopR`, `nilDead`, the `…U` borrows, `iterate`, `divFuel`, `reify`,
+`bounded_fix`): 222 corpus programs, I/O programs and codata among them. A program outside it is
+refused by the new backend ("outside the pure fragment") and compiled by the old.
+
+- **The LIR** (`Backend2/Syntax.lean`): named A-normal form whose every variable has its type,
+  `LTy`, the typed term's `VTy` with lifetimes, `[@a]` and `!` erased (`Backend2/Types.lean`);
+  first-order functions; closures of `lam`, `unit` and `amp` codes (a `&`'s two components share
+  one environment). Every variable is consumed once on every path.
+- **Closure conversion** (`Backend2/Convert.lean`) follows the derivation: at a split the masks
+  `u` place the copies (a slot both parts use, persistent by `Ctx.SplitP`'s `dup`) and the drops
+  (a live slot neither part uses), and a leaf drops its context's other live slots (`DeadP`,
+  `SoloP`). No copy or drop is inferred from occurrences. A constant applied to its arguments
+  (a spine of `lolliE`) is its operation; used as a value, a closure that applies it.
+- **Derived nodes and constants read**: `dtor A` is `A`'s destructor (`dtorAt`); `array_replace`
+  and `slice_replace_mut` are a slot swap, the old contents moved out and the new moved in, with
+  no copy or drop (#608); `withswap` moves its contents out and back (its load's copy and its
+  store's drop cancelled); `divLit` is its division with no error arm (§39); `litFn`'s bytes are
+  the program's data and its table a code that reads them; `fold_own`, `fold_reuse`, `fold_imm`
+  and `unfold` are functions generated from their node's shape and body; `lendCell`'s cell is a
+  frame slot when its owner is freed in its function.
+- **Specialisation**: a `use` node's body is converted once per key (declaration, type arguments,
+  the elaborator's key) and its value's term instantiated at each later use; a body that takes a
+  closure is converted at each use, so that its closures' codes are each use's.
+- **The closure flow** (`Backend2/Flow.lean`), a 0-CFA run once on the LIR: a call whose function
+  holds one code is a direct call.
+- **Layouts from types** (`Backend2/Layout.lean`): each variable's layout is built from its type;
+  the places a value moves between share one representation, so the codes that reach a closure
+  place are its class, laid out as a tag and the widest environment, or on the heap when the
+  class holds itself (§35); §35's one box a node; a cell is as wide as the widest type of its
+  class (`Checked.cells`); an array of cells whose class holds only `i32` (or `f32`) has 4-byte
+  slots, of `u8` 1-byte ones.
+- **Literal views** (`Backend2/LitViews.lean`): an array tabulated from a literal's table and only
+  read (lent shared, then destroyed) is the literal's bytes in the data when its length is within
+  the literal's.
+- **The word IR** (`Backend2/Lower.lean`) is the old backend's `Backend/Flat/Syntax.lean`, with
+  `load32`/`store32` for 4-byte slots, and its Wasm and LLVM emitters are shared
+  (`Backend/Flat/Host.lean` holds what they read of a host operation).
+- **Checks**: the LIR interpreter (`Backend2/Interp.lean`: consumption, copies and drops at
+  types that own no cell, cell writes, live objects) and the LIR lint (`Backend2/Lint.lean`);
+  `scripts/check-backend2.sh` fences `Backend2/`'s imports off the old backend's reconstruction
+  and the elaboration, and bans the erasure and the deleted passes' names.
+
+### Programs
+
+Every program of the fragment at its golden at the LIR interpreter, the word IR, Wasm and natively
+(`scripts/compile-backend2.sh`), its counts pinned in `corpus/counts-backend2.expected`.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the checker, the elaboration, the old backend's
+output or a kernel program. `corpus/counts.expected` and `kernel-counts.expected` unchanged.
+
+### Open
+
+- **Codata observations dispatch**: the η-expanded thunk the library and the elaboration write for
+  a loop (`thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >`) and `unfold`'s code
+  share a closure class, so each observation is a dispatched call (122 programs' `indirect` rise
+  against the old backend, which removed the thunk by a recogniser, `Collapse`). The fix is N4's:
+  a derived node for the scheme, whose value is `unfold step s` itself.
+- **Bounds checks in a counted walk** (L-3): the `walk` node's rule fixes that its term is a
+  `count_try`/`count_fold`; that the step reads, at its index, the view the bound was taken from
+  is the elaboration's (`Frontend/Check/TFacts.lean`), not a fact of the typed term, so every read
+  keeps its check.
+- **A block as one object** (§42 *Open*, A7): a block's cells are freed one by one by its type's
+  destructor and by a match that binds them, so one object needs a way to free an interior cell.
+- The effectful programs (N2, N3), `bounded_fix`'s budget as a stack-pointer compare (NEW-b),
+  pointer reversal for owned folds (B6), frame slots and LLVM attributes by rule (N5).
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -8186,12 +8277,24 @@ Entry 40 (§41) is implemented in `Frontend/Parser.lean` (R1: `bindName`, `lookN
 (`Cx.copy`, `rowC`, `unboxesC`, `forOverParam`, `capKey`, `blockKeys`), `Frontend/Sugar.lean`
 (`termParts`), `Frontend/Elab/Hygiene.lean` (a control handler's code), `Frontend/Parser.lean`
 (`generatedName`, `pushBinder`, `resolutionOf`, `unrename`), `Frontend/Main.lean` (`bcc alpha`)
-and `scripts/alpha-check.py`.
+and `scripts/alpha-check.py`. Entry 42 (§43) is implemented in `Backend2/` (the typed term to the
+LIR, its interpreter and lint, the closure flow, the layouts, the literal views, the frame slots,
+the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Backend/Wasm/` and
+`Backend/Native/`, `bcc`'s `--backend new` and `lir` commands, `bcc-counts --backend new`, and
+`scripts/check-backend2.sh` and `scripts/compile-backend2.sh`; no change to `CDerives`, `Core/`,
+`Paper/`, `Support/` or the checker.
 
 ---
 
 ## Changelog
 
+- **0.91** (2026-10-20) — §43 (#636, unit N1 of `docs/compiler.md`): the new backend's pure
+  fragment, `Backend2/`: the typed term to a typed LIR (copies and drops from the split masks,
+  constants and derived nodes read from their nodes, a slot swap for `array_replace`, `use` bodies
+  once per key), an LIR interpreter and lint, layouts from types with 4-byte `i32` slots, a 0-CFA
+  run once, and the shared word IR's Wasm and LLVM; every effect-free corpus program at its golden
+  on both targets. The word IR gains `load32`/`store32`. No change to the language or to the old
+  backend's output.
 - **0.90** (2026-10-20) — §42 (#593, unit U1 of `docs/data-declarations.md`): `data`
   declarations, records and variants, monomorphic and generic, transparent; recursion under a
   written `box` (blocks); the single-root rule; constructors, record literals, fields and field

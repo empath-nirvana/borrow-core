@@ -1,5 +1,5 @@
 name = "borrow_core"
-defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "Backend", "bcc", "bcc-counts"]
+defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "Backend", "Backend2", "bcc", "bcc-counts"]
 
 [[require]]
 name = "mathlib"
@@ -23,6 +23,10 @@ name = "Frontend"
 
 [[lean_lib]]
 name = "Backend"
+
+# The new backend (docs/compiler.md, N1): compiles the typed term.
+[[lean_lib]]
+name = "Backend2"
 
 [[lean_exe]]
 name = "bcc"

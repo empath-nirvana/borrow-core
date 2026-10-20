@@ -1,5 +1,5 @@
 import Backend.Flat.Syntax
-import Backend.Clos.Types
+import Backend.Flat.Host
 import Backend.Wasm.Syntax
 
 /-!
@@ -24,14 +24,14 @@ def fname (k : Nat) : String := s!"$f{k}"
 /-- The float operations' operands and results are a float's bits in the flat IR: an operand is
 reinterpreted as a float when pushed, and a float result as its bits (SPEC §37). -/
 def floatIn (o : HostOp) : List Instr :=
-  match Clos.hostArgWidth o, o with
+  match Flat.hostArgWidth o, o with
   | _, .reinterpret_i _ | _, .reinterpret_f _ => []
   | w, _ => match w.float? with
     | some f => [.num (.reinterpret_f f)]
     | none => []
 
 def floatOut (o : HostOp) : List Instr :=
-  match Clos.hostResKind o, o with
+  match Flat.hostResKind o, o with
   | _, .reinterpret_i _ | _, .reinterpret_f _ => []
   | .int w, _ => match w.float? with
     | some f => [.num (.reinterpret_i f)]
@@ -44,6 +44,7 @@ def lowerExp (fp : Nat) : Flat.Exp → List Instr
   | .c32 n => [.i32Const n]
   | .load a off => lowerExp fp a ++ [.num .wrap, .i64Load (8 * off)]
   | .load8 a => lowerExp fp a ++ [.num .wrap, .i64Load8U]
+  | .load32 a => lowerExp fp a ++ [.num .wrap, .i64Load32U]
   | .op o args => lowerOpArgs o args ++ [.num o] ++ floatOut o
   | .alloc w => lowerExp fp w ++ [.call "$alloc"]
   | .slot off _ => [.localGet fp, .i64Const (8 * off).toUInt64, .num (.bin .w64 .add)]
@@ -100,6 +101,7 @@ def lowerStmt (cnt : Bool) (fp frame : Nat) : Flat.Stmt → List Instr
   | .set i e => lowerExp fp e ++ [.localSet i]
   | .store a off v => lowerExp fp a ++ [.num .wrap] ++ lowerExp fp v ++ [.i64Store (8 * off)]
   | .store8 a v => lowerExp fp a ++ [.num .wrap] ++ lowerExp fp v ++ [.i64Store8]
+  | .store32 a v => lowerExp fp a ++ [.num .wrap] ++ lowerExp fp v ++ [.i64Store32]
   | .free a => lowerExp fp a ++ [.call "$free"]
   | .unslot _ => []
   | .out b => lowerExp fp b ++ [.call "$putc"]

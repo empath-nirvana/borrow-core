@@ -1,5 +1,5 @@
 import Backend.Flat.Syntax
-import Backend.Flat.Lower
+import Backend.Flat.Host
 
 /-!
 # Backend — flat IR to LLVM IR  `[spec §40]`
@@ -323,6 +323,10 @@ def expr (fp : String) : Exp → EM String
     let p ← ptrAt (← expr fp a) 0
     let b ← val s!"load i8, ptr {p}, align 1"
     val s!"zext i8 {b} to i64"
+  | .load32 a => do
+    let p ← ptrAt (← expr fp a) 0
+    let b ← val s!"load i32, ptr {p}, align 4"
+    val s!"zext i32 {b} to i64"
   | .op o args => do hostOp o (← exprs fp args)
   | .alloc w => do val s!"call i64 @bc_alloc(i64 {← expr fp w})"
   | .slot off _ => val s!"add i64 {fp}, {8 * off}"
@@ -399,6 +403,12 @@ def stmt (fp : String) (results : Nat) : Stmt → EM Unit
     let p ← ptrAt a 0
     let b ← val s!"trunc i64 {v} to i8"
     ins s!"store i8 {b}, ptr {p}, align 1"
+  | .store32 a v => do
+    let a ← expr fp a
+    let v ← expr fp v
+    let p ← ptrAt a 0
+    let b ← val s!"trunc i64 {v} to i32"
+    ins s!"store i32 {b}, ptr {p}, align 4"
   | .free a => do ins s!"call void @bc_free(i64 {← expr fp a})"
   | .unslot _ => pure ()
   | .out b => do ins s!"call void @bc_putc(i64 1, i64 {← expr fp b})"

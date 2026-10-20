@@ -25,6 +25,9 @@ inductive Instr where
   /-- `i64.load8_u` and `i64.store8`: a byte slot. -/
   | i64Load8U
   | i64Store8
+  /-- `i64.load32_u` and `i64.store32`: a 4-byte slot. -/
+  | i64Load32U
+  | i64Store32
   | num (o : HostOp)
   | call (f : String)
   | returnCall (f : String)

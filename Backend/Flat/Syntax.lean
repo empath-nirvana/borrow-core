@@ -33,6 +33,8 @@ inductive Exp where
   | load (addr : Exp) (off : Nat)
   /-- The byte at `addr`, zero-extended. -/
   | load8 (addr : Exp)
+  /-- The 4 bytes at `addr` (a multiple of 4), zero-extended: an `i32` slot. -/
+  | load32 (addr : Exp)
   /-- A host operation (SPEC §8, §37); a partial one traps where its §8 form answers `inr ()`. -/
   | op (o : HostOp) (args : List Exp)
   /-- The allocator: a fresh range of `words` words. -/
@@ -63,6 +65,8 @@ inductive Stmt where
   | store (addr : Exp) (off : Nat) (v : Exp)
   /-- The low byte of `v` at `addr`. -/
   | store8 (addr : Exp) (v : Exp)
+  /-- The low 4 bytes of `v` at `addr` (a multiple of 4). -/
+  | store32 (addr : Exp) (v : Exp)
   /-- Return a range to the allocator. -/
   | free (addr : Exp)
   /-- End the life of the frame slot at `addr` (`Exp.slot`): nothing is freed. -/
