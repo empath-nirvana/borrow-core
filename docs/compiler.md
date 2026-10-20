@@ -416,7 +416,7 @@ Each rule is a handler law applied at a known site. The pass reads only the node
 
 | clause kind (on the `handle` node) | rewrite | law |
 |---|---|---|
-| tail-resumptive on every path, its row unhandled inside (`cond2B` at `Checked.flows`) | a direct call of the clause at the `perform` | `op_tail`, `tail_resumes`, `Checked.unhandledIn` |
+| tail-resumptive on every path, its own names unhandled inside (`handlerNames`, `cond2B` at `Checked.flows`) | a direct call of the clause at the `perform` | `op_tail`, `tail_resumes`, `tail_clause_names`, `Checked.unhandledNames` |
 | tail-resumptive, with handler state | the state in a local cell of the handler's scope | `handle_fold` (equation stated and proved in its unit) |
 | abortive (`raise`, a loop exit) | a jump to the handler's join point | `catch_abort`, `abort_absorbs`, `unwind_prefix` |
 | `tick` under the runtime / `div_fuel` | the back edge / a counter test | S0's laws (`docs/pipeline-architecture.md` §4.2) |
@@ -653,6 +653,7 @@ programs, `counts.expected` and the desugar diff. A unit that touches `Core/`, `
 | C3 | **Clause kinds**, classified by the checker at `[handle]`, each with the lemma that gives its law's premise | C1, B2 if `tick` | every handler of the corpus classified; the report rendered from the field (`docs/pipeline-architecture.md` §9.2 defect 3) |
 | C3b (#571) | **Kinds complete, sites on the node**: right-unit and alias steps in the premises and laws; site names, site kind and handler state on the `handle` node, cross-checked; `exits` from the platform handler's site; condition 2 stated over the rows | C3 | `kinds.expected` changes only by the new laws; every other output unchanged |
 | C3c (#574) | **Self-contained handler sites**: the clauses inline in `hnd`, read by the classifier from the node (no chase through `Env.vals`); the site record at core types in the frame of its node, its operations checked equal to the node's `E` | C3b | `erase` changes only by removing the clause `β`-redexes; every run output, golden and count unchanged |
+| C4 (#575), C4b (#610) | **Condition 2 as a checked fact**: the frames inside each handled computation (`inside`) and the program's flow record (`Checked.flows`), with the run invariant; condition 2 over the names each clause's own code performs or raises (`handlerNames`), which bound its work's runs (`tail_clause_names`); a bound per node stated (`Checked.FramesPerNode`) | C3c | `handled.expected`: every direct call of the old backend agrees; every other output unchanged |
 | S0 (#554) | **running** | — | its own |
 | B1 | `Div` in the kernel, as `docs/pipeline-architecture.md` §3.7 | S0 | as there |
 | B2 | the `Div` elaboration as typed schemes; the remaining templates converted (no `parseComp` on the elaboration path) | B1, U1, C1 | as there; `template`/`mTemplate` deleted |

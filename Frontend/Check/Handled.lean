@@ -1,11 +1,22 @@
 import Frontend.Check.Program
 
 /-!
-# Frontend — Check — the names handled inside a handled computation  `[spec §19]`
+# Frontend — Check — condition 2: the clause's names and the names handled inside  `[spec §19]`
 
 Condition 2 of the direct call of a tail-resumptive clause (`docs/effect-lowering.md` §2.3) is
-`UnhandledIn Σ K`: no frame of the continuation `K` between a `perform` and its handler catches a
-name of the clause's row `Σ` (`Core/ClauseNames.lean`). Two records decide it.
+that no frame of the continuation `K` between a `perform` and its handler catches a name the
+clause's work performs or raises. It is stated over the names the clause's own code performs or
+raises (`UnhandledNames ns K`, `Core/ClauseOwn.lean`), read off the clause the node's erasure
+holds (`handlerNames`, `Frontend/Check/Kinds.lean`), and over the clause's row `Σ`
+(`UnhandledIn Σ K`, `Core/ClauseNames.lean`) where the clause may run code it does not hold.
+
+* **The names bound the work** (`tail_clause_names`): at a node whose kind for an operation is
+  `tail`, every run of the clause's work, its body without its resumes, at any values of its
+  variables and from any memory, performs and raises only the clause's names
+  (`tail_work_names`). A clause with no names meets condition 2 in every `K`
+  (`unhandledNames_nil`).
+
+Where a clause has names, two records decide it.
 
 * **At `[handle]`**, the node's `inside`: the frames its handled computation holds, its erasure's
   `Expr.hin` (`Core/HandledNames.lean`), through the bodies of `use` nodes, which the erasure
@@ -19,10 +30,10 @@ name of the clause's row `Σ` (`Core/ClauseNames.lean`). Two records decide it.
   computation of the erasure, since a continuation may capture them, so a node's `inside` is
   among them wherever the erasure holds the node.
 
-**The theorem** (`Checked.unhandledIn`): in every run of `main` from the empty memory, at every
-configuration that holds a handler frame over a context `K` (at an operation it catches, the
-point where its clause runs), a row `Σ` none of whose names `Checked.flows` may catch
-(`cond2B`) is unhandled in `K`.
+**The theorem** (`Checked.unhandledNames`, and `Checked.unhandledIn` over a row): in every run of
+`main` from the empty memory, at every configuration that holds a handler frame over a context
+`K` (at an operation it catches, the point where its clause runs), names none of which
+`Checked.flows` may catch (`cond2B`) are unhandled in `K`.
 
 **The run invariant** (`Checked.frame_of_node`): every handler frame of a configuration such a run
 reaches has the name of a handle node of `main`'s erasure (or the reserved `0`, or `main` holds a
