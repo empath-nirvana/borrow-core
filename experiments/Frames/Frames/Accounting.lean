@@ -307,6 +307,75 @@ theorem acc_under {Q : VTy} {eM : Expr}
   fsimp
   exact retsG_val (w := Val.pair (Val.pair q ρ) r) ⟨_, rfl⟩
 
+/-! ### The unwinding borrow constant hands back its source -/
+
+theorem psub_withborU (k : Nat) (γ : List Val) (T : VTy) :
+    Expr.psub k γ (withborUE (dtorE T)) = withborUE (dtorE T) :=
+  psub_closedAt _ γ (withborUE_closed (dtorAt_closed false T)) (Nat.zero_le k)
+
+theorem subst_withborU (j : Nat) (s : Val) (T : VTy) :
+    Expr.subst j s (withborUE (dtorE T)) = withborUE (dtorE T) :=
+  subst_closedAt _ s (withborUE_closed (dtorAt_closed false T)) (Nat.zero_le j)
+
+/-- The answers `(p, b)`: the source `p` handed back beside a result. -/
+def SrcQ (p : Val) (y : Val) : Prop := ∃ b, y = Val.pair p b
+
+/-- `withborU d p f` answers `(p, b)`: the source it was given. -/
+theorem retsG_withborU {G : Expr → Prop} (T : VTy) (p f : Val) :
+    RetsG (ℍ := ℍ) (SrcQ p) G
+      (.app (.app (withborUE (dtorE T)) (.val p)) (.val f)) := by
+  change RetsG _ G ((Kont.appL .hole f).plug (.app (.val (.lam (.val (.lam (thenE (.pair (.var 2) (.var 0))
+    (.app (dtorE T) (.var 2)) (.app (.app (.var 0) (.val .unit)) (.var 1))))))) (.val p)))
+  refine retsG_beta _ ?_
+  fsimp
+  refine retsG_beta .hole ?_
+  simp only [thenE]
+  fsimp
+  refine retsG_ubind (N := Val.lam _) (D := Val.lam _) (Q₁ := fun _ => True) (retsG_true _ _)
+    (fun b _ => ?_)
+  refine retsG_beta .hole ?_
+  fsimp
+  exact retsG_val (w := Val.pair p b) (Q := SrcQ p) ⟨_, rfl⟩
+
+/-! ### `use` -/
+
+theorem acc_use (src : LendSrc) (Ps : List VTy) (N : Expr) (γ : List Val) :
+    Returns (ℍ := ℍ) (substAll γ (useE src Ps N)) := by
+  intro π
+  apply rets_of_retsG
+  change RetsG (PairQ π) _ (Kont.plug .hole (.app (.val (.lam (Expr.psub 1 γ
+    (.letpair (.var 0)
+      (.app (.val (.lam
+        (.app (.val (.lam
+          (thenE (.letpair (.var 0) (.pair (.pair (.var 1) (.var 5)) (.inj₁ (.var 0))))
+            (.app (dtorE (slotsTy Ps)) (.var 3))
+            (.app (.app (.var 0) (.var 3)) (.var 1)))))
+          (withborUE src.fin))))
+        (sh 3 N)))))) (.val π)))
+  refine retsG_beta .hole ?_
+  simp only [thenE, LendSrc.fin]
+  fsimp
+  simp only [psub_withborU, subst_withborU]
+  refine retsG_letpairV (fun p ρ hπ => ?_)
+  subst hπ
+  fsimp
+  simp only [subst_withborU]
+  refine retsG_plain (K := .appR (.lam _) .hole) rfl (retsG_true _ _) (fun f _ => ?_)
+  refine retsG_beta .hole ?_
+  fsimp
+  simp only [subst_withborU]
+  change RetsG _ _ (Kont.plug .hole (.app (.val (.lam _)) (.val (withborUV (dtorE src.ty)))))
+  refine retsG_beta .hole ?_
+  fsimp
+  refine retsG_ubind (N := Val.lam _) (D := Val.lam _) (Q₁ := SrcQ p) ?_ (fun y hy => ?_)
+  · simpa [withborUV, Expr.val] using retsG_withborU (G := fun _ => False) src.ty p f
+  · obtain ⟨b, rfl⟩ := hy
+    refine retsG_beta .hole ?_
+    fsimp
+    refine retsG_letpair .hole ?_
+    fsimp
+    exact retsG_val (w := Val.pair (Val.pair p ρ) (Val.inj₁ b)) ⟨_, rfl⟩
+
 end BoCa.Fig16.LogRel.Core.Frames
 
 end
