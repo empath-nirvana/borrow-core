@@ -616,6 +616,141 @@ theorem retsG_ubind {Q₁ Q : Val → Prop} {G : Expr → Prop} {N D : Val} {t :
         · exact ((retsG_unfold hE₂).2 _ _ _ _ _ _ h hKE w).elim (fun h => .inr (.inl h))
             (fun h => .inr (.inr h))
 
+/-! ### Administrative steps -/
+
+/-- A term with a step is no stop. -/
+theorem step_not_perfAt {μ μ₁ : Heap} {t t₁ : Expr} (h : Step1 (ℍ := ℍ) μ t μ₁ t₁) (K : Kont)
+    (n i : UInt32) (v : Val) (hK : K.HasHnd n = false) : t ≠ perfAt K n i v := by
+  rintro rfl
+  exact perfAt_irred hK μ _ _ h
+
+/-- **A step**, at any term with a step, all of whose steps lead into the invariant. -/
+theorem retsG_step' {Q : Val → Prop} {G : Expr → Prop} {t : Expr}
+    (hex : ∃ μ μ₁ t₁, Step1 (ℍ := ℍ) μ t μ₁ t₁)
+    (h : ∀ μ μ₁ t₁, Step1 (ℍ := ℍ) μ t μ₁ t₁ → RetsG (ℍ := ℍ) Q G t₁) : RetsG (ℍ := ℍ) Q G t := by
+  obtain ⟨μ₀, μ₀', t₀, h₀⟩ := hex
+  refine retsG_coind (fun s => s = t) (fun t' ht => ?_) rfl
+  subst ht
+  refine ⟨fun μ μ' w hs => ?_, fun μ μ' K n i v hs hK w => ?_⟩
+  · rcases steps_cases hs with ⟨-, h'⟩ | ⟨μ₁, e₁, h₁, t₁⟩
+    · subst h'; exact absurd h₀ no_step_val
+    · exact (retsG_unfold (h _ _ _ h₁)).1 _ _ _ t₁
+  · rcases steps_cases hs with ⟨-, h'⟩ | ⟨μ₁, e₁, h₁, t₁⟩
+    · exact absurd h'.symm (step_not_perfAt h₀ K n i v hK)
+    · exact ((retsG_unfold (h _ _ _ h₁)).2 _ _ _ _ _ _ t₁ hK w).elim (fun h => .inr (.inl h))
+        (fun h => .inr (.inr h))
+
+/-- **A deterministic redex in any context**: `K[e]` satisfies what `K[e']` does, `e ↦ e'` the
+redex's only step. -/
+theorem retsG_ctx_det {Q : Val → Prop} {G : Expr → Prop} (K : Kont) {e e' : Expr}
+    (h₀ : ∃ μ, Head (ℍ := ℍ) μ e μ e')
+    (hdet : ∀ μ μ₁ e₁, Step1 (ℍ := ℍ) μ e μ₁ e₁ → μ₁ = μ ∧ e₁ = e')
+    (h : RetsG (ℍ := ℍ) Q G (K.plug e')) : RetsG (ℍ := ℍ) Q G (K.plug e) := by
+  obtain ⟨μ₀, h₀⟩ := h₀
+  refine retsG_step' ⟨μ₀, μ₀, K.plug e', ⟨K, e, e', rfl, rfl, h₀⟩⟩ (fun μ μ₁ t₁ hst => ?_)
+  obtain ⟨e₁, rfl, he₁⟩ := step1_plug_inv_active K .hole rfl h₀ hst
+  obtain ⟨-, rfl⟩ := hdet _ _ _ he₁
+  exact h
+
+theorem retsG_beta {Q : Val → Prop} {G : Expr → Prop} (K : Kont) {b : Expr} {v : Val}
+    (h : RetsG (ℍ := ℍ) Q G (K.plug (b.subst 0 v))) :
+    RetsG (ℍ := ℍ) Q G (K.plug (.app (.val (.lam b)) (.val v))) :=
+  retsG_ctx_det K ⟨fun _ => none, Head.beta _ b v⟩
+    (fun _ _ _ hst => step1_beta_inv (b := b) (v := v) hst) h
+
+theorem retsG_letpair {Q : Val → Prop} {G : Expr → Prop} (K : Kont) {b : Expr} {v₁ v₂ : Val}
+    (h : RetsG (ℍ := ℍ) Q G (K.plug ((b.subst 0 (v₂.shift 1 0)).subst 0 v₁))) :
+    RetsG (ℍ := ℍ) Q G (K.plug (.letpair (.val (Val.pair v₁ v₂)) b)) := by
+  refine retsG_ctx_det K ⟨fun _ => none, Head.letpair _ v₁ v₂ b⟩ (fun μ μ₁ e₁ hst => ?_) h
+  obtain ⟨u₁, u₂, hu, rfl, rfl⟩ := step1_letpair_inv hst
+  obtain ⟨rfl, rfl⟩ := valPair_inj (congrArg Subtype.val hu)
+  exact ⟨rfl, rfl⟩
+
+/-- `case v {…}` steps only to the branch of `v`. -/
+theorem step1_case_inv {μ μ₁ : Heap} {v : Val} {e₁ e₂ E : Expr}
+    (h : Step1 (ℍ := ℍ) μ (.case (.val v) e₁ e₂) μ₁ E) :
+    μ₁ = μ ∧ ((∃ a, v = Val.inj₁ a ∧ E = e₁.subst 0 a) ∨ (∃ a, v = Val.inj₂ a ∧ E = e₂.subst 0 a)) := by
+  obtain ⟨K', a, a', he, rfl, hh⟩ := h
+  cases K' with
+  | hole =>
+      simp only [Kont.plug] at he ⊢; subst he
+      generalize hE : Expr.case (.val v) e₁ e₂ = X at hh
+      cases hh with
+      | case₁ u f₁ f₂ =>
+          simp only [Expr.case.injEq] at hE
+          obtain ⟨h1, rfl, rfl⟩ := hE
+          exact ⟨rfl, .inl ⟨u, Subtype.ext h1, rfl⟩⟩
+      | case₂ u f₁ f₂ =>
+          simp only [Expr.case.injEq] at hE
+          obtain ⟨h1, rfl, rfl⟩ := hE
+          exact ⟨rfl, .inr ⟨u, Subtype.ext h1, rfl⟩⟩
+      | _ => simp_all [BoCa.BoLo.hndE, ubindE, BoCa.BoLo.ccatchE, cfinE]
+  | case K₂ f₁ f₂ =>
+      simp only [Kont.plug, Expr.case.injEq] at he
+      exact absurd (K₂.isVal_of_plug (by rw [← he.1]; exact v.2)) hh.not_isVal
+  | _ => simp [Kont.plug] at he
+
+theorem retsG_case₁ {Q : Val → Prop} {G : Expr → Prop} (K : Kont) {e₁ e₂ : Expr} {a : Val}
+    (h : RetsG (ℍ := ℍ) Q G (K.plug (e₁.subst 0 a))) :
+    RetsG (ℍ := ℍ) Q G (K.plug (.case (.val (Val.inj₁ a)) e₁ e₂)) := by
+  refine retsG_ctx_det K ⟨fun _ => none, Head.case₁ _ a e₁ e₂⟩ (fun μ μ₁ e hst => ?_) h
+  obtain ⟨rfl, ⟨u, hu, rfl⟩ | ⟨u, hu, -⟩⟩ := step1_case_inv hst
+  · have : u = a := Subtype.ext (by simpa [Val.inj₁] using (congrArg Subtype.val hu).symm)
+    subst this; exact ⟨rfl, rfl⟩
+  · exact absurd (congrArg Subtype.val hu) (by simp [Val.inj₁, Val.inj₂])
+
+theorem retsG_case₂ {Q : Val → Prop} {G : Expr → Prop} (K : Kont) {e₁ e₂ : Expr} {a : Val}
+    (h : RetsG (ℍ := ℍ) Q G (K.plug (e₂.subst 0 a))) :
+    RetsG (ℍ := ℍ) Q G (K.plug (.case (.val (Val.inj₂ a)) e₁ e₂)) := by
+  refine retsG_ctx_det K ⟨fun _ => none, Head.case₂ _ a e₁ e₂⟩ (fun μ μ₁ e hst => ?_) h
+  obtain ⟨rfl, ⟨u, hu, -⟩ | ⟨u, hu, rfl⟩⟩ := step1_case_inv hst
+  · exact absurd (congrArg Subtype.val hu) (by simp [Val.inj₁, Val.inj₂])
+  · have : u = a := Subtype.ext (by simpa [Val.inj₂] using (congrArg Subtype.val hu).symm)
+    subst this; exact ⟨rfl, rfl⟩
+
+theorem retsG_seqU {Q : Val → Prop} {G : Expr → Prop} (K : Kont) {X : Expr}
+    (h : RetsG (ℍ := ℍ) Q G (K.plug X)) :
+    RetsG (ℍ := ℍ) Q G (K.plug (.seq (.val .unit) X)) := by
+  refine retsG_ctx_det K ⟨fun _ => none, Head.seq _ X⟩ (fun μ μ₁ e hst => ?_) h
+  obtain ⟨-, rfl, rfl⟩ := step1_seq_inv hst
+  exact ⟨rfl, rfl⟩
+
+/-- `let (x, y) = v; b` at the top, any value `v`: at a pair what its body does; else stuck. -/
+theorem retsG_letpairV {Q : Val → Prop} {G : Expr → Prop} {b : Expr} {v : Val}
+    (h : ∀ v₁ v₂, v = Val.pair v₁ v₂ →
+      RetsG (ℍ := ℍ) Q G ((b.subst 0 (v₂.shift 1 0)).subst 0 v₁)) :
+    RetsG (ℍ := ℍ) Q G (.letpair (.val v) b) := by
+  by_cases hp : ∃ v₁ v₂, v = Val.pair v₁ v₂
+  · obtain ⟨v₁, v₂, rfl⟩ := hp
+    exact retsG_letpair .hole (h v₁ v₂ rfl)
+  · refine retsG_stuck (fun μ μ₂ t₂ hst => ?_) (by intro h; cases h) (fun K n i u he => ?_)
+    · obtain ⟨v₁, v₂, hv, -⟩ := step1_letpair_inv hst
+      exact hp ⟨v₁, v₂, hv⟩
+    · cases K with
+      | letpair K₂ e =>
+          simp only [perfAt, Kont.plug, Expr.letpair.injEq] at he
+          exact perform_not_isVal _ (K₂.isVal_of_plug (by rw [← he.1]; exact v.2))
+      | _ => simp [perfAt, Kont.plug, performE] at he
+
+/-- `case v {…}` at the top, any value `v`. -/
+theorem retsG_caseV {Q : Val → Prop} {G : Expr → Prop} {e₁ e₂ : Expr} {v : Val}
+    (h₁ : ∀ a, v = Val.inj₁ a → RetsG (ℍ := ℍ) Q G (e₁.subst 0 a))
+    (h₂ : ∀ a, v = Val.inj₂ a → RetsG (ℍ := ℍ) Q G (e₂.subst 0 a)) :
+    RetsG (ℍ := ℍ) Q G (.case (.val v) e₁ e₂) := by
+  by_cases hp : (∃ a, v = Val.inj₁ a) ∨ (∃ a, v = Val.inj₂ a)
+  · rcases hp with ⟨a, rfl⟩ | ⟨a, rfl⟩
+    · exact retsG_case₁ .hole (h₁ a rfl)
+    · exact retsG_case₂ .hole (h₂ a rfl)
+  · refine retsG_stuck (fun μ μ₂ t₂ hst => ?_) (by intro h; cases h) (fun K n i u he => ?_)
+    · obtain ⟨-, ⟨a, ha, -⟩ | ⟨a, ha, -⟩⟩ := step1_case_inv hst
+      · exact hp (.inl ⟨a, ha⟩)
+      · exact hp (.inr ⟨a, ha⟩)
+    · cases K with
+      | case K₂ f₁ f₂ =>
+          simp only [perfAt, Kont.plug, Expr.case.injEq] at he
+          exact perform_not_isVal _ (K₂.isVal_of_plug (by rw [← he.1]; exact v.2))
+      | _ => simp [perfAt, Kont.plug, performE] at he
+
 end BoCa.Fig16.LogRel.Core.Frames
 
 end

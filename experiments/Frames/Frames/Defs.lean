@@ -137,11 +137,13 @@ def dropCtxE : Ctx VTy → Nat → Expr → Expr
   | ⟨T, true⟩ :: Γ, i, k => dropE T i (dropCtxE Γ (i + 1) k)
   | ⟨_, false⟩ :: Γ, i, k => dropCtxE Γ (i + 1) k
 
-/-- The arm of an exit that skips a continuation: `absurd` when the row is empty (the payload is
-`0`), else the drop glue `d`. -/
-def exitArmE : ExitRow → Expr → Expr
-  | [], _ => absurdE (.var 0)
-  | _ :: _, d => d
+/-- The arm of an exit that skips a continuation: when the row is empty, the payload is `0` and
+the arm is `(π', inr (absurd e))`, `π'` at index `i`, with no drop glue (`absurd` drops its
+context); else the drop glue `d`. The slots are handed back on both, so the arm returns them
+whatever the payload is at run time. -/
+def exitArmE : ExitRow → Nat → Expr → Expr
+  | [], i, _ => .pair (.var i) (.inj₂ (absurdE (.var 0)))
+  | _ :: _, _, d => d
 
 /-- **`bind M (x. N)`**: `λπ. M π to (π', r). case r {inl a → N[a] π' | inr e → drop Γ₂; (π', inr e)}`.
 `eN` is `N`'s elaboration, under `a`; `Γ₂` is `N`'s context, which the exit arm drops.
@@ -150,7 +152,7 @@ def bindE (E : ExitRow) (Γ₂ : Ctx VTy) (eM eN : Expr) : Expr :=
   seqE eM (.letpair (.var 0)
     (.case (.var 0)
       (.app (.app (sh 5 (.val (.lam eN))) (.var 0)) (.var 2))
-      (exitArmE E (dropCtxE Γ₂ 5 (.pair (.var 2) (.inj₂ (.var 0)))))))
+      (exitArmE E 2 (dropCtxE Γ₂ 5 (.pair (.var 2) (.inj₂ (.var 0)))))))
 
 /-- **`case V (x. M₁) (y. M₂)`**: `λπ. case V↑ {inl x → M₁[x] π | inr y → M₂[y] π}`.
 In a branch: `0 = x`, `1 = π`, `2… = Γ`. -/

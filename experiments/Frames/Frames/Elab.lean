@@ -116,15 +116,14 @@ theorem dropCtx_derives {Δ : LifeCtx} {k : Expr} {C : CTy} :
         (by simpa [kill] using h)
       simpa [dropCtxE] using ih
 
-/-- The exit arm: at an empty row, `absurd` of the payload; else the drop glue. -/
-theorem exitArm_derives {Δ : LifeCtx} {Γ : Ctx VTy} {E : ExitRow} {d : Expr} {C : CTy}
-    {T : Slot VTy} (hE : T = ⟨E.sumTy, true⟩)
+/-- The exit arm: at an empty row, `(π', inr (absurd e))`; else the drop glue. -/
+theorem exitArm_derives {Δ : LifeCtx} {Γ : Ctx VTy} {E : ExitRow} {i : Nat} {d : Expr} {C : CTy}
+    {T : Slot VTy}
+    (h₀ : E = [] → CDerives Δ (T :: Γ) (.pair (.var i) (.inj₂ (absurdE (.var 0)))) (.comp C))
     (hd : E ≠ [] → CDerives Δ (T :: Γ) d (.comp C)) :
-    CDerives Δ (T :: Γ) (exitArmE E d) (.comp C) := by
+    CDerives Δ (T :: Γ) (exitArmE E i d) (.comp C) := by
   cases E with
-  | nil =>
-      subst hE
-      exact .zeroE (.left (splitP_right_all Γ)) (.var (.here (kill_dead Γ).toP))
+  | nil => exact h₀ rfl
   | cons _ _ => exact hd (by simp)
 
 theorem drops_consDead {Γ : Ctx VTy} {T : VTy} (h : Γ.Drops) : Ctx.Drops (⟨T, false⟩ :: Γ) := by
@@ -159,7 +158,13 @@ theorem elab_bind {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Ps : List VTy} {eM 
       (shift_deadN [⟨A, false⟩, ⟨_, false⟩, ⟨_, false⟩, ⟨_, false⟩, ⟨_, false⟩]
         (.cons (.cons (.cons (.cons (.cons .nil))))) (.lam hN))
       (.here (.cons (.cons (.cons (.cons kd.toP)))))
-  · refine exitArm_derives rfl (fun hE => ?_)
+  · refine exitArm_derives (fun hE => ?_) (fun hE => ?_)
+    · subst hE
+      exact .effSub (RowLe.nil S) (.ret (.tensorI
+        (.right (.dead (.left (.dead (.dead (splitP_right_all Γ₂))))))
+        (.var (.there (.there (.here (.cons (.cons kd.toP))))))
+        (.sumI₂ (.ofRet (.zeroE (.left (.dead (.dead (.dead (.dead (splitP_right_all Γ₂))))))
+          (.var (.here (.cons (.cons (.cons (.cons kd.toP)))))))))))
     have hD : CtxDtor Γ₂ := hX.resolve_left hE
     refine dropCtx_derives Γ₂ [⟨_, true⟩, ⟨_, false⟩, ⟨_, true⟩, ⟨_, false⟩, ⟨_, false⟩] hD ?_
     exact .effSub (RowLe.nil S) (.ret (.tensorI
