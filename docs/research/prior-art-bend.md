@@ -65,6 +65,19 @@ Two facts from this table change how the question reads.
   divide-and-conquer written as self-recursion is at the row `{Exhausted}`. Either the fork admits
   sides at an abortive row (#212's `Row.Unwind` option with law L5), or each side handles
   `Exhausted` inside itself. Section 2 states which programs this touches.
+- **The kernel already has a total divide-and-conquer.** `bounded_fix[A, C]` is typed at every
+  computation type `C`, `F B` among them, and "the step decides what a spent budget does: `self`
+  is `inj₁ ()`" (SPEC §20 *The kernel*). The surface driver `bounded` performs `exhausted()` there;
+  a step that instead runs a sequential base case (a counted loop) never performs anything, so the
+  whole recursion is at `F_∅`. The budget is then the depth at which forking stops: a grain the
+  program writes, checked, and no heuristic (§5). BELIEVED: that the surface accepts a
+  `bounded_fix` written this way was not checked.
+
+  **A raise changes what is observable.** Sequentially, a side that performs `exhausted()` stops
+  its sibling from ever starting. In parallel the sibling has already written its `mut` half,
+  and the handler, after the lend ends, sees those writes (#212 scoping §3(a), L5). So a fork at an
+  abortive row is never result-preserving without choosing L5: automatic forking is confined to
+  `F_∅`, and a fork at `{Exhausted}` is an explicit `join` with L5's semantics.
 
 ---
 
@@ -77,8 +90,8 @@ fragment named in the row.
 | program | split point | fact that makes the split safe | row of each side | proof obligation | grain | answer |
 |---|---|---|---|---|---|---|
 | **Tree sum** (Bend's canonical `fold`) | the two recursive positions of a `node` in `foldImm`'s traversal: `travK (tensor F G)` is a `letpair` of the view, two `bind`s (one per component, the recursive call `h` shared) and a `pair` (`Core/FoldImm.lean`) | the `letpair` gives each bind one component of the view; each child is read through an `Imm` view (`withload` at `Ref X`), so reads are shared and nothing is written; the recursive call and the algebra are `!` and hold `∅` (`vP_empty_of_persistent`); each child's result is a fresh value | `F R` (`F_∅`) when written as a fold; `{Exhausted}` when written as self-recursion (`corpus/rec-tree.bc`) | `adequacyPar` at `F_∅`, with fork points only at fold nodes | the fold node knows the shape, not the size. Depth-based cut-offs are a heuristic; a forcing `par` at the fold, or heartbeat promotion, is not | **yes**, as a fold. As self-recursion, yes only with `Exhausted` handled inside each side or admitted by L5 |
-| **Map over an array split in halves**, in place | the two halves from `slice_split_mut` | the two `ArrayMut 'x A` families are disjoint (`vP_fam_split`); the mapped function is `!`; the masks put each half in one side | the halving recursion is `bounded_fix` (`{Exhausted}`); the per-element step is `F_∅` | `adequacyPar` with `Mut` families split across the fork; this is where we exceed Bend (in-place writes) | the program writes the cut-off (`if len < k`) or a forcing `par_for` decides | **yes** with the split written by the program (a library `par_map_mut` over `slice_split_mut`); the split itself is never inferred from a `for` |
-| **Merge sort** | the two recursive sorts after `slice_split_mut` of data and scratch | as the map: disjoint `mut` halves of both buffers; the merge is sequential and depends on both results (the masks show it) | `{Exhausted}` (self-recursion on slice length, not structural on a `μ`) | as the map; the merge is after the join | as the map | **yes**, with the same row caveat; the merge is correctly not split |
+| **Map over an array split in halves**, in place | the two halves from `slice_split_mut` | the two `ArrayMut 'x A` families are disjoint (`vP_fam_split`); the mapped function is `!`; the masks put each half in one side | the halving recursion is `bounded_fix` (`{Exhausted}`); the per-element step is `F_∅` | `adequacyPar` with `Mut` families split across the fork; this is where we exceed Bend (in-place writes) | the depth budget of a `bounded_fix` whose spent branch is the sequential loop (§1), or a cut-off the program writes (`if len < k`), or a forcing `par_for` | **yes** at `F_∅` with the split written by the program (a library `par_map_mut` over `slice_split_mut` and `bounded_fix`); the split itself is never inferred from a `for`. At `{Exhausted}`, only an explicit `join` with L5 |
+| **Merge sort** | the two recursive sorts after `slice_split_mut` of data and scratch | as the map: disjoint `mut` halves of both buffers; the merge is sequential and depends on both results (the masks show it) | `{Exhausted}` as surface self-recursion (on slice length, not structural on a `μ`); `F_∅` over `bounded_fix` with a sequential base case | as the map; the merge is after the join | as the map | **yes** at `F_∅`, as the map; the merge is correctly not split |
 | **Parallel fold of a k8s-style list** | none on a cons list: the fold's tail result is an argument of the head's algebra | for the **map** part (per-object computation) the masks give independence, as above; for the **reduce** part, splitting a list fold needs the combiner to be associative with a unit, which is a law about a user function, not a typed fact | `F_∅` if the per-object step is pure; any IO (API calls) makes the row non-empty and the program leaves the fragment | the map part: `adequacyPar`. The reduce part: `adequacyPar` **plus** a monoid law, `op (op a b) c = op a (op b c)`, stated and proved by the program (cf. Bend 2's laws, §6) or trusted | the list's spine is a chain: no split without converting to a tree or an array (NESL's flattening) | **map yes; reduce no** without a law. The kill criterion fires for the reduce only (§2.1) |
 | **Negative: a loop with a carried dependency** (`acc = f(acc, a[i])`) | none | the elaborated loop threads `acc` through each turn: the next turn's first bind has `acc` live in its context (the masks), and a `Mut` accumulator is not persistent and cannot be in both parts | `F_∅` | none: there is no split to justify | n/a | **not split**, by the same fact; nothing is inferred to refuse it |
 
@@ -102,5 +115,77 @@ divide-and-conquer already has its bracketing fixed by the program, and does not
 
 **It also does not decide grain.** The criterion asks about safety. Where the split pays is a
 separate question (§5), and it is the one that forces an annotation or a runtime mechanism.
+
+---
+
+### 3. The proof obligation
+
+Our theorems are stated about closed typed programs and the machine (`adequacyC`,
+`Core/Fundamental.lean`; `adequacyD`, `Core/Demonic.lean`; `total_every_run`,
+`Core/Totality.lean`):
+
+    adequacyC : CDerives ∅ [] e (F 1) → Steps ∅ e ∅ (val ())
+    total_every_run : CDerives ∅ [] e (F A) → every run from ∅ continues to a value
+
+The parallel statement has the same shape, over a parallel machine and a set of fork points read
+off the typed term.
+
+**Forkable node.** For a typed term `t` (SPEC §3), a node `n` of `t` is *forkable* when it is
+`M₁ to x. (M₂ to y. N)` (or `pair`/`tensorI` of two value judgments), and
+
+1. `M₁` and `M₂` are typed at `F_∅` (the row is a field of the node);
+2. the inner bind's masks give `x` to `N`'s part, not to `M₂`'s (`SplitMasks`);
+3. the outer split gives `M₁` and the continuation disjoint live slots, shared only at persistent
+   types (`Ctx.SplitP`, which the derivation fixes);
+4. no node under `M₁` or `M₂` is a SemC-only site: an extern, a `trust` site, a `PinLaw` field.
+   This is #212 scoping's B1: a term valid only through `SemC` may write through an `Imm` and
+   undo the write, which a big-step relation cannot see. Every such site is a node kind, so the
+   condition is a pattern too.
+
+**Parallel machine.** `PStep_F`, for a set `F` of forkable nodes of `t`: `Step1`'s heads in a
+`PKont` that, at a node of `F`, holds both sides and steps either (#212 scoping B5, O-Mach).
+`Step1` is `PStep_∅`, so the sequential machine is a special case and the interpreter, the
+corpus and the backends are unchanged.
+
+**The statement.**
+
+    adequacyPar :
+      TDerivesAt Ξ ∅ [] t (F A) → (∀ n ∈ F, Forkable t n) →
+      ∀ run of PStep_F from ∅ at t.erase,
+        it continues to some (μ′, val v), and
+        ∃ τ (a bijection of locations moving each allocated block whole),
+          Steps ∅ t.erase (τ • μ′) (val (τ • v))
+
+with the corollaries that every parallel run gives the sequential value up to `τ`, that two
+parallel runs agree up to `τ`, and that output bytes, which go through one exclusive
+`Mut Output`, are equal (#212 scoping B7). `F` ranges over *every* set of forkable nodes, so the
+theorem licenses any scheduler, including one that forks at no node, at all nodes, or at the nodes
+a heartbeat promotes (§5). That universality is what makes "automatic" a scheduling question
+rather than a semantic one.
+
+**What it needs** (#212 scoping §4, with its names):
+
+| obligation | content | status there |
+|---|---|---|
+| U1, footprint component | the run `wpTS` exhibits is a permission run: loads in Rd ∪ O, stores and frees in O; permissions split at the fork as the context splits | UNKNOWN cost; BELIEVED mechanical at the witness constructions |
+| B2, O-Fp | `Hash ρ₁ ρ₂ → Wr ρ₁ ∩ Rd ρ₂ = ∅ ∧ Wr ρ₂ ∩ Rd ρ₁ = ∅`, from `ResU.Flat.split` and `wpTS_footprint` | BELIEVED; "ex = writable" not checked |
+| B3, O-Reorder | every interleaving equals, up to renaming, a sequential schedule consistent with the steps' dependency order; well-founded by `total_no_infinite_run` | BELIEVED, medium (Brookes/O'Hearn) |
+| B4, O-Ren | `Step1` equivariant under block renamings, array steps included | BELIEVED, low to medium |
+| B5, O-Mach | `PKont`, `PStep` | BELIEVED, low |
+
+`adequacyPar` is #212's B6 at a typed term and a fork set instead of at an explicit `join`. Its
+condition 4 is the only addition, and it is a node pattern. Nothing in this note makes U1 cheaper:
+the automatic version and the annotated version need the same footprint fact.
+
+**Why `fundamentalC` alone does not give it.** `wpTS` (`Core/World.lean`) says: for every frame
+`ρf` and every allocator, the run from the lowered heap reaches a value and leaves the frame's
+cells as they were. It says nothing about the states in between. A run may read a frame cell, or
+write one and restore it, and still satisfy `wpTS` for every frame; run beside a sibling that
+owns that cell, it races. The typed terms never do this, but `wpTS` cannot say so. That is the
+whole content of U1.
+
+**The div-free hypothesis is used twice.** Sides cannot diverge, so a fork always joins
+(`total_every_run`), and the reordering induction is well-founded. A `Loop` side needs #212's U6,
+a parallel `Loop` driver, and is outside this fragment.
 
 ---
