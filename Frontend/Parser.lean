@@ -1446,9 +1446,10 @@ def placeLoadsV (y : String) (lift : Bool) : Val → StateT (List PlacePre) P Va
     -- Only a `run` that reads the place and does nothing else with it: one that writes it reads
     -- it where it is evaluated, and hands it back (SPEC §41, rule R3).
     let M₁ ← placeLoads y false M
+    if !lift then return .run sp M₁
     let v ← freshName "io_lv"
     let M' := M₁.readsAs y v
-    if lift && M' != M₁ && !M'.namesV y then
+    if M' != M₁ && !M'.namesV y then
       modify (· ++ [.load v false sp])
       return .run sp M'
     return .run sp (← placeLoads y true M)
