@@ -1441,14 +1441,17 @@ def placeLoadsV (y : String) (lift : Bool) : Val → StateT (List PlacePre) P Va
   | .bangThunk sp M => return .bangThunk sp (← placeLoads y true M)
   | .bangThunkv sp M => return .bangThunkv sp (← placeLoads y true M)
   | .run sp M => do
-    -- A `run` in an expression (`a && b`) reads the place where the expression is evaluated:
-    -- a load has no effect, and nothing in an expression writes the place (`checkRun`).
+    -- A `run` in an expression (`a && b`) that only reads the place reads it where the expression
+    -- is evaluated: a load has no effect.
+    -- Only a `run` that reads the place and does nothing else with it: one that writes it reads
+    -- it where it is evaluated, and hands it back (SPEC §41, rule R3).
     let M₁ ← placeLoads y false M
-    if !lift then return .run sp M₁
     let v ← freshName "io_lv"
     let M' := M₁.readsAs y v
-    if M' != M₁ then modify (· ++ [.load v false sp])
-    return .run sp M'
+    if lift && M' != M₁ && !M'.namesV y then
+      modify (· ++ [.load v false sp])
+      return .run sp M'
+    return .run sp (← placeLoads y true M)
   | V => pure V
 
 /-- The computation `M` with each read of the place `y` bound by a load where it is evaluated:
