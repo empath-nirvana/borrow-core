@@ -53,10 +53,10 @@ structure CheckedProg where
 def checkedOf (file src : String) : Except String CheckedProg := do
   let p₀ ← match Frontend.parseProgram src with
     | .ok p => pure p
-    | .error e => throw s!"{file}:{e.render}"
+    | .error e => throw s!"{file}:{e.renderIn src}"
   let r ← match Frontend.Check.checkProgram p₀ with
     | .ok r => pure r
-    | .error e => throw s!"{file}:{e.render}"
+    | .error e => throw s!"{file}:{e.renderIn src}"
   let some c := r.main | throw s!"{file}: no `main`"
   match Frontend.Check.ioMainOf r.el.prog c with
   | .ok io => pure ⟨r.el.prog, c, io⟩
@@ -251,11 +251,11 @@ def compileWatTimed (file src : String) : IO (Except String String) := do
     let p₀ ← ExceptT.mk <| stage "parse" (fun (p : Frontend.Program) => s!"{p.decls.length} declarations")
       fun _ => match Frontend.parseProgram src with
         | .ok p => pure p
-        | .error e => throw s!"{file}:{e.render}"
+        | .error e => throw s!"{file}:{e.renderIn src}"
     let r ← ExceptT.mk <| stage "check" (fun _ => "") fun _ =>
       match Frontend.Check.checkProgram p₀ with
         | .ok r => pure r
-        | .error e => throw s!"{file}:{e.render}"
+        | .error e => throw s!"{file}:{e.renderIn src}"
     let some c := r.main | throw s!"{file}: no `main`"
     let io ← ExceptT.mk <| stage "io main" (fun _ => "") fun _ =>
       match Frontend.Check.ioMainOf r.el.prog c with
@@ -400,14 +400,14 @@ def typingReport (c : Frontend.Check.Checked) : String :=
 def trusted (file src : String) : Except String String := do
   let p ← match Frontend.parseProgram src with
     | .ok p => pure p
-    | .error e => throw s!"{file}:{e.render}"
+    | .error e => throw s!"{file}:{e.renderIn src}"
   let r ← match Frontend.Check.checkProgram p with
     | .ok r => pure r
-    | .error e => throw s!"{file}:{e.render}"
+    | .error e => throw s!"{file}:{e.renderIn src}"
   let typing := (r.main.map typingReport).toList
   let xs ← match Frontend.Check.externs r.el.prog.decls.toArray with
     | .ok xs => pure xs
-    | .error e => throw s!"{file}:{e.render}"
+    | .error e => throw s!"{file}:{e.renderIn src}"
   -- The externs `main`'s erasure uses: a library's extern that the program never reaches is not
   -- in its trusted base (SPEC §34). The last declared is at index 0 of `main`'s context.
   let xs := match r.main with

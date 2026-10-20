@@ -1019,6 +1019,7 @@ corpus/lend-pipeline.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/lend-pipeline.bc 2.0 stored,tail: machine; condition 2 holds; -
 corpus/lend-pipeline.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/lend-server.bc flows [0, 4294967295]; main []
+corpus/lend-shadow.bc flows [0, 4294967295]; main []
 corpus/list-blocks.bc flows [0, 2, 4294967295], finaliser; main [1, 2, 3], finaliser
 corpus/list-blocks.bc 22:12: handle 3: inside [], finaliser; row []; ops 3.0 abortive; condition 2 holds
 corpus/list-blocks.bc 19:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; condition 2 holds
@@ -1036,9 +1037,16 @@ corpus/loop-labels.bc flows [0, 4294967295]; main []
 corpus/loop-row-answer.bc flows [0, 1, 4294967295]; main [1]
 corpus/loop-row-answer.bc 20:21: handle 1: inside []; row []; ops 1.0 once; condition 2 holds
 corpus/loop-row-answer.bc 1.0 once: machine; condition 2 holds; -
+corpus/loop-shadow-linear.bc flows [0, 4294967295]; main []
+corpus/loop-shadow-owner.bc flows [0, 4294967295]; main []
+corpus/loop-shadow-persistent.bc flows [0, 4294967295]; main []
 corpus/main-lifetime.bc flows [0, 4294967295]; main []
 corpus/map-reuse.bc flows [0, 4294967295]; main []
 corpus/map-views.bc flows [0, 4294967295]; main []
+corpus/mut-bind-arm.bc flows [0, 4294967295]; main []
+corpus/mut-name-capture.bc flows [0, 4294967295]; main []
+corpus/mut-shadow-arms.bc flows [0, 4294967295]; main []
+corpus/name-clash.bc flows [0, 4294967295]; main []
 corpus/nats-sum.bc flows [0, 4294967295]; main []
 corpus/needs-stdout.bc flows [0, 4294967295]; main []
 corpus/operator-rounds.bc flows [0, 1, 2, 3, 4, 4294967295], finaliser; main [1, 2, 3, 4], finaliser

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.83 · 2026-10-19
+Version 0.84 · 2026-10-19
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -7197,6 +7197,141 @@ for byte, and every output, golden and count is unchanged.
 
 ---
 
+## 41. Entry 40 — `let mut`: names resolved to their binders, compositional writes, one boundary rule
+
+### Motivation
+
+#613, after #611's spike (PR #612). Every silent wrong answer of `let mut` has one of two causes:
+state that crosses into another frame (a block, a `modify` callback) is not passed in and back
+out (#586), and the threading reads variables back **by name**, so a `let` that shadows a
+variable takes its place where an arm joins or a loop's turn ends (#504 and its broader form,
+#493, #590). The user's requirement: "it's done in a principled way. Because if you just try to
+get one program to compile, the first permutation will break." So the elaboration of `let mut`
+is three general rules, one per surface construct, in place of hand-written cases:
+
+1. **R1, resolution:** every name resolves to a unique binder before any threading, so threading
+   never compares names;
+2. **R2, writes:** what a construct writes is computed from its parts;
+3. **R3, the boundary:** one rule passes a construct's writes in and out of every construct that
+   runs code in another frame; a writer that escapes is refused by a named rule.
+
+This version provides R1 and R2. R3 is *Open* below.
+
+**Prior art.** The rules follow the translation of Ullrich and de Moura, *'do' Unchained:
+Embracing Local Imperativity in a Purely Functional Language* (ICFP 2022; read for this entry):
+`let mut` is a local state effect over its scope (their Fig. 5, rules S1–S6), a join point
+rebinds the variable (S2, and S9 at a loop's entrance), the rewriting system is assumed hygienic
+(§2: "an identifier introduced by a rewriting rule is renamed automatically to avoid any conflict
+with user-specified names"), and reassignment is legal only in the `do` block that declares the
+variable (§2), the analogue of R3's escape refusal. Two differences: they refuse a binder that
+shadows a `mut` variable (S2, S3's side condition `x ≠ y`, "shadowing of mutable variables is
+disallowed in general"), where R1 makes it a variable of its own; and their state crosses only
+`do`-block joins and `for`, where ours also crosses blocks, borrow and `modify` callbacks, loop
+turns observed one at a time, generators and handlers (R3). Koka's `var` (the Koka book, §3.2.4
+*Local Mutable Variables*; read) is a local state handler; a closure that assigns it has the
+`local<h>` effect in its type, and one that escapes the variable's scope is a type error: the
+precedent for R3's escape refusal, and for a write being visible in a closure's type. Effekt's
+mutable variables (the Effekt tour, *Variables* and *Regions*; read, not checked against its
+implementation) live in a region, a closure over one has the capture set `at {x}` in its type, and
+it may be used only where the region is in scope.
+
+### R1: resolution
+
+In a surface body (a `fn`, `main -> T`, a handler's clause, a `poly` case), the parser resolves
+each name as it reads it (`Frontend/Parser.lean`, `bindName`, `lookName`):
+
+- **A binder of a name already in scope is a new variable.** It gets a fresh name, `x1`, `x2`,
+  …: the first that no name of the source and no earlier renamed binder has. So no binder shadows
+  another, and two variables never share a name. This holds for every binder: `let`, `let mut`,
+  `x <- M`, `fun`, a closure's or a borrow block's pattern, a `with`'s capability, a `match` or
+  `case` arm, a `for`'s variable, `withbor2r`'s view.
+- **An occurrence resolves to the innermost binder of its name in scope,** or to a declaration
+  when none is.
+- **Except:** a capability (`stdin`, `stdout`, `stderr`, `clock`, `args`) is a place the
+  platform names, passed and handed back by name (§11): a binder of its name rebinds it. Core text
+  (`def`, `main : C`) is not resolved: it has no assignment, and a binding of a name in scope is
+  how it passes a variable on (`corpus/sugar/for.bc`). Generated templates are not resolved.
+- **Declarations.** A program's declaration of a name an included module also declares shadows
+  the module's: the module's is renamed, in its own name and wherever the module's declarations
+  name it, so the module's code keeps meaning its own (`Decl.renameDecls`, #590).
+- **Messages** name a renamed binder as the source writes it (`Error.renderIn`, `unrename`): a
+  fresh name is no name of the source.
+
+### R2: writes
+
+A construct **writes** a `let mut` variable when it is, or contains on its own frame:
+
+| form | writes |
+|---|---|
+| `x = e` | `x`, where `x` resolves to a `let mut` variable; otherwise refused: "`x` is assigned, but it is not declared `let mut`" |
+| `x <- M`, `x : A <- M`, `linear x <- M` | `x`, the value of `M`, where `x` resolves to a `let mut` variable ('do' Unchained's A4, `x ← s`); otherwise R1's new variable |
+| `let (x, q) = f(…, x, …)` | the place `x` moved and rebound (typed elaboration §5.1): `x` is the variable it was, and a write when it is `let mut` |
+| any other binder of a name in scope | nothing: R1's new variable |
+
+What a `match`/`if` arm, a binding's head and a loop's body write is the union of what their parts
+write (the joins of 0.16 and 0.81, and §14's loops), now over resolved variables, so a shadowing
+`let` inside one is never taken for the variable it shadows.
+
+### R3: the boundary
+
+*Open* (below): the next version.
+
+### Programs
+
+| program | what it shows | answer |
+|---|---|---|
+| `corpus/mut-shadow-arms.bc` | a `let` shadowing a `let mut` in an `if` arm, a `let` head, a `match` arm and a `for` body (#504's broader form) | `(i32[2], (i32[3], (i32[4], i32[6])))` (was `(50, (60, (70, 1020300)))`) |
+| `corpus/reject/mut-shadow-assign.bc`, `mut-shadow-assign-loop.bc` | #504: an assignment after a shadowing `let` | refused: "`n` is assigned, but it is not declared `let mut`" (was `11`, `13`) |
+| `corpus/loop-shadow-persistent.bc` | a `let` in a loop's body shadowing a variable that is not `let mut` | `(i32[1], i32[3])` (was `(4, 6)`) |
+| `corpus/mut-bind-arm.bc` | `x <- M` on a `let mut` in an arm (R2) | `(i32[5], i32[3])` (the arm's write was lost: `(1, 3)`) |
+| `corpus/loop-shadow-linear.bc`, `loop-shadow-owner.bc` | #493's two programs, from `corpus/pending/` | `i32[6]`; `.` and `i32[6]` |
+| `corpus/lend-shadow.bc` | a borrow block's `let mut acc` beside `main`'s `acc`, lent per observation | `i32[105]`; in core text still refused (`corpus/reject/lend-shadow.bc`) |
+| `corpus/name-clash.bc` | #590 (1): a program's `fn take` beside `include buf`'s | `i32[2]` (was refused) |
+| `corpus/mut-name-capture.bc` | #590 (2): a callee's `let mut tbl` beside its caller's | prints `1`, `i32[0]` (was refused) |
+
+`scripts/mut-combos.py` checks the rules on generated nestings (*Acceptance* below).
+
+### Acceptance
+
+`scripts/mut-combos.py` (a gate step) generates nestings of `if`, `let` heads, `match`, counted
+`for`, shadowing `let`s and binders named as the variables at every binding position, and a
+resuming control operation, each assigning two outer `let mut`s; each program is run as written
+and with the variables as `State` instances (#611), and the two runs must agree, with no
+program refused.
+
+### Baseline
+
+No change to `CDerives`, `Core/`, `Paper/`, `Support/`, the relation, the machine or the checker.
+Every corpus program elaborates to a core whose run output, goldens, `corpus/counts.expected`,
+`corpus/kernel-counts.expected`, `kinds.expected`, `cells.expected` and `handled.expected` are as
+they were, except the programs above. A program with a shadowing binder elaborates to the same
+core with the binder renamed (`bcc desugar`). Changed:
+
+- `bcc check`'s reports name a program's declaration that shadows a module's as the program's
+  (`corpus/leetcode/lists/0206`, `text-wordfreq`: their own `reverse`; probes `bg/regex`,
+  `ds/btree`, `tests/T14*`), and the module's renamed one (`cmp_i32'lib`) where it is listed.
+- `corpus/reject/lend-shadow.bc` is core text (`main : F i32`), where names are not resolved.
+- `corpus/pending/config-parse.bc` is refused at the block given to `fold_lines` (`f` is passed in
+  the fold's state, which §30 refuses), before the `raise` it was refused at.
+- `docs/expressiveness-probes/tests/T04.bc` reverses its copy with a borrow per step: its
+  `let mut v = v` inside a borrow block over a loop is a variable of its own, a `mut` view held
+  across the loop's steps, which §14 refuses.
+
+### Open
+
+- **R3, the boundary rule** (#613's next part): a block at a block parameter (§30, §32), `modify`
+  and `withswap` callbacks, borrow callbacks, loop turns, generator bodies, handler bodies and
+  `run` pass their writes in and back out by one rule, and a closure that writes an outer `let mut`
+  and escapes is refused by name; the hand-written joins (`joinHead`, `bindHead`, `armOf`) and a
+  borrow block's hand-back become instances of it. Until then #586's forms still lose a block's
+  write.
+- **Names the elaboration still reads.** §14's per-observation lend (`LoopLend`) identifies the
+  borrow by the block's binder, so a copy of it bound in the block is not the borrow (T04 above);
+  §30 identifies a block parameter by its name, so one passed through a fold's state is taken as
+  stored (config-parse above). Both were met before only when the names coincided.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -7539,9 +7674,22 @@ Entry 39 (§40) is implemented in `Backend/Native/Lower.lean` (the LLVM IR), `Ba
 `Op.dataAddr` and `Exp.data` in the closure IR and the flat IR, and `scripts/compile-native.sh`;
 no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the frontend or the checker.
 
+Entry 40 (§41) R1 and R2 are implemented in `Frontend/Parser.lean` (`bindName`, `lookName`,
+`bindOrAssign`, `rebindOf?`, `renamesOf`, `Error.renderIn`), `Frontend/Elab/Hygiene.lean`
+(`Decl.renameDecls`), `Frontend/Sugar.lean` (a program's declarations shadow a module's) and
+`scripts/mut-combos.py`; no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the checker.
+
 ---
 
 ## Changelog
+
+- **0.84** (2026-10-19) — §41 (new, #613): `let mut`'s names resolved to their binders (R1) and
+  its writes (R2). In a surface body a binder of a name in scope is a new variable with a fresh
+  name, so threading never takes a shadowing `let` for the variable it shadows (#504 and its
+  broader form, #493); `x <- M` on a `let mut` assigns it; `let (x, q) = f(…, x, …)` rebinds the
+  place `x`; a program's declaration shadows an included module's (#590). Messages name binders
+  as written. No kernel, `CDerives` or checker change; the programs whose answers change are
+  listed in §41.
 
 - **0.83** (2026-10-19) — §19, *The clause's names in the continuation* (#575): condition 2 of the
   direct call of a tail-resumptive clause is a checked fact. Each `handle` node records the frames

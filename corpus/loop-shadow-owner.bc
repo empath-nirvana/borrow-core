@@ -1,0 +1,16 @@
+-- A name bound in a `for`'s body, inside a borrow block, that is the name of the block's owner:
+-- `let (s, c) = (i, 1)` binds a new `s : i32` for the rest of the body (SPEC §41, rule R1), so the
+-- loop threads `k` and not the owner `s` (#493).
+--
+-- Answer: `.` and i32[6].
+
+include textio
+
+main -> i32 =
+  let s = string_of_lit("abc");
+  let n = borrow imm s { 't, t ->
+    let mut k = 0;
+    for i in 0..3 { let (s, c) = (i, 1); k = k + s + c };
+    k };
+  print_byte(b'.');
+  n

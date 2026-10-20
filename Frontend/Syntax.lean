@@ -709,6 +709,8 @@ structure CHandler where
   meet of the lifetimes in scope there; a clause that keeps its continuation receives it boxed at
   the first (SPEC §32).  `[spec §32]` -/
   lps : List (Ident × Life) := []
+  /-- The parameters written `mut`: `let mut` variables in each clause (SPEC §41). -/
+  mutPs : List String := []
   deriving DecidableEq, Repr
 
 /-- Declarations (syntax-core §10). -/

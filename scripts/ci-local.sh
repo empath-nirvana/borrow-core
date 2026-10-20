@@ -80,6 +80,7 @@ steps=(
   "compile kernel"   "scripts/compile-kernel.sh"
   "native"           "scripts/compile-native.sh"
   "sugar pairs"      "scripts/check-sugar.sh"
+  "let mut combos"   "scripts/mut-combos.py --gate --count 400"
   "book doc-tests"   "scripts/book-doctest.sh"
   "book build"       "mdbook build book"
 )
@@ -107,7 +108,7 @@ if [ "$changed" = 1 ]; then
       case "$f" in
         corpus/kernel-counts.expected) add "compile kernel" ;;
         corpus/*) add "${corpus[@]}" ;;
-        lib/*) add "${corpus[@]}" "book doc-tests" "compile scaling" ;;
+        lib/*) add "${corpus[@]}" "book doc-tests" "compile scaling" "let mut combos" ;;
         book/*) add "book doc-tests" "book build" ;;
         scripts/ci-local.sh|scripts/par.sh) add "${everyStep[@]}" ;;
         scripts/parse-corpus.sh) add "parse corpus" ;;
@@ -120,6 +121,7 @@ if [ "$changed" = 1 ]; then
         scripts/compile-native.sh) add "native" ;;
         scripts/compile-scaling.sh) add "compile scaling" ;;
         scripts/check-sugar.sh) add "sugar pairs" ;;
+        scripts/mut-combos.py) add "let mut combos" ;;
         scripts/book-doctest.sh) add "book doc-tests" ;;
         scripts/source-stage.sh) add "compile corpus" "book doc-tests" ;;
       esac

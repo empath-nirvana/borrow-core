@@ -68,96 +68,103 @@ def look (ρ : Ren) (x : String) : String := (ρ.lookup x).getD x
 def lookI (ρ : Ren) (x : Ident) : Ident := { x with name := look ρ x.name }
 
 mutual
-/-- `V` with its binders renamed by `glob` and its occurrences by `ρ`. The sites `hndCtl`,
+/-- `V` with its binders renamed by `glob` and its occurrences by `ρ`, and the declarations its
+explicit instances name (`defApp`) by `defs`. The sites `hndCtl`,
 `forSite` and `pullSite` are made by `Frontend.Elab.Effects`, after this pass: only the variable
 a `for`'s site threads is a name of the program in them. -/
-def _root_.Frontend.Val.hyg (glob : String → Bool) (ρ : Ren) : Val → HM Val
+def _root_.Frontend.Val.hygD (defs : Ren) (glob : String → Bool) (ρ : Ren) : Val → HM Val
   | .var sp x => pure (.var sp (look ρ x))
   | .clone sp x => pure (.clone sp (look ρ x))
-  | .defApp sp n args => pure (.defApp sp n args)
+  | .defApp sp n args => pure (.defApp sp ((defs.lookup n).getD n) args)
   | .unit sp => pure (.unit sp)
-  | .pair sp V W => do pure (.pair sp (← V.hyg glob ρ) (← W.hyg glob ρ))
-  | .inl sp V => do pure (.inl sp (← V.hyg glob ρ))
-  | .inr sp V => do pure (.inr sp (← V.hyg glob ρ))
-  | .thunk sp M => do pure (.thunk sp (← M.hyg glob ρ))
-  | .thunkv sp M => do pure (.thunkv sp (← M.hyg glob ρ))
-  | .bangThunk sp M => do pure (.bangThunk sp (← M.hyg glob ρ))
-  | .bangThunkv sp M => do pure (.bangThunkv sp (← M.hyg glob ρ))
-  | .unbang sp V => do pure (.unbang sp (← V.hyg glob ρ))
-  | .boxed sp a V => do pure (.boxed sp a (← V.hyg glob ρ))
-  | .unbox sp V => do pure (.unbox sp (← V.hyg glob ρ))
-  | .sub sp V a => do pure (.sub sp (← V.hyg glob ρ) a)
-  | .roll sp V => do pure (.roll sp (← V.hyg glob ρ))
-  | .unroll sp V => do pure (.unroll sp (← V.hyg glob ρ))
-  | .run sp M => do pure (.run sp (← M.hyg glob ρ))
-  | .app sp V W => do pure (.app sp (← V.hyg glob ρ) (← W.hyg glob ρ))
-  | .inst sp V a => do pure (.inst sp (← V.hyg glob ρ) a)
-  | .ascribe sp V A => do pure (.ascribe sp (← V.hyg glob ρ) A)
+  | .pair sp V W => do pure (.pair sp (← V.hygD defs glob ρ) (← W.hygD defs glob ρ))
+  | .inl sp V => do pure (.inl sp (← V.hygD defs glob ρ))
+  | .inr sp V => do pure (.inr sp (← V.hygD defs glob ρ))
+  | .thunk sp M => do pure (.thunk sp (← M.hygD defs glob ρ))
+  | .thunkv sp M => do pure (.thunkv sp (← M.hygD defs glob ρ))
+  | .bangThunk sp M => do pure (.bangThunk sp (← M.hygD defs glob ρ))
+  | .bangThunkv sp M => do pure (.bangThunkv sp (← M.hygD defs glob ρ))
+  | .unbang sp V => do pure (.unbang sp (← V.hygD defs glob ρ))
+  | .boxed sp a V => do pure (.boxed sp a (← V.hygD defs glob ρ))
+  | .unbox sp V => do pure (.unbox sp (← V.hygD defs glob ρ))
+  | .sub sp V a => do pure (.sub sp (← V.hygD defs glob ρ) a)
+  | .roll sp V => do pure (.roll sp (← V.hygD defs glob ρ))
+  | .unroll sp V => do pure (.unroll sp (← V.hygD defs glob ρ))
+  | .run sp M => do pure (.run sp (← M.hygD defs glob ρ))
+  | .app sp V W => do pure (.app sp (← V.hygD defs glob ρ) (← W.hygD defs glob ρ))
+  | .inst sp V a => do pure (.inst sp (← V.hygD defs glob ρ) a)
+  | .ascribe sp V A => do pure (.ascribe sp (← V.hygD defs glob ρ) A)
   | .const sp c => pure (.const sp c)
-  | .shorten sp m s a V => do pure (.shorten sp m s a (← V.hyg glob ρ))
+  | .shorten sp m s a V => do pure (.shorten sp m s a (← V.hygD defs glob ρ))
   | .lend sp x m => pure (.lend sp (lookI ρ x) m)
   | .sugar sp (.forSite i) => pure (.sugar sp (.forSite { i with w := look ρ i.w }))
   | .sugar sp (.pullSite i) => pure (.sugar sp (.pullSite { i with w := look ρ i.w }))
   | .sugar sp s => pure (.sugar sp s)
-  | .mark sp k V => do pure (.mark sp k (← V.hyg glob ρ))
+  | .mark sp k V => do pure (.mark sp k (← V.hygD defs glob ρ))
 
 /-- `M` with its binders renamed by `glob` and its occurrences by `ρ`. -/
-def _root_.Frontend.Comp.hyg (glob : String → Bool) (ρ : Ren) : Comp → HM Comp
-  | .ret sp V => do pure (.ret sp (← V.hyg glob ρ))
+def _root_.Frontend.Comp.hygD (defs : Ren) (glob : String → Bool) (ρ : Ren) : Comp → HM Comp
+  | .ret sp V => do pure (.ret sp (← V.hygD defs glob ρ))
   | .bind sp x A M N lin => do
-    let M' ← M.hyg glob ρ
+    let M' ← M.hygD defs glob ρ
     let (x', ρ') ← bind glob ρ x
-    pure (.bind sp x' A M' (← N.hyg glob ρ') lin)
+    pure (.bind sp x' A M' (← N.hygD defs glob ρ') lin)
   | .force sp x => pure (.force sp (lookI ρ x))
   | .lam sp x A M => do
     let (x', ρ') ← bind glob ρ x
-    pure (.lam sp x' A (← M.hyg glob ρ'))
-  | .app sp M x => do pure (.app sp (← M.hyg glob ρ) (lookI ρ x))
-  | .with_ sp M N => do pure (.with_ sp (← M.hyg glob ρ) (← N.hyg glob ρ))
-  | .proj sp i M => do pure (.proj sp i (← M.hyg glob ρ))
+    pure (.lam sp x' A (← M.hygD defs glob ρ'))
+  | .app sp M x => do pure (.app sp (← M.hygD defs glob ρ) (lookI ρ x))
+  | .with_ sp M N => do pure (.with_ sp (← M.hygD defs glob ρ) (← N.hygD defs glob ρ))
+  | .proj sp i M => do pure (.proj sp i (← M.hygD defs glob ρ))
   | .top sp => pure (.top sp)
-  | .letUnit sp V M => do pure (.letUnit sp (← V.hyg glob ρ) (← M.hyg glob ρ))
+  | .letUnit sp V M => do pure (.letUnit sp (← V.hygD defs glob ρ) (← M.hygD defs glob ρ))
   | .letPair sp x y V M => do
-    let V' ← V.hyg glob ρ
+    let V' ← V.hygD defs glob ρ
     let (x', ρ₁) ← bind glob ρ x
     let (y', ρ₂) ← bind glob ρ₁ y
-    pure (.letPair sp x' y' V' (← M.hyg glob ρ₂))
+    pure (.letPair sp x' y' V' (← M.hygD defs glob ρ₂))
   | .case sp V x M y N => do
-    let V' ← V.hyg glob ρ
+    let V' ← V.hygD defs glob ρ
     let (x', ρx) ← bind glob ρ x
-    let M' ← M.hyg glob ρx
+    let M' ← M.hygD defs glob ρx
     let (y', ρy) ← bind glob ρ y
-    pure (.case sp V' x' M' y' (← N.hyg glob ρy))
-  | .absurd sp V => do pure (.absurd sp (← V.hyg glob ρ))
-  | .lamL sp x b M => do pure (.lamL sp x b (← M.hyg glob ρ))
-  | .inst sp M a => do pure (.inst sp (← M.hyg glob ρ) a)
-  | .nuIn sp M => do pure (.nuIn sp (← M.hyg glob ρ))
-  | .nuOut sp M => do pure (.nuOut sp (← M.hyg glob ρ))
-  | .ascribe sp M C => do pure (.ascribe sp (← M.hyg glob ρ) C)
+    pure (.case sp V' x' M' y' (← N.hygD defs glob ρy))
+  | .absurd sp V => do pure (.absurd sp (← V.hygD defs glob ρ))
+  | .lamL sp x b M => do pure (.lamL sp x b (← M.hygD defs glob ρ))
+  | .inst sp M a => do pure (.inst sp (← M.hygD defs glob ρ) a)
+  | .nuIn sp M => do pure (.nuIn sp (← M.hygD defs glob ρ))
+  | .nuOut sp M => do pure (.nuOut sp (← M.hygD defs glob ρ))
+  | .ascribe sp M C => do pure (.ascribe sp (← M.hygD defs glob ρ) C)
   | .loop sp ℓ (.each x) V M N => do
-    let V' ← V.hyg glob ρ
+    let V' ← V.hygD defs glob ρ
     let (x', ρx) ← bind glob ρ x
-    let M' ← M.hyg glob ρx
-    pure (.loop sp ℓ (.each x') V' M' (← N.hyg glob ρ))
+    let M' ← M.hygD defs glob ρx
+    pure (.loop sp ℓ (.each x') V' M' (← N.hygD defs glob ρ))
   | .loop sp ℓ src V M N => do
-    let V' ← V.hyg glob ρ
-    let M' ← M.hyg glob ρ
-    pure (.loop sp ℓ src V' M' (← N.hyg glob ρ))
-  | .perform sp n i V => do pure (.perform sp n i (← V.hyg glob ρ))
-  | .abort sp n i V => do pure (.abort sp n i (← V.hyg glob ρ))
+    let V' ← V.hygD defs glob ρ
+    let M' ← M.hygD defs glob ρ
+    pure (.loop sp ℓ src V' M' (← N.hygD defs glob ρ))
+  | .perform sp n i V => do pure (.perform sp n i (← V.hygD defs glob ρ))
+  | .abort sp n i V => do pure (.abort sp n i (← V.hygD defs glob ρ))
   | .handle sp n st hr hc M => do
-    let hr' ← hr.hyg glob ρ
-    let hc' ← hc.hyg glob ρ
-    pure (.handle sp n st hr' hc' (← M.hyg glob ρ))
+    let hr' ← hr.hygD defs glob ρ
+    let hc' ← hc.hygD defs glob ρ
+    pure (.handle sp n st hr' hc' (← M.hygD defs glob ρ))
   | .unwind sp x A M D N => do
-    let M' ← M.hyg glob ρ
-    let D' ← D.hyg glob ρ
+    let M' ← M.hygD defs glob ρ
+    let D' ← D.hygD defs glob ρ
     let (x', ρx) ← bind glob ρ x
-    pure (.unwind sp x' A M' D' (← N.hyg glob ρx))
+    pure (.unwind sp x' A M' D' (← N.hygD defs glob ρx))
   | .withbor2r sp x b A B r p m M => do
     let (m', ρm) ← bind glob ρ m
-    pure (.withbor2r sp x b A B r (lookI ρ p) m' (← M.hyg glob ρm))
+    pure (.withbor2r sp x b A B r (lookI ρ p) m' (← M.hygD defs glob ρm))
 end
+
+/-- `V` with its binders renamed by `glob` and its occurrences by `ρ`. -/
+def _root_.Frontend.Val.hyg (glob : String → Bool) (ρ : Ren) (V : Val) : HM Val := V.hygD [] glob ρ
+
+/-- `M` with its binders renamed by `glob` and its occurrences by `ρ`. -/
+def _root_.Frontend.Comp.hyg (glob : String → Bool) (ρ : Ren) (M : Comp) : HM Comp := M.hygD [] glob ρ
 
 /-- A clause, in the scope `ρ`: its parameters bind in its body. -/
 def _root_.Frontend.Clause.hyg (glob : String → Bool) (ρ : Ren) (c : Clause) : HM Clause := do
@@ -184,6 +191,17 @@ where
       pure (.chandler sp { h with params := ps.zip (h.params.map (·.2)), ret := (rx', rA, rM'),
                                   clauses := cs })
     | d => pure d
+
+/-- A library's declaration with the library's declarations named in `ρ` renamed as `ρ` says, in
+its own name and wherever it names them: the program declares those names itself, and its
+declarations shadow the library's (SPEC §41, rule R1), whose own code keeps meaning its own. -/
+def _root_.Frontend.Decl.renameDecls (ρ : Ren) (d : Decl) : Decl :=
+  if ρ.isEmpty then d else
+  let n' (n : Ident) : Ident := { n with name := look ρ n.name }
+  match d with
+  | .def_ sp n ps A V mk => .def_ sp (n' n) ps A ((V.hygD ρ (fun _ => false) ρ).run' 0) mk
+  | .extern sp n A => .extern sp (n' n) A
+  | d => d
 
 /-- The top-level names of value-level declarations: what a local must not be named. -/
 def _root_.Frontend.Decl.globals : Decl → List String

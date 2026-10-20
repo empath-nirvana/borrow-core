@@ -79,13 +79,17 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
     derived-form keyword (`alloc`, `free`, `copy`, `swap`, `host`, …), `val`, `block`, `leaf`,
     `node`, `str`, and `main` are reserved as lower-case names; `U`, `F`, `Fun` as upper-case
     names. `main` has to be reserved: a `def` body ends where the next declaration begins.
-13. **Names are not resolved.** A lower-case name is `Val.var` whether it is a variable or a
-    `def`; an upper-case name in a type is `VTy.name` whether it is `mu`-bound, an
-    abbreviation or a `def` parameter. In a fold's `F` argument, `X` is such a name. Before
-    the sugar is elaborated, `Frontend/Elab/Hygiene.lean` renames every local named as a
+13. **Variables are resolved in surface bodies only.** A lower-case name is `Val.var` whether it
+    is a variable or a `def`; an upper-case name in a type is `VTy.name` whether it is
+    `mu`-bound, an abbreviation or a `def` parameter. In a fold's `F` argument, `X` is such a
+    name. In a surface body (a `fn`, `main -> T`, a handler's clause, a `poly` case) each name
+    resolves to its binder as it is read, and a binder of a name already in scope gets a fresh
+    name (`x1`), so no binder shadows another (SPEC §41, rule R1); core text is read as written.
+    Before the sugar is elaborated, `Frontend/Elab/Hygiene.lean` renames every local named as a
     declaration (other than the capabilities `stdin`, `stdout`, `stderr`) and every control
     handler's parameter to a fresh `hy{n}_{x}`, so code the elaboration moves between scopes
-    neither captures a user's variable nor is captured by one (#481).
+    neither captures a user's variable nor is captured by one (#481). `bcc parse` reads its
+    printed program back without resolving it: its names are already its binders.
 14. **Declarations.** At most one `main`; a library file may have none. Declaration order is
     not checked by the parser (the checker enforces "earlier" for `type`, `shape` and `def`).
     `def` parameters are upper-case names.

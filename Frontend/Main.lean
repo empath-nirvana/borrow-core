@@ -127,9 +127,9 @@ def parseInterpArgs : List String → InterpArgs → Option InterpArgs
 def desugar (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match parseProgram src with
-  | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+  | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
   | .ok p => match Frontend.Elab.elaborate p with
-    | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+    | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
     | .ok el => IO.print el.prog.pp; return 0
 
 /-- Print the erasure of `file`'s checked `main`. -/
@@ -150,10 +150,10 @@ def trusted (file : String) : IO UInt32 := do
 def kinds (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match parseProgram src with
-  | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+  | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
   | .ok p =>
     match Check.checkProgram p with
-    | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+    | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
     | .ok r =>
       for h in r.handles do
         let ks := (List.range h.ks.length).zip h.ks |>.map fun (i, k) => k.render h.n i
@@ -174,10 +174,10 @@ the flow record and whether `main` holds a handler whose name is not a literal. 
 def handled (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match parseProgram src with
-  | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+  | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
   | .ok p =>
     match Check.checkProgram p with
-    | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+    | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
     | .ok r =>
       let some c := r.main | return 0
       let V := c.flows
@@ -196,10 +196,10 @@ clause kinds: `sp: handle n: kind eff[args] by handler (as slot), state (x: A, �
 def sites (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match parseProgram src with
-  | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+  | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
   | .ok p =>
     match Check.checkProgram p with
-    | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+    | .error e => IO.eprintln s!"{file}:{e.renderIn src}"; return 1
     | .ok r =>
       for h in r.handles do
         let ks := (List.range h.ks.length).zip h.ks |>.map fun (i, k) => k.render h.n i
@@ -402,10 +402,11 @@ def kernel (args : List String) : IO UInt32 := do
     IO.eprintln "usage: bcc kernel (list | interp [--stage S] <name> | compile <name> -o <out.wat> | run <name>)"
     return 2
 
-/-- Parse `src`, print it, parse the output, and compare the two ASTs up to spans. -/
+/-- Parse `src`, print it, parse the output, and compare the two ASTs up to spans. The printed
+program's names are already its binders (SPEC §41), so it is read back without resolving them. -/
 def roundTrip (p : Program) : Except String Unit := do
   let out := p.pp
-  match parseProgram out with
+  match parseProgram out (resolve := false) with
   | .error e => throw s!"the printed program does not parse: {e.render}\n{out}"
   | .ok q =>
     if q.strip == p.strip then pure ()
@@ -450,7 +451,7 @@ def main (argv : List String) : IO UInt32 := do
     let src ← IO.FS.readFile file
     match parseProgram src with
     | .error e =>
-      IO.eprintln s!"{file}:{e.render}"
+      IO.eprintln s!"{file}:{e.renderIn src}"
       return 1
     | .ok p =>
       if cmd == "print" then
@@ -459,10 +460,12 @@ def main (argv : List String) : IO UInt32 := do
       if cmd == "check" then
         match Check.checkProgram p with
         | .error e =>
-          IO.eprintln s!"{file}:{e.render}"
+          IO.eprintln s!"{file}:{e.renderIn src}"
           return 1
         | .ok r =>
-          for l in r.lines do IO.println l
+          let rs := renamesOf src
+          for l in r.lines do
+            IO.println (unrename rs l)
           return 0
       match roundTrip p with
       | .error msg =>

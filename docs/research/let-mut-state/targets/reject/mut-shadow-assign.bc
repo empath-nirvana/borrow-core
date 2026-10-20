@@ -1,5 +1,0 @@
--- expect: 3:35: `n` is assigned, but it is not declared `let mut`
-main -> i32 =
-  let mut n = 0;
-  for i in 0..3 { let n = 10 + i; n = n + 1 };
-  n
