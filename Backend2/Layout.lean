@@ -64,7 +64,17 @@ def findIn (parent : Array Nat) : Nat → Nat → Nat
   | 0, i => i
   | f + 1, i => let p := parent[i]!; if p == i then i else findIn parent f p
 
-def find (i : Nat) : GM Nat := return findIn (← get).parent (← get).parent.size i
+/-- The representative of `i`, compressing the path to it. -/
+def find (i : Nat) : GM Nat := do
+  let r := findIn (← get).parent (← get).parent.size i
+  -- Path compression: every node on the way points at the representative.
+  let mut j := i
+  for _ in [0:64] do
+    let p := (← get).parent[j]!
+    if p == j || p == r then break
+    modify fun s => { s with parent := s.parent.set! j r }
+    j := p
+  return r
 
 def newNode (k : NK) (o : LTy) : GM Nat := modifyGet fun s =>
   (s.nodes.size, { s with nodes := s.nodes.push k, parent := s.parent.push s.nodes.size,
@@ -167,11 +177,12 @@ def join (a b : Nat) : GM Unit := do
       let rx ← find x
       let ry ← find y
       if rx == ry then continue
-      let s ← get
-      let kx := s.nodes[rx]!
-      let ky := s.nodes[ry]!
-      let cs := s.codes.getD rx [] ++ s.codes.getD ry []
-      set { s with parent := s.parent.set! ry rx, codes := (s.codes.erase ry).insert rx cs }
+      let kx := (← get).nodes[rx]!
+      let ky := (← get).nodes[ry]!
+      let cs := (← get).codes.getD rx [] ++ (← get).codes.getD ry []
+      let ox := (← get).origin[rx]!
+      let oy := (← get).origin[ry]!
+      modify fun s => { s with parent := s.parent.set! ry rx, codes := (s.codes.erase ry).insert rx cs }
       let more : List (Nat × Nat) ← match kx, ky with
         | .pair a b, .pair c d | .sum a b, .sum c d => pure [(a, c), (b, d)]
         | .ref a, .ref c | .imm a, .imm c | .mut a, .mut c | .fam a, .fam c => pure [(a, c)]
@@ -179,7 +190,7 @@ def join (a b : Nat) : GM Unit := do
         | .imm a, .mut c | .mut a, .imm c => pure [(a, c)]
         | .clos k p r, .clos k' p' r' =>
           if k != k' || r.length != r'.length then
-            throw s!"layout: closures of different kinds joined ({reprStr k} {s.origin[rx]!} codes {cs}, {reprStr k'} {s.origin[ry]!})"
+            throw s!"layout: closures of different kinds joined ({reprStr k} {ox} codes {cs}, {reprStr k'} {oy})"
           let ps := match p, p' with
             | some a, some c => [(a, c)]
             | _, _ => []
@@ -206,8 +217,9 @@ def joinRe (c v : Nat) : GM Unit := do
       let ry ← find y
       if rx == ry || seen.contains (rx, ry) then continue
       seen := seen.insert (rx, ry)
-      let s ← get
-      match s.nodes[rx]!, s.nodes[ry]! with
+      let kx := (← get).nodes[rx]!
+      let ky := (← get).nodes[ry]!
+      match kx, ky with
       | .pair a b, .pair c d | .sum a b, .sum c d => todo := (a, c) :: (b, d) :: todo
       | .ref a, .imm c | .mut a, .imm c | .imm a, .imm c => join a c
       | .fam a, .fam c => todo := (a, c) :: todo
@@ -435,12 +447,13 @@ def sccs (n : Nat) (succ : Array (List Nat)) : Array Bool × Array Nat := Id.run
   let mut stack : List Nat := []
   let mut cyc : Array Bool := Array.replicate n false
   let mut idx := 0
+  let bound := 4 * n + 4 + succ.foldl (· + ·.length) 0
   for root in [0:n] do
     if index[root]!.isSome then continue
     let mut work : List (Nat × List Nat) := [(root, succ[root]!)]
     index := index.set! root (some idx); low := low.set! root idx; idx := idx + 1
     stack := root :: stack; onStack := onStack.set! root true
-    for _ in [0:4 * n + 4 + succ.foldl (· + ·.length) 0] do
+    for _ in [0:bound] do
       match work with
       | [] => break
       | (v, c :: cs) :: rest =>
@@ -475,11 +488,12 @@ def backEdges (n : Nat) (fs : Nat → Array Nat) (roots : List Nat)
     (skip : Std.HashSet (Nat × Nat)) : Std.HashSet (Nat × Nat) := Id.run do
   let mut color : Array Nat := Array.replicate n 0
   let mut back : Std.HashSet (Nat × Nat) := {}
+  let bound := 4 * n + 4 + (List.range n).foldl (fun k v => k + (fs v).size) 0
   for root in roots do
     if color[root]! != 0 then continue
     let mut stack : List (Nat × Nat) := [(root, 0)]
     color := color.set! root 1
-    for _ in [0:4 * n + 4 + (List.range n).foldl (fun k v => k + (fs v).size) 0] do
+    for _ in [0:bound] do
       match stack with
       | [] => break
       | (v, i) :: rest =>
@@ -587,7 +601,9 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) (cells : List (List LTy)) :
   for v in [0:n] do
     if rep[v]! == v && cyc[v]! then
       if let .clos .. := shape[v]! then recCls := recCls.insert v
-  let fieldsOf (v : Nat) : Array Nat := if recCls.contains v then #[] else succ[v]!.toArray
+  let fieldsA : Array (Array Nat) := (Array.range n).map fun v =>
+    if recCls.contains v then #[] else succ[v]!.toArray
+  let fieldsOf (v : Nat) : Array Nat := fieldsA[v]!
   let reps := (List.range n).filter fun v => rep[v]! == v
   let isSum (v : Nat) : Bool := match shape[v]! with | .sum .. => true | _ => false
   let roots := reps.filter isSum ++ reps.filter (!isSum ·)
@@ -597,11 +613,12 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) (cells : List (List LTy)) :
   let mut color : Array Nat := Array.replicate n 0
   let mut width : Array Nat := Array.replicate n 0
   let mut trivial : Array Bool := Array.replicate n true
+  let bound := 4 * n + 4 + succ.foldl (· + ·.length) 0
   for root in reps do
     if color[root]! != 0 then continue
     let mut stack : List (Nat × Nat) := [(root, 0)]
     color := color.set! root 1
-    for _ in [0:4 * n + 4 + succ.foldl (· + ·.length) 0] do
+    for _ in [0:bound] do
       match stack with
       | [] => break
       | (v, i) :: rest =>

@@ -66,6 +66,8 @@ structure CState where
   reads : Std.HashMap String Nat := {}
   /-- The static words for the capabilities' cells, in the data after the literals. -/
   statics : Array Nat := #[]
+  /-- Record the type formers the layouts are read from (`readFormers`). -/
+  census : Bool := false
   /-- The destructors of `μ` types, generated once per type (`genDtor`). -/
   dtors : Std.HashMap String Nat := {}
 
@@ -89,8 +91,43 @@ def lift (r : Except String α) : CM α := match r with
   | .ok a => pure a
   | .error e => throw e
 
-def vty (A : VTy) : CM LTy := lift (ofV A)
-def cty (C : CTy) : CM LCTy := lift (ofC C)
+mutual
+/-- The formers of a value type, each once. -/
+def formersV (acc : List String) : VTy → List String
+  | .tensor A B => formersV (formersV ("V.tensor" :: acc) A) B
+  | .sum A B => formersV (formersV ("V.sum" :: acc) A) B
+  | .thunk C => formersC ("V.thunk" :: acc) C
+  | .ref A => formersV ("V.ref" :: acc) A
+  | .imm _ A => formersV ("V.imm" :: acc) A
+  | .mut _ A => formersV ("V.mut" :: acc) A
+  | .box _ A => formersV ("V.box" :: acc) A
+  | .bang A => formersV ("V.bang" :: acc) A
+  | .mu A => formersV ("V.mu" :: acc) A
+  | .fam A => formersV ("V.fam" :: acc) A
+  | .unit => "V.unit" :: acc
+  | .zero => "V.zero" :: acc
+  | .unk => "V.unk" :: acc
+  | .tvar _ => "V.tvar" :: acc
+  | .int _ => "V.int" :: acc
+  | .opq _ => "V.opq" :: acc
+/-- The formers of a computation type, each once. -/
+def formersC (acc : List String) : CTy → List String
+  | .ret A => formersV ("C.ret" :: acc) A
+  | .arr A C => formersC (formersV ("C.arr" :: acc) A) C
+  | .amp C D => formersC (formersC ("C.amp" :: acc) C) D
+  | .all _ _ C => formersC ("C.all" :: acc) C
+  | .nu C => formersC ("C.nu" :: acc) C
+  | .eff _ _ _ A B fin C => formersC (formersC (formersV (formersV ("C.eff" :: acc) A) B) fin) C
+  | .top => "C.top" :: acc
+end
+
+/-- Record the formers a layout is read from (in the census's run). -/
+def readFormers (fs : List String) : CM Unit := do
+  if (← get).census then
+    for f in fs.eraseDups do readFact s!"{f}:layout"
+
+def vty (A : VTy) : CM LTy := do readFormers (formersV [] A); lift (ofV A)
+def cty (C : CTy) : CM LCTy := do readFormers (formersC [] C); lift (ofC C)
 
 /-- The type of a node's value: a value type's, `F A`'s `A`, and otherwise the closure the
 computation's λ-value is. -/
@@ -121,7 +158,7 @@ def leaf (ctx : Ctx) (keep : Option Nat) (b : Tm) : Tm :=
 
 /-- The context at a split, by its masks: the parts' contexts and the copies and drops made at the
 split. -/
-def splitCtx (ctx : Ctx) (m : Masks) : CM ((Tm → Tm) × Ctx × Ctx) := do
+def splitCtx (ctx : Ctx) (m : Masks) (rule : String := "?") : CM ((Tm → Tm) × Ctx × Ctx) := do
   if m.ms.length != ctx.length then
     throw s!"LIR: masks of {m.ms.length} slots at a context of {ctx.length}"
   let mut pre : List (Tm → Tm) := []
@@ -140,7 +177,7 @@ def splitCtx (ctx : Ctx) (m : Masks) : CM ((Tm → Tm) × Ctx × Ctx) := do
     | some x, false, false =>
       pre := (fun t => .drop x t) :: pre
       c₁ := c₁.push none; c₂ := c₂.push none
-  readFact "masks"
+  readFact s!"{rule}:masks"
   return (fun t => pre.foldl (fun t f => f t) t, c₁.toList, c₂.toList)
 
 /-- Register a function. -/
@@ -628,7 +665,7 @@ def genUnfold (C : LCTy) (gT sT : LTy) : CM Nat := do
     setFn fi { name := "observe", params := [g, st], body := b, ret := ← resOf (LCTy.subst 0 nu Cj) }
     fis := fis.push fi
   modify fun s => { s with codes := s.codes.set! obs { kind := .amp, fns := fis.toList, ty := .nu C } }
-  readFact "unfold"
+  readFact "unfoldN:body"
   return obs
 
 /-! ### Destructors (SPEC §12)
@@ -914,7 +951,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   match fuel with
   | 0 => throw "LIR: the typed term is too deep"
   | fuel + 1 =>
-  readFact (ruleName t)
+  readFact s!"{ruleName t}:node"
   match t with
   | .var _ _ i _ =>
     match ctx[i]? with
@@ -923,7 +960,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   | .unitI .. | .topI .. => return leaf ctx none .unit
   | .lit _ _ c => return leaf ctx none (.lit c)
   | .tensorI _ j _ _ u t₁ t₂ => do
-    let (pre, c₁, c₂) ← splitCtx ctx u
+    let (pre, c₁, c₂) ← splitCtx ctx u "tensorI"
     let rT ← repJ j
     let .pair aT bT := rT | throw "LIR: a pair at a non-pair type"
     return pre (← bindTm (← conv fuel c₁ t₁) aT fun a => do
@@ -956,10 +993,11 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let .thunk k ← repJ j | throw "LIR: a `&` at a non-closure type"
     let r₁ ← selTy (.thunk k) 0
     let r₂ ← selTy (.thunk k) 1
+    readFact "withI:code kind"
     mkAmp "with" ctx k [r₁, r₂] [fun ctx' => conv fuel (none :: none :: ctx') tM,
       fun ctx' => conv fuel (none :: none :: ctx') tN]
   | .bind _ _ A _ u tM tN | .effLet _ _ A _ [] u tM tN => do
-    let (pre, c₁, c₂) ← splitCtx ctx u
+    let (pre, c₁, c₂) ← splitCtx ctx u "bind"
     return pre (← bindTm (← conv fuel c₁ tM) (← vty A) fun x => conv fuel (some x :: c₂) tN)
   | .force _ j i C => do
     match ctx[i]? with
@@ -969,7 +1007,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       | _ => return leaf ctx (some i) (.var x)
     | _ => throw s!"LIR: forced variable {i} is not live"
   | .app _ j i _ _ u tM => do
-    let (pre, c₁, c₂) ← splitCtx ctx u
+    let (pre, c₁, c₂) ← splitCtx ctx u "app"
     let some (some x) := c₂[i]? | throw s!"LIR: the argument {i} is not live"
     let rest := leaf c₂ (some i)
     match headOf 64 tM with
@@ -982,24 +1020,24 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let fT ← repJ c.jdg
     bindTm (← conv fuel ctx c) fT fun f => pure (.sel f j)
   | .unitE _ _ _ u tV tM => do
-    let (pre, c₁, c₂) ← splitCtx ctx u
+    let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
     return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop v (← conv fuel c₂ tM))
   | .tensorE _ _ A B _ u tV tM => do
-    let (pre, c₁, c₂) ← splitCtx ctx u
+    let (pre, c₁, c₂) ← splitCtx ctx u "tensorE"
     let aT ← vty A
     let bT ← vty B
     return pre (← bindTm (← conv fuel c₁ tV) (.pair aT bT) fun p => do
       let x ← fresh aT; let y ← fresh bT
       return .letpair x y p (← conv fuel (some y :: some x :: c₂) tM))
   | .sumE _ _ A B _ u tV t₁ t₂ => do
-    let (pre, c₁, c₂) ← splitCtx ctx u
+    let (pre, c₁, c₂) ← splitCtx ctx u "sumE"
     let aT ← vty A
     let bT ← vty B
     return pre (← bindTm (← conv fuel c₁ tV) (.sum aT bT) fun sv => do
       let x ← fresh aT; let y ← fresh bT
       return .case sv x (← conv fuel (some x :: c₂) t₁) y (← conv fuel (some y :: c₂) t₂))
   | .zeroE _ _ _ u tV => do
-    let (pre, c₁, _) ← splitCtx ctx u
+    let (pre, c₁, _) ← splitCtx ctx u "zeroE"
     return pre (← bindTm (← conv fuel c₁ tV) .zero fun v => pure (.absurd v))
   | .allE _ _ _ _ _ _ c | .allEV _ _ _ _ _ _ c => do
     bindTm (← conv fuel ctx c) (← repJ c.jdg) fun f => pure (.app0 f)
@@ -1013,7 +1051,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let off := (← get).data.size
     modify fun s => { s with data := s.data ++ (bs.map (·.toUInt8)).toArray }
     let c ← litCode off bs.length
-    readFact "litFn.bytes"
+    readFact "litFn:bytes"
     modify fun s => { s with lits := s.lits.push (c, off, bs.length) }
     return leaf ctx none (.clos c [])
   | .divLit _ j op c inner => convDivLit fuel ctx j op c inner
@@ -1043,7 +1081,7 @@ def convSpine (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
 where
   go (fuel : Nat) (ctx : Ctx) : List (Masks × TExpr) → List Var → TExpr → LTy → CM Tm
     | (u, ta) :: rest, vs, h, resT => do
-      let (pre, cA, cF) ← splitCtx ctx u
+      let (pre, cA, cF) ← splitCtx ctx u "lolliE"
       let aT ← repJ ta.jdg
       return pre (← bindTm (← conv fuel cA ta) aT fun a => go fuel cF rest (a :: vs) h resT)
     | [], vs, h, resT => do
@@ -1079,12 +1117,12 @@ def convLendCell (fuel : Nat) (ctx : Ctx) (t inner : TExpr) : CM Tm := do
     let (bs, ah) := spineOf 8 aApp
     match bs, headOf 64 ah with
     | [(u₃, v)], .alloc .. => do
-      readFact "lendCell.cell"
-      let (pre₁, c₁, cF) ← splitCtx ctx u₁
+      readFact "lendCell:cell"
+      let (pre₁, c₁, cF) ← splitCtx ctx u₁ "lolliE"
       let cbv ← fresh (← repJ cb.jdg)
       let cbTm ← conv fuel c₁ cb
-      let (pre₂, c₂, cH) ← splitCtx cF u₂
-      let (pre₃, c₃, cA) ← splitCtx c₂ u₃
+      let (pre₂, c₂, cH) ← splitCtx cF u₂ "lolliE"
+      let (pre₃, c₃, cA) ← splitCtx c₂ u₃ "lolliE"
       let vv ← fresh (← repJ v.jdg)
       let vTm ← conv fuel c₃ v
       let cell ← fresh (← repJ aApp.jdg)
@@ -1102,7 +1140,7 @@ def convUse (fuel : Nat) (ctx : Ctx) (info : TInfo) (j : Jdg) (decl : Nat) (targ
   -- A body that takes a closure is specialised to each use, as it is to each set of argument codes
   -- (docs/compiler.md §3.1): its codes would join the closures of every use otherwise.
   if takesClos 64 (← repJ j) then
-    readFact "use.perUse"
+    readFact "use:per-use body"
     return ← conv fuel ctx body
   match (← get).uses[key]? with
   | some tp =>
@@ -1114,7 +1152,7 @@ def convUse (fuel : Nat) (ctx : Ctx) (info : TInfo) (j : Jdg) (decl : Nat) (targ
       | some (some y) => m := m.insert x y
       | _ => ok := false
     if ok then
-      readFact "use.shared"
+      readFact "use:key, shared"
       let kept := tp.slots.map (·.1)
       let extra := slots.filter fun (i, _) => !kept.contains i
       return drops (extra.map (·.2)) (← renameTm m tp.tm)
@@ -1122,7 +1160,7 @@ def convUse (fuel : Nat) (ctx : Ctx) (info : TInfo) (j : Jdg) (decl : Nat) (targ
   | none =>
     let tm ← conv fuel ctx body
     modify fun s => { s with uses := s.uses.insert key ⟨slots, tm⟩ }
-    readFact "use.key"
+    readFact "use:key"
     return tm
 
 /-- A division by a literal at which it cannot fail (`TExpr.divLit`): the dividend, then the
@@ -1133,9 +1171,9 @@ def convDivLit (fuel : Nat) (ctx : Ctx) (j : Jdg) (op : HostOp) (c : IntLit) (in
   let rT ← repJ j
   match peelRet inner with
   | .bind _ _ A _ u tM _ => do
-    let (pre, c₁, c₂) ← splitCtx ctx u
+    let (pre, c₁, c₂) ← splitCtx ctx u "bind"
     let aT ← vty A
-    readFact "divLit.divisor"
+    readFact "divLit:divisor"
     return pre (leaf c₂ none (← bindTm (← conv fuel c₁ tM) aT fun a => do
       let d ← fresh (match c with | .u8 _ => .int .w8 | .i64 _ => .int .w64 | _ => i32T)
       return .letv d (.lit c) (.prim (.divLit op) [a, d])))
@@ -1166,7 +1204,7 @@ where
 /-- **A constant applied to its arguments**, `args` in the order they apply, its answer of type
 `resT`. -/
 def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
-  readFact (ruleName c)
+  readFact s!"{ruleName c}:expand"
   match c, args with
   | .alloc .., [v] => return .prim .alloc [v]
   | .free .., [x] => return .prim .free [x]
@@ -1174,7 +1212,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
   | .copy .., [x] | .arrCopy .., [x] => dup x fun x x' => pure (.pair x x')
   | .forgetImm .., [x] | .forgetMut .., [x] | .forgetUnk .., [x] | .arrForget .., [x] =>
     return .drop x .unit
-  | .dtor _ _ A, [x] => genDtor 64 A x
+  | .dtor _ _ A, [x] => do readFact "dtor:type"; genDtor 64 A x
   | .hostOp _ _ op, [x] => return .prim (.host op) [x]
   | .arrNew _ j _, [p] => do
     let (pT, aT) ← arrowOf (← repJ j)
@@ -1188,7 +1226,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
   | .arrLen .., [v] => return .prim .len [v]
   | .arrReplace .., [p] | .sliceReplaceM .., [p] =>
     letpairM p fun a r => letpairM r fun i x => do
-      readFact "replace.swap"
+      readFact s!"{ruleName c}:slot swap"
       return .prim .replace [a, i, x]
   | .arrGet .., [p] | .sliceGetM .., [p] =>
     letpairM p fun v i => pure (.prim (.idx true) [v, i])
@@ -1221,7 +1259,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     let k : FoldKind := match c with | .foldReuse .. => .reuse | _ => .own
     let .thunk fk := resT | throw "LIR: a fold's answer is not a closure"
     let (some muT, R) ← answerOf resT | throw "LIR: a fold takes no structure"
-    readFact "fold.shape"
+    readFact s!"{ruleName c}:shape"
     let (recV, _) ← genFoldFns k F muT muT (← tyOf g)
     mkClos "fold" [some g] fk (some muT) R fun ctx' => do
       match ctx' with
@@ -1234,7 +1272,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     let (some lT, R) ← answerOf hT | throw "LIR: fold_imm takes no borrow"
     let .imm cellT := lT | throw "LIR: fold_imm's argument is not a borrow"
     let muT ← vty (VTy.immReborrow (.var y) (.mu F.ty))
-    readFact "fold.shape"
+    readFact s!"{ruleName c}:shape"
     let (_, recL) ← genFoldFns .imm F muT cellT (← tyOf g)
     mkClos "fold_imm" [some g] fk none hT fun ctx' =>
       mkClos "fold_imm" ctx' hk (some lT) R fun ctx'' => do
@@ -1337,8 +1375,8 @@ where
 
 /-- Convert a checked `main` to a program. -/
 def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) (ncaps : Nat)
-    (loops : Bool) : Except String (Prog × CState) := do
-  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run {}
+    (loops : Bool) (census : Bool := false) : Except String (Prog × CState) := do
+  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run { census }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
             statics := s.statics.size }, s)
 

@@ -34,13 +34,13 @@ def extsOf (m : Frontend.Check.IOMain) : Except String (List Ext) :=
     | .harness => throw s!"extern `{x.name}` is the model's harness and is not compiled"
 
 /-- The LIR of a checked program, and what the conversion read. -/
-def lirOf (k : Backend.CheckedProg) : Except String (Prog × CState) := do
+def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
   let c := k.main
   let (exts, ncaps, loops) ← match k.io with
     | none => pure ([], 0, false)
     | some m => pure (← extsOf m, m.caps.length, m.loopB.isSome)
   let ctx := c.ctx.map fun s => (s.ty, s.live)
-  convertProg exts ctx c.t c.C ncaps loops
+  convertProg exts ctx c.t c.C ncaps loops census
 
 /-- Convert and lint a program (`bcc lir --lint`): an error outside the pure fragment, or the
 lint's. -/
