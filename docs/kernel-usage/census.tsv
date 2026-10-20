@@ -1,140 +1,264 @@
 fail	corpus/13-1-library.bc	no main
-node	var	374	115176	6327	265193	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
-node	unitI	350	6286	625	12284	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
-node	tensorI	373	51243	2618	124450	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
-node	sumI₁	313	4274	304	6849	corpus/13-2-sum-prog.bc corpus/array-get.bc corpus/ascii-upper.bc
-node	sumI₂	308	4614	309	7190	corpus/13-2-sum-prog.bc corpus/array-get.bc corpus/ascii-upper.bc
+fail	corpus/data-option.bc	18:7: no constructor `Some` is declared
+node	var	379	116362	6330	266844	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	unitI	355	6374	631	12400	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	tensorI	378	51788	2618	125158	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	sumI₁	318	4308	307	6890	corpus/13-2-sum-prog.bc corpus/array-get.bc corpus/ascii-upper.bc
+node	sumI₂	313	4649	312	7236	corpus/13-2-sum-prog.bc corpus/array-get.bc corpus/ascii-upper.bc
 node	thunkF	1	1	0	1	corpus/async-r1-local-borrows.bc
-node	thunkV	302	7645	656	17486	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
-node	ret	374	56109	3216	118075	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
-node	bind	371	27472	1084	52098	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
-node	force	273	4039	78	4461	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
-node	lam	366	12830	1057	32372	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
-node	lamDead	53	85	0	96	corpus/async-map.bc corpus/async-mapreduce.bc corpus/async-race.bc
-node	app	273	3143	68	3555	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
+node	thunkV	305	7711	656	17615	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	ret	379	56740	3219	118958	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	bind	376	27767	1084	52478	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	force	276	4052	78	4474	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
+node	lam	371	12946	1060	32562	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	lamDead	56	89	0	100	corpus/async-map.bc corpus/async-mapreduce.bc corpus/async-race.bc
+node	app	276	3164	68	3576	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
 node	withI	209	1428	68	1513	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
 node	proj₁	232	1589	39	1716	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
 node	proj₂	216	1412	39	1507	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
 node	topI	0	0	0	0	
-node	unitE	328	4234	190	7179	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
-node	tensorE	360	27848	1480	68440	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
-node	sumE	330	11234	562	21732	corpus/13-2-sum-prog.bc corpus/array-get.bc corpus/array-refs.bc
+node	unitE	333	4290	190	7241	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	tensorE	365	28133	1480	68852	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	sumE	335	11388	562	21918	corpus/13-2-sum-prog.bc corpus/array-get.bc corpus/array-refs.bc
 node	zeroE	4	5	0	5	corpus/for-never.bc corpus/gen-fib.bc corpus/rec-deep.bc
-node	allI	248	4658	425	11645	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	allI	251	4698	425	11739	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
 node	allE	0	0	0	0	
 node	bangThunkF	0	0	0	0	
-node	bangThunkV	361	10503	860	27198	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
-node	bangE	368	30375	2211	71457	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	bangThunkV	366	10595	863	27355	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	bangE	373	30739	2214	71948	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
 node	copyBang	0	0	0	0	
 node	forgetBang	0	0	0	0	
-node	boxI	262	2245	127	4868	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	boxI	265	2267	127	4899	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
 node	boxE	23	136	0	198	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
 node	immSub	0	0	0	0	
 node	mutSub	0	0	0	0	
 node	alloc	121	229	0	270	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
-node	free	94	195	0	232	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	free	96	203	0	240	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
 node	swap	19	56	0	68	corpus/aff-coerce.bc corpus/aff-counter.bc corpus/aff-depth.bc
 node	copy	15	28	0	93	corpus/async-scoped.bc corpus/async-workers-scoped.bc corpus/borrow-in-scope.bc
 node	forgetImm	11	36	0	141	corpus/borrow-in-scope.bc corpus/map-views.bc corpus/poly-providers.bc
 node	forgetMut	12	17	0	24	corpus/aff-capture.bc corpus/async-r1-cancel-finaliser-writes.bc corpus/io-laws.bc
 node	forgetUnk	0	0	0	0	
-node	lit	364	18874	786	41499	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
-node	hostOp	351	12903	1064	29850	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
-node	arrNew	176	880	49	2877	corpus/array-empty.bc corpus/array-get.bc corpus/array-refs.bc
+node	lit	369	19185	786	41845	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
+node	hostOp	356	13095	1067	30077	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
+node	arrNew	179	888	49	2888	corpus/array-empty.bc corpus/array-get.bc corpus/array-refs.bc
 node	arrFree	5	10	0	10	corpus/effects-map-hand.bc corpus/effects-map.bc corpus/effects-named.bc
-node	arrSize	124	400	32	1970	corpus/array-empty.bc corpus/ascii-upper.bc corpus/div-recover.bc
-node	arrReplace	134	902	71	6253	corpus/array-empty.bc corpus/array-refs.bc corpus/array-replace.bc
-node	arrLen	131	211	16	784	corpus/array-get.bc corpus/ascii-upper.bc corpus/div-recover.bc
-node	arrGet	152	335	16	1685	corpus/array-get.bc corpus/ascii-upper.bc corpus/bytes-upper.bc
-node	arrCopy	143	1202	110	1675	corpus/array-get.bc corpus/ascii-upper.bc corpus/div-euclid.bc
-node	arrForget	111	588	56	725	corpus/ascii-upper.bc corpus/effects-instances.bc corpus/fields.bc
-node	countFold	165	1018	63	3377	corpus/ascii-upper.bc corpus/async-bank-inbox.bc corpus/async-cancel.bc
-node	countTry	69	173	0	456	corpus/async-timers.bc corpus/count-try.bc corpus/div-infer.bc
-node	boundedFix	57	146	0	186	corpus/async-bank-inbox.bc corpus/async-map.bc corpus/async-mapreduce.bc
+node	arrSize	126	402	32	1973	corpus/array-empty.bc corpus/ascii-upper.bc corpus/data-config.bc
+node	arrReplace	136	909	71	6262	corpus/array-empty.bc corpus/array-refs.bc corpus/array-replace.bc
+node	arrLen	134	215	16	795	corpus/array-get.bc corpus/ascii-upper.bc corpus/data-config.bc
+node	arrGet	155	339	16	1694	corpus/array-get.bc corpus/ascii-upper.bc corpus/bytes-upper.bc
+node	arrCopy	146	1224	110	1702	corpus/array-get.bc corpus/ascii-upper.bc corpus/data-config.bc
+node	arrForget	112	597	56	746	corpus/ascii-upper.bc corpus/data-config.bc corpus/effects-instances.bc
+node	countFold	168	1031	63	3395	corpus/ascii-upper.bc corpus/async-bank-inbox.bc corpus/async-cancel.bc
+node	countTry	70	174	0	457	corpus/async-timers.bc corpus/count-try.bc corpus/data-config.bc
+node	boundedFix	59	148	0	188	corpus/async-bank-inbox.bc corpus/async-map.bc corpus/async-mapreduce.bc
 node	iterate	0	0	0	0	
 node	divFuel	0	0	0	0	
 node	reify	0	0	0	0	
-node	sliceBorrowM	109	133	5	139	corpus/ascii-upper.bc corpus/bytes-upper.bc corpus/float-ordered.bc
-node	sliceBorrowI	151	655	11	1442	corpus/ascii-upper.bc corpus/bytes-upper.bc corpus/div-euclid.bc
-node	sliceGetM	10	11	0	20	corpus/bytes-upper.bc corpus/io-laws.bc corpus/iter-mut-count.bc
-node	sliceLenM	27	30	1	43	corpus/ascii-upper.bc corpus/float-ordered.bc corpus/io-laws.bc
-node	sliceSplitI	120	249	16	503	corpus/ascii-upper.bc corpus/effects-instances.bc corpus/effects-map-hand.bc
-node	sliceSplitM	101	115	9	118	corpus/ascii-upper.bc corpus/io-effects.bc corpus/iter-mut-slice.bc
+node	sliceBorrowM	110	134	5	140	corpus/ascii-upper.bc corpus/bytes-upper.bc corpus/data-particles.bc
+node	sliceBorrowI	154	661	11	1449	corpus/ascii-upper.bc corpus/bytes-upper.bc corpus/data-config.bc
+node	sliceGetM	11	12	0	21	corpus/bytes-upper.bc corpus/data-particles.bc corpus/io-laws.bc
+node	sliceLenM	28	31	1	44	corpus/ascii-upper.bc corpus/data-particles.bc corpus/float-ordered.bc
+node	sliceSplitI	121	251	16	515	corpus/ascii-upper.bc corpus/data-config.bc corpus/effects-instances.bc
+node	sliceSplitM	102	116	9	119	corpus/ascii-upper.bc corpus/data-particles.bc corpus/io-effects.bc
 node	sliceEmptyI	91	189	14	211	corpus/float-roundtrip.bc corpus/io-effects.bc corpus/json-tokens.bc
 node	sliceEmptyM	2	2	0	2	corpus/slice-lib.bc corpus/slice-split.bc
 node	sliceReplaceM	22	25	1	97	corpus/ascii-upper.bc corpus/float-ordered.bc corpus/io-laws.bc
 node	sliceSwapM	18	22	0	29	corpus/float-ordered.bc corpus/lend-copy.bc corpus/quicksort.bc
 node	withbor1	47	74	0	106	corpus/13-2-sum-prog.bc corpus/array-get.bc corpus/async-lend-slots.bc
-node	withbor2	202	583	82	906	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
+node	withbor2	205	594	82	920	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
 node	withbor3	10	14	0	15	corpus/aff-depth.bc corpus/clause-captures.bc corpus/effects-log-fail.bc
-node	withload	169	494	23	1827	corpus/array-get.bc corpus/ascii-upper.bc corpus/async-lend-slots.bc
-node	withswap	60	122	0	182	corpus/aff-capture.bc corpus/aff-counter.bc corpus/aff-depth.bc
+node	withload	172	498	23	1836	corpus/array-get.bc corpus/ascii-upper.bc corpus/async-lend-slots.bc
+node	withswap	61	126	0	186	corpus/aff-capture.bc corpus/aff-counter.bc corpus/aff-depth.bc
 node	withbor1U	1	1	0	1	corpus/core-effects-borrows.bc
 node	withbor2U	4	4	0	6	corpus/core-effects-borrow-abort.bc corpus/effects-borrow-raise.bc corpus/effects-log-fail.bc
 node	withbor3U	2	2	0	2	corpus/core-effects-reborrows.bc corpus/leetcode/trees/0212-word-search-ii.bc
 node	withloadU	1	1	0	1	corpus/core-effects-reborrows.bc
 node	sliceBorrowMU	1	1	0	1	corpus/core-effects-borrows.bc
 node	sliceBorrowIU	1	1	0	1	corpus/core-effects-reborrows.bc
-node	lolliE	372	37809	2698	86887	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
-node	allEV	226	4660	446	8250	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
-node	ofRet	151	892	66	1411	corpus/ascii-upper.bc corpus/async-lend-slots.bc corpus/async-try-join.bc
-node	roll	67	471	0	920	corpus/13-2-sum-prog.bc corpus/async-bank-inbox.bc corpus/async-cancel.bc
-node	unroll	48	215	0	287	corpus/async-bank-inbox.bc corpus/async-cancel.bc corpus/async-lend-slots.bc
+node	lolliE	377	38268	2701	87499	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	allEV	229	4708	446	8331	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+node	ofRet	154	915	66	1441	corpus/ascii-upper.bc corpus/async-lend-slots.bc corpus/async-try-join.bc
+node	roll	69	481	0	932	corpus/13-2-sum-prog.bc corpus/async-bank-inbox.bc corpus/async-cancel.bc
+node	unroll	50	217	0	289	corpus/async-bank-inbox.bc corpus/async-cancel.bc corpus/async-lend-slots.bc
 node	foldImm	11	15	0	17	corpus/13-2-sum-prog.bc corpus/fn-lifetime.bc corpus/sum-i32.bc
 node	foldOwn	15	23	0	28	corpus/13-2-sum-prog.bc corpus/clone-reuse.bc corpus/count-down-exact.bc
 node	foldReuse	3	3	0	3	corpus/map-reuse.bc corpus/surface/map-reuse.bc corpus/axes/scope-data-effects.bc
 node	nuIn	204	768	34	814	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
 node	nuOut	204	2434	78	2604	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
 node	unfoldN	197	634	34	663	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
-node	effSub	151	3024	2	3844	corpus/answers-two-types.bc corpus/ascii-upper.bc corpus/async-bank-inbox.bc
+node	effSub	154	3062	2	3882	corpus/answers-two-types.bc corpus/ascii-upper.bc corpus/async-bank-inbox.bc
 node	effPerform	73	269	0	284	corpus/answers-two-types.bc corpus/async-bank-inbox.bc corpus/async-cancel.bc
-node	effRaise	108	469	2	649	corpus/ascii-upper.bc corpus/async-bank-inbox.bc corpus/async-logged.bc
-node	effLet	129	784	0	977	corpus/answers-two-types.bc corpus/async-bank-inbox.bc corpus/async-cancel.bc
-node	effThen	79	279	0	342	corpus/async-cancel.bc corpus/async-lend-slots.bc corpus/async-map.bc
-node	effHandleV	148	523	0	606	corpus/answers-two-types.bc corpus/ascii-upper.bc corpus/async-bank-inbox.bc
+node	effRaise	111	482	2	662	corpus/ascii-upper.bc corpus/async-bank-inbox.bc corpus/async-logged.bc
+node	effLet	132	790	0	983	corpus/answers-two-types.bc corpus/async-bank-inbox.bc corpus/async-cancel.bc
+node	effThen	82	287	0	350	corpus/async-cancel.bc corpus/async-lend-slots.bc corpus/async-map.bc
+node	effHandleV	151	529	0	612	corpus/answers-two-types.bc corpus/ascii-upper.bc corpus/async-bank-inbox.bc
 node	effHandleVB	16	29	0	37	corpus/async-bank-inbox.bc corpus/async-cancel.bc corpus/async-lend-slots.bc
 node	effHandleT	0	0	0	0	
 node	letPoly	0	0	0	0	
 node	lendR	10	16	0	16	corpus/async-bank-inbox.bc corpus/async-cancel.bc corpus/async-logged.bc
 node	lendLoopR	0	0	0	0	
 node	nilDead	10	16	0	16	corpus/async-bank-inbox.bc corpus/async-cancel.bc corpus/async-logged.bc
-node	dtor	288	3498	161	6213	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
-node	allocS	13	15	0	43	corpus/13-2-sum-prog.bc corpus/block-swap.bc corpus/fn-lifetime.bc
+node	dtor	293	3543	161	6264	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
+node	allocS	15	18	0	48	corpus/13-2-sum-prog.bc corpus/block-swap.bc corpus/data-box-tree.bc
 node	freeS	1	1	0	1	corpus/block-swap.bc
 node	withborSM	1	1	0	1	corpus/block-swap.bc
 node	withborSI	0	0	0	0	
 node	withborF2M	2	2	0	2	corpus/family-swap.bc corpus/surface/family-swap.bc
 node	withborF2I	0	0	0	0	
-node	litFn	53	159	0	181	corpus/div-euclid.bc corpus/div-infer.bc corpus/div-innermost.bc
+node	litFn	55	168	0	190	corpus/data-config.bc corpus/data-turnstile.bc corpus/div-euclid.bc
 node	divLit	10	15	0	17	corpus/div-infer.bc corpus/div-literal.bc corpus/div-overflow.bc
-node	walk	60	78	0	122	corpus/div-recover.bc corpus/effects-fold-sum.bc corpus/effects-fold.bc
-node	selfCall	51	219	0	281	corpus/async-map.bc corpus/async-mapreduce.bc corpus/async-race.bc
+node	walk	63	82	0	126	corpus/data-config.bc corpus/data-particles.bc corpus/data-turnstile.bc
+node	selfCall	53	225	0	287	corpus/async-map.bc corpus/async-mapreduce.bc corpus/async-race.bc
 node	lendCell	26	52	0	74	corpus/async-lend-slots.bc corpus/block-capability-inner.bc corpus/block-capability.bc
-node	use	347	10571	695	19615	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
-former	V.unit	368	235749
-former	V.tensor	373	301161
-former	V.zero	115	18688
-former	V.sum	343	192352
-former	V.thunk	374	164879
-former	V.ref	275	160332
-former	V.imm	183	71227
-former	V.mut	227	37165
-former	V.box	264	32404
-former	V.bang	370	74631
+node	use	352	10656	695	19734	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
+former	V.unit	373	238268
+former	V.tensor	378	304007
+former	V.zero	118	19007
+former	V.sum	348	193982
+former	V.thunk	379	166349
+former	V.ref	280	161931
+former	V.imm	186	72023
+former	V.mut	230	37552
+former	V.box	267	32667
+former	V.bang	375	75460
 former	V.unk	0	0
-former	V.tvar	231	65582
-former	V.mu	67	26601
-former	V.int	365	431687
-former	V.fam	176	182998
-former	V.opq	161	75020
-former	C.ret	374	285966
-former	C.arr	374	147628
+former	V.tvar	233	65795
+former	V.mu	69	26814
+former	V.int	370	436174
+former	V.fam	179	184581
+former	V.opq	164	75876
+former	C.ret	379	288901
+former	C.arr	379	149225
 former	C.amp	233	49322
 former	C.top	2	12
-former	C.all	248	22488
+former	C.all	251	22705
 former	C.nu	204	46531
-former	C.eff	154	36816
+former	C.eff	157	37135
 qual	lin	2	2
-qual	aff	152	573
+qual	aff	155	579
 qual	unr	0	0
-programs	374	failed	1
+read	C.all	layout	173	13037
+read	C.amp	layout	121	9239
+read	C.arr	layout	214	47947
+read	C.nu	layout	121	7842
+read	C.ret	layout	214	53236
+read	V.bang	layout	209	23290
+read	V.box	layout	173	5973
+read	V.fam	layout	150	77482
+read	V.imm	layout	148	32400
+read	V.int	layout	216	154882
+read	V.mu	layout	18	2285
+read	V.mut	layout	153	24035
+read	V.opq	layout	117	45245
+read	V.ref	layout	185	68726
+read	V.sum	layout	193	49269
+read	V.tensor	layout	220	114277
+read	V.thunk	layout	214	45150
+read	V.tvar	layout	133	10245
+read	V.unit	layout	214	70666
+read	V.zero	layout	2	502
+read	allEV	node	158	3795
+read	allI	node	173	3834
+read	alloc	expand	47	77
+read	allocS	expand	13	15
+read	app	masks	123	657
+read	app	node	123	657
+read	arrCopy	expand	93	792
+read	arrForget	expand	72	393
+read	arrFree	expand	5	10
+read	arrGet	expand	105	218
+read	arrLen	expand	88	139
+read	arrNew	expand	121	542
+read	arrReplace	expand	94	589
+read	arrReplace	slot swap	94	589
+read	arrSize	expand	84	260
+read	bangE	node	197	7504
+read	bangThunkV	node	209	6242
+read	bind	masks	219	15027
+read	bind	node	218	15016
+read	boxE	node	7	31
+read	boxI	node	173	1807
+read	copy	expand	11	21
+read	countFold	expand	115	721
+read	countTry	expand	43	104
+read	divLit	divisor	6	11
+read	divLit	node	6	11
+read	dtor	expand	180	2163
+read	dtor	type	180	2163
+read	foldImm	expand	7	11
+read	foldImm	shape	7	11
+read	foldOwn	expand	10	15
+read	foldOwn	shape	10	15
+read	foldReuse	expand	3	3
+read	foldReuse	shape	3	3
+read	force	node	123	1077
+read	forgetImm	expand	10	31
+read	forgetMut	expand	8	8
+read	free	expand	46	89
+read	freeS	expand	1	1
+read	hostOp	expand	207	6763
+read	lam	node	214	8301
+read	lamDead	node	4	4
+read	lend		173	1312
+read	lendCell	cell	18	34
+read	lendCell	node	18	34
+read	lit	node	215	8816
+read	litFn	bytes	26	90
+read	litFn	node	26	90
+read	lolliE	masks	221	24621
+read	lolliE	node	221	22808
+read	nuIn	node	121	302
+read	nuOut	node	121	1052
+read	ofRet	node	94	565
+read	proj₁	node	121	556
+read	proj₂	node	121	514
+read	ret	node	222	32471
+read	roll	node	18	72
+read	sliceBorrowI	expand	101	472
+read	sliceBorrowM	expand	77	99
+read	sliceEmptyI	expand	59	103
+read	sliceEmptyI	node	59	103
+read	sliceEmptyM	expand	2	2
+read	sliceEmptyM	node	2	2
+read	sliceGetM	expand	11	12
+read	sliceLenM	expand	25	28
+read	sliceReplaceM	expand	19	22
+read	sliceReplaceM	slot swap	19	22
+read	sliceSplitI	expand	81	163
+read	sliceSplitM	expand	69	81
+read	sliceSwapM	expand	17	21
+read	sumE	masks	182	4705
+read	sumE	node	182	4705
+read	sumI₁	node	165	1706
+read	sumI₂	node	161	2079
+read	swap	expand	10	23
+read	tensorE	masks	212	18799
+read	tensorE	node	212	18799
+read	tensorI	masks	220	31925
+read	tensorI	node	220	31925
+read	thunkV	node	187	6179
+read	unfoldN	body	121	302
+read	unfoldN	expand	121	302
+read	unitE	masks	190	2381
+read	unitE	node	190	2381
+read	unitI	node	198	2998
+read	unroll	node	6	9
+read	use	key	199	3369
+read	use	key, shared	132	2168
+read	use	node	202	6984
+read	use	per-use body	129	684
+read	var	node	221	72360
+read	walk	node	33	48
+read	withI	code kind	121	611
+read	withI	node	121	611
+read	withbor1	expand	30	50
+read	withbor2	expand	142	687
+read	withbor3	expand	1	1
+read	withborF2M	expand	2	2
+read	withborSM	expand	1	1
+read	withload	expand	115	338
+read	withswap	expand	35	70
+read	zeroE	masks	2	3
+read	zeroE	node	2	3
+programs	379	failed	2	backend2	222

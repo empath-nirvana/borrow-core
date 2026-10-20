@@ -76,6 +76,18 @@ beyond its term is either re-derived from the erasure or dropped:
 - the borrow modes and lifetimes, ignored;
 - the derived nodes' facts (`walk`, `divLit`), ignored.
 
+### What the new backend reads (N1, #636)
+
+`Backend2/` (`docs/n1-plan.md`, SPEC §43) compiles `Checked.t` itself for the programs with no
+effect node (222 of the 379 checked). The census converts each program by it and counts what the
+conversion reads of the typed term, by rule and fact: the `read` lines of
+`docs/kernel-usage/census.tsv` (`scripts/KernelCensus.lean`, `backend2Reads`; the facts recorded
+by `Backend2.readFact`). The rows N1 was given are class A by that backend's reading: the masks
+at every split, the destructor's type, the slot swap, the fold's shape, the literal's bytes, the
+safe divisor, the `use` keys, and every type former a layout is built from. The old backend, the
+default until N6, reads what this section's first paragraph says; the classes below are the new
+backend's where they changed.
+
 ## 2. Classes
 
 - **A**: produced, and its term is all there is to compile. It proves no fact beyond its term that
@@ -101,25 +113,25 @@ baseline).
 |---|---|---|---|---|---|---|---|---|
 | 1 | [`var`](../Core/Fundamental.lean#L87) | §3 | 374 | 115176 | 265193 | erasure only (`Convert.lean:653`) | **A** | — |
 | 2 | [`unitI`](../Core/Fundamental.lean#L88) | §3 | 350 | 6286 | 12284 | erasure only | **A** | — |
-| 3 | [`tensorI`](../Core/Fundamental.lean#L89) | §3 | 373 | 51243 | 124450 | erasure only; the split's masks `u` are dropped and copies/drops are re-derived from free-variable occurrence (`plan2`, `Backend/Clos/Convert.lean:200`) | **B** | N1: copies/moves from the masks (C2b) |
+| 3 | [`tensorI`](../Core/Fundamental.lean#L89) | §3 | 373 | 51243 | 124450 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:161`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
 | 4 | [`sumI₁`](../Core/Fundamental.lean#L92) | §3 | 313 | 4274 | 6849 | erasure only | **A** | — |
 | 5 | [`sumI₂`](../Core/Fundamental.lean#L94) | §3 | 308 | 4614 | 7190 | erasure only | **A** | — |
 | 6 | [`thunkF`](../Core/Fundamental.lean#L97) | §3 | 1 | 1 | 1 | erasure only | **A** | — |
 | 7 | [`thunkV`](../Core/Fundamental.lean#L100) | §3 | 302 | 7645 | 17486 | erasure only | **A** | — |
 | 8 | [`ret`](../Core/Fundamental.lean#L103) | §3 | 374 | 56109 | 118075 | erasure only (identity) | **A** | — |
-| 9 | [`bind`](../Core/Fundamental.lean#L105) | §3 | 371 | 27472 | 52098 | erasure only; the split's masks `u` are dropped and copies/drops are re-derived from free-variable occurrence (`plan2`, `Backend/Clos/Convert.lean:200`) | **B** | N1: copies/moves from the masks |
+| 9 | [`bind`](../Core/Fundamental.lean#L105) | §3 | 371 | 27472 | 52098 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:161`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
 | 10 | [`force`](../Core/Fundamental.lean#L109) | §3 | 273 | 4039 | 4461 | erasure only | **A** | — |
 | 11 | [`lam`](../Core/Fundamental.lean#L111) | §3 | 366 | 12830 | 32372 | erasure only (`Convert.lean:842`) | **A** | — |
 | 12 | [`lamDead`](../Core/Fundamental.lean#L114) | §26 | 53 | 85 | 96 | erasure only | **A** | — |
-| 13 | [`app`](../Core/Fundamental.lean#L117) | §3 | 273 | 3143 | 3555 | erasure only; the split's masks `u` are dropped and copies/drops are re-derived from free-variable occurrence (`plan2`, `Backend/Clos/Convert.lean:200`) | **B** | N1: copies/moves from the masks |
-| 14 | [`withI`](../Core/Fundamental.lean#L121) | §3 | 209 | 1428 | 1513 | erasure only; the code's `&` kind is re-inferred by shape (`Code.selShape?`, `Backend/Clos/Types.lean:429`) | **A** | N1 (layouts from types) removes the re-inference |
+| 13 | [`app`](../Core/Fundamental.lean#L117) | §3 | 273 | 3143 | 3555 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:161`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
+| 14 | [`withI`](../Core/Fundamental.lean#L121) | §3 | 209 | 1428 | 1513 | the new backend reads the code's kind from the node's type (`Backend2/Convert.lean:996`, `mkAmp`); the old re-infers it by shape | **A** | — |
 | 15 | [`proj₁`](../Core/Fundamental.lean#L124) | §3 | 232 | 1589 | 1716 | erasure only | **A** | — |
 | 16 | [`proj₂`](../Core/Fundamental.lean#L126) | §3 | 216 | 1412 | 1507 | erasure only | **A** | — |
 | 17 | [`topI`](../Core/Fundamental.lean#L129) | §3 | 0 | 0 | 0 | — | **C** | nothing (CBPV basis; the checker has the rule, `Frontend/Check/Rules.lean:57`, and no program reaches it) |
-| 18 | [`unitE`](../Core/Fundamental.lean#L130) | §3 | 328 | 4234 | 7179 | erasure only; the split's masks `u` are dropped and copies/drops are re-derived from free-variable occurrence (`plan2`, `Backend/Clos/Convert.lean:200`) | **B** | N1: copies/moves from the masks |
-| 19 | [`tensorE`](../Core/Fundamental.lean#L133) | §3 | 360 | 27848 | 68440 | erasure only; the split's masks `u` are dropped and copies/drops are re-derived from free-variable occurrence (`plan2`, `Backend/Clos/Convert.lean:200`) | **B** | N1: copies/moves from the masks |
-| 20 | [`sumE`](../Core/Fundamental.lean#L137) | §3 | 330 | 11234 | 21732 | erasure only; the split's masks `u` are dropped and copies/drops are re-derived from free-variable occurrence (`plan2`, `Backend/Clos/Convert.lean:200`) | **B** | N1: copies/moves from the masks |
-| 21 | [`zeroE`](../Core/Fundamental.lean#L143) | §3 | 4 | 5 | 5 | erasure only; the split's masks `u` are dropped and copies/drops are re-derived from free-variable occurrence (`plan2`, `Backend/Clos/Convert.lean:200`) | **B** | N1: copies/moves from the masks |
+| 18 | [`unitE`](../Core/Fundamental.lean#L130) | §3 | 328 | 4234 | 7179 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:161`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
+| 19 | [`tensorE`](../Core/Fundamental.lean#L133) | §3 | 360 | 27848 | 68440 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:161`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
+| 20 | [`sumE`](../Core/Fundamental.lean#L137) | §3 | 330 | 11234 | 21732 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:161`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
+| 21 | [`zeroE`](../Core/Fundamental.lean#L143) | §3 | 4 | 5 | 5 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:161`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
 | 22 | [`allI`](../Core/Fundamental.lean#L146) | §3 | 248 | 4658 | 11645 | erasure only; lifetimes erased | **A** | — |
 | 23 | [`allE`](../Core/Fundamental.lean#L152) | §3 | 0 | 0 | 0 | — | **C** | deletion candidate (Growth): the checker emits `allEV` at every use; `allE` at `C` has a checker rule (`Rules.lean:381`) no program reaches |
 | 24 | [`bangThunkF`](../Core/Fundamental.lean#L155) | §2 | 0 | 0 | 0 | — | **C** | nothing (the checker has it, `Rules.lean:214`; `bangThunkV` is used instead) |
@@ -143,7 +155,7 @@ baseline).
 | 42 | [`arrNew`](../Core/Fundamental.lean#L193) | §9 | 176 | 880 | 2877 | erasure only (`tab`, `Flat/Lower.lean:567`) | **A** | — |
 | 43 | [`arrFree`](../Core/Fundamental.lean#L196) | §9 | 5 | 10 | 10 | erasure only (`drop`, `Flat/Lower.lean:637`) | **A** | — |
 | 44 | [`arrSize`](../Core/Fundamental.lean#L199) | §9 | 124 | 400 | 1970 | erasure only | **A** | — |
-| 45 | [`arrReplace`](../Core/Fundamental.lean#L201) | §9 | 134 | 902 | 6253 | erasure only; the move it types is compiled with the copies `plan2` inserts: #608's deep copy of a μ value beside this node | **B** | N1 acceptance (#608): moves from the masks, layouts from types |
+| 45 | [`arrReplace`](../Core/Fundamental.lean#L201) | §9 | 134 | 902 | 6253 | the new backend lowers it from the node as a slot swap: the old contents moved out, the new moved in, no copy and no drop (`Backend2/Convert.lean:1229`, `Backend2/Lower.lean:540`; #608) | **A** | N6 |
 | 46 | [`arrLen`](../Core/Fundamental.lean#L204) | §9 | 131 | 211 | 784 | erasure only | **A** | — |
 | 47 | [`arrGet`](../Core/Fundamental.lean#L207) | §9 | 152 | 335 | 1685 | erasure only (`idx`, `Flat/Lower.lean:604`), bounds-checked at every access | **A** | — |
 | 48 | [`arrCopy`](../Core/Fundamental.lean#L210) | §9 | 143 | 1202 | 1675 | erasure only | **A** | — |
@@ -175,21 +187,21 @@ baseline).
 | 74 | [`withloadU`](../Core/Fundamental.lean#L322) | §19 | 1 | 1 | 1 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read; the row is re-derived | **B** | N5, N2 |
 | 75 | [`sliceBorrowMU`](../Core/Fundamental.lean#L327) | §19 | 1 | 1 | 1 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read; the row is re-derived | **B** | N5, N2 |
 | 76 | [`sliceBorrowIU`](../Core/Fundamental.lean#L334) | §19 | 1 | 1 | 1 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read; the row is re-derived | **B** | N5, N2 |
-| 77 | [`lolliE`](../Core/Fundamental.lean#L342) | §3 | 372 | 37809 | 86887 | erasure only; the split's masks `u` are dropped and copies/drops are re-derived from free-variable occurrence (`plan2`, `Backend/Clos/Convert.lean:200`) | **B** | N1: copies/moves from the masks |
+| 77 | [`lolliE`](../Core/Fundamental.lean#L342) | §3 | 372 | 37809 | 86887 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:161`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
 | 78 | [`allEV`](../Core/Fundamental.lean#L346) | §3 | 226 | 4660 | 8250 | erasure only | **A** | — |
 | 79 | [`ofRet`](../Core/Fundamental.lean#L349) | §3 | 151 | 892 | 1411 | erasure only (identity) | **A** | — |
 | 80 | [`roll`](../Core/Fundamental.lean#L352) | §6 | 67 | 471 | 920 | erasure only (identity) | **A** | — |
 | 81 | [`unroll`](../Core/Fundamental.lean#L355) | §6 | 48 | 215 | 287 | erasure only (identity) | **A** | — |
 | 82 | [`foldImm`](../Core/Fundamental.lean#L362) | §6 | 11 | 15 | 17 | no recogniser: compiled as the generic Z fixed point (`fixBody?`, `Convert.lean:303`) | **A** | — |
-| 83 | [`foldOwn`](../Core/Fundamental.lean#L368) | §6 | 15 | 23 | 28 | re-recognised from the erasure (`travShape?`, `Convert.lean:311`; `foldShape?`, `:332`), its shape re-checked against the layout types (`dswOK`), then pointer reversal (`foldPlan?`, `Flat/Lower.lean:891`) | **B** | N1: read `F` from the node, delete `travShape?` |
-| 84 | [`foldReuse`](../Core/Fundamental.lean#L373) | §6 | 3 | 3 | 3 | as `foldOwn`; the in-place reuse it proves is re-derived the same way | **B** | N1: ownership → in-place reuse from the node |
+| 83 | [`foldOwn`](../Core/Fundamental.lean#L368) | §6 | 15 | 23 | 28 | the new backend reads `F` and `R` from the node: the fold is a function generated from the shape (`genFoldFns`, `travF`, `Backend2/Convert.lean:482`); no pointer reversal yet (B6) | **A** | B6: pointer reversal from the node |
+| 84 | [`foldReuse`](../Core/Fundamental.lean#L373) | §6 | 3 | 3 | 3 | as `foldOwn`: the emptied cell handed to the algebra as the node's type says (`travF`'s reuse, `Backend2/Convert.lean:435`) | **A** | B6 |
 | 85 | [`nuIn`](../Core/Fundamental.lean#L377) | §7 | 204 | 768 | 814 | erasure only; the codata scheme is re-recognised on the closure IR (`collapse?`, `Backend/Clos/Collapse.lean:74`) | **B** | N4 (codata and loops) |
 | 86 | [`nuOut`](../Core/Fundamental.lean#L379) | §7 | 204 | 2434 | 2604 | as `nuIn` | **B** | N4 |
 | 87 | [`unfoldN`](../Core/Fundamental.lean#L383) | §7 | 197 | 634 | 663 | as `nuIn` | **B** | N4 |
 | 88 | [`effSub`](../Core/Fundamental.lean#L386) | §19 | 151 | 3024 | 3844 | erasure only; the row is re-derived by the 0-CFA (`SFacts.of`, `Backend/Clos/Capture.lean:469`; `UFacts.solve`, `Backend/Clos/Unwind.lean:386`) | **B** | N2 (effect erasure from rows and static sites) |
 | 89 | [`effPerform`](../Core/Fundamental.lean#L389) | §19 | 73 | 269 | 284 | erasure only; the row is re-derived by the 0-CFA (`SFacts.of`, `Backend/Clos/Capture.lean:469`; `UFacts.solve`, `Backend/Clos/Unwind.lean:386`); control vs. abortive re-read from the prim (`Ops.of`, `Capture.lean:178`) | **B** | N2 |
 | 90 | [`effRaise`](../Core/Fundamental.lean#L394) | §19 | 108 | 469 | 649 | erasure only; the row is re-derived by the 0-CFA (`SFacts.of`, `Backend/Clos/Capture.lean:469`; `UFacts.solve`, `Backend/Clos/Unwind.lean:386`) | **B** | N2 |
-| 91 | [`effLet`](../Core/Fundamental.lean#L399) | §19 | 129 | 784 | 977 | erasure only; the split's masks `u` are dropped and copies/drops are re-derived from free-variable occurrence (`plan2`, `Backend/Clos/Convert.lean:200`); the row is re-derived | **B** | N1 (masks), N2 (rows) |
+| 91 | [`effLet`](../Core/Fundamental.lean#L399) | §19 | 129 | 784 | 977 | erasure only; the split's masks `u` are dropped and copies/drops are re-derived from free-variable occurrence (`plan2`, `Backend/Clos/Convert.lean:200`); the row is re-derived | **B** | N2 (rows; its masks are read where its row is empty, `Backend2/Convert.lean`) |
 | 92 | [`effThen`](../Core/Fundamental.lean#L412) | §19, §27 | 79 | 279 | 342 | the finaliser frame is re-recognised (`markUbinds`, `Convert.lean:463`; `finRaises`/`finSuspends`, `Capture.lean:1132`/`:1140`) | **B** | N2 |
 | 93 | [`effHandleV`](../Core/Fundamental.lean#L427) | §19, §24 | 148 | 523 | 606 | erasure only; the qualifiers in `qs` are matched `_` and dropped (`Convert.lean:740`); the clause kinds `ks` are re-derived (`tailClause?`, `Capture.lean:625`); `site` is read only for `main_div_error` (`Checked.exitsOnDivError`, `Frontend/Check/Program.lean:59`, via `Driver.lean:106`); `inside` is not read | **B** | N2: kinds (C3) and sites (C3b) read from the node; κ's cell by qualifier |
 | 94 | [`effHandleVB`](../Core/Fundamental.lean#L438) | §28 | 16 | 29 | 37 | as `effHandleV`; the box lifetime `d` is not read | **B** | N2, N3 (stored continuations) |
@@ -211,19 +223,19 @@ ones have their run facts (`Frontend/Check/Derived.lean`).
 
 | # | rule | §  | progs | static | expanded | read by the backend | class | what would change it |
 |---|---|---|---|---|---|---|---|---|
-| 100 | [`dtor`](../Frontend/Check/TExpr.lean#L364) | §12 | 288 | 3498 | 6213 | erasure only (`dtorE`); drops are re-inserted from occurrence (`wrapDrops`, `Convert.lean:192`) | **B** | N1: exact drops from the node |
+| 100 | [`dtor`](../Frontend/Check/TExpr.lean#L364) | §12 | 288 | 3498 | 6213 | the new backend reads `A` from the node: the destructor `dtorAt` gives, a cell freed, a `μ` by its fold, `close` at codata (`genDtor`, `Backend2/Convert.lean:679`) | **A** | — |
 | 101 | [`allocS`](../Frontend/Check/TExpr.lean#L366) | §5 | 13 | 15 | 43 | erasure only (no recogniser for `allocS`) | **B** | N5: frame slots by rule |
 | 102 | [`freeS`](../Frontend/Check/TExpr.lean#L368) | §5 | 1 | 1 | 1 | erasure only | **B** | N5 |
 | 103 | [`withborSM`](../Frontend/Check/TExpr.lean#L371) | §5 | 1 | 1 | 1 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5 |
 | 104 | [`withborSI`](../Frontend/Check/TExpr.lean#L373) | §5 | 0 | 0 | 0 | — | **C** | nothing (checker producer `Frontend/Check/Consts.lean:382`; no program writes an `imm` block borrow) — or U4 (#593): records over blocks |
 | 105 | [`withborF2M`](../Frontend/Check/TExpr.lean#L375) | §5 | 2 | 2 | 2 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5 |
 | 106 | [`withborF2I`](../Frontend/Check/TExpr.lean#L377) | §5 | 0 | 0 | 0 | — | **C** | nothing (checker producer `Consts.lean:506`, unreached) |
-| 107 | [`litFn`](../Frontend/Check/TExpr.lean#L379) | §17 | 53 | 159 | 181 | re-recognised from the erasure (`litTable?`, `Convert.lean:374`) | **B** | N1: read the bytes from the node (C2 acceptance: one node per recogniser) |
-| 108 | [`divLit`](../Frontend/Check/TExpr.lean#L382) | §39 | 10 | 15 | 17 | erasure only: the node's fact (`divLit_some32/64/8`, `Frontend/Check/Derived.lean:66–93`: the error arm is never taken) is not read; the arm is compiled | **B** | N1/N5: drop the dead arm from the node |
+| 107 | [`litFn`](../Frontend/Check/TExpr.lean#L379) | §17 | 53 | 159 | 181 | the new backend reads the bytes from the node: the program's data and a code that reads them (`litCode`, `Backend2/Convert.lean:836`); literal views from it (`Backend2/LitViews.lean`) | **A** | — |
+| 108 | [`divLit`](../Frontend/Check/TExpr.lean#L382) | §39 | 10 | 15 | 17 | the new backend reads the operation and the divisor from the node: the division with no error arm (`convDivLit`, `Backend2/Convert.lean:1169`; `divLitVals`, `Backend2/Lower.lean:360`) | **A** | — |
 | 109 | [`walk`](../Frontend/Check/TExpr.lean#L384) | §16 | 60 | 78 | 122 | erasure only: the node's fact (`walk_index_lt`, `Derived.lean:14`: every index is below the view's length) is not read; each access is bounds-checked (`tickBound`, `Flat/Lower.lean:124`) | **B** | N5: bounds checks elided from the node |
-| 110 | [`selfCall`](../Frontend/Check/TExpr.lean#L387) | §21 | 51 | 219 | 281 | re-derived: the fixed point is re-recognised (`fixBody?`, `Convert.lean:303`) | **B** | N1: direct self-calls from the node |
+| 110 | [`selfCall`](../Frontend/Check/TExpr.lean#L387) | §21 | 51 | 219 | 281 | re-derived: the fixed point is re-recognised (`fixBody?`, `Convert.lean:303`) | **B** | N2 (every self-call is under `bounded_fix` and `Exhausted`, outside N1's fragment), then direct self-calls from the node |
 | 111 | [`lendCell`](../Frontend/Check/TExpr.lean#L390) | §35, §41 | 26 | 52 | 74 | re-derived: the scoped cell is re-recognised (`markScoped`, `Convert.lean:544`) | **D** | N5 (framing from the node); its producers are workarounds (see class D): `lendBorrow`'s value branch (`Frontend/Sugar.lean:2276`, ergonomics N1) and `withBlk`'s state cell (`Sugar.lean:3526`) → #626/#632 |
-| 112 | [`use`](../Frontend/Check/TExpr.lean#L393) | §3 | 347 | 10571 | 19615 | erasure only: `t.erase` holds a copy of the body per use; specialisation keys are not read (pipeline-architecture A6) | **B** | N1: specialisation from `use` keys |
+| 112 | [`use`](../Frontend/Check/TExpr.lean#L393) | §3 | 347 | 10571 | 19615 | the new backend converts each key's body once and instantiates it at later uses; a body that takes a closure at each use (`convUse`, `Backend2/Convert.lean:1136`) | **A** | #541: keys with the argument codes |
 
 ## 6. Type formers
 
@@ -231,26 +243,26 @@ ones have their run facts (`Frontend/Check/Derived.lean`).
 
 | # | former | progs | nodes whose judgment has it | read by the backend | class | what would change it |
 |---|---|---|---|---|---|---|
-| 113 | `V.unit` | 368 | 235749 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1 |
-| 114 | `V.tensor` | 373 | 301161 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1 |
-| 115 | `V.zero` | 115 | 18688 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1 |
-| 116 | `V.sum` | 343 | 192352 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1 |
-| 117 | `V.thunk` | 374 | 164879 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1 |
-| 118 | `V.ref` | 275 | 160332 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1 |
+| 113 | `V.unit` | 368 | 235749 | the new backend's layouts are built from the types (`ofV`, `Backend2/Types.lean`; `build`, `Backend2/Layout.lean:87`; `resolve`, `:564`); the old re-derives them by unification | **A** | — |
+| 114 | `V.tensor` | 373 | 301161 | the new backend's layouts are built from the types (`ofV`, `Backend2/Types.lean`; `build`, `Backend2/Layout.lean:87`; `resolve`, `:564`); the old re-derives them by unification | **A** | — |
+| 115 | `V.zero` | 115 | 18688 | the new backend's layouts are built from the types (`ofV`, `Backend2/Types.lean`; `build`, `Backend2/Layout.lean:87`; `resolve`, `:564`); the old re-derives them by unification | **A** | — |
+| 116 | `V.sum` | 343 | 192352 | the new backend's layouts are built from the types (`ofV`, `Backend2/Types.lean`; `build`, `Backend2/Layout.lean:87`; `resolve`, `:564`); the old re-derives them by unification | **A** | — |
+| 117 | `V.thunk` | 374 | 164879 | the new backend's layouts are built from the types (`ofV`, `Backend2/Types.lean`; `build`, `Backend2/Layout.lean:87`; `resolve`, `:564`); the old re-derives them by unification | **A** | — |
+| 118 | `V.ref` | 275 | 160332 | the new backend's layouts are built from the types (`ofV`, `Backend2/Types.lean`; `build`, `Backend2/Layout.lean:87`; `resolve`, `:564`); the old re-derives them by unification | **A** | — |
 | 119 | `V.imm` | 183 | 71227 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N5: `readonly` |
 | 120 | `V.mut` | 227 | 37165 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N5: `noalias` |
 | 121 | `V.box` | 264 | 32404 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N5: storage from the lifetime |
-| 122 | `V.bang` | 370 | 74631 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1 |
+| 122 | `V.bang` | 370 | 74631 | the new backend's layouts are built from the types (`ofV`, `Backend2/Types.lean`; `build`, `Backend2/Layout.lean:87`; `resolve`, `:564`); the old re-derives them by unification | **A** | — |
 | 123 | `V.unk` | 0 | 0 | — | **C** | nothing (paper baseline; `Imm̲` of an opaque type) |
-| 124 | `V.tvar` | 231 | 65582 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1 (specialisation) |
-| 125 | `V.mu` | 67 | 26601 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1 (#608: layouts from types) |
-| 126 | `V.int` | 365 | 431687 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1 |
-| 127 | `V.fam` | 176 | 182998 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1, N5 |
-| 128 | `V.opq` | 161 | 75020 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1 |
-| 129 | `C.ret` | 374 | 285966 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1 |
-| 130 | `C.arr` | 374 | 147628 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1 |
-| 131 | `C.amp` | 233 | 49322 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1 |
-| 132 | `C.top` | 2 | 12 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N1 |
+| 124 | `V.tvar` | 231 | 65582 | the new backend's layouts are built from the types (`ofV`, `Backend2/Types.lean`; `build`, `Backend2/Layout.lean:87`; `resolve`, `:564`); the old re-derives them by unification | **A** | — |
+| 125 | `V.mu` | 67 | 26601 | the new backend's layouts are built from the types (`ofV`, `Backend2/Types.lean`; `build`, `Backend2/Layout.lean:87`; `resolve`, `:564`); the old re-derives them by unification | **A** | — |
+| 126 | `V.int` | 365 | 431687 | the new backend's layouts are built from the types (`ofV`, `Backend2/Types.lean`; `build`, `Backend2/Layout.lean:87`; `resolve`, `:564`); the old re-derives them by unification | **A** | — |
+| 127 | `V.fam` | 176 | 182998 | the new backend's layouts are built from the types (`ofV`, `Backend2/Types.lean`; `build`, `Backend2/Layout.lean:87`; `resolve`, `:564`); the old re-derives them by unification | **A** | N5: typed pointers |
+| 128 | `V.opq` | 161 | 75020 | the new backend's layouts are built from the types (`ofV`, `Backend2/Types.lean`; `build`, `Backend2/Layout.lean:87`; `resolve`, `:564`); the old re-derives them by unification | **A** | — |
+| 129 | `C.ret` | 374 | 285966 | the new backend's layouts are built from the types (`ofV`, `Backend2/Types.lean`; `build`, `Backend2/Layout.lean:87`; `resolve`, `:564`); the old re-derives them by unification | **A** | — |
+| 130 | `C.arr` | 374 | 147628 | the new backend's layouts are built from the types (`ofV`, `Backend2/Types.lean`; `build`, `Backend2/Layout.lean:87`; `resolve`, `:564`); the old re-derives them by unification | **A** | — |
+| 131 | `C.amp` | 233 | 49322 | the new backend's layouts are built from the types (`ofV`, `Backend2/Types.lean`; `build`, `Backend2/Layout.lean:87`; `resolve`, `:564`); the old re-derives them by unification | **A** | — |
+| 132 | `C.top` | 2 | 12 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2); its two programs are effectful, outside the new backend's fragment | **B** | N2 |
 | 133 | `C.all` | 248 | 22488 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N5: lifetimes → storage |
 | 134 | `C.nu` | 204 | 46531 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N4 |
 | 135 | `C.eff` | 154 | 36816 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N2: rows |
@@ -265,7 +277,7 @@ ones have their run facts (`Frontend/Check/Derived.lean`).
 | 139 | `effHandle` (two-variable `[handle]`), `effThenA` | `Core/Fundamental.lean`, `Core/PinDerives.lean` | yes, as `effHandleV`/`effThen` nodes (`Frontend/Check/TiedDer.effHandle`) | as row 93 | **B** | N2 |
 | 140 | weakening by dead slots: `CDerives.append_dead`, `insert_dead` | `Core/Weaken.lean`, `Core/InsertDead.lean` | yes: the checker places a `def`'s body at each `use` with them (`Frontend/Check/Weaken.lean`, C2) | not needed: a typing fact with no runtime content | **A** | — |
 | 141 | `letPoly_copy`, `letPoly_of_fill`, `Expr.unfill` | `Core/LetCopy.lean` | no (`letPoly` is never produced, row 96); used only by `checkProgram_letPoly` (`Frontend/Check/Program.lean`) | — | **C** | with `letPoly` |
-| 142 | the Z combinator `selfV` | `Core/Fix.lean:189` | yes, under `selfCall` (row 110) | re-recognised by `fixBody?` (`Convert.lean:303`) | **B** | N1, with `selfCall` |
+| 142 | the Z combinator `selfV` | `Core/Fix.lean:189` | yes, under `selfCall` (row 110) | re-recognised by `fixBody?` (`Convert.lean:303`) | **B** | N2, with `selfCall` |
 | 143 | the cancel and unwind frames `ccatch`, `cfin`, `ubind`, and κ's cell (§19 *Laws* 5–6, §25) | `Paper/S1_Syntax/Definitions.lean` (`Prim`), `Core/EffMachine.lean` | `ubind` under `effThen`. `ccatch`/`cfin` only appear in machine steps | `Convert.lean:738–739` rejects `ccatch`/`cfin` as source. `Capture` builds κ with the same cancel arm for every qualifier (`kapBody`, `Capture.lean:261`): no cell, whatever the qualifier | **B** | N2 (κ's cell by qualifier), N3 |
 
 ## 8. Class D: elaborator workarounds and the rules they produce
@@ -304,8 +316,8 @@ Two pieces were checked and are **not** D:
 
 | class | rows |
 |---|---|
-| A, used end to end | 49 |
-| B, produced, the backend ignores what it proves | 73 |
+| A, used end to end | 79 |
+| B, produced, the backend ignores what it proves | 43 |
 | C, proved, never produced | 18 |
 | D, produced only through a workaround | 1 |
 | E, dead | 2 |
@@ -315,15 +327,15 @@ Two pieces were checked and are **not** D:
 
 None is filed as an issue. This list is for the user.
 
-**N1 (new backend, pure fragment; #555 acceptance):**
-- Copies, moves and drops from the split masks and `dtor` nodes, not from occurrence (`plan2`).
-  Rows: `tensorI`, `bind`, `app`, `unitE`, `tensorE`, `sumE`, `zeroE`, `lolliE`, `effLet`,
-  `dtor`, and `arrReplace` (#608).
-- Layouts from types. Rows: every former in §6 except `Unk`, and `withI`'s code kind.
-- Folds from the node, with in-place reuse: `foldOwn`, `foldReuse` (delete `travShape?`/`foldShape?`).
-- The derived nodes read instead of re-recognised: `litFn` (`litTable?`), `selfCall` and
-  `selfV` (`fixBody?`), `divLit` (drop the dead arm).
-- Specialisation from `use` keys.
+**N1 (new backend, pure fragment; #555 acceptance):** done in `Backend2/` for its fragment (§1,
+*What the new backend reads*): the masks of `tensorI`, `bind`, `app`, `unitE`, `tensorE`, `sumE`,
+`zeroE`, `lolliE`; `dtor`; `arrReplace`'s slot swap (#608); every former in §6 that the fragment
+produces, and `withI`'s code kind; `foldOwn`, `foldReuse`; `litFn`, `divLit`; `use` keys. Left:
+- `effLet`'s masks with its row (N2), and `selfCall`/`selfV`, which only bounded recursions
+  produce, every one under `Exhausted` (N2);
+- `C.top`, whose two programs are effectful (N2);
+- pointer reversal for owned folds (B6), and `C.all`/`V.box`/`V.imm`/`V.mut` as storage and
+  attributes (N5).
 
 **N2 (effect erasure):**
 - Rows from the derivation, not the 0-CFA: `effSub`, `effPerform`, `effRaise`, `effLet`, the

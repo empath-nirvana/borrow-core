@@ -83,3 +83,33 @@ when N2 lands.
   recovered (criterion 3).
 - Any output, golden, exit status or `live 0` differs (criterion 4).
 - A count of `counts.expected` rises on the fragment (criterion 6, applied early).
+
+## As built
+
+What the build changed from the plan above, and where each acceptance item stands.
+
+- **Closure classes.** The plan's 0-CFA gives direct calls; it does not give closures their
+  layout, since every place a value moves to must share its representation. The layout stage
+  joins the places a value moves between (`Backend2/Layout.lean`, `join`): a closure place's
+  class is the codes that reach it, with one argument and answer layout. No type is inferred: each
+  node's former is read from the variable's `LTy`. The 0-CFA (`Backend2/Flow.lean`) runs once,
+  after the layouts, for the calls.
+- **Specialisation.** A `use` body is converted once per key; a body that takes a closure is
+  converted at each use, as the old backend's substitution did, so its closures' classes stay each
+  use's (the key with the argument codes of `docs/compiler.md` §3.1 is #541's).
+- **Two passes over the LIR's ownership**, each reading an owner's one consumer: frame slots for
+  `lendCell`'s cell (`Backend2/Frames.lean`) and literal views (`Backend2/LitViews.lean`).
+- **The word IR** is the old backend's (`Backend/Flat/Syntax.lean`), with `load32`/`store32`.
+
+| item | status |
+|---|---|
+| every effect-free corpus program at its golden, Wasm and native | met: 222 programs (`scripts/compile-backend2.sh`) |
+| #509's reproduction compiles once | met: 21 calls of `print_f64`, 419 Wasm functions (old: 38706) |
+| copies, moves and drops from the masks; `arrReplace`/`sliceReplaceM`/`sliceSwapM` a slot swap (#608) | met; the reproduction without recursion allocates 5 (old: 45). Towers and `richards_mu` raise `Exhausted` and `Fail`: outside the fragment (N2) |
+| L-3: no bounds check at a walk's read | not met: the typed term does not say which read is the walk's (SPEC §43 *Open*) |
+| L-6: 4-byte `i32` slots | met: a cell class of `i32`s or `f32`s (`load32`/`store32`) |
+| NEW-b: the budget as a stack-pointer compare | not met: every `bounded_fix` program raises `Exhausted` (N2), and the compare changes when a budget is spent, which SPEC §20 fixes as a count |
+| `divLit`: no error arm | met |
+| every generated deep copy counted | met: an LIR copy at a heap type, and a read through `Imm̲` that copies |
+| the census: N1's class-B rows class A | met for the fragment (`docs/kernel-usage.md` §1); `selfCall`, `effLet`'s rows and `C.top` are effectful (N2) |
+| U1's block as one object | not met: a block's cells are freed one by one (SPEC §43 *Open*) |
