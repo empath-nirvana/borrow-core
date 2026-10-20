@@ -53,27 +53,26 @@ def Counts.sum (a b : Counts) : Counts := b.fold (fun m k n => m.add k n) a
 
 def Counts.scale (a : Counts) (n : Nat) : Counts := a.fold (fun m k v => m.insert k (v * n)) {}
 
+def vName (t : VTy) : String := "V." ++ vtyNames[t.ctorIdx]!
+def cName (t : CTy) : String := "C." ++ ctyNames[t.ctorIdx]!
+
 mutual
 /-- The formers of a value type, each once. -/
-partial def formersV (acc : Std.HashSet String) : VTy → Std.HashSet String
-  | t =>
-    let acc := acc.insert ("V." ++ vtyNames[t.ctorIdx]!)
-    match t with
-    | .tensor A B | .sum A B => formersV (formersV acc A) B
-    | .thunk C => formersC acc C
-    | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .mu A | .fam A => formersV acc A
-    | _ => acc
+def formersV (acc : Std.HashSet String) : VTy → Std.HashSet String
+  | t@(.tensor A B) | t@(.sum A B) => formersV (formersV (acc.insert (vName t)) A) B
+  | t@(.thunk C) => formersC (acc.insert (vName t)) C
+  | t@(.ref A) | t@(.imm _ A) | t@(.mut _ A) | t@(.box _ A) | t@(.bang A) | t@(.mu A)
+  | t@(.fam A) => formersV (acc.insert (vName t)) A
+  | t => acc.insert (vName t)
 /-- The formers of a computation type, each once. -/
-partial def formersC (acc : Std.HashSet String) : CTy → Std.HashSet String
-  | t =>
-    let acc := acc.insert ("C." ++ ctyNames[t.ctorIdx]!)
-    match t with
-    | .ret A => formersV acc A
-    | .arr A C => formersC (formersV acc A) C
-    | .amp C D => formersC (formersC acc C) D
-    | .all _ _ C | .nu C => formersC acc C
-    | .eff _ _ _ A B fin C => formersC (formersC (formersV (formersV acc A) B) fin) C
-    | .top => acc
+def formersC (acc : Std.HashSet String) : CTy → Std.HashSet String
+  | t@(.ret A) => formersV (acc.insert (cName t)) A
+  | t@(.arr A C) => formersC (formersV (acc.insert (cName t)) A) C
+  | t@(.amp C D) => formersC (formersC (acc.insert (cName t)) C) D
+  | t@(.all _ _ C) | t@(.nu C) => formersC (acc.insert (cName t)) C
+  | t@(.eff _ _ _ A B fin C) =>
+    formersC (formersC (formersV (formersV (acc.insert (cName t)) A) B) fin) C
+  | t@.top => acc.insert (cName t)
 end
 
 def formersJ : Jdg → Std.HashSet String
@@ -98,7 +97,12 @@ structure Own where
 def qualName : Qual → String
   | .lin => "lin" | .aff => "aff" | .unr => "unr"
 
-partial def own (acc : Own) (t : TExpr) : Own :=
+/-- The depth bound of the walk: the checker's (`Frontend.Check.checkFuel`). -/
+def ownFuel : Nat := 1 <<< 20
+
+def own : Nat → Own → TExpr → Own
+  | 0, acc, _ => acc
+  | fuel + 1, acc, t =>
   let acc := { acc with
     nodes := acc.nodes.add texprNames[t.ctorIdx]!,
     formers := (formersJ t.jdg).fold (fun m f => m.add f) acc.formers }
@@ -108,7 +112,7 @@ partial def own (acc : Own) (t : TExpr) : Own :=
     | _ => acc
   match t with
   | .use _ _ name decl targs _ body => { acc with uses := acc.uses ++ [(⟨decl, name, targs⟩, body)] }
-  | _ => t.children.foldl (fun a (_, c) => own a c) acc
+  | _ => t.children.foldl (fun a (_, c) => own fuel a c) acc
 
 /-- One program's counts. -/
 structure Prog where
@@ -120,10 +124,10 @@ structure Prog where
 
 /-- Walk `main`: each distinct body once for `static`, every occurrence for `expanded`
 (memoised by key). -/
-partial def census (lib : Nat) (main : TExpr) : Prog := Id.run do
+def census (lib : Nat) (main : TExpr) : Prog := Id.run do
   let mut seen : List (UseKey × Own) := []
   let mut todo : List (UseKey × TExpr) := []
-  let o := own {} main
+  let o := own ownFuel {} main
   let mut p : Prog := { static := o.nodes, expanded := {}, formers := o.formers, quals := o.quals }
   todo := o.uses
   -- static: each distinct body once
@@ -133,7 +137,7 @@ partial def census (lib : Nat) (main : TExpr) : Prog := Id.run do
     | (k, b) :: rest =>
       todo := rest
       if seen.any (·.1 == k) then continue
-      let ob := own {} b
+      let ob := own ownFuel {} b
       seen := seen ++ [(k, ob)]
       p := { p with
         static := p.static.sum ob.nodes,
