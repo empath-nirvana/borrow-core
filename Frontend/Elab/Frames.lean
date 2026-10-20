@@ -201,8 +201,12 @@ def loadsV (y : String) : Val → StateT (List Load) FM Val
   | .thunkv sp M => return .thunkv sp (← loadsIn y M)
   | .bangThunk sp M => return .bangThunk sp (← loadsIn y M)
   | .bangThunkv sp M => return .bangThunkv sp (← loadsIn y M)
-  -- `run M` is a frame inside its binding: its reads are loaded where they are.
-  | .run sp M => return .run sp (← (slotLoads y M : FM Comp))
+  -- `run M` is a frame inside its binding: its reads are loaded where they are when it also
+  -- writes or lends the slot. One that only reads it (`a || b`'s operands) reads it where the
+  -- expression is evaluated: a load has no effect.
+  | .run sp M =>
+    if cNames y (cReads y "io_f_" M) then return .run sp (← (slotLoads y M : FM Comp))
+    else return .run sp (← loadsIn y M)
   | V => pure V
 
 /-- A closure's or a `run`'s body with its reads of `y` taken out to the loads before it. -/
