@@ -304,7 +304,7 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
   | .prim op as => do
     let a (i : Nat) : GM Nat := do nv (as.getD i 0)
     match op with
-    | .alloc | .staticCell _ => join (← kid dst 0) (← a 0)
+    | .alloc | .allocLent | .staticCell _ => join (← kid dst 0) (← a 0)
     | .free => join dst (← kid (← a 0) 0)
     | .swap => do
       join (← kid (← kid dst 0) 0) (← a 1)

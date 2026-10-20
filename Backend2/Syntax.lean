@@ -44,6 +44,9 @@ inductive Op where
   | divLit (op : HostOp)
   /-- A fresh cell holding the argument. -/
   | alloc
+  /-- A fresh cell holding the argument, allocated for one lend (`TExpr.lendCell`): a frame slot
+  when its owner is freed in its function (`Backend2/Frames.lean`). -/
+  | allocLent
   /-- The cell's contents; the cell is freed. -/
   | free
   /-- `swap ℓ v`: `(ℓ, old)`, the old contents moved out and `v` moved in. -/

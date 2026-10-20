@@ -304,7 +304,7 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
     match ← liftE (hostWords o [a, d]) with
     | some r => pure (.int (if byte = true then r &&& 0xff else r))
     | none => bad "a division by a literal that has no answer"
-  | .alloc, [v] => do
+  | .alloc, [v] | .allocLent, [v] => do
     let b ← newObj 1
     writeAt b (some v)
     pure (.loc b)

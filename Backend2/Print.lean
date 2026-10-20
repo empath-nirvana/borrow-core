@@ -19,7 +19,7 @@ def ppOp : Op → String
   | .litByte off n => s!"litByte[{off},{n}]"
   | .litView c => s!"litView[{c}]"
   | .staticCell k => s!"static[{k}]"
-  | .alloc => "alloc" | .free => "free" | .swap => "swap" | .lend => "lend" | .relend => "relend"
+  | .alloc => "alloc" | .allocLent => "allocLent" | .free => "free" | .swap => "swap" | .lend => "lend" | .relend => "relend"
   | .load => "load" | .take => "take" | .put => "put" | .newArr => "newArr"
   | .slotPut => "slotPut" | .slotTake => "slotTake" | .freeArr => "freeArr" | .size => "size"
   | .len => "len" | .emptyFam => "emptyFam" | .replace => "replace" | .swapSlots => "swapSlots"

@@ -49,10 +49,16 @@ structure LCtx where
   staticBase : Nat
   /-- The code of each call's function variable, where the closure flow finds one. -/
   known : Std.HashMap Var Nat := {}
+  /-- The lent cells placed in frame slots (`Backend2/Frames.lean`). -/
+  framed : Std.HashSet Var := {}
 
 structure LState where
   locals : Std.HashMap Var (List Nat) := {}
   next : Nat := 0
+  /-- The words of the function's frame so far. -/
+  frame : Nat := 0
+  /-- The locals holding a frame slot's address. -/
+  slots : Std.HashSet Nat := {}
   helpers : Std.HashMap Helper Nat := {}
   queue : Array Helper := #[]
 
@@ -90,13 +96,19 @@ def helper (h : Helper) : LM Nat := do
       { s with helpers := s.helpers.insert h (base + s.queue.size), queue := s.queue.push h })
 
 /-- Run `act` as the body of a function of `params` words: the locals beyond them. -/
-def inFn (params : Nat) (act : LM α) : LM (α × Nat) := do
+def inFnF (params : Nat) (act : LM α) : LM (α × Nat × Nat) := do
   let saved ← get
-  set { saved with locals := {}, next := params }
+  set { saved with locals := {}, next := params, frame := 0, slots := {} }
   let a ← act
   let n := (← get).next
-  modify fun s => { s with locals := saved.locals, next := saved.next }
-  pure (a, n - params)
+  let fw := (← get).frame
+  modify fun s => { s with locals := saved.locals, next := saved.next, frame := saved.frame,
+                           slots := saved.slots }
+  pure (a, n - params, fw)
+
+def inFn (params : Nat) (act : LM α) : LM (α × Nat) := do
+  let (a, n, _) ← inFnF params act
+  pure (a, n)
 
 /-- Where a term's words go: locals, returned (padded to `k` words), or bound to a variable. -/
 inductive Dest where
@@ -107,6 +119,10 @@ inductive Dest where
 def emit : Dest → List Exp → LM (List Stmt)
   | .to ls, vs => do
     if ls.length != vs.length then throw s!"word IR: {vs.length} words for {ls.length} locals"
+    -- A frame slot's address moved to another local is a slot's address there too.
+    for (l, e) in ls.zip vs do
+      if let .loc l' := e then
+        if (← get).slots.contains l' then modify fun s => { s with slots := s.slots.insert l }
     pure (ls.zip vs |>.map fun (l, e) => .set l e)
   | .ret k, vs => do
     if vs.length > k then throw s!"word IR: {vs.length} words returned for {k}"
@@ -376,21 +392,31 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let c ← one (args.getD 0 0)
     let t ← fresh1
     return [.ite (ltu32 c (.c64 0x80000000)) [.set t c] [.set t (.c64 0)]] ++ (← emit d [.loc t])
-  | .alloc => do
+  | .alloc | .allocLent => do
     if ← zeroCell n then return ← emit d [.c64 0]
     let t ← fresh1
     let w := max 1 ((← L).cellWords.getD ((← L).r n) 1)
-    return [.set t (.alloc (.c64 w.toUInt64))] ++ (← storeCell n (.loc t) (locs (← arg 0))) ++
-      (← emit d [.loc t])
+    let fr := (← read).framed
+    let inFrame := match op, d with
+      | .allocLent, .bind x => fr.contains x
+      | _, _ => false
+    let addr ← if inFrame then do
+        let off := (← get).frame
+        modify fun s => { s with frame := off + w, slots := s.slots.insert t }
+        pure (Exp.slot off w)
+      else pure (.alloc (.c64 w.toUInt64))
+    return [.set t addr] ++ (← storeCell n (.loc t) (locs (← arg 0))) ++ (← emit d [.loc t])
   | .staticCell k => do
     let a := Exp.data ((← read).staticBase + 8 * k)
     return (← storeCell n a (locs (← arg 0))) ++ (← emit d [a])
   | .free => do
     let pn ← argN 0
     if ← zeroCell pn then return ← emit d []
-    let a := Exp.loc ((← arg 0).headD 0)
+    let al := (← arg 0).headD 0
+    let a := Exp.loc al
     let (s, vs) ← loadCell pn a (← wordsN (← contents pn))
-    return s ++ [.free a] ++ (← emit d (locs vs))
+    let rel := if (← get).slots.contains al then Stmt.unslot a else .free a
+    return s ++ [rel] ++ (← emit d (locs vs))
   | .swap => do
     let pn ← argN 0
     let m := (← arg 0).headD 0
@@ -860,13 +886,13 @@ def lowerFn (i : Nat) (fd : Backend2.Fn) : LM Backend.Flat.Fn := do
   let pws := fd.params.map fun x => L.w (L.node x)
   let total := pws.foldl (· + ·) 0
   let k := L.w rn
-  let (body, nloc) ← inFn total do
+  let (body, nloc, frame) ← inFnF total do
     let mut off := 0
     for (x, w) in fd.params.zip pws do
       bindVals x (List.range' off w)
       off := off + w
     pure ((← lowerTm (1 <<< 22) fd.body rn (.ret k)) ++ [.trap])
-  pure { name := fd.name, params := total, results := k, locals := nloc, body }
+  pure { name := fd.name, params := total, results := k, locals := nloc, frame, body }
 
 def countsReport : List Stmt :=
   outStr "allocs " ++ [.call [] fPrintDec [.stat 0]] ++ outStr "\nindirect " ++
@@ -887,18 +913,18 @@ def entryFn (fMain : Nat) : LM Backend.Flat.Fn := do
   pure { name := "entry", params := 0, results := 0, locals := nloc, body }
 
 /-- The word IR of a program at its layouts; with `counts`, the counting build. -/
-def lowerProg (p : Prog) (L : Layouts) (known : Std.HashMap Var Nat) (counts : Bool) :
-    Except String Backend.Flat.Prog := do
+def lowerProg (p : Prog) (L : Layouts) (known : Std.HashMap Var Nat) (framed : Std.HashSet Var)
+    (counts : Bool) : Except String Backend.Flat.Prog := do
   let nf := p.fns.size
   let fMain := 1 + nf
   let pad := (8 - p.data.size % 8) % 8
-  let ctx : LCtx := { L, p, helperBase := fMain + 2, counts, staticBase := p.data.size + pad, known }
+  let ctx : LCtx := { L, p, helperBase := fMain + 2, counts, staticBase := p.data.size + pad, known, framed }
   let act : LM (List Backend.Flat.Fn) := do
     let fns ← p.fns.toList.zipIdx.mapM fun (fd, i) => lowerFn i fd
     let k := L.w L.mainNode
-    let (body, nloc) ← inFn 0 do
+    let (body, nloc, frame) ← inFnF 0 do
       pure ((← lowerTm (1 <<< 22) p.main L.mainNode (.ret k)) ++ [.trap])
-    let main : Backend.Flat.Fn := { name := "main", params := 0, results := k, locals := nloc, body }
+    let main : Backend.Flat.Fn := { name := "main", params := 0, results := k, locals := nloc, frame, body }
     let entry ← entryFn fMain
     let mut gen : Array Backend.Flat.Fn := #[]
     let mut i := 0

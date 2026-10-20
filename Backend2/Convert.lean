@@ -1019,7 +1019,8 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     modify fun s => { s with lits := s.lits.push (c, off, bs.length) }
     return leaf ctx none (.clos c [])
   | .divLit _ j op c inner => convDivLit fuel ctx j op c inner
-  | .walk _ _ _ c | .selfCall _ _ _ _ c | .lendCell _ _ _ c => conv fuel ctx c
+  | .lendCell _ _ _ c => convLendCell fuel ctx t c
+  | .walk _ _ _ c | .selfCall _ _ _ _ c => conv fuel ctx c
   | .effPerform .. | .effRaise .. | .effHandleV .. | .effHandleVB .. | .effHandleT .. | .effThen ..
   | .effLet .. | .effSub .. | .lendR .. | .lendLoopR .. | .nilDead .. | .withbor1U .. | .withbor2U ..
   | .withbor3U .. | .withloadU .. | .sliceBorrowMU .. | .sliceBorrowIU .. | .iterate .. | .divFuel ..
@@ -1070,6 +1071,30 @@ where
         | _, _ => do
           let f ← fresh (← repJ h.jdg)
           return .letv f (← conv fuel ctx h) (← applyAll f vs)
+
+/-- The lend of a cell allocated for it (`TExpr.lendCell`, `withbor (alloc v) cb`, `lendCellB`):
+as a spine, its cell's allocation `allocLent`, which the frame pass may place in the frame. -/
+def convLendCell (fuel : Nat) (ctx : Ctx) (t inner : TExpr) : CM Tm := do
+  let (as, h) := spineOf 8 inner
+  match as with
+  | [(u₁, cb), (u₂, aApp)] =>
+    let (bs, ah) := spineOf 8 aApp
+    match bs, headOf 64 ah with
+    | [(u₃, v)], .alloc .. => do
+      readFact "lendCell.cell"
+      let (pre₁, c₁, cF) ← splitCtx ctx u₁
+      let cbv ← fresh (← repJ cb.jdg)
+      let cbTm ← conv fuel c₁ cb
+      let (pre₂, c₂, cH) ← splitCtx cF u₂
+      let (pre₃, c₃, cA) ← splitCtx c₂ u₃
+      let vv ← fresh (← repJ v.jdg)
+      let vTm ← conv fuel c₃ v
+      let cell ← fresh (← repJ aApp.jdg)
+      let body ← expand fuel (headOf 64 h) [cell, cbv] (← repJ t.jdg)
+      return pre₁ (.letv cbv cbTm (pre₂ (pre₃ (.letv vv vTm (leaf cA none
+        (.letv cell (.prim .allocLent [vv]) (leaf cH none body)))))))
+    | _, _ => conv fuel ctx inner
+  | _ => conv fuel ctx inner
 
 /-- A `use` of a `def`: its body's term made once per key, instantiated at each later use. -/
 def convUse (fuel : Nat) (ctx : Ctx) (info : TInfo) (j : Jdg) (decl : Nat) (targs : List VTy)
