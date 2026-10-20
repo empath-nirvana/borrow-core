@@ -360,7 +360,7 @@ theorem elab_callBlock {Δ : LifeCtx} {Γ : Ctx VTy} {j : Nat} {b : FBlock} (hb 
   have kd := kill_dead Γ
   have hv : CDerives Δ (kill (⟨slotsTy b.Ps, true⟩ :: Γ)) (.val b.v)
       (.val (blockTy b.B b.S b.Ps b.E b.A)) := by
-    have h := shift_deadN _ (kill_dead (⟨slotsTy b.Ps, true⟩ :: Γ)) hb.2
+    have h := shift_deadN _ (kill_dead (⟨slotsTy b.Ps, true⟩ :: Γ)) hb.2.2
     rwa [List.append_nil, shift_closed0 hb.1] at h
   refine .lam (.bind (A := .thunk (.arr b.B (frTy b.S b.Ps b.E b.A))) (splitP_right_all _)
     (.ret (.bangE hv)) ?_)

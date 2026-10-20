@@ -44,9 +44,10 @@ structure FBlock where
   E : ExitRow
   A : VTy
 
-/-- The block is closed and typed at its frame type. -/
+/-- The block is a closed `λ`, typed at its frame type. -/
 def FBlock.Wf (Δ : LifeCtx) (b : FBlock) : Prop :=
-  closedAt 0 b.v.1 = true ∧ CDerives Δ [] (.val b.v) (.val (blockTy b.B b.S b.Ps b.E b.A))
+  closedAt 0 b.v.1 = true ∧ (∃ body, b.v = Val.lam body) ∧
+    CDerives Δ [] (.val b.v) (.val (blockTy b.B b.S b.Ps b.E b.A))
 
 /-- The side conditions of the unwinding borrow constant at a source, for a fresh `'x`. -/
 def LendOk (Δ : LifeCtx) (x : LifeVar) : LendSrc → Prop

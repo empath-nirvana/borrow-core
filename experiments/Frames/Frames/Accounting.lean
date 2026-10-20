@@ -451,6 +451,66 @@ theorem acc_lend (src : LendSrc) {eM : Expr}
     fsimp
     exact retsG_val (w := Val.pair (Val.pair p ρ) r) ⟨_, rfl⟩
 
+/-! ### `new` -/
+
+theorem acc_new (A : VTy) (V : Expr) {eM : Expr}
+    (ih : ∀ γ : List Val, Returns (ℍ := ℍ) (substAll γ eM)) (γ : List Val) :
+    Returns (ℍ := ℍ) (substAll γ (newE A V eM)) := by
+  intro π
+  apply rets_of_retsG
+  show RetsG _ _ (Kont.plug .hole (.app (substAll γ (newE A V eM)) (.val π)))
+  simp only [substAll, newE, Expr.psub]
+  refine retsG_betaE .hole π.2 ?_
+  fsimp
+  refine retsG_plain (K := .appR (.lam _) .hole) rfl (retsG_true _ _) (fun c _ => ?_)
+  refine retsG_beta .hole ?_
+  fsimp
+  refine retsG_betaE .hole (IsVal.pair c.2 π.2) ?_
+  fsimp
+  refine retsG_plain (K := .appR (.lam _) .hole) rfl
+    (retsG_of_rets (by simpa [substAll] using ih γ (Val.pair c π))) ?_
+  rintro y ⟨r, rfl⟩
+  refine retsG_beta .hole ?_
+  fsimp
+  refine retsG_letpair (v₁ := Val.pair c π) (v₂ := r) .hole ?_
+  fsimp
+  refine retsG_letpair (v₁ := c) (v₂ := π) .hole ?_
+  fsimp
+  refine retsG_caseV (fun b _ => ?_) (fun e _ => ?_)
+  · fsimp
+    refine retsG_plain (K := .appR (.lam _) .hole) rfl (retsG_true _ _) (fun a _ => ?_)
+    refine retsG_beta .hole ?_
+    fsimp
+    exact retsG_val (w := Val.pair π (Val.inj₁ (Val.pair b a))) ⟨_, rfl⟩
+  · fsimp
+    exact retsG_seq (retsG_val (w := Val.pair π (Val.inj₂ e)) ⟨_, rfl⟩)
+
+/-! ### `callBlock` -/
+
+theorem acc_callBlock {Δ : LifeCtx} {b : FBlock} {j : Nat} (hwf : b.Wf Δ)
+    (hb : b.Returns (ℍ := ℍ)) (γ : List Val) :
+    Returns (ℍ := ℍ) (substAll γ (callE b.v j)) := by
+  intro π
+  apply rets_of_retsG
+  obtain ⟨hcl, ⟨body, hbody⟩, -⟩ := hwf
+  show RetsG _ _ (Kont.plug .hole (.app (substAll γ (callE b.v j)) (.val π)))
+  simp only [substAll, callE, Expr.psub]
+  refine retsG_betaE .hole π.2 ?_
+  have hc : ∀ k, Expr.psub k γ b.v.1 = b.v.1 := fun k => psub_closedAt _ γ hcl (Nat.zero_le k)
+  have hs : ∀ j (s : Val), Expr.subst j s b.v.1 = b.v.1 := fun j s => subst_closedAt _ s hcl (Nat.zero_le j)
+  simp only [Expr.subst, Expr.val, hc, hs, Kont.plug]
+  refine retsG_betaE .hole b.v.2 ?_
+  generalize hX : Expr.subst 0 b.v (Expr.subst 1 (π.shift 1 0) (Expr.psub 2 γ (.var (j + 2)))) = X
+  have e : Expr.subst 0 ⟨b.v.1, b.v.2⟩ (Expr.subst (0 + 1) (Val.shift 1 0 ⟨π.1, π.2⟩)
+      (Expr.psub (0 + 1 + 1) γ (((Expr.var 0).app (Expr.var (j + 2))).app (Expr.var 1)))) =
+      (Kont.appL (.appR (.val b.v) .hole) π).plug X := by
+    rw [← hX]
+    simp [Expr.psub, Expr.subst, Kont.plug, Expr.val]
+  rw [e]
+  refine retsG_plain (K := .appL (.appR (.val b.v) .hole) π) (by rw [hbody]; rfl)
+    (retsG_true _ _) (fun a _ => ?_)
+  exact retsG_of_rets (hb a π)
+
 end BoCa.Fig16.LogRel.Core.Frames
 
 end
