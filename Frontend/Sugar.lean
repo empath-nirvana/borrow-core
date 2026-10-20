@@ -538,7 +538,9 @@ after the last loop, `x1 <- return x`, is `x` there. The residual is identified 
 followed through its copies, not by the name the terminal gives it (SPEC §41, #617). -/
 def termParts (parts : List CVTy) (ρ : List (String × String)) :
     Comp → Option (List (List (String × CVTy)))
-  | .bind _ x _ (.ret _ (.var _ y)) N _ => termParts parts ((x.name, (ρ.lookup y).getD y) :: ρ) N
+  | .bind _ x _ (.ret _ V) N _ => match V.copyOf? with
+    | some y => termParts parts ((x.name, (ρ.lookup y).getD y) :: ρ) N
+    | none => termParts parts ρ N
   | .loop _ _ _ _ _ N => termParts parts [] N
   | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N => termParts parts ρ N
   | .case _ _ _ M _ N => (termParts parts ρ M).orElse fun _ => termParts parts ρ N

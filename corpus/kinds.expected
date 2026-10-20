@@ -81,6 +81,9 @@ corpus/async-workers-scoped.bc 3.0 affine stored: machine: a path of the clause 
 corpus/async-workers-scoped.bc 3.1 affine tail: -; agree
 corpus/async-workers-scoped.bc 2.0 affine abortive: branch; agree
 corpus/async-workers-scoped.bc 1.0 affine abortive: branch; agree
+corpus/binder-copies.bc 3.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/binder-copies.bc 2.0 affine tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/binder-copies.bc 1.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/block-yield-inner.bc 1.0 affine tail: -; agree
 corpus/block-yield-inner.bc 3.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/block-yield-inner.bc 2.0 affine tail: direct; agree
@@ -333,6 +336,9 @@ corpus/list-blocks.bc 2.0 affine abortive: branch; agree
 corpus/list-blocks.bc 3.0 affine abortive: branch; agree
 corpus/list-capability.bc 1.0 affine abortive: branch; agree
 corpus/list-generic.bc 1.0 affine abortive: branch; agree
+corpus/loop-handler-binder.bc 1.0 affine abortive: branch; agree
+corpus/loop-handler-binder.bc 3.0 affine abortive: branch; agree
+corpus/loop-handler-binder.bc 2.0 affine abortive: branch; agree
 corpus/loop-row-answer.bc 1.0 affine once: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/operator-rounds.bc 1.0 affine abortive: branch; agree
 corpus/operator-rounds.bc 2.0 affine abortive: branch; agree

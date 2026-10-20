@@ -134,8 +134,8 @@ def loopsOnSpine (divCall : Val → Bool) (fin : Finite) : Nat → Comp → Bool
   | n + 1, .loop _ _ src V M N => !src.fin fin V M N || loopsOnSpine divCall fin n N
   | _ + 1, T => isLoopHead divCall T
 
-/-- A binding of the borrow on a block's spine: a copy `let z = a` of a name `a` that holds the
-whole borrow, or a destructuring `let (y, z) = a` (`let () = a`) of a name that holds it or a part
+/-- A binding of the borrow on a block's spine: a copy `let z = a` (`(a : T)`, `clone a`) of a
+name `a` that holds the whole borrow, or a destructuring `let (y, z) = a` (`let () = a`) of a name that holds it or a part
 of it (the parser's form of a pattern). The names it binds hold the borrow as `a` does: a borrow is
 identified by its binder, followed through its copies and parts, never by a name (SPEC §14). -/
 structure Binding where
@@ -149,10 +149,13 @@ structure Binding where
 
 /-- `M` as a binding of the borrow held by `aliases` (the whole of it by `copies`). -/
 def Binding.of? (aliases copies : List String) : Comp → Option Binding
-  | .bind sp z A M@(.ret _ (.var _ a)) N lin =>
-    if aliases.contains a then
-      some ⟨fun K => .bind sp z A M K lin, [z.name], if copies.contains a then [z.name] else [], N⟩
-    else none
+  | .bind sp z A M@(.ret _ V) N lin =>
+    match V.copyOf? with
+    | some a =>
+      if aliases.contains a then
+        some ⟨fun K => .bind sp z A M K lin, [z.name], if copies.contains a then [z.name] else [], N⟩
+      else none
+    | none => none
   | .letPair sp x y V@(.var _ a) N =>
     if aliases.contains a then some ⟨fun K => .letPair sp x y V K, [x.name, y.name], [], N⟩ else none
   | .letUnit sp V@(.var _ a) N =>

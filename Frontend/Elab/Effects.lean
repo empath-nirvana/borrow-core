@@ -774,11 +774,12 @@ def rowC (env : Env) : Nat → Comp → List Inst
   | n + 1, M => match M with
     | .ret _ V | .absurd _ V => rowV env n V
     -- A copy of a block parameter is the block parameter (`Cx.copy`).
-    | .bind _ x _ (.ret _ (.var _ y)) N _ =>
-      match env.cbRows.lookup y with
+    | .bind _ x A (.ret _ V) N _ =>
+      match V.copyOf?.bind fun y => List.lookup y env.cbRows with
       | some r => rowC { env with cbRows := (x.name, r) :: env.cbRows } n N
-      | none => rowC env n N
-    | .bind _ _ (some A) (.ret _ V) N _ => env.union (pullRow env n (isPullTy A) V) (rowC env n N)
+      | none => match A with
+        | some A => env.union (pullRow env n (isPullTy A) V) (rowC env n N)
+        | none => env.union (rowV env n V) (rowC env n N)
     | .bind _ _ _ M N _ | .with_ _ M N => env.union (rowC env n M) (rowC env n N)
     | .letUnit _ V M | .letPair _ _ _ V M => env.union (rowV env n V) (rowC env n M)
     | .case _ V _ M _ N =>
@@ -999,7 +1000,9 @@ def unboxesC (k : String) : Nat → Comp → Bool
   | n + 1, M => match M with
     | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => unboxesV k n V
     -- A copy of the continuation is the continuation (`Cx.copy`).
-    | .bind _ x _ (.ret _ (.var _ y)) N _ => if y == k then unboxesC x.name n N else unboxesC k n N
+    | .bind _ x _ (.ret _ V@(.var ..)) N _ | .bind _ x _ (.ret _ V@(.clone ..)) N _
+    | .bind _ x _ (.ret _ V@(.ascribe ..)) N _ =>
+      if V.copyOf? == some k then unboxesC x.name n N else unboxesV k n V || unboxesC k n N
     | .bind _ _ _ M N _ | .with_ _ M N => unboxesC k n M || unboxesC k n N
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
     | .nuOut _ M | .ascribe _ M _ => unboxesC k n M
@@ -1801,7 +1804,7 @@ def trBind : Nat → Cx → List Cap → Bool → Span → Ident → Option VTy 
   | 0, _, _, _, sp, _, _, _, _, _ => throw ⟨sp, "internal error: a body nested too deeply"⟩
   | n + 1, cx, cs, wrap, sp, x, A, M, N, lin => do
     -- `x <- return y`, a copy of a block parameter, a continuation or a layer's `call`.
-    if let .ret _ (.var _ y) := M then
+    if let some y := (match M with | .ret _ V => V.copyOf? | _ => none) then
       if let some cx' := cx.copy x.name y then
         return .bind sp x A M (← trC n cx' cs wrap N) lin
     -- `x : pull A B R <- return g(W)`: the stored generator of the call.
@@ -3364,8 +3367,8 @@ def forOverParam (xs : List String) : Nat → Comp → Option Span
     | .loop sp _ src V B N =>
       if (match src, V with | .each _, .app _ f _ => (headName f).any xs.contains | _, _ => false) then some sp
       else (forOverParam xs k B).orElse fun _ => forOverParam xs k N
-    | .bind _ x _ (.ret _ (.var _ y)) N _ =>
-      forOverParam (if xs.contains y then x.name :: xs else xs) k N
+    | .bind _ x _ (.ret _ V) N _ =>
+      if V.copyOf?.any xs.contains then forOverParam (x.name :: xs) k N else forOverParam xs k N
     | .bind _ _ _ M N _ | .with_ _ M N | .case _ _ _ M _ N =>
       (forOverParam xs k M).orElse fun _ => forOverParam xs k N
     | .letUnit _ _ M | .letPair _ _ _ _ M | .lam _ _ _ M | .lamL _ _ _ M => forOverParam xs k M

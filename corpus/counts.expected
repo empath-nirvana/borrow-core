@@ -62,6 +62,7 @@ axes/scope-boxed-iter 3 0 0 13 8 3
 axes/scope-codata-effects 0 0 0 7 1 0
 axes/scope-data-effects 7 0 0 68 49 0
 axes/scope-loop-lend 2 0 0 30 13 4
+binder-copies 0 2 0 0 0 0
 block-capability 0 0 0 3 3 0
 block-capability-inner 0 0 0 5 5 0
 block-swap 2 0 0 4 4 0
@@ -102,6 +103,7 @@ div-overflow 0 0 0 1 1 0
 div-own-fail 0 0 0 0 0 0
 div-recover 5 0 0 42 32 13 # the two arrays of rows and the buffers `means` builds; `bad`'s is dropped by the unwind
 div-recursive 0 0 0 1 1 0
+div-residual-copy 0 0 0 7 1 0
 div-unhandled 1 0 0 38 5 1 # the buffer, dropped by the unwind
 effects-abstraction 0 0 0 0 0 0
 effects-borrow-raise 2 0 0 3 3 0 # the cell of each run; freed by the unwinding borrow on the abort
@@ -154,6 +156,7 @@ gen-produce 0 0 0 0 0 0
 gen-return 0 0 0 14 1 0
 gen-tokenize-parse 0 0 0 34 0 17 # the stored generator's state is a stack value, and literal views are read-only data
 gen-value 0 0 0 0 0 0
+generated-names 1 0 0 2 2 0
 generic-in-def 0 0 0 0 0 0
 generic-pair-arg 0 0 0 0 0 0
 hello 0 0 0 16 1 0 # nothing: the output capability's cell is a word of the program's data, and the literal is read-only data
@@ -288,6 +291,7 @@ leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree 74 0 0 5788 5
 leetcode/trees/0297-serialize-and-deserialize-binary-tree 80 0 0 6127 5640 5021 # the input string; per case the line's tokens, two cells per node of each of two trees (Rust: one box), the two strings and the second string's tokens
 leetcode/trees/0572-subtree-of-another-tree 70 0 0 6371 5928 4618 # the input string; per case the line's tokens and two cells per node of each tree (Rust: one box); the comparisons allocate and copy nothing
 lend-config 1 0 0 24 4 0
+lend-copy 3 0 0 38 17 13
 lend-div 2 0 0 36 12 8
 lend-lib-each 2 0 0 44 12 11
 lend-lib-gen 1 0 0 4 4 0
@@ -299,6 +303,7 @@ lend-shadow 2 0 0 33 13 5
 list-blocks 13 0 0 55 43 0
 list-capability 6 0 0 31 22 0
 list-generic 27 0 0 148 102 0 # the lists' nodes, one object each; no frame and no closure is allocated
+loop-handler-binder 1 0 0 15 4 16
 loop-labels 0 0 0 0 0 0
 loop-row-answer 0 0 0 0 0 0
 loop-shadow-linear 1 0 0 6 3 3
