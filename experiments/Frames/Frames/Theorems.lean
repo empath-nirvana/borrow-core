@@ -1,4 +1,4 @@
-import Frames.Elab
+import Frames.Runs
 
 /-!
 # Frames — the target theorems
@@ -117,29 +117,6 @@ theorem core_embeds {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {S : Row} {A : VTy}
   .core hS (fun _ h => absurd h List.not_mem_nil) hN
 
 /-! ### 3. Accounting -/
-
-/-- One step of the accounting invariant `R` at `t`: every run from `t` that reaches a value
-reaches `(π, x)`, the slots `π` themselves beside an exit tag; and every run that stops at an
-operation no handler in it handles (a `Div` tick, an outer handler's operation) is resumed, at
-every answer, into a term of `R`. A run that stops at a `raise` leaves by §19's unwinding
-(`frame_unwind_leakfree`). -/
-def RetsStep (π : Val) (R : Expr → Prop) (t : Expr) : Prop :=
-  (∀ (μ μ' : Heap) (w : Val), Steps μ t μ' (.val w) → ∃ x : Val, w = Val.pair π x) ∧
-  (∀ (μ μ' : Heap) (K : Kont) (n i : UInt32) (v : Val),
-    Steps μ t μ' (K.plug (performE (.val (opPayload n i v)))) → K.HasHnd n = false →
-    ∀ w : Val, R (K.plug (.val w)))
-
-/-- **The slots come back**, coinductively: `t` is in an invariant closed under `RetsStep`. It is
-a greatest fixed point because a div loop stops at a tick at every turn, forever. A unary
-property of machine runs at one value `π`; it reads no type and no resource. -/
-def Rets (π : Val) (t : Expr) : Prop :=
-  ∃ R : Expr → Prop, R t ∧ ∀ t', R t' → RetsStep π R t'
-
-/-- A frame term hands back the slots it is given, whatever they are. -/
-def Returns (e : Expr) : Prop := ∀ π : Val, Rets π (.app e (.val π))
-
-/-- A block hands back the slots on every argument. -/
-def FBlock.Returns (b : FBlock) : Prop := ∀ a : Val, Frames.Returns (.app (.val b.v) (.val a))
 
 /-- **Accounting**: every exit of a well-typed frame returns each of its slots exactly once, the
 same slot at the same position. ONE induction over `FDerives`; each case uses only its premises'
