@@ -69,11 +69,11 @@ inductive Op where
   /-- `tab fi (f, n)` (`array_new`): an array of `n` slots, slot `i` filled with `f i` by the loop
   function `fi`, called on `(f, a, 0, n)`. -/
   | tab (fi : Nat)
-  /-- `tab fi (f, n)` where `f` is the closure of the literal table code `c`, whose `len` bytes are
-  at `off` in the data, and the array is only read before it is destroyed
-  (`Backend2/LitViews.lean`): at `n ≤ len` the array is the literal's bytes in the data, and
-  nothing is allocated; else `tab`'s. -/
-  | tabLit (fi c off len : Nat)
+  /-- `tab fi (f, n)` where `f` is a closure of the literal tables' code, whose environment is the
+  literal's offset in the data and its length `len`, and the array is only read before it is
+  destroyed (`Backend2/LitViews.lean`): at `n ≤ len` the array is the literal's bytes in the
+  data, and nothing is allocated; else `tab`'s. -/
+  | tabLit (fi : Nat)
   /-- `slotPut a i v`: `v` moved into slot `i` of the array `a`, unwritten; the result is `a`. -/
   | slotPut
   /-- `slotTake a i`: slot `i`'s contents moved out, the slot left unwritten: `(a, contents)`. -/
@@ -100,9 +100,10 @@ inductive Op where
   | roll
   /-- `μ`'s unfold. -/
   | unroll
-  /-- A byte of a literal's table (`TExpr.litFn`): the byte at index `i` of the `n` bytes at
-  `off` in the program's data, `0` past the end. -/
-  | litByte (off n : Nat)
+  /-- A byte of a literal's table (`TExpr.litFn`), on `(off, n, i)`: the byte at index `i` of the
+  `n` bytes at `off` in the program's data, `0` past the end. One code reads every literal, so the
+  tables of a program are one closure class's single code. -/
+  | litByte
   /-- The view of a literal's table as a family of bytes in the program's data, when the table
   is the closure of code `c` (`TExpr.litFn`) and the length at most its own: `inl (base, n)`,
   else `inr ()`. -/
@@ -111,6 +112,11 @@ inductive Op where
   | io (k : IOKind)
   /-- `len(c)`: `c` when `c < 2³¹`, else `0` (SPEC §9). -/
   | clampLen
+  /-- `i < n` of a counted loop's index and bound, the bound below `2³¹` (`arrLen`): `inr ()` when
+  it holds, else `inl ()`. Both are `i32`s, held zero-extended, so they are compared as words. -/
+  | cntLt
+  /-- `i + 1` of a counted loop's index below its bound: below `2³¹`, so it does not wrap. -/
+  | cntSucc
   /-- A capability's cell (SPEC §11, §34): the `k`-th static word of the program's data, holding
   the argument. Freeing it frees nothing. -/
   | staticCell (k : Nat)

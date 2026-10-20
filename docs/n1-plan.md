@@ -113,3 +113,30 @@ What the build changed from the plan above, and where each acceptance item stand
 | every generated deep copy counted | met: an LIR copy at a heap type, and a read through `Imm̲` that copies |
 | the census: N1's class-B rows class A | met for the fragment (`docs/kernel-usage.md` §1); `selfCall`, `effLet`'s rows and `C.top` are effectful (N2) |
 | U1's block as one object | not met: a block's cells are freed one by one (SPEC §43 *Open*) |
+
+## Part 2
+
+The decisions recorded on #636 after part 1: a type-erasure rule for `Λ`, the codata derived node
+pulled forward from N4, and the walk's typed fact (L-3). SPEC §44–§46.
+
+| item | status |
+|---|---|
+| `Λ` erased by a proved rule (§44) | met: `allI_inst` (one β at every memory to the body's λ-value); `∀'x. C` is `C` in the LIR's types; no `∀` type in any program's LIR. Counts unchanged (the instantiations were direct calls) |
+| codata's η-thunk as a derived node (§45) | met: `nuEta`, built by the checker at `thunkv`; `nuEta_obs`, `nuEta_var`, `nuEta_unfold`; at `f = unfold step` the call `f s` is made where the thunk is built. Every program's `indirect` at most the old backend's: 37 in all, equal on all 222 (part 1: 2024917). Two programs' rise was literal tables, now one code over the literal's offset and length |
+| L-3: the walk's read (§46) | met: `walk`'s `read` (`walkReadB`), the marked read `walkGet`; the 33 programs of the fragment with a walk have no test at the walk's read. The step's tails handing the view on is fixed of the term, not proved of the runs (§46 *Open*) |
+| NEW-b | not in reach: every `bounded_fix` program has an effect node, outside the fragment; counts are gated on Wasm |
+| U1's block as one object | deferred (decision on #636) |
+
+**The run-time gap.** The part-1 report attributed `parse` and `wordcount`'s gap to the
+instantiation thunks. Erasing them changed neither time: LLVM had inlined them. The cause was the
+generated counted loops' index, tested and stepped by the 32-bit host operations with their
+truncations, which kept LLVM from relating the loop's test to the reads' tests. As words
+(`cntLt`, `cntSucc`, §46) the two run at:
+
+| bench | old | new | Rust | new / Rust | old / Rust |
+|---|---|---|---|---|---|
+| parse | 153 ms | 153 ms | 127 ms | 1.20× | 1.20× |
+| wordcount | 127 ms | 132 ms | 104 ms | 1.27× | 1.22× |
+
+(native, median of 11, interleaved). The tests LLVM removes once the loop's test is a word compare
+are LLVM's: no annotation forces them.

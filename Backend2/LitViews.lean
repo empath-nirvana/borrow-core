@@ -19,26 +19,26 @@ namespace Backend2.LitViews
 open Backend2
 
 /-- Rewrite each `tab` whose array is a literal's view. -/
-def rewrite (p : Prog) (lits : Array (Nat × Nat × Nat)) (sets : Std.HashMap Var (Std.HashSet Nat))
+def rewrite (p : Prog) (lits : Option Nat) (sets : Std.HashMap Var (Std.HashSet Nat))
     : Prog := Id.run do
-  let litOf (f : Var) : Option (Nat × Nat × Nat) := do
+  let litOf (f : Var) : Option Nat := do
     let cs := sets.getD f {}
     if cs.size != 1 then none
     let c ← cs.toList.head?
-    lits.find? (·.1 == c)
+    if lits == some c then some c else none
   let rw (body : Tm) : Tm :=
     let uses := Frames.usesOf (1 <<< 22) body none {}
     go uses litOf (1 <<< 22) body none
   { p with fns := p.fns.map (fun fd => { fd with body := rw fd.body }), main := rw p.main }
 where
-  go (uses : Std.HashMap Var Frames.Use) (litOf : Var → Option (Nat × Nat × Nat)) :
+  go (uses : Std.HashMap Var Frames.Use) (litOf : Var → Option Nat) :
       Nat → Tm → Option Var → Tm
     | 0, t, _ => t
     | f + 1, t, dst => match t with
       | .prim (.tab fi) [g, n] =>
         match dst, litOf g with
-        | some a, some (c, off, len) =>
-          if Frames.readOnly p uses 4096 a none then .prim (.tabLit fi c off len) [g, n] else t
+        | some a, some _ =>
+          if Frames.readOnly p uses 4096 a none then .prim (.tabLit fi) [g, n] else t
         | _, _ => t
       | .letv x e b => .letv x (go uses litOf f e (some x)) (go uses litOf f b dst)
       | .letpair x y q b => .letpair x y q (go uses litOf f b dst)

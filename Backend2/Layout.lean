@@ -133,7 +133,6 @@ def buildC (fuel : Nat) (env : List Nat) (k : LCTy) : GM Nat := do
     modify fun s => { s with parent := s.parent.set! i p }
     pure p
   | .ret a => do newNode (.clos .unit none [← build f env a]) (.thunk k)
-  | .all c => do newNode (.clos .unit none [← repNode f env c]) (.thunk k)
   | .arr a c => do newNode (.clos .lam (some (← build f env a)) [← repNode f env c]) (.thunk k)
   | .amp c d => do newNode (.clos .amp none [← repNode f env c, ← repNode f env d]) (.thunk k)
   | .top => newNode .unit (.thunk k)

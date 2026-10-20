@@ -31,11 +31,15 @@ means beside the shape their rule fixes (`walkB`, `selfCallB`, `lendCellB`):
 
 * **A counted walk's view.** The rule fixes that the term is a `count_fold` or a `count_try`, and
   `walk_fold_index_lt`/`walk_index_lt`/`walk_get_leaf`/`walk_split_first` that its step runs below
-  the bound and that
-  below its length a view's read answers a leaf. That the step reads, at the step's index, the
-  view the bound was taken from is the scheme's: `forData` threads the view in the loop's state
-  and reads it there. A lemma over the step's reduction (the state's view component handed on
-  unchanged by every tail of the step) would pin it.
+  the bound and that below its length a view's read answers a leaf. With `read` (SPEC §46) the
+  rule also fixes, of the term's erasure, that at a shared view the bound is the view's length and
+  the state's first component the view, that the step reads a copy of that component at its
+  counter, and that every tail of the step hands the component on unchanged, as a variable
+  (`walkReadB`, `walkStepB`, `walkTailsB`); at a unique view, that the step's read is of the head
+  a split by one gives (`walk_get_split`). Two things are not fixed by the derivation: that the
+  read the step makes is the one its `walkGet` node marks (the elaboration's mark, and the
+  checker's count of one `walkGet` in the walk), and that a tail handing the variable on hands its
+  value on in every run, which a lemma over the step's reduction would pin.
 * **A self-call's member.** The rule fixes that the term is a variable; that it is the recursive
   group's self-reference, and that the call reads member `j` of `n`, is the elaborator's
   (`Frontend.Elab.Effects.memberCall`). The projections that read member `j` are rule nodes after

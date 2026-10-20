@@ -145,6 +145,15 @@ def rLitFn {j : Jdg} (bs : List Nat) (r : Res Δ T j) : Option (Res Δ T j) :=
     else none
   else none
 
+/-- The walk reads (`TExpr.walkGet`) of a walk's typed term, outside the walks inside it (to a
+depth bound). -/
+def walkGets : Nat → TExpr → Nat
+  | 0, _ => 0
+  | f + 1, t => match t with
+    | .walkGet .. => 1
+    | .walk .. => 0
+    | t => (t.children.map fun (_, c) => walkGets f c).foldl (· + ·) 0
+
 /-- A marked scheme's derived node over its checked term `r`, when `r`'s erasure is the scheme's
 (`divLitB`, `walkB`, `selfCallB`, `lendCellB`): `none` otherwise. -/
 def rMarked {j : Jdg} (k : Frontend.SchemeMark) (r : Res Δ T j) : Option (Res Δ T j) :=
@@ -158,7 +167,12 @@ def rMarked {j : Jdg} (k : Frontend.SchemeMark) (r : Res Δ T j) : Option (Res �
     else none
   | .walk m =>
     if hb : walkB r.t.erase = true then
-      some ⟨.walk i j m r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.walk i m hb h⟩
+      let read := walkReadB m r.t.erase && walkGets 4096 r.t == 1
+      some ⟨.walk i j m read r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.walk i m read hb (fun h => (Bool.and_eq_true _ _ ▸ h).1) h⟩
+    else none
+  | .walkGet m =>
+    if hb : walkGetB m r.t.erase = true then
+      some ⟨.walkGet i j m r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.walkGet i m hb h⟩
     else none
   | .selfCall k n =>
     if hb : selfCallB r.t.erase = true then
@@ -189,13 +203,36 @@ def rThunkF {A : CVTy} (r : Res Δ (.unit :: T) (.comp (.ret A))) :
   let F ← r.F.popDead
   pure ⟨.thunkF i (.val (.thunk (.ret A))) A r.t, r.sigs, r.pins, F.map fun _ h => TTied.thunkF i h⟩
 
-/-- `thunkv N`: `N` erases to a λ. -/
+/-- The variables of the η-thunk of codata (`nuEtaE`), when the term is one. -/
+def nuEtaOf? : Expr → Option (Nat × Option Nat)
+  | .lam (.case (.var 0) (.seq (.var 0) (.app (.app (.var f) (.var s)) _)) _) =>
+    if 2 ≤ f && 2 ≤ s then some (f - 2, some (s - 2)) else none
+  | .lam (.case (.var 0) (.seq (.var 0) (.app (.lam (.app (.app (.var 0) (.var s)) _)) (.var f))) _) =>
+    if 2 ≤ f && 3 ≤ s then some (f - 2, some (s - 3)) else none
+  | .lam (.case (.var 0) (.seq (.var 0) (.app (.lam (.app (.var 0) _)) (.var f))) _) =>
+    if 2 ≤ f then some (f - 2, none) else none
+  | .lam (.case (.var 0) (.seq (.var 0) (.app (.var f) _)) _) =>
+    if 2 ≤ f then some (f - 2, none) else none
+  | _ => none
+
+/-- The η-thunk of codata as its derived node (SPEC §45), when the thunk's erasure is the scheme. -/
+def rNuEta {C : CCTy} (r : Res Δ T (.val (.thunk C))) : Res Δ T (.val (.thunk C)) :=
+  if C matches .nu _ then
+    match nuEtaOf? r.t.erase with
+    | some (f, s) =>
+      if hb : nuEtaB f s r.t.erase = true then
+        ⟨.nuEta i (.val (.thunk C)) f s r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.nuEta i f s hb h⟩
+      else r
+    | none => r
+  else r
+
+/-- `thunkv N`: `N` erases to a λ; the η-thunk of codata is its derived node (`rNuEta`). -/
 def rThunkV {C : CCTy} (hC : C.isRet = false) (r : Res Δ T (.comp C)) :
     Option (Res Δ T (.val (.thunk C))) :=
   if hl : r.t.isLam = true then
-    some ⟨.thunkV i (.val (.thunk C)) C r.t, r.sigs, r.pins, r.F.map fun _ h =>
+    some (rNuEta i ⟨.thunkV i (.val (.thunk C)) C r.t, r.sigs, r.pins, r.F.map fun _ h =>
       have ⟨_, q⟩ := TExpr.isLam_sound _ hl
-      TTied.thunkV i hC h q⟩
+      TTied.thunkV i hC h q⟩)
   else none
 
 /-- The first used slot failing `p`. -/
