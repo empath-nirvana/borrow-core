@@ -176,6 +176,18 @@ theorem Row.Unwind.out {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (α
   exact vC_outlives (Δ := LifeCtx.empty) (a := .var x) (models_empty_any _)
     (interp_ext_self δ x α) (hO _ _) true ls v ρ h'
 
+/-- **The row of a lend's callback** `'x`: every operation is of a nonzero name, its argument
+closed data (free of `'x` and outliving every lifetime); and each is either abortive, so a stop
+abandons its continuation (§19), or call-graded and linear with an answer that is closed data too,
+so its continuation is resumed in the scope of the stop (§48).  `[spec §19, §48]` -/
+def Row.Lend (S : Row) (x : LifeVar) : Prop :=
+  ∀ o ∈ S, o.n ≠ 0 ∧ ¬ VFree x o.A ∧ (∀ Δ a, VOutlives Δ a o.A) ∧
+    (o.abort = true ∨ (o.call = true ∧ o.q = .lin ∧ ¬ VFree x o.B ∧ ∀ Δ a, VOutlives Δ a o.B))
+
+/-- An unwind-only row is a lend's row with no graded operation.  `[spec §48]` -/
+theorem Row.Unwind.lend {S : Row} {x : LifeVar} (hS : S.Unwind x) : S.Lend x :=
+  fun o ho => ⟨(hS o ho).2.1, (hS o ho).2.2.1, (hS o ho).2.2.2, Or.inl (hS o ho).1⟩
+
 /-! ### The constants -/
 
 /-- An unwinding callback, a thunk of `∀'x ⊏ @bnd. L ⊸ F_Σ(['x] B)`, `L` the lend.
