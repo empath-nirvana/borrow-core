@@ -64,12 +64,20 @@ def _root_.Frontend.LoopSrc.fin (src : LoopSrc) (fin : Finite) (V : Val) (M N : 
 loops, or a call of a div function in the head of a binding or at a terminal. -/
 def loopsOnSpine (divCall : Val → Bool) (fin : Finite) : Nat → Comp → Bool
   | 0, _ => false
-  | n + 1, .bind _ _ _ M N _ => isLoopHead divCall M || loopsOnSpine divCall fin n N
+  | n + 1, .bind _ _ _ M N _ =>
+    isLoopHead divCall M || blockHeadLoops divCall fin n M || loopsOnSpine divCall fin n N
   | n + 1, .letUnit _ _ M | n + 1, .letPair _ _ _ _ M => loopsOnSpine divCall fin n M
   | n + 1, .case _ _ _ M _ N => loopsOnSpine divCall fin n M || loopsOnSpine divCall fin n N
   | n + 1, .loop _ _ src V M N =>
     !src.fin fin V M N || loopsOnSpine divCall fin n M || loopsOnSpine divCall fin n N
-  | _ + 1, T => isLoopHead divCall T
+  | n + 1, T => isLoopHead divCall T || blockHeadLoops divCall fin n T
+where
+  /-- `return B`, `B` a borrow block whose body loops on its spine. -/
+  blockHeadLoops (divCall : Val → Bool) (fin : Finite) : Nat → Comp → Bool
+    | n, .ret _ V => match Block.of? V with
+      | some B => loopsOnSpine divCall fin n B.S
+      | none => false
+    | _, _ => false
 
 /-- The error for a borrow block whose result has the block's lifetime `'x` in its type `T`. -/
 def escapeError (sp : Span) (x T : String) : Error :=

@@ -1,0 +1,30 @@
+-- Borrow blocks nested three deep in one body, each lend held across the loop's ticks (SPEC §14,
+-- §48). `main` borrows `a`; inside, it allocates `b` and borrows it; inside that, `c`; the
+-- innermost body loops over the input, storing through all three borrows. A borrow block loops
+-- when its body's spine holds a borrow block that loops, so each block is the unwinding form of
+-- its borrow at the graded row `div call`, and each lend is held across the ticks.
+--
+-- Answer: i32[4060804] on the input `1203`: `a` ends at 4 (one per byte), `b` at 6 (the digits),
+-- `c` at 8 (two per byte), and the count 4 is handed out through each block.
+
+main -> i32 =
+  let a = alloc(0);
+  let k = borrow mut a { ma ->
+    let b = alloc(0);
+    let k2 = borrow mut b { mb ->
+      let c = alloc(0);
+      let k3 = borrow mut c { mc ->
+        let mut k = 0;
+        for x in bytes(&mut stdin) {
+          modify ma { v -> v + 1 };
+          modify mb { v -> v + to_i32(x) - 48 };
+          modify mc { v -> v + 2 };
+          k = k + 1
+        };
+        k
+      };
+      free(c) * 100 + k3
+    };
+    free(b) * 10000 + k2
+  };
+  free(a) * 1000000 + k
