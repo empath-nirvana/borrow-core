@@ -78,6 +78,8 @@ def formersC (acc : Std.HashSet String) : CTy → Std.HashSet String
   | t@(.amp C D) => formersC (formersC (acc.insert (cName t)) C) D
   | t@(.all _ _ C) | t@(.nu C) => formersC (acc.insert (cName t)) C
   | t@(.eff _ _ _ A B fin cg C) =>
+    -- A call-graded operation (SPEC §48) is counted as the former `C.eff.call` besides.
+    let acc := if cg then acc.insert "C.eff.call" else acc
     formersC (formersC (formersV (formersV (acc.insert (cName t)) A) B) fin) C
   | t@.top => acc.insert (cName t)
 end
@@ -230,7 +232,7 @@ def main (files : List String) : IO UInt32 := do
         qops := qops.add k n
   for k in texprNames do
     IO.println s!"node\t{k}\t{progs.getD k 0}\t{static.getD k 0}\t{lib.getD k 0}\t{expanded.getD k 0}\t{" ".intercalate (firsts.getD k [])}"
-  for k in vtyNames.map ("V." ++ ·) ++ ctyNames.map ("C." ++ ·) do
+  for k in vtyNames.map ("V." ++ ·) ++ ctyNames.map ("C." ++ ·) ++ #["C.eff.call"] do
     IO.println s!"former\t{k}\t{fprogs.getD k 0}\t{fnodes.getD k 0}"
   for k in ["lin", "aff", "unr"] do
     IO.println s!"qual\t{k}\t{qprogs.getD k 0}\t{qops.getD k 0}"

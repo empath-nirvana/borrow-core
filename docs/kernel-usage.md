@@ -270,6 +270,7 @@ ones have their run facts (`Frontend/Check/Derived.lean`).
 | 135 | `C.all` | 248 | 22488 | the new backend erases it from the LIR's types (SPEC §44, `ofU`); the lifetime it binds is not read | **B** | N5: lifetimes → storage |
 | 136 | `C.nu` | 204 | 46531 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N4 |
 | 137 | `C.eff` | 154 | 36816 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N2: rows |
+| 138 | `C.eff.call` | 1 | 98 | a layer whose operation is call-graded (SPEC §48), counted besides `C.eff`: `lend-mut`'s graded `div call`; the grade is erased, and a graded `main` runs under the runtime's clause (`rtMainE`, `Frontend/Check/Externs.lean`) | **B** | N2: rows |
 
 ## 7. Derived forms with no node
 
