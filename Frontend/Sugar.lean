@@ -1370,9 +1370,9 @@ def renameHead (g : String) : Val → Val
 /-- **The loop value of a call** `f W` of a div function at the row `div, S`, `S` not empty
 (SPEC §14, §15): it runs nothing until it is observed. Its start is a loop whose first turn moves
 on at once, so that its back edge is the first tick: `iterate` over `W`, whose next turn is the call
-and whose close is the function's close before it starts, `g__close W`. Each observation makes
-`reify` of the start, which stops at that tick, and observes it: the first runs the call to its
-first tick. -/
+and whose close is the function's close before it starts, `g__close W`. Its first observation makes
+`reify` of the start, which stops at that tick, and observes it, running the call to its first
+tick; closed before, it is `g__close W`. -/
 def eStart (c : TCx) (sp : Span) (sfx : String) (S : Frontend.Check.CRow) (B R : CVTy) (f W : Val) :
     EM Comp := do
   let some g := calleeHead f
@@ -1414,14 +1414,11 @@ def eStart (c : TCx) (sp : Span) (sfx : String) (S : Frontend.Check.CRow) (B R :
     (eBind sp s!"io_rt{sfx}" (some tT)
       (.ret sp (.thunkv sp (.lam sp ⟨"io_u", sp⟩ (.unit sp) (.letUnit sp (.var sp "io_u") start))))
       (.app sp (.force sp ⟨s!"io_rf{sfx}", sp⟩) ⟨s!"io_rt{sfx}", sp⟩))
-  -- The loop value is made once per observation, from one thunk.
-  let mk := s!"io_mk{sfx}"
-  let obs (i : Bool) : Comp :=
-    eBind sp s!"io_mu{sfx}" none (.ret sp (.unit sp))
-      (eBind sp s!"io_rl{sfx}" none (.app sp (.force sp ⟨mk, sp⟩) ⟨s!"io_mu{sfx}", sp⟩)
-        (.proj sp i (.nuOut sp (.force sp ⟨s!"io_rl{sfx}", sp⟩))))
-  pure (eBind sp mk none (.ret sp (.thunkv sp (.lam sp ⟨"io_u", sp⟩ (.unit sp) (.letUnit sp (.var sp "io_u") made))))
-    (.ret sp (.thunkv sp (.nuIn sp (.with_ sp (obs true) (obs false))))))
+  -- The first observation makes the loop value and observes it; the close before it is the
+  -- function's close before it starts, which runs none of the call.
+  let first : Comp := eBind sp s!"io_rl{sfx}" none made
+    (.proj sp true (.nuOut sp (.force sp ⟨s!"io_rl{sfx}", sp⟩)))
+  pure (.ret sp (.thunkv sp (.nuIn sp (.with_ sp first (eCallC sp s!"e{sfx}" fc W)))))
 
 /-- The call a computation makes in direct style, if it is one: `return (f W)` or
 `g <- return f; a <- return W; (force g) a`. A call of a div function placed for the empty row,
