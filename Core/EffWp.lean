@@ -122,42 +122,6 @@ theorem del_inStratum_left {ρ₁ ρ₂ ρ : WRes} (h : ResU.CompS ρ₁ ρ₂ �
 def immCell (l : BoCa.Loc) (A : Life) (v : Val) (ρP : WRes) (h : ρP.InStratum A) : WRes :=
   ResU.single l (CellU.immOf (LSet.singleton A) v ρP h)
 
-/-- The lists an `imm` lend of the record `p` at `A` runs its callback at, from the caller's
-`ls`: `ls` with `p` and its lineage at `A`, up to the order of the records. -/
-def ImmList (p : FrameRec) (A : Life) (ls ls' : List SRec) : Prop :=
-  ∀ x, x ∈ ls' ↔ (x = (p, A) ∨ (∃ d, Desc p d ∧ x = (d, A)) ∨ x ∈ ls)
-
-theorem immList_frameList {p : FrameRec} {ds : List FrameRec} {A : Life} {ls : List SRec}
-    (hds : ∀ d, d ∈ ds ↔ Desc p d) : ImmList p A ls (frameList p ds A ls) := by
-  intro x
-  simp only [frameList, List.mem_cons, List.mem_append, List.mem_map]
-  constructor
-  · rintro (rfl | ⟨d, hd, rfl⟩ | hx)
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inl ⟨d, (hds d).mp hd, rfl⟩)
-    · exact Or.inr (Or.inr hx)
-  · rintro (rfl | ⟨d, hd, rfl⟩ | hx)
-    · exact Or.inl rfl
-    · exact Or.inr (Or.inl ⟨d, (hds d).mpr hd, rfl⟩)
-    · exact Or.inr (Or.inr hx)
-
-/-- `ImmList` is read up to the members of both lists. -/
-theorem ImmList.same {p : FrameRec} {A : Life} {ls ls' ls₂ ls₂' : List SRec}
-    (h : ImmList p A ls ls') (h₁ : ∀ x, x ∈ ls₂ ↔ x ∈ ls) (h₂ : ∀ x, x ∈ ls₂' ↔ x ∈ ls') :
-    ImmList p A ls₂ ls₂' := fun x => (h₂ x).trans ((h x).trans (by rw [h₁ x]))
-
-theorem ImmList.addAt {p : FrameRec} {A : Life} {ls ls' : List SRec} (h : ImmList p A ls ls') :
-    AddAt ls ls' A := by
-  refine ⟨fun x hx => (h x).mpr (Or.inr (Or.inr hx)), fun x hx hn => ?_⟩
-  rcases (h x).mp hx with rfl | ⟨d, -, rfl⟩ | h'
-  · rfl
-  · rfl
-  · exact absurd h' hn
-
-theorem ImmList.record {p : FrameRec} {A : Life} {ls ls' : List SRec} (h : ImmList p A ls ls') :
-    ∃ r ∈ rsOf ls', r.le = p.le ∧ r.T = p.T ∧ r.δ = p.δ :=
-  ⟨p, mem_rsOf.mpr ⟨A, (h _).mpr (Or.inl rfl)⟩, rfl, rfl, rfl⟩
-
 /-- An `imm` cell of `A` beside a resource puts it outside `Res_A`. -/
 theorem immCell_not_inStratum {l : BoCa.Loc} {A : Life} {v : Val} {ρP ρ₁ ρ' : WRes}
     {h : ρP.InStratum A} (hc : ResU.CompS ρ₁ (immCell l A v ρP h) ρ') (hs : ρ'.InStratum A) :
@@ -177,6 +141,17 @@ theorem immCell_not_inStratum {l : BoCa.Loc} {A : Life} {v : Val} {ρP ρ₁ ρ'
     obtain ⟨s₁, s₂, w, ρw, hh₁, hh₂, hh₃, rfl, he₂, rfl⟩ := hcomp
     obtain ⟨hs₂, -, -⟩ := CellU.immOf_inj he₂
     exact key _ _ _ _ (hs l _ f) (Or.inr (by rw [← hs₂]; rfl))
+
+/-- A list with a frame list's members adds records at its lifetime. -/
+theorem addAt_frameList_same {p : FrameRec} {ds : List FrameRec} {A : Life}
+    {ls ls' : List SRec} (h : ∀ x, x ∈ ls' ↔ x ∈ frameList p ds A ls) : AddAt ls ls' A :=
+  ⟨fun x hx => (h x).mpr ((addAt_frameList p ds A ls).1 x hx),
+    fun x hx hn => (addAt_frameList p ds A ls).2 x ((h x).mp hx) hn⟩
+
+/-- Frame lists over lists with the same members have the same members. -/
+theorem frameList_same {p : FrameRec} {ds : List FrameRec} {A : Life} {ls ls' : List SRec}
+    (h : ∀ x, x ∈ ls' ↔ x ∈ ls) : ∀ x, x ∈ frameList p ds A ls' ↔ x ∈ frameList p ds A ls := by
+  intro x; simp only [frameList, List.mem_cons, List.mem_append, h x]
 
 /-- A singleton is the only lifetime set inside it. -/
 theorem LSet.eq_singleton_of_mem {s : LSet} {A : Life} (h : ∀ x, s.mem x → x = A) :
@@ -225,7 +200,7 @@ theorem wpG_immEnd {l : BoCa.Loc} {A : Life} {v : Val} {ρP ρb ρlP BI : WRes}
     (hlPcell : ResU.CompS ρP (ResU.single l (CellU.ownOf v)) ρlP) (hH12 : ResU.Hash ρb ρlP)
     (hBI : ResU.CompS ρb (immCell l A v ρP houtP) BI) {ls : List SRec} {e : Expr}
     {Y : List SRec → Expr → WProp} (h : wpG ls e Y BI) :
-    wpG ls e (fun ls' t ρ₁ => ∃ ρ', Y ls' t ρ' ∧ ρ₁.InStratum A ∧
+    wpG ls e (fun ls' t ρ₁ => ∃ ρ', Y ls' t ρ' ∧ ρ₁.InStratum A ∧ ρ₁.get l = none ∧
       ((ρ'.get l = none ∧ ρ₁ = ρ') ∨ ResU.CompS ρ₁ (immCell l A v ρP houtP) ρ')) BI := by
   refine wpG_garbage ?_
   intro ρf fρ ps h1 h2 h3 h4 Al k
@@ -245,7 +220,7 @@ theorem wpG_immEnd {l : BoCa.Loc} {A : Life} {v : Val} {ρP ρb ρlP BI : WRes}
         by_cases hm : m = l
         · subst hm; rw [ResU.del_get_self, hg]
         · rw [ResU.del_get_ne _ hm]
-      exact ⟨ρ', PMap.empty, ResU.comp_empty_right ρ', noOwn_empty, ρ', a15, hd ▸ h₁str,
+      exact ⟨ρ', PMap.empty, ResU.comp_empty_right ρ', noOwn_empty, ρ', a15, hd ▸ h₁str, hg,
         Or.inl ⟨hg, rfl⟩⟩
   | some c =>
       -- the share's cell at `ℓ` is a part of `ℓ ↦ imm({A}, …)`, so it is that cell
@@ -268,17 +243,19 @@ theorem wpG_immEnd {l : BoCa.Loc} {A : Life} {v : Val} {ρP ρb ρlP BI : WRes}
       have hdc := ResU.del_compS hg
       exact ⟨ρ'.del l, ResU.single l (CellU.immOf (LSet.singleton A) v ρP houtP), hdc,
         noOwn_single_mut _ _ (fun c => Kind.noConfusion c), ρ', a15,
-        h₁str, Or.inr hdc⟩
+        h₁str, ResU.del_get_self _ _, Or.inr hdc⟩
 
 /-! ### Theorem 6.64 (Imm Frame) at the typed world; record in `Paper/S6_3_FrameAndAntiFrame/Lemmas.lean` -/
 /-- What the end of an `imm` lend hands its frame: the callback's post `Y` at its share `ρ′` and
-the list `ls″` it ended at, which has the frame's records (`ImmList`); the share less the cell,
+the list `ls″` it ended at, which has the frame list's members; the share less the cell,
 `ρ₁`, which is `ρ′` where the share has left the cell behind; and the frame's resource
 `R = ρ₁ ● ℓ ↦ own(v) ● ρ_P`, at which `ls″` steps back to the caller's list.  `[spec §48]` -/
 def ExitPostI (l : BoCa.Loc) (T : VTy) (δ : LSub) (A : Life) (v : Val) (ρP : WRes)
     (houtP : ρP.InStratum A) (ρlP : WRes) (ls : List SRec) (Y : List SRec → Expr → WProp) :
     List SRec → Expr → WProp := fun lsE t R =>
-  ∃ (ls'' : List SRec) (ρ' ρ₁ : WRes), Y ls'' t ρ' ∧ ImmList ⟨l, v, ρP, T, δ⟩ A ls ls'' ∧
+  ∃ (ls'' : List SRec) (ρ' ρ₁ : WRes), Y ls'' t ρ' ∧
+    (∀ x, x ∈ ls'' ↔ x ∈ frameList ⟨l, v, ρP, T, δ⟩ (lineageOf ⟨l, v, ρP, T, δ⟩) A ls) ∧
+    ρ₁.InStratum A ∧ ρ₁.get l = none ∧
     ((ρ'.get l = none ∧ ρ₁ = ρ') ∨ ResU.CompS ρ₁ (immCell l A v ρP houtP) ρ') ∧
     ResU.CompS ρ₁ ρlP R ∧ Ext ls'' lsE R
 
@@ -352,13 +329,12 @@ theorem wpG_I_frameAt (l : BoCa.Loc) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (
       exact ⟨q, List.mem_cons_of_mem _ hq, hqd, hFLold q hq x.2 hfq⟩
   -- H18: the callback, at the fictional borrow, at the list with the frame's records; the cell
   -- its share holds at its end is set aside with the leftover (`wpG_immEnd`)
-  have hImm : ImmList p A ls ls' := immList_frameList hds
   have hwpBI := wpG_immEnd houtb hlPcell hH12 hBI (hcb BI hBI)
   obtain ⟨ρ', ρp, fρ', fρ'p, π, v', μ, μ', ps'', ls'',
     h1, h2, h3, h5, h6, h7, h8, h9, h10, h11, hT'', htg'', hps'', hls'', h12⟩ :=
     hwpBI ρf fρ (p :: ps) hH17 h4 hTin htgin alc kc
   -- H24 and H25: the share less the cell is in `Res_A`
-  obtain ⟨ρ'₀, hY, houtρ', hcase⟩ := h12
+  obtain ⟨ρ'₀, hY, houtρ', hρ₁l, hcase⟩ := h12
   -- H27
   obtain ⟨hfρp, hρ'p⟩ := ResU.Hash.split h2 (ResU.hash_symm h3)
   -- H26: 6.29 with H11 and H12 and H21, then "by H24, `ℓ ∉ dom(ρ′)`"
@@ -505,8 +481,7 @@ theorem wpG_I_frameAt (l : BoCa.Loc) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (
       exact (not_rel_lineage hα' haF hicpR hRα hRl ⟨q, hqd⟩ hrel).elim
     · exact mem_rsOf.mpr ⟨t, h⟩
   have hQls : ExitPostI l T δ A v ρP houtP ρlP ls Y ls v' R :=
-    ⟨ls'', ρ'₀, ρ', hY, ImmList.same hImm (fun _ => Iff.rfl) hls'', hcase, hR,
-      ext_drop hls''add hRα hkeep⟩
+    ⟨ls'', ρ'₀, ρ', hY, hls'', houtρ', hρ₁l, hcase, hR, ext_drop hls''add hRα hkeep⟩
   -- exit: `TW.immEnd` at `p`, back to the caller's records
   have hTout : TW FRP ps (rsOf ls) :=
     TW.immEnd p hT'' hp'' (ResU.CompS.comm hFPi) hclP (ResU.CompS.comm hFPDlP) hvFRP
@@ -583,12 +558,12 @@ theorem wpG_I_frameX (l : BoCa.Loc) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (v
       (fun ls'' v' => box A (ptoOwn l v ─⋆ (vC true T ls'' δ v ─⋆ Q ls'' v'))))
     (fun lsE t R hx => ?_) (wpG_I_frameAt l T δ hadm v e ls A ρP ρb ρlP ρ hPv houtP
       houtb hAtag hclP hcρ _ fun BI hBI => ?_)
-  · obtain ⟨ls'', ρ', ρ₁, hY, hI'', hcase, hR, hext⟩ := hx
+  · obtain ⟨ls'', ρ', ρ₁, hY, hI'', -, -, hcase, hR, hext⟩ := hx
     rcases hcase with ⟨-, rfl⟩ | hc1
     · obtain ⟨X, hX, hXR⟩ :=
         (ResU.CompS.assoc ρ₁ (ResU.single l (CellU.ownOf v)) ρP R).mp ⟨ρlP, hclP, hR⟩
       have hPv'' : vC true T ls'' δ v ρP :=
-        vC_local true T (ext_add hI''.addAt houtP) hPv
+        vC_local true T (ext_add (addAt_frameList_same hI'') houtP) hPv
       exact hQ ls'' lsE t R hext ((hY.1 _ X rfl hX) ρP R hPv'' hXR)
     · -- the cell is not in `Res_A`, which the box asks of the share
       exact (immCell_not_inStratum hc1 hY.2).elim

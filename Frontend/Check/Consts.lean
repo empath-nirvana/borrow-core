@@ -181,7 +181,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A)
       (cDeadStrict (fun j => .withbor1U (at_ sp) j A B S x (finNode sp (.ref A))) fun hd _ =>
-        .withbor1U x hd.toP hx (scopedB_sound hsc) h₁ h₂ hS hdc
+        .withbor1U x hd.toP hx (scopedB_sound hsc) h₁ h₂ hS.lend hdc
           (.dtor hdt hdc hde hd))
   | .withbor2U _ b A B r => do
       let b ← E.elabL Δ b
@@ -194,7 +194,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A)
       (cDeadStrict (fun j => .withbor2U (at_ sp) j A B S x (finNode sp (.ref A))) fun hd _ =>
-        .withbor2U x hd.toP hx hside h₁ h₂ hS hdc
+        .withbor2U x hd.toP hx hside h₁ h₂ hS.lend hdc
           (.dtor hdt hdc hde hd))
   | .withbor3U a _ A B r => do
       let a ← E.elabL Δ a

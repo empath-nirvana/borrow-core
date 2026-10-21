@@ -313,14 +313,14 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- The unwinding form of `withbor` (1): `Ref A` lent as `Imm 'x A` to a callback at a row of
   abortive operations; when it unwinds, the finaliser `d` runs on the source.  `[spec §19]` -/
   | withbor1U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+      (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Lend x)
       (hdc : closedAt 0 d = true) (hd : CDerivesP Δ Γ d (.val (.lolli (.ref A) .unit))) :
       CDerivesP Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S))
-  /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, its side condition
-  non-strict.  `[spec §19, §23]` -/
+  /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, at a lend's row, its side
+  condition non-strict.  `[spec §19, §23, §48]` -/
   | withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Lend x)
       (hdc : closedAt 0 d = true) (hd : CDerivesP Δ Γ d (.val (.lolli (.ref A) .unit))) :
       CDerivesP Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S))
   /-- The unwinding form of `withbor` (3): `Mut @a A` reborrowed as `Mut 'x A`.  `[spec §19]` -/

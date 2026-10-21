@@ -203,9 +203,9 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | withbor3 x hΓ hx hf₁ hf₂ => exact withbor3_compatX x hΓ hx hf₁ hf₂
   | withload x hΓ hx hf₁ hf₂ => exact withload_compatX x hΓ hx hf₁ hf₂
   | withswap hΓ => exact withswap_compatX hΓ
-  | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS hdc _ ihd => exact withbor1U_compatX x hΓ hsc₁ hf₁ hf₂ hS hdc ihd
+  | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS hdc _ ihd => exact withbor1L_compatX x hΓ hsc₁ hf₁ hf₂ hS hdc ihd
   | withbor2U x hΓ _ hside hf₁ hf₂ hS hdc _ ihd =>
-      exact withbor2U_compatX x hΓ hside hf₁ hf₂ hS hdc ihd
+      exact withbor2L_compatX x hΓ hside hf₁ hf₂ hS hdc ihd
   | withbor3U x hΓ _ hf₁ hf₂ hS hdc _ ihd => exact withbor3U_compatX x hΓ hf₁ hf₂ hS hdc ihd
   | withloadU x hΓ _ hf₁ hf₂ hS => exact withloadU_compatX x hΓ hf₁ hf₂ hS
   | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS hdc _ ihd =>
