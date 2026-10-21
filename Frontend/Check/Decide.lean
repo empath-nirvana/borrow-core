@@ -770,14 +770,19 @@ theorem dropB_sound : ∀ A : VTy, dropB A = true → A.Drop
   | .thunk _, h | .ref _, h | .box _ _, h | .tvar _, h | .mu _, h | .fam _, h => by
       simp [dropB] at h
 
-/-- `RowLe S S'`, decided: every operation of `S` is found in `S'` as itself. -/
-def rowLeB (S S' : Row) : Bool := S.all fun o => Row.find S' o.n o.i == some o
+/-- `RowLe S S'`, decided: every operation of `S` is found in `S'` as itself, or as its graded
+form (grading only weakens what a stop owes, SPEC §48). -/
+def rowLeB (S S' : Row) : Bool := S.all fun o =>
+  Row.find S' o.n o.i == some o || Row.find S' o.n o.i == some { o with call := true }
 
 theorem rowLeB_sound {S S' : Row} (h : rowLeB S S' = true) : RowLe S S' := by
-  refine RowLe.of_find fun n i o hf => ?_
+  intro n i o hf
   obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
   have := List.all_eq_true.mp h o hm
-  simpa using this
+  simp only [Bool.or_eq_true, beq_iff_eq] at this
+  rcases this with h' | h'
+  · exact ⟨o, h', OpSig.LeF.refl o⟩
+  · exact ⟨_, h', ⟨⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => FinLe.refl o.fin, fun _ => rfl⟩⟩
 
 /-- `Row.NZ`, decided. -/
 def Row.nzB (S : Row) : Bool := S.all fun o => o.n != 0
@@ -822,15 +827,22 @@ def Row.unrDB (S : Row) : Bool := S.any fun o => o.q == .unr || (capB o.q o.B &&
 theorem Row.unrDB_iff {S : Row} : Row.unrDB S = true ↔ S.UnrD := by
   simp [Row.unrDB, Row.UnrD, finUnrB_iff]
 
-/-- `Row.Unwind S x`, decided: every operation abortive, named, its argument free of `'x` and
-outliving every lifetime (`outlivesAllB`). -/
-def Row.unwindB (S : Row) (x : LifeVar) : Bool :=
-  S.all fun o => o.abort && o.n != 0 && !vfreeB x o.A && outlivesAllB o.A
+/-- `Row.Lend S x`, decided: every operation named, its argument free of `'x` and outliving every
+lifetime, and abortive, or call-graded and linear with an answer free of `'x` and outliving every
+lifetime.  `[spec §48]` -/
+def Row.lendB (S : Row) (x : LifeVar) : Bool :=
+  S.all fun o => o.n != 0 && !vfreeB x o.A && outlivesAllB o.A &&
+    (o.abort || (o.call && o.q == .lin && !vfreeB x o.B && outlivesAllB o.B))
 
-theorem Row.unwindB_sound {S : Row} {x : LifeVar} (h : Row.unwindB S x = true) : S.Unwind x := by
+theorem Row.lendB_sound {S : Row} {x : LifeVar} (h : Row.lendB S x = true) : S.Lend x := by
   intro o ho
   have := List.all_eq_true.mp h o ho
-  simp only [Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true'] at this
-  exact ⟨this.1.1.1, this.1.1.2, not_vfree_of_vfreeB this.1.2, outlivesAllB_sound _ this.2⟩
+  simp only [Bool.and_eq_true, Bool.or_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true',
+    beq_iff_eq] at this
+  obtain ⟨⟨⟨hn, hA⟩, hoA⟩, hk⟩ := this
+  refine ⟨hn, not_vfree_of_vfreeB hA, outlivesAllB_sound _ hoA, ?_⟩
+  rcases hk with hk | ⟨⟨⟨hc, hq⟩, hB⟩, hoB⟩
+  · exact Or.inl hk
+  · exact Or.inr ⟨hc, hq, not_vfree_of_vfreeB hB, outlivesAllB_sound _ hoB⟩
 
 end BoCa.Fig16.LogRel.Core.Check

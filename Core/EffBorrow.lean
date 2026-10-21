@@ -188,6 +188,15 @@ def Row.Lend (S : Row) (x : LifeVar) : Prop :=
 theorem Row.Unwind.lend {S : Row} {x : LifeVar} (hS : S.Unwind x) : S.Lend x :=
   fun o ho => ⟨(hS o ho).2.1, (hS o ho).2.2.1, (hS o ho).2.2.2, Or.inl (hS o ho).1⟩
 
+/-- A lend's row with no graded operation is unwind-only.  `[spec §48]` -/
+theorem Row.Lend.unwind {S : Row} {x : LifeVar} (hS : S.Lend x) (hg : ∀ o ∈ S, o.call = false) :
+    S.Unwind x := by
+  intro o ho
+  obtain ⟨hn, hx, hA, hk⟩ := hS o ho
+  rcases hk with ha | ⟨hc, -⟩
+  · exact ⟨ha, hn, hx, hA⟩
+  · rw [hg o ho] at hc; cases hc
+
 /-! ### The constants -/
 
 /-- An unwinding callback, a thunk of `∀'x ⊏ @bnd. L ⊸ F_Σ(['x] B)`, `L` the lend.

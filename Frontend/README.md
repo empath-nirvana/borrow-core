@@ -321,7 +321,7 @@ of the search; none is a change to `CDerives`.
 The checker applies §19's rules (`Core/Fundamental.lean`) through the builders `rEffSub`,
 `rPerform`, `rRaise`, `rEffLet`, `rEffThen` and `rEffHandle` (`Rules.lean`) and the six unwinding
 borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowLeB`, `Row.nzB`,
-`Row.uniqB`, `Row.weakB`, `Row.unrB`, `Row.unwindB`, `dropB` and `CTy.effLeafB`
+`Row.uniqB`, `Row.weakB`, `Row.unrB`, `Row.lendB`, `dropB` and `CTy.effLeafB`
 (`Decide.lean`), each with its soundness lemma.
 
 * **The current row.** `Env.row` is the row of the returner chain `F_Σ B` a computation is checked
