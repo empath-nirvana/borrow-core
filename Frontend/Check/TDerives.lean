@@ -148,8 +148,8 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
       TDerivesAt Ξ Δ Γ (TExpr.boundedFix (info := info) (jdg := (.val (boundedFixTy A C))) (A := A) (C := C)) (.val (boundedFixTy A C))
   | iterate {Δ Γ} {info : TInfo} (S : Row) (St B R : VTy) (hAt : RowAt Ξ S) (hS : Row.divB S = true) (hΓ : Ctx.DeadP Γ) :
       TDerivesAt Ξ Δ Γ (TExpr.iterate (info := info) (jdg := (.val (iterTy S St B R))) (S := S) (St := St) (B := B) (R := R)) (.val (iterTy S St B R))
-  | divFuel {Δ Γ} {info : TInfo} (S : Row) (A : VTy) (hAt : RowAt Ξ (tickSig :: S)) (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
-      TDerivesAt Ξ Δ Γ (TExpr.divFuel (info := info) (jdg := (.val (divFuelTy S A))) (S := S) (A := A)) (.val (divFuelTy S A))
+  | divFuel {Δ Γ} {info : TInfo} {c : Bool} (S : Row) (A : VTy) (hAt : RowAt Ξ (tickSigG c :: S)) (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.divFuel (info := info) (jdg := (.val (divFuelTy S A c))) (c := c) (S := S) (A := A)) (.val (divFuelTy S A c))
   | reify {Δ Γ} {info : TInfo} {tres : TExpr} (S : Row) (B R : VTy) (res : Val) (hAt : RowAt Ξ (tickSig :: S)) (hS : ∀ o ∈ S, o.n ≠ divEff) (hcl : closedAt 0 res.1 = true) (hres : TDerivesAt Ξ Δ [] tres (.val (resTy S B R))) (qres : tres.erase = ((.val res) : Expr)) (hΓ : Ctx.DeadP Γ) :
       TDerivesAt Ξ Δ Γ (TExpr.reify (info := info) (jdg := (.val (reifyTy S B R))) (S := S) (B := B) (R := R) (tres := tres)) (.val (reifyTy S B R))
   | sliceBorrowM {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
@@ -418,8 +418,8 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       TDerivesP Δ Γ (TExpr.boundedFix (info := info) (jdg := (.val (boundedFixTy A C))) (A := A) (C := C)) (.val (boundedFixTy A C))
   | iterate {Δ Γ} {info : TInfo} (S : Row) (St B R : VTy) (hS : Row.divB S = true) (hΓ : Ctx.DeadP Γ) :
       TDerivesP Δ Γ (TExpr.iterate (info := info) (jdg := (.val (iterTy S St B R))) (S := S) (St := St) (B := B) (R := R)) (.val (iterTy S St B R))
-  | divFuel {Δ Γ} {info : TInfo} (S : Row) (A : VTy) (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
-      TDerivesP Δ Γ (TExpr.divFuel (info := info) (jdg := (.val (divFuelTy S A))) (S := S) (A := A)) (.val (divFuelTy S A))
+  | divFuel {Δ Γ} {info : TInfo} {c : Bool} (S : Row) (A : VTy) (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
+      TDerivesP Δ Γ (TExpr.divFuel (info := info) (jdg := (.val (divFuelTy S A c))) (c := c) (S := S) (A := A)) (.val (divFuelTy S A c))
   | reify {Δ Γ} {info : TInfo} {tres : TExpr} (S : Row) (B R : VTy) (res : Val) (hS : ∀ o ∈ S, o.n ≠ divEff) (hcl : closedAt 0 res.1 = true) (hres : TDerivesP Δ [] tres (.val (resTy S B R))) (qres : tres.erase = ((.val res) : Expr)) (hΓ : Ctx.DeadP Γ) :
       TDerivesP Δ Γ (TExpr.reify (info := info) (jdg := (.val (reifyTy S B R))) (S := S) (B := B) (R := R) (tres := tres)) (.val (reifyTy S B R))
   | sliceBorrowM {Δ Γ A B} {info : TInfo} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :

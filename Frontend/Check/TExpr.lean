@@ -487,7 +487,7 @@ inductive TExpr where
   | countTry (info : TInfo) (jdg : Jdg) (S : VTy) (E : VTy)
   | boundedFix (info : TInfo) (jdg : Jdg) (A : VTy) (C : CTy)
   | iterate (info : TInfo) (jdg : Jdg) (S : Row) (St : VTy) (B : VTy) (R : VTy)
-  | divFuel (info : TInfo) (jdg : Jdg) (S : Row) (A : VTy)
+  | divFuel (info : TInfo) (jdg : Jdg) (c : Bool) (S : Row) (A : VTy)
   | reify (info : TInfo) (jdg : Jdg) (S : Row) (B : VTy) (R : VTy) (tres : TExpr)
   | sliceBorrowM (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (x : LifeVar)
   | sliceBorrowI (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (x : LifeVar)
@@ -628,7 +628,7 @@ def TExpr.erase : TExpr → Expr
   | .countTry _ _ _ _ => (.val (.prim .countTry))
   | .boundedFix _ _ _ _ => (.val (.prim .boundedFix))
   | .iterate _ _ _ _ _ _ => (.val (.prim .iterate))
-  | .divFuel _ _ _ _ => (.val divFuelV)
+  | .divFuel _ _ _ _ _ => (.val divFuelV)
   | .reify _ _ _ _ _ tres => (.val (reifyV (Expr.toVal (tres.erase))))
   | .sliceBorrowM _ _ _ _ _ => withbor
   | .sliceBorrowI _ _ _ _ _ => withbor
@@ -738,7 +738,7 @@ def TExpr.info : TExpr → TInfo
   | .countTry i _ _ _ => i
   | .boundedFix i _ _ _ => i
   | .iterate i _ _ _ _ _ => i
-  | .divFuel i _ _ _ => i
+  | .divFuel i _ _ _ _ => i
   | .reify i _ _ _ _ _ => i
   | .sliceBorrowM i _ _ _ _ => i
   | .sliceBorrowI i _ _ _ _ => i
@@ -844,7 +844,7 @@ def TExpr.jdg : TExpr → Jdg
   | .countTry _ j _ _ => j
   | .boundedFix _ j _ _ => j
   | .iterate _ j _ _ _ _ => j
-  | .divFuel _ j _ _ => j
+  | .divFuel _ j _ _ _ => j
   | .reify _ j _ _ _ _ => j
   | .sliceBorrowM _ j _ _ _ => j
   | .sliceBorrowI _ j _ _ _ => j
@@ -958,7 +958,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .countTry _ _ _ _ => []
   | .boundedFix _ _ _ _ => []
   | .iterate _ _ _ _ _ _ => []
-  | .divFuel _ _ _ _ => []
+  | .divFuel _ _ _ _ _ => []
   | .reify _ _ _ _ _ tres => [(.fresh 0, tres)]
   | .sliceBorrowM _ _ _ _ _ => []
   | .sliceBorrowI _ _ _ _ _ => []
@@ -1084,7 +1084,7 @@ def TExpr.isLam : TExpr → Bool
   | .countTry _ _ _ _ => false
   | .boundedFix _ _ _ _ => false
   | .iterate _ _ _ _ _ _ => false
-  | .divFuel _ _ _ _ => (((.val divFuelV) : Expr) matches .lam _)
+  | .divFuel _ _ _ _ _ => (((.val divFuelV) : Expr) matches .lam _)
   | .reify _ _ _ _ _ tres => (((.val (reifyV (Expr.toVal (tres.erase)))) : Expr) matches .lam _)
   | .sliceBorrowM _ _ _ _ _ => ((withbor : Expr) matches .lam _)
   | .sliceBorrowI _ _ _ _ _ => ((withbor : Expr) matches .lam _)
@@ -1194,7 +1194,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .countTry _ _ _ _ => rfl
   | .boundedFix _ _ _ _ => rfl
   | .iterate _ _ _ _ _ _ => rfl
-  | .divFuel _ _ _ _ => rfl
+  | .divFuel _ _ _ _ _ => rfl
   | .reify _ _ _ _ _ _ => rfl
   | .sliceBorrowM _ _ _ _ _ => rfl
   | .sliceBorrowI _ _ _ _ _ => rfl

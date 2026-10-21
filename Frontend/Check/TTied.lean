@@ -365,12 +365,12 @@ theorem iterate (S : CRow) (St B R : CVTy) (hS : BoCa.Fig16.LogRel.Core.Row.divB
       (.val (BoCa.Fig16.LogRel.Core.iterTy S St B R)) :=
   ⟨fun _ _ hΞ => .iterate S St B R (rowAt_of_sigsAt hΞ) hS hΓ, .iterate S St B R hS hΓ⟩
 
-/-- `div_fuel` reads its handled row `tick, Σ`.  `[spec §14]` -/
-theorem divFuel (S : CRow) (A : CVTy) (hS : ∀ o ∈ S, o.n ≠ divEff)
+/-- `div_fuel` reads its handled row `tick^c, Σ`.  `[spec §14, §48]` -/
+theorem divFuel (c : Bool) (S : CRow) (A : CVTy) (hS : ∀ o ∈ S, o.n ≠ divEff)
     (hΓ : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) :
-    TTied [] (BoCa.Fig16.LogRel.Core.tickSig :: S) Δ Γ
-      (.divFuel i (.val (BoCa.Fig16.LogRel.Core.divFuelTy S A)) S A)
-      (.val (BoCa.Fig16.LogRel.Core.divFuelTy S A)) :=
+    TTied [] (BoCa.Fig16.LogRel.Core.tickSigG c :: S) Δ Γ
+      (.divFuel i (.val (BoCa.Fig16.LogRel.Core.divFuelTy S A c)) c S A)
+      (.val (BoCa.Fig16.LogRel.Core.divFuelTy S A c)) :=
   ⟨fun _ _ hΞ => .divFuel S A (rowAt_of_sigsAt hΞ) hS hΓ, .divFuel S A hS hΓ⟩
 
 /-- `reify_res` reads its handled row `tick, Σ`, and its residual's premise.  `[spec §14]` -/

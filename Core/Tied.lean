@@ -206,9 +206,9 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hΓ : Ctx.DeadP Γ) :
       CDerivesAt Ξ Δ Γ (.val (.prim .iterate)) (.val (iterTy S St B R))
   /-- `div_fuel`, the handled row tied to `Ξ`.  `[spec §14]` -/
-  | divFuel {Δ Γ} (S : Row) (A : VTy) (hAt : RowAt Ξ (tickSig :: S)) (hS : ∀ o ∈ S, o.n ≠ divEff)
-      (hΓ : Ctx.DeadP Γ) :
-      CDerivesAt Ξ Δ Γ (.val divFuelV) (.val (divFuelTy S A))
+  | divFuel {Δ Γ} {c : Bool} (S : Row) (A : VTy) (hAt : RowAt Ξ (tickSigG c :: S))
+      (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
+      CDerivesAt Ξ Δ Γ (.val divFuelV) (.val (divFuelTy S A c))
   /-- `reify_res`, the handled row tied to `Ξ`.  `[spec §14]` -/
   | reify {Δ Γ} (S : Row) (B R : VTy) (res : Val) (hAt : RowAt Ξ (tickSig :: S))
       (hS : ∀ o ∈ S, o.n ≠ divEff) (hcl : closedAt 0 res.1 = true)

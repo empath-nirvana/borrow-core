@@ -197,7 +197,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .countTry ii jj S E => []
   | .boundedFix ii jj A C => []
   | .iterate ii jj S St B R => []
-  | .divFuel ii jj S A => []
+  | .divFuel ii jj c S A => []
   | .reify ii jj S B R tres => tres.lifeBinders
   | .sliceBorrowM ii jj A B x => []
   | .sliceBorrowI ii jj A B x => []
@@ -305,7 +305,7 @@ def TExpr.domFree : TExpr → Bool
   | .countTry ii jj S E => true
   | .boundedFix ii jj A C => true
   | .iterate ii jj S St B R => true
-  | .divFuel ii jj S A => true
+  | .divFuel ii jj c S A => true
   | .reify ii jj S B R tres => tres.domFree
   | .sliceBorrowM ii jj A B x => false
   | .sliceBorrowI ii jj A B x => false
@@ -412,7 +412,7 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .countTry ii jj S E => .countTry ii jj S E
   | .boundedFix ii jj A C => .boundedFix ii jj A C
   | .iterate ii jj S St B R => .iterate ii jj S St B R
-  | .divFuel ii jj S A => .divFuel ii jj S A
+  | .divFuel ii jj c S A => .divFuel ii jj c S A
   | .reify ii jj S B R tres => .reify ii jj S B R (tres.reAb Δr)
   | .sliceBorrowM ii jj A B x => .sliceBorrowM ii jj A B x
   | .sliceBorrowI ii jj A B x => .sliceBorrowI ii jj A B x

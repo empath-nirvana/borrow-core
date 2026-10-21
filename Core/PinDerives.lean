@@ -240,11 +240,12 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   step `iterate`: the loop that ticks at each back edge.  `[spec §14]` -/
   | iterate {Δ Γ} (S : Row) (St B R : VTy) (hS : Row.divB S = true) (hΓ : Ctx.DeadP Γ) :
       CDerivesP Δ Γ (.val (.prim .iterate)) (.val (iterTy S St B R))
-  /-- `div_fuel : !U(U(1 ⊸ F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)`, `Σ` without `Div`'s name: the handler of
-  `Div` that answers *next* to the first ticks, as many as the budget, and *close* after.
-  `[spec §14]` -/
-  | divFuel {Δ Γ} (S : Row) (A : VTy) (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
-      CDerivesP Δ Γ (.val divFuelV) (.val (divFuelTy S A))
+  /-- `div_fuel : !U(U(1 ⊸ F_{tick^c, Σ} A) ⊗ I32 ⊸ F_Σ A)`, `Σ` without `Div`'s name, `tick` at
+  either grade: the handler of `Div` that answers *next* to the first ticks, as many as the
+  budget, and *close* after.  `[spec §14, §48]` -/
+  | divFuel {Δ Γ} {c : Bool} (S : Row) (A : VTy) (hS : ∀ o ∈ S, o.n ≠ divEff)
+      (hΓ : Ctx.DeadP Γ) :
+      CDerivesP Δ Γ (.val divFuelV) (.val (divFuelTy S A c))
   /-- `reify_res : !U(U(1 ⊸ F_{tick, Σ}(B ⊕ R)) ⊸ F_Σ U(Loop_Σ B R))`, `Σ` without `Div`'s name, at
   the residual of a result `res : !U(B ⊸ F_Σ R)`, a closed term: the handler of `Div` that makes
   a loop value of a computation.  `[spec §14]` -/
