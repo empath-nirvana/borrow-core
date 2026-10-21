@@ -1263,7 +1263,7 @@ def eIter (m : DCx) (c : TCx) (sp : Span) (vars : List (String × CVTy)) (J : CV
   let s0 := s!"io_s0{k}"
   let stepV : Val := .bangThunkv sp (.lam sp ⟨s, sp⟩ Sts
     (.with_ sp (eDestruct sp s names turn) (eDestruct sp s names close)))
-  let it := s!"io_it{k}"
+  let it := s!"io_iter{k}"
   let p := s!"io_p{k}"
   let iterC : Comp :=
     eBind sp it none (.ret sp (.unbang sp (.const sp (.iterate Sts BLs Rs rowS))))
@@ -1639,7 +1639,7 @@ def eLoop (m : DCx) : Nat → TCx → Span → LoopSrc → Val → Comp → Comp
         mentionsC y (m.restOf N))
     let k ← eFresh ""
     let own : Option MHeld := P.it.map fun (Vt, _, _, _, Q') =>
-      { v := s!"io_src{k}", T := Vt, closeSrc := s!"io_c <- (nu_out (force io_src{k})).2;\n{bindCap P.cap Q' "io_c"}",
+      { v := s!"io_it{k}", T := Vt, closeSrc := s!"io_c <- (nu_out (force io_it{k})).2;\n{bindCap P.cap Q' "io_c"}",
         caps := P.cap.toList }
     let held := own.toList ++ m.held
     let hcaps := held.flatMap (·.caps)
@@ -1664,7 +1664,7 @@ def eLoop (m : DCx) : Nat → TCx → Span → LoopSrc → Val → Comp → Comp
     let back ← eBack mb sp
     let turn ← match P.it, src with
       | some (_, _, isGen, Q, _), .each x => do
-        let v := s!"io_src{k}"
+        let v := s!"io_it{k}"
         let ended := if Q == .zero then "absurd io_q" else match P.keep, P.els with
           | some (r, _), some _ =>
             let drop := if P.cap.isSome then bindCap P.cap Q "io_q" else "io_dq <- return io_q;\n"

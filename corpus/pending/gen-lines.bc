@@ -7,7 +7,7 @@
 -- input capability (no destructor, §12), is live across `yield`, whose continuation may be
 -- cancelled.
 --
--- now: 23:18: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its type has no destructor: an abortive operation of the bound computation would abandon it
+-- now: 23:18: `io_it2`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its type has no destructor: an abortive operation of the bound computation would abandon it
 
 include yield
 
