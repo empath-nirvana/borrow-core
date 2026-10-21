@@ -1,11 +1,11 @@
 -- Generators composed: a `range` written with `while`, a map (`squares`) and a filter (`above`)
 -- written as generators over a stored generator, and a `for` that sums the pipeline.
 --
--- Each generator's body is one loop, and each is one state machine whose observation runs one
--- turn of the loop. `squares` and `above` take a stored generator (`pull i32 1 1`), so each call
--- in the pipeline is stored where it is passed, and observed by the loop it is passed to; `main`'s
--- `for` handles `above`'s `yield`s. Every observation is a call of known code: the pipeline
--- allocates nothing and makes no dispatched call (`corpus/counts.expected`: 0 and 0).
+-- Each generator's body is one loop, `iterate` at its row (SPEC §47), whose loop value's
+-- observation runs one turn of the loop. `squares` and `above` take a stored generator
+-- (`pull i32 1 1`), so each call in the pipeline is stored where it is passed, and observed by the
+-- loop it is passed to; `main`'s `for` handles `above`'s `yield`s. The pipeline allocates nothing;
+-- its dispatched calls are the loops' steps and resumes until B3 (`corpus/counts.expected`).
 --
 -- Answer: i32[355], the squares from 1 to 10 that are above 20: 25 + 36 + 49 + 64 + 81 + 100. A
 -- range that stopped one early gives 255; a filter that kept everything gives 385; a map that
