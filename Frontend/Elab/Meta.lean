@@ -291,6 +291,9 @@ def direct (B : CVTy) : CVTy := match loopOf B with
   | some (B', _) => B'
   | none => B
 
+/-- `U (Loop_Σ B R)`, the type of a loop value at the row `Σ` (`U (loop B R)` at the empty row). -/
+def loopValTy (S : CRow) (B R : CVTy) : CVTy := .thunk (BoCa.Fig16.LogRel.Core.CTy.loopEff S B R)
+
 mutual
 /-- Synthesize a value's type. -/
 def synM : Nat → MCx → Val → MM MTy
@@ -310,6 +313,9 @@ def synM : Nat → MCx → Val → MM MTy
       let tf ← synM n c f
       match tf.walk (← get).sub 64 with
       | .known (.thunk (.arr A (.ret B))) => do chkM n c W (.known A); pure (.known (direct B))
+      | .known T => match divFnOf T with
+        | some (A, _, B, _) => do chkM n c W (.known A); pure (.known B)
+        | none => do let _ ← synM n c W; freshM
       | _ => do let _ ← synM n c W; freshM
     | .unbang _ V => do
       let t ← synM n c V

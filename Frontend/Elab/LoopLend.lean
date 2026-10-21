@@ -454,12 +454,13 @@ def lendLet (sp : Span) (r : Ident) (A : Option VTy) (M N : Comp) : Except Error
   pure (some (.bind sp ⟨v, sp⟩ none (.ret sp B)
     (.letPair sp x ⟨res, sp⟩ (.var sp v) (.ret sp (.var sp res))) false))
 
-/-- A call of a div function: its callee's result is a loop, with or without a lifetime binder. -/
+/-- A call of a div function: its callee is at a row that holds `Div`, or its result is a loop,
+with or without a lifetime binder. -/
 def divCallIn (c : TCx) : Val → Bool
   | .app _ f _ => match c.tyV f with
     | some (.bang (.thunk (.all _ _ (.ret F)))) | some (.thunk (.all _ _ (.ret F))) =>
-      (loopFnOf F).isSome
-    | some F => (loopFnOf F).isSome
+      (loopFnOf F).isSome || (divFnOf F).isSome
+    | some F => (loopFnOf F).isSome || (divFnOf F).isSome
     | none => false
   | _ => false
 
