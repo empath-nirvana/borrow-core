@@ -133,6 +133,9 @@ def Row.pp : Row → String
   -- `Div`'s `tick : 1 ↠^lin Next` (SPEC §14) is written `div`.
   | .cons 4294967295 0 .lin (.unit _) (.sum _ (.unit _) (.unit _)) .nil => "div"
   | .cons 4294967295 0 .lin (.unit _) (.sum _ (.unit _) (.unit _)) r => "div, " ++ r.pp
+  -- the graded `tick` (SPEC §48) is written `div call`.
+  | .cons 4294967295 0 .call (.unit _) (.sum _ (.unit _) (.unit _)) .nil => "div call"
+  | .cons 4294967295 0 .call (.unit _) (.sum _ (.unit _) (.unit _)) r => "div call, " ++ r.pp
   | .cons n i q A B .nil => s!"{n}.{i} {q.str} " ++ A.pp ++ " ~> " ++ B.pp
   | .cons n i q A B r => s!"{n}.{i} {q.str} " ++ A.pp ++ " ~> " ++ B.pp ++ ", " ++ r.pp
 
@@ -368,7 +371,8 @@ def Decl.pp : Decl → String
         | .fn => "fn "
         | .ctl .lin => "linear ctl "
         | .ctl .aff => "ctl "
-        | .ctl .unr => "multi ctl ") ++
+        | .ctl .unr => "multi ctl "
+        | .ctl .call => "call ctl ") ++
       o.name.name ++
         (if o.lives.isEmpty then "" else "<" ++ ", ".intercalate (o.lives.map fun (a, b) =>
           (Life.var a.span a.name).pp ++ (match b with | .top _ => "" | b => " < " ++ b.pp)) ++ ">") ++

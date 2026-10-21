@@ -1133,7 +1133,8 @@ def eTy (c : TCx) (sp : Span) (A : CVTy) : EM VTy := (c.surface sp A : Except Er
 def surfRow (c : TCx) (sp : Span) : Frontend.Check.CRow → Except Error Frontend.Row
   | [] => pure .nil
   | o :: os => do
-    let q : Qual := match o.q with | .lin => .lin | .aff => .aff | .unr => .unr
+    let q : Qual := match o.q with
+      | .lin => if o.call then .call else .lin | .aff => .aff | .unr => .unr
     pure (.cons o.n.toNat o.i.toNat q (← c.surface sp o.A) (← c.surface sp o.B) (← surfRow c sp os))
 
 def eBind (sp : Span) (x : String) (A : Option VTy) (M N : Comp) : Comp := .bind sp ⟨x, sp⟩ A M N false
@@ -3383,6 +3384,7 @@ def coreQual : Qual → BoCa.Fig16.LogRel.Core.Qual
   | .lin => .lin
   | .aff => .aff
   | .unr => .unr
+  | .call => .lin
 
 /-- The type of the computation `C` when it is a returner chain `F[S] A`: `S` and `A`. -/
 def rowRes? (C : CCTy) : Option (Frontend.Check.CRow × CVTy) := Frontend.Check.effRow? C

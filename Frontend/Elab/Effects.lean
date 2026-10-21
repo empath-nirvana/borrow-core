@@ -468,6 +468,7 @@ def tupleTy (sp : Span) : List VTy → VTy
 def _root_.Frontend.OpDecl.abortive (o : OpDecl) : Bool :=
   (match o.res with | .zero _ => true | _ => false) && (match o.kind with
     | .ctl .lin => false
+    | .ctl .call => false
     | .ctl _ => true
     | .fn => false)
 
@@ -3886,7 +3887,7 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
         report sp "effect" (s!"{e.name}: " ++ ", ".intercalate (ops.map fun o =>
           s!"{o.name.name}{match o.kind with
             | .fn => ""
-            | .ctl q => s!" (ctl, {match q with | .lin => "linear" | .aff => "affine" | .unr => "unrestricted"}{
+            | .ctl q => s!" (ctl, {match q with | .lin => "linear" | .aff => "affine" | .unr => "unrestricted" | .call => "call"}{
                 if o.abortive then ", abortive" else ""})"}"))
       | .handler sp h st S e cs lent =>
         let some eff := env.eff? e.name

@@ -766,7 +766,11 @@ def rowEntries : Nat → P Row
     if (← peek).tok == .kw "div" then
       let t ← bump
       let sp := t.span
-      let e : Row → Row := .cons 4294967295 0 .lin (.unit sp) (.sum sp (.unit sp) (.unit sp))
+      -- `div call`: the graded `tick` (SPEC §48).
+      let q ← match (← peek).tok with
+        | .ident "call" => discard bump; pure Qual.call
+        | _ => pure Qual.lin
+      let e : Row → Row := .cons 4294967295 0 q (.unit sp) (.sum sp (.unit sp) (.unit sp))
       if ← isSym "," then
         discard bump
         return e (← rowEntries n)
@@ -777,7 +781,8 @@ def rowEntries : Nat → P Row
       | .ident "lin" => discard bump; pure Qual.lin
       | .ident "aff" => discard bump; pure Qual.aff
       | .ident "unr" => discard bump; pure Qual.unr
-      | _ => expected "a qualifier `lin`, `aff` or `unr`"
+      | .ident "call" => discard bump; pure Qual.call
+      | _ => expected "a qualifier `lin`, `aff`, `unr` or `call`"
     let A ← rvty n
     expectSym "~>"
     let B ← rvty n

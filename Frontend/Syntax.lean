@@ -65,18 +65,21 @@ inductive Mode where
   | imm
   deriving DecidableEq, Repr, Inhabited
 
-/-- The qualifier of an operation's continuation in a row (SPEC §19): linear, affine or
-unrestricted. -/
+/-- The qualifier of an operation's continuation in a row (SPEC §19, §48): linear, affine,
+unrestricted, or `call`: linear and call-graded, its continuation resumed in the scope of the
+stop. -/
 inductive Qual where
   | lin
   | aff
   | unr
+  | call
   deriving DecidableEq, Repr, Inhabited
 
 def Qual.str : Qual → String
   | .lin => "lin"
   | .aff => "aff"
   | .unr => "unr"
+  | .call => "call"
 
 /-- The host resource kinds the surface names (SPEC §11, §34): `input`, `output`, `clock`,
 `args`. -/
