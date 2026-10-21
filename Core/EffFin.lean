@@ -43,7 +43,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-- A layer's cancel row is smaller than the cancel row it is a layer of. -/
 theorem rowOf_fin_lt : ∀ (F : CTy) {o : OpSig}, o ∈ F.rowOf → sizeOf o.fin < sizeOf F
-  | .eff n i q A B f C, o, h => by
+  | .eff n i q A B f cg C, o, h => by
       simp only [CTy.rowOf, List.mem_cons] at h
       rcases h with rfl | h
       · simp; omega
@@ -53,7 +53,7 @@ theorem rowOf_fin_lt : ∀ (F : CTy) {o : OpSig}, o ∈ F.rowOf → sizeOf o.fin
 
 /-- A cancel row's table is the table of its layers. -/
 theorem effTab_rowOf (δ : LSub) : ∀ F : CTy, effTab F δ = Row.tab F.rowOf δ
-  | .eff n i q A B f C => by
+  | .eff n i q A B f cg C => by
       funext n' i'
       simp only [effTab, OpTab.ext, CTy.rowOf, effTab_rowOf δ C]
       by_cases h : n' = n ∧ i' = i
@@ -68,8 +68,8 @@ theorem finObl_eq (δ : LSub) (F : CTy) :
     finObl F δ = if F.isTop then none else some (cancelObl (Row.tab F.rowOf δ)) := by
   cases F with
   | top => rfl
-  | eff n i q A B f C =>
-      have h := effTab_rowOf δ (.eff n i q A B f C)
+  | eff n i q A B f cg C =>
+      have h := effTab_rowOf δ (.eff n i q A B f cg C)
       simp only [effTab] at h
       simp only [finObl, CTy.isTop, Bool.false_eq_true, if_false, h]
   | ret _ | arr _ _ | amp _ _ | all _ _ _ | nu _ =>
@@ -121,13 +121,14 @@ the one `F′` finds at its key, with, at a capturable operation, a cancel row b
 def FinLe (F F' : CTy) : Prop :=
   F'.isTop = true ∨ (F.isTop = false ∧ ∀ n i o, Row.find F.rowOf n i = some o →
     ∃ o', Row.find F'.rowOf n i = some o' ∧ o.Sig o' ∧
-      (capB o.q o.B = true → FinLe o.fin o'.fin))
+      (capB o.q o.B = true → FinLe o.fin o'.fin) ∧ (o.call = true → o'.call = true))
 termination_by sizeOf F
 decreasing_by exact rowOf_fin_lt F (Row.find_mem (by assumption)).1
 
-/-- `o ≤ o′`: the same operation, its cancel row grown at a capturable operation.
-`[spec §27]` -/
-def OpSig.LeF (o o' : OpSig) : Prop := o.Sig o' ∧ (capB o.q o.B = true → FinLe o.fin o'.fin)
+/-- `o ≤ o′`: the same operation, its cancel row grown at a capturable operation, and graded
+where `o` is: grading only weakens what a stop owes.  `[spec §27, §48]` -/
+def OpSig.LeF (o o' : OpSig) : Prop :=
+  o.Sig o' ∧ (capB o.q o.B = true → FinLe o.fin o'.fin) ∧ (o.call = true → o'.call = true)
 
 /-- **`Σ ⊆ Σ′` as rows** (`[sub]`): every operation `Σ` finds is below the one `Σ′` finds at its
 key; an entry's cancel row may only grow.  `[spec §19, §27]` -/
@@ -143,7 +144,7 @@ theorem FinLe.top (F : CTy) : FinLe F .top := by rw [FinLe]; exact Or.inl rfl
 theorem FinLe.refl (F : CTy) : FinLe F F := by
   rw [FinLe]
   cases hT : F.isTop
-  · refine Or.inr ⟨rfl, fun n i o hf => ⟨o, hf, OpSig.Sig.refl o, fun _ => FinLe.refl o.fin⟩⟩
+  · refine Or.inr ⟨rfl, fun n i o hf => ⟨o, hf, OpSig.Sig.refl o, fun _ => FinLe.refl o.fin, id⟩⟩
   · exact Or.inl rfl
 termination_by sizeOf F
 decreasing_by exact rowOf_fin_lt F (Row.find_mem (by assumption)).1
@@ -156,17 +157,18 @@ theorem FinLe.trans (F : CTy) : ∀ {F' F'' : CTy}, FinLe F F' → FinLe F' F'' 
   rcases h with h | ⟨hF, h⟩
   · rw [h] at hF'; cases hF'
   refine Or.inr ⟨hF, fun n i o hf => ?_⟩
-  obtain ⟨o', hf', hs, hle⟩ := h n i o hf
-  obtain ⟨o'', hf'', hs', hle'⟩ := h' n i o' hf'
+  obtain ⟨o', hf', hs, hle, hg⟩ := h n i o hf
+  obtain ⟨o'', hf'', hs', hle', hg'⟩ := h' n i o' hf'
   exact ⟨o'', hf'', hs.trans hs', fun hc =>
-    FinLe.trans o.fin (hle hc) (hle' (hs.capB_eq ▸ hc))⟩
+    FinLe.trans o.fin (hle hc) (hle' (hs.capB_eq ▸ hc)), fun hc => hg' (hg hc)⟩
 termination_by sizeOf F
 decreasing_by exact rowOf_fin_lt F (Row.find_mem (by assumption)).1
 
-theorem OpSig.LeF.refl (o : OpSig) : o.LeF o := ⟨OpSig.Sig.refl o, fun _ => FinLe.refl o.fin⟩
+theorem OpSig.LeF.refl (o : OpSig) : o.LeF o := ⟨OpSig.Sig.refl o, fun _ => FinLe.refl o.fin, id⟩
 
 theorem OpSig.LeF.trans {o o' o'' : OpSig} (h : o.LeF o') (h' : o'.LeF o'') : o.LeF o'' :=
-  ⟨h.1.trans h'.1, fun hc => FinLe.trans o.fin (h.2 hc) (h'.2 (h.1.capB_eq ▸ hc))⟩
+  ⟨h.1.trans h'.1, fun hc => FinLe.trans o.fin (h.2.1 hc) (h'.2.1 (h.1.capB_eq ▸ hc)),
+    fun hc => h'.2.2 (h.2.2 hc)⟩
 
 theorem RowLe.refl (S : Row) : RowLe S S := fun _ _ o hf => ⟨o, hf, OpSig.LeF.refl o⟩
 
@@ -230,8 +232,8 @@ theorem finObl_mono (δ : LSub) (F : CTy) :
       refine cancelObl_le ?_ hc
       intro n i en hT
       obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
-      obtain ⟨o', hf', hs, hle⟩ := h n i o hf
-      refine ⟨o'.ent δ, Row.tab_find hf', hs.2.2.1, hs.abort_eq, ?_, ?_, fun ha hq => ?_⟩
+      obtain ⟨o', hf', hs, hle, hg⟩ := h n i o hf
+      refine ⟨o'.ent δ, Row.tab_find hf', hs.2.2.1, hs.abort_eq, ?_, ?_, fun ha hq => ?_, hg⟩
       · simp only [OpSig.ent, hs.2.2.2.1]
       · simp only [OpSig.ent, hs.2.2.2.2]
       · have hc := capB_of_ent ha hq
@@ -242,20 +244,20 @@ termination_by sizeOf F
 decreasing_by exact rowOf_fin_lt F (Row.find_mem hf).1
 
 /-- The entries of one operation, not capturable, at two cancel rows are one entry. -/
-theorem OpSig.ent_eq_of_sig (δ : LSub) {o o' : OpSig} (h : o.Sig o') (hc : capB o.q o.B = false) :
-    o.ent δ = o'.ent δ := by
+theorem OpSig.ent_eq_of_sig (δ : LSub) {o o' : OpSig} (h : o.Sig o') (hc : capB o.q o.B = false)
+    (hg : o.call = o'.call) : o.ent δ = o'.ent δ := by
   have hc' : capB o'.q o'.B = false := h.capB_eq ▸ hc
-  simp only [OpSig.ent, OpSig.abort, hc', h.2.2.1, h.2.2.2.1, h.2.2.2.2, Bool.false_eq_true,
+  simp only [OpSig.ent, OpSig.abort, hc', h.2.2.1, h.2.2.2.1, h.2.2.2.2, hg, Bool.false_eq_true,
     if_false]
 
 /-- An operation's entry grows with the operation. -/
 theorem OpSig.ent_le (δ : LSub) {o o' : OpSig} (h : o.LeF o') : (o.ent δ).Le (o'.ent δ) := by
-  refine ⟨h.1.2.2.1, h.1.abort_eq, ?_, ?_, fun ha hq => ?_⟩
+  refine ⟨h.1.2.2.1, h.1.abort_eq, ?_, ?_, fun ha hq => ?_, h.2.2⟩
   · simp only [OpSig.ent, h.1.2.2.2.1]
   · simp only [OpSig.ent, h.1.2.2.2.2]
   · have hc := capB_of_ent ha hq
     rw [OpSig.ent_fin, OpSig.ent_fin, if_pos hc, if_pos (h.1.capB_eq ▸ hc)]
-    exact finObl_mono δ o.fin (h.2 hc)
+    exact finObl_mono δ o.fin (h.2.1 hc)
 
 /-- **A row's table grows with the row** (`[sub]`).  `[spec §19, §27]` -/
 theorem Row.tab_le {S S' : Row} (δ : LSub) (h : RowLe S S') : (Row.tab S δ).Le (Row.tab S' δ) := by
@@ -266,7 +268,7 @@ theorem Row.tab_le {S S' : Row} (δ : LSub) (h : RowLe S S') : (Row.tab S δ).Le
 
 theorem finUnr_of_mem : ∀ {G : CTy} {o : OpSig}, o ∈ G.rowOf →
     (o.q = .unr ∨ (capB o.q o.B = true ∧ o.fin.FinUnr)) → G.FinUnr
-  | .eff n i q A B f C, o, ho, h => by
+  | .eff n i q A B f cg C, o, ho, h => by
       simp only [CTy.rowOf, List.mem_cons] at ho
       rcases ho with rfl | ho
       · rcases h with h | h
@@ -366,7 +368,7 @@ nested cancel of its continuation runs.  `pend P ⊤ = ⊤`.  `[spec §27]` -/
 def PendLe (P : Row) (G G' : CTy) : Prop :=
   G'.isTop = true ∨ (G.isTop = false ∧
     (∀ n i o, Row.find G.rowOf n i = some o → ∃ o', Row.find G'.rowOf n i = some o' ∧ o.Sig o' ∧
-      (capB o.q o.B = true → PendLe P o.fin o'.fin)) ∧
+      (capB o.q o.B = true → PendLe P o.fin o'.fin) ∧ (o.call = true → o'.call = true)) ∧
     (∀ n i o, Row.find P n i = some o → o.abort = true →
       ∃ o', Row.find G'.rowOf n i = some o' ∧ o.Sig o'))
 termination_by sizeOf G
@@ -380,9 +382,9 @@ too); each operation `E` finds is `T`'s, a capturable one's cancel row with `F`'
 def ThenLe (F : CTy) (E : Row) (T : CTy) : Prop :=
   T.isTop = true ∨ (F.isTop = false ∧
     (∀ n i o, Row.find F.rowOf n i = some o → ∃ o', Row.find T.rowOf n i = some o' ∧ o.Sig o' ∧
-      (capB o.q o.B = true → ThenLe o.fin E o'.fin)) ∧
+      (capB o.q o.B = true → ThenLe o.fin E o'.fin) ∧ (o.call = true → o'.call = true)) ∧
     (∀ n i o, Row.find E n i = some o → ∃ o', Row.find T.rowOf n i = some o' ∧ o.Sig o' ∧
-      (capB o.q o.B = true → PendLe F.rowOf o.fin o'.fin)))
+      (capB o.q o.B = true → PendLe F.rowOf o.fin o'.fin) ∧ (o.call = true → o'.call = true)))
 termination_by sizeOf F
 decreasing_by exact rowOf_fin_lt F (Row.find_mem (by assumption)).1
 
@@ -390,7 +392,7 @@ decreasing_by exact rowOf_fin_lt F (Row.find_mem (by assumption)).1
 theorem ThenLe.nil (F : CTy) : ThenLe F [] F := by
   rw [ThenLe]
   cases hT : F.isTop
-  · exact Or.inr ⟨rfl, fun n i o hf => ⟨o, hf, OpSig.Sig.refl o, fun _ => ThenLe.nil o.fin⟩,
+  · exact Or.inr ⟨rfl, fun n i o hf => ⟨o, hf, OpSig.Sig.refl o, fun _ => ThenLe.nil o.fin, id⟩,
       fun n i o hf => by simp [Row.find] at hf⟩
   · exact Or.inl rfl
 termination_by sizeOf F
@@ -398,7 +400,7 @@ decreasing_by exact rowOf_fin_lt F (Row.find_mem (by assumption)).1
 
 /-- The errors a cancel row may keep, at every depth, have persistent arguments.  `[spec §27]` -/
 def CTy.FinPers : CTy → Prop
-  | .eff _ _ q A B f C => ((B.isZero && q != .lin) = true → A.Persistent) ∧
+  | .eff _ _ q A B f _ C => ((B.isZero && q != .lin) = true → A.Persistent) ∧
       (capB q B = true → f.FinPers) ∧ C.FinPers
   | _ => True
 
@@ -410,7 +412,7 @@ def Row.PendPers (S : Row) : Prop :=
 
 theorem finPers_of_mem : ∀ {F : CTy} {o : OpSig}, F.FinPers → o ∈ F.rowOf →
     (o.abort = true → o.A.Persistent) ∧ (capB o.q o.B = true → o.fin.FinPers)
-  | .eff n i q A B f C, o, h, ho => by
+  | .eff n i q A B f cg C, o, h, ho => by
       simp only [CTy.rowOf, List.mem_cons] at ho
       rcases ho with rfl | ho
       · exact ⟨h.1, h.2.1⟩
@@ -503,7 +505,7 @@ theorem cfin_cancel (δ : LSub) (P : Row) (err : Option Val) (G : CTy) :
   · -- an operation of the nested cancel's finaliser: the `cfin` joins its continuation
     obtain ⟨⟨rfl, hK₁, hT, ha⟩, ρa, ρk, hcak, hA, hu', hcont⟩ := pure_sep_iff.mp hp
     obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
-    obtain ⟨o', hf', hs, hfin⟩ := hGG n i o hf
+    obtain ⟨o', hf', hs, hfin, hgr⟩ := hGG n i o hf
     obtain ⟨ρk', hk', hcσ'⟩ := compS_reassoc hcak hcτ
     refine wpG_here _ _ _ τ (Or.inr (Or.inr ⟨(cfinK (cancelVal err)).comp K₁, n, i, v, o'.ent δ,
       pure_sep_mk ⟨(Kont.plug_comp _ _ _).symm, ?_, Row.tab_find hf',
@@ -517,8 +519,8 @@ theorem cfin_cancel (δ : LSub) (P : Row) (err : Option Val) (G : CTy) :
     · obtain ⟨z, hz, hcz⟩ := compS_exch hk' hcτ'
       rw [Kont.plug_comp]
       have hB' : (o.ent δ).PB ls'' w τ₃ := by simpa only [OpSig.ent, hs.2.2.2.2] using hB
-      exact (hcont ls'' (hext.left hk')).1 w τ₃ z hB' hz
-        (errOk_local (Row.tab_local P δ) (hext.right hk') he') hu hcz
+      exact (hcont ls'' ((hext.left hk').of_le hgr)).1 w τ₃ z hB' hz
+        (errOk_local (Row.tab_local P δ) (hext.right hk').ext he') hu hcz
     · intro Q hQ
       obtain ⟨hcap', hnT, rfl⟩ := ent_fin_some hQ
       have hcap : capB o.q o.B = true := hs.capB_eq ▸ hcap'
@@ -527,12 +529,12 @@ theorem cfin_cancel (δ : LSub) (P : Row) (err : Option Val) (G : CTy) :
       have hoT : o.fin.isTop = false := by
         rw [PendLe, hnT] at hfin'
         exact (hfin'.resolve_left (by simp)).1
-      have hcan := (hcont ls'' (hext.left hk')).2 hq₀ (cancelObl (Row.tab o.fin.rowOf δ)) (by
+      have hcan := (hcont ls'' ((hext.left hk').of_le hgr)).2 hq₀ (cancelObl (Row.tab o.fin.rowOf δ)) (by
         rw [OpSig.ent_fin, if_pos hcap, finObl_eq, hoT]; rfl)
       show cancelObl _ ls'' (((cfinK (cancelVal err)).comp K₁).dead.plug _) ρk'
       rw [dead_comp, dead_cfinK, Kont.plug_comp]
       exact cfin_cancel δ P err o.fin hfin' hnT hcan
-        (errOk_local (Row.tab_local P δ) (hext.right hk') he')
+        (errOk_local (Row.tab_local P δ) (hext.right hk').ext he')
         (fun hu₁ => hu (finUnr_of_find hf (Or.inr ⟨hcap, hu₁⟩))) hk'
 termination_by sizeOf G
 decreasing_by exact rowOf_fin_lt G (Row.find_mem hf).1
@@ -549,7 +551,7 @@ handler, and a cancel of that continuation passes the `cfin` (`cfin_cancel`).  T
 nothing where `E` may stop at an unrestricted operation.  `[spec §27]` -/
 theorem cfin_run (δ : LSub) (E P : Row) (err : Option Val) {T : CTy}
     (hE : ∀ n i o, Row.find E n i = some o → ∃ o', Row.find T.rowOf n i = some o' ∧ o.Sig o' ∧
-      (capB o.q o.B = true → PendLe P o.fin o'.fin))
+      (capB o.q o.B = true → PendLe P o.fin o'.fin) ∧ (o.call = true → o'.call = true))
     (hP : ∀ n i o, Row.find P n i = some o → o.abort = true →
       ∃ o', Row.find T.rowOf n i = some o' ∧ o.Sig o')
     (hNZ : ∀ n i o, Row.find E n i = some o → o.n ≠ 0)
@@ -577,7 +579,7 @@ theorem cfin_run (δ : LSub) (E P : Row) (err : Option Val) {T : CTy}
   · -- an operation of the finaliser passes the dead region; the `cfin` joins its continuation
     obtain ⟨⟨rfl, hK₁, hTn, ha⟩, ρa, ρk, hcak, hA, hu', hcont⟩ := pure_sep_iff.mp hp
     obtain ⟨o, hf, rfl⟩ := Row.tab_some hTn
-    obtain ⟨o', hf', hs, hfin⟩ := hE n i o hf
+    obtain ⟨o', hf', hs, hfin, hgr⟩ := hE n i o hf
     obtain ⟨ρk', hk', hcσ'⟩ := compS_reassoc hcak hcτ
     refine wpG_here _ _ _ τ (Or.inr (Or.inr ⟨(cfinK (cancelVal err)).comp K₁, n, i, v, o'.ent δ,
       pure_sep_mk ⟨(Kont.plug_comp _ _ _).symm, ?_, Row.tab_find hf',
@@ -591,8 +593,8 @@ theorem cfin_run (δ : LSub) (E P : Row) (err : Option Val) {T : CTy}
     · obtain ⟨z, hz, hcz⟩ := compS_exch hk' hcτ'
       rw [Kont.plug_comp]
       have hB' : (o.ent δ).PB ls'' w τ₃ := by simpa only [OpSig.ent, hs.2.2.2.2] using hB
-      exact (hcont ls'' (hext.left hk')).1 w τ₃ z hB' hz
-        (errOk_local (Row.tab_local P δ) (hext.right hk') he') hu hcz
+      exact (hcont ls'' ((hext.left hk').of_le hgr)).1 w τ₃ z hB' hz
+        (errOk_local (Row.tab_local P δ) (hext.right hk').ext he') hu hcz
     · intro Q hQ
       obtain ⟨hcap', hnT, rfl⟩ := ent_fin_some hQ
       have hcap : capB o.q o.B = true := hs.capB_eq ▸ hcap'
@@ -600,12 +602,12 @@ theorem cfin_run (δ : LSub) (E P : Row) (err : Option Val) {T : CTy}
       have hoT : o.fin.isTop = false := by
         rw [PendLe, hnT] at hfin'
         exact (hfin'.resolve_left (by simp)).1
-      have hcan := (hcont ls'' (hext.left hk')).2 (not_lin_of_capB hcap)
+      have hcan := (hcont ls'' ((hext.left hk').of_le hgr)).2 (not_lin_of_capB hcap)
         (cancelObl (Row.tab o.fin.rowOf δ)) (by rw [OpSig.ent_fin, if_pos hcap, finObl_eq, hoT]; rfl)
       show cancelObl _ ls'' (((cfinK (cancelVal err)).comp K₁).dead.plug _) ρk'
       rw [dead_comp, dead_cfinK, Kont.plug_comp]
       exact cfin_cancel δ P err o.fin hfin' hnT hcan
-        (errOk_local (Row.tab_local P δ) (hext.right hk') he')
+        (errOk_local (Row.tab_local P δ) (hext.right hk').ext he')
         (fun hu₁ => hu (unr_of_find hf (Or.inr ⟨hcap, hu₁⟩))) hk'
   · -- a raise of the finaliser: the first error is kept, and the cancel goes on
     obtain ⟨⟨rfl, hK₁, hTm, ha⟩, ρa, ρn, hcan, ⟨hPA, hnA⟩, hnn⟩ := pure_sep_iff.mp hp
@@ -664,12 +666,12 @@ theorem then_cancel (δ : LSub) (E : Row) (hNZ : ∀ n i o, Row.find E n i = som
     obtain ⟨z, hz, hcz⟩ := compS_exch hcab hcτ
     refine ewp_absorb (cancelTab_mono _) ?_ hnb hcz
     refine cfin_run δ E F.rowOf err hET (fun n i o hf _ => by
-        obtain ⟨o', hf', hs, -⟩ := hFT n i o hf; exact ⟨o', hf', hs⟩) hNZ hQd
+        obtain ⟨o', hf', hs, -, -⟩ := hFT n i o hf; exact ⟨o', hf', hs⟩) hNZ hQd
       (hD ls' τ₂ hF') he (fun hu => errOk_empty_of_pers (hpers hu) he) (ResU.CompS.comm hz)
   · -- an operation below the frame: the frame joins its continuation
     obtain ⟨⟨rfl, hK₁, hTn, ha⟩, ρa, ρk, hcak, hA, hu', hcont⟩ := pure_sep_iff.mp hp
     obtain ⟨o, hf, rfl⟩ := Row.tab_some hTn
-    obtain ⟨o', hf', hs, hfin⟩ := hFT n i o hf
+    obtain ⟨o', hf', hs, hfin, hgr⟩ := hFT n i o hf
     obtain ⟨ρk', hk', hcσ'⟩ := compS_reassoc hcak hcτ
     refine wpG_here _ _ _ τ (Or.inr (Or.inr ⟨(ubindK Nv Dv).comp K₁, n, i, v, o'.ent δ,
       pure_sep_mk ⟨(Kont.plug_comp _ _ _).symm, ?_, Row.tab_find hf',
@@ -684,7 +686,7 @@ theorem then_cancel (δ : LSub) (E : Row) (hNZ : ∀ n i o, Row.find E n i = som
     · obtain ⟨z, hz, hcz⟩ := compS_exch hk' hcτ'
       rw [Kont.plug_comp]
       have hB' : (o.ent δ).PB ls'' w τ₃ := by simpa only [OpSig.ent, hs.2.2.2.2] using hB
-      exact (hcont ls'' (hext.left hk')).1 w τ₃ z hB' hz (hFe ls' ls'' τ₂ (hext.right hk') hF') hcz
+      exact (hcont ls'' ((hext.left hk').of_le hgr)).1 w τ₃ z hB' hz (hFe ls' ls'' τ₂ (hext.right hk').ext hF') hcz
     · intro Q hQ
       obtain ⟨hcap', hnT, rfl⟩ := ent_fin_some hQ
       have hcap : capB o.q o.B = true := hs.capB_eq ▸ hcap'
@@ -692,14 +694,14 @@ theorem then_cancel (δ : LSub) (E : Row) (hNZ : ∀ n i o, Row.find E n i = som
       have hoT : o.fin.isTop = false := by
         rw [ThenLe, hnT] at hfin'
         exact (hfin'.resolve_left (by simp)).1
-      have hcan := (hcont ls'' (hext.left hk')).2 (not_lin_of_capB hcap)
+      have hcan := (hcont ls'' ((hext.left hk').of_le hgr)).2 (not_lin_of_capB hcap)
         (cancelObl (Row.tab o.fin.rowOf δ)) (by rw [OpSig.ent_fin, if_pos hcap, finObl_eq, hoT]; rfl)
       show cancelObl _ ls'' (((ubindK Nv Dv).comp K₁).dead.plug _) ρk'
       rw [dead_comp, dead_ubindK, Kont.plug_comp]
       exact then_cancel δ E hNZ Nv Dv Fr hFs hFe hQd hD o.fin hfin' hnT
         (fun hu₁ => hunr (finUnr_of_find hf' (Or.inr ⟨hcap', hu₁⟩)))
         (fun hu₁ => (finPers_of_mem (hpers hu₁) (Row.find_mem hf).1).2 hcap) hcan
-        (hFe ls' ls'' τ₂ (hext.right hk') hF') hk'
+        (hFe ls' ls'' τ₂ (hext.right hk').ext hF') hk'
 termination_by sizeOf F
 decreasing_by exact rowOf_fin_lt F (Row.find_mem hf).1
 
@@ -785,7 +787,7 @@ theorem seq_raise_run (δ : LSub) (S E : Row) (hES : RowLe E S) (er : Bool)
     · obtain ⟨z, hz, hcz⟩ := compS_exch hk' hcτ'
       rw [Kont.plug_comp]
       exact (hcont ls'' (hext.left hk')).1 w' τ₃ z hB hz
-        ⟨(Row.tab_local S δ n i en (OpTab.eraseIf_some hTn).1 _ ls'' v τ₂ (hext.right hk')).1 hp'.1, hp'.2⟩ hu hcz
+        ⟨(Row.tab_local S δ n i en (OpTab.eraseIf_some hTn).1 _ ls'' v τ₂ (hext.right hk').ext).1 hp'.1, hp'.2⟩ hu hcz
     · exact ent_plain δ (seqRaiseK (opPayload n i v)) (seqRaiseK_hasHnd _) (seqRaiseK_catches _ 0)
         hp'.2 o ((hcont ls'' (hext.left hk')).2 hq) hk'
   · -- a raise of the finaliser supersedes the pending one
@@ -869,7 +871,8 @@ theorem ewp_frame_then_or (δ : LSub) (S SM SD : Row) (hNZ : S.NZ) (hMS : RowLe 
       obtain ⟨z, hz, hcz⟩ := compS_exch hk' hcτ
       rw [Kont.plug_comp]
       have hB' : (o.ent δ).PB ls'' w τ₁ := by simpa only [OpSig.ent, hle.1.2.2.2.2] using hB
-      exact (hcont ls'' (he.left hk')).1 w τ₁ z hB' hz (hFe ls' ls'' σ₂ (he.right hk') hF') hcz
+      exact (hcont ls'' ((he.left hk').of_le hle.2.2)).1 w τ₁ z hB' hz
+        (hFe ls' ls'' σ₂ (he.right hk').ext hF') hcz
     · intro Q' hQ'
       obtain ⟨hcap', hnT, rfl⟩ := ent_fin_some hQ'
       have hcap : capB o.q o.B = true := hle.1.capB_eq ▸ hcap'
@@ -877,14 +880,14 @@ theorem ewp_frame_then_or (δ : LSub) (S SM SD : Row) (hNZ : S.NZ) (hMS : RowLe 
       have hoT : o.fin.isTop = false := by
         rw [ThenLe, hnT] at hth
         exact (hth.resolve_left (by simp)).1
-      have hcan := (hcont ls'' (he.left hk')).2 (not_lin_of_capB hcap)
+      have hcan := (hcont ls'' ((he.left hk').of_le hle.2.2)).2 (not_lin_of_capB hcap)
         (cancelObl (Row.tab o.fin.rowOf δ)) (by rw [OpSig.ent_fin, if_pos hcap, finObl_eq, hoT]; rfl)
       show cancelObl _ ls'' (((ubindK Nv Dv).comp K₁).dead.plug _) ρk'
       rw [dead_comp, dead_ubindK, Kont.plug_comp]
       exact then_cancel δ SD hNZD Nv Dv Fr hFs hFe (fun _ _ _ h => (hQd _ _ _ h).2) hD o.fin hth hnT
         (fun hu₁ => hU ⟨o', (Row.find_mem hf').1, Or.inr ⟨hcap', hu₁⟩⟩)
         (fun hu₁ => ((hP hu₁) o (Row.find_mem hf).1).2 hcap) hcan
-        (hFe ls' ls'' σ₂ (he.right hk') hF') hk'
+        (hFe ls' ls'' σ₂ (he.right hk').ext hF') hk'
   · -- a `raise`: the finaliser runs, then the `raise` goes on
     obtain ⟨⟨rfl, hK₁, hTn, ha⟩, ρa, ρn, hcan, ⟨hPA, hnA⟩, hn⟩ := pure_sep_iff.mp hp
     obtain ⟨hTn₀, hkn⟩ := OpTab.eraseIf_some hTn
@@ -983,19 +986,36 @@ theorem effWp_sub {S S' : Row} (hle : RowLe S S') {δ : LSub} {Q : List SRec →
 
 /-- A stack of layers holds `Div` as its row does. -/
 theorem CTy.divB_rowOf : ∀ C : CTy, Row.divB C.rowOf = C.divAt
-  | .eff n i q A B fin C => by
+  | .eff n i q A B fin cg C => by
       simp only [CTy.rowOf, Row.divB, CTy.effOf, CTy.divAt]
       rw [show (CTy.effOf C.rowOf .unit).divAt = Row.divB C.rowOf from rfl, CTy.divB_rowOf C]
   | .ret _ | .arr _ _ | .amp _ _ | .top | .all _ _ _ | .nu _ => rfl
 
 /-! ### `Closing` at a row -/
 
-/-- `tick` answered *close* only: `tick : 1 ↠ 0 ⊕ 1`. -/
-def closeSig : OpSig := ⟨divEff, 0, .lin, .unit, .sum .zero .unit, .ret .unit⟩
+/-- `tick` answered *close* only, at the grade `c`: `tick : 1 ↠ 0 ⊕ 1`.  `[spec §14, §48]` -/
+def closeSig (c : Bool) : OpSig := ⟨divEff, 0, .lin, .unit, .sum .zero .unit, .ret .unit, c⟩
 
-/-- `tick`'s entry answered *close* only is the closing signature's. -/
-theorem closeSig_ent {en : OpEnt} (ht : en.IsTick) (δ : LSub) : en.closeOnly.Le (closeSig.ent δ) ∧
-    (closeSig.ent δ).Le en.closeOnly := by
+/-- The grade of the row's `tick`, `false` where it has none.  `[spec §48]` -/
+def Row.divCall (S : Row) : Bool := ((Row.find S divEff 0).map OpSig.call).getD false
+
+theorem Row.divCall_of_find {S : Row} {o : OpSig} (hf : Row.find S divEff 0 = some o) :
+    S.divCall = o.call := by simp [Row.divCall, hf]
+
+/-- A row's `tick` is graded in a larger row where it is graded. -/
+theorem Row.divCall_le {S S' : Row} (hle : RowLe S S') (h : S.divCall = true) :
+    S'.divCall = true := by
+  unfold Row.divCall at h
+  cases hf : Row.find S divEff 0 with
+  | none => rw [hf] at h; cases h
+  | some o =>
+      rw [hf] at h
+      obtain ⟨o', hf', hle'⟩ := hle _ _ o hf
+      rw [Row.divCall_of_find hf']; exact hle'.2.2 h
+
+/-- `tick`'s entry answered *close* only is the closing signature's, at its grade. -/
+theorem closeSig_ent {en : OpEnt} (ht : en.IsTick) (δ : LSub) :
+    en.closeOnly.Le ((closeSig en.call).ent δ) ∧ ((closeSig en.call).ent δ).Le en.closeOnly := by
   have hPA : en.PA = fun ls v => vC true .unit ls δ v := by
     funext ls v ρ; exact propext ((ht.2.2.1 ls v ρ).trans vC_unit_iff.symm)
   have hPB : en.closeOnly.PB = fun ls v => vC true (.sum .zero .unit) ls δ v := by
@@ -1007,19 +1027,20 @@ theorem closeSig_ent {en : OpEnt} (ht : en.IsTick) (δ : LSub) : en.closeOnly.Le
     · rcases h with ⟨v, ρ₁, ρ₂, hc, ⟨rfl, -⟩, hz⟩ | ⟨v, ρ₁, ρ₂, hc, ⟨rfl, rfl⟩, ⟨rfl, rfl⟩⟩
       · exact hz.elim
       · exact ⟨(ht.2.2.2 ls _ _).mpr ⟨Or.inr rfl, eq_of_compS_empty_left hc⟩, rfl⟩
-  have hq : en.closeOnly.q = (closeSig.ent δ).q := ht.1
-  have ha : en.closeOnly.abort = (closeSig.ent δ).abort := ht.2.1
-  have hA : en.closeOnly.PA = (closeSig.ent δ).PA := hPA
-  have hB : en.closeOnly.PB = (closeSig.ent δ).PB := hPB
-  exact ⟨⟨hq, ha, hA, hB, fun _ h => absurd ht.1 h⟩,
-    ⟨hq.symm, ha.symm, hA.symm, hB.symm, fun _ h => absurd rfl h⟩⟩
+  have hq : en.closeOnly.q = ((closeSig en.call).ent δ).q := ht.1
+  have ha : en.closeOnly.abort = ((closeSig en.call).ent δ).abort := ht.2.1
+  have hA : en.closeOnly.PA = ((closeSig en.call).ent δ).PA := hPA
+  have hB : en.closeOnly.PB = ((closeSig en.call).ent δ).PB := hPB
+  exact ⟨⟨hq, ha, hA, hB, fun _ h => absurd ht.1 h, id⟩,
+    ⟨hq.symm, ha.symm, hA.symm, hB.symm, fun _ h => absurd rfl h, id⟩⟩
 
-theorem find_closeSig (S : Row) (n i : UInt32) :
-    Row.find (closeSig :: S) n i = if n = divEff ∧ i = 0 then some closeSig else Row.find S n i := by
+theorem find_closeSig (c : Bool) (S : Row) (n i : UInt32) :
+    Row.find (closeSig c :: S) n i = if n = divEff ∧ i = 0 then some (closeSig c)
+      else Row.find S n i := by
   by_cases h : n = divEff ∧ i = 0
   · rw [if_pos h]; simp [Row.find, List.find?, closeSig, h]
   · rw [if_neg h]
-    have : decide (n = closeSig.n ∧ i = closeSig.i) = false := by
+    have : decide (n = (closeSig c).n ∧ i = (closeSig c).i) = false := by
       simp only [closeSig]; exact decide_eq_false h
     simp [Row.find, List.find?, this]
 
@@ -1027,7 +1048,7 @@ theorem find_closeSig (S : Row) (n i : UInt32) :
 theorem closing_to_row {S : Row} {δ : LSub} (hT : (Row.tab S δ).DivOK)
     {Q : List SRec → Val → WProp} {ls : List SRec} {e : Expr} {ρ : WRes}
     (h : Closing (Row.tab S δ) Q ls e ρ) :
-    ewpTS ls e (opTable (Row.tab (closeSig :: S) δ)) Q ρ := by
+    ewpTS ls e (opTable (Row.tab (closeSig S.divCall :: S) δ)) Q ρ := by
   refine ewp_sub (fun n i en hT' => ?_) h
   unfold OpTab.closeAt at hT'
   by_cases hk : n = divEff ∧ i = 0
@@ -1037,20 +1058,27 @@ theorem closing_to_row {S : Row} {δ : LSub} (hT : (Row.tab S δ).DivOK)
     | none => rw [h₀] at hT'; cases hT'
     | some en₀ =>
         rw [h₀] at hT'; cases hT'
-        exact ⟨closeSig.ent δ, Row.tab_find (by rw [find_closeSig, if_pos ⟨rfl, rfl⟩]),
-          (closeSig_ent (hT en₀ h₀) δ).1⟩
+        obtain ⟨o₀, hf₀, rfl⟩ := Row.tab_some h₀
+        have hc : S.divCall = (o₀.ent δ).call := Row.divCall_of_find hf₀
+        rw [hc]
+        exact ⟨(closeSig (o₀.ent δ).call).ent δ,
+          Row.tab_find (by rw [find_closeSig, if_pos ⟨rfl, rfl⟩]), (closeSig_ent (hT _ h₀) δ).1⟩
   · rw [if_neg hk] at hT'
     exact ⟨en, by simp only [Row.tab, find_closeSig, if_neg hk]; exact hT', OpEnt.Le.refl en⟩
 
 theorem closing_of_row {S : Row} {δ : LSub} {en₀ : OpEnt} (h₀ : Row.tab S δ divEff 0 = some en₀)
     (ht : en₀.IsTick) {Q : List SRec → Val → WProp} {ls : List SRec} {e : Expr} {ρ : WRes}
-    (h : ewpTS ls e (opTable (Row.tab (closeSig :: S) δ)) Q ρ) : Closing (Row.tab S δ) Q ls e ρ := by
+    (h : ewpTS ls e (opTable (Row.tab (closeSig S.divCall :: S) δ)) Q ρ) :
+    Closing (Row.tab S δ) Q ls e ρ := by
   refine ewp_sub (fun n i en hT' => ?_) h
   by_cases hk : n = divEff ∧ i = 0
   · obtain ⟨rfl, rfl⟩ := hk
     simp only [Row.tab, find_closeSig, if_pos (And.intro rfl rfl), Option.map_some] at hT'
     cases hT'
-    exact ⟨en₀.closeOnly, by rw [OpTab.closeAt_key, h₀]; rfl, (closeSig_ent ht δ).2⟩
+    obtain ⟨o₀, hf₀, rfl⟩ := Row.tab_some h₀
+    have hc : S.divCall = (o₀.ent δ).call := Row.divCall_of_find hf₀
+    rw [hc]
+    exact ⟨(o₀.ent δ).closeOnly, by rw [OpTab.closeAt_key, h₀]; rfl, (closeSig_ent ht δ).2⟩
   · simp only [Row.tab, find_closeSig, if_neg hk] at hT'
     exact ⟨en, by rw [OpTab.closeAt_ne hk]; exact hT', OpEnt.Le.refl en⟩
 
@@ -1085,7 +1113,8 @@ theorem closing_then
   have ht := OpSig.isTick_ent δ ho
   have hDk := Row.find_key_none hDS hSd hSDd
   refine closing_of_row h₀ ht ?_
-  refine ewp_frame_then δ (closeSig :: S) (closeSig :: SM) SD ?_ ?_ ?_ ?_ ?_ Nv Dv Fr hFs hFe ?_ hQd hD
+  refine ewp_frame_then δ (closeSig S.divCall :: S) (closeSig SM.divCall :: SM) SD ?_ ?_ ?_ ?_ ?_
+    Nv Dv Fr hFs hFe ?_ hQd hD
     Q₁ Q (fun ls v σ hσ => closing_to_row (Row.divOK_of_divB hSd δ) (hk ls v σ hσ))
     (closing_to_row (Row.divOK_of_le hMS hSd δ) h) hF hc
   · intro o' ho'
@@ -1096,7 +1125,8 @@ theorem closing_then
   · intro n i o' hf'
     rw [find_closeSig] at hf' ⊢
     split at hf'
-    · rw [if_pos (by assumption)]; cases hf'; exact ⟨_, rfl, OpSig.LeF.refl _⟩
+    · rw [if_pos (by assumption)]; cases hf'
+      exact ⟨_, rfl, OpSig.Sig.refl _, fun h => absurd h (by simp [capB, closeSig, OpSig.abort, VTy.isZero]), Row.divCall_le hMS⟩
     · rw [if_neg (by assumption)]; exact hMS n i o' hf'
   · intro n i o' hf'
     rw [find_closeSig]
@@ -1106,19 +1136,19 @@ theorem closing_then
   · intro n i o₁ o₂ hf₁ hf₂ hcap
     rw [find_closeSig] at hf₁ hf₂
     split at hf₁
-    · cases hf₁; exact absurd hcap (by decide)
+    · cases hf₁; exact absurd hcap (by simp [capB, closeSig, OpSig.abort, VTy.isZero])
     · rw [if_neg (by assumption)] at hf₂; exact hfin n i o₁ o₂ hf₁ hf₂ hcap
   · intro hu o' ho'
     simp only [List.mem_cons] at ho'
     rcases ho' with rfl | ho'
-    · exact ⟨fun h => absurd h (by decide), fun h => absurd h (by decide)⟩
+    · exact ⟨fun h => absurd h (by simp [capB, closeSig, OpSig.abort, VTy.isZero]), fun h => absurd h (by simp [capB, closeSig, OpSig.abort, VTy.isZero])⟩
     · exact hP hu o' ho'
   · rintro ⟨o', ho', hu⟩
     simp only [List.mem_cons] at ho'
     rcases ho' with rfl | ho'
     · rcases hu with hu | ⟨hcap, -⟩
       · cases hu
-      · exact absurd hcap (by decide)
+      · exact absurd hcap (by simp [capB, closeSig, OpSig.abort, VTy.isZero])
     · exact hU ⟨o', ho', hu⟩
 
 include hSd hSDd hNZ hMS hDS hfin hP hFs hFe hU hQd hD in
@@ -1152,8 +1182,13 @@ theorem cwp_then
     rw [← Kont.plug_comp]
     refine tickStop_mk h₀ (OpSig.isTick_ent δ ho) ((ubindK Nv Dv).comp K₁)
       (by rw [hasHnd_comp, hK₁]; simp [Kont.HasHnd, Expr.val, Val.pair]) fun ls'' he w hw => ?_
-    have ho' := hcont ls'' (he.left hcσ) w hw
-    have hF'' := hFe ls' ls'' σ₂ (he.right hcσ) hF'
+    have hgr : en.call = true → (o.ent δ).call = true := by
+      obtain ⟨oM, hfM, rfl⟩ := Row.tab_some hT0
+      obtain ⟨o', hf', hle'⟩ := hMS _ _ oM hfM
+      rw [hf] at hf'; cases hf'
+      exact hle'.2.2
+    have ho' := hcont ls'' ((he.left hcσ).of_le hgr) w hw
+    have hF'' := hFe ls' ls'' σ₂ (he.right hcσ).ext hF'
     rw [Kont.plug_comp]
     exact ⟨Or.inl ⟨_, _, σ₂, rfl, ho'.1, hF'', hcσ⟩, hcl ho'.2 hF'' hcσ⟩
   exact cwp_coind_up hW' ⟨e, ρ, ρ₂, rfl, h, hF, hc⟩
@@ -1342,7 +1377,7 @@ def cancelTabOf (S : Row) (F : CTy) (δ : LSub) : Option OpTab :=
 theorem vC_kTy_of_kapRel {S : Row} {R B : VTy} {q : Qual} {F : CTy} {δ : LSub} {ls : List SRec}
     {κ : Val} {ρ : WRes} (A : VTy) (n i : UInt32)
     (h : KapRel (Row.tab S δ) (fun ls v => vC true R ls δ v)
-      (OpSig.ent δ ⟨n, i, q, A, B, F⟩) (cancelTabOf S F δ) ls κ ρ) :
+      (OpSig.ent δ ⟨n, i, q, A, B, F, false⟩) (cancelTabOf S F δ) ls κ ρ) :
     vC true (kTy S R q B F) ls δ κ ρ := by
   obtain ⟨hu, hk⟩ := h
   have hres : ∀ ls', Ext ls ls' ρ →

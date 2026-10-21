@@ -344,9 +344,11 @@ theorem reify_next {ls : List SRec} {x : Expr} {ρ : WRes}
       tickStop_inv (Row.divOK_of_divB (Row.divB_tick S) δ) ht
     refine ewp_unfold hM (hnd_tick hM reifyR (reifyC res) .hole K₁ hK₁ fun ℓ σ₁ σ₂ hp hc => ?_)
     refine ewp_pureSteps hM (reifyC_steps res hres _) _ _ σ₂ (ewp_val hM (nuAns_inr ?_))
+    -- `reify`'s premise: the tick is ungraded, so the loop value owes `κ` at every extension
+    have hc0 : en.call = false := by rw [Row.tab_tick_key] at hT0; cases hT0; rfl
     intro ls'' he
     exact Or.inl ⟨ℓ, K₁, σ₁, σ, rfl, ResU.CompS.comm hc, hp, fun ls₃ he₃ w hw =>
-      hcont ls₃ ((he.right (ResU.CompS.comm hc)).trans he₃) w hw⟩
+      hcont ls₃ ((owed_ungraded hc0).mpr ((he.right (ResU.CompS.comm hc)).trans he₃)) w hw⟩
 
 include hS hres hresR in
 /-- **The *close* observation**: a computation of `Closing` under `reify`'s handler and the

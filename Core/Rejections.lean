@@ -45,7 +45,7 @@ open BoCa.Fig16.LogRel.Core.EffPrograms (dFlag d_hrS)
 /-! ### The handlers -/
 
 /-- `Foo : 1 ↠^lin 1`, the operation `0` of the name `5`. -/
-def fooSig : OpSig := ⟨5, 0, .lin, .unit, .unit, .ret .unit⟩
+def fooSig : OpSig := ⟨5, 0, .lin, .unit, .unit, .ret .unit, false⟩
 
 /-- `foo ()`. -/
 def fooE : Expr := performE (opArgE 5 0 (.val .unit))

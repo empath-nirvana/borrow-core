@@ -166,7 +166,7 @@ theorem tickStop_inv {T : OpTab} (hT : T.DivOK)
     {Φ : List SRec → Expr → WProp} {ls : List SRec} {t : Expr} {ρ : WRes}
     (h : performStop T.only0 ls t Φ ρ) :
     ∃ (K : Kont) (en : OpEnt), t = K.plug tickE ∧ K.HasHnd divEff = false ∧ T divEff 0 = some en ∧ en.IsTick ∧
-      ∀ ls', Ext ls ls' ρ → ∀ w, w = nextV ∨ w = closeV → Φ ls' (K.plug (.val w)) ρ := by
+      ∀ ls', Owed en ls ls' ρ → ∀ w, w = nextV ∨ w = closeV → Φ ls' (K.plug (.val w)) ρ := by
   obtain ⟨K, n, i, v, en, hp⟩ := h
   obtain ⟨⟨rfl, hK, hTn, ha⟩, ρa, ρk, hc, hA, hu, hcont⟩ := pure_sep_iff.mp hp
   obtain ⟨rfl, rfl, hT0⟩ := OpTab.only0_some hTn
@@ -181,7 +181,7 @@ theorem tickStop_inv {T : OpTab} (hT : T.DivOK)
 theorem tickStop_mk {T : OpTab} {en : OpEnt} (hT : T divEff 0 = some en) (ht : en.IsTick)
     {Φ : List SRec → Expr → WProp} (K : Kont) (hK : K.HasHnd divEff = false) {ls : List SRec}
     {ρ : WRes}
-    (h : ∀ ls', Ext ls ls' ρ → ∀ w : Val, w = nextV ∨ w = closeV → Φ ls' (K.plug (.val w)) ρ) :
+    (h : ∀ ls', Owed en ls ls' ρ → ∀ w : Val, w = nextV ∨ w = closeV → Φ ls' (K.plug (.val w)) ρ) :
     performStop T.only0 ls (K.plug tickE) Φ ρ := by
   refine ⟨K, divEff, 0, .unit, en, pure_sep_mk ⟨rfl, hK, by rw [OpTab.only0_key]; exact hT,
     ht.2.1⟩ ⟨PMap.empty, ρ, compS_empty_left ρ, (ht.2.2.1 ls .unit _).mpr ⟨rfl, rfl⟩, ?_, ?_⟩⟩
@@ -201,7 +201,7 @@ theorem tickStop_frame {T : OpTab} (hT : T.DivOK) {Φ Ψ : List SRec → Expr �
   rw [← Kont.plug_comp]
   refine tickStop_mk hT0 ht (K.comp K₁) (by rw [hasHnd_comp, hK, hK₁]; rfl) fun ls' he w hw => ?_
   rw [Kont.plug_comp]
-  exact hΦ ls' _ he (hcont ls' he w hw)
+  exact hΦ ls' _ he.ext (hcont ls' he w hw)
 
 /-- **`tick ()`**, at the empty resource: its continuation, the hole, answers *next* or
 *close*.  `[spec §14]` -/
@@ -292,8 +292,45 @@ theorem frame_conds_closeAt {T : OpTab} {Fr : List SRec → WProp} {K : Kont}
     exact hK n i en' h' (hab ▸ ha) (hq' ▸ hq) ls K₁ ρ σ ρ' (fun P' hP' => hc P' (hf ▸ hP')) hF hcs
       P (hf ▸ hP)
 
-/-- **A plain frame around a computation of `Closing`**: `ewp_frame_plain_or` at the closing
-tables, the row growing from `T` to `T′`. -/
+/-- The frame's transport at `T` gives it at `T`'s tables without the tick and at *close*. -/
+theorem owed_conds {T : OpTab} {Fr : List SRec → WProp}
+    (hFo : ∀ n i en, T n i = some en → ∀ ls ls' ρ, Owed en ls ls' ρ → Fr ls ρ → Fr ls' ρ) :
+    (∀ n i en, T.erase0 n i = some en → ∀ ls ls' ρ, Owed en ls ls' ρ → Fr ls ρ → Fr ls' ρ) ∧
+    (∀ n i en, T.closeAt n i = some en → ∀ ls ls' ρ, Owed en ls ls' ρ → Fr ls ρ → Fr ls' ρ) := by
+  refine ⟨fun n i en hT => ?_, fun n i en hT => ?_⟩
+  · unfold OpTab.erase0 at hT; split at hT
+    · cases hT
+    · exact hFo n i en hT
+  · unfold OpTab.closeAt at hT; split at hT
+    · cases hT' : T n i with
+      | none => rw [hT'] at hT; cases hT
+      | some en' => rw [hT'] at hT; cases hT; exact hFo n i en' hT'
+    · exact hFo n i en hT
+
+/-- **A plain frame around a computation of `Closing`**: `ewp_frame_plain_owed` at the closing
+tables, the row growing from `T` to `T′`, the frame carried to the lists each stop is owed at.
+`[spec §14, §48]` -/
+theorem closing_frame_owed {T T' : OpTab} (hTT : T.Le T') (K : Kont) (hH : ∀ n, K.HasHnd n = false)
+    (hC : ∀ n, K.Catches n = false) (Fr : List SRec → WProp)
+    (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr ls) (Fr ls'))
+    (hFo : ∀ n i en, T n i = some en → ∀ ls ls' ρ, Owed en ls ls' ρ → Fr ls ρ → Fr ls' ρ)
+    (hW : ∀ n i en, T n i = some en → en.abort = true → ∀ ls ρ, Fr ls ρ → NoOwn ρ)
+    (hU : ∀ n i en, T n i = some en → en.q = .unr → ∀ ls ρ, Fr ls ρ → ρ = PMap.empty)
+    (hK : ∀ n i en, T n i = some en → en.abort = false → en.q ≠ .lin →
+      ∀ ls K₁ ρ σ ρ', cancelOK en ls K₁ ρ → Fr ls σ → ResU.CompS ρ σ ρ' →
+        cancelOK en ls (K.comp K₁) ρ')
+    (Q₁ Q : List SRec → Val → WProp)
+    (hkc : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls) (Closing T' Q ls (K.plug (.val v))))
+    {ls : List SRec} {e : Expr} {ρ : WRes} (h : Closing T Q₁ ls e ρ) {ρ₂ ρ' : WRes}
+    (hF : Fr ls ρ₂) (hc : ResU.CompS ρ ρ₂ ρ') : Closing T' Q ls (K.plug e) ρ' := by
+  obtain ⟨hWc, hUc, hKc⟩ := frame_conds_closeAt (K := K) hW hU hK
+  exact (ewp_orBot (opTable_mono _)).mp (ewp_frame_plain_owed _ _ (OpTab.le_closeAt hTT) Table.bot
+    Table.bot Table.bot_const.mono K hH hC Fr hFs (owed_conds hFo).2 hWc hUc hKc
+    (fun _ _ _ _ _ _ _ h => h.elim)
+    Q₁ Q (fun ls v σ hσ => (ewp_orBot (opTable_mono _)).mpr (hkc ls v σ hσ))
+    ((ewp_orBot (opTable_mono _)).mpr h) hF hc)
+
+/-- `closing_frame_owed` with the frame carried along every extension. -/
 theorem closing_frame {T T' : OpTab} (hTT : T.Le T') (K : Kont) (hH : ∀ n, K.HasHnd n = false)
     (hC : ∀ n, K.Catches n = false) (Fr : List SRec → WProp)
     (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr ls) (Fr ls'))
@@ -306,16 +343,48 @@ theorem closing_frame {T T' : OpTab} (hTT : T.Le T') (K : Kont) (hH : ∀ n, K.H
     (Q₁ Q : List SRec → Val → WProp)
     (hkc : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls) (Closing T' Q ls (K.plug (.val v))))
     {ls : List SRec} {e : Expr} {ρ : WRes} (h : Closing T Q₁ ls e ρ) {ρ₂ ρ' : WRes}
-    (hF : Fr ls ρ₂) (hc : ResU.CompS ρ ρ₂ ρ') : Closing T' Q ls (K.plug e) ρ' := by
-  obtain ⟨hWc, hUc, hKc⟩ := frame_conds_closeAt (K := K) hW hU hK
-  exact (ewp_orBot (opTable_mono _)).mp (ewp_frame_plain_or _ _ (OpTab.le_closeAt hTT) Table.bot
-    Table.bot Table.bot_const.mono K hH hC Fr hFs hFe hWc hUc hKc (fun _ _ _ _ _ _ _ h => h.elim)
-    Q₁ Q (fun ls v σ hσ => (ewp_orBot (opTable_mono _)).mpr (hkc ls v σ hσ))
-    ((ewp_orBot (opTable_mono _)).mpr h) hF hc)
+    (hF : Fr ls ρ₂) (hc : ResU.CompS ρ ρ₂ ρ') : Closing T' Q ls (K.plug e) ρ' :=
+  closing_frame_owed hTT K hH hC Fr hFs (fun _ _ _ _ ls ls' ρ ho => hFe ls ls' ρ ho.ext) hW hU hK
+    Q₁ Q hkc h hF hc
 
 /-- **A plain frame around a computation of `cwp`, one segment**, the row growing from `T` to
-`T′`, at any target candidate `Y` that holds the frame around every computation of `cwp` (`hY`).
-`[spec §14]` -/
+`T′`, at any target candidate `Y` that holds the frame around every computation of `cwp` (`hY`);
+the frame carried to the lists each stop is owed at.  `[spec §14, §48]` -/
+theorem cwpF_frame_owed {T T' : OpTab} (hT : T.DivOK) (hT' : T'.DivOK) (hTT : T.Le T') (K : Kont)
+    (hH : ∀ n, K.HasHnd n = false)
+    (hC : ∀ n, K.Catches n = false) (Fr : List SRec → WProp)
+    (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr ls) (Fr ls'))
+    (hFo : ∀ n i en, T n i = some en → ∀ ls ls' ρ, Owed en ls ls' ρ → Fr ls ρ → Fr ls' ρ)
+    (hW : ∀ n i en, T n i = some en → en.abort = true → ∀ ls ρ, Fr ls ρ → NoOwn ρ)
+    (hU : ∀ n i en, T n i = some en → en.q = .unr → ∀ ls ρ, Fr ls ρ → ρ = PMap.empty)
+    (hK : ∀ n i en, T n i = some en → en.abort = false → en.q ≠ .lin →
+      ∀ ls K₁ ρ σ ρ', cancelOK en ls K₁ ρ → Fr ls σ → ResU.CompS ρ σ ρ' →
+        cancelOK en ls (K.comp K₁) ρ')
+    (Q₁ Q : List SRec → Val → WProp) (Y : List SRec → Expr → WProp)
+    (hY : ∀ ls e ρ ρ₂ ρ', cwp T Q₁ ls e ρ → Fr ls ρ₂ → ResU.CompS ρ ρ₂ ρ' →
+      Y ls (K.plug e) ρ')
+    (hk : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls) (cwpF T' Q Y ls (K.plug (.val v))))
+    (hkc : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls) (Closing T' Q ls (K.plug (.val v)))) :
+    ∀ {ls : List SRec} {e : Expr} {ρ : WRes}, cwp T Q₁ ls e ρ →
+      ∀ {ρ₂ ρ' : WRes}, Fr ls ρ₂ → ResU.CompS ρ ρ₂ ρ' → cwpF T' Q Y ls (K.plug e) ρ' := by
+  obtain ⟨hWe, hUe, hKe⟩ := frame_conds_erase0 (K := K) hW hU hK
+  intro ls e ρ he ρ₂ ρ' hF hc
+  refine ewp_frame_plain_owed T.erase0 T'.erase0 (OpTab.le_erase0 hTT) _ _
+    (Table.Const.mono fun _ _ _ _ _ h => h) K hH hC Fr hFs (owed_conds hFo).1 hWe hUe hKe ?_ Q₁ Q hk
+    (cwp_out he) hF hc
+  intro ls' t Φ Φ' σ₁ σ₂ σ hp hF' hcσ
+  obtain ⟨K₁, en, rfl, hK₁, hT0, ht, hcont⟩ := tickStop_inv hT hp
+  obtain ⟨en', hT0', hle⟩ := hTT _ _ _ hT0
+  rw [← Kont.plug_comp]
+  refine tickStop_mk hT0' (hT' en' hT0') (K.comp K₁) (by rw [hasHnd_comp, hH, hK₁]; rfl)
+    fun ls'' he w hw => ?_
+  have ho := hcont ls'' ((he.left hcσ).of_le hle.call) w hw
+  have hF'' := hFo _ _ _ hT0 ls' ls'' σ₂ ((he.right hcσ).of_le hle.call) hF'
+  rw [Kont.plug_comp]
+  exact ⟨hY _ _ _ σ₂ σ ho.1 hF'' hcσ,
+    closing_frame_owed hTT K hH hC Fr hFs hFo hW hU hK Q₁ Q hkc ho.2 hF'' hcσ⟩
+
+/-- `cwpF_frame_owed` with the frame carried along every extension.  `[spec §14]` -/
 theorem cwpF_frame {T T' : OpTab} (hT : T.DivOK) (hT' : T'.DivOK) (hTT : T.Le T') (K : Kont)
     (hH : ∀ n, K.HasHnd n = false)
     (hC : ∀ n, K.Catches n = false) (Fr : List SRec → WProp)
@@ -332,23 +401,9 @@ theorem cwpF_frame {T T' : OpTab} (hT : T.DivOK) (hT' : T'.DivOK) (hTT : T.Le T'
     (hk : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls) (cwpF T' Q Y ls (K.plug (.val v))))
     (hkc : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls) (Closing T' Q ls (K.plug (.val v)))) :
     ∀ {ls : List SRec} {e : Expr} {ρ : WRes}, cwp T Q₁ ls e ρ →
-      ∀ {ρ₂ ρ' : WRes}, Fr ls ρ₂ → ResU.CompS ρ ρ₂ ρ' → cwpF T' Q Y ls (K.plug e) ρ' := by
-  obtain ⟨hWe, hUe, hKe⟩ := frame_conds_erase0 (K := K) hW hU hK
-  intro ls e ρ he ρ₂ ρ' hF hc
-  refine ewp_frame_plain_or T.erase0 T'.erase0 (OpTab.le_erase0 hTT) _ _
-    (Table.Const.mono fun _ _ _ _ _ h => h) K hH hC Fr hFs hFe hWe hUe hKe ?_ Q₁ Q hk
-    (cwp_out he) hF hc
-  intro ls' t Φ Φ' σ₁ σ₂ σ hp hF' hcσ
-  obtain ⟨K₁, en, rfl, hK₁, hT0, ht, hcont⟩ := tickStop_inv hT hp
-  obtain ⟨en', hT0', -⟩ := hTT _ _ _ hT0
-  rw [← Kont.plug_comp]
-  refine tickStop_mk hT0' (hT' en' hT0') (K.comp K₁) (by rw [hasHnd_comp, hH, hK₁]; rfl)
-    fun ls'' he w hw => ?_
-  have ho := hcont ls'' (he.left hcσ) w hw
-  have hF'' := hFe ls' ls'' σ₂ (he.right hcσ) hF'
-  rw [Kont.plug_comp]
-  exact ⟨hY _ _ _ σ₂ σ ho.1 hF'' hcσ,
-    closing_frame hTT K hH hC Fr hFs hFe hW hU hK Q₁ Q hkc ho.2 hF'' hcσ⟩
+      ∀ {ρ₂ ρ' : WRes}, Fr ls ρ₂ → ResU.CompS ρ ρ₂ ρ' → cwpF T' Q Y ls (K.plug e) ρ' :=
+  cwpF_frame_owed hT hT' hTT K hH hC Fr hFs (fun _ _ _ _ ls ls' ρ ho => hFe ls ls' ρ ho.ext)
+    hW hU hK Q₁ Q Y hY hk hkc
 
 /-- `Closing` of a computation of `cwp`: a segment's ticks owe `Closing`, so answered *close* at
 every tick, it ends. -/

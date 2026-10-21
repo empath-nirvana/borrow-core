@@ -187,12 +187,12 @@ theorem VTy.polyB_sound : ∀ A : VTy, VTy.polyB A = true → A.Poly
 /-- `CTy.EffLeaf`, decided: `F_Σ A`, the operation types closed.  `[spec §19]` -/
 def CTy.effLeafB : CTy → Bool
   | .ret A => VTy.polyB A
-  | .eff _ _ _ A B fin C => VTy.clB 0 A && VTy.clB 0 B && CTy.effLeafB C
+  | .eff _ _ _ A B fin _ C => VTy.clB 0 A && VTy.clB 0 B && CTy.effLeafB C
   | _ => false
 
 theorem CTy.effLeafB_sound : ∀ C : CTy, CTy.effLeafB C = true → C.EffLeaf
   | .ret A, h => VTy.polyB_sound A h
-  | .eff _ _ _ A B fin C, h => by
+  | .eff _ _ _ A B fin cg C, h => by
       simp only [CTy.effLeafB, Bool.and_eq_true] at h
       exact ⟨VTy.clB_sound 0 A h.1.1, VTy.clB_sound 0 B h.1.2, effLeafB_sound C h.2⟩
   | .arr _ _, h | .amp _ _, h | .top, h | .all _ _ _, h | .nu _, h => by simp [CTy.effLeafB] at h
@@ -201,7 +201,7 @@ theorem CTy.effLeafB_sound : ∀ C : CTy, CTy.effLeafB C = true → C.EffLeaf
 def CTy.nuLeafB : CTy → Bool
   | .ret A => VTy.polyB A
   | .amp C D => CTy.nuLeafB C && CTy.nuLeafB D
-  | .eff n i q A B fin C => CTy.effLeafB (.eff n i q A B fin C)
+  | .eff n i q A B fin cg C => CTy.effLeafB (.eff n i q A B fin cg C)
   | .arr A D => VTy.clB 0 A && CTy.nuLeafB D
   | _ => false
 
@@ -210,7 +210,7 @@ theorem CTy.nuLeafB_sound : ∀ C : CTy, CTy.nuLeafB C = true → C.NuLeaf
   | .amp C D, h => by
       simp only [CTy.nuLeafB, Bool.and_eq_true] at h
       exact ⟨nuLeafB_sound C h.1, nuLeafB_sound D h.2⟩
-  | .eff n i q A B fin C, h => CTy.effLeafB_sound (.eff n i q A B fin C) h
+  | .eff n i q A B fin cg C, h => CTy.effLeafB_sound (.eff n i q A B fin cg C) h
   | .arr A D, h => by
       simp only [CTy.nuLeafB, Bool.and_eq_true] at h
       exact ⟨VTy.clB_sound 0 A h.1, nuLeafB_sound D h.2⟩
@@ -225,7 +225,7 @@ theorem CTy.nuOkB_sound : ∀ C : CTy, CTy.nuOkB C = true → C.NuOk
   | .amp C D, h => by
       simp only [CTy.nuOkB, Bool.and_eq_true] at h
       exact ⟨CTy.nuLeafB_sound C h.1, CTy.nuLeafB_sound D h.2⟩
-  | .ret _, h | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h | .eff _ _ _ _ _ _ _, h => by
+  | .ret _, h | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h | .eff _ _ _ _ _ _ _ _, h => by
       simp [CTy.nuOkB] at h
 
 /-- The bodies `C` of the thunks `U(νX. C)` in a value type: where `nu_in` looks for the type
@@ -240,7 +240,7 @@ def VTy.nuThunks : VTy → List CTy
 def CTy.nuThunks : CTy → List CTy
   | .ret A => VTy.nuThunks A
   | .amp C D => CTy.nuThunks C ++ CTy.nuThunks D
-  | .eff _ _ _ _ _ _ C => CTy.nuThunks C
+  | .eff _ _ _ _ _ _ _ C => CTy.nuThunks C
   | .arr _ D => CTy.nuThunks D
   | _ => []
 
@@ -273,7 +273,7 @@ def cfreeB (x : LifeVar) : CTy → Bool
   | .top => false
   | .all y b C => b.mentions x || (x != y && cfreeB x C)
   | .nu C => cfreeB x C
-  | .eff _ _ _ A B fin C => vfreeB x A || vfreeB x B || cfreeB x fin || cfreeB x C
+  | .eff _ _ _ A B fin _ C => vfreeB x A || vfreeB x B || cfreeB x fin || cfreeB x C
 end
 
 mutual
@@ -301,7 +301,7 @@ theorem cfreeB_iff (x : LifeVar) : ∀ C : CTy, cfreeB x C = true ↔ CFree x C
   | .top => by simp [cfreeB, CFree]
   | .all y b C => by simp [cfreeB, CFree, cfreeB_iff x C]
   | .nu C => by simp [cfreeB, CFree, cfreeB_iff x C]
-  | .eff _ _ _ A B fin C => by
+  | .eff _ _ _ A B fin cg C => by
       simp [cfreeB, CFree, vfreeB_iff x A, vfreeB_iff x B, cfreeB_iff x fin, cfreeB_iff x C,
         or_assoc]
 end
@@ -642,7 +642,7 @@ def cScopedB (Δ : LifeCtx) (ex : List LifeVar) : CTy → Bool
   | .top => true
   | .all y b C => lifeScopedB Δ ex b && cScopedB Δ (y :: ex) C
   | .nu C => cScopedB Δ ex C
-  | .eff _ _ _ A B fin C =>
+  | .eff _ _ _ A B fin _ C =>
       vScopedB Δ ex A && vScopedB Δ ex B && cScopedB Δ ex fin && cScopedB Δ ex C
 end
 
@@ -695,7 +695,7 @@ theorem cScopedB_sound {Δ : LifeCtx} {y : LifeVar} : ∀ {ex : List LifeVar} (C
           · exact Or.inl hm
         · exact Or.inr hs
   | _, .nu C, h, hf => cScopedB_sound C h hf
-  | _, .eff _ _ _ A B fin C, h, hf => by
+  | _, .eff _ _ _ A B fin cg C, h, hf => by
       simp only [cScopedB, Bool.and_eq_true] at h
       rcases hf with hf | hf | hf | hf
       · exact vScopedB_sound A h.1.1.1 hf
@@ -806,11 +806,11 @@ theorem Row.unrB_iff {S : Row} : Row.unrB S = true ↔ S.Unr := by
 
 /-- `CTy.FinUnr`, decided. -/
 def finUnrB : CTy → Bool
-  | .eff _ _ q _ B f C => q == .unr || (capB q B && finUnrB f) || finUnrB C
+  | .eff _ _ q _ B f _ C => q == .unr || (capB q B && finUnrB f) || finUnrB C
   | _ => false
 
 theorem finUnrB_iff : ∀ C : CTy, finUnrB C = true ↔ C.FinUnr
-  | .eff _ _ q _ B f C => by
+  | .eff _ _ q _ B f cg C => by
       simp only [finUnrB, CTy.FinUnr, Bool.or_eq_true, beq_iff_eq, Bool.and_eq_true,
         finUnrB_iff f, finUnrB_iff C, or_assoc]
   | .ret _ | .arr _ _ | .amp _ _ | .top | .all _ _ _ | .nu _ => by

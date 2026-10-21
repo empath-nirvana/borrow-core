@@ -90,8 +90,10 @@ inductive CTy where
   /-- One operation of an effect row: `C` extended by the operation `i` of the name `n`,
   `A ↠^q B`, with its cancel row `fin`: what cancelling a continuation captured at the operation
   may raise or perform, `⊤` when it cannot be cancelled, otherwise the operations of `fin`'s layers
-  (`CTy.rowOf`).  `F_Σ R` is a stack of these over `F R` (`CTy.effOf`).  `[spec §19, §27]` -/
-  | eff (n i : UInt32) (q : Qual) (A B : VTy) (fin : CTy) (C : CTy)
+  (`CTy.rowOf`); and its grade `c`: a call-graded operation's continuation is resumed only at a
+  list with the stop's members.  `F_Σ R` is a stack of these over `F R` (`CTy.effOf`).
+  `[spec §19, §27, §48]` -/
+  | eff (n i : UInt32) (q : Qual) (A B : VTy) (fin : CTy) (c : Bool) (C : CTy)
 end
 
 /-- The value-type eliminator with `U C` a leaf. -/
@@ -143,10 +145,12 @@ def CTy.EffFree : CTy → Prop
   | .ret _ | .top => True
   | .arr _ C | .all _ _ C | .nu C => C.EffFree
   | .amp C D => C.EffFree ∧ D.EffFree
-  | .eff _ _ _ _ _ _ _ => False
+  | .eff _ _ _ _ _ _ _ _ => False
 
-/-- An operation of an effect row: the operation `i` of the name `n`, `A ↠^q B`, and its cancel
-row `fin` (`CTy.eff`), the empty row `F 1` by default.  `[spec §19, §27]` -/
+/-- An operation of an effect row: the operation `i` of the name `n`, `A ↠^q B`, its cancel
+row `fin` (`CTy.eff`), the empty row `F 1` by default, and its grade `call`, ungraded by default:
+a call-graded operation's continuation is resumed only at a list with the stop's members.
+`[spec §19, §27, §48]` -/
 structure OpSig where
   n : UInt32
   i : UInt32
@@ -154,6 +158,7 @@ structure OpSig where
   A : VTy
   B : VTy
   fin : CTy := .ret .unit
+  call : Bool := false
 
 /-- An operation `A ↠^q B` is capturable: not linear, and not abortive (its answer type is not
 `0`), so a continuation captured at it has a cancel branch, and its cancel row is read.
@@ -166,11 +171,11 @@ theorem capB_congr {q : Qual} {B B' : VTy} (h : B.isZero = B'.isZero) : capB q B
 /-- `F_Σ R`: the row's operations stacked over `F R`; `F_∅ R = F R`.  `[spec §19]` -/
 def CTy.effOf : List OpSig → VTy → CTy
   | [], R => .ret R
-  | o :: os, R => .eff o.n o.i o.q o.A o.B o.fin (CTy.effOf os R)
+  | o :: os, R => .eff o.n o.i o.q o.A o.B o.fin o.call (CTy.effOf os R)
 
 /-- The operations a cancel row holds: its layers, `[]` at any other former.  `[spec §27]` -/
 def CTy.rowOf : CTy → List OpSig
-  | .eff n i q A B fin C => ⟨n, i, q, A, B, fin⟩ :: CTy.rowOf C
+  | .eff n i q A B fin cg C => ⟨n, i, q, A, B, fin, cg⟩ :: CTy.rowOf C
   | _ => []
 
 /-- The cancel row `⊤`: a continuation captured there cannot be cancelled.  `[spec §27]` -/
@@ -217,7 +222,7 @@ def CFree (x : LifeVar) : CTy → Prop
   | .top => False
   | .all y b C => b.mentions x = true ∨ (x ≠ y ∧ CFree x C)
   | .nu C => CFree x C
-  | .eff _ _ _ A B fin C => VFree x A ∨ VFree x B ∨ CFree x fin ∨ CFree x C
+  | .eff _ _ _ A B fin _ C => VFree x A ∨ VFree x B ∨ CFree x fin ∨ CFree x C
 end
 
 /-! ### Type variables: renaming, substitution, closedness
@@ -1158,7 +1163,7 @@ each `F_Σ A`, whose operation types are closed.  `[spec §7, §19]` -/
 def instT (S : VTy) : CTy → CTy
   | .ret A => .ret (VTy.inst S A)
   | .amp C D => .amp (instT S C) (instT S D)
-  | .eff n i q A B fin C => .eff n i q A B fin (instT S C)
+  | .eff n i q A B fin cg C => .eff n i q A B fin cg (instT S C)
   | .arr A C => .arr A (instT S C)
   | C => C
 
@@ -1166,7 +1171,7 @@ def instT (S : VTy) : CTy → CTy
 `A` polynomial in `X`.  `[spec §19]` -/
 def EffLeaf : CTy → Prop
   | .ret A => A.Poly
-  | .eff _ _ _ A B _ C => A.Cl 0 ∧ B.Cl 0 ∧ EffLeaf C
+  | .eff _ _ _ A B _ _ C => A.Cl 0 ∧ B.Cl 0 ∧ EffLeaf C
   | _ => False
 
 /-- A `&`-tree of observations `F A` and `F_Σ A`, each `A` polynomial in `X`, and observations
@@ -1175,7 +1180,7 @@ with an argument `A ⊸ D` over such a tree, the argument type closed (the affin
 def NuLeaf : CTy → Prop
   | .ret A => A.Poly
   | .amp C D => NuLeaf C ∧ NuLeaf D
-  | .eff n i q A B fin C => EffLeaf (.eff n i q A B fin C)
+  | .eff n i q A B fin cg C => EffLeaf (.eff n i q A B fin cg C)
   | .arr A D => A.Cl 0 ∧ NuLeaf D
   | _ => False
 
@@ -1573,7 +1578,7 @@ def CTy.lifeBound : CTy → Nat
   | .top => 0
   | .all x b C => max (x + 1) (max b.varBound C.lifeBound)
   | .nu C => C.lifeBound
-  | .eff _ _ _ A B fin C => max A.lifeBound (max B.lifeBound (max fin.lifeBound C.lifeBound))
+  | .eff _ _ _ A B fin _ C => max A.lifeBound (max B.lifeBound (max fin.lifeBound C.lifeBound))
 end
 
 mutual
@@ -1610,8 +1615,8 @@ def CTy.applyLSub (σ : LSubst) : CTy → CTy
       else
         .all y (b.applySub σ) (C.applyLSub (lsubDrop σ y))
   | .nu C => .nu (C.applyLSub σ)
-  | .eff n i q A B fin C =>
-      .eff n i q (A.applyLSub σ) (B.applyLSub σ) (fin.applyLSub σ) (C.applyLSub σ)
+  | .eff n i q A B fin cg C =>
+      .eff n i q (A.applyLSub σ) (B.applyLSub σ) (fin.applyLSub σ) cg (C.applyLSub σ)
 end
 
 /-- `A[@a/'x]`. -/
@@ -1686,7 +1691,7 @@ theorem lt_cLifeBound {x : LifeVar} : ∀ {C : CTy}, CFree x C → x < C.lifeBou
       · exact Nat.lt_of_lt_of_le (lt_cLifeBound h)
           (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _))
   | .nu C, h => lt_cLifeBound (C := C) h
-  | .eff _ _ _ A B fin C, h => by
+  | .eff _ _ _ A B fin cg C, h => by
       rcases h with h | h | h | h
       · exact Nat.lt_of_lt_of_le (lt_vLifeBound h) (Nat.le_max_left _ _)
       · exact Nat.lt_of_lt_of_le (lt_vLifeBound h)

@@ -421,12 +421,14 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   /-- `[handle]` at clauses that resume `κ` in tail position, the handled row tied to `Ξ`.
   `[spec §14, §19]` -/
   | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
-      {n : UInt32} {A R : VTy} (hAt : RowAt Ξ (Row.ofEff n E 0 fs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
+      {n : UInt32} {c : Bool} {A R : VTy} (hAt : RowAt Ξ (Row.ofEff n E 0 fs c ++ S))
+      (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
       (hc : CDerivesAt Ξ Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
       (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
-      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
+      (hCN : c = true → ∀ o ∈ SN, o.call = true)
+      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs c ++ S) A))) :
       CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) e)
         (.comp (CTy.effOf S R))
   /-- `[let-poly]`: `let x = λy. b in N` for a closed λ-value, from `N` with the λ-value for `x`,
@@ -542,8 +544,8 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
       exact .effHandleV hs hd hH ihc hn0 hnS hlen hdv ihe
   | effHandleVB _ hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
       exact .effHandleVB hs hd hH ihc hn0 hnS hlen hdv ihe hΓd hSd
-  | effHandleT _ hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
-      exact .effHandleT hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
+  | effHandleT _ hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin hCN _ ihc ihe =>
+      exact .effHandleT hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin hCN ihe
   | iterate S St B R _ hS hΓ => exact .iterate S St B R hS hΓ
   | divFuel S A _ hS hΓ => exact .divFuel S A hS hΓ
   | reify S B R res _ hS hcl _ hΓ ih => exact .reify S B R res hS hcl ih hΓ
@@ -662,7 +664,7 @@ theorem find_ofEff_isSome (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k 
 theorem find_ofEff_at (n : UInt32) (E : List (Qual × VTy × VTy)) (j : Nat) (hj : j < E.length)
     (hlen : E.length ≤ 2 ^ 32) :
     Row.find (Row.ofEff n E 0) n (UInt32.ofNat j) =
-      some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2, .ret .unit⟩ := by
+      some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2, .ret .unit, false⟩ := by
   have hj' : j < 2 ^ 32 := by omega
   have hi : (UInt32.ofNat j).toNat = 0 + j := by
     rw [Nat.zero_add]; exact UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)
@@ -692,10 +694,10 @@ theorem find_ofEff_sig (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : N
   | (q, A, B) :: E, k, fs, fs', m, i, o, h => by
       by_cases hk : m = n ∧ i = UInt32.ofNat k
       · have h₁ : Row.find (Row.ofEff n ((q, A, B) :: E) k fs) m i =
-            some ⟨n, UInt32.ofNat k, q, A, B, fs 0⟩ := by
+            some ⟨n, UInt32.ofNat k, q, A, B, fs 0, false⟩ := by
           simp [Row.ofEff, Row.find, hk]
         have h₂ : Row.find (Row.ofEff n ((q, A, B) :: E) k fs') m i =
-            some ⟨n, UInt32.ofNat k, q, A, B, fs' 0⟩ := by
+            some ⟨n, UInt32.ofNat k, q, A, B, fs' 0, false⟩ := by
           simp [Row.ofEff, Row.find, hk]
         rw [h₁] at h; cases h
         exact ⟨_, h₂, rfl, rfl, rfl, rfl, rfl⟩
@@ -744,7 +746,7 @@ theorem sig_prefix_of_rowAt {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy ×
   intro j
   by_cases hj : j < E.length
   · have hf : Row.find (Row.ofEff n E 0 ++ S) n (UInt32.ofNat j) =
-        some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2, .ret .unit⟩ := by
+        some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2, .ret .unit, false⟩ := by
       rw [Row.find_append, find_ofEff_at n E j hj hlen, Option.some_or]
     obtain ⟨-, -, hg⟩ := h n _ _ hf
     rw [UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)] at hg

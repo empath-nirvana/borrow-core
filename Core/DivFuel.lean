@@ -362,7 +362,7 @@ theorem fuel_total : ∀ (n : ℕ) (k : UInt32), k.toNat = n → ∀ {K : Kont},
         obtain ⟨K₁, en, rfl, hK₁, hT0, ht', hcont⟩ :=
           tickStop_inv (Row.divOK_of_divB (Row.divB_tick S) δ) ht
         refine ewp_unfold hM (fuel_tick_succ hM hk0 hK K₁ hK₁ ?_)
-        exact ih (k - 1) hkm (nextK_frame k) (hcont ls' (Ext.refl ls' σ) nextV (Or.inl rfl)).1
+        exact ih (k - 1) hkm (nextK_frame k) (hcont ls' (Owed.refl _ ls' σ) nextV (Or.inl rfl)).1
 
 end
 

@@ -71,12 +71,12 @@ theorem TDerivesAt.inside_eqB {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : T
   | effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
 
 theorem TDerivesAt.inside_eqT {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jdg}
-    {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
+    {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {c : Bool} {A R : VTy}
     {u : Masks} {site : Option HSite} {ins : HIn} {tc te : TExpr}
-    (h : TDerivesAt Ξ Δ Γ (.effHandleT i J S SN E fs n A R u site ins tc te) J') :
+    (h : TDerivesAt Ξ Δ Γ (.effHandleT i J S SN E fs n c A R u site ins tc te) J') :
     ins = te.erase.hin := by
   cases h with
-  | effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
+  | effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
 
 theorem TDerivesP.inside_eq {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jdg}
     {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
@@ -96,12 +96,12 @@ theorem TDerivesP.inside_eqB {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : J
   | effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
 
 theorem TDerivesP.inside_eqT {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jdg}
-    {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
+    {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {c : Bool} {A R : VTy}
     {u : Masks} {site : Option HSite} {ins : HIn} {tc te : TExpr}
-    (h : TDerivesP Δ Γ (.effHandleT i J S SN E fs n A R u site ins tc te) J') :
+    (h : TDerivesP Δ Γ (.effHandleT i J S SN E fs n c A R u site ins tc te) J') :
     ins = te.erase.hin := by
   cases h with
-  | effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
+  | effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
 
 /-! ### The names a clause's own code performs or raises -/
 

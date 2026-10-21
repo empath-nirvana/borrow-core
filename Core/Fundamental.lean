@@ -447,14 +447,17 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `[handle]` at clauses that resume `κ` in tail position: `handle_n e with (h_ret, gs)`, the
   clauses written out from a tuple `gs` of answering functions (`tailTuple`), each at a row `Σ_N`
   of linear operations below `Σ`; an abortive operation's clause is its function itself.  The
-  handled row may hold `Div` (decision 68).  `[spec §14, §19]` -/
+  handled row may hold `Div` (decision 68).  At the grade `c` the handled operations are
+  call-graded and so is every operation of `Σ_N`: the only handler of a graded name.
+  `[spec §14, §19, §48]` -/
   | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
-      {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
+      {n : UInt32} {c : Bool} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
       (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
       (hc : CDerives Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
       (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
-      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
+      (hCN : c = true → ∀ o ∈ SN, o.call = true)
+      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs c ++ S) A))) :
       CDerives Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) e)
         (.comp (CTy.effOf S R))
   /-- `[let-poly]`: `let x = λy. b in N` for a closed λ-value, from `N` with the λ-value for `x`,
@@ -659,8 +662,8 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
       exact handleV_compatC hs hd hH ihc hn0 hnS hlen hdv ihe
   | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
       exact handleV_compatCB hs hd hH ihc hn0 hnS hlen hdv ihe hΓd hSd
-  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
-      exact handleT_compatC hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
+  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin hCN _ ihc ihe =>
+      exact handleT_compatC hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin hCN ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN
 
 /-- **The stop lemma** (BOXED-κ's premise, `[spec §28]`): a computation typed at `F_Σ A` under

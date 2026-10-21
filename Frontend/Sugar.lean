@@ -3119,8 +3119,8 @@ def phShiftC (k : Nat) : CCTy → CCTy
   | .nu C => .nu (phShiftC k C)
   | .all v b C => .all v b (phShiftC k C)
   | .top => .top
-  | .eff n i q A B fin C =>
-      .eff n i q (phShiftV k A) (phShiftV k B) (phShiftC k fin) (phShiftC k C)
+  | .eff n i q A B fin cg C =>
+      .eff n i q (phShiftV k A) (phShiftV k B) (phShiftC k fin) cg (phShiftC k C)
 end
 
 /-- A placeholder's solution, followed. -/
@@ -3337,7 +3337,7 @@ def pureArrow : CVTy → Option CVTy
   | _ => none
 where
   retOf : CCTy → CVTy
-    | .eff _ _ _ _ _ _ C => retOf C
+    | .eff _ _ _ _ _ _ _ C => retOf C
     | .ret B => B
     | _ => .unit
 

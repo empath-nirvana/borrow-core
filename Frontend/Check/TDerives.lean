@@ -230,8 +230,8 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
       TDerivesAt Ξ Δ Γ (TExpr.effHandleV (info := info) (jdg := (.comp (CTy.effOf S R))) (S := S) (E := E) (fs := fs) (n := n) (A := A) (R := R) (u := u) (ks := ks) (site := site) (inside := inside) (tc := tc) (te := te)) (.comp (CTy.effOf S R))
   | effHandleVB {Δ Γ Γ₁ Γ₂} {info : TInfo} {u : Masks} {ks : List ClauseKinds.HKind} {site : Option HSite} {inside : ClauseKinds.HIn} {tc te : TExpr} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy} {d : Lifetime.Life} (hAt : RowAt Ξ (Row.ofEff n E 0 fs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : (tc.erase).ValFormIn Γ₁) (hc : TDerivesAt Ξ Δ Γ₁ tc (.val (.tensor (retTy S A R) (clausesTyB S R d E fs)))) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 fs ++ S) = false) (he : TDerivesAt Ξ Δ Γ₂ te (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs ++ S)) (hins : inside = Expr.hin (te.erase)) :
       TDerivesAt Ξ Δ Γ (TExpr.effHandleVB (info := info) (jdg := (.comp (CTy.effOf S R))) (S := S) (E := E) (fs := fs) (n := n) (A := A) (R := R) (d := d) (u := u) (ks := ks) (site := site) (inside := inside) (tc := tc) (te := te)) (.comp (CTy.effOf S R))
-  | effHandleT {Δ Γ Γ₁ Γ₂} {info : TInfo} {u : Masks} {site : Option HSite} {inside : ClauseKinds.HIn} {tc te : TExpr} {Hr Hc : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy} (hAt : RowAt Ξ (Row.ofEff n E 0 fs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁) (hc : TDerivesAt Ξ Δ Γ₁ tc (.val (.tensor (retTy S A R) (ansesTy S SN R E)))) (qc : tc.erase = ((.pair Hr Hc) : Expr)) (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false) (he : TDerivesAt Ξ Δ Γ₂ te (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) (hins : inside = Expr.hin (te.erase)) :
-      TDerivesAt Ξ Δ Γ (TExpr.effHandleT (info := info) (jdg := (.comp (CTy.effOf S R))) (S := S) (SN := SN) (E := E) (fs := fs) (n := n) (A := A) (R := R) (u := u) (site := site) (inside := inside) (tc := tc) (te := te)) (.comp (CTy.effOf S R))
+  | effHandleT {Δ Γ Γ₁ Γ₂} {info : TInfo} {u : Masks} {site : Option HSite} {inside : ClauseKinds.HIn} {tc te : TExpr} {Hr Hc : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {c : Bool} {A R : VTy} (hAt : RowAt Ξ (Row.ofEff n E 0 fs c ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁) (hc : TDerivesAt Ξ Δ Γ₁ tc (.val (.tensor (retTy S A R) (ansesTy S SN R E)))) (qc : tc.erase = ((.pair Hr Hc) : Expr)) (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false) (hCN : c = true → ∀ o ∈ SN, o.call = true) (he : TDerivesAt Ξ Δ Γ₂ te (.comp (CTy.effOf (Row.ofEff n E 0 fs c ++ S) A))) (hins : inside = Expr.hin (te.erase)) :
+      TDerivesAt Ξ Δ Γ (TExpr.effHandleT (info := info) (jdg := (.comp (CTy.effOf S R))) (S := S) (SN := SN) (E := E) (fs := fs) (n := n) (c := c) (A := A) (R := R) (u := u) (site := site) (inside := inside) (tc := tc) (te := te)) (.comp (CTy.effOf S R))
   | letPoly {N : Expr} {info : TInfo} {tV tN : TExpr} {Δ Γ C} {j : Jdg} (b : Expr) (hcl : closedAt 0 (Val.lam b).1 = true) (hV : TDerivesAt Ξ Δ [] tV j) (qV : tV.erase = ((.val (.lam b)) : Expr)) (hN : TDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ) tN (.comp C)) (qN : tN.erase = (((N.subst 0 (Val.lam b)).shift 1 0) : Expr)) :
       TDerivesAt Ξ Δ Γ (TExpr.letPoly (info := info) (jdg := (.comp C)) (C := C) (j := j) (tV := tV) (tN := tN)) (.comp C)
   /-- **Derived**: the destructor of `A` (`dtor_wf`). -/
@@ -500,8 +500,8 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       TDerivesP Δ Γ (TExpr.effHandleV (info := info) (jdg := (.comp (CTy.effOf S R))) (S := S) (E := E) (fs := fs) (n := n) (A := A) (R := R) (u := u) (ks := ks) (site := site) (inside := inside) (tc := tc) (te := te)) (.comp (CTy.effOf S R))
   | effHandleVB {Δ Γ Γ₁ Γ₂} {info : TInfo} {u : Masks} {ks : List ClauseKinds.HKind} {site : Option HSite} {inside : ClauseKinds.HIn} {tc te : TExpr} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy} {d : Lifetime.Life} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : (tc.erase).ValFormIn Γ₁) (hc : TDerivesP Δ Γ₁ tc (.val (.tensor (retTy S A R) (clausesTyB S R d E fs)))) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hdv : Row.divB (Row.ofEff n E 0 fs ++ S) = false) (he : TDerivesP Δ Γ₂ te (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) (hΓd : CtxOutlives Δ Γ₂ d) (hSd : Row.AnsOutlives Δ d (Row.ofEff n E 0 fs ++ S)) (hins : inside = Expr.hin (te.erase)) :
       TDerivesP Δ Γ (TExpr.effHandleVB (info := info) (jdg := (.comp (CTy.effOf S R))) (S := S) (E := E) (fs := fs) (n := n) (A := A) (R := R) (d := d) (u := u) (ks := ks) (site := site) (inside := inside) (tc := tc) (te := te)) (.comp (CTy.effOf S R))
-  | effHandleT {Δ Γ Γ₁ Γ₂} {info : TInfo} {u : Masks} {site : Option HSite} {inside : ClauseKinds.HIn} {tc te : TExpr} {Hr Hc : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁) (hc : TDerivesP Δ Γ₁ tc (.val (.tensor (retTy S A R) (ansesTy S SN R E)))) (qc : tc.erase = ((.pair Hr Hc) : Expr)) (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false) (he : TDerivesP Δ Γ₂ te (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) (hins : inside = Expr.hin (te.erase)) :
-      TDerivesP Δ Γ (TExpr.effHandleT (info := info) (jdg := (.comp (CTy.effOf S R))) (S := S) (SN := SN) (E := E) (fs := fs) (n := n) (A := A) (R := R) (u := u) (site := site) (inside := inside) (tc := tc) (te := te)) (.comp (CTy.effOf S R))
+  | effHandleT {Δ Γ Γ₁ Γ₂} {info : TInfo} {u : Masks} {site : Option HSite} {inside : ClauseKinds.HIn} {tc te : TExpr} {Hr Hc : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {c : Bool} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁) (hc : TDerivesP Δ Γ₁ tc (.val (.tensor (retTy S A R) (ansesTy S SN R E)))) (qc : tc.erase = ((.pair Hr Hc) : Expr)) (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false) (hCN : c = true → ∀ o ∈ SN, o.call = true) (he : TDerivesP Δ Γ₂ te (.comp (CTy.effOf (Row.ofEff n E 0 fs c ++ S) A))) (hins : inside = Expr.hin (te.erase)) :
+      TDerivesP Δ Γ (TExpr.effHandleT (info := info) (jdg := (.comp (CTy.effOf S R))) (S := S) (SN := SN) (E := E) (fs := fs) (n := n) (c := c) (A := A) (R := R) (u := u) (site := site) (inside := inside) (tc := tc) (te := te)) (.comp (CTy.effOf S R))
   | letPoly {N : Expr} {info : TInfo} {tV tN : TExpr} {Δ Γ C} {j : Jdg} (b : Expr) (hcl : closedAt 0 (Val.lam b).1 = true) (hV : TDerivesP Δ [] tV j) (qV : tV.erase = ((.val (.lam b)) : Expr)) (hN : TDerivesP Δ (⟨.unit, false⟩ :: Γ) tN (.comp C)) (qN : tN.erase = (((N.subst 0 (Val.lam b)).shift 1 0) : Expr)) :
       TDerivesP Δ Γ (TExpr.letPoly (info := info) (jdg := (.comp C)) (C := C) (j := j) (tV := tV) (tN := tN)) (.comp C)
   | lendR {Δ : LifeCtx} {info : TInfo} {td tM : TExpr} {x : LifeVar} {b : Lifetime.Life} {T B : VTy} {S : Row} (hb : Δ.Defines b) (hx : Δ.find? x = none) (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false) (hT : ¬ VFree x T) (hB : ¬ VFree x B) (hBn : NoThunkT B) (hside : ∃ b', Δ.Defines b' ∧ VOutlivesLe Δ b' T) (hS : Row.ResumeO S x) (hM1 : closedAt 1 (tM.erase) = true) (hcb : closedAt 0 (lendCb (tM.erase)).1 = true) (hdc : closedAt 0 (td.erase) = true) (hd : TDerivesP Δ [] td (.val (.lolli (.ref T) .unit))) (hM : TDerivesP (Δ.extend x b) [⟨.mut (.var x) T, true⟩] tM (.comp (CTy.effOf S (.box (.var x) B)))) :
@@ -878,11 +878,11 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
   | effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 ih0 ih1 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.effHandleVB a0 a1 a3 a4 ih0 a6 a7 a8 a9 ih1 a11 a12
-  | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 ih0 ih1 =>
+  | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 ih0 ih1 =>
       dsimp only [TExpr.erase]
       rw [a7] at ih0
       rw [a7]
-      exact CDerivesAt.effHandleT a0 a1 a3 a4 a5 ih0 a8 a9 a10 a11 a12 a13 ih1
+      exact CDerivesAt.effHandleT a0 a1 a3 a4 a5 ih0 a8 a9 a10 a11 a12 a13 a14 ih1
   | letPoly a0 a1 a2 a3 a4 a5 ih0 ih1 =>
       dsimp only [TExpr.erase]
       rw [a3] at ih0
@@ -1194,11 +1194,11 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.effHandleVB a0 a2 a3 ih0 a5 a6 a7 a8 ih1 a10 a11
-  | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 ih0 ih1 =>
+  | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 ih0 ih1 =>
       dsimp only [TExpr.erase]
       rw [a6] at ih0
       rw [a6]
-      exact CDerivesP.effHandleT a0 a2 a3 a4 ih0 a7 a8 a9 a10 a11 a12 ih1
+      exact CDerivesP.effHandleT a0 a2 a3 a4 ih0 a7 a8 a9 a10 a11 a12 a13 ih1
   | letPoly a0 a1 a2 a3 a4 a5 ih0 ih1 =>
       dsimp only [TExpr.erase]
       rw [a3] at ih0
@@ -1323,7 +1323,7 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 ih2 => exact TDerivesP.effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 ih0 ih1 ih2
   | effHandleV a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 => exact TDerivesP.effHandleV a1 a2 a3 a4 ih0 a6 a7 a8 a9 ih1 a11
   | effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 ih0 ih1 => exact TDerivesP.effHandleVB a1 a2 a3 a4 ih0 a6 a7 a8 a9 ih1 a11 a12 a13
-  | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 ih0 ih1 => exact TDerivesP.effHandleT a1 a2 a3 a4 a5 ih0 a7 a8 a9 a10 a11 a12 a13 ih1 a15
+  | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 ih0 ih1 => exact TDerivesP.effHandleT a1 a2 a3 a4 a5 ih0 a7 a8 a9 a10 a11 a12 a13 a14 ih1 a16
   | letPoly a0 a1 a2 a3 a4 a5 ih0 ih1 => exact TDerivesP.letPoly a0 a1 ih0 a3 ih1 a5
   | dtor hA hc he hΓ => exact .dtor hA hc he hΓ
   | allocS σ he hΓ => exact .allocS σ he hΓ

@@ -139,10 +139,10 @@ theorem post_cases {μ : Heap} {t : Expr} (h : PostD Q μ t) :
   rcases hC with ⟨w, rfl, -⟩ | ht | ht
   · exact .inl ⟨w, rfl⟩
   · exact (opTable_empty (by rw [T0_erase0] at ht; exact ht)).elim
-  obtain ⟨K, -, rfl, hK, -, -, hcont⟩ := tickStop_inv T0_divOK ht
+  obtain ⟨K, en, rfl, hK, -, -, hcont⟩ := tickStop_inv T0_divOK ht
   refine .inr ⟨K, rfl, hK, ?_⟩
   have hk : cwp T0 Q ls' (K.plug (.val nextV)) ρ' :=
-    (hcont ls' (Ext.refl ls' ρ') nextV (Or.inl rfl)).1
+    (hcont ls' (Owed.refl _ ls' ρ') nextV (Or.inl rfl)).1
   -- the garbage joins the frame (`wpG_bind`'s regrouping)
   obtain ⟨z, hzp, hz⟩ := (hash_shift ρp ρf ρ').mp ⟨fρ', h₂, h₃⟩
   have hfz : ResU.CompS ρf ρp z := ResU.CompS.comm hzp

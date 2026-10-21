@@ -124,7 +124,7 @@ def formersC (acc : List String) : CTy → List String
   | .amp C D => formersC (formersC ("C.amp" :: acc) C) D
   | .all _ _ C => formersC ("C.all" :: acc) C
   | .nu C => formersC ("C.nu" :: acc) C
-  | .eff _ _ _ A B fin C => formersC (formersC (formersV (formersV ("C.eff" :: acc) A) B) fin) C
+  | .eff _ _ _ A B fin _ C => formersC (formersC (formersV (formersV ("C.eff" :: acc) A) B) fin) C
   | .top => "C.top" :: acc
 end
 

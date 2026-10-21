@@ -458,14 +458,17 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `[handle]` at clauses that resume `κ` in tail position: `handle_n e with (h_ret, gs)`, the
   clauses written out from a tuple `gs` of answering functions (`tailTuple`), each at a row `Σ_N`
   of linear operations below `Σ`; an abortive operation's clause is its function itself.  The
-  handled row may hold `Div` (decision 68).  `[spec §14, §19]` -/
+  handled row may hold `Div` (decision 68).  At the grade `c` the handled operations are
+  call-graded and so is every operation of `Σ_N`: the only handler of a graded name.
+  `[spec §14, §19, §48]` -/
   | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
-      {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
+      {n : UInt32} {c : Bool} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
       (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
       (hc : CDerivesP Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
       (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
-      (he : CDerivesP Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
+      (hCN : c = true → ∀ o ∈ SN, o.call = true)
+      (he : CDerivesP Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs c ++ S) A))) :
       CDerivesP Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) e)
         (.comp (CTy.effOf S R))
   /-- `[let-poly]`: `let x = λy. b in N` for a closed λ-value, from `N` with the λ-value for `x`,

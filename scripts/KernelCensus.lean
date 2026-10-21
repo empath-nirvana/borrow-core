@@ -77,7 +77,7 @@ def formersC (acc : Std.HashSet String) : CTy → Std.HashSet String
   | t@(.arr A C) => formersC (formersV (acc.insert (cName t)) A) C
   | t@(.amp C D) => formersC (formersC (acc.insert (cName t)) C) D
   | t@(.all _ _ C) | t@(.nu C) => formersC (acc.insert (cName t)) C
-  | t@(.eff _ _ _ A B fin C) =>
+  | t@(.eff _ _ _ A B fin cg C) =>
     formersC (formersC (formersV (formersV (acc.insert (cName t)) A) B) fin) C
   | t@.top => acc.insert (cName t)
 end
