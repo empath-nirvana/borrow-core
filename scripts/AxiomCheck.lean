@@ -7,6 +7,7 @@ import Frontend.Check.Program
 import Frontend.Check.Handled
 import Frontend.Check.TFacts
 import Frontend.Check.Derived
+import Frontend.Elab.DivPlacement
 /-! The theorems `SPEC.md` names, with their axioms. -/
 #print axioms BoCa.Fig16.LogRel.Typed.fundamentalProperty
 #print axioms BoCa.Fig16.LogRel.Typed.adequacy
@@ -629,3 +630,4 @@ import Frontend.Check.Derived
 #print axioms Frontend.Check.checkProgram_soundP
 #print axioms Frontend.Check.checked_sem_pin
 #print axioms Frontend.Check.checked_runs_pin
+#print axioms Frontend.Elab.DivPlacement.sim_loop
