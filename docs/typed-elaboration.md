@@ -249,7 +249,8 @@ function to be div.
 `g(f(x), y + 1)` becomes a sequence of binds, left to right. This is the order the value-level
 application `lolliE` already evaluates in. The bind of a div call then becomes a state of the
 body's state machine that holds the callee's loop, with the rest of the body run when it finishes
-(SPEC §14, §15; §7 below); `div_bind` is the same bind as library code. So a div call may stand in an
+(SPEC §14, §15; §7 below); `div_bind` is the same bind as library code. Since B2 (SPEC §47) a div
+call is a call at the row `div`, whose `inr` hands the caller's residual back. So a div call may stand in an
 argument, an operand, a `let`, a `match` scrutinee or a tail, not only at the head `return (f V)`.
 Because inference types every call, no syntactic pattern is involved.
 
@@ -686,9 +687,9 @@ main : F (U (loop ((In * Out) * (i32 * (i32 * i32))) ((In * Out) * 1))) =
 `In * Out`. The continuation's close observation fills it by identity: `stdin` comes from the
 callee's residual, and `stdout` is the caller's own.
 
-This is the draft's form. As built, `main` is one state machine (§7, *Whole-body state
-machines*): the call of `count` is a state holding `count`'s loop and `stdout`, whose `close`
-binds `stdin` from the callee's residual in the same way.
+This is the draft's form. As built before B2, `main` was one state machine (§7, *Whole-body state
+machines*); since B2 (SPEC §47) the call of `count` is a call at the row `div`, whose `inr` binds
+`stdin` from the callee's residual in the same way.
 
 ### 6.2 `map-reuse` (block constructors, `fold_reuse`, `&mut` on a `let mut`)
 
@@ -901,7 +902,8 @@ result is elaborated as any surface code. A `def` over a borrow whose body loops
 take the owner before `surfDecl` (`lentDef`). Pairs: `corpus/sugar/lend-block.bc`, `lend-let.bc`,
 `lend-div.bc`.
 
-**Whole-body state machines, as built** (SPEC §14, *One state machine per body*; #109 item 8;
+**Whole-body state machines, as built until B2** (deleted by SPEC §47, which elaborates loops to
+`Div`; before it SPEC §14, *One state machine per body*; #109 item 8;
 decisions 42 and 56 of `docs/decisions.md`). `mWalk` in `Sugar.lean` walks a div body once, on
 the same typing context as the rest of the elaboration, and records a point for each loop head,
 call of a div function in direct style, and loop join, with the variables live there (their inferred types; the capabilities of the residual by name).

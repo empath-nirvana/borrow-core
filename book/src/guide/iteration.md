@@ -293,9 +293,9 @@ main -> i32 =
 `|>` into a handler is `with`: `e |> to_result` is `with to_result { e }`
 ([Effects and handlers](effects.md#computation-parameters-and-)).
 
-The generators compile to state machines, one per generator body, and a `for` over a call of a
-generator whose body does nothing else compiles each `yield` to a direct call of the loop's body:
-the programs above allocate nothing.
+A `for` over a call of a generator whose body does nothing else compiles each `yield` to a direct
+call of the loop's body, and a generator's loops are the kernel's `iterate`: the programs above
+allocate nothing.
 
 ## Borrows and loops
 

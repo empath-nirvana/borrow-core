@@ -1,5 +1,11 @@
 # Loops: one loop model for every nest (#545)
 
+**Status (2026-10-21).** U1 (#548) is built, and U2's class pass with B2 (#644, SPEC §47): a counted
+loop whose body loops is a loop of the machine over its cursor, its `&a` lent per turn to the
+bindings at the start of its body that use the element. The matrix's 24 non-AA cells print `241`,
+and the `return` matrix's 24 non-AA cells `298`. `break e` and `else` on a counted loop of the
+machine, and one over `&mut a`, are not provided yet. The rest is the design as written.
+
 A design for the surface's loops: `for`, `while`, `loop`, their exits (`break`, `break e`,
 `continue`, `return`, and exits to an enclosing loop by name), and how a nest of loops of any
 kinds is elaborated. It changes no code. Each claim is marked:

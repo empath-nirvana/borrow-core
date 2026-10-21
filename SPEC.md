@@ -520,8 +520,8 @@ their relations and their six rules are deleted.
   borrow and whose rest keeps it, is not yet written as a program (§9 iteration, `[@d] U(νX. C)`
   per `docs/scope-recursion.md` §3.5).
 - **General recursion.** Non-tail recursion needs an explicit stack in the state. Sequencing
-  loops is library code over `unfold` (the delay bind, §14), or one `unfold` for a whole body
-  (§14, *One state machine per body*).
+  loop values is library code over `unfold` (the delay bind, §14); a div body sequences its loops
+  as one computation at the row `div` (§47).
 - Whether `D`'s greatest fixed point equals the intersection of its finite approximations is
   reduced to one property of `wpTS` (`WpChainCommutes`), not derived.
 - Stream adequacy is stated generically only at `Stream 1` (`take_runs`).
@@ -1160,7 +1160,7 @@ elaborate to the same term.
   name, and the loop goes on; at the end of the stream the capability it hands back is bound to
   `c`, and the loop finishes with the capabilities and the threaded variables. Its `close`
   closes the stream and hands the capabilities back. The rest of the body, `N`, runs at the
-  loop's end, in the body's one state machine (§14, §15). A `for` over data (a count, a view,
+  loop's end, after the loop's `iterate` (§14, §47). A `for` over data (a count, a view,
   an array) is a counted loop instead, and total (§16, *The `for` loop over data*).
 
 ### Designed, not built
@@ -1373,15 +1373,16 @@ divergent computation is handling the effect.
 
 ### Types
 
-A **div function** is one whose result is a loop (§7):
+A **div function** is one whose computation performs `Div` (*The effect `Div` in the kernel*,
+below; §47):
 
-    A ⇒ div B   ≜   U(A ⊸ F(U(Loop B R)))          D B = Loop B 1
+    A ⇒ div B   ≜   U(A ⊸ F_{div, Σ}(B ⊕ R))          D B = Loop B 1
 
-A call runs the function's code up to its first loop and returns the rest of the run as a loop,
-which finishes with `B` or, closed early, hands back the **residual** `R`. A **total function**
-is one whose result is `F B` with no loop: `U(A ⊸ F B)`. There is no new former, rule or relation
-clause: `div` is a reading of `Loop` (§7), which already exists, and the function types are the
-existing ones. `!(A ⇒ div B)` is the persistent form.
+A call runs the function's code; each loop of it ticks, and the call finishes with `inl b` or,
+closed early at a tick, hands back the **residual** `R` as `inr r`. Its *loop value*, made where
+a loop is expected, is `U(Loop B R)` (§7): `reify` of the call. A **total function** is one whose
+row does not hold `Div`: `U(A ⊸ F_Σ B)`. `!(A ⇒ div B)` is the persistent form. A function
+written to return a loop, `A ⇒ U(Loop B R)`, is core: a loop value, as before.
 
 **The residual.** A loop closed early must release its state. What has a destructor (§12) is
 dropped, and what has none, such as a capability (§11), must be handed back. The residual of a
@@ -1410,9 +1411,8 @@ observation, which turns it into the whole's; `close` in the second loop closes 
 continuation is one linear thunk with two observations, so the variables it captures are used
 by whichever observation runs, and dropped (§12) by the other where they have destructors. If
 either loop never finishes, neither does the whole. Nothing in the kernel changes: `div_bind` is
-checked like any `def`, and `fundamentalC` and `adequacyC` cover every use. The elaboration of a
-div body does not nest delay binds: the whole body is one `unfold` whose states are its loops
-and calls (below, *One state machine per body*).
+checked like any `def`, and `fundamentalC` and `adequacyC` cover every use. The elaboration does
+not emit it: a div body is one computation at the row `div` (§47).
 
 **The fuel handler.** `div_fuel[A, Q] : U(Loop A Q) ⊗ I32 ⇒ A ⊕ Q` observes a loop at most `n`
 times and closes it if it has not finished: `driveE n` (§7) with the count a value, counted by
@@ -1425,12 +1425,13 @@ that runs nothing until it is first observed. Its argument has two observations:
 the code up to a loop and returns the loop, the second hands back the residual without running
 anything. It is `unfold` at `Loop B R` with the state "not started, with the code" or "started,
 with the loop": `next` before the start runs the code and observes its loop, `close` before the
-start takes the second observation. The surface block `{ S }` of a body `S` that loops is
-`div_defer` of `⟨S', abort⟩`, `S'` the body elaborated as a div body and `abort` handing back
-its residual (`corpus/sugar/surface-defer.bc`). Library code over `unfold`, like `div_bind`.
+start takes the second observation. Library code over `unfold`, like `div_bind`; the elaboration
+does not emit it. The surface block `{ S }` of a body `S` that loops is the loop whose first
+observation makes `reify` of `S` and observes it, and whose close before that hands back the
+residual (§47, `corpus/sugar/surface-defer.bc`).
 
 **The outermost handler.** The runtime drives a `main` that returns a loop until it finishes
-(§11); it never closes it. Timeouts and cooperative yielding to a scheduler (#52) are further
+(§11); it never closes it. A `main` that loops returns the loop value of its body (§47). Timeouts and cooperative yielding to a scheduler (#52) are further
 handlers of the same loops.
 
 ### The loop node
@@ -1450,14 +1451,14 @@ reported as a `while`, never as a `for`.
 
 ### Inference and markers
 
-A function is div when its type says so (`A ⇒ U(Loop B R)`), or when its body **loops**: on its
-spine (the tail positions of binds, `let`s, `case` arms and loops) it has a loop that is not a
-counted loop (a `while`, a `loop`, or a `for` over a source that is not sized, §16), or it runs
-a call of a div function in **direct style**: an application whose type is a loop, where the
-type expected of it is not that loop, at any depth of a bound or returned value, a `case`
-scrutinee or a `let`'s value. A
-function written with a plain result `A ⇒ B` whose body loops is elaborated to
-`A ⇒ U(Loop B R)`. Definitions are in dependency order (a recursive group is declared at its last
+A function is div when its type says so (`A ⇒ U(Loop B R)`, or a row that holds `div`), or when
+its body **loops**: on its spine (the tail positions of binds, `let`s, `case` arms and loops) it
+has a loop that is not a counted loop (a `while`, a `loop`, a `for` over a source that is not
+sized, §16, or a counted loop whose body loops, §47), or it runs a call of a div function in
+**direct style**: an application of a div function, or one whose type is a loop where the type
+expected of it is not that loop, at any depth of a bound or returned value, a `case` scrutinee or
+a `let`'s value. A function written with a plain result `A ⇒ B` whose body loops is elaborated to
+`A ⇒ F_{div, Σ}(B ⊕ R)` (§47). Definitions are in dependency order (a recursive group is declared at its last
 member, §20),
 so one pass in declaration order infers this; there is no fixed point.
 
@@ -1470,10 +1471,11 @@ so one pass in declaration order infers this; there is no fixed point.
   written type is `F A` either way. A `main` that loops but uses no capability is given none:
   the runtime drives a loop with no capabilities (§11).
 
-A function whose written type is already a loop is core and is not elaborated; so is a `main`
-written at `F(U(Loop …))`. A call checked against its own loop type is the loop as a value, not
-a call in direct style: an annotated binding `l : U (loop B R) <- return (f V)`, or an argument
-of a parameter of that type, `div_fuel[…] (f V, n)`.
+A function whose written type is already a loop, or at a row that holds `div`, is core and is not
+elaborated; so is a `main` written at `F(U(Loop …))`. A call checked against its loop type is its
+loop value, `reify` of the call, not a call in direct style: an annotated binding
+`l : U (loop B R) <- return (f V)`, or an argument of a parameter of that type,
+`div_fuel[…] (f V, n)`.
 
 ### Elaboration
 
@@ -1484,80 +1486,44 @@ result `B` and residual `R`:
 - **Nested calls** are lifted first: a value with a call in direct style below its top has its
   applications bound before it, innermost and leftmost first, the order its evaluation runs them
   in (`corpus/sugar/div-nested.bc`).
-- **The body is one state machine** (*One state machine per body*, below): `unfold` at
-  `Loop B R` whose state has a summand for each `for` (its iterator, the capabilities it does not
-  hold and the variables live there) and for each call of a div function in direct style (the
-  callee's loop and what the rest uses). Each observation is one iteration of a loop, or one
-  observation of a callee's loop; what follows a loop or a call runs, within the observation
-  that ends it, up to the next state, which the observation returns (a skip), or to a terminal,
-  which finishes. The call of the function runs its code up to its first state and returns the
-  machine there (`corpus/sugar/for-value.core.bc`).
-- **A direct-style call** `x <- return (f V); N`, `f : A' ⇒ U(Loop B' R')`, is a state holding
-  `f V`'s loop: its observation observes that loop, a skip until it finishes with `a`, then binds
-  `x` to `a` (with `&mut c` in `V` (§11), `(c, x)`) and runs `N`. Closed there, the machine closes
-  the callee's loop and hands back the body's residual: its residual itself when `R' = R`; else
-  the capabilities by name, with `c` rebound from `r = (c, ())`.
+- **The body is one computation** at the row `div, Σ`, of type `F_{div, Σ}(B ⊕ R)` (§47): each
+  loop is `iterate` over its state (its source, the capabilities it does not hold and the
+  variables live there), whose turn runs one iteration and whose back edge ticks; what follows a
+  loop runs after it, with what the loop hands on. At the empty row a move forward to a loop's
+  head ticks, and so does a terminal before any loop or call; at a row only back edges tick. A
+  tick stands where an observation of the per-body machine of the previous elaboration ended
+  (§47, `sim_loop`).
+- **A direct-style call** `x <- return (f V); N` of a div function is a call: on `inl a` it binds
+  `x` to `a` (with `&mut c` in `V` (§11), `(c, x)`) and runs `N`; on `inr r`, closed early, it
+  hands back the body's residual, closing what the loops around hold: `r` itself when the
+  residuals agree; else the capabilities by name, with `c` rebound from `r = (c, ())`. A call of a
+  loop (a function written to return one) is a drain of it, `iterate` observing it once per turn.
 - **`for x in V { M }; N`**, `V : U(Iter A R₀ R₀')` made from a capability `c`, is the loop of
-  §11 as a state, with residual `R`; the variables it holds have the types inference gives them
+  §11 as `iterate`, with residual `R`; the variables it holds have the types inference gives them
   (`corpus/sugar/for-untyped.bc`). At the end of the stream `c` is bound to what the iterator
-  hands back and `N` runs; after `break`, the iterator is closed first. A loop in `M` is a state
-  of the same machine.
-- **A terminal** `T` finishes: `v : B <- T; return (inl v)`. Before the first state, when the
-  function is called, it is the loop that finishes with `v` at its first observation,
-  `thunkv nu_in ⟨return (inl v), close⟩`; `close` hands back the components of `v` that have no
+  hands back and `N` runs; after `break`, the iterator is closed first. A loop in `M` is an
+  `iterate` inside the turn.
+- **A terminal** `T` finishes: `v : B <- T; return (inl v)`. At the empty row, before any loop or
+  call, it ticks first, and closed there hands back the components of `v` that have no
   destructor.
 
 The variables that hold `K` are named as a terminal `return` names them, or, in an ambient
 `main`, `stdin`, `stdout` and `stderr` (`corpus/sugar/residual-alias.bc`: a residual under a
-name of the program's own). `bcc desugar` prints the
-elaborated program, and `corpus/sugar/div-infer.bc` pairs an unmarked div helper with its core
-form written by hand; `div-annotated.bc` is the same program with `div` and `total` markers.
-
-### One state machine per body
-
-Every div body is **one `unfold`** (`Frontend/Sugar.lean`, `mWalk`, `mAssemble`; #109 item 8).
-Its state is a sum with one summand per **resumption point**, a place where the body stops
-between two observations, holding the variables live there: a loop's head (its source, and what
-the loop and what follows it use), and a call of a div function in direct style (the callee's
-loop, and what follows uses). Inside a loop, a state also holds the sources of the loops around
-it, and what they use. The step is one code with a `case` on the state. The code between points
-is the program's own, with its transitions replaced: reaching a head or a call is a **move** to its
-point; the end of a loop's body moves back to its head; `break` closes the source and moves to the
-code after the loop, its **join**; `return e` closes the sources of the loops it leaves and
-finishes; a terminal finishes.
-
-**Moves.** The code of a point that a move calls is a `!` function of its state, defined before
-the step; the code of any other point is its arm of the step. A move to a join calls its
-function. At the empty row every move to a summand is a skip: each observation is one iteration,
-or one observation of a callee, as with the delay bind, and `div_fuel` counts the same
-observations; no move calls a summand, so each summand's code is its arm. The body runs its code
-up to its first state when called, and a move there is the machine at that state (the `unfold`
-of the step, from the state). At a row (a generator, §15) the observations perform the row's
-operations; a move forward, from the step's own code or to a later point, is a call, and a move
-back to a loop's head a skip, so each observation runs one turn of a loop; the body runs nothing
-when called, its first state holding the parameter. A function calls only the functions of
-points after it in the body, so none calls itself and every observation ends. A terminal that is
-a value finishes with it (`inl V`).
-
-**The residual by name.** Each state's `close` closes what the state holds, innermost first: the
-callee's loop (turning its residual into the body's: the lent capability, `()`, the body's own
-residual bound by name, or capabilities of the body by their types), then the loops' sources
-(binding the capability each hands back); then it returns the residual from the names. Every
-other variable of the state is dropped (§12).
-
-Every observation is then a call of known code. A body the machine does not cover (a variable of
-a type that is not determined, live at a point; a callee's residual it cannot hand back) is an
-error that names it. The core forms of `corpus/sugar/for-value.bc` and the generator pairs are the
-elaboration as `bcc desugar` prints it.
+name of the program's own). Each loop's close closes what its state holds, innermost first, and
+returns the residual from the names; every other variable of the state is dropped (§12). A body
+whose state has a variable of a type that is not determined, or a callee's residual it cannot hand
+back, is an error that names it. `bcc desugar` prints the elaborated program, and
+`corpus/sugar/div-infer.bc` pairs an unmarked div helper with its core form; `div-annotated.bc` is
+the same program with `div` and `total` markers.
 
 ### Higher-order functions: specialization at the callback's type
 
-A callback's thunk type carries its effect: `U(A ⊸ F B)` is total and `U(A ⊸ F(U(Loop B R)))`
-is div. A higher-order function written once must serve both, or functions are colored. It is
+A callback's thunk type carries its effect: `U(A ⊸ F B)` is total and `U(A ⊸ F_{div}(B ⊕ R))`
+is div (§47). A higher-order function written once must serve both, or functions are colored. It is
 **specialized at the callback's computation type**: at a call `h V` of a function
 `h : P ⇒ Q = thunkv fun (p : P) -> M` (or its `!` form) where `P` has a total function type
 (`A ⇒ B` or `!(A ⇒ B)`) at a component whose argument's type, as inference gives it, is a div
-function's (`A ⇒ U(Loop B R)`), the elaborator makes a copy of `h` with that component of `P` at
+function's (`A ⇒ F_{div}(B ⊕ R)`, or a function returning a loop, `A ⇒ U(Loop B R)`), the elaborator makes a copy of `h` with that component of `P` at
 the argument's type, infers the copy's divergence (calls through the parameter are now
 direct-style div calls, so the copy is div), and calls the copy (`corpus/div-hof.bc`,
 `sum3__0`). The callback may be a named function, a local holding one
@@ -1573,9 +1539,9 @@ computation type of a callback argument, followed by the effect's own inference 
 Another control effect may reuse it by giving (§30 does, for every control effect, keyed by a
 block's sites rather than a computation type):
 
-1. its computation type for a callback, as `Loop` is div's (the result shape a call returns);
+1. its computation type for a callback, as the row `div` is div's (the result shape a call returns);
 2. its inference on a body, as `loopsAt` is div's (which constructs make a body effectful);
-3. its elaboration of a body and of a direct-style call, as the body's state machine is div's.
+3. its elaboration of a body and of a direct-style call, as the `Div` elaboration is div's (§47).
 
 The specialization itself — finding the callback's type at a call, copying, caching by
 (function, parameter type), renaming the call — is shared. What it does not yet cover is below.
@@ -1583,8 +1549,9 @@ The specialization itself — finding the callback's type at a call, copying, ca
 ### Generators
 
 A generator is a function that performs an iteration effect (§15). Its loops are a div body's,
-at the function's row: `Loop_Σ`, whose observations perform the operation (§19, *Divergence*).
-A `while` or a `loop` is a loop of any div body.
+at the function's row with `div`: `F_{div, Σ}(B ⊕ R)`, ticking only at its back edges; its loop
+value, `Loop_Σ`, observations of which perform the operation (§19, *Divergence*), is `reify` of a
+call (§47). A `while` or a `loop` is a loop of any div body.
 
 ### Borrow scopes over loops, per observation
 
@@ -1668,8 +1635,9 @@ whose `main` loops is covered one prefix at a time instead (§11, `externs_loop_
 ### The effect `Div` in the kernel
 
 Divergence is also an effect the kernel handles (decision 67; `docs/pipeline-architecture.md`
-§3.2). The kernel has it; the frontend keeps the elaboration above, with no `Div` in any row it
-writes, until B2 (#563's successor) elaborates loops to it.
+§3.2). The frontend elaborates loops to it (§47): a div body is a computation at a row that holds
+`Div`, each loop `iterate`, each loop value `reify`; the core text writes `Div`'s entry `div`,
+`iterate[S, B, R, [Σ]]` and `reify[B, R, [Σ]](res)`.
 
 **The effect.** `Div` is the reserved name `divEff = 2³² − 1` with one linear operation
 
@@ -1763,11 +1731,11 @@ obligation for a looping `main` is §11's.
 
 ### Open
 
-- **Some loop bodies are total**: the body of a counted loop (§16) and the clause of a `for` over
-  a generator (§15) are one step, and have no drain and no div call. The body of any other loop
-  may loop: its states nest in the body's machine (`corpus/gen-nested.bc`). A `for` over data is a
-  counted loop, total, and nests anywhere, unless its body performs an operation that resumes
-  (§16, *Effectful bodies*).
+- **Some loop bodies are total**: the clause of a `for` over a generator (§15) is one step, and has
+  no drain and no div call. A counted loop whose body loops is a loop of the machine (§47); the
+  body of any other loop may loop, its `iterate` inside the turn (`corpus/gen-nested.bc`). A `for`
+  over data is a counted loop, total, and nests anywhere, unless its body loops or performs an
+  operation that resumes (§16, *Effectful bodies*).
 - **A call lends at most one capability** with `&mut c`, and a div call whose residual differs
   from the caller's must hand back, in its residual, the capability it was lent (it is matched
   to the lent `&mut c`), or nothing.
@@ -1833,11 +1801,11 @@ with a static name `n` of its own (§18, §19):
   clause runs outside the site: what the body performs goes to the sites around the `for`.
 - **The loop's value** is what `g` returns, or `e` after `break e` (`let r = for …`, as §16's);
   a generator that returns `0` gives only `break`'s. A `for` over a generator has no `else`.
-- **When `g`'s body does not loop**, the `for` is one handled call: total. When it loops, `g`'s
-  call is its loop (below), whose observations perform the operation; the `for` is a call of a
-  div function in direct style (§14) of the loop that handles each of `g`'s observations
+- **When `g`'s body does not loop**, the `for` is one handled call: total. When it loops, the
+  loop value of `g`'s call (below, §47) observes it one turn at a time, each observation
+  performing the operation; the `for` drains the loop that handles each of its observations
   (`io_hwf`): its observation is `handle_with[n](V_r, V_c) ((nu_out l).1)`, and its close closes
-  `g`'s loop under a handler of its own.
+  `g`'s loop under a handler of its own. No handler wraps a computation that ticks.
 - **A body that performs a control operation, or may loop** (a `while`, a `loop`, or a `for`
   over anything but a count), is not a clause: the clause would hold the continuation across the
   operation, and an affine continuation has no destructor (its cancel performs at the site's
@@ -1856,20 +1824,21 @@ A generator's body is a function body at a row (§18's copy for its sites). On i
 
 - **A terminal** returns, with the threaded variables first.
 - **A loop** (`while c { M }`, `loop { M }`, a `for` over a stored generator or an iterator)
-  makes the body a div body at the row (§14): the function returns `Loop_Σ B R = νX. F_Σ(B ⊕ U X)
-  & F_Σ R` (§19, *Divergence*), one state machine whose observations perform the row's
-  operations. Such a body **runs nothing when called**: its first state holds the parameter, and
-  closed there it closes the stored generators and iterators it was given and hands back its
-  residual. A move forward (to the loop's head from before it, or to a later point) runs in the
-  same observation, and a move back to a loop's head is a skip, so each observation runs one turn
-  of a loop and every observation is total. Its residual is `K`, the components of its result with
-  no destructor, as a stored generator's must be (below).
+  makes the body a div body at the row `div, Σ` (§14, §47): the function is
+  `P ⇒ F_{div, Σ}(B ⊕ K)`, each loop `iterate`, ticking only at its back edges. Its loop value,
+  `Loop_Σ B K = νX. F_Σ(B ⊕ U X) & F_Σ K` (§19, *Divergence*), whose observations perform the row's
+  operations, **runs nothing until it is observed** (`eStart`): it starts with a back edge, and
+  closed there it is the body's close before it starts, `g__close`, which closes the stored
+  generators and iterators it was given and hands back its residual. Each observation runs one
+  turn of a loop and is total. Its residual is `K`, the components of its result with no
+  destructor, as a stored generator's must be (below).
 - **`return e`** inside a loop returns from the generator with `e` from any depth of its loops,
   closing each loop's source on the way out; `break` leaves the innermost loop from any position
   of its body (`corpus/gen-return.bc`).
 - **A call of a generator** at the same site passes on what it yields and goes on with what it
   returns: delegation is a call (`corpus/gen-from.bc`). A call of a function that loops, a
-  generator included, is a call in direct style, a state holding its loop (`corpus/gen-div.bc`).
+  generator included, is a call in direct style; a call of a loop written in core, or of a div
+  function of the empty row, drains its loop value (`corpus/gen-div.bc`, §47).
 
 ### Stored generators
 
@@ -1885,9 +1854,10 @@ a type only (it is not reserved), with no counterpart in `Core/`. The call is a 
 clause does not resume: it answers the element with the continuation as the rest,
 `thunkv nu_in ⟨(force k).1 (), (force k).2⟩`, so nothing runs until the first observation, the
 next observation resumes the generator where it yielded, and `close` cancels it (`R = 1`). When
-the generator's body loops, the stored generator is `unfold` over its loop or such a rest: an
-observation handles one turn of the loop; a resumed rest that ends the turn runs the next turn at
-once, so that a loop that yields once per turn gives an element at every observation.
+the generator's body loops, the stored generator is `unfold` over the loop value of its call
+(`reify` of its start, §47) or such a rest: an observation handles one turn of the loop; a
+resumed rest that ends the turn runs the next turn at once, so that a loop that yields once per
+turn gives an element at every observation.
 
 A `for` over a stored generator observes it until it returns (§14's drain, div), and the
 adapters (`lib/adapters.bc`) are generic generators over stored generators: `map`, `filter`,
@@ -1997,8 +1967,8 @@ and §19 is preserved: every construct of this entry is elaborated into core bef
 - **Stored generators over a row.** A stored generator's observations are pure: a generator that
   performs another effect besides its iteration effect (a `Fail`) is not stored.
 - **The source interpreter** (`bcc interp`, `Support`'s substitution machine) substitutes into
-  the whole step at each observation, so its time per observation grows with the size of the
-  body's machine.
+  the whole step at each turn, and captures the continuation at each tick under `reify`, so its
+  time per observation grows with the size of the loop's step and of what the continuation holds.
 
 ---
 
@@ -2185,8 +2155,10 @@ context).
 **Effectful bodies.** A counted loop's step is one total computation, so it cannot hold the
 continuation of a control operation that resumes. When the body's row has one (`opsC` finds a
 `perform` of a non-abortive operation of the row, the rule keyed on the row, no effect named),
-the `for` is a **div loop** over the source's cursor instead: a `while`, a loop of the body's
-machine (§14, §15), one turn per element (`forDataDiv`, `Frontend/Sugar.lean`). This holds when the
+the `for` is a **div loop** over the source's cursor instead: a `while`, an `iterate` of the body
+(§14, §15, §47), one turn per element (`forDataDiv`, `Frontend/Sugar.lean`). So is a counted loop
+whose body loops: it has a `while`, a `loop`, a drain, a `for` over a generator that loops, or a
+call of a div function (its class, §47). This holds when the
 operation is of a site that observes its computation one turn at a time, a `for`'s site or a
 stored generator's (§15); at any other site the loop is total at the row, `bounded_fix` over the
 count, which a handler wraps (§30, *Counted loops at a resuming row*, proposed):
@@ -8092,6 +8064,146 @@ stores, which go down (209 → 161, 49 → 25): the walk's copy and length insid
 
 ---
 
+## 47. Entry 46 — loops elaborate to `Div` (B2)
+
+### Motivation
+
+§14's kernel has divergence as the effect `Div`: `tick`, the loop `iterate` at a row that holds
+it, and its handlers `reify` (a loop value) and `div_fuel`. Until this entry the frontend did not
+elaborate to it: every div body was one state machine over `unfold`, a value of `Loop B R` built
+by the elaborator (`docs/pipeline-architecture.md` §3.2, #644). This entry elaborates loops to the
+kernel's `Div` and deletes the per-body machine: a div function is a computation at a row that
+holds `Div`, each loop is `iterate`, and a loop value is made only where one is expected, by
+`reify`. Nothing in the kernel changes.
+
+### Types
+
+A **div function** of `A` returning `B` with residual `R` (§14, *The residual*) is
+
+    A ⇒ div B   ≜   U(A ⊸ F_{div, Σ}(B ⊕ R))
+
+`div` is `Div`'s entry, `4294967295.0 lin 1 ~> 1 + 1`, written `div` in a row (`F[div] A`,
+`F[div, n.i q A ~> B] A`), first in the row; `Σ` is the row its effects give it (§18). It finishes
+with `inl b`, or, closed early, with `inr r`, the residual by name. A function written to return a
+loop, `A ⇒ U(Loop B R)`, is core as before: a loop value.
+
+The core text gains two forms: the constant `iterate[S, B, R, [Σ]]` (§14's `iterate` at the row
+`Σ`, which holds `Div`, of state `S`) and the value `reify[B, R, [Σ]](res)` (§14's `reify_res` at
+the row `Σ`, which does not hold `Div`, with `res : !U(B ⊸ F_Σ R)` a closed value checked at the
+empty context). The checker builds them by `TTied.iterate` and `TTied.reify`
+(`Frontend/Check/Consts.lean`, `Frontend/Check/Checker.lean`); the printer writes them back.
+
+### The elaboration
+
+`Frontend/Sugar.lean`, *The `Div` elaboration* (`eWalk`, `eIter`, `eCall`, `eDrain`, `eLoop`,
+`eFinish`). A div body at the row `div, Σ` is a computation of `F_{div, Σ}(B ⊕ R)`:
+
+- **A loop** (`while`, `loop`, a drain of a stored generator or an iterator, a counted loop of the
+  machine, below) is `iterate (step, s₀)`. The state `s₀` holds the sources the loops around hold,
+  the body's capabilities, and the locals the loop and what follows it use, by name. The step's
+  first observation is one turn: the head's test, then the body, ending with `inr s′` at the end
+  of the body and at `continue` (the back edge), with `inl (inl j)` at `break` and at the loop's
+  end (`j` what follows the loop uses, with the loop's value), and with `inl (inr a)` when the turn
+  leaves the body with its answer `a` (`return e`, its sources closed, or a call closed early).
+  Its second observation closes what the state holds, innermost first, and returns the residual
+  by name. After `iterate`, a `case` goes on with `j`, or leaves with the answer.
+- **The placement of ticks.** A tick stands where an observation of the previous elaboration's
+  loop value ended. At a back edge, `iterate` ticks. At the empty row a move forward to a loop's
+  head ticks too (`tick () to n. case n { next → iterate (step, s₀) | close → (step s₀).2 }`), and
+  so does a terminal that no loop or call precedes, closed with what its value holds. At a row the
+  body ticks only at back edges.
+- **A call of a div function in direct style** at the body's placement is a call. On `inl b` it
+  binds the result and goes on; on `inr r` the callee's residual is turned into the body's (what
+  the call was lent, nothing, the body's own, or capabilities by type, as before), what the loops
+  around hold is closed, and the body is left with `inr`. Nested calls are bound first, as before.
+- **A call of a loop** — a function written to return a loop, or a div function placed for the
+  empty row called at a row — is a drain of the loop value: `iterate` whose turn observes it once,
+  holding it in the state. A div function of the empty row's placement is made a loop value by
+  `reify`, which runs it to its first tick.
+- **A loop value** where one is expected (an argument at a `U(Loop B R)` parameter, a binding
+  annotated with it, a component of a tuple that is): `reify` of the call. A div function where a
+  function returning its loop is expected is the function that returns the loop value of each
+  call (`lvV`, `lvC`). `main` that loops is the loop value of its body, which the runtime drives
+  (§11). A block that loops, `{ S }`, is the loop that runs nothing until it is observed: its first
+  observation makes `reify` of `S` and observes it; its close before that hands back the residual.
+- **A div function at a row** (a generator, §15) has, besides itself, its close before it starts,
+  `g__close : P ⇒ F_Σ R`. The loop value of a call (a stored generator, the generator of a `for`
+  that loops, §15) runs nothing until it is observed (`eStart`): each observation makes `reify`
+  of a loop whose first turn moves on at once, so its first tick comes before any event; its next
+  turn is the call, and its close is `g__close`.
+- **Counted loops' class** (`docs/loops.md` §2.2). A counted loop whose body has a loop of the
+  machine (a `while`, a `loop`, a drain, a `for` over a generator that loops) or a call of a div
+  function is a loop of the machine over its source's cursor (`forDataDiv`), a `while`; one whose
+  body has none is total, as before (§16). The choice is made after elaborating the body once,
+  its state restored. Over `&a` the array is lent at each turn, to the bindings at the start of
+  the body that use the element; what they bind and what follows reads is handed on, and a use
+  of the element after a loop or a call that loops is reported (§14, borrow scopes over loops).
+
+**What stays.** `unfold`, `Loop`, `div_bind`, `div_defer` and `div_fuel` stay as library code
+over loop values (`lib/div.bc`); the elaboration emits none of `div_bind` and `div_defer`.
+`div_fuel`'s argument is a loop value: `reify` of a call. A `for` over a generator whose body does
+not loop is one handled call, as before; one whose body loops handles each observation of the
+generator's loop value (`io_hwf`), as before, now `reify` of its call.
+
+**Not decided here.** Every judgment of aliasing, mutation, ownership, lend extents and escape is
+the kernel's: the state of a loop is the program's own variables, by name, and each scheme is
+checked by `[let]`, `iterate`, `reify` and the borrow rules.
+
+### `sim_loop`
+
+`Frontend/Elab/DivPlacement.lean` states the placement over the schema of div bodies (a run of a
+body: events, loops with the runs of their turns, joins, `return`, direct-style calls at the
+body's placement, calls of an empty-row function at a row, drains of core loops; the empty row and
+a row) and proves that along every run the loop value of the new elaboration and that of the
+per-body machine have the same trace: the same events in the same observations, the same ends
+(`sim_loop`, axioms within the three). So `div_fuel`'s answers and pull consumers' skips are the
+same. The two elaborations are transcribed as functions from runs to traces; that the emitted
+kernel terms have those traces is the transcription's, not proved over the terms (*Open*).
+
+### Backend
+
+- The old backend compiles `iterate` as before (`expandIter`, a fixed point) and `reify` by
+  `Capture`. `indirect` counts a call of a loop's step and a resume of a loop value's
+  continuation, so every program with a loop counts more dispatched calls (`corpus/counts.expected`,
+  rewritten; allocations are unchanged but in `gen-fib`, 0 → 47). B3 lowers `iterate` natively and
+  drives `main` by the runtime's clause.
+- The Wasm lowering numbers each function's locals again by their intervals (`compactLocals`,
+  `Backend/Wasm/Lower.lean`): a flat-IR body has no back edge, so a local is live only between its
+  first and last occurrence. Wasm bounds a function's locals, which `gen-adapters-fail`'s largest
+  function passed.
+- The new backend (§43) leaves a program with `iterate` or `reify` outside its fragment (N2):
+  122 corpus programs run there, 222 before.
+
+### Programs
+
+Every corpus program's output, golden, exit status and `live 0` is unchanged at every stage, and
+every `div_fuel` answer. The loop matrix of #545 runs in every cell but `AA` (24 cells, `241`), and
+so does its `return` matrix (24 cells, `298`). `corpus/for-data-gen-loop.bc` and
+`corpus/while-in-counted-for.bc`, rejected before, are accepted by the counted loops' class and
+move to the corpus. The sugar pairs' core forms are the new elaboration (`corpus/sugar/*.core.bc`).
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `Core/` or a kernel program. `fundamentalC`,
+`adequacyC`, `fundamentalD`, `adequacyD` and `total_every_run` keep their statements; every
+elaborated program is checked core, so they cover it.
+
+### Open
+
+- `sim_loop` is proved over the transcription of the two placements, not over the kernel terms
+  each elaboration emits: a simulation of `iterate` under `div_fuel` against `unfold` observed by
+  `driveE` (S0's `while` schema) and of `reify`'s observations is not proved.
+- A handler of another name whose clause keeps `κ` around a computation that ticks
+  (`handle_general`, #564): no handler wraps a div computation yet but per observation of a loop
+  value.
+- The old backend's counts and code size grow until B3 (native `iterate`, `main` under the
+  runtime's clause); the source interpreter is slower on generators (`reify` captures the
+  continuation at each tick).
+- A counted loop of the machine over `&mut a`, and one with `break e` or `else`, are not provided.
+- The element of a counted loop over `&a` is lent only to the bindings at the start of its body.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -8106,12 +8218,14 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 `Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`. Entry 12
 (§13) is implemented in `Core/Alloc.lean`, `Core/World.lean`, `Core/Demonic.lean` and
 `Core/Stale.lean`. Entry 13 (§14) is implemented in `lib/div.bc`, `lib/lend.bc`, `Frontend/Sugar.lean`,
-`Frontend/Elab/LoopLend.lean` and `Core/Totality.lean`; each div body is one state machine.
+`Frontend/Elab/LoopLend.lean` and `Core/Totality.lean`.
 Its effect `Div` is in the kernel (`Core/DivDefs.lean` to `Core/DivRuntime.lean`, the rules
 `iterate`, `divFuel`, `reify` and `effHandleT` of `CDerives`), and the backend replaces `iterate`
-by its fixed point (`Backend/Clos/Convert.lean`); the frontend does not elaborate to it yet. Entry 14 (§15) is implemented in `lib/yield.bc`, `lib/adapters.bc`,
+by its fixed point (`Backend/Clos/Convert.lean`); the frontend elaborates loops to it (Entry 46,
+§47: `Frontend/Sugar.lean`'s *The `Div` elaboration*, the checker's `iterate` and `reify`,
+`Frontend/Elab/DivPlacement.lean`'s `sim_loop`). Entry 14 (§15) is implemented in `lib/yield.bc`, `lib/adapters.bc`,
 `Frontend/Elab/Effects.lean` (the sites), `Frontend/Sugar.lean` (`forYield`, `pullView`, the
-machine at a row) and `Frontend/Elab/Subst.lean`, with no change to `CDerives`, and lowered by
+`Div` elaboration at a row) and `Frontend/Elab/Subst.lean`, with no change to `CDerives`, and lowered by
 `Backend/Clos/Capture.lean` and `Backend/Clos/Convert.lean`. Entry 15 (§16) is implemented in
 `Paper/` and `Support/` (the step), `Core/CountFold.lean`, the checker (`count_fold`) and the
 backend (`count_loop`). §9's slice borrows are `Core/SliceFrames.lean` and `Core/Slices.lean`,
@@ -8467,6 +8581,18 @@ the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Backend/Wasm
 ---
 
 ## Changelog
+
+- **0.95** (2026-10-21) — §47 (#644, B2): loops elaborate to the kernel's `Div`. A div function is
+  `A ⇒ F_{div, Σ}(B ⊕ R)`; each loop is `iterate` over its state; a tick stands where an
+  observation of the previous elaboration's loop value ended (`sim_loop` over the schema of div
+  bodies); a direct-style call is a call; a loop value is `reify` (`main`, `div_fuel`'s argument,
+  a block that loops, a stored generator, the generator of a `for` that loops). The per-body state
+  machine, the emission of `div_bind` and `div_defer`, and §14's machine are deleted. A counted
+  loop whose body loops is a loop of the machine over its cursor, its `&a` lent per turn: the loop
+  matrix's 24 non-`AA` cells and the `return` matrix's run. The core text writes `div`,
+  `iterate[…]` and `reify[…](res)`. The Wasm lowering reuses locals. Every output, golden, exit
+  status, `live 0` and `div_fuel` answer unchanged; `indirect` counts grow until B3. No change to
+  `CDerives`, the relation, the machine or `Core/`.
 
 - **0.94** (2026-10-20) — §46 (#636, N1 part 2, L-3): a counted walk's read in range is a typed
   fact: `walk`'s `read` (`walkReadB`) and the marked read `walkGet`; the new backend drops the

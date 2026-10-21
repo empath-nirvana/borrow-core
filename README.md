@@ -83,7 +83,7 @@ records why it was added:
 - persistent `!` values and implicit destructors (§10, §12);
 - stdin, stdout and stderr as linear capabilities (§11);
 - divergence as an inferred effect (§14);
-- generators, `gen fn` with `yield`, each body one state machine (§15);
+- generators, `gen fn` with `yield`, each loop of a body `iterate` at its row (§15, §47);
 - counted loops and `for` over data and iterators (§16);
 - growable buffers, UTF-8 text and string literals (§17);
 - effects and handlers in the surface, defined by elaboration into capability passing (§18);

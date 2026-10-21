@@ -177,12 +177,14 @@ The same form is library code for loops and stored generators written by hand:
 
 ## What it means in core
 
-A div function returning `B` has the core type `A => U (loop B R)`: a call runs the function up
-to its first loop and returns the rest as a loop, which finishes with `B`, or, closed early,
-hands back the residual `R`, the capabilities the function holds (or `()`). A call of a div
-function in direct style is `div_bind`, the delay bind, which runs one loop and then the rest of
-the function; it is ordinary library code over `unfold` (`lib/div.bc`). `bcc desugar` shows
-all of it; the checker sees only core, and nothing in the kernel knows about `div`.
+A div function returning `B` has the core type `A => F[div] (B + R)`: its computation performs
+`Div`, the kernel's divergence effect, ticking once per turn of each loop, and finishes with
+`inl b`, or, closed early at a tick, hands back the residual `R` as `inr r`: the capabilities the
+function holds (or `()`). Each loop is the kernel's `iterate` over the variables it threads; a
+call of a div function in direct style is a call. Where a loop is expected (`div_fuel`'s
+argument, `main`'s result), the call's loop value is `reify` of it, a loop that runs the call one
+turn per observation. `bcc desugar` shows all of it; the checker sees only core
+(SPEC [§47](https://github.com/empath-nirvana/borrow-core/blob/main/SPEC.md#47-entry-46--loops-elaborate-to-div-b2)).
 
 ## What is proved
 
