@@ -2,6 +2,7 @@ import Frontend.Parser
 import Frontend.Print
 import Frontend.Check.Program
 import Core.Stdio
+import Core.DivRuntime
 
 /-!
 # Frontend — Check — externs and standard I/O  `[spec §11]`
@@ -229,6 +230,40 @@ main : {B} -o F ({out} * ({out} * ({ppVTy A}))) =
     return (io_out, (io_err, io_a))
 "
 
+/-- The source of `run_io` for a `main` the runtime's clause drives, `F[div call] ((Caps * A) +
+(Caps * B))`: `run_io` is a computation at that row, which the runtime runs the same way; on `inl`
+it takes the outputs back as `wrapperSrc` does.  `[spec §11, §48]` -/
+def rtWrapperSrc (caps : List String) (capsT A B : CVTy) (body : Comp) (args : List UInt8) :
+    String :=
+  let bs := bytesSrc
+  let out := s!"(i32 * {bs})"
+  let res := s!"({out} * ({out} * ({ppVTy A})))"
+  let res' := s!"({out} * ({out} * ({ppVTy B})))"
+  let take := s!"{rebindCaps caps "io_caps"}{takeExtra caps}io_in <- return ((unbang take_input) stdin);
+        io_out <- return ((unbang take_output) stdout);
+        io_err <- return ((unbang take_output) stderr);
+        "
+  s!"extern mk_input : !({bs} => ref input)
+extern mk_output : !(i32 => ref output)
+extern take_input : !(ref input => {bs})
+extern take_output : !(ref output => i32 * {bs})
+{clockExterns caps}
+main : {bs} -o F[div call] ({res} + {res'}) =
+  fun (io_inp : {bs}) ->
+    stdin <- return ((unbang mk_input) io_inp);
+    stdout <- return ((unbang mk_output) i32[1]);
+    stderr <- return ((unbang mk_output) i32[2]);
+    {makeExtra caps args}io_l : (({ppVTy capsT}) * ({ppVTy A})) + (({ppVTy capsT}) * ({ppVTy B})) <- ({body.pp 0 6});
+    case io_l \{
+      inl io_fin ->
+        let (io_caps, io_a) = io_fin;
+        {take}return (inl (io_out, (io_err, io_a)) : {res} + {res'})
+    | inr io_fin ->
+        let (io_caps, io_b) = io_fin;
+        {take}return (inr (io_out, (io_err, io_b)) : {res} + {res'})
+    }
+"
+
 /-- Bind the names of a right-nested tuple held in `v`. -/
 def destructNames (v : String) : List String → String
   | [] => s!"let () = {v};\n    "
@@ -308,8 +343,27 @@ structure IOMain where
   caps : List ExternSpec
   A : CVTy
   /-- `some B` when `main` returns a loop `U (loop (Caps * A) (Caps * B))` (or `U (loop A B)`
-  with no capabilities), run until it finishes (SPEC §11, §14). -/
+  with no capabilities), run until it finishes (SPEC §11, §14); or, with `rt`, when `main` is a
+  computation `F[div call] ((Caps * A) + (Caps * B))` the runtime's clause drives (SPEC §48). -/
   loopB : Option CVTy
+  rt : Bool := false
+
+/-- `main`'s type at the graded row of `Div` alone, `F[div call] (X + Y)`: the runtime's clause
+drives it, answering every tick *next* (SPEC §14, §48). -/
+def rtMainOf : CCTy → Option (CVTy × CVTy)
+  | C@(.eff _ _ _ _ _ _ true (.ret (.sum X Y))) =>
+    if C = BoCa.Fig16.LogRel.Core.CTy.effOf [BoCa.Fig16.LogRel.Core.tickSigG true] (.sum X Y) then
+      some (X, Y)
+    else none
+  | _ => none
+
+/-- `main` under the runtime's clause (`DivRuntime.rtH`), its answer `inl b` read as `b`. The
+runtime never answers a tick *close*, so `inr` is not reached; its branch is `Ω`, which runs
+forever and has every layout.  `[spec §48]` -/
+def rtMainE (e : Expr) : Expr :=
+  .app (.lam (.case (.var 0) (.var 0)
+    (.app (.lam (.app (.var 0) (.var 0))) (.lam (.app (.var 0) (.var 0))))))
+    (BoCa.BoLo.hndE BoCa.Fig16.LogRel.Core.DivRuntime.rtH e)
 
 /-- The externs of a checked `main`, and, when it has capabilities, its result type after them. -/
 def ioMainOf (p : Program) (c : Checked) : Except String (Option IOMain) := do
@@ -317,11 +371,12 @@ def ioMainOf (p : Program) (c : Checked) : Except String (Option IOMain) := do
   let xs ← match externs ds with
     | .ok xs => pure xs
     | .error e => throw e.render
-  -- A `main` with no externs that returns a loop is driven too, with no capabilities (SPEC §14).
+  -- A `main` with no externs that returns a loop is driven too, with no capabilities (SPEC §14);
+  -- one the runtime's clause drives is run as its own (`rtMainE`).
   if xs.isEmpty then
     match c.C with
     | .ret (.thunk (.nu (.amp (.ret (.sum A (.tvar 0))) (.ret B)))) =>
-      return if c.C = .ret (.thunk (.loop A B)) then some ⟨[], [], A, some B⟩ else none
+      return if c.C = .ret (.thunk (.loop A B)) then some ⟨[], [], A, some B, false⟩ else none
     | _ => return none
   let specs ← checkExterns xs
   let caps := capsOf specs
@@ -333,12 +388,14 @@ def ioMainOf (p : Program) (c : Checked) : Except String (Option IOMain) := do
   let T₀ := capsTy caps
   let shape := s!"`main` must have type `F (Caps * A)`, or `F (U (loop (Caps * A) (Caps * B)))` " ++
     s!"to run until it finishes, with `Caps` = `{ppVTy T₀}`, its capabilities in declaration order"
+  if let some (.tensor T A, .tensor T' B) := rtMainOf c.C then
+    if T = T₀ ∧ T' = T₀ then return some ⟨specs, caps, A, some B, true⟩
   match c.C with
   | .ret (.tensor T A) =>
-    if T = T₀ then pure (some ⟨specs, caps, A, none⟩) else throw shape
+    if T = T₀ then pure (some ⟨specs, caps, A, none, false⟩) else throw shape
   | .ret (.thunk (.nu (.amp (.ret (.sum (.tensor T A) (.tvar 0))) (.ret (.tensor T' B))))) =>
     if c.C = .ret (.thunk (.loop (.tensor T A) (.tensor T' B))) ∧ T = T₀ ∧ T' = T₀ then
-      pure (some ⟨specs, caps, A, some B⟩)
+      pure (some ⟨specs, caps, A, some B, false⟩)
     else throw shape
   | _ => throw shape
 
@@ -353,7 +410,8 @@ def ioWrapper (p : Program) (m : IOMain) (args : List UInt8 := []) : Except Stri
     | _ => true
   let src := match m.loopB with
     | none => wrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A body args
-    | some B => loopWrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A B body args
+    | some B => if m.rt then rtWrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A B body args
+      else loopWrapperSrc (m.caps.map (·.name)) (capsTy m.caps) m.A B body args
   match parseProgram src (resolve := false) with
   | .ok w => pure ⟨keep ++ w.decls⟩
   | .error e => throw s!"run_io: {e.render}\n{src}"
@@ -387,9 +445,11 @@ def modelsOf : (Γ : Ctx CVTy) →
     else none
 
 /-- `run_io`'s type: `Bytes ⊸ F R`, or `Bytes ⊸ F (U (Loop R R'))` when `main` runs until it
-finishes. -/
-def ioType (loops : Bool) (R R' : CVTy) : CCTy :=
-  if loops then .arr bytesTy (.ret (.thunk (.loop R R'))) else .arr bytesTy (.ret R)
+finishes, or `Bytes ⊸ F[div call] (R + R')` when the runtime's clause drives it (`rt`). -/
+def ioType (loops : Bool) (R R' : CVTy) (rt : Bool := false) : CCTy :=
+  if rt then .arr bytesTy (BoCa.Fig16.LogRel.Core.CTy.effOf [BoCa.Fig16.LogRel.Core.tickSigG true]
+    (.sum R R'))
+  else if loops then .arr bytesTy (.ret (.thunk (.loop R R'))) else .arr bytesTy (.ret R)
 
 /-- `run_io` checked, with the model of every extern: the object of `io_every_run` and
 `io_loop_every_run`. -/
@@ -398,7 +458,9 @@ structure IORun where
   loops : Bool
   R : CVTy
   R' : CVTy
-  hC : c.C = ioType loops R R'
+  /-- `run_io` is a computation the runtime's clause drives (SPEC §48). -/
+  rt : Bool
+  hC : c.C = ioType loops R R' rt
   hR : R.Persistent
   hR' : R'.Persistent
   N : CExpr
@@ -417,13 +479,14 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 `IORun.expr`, from the empty memory and under every allocator, continues to a value of
 `run_io`'s result type at the empty memory. `io_every_run` at the checked wrapper.
 `[spec §11, §13]` -/
-theorem IORun.every_run (r : IORun) (hp : r.c.pins = []) (hl : r.loops = false) (inp : List UInt8)
+theorem IORun.every_run (r : IORun) (hp : r.c.pins = []) (hl : r.loops = false) (hr : r.rt = false)
+    (inp : List UInt8)
     {μ₁ : BoCa.BoLo.Heap} {e₁ : Expr}
     (hs : BoCa.BoLo.Steps BoCa.Adequacy.emptyMem (r.expr inp) μ₁ e₁) :
     ∃ v : CVal, BoCa.BoLo.Steps μ₁ e₁ BoCa.Adequacy.emptyMem (.val v) ∧
       ∃ ls δ, BoCa.Fig16.LogRel.Core.vCE none true r.R ls δ v BoCa.Fig16.PMap.empty := by
   have h := r.c.deriv hp
-  rw [r.hC, ioType, hl] at h
+  rw [r.hC, ioType, hr, hl] at h
   exact io_every_run h r.hR r.hγ (bytesVal_bytes inp) hs
 
 /-- **The model run of a program that runs until its input ends**: for every `n`, every run of
@@ -432,6 +495,7 @@ continues to a value at the empty memory. `io_loop_every_run` at the checked wra
 `bcc interp` that finishes after `k` observations is the run of the `k`-th prefix.
 `[spec §11, §13]` -/
 theorem IORun.loop_every_run (r : IORun) (hp : r.c.pins = []) (hl : r.loops = true)
+    (hr : r.rt = false)
     (inp : List UInt8) (n : ℕ)
     {μ₁ : BoCa.BoLo.Heap} {e₁ : Expr}
     (hs : BoCa.BoLo.Steps BoCa.Adequacy.emptyMem
@@ -440,7 +504,7 @@ theorem IORun.loop_every_run (r : IORun) (hp : r.c.pins = []) (hl : r.loops = tr
       ∃ ls δ, BoCa.Fig16.LogRel.Core.vCE none true (.sum r.R r.R') ls δ v
         BoCa.Fig16.PMap.empty := by
   have h := r.c.deriv hp
-  rw [r.hC, ioType, hl, show r.c.t.erase = _ from r.he] at h
+  rw [r.hC, ioType, hr, hl, show r.c.t.erase = _ from r.he] at h
   exact io_loop_every_run h r.hR r.hR' r.hγ inp n hs
 
 end
@@ -461,16 +525,23 @@ def ioRunOf (w : Program) : Except String IORun := do
     | none => throw "run_io: an extern has no model"
     | some ⟨γ, hγ⟩ =>
       match c.C with
+      | .arr _ C@(.eff _ _ _ _ _ _ true (.ret (.sum R R'))) =>
+        if hC : c.C = ioType false R R' true then
+          if hR : R.persistent = true then
+            if hR' : R'.persistent = true then pure ⟨c, false, R, R', true, hC, hR, hR', N, he, γ, hγ⟩
+            else throw (persistErr R')
+          else throw (persistErr R)
+        else throw s!"run_io: wrong type {ppCTy C}"
       | .arr _ (.ret (.thunk (.nu (.amp (.ret (.sum R (.tvar 0))) (.ret R'))))) =>
         if hC : c.C = ioType true R R' then
           if hR : R.persistent = true then
-            if hR' : R'.persistent = true then pure ⟨c, true, R, R', hC, hR, hR', N, he, γ, hγ⟩
+            if hR' : R'.persistent = true then pure ⟨c, true, R, R', false, hC, hR, hR', N, he, γ, hγ⟩
             else throw (persistErr R')
           else throw (persistErr R)
         else throw "run_io: wrong type"
       | .arr _ (.ret R) =>
         if hC : c.C = ioType false R .unit then
-          if hR : R.persistent = true then pure ⟨c, false, R, .unit, hC, hR, rfl, N, he, γ, hγ⟩
+          if hR : R.persistent = true then pure ⟨c, false, R, .unit, false, hC, hR, rfl, N, he, γ, hγ⟩
           else throw (persistErr R)
         else throw "run_io: wrong type"
       | _ => throw "run_io: wrong type"
