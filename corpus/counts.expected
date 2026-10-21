@@ -302,6 +302,7 @@ leetcode/trees/0572-subtree-of-another-tree 70 1 0 6371 5928 4618 # the input st
 lend-lib-each 2 0 0 44 12 11
 lend-lib-gen 1 0 0 4 4 0
 lend-lib-loop 3 0 0 34 22 4
+lend-mut 1 0 0 11 6 0
 list-blocks 13 0 0 55 43 0
 list-capability 6 0 0 31 22 0
 list-generic 27 0 0 148 102 0 # the lists' nodes, one object each; no frame and no closure is allocated
