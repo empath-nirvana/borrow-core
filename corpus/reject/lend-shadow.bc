@@ -1,9 +1,10 @@
--- expect: 20:11: the row of an unwinding borrow's callback has only abortive operations, of names other than 0, whose arguments outlive every lifetime and do not mention its lifetime
+-- expect: 23:34: `b` is used twice here, and its type `imm 'io_l2 array i32` is not persistent
 -- A name bound inside a borrow block over a loop, beside a variable of the same name outside it,
 -- in core text, whose names are not resolved (SPEC §41). The block's body loops, so its lend is held
--- across the loop's ticks, and the kernel refuses the lend at the row `div` (`Row.Unwind`; T1, SPEC
--- §14, §19). In a surface body the block's `acc` is a variable of its own
--- (`corpus/pending/lend-shadow.bc`).
+-- across the loop's ticks, which the kernel admits at the graded row `div call` (SPEC §48); the loop
+-- reads the borrow `b` at each turn, and a borrow is not persistent, so the kernel refuses the second
+-- use (SPEC §10, §14; an implicit copy of an `imm` borrow is open, #58). In a surface body the
+-- block's `acc` is a variable of its own (`corpus/pending/lend-shadow.bc`).
 
 fn tab(i: i32) -> i32 = i * 10
 
@@ -19,7 +20,7 @@ main : F i32 =
   let acc = 5;
   let r = borrow imm t { b ->
     let mut acc = 0;
-    for c in bytes(&mut stdin) { acc = acc + get(b, c - 48) };
+    for c in bytes(&mut stdin) { acc = acc + get(b, to_i32(c) - 48) };
     acc
   };
   acc + r

@@ -1,7 +1,9 @@
--- expect: 17:11: the row of an unwinding borrow's callback has only abortive operations, of names other than 0, whose arguments outlive every lifetime and do not mention its lifetime
+-- expect: 22:34: `q` is used twice here, and its type `imm 'x array i32 * i32` is not persistent
 -- A borrow block over a loop whose loop keeps something borrowed before it. The block's body
--- loops, so its lend is held across the loop's ticks, and the kernel refuses the lend at the row
--- `div` (`Row.Unwind`; T1, SPEC §14, §19).
+-- loops, so its lend is held across the loop's ticks, which the kernel admits at the graded row
+-- `div call` (SPEC §48); the loop then reads `q`, which holds the borrow, at each turn, and a borrow
+-- is not persistent, so the kernel refuses the second use (SPEC §10, §14; an implicit copy of an
+-- `imm` borrow is open, #58).
 
 fn tab(i: i32) -> i32 = i * 10
 

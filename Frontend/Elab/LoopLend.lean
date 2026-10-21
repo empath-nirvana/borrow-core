@@ -7,9 +7,10 @@ import Frontend.Check.Steps
 A borrow block's body is one computation: `withbor`'s callback returns before the block ends. A
 loop is at the row `div` (SPEC §14): each of its back edges ticks, and `tick` is a control
 operation that resumes, so a borrow block whose body loops holds its lend across a tick. That is
-a lend held by a suspension (T1, tier 2, #172): the block is elaborated as written, its borrow in
-the unwinding form at the row `div` (`Frontend/Sugar.lean`, `blockLoops`), and the kernel's
-rule for a lend at a row (`Row.Unwind`) refuses it. The elaborator does not lend again per step.
+a lend held by a suspension whose continuation is resumed in its scope: the block is elaborated as
+written, its borrow in the unwinding form at the graded row `div call` (`Frontend/Sugar.lean`,
+`blockLoops`), which the kernel's rule for a lend at a row (`Row.Lend`, SPEC §48) checks. The
+elaborator does not lend again per step.
 
 This module recognises such a block, and holds two forms around borrow scopes:
 

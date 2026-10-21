@@ -1578,8 +1578,8 @@ mutual
 def eWalk (m : DCx) : Nat → TCx → Comp → EM Comp
   | 0, _, M => throw ⟨M.span, "internal error: a body nested too deeply"⟩
   | n + 1, c, .bind sp x A M N lin => do
-    -- A borrow block whose body loops holds its lend across the body's ticks: the kernel refuses
-    -- the lend (`Row.Unwind`; T1, tier 2). Its body is a div body of its own, at the callback's
+    -- A borrow block whose body loops holds its lend across the body's ticks, at the graded row
+    -- `div call` (`Row.Lend`, SPEC §48). Its body is a div body of its own, at the callback's
     -- row, which a close inside the lend leaves with the body's residual.
     let lendBody (l : LendCb) : EM Comp := do
       let some dom := c.elabL l.b | throw ⟨l.sp, "internal error: a lend's bound"⟩
@@ -2773,8 +2773,8 @@ def unwindingC? (sp : Span) : Val → Option Comp
       let cb := match cb with
         | .thunkv tsp (.lamL lsp xi b (.ret _ (.thunkv _ L))) => Val.thunkv tsp (.lamL lsp xi b L)
         | cb => cb
-      -- At a row that holds `Div` (a body that loops), the constant is bound at its type: the
-      -- kernel refuses its lend there (`Row.Unwind`), and what follows is typed past it.
+      -- At a row that holds `Div` (a body that loops), the constant is bound at its type, the
+      -- graded row `div call` (SPEC §48), and what follows is typed past it.
       let kTy : Option VTy := match C, cbTy with
         | .withbor1U _ A B r, some T | .withbor2U _ _ A B r, some T =>
           if r.hasDiv then some (uTy (.ref sp A) T B r) else none
@@ -2809,7 +2809,7 @@ def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
     (.lam sp ⟨mv, sp⟩ Tm (body l mv)))))
   let C : Const := if m == .mut then .withbor2 li (.top sp) As Bs else .withbor1 li As Bs
   -- A body that calls a div function holds the lend across its ticks: the borrow's unwinding
-  -- form at the row `div, Σ`, which the kernel refuses (`Row.Unwind`; T1, tier 2).
+  -- form at the graded row `div call, Σ` (`Row.Lend`, SPEC §48).
   let C ← match row with
     | some r => do pure ((Const.unwinding (← (surfRow c sp r : Except Error Frontend.Row)) C).getD C)
     | none => pure C
@@ -4580,8 +4580,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       if let .app _ (.sugar _ (.pullSite i)) call := V then return ← pullView n c sp i call
       if let some B := borrowBlock? V then
         -- A borrow block whose body loops holds its lend across the loop's ticks: its borrow is
-        -- at the row `div` besides, and the kernel refuses the lend there (`Row.Unwind`; T1,
-        -- tier 2).  `[spec §14, §19]`
+        -- at the graded row `div call` besides (`Row.Lend`).  `[spec §14, §19, §48]`
         let loops := Frontend.Elab.LoopLend.blockLoops c (dataFor (← get).sizedFns) V
         if loops || c.E.row.isSome then
           let S := c.E.row.getD []

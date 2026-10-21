@@ -1,16 +1,15 @@
--- pending: a lend held across a tick (a suspension; T1, #172): tier 2 is open and has no path
--- now: 34:30: `cfg` is used twice here, and its type `imm 'a (i32 * i32)` is not persistent
+-- pending: #58 (an implicit copy of an `imm` borrow, here one read at each turn of a loop; SPEC §42 Open)
+-- now: 33:30: `cfg` is used twice here, and its type `imm 'a (i32 * i32)` is not persistent
 --
 -- A div function that takes a borrow: `serve` reads its input to the end, handling each byte
 -- under a configuration it borrows, and `main` calls it in direct style with
 -- `serve(&config, stdin)`.
 --
--- Needs a lend held across a tick. Every loop is at the row `div` (SPEC §14), and each of its back
--- edges ticks, a control operation that resumes; the lend `&config` at 39:20 spans the call of
--- `serve`, whose `for` over the input at 34:5 ticks and reads the borrow `cfg` at each turn (the
--- kernel refuses that use first: `cfg` is not persistent). The kernel's rule for a lend at a row
--- has only abortive operations (`Row.Unwind`), so it refuses the lend. Holding a lend across a
--- suspension is tier 2, which is open and has no path.
+-- The div function's loop reads the borrow `cfg` it is given at each turn, so its state
+-- threads it and each turn uses it again; a borrow is not persistent, and an `imm` borrow is
+-- not copied implicitly (#58, SPEC §42 Open), so the checker refuses the second use, as it does
+-- `corpus/reject/lend-iter-borrow.bc`'s. The lend at the call, across the callee's ticks, is
+-- the kind the kernel admits at the graded row `div call` (SPEC §48); it is not reached.
 --
 -- Once it lands: on the input `1203`, `i32[65]`, `live 0`: the configuration is (step 10, bias 1),
 -- so each digit adds `10 * d + 1`, giving 64, and `main` adds the bias read from the configuration

@@ -1,16 +1,16 @@
--- pending: a lend held across a tick (a suspension; T1, #172): tier 2 is open and has no path
--- now: 33:13: the row of an unwinding borrow's callback has only abortive operations, of names other than 0, whose arguments outlive every lifetime and do not mention its lifetime
+-- pending: #58 (an implicit copy of an `imm` borrow, here one read at each turn of a loop; SPEC §42 Open)
+-- now: 36:19: `b2` is used twice here, and its type `imm 'x array i32` is not persistent
 --
 -- A copy of a borrow block's borrow is the borrow: the borrow is identified by its binder,
 -- followed through copies, `let b2 = b` and `let mut v = v`. `sum` reads a table through a copy
 -- of an `imm` borrow; `rev` reverses an array through a `let mut` copy of a `mut` borrow,
 -- assigned at each step (#617); `late` copies the borrow after a statement that does not use it.
 --
--- Needs a lend held across a tick. Every loop is at the row `div` (SPEC §14), and each of its back
--- edges ticks, a control operation that resumes; the borrows at 33:13, 42:3 and 51:14 span the
--- ticks of the `while` loops in their bodies. The kernel's rule for a lend at a row has only
--- abortive operations (`Row.Unwind`), so it refuses the lend. Holding a lend across a suspension is
--- tier 2, which is open and has no path.
+-- The lend spans the loop's ticks, which the kernel admits at the graded row `div call`
+-- (SPEC §48). The loop then reads the borrow `b2` at each turn, so its state threads it and
+-- each turn uses it again; a borrow is not persistent, and an `imm` borrow is not copied
+-- implicitly (#58, SPEC §42 Open), so the checker refuses the second use, as it does
+-- `corpus/reject/lend-iter-borrow.bc`'s.
 --
 -- Once it lands: `(i32[30], (i32[321], i32[6]))`, `live 0`: 0 + 10 + 20; the array [1, 2, 3]
 -- reversed, read as the digits of 3·100 + 2·10 + 1; and 1 + 2 + 3 through a copy bound after `let k
