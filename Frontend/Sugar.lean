@@ -507,6 +507,66 @@ def _root_.Frontend.Row.hasDiv : Frontend.Row → Bool
   | .nil => false
   | .cons n i _ _ _ rest => (n == 4294967295 && i == 0) || rest.hasDiv
 
+/-- A written row with `Div`'s entry graded, `div call` (SPEC §48). -/
+def _root_.Frontend.Row.gradeDiv : Frontend.Row → Frontend.Row
+  | .nil => .nil
+  | .cons n i q A B rest =>
+    .cons n i (if n == 4294967295 && i == 0 && q == .lin then .call else q) A B rest.gradeDiv
+
+/-- A written row whose `Div` entry is graded. -/
+def _root_.Frontend.Row.divGraded : Frontend.Row → Bool
+  | .nil => false
+  | .cons n i q _ _ rest => (n == 4294967295 && i == 0 && q == .call) || rest.divGraded
+
+/-- A kernel row with its `tick` graded, `tickSigG true` (SPEC §48). -/
+def gradeRowC (S : Frontend.Check.CRow) : Frontend.Check.CRow :=
+  S.map fun o => if isDivSig o then { o with call := true } else o
+
+/-- A div function's type whose row's `tick` is graded. -/
+def gradedDivTy : CVTy → Bool
+  | .bang A => gradedDivTy A
+  | .thunk (.all _ _ (.ret A)) => gradedDivTy A
+  | .thunk (.arr _ C) => match Frontend.Check.effRow? C with
+    | some (S, _) => S.any fun o => isDivSig o && o.call
+    | none => false
+  | _ => false
+
+/-- An unwinding borrow constant at a row whose `tick` is graded. -/
+def _root_.Frontend.Const.gradedLend : Const → Bool
+  | .withbor1U _ _ _ r | .withbor2U _ _ _ _ r | .withbor3U _ _ _ _ r | .withloadU _ _ _ _ r
+  | .sliceBorrowMutU _ _ _ _ r | .sliceBorrowImmU _ _ _ _ r => r.divGraded
+  | _ => false
+
+mutual
+/-- A value holds a graded lend (an unwinding borrow at a graded row) or names a function `g`
+the predicate marks (a div function of graded type).  `[spec §48]` -/
+def _root_.Frontend.Val.graded (g : String → Bool) : Val → Bool
+  | .var _ x | .clone _ x | .defApp _ x _ => g x
+  | .const _ C => C.gradedLend
+  | .pair _ V W | .app _ V W => V.graded g || W.graded g
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V
+  | .reify _ _ _ _ V => V.graded g
+  | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.graded g
+  | _ => false
+
+/-- A computation holds a graded lend or a call of a graded function.  `[spec §48]` -/
+def _root_.Frontend.Comp.graded (g : String → Bool) : Comp → Bool
+  | .ret _ V | .absurd _ V => V.graded g
+  | .bind _ _ _ M N _ | .with_ _ M N => M.graded g || N.graded g
+  | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
+  | .nuOut _ M | .ascribe _ M _ => M.graded g
+  | .letUnit _ V M | .letPair _ _ _ V M => V.graded g || M.graded g
+  | .case _ V _ M _ N => V.graded g || M.graded g || N.graded g
+  | .loop _ _ _ V M N => V.graded g || M.graded g || N.graded g
+  | .perform _ _ _ V | .abort _ _ _ V => V.graded g
+  | .handle _ _ _ hr hc M => hr.graded g || hc.graded g || M.graded g
+  | .unwind _ _ _ M D N => M.graded g || D.graded g || N.graded g
+  | .withbor2r _ _ _ _ _ _ _ _ M => M.graded g
+  | .force _ x => g x.name
+  | .top _ => false
+end
+
 /-- A callback's type at a row that holds `Div`: a borrow block's, whose body loops. -/
 def divCbTy : Option VTy → Bool
   | some (.thunk _ (.all _ _ _ (.arr _ _ (.eff _ r _)))) => r.hasDiv
@@ -1175,6 +1235,15 @@ def lendCb? (A : Option VTy) (M : Comp) : Option LendCb :=
     if r.hasDiv then some ⟨T, sp, tsp, lsp, lamsp, xi, b, q, Tq, S⟩ else none
   | _, _ => none
 
+/-- An unwinding borrow constant with its answer type `B` replaced. -/
+def _root_.Frontend.Const.withAns (B : VTy) : Const → Const
+  | .withbor1U x A _ r => .withbor1U x A B r
+  | .withbor2U x b A _ r => .withbor2U x b A B r
+  | .withbor3U a x A _ r => .withbor3U a x A B r
+  | .sliceBorrowMutU x b A _ r => .sliceBorrowMutU x b A B r
+  | .sliceBorrowImmU x b A _ r => .sliceBorrowImmU x b A B r
+  | C => C
+
 /-- The callback with the body `S`, its answer `X ⊕ R`: a close inside the lend leaves it with the
 body's residual `R`. -/
 def LendCb.bind (l : LendCb) (R : VTy) (S : Comp) : Option VTy × Comp :=
@@ -1532,6 +1601,44 @@ def eWalk (m : DCx) : Nat → TCx → Comp → EM Comp
       | M => (M, id))
     if let .bind s₁ k kA K (.bind s₂ p pA Pc (.bind s₃ f fA F app l₃) l₂) l₁ := lendC then
       if let some l := lendCb? fA F then
+        -- The lend's answer holds the body's: `['x](B ⊕ R)`, the residual `R` of a close inside
+        -- the lend boxed beside the result; the borrow then answers `src ⊗ (B ⊕ R)`, which is a
+        -- call of the body's shape, `(src ⊗ B) ⊕ R` (SPEC §48).
+        if let (some (.thunk ks₁ (.arr ks₂ src (.arr ks₃ _ (.eff ks₄ r (.tensor ks₅ _ _))))),
+            .ret ksp (.const csp C),
+            some (.thunk ts₁ (.all ts₂ xv bv (.arr ts₃ L (.eff ts₄ r' (.box bxs a B₀)))))) :=
+            (kA, K, fA) then
+          let Rs ← eTy c sp m.L.R
+          let B' : VTy := .sum bxs B₀ Rs
+          let T' : VTy := .thunk ts₁ (.all ts₂ xv bv (.arr ts₃ L (.eff ts₄ r' (.box bxs a B'))))
+          let kA' : VTy := .thunk ks₁ (.arr ks₂ src (.arr ks₃ T' (.eff ks₄ r (.tensor ks₅ src B'))))
+          let body ← lendBody l
+          let sfx ← eFresh ""
+          let lb := s!"io_lb{sfx}"
+          let lv := s!"io_lv{sfx}"
+          let lr := s!"io_lr{sfx}"
+          let ly := s!"io_ly{sfx}"
+          let boxedBody : Comp := eBind sp ly (some (.sum bxs (.box bxs a B₀) Rs)) body
+            (.case sp (.var sp ly)
+              ⟨lb, sp⟩ (eBind sp lv none (.ret sp (.unbox sp (.var sp lb)))
+                (.ret sp (.boxed sp a (.ascribe sp (.inl sp (.var sp lv)) B'))))
+              ⟨lr, sp⟩ (.ret sp (.boxed sp a (.ascribe sp (.inr sp (.var sp lr)) B'))))
+          let F' : Comp := .ret l.sp (.thunkv l.tsp (.lamL l.lsp l.xi l.b (.lam l.lamsp l.q l.Tq boxedBody)))
+          let chain : Comp := .bind s₁ k (some kA') (.ret ksp (.const csp (C.withAns B')))
+            (.bind s₂ p pA Pc (.bind s₃ f (some T') F' app l₃) l₂) l₁
+          let BR : VTy := .sum sp (.tensor sp src B₀) Rs
+          let lw := s!"io_lw{sfx}"
+          let ls := s!"io_ls{sfx}"
+          let call : Comp := eBind sp lw none chain
+            (.letPair sp ⟨ls, sp⟩ ⟨ly, sp⟩ (.var sp lw)
+              (.case sp (.var sp ly)
+                ⟨lb, sp⟩ (.ret sp (.ascribe sp (.inl sp (.pair sp (.var sp ls) (.var sp lb))) BR))
+                ⟨lr, sp⟩ (.ret sp (.ascribe sp (.inr sp (.var sp lr)) BR))))
+          let some srcC := c.elabV src | throw ⟨sp, "internal error: a lend's source"⟩
+          let some B₀C := c.elabV B₀ | throw ⟨sp, "internal error: a lend's result"⟩
+          let Bf : CVTy := .tensor srcC B₀C
+          let exp := A.bind c.elabV
+          return ← eCall m n c (c.push x.name (exp <|> some Bf)) sp x A none call Bf m.L.R N
         let (fA', F') := l.bind (← eTy c sp m.L.R) (← lendBody l)
         let M' : Comp := rerun (.bind s₁ k kA K (.bind s₂ p pA Pc (.bind s₃ f fA' F' app l₃) l₂) l₁)
         return .bind sp x A M' (← eWalk m n (c.push x.name (bindTy c A M)) N) lin
@@ -1785,11 +1892,29 @@ def divBody (cx : LoopCx) (row : Frontend.Check.CRow) (c : TCx) (M : Comp) : SM 
   let c := { c with E := { c.E with row := some row } }
   (eWalk m divFuel c M).run' 0
 
+/-- A function of the context whose type is a div function's at a graded row. -/
+def gradedName (c : TCx) (sp : Span) (x : String) : Bool :=
+  (c.tyV (.var sp x)).any gradedDivTy
+
+/-- **A div body and its grade** (SPEC §48): the body at `row`, and, when its code holds a graded
+lend or a call of a graded function, the body again at `row` with its `tick` graded, which the
+lend's or the call's row then subsumes into. The grade is a type, inferred; the kernel checks it. -/
+def divBodyG (cx : LoopCx) (row : Frontend.Check.CRow) (c : TCx) (M : Comp) :
+    SM (Comp × Bool) := do
+  let st ← get
+  let M' ← divBody cx row c M
+  if M'.graded (gradedName c M.span) then
+    set st
+    pure (← divBody cx (gradeRowC row) c M, true)
+  else pure (M', false)
+
 /-- A `main` that loops: the loop value of its body (`reify`), which the runtime drives (SPEC §11,
-§14).  `[spec §14]` -/
-def divMain (cx : LoopCx) (c : TCx) (sp : Span) (M : Comp) : SM Comp := do
-  let body ← divBody cx [BoCa.Fig16.LogRel.Core.tickSig] c M
-  pure (.ret sp (← (eReify c sp [] cx.B cx.R body).run' 0))
+§14); at a graded row (a lend across its ticks), the body itself, `F[div call] (B + R)`, which the
+runtime's clause drives (SPEC §48). The grade is returned.  `[spec §14, §48]` -/
+def divMain (cx : LoopCx) (c : TCx) (sp : Span) (M : Comp) : SM (Comp × Bool) := do
+  let (body, g) ← divBodyG cx [BoCa.Fig16.LogRel.Core.tickSig] c M
+  if g then return (body, true)
+  pure (.ret sp (← (eReify c sp [] cx.B cx.R body).run' 0), false)
 
 /-! ### Loop values  `[spec §14]`
 
@@ -1942,7 +2067,10 @@ def ambientMain (c : TCx) (cs : List String) (sp : Span) (C : CTy) (M : Comp) :
   let some Ac := Ac | throw ⟨A.span, "internal error: `main`'s result type"⟩
   let K := tupleT (cs.map capTyC)
   let cx : LoopCx := ⟨.tensor K Ac, .tensor K .unit, K, [cs.map fun n => (n, capTyC n)], true⟩
-  pure (.ret sp (.thunk sp (.loop sp B (.tensor sp capsT (.unit sp)))), ← divMain cx c sp M')
+  let (body, g) ← divMain cx c sp M'
+  let R := .tensor sp capsT (.unit sp)
+  pure (if g then .eff sp (divRowS sp .nil).gradeDiv (.sum sp B R)
+    else .ret sp (.thunk sp (.loop sp B R)), body)
 
 /-- The result `B` of a function type `A => B` or `!(A => B)`. -/
 def resultOf : Option CVTy → Option CVTy
@@ -2037,7 +2165,7 @@ def elabDef (scope : List Decl) : Decl → SM (Decl × Option (String × VTy) ×
       let cP₀ := cl.push x.name (cl.elabV Ax)
       let cP := { cP₀ with E := { cP₀.E with row := if S.isEmpty then none else some S } }
       -- The body at the row `div, Σ`: the empty row's placement when `Σ` is empty.
-      let M' ← divBody cx (BoCa.Fig16.LogRel.Core.tickSig :: S) cP M
+      let (M', gr) ← divBodyG cx (BoCa.Fig16.LogRel.Core.tickSig :: S) cP M
       let Rs ← (cl.surface sp cx.R : Except Error VTy)
       let lsp := match Mi with | .lam lsp .. => lsp | _ => sp
       let wrap (F : VTy) (lamC : Comp) : VTy × Val :=
@@ -2047,7 +2175,8 @@ def elabDef (scope : List Decl) : Decl → SM (Decl × Option (String × VTy) ×
         (A', match V with
           | .bangThunkv vsp _ => Val.bangThunkv vsp body
           | _ => Val.thunkv sp body)
-      let F := VTy.thunk A.span (.arr A.span Ar (.eff B.span (divRowS B.span row) (.sum B.span B Rs)))
+      let rowD := if gr then (divRowS B.span row).gradeDiv else divRowS B.span row
+      let F := VTy.thunk A.span (.arr A.span Ar (.eff B.span rowD (.sum B.span B Rs)))
       let (A', V') := wrap F (Comp.lam lsp x Ax M')
       -- At a row, the body's close before it starts: a loop value of a call starts with a tick,
       -- and closed there it closes the sources it was given and hands back the residual
@@ -2229,10 +2358,10 @@ def closureAt (c : TCx) (P : CVTy) (V : Val) : DM (Val × Option CVTy) := do
     let c' := c.push x.name Ac
     if (loopsAt c' (some B) M).isNone then return (V, c.tyV V)
     let cx ← (loopCxOf lsp B M : Except Error LoopCx)
-    let M' ← (divBody cx [BoCa.Fig16.LogRel.Core.tickSig] c' M : SM Comp)
+    let (M', gr) ← (divBodyG cx [BoCa.Fig16.LogRel.Core.tickSig] c' M : SM (Comp × Bool))
     modify fun st => { st with any := true }
     let some Ac := Ac | return (V, none)
-    let F : CVTy := .thunk (.arr Ac (Frontend.Check.effOf [BoCa.Fig16.LogRel.Core.tickSig] (.sum B cx.R)))
+    let F : CVTy := .thunk (.arr Ac (Frontend.Check.effOf [BoCa.Fig16.LogRel.Core.tickSigG gr] (.sum B cx.R)))
     let lam := Comp.lam lsp x A M'
     return (if bang then (.bangThunkv sp lam, some (.bang F)) else (.thunkv sp lam, some F))
   | V, _ => return (V, c.tyV V)
@@ -2611,8 +2740,11 @@ def replaceLend (y : String) : Val → Val
   | .pair sp V W => .pair sp (replaceLend y V) (replaceLend y W)
   | V => V
 
-/-- A borrow block's constant in its unwinding form, at the row `r` (SPEC §19). -/
-def Const.unwinding (r : Frontend.Row) : Const → Option Const
+/-- A borrow block's constant in its unwinding form, at the row `r` (SPEC §19); its `tick`, if
+it has one, graded: a lend's row has abortive and call-graded operations only (SPEC §48). -/
+def Const.unwinding (r₀ : Frontend.Row) (C : Const) : Option Const :=
+  let r := r₀.gradeDiv
+  match C with
   | .withbor1 x A B => some (.withbor1U x A B r)
   | .withbor2 x b A B => some (.withbor2U x b A B r)
   | .withbor3 a x A B => some (.withbor3U a x A B r)
@@ -6309,7 +6441,10 @@ def plainMain (c : TCx) (sp : Span) (C : CTy) (M : Comp) : SM (CTy × Comp) := d
   match C, Bc, loopsAt c Bc M with
   | .ret _ B, some Bc, some _ =>
     let cx ← loopCxOf sp Bc M
-    pure (.ret sp (.thunk sp (.loop sp B (← toSurface sp cx.R))), ← divMain cx c sp M)
+    let R ← toSurface sp cx.R
+    let (body, g) ← divMain cx c sp M
+    pure (if g then .eff sp (divRowS sp .nil).gradeDiv (.sum sp B R)
+      else .ret sp (.thunk sp (.loop sp B R)), body)
   | _, _, some (sp', what) =>
     throw ⟨sp', s!"`main` loops ({what}), so its type is written `F A` (SPEC §14)"⟩
   | _, _, none => pure (C, M)
