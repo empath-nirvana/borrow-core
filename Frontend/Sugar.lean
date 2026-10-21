@@ -3155,6 +3155,12 @@ def relaxedC? (sp : Span) : Val → Option (Ident × Comp)
   | .mark _ _ V => relaxedC? sp V
   | _ => none
 
+/-- The heads `slotMove` reads: a load of a variable, or a store's `modify`. -/
+def slotHead? : Comp → Bool
+  | .ret _ (.app _ (.sugar _ .deref) (.var _ _)) => true
+  | .ret _ (.app _ (.app _ (.sugar _ (.borrow .modify _)) (.lend _ _ .mut)) _) => true
+  | _ => false
+
 /-- **A slot's typestate** (`BCC_FRAMES=1`, SPEC §47): the head `M` of `x <- M; N` that moves a
 slot's content out, or puts one into an emptied slot, written as the strong update `swap`, the
 slot's variable rebound to the cell `swap` hands back:
@@ -4309,7 +4315,8 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         modify fun s => { s with exits := saved }
         return N'
       -- `BCC_FRAMES=1`: a slot's linear content moved out, and put back (SPEC §47).
-      if framesEnv then
+      -- The flag is read only at such a head, so that a program with none reduces in the kernel.
+      if slotHead? M && framesEnv then
         if let some L ← slotMove c sp x M N then return ← surfC n c exp L
       -- A borrow block over a loop, or a `let r = &x`: lent per observation (`LoopLend`).
       if let some L ← (Frontend.Elab.LoopLend.hook c (dataFor (← get).sizedFns) sp x A M N lin :
@@ -4331,7 +4338,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
           | none => surfC n c atA M
         | _ => surfC n c atA M
       -- `BCC_FRAMES=1`: a frame join whose arms leave a slot in two states (SPEC §47).
-      let M' ← if framesEnv && x.name.startsWith "io_fj" then do
+      let M' ← if x.name.startsWith "io_fj" && framesEnv then do
           pure ((← slotWiden (← refresh c) M').getD M')
         else pure M'
       let c ← refresh c
