@@ -190,6 +190,9 @@ structure Prog where
   data : Array UInt8 := #[]
   /-- The number of capabilities' static cells (`Op.staticCell`). -/
   statics : Nat := 0
+  /-- `main` is served `Fail[DivError]` by the platform's handler (`Checked.exitsOnDivError`,
+  SPEC §39): its value is `inl v`, whose `v` is reported, or `inr ()`, the exit status `1`. -/
+  exits : Bool := false
   deriving Inhabited
 
 end Backend2

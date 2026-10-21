@@ -938,15 +938,23 @@ def countsReport : List Stmt :=
 
 /-- Run `main`, print its value, drop it, print the live count, and with `counts` the run's
 counts. -/
-def entryFn (fMain : Nat) : LM Backend.Flat.Fn := do
+def entryFn (fMain : Nat) (exits : Bool) : LM Backend.Flat.Fn := do
   let L ← L
   let n := L.mainNode
   let (body, nloc) ← inFn 0 do
     let m ← fresh (L.w n)
-    let pr := [Stmt.call [] (← helper (.print (L.r n))) (locs m)] ++ outStr "\n"
+    -- With `exits` (SPEC §39), `main`'s value is `inl v`, whose `v` is printed, or `inr ()`, which
+    -- prints nothing and ends the run with the exit status `1`.
+    let (pr, status) ← if exits then do
+        let .sum a _ := L.sh n | throw "word IR: `main`'s value is not `inl v` or `inr ()`"
+        let (s, vs) ← payload n false m false
+        let tag := Exp.loc (m.headD 0)
+        pure ([Stmt.ite (eqz64 tag) (s ++ [.call [] (← helper (.print (L.r a))) (locs vs)] ++ outStr "\n") []],
+          [Stmt.ite (eqz64 tag) [] [.status (.c64 1)]])
+      else pure ([Stmt.call [] (← helper (.print (L.r n))) (locs m)] ++ outStr "\n", [])
     let dr ← dropVals n m
     pure ([Stmt.call m fMain []] ++ pr ++ dr ++ outStr "live " ++ [.call [] fPrintDec [.live]] ++
-      outStr "\n" ++ (if (← read).counts then countsReport else []) ++ [.ret []])
+      outStr "\n" ++ (if (← read).counts then countsReport else []) ++ status ++ [.ret []])
   pure { name := "entry", params := 0, results := 0, locals := nloc, body }
 
 /-- The word IR of a program at its layouts; with `counts`, the counting build. -/
@@ -962,7 +970,7 @@ def lowerProg (p : Prog) (L : Layouts) (known : Std.HashMap Var Nat) (framed : S
     let (body, nloc, frame) ← inFnF 0 do
       pure ((← lowerTm (1 <<< 22) p.main L.mainNode (.ret k)) ++ [.trap])
     let main : Backend.Flat.Fn := { name := "main", params := 0, results := k, locals := nloc, frame, body }
-    let entry ← entryFn fMain
+    let entry ← entryFn fMain p.exits
     let mut gen : Array Backend.Flat.Fn := #[]
     let mut i := 0
     for _ in [0:100000] do
