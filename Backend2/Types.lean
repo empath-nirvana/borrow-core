@@ -20,7 +20,8 @@ the image of a type the checker put on a node of the typed term.
   `R ⊕ P`, `P` the payload of `Σ`'s abortive operations (`rowPay`), one summand per operation in
   the row's order; with none, `R`. A non-abortive operation has no run-time content in the type:
   its handler's clause is called where it is performed (`Backend2/Convert.lean`). `Div`'s
-  operations are outside the fragment (N4).
+  `tick` is linear, so it is not abortive: it has no run-time content in the type, and its
+  handler, the runtime, answers it where it is performed (SPEC §49).
 -/
 
 namespace Backend2
@@ -118,8 +119,6 @@ def ofC : CTy → Except String LCTy
   | .nu C => return .nu (← ofC C)
   | .eff n i q A B _ C => do
     -- `F_Σ R`: `R`, or `R ⊕ P` with the payload of `Σ`'s abortive operations.  [spec §48]
-    if n == divName then
-      throw s!"an operation ({n}, {i}) in a computation type: outside the pure fragment"
     let (ps, r) ← ofEff C
     let ps ← if abortB q B then pure (((n, i), ← ofV A) :: ps) else pure ps
     match payOf ps with
@@ -127,12 +126,10 @@ def ofC : CTy → Except String LCTy
     | some p => return .ret (.sum r p)
 
 /-- The layers of `F_Σ R` (`CTy.effOf`): each abortive operation's key and argument type, in the
-row's order, and `R`. `Div`'s operations are outside the fragment (N4).  [spec §48] -/
+row's order, and `R`. `Div`'s `tick` is linear, so not a layer (SPEC §49).  [spec §48] -/
 def ofEff : CTy → Except String (List ((UInt32 × UInt32) × LTy) × LTy)
   | .ret R => return ([], ← ofV R)
   | .eff n i q A B _ C => do
-    if n == divName then
-      throw s!"an operation ({n}, {i}) in a computation type: outside the pure fragment"
     let (ps, r) ← ofEff C
     if abortB q B then return (((n, i), ← ofV A) :: ps, r) else return (ps, r)
   | _ => throw "a row's layers over a type that is not `F R`"

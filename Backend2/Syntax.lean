@@ -117,6 +117,9 @@ inductive Op where
   | cntLt
   /-- `i + 1` of a counted loop's index below its bound: below `2³¹`, so it does not wrap. -/
   | cntSucc
+  /-- `k − 1` of a budget that is not `0` (`bounded_fix`'s count, read unsigned, SPEC §20): it does
+  not wrap. -/
+  | cntPred
   /-- A capability's cell (SPEC §11, §34): the `k`-th static word of the program's data, holding
   the argument. Freeing it frees nothing. -/
   | staticCell (k : Nat)

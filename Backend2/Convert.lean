@@ -88,6 +88,11 @@ structure CState where
   works : Std.HashMap (UInt32 × Nat) (Nat × List ((UInt32 × UInt32) × LTy)) := {}
   /-- The `handle`, `perform` and `raise` nodes erased (`bcc lir --erasure`). -/
   erased : Std.HashMap String Nat := {}
+  /-- **The runtime answers every tick**  `[spec §49]`: `main` is a loop the runtime drives (SPEC
+  §11), its value `reify` of its body, and that `reify` is the typed term's one handler of `Div`
+  (no other `reify` and no `div_fuel` node: `Backend2/Driver.lean`, `divRuntime`). A tick is then
+  answered *next*, where it is performed. -/
+  divRt : Bool := false
 
 abbrev CM := StateT CState (Except String)
 
@@ -348,8 +353,6 @@ abbrev Pay := List ((UInt32 × UInt32) × LTy)
 def rowPay (S : Row) : CM Pay := do
   let mut acc : Pay := []
   for o in S do
-    if o.n == divName then
-      throw s!"an operation ({o.n}, {o.i}) in a computation type: outside the pure fragment"
     if o.abort && !(acc.any (·.1 == (o.n, o.i))) then
       acc := acc ++ [((o.n, o.i), ← vty o.A)]
   return acc
@@ -757,6 +760,76 @@ def genUnfold (C : LCTy) (gT sT : LTy) : CM Nat := do
   readFact "unfoldN:body"
   return obs
 
+/-! ### Loops of `Div` and of `bounded_fix`  `[spec §49]` -/
+
+/-- **`iterate (f, s)` under the runtime** (SPEC §14, §49): the loop `iterate`'s machine step
+unrolls (`Head.iterate`, `iter_step`), its back edge a tail call. A turn `(f s).1` answers
+`inl b`, finished, or `inr s′`, after which `iterate` ticks; the runtime answers the tick *next*
+(`tail_resumes` at its clause `λ((), κ). κ next`), so the turn's `case` on the answer goes on with
+`iterate (f, s′)`: the close `(f s′).2` is never observed. An abort of the row's payload `pay` is
+handed on. `ansT` is the node's answer `B ⊕ R` at `pay`.  `[spec §49]` -/
+def genIter (fT ansT : LTy) (pay : Pay) (p : Var) : CM Tm := do
+  let fi ← reserveFn "iterate"
+  let f ← fresh fT
+  let (some sT, gT) ← answerOf fT | throw "LIR: iterate's step takes no state"
+  let s ← fresh sT
+  let xT ← selTy gT 0
+  let valT ← match payTy pay, ansT with
+    | none, t => pure t
+    | some _, .sum t _ => pure t
+    | some _, t => throw s!"LIR: iterate's answer at a row with aborts: {t}"
+  let .sum _ _ := valT | throw s!"LIR: iterate's answer is not `B ⊕ R`: {valT}"
+  let body ← dup f fun f f' => do
+    let g ← fresh gT
+    let x ← fresh xT
+    let turn (o : Var) : CM Tm := do
+      let .sum oB oS := (← tyOf o) | throw "LIR: iterate's turn does not answer `B ⊕ S`"
+      let b ← fresh oB; let s' ← fresh oS
+      let w ← fresh valT
+      let done : Tm := match payTy pay with
+        | none => .drop f (.letv w (.inj false b) (.var w))
+        | some _ => .drop f (.letv w (.inj false b) (.inj false w))
+      return .case o b done s' (.call fi [f, s'])
+    let rest ← match payTy pay with
+      | none => turn x
+      | some pT => do
+        let .sum oT _ := (← tyOf x) | throw "LIR: iterate's turn at a row with aborts"
+        let o ← fresh oT; let e ← fresh pT
+        return .case x o (← turn o) e (.drop f (.inj true e))
+    return .letv g (.app f' s) (.letv x (.sel g 0) rest)
+  setFn fi { name := "iterate", params := [f, s], body, ret := ansT }
+  letpairM p fun f s => pure (.call fi [f, s])
+
+/-- **`bounded_fix (s, (k, a))`** (SPEC §20): its machine step (`Head.boundedFix`), `s` run on
+`(self_k, a)`, `self_0 = inl ()` and `self_{j+1} = inr (λx. bounded_fix (s, (j, x)))`, the budget
+read unsigned and counted down. The self-reference is a closure of a code of its own over `s` and
+`j`, whose call is `bounded_fix (s, (j, x))` again: a step that calls it in tail position is a loop
+of tail calls with its budget (§47's counted loops at the row), and one that calls it elsewhere a
+native recursion bounded by it (§20, §21).  `[spec §49]` -/
+def genFix (sT : LTy) (p : Var) : CM Tm := do
+  let fi ← reserveFn "bounded_fix"
+  let (some qT, rT) ← answerOf sT | throw "LIR: bounded_fix's step takes no argument"
+  let .pair selfOT aT := qT | throw "LIR: bounded_fix's step does not take `(self, a)`"
+  let .sum _ selfT := selfOT | throw "LIR: bounded_fix's self-reference is not `1 ⊕ U(A ⊸ C)`"
+  let .thunk selfK := selfT | throw "LIR: bounded_fix's self-reference is not a closure"
+  let si ← reserveFn "bounded_fix self"
+  let s₁ ← fresh sT; let k₁ ← fresh i32T; let x ← fresh aT
+  setFn si { name := "bounded_fix self", params := [s₁, k₁, x], body := .call fi [s₁, k₁, x],
+             ret := rT }
+  let c ← addCode { kind := .lam, fns := [si], ty := selfK }
+  let s ← fresh sT; let k ← fresh i32T; let a ← fresh aT
+  let body ← dup s fun s s' => dup k fun k k' => lit32 0 fun z => do
+    let self ← fresh selfOT
+    let k₂ ← fresh i32T; let cl ← fresh selfT
+    let yes : Tm := .letv k₂ (.prim .cntPred [k]) (.letv cl (.clos c [s', k₂]) (.inj true cl))
+    let u ← fresh .unit
+    let no : Tm := .drop s' (.drop k (.letv u .unit (.inj false u)))
+    let test ← ifLt z k' (pure yes) (pure no)
+    let q ← fresh qT
+    return .letv self test (.letv q (.pair self a) (.app s q))
+  setFn fi { name := "bounded_fix", params := [s, k, a], body, ret := rT }
+  letpairM p fun s r => letpairM r fun k a => pure (.call fi [s, k, a])
+
 /-! ### Destructors (SPEC §12)
 
 `dtor A` (the checker's `dtorE A`, at an owned value that goes unused) is the destructor its type
@@ -930,7 +1003,7 @@ def constArity : TExpr → Option Nat
   | .arrNew .. | .arrFree .. | .arrSize .. | .arrReplace .. | .arrLen .. | .arrGet .. | .arrCopy ..
   | .arrForget .. | .countFold .. | .countTry .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
   | .sliceSplitM .. | .sliceReplaceM .. | .sliceSwapM .. | .dtor .. | .foldImm .. | .foldOwn ..
-  | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. => some 1
+  | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. | .iterate .. | .boundedFix .. => some 1
   | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU ..
@@ -1150,6 +1223,21 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let some j := payIdx p (o.n, o.i) | throw s!"LIR: a raise of ({o.n}, {o.i}) outside its row"
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay p j v fun w => pure (.inj true w)
   | .effPerform _ _ S o c => do
+    if o.n == divName then
+      -- **`tick` under the runtime**: its clause `λ((), κ). κ next` resumes in tail position with
+      -- the literal *next* (`tail_resumes`); `drive_reify_tick` (`Core/DivDrive.lean`) is the
+      -- runtime's drive of `main`'s loop answering it so.  [spec §49]
+      unless (← get).divRt do
+        throw "LIR: a tick whose handler is not the runtime (a stored loop's `reify`, N3) is outside the pure fragment"
+      readFact "effPerform:tick at the runtime"
+      modify fun st => { st with erased := st.erased.insert "perform" (st.erased.getD "perform" 0 + 1) }
+      let p ← rowPay S
+      return ← bindTm (← conv fuel ctx c) .unit fun v => do
+        let u ← fresh .unit
+        let nx ← fresh boolT
+        match payTy p with
+        | none => return .drop v (.letv u .unit (.inj false u))
+        | some _ => return .drop v (.letv u .unit (.letv nx (.inj false u) (.inj false nx)))
     -- `perform` of a tail-resumptive clause: a direct call of the clause's work (`tail_resumes`,
     -- `TailResumesAt.subst_kappa`, `tail_clause_names`, `Checked.unhandledNames`).  [spec §48]
     let some (fi, ph) := (← get).works[(o.n, o.i.toNat)]?
@@ -1283,8 +1371,8 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
         else conv fuel ctx c
       | _ => conv fuel ctx c
     | _, _ => conv fuel ctx c
-  | .effHandleT .. | .lendR .. | .lendLoopR .. | .nilDead .. | .iterate .. | .divFuel ..
-  | .reify .. | .boundedFix .. | .letPoly .. => outside t
+  | .effHandleT .. | .lendR .. | .lendLoopR .. | .nilDead .. | .divFuel ..
+  | .reify .. | .letPoly .. => outside t
   | t =>
     match transparent? t with
     | some c => conv fuel ctx c
@@ -1719,6 +1807,18 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     let .pair fT _ := pT | throw "LIR: count_try's argument"
     let .sum sT eT := rT | throw "LIR: count_try's answer"
     genCountTry fT sT eT p
+  | .iterate _ j S _ _ _, [p] => do
+    unless (← get).divRt do
+      throw "LIR: `iterate` whose ticks the runtime does not answer (a stored loop's `reify`, N3) is outside the pure fragment"
+    let (pT, rT) ← arrowOf (← repJ j)
+    let .pair fT _ := pT | throw "LIR: iterate's argument"
+    readFact "iterate:row"
+    genIter fT rT (← rowPay S) p
+  | .boundedFix _ j _ _, [p] => do
+    let (some pT, _) ← answerOf (← repJ j) | throw "LIR: bounded_fix takes no argument"
+    let .pair sT _ := pT | throw "LIR: bounded_fix's argument"
+    readFact "boundedFix:budget"
+    genFix sT p
   | .withbor1 .., [x, cb] | .withbor2 .., [x, cb] | .sliceBorrowM .., [x, cb]
   | .sliceBorrowI .., [x, cb] => genLend .lend x (← tyOf cb) (callCb cb)
   | .withbor3 .., [m, cb] => genLend .relend m (← tyOf cb) (callCb cb)
@@ -1834,6 +1934,23 @@ def genDrive (lT : LTy) : CM Nat := do
              body := .letv r (.sel l 0) (.case r v (.var v) l' (.call fi [l'])) }
   return fi
 
+/-- `main`'s value as `reify` of its body (SPEC §47: a `main` that loops is the loop value of its
+body): through the nodes that keep their child's value, the `reify` constant applied to the
+body's thunk. Its split's masks, the thunk, and the `reify` node's row `Σ`, result `B` and
+residual `R`.  `[spec §49]` -/
+def mainReify? (t : TExpr) : Option (Masks × TExpr × Row × VTy × VTy) :=
+  match peel 64 t with
+  | .lolliE _ _ _ _ u ta tf => match headOf 64 tf with
+    | .reify _ _ S B R _ => some (u, ta, S, B, R)
+    | _ => none
+  | _ => none
+where
+  peel : Nat → TExpr → TExpr
+    | 0, t => t
+    | f + 1, t => match transparent? t with
+      | some c => peel f c
+      | none => t
+
 /-- **The LIR of `main`**: its externs bound to their implementations (`exts`, in declaration
 order; the context's slot `i` is extern `n − 1 − i`), its typed term converted, and its
 capabilities taken back. With `loops`, `main`'s value is a loop, driven until it finishes. -/
@@ -1863,6 +1980,9 @@ def convMain (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) 
       binds := (fun b => .letv x c b) :: binds
     cx := cx.push (some x)
   prepWorks (1 <<< 22) cx.size t
+  if loops then
+    if let some (u, ta, S, B, R) := mainReify? t then
+      return ← runtimeMain cx.toList u ta S B R binds
   let body ← conv (1 <<< 22) cx.toList t
   let mT ← repJ (.comp C)
   let r ← fresh mT
@@ -1881,12 +2001,41 @@ where
     match t with
     | .pair _ a => pure a
     | t => throw s!"LIR: main's value with capabilities is not a pair: {t}"
+  /-- **`main`'s loop under the runtime**  `[spec §49]`: `main`'s value is `reify` of its body
+  `t ()`, which the runtime drives with *next* until it finishes (SPEC §11). The drive answers
+  *next* to every tick of the body (`drive_reify_tick`, `Core/DivDrive.lean`), so the program is
+  the body run with each tick answered *next* where it is performed (`effPerform`'s tick):
+  `inl b` finishes with `b` (`drive_reify_done`); `inr r` is a loop closed with its residual,
+  which the drive observes without end (`drive_reify_closed`), a run that does not finish. -/
+  runtimeMain (cx : Ctx) (u : Masks) (ta : TExpr) (S : Row) (B R : VTy)
+      (binds : List (Tm → Tm)) : CM (Tm × LTy) := do
+    readFact "reify:main, at the runtime"
+    modify fun st => { st with erased := st.erased.insert "handle" (st.erased.getD "handle" 0 + 1) }
+    let p ← rowPay S
+    if (payTy p).isSome then
+      throw "LIR: `main`'s loop at a row with aborts (the platform's handler) is outside the pure fragment"
+    let (pre, cA, cF) ← splitCtx cx u "lolliE"
+    let unitV ← fresh .unit
+    let body ← applyTo (1 <<< 22) cA ta unitV
+    let bT ← vty B; let rT ← vty R
+    let r ← fresh (.sum bT rT)
+    let b ← fresh bT; let x ← fresh rT
+    let resT ← resultTy bT
+    let ep ← epilogue b ncaps
+    -- The loop `closed r`, which every observation skips: it holds the residual, and does not
+    -- finish.
+    let spin ← reserveFn "closed"
+    let x₁ ← fresh rT
+    setFn spin { name := "closed", params := [x₁], body := .call spin [x₁], ret := resT }
+    let tm := pre (leaf cF none (.letv unitV .unit (.letv r body
+      (.case r b ep x (.call spin [x])))))
+    return (binds.foldl (fun t f => f t) tm, resT)
 
 /-- Convert a checked `main` to a program. -/
 def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) (ncaps : Nat)
-    (loops : Bool) (census : Bool := false) (direct : Std.HashMap UInt32 (List Bool) := {}) :
-    Except String (Prog × CState) := do
-  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run { census, direct }
+    (loops : Bool) (census : Bool := false) (direct : Std.HashMap UInt32 (List Bool) := {})
+    (divRt : Bool := false) : Except String (Prog × CState) := do
+  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run { census, direct, divRt }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
             statics := s.statics.size }, s)
 
