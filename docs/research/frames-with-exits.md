@@ -951,3 +951,19 @@ SPEC §47 is the entry; this section records what changed from §1–§13.
 - **Open:** `FDerives` is not built by the checker (the surface writes direct-style terms the
   rules describe, and the `slot` node records the moves); §13.6's D4, N4, N2 and L1/L2 stand.
 
+
+### 14.1 Part 2: the two states in Lean, and what a producer needs
+
+- **The two states, settled.** `not_bindOne` (`Core/FramesExamples.lean`) refutes the
+  single-`Π_out` `bind`. A move out followed by an exit (`moveExit`) and a put back (`putBack`)
+  are single-state frames. Composed at one state and closed by `catch` and `new`, they make a
+  closed program at a persistent answer whose computed run hands out the hole's `()` as an
+  `i32`, against adequacy. The two-state `bind` types the same frames (`movePut_derives`,
+  `moveExitCaught_derives`).
+- **The producer is not built.** `FDerives` types a loop as `count_try` at the pure row
+  (`loopCount`) or as `iterate` at a `Div` row (`loopIter`). The frontend writes `while` and
+  `loop` as `unfold`, with the loop's tail and the cells' release in the codata's done branch,
+  and never writes `iterate`. A `for` whose body performs a resuming operation is `bounded_fix`
+  at the row. Of the 341 programs that run under the flag, 147 use a slot inside a loop body
+  (48 in a `while` or `loop`), and one inside a `with` body. SPEC §47 *Open* lists what a
+  producer that keeps them needs, in order.

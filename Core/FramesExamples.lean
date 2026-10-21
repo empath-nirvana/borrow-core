@@ -1,4 +1,5 @@
 import Core.FramesTheorems
+import Core.Run
 
 /-!
 # Core — frames: examples  `[spec §47]`
@@ -14,6 +15,10 @@ import Core.FramesTheorems
 - `moveJoin` is a slot whose content is moved out and, on one arm of a case, put back: the arms
   leave the cell in two states, joined into `Ref i32 ⊕ Ref 1` by `widen`, and the cell's release
   at the end of its scope reads the tag (`moveJoin_derives`, `moveJoin_returns`).
+- `not_bindOne`: the single-`Π_out` frame type does not compose under `bind`. A move out with an
+  exit, then a put back, typed by a `bind` at one state, makes a closed program at a persistent
+  answer whose run hands out the hole's `()` as an `i32`, against adequacy. The two-state `bind`
+  types the same frames (`movePut_derives`, `moveExitCaught_derives`).
 -/
 
 noncomputable section
@@ -200,6 +205,132 @@ theorem moveJoin_derives :
 state. -/
 theorem moveJoin_returns (b : Val) : Returns (ℍ := ℍ) (substAll [b] moveJoin) :=
   accounting (ℍ := ℍ) (fun _ h => absurd h List.not_mem_nil) moveJoin_derives [b]
+
+/-! ### Why the normal exit and the local exits have a state each
+
+The single-`Π_out` form of the frame type, `Π ⊸ F_Σ (Π_out ⊗ (A ⊕ ⊕E))`, is `frTy S P Po Po E A`
+(the slots distributed over the sum): one state for the normal exit and every exit. Its `bind`
+would type `M; N` at `N`'s state, `P₀ → P₂ / P₂`, from `M : P₀ → P₁ / P₁` and `N : P₁ → P₂ / P₂`.
+An exit of `M` skips `N` and leaves at `P₁`, so that typing claims a state the slots are not in.
+`moveExit` moves a cell's content out and exits with the cell empty (`Ref 1`); `putBack` fills it
+again (`Ref i32`). Both are single-state frames (`moveExit_derives`, `putBack_derives`). Composed
+by the single-state `bind`, caught by a handler that leaves the slot as it is, and closed by `new`,
+they make a closed program typed at a persistent answer whose run hands out the empty cell's
+content `()` as an `i32` (`moveExitPut_runs`), against adequacy: `not_bindOne`. With a state for
+each exit kind, `bind` composes the same frames at `[Ref i32] → [Ref i32] / [Ref 1]`, and the
+handler is typed from `Ref 1` (`movePut_derives`, `moveExitCaught_derives`). -/
+
+/-- The row of one local exit, with no payload. -/
+abbrev rowX : ExitRow := [(0, .unit)]
+
+/-- `let x = take c; exit 0 ()`: the content moved out (`swap c ()`), then an exit with the cell
+empty. -/
+def moveExit : Expr := bindE rowX [] (swapSE (.val .unit)) (exitE 0 (.val .unit))
+
+/-- `moveExit` is a frame with one state, `Ref 1`, at the normal exit and at the exits. -/
+theorem moveExit_derives :
+    FDerives LifeCtx.empty [] [] [.ref .i32] [.ref .unit] [.ref .unit] moveExit [] rowX .i32 :=
+  .bind (Γ₁ := []) (Γ₂ := []) .nil (fun _ => fun _ h => absurd h List.not_mem_nil)
+    (fun _ => fun _ h => absurd h List.not_mem_nil) (.inr fun _ h => absurd h List.not_mem_nil)
+    (.swap .unit (.unitI .nil))
+    (.exit (k := 0) (l := 0) (B := .unit) rfl (.unitI (.drop rfl .nil)))
+
+/-- `put c x`: the empty cell filled again (`swap c x`), at any exit state. -/
+def putBack : Expr := swapSE (.var 0)
+
+theorem putBack_derives (X : List VTy) :
+    FDerives LifeCtx.empty [⟨.i32, true⟩] [] [.ref .unit] [.ref .i32] X putBack [] rowX .unit :=
+  .swap .int (.var (.here .nil))
+
+/-- `moveExit; putBack`. -/
+def movePut : Expr := bindE rowX [] moveExit putBack
+
+/-- **The two-state `bind` composes them**: normal exit `Ref i32` (put back), exits `Ref 1` (the
+exit of `moveExit`, before the put back). -/
+theorem movePut_derives :
+    FDerives LifeCtx.empty [] [] [.ref .i32] [.ref .i32] [.ref .unit] movePut [] rowX .unit :=
+  .bind (Γ₁ := []) (Γ₂ := []) .nil (fun _ => fun _ h => absurd h List.not_mem_nil)
+    (fun _ => fun _ h => absurd h List.not_mem_nil) (.inr fun _ h => absurd h List.not_mem_nil)
+    moveExit_derives (putBack_derives _)
+
+/-- The handler of the two-state program: the exit's empty cell filled with `7`. -/
+def fill7 : Expr := swapSE (Val.i32 7).1
+
+/-- `let mut c = 7; catch movePut (_. fill7)`, at the two states: the handler is typed from the
+exits' state `Ref 1`, so it must fill the cell, and the cell is released full. -/
+def moveExitCaught : Expr :=
+  newE (.full .i32) (.ref .unit) (Val.i32 7).1 (catchE [] movePut fill7)
+
+theorem moveExitCaught_derives :
+    FDerives LifeCtx.empty [] [] [] [] [] moveExitCaught [] [] (.tensor .unit .i32) := by
+  refine .new (Γ₁ := []) (Γ₂ := []) (q := .full .i32) .nil .int .int (.ref .unit)
+    (.lit (.i32 7) .nil) ?_
+  refine .catch (Γ₁ := []) (Γ₂ := []) (l := 0) (B := .unit) .nil
+    (fun _ => fun _ h => absurd h List.not_mem_nil) (fun _ => fun _ h => absurd h List.not_mem_nil)
+    (fun _ h => absurd h List.not_mem_nil) movePut_derives ?_
+  exact .swap .int (.lit (.i32 7) (.drop rfl .nil))
+
+/-- Its accounting is the general theorem's. -/
+theorem moveExitCaught_returns : Returns (ℍ := ℍ) moveExitCaught := by
+  have h := accounting (ℍ := ℍ) (fun _ h => absurd h List.not_mem_nil) moveExitCaught_derives []
+  simpa [substAll, Adequacy.psub_nil] using h
+
+/-- And every run reaches a value at the empty memory. -/
+theorem moveExitCaught_adequate {μ₁ : Heap} {e₁ : Expr}
+    (hs : Steps Adequacy.emptyMem (runFrameE moveExitCaught) μ₁ e₁) :
+    ∃ v, Steps μ₁ e₁ Adequacy.emptyMem (.val v) ∧
+      ∃ ls, vP (ansTy [] [] (.tensor .unit .i32) []) ls LSub.empty v PMap.empty :=
+  frame_adequacy rfl moveExitCaught_derives hs
+
+/-- **The single-state `bind`**: from single-state frames `M : P₀ → P₁ / P₁` and
+`N : P₁ → P₂ / P₂`, the composite typed at `N`'s state, `P₀ → P₂ / P₂`, under `bind`'s side
+conditions. -/
+def BindOne : Prop :=
+  ∀ {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Φ : List FBlock} {P₀ P₁ P₂ : List VTy} {eM eN : Expr}
+    {S : Row} {E : ExitRow} {A B : VTy},
+    Ctx.SplitP Γ Γ₁ Γ₂ → (S.Weak → Γ₂.Drops) → (S.Unr → Persistent Γ₂) → (E = [] ∨ CtxDtor Γ₂) →
+    FDerives Δ Γ₁ Φ P₀ P₁ P₁ eM S E A → FDerives Δ (⟨A, true⟩ :: Γ₂) Φ P₁ P₂ P₂ eN S E B →
+    CDerives Δ Γ (bindE E Γ₂ eM eN) (.comp (frTy S P₀ P₂ P₂ E B))
+
+/-- The handler of the single-state program: nothing, the slot left as the single state says it
+is (`Ref i32`). -/
+def leave : Expr := coreE [.ref .i32] (.val .unit)
+
+/-- `let mut c = 7; catch movePut (_. leave)`. -/
+def moveExitPut : Expr :=
+  newE (.full .i32) (.ref .i32) (Val.i32 7).1 (catchE [] movePut leave)
+
+/-- The answer of `moveExitPut`'s run: the released cell's content is `()`, the hole `moveExit`
+left. -/
+def holeOut : Val := Val.inj₁ (Val.pair Val.unit (Val.pair Val.unit Val.unit))
+
+/-- **`moveExitPut` runs to `inl ((), ((), ()))`** at the empty memory. -/
+theorem moveExitPut_runs :
+    Steps (ℍ := ℍ) Adequacy.emptyMem (runFrameE moveExitPut) Adequacy.emptyMem (.val holeOut) :=
+  runM_val (k := 300) (m := []) (m' := []) rfl
+
+/-- **The single-`Π_out` form does not compose under `bind`.** -/
+theorem not_bindOne : ¬ BindOne := by
+  intro hb
+  letI : BoCa.HostIs BoCa.wasmHost := ⟨⟩
+  have hC := hb (Δ := LifeCtx.empty) (Γ₁ := []) (Γ₂ := []) (Φ := []) .nil
+    (fun _ => fun _ h => absurd h List.not_mem_nil) (fun _ => fun _ h => absurd h List.not_mem_nil)
+    (.inr fun _ h => absurd h List.not_mem_nil) moveExit_derives (putBack_derives [.ref .i32])
+  have hL : FDerives LifeCtx.empty [⟨.unit, true⟩] [] [.ref .i32] [.ref .i32] [.ref .i32] leave
+      [] [] .unit :=
+    .core frow_nil (fun P hP => by simp only [List.mem_singleton] at hP; subst hP; exact .ref .int)
+      (.ret (.unitI (.drop rfl .nil)))
+  have hK := elab_catch (Γ₁ := []) (Γ₂ := []) (l := 0) (B := .unit) .nil
+    (fun _ => fun _ h => absurd h List.not_mem_nil) (fun _ => fun _ h => absurd h List.not_mem_nil)
+    (fun _ h => absurd h List.not_mem_nil) hC (FDerives.elab hL)
+  have hP := elab_new (Γ₁ := []) (Γ₂ := []) (q := .full .i32) (Q' := .ref .i32) .nil .int
+    (.ref .int) (.lit (.i32 7) .nil) hK
+  obtain ⟨v, hs, ls, hv⟩ :=
+    EffPrograms.adequacyD_obs (ℍ := BoCa.wasmHost) rfl (runFrameC_derives hP)
+      (moveExitPut_runs (ℍ := BoCa.wasmHost))
+  obtain ⟨-, rfl⟩ := steps_from_val hs
+  simp [holeOut, ansTy, slotsTy, vCE, CellSt.content, BoLo.or, BoLo.ex, BoLo.sep, BoLo.pure, Val.inj₁, Val.pair,
+    Val.unit, Val.IsInt, Val.i32, Val.inj₂, Subtype.mk.injEq] at hv
 
 end BoCa.Fig16.LogRel.Core.Frames
 
