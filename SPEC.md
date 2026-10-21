@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.94 · 2026-10-20
+Version 0.96 · 2026-10-21
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8217,6 +8217,166 @@ elaborated program is checked core, so they cover it.
 
 ---
 
+## 48. Entry 47 — call-graded operations: a lend held across an operation that resumes in scope
+
+### Motivation
+
+T1 (§19, #172) types a borrow callback only at a row of abortive operations (`Row.Unwind`): a
+continuation `κ` captured inside a lend may be stored and resumed at any later world, and Core's
+relation owes it at every `Ext`-extension of the stop's list, where a lend cannot be kept. B2 (§47)
+puts every loop at the row `div`, whose `tick` resumes, so twelve programs that hold a lend across
+a loop's ticks are pending (§14, *Open*). The spike #645 (PR #648, `experiments/SuspSpike`,
+class 1) found that a lend survives a stop whose continuation is resumed **in the scope of the
+stop**, at a list with the stop's members: the lend ends at the stop as at a return, and the
+resumption lends again **at the same lifetime, with the cell the stop held**, so the continuation
+gets back exactly the resource it stopped with and the borrower side is Core's relation unchanged.
+An operation every handler of which resumes `κ` in tail position is resumed there.
+
+This entry makes that a grade of operations in the kernel. It is a typing restriction on where a
+continuation may go, read off the operation's signature: second-class to its handler clause in
+tail position (class 1 of #645). Classes 2 and 3 (a stored `κ` holding a lend) stay open.
+
+### Types
+
+- **The grade.** An operation signature `OpSig` gains a field `call : Bool`, `false` by default;
+  `CTy.eff n i q A B fin c C` carries it (`c`). An operation `A ↠^call B` is **call-graded**: its
+  continuation is resumed only at a list with the stop's members. The grade travels in types: in a
+  row, at every depth of a thunk, a codata observation (`Loop_Σ`) or a handler's clause type.
+- **Core text.** `n.i call A ~> B` is the operation `A ↠^lin B` at the grade; `div call` is `Div`'s
+  `tick` at the grade (`div` is `tick` without it, as before). The printer writes them back.
+- **`[sub]` grades.** `RowLe Σ Σ′` admits an operation of `Σ` below its graded form in `Σ′` (the
+  same name, index, qualifier, argument, answer and cancel row): grading only weakens what a stop
+  owes. Nothing ungrades.
+
+### The relation
+
+- An operation's entry `OpEnt` gains `call`, read off the signature (`OpSig.ent`; `cC`, `cB` and
+  `effTab` read `c`).
+- **What a stop owes.** `Owed en ls ls′ ρ` is `Ext ls ls′ ρ` at an ungraded entry and
+  `∀ x, x ∈ ls′ ↔ x ∈ ls` at a graded one. The continuation's share at a stop (`contShare`) and
+  `κ`'s relation at a clause (`KapRelT`) are owed at every list `Owed` admits, where they were owed
+  at every `Ext`-extension. A list with the stop's members is an `Ext`-extension at every resource
+  (`ext_of_same`), so `Owed` implies `Ext` (`Owed.ext`).
+- **Conservativity.** At an ungraded entry `Owed` is `Ext` by definition, so `contShare`, `KapRelT`,
+  `opTable`, `ewpTS`, `cwp` and every clause of `cC` and `cB` at a row with no graded operation are
+  the definitions before this entry verbatim (`contShare_ungraded`, `kapRelT_ungraded`, by `rfl`).
+  Every computation in the relation at a row is in the relation at any grading of it
+  (`ewp_sub`, `effWp_sub` at the grading `RowLe`).
+
+### Typing
+
+1. **The row of a lend.** The unwinding form of every borrow constant (`withbor` 1–3, `withload`,
+   the slice borrows, §19) takes its callback at a row `Σ` with `Row.Lend Σ 'x` in place of
+   `Row.Unwind Σ 'x`: every operation is of a nonzero name, and either
+   - abortive, its argument closed data (free of `'x`, outliving every lifetime), as before; or
+   - call-graded, linear and not abortive, its argument and its answer closed data.
+
+   `Row.Unwind` is `Row.Lend` at a row with no graded operation. The constants' types and terms
+   are unchanged: at a graded stop the callback's frame ends the lend and lends again at the
+   resumption (*Frames*), so no term changes.
+2. **`[handle-tail]` is the only handler of a graded name.** `effHandleT` takes a grade `c` for
+   the name it handles: at `c`, each handled operation is call-graded, linear and not abortive, and
+   every operation of the answering functions' row `Σ_N` is call-graded. `effHandleV` and
+   `effHandleVB`, whose clauses receive `κ`, handle ungraded rows only (`Row.ofEff` writes no
+   grade), so a continuation a clause may store never holds a lend that spans its stop.
+3. **`Div`.** `iterate` is typed at a row that holds `Div` at either grade (`CTy.divAt` reads the
+   signature without the grade). `div_fuel` takes its callback at `F_{tick^c, Σ} A` at either
+   grade `c`, and the runtime drives a `main` of `F_{tick^c} A` at either; both resume `κ` in tail
+   position. **`reify`'s premise** is its callback at `F_{tick, Σ}(B ⊕ R)` with `tick` ungraded: a
+   loop value stores `κ`, so a loop that holds a lend across its ticks, whose row holds the graded
+   `tick`, is not a `reify` callback, and `[sub]` does not ungrade it. The kernel refuses it at
+   `reify`'s premise; the elaborator refuses nothing.
+
+No rule is added to `CDerives` and no index: `effHandleT`, `divFuel` and the borrow constants' rules
+gain a premise each, read off the row.
+
+### Frames: the lend across a graded stop
+
+Each borrow frame of `[TR]` (6.64 `Imm`, 6.65 `Mut`, 6.66 `AntiFrame`, 6.150 the reborrow of
+`withload`, and the families of the slice borrows) is stated at `wpG` **at a given lifetime**
+(`…FrameAt`): the lifetime `α` and the conditions H4 establishes are hypotheses, the callback runs
+from the cell the entry builds, and the exit reports what the lend hands back and whether the
+share at the end still holds the cell. The printed lemma (`wpG_I_frameX`, `wpG_M_frameX`, …) is its
+instance at the lifetime H4 chooses.
+
+Over `ewpTS`, at a table whose stops are abortive or call-graded with closed data, the frame is
+one induction on the callback's least fixed point, uniform in the lend kind:
+
+- **a return**: the printed exit;
+- **an abortive stop**: as §19's unwinding frames: the abandoned continuation holds nothing owned,
+  the frame ends as at a return, and the source joins the stop;
+- **a graded stop**: the cell the share holds is set aside with the leftover, the frame ends
+  (the printed exit, which reads no term), and the frame's stop owes its continuation the owner.
+  The share less the cell is in `Res_α` (6.27's stratum from 6.50 at one location). At the
+  resumption, at a list with the stop's members, the frame lends again at `α` **with the cell the
+  stop held** (the same location, lifetime, value, payload and stored predicate, which is `𝒱⟦T⟧`
+  read at a list with the same members), so the callback's continuation runs from exactly the
+  resource it stopped with;
+- **a graded stop whose share no longer holds the cell**: the owner is carried beside the callback
+  to its return.
+
+At a row that holds `Div` the frame is coinductive: its candidate is the frame around a computation
+of `cwp`, each segment framed by the induction above, a tick a graded stop whose continuation is
+owed to the candidate and to `Closing`, framed at `Closing`'s table.
+
+The handler side: a tail clause `λ(x, κ). (λw. κ.1 w) (g x)` at a graded operation, `g` at a row of
+graded operations, answers in the scope of the stop (`ewp_sameMem`: every answer of a run at a
+table whose stops are all graded is at a list with the start's members, and `cwp`'s), where `κ` is
+owed. No case names `tick` or any effect, and none is special to a nesting depth.
+
+### Theorems
+
+- `fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`, `total_every_run`, `fundamentalC_pin`
+  and the adequacy of every checked program keep their statements, and cover the graded rules.
+- `runtime_every_run` holds at a `main` of `F_{tick^c} A` at either grade.
+- Every borrow guarantee is the frame lemmas' conclusion, unchanged at an ungraded row.
+- R1 and `PinLaw` (§29) are unchanged: `lendR`'s premise `Row.ResumeO` and `PinStop` read Core's
+  relation, which is the graded one at an ungraded row.
+
+### Elaboration
+
+The grade is a type, inferred as `Div` is (§14, *Inference and markers*), and the kernel checks it:
+
+- the callback row of a borrow block whose body loops, and of a lend at a call of a div function
+  (§14, *Borrow scopes over loops*), is the body's row with `tick` graded, `div call, Σ`: the only
+  row at which the constant's premise can hold;
+- a div body's row has `tick` graded when its spine holds a graded computation: such a borrow
+  block, or a direct-style call of a function whose row has it; a div function's type has the
+  grade of its body;
+- a `main` whose row has the graded `tick` is that computation, `F_{div call}(…)`, driven by the
+  runtime's clause; any other looping `main` is the loop value of its body (§47), as before;
+- a loop value of a computation at the graded row is `reify` of it, as of any other, and the kernel
+  refuses it at `reify`'s premise.
+
+The elaborator refuses nothing on these grounds; what it refused before and the kernel now accepts
+is deleted.
+
+### Backend
+
+A `main` of `F_{div call} A` is run as `hnd H_rt main` (`H_rt` the runtime's clause, §14), an
+ordinary handler term every stage compiles, answering `A` as a `main` that does not loop does.
+
+### Programs
+
+B2's twelve pending programs (§14 *Open*, §47) return to the corpus at their goldens where the
+kernel's rule is all they need; each that does not is listed with its reason. Kernel programs test
+a graded lend at nesting depth 3 and a callback of order 3 (`bench`, `compose` and `bracket` of
+PR #472).
+
+### Baseline
+
+`fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`, `total_every_run`, `runtime_every_run`,
+`fundamentalC_pin` and `adequacyD_pin` keep their statements. Every corpus and kernel program keeps
+its output.
+
+### Open
+
+- Classes 2 and 3 of #645: a stored `κ` (a loop value, a generator handed out, a scheduler's queue)
+  holding a lend; a handler that resumes `κ` once in its scope but not in tail position (class 1′).
+- A graded operation with a weakening qualifier (cancel inside a lend, class 3′).
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -8594,6 +8754,15 @@ the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Backend/Wasm
 ---
 
 ## Changelog
+
+- **0.96** (2026-10-21) — §48 (#649, class 1 of #645): call-graded operations. `OpSig` and
+  `CTy.eff` carry a grade `call`; a graded stop's continuation is owed only at lists with the
+  stop's members (`Owed`), definitionally Core's at an ungraded entry. The unwinding forms of the
+  borrow constants take a callback row of abortive or graded operations (`Row.Lend`); `[handle-tail]`
+  is the only handler of a graded name; `tick` is graded at `div_fuel` and the runtime, and
+  ungraded at `reify`'s premise. Each borrow frame is stated at a given lifetime and lends again at
+  the resumption with the cell the stop held. The core text writes `n.i call A ~> B` and
+  `div call`.
 
 - **0.95** (2026-10-21) — §47 (#644, B2): loops elaborate to the kernel's `Div`. A div function is
   `A ⇒ F_{div, Σ}(B ⊕ R)`; each loop is `iterate` over its state; a tick stands where an
