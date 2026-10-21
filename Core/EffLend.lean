@@ -61,15 +61,6 @@ def Six27S : Prop :=
     ρ.InStratum α → ResU.CompS ρ (ResU.single l (CellU.mutOf α v ρv h P hw)) M →
     ResU.UpdV M ρ' → (ρ'.del l).InStratum α
 
-theorem del_inStratum_left {ρ₁ ρ₂ ρ : WRes} (h : ResU.CompS ρ₁ ρ₂ ρ) {α : Life} {l : BoCa.Loc}
-    (hρ : (ρ.del l).InStratum α) : (ρ₁.del l).InStratum α := by
-  intro m ψ e
-  by_cases hm : m = l
-  · subst hm; rw [ResU.del_get_self] at e; cases e
-  · rw [ResU.del_get_ne _ hm] at e
-    exact ResU.CompS.inStratum_left_at h
-      (fun φ hφ => hρ m φ (by rw [ResU.del_get_ne _ hm]; exact hφ)) e
-
 /-- Off `ℓ`, a resource and its composite with a cell at `ℓ` agree. -/
 theorem get_off_single {ρ₁ ρ : WRes} {l m : BoCa.Loc} {ψ : CellU BoCa.Loc BoCa.Val}
     (h : ResU.CompS ρ₁ (ResU.single l ψ) ρ) (hm : m ≠ l) : ρ.get m = ρ₁.get m := by
@@ -371,8 +362,7 @@ share holds the cell, the continuation is resumed in the scope of the stop, with
 again at `α` with the cell the stop held; at one whose share has left it, the owner goes on
 beside the callback (`lendM_owner`).  A tick's obligation is carried by `hΨA` and `hΨB`, the
 same two ways.  `[spec §48]` -/
-theorem lendM_frame (β : Life) (hαβ : α ⊏ β)
-    (hP : ∀ ls w σ, vC true Tt ls δ w σ → σ.InStratum β)
+theorem lendM_frame
     (hΨB : ∀ ls c σ σo σ', Ψi ls c σ → owner l Tt δ ls σo → ResU.CompS σ σo σ' →
       Ψo ls ((ubindK Nv Dv).plug c) σ')
     (hΨA : ∀ ls c (v'' : Val) (χ : WRes) (hχ : χ.InStratum α) (ls₀ : List SRec)
@@ -404,7 +394,7 @@ theorem lendM_frame (β : Life) (hαβ : α ⊏ β)
   have hcell : viewCell l Tt δ ls α v ρP houtP hPv' = viewCell l Tt δ ls₀ α v ρP houtP hPv :=
     viewCell_congr hs₀' hPv' hPv
   have hrun := wpG_sameMem (wpG_viewStrat hb hcb (wpG_lendEnd hs))
-  have hex := wpG_M_frameAt l Tt δ α β hαβ hP v e ls ρP ρb ρlP ρ hPv' houtP hb hclP hcρ _
+  have hex := wpG_M_frameAt l Tt δ α v e ls ρP ρb ρlP ρ hPv' houtP hb hclP hcρ _
     (fun BM hBM => by
       rw [hcell] at hBM
       cases ResU.CompS.functional hBM hcb
@@ -701,7 +691,6 @@ variable {T : OpTab} {α : Life} (hT : T.LendAt α) (hL : T.Local) (h0 : ∀ i, 
   (hD : ∀ ls, Entails (owner l Tt δ ls) (wpTS ls (.app (.val Dv) (.val .unit)) Qd))
   (Qx Q : List SRec → Val → WProp)
   (hkc : ∀ ls v, Entails (Qx ls v) (cwp T Q ls ((ubindK Nv Dv).plug (.val v))))
-  (β : Life) (hαβ : α ⊏ β) (hP : ∀ ls w σ, vC true Tt ls δ w σ → σ.InStratum β)
 
 /-- The tick's obligations are both cases of the candidate's; their `Closing` the lend at the
 closing table, where no tick's table is beside the row's. -/
@@ -717,7 +706,7 @@ theorem closing_lendM_owner {ls : List SRec} {c : Expr} {σ σo σ' : WRes}
     (fun ls v σ hσ => ewp_LTab_empty.mpr (closing_of_cwp (hkc ls v σ hσ)))
     (fun _ _ _ _ _ h => h.elim) (ewp_LTab_empty.mpr hc) ho hcp)
 
-include hT hL h0 hQd hD hkc hαβ hP in
+include hT hL h0 hQd hD hkc in
 theorem closing_lendM {ls ls₀ : List SRec} {c : Expr} {v : Val} {ρP ρb ρlP ρc ρ : WRes}
     (hPv : vC true Tt ls₀ δ v ρP) (houtP : ρP.InStratum α)
     (hcl : Closing T (postA l Tt δ α Qx) ls c ρc) (hs : ∀ x, x ∈ ls ↔ x ∈ ls₀)
@@ -728,10 +717,10 @@ theorem closing_lendM {ls ls₀ : List SRec} {c : Expr} {v : Val} {ρP ρb ρlP 
     (fun i => by rw [OpTab.closeAt_ne (fun h => divEff_ne_zero h.1.symm)]; exact h0 i)
     (fun _ _ _ h => by simp [OpTab.empty] at h) Nv Dv hQd l Tt δ hD Qx Q
     (fun ls v σ hσ => ewp_LTab_empty.mpr (closing_of_cwp (hkc ls v σ hσ)))
-    β hαβ hP (fun _ _ _ _ _ h => h.elim) (fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ h => h.elim) ls₀
+    (fun _ _ _ _ _ h => h.elim) (fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ h => h.elim) ls₀
     (ewp_LTab_empty.mpr hcl) v ρP ρb ρlP ρ hPv houtP hs hb hcb hclP hcρ)
 
-include hT hL h0 hQd hD hkc hαβ hP in
+include hT hL h0 hQd hD hkc in
 /-- **The lend across graded stops at a row that holds `Div`**, by coinduction (`lendW`): a
 segment of the callback is `lendM_frame` (lent) or `lendM_owner` (the owner beside) at the
 segment's tables, a tick of the callback a graded stop whose continuation is owed the candidate
@@ -759,12 +748,12 @@ theorem cwp_lendM {ls : List SRec} {x : Expr} {ρ : WRes}
       owe T Q W' ls ((ubindK Nv Dv).plug c) τ :=
     fun ls c v'' χ hχ ls₀ hw₀ b z W τ hs hb hbz hc hW hWτ =>
       ⟨Or.inl (Or.inl ⟨c, z, ls₀, v'', χ, b, W, hw₀, hχ, rfl, hc.1, hs, hb, hbz, hW, hWτ⟩),
-        closing_lendM hT hL h0 Nv Dv hQd l Tt δ hD Qx Q hkc β hαβ hP hw₀ hχ hc.2 hs hb hbz hW hWτ⟩
+        closing_lendM hT hL h0 Nv Dv hQd l Tt δ hD Qx Q hkc hw₀ hχ hc.2 hs hb hbz hW hWτ⟩
   refine cwp_coind_up (W := lendW T l Tt δ α Qx Nv Dv) (fun ls x ρ hx => ?_) h
   rcases hx with ⟨e, ρc, ls₀, v, ρP, ρb, ρlP, hPv, houtP, rfl, he, hs, hb, hcb, hclP, hcρ⟩ |
     ⟨e, ρc, ρo, rfl, he, ho, hcp⟩
   · exact lendM_frame (Ψi := owe T (postA l Tt δ α Qx) (cwp T (postA l Tt δ α Qx)))
-      (Ψo := owe T Q W') hE0 hL0 h00 hO0 Nv Dv hQd l Tt δ hD Qx Q hk β hαβ hP hΨB hΨA ls₀
+      (Ψo := owe T Q W') hE0 hL0 h00 hO0 Nv Dv hQd l Tt δ hD Qx Q hk hΨB hΨA ls₀
       (cwp_out he) v ρP ρb ρlP ρ hPv houtP hs hb hcb hclP hcρ
   · exact lendM_owner (Ψi := owe T (postA l Tt δ α Qx) (cwp T (postA l Tt δ α Qx)))
       (Ψo := owe T Q W') hE0 hL0 h00 hO0 Nv Dv hQd l Tt δ hD Qx Q hk hΨB (cwp_out he) ho hcp
@@ -864,13 +853,13 @@ theorem withbor2L_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
     refine withborUE_beta (opTable_mono _) hdc (.loc ℓ) rfl vf ?_
     exact ewp_LTab_empty.mp (lendM_frame (Ψi := noTick) (Ψo := noTick) hTL hL h0
       (fun _ _ _ h => by simp [OpTab.empty] at h) Nv Dv hQd ℓ A δ hD Qx _
-      (fun ls v σ hσ => ewp_LTab_empty.mpr (hret (opTable_mono _) ls v σ hσ)) β hαβ hβ
+      (fun ls v σ hσ => ewp_LTab_empty.mpr (hret (opTable_mono _) ls v σ hσ))
       (fun _ _ _ _ _ h => h.elim) (fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ h => h.elim) ls₁
       (ewp_LTab_empty.mpr hX) vℓ ρP' ρb ρlP τ hPv houtP (fun _ => Iff.rfl) hb' hBM hclP hcρ)
   · -- a row that holds `Div`: by coinduction
     refine cwp_roll (withborUE_beta (divTab_mono _ _ _) hdc (.loc ℓ) rfl vf (cwp_out ?_))
     exact cwp_lendM hTL hL h0 Nv Dv hQd ℓ A δ hD Qx _
-      (fun ls v σ hσ => cwp_roll (hret (divTab_mono _ _ _) ls v σ hσ)) β hαβ hβ
+      (fun ls v σ hσ => cwp_roll (hret (divTab_mono _ _ _) ls v σ hσ))
       (Or.inl ⟨_, BM, ls₁, vℓ, ρP', ρb, ρlP, hPv, houtP, rfl, hX, fun _ => Iff.rfl, hb', hBM, hclP,
         hcρ⟩)
 
