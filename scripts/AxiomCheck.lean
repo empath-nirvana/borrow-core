@@ -643,6 +643,11 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.Frames.nested_adequate
 #print axioms BoCa.Fig16.LogRel.Core.Frames.moveJoin_derives
 #print axioms BoCa.Fig16.LogRel.Core.Frames.moveJoin_returns
+#print axioms BoCa.Fig16.LogRel.Core.Frames.not_bindOne
+#print axioms BoCa.Fig16.LogRel.Core.Frames.moveExitPut_runs
+#print axioms BoCa.Fig16.LogRel.Core.Frames.moveExitCaught_derives
+#print axioms BoCa.Fig16.LogRel.Core.Frames.moveExitCaught_returns
+#print axioms BoCa.Fig16.LogRel.Core.Frames.moveExitCaught_adequate
 #print axioms BoCa.Fig16.LogRel.Core.Frames.retsG_swap
 #print axioms BoCa.Fig16.LogRel.Core.Frames.retsG_wid
 #print axioms BoCa.Fig16.LogRel.Core.Frames.swap_steps

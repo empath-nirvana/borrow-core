@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.95 · 2026-10-20
+Version 0.96 · 2026-10-20
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8119,10 +8119,23 @@ The frame type is a derived computation type:
 exit row (a stack, innermost catcher first) and `A` the normal answer. At `Π = Πn = Πx` it is
 #632's `Π ⊸ F_Σ (Π ⊗ (A ⊕ ⊕E))`, the slots distributed over the sum. The normal and the local
 exits have a state each, not one `Π_out` for both as #639's text wrote: in `bind M (x. N)` an exit
-of `M` skips `N`, so it leaves at `M`'s state, and `N`'s normal state is in general no widening of
-it (a move out followed by a put back, inside a loop, leaves `M` at `Ref 1` and `N` at `Ref A`).
-With the two states, `bind` composes at any exit row; every exit of a frame leaves at the one
-state `Πx`, and `exit k` leaves at the state where it is.
+of `M` skips `N`, so it leaves at `M`'s state, and `N`'s normal state is in general not that
+state (a move out followed by a put back leaves `M` at `Ref 1` and `N` at `Ref A`). With the two
+states, `bind` composes at any exit row; every exit of a frame leaves at the one state `Πx`, and
+`exit k` leaves at the state where it is.
+
+The single-`Π_out` form fails under `bind` (`Core/FramesExamples.lean`). The single-state `bind`
+(`BindOne`) types `M; N` at `N`'s state from `M : P₀ → P₁ / P₁` and `N : P₁ → P₂ / P₂`. Take
+`moveExit` (move a cell's content out, then exit with the cell empty) and `putBack` (fill it
+again). Both are single-state frames, derived by the frame rules with every side condition
+discharged (`moveExit_derives`, `putBack_derives`). Their composite, caught by a handler that
+leaves the slot as `Ref i32` and closed by `new`, is a closed program at the persistent answer
+`1 ⊗ i32`. Its run (`moveExitPut_runs`, computed by `runM`) hands out the hole's `()` as the
+`i32`, so adequacy fails, and `not_bindOne : ¬ BindOne` follows. The two-state `bind` types the
+same two frames at `[Ref i32] → [Ref i32] / [Ref 1]`, with the handler typed from `Ref 1`
+(`movePut_derives`, `moveExitCaught_derives`, `moveExitCaught_returns`). The proof does not
+cover widening `M`'s and `N`'s states into a join they share and typing the composite there:
+that typing loses `N`'s normal state, and no theorem here says which programs need that state.
 
 A slot is `SlotOk`: an owned cell `Ref A` whose content has a destructor, a borrow `Mut @a A`,
 or `P ⊕ Q` of two slots, the tag its drop flag. A frame's own cell (`new`) ends in a `CellSt`:
@@ -8166,6 +8179,8 @@ by slot (`keep`, `inl`, `inr`) by the closed function `widE ws`.
   the accounting); `nested_derives`/`nested_returns` (depth 4, an exit across a loop);
   `moveJoin_derives`/`moveJoin_returns` (a move out, a put back on one arm, the join `widen`ed into
   `Ref i32 ⊕ Ref 1`, the release reading the tag).
+- The two states: `not_bindOne`, `moveExitPut_runs`, `movePut_derives`, `moveExitCaught_derives`,
+  `moveExitCaught_returns`, `moveExitCaught_adequate` (the frame type above).
 
 ### `let mut` as frame slots, behind `BCC_FRAMES=1`
 
@@ -8240,10 +8255,26 @@ interpreter frees a cell of `()` contents with no read, which changes no run.
   the tag today; promotion of a slot to a local (N5) would read the slot's state there.
 - **Joins only of `Ref A` and `Ref 1`.** Two different full states, or a slot emptied in a loop's
   turn and full at its entry, are refused (a loop keeps its slots' states).
-- **`FDerives` is the kernel's theory, not a judgment the checker builds.** The elaboration
-  writes direct-style terms (each slot a variable) that the frame rules describe; what the
-  checker records of a slot is the `slot` node. Building `FDerives` derivations from the typed
-  term would make the accounting a fact of each program.
+- **`FDerives` is the kernel's theory, not a judgment the checker builds** (#639 part 2, not
+  built). The elaboration writes direct-style terms (each slot a variable) that the frame rules
+  describe; what the checker records of a slot is the `slot` node. A producer of derivations,
+  with the kernel term their elaboration, needs a frame rule for each loop a slot is used in.
+  `FDerives` has two: `loopCount` (`count_try`, at the pure row) and `loopIter` (`iterate`, at a
+  row holding `Div`: `hdiv : Row.divB S = true`).
+  - The frontend elaborates `while` and `loop` to `unfold` (#545's one loop model). The loop's
+    tail, with the release of the cells, is in the codata's done branch. The frontend produces no
+    `iterate` (`docs/kernel-usage.md` row 53: no checker producer).
+  - A `for` whose body performs a resuming operation is `bounded_fix` at the row, which has no
+    frame rule either.
+  - Of the 341 programs that run under the flag, 147 use a slot inside a loop body: 48 in a
+    `while` or `loop`, the other 99 in `for`s only. One uses a slot in a `with` body, which has
+    no frame rule. These counts come from a parser change, not committed, that refuses at each
+    such loop.
+  - A producer that keeps the 341 needs, in order: `while` and `loop` as frames (`iterate` at a
+    `Div` row, the B2 elaboration, or a frame rule for `unfold`); a frame rule for the
+    `bounded_fix` row loop; the pure `for` as `loopCount` (`count_try` with the `break` unused,
+    where §16 writes `count_fold`); then the checker's frame rules, and the deletion of
+    `slotMove`/`slotWiden` and the parser's direct-style rewrite.
 - D4 (closures that write a slot), N4/G2 (generated code copying a slot), N2 (effects inside a
   use), L1/L2 slot promotion (N5), suspension inside a lend (T1, #172).
 
@@ -8631,6 +8662,13 @@ weakening cases, `slot_swap`) and `Backend2/` (`Op.slotOut`, `Op.slotIn`); no ch
 ---
 
 ## Changelog
+
+- **0.96** (2026-10-20) — §47 (#639 part 2): the two-state frame type settled in Lean:
+  `not_bindOne`, the single-`Π_out` `bind` refuted by a closed program (a move out with an exit,
+  then a put back) whose run hands out a hole's `()` as an `i32`; the two-state `bind` types the
+  same frames (`movePut_derives`, `moveExitCaught_derives`). `runFrameC_derives`. The producer of
+  `FDerives` derivations is not built: *Open* states what it needs. No change to the frontend,
+  the backend or any program.
 
 - **0.95** (2026-10-20) — §47 (#639): frames with typed exits in `Core/`, with typestate slots:
   `FDerives` over the slots' entry, normal and exit states; the rules `swap`, `caseSlot`, `widen`;

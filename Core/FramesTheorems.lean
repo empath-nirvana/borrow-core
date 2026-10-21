@@ -80,13 +80,19 @@ theorem frame_sound {Δ : LifeCtx} {Γ : Ctx VTy} {Φ : List FBlock} {P Pn X : L
 /-- A closed frame over no slots, run on `()`. -/
 def runFrameE (e : Expr) : Expr := .app (.val (.lam (.app (sh 1 e) (.var 0)))) (.val .unit)
 
+/-- The run of a closed computation at a frame type over no slots is a Core computation. -/
+theorem runFrameC_derives {e : Expr} {A : VTy}
+    (h : CDerives LifeCtx.empty [] e (.comp (frTy [] [] [] [] [] A))) :
+    CDerives LifeCtx.empty [] (runFrameE e) (.comp (.ret (ansTy [] [] A []))) :=
+  .bind (Γ₁ := []) (Γ₂ := []) .nil (.ret (.unitI .nil))
+    (.app (Γ₁ := [⟨.unit, false⟩]) (Γ₂ := [⟨.unit, true⟩]) (.right .nil)
+      (CDerives.shift_dead .unit h) (.here .nil))
+
 /-- The run of a closed frame is a Core computation. -/
 theorem runFrame_derives {Φ : List FBlock} {e : Expr} {A : VTy}
     (h : FDerives LifeCtx.empty [] Φ [] [] [] e [] [] A) :
     CDerives LifeCtx.empty [] (runFrameE e) (.comp (.ret (ansTy [] [] A []))) :=
-  .bind (Γ₁ := []) (Γ₂ := []) .nil (.ret (.unitI .nil))
-    (.app (Γ₁ := [⟨.unit, false⟩]) (Γ₂ := [⟨.unit, true⟩]) (.right .nil)
-      (CDerives.shift_dead .unit (FDerives.elab h)) (.here .nil))
+  runFrameC_derives (FDerives.elab h)
 
 /-- **Adequacy for frames**, `adequacyD_obs` unchanged: every run of a closed frame program at a
 persistent answer, from the empty memory, continues to a value at the empty memory. -/
