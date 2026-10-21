@@ -28,9 +28,8 @@ annotated first (`Frontend.Elab.fillProgram`), and each decision below reads tho
   becomes `return (caps, V)`, and any other terminal `T` becomes `r <- T; return (caps, r)`,
   with the capabilities read by name where the path ends (`wrapTail`).
 * **`for x in V { M }; N`**, `V` an iterator made from a capability, in any function or `main`
-  becomes a loop by `unfold` over the state (iterator, other capabilities, threaded variables at
-  their inferred types), and makes the function div (§14): a state of the body's one state
-  machine (`divMachine`, §15).
+  becomes `iterate` over the state (iterator, other capabilities, threaded variables at their
+  inferred types), and makes the function div (§14, §47, *The `Div` elaboration* below).
 * **`&c`** in the head of `x <- M; N` becomes `r <- M[c/&c]; let (c, x) = r; N` (`Comp.elab`).
 
 The generated code is a template, printed and parsed, whose holes are filled with the program's
@@ -285,28 +284,25 @@ def parseComp (src : String) : Except Error Comp := do
   | some M => pure M
   | none => throw ⟨Span.none, "internal error: a template without main"⟩
 
-/-! ### Divergence  `[spec §14]`
+/-! ### Divergence  `[spec §14, §47]`
 
-A function whose result type is a loop, `A => U (loop B R)`, is a **div function**: a call runs
-its code up to its first loop and returns the rest of the run as a loop, which finishes with `B`
-or, closed early, hands back the residual `R`. A function is div when its type says so, or when
-its body loops: it has a `for`, or it runs a call of a div function in direct style, on its spine
-(the tail positions of binds, `let`s, `case` arms and `for`s). Definitions are in dependency
-order, so one pass infers this. A div function written with a plain result `A => B` is
-elaborated to `A => U (loop B R)`, and so is `main`; `total def` asserts that the body does not
-loop.
+A **div function** is one whose computation performs `Div`: `A ⇒ F_{div, Σ}(B ⊕ R)`, which
+finishes with `inl b`, or, closed early at a tick, hands back the residual `R` as `inr r`. A
+function is div when its type says so, or when its body loops: it has a loop that is not a total
+counted loop, or it runs a call of a div function in direct style, on its spine (the tail
+positions of binds, `let`s, `case` arms and loops). Definitions are in dependency order, so one
+pass infers this. A div function written with a plain result `A => B` is elaborated to
+`A ⇒ F_{div, Σ}(B ⊕ R)` (*The `Div` elaboration*, below); `main` that loops returns the loop value
+of its body; `total def` asserts that the body does not loop.
 
 Everything here is decided by types (`Frontend.Elab.TCx`, docs/typed-elaboration.md §2.4):
 
-* **A call run in direct style** is an application whose type is a loop, where the type expected
-  of it is not that loop. It may stand at any depth of a bound or returned value, a scrutinee or
-  a `let`'s value: the value's applications are then lifted out, innermost and leftmost first,
-  into bindings (`liftApps`), and each call becomes the delay bind of `lib/div.bc`, `div_bind`,
-  with the rest of the body as its continuation. Checked against its own loop type (an argument
-  of `div_fuel`, an annotated binding) the call is the loop as a value.
-* **A `for`** becomes a loop by `unfold` whose state is the iterator, the other capabilities, and
-  the variables the body reads, at their inferred types; then the same bind.
-* **A terminal** `return V` becomes the loop that finishes with `V` at its first observation.
+* **A call run in direct style** is an application of a div function (or one whose type is a
+  loop), where the type expected of it is not its loop. It may stand at any depth of a bound or
+  returned value, a scrutinee or a `let`'s value: the value's applications are then lifted out,
+  innermost and leftmost first, into bindings (`liftApps`). Checked against its loop type (an
+  argument of `div_fuel`, an annotated binding) the call is its loop value, `reify` of it
+  (`lvV`).
 * **The residual** `R` is `K * 1`, where `K` is the components of the result type `B` that have
   no destructor (SPEC §12), or `1` when there are none: a loop closed early hands back what it
   cannot drop. The variables that hold `K` are the ones a terminal `return` puts there.
@@ -832,27 +828,6 @@ def normExits : Nat → Comp → Except Error Comp
   | _, T => pure T
 
 /-! #### Elaborating a div body -/
-
-/-- A terminal `T` of a div body: `io_v : B <- T`, then the loop that finishes with `io_v` at
-its first observation; closed instead, it hands back the components of `io_v` that have no
-destructor, and the checker drops the others. -/
-def dret (cx : LoopCx) (T : Comp) : SM Comp := do
-  let parts := spineT cx.B
-  let lin := parts.map isLinear
-  let last := (lin.zip (List.range lin.length)).foldl (fun a (b, i) => if b then i + 1 else a) 0
-  let close := if last == 0 then "return ()" else
-    let ns := (List.range last).map (s!"io_w{·}") ++ (if last < parts.length then ["io_wr"] else [])
-    let keep := ((List.range last).zip lin).filterMap fun (i, b) => if b then some s!"io_w{i}" else none
-    destructSrc "io_v" ns ++ s!"return ({tupleSrc keep}, ())"
-  let src := s!"io_v : {ppT cx.B} <- force io_hole_t;
-return (thunkv nu_in < return (inl io_v), {close} >)"
-  let L ← template T.span "the loop a div function's result becomes" src
-  let L := L.fill (fun _ => none) (fun n => if n == "io_hole_t" then some T else none)
-  -- A terminal that lends keeps its binding unannotated, as `&c` requires.
-  match T.takeLends.2, L with
-  | [], _ => pure L
-  | _, .bind sp x _ M N lin => pure (.bind sp x none M N lin)
-  | _, L => pure L
 
 /-- The latest binding of each name, oldest first. -/
 def latest (env : List (String × Option CVTy)) : List (String × Option CVTy) :=

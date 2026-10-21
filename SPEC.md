@@ -1608,7 +1608,8 @@ function called with a borrow that is not lent from a place (a view, a field, a 
 holds it across its loop. `|>` is §33's.
 
 Programs: `corpus/axes/borrow-across-loop.bc`, `corpus/lend-mut.bc`, `lend-config.bc`,
-`lend-pipeline.bc` (0 allocations, dispatched calls and copies beyond the table's own),
+`lend-pipeline.bc` (no allocation or copy beyond the table's own; since §47 its loops' steps
+are dispatched calls until B3),
 `lend-server.bc`, `lend-div.bc`, and the library's `lend-lib-loop.bc`, `lend-lib-gen.bc`,
 `lend-lib-each.bc`; pairs `corpus/sugar/lend-block.bc`, `lend-let.bc`, `lend-div.bc`; rejects
 `corpus/reject/lend-*.bc`. Every elaborated program is checked core, so `fundamentalC` and
@@ -1813,8 +1814,9 @@ with a static name `n` of its own (§18, §19):
   generator instead (below), a loop of the enclosing body.
 
 When the body performs nothing else, the clause resumes in tail position, and the operation is a
-direct call of the clause (§19, *Lowering*): `corpus/gen-produce.bc`, `gen-fib.bc` and
-`gen-pipeline.bc` allocate nothing and dispatch no call. A body that branches resumes at the end
+direct call of the clause (§19, *Lowering*): `corpus/gen-produce.bc` and `gen-pipeline.bc`
+allocate nothing; since §47 the steps of their loops are dispatched calls until B3, and so is
+`gen-fib.bc`'s stored generator, which keeps its continuation. A body that branches resumes at the end
 of each arm, and is a direct call too; a body with `break` or `return` in an arm cancels there,
 and is a suspension (`corpus/for-yield-branch.bc`).
 
@@ -1866,8 +1868,9 @@ adapters (`lib/adapters.bc`) are generic generators over stored generators: `map
 `zip` close their source, so they take one that hands back, closed, what it returns,
 `U (pull A K K)`; a failing source returns an error it cannot hand back closed, and is rejected
 there (`corpus/reject/take-failing.bc`). A pipeline of adapters whose functions are known
-allocates nothing and dispatches no call (`corpus/gen-pipeline-adapters.bc`: 0, 0, 0;
-`gen-adapters.bc`, `gen-adapters-fail.bc` at their previous counts).
+allocates nothing (`corpus/gen-pipeline-adapters.bc`: no allocation or copy;
+`gen-adapters.bc`, `gen-adapters-fail.bc` at their previous allocations); since §47 the steps of
+its loops are dispatched calls until B3 lowers `iterate` natively.
 
 ### Self-reference
 
@@ -8165,7 +8168,8 @@ kernel terms have those traces is the transcription's, not proved over the terms
 - The old backend compiles `iterate` as before (`expandIter`, a fixed point) and `reify` by
   `Capture`. `indirect` counts a call of a loop's step and a resume of a loop value's
   continuation, so every program with a loop counts more dispatched calls (`corpus/counts.expected`,
-  rewritten; allocations are unchanged but in `gen-fib`, 0 → 47). B3 lowers `iterate` natively and
+  rewritten; allocations, loads and stores are unchanged but in `gen-fib`, whose stored
+  generator keeps its continuation: 0 → 48, 0 → 1026, 0 → 1062). B3 lowers `iterate` natively and
   drives `main` by the runtime's clause.
 - The Wasm lowering numbers each function's locals again by their intervals (`compactLocals`,
   `Backend/Wasm/Lower.lean`): a flat-IR body has no back edge, so a local is live only between its
