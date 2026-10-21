@@ -984,6 +984,42 @@ theorem effWp_sub {S S' : Row} (hle : RowLe S S') {δ : LSub} {Q : List SRec →
   · rw [Row.divB_le hle hS] at hS'; cases hS'
   · exact cwp_sub (Row.tab_le δ hle) h
 
+/-! ### Grading only weakens -/
+
+/-- `o` at the grade: call-graded.  `[spec §48]` -/
+def OpSig.grade (o : OpSig) : OpSig := { o with call := true }
+
+theorem OpSig.LeF.grade (o : OpSig) : o.LeF o.grade :=
+  ⟨⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => FinLe.refl o.fin, fun _ => rfl⟩
+
+/-- `Σ` with each operation `g` picks call-graded.  `[spec §48]` -/
+def Row.gradeAt (g : OpSig → Bool) (S : Row) : Row := S.map fun o => if g o then o.grade else o
+
+theorem Row.find_gradeAt (g : OpSig → Bool) (S : Row) (n i : UInt32) :
+    Row.find (Row.gradeAt g S) n i = (Row.find S n i).map fun o => if g o then o.grade else o := by
+  have hp : ((fun o => decide (n = o.n ∧ i = o.i)) ∘ fun o => if g o then o.grade else o) =
+      fun o => decide (n = o.n ∧ i = o.i) := by
+    funext o; simp only [Function.comp]; split <;> rfl
+  unfold Row.find Row.gradeAt
+  rw [List.find?_map, hp]
+
+/-- **A row is below every grading of it** (`[sub]` grades).  `[spec §48]` -/
+theorem rowLe_gradeAt (g : OpSig → Bool) (S : Row) : RowLe S (Row.gradeAt g S) := by
+  intro n i o hf
+  refine ⟨_, by rw [Row.find_gradeAt, hf]; rfl, ?_⟩
+  show o.LeF (if g o then o.grade else o)
+  split
+  · exact OpSig.LeF.grade o
+  · exact OpSig.LeF.refl o
+
+/-- **Conservativity: grading only weakens.**  Every computation in the relation at a row is in
+the relation at every grading of it.  `[spec §48]` -/
+theorem effWp_gradeAt (g : OpSig → Bool) {S : Row} {δ : LSub} {Q : List SRec → Val → WProp}
+    {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : effWp (Row.divB S) (Row.tab S δ) Q ls e ρ) :
+    effWp (Row.divB (Row.gradeAt g S)) (Row.tab (Row.gradeAt g S) δ) Q ls e ρ :=
+  effWp_sub (rowLe_gradeAt g S) h
+
 /-- A stack of layers holds `Div` as its row does. -/
 theorem CTy.divB_rowOf : ∀ C : CTy, Row.divB C.rowOf = C.divAt
   | .eff n i q A B fin cg C => by

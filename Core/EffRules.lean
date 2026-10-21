@@ -731,6 +731,20 @@ def KapRelT (Tb : Table) (Qout : List SRec → Val → WProp) (en : OpEnt) (Tc :
     (en.q ≠ .lin → ∀ Tk, Tc = some Tk →
       ewpTS ls' (.app κ.1 (.val (Val.inj₂ .unit))) (opTable Tk) (fun _ v => ⌜v = Val.unit⌝) ρ)
 
+/-- **Conservativity of the grade at a clause**: at an ungraded entry `κ` is owed at every
+`Ext`-extension, Core's `κ` relation before §48.  `[spec §48]` -/
+theorem kapRelT_ungraded {en : OpEnt} (h : en.call = false) (Tb : Table)
+    (Qout : List SRec → Val → WProp) (Tc : Option OpTab) (ls : List SRec) (κ : Val) :
+    KapRelT Tb Qout en Tc ls κ = fun ρ =>
+      (en.q = .unr → ρ = PMap.empty) ∧
+      ∀ ls', Ext ls ls' ρ →
+        (∀ w : Val, (en.PB ls' w ─⋆
+          ewpTS ls' (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val w)) Tb Qout) ρ) ∧
+        (en.q ≠ .lin → ∀ Tk, Tc = some Tk →
+          ewpTS ls' (.app κ.1 (.val (Val.inj₂ .unit))) (opTable Tk)
+            (fun _ v => ⌜v = Val.unit⌝) ρ) := by
+  unfold KapRelT Owed; rw [h]
+
 /-- `KapRelT` at the protocol table of a row's operation table.  `[spec §19, §27]` -/
 abbrev KapRel (Tout : OpTab) (Qout : List SRec → Val → WProp) (en : OpEnt) (Tc : Option OpTab)
     (ls : List SRec) (κ : Val) : WProp := KapRelT (opTable Tout) Qout en Tc ls κ

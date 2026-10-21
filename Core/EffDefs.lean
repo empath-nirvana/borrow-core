@@ -311,6 +311,17 @@ def contShare (en : OpEnt) (ls : List SRec) (K : Kont) (Φ : List SRec → Expr 
       (∀ w : Val, (en.PB ls' w ─⋆ Φ ls' (K.plug (.val w))) ρ) ∧
       (en.q ≠ .lin → cancelOK en ls' K ρ)
 
+/-- **Conservativity of the grade at a stop**: at an ungraded entry the continuation's share is
+owed at every `Ext`-extension, Core's share before §48.  `[spec §48]` -/
+theorem contShare_ungraded {en : OpEnt} (h : en.call = false) (ls : List SRec) (K : Kont)
+    (Φ : List SRec → Expr → WProp) :
+    contShare en ls K Φ = fun ρ =>
+      (en.q = .unr → ρ = PMap.empty) ∧
+      ∀ ls', Ext ls ls' ρ →
+        (∀ w : Val, (en.PB ls' w ─⋆ Φ ls' (K.plug (.val w))) ρ) ∧
+        (en.q ≠ .lin → cancelOK en ls' K ρ) := by
+  unfold contShare Owed; rw [h]
+
 /-- A stop at a non-abortive operation of `T`, `perform (n, (i, v))` under a context free of `n`:
 the argument, and the continuation's share.  `[spec §19]` -/
 def performStop (T : OpTab) : Table := fun ls t Φ =>
