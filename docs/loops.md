@@ -1,10 +1,11 @@
 # Loops: one loop model for every nest (#545)
 
-**Status (2026-10-21).** U1 (#548) is built, and U2's class pass with B2 (#644, SPEC §47): a counted
-loop whose body loops is a loop of the machine over its cursor, unless its source is a lend
-(`&a`, `&mut a`): a lend per turn is the kernel's to express (`STOP: KERNEL WORK`, #644). 21 of the
-matrix's 24 non-AA cells print `241`, and 21 of the `return` matrix's `298`; AW, AL and AG are
-refused as before. `break e` and `else` on a counted loop of the machine are not provided yet. The rest is the design as written.
+**Status (2026-10-21).** U1 (#548) is built, and U2's class with B2 (#644, SPEC §47): a counted
+loop whose body loops is at the row `div`, `bounded_fix` over the count
+(`docs/pipeline-architecture.md` §3.2), with `break e` and `else`; counted machine loops over a
+cursor are not built. Over a lend (`&a`, `&mut a`) its borrow is held across the body's ticks, and
+the kernel refuses it (AW, AL, AG; SPEC §14, *Borrow scopes over loops*). The per-observation lend
+(`LoopLend`'s rewrite, S13 below) is retired. The rest is the design as written.
 
 A design for the surface's loops: `for`, `while`, `loop`, their exits (`break`, `break e`,
 `continue`, `return`, and exits to an enclosing loop by name), and how a nest of loops of any

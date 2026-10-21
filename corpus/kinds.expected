@@ -334,10 +334,6 @@ corpus/leetcode/trees/0230-kth-smallest-element-in-a-bst.bc 1.0 affine abortive:
 corpus/leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree.bc 1.0 affine abortive: branch; agree
 corpus/leetcode/trees/0297-serialize-and-deserialize-binary-tree.bc 1.0 affine abortive: branch; agree
 corpus/leetcode/trees/0572-subtree-of-another-tree.bc 1.0 affine abortive: branch; agree
-corpus/lend-div.bc 1.0 affine tail: machine: the handlers of the name have 4 clauses for it; disagree
-corpus/lend-pipeline.bc 3.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/lend-pipeline.bc 2.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/lend-pipeline.bc 1.0 affine tail: machine: the handlers of the name have 2 clauses for it; disagree
 corpus/list-blocks.bc 1.0 affine abortive: branch; agree
 corpus/list-blocks.bc 2.0 affine abortive: branch; agree
 corpus/list-blocks.bc 3.0 affine abortive: branch; agree

@@ -21,7 +21,6 @@ array-get 2 0 0 10 7 2
 array-refs 5 0 0 8 8 1
 array-replace 2 0 0 12 12 5
 array-sum 1 0 0 3000 3000 2024
-axes/borrow-across-loop 2 0 0 30 13 4
 axes/codata-coeffects 2 0 0 27 10 16
 axes/codata-effects 0 0 0 11 1 0
 axes/codata-generic 0 0 0 5 1 0
@@ -74,6 +73,7 @@ for-finite 0 0 0 0 0 0
 for-in-if-lend 1 0 0 4 2 2
 for-return 1 0 0 9 5 0
 for-view-effect-copy 1 0 0 11 5 5
+for-view-local 1 0 0 3 3 0
 format 1 0 0 38 31 21
 generated-names 1 0 0 2 2 0
 generic-in-def 0 0 0 0 0 0
@@ -81,7 +81,6 @@ generic-pair-arg 0 0 0 0 0 0
 hello 0 0 0 16 1 0
 http-request 2 0 0 592 401 257
 hygiene-answering-state 0 0 0 2 2 0
-hygiene-borrow-loop 1 0 0 3 1 0
 hygiene-box-lib 1 0 0 4 4 0
 hygiene-clause-name 0 0 0 2 2 0
 hygiene-for-global 0 0 0 0 0 0
@@ -174,14 +173,9 @@ leetcode/strings/0242-valid-anagram 2 0 0 9283 6990 4830
 leetcode/strings/0647-palindromic-substrings 1 0 0 4533 4098 431
 leetcode/trees/0208-implement-trie 25 0 0 8067 7610 2373
 leetcode/trees/0211-design-add-and-search-words-data-structure 46 0 0 10900 9038 4453
-lend-config 1 0 0 24 4 0
-lend-copy 3 0 0 38 17 12
 lend-lib-each 2 0 0 44 12 11
 lend-lib-gen 1 0 0 4 4 0
 lend-lib-loop 3 0 0 34 22 4
-lend-mut 1 0 0 11 6 0
-lend-server 1 0 0 16 3 0
-lend-shadow 2 0 0 33 13 5
 loop-labels 0 0 0 0 0 0
 loop-shadow-linear 1 0 0 6 3 3
 loop-shadow-owner 1 0 0 11 7 7

@@ -1,0 +1,34 @@
+-- pending: a lend held across a tick (a suspension; T1, #172): tier 2 is open and has no path
+-- now: 29:11: the row of an unwinding borrow's callback has only abortive operations, of names other than 0, whose arguments outlive every lifetime and do not mention its lifetime
+--
+-- Axes: codata (the div loop) × effects (input) × coeffects (the `imm` demand) × scope (one
+-- borrow block around the loop). A lookup table borrowed once, and read on every byte of the
+-- input by a `for` inside the borrow block. `corpus/axes/scope-loop-lend.bc` writes the borrow
+-- per step by hand.
+--
+-- Needs a lend held across a tick. Every loop is at the row `div` (SPEC §14), and each of its back
+-- edges ticks, a control operation that resumes; the borrow of `t` at 29:11 spans the ticks of the
+-- `for` over the input at 31:5. The kernel's rule for a lend at a row has only abortive operations
+-- (`Row.Unwind`), so it refuses the lend. Holding a lend across a suspension is tier 2, which is
+-- open and has no path.
+--
+-- Once it lands: on the input `1203`, `i32[60]`, `live 0`: the table holds 10 * i, and 10 + 20 + 0
+-- + 30 = 60.
+
+fn tab(i: i32) -> i32 = i * 10
+
+-- The entry at `i`, or 0 out of range.
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let n = borrow imm t { 'x, b ->
+    let mut acc = 0;
+    for c in bytes(&mut stdin) { acc = acc + (unbang get) ['x] (b, to_i32(c) - 48) };
+    acc
+  };
+  n

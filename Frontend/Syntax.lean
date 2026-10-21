@@ -533,6 +533,16 @@ inductive VSugar where
   variable `r_g` is the record's field `g`; the record's declaration is one of `cands`, as
   `field`'s.  `[spec §42]` -/
   | update (f : String) (cands : List FieldCand)
+  /-- The step of a counted loop whose body performs `Div` (SPEC §14, §16), applied to it: a
+  `!` function from the counter and the loop's state at the row, its body the loop's body. `ws`
+  are the variables the loop threads, which a close inside the body hands back; `ret` is set when
+  a `return` inside the body's loops leaves through the loop's exit. The `Div` elaboration walks
+  the step's body, and leaves the step itself.  `[spec §14, §16]` -/
+  | rowStep (ws : List String) (ret : Bool)
+  /-- Where a counted loop whose body performs `Div` was closed during its step (`rowStep`): the
+  `Div` elaboration closes what the loops around hold and leaves the body with the residual by
+  name.  `[spec §14, §16]` -/
+  | rowClose
   deriving DecidableEq, Repr, Inhabited
 
 /-- What a loop walks, as the program writes it (`docs/loops.md` §2.1), with the loop's value

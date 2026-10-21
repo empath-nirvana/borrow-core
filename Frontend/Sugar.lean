@@ -502,10 +502,30 @@ def headLoops (c : TCx) (exp : Option CVTy) : Comp → Option (Span × String)
     callMsg M.span (calleeName (.app M.span f (.unit M.span)))
   | _ => none
 
+/-- A written row holds `Div`'s entry. -/
+def _root_.Frontend.Row.hasDiv : Frontend.Row → Bool
+  | .nil => false
+  | .cons n i _ _ _ rest => (n == 4294967295 && i == 0) || rest.hasDiv
+
+/-- A callback's type at a row that holds `Div`: a borrow block's, whose body loops. -/
+def divCbTy : Option VTy → Bool
+  | some (.thunk _ (.all _ _ _ (.arr _ _ (.eff _ r _)))) => r.hasDiv
+  | _ => false
+
+/-- `x : A <- M`: the callback of a borrow block whose body loops (in its unwinding form,
+`unwindingC?`), or that form itself. -/
+def lendsAtDiv (A : Option VTy) : Comp → Bool
+  | .bind _ _ _ _ (.bind _ _ _ _ (.bind _ _ fA _ _ _) _) _
+  | .ret _ (.run _ (.bind _ _ _ _ (.bind _ _ _ _ (.bind _ _ fA _ _ _) _) _)) => divCbTy fA
+  | _ => divCbTy A
+
 /-- Where a body loops, on its spine: a `for`, or a call run in direct style. `B` is the body's
 result type. -/
 def loopsAt (c : TCx) (B : Option CVTy) : Comp → Option (Span × String)
-  | L@(.bind _ x A M N _) =>
+  | .bind sp _ _ (.ret _ (.app _ (.sugar _ (.rowStep ..)) _)) _ _ =>
+    some (sp, "it has a counted loop whose body loops")
+  | L@(.bind sp x A M N _) =>
+    if lendsAtDiv A M then some (sp, "it has a borrow block whose body loops") else
     -- A call of a div function as the computation it is, at the tail.
     (headLoops c B L).orElse fun _ =>
     (headLoops c (A.bind c.elabV) M).orElse fun _ => loopsAt (c.push x.name (bindTy c A M)) B N
@@ -1086,6 +1106,9 @@ structure DCx where
   held : List MHeld := []
   /-- No loop or call precedes the code on its path. -/
   pre : Bool := true
+  /-- In the step of a counted loop at the row (`VSugar.rowStep`): the step's answer for a
+  `return e` inside its loops, which leaves through the counted loop's exit. -/
+  retOf : Option (Span → Val → Val) := none
 
 /-- The body's answer, `B ⊕ R`. -/
 def DCx.ans (m : DCx) : CVTy := .sum m.L.B m.L.R
@@ -1127,6 +1150,38 @@ def eTick (sp : Span) : Comp := .perform sp 4294967295 0 (.unit sp)
 /-- The row of `Div` alone, `div`. -/
 def divRowS (sp : Span) (r : Frontend.Row) : Frontend.Row :=
   .cons 4294967295 0 .lin (.unit sp) (.sum sp (.unit sp) (.unit sp)) r
+
+
+/-- The callback of a borrow block whose body loops, in its unwinding form at a row that holds
+`Div` (`unwindingC?`): bound at its type `T`, `thunkv Fun 'x < b. fun (q : Tq) -> S`. -/
+structure LendCb where
+  T : VTy
+  sp : Span
+  tsp : Span
+  lsp : Span
+  lamsp : Span
+  xi : Ident
+  b : Frontend.Life
+  q : Ident
+  Tq : VTy
+  S : Comp
+
+/-- The callback `x : T <- return cb` of a borrow at a row that holds `Div`. -/
+def lendCb? (A : Option VTy) (M : Comp) : Option LendCb :=
+  match A, M with
+  | some T@(.thunk _ (.all _ _ _ (.arr _ _ (.eff _ r _)))),
+    .ret sp (.thunkv tsp (.lamL lsp xi b (.lam lamsp q Tq S))) =>
+    if r.hasDiv then some ⟨T, sp, tsp, lsp, lamsp, xi, b, q, Tq, S⟩ else none
+  | _, _ => none
+
+/-- The callback with the body `S`, its answer `X ⊕ R`: a close inside the lend leaves it with the
+body's residual `R`. -/
+def LendCb.bind (l : LendCb) (R : VTy) (S : Comp) : Option VTy × Comp :=
+  let T := match l.T with
+    | .thunk s₁ (.all s₂ x b (.arr s₃ L (.eff s₄ r X))) =>
+      VTy.thunk s₁ (.all s₂ x b (.arr s₃ L (.eff s₄ r (.sum s₄ X R))))
+    | T => T
+  (some T, .ret l.sp (.thunkv l.tsp (.lamL l.lsp l.xi l.b (.lam l.lamsp l.q l.Tq S))))
 
 def DCx.restOf (m : DCx) (M : Comp) : Comp := match m.loops with
   | [] => M
@@ -1453,6 +1508,52 @@ mutual
 def eWalk (m : DCx) : Nat → TCx → Comp → EM Comp
   | 0, _, M => throw ⟨M.span, "internal error: a body nested too deeply"⟩
   | n + 1, c, .bind sp x A M N lin => do
+    -- A borrow block whose body loops holds its lend across the body's ticks: the kernel refuses
+    -- the lend (`Row.Unwind`; T1, tier 2). Its body is a div body of its own, at the callback's
+    -- row, which a close inside the lend leaves with the body's residual.
+    let lendBody (l : LendCb) : EM Comp := do
+      let some dom := c.elabL l.b | throw ⟨l.sp, "internal error: a lend's bound"⟩
+      let c₁ := c.pushLife l.xi.name dom
+      let .thunk _ (.all _ _ _ (.arr _ _ (.eff _ r X))) := l.T
+        | throw ⟨l.sp, "internal error: a lend's callback"⟩
+      let some Bc := c₁.elabV X | throw ⟨l.sp, "internal error: a lend's result"⟩
+      let row ← (c₁.E.elabRow c₁.Δ l.sp r : Except Error Frontend.Check.CRow)
+      let lc : LoopCx := { m.L with B := Bc }
+      let ppl : CVTy → String := fun T => Frontend.Check.ppV c₁.E.lenv 0 0 T
+      let ml : DCx := { L := lc, row := row, fwd := (rowNoDiv row).isEmpty, pp := ppl, pre := false }
+      eWalk ml n (c₁.push l.q.name (c₁.elabV l.Tq)) l.S
+    if let some l := lendCb? A M then
+      let (A', M') := l.bind (← eTy c sp m.L.R) (← lendBody l)
+      return .bind sp x A' M' (← eWalk m n (c.push x.name (bindTy c A M)) N) lin
+    -- The unwinding form in the head, or run as a value (a lend at a call, `lendCall`).
+    let (lendC, rerun) : Comp × (Comp → Comp) := (match M with
+      | .ret rsp (.run usp L) => (L, fun L' => .ret rsp (.run usp L'))
+      | M => (M, id))
+    if let .bind s₁ k kA K (.bind s₂ p pA Pc (.bind s₃ f fA F app l₃) l₂) l₁ := lendC then
+      if let some l := lendCb? fA F then
+        let (fA', F') := l.bind (← eTy c sp m.L.R) (← lendBody l)
+        let M' : Comp := rerun (.bind s₁ k kA K (.bind s₂ p pA Pc (.bind s₃ f fA' F' app l₃) l₂) l₁)
+        return .bind sp x A M' (← eWalk m n (c.push x.name (bindTy c A M)) N) lin
+    -- The step of a counted loop at the row: its body is a div body of its own, whose answer is
+    -- the step's, and whose close hands back the variables the loop threads.
+    if let .ret rsp (.app _ (.sugar _ (.rowStep ws ret)) (.bangThunkv vsp (.lam lsp q T K))) := M then
+      let some Fty := A.bind c.elabV
+        | throw ⟨sp, "internal error: a counted loop's step at the row has no type"⟩
+      let (Pt, Bs, Rs) ← match Fty with
+        | .bang (.thunk (.arr P C)) => match Frontend.Check.effRow? C with
+          | some (_, .sum Bs Rs) => pure (P, Bs, Rs)
+          | _ => throw ⟨sp, "internal error: a counted loop's step at the row"⟩
+        | _ => throw ⟨sp, "internal error: a counted loop's step at the row"⟩
+      let caps ← ws.mapM fun y => match c.tyV (.var sp y) with
+        | some Ty => pure (y, Ty)
+        | none => (throw ⟨sp, s!"the loop threads `{y}`, whose type is not determined: ascribe it"⟩ : EM _)
+      let cx : LoopCx := ⟨Bs, Rs, Rs, if caps.isEmpty then [] else [caps], false⟩
+      let retOf : Option (Span → Val → Val) := if !ret then none else some fun tsp v =>
+        .inl tsp (.inr tsp (.pair tsp (tupleVal tsp ws) (.inr tsp (.inr tsp v))))
+      let ms : DCx := { L := cx, row := m.row, fwd := m.fwd, pp := m.pp, pre := false, retOf }
+      let K' ← eWalk ms n (c.push q.name (some Pt)) K
+      let M' : Comp := .ret rsp (.bangThunkv vsp (.lam lsp q T K'))
+      return .bind sp x A M' (← eWalk m n (c.push x.name (some Fty)) N) lin
     -- A call of a div function as the computation it is, at the tail: bound, then returned.
     if (divCallC? c (.bind sp x A M N lin)).isSome then
       return ← eWalk m n c (.bind sp ⟨"io_t", sp⟩ none (.bind sp x A M N lin) (.ret sp (.var sp "io_t")) false)
@@ -1521,11 +1622,18 @@ def eWalk (m : DCx) : Nat → TCx → Comp → EM Comp
     if v.hasExit then throw (exitOffSpine (v.exitAt.getD v.span))
     -- `return e` from inside loops: every loop it leaves closes its source, and the body finishes.
     let k ← eFresh "io_rv"
+    let a := match m.retOf with
+      | some f => f sp (.var sp k)
+      | none => .inl sp (.var sp k)
     eTpl sp "`return`" (String.join (m.held.map (·.closeSrc)) ++ s!"{k} <- return io_hole_rv;\nforce io_hole_k")
-      [("io_hole_rv", v)] [("io_hole_k", eLeave m sp (.inl sp (.var sp k)))]
+      [("io_hole_rv", v)] [("io_hole_k", eLeave m sp a)]
   | _ + 1, _, .ret sp (.sugar _ .brk) => eBreak m sp (.unit sp)
   | _ + 1, _, .ret sp (.sugar _ .cont) => eBack m sp
   | _ + 1, _, .ret sp (.app _ (.sugar _ .brk) e) => eBreak m sp e
+  | _ + 1, _, .ret sp (.sugar _ .rowClose) =>
+    -- A counted loop at the row closed during its step, the variables it threads bound: what
+    -- the loops around hold is closed, and the body is left with the residual by name.
+    eClose m sp "a counted loop at the row, closed" "" m.held
   | n + 1, c, T => do
     if T.hasExit then throw (exitOffSpine (T.exitAt.getD T.span))
     let exp := if m.loops.isEmpty then some m.L.B else none
@@ -2502,10 +2610,62 @@ def replaceLend (y : String) : Val → Val
   | .pair sp V W => .pair sp (replaceLend y V) (replaceLend y W)
   | V => V
 
+/-- A borrow block's constant in its unwinding form, at the row `r` (SPEC §19). -/
+def Const.unwinding (r : Frontend.Row) : Const → Option Const
+  | .withbor1 x A B => some (.withbor1U x A B r)
+  | .withbor2 x b A B => some (.withbor2U x b A B r)
+  | .withbor3 a x A B => some (.withbor3U a x A B r)
+  | .sliceBorrowMut x b A B => some (.sliceBorrowMutU x b A B r)
+  | .sliceBorrowImm x b A B => some (.sliceBorrowImmU x b A B r)
+  | _ => none
+
+/-- A borrow block whose constant is an unwinding form, as the computation it is:
+`k <- return CONST; p <- return P; f <- return CB; ((force k) p) f`. -/
+def unwindingC? (sp : Span) : Val → Option Comp
+  | .app _ (.app _ (.const ksp C) P) cb => match C with
+    | .withbor1U .. | .withbor2U .. | .withbor3U .. | .sliceBorrowMutU .. | .sliceBorrowImmU .. =>
+      let sfx := s!"{sp.start.line}_{sp.start.col}"
+      let k : Ident := ⟨s!"io_uk{sfx}", sp⟩
+      let p : Ident := ⟨s!"io_up{sfx}", sp⟩
+      let f : Ident := ⟨s!"io_uf{sfx}", sp⟩
+      -- The callback is ascribed its type: a computation synthesized in a value performs
+      -- nothing, and the callback's body performs the row's operations.
+      let cbTy : Option VTy := match C with
+        | .withbor1U x A B r => some (ty x (.imm sp (.var sp x.name) A) B r)
+        | .withbor2U x _ A B r | .withbor3U _ x A B r => some (ty x (.mut sp (.var sp x.name) A) B r)
+        | .sliceBorrowMutU x _ A B r => some (ty x (.arrayMut sp (.var sp x.name) A) B r)
+        | .sliceBorrowImmU x _ A B r => some (ty x (.arrayImm sp (.var sp x.name) A) B r)
+        | _ => none
+      -- Its `∀` is over the computation `L ⊸ F[S] (['x] B)` itself, not over a returned thunk.
+      let cb := match cb with
+        | .thunkv tsp (.lamL lsp xi b (.ret _ (.thunkv _ L))) => Val.thunkv tsp (.lamL lsp xi b L)
+        | cb => cb
+      -- At a row that holds `Div` (a body that loops), the constant is bound at its type: the
+      -- kernel refuses its lend there (`Row.Unwind`), and what follows is typed past it.
+      let kTy : Option VTy := match C, cbTy with
+        | .withbor1U _ A B r, some T | .withbor2U _ _ A B r, some T =>
+          if r.hasDiv then some (uTy (.ref sp A) T B r) else none
+        | .withbor3U a _ A B r, some T =>
+          if r.hasDiv then some (uTy (.mut sp a A) T B r) else none
+        | .sliceBorrowMutU _ _ A B r, some T | .sliceBorrowImmU _ _ A B r, some T =>
+          if r.hasDiv then some (uTy (.array sp A) T B r) else none
+        | _, _ => none
+      some (.bind sp k kTy (.ret sp (.const ksp C)) (.bind sp p none (.ret sp P)
+        (.bind sp f cbTy (.ret sp cb) (.app sp (.app sp (.force sp k) p) f) false) false) false)
+    | _ => none
+  -- A lent cell's mark is the plain borrow's scheme, not the unwinding form's.
+  | .mark _ _ V | .reify _ _ _ _ V => unwindingC? sp V
+  | _ => none
+where
+  ty (x : Ident) (L B : VTy) (r : Frontend.Row) : VTy :=
+    .thunk sp (.all sp x (.dom sp) (.arr sp L (.eff sp r (.box sp (.var sp x.name) B))))
+  uTy (src cb B : VTy) (r : Frontend.Row) : VTy :=
+    .thunk sp (.arr sp src (.arr sp cb (.eff sp r (.tensor sp src B))))
+
 /-- A borrow of the place `x`, lent at the call `sp`, around the body `body` that uses the
 borrow `m : mut 'l A` (or `imm 'l A`) and returns `B`: its value, which the lend rebinds. -/
 def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
-    (body : String → String → Comp) : DM Val := do
+    (body : String → String → Comp) (row : Option Frontend.Check.CRow := none) : DM Val := do
   let l := s!"io_lb{sp.start.line}_{sp.start.col}"
   let mv := s!"io_lm{sp.start.line}_{sp.start.col}"
   let As ← (c.surface sp A : Except Error VTy)
@@ -2515,9 +2675,18 @@ def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
   let cb : Val := .thunkv sp (.lamL sp li (.dom sp) (.ret sp (.thunkv sp
     (.lam sp ⟨mv, sp⟩ Tm (body l mv)))))
   let C : Const := if m == .mut then .withbor2 li (.top sp) As Bs else .withbor1 li As Bs
+  -- A body that calls a div function holds the lend across its ticks: the borrow's unwinding
+  -- form at the row `div, Σ`, which the kernel refuses (`Row.Unwind`; T1, tier 2).
+  let C ← match row with
+    | some r => do pure ((Const.unwinding (← (surfRow c sp r : Except Error Frontend.Row)) C).getD C)
+    | none => pure C
   let place := Val.lend sp x m
   match c.tyV (.var sp x.name) with
-  | some (.ref _) => pure (.app sp (.app sp (.const sp C) place) cb)
+  | some (.ref _) =>
+    let V : Val := .app sp (.app sp (.const sp C) place) cb
+    pure (match row.bind fun _ => unwindingC? sp V with
+      | some M => .run sp M
+      | none => V)
   | some (.mut ..) | some (.imm ..) =>
     throw ⟨x.span, s!"`{x.name}` is a borrow; lend it by passing it (a reborrow is not provided)"⟩
   | _ =>
@@ -2658,7 +2827,7 @@ from the pair. A view the call hands back, as its result or its result's first c
 dropped there: the lend's result is the rest (`()` for a function that hands back only the view,
 `reverse(&mut a)`).  `[spec §9]` -/
 def lendSlice (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A : CVTy) (v : BoCa.Lifetime.LifeVar)
-    (Q : CVTy) (call : String → String → Comp) : DM Val := do
+    (Q : CVTy) (call : String → String → Comp) (row : Option Frontend.Check.CRow := none) : DM Val := do
   let isView : CVTy → Bool
     | .fam (.mut (.var w) _) | .fam (.imm (.var w) _) => w == v
     | _ => false
@@ -2688,7 +2857,14 @@ def lendSlice (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A : CVTy) (v : BoCa.
     (.lam sp ⟨mv, sp⟩ Tm body))))
   let C : Const := if m == .mut then .sliceBorrowMut li (.top sp) As Bs
     else .sliceBorrowImm li (.top sp) As Bs
-  pure (.app sp (.app sp (.const sp C) (.lend sp x m)) cb)
+  -- A call of a div function holds the lend across its ticks: as `lendBorrow`'s.
+  let C ← match row with
+    | some r => do pure ((Const.unwinding (← (surfRow c sp r : Except Error Frontend.Row)) C).getD C)
+    | none => pure C
+  let V : Val := .app sp (.app sp (.const sp C) (.lend sp x m)) cb
+  pure (match row.bind fun _ => unwindingC? sp V with
+    | some M => .run sp M
+    | none => V)
 
 /-- A call `f W` whose argument lends a place at a borrow parameter of `f`: the borrow around
 the call. `none` when it does not. `f` may take several lifetime parameters when `apps` gives the
@@ -2698,17 +2874,21 @@ one. -/
 def lendCall (c : TCx) (sp : Span) (f W : Val)
     (apps : Option (List (Option BoCa.Lifetime.Life)) := none) : DM (Option Val) := do
   -- `f : !(all 'a < b. … P => Q)` or `all 'a < b. … P => Q`.
-  let rec peel : Nat → CVTy → Option (List BoCa.Lifetime.LifeVar × CVTy × CVTy)
+  -- A div function's result is its `B`, at the row `div, Σ` (`row`).
+  let rec peel : Nat → CVTy → Option (List BoCa.Lifetime.LifeVar × CVTy × CVTy × Option Frontend.Check.CRow)
     | 0, _ => none
-    | k + 1, .thunk (.all v _ (.ret X)) => do let (vs, P, Q) ← peel k X; pure (v :: vs, P, Q)
-    | _, .thunk (.arr P (.ret Q)) => some ([], P, Q)
+    | k + 1, .thunk (.all v _ (.ret X)) => do let (vs, P, Q, r) ← peel k X; pure (v :: vs, P, Q, r)
+    | _, .thunk (.arr P (.ret Q)) => some ([], P, Q, none)
+    | _, T@(.thunk (.arr P _)) => match divFnOf T with
+      | some (_, S, B, _) => some ([], P, B, some (BoCa.Fig16.LogRel.Core.tickSig :: S))
+      | none => none
     | _, _ => none
-  let (bang, vs, P, Q) ← match c.tyV f with
+  let (bang, vs, P, Q, row) ← match c.tyV f with
     | some (.bang T) => match peel 64 T with
-      | some (vs, P, Q) => pure (true, vs, P, Q)
+      | some (vs, P, Q, r) => pure (true, vs, P, Q, r)
       | none => return none
     | some T => match peel 64 T with
-      | some (vs, P, Q) => pure (false, vs, P, Q)
+      | some (vs, P, Q, r) => pure (false, vs, P, Q, r)
       | none => return none
     | none => return none
   if vs.isEmpty || (apps.isNone && vs.length != 1) then return none
@@ -2739,12 +2919,12 @@ def lendCall (c : TCx) (sp : Span) (f W : Val)
   let A := A.applyLSub σ
   let f' := if bang then Val.unbang f.span f else f
   let applied (l : String) : Val := ls.foldl (fun g o => .inst sp g (o.getD (.var sp l))) f'
-  if fam then return some (← lendSlice c sp x m A w Q fun l mv =>
+  if fam then return some (← lendSlice c sp x m A w Q (row := row) fun l mv =>
     .ret sp (.app sp (applied l) (replaceLend mv W)))
   if BoCa.Fig16.LogRel.Core.Check.vfreeB w Q then
     throw ⟨sp, "the call's result mentions the lifetime of the lent place, so the place cannot " ++
       "be handed back after it"⟩
-  some <$> lendBorrow c sp x m A Q fun l mv =>
+  some <$> lendBorrow c sp x m A Q (row := row) fun l mv =>
     boxedResult sp l (.ret sp (.app sp (applied l) (replaceLend mv W)))
 
 /-- The typing context `c` with the declarations made so far in scope (the instances and copies
@@ -3297,50 +3477,29 @@ end
 
 /-- A callback's context at the row of the borrow block being elaborated, when it has one. -/
 def cbRowed (r : Option Frontend.Check.CRow) (c : TCx) : TCx :=
-  match r with
-  | some S => { c with E := { c.E with row := some S } }
-  | none => c
+  -- `Div` aside: the body's loops are elaborated at its row, and the `Div` elaboration places
+  -- their ticks.
+  match r.map rowNoDiv with
+  | some S@(_ :: _) => { c with E := { c.E with row := some S } }
+  | _ => c
+
+/-- `M` with each loop on its spine replaced by what follows it, which sees the variables the loop
+assigns at their types: for the result type of a body whose loops are not elaborated yet. -/
+def dropLoops : Nat → Comp → Comp
+  | 0, M => M
+  | n + 1, .bind sp x A M N lin => .bind sp x A M (dropLoops n N) lin
+  | n + 1, .letUnit sp V M => .letUnit sp V (dropLoops n M)
+  | n + 1, .letPair sp x y V M => .letPair sp x y V (dropLoops n M)
+  | n + 1, .case sp V x M y N => .case sp V x (dropLoops n M) y (dropLoops n N)
+  | n + 1, .loop _ _ _ _ _ N => dropLoops n N
+  | _, M => M
+
+/-- The result type of a borrow block's body `S` in its context `c`; a body that loops has the
+result of what follows its loops. -/
+def blockResTy (c : TCx) (S : Comp) : Option CVTy :=
+  (resultOfC (c.tyCL S)).orElse fun _ => resultOfC (c.tyCL (dropLoops divFuel S))
 
 
-/-- A borrow block's constant in its unwinding form, at the row `r` (SPEC §19). -/
-def Const.unwinding (r : Frontend.Row) : Const → Option Const
-  | .withbor1 x A B => some (.withbor1U x A B r)
-  | .withbor2 x b A B => some (.withbor2U x b A B r)
-  | .withbor3 a x A B => some (.withbor3U a x A B r)
-  | .sliceBorrowMut x b A B => some (.sliceBorrowMutU x b A B r)
-  | .sliceBorrowImm x b A B => some (.sliceBorrowImmU x b A B r)
-  | _ => none
-
-/-- A borrow block whose constant is an unwinding form, as the computation it is:
-`k <- return CONST; p <- return P; f <- return CB; ((force k) p) f`. -/
-def unwindingC? (sp : Span) : Val → Option Comp
-  | .app _ (.app _ (.const ksp C) P) cb => match C with
-    | .withbor1U .. | .withbor2U .. | .withbor3U .. | .sliceBorrowMutU .. | .sliceBorrowImmU .. =>
-      let sfx := s!"{sp.start.line}_{sp.start.col}"
-      let k : Ident := ⟨s!"io_uk{sfx}", sp⟩
-      let p : Ident := ⟨s!"io_up{sfx}", sp⟩
-      let f : Ident := ⟨s!"io_uf{sfx}", sp⟩
-      -- The callback is ascribed its type: a computation synthesized in a value performs
-      -- nothing, and the callback's body performs the row's operations.
-      let cbTy : Option VTy := match C with
-        | .withbor1U x A B r => some (ty x (.imm sp (.var sp x.name) A) B r)
-        | .withbor2U x _ A B r | .withbor3U _ x A B r => some (ty x (.mut sp (.var sp x.name) A) B r)
-        | .sliceBorrowMutU x _ A B r => some (ty x (.arrayMut sp (.var sp x.name) A) B r)
-        | .sliceBorrowImmU x _ A B r => some (ty x (.arrayImm sp (.var sp x.name) A) B r)
-        | _ => none
-      -- Its `∀` is over the computation `L ⊸ F[S] (['x] B)` itself, not over a returned thunk.
-      let cb := match cb with
-        | .thunkv tsp (.lamL lsp xi b (.ret _ (.thunkv _ L))) => Val.thunkv tsp (.lamL lsp xi b L)
-        | cb => cb
-      some (.bind sp k none (.ret sp (.const ksp C)) (.bind sp p none (.ret sp P)
-        (.bind sp f cbTy (.ret sp cb) (.app sp (.app sp (.force sp k) p) f) false) false) false)
-    | _ => none
-  -- A lent cell's mark is the plain borrow's scheme, not the unwinding form's.
-  | .mark _ _ V | .reify _ _ _ _ V => unwindingC? sp V
-  | _ => none
-where
-  ty (x : Ident) (L B : VTy) (r : Frontend.Row) : VTy :=
-    .thunk sp (.all sp x (.dom sp) (.arr sp L (.eff sp r (.box sp (.var sp x.name) B))))
 
 /-- A `mut` borrow block of an owned cell whose body performs resuming operations, as the relaxed
 lend R1 (SPEC §29): `p <- return P; withbor2r['x, @b, A, B, [r]](p, m) M`, from the unwinding
@@ -3702,6 +3861,10 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         else none) (fun _ => none)
       surfV n c exp (.run sp L)
     | .app sp (.sugar osp (.op o)) (.pair psp a b) => surfOp n c exp sp osp psp o false a b
+    | .app sp (.sugar ksp (.rowStep ws r)) V => do
+      -- The step's body is at the loop's row, which the `Div` elaboration gives it: its own
+      -- type is the step's after that elaboration.
+      pure (.app sp (.sugar ksp (.rowStep ws r)) (← surfV n c none V))
     | .app sp (.sugar osp (.checked o)) (.pair psp a b) => surfOp n c exp sp osp psp o true a b
     | .app sp (.sugar ksp (.call k)) W => do
       let W' ← surfV n c none W
@@ -3864,7 +4027,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := if k == .imm then .imm (.var v) A else .mut (.var v) A
         let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
-        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
+        let B ← need tsp "the block's result" (blockResTy (cbRowed cbr ((← refresh c₁).push b.name (some Tb))) S')
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
@@ -3891,7 +4054,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := .mut (.var v) A
         let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
-        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
+        let B ← need tsp "the block's result" (blockResTy (cbRowed cbr ((← refresh c₁).push b.name (some Tb))) S')
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
@@ -3912,7 +4075,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := .fam (if k == .imm then .imm (.var v) A else .mut (.var v) A)
         let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
-        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
+        let B ← need tsp "the block's result" (blockResTy (cbRowed cbr ((← refresh c₁).push b.name (some Tb))) S')
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
@@ -3936,7 +4099,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := .fam (if imm then .imm (.var v) A else .mut (.var v) A)
         let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
-        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
+        let B ← need tsp "the block's result" (blockResTy (cbRowed cbr ((← refresh c₁).push b.name (some Tb))) S')
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
@@ -3975,7 +4138,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let U8 : CVTy := .int .w8
         let Tb : CVTy := .fam (.imm (.var v) U8)
         let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
-        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
+        let B ← need tsp "the block's result" (blockResTy (cbRowed cbr ((← refresh c₁).push b.name (some Tb))) S')
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let U8s : VTy := .int ksp .w8
@@ -4077,7 +4240,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := .tensor (.mut (.var v) A) (.mut (.var v) B)
         let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
-        let T ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyCL S'))
+        let T ← need tsp "the block's result" (blockResTy (cbRowed cbr ((← refresh c₁).push b.name (some Tb))) S')
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v T then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 T))
         let As ← c.surface ksp A
@@ -4282,13 +4445,19 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       if let some (i, P, R, cls, B) := hndCtl? V then return ← hndCtlC n c sp i P R cls B
       if let .app _ (.sugar _ (.pullSite i)) call := V then return ← pullView n c sp i call
       if let some B := borrowBlock? V then
-        if let some S := c.E.row then
+        -- A borrow block whose body loops holds its lend across the loop's ticks: its borrow is
+        -- at the row `div` besides, and the kernel refuses the lend there (`Row.Unwind`; T1,
+        -- tier 2).  `[spec §14, §19]`
+        let loops := Frontend.Elab.LoopLend.blockLoops c (dataFor (← get).sizedFns) V
+        if loops || c.E.row.isSome then
+          let S := c.E.row.getD []
           -- A borrow block whose body performs operations: the unwinding form of its borrow, at
           -- the operations of the names the body performs (SPEC §19).
           let used := (opsC c divFuel B).map (·.1)
-          let r := S.filter fun o => used.contains o.n.toNat
+          let r₀ := S.filter fun o => used.contains o.n.toNat
+          let r := if loops then BoCa.Fig16.LogRel.Core.tickSig :: r₀ else r₀
           if !r.isEmpty then
-            if let some o := r.find? (fun o => !o.abort) then
+            if let some o := r₀.find? (fun o => !o.abort) then
               -- A `mut` borrow of an owned cell: the relaxed lend R1 (SPEC §29).
               if let some (.mut, P) := borrowKind? V then
                 if let some (.ref _) := c.tyV P then
@@ -4322,7 +4491,11 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
             modify fun st => { st with cbRow := saved }
             match unwindingC? sp V' with
             | some M' => return M'
-            | none => throw ⟨V.span, "this borrow block's body performs an abortive operation, and " ++
+            | none =>
+              if loops then throw ⟨V.span, "this borrow block's body loops, so its lend is held " ++
+                "across the loop's ticks (T1), and its place (a buffer or a literal) has no " ++
+                "unwinding form at a row: not provided"⟩
+              throw ⟨V.span, "this borrow block's body performs an abortive operation, and " ++
                 "its place (a buffer or a literal) has no unwinding form here: not provided"⟩
       let V' ← surfV n c (match exp.bind rowRes? with | some (_, A) => some A | _ => none) V
       let c' ← refresh c
@@ -4349,9 +4522,8 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         let N' ← surfC n c exp N
         modify fun s => { s with exits := saved }
         return N'
-      -- A borrow block over a loop, or a `let r = &x`: lent per observation (`LoopLend`).
-      if let some L ← (Frontend.Elab.LoopLend.hook c (dataFor (← get).sizedFns) sp x A M N lin :
-          Except Error (Option Comp)) then
+      -- `let r = &x`: a borrow block over the rest of the body (`LoopLend.lendLet`).
+      if let some L ← (Frontend.Elab.LoopLend.hook sp x A M N : Except Error (Option Comp)) then
         return (← surfC n c exp L)
       -- An annotated head that performs operations of the current row is at that row, as the
       -- checker reads it (`F_Σ A` when `F A` fails): a handler site inside it handles its body at
@@ -4414,24 +4586,24 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       if let .each x := src then
         -- Over a call of a function that performs an iteration effect: a handler site (SPEC §15).
         if let .app _ (.sugar _ (.forSite i)) call := V then return ← forYield n c exp sp x i call M N
-        -- Over data: a counted loop, total (SPEC §16).
-        -- A counted loop's class (`docs/loops.md` §2.2): total, unless its body has a loop of the
-        -- machine or a call of a div function, which makes it a loop of the machine over its
-        -- source's cursor.  `[spec §14, §16]`
-        if let some src := dataSrcOf c V' then
+        -- Over data: a counted loop, total (SPEC §16), unless its body performs `Div` (it has a
+        -- loop, or a call of a div function): then the loop is at the row `div`, `bounded_fix`
+        -- over the count (`docs/pipeline-architecture.md` §3.2), and a loop around it is too.
+        -- `[spec §14, §16]`
+        if (dataSrcOf c V').isSome then
           let s₀ ← get
           let o₀ ← getThe Origins
           modify fun st => { st with machine := false }
-          let L? ← forData n c exp sp x V V' M N
-          -- A source lent for the loop (`&a`, `&mut a`) is not walked as a loop of the machine:
-          -- its lend's extent is the whole loop (STOP: KERNEL WORK, #644).
-          let lent := match src with | .lend .. => true | _ => false
-          if (← get).machine && !lent then
+          let L? ← forData n c exp sp x V V' M N false
+          if (← get).machine then
             set s₀
             set o₀
-            return ← forDataDiv n c exp sp x V src M N none
-          modify fun st => { st with machine := s₀.machine }
-          if let some L := L? then return L
+            let L? ← forData n c exp sp x V V' M N true
+            modify fun st => { st with machine := true }
+            if let some L := L? then return L
+          else
+            modify fun st => { st with machine := s₀.machine }
+            if let some L := L? then return L
       -- Otherwise a drain of a generator or an iterator, a `while` or a `loop`: div (SPEC §14,
       -- §15).
       let T := match src with
@@ -4614,10 +4786,13 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
 `none` when the source is not sized. `V` is the source as written. A body that performs an
 operation that resumes is a div loop at a site observed one turn at a time (`forDataDiv`), and a
 loop at the row otherwise: `bounded_fix` whose budget is the count, its step the body at the row
-(`rowLoop`).  `[spec §16, §30]` -/
-def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val → Comp → Comp → DM (Option Comp)
-  | 0, _, _, _, _, _, _, _, _ => pure none
-  | n + 1, c, exp, sp, x, V, V', M, N => do
+(`rowLoop`). With `divRow`, the body performs `Div` (it loops, or calls a div function): the loop
+is at the row `div, Σ`, `bounded_fix` over the count, and its step, marked (`VSugar.rowStep`), is
+walked by the `Div` elaboration, whose close inside it hands the threaded variables back
+(`VSugar.rowClose`).  `[spec §14, §16, §30]` -/
+def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val → Comp → Comp → Bool → DM (Option Comp)
+  | 0, _, _, _, _, _, _, _, _, _ => pure none
+  | n + 1, c, exp, sp, x, V, V', M, N, divRow => do
     let some src := dataSrcOf c V' | return none
     let st ← get
     let sfx := s!"{sp.start.line}_{sp.start.col}"
@@ -4631,9 +4806,9 @@ def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val →
     let resumes := (opsC c divFuel M).filter fun (k, i) =>
       S₀.any fun o => o.n.toNat == k && o.i.toNat == i && !o.abort
     if let some (k, i) := resumes.find? (st.perTurn.contains ·.1) then
-      return some (← forDataDiv n c exp sp x V src M N (some (k, i)))
-    let rowLoop := !resumes.isEmpty
-    if rowLoop then
+      return some (← forDataDiv n c exp sp x V src M N k i)
+    let rowLoop := !resumes.isEmpty || divRow
+    if !resumes.isEmpty then
       match src with
       | .lend a m _ => throw ⟨sp, s!"the body of this `for` performs an operation that resumes, " ++
           s!"and its source `&{if m then "mut " else ""}{a.name}` lends `{a.name}` around the whole " ++
@@ -4871,11 +5046,47 @@ case io_so{sfx} \{
     -- The loop at the row: `bounded_fix` whose budget is the count, so that the self-reference is
     -- `inl ()` once the body has run at each index; its step runs the body at the row and goes on
     -- with the self-reference, or leaves by an exit.
+    -- With `Div` in the body, the row is `div, Σ`, and the step answers besides what a close
+    -- inside it hands back: the threaded variables.
+    let Wcl := Wt
     let FR ← do
       let es ← S.mapM fun o => do
         pure s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q} {← pp o.A} ~> {← pp o.B}"
-      pure s!"F[{", ".intercalate es}] (({St}) + ({stepT}))"
+      let es := if divRow then "div" :: es else es
+      if divRow then pure s!"F[{", ".intercalate es}] ((({St}) + ({stepT})) + ({Wcl}))"
+      else pure s!"F[{", ".intercalate es}] (({St}) + ({stepT}))"
     let At := s!"i32 * ({St})"
+    -- With `Div`: the body is the step `io_gb`, marked for the `Div` elaboration, and the loop's
+    -- self-reference goes on with it; a close inside it leaves the loop with the threaded
+    -- variables (`io_cl`), and after the loop the body is closed there (`VSugar.rowClose`).
+    let rowCoreDiv := s!"{pre}io_nb{sfx} <- if {bound} < 0 \{ 0 } else \{ {bound} };
+io_gb{sfx} : !U (({At}) -o {FR}) <- return io_hole_rowstep;
+io_gs{sfx} : !U (((1 + !U (({At}) -o {FR})) * ({At})) -o {FR}) <- return (!thunkv fun (io_gp{sfx} : (1 + !U (({At}) -o {FR})) * ({At})) ->
+  let (io_self{sfx}, io_ga{sfx}) = io_gp{sfx};
+  let (io_i{sfx}, io_s{sfx}) = io_ga{sfx};
+  case io_self{sfx} \{
+    inl io_z{sfx} -> return (inl (inl io_s{sfx}))
+  | inr io_me{sfx} ->
+      io_gf{sfx} <- return (unbang io_gb{sfx});
+      io_gq{sfx} <- return (io_i{sfx}, io_s{sfx});
+      io_oc{sfx} <- force io_gf{sfx} io_gq{sfx};
+      case io_oc{sfx} \{
+        inl io_o{sfx} -> case io_o{sfx} \{
+          inl io_s2{sfx} -> io_g{sfx} <- return (unbang io_me{sfx});
+            io_a2{sfx} <- return (io_i{sfx} + 1, io_s2{sfx});
+            force io_g{sfx} io_a2{sfx}
+        | inr io_e{sfx} -> return (inl (inr io_e{sfx}))
+        }
+      | inr io_cl{sfx} -> return (inr io_cl{sfx})
+      }
+  });
+io_fb{sfx} <- return (unbang bounded_fix[{At}, {FR}]);
+io_fa{sfx} <- return (io_gs{sfx}, (io_nb{sfx}, ({i0}, {stateS})));
+io_rc{sfx} <- force io_fb{sfx} io_fa{sfx};
+"
+    let rowStepSrc := s!"return (!thunkv fun (io_q{sfx} : {At}) ->
+  let (io_i{sfx}, io_s{sfx}) = io_q{sfx};
+  {destructSrc s!"io_s{sfx}" (curN ++ wsN)}{elem})"
     let rowCore := s!"{pre}io_nb{sfx} <- if {bound} < 0 \{ 0 } else \{ {bound} };
 io_gs{sfx} : !U (((1 + !U (({At}) -o {FR})) * ({At})) -o {FR}) <- return (!thunkv fun (io_gp{sfx} : (1 + !U (({At}) -o {FR})) * ({At})) ->
   let (io_self{sfx}, io_ga{sfx}) = io_gp{sfx};
@@ -4911,27 +5122,34 @@ io_fa{sfx} <- return (io_gs{sfx}, (io_nb{sfx}, ({i0}, {stateS})));
     let foldCore := match stN with
       | [y] => s!"{pre}{y} <- return {loopV};\n"
       | _ => s!"{pre}io_r{sfx} <- return {loopV};\n{destructSrc s!"io_r{sfx}" stN}"
-    let core := if fold then foldCore else (if rowLoop then rowCore else
-      s!"{pre}{rname} <- return {loopV};
-") ++ s!"{reabort}io_j{sfx} : {Jt} <- case io_r{sfx} \{
+    let jCase := s!"io_j{sfx} : {Jt} <- case io_r{sfx} \{
     inl io_s{sfx} -> {destructSrc s!"io_s{sfx}" (curN ++ wsN)}return ({jEnded})
   | inr io_e{sfx} -> let (io_w{sfx}, io_o{sfx}) = io_e{sfx};
       {destructSrc s!"io_w{sfx}" wsN}{jExit}
   };
 "
+    let core := if fold then foldCore else if divRow then
+        rowCoreDiv ++ s!"io_jc{sfx} : ({Jt}) + ({Wcl}) <- case io_rc{sfx} \{
+    inl io_r{sfx} -> {jCase}return (inl io_j{sfx})
+  | inr io_cl{sfx} -> return (inr io_cl{sfx}) };
+"
+      else (if rowLoop then rowCore else
+      s!"{pre}{rname} <- return {loopV};
+") ++ reabort ++ jCase
     -- Around a borrow block (a lent array), the loop's result is the block's: the body binds
     -- `io_bt`, so the parser does not add the variables it hands back (`Parser.borrowBlock`),
     -- and the loop's threaded variables, capabilities included, come out in its result.
     let outN := wsN
+    let jv := if divRow then s!"io_jc{sfx}" else s!"io_j{sfx}"
     let reshape := if fold then s!"io_bt <- return {tupleSrc wsN};\nreturn io_bt"
-      else s!"io_bt <- return io_j{sfx};\nreturn io_bt"
+      else s!"io_bt <- return {jv};\nreturn io_bt"
     let loopSrc := match wrap with
       | some (open_, back) => if fold then
           s!"{outerPre}io_bl{sfx} <- return ({open_}{core}{reshape} });
 let ({back}, io_jw{sfx}) = io_bl{sfx};
 {destructSrc s!"io_jw{sfx}" outN}"
         else s!"{outerPre}io_bl{sfx} <- return ({open_}{core}{reshape} });
-let ({back}, io_j{sfx}) = io_bl{sfx};
+let ({back}, {jv}) = io_bl{sfx};
 "
       | none => core
     -- After the loop: the threaded variables rebound, then the value, then what follows.
@@ -4953,7 +5171,17 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
 | inr io_rv{sfx} -> force io_hole_ret }"
       else s!"let (io_jw{sfx}, io_ob{sfx}) = io_j{sfx};\n{destructSrc s!"io_jw{sfx}" outN}{value}force io_hole_rest"
     let what := "a `for` over data (a counted loop)"
-    let L ← (template sp what (loopSrc ++ after) : SM Comp)
+    let full := if divRow then
+        loopSrc ++ s!"case io_jc{sfx} \{ inl io_j{sfx} -> " ++ after ++
+          s!"\n| inr io_cl{sfx} -> {destructSrc s!"io_cl{sfx}" wsN}force io_hole_close }"
+      else loopSrc ++ after
+    let L ← (template sp what full : SM Comp)
+    let L ← if !divRow then pure L else do
+      let .ret _ stepV ← (template sp what rowStepSrc : SM Comp)
+        | throw ⟨sp, "internal error: a counted loop's step at the row"⟩
+      let stepV := Val.app sp (.sugar sp (.rowStep wsN hasRet)) stepV
+      pure (L.fill (fun h => if h == "io_hole_rowstep" then some stepV else none)
+        (fun h => if h == "io_hole_close" then some (.ret sp (.sugar sp .rowClose)) else none))
     let L ← match walkOf with
       | some m => do
         let W ← ((parseComp s!"return run ({walkIn}return {ctSrc})").mapError (internalError sp what) :
@@ -4991,15 +5219,17 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
       else if h == "io_hole_ret" then some (retOut rsp (.var rsp s!"io_rv{sfx}")) else none
     let L := L.fill hv hc
     if !(← get).quiet then
-      if rowLoop then
+      if divRow then
+        report sp (s!"`for` is bounded by {desc}: its body loops, so it is a loop at the row " ++
+          "`div` (bounded_fix over the count)")
+      else if rowLoop then
         report sp (s!"`for` is total, bounded by {desc}: its body performs an operation that " ++
           "resumes, so it is a loop at the row (bounded_fix over the count)")
       else report sp s!"`for` is total, bounded by {desc}"
     -- The loops inside the body leave by this loop's exit on `return`.
     let ret (tsp : Span) (v : Val) : Comp := .ret tsp (exitV tsp (.inr tsp (.inr tsp v)))
-    -- A counted loop over a source it does not lend may become a loop of the machine (its class).
-    let walks := match src with | .lend .. => false | _ => true
-    modify fun s => { s with exits := .total Rt ret walks :: s.exits }
+    -- A loop of the body, or a call of a div function in it, makes the loop one at the row `div`.
+    modify fun s => { s with exits := .total Rt ret true :: s.exits }
     let L' ← surfC n c exp L
     modify fun s => { s with exits := s.exits.drop 1 }
     return some L'
@@ -5011,19 +5241,15 @@ the body's machine (SPEC §14, §15), one turn per element: a count's index, a v
 an owned array's index (each element copied out under a borrow of one turn), a sized iterator's
 data and state. `&a` and `&mut a` lend `a` around the whole loop, and an operation that resumes
 cannot cross a borrow (T1, #172): they are rejected. The loop has no value (`else`, `break e`). -/
-def forDataDiv : Nat → TCx → Option CCTy → Span → Ident → Val → DataSrc → Comp → Comp →
-    Option (Nat × Nat) → DM Comp
-  | 0, _, _, sp, _, _, _, _, _, _ => throw ⟨sp, "internal error: a loop nested too deeply"⟩
-  | n + 1, c, exp, sp, x, V, src, M, N, op => do
+def forDataDiv : Nat → TCx → Option CCTy → Span → Ident → Val → DataSrc → Comp → Comp → Nat → Nat →
+    DM Comp
+  | 0, _, _, sp, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: a loop nested too deeply"⟩
+  | n + 1, c, exp, sp, x, V, src, M, N, k, i => do
     let sfx := s!"{sp.start.line}_{sp.start.col}"
     let pp (T : CVTy) : DM String := do pure (← (c.surface sp T : Except Error VTy)).pp
-    -- Why the loop is div: its body performs an operation that resumes at a site that observes it
-    -- one turn at a time, or its body loops (its class).
-    let why := match op with
-      | some (k, i) => s!"the body of this `for` performs an operation that resumes (the operation {k}.{i})"
-      | none => "the body of this `for` loops"
     if N.forElse?.isSome || N.forRes?.isSome || M.spineBreaks.any (·.2.isSome) then
-      throw ⟨sp, s!"{why}, so the loop is div (a `while` over its source), and it has no value: " ++
+      throw ⟨sp, s!"the body of this `for` performs an operation that resumes (the operation " ++
+        s!"{k}.{i}), so the loop is div (a `while` over its source), and it has no value: " ++
         "`break e` and `else` are not provided there"⟩
     let x' := x.name
     let w := s!"io_w{sfx}"
@@ -5092,7 +5318,8 @@ while ({w}m) \{
   }
 };
 force io_hole_rest"
-      | .lend a m _ => throw ⟨sp, s!"{why}, and its source `&{if m then "mut " else ""}{a.name}` lends " ++
+      | .lend a m _ => throw ⟨sp, s!"the body of this `for` performs an operation that resumes " ++
+          s!"(the operation {k}.{i}), and its source `&{if m then "mut " else ""}{a.name}` lends " ++
           s!"`{a.name}` around the whole loop: an operation that resumes cannot cross a borrow " ++
           "(T1, #172). Iterate an owned array, or a view the function is given"⟩
     let (lo, hi) := match V with
@@ -5106,9 +5333,7 @@ force io_hole_rest"
     let L ← (template sp "a `for` over data whose body performs an operation that resumes (a div loop)"
       src : SM Comp)
     if !(← get).quiet then
-      report sp (match op with
-        | some (k, i) => s!"`for` is div: its body performs an operation that resumes ({k}.{i}), so it is a loop over the source's cursor"
-        | none => "`for` is div: its body loops, so it is a loop over the source's cursor")
+      report sp s!"`for` is div: its body performs an operation that resumes ({k}.{i}), so it is a loop over the source's cursor"
     surfC n c exp (L.fill hv hc)
 
 /-- `for x in g(e) { M }; N`, `g` performing an iteration effect (SPEC §15): the handler site
@@ -5177,7 +5402,8 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let cw ← refresh cw
     let some g := (match call' with | .app _ f _ => calleeHead f | _ => none)
       | throw ⟨sp, "internal error: the call of a `for` over a generator"⟩
-    let some Gt := cw.tyV (.var .none g)
+    -- The callee's type at the call's lifetimes: the threaded variables may hold borrows.
+    let some Gt := (match call' with | .app _ f _ => cw.tyV f | _ => none) <|> cw.tyV (.var .none g)
       | throw ⟨sp, s!"the type of `{i.callee}` is not determined here"⟩
     let some (S0, Res) := resultRowOf (some Gt)
       | throw ⟨sp, s!"`{i.callee}`'s type is not a function's"⟩
@@ -5235,7 +5461,7 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     -- (`Jt`), or the rest of the loop.
     let Lg ← pp Res
     let Ot := if looping then s!"({Jt}) + {Lg}" else Jt
-    let K ← do pure s!"U (({Wt} -o {← F Ot}) & {← F "1"})"
+    let K ← do pure s!"U ((({Wt}) -o {← F Ot}) & {← F "1"})"
     let clT ← do pure s!"!U ((({Tt}) * ({Wt})) * {K} -o {← F Ot})"
     let hrIn := if looping then s!"(({Wt}) * ({Bt})) + {Lg}" else s!"({Wt}) * ({Bt})"
     let hrBody := if looping then
@@ -5292,7 +5518,7 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
       let fOb ← F s!"({Jt}) + U X"
       let fCl ← F Rgs
       let Lw := if S.isEmpty then s!"loop ({Jt}) ({Rgs})" else s!"nu X. {fOb} & {fCl}"
-      let Kc ← do pure s!"U (({Wt} -o {← F Rgs}) & {← F "1"})"
+      let Kc ← do pure s!"U ((({Wt}) -o {← F Rgs}) & {← F "1"})"
       let closer := s!"((!thunkv fun (io_cv{sfx} : {Rgs}) -> return io_cv{sfx}) : !U ({Rgs} -o {← F Rgs})),
   (((!thunkv fun (io_cp{sfx} : (({Tt}) * ({Wt})) * {Kc}) ->
     let (io_cxw{sfx}, io_ck{sfx}) = io_cp{sfx};
@@ -5919,10 +6145,6 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
     let st := { st with quiet := match d with
       | .def_ _ nm _ _ _ _ => st.libNames.contains nm.name
       | _ => false }
-    -- A div function taking a borrow takes the owner, lent at each step (`LoopLend.lentDef`).
-    let c₀ := TCx.ofScope (st.lib ++ st.out) false
-    let d := (← (Frontend.Elab.LoopLend.lentDef c₀ (dataFor st.sizedFns) d :
-      Except Error (Option Decl))).getD d
     let (d, st) ← (surfDecl fuel d).run st
     -- A recursive group's source under a heap driver: its machine (SPEC §20).
     let d ← match d with

@@ -1,10 +1,18 @@
--- A div function taking a borrow (SPEC §14, borrow scopes over loops). `total_at` loops over its
--- argument's entries, so it is elaborated to take the owner, `ref (array i32)`, and hand it back
--- first, with its body a borrow block of the owner lent per observation. `total_at(&t)` lends the
--- place as a capability is lent; inside a borrow block, `total_at(b)` passes the block's borrow,
--- which is the place lent instead. `lend-div.core.bc` is its elaboration in core, as
--- `bcc desugar` prints it.
--- Answer: i32[200]: each call sums the entries at 4, 3, 2, 1 of 10 * i.
+-- pending: a lend held across a tick (a suspension; T1, #172): tier 2 is open and has no path
+-- now: 40:24: `b` is used twice here, and its type `imm 'a array i32` is not persistent
+--
+-- A div function taking a borrow: `total_at` loops over its argument's entries, and
+-- `main` calls it lending the table's cell, `total_at(&t)`, and from inside a borrow block of the
+-- table, `total_at(b)`.
+--
+-- Needs a lend held across a tick. Every loop is at the row `div` (SPEC §14), and each of its back
+-- edges ticks, a control operation that resumes; the lend `&t` at 45:11 spans the call of
+-- `total_at`, whose `for` at 40:5 ticks and reads the borrow `b` at each turn (the kernel refuses
+-- that use first: `b` is not persistent). The kernel's rule for a lend at a row has only abortive
+-- operations (`Row.Unwind`), so it refuses the lend. Holding a lend across a suspension is tier 2,
+-- which is open and has no path.
+--
+-- Once it lands: `i32[200]`, `live 0`: each call sums the entries at 4, 3, 2, 1 of 10 * i.
 
 def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
   !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->

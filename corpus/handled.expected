@@ -194,7 +194,6 @@ corpus/async-workers-scoped.bc 3.0 stored: machine; condition 2 holds; -
 corpus/async-workers-scoped.bc 3.1 tail: -; condition 2 holds; -
 corpus/async-workers-scoped.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/async-workers-scoped.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/axes/borrow-across-loop.bc flows [0, 4294967295]; main [4294967295]
 corpus/axes/codata-coeffects.bc flows [0, 4294967295]; main []
 corpus/axes/codata-effects.bc flows [0, 4294967295]; main [4294967295]
 corpus/axes/codata-generic.bc flows [0, 4294967295]; main []
@@ -790,7 +789,6 @@ corpus/generic-pair-arg.bc flows [0, 4294967295]; main []
 corpus/hello.bc flows [0, 4294967295]; main []
 corpus/http-request.bc flows [0, 4294967295]; main []
 corpus/hygiene-answering-state.bc flows [0, 4294967295]; main []
-corpus/hygiene-borrow-loop.bc flows [0, 4294967295]; main [4294967295]
 corpus/hygiene-box-lib.bc flows [0, 4294967295]; main []
 corpus/hygiene-clause-global.bc flows [0, 1, 4294967295]; main [1, 2]
 corpus/hygiene-clause-global.bc 14:11: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
@@ -1034,26 +1032,9 @@ corpus/leetcode/trees/0297-serialize-and-deserialize-binary-tree.bc 1.0 abortive
 corpus/leetcode/trees/0572-subtree-of-another-tree.bc flows [0, 1, 4294967295], finaliser; main [1, 4294967295], finaliser
 corpus/leetcode/trees/0572-subtree-of-another-tree.bc 147:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/trees/0572-subtree-of-another-tree.bc 1.0 abortive: branch; condition 2 holds; -
-corpus/lend-config.bc flows [0, 4294967295]; main [4294967295]
-corpus/lend-copy.bc flows [0, 4294967295]; main [4294967295]
-corpus/lend-div.bc flows [0, 1, 4294967295]; main [1, 4294967295]
-corpus/lend-div.bc 35:5: handle 1: inside []; row []; ops 1.0 tail; names 1.0 row; condition 2 holds
-corpus/lend-div.bc 1.0 tail: machine; condition 2 holds; -
 corpus/lend-lib-each.bc flows [0, 4294967295]; main []
 corpus/lend-lib-gen.bc flows [0, 4294967295]; main []
 corpus/lend-lib-loop.bc flows [0, 4294967295]; main []
-corpus/lend-mut.bc flows [0, 4294967295]; main [4294967295]
-corpus/lend-pipeline.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3, 4294967295], finaliser
-corpus/lend-pipeline.bc 43:32: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
-corpus/lend-pipeline.bc 43:32: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
-corpus/lend-pipeline.bc 43:24: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
-corpus/lend-pipeline.bc 43:24: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
-corpus/lend-pipeline.bc 43:5: handle 1: inside []; row []; ops 1.0 tail; names 1.0 row; condition 2 holds
-corpus/lend-pipeline.bc 3.0 stored,tail: machine; condition 2 holds; -
-corpus/lend-pipeline.bc 2.0 stored,tail: machine; condition 2 holds; -
-corpus/lend-pipeline.bc 1.0 tail: machine; condition 2 holds; -
-corpus/lend-server.bc flows [0, 4294967295]; main [4294967295]
-corpus/lend-shadow.bc flows [0, 4294967295]; main [4294967295]
 corpus/list-blocks.bc flows [0, 2, 4294967295], finaliser; main [1, 2, 3], finaliser
 corpus/list-blocks.bc 22:12: handle 3: inside [], finaliser; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
 corpus/list-blocks.bc 19:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
@@ -1394,12 +1375,6 @@ corpus/sugar/inject.bc flows [0, 4294967295]; main []
 corpus/sugar/inject.core.bc flows [0, 4294967295]; main []
 corpus/sugar/lend-array.bc flows [0, 4294967295]; main []
 corpus/sugar/lend-array.core.bc flows [0, 4294967295]; main []
-corpus/sugar/lend-block.bc flows [0, 4294967295]; main [4294967295]
-corpus/sugar/lend-block.core.bc flows [0, 4294967295]; main [4294967295]
-corpus/sugar/lend-div.bc flows [0, 4294967295]; main [4294967295]
-corpus/sugar/lend-div.core.bc flows [0, 4294967295]; main [4294967295]
-corpus/sugar/lend-let.bc flows [0, 4294967295]; main [4294967295]
-corpus/sugar/lend-let.core.bc flows [0, 4294967295]; main [4294967295]
 corpus/sugar/lend.bc flows [0, 4294967295]; main []
 corpus/sugar/lend.core.bc flows [0, 4294967295]; main []
 corpus/sugar/loop-main.bc flows [0, 4294967295]; main [4294967295]

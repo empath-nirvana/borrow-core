@@ -113,99 +113,99 @@ baseline).
 
 | # | rule | §  | progs | static | expanded | read by the backend | class | what would change it |
 |---|---|---|---|---|---|---|---|---|
-| 1 | [`var`](../Core/Fundamental.lean#L87) | §3 | 374 | 115176 | 265193 | erasure only (`Convert.lean:653`) | **A** | — |
-| 2 | [`unitI`](../Core/Fundamental.lean#L88) | §3 | 350 | 6286 | 12284 | erasure only | **A** | — |
-| 3 | [`tensorI`](../Core/Fundamental.lean#L89) | §3 | 373 | 51243 | 124450 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
-| 4 | [`sumI₁`](../Core/Fundamental.lean#L92) | §3 | 313 | 4274 | 6849 | erasure only | **A** | — |
-| 5 | [`sumI₂`](../Core/Fundamental.lean#L94) | §3 | 308 | 4614 | 7190 | erasure only | **A** | — |
+| 1 | [`var`](../Core/Fundamental.lean#L87) | §3 | 373 | 118987 | 269943 | erasure only (`Convert.lean:653`) | **A** | — |
+| 2 | [`unitI`](../Core/Fundamental.lean#L88) | §3 | 348 | 6856 | 13091 | erasure only | **A** | — |
+| 3 | [`tensorI`](../Core/Fundamental.lean#L89) | §3 | 372 | 52077 | 125468 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
+| 4 | [`sumI₁`](../Core/Fundamental.lean#L92) | §3 | 311 | 4939 | 7545 | erasure only | **A** | — |
+| 5 | [`sumI₂`](../Core/Fundamental.lean#L94) | §3 | 306 | 4936 | 7540 | erasure only | **A** | — |
 | 6 | [`thunkF`](../Core/Fundamental.lean#L97) | §3 | 1 | 1 | 1 | erasure only | **A** | — |
-| 7 | [`thunkV`](../Core/Fundamental.lean#L100) | §3 | 302 | 7645 | 17486 | erasure only | **A** | — |
-| 8 | [`ret`](../Core/Fundamental.lean#L103) | §3 | 374 | 56109 | 118075 | erasure only (identity) | **A** | — |
-| 9 | [`bind`](../Core/Fundamental.lean#L105) | §3 | 371 | 27472 | 52098 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
-| 10 | [`force`](../Core/Fundamental.lean#L109) | §3 | 273 | 4039 | 4461 | erasure only | **A** | — |
-| 11 | [`lam`](../Core/Fundamental.lean#L111) | §3 | 366 | 12830 | 32372 | erasure only (`Convert.lean:842`) | **A** | — |
-| 12 | [`lamDead`](../Core/Fundamental.lean#L114) | §26 | 53 | 85 | 96 | erasure only | **A** | — |
-| 13 | [`app`](../Core/Fundamental.lean#L117) | §3 | 273 | 3143 | 3555 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
-| 14 | [`withI`](../Core/Fundamental.lean#L121) | §3 | 209 | 1428 | 1513 | the new backend reads the code's kind from the node's type (`Backend2/Convert.lean:1030`, `mkAmp`); the old re-infers it by shape | **A** | — |
-| 15 | [`proj₁`](../Core/Fundamental.lean#L124) | §3 | 232 | 1589 | 1716 | erasure only | **A** | — |
-| 16 | [`proj₂`](../Core/Fundamental.lean#L126) | §3 | 216 | 1412 | 1507 | erasure only | **A** | — |
+| 7 | [`thunkV`](../Core/Fundamental.lean#L100) | §3 | 299 | 7530 | 17416 | erasure only | **A** | — |
+| 8 | [`ret`](../Core/Fundamental.lean#L103) | §3 | 373 | 59592 | 122132 | erasure only (identity) | **A** | — |
+| 9 | [`bind`](../Core/Fundamental.lean#L105) | §3 | 370 | 29087 | 53853 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
+| 10 | [`force`](../Core/Fundamental.lean#L109) | §3 | 269 | 3981 | 4387 | erasure only | **A** | — |
+| 11 | [`lam`](../Core/Fundamental.lean#L111) | §3 | 365 | 13183 | 32995 | erasure only (`Convert.lean:842`) | **A** | — |
+| 12 | [`lamDead`](../Core/Fundamental.lean#L114) | §26 | 67 | 132 | 144 | erasure only | **A** | — |
+| 13 | [`app`](../Core/Fundamental.lean#L117) | §3 | 269 | 3384 | 3785 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
+| 14 | [`withI`](../Core/Fundamental.lean#L121) | §3 | 202 | 1080 | 1153 | the new backend reads the code's kind from the node's type (`Backend2/Convert.lean:1030`, `mkAmp`); the old re-infers it by shape | **A** | — |
+| 15 | [`proj₁`](../Core/Fundamental.lean#L124) | §3 | 127 | 1045 | 1156 | erasure only | **A** | — |
+| 16 | [`proj₂`](../Core/Fundamental.lean#L126) | §3 | 209 | 1011 | 1096 | erasure only | **A** | — |
 | 17 | [`topI`](../Core/Fundamental.lean#L129) | §3 | 0 | 0 | 0 | — | **C** | nothing (CBPV basis; the checker has the rule, `Frontend/Check/Rules.lean:57`, and no program reaches it) |
-| 18 | [`unitE`](../Core/Fundamental.lean#L130) | §3 | 328 | 4234 | 7179 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
-| 19 | [`tensorE`](../Core/Fundamental.lean#L133) | §3 | 360 | 27848 | 68440 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
-| 20 | [`sumE`](../Core/Fundamental.lean#L137) | §3 | 330 | 11234 | 21732 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
-| 21 | [`zeroE`](../Core/Fundamental.lean#L143) | §3 | 4 | 5 | 5 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
-| 22 | [`allI`](../Core/Fundamental.lean#L146) | §3, §44 | 251 | 4698 | 11739 | the new backend reads that the body is a λ-value (`TExpr.isLam`) and compiles the `Λ` as its body (`allI_inst`; `Backend2/Convert.lean:1020`); `∀` erased from the LIR's types (`Backend2/Types.lean`, `ofU`) | **A** | — |
+| 18 | [`unitE`](../Core/Fundamental.lean#L130) | §3 | 327 | 4523 | 7581 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
+| 19 | [`tensorE`](../Core/Fundamental.lean#L133) | §3 | 359 | 27861 | 68838 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
+| 20 | [`sumE`](../Core/Fundamental.lean#L137) | §3 | 329 | 12184 | 22731 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
+| 21 | [`zeroE`](../Core/Fundamental.lean#L143) | §3 | 4 | 7 | 7 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
+| 22 | [`allI`](../Core/Fundamental.lean#L146) | §3, §44 | 243 | 4650 | 11689 | the new backend reads that the body is a λ-value (`TExpr.isLam`) and compiles the `Λ` as its body (`allI_inst`; `Backend2/Convert.lean:1020`); `∀` erased from the LIR's types (`Backend2/Types.lean`, `ofU`) | **A** | — |
 | 23 | [`allE`](../Core/Fundamental.lean#L152) | §3 | 0 | 0 | 0 | — | **C** | deletion candidate (Growth): the checker emits `allEV` at every use; `allE` at `C` has a checker rule (`Rules.lean:381`) no program reaches |
 | 24 | [`bangThunkF`](../Core/Fundamental.lean#L155) | §2 | 0 | 0 | 0 | — | **C** | nothing (the checker has it, `Rules.lean:214`; `bangThunkV` is used instead) |
-| 25 | [`bangThunkV`](../Core/Fundamental.lean#L159) | §2 | 361 | 10503 | 27198 | erasure only | **A** | — |
-| 26 | [`bangE`](../Core/Fundamental.lean#L163) | §2 | 368 | 30375 | 71457 | erasure only (identity) | **A** | — |
+| 25 | [`bangThunkV`](../Core/Fundamental.lean#L159) | §2 | 360 | 10661 | 27623 | erasure only | **A** | — |
+| 26 | [`bangE`](../Core/Fundamental.lean#L163) | §2 | 367 | 31070 | 72289 | erasure only (identity) | **A** | — |
 | 27 | [`copyBang`](../Core/Fundamental.lean#L164) | §2 | 0 | 0 | 0 | — | **E** | deletion candidate (Growth): §10's persistent contexts duplicate `!A` by the split; `copy_bang` (`Frontend/Check/Consts.lean:271`) is never written |
 | 28 | [`forgetBang`](../Core/Fundamental.lean#L166) | §2 | 0 | 0 | 0 | — | **E** | deletion candidate (Growth): §10's `DeadP` drops `!A`; `forget_bang` (`Consts.lean:283`) is never written |
-| 29 | [`boxI`](../Core/Fundamental.lean#L169) | §3, §23 | 262 | 2245 | 4868 | erasure only (identity); the outlives fact is not read | **A** | — |
+| 29 | [`boxI`](../Core/Fundamental.lean#L169) | §3, §23 | 257 | 2227 | 4850 | erasure only (identity); the outlives fact is not read | **A** | — |
 | 30 | [`boxE`](../Core/Fundamental.lean#L171) | §3 | 23 | 136 | 198 | erasure only (identity) | **A** | — |
 | 31 | [`immSub`](../Core/Fundamental.lean#L172) | §3 | 0 | 0 | 0 | — | **C** | nothing (paper rule ⊑imm; checker rule `Rules.lean:245` unreached) |
 | 32 | [`mutSub`](../Core/Fundamental.lean#L174) | §3 | 0 | 0 | 0 | — | **C** | nothing (paper rule ⊑mut; checker rule `Rules.lean:250` unreached) |
-| 33 | [`alloc`](../Core/Fundamental.lean#L177) | §1, §35 | 121 | 229 | 270 | erasure only (`Op.ofPrim?`, `Convert.lean:218`); a scoped cell is re-recognised from the shape `withbor (alloc v) … free c` (`markScoped`, `Convert.lean:544`) and framed by `frameScopes` (`Flat/Lower.lean:1578`) | **B** | N5: frame slots by rule, from the lend's lifetime |
-| 34 | [`free`](../Core/Fundamental.lean#L179) | §1, §35 | 94 | 195 | 232 | erasure only; paired with `alloc` by `markFreeOf` (`Convert.lean:505`) | **B** | N5: frame slots by rule |
+| 33 | [`alloc`](../Core/Fundamental.lean#L177) | §1, §35 | 112 | 220 | 261 | erasure only (`Op.ofPrim?`, `Convert.lean:218`); a scoped cell is re-recognised from the shape `withbor (alloc v) … free c` (`markScoped`, `Convert.lean:544`) and framed by `frameScopes` (`Flat/Lower.lean:1578`) | **B** | N5: frame slots by rule, from the lend's lifetime |
+| 34 | [`free`](../Core/Fundamental.lean#L179) | §1, §35 | 92 | 199 | 236 | erasure only; paired with `alloc` by `markFreeOf` (`Convert.lean:505`) | **B** | N5: frame slots by rule |
 | 35 | [`swap`](../Core/Fundamental.lean#L181) | §1 | 19 | 56 | 68 | exact fixed-scheme recogniser `isSwap` (`Convert.lean:283`) | **A** | — |
 | 36 | [`copy`](../Core/Fundamental.lean#L182) | §1 | 15 | 28 | 93 | erasure only | **A** | — |
 | 37 | [`forgetImm`](../Core/Fundamental.lean#L183) | §1 | 11 | 36 | 141 | erasure only | **A** | — |
-| 38 | [`forgetMut`](../Core/Fundamental.lean#L184) | §1 | 12 | 17 | 24 | erasure only | **A** | — |
+| 38 | [`forgetMut`](../Core/Fundamental.lean#L184) | §1 | 11 | 16 | 23 | erasure only | **A** | — |
 | 39 | [`forgetUnk`](../Core/Fundamental.lean#L185) | §1 | 0 | 0 | 0 | — | **C** | nothing (paper axiom; `Unk` never occurs as a type in the corpus) |
-| 40 | [`lit`](../Core/Fundamental.lean#L187) | §8 | 364 | 18874 | 41499 | erasure only | **A** | — |
-| 41 | [`hostOp`](../Core/Fundamental.lean#L190) | §8 | 351 | 12903 | 29850 | erasure only (Flat host op `Flat/Lower.lean:564`) | **A** | — |
-| 42 | [`arrNew`](../Core/Fundamental.lean#L193) | §9 | 176 | 880 | 2877 | erasure only (`tab`, `Flat/Lower.lean:567`) | **A** | — |
+| 40 | [`lit`](../Core/Fundamental.lean#L187) | §8 | 363 | 19252 | 41917 | erasure only | **A** | — |
+| 41 | [`hostOp`](../Core/Fundamental.lean#L190) | §8 | 350 | 13060 | 30060 | erasure only (Flat host op `Flat/Lower.lean:564`) | **A** | — |
+| 42 | [`arrNew`](../Core/Fundamental.lean#L193) | §9 | 175 | 884 | 2884 | erasure only (`tab`, `Flat/Lower.lean:567`) | **A** | — |
 | 43 | [`arrFree`](../Core/Fundamental.lean#L196) | §9 | 5 | 10 | 10 | erasure only (`drop`, `Flat/Lower.lean:637`) | **A** | — |
-| 44 | [`arrSize`](../Core/Fundamental.lean#L199) | §9 | 124 | 400 | 1970 | erasure only | **A** | — |
-| 45 | [`arrReplace`](../Core/Fundamental.lean#L201) | §9 | 134 | 902 | 6253 | the new backend lowers it from the node as a slot swap: the old contents moved out, the new moved in, no copy and no drop (`Backend2/Convert.lean:1337`, `Backend2/Lower.lean:552`; #608) | **A** | N6 |
-| 46 | [`arrLen`](../Core/Fundamental.lean#L204) | §9 | 131 | 211 | 784 | erasure only | **A** | — |
-| 47 | [`arrGet`](../Core/Fundamental.lean#L207) | §9 | 152 | 335 | 1685 | erasure only (`idx`, `Flat/Lower.lean:604`), bounds-checked at every access | **A** | — |
-| 48 | [`arrCopy`](../Core/Fundamental.lean#L210) | §9 | 143 | 1202 | 1675 | erasure only | **A** | — |
-| 49 | [`arrForget`](../Core/Fundamental.lean#L213) | §9 | 111 | 588 | 725 | erasure only | **A** | — |
-| 50 | [`countFold`](../Core/Fundamental.lean#L217) | §16 | 165 | 1018 | 3377 | erasure only (`count_loop`, `Flat/Lower.lean:1405`) | **A** | — |
-| 51 | [`countTry`](../Core/Fundamental.lean#L221) | §16 | 69 | 173 | 456 | erasure only (`count_try_loop`, `Flat/Lower.lean:1439`) | **A** | — |
-| 52 | [`boundedFix`](../Core/Fundamental.lean#L226) | §20 | 57 | 146 | 186 | erasure only (`fixValue`, `Convert.lean:243`) | **A** | — |
-| 53 | [`iterate`](../Core/Fundamental.lean#L230) | §14, §47 | 167 | 464 | 476 | `expandIter` (`Convert.lean:875`) turns it into a fixed point (one code calling itself, the step a closure); the new backend leaves it outside its fragment | **B** | B3 (`iterate` as a native loop in the old backend), N2 (in the new one) |
+| 44 | [`arrSize`](../Core/Fundamental.lean#L199) | §9 | 126 | 402 | 1973 | erasure only | **A** | — |
+| 45 | [`arrReplace`](../Core/Fundamental.lean#L201) | §9 | 136 | 909 | 6262 | the new backend lowers it from the node as a slot swap: the old contents moved out, the new moved in, no copy and no drop (`Backend2/Convert.lean:1337`, `Backend2/Lower.lean:552`; #608) | **A** | N6 |
+| 46 | [`arrLen`](../Core/Fundamental.lean#L204) | §9 | 135 | 216 | 796 | erasure only | **A** | — |
+| 47 | [`arrGet`](../Core/Fundamental.lean#L207) | §9 | 151 | 334 | 1685 | erasure only (`idx`, `Flat/Lower.lean:604`), bounds-checked at every access | **A** | — |
+| 48 | [`arrCopy`](../Core/Fundamental.lean#L210) | §9 | 147 | 1227 | 1705 | erasure only | **A** | — |
+| 49 | [`arrForget`](../Core/Fundamental.lean#L213) | §9 | 112 | 597 | 746 | erasure only | **A** | — |
+| 50 | [`countFold`](../Core/Fundamental.lean#L217) | §16 | 169 | 1032 | 3396 | erasure only (`count_loop`, `Flat/Lower.lean:1405`) | **A** | — |
+| 51 | [`countTry`](../Core/Fundamental.lean#L221) | §16 | 70 | 174 | 457 | erasure only (`count_try_loop`, `Flat/Lower.lean:1439`) | **A** | — |
+| 52 | [`boundedFix`](../Core/Fundamental.lean#L226) | §20, §47 | 61 | 150 | 190 | erasure only (`fixValue`, `Convert.lean:243`) | **A** | — |
+| 53 | [`iterate`](../Core/Fundamental.lean#L230) | §14, §47 | 158 | 445 | 456 | `expandIter` (`Convert.lean:875`) turns it into a fixed point (one code calling itself, the step a closure); the new backend leaves it outside its fragment | **B** | B3 (`iterate` as a native loop in the old backend), N2 (in the new one) |
 | 54 | [`divFuel`](../Core/Fundamental.lean#L235) | §14 | 0 | 0 | 0 | generic; reached only by the kernel program `div-residual` | **C** | B2, then N4 |
-| 55 | [`reify`](../Core/Fundamental.lean#L240) | §14, §47 | 167 | 266 | 269 | erasure only: a deep handler of `Div` whose clause keeps `κ`, lowered by `Capture`'s state machine (`main`'s loop value, stored generators, the generator of a `for` that loops); the new backend leaves it outside its fragment | **B** | B3 (`main` under the runtime's clause; `reify` only where a loop is stored), N2 |
-| 56 | [`sliceBorrowM`](../Core/Fundamental.lean#L247) | §9 | 109 | 133 | 139 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `noalias` on the leaf borrows (#555 choice 6) |
-| 57 | [`sliceBorrowI`](../Core/Fundamental.lean#L254) | §9 | 151 | 655 | 1442 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `readonly` on the leaf borrows |
+| 55 | [`reify`](../Core/Fundamental.lean#L240) | §14, §47 | 158 | 255 | 257 | erasure only: a deep handler of `Div` whose clause keeps `κ`, lowered by `Capture`'s state machine (`main`'s loop value, stored generators, the generator of a `for` that loops); the new backend leaves it outside its fragment | **B** | B3 (`main` under the runtime's clause; `reify` only where a loop is stored), N2 |
+| 56 | [`sliceBorrowM`](../Core/Fundamental.lean#L247) | §9 | 109 | 132 | 138 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `noalias` on the leaf borrows (#555 choice 6) |
+| 57 | [`sliceBorrowI`](../Core/Fundamental.lean#L254) | §9 | 154 | 659 | 1447 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `readonly` on the leaf borrows |
 | 58 | [`sliceGetM`](../Core/Fundamental.lean#L259) | §9 | 10 | 11 | 20 | erasure only | **A** | — |
-| 59 | [`sliceLenM`](../Core/Fundamental.lean#L262) | §9 | 27 | 30 | 43 | erasure only | **A** | — |
-| 60 | [`sliceSplitI`](../Core/Fundamental.lean#L266) | §9 | 120 | 249 | 503 | erasure only (`split`, `Flat/Lower.lean:616`) | **A** | — |
-| 61 | [`sliceSplitM`](../Core/Fundamental.lean#L270) | §9 | 101 | 115 | 118 | erasure only | **A** | — |
+| 59 | [`sliceLenM`](../Core/Fundamental.lean#L262) | §9 | 28 | 31 | 44 | erasure only | **A** | — |
+| 60 | [`sliceSplitI`](../Core/Fundamental.lean#L266) | §9 | 121 | 251 | 515 | erasure only (`split`, `Flat/Lower.lean:616`) | **A** | — |
+| 61 | [`sliceSplitM`](../Core/Fundamental.lean#L270) | §9 | 102 | 116 | 119 | erasure only | **A** | — |
 | 62 | [`sliceEmptyI`](../Core/Fundamental.lean#L273) | §9 | 91 | 189 | 211 | erasure only | **A** | — |
 | 63 | [`sliceEmptyM`](../Core/Fundamental.lean#L276) | §9 | 2 | 2 | 2 | erasure only | **A** | — |
 | 64 | [`sliceReplaceM`](../Core/Fundamental.lean#L280) | §9 | 22 | 25 | 97 | erasure only | **A** | — |
-| 65 | [`sliceSwapM`](../Core/Fundamental.lean#L283) | §9 | 18 | 22 | 29 | erasure only | **A** | — |
-| 66 | [`withbor1`](../Core/Fundamental.lean#L285) | §1 | 47 | 74 | 106 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `readonly`, lend extent → storage |
-| 67 | [`withbor2`](../Core/Fundamental.lean#L290) | §1, §23 | 202 | 583 | 906 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `noalias`, lend extent → storage |
+| 65 | [`sliceSwapM`](../Core/Fundamental.lean#L283) | §9 | 17 | 21 | 28 | erasure only | **A** | — |
+| 66 | [`withbor1`](../Core/Fundamental.lean#L285) | §1 | 39 | 64 | 95 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `readonly`, lend extent → storage |
+| 67 | [`withbor2`](../Core/Fundamental.lean#L290) | §1, §23 | 200 | 588 | 914 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `noalias`, lend extent → storage |
 | 68 | [`withbor3`](../Core/Fundamental.lean#L294) | §1 | 10 | 14 | 15 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5 |
-| 69 | [`withload`](../Core/Fundamental.lean#L297) | §1 | 169 | 494 | 1827 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `readonly` |
-| 70 | [`withswap`](../Core/Fundamental.lean#L300) | §1 | 60 | 122 | 182 | erasure only (`Paper/S3_Dynamics/Definitions.lean:660`'s λ-term); the in-place update it proves is compiled as a load, a call and a store | **B** | N5 |
+| 69 | [`withload`](../Core/Fundamental.lean#L297) | §1 | 164 | 483 | 1815 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `readonly` |
+| 70 | [`withswap`](../Core/Fundamental.lean#L300) | §1 | 60 | 125 | 185 | erasure only (`Paper/S3_Dynamics/Definitions.lean:660`'s λ-term); the in-place update it proves is compiled as a load, a call and a store | **B** | N5 |
 | 71 | [`withbor1U`](../Core/Fundamental.lean#L304) | §19 | 1 | 1 | 1 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read; the row is re-derived | **B** | N5, N2 |
 | 72 | [`withbor2U`](../Core/Fundamental.lean#L310) | §19, §23 | 4 | 4 | 6 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read; the row is re-derived | **B** | N5, N2 |
 | 73 | [`withbor3U`](../Core/Fundamental.lean#L316) | §19 | 2 | 2 | 2 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read; the row is re-derived | **B** | N5, N2 |
 | 74 | [`withloadU`](../Core/Fundamental.lean#L322) | §19 | 1 | 1 | 1 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read; the row is re-derived | **B** | N5, N2 |
 | 75 | [`sliceBorrowMU`](../Core/Fundamental.lean#L327) | §19 | 1 | 1 | 1 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read; the row is re-derived | **B** | N5, N2 |
 | 76 | [`sliceBorrowIU`](../Core/Fundamental.lean#L334) | §19 | 1 | 1 | 1 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read; the row is re-derived | **B** | N5, N2 |
-| 77 | [`lolliE`](../Core/Fundamental.lean#L342) | §3 | 372 | 37809 | 86887 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
-| 78 | [`allEV`](../Core/Fundamental.lean#L346) | §3, §44 | 229 | 4708 | 8331 | the new backend compiles an instantiation as its operand (`allI_inst`; `Backend2/Convert.lean:1081`) | **A** | — |
-| 79 | [`ofRet`](../Core/Fundamental.lean#L349) | §3 | 151 | 892 | 1411 | erasure only (identity) | **A** | — |
-| 80 | [`roll`](../Core/Fundamental.lean#L352) | §6 | 67 | 471 | 920 | erasure only (identity) | **A** | — |
-| 81 | [`unroll`](../Core/Fundamental.lean#L355) | §6 | 48 | 215 | 287 | erasure only (identity) | **A** | — |
+| 77 | [`lolliE`](../Core/Fundamental.lean#L342) | §3 | 371 | 37363 | 86677 | the new backend reads the masks: a slot both parts use is copied, a live slot neither uses dropped (`splitCtx`, `Backend2/Convert.lean:168`); the old backend (the default until N6) still re-derives them (`plan2`) | **A** | N6 (the old backend deleted) |
+| 78 | [`allEV`](../Core/Fundamental.lean#L346) | §3, §44 | 222 | 4695 | 8318 | the new backend compiles an instantiation as its operand (`allI_inst`; `Backend2/Convert.lean:1081`) | **A** | — |
+| 79 | [`ofRet`](../Core/Fundamental.lean#L349) | §3 | 159 | 997 | 1567 | erasure only (identity) | **A** | — |
+| 80 | [`roll`](../Core/Fundamental.lean#L352) | §6 | 69 | 481 | 937 | erasure only (identity) | **A** | — |
+| 81 | [`unroll`](../Core/Fundamental.lean#L355) | §6 | 50 | 217 | 289 | erasure only (identity) | **A** | — |
 | 82 | [`foldImm`](../Core/Fundamental.lean#L362) | §6 | 11 | 15 | 17 | no recogniser: compiled as the generic Z fixed point (`fixBody?`, `Convert.lean:303`) | **A** | — |
-| 83 | [`foldOwn`](../Core/Fundamental.lean#L368) | §6 | 15 | 23 | 28 | the new backend reads `F` and `R` from the node: the fold is a function generated from the shape (`genFoldFns`, `travF`, `Backend2/Convert.lean:488`); no pointer reversal yet (B6) | **A** | B6: pointer reversal from the node |
+| 83 | [`foldOwn`](../Core/Fundamental.lean#L368) | §6 | 15 | 23 | 29 | the new backend reads `F` and `R` from the node: the fold is a function generated from the shape (`genFoldFns`, `travF`, `Backend2/Convert.lean:488`); no pointer reversal yet (B6) | **A** | B6: pointer reversal from the node |
 | 84 | [`foldReuse`](../Core/Fundamental.lean#L373) | §6 | 3 | 3 | 3 | as `foldOwn`: the emptied cell handed to the algebra as the node's type says (`travF`'s reuse, `Backend2/Convert.lean:444`) | **A** | B6 |
-| 85 | [`nuIn`](../Core/Fundamental.lean#L377) | §7, §45 | 204 | 768 | 814 | erasure only (identity); the η-thunk around it is the derived node `nuEta`, which the new backend reads (row 113); the old backend (the default until N6) re-recognises it (`collapse?`, `Backend/Clos/Collapse.lean:74`) | **A** | N6 (the old backend deleted) |
-| 86 | [`nuOut`](../Core/Fundamental.lean#L379) | §7, §45 | 204 | 2434 | 2604 | as `nuIn` | **A** | N6 |
-| 87 | [`unfoldN`](../Core/Fundamental.lean#L383) | §7, §45 | 197 | 634 | 663 | the new backend reads `C` and `S` (`genUnfold`) and that a `bind` binds `unfold step` (`isUnfoldApp`, `Backend2/Convert.lean:903`), so a `nuEta` over it is the call `f s` | **A** | N6 |
-| 88 | [`effSub`](../Core/Fundamental.lean#L386) | §19 | 151 | 3024 | 3844 | erasure only; the row is re-derived by the 0-CFA (`SFacts.of`, `Backend/Clos/Capture.lean:469`; `UFacts.solve`, `Backend/Clos/Unwind.lean:386`) | **B** | N2 (effect erasure from rows and static sites) |
-| 89 | [`effPerform`](../Core/Fundamental.lean#L389) | §19 | 73 | 269 | 284 | erasure only; the row is re-derived by the 0-CFA (`SFacts.of`, `Backend/Clos/Capture.lean:469`; `UFacts.solve`, `Backend/Clos/Unwind.lean:386`); control vs. abortive re-read from the prim (`Ops.of`, `Capture.lean:178`) | **B** | N2 |
-| 90 | [`effRaise`](../Core/Fundamental.lean#L394) | §19 | 108 | 469 | 649 | erasure only; the row is re-derived by the 0-CFA (`SFacts.of`, `Backend/Clos/Capture.lean:469`; `UFacts.solve`, `Backend/Clos/Unwind.lean:386`) | **B** | N2 |
-| 91 | [`effLet`](../Core/Fundamental.lean#L399) | §19 | 129 | 784 | 977 | erasure only; the split's masks `u` are dropped and copies/drops are re-derived from free-variable occurrence (`plan2`, `Backend/Clos/Convert.lean:200`); the row is re-derived | **B** | N2 (rows; its masks are read where its row is empty, `Backend2/Convert.lean`) |
-| 92 | [`effThen`](../Core/Fundamental.lean#L412) | §19, §27 | 79 | 279 | 342 | the finaliser frame is re-recognised (`markUbinds`, `Convert.lean:463`; `finRaises`/`finSuspends`, `Capture.lean:1132`/`:1140`) | **B** | N2 |
-| 93 | [`effHandleV`](../Core/Fundamental.lean#L427) | §19, §24 | 148 | 523 | 606 | erasure only; the qualifiers in `qs` are matched `_` and dropped (`Convert.lean:740`); the clause kinds `ks` are re-derived (`tailClause?`, `Capture.lean:625`); `site` is read only for `main_div_error` (`Checked.exitsOnDivError`, `Frontend/Check/Program.lean:59`, via `Driver.lean:106`); `inside` is not read | **B** | N2: kinds (C3) and sites (C3b) read from the node; κ's cell by qualifier |
+| 85 | [`nuIn`](../Core/Fundamental.lean#L377) | §7, §45 | 97 | 421 | 456 | erasure only (identity); the η-thunk around it is the derived node `nuEta`, which the new backend reads (row 113); the old backend (the default until N6) re-recognises it (`collapse?`, `Backend/Clos/Collapse.lean:74`) | **A** | N6 (the old backend deleted) |
+| 86 | [`nuOut`](../Core/Fundamental.lean#L379) | §7, §45 | 97 | 1251 | 1392 | as `nuIn` | **A** | N6 |
+| 87 | [`unfoldN`](../Core/Fundamental.lean#L383) | §7, §45 | 83 | 188 | 205 | the new backend reads `C` and `S` (`genUnfold`) and that a `bind` binds `unfold step` (`isUnfoldApp`, `Backend2/Convert.lean:903`), so a `nuEta` over it is the call `f s` | **A** | N6 |
+| 88 | [`effSub`](../Core/Fundamental.lean#L386) | §19 | 247 | 7414 | 8526 | erasure only; the row is re-derived by the 0-CFA (`SFacts.of`, `Backend/Clos/Capture.lean:469`; `UFacts.solve`, `Backend/Clos/Unwind.lean:386`) | **B** | N2 (effect erasure from rows and static sites) |
+| 89 | [`effPerform`](../Core/Fundamental.lean#L389) | §19 | 200 | 508 | 529 | erasure only; the row is re-derived by the 0-CFA (`SFacts.of`, `Backend/Clos/Capture.lean:469`; `UFacts.solve`, `Backend/Clos/Unwind.lean:386`); control vs. abortive re-read from the prim (`Ops.of`, `Capture.lean:178`) | **B** | N2 |
+| 90 | [`effRaise`](../Core/Fundamental.lean#L394) | §19 | 111 | 482 | 662 | erasure only; the row is re-derived by the 0-CFA (`SFacts.of`, `Backend/Clos/Capture.lean:469`; `UFacts.solve`, `Backend/Clos/Unwind.lean:386`) | **B** | N2 |
+| 91 | [`effLet`](../Core/Fundamental.lean#L399) | §19 | 233 | 2091 | 2310 | erasure only; the split's masks `u` are dropped and copies/drops are re-derived from free-variable occurrence (`plan2`, `Backend/Clos/Convert.lean:200`); the row is re-derived | **B** | N2 (rows; its masks are read where its row is empty, `Backend2/Convert.lean`) |
+| 92 | [`effThen`](../Core/Fundamental.lean#L412) | §19, §27 | 81 | 283 | 345 | the finaliser frame is re-recognised (`markUbinds`, `Convert.lean:463`; `finRaises`/`finSuspends`, `Capture.lean:1132`/`:1140`) | **B** | N2 |
+| 93 | [`effHandleV`](../Core/Fundamental.lean#L427) | §19, §24 | 150 | 527 | 608 | erasure only; the qualifiers in `qs` are matched `_` and dropped (`Convert.lean:740`); the clause kinds `ks` are re-derived (`tailClause?`, `Capture.lean:625`); `site` is read only for `main_div_error` (`Checked.exitsOnDivError`, `Frontend/Check/Program.lean:59`, via `Driver.lean:106`); `inside` is not read | **B** | N2: kinds (C3) and sites (C3b) read from the node; κ's cell by qualifier |
 | 94 | [`effHandleVB`](../Core/Fundamental.lean#L438) | §28 | 16 | 29 | 37 | as `effHandleV`; the box lifetime `d` is not read | **B** | N2, N3 (stored continuations) |
 | 95 | [`effHandleT`](../Core/Fundamental.lean#L451) | §14, §19 | 0 | 0 | 0 | — | **C** | B1/B2 (`tick`'s handlers): no checker producer and no typed Core program |
 | 96 | [`letPoly`](../Core/Fundamental.lean#L463) | §24 | 0 | 0 | 0 | `polyLet?` (`Convert.lean:606`) recognises its erasure; rows re-derived (`Backend/Clos/Poly.lean`) | **C** | rule table: an elaboration rule for a let used at several rows (pipeline-architecture A11), else a deletion candidate. no checker producer; reached only by the kernel programs `hof-two-rows`, `poly-id` |
@@ -225,21 +225,21 @@ ones have their run facts (`Frontend/Check/Derived.lean`).
 
 | # | rule | §  | progs | static | expanded | read by the backend | class | what would change it |
 |---|---|---|---|---|---|---|---|---|
-| 100 | [`dtor`](../Frontend/Check/TExpr.lean#L364) | §12 | 288 | 3498 | 6213 | the new backend reads `A` from the node: the destructor `dtorAt` gives, a cell freed, a `μ` by its fold, `close` at codata (`genDtor`, `Backend2/Convert.lean:676`) | **A** | — |
-| 101 | [`allocS`](../Frontend/Check/TExpr.lean#L366) | §5 | 13 | 15 | 43 | erasure only (no recogniser for `allocS`) | **B** | N5: frame slots by rule |
+| 100 | [`dtor`](../Frontend/Check/TExpr.lean#L364) | §12 | 285 | 3512 | 6334 | the new backend reads `A` from the node: the destructor `dtorAt` gives, a cell freed, a `μ` by its fold, `close` at codata (`genDtor`, `Backend2/Convert.lean:676`) | **A** | — |
+| 101 | [`allocS`](../Frontend/Check/TExpr.lean#L366) | §5 | 15 | 18 | 48 | erasure only (no recogniser for `allocS`) | **B** | N5: frame slots by rule |
 | 102 | [`freeS`](../Frontend/Check/TExpr.lean#L368) | §5 | 1 | 1 | 1 | erasure only | **B** | N5 |
 | 103 | [`withborSM`](../Frontend/Check/TExpr.lean#L371) | §5 | 1 | 1 | 1 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5 |
 | 104 | [`withborSI`](../Frontend/Check/TExpr.lean#L373) | §5 | 0 | 0 | 0 | — | **C** | nothing (checker producer `Frontend/Check/Consts.lean:382`; no program writes an `imm` block borrow) — or U4 (#593): records over blocks |
 | 105 | [`withborF2M`](../Frontend/Check/TExpr.lean#L375) | §5 | 2 | 2 | 2 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5 |
 | 106 | [`withborF2I`](../Frontend/Check/TExpr.lean#L377) | §5 | 0 | 0 | 0 | — | **C** | nothing (checker producer `Consts.lean:506`, unreached) |
 | 107 | [`litFn`](../Frontend/Check/TExpr.lean#L552) | §17, §45 | 55 | 168 | 190 | the new backend reads the bytes from the node: the program's data, and one code for every literal table over its offset and length (`litCode`, `Backend2/Convert.lean:825`); literal views from it (`Backend2/LitViews.lean`) | **A** | — |
-| 108 | [`divLit`](../Frontend/Check/TExpr.lean#L382) | §39 | 10 | 15 | 17 | the new backend reads the operation and the divisor from the node: the division with no error arm (`convDivLit`, `Backend2/Convert.lean:1265`; `divLitVals`, `Backend2/Lower.lean:360`) | **A** | — |
-| 109 | [`walk`](../Frontend/Check/TExpr.lean#L558) | §16, §46 | 63 | 82 | 126 | the new backend reads `read` (`walkReadB`: the bound the view's length, the step's read of the view at its index, its tails handing the view on) and drops the read's test (`Backend2/Convert.lean:1100`); the old backend (the default until N6) checks every access | **A** | the step's tails as a run lemma (SPEC §46 *Open*) |
-| 110 | [`walkGet`](../Frontend/Check/TExpr.lean#L561) | §46 | 63 | 82 | 126 | the new backend's read with no test inside a walk with `read` (`Backend2/Convert.lean:1108`) | **A** | — |
-| 111 | [`selfCall`](../Frontend/Check/TExpr.lean#L387) | §21 | 51 | 219 | 281 | re-derived: the fixed point is re-recognised (`fixBody?`, `Convert.lean:303`) | **B** | N2 (every self-call is under `bounded_fix` and `Exhausted`, outside N1's fragment), then direct self-calls from the node |
+| 108 | [`divLit`](../Frontend/Check/TExpr.lean#L382) | §39 | 9 | 14 | 16 | the new backend reads the operation and the divisor from the node: the division with no error arm (`convDivLit`, `Backend2/Convert.lean:1265`; `divLitVals`, `Backend2/Lower.lean:360`) | **A** | — |
+| 109 | [`walk`](../Frontend/Check/TExpr.lean#L558) | §16, §46 | 64 | 83 | 127 | the new backend reads `read` (`walkReadB`: the bound the view's length, the step's read of the view at its index, its tails handing the view on) and drops the read's test (`Backend2/Convert.lean:1100`); the old backend (the default until N6) checks every access | **A** | the step's tails as a run lemma (SPEC §46 *Open*) |
+| 110 | [`walkGet`](../Frontend/Check/TExpr.lean#L561) | §46 | 64 | 83 | 127 | the new backend's read with no test inside a walk with `read` (`Backend2/Convert.lean:1108`) | **A** | — |
+| 111 | [`selfCall`](../Frontend/Check/TExpr.lean#L387) | §21 | 53 | 225 | 287 | re-derived: the fixed point is re-recognised (`fixBody?`, `Convert.lean:303`) | **B** | N2 (every self-call is under `bounded_fix` and `Exhausted`, outside N1's fragment), then direct self-calls from the node |
 | 112 | [`lendCell`](../Frontend/Check/TExpr.lean#L390) | §35, §41 | 26 | 52 | 74 | re-derived: the scoped cell is re-recognised (`markScoped`, `Convert.lean:544`) | **D** | N5 (framing from the node); its producers are workarounds (see class D): `lendBorrow`'s value branch (`Frontend/Sugar.lean:2276`, ergonomics N1) and `withBlk`'s state cell (`Sugar.lean:3526`) → #626/#632 |
-| 113 | [`nuEta`](../Frontend/Check/TExpr.lean#L570) | §45 | 197 | 634 | 663 | the new backend reads `f` and `s`: at a variable a `bind` bound to `unfold step` the codata is the call `f s`, made where the thunk is built (`nuEta_unfold`; `Backend2/Convert.lean:1118`); with no state, the variable itself (`nuEta_var`) | **A** | — |
-| 114 | [`use`](../Frontend/Check/TExpr.lean#L393) | §3 | 347 | 10571 | 19615 | the new backend converts each key's body once and instantiates it at later uses; a body that takes a closure at each use (`convUse`, `Backend2/Convert.lean:1232`) | **A** | #541: keys with the argument codes |
+| 113 | [`nuEta`](../Frontend/Check/TExpr.lean#L570) | §45 | 83 | 188 | 205 | the new backend reads `f` and `s`: at a variable a `bind` bound to `unfold step` the codata is the call `f s`, made where the thunk is built (`nuEta_unfold`; `Backend2/Convert.lean:1118`); with no state, the variable itself (`nuEta_var`) | **A** | — |
+| 114 | [`use`](../Frontend/Check/TExpr.lean#L393) | §3 | 345 | 10917 | 20003 | the new backend converts each key's body once and instantiates it at later uses; a body that takes a closure at each use (`convUse`, `Backend2/Convert.lean:1232`) | **A** | #541: keys with the argument codes |
 
 ## 6. Type formers
 
@@ -302,7 +302,7 @@ workaround can be traced.
 | `let mut` value lent through a cell | `Sugar.lean:2276` (`lendBorrow`'s value branch, `:2292–2297`) | copies the value into a cell and rebinds it after | `alloc`, `withbor1`/`withbor2`, `free`, under **`lendCell`** | #626 (place model); ergonomics N1 |
 | in-place `modify` of a `let mut` value (`io_mu`) | `Sugar.lean:3458–3461` | rebinds with no borrow (a `letPair` where `withswap` belongs) | `tensorE`, `tensorI` instead of `withswap` | #626; #632 |
 | a handler's state passed as a value | `Sugar.lean:3526`, `withBlk` (`Effects.lean:2454`) | threads state through a cell | **`lendCell`** | #632; the stateful handler below |
-| LoopLend (§14, decision 40) | `Frontend/Elab/LoopLend.lean:388` (`lendBind`), `:439`, `:495` (`lentDef`, which rewrites a def's signature), `:542`, `:257`, `:311`, `:129`; refusals `:283`, `:290`, `:297`, `:424`, `:446`, `:518`, `:524` | decides lend extents, threads the owner through the loop state, and refuses on borrow grounds | per-turn `withbor1`/`withbor2`/`withbor3` and `…U`, `tensorI`. **Not `lendLoopR`** (row 98), which is the kernel rule for it and has no producer | #632 D3; async U6 (`docs/async-capabilities.md:567`) |
+| LoopLend (§14, decision 40) | retired by #644: `Frontend/Elab/LoopLend.lean` keeps `blockLoops` and `lendLet` | — (a borrow block over a loop is elaborated as written and the kernel refuses it) | — | #644 |
 | callee copies threading capabilities (§32) | `Effects.lean:2924` (`copyFor`), `:2392–2405`, `forSite` `:2814` | threads a `for` body's locals through `perform` | ordinary formers in the copies | #632; rule table |
 | stateful control handler (§19 *Handler state*) | `Effects.lean:2677–2733`, `:1047`, `:2176–2195`; `HInfo.params` (`Frontend/Syntax.lean:366`) | a state-passing transform, by hand | `effHandleV` at a function-typed answer | N2 (handler state as a field, pipeline-architecture A5); #632 |
 | capability and lend refusals | `Effects.lean:1711` (`noLend`), `:1962–1966`, `:2453`, `:2512–2515`, `:3572` | refuses on aliasing grounds | — | rule table; #632 |
@@ -408,7 +408,7 @@ that ticks (#564).
    - The only programs that reach them are the kernel programs `div-residual` (`divFuel`),
      `hof-two-rows` and `poly-id` (`letPoly`).
    - `effHandleT` has no typed program anywhere: no Core derivation and no checker producer.
-   - `iterate` and `reify` are produced by the `Div` elaboration (SPEC §47, #644): 167 programs.
+   - `iterate` and `reify` are produced by the `Div` elaboration (SPEC §47, #644): 158 programs.
 4. **Qualifiers.**
    - Over 152 programs, `[handle]` nodes type 573 affine operations, 2 linear ones and no
      unrestricted one.

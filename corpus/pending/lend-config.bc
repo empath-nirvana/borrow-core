@@ -1,0 +1,44 @@
+-- pending: a lend held across a tick (a suspension; T1, #172): tier 2 is open and has no path
+-- now: 41:13: the row of an unwinding borrow's callback has only abortive operations, of names other than 0, whose arguments outlive every lifetime and do not mention its lifetime
+--
+-- A loop-invariant borrow: `let cfg = &config` borrows the configuration `imm` for the rest of
+-- `main` (the borrow block `borrow imm config { cfg -> … }`); the code before the loop reads it,
+-- every step of the loop reads it, and the code after the loop reads it again. The calls
+-- `scale(cfg, …)` and `cap(cfg, …)` take the lifetime of `cfg` from their argument.
+--
+-- Needs a lend held across a tick. Every loop is at the row `div` (SPEC §14), and each of its back
+-- edges ticks, a control operation that resumes; the borrow of `config` that `let cfg = &config` at
+-- 41:13 opens for the rest of `main` spans the ticks of the `for` over the input at 43:3. The
+-- kernel's rule for a lend at a row has only abortive operations (`Row.Unwind`), so it refuses the
+-- lend. Holding a lend across a suspension is tier 2, which is open and has no path.
+--
+-- Once it lands: on the input `1203`, `i32[54]`, `live 0`: the configuration is (step 10, limit
+-- 100, bias 2); each digit adds `10 * d + 2`, giving 12, 34, 36, 68, under the limit, less 7 * 2
+-- read after the loop.
+
+type Cfg = i32 * (i32 * i32)
+
+-- `acc + step * d + bias`.
+def scale : !(all 'a < top. imm 'a Cfg * (i32 * i32) => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a Cfg * (i32 * i32)) ->
+    let (cfg, q) = p;
+    let (acc, d) = q;
+    let (step, r) = *cfg;
+    let (limit, bias) = r;
+    acc + step * d + bias)
+
+-- `n` capped at the limit, less seven times the bias.
+def cap : !(all 'a < top. imm 'a Cfg * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a Cfg * i32) ->
+    let (cfg, n) = p;
+    let (step, r) = *cfg;
+    let (limit, bias) = r;
+    let m = if limit < n { limit } else { n };
+    m - 7 * bias)
+
+main -> i32 =
+  let config = alloc((10, (100, 2)));
+  let cfg = &config;
+  let mut acc = 0;
+  for c in bytes(&mut stdin) { acc = scale(cfg, (acc, to_i32(c) - 48)) };
+  cap(cfg, acc)

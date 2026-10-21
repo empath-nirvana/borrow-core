@@ -328,9 +328,10 @@ has no cancel, so closing a loop is a *resume* with `close`, never a cancel (§4
 - **Totality** is the row without `Div`. A `total fn`'s written row has no `Div`.
 - **What stays.** `Loop`, `unfold`, `div_bind` and `div_defer` remain the kernel library of loop
   *values*: `reify`'s result, and hand-written core.
-- **Borrows.** `tick` is a non-abortive control operation, so it cannot cross a borrow (T1).
-  `LoopLend`'s per-observation lends stay (SPEC §14 *Borrow scopes over loops*). The native loop
-  runs those lends one turn at a time.
+- **Borrows.** `tick` is a non-abortive control operation, so it cannot cross a borrow (T1). A
+  borrow block around a loop is elaborated as written, at the row `div`, and the kernel refuses
+  it (SPEC §14 *Borrow scopes over loops*); the per-observation lend is retired (#644). A lend held
+  across a tick is tier 2, open with no path.
 
 ### 3.3 Where state machines are built
 

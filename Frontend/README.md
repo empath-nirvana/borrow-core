@@ -185,7 +185,7 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Elab/Tir.lean` | the sugar's inference nodes: one node per node of a term, with its type, binders (identity, type, class) and effect (`docs/typed-elaboration.md` §1.1) |
 | `Elab/Infer.lean` | the sugar's inference (`TCx.tyV`): a term's type, bidirectionally, in the environment the checker uses; the checker's synthesis answers for the core's substitutions |
 | `Elab/Pipeline.lean` | the pipeline `checkProgram` runs: the sugar, and errors in generated code named by their sugar (`renderError`) |
-| `Elab/LoopLend.lean` | borrow scopes over loops, per observation (SPEC §14): a borrow block whose body loops, `let r = &x` over a loop, and a div function over a borrow, rewritten so that each step borrows the owner again (`hook`, `lentDef`) |
+| `Elab/LoopLend.lean` | borrow scopes and loops (SPEC §14): a borrow block whose body loops (`blockLoops`), elaborated as written at the row `div` for the kernel to refuse; `let r = &x` (`lendLet`) |
 | `Check/Externs.lean` | the standard externs with their roles, models and assurance levels; the `run_io` wrapper; `IORun` (SPEC §11) |
 
 ### Soundness

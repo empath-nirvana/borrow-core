@@ -1,0 +1,47 @@
+-- pending: a lend held across a tick (a suspension; T1, #172): tier 2 is open and has no path
+-- now: 42:11: the row of an unwinding borrow's callback has only abortive operations, of names other than 0, whose arguments outlive every lifetime and do not mention its lifetime
+--
+-- A borrow block over a pipeline: a table borrowed once, and read by every step of a `for` over a
+-- pipeline of generators, `above(20, squares(range(1, 11)))`.
+--
+-- Needs a lend held across a tick. Every loop is at the row `div` (SPEC §14), and each of its back
+-- edges ticks, a control operation that resumes; the borrow of `t` at 42:11 spans the ticks of the
+-- `for` over the pipeline at 44:5. The kernel's rule for a lend at a row has only abortive
+-- operations (`Row.Unwind`), so it refuses the lend. Holding a lend across a suspension is tier 2,
+-- which is open and has no path.
+--
+-- Once it lands: `i32[361]`, `live 0`: the table holds i + 1, and the squares above 20 from 1 to 10
+-- are 25, 36, 49, 64, 81, 100, so the sum is 355 + 6.
+
+include yield
+
+fn tab(i: i32) -> i32 = i + 1
+
+-- The entry at `i`, or 0 out of range.
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+fn squares(it: U (pull i32 1 1)) -> 1 with Yield[i32] =
+  for x in it { yield(x * x) };
+  ()
+
+fn above(n: i32, it: U (pull i32 1 1)) -> 1 with Yield[i32] =
+  for x in it { if n < x { yield(x) } else { () } };
+  ()
+
+main -> i32 =
+  let t = alloc(array_new[i32] (101, tab));
+  let n = borrow imm t { b ->
+    let mut acc = 0;
+    for x in above(20, squares(range(1, 11))) { acc = acc + get(b, x) };
+    acc
+  };
+  n

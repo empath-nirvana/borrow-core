@@ -1553,67 +1553,53 @@ at the function's row with `div`: `F_{div, Σ}(B ⊕ R)`, ticking only at its ba
 value, `Loop_Σ`, observations of which perform the operation (§19, *Divergence*), is `reify` of a
 call (§47). A `while` or a `loop` is a loop of any div body.
 
-### Borrow scopes over loops, per observation
+### Borrow scopes over loops
 
 A borrow block's body is the callback of `withbor`, one computation that returns before the block
-ends; a loop is codata, observed one step at a time. So no borrow stays open while a loop runs:
-`↭` brackets every borrow cell inside one run, and a lend that spans observations needs a model
-change that is not verified (`experiments/LoopBorrow`). What works with no new rule is to **lend
-again at each observation**: the owner lives in the loop's state, and each step borrows it by an
-ordinary `withbor` inside that step, so the state between steps holds the owner, never a borrow.
+ends. A loop is at the row `div` (§47): each of its back edges ticks, and `tick` is a control
+operation that resumes. So a borrow block whose body loops holds its lend across the loop's ticks,
+a lend held by a suspension (T1, #172), and the kernel has no rule for that: a lend at a row is the
+unwinding form of §19, whose row has only abortive operations (`Row.Unwind`).
 
-**The library** (`lib/lend.bc`, `include lend`) has the per-observation lend as code over
-`unfold`: `loop_lend_imm` and `loop_lend_mut` (a loop whose steps take `imm 'x A` or `mut 'x A`
-with the state), `pull_lend_imm` and `pull_lend_mut` (a stored generator, §15), and `array_each_imm`, the
-lending loop in push form: each observation lends one array entry, a view `imm 'z E` borrowed
-inside the observation, to a body that runs inside it. Each takes its steps and the first state
-`(owner, s)`, and hands the owner back when the codata finishes or is closed.
+**The elaboration** writes such a block as it is written, and lets the kernel refuse it
+(`Frontend/Elab/LoopLend.lean`, `blockLoops`; `Frontend/Sugar.lean`):
 
-**The elaboration** (`Frontend/Elab/LoopLend.lean`) puts the surface's borrow scopes into that
-form, before the other sugar, with no kernel or checker change:
-
-- **A borrow block whose body loops** (`borrow imm t { 'x, b -> S }`, `borrow mut`, a family),
-  where `S` has on its spine a `for` or a call of a div function in direct style, is rewritten in
-  the enclosing body: each stretch of `S` that uses the borrow is a borrow block of the same place
-  handing on the variables that later code reads; the body of each `for` that uses it is a borrow
-  block of its own, per step; stretches that do not use it are left outside any block. The `for`
-  is then on the enclosing spine and threads the place, which each step rebinds. This is
-  `loop_lend_*` written inline, so each step is known code.
+- **A borrow block whose body loops** (`borrow imm t { 'x, b -> S }`, `borrow mut`, where `S` has
+  on its spine a `for` that is not total, a `while`, a `loop`, a counted `for` whose body loops, or
+  a call of a div function) is the unwinding form of its borrow at the row `div, Σ`, `Σ` the
+  operations its body performs. Its body is a div body of its own (§47, *The `Div` elaboration*),
+  at that row, whose close hands back the body's residual: the callback's answer is `['x] B ⊕ R`.
+  The constant is bound at its type, so what follows is typed; the kernel refuses the constant
+  (`Row.Unwind`).
 - **`let r = &x; S`** (or `&mut x`) is `borrow imm x { r -> S }` over the rest of the body; `x` is
-  not used in `S`. A loop-invariant borrow is thus lent per observation.
-- **A div function over a borrow**: a `def f : !(all 'a < b. P => Q)` whose body loops, with one
-  component `imm 'a A` (or `mut 'a A`) of `P`, is elaborated to take the owner `ref A` there and
-  hand it back first, `!(P' => ref A * Q)`, its body a borrow block of the owner. A call lends
-  the place, `f(&t)`, as a capability is lent (§11); inside a borrow block, the block's borrow
-  passed to `f` is the place lent instead.
+  not used in `S` (`lendLet`). When `S` loops, it is the block above.
+- **A lend at a call of a div function**, `f(&t)` at a borrow parameter, is a borrow of `t` around
+  the call (`lendCall`), at the row `div, Σ` of `f`: the same refusal.
 - **A call of a function with lifetime parameters**, `f(W)` with
   `f : !(all 'a < b. all 'b < c. … P => Q)` and no lend in `W`, is `(unbang f) ['l] ['m] … W`
   with each lifetime the one `W`'s type gives its parameter in `P` (§15, *Generic functions*).
 
-The borrow is the block's parameter and every copy of it or of its parts on the block's spine
-(`let b2 = b`, `let mut v = v`, the pattern's names; §41 *Binder identity*): each block of the
-rewrite binds them again at its start. It applies when what the loop holds between steps outlives
-`'x`. Otherwise it reports where it does not: an iterator that holds the borrow; a stretch before the loop that hands on something
-with `'x` in its type; a div call that takes the borrow other than as its own argument; a div
-function with more than one borrow at its lifetime; a name the block binds again and that is read
-after it (the rewrite puts the block's bindings in the enclosing body).
+The elaborator does not lend again at each step, thread the owner through a loop's state, or
+refuse a block on borrow grounds. A borrow taken inside one step, `for … { borrow imm t { b -> … } }`
+or a lend in a call in the body, `get(&t, i)`, ends inside that step and checks
+(`corpus/axes/scope-loop-lend.bc`).
 
-**Not covered** (each needs the spanning lend, or a construct not built): a pipeline whose source
-holds the borrow, `for x in map(filter(iter(xs), p), f)` inside `borrow imm v { xs -> … }`. The
-source could be rewritten to hold the owner, but the owner would come back only through the
-pipeline's finishing value and residual: each adapter would pass them on, the `for` would bind
-the finishing value, and the residual would have to hand back an owner that has a destructor. A
-`yield` inside a borrow block is rejected (§15, *Self-reference*). A div
-function called with a borrow that is not lent from a place (a view, a field, a second borrow)
-holds it across its loop. `|>` is §33's.
+**The library** (`lib/lend.bc`, `include lend`) writes the per-step lend as code over `unfold`:
+`loop_lend_imm` and `loop_lend_mut` (a loop whose steps take `imm 'x A` or `mut 'x A` with the
+state), `pull_lend_imm` and `pull_lend_mut` (a stored generator, §15), and `array_each_imm`, the
+lending loop in push form. Each takes its steps and the first state `(owner, s)`, and hands the
+owner back when the codata finishes or is closed. They are ordinary programs, checked by the
+kernel's rules.
 
-Programs: `corpus/axes/borrow-across-loop.bc`, `corpus/lend-mut.bc`, `lend-config.bc`,
-`lend-pipeline.bc` (no allocation or copy beyond the table's own; since §47 its loops' steps
-are dispatched calls until B3),
-`lend-server.bc`, `lend-div.bc`, and the library's `lend-lib-loop.bc`, `lend-lib-gen.bc`,
-`lend-lib-each.bc`; pairs `corpus/sugar/lend-block.bc`, `lend-let.bc`, `lend-div.bc`; rejects
-`corpus/reject/lend-*.bc`. Every elaborated program is checked core, so `fundamentalC` and
-`adequacyC` cover it.
+**Open.** A lend held across a tick is tier 2 (#172), which is open and has no path. The programs
+that need it are in `corpus/pending/` under that label: `hygiene-borrow-loop`, `lend-block`,
+`lend-config`, `lend-copy`, `lend-div`, `lend-div-iter`, `lend-let`, `lend-mut`, `lend-pipeline`,
+`lend-server`, `lend-shadow`, `borrow-across-loop`; and `for-buf-borrow`, `parse-recover-gen`,
+`state-machine-audit` besides their own refusals.
+
+Programs: `corpus/axes/scope-loop-lend.bc` and the library's `lend-lib-loop.bc`, `lend-lib-gen.bc`,
+`lend-lib-each.bc`; rejects `corpus/reject/lend-*.bc`. Every elaborated program is checked core,
+so `fundamentalC` and `adequacyC` cover it.
 
 ### The totality theorem
 
@@ -1733,8 +1719,8 @@ obligation for a looping `main` is §11's.
 ### Open
 
 - **Some loop bodies are total**: the clause of a `for` over a generator (§15) is one step, and has
-  no drain and no div call. A counted loop whose body loops is a loop of the machine (§47); the
-  body of any other loop may loop, its `iterate` inside the turn (`corpus/gen-nested.bc`). A `for`
+  no drain and no div call. A counted loop whose body loops is at the row `div`, `bounded_fix`
+  over the count (§47); the body of any other loop may loop, its `iterate` inside the turn (`corpus/gen-nested.bc`). A `for`
   over data is a counted loop, total, and nests anywhere, unless its body loops or performs an
   operation that resumes (§16, *Effectful bodies*).
 - **A call lends at most one capability** with `&mut c`, and a div call whose residual differs
@@ -2151,17 +2137,15 @@ So the bound equals the number of elements: every element is visited and none is
 axioms are within `[propext, Classical.choice, Quot.sound]`.
 
 **Borrowing.** A counted loop is one computation, so a borrow block around it keeps its borrow for
-the whole loop (§9's lend of `&a`/`&mut a` is such a block); the per-observation lend (§14)
-applies to drains only (`LoopLend`, whose test of a loop reads the source's type in the block's
-context).
+the whole loop (§9's lend of `&a`/`&mut a` is such a block). A counted loop whose body loops ticks,
+so a borrow block around it holds its lend across the ticks, which the kernel refuses (§14,
+*Borrow scopes over loops*).
 
 **Effectful bodies.** A counted loop's step is one total computation, so it cannot hold the
 continuation of a control operation that resumes. When the body's row has one (`opsC` finds a
 `perform` of a non-abortive operation of the row, the rule keyed on the row, no effect named),
 the `for` is a **div loop** over the source's cursor instead: a `while`, an `iterate` of the body
-(§14, §15, §47), one turn per element (`forDataDiv`, `Frontend/Sugar.lean`). So is a counted loop
-whose body loops: it has a `while`, a `loop`, a drain, a `for` over a generator that loops, or a
-call of a div function (its class, §47). This holds when the
+(§14, §15, §47), one turn per element (`forDataDiv`, `Frontend/Sugar.lean`). This holds when the
 operation is of a site that observes its computation one turn at a time, a `for`'s site or a
 stored generator's (§15); at any other site the loop is total at the row, `bounded_fix` over the
 count, which a handler wraps (§30, *Counted loops at a resuming row*, proposed):
@@ -5827,8 +5811,7 @@ What exists and is reused, no new mechanism where one serves:
 - §11's ambient `main` (`Frontend/Sugar.lean`, `ambientMain`), which adds the capability externs
   `main` uses and hands them back by name;
 - tasks over an outer borrow (§32, `spawn_in`), blocks and computation parameters that use
-  capabilities (§32, §33), and the per-observation lend of a borrow block over a loop (§14,
-  `Frontend/Elab/LoopLend.lean`).
+  capabilities (§32, §33).
 
 ### Laws
 
@@ -7380,7 +7363,7 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/loop-shadow-persistent.bc` | a `let` in a loop's body shadowing a variable that is not `let mut` | `(i32[1], i32[3])` (was `(4, 6)`) |
 | `corpus/mut-bind-arm.bc` | `x <- M` on a `let mut` in an arm (R2) | `(i32[5], i32[3])` (the arm's write was lost: `(1, 3)`) |
 | `corpus/loop-shadow-linear.bc`, `loop-shadow-owner.bc` | #493's two programs, from `corpus/pending/` | `i32[6]`; `.` and `i32[6]` |
-| `corpus/lend-shadow.bc` | a borrow block's `let mut acc` beside `main`'s `acc`, lent per observation | `i32[105]`; in core text still refused (`corpus/reject/lend-shadow.bc`) |
+| `corpus/pending/lend-shadow.bc` | a borrow block's `let mut acc` beside `main`'s `acc`, over a loop | a lend held across a tick (§14, *Borrow scopes over loops*); in core text refused too (`corpus/reject/lend-shadow.bc`) |
 | `corpus/name-clash.bc` | #590 (1): a program's `fn take` beside `include buf`'s | `i32[2]` (was refused) |
 | `corpus/mut-name-capture.bc` | #590 (2): a callee's `let mut tbl` beside its caller's | prints `1`, `i32[0]` (was refused) |
 | `corpus/mut-block.bc` | #586: a block that writes, at a block parameter called once, twice, and in a loop | `(i32[52], (i32[4036], i32[323]))` (was `(12, …)`) |
@@ -7392,7 +7375,7 @@ written (the parser finds it), and in core text it is read as printed.
 | `corpus/mut-lend-arm.bc` | `&mut x` in an arm (R2) | `i32[12]` (was `2`, the lend's write lost) |
 | `corpus/for-in-if-lend.bc` | #502, from `corpus/pending/` | `i32[3]` |
 | `corpus/reject/mut-control-with.bc` | a control handler's body that writes | refused (§18 *Not provided*) |
-| `corpus/lend-copy.bc` | copies of a borrow block's borrow over a loop: `let b2 = b`, `let mut v = v` (T04's form), a copy after a statement | `(i32[30], (i32[321], i32[6]))` (was refused) |
+| `corpus/pending/lend-copy.bc` | copies of a borrow block's borrow over a loop: `let b2 = b`, `let mut v = v` (T04's form), a copy after a statement | a lend held across a tick (§14) |
 | `corpus/binder-copies.bc` | a copy of a block parameter, of a clause's continuation, and a copy of a copy | `(i32[4294967291], (i32[103], i32[22]))` (was refused) |
 | `corpus/div-residual-copy.bc` | a div function's residual handed back by a copy, `let j = i`, and by `let i = i` | `i32[4]` on `abc` (was refused; `let i = i` ran before R1) |
 | `corpus/loop-handler-binder.bc` | #493's handler-clause binder, from `corpus/pending/` | `i32[42]` (was refused) |
@@ -7462,7 +7445,6 @@ of its own:
 
 | what | identified by | a copy of it |
 |---|---|---|
-| a borrow block's borrow over a loop (§14, `LoopLend`) | the block's parameter | a copy, or a destructuring of it or of a part (`Binding.of?`), anywhere on the block's spine, is one of the block's aliases from there on, bound again at the start of each block the rewrite makes; a copy passed to a div function is the place lent (`lendCall`) |
 | a block parameter of a §30 copy, a computation parameter's port (§33) | the copy's `cbs`, `cbRows`, `ports` | is the parameter (`Cx.copy`, `rowC`, `forOverParam`) |
 | a clause's continuation (§19), a layer's `call` (§20) | `ResumeK.k`, `LCall.name` | is it (`Cx.copy`; `unboxesC` for BOXED-κ) |
 | a div function's residual (§14, *The residual by name*) | the names the terminal hands back | a copy made after the last loop is the binder it copies (`termParts`) |
@@ -8134,12 +8116,24 @@ empty context). The checker builds them by `TTied.iterate` and `TTied.reify`
   that loops, §15) runs nothing until it is observed (`eStart`): each observation makes `reify`
   of a loop whose first turn moves on at once, so its first tick comes before any event; its next
   turn is the call, and its close is `g__close`.
-- **Counted loops' class** (`docs/loops.md` §2.2). A counted loop whose body has a loop of the
-  machine (a `while`, a `loop`, a drain, a `for` over a generator that loops) or a call of a div
-  function is a loop of the machine over its source's cursor (`forDataDiv`), a `while`; one whose
-  body has none is total, as before (§16). The choice is made after elaborating the body once,
-  its state restored. A counted loop over a source it lends (`&a`, `&mut a`) is not walked so:
-  its lend's extent is the whole loop, and a lend per turn is the kernel's to express (*Open*).
+- **A counted loop whose body performs `Div`** (`docs/pipeline-architecture.md` §3.2): its body
+  has a `while`, a `loop`, a drain, a `for` over a generator that loops, or a counted loop that is
+  one of these. It is at the row `div, Σ`: `bounded_fix` over the count, as §30's loop at a
+  resuming row, its step `io_gb : !(i32 ⊗ S ⊸ F_{div,Σ}((S ⊕ E) ⊕ W))` marked
+  (`VSugar.rowStep`). The step's body is a div body of its own, whose answer is the step's
+  (`inl` of the next state or an exit) and whose close hands back the threaded variables `W`
+  (`inr w`); a `return` inside its loops leaves through the counted loop's exit. After the loop, a
+  close binds `W` and closes what the loops around hold, leaving the body with its residual
+  (`VSugar.rowClose`). A counted loop whose body does not perform `Div` is total, as before (§16).
+  The choice is made after elaborating the body once, its state restored; a counted loop around
+  one at the row is at the row too. Over a lent source (`&a`, `&mut a`, an owned array) the
+  borrow block around the loop holds its lend across the step's ticks, and the kernel refuses it
+  (§14, *Borrow scopes over loops*).
+- **A borrow block whose body loops** (§14, *Borrow scopes over loops*) is the unwinding form of
+  its borrow at the row `div, Σ`, its body a div body of its own whose close hands back the body's
+  residual; a lend at a call of a div function is such a block around the call (`lendCall`). The
+  kernel refuses both. The per-observation rewrite (`LoopLend`'s `lendBind`, `lentDef`) is
+  deleted.
 
 **What stays.** `unfold`, `Loop`, `div_bind`, `div_defer` and `div_fuel` stay as library code
 over loop values (`lib/div.bc`); the elaboration emits none of `div_bind` and `div_defer`.
@@ -8175,16 +8169,26 @@ kernel terms have those traces is the transcription's, not proved over the terms
   first and last occurrence. Wasm bounds a function's locals, which `gen-adapters-fail`'s largest
   function passed.
 - The new backend (§43) leaves a program with `iterate` or `reify` outside its fragment (N2):
-  122 corpus programs run there, 222 before.
+  123 corpus programs run there, 222 before (7 of which are now in `corpus/pending/`, §14).
 
 ### Programs
 
-Every corpus program's output, golden, exit status and `live 0` is unchanged at every stage, and
-every `div_fuel` answer. The loop matrix of #545 runs in 21 of its 24 non-`AA` cells (`241`), and
-so does its `return` matrix (21 cells, `298`); `AW`, `AL` and `AG` (a machine loop inside
-`for x in &a`) are refused as before (*Open*). `corpus/for-data-gen-loop.bc` and
-`corpus/while-in-counted-for.bc`, rejected before, are accepted by the counted loops' class and
-move to the corpus. The sugar pairs' core forms are the new elaboration (`corpus/sugar/*.core.bc`).
+Every corpus program that checks has its output, golden, exit status and `live 0` unchanged at
+every stage, and every `div_fuel` answer. The loop matrix of #545 runs in 21 of its 24 non-`AA`
+cells (`241`), and so does its `return` matrix (21 cells, `298`); `AW`, `AL` and `AG` (a loop
+inside `for x in &a`) hold the lend of `a` across the body's ticks, and the kernel refuses them.
+`corpus/for-data-gen-loop.bc` and `corpus/while-in-counted-for.bc`, rejected before, are counted
+loops at the row and move to the corpus; so does `corpus/for-view-local.bc` (#491), which the
+per-observation rewrite misread. The sugar pairs' core forms are the new elaboration
+(`corpus/sugar/*.core.bc`).
+
+The per-observation lend of §14 is retired, so the programs that ran only through it move to
+`corpus/pending/`, each with the lend and the ticks it spans: they need a lend held across a tick
+(T1, #172; tier 2 is open and has no path). Twelve: `hygiene-borrow-loop`, `lend-config`,
+`lend-copy`, `lend-div`, `lend-mut`, `lend-pipeline`, `lend-server`, `lend-shadow`,
+`borrow-across-loop` (from `corpus/axes/`), and the sugar pairs' `lend-block`, `lend-let` and
+`lend-div` (`lend-div-iter`), whose core forms are deleted. The rejects `corpus/reject/lend-*.bc`
+are refused by the kernel now, `Row.Unwind` or a borrow used at each turn.
 
 ### Baseline
 
@@ -8203,12 +8207,13 @@ elaborated program is checked core, so they cover it.
 - The old backend's counts and code size grow until B3 (native `iterate`, `main` under the
   runtime's clause); the source interpreter is slower on generators (`reify` captures the
   continuation at each tick).
-- A counted loop of the machine with `break e` or `else` is not provided.
-- **A counted loop over `&a` or `&mut a` whose body loops** (the matrix's `AW`, `AL`, `AG`): the
-  lend of `a` would have to end before each tick and start again at the next turn, an extent per
-  turn that the elaborator may not decide (`STOP: KERNEL WORK`, #644). The kernel would have to
-  express a lend of the loop's source per turn, or a borrow held across `tick` (T1 for a linear
-  operation). Refused as before.
+- **A lend held across a tick** (a borrow block whose body loops, `let r = &x` before a loop, a
+  lend at a call of a div function, a counted loop over `&a` or `&mut a` whose body loops): the
+  kernel refuses the lend at a row that holds `Div` (`Row.Unwind`). It would have to express a lend
+  held by a suspension, or a lend of the loop's source per turn (T1, #172); tier 2 is open and has
+  no path. The programs are §14's *Open* list.
+- A counted loop at the row over a source whose cursor is linear (a `mut` view) does not hand the
+  cursor back when the body is closed during a step: the close hands back the threaded variables.
 
 ---
 
@@ -8563,7 +8568,7 @@ Entry 40 (§41) is implemented in `Frontend/Parser.lean` (R1: `bindName`, `lookN
 `escapingWriter`), `Frontend/Sugar.lean` (a program's declarations shadow a module's;
 `modifyBody`, `TCx.tyCL`) and `scripts/mut-combos.py`; no change to `CDerives`, `Core/`, `Paper/`,
 `Support/` or the checker. Its binder identity is `Val.copyOf?` (`Frontend/Syntax.lean`),
-`Frontend/Elab/LoopLend.lean` (`Binding.of?`, `spineAliases`, `Env.walk`), `Frontend/Elab/Effects.lean`
+`Frontend/Elab/Effects.lean`
 (`Cx.copy`, `rowC`, `unboxesC`, `forOverParam`, `capKey`, `blockKeys`), `Frontend/Sugar.lean`
 (`termParts`), `Frontend/Elab/Hygiene.lean` (a control handler's code), `Frontend/Parser.lean`
 (`generatedName`, `pushBinder`, `resolutionOf`, `unrename`), `Frontend/Main.lean` (`bcc alpha`)
@@ -8596,11 +8601,16 @@ the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Backend/Wasm
   bodies); a direct-style call is a call; a loop value is `reify` (`main`, `div_fuel`'s argument,
   a block that loops, a stored generator, the generator of a `for` that loops). The per-body state
   machine, the emission of `div_bind` and `div_defer`, and §14's machine are deleted. A counted
-  loop whose body loops is a loop of the machine over its cursor (not over a lent `&a`): 21 of the
-  loop matrix's 24 non-`AA` cells run, and 21 of the `return` matrix's. The core text writes `div`,
-  `iterate[…]` and `reify[…](res)`. The Wasm lowering reuses locals. Every output, golden, exit
-  status, `live 0` and `div_fuel` answer unchanged; `indirect` counts grow until B3. No change to
-  `CDerives`, the relation, the machine or `Core/`.
+  loop whose body loops is at the row `div`, `bounded_fix` over the count, its step's body a div
+  body of its own: 21 of the loop matrix's 24 non-`AA` cells run, and 21 of the `return` matrix's.
+  §14's per-observation lend is retired: a borrow block whose body loops is the unwinding form at
+  the row `div`, which the kernel refuses (`Row.Unwind`); twelve programs that ran only through
+  the rewrite move to `corpus/pending/` (a lend held across a tick; tier 2 is open and has no
+  path), and `corpus/for-view-local.bc`, which the rewrite misread, moves to the corpus. The core
+  text writes `div`, `iterate[…]` and `reify[…](res)`. The Wasm lowering reuses locals. Every
+  output, golden, exit status, `live 0` and `div_fuel` answer of a program that checks is
+  unchanged; `indirect` counts grow until B3. No change to `CDerives`, the relation, the machine
+  or `Core/`.
 
 - **0.94** (2026-10-20) — §46 (#636, N1 part 2, L-3): a counted walk's read in range is a typed
   fact: `walk`'s `read` (`walkReadB`) and the marked read `walkGet`; the new backend drops the

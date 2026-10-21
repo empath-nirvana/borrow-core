@@ -894,13 +894,9 @@ tracks the `let mut` variables in scope and those each arm assigns. `lib/prelude
 its `main` is the scoped cell) and `array-sum.bc` (16 against 25), each with the same answer and
 counts. Pairs: `corpus/sugar/surface-mut.bc`, `surface-lend.bc`, `surface-bool.bc`.
 
-**Borrow scopes over loops, as built** (SPEC §14; decision 40 of `docs/decisions.md`).
-`Frontend/Elab/LoopLend.lean` runs inside `surfC`, on the program as written: a binding whose head
-is a borrow block whose body loops, or a `let r = &x`, is rewritten so that each stretch of the
-body that uses the borrow is a borrow block of its own and each `for`'s body borrows per step; the
-result is elaborated as any surface code. A `def` over a borrow whose body loops is rewritten to
-take the owner before `surfDecl` (`lentDef`). Pairs: `corpus/sugar/lend-block.bc`, `lend-let.bc`,
-`lend-div.bc`.
+**Borrow scopes over loops** (SPEC §14). A borrow block whose body loops is elaborated as written,
+its borrow the unwinding form at the row `div` (`LoopLend.blockLoops`), and the kernel refuses the
+lend (`Row.Unwind`). `let r = &x` is a borrow block over the rest of the body (`lendLet`).
 
 **Whole-body state machines, as built until B2** (deleted by SPEC §47, which elaborates loops to
 `Div`; before it SPEC §14, *One state machine per body*; #109 item 8;
@@ -949,8 +945,7 @@ loop's value is `break`'s, or the `else { d }` value when the source ends. Every
 drain, elaborated as before (§14, §15), which now takes `else` and `continue`, and a generator that
 finishes with `0` (its body a `loop { … }`) never ends: the loop's value is `break`'s, and code
 after a loop with no `break` is reported unreachable. `bcc check` reports each loop, total with
-its bound or div. The per-observation lend (`LoopLend`) leaves a counted loop inside a borrow block
-alone, reading its source's type in the block's context. From PR #132: the lend of an array at a
+its bound or div. From PR #132: the lend of an array at a
 view parameter for one call (`lendSlice`), and generic instances at types with lifetimes; its
 table of bounded sources by name is not taken. Pairs: `corpus/sugar/lend-array.bc`,
 `corpus/sugar/for-count.bc`.

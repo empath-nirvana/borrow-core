@@ -1,0 +1,41 @@
+-- pending: a lend held across a tick (a suspension; T1, #172): tier 2 is open and has no path
+-- now: 34:30: `cfg` is used twice here, and its type `imm 'a (i32 * i32)` is not persistent
+--
+-- A div function that takes a borrow: `serve` reads its input to the end, handling each byte
+-- under a configuration it borrows, and `main` calls it in direct style with
+-- `serve(&config, stdin)`.
+--
+-- Needs a lend held across a tick. Every loop is at the row `div` (SPEC §14), and each of its back
+-- edges ticks, a control operation that resumes; the lend `&config` at 39:20 spans the call of
+-- `serve`, whose `for` over the input at 34:5 ticks and reads the borrow `cfg` at each turn (the
+-- kernel refuses that use first: `cfg` is not persistent). The kernel's rule for a lend at a row
+-- has only abortive operations (`Row.Unwind`), so it refuses the lend. Holding a lend across a
+-- suspension is tier 2, which is open and has no path.
+--
+-- Once it lands: on the input `1203`, `i32[65]`, `live 0`: the configuration is (step 10, bias 1),
+-- so each digit adds `10 * d + 1`, giving 64, and `main` adds the bias read from the configuration
+-- it got back.
+
+type Cfg = i32 * i32
+
+-- `acc + step * d + bias`.
+def handle : !(all 'a < top. imm 'a Cfg * (i32 * i32) => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a Cfg * (i32 * i32)) ->
+    let (cfg, q) = p;
+    let (acc, d) = q;
+    let (step, bias) = *cfg;
+    acc + step * d + bias)
+
+-- Reads its input to the end, handling each byte under the configuration it borrows.
+def serve : !(all 'a < top. imm 'a Cfg * ref input => ref input * i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a Cfg * ref input) ->
+    let (cfg, i) = p;
+    let mut acc = 0;
+    for c in bytes(&mut i) { acc = handle(cfg, (acc, to_i32(c) - 48)) };
+    (i, acc))
+
+main -> i32 =
+  let config = alloc((10, 1));
+  let (stdin, n) = serve(&config, stdin);
+  let (step, bias) = free(config);
+  n + bias

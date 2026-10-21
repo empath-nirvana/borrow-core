@@ -299,12 +299,11 @@ allocate nothing.
 
 ## Borrows and loops
 
-A borrow lasts for one computation, and a loop runs one step at a time, so a borrow block around
-a loop lends the place again at each step, at no run-time cost. What the loop carries from one
-step to the next must not hold the borrow: an iterator that holds it is rejected with a message
-that says so ([Divergence](../elaboration/divergence.md#borrows-around-a-loop)). Holding a
-borrow across the turns of a generator (the *spanning lend*) is not provided (#172): a `for` over
-`&a` whose body yields is rejected for that reason.
+A borrow lasts for one computation, and a loop ticks at each turn, so a borrow block around a loop
+holds its lend across the ticks, which the kernel refuses. Borrow inside the step instead,
+`get(&t, i)` in the body, at no run-time cost ([Divergence](../elaboration/divergence.md#borrows-around-a-loop)).
+Holding a borrow across a loop's ticks or a generator's turns (the *spanning lend*, #172) is
+open and has no path: a `for` over `&a` whose body loops or yields is refused for that reason.
 
 ## Not yet
 
@@ -313,7 +312,7 @@ borrow across the turns of a generator (the *spanning lend*) is not provided (#1
   capability has no destructor to run then. A `for` over a generator that performs `Stdin`, say,
   is refused with a message saying so. The *body* of the `for` may use capabilities, and a block
   given to a function may yield to a `for` it is written inside (SPEC §32).
-- The spanning lend: a borrow held across a generator's turns (#172), above.
+- The spanning lend: a borrow held across a loop's ticks or a generator's turns (#172), above.
 - A `for` over the view of a borrow block written inline in some shapes (#501), a `for` that
   lends a variable inside an `if` arm (#502), and a recursive call inside a counted `for` that
   threads an array (#492) are refused; each issue has the shape and the workaround.
