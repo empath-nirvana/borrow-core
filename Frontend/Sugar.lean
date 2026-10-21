@@ -1680,26 +1680,6 @@ def divMain (cx : LoopCx) (c : TCx) (sp : Span) (M : Comp) : SM Comp := do
   let body ← divBody cx [BoCa.Fig16.LogRel.Core.tickSig] c M
   pure (.ret sp (← (eReify c sp [] cx.B cx.R body).run' 0))
 
-/-- The stretch of a loop's body that uses its element `x`, a borrow made at each turn (SPEC §14,
-borrow scopes over loops): the bindings of the body's spine up to its last use of `x`, none of
-which loops or leaves; and what follows them, which does not use `x`. `none` when the body uses
-`x` elsewhere: in a loop, a `case`, a terminal, or after a binding that loops. -/
-def elemStretch (x : String) : Nat → Comp → Option ((Comp → Comp) × List String × Comp)
-  | 0, _ => none
-  | n + 1, M =>
-    if !mentionsC x M then some (id, [], M) else
-    match M with
-    | .bind sp y A H N lin =>
-      if H.hasFor || H.hasExit then none else
-      (elemStretch x n N).map fun (w, ys, R) => (fun K => .bind sp y A H (w K) lin, y.name :: ys, R)
-    | .letPair sp y z V N =>
-      if V.hasExit then none else
-      (elemStretch x n N).map fun (w, ys, R) => (fun K => .letPair sp y z V (w K), y.name :: z.name :: ys, R)
-    | .letUnit sp V N =>
-      if V.hasExit then none else
-      (elemStretch x n N).map fun (w, ys, R) => (fun K => .letUnit sp V (w K), ys, R)
-    | _ => none
-
 /-! ### Loop values  `[spec §14]`
 
 A call of a div function where a loop is expected (an argument at a parameter of type
@@ -5040,8 +5020,6 @@ def forDataDiv : Nat → TCx → Option CCTy → Span → Ident → Val → Data
         "`break e` and `else` are not provided there"⟩
     let x' := x.name
     let w := s!"io_w{sfx}"
-    let mut preHole : Option Comp := none
-    let mut postHole : Option Comp := none
     let src ← match src with
       | .count _ _ => pure s!"{w}l <- return io_hole_lo;
 {w}h <- return io_hole_hi;
@@ -5107,47 +5085,9 @@ while ({w}m) \{
   }
 };
 force io_hole_rest"
-      | .lend a true _ => throw ⟨sp, s!"{why}, and its source `&mut {a.name}` lends " ++
+      | .lend a m _ => throw ⟨sp, s!"{why}, and its source `&{if m then "mut " else ""}{a.name}` lends " ++
           s!"`{a.name}` around the whole loop: an operation that resumes cannot cross a borrow " ++
           "(T1, #172). Iterate an owned array, or a view the function is given"⟩
-      | .lend a false A => do
-        -- `&a`: the array is lent at each turn, to the stretch of the body that uses the element
-        -- (SPEC §14, borrow scopes over loops). What the stretch binds and what follows reads, or
-        -- an outer variable it assigns, is handed on.
-        let some (wrap, ys, rest) := elemStretch x' divFuel M
-          | throw ⟨M.span, s!"{why}, so `&{a.name}` is lent one turn at a time, to the bindings " ++
-              s!"at the start of the body that use `{x'}`: `{x'}` is used after a loop, a `case` or a " ++
-              s!"call that loops, which the borrow of one turn does not reach (SPEC §14, borrow scopes " ++
-              "over loops)"⟩
-        let outer := c.locals.map (·.1)
-        let vs := ys.eraseDups.filter fun y => y != x' && (mentionsC y rest || outer.contains y)
-        -- The types of what is handed on: the stretch elaborated on its own, its state restored.
-        let some dom := c.elabL (.dom sp) | throw ⟨sp, "internal error: a borrow's lifetime"⟩
-        let cl := c.pushLife "io_wl" dom
-        let some v := cl.E.lenv.lookup "io_wl" | throw ⟨sp, "internal error: a borrow's lifetime"⟩
-        let cx := (cl.push s!"{w}lv" (some (.fam (.imm (.var v) A)))).push x' (some (.imm (.var v) A))
-        let s₀ ← get
-        let o₀ ← getThe Origins
-        let P' ← surfC n cx none (wrap (.ret sp (tupleVal sp vs)))
-        let VS ← need sp "what the borrowed stretch of the loop's body hands on"
-          ((← refresh cx).tyC P' |>.bind fun | .ret T => some T | _ => none)
-        set s₀
-        set o₀
-        let VSs ← pp VS
-        let At ← pp A
-        preHole := some (wrap (.ret sp (.ascribe sp (.inl sp (tupleVal sp vs)) (← (c.surface sp (.sum VS .unit) : Except Error VTy)))))
-        postHole := some (eDestruct sp s!"{w}vs" vs rest)
-        pure s!"let ({a.name}, {w}n) = array_size[{At}]({a.name});
-{w}i <- return 0;
-while ({w}i < {w}n) \{
-  {w}k <- return {w}i;
-  {w}i <- return ({w}i + 1);
-  {w}b <- return borrow imm {a.name} \{ 'io_wl, {w}lv -> case array_get['io_wl, {At}]({w}lv, {w}k) \{
-      inl {x'} -> force io_hole_pre | inr {w}u -> return (inr () : ({VSs}) + 1) } };
-  let ({a.name}, {w}r) = {w}b;
-  case {w}r \{ inl {w}vs -> force io_hole_post | inr {w}u -> return () }
-};
-force io_hole_rest"
     let (lo, hi) := match V with
       | .app _ (.sugar _ .count) (.pair _ a b) => (some a, some b)
       | _ => (none, none)
@@ -5155,8 +5095,7 @@ force io_hole_rest"
       if h == "io_hole_src" then some V else if h == "io_hole_lo" then lo
       else if h == "io_hole_hi" then hi else none
     let hc (h : String) : Option Comp :=
-      if h == "io_hole_body" then some M else if h == "io_hole_rest" then some N
-      else if h == "io_hole_pre" then preHole else if h == "io_hole_post" then postHole else none
+      if h == "io_hole_body" then some M else if h == "io_hole_rest" then some N else none
     let L ← (template sp "a `for` over data whose body performs an operation that resumes (a div loop)"
       src : SM Comp)
     if !(← get).quiet then
