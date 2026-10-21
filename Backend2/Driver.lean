@@ -7,6 +7,7 @@ import Backend2.Flow
 import Backend2.Frames
 import Backend2.LitViews
 import Backend2.Lint
+import Frontend.Check.Handled
 
 /-!
 # Backend2 — driver
@@ -18,7 +19,7 @@ It is outside the import fence (`scripts/check-backend2.sh`).
 -/
 
 namespace Backend2
-open BoCa BoCa.Fig16.LogRel.Core
+open BoCa BoCa.Fig16.LogRel.Core BoCa.Fig16.LogRel.Core.Check
 
 /-- The implementation of each extern, in declaration order. -/
 def extsOf (m : Frontend.Check.IOMain) : Except String (List Ext) :=
@@ -33,6 +34,55 @@ def extsOf (m : Frontend.Check.IOMain) : Except String (List Ext) :=
     | .clockSleep => pure (.io .clockSleep)
     | .harness => throw s!"extern `{x.name}` is the model's harness and is not compiled"
 
+/-- A `handle` node of the typed term, as the direct-call facts read it: its name, operations,
+outer row, clauses' kinds and its handler pair's erasure. -/
+structure HNode where
+  n : UInt32
+  E : List (Qual × VTy × VTy)
+  S : Row
+  ks : List ClauseKinds.HKind
+  H : Expr
+
+/-- The `handle` nodes of a typed term, within the depth `fuel`. -/
+def hnodes : Nat → TExpr → List HNode
+  | 0, _ => []
+  | f + 1, t =>
+    let here : List HNode := match t with
+      | .effHandleV _ _ S E _ n _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase⟩]
+      | .effHandleVB _ _ S E _ n _ _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase⟩]
+      | _ => []
+    here ++ t.children.flatMap fun (_, c) => hnodes f c
+
+/-- **The direct calls the checked facts license**  `[spec §48]`: for each static name, for each of
+its operations, whether every `handle` node of the name
+- classifies the operation's clause `tail` (`ks`, `classifyHandler_sound`),
+- holds names of the clause's own code (`handlerNames`; its row's names where it has none) that
+  `main`'s flow record cannot catch (`cond2B` at `Checked.flows`, which gives
+  `Checked.unhandledNames`: no frame between a `perform` and its handler catches them), and
+- holds one clause for it, closed (`closedAt 0`), at one outer row and one signature,
+so that the clause a `perform` reaches is known and needs nothing from its handler's frame. -/
+def directFacts (c : Frontend.Check.Checked) : Std.HashMap UInt32 (List Bool) := Id.run do
+  let nodes := hnodes Frontend.Check.copiesFuel c.t
+  let flows := c.flows
+  let mut out : Std.HashMap UInt32 (List Bool) := {}
+  for h in nodes do
+    if out.contains h.n then continue
+    let same := nodes.filter (·.n == h.n)
+    let hs := match h.H with | .pair _ hs => some hs | _ => none
+    let ok := h.E.zipIdx.map fun (_, j) =>
+      same.all fun g =>
+        let gs := match g.H with | .pair _ hs => some hs | _ => none
+        let names := Check.handlerNames g.E g.H
+        let row := (g.S.map (·.n)).eraseDups
+        let cl := gs.bind fun hs => Check.clauseExpr hs j
+        (g.ks[j]?.map (·.kind)) == some .tail &&
+          Frontend.Check.cond2B flows (Frontend.Check.cond2Names row ((names[j]?).getD none)) &&
+          (match cl with | some e => closedAt 0 e | none => false) &&
+          cl == hs.bind (fun hs => Check.clauseExpr hs j) &&
+          decide (CTy.effOf g.S .unit = CTy.effOf h.S .unit) && decide (g.E = h.E)
+    out := out.insert h.n ok
+  return out
+
 /-- The LIR of a checked program, and what the conversion read. -/
 def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
   let c := k.main
@@ -40,7 +90,32 @@ def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Pr
     | none => pure ([], 0, false)
     | some m => pure (← extsOf m, m.caps.length, m.loopB.isSome)
   let ctx := c.ctx.map fun s => (s.ty, s.live)
-  convertProg exts ctx c.t c.C ncaps loops census
+  let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c)
+  return ({ p with exits := c.exitsOnDivError }, st)
+
+/-- **The effect erasure's postcondition**, for a program (`bcc lir --erasure`, SPEC §48): the LIR
+has no `handle` and no `perform`, so a program the new backend compiles has none left. The line
+counts, at a compiled program, the `handle`, `perform` and `raise` nodes the conversion erased
+(each `use` body once per key); at any program, the `handle` nodes left for the state machines
+(a clause of kind `once` or `stored`: the stored-continuation sites, N3) and those left by a rule
+not built (`tail+state`, `resume-or-cancel`, or a tail-resumptive clause whose direct call the
+facts do not license). -/
+def erasureLine (k : Backend.CheckedProg) : String := Id.run do
+  let c := k.main
+  let nodes := hnodes Frontend.Check.copiesFuel c.t
+  let direct := directFacts c
+  let erasable (g : HNode) : Bool := g.ks.zipIdx.all fun (h, j) =>
+    h.kind == .abortive || (h.kind == .tail && (direct.getD g.n [])[j]? == some true)
+  let storedB (g : HNode) : Bool := g.ks.any fun h => match h.kind with
+    | .stored | .resumeOnce _ => true
+    | _ => false
+  let stored := (nodes.filter storedB).length
+  let other := (nodes.filter fun g => !erasable g && !storedB g).length
+  match lirOf k with
+  | .ok (_, st) =>
+    let r (key : String) := st.erased.getD key 0
+    s!"erased handles {r "handle"} performs {r "perform"} raises {r "raise"} left {stored} {other}"
+  | .error _ => s!"outside left {stored} {other}"
 
 /-- Convert and lint a program (`bcc lir --lint`): an error outside the pure fragment, or the
 lint's. -/

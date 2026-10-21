@@ -16,8 +16,11 @@ the image of a type the checker put on a node of the typed term.
   `A` and `U (∀'x. C)` is `U C`; no instantiation has run-time content.
 * `Ref A` is an owned cell, `Imm A` and `Mut A` borrows of one, `[L]` a family of leaves `L`
   (an array is `[Ref A]`).
-* A row has no run-time content in the pure fragment: a computation type with an operation is
-  outside it (`ofC` fails there).
+* A row's abortive operations are its computation's way out (SPEC §48): `F_Σ R` answers
+  `R ⊕ P`, `P` the payload of `Σ`'s abortive operations (`rowPay`), one summand per operation in
+  the row's order; with none, `R`. A non-abortive operation has no run-time content in the type:
+  its handler's clause is called where it is performed (`Backend2/Convert.lean`). `Div`'s
+  operations are outside the fragment (N4).
 -/
 
 namespace Backend2
@@ -63,6 +66,21 @@ inductive LCTy where
   deriving Inhabited, BEq, Hashable
 end
 
+/-- An operation of a row is abortive: answer `0` at a qualifier with weakening (`OpSig.abort`). -/
+def abortB (q : Qual) (B : VTy) : Bool := B.isZero && q != .lin
+
+/-- The payload of a row's abortive operations (`ofEff`'s list): each key once, its first, as
+`Row.find` reads a row; their argument types a right-nested sum, one summand per operation, in
+the row's order; `none` at none.  `[spec §48]` -/
+def payOf (ps : List ((UInt32 × UInt32) × LTy)) : Option LTy :=
+  let ks := ps.foldl (fun acc p => if acc.any (·.1 == p.1) then acc else acc ++ [p]) []
+  ks.reverse.foldl (fun acc p => match acc with
+    | none => some p.2
+    | some t => some (.sum p.2 t)) none
+
+/-- The name of `Div` (SPEC §14). -/
+def divName : UInt32 := 0xFFFFFFFF
+
 mutual
 /-- The LIR type of a value type: lifetimes, `[@a]`, `!` and `∀` erased. -/
 def ofV : VTy → Except String LTy
@@ -98,7 +116,26 @@ def ofC : CTy → Except String LCTy
   | .top => pure .top
   | .all _ _ C => ofC C
   | .nu C => return .nu (← ofC C)
-  | .eff n i .. => throw s!"an operation ({n}, {i}) in a computation type: outside the pure fragment"
+  | .eff n i q A B _ C => do
+    -- `F_Σ R`: `R`, or `R ⊕ P` with the payload of `Σ`'s abortive operations.  [spec §48]
+    if n == divName then
+      throw s!"an operation ({n}, {i}) in a computation type: outside the pure fragment"
+    let (ps, r) ← ofEff C
+    let ps ← if abortB q B then pure (((n, i), ← ofV A) :: ps) else pure ps
+    match payOf ps with
+    | none => return .ret r
+    | some p => return .ret (.sum r p)
+
+/-- The layers of `F_Σ R` (`CTy.effOf`): each abortive operation's key and argument type, in the
+row's order, and `R`. `Div`'s operations are outside the fragment (N4).  [spec §48] -/
+def ofEff : CTy → Except String (List ((UInt32 × UInt32) × LTy) × LTy)
+  | .ret R => return ([], ← ofV R)
+  | .eff n i q A B _ C => do
+    if n == divName then
+      throw s!"an operation ({n}, {i}) in a computation type: outside the pure fragment"
+    let (ps, r) ← ofEff C
+    if abortB q B then return (((n, i), ← ofV A) :: ps, r) else return (ps, r)
+  | _ => throw "a row's layers over a type that is not `F R`"
 end
 
 /-- The LIR type of a judgment: a value type, or the closure type a computation's value has

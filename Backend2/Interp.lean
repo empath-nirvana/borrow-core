@@ -507,6 +507,7 @@ def runLIR (p : Prog) (fuel : Nat) (input : List UInt8) (args : List UInt8 := []
   if !s.frame.isEmpty then
     throw s!"LIR interpreter: main leaves {s.frame.toList.map (s!"x{·.1}")} unconsumed"
   let pv ← pvOf 4096 p.mainTy v
-  pure (Backend.Output.mk' s.out s.err (Backend.report pv s.objs.size))
+  let (r, status) := Backend.reportExit p.exits pv s.objs.size
+  pure (Backend.Output.mk' s.out s.err r status)
 
 end Backend2

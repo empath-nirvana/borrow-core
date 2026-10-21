@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Backend2.Syntax
 import Backend2.Debug
+import Frontend.Check.Kinds
 
 /-!
 # Backend2 — closure conversion of the typed term  `[spec §3, §10]`
@@ -77,6 +78,16 @@ structure CState where
   walkRead : Bool := false
   /-- Converting a walk's read (`TExpr.walkGet`) inside such a walk: its index is in range. -/
   inRange : Bool := false
+  /-- **The direct calls the checked facts license**  `[spec §48]`: at each static name, for each
+  of its operations, whether every `handle` node of the name classifies its clause `tail`, its
+  names meet condition 2 at the program's flow record (`cond2B`, `Checked.flows`), and the nodes
+  hold one closed clause for it (`Backend2/Driver.lean`, `directFacts`). -/
+  direct : Std.HashMap UInt32 (List Bool) := {}
+  /-- The function of each directly called clause, by its operation, with the payload of its
+  handler's outer row: the clause's work, its resumes removed (`TailResumesAt`). -/
+  works : Std.HashMap (UInt32 × Nat) (Nat × List ((UInt32 × UInt32) × LTy)) := {}
+  /-- The `handle`, `perform` and `raise` nodes erased (`bcc lir --erasure`). -/
+  erased : Std.HashMap String Nat := {}
 
 abbrev CM := StateT CState (Except String)
 
@@ -142,6 +153,11 @@ def repJ (j : Jdg) : CM LTy := do
   match j with
   | .val A => vty A
   | .comp (.ret A) => vty A
+  | .comp C@(.eff ..) => do
+    -- `F_Σ R`'s value: `R`, or `R ⊕ P` (SPEC §48).
+    match ← cty C with
+    | .ret a => pure a
+    | k => throw s!"LIR: a row's computation type at {k}"
   | .comp .top => pure .unit
   | .comp C => return .thunk (← cty C)
 
@@ -317,6 +333,82 @@ def letpairM (p : Var) (k : Var → Var → CM Tm) : CM Tm := do
 def unitThen (b : Tm) : CM Tm := do
   let u ← fresh .unit
   return .letv u b (.drop u .unit)
+
+/-! ### Rows and their payloads  `[spec §48]`
+
+A computation at the row `Σ` answers `R ⊕ P` when `Σ` has abortive operations, `P` the payload of
+their arguments (`Backend2/Types.lean`, `payOf`), and `R` otherwise. The payload is read off the
+row a node carries; each operation is a summand, at its index among the row's abortive
+operations. -/
+
+/-- The payload of a row: its abortive operations, each key once with its argument's type, in the
+row's order (`Types.payOf`'s list).  `[spec §48]` -/
+abbrev Pay := List ((UInt32 × UInt32) × LTy)
+
+def rowPay (S : Row) : CM Pay := do
+  let mut acc : Pay := []
+  for o in S do
+    if o.n == divName then
+      throw s!"an operation ({o.n}, {o.i}) in a computation type: outside the pure fragment"
+    if o.abort && !(acc.any (·.1 == (o.n, o.i))) then
+      acc := acc ++ [((o.n, o.i), ← vty o.A)]
+  return acc
+
+/-- The payload's type: `none` at no operation. -/
+def payTy (p : Pay) : Option LTy := payOf p
+
+/-- The value type of a computation answering `a` at the payload `p`. -/
+def resTy (a : LTy) (p : Pay) : LTy :=
+  match payTy p with
+  | none => a
+  | some t => .sum a t
+
+/-- The payload `p` holding `v` at the summand `j`. -/
+def injectPay (p : Pay) (j : Nat) (v : Var) (k : Var → CM Tm) : CM Tm := do
+  match p, j with
+  | [_], _ => k v
+  | _ :: rest, 0 => do
+    let w ← fresh (← lift (Option.elim (payTy p) (.error "LIR: an empty payload") .ok))
+    return .letv w (.inj false v) (← k w)
+  | _ :: rest, j + 1 =>
+    injectPay rest j v fun r => do
+      let w ← fresh (← lift (Option.elim (payTy p) (.error "LIR: an empty payload") .ok))
+      return .letv w (.inj true r) (← k w)
+  | [], _ => throw "LIR: an operation outside its row's payload"
+
+/-- Take the payload `x` of `p` apart: `k j v` at the summand `j`, its argument `v`. -/
+def casePay (p : Pay) (x : Var) (k : Nat → Var → CM Tm) : CM Tm := do
+  match p with
+  | [] => throw "LIR: an empty payload"
+  | [_] => k 0 x
+  | (_, t) :: rest => do
+    let a ← fresh t
+    let b ← fresh (← lift (Option.elim (payTy rest) (.error "LIR: an empty payload") .ok))
+    return .case x a (← k 0 a) b (← casePay rest b fun j v => k (j + 1) v)
+
+/-- The index of an operation's key among a payload's summands. -/
+def payIdx (p : Pay) (key : UInt32 × UInt32) : Option Nat := p.findIdx? (·.1 == key)
+
+/-- A payload `x` of `p` as one of `q`: each operation at its own summand of `q`, which holds it
+(the row `Σ ⊆ Σ'`, `RowLe`).  `[spec §48]` -/
+def coercePay (p q : Pay) (x : Var) (k : Var → CM Tm) : CM Tm := do
+  if p.map (·.1) == q.map (·.1) then return ← k x
+  casePay p x fun j v => do
+    let some key := (p[j]?).map (·.1) | throw "LIR: a payload's summand"
+    let some j' := payIdx q key | throw s!"LIR: a raise of {key} where its row does not hold it"
+    injectPay q j' v k
+
+/-- The answer `r` of a computation answering `a` at the payload `p`, as one at `q`: a value
+handed on as `inl`, an abort's payload re-injected.  `[spec §48]` -/
+def coerceRes (a : LTy) (p q : Pay) (r : Var) : CM Tm := do
+  if p.map (·.1) == q.map (·.1) then return .var r
+  match payTy p, payTy q with
+  | none, none => return .var r
+  | none, some _ => return .inj false r
+  | some pT, some _ => do
+    let x ← fresh a; let e ← fresh pT
+    return .case r x (.inj false x) e (← coercePay p q e fun e' => pure (.inj true e'))
+  | some _, none => throw "LIR: an abort where the row holds no abortive operation"
 
 /-! ### Loops generated per site -/
 
@@ -841,7 +933,8 @@ def constArity : TExpr → Option Nat
   | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. => some 1
   | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M ..
-  | .withborF2I .. => some 2
+  | .withborF2I .. | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU ..
+  | .sliceBorrowMU .. | .sliceBorrowIU .. => some 2
   | .sliceEmptyI .. | .sliceEmptyM .. => some 0
   | _ => none
 
@@ -1030,19 +1123,77 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     readFact "withI:code kind"
     mkAmp "with" ctx k [r₁, r₂] [fun ctx' => conv fuel (none :: none :: ctx') tM,
       fun ctx' => conv fuel (none :: none :: ctx') tN]
-  | .bind _ _ A _ u tM tN | .effLet _ _ A _ [] u tM tN => do
-    let (pre, c₁, c₂) ← splitCtx ctx u "bind"
-    let unf := isUnfoldApp tM
-    return pre (← bindTm (← conv fuel c₁ tM) (← vty A) fun x => do
-      if unf then
-        readFact "bind:unfold step"
-        modify fun st => { st with unfolds := st.unfolds.insert x }
-      conv fuel (some x :: c₂) tN)
+  | .effLet _ _ A B S u tM tN => do
+    match payTy (← rowPay S) with
+    | none => convBind fuel ctx A u tM tN
+    | some pT => do
+      -- `M to x. N` at a row with abortive operations: `N` on a value, the abort handed on, `N`'s
+      -- context dropped (`effLet`'s `hW`), the branch per call of SPEC §19 (`abort_to`).
+      readFact "effLet:row"
+      let (pre, c₁, c₂) ← splitCtx ctx u "effLet"
+      let aT ← vty A
+      let m ← fresh (.sum aT pT); let x ← fresh aT; let e ← fresh pT
+      return pre (.letv m (← conv fuel c₁ tM)
+        (.case m x (← conv fuel (some x :: c₂) tN) e (drops (live c₂) (.inj true e))))
+  | .effSub _ _ S S' A c => do
+    -- `[sub]`: the payload of `Σ` as one of `Σ'`.  [spec §48]
+    readFact "effSub:rows"
+    let p ← rowPay S; let q ← rowPay S'
+    let a ← vty A
+    bindTm (← conv fuel ctx c) (resTy a p) fun r => coerceRes a p q r
+  | .effRaise _ _ S o _ c => do
+    -- `raise`: the abort at its operation's summand, handed to the handler's join (`catch_abort`,
+    -- `abort_absorbs`).  [spec §48]
+    readFact "effRaise:op"
+    modify fun st => { st with erased := st.erased.insert "raise" (st.erased.getD "raise" 0 + 1) }
+    let p ← rowPay S
+    let some j := payIdx p (o.n, o.i) | throw s!"LIR: a raise of ({o.n}, {o.i}) outside its row"
+    bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay p j v fun w => pure (.inj true w)
+  | .effPerform _ _ S o c => do
+    -- `perform` of a tail-resumptive clause: a direct call of the clause's work (`tail_resumes`,
+    -- `TailResumesAt.subst_kappa`, `tail_clause_names`, `Checked.unhandledNames`).  [spec §48]
+    let some (fi, ph) := (← get).works[(o.n, o.i.toNat)]?
+      | throw s!"LIR: `effPerform` of ({o.n}, {o.i}) with no direct call is outside the pure fragment (N3)"
+    readFact "effPerform:direct call"
+    modify fun st => { st with erased := st.erased.insert "perform" (st.erased.getD "perform" 0 + 1) }
+    let p ← rowPay S
+    unless ph.all fun k => (payIdx p k.1).isSome do
+      throw s!"LIR: `effPerform` of ({o.n}, {o.i}) at a row that does not hold its clause's aborts is outside the pure fragment"
+    let bT ← vty o.B
+    bindTm (← conv fuel ctx c) (← vty o.A) fun v => do
+      let r ← fresh (resTy bT ph)
+      return .letv r (.call fi [v]) (← coerceRes bT ph p r)
+  | .effThen _ _ A _ S SM SD u tM tN tD => do
+    -- `M then x. N unwind D`: `N` on a value; on an abort the finaliser `D`, then the abort, or
+    -- the finaliser's own, handed on (`then_ret`, `then_fin`, `unwind_prefix`).  [spec §48]
+    readFact "effThen:rows"
+    let (pre, c₁, c₂) ← splitCtx ctx u "effThen"
+    let pm ← rowPay SM; let ps ← rowPay S; let pd ← rowPay SD
+    let aT ← vty A
+    match payTy pm with
+    | none => return pre (← bindTm (← conv fuel c₁ tM) aT fun x => conv fuel (some x :: c₂) tN)
+    | some pmT =>
+      let m ← fresh (.sum aT pmT); let x ← fresh aT; let e ← fresh pmT
+      let d ← fresh (resTy .unit pd)
+      let dTm ← conv fuel (none :: c₂) tD
+      let pass ← coercePay pm ps e fun e' => pure (.inj true e')
+      let fin ← match payTy pd with
+        | none => pure (Tm.letv d dTm (.drop d pass))
+        | some pdT => do
+          let w ← fresh .unit; let e₂ ← fresh pdT
+          pure (Tm.letv d dTm (.case d w (.drop w pass) e₂
+            (.drop e (← coercePay pd ps e₂ fun e' => pure (.inj true e')))))
+      return pre (.letv m (← conv fuel c₁ tM) (.case m x (← conv fuel (some x :: c₂) tN) e fin))
+  | .effHandleV _ _ S E fs n A R u ks _ _ tc te =>
+    convHandle fuel ctx S E fs n A R u ks tc te
+  | .effHandleVB _ _ S E fs n A R _ u ks _ _ tc te =>
+    convHandle fuel ctx S E fs n A R u ks tc te
+  | .bind _ _ A _ u tM tN => convBind fuel ctx A u tM tN
   | .force _ j i C => do
     match ctx[i]? with
     | some (some x) =>
       match C with
-      | .ret _ => return leaf ctx (some i) (.app0 x)
+      | .ret _ | .eff .. => return leaf ctx (some i) (.app0 x)
       | _ => return leaf ctx (some i) (.var x)
     | _ => throw s!"LIR: forced variable {i} is not live"
   | .app _ j i _ _ u tM => do
@@ -1132,9 +1283,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
         else conv fuel ctx c
       | _ => conv fuel ctx c
     | _, _ => conv fuel ctx c
-  | .effPerform .. | .effRaise .. | .effHandleV .. | .effHandleVB .. | .effHandleT .. | .effThen ..
-  | .effLet .. | .effSub .. | .lendR .. | .lendLoopR .. | .nilDead .. | .withbor1U .. | .withbor2U ..
-  | .withbor3U .. | .withloadU .. | .sliceBorrowMU .. | .sliceBorrowIU .. | .iterate .. | .divFuel ..
+  | .effHandleT .. | .lendR .. | .lendLoopR .. | .nilDead .. | .iterate .. | .divFuel ..
   | .reify .. | .boundedFix .. | .letPoly .. => outside t
   | t =>
     match transparent? t with
@@ -1143,6 +1292,191 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       match constArity t with
       | some _ => return leaf ctx none (← constClos fuel t)
       | none => throw s!"LIR: no conversion for `{ruleName t}`"
+
+/-- `x <- M; N`: `M`'s value bound, then `N`. -/
+def convBind (fuel : Nat) (ctx : Ctx) (A : VTy) (u : Masks) (tM tN : TExpr) : CM Tm := do
+  let (pre, c₁, c₂) ← splitCtx ctx u "bind"
+  let unf := isUnfoldApp tM
+  return pre (← bindTm (← conv fuel c₁ tM) (← vty A) fun x => do
+    if unf then
+      readFact "bind:unfold step"
+      modify fun st => { st with unfolds := st.unfolds.insert x }
+    conv fuel (some x :: c₂) tN)
+
+/-- The function `tF` applied to `a`: a λ's body at `a` (through transparent nodes and lifetime
+abstractions, `lamOf`), or a closure call. -/
+def applyTo (fuel : Nat) (ctx : Ctx) (tF : TExpr) (a : Var) : CM Tm := do
+  match lamOf 64 tF with
+  | some (k, .lam _ _ _ _ body) => conv fuel (some a :: (List.replicate k none ++ ctx)) body
+  | _ => do
+    let f ← fresh (← repJ tF.jdg)
+    return .letv f (← conv fuel ctx tF) (.app f a)
+
+/-- **`handle_n e with (h_ret, hs)`, erased**  `[spec §48]`. Read from the node: its name `n`, its
+operations `E`, its clauses' kinds `ks`, its outer row `Σ` and the masks. Every clause must be
+`abortive`, or `tail` with its direct call licensed (`CState.direct`); any other kind is a
+stored-continuation site, left to the state machines (N3). The handled computation runs in place;
+its value goes to `h_ret`, an abort of one of `n`'s operations to that operation's clause (the
+handler's join: `catch_abort`), an abort of `Σ`'s handed on (`fwd_abort`). A tail-resumptive
+clause is called where it is performed (`effPerform`). -/
+def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy)
+    (n : UInt32) (A R : VTy) (u : Masks) (ks : List ClauseKinds.HKind) (tc te : TExpr) : CM Tm := do
+  let direct := (← get).direct.getD n []
+  readFact "effHandleV:kinds"
+  for (k, j) in ks.zipIdx do
+    match k.kind with
+    | .abortive => pure ()
+    | .tail =>
+      unless direct[j]? == some true do
+        throw s!"LIR: `effHandleV`: the clause {n}.{j} is tail-resumptive, but its direct call is not licensed (condition 2, or one closed clause at its nodes): outside the pure fragment"
+    | .resumeOnce _ | .stored =>
+      throw s!"LIR: `effHandleV`: the clause {n}.{j} is `{k.kind.tag}`, a stored-continuation site (N3): outside the pure fragment"
+    | kd => throw s!"LIR: `effHandleV`: the clause {n}.{j} is `{kd.tag}`, whose rule is not built: outside the pure fragment"
+  let (pre, c₁, c₂) ← splitCtx ctx u "effHandleV"
+  -- The handler's pair, written in place: `h_ret` and each clause with its part of the context.
+  let .tensorI _ _ _ _ uH tR tCs := tc
+    | throw "LIR: `effHandleV`: a handler pair not written in place is outside the pure fragment"
+  let (preH, cR, cCs) ← splitCtx c₁ uH "effHandleV"
+  let mut parts : Array (Ctx × TExpr) := #[]
+  let mut cur := cCs
+  let mut tcur := tCs
+  let mut preCs : Array (Tm → Tm) := #[]
+  for _ in E do
+    match tcur with
+    | .tensorI _ _ _ _ uc c rest => do
+      let (pc, cc, cr) ← splitCtx cur uc "effHandleV"
+      preCs := preCs.push pc
+      parts := parts.push (cc, c)
+      cur := cr; tcur := rest
+    | _ => throw "LIR: `effHandleV`: a clause tuple not written in place is outside the pure fragment"
+  let tailCtx := cur
+  -- The direct calls' functions, made at the first node of the name.
+  for (k, j) in ks.zipIdx do
+    if k.kind == .tail then
+      let some (cc, c) := parts[j]? | throw "LIR: a clause"
+      let some o := E[j]? | throw "LIR: an operation"
+      ensureWork fuel n j cc.length S o c
+  let ctxs : List Ctx := cR :: parts.toList.map (·.1) ++ [tailCtx]
+  let dropAll (keep : Option Nat) (b : Tm) : Tm :=
+    drops ((ctxs.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
+  let pt ← rowPay (Row.ofEff n E 0 fs ++ S)
+  let ps ← rowPay S
+  let aT ← vty A
+  modify fun st => { st with erased := st.erased.insert "handle" (st.erased.getD "handle" 0 + 1) }
+  let retArm (a : Var) : CM Tm := do return dropAll (some 0) (← applyTo fuel cR tR a)
+  let wrap (b : Tm) : Tm := pre (preH (preCs.foldr (fun f t => f t) b))
+  match payTy pt with
+  | none => return wrap (← bindTm (← conv fuel c₂ te) aT retArm)
+  | some ptT =>
+    readFact "effHandleV:join"
+    let b ← fresh (.sum aT ptT); let a ← fresh aT; let e ← fresh ptT
+    let arms ← casePay pt e fun j v => do
+      let some (key, _) := pt[j]? | throw "LIR: a payload's summand"
+      if key.1 == n then
+        let idx := key.2.toNat
+        let some (cc, c) := parts[idx]? | throw "LIR: an abortive clause"
+        return dropAll (some (idx + 1)) (← applyTo fuel cc c v)
+      else
+        let some j' := payIdx ps key | throw s!"LIR: an abort of {key} outside the handler's row"
+        return dropAll none (← injectPay ps j' v fun w => pure (.inj true w))
+    return wrap (.letv b (← conv fuel c₂ te) (.case b a (← retArm a) e arms))
+
+/-- **A tail-resumptive clause's work**, the function a `perform` of its operation calls
+(`[spec §48]`, `tail_resumes`): the clause `λp. let (x, κ) = p; M` with each resume of `κ`
+replaced by its answer (`TailResumesAt 0 M M'`, which the clause's kind gives,
+`classifyHandler_sound`). It takes the argument `x` and answers the operation's answer, at the
+payload of the handler's outer row `Σ`. Made once per operation. -/
+def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
+    (o : Qual × VTy × VTy) (c : TExpr) : CM Unit := do
+  if (← get).works.contains (n, j) then return
+  match c.unUse with
+  | .bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => do
+    readFact "effHandleV:tail work"
+    let x ← fresh (← vty o.2.1)
+    let kv ← fresh .unit
+    let ph ← rowPay S
+    let bT ← vty o.2.2
+    let fi ← reserveFn s!"clause {n}.{j}"
+    modify fun st => { st with works := st.works.insert (n, j) (fi, ph) }
+    let body ← convWork fuel 0 ph (some kv :: some x :: none :: List.replicate depth none) tM
+    -- `κ`'s slot holds a unit: every resume of it is its answer, and it is dropped there.
+    setFn fi { name := s!"clause {n}.{j}", params := [x], body := .letv kv .unit body,
+               ret := resTy bT ph }
+  | _ => throw s!"LIR: the clause {n}.{j} is not `λp. let (x, κ) = p; M`"
+
+/-- The variable a term answers through the nodes that keep their premise's value (`ret`,
+`unbox`, `[sub]`, …): the alias `return κ`. -/
+def aliasOf : Nat → TExpr → Option Nat
+  | 0, _ => none
+  | f + 1, t => match t with
+    | .var _ _ i _ => some i
+    | .effSub _ _ _ _ _ c => aliasOf f c
+    | t => match transparent? t with
+      | some c => aliasOf f c
+      | none => none
+
+/-- **The clause's body with its resumes removed** (`TailResumesAt`), `κ` in the slot `k`: on
+each path, through `[⊕E]`, `[⊗E]`, `[1E]`, `[let]` and `[sub]`, to the resume `κ.1 y`
+(`resumeB`), whose value is `y`; the right unit `x <- κ.1 y; return x` (`tailLeafB`,
+`returns0B`) is the resume; an alias `κ' <- return κ` moves `κ` to its binder. An abort of the
+path's `[let]`s is handed on at the handler's row's payload `ph`. -/
+def convWork (fuel : Nat) (k : Nat) (ph : Pay) (ctx : Ctx) (t : TExpr) : CM Tm := do
+  match fuel with
+  | 0 => throw "LIR: the typed term is too deep"
+  | fuel + 1 =>
+  let answer (y : Var) : CM Tm := do
+    match payTy ph with
+    | none => return .var y
+    | some _ => return .inj false y
+  if resumeB k t then
+    match t.unSub with
+    | .app _ _ y _ _ u _ => do
+      let (pre, c₁, c₂) ← splitCtx ctx u "app"
+      let some (some yv) := c₂[y]? | throw "LIR: a resume's answer is not live"
+      return pre (drops (live c₁) (leaf c₂ (some y) (← answer yv)))
+    | _ => throw "LIR: a resume"
+  match t with
+  | .bind _ _ A _ u tM tN | .effLet _ _ A _ _ u tM tN =>
+    let row := match t with | .effLet _ _ _ _ S .. => some S | _ => none
+    if tailLeafB k tM && returns0B tN then
+      -- The right unit: the resume's answer is the clause's.
+      let (pre, c₁, c₂) ← splitCtx ctx u "bind"
+      return pre (drops (live c₂) (← convWork fuel k ph c₁ tM))
+    else if aliasOf 64 tM == some k then
+      -- `κ' <- return κ`: the alias's slot holds `κ`.
+      let (pre, c₁, c₂) ← splitCtx ctx u "bind"
+      let some (some kv) := c₁[k]? | throw "LIR: an alias of a continuation that is not live"
+      return pre (leaf c₁ (some k) (← convWork fuel 0 ph (some kv :: c₂) tN))
+    else
+      let (pre, c₁, c₂) ← splitCtx ctx u "bind"
+      let aT ← vty A
+      let p ← match row with | some S => rowPay S | none => pure []
+      match payTy p with
+      | none =>
+        return pre (← bindTm (← conv fuel c₁ tM) aT fun x => convWork fuel (k + 1) ph (some x :: c₂) tN)
+      | some pT =>
+        let m ← fresh (.sum aT pT); let x ← fresh aT; let e ← fresh pT
+        let pass ← coercePay p ph e fun e' => pure (.inj true e')
+        return pre (.letv m (← conv fuel c₁ tM)
+          (.case m x (← convWork fuel (k + 1) ph (some x :: c₂) tN) e (drops (live c₂) pass)))
+  | .sumE _ _ A B _ u tV t₁ t₂ => do
+    let (pre, c₁, c₂) ← splitCtx ctx u "sumE"
+    let aT ← vty A; let bT ← vty B
+    return pre (← bindTm (← conv fuel c₁ tV) (.sum aT bT) fun sv => do
+      let x ← fresh aT; let y ← fresh bT
+      return .case sv x (← convWork fuel (k + 1) ph (some x :: c₂) t₁)
+        y (← convWork fuel (k + 1) ph (some y :: c₂) t₂))
+  | .tensorE _ _ A B _ u tV tM => do
+    let (pre, c₁, c₂) ← splitCtx ctx u "tensorE"
+    let aT ← vty A; let bT ← vty B
+    return pre (← bindTm (← conv fuel c₁ tV) (.pair aT bT) fun pv => do
+      let x ← fresh aT; let y ← fresh bT
+      return .letpair x y pv (← convWork fuel (k + 2) ph (some y :: some x :: c₂) tM))
+  | .unitE _ _ _ u tV tM => do
+    let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
+    return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop v (← convWork fuel k ph c₂ tM))
+  | .effSub _ _ _ _ _ c => convWork fuel k ph ctx c
+  | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
 
 /-- A spine of `lolliE` nodes: its arguments evaluated outermost first, then its function: a
 constant's operation (`expand`), a λ's body (β), or a closure call. -/
@@ -1172,7 +1506,9 @@ def convSpine (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
 where
   cbConst : TExpr → Bool
     | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .sliceBorrowM ..
-    | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I .. => true
+    | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I ..
+    | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU .. | .sliceBorrowMU ..
+    | .sliceBorrowIU .. => true
     | _ => false
   go (fuel : Nat) (ctx : Ctx) : List (Masks × TExpr) → List Var → TExpr → LTy → CM Tm
     | (u, ta) :: rest, vs, h, resT => do
@@ -1297,6 +1633,31 @@ where
         if k == 0 then expand fuel c got'.reverse.reverse rT
         else curry fuel c rT got' k
 
+/-- **An unwinding borrow** (`withborUE d`, SPEC §19): `(f [] r) then b. (r, b) unwind d r`. The
+owner lent as `genLend` does; the callback's value `b` gives `(r, b)`; its abort ends the lend, runs
+the finaliser `d` on the owner, and is handed on (`then_fin`).  `[spec §48]` -/
+def genLendU (fuel : Nat) (op : Op) (src : Var) (cbT : LTy) (call : Var → CM Tm) (td : TExpr) :
+    CM Tm := do
+  match fuel with
+  | 0 => throw "LIR: the typed term is too deep"
+  | fuel + 1 =>
+  let (some bT, rT) ← answerOf cbT | throw "LIR: a borrow's callback takes no borrow"
+  match rT with
+  | .sum vT eT => do
+    readFact "withborU:finaliser"
+    let pr ← fresh (.pair (← tyOf src) bT)
+    let o ← freshLike src; let b ← fresh bT
+    let r ← fresh rT
+    let v ← fresh vT; let e ← fresh eT
+    let q ← fresh (.pair (← tyOf src) vT)
+    let u ← fresh .unit
+    let fin ← match constArity (headOf 64 td) with
+      | some 1 => expand fuel (headOf 64 td) [o] .unit
+      | _ => throw "LIR: an unwinding borrow's finaliser that is not a constant is outside the pure fragment"
+    return .letv pr (.prim op [src]) (.letpair o b pr (.letv r (← call b)
+      (.case r v (.letv q (.pair o v) (.inj false q)) e (.letv u fin (.drop u (.inj true e))))))
+  | _ => genLend op src cbT call
+
 /-- A borrowing constant applied to its first argument `x`, its callback's call given by `call`. -/
 def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM Tm) (resT : LTy) :
     CM Tm := do
@@ -1307,6 +1668,10 @@ def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM 
   | .withload .. => genWithload x cbT call
   | .withswap .. => genWithswap x cbT call
   | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I .. => genLendTree x cbT call
+  | .withbor1U _ _ _ _ _ _ td | .withbor2U _ _ _ _ _ _ td | .sliceBorrowMU _ _ _ _ _ _ td
+  | .sliceBorrowIU _ _ _ _ _ _ td => genLendU _fuel .lend x cbT call td
+  | .withbor3U _ _ _ _ _ _ _ td => genLendU _fuel .relend x cbT call td
+  | .withloadU .. => genWithload x cbT call
   | c => throw s!"LIR: `{ruleName c}` is not a borrow (answer {resT})"
 
 /-- **A constant applied to its arguments**, `args` in the order they apply, its answer of type
@@ -1365,6 +1730,11 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     freeTree v vT
   | .withborSM .., [x, cb] | .withborSI .., [x, cb] | .withborF2M .., [x, cb]
   | .withborF2I .., [x, cb] => genLendTree x (← tyOf cb) (callCb cb)
+  | .withbor1U _ _ _ _ _ _ td, [x, cb] | .withbor2U _ _ _ _ _ _ td, [x, cb]
+  | .sliceBorrowMU _ _ _ _ _ _ td, [x, cb] | .sliceBorrowIU _ _ _ _ _ _ td, [x, cb] =>
+    genLendU fuel .lend x (← tyOf cb) (callCb cb) td
+  | .withbor3U _ _ _ _ _ _ _ td, [m, cb] => genLendU fuel .relend m (← tyOf cb) (callCb cb) td
+  | .withloadU .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
   | .foldOwn _ _ F _, [g] | .foldReuse _ _ F _, [g] => do
     let k : FoldKind := match c with | .foldReuse .. => .reuse | _ => .own
     let .thunk fk := resT | throw "LIR: a fold's answer is not a closure"
@@ -1398,6 +1768,36 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
   | c, _ => throw s!"LIR: `{ruleName c}` applied to {args.length} arguments"
 end
 
+
+/-- The clauses of a handler pair written in place, `(h_ret, (c₀, (c₁, … ())))`: `n` of them. -/
+def clausesOf : Nat → TExpr → List TExpr
+  | 0, _ => []
+  | n + 1, .tensorI _ _ _ _ _ c rest => c :: clausesOf n rest
+  | _, _ => []
+
+/-- **The directly called clauses' functions, made first** (`ensureWork`): a `perform` may be
+converted before its handler's node (a function made before the `handle` and called inside it).
+Each tail-resumptive clause whose direct call is licensed, at the first `handle` node of its
+name, with the depth of the node's context.  `[spec §48]` -/
+def prepWorks (fuel : Nat) (depth : Nat) (t : TExpr) : CM Unit := do
+  match fuel with
+  | 0 => throw "LIR: the typed term is too deep"
+  | fuel + 1 =>
+  let here : Option (Row × List (Qual × VTy × VTy) × UInt32 × List ClauseKinds.HKind × TExpr) :=
+    match t with
+    | .effHandleV _ _ S E _ n _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
+    | .effHandleVB _ _ S E _ n _ _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
+    | _ => none
+  if let some (S, E, n, ks, .tensorI _ _ _ _ _ _ tCs) := here then
+    let direct := (← get).direct.getD n []
+    let cs := clausesOf E.length tCs
+    for (k, j) in ks.zipIdx do
+      if k.kind == .tail && direct[j]? == some true then
+        if let (some c, some o) := (cs[j]?, E[j]?) then
+          ensureWork (1 <<< 22) n j depth S o c
+  for (sc, c) in t.children do
+    let d := match sc with | .push k => depth + k | .fresh k => k
+    prepWorks fuel d c
 
 /-! ### `main` -/
 
@@ -1462,6 +1862,7 @@ def convMain (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) 
       let c ← ioClos 8 op aT
       binds := (fun b => .letv x c b) :: binds
     cx := cx.push (some x)
+  prepWorks (1 <<< 22) cx.size t
   let body ← conv (1 <<< 22) cx.toList t
   let mT ← repJ (.comp C)
   let r ← fresh mT
@@ -1483,8 +1884,9 @@ where
 
 /-- Convert a checked `main` to a program. -/
 def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) (ncaps : Nat)
-    (loops : Bool) (census : Bool := false) : Except String (Prog × CState) := do
-  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run { census }
+    (loops : Bool) (census : Bool := false) (direct : Std.HashMap UInt32 (List Bool) := {}) :
+    Except String (Prog × CState) := do
+  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run { census, direct }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
             statics := s.statics.size }, s)
 

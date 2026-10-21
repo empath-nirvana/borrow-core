@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.94 · 2026-10-20
+Version 0.96 · 2026-10-21
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8215,6 +8215,107 @@ elaborated program is checked core, so they cover it.
 - A counted loop at the row over a source whose cursor is linear (a `mut` view) does not hand the
   cursor back when the body is closed during a step: the close hands back the threaded variables.
 
+## 48. Entry 47 — the new backend: effect erasure by handler law (N2)
+
+### Motivation
+
+`docs/compiler.md` §3.2 (#552) erases effects by handler laws applied at known sites, each rule
+reading its applicability from the typed term. Unit N2 (#647) builds the rules in the new backend
+(§43) for the clause kinds whose laws Core has: abortive operations and tail-resumptive clauses.
+Every program the new backend compiles has no `handle` and no `perform` left: an operation is a
+direct call, an abort a branch to its handler's join, and nothing is captured.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration or semantics.
+
+### Lowering
+
+`Backend2/`. Each rule reads the node's fields and the checker's facts; none recognises a term.
+
+- **Rows in the LIR's types** (`Backend2/Types.lean`, `ofC`): `F_Σ R` is `R ⊕ P`, `P` the payload
+  of `Σ`'s abortive operations (answer `0` at a qualifier with weakening, `OpSig.abort`): their
+  argument types, one summand per operation, each key once, in the row's order (`payOf`); with no
+  abortive operation it is `R`. A non-abortive operation has no run-time content in the type.
+  `Div`'s operations stay outside the fragment (N4).
+- **`raise`** (`effRaise`): the payload at its operation's summand, `inr`: a jump to the handler's
+  join (`catch_abort`; frames that catch nothing of its name are passed, `abort_absorbs`).
+- **`[let]` at a row** (`effLet`): `N` on `inl`, the abort handed on and `N`'s context dropped
+  (`effLet`'s `hW`: it holds no own cell), the branch per call of §19 (`abort_to`, `abort_passes`).
+- **`[sub]`** (`effSub`): the payload of `Σ` re-injected at `Σ'`'s summands (`RowLe`).
+- **`[then]`** (`effThen`): `N` on a value; on an abort the finaliser `D`, then the abort, or the
+  finaliser's own, which supersedes it, handed on (`then_ret`, `then_fin`, `unwind_prefix`).
+- **The unwinding borrows** (`withbor1U`, `withbor2U`, `withbor3U`, `withloadU`, `sliceBorrowMU`,
+  `sliceBorrowIU`; `withborUE d`): the lend as §43's; the callback's abort ends it, runs the
+  finaliser `d` on the owner and is handed on (`then_fin`). A finaliser that is not a constant is
+  outside the fragment.
+- **`[handle]`** (`effHandleV`, `effHandleVB`), read from the node: its name `n`, its operations
+  `E`, its clauses' kinds `ks` (§19 *Clause kinds*, `classifyHandler_sound`), its outer row `Σ`,
+  the masks, and the clauses of its pair written in place. Every clause must be `abortive`, or
+  `tail` with its direct call licensed (below); any other kind leaves the program outside the
+  fragment. The handled computation runs in place; a value goes to `h_ret` (`catch_ret`), an abort
+  of `n`'s operation `j` to clause `j` (`catch_abort`), an abort of `Σ`'s handed on (`fwd_abort`).
+- **A direct call** (`effPerform`). At a static name, the facts license operation `j`'s direct
+  call when every `handle` node of the name (`Backend2/Driver.lean`, `directFacts`)
+  - classifies the clause `tail` (`ks`), so its body `M` resumes on every path in tail position
+    and uses `κ` nowhere else (`TailResumesAt 0 M M'`, `TailResumesAt.subst_kappa`,
+    `TailResumesAt.kappa_free`);
+  - holds names of the clause's own code (`handlerNames`, its row's where it has none) that `main`'s
+    flow record cannot catch (`cond2B` at `Checked.flows`): no frame between a `perform` and its
+    handler catches them (`Checked.unhandledNames`, `tail_clause_names`);
+  - holds one closed clause for it (`closedAt 0` of the node's clause), at one outer row and one
+    signature, so the clause a `perform` reaches is the same code at every node and needs nothing
+    from its handler's frame.
+
+  The clause's work `M'` (`M` with each resume `κ.1 y` replaced by `y`, read along the paths of
+  `TailResumesAt` through `[⊕E]`, `[⊗E]`, `[1E]`, `[let]` and `[sub]`, the right unit and the
+  alias of `κ` included) is one function, made before the conversion (a `perform` may stand in a
+  function made before its handler). A `perform` of the operation calls it on the argument
+  (`tail_resumes`: the clause runs as its work followed by one resume, which `kappa_resume_steps`
+  takes back into `K`); its aborts, at the outer row's payload, are re-injected at the `perform`'s
+  row, and a `perform` at a row that does not hold them is outside the fragment.
+- **`main`'s exit status** (§39): when `main` is served `Fail[DivError]` by the platform's handler
+  (`Checked.exitsOnDivError`), its value `inl v` reports `v` and `inr ()` ends the run with the
+  status `1`, at the LIR interpreter, the word IR and both targets.
+
+### The postcondition
+
+The LIR has no `handle` and no `perform` former, so a program the new backend compiles has none
+left. `bcc lir --erasure` prints, for a compiled program, the `handle`, `perform` and `raise` nodes
+the conversion erased (each `use` body once per key), and, for any program, the `handle` nodes left
+for the state machines (a clause of kind `once` or `stored`, the stored-continuation sites) and
+those left by a rule this entry does not build. `scripts/compile-backend2.sh` requires `left 0 0`
+of every program it compiles and pins the line in `corpus/erasure-backend2.expected`.
+
+### Programs
+
+159 corpus programs at their goldens at the LIR interpreter, the word IR, Wasm and natively, 36 of
+them effectful: every one whose handlers are abortive or directly called and that has no loop
+(`iterate`, `bounded_fix`: N4). Their counts are pinned in `corpus/counts-backend2.expected`, with no
+indirect call.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `Core/`, the checker, the elaboration, the old
+backend (still `bcc`'s default) or a kernel program. `corpus/counts.expected` and
+`kernel-counts.expected` unchanged.
+
+### Open
+
+- **`tail+state`** (§19 *Handler state*): the clause answers the state-passing function, and the
+  `handle` node's value is that function, applied to the initial state by the code after the node.
+  The rewrite that keeps the state in a cell (`handle_fold` for the `hnd` encoding) needs the
+  initial state at the node, and that the clause's work after its resume is a value, so that the
+  continuation's segment and that work commute. Neither is a fact of the typed term; the programs
+  stay with the old backend.
+- **`resume-or-cancel`**: the cancel in place runs the region's finalisers under §19 *Cancels*
+  (the region's handlers dead, the first finaliser error kept) and then the clause's rest. Its
+  representation, a summand of the operation in the payload of every row that holds it, depends on
+  the clause's kind, which the rows do not carry; not built.
+- A tail-resumptive clause that captures values, or that differs between the nodes of its name:
+  its direct call needs its captures at the `perform` (evidence), as §19 *Open* says.
+- `once` and `stored` clauses (N3); `iterate`, `count_try`'s exits, `bounded_fix` and `tick` (N4).
+
 ---
 
 ## Status
@@ -8589,11 +8690,25 @@ the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Backend/Wasm
 `walkGetB`, `TExpr.walk`'s `read`, `TExpr.walkGet`), `Frontend/Syntax.lean`
 (`SchemeMark.walkGet`), `Frontend/Sugar.lean` (`forData`'s `view`), `Frontend/Check/` (`rMarked`,
 `walkGets`, `TTied.walkGet`, the shift and weakening cases, `walk_copy_len`, `walk_get_split`) and
-`Backend2/Convert.lean`; no change to `CDerives`, `Core/`, `Paper/` or `Support/`.
+`Backend2/Convert.lean`; no change to `CDerives`, `Core/`, `Paper/` or `Support/`. Entry 47 (§48)
+is implemented in `Backend2/Types.lean` (`ofC`'s rows, `payOf`), `Backend2/Convert.lean` (the
+payloads, `convHandle`, `ensureWork`, `convWork`, `prepWorks`, `genLendU`, the effect cases),
+`Backend2/Driver.lean` (`directFacts`, `erasureLine`), the exit status in `Backend2/Interp.lean` and
+`Backend2/Lower.lean`, `bcc lir --erasure` and `scripts/compile-backend2.sh`; no change to
+`CDerives`, `Core/`, `Paper/`, `Support/`, the checker or the old backend.
 
 ---
 
 ## Changelog
+
+- **0.96** (2026-10-21) — §48 (#647, N2): the new backend erases effects by handler law: rows in
+  the LIR's types as the payload of their abortive operations; `raise` a branch to its handler's
+  join, `[let]` at a row a branch per call, `[then]`'s finaliser and the unwinding borrows on the
+  abort path; a tail-resumptive clause whose direct call the facts license (its kind, condition 2
+  at `Checked.flows`, one closed clause at its nodes) a direct call of its work; `main`'s exit
+  status under `Fail[DivError]`. The postcondition, no `handle` or `perform` left, pinned per
+  program. 36 effectful programs join the new backend's fragment (159 in all). No change to the
+  language or to the old backend's output.
 
 - **0.95** (2026-10-21) — §47 (#644, B2): loops elaborate to the kernel's `Div`. A div function is
   `A ⇒ F_{div, Σ}(B ⊕ R)`; each loop is `iterate` over its state; a tick stands where an

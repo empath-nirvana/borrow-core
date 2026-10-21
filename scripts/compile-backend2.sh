@@ -8,7 +8,10 @@
 # with the golden status. Its counts (`bcc-counts --backend new`) must be at most its entry in
 # `corpus/counts-backend2.expected` (`name allocs indirect copies loads stores bounds`), the new
 # backend's own table; they are also printed beside the old backend's (`corpus/counts.expected`),
-# which they are compared with at the switch (docs/compiler.md §5.4, criterion 6).
+# which they are compared with at the switch (docs/compiler.md §5.4, criterion 6). The effect
+# erasure's postcondition (SPEC §48, `bcc lir --erasure`): the program has no `handle` or `perform`
+# left, and the `handle`, `perform` and `raise` nodes erased are its line of
+# `corpus/erasure-backend2.expected`.
 #
 #     scripts/compile-backend2.sh [file.bc…]
 #     scripts/compile-backend2.sh --write-counts [file.bc…]
@@ -31,6 +34,7 @@ command -v wasmtime >/dev/null || { echo "wasmtime is not on PATH"; exit 1; }
 export bcc=.lake/build/bin/bcc
 export bccCounts=.lake/build/bin/bcc-counts
 export expected=corpus/counts-backend2.expected
+export erasure=corpus/erasure-backend2.expected
 export old=corpus/counts.expected
 export native=0
 if "$bcc" cc >/dev/null 2>&1; then native=1; fi
@@ -75,6 +79,17 @@ program() {
     fi
   done
   name=${f#corpus/}; name=${name%.bc}
+  local er wer
+  er=$("$bcc" lir --erasure "$f" 2>&1)
+  case "$er" in
+    "erased "*" left 0 0") ;;
+    *) echo "$f: the effect erasure's postcondition: $er"; return 1 ;;
+  esac
+  echo "$name $er" >> "$tmp/erasure.$$.$RANDOM"
+  if [ "$write" != 1 ]; then
+    wer=$(awk -v n="$name" '$1 == n { $1 = ""; sub(/^ /, ""); print }' "$erasure" 2>/dev/null || true)
+    if [ "$wer" != "$er" ]; then echo "$f: erasure \"$er\", pinned \"$wer\" ($erasure)"; return 1; fi
+  fi
   if ! got=$("$bccCounts" --backend new "$f" -- "${args[@]+"${args[@]}"}" < "$in" 2>&1); then
     echo "$f: counts: $got"; return 1
   fi
@@ -100,6 +115,9 @@ if [ "$write" = 1 ]; then
   cat "$tmp"/counts.* 2>/dev/null | sort > "$tmp/new"
   { echo "# The new backend's counts per run (scripts/compile-backend2.sh, bcc-counts --backend new): name allocs indirect copies loads stores bounds."; cat "$tmp/new"; } > "$expected"
   echo "wrote $expected"
+  cat "$tmp"/erasure.* 2>/dev/null | sort > "$tmp/newe"
+  { echo "# The effect erasure per program the new backend compiles (scripts/compile-backend2.sh, bcc lir --erasure; SPEC §48): name, the handle, perform and raise nodes erased, and the handle nodes left (stored-continuation sites, other)."; cat "$tmp/newe"; } > "$erasure"
+  echo "wrote $erasure"
 fi
 echo "the new backend: $(cat "$tmp"/counts.* 2>/dev/null | wc -l | tr -d ' ') program(s) at their goldens, $(ls "$tmp"/out.* 2>/dev/null | wc -l | tr -d ' ') outside its fragment; $par_failed failure(s)."
 [ "$par_failed" -eq 0 ]
