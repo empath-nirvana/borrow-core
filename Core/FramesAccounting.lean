@@ -184,6 +184,25 @@ theorem retsG_swap {G : Expr → Prop} (c v : Val) :
   try fsimp
   exact retsG_val (Q := CellQ c) (w := Val.pair c w) ⟨w, rfl⟩
 
+/-- **`swap` at a cell**: from a memory where `ℓ` holds `u`, `swap ℓ v` reaches `(ℓ, u)` with `ℓ`
+holding `v`: the same cell, its old content moved out and `v` moved in. -/
+theorem swap_steps (μ : Heap) (ℓ : Loc) (u v : Val) (h : μ ℓ = some u) :
+    Steps (ℍ := ℍ) μ (.app (.app swap (.val (Val.loc ℓ))) (.val v)) (μ.upd ℓ v)
+      (.val (Val.pair (Val.loc ℓ) u)) := by
+  refine .more ⟨.appL .hole v, _, _, rfl, rfl, Head.beta μ _ (Val.loc ℓ)⟩ ?_
+  simp only [Kont.plug]
+  refine .more (Step1.head (Head.beta μ _ v)) ?_
+  simp [BoCa.v0, BoCa.v1, BoCa.v2, BoCa.elet, BoCa.load', BoCa.store', Expr.subst, Expr.val,
+    Val.lam, Val.loc, Expr.shift]
+  refine .more ⟨.appR _ .hole, _, _, rfl, rfl, Head.load μ ℓ u h⟩ ?_
+  simp only [Kont.plug]
+  refine .more (Step1.head (Head.beta μ _ u)) ?_
+  simp [Expr.subst, subst_shift_expr]
+  refine .more ⟨.seq .hole _, _, _, rfl, rfl, Head.store μ ℓ v u h⟩ ?_
+  simp only [Kont.plug]
+  refine .more (Step1.head (Head.seq _ _)) ?_
+  exact .refl _ _
+
 /-! ### `core` -/
 
 theorem acc_core (Ps : List VTy) (N : Expr) (γ : List Val) :

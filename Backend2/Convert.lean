@@ -77,6 +77,9 @@ structure CState where
   walkRead : Bool := false
   /-- Converting a walk's read (`TExpr.walkGet`) inside such a walk: its index is in range. -/
   inRange : Bool := false
+  /-- Converting a frame slot's strong update (`TExpr.slot`, SPEC §47): the state its `swap`
+  leaves the slot's cell in. -/
+  slotOp : Option Frontend.SlotOp := none
 
 abbrev CM := StateT CState (Except String)
 
@@ -1115,6 +1118,14 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     modify fun s => { s with inRange := old }
     return r
   | .selfCall _ _ _ _ c => conv fuel ctx c
+  | .slot _ _ op _ c => do
+    -- A frame slot's strong update (`slot_swap`)  [spec §47]: its `swap` is a move out of the
+    -- cell that leaves it unwritten (`take`), or a move into the unwritten cell (`put`).
+    let old := (← get).slotOp
+    modify fun s => { s with slotOp := some op }
+    let r ← conv fuel ctx c
+    modify fun s => { s with slotOp := old }
+    return r
   | .nuEta _ _ f s c => do
     -- The η-thunk of codata is the codata it observes (`nuEta_var`, `nuEta_unfold`)  [spec §45]:
     -- with no state, the variable itself; at `f = unfold step`, the call `f s`, made here.
@@ -1316,7 +1327,22 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
   match c, args with
   | .alloc .., [v] => return .prim .alloc [v]
   | .free .., [x] => return .prim .free [x]
-  | .swap .., [x, v] => return .prim .swap [x, v]
+  | .swap .., [x, v] => do
+    let op := (← get).slotOp
+    modify fun s => { s with slotOp := none }
+    match op with
+    | some .take =>
+      -- The content moved out, the cell left unwritten: `v` is `()`.
+      readFact "slot:take"
+      return .drop v (.prim .slotOut [x])
+    | some .put =>
+      -- The content moved into the cell, unwritten since its `take`; the old content is `()`.
+      readFact "slot:put"
+      let .pair cT uT := resT | throw "LIR: a slot's put answers no pair"
+      let c ← fresh cT
+      let u ← fresh uT
+      return .letv c (.prim .slotIn [x, v]) (.letv u .unit (.pair c u))
+    | none => return .prim .swap [x, v]
   | .copy .., [x] | .arrCopy .., [x] => dup x fun x x' => pure (.pair x x')
   | .forgetImm .., [x] | .forgetMut .., [x] | .forgetUnk .., [x] | .arrForget .., [x] =>
     return .drop x .unit

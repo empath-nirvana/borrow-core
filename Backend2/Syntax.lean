@@ -64,6 +64,13 @@ inductive Op where
   | take
   /-- `put b v`: `v` moved into the cell `b` points at, unwritten since `take`; the result is `b`. -/
   | put
+  /-- A frame slot's move out (`TExpr.slot`'s `take`, SPEC §47): `(ℓ, contents)`, the owned cell
+  `ℓ` left unwritten, an emptied slot. Its contents' type changes: the cell keeps its address and
+  its width, and its type before and after are not the same place's. -/
+  | slotOut
+  /-- A frame slot's put back (`TExpr.slot`'s `put`, SPEC §47): `v` moved into the owned cell `ℓ`,
+  unwritten since its `slotOut`; the result is `ℓ`. -/
+  | slotIn
   /-- `newArr n`: an array of `n` unwritten slots (`n` unsigned). -/
   | newArr
   /-- `tab fi (f, n)` (`array_new`): an array of `n` slots, slot `i` filled with `f i` by the loop

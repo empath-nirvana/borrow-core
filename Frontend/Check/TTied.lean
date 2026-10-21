@@ -538,6 +538,11 @@ theorem nuEta {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (f : Nat) (sv : Option
     (hb : nuEtaB f sv t.erase = true) (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.nuEta i j f sv t) j :=
   ⟨fun hn Ξ hΞ => .nuEta (h.1 hn Ξ hΞ) hb, .nuEta h.2 hb⟩
 
+/-- **A frame slot's strong update** (SPEC §47): the derived node over the `swap`'s typed term. -/
+theorem slot {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (op : Frontend.SlotOp) (x : Nat)
+    (hb : slotB op x t.erase = true) (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.slot i j op x t) j :=
+  ⟨fun hn Ξ hΞ => .slot (h.1 hn Ξ hΞ) hb, .slot h.2 hb⟩
+
 /-- **A `def`'s body at its use**: the `use` node over the body, its absorption the body's.
 `[spec §10]` -/
 theorem use {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (name : String) (decl : Nat)

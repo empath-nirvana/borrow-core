@@ -465,6 +465,19 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let m := (← arg 0).headD 0
     if ← zeroCell pn then return ← emit d [.loc m]
     return (← storeCell pn (.loc m) (locs (← arg 1))) ++ (← emit d [.loc m])
+  | .slotOut => do
+    -- `swap`'s load, with no store: the slot is left empty.
+    let pn ← argN 0
+    let m := (← arg 0).headD 0
+    if ← zeroCell pn then return ← emit d ([.loc m] ++ zeros (← wordsN (← contents pn)))
+    let (s, old) ← loadCell pn (.loc m) (← wordsN (← contents pn))
+    return s ++ (← emit d (locs (m :: old)))
+  | .slotIn => do
+    -- `swap`'s store, with no load: the slot was empty.
+    let m := (← arg 0).headD 0
+    let rn := n
+    if ← zeroCell rn then return ← emit d [.loc m]
+    return (← storeCell rn (.loc m) (locs (← arg 1))) ++ (← emit d [.loc m])
   | .tab fi | .tabLit fi .. => do
     let leaf ← leafOf n
     let st ← slotStride leaf

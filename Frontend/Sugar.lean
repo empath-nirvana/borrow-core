@@ -1868,6 +1868,9 @@ structure DivSt where
   /-- The `poly` families and their cases, all of the program's, known before any call is
   elaborated.  `[spec §36]` -/
   polys : PolyTab := {}
+  /-- `BCC_FRAMES=1`: the content type each slot had when it was emptied, by the slot's name: the
+  type a put back stores (SPEC §47). -/
+  holes : List (String × CVTy) := []
 
 /-- Elaboration with the state of the declarations. -/
 abbrev DM := StateT DivSt SM
@@ -3152,6 +3155,39 @@ def relaxedC? (sp : Span) : Val → Option (Ident × Comp)
   | .mark _ _ V => relaxedC? sp V
   | _ => none
 
+/-- **A slot's typestate** (`BCC_FRAMES=1`, SPEC §47): the head `M` of `x <- M; N` that moves a
+slot's content out, or puts one into an emptied slot, written as the strong update `swap`, the
+slot's variable rebound to the cell `swap` hands back:
+* `x <- *y`, `y : ref A` and `A` not persistent: `let (y, x) = swap[A, 1](y, ()); N`, the slot
+  left empty (`ref 1`), its content moved into `x` (a load copies, so it needs `A` persistent);
+* `x <- modify &mut y { o -> (V, ()) }` (a store), `y : ref 1` a slot emptied at `A`:
+  `let (y, o) = swap[1, A](y, V); x <- (); N`: `withswap` keeps a cell's type, and the slot has
+  none to keep.
+Each `swap` is marked (`SchemeMark.slot`): the checker records the slot's state on the typed term.
+Any other head: `none`. -/
+def slotMove (c : TCx) (sp : Span) (x : Ident) (M N : Comp) : DM (Option Comp) := do
+  match M with
+  | .ret _ (.app dsp (.sugar _ .deref) (.var vsp y)) =>
+    match c.tyV (.var vsp y) with
+    | some (.ref A) =>
+      if Class.of A == .persistent then return none
+      let As ← (c.surface dsp A : Except Error VTy)
+      modify fun st => { st with holes := (y, A) :: st.holes }
+      let sw : Val := .mark dsp (.slot .take) (.app dsp (.app dsp (.const dsp (.swap As (.unit dsp)))
+        (.var vsp y)) (.unit dsp))
+      return some (.letPair sp ⟨y, vsp⟩ x sw N)
+    | _ => return none
+  | .ret rsp (.app _ (.app _ (.sugar _ (.borrow .modify _)) (.lend _ ⟨y, ysp⟩ .mut))
+      (.thunkv _ (.lam _ o _ (.ret _ (.pair _ W (.unit _)))))) =>
+    match c.tyV (.var ysp y), (← get).holes.lookup y with
+    | some (.ref .unit), some A =>
+      let As ← (c.surface rsp A : Except Error VTy)
+      let sw : Val := .mark rsp (.slot .put) (.app rsp (.app rsp (.const rsp (.swap (.unit rsp) As))
+        (.var ysp y)) (.ascribe rsp W As))
+      return some (.letPair sp ⟨y, ysp⟩ o sw (.bind sp x none (.ret sp (.unit sp)) N false))
+    | _, _ => return none
+  | _ => return none
+
 /-- A borrow block, as written. -/
 def borrowBlock? : Val → Option Comp
   | .app _ (.app _ (.sugar _ (.borrow k _)) _) (.thunkv _ (.lam _ _ _ M)) =>
@@ -4158,6 +4194,9 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         let N' ← surfC n c exp N
         modify fun s => { s with exits := saved }
         return N'
+      -- `BCC_FRAMES=1`: a slot's linear content moved out, and put back (SPEC §47).
+      if framesEnv then
+        if let some L ← slotMove c sp x M N then return ← surfC n c exp L
       -- A borrow block over a loop, or a `let r = &x`: lent per observation (`LoopLend`).
       if let some L ← (Frontend.Elab.LoopLend.hook c (dataFor (← get).sizedFns) sp x A M N lin :
           Except Error (Option Comp)) then
