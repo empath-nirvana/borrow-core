@@ -3185,8 +3185,111 @@ def slotMove (c : TCx) (sp : Span) (x : Ident) (M N : Comp) : DM (Option Comp) :
       let sw : Val := .mark rsp (.slot .put) (.app rsp (.app rsp (.const rsp (.swap (.unit rsp) As))
         (.var ysp y)) (.ascribe rsp W As))
       return some (.letPair sp ⟨y, ysp⟩ o sw (.bind sp x none (.ret sp (.unit sp)) N false))
+    | some (.sum (.ref A) (.ref .unit)), _ =>
+      -- A slot full or emptied (a join's `ref A + ref 1`): the store reads the tag, a swap of
+      -- the full cell (its old content dropped) or a put into the emptied one (the rule
+      -- `caseSlot`).
+      let As ← (c.surface rsp A : Except Error VTy)
+      let nm (k : String) : Ident := ⟨s!"io_fs{k}{rsp.start.line}_{rsp.start.col}", rsp⟩
+      let full : Val := .app rsp (.app rsp (.const rsp (.swap As As)) (.var rsp (nm "a").name))
+        (.ascribe rsp W As)
+      let empty : Val := .mark rsp (.slot .put) (.app rsp (.app rsp (.const rsp (.swap (.unit rsp) As))
+        (.var rsp (nm "b").name)) (.ascribe rsp W As))
+      let M' : Comp := .case sp (.var ysp y)
+        (nm "a") (.letPair sp (nm "ca") (nm "oa") full (.ret sp (.var sp (nm "ca").name)))
+        (nm "b") (.letPair sp (nm "cb") (nm "ob") empty (.ret sp (.var sp (nm "cb").name)))
+      return some (.bind sp ⟨y, ysp⟩ none M' (.bind sp x none (.ret sp (.unit sp)) N false) false)
     | _, _ => return none
   | _ => return none
+
+/-- The slot variables of a frame join's tuple (`Frames.handSlots`'s `tuple`): `()`, `y`, or
+`(y, rest)`. -/
+def slotTuple? : Val → Option (List (Span × String))
+  | .unit _ => some []
+  | .var sp y => some [(sp, y)]
+  | .pair _ (.var sp y) W => ((sp, y) :: ·) <$> slotTuple? W
+  | _ => none
+
+/-- The tuple of `ys` with the `k`-th slot as written by `f`. -/
+def slotTupleMap (sp : Span) (f : Nat → Span → String → Val) : Nat → List (Span × String) → Val
+  | _, [] => .unit sp
+  | k, [(ysp, y)] => f k ysp y
+  | k, (ysp, y) :: ys => .pair sp (f k ysp y) (slotTupleMap sp f (k + 1) ys)
+
+/-- The terminals of an elaborated arm reached through tail positions, each with its context:
+`(V, (y₁, …))` handed back by a frame join (`Frames.handSlots`). `none` at a tail the walk does not
+see through. -/
+def joinTerms : Nat → TCx → Comp → Option (List (TCx × Val × List (Span × String)))
+  | 0, _, _ => none
+  | f + 1, c, M => match M with
+    | .ret _ V@(.pair _ _ W) => (fun ys => [(c, V, ys)]) <$> slotTuple? W
+    | .bind _ y A M₁ N _ => joinTerms f (c.push y.name (bindTy c A M₁)) N
+    | .letUnit _ _ N => joinTerms f c N
+    | .letPair _ a b V N =>
+      let (Aa, Ab) := pairTys c V
+      joinTerms f ((c.push a.name Aa).push b.name Ab) N
+    | .case _ V a M₁ b M₂ =>
+      let (Aa, Ab) := sumTys c V
+      return (← joinTerms f (c.push a.name Aa) M₁) ++ (← joinTerms f (c.push b.name Ab) M₂)
+    | _ => none
+
+/-- **A join of two slot states** (`BCC_FRAMES=1`, SPEC §47): the arms of a frame join `M` hand
+back a slot full (`ref A`) at some terminals and emptied (`ref 1`) at others. Each terminal hands it
+back injected into `ref A + ref 1`, `inl` full and `inr` empty, the tag its drop flag (the rule
+`widen`). `none` when every slot is in one state at every terminal, or the arms are not seen
+through. -/
+def slotWiden (c : TCx) (M : Comp) : DM (Option Comp) := do
+  let some ts := joinTerms 256 c M | return none
+  let some (_, _, ys) := ts.head? | return none
+  -- Each slot's type at each terminal.
+  let tys := ts.map fun (c', _, ys') => ys'.map fun (sp, y) => c'.tyV (.var sp y)
+  let mut joins : List (Option (CVTy × CVTy)) := []
+  for k in [0:ys.length] do
+    let at_ : List (Option CVTy) := tys.map (·[k]?.join)
+    let full : Option CVTy := at_.findSome? fun (t : Option CVTy) => match t with
+      | some (.ref A) => if A == .unit then none else some A
+      | _ => none
+    let empty := at_.any (· == some (.ref .unit))
+    match full with
+    | some A =>
+      if empty && at_.all (fun t => t == some (.ref A) || t == some (.ref .unit)) then
+        joins := joins ++ [some (.ref A, .ref .unit)]
+      else joins := joins ++ [none]
+    | none => joins := joins ++ [none]
+  if joins.all (·.isNone) then return none
+  let mut sums : List (Option VTy) := []
+  for (j, (sp, _)) in joins.zip ys do
+    match j with
+    | some (P, Q) => sums := sums ++ [some (← (c.surface sp (.sum P Q) : Except Error VTy))]
+    | none => sums := sums ++ [none]
+  let rewrite (c' : TCx) (V : Val) : Val := match V with
+    | .pair sp B W => match slotTuple? W with
+      | some ys' => .pair sp B (slotTupleMap sp (fun k ysp y =>
+          match sums[k]?.join with
+          | some S =>
+            if c'.tyV (.var ysp y) == some (.ref .unit) then .ascribe ysp (.inr ysp (.var ysp y)) S
+            else .ascribe ysp (.inl ysp (.var ysp y)) S
+          | none => .var ysp y) 0 ys')
+      | none => V
+    | V => V
+  -- Each terminal rewritten in its own context: the terminals are visited in `joinTerms`'s order.
+  let ctxs := ts.map (·.1)
+  let (M', _) := (mapJoinTermsCx rewrite M).run ctxs
+  return some M'
+where
+  /-- `mapJoinTerms` with the terminals' contexts handed out in order. -/
+  mapJoinTermsCx (f : TCx → Val → Val) : Comp → StateM (List TCx) Comp
+    | .ret sp V => do
+      match (← get) with
+      | c' :: rest => set rest; return .ret sp (f c' V)
+      | [] => return .ret sp V
+    | .bind sp x A M N lin => do return .bind sp x A M (← mapJoinTermsCx f N) lin
+    | .letUnit sp V M => do return .letUnit sp V (← mapJoinTermsCx f M)
+    | .letPair sp x y V M => do return .letPair sp x y V (← mapJoinTermsCx f M)
+    | .case sp V x M y N => do
+      let M' ← mapJoinTermsCx f M
+      return .case sp V x M' y (← mapJoinTermsCx f N)
+    | M => pure M
 
 /-- A borrow block, as written. -/
 def borrowBlock? : Val → Option Comp
@@ -3546,6 +3649,17 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       | "free", W' => do
         let A ← match (← refresh c).tyV W' with
           | some (.ref A) => pure A
+          | some (.sum (.ref A) (.ref B)) =>
+            if framesEnv then
+              -- A slot full or emptied (a join's `ref A + ref 1`): its release reads the tag, and
+              -- hands out `A + 1` (the rule `new` at the state `full A ⊕ full 1`).  `[spec §47]`
+              let nm (k : String) : Ident := ⟨s!"io_fr{k}{sp.start.line}_{sp.start.col}", sp⟩
+              let S ← (c.surface ksp (.sum A B) : Except Error VTy)
+              let rel (x : Ident) : Val := .app sp (.sugar ksp (.call "free")) (.var sp x.name)
+              return ← surfV n c exp (.run sp (.case sp W' (nm "a")
+                (.ret sp (.ascribe sp (.inl sp (rel (nm "a"))) S)) (nm "b")
+                (.ret sp (.ascribe sp (.inr sp (rel (nm "b"))) S))))
+            else throw ⟨W.span, "`free` takes a cell, `ref A`"⟩
           | _ => throw ⟨W.span, "`free` takes a cell, `ref A`"⟩
         pure (.app sp (.const ksp (.free (← c.surface ksp A))) W')
       | "swap", .pair _ r v => do
@@ -3928,7 +4042,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         -- `BCC_FRAMES=1` (#632): a slot's content swapped out for a borrow block (`io_fbv…`,
         -- `Frontend.Elab.Frames`) that is neither a cell nor an array is lent through a cell
         -- allocated for it, as a value is (SPEC §35); the content comes back by its `free`
-        -- (SPEC §43).
+        -- (SPEC §47).
         if k == .imm || k == .mut then
           if let .var vsp v := P then
             if v.startsWith "io_fbv" && framesEnv then
@@ -4216,6 +4330,10 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
           | some (i, P, R, cls, B) => hndCtlC n c rsp i P R cls B
           | none => surfC n c atA M
         | _ => surfC n c atA M
+      -- `BCC_FRAMES=1`: a frame join whose arms leave a slot in two states (SPEC §47).
+      let M' ← if framesEnv && x.name.startsWith "io_fj" then do
+          pure ((← slotWiden (← refresh c) M').getD M')
+        else pure M'
       let c ← refresh c
       let N' ← surfC n (c.push x.name (bindTy c A M')) exp N
       pure (.bind sp x A M' N' lin)
@@ -5706,8 +5824,10 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
       let tnames := st.templates.filterMap fun | .def_ _ m _ _ _ _ => some m.name | _ => none
       if tnames.any dV.names then
         return { st with templates := st.templates ++ [.def_ dsp dn ps dA dV (.template mk)] }
-    -- The loops of a library's declarations are not reported.
-    let st := { st with quiet := match d with
+    -- The loops of a library's declarations are not reported. Each declaration's slots are its
+    -- own (`holes`): an instance made while another declaration is elaborated keeps that one's.
+    let holes₀ := st.holes
+    let st := { st with holes := [], quiet := match d with
       | .def_ _ nm _ _ _ _ => st.libNames.contains nm.name
       | _ => false }
     -- A div function taking a borrow takes the owner, lent at each step (`LoopLend.lentDef`).
@@ -5715,6 +5835,7 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
     let d := (← (Frontend.Elab.LoopLend.lentDef c₀ (dataFor st.sizedFns) d :
       Except Error (Option Decl))).getD d
     let (d, st) ← (surfDecl fuel d).run st
+    let st := { st with holes := holes₀ }
     -- A recursive group's source under a heap driver: its machine (SPEC §20).
     let d ← match d with
       | .def_ _ nm _ _ _ _ =>

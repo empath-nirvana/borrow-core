@@ -1,0 +1,13 @@
+-- A slot read after its content was moved out: the second read is of `ref 1`, and the kernel's
+-- typing refuses it (a `1` where an `array i32 * i32` is used).
+-- Refused.
+fn consume(v: array i32 * i32) -> i32 =
+  let (a, n) = v;
+  array_free[i32](!{ x -> () }, a);
+  n
+
+main -> i32 =
+  let mut s = (array_new[i32](2, !{ i -> 0 }), 5);
+  let a = consume(s);
+  let b = consume(s);
+  a + b

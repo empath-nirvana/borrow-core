@@ -1,10 +1,10 @@
 import Frontend.Syntax
 
 /-!
-# Frontend — Elab — `let mut` as a frame's slots (`BCC_FRAMES=1`, #632, a prototype)  `[spec §43]`
+# Frontend — Elab — `let mut` as a frame's slots (`BCC_FRAMES=1`, #632, a prototype)  `[spec §47]`
 
-The surface elaboration of `let mut` by the frame rules of `experiments/Frames`
-(`docs/research/frames-with-exits.md`, SPEC §43). A `let mut x = e` of a surface body is a
+The surface elaboration of `let mut` by the frame rules of `Core/FramesRules.lean`
+(`docs/research/frames-with-exits.md`, SPEC §47). A `let mut x = e` of a surface body is a
 **slot** of the body's frame: the cell `alloc(e)` (the rule `new`), which the frame owns. Each use
 of `x` is the rule `use`, the cell lent for that one use: a load (`*x`), a store or a swap
 (`modify &mut x`), a lend to a call or a borrow block (the content swapped out and lent by the

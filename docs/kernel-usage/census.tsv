@@ -113,6 +113,7 @@ node	walkGet	63	82	0	126	corpus/data-config.bc corpus/data-particles.bc corpus/d
 node	selfCall	53	225	0	287	corpus/async-map.bc corpus/async-mapreduce.bc corpus/async-race.bc
 node	lendCell	26	52	0	74	corpus/async-lend-slots.bc corpus/block-capability-inner.bc corpus/block-capability.bc
 node	nuEta	197	634	34	663	corpus/aff-capture.bc corpus/aff-coerce.bc corpus/aff-counter.bc
+node	slot	0	0	0	0	
 node	use	352	10656	695	19734	corpus/13-2-sum-prog.bc corpus/aff-capture.bc corpus/aff-coerce.bc
 former	V.unit	373	238991
 former	V.tensor	378	304699

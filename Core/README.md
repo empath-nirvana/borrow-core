@@ -294,6 +294,7 @@ with no new case.
 | block borrow `withborS σ : refTy σ ⊸ (∀'c ⊏ ⊓Δ. famTy M 'c σ ⊸ ['c] T) ⊸ refTy σ ⊗ T`, `shortenE`: `withborS_wf`, `withborSM_wf`, `withborSI_wf`, `shortenE_wf` | `BlockBorrow.lean` |
 | block allocation and free: `allocS`, `freeS` (`d_allocS`, `d_freeS`) | `Blocks.lean` |
 | destructors `dtorE T : T ⊸ F 1` at every `HasDtor T` (forgettable types, `Ref`, `⊗`/`⊕`/`[@a]`, fold-class `μ`, codata by `close`), and the drop `dropE T i e = (dtorE T xᵢ; e)`: `dtor_wf`, `drop_derives` (SPEC §12) | `Dtor.lean` |
+| frames with typed exits and typestate slots (SPEC §47): `FDerives`, 16 derived rules over the slots' entry, normal and exit states, each elaborated to a `CDerives` derivation at `Fr Σ Π Πn Πx E A ≜ Π ⊸ F_Σ ((Πn ⊗ A) ⊕ (Πx ⊗ ⊕E))` (`FDerives.elab`); every frame hands back the cells of its slots on every exit (`accounting`, one induction over `FDerives`); `core_conservative`, `frame_unwind_leakfree` | `FramesDefs.lean`, `FramesRules.lean`, `FramesElab.lean`, `FramesRuns.lean`, `FramesAccounting.lean`, `FramesTheorems.lean`, `FramesExamples.lean` |
 
 These facts are stated at the typed world:
 

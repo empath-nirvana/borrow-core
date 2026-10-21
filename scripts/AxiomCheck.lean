@@ -645,3 +645,6 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.Frames.moveJoin_returns
 #print axioms BoCa.Fig16.LogRel.Core.Frames.retsG_swap
 #print axioms BoCa.Fig16.LogRel.Core.Frames.retsG_wid
+#print axioms BoCa.Fig16.LogRel.Core.Frames.swap_steps
+#print axioms BoCa.Fig16.LogRel.Core.Check.slotB_shift
+#print axioms BoCa.Fig16.LogRel.Core.Check.slot_swap

@@ -1,0 +1,17 @@
+-- A store into a slot that a join left full or emptied: the store reads the tag, a swap of the
+-- full cell (its old content destroyed) or a put into the emptied one (the rule `caseSlot`).
+-- Answer: i32[7].
+fn consume(v: array i32 * i32) -> i32 =
+  let (a, n) = v;
+  array_free[i32](!{ x -> () }, a);
+  n
+
+fn mk(n: i32) -> array i32 * i32 = (array_new[i32](2, !{ i -> 0 }), n)
+
+main -> i32 =
+  let mut s = mk(5);
+  let k = 0;
+  let r = if k == 1 { consume(s) } else { 0 };
+  s = mk(7);
+  let t = consume(s);
+  r + t
