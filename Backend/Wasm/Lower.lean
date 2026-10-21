@@ -215,15 +215,25 @@ def compactLocals (f : Flat.Fn) : Flat.Fn := Id.run do
   let m := (List.range f.params).foldl (fun m i =>
     m.insert i (match m[i]? with | some (_, b) => (0, b) | none => (0, 0))) m
   let ivs := (m.toList.filter (·.1 ≥ f.params)).toArray.qsort (fun a b => a.2.1 < b.2.1 || (a.2.1 == b.2.1 && a.1 < b.1))
-  -- Each number's last position, among the numbers past the parameters.
-  let mut ends : Array Nat := #[]
+  -- The same intervals by their ends: before each first occurrence, the numbers of the locals
+  -- whose last occurrence is past are free again.
+  let byEnd := ivs.qsort (fun a b => a.2.2 < b.2.2)
+  let mut free : List Nat := []
+  let mut next := 0
+  let mut p := 0
   let mut to : Std.HashMap Nat Nat := {}
-  for (i, (a, b)) in ivs.toList do
-    match (ends.zipIdx.toList.find? fun (e, _) => e < a) with
-    | some (_, k) => ends := ends.set! k b; to := to.insert i (f.params + k)
-    | none => to := to.insert i (f.params + ends.size); ends := ends.push b
+  for (i, (a, _)) in ivs.toList do
+    while h : p < byEnd.size do
+      let (j, (_, e)) := byEnd[p]
+      if e < a then
+        if let some k := to[j]? then free := k :: free
+        p := p + 1
+      else break
+    match free with
+    | k :: ks => free := ks; to := to.insert i k
+    | [] => to := to.insert i (f.params + next); next := next + 1
   let r (i : Nat) : Nat := if i < f.params then i else to.getD i i
-  pure { f with locals := ends.size, body := f.body.map (renStmt r occFuel) }
+  pure { f with locals := next, body := f.body.map (renStmt r occFuel) }
 
 /-- A function. One with a frame has a local more, `fp`, the frame's base: on entry the frame
 is taken from the stack (`$sp` lowered by its size, trapping when it would pass the stack's

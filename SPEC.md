@@ -8138,9 +8138,8 @@ empty context). The checker builds them by `TTied.iterate` and `TTied.reify`
   machine (a `while`, a `loop`, a drain, a `for` over a generator that loops) or a call of a div
   function is a loop of the machine over its source's cursor (`forDataDiv`), a `while`; one whose
   body has none is total, as before (§16). The choice is made after elaborating the body once,
-  its state restored. Over `&a` the array is lent at each turn, to the bindings at the start of
-  the body that use the element; what they bind and what follows reads is handed on, and a use
-  of the element after a loop or a call that loops is reported (§14, borrow scopes over loops).
+  its state restored. A counted loop over a source it lends (`&a`, `&mut a`) is not walked so:
+  its lend's extent is the whole loop, and a lend per turn is the kernel's to express (*Open*).
 
 **What stays.** `unfold`, `Loop`, `div_bind`, `div_defer` and `div_fuel` stay as library code
 over loop values (`lib/div.bc`); the elaboration emits none of `div_bind` and `div_defer`.
@@ -8181,8 +8180,9 @@ kernel terms have those traces is the transcription's, not proved over the terms
 ### Programs
 
 Every corpus program's output, golden, exit status and `live 0` is unchanged at every stage, and
-every `div_fuel` answer. The loop matrix of #545 runs in every cell but `AA` (24 cells, `241`), and
-so does its `return` matrix (24 cells, `298`). `corpus/for-data-gen-loop.bc` and
+every `div_fuel` answer. The loop matrix of #545 runs in 21 of its 24 non-`AA` cells (`241`), and
+so does its `return` matrix (21 cells, `298`); `AW`, `AL` and `AG` (a machine loop inside
+`for x in &a`) are refused as before (*Open*). `corpus/for-data-gen-loop.bc` and
 `corpus/while-in-counted-for.bc`, rejected before, are accepted by the counted loops' class and
 move to the corpus. The sugar pairs' core forms are the new elaboration (`corpus/sugar/*.core.bc`).
 
@@ -8203,8 +8203,12 @@ elaborated program is checked core, so they cover it.
 - The old backend's counts and code size grow until B3 (native `iterate`, `main` under the
   runtime's clause); the source interpreter is slower on generators (`reify` captures the
   continuation at each tick).
-- A counted loop of the machine over `&mut a`, and one with `break e` or `else`, are not provided.
-- The element of a counted loop over `&a` is lent only to the bindings at the start of its body.
+- A counted loop of the machine with `break e` or `else` is not provided.
+- **A counted loop over `&a` or `&mut a` whose body loops** (the matrix's `AW`, `AL`, `AG`): the
+  lend of `a` would have to end before each tick and start again at the next turn, an extent per
+  turn that the elaborator may not decide (`STOP: KERNEL WORK`, #644). The kernel would have to
+  express a lend of the loop's source per turn, or a borrow held across `tick` (T1 for a linear
+  operation). Refused as before.
 
 ---
 
@@ -8592,8 +8596,8 @@ the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Backend/Wasm
   bodies); a direct-style call is a call; a loop value is `reify` (`main`, `div_fuel`'s argument,
   a block that loops, a stored generator, the generator of a `for` that loops). The per-body state
   machine, the emission of `div_bind` and `div_defer`, and §14's machine are deleted. A counted
-  loop whose body loops is a loop of the machine over its cursor, its `&a` lent per turn: the loop
-  matrix's 24 non-`AA` cells and the `return` matrix's run. The core text writes `div`,
+  loop whose body loops is a loop of the machine over its cursor (not over a lent `&a`): 21 of the
+  loop matrix's 24 non-`AA` cells run, and 21 of the `return` matrix's. The core text writes `div`,
   `iterate[…]` and `reify[…](res)`. The Wasm lowering reuses locals. Every output, golden, exit
   status, `live 0` and `div_fuel` answer unchanged; `indirect` counts grow until B3. No change to
   `CDerives`, the relation, the machine or `Core/`.

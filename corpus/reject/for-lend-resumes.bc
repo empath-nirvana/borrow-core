@@ -1,8 +1,7 @@
--- expect: 15:3: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a continuation held across a lend is T1, #172)
--- A `for` over `&a`, whose body performs `yield`. The loop is div because its body performs an
--- operation that resumes, so `&a` lends `a` one turn at a time, to the bindings of the body that
--- use the element (SPEC §14, borrow scopes over loops): here `yield(*x)`, so the continuation of
--- `yield` would hold the lend across a suspension, which is T1 (#172). Over the
+-- expect: 14:3: the body of this `for` performs an operation that resumes (the operation 1.0), and its source `&a` lends `a` around the whole loop: an operation that resumes cannot cross a borrow (T1, #172). Iterate an owned array, or a view the function is given
+-- A `for` over `&a`, whose body performs `yield`. `&a` lends `a` for the whole loop (SPEC §9,
+-- §16), and the loop is div because its body performs an operation that resumes: the
+-- continuation of `yield` would hold the lend across a suspension, which is T1 (#172). Over the
 -- owned array, or over a view the generator is given, the same loop runs
 -- (`corpus/for-data-div.bc`).
 

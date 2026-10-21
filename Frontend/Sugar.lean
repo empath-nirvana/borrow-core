@@ -1472,7 +1472,9 @@ def eWalk (m : DCx) : Nat → TCx → Comp → EM Comp
     let exp := A.bind c.elabV
     -- A call of a div function as the computation it is: the call, its lends taken as a call's.
     let M : Comp := match divCallC? c M with
-      | some (f, .ret _ W) => if W.takeLends.2.isEmpty then M else .ret M.span (.app M.span f W)
+      | some (f, .ret _ W) =>
+        if W.takeLends.2.isEmpty && (callIn c divFuel none W).isNone then M
+        else .ret M.span (.app M.span f W)
       | _ => M
     if let .ret sp' V := M then
       if (nestedCall c exp V).isSome then
@@ -4421,7 +4423,10 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
           let o₀ ← getThe Origins
           modify fun st => { st with machine := false }
           let L? ← forData n c exp sp x V V' M N
-          if (← get).machine then
+          -- A source lent for the loop (`&a`, `&mut a`) is not walked as a loop of the machine:
+          -- its lend's extent is the whole loop (STOP: KERNEL WORK, #644).
+          let lent := match src with | .lend .. => true | _ => false
+          if (← get).machine && !lent then
             set s₀
             set o₀
             return ← forDataDiv n c exp sp x V src M N none
@@ -4992,7 +4997,9 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
       else report sp s!"`for` is total, bounded by {desc}"
     -- The loops inside the body leave by this loop's exit on `return`.
     let ret (tsp : Span) (v : Val) : Comp := .ret tsp (exitV tsp (.inr tsp (.inr tsp v)))
-    modify fun s => { s with exits := .total Rt ret true :: s.exits }
+    -- A counted loop over a source it does not lend may become a loop of the machine (its class).
+    let walks := match src with | .lend .. => false | _ => true
+    modify fun s => { s with exits := .total Rt ret walks :: s.exits }
     let L' ← surfC n c exp L
     modify fun s => { s with exits := s.exits.drop 1 }
     return some L'

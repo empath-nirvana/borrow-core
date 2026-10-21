@@ -1349,8 +1349,8 @@ corpus/sugar/gen-div.bc flows [0, 1, 4294967295]; main [1, 4294967295]
 corpus/sugar/gen-div.bc 40:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-div.bc 1.0 tail: machine; condition 2 holds; -
 corpus/sugar/gen-div.core.bc flows [0, 1, 4294967295]; main [1, 4294967295]
-corpus/sugar/gen-div.core.bc 107:21: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
-corpus/sugar/gen-div.core.bc 118:21: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/sugar/gen-div.core.bc 103:21: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/sugar/gen-div.core.bc 114:21: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-div.core.bc 1.0 tail: machine; condition 2 holds; -
 corpus/sugar/gen-from.bc flows [0, 1, 4294967295]; main [1]
 corpus/sugar/gen-from.bc 21:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
@@ -1362,15 +1362,15 @@ corpus/sugar/gen-range.bc flows [0, 1, 4294967295]; main [1, 4294967295]
 corpus/sugar/gen-range.bc 19:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-range.bc 1.0 tail: machine; condition 2 holds; -
 corpus/sugar/gen-range.core.bc flows [0, 1, 4294967295]; main [1, 4294967295]
-corpus/sugar/gen-range.core.bc 88:21: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
-corpus/sugar/gen-range.core.bc 99:21: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/sugar/gen-range.core.bc 84:21: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/sugar/gen-range.core.bc 95:21: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-range.core.bc 1.0 tail: machine; condition 2 holds; -
 corpus/sugar/gen-return.bc flows [0, 1, 4294967295]; main [1, 4294967295]
 corpus/sugar/gen-return.bc 21:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-return.bc 1.0 tail: machine; condition 2 holds; -
 corpus/sugar/gen-return.core.bc flows [0, 1, 4294967295]; main [1, 4294967295]
-corpus/sugar/gen-return.core.bc 94:21: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
-corpus/sugar/gen-return.core.bc 105:21: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/sugar/gen-return.core.bc 90:21: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/sugar/gen-return.core.bc 101:21: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/sugar/gen-return.core.bc 1.0 tail: machine; condition 2 holds; -
 corpus/sugar/gen-yields.bc flows [0, 1, 4294967295]; main [1]
 corpus/sugar/gen-yields.bc 16:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
