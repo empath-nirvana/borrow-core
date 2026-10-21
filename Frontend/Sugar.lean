@@ -1399,7 +1399,7 @@ and whose close is the function's close before it starts, `g__close W`. Each obs
 `reify` of the start, which stops at that tick, and observes it: the first runs the call to its
 first tick. -/
 def eStart (c : TCx) (sp : Span) (sfx : String) (S : Frontend.Check.CRow) (B R : CVTy) (f W : Val) :
-    EM Val := do
+    EM Comp := do
   let some g := calleeHead f
     | throw ⟨sp, "internal error: a loop value of a call whose function has no name"⟩
   let some (P, _, _, _) := (c.tyV f).bind divFnOf
@@ -1439,9 +1439,14 @@ def eStart (c : TCx) (sp : Span) (sfx : String) (S : Frontend.Check.CRow) (B R :
     (eBind sp s!"io_rt{sfx}" (some tT)
       (.ret sp (.thunkv sp (.lam sp ⟨"io_u", sp⟩ (.unit sp) (.letUnit sp (.var sp "io_u") start))))
       (.app sp (.force sp ⟨s!"io_rf{sfx}", sp⟩) ⟨s!"io_rt{sfx}", sp⟩))
-  let obs (i : Bool) : Comp := eBind sp s!"io_rl{sfx}" none made
-    (.proj sp i (.nuOut sp (.force sp ⟨s!"io_rl{sfx}", sp⟩)))
-  pure (.thunkv sp (.nuIn sp (.with_ sp (obs true) (obs false))))
+  -- The loop value is made once per observation, from one thunk.
+  let mk := s!"io_mk{sfx}"
+  let obs (i : Bool) : Comp :=
+    eBind sp s!"io_mu{sfx}" none (.ret sp (.unit sp))
+      (eBind sp s!"io_rl{sfx}" none (.app sp (.force sp ⟨mk, sp⟩) ⟨s!"io_mu{sfx}", sp⟩)
+        (.proj sp i (.nuOut sp (.force sp ⟨s!"io_rl{sfx}", sp⟩))))
+  pure (eBind sp mk none (.ret sp (.thunkv sp (.lam sp ⟨"io_u", sp⟩ (.unit sp) (.letUnit sp (.var sp "io_u") made))))
+    (.ret sp (.thunkv sp (.nuIn sp (.with_ sp (obs true) (obs false))))))
 
 /-- The call a computation makes in direct style, if it is one: `return (f W)` or
 `g <- return f; a <- return W; (force g) a`. A call of a div function placed for the empty row,
@@ -2043,7 +2048,8 @@ def specTy : CVTy → CVTy → Option CVTy
 it: a counted loop leaves through its exit (`ret`, of type `Rt`); a drain passes the `return` on
 as its own (`VSugar.retE`).  `[spec §16]` -/
 inductive LoopExit where
-  | total (Rt : CVTy) (ret : Span → Val → Comp)
+  /-- A total loop's body: a counted loop's (`counted`) or a `for` over a generator's clause. -/
+  | total (Rt : CVTy) (ret : Span → Val → Comp) (counted : Bool := false)
   | drain
 
 /-- A case of a `poly` family (SPEC §36): its family, the template it is (`f__at{k}`, generic in
@@ -2091,6 +2097,11 @@ structure DivSt where
   /-- The loops around the code being elaborated, innermost first: how a `return` in the body of
   a counted loop inside them leaves (`forData`).  `[spec §16]` -/
   exits : List LoopExit := []
+  /-- The result type of the body being elaborated: what a `return` in a loop returns.  `[spec §16]` -/
+  res : Option CVTy := none
+  /-- A loop of the machine, or a call of a div function, was elaborated inside a counted loop's
+  body: that loop is a loop of the machine too (its class, `forData`).  `[spec §14, §16]` -/
+  machine : Bool := false
   /-- The declarations of the included library modules, and the instances of their templates:
   their loops are not reported. -/
   libNames : List String := []
@@ -4430,7 +4441,20 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         -- Over a call of a function that performs an iteration effect: a handler site (SPEC §15).
         if let .app _ (.sugar _ (.forSite i)) call := V then return ← forYield n c exp sp x i call M N
         -- Over data: a counted loop, total (SPEC §16).
-        if let some L ← forData n c exp sp x V V' M N then return L
+        -- A counted loop's class (`docs/loops.md` §2.2): total, unless its body has a loop of the
+        -- machine or a call of a div function, which makes it a loop of the machine over its
+        -- source's cursor.  `[spec §14, §16]`
+        if let some src := dataSrcOf c V' then
+          let s₀ ← get
+          let o₀ ← getThe Origins
+          modify fun st => { st with machine := false }
+          let L? ← forData n c exp sp x V V' M N
+          if (← get).machine then
+            set s₀
+            set o₀
+            return ← forDataDiv n c exp sp x V src M N none
+          modify fun st => { st with machine := s₀.machine }
+          if let some L := L? then return L
       -- Otherwise a drain of a generator or an iterator, a `while` or a `loop`: div (SPEC §14,
       -- §15).
       let T := match src with
@@ -4440,6 +4464,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         report sp (s!"`for` is div: its source{(T.map fun T => s!", of type `{ppT T}`,").getD ""} " ++
           "is unbounded (a drain)")
       let el := T.bind elemOf
+      if let some (.total _ _ true) := (← get).exits.head? then modify fun s => { s with machine := true }
       modify fun s => { s with exits := .drain :: s.exits }
       let cM := match src with
         | .each x => c.push x.name el
@@ -4629,7 +4654,7 @@ def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val →
     let resumes := (opsC c divFuel M).filter fun (k, i) =>
       S₀.any fun o => o.n.toNat == k && o.i.toNat == i && !o.abort
     if let some (k, i) := resumes.find? (st.perTurn.contains ·.1) then
-      return some (← forDataDiv n c exp sp x V src M N k i)
+      return some (← forDataDiv n c exp sp x V src M N (some (k, i)))
     let rowLoop := !resumes.isEmpty
     if rowLoop then
       match src with
@@ -4665,13 +4690,14 @@ def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val →
     let hasRet := M.hasRet
     let outer := st.exits.head?
     let Rt : CVTy ← if !hasRet then pure .unit else match outer with
-      | some (.total Rt _) => pure Rt
-      | _ => match exp with
-        | some (.ret Q) => pure Q
-        | _ => throw ⟨sp, "the type of the function's result, which a `return` in this loop " ++
+      | some (.total Rt _ _) => pure Rt
+      | _ => match exp, st.res with
+        | some (.ret Q), _ => pure Q
+        | _, some Q => pure Q
+        | _, _ => throw ⟨sp, "the type of the function's result, which a `return` in this loop " ++
             "returns, is not determined here"⟩
     let retOut (rsp : Span) (v : Val) : Comp := match outer with
-      | some (.total _ f) => f rsp v
+      | some (.total _ f _) => f rsp v
       | some .drain => .ret rsp (.app rsp (.sugar rsp .retE) v)
       | none => .ret rsp v
     -- The variables the loop threads: those the body reads or assigns, locals and capabilities.
@@ -4994,7 +5020,7 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
       else report sp s!"`for` is total, bounded by {desc}"
     -- The loops inside the body leave by this loop's exit on `return`.
     let ret (tsp : Span) (v : Val) : Comp := .ret tsp (exitV tsp (.inr tsp (.inr tsp v)))
-    modify fun s => { s with exits := .total Rt ret :: s.exits }
+    modify fun s => { s with exits := .total Rt ret true :: s.exits }
     let L' ← surfC n c exp L
     modify fun s => { s with exits := s.exits.drop 1 }
     return some L'
@@ -5006,15 +5032,19 @@ the body's machine (SPEC §14, §15), one turn per element: a count's index, a v
 an owned array's index (each element copied out under a borrow of one turn), a sized iterator's
 data and state. `&a` and `&mut a` lend `a` around the whole loop, and an operation that resumes
 cannot cross a borrow (T1, #172): they are rejected. The loop has no value (`else`, `break e`). -/
-def forDataDiv : Nat → TCx → Option CCTy → Span → Ident → Val → DataSrc → Comp → Comp → Nat → Nat →
-    DM Comp
-  | 0, _, _, sp, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: a loop nested too deeply"⟩
-  | n + 1, c, exp, sp, x, V, src, M, N, k, i => do
+def forDataDiv : Nat → TCx → Option CCTy → Span → Ident → Val → DataSrc → Comp → Comp →
+    Option (Nat × Nat) → DM Comp
+  | 0, _, _, sp, _, _, _, _, _, _ => throw ⟨sp, "internal error: a loop nested too deeply"⟩
+  | n + 1, c, exp, sp, x, V, src, M, N, op => do
     let sfx := s!"{sp.start.line}_{sp.start.col}"
     let pp (T : CVTy) : DM String := do pure (← (c.surface sp T : Except Error VTy)).pp
+    -- Why the loop is div: its body performs an operation that resumes at a site that observes it
+    -- one turn at a time, or its body loops (its class).
+    let why := match op with
+      | some (k, i) => s!"the body of this `for` performs an operation that resumes (the operation {k}.{i})"
+      | none => "the body of this `for` loops"
     if N.forElse?.isSome || N.forRes?.isSome || M.spineBreaks.any (·.2.isSome) then
-      throw ⟨sp, s!"the body of this `for` performs an operation that resumes (the operation " ++
-        s!"{k}.{i}), so the loop is div (a `while` over its source), and it has no value: " ++
+      throw ⟨sp, s!"{why}, so the loop is div (a `while` over its source), and it has no value: " ++
         "`break e` and `else` are not provided there"⟩
     let x' := x.name
     let w := s!"io_w{sfx}"
@@ -5083,8 +5113,7 @@ while ({w}m) \{
   }
 };
 force io_hole_rest"
-      | .lend a m _ => throw ⟨sp, s!"the body of this `for` performs an operation that resumes " ++
-          s!"(the operation {k}.{i}), and its source `&{if m then "mut " else ""}{a.name}` lends " ++
+      | .lend a m _ => throw ⟨sp, s!"{why}, and its source `&{if m then "mut " else ""}{a.name}` lends " ++
           s!"`{a.name}` around the whole loop: an operation that resumes cannot cross a borrow " ++
           "(T1, #172). Iterate an owned array, or a view the function is given"⟩
     let (lo, hi) := match V with
@@ -5098,7 +5127,9 @@ force io_hole_rest"
     let L ← (template sp "a `for` over data whose body performs an operation that resumes (a div loop)"
       src : SM Comp)
     if !(← get).quiet then
-      report sp s!"`for` is div: its body performs an operation that resumes ({k}.{i}), so it is a loop over the source's cursor"
+      report sp (match op with
+        | some (k, i) => s!"`for` is div: its body performs an operation that resumes ({k}.{i}), so it is a loop over the source's cursor"
+        | none => "`for` is div: its body loops, so it is a loop over the source's cursor")
     surfC n c exp (L.fill hv hc)
 
 /-- `for x in g(e) { M }; N`, `g` performing an iteration effect (SPEC §15): the handler site
@@ -5136,13 +5167,14 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let hasRet := M.hasRet
     let outer := st.exits.head?
     let Rt : CVTy ← if !hasRet then pure .unit else match outer with
-      | some (.total Rt _) => pure Rt
-      | _ => match exp.bind rowRes? with
-        | some (_, Q) => pure Q
-        | none => throw ⟨sp, "the type of the function's result, which a `return` in this loop " ++
+      | some (.total Rt _ _) => pure Rt
+      | _ => match exp.bind rowRes?, st.res with
+        | some (_, Q), _ => pure Q
+        | none, some Q => pure Q
+        | none, none => throw ⟨sp, "the type of the function's result, which a `return` in this loop " ++
             "returns, is not determined here"⟩
     let retOut (rsp : Span) (v : Val) : Comp := match outer with
-      | some (.total _ f) => f rsp v
+      | some (.total _ f _) => f rsp v
       | some .drain => .ret rsp (.app rsp (.sugar rsp .retE) v)
       | none => .ret rsp v
     -- The variables the loop threads: those the body reads or assigns, locals and capabilities.
@@ -5189,7 +5221,9 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
       | .tensor _ B => pure B
       | _ => throw ⟨sp, "internal error: a generator's copy for a `for` hands its variables back"⟩
     -- The body of a counted loop, or of a `for` over a generator, is one total step.
-    if looping then if let some (.total ..) := st.exits.head? then
+    if looping then if let some (.total _ _ counted) := st.exits.head? then
+      -- Inside a counted loop, the counted loop is a loop of the machine (`forData`'s class).
+      if counted then modify fun st => { st with machine := true } else
       throw ⟨sp, s!"`{i.callee}` loops, so a `for` over it is div, and it is inside the body of a " ++
         "loop that is one total step (a `for` over data, SPEC §16, or the clause of a `for` over a " ++
         "generator): store the generator and loop over it after, or loop over it in a function"⟩
@@ -5298,7 +5332,7 @@ io_j{sfx} : {Jt} <- return ((unbang io_hwf{sfx}) io_l{sfx});
     let L ← (template sp what (core ++ join ++ after) : SM Comp)
     -- The generator's loop value, when it is a div function: `reify` of its call (`eStart`).
     let callC ← match divG, call', Rg? with
-      | true, .app _ f W, some Rg => do pure (.ret sp (← ((eStart cw sp sfx rowG Bw Rg f W).run' 0 : SM Val)))
+      | true, .app _ f W, some Rg => ((eStart cw sp sfx rowG Bw Rg f W).run' 0 : SM Comp)
       | _, _, _ => pure (.ret sp call')
     let hc (h : String) : Option Comp :=
       if h == "io_hole_body" then some body else if h == "io_hole_rest" then some (restOf N)
@@ -5435,7 +5469,7 @@ return (thunkv nu_in < (nu_out (force io_pf{sfx} io_ps{sfx})).1, (nu_out (force 
     let L ← (template sp "a stored generator" src : SM Comp)
     -- The generator's loop value, when it is a div function: `reify` of its call (`eStart`).
     let callC ← match divG, call', Rg? with
-      | true, .app _ f W, some Rg => do pure (.ret sp (← ((eStart c sp sfx row Bg Rg f W).run' 0 : SM Val)))
+      | true, .app _ f W, some Rg => ((eStart c sp sfx row Bg Rg f W).run' 0 : SM Comp)
       | _, _, _ => pure (.ret sp call')
     let L := L.fillS (fun _ => none) (fun h => if h == "io_hole_call" then some callC else none)
       fun k => if k == i.n then some site else none
@@ -5455,8 +5489,9 @@ def surfDecl : Nat → Decl → DM Decl
       let M ← normExits divFuel M
       if let some bsp := M.spineBreak then throw ⟨bsp, "`break` is outside every loop"⟩
       pure M) V : Except Error Val)
-    set { st with exits := [] }
+    set { st with exits := [], res := (resultRowOf (c.elabV A)).map (fun (p : Frontend.Check.CRow × CVTy) => p.2) }
     let V' ← surfV n c (c.elabV A) V
+    modify fun st => { st with res := none }
     pure (.def_ sp nm ps A V' mk)
   | n + 1, .main sp C M => do
     let st ← get
@@ -5467,7 +5502,7 @@ def surfDecl : Nat → Decl → DM Decl
     let exp := match (c.E.elabC c.Δ C).toOption with
       | some (.ret A) => some (BoCa.Fig16.LogRel.Core.CTy.ret A)
       | e => e
-    set { st with caps := caps }
+    set { st with caps := caps, res := exp.bind fun | .ret A => some A | _ => none }
     -- `main` runs under a lifetime of its own, `'main`: its body is elaborated once, inside the
     -- borrow `mainLife` writes out.  `[spec §23]`
     let c₀ := c.push "io_main" (some (.ref .unit))

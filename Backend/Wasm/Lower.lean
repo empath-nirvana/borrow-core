@@ -1,6 +1,7 @@
 import Backend.Flat.Syntax
 import Backend.Flat.Host
 import Backend.Wasm.Syntax
+import Std.Data.HashMap
 
 /-!
 # Backend — flat IR to Wasm
@@ -126,10 +127,109 @@ where
     | [] => []
     | c :: cs => lowerBlock c :: lowerCases cs
 
+/-! ### Reusing locals
+
+A flat-IR function's body is a tree of statements with no back edge (a loop is a tail call), so a
+local is live, on any path, only between its first and its last occurrence in the body's order. A
+local whose occurrences all come after another's last one may be that one: the locals are
+numbered again by these intervals, each in the lowest number free at its first occurrence. Wasm
+bounds a function's locals. -/
+
+/-- The depth bound of the traversals below. -/
+def occFuel : Nat := 1 <<< 20
+
+/-- The first and last position of each local, the local `i` met at position `n`. -/
+def occAt (n i : Nat) (m : Std.HashMap Nat (Nat × Nat)) : Std.HashMap Nat (Nat × Nat) :=
+  m.insert i (match m[i]? with | some (a, _) => (a, n) | none => (n, n))
+
+/-- The occurrences of the locals in an expression at position `n`. -/
+def occExp (n : Nat) : Nat → Std.HashMap Nat (Nat × Nat) → Flat.Exp → Std.HashMap Nat (Nat × Nat)
+  | 0, m, _ => m
+  | k + 1, m, e => match e with
+    | .loc i => occAt n i m
+    | .load a _ | .load8 a | .load32 a | .alloc a | .getc a | .now a => occExp n k m a
+    | .op _ args => args.foldl (occExp n k) m
+    | .getv a b c => occExp n k (occExp n k (occExp n k m a) b) c
+    | _ => m
+
+/-- The occurrences of the locals in a statement, each statement one position on from the last. -/
+def occStmt : Nat → Nat × Std.HashMap Nat (Nat × Nat) → Flat.Stmt → Nat × Std.HashMap Nat (Nat × Nat)
+  | 0, nm, _ => nm
+  | k + 1, (n, m), s =>
+    let n := n + 1
+    match s with
+    | .set i e => (n, occAt n i (occExp n occFuel m e))
+    | .store a _ v | .store8 a v | .store32 a v | .putc a v | .sleep a v =>
+      (n, occExp n occFuel (occExp n occFuel m a) v)
+    | .free a | .unslot a | .out a | .status a => (n, occExp n occFuel m a)
+    | .putv a b c => (n, occExp n occFuel (occExp n occFuel (occExp n occFuel m a) b) c)
+    | .ite c t e => (t ++ e).foldl (occStmt k) (n, occExp n occFuel m c)
+    | .switch e cs d => (cs.flatten ++ d).foldl (occStmt k) (n, occExp n occFuel m e)
+    | .call ds _ args => (n, ds.foldl (fun m i => occAt n i m) (args.foldl (occExp n occFuel) m))
+    | .ret es | .tailCall _ es => (n, es.foldl (occExp n occFuel) m)
+    | _ => (n, m)
+
+/-- An expression with its locals renamed by `f`. -/
+def renExp (f : Nat → Nat) : Nat → Flat.Exp → Flat.Exp
+  | 0, e => e
+  | k + 1, e => match e with
+    | .loc i => .loc (f i)
+    | .load a o => .load (renExp f k a) o
+    | .load8 a => .load8 (renExp f k a)
+    | .load32 a => .load32 (renExp f k a)
+    | .op o args => .op o (args.map (renExp f k))
+    | .alloc a => .alloc (renExp f k a)
+    | .getc a => .getc (renExp f k a)
+    | .getv a b c => .getv (renExp f k a) (renExp f k b) (renExp f k c)
+    | .now a => .now (renExp f k a)
+    | e => e
+
+/-- A statement with its locals renamed by `f`. -/
+def renStmt (f : Nat → Nat) : Nat → Flat.Stmt → Flat.Stmt
+  | 0, s => s
+  | k + 1, s =>
+    let re := renExp f occFuel
+    match s with
+    | .set i e => .set (f i) (re e)
+    | .store a o v => .store (re a) o (re v)
+    | .store8 a v => .store8 (re a) (re v)
+    | .store32 a v => .store32 (re a) (re v)
+    | .free a => .free (re a)
+    | .unslot a => .unslot (re a)
+    | .out a => .out (re a)
+    | .putc a b => .putc (re a) (re b)
+    | .putv a b c => .putv (re a) (re b) (re c)
+    | .sleep a b => .sleep (re a) (re b)
+    | .ite c t e => .ite (re c) (t.map (renStmt f k)) (e.map (renStmt f k))
+    | .switch e cs d => .switch (re e) (cs.map (·.map (renStmt f k))) (d.map (renStmt f k))
+    | .call ds g args => .call (ds.map f) g (args.map re)
+    | .ret es => .ret (es.map re)
+    | .tailCall g es => .tailCall g (es.map re)
+    | .status a => .status (re a)
+    | s => s
+
+/-- The function with its locals numbered again by their intervals; the parameters keep theirs. -/
+def compactLocals (f : Flat.Fn) : Flat.Fn := Id.run do
+  let (_, m) := f.body.foldl (occStmt occFuel) (0, {})
+  -- The parameters are live from the start.
+  let m := (List.range f.params).foldl (fun m i =>
+    m.insert i (match m[i]? with | some (_, b) => (0, b) | none => (0, 0))) m
+  let ivs := (m.toList.filter (·.1 ≥ f.params)).toArray.qsort (fun a b => a.2.1 < b.2.1 || (a.2.1 == b.2.1 && a.1 < b.1))
+  -- Each number's last position, among the numbers past the parameters.
+  let mut ends : Array Nat := #[]
+  let mut to : Std.HashMap Nat Nat := {}
+  for (i, (a, b)) in ivs.toList do
+    match (ends.zipIdx.toList.find? fun (e, _) => e < a) with
+    | some (_, k) => ends := ends.set! k b; to := to.insert i (f.params + k)
+    | none => to := to.insert i (f.params + ends.size); ends := ends.push b
+  let r (i : Nat) : Nat := if i < f.params then i else to.getD i i
+  pure { f with locals := ends.size, body := f.body.map (renStmt r occFuel) }
+
 /-- A function. One with a frame has a local more, `fp`, the frame's base: on entry the frame
 is taken from the stack (`$sp` lowered by its size, trapping when it would pass the stack's
 end), and every return and tail call gives it back.  `[spec §35]` -/
 def lowerFn (cnt : Bool) (k : Nat) (f : Flat.Fn) : Func :=
+  let f := compactLocals f
   let fp := f.params + f.locals
   let enter : List Instr := if f.frame == 0 then [] else
     [.globalGet "$sp", .i64Const (8 * f.frame).toUInt64, .num (.bin .w64 .sub), .localSet fp,
