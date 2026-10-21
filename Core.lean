@@ -23,6 +23,7 @@ import Core.DivReify
 import Core.DivHandle
 import Core.DivPrograms
 import Core.DivRuntime
+import Core.DivDrive
 import Core.EffCancel
 import Core.EffCancelTyped
 import Core.Persistent

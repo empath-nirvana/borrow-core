@@ -22,7 +22,9 @@
 # lists the unverified programs instead.
 #
 # The full gate builds everything (`lake build`), then runs the compile-time guard alone (it
-# measures time), then every other step at once, each one's output printed in order as it
+# measures time) on the new backend: `scripts/compile-scaling.sh --guard --backend new` compiles a
+# body inside the new backend's fragment with it, at the same limit (the decision on #646: the old
+# backend is deleted at N6; SPEC §49). Then every other step at once, each one's output printed in order as it
 # finishes. The steps are independent: each reads the build and the sources, and writes only its
 # own temporary files (and `mdbook` its `book/book`). The scripts skip their own `lake build`
 # when this one has built (`CI_LOCAL_BUILT`); when the build fails, they run one after another,
@@ -147,7 +149,7 @@ else step "build (bcc, bcc-counts)" lake build bcc bcc-counts; fi
 built=$fail
 [ "$built" = 0 ] && export CI_LOCAL_BUILT=1
 
-if wanted "compile scaling"; then step "compile scaling" scripts/compile-scaling.sh --guard; fi
+if wanted "compile scaling"; then step "compile scaling" scripts/compile-scaling.sh --guard --backend new; fi
 
 mdbook=1; command -v mdbook >/dev/null || mdbook=0
 names=(); pids=()

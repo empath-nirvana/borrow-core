@@ -79,7 +79,8 @@ beyond its term is either re-derived from the erasure or dropped:
 ### What the new backend reads (N1, #636)
 
 `Backend2/` (`docs/n1-plan.md`, SPEC §43) compiles `Checked.t` itself for the programs with no
-effect node, and since N2 (SPEC §48) for those whose effects it erases (159 of the 374 checked). The census converts each program by it and counts what the
+effect node, and since N2 (SPEC §48) for those whose effects it erases, and since N4 (SPEC §49) for those whose
+loops the runtime drives (310 of the 374 checked). The census converts each program by it and counts what the
 conversion reads of the typed term, by rule and fact: the `read` lines of
 `docs/kernel-usage/census.tsv` (`scripts/KernelCensus.lean`, `backend2Reads`; the facts recorded
 by `Backend2.readFact`). The rows N1 was given are class A by that backend's reading: the masks
@@ -92,7 +93,11 @@ derived node `nuEta` with the `bind` of `unfold step` it calls, and a walk's `re
 (`C.eff`'s payload), the clause kinds at `effHandleV`, the direct calls `directFacts` licenses,
 and `effThen` and the unwinding borrows on the abort path, for the 36 effectful programs whose
 handlers are abortive or directly called and that have no loop: 159 programs in all; `effSub`,
-`effPerform`, `effRaise`, `effLet`, `effThen` and the `…U` borrows move to A.
+`effPerform`, `effRaise`, `effLet`, `effThen` and the `…U` borrows move to A. N4's loop part
+(#652, SPEC §49) adds `main`'s `reify` with the fact that it is the term's one handler of `Div`
+(the runtime answers every tick), `iterate`'s row, `tick`'s `perform`, and `bounded_fix`'s type:
+310 programs in all; `iterate` moves to A, `reify` stays B (a stored loop's, N3), and `divFuel`
+stays C (no producer).
 
 ## 2. Classes
 
@@ -167,11 +172,11 @@ baseline).
 | 48 | [`arrCopy`](../Core/Fundamental.lean#L210) | §9 | 147 | 1227 | 1705 | erasure only | **A** | — |
 | 49 | [`arrForget`](../Core/Fundamental.lean#L213) | §9 | 112 | 597 | 746 | erasure only | **A** | — |
 | 50 | [`countFold`](../Core/Fundamental.lean#L217) | §16 | 169 | 1032 | 3396 | erasure only (`count_loop`, `Flat/Lower.lean:1405`) | **A** | — |
-| 51 | [`countTry`](../Core/Fundamental.lean#L221) | §16 | 70 | 174 | 457 | erasure only (`count_try_loop`, `Flat/Lower.lean:1439`) | **A** | — |
-| 52 | [`boundedFix`](../Core/Fundamental.lean#L226) | §20, §47 | 61 | 150 | 190 | erasure only (`fixValue`, `Convert.lean:243`) | **A** | — |
-| 53 | [`iterate`](../Core/Fundamental.lean#L230) | §14, §47 | 158 | 445 | 456 | `expandIter` (`Convert.lean:875`) turns it into a fixed point (one code calling itself, the step a closure); the new backend leaves it outside its fragment | **B** | B3 (`iterate` as a native loop in the old backend), N2 (in the new one) |
-| 54 | [`divFuel`](../Core/Fundamental.lean#L235) | §14 | 0 | 0 | 0 | generic; reached only by the kernel program `div-residual` | **C** | B2, then N4 |
-| 55 | [`reify`](../Core/Fundamental.lean#L240) | §14, §47 | 158 | 255 | 257 | erasure only: a deep handler of `Div` whose clause keeps `κ`, lowered by `Capture`'s state machine (`main`'s loop value, stored generators, the generator of a `for` that loops); the new backend leaves it outside its fragment | **B** | B3 (`main` under the runtime's clause; `reify` only where a loop is stored), N2 |
+| 51 | [`countTry`](../Core/Fundamental.lean#L221) | §16 | 70 | 174 | 457 | erasure only (`count_try_loop`, `Flat/Lower.lean:1439`); the new backend's native loop from the node's `S` and `E` (`genCountTry`) | **A** | — |
+| 52 | [`boundedFix`](../Core/Fundamental.lean#L226) | §20, §47, §49 | 61 | 150 | 190 | the new backend reads the node's type: its machine step, a function per node whose self-reference counts the budget down (`genFix`, `Backend2/Convert.lean`; SPEC §49), in 44 programs; the old backend (the default until N6) compiles the erasure (`fixValue`, `Convert.lean:243`) | **A** | — |
+| 53 | [`iterate`](../Core/Fundamental.lean#L230) | §14, §47, §49 | 158 | 445 | 456 | the new backend reads the node's row `S` and type under the runtime (`divRuntime`): a function per node, its back edge a tail call, its tick answered *next* (`genIter`, `Backend2/Convert.lean`; `drive_reify_tick`, SPEC §49), in 127 programs; the 31 others are outside its fragment, for a stored loop or a stored continuation (N3) or a rule SPEC §48 does not build. The old backend (the default until N6) turns it into a fixed point (`expandIter`, `Convert.lean:875`) | **A** | N3 (the programs with a stored loop) |
+| 54 | [`divFuel`](../Core/Fundamental.lean#L235) | §14 | 0 | 0 | 0 | generic; reached only by the kernel program `div-residual`; the checker has no producer (no core text spells it), so the new backend's counter test is not built (SPEC §49 *Open*) | **C** | a checker producer, then its counter test |
+| 55 | [`reify`](../Core/Fundamental.lean#L240) | §14, §47, §49 | 158 | 255 | 257 | the new backend reads `main`'s `reify` node (`mainReify?`, its `S`, `B`, `R`) and that it is the term's one handler of `Div` (`divRuntime`): `main`'s body runs in place under the runtime's drive (`runtimeMain`; `Core/DivDrive.lean`, SPEC §49), in 127 programs; a stored loop's `reify` keeps `κ` and leaves its program with the old backend, which lowers it by `Capture`'s state machine | **B** | N3 (a stored loop's `reify`) |
 | 56 | [`sliceBorrowM`](../Core/Fundamental.lean#L247) | §9 | 109 | 132 | 138 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `noalias` on the leaf borrows (#555 choice 6) |
 | 57 | [`sliceBorrowI`](../Core/Fundamental.lean#L254) | §9 | 154 | 659 | 1447 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `readonly` on the leaf borrows |
 | 58 | [`sliceGetM`](../Core/Fundamental.lean#L259) | §9 | 10 | 11 | 20 | erasure only | **A** | — |
@@ -240,7 +245,7 @@ ones have their run facts (`Frontend/Check/Derived.lean`).
 | 108 | [`divLit`](../Frontend/Check/TExpr.lean#L382) | §39 | 9 | 14 | 16 | the new backend reads the operation and the divisor from the node: the division with no error arm (`convDivLit`, `Backend2/Convert.lean:1265`; `divLitVals`, `Backend2/Lower.lean:360`) | **A** | — |
 | 109 | [`walk`](../Frontend/Check/TExpr.lean#L558) | §16, §46 | 64 | 83 | 127 | the new backend reads `read` (`walkReadB`: the bound the view's length, the step's read of the view at its index, its tails handing the view on) and drops the read's test (`Backend2/Convert.lean:1100`); the old backend (the default until N6) checks every access | **A** | the step's tails as a run lemma (SPEC §46 *Open*) |
 | 110 | [`walkGet`](../Frontend/Check/TExpr.lean#L561) | §46 | 64 | 83 | 127 | the new backend's read with no test inside a walk with `read` (`Backend2/Convert.lean:1108`) | **A** | — |
-| 111 | [`selfCall`](../Frontend/Check/TExpr.lean#L387) | §21 | 53 | 225 | 287 | re-derived: the fixed point is re-recognised (`fixBody?`, `Convert.lean:303`) | **B** | N2 (every self-call is under `bounded_fix` and `Exhausted`, outside N1's fragment), then direct self-calls from the node |
+| 111 | [`selfCall`](../Frontend/Check/TExpr.lean#L387) | §21 | 53 | 225 | 287 | re-derived: the fixed point is re-recognised (`fixBody?`, `Convert.lean:303`); the new backend compiles the call it marks as a call of `bounded_fix`'s self-reference, which the 0-CFA makes direct (SPEC §49), and does not read the node's fact | **B** | direct self-calls from the node |
 | 112 | [`lendCell`](../Frontend/Check/TExpr.lean#L390) | §35, §41 | 26 | 52 | 74 | re-derived: the scoped cell is re-recognised (`markScoped`, `Convert.lean:544`) | **D** | N5 (framing from the node); its producers are workarounds (see class D): `lendBorrow`'s value branch (`Frontend/Sugar.lean:2276`, ergonomics N1) and `withBlk`'s state cell (`Sugar.lean:3526`) → #626/#632 |
 | 113 | [`nuEta`](../Frontend/Check/TExpr.lean#L570) | §45 | 83 | 188 | 205 | the new backend reads `f` and `s`: at a variable a `bind` bound to `unfold step` the codata is the call `f s`, made where the thunk is built (`nuEta_unfold`; `Backend2/Convert.lean:1118`); with no state, the variable itself (`nuEta_var`) | **A** | — |
 | 114 | [`use`](../Frontend/Check/TExpr.lean#L393) | §3 | 345 | 10917 | 20003 | the new backend converts each key's body once and instantiates it at later uses; a body that takes a closure at each use (`convUse`, `Backend2/Convert.lean:1232`) | **A** | #541: keys with the argument codes |

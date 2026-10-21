@@ -631,3 +631,11 @@ import Frontend.Elab.DivPlacement
 #print axioms Frontend.Check.checked_sem_pin
 #print axioms Frontend.Check.checked_runs_pin
 #print axioms Frontend.Elab.DivPlacement.sim_loop
+#print axioms BoCa.Fig16.LogRel.Core.DivDrive.drive_reify_tick
+#print axioms BoCa.Fig16.LogRel.Core.DivDrive.drive_reify_done
+#print axioms BoCa.Fig16.LogRel.Core.DivDrive.drive_reify_closed
+#print axioms BoCa.Fig16.LogRel.Core.DivDrive.reify_start
+#print axioms BoCa.Fig16.LogRel.Core.DivDrive.reify_first_tick
+#print axioms BoCa.Fig16.LogRel.Core.DivDrive.reify_first_done
+#print axioms BoCa.Fig16.LogRel.Core.DivDrive.drive_first_tick
+#print axioms BoCa.Fig16.LogRel.Core.DivDrive.drive_first_done

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.96 · 2026-10-21
+Version 0.97 · 2026-10-21
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8316,6 +8316,99 @@ backend (still `bcc`'s default) or a kernel program. `corpus/counts.expected` an
   its direct call needs its captures at the `perform` (evidence), as §19 *Open* says.
 - `once` and `stored` clauses (N3); `iterate`, `count_try`'s exits, `bounded_fix` and `tick` (N4).
 
+## 49. Entry 48 — the new backend: `Div`'s loops under the runtime, `bounded_fix` (N4, the loop part)
+
+### Motivation
+
+§48 left the loops to unit N4 (`docs/compiler.md` §3.2, §6.1; #652): `iterate` at a row that holds
+`Div`, `tick`, `bounded_fix` (§20, and §47's counted loops whose body loops), and `main`'s loop,
+which §47 makes the loop value of its body. This entry builds them in the new backend (§43), each
+from the typed term's nodes and a law over Core. A stored loop (`reify` anywhere but `main`, a
+`κ` kept: N3) and `div_fuel`'s counter (below) are not built.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration or semantics.
+
+### Lowering
+
+`Backend2/`. Each rule reads the node's fields and the checker's facts; none recognises a term.
+
+- **`tick` has no run-time content in a row** (`Backend2/Types.lean`, `ofC`): it is linear, so not
+  abortive (§48's payload), and `F_{div, Σ} R` is `F_Σ R`'s representation.
+- **The runtime answers every tick** (`Backend2/Driver.lean`, `divRuntime`): when `main` is a loop
+  the runtime drives (§11, `IOMain.loopB`) and its value is the `reify` node applied to its body's
+  thunk (`mainReify?`), and that `reify` is the typed term's one handler of `Div` (no other
+  `reify` node and no `div_fuel` node), every tick of the program is performed inside `main`'s
+  body, under the runtime's drive. A program with another handler of `Div` is outside the fragment.
+- **`main`'s loop** (`runtimeMain`): the body `t ()` runs in place, and its answer `inl b` is the
+  program's value (with its capabilities taken back, §11); `inr r`, a loop closed with its
+  residual, is a run that does not finish (a function that calls itself). The law
+  (`Core/DivDrive.lean`): `reify_start` (`reify_res t` runs `t ()` under `rk [hnd H ·]`), then
+  at every tick the drive's observation with *next* resumes the segment with *next* at the memory
+  it had (`reify_first_tick`, `drive_first_tick`, and at every later tick `drive_reify_tick`); a
+  segment ending with `inl b` ends the drive with `inl b` (`reify_first_done`, `drive_first_done`,
+  `drive_reify_done`), and one ending with `inr r` leaves `closed r`, which every observation
+  skips, so every bounded drive answers `inr r` (`drive_reify_closed`).
+- **`tick`** (`effPerform` at `Div`'s operation): the literal *next* where it is performed, by the
+  same law: the runtime's clause `λ((), κ). κ next` resumes in tail position with *next*
+  (`tail_resumes`), as the drive does (`drive_reify_tick`). The `case` on its answer is compiled as
+  written.
+- **`iterate (f, s)`** (the `iterate` node's `S`, its type; `genIter`): a function of `(f, s)` per
+  node, one turn a call: the turn `(f s).1` answers `inl b`, the loop's answer, or `inr s′`, after
+  which the back edge is a tail call on `s′`; an abort of the row's payload is handed on. The law:
+  the machine step `Head.iterate` (`iter_step`), the turn's two answers (`iterK_inl`, `iterK_inr`),
+  the tick answered *next* (`drive_reify_tick`), and `turnK_next`. The close `(f s′).2` is never
+  observed under the runtime.
+- **`bounded_fix (s, (k, a))`** (`boundedFix`'s type; `genFix`): a function of `(s, k, a)` per node
+  and a code of its own for the self-reference. The function runs `s` on `(self_k, a)`: `self_0 =
+  inl ()`, `self_{j+1} = inr` of a closure over `s` and `j` whose call is the function again, the
+  budget read unsigned and counted down (`Op.cntPred`). The law: the machine step
+  `Head.boundedFix` and `fixSelf` (§20). A step that calls the self-reference in tail position
+  (§47's counted loops at the row) is a loop of tail calls that counts its budget; a recursion
+  (§21's groups) is a native recursion bounded by it.
+- **`count_try`** is §43's native loop already; nothing changes.
+- **The postcondition** (`bcc lir --erasure`, §48): `main`'s `reify` counts as a `handle` erased
+  and each tick as a `perform` erased.
+- **`bcc compile --backend new --timings`** (`Backend2.watTimed`) writes each stage's time;
+  `scripts/compile-scaling.sh --backend new` reads it.
+
+### Programs
+
+310 corpus programs at their goldens at the LIR interpreter, the word IR, Wasm and natively (159
+before): 127 whose loops `Div` types, and 24 of the 25 that used `bounded_fix` (recursive groups,
+§47's counted loops whose body loops). Their counts are pinned in `corpus/counts-backend2.expected`
+and their erasure lines in `corpus/erasure-backend2.expected`; `indirect` is 0 on every new one.
+The 64 outside need a stored continuation (N3: the async programs, a generator's `reify`, a
+`div_fuel` over a reified loop, `io-fuel`), `tail+state`, `resume-or-cancel`, or a direct call the
+facts do not license (§48 *Open*).
+
+**The compile-time guard** (`scripts/ci-local.sh`, decision on #646) measures the new backend: the
+generated body of `scripts/compile-scaling.sh` is stored generators and adapters throughout (N3),
+so the guard compiles a body of the same kind inside the new backend's fragment
+(`--backend new`), at the same limit.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the checker, the elaboration, the old backend
+(still `bcc`'s default) or a kernel program. `Core/DivDrive.lean` adds lemmas over existing
+definitions (the drive of §11 and §14's `reify`); no rule. `corpus/counts.expected` and
+`kernel-counts.expected` unchanged.
+
+### Open
+
+- **`div_fuel`'s counter test.** The checker has no producer of the `divFuel` node (no core text
+  spells it), so no program reaches it and the rule is not built: under `div_fuel` a tick would
+  be a test of its counter (its handler's state), `fuelBody`'s two arms.
+- **A stored loop** (`reify` other than `main`'s, a stored generator, the generator of a `for`
+  that loops): its continuation is kept (N3).
+- `iterate`'s step is a closure called once per turn; the 0-CFA makes the call direct, and LLVM
+  inlines it where it can. A turn's answer is built and taken apart at each back edge.
+- After a call in tail position at a row with aborts, a body that takes its answer apart and builds
+  it again (`case r { inl p → let (a, b) = p; inl (a, b) | inr e → inr e }`, as the elaboration
+  writes a generator's threaded state) keeps the call out of tail position: the word IR pads an
+  injection's unused words with zeros, so LLVM cannot see the identity (`bench/gen-tree`).
+
 ---
 
 ## Status
@@ -8695,11 +8788,26 @@ is implemented in `Backend2/Types.lean` (`ofC`'s rows, `payOf`), `Backend2/Conve
 payloads, `convHandle`, `ensureWork`, `convWork`, `prepWorks`, `genLendU`, the effect cases),
 `Backend2/Driver.lean` (`directFacts`, `erasureLine`), the exit status in `Backend2/Interp.lean` and
 `Backend2/Lower.lean`, `bcc lir --erasure` and `scripts/compile-backend2.sh`; no change to
-`CDerives`, `Core/`, `Paper/`, `Support/`, the checker or the old backend.
+`CDerives`, `Core/`, `Paper/`, `Support/`, the checker or the old backend. Entry 48 (§49) is
+implemented in `Backend2/Types.lean` (`tick` in a row), `Backend2/Convert.lean` (`genIter`,
+`genFix`, `mainReify?`, `runtimeMain`, the tick), `Backend2/Driver.lean` (`divHandlers`,
+`divRuntime`, `watTimed`), `Op.cntPred`, `bcc compile --backend new --timings`,
+`scripts/compile-scaling.sh --backend new` and `scripts/ci-local.sh`; its law is
+`Core/DivDrive.lean`; no change to `CDerives`, `Paper/`, `Support/`, the checker or the old
+backend.
 
 ---
 
 ## Changelog
+
+- **0.97** (2026-10-21) — §49 (#652, N4's loop part): the new backend compiles `Div`'s loops
+  under the runtime and `bounded_fix`. `tick` has no run-time content in a row; when `main`'s
+  `reify` is the typed term's one handler of `Div`, `main`'s body runs in place, each tick is
+  answered *next* where it is performed, and `iterate` is a function per node whose back edge is a
+  tail call (the drive's law, `Core/DivDrive.lean`); `bounded_fix` is its machine step, a function
+  per node with a self-reference that counts the budget down. 151 programs join the fragment (310
+  in all), `indirect 0` on each. The compile-time guard measures the new backend on a body of its
+  fragment. No change to the language or to the old backend's output.
 
 - **0.96** (2026-10-21) — §48 (#647, N2): the new backend erases effects by handler law: rows in
   the LIR's types as the payload of their abortive operations; `raise` a branch to its handler's
