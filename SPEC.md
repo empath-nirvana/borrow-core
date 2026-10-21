@@ -8370,8 +8370,9 @@ The grade is a type, inferred as `Div` is (§14, *Inference and markers*), and t
 - a loop value of a computation at the graded row is `reify` of it, as of any other, and the kernel
   refuses it at `reify`'s premise.
 
-The elaborator refuses nothing on these grounds; what it refused before and the kernel now accepts
-is deleted.
+The elaborator refuses nothing on these grounds. §19's refusal of a borrow block whose body
+performs a resuming user operation stays: elaboration grades no user operation (*Open*), and the
+kernel refuses such a row (`Row.Lend.resumes`).
 
 ### Backend
 
