@@ -2,6 +2,7 @@ import Core.DivPrograms
 import Core.Alloc
 import Core.Stale
 import Core.EffMachine
+import Core.Stdio
 
 /-!
 # Core — `Div`: the runtime's clause  `[spec §14]`
@@ -54,20 +55,20 @@ def rtC : Val := .lam (.letpair (.var 0) (.app (.app (.var 0) (.val (Val.inj₁ 
 /-- The runtime's handler value. -/
 def rtH : Val := hndVal divEff (qualsVal [.lin]) rtR (Val.pair rtC .unit)
 
-/-- The table of the row of `Div` alone. -/
-abbrev T0 : OpTab := Row.tab [tickSig] LSub.empty
+/-- The table of the row of `Div` alone, at the grade `c`. -/
+abbrev T0 (c : Bool) : OpTab := Row.tab [tickSigG c] LSub.empty
 
-theorem T0_erase0 : T0.erase0 = OpTab.empty := by
+theorem T0_erase0 (c : Bool) : (T0 c).erase0 = OpTab.empty := by
   funext n i
   simp only [OpTab.erase0]
   split
   · rfl
   · rename_i h
-    show Row.tab [tickSig] LSub.empty n i = _
-    rw [Row.tab_tick_ne [] LSub.empty h]
+    show Row.tab [tickSigG c] LSub.empty n i = _
+    rw [Row.tab_tickG_ne c [] LSub.empty h]
     simp [Row.tab, Row.find, OpTab.empty]
 
-theorem T0_divOK : T0.DivOK := Row.divOK_of_divB (Row.divB_tick []) LSub.empty
+theorem T0_divOK (c : Bool) : (T0 c).DivOK := Row.divOK_of_divB (Row.divB_tickG c []) LSub.empty
 
 /-! ### A run of a segment continues to its stop -/
 
@@ -87,11 +88,11 @@ theorem ARun.rest_final {A : Alloc} {i j j₁ : Nat} {μ μ' μ₁ : Heap} {e e�
           exact ih t
 
 section
-variable (Q : List SRec → Val → WProp)
+variable (c : Bool) (Q : List SRec → Val → WProp)
 
 /-- A configuration a segment's `wp` holds at: `x` in `cwp`, its frame, world and memory. -/
 def Good (μ : Heap) (x : Expr) : Prop :=
-  ∃ (ls : List SRec) (ρ ρf fρ : WRes) (ps : List FrameRec), cwp T0 Q ls x ρ ∧
+  ∃ (ls : List SRec) (ρ ρf fρ : WRes) (ps : List FrameRec), cwp (T0 c) Q ls x ρ ∧
     ResU.Hash ρf ρ ∧ ResU.CompS ρf ρ fρ ∧ TW fρ ps (rsOf ls) ∧ Tagged fρ ps ls ∧ ResU.Lower fρ μ
 
 /-- The configuration a segment's `wp` stops at: its post-configuration, at a term that is an
@@ -101,23 +102,23 @@ def PostD (μ : Heap) (t : Expr) : Prop :=
     ResU.Hash ρ' ρf ∧ ResU.CompS ρf ρ' fρ' ∧ ResU.Hash ρp fρ' ∧ ResU.CompS fρ' ρp fρ'p ∧
     ResU.Lower fρ'p μ ∧ NoOwn ρp ∧ TW fρ'p ps' (rsOf ls') ∧ Tagged fρ'p ps' ls' ∧
     (valPost Q ls' t ρ' ∨
-      divTab T0 Q (cwp T0 Q) ls' t (fun ls e => ewpTS ls e (divTab T0 Q (cwp T0 Q)) Q) ρ')
+      divTab (T0 c) Q (cwp (T0 c) Q) ls' t (fun ls e => ewpTS ls e (divTab (T0 c) Q (cwp (T0 c) Q)) Q) ρ')
 
 /-- A stop of a segment takes no step. -/
-theorem post_final {μ : Heap} {t : Expr} (h : PostD Q μ t) :
+theorem post_final {μ : Heap} {t : Expr} (h : PostD c Q μ t) :
     ∀ μ₂ t₂, ¬ Step1 (ℍ := ℍ) μ t μ₂ t₂ := by
   obtain ⟨_, _, _, _, _, _, _, -, -, -, -, -, -, -, -, ht⟩ := h
   rcases ht with ⟨v, rfl, -⟩ | ht | ht
   · exact fun _ _ => BoCa.BoLo.no_step_val
-  · exact (opTable_empty (by rw [T0_erase0] at ht; exact ht)).elim
-  · obtain ⟨K, -, rfl, hK, -⟩ := tickStop_inv T0_divOK ht
+  · exact (opTable_empty (by rw [T0_erase0 c] at ht; exact ht)).elim
+  · obtain ⟨K, -, rfl, hK, -⟩ := tickStop_inv (T0_divOK c) ht
     exact fun _ _ h => opPlug_no_step (r := false) (p := opPayload divEff 0 .unit)
       (payloadName_opPayload divEff 0 .unit) hK h
 
 /-- **Every run of a segment continues to its stop**, under the allocator that replays it. -/
-theorem seg_demonic {μ₀ μ₁ : Heap} {x x₁ : Expr} (hg : Good Q μ₀ x)
+theorem seg_demonic {μ₀ μ₁ : Heap} {x x₁ : Expr} (hg : Good c Q μ₀ x)
     (hs : Steps (ℍ := ℍ) μ₀ x μ₁ x₁) :
-    ∃ μt t, Steps (ℍ := ℍ) μ₁ x₁ μt t ∧ PostD Q μt t := by
+    ∃ μt t, Steps (ℍ := ℍ) μ₁ x₁ μt t ∧ PostD c Q μt t := by
   obtain ⟨ls, ρ, ρf, fρ, ps, hc, hf, hcf, hT, htg, hμ⟩ := hg
   have hw := ewp_unfold (divTab_mono _ _ _) (cwp_out hc)
   obtain ⟨cs, hcs⟩ := steps_replay hs
@@ -125,23 +126,23 @@ theorem seg_demonic {μ₀ μ₁ : Heap} {x x₁ : Expr} (hg : Good Q μ₀ x)
   obtain ⟨ρ', ρp, fρ', fρ'p, π, t, μ, μ', ps', ls', h₁, h₂, h₃, h₅, h₆, h₇, ⟨j, h₈⟩, -, -, hB,
     hT', htg', -, -, hC⟩ := hw ρf fρ ps hf hcf hT htg (Alloc.replay cs) 0
   obtain rfl := ResU.Lower.functional h₅ hμ
-  have hpost : PostD Q μ' t := ⟨ls', ρ', ρf, ρp, fρ', fρ'p, ps', h₁, h₂, h₃, h₆, h₇, hB, hT',
+  have hpost : PostD c Q μ' t := ⟨ls', ρ', ρf, ρp, fρ', fρ'p, ps', h₁, h₂, h₃, h₆, h₇, hB, hT',
     htg', hC⟩
-  exact ⟨μ', t, (ARun.rest_final (post_final Q hpost) hrun h₈).toSteps, hpost⟩
+  exact ⟨μ', t, (ARun.rest_final (post_final c Q hpost) hrun h₈).toSteps, hpost⟩
 
 /-- **A segment's stop**: an answer, or a tick whose continuation at *next* is `Good`, at the
 stop's resources, the garbage joining the frame. -/
-theorem post_cases {μ : Heap} {t : Expr} (h : PostD Q μ t) :
-    (∃ v : Val, t = .val v) ∨
+theorem post_cases {μ : Heap} {t : Expr} (h : PostD c Q μ t) :
+    (∃ v : Val, t = .val v ∧ ∃ ls ρ, Q ls v ρ) ∨
       ∃ K₁ : Kont, t = K₁.plug tickE ∧ K₁.HasHnd divEff = false ∧
-        Good Q μ (K₁.plug (.val nextV)) := by
+        Good c Q μ (K₁.plug (.val nextV)) := by
   obtain ⟨ls', ρ', ρf, ρp, fρ', fρ'p, ps', h₁, h₂, h₃, h₆, h₇, hB, hT', htg', hC⟩ := h
-  rcases hC with ⟨w, rfl, -⟩ | ht | ht
-  · exact .inl ⟨w, rfl⟩
-  · exact (opTable_empty (by rw [T0_erase0] at ht; exact ht)).elim
-  obtain ⟨K, en, rfl, hK, -, -, hcont⟩ := tickStop_inv T0_divOK ht
+  rcases hC with ⟨w, rfl, hw⟩ | ht | ht
+  · exact .inl ⟨w, rfl, ls', ρ', hw⟩
+  · exact (opTable_empty (by rw [T0_erase0 c] at ht; exact ht)).elim
+  obtain ⟨K, en, rfl, hK, -, -, hcont⟩ := tickStop_inv (T0_divOK c) ht
   refine .inr ⟨K, rfl, hK, ?_⟩
-  have hk : cwp T0 Q ls' (K.plug (.val nextV)) ρ' :=
+  have hk : cwp (T0 c) Q ls' (K.plug (.val nextV)) ρ' :=
     (hcont ls' (Owed.refl _ ls' ρ') nextV (Or.inl rfl)).1
   -- the garbage joins the frame (`wpG_bind`'s regrouping)
   obtain ⟨z, hzp, hz⟩ := (hash_shift ρp ρf ρ').mp ⟨fρ', h₂, h₃⟩
@@ -233,7 +234,7 @@ end chain
 /-! ### The invariant -/
 
 section inv
-variable (Q : List SRec → Val → WProp)
+variable (c : Bool) (Q : List SRec → Val → WProp)
 
 /-- The handler's configurations after a tick of `K₁` at the memory `μt`. -/
 def HS (K₁ : Kont) (μt μ : Heap) (e : Expr) : Prop :=
@@ -245,27 +246,27 @@ def HS (K₁ : Kont) (μt μ : Heap) (e : Expr) : Prop :=
 
 /-- **The invariant** of a run under the runtime's handler. -/
 inductive RT : Heap → Expr → Prop
-  | seg {μ₀ μ : Heap} {x x₁ : Expr} : Good Q μ₀ x → Steps (ℍ := ℍ) μ₀ x μ x₁ →
+  | seg {μ₀ μ : Heap} {x x₁ : Expr} : Good c Q μ₀ x → Steps (ℍ := ℍ) μ₀ x μ x₁ →
       RT μ (hndE rtH x₁)
-  | ret {μ : Heap} {v : Val} : RT μ (.app (.val rtR) (.val v))
-  | val {μ : Heap} {v : Val} : RT μ (.val v)
-  | hs {μt μ : Heap} {K₁ : Kont} {e : Expr} : Good Q μt (K₁.plug (.val nextV)) →
+  | ret {μ : Heap} {v : Val} : (∃ ls ρ, Q ls v ρ) → RT μ (.app (.val rtR) (.val v))
+  | val {μ : Heap} {v : Val} : (∃ ls ρ, Q ls v ρ) → RT μ (.val v)
+  | hs {μt μ : Heap} {K₁ : Kont} {e : Expr} : Good c Q μt (K₁.plug (.val nextV)) →
       HS K₁ μt μ e → RT μ e
 
-theorem good_finDom {μ : Heap} {x : Expr} (h : Good Q μ x) : Fig16.FinDom μ := by
+theorem good_finDom {μ : Heap} {x : Expr} (h : Good c Q μ x) : Fig16.FinDom μ := by
   obtain ⟨_, _, _, _, _, -, -, -, -, -, hμ⟩ := h
   exact lower_finDom hμ
 
 /-- At a configuration of a segment with no step, the segment has stopped. -/
-theorem seg_stopped {μ₀ μ : Heap} {x x₁ : Expr} (hg : Good Q μ₀ x)
+theorem seg_stopped {μ₀ μ : Heap} {x x₁ : Expr} (hg : Good c Q μ₀ x)
     (hs : Steps (ℍ := ℍ) μ₀ x μ x₁) (hno : ∀ μ₂ t₂, ¬ Step1 (ℍ := ℍ) μ x₁ μ₂ t₂) :
-    PostD Q μ x₁ := by
-  obtain ⟨μt, t, hst, hp⟩ := seg_demonic Q hg hs
+    PostD c Q μ x₁ := by
+  obtain ⟨μt, t, hst, hp⟩ := seg_demonic c Q hg hs
   cases hst with
   | refl => exact hp
   | more h _ => exact (hno _ _ h).elim
 
-theorem rt_safe {μ : Heap} {e : Expr} (h : RT (ℍ := ℍ) Q μ e) :
+theorem rt_safe {μ : Heap} {e : Expr} (h : RT (ℍ := ℍ) c Q μ e) :
     IsVal e ∨ ∃ μ' e', Step1 (ℍ := ℍ) μ e μ' e' := by
   cases h with
   | @seg μ₀ _ x x₁ hg hs =>
@@ -273,15 +274,15 @@ theorem rt_safe {μ : Heap} {e : Expr} (h : RT (ℍ := ℍ) Q μ e) :
       · obtain ⟨μ₂, t₂, h₂⟩ := hx
         exact .inr ⟨μ₂, _, h₂.plug (hndK rtH)⟩
       · simp only [not_exists] at hx
-        rcases post_cases Q (seg_stopped Q hg hs hx) with ⟨v, rfl⟩ | ⟨K₁, rfl, hK, -⟩
+        rcases post_cases c Q (seg_stopped c Q hg hs hx) with ⟨v, rfl, -⟩ | ⟨K₁, rfl, hK, -⟩
         · exact .inr ⟨_, _, (catch_ret μ divEff _ _ _ v .hole).1⟩
         · exact .inr ⟨_, _, (catch_step μ (qs := qualsVal [.lin]) (hr := rtR) .unit
             (clauseAt_one rtC) hK .hole).1⟩
-  | ret => exact .inr ⟨_, _, Step1.head (Head.beta μ _ _)⟩
-  | @val _ v => exact .inl v.2
+  | ret _ => exact .inr ⟨_, _, Step1.head (Head.beta μ _ _)⟩
+  | @val _ v _ => exact .inl v.2
   | @hs μt _ K₁ e hg hh =>
       rcases hh with ⟨rfl, rfl⟩ | ⟨ℓ, hℓ, ⟨rfl, he⟩ | ⟨rfl, he⟩⟩
-      · obtain ⟨ℓ, hℓ⟩ := BoCa.BoLo.finDom_block (good_finDom Q hg)
+      · obtain ⟨ℓ, hℓ⟩ := BoCa.BoLo.finDom_block (good_finDom c Q hg)
         exact .inr ⟨_, _, (c1_steps K₁).2 ⟨ℓ, by simpa using hℓ 0, rfl, rfl⟩⟩
       · rcases he with rfl | rfl | rfl | rfl | rfl | rfl | rfl
         · exact .inr ⟨_, _, (c2_c3 K₁ ℓ _).1⟩
@@ -295,8 +296,8 @@ theorem rt_safe {μ : Heap} {e : Expr} (h : RT (ℍ := ℍ) Q μ e) :
         · exact .inr ⟨_, _, (c9_c10 K₁ _).1⟩
         · exact .inr ⟨_, _, (c10_end K₁ _).1⟩
 
-theorem rt_step {μ μ' : Heap} {e e' : Expr} (h : RT (ℍ := ℍ) Q μ e)
-    (hs : Step1 (ℍ := ℍ) μ e μ' e') : RT (ℍ := ℍ) Q μ' e' := by
+theorem rt_step {μ μ' : Heap} {e e' : Expr} (h : RT (ℍ := ℍ) c Q μ e)
+    (hs : Step1 (ℍ := ℍ) μ e μ' e') : RT (ℍ := ℍ) c Q μ' e' := by
   cases h with
   | @seg μ₀ _ x x₁ hg hx₁ =>
       by_cases hx : ∃ μ₂ t₂, Step1 (ℍ := ℍ) μ x₁ μ₂ t₂
@@ -304,18 +305,18 @@ theorem rt_step {μ μ' : Heap} {e e' : Expr} (h : RT (ℍ := ℍ) Q μ e)
         obtain ⟨x', rfl, h'⟩ := step1_plug_of_step (hndK rtH) h₂ hs
         exact .seg hg (hx₁.trans (.one h'))
       · simp only [not_exists] at hx
-        rcases post_cases Q (seg_stopped Q hg hx₁ hx) with ⟨v, rfl⟩ | ⟨K₁, rfl, hK, hg'⟩
+        rcases post_cases c Q (seg_stopped c Q hg hx₁ hx) with ⟨v, rfl, hq⟩ | ⟨K₁, rfl, hK, hg'⟩
         · obtain ⟨rfl, rfl⟩ := (catch_ret μ divEff _ _ _ v .hole).2 _ _ hs
-          exact .ret
+          exact .ret hq
         · obtain ⟨rfl, rfl⟩ := (catch_step μ (qs := qualsVal [.lin]) (hr := rtR) .unit
             (clauseAt_one rtC) hK .hole).2 _ _ hs
           refine .hs hg' (.inl ⟨rfl, ?_⟩)
           simp only [Kont.plug]
           rw [kappaAt_lin]; rfl
-  | ret =>
+  | ret hq =>
       obtain ⟨rfl, rfl⟩ := (step1Only_plug (ℍ := ℍ) (Head.beta μ _ _) rfl .hole).2 _ _ hs
-      exact .val (v := _)
-  | val => exact (BoCa.BoLo.no_step_val hs).elim
+      exact .val (v := _) (by simpa [rtR, Expr.subst] using hq)
+  | val _ => exact (BoCa.BoLo.no_step_val hs).elim
   | @hs μt _ K₁ e hg hh =>
       rcases hh with ⟨rfl, rfl⟩ | ⟨ℓ, hℓ, ⟨rfl, he⟩ | ⟨rfl, he⟩⟩
       · obtain ⟨ℓ, hℓ, rfl, rfl⟩ := (c1_steps K₁).1 hs
@@ -341,38 +342,220 @@ theorem rt_step {μ μ' : Heap} {e e' : Expr} (h : RT (ℍ := ℍ) Q μ e)
         · obtain ⟨rfl, rfl⟩ := (c10_end K₁ _).2 _ _ hs
           exact .seg hg (.refl _ _)
 
+/-- A value the invariant reaches is an answer. -/
+theorem rt_val {μ : Heap} {e : Expr} {v : Val} (h : RT (ℍ := ℍ) c Q μ e) (hv : e = v.1) :
+    ∃ ls ρ, Q ls v ρ := by
+  have hve : IsVal e := hv ▸ v.2
+  cases h with
+  | seg => simp [hndE] at hve
+  | ret => simp [rtR] at hve
+  | @val _ w hq => exact (Subtype.ext hv : w = v) ▸ hq
+  | @hs μt _ K₁ e hg hh =>
+      exfalso
+      rcases hh with ⟨-, rfl⟩ | ⟨ℓ, -, ⟨-, he⟩ | ⟨-, he⟩⟩
+      · simp [c1, rtC] at hve
+      · rcases he with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+          simp [c2, c3, c4, c5, c6, c7, c8, rtC, Kont.plug] at hve
+      · rcases he with rfl | rfl <;> simp [c9, c10, kResume, Kont.plug] at hve
+
 end inv
 
 end DivRuntime
 
 open DivRuntime in
+/-- **Every prefix of every run under the runtime's clause, from `cwp`**: a computation in `cwp`
+at the table of `Div` alone, at either grade, at the empty resource and list, under
+`hnd_Div H_rt`, from the empty memory: every configuration a run reaches is an answer or takes a
+step.  `[spec §14, §48]` -/
+theorem runtime_every_run_cwp (c : Bool) {M : Expr} {Q : List SRec → Val → WProp}
+    (hc : cwp (T0 c) Q [] M PMap.empty) {μ₁ : Heap} {e₁ : Expr}
+    (hs : Steps (ℍ := ℍ) Adequacy.emptyMem (hndE rtH M) μ₁ e₁) :
+    IsVal e₁ ∨ ∃ μ₂ e₂, Step1 (ℍ := ℍ) μ₁ e₁ μ₂ e₂ := by
+  have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
+  have hg : DivRuntime.Good c Q Adequacy.emptyMem M :=
+    ⟨[], PMap.empty, PMap.empty, PMap.empty, [], hc, Fig16.LogRel.hash_empty,
+      ResU.comp_empty_right _, TW.empty, htg, Fig16.BoLo.lower_empty⟩
+  have hrt : DivRuntime.RT (ℍ := ℍ) c Q Adequacy.emptyMem (hndE rtH M) := .seg hg (.refl _ _)
+  suffices ∀ {μ e μ' e'}, Steps (ℍ := ℍ) μ e μ' e' →
+      DivRuntime.RT (ℍ := ℍ) c Q μ e → DivRuntime.RT (ℍ := ℍ) c Q μ' e' from
+    DivRuntime.rt_safe c _ (this hs hrt)
+  intro μ e μ' e' hs' hr
+  induction hs' with
+  | refl => exact hr
+  | more h₁ _ ih => exact ih (DivRuntime.rt_step c _ hr h₁)
+
+open DivRuntime in
 /-- **Every prefix of every run under the runtime's clause**: a closed `M` typed at `F_{Div} A`,
-under `hnd_Div H_rt`, from the empty memory: every configuration a run reaches is an answer or
-takes a step.  The relation at `M`'s row is `cwp` (`effWp`), by the Fundamental Property.
-`[spec §14]` -/
-theorem runtime_every_run {M : Expr} {A : VTy}
-    (h : CDerives LifeCtx.empty [] M (.comp (CTy.effOf [tickSig] A))) {μ₁ : Heap} {e₁ : Expr}
+`tick` at either grade, under `hnd_Div H_rt`, from the empty memory: every configuration a run
+reaches is an answer or takes a step.  The relation at `M`'s row is `cwp` (`effWp`), by the
+Fundamental Property.  `[spec §14, §48]` -/
+theorem runtime_every_run (c : Bool) {M : Expr} {A : VTy}
+    (h : CDerives LifeCtx.empty [] M (.comp (CTy.effOf [tickSigG c] A))) {μ₁ : Heap} {e₁ : Expr}
     (hs : Steps (ℍ := ℍ) Adequacy.emptyMem (hndE rtH M) μ₁ e₁) :
     IsVal e₁ ∨ ∃ μ₂ e₂, Step1 (ℍ := ℍ) μ₁ e₁ μ₂ e₂ := by
   have hwp := fundamentalC (ℍ := ℍ) h LSub.empty [] [] PMap.empty Adequacy.models_empty
     (gDenC_nil _ _)
   rw [show substAll [] M = M from Adequacy.psub_nil 0 M] at hwp
-  have hc := (cC_effOf_wp [tickSig] A [] LSub.empty M PMap.empty).mp hwp
-  rw [Row.divB_tick] at hc
+  have hc := (cC_effOf_wp [tickSigG c] A [] LSub.empty M PMap.empty).mp hwp
+  rw [Row.divB_tickG] at hc
+  exact runtime_every_run_cwp c hc hs
+
+namespace DivRuntime
+
+/-! ### `main`'s answer read off
+
+The runtime's clause never answers a tick *close*, so a `main` of `F_{Div}(A ⊕ B)` it drives
+answers `inj₁ a`; the run reads `a` off with `λx. case x {inj₁ a. a | inj₂ _. Ω}`. -/
+
+/-- `Ω = (λx. x x)(λx. x x)`, whose only step is to itself. -/
+def omegaE : Expr := .app (.lam (.app (.var 0) (.var 0))) (.lam (.app (.var 0) (.var 0)))
+
+/-- `case x {inj₁ a. a | inj₂ _. Ω}`, `x` the variable `0`. -/
+def ansBody : Expr := .case (.var 0) (.var 0) omegaE
+
+/-- `main` under the runtime's clause, its answer read off: `(λx. ansBody) (hnd_Div H_rt M)`.
+`[spec §48]` -/
+def rtMain (M : Expr) : Expr := .app (.lam ansBody) (hndE rtH M)
+
+theorem omega_only (μ : Heap) : Step1Only (ℍ := ℍ) μ omegaE μ omegaE := by
+  have h := step1Only_plug (ℍ := ℍ) (Head.beta μ (.app (.var 0) (.var 0))
+    (Val.lam (.app (.var 0) (.var 0)))) rfl .hole
+  simpa [omegaE, Expr.subst, Kont.plug] using h
+
+theorem ans_beta (μ : Heap) (v : Val) :
+    Step1Only (ℍ := ℍ) μ (.app (.lam ansBody) (.val v)) μ (.case (.val v) (.var 0) omegaE) := by
+  have h := step1Only_plug (ℍ := ℍ) (Head.beta μ ansBody v) rfl .hole
+  simpa [ansBody, omegaE, Expr.subst, Kont.plug] using h
+
+theorem ans_case₁ (μ : Heap) (a : Val) :
+    Step1Only (ℍ := ℍ) μ (.case (.val (Val.inj₁ a)) (.var 0) omegaE) μ (.val a) := by
+  have h := step1Only_plug (ℍ := ℍ) (Head.case₁ μ a (.var 0) omegaE) rfl .hole
+  simpa [Expr.subst, Kont.plug] using h
+
+theorem ans_case₂ (μ : Heap) (b : Val) :
+    Step1Only (ℍ := ℍ) μ (.case (.val (Val.inj₂ b)) (.var 0) omegaE) μ omegaE := by
+  have h := step1Only_plug (ℍ := ℍ) (Head.case₂ μ b (.var 0) omegaE) rfl .hole
+  simpa [omegaE, Expr.subst, Kont.plug] using h
+
+section wrap
+variable (c : Bool) (Q : List SRec → Val → WProp)
+
+/-- The invariant of a run of `rtMain M`: under the reading-off, `RT`; the reading-off of an
+answer; a value; `Ω`. -/
+inductive RTW : Heap → Expr → Prop
+  | inner {μ : Heap} {x : Expr} : RT (ℍ := ℍ) c Q μ x → RTW μ (.app (.lam ansBody) x)
+  | ans {μ : Heap} {v : Val} : (∃ ls ρ, Q ls v ρ) → RTW μ (.case (.val v) (.var 0) omegaE)
+  | done {μ : Heap} {v : Val} : RTW μ (.val v)
+  | omega {μ : Heap} : RTW μ omegaE
+
+variable (hQ : ∀ ls v ρ, Q ls v ρ → (∃ a, v = Val.inj₁ a) ∨ (∃ b, v = Val.inj₂ b))
+include hQ
+
+theorem rtw_safe {μ : Heap} {e : Expr} (h : RTW (ℍ := ℍ) c Q μ e) :
+    IsVal e ∨ ∃ μ' e', Step1 (ℍ := ℍ) μ e μ' e' := by
+  cases h with
+  | @inner x hx =>
+      rcases rt_safe c Q hx with hv | ⟨μ', x', hs⟩
+      · exact .inr ⟨_, _, (ans_beta μ ⟨x, hv⟩).1⟩
+      · exact .inr ⟨μ', _, hs.plug (.appR (.lam ansBody) .hole)⟩
+  | @ans v hv =>
+      obtain ⟨ls, ρ, hq⟩ := hv
+      rcases hQ ls v ρ hq with ⟨a, rfl⟩ | ⟨b, rfl⟩
+      · exact .inr ⟨_, _, (ans_case₁ μ a).1⟩
+      · exact .inr ⟨_, _, (ans_case₂ μ b).1⟩
+  | @done v => exact .inl v.2
+  | omega => exact .inr ⟨_, _, (omega_only μ).1⟩
+
+theorem rtw_step {μ μ' : Heap} {e e' : Expr} (h : RTW (ℍ := ℍ) c Q μ e)
+    (hs : Step1 (ℍ := ℍ) μ e μ' e') : RTW (ℍ := ℍ) c Q μ' e' := by
+  cases h with
+  | @inner x hx =>
+      by_cases hv : IsVal x
+      · obtain ⟨rfl, rfl⟩ := (ans_beta μ ⟨x, hv⟩).2 _ _ hs
+        exact .ans (rt_val c Q hx (v := ⟨x, hv⟩) rfl)
+      · obtain ⟨x', rfl, hx'⟩ := step1_plug_inv (.appR (.lam ansBody) .hole) rfl hv hs
+        exact .inner (rt_step c Q hx hx')
+  | @ans v hv =>
+      obtain ⟨ls, ρ, hq⟩ := hv
+      rcases hQ ls v ρ hq with ⟨a, rfl⟩ | ⟨b, rfl⟩
+      · obtain ⟨rfl, rfl⟩ := (ans_case₁ μ a).2 _ _ hs
+        exact .done
+      · obtain ⟨rfl, rfl⟩ := (ans_case₂ μ b).2 _ _ hs
+        exact .omega
+  | done => exact (BoCa.BoLo.no_step_val hs).elim
+  | omega =>
+      obtain ⟨rfl, rfl⟩ := (omega_only μ).2 _ _ hs
+      exact .omega
+
+end wrap
+
+end DivRuntime
+
+open DivRuntime in
+/-- **Every prefix of every run of `main` under the runtime's clause, its answer read off**:
+a computation in `cwp` at the table of `Div` alone, at either grade, whose answers are
+injections: every configuration a run of `rtMain M` from the empty memory reaches is a value or
+takes a step.  `[spec §14, §48]` -/
+theorem runtime_main_every_run_cwp (c : Bool) {M : Expr} {Q : List SRec → Val → WProp}
+    (hQ : ∀ ls v ρ, Q ls v ρ → (∃ a, v = Val.inj₁ a) ∨ (∃ b, v = Val.inj₂ b))
+    (hc : cwp (T0 c) Q [] M PMap.empty) {μ₁ : Heap} {e₁ : Expr}
+    (hs : Steps (ℍ := ℍ) Adequacy.emptyMem (rtMain M) μ₁ e₁) :
+    IsVal e₁ ∨ ∃ μ₂ e₂, Step1 (ℍ := ℍ) μ₁ e₁ μ₂ e₂ := by
   have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
-  have hg : DivRuntime.Good (fun ls v => vC true A ls LSub.empty v) Adequacy.emptyMem M :=
+  have hg : DivRuntime.Good c Q Adequacy.emptyMem M :=
     ⟨[], PMap.empty, PMap.empty, PMap.empty, [], hc, Fig16.LogRel.hash_empty,
       ResU.comp_empty_right _, TW.empty, htg, Fig16.BoLo.lower_empty⟩
-  have hrt : DivRuntime.RT (ℍ := ℍ) (fun ls v => vC true A ls LSub.empty v) Adequacy.emptyMem
-      (hndE rtH M) := .seg hg (.refl _ _)
+  have hrt : DivRuntime.RTW (ℍ := ℍ) c Q Adequacy.emptyMem (rtMain M) :=
+    .inner (.seg hg (.refl _ _))
   suffices ∀ {μ e μ' e'}, Steps (ℍ := ℍ) μ e μ' e' →
-      DivRuntime.RT (ℍ := ℍ) (fun ls v => vC true A ls LSub.empty v) μ e →
-      DivRuntime.RT (ℍ := ℍ) (fun ls v => vC true A ls LSub.empty v) μ' e' from
-    DivRuntime.rt_safe _ (this hs hrt)
+      DivRuntime.RTW (ℍ := ℍ) c Q μ e → DivRuntime.RTW (ℍ := ℍ) c Q μ' e' from
+    DivRuntime.rtw_safe c Q hQ (this hs hrt)
   intro μ e μ' e' hs' hr
   induction hs' with
   | refl => exact hr
-  | more h₁ _ ih => exact ih (DivRuntime.rt_step _ hr h₁)
+  | more h₁ _ ih => exact ih (DivRuntime.rtw_step c Q hQ hr h₁)
+
+open DivRuntime in
+/-- **Every prefix of every run of a closed `main` under the runtime's clause, its answer read
+off**: a closed `M` typed at `F_{Div}(A ⊕ B)`, `tick` at either grade: every configuration a run
+of `rtMain M` from the empty memory reaches is a value or takes a step.  `[spec §14, §48]` -/
+theorem runtime_main_every_run (c : Bool) {M : Expr} {A B : VTy}
+    (h : CDerives LifeCtx.empty [] M (.comp (CTy.effOf [tickSigG c] (.sum A B))))
+    {μ₁ : Heap} {e₁ : Expr}
+    (hs : Steps (ℍ := ℍ) Adequacy.emptyMem (rtMain M) μ₁ e₁) :
+    IsVal e₁ ∨ ∃ μ₂ e₂, Step1 (ℍ := ℍ) μ₁ e₁ μ₂ e₂ := by
+  have hwp := fundamentalC (ℍ := ℍ) h LSub.empty [] [] PMap.empty Adequacy.models_empty
+    (gDenC_nil _ _)
+  rw [show substAll [] M = M from Adequacy.psub_nil 0 M] at hwp
+  have hc := (cC_effOf_wp [tickSigG c] (.sum A B) [] LSub.empty M PMap.empty).mp hwp
+  rw [Row.divB_tickG] at hc
+  refine runtime_main_every_run_cwp c (fun ls v ρ hv => ?_) hc hs
+  rcases hv with ⟨a, -, -, -, ⟨-, rfl⟩, -⟩ | ⟨b, -, -, -, ⟨-, rfl⟩, -⟩
+  · exact .inl ⟨a, rfl⟩
+  · exact .inr ⟨b, rfl⟩
+
+open DivRuntime in
+/-- **The IO run under the runtime's clause**: `run_io : Bytes ⊸ F_{Div}(R ⊕ R′)`, `tick` at
+either grade, checked at a context of externs that meet their contracts (`ExternsMeet`): for
+every input byte list, every configuration a run of `rtMain (run_io[γ] inp)` from the empty
+memory reaches is a value or takes a step.  `[spec §11, §14, §48]` -/
+theorem io_rt_every_run (c : Bool) {Γ : Ctx VTy} {e : Expr} {R R' : VTy}
+    (h : CDerives LifeCtx.empty Γ e
+      (.comp (.arr bytesTy (CTy.effOf [tickSigG c] (.sum R R')))))
+    {γ : List Val} (hγ : ExternsMeet Γ γ) {inp : Val} (hin : BytesV inp)
+    {μ₁ : Heap} {e₁ : Expr}
+    (hs : Steps (ℍ := ℍ) Adequacy.emptyMem (rtMain (.app (substAll γ e) (.val inp))) μ₁ e₁) :
+    IsVal e₁ ∨ ∃ μ₂ e₂, Step1 (ℍ := ℍ) μ₁ e₁ μ₂ e₂ := by
+  have hsem := fundamentalC (ℍ := ℍ) h LSub.empty γ [] PMap.empty Adequacy.models_empty
+    (gDenC_of_meets hγ [] LSub.empty)
+  have hwp := hsem inp PMap.empty PMap.empty (vC_bytes_iff.mpr ⟨rfl, hin⟩)
+    (ResU.comp_empty_right _)
+  have hc := (cC_effOf_wp [tickSigG c] (.sum R R') [] LSub.empty _ PMap.empty).mp hwp
+  rw [Row.divB_tickG] at hc
+  refine runtime_main_every_run_cwp c (fun ls v ρ hv => ?_) hc hs
+  rcases hv with ⟨a, -, -, -, ⟨-, rfl⟩, -⟩ | ⟨b, -, -, -, ⟨-, rfl⟩, -⟩
+  · exact .inl ⟨a, rfl⟩
+  · exact .inr ⟨b, rfl⟩
 
 end BoCa.Fig16.LogRel.Core
 

@@ -22,7 +22,8 @@ The standard externs, each with its type, its role, its model and its assurance 
   program, so it has a `CDerives` derivation at the context of the operations and the harness.
 * **The model run** (`IORun`). The checked wrapper with the model of each extern, chosen by
   type from `stdModel`, and the proofs `io_every_run` asks for: `IORun.every_run` is
-  `io_every_run` at it. `bcc interp` runs exactly `IORun.expr`.
+  `io_every_run` at it. `bcc interp` runs exactly `IORun.expr`, or, for a `main` the runtime's
+  clause drives, `rtMainE (IORun.expr inp)`, whose every run `IORun.rt_every_run` shows safe.
 -/
 
 namespace Frontend.Check
@@ -360,10 +361,7 @@ def rtMainOf : CCTy → Option (CVTy × CVTy)
 /-- `main` under the runtime's clause (`DivRuntime.rtH`), its answer `inl b` read as `b`. The
 runtime never answers a tick *close*, so `inr` is not reached; its branch is `Ω`, which runs
 forever and has every layout.  `[spec §48]` -/
-def rtMainE (e : Expr) : Expr :=
-  .app (.lam (.case (.var 0) (.var 0)
-    (.app (.lam (.app (.var 0) (.var 0))) (.lam (.app (.var 0) (.var 0))))))
-    (BoCa.BoLo.hndE BoCa.Fig16.LogRel.Core.DivRuntime.rtH e)
+def rtMainE (e : Expr) : Expr := BoCa.Fig16.LogRel.Core.DivRuntime.rtMain e
 
 /-- The externs of a checked `main`, and, when it has capabilities, its result type after them. -/
 def ioMainOf (p : Program) (c : Checked) : Except String (Option IOMain) := do
@@ -506,6 +504,19 @@ theorem IORun.loop_every_run (r : IORun) (hp : r.c.pins = []) (hl : r.loops = tr
   have h := r.c.deriv hp
   rw [r.hC, ioType, hr, hl, show r.c.t.erase = _ from r.he] at h
   exact io_loop_every_run h r.hR r.hR' r.hγ inp n hs
+
+/-- **The model run of a `main` the runtime's clause drives**: every configuration a run of
+`rtMainE (IORun.expr inp)` reaches from the empty memory, under every allocator, is a value or
+takes a step. `io_rt_every_run` at the checked wrapper. `[spec §11, §48]` -/
+theorem IORun.rt_every_run (r : IORun) (hp : r.c.pins = []) (hr : r.rt = true)
+    (inp : List UInt8)
+    {μ₁ : BoCa.BoLo.Heap} {e₁ : Expr}
+    (hs : BoCa.BoLo.Steps BoCa.Adequacy.emptyMem (rtMainE (r.expr inp)) μ₁ e₁) :
+    BoCa.IsVal e₁ ∨ ∃ μ₂ e₂, BoCa.BoLo.Step1 μ₁ e₁ μ₂ e₂ := by
+  have h := r.c.deriv hp
+  rw [r.hC, ioType, if_pos hr] at h
+  exact BoCa.Fig16.LogRel.Core.io_rt_every_run true h
+    (BoCa.Fig16.LogRel.Core.externsMeet_of_model r.hγ) (bytesVal_bytes inp) hs
 
 end
 
