@@ -406,6 +406,9 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
   | .cntSucc => do
     let i ← one (args.getD 0 0)
     emit d [add64 i (.c64 1)]
+  | .cntPred => do
+    let i ← one (args.getD 0 0)
+    emit d [.op (.bin .w64 .sub) [i, .c64 1]]
   | .clampLen => do
     let c ← one (args.getD 0 0)
     let t ← fresh1

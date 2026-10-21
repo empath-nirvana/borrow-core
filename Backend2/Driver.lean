@@ -159,6 +159,45 @@ def watOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String Str
 def llOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String String := do
   Backend.Native.printProg (← flatOf k counts) Backend.nativeTriple counts
 
+/-- **The new backend's compile, timed** (`bcc compile --backend new --timings`): `file`'s WAT, each
+stage's time and output size written to standard error as `Backend.compileWatTimed` writes the
+old backend's, then their total. The stages are the frontend's (parse, check, `main`'s I/O) and the
+new backend's (the LIR, its layouts, the 0-CFA, the word IR, Wasm, the printed module).
+A measurement of the new backend's compile time, outside the gate (SPEC §48). -/
+def watTimed (file src : String) : IO (Except String String) := do
+  let tot ← IO.mkRef 0
+  let stage {α} := @Backend.timed α (some tot)
+  let go : ExceptT String IO String := do
+    let p₀ ← ExceptT.mk <| stage "parse" (fun (p : Frontend.Program) => s!"{p.decls.length} declarations")
+      fun _ => match Frontend.parseProgram src (lib := Frontend.Sugar.libSrc) with
+        | .ok p => pure p
+        | .error e => throw s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
+    let r ← ExceptT.mk <| stage "check" (fun _ => "") fun _ =>
+      match Frontend.Check.checkProgram p₀ with
+        | .ok r => pure r
+        | .error e => throw s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
+    let some c := r.main | throw s!"{file}: no `main`"
+    let k ← ExceptT.mk <| stage "io main" (fun _ => "") fun _ =>
+      match Frontend.Check.ioMainOf r.el.prog c with
+        | .ok io => pure (⟨r.el.prog, c, io⟩ : Backend.CheckedProg)
+        | .error e => throw s!"{file}: {e}"
+    let (p, cs) ← ExceptT.mk <| stage "lir" (fun (q : Prog × CState) =>
+        s!"{q.1.fns.size} functions, {q.1.codes.size} codes") fun _ => lirOf k
+    let L ← ExceptT.mk <| stage "layout" (fun _ => "") fun _ => layoutsOf k p
+    let fs ← ExceptT.mk <| stage "flow" (fun _ => "") fun _ => pure (Flow.solution p L)
+    let flat ← ExceptT.mk <| stage "lower" (fun (q : Backend.Flat.Prog) => s!"{q.fns.size} functions")
+      fun _ => do
+        let p := LitViews.rewrite p cs.lits fs.sets
+        Low.lowerProg p L (Flow.known p L fs) (Frames.framed p) false
+    let wasm ← ExceptT.mk <| stage "wasm" (fun (m : Backend.Wasm.Module) => s!"{m.funcs.length} functions")
+      fun _ => pure (Backend.Wasm.lowerProg flat)
+    let wat ← ExceptT.mk <| stage "print" (fun (s : String) => s!"{s.utf8ByteSize} bytes")
+      fun _ => pure (Backend.Wasm.printModule wasm)
+    pure wat
+  let r ← go.run
+  IO.eprintln s!"total: {(← tot.get) / 1000000} ms"
+  pure r
+
 /-- A stage of the new backend on a checked program: `lir` is the LIR interpreter, `lflat` the
 word IR's interpreter at the new backend's lowering. -/
 def interpStage (stage : String) (k : Except String Backend.CheckedProg) (input : List UInt8)
