@@ -165,9 +165,9 @@ baseline).
 | 50 | [`countFold`](../Core/Fundamental.lean#L217) | §16 | 165 | 1018 | 3377 | erasure only (`count_loop`, `Flat/Lower.lean:1405`) | **A** | — |
 | 51 | [`countTry`](../Core/Fundamental.lean#L221) | §16 | 69 | 173 | 456 | erasure only (`count_try_loop`, `Flat/Lower.lean:1439`) | **A** | — |
 | 52 | [`boundedFix`](../Core/Fundamental.lean#L226) | §20 | 57 | 146 | 186 | erasure only (`fixValue`, `Convert.lean:243`) | **A** | — |
-| 53 | [`iterate`](../Core/Fundamental.lean#L230) | §14 | 0 | 0 | 0 | `expandIter` (`Convert.lean:875`) turns it into a fixed point; reached only by the kernel program `div-residual` | **C** | B2 (the `Div` elaboration as typed schemes), then N4 (`iterate` as an LIR loop). SPEC.md:7574: "the frontend does not elaborate to it yet" |
+| 53 | [`iterate`](../Core/Fundamental.lean#L230) | §14, §47 | 167 | 464 | 476 | `expandIter` (`Convert.lean:875`) turns it into a fixed point (one code calling itself, the step a closure); the new backend leaves it outside its fragment | **B** | B3 (`iterate` as a native loop in the old backend), N2 (in the new one) |
 | 54 | [`divFuel`](../Core/Fundamental.lean#L235) | §14 | 0 | 0 | 0 | generic; reached only by the kernel program `div-residual` | **C** | B2, then N4 |
-| 55 | [`reify`](../Core/Fundamental.lean#L240) | §14 | 0 | 0 | 0 | — | **C** | B2/N4 (N4's acceptance "no `drive` outside `reify`" plans it); no checker producer and no typed Core program |
+| 55 | [`reify`](../Core/Fundamental.lean#L240) | §14, §47 | 167 | 266 | 269 | erasure only: a deep handler of `Div` whose clause keeps `κ`, lowered by `Capture`'s state machine (`main`'s loop value, stored generators, the generator of a `for` that loops); the new backend leaves it outside its fragment | **B** | B3 (`main` under the runtime's clause; `reify` only where a loop is stored), N2 |
 | 56 | [`sliceBorrowM`](../Core/Fundamental.lean#L247) | §9 | 109 | 133 | 139 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `noalias` on the leaf borrows (#555 choice 6) |
 | 57 | [`sliceBorrowI`](../Core/Fundamental.lean#L254) | §9 | 151 | 655 | 1442 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `readonly` on the leaf borrows |
 | 58 | [`sliceGetM`](../Core/Fundamental.lean#L259) | §9 | 10 | 11 | 20 | erasure only | **A** | — |
@@ -352,7 +352,7 @@ produces, and `withI`'s code kind; `foldOwn`, `foldReuse`; `litFn`, `divLit`; `u
 **N3 (state machines):** `lendR` (R1's PinLaw lend held across a suspension), `effHandleVB`.
 
 **N4 (codata and loops):** `nuIn`, `nuOut`, `unfoldN` and their instances (`fixD`, `unfoldS`, …),
-with `Collapse` reading the node. `iterate`, `divFuel` and `reify` once B2 produces them.
+with `Collapse` reading the node. `iterate` and `reify`, which B2 (#644) produces.
 
 **N5 (target facts):**
 - Modes and extents of every borrow: `withbor1/2/3`, `withload`, `withswap`, the slice borrows,
@@ -360,8 +360,11 @@ with `Collapse` reading the node. `iterate`, `divFuel` and `reify` once B2 produ
 - Storage from lifetimes: `alloc`/`free`, `allocS`/`freeS`, `lendCell` (delete `markScoped`), `V.box`, `C.all`.
 - Bounds checks elided by `walk`'s proved fact (`walk_index_lt`).
 
-**B1/B2 (`Div` in the kernel, its elaboration as typed schemes):** `iterate`, `divFuel`, `reify`,
-`effHandleT` are proved and the checker has no producer for them. SPEC.md:7574 says so.
+**B1/B2 (`Div` in the kernel, its elaboration, #563, #644):** `iterate` and `reify` are produced by
+the `Div` elaboration (SPEC §47): every loop of a div body is `iterate`, every loop value `reify`.
+`divFuel` and `effHandleT` are proved and the checker has no producer for them: the surface's
+`div_fuel` is `lib/div.bc`'s, over a loop value, and no handler of another name wraps a computation
+that ticks (#564).
 
 **#632 (frames with exits) and #626 (`let mut` as a place):**
 - Every class-D producer in §8. These are the R2/R3 joins, `mutCap`, `escapingWriter`, LoopLend,
@@ -400,13 +403,12 @@ with `Collapse` reading the node. `iterate`, `divFuel` and `reify` once B2 produ
      bounds-checked.
    - `divLit`'s nonzero divisor proves the error arm is dead. 10 programs have one, and the arm
      is still compiled.
-3. **The checker has no producer at all for `iterate`, `divFuel`, `reify`, `effHandleT`, `letPoly` or
-   `lendLoopR`.**
-   - These are six proved rules, five of them with a `TExpr` constructor.
-   - The only programs that reach them are the kernel programs `div-residual` (`iterate`,
-     `divFuel`), `hof-two-rows` and `poly-id` (`letPoly`).
-   - `reify` and `effHandleT` have no typed program anywhere: no Core derivation and no checker
-     producer.
+3. **The checker has no producer at all for `divFuel`, `effHandleT`, `letPoly` or `lendLoopR`.**
+   - These are four proved rules, three of them with a `TExpr` constructor.
+   - The only programs that reach them are the kernel programs `div-residual` (`divFuel`),
+     `hof-two-rows` and `poly-id` (`letPoly`).
+   - `effHandleT` has no typed program anywhere: no Core derivation and no checker producer.
+   - `iterate` and `reify` are produced by the `Div` elaboration (SPEC §47, #644): 167 programs.
 4. **Qualifiers.**
    - Over 152 programs, `[handle]` nodes type 573 affine operations, 2 linear ones and no
      unrestricted one.
