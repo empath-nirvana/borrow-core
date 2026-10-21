@@ -299,10 +299,14 @@ leetcode/trees/0230-kth-smallest-element-in-a-bst 105 1 0 5650 5283 4544 # the i
 leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree 74 1 0 5788 5270 4756 # the input string; per case the line's tokens and two cells per node (Rust: one box)
 leetcode/trees/0297-serialize-and-deserialize-binary-tree 80 1 0 6127 5640 5021 # the input string; per case the line's tokens, two cells per node of each of two trees (Rust: one box), the two strings and the second string's tokens
 leetcode/trees/0572-subtree-of-another-tree 70 1 0 6371 5928 4618 # the input string; per case the line's tokens and two cells per node of each tree (Rust: one box); the comparisons allocate and copy nothing
+lend-call-copy 1 0 0 16 3 0
+lend-depth3 5 0 0 38 38 0
+lend-imm-copy 2 0 0 27 12 5
 lend-lib-each 2 0 0 44 12 11
 lend-lib-gen 1 0 0 4 4 0
 lend-lib-loop 3 0 0 34 22 4
 lend-mut 1 0 0 11 6 0
+lend-order3 1 0 0 13 8 0
 list-blocks 13 0 0 55 43 0
 list-capability 6 0 0 31 22 0
 list-generic 27 0 0 148 102 0 # the lists' nodes, one object each; no frame and no closure is allocated

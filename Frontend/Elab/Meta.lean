@@ -193,6 +193,10 @@ def _root_.Frontend.Comp.takeLends : Comp → Comp × List Ident
   | .letPair sp x y V M => let (V', a) := V.takeLends; (.letPair sp x y V' M, a)
   | .perform sp k i V => let (V', a) := V.takeLends; (.perform sp k i V', a)
   | .abort sp k i V => let (V', a) := V.takeLends; (.abort sp k i V', a)
+  -- A borrow's unwinding form (`unwindingC?`), `k <- return CONST; p <- return P; …`: its place.
+  | .bind sp k kA K@(.ret _ (.const _ _)) (.bind sp₂ p pA (.ret psp P) N l₂) l₁ =>
+    let (P', a) := P.takeLends
+    (.bind sp k kA K (.bind sp₂ p pA (.ret psp P') N l₂) l₁, a)
   | M => (M, [])
 end
 

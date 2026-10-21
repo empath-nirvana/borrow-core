@@ -129,6 +129,8 @@ def _root_.Frontend.Val.elab (lend : Bool) : Val → Except Error Val
 its `&c` outside nested binders becomes `c`. -/
 def _root_.Frontend.Comp.elab (lend : Bool) : Comp → Except Error Comp
   | .bind sp x A M N lin => do
+    -- In a head whose lend is taken, a borrow's unwinding form (`Comp.takeLends`): its place.
+    if lend then return .bind sp x A (← M.elab true) (← N.elab true) lin
     match M.takeLends.2 with
     | [] => return .bind sp x A (← M.elab false) (← N.elab false) lin
     | [c] =>
@@ -1587,19 +1589,27 @@ def eWalk (m : DCx) : Nat → TCx → Comp → EM Comp
     -- A borrow block whose body loops holds its lend across the body's ticks, at the graded row
     -- `div call` (`Row.Lend`, SPEC §48). Its body is a div body of its own, at the callback's
     -- row, which a close inside the lend leaves with the body's residual.
-    let lendBody (l : LendCb) : EM Comp := do
+    -- With `narrow`, a close inside the lend hands back the capabilities of the body that it
+    -- mentions, which the lend's callback holds; what follows the lend has the others.
+    let lendBody (l : LendCb) (narrow : Bool := false) : EM (Comp × CVTy) := do
       let some dom := c.elabL l.b | throw ⟨l.sp, "internal error: a lend's bound"⟩
       let c₁ := c.pushLife l.xi.name dom
       let .thunk _ (.all _ _ _ (.arr _ _ (.eff _ r X))) := l.T
         | throw ⟨l.sp, "internal error: a lend's callback"⟩
       let some Bc := c₁.elabV X | throw ⟨l.sp, "internal error: a lend's result"⟩
       let row ← (c₁.E.elabRow c₁.Δ l.sp r : Except Error Frontend.Check.CRow)
-      let lc : LoopCx := { m.L with B := Bc }
+      let used := m.L.parts.filter fun p => p.any fun (y, _) => Frontend.Check.mentionsC y l.S
+      let lc : LoopCx :=
+        if !narrow || used.length == m.L.parts.length then { m.L with B := Bc }
+        else if used.isEmpty then ⟨Bc, .unit, .unit, [], true⟩
+        else
+          let K := tupleT (used.map fun p => tupleT (p.map (·.2)))
+          ⟨Bc, .tensor K .unit, K, used, true⟩
       let ppl : CVTy → String := fun T => Frontend.Check.ppV c₁.E.lenv 0 0 T
       let ml : DCx := { L := lc, row := row, fwd := (rowNoDiv row).isEmpty, pp := ppl, pre := false }
-      eWalk ml n (c₁.push l.q.name (c₁.elabV l.Tq)) l.S
+      pure (← eWalk ml n (c₁.push l.q.name (c₁.elabV l.Tq)) l.S, lc.R)
     if let some l := lendCb? A M then
-      let (A', M') := l.bind (← eTy c sp m.L.R) (← lendBody l)
+      let (A', M') := l.bind (← eTy c sp m.L.R) (← lendBody l).1
       return .bind sp x A' M' (← eWalk m n (c.push x.name (bindTy c A M)) N) lin
     -- The unwinding form in the head, or run as a value (a lend at a call, `lendCall`).
     let (lendC, rerun) : Comp × (Comp → Comp) := (match M with
@@ -1614,11 +1624,11 @@ def eWalk (m : DCx) : Nat → TCx → Comp → EM Comp
             .ret ksp (.const csp C),
             some (.thunk ts₁ (.all ts₂ xv bv (.arr ts₃ L (.eff ts₄ r' (.box bxs a B₀)))))) :=
             (kA, K, fA) then
-          let Rs ← eTy c sp m.L.R
+          let (body, Rl) ← lendBody l (narrow := true)
+          let Rs ← eTy c sp Rl
           let B' : VTy := .sum bxs B₀ Rs
           let T' : VTy := .thunk ts₁ (.all ts₂ xv bv (.arr ts₃ L (.eff ts₄ r' (.box bxs a B'))))
           let kA' : VTy := .thunk ks₁ (.arr ks₂ src (.arr ks₃ T' (.eff ks₄ r (.tensor ks₅ src B'))))
-          let body ← lendBody l
           let sfx ← eFresh ""
           let lb := s!"io_lb{sfx}"
           let lv := s!"io_lv{sfx}"
@@ -1630,6 +1640,10 @@ def eWalk (m : DCx) : Nat → TCx → Comp → EM Comp
                 (.ret sp (.boxed sp a (.ascribe sp (.inl sp (.var sp lv)) B'))))
               ⟨lr, sp⟩ (.ret sp (.boxed sp a (.ascribe sp (.inr sp (.var sp lr)) B'))))
           let F' : Comp := .ret l.sp (.thunkv l.tsp (.lamL l.lsp l.xi l.b (.lam l.lamsp l.q l.Tq boxedBody)))
+          -- A place lent at the call (`&y`) is handed back beside the result, as `eCall`'s lend.
+          let (Pc, lendY) : Comp × Option Ident := match Pc with
+            | .ret psp (.lend _ y _) => (.ret psp (.var y.span y.name), some y)
+            | Pc => (Pc, none)
           let chain : Comp := .bind s₁ k (some kA') (.ret ksp (.const csp (C.withAns B')))
             (.bind s₂ p pA Pc (.bind s₃ f (some T') F' app l₃) l₂) l₁
           let BR : VTy := .sum sp (.tensor sp src B₀) Rs
@@ -1644,8 +1658,11 @@ def eWalk (m : DCx) : Nat → TCx → Comp → EM Comp
           let some B₀C := c.elabV B₀ | throw ⟨sp, "internal error: a lend's result"⟩
           let Bf : CVTy := .tensor srcC B₀C
           let exp := A.bind c.elabV
-          return ← eCall m n c (c.push x.name (exp <|> some Bf)) sp x A none call Bf m.L.R N
-        let (fA', F') := l.bind (← eTy c sp m.L.R) (← lendBody l)
+          let c' := match lendY with
+            | some y => (c.push y.name (some srcC)).push x.name (exp <|> some B₀C)
+            | none => c.push x.name (exp <|> some Bf)
+          return ← eCall m n c c' sp x A lendY call Bf Rl N
+        let (fA', F') := l.bind (← eTy c sp m.L.R) (← lendBody l).1
         let M' : Comp := rerun (.bind s₁ k kA K (.bind s₂ p pA Pc (.bind s₃ f fA' F' app l₃) l₂) l₁)
         return .bind sp x A M' (← eWalk m n (c.push x.name (bindTy c A M)) N) lin
     -- The step of a counted loop at the row: its body is a div body of its own, whose answer is

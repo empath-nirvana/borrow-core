@@ -1,0 +1,47 @@
+-- A lend held across the ticks of a callback of order three (SPEC §14, §48), in the shapes of
+-- PR #472's `bench` and `compose`: `bench` takes a function `go` that takes a function, builds
+-- `h = compose(inc, inc)`, and loops calling `go(h)`. `l` holds a `mut` borrow across `bench`'s
+-- ticks at each turn of its own loop, and `main` holds one across `l`'s, then a borrow block of the
+-- same cell across a `for` over the input whose body calls `bench`.
+--
+-- Answer: i32[7806] on the input `1203`. `twice(h)` is h(h(0)) = 4, and `bench(twice)` sums it
+-- three times, 12. `l` adds 12 twice (24) and answers 2; the block adds 12 plus each digit for
+-- the four bytes (48 + 6) and answers 4; the cell is 78. A lend that lost a store changes the
+-- hundreds.
+
+fn inc(s: i32) -> i32 = s + 1
+
+fn compose(f: !(i32 => i32), g: !(i32 => i32)) -> !(i32 => i32) = !{ x -> f(g(x)) }
+
+fn twice(f: !(i32 => i32)) -> i32 = f(f(0))
+
+fn bench(go: !(!(i32 => i32) => i32)) -> i32 =
+  let h = compose(inc, inc);
+  let mut k = 0;
+  let mut t = 0;
+  while k < 3 { t = t + go(h); k = k + 1 };
+  t
+
+def l : !(all 'a < top. mut 'a i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (m : mut 'a i32) ->
+    let mut k = 0;
+    while k < 2 {
+      let j = bench(twice);
+      modify m { v -> v + j };
+      k = k + 1
+    };
+    k)
+
+main -> i32 =
+  let a = alloc(0);
+  let r = l(&mut a);
+  let s = borrow mut a { m ->
+    let mut k = 0;
+    for b in bytes(&mut stdin) {
+      let j = bench(twice);
+      modify m { v -> v + j + to_i32(b) - 48 };
+      k = k + 1
+    };
+    k
+  };
+  free(a) * 100 + r + s

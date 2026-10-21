@@ -1,0 +1,45 @@
+-- Lends held across a div function's ticks, nested three deep (SPEC §14, §48). `main` lends its
+-- cell `a` to `l1`, `l1` lends its own cell `b` to `l2` at each turn of its loop, and `l2` lends
+-- its cell `c` to `l3` at each turn of its; `l3` loops, adding to the cell it borrows. Each lend
+-- is held across the callee's ticks: the borrow's unwinding form at the graded row `div call`,
+-- whose stops are resumed in their scope, so each caller's body is graded, and `main` is the
+-- computation `F[div call] …` the runtime's clause drives.
+--
+-- Answer: i32[42027]. `l3` adds 0 + 1 + 2 + 3 = 6 to its cell and answers 4; `l2` calls it twice,
+-- adding 4 to its borrow each time (8), and answers its cell plus its count, 12 + 2 = 14; `l1`
+-- calls `l2` three times, adding 14 to its borrow each time (42), and answers 24 + 3 = 27; `main`
+-- answers 42 * 1000 + 27. A lend that lost a store gives less in the thousands; a caller that lost
+-- its count gives less in the units.
+
+def l3 : !(all 'a < top. mut 'a i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (m : mut 'a i32) ->
+    let mut k = 0;
+    while k < 4 { modify m { v -> v + k }; k = k + 1 };
+    k)
+
+def l2 : !(all 'a < top. mut 'a i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (m : mut 'a i32) ->
+    let c = alloc(0);
+    let mut k = 0;
+    while k < 2 {
+      let j = l3(&mut c);
+      modify m { v -> v + j };
+      k = k + 1
+    };
+    free(c) + k)
+
+def l1 : !(all 'a < top. mut 'a i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (m : mut 'a i32) ->
+    let b = alloc(0);
+    let mut k = 0;
+    while k < 3 {
+      let j = l2(&mut b);
+      modify m { v -> v + j };
+      k = k + 1
+    };
+    free(b) + k)
+
+main -> i32 =
+  let a = alloc(0);
+  let r = l1(&mut a);
+  free(a) * 1000 + r
