@@ -103,3 +103,10 @@ import Core.ClauseOwn
 import Core.Aff
 import Core.AffRules
 import Core.AffPrograms
+import Core.FramesDefs
+import Core.FramesRules
+import Core.FramesElab
+import Core.FramesRuns
+import Core.FramesAccounting
+import Core.FramesTheorems
+import Core.FramesExamples
