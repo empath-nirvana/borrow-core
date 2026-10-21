@@ -145,7 +145,10 @@ main -> i32 =
 ```
 
 A borrow block around the loop, `borrow imm t { b -> for … { … get(b, …) … } }`, or
-`let tb = &t` before it, holds the lend across the loop's ticks, and is refused by the kernel:
+`let tb = &t` before it, holds the lend across the loop's ticks. The kernel admits that at the
+graded row `div call`, whose stops are resumed in their scope (SPEC §48), but the loop reads the
+borrow `b` at each turn, and an `imm` borrow is not copied implicitly (#58), so the checker refuses
+its second use:
 
 ```bc,reject
 fn tab(i: i32) -> i32 = i * 10
@@ -164,7 +167,7 @@ main -> i32 =
     acc
   };
   n
--- expect: 11:11: the row of an unwinding borrow's callback has only abortive operations, of names other than 0, whose arguments outlive every lifetime and do not mention its lifetime
+-- expect: 13:34: `b` is used twice here, and its type `imm 'io_l2 array i32` is not persistent
 ```
 
 The per-step lend is also library code for loops and stored generators written by hand:

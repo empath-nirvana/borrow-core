@@ -211,8 +211,9 @@ def Env.forVal (E : Env) : Env := { E with own := [], row := none }
 
 def ppRow (E : Env) (S : CRow) : String :=
   "[" ++ ", ".intercalate (S.map fun o =>
-    if o.n = BoCa.divEff ∧ o.i = 0 ∧ o.q = .lin ∧ o.A = .unit ∧ o.B = .sum .unit .unit then "div"
-    else s!"{o.n}.{o.i} {qualStr o.q} {E.ppV o.A} ~> {E.ppV o.B}") ++ "]"
+    if o.n = BoCa.divEff ∧ o.i = 0 ∧ o.q = .lin ∧ o.A = .unit ∧ o.B = .sum .unit .unit then
+      (if o.call then "div call" else "div")
+    else s!"{o.n}.{o.i} {if o.call && o.q == .lin then "call" else qualStr o.q} {E.ppV o.A} ~> {E.ppV o.B}") ++ "]"
 
 theorem Row.weak_of_unr {S : CRow} (h : S.Unr) : S.Weak := by
   obtain ⟨o, ho, hq⟩ := h

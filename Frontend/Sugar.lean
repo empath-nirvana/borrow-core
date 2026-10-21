@@ -518,6 +518,12 @@ def _root_.Frontend.Row.divGraded : Frontend.Row → Bool
   | .nil => false
   | .cons n i q _ _ rest => (n == 4294967295 && i == 0 && q == .call) || rest.divGraded
 
+/-- A step's written type `!U(P ⊸ F[r] X)` with its row's `tick` graded. -/
+def gradeStepTy : VTy → VTy
+  | .bang sp (.thunk tsp (.arr asp P (.eff esp r X))) =>
+    .bang sp (.thunk tsp (.arr asp P (.eff esp r.gradeDiv X)))
+  | T => T
+
 /-- A kernel row with its `tick` graded, `tickSigG true` (SPEC §48). -/
 def gradeRowC (S : Frontend.Check.CRow) : Frontend.Check.CRow :=
   S.map fun o => if isDivSig o then { o with call := true } else o
@@ -1645,6 +1651,8 @@ def eWalk (m : DCx) : Nat → TCx → Comp → EM Comp
     -- The step of a counted loop at the row: its body is a div body of its own, whose answer is
     -- the step's, and whose close hands back the variables the loop threads.
     if let .ret rsp (.app _ (.sugar _ (.rowStep ws ret)) (.bangThunkv vsp (.lam lsp q T K))) := M then
+      -- The step is at the body's row, graded with it (SPEC §48).
+      let A := if m.row.any (fun o => isDivSig o && o.call) then A.map gradeStepTy else A
       let some Fty := A.bind c.elabV
         | throw ⟨sp, "internal error: a counted loop's step at the row has no type"⟩
       let (Pt, Bs, Rs) ← match Fty with

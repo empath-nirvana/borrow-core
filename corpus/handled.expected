@@ -1036,6 +1036,7 @@ corpus/leetcode/trees/0572-subtree-of-another-tree.bc 1.0 abortive: branch; cond
 corpus/lend-lib-each.bc flows [0, 4294967295]; main []
 corpus/lend-lib-gen.bc flows [0, 4294967295]; main []
 corpus/lend-lib-loop.bc flows [0, 4294967295]; main []
+corpus/lend-mut.bc flows [0, 4294967295], finaliser; main [], finaliser
 corpus/list-blocks.bc flows [0, 2, 4294967295], finaliser; main [1, 2, 3], finaliser
 corpus/list-blocks.bc 22:12: handle 3: inside [], finaliser; row []; ops 3.0 abortive; names 3.0 []; condition 2 holds
 corpus/list-blocks.bc 19:3: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
