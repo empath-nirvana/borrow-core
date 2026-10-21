@@ -309,7 +309,9 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
     writeAt b (some v)
     pure (.loc b)
   | .free, [.loc a] => do
-    let v ← readAt a
+    -- A cell whose contents are `()` is freed without a read: an emptied frame slot is
+    -- unwritten (SPEC §47).
+    let v ← if resTy == LTy.unit then pure .unit else readAt a
     if a ≥ staticAt then return v
     freeObj a 1
     pure v
@@ -327,6 +329,14 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
     pure (.pair (.loc a) v)
   | .put, [.loc a, v] => do
     if ← isWritten a then bad "a put into a written cell"
+    writeAt a (some v)
+    pure (.loc a)
+  | .slotOut, [.loc a] => do
+    let v ← readAt a
+    writeAt a none
+    pure (.pair (.loc a) v)
+  | .slotIn, [.loc a, v] => do
+    if ← isWritten a then bad "a frame slot's put into a slot that is not empty"
     writeAt a (some v)
     pure (.loc a)
   | .newArr, [.int n] => do

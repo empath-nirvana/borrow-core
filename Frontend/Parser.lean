@@ -3,6 +3,7 @@ import Frontend.Consts
 import Frontend.FloatLit
 import Frontend.Elab.Hygiene
 import Frontend.Elab.Data
+import Frontend.Elab.Frames
 /-!
 # Frontend — Parser
 
@@ -158,6 +159,14 @@ end
 
 /-! ### The parser monad -/
 
+/-- `BCC_FRAMES=1`: `let mut` elaborated by the frame rules (#632, a prototype behind a flag): a
+`let mut` is a slot of its body's frame (`Frontend.Elab.Frames`).  `[spec §47]` -/
+initialize framesEnv : Bool ← do return (← IO.getEnv "BCC_FRAMES") == some "1"
+
+/-- `BCC_FRAMES_LIB=thread`: the library modules keep the threading elaboration under
+`BCC_FRAMES=1`, so that a program's own `let mut`s are measured apart from the library's. -/
+initialize framesLibEnv : Bool ← do return (← IO.getEnv "BCC_FRAMES_LIB") != some "thread"
+
 structure PState where
   toks : Array Token
   pos : Nat
@@ -212,6 +221,14 @@ structure PState where
   literal or a pattern (SPEC §42): the name there is a field's and a variable's, so a renaming of
   the variable writes `f: f'` (`bcc alpha`). -/
   shorthands : List Pos := []
+  /-- The frame elaboration of `let mut` (`framesEnv`), in a resolved source. -/
+  frameMode : Bool := false
+  /-- The frame's slots in scope (`frameMode`): each `let mut` variable is its cell. -/
+  slots : List String := []
+  /-- `x <- M` of a slot binds a fresh variable, stored into the slot after it (`frameMode`). -/
+  slotStores : List (String × String) := []
+  /-- Inside a closure, a block or a callback (`frameMode`): Core code, which sees no slot. -/
+  inCode : Bool := false
 
 abbrev P := StateT PState (Except Error)
 
@@ -327,9 +344,10 @@ def bindOrAssign (x : Ident) : P Ident := do
 /-- Parse a closure, block or borrow block's body: a statement `return e` in it is the core's. -/
 def inClosure {α} (p : P α) : P α := do
   let l₀ := (← get).inLoop
-  modify fun s => { s with inLoop := false }
+  let c₀ := (← get).inCode
+  modify fun s => { s with inLoop := false, inCode := true }
   let r ← p
-  modify fun s => { s with inLoop := l₀ }
+  modify fun s => { s with inLoop := l₀, inCode := c₀ }
   pure r
 
 /-- A frame of the write rule (SPEC §41, rule R2): `p` read with a write set of its own, and the
@@ -1281,6 +1299,102 @@ def forResOf (sp : Span) : Option Comp → Val
 /-- A binder type to be filled by the elaborator (a closure's, a borrow callback's). -/
 def holeTy (sp : Span) : VTy := .name sp "_"
 
+/-! ### `let mut` as a frame's slots (`frameMode`, #632)  `[spec §47]`
+
+The frame rules of `Core/FramesRules.lean`, applied to a surface body (`Frontend.Elab.Frames`): a
+`let mut` is a slot, each use of it is one lend of its cell, and a construct whose arms use slots
+hands them back by the rule `case`. -/
+
+/-- A frames builder over the parser's fresh names. -/
+def runFM {α} (m : Frames.FM α) : P α := do
+  let (a, n) := m.run (← get).fresh
+  modify fun s => { s with fresh := n }
+  pure a
+
+/-- The slots in scope that `M` mentions, innermost first. -/
+def slotsOf (M : Comp) : P (List String) := do
+  pure ((← get).slots.filter (fun y => Frames.cNames y M))
+
+/-- Whether `M` has arms through its tail positions, so that a construct after it is a join. -/
+def Comp.hasArms : Comp → Bool
+  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N | .loop _ _ _ _ _ N => N.hasArms
+  | .case .. => true
+  | _ => false
+
+/-- **The rules `case` and `bind` at a join** (`frameMode`): the arms of `M` hand back the slots
+`ps` they mention, `p` binds `M`'s value (dropped when none), and `N` takes the slots apart. -/
+def slotJoin (sp : Span) (n : Nat) (ps : List String) (p : Option Pat) (M N : Comp) : P Comp := do
+  let j ← freshName "io_fj"
+  let t ← freshName "io_ft"
+  let q := Pat.pair sp (p.getD (.wild sp)) (varPat sp ps)
+  return .bind sp ⟨j, sp⟩ none (Frames.handSlots t ps M) (← bindPat sp n q (.var sp j) N) false
+
+/-- The refusal of a write of a slot inside Core code (`frameMode`): a closure, a block or a
+callback that writes a slot is a frame-typed block (`callBlock`), which this prototype does not
+build (D4). -/
+def slotCodeWrite (sp : Span) (y : String) : P Unit := do
+  if (← get).inCode then
+    failAt sp (s!"frames (BCC_FRAMES=1): this closure, block or callback assigns the slot `{y}`. " ++
+      "A body that writes a slot is a frame-typed block (`callBlock`, generic in its slots at " ++
+      "its callee, D4), which this prototype does not build")
+
+/-- `x <- M` of a slot (`frameMode`): `M` bound to a fresh variable, stored into the slot after
+it. The binder, and the slot when it is one. -/
+def slotBinder (x : Ident) : P (Ident × Option String) := do
+  let s ← get
+  -- A slot is in scope only under the flag: `frameMode` is read only where one is, so that the
+  -- elaboration of a program without one reduces in the kernel (`Frontend/Tests.lean`).
+  if !s.slots.isEmpty then
+    if let some (y, b) := s.scope.lookup x.name then
+      if s.slots.contains y then
+        slotCodeWrite x.span y
+        let t ← freshName "io_fpt"
+        noteOcc x.span x.name y b
+        return ({ x with name := t }, some y)
+  return (← bindOrAssign x, none)
+
+/-- **The rule `lend` at a callback** (`frameMode`): a borrow block's or a `with`'s body that uses
+slots is a frame inside the lend: it hands back the slots it uses beside its result and the
+variables `thr` the block hands back, and the binding takes them apart (`blockThreads`). Outside
+the flag, or when the body uses no slot, the block's own hand-on of `thr`. -/
+def callbackSlots (M : Comp) (thr : List String) : P (Comp × List String) := do
+  if !(← get).slots.isEmpty && !(M.boundNames.contains "io_bt") then
+    let ps ← slotsOf M
+    unless ps.isEmpty do
+      let thr := thr ++ ps
+      return (Frames.handSlots "io_bt" thr M, thr)
+  pure (if thr.isEmpty then M else handOn { t := "io_bt" } thr M, thr)
+
+/-- A value that lends slots, with each lend through its slot's swap (`frameMode`,
+`Frames.wrapLends`); `mk` builds the innermost value. -/
+def slotLendsV (V : Val) (mk : Val → Val := id) (except : List String := []) : P Val := do
+  let s ← get
+  if s.slots.isEmpty then return mk V
+  let ys := Frames.lentSlots (s.slots.filter (!except.contains ·)) V
+  if ys.isEmpty then return mk V
+  runFM (Frames.wrapLends V.span mk ys V)
+
+/-- A tail value bound before it is returned when it lends (`frameMode`): a lend is made in the
+head of a binding, and what is around the tail (a turn's state, a join's slots) pairs it. -/
+def slotTail (sp : Span) (S : Comp) : P Comp := do
+  if (← get).slots.isEmpty then return S
+  match S with
+  | .ret _ V =>
+    if V.lends || (match V with | .app _ (.app _ (.sugar _ (.borrow .modify _)) _) _ => true | _ => false) then
+      let t ← freshName "io_fv"
+      return .bind sp ⟨t, sp⟩ none S (.ret sp (.var sp t)) false
+    pure S
+  | _ => pure S
+
+/-- The store of `t` into the slot `y`, before `N` (the rule `use` with `withswap`). -/
+def slotStored (sp : Span) (t : String) : Option String → Comp → P Comp
+  | none, N => pure N
+  | some y, N => do
+    let o ← freshName "io_fo"
+    let d ← freshName "io_fs"
+    let sw := Frames.swapV sp y o (.ret sp (.pair sp (.var sp t) (.unit sp)))
+    pure (.bind sp ⟨d, sp⟩ none (.ret sp sw) N false)
+
 mutual
 /-- A value-judged expression: a binding form (`thunk`, `thunkv`, `!thunk`, `!thunkv`), which
     extends as far right as possible, a block `{ … }` or `!{ … }`, or an operator expression. -/
@@ -1416,8 +1530,16 @@ def valPrefix : Nat → P Val
       -- `run M` hands back what `M` writes beside its value, which its binding takes apart
       -- (SPEC §41, rule R3).
       discard bump
-      let (M, w) ← inClosure (frame (compPrefix n))
+      let (M, w) ← inClosure (do
+        -- `run M` is a frame inside its binding (the rule `bind`), not Core code.
+        modify fun s => { s with inCode := false }
+        frame (compPrefix n))
       let sp ← spanFrom st
+      if w.isEmpty && !(← get).slots.isEmpty then
+        let ps ← slotsOf M
+        unless ps.isEmpty do
+          modify fun s => { s with blockThreads := ps, joined := [], pendingRun := some sp }
+          return .run sp (Frames.handSlots "io_bt" ps M)
       if w.isEmpty then return .run sp M
       modify fun s => { s with blockThreads := w, joined := [], pendingRun := some sp }
       pure (.run sp (handOn { t := "io_bt" } w M))
@@ -1652,6 +1774,8 @@ def borrowBlock : Nat → P Val
   | 0 => outOfFuel
   | n + 1 => do
     inClosure do
+    -- The body is a frame inside the lend (the rule `lend`), not Core code.
+    modify fun s => { s with inCode := false }
     let st ← startPos
     let t ← bump
     let k ← if t.tok == .kw "modify" then pure BorrowKind.modify else
@@ -1659,6 +1783,16 @@ def borrowBlock : Nat → P Val
       else if ← isKw "mut" then discard bump; pure .mut
       else expected "`imm` or `mut` after `borrow`"
     let place ← valPrefix n
+    -- A borrow block of a slot lends its cell (`frameMode`, the rule `use`).
+    let slots₀ := (← get).slots
+    let slotPlace : Option String := match Frames.mark? place with
+      | some y => if slots₀.contains y && k != .modify then some y else none
+      | none => none
+    let place := match Frames.mark? place with
+      | some y => if slots₀.contains y then
+          (if k == .modify then Val.lend place.span ⟨y, place.span⟩ .mut else Val.var place.span y)
+        else place
+      | none => place
     -- A borrow block rebinds its place: a write of a `let mut` place (SPEC §41, rule R2).
     if let .var _ x := place then notePlaceWrite x
     let k := match k, place with
@@ -1687,13 +1821,21 @@ def borrowBlock : Nat → P Val
     -- `modify` hands back only the variables it writes: its body's value is the place's new
     -- content.
     let thr := if bound.contains "io_bt" then [] else if k == .modify then w else thr
-    let M := if thr.isEmpty then M else handOn { t := "io_bt" } thr M
+    let (M, thr) ← callbackSlots M thr
     modify fun s => { s with blockThreads := thr, joined := [] }
     let (b, M) ← match p with
       | .var b => pure (b, M)
       | p => do
         let b : Ident := ⟨← freshName "io_c", sp⟩
         pure (b, ← bindPat sp n p (.var sp b.name) M)
+    -- A borrow block of a slot borrows its content by the value's own rules (`frameMode`): the
+    -- content swapped out of the cell, borrowed, and swapped back, `modify &mut y { v -> borrow
+    -- k v { … } }` (the rule `use`); the block's value `(v, r)` is the swap's.
+    if let some y := slotPlace then
+      let v ← freshName "io_fbv"
+      let blk : Val := .app sp (.app sp (.sugar t.span (.borrow k x)) (.var sp v))
+        (.thunkv sp (.lam sp b (holeTy sp) M))
+      return Frames.swapV sp y v (.ret sp blk)
     pure (.app sp (.app sp (.sugar t.span (.borrow k x)) place)
       (.thunkv sp (.lam sp b (holeTy sp) M)))
 
@@ -1706,6 +1848,8 @@ def withBlock : Nat → P Val
   | 0 => outOfFuel
   | n + 1 => do
     inClosure do
+    -- The body is a frame inside the handler (the rules `lend` and `under`), not Core code.
+    modify fun s => { s with inCode := false }
     let st ← startPos
     let t ← bump
     -- `with n = h(…) { S }`: the handler named `n` (SPEC §38).
@@ -1754,7 +1898,7 @@ def withBlock : Nat → P Val
     let thr := (w ++ (M.lentNames.filter (fun x => !bound.contains x)) ++ M.withPlaces [b.name] ++
       caps).eraseDups
     let thr := if bound.contains "io_bt" then [] else thr
-    let M := if thr.isEmpty then M else handOn { t := "io_bt" } thr M
+    let (M, thr) ← callbackSlots M thr
     modify fun s => { s with blockThreads := thr, joined := [] }
     pure (.app sp (.app sp (.sugar t.span (.handle h.name x As nm)) place)
       (.thunkv sp (.lam sp b (holeTy sp) M)))
@@ -1805,7 +1949,11 @@ def valAtom : Nat → P Val
         let As ← tyList n (fuelPerToken * ((← get).toks.size + 1))
         expectSym "]"
         pure (.defApp (← spanFrom st) s As)
-      else pure (.var t.span (← lookName s t.span))
+      else
+        let y ← lookName s t.span
+        -- A read of a slot is a load (`frameMode`, `Frames.slotLoads`).
+        if (← get).slots.contains y then return Frames.mark t.span y
+        pure (.var t.span y)
     | .int k => discard bump; pure (.sugar t.span (.lit k))
     | .flt x => discard bump; let (m, e) := decOfText x; pure (.sugar t.span (.flit m e))
     | .str bs => discard bump; pure (.sugar t.span (.str bs))
@@ -1925,9 +2073,16 @@ def compG : Nat → Bool → P Comp
       let D ← unwindOf n
       expectSym ";"
       withScope do
-      let x ← bindOrAssign ⟨x, t.span⟩
+      let (x, sl) ← slotBinder ⟨x, t.span⟩
       let N ← comp n
       let sp ← spanFrom st
+      let N ← slotStored sp x.name sl N
+      let M ← match M with
+        | .ret rsp V => do pure (Comp.ret rsp (← slotLendsV V))
+        | M => pure M
+      if M.hasArms && D.isNone && !(← get).slots.isEmpty then
+        let ps ← slotsOf M
+        unless ps.isEmpty do return ← slotJoin sp n ps (some (.var x)) M N
       bindForm sp n x none M D N false xs
     | .ident x, .sym ":" =>
       discard bump; discard bump
@@ -1937,15 +2092,28 @@ def compG : Nat → Bool → P Comp
       let D ← unwindOf n
       expectSym ";"
       withScope do
-      let x ← bindOrAssign ⟨x, t.span⟩
+      let (x, sl) ← slotBinder ⟨x, t.span⟩
       let N ← comp n
       let sp ← spanFrom st
+      let N ← slotStored sp x.name sl N
+      let M ← match M with
+        | .ret rsp V => do pure (Comp.ret rsp (← slotLendsV V))
+        | M => pure M
+      if M.hasArms && D.isNone && !(← get).slots.isEmpty then
+        let ps ← slotsOf M
+        unless ps.isEmpty do
+          let j ← freshName "io_fj"
+          let v ← freshName "io_fv"
+          let N' := Comp.bind sp x (some A) (.ret sp (.var sp v)) N false
+          return ← slotJoin sp n ps (some (.var ⟨v, sp⟩)) M N'
       bindForm sp n x (some A) M D N false xs
     | .ident x₀, .sym "=" =>
       -- `x = e`: a `let mut` variable rebound (typed elaboration §5.2), the variable the name
       -- resolves to (SPEC §41, rule R2).
       discard bump; discard bump
       let x ← lookName x₀ t.span
+      if (← get).slots.contains x then
+        return ← slotStore n st head x t.span
       unless (← get).muts.contains x do
         failAt t.span s!"`{x₀}` is assigned, but it is not declared `let mut`"
       modify fun s => { s with assigned := x :: s.assigned, blockThreads := [], pendingRun := none }
@@ -1972,8 +2140,16 @@ def compG : Nat → Bool → P Comp
       let (M, xs) ← frame (compG n true)
       expectSym ";"
       withScope do
-      let x ← bindOrAssign ⟨x, xt.span⟩
+      let (x, sl) ← slotBinder ⟨x, xt.span⟩
       let N ← comp n
+      let N ← slotStored (← spanFrom st) x.name sl N
+      if M.hasArms && !(← get).slots.isEmpty then
+        let ps ← slotsOf M
+        unless ps.isEmpty do
+          let sp ← spanFrom st
+          let v ← freshName "io_fv"
+          let N' := Comp.bind sp x A (.ret sp (.var sp v)) N true
+          return ← slotJoin sp n ps (some (.var ⟨v, sp⟩)) M N'
       bindForm (← spanFrom st) n x A M none N true xs
     | .kw "for", _ | .kw "while", _ | .kw "loop", .sym "{" => loopC n st none
     | .life l, .sym ":" =>
@@ -2058,6 +2234,9 @@ def compG : Nat → Bool → P Comp
         let p ← bindP
         let N ← comp n
         let sp ← spanFrom st
+        if M.hasArms && !(← get).slots.isEmpty then
+          let ps ← slotsOf M
+          unless ps.isEmpty do return ← slotJoin sp n ps (some p) M N
         -- The `let mut` variables its arms assign are handed on to what follows.
         unless xs.isEmpty do
           return ← joinBind sp n xs (some p) (handOn { t := "io_jr", A, direct := true } xs M) N
@@ -2080,6 +2259,26 @@ def compG : Nat → Bool → P Comp
       let thr := (← get).blockThreads
       checkRun V
       expectSym ";"
+      let V ← slotLendsV V
+      -- `let mut x = V; N`: a slot (the rule `new`).
+      if isMut && (← get).frameMode then
+        if let .var x := p then
+          if !capabilityNames.contains x.name then
+            let x ← bindName x
+            let sp ← spanFrom st
+            let V := match A with | some A => Val.ascribe sp V A | none => V
+            return ← slotScope n sp x V
+      -- `let (x, q) = f(…, x, …)` of a slot: the swap `modify &mut x { o -> f(…, o, …) }`.
+      if let (.pair _ (.var x) q, .app _ _ args) := (p, V) then
+        if let some (y, b) := (← get).scope.lookup x.name then
+          if (← get).slots.contains y && (argsOf args).any (Frames.mark? · == some y) then
+            slotCodeWrite x.span y
+            noteOcc x.span x.name y b
+            let o ← freshName "io_fo"
+            let q ← bindPatNames q
+            let N ← comp n
+            let sp ← spanFrom st
+            return ← letVal sp n q A (Frames.swapV sp y o (.ret sp (Frames.vReads y o V))) N thr
       let p ← bindP (some V)
       let N ← comp n
       letVal (← spanFrom st) n p A V N thr
@@ -2104,6 +2303,53 @@ def compG : Nat → Bool → P Comp
       let M ← comp n
       pure (.lamL (← spanFrom st) x b M)
     | _, _ => statement n st head
+
+/-- **The rule `new`** (`frameMode`): `let mut x = V; N` is the cell `alloc(V)`, the slot `x` of
+`N`'s frame. `N`'s reads of `x` are loads (`Frames.slotLoads`); at `N`'s normal end the cell is
+freed and its last content read where `N`'s value reads `x` (`Frames.slotEnd`). -/
+def slotScope : Nat → Span → Ident → Val → P Comp
+  | 0, _, _, _ => outOfFuel
+  | n + 1, sp, x, V => do
+    let s₀ := (← get).slots
+    modify fun s => { s with slots := x.name :: s.slots }
+    let N ← comp n
+    modify fun s => { s with slots := s₀ }
+    let d ← freshName "io_fd"
+    let N ← runFM (Frames.slotLoads x.name (Frames.slotEnd x.name d N))
+    pure (.bind sp x none (.ret sp (.app sp (.sugar sp (.call "alloc")) V)) N false)
+
+/-- `x = V` of the slot `x` (`frameMode`): the store `modify &mut x { o -> (V, ()) }`, `V` reading
+`x` as `o`, the old content (the rule `use` with `withswap`); then what follows. -/
+def slotStore : Nat → Pos → Bool → String → Span → P Comp
+  | 0, _, _, _, _ => outOfFuel
+  | n + 1, st, head, x, xsp => do
+    slotCodeWrite xsp x
+    let V ← val n
+    let o ← freshName "io_fo"
+    let d ← freshName "io_fs"
+    -- A value that does not read the slot is evaluated first, as Core code, and stored after:
+    -- the swap's callback then does nothing but the store. One that reads it takes the old
+    -- content `o` in the swap (`x = push(x, 1)` of a linear content).
+    let (pre, V) ← if Frames.vNames x V then pure (none, V) else do
+      let t ← freshName "io_fst"
+      pure (some t, V)
+    let sw ← match pre with
+      | some t => pure (Frames.swapV xsp x o (.ret xsp (.pair xsp (.var xsp t) (.unit xsp))))
+      | none =>
+        let mk : Val → Val := fun W => Frames.swapV xsp x o (.ret xsp (.pair xsp (Frames.vReads x o W) (.unit xsp)))
+        slotLendsV V (except := [x]) mk
+    let wrapPre (M : Comp) : P Comp := match pre with
+      | some t => do
+        let V' ← slotLendsV V
+        pure (.bind V.span ⟨t, V.span⟩ none (.ret V.span V') M false)
+      | none => pure M
+    if !head && (← isSym ";") then
+      discard bump
+      let N ← comp n
+      let sp ← spanFrom st
+      return ← wrapPre (.bind sp ⟨d, sp⟩ none (.ret sp sw) N false)
+    let sp ← spanFrom st
+    wrapPre (.bind sp ⟨d, sp⟩ none (.ret sp sw) (.ret sp (.var sp d)) false)
 
 /-- `x.f = e`, a field update (SPEC §42, E6): `modify &mut x { r -> (r).{f = e} }` of a `let mut`
 `x`, or `modify x { r -> … }`, whose body rebuilds the record `r` with `e` at `f` (`VSugar.update`,
@@ -2209,7 +2455,8 @@ def statement : Nat → Pos → Bool → P Comp
         else if let some V ← fieldUpdate n then pure (Comp.ret (← spanFrom st) V, V.rebinds)
         else do
           let V ← val n
-          pure (Comp.ret (← spanFrom st) V, V.rebinds)
+          let W ← slotLendsV V
+          pure (Comp.ret (← spanFrom st) W, if W == V then V.rebinds else none)
     let joined := (← get).joined
     let thr := (← get).blockThreads
     -- A frame's value: a borrow block or `modify` on a place, which rebinds it, or a frame that
@@ -2227,6 +2474,10 @@ def statement : Nat → Pos → Bool → P Comp
       -- A `match` or `if` that assigns `let mut` variables hands them on to what follows.
       if !joined.isEmpty then
         return ← joinBind sp n joined none (handArms joined S) N
+      -- A construct whose arms use slots hands them back (`frameMode`, the rule `case`).
+      if S.hasArms && !(← get).slots.isEmpty then
+        let ps ← slotsOf S
+        unless ps.isEmpty do return ← slotJoin sp n ps none S N
       match frameV with
       | some V => letVal sp n (.wild sp) none V N thr
       | none =>
@@ -2239,7 +2490,7 @@ def statement : Nat → Pos → Bool → P Comp
         let sp ← spanFrom st
         let v ← freshName "io_v"
         letVal sp n (.var ⟨v, sp⟩) none V (.ret sp (.var sp v)) thr
-      | none => pure S
+      | none => slotTail (← spanFrom st) S
 
 /-- A prefix keyword applied to its operand, or a spine. -/
 def compPrefix : Nat → P Comp
@@ -2696,7 +2947,7 @@ def decl (n : Nat) : P Decl := do
       let H ← vty n
       expectSym "="
       let V ← if printed then val n else do
-        modify fun s => { s with muts := [], assigned := [], surf := true }
+        modify fun s => { s with muts := [], slots := [], assigned := [], surf := true }
         let M ← comp n
         modify fun s => { s with surf := false }
         pure (Val.thunk M.span M)
@@ -2848,7 +3099,7 @@ def decl (n : Nat) : P Decl := do
         if ← isSym "," then discard bump
       expectSym ")"
       expectSym "="
-      modify fun s => { s with muts := mutPs, assigned := [], surf := true, scope := pScope }
+      modify fun s => { s with muts := mutPs, slots := [], assigned := [], surf := true, scope := pScope }
       for x in xs.toList do pushBinder x x.name
       let M ← if ← isSym "{" then do
           discard bump
@@ -2856,7 +3107,7 @@ def decl (n : Nat) : P Decl := do
           expectSym "}"
           pure M
         else compG n true
-      modify fun s => { s with muts := [], assigned := [], surf := false, scope := [] }
+      modify fun s => { s with muts := [], slots := [], assigned := [], surf := false, scope := [] }
       if isRet then
         let some x := xs[0]? | failAt o.span "`return(x) = M`: the return clause binds the body's value"
         ret := some (x, M)
@@ -2899,14 +3150,14 @@ def decl (n : Nat) : P Decl := do
         | .error _ => liftSort T.toC
       expectSym "="
       -- Each declaration's `let mut` variables are its own.
-      modify fun s => { s with surf := true, muts := [], assigned := [], scope := [] }
+      modify fun s => { s with surf := true, muts := [], slots := [], assigned := [], scope := [] }
       let M ← comp n
       modify fun s => { s with surf := false }
       return .main (← spanFrom st) C M
     expectSym ":"
     let C ← cty n
     expectSym "="
-    modify fun s => { s with muts := [], assigned := [], scope := [] }
+    modify fun s => { s with muts := [], slots := [], assigned := [], scope := [] }
     let M ← comp n
     pure (.main (← spanFrom st) C M)
   | _ => expected "a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`)"
@@ -2928,7 +3179,7 @@ where
     expectSym ":"
     let A ← vty n
     expectSym "="
-    modify fun s => { s with muts := [], assigned := [], scope := [] }
+    modify fun s => { s with muts := [], slots := [], assigned := [], scope := [] }
     let V ← val n
     pure (.def_ (← spanFrom st) x ps A V mk)
   /-- A `fn` after its keyword (draft 0 §2.5): `name[P₁, …]<'a, …>(x₁: A₁, …, xₙ: Aₙ) -> T = S`,
@@ -2958,7 +3209,7 @@ where
     let ns := if nes.all (·.1.isNone) then [] else nes.map (·.1)
     let bs ← whereBounds tps (lives.map (·.1.name))
     expectSym "="
-    modify fun s => { s with muts := [], assigned := [], surf := true, scope := [] }
+    modify fun s => { s with muts := [], slots := [], assigned := [], surf := true, scope := [] }
     for x in ps.map (·.1) do pushBinder x x.name
     let M ← comp n
     modify fun s => { s with surf := false, scope := [] }
@@ -3115,8 +3366,8 @@ def decls (n : Nat) : Nat → List Decl → P (List Decl)
 /-- Run a parser over the tokens of `src`, requiring it to consume all of them. With `resolve`,
 each name is resolved to its binder (SPEC §41, rule R1), and no fresh binder is named as a name
 of the source. -/
-def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data : Data.Table := []) :
-    Except Error (α × PState) := do
+def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data : Data.Table := [])
+    (isLib : Bool := false) : Except Error (α × PState) := do
   let toks ← lex src
   let fuel := fuelPerToken * (toks.size + 1)
   let go : P α := do
@@ -3126,7 +3377,8 @@ def runPS {α} (p : Nat → P α) (src : String) (resolve : Bool := false) (data
   let taken := if resolve then toks.toList.filterMap (fun t => match t.tok with
     | .ident s => some s
     | _ => none) |>.eraseDups else []
-  go.run { toks, pos := 0, lastStop := ⟨1, 1⟩, resolve, taken, data }
+  go.run { toks, pos := 0, lastStop := ⟨1, 1⟩, resolve, taken, data,
+           frameMode := resolve && framesEnv && (!isLib || framesLibEnv) }
 
 /-- The `data` declarations written in the tokens `toks`, each read where it is (SPEC §42): a
 declaration is in scope in its whole module. A declaration that does not read is left to the
@@ -3179,10 +3431,11 @@ def dataOf (lib : String → Option String) (src : String) : Data.Table :=
 /-- The declarations of a source file. At most one `main` is accepted. Its names are resolved
 (`resolve`) unless it is code the elaborator generated. -/
 def parseProgram (src : String) (resolve : Bool := true)
-    (lib : String → Option String := fun _ => none) : Except Error Program := do
+    (lib : String → Option String := fun _ => none) (isLib : Bool := false) :
+    Except Error Program := do
   -- The `data` declarations in scope (SPEC §42): the prelude's, the included modules', the
   -- program's own.
-  let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src)
+  let ds ← (·.1) <$> runPS (fun n => decls n n []) src resolve (dataOf lib src) isLib
   let mains := ds.filter fun | .main .. => true | _ => false
   match mains with
   | _ :: .main sp _ _ :: _ => .error ⟨sp, "a program has at most one `main`"⟩

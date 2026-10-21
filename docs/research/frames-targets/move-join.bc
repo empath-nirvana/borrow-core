@@ -1,0 +1,13 @@
+-- A slot moved out on one arm only: the join hands it back as `ref A + ref 1`, `inl` full and
+-- `inr` emptied (the rule `widen`), and its release at the end of its scope reads the tag.
+-- Answer: i32[5].
+fn consume(v: array i32 * i32) -> i32 =
+  let (a, n) = v;
+  array_free[i32](!{ x -> () }, a);
+  n
+
+main -> i32 =
+  let mut s = (array_new[i32](2, !{ i -> 0 }), 5);
+  let k = 1;
+  let r = if k == 1 { consume(s) } else { 0 };
+  r

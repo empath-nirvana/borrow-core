@@ -327,6 +327,10 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
     | .load => joinRe (← kid (← a 0) 0) dst
     | .take => do join (← kid dst 0) (← a 0); join (← kid dst 1) (← kid (← a 0) 0)
     | .put => do join (← kid (← a 0) 0) (← a 1); join dst (← a 0)
+    -- A frame slot's cell before and after a strong update are not one place: its contents are
+    -- of different types (`swap`'s).
+    | .slotOut => join (← kid dst 1) (← kid (← a 0) 0)
+    | .slotIn => join (← kid dst 0) (← a 1)
     | .slotPut => do join (← kid (← kid (← a 0) 0) 0) (← a 2); join dst (← a 0)
     | .slotTake => do
       join (← kid dst 0) (← a 0)

@@ -154,6 +154,11 @@ def walkGets : Nat → TExpr → Nat
     | .walk .. => 0
     | t => (t.children.map fun (_, c) => walkGets f c).foldl (· + ·) 0
 
+/-- The cell of a frame slot's strong update `swap x v` (SPEC §47): the variable `x`. -/
+def slotVar? : Expr → Option Nat
+  | .app (.app _ (.var x)) _ => some x
+  | _ => none
+
 /-- A marked scheme's derived node over its checked term `r`, when `r`'s erasure is the scheme's
 (`divLitB`, `walkB`, `selfCallB`, `lendCellB`): `none` otherwise. -/
 def rMarked {j : Jdg} (k : Frontend.SchemeMark) (r : Res Δ T j) : Option (Res Δ T j) :=
@@ -182,6 +187,13 @@ def rMarked {j : Jdg} (k : Frontend.SchemeMark) (r : Res Δ T j) : Option (Res �
     if hb : lendCellB r.t.erase = true then
       some ⟨.lendCell i j m r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.lendCell i m hb h⟩
     else none
+  | .slot op =>
+    match slotVar? r.t.erase with
+    | some x =>
+      if hb : slotB op x r.t.erase = true then
+        some ⟨.slot i j op x r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.slot i op x hb h⟩
+      else none
+    | none => none
 
 /-! ### Structural value rules -/
 

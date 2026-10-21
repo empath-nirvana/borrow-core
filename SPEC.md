@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.94 · 2026-10-20
+Version 0.95 · 2026-10-20
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8090,6 +8090,163 @@ stores, which go down (209 → 161, 49 → 25): the walk's copy and length insid
 - That the read the step makes is the one its `walkGet` node marks is the elaboration's mark,
   counted by the checker.
 
+## 47. Entry 46 — frames into Core, with typestate slots (#639)
+
+### Motivation
+
+#632 is the kernel's theory of exits: control flow with several exits, each handing back every
+lend. PR #634 proved it in `experiments/Frames` and tried it on `let mut` behind a flag. Its
+largest class of refusals (A3a, 55 programs, and A3b's views and A4's cells, 79 in all) was a
+slot's linear content moved out: a load copies, and a slot had no hole. #639 moves frames into
+`Core/` and gives slots a **typestate**, so that a slot may be emptied and filled again. A hole is
+a derived form: `Ref 1` is a cell that owns nothing (SPEC §6's reuse token), `swap` changes a
+cell's content type (§5, *Cell classes*), a move out is `swap c ()` and a put back `swap c a`, a
+join of two states is `Ref A ⊕ Ref 1` whose tag is the drop flag, and the drop is `free`.
+
+### Language
+
+No change to `VTy`, `CTy`, `CDerives`, the relation, the machine or `Paper/`/`Support/`. Without
+`BCC_FRAMES=1` the parser, the elaboration, every program's kernel term, output, goldens, exit
+status and counts are as they were.
+
+### The frame judgment (`Core/FramesDefs.lean`, `Core/FramesRules.lean`)
+
+The frame type is a derived computation type:
+
+    Fr Σ Π Πn Πx E A  ≜  Π ⊸ F_Σ ((Πn ⊗ A) ⊕ (Πx ⊗ ⊕E))          (frTy)
+
+`Π` is the slots' states on entry, `Πn` at the normal exit, `Πx` at every local exit; `E` is the
+exit row (a stack, innermost catcher first) and `A` the normal answer. At `Π = Πn = Πx` it is
+#632's `Π ⊸ F_Σ (Π ⊗ (A ⊕ ⊕E))`, the slots distributed over the sum. The normal and the local
+exits have a state each, not one `Π_out` for both as #639's text wrote: in `bind M (x. N)` an exit
+of `M` skips `N`, so it leaves at `M`'s state, and `N`'s normal state is in general no widening of
+it (a move out followed by a put back, inside a loop, leaves `M` at `Ref 1` and `N` at `Ref A`).
+With the two states, `bind` composes at any exit row; every exit of a frame leaves at the one
+state `Πx`, and `exit k` leaves at the state where it is.
+
+A slot is `SlotOk`: an owned cell `Ref A` whose content has a destructor, a borrow `Mut @a A`,
+or `P ⊕ Q` of two slots, the tag its drop flag. A frame's own cell (`new`) ends in a `CellSt`:
+`full A` (`Ref A`; a hole is `full 1`) or `sum s t`, released by `CellSt.relE` (`free` under the
+case on the tags) and its content `CellSt.content` handed out. `Widens ws Π Π'` widens a tuple slot
+by slot (`keep`, `inl`, `inr`) by the closed function `widE ws`.
+
+`FDerives Δ Γ Φ Π Πn Πx e Σ E A`, 16 derived rules, the elaborated term `e` an index:
+
+| rule | slots: entry → normal / exits | exit row |
+|---|---|---|
+| `core N` | `Π → Π / any` | any |
+| `exit k V` | `Π → any / Π` | `E[k] = (l, B)` |
+| `bind M (x. N)` | `M : Π₀ → Π₁ / Πx`, `N : Π₁ → Π₂ / Πx` gives `Π₀ → Π₂ / Πx` | the premises' |
+| `case V M₁ M₂` | both arms the same | the premises' |
+| `catch M (b. H)` | `M : Π → Πn / Πx` at `(l, B) :: E`, `H : Πx → Πn / Πx` | `E` |
+| `under M` | the head slot `Q` added to every state | the premise's |
+| `use N` | `src :: Π → src :: Π / any` | any |
+| `lend M` | `Mut 'x A :: …` inside, `src :: …` outside, every state | the premise's |
+| `new V M` | `Ref A :: Π → q :: Πn / Q' :: Πx` inside; outside `Π → Πn / Πx`, answer `B ⊗ content q` | the premise's |
+| `swap V` | `Ref A :: Π → Ref B :: Π / any`, answer `A` | any |
+| `caseSlot M₁ M₂` | `(P₁ ⊕ P₂) :: Π`: `M₁` at `P₁`, `M₂` at `P₂` | the premises' |
+| `widen M` | `Πn` and `Πx` widened | the premise's |
+| `loopCount`, `loopIter` | the turn `Π → Π / Πx`; the loop `Π → Πx / Πx`, the source's end widened | the turn's minus its head |
+| `callBlock` | the block's | the block's |
+| `sub` | unchanged | unchanged |
+
+### Theorems (`Core/FramesElab.lean`, `Core/FramesRuns.lean`, `Core/FramesAccounting.lean`, `Core/FramesTheorems.lean`, `Core/FramesExamples.lean`)
+
+- `FDerives.elab`: every frame is a `CDerives` derivation at its frame type, one lemma per rule;
+  `frame_sound` (`fundamentalC`), `runFrame_derives`, `frame_adequacy` (`adequacyD_obs`).
+- `accounting`: every frame's elaboration, at every closing substitution, hands back the cells
+  of the slots it is given. `Returns e ≜ ∀ π, Rets π (e π)`; `Rets π` is coinductive (a div loop
+  ticks forever), and its answers satisfy `AnsQ π`: `inl (π', a)` or `inr (π', e)` with
+  `SameCells π π'`, the same cells at the same positions once the drop flags are erased
+  (`slotCells`). One induction over `FDerives`, one lemma per rule; the shared lemmas are each
+  about one term (`retsG_wid`, `retsG_swap`, `swap_steps`, the run lemmas of `FramesRuns.lean`).
+- `core_conservative` (`core N` runs as `N`), `core_embeds`, `block_returns`; `frame_handled` and
+  `frame_unwind_leakfree` (raise and abort are §19's `[handle]`, with no frame rule).
+- Not vacuous: `not_returns_swap` (a typed Core term at the frame type that swaps two slots fails
+  the accounting); `nested_derives`/`nested_returns` (depth 4, an exit across a loop);
+  `moveJoin_derives`/`moveJoin_returns` (a move out, a put back on one arm, the join `widen`ed into
+  `Ref i32 ⊕ Ref 1`, the release reading the tag).
+
+### `let mut` as frame slots, behind `BCC_FRAMES=1`
+
+PR #634's prototype (`Frontend/Elab/Frames.lean`, its hooks in `Frontend/Parser.lean`, the
+fallback in `Frontend/Sugar.lean`), on `main` unchanged, with the typestate added in
+`Frontend/Sugar.lean` (`slotMove`, `slotWiden`, the release of a joined slot):
+
+| construct | under the flag |
+|---|---|
+| `let mut x = e; N` | the rule `new`: the cell `alloc(e)` is the slot `x`; at `N`'s normal end it is freed and its last content read where `N`'s value reads `x`; at any other exit it is a linear value in scope, destroyed by §12 |
+| a read of `x` | a load `*x`, made before the construct that evaluates the read; **at a content that is not persistent, a move out**: `let (x, v) = swap(x, ())`, the slot now `ref 1` |
+| `x = e` | the rule `use` with `withswap`; **into an emptied slot, a put back**: `let (x, o) = swap(x, e)` at the type the slot was emptied at (`DivSt.holes`) |
+| `&mut x`, `&x`, `borrow k x`, `let (x, q) = f(…, x, …)` | the rule `use`: the content swapped out, lent, swapped back |
+| `if`, `match`, `case`, `x <- M` | the rules `case` and `bind`: the arms hand back the slots they mention; **a slot full at some terminals and emptied at others is handed back as `ref A + ref 1`**, `inl` full and `inr` emptied (the rule `widen`, `slotWiden`) |
+| a store into, or the release of, a slot `ref A + ref 1` | the case on its tag (the rule `caseSlot`): a store swaps the full cell (its old content destroyed) or puts into the emptied one; the release frees either and hands out `A + 1` |
+| a borrow block's, a `with`'s, a `run`'s body | the rule `lend`: the body hands back the slots it uses |
+| the loops | §14's and §16's loops, the cells in their state |
+| a closure that writes a slot | refused: `callBlock` generic in its slots (D4) is not built |
+
+A read of an emptied slot, or of one a join may have emptied, is refused by the kernel's typing
+(a `ref 1`, or a `ref A + ref 1`, where a `ref A` is used); the elaboration does not decide it.
+The targets `docs/research/frames-targets/*.bc` (`check-targets.sh`) run a move and a put back in
+a loop, a move on one arm and the join, either arm's release, a store into a joined slot, and a
+read after a move (refused), at the interpreter, the new backend and the old.
+
+### The slot node
+
+- **`slot op x t`** (`TExpr.slot`, `scripts/pin/TExpr.tmpl.lean`), over the typed term of a
+  `swap` the elaboration marks (`SchemeMark.slot`): `op` is `take` (the content moved out) or
+  `put` (a content moved into the emptied slot), `x` the slot's cell, a variable of the node's
+  context. Its typed rule (`TDerivesAt.slot`, `TDerivesP.slot`) says the erasure is `swap x ()` or
+  `swap x v` (`slotB`); the node is kept by moving the term's variables (`slotB_shift`,
+  `TExpr.shift`). The checker builds it at the mark (`rMarked`, `slotVar?`).
+- **The fact** (`Frontend/Check/Derived.lean`, `slot_swap`): every run of the node's term answers
+  `(c, w)`, the cell it was given (`Frames.retsG_swap`, the run lemma of the frame rule `swap`),
+  and from a memory where the cell holds `u` it reaches `(c, u)` with the cell holding the swapped
+  value (`Frames.swap_steps`): at a `take` the cell is left empty.
+- **The lowering** (`Backend2/Convert.lean`): a `take` node's `swap` is `Op.slotOut`, `swap`'s load
+  with no store, the cell left unwritten; a `put` node's is `Op.slotIn`, `swap`'s store with no
+  load, into a cell that must be unwritten. The LIR interpreter checks both on every run
+  (`Backend2/Interp.lean`: a `slotIn` into a written cell is an error, as is a read of an
+  unwritten one), and a cell whose contents are `()` is freed with no read. The cell's layout
+  before and after are not one place (`Backend2/Layout.lean`), as at `swap`.
+
+### Measurements
+
+`BCC_FRAMES_LIB=thread scripts/frames-measure.sh` (380 programs): **341 same, 0 wrong, 39
+refused**, against #634's 273 / 0 / 107. Every refusal of a load of a linear content is gone
+(A3a, A3b, A4: 79 programs); 68 of them run, and 11 are refused for another reason further on
+(the prototype's classes below). The 39, by class: B2 7 (a control handler's body that uses a
+slot, §41's refusal), G2/N4 10 (generated code for threaded values copies a slot: a `for` over a
+generator, a div body's state machine), N2 7 (an effect inside a use), D4 4 (a closure that writes
+a slot), B1 4 (inference through the frame), and 7 others (an outlives the frame's box asks, a
+field of a slot, an exit off the spine, a borrow of a unit or of a record content). Counts: 167
+of the 341 count as expected; the others allocate more (N3: every slot is a heap cell). Under the flag, `scripts/mut-combos.py --gate`
+(seed 611) agrees, differs and refuses 200/0/0 (`joins`), 64/0/136 (`frames`) and 62/0/138
+(`loops`), against #634's 200/0/0, 56/0/144 and 56/0/144; the renaming check
+(`scripts/alpha-check.py`) has 0 differences in 649 programs.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `Paper/`, `Support/` or the old backend.
+Without the flag: every corpus program's output, golden, exit status, `live 0`,
+`corpus/counts.expected`, `corpus/counts-backend2.expected` and `kernel-counts.expected` are
+unchanged. `fundamentalC`, adequacy, outlives and `PinLaw` are not touched. The new backend's
+interpreter frees a cell of `()` contents with no read, which changes no run.
+
+### Open
+
+- **The tag has no node.** A join's `inl`/`inr` of a slot and the case on it are the kernel's sum
+  rules; the `swap`s under the case are `slot` nodes. Nothing the backend compiles reads more of
+  the tag today; promotion of a slot to a local (N5) would read the slot's state there.
+- **Joins only of `Ref A` and `Ref 1`.** Two different full states, or a slot emptied in a loop's
+  turn and full at its entry, are refused (a loop keeps its slots' states).
+- **`FDerives` is the kernel's theory, not a judgment the checker builds.** The elaboration
+  writes direct-style terms (each slot a variable) that the frame rules describe; what the
+  checker records of a slot is the `slot` node. Building `FDerives` derivations from the typed
+  term would make the accounting a fact of each program.
+- D4 (closures that write a slot), N4/G2 (generated code copying a slot), N2 (effects inside a
+  use), L1/L2 slot promotion (N5), suspension inside a lend (T1, #172).
+
 ---
 
 ## Status
@@ -8462,11 +8619,26 @@ the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Backend/Wasm
 `walkGetB`, `TExpr.walk`'s `read`, `TExpr.walkGet`), `Frontend/Syntax.lean`
 (`SchemeMark.walkGet`), `Frontend/Sugar.lean` (`forData`'s `view`), `Frontend/Check/` (`rMarked`,
 `walkGets`, `TTied.walkGet`, the shift and weakening cases, `walk_copy_len`, `walk_get_split`) and
-`Backend2/Convert.lean`; no change to `CDerives`, `Core/`, `Paper/` or `Support/`.
+`Backend2/Convert.lean`; no change to `CDerives`, `Core/`, `Paper/` or `Support/`. Entry 46
+(§47) is implemented in `Core/FramesDefs.lean` to `Core/FramesExamples.lean` (the frame judgment
+and its theorems), `Frontend/Elab/Frames.lean` and the hooks of `Frontend/Parser.lean` and
+`Frontend/Sugar.lean` (`slotMove`, `slotWiden`) behind `BCC_FRAMES=1`, `scripts/pin/` (`slotB`,
+`slotB_shift`, `TExpr.slot` and its typed rules), `Frontend/Syntax.lean` (`SlotOp`,
+`SchemeMark.slot`), `Frontend/Check/` (`rMarked`, `slotVar?`, `TTied.slot`, the shift and
+weakening cases, `slot_swap`) and `Backend2/` (`Op.slotOut`, `Op.slotIn`); no change to
+`CDerives`, `Paper/` or `Support/`.
 
 ---
 
 ## Changelog
+
+- **0.95** (2026-10-20) — §47 (#639): frames with typed exits in `Core/`, with typestate slots:
+  `FDerives` over the slots' entry, normal and exit states; the rules `swap`, `caseSlot`, `widen`;
+  `elab`, `accounting` (the same cells at the same positions), `core_conservative`, proved. Behind
+  `BCC_FRAMES=1`, a load of a slot's linear content moves it out, a store into an emptied slot
+  puts it back, and a join of a full and an emptied slot is `ref A + ref 1`; the derived node
+  `slot` records each move and put, and the new backend compiles them as `slotOut`/`slotIn`. No
+  change without the flag.
 
 - **0.94** (2026-10-20) — §46 (#636, N1 part 2, L-3): a counted walk's read in range is a typed
   fact: `walk`'s `read` (`walkReadB`) and the marked read `walkGet`; the new backend drops the

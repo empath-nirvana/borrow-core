@@ -51,7 +51,8 @@ def usesOf : Nat → Tm → Option Var → Std.HashMap Var Use → Std.HashMap V
       | .allocLent, [x], _ => set x .other m
       | .lend, x :: rest, some y | .relend, x :: rest, some y | .swap, x :: rest, some y
       | .take, x :: rest, some y | .size, x :: rest, some y => others rest (set x (.through y true) m)
-      | .put, x :: rest, some y => others rest (set x (.through y false) m)
+      | .slotOut, x :: rest, some y => others rest (set x (.through y true) m)
+      | .put, x :: rest, some y | .slotIn, x :: rest, some y => others rest (set x (.through y false) m)
       | _, as, _ => others as m
     | .inj _ a => set a .other m
     | .clos _ env => others env m

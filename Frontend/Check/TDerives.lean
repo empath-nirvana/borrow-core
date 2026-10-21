@@ -305,6 +305,11 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
   | nuEta {Δ Γ j} {info : TInfo} {f : Nat} {s : Option Nat} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j)
       (hb : nuEtaB f s t.erase = true) :
       TDerivesAt Ξ Δ Γ (TExpr.nuEta info j f s t) j
+  /-- **Derived**: a frame slot's strong update at the variable `x`: its typed term's erasure is
+  `swap x ()` or `swap x v` (`slotB`).  `[spec §47]` -/
+  | slot {Δ Γ j} {info : TInfo} {op : Frontend.SlotOp} {x : Nat} {t : TExpr}
+      (h : TDerivesAt Ξ Δ Γ t j) (hb : slotB op x t.erase = true) :
+      TDerivesAt Ξ Δ Γ (TExpr.slot info j op x t) j
   /-- A `def`'s body at its use. -/
   | use {Δ Γ j} {info : TInfo} {name : String} {decl : Nat} {targs : List VTy} {ab : Option AbsF}
       {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j) (hab : ab = t.absF Δ) :
@@ -580,6 +585,10 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
   | nuEta {Δ Γ j} {info : TInfo} {f : Nat} {s : Option Nat} {t : TExpr} (h : TDerivesP Δ Γ t j)
       (hb : nuEtaB f s t.erase = true) :
       TDerivesP Δ Γ (TExpr.nuEta info j f s t) j
+  /-- **Derived**: a frame slot's strong update (`slotB`).  `[spec §47]` -/
+  | slot {Δ Γ j} {info : TInfo} {op : Frontend.SlotOp} {x : Nat} {t : TExpr}
+      (h : TDerivesP Δ Γ t j) (hb : slotB op x t.erase = true) :
+      TDerivesP Δ Γ (TExpr.slot info j op x t) j
   /-- A `def`'s body at its use. -/
   | use {Δ Γ j} {info : TInfo} {name : String} {decl : Nat} {targs : List VTy} {ab : Option AbsF}
       {t : TExpr} (h : TDerivesP Δ Γ t j) (hab : ab = t.absF Δ) :
@@ -898,7 +907,7 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
   | withborF2I s hA hB hBo hTo he hΓ =>
       exact CDerivesAt.ofEffFree (withborI2_wf s hA hB hBo hTo hΓ) he
   | litFn _ _ _ ih => exact ih
-  | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ ih | nuEta _ _ ih => exact ih
+  | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ ih | nuEta _ _ ih | slot _ _ ih => exact ih
   | use _ _ ih => exact ih
 
 /-- **A typed derivation is a derivation of the erasure**, in `CDerivesP`.  `[spec §29]` -/
@@ -1222,7 +1231,7 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | withborF2M s hA hBo hTo _ hΓ => exact CDerivesP.ofC (withborM2_wf s hA hBo hTo hΓ)
   | withborF2I s hA hB hBo hTo _ hΓ => exact CDerivesP.ofC (withborI2_wf s hA hB hBo hTo hΓ)
   | litFn _ _ _ ih => exact ih
-  | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ ih | nuEta _ _ ih => exact ih
+  | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ ih | nuEta _ _ ih | slot _ _ ih => exact ih
   | use _ _ ih => exact ih
 
 /-- A tied typed derivation is one of `TDerivesP`, at the same node. -/
@@ -1339,6 +1348,7 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | selfCall _ hb ih => exact .selfCall ih hb
   | lendCell _ hb ih => exact .lendCell ih hb
   | nuEta _ hb ih => exact .nuEta ih hb
+  | slot _ hb ih => exact .slot ih hb
   | use _ hab ih => exact .use ih hab
 
 /-- **A split node's masks are its parts'**: a typed derivation of a node at a split splits its

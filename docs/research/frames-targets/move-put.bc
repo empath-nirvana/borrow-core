@@ -1,0 +1,19 @@
+-- A slot's linear content moved out by a read and put back by a store, at each turn of a loop
+-- (SPEC §47): `let t = push1(s, k)` moves `s` out (`swap s ()`, the slot `ref 1`), `s = t` puts it
+-- back (`swap s t`).
+-- Answer: i32[3].
+fn push1(v: array i32 * i32, x: i32) -> array i32 * i32 =
+  let (a, n) = v;
+  (a, n + x)
+
+main -> i32 =
+  let mut s = (array_new[i32](2, !{ i -> 0 }), 0);
+  let mut k = 0;
+  while k < 3 {
+    let t = push1(s, k);
+    s = t;
+    k = k + 1
+  };
+  let (a, n) = s;
+  array_free[i32](!{ x -> () }, a);
+  n

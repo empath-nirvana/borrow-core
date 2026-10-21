@@ -1,5 +1,6 @@
 import Frontend.Check.TDerives
 import Support.Dynamics.Completeness
+import Core.FramesAccounting
 
 /-!
 # Frontend — Check — what the marked derived nodes carry  `[spec §3, §16, §39]`
@@ -265,5 +266,26 @@ theorem walk_get_split (ℓ : Loc) (n : UInt32) {h t : Val}
     have := idxAns_lt ℓ (n := 1) (i := 0) (by decide)
     simpa using this
   · simp [Val.inj₂, Val.inj₁] at hs
+
+/-! ### A frame slot's strong update (SPEC §47)
+
+A `slot` node marks a `swap` at a frame slot's cell, the variable `x` (`slotB`): `take`, the
+slot's content moved out (`swap x ()`), or `put`, a content moved into the emptied slot
+(`swap x v`). The node says which cell it is and in which state the swap leaves it, so the
+backend compiles a `take` as a move out that leaves the cell unwritten and a `put` as a move into
+an unwritten cell. What the node's term does is the frame rule `swap`'s (`Core/FramesRules.lean`):
+-/
+
+/-- **A slot's strong update keeps its cell**: every run of `swap c v` that reaches a value
+answers `(c, w)`, the cell it was given at the same address (`Frames.retsG_swap`, the run lemma of
+the frame rule `swap`); and from a memory where the cell `ℓ` holds `u` it reaches `(ℓ, u)` with
+`ℓ` holding `v` (`Frames.swap_steps`): at a `take` (`v = ()`) the cell is left holding `()`, an
+empty slot, and its content moved out; at a `put` the emptied cell is filled. -/
+theorem slot_swap {ℍ : Host} [HostIs ℍ] (μ : BoLo.Heap) (ℓ : Loc) (u v : Val) (h : μ ℓ = some u) :
+    (∀ G, Frames.RetsG (ℍ := ℍ) (Frames.CellQ (Val.loc ℓ)) G
+      (.app (.app swap (.val (Val.loc ℓ))) (.val v))) ∧
+    BoLo.Steps (ℍ := ℍ) μ (.app (.app swap (.val (Val.loc ℓ))) (.val v)) (μ.upd ℓ v)
+      (.val (Val.pair (Val.loc ℓ) u)) :=
+  ⟨fun _ => Frames.retsG_swap _ _, Frames.swap_steps μ ℓ u v h⟩
 
 end BoCa.Fig16.LogRel.Core.Check

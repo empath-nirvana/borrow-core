@@ -562,6 +562,14 @@ def LoopSrc.strip : LoopSrc → LoopSrc
   | .each x => .each x.strip
   | s => s
 
+/-- An operation of a frame slot's typestate (SPEC §47). -/
+inductive SlotOp where
+  /-- `swap(y, ())`: the slot's content moved out, the slot left empty. -/
+  | take
+  /-- `swap(y, v)` into an emptied slot: the slot filled again. -/
+  | put
+  deriving DecidableEq, Repr, Inhabited, BEq
+
 /-- A fixed scheme the elaborator writes, recorded on the value it wrote (`Val.mark`): the checker
 checks the value as written and builds the scheme's derived node over it (SPEC §3). -/
 inductive SchemeMark where
@@ -583,6 +591,9 @@ inductive SchemeMark where
   /-- The lend of a cell allocated for it (SPEC §35): `withbor (alloc v) cb`; `m` the lend is
   `mut`. -/
   | lendCell (m : Bool)
+  /-- A frame slot's strong update (SPEC §47): `swap(y, ())`, its content moved out, or `swap(y, v)`
+  into the emptied slot. -/
+  | slot (op : SlotOp)
   deriving DecidableEq, Repr, Inhabited
 
 mutual
