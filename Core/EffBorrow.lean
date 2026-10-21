@@ -188,6 +188,15 @@ def Row.Lend (S : Row) (x : LifeVar) : Prop :=
 theorem Row.Unwind.lend {S : Row} {x : LifeVar} (hS : S.Unwind x) : S.Lend x :=
   fun o ho => ⟨(hS o ho).2.1, (hS o ho).2.2.1, (hS o ho).2.2.2, Or.inl (hS o ho).1⟩
 
+/-- **An operation of a lend's row that resumes is call-graded and linear**: an operation that
+resumes with a weakening qualifier (a generator's `aff` `yield`, whose continuation may be
+cancelled), or that is not graded, is not in the row of a lend's callback.  `[spec §48]` -/
+theorem Row.Lend.resumes {S : Row} {x : LifeVar} (hS : S.Lend x) {o : OpSig} (ho : o ∈ S)
+    (ha : o.abort = false) : o.call = true ∧ o.q = .lin := by
+  rcases (hS o ho).2.2.2 with h | ⟨hc, hq, -⟩
+  · rw [ha] at h; cases h
+  · exact ⟨hc, hq⟩
+
 /-- A lend's row with no graded operation is unwind-only.  `[spec §48]` -/
 theorem Row.Lend.unwind {S : Row} {x : LifeVar} (hS : S.Lend x) (hg : ∀ o ∈ S, o.call = false) :
     S.Unwind x := by

@@ -631,3 +631,23 @@ import Frontend.Elab.DivPlacement
 #print axioms Frontend.Check.checked_sem_pin
 #print axioms Frontend.Check.checked_runs_pin
 #print axioms Frontend.Elab.DivPlacement.sim_loop
+/-! §48: call-graded operations. -/
+#print axioms BoCa.Fig16.LogRel.Core.contShare_ungraded
+#print axioms BoCa.Fig16.LogRel.Core.kapRelT_ungraded
+#print axioms BoCa.Fig16.LogRel.Core.rowLe_gradeAt
+#print axioms BoCa.Fig16.LogRel.Core.effWp_gradeAt
+#print axioms BoCa.Fig16.LogRel.Core.Row.Lend.resumes
+#print axioms BoCa.Fig16.LogRel.Core.wpG_M_frameAt
+#print axioms BoCa.Fig16.LogRel.Core.wpG_I_frameAt
+#print axioms BoCa.Fig16.LogRel.Core.lendM_frame
+#print axioms BoCa.Fig16.LogRel.Core.lendI_frame
+#print axioms BoCa.Fig16.LogRel.Core.cwp_lendM
+#print axioms BoCa.Fig16.LogRel.Core.cwp_lendI
+#print axioms BoCa.Fig16.LogRel.Core.withbor2L_compatX
+#print axioms BoCa.Fig16.LogRel.Core.withbor1L_compatX
+#print axioms BoCa.Fig16.LogRel.Core.handleT_compatC
+#print axioms BoCa.Fig16.LogRel.Core.DivPrograms.divFuel_every_run
+#print axioms BoCa.Fig16.LogRel.Core.runtime_every_run
+#print axioms BoCa.Fig16.LogRel.Core.runtime_main_every_run
+#print axioms BoCa.Fig16.LogRel.Core.io_rt_every_run
+#print axioms Frontend.Check.IORun.rt_every_run
