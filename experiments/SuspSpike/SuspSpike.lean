@@ -6,3 +6,4 @@ import SuspSpike.Frame
 import SuspSpike.Handler
 import SuspSpike.Lend
 import SuspSpike.Depth
+import SuspSpike.Stored
