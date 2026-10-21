@@ -522,6 +522,10 @@ def roundTrip (p : Program) : Except String Unit := do
 def main (argv : List String) : IO UInt32 := do
   match argv with
   | "kernel" :: args => kernel args
+  | ["compile", "--backend", "new", "--timings", file, "-o", out] => do
+    match ← Backend2.watTimed file (← IO.FS.readFile file) with
+    | .ok wat => IO.FS.writeFile out wat; return 0
+    | .error e => IO.eprintln e; return 1
   | ["compile", "--backend", "new", file, "-o", out] => do
     match ← compile2 false file with
     | .ok wat => IO.FS.writeFile out wat; return 0

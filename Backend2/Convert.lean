@@ -757,6 +757,38 @@ def genUnfold (C : LCTy) (gT sT : LTy) : CM Nat := do
   readFact "unfoldN:body"
   return obs
 
+/-! ### `bounded_fix`  `[spec §48]` -/
+
+/-- **`bounded_fix (s, (k, a))`** (SPEC §20): its machine step (`Head.boundedFix`), `s` run on
+`(self_k, a)`, `self_0 = inl ()` and `self_{j+1} = inr (λx. bounded_fix (s, (j, x)))`, the budget
+read unsigned and counted down. The self-reference is a closure of a code of its own over `s` and
+`j`, whose call is `bounded_fix (s, (j, x))` again: a step that calls it in tail position is a loop
+of tail calls with its budget, and one that calls it elsewhere a native recursion bounded by it
+(§20, §21).  `[spec §48]` -/
+def genFix (sT : LTy) (p : Var) : CM Tm := do
+  let fi ← reserveFn "bounded_fix"
+  let (some qT, rT) ← answerOf sT | throw "LIR: bounded_fix's step takes no argument"
+  let .pair selfOT aT := qT | throw "LIR: bounded_fix's step does not take `(self, a)`"
+  let .sum _ selfT := selfOT | throw "LIR: bounded_fix's self-reference is not `1 ⊕ U(A ⊸ C)`"
+  let .thunk selfK := selfT | throw "LIR: bounded_fix's self-reference is not a closure"
+  let si ← reserveFn "bounded_fix self"
+  let s₁ ← fresh sT; let k₁ ← fresh i32T; let x ← fresh aT
+  setFn si { name := "bounded_fix self", params := [s₁, k₁, x], body := .call fi [s₁, k₁, x],
+             ret := rT }
+  let c ← addCode { kind := .lam, fns := [si], ty := selfK }
+  let s ← fresh sT; let k ← fresh i32T; let a ← fresh aT
+  let body ← dup s fun s s' => dup k fun k k' => lit32 0 fun z => do
+    let self ← fresh selfOT
+    let k₂ ← fresh i32T; let cl ← fresh selfT
+    let yes : Tm := .letv k₂ (.prim .cntPred [k]) (.letv cl (.clos c [s', k₂]) (.inj true cl))
+    let u ← fresh .unit
+    let no : Tm := .drop s' (.drop k (.letv u .unit (.inj false u)))
+    let test ← ifLt z k' (pure yes) (pure no)
+    let q ← fresh qT
+    return .letv self test (.letv q (.pair self a) (.app s q))
+  setFn fi { name := "bounded_fix", params := [s, k, a], body, ret := rT }
+  letpairM p fun s r => letpairM r fun k a => pure (.call fi [s, k, a])
+
 /-! ### Destructors (SPEC §12)
 
 `dtor A` (the checker's `dtorE A`, at an owned value that goes unused) is the destructor its type
@@ -930,7 +962,7 @@ def constArity : TExpr → Option Nat
   | .arrNew .. | .arrFree .. | .arrSize .. | .arrReplace .. | .arrLen .. | .arrGet .. | .arrCopy ..
   | .arrForget .. | .countFold .. | .countTry .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
   | .sliceSplitM .. | .sliceReplaceM .. | .sliceSwapM .. | .dtor .. | .foldImm .. | .foldOwn ..
-  | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. => some 1
+  | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. | .boundedFix .. => some 1
   | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU ..
@@ -1284,7 +1316,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       | _ => conv fuel ctx c
     | _, _ => conv fuel ctx c
   | .effHandleT .. | .lendR .. | .lendLoopR .. | .nilDead .. | .iterate .. | .divFuel ..
-  | .reify .. | .boundedFix .. | .letPoly .. => outside t
+  | .reify .. | .letPoly .. => outside t
   | t =>
     match transparent? t with
     | some c => conv fuel ctx c
@@ -1719,6 +1751,11 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     let .pair fT _ := pT | throw "LIR: count_try's argument"
     let .sum sT eT := rT | throw "LIR: count_try's answer"
     genCountTry fT sT eT p
+  | .boundedFix _ j _ _, [p] => do
+    let (some pT, _) ← answerOf (← repJ j) | throw "LIR: bounded_fix takes no argument"
+    let .pair sT _ := pT | throw "LIR: bounded_fix's argument"
+    readFact "boundedFix:budget"
+    genFix sT p
   | .withbor1 .., [x, cb] | .withbor2 .., [x, cb] | .sliceBorrowM .., [x, cb]
   | .sliceBorrowI .., [x, cb] => genLend .lend x (← tyOf cb) (callCb cb)
   | .withbor3 .., [m, cb] => genLend .relend m (← tyOf cb) (callCb cb)

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.95 · 2026-10-21
+Version 0.96 · 2026-10-21
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8194,6 +8194,94 @@ backend (still `bcc`'s default) or a kernel program. `corpus/counts.expected` an
 - `once` and `stored` clauses (N3); `bounded_fix`, `count_try`'s exits, `unfold`/`drive` as loops and `tick`
   (N4).
 
+## 48. Entry 47 — the new backend: `bounded_fix` as its machine step (N4, loop part)
+
+### Motivation
+
+Unit N4 (`docs/compiler.md` §6.1, #652) compiles the loop forms the elaboration produces as LIR
+loops. On this baseline those are `count_try` (§16), `unfold` with its drive (§7, §11, §14) and
+`bounded_fix` (§20). The first two have been compiled by the new backend since §43 and §45:
+`count_try` is a native loop whose exit `inr e` leaves it, `unfold` a code of observations, and the
+runtime's drive of `main`'s loop a self tail call. After §47, the one loop node that no rule
+compiled was `bounded_fix`. It stopped 48 programs, and 44 of them have no other node outside the
+fragment. This entry compiles it from its machine step.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration or semantics.
+
+### Lowering
+
+`Backend2/`. The rule reads the node's type and nothing else.
+
+- **`bounded_fix (s, (k, a))`** (`boundedFix`, read at its spine; `genFix`): the head step
+  `Head.boundedFix` (§20; `boundedFixNext`, `fixSelf`), `s` run on `(self_k, a)` with
+  `self_0 = inl ()` and `self_{j+1} = inr (λx. bounded_fix (s, (j, x)))`. It becomes one function
+  per node, `bounded_fix(s, k, a)`. The function tests `0 < k` with the budget read unsigned
+  (`cntLt`, as §16's counter), builds the self-reference and calls `s` on `(self, a)`. The
+  self-reference at `j + 1` is a closure of its own code over `s` and `j`, where `j` is `k − 1`
+  (`Op.cntPred`: the budget is not `0` there, so it does not wrap). The code's one function is
+  `bounded_fix(s, j, x)` again. The step type `(1 ⊕ U(A ⊸ C)) ⊗ A ⊸ C` gives the LIR types of the
+  self-reference and its code. A `selfCall` (§21) is a call of that closure, which the 0-CFA makes
+  direct. So a step that calls itself in tail position is a loop of tail calls with its budget,
+  and one that calls it elsewhere is a native recursion bounded by it (§20's `bounded`).
+- **`Op.cntPred`**: `k − 1` of a word that is not `0`, at the LIR interpreter, the word IR, Wasm
+  and natively.
+
+No rule here reads `Div`, `tick`, `iterate`, `div_fuel` or `reify`. The elaboration produces none
+of them yet (they are §14's kernel `Div`, elaborated by the `Div` work parked on #646), so they
+stay outside the fragment.
+
+### The law for the runtime's drive of `reify`
+
+`Core/DivDrive.lean` proves the steps of the runtime's drive of a loop written as
+`reify_res t`. A segment that reaches a tick is resumed with *next* in place
+(`drive_reify_tick`, from `reify_seg_tick` and `reify_next_resumes`). A segment that ends with
+`inl b` ends the drive with `inl b` (`drive_reify_done`). One that ends with `inr r` leaves a
+loop that every observation skips, so the drive does not finish (`drive_reify_closed`). The first
+segment has its own lemmas (`reify_start`, `reify_first_tick`, `reify_first_done`,
+`drive_first_tick`, `drive_first_done`). These lemmas are over Core's existing `reify`, `driveE`
+and machine, and their axioms are within the standard three (`scripts/AxiomCheck.lean`). This is
+the law a rule running such a loop in place will read once the elaboration produces `reify`; no
+rule of the new backend reads it yet.
+
+### Programs
+
+316 corpus programs at their goldens at the LIR interpreter, the word IR, Wasm and natively (272
+before). The 44 new ones are every program whose only node outside the fragment was
+`bounded_fix`. Each has `indirect 0`, and their counts and erasure lines are pinned in
+`corpus/counts-backend2.expected` and `corpus/erasure-backend2.expected`. Their allocations
+equal the old backend's except in four programs (`list-generic` 32/27, `parse-recover` 259/246,
+`rec-generic-mutual` 11/8, `rec-parser` 22/17). Those are the boxed `μ` fields of §43's layouts
+(§35), the same difference §47 reported for `effects-fail-list`; `genFix` allocates nothing. The
+272 earlier programs keep their counts.
+
+The 64 still outside the fragment are N3 (`stored` or `once` clauses, and a `perform` with no
+direct call), `tail+state`, `resume-or-cancel`, or a tail clause whose direct call is not licensed
+(§47 *Open*).
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, the checker, the elaboration, the old backend
+(still `bcc`'s default) or a kernel program. `Core/` gains `Core/DivDrive.lean`: lemmas over
+existing definitions, with no rule. `bcc compile --backend new --timings` prints the new
+backend's stages; the gate's compile-time guard is unchanged. `corpus/counts.expected` and
+`kernel-counts.expected` are unchanged.
+
+### Open
+
+- **A loop that may diverge runs one turn per observation.** On this baseline a div body is one
+  state machine (§14, *One state machine per body*). A callee's loop that a body runs in direct
+  style is a state of the caller's machine, so the runtime advances the innermost loop one
+  observation at a time through every enclosing machine. The new backend compiles each machine's
+  `unfold` and the drive as given. A native loop per source loop needs a node per loop (§14's
+  `iterate` under the runtime, which reads `Core/DivDrive.lean`). A rule that drove an inner
+  loop in place from the shape of its caller's step would be a recogniser. `bench/sieve` runs at
+  about 4.2× Rust for this reason.
+- **`div_fuel`'s counter test**: the checker has no producer of `divFuel`, so the rule is not
+  built.
+- A `selfCall`'s fact (§21) is not read: the call is direct by the 0-CFA, not by the node.
+
 ---
 
 ## Status
@@ -8571,11 +8659,21 @@ is implemented in `Backend2/Types.lean` (`ofC`'s rows, `payOf`), `Backend2/Conve
 payloads, `convHandle`, `ensureWork`, `convWork`, `prepWorks`, `genLendU`, the effect cases),
 `Backend2/Driver.lean` (`directFacts`, `erasureLine`), the exit status in `Backend2/Interp.lean` and
 `Backend2/Lower.lean`, `bcc lir --erasure` and `scripts/compile-backend2.sh`; no change to
-`CDerives`, `Core/`, `Paper/`, `Support/`, the checker or the old backend.
+`CDerives`, `Core/`, `Paper/`, `Support/`, the checker or the old backend. Entry 47 (§48) is
+implemented in `Backend2/Convert.lean` (`genFix`, the `boundedFix` case), `Op.cntPred` in
+`Backend2/Syntax.lean`, `Interp.lean`, `Lower.lean` and `Print.lean`, `Backend2/Driver.lean`
+(`watTimed`) and `Core/DivDrive.lean`; no change to `CDerives`, `Paper/`, `Support/`, the checker or
+the old backend.
 
 ---
 
 ## Changelog
+
+- **0.96** (2026-10-21) — §48 (#652, N4's loop part): the new backend compiles `bounded_fix` as
+  its machine step. It is one function per node whose self-reference is a closure of its own code,
+  and the budget is counted down (`Op.cntPred`). 44 programs join the new backend's fragment (316
+  in all), each with `indirect 0`. `Core/DivDrive.lean` proves the runtime's drive of a reified
+  loop, which no rule reads yet. No change to the language or to the old backend's output.
 
 - **0.95** (2026-10-21) — §47 (#647, N2): the new backend erases effects by handler law: rows in
   the LIR's types as the payload of their abortive operations; `raise` a branch to its handler's

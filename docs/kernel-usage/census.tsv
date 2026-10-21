@@ -140,116 +140,120 @@ former	C.eff	157	37211
 qual	lin	2	2
 qual	aff	155	579
 qual	unr	0	0
-read	C.all	layout	204	4278
-read	C.amp	layout	136	7782
-read	C.arr	layout	260	42899
-read	C.eff	layout	45	679
-read	C.nu	layout	136	6212
-read	C.ret	layout	260	47635
-read	V.bang	layout	241	23449
-read	V.box	layout	204	5498
-read	V.fam	layout	177	105327
-read	V.imm	layout	175	39888
-read	V.int	layout	264	210127
-read	V.mu	layout	19	2475
-read	V.mut	layout	180	22059
-read	V.opq	layout	137	43962
-read	V.ref	layout	217	92112
-read	V.sum	layout	242	62496
-read	V.tensor	layout	270	142976
-read	V.thunk	layout	253	34665
-read	V.tvar	layout	149	8944
-read	V.unit	layout	261	86803
-read	V.zero	layout	44	1414
-read	allEV	erased	170	1954
-read	allEV	node	170	1954
-read	allI	body a λ-value	204	3370
-read	allI	node	204	3370
-read	alloc	expand	54	90
-read	allocS	expand	13	43
-read	app	masks	55	225
-read	app	node	53	219
-read	arrCopy	expand	118	1078
-read	arrForget	expand	90	530
+read	C.all	layout	233	5056
+read	C.amp	layout	161	8916
+read	C.arr	layout	303	54874
+read	C.eff	layout	88	3908
+read	C.nu	layout	156	6807
+read	C.ret	layout	303	60099
+read	V.bang	layout	284	30849
+read	V.box	layout	233	6178
+read	V.fam	layout	201	126057
+read	V.imm	layout	199	47268
+read	V.int	layout	307	257571
+read	V.mu	layout	48	11521
+read	V.mut	layout	208	27791
+read	V.opq	layout	159	52472
+read	V.ref	layout	249	111529
+read	V.sum	layout	285	87198
+read	V.tensor	layout	313	178399
+read	V.thunk	layout	296	43772
+read	V.tvar	layout	183	18671
+read	V.unit	layout	304	119407
+read	V.zero	layout	87	4643
+read	allEV	erased	199	2436
+read	allEV	node	199	2436
+read	allI	body a λ-value	233	4013
+read	allI	node	233	4013
+read	alloc	expand	75	126
+read	allocS	expand	15	48
+read	app	masks	98	1044
+read	app	node	96	1034
+read	arrCopy	expand	141	1293
+read	arrForget	expand	111	637
 read	arrFree	expand	5	10
-read	arrGet	expand	126	744
-read	arrGet	in range	32	51
-read	arrLen	expand	109	501
-read	arrNew	expand	148	961
-read	arrReplace	expand	115	1619
-read	arrReplace	slot swap	115	1619
-read	arrSize	expand	104	527
-read	bangE	node	216	4160
-read	bangThunkV	node	241	4787
-read	bind	masks	269	21255
-read	bind	node	268	21220
-read	bind	unfold step	136	338
+read	arrGet	expand	149	848
+read	arrGet	in range	48	68
+read	arrLen	expand	131	618
+read	arrNew	expand	172	1234
+read	arrReplace	expand	135	1954
+read	arrReplace	slot swap	135	1954
+read	arrSize	expand	124	644
+read	bangE	node	259	5398
+read	bangThunkV	node	284	6128
+read	bind	masks	312	26943
+read	bind	node	311	26896
+read	bind	unfold step	156	381
+read	boundedFix	budget	43	111
+read	boundedFix	expand	43	111
+read	boundedFix	node	43	111
 read	boxE	node	7	31
-read	boxI	node	202	2576
-read	copy	expand	11	21
-read	countFold	expand	135	1114
-read	countTry	expand	60	173
+read	boxI	node	231	2935
+read	copy	expand	12	23
+read	countFold	expand	157	1352
+read	countTry	expand	68	185
 read	divLit	divisor	8	13
 read	divLit	node	8	13
-read	dtor	expand	212	3020
-read	dtor	type	212	3020
-read	effHandleV	join	47	156
-read	effHandleV	kinds	50	162
-read	effHandleV	masks	50	486
-read	effHandleV	node	50	162
-read	effHandleV	tail work	6	6
-read	effLet	masks	29	136
-read	effLet	node	34	149
-read	effLet	row	29	136
-read	effPerform	direct call	6	9
-read	effPerform	node	6	9
-read	effRaise	node	44	190
-read	effRaise	op	44	190
-read	effSub	node	47	773
-read	effSub	rows	47	773
-read	effThen	masks	18	82
-read	effThen	node	18	82
-read	effThen	rows	18	82
-read	foldImm	expand	7	11
-read	foldImm	shape	7	11
+read	dtor	expand	244	3879
+read	dtor	type	244	3879
+read	effHandleV	join	90	226
+read	effHandleV	kinds	93	233
+read	effHandleV	masks	93	699
+read	effHandleV	node	93	233
+read	effHandleV	tail work	9	10
+read	effLet	masks	71	390
+read	effLet	node	76	405
+read	effLet	row	71	390
+read	effPerform	direct call	9	14
+read	effPerform	node	9	14
+read	effRaise	node	87	417
+read	effRaise	op	87	417
+read	effSub	node	90	1619
+read	effSub	rows	90	1619
+read	effThen	masks	47	196
+read	effThen	node	47	196
+read	effThen	rows	47	196
+read	foldImm	expand	11	15
+read	foldImm	shape	11	15
 read	foldOwn	expand	10	15
 read	foldOwn	shape	10	15
 read	foldReuse	expand	3	3
 read	foldReuse	shape	3	3
-read	force	node	164	661
-read	forgetImm	expand	10	31
+read	force	node	207	1203
+read	forgetImm	expand	11	36
 read	forgetMut	expand	8	15
-read	free	expand	50	98
+read	free	expand	72	145
 read	freeS	expand	1	1
-read	hostOp	expand	249	10637
-read	lam	node	252	7244
-read	lamDead	node	19	36
-read	lend		201	1600
-read	lendCell	cell	19	35
-read	lendCell	node	19	35
-read	lit	node	263	13442
-read	litFn	bytes	43	148
-read	litFn	node	43	148
-read	lolliE	beta	224	6201
-read	lolliE	callback beta	39	92
-read	lolliE	masks	269	37183
-read	lolliE	node	269	34603
-read	nuEta	node	136	338
-read	nuEta	unfold call	136	338
-read	nuOut	node	132	481
-read	ofRet	node	123	925
-read	proj₁	node	132	274
-read	proj₂	node	126	231
-read	ret	node	272	46993
-read	roll	node	19	115
-read	sliceBorrowI	expand	126	649
+read	hostOp	expand	291	12575
+read	lam	node	295	9006
+read	lamDead	node	43	69
+read	lend		230	1826
+read	lendCell	cell	25	42
+read	lendCell	node	25	42
+read	lit	node	306	16344
+read	litFn	bytes	53	164
+read	litFn	node	53	164
+read	lolliE	beta	260	7484
+read	lolliE	callback beta	45	104
+read	lolliE	masks	312	44467
+read	lolliE	node	312	41496
+read	nuEta	node	156	381
+read	nuEta	unfold call	156	381
+read	nuOut	node	152	527
+read	ofRet	node	147	1115
+read	proj₁	node	157	332
+read	proj₂	node	151	325
+read	ret	node	315	58242
+read	roll	node	48	477
+read	selfCall	node	43	206
+read	sliceBorrowI	expand	150	739
 read	sliceBorrowIU	expand	1	1
 read	sliceBorrowIU	node	1	1
-read	sliceBorrowM	expand	89	114
+read	sliceBorrowM	expand	109	134
 read	sliceBorrowMU	expand	1	1
 read	sliceBorrowMU	node	1	1
-read	sliceEmptyI	expand	70	165
-read	sliceEmptyI	node	70	165
+read	sliceEmptyI	expand	90	203
+read	sliceEmptyI	node	90	203
 read	sliceEmptyM	expand	2	2
 read	sliceEmptyM	node	2	2
 read	sliceGetM	expand	11	21
@@ -257,51 +261,51 @@ read	sliceGetM	in range	3	3
 read	sliceLenM	expand	28	38
 read	sliceReplaceM	expand	22	82
 read	sliceReplaceM	slot swap	22	82
-read	sliceSplitI	expand	99	357
-read	sliceSplitM	expand	81	96
+read	sliceSplitI	expand	120	437
+read	sliceSplitM	expand	101	116
 read	sliceSwapM	expand	18	26
-read	sumE	masks	228	7532
-read	sumE	node	228	7532
-read	sumI₁	node	214	2634
-read	sumI₂	node	209	2914
-read	swap	expand	10	29
-read	tensorE	masks	254	28516
-read	tensorE	node	254	28515
-read	tensorI	masks	269	48275
-read	tensorI	node	269	48275
-read	thunkV	node	206	5829
-read	unfoldN	body	136	338
-read	unfoldN	expand	136	338
-read	unitE	masks	228	3258
-read	unitE	node	224	3253
-read	unitI	node	239	4258
-read	unroll	node	7	14
-read	use	key	215	1646
-read	use	key, shared	128	1125
-read	use	node	222	3306
-read	use	per-use body	112	339
-read	var	node	271	109890
-read	walk	node	46	69
-read	walk	read	34	54
-read	walkGet	node	46	69
-read	withI	code kind	136	345
-read	withI	node	136	345
-read	withbor1	expand	31	51
+read	sumE	masks	271	9356
+read	sumE	node	271	9356
+read	sumI₁	node	257	3350
+read	sumI₂	node	252	3623
+read	swap	expand	18	61
+read	tensorE	masks	297	34443
+read	tensorE	node	297	34438
+read	tensorI	masks	312	58404
+read	tensorI	node	312	58404
+read	thunkV	node	235	6789
+read	unfoldN	body	156	381
+read	unfoldN	expand	156	381
+read	unitE	masks	271	4458
+read	unitE	node	267	4452
+read	unitI	node	282	5917
+read	unroll	node	33	123
+read	use	key	256	2069
+read	use	key, shared	157	1350
+read	use	node	265	4197
+read	use	per-use body	155	562
+read	var	node	314	134014
+read	walk	node	62	86
+read	walk	read	50	71
+read	walkGet	node	62	86
+read	withI	code kind	161	407
+read	withI	node	161	407
+read	withbor1	expand	36	57
 read	withbor1U	expand	1	1
 read	withbor1U	node	1	1
-read	withbor2	expand	166	779
-read	withbor2U	expand	3	3
-read	withbor2U	node	3	3
-read	withbor3	expand	4	4
-read	withbor3U	expand	1	1
-read	withbor3U	node	1	1
+read	withbor2	expand	193	880
+read	withbor2U	expand	4	4
+read	withbor2U	node	4	4
+read	withbor3	expand	9	13
+read	withbor3U	expand	2	2
+read	withbor3U	node	2	2
 read	withborF2M	expand	2	2
 read	withborSM	expand	1	1
-read	withborU	finaliser	5	7
-read	withload	expand	136	787
+read	withborU	finaliser	7	9
+read	withload	expand	159	894
 read	withloadU	expand	1	1
 read	withloadU	node	1	1
-read	withswap	expand	39	92
+read	withswap	expand	45	104
 read	zeroE	masks	2	3
 read	zeroE	node	2	3
-programs	379	failed	2	backend2	272
+programs	379	failed	2	backend2	315

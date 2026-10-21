@@ -79,7 +79,9 @@ beyond its term is either re-derived from the erasure or dropped:
 ### What the new backend reads (N1, #636)
 
 `Backend2/` (`docs/n1-plan.md`, SPEC §43) compiles `Checked.t` itself for the programs with no
-effect node, and since N2 (SPEC §47) for those whose effects it erases (272 of the 379 checked). The census converts each program by it and counts what the
+effect node, since N2 (SPEC §47) for those whose effects it erases, and since N4's loop part
+(SPEC §48) for those with a `bounded_fix` (316 of the 379 compile at their goldens; the census
+converts 315, `data-option` failing its check here). The census converts each program by it and counts what the
 conversion reads of the typed term, by rule and fact: the `read` lines of
 `docs/kernel-usage/census.tsv` (`scripts/KernelCensus.lean`, `backend2Reads`; the facts recorded
 by `Backend2.readFact`). The rows N1 was given are class A by that backend's reading: the masks
@@ -91,8 +93,9 @@ derived node `nuEta` with the `bind` of `unfold step` it calls, and a walk's `re
 `walkGet`; `nuIn`, `nuOut`, `unfoldN` and `walk` move to A. N2 (#647, SPEC §47) adds the rows
 (`C.eff`'s payload), the clause kinds at `effHandleV`, the direct calls `directFacts` licenses,
 and `effThen` and the unwinding borrows on the abort path, for the 50 effectful programs whose
-handlers are abortive or directly called and that have no `bounded_fix` (N4): 272 programs in all; `effSub`,
-`effPerform`, `effRaise`, `effLet`, `effThen` and the `…U` borrows move to A.
+handlers are abortive or directly called and that have no `bounded_fix`: 272 programs in all; `effSub`,
+`effPerform`, `effRaise`, `effLet`, `effThen` and the `…U` borrows move to A. N4's loop part (#652,
+SPEC §48) adds `bounded_fix`'s type (its machine step), in 43 programs of the census.
 
 ## 2. Classes
 
@@ -167,8 +170,8 @@ baseline).
 | 48 | [`arrCopy`](../Core/Fundamental.lean#L210) | §9 | 143 | 1202 | 1675 | erasure only | **A** | — |
 | 49 | [`arrForget`](../Core/Fundamental.lean#L213) | §9 | 111 | 588 | 725 | erasure only | **A** | — |
 | 50 | [`countFold`](../Core/Fundamental.lean#L217) | §16 | 165 | 1018 | 3377 | erasure only (`count_loop`, `Flat/Lower.lean:1405`) | **A** | — |
-| 51 | [`countTry`](../Core/Fundamental.lean#L221) | §16 | 69 | 173 | 456 | erasure only (`count_try_loop`, `Flat/Lower.lean:1439`) | **A** | — |
-| 52 | [`boundedFix`](../Core/Fundamental.lean#L226) | §20 | 57 | 146 | 186 | erasure only (`fixValue`, `Convert.lean:243`) | **A** | — |
+| 51 | [`countTry`](../Core/Fundamental.lean#L221) | §16 | 70 | 174 | 457 | erasure only (`count_try_loop`, `Flat/Lower.lean:1439`); the new backend's native loop from the node's type, its exit `inr e` leaving it (`genCountTry`, `Backend2/Convert.lean`; SPEC §43) | **A** | — |
+| 52 | [`boundedFix`](../Core/Fundamental.lean#L226) | §20, §48 | 59 | 148 | 188 | the new backend reads the node's type: its machine step, a function per node whose self-reference counts the budget down (`genFix`, `Backend2/Convert.lean`; SPEC §48), in 43 programs; the old backend (the default until N6) compiles the erasure (`fixValue`, `Convert.lean:243`) | **A** | — |
 | 53 | [`iterate`](../Core/Fundamental.lean#L230) | §14 | 0 | 0 | 0 | `expandIter` (`Convert.lean:875`) turns it into a fixed point; reached only by the kernel program `div-residual` | **C** | B2 (the `Div` elaboration as typed schemes), then N4 (`iterate` as an LIR loop). SPEC.md:7574: "the frontend does not elaborate to it yet" |
 | 54 | [`divFuel`](../Core/Fundamental.lean#L235) | §14 | 0 | 0 | 0 | generic; reached only by the kernel program `div-residual` | **C** | B2, then N4 |
 | 55 | [`reify`](../Core/Fundamental.lean#L240) | §14 | 0 | 0 | 0 | — | **C** | B2/N4 (N4's acceptance "no `drive` outside `reify`" plans it); no checker producer and no typed Core program |
@@ -240,7 +243,7 @@ ones have their run facts (`Frontend/Check/Derived.lean`).
 | 108 | [`divLit`](../Frontend/Check/TExpr.lean#L382) | §39 | 10 | 15 | 17 | the new backend reads the operation and the divisor from the node: the division with no error arm (`convDivLit`, `Backend2/Convert.lean:1265`; `divLitVals`, `Backend2/Lower.lean:360`) | **A** | — |
 | 109 | [`walk`](../Frontend/Check/TExpr.lean#L558) | §16, §46 | 63 | 82 | 126 | the new backend reads `read` (`walkReadB`: the bound the view's length, the step's read of the view at its index, its tails handing the view on) and drops the read's test (`Backend2/Convert.lean:1100`); the old backend (the default until N6) checks every access | **A** | the step's tails as a run lemma (SPEC §46 *Open*) |
 | 110 | [`walkGet`](../Frontend/Check/TExpr.lean#L561) | §46 | 63 | 82 | 126 | the new backend's read with no test inside a walk with `read` (`Backend2/Convert.lean:1108`) | **A** | — |
-| 111 | [`selfCall`](../Frontend/Check/TExpr.lean#L387) | §21 | 51 | 219 | 281 | re-derived: the fixed point is re-recognised (`fixBody?`, `Convert.lean:303`) | **B** | N2 (every self-call is under `bounded_fix` and `Exhausted`, outside N1's fragment), then direct self-calls from the node |
+| 111 | [`selfCall`](../Frontend/Check/TExpr.lean#L387) | §21 | 53 | 225 | 287 | re-derived: the fixed point is re-recognised (`fixBody?`, `Convert.lean:303`); the new backend compiles the call it marks as a call of `bounded_fix`'s self-reference, which the 0-CFA makes direct (SPEC §48), and does not read the node's fact | **B** | direct self-calls from the node |
 | 112 | [`lendCell`](../Frontend/Check/TExpr.lean#L390) | §35, §41 | 26 | 52 | 74 | re-derived: the scoped cell is re-recognised (`markScoped`, `Convert.lean:544`) | **D** | N5 (framing from the node); its producers are workarounds (see class D): `lendBorrow`'s value branch (`Frontend/Sugar.lean:2276`, ergonomics N1) and `withBlk`'s state cell (`Sugar.lean:3526`) → #626/#632 |
 | 113 | [`nuEta`](../Frontend/Check/TExpr.lean#L570) | §45 | 197 | 634 | 663 | the new backend reads `f` and `s`: at a variable a `bind` bound to `unfold step` the codata is the call `f s`, made where the thunk is built (`nuEta_unfold`; `Backend2/Convert.lean:1118`); with no state, the variable itself (`nuEta_var`) | **A** | — |
 | 114 | [`use`](../Frontend/Check/TExpr.lean#L393) | §3 | 347 | 10571 | 19615 | the new backend converts each key's body once and instantiates it at later uses; a body that takes a closure at each use (`convUse`, `Backend2/Convert.lean:1232`) | **A** | #541: keys with the argument codes |
