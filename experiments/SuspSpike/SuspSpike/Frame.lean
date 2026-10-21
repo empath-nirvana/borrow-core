@@ -15,7 +15,8 @@ resource it stopped with. No value is moved to another lifetime.
   the owner beside it and gives it to the callback's return (mode B of `DESIGN.md` §4);
 * `wpG_viewStrat`: at the end of a run started from `Res_α ● ℓ ↦ mut(α, …)`, the share less the
   cell at `ℓ` is in `Res_α`. It is proved from `Six27S`, 6.27's stratum with the cell set aside, a
-  statement about `↭` alone, not derived here (`Six27S` is a hypothesis of this file's theorems).
+  statement about `↭` alone, which holds (`six27S`, from 6.50 at one location);
+* `frameC`: `ewpTS_M_frameC` with `six27S` discharged.
 -/
 
 noncomputable section
@@ -31,7 +32,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-- **6.27's stratum with the cell set aside.** If `@ρ ⊐ α` and
 `ρ ● ℓ ↦ mut(α, v, ρ_v, P̂) ↭ ρ′`, then `ρ′/ℓ ∈ Res_α`: `↭` keeps every borrow (its two clauses),
-and the only borrow of the left side not in `Res_α` is the one at `ℓ`. Stated, not derived here. -/
+and the only borrow of the left side not in `Res_α` is the one at `ℓ`. Proved below (`six27S`). -/
 def Six27S : Prop :=
   ∀ (l : BoCa.Loc) (α : Life) (v : BoCa.Val) (ρ ρv M ρ' : WRes) (h : ρv.InStratum α)
     (P : BoCa.Val → SPropS BoCa.Loc BoCa.Val α) (hw : P v ⟨ρv, h⟩),
@@ -347,6 +348,37 @@ theorem ewpTS_M_frameC (hS : Six27S) {T : OpTab} {C : Grade} (hC : CallRow T C)
       · unfold viewCell at e₂; rw [ResU.single_get_ne _ hm] at e₂; cases e₂)
   exact frameAt hS hC hArg l Tt δ A β hAβ hP Q ls (hwand _ BM hcellm hBM) v ρP ρb ρlP ρ hPv houtP
     (SameMem.refl ls) houtb hBM hclP hcρ
+
+/-! ### 6.27's stratum with the cell set aside, derived -/
+
+/-- **`Six27S` holds**: off `ℓ`, `ρ ● ℓ ↦ mut(α, …)` is in `Res_α`, and the whole is in
+`Res_{↓α}`, so 6.50 at one location (`ResU.updV_outlives_at`) puts every cell of `ρ′` off `ℓ` in
+`Res_α`. -/
+theorem six27S : Six27S := by
+  intro l α v ρ ρv M ρ' h P hw hout hM hu m ψ e
+  by_cases hm : m = l
+  · subst hm; rw [ResU.del_get_self] at e; cases e
+  · rw [ResU.del_get_ne _ hm] at e
+    have hdM : M.InStratum (↓α) :=
+      BoLo.inStratum_comp (BoLo.compS_hC (↓α)) hM
+        (fun m ψ e => CellU.InStratum.mono (le_of_lt (Life.down_sqsubset α)) (hout m ψ e))
+        (ResU.inStratum_single l ((CellU.inStratum_mutOf (↓α) α v ρv h P hw).mpr
+          (Life.down_sqsubset α)))
+    exact ResU.updV_outlives_at hdM hu
+      (fun φ hφ => hout m φ (by rw [← get_off_single hM hm]; exact hφ)) e
+
+/-- **Class 1's frame**, every hypothesis but the class's discharged: `[TR]` 6.65 over `ewpTS` at
+a class-1 table whose arguments are closed data. -/
+theorem frameC {T : OpTab} {C : Grade} (hC : CallRow T C) (hArg : ∀ α, ArgIn α T)
+    (l : BoCa.Loc) (Tt : VTy) (δ : LSub) (β : Life)
+    (hP : ∀ ls w σ, vC true Tt ls δ w σ → σ.InStratum β) (v : Val) (e : Expr) (ls : List SRec)
+    (Q : List SRec → Val → WProp) :
+    Entails
+      (ptoOwn l v ⋆ vC true Tt ls δ v ⋆
+        fresh (fun α => ptoMutS l α ls (fun ls₀ => vC true Tt ls₀ δ) ─⋆
+          ewpTS ls e (opTableC T C) (postA l Tt δ α Q)))
+      (ewpTS ls e (opTableC T C) Q) :=
+  ewpTS_M_frameC six27S hC hArg l Tt δ β hP v e ls Q
 
 end SuspSpike
 
