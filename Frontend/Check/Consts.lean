@@ -508,6 +508,16 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
           (outlivesB_sound _ _ _ hTo) he hd)
   | c@(.withbor1U ..) | c@(.withbor2U ..) | c@(.withbor3U ..) | c@(.withloadU ..)
   | c@(.sliceBorrowMutU ..) | c@(.sliceBorrowImmU ..) => synConstU E Δ T sp c
+  | .iterate St B R r => do
+      -- `iterate` reads its row, which holds `Div` (SPEC §14).
+      let St ← E.elabV Δ St
+      let B ← E.elabV Δ B
+      let R ← E.elabV Δ R
+      let S ← E.elabRow Δ sp r
+      if hS : BoCa.Fig16.LogRel.Core.Row.divB S = true then
+        pure ⟨_, ⟨.iterate (at_ sp) (.val (BoCa.Fig16.LogRel.Core.iterTy S St B R)) S St B R, S, [],
+          (Fam.dead T).map fun _ hd => TTied.iterate (at_ sp) S St B R hS hd⟩⟩
+      else err sp "`iterate`'s row does not hold `Div` (`div`)"
 
 /-- The lifetime of a family at a shape: the lifetime of its first leaf. -/
 def famLife (M : Mode) : CShape → CVTy → Option CLife

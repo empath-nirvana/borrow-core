@@ -86,7 +86,7 @@ def valLends : Val → Bool
   | .lend .. => true
   | .pair _ V W | .app _ V W => valLends V || valLends W
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => valLends V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V | .reify _ _ _ _ V => valLends V
   | _ => false
 
 mutual
@@ -103,7 +103,7 @@ def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → I
     | .unit _ => pure (node (some .unit) [])
     | .lend _ x _ => pure (node (varTy E Δ T x.name) [])
     | .sugar .. => pure (node none [])
-    | .mark _ _ V => do
+    | .mark _ _ V | .reify _ _ _ _ V => do
       let a ← inferV n E Δ T exp V
       pure (node a.ty.v? [a])
     | .const sp c =>

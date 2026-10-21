@@ -177,6 +177,7 @@ def _root_.Frontend.Val.takeLends : Val → Val × List Ident
   | .shorten sp m σ l V => let (V', a) := V.takeLends; (.shorten sp m σ l V', a)
   | .run sp M => let (M', a) := M.takeLends; (.run sp M', a)
   | .mark sp k V => let (V', a) := V.takeLends; (.mark sp k V', a)
+  | .reify sp B R r V => (.reify sp B R r V, [])
   | V => (V, [])
 
 /-- The `&c` of the head of a bind, outside nested binders. -/
@@ -204,7 +205,7 @@ def _root_.Frontend.Val.synthInj : Val → Bool
   | .pair _ V W => V.synthInj || W.synthInj
   | .unbang _ V | .unbox _ V | .unroll _ V | .inst _ V _ | .sub _ V _ | .boxed _ _ V => V.synthInj
   | .run _ M => M.synthInj
-  | .mark _ _ V => V.synthInj
+  | .mark _ _ V | .reify _ _ _ _ V => V.synthInj
   | _ => false
 
 /-- An injection in a position of a computation whose type the checker synthesizes: the value

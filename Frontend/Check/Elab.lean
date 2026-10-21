@@ -194,12 +194,14 @@ def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
   | .eff n i q A B fin C =>
       let (es, r) := ppEff nm C
       parenIf (p > 5)
-        s!"F[{", ".intercalate (s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es)}] {r}"
+        s!"F[{", ".intercalate ((if n = BoCa.divEff ∧ i = 0 ∧ q = .lin ∧ A = .unit ∧ B = .sum .unit .unit then "div"
+          else s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}") :: es)}] {r}"
 /-- The entries of a row's layers `F_Σ`, and what is under them. -/
 def ppEff (nm : List (String × LifeVar)) : CCTy → List String × String
   | .eff n i q A B fin C =>
       let (es, r) := ppEff nm C
-      (s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es, r)
+      ((if n = BoCa.divEff ∧ i = 0 ∧ q = .lin ∧ A = .unit ∧ B = .sum .unit .unit then "div"
+        else s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}") :: es, r)
   | .ret A => ([], ppV nm 0 6 A)
   | C => ([], ppC nm 6 C)
 end

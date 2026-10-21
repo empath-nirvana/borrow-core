@@ -77,7 +77,7 @@ def keywords : List String :=
     "slice_split_imm", "slice_split_mut", "slice_empty_imm", "slice_empty_mut",
     "slice_replace_mut", "slice_swap_mut",
     "array_len", "array_get", "array_copy", "array_forget",
-    "withbor1u", "withbor2u", "withbor3u", "withloadu", "slice_borrow_mut_u", "slice_borrow_imm_u" ]
+    "withbor1u", "withbor2u", "withbor3u", "withloadu", "slice_borrow_mut_u", "slice_borrow_imm_u", "iterate", "reify" ]
 
 /-- The reserved upper-case words. -/
 def upperKeywords : List String := ["U", "F", "Fun"]

@@ -122,6 +122,7 @@ def _root_.Frontend.Val.elab (lend : Bool) : Val → Except Error Val
   | .bangThunkv sp M => return .bangThunkv sp (← M.elab false)
   | .run sp M => return .run sp (← M.elab lend)
   | .mark sp k V => return .mark sp k (← V.elab lend)
+  | .reify sp B R r V => return .reify sp B R r (← V.elab lend)
   | V@(.var ..) | V@(.clone ..) | V@(.defApp ..) | V@(.unit ..) | V@(.const ..) | V@(.sugar ..) => pure V
 
 /-- Elaborate `&c` in a computation: in `x <- M; N`, one `&c` in `M` becomes
@@ -196,6 +197,7 @@ def _root_.Frontend.Val.fillS (hv : String → Option Val) (hc : String → Opti
   | .bangThunkv sp M => .bangThunkv sp (M.fillS hv hc hs)
   | .run sp M => .run sp (M.fillS hv hc hs)
   | .mark sp k V => .mark sp k (V.fillS hv hc hs)
+  | .reify sp B R r V => .reify sp B R r (V.fillS hv hc hs)
   | V => V
 
 def _root_.Frontend.Comp.fillS (hv : String → Option Val) (hc : String → Option Comp)
@@ -358,7 +360,7 @@ def children (c : TCx) (exp : Option CVTy) : Val → List (Option CVTy × Val)
   | .inr _ V => [(match exp with | some (.sum _ B) => some B | _ => none, V)]
   | .ascribe _ V A => [(c.elabV A, V)]
   | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V | .unroll _ V
-  | .inst _ V _ | .shorten _ _ _ _ V | .mark _ _ V => [(none, V)]
+  | .inst _ V _ | .shorten _ _ _ _ V | .mark _ _ V | .reify _ _ _ _ V => [(none, V)]
   | _ => []
 
 /-- A call run in direct style in a value, at any depth outside nested computations: its span
@@ -498,7 +500,7 @@ def _root_.Frontend.Val.names (n : String) : Val → Bool
   | .var _ x | .clone _ x | .defApp _ x _ => x == n
   | .pair _ V W | .app _ V W => V.names n || W.names n
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.names n
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V | .reify _ _ _ _ V => V.names n
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.names n
   | _ => false
 
@@ -645,7 +647,7 @@ def _root_.Frontend.Val.exitAt : Val → Option Span
   | .sugar sp .brk | .sugar sp .cont | .app sp (.sugar _ .retE) _ => some sp
   | .pair _ V W | .app _ V W => V.exitAt.orElse fun _ => W.exitAt
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.exitAt
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V | .reify _ _ _ _ V => V.exitAt
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.exitAt
   | _ => none
 
@@ -677,7 +679,7 @@ def _root_.Frontend.Val.sugarAt (p : VSugar → Bool) : Val → Option Span
   | .sugar sp s => if p s then some sp else none
   | .pair _ V W | .app _ V W => (V.sugarAt p).orElse fun _ => W.sugarAt p
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.sugarAt p
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V | .reify _ _ _ _ V => V.sugarAt p
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.sugarAt p
   | _ => none
 
@@ -1465,6 +1467,7 @@ def mResV (inj : Nat → Option (Nat × Nat)) : Val → Val
   | .bangThunkv sp M => .bangThunkv sp (mResC inj M)
   | .run sp M => .run sp (mResC inj M)
   | .mark sp k V => .mark sp k (mResV inj V)
+  | .reify sp B R r V => .reify sp B R r (mResV inj V)
   | V => V
 
 def mResC (inj : Nat → Option (Nat × Nat)) : Comp → Comp
@@ -3080,7 +3083,7 @@ def opsV (c : TCx) : Nat → Val → List (Nat × Nat)
         own ++ opsV c k f ++ opsV c k W
       | .pair _ V W => opsV c k V ++ opsV c k W
       | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-      | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => opsV c k V
+      | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V | .reify _ _ _ _ V => opsV c k V
       -- A closure that performs an operation is a block given to a copy that calls it (SPEC §30):
       -- the call performs what the block does, whether or not the copy's type is known here.
       | .run _ M | .thunkv _ M | .bangThunkv _ M => opsC c k M
@@ -3134,7 +3137,7 @@ def unwindingC? (sp : Span) : Val → Option Comp
         (.bind sp f cbTy (.ret sp cb) (.app sp (.app sp (.force sp k) p) f) false) false) false)
     | _ => none
   -- A lent cell's mark is the plain borrow's scheme, not the unwinding form's.
-  | .mark _ _ V => unwindingC? sp V
+  | .mark _ _ V | .reify _ _ _ _ V => unwindingC? sp V
   | _ => none
 where
   ty (x : Ident) (L B : VTy) (r : Frontend.Row) : VTy :=
@@ -3149,7 +3152,7 @@ def relaxedC? (sp : Span) : Val → Option (Ident × Comp)
       (.thunkv _ (.lamL _ _ _ (.ret _ (.thunkv _ (.lam _ m _ M))))) =>
     let p : Ident := ⟨s!"io_rp{sp.start.line}_{sp.start.col}", sp⟩
     some (m, .bind sp p none (.ret sp P) (.withbor2r sp x b A B r p m M) false)
-  | .mark _ _ V => relaxedC? sp V
+  | .mark _ _ V | .reify _ _ _ _ V => relaxedC? sp V
   | _ => none
 
 /-- A borrow block, as written. -/
@@ -3235,7 +3238,7 @@ def rmSelfIn : Val → Bool
   | V@(.app _ f W) => (rmSelfApp? V).isSome || rmSelfIn f || rmSelfIn W
   | .pair _ V W => rmSelfIn V || rmSelfIn W
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => rmSelfIn V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V | .reify _ _ _ _ V => rmSelfIn V
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => rmSelfInC M
   | _ => false
 
@@ -4001,6 +4004,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       pure (.bangThunkv sp (← surfC n c (exp.bind fun | .bang (.thunk C) => some C | _ => none) M))
     | .run sp M => do pure (.run sp (← surfC n c (exp.map .ret) M))
     | .mark sp k V => do pure (.mark sp k (← surfV n c exp V))
+    | .reify sp B R r V => do pure (.reify sp B R r (← surfV n c none V))
     | V => pure V
 
 /-- A binary operator applied to `a` and `b`, at the width of its operands; with `checked`,
@@ -5741,6 +5745,7 @@ def specV : Nat → TCx → Val → DM Val
     | .bangThunkv sp M => do pure (.bangThunkv sp (← specC n c M))
     | .run sp M => do pure (.run sp (← specC n c M))
     | .mark sp k V => do pure (.mark sp k (← specV n c V))
+    | .reify sp B R r V => do pure (.reify sp B R r (← specV n c V))
     | V => pure V
 
 /-- A computation with its calls of higher-order functions specialized. -/
