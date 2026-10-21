@@ -1,0 +1,13 @@
+-- A `while` inside a counted `for`: the `while` is div, so the counted loop around it is a loop
+-- of the machine (its class, SPEC §14, §16, `docs/loops.md` §2.2): a loop over its source's
+-- cursor, one turn per tick.
+--
+-- Answer: i32[4]: the sums 0, 0, 0 + 1 and 0 + 1 + 2 of `j` below `i` for `i` = 0 … 3.
+main -> i32 =
+  let n = 4;
+  let mut s = 0;
+  for i in 0..n {
+    let mut j = 0;
+    while j < i { s = s + j; j = j + 1 }
+  };
+  s
