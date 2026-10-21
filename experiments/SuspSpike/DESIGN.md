@@ -103,3 +103,18 @@ continues with the owner held beside the callback:
   `ℓ ↦ mut(α, v″, χ, P̂)`: the one the stop held;
 - a stop without the view: mode B, the owner carried through the callback's stops and given to
   its return.
+
+## 5. As built
+
+The plan of §4 held. Changes against it, none of them a patch to a failed proof:
+
+- `Six27S` was first a hypothesis of the frame lemma; it is proved (`six27S`, from Core's
+  `ResU.updV_outlives_at`, 6.50 at one location).
+- The class hypothesis gained `ArgIn` (every operation's argument in every stratum), the argument
+  half of `Row.ResumeO`'s "closed data": the frame needs the view cell to sit in the continuation's
+  share, not in the argument.
+- The lend's term (`withborC`) and the depth-3 program (`Depth.lean`) were added after the frame
+  and the handler, as the test of §2 item 6.
+
+Kill criteria: none fired for class 1. For classes 2 and 3, the open-cell route needs an invariant
+beyond `↭` (`openCellStop_false`); the other two routes are open (`README.md`).
