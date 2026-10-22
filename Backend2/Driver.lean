@@ -52,6 +52,8 @@ structure HNode where
   codeRow : Row := []
   /-- The length of the node's context. -/
   depth : Nat := 0
+  /-- At a rule-written handler, its answering functions' or works' tuple, as erased. -/
+  fns : Option Expr := none
 
 /-- The `handle` nodes of a typed term, within the depth `fuel`. At `effHandleT` and `effHandleL`
 the clauses are the rule's (`tailKind`, `lastKind`), written out from the node's tuples as the
@@ -62,19 +64,20 @@ def hnodes (fuel : Nat) (t : TExpr) (depth : Nat := 0) : List HNode :=
   | f + 1 =>
     let here : List HNode := match t with
       | .effHandleV _ _ S E _ n _ _ _ ks _ _ tc _ =>
-          [⟨n, E, S, ks, tc.erase, none, Check.handlerNames E tc.erase, S, depth⟩]
+          [⟨n, E, S, ks, tc.erase, none, Check.handlerNames E tc.erase, S, depth, none⟩]
       | .effHandleVB _ _ S E _ n _ _ _ _ ks _ _ tc _ =>
-          [⟨n, E, S, ks, tc.erase, none, Check.handlerNames E tc.erase, S, depth⟩]
+          [⟨n, E, S, ks, tc.erase, none, Check.handlerNames E tc.erase, S, depth, none⟩]
       | .effHandleT _ _ S SN E _ n _ _ _ _ _ tc _ =>
           [⟨n, E, S, E.map ClauseKinds.tailKind,
             .pair (Expr.pairL tc.erase) (tailTuple E 0 (Expr.pairR tc.erase)), none,
-            Check.ruleNames E (Expr.pairR tc.erase), SN, depth⟩]
+            Check.ruleNames E (Expr.pairR tc.erase), SN, depth, some (Expr.pairR tc.erase)⟩]
       | .effHandleL _ _ S SW E fs Xs n _ _ _ _ _ tc _ =>
           [⟨n, E, S, E.map ClauseKinds.lastKind,
             .pair (Expr.pairL tc.erase) (lastTuple E 0 (Expr.pairL (Expr.pairR tc.erase))
               (Expr.pairR (Expr.pairR tc.erase))),
             some (SW, Xs, (List.range E.length).all fun j => decide (fs j = .ret .unit)),
-            Check.ruleNames E (Expr.pairL (Expr.pairR tc.erase)), SW, depth⟩]
+            Check.ruleNames E (Expr.pairL (Expr.pairR tc.erase)), SW, depth,
+            some (Expr.pairL (Expr.pairR tc.erase))⟩]
       | _ => []
     here ++ t.children.flatMap fun (sc, c) =>
       hnodes f c (match sc with | .push k => depth + k | .fresh k => k)
@@ -100,6 +103,19 @@ externs (`ioSlots`, the last `n`). -/
 def openOK (io : Nat × (Nat → Bool)) (depth : Nat) (e : Expr) : Bool :=
   let (n, ext) := io
   (freeVars e).all fun v => v < depth && depth ≥ n && v ≥ depth - n && ext (v - (depth - n))
+
+/-- **The context slots each rule-written handler's code reads** (`effHandleT`'s answering
+functions, `effHandleL`'s works), by operation: the free variables of its `λ` in the node's
+erasure, which `openOK` admits only at `main`'s I/O externs (`Backend2/Convert.lean`, `ioCtx`).
+`[spec §54]` -/
+def ruleFVs (c : Frontend.Check.Checked) : Std.HashMap (UInt32 × Nat) (List Nat) := Id.run do
+  let mut out : Std.HashMap (UInt32 × Nat) (List Nat) := {}
+  for h in hnodes Frontend.Check.copiesFuel c.t c.ctx.length do
+    let some fs := h.fns | continue
+    for j in List.range h.E.length do
+      if let some e := Check.clauseExpr fs j then
+        out := out.insert (h.n, j) ((out.getD (h.n, j) []) ++ freeVars e).eraseDups
+  return out
 
 /-- **The direct calls the checked facts license**  `[spec §47]`: for each static name, for each of
 its operations, whether every `handle` node of the name
@@ -240,7 +256,7 @@ def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Pr
       Except String (Prog × CState × Std.HashMap Nat LTy) := do
     let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c (ioSlots k))
       (machineOps c (ioSlots k))
-      (divRuntime c loops) threaded
+      (divRuntime c loops) threaded (ruleFVs c)
     let p := { p with exits := c.exitsOnDivError }
     if st.done.isEmpty then return (p, st, {})
     -- A call in tail position whose callee's suspended computations may be the machine's own

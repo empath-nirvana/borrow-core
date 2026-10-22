@@ -187,6 +187,9 @@ structure CState where
   /-- `main`'s I/O externs by its context slot, each with its type: the persistent closures a
   rule-written handler's code may read, made again where that code runs (`ioCtx`). -/
   mainIO : Array (Option (IOKind × VTy)) := #[]
+  /-- **The context slots each rule-written handler's code reads**, by operation, at its node
+  (`Backend2/Driver.lean`, `ruleFVs`, from the node's tuples): `main`'s I/O externs (`openOK`). -/
+  workFV : Std.HashMap (UInt32 × Nat) (List Nat) := {}
   /-- The `handle`, `perform` and `raise` nodes erased (`bcc lir --erasure`). -/
   erased : Std.HashMap String Nat := {}
   /-- **The program's machine operations** (SPEC §49, `Backend2/Driver.lean`, `machineOps`). -/
@@ -3097,16 +3100,16 @@ def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
 
 /-- **The context of a rule-written handler's code run where its operation is performed**
 (`openOK`): at a node whose context has `depth` slots, each slot dead but `main`'s I/O externs the
-code `body` reads (under its `k` binders), each made again here (`ioClos`, as `convMain` makes
+code of the operation `key` reads (`workFV`), each made again here (`ioClos`, as `convMain` makes
 it). The slots, and the bindings that make them.  `[spec §54]` -/
-def ioCtx (depth k : Nat) (body : Expr) : CM (Ctx × (Tm → Tm)) := do
+def ioCtx (depth : Nat) (key : UInt32 × Nat) : CM (Ctx × (Tm → Tm)) := do
   let io := (← get).mainIO
   let n := io.size
-  let fv := freeVars body
+  let fv := (← get).workFV.getD key []
   let mut ctx : Ctx := []
   let mut binds : Tm → Tm := id
   for p in List.range depth do
-    let slot ← if depth ≥ n && p ≥ depth - n && fv.contains (p + k) then
+    let slot ← if depth ≥ n && p ≥ depth - n && fv.contains p then
         match io[p - (depth - n)]? with
         | some (some (op, A)) => do
           let aT ← vty A
@@ -3135,7 +3138,7 @@ def ensureAns (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (SN : Row)
   let bT ← vty o.2.2
   let fi ← reserveFn s!"clause {n}.{j}"
   modify fun st => { st with works := st.works.insert (n, j) (fi, ph, none) }
-  let (cw, binds) ← ioCtx depth (k + 1) body.erase
+  let (cw, binds) ← ioCtx depth (n, j)
   let b ← conv fuel (some x :: (List.replicate k none ++ cw)) body
   setFn fi { name := s!"clause {n}.{j}", params := [x], body := binds b, ret := resTy bT ph }
 
@@ -3155,7 +3158,7 @@ def ensureLastWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (SW : Row)
   let xT ← vty X
   let fi ← reserveFn s!"work {n}.{j}"
   modify fun st => { st with lasts := st.lasts.insert (n, j) (fi, phW, xT) }
-  let (cw, binds) ← ioCtx depth (k + 1) body.erase
+  let (cw, binds) ← ioCtx depth (n, j)
   let b ← conv fuel (some x :: (List.replicate k none ++ cw)) body
   setFn fi { name := s!"work {n}.{j}", params := [x], body := binds b,
              ret := resTy (.sum bT xT) phW }
@@ -3907,9 +3910,11 @@ def threadedOf (s : CState) (recursive : Nat → Bool) : Std.HashMap Nat LTy := 
 (`threadedOf` of a first conversion). -/
 def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) (ncaps : Nat)
     (loops : Bool) (census : Bool := false) (direct : Std.HashMap UInt32 (List Bool) := {})
-    (mach : MachSet := {}) (divRt : Bool := false) (threaded : Std.HashMap Nat LTy := {}) :
+    (mach : MachSet := {}) (divRt : Bool := false) (threaded : Std.HashMap Nat LTy := {})
+    (workFV : Std.HashMap (UInt32 × Nat) (List Nat) := {}) :
     Except String (Prog × CState) := do
-  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run { census, direct, mach, divRt, threaded }
+  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run
+    { census, direct, mach, divRt, threaded, workFV }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
             statics := s.statics.size }, s)
 

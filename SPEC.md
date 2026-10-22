@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.01 · 2026-10-22
+Version 1.02 · 2026-10-22
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1782,30 +1782,35 @@ with a static name `n` of its own (§18, §19):
   `yield(v)` is `w <- perform[n.0] (v, w)`, the operation `A ⊗ W ↠ W`. A generator that calls
   another at the same site passes `w` on to it. So the body, which must be the clause of a `!`
   handler (§19's `[handle]`), receives the variables with the element.
-- **The body is the clause.** `yield((x, w), k) = M; (force k).1 ws`: it binds `x` and `ws` from
-  the payload, runs `M`, and resumes with the variables at its end and at `continue`. `break e`
-  and `return e` cancel the continuation, `(force k).2`, which runs the generator's finalisers
-  (its owned values dropped, §19's drop glue), and leave with the variables and the exit. The
-  clause runs outside the site: what the body performs goes to the sites around the `for`.
+- **The body is the clause, written by the kernel's rule** (§14, §51, §54). The body is the
+  *work* of a handler whose clauses the rule writes out: `w (x, ws) = M`, binding `x` and `ws`
+  from the payload and answering the variables at its end and at `continue`. When every exit of
+  the body resumes and it raises nothing, the node is the tail-resuming rule's (`handle_tail`,
+  `effHandleT`): the clause is `λ(x, κ). κ.1 (w x)`. When the body has `break e` or `return e`, or
+  raises, the node is `[handle-last]`'s (`handle_last`, `effHandleL`): the work answers `inl ws`
+  to resume and `inr (ws, e)` to leave; the clause resumes `κ` on `inl`, and on `inr` cancels it,
+  which runs the generator's finalisers (its owned values dropped, §19's drop glue), then runs the
+  exit `λz. return inr z`. A raise from the work runs the same cancel first (`κ`'s cancel is the
+  work's finaliser) and goes on outward. The clause runs outside the site: what the body raises
+  goes to the sites around the `for`.
 - **The loop's value** is what `g` returns, or `e` after `break e` (`let r = for …`, as §16's);
   a generator that returns `0` gives only `break`'s. A `for` over a generator has no `else`.
-- **When `g`'s body does not loop**, the `for` is one handled call: total. When it loops, the
-  loop value of `g`'s call (below, §52) observes it one turn at a time, each observation
-  performing the operation; the `for` drains the loop that handles each of its observations
-  (`io_hwf`): its observation is `handle_with[n](V_r, V_c) ((nu_out l).1)`, and its close closes
-  `g`'s loop under a handler of its own. No handler wraps a computation that ticks.
-- **A body that performs a control operation, or may loop** (a `while`, a `loop`, or a `for`
-  over anything but a count), is not a clause: the clause would hold the continuation across the
-  operation, and an affine continuation has no destructor (its cancel performs at the site's
-  row, so it cannot be drop glue), and a clause is total. The `for` then observes `g`'s stored
-  generator instead (below), a loop of the enclosing body.
+- **The node is around `g`'s call in direct style.** When `g`'s body does not loop, the `for` is
+  total. When it loops, the node's handled computation ticks, and the rule forwards the ticks; the
+  node's answer is the `for`'s beside `g`'s residual, so the node is itself a call of a div
+  function in direct style (§52, `handleDivCall?`): `inr r` leaves the body around with its
+  residual.
+- **A body that performs a control operation that resumes, or may loop** (a `while`, a `loop`, or
+  a `for` over anything but a count), is not a work yet: a work that performs an operation of the
+  sites around needs the erasure law at a work that performs (T-B2, #564), and one that loops is a
+  work that ticks, with a residual of its own. The `for` then observes `g`'s stored generator
+  instead (below), a loop of the enclosing body.
 
-When the body performs nothing else, the clause resumes in tail position, and the operation is a
-direct call of the clause (§19, *Lowering*): `corpus/gen-produce.bc` and `gen-pipeline.bc`
-allocate nothing; since §52 the steps of their loops are dispatched calls until B3, and so is
-`gen-fib.bc`'s stored generator, which keeps its continuation. A body that branches resumes at the end
-of each arm, and is a direct call too; a body with `break` or `return` in an arm cancels there,
-and is a suspension (`corpus/for-yield-branch.bc`).
+The new backend calls the work where `yield` is performed (§54): `inl` returns to the generator
+and `inr` unwinds it to the node through its finalisers, then branches to the exit
+(`corpus/for-never.bc`, `for-yield-branch.bc`, `gen-return.bc`). A program that stores a
+generator compiles at the fallback at a stored loop (§54): `tick` is a machine operation, and the
+stored generator's `reify` a drive.
 
 ### A generator's body
 
@@ -1948,9 +1953,9 @@ and §19 is preserved: every construct of this entry is elaborated into core bef
   a cancel that hands back a residual, or a `linear ctl` iteration effect (no `break`).
 - **Callbacks that yield** to a `for`'s site: a block takes the loop's threaded variables and
   hands them back at each call (§32, `corpus/yield-callback.bc`). `|>` chains the adapters as
-  functions over stored generators (§33). Adapters written as handlers over a computation would
-  hold the continuation across their own `yield` (*A body that performs a control operation*,
-  above), and are not provided.
+  functions over stored generators (§33). Adapters over a source computation (#564, R-1's 2a) are
+  generators whose `for` over the source yields: a work that performs, which waits on T-B2 (*A
+  body that performs a control operation that resumes*, above).
 - **A total consumer of a generator that loops.** A `for` over one is div: its turns are
   unbounded. A finite source written as data, or a sized iterator (§16), is total, and so is a
   generator whose body does not loop.
@@ -8608,18 +8613,17 @@ corpus or a golden.
 
 ### Open
 
-- **The erasure laws** (T-B1 `last_resume_direct`, T-B1′ `last_cancel_direct`, T-B2): the
-  backend's licence to call a work where it is performed. T-B1/B1′ are `tail_resumes_answer` and
-  `kappa_cancel_steps` with the finaliser frame; T-B2, at a work that performs, is a two-run
-  correspondence. They read the rule's clause form (`lastClause`, `lastN`, `lastD`, `exitK`) and
-  its step lemmas (`lastClause_steps`, `lastN_inl`, `lastN_inr`, `exitK_steps`, `lastD_steps`).
-- **The elaboration** of `for` with `break`/`return` and a body that performs, and the adapters
-  over a source computation (R-1's frontend): it needs a checker producer for the node
-  (`TTied`'s builder, the clause kinds of the node, `Frontend/Check/Kinds.lean`, and its handled
-  names), and the works' and exits' tuples written by the elaborator.
+- **The erasure laws**: T-B1 `last_resume_direct` and T-B1′ `last_cancel_direct`, at a work that
+  performs nothing, are §54's. T-B2, at a work that performs, is a two-run correspondence, open.
+- **The elaboration**: the checker's producer, its clause kinds and handled names and the `for`
+  over a generator are §54's. A body that performs an operation that resumes, a body that loops,
+  and the adapters over a source computation (R-1's 2a) are open (§54 *Open*).
 - **Handler state** (R-2, `effHandleLS`).
 - **Finalisers are total, as a theorem** (decision 69, §14 *Open*): a work, like `effHandleT`'s
   answering function, may tick without end.
+
+---
+
 ## 52. Entry 51 — loops elaborate to `Div` (B2)
 
 ### Motivation
@@ -8709,8 +8713,9 @@ empty context). The checker builds them by `TTied.iterate` and `TTied.reify`
 **What stays.** `unfold`, `Loop`, `div_bind`, `div_defer` and `div_fuel` stay as library code
 over loop values (`lib/div.bc`); the elaboration emits none of `div_bind` and `div_defer`.
 `div_fuel`'s argument is a loop value: `reify` of a call. A `for` over a generator whose body does
-not loop is one handled call, as before; one whose body loops handles each observation of the
-generator's loop value (`io_hwf`), as before, now `reify` of its call.
+not loop is one handled call, as before; one whose body loops handled each observation of the
+generator's loop value (`io_hwf`), `reify` of its call, until §54 put the handler around the
+generator's call in direct style.
 
 **Not decided here.** Every judgment of aliasing, mutation, ownership, lend extents and escape is
 the kernel's: the state of a loop is the program's own variables, by name, and each scheme is
@@ -8773,8 +8778,8 @@ elaborated program is checked core, so they cover it.
   each elaboration emits: a simulation of `iterate` under `div_fuel` against `unfold` observed by
   `driveE` (S0's `while` schema) and of `reify`'s observations is not proved.
 - A handler of another name whose clause keeps `κ` around a computation that ticks
-  (`handle_general`, #564): no handler wraps a div computation yet but per observation of a loop
-  value.
+  (`handle_general`, #564, route R-4, not taken). §51's `[handle-last]` and the tail-resuming rule
+  wrap the call of a generator that loops since §54.
 - The old backend's counts and code size grow until B3 (native `iterate`, `main` under the
   runtime's clause); the source interpreter is slower on generators (`reify` captures the
   continuation at each tick).
@@ -8866,17 +8871,198 @@ or a kernel program.
 ### Open
 
 - **A stored loop** (`reify` other than `main`'s): its tick keeps `κ`, so it is a
-  stored-continuation site. §49's machines are built at `handle` nodes from their typed clauses;
-  `reify` is a node of its own whose clause is `reifyH`'s, a Core value. Taking it needs a rule:
-  `tick` a machine operation at such a `reify`, and the `reify` node a drive whose clause is
-  `reifyH`'s (`reifyR`, `reifyC`). `bench/chain-yield` and `scripts/compile-scaling.sh`'s body
-  are such programs.
+  stored-continuation site. Built by §54: `tick` a machine operation at a program with such a
+  `reify`, and the `reify` node a drive whose clauses are `reifyH`'s (`reifyR`, `reifyC`).
 - **`div_fuel`'s counter test**: no core text spells the `divFuel` node, so no program reaches it.
 - After a call in tail position at a row with aborts, a body that takes its answer apart and builds
   it again keeps the call out of tail position (`bench/gen-tree`, #659).
 - In `bench/sieve`'s `while`, the turn's answer is a phi of aggregates after LLVM inlines the
   step, which leaves a tag test and a jump in the inner loop (the shared native emitter's
   aggregate returns).
+
+---
+
+## 54. Entry 53 — `for` over a generator, pushed: the rule-written handlers checked, elaborated and compiled (#644 B2, #564 R-1)
+
+### Motivation
+
+B2 (§52, §53) is held until every regular `for` compiles directly (#644, the user's decision of
+2026-10-21): a stored `κ`, and so a state machine, only where the consumer genuinely keeps the
+generator. §51 gave the kernel `[handle-last]` (R-1a). This entry builds the rest of route R-1's
+first step: the erasure law at a work that performs nothing (T-B1, T-B1′), the checker's producer
+of `effHandleT` and `effHandleL`, the push elaboration of `for` over a generator, the new backend's
+direct calls at both rules, and, for the consumers that do keep a generator, the fallback at a
+stored loop that §53 left open.
+
+### The erasure law (T-B1, T-B1′)
+
+`Core/DivHandleLastRuns.lean`, at a `[handle-last]` handler `lastH n E vr vw vn` around
+`K[perform (n, (i, v))]`, `K` free of `n`, the operation `i = j` affine, its work `g` (the `j`-th
+of `vw`):
+
+- **`last_op_work`**: `[op]` and `κ`'s cell (`catch_cell`), then the clause up to its work under the
+  finaliser frame (`lastClause_steps`): the configuration reaches `ubind (lastN, lastD) [g v]`.
+- **T-B1, `last_resume_direct`**: when `g v` runs to `inl y` (with `κ`'s cell in the memory), the
+  configuration reaches `hnd H K[y]` with the cell released (`lastN_inl`, `kappaC_resume`): the
+  work's `inl` answers `y` where the operation was performed.
+- **T-B1′, `last_cancel_direct`**: when `g v` runs to `inr z`, it reaches the exit's frame around
+  `κ`'s cancel run `cancelOf K = ccatch (K†[raise (0, (0, none))])`, the cell released
+  (`lastN_inr`, `kappaC_cancel`); **`last_cancel_exit`**: when that run answers `()`, the exit runs
+  at `z` (`exitK_steps`). `cancel_prefix` (§19) reads the run: `K`'s finalisers, innermost first,
+  `K†` holding no handler. **`cancelOf_steps`**: with no finaliser it answers `()` at once.
+- **`tail_resume_direct`**: the same law at the tail-resuming rule's clause `λ(x, κ). κ.1 (g x)`
+  (`tailClause_steps`, `resK_steps`).
+
+A tick inside the work is answered *next* where it is performed when the runtime answers every tick
+(§53, `drive_reify_tick`). The law at a work that performs an operation of the handlers outside
+(T-B2) is not built.
+
+### The checker
+
+- **The core forms** `handle_tail[n: q, …](h_ret, gs) M` and `handle_last[n: q, …](h_ret, (ws, nfs))
+  M` (`Frontend/Syntax.lean`, `HForm`; the parser and the printer): the clauses are written out by
+  the rule from the answering functions `gs`, or from the works `ws` and exits `nfs`; the
+  operations' qualifiers are named, the rest is read back from the tuples' types (`ansesRead`,
+  `lastRead`, `Frontend/Check/Steps.lean`).
+- **The builders** (`Frontend/Check/Rules.lean`): `rEffHandleT` (`TTied.effHandleT`) and
+  `rEffHandleL` (`TTied.effHandleL`), each premise decided: `rowLeB` for `Σ_N ≤ Σ` and `Σ_W ≤ Σ`,
+  `Σ_N`'s operations linear, `Row.nzB` for `Σ.NZ`, `Row.unrDB` for `¬ Σ.UnrD`, `hAff`, and
+  `LastFinOK` at the empty cancel rows (`lastFinOK_of_rowLeB`, `lastFinOK_nil_of_find`). The
+  handled row may hold `Div`.
+- **The clause kinds** (`Core/ClauseKinds.lean`): a kind `last`, `[handle-last]`'s clause, whose
+  premise is the rule's clause form (`lastKind`, `lastClause_premise`), as `tailKind` and
+  `tailClause_premise` are `effHandleT`'s. The handle sites (`Frontend/Check/Kinds.lean`) read
+  both nodes; their names are the answering functions' or works' own (`ruleNames`), at the row
+  that code runs at (`Σ_N`, `Σ_W`); the `inside` record is the derivation's (`inside_eqT`,
+  `inside_eqL`).
+- Neither node is placed at a wider context by absorption (`absF` is `none` at both, as before).
+
+### The elaboration
+
+`Frontend/Sugar.lean`, `forYield`; `Frontend/Elab/Effects.lean`, the routing of a `for` over a
+call of a generator. One rule, `for x in g(e) { M }; N` over a site `n` (§15):
+
+- **The body is the work** `λ(x, ws). M′`: `M′` answers the threaded variables at its end and at
+  `continue`; at `break e` or `return e` it answers the exit `(ws, e)`.
+- **The tail-resuming rule** when every exit resumes and the body raises nothing:
+  `handle_tail[n: aff]((h_ret), (λ(x, ws). M′, ())) (g(ws₀, ()))`, `M′` answering `ws`.
+- **`[handle-last]`** when the body leaves early or raises (its work's row `Σ_W` is the outer row's
+  abortive operations it performs): `handle_last[n: aff]((h_ret), ((λ(x, ws). M′, ()), (λz.
+  return inr z, ()))) (g(ws₀, ()))`, `M′` answering `inl ws` or `inr (ws, e)`.
+- **The handled computation is `g`'s call in direct style.** When `g` loops (a div function at the
+  row `div, n.0`), the node's outer row is `div, Σ`, its answer clause hands `g`'s residual on
+  (`inr r ↦ inr r`), and the node is a call of a div function in direct style (`handleDivCall?`,
+  read by `headLoops` and `eDivCall?`, §52): on `inr r` the body around closes its loops and leaves
+  with its residual. Before this entry such a `for` observed `g`'s loop value one turn at a time
+  (`io_hwf`), and a body with `break` was a stored-continuation site (§49): both are gone.
+- **A body whose control operations are all abortive** is a site's work (`Cx.aborts`); one that
+  performs an operation that resumes, or loops, drains `g`'s stored generator as before (T-B2; a
+  work that ticks).
+
+No other construct changes. The elaborator decides no aliasing, mutation, ownership, lend extent
+or escape: the work is the body as written, checked by the kernel's rules.
+
+### Backend
+
+`Backend2/`. Each rule reads the node's fields and the checker's facts; none recognises a term.
+
+- **`effHandleT`** (`convHandle` at the rule's clauses, `tailKind`): each operation's answering
+  function is a function (`ensureAns`), called where `yield` is performed (`effPerform:direct
+  call`). The fact: `directFacts` at the node, its kind `tail`, its own code's names at its row
+  `Σ_N` (`ruleNames`, `codeRow`), condition 2 (`cond2B`), one handler of the name. The law:
+  `tail_resume_direct`.
+- **`effHandleL`** (`convHandleL`, `lastPerform`): each control operation's work is a function
+  (`ensureLastWork`), called where `yield` is performed: `inl y` answers `y` there; `inr z`, or a
+  raise from the work, leaves at the operation's **cancel summand**, a summand of the payload of
+  every row that holds the operation (`MachSet.last`, `cancelSummand`: the exit's argument, beside
+  the work's raises), so it unwinds the generator to the node as an abort does (§47), running the
+  finalisers of `K` on the way (`effThen`, `abortK`), and the node's join runs the exit at `z`, or
+  raises the work's error on outward. The facts (`lastFacts`): every node of the name a
+  `[handle-last]` node with one handler, the work's row `Σ_W` holding only abortive operations and
+  `tick` (it performs nothing), and the empty cancel rows (so `K`'s finalisers perform nothing:
+  `[then]`'s `hfin`). The law: `last_resume_direct`, `last_cancel_direct`, `last_cancel_exit`,
+  `cancel_prefix`. No handler between the `perform` and the node holds `n`, so nothing catches
+  the summand on the way; the work's raise goes through the same summand, so no handler of `K`
+  catches it, as `K†`'s dead handlers do not.
+- **The works read `main`'s I/O externs** (`ioSlots`, `openOK`, `ioCtx`): a handler closed but for
+  them is made again where its work runs, each extern's closure as `convMain` makes it.
+- **The fallback at a stored loop** (a `reify` other than `main`'s; `machineOps`): `tick` is a
+  machine operation of the program (§49), so a computation at a row that holds `Div` is a machine.
+  `iterate` is a machine per node whose back edge suspends at `tick` (`genIterK`; the law
+  `Head.iterate`, `iterK_inr`, `turnK_next`), and each `reify` node is a drive (`genReify`) with
+  `reifyH`'s clauses: a value `inl b` is `inl b`, `inr r` the loop `closed r` (`reifyR`); a
+  suspension at `tick` with its suspended computation `k` is the loop `tickLoop k` (`reifyC`), whose
+  *next* resumes `k` with *next* and drives again and whose *close* resumes it with *close*,
+  drives, and closes what that answers (`closeKV`); a suspension of the row's own machine
+  operations is forwarded; the first answer is made a loop by `rkV` (`done b`). The law:
+  `Core/DivReify.lean` (`reifyR_inl`, `reifyR_inr`, `reifyC`, `tickLoop`, `closeKV`, `rkV`) and
+  §49's machine laws. `main`'s loop is then driven by `genDrive` (§11). `effHandleT` and
+  `effHandleL` around a computation with a machine operation are drives (`convDrive`, §49): an
+  abortive operation's clause is its work, a control operation's cancel goes to its exit.
+- `genIter`'s payload branch returned from the wrong `do` block, dropping the turn's call; the
+  cancel summands put a payload on every loop of a generator's row, which reached it.
+- The postcondition (`bcc lir --erasure`): each rule-written node counts as a `handle` erased,
+  each direct `yield` as a `perform` erased; a stored loop's `reify` as a drive (`machines`).
+
+### Programs
+
+Every corpus program is in the new backend's fragment: 374 at their goldens at the LIR
+interpreter, the word IR, Wasm and natively (352, with 22 outside, before; 380 on `main` before
+§52, 64 of them with state machines). 318 compile with no state machine (310 before; 316 on
+`main`).
+
+- **Directly, no state machine**: `for-never`, `for-yield-branch`, `gen-cell` and `gen-return`,
+  which §53 left outside (state machines on `main`); `for-data-gen-loop`; the book's
+  `guide/iteration.md` blocks at lines 135 and 168. Each `yield` is a call of the work; `break`
+  and `return` unwind to the node. `capture-take-hand`, `state-machine` and
+  `leetcode/trees/0230-kth-smallest-element-in-a-bst`, whose `break` made a stored-continuation
+  site (§49), lose their machine: 0230 allocates 64 objects (89 before) and loads 5144 words
+  (5434).
+- **At the fallback at a stored loop** (§54 *Backend*), the consumers that keep a generator:
+  - a `U (pull …)` the program writes, stored by the user's decision (#564, Q2): `for-data-div`
+    (its `first_two` steps a generator by hand), `gen-borrowed`, `gen-close`, `gen-div`,
+    `gen-fib`, `gen-pipeline`, `gen-tokenize-parse`, `gen-value`, `yield-callback`, the book's
+    block at 221;
+  - the adapters of `lib/adapters.bc`, over stored generators until R-1's 2a, which waits on
+    T-B2: `gen-adapters`, `gen-adapters-fail`, `gen-pipeline-adapters`, `gen-pipeline-pipe`,
+    the book's blocks at 252 and 276, `scripts/compile-scaling.sh`'s body;
+  - a body that yields to an outer site (T-B2): `block-yield-inner`, `gen-from`, the book's
+    block at 80;
+  - a body that loops: `gen-nested`;
+  - `io-fuel`, `div_fuel` over a reified loop.
+
+  Every tick of such a program is a suspension, so its counts exceed `main`'s per-body machines
+  (`gen-adapters`: 80 allocations, 303 dispatched calls, 2707 loads; 5, 0 and 15 on `main`).
+- `corpus/counts-backend2.expected` and `corpus/erasure-backend2.expected` gain the 22 programs
+  and change at the three that lose their machine. `corpus/kinds.expected` has 3 disagreements
+  (45 before): a `for`'s site is `tail` or `last` by its rule, and the backend agrees.
+  `corpus/handled.expected` records 62 direct calls where condition 2 holds. The sugar pairs'
+  core forms are the push elaboration (`for-value`, `gen-div`, `gen-from`, `gen-range`,
+  `gen-return`, `gen-yields`). `corpus/reject/for-free-bound.bc`'s message names a `for` over a
+  generator that loops.
+- No program moves to `corpus/pending/`; none of its twelve lend programs (§52), and neither
+  `corpus/reject/gen-self-borrow.bc` nor `for-lend-resumes.bc`, type: each holds a lend across a
+  `yield` or a tick.
+
+### Baseline
+
+`CDerives`, the relation, `𝒱⟦·⟧`, the machine, the effect equations and every kernel rule are
+unchanged; `fundamentalC`, `adequacyC` and every borrow guarantee keep their statements. Core gains
+the erasure lemmas, the clause kind `last` and `lastClause_premise`. No program is refused that
+checked before, and none moves to `corpus/pending/`. Every output, golden and exit status is
+unchanged at every stage of both backends.
+
+### Open
+
+- **T-B2**, the erasure law at a work that performs an operation of the handlers outside (#564):
+  a body that yields to an outer site (`block-yield-inner`, `gen-from`'s chained generator), and
+  the adapters over a source computation (R-1's 2a), wait on it.
+- **A body that loops** is a work that ticks, with a residual of its own (`gen-nested`): the
+  elaboration of a work as a div body is not built.
+- **The fallback's cost.** At a program that stores a generator, every loop is a machine: `tick`
+  suspends. `scripts/compile-scaling.sh`'s body compiles (1× 5.2 s, 8× 99 s): ratio 19.2 against
+  the guard's 16, its time in the layouts (`Lay.resolve`, `Lay.sccs`, arrays copied).
+- `div_fuel`'s node (§53) and the old backend (deleted at N6) are unchanged.
 
 ---
 
@@ -9272,11 +9458,28 @@ the old backend. Entry 52 (§53) is implemented in `Backend2/Types.lean` (`tick`
 `Backend2/Convert.lean` (`genIter`, `tickTm`, `mainReify?`, `runtimeMain`, the `iterate` and tick
 cases) and `Backend2/Driver.lean` (`divHandlers`, `divRuntime`); its law is `Core/DivDrive.lean`
 and `Core/DivIterate.lean`; no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the checker or
-the old backend.
+the old backend. Entry 53 (§54) is implemented in `Core/DivHandleLastRuns.lean` (the erasure law),
+`Core/ClauseKinds.lean` (`last`, `lastKind`, `lastClause_premise`), `Frontend/Syntax.lean`
+(`HForm`), the parser and the printer, `Frontend/Check/` (`ansesRead`, `lastRead`,
+`TTied.effHandleL`, `rEffHandleT`, `rEffHandleL`, `lastFinOK_of_rowLeB`, `ruleNames`,
+`inside_eqL`), `Frontend/Sugar.lean` (`forYield`, `handleDivCall?`), `Frontend/Elab/Effects.lean`
+(`Cx.aborts`) and `Backend2/` (`MachSet.last`, `cancelSummand`, `lastFacts`, `ioSlots`, `openOK`,
+`ensureAns`, `ensureLastWork`, `lastPerform`, `convHandleL`, `ioCtx`, `genIterK`, `genReify`);
+no change to `CDerives`, `Paper/`, `Support/` or the old backend.
 
 ---
 
 ## Changelog
+
+- **1.02** (2026-10-22) — §54 (#644 B2, #564 R-1): `for` over a generator is pushed. The erasure
+  law at a work that performs nothing (`last_resume_direct`, `last_cancel_direct`,
+  `tail_resume_direct`); the core forms `handle_tail` and `handle_last` and the checker's
+  `effHandleT` and `effHandleL` with every premise decided; the clause kind `last`; the
+  elaboration of a `for` over a generator as the tail-resuming rule or `[handle-last]` around the
+  generator's call in direct style; the new backend's direct call of the work at `yield`, `inr`
+  unwinding to the node through its cancel summand; the fallback at a stored loop (`tick` a
+  machine operation, `reify` a drive), which puts every corpus program in the new backend's
+  fragment. No output, golden or status changes.
 
 - **1.01** (2026-10-22) — §53 (#644, B2 with N4's `iterate`): the new backend compiles `Div`'s
   loops under the runtime: `tick` has no run-time content in a row; when `main`'s `reify` is the
