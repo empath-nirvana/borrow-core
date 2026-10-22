@@ -64,6 +64,30 @@ corpus/async-scoped.bc 3.1 affine tail: -; agree
 corpus/async-scoped.bc 2.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-scoped.bc 2.1 affine tail: -; agree
 corpus/async-scoped.bc 1.0 affine abortive: branch; agree
+corpus/async-stack-cancel.bc 2.0 affine abortive: branch; agree
+corpus/async-stack-cancel.bc 4.0 affine abortive: branch; agree
+corpus/async-stack-cancel.bc 3.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-stack-cancel.bc 3.1 affine tail: -; agree
+corpus/async-stack-cancel.bc 1.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-stack-cancel.bc 1.1 affine tail: -; agree
+corpus/async-stack-deep.bc 2.0 affine abortive: branch; agree
+corpus/async-stack-deep.bc 4.0 affine abortive: branch; agree
+corpus/async-stack-deep.bc 6.0 affine abortive: branch; agree
+corpus/async-stack-deep.bc 5.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-stack-deep.bc 5.1 affine tail: -; agree
+corpus/async-stack-deep.bc 3.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-stack-deep.bc 3.1 affine tail: -; agree
+corpus/async-stack-deep.bc 1.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-stack-deep.bc 1.1 affine tail: -; agree
+corpus/async-stack-nested.bc 2.0 affine abortive: branch; agree
+corpus/async-stack-nested.bc 1.0 affine stored: machine: the handlers of the name have 2 clauses for it; agree
+corpus/async-stack-nested.bc 1.1 affine tail: -; agree
+corpus/async-stack-nested.bc 4.0 affine abortive: branch; agree
+corpus/async-stack-nested.bc 6.0 affine abortive: branch; agree
+corpus/async-stack-nested.bc 5.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-stack-nested.bc 5.1 affine tail: -; agree
+corpus/async-stack-nested.bc 3.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-stack-nested.bc 3.1 affine tail: -; agree
 corpus/async-timers.bc 4.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-timers.bc 3.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-timers.bc 2.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
@@ -75,6 +99,10 @@ corpus/async-try-join.bc 3.0 affine abortive: branch; agree
 corpus/async-try-join.bc 6.0 affine abortive: branch; agree
 corpus/async-try-join.bc 5.0 affine abortive: branch; agree
 corpus/async-try-join.bc 4.0 affine abortive: branch; agree
+corpus/async-unr-site.bc 2.0 affine abortive: branch; agree
+corpus/async-unr-site.bc 3.0 unrestricted stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-unr-site.bc 1.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-unr-site.bc 1.1 affine tail: -; agree
 corpus/async-workers-scoped.bc 4.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-workers-scoped.bc 4.1 affine tail: -; agree
 corpus/async-workers-scoped.bc 3.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
