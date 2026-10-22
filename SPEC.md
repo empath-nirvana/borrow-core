@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.97 · 2026-10-21
+Version 0.98 · 2026-10-21
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2490,7 +2490,7 @@ as the call's binding binds `r`, and a terminal `return V` in tail position is t
 when the call hands back the capabilities the computation hands back (in order) or the
 computation hands back none. This holds at every call that is bound so: a function's copy, a
 block parameter (§32), an answering operation, a resume (§19), a handler site, a stored
-generator's site. A parameter that is the function's only one is its lambda's binder, not bound
+generator's site, a recursive group's self-reference and a layer's `call` (§20). A parameter that is the function's only one is its lambda's binder, not bound
 again from a tuple (`Parser.paramVar`), as is an answering clause's only parameter; a clause's
 value terminal is handed on as itself, `(s, (V : B))`.
 
@@ -3969,7 +3969,9 @@ of its members (Bekič):
 
       case self { inj₁ _ ⇒ abort[e.0] () | inj₂ g ⇒ (force (unbang g) ()).j (E, W) }
 
-  with `E` bound again after, `e` the site of the exhaustion effect.
+  with `E` bound again after, `e` the site of the exhaustion effect. It is a call's binding (§18,
+  *A call's binding*), so a terminal that is its answer is the call itself, in tail position; a
+  layer's `call` likewise.
 - **A member's copy** is `(bounded_fix[1, R] (gen, (budget, ()))).j`, at the budget `recBudget`. It
   has the type a copy of the member has, so a call of it from outside is a call of a copy.
 
@@ -8822,6 +8824,14 @@ the old backend.
 
 ## Changelog
 
+- **0.98** (2026-10-21) — §18, §20 (#659): a call of the recursive group's self-reference, and a
+  layer's `call`, is a call's binding like every other call, so a terminal that is its answer is
+  the call in tail position (`t <- C; let (E, r) = t; return (E, r)` is `C`, the right unit and
+  `⊗`'s η), and `x <- return r` binds `x` as the call's binding. The walk of a recursive
+  generator ends in a tail call: gen-tree runs at 0.98× Rust on the new backend (1.56× before)
+  and 1.03× on the old (1.31×). Counts fall at 0230 on both backends (allocs 105 → 89 old, 94 → 89
+  new); on the old backend its suspended walk's resumes become 29 indirect calls, the convention of
+  §14's tail calls. No output, golden or status changes.
 - **0.97** (2026-10-21) — §49 (#657, N3): the new backend compiles the stored-continuation sites
   as state machines: the machine operations from the nodes' kinds, the outcome of a row with one
   (its value, an abort or a suspension with its continuation), a machine's state per point with

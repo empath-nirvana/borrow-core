@@ -2164,8 +2164,7 @@ def selfCall : Nat → Cx → List Cap → Span → RSelf → String → Nat →
     let call : Comp := .case sp (.var sp rs.self) ⟨u, sp⟩
       (.ascribe sp (.abort sp rs.e 0 (.unit sp)) res) ⟨g, sp⟩
       (memberCall sp rs j g f z a W')
-    -- A call of the recursive group's own member stays bound, as the tail rule of `trC` leaves it.
-    let bind : Bind := .k (Bind.caps sp t none call rs.env r false id).run
+    let bind : Bind := .caps sp t none call rs.env r false id
     pure (b ++ [bind], .var sp r)
 
 /-- `k(W)` in a clause of an operation that resumes (SPEC §19): the continuation resumed,
@@ -2204,7 +2203,7 @@ def layerSelfCall : Nat → Cx → List Cap → Span → LCall → Val → EM (L
     let z ← fresh "fx_z"
     let a ← fresh "fx_a"
     report sp "call" s!"{lc.name} → the member's call, through the self-reference"
-    let bind : Bind := .k (Bind.caps sp t none (memberCall sp lc.rs lc.j lc.g f z a W') lc.rs.env r false id).run
+    let bind : Bind := .caps sp t none (memberCall sp lc.rs lc.j lc.g f z a W') lc.rs.env r false id
     pure (b ++ [bind], .var sp r)
 
 /-- A plain application, its parts elaborated. `return e` from a loop's body in a copy hands the
