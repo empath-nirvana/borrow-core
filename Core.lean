@@ -22,6 +22,7 @@ import Core.DivFuel
 import Core.DivReify
 import Core.DivHandle
 import Core.DivHandleLast
+import Core.DivHandleLastRuns
 import Core.DivPrograms
 import Core.DivRuntime
 import Core.DivDrive

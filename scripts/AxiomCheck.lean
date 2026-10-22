@@ -689,6 +689,13 @@ import Frontend.Elab.DivPlacement
 #print axioms Backend2.Lint.copyable_ofV
 #print axioms Backend2.Lint.droppable_ofV_persistent
 #print axioms Backend2.Lint.droppable_ofV_drop
+-- SPEC §64: [handle-last]'s erasure law at a work that performs nothing (T-B1, T-B1′)
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.last_op_work
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.last_resume_direct
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.last_cancel_direct
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.last_cancel_exit
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.cancelOf_steps
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.tail_resume_direct
 #print axioms Frontend.Elab.DivPlacement.sim_loop
 /-! §63: call-graded operations. -/
 #print axioms BoCa.Fig16.LogRel.Core.contShare_ungraded
