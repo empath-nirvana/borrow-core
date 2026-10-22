@@ -1,0 +1,30 @@
+-- H3 probe: a lend of a tree whose subtrees are INLINE (`mu X. 1 + (X * (i32 * X))`, no `ref X`).
+-- `withload` at a `mu` type loads the value, and the backends copy a loaded `mu` deeply: each
+-- lend below copies the 1000-node tree (allocs 3001: the tree and two copies). With the children
+-- boxed in cells (`ref X`, as `r3`), a level's `withload` copies one node's words and allocates
+-- nothing. So a re-borrowing walk needs the tree's recursion under `ref`.
+include rec
+type Tree = mu X. 1 + (X * (i32 * X))
+
+fn build(lo: i32, hi: i32) -> Tree =
+  if lo < hi { let m = lo + (hi - lo) / 2; roll inr (build(lo, m), (m, build(m + 1, hi))) } else { roll inl () }
+
+def rootkey : !(ref Tree => ref Tree * i32) =
+  !thunkv fun (c : ref Tree) ->
+      return withbor1['x, Tree, i32] c (thunkv Fun 'x < dom.
+          return (thunkv fun (b : imm 'x Tree) ->
+              v <- return withload['x, 'y, Tree, i32] b (thunkv Fun 'y < dom.
+                    return (thunkv fun (t : view 'y Tree) ->
+                       case unroll t {
+                         inl u -> return boxed['y] i32[0]
+                       | inr n -> let (l, p) = n; let (k, r) = p; return boxed['y] k
+                       }));
+              return boxed['x] v))
+
+main -> i32 =
+  let t = with on_exhausted(!{ u -> roll inl () }) { build(0, 1000) };
+  let c = alloc(t);
+  let (c, a) = rootkey(c);
+  let (c, b) = rootkey(c);
+  let t2 = free(c);
+  a + b

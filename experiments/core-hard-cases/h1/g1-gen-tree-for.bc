@@ -1,0 +1,78 @@
+-- H1 (i): `bench/gen-tree` as an effect-free core term. `walk` is a recursive generator observed
+-- by a `for` whose clause is tail-resumptive (`s = s + x`). By `tail_resumes` each `yield(v)` is
+-- a call of the site's work at the perform, so the copy of `walk` for this site is a plain
+-- recursion threading the site's variable `s`: no machine, no frame, no `κ`. The recursion is
+-- `bounded_fix` (SPEC §20) and the budget's end, the abort of `Exhausted`, is `inr ()`, which
+-- `on_exhausted`'s clause turns into `0` (`catch_abort`).
+--
+-- Rule sketch (one rule per construct, from the typed term):
+--   [for-tail]   a `for` site whose clause is tail: the generator's copy takes the site's
+--                threaded variables as an argument and answers them; `yield v` ↦ `work (v, s)`.
+--   [rec]        a recursive group ↦ `bounded_fix[1, C]` over its step, `self` called directly.
+--   [abort-sum]  an abortive operation `Exhausted` ↦ `F (R + 1)`; each frame a `case` that passes
+--                `inr` on; its handler a `case` (`catch_abort`).
+--
+-- Answer: the sum over rounds `r < reps` of the values of keys `0 .. n` (as the bench prints).
+
+def value : !(i32 * i32 => i32) =
+  !thunkv fun (p : i32 * i32) ->
+      let (k, r) = p;
+      x <- return (unbang host[add32]) ((unbang host[mul32]) (k, i32[7919]), r);
+      case (unbang host[rem_s32]) (x, i32[1000]) { inl q -> return q | inr u -> return i32[0] }
+
+-- The site's work: `s = s + x`, resumed in tail position.
+def work : !(i32 * i64 => i64) =
+  !thunkv fun (p : i32 * i64) ->
+      let (x, s) = p;
+      return (unbang host[add64]) (s, (unbang host[extend_s]) x)
+
+-- `walk(lo, hi, r)`'s copy at the site: the keys of `[lo, hi)` in order, each passed to `work`.
+def walk_step : !U ((1 + !U (1 -o i32 * (i32 * (i32 * i64)) -o F (i64 + 1))) * 1 -o i32 * (i32 * (i32 * i64)) -o F (i64 + 1)) =
+  !thunkv fun (sp0 : (1 + !U (1 -o i32 * (i32 * (i32 * i64)) -o F (i64 + 1))) * 1) ->
+      let (self, u) = sp0;
+      let () = u;
+      fun (p : i32 * (i32 * (i32 * i64))) ->
+        let (lo, q) = p;
+        let (hi, q2) = q;
+        let (r, s) = q2;
+        case (unbang host[lt_s32]) (lo, hi) {
+          inl e -> return inl s
+        | inr t -> h2 <- case (unbang host[div_s32]) ((unbang host[sub32]) (hi, lo), i32[2]) {
+                inl d -> return d
+              | inr d -> return i32[0]
+              };
+            m <- return (unbang host[add32]) (lo, h2);
+            case self {
+              inl x -> return inr ()
+            | inr g -> f <- return unbang g;
+                z <- return ();
+                a1 <- return (lo, (m, (r, s)));
+                o <- force f z a1;
+                case o {
+                  inl s1 -> s2 <- return (unbang work) ((unbang value) (m, r), s1);
+                    f2 <- return unbang g;
+                    z2 <- return ();
+                    a2 <- return ((unbang host[add32]) (m, i32[1]), (hi, (r, s2)));
+                    force f2 z2 a2
+                | inr x -> return inr ()
+                }
+            }
+        }
+
+def walk : !U (i32 * (i32 * (i32 * i64)) -o F (i64 + 1)) =
+  !thunkv fun (p : i32 * (i32 * (i32 * i64))) ->
+      st <- return walk_step;
+      bf <- return unbang bounded_fix[1, i32 * (i32 * (i32 * i64)) -o F (i64 + 1)];
+      ba <- return (st, (i32[10000], ()));
+      force bf ba p
+
+-- `total_of(n, r)` under `on_exhausted(0)`.
+fn total_of(n: i32, r: i32) -> i64 =
+  match walk(0, n, r, i64[0]) { inl s -> s | inr u -> i64[0] }
+
+main -> i64 =
+  let n = 200;
+  let reps = 2;
+  let mut acc = i64[0];
+  for r in 0..reps { acc = acc + total_of(n, r) };
+  acc

@@ -1,0 +1,8 @@
+MEMORY cancel-twice: REJECTED 97:24: `b` is used twice here, and its type `box top U (nu X. F (i32 + box top U X) & F 1)` is not persistent  -- the losing task cancelled twice
+MEMORY loser-dropped: ACCEPTED (assurance: unconditional) src: (inl i32[30], inr ()) live 0 | lir: (inl i32[30], inr ()) live 0  -- the losing task neither cancelled nor resumed (the implicit destructor cancels it)
+MEMORY loser-dropped-linear: REJECTED 97:13: in this `case`, `b` is consumed in the `inr` arm but not in the `inl` arm  -- the losing task bound `linear`, then neither cancelled nor resumed
+MEMORY close-keeps-buf-linear: REJECTED 39:16: `buf` is declared `linear` and is not consumed in its scope  -- lookup's cancel does not free its buffer (bound `linear`)
+MEMORY close-keeps-buf: ACCEPTED (assurance: unconditional) src: (inl i32[30], inr ()) live 0 | lir: (inl i32[30], inr ()) live 0  -- lookup's cancel does not free its buffer (the implicit destructor frees it)
+MEMORY use-after-free: REJECTED 36:21: `buf` is used twice here, and its type `ref i32` is not persistent  -- the buffer freed, then kept in the next state
+MEMORY task-duplicated: REJECTED 142:16: `a` is used twice here, and its type `box top U (nu X. F (i32 + box top U X) & F 1)` is not persistent  -- one task raced against itself (an affine task used twice)
+SEMANTIC wrong-winner: ACCEPTED (assurance: unconditional) src: (inl i32[30], inl i32[0]) live 0 | lir: (inl i32[30], inl i32[0]) live 0  -- b's win reported as a's

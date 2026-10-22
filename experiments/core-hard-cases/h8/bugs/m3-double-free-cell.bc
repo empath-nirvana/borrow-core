@@ -1,0 +1,88 @@
+-- H8 injected bug m3-double-free-cell (MEMORY), a variant of `h8c-list-cursor-refold.bc`.
+-- H8, a derived value that is NOT cheaply re-derivable: a generator that owns a list (a `mu`
+-- value) and yields its elements in order through a borrow of it (Rust: `for x in xs.iter() {
+-- yield x }`, whose cursor `&Node` is a self-borrow held across each `yield`, behind `Pin`).
+--
+-- Core has no cursor into a borrowed `mu` value: the one eliminator under `imm` is `fold_imm`,
+-- a whole fold. With the cursor not held (no E2), each step re-derives the element at its position
+-- from owned state: the state owns the list's cell and the position `j` (the length of the suffix
+-- whose head is next), and each observation lends the cell and folds the whole list to find that
+-- element. That is O(n) per `yield`, O(n²) in all, where the held cursor is O(1).
+--
+-- Worse: the fold's algebra is `!` code typed at a dead context, and a run-time `i32` cannot be
+-- promoted to `!i32` (§10's `!Γ` premise), so the algebra cannot be told the position. Its
+-- result must be the whole sequence: each step copies the list (`fold_imm` to a fresh `List`, n
+-- allocations), walks the copy to the position, and frees it. O(n) allocations per `yield`.
+--
+-- Answer: the sum 1 + … + N, `live 0`.
+include list
+
+type L = List[i32]
+-- The state: the list's cell, and the position of the next element.
+type S = ref L * i32
+type Pull = U (nu X. F (i32 * U X + (1 + U X)) & F 1)
+
+fn build(n: i32) -> L =
+  let mut l = (roll inl () : L);
+  for i in 0..n { l = (roll inr (n - i, l) : L) };
+  l
+
+-- Element `k` of an owned list (the list consumed), by a counted walk.
+fn nth(l: L, k: i32) -> i32 + 1 =
+  let mut cur = l;
+  for _ in 0..k { match unroll cur { inl u -> cur = (roll inl () : L) | inr (x, r) -> cur = r } };
+  match unroll cur { inl u -> inr () | inr (x, r) -> inl x }
+
+-- The borrowed list copied by one fold.
+def copy_alg : !(all 'y < top. 1 + i32 * L => L) =
+  !thunkv Fun 'y < top.
+      return (thunkv fun (r : 1 + i32 * L) ->
+          case r { inl u -> return (roll inl () : L) | inr p -> return (roll inr p : L) })
+
+def copy_list : !(all 'a < top. imm 'a L => L) = fold_imm[1 + (i32 * X), 'a, top, L] copy_alg
+
+-- Element `k` of the list in the cell, re-derived under a lend of this observation.
+def at : !(S => S * (i32 + 1)) =
+  !thunkv fun (s : S) ->
+      let (c, k) = s;
+      q <- return withbor1['x, L, L] c (thunkv Fun 'x < dom.
+          return (thunkv fun (b : imm 'x L) -> l2 <- return (unbang copy_list) ['x] b; return boxed['x] l2));
+      let (c, l2) = q;
+      return ((c, k), nth (l2, k))
+
+def gen_step : !U (S -o F (i32 * S + (1 + S)) & F 1) =
+  !thunkv fun (s : S) ->
+      < r <- return (unbang at) s;
+        let (s2, o) = r;
+        let (c, k) = s2;
+        case o {
+          inl x -> return (inl (x, (c, (unbang host[add32]) (k, i32[1]))) : i32 * S + (1 + S))
+        | inr u -> return (inr (inl ()) : i32 * S + (1 + S))
+        },
+        let (c, k) = s; d <- return free[L] c; d2 <- return free[L] c; return () >
+
+fn n_of(u: 1) -> i32 = 200
+
+main : F U loop i32 1 =
+  n <- return n_of ();
+  l <- return build n;
+  c <- return alloc[L] l;
+  f <- return unbang unfold[nu X. F (i32 * U X + (1 + U X)) & F 1, S] gen_step;
+  s0 : S <- return (c, i32[0]);
+  g : Pull <- return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >);
+  st : !U (Pull * i32 -o F (i32 + Pull * i32) & F 1) <- return (!thunkv fun (p : Pull * i32) ->
+        < let (it, acc) = p;
+          o <- (nu_out force it).1;
+          case o {
+            inl xr -> let (x, it2) = xr;
+              return (inr (it2, (unbang host[add32]) (acc, x)) : i32 + Pull * i32)
+          | inr q -> case q {
+              inl u -> return (inl acc : i32 + Pull * i32)
+            | inr it2 -> return (inr (it2, acc) : i32 + Pull * i32)
+            }
+          },
+          let (it, acc) = p;
+          (nu_out force it).2 >);
+  lp <- return unbang unfold[loop i32 1, Pull * i32] st;
+  z : Pull * i32 <- return (g, i32[0]);
+  return (thunkv nu_in < (nu_out force lp z).1, (nu_out force lp z).2 >)

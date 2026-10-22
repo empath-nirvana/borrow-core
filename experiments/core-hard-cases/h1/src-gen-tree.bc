@@ -1,0 +1,29 @@
+-- H1 comparator: `bench/gen-tree/main.bc` as main compiles it, with the arguments as constants
+-- and the total answered by `main` (no argument parsing or printing), as the core terms do.
+include rec
+include yield
+
+fn value(k: i32, r: i32) -> i32 = (k * 7919 + r) % 1000
+
+fn walk(lo: i32, hi: i32, r: i32) -> 1 with Yield[i32], Exhausted =
+  if lo < hi {
+    let m = lo + (hi - lo) / 2;
+    walk(lo, m, r);
+    yield(value(m, r));
+    walk(m + 1, hi, r)
+  } else { () }
+
+fn total_of(n: i32, r: i32) -> i64 with Exhausted =
+  let mut s = i64[0];
+  for x in walk(0, n, r) { s = s + host[extend_s](x) };
+  s
+
+main -> i64 =
+  let n = 200;
+  let reps = 2;
+  let mut acc = i64[0];
+  for r in 0..reps {
+    let s = with on_exhausted(!{ u -> i64[0] }) { total_of(n, r) };
+    acc = acc + s
+  };
+  acc

@@ -1,0 +1,110 @@
+-- bug SEMANTIC wrong-point: the task starts at the second await's point (skips an await)
+-- H5b: a STORED task cancelled later from the queue, whose finaliser writes through its lend and
+-- then frees. The source (in the style of `corpus/async-cancel.bc` with
+-- `async-r1-cancel-finaliser-writes.bc`'s finaliser):
+--
+--   fn victim() -> i32 with Async =
+--     let extra = alloc(11);
+--     let buf = alloc(10);
+--     let v = borrow mut buf { m ->            -- R1: the view crosses two awaits
+--       let p = (m, 5);
+--       await(); await();                      -- on cancel: write 99 through m (the unwind finaliser)
+--       let (m, k) = p;
+--       modify m { x -> (x, x + k) } };
+--     let _ = free(buf); let e = free(extra); v + e
+--   fn killer(t: Task[i32]) -> i32 with Async = await(); cancel(t); 2
+--   main: t = spawn victim; queue [spawn killer(t), spawn victim]; a third victim dropped.
+--
+-- Effect-free core, one rule per construct:
+-- * `κ` at each `await` is a summand of the task's `unfold` state (`kappa_resume_steps`): here the
+--   point (`inl ()` after the first `await`, `inr ()` after the second) and the live variables
+--   (`buf`, `extra`, `k`).
+-- * The lend held across the `await`s is not stored: the state owns `buf`, and the view in the pair
+--   `p` is replaced by its owner; each segment that uses the view opens the lend again
+--   (`withbor2` on the owned cell), the re-lend transformation (#669 `p8`).
+-- * Cancel is the state's `close` (`kappa_cancel_steps`, `cancel_prefix`): the region's finalisers
+--   innermost first, here the borrower's finaliser (re-open the lend, write 99 through `m`, end it),
+--   the owner's finaliser (`free buf`), then `extra`'s destructor (`free extra`).
+-- * `with spawn` runs the body to its first `await` and answers `boxed[top]` of the machine.
+-- * A dropped task is consumed by its destructor (SPEC §12): `close`, the cancel.
+--
+-- Answer: `inr (i32[2], inr (i32[26], inl ()))`: killer 2; the victim that finishes 10 + 5 + 11;
+-- `live 0` (the cancelled and the dropped victims' cells freed by `close`).
+include async
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+type S = ref i32 * (ref i32 * (i32 * (1 + 1)))
+
+-- The borrower's finaliser, run with the lend re-opened: write 99 through the view.
+def fin_write : !(ref i32 => ref i32) =
+  !thunkv fun (buf : ref i32) ->
+      r <- return withbor2['x, top, i32, 1] buf (thunkv Fun 'x < dom.
+            return (thunkv fun (m : mut 'x i32) ->
+              q <- return (withswap['x, i32, 1] m (thunkv fun (v : i32) -> return (i32[99], ())));
+              let (m, z) = q;
+              let () = forget_mut['x, i32] m;
+              return boxed['x] z));
+      let (buf, u) = r;
+      let () = u;
+      return buf
+
+def victim_step : !U (S -o F (i32 + box top S) & F 1) =
+  !thunkv fun (s : S) ->
+      < let (buf, r) = s;
+        let (extra, r2) = r;
+        let (k, pt) = r2;
+        case pt {
+          inl u -> return (inr boxed[top] ((buf, (extra, (k, (inr () : 1 + 1)))) : S) : i32 + box top S)
+        | inr u ->
+            r3 <- return withbor2['x, top, i32, i32] buf (thunkv Fun 'x < dom.
+                  return (thunkv fun (m : mut 'x i32) ->
+                    q <- return (withswap['x, i32, i32] m (thunkv fun (x : i32) ->
+                          return (plus (x, k), plus (x, k))));
+                    let (m, y) = q;
+                    let () = forget_mut['x, i32] m;
+                    return boxed['x] y));
+            let (buf, v) = r3;
+            w <- return (free[i32] buf);
+            e <- return (free[i32] extra);
+            return (inl plus (v, e) : i32 + box top S)
+        },
+        let (buf, r) = s;
+        let (extra, r2) = r;
+        let (k, pt) = r2;
+        buf2 <- return (unbang fin_write) buf;
+        w <- return (free[i32] buf2);
+        e <- return (free[i32] extra);
+        return () >
+
+def spawn_victim : !(1 => Task[i32]) =
+  !thunkv fun (u : 1) ->
+      extra <- return (alloc[i32] i32[11]);
+      buf <- return (alloc[i32] i32[10]);
+      s0 : S <- return (buf, (extra, (i32[5], (inr () : 1 + 1))));
+      f <- return unfold[nu X. F (i32 + box top U X) & F 1, S] victim_step;
+      return boxed[top] (thunkv nu_in < fu <- return unbang f; (nu_out force fu s0).1,
+          fu <- return unbang f; (nu_out force fu s0).2 >)
+
+-- killer's machine: suspended at its `await`, holding the victim.
+def killer_step : !U (Task[i32] -o F (i32 + box top Task[i32]) & F 1) =
+  !thunkv fun (t : Task[i32]) ->
+      < g <- return (unbox t);
+        c <- (nu_out (force g)).2;
+        return (inl i32[2] : i32 + box top Task[i32]),
+        g <- return (unbox t);
+        (nu_out (force g)).2 >
+
+def spawn_killer : !(Task[i32] => Task[i32]) =
+  !thunkv fun (t : Task[i32]) ->
+      f <- return unfold[nu X. F (i32 + box top U X) & F 1, Task[i32]] killer_step;
+      return boxed[top] (thunkv nu_in < fu <- return unbang f; (nu_out force fu t).1,
+          fu <- return unbang f; (nu_out force fu t).2 >)
+
+main -> List[i32] =
+  let t = spawn_victim(());
+  let q = queue[i32]();
+  let q = push(q, spawn_killer(t));
+  let q = push(q, spawn_victim(()));
+  let d = spawn_victim(());
+  run_until_empty(q)

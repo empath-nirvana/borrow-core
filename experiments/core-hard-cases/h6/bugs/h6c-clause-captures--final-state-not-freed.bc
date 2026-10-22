@@ -1,0 +1,93 @@
+-- bug MEMORY final-state-not-freed: the return clause does not free the state's cell (the implicit destructor frees it)
+-- H6c: `corpus/clause-captures.bc` effect-free core.
+--
+-- Rules, one per construct:
+-- * `handler count(mut n: i32): Count = { tick() = … }` at `with count(&mut n)`: the handler's
+--   state is a `mut` borrow, the `with`'s lend of `n` (`withbor2`). Its evidence is the borrow
+--   itself, threaded linearly through the handled body (a work's argument and answer, as `p9`):
+--   each `tick()` is the work's call, a `withswap` on the threaded borrow; the lend ends where the
+--   `with` does, and the borrow is never stored.
+-- * `releasing(c)` (an abortive `Fail`): the body answers `A + E` (`F_Σ R ↦ F (R ⊕ P)`, §47); the
+--   handler's site is a `case`, the return clause on `inl`, the raise clause on `inr`; the
+--   handler's owned argument `c` is consumed by each arm (`catch_ret`, `catch_abort`).
+-- * `asking(mut c: ref i32)` (`ctl ask`, `k(v)` in tail position): a state that owns a cell,
+--   threaded through the body; the clause is the work `σ -> σ * v`, which frees the old cell and
+--   allocates the new; the return clause frees the final cell (`tail_resumes`).
+--
+-- Answer: `(i32[105], (i32[2200], (i32[63], i32[4])))`, `live 0`.
+def plus : i32 * i32 => i32 = unbang host[add32]
+def times : i32 * i32 => i32 = unbang host[mul32]
+
+-- `tick`'s clause at the cell behind the borrow: `n = n + 1; n`.
+def tick_fn : !(i32 => i32 * i32) =
+  !thunkv fun (x : i32) -> y <- return plus (x, i32[1]); return (y, y)
+
+-- `check(x)`: `inl x`, or `inr x` (the raise) when x > 10.
+def check : !(i32 => i32 + i32) =
+  !thunkv fun (x : i32) ->
+      case (unbang host[lt_s32]) (i32[10], x) {
+        inl le -> return (inl x : i32 + i32)
+      | inr gt -> return (inr x : i32 + i32)
+      }
+
+-- `ask`'s clause, the work over the state: `v = free(c); c = alloc(v + 1); tick(); k(v)`.
+def ask_work : !(all 'x < top. ref i32 * mut 'x i32 => (ref i32 * mut 'x i32) * i32) =
+  !thunkv Fun 'x < top.
+      return (thunkv fun (s : ref i32 * mut 'x i32) ->
+          let (c, m) = s;
+          v <- return (free[i32] c);
+          c2 <- return (alloc[i32] (plus (v, i32[1])));
+          t <- return (withswap['x, i32, i32] m (unbang tick_fn));
+          let (m, k) = t;
+          return ((c2, m), v))
+
+-- `with releasing(alloc(c0)) { [tick();] check(x) }`, threading the count's borrow.
+def releasing : !(all 'x < top. mut 'x i32 * (i32 * (i32 * (1 + 1))) => mut 'x i32 * i32) =
+  !thunkv Fun 'x < top.
+      return (thunkv fun (p : mut 'x i32 * (i32 * (i32 * (1 + 1)))) ->
+          let (m, q) = p;
+          let (c0, q2) = q;
+          let (x, tk) = q2;
+          c <- return (alloc[i32] c0);
+          m1 <- case tk {
+              inl no -> return m
+            | inr yes -> t <- return (withswap['x, i32, i32] m (unbang tick_fn)); let (m, k) = t; return m
+            };
+          r <- return (unbang check) x;
+          case r {
+            inl a -> w <- return (free[i32] c); return (m1, plus (a, w))
+          | inr e -> t <- return (withswap['x, i32, i32] m1 (unbang tick_fn));
+              let (m2, k) = t;
+              w <- return (free[i32] c);
+              return (m2, plus (times (k, i32[1000]), w))
+          })
+
+-- `with asking(alloc(5)) { let x = ask(); let y = ask(); x * 10 + y }`.
+def asking : !(all 'x < top. mut 'x i32 => mut 'x i32 * i32) =
+  !thunkv Fun 'x < top.
+      return (thunkv fun (m : mut 'x i32) ->
+          c <- return (alloc[i32] i32[5]);
+          s1 <- return (unbang ask_work) ['x] (c, m);
+          let (st1, x) = s1;
+          s2 <- return (unbang ask_work) ['x] st1;
+          let (st2, y) = s2;
+          let (c2, m2) = st2;
+          return (m2, plus (times (x, i32[10]), y)))
+
+main : F (i32 * (i32 * (i32 * i32))) =
+  n <- return (alloc[i32] i32[0]);
+  r <- return withbor2['x, top, i32, i32 * (i32 * i32)] n (thunkv Fun 'x < dom.
+        return (thunkv fun (m : mut 'x i32) ->
+          ra <- return (unbang releasing) ['x] (m, (i32[100], (i32[5], (inr () : 1 + 1))));
+          let (m, a) = ra;
+          rb <- return (unbang releasing) ['x] (m, (i32[200], (i32[50], (inl () : 1 + 1))));
+          let (m, b) = rb;
+          rc <- return (unbang asking) ['x] m;
+          let (m, c) = rc;
+          let () = forget_mut['x, i32] m;
+          return boxed['x] (a, (b, c))));
+  let (n, abc) = r;
+  let (a, bc) = abc;
+  let (b, c) = bc;
+  w <- return (free[i32] n);
+  return (a, (b, (c, w)))

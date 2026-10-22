@@ -1,0 +1,146 @@
+-- bug MEMORY cancel-twice: the losing task cancelled twice
+-- H4b: `corpus/async-race.bc` as effect-free core by WHOLE-PROGRAM DEFUNCTIONALISATION: the task
+-- type is a sum of the bodies' states, `TV = i32 + (LS + i32)` (finished; `lookup` suspended with
+-- its buffer and awaits left; `sleeper` suspended with its awaits left), held by value. A resume is
+-- a `case` on the body's summand and a direct call of that body's step; a cancel is a `case` and
+-- that body's `close` (here `free buf` or nothing). No `U`, no closure, no indirect call.
+--
+-- Rule (over H4a's): the closure class of `TV`'s values is closed (every `unfold` packed
+-- into it is known: here the two spawn sites), so `TV` is replaced by the sum of the
+-- class's states and each observation by a `case` over it (0-CFA over the typed term, then a
+-- type-directed rewrite; #669's p3b/p3c lifted to several bodies). This is a whole-program rewrite:
+-- a task type whose class is open (a library taking `Task[A]` from a caller compiled apart) keeps
+-- H4a's form.
+--
+-- Answer: `(inl i32[30], inr ())`, `live 0`.
+include async
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+def minus : i32 * i32 => i32 = unbang host[sub32]
+
+-- `lookup(key, steps)` suspended: (buf, awaits left after this one).
+type LS = ref i32 * i32
+-- A suspended task: one summand per body.
+type St = LS + i32
+-- A task: finished with its value, or suspended.
+type TV = i32 + St
+
+def lookup_next : !(LS => i32 + St) =
+  !thunkv fun (s : LS) ->
+      let (buf, left) = s;
+      case (unbang host[lt_s32]) (i32[0], left) {
+        inl ge -> v <- return (free[i32] buf);
+          return (inl (unbang host[mul32]) (v, i32[10]) : i32 + St)
+      | inr lt -> return (inr (inl (buf, minus (left, i32[1])) : St) : i32 + St)
+      }
+
+def sleeper_next : !(i32 => i32 + St) =
+  !thunkv fun (left : i32) ->
+      case (unbang host[lt_s32]) (i32[0], left) {
+        inl ge -> return (inl i32[0] : i32 + St)
+      | inr lt -> return (inr (inr minus (left, i32[1]) : St) : i32 + St)
+      }
+
+def spawn_lookup : !(i32 * i32 => TV) =
+  !thunkv fun (p : i32 * i32) ->
+      let (key, steps) = p;
+      buf <- return (alloc[i32] key);
+      case (unbang host[lt_s32]) (i32[0], steps) {
+        inl ge -> v <- return (free[i32] buf); return (inl (unbang host[mul32]) (v, i32[10]) : TV)
+      | inr lt -> return (inr (inl (buf, minus (steps, i32[1])) : St) : TV)
+      }
+
+def sleeping : !(i32 => TV) =
+  !thunkv fun (steps : i32) ->
+      case (unbang host[lt_s32]) (i32[0], steps) {
+        inl ge -> return (inl i32[0] : TV)
+      | inr lt -> return (inr (inr minus (steps, i32[1]) : St) : TV)
+      }
+
+def resume_t : !(TV => i32 + TV) =
+  !thunkv fun (t : TV) ->
+      case t {
+        inl v -> return (inl v : i32 + TV)
+      | inr st -> o <- case st { inl ls -> return (unbang lookup_next) ls | inr n -> return (unbang sleeper_next) n };
+          case o { inl v -> return (inl v : i32 + TV) | inr st2 -> return (inr (inr st2 : TV) : i32 + TV) }
+      }
+
+def cancel_t : !(TV => 1) =
+  !thunkv fun (t : TV) ->
+      case t {
+        inl v -> return ()
+      | inr st -> case st {
+          inl ls -> let (buf, left) = ls; w <- return (free[i32] buf); return ()
+        | inr n -> return ()
+        }
+      }
+
+type RA = TV * (TV * i32)
+type RR = i32 + (i32 + 1)
+
+-- `race`'s generator: its recursive call is the self-reference; the end of the budget is `inr ()`.
+def race_step : !U ((1 + !U (1 -o RA -o F (RR + 1))) * 1 -o RA -o F (RR + 1)) =
+  !thunkv fun (sp0 : (1 + !U (1 -o RA -o F (RR + 1))) * 1) ->
+      let (self, u) = sp0;
+      let () = u;
+      fun (p : RA) ->
+        let (a, q) = p;
+        let (b, turns) = q;
+        case (unbang host[eq32]) (turns, i32[0]) {
+          inl ne -> ra <- return (unbang resume_t) a;
+            case ra {
+              inl v -> x <- return (unbang cancel_t) b; x2 <- return (unbang cancel_t) b; return (inl (inl v : RR) : RR + 1)
+            | inr a2 -> rb <- return (unbang resume_t) b;
+                case rb {
+                  inl w -> x <- return (unbang cancel_t) a2; return (inl (inr (inl w : i32 + 1) : RR) : RR + 1)
+                | inr b2 -> case self {
+                    inl z -> x <- return (unbang cancel_t) a2; y <- return (unbang cancel_t) b2;
+                      return (inr () : RR + 1)
+                  | inr g -> f <- return unbang g;
+                      z <- return ();
+                      n <- return (a2, (b2, minus (turns, i32[1])));
+                      force f z n
+                  }
+                }
+            }
+        | inr eq -> x <- return (unbang cancel_t) a; y <- return (unbang cancel_t) b;
+            return (inl (inr (inr () : i32 + 1) : RR) : RR + 1)
+        }
+
+def race : !U (RA -o F (RR + 1)) =
+  !thunkv fun (p : RA) ->
+      st <- return race_step;
+      bf <- return unbang bounded_fix[1, RA -o F (RR + 1)];
+      ba <- return (st, (i32[10000], ()));
+      force bf ba p
+
+def timeout : !(TV * i32 => (i32 + 1) + 1) =
+  !thunkv fun (p : TV * i32) ->
+      let (t, steps) = p;
+      s <- return (unbang sleeping) steps;
+      rc <- return unbang race;
+      a <- return (t, (s, plus (steps, i32[1])));
+      r <- force rc a;
+      case r {
+        inl rr -> case rr {
+            inl v -> return (inl (inl v : i32 + 1) : (i32 + 1) + 1)
+          | inr e -> return (inl (inr () : i32 + 1) : (i32 + 1) + 1)
+          }
+      | inr x -> return (inr () : (i32 + 1) + 1)
+      }
+
+main : F (RR * (i32 + 1)) =
+  a <- return (unbang spawn_lookup) (i32[3], i32[3]);
+  b <- return (unbang spawn_lookup) (i32[4], i32[6]);
+  c <- return (unbang spawn_lookup) (i32[5], i32[3]);
+  rc <- return unbang race;
+  ab <- return (a, (b, i32[10]));
+  first <- force rc ab;
+  case first {
+    inl fr -> late <- return (unbang timeout) (c, i32[2]);
+      case late {
+        inl lt -> return (fr, lt)
+      | inr x -> return ((inr (inr () : i32 + 1) : RR), (inr () : i32 + 1))
+      }
+  | inr x -> return ((inr (inr () : i32 + 1) : RR), (inr () : i32 + 1))
+  }

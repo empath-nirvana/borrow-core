@@ -1,0 +1,85 @@
+-- H2, encoding (c): `corpus/async-logged.bc` as an effect-free core term. `careful` lends its own
+-- cell `c` across a `log`, an `await` and a `log` (R1 in the source: `PinLaw`). Here the task is a
+-- machine (κ defunctionalised, #669 program 2) whose state OWNS `c`; each segment between two
+-- stops opens its own lend of `c`. The crossing borrow (`m`, and `p = (m, 10)`) is stored with the
+-- borrow replaced by `1` and re-filled from the fresh lend. `Fail`, handled inside the block, is
+-- a sum (`catch_abort`). `log` and `await` are the machine's stops: its observation answers
+-- `lib/async.bc`'s `Stopped[i32]` (`inl ()` at an `await`, `inr x` at a `log` of `x`), so the
+-- library's `lpush`/`run_logged` (already effect-free core) run it unchanged.
+--
+-- States: `inl n` not started; then after `log(a)`: `c`; after `await`: `(c, ((), 10))`; after
+-- `log(b)`: `(c, (k, b))`. `close` frees `c` (the cancel's finalisers: the lend is not open
+-- between stops, so ending it is nothing, then `c`'s destructor).
+--
+-- Answer: as `corpus/async-logged.out`, `live 0`.
+include async
+
+type S = i32 + (ref i32 + (ref i32 * (1 * i32) + ref i32 * (i32 * i32)))
+type R = i32 + ((1 + i32) * box top S)
+
+fn rd(c: ref i32) -> ref i32 * i32 =
+  let v = borrow mut c { m -> modify m { x -> (x, x) } };
+  (c, v)
+
+-- Before `log(a)`: alloc, lend, read.
+fn seg0(n: i32) -> ref i32 * i32 = rd(alloc(n))
+-- Between `log(a)` and `await`: `p = (m, 10)` made inside a fresh lend; its borrow stored as `()`.
+fn seg1(c: ref i32) -> ref i32 * (1 * i32) =
+  let q = borrow mut c { m -> let p = (m, 10); let (m0, k) = p; ((), k) };
+  (c, q)
+-- Between `await` and `log(b)`: `(m, k) = p`, with `m` re-filled; `b` read.
+fn seg2(s: ref i32 * (1 * i32)) -> ref i32 * (i32 * i32) =
+  let (c, q) = s;
+  let ((), k) = q;
+  let b = borrow mut c { m -> let p = (m, k); let (m2, k2) = p; modify m2 { x -> (x, x) } };
+  (c, (k, b))
+-- After `log(b)` to the end: `to_result`'s handler as a sum, then `c` freed.
+fn seg3(s: ref i32 * (i32 * i32)) -> i32 =
+  let (c, kb) = s;
+  let (k, b) = kb;
+  let r = borrow mut c { m ->
+    if b == 2 { (inr b : i32 + i32) } else { modify m { x -> x * k }; let y = modify m { x -> (x, x) }; (inl y : i32 + i32) } };
+  let _ = free(c);
+  match r { inl x -> x | inr e -> 0 - e }
+
+def careful_step : !U (S -o F R & F 1) =
+  !thunkv fun (s : S) ->
+      < case s {
+          inl n -> ca <- return seg0 n;
+            let (c, a) = ca;
+            return (inr (inr a, boxed[top] (inr (inl c) : S)) : R)
+        | inr t -> case t {
+            inl c -> q <- return seg1 c;
+              return (inr (inl (), boxed[top] (inr (inr (inl q)) : S)) : R)
+          | inr t2 -> case t2 {
+              inl q -> r <- return seg2 q;
+                let (c, kb) = r;
+                let (k, b) = kb;
+                return (inr (inr b, boxed[top] (inr (inr (inr (c, (k, b)))) : S)) : R)
+            | inr r -> return (inl (seg3 r) : R)
+            }
+          }
+        },
+        case s {
+          inl n -> return ()
+        | inr t -> case t {
+            inl c -> d <- return free[i32] c; return ()
+          | inr t2 -> case t2 {
+              inl q -> let (c, z) = q; d <- return free[i32] c; return ()
+            | inr r -> let (c, z) = r; d <- return free[i32] c; return ()
+            }
+          }
+        } >
+
+-- `with spawn_logged { careful(n) }`: the machine run to its first stop.
+def spawn_careful : !(i32 => Stopped[i32]) =
+  !thunkv fun (n : i32) ->
+      f <- return unbang unfold[nu X. F (i32 + ((1 + i32) * box top U X)) & F 1, S] careful_step;
+      s0 : S <- return inl n;
+      (nu_out force f s0).1
+
+main -> List[i32] * List[i32] =
+  let q = lqueue[i32]();
+  let q = lpush(q, spawn_careful(3));
+  let q = lpush(q, spawn_careful(2));
+  run_logged(q)

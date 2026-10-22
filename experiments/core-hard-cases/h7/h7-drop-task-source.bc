@@ -1,0 +1,14 @@
+-- H7 (#671), the source: an affine task that owns a cell, suspended at its `await`, dropped
+-- without a `cancel`. `t` is never used: the checker inserts its destructor (SPEC §12), and
+-- `Task[i32]` = `box top U (nu X. F (i32 + box top U X) & F 1)` is class 2, so the destructor is
+-- `close`, which is the task's cancel.
+include async
+
+fn holder() -> i32 with Async =
+  let c = alloc(5);
+  await();
+  free(c)
+
+main -> i32 =
+  let t = with spawn { holder() };
+  7

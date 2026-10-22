@@ -1,0 +1,24 @@
+-- bug SEMANTIC state-not-threaded: the outer handler's state not threaded past the clause (no resource: only a wrong value)
+-- H6b: `corpus/answers-two-types.bc` effect-free: two operations of different answer types
+-- (`attempt` answers `i32`, `note` answers `1`) under two handlers, the outer with a state.
+--
+-- Rules: as H6a, one work per tail clause, each at its own answer type, so the answers need no
+-- common layout (the `Ops.wrapsAnswers` variants of the old backend do not arise): the outer
+-- handler's state (`calls`) is threaded through the body; the inner (`journal`) has none, so its
+-- work takes only the operation's argument. A clause's resumption `k(v)` in tail position is the
+-- return of the work.
+--
+-- Answer: `(i32[201], i32[1])`, `live 0`.
+fn attempt_work(calls: i32) -> i32 * i32 = let calls = calls + 1; (calls, calls)
+
+fn note_work(x: i32) -> 1 = ()
+
+fn step(calls: i32, ms: i32) -> i32 * i32 =
+  let (c2, n) = attempt_work(calls);
+  let () = note_work(n);
+  (calls, 200 + n)
+
+main -> i32 * i32 =
+  let (calls, a) = step(0, 80);
+  let a = a;
+  (a, calls)

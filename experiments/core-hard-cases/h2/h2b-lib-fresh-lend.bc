@@ -1,0 +1,11 @@
+-- H2, encoding (b) at the library scheduler: a `Task[A]`-shaped queue holds the task across the
+-- scheduler's rounds, and the owner (hoisted out of the task) lends its cell afresh for each
+-- resume. The task's observation must then be generic in the lend's lifetime. Expected to be
+-- refused by `CTy.NuOk` (no lifetime binder in an observation tree; #669 `p9b`); E1 would admit it.
+
+type T = box top U (nu X. (forall 'b < top. (mut 'b i32 -o F (mut 'b i32 * (i32 + box top U X)))) & F 1)
+
+main : F i32 =
+  c <- return alloc[i32] i32[3];
+  d <- return free[i32] c;
+  return d

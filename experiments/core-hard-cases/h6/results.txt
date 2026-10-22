@@ -1,0 +1,6 @@
+h6a-handler-state | assurance: unconditional | src: i32[102] live 0  | lir: i32[102] live 0  | wasm: i32[102] live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 0 indirect 0 copies 0 loads 0 stores 0 bounds 0
+h6b-answers-two-types | assurance: unconditional | src: (i32[201], i32[1]) live 0  | lir: (i32[201], i32[1]) live 0  | wasm: (i32[201], i32[1]) live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 0 indirect 0 copies 0 loads 0 stores 0 bounds 0
+h6c-clause-captures | assurance: unconditional | src: (i32[105], (i32[2200], (i32[63], i32[4]))) live 0  | lir: (i32[105], (i32[2200], (i32[63], i32[4]))) live 0  | wasm: (i32[105], (i32[2200], (i32[63], i32[4]))) live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 6 indirect 0 copies 0 loads 10 stores 10 bounds 0
+main: answers-two-types 0 2 0 0 0 0
+main: clause-captures 6 3 0 10 10 0
+main: hygiene-handler-state 0 2 0 0 0 0

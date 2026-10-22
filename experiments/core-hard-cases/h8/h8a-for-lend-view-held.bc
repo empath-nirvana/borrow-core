@@ -1,0 +1,36 @@
+-- H8, the derived view HELD across the stop: `corpus/reject/for-lend-resumes.bc`'s generator
+-- (`for x in &a { yield(*x) }`), stored (its consumer steps it, so each `yield` is a stop), with
+-- κ defunctionalised: the state at the `yield` holds the loop's cursor over `&a`, the view family
+-- `array_imm 'l i32` and the index. The view is derived from the lend of the generator's own
+-- array, so the machine must leave the lend's callback boxed at `'l`. Expected to be refused by
+-- the box rule (as #669 `p5c`): typing it needs a lend whose scope is the machine's (E2).
+
+type Pull = U (nu X. F (i32 * U X + (1 + U X)) & F 1)
+
+def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return (unbang host[add32]) (i, i32[1])
+
+main : F i32 =
+  a <- return (unbang array_new[i32]) (i32[3], tab);
+  r <- return slice_borrow_imm['l, top, i32, Pull] a (thunkv Fun 'l < dom.
+      return (thunkv fun (v : array_imm 'l i32) ->
+          st <- return (!thunkv fun (s : array_imm 'l i32 * i32) ->
+                < let (w, i) = s;
+                  cw <- return (unbang array_copy['l, i32]) w;
+                  let (w, w2) = cw;
+                  case (unbang array_get['l, i32]) (w2, i) {
+                    inl g -> x <- return withload['l, 'y, i32, i32] g (thunkv Fun 'y < dom.
+                          return (thunkv fun (dv : view 'y i32) -> return boxed['y] dv));
+                      return (inl (x, (w, (unbang host[add32]) (i, i32[1]))) : i32 * (array_imm 'l i32 * i32) + (1 + array_imm 'l i32 * i32))
+                  | inr u -> let () = (unbang array_forget['l, i32]) w; return (inr (inl ()) : i32 * (array_imm 'l i32 * i32) + (1 + array_imm 'l i32 * i32))
+                  },
+                  let (w, i) = s; let () = (unbang array_forget['l, i32]) w; return () >);
+          f <- return unfold[nu X. F (i32 * U X + (1 + U X)) & F 1, array_imm 'l i32 * i32] st;
+          s0 : array_imm 'l i32 * i32 <- return (v, i32[0]);
+          return boxed['l] (thunkv nu_in < fu <- return unbang f; (nu_out force fu s0).1,
+              fu <- return unbang f; (nu_out force fu s0).2 >)));
+  let (a, g) = r;
+  o <- (nu_out force g).1;
+  case o {
+    inl p -> let (x, g2) = p; e <- (nu_out force g2).2; return x
+  | inr q -> case q { inl u -> return i32[0] | inr g2 -> e <- (nu_out force g2).2; return i32[0] }
+  }

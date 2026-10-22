@@ -1,0 +1,11 @@
+MEMORY double-free: REJECTED 25:3: `c` is used twice here, and its type `ref i32` is not persistent  -- the owner's finaliser run twice
+MEMORY write-after-lend: REJECTED 22:11: `m` is used twice here, and its type `mut 'x i32` is not persistent  -- a write through the borrow after the borrower's finaliser ended it
+MEMORY borrow-escapes: REJECTED 16:42: unbound lifetime variable 'x  -- the borrow returned out of its lend (answer type mentions 'x)
+MEMORY borrow-escapes-boxed: REJECTED 22:28: type mismatch: expected `i32 + i32`, but this has type `mut 'x i32`  -- the borrow answered from the lend: B = mut 'x i32
+MEMORY owner-used-in-lend: REJECTED 16:15: `c` is used twice here, and its type `ref i32` is not persistent  -- the owner freed while it is lent (inside the callback)
+MEMORY free-skipped: ACCEPTED (assurance: unconditional) src: inl i32[1] live 0 | lir: inl i32[1] live 0  -- the owner's finaliser skipped on the only path (the checker's implicit destructor, SPEC 12, frees c)
+MEMORY owner-dup: REJECTED 25:3: `c` is used twice here, and its type `ref i32` is not persistent  -- the owner freed, then freed again by the original free (affine resource used twice)
+SEMANTIC write-skipped: ACCEPTED (assurance: unconditional) src: inl i32[1] live 0 | lir: inl i32[1] live 0  -- the borrower's write of 99 skipped: observable output only
+SEMANTIC wrong-summand: ACCEPTED (assurance: unconditional) src: inr i32[1] live 0 | lir: inr i32[1] live 0  -- the wrong summand answered
+MEMORY finaliser-thunk-dropped: REJECTED 25:3: `fin` is not consumed in its scope, and its type `U (F i32)` has no destructor  -- the owner's finaliser packaged as a linear thunk (class 3, no destructor) and never run
+MEMORY linear-free-skipped: REJECTED 25:10: `c` is declared `linear` and is not consumed in its scope  -- the owner bound `linear` (opted out of implicit destructors) and its free skipped

@@ -1,0 +1,1 @@
+SEMANTIC state-not-threaded: ACCEPTED (assurance: unconditional) src: (i32[201], i32[0]) live 0 | lir: (i32[201], i32[0]) live 0  -- the outer handler's state not threaded past the clause (no resource: only a wrong value)

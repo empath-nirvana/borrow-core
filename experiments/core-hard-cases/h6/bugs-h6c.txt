@@ -1,0 +1,9 @@
+MEMORY ask-use-after-free: REJECTED 38:11: `c` is used twice here, and its type `ref i32` is not persistent  -- the state's old cell freed again after its free (double free / use after free)
+MEMORY ask-old-cell-kept: REJECTED 38:11: `c` is used twice here, and its type `ref i32` is not persistent  -- the work answers the freed old cell as the new state, the new one dropped
+MEMORY final-state-not-freed: ACCEPTED (assurance: unconditional) src: (i32[105], (i32[2200], (i32[56], i32[4]))) live 0 | lir: (i32[105], (i32[2200], (i32[56], i32[4]))) live 0  -- the return clause does not free the state's cell (the implicit destructor frees it)
+MEMORY final-state-not-freed-linear: REJECTED 75:18: `c2` is declared `linear` and is not consumed in its scope  -- as above, the cell bound `linear`
+MEMORY release-both-arms-twice: REJECTED 61:15: `c` is used twice here, and its type `ref i32` is not persistent  -- the raise clause frees the handler's cell twice
+MEMORY borrow-aliased: REJECTED 84:11: `m` is used twice here, and its type `mut 'x i32` is not persistent  -- the count's borrow used after it was handed to the second `with` (two live `mut` borrows)
+MEMORY borrow-escapes: REJECTED 88:40: type mismatch: expected `mut top i32`, but this has type `mut 'x i32`  -- the handler's borrow answered out of the `with` (stored past its lend)
+SEMANTIC tick-skipped: ACCEPTED (assurance: unconditional) src: (i32[5], (i32[2200], (i32[63], i32[4]))) live 0 | lir: (i32[5], (i32[2200], (i32[63], i32[4]))) live 0  -- a wrong value (the freed cell's contents not added)
+SEMANTIC raise-no-tick: ACCEPTED (assurance: unconditional) src: (i32[105], (i32[2200], (i32[63], i32[3]))) live 0 | lir: (i32[105], (i32[2200], (i32[63], i32[3]))) live 0  -- the raise clause skips its `tick()` (count observable only)

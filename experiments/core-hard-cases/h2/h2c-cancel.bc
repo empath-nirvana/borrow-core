@@ -1,0 +1,66 @@
+-- H2, encoding (c): `corpus/async-cancel.bc` as an effect-free core term. `victim` owns `extra` and
+-- lends `buf` across two `await`s (R1 in the source). Here its machine's state OWNS both cells,
+-- `p = (m, 5)` stored as `((), 5)`, and the segment after the second `await` lends `buf` again.
+-- `killer` holds the victim's task in its own state and cancels it: the victim's `close` frees
+-- `buf` then `extra` (the lend is not open between stops, so its unwinding ends nothing, then
+-- `buf`'s destructor, then `extra`'s: innermost first, as the source's cancel).
+--
+-- Answer: `inr (i32[2], inl ())`, `live 0`, as `corpus/async-cancel.out`.
+include async
+
+type V = ref i32 * (ref i32 * (1 * i32))
+-- After the first `await` (`inl`) or the second (`inr`).
+type VS = V + V
+
+fn victim_end(s: V) -> i32 =
+  let (extra, q) = s;
+  let (buf, r) = q;
+  let ((), k) = r;
+  let v = borrow mut buf { m -> let p = (m, k); let (m2, k2) = p; modify m2 { x -> (x, x + k2) } };
+  let _ = free(buf);
+  let e = free(extra);
+  v + e
+
+-- The victim up to its first `await`: `p = (m, 5)` made in a lend, its borrow stored as `()`.
+fn victim_start(u: 1) -> V =
+  let extra = alloc(11);
+  let buf = alloc(10);
+  let r = borrow mut buf { m -> let p = (m, 5); let (m0, k) = p; ((), k) };
+  (extra, (buf, r))
+
+def victim_step : !U (VS -o F (i32 + box top VS) & F 1) =
+  !thunkv fun (s : VS) ->
+      < case s {
+          inl v -> return (inr boxed[top] (inr v : VS) : i32 + box top VS)
+        | inr v -> return (inl (victim_end v) : i32 + box top VS)
+        },
+        case s {
+          inl v -> let (extra, q) = v; let (buf, r) = q; d <- return free[i32] buf; e <- return free[i32] extra; return ()
+        | inr v -> let (extra, q) = v; let (buf, r) = q; d <- return free[i32] buf; e <- return free[i32] extra; return ()
+        } >
+
+-- `with spawn { victim() }`: run to its first `await`, the rest boxed at `top`.
+def spawn_victim : !(1 => Task[i32]) =
+  !thunkv fun (u : 1) ->
+      fb <- return unfold[nu X. F (i32 + box top U X) & F 1, VS] victim_step;
+      s0 : VS <- return inl (victim_start u);
+      return boxed[top] (thunkv nu_in < fu <- return unbang fb; (nu_out force fu s0).1,
+          fu <- return unbang fb; (nu_out force fu s0).2 >)
+
+-- `killer(t)`: suspended at its `await` holding `t`; its next observation cancels `t` and answers 2.
+def killer_step : !U (Task[i32] -o F (i32 + box top Task[i32]) & F 1) =
+  !thunkv fun (t : Task[i32]) ->
+      < c <- return cancel[i32](t); return (inl i32[2] : i32 + box top Task[i32]),
+        cancel[i32](t) >
+
+def spawn_killer : !(Task[i32] => Task[i32]) =
+  !thunkv fun (t : Task[i32]) ->
+      fb <- return unfold[nu X. F (i32 + box top U X) & F 1, Task[i32]] killer_step;
+      return boxed[top] (thunkv nu_in < fu <- return unbang fb; (nu_out force fu t).1,
+          fu <- return unbang fb; (nu_out force fu t).2 >)
+
+main -> List[i32] =
+  let t = spawn_victim(());
+  let q = queue[i32]();
+  let q = push(q, spawn_killer(t));
+  run_until_empty(q)

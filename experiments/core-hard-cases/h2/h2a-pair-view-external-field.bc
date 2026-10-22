@@ -1,0 +1,32 @@
+-- H2, encoding (a) for an EXTERNAL lend: the owner hoisted out of the task (as in (b)), lent once
+-- at `'a` around the whole run, and the machine's state holds the borrow as a field bounded by
+-- `'a` (`lib/async.bc`'s `TaskIn[A]<'d>` / `spawn_in` shape). The machine never leaves the lend.
+--
+-- Answer: i32[7], `live 0`.
+
+main : F i32 =
+  c <- return alloc[i32] i32[3];
+  r <- return withbor2['a, top, i32, i32] c (thunkv Fun 'a < dom.
+    return (thunkv fun (m : mut 'a i32) ->
+      st <- return (!thunkv fun (s : 1 + mut 'a i32 * i32) ->
+            < case s {
+                inl u -> return (inr (inl i32[0] : i32 + (1 + mut 'a i32 * i32)) : i32 * (1 + mut 'a i32 * i32) + (i32 + (1 + mut 'a i32 * i32)))
+              | inr p -> let (m2, k) = p;
+                  w <- return withswap['a, i32, i32] m2 (thunkv fun (x : i32) ->
+                        y <- return (unbang host[add32]) (x, k); return (y, y));
+                  let (m3, y) = w;
+                  let () = forget_mut['a, i32] m3;
+                  return (inr (inl y : i32 + (1 + mut 'a i32 * i32)) : i32 * (1 + mut 'a i32 * i32) + (i32 + (1 + mut 'a i32 * i32)))
+              },
+              case s { inl u -> return () | inr p -> let (m2, k) = p; let () = forget_mut['a, i32] m2; return () } >);
+      f <- return unbang unfold[nu X. F (i32 * U X + (i32 + U X)) & F 1, 1 + mut 'a i32 * i32] st;
+      s0 : 1 + mut 'a i32 * i32 <- return inr (m, i32[4]);
+      g <- return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >);
+      o <- (nu_out force g).1;
+      case o {
+        inl p -> let (x, g2) = p; e <- (nu_out force g2).2; return boxed['a] x
+      | inr q -> case q { inl v -> return boxed['a] v | inr g2 -> e <- (nu_out force g2).2; return boxed['a] i32[0] }
+      }));
+  let (c, v) = r;
+  d <- return free[i32] c;
+  return v

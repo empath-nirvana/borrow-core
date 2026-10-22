@@ -1,0 +1,1 @@
+SEMANTIC stale-state: ACCEPTED (assurance: unconditional) src: i32[101] live 0 | lir: i32[101] live 0  -- the return clause given the state before the clause ran (no resource: only a wrong value)

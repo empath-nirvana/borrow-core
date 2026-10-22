@@ -1,0 +1,17 @@
+H3 rs borrow (stack of &Node)                 204.0 ms  (201.6-223.9)  out 144471560
+H3 rs consume                                 207.4 ms  (204.7-211.7)  out 144471560
+H3 rs build only                              164.8 ms  (163.2-171.2)  out 0
+H3 core r3 re-borrow per step                 514.3 ms  (512.8-517.6)  out i64[144471560]
+H3 core z3 consume, frames array              176.5 ms  (176.3-177.4)  out i64[144471560]
+H3 core zz3 zipper, owned, rebuilt            382.7 ms  (374.4-394.2)  out i64[144471560]
+H3 main src consume (task stacks)             188.2 ms  (187.5-193.3)  out i64[144471560]
+H3 core b3 build only                         108.2 ms  (107.9-110.9)  out i64[0]
+H1 rs bench/async-tree (iterative)            108.5 ms  (107.2-110.5)  out 18058304
+H1 core a1 frames mu list                     389.3 ms  (388.3-392.8)  out i64[505641240]
+H1 core a1b frames array                      179.1 ms  (177.4-182.7)  out i64[505641240]
+H1 main src async-tree (task stacks)          248.7 ms  (245.7-256.7)  out i64[505641240]
+H1 rs bench/gen-tree                          103.3 ms  (103.0-104.4)  out 1083498760
+H1 core g1 gen-tree at its for                102.2 ms  (101.8-103.7)  out i64[1083498760]
+H1 main src gen-tree                          102.7 ms  (102.5-104.0)  out i64[1083498760]
+H1 core g2 zip, stored, frames mu list         55.6 ms  (54.9-56.1)  out i64[216706624]
+H1 main src zip (stored generators)           231.0 ms  (230.0-232.4)  out i64[216706624]

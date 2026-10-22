@@ -1,0 +1,66 @@
+-- H8 injected bug m6-view-stored-in-state (MEMORY), a variant of `h8b-for-lend-index.bc`: the per-observation lend's view family is handed out of the lend (to be stored in the state as the cursor).
+-- H8, the derived view RE-DERIVED: `corpus/reject/for-lend-resumes.bc`'s generator, stored, with
+-- the loop's cursor over `&a` re-derived at each step from owned state. The state owns the array
+-- and the index; each observation lends the array (`slice_borrow_imm`), reads slot `i`, and ends
+-- the lend before it yields. The rule: a counted walk's cursor over a view `xs` of an owned
+-- array is (owner, index); `xs` is the per-observation lend of the owner (SPEC §14).
+-- `main` drains it (`for x in elems_of() { acc = acc + x }`, the generator stored).
+--
+-- Answer: i32[6] (1 + 2 + 3: `tab(i) = i + 1`), `live 0`.
+
+type Pull = U (nu X. F (i32 * U X + (1 + U X)) & F 1)
+type S = array i32 * i32
+
+def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return (unbang host[add32]) (i, i32[1])
+
+-- Slot `i` of the owned array, read under a lend of this observation.
+def read : !(array i32 * i32 => array i32 * (i32 + 1)) =
+  !thunkv fun (p : array i32 * i32) ->
+      let (a, i) = p;
+      return slice_borrow_imm['l, top, i32, i32 + 1] a (thunkv Fun 'l < dom.
+          return (thunkv fun (v : array_imm 'l i32) ->
+              case (unbang array_get['l, i32]) (v, i) {
+                inl g -> x <- return withload['l, 'y, i32, i32] g (thunkv Fun 'y < dom.
+                      return (thunkv fun (dv : view 'y i32) -> return boxed['y] dv));
+                  return boxed['l] (inl x : i32 + 1)
+              | inr u -> return boxed['l] (inr () : i32 + 1)
+              }))
+
+-- The view family of this observation's lend, handed out of the lend to be kept in the state.
+def keep_view : !(array i32 => array i32 * array_imm top i32) =
+  !thunkv fun (a : array i32) ->
+      return slice_borrow_imm['l, top, i32, array_imm top i32] a (thunkv Fun 'l < dom.
+          return (thunkv fun (v : array_imm 'l i32) -> return boxed['l] v))
+
+def gen_step : !U (S -o F (i32 * S + (1 + S)) & F 1) =
+  !thunkv fun (s : S) ->
+      < let (a, i) = s;
+        r <- return (unbang read) (a, i);
+        let (a, o) = r;
+        case o {
+          inl x -> return (inl (x, (a, (unbang host[add32]) (i, i32[1]))) : i32 * S + (1 + S))
+        | inr u -> return (inr (inl ()) : i32 * S + (1 + S))
+        },
+        let (a, i) = s; return () >
+
+main : F U loop i32 1 =
+  a <- return (unbang array_new[i32]) (i32[3], tab);
+  f <- return unbang unfold[nu X. F (i32 * U X + (1 + U X)) & F 1, S] gen_step;
+  s0 : S <- return (a, i32[0]);
+  g : Pull <- return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >);
+  st : !U (Pull * i32 -o F (i32 + Pull * i32) & F 1) <- return (!thunkv fun (p : Pull * i32) ->
+        < let (it, acc) = p;
+          o <- (nu_out force it).1;
+          case o {
+            inl xr -> let (x, it2) = xr;
+              return (inr (it2, (unbang host[add32]) (acc, x)) : i32 + Pull * i32)
+          | inr q -> case q {
+              inl u -> return (inl acc : i32 + Pull * i32)
+            | inr it2 -> return (inr (it2, acc) : i32 + Pull * i32)
+            }
+          },
+          let (it, acc) = p;
+          (nu_out force it).2 >);
+  l <- return unbang unfold[loop i32 1, Pull * i32] st;
+  z : Pull * i32 <- return (g, i32[0]);
+  return (thunkv nu_in < (nu_out force l z).1, (nu_out force l z).2 >)

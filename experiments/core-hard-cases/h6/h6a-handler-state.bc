@@ -1,0 +1,19 @@
+-- H6a: `corpus/hygiene-handler-state.bc` effect-free. Written in the surface's effect-free
+-- fragment (no `effect`, `handler`, `with` or operation: it elaborates to plain core, and
+-- `bcc lir --erasure` shows no handle, perform or raise).
+--
+-- Rule (a handler with a state, its clauses tail-resumptive: Koka's evidence passing with the
+-- state as an argument, `tail_resumes`): the clause `ask(k) = { c = c + 1; k(c) }` is the `!` work
+-- `ask_work : σ -> σ * answer`, called where the body performs `ask()`; the handled body threads
+-- the state σ through its performs in order; the return clause receives the final σ.
+--
+-- Answer: i32[102], `live 0`.
+fn ask_work(c: i32) -> i32 * i32 = let c = c + 1; (c, c)
+
+fn ret_clause(a: i32, c: i32) -> i32 = a + c
+
+main -> i32 =
+  let c = 100;
+  let s0 = 0;
+  let (s1, x) = ask_work(s0);
+  ret_clause(x + c, s1)

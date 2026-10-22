@@ -1,0 +1,29 @@
+-- H7 (#671) in effect-free core: `h7-drop-task-source.bc` with `holder`'s `κ` defunctionalised.
+-- The task's machine state is `holder`'s live variables at its `await`: the cell `c`. Its next
+-- observation frees `c` and finishes with its value; its close (the task's cancel) frees `c`.
+-- `with spawn { holder() }` runs `holder` to its first `await` (allocates `c`) and answers the
+-- machine boxed at `top`, a `Task[i32]`. `main` never uses `t`: the checker inserts `t`'s
+-- destructor (SPEC §12, class 2 at `U (nu X. C & F 1)`), which is `close`: the cancel runs and
+-- frees `c`.
+--
+-- Answer: i32[7], `live 0`.
+
+type Task = box top U (nu X. F (i32 + box top U X) & F 1)
+
+def step : !U (ref i32 -o F (i32 + box top ref i32) & F 1) =
+  !thunkv fun (c : ref i32) ->
+      < v <- return free[i32] c;
+        return (inl v : i32 + box top ref i32),
+        v <- return free[i32] c;
+        return () >
+
+def spawn0 : !(1 => Task) =
+  !thunkv fun (u : 1) ->
+      f <- return unfold[nu X. F (i32 + box top U X) & F 1, ref i32] step;
+      c <- return alloc[i32] i32[5];
+      return boxed[top] (thunkv nu_in < fu <- return unbang f; (nu_out force fu c).1,
+          fu <- return unbang f; (nu_out force fu c).2 >)
+
+main : F i32 =
+  t <- return (unbang spawn0) ();
+  return i32[7]

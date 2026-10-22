@@ -1,0 +1,59 @@
+-- H1 comparator (ii): a STORED recursive generator, as main compiles it. `zipsum` walks the tree
+-- in round `r` with a `for`, and steps a second walk, of round `r + 1`, by hand at each element:
+-- that walk is a stored generator (`U (pull i32 1 1)`) held across the `for`'s iterations, its
+-- continuation the recursion's frames. Both walks are stored and stepped in turn by a `while`.
+include rec
+include yield
+
+fn value(k: i32, r: i32) -> i32 = (k * 7919 + r) % 1000
+
+fn walk(lo: i32, hi: i32, r: i32) -> 1 with Yield[i32], Exhausted =
+  if lo < hi {
+    let m = lo + (hi - lo) / 2;
+    walk(lo, m, r);
+    yield(value(m, r));
+    walk(m + 1, hi, r)
+  } else { () }
+
+fn walkh(n: i32, r: i32) -> 1 with Yield[i32] = with on_exhausted(!{ u -> () }) { walk(0, n, r) }
+
+fn empty(k: i32) -> 1 with Yield[i32] = if k < 0 { yield(k) } else { () }
+
+fn empty_gen() -> U (pull i32 1 1) = let e : U (pull i32 1 1) = empty(0); e
+
+fn step(it: U (pull i32 1 1)) -> (i32 * U (pull i32 1 1)) + 1 =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> inl (x, it)
+  | inr d -> match d { inl u -> inr () | inr it -> inl (0, it) }
+  }
+
+fn zipsum(n: i32, r: i32) -> i64 =
+  let a0 : U (pull i32 1 1) = walkh(n, r);
+  let b0 : U (pull i32 1 1) = walkh(n, r + 1);
+  let mut a = a0;
+  let mut b = b0;
+  let mut s = i64[0];
+  let mut go = true;
+  while go {
+    match step(a) {
+      inl (x, a2) ->
+        a = a2;
+        match step(b) {
+          inl (y, b2) -> s = s + host[extend_s](x + 2 * y); b = b2
+        | inr u -> b = empty_gen(); go = false
+        }
+    | inr u -> a = empty_gen(); go = false
+    }
+  };
+  (nu_out (force a)).2;
+  (nu_out (force b)).2;
+  s
+
+main -> i64 =
+  let n = 200;
+  let reps = 2;
+  let mut acc = i64[0];
+  let mut r = 0;
+  while r < reps { acc = acc + zipsum(n, r); r = r + 1 };
+  acc

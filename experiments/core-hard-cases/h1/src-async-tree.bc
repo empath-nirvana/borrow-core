@@ -1,0 +1,37 @@
+-- H1 comparator (iii): `bench/async-tree/main.bc` as main compiles it (a recursive task: a stack
+-- machine on a task stack, SPEC §52), with the arguments as constants and the tasks' values summed
+-- by `main` (no argument parsing or printing), as the core term does.
+include rec
+include async
+
+fn value(k: i32, r: i32) -> i32 = (k * 7919 + r) % 1000
+
+fn tsum(lo: i32, hi: i32, r: i32) -> i64 with Async, Exhausted =
+  if lo < hi {
+    let m = lo + (hi - lo) / 2;
+    let a = tsum(lo, m, r);
+    await();
+    let b = tsum(m + 1, hi, r);
+    a + host[extend_s](value(m, r)) + b
+  } else { i64[0] }
+
+fn task(n: i32, r: i32) -> i64 with Async = with on_exhausted(!{ u -> i64[0] - 1 }) { tsum(0, n, r) }
+
+fn sum_all(xs: List[i64]) -> i64 =
+  let mut cur = xs;
+  let mut acc = i64[0];
+  let mut more = true;
+  while more {
+    match unroll cur {
+      inl u -> more = false; cur = (roll inl () : List[i64])
+    | inr (x, rest) -> acc = acc + x; cur = rest
+    }
+  };
+  acc
+
+main -> i64 =
+  let n = 200;
+  let tasks = 3;
+  let mut q = queue[i64]();
+  for r in 0..tasks { q = push(q, with spawn { task(n, r) }) };
+  sum_all(run_until_empty(q))

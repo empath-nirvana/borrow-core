@@ -1,0 +1,156 @@
+-- H1 (iii): `bench/async-tree` (a recursive task, `src-async-tree.bc`) as an effect-free core term.
+-- The task's `κ` at `await` is defunctionalised: its frames are a `mu` list of frame records, one
+-- summand per non-tail call point of `tsum`, each holding that point's live variables:
+--   K_left  (m, hi, r)   after `let a = tsum(lo, m, r)`: the `await`, then the right call;
+--   K_right (a, m, r)    after `let b = tsum(m + 1, hi, r)`: `a + value(m, r) + b`.
+-- The task at its `await` is `St = (a, m, hi, r, Stack)`, first-order data; the scheduler holds
+-- each task's state by value in an array slot (as #669's p3c), and a resume is a direct call.
+-- No new type former: `mu`, `*`, `+`, and `bounded_fix` for the step's own loop.
+--
+-- Rule sketch: [frame], [return], [tail], [rec], [abort-sum] as in `g2-gen-zip-stored.bc`, and
+--   [await]     `await()` under `spawn` ↦ answer `inr St`, St the point after it with its frames.
+--   [spawn]     `with spawn { M }` ↦ run `M`'s machine to its first `await` (its state) or its end.
+--   [resume]    `resume t` ↦ the step at `St`; `cancel t` ↦ drop `St` (its destructor).
+--   [sched]     a queue of tasks of one body ↦ an array of `i64 + St` slots (p3c), resumed in place.
+--   [on_exhausted] the task's handler of `Exhausted` ↦ `case` on the drive's `inr ()`: `-1`.
+--
+-- Answer: the sum of the tasks' values, as `src-async-tree.bc`.
+
+def value : !(i32 * i32 => i32) =
+  !thunkv fun (p : i32 * i32) ->
+      let (k, r) = p;
+      x <- return (unbang host[add32]) ((unbang host[mul32]) (k, i32[7919]), r);
+      case (unbang host[rem_s32]) (x, i32[1000]) { inl q -> return q | inr u -> return i32[0] }
+
+type Frame = (i32 * (i32 * i32)) + (i64 * (i32 * i32))
+type Stack = mu L. 1 + (Frame * L)
+-- The task at its `await`: (a, (m, (hi, (r, frames)))).
+type St = i64 * (i32 * (i32 * (i32 * Stack)))
+-- The drive's argument: run `tsum(lo, hi, r)` under the frames, or return `v` to them.
+type D = (i32 * (i32 * (i32 * Stack))) + (i64 * Stack)
+-- The drive's answer: finished with a value, at an `await`, or the budget spent.
+type Out = i64 + (St + 1)
+
+def drive_step : !U ((1 + !U (1 -o D -o F Out)) * 1 -o D -o F Out) =
+  !thunkv fun (sp0 : (1 + !U (1 -o D -o F Out)) * 1) ->
+      let (self, u) = sp0;
+      let () = u;
+      fun (d : D) ->
+        case self {
+          inl x -> return (inr (inr () : St + 1) : Out)
+        | inr g -> case d {
+              inl go -> let (lo, q) = go;
+                let (hi, q2) = q;
+                let (r, stk) = q2;
+                case (unbang host[lt_s32]) (lo, hi) {
+                  inl e -> a : D <- return inr (i64[0], stk);
+                    f <- return unbang g;
+                    z <- return ();
+                    force f z a
+                | inr t -> h2 <- case (unbang host[div_s32]) ((unbang host[sub32]) (hi, lo), i32[2]) {
+                        inl dd -> return dd
+                      | inr dd -> return i32[0]
+                      };
+                    m <- return (unbang host[add32]) (lo, h2);
+                    fr : Frame <- return inl (m, (hi, r));
+                    stk2 : Stack <- return roll inr (fr, stk);
+                    a : D <- return inl (lo, (m, (r, stk2)));
+                    f <- return unbang g;
+                    z <- return ();
+                    force f z a
+                }
+            | inr rt -> let (v, stk) = rt;
+                case unroll stk {
+                  inl e -> return (inl v : Out)
+                | inr fs -> let (fr, rest) = fs;
+                    case fr {
+                      inl kl -> let (m, q) = kl;
+                        let (hi, r) = q;
+                        return (inr (inl (v, (m, (hi, (r, rest)))) : St + 1) : Out)
+                    | inr kr -> let (a, q) = kr;
+                        let (m, r) = q;
+                        w <- return (unbang host[add64]) ((unbang host[add64]) (a, (unbang host[extend_s]) ((unbang value) (m, r))), v);
+                        a2 : D <- return inr (w, rest);
+                        f <- return unbang g;
+                        z <- return ();
+                        force f z a2
+                    }
+                }
+            }
+        }
+
+def drive : !U (D -o F Out) =
+  !thunkv fun (d : D) ->
+      st <- return drive_step;
+      bf <- return unbang bounded_fix[1, D -o F Out];
+      ba <- return (st, (i32[10000], ()));
+      force bf ba d
+
+-- The task's state after a step: its value (`-1` at the budget's end, `on_exhausted`) or its `await`.
+def settle : !(Out => i64 + St) =
+  !thunkv fun (o : Out) ->
+      case o {
+        inl v -> return (inl v : i64 + St)
+      | inr w -> case w {
+          inl k -> return (inr k : i64 + St)
+        | inr u -> return (inl (unbang host[sub64]) (i64[0], i64[1]) : i64 + St)
+        }
+      }
+
+-- `κ`'s resume: the rest after the `await`: the right call under `K_right (a, m, r)`.
+def adv : !(St => i64 + St) =
+  !thunkv fun (k : St) ->
+      let (a, q) = k;
+      let (m, q2) = q;
+      let (hi, q3) = q2;
+      let (r, stk) = q3;
+      fr : Frame <- return inr (a, (m, r));
+      stk2 : Stack <- return roll inr (fr, stk);
+      dv : D <- return inl ((unbang host[add32]) (m, i32[1]), (hi, (r, stk2)));
+      dr <- return unbang drive;
+      o <- force dr dv;
+      return (unbang settle) o
+
+-- `with spawn { task(n, r) }`: the task run to its first `await`.
+def spawn0 : !(i32 * i32 => i64 + St) =
+  !thunkv fun (p : i32 * i32) ->
+      let (n, r) = p;
+      dv : D <- return inl (i32[0], (n, (r, (roll inl () : Stack))));
+      dr <- return unbang drive;
+      o <- force dr dv;
+      return (unbang settle) o
+
+fn spawn_r(r: i32) -> i64 + St = spawn0(200, r)
+
+-- Round robin over the slots until none is pending, then the values summed (p3c's scheduler).
+main -> i64 =
+  let tasks = 3;
+  let mut ts = array_new[i64 + St] (tasks, spawn_r);
+  let mut more = true;
+  while more {
+    more = false;
+    for i in 0..tasks {
+      let (t2, old) = array_replace[i64 + St] (ts, i, (inl i64[0] : i64 + St));
+      ts = t2;
+      match old {
+        inl cur -> match cur {
+            inl v -> let (t3, _) = array_replace[i64 + St] (ts, i, (inl v : i64 + St)); ts = t3
+          | inr k -> match adv(k) {
+              inl v -> let (t3, _) = array_replace[i64 + St] (ts, i, (inl v : i64 + St)); ts = t3
+            | inr k2 -> more = true; let (t3, _) = array_replace[i64 + St] (ts, i, (inr k2 : i64 + St)); ts = t3
+            }
+          }
+      | inr back -> ()
+      }
+    }
+  };
+  let mut acc = i64[0];
+  for i in 0..tasks {
+    let (t2, old) = array_replace[i64 + St] (ts, i, (inl i64[0] : i64 + St));
+    ts = t2;
+    match old {
+      inl cur -> match cur { inl v -> acc = acc + v | inr k -> () }
+    | inr back -> ()
+    }
+  };
+  acc

@@ -1,0 +1,22 @@
+h8a-for-lend-view-held | REFUSED: experiments/core-hard-cases/h8/h8a-for-lend-view-held.bc:14:15: cannot show that `U (pull i32 1 1)` outlives `top` 
+h8a2-for-lend-view-external | assurance: unconditional | src: i32[6] live 0  | lir: i32[6] live 0  | wasm: i32[6] live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 1 indirect 0 copies 0 loads 6 stores 3 bounds 3
+h8b-for-lend-index | assurance: unconditional | src: i32[6] live 0  | lir: i32[6] live 0  | wasm: i32[6] live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 1 indirect 0 copies 0 loads 6 stores 3 bounds 4
+h8c-list-cursor-refold | assurance: unconditional | src: timeout | lir: i32[20100] live 0  | wasm: i32[20100] live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 80601 indirect 0 copies 201 loads 363006 stores 241803 bounds 0
+h8d-list-ownership-walk | assurance: unconditional | src: i32[20100] live 0  | lir: i32[20100] live 0  | wasm: i32[20100] live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 600 indirect 0 copies 0 loads 1800 stores 1800 bounds 0
+for-data-div | assurance: unconditional | src: (i32[30], (i32[5], (i32[30], i32[6]))) live 0  | lir: (i32[30], (i32[5], (i32[30], i32[6]))) live 0  | wasm: (i32[30], (i32[5], (i32[30], i32[6]))) live 0  | erased handles 0 performs 0 raises 0 machines 8 suspends 4 left 0 0 | machines 28 tailSites 8 merged 2 threaded 0 stacked 0 statics 0 effectOps [] | allocs 3 indirect 0 copies 0 loads 17 stores 9 bounds 6
+gen-cell | assurance: unconditional | src: i32[10] live 0  | lir: i32[10] live 0  | wasm: i32[10] live 0  | erased handles 0 performs 0 raises 0 machines 2 suspends 1 left 0 0 | machines 7 tailSites 2 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 1 indirect 0 copies 0 loads 11 stores 6 bounds 0
+p5-self-borrow-stored | REFUSED: /Users/johnthompson/repos/669h-work/spike669-ref/p5-self-borrow-stored.bc:32:20: `boxed['x]`: `g`, of type `U (pull i32 0 1)`, is used inside, and it cannot be shown to outlive `'x` 
+p5b-self-borrow-stored-relend | assurance: unconditional | src: i32[5] live 0  | lir: i32[5] live 0  | wasm: i32[5] live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 1 indirect 0 copies 0 loads 2 stores 1 bounds 0
+-- scaling (bcc-counts --backend new) at N = 100, 200
+h8c-list-cursor-refold N=100 allocs 20301 indirect 0 copies 101 loads 91506 stores 60903 bounds 0
+h8d-list-ownership-walk N=100 allocs 300 indirect 0 copies 0 loads 900 stores 900 bounds 0
+h8c-list-cursor-refold N=200 allocs 80601 indirect 0 copies 201 loads 363006 stores 241803 bounds 0
+h8d-list-ownership-walk N=200 allocs 600 indirect 0 copies 0 loads 1800 stores 1800 bounds 0
+-- injected bugs
+m1-read-after-free MEMORY | REJECTED: m1-read-after-free.bc:32:9: `a` is used twice here, and its type `array i32` is not persistent
+m2-view-family-used-after-move MEMORY | REJECTED: m2-view-family-used-after-move.bc:24:19: `w` is used twice here, and its type `array_imm 'l i32` is not persistent
+m3-double-free-cell MEMORY | REJECTED: m3-double-free-cell.bc:62:25: `c` is used twice here, and its type `ref (mu X. 1 + i32 * X)` is not persistent
+m4-owned-list-duplicated MEMORY | REJECTED: m4-owned-list-duplicated.bc:37:30: `rest` is used again at 37:51, so this use copies it, and its type `mu X. 1 + i32 * X` holds recursive data: the copy allocates every node. Write `clone(rest)` to copy it here, or do not use `rest` after this
+m5-close-drops-lists MEMORY | ACCEPTED assurance: unconditional | src: i32[1] live 0 | lir: i32[1] live 0 
+m6-view-stored-in-state MEMORY | REJECTED: m6-view-stored-in-state.bc:33:73: type mismatch: expected `array_imm top i32`, but this has type `array_imm 'l i32`
+s1-skips-elements SEMANTIC | ACCEPTED assurance: unconditional | src: i32[4] live 0 | lir: i32[4] live 0 

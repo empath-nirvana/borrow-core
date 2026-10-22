@@ -1,0 +1,85 @@
+-- bug MEMORY bound-at-lend: the tasks boxed at 'b, the lifetime of the lend of v2 itself (not strictly inside it)
+-- H4c: tasks of two different bodies in one type when they HOLD BORROWS: `reader` holds an `imm`
+-- borrow of the lender's cell `c1` across its awaits, `counter` one of `c2`; both are values of
+-- one type `box 'b U (nu X. F (i32 + box 'b U X) & F 1)` (`TaskIn[i32]<'d>` of `lib/async.bc`),
+-- `'d` a lifetime strictly inside both lends (the box rule asks `imm 'b T ⊐ 'd`, strict at a
+-- borrow, SPEC §23; a unit cell is lent to get one). The existential is `ν`'s; the outlives bound
+-- is the `box 'b` on the rest (§22's boxed rest), with `'d` FIXED for the queue's whole life. Each task
+-- is resumed once, then both are cancelled, all inside both lends.
+--
+-- The steps are written inline under the lends' binders (#669 hazard 2: a `!` step generic in a
+-- lifetime cannot be a shared `def`).
+--
+-- Answer: i32[13]: reader reads c1 = 5, then 5 again (10); counter's first turn answers 3 = c2;
+-- 10 + 3 = 13. `live 0`.
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+main : F i32 =
+  c1 <- return (alloc[i32] i32[5]);
+  c2 <- return (alloc[i32] i32[3]);
+  r1 <- return withbor1['a, i32, i32] c1 (thunkv Fun 'a < dom.
+    return (thunkv fun (v1 : imm 'a i32) ->
+      r2 <- return withbor1['b, i32, i32] c2 (thunkv Fun 'b < dom.
+        return (thunkv fun (v2 : imm 'b i32) ->
+          -- the queue's scope: a lifetime 'd strictly inside both lends (the box rule asks
+          -- `imm 'b T ⊐ 'd`, strict at a borrow, SPEC §23); a unit cell lent for it.
+          uc <- return (alloc[1] ());
+          r3 <- return withbor1['d, 1, i32] uc (thunkv Fun 'd < dom.
+          return (thunkv fun (ud : imm 'd 1) ->
+          let () = forget_imm['d, 1] ud;
+          -- reader: state (the borrow, the sum so far); each turn reads the cell.
+          rs <- return (!thunkv fun (s : imm 'a i32 * i32) ->
+                < let (b, acc) = s;
+                  q <- return (copy['a, i32] b);
+                  let (b1, b2) = q;
+                  x <- return withload['a, 'y, i32, i32] b1 (thunkv Fun 'y < dom.
+                        return (thunkv fun (dv : view 'y i32) -> return boxed['y] dv));
+                  return (inr boxed['b] ((b2, plus (acc, x)) : imm 'a i32 * i32)
+                    : i32 + box 'b (imm 'a i32 * i32)),
+                  let (b, acc) = s;
+                  let () = forget_imm['a, i32] b;
+                  return () >);
+          -- counter: state (the borrow); its first turn answers the cell's value.
+          cs <- return (!thunkv fun (b : imm 'b i32) ->
+                < x <- return withload['b, 'y, i32, i32] b (thunkv Fun 'y < dom.
+                        return (thunkv fun (dv : view 'y i32) -> return boxed['y] dv));
+                  return (inl x : i32 + box 'b (imm 'b i32)),
+                  let () = forget_imm['b, i32] b;
+                  return () >);
+          fr <- return unfold[nu X. F (i32 + box 'b U X) & F 1, imm 'a i32 * i32] rs;
+          fc <- return unfold[nu X. F (i32 + box 'b U X) & F 1, imm 'b i32] cs;
+          s0 : imm 'a i32 * i32 <- return (v1, i32[0]);
+          ta : box 'b U (nu X. F (i32 + box 'b U X) & F 1) <- return
+            boxed['b] (thunkv nu_in < fu <- return unbang fr; (nu_out force fu s0).1, fu <- return unbang fr; (nu_out force fu s0).2 >);
+          tb : box 'b U (nu X. F (i32 + box 'b U X) & F 1) <- return
+            boxed['b] (thunkv nu_in < fu <- return unbang fc; (nu_out force fu v2).1, fu <- return unbang fc; (nu_out force fu v2).2 >);
+          -- one queue: the two tasks, of different bodies, at one type.
+          qu <- return (ta, tb);
+          let (t1, t2) = qu;
+          g1 <- return (unbox t1);
+          o1 <- (nu_out (force g1)).1;
+          g2 <- return (unbox t2);
+          o2 <- (nu_out (force g2)).1;
+          y <- case o2 { inl v -> return v | inr t2b -> g <- return (unbox t2b); z <- (nu_out (force g)).2; return i32[0] };
+          case o1 {
+            inl v -> return boxed['d] plus (v, y)
+          | inr t1b -> g <- return (unbox t1b);
+              o3 <- (nu_out (force g)).1;
+              case o3 {
+                inl v -> return boxed['d] plus (v, y)
+              | inr t1c -> g3 <- return (unbox t1c);
+                  -- the reader's sum so far is in its state; read it out by one more turn's value
+                  -- is not available, so close it and answer 10 + y from the two reads.
+                  z <- (nu_out (force g3)).2;
+                  return boxed['d] plus (i32[10], y)
+              }
+          }));
+          let (uc, w3) = r3;
+          e3 <- return (free[1] uc);
+          return boxed['b] w3));
+      let (c2, w) = r2;
+      e <- return (free[i32] c2);
+      return boxed['a] w));
+  let (c1, v) = r1;
+  e <- return (free[i32] c1);
+  return v

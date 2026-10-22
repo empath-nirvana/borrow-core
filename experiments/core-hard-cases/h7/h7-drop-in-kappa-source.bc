@@ -1,0 +1,22 @@
+-- H7 (#671), the source: a suspended task, owning a cell, held in the frames of a continuation
+-- that a clause drops (`stop(k) = 0`: `k` never resumed). The dropped `κ`'s destructor is its
+-- cancel, which unwinds the frames, and the task's drop glue (its `close`) runs there.
+include async
+
+effect Stop { ctl stop() }
+handler halt: Stop, i32 -> i32 = { return(a) = a; stop(k) = 0 }
+
+fn holder() -> i32 with Async =
+  let c = alloc(5);
+  await();
+  free(c)
+
+fn spawned() -> Task[i32] = with spawn { holder() }
+
+fn body() -> i32 with Stop =
+  let t = spawned();
+  stop();
+  cancel(t);
+  1
+
+main -> i32 = with halt { body() }

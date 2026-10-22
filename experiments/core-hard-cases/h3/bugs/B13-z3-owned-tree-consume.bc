@@ -1,0 +1,251 @@
+-- B13 (MEMORY): a frame's owned subtree also freed at once (one cell freed twice / used after free). A patch of `z3-owned-tree-consume.bc` (`h3/bugs.py`).
+-- H3, the consuming form: `src-owned-tree.bc` (the task consumes its tree, as main's source does)
+-- as an effect-free core term, by H1's rule: the recursive task's `κ` defunctionalised, its frames
+-- an owned array of frame records (one summand per non-tail call point of `tsum`), and here the
+-- frames hold OWNED resources:
+--   K_left  (rr, k)   after `let a = tsum(free(l), r)`: the right subtree's cell, owned, and the key;
+--   K_right (a, k)    after `let b = tsum(free(rr), r)`.
+-- A cancel drops the state, and the destructors of the array's frames free the subtrees they
+-- hold (SPEC §12). Nothing is borrowed. No new type former.
+--
+-- Answer: as `src-owned-tree.bc`.
+
+type Tree = mu X. 1 + (ref X * (i32 * ref X))
+
+def value : !(i32 * i32 => i32) =
+  !thunkv fun (p : i32 * i32) ->
+      let (k, r) = p;
+      x <- return (unbang host[add32]) ((unbang host[mul32]) (k, i32[7919]), r);
+      case (unbang host[rem_s32]) (x, i32[1000]) { inl q -> return q | inr u -> return i32[0] }
+
+def mid : !(i32 * i32 => i32) =
+  !thunkv fun (p : i32 * i32) ->
+      let (lo, hi) = p;
+      h2 <- case (unbang host[div_s32]) ((unbang host[sub32]) (hi, lo), i32[2]) {
+          inl d -> return d
+        | inr d -> return i32[0]
+        };
+      return (unbang host[add32]) (lo, h2)
+
+-- The balanced search tree of the keys `[lo, hi)`; `inr ()` at the budget's end.
+def build_step : !U ((1 + !U (1 -o i32 * i32 -o F (Tree + 1))) * 1 -o i32 * i32 -o F (Tree + 1)) =
+  !thunkv fun (sp0 : (1 + !U (1 -o i32 * i32 -o F (Tree + 1))) * 1) ->
+      let (self, u) = sp0;
+      let () = u;
+      fun (p : i32 * i32) ->
+        let (lo, hi) = p;
+        case (unbang host[lt_s32]) (lo, hi) {
+          inl e -> return (inl (roll inl () : Tree) : Tree + 1)
+        | inr t -> m <- return (unbang mid) (lo, hi);
+            case self {
+              inl x -> return (inr () : Tree + 1)
+            | inr g -> f <- return unbang g;
+                z <- return ();
+                a1 <- return (lo, m);
+                o1 <- force f z a1;
+                case o1 {
+                  inl lt -> f2 <- return unbang g;
+                    z2 <- return ();
+                    a2 <- return ((unbang host[add32]) (m, i32[1]), hi);
+                    o2 <- force f2 z2 a2;
+                    case o2 {
+                      inl rt -> return (inl (roll inr (alloc[Tree] lt, (m, alloc[Tree] rt)) : Tree) : Tree + 1)
+                    | inr x -> return (inr () : Tree + 1)
+                    }
+                | inr x -> return (inr () : Tree + 1)
+                }
+            }
+        }
+
+def build : !U (i32 * i32 -o F (Tree + 1)) =
+  !thunkv fun (p : i32 * i32) ->
+      st <- return build_step;
+      bf <- return unbang bounded_fix[1, i32 * i32 -o F (Tree + 1)];
+      ba <- return (st, (i32[10000], ()));
+      force bf ba p
+
+type Frame = (ref Tree * i32) + (i64 * i32)
+type Stack = array Frame * i32
+
+def zf : !(i32 => Frame) = !thunkv fun (i : i32) -> return (inr (i64[0], i32[0]) : Frame)
+
+-- Move slot `i` of the old array into the new one.
+def mv : !(i32 * (array Frame * array Frame) => array Frame * array Frame) =
+  !thunkv fun (p : i32 * (array Frame * array Frame)) ->
+      let (i, q) = p;
+      let (o, n) = q;
+      t <- return (unbang array_replace[Frame]) (o, (i, (inr (i64[0], i32[0]) : Frame)));
+      let (o2, x) = t;
+      case x {
+        inl fr -> t2 <- return (unbang array_replace[Frame]) (n, (i, fr));
+          let (n2, y) = t2;
+          return (o2, n2)
+      | inr fr -> return (o2, n)
+      }
+
+-- `fr` pushed; a full array first moved into one twice its size.
+def push : !(Stack * Frame => Stack) =
+  !thunkv fun (p : Stack * Frame) ->
+      let (st, fr) = p;
+      let (a, sp) = st;
+      sz <- return (unbang array_size[Frame]) a;
+      let (a1, len) = sz;
+      a2 <- case (unbang host[lt_s32]) (sp, len) {
+          inl full -> n0 <- return (unbang array_new[Frame]) ((unbang host[mul32]) (len, i32[2]), zf);
+            r <- return (unbang count_fold[array Frame * array Frame]) (mv, (len, (i32[0], (a1, n0))));
+            let (o, n) = r;
+            return n
+        | inr room -> return a1
+        };
+      t <- return (unbang array_replace[Frame]) (a2, (sp, fr));
+      let (a3, old) = t;
+      return (a3, (unbang host[add32]) (sp, i32[1]))
+
+-- The top frame popped, or `inr` the empty stack.
+def pop : !(Stack => Frame * Stack + Stack) =
+  !thunkv fun (st : Stack) ->
+      let (a, sp) = st;
+      case (unbang host[lt_s32]) (i32[0], sp) {
+        inl empty -> return (inr (a, sp) : Frame * Stack + Stack)
+      | inr some -> sp1 <- return (unbang host[sub32]) (sp, i32[1]);
+          t <- return (unbang array_replace[Frame]) (a, (sp1, (inr (i64[0], i32[0]) : Frame)));
+          let (a2, x) = t;
+          case x {
+            inl fr -> return (inl (fr, (a2, sp1)) : Frame * Stack + Stack)
+          | inr fr -> return (inr (a2, sp1) : Frame * Stack + Stack)
+          }
+      }
+-- The task at its `await`: (a, (m, (hi, (r, frames)))).
+-- The task at its `await`: (a, (rr, (k, (r, frames)))): the left subtree's sum, the right
+-- subtree's cell, the node's key.
+type St = i64 * (ref Tree * (i32 * (i32 * Stack)))
+-- The drive's argument: walk the tree `t` under the frames, or return `v` to them.
+type D = (Tree * (i32 * Stack)) + (i64 * (i32 * Stack))
+type Out = i64 + (St + 1)
+
+def drive_step : !U ((1 + !U (1 -o D -o F Out)) * 1 -o D -o F Out) =
+  !thunkv fun (sp0 : (1 + !U (1 -o D -o F Out)) * 1) ->
+      let (self, u) = sp0;
+      let () = u;
+      fun (d : D) ->
+        case self {
+          inl x -> return (inr (inr () : St + 1) : Out)
+        | inr g -> case d {
+              inl go -> let (t, q) = go;
+                let (r, stk) = q;
+                case unroll t {
+                  inl e -> a : D <- return inr (i64[0], (r, stk));
+                    f <- return unbang g;
+                    z <- return ();
+                    force f z a
+                | inr nd -> let (l, q2) = nd;
+                    let (k, rr) = q2;
+                    fr : Frame <- return inl (rr, k);
+                    stk2 <- return (unbang push) (stk, fr);
+                    lt <- return free[Tree] l;
+                    xx <- return free[Tree] rr;
+                    a : D <- return inl (lt, (r, stk2));
+                    f <- return unbang g;
+                    z <- return ();
+                    force f z a
+                }
+            | inr rt -> let (v, q) = rt;
+                let (r, stk) = q;
+                case (unbang pop) stk {
+                  inl fs -> let (fr, rest) = fs;
+                    case fr {
+                      inl kl -> let (rr, k) = kl;
+                        return (inr (inl (v, (rr, (k, (r, rest)))) : St + 1) : Out)
+                    | inr kr -> let (a, k) = kr;
+                        w <- return (unbang host[add64]) ((unbang host[add64]) (a, (unbang host[extend_s]) ((unbang value) (k, r))), v);
+                        a2 : D <- return inr (w, (r, rest));
+                        f <- return unbang g;
+                        z <- return ();
+                        force f z a2
+                    }
+                | inr e -> return (inl v : Out)
+                }
+            }
+        }
+
+def drive : !U (D -o F Out) =
+  !thunkv fun (d : D) ->
+      st <- return drive_step;
+      bf <- return unbang bounded_fix[1, D -o F Out];
+      ba <- return (st, (i32[10000], ()));
+      force bf ba d
+
+def settle : !(Out => i64 + St) =
+  !thunkv fun (o : Out) ->
+      case o {
+        inl v -> return (inl v : i64 + St)
+      | inr w -> case w {
+          inl k -> return (inr k : i64 + St)
+        | inr u -> return (inl (unbang host[sub64]) (i64[0], i64[1]) : i64 + St)
+        }
+      }
+
+-- `κ`'s resume: the right subtree walked under `K_right (a, k)`.
+def adv : !(St => i64 + St) =
+  !thunkv fun (s : St) ->
+      let (a, q) = s;
+      let (rr, q2) = q;
+      let (k, q3) = q2;
+      let (r, stk) = q3;
+      fr : Frame <- return inr (a, k);
+      stk2 <- return (unbang push) (stk, fr);
+      t <- return free[Tree] rr;
+      dv : D <- return inl (t, (r, stk2));
+      dr <- return unbang drive;
+      o <- force dr dv;
+      return (unbang settle) o
+
+-- `with spawn { task(n, r) }`: the tree built, then walked to its first `await`.
+def spawn0 : !(i32 * i32 => i64 + St) =
+  !thunkv fun (p : i32 * i32) ->
+      let (n, r) = p;
+      bd <- return unbang build;
+      ba <- return (i32[0], n);
+      t <- force bd ba;
+      case t {
+        inl tr -> dv : D <- return inl (tr, (r, ((unbang array_new[Frame]) (i32[64], zf), i32[0])));
+          dr <- return unbang drive;
+          o <- force dr dv;
+          return (unbang settle) o
+      | inr x -> return (inl (unbang host[sub64]) (i64[0], i64[1]) : i64 + St)
+      }
+
+fn spawn_r(r: i32) -> i64 + St = spawn0(200, r)
+
+-- Round robin over the slots until none is pending, then the values summed (p3c's scheduler).
+main -> i64 =
+  let tasks = 3;
+  let mut ts = array_new[i64 + St] (tasks, spawn_r);
+  let mut more = true;
+  while more {
+    more = false;
+    for i in 0..tasks {
+      let (t2, old) = array_replace[i64 + St] (ts, i, (inl i64[0] : i64 + St));
+      ts = t2;
+      match old {
+        inl cur -> match cur {
+            inl v -> let (t3, _) = array_replace[i64 + St] (ts, i, (inl v : i64 + St)); ts = t3
+          | inr k -> match adv(k) {
+              inl v -> let (t3, _) = array_replace[i64 + St] (ts, i, (inl v : i64 + St)); ts = t3
+            | inr k2 -> more = true; let (t3, _) = array_replace[i64 + St] (ts, i, (inr k2 : i64 + St)); ts = t3
+            }
+          }
+      | inr back -> ()
+      }
+    }
+  };
+  let mut acc = i64[0];
+  for i in 0..tasks {
+    let (t2, old) = array_replace[i64 + St] (ts, i, (inl i64[0] : i64 + St));
+    ts = t2;
+    match old {
+      inl cur -> match cur { inl v -> acc = acc + v | inr k -> () }
+    | inr back -> ()
+    }
+  };
+  acc

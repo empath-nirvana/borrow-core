@@ -1,0 +1,16 @@
+-- H7 (#671), the source: two suspended tasks, each owning a cell, queued and the queue dropped.
+-- The queue is a `mu` list of slots holding tasks; its destructor is `fold_own` with each
+-- task's `close`.
+include async
+
+fn holder(n: i32) -> i32 with Async =
+  let c = alloc(n);
+  await();
+  await();
+  free(c)
+
+main -> i32 =
+  let q = queue[i32]();
+  let q = push(q, with spawn { holder(1) });
+  let q = push(q, with spawn { holder(2) });
+  9

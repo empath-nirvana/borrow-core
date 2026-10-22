@@ -1,0 +1,16 @@
+-- H7 (#671), the source: a recursive task (a stack machine, SPEC §52: it runs on a task stack)
+-- whose levels each own a cell, suspended 3 levels deep, dropped without a `cancel`.
+include async
+include rec
+
+fn deep(n: i32) -> i32 with Async, Exhausted =
+  let c = alloc(n);
+  if n == 0 { await(); free(c) } else { let r = deep(n - 1); await(); r + free(c) }
+
+fn task(n: i32) -> i32 with Async = with on_exhausted(!{ u -> 0 - 1 }) { deep(n) }
+
+main -> i32 =
+  let t = with spawn { task(3) };
+  let q = queue[i32]();
+  let q = push(q, with spawn { task(2) });
+  match resume(t) { inl v -> v | inr t2 -> 5 }

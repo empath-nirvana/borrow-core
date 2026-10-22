@@ -1,0 +1,26 @@
+-- bug MEMORY borrow-escapes: the borrow returned out of its lend (answer type mentions 'x)
+-- H5a: `corpus/async-r1-cancel-finaliser-writes.bc` as effect-free core. The clause cancels `κ` at
+-- the `perform` (its body is `u <- (force k).2; return (inl x)`), a `[handle-last]`-shaped clause:
+-- by T-B1′ (`last_cancel_direct`, `kappa_cancel_steps`, `cancel_prefix`) the `perform` becomes the
+-- region's finalisers, innermost first, then the clause's answer:
+--   1. the borrower's finaliser (`unwind`): write 99 through `m`, then end the borrow (`forget_mut`);
+--   2. the lend ends (`withbor2`'s callback answers), handing `c` back;
+--   3. the owner's finaliser: `free c`.
+-- No continuation is left, so the lend is an ordinary `withbor2` (no R1, no `PinLaw`).
+--
+-- Answer: inl i32[1]; `live 0`.
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+main : F (i32 + i32) =
+  c <- return (alloc[i32] i32[10]);
+  r <- return withbor2['x, top, i32, mut 'x i32] c (thunkv Fun 'x < dom.
+        return (thunkv fun (m : mut 'x i32) ->
+          x : i32 <- return i32[1];
+          q <- return (withswap['x, i32, 1] m (thunkv fun (v : i32) -> return (i32[99], ())));
+          let (m, z) = q;
+          let () = z;
+          let () = forget_mut['x, i32] m;
+          return boxed['x] (inl x : i32 + i32)));
+  let (c, s) = r;
+  w <- return (free[i32] c);
+  return s

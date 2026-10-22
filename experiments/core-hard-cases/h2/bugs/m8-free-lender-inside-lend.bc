@@ -1,0 +1,91 @@
+-- H2 injected bug m8-free-lender-inside-lend (MEMORY), a variant of `h2b-local-borrows-resupply.bc`.
+-- H2, encoding (b): `corpus/async-r1-local-borrows.bc` with each task's lend RE-SUPPLIED at each
+-- resume (#669 `p9`). A local cannot be lent from outside the task that owns it, so the owner is
+-- hoisted to the scheduler (`main`): `main` allocates both cells, lends `c1` at `'a` and `c2` at
+-- `'b` around the whole interleaving, and each observation of a task takes its borrow and hands
+-- it back. The machines never hold a borrow between observations. The task no longer owns its
+-- cell: its `close` frees nothing, and the cells are freed by `main` after the lends end.
+--
+-- Answer: i32[1207], `live 0`.
+
+main : F i32 =
+  c1 <- return alloc[i32] i32[10];
+  c2 <- return alloc[i32] i32[3];
+  r <- return withbor2['a, top, i32, i32 * ref i32] c1 (thunkv Fun 'a < dom.
+    return (thunkv fun (ma : mut 'a i32) ->
+      r2 <- return withbor2['b, 'a /\ top, i32, i32] c2 (thunkv Fun 'b < dom.
+        return (thunkv fun (mb : mut 'b i32) ->
+          -- `counter`: state `inl ()` before the `yield`, `inr ()` after.
+          cs <- return (!thunkv fun (s : 1 + 1) ->
+                < fun (m : mut 'a i32) -> case s {
+                      inl u -> w <- return withswap['a, i32, 1] m (thunkv fun (x : i32) ->
+                              return ((unbang host[add32]) (x, i32[1]), ()));
+                        let (m1, z) = w;
+                        return (m1, (inl (i32[1], (inr () : 1 + 1)) : i32 * (1 + 1) + (i32 + (1 + 1))))
+                    | inr u -> w <- return withswap['a, i32, i32] m (thunkv fun (x : i32) ->
+                              y <- return (unbang host[add32]) (x, i32[1]); return (y, y));
+                        let (m1, y) = w;
+                        return (m1, (inr (inl y : i32 + (1 + 1)) : i32 * (1 + 1) + (i32 + (1 + 1))))
+                    },
+                  return () >);
+          fc <- return unbang unfold[nu X. (mut 'a i32 -o F (mut 'a i32 * (i32 * U X + (i32 + U X)))) & F 1, 1 + 1] cs;
+          -- `pair_view`: state `inl ()` before, `inr 4` (the pair's data, its borrow re-supplied).
+          ps <- return (!thunkv fun (s : 1 + i32) ->
+                < fun (m : mut 'b i32) -> case s {
+                      inl u -> return (m, (inl (i32[2], (inr i32[4] : 1 + i32)) : i32 * (1 + i32) + (i32 + (1 + i32))))
+                    | inr k -> p <- return (m, k);
+                        let (m2, k2) = p;
+                        w <- return withswap['b, i32, i32] m2 (thunkv fun (x : i32) ->
+                              y <- return (unbang host[add32]) (x, k2); return (y, y));
+                        let (m3, y) = w;
+                        return (m3, (inr (inl y : i32 + (1 + i32)) : i32 * (1 + i32) + (i32 + (1 + i32))))
+                    },
+                  return () >);
+          fp <- return unbang unfold[nu X. (mut 'b i32 -o F (mut 'b i32 * (i32 * U X + (i32 + U X)))) & F 1, 1 + i32] ps;
+          z <- return free[i32] c1;
+          s0 : 1 + 1 <- return inl ();
+          t0 : 1 + i32 <- return inl ();
+          a <- return (thunkv nu_in < (nu_out force fc s0).1, (nu_out force fc s0).2 >);
+          b <- return (thunkv nu_in < (nu_out force fp t0).1, (nu_out force fp t0).2 >);
+          -- The interleaving of `corpus/async-r1-local-borrows.bc`'s `main`: a, b, a, b.
+          o1 <- (nu_out force a).1 ma;
+          let (ma1, q1) = o1;
+          case q1 {
+            inl xa -> let (x, a1) = xa;
+              o2 <- (nu_out force b).1 mb;
+              let (mb1, q2) = o2;
+              case q2 {
+                inl yb -> let (y, b1) = yb;
+                  o3 <- (nu_out force a1).1 ma1;
+                  let (ma2, q3) = o3;
+                  case q3 {
+                    inl za -> let (z, a2) = za; e <- (nu_out force a2).2; f <- (nu_out force b1).2;
+                      let () = forget_mut['a, i32] ma2; let () = forget_mut['b, i32] mb1; return boxed['b] i32[0]
+                  | inr ra -> case ra {
+                      inl rv -> o4 <- (nu_out force b1).1 mb1;
+                        let (mb2, q4) = o4;
+                        let () = forget_mut['a, i32] ma2; let () = forget_mut['b, i32] mb2;
+                        case q4 {
+                          inl wb -> let (w, b2) = wb; e <- (nu_out force b2).2; return boxed['b] i32[0]
+                        | inr rb -> case rb {
+                            inl rbv -> return boxed['b] (unbang host[add32]) ((unbang host[mul32]) (rv, i32[100]), rbv)
+                          | inr b2 -> e <- (nu_out force b2).2; return boxed['b] i32[0]
+                          }
+                        }
+                    | inr a2 -> e <- (nu_out force a2).2; f <- (nu_out force b1).2;
+                        let () = forget_mut['a, i32] ma2; let () = forget_mut['b, i32] mb1; return boxed['b] i32[0]
+                    }
+                  }
+              | inr rb -> e <- (nu_out force a1).2; let () = forget_mut['a, i32] ma1; let () = forget_mut['b, i32] mb1;
+                  case rb { inl rv -> return boxed['b] i32[0] | inr b1 -> f <- (nu_out force b1).2; return boxed['b] i32[0] }
+              }
+          | inr ra -> f <- (nu_out force b).2; let () = forget_mut['a, i32] ma1; let () = forget_mut['b, i32] mb;
+              case ra { inl rv -> return boxed['b] i32[0] | inr a1 -> e <- (nu_out force a1).2; return boxed['b] i32[0] }
+          }));
+      let (c2, v) = r2;
+      return boxed['a] (v, c2)));
+  let (c1, vc) = r;
+  let (v, c2) = vc;
+  d1 <- return free[i32] c1;
+  d2 <- return free[i32] c2;
+  return v

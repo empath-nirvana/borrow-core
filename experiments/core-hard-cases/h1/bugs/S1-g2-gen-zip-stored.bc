@@ -1,0 +1,143 @@
+-- S1 (SEMANTIC): the wrong round's value yielded at a popped frame. A patch of `g2-gen-zip-stored.bc` (`h3/bugs.py`).
+-- H1 (ii): a STORED recursive generator as an effect-free core term: `src-gen-zip.bc` (two
+-- in-order walks of the implicit tree, stored, stepped in turn) with each walk's `κ`
+-- defunctionalised into an `unfold` state.
+--
+-- `walk`'s resumption points: the `yield` (after it, a tail call of `walk(m + 1, hi, r)`), and the
+-- return of its first, non-tail, recursive call. A tail call pushes nothing; a non-tail call point
+-- is a frame record holding the point's live variables. The frames are a `mu` list (a sum per
+-- non-tail call point; here one: `K_left (m, hi, r)`), so the machine's state is
+-- `S = (lo, hi, r, Stack)`: "run `walk(lo, hi, r)` under the frames `Stack`". No new type former:
+-- `mu`, `nu` (`unfold`), `*`, `+`.
+--
+-- Rule sketch (one rule per construct of the typed term):
+--   [κ-defun]   a stored site's `κ` ↦ `unfold[pull A R C, S]` over a step; the step's argument is
+--               the resumption point, its answer the next element and the next point.
+--   [frame]     a non-tail call `x <- f a; M` inside a recursion that may suspend ↦ push the frame
+--               `K_i (live vars of M)` (a summand of `Frame`) on the state's `mu` list, run `f a`.
+--   [return]    a recursion's value ↦ pop the top frame and run its point's continuation on it; the
+--               empty list is the machine's end.
+--   [tail]      a call in tail position pushes nothing.
+--   [yield]     `yield v` ↦ answer `inl (v, S')`, `S'` the point after it.
+--   [close]     the state's `close` drops what it holds (the frames' resources, by their
+--               destructors); here they are persistent data.
+--   [rec]/[abort-sum] as in g1: the step's own loop is `bounded_fix`, the budget's end `inr ()`,
+--               which `walkh`'s `on_exhausted(())` turns into the generator's end.
+--
+-- Answer: as `src-gen-zip.bc`.
+
+def value : !(i32 * i32 => i32) =
+  !thunkv fun (p : i32 * i32) ->
+      let (k, r) = p;
+      x <- return (unbang host[add32]) ((unbang host[mul32]) (k, i32[7919]), r);
+      case (unbang host[rem_s32]) (x, i32[1000]) { inl q -> return q | inr u -> return i32[0] }
+
+-- The frames: one non-tail call point, `K_left (m, hi, r)`.
+type Stack = mu L. 1 + ((i32 * (i32 * i32)) * L)
+type S = i32 * (i32 * (i32 * Stack))
+type Pull = U (nu X. F (i32 * U X + (1 + U X)) & F 1)
+
+-- Run `walk(lo, hi, r)` under the frames up to its next `yield` (`inl` the element and the point
+-- after it) or to the end of the frames (`inr ()`; also the budget's end).
+def run_step : !U ((1 + !U (1 -o S -o F (i32 * S + 1))) * 1 -o S -o F (i32 * S + 1)) =
+  !thunkv fun (sp0 : (1 + !U (1 -o S -o F (i32 * S + 1))) * 1) ->
+      let (self, u) = sp0;
+      let () = u;
+      fun (p : S) ->
+        let (lo, q) = p;
+        let (hi, q2) = q;
+        let (r, stk) = q2;
+        case (unbang host[lt_s32]) (lo, hi) {
+          inl e -> case unroll stk {
+              inl v -> return (inr () : i32 * S + 1)
+            | inr fr -> let (k, rest) = fr;
+                let (m, k2) = k;
+                let (h, r2) = k2;
+                return (inl ((unbang value) (m, i32[0]), ((unbang host[add32]) (m, i32[1]), (h, (r2, rest)))) : i32 * S + 1)
+            }
+        | inr t -> h2 <- case (unbang host[div_s32]) ((unbang host[sub32]) (hi, lo), i32[2]) {
+                inl d -> return d
+              | inr d -> return i32[0]
+              };
+            m <- return (unbang host[add32]) (lo, h2);
+            case self {
+              inl x -> return (inr () : i32 * S + 1)
+            | inr g -> f <- return unbang g;
+                z <- return ();
+                stk2 : Stack <- return roll inr ((m, (hi, r)), stk);
+                a <- return (lo, (m, (r, stk2)));
+                force f z a
+            }
+        }
+
+def runw : !U (S -o F (i32 * S + 1)) =
+  !thunkv fun (p : S) ->
+      st <- return run_step;
+      bf <- return unbang bounded_fix[1, S -o F (i32 * S + 1)];
+      ba <- return (st, (i32[10000], ()));
+      force bf ba p
+
+-- The machine's step: `next` runs to the next `yield`; `close` drops the state.
+def gen_step : !U (S -o F (i32 * S + (1 + S)) & F 1) =
+  !thunkv fun (s : S) ->
+      < rn <- return unbang runw;
+        o <- force rn s;
+        case o {
+          inl xs -> return (inl xs : i32 * S + (1 + S))
+        | inr u -> return (inr (inl () : 1 + S) : i32 * S + (1 + S))
+        },
+        return () >
+
+-- `walkh(n, r)`: the stored generator, before its first observation.
+def walkh : !(i32 * i32 => Pull) =
+  !thunkv fun (p : i32 * i32) ->
+      let (n, r) = p;
+      f <- return unbang unfold[nu X. F (i32 * U X + (1 + U X)) & F 1, S] gen_step;
+      s0 : S <- return (i32[0], (n, (r, (roll inl () : Stack))));
+      return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >)
+
+-- One observation: the element and the rest, or the end.
+def step : !(Pull => i32 * Pull + 1) =
+  !thunkv fun (it : Pull) ->
+      o <- (nu_out force it).1;
+      case o {
+        inl xr -> return (inl xr : i32 * Pull + 1)
+      | inr q -> case q {
+          inl u -> return (inr () : i32 * Pull + 1)
+        | inr it2 -> return (inl (i32[0], it2) : i32 * Pull + 1)
+        }
+      }
+
+-- `zipsum`'s loop: both walks stepped in turn until one ends; then both closed.
+fn zipsum(n: i32, r: i32) -> i64 =
+  let mut a : 1 + Pull = inr walkh(n, r);
+  let mut b : 1 + Pull = inr walkh(n, r + 1);
+  let mut s = i64[0];
+  let mut go = true;
+  while go {
+    match a {
+      inl u -> a = (inl () : 1 + Pull); go = false
+    | inr ga -> match step(ga) {
+        inl (x, a2) ->
+          match b {
+            inl u -> b = (inl () : 1 + Pull); a = (inr a2 : 1 + Pull); go = false
+          | inr gb -> match step(gb) {
+              inl (y, b2) -> s = s + host[extend_s](x + 2 * y); a = (inr a2 : 1 + Pull); b = (inr b2 : 1 + Pull)
+            | inr u -> b = (inl () : 1 + Pull); a = (inr a2 : 1 + Pull); go = false
+            }
+          }
+      | inr u -> a = (inl () : 1 + Pull); go = false
+      }
+    }
+  };
+  match a { inl u -> () | inr g -> (nu_out (force g)).2 };
+  match b { inl u -> () | inr g -> (nu_out (force g)).2 };
+  s
+
+main -> i64 =
+  let n = 200;
+  let reps = 2;
+  let mut acc = i64[0];
+  let mut r = 0;
+  while r < reps { acc = acc + zipsum(n, r); r = r + 1 };
+  acc

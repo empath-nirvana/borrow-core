@@ -1,0 +1,4 @@
+MEMORY free-while-lent: REJECTED 20:16: `c1` is used twice here, and its type `ref i32` is not persistent  -- the lent cell c1 freed while the tasks hold its borrow
+MEMORY task-escapes-queue-scope: REJECTED 27:11: `v2` is used twice here, and its type `imm 'b i32` is not persistent  -- the counter's borrow used after the queue's scope handed it to the task (v2 used twice)
+SEMANTIC reader-sum-wrong: ACCEPTED (assurance: unconditional) src: i32[14] live 0 | lir: i32[14] live 0  -- a wrong value
+MEMORY bound-at-lend: REJECTED 55:13: `boxed['b]`: `v2`, of type `imm 'b i32`, is used inside, and it cannot be shown to outlive `'b`  -- the tasks boxed at the lend's own lifetime 'b

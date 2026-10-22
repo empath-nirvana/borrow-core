@@ -1,0 +1,48 @@
+# H3: experiments/core-hard-cases/run.sh at the files' sizes (n=200, tasks=3)
+src-owned-tree | assurance: unconditional | src: timeout | lir: i64[297900] live 0  | wasm: i64[297900] live 0  | erased handles 0 performs 0 raises 4 machines 2 suspends 1 left 0 0 | machines 6 tailSites 0 merged 1 threaded 0 stacked 1 statics 1 effectOps [stackNew, stackSwap, framePush, framePop, framePut, frameTop, unreachable, stackFree, kappaPut, kappaTake] | allocs 1210 indirect 0 copies 0 loads 37908 stores 30720 bounds 1212
+r3-owned-tree-reborrow | assurance: unconditional | src: timeout | lir: i64[297900] live 0  | wasm: i64[297900] live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 1207 indirect 0 copies 0 loads 43215 stores 22167 bounds 8718
+z3-owned-tree-consume | assurance: unconditional | src: timeout | lir: i64[297900] live 0  | wasm: i64[297900] live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 1204 indirect 0 copies 0 loads 22224 stores 22224 bounds 3603
+zz3-owned-tree-zipper | assurance: unconditional | src: timeout | lir: i64[297900] live 0  | wasm: i64[297900] live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 2404 indirect 0 copies 0 loads 42216 stores 42216 bounds 3603
+b3-build-only | assurance: unconditional | src: i64[0] live 0  | lir: i64[0] live 0  | wasm: i64[0] live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 1201 indirect 0 copies 0 loads 4860 stores 4860 bounds 9
+
+# the reference interpreter at n=40, tasks=2 (sizes substituted)
+r3-owned-tree-reborrow.bc: src i64[39680] live 0  lir i64[39680] live 0 
+src-gen-zip.bc: src i64[119200] live 0  lir i64[119200] live 0 
+src-owned-tree.bc: src i64[39680] live 0  lir i64[39680] live 0 
+z3-owned-tree-consume.bc: src i64[39680] live 0  lir i64[39680] live 0 
+zz3.bc: src i64[39680] live 0  lir i64[39680] live 0 
+
+# bug injection (h3/bugs.py), the H3 rows
+B8 MEMORY h3/r3-owned-tree-reborrow: the step's walk captured with the lend's borrow and run after the lend has closed (a borrow outliving its lend)
+    REFUSED: h3/bugs/B8-r3-owned-tree-reborrow.bc:194:22: `boxed['x]`: `b`, of type `imm 'x (mu X. 1 + ref X * i32 * ref X)`, is used inside, and it cannot be shown to outlive `'x`
+B9 MEMORY h3/r3-owned-tree-reborrow: the tree's cell freed at the resume, then lent (use after free)
+    REFUSED: h3/bugs/B9-r3-owned-tree-reborrow.bc:229:7: `c` is used twice here, and its type `ref (mu X. 1 + ref X * i32 * ref X)` is not persistent
+B10 MEMORY h3/r3-owned-tree-reborrow: the owner freed inside its own lend (the lent cell aliased by its owner)
+    REFUSED: h3/bugs/B10-r3-owned-tree-reborrow.bc:192:14: `c` is used twice here, and its type `ref (mu X. 1 + ref X * i32 * ref X)` is not persistent
+B11 MEMORY h3/r3-owned-tree-reborrow: the owned path array kept in the state and also handed to the walk (affine duplicated)
+    REFUSED: h3/bugs/B11-r3-owned-tree-reborrow.bc:228:7: `path` is used twice here, and its type `array i32` is not persistent
+B12 LEAK-CHECK h3/r3-owned-tree-reborrow: the scheduler stops after 5 rounds and drops the suspended tasks (each owning its tree): live 0
+    ACCEPTED (assurance: unconditional) | lir: i64[0] live 0 | wasm: i64[0] live 0
+S3 SEMANTIC h3/r3-owned-tree-reborrow: the wrong round's value added
+    ACCEPTED (assurance: unconditional) | lir: i64[297300] live 0 | wasm: i64[297300] live 0
+B13 MEMORY h3/z3-owned-tree-consume: a frame's owned subtree also freed at once (one cell freed twice / used after free)
+    REFUSED: h3/bugs/B13-z3-owned-tree-consume.bc:143:21: `rr` is used twice here, and its type `ref (mu X. 1 + ref X * i32 * ref X)` is not persistent
+B14 MEMORY h3/z3-owned-tree-consume: a node's left cell freed twice (double free)
+    REFUSED: h3/bugs/B14-z3-owned-tree-consume.bc:145:21: `l` is used twice here, and its type `ref (mu X. 1 + ref X * i32 * ref X)` is not persistent
+B15 MEMORY h3/z3-owned-tree-consume: a frame holding an owned subtree pushed twice (affine duplicated)
+    REFUSED: h3/bugs/B15-z3-owned-tree-consume.bc:144:21: `fr` is used twice here, and its type `ref (mu X. 1 + ref X * i32 * ref X) * i32 + i64 * i32` is not persistent
+B16 LEAK-CHECK h3/z3-owned-tree-consume: the scheduler stops after 5 rounds and drops the suspended tasks (frames owning subtrees): live 0
+    ACCEPTED (assurance: unconditional) | lir: i64[0] live 0 | wasm: i64[0] live 0
+S4 SEMANTIC h3/z3-owned-tree-consume: the right subtree skipped (its cell freed, not walked): a wrong sum, nothing leaked
+    ACCEPTED (assurance: unconditional) | lir: i64[15153] live 0 | wasm: i64[15153] live 0
+
+# native timing (h3/bench.py --runs 9; CPU ms, median): h3/bench-results.txt
+H3 rs borrow (stack of &Node)                 204.0 ms  (201.6-223.9)  out 144471560
+H3 rs consume                                 207.4 ms  (204.7-211.7)  out 144471560
+H3 rs build only                              164.8 ms  (163.2-171.2)  out 0
+H3 core r3 re-borrow per step                 514.3 ms  (512.8-517.6)  out i64[144471560]
+H3 core z3 consume, frames array              176.5 ms  (176.3-177.4)  out i64[144471560]
+H3 core zz3 zipper, owned, rebuilt            382.7 ms  (374.4-394.2)  out i64[144471560]
+H3 main src consume (task stacks)             188.2 ms  (187.5-193.3)  out i64[144471560]
+H3 core b3 build only                         108.2 ms  (107.9-110.9)  out i64[0]
+probe-view-copies: allocs 3001 indirect 0 copies 2 loads 25006 stores 15002 bounds 0

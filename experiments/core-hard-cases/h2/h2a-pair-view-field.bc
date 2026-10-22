@@ -1,0 +1,34 @@
+-- H2, encoding (a): `pair_view` of `corpus/async-r1-local-borrows.bc` with the borrow stored as a
+-- lifetime-bounded FIELD of the machine's state. The lend of the task's own local `c` is opened
+-- inside the task, so the machine that holds `(m, 4) : mut 'x i32 * i32` is built inside the
+-- `withbor2` callback and must leave it boxed at `'x`, beside the owner it lends from. Expected
+-- to be refused by the box rule: a thunk holding `mut 'x i32` does not outlive `'x`.
+
+type Pull = U (nu X. F (i32 * U X + (i32 + U X)) & F 1)
+
+main : F i32 =
+  c <- return alloc[i32] i32[3];
+  lend <- return withbor2['x, top, i32, Pull] c (thunkv Fun 'x < dom.
+        return (thunkv fun (m : mut 'x i32) ->
+            st <- return (!thunkv fun (s : 1 + mut 'x i32 * i32) ->
+                < case s {
+                    inl u -> return (inr (inl i32[0] : i32 + (1 + mut 'x i32 * i32)) : i32 * (1 + mut 'x i32 * i32) + (i32 + (1 + mut 'x i32 * i32)))
+                  | inr p -> let (m2, k) = p;
+                      w <- return withswap['x, i32, i32] m2 (thunkv fun (x : i32) ->
+                            y <- return (unbang host[add32]) (x, k); return (y, y));
+                      let (m3, y) = w;
+                      let () = forget_mut['x, i32] m3;
+                      return (inl (y, (inl () : 1 + mut 'x i32 * i32)) : i32 * (1 + mut 'x i32 * i32) + (i32 + (1 + mut 'x i32 * i32)))
+                  },
+                  case s { inl u -> return () | inr p -> let (m2, k) = p; let () = forget_mut['x, i32] m2; return () } >);
+            f <- return unfold[nu X. F (i32 * U X + (i32 + U X)) & F 1, 1 + mut 'x i32 * i32] st;
+            s0 : 1 + mut 'x i32 * i32 <- return inr (m, i32[4]);
+            return boxed['x] (thunkv nu_in < fu <- return unbang f; (nu_out force fu s0).1,
+                fu <- return unbang f; (nu_out force fu s0).2 >)));
+  let (c, g) = lend;
+  o <- (nu_out force g).1;
+  d <- return free[i32] c;
+  case o {
+    inl p -> let (x, g2) = p; e <- (nu_out force g2).2; return x
+  | inr q -> case q { inl r -> return r | inr g2 -> e <- (nu_out force g2).2; return i32[0] }
+  }

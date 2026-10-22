@@ -1,0 +1,13 @@
+MEMORY close-double-free: REJECTED 76:9: `buf2` is used twice here, and its type `ref i32` is not persistent  -- cancel frees the owner twice
+MEMORY close-free-skipped: ACCEPTED (assurance: unconditional) src: inr (i32[2], inr (i32[26], inl ())) live 0 | lir: inr (i32[2], inr (i32[26], inl ())) live 0  -- cancel skips the owner's free (the checker's implicit destructor frees it)
+MEMORY close-free-skipped-linear: REJECTED 75:16: `buf2` is declared `linear` and is not consumed in its scope  -- cancel skips the owner's free, the owner bound `linear`
+MEMORY close-free-before-lend: REJECTED 75:9: `buf` is used twice here, and its type `ref i32` is not persistent  -- the owner freed before the borrower's finaliser re-opens the lend (use after free)
+MEMORY fin-write-after-end: REJECTED 46:15: `m` is used twice here, and its type `mut 'x i32` is not persistent  -- the finaliser writes through the borrow after ending it
+MEMORY fin-borrow-escapes: REJECTED 44:32: type mismatch: expected `mut top i32`, but this has type `mut 'x i32`  -- the finaliser's borrow answered out of its lend (B = mut top i32)
+MEMORY killer-cancel-twice: REJECTED 93:9: `g` is used twice here, and its type `U (nu X. F (i32 + box top U X) & F 1)` is not persistent  -- the victim cancelled twice
+MEMORY killer-drops-linear: REJECTED 92:16: `g` is declared `linear` and is not consumed in its scope  -- the victim dropped by killer, bound `linear`
+MEMORY killer-drops: ACCEPTED (assurance: unconditional) src: inr (i32[2], inr (i32[26], inl ())) live 0 | lir: inr (i32[2], inr (i32[26], inl ())) live 0  -- the victim dropped by killer without cancel (the checker's implicit destructor is `close`)
+MEMORY task-duplicated: REJECTED 107:3: `t` is used twice here, and its type `box top U (nu X. F (i32 + box top U X) & F 1)` is not persistent  -- the victim queued and also given to killer (an affine task used twice)
+MEMORY state-holds-dead-cell: REJECTED 69:13: `extra` is used twice here, and its type `ref i32` is not persistent  -- the cells freed, then kept in the next state
+SEMANTIC fin-write-skipped: ACCEPTED (assurance: unconditional) src: inr (i32[2], inr (i32[26], inl ())) live 0 | lir: inr (i32[2], inr (i32[26], inl ())) live 0  -- cancel skips the borrower's write of 99 (observable only)
+SEMANTIC wrong-point: ACCEPTED (assurance: unconditional) src: inr (i32[2], inr (i32[26], inl ())) live 0 | lir: inr (i32[2], inr (i32[26], inl ())) live 0  -- the task starts at the second await's point (skips an await)

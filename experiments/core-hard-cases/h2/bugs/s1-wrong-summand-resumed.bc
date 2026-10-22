@@ -1,0 +1,96 @@
+-- H2 injected bug s1-wrong-summand-resumed (SEMANTIC), a variant of `h2c-local-borrows.bc`.
+-- H2, encoding (c): `corpus/async-r1-local-borrows.bc` as an effect-free core term, each task's
+-- borrow of its own local RE-OPENED from owned state at each step. No borrow is stored.
+--
+-- The rule (one per R1 lend, from the typed term): at each suspension inside `withbor2r` of `c`,
+-- the machine state holds the owner `c` (not the lend), and every live variable whose type
+-- mentions the lend's `'x` is stored with each occurrence of `mut 'x T` replaced by `1`. The
+-- observation that resumes opens `withbor2['x']` on `c` again and puts the fresh borrow back in
+-- those positions. Precondition: at the suspension, `'x` occurs in the live variables' types only
+-- as the borrow itself (`mut 'x T` / `imm 'x T`) under `*` and `+` -- never under `U`, `view`,
+-- or a family -- so nothing DERIVED from the lend crosses (H8 is the case where it does).
+--
+-- `counter`: `bump` (a closure over `m`) is forced before the `yield`, so only `m` crosses: its
+-- state after `yield(1)` is `c`. `pair_view`: `p = (m, 4)` crosses: its state is `(c, ((), 4))`.
+--
+-- Answer: i32[1207], `live 0`, as `corpus/async-r1-local-borrows.out`.
+
+type Pull = U (nu X. F (i32 * U X + (i32 + U X)) & F 1)
+type SC = 1 + ref i32
+type SP = 1 + ref i32 * (1 * i32)
+
+-- `counter`'s segments: before the `yield` (alloc, lend, `bump` forced), and after it.
+fn counter_seg0(u: 1) -> ref i32 =
+  let c = alloc(10);
+  let _ = borrow mut c { m -> let bump = { modify m { x -> x + 1 }; m }; m <- force bump; () };
+  c
+fn counter_seg1(c: ref i32) -> i32 =
+  let v = borrow mut c { m -> modify m { x -> x + 1 }; modify m { x -> (x, x) } };
+  let _ = free(c);
+  v
+
+-- `pair_view`'s segments. The pair `p = (m, 4)` crosses: stored as `((), 4)`, its borrow re-filled.
+fn pair_seg0(u: 1) -> ref i32 * (1 * i32) =
+  let c = alloc(3);
+  let q = borrow mut c { m -> let p = (m, 4); let (m0, k) = p; ((), k) };
+  (c, q)
+fn pair_seg1(s: ref i32 * (1 * i32)) -> i32 =
+  let (c, q) = s;
+  let ((), k) = q;
+  let v = borrow mut c { m -> let p = (m, k); let (m2, k2) = p; modify m2 { x -> x + k2 }; modify m2 { x -> (x, x) } };
+  let _ = free(c);
+  v
+
+def counter_step : !U (SC -o F (i32 * SC + (i32 + SC)) & F 1) =
+  !thunkv fun (s : SC) ->
+      < case s {
+          inl u -> c <- return counter_seg0 u;
+            return (inl (i32[1], (inr c : SC)) : i32 * SC + (i32 + SC))
+        | inr c -> return (inl (i32[1], (inr c : SC)) : i32 * SC + (i32 + SC))
+        },
+        case s { inl u -> return () | inr c -> d <- return free[i32] c; return () } >
+
+def pair_step : !U (SP -o F (i32 * SP + (i32 + SP)) & F 1) =
+  !thunkv fun (s : SP) ->
+      < case s {
+          inl u -> q <- return pair_seg0 u;
+            return (inl (i32[2], (inr q : SP)) : i32 * SP + (i32 + SP))
+        | inr q -> return (inr (inl (pair_seg1 q) : i32 + SP) : i32 * SP + (i32 + SP))
+        },
+        case s { inl u -> return () | inr q -> let (c, r) = q; d <- return free[i32] c; return () } >
+
+def counter : !(1 => Pull) =
+  !thunkv fun (u : 1) ->
+      f <- return unbang unfold[nu X. F (i32 * U X + (i32 + U X)) & F 1, SC] counter_step;
+      s0 : SC <- return inl u;
+      return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >)
+
+def pair_view : !(1 => Pull) =
+  !thunkv fun (u : 1) ->
+      f <- return unbang unfold[nu X. F (i32 * U X + (i32 + U X)) & F 1, SP] pair_step;
+      s0 : SP <- return inl u;
+      return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >)
+
+fn step(it: Pull) -> (i32 * Pull) + i32 =
+  o <- (nu_out (force it)).1;
+  match o {
+    inl (x, it) -> inl (x, it)
+  | inr d -> match d { inl r -> inr r | inr it -> inl (0, it) }
+  }
+
+main -> i32 =
+  let a : Pull = counter(());
+  let b : Pull = pair_view(());
+  match step(a) {
+    inl (x, a) -> match step(b) {
+      inl (y, b) -> match step(a) {
+        inl (z, a) -> (nu_out (force a)).2; 0
+      | inr ra -> match step(b) {
+          inl (w, b) -> (nu_out (force b)).2; 0
+        | inr rb -> ra * 100 + rb
+        }
+      }
+    | inr rb -> 0
+    }
+  | inr ra -> 0
+  }

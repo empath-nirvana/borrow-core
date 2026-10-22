@@ -1,0 +1,51 @@
+# H1: experiments/core-hard-cases/run.sh at the files' sizes (gen-tree n=200 reps=2; async-tree n=200 tasks=3)
+g1-gen-tree-for | assurance: unconditional | src: i64[198400] live 0  | lir: i64[198400] live 0  | wasm: i64[198400] live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 0 indirect 0 copies 0 loads 0 stores 0 bounds 0
+src-gen-tree | assurance: unconditional | src: i64[198400] live 0  | lir: i64[198400] live 0  | wasm: i64[198400] live 0  | erased handles 2 performs 1 raises 2 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 0 indirect 0 copies 0 loads 0 stores 0 bounds 0
+g2-gen-zip-stored | assurance: unconditional | src: i64[596000] live 0  | lir: i64[596000] live 0  | wasm: i64[596000] live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 800 indirect 0 copies 0 loads 4000 stores 4000 bounds 0
+src-gen-zip | assurance: unconditional | src: timeout | lir: i64[596000] live 0  | wasm: i64[596000] live 0  | erased handles 0 performs 0 raises 4 machines 6 suspends 3 left 0 0 | machines 15 tailSites 2 merged 2 threaded 0 stacked 0 statics 0 effectOps [] | allocs 1308 indirect 806 copies 0 loads 35992 stores 35992 bounds 0
+a1-async-tree | assurance: unconditional | src: i64[297900] live 0  | lir: i64[297900] live 0  | wasm: i64[297900] live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 1201 indirect 0 copies 0 loads 20466 stores 20466 bounds 1203
+a1b-async-tree-array | assurance: unconditional | src: i64[297900] live 0  | lir: i64[297900] live 0  | wasm: i64[297900] live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 4 indirect 0 copies 0 loads 20016 stores 20016 bounds 3603
+src-async-tree | assurance: unconditional | src: i64[297900] live 0  | lir: i64[297900] live 0  | wasm: i64[297900] live 0  | erased handles 0 performs 0 raises 2 machines 2 suspends 1 left 0 0 | machines 6 tailSites 0 merged 1 threaded 0 stacked 1 statics 1 effectOps [stackNew, stackSwap, framePush, framePop, framePut, frameTop, unreachable, stackFree, kappaPut, kappaTake] | allocs 10 indirect 0 copies 0 loads 33108 stores 25920 bounds 1212
+
+# bcc-counts --backend new at n=16384, reps/tasks=4 (sizes substituted; ~/repos/669h-work/h1/big)
+a1-async-tree allocs 131073 indirect 0 copies 0 loads 2228312 stores 2228312 bounds 131076 
+a1b-async-tree-array allocs 5 indirect 0 copies 0 loads 2098240 stores 2098240 bounds 393220 
+g1-gen-tree-for allocs 0 indirect 0 copies 0 loads 0 stores 0 bounds 0 
+g2-gen-zip-stored allocs 131072 indirect 0 copies 0 loads 655360 stores 655360 bounds 0 
+src-async-tree allocs 13 indirect 0 copies 0 loads 3604624 stores 2818208 bounds 131088 
+src-gen-tree allocs 0 indirect 0 copies 0 loads 0 stores 0 bounds 0 
+src-gen-zip allocs 196608 indirect 131084 copies 0 loads 10093864 stores 10093864 bounds 0 
+
+# a1b with a 1-slot initial frames array (grow path exercised)
+a1b-grow-test | assurance: unconditional | src: timeout | lir: i64[297900] live 0  | wasm: i64[297900] live 0  | erased handles 0 performs 0 raises 0 left 0 0 | machines 0 tailSites 0 merged 0 threaded 0 stacked 0 statics 0 effectOps [] | allocs 13 indirect 0 copies 0 loads 19596 stores 19596 bounds 3645
+
+# bug injection (h3/bugs.py), the H1 rows
+B1 MEMORY h1/g2-gen-zip-stored: a stored generator (linear `U`) observed twice: next and close
+    REFUSED: h1/bugs/B1-g2-gen-zip-stored.bc:102:7: `it` is used twice here, and its type `U (pull i32 1 1)` is not persistent
+B2 MEMORY h1/g2-gen-zip-stored: one machine's code (linear) used for two stored generators
+    REFUSED: h1/bugs/B2-g2-gen-zip-stored.bc:97:7: `f` is used twice here, and its type `U (i32 * i32 * i32 * (mu X. 1 + (i32 * i32 * i32) * X) -o pull i32 1 1)` is not persistent
+B3 LEAK-CHECK h1/g2-gen-zip-stored: both stored walks dropped mid-walk (after 10 steps) with no close: the checker's destructor must close them, live 0
+    ACCEPTED (assurance: unconditional) | lir: i64[32200] live 0 | wasm: i64[32200] live 0
+S1 SEMANTIC h1/g2-gen-zip-stored: the wrong round's value yielded at a popped frame
+    ACCEPTED (assurance: unconditional) | lir: i64[594600] live 0 | wasm: i64[594600] live 0
+B4 MEMORY h1/a1b-async-tree-array: the frames array used after it was moved into `array_replace` (use after move/free)
+    REFUSED: h1/bugs/B4-a1b-async-tree-array.bc:46:7: `a1` is used twice here, and its type `array (i32 * i32 * i32 + i64 * i32 * i32)` is not persistent
+B5 MEMORY h1/a1b-async-tree-array: a task's frames (owned) duplicated at its resume
+    REFUSED: h1/bugs/B5-a1b-async-tree-array.bc:152:7: `stk` is used twice here, and its type `array (i32 * i32 * i32 + i64 * i32 * i32) * i32` is not persistent
+B6 MEMORY h1/a1b-async-tree-array: a `linear` frames array never released (a leak the kernel cannot repair)
+    REFUSED: h1/bugs/B6-a1b-async-tree-array.bc:151:14: `junk` is declared `linear` and is not consumed in its scope
+B7 LEAK-CHECK h1/a1b-async-tree-array: the scheduler stops after 5 rounds and drops the suspended tasks (their frames arrays): live 0
+    ACCEPTED (assurance: unconditional) | lir: i64[0] live 0 | wasm: i64[0] live 0
+S2 SEMANTIC h1/a1b-async-tree-array: the wrong round's value added at `K_right`
+    ACCEPTED (assurance: unconditional) | lir: i64[297300] live 0 | wasm: i64[297300] live 0
+
+# native timing: h3/bench-results.txt (H1 rows)
+H1 rs bench/async-tree (iterative)            108.5 ms  (107.2-110.5)  out 18058304
+H1 core a1 frames mu list                     389.3 ms  (388.3-392.8)  out i64[505641240]
+H1 core a1b frames array                      179.1 ms  (177.4-182.7)  out i64[505641240]
+H1 main src async-tree (task stacks)          248.7 ms  (245.7-256.7)  out i64[505641240]
+H1 rs bench/gen-tree                          103.3 ms  (103.0-104.4)  out 1083498760
+H1 core g1 gen-tree at its for                102.2 ms  (101.8-103.7)  out i64[1083498760]
+H1 main src gen-tree                          102.7 ms  (102.5-104.0)  out i64[1083498760]
+H1 core g2 zip, stored, frames mu list         55.6 ms  (54.9-56.1)  out i64[216706624]
+H1 main src zip (stored generators)           231.0 ms  (230.0-232.4)  out i64[216706624]

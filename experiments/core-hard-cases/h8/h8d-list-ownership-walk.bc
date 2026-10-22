@@ -1,0 +1,63 @@
+-- H8, the same generator as `h8c-list-cursor-refold.bc` with NO borrow: the generator walks its
+-- list by OWNERSHIP (a zipper). The state holds the unvisited suffix and the visited prefix,
+-- reversed; each step unrolls the suffix's head and rolls it onto the prefix. At the end the
+-- prefix is reversed back, so the list is whole again (here then dropped, as the source frees
+-- it). O(1) per `yield`, and no lend at all: nothing to hold across the stop. It is a different
+-- program from the borrowing one (the list is taken apart while it is walked), which is what a
+-- rewriter may produce only when nothing else observes the list during the walk.
+--
+-- Answer: the sum 1 + … + N, `live 0`.
+include list
+
+type L = List[i32]
+type S = L * L
+type Pull = U (nu X. F (i32 * U X + (1 + U X)) & F 1)
+
+fn build(n: i32) -> L =
+  let mut l = (roll inl () : L);
+  for i in 0..n { l = (roll inr (n - i, l) : L) };
+  l
+
+-- `back` reversed onto `front` (a counted walk of `n` steps).
+fn unzip(n: i32, back: L, front: L) -> L =
+  let mut b = back;
+  let mut f = front;
+  for _ in 0..n { match unroll b { inl u -> b = (roll inl () : L) | inr (x, r) -> b = r; f = (roll inr (x, f) : L) } };
+  f
+
+def gen_step : !U (L * (L * i32) -o F (i32 * (L * (L * i32)) + (1 + L * (L * i32))) & F 1) =
+  !thunkv fun (s : L * (L * i32)) ->
+      < let (front, q) = s;
+        let (back, k) = q;
+        case unroll front {
+          inl u -> whole <- return unzip (k, back, (roll inl () : L));
+            return (inr (inl ()) : i32 * (L * (L * i32)) + (1 + L * (L * i32)))
+        | inr p -> let (x, rest) = p;
+            return (inl (x, (rest, ((roll inr (x, back) : L), (unbang host[add32]) (k, i32[1])))) : i32 * (L * (L * i32)) + (1 + L * (L * i32)))
+        },
+        let (front, q) = s; let (back, k) = q; return () >
+
+fn n_of(u: 1) -> i32 = 200
+
+main : F U loop i32 1 =
+  n <- return n_of ();
+  l <- return build n;
+  f <- return unbang unfold[nu X. F (i32 * U X + (1 + U X)) & F 1, L * (L * i32)] gen_step;
+  s0 : L * (L * i32) <- return (l, ((roll inl () : L), i32[0]));
+  g : Pull <- return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >);
+  st : !U (Pull * i32 -o F (i32 + Pull * i32) & F 1) <- return (!thunkv fun (p : Pull * i32) ->
+        < let (it, acc) = p;
+          o <- (nu_out force it).1;
+          case o {
+            inl xr -> let (x, it2) = xr;
+              return (inr (it2, (unbang host[add32]) (acc, x)) : i32 + Pull * i32)
+          | inr q -> case q {
+              inl u -> return (inl acc : i32 + Pull * i32)
+            | inr it2 -> return (inr (it2, acc) : i32 + Pull * i32)
+            }
+          },
+          let (it, acc) = p;
+          (nu_out force it).2 >);
+  lp <- return unbang unfold[loop i32 1, Pull * i32] st;
+  z : Pull * i32 <- return (g, i32[0]);
+  return (thunkv nu_in < (nu_out force lp z).1, (nu_out force lp z).2 >)

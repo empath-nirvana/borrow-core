@@ -1,0 +1,31 @@
+-- H5b's source on main (for its counts): the surface has no `then … unwind …` (U2), so the
+-- borrower's finaliser that writes 99 is left out; otherwise the program of
+-- `h5b-stored-cancel-finaliser.bc`. The block is R1 (`PinLaw`).
+include async
+
+fn victim() -> i32 with Async =
+  let extra = alloc(11);
+  let buf = alloc(10);
+  let v = borrow mut buf { m ->
+    let p = (m, 5);
+    await();
+    await();
+    let (m, k) = p;
+    modify m { x -> (x, x + k) }
+  };
+  let _ = free(buf);
+  let e = free(extra);
+  v + e
+
+fn killer(t: Task[i32]) -> i32 with Async =
+  await();
+  cancel(t);
+  2
+
+main -> List[i32] =
+  let t = with spawn { victim() };
+  let q = queue[i32]();
+  let q = push(q, with spawn { killer(t) });
+  let q = push(q, with spawn { victim() });
+  let d = with spawn { victim() };
+  run_until_empty(q)
