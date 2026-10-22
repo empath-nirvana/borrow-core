@@ -648,6 +648,6 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.handleL_compatC
 #print axioms BoCa.Fig16.LogRel.Core.CDerives.effHandleL
 #print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.effHandleL
-#print axioms BoCa.Fig16.LogRel.Core.der_hndJ₁
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.der_hndJ₁
 #print axioms BoCa.Fig16.LogRel.Core.kappaFinSelf
 #print axioms BoCa.Fig16.LogRel.Core.lastFinOK_nil_of_find
