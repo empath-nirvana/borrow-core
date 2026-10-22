@@ -228,3 +228,160 @@ theorem LinL.var_closed {Γ x} (h : ClosedL D Γ (.var x)) : Γ = {x} := by
 theorem bnd_bindTm_letv {e : Tm} {x : Var} {b : Tm} : bnd (.letv x e b) = x :: (bnd e ++ bnd b) := rfl
 
 end Backend2.Spike670
+
+namespace Backend2.Spike670
+open Backend2
+
+/-- The arity facts at every operand-only form of a term. -/
+def ArOK (p : Prog) : Tm → Prop
+  | .letv _ e b => ArOK p e ∧ ArOK p b
+  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => ArOK p b
+  | .case _ _ b₁ _ b₂ => ArOK p b₁ ∧ ArOK p b₂
+  | t => AritiesOK p t
+
+theorem ArOK_ops {p : Prog} {t : Tm} {xs : List Var} (ho : operands t = some xs) (ha : ArOK p t) :
+    AritiesOK p t := by
+  cases t <;> simp_all [ArOK, operands]
+
+/-- **From `LinL` to `Lin`**: binders that are distinct, new to the program and typed make the
+bound set's threading go through. -/
+theorem LinL.toLin {p : Prog} {D : Var → Prop} {Γ t Δ} (h : LinL D Γ t Δ) :
+    ∀ {B : Finset Var}, (bnd t).Nodup → (∀ x ∈ bnd t, x ∉ B ∧ Typed p x) → Γ ⊆ B → ArOK p t →
+    ∃ B', Lin p D B Γ t Δ B' ∧ B ⊆ B' ∧ B' ⊆ B ∪ (bnd t).toFinset ∧
+      (∀ Δ', Δ = some Δ' → Δ' ⊆ B') := by
+  induction h with
+  | @ops Γ t xs Γ' ho hu =>
+    intro B _ _ hΓ ha
+    exact ⟨B, .ops ho (ArOK_ops ho ha) hu, le_refl _, Finset.subset_union_left, fun _ e => by
+      cases e; exact hu.sub.trans hΓ⟩
+  | @letvNone Γ x e b _ ih =>
+    intro B hn hb hΓ ha
+    simp only [bnd, List.nodup_cons, List.nodup_append, List.mem_append] at hn
+    obtain ⟨B₁, l, s₁, s₂, -⟩ := ih (B := B) hn.2.1 (fun y hy => hb y (by simp [bnd, hy])) hΓ ha.1
+    exact ⟨B₁, .letvNone l, s₁, s₂.trans (by intro z; simp [bnd] <;> tauto), by simp⟩
+  | @letv Γ x e b Γ₁ Δ he _ ih₁ ih₂ =>
+    intro B hn hb hΓ ha
+    simp only [bnd, List.nodup_cons, List.nodup_append, List.mem_append, not_or] at hn
+    obtain ⟨B₁, l₁, s₁, s₂, e₁⟩ := ih₁ (B := B) hn.2.1 (fun y hy => hb y (by simp [bnd, hy])) hΓ ha.1
+    have hxB₁ : x ∉ B₁ := fun h => by
+      have := s₂ h; simp only [Finset.mem_union, List.mem_toFinset] at this
+      rcases this with h | h
+      · exact (hb x (by simp [bnd])).1 h
+      · exact hn.1.1 h
+    obtain ⟨B₂, l₂, s₃, s₄, e₂⟩ := ih₂ (B := insert x B₁) hn.2.2.1
+      (fun y hy => ⟨by
+        simp only [Finset.mem_insert, not_or]
+        refine ⟨fun h => hn.1.2 (h ▸ hy), fun h => ?_⟩
+        have := s₂ h; simp only [Finset.mem_union, List.mem_toFinset] at this
+        rcases this with h | h
+        · exact (hb y (by simp [bnd, hy])).1 h
+        · exact hn.2.2.2 y h y hy rfl, (hb y (by simp [bnd, hy])).2⟩)
+      (Finset.insert_subset_insert _ (e₁ Γ₁ rfl)) ha.2
+    refine ⟨B₂, .letv l₁ hxB₁ (hb x (by simp [bnd])).2 l₂, ?_, ?_, e₂⟩
+    · exact s₁.trans ((Finset.subset_insert _ _).trans s₃)
+    · intro z hz
+      have h4 := s₄ hz
+      simp only [Finset.mem_union, Finset.mem_insert, List.mem_toFinset] at h4
+      simp only [bnd, Finset.mem_union, List.mem_toFinset, List.mem_cons, List.mem_append]
+      rcases h4 with (h | h) | h
+      · exact .inr (.inl h)
+      · have h2 := s₂ h; simp only [Finset.mem_union, List.mem_toFinset] at h2; tauto
+      · tauto
+  | @letpair Γ x y q b Δ hq _ ih =>
+    intro B hn hb hΓ ha
+    simp only [bnd, List.nodup_cons, List.mem_cons, not_or] at hn
+    have hx := hb x (by simp [bnd]); have hy := hb y (by simp [bnd])
+    obtain ⟨B', l, s₁, s₂, e⟩ := ih (B := insert y (insert x B)) hn.2.2
+      (fun z hz => ⟨by
+        simp only [Finset.mem_insert, not_or]
+        exact ⟨fun h => hn.2.1 (h ▸ hz), fun h => hn.1.2 (h ▸ hz), (hb z (by simp [bnd, hz])).1⟩,
+        (hb z (by simp [bnd, hz])).2⟩)
+      (fun z hz => by
+        simp only [Finset.mem_insert, Finset.mem_erase] at hz ⊢
+        rcases hz with rfl | rfl | ⟨_, hz⟩
+        · exact .inl rfl
+        · exact .inr (.inl rfl)
+        · exact .inr (.inr (hΓ hz)))
+      ha
+    have hyxB : y ∉ insert x B := by
+      simp only [Finset.mem_insert, not_or]; exact ⟨fun h => hn.1.1 h.symm, hy.1⟩
+    refine ⟨B', .letpair hq hx.1 hx.2 hyxB hy.2 l, ?_, ?_, e⟩
+    · exact (Finset.subset_insert _ _).trans ((Finset.subset_insert _ _).trans s₁)
+    · refine s₂.trans ?_; intro z; simp [bnd] <;> tauto
+  | @case Γ s x b₁ y b₂ Δ₁ Δ₂ Δ hs _ _ hj ih₁ ih₂ =>
+    intro B hn hb hΓ ha
+    simp only [bnd, List.nodup_cons, List.nodup_append, List.mem_append, List.mem_cons,
+      not_or] at hn
+    have hx := hb x (by simp [bnd]); have hy := hb y (by simp [bnd])
+    obtain ⟨B₁, l₁, s₁, s₂, e₁⟩ := ih₁ (B := insert x B) hn.2.1
+      (fun z hz => ⟨by
+        simp only [Finset.mem_insert, not_or]
+        exact ⟨fun h => hn.1.1 (h ▸ hz), (hb z (by simp [bnd, hz])).1⟩,
+        (hb z (by simp [bnd, hz])).2⟩)
+      (fun z hz => by
+        simp only [Finset.mem_insert, Finset.mem_erase] at hz ⊢
+        rcases hz with rfl | ⟨_, hz⟩
+        · exact .inl rfl
+        · exact .inr (hΓ hz))
+      ha.1
+    have hyB₁ : y ∉ B₁ := fun h => by
+      have := s₂ h; simp only [Finset.mem_union, Finset.mem_insert, List.mem_toFinset] at this
+      rcases this with (h | h) | h
+      · exact hn.1.2.1 h.symm
+      · exact hy.1 h
+      · exact hn.2.2.2 y h y (by simp) rfl
+    obtain ⟨B₂, l₂, s₃, s₄, e₂⟩ := ih₂ (B := insert y B₁) hn.2.2.1.2
+      (fun z hz => ⟨by
+        simp only [Finset.mem_insert, not_or]
+        refine ⟨fun h => hn.2.2.1.1 (h ▸ hz), fun h => ?_⟩
+        have := s₂ h; simp only [Finset.mem_union, Finset.mem_insert, List.mem_toFinset] at this
+        rcases this with (h | h) | h
+        · exact hn.1.2.2 (h ▸ hz)
+        · exact (hb z (by simp [bnd, hz])).1 h
+        · exact hn.2.2.2 z h z (by simp [hz]) rfl, (hb z (by simp [bnd, hz])).2⟩)
+      (fun z hz => by
+        simp only [Finset.mem_insert, Finset.mem_erase] at hz ⊢
+        rcases hz with rfl | ⟨_, hz⟩
+        · exact .inl rfl
+        · exact .inr (s₁ (Finset.mem_insert_of_mem (hΓ hz))))
+      ha.2
+    refine ⟨B₂, .case hs hx.1 hx.2 l₁ hyB₁ hy.2 l₂ hj, ?_, ?_, ?_⟩
+    · exact ((Finset.subset_insert _ _).trans s₁).trans ((Finset.subset_insert _ _).trans s₃)
+    · intro z hz
+      have h4 := s₄ hz
+      simp only [Finset.mem_union, Finset.mem_insert, List.mem_toFinset] at h4
+      simp only [bnd, Finset.mem_union, List.mem_toFinset, List.mem_cons, List.mem_append]
+      rcases h4 with (h | h) | h
+      · tauto
+      · have h2 := s₂ h; simp only [Finset.mem_union, Finset.mem_insert, List.mem_toFinset] at h2
+        tauto
+      · tauto
+    · intro Δ' hΔ
+      subst hΔ
+      cases Δ₁ with
+      | none => simp [Join] at hj; exact e₂ Δ' hj.symm
+      | some a =>
+        cases Δ₂ with
+        | none =>
+          simp [Join] at hj; subst hj
+          exact (e₁ _ rfl).trans ((Finset.subset_insert _ _).trans s₃)
+        | some b => simp [Join] at hj; obtain ⟨rfl, rfl⟩ := hj; exact e₂ _ rfl
+  | absurd hs => intro B _ _ _ _; exact ⟨B, .absurd hs, le_refl _, Finset.subset_union_left, by simp⟩
+  | @copy Γ x x' b Δ hx hD _ ih =>
+    intro B hn hb hΓ ha
+    simp only [bnd, List.nodup_cons] at hn
+    have hx' := hb x' (by simp [bnd])
+    obtain ⟨B', l, s₁, s₂, e⟩ := ih (B := insert x' B) hn.2
+      (fun z hz => ⟨by
+        simp only [Finset.mem_insert, not_or]
+        exact ⟨fun h => hn.1 (h ▸ hz), (hb z (by simp [bnd, hz])).1⟩,
+        (hb z (by simp [bnd, hz])).2⟩)
+      (Finset.insert_subset_insert _ hΓ) ha
+    refine ⟨B', .copy hx hD hx'.1 hx'.2 l, (Finset.subset_insert _ _).trans s₁, ?_, e⟩
+    refine s₂.trans ?_; intro z; simp [bnd] <;> tauto
+  | @drop Γ x b Δ hx _ ih =>
+    intro B hn hb hΓ ha
+    obtain ⟨B', l, s₁, s₂, e⟩ := ih (B := B) hn hb ((Finset.erase_subset _ _).trans hΓ) ha
+    exact ⟨B', .drop hx l, s₁, by simpa [bnd] using s₂, e⟩
+
+end Backend2.Spike670
