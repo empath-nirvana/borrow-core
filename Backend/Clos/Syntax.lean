@@ -78,6 +78,11 @@ inductive Op where
   `swap ≜ λx.λy. let z = load x; store x y; (x, z)` ([TR] 3.24) with its copy of the old contents
   and their drop cancelled; the contents may change type (`Ref A ⊸ B ⊸ Ref B ⊗ A`). -/
   | swap
+  /-- `swapSlot ℓ v`: `(ℓ, old)`, the old contents moved out and `v` moved in, at a location whose
+  contents keep their type (an array's slot): `array_replace`'s `(λold. store ℓ v; old) (load ℓ)`
+  (`Core/Arrays.lean`, `swapCellE`) with its copy of the old contents and their drop cancelled,
+  as `swap`'s are. -/
+  | swapSlot
   /-- A host operation of §8, applied to its (consumed) argument. -/
   | host (op : HostOp)
   /-- `tab (n, f)`: an array of `len(n)` slots, slot `i` holding `f i` (§9). -/

@@ -795,6 +795,25 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
           let tl ← conv cl l kl
           return wrapCopies cs (.letv vv tv (.letv lv tl (.prim .swap [lv, vv])))
       | .lam b =>
+        -- `(λold. store c x; old) (load c)`, a slot's swap (`array_replace`, `Core/Arrays.lean`
+        -- `swapCellE`): the closure IR's `swapSlot`, which moves the old contents out, as the
+        -- axiom `swap` is, where `load` would copy them (a deep copy of a heap closure) and
+        -- `store` drop the original. `x` is evaluated before `c` is read; both are variables.
+        match b with
+        | .seq (.app (.app (.prim .store) (.var (j + 1))) xE) (.var 0) =>
+          match a with
+          | .app (.prim .load) (.var j') =>
+            if j == j' && !(0 ∈ (← fvsAt (id + 7) 0)) then
+              let kl := k₂ + 2
+              let (cs, cx, cl) ← plan2 ctx (← fvsAt (id + 7) 1) (← fvsAt kl 0)
+              let dummy ← fresh
+              let xv ← fresh; let lv ← fresh; let pr ← fresh; let c' ← fresh; let old ← fresh
+              let tx ← conv (cx.push dummy) xE (id + 7)
+              let lc ← lookup cl j
+              return wrapCopies cs (.letv xv tx (.letv lv (.var lc) (.letv pr (.prim .swapSlot [lv, xv])
+                (.letpair c' old pr (.drop c' (.var old))))))
+          | _ => pure ()
+        | _ => pure ()
         if !isSwap f && (fixBody? f).isNone then
           -- `(λx. b) a`, the erasure's `let`: `a` is bound to `x` and no closure is made.
           let kb := k₁ + 1

@@ -834,7 +834,10 @@ def tlowerFn (k : Nat) (f : Fn) : EM (List String) := do
       acc := s!"%ra{i}"
     pure (out ++ [s!"  ret {t} {acc}"])
   let trap := if st.trapUsed then ["trap:", "  call void @llvm.trap()", "  unreachable"] else []
-  let fattrs := if f.inline.isSome then " alwaysinline" else ""
+  -- Frame pointers kept, so that a profiler's backtraces reach past the first frame (#664: without
+  -- the attribute LLVM omits them in IR that does not ask; on these benchmarks they cost nothing
+  -- measurable).
+  let fattrs := (if f.inline.isSome then " alwaysinline" else "") ++ " \"frame-pointer\"=\"all\""
   let why := match f.inline with
     | some r => [s!"; alwaysinline — {r}"]
     | none => []

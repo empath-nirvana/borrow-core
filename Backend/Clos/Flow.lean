@@ -114,7 +114,7 @@ def genPrim : Op → List Var → GM Key
       emit (.load (.var l) r)
       pure r
   | .store, [l, v] => do emit (.store (.var l) (.var v)); pure .none
-  | .swap, [l, v] => do
+  | .swap, [l, v] | .swapSlot, [l, v] => do
       let old ← freshKey
       emit (.load (.var l) old)
       emit (.store (.var l) (.var v))

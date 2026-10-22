@@ -224,6 +224,10 @@ def primTy : Op → List Var → TM Nat
   | .store, [l, v] => do
       unify (← tyVar l) (← newLoc (← tyVar v))
       unitT
+  | .swapSlot, [l, v] => do
+      -- The contents keep their type: the old and the new are one node, as `store`'s.
+      unify (← tyVar l) (← newLoc (← tyVar v))
+      newNode (.pair (← tyVar l) (← tyVar v))
   | .swap, [l, v] => do
       -- The result is the same cell, now holding `v`'s type.
       let a ← newNode .any
