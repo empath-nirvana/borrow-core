@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.02 · 2026-10-22
+Version 1.03 · 2026-10-22
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1800,17 +1800,18 @@ with a static name `n` of its own (§18, §19):
   node's answer is the `for`'s beside `g`'s residual, so the node is itself a call of a div
   function in direct style (§52, `handleDivCall?`): `inr r` leaves the body around with its
   residual.
-- **A body that performs a control operation that resumes, or may loop** (a `while`, a `loop`, or
-  a `for` over anything but a count), is not a work yet: a work that performs an operation of the
-  sites around needs the erasure law at a work that performs (T-B2, #564), and one that loops is a
-  work that ticks, with a residual of its own. The `for` then observes `g`'s stored generator
-  instead (below), a loop of the enclosing body.
+- **A body that performs an affine operation of a site around, or loops** (a `while`, a `loop`, a
+  `for` over anything but a count, a call of a div function), is `[handle-last]`'s work too (§55):
+  its row `Σ_W` holds those operations, and a body that loops is a div body of its own at the
+  row around the `for`, whose close leaves the `for` with the threaded variables that have no
+  destructor.
 
-The new backend calls the work where `yield` is performed (§54): `inl` returns to the generator
-and `inr` unwinds it to the node through its finalisers, then branches to the exit
-(`corpus/for-never.bc`, `for-yield-branch.bc`, `gen-return.bc`). A program that stores a
-generator compiles at the fallback at a stored loop (§54): `tick` is a machine operation, and the
-stored generator's `reify` a drive.
+The new backend calls the work where `yield` is performed where the checked fact `DirectOK`
+holds (§54, §55): `inl` returns to the generator and `inr` unwinds it to the node through its
+finalisers, then branches to the exit (`corpus/for-never.bc`, `for-yield-branch.bc`,
+`gen-return.bc`, `block-yield-inner.bc`, `gen-from.bc`, `gen-nested.bc`). Elsewhere the node is a
+drive that runs the rule's clause (§55). A program that stores a generator compiles at the
+fallback at a stored loop (§54).
 
 ### A generator's body
 
@@ -1853,16 +1854,16 @@ the generator's body loops, the stored generator is `unfold` over the loop value
 resumed rest that ends the turn runs the next turn at once, so that a loop that yields once per
 turn gives an element at every observation.
 
-A `for` over a stored generator observes it until it returns (§14's drain, div), and the
-adapters (`lib/adapters.bc`) are generic generators over stored generators: `map`, `filter`,
-`take`, `skip`, `enumerate`, `chain`, `flat_map`, `take_until`, `scan`, `zip`, `chunks`, `lines`,
-`batch`. Each runs its source to the end and returns the source's `K`. `take`, `take_until` and
-`zip` close their source, so they take one that hands back, closed, what it returns,
-`U (pull A K K)`; a failing source returns an error it cannot hand back closed, and is rejected
-there (`corpus/reject/take-failing.bc`). A pipeline of adapters whose functions are known
-allocates nothing (`corpus/gen-pipeline-adapters.bc`: no allocation or copy;
-`gen-adapters.bc`, `gen-adapters-fail.bc` at their previous allocations); since §52 the steps of
-its loops are dispatched calls until B3 lowers `iterate` natively.
+A `for` over a stored generator observes it until it returns (§14's drain, div). The adapters
+(`lib/adapters.bc`: `map`, `filter`, `take`, `skip`, `enumerate`, `chain`, `flat_map`,
+`take_until`, `scan`, `chunks`, `lines`, `batch`) are generic generators over a source
+computation since §55: each takes its source at a source parameter, `(1 => K with Yield[A])`, and
+a call at a call of a generator there is a call of its instance for that source, whose `for` is
+over the source's call. Each runs its source to the end and returns the source's `K`; `take` and
+`take_until` cancel it, which hands nothing back, so their source returns `1`, and a failing
+source is rejected there (`corpus/reject/take-failing.bc`). `zip` steps two sources by hand and
+takes stored generators, `U (pull A K K)`. A pipeline of adapters whose functions are known is a
+nest of direct calls and allocates nothing (`corpus/gen-pipeline-adapters.bc`).
 
 ### Self-reference
 
@@ -1952,10 +1953,8 @@ and §19 is preserved: every construct of this entry is elaborated into core bef
   (`corpus/pending/gen-digits.bc`, `gen-lines.bc`, `gen-lazy.bc`, `gen-adapters-io.bc`). It needs
   a cancel that hands back a residual, or a `linear ctl` iteration effect (no `break`).
 - **Callbacks that yield** to a `for`'s site: a block takes the loop's threaded variables and
-  hands them back at each call (§32, `corpus/yield-callback.bc`). `|>` chains the adapters as
-  functions over stored generators (§33). Adapters over a source computation (#564, R-1's 2a) are
-  generators whose `for` over the source yields: a work that performs, which waits on T-B2 (*A
-  body that performs a control operation that resumes*, above).
+  hands them back at each call (§32, `corpus/yield-callback.bc`). `|>` chains the adapters (§33),
+  over a source computation since §55.
 - **A total consumer of a generator that loops.** A `for` over one is div: its turns are
   unbounded. A finite source written as data, or a sized iterator (§16), is total, and so is a
   generator whose body does not loop.
@@ -9059,14 +9058,153 @@ unchanged at every stage of both backends.
 ### Open
 
 - **T-B2**, the erasure law at a work that performs an operation of the handlers outside (#564):
-  a body that yields to an outer site (`block-yield-inner`, `gen-from`'s chained generator), and
-  the adapters over a source computation (R-1's 2a), wait on it.
-- **A body that loops** is a work that ticks, with a residual of its own (`gen-nested`): the
-  elaboration of a work as a div body is not built.
+  not built. Since §55 a body that yields to an outer site and the adapters over a source
+  computation compile directly where the checked fact `DirectOK` holds (the user's decision of
+  2026-10-22: T-B2 does not block).
+- **A body that loops** is a work that ticks: built in §55.
 - **The fallback's cost.** At a program that stores a generator, every loop is a machine: `tick`
   suspends. `scripts/compile-scaling.sh`'s body compiles (1× 5.2 s, 8× 99 s): ratio 19.2 against
   the guard's 16, its time in the layouts (`Lay.resolve`, `Lay.sccs`, arrays copied).
 - `div_fuel`'s node (§53) and the old backend (deleted at N6) are unchanged.
+
+---
+
+## 55. Entry 54 — `DirectOK`, works that perform or loop, adapters over a source computation (#564 R-1, #644 B2)
+
+### Motivation
+
+§54 compiled a `for` over a generator directly when its body performs nothing but aborts. The
+user's decision of 2026-10-22 on #564 (T-B2 does not block) asks for the rest of the regular
+`for`s: a body that yields to an outer site (`block-yield-inner`, `gen-from`, the book's
+`guide/iteration.md` block at 80), a body that loops (`gen-nested`), and the library adapters
+over a source computation (R-1's 2a). Each compiles directly wherever the checked fact
+`DirectOK` holds; where it does not, the node is a drive running the rule's clause. A stored
+`κ`, and so a state machine, remains only where the program keeps a generator: a
+`U (pull …)` it writes (Q2), `zip`'s sources, a `flat_map` function's stored generators.
+
+### Language
+
+No change to `CDerives`, the relation, `𝒱⟦·⟧`, the machine or any kernel rule. The surface gains
+the **source parameter** (below), elaborated away by the effects pass.
+
+### Works that perform or loop
+
+`Frontend/Elab/Effects.lean` (`Cx.lastOps`) and `Frontend/Sugar.lean` (`forYield`).
+
+- A `for` body whose control operations are abortive or affine is the site's work. Its row
+  `Σ_W` is the outer row's operations it performs (`opsC`, of the body as written and as
+  elaborated); `effHandleL`'s premises are those of §51 (`Σ_W ≤ Σ`, `¬ Σ.UnrD`, `LastFinOK` at the
+  empty cancel rows), decided by the checker as before.
+- **A body that loops** (a loop or a call of a div function on its spine, `loopsAt`, read from
+  one elaboration of the body that is discarded) is a div body of its own: its work is marked
+  (`VSugar.workStep`) and walked by the `Div` elaboration as a counted loop's step is (§52), at
+  the row around the `for` with `div` (`Σ_W = div, Σ`). Its answer is the work's,
+  `inl ws` or `inr (inl (ws, e))`; a close inside it hands back the threaded variables that have
+  no destructor, `inr (inr l)`, and after the node the body is closed there (`VSugar.rowClose`),
+  as a counted loop's close is. The kernel admits a work whose row holds `tick`: `effHandleL`
+  asks only `Σ_W ≤ Σ`, and `LastFinOK` holds at the empty cancel rows (`lastFinOK_of_rowLeB`);
+  no rule is added.
+
+### Source parameters (R-1's 2a)
+
+`Frontend/Elab/Effects.lean`, *Source parameters* (`srcParams`, `srcTree`, `srcInst`).
+
+- A **source parameter** is a computation parameter (§33) that provides an iteration effect and
+  that the body uses once, as the source of a `for`: `it: (1 => K with Yield[A])`,
+  `for x in it(()) { … }`.
+- A function with one is a template in its source, as it is in its types (§15, *Generic
+  functions*). A call of it at a call of a generator there, `map(range(0, 10), f)`, or
+  `range(0, 10) |> map(f)`, or a generator named there, is a call of its **instance for the
+  source**: the template with the `for` over the source's call itself, `for x in range(l₁, l₂)`.
+  The source of an instance may be a call of another such function, whose source is a call
+  again: the instance is made for the **source call tree** (its key names it,
+  `take__of_skip_filter_map_range`), and the tree's **leaves** — the arguments at parameters
+  that are not sources — are evaluated where the call is written, in order, and passed in (a
+  call at a stored generator's parameter is its stored generator there, as before). Each node's
+  type parameters are renamed for it; what a source yields and returns is unified with its
+  parameter's `A` and `K` (`unifyTy`), and a mismatch is reported there (`take`'s source returns
+  `1`). The instance's row is what its body performs, each entry at the template's.
+- The `for` in the instance is over a call of a generator: a handler site (§15, §54), whose work
+  is the adapter's body. So a pipeline of adapters is a nest of direct calls, the source's
+  `yield` calling the innermost adapter's work, whose `yield` calls the next's.
+- `lib/adapters.bc`: every adapter but `zip` takes its source so. `take` and `take_until` cancel
+  their source, which hands nothing back: their source returns `1`. `zip` steps two sources by
+  hand and keeps `U (pull …)` parameters (stored, Q2).
+
+The elaborator decides no aliasing, mutation, ownership, lend extent or escape: an instance is the
+template with a call put where its parameter was called, and its leaves are ordinary arguments,
+checked by the kernel's rules.
+
+### `DirectOK`, the checked fact
+
+`Backend2/Driver.lean` (`directOK`, `lastFacts`, `machineOps`), the typed-term pass that emits
+`directFacts` and `lastFacts`. #564's T-B2 spike states it as a run-level `Prop` (`DirectOK`,
+`ActiveOK`, `~/repos/scratch-archive/564-tb2-spike/TB2.lean`); the pass decides, at each
+`[handle-last]` operation:
+
+- **F-names**: no handler in the context `K` between a `perform` and the node serves a name the
+  work performs or raises. The work's names (`ruleNames`, its row's where it has none), but
+  `Div`'s, are held by no frame of the bound: the frames the node's handled computation holds
+  (`inside`, pinned by the typed rule, `TDerivesAt.inside_eqL`), the cancel delimiter, and the
+  frames of the code it takes in — the code values of the typed term at the shapes of the code
+  its free variables' types hold, to a fixed point (`takenFrames`; a type that may hold a
+  continuation, or `Unk`, takes `Checked.flowsKept`). `tick` is caught by no frame of `K` when
+  `main`'s `reify` is the typed term's one handler of `Div` (`divAtMainOnly`).
+- **F-fin**: the cancel rows are the empty ones the checker emits, so every finaliser in `K` is at
+  the empty row (`[then]`'s `hfin`): it performs and raises nothing, and the raise-mode unwind and
+  the cancel-mode unwind run the same finalisers with the same outcome.
+- **Exit indices in bounds**: `2·|E| < 2³²`.
+
+The backend reads the fact and never re-derives it. Two representation conditions are the
+backend's own: every node of the name holds one closed handler (§54), and a work whose row holds
+a machine operation is not called where its operation is performed (its suspension would pass
+through code whose type does not say it may suspend): such an operation is a machine operation,
+to a fixed point (`machineOps`). The proof that the direct form and the source agree (T-B2) is not
+built; `DirectOK` guards its two known differences (which error wins when a finaliser of `K`
+raises; a name the work performs shadowed by a generator's own handler).
+
+### Backend
+
+- **Works that perform** call the outer sites' code where they are performed (§47, §54): nested
+  direct calls. A work's cancel summand is its exit's argument beside the whole payload of its row
+  (its aborts and the cancel summands of the `[handle-last]` operations it performs,
+  `cancelSummand`, to a fixed point), so a nested work's `inr` crosses the generators between.
+- **`prepWorks`** reserves every work before it makes any, so a work that performs another's
+  operation calls it however the nodes nest.
+- **The fallback** (`convHandleL` as a drive, `lastClauseDrive`): an operation whose work is not
+  licensed runs the rule's clause in the node's drive with `κ` (`genKap`), its cancel at the
+  operation's own cancel row (R-1a: `κ`'s type never appears in a program): the work, `κ.2 ()` its
+  finaliser frame, then `inl y` resumes `κ` (`kappaC_resume`) and `inr z` cancels it
+  (`kappaC_cancel`) and runs the exit (`last_cancel_exit`); a raise from the work cancels `κ` and
+  goes on outward. A licensed operation's work raises through its cancel summand there too.
+- **The old backend** (`Backend/Clos/Flow.lean`): before the effects are lowered a `perform`'s
+  payload is the pair `(n, (i, v))`, which `drive`'s `when` reads too, so a closure a clause is
+  given in an operation's argument reaches its calls (`block-yield-inner`: a block called from a
+  work, which suspended unseen).
+
+FALLBACK-PLACEHOLDER
+
+### Programs
+
+PROGRAMS-PLACEHOLDER
+
+### Baseline
+
+`CDerives`, the relation, `𝒱⟦·⟧`, the machine and every kernel rule are unchanged;
+`fundamentalC`, `adequacyC` and every borrow guarantee keep their statements, and every elaborated
+program is checked core. Every output, golden and exit status is unchanged at every stage of both
+backends; `corpus/comp-param-for.bc` moves from `pending/` to the corpus, and
+`corpus/reject/take-failing.bc`'s message names the source's result.
+
+### Open
+
+- **T-B2**, the proof that a work run in place agrees with the source (#564; 2.5k–5k lines for
+  the forward direction): `DirectOK` guards it, it does not prove it.
+- **`DirectOK`'s bound for code taken in** is by type shape: a value of a type holds code of a
+  code value at that shape. That a run never puts other code there is the typing invariant of
+  the run, not proved here.
+- A source parameter's argument is a call tree of generators; a block whose body is more than a
+  call, or a stored generator passed at a source parameter, is refused there.
 
 ---
 
@@ -9474,6 +9612,11 @@ no change to `CDerives`, `Paper/`, `Support/` or the old backend.
 ---
 
 ## Changelog
+
+- **1.03** (2026-10-22) — §55 (#564 R-1, #644 B2): a `for` body that yields to an outer site or
+  loops is `[handle-last]`'s work; the adapters take their source as a source parameter,
+  instantiated per source call tree; the checked fact `DirectOK` licenses each direct call, and
+  where it does not hold the node's drive runs the rule's clause. CHANGELOG-PLACEHOLDER
 
 - **1.02** (2026-10-22) — §54 (#644 B2, #564 R-1): `for` over a generator is pushed. The erasure
   law at a work that performs nothing (`last_resume_direct`, `last_cancel_direct`,
