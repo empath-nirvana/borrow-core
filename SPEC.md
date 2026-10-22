@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.99 · 2026-10-22
+Version 1.00 · 2026-10-22
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1737,7 +1737,8 @@ and `ewp_handle_or` (`Core/EffRules.lean`, `Core/EffFin.lean`), with `ewp_frame_
   `g : !U(A ⊸ F_{Σ_N} B)`, `Σ_N ≤ Σ` a row of linear operations, as `λ(x, κ). (λw. κ.1 w) (g x)`,
   and an abortive operation's clause as `g : !U(A ⊸ F_Σ R)`. `effHandleV` and `effHandleVB` ask
   the handled row not to hold `Div`. A handler whose clauses are all abortive is `effHandleT` at
-  an η-expanded clause tuple.
+  an η-expanded clause tuple. A clause that works, then resumes `κ` in tail position or cancels it
+  and leaves, with `κ`'s cancel its unwind finaliser while it works, is `effHandleL` (§51).
 
 **What is proved.**
 
@@ -1777,14 +1778,14 @@ obligation for a looping `main` is §11's.
   generic (a `fn f[A](g: U (pull A 1 1)) -> …` that drains `g`).
 - **`div_fuel` is `driveE`** by construction, not by a proved equation.
 - **`[handle]` of another name at a clause given `κ`** around a computation that ticks
-  (`handle_general`, #564).
+  (`handle_general`, #564), beyond `effHandleT`'s and `effHandleL`'s (§51) classes.
 - **Finalisers are total, as a theorem** (decision 69): every run of a finaliser terminates, the
   handler clauses its operations reach included. `[then]`'s premise keeps the finaliser's own row
   free of `Div`, so its own run is a least fixed point (`ewpTS`): it performs finitely many
   operations, each segment finite. A clause it reaches runs at the handler's outer row: at
   `effHandleV` and `effHandleVB` that row is free of `Div` and the clause's run is a least fixed
   point too, but an `effHandleT` clause's answering function is at a row `Σ_N` that may hold
-  `Div`, and may tick without end. Not proved.
+  `Div`, and may tick without end, as may an `effHandleL` clause's work (§51). Not proved.
 - The model interpreter (`bcc interp`) copies the remaining input on every read.
 
 ---
@@ -8554,6 +8555,117 @@ IR's interpreter counts the frame slots a run starts.
 
 ---
 
+## 51. Entry 50 — `[handle-last]`: a clause that uses `κ` once, last (#564, R-1)
+
+### Motivation
+
+Decision 68 types `[handle]` of another name around a computation that ticks only at clauses that
+resume `κ` in tail position (`effHandleT`, §14). B2's three blockers (#644: `break`/`return`
+around a looping generator; a `for` body that yields, raises or calls a delegating generator;
+adapters over a source computation) are one class of clause beyond it (#564's design, comment
+6331907320; the user's decision R-1a): the clause works on the operation's argument, then resumes
+`κ` in tail position or cancels it and leaves, and while it works `κ`'s cancel is its unwind
+finaliser.
+
+    λ(x, κ).  (w x)  then r. case r { inl y → κ.1 y  |  inr z → κ.2 (); nf z }  unwind κ.2 ()
+
+`κ.2 ()` is the destructor decision 56 says an affine continuation lacks: a raise from `w`, or a
+cancel of an outer continuation captured inside `w`, first cancels `κ`, and so runs the
+handled computation's finalisers.
+
+### Language
+
+One kernel rule, `effHandleL` (`CDerives`, `CDerivesAt`, `CDerivesP`; `Core/DivHandleLast.lean`).
+Its clauses are written by the rule (R-1a), as `effHandleT`'s are, from two tuples: works
+`ws` and exits `nfs` (`lastTuple`). `κ`'s type never appears in a program, and no type, typing rule
+of another former, effect equation, machine step or `𝒱⟦·⟧` clause changes.
+
+    Γ₁ dead, (h_ret, (ws, nfs)) a value form over Γ₁
+    Γ₁ ⊢ (h_ret, (ws, nfs)) : (A ⊸ F_Σ R) ⊗ (⊗_j W_j ⊗ ⊗_j !U(X_j ⊸ F_Σ R))
+    Γ₂ ⊢ e : F_{n:E[fs] ⊕ Σ} A          n ∉ Σ, n ≠ 0, n ≠ Div
+    each operation of E affine or abortive         Σ_W ≤ Σ       Σ.NZ        ¬ Σ.UnrD
+    each j: LastFinOK Σ Σ_W (fs j) X_j
+    ──────────────────────────────────────────────────────────────────────── [handle-last]
+    Γ ⊢ handle_n e with (h_ret, lastTuple(ws, nfs)) : F_Σ R
+
+- **The works**: `W_j = !U(A_j ⊸ F_{Σ_W}(B_j ⊕ X_j))` at a non-abortive operation `A_j ↠ B_j`, and
+  `!U(A_j ⊸ F_Σ R)` at an abortive one, whose clause is the work itself (`effHandleT`'s abortive
+  clause). A work does not mention `κ`; it may tick, raise, and perform the affine operations of
+  `Σ_W`.
+- **The clause** of a non-abortive operation is the one displayed above (`lastClause`): the work's
+  answer `inl y` resumes `κ` at `y` in tail position, `inr z` cancels `κ` and runs the exit at `z`.
+- **The operations are affine or abortive.** A linear operation's `κ` has no cancel; it stays
+  `effHandleT`'s.
+- **`¬ Σ.UnrD`** is `[then]`'s `hU` (§27): `κ` is not persistent, so no unrestricted operation may
+  capture the frame that holds it. Decision 63 makes this a restriction, not a cost.
+- **`Σ.NZ`** is `[then]`'s: the frame's `[finalise]` step asks the raise's name not to be `0`.
+- **The cancel rows** (`LastFinOK`): for each operation, its cancel row `F = fs j` is not `⊤`, is
+  below `Σ` (D3) and does not hold `Div` (decision 69: `κ.2 ()` is the clause's finaliser); each
+  capturable operation of `Σ_W` has a cancel row above its own `⋈ F` (`[then]`'s `hfin`); the errors
+  pending at the finaliser are persistent where `F` has an unrestricted operation (`[then]`'s
+  `hP`); and `X_j` drops where `F` has an operation with weakening (`[let]`'s `hW`: `z : X_j` is
+  held across `κ.2 ()`, which may raise or be captured and cancelled). At the empty cancel rows
+  the checker emits (§27 *Baseline*), `LastFinOK` is `[then]`'s `hfin` at the empty finaliser row
+  (`lastFinOK_nil`), which holds where `Σ_W` finds what `Σ` finds (`lastFinOK_nil_of_find`).
+- **The handled row may hold `Div`.** The handler forwards `tick`, as `effHandleT`'s does.
+
+**`κ`'s cancel branch.** The proof gives `κ.2` the table of the operation's own cancel row `fs j`
+(`lastTc`), which `ewp_handle_or`'s `hTc` permits: it asks only that the table be above the
+entry's cancel obligation. `κ`'s type at a clause the program writes, `cancelTy Σ F = F_{F ⊕ Σ} 1`,
+holds `Div` whenever `Σ` does, and as a finaliser it makes the cancel row of every capturable
+operation of `Σ` beneath it find that operation's own key (`kappaFinSelf`). A rule-written clause
+avoids both.
+
+### The proof
+
+`handleL_compatC` is the rule's compatibility lemma.
+
+- **At a row holding `Div`** (`cwp_handle_last`), by coinduction, as `cwp_handle_tail`: the
+  candidate `lastY` is the least fixed point of the handled computations under the handler, the
+  finaliser frame around a work with `κ` in the frame resumed into one segment of the candidate
+  (`lastW₂`), and `cwp`. `κ`'s relation is `KapRelT` at one segment of the candidate, the relation
+  `cwp_handle_tail` gives it, with its cancel at `fs j`'s table.
+- **The finaliser frame at a candidate** (`cwpF_frame_then`, T-A1): `[then]` around a computation
+  of `cwp`, one segment, at a parameter candidate `Y`; `cwp_then` is now its instance. A tick
+  inside the frame owes the frame around its continuation to `Y` and to `Closing`
+  (`closing_then`); `κ`'s capture cell is in the frame's resource, carried along the list
+  (`KapRelT.same`, `KapRelT.ext`).
+- **The frame's answer** (`last_cont`): `inl y` resumes `κ`; `inr z` cancels `κ` at its cancel
+  row's table beside `z` (`ewp_frame_plain_or`), then runs the exit.
+- **`Closing`** (`last_closing`) is `ewp_handle` at the closing tables, the work under the frame
+  by `closing_then`.
+- **Elsewhere** (`ewp_handle_last`) it is Core's `ewp_handle` with the frame `ewp_frame_then`.
+- The Fundamental Property is applied to `h_ret`, the works, the exits and `e`, never to a term
+  that mentions `κ`. The relation, `𝒱⟦·⟧` and `CDerives`' indices are unchanged; no step index.
+
+### Baseline
+
+`fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`, `fundamentalC_pin`, `total_every_run`
+and every borrow guarantee keep their statements and cover the new rule. The handler inversions
+(`der_hnd`, `der_hndJ`, `HndBase`) read a third form, `lastTuple`'s; `der_hndJ₁` asks a clause
+tuple to be neither `tailTuple`'s nor `lastTuple`'s (`not_tail` proves both). The typed term
+(`TExpr`, `TDerivesAt`, `TDerivesP`) gains the node `effHandleL`, generated (`scripts/gen-pin.py`);
+the checker emits no such node, and its absorption places none at a wider context, as
+`effHandleT`'s. No change to the checker's output, the elaboration, `Backend/`, `Backend2/`, the
+corpus or a golden.
+
+### Open
+
+- **The erasure laws** (T-B1 `last_resume_direct`, T-B1′ `last_cancel_direct`, T-B2): the
+  backend's licence to call a work where it is performed. T-B1/B1′ are `tail_resumes_answer` and
+  `kappa_cancel_steps` with the finaliser frame; T-B2, at a work that performs, is a two-run
+  correspondence. They read the rule's clause form (`lastClause`, `lastN`, `lastD`, `exitK`) and
+  its step lemmas (`lastClause_steps`, `lastN_inl`, `lastN_inr`, `exitK_steps`, `lastD_steps`).
+- **The elaboration** of `for` with `break`/`return` and a body that performs, and the adapters
+  over a source computation (R-1's frontend): it needs a checker producer for the node
+  (`TTied`'s builder, the clause kinds of the node, `Frontend/Check/Kinds.lean`, and its handled
+  names), and the works' and exits' tuples written by the elaborator.
+- **Handler state** (R-2, `effHandleLS`).
+- **Finalisers are total, as a theorem** (decision 69, §14 *Open*): a work, like `effHandleT`'s
+  answering function, may tick without end.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -8570,7 +8682,7 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 `Core/Stale.lean`. Entry 13 (§14) is implemented in `lib/div.bc`, `lib/lend.bc`, `Frontend/Sugar.lean`,
 `Frontend/Elab/LoopLend.lean` and `Core/Totality.lean`; each div body is one state machine.
 Its effect `Div` is in the kernel (`Core/DivDefs.lean` to `Core/DivRuntime.lean`, the rules
-`iterate`, `divFuel`, `reify` and `effHandleT` of `CDerives`), and the backend replaces `iterate`
+`iterate`, `divFuel`, `reify`, `effHandleT` and `effHandleL` (§51) of `CDerives`), and the backend replaces `iterate`
 by its fixed point (`Backend/Clos/Convert.lean`); the frontend does not elaborate to it yet. Entry 14 (§15) is implemented in `lib/yield.bc`, `lib/adapters.bc`,
 `Frontend/Elab/Effects.lean` (the sites), `Frontend/Sugar.lean` (`forYield`, `pullView`, the
 machine at a row) and `Frontend/Elab/Subst.lean`, with no change to `CDerives`, and lowered by
@@ -8945,6 +9057,13 @@ the old backend's output.
 
 ## Changelog
 
+- **1.00** (2026-10-22) — §51 (#564, R-1): `[handle-last]`, the kernel rule `effHandleL` for a
+  clause that works on the argument, then resumes `κ` in tail position or cancels it and runs an
+  exit, with `κ`'s cancel its unwind finaliser while it works; the handled row may hold `Div`. Its
+  clauses are written by the rule from works and exits, and `κ`'s cancel is given its own cancel
+  row's table. `cwpF_frame_then` (`[then]` at `cwp`, one segment, at a parameter candidate),
+  `handleL_compatC`, and `fundamentalC`/`adequacyC` with one more case; `kappaFinSelf`. No change
+  to the relation, the checker's output, the elaboration or a backend.
 - **0.99** (2026-10-22) — §50 (#661, N5): the new backend's native target has typed pointers
   (a `ptr` where a layout places an address, `getelementptr` from bases), the parameters' facts
   as cited `noalias`/`readonly`/`nonnull`/`dereferenceable`, `alwaysinline` on a call point's

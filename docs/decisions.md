@@ -879,6 +879,11 @@ Each entry: the decision, and why. Newest last.
       not to hold `Div`.
     - This is a deliberate, temporary restriction (hard-stop item 4), not the design: #564 proves
       `handle_general` and lifts it.
+    - What `effHandleL` (#564 route R-1, SPEC §51) lifts: "typed only when its clause resumes `κ` in
+      tail position" becomes "… when its clause resumes `κ` in tail position, or uses `κ` once,
+      last, with its cancel as the clause's unwind finaliser (`effHandleL`)". A clause that stores
+      `κ`, or uses it before its last step, around a body that ticks stays restricted:
+      `handle_general` (R-4) is not proved.
     - No program that runs today is rejected: the frontend writes no `Div` in any row until B2, and
       every kernel program's handled rows are without `Div`. `operator-reconcile.bc` is already
       pending.
