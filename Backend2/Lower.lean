@@ -978,8 +978,8 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
           (outStr "inr " ++ (← printField n 1 (← fieldLocals n 1 ps) true))]
     pure { name := "print", params := w, results := 0, locals := nloc, body := body ++ [.ret []], ptrs }
   | .reCopy c n =>
-    -- The contents at `c` read through `Imm̲` at `n`: a closure is `Unk` (no words), a pointer the
-    -- word, a boxed field copied, as `copy` copies.
+    -- The contents at `c` read through `Imm̲` at `n`: a closure or an opaque value is `Unk` (no
+    -- words), a pointer the word, a boxed field copied, as `copy` copies.
     let wc := L.w c
     let wn := L.w n
     let (body, nloc, ptrs) ← inFn wc do
@@ -1054,12 +1054,14 @@ where
         return (s, locs ts)
       match L.sh c', L.sh n' with
       | .clos .., .unk => return ([], [])
+      | .opq, .unk => return ([], [])
       | _, _ =>
         if L.triv c' && L.w c' == L.w n' then return ([], locs vs)
         let ts ← fresh (L.w n')
         return ([.call ts (← helper (.reCopy (L.r c') (L.r n'))) (locs vs)], locs ts)
     match L.sh c, L.sh n with
     | .clos .., .unk => return ([], [])
+    | .opq, .unk => return ([], [])
     | .pair .., .pair .. => do
       let (s₀, a, b) ← splitPair c ls false
       let (s₁, va) ← sub (← child c 0) (← child n 0) a

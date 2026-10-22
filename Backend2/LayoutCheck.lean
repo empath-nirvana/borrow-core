@@ -13,7 +13,8 @@ words, copies, drops, boxes, cells and closure dispatch. The analysis is not pro
 checks its **result** on every compile (`Backend2/Driver.lean`, `checkedLayouts`): the result is
 a solution of the constraints the program generates. It does not run the analysis, and does not
 use its solver (`find`, `join`, `walk`, `resolve`); it reads the LIR and the finished `Layouts`
-and verifies, each in time linear in the program and the layouts:
+and verifies, each in time near-linear in the program and the layouts (a variable's type is
+walked once):
 
 - **Every node is its type's** (`conf`): each variable's node, each function's answer node and
   `main`'s node have, constructor for constructor, the shape `nodeOf`/`build` makes of its `LTy`
@@ -532,6 +533,14 @@ def cellsOk (L : Layouts) : CM Unit := do
 
 end
 
+/-- Every move of the program: each function's body to its answer, `main`'s to its node. -/
+def walkProg (p : Prog) (L : Layouts) : CM Unit := do
+  for (fd, i) in p.fns.toList.zipIdx do
+    let w := s!"f{i} ({fd.name})"
+    for x in fd.params do let _ ← see L w x
+    walk L p w (1 <<< 22) fd.body (← retOf L i)
+  walk L p "main" (1 <<< 22) p.main (← rp L L.mainNode)
+
 /-- **The closure classes and layouts of a program's LIR are a solution of its constraints**:
 every check of this module's header. -/
 def check (p : Prog) (L : Layouts) : Except String Unit := do
@@ -542,11 +551,18 @@ def check (p : Prog) (L : Layouts) : Except String Unit := do
     let r := L.rep[i]!
     unless r < n && L.rep[r]! == r do throw s!"node {i}'s representative {r} is not its own"
   let act : CM Unit := do
-    for (fd, i) in p.fns.toList.zipIdx do
-      let w := s!"f{i} ({fd.name})"
-      for x in fd.params do let _ ← see L w x
-      walk L p w (1 <<< 22) fd.body (← retOf L i)
-    walk L p "main" (1 <<< 22) p.main (← rp L L.mainNode)
+    -- Every code of a class fits it: first, so that a code's own nodes are reported as its own.
+    -- The analysis keeps an entry, empty, at every node it joined: only classes with codes.
+    for (R, cs) in L.union.toList do
+      if cs.isEmpty then continue
+      unless L.rep[R]? == some R do throw s!"class {R} is not a representative"
+      let _ ← closOf L s!"class {R}" R
+      let mut seen : Std.HashSet Nat := {}
+      for c in cs do
+        if seen.contains c then throw s!"class {R} holds code c{c} twice"
+        seen := seen.insert c
+        codeOk L p R c
+    walkProg p L
     -- Every node is its type's.
     for (x, w) in (← get).vars.toList do
       let some t := p.ty[x]? | throw s!"{w}: x{x} has no type"
@@ -559,19 +575,11 @@ def check (p : Prog) (L : Layouts) : Except String Unit := do
       match L.regions[s]? with
       | some r' => same L s!"site {s}" "its κ region" r r'
       | none => throw s!"site {s} has no κ region node"
-    -- The classes.
-    -- The analysis keeps an entry, empty, at every node it joined: only classes with codes.
+    -- `codeClass` is the inverse of the classes' codes.
     for (R, cs) in L.union.toList do
-      if cs.isEmpty then continue
-      unless L.rep[R]? == some R do throw s!"class {R} is not a representative"
-      let _ ← closOf L s!"class {R}" R
-      let mut seen : Std.HashSet Nat := {}
       for c in cs do
-        if seen.contains c then throw s!"class {R} holds code c{c} twice"
-        seen := seen.insert c
         unless L.codeClass[c]? == some R do
           throw s!"class {R} holds code c{c}, whose class is {L.codeClass[c]?}"
-        codeOk L p R c
     for (c, R) in L.codeClass.toList do
       unless (L.union.getD R #[]).contains c do
         throw s!"code c{c}'s class is {R}, whose codes do not hold it"
@@ -700,8 +708,9 @@ def checkFlow (p : Prog) (L : Layouts) (sets : Std.HashMap Var (Std.HashSet Nat)
 /-! ### Reject tests: the checks refuse wrong layouts
 
 Each perturbation changes one fact of a program's layouts or closure flow as `Lower` would read
-it; the checks must refuse every one (`bcc lir --layout-reject`, `scripts/check-layout-reject.sh`).
-A perturbation with no target in a program is `n/a` there. -/
+it, and is aimed at one family of the checks; the checks must refuse every one, by that family's
+refusal (`bcc lir --layout-reject`, `scripts/check-layout-reject.sh`). A perturbation with no
+target in a program is `n/a` there. -/
 
 /-- The sorted keys of a map. -/
 def sortedKeys {β} (m : Std.HashMap Nat β) : List Nat := (m.toList.map (·.1)).mergeSort (· ≤ ·)
@@ -710,20 +719,94 @@ def sortedKeys {β} (m : Std.HashMap Nat β) : List Nat := (m.toList.map (·.1))
 def classes (L : Layouts) : List Nat :=
   (sortedKeys L.union).filter fun R => !(L.union.getD R #[]).isEmpty
 
-def isClosNK : NK → Bool
-  | .clos .. => true
+def isPtrNK : NK → Bool
+  | .ref _ | .imm _ | .mut _ => true
   | _ => false
 
-/-- The layouts with node `i`'s representative a fresh node of the same shape, width and
-triviality. -/
-def splitNode (L : Layouts) (x : Var) : Layouts :=
-  let r := L.node x
+/-- A fresh node, a copy of node `i`'s representative: its shape, width, triviality and cell. -/
+def freshOf (L : Layouts) (i : Nat) : Layouts × Nat :=
+  let r := L.r i
   let n := L.rep.size
-  { L with rep := L.rep.push n, shape := L.shape.push L.shape[r]!, width := L.width.push L.width[r]!,
-           trivial := L.trivial.push L.trivial[r]!, varNode := L.varNode.insert x n }
+  let L' := { L with rep := L.rep.push n, shape := L.shape.push L.shape[r]!,
+                     width := L.width.push L.width[r]!, trivial := L.trivial.push L.trivial[r]! }
+  let L' := match L.cellWords[r]? with
+    | some w => { L' with cellWords := L'.cellWords.insert n w }
+    | none => L'
+  let L' := match L.slotBytes[r]? with
+    | some b => { L' with slotBytes := L'.slotBytes.insert n b }
+    | none => L'
+  (L', n)
+
+/-- The layouts with variable `x`'s node a fresh copy of it. -/
+def splitNode (L : Layouts) (x : Var) : Layouts :=
+  let (L', n) := freshOf L (L.node x)
+  { L' with varNode := L'.varNode.insert x n }
+
+/-- Every `letv x e _` of a term, in the order the checks walk them. -/
+def binds : Nat → Tm → List (Var × Tm)
+  | 0, _ => []
+  | f + 1, t => match t with
+    | .letv x e b => (x, e) :: (binds f e ++ binds f b)
+    | .letpair _ _ _ b | .copy _ _ b | .drop _ b => binds f b
+    | .case _ _ b₁ _ b₂ => binds f b₁ ++ binds f b₂
+    | _ => []
+
+def progBinds (p : Prog) : List (Var × Tm) :=
+  (p.fns.toList.flatMap fun fd => binds (1 <<< 22) fd.body) ++ binds (1 <<< 22) p.main
+
+/-- The pointer nodes at which the walk sees one run-time cell (`sameCell`). -/
+def sameCellPairs (p : Prog) (L : Layouts) : Array (Nat × Nat × String) :=
+  match (walkProg p L).run {} with
+  | .ok (_, s) => s.sameCell
+  | .error _ => #[]
+
+/-- Merge class `b` into class `a` with everything the two classes hold, node for node, as the
+analysis would had their closures met (`a`'s width kept): `none` where their nodes are not of one
+shape, node for node. -/
+def mergeClasses (L : Layouts) (a b : Nat) : Option Layouts := Id.run do
+  let mut redir : Std.HashMap Nat Nat := {}
+  let mut todo : List (Nat × Nat) := [(a, b)]
+  let fd (m : Std.HashMap Nat Nat) (x : Nat) : Nat := Id.run do
+    let mut y := L.r x
+    for _ in [0:L.rep.size + 1] do
+      match m[y]? with
+      | some z => y := z
+      | none => break
+    return y
+  for _ in [0:100000] do
+    match todo with
+    | [] => break
+    | (x, y) :: rest =>
+      todo := rest
+      let rx := fd redir x
+      let ry := fd redir y
+      if rx == ry then continue
+      let kids : Option (List (Nat × Nat)) := match L.shape[rx]!, L.shape[ry]! with
+        | .pair u v, .pair u' v' | .sum u v, .sum u' v' => some [(u, u'), (v, v')]
+        | .ref u, .ref u' | .imm u, .imm u' | .mut u, .mut u' | .fam u, .fam u' => some [(u, u')]
+        | .clos k pa ra, .clos k' pa' ra' =>
+          if k == k' && ra.length == ra'.length && pa.isSome == pa'.isSome then
+            some ((match pa, pa' with | some u, some u' => [(u, u')] | _, _ => []) ++ ra.zip ra')
+          else none
+        | kx, ky => if kx == ky then some [] else none
+      let some ks := kids | return none
+      redir := redir.insert ry rx
+      todo := ks ++ todo
+  if !todo.isEmpty then return none
+  let rep := L.rep.map (fd redir)
+  let mut union := L.union
+  let mut codeClass := L.codeClass
+  for (y, x) in redir.toList do
+    let x := fd redir x
+    let uy := L.union.getD y #[]
+    if uy.isEmpty then continue
+    let u := ((union.getD x #[]).toList ++ uy.toList).mergeSort (· ≤ ·)
+    union := (union.erase y).insert x u.toArray
+    for c in uy do codeClass := codeClass.insert c x
+  return some { L with rep, union, codeClass }
 
 /-- The perturbations of the layouts, each named: `none` where the program has no target. -/
-def perturbLayouts (L : Layouts) : List (String × Option Layouts) :=
+def perturbLayouts (p : Prog) (L : Layouts) : List (String × Option Layouts) :=
   let cls := classes L
   let multi := (cls.find? fun R => (L.union.getD R #[]).size ≥ 2).orElse fun _ => cls.head?
   let dropCode := multi.map fun R =>
@@ -732,23 +815,75 @@ def perturbLayouts (L : Layouts) : List (String × Option Layouts) :=
   let dropClassOf := cls.head?.map fun R =>
     let c := (L.union.getD R #[])[0]!
     { L with codeClass := L.codeClass.erase c }
-  let pairs := cls.flatMap fun a => cls.filterMap fun b =>
-    if a < b && L.width[a]! != L.width[b]! then some (a, b) else none
-  let merge := pairs.head?.map fun (a, b) =>
-    let ub := L.union.getD b #[]
-    let u := ((L.union.getD a #[]).toList ++ ub.toList).mergeSort (· ≤ ·)
-    { L with rep := L.rep.map (fun r => if r == b then a else r),
-             union := (L.union.erase b).insert a u.toArray,
-             codeClass := ub.foldl (fun m c => m.insert c a) L.codeClass }
+  -- Two classes of one shape, node for node, the second wider: merged at the first's width.
+  let merge := Id.run do
+    let mut tries := 0
+    for a in cls do
+      for b in cls do
+        if a == b || L.width[b]! ≤ L.width[a]! then continue
+        tries := tries + 1
+        if tries > 20000 then return none
+        if let some L' := mergeClasses L a b then return some L'
+    return none
   let width := cls.head?.map fun R => { L with width := L.width.set! R (L.width[R]! + 1) }
+  let triv := (cls.find? fun R => !L.trivial[R]! && !L.recCls.contains R).map fun R =>
+    { L with trivial := L.trivial.set! R true }
+  -- A code's own nodes: its environment, its argument, its answer, each a fresh node.
+  let codeOf (R : Nat) : Option (Nat × Nat × Fn) := do
+    let c ← (L.union.getD R #[])[0]?
+    let code ← p.codes[c]?
+    let fn ← code.fns.head?
+    let fd ← p.fns[fn]?
+    pure (c, fn, fd)
+  let envC := cls.findSome? fun R => do
+    let (c, _, _) ← codeOf R
+    let e ← (L.codeEnv.getD c [])[0]?
+    let (L', n) := freshOf L e
+    pure { L' with codeEnv := L'.codeEnv.insert c (n :: (L.codeEnv.getD c []).drop 1) }
+  let argC := cls.findSome? fun R => do
+    let .clos .lam _ _ := L.shape[R]! | none
+    let (_, _, fd) ← codeOf R
+    let y ← fd.params.getLast?
+    pure (splitNode L y)
+  let ansC := cls.findSome? fun R => do
+    let (_, fn, _) ← codeOf R
+    let r ← L.fnRet[fn]?
+    let (L', n) := freshOf L r
+    pure { L' with fnRet := L'.fnRet.insert fn n }
   let boxes := (L.boxed.toList.mergeSort fun x y => x.1 < y.1 || (x.1 == y.1 && x.2 ≤ y.2))
   let unbox := boxes.head?.map fun b => { L with boxed := L.boxed.erase b }
   let heap := ((L.recCls.toList.mergeSort (· ≤ ·)).head?).map fun R =>
     { L with recCls := L.recCls.erase R }
-  let cells := ((List.range L.rep.size).filter fun v =>
-    L.rep[v]! == v && isPtrNK L.shape[v]! && L.cellWords.getD v 0 > 0 && !L.slotBytes.contains v)
+  let ptrs := (List.range L.rep.size).filter fun v => L.rep[v]! == v && isPtrNK L.shape[v]!
+  let cells := ptrs.filter fun v => L.cellWords.getD v 0 > 0 && !L.slotBytes.contains v
   let shrink := cells.head?.map fun v => { L with cellWords := L.cellWords.insert v (L.cellWords.getD v 0 - 1) }
-  -- A variable whose node another variable shares, split from it.
+  let slot := (ptrs.find? (L.slotBytes.contains ·)).map fun v =>
+    { L with slotBytes := L.slotBytes.insert v (if L.slotBytes.getD v 0 == 1 then 4 else 1) }
+  let pairs := sameCellPairs p L
+  let twoSizes := pairs[0]?.map fun (a, _, _) =>
+    { L with cellWords := L.cellWords.insert a (L.cellWords.getD a 0 + 1) }
+  let region := ((sortedKeys L.regions).head?).map fun s =>
+    let (L', n) := freshOf L (L.regions.getD s 0)
+    { L' with regions := L'.regions.insert s n }
+  -- The second frame access of a machine, its frame node a fresh copy.
+  let bs := progBinds p
+  let frameSites := bs.filterMap fun (x, e) => match e with
+    | .prim (.framePush m _) _ | .prim (.frameTop m _) _ => some (m, x)
+    | _ => none
+  let frame := Id.run do
+    let mut seen : Std.HashSet Nat := {}
+    for (m, x) in frameSites do
+      if seen.contains m then
+        let nx := L.node x
+        if let .pair a b := L.shape[nx]! then
+          let (L', n) := freshOf L a
+          return some { L' with shape := L'.shape.set! nx (.pair n b) }
+      seen := seen.insert m
+    return none
+  -- A read through a shared borrow of an integer, its reading a fresh node.
+  let reread := (bs.find? fun (x, e) => match e with
+      | .prim .load _ => (match L.shape[L.node x]! with | .int _ => true | _ => false)
+      | _ => false).map fun (x, _) => splitNode L x
   let shared := Id.run do
     let mut seen : Std.HashMap Nat Var := {}
     let mut out : Option Var := none
@@ -760,19 +895,24 @@ def perturbLayouts (L : Layouts) : List (String × Option Layouts) :=
   let split := shared.map (splitNode L)
   [("drop a code from its class", dropCode),
    ("drop a code's class", dropClassOf),
-   ("merge two classes of different widths", merge),
+   ("merge two classes of one shape and different widths", merge),
    ("change a class's width", width),
+   ("call a class trivial", triv),
+   ("move a code's environment node", envC),
+   ("move a code's argument node", argC),
+   ("move a code's answer node", ansC),
    ("unbox a boxed field", unbox),
    ("keep a heap class's environment inline", heap),
    ("shrink a cell", shrink),
+   ("give a slot the wrong width", slot),
+   ("give one cell two sizes", twoSizes),
+   ("move a κ region's node", region),
+   ("move a machine's frame node at one access", frame),
+   ("move a reborrowed read's node", reread),
    ("split a variable's node from the places it is joined with", split)]
-where
-  isPtrNK : NK → Bool
-    | .ref _ | .imm _ | .mut _ => true
-    | _ => false
 
 /-- The perturbations of the closure flow, each named. -/
-def perturbFlow (sets : Std.HashMap Var (Std.HashSet Nat)) (known : Std.HashMap Var Nat) :
+def perturbFlow (p : Prog) (sets : Std.HashMap Var (Std.HashSet Nat)) (known : Std.HashMap Var Nat) :
     List (String × Option (Std.HashMap Var (Std.HashSet Nat) × Std.HashMap Var Nat)) :=
   let withCodes := (sortedKeys sets).filter fun x => !(sets.getD x {}).isEmpty
   let dropSet := withCodes.head?.map fun x =>
@@ -782,7 +922,27 @@ def perturbFlow (sets : Std.HashMap Var (Std.HashSet Nat)) (known : Std.HashMap 
   let several := withCodes.find? fun x => (sets.getD x {}).size ≥ 2
   let wrongKnown := several.map fun x =>
     (sets, known.insert x (((sets.getD x {}).toList.mergeSort (· ≤ ·))[0]!))
+  -- A call's answer set without a code its callee's answer holds: the answer link.
+  let base := p.ty.fold (fun m x _ => max m (x + 1)) 0
+  let isClosV (x : Var) : Bool := match p.ty[x]? with
+    | some (.thunk _) => true
+    | _ => false
+  let answer := (progBinds p).findSome? fun (d, e) => do
+    let (g, j) ← match e with
+      | .app g _ | .app0 g => some (g, 0)
+      | .sel g j => some (g, j)
+      | _ => none
+    if !isClosV d then none
+    let sd := sets.getD d {}
+    (sets.getD g {}).toList.findSome? fun c => do
+      let code ← p.codes[c]?
+      let fn ← code.fns[j]?
+      let fd ← p.fns[fn]?
+      let .thunk _ := fd.ret | none
+      let c' ← (sets.getD (base + fn) {}).toList.find? sd.contains
+      pure (sets.insert d (sd.erase c'), known)
   [("drop a code from a variable's flow set", dropSet),
+   ("drop a code from a call's answer", answer),
    ("a direct call where several codes reach", wrongKnown)]
 
 end Backend2.LayCheck

@@ -122,26 +122,34 @@ def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
 def cellsOf (k : Backend.CheckedProg) : List (List LTy) :=
   k.main.cells.map fun c => c.tys.filterMap fun t => (ofV (machineOps k.main) t).toOption
 
-/-- **The layouts of a program's LIR, checked** (`Backend2/LayoutCheck.lean`): `Layouts`'s
-analysis (`Lay.places`, `Lay.resolve`), then the check that its result is a solution of the
-program's constraints. Every layout the compiler reads is one of these. A failure is the
-compiler's error, not the program's. -/
+/-- **The check of a program's layouts** (`Backend2/LayoutCheck.lean`), as the compiler's error. -/
+def checkLayouts (p : Prog) (L : Lay.Layouts) : Except String Unit :=
+  match LayCheck.check p L with
+  | .ok () => pure ()
+  | .error e => throw s!"internal: closure classes not a fixed point: {e}"
+
+/-- **The layouts of a program's LIR, checked**: `Layouts`'s analysis (`Lay.places`,
+`Lay.resolve`), then the check that its result is a solution of the program's constraints
+(`checkLayouts`). Every layout the compiler reads is one of these. A failure is the compiler's
+error, not the program's. -/
 def checkedLayouts (cells : List (List LTy)) (p : Prog) : Except String Lay.Layouts := do
   let (g, m) ← Lay.places p
   let L := Lay.resolve p g m cells
-  match LayCheck.check p L with
-  | .ok () => pure L
-  | .error e => throw s!"internal: closure classes not a fixed point: {e}"
+  checkLayouts p L
+  pure L
 
-/-- **The closure flow of a program's LIR, checked** (`LayCheck.checkFlow`): `Flow.solution` and
-the direct calls it licenses (`Flow.known`), the sets checked a solution of the flow's
-constraints. -/
-def checkedFlow (p : Prog) (L : Lay.Layouts) : Except String (Flow.St × Std.HashMap Var Nat) := do
-  let fs := Flow.solution p L
+/-- **The check of a program's closure flow** (`LayCheck.checkFlow`): the direct calls `fs`
+licenses (`Flow.known`), its sets checked a solution of the flow's constraints. -/
+def checkFlow (p : Prog) (L : Lay.Layouts) (fs : Flow.St) : Except String (Std.HashMap Var Nat) := do
   let kn := Flow.known p L fs
   match LayCheck.checkFlow p L fs.sets kn with
-  | .ok () => pure (fs, kn)
+  | .ok () => pure kn
   | .error e => throw s!"internal: closure classes not a fixed point: closure flow: {e}"
+
+/-- **The closure flow of a program's LIR, checked**: `Flow.solution`, then `checkFlow`. -/
+def checkedFlow (p : Prog) (L : Lay.Layouts) : Except String (Flow.St × Std.HashMap Var Nat) := do
+  let fs := Flow.solution p L
+  pure (fs, ← checkFlow p L fs)
 
 /-- The codes of the suspended computations an outcome `o` (of `M`) may hold, by the layouts: the
 closure classes of each suspension's `k`.  `[spec §49]` -/
@@ -294,9 +302,9 @@ def rejectReport (k : Backend.CheckedProg) : Except String (List String) := do
     | none => s!"n/a: {name}"
     | some (.ok ()) => s!"ACCEPTED: {name}"
     | some (.error e) => s!"refused: {name}: {e.take 160}"
-  let ls := (LayCheck.perturbLayouts L).map fun (name, L') =>
+  let ls := (LayCheck.perturbLayouts p L).map fun (name, L') =>
     line name (L'.map fun L' => LayCheck.check p L')
-  let fl := (LayCheck.perturbFlow fs.sets kn).map fun (name, x) =>
+  let fl := (LayCheck.perturbFlow p fs.sets kn).map fun (name, x) =>
     line name (x.map fun (s, kn') => LayCheck.checkFlow p L s kn')
   pure (base :: ls ++ fl)
 
@@ -352,16 +360,10 @@ def watTimed (file src : String) : IO (Except String String) := do
     let L ← ExceptT.mk <| stage "layout" (fun _ => "") fun _ => do
       let (g, m) ← Lay.places p
       pure (Lay.resolve p g m (cellsOf k))
-    ExceptT.mk <| stage "layout check" (fun _ => "") fun _ => match LayCheck.check p L with
-      | .ok () => pure ()
-      | .error e => throw s!"{file}: internal: closure classes not a fixed point: {e}"
+    ExceptT.mk <| stage "layout check" (fun _ => "") fun _ => checkLayouts p L
     ExceptT.mk <| stage "lint copies" (fun _ => "") fun _ => copiesChecked p L
     let fs ← ExceptT.mk <| stage "flow" (fun _ => "") fun _ => pure (Flow.solution p L)
-    let kn ← ExceptT.mk <| stage "flow check" (fun _ => "") fun _ => do
-      let kn := Flow.known p L fs
-      match LayCheck.checkFlow p L fs.sets kn with
-      | .ok () => pure kn
-      | .error e => throw s!"{file}: internal: closure classes not a fixed point: closure flow: {e}"
+    let kn ← ExceptT.mk <| stage "flow check" (fun _ => "") fun _ => checkFlow p L fs
     let flat ← ExceptT.mk <| stage "lower" (fun (q : Backend.Flat.Prog) => s!"{q.fns.size} functions")
       fun _ => do
         let p := LitViews.rewrite p cs.lits fs.sets
