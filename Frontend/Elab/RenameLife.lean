@@ -195,8 +195,8 @@ def Comp.renameLife (f : Span → String → Life) : Comp → Comp
   | .loop s ℓ src V M N => .loop s ℓ src (V.renameLife f) (M.renameLife f) (N.renameLife f)
   | .perform s n i V => .perform s n i (V.renameLife f)
   | .abort s n i V => .abort s n i (V.renameLife f)
-  | .handle s n st hr hc M =>
-    .handle s n (st.map (SiteRec.mapTy (VTy.renameLife f)))
+  | .handle s n hf st hr hc M =>
+    .handle s n hf (st.map (SiteRec.mapTy (VTy.renameLife f)))
       (hr.renameLife f) (hc.renameLife f) (M.renameLife f)
   | .unwind s x A M D N =>
       .unwind s (x.renameLife f) (A.map (VTy.renameLife f)) (M.renameLife f) (D.renameLife f) (N.renameLife f)

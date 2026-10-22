@@ -236,7 +236,8 @@ def handlerNames (E : List (Qual × VTy × VTy)) (H : Expr) : List (Option (List
 its clauses receive `κ` boxed (BOXED-κ, §28), its site as the elaboration records it, the names of
 its outer row and the frames its handled computation holds. At `effHandleV` and `effHandleVB` the kinds are the
 checker's classification (`ks`); at `effHandleT` they are its rule's, `tail` or `abortive`
-(`tailKind`), which `tailClause_premise` shows are the same `tail` kind. -/
+(`tailKind`), which `tailClause_premise` shows are the same `tail` kind; at `effHandleL` its rule's,
+`last` or `abortive` (`lastKind`, `lastClause_premise`). -/
 structure HandleSite where
   sp : Frontend.Span
   n : UInt32
@@ -269,6 +270,11 @@ def TExpr.handleSites : Nat → TExpr → List HandleSite
       | .effHandleT i _ S _ E _ n _ _ _ st ins tc _ =>
           [⟨i.sp, n, E.map tailKind, false, st, (S.map (·.n)).eraseDups, ins,
             handlerNames E (.pair (Expr.pairL tc.erase) (tailTuple E 0 (Expr.pairR tc.erase)))⟩]
+      -- `effHandleL`'s clauses are its rule's (`lastClause_premise`).
+      | .effHandleL i _ S _ E _ _ n _ _ _ st ins tc _ =>
+          [⟨i.sp, n, E.map lastKind, false, st, (S.map (·.n)).eraseDups, ins,
+            handlerNames E (.pair (Expr.pairL tc.erase) (lastTuple E 0
+              (Expr.pairL (Expr.pairR tc.erase)) (Expr.pairR (Expr.pairR tc.erase))))⟩]
       | _ => []
     match here, t.children with
     | _ :: _, (_, tc) :: rest =>
@@ -308,6 +314,7 @@ def _root_.BoCa.Fig16.LogRel.Core.ClauseKinds.ClauseKind.describe : ClauseKind �
   | .resumeOnce s => "resumed or cancelled once on each path, not all in tail position" ++
       (if s then ", with the handler's state" else "")
   | .stored => "its continuation may be kept"
+  | .last => "its work, then resumed in tail position or cancelled, the cancel its finaliser"
 
 /-- The kind's name, for `bcc kinds`. -/
 def _root_.BoCa.Fig16.LogRel.Core.ClauseKinds.ClauseKind.tag : ClauseKind → String
@@ -317,6 +324,7 @@ def _root_.BoCa.Fig16.LogRel.Core.ClauseKinds.ClauseKind.tag : ClauseKind → St
   | .resumeOrCancel s => "resume-or-cancel" ++ (if s then "+state" else "")
   | .resumeOnce s => "once" ++ (if s then "+state" else "")
   | .stored => "stored"
+  | .last => "last"
 
 /-- The operation `n.i`'s clause, for `bcc kinds`. -/
 def _root_.BoCa.Fig16.LogRel.Core.ClauseKinds.HKind.render (n : UInt32) (i : Nat) (h : HKind) : String :=

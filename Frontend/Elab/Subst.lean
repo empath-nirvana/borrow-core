@@ -193,8 +193,8 @@ def Comp.subst (σ : TySubst) : Comp → Comp
   | .loop sp ℓ src V M N => .loop sp ℓ src (V.subst σ) (M.subst σ) (N.subst σ)
   | .perform sp n i V => .perform sp n i (V.subst σ)
   | .abort sp n i V => .abort sp n i (V.subst σ)
-  | .handle sp n st hr hc M =>
-    .handle sp n (st.map (SiteRec.mapTy (VTy.subst σ)))
+  | .handle sp n hf st hr hc M =>
+    .handle sp n hf (st.map (SiteRec.mapTy (VTy.subst σ)))
       (hr.subst σ) (hc.subst σ) (M.subst σ)
   | .unwind sp x A M D N => .unwind sp x (A.map (VTy.subst σ)) (M.subst σ) (D.subst σ) (N.subst σ)
   | .withbor2r sp x b A B r p m M =>

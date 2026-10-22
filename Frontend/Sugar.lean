@@ -159,10 +159,10 @@ def _root_.Frontend.Comp.elab (lend : Bool) : Comp → Except Error Comp
       "that is one total step (SPEC §14)"⟩
   | .perform sp k i V => return .perform sp k i (← V.elab lend)
   | .abort sp k i V => return .abort sp k i (← V.elab lend)
-  | .handle sp k st hr hc M => do
+  | .handle sp k hf st hr hc M => do
     let hr' ← hr.elab false
     let hc' ← hc.elab false
-    return .handle sp k st hr' hc' (← M.elab false)
+    return .handle sp k hf st hr' hc' (← M.elab false)
   | .unwind sp x A M D N => return .unwind sp x A (← M.elab false) (← D.elab false) (← N.elab false)
   | .withbor2r sp x b A B r p m M => return .withbor2r sp x b A B r p m (← M.elab false)
 end
@@ -219,8 +219,8 @@ def _root_.Frontend.Comp.fillS (hv : String → Option Val) (hc : String → Opt
   | .ascribe sp M C => .ascribe sp (M.fillS hv hc hs) C
   | .perform sp k i V => .perform sp k i (V.fillS hv hc hs)
   | .abort sp k i V => .abort sp k i (V.fillS hv hc hs)
-  | .handle sp k st hr hc' M =>
-    .handle sp k (st.orElse fun _ => hs k) (hr.fillS hv hc hs) (hc'.fillS hv hc hs) (M.fillS hv hc hs)
+  | .handle sp k hf st hr hc' M =>
+    .handle sp k hf (st.orElse fun _ => hs k) (hr.fillS hv hc hs) (hc'.fillS hv hc hs) (M.fillS hv hc hs)
   | .unwind sp x A M D N => .unwind sp x A (M.fillS hv hc hs) (D.fillS hv hc hs) (N.fillS hv hc hs)
   | .withbor2r sp x b A B r p m M => .withbor2r sp x b A B r p m (M.fillS hv hc hs)
   | .loop sp ℓ src V M N => .loop sp ℓ src (V.fillS hv hc hs) (M.fillS hv hc hs) (N.fillS hv hc hs)
@@ -565,7 +565,7 @@ def _root_.Frontend.Comp.names (n : String) : Comp → Bool
   | .case _ V _ M _ N => V.names n || M.names n || N.names n
   | .loop _ _ _ V M N => V.names n || M.names n || N.names n
   | .perform _ _ _ V | .abort _ _ _ V => V.names n
-  | .handle _ _ _ hr hc M => hr.names n || hc.names n || M.names n
+  | .handle _ _ _ _ hr hc M => hr.names n || hc.names n || M.names n
   | .unwind _ _ _ M D N => M.names n || D.names n || N.names n
   | .withbor2r _ _ _ _ _ _ p m M => p.name == n || m.name == n || M.names n
   | .force .. | .top _ => false
@@ -686,7 +686,7 @@ def _root_.Frontend.Comp.hasFor : Comp → Bool
   | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
   | .nuOut _ M | .ascribe _ M _ | .letUnit _ _ M | .letPair _ _ _ _ M => M.hasFor
   | .case _ _ _ M _ N => M.hasFor || N.hasFor
-  | .handle _ _ _ _ _ M => M.hasFor
+  | .handle _ _ _ _ _ _ M => M.hasFor
   | .unwind _ _ _ M D N => M.hasFor || D.hasFor || N.hasFor
   | .withbor2r _ _ _ _ _ _ _ _ M => M.hasFor
   | .loop .. => true
@@ -712,7 +712,7 @@ def _root_.Frontend.Comp.exitAt : Comp → Option Span
   | .case _ V _ M _ N => V.exitAt.orElse fun _ => M.exitAt.orElse fun _ => N.exitAt
   | .loop _ _ _ V M N => V.exitAt.orElse fun _ => M.exitAt.orElse fun _ => N.exitAt
   | .perform _ _ _ V | .abort _ _ _ V => V.exitAt
-  | .handle _ _ _ hr hc M => hr.exitAt.orElse fun _ => hc.exitAt.orElse fun _ => M.exitAt
+  | .handle _ _ _ _ hr hc M => hr.exitAt.orElse fun _ => hc.exitAt.orElse fun _ => M.exitAt
   | .unwind _ _ _ M D N => M.exitAt.orElse fun _ => D.exitAt.orElse fun _ => N.exitAt
   | .withbor2r _ _ _ _ _ _ _ _ M => M.exitAt
   | .force .. | .top _ => none
@@ -744,7 +744,7 @@ def _root_.Frontend.Comp.sugarAt (p : VSugar → Bool) : Comp → Option Span
   | .case _ V _ M _ N => ((V.sugarAt p).orElse fun _ => M.sugarAt p).orElse fun _ => N.sugarAt p
   | .loop _ _ _ V M N => ((V.sugarAt p).orElse fun _ => M.sugarAt p).orElse fun _ => N.sugarAt p
   | .perform _ _ _ V | .abort _ _ _ V => V.sugarAt p
-  | .handle _ _ _ hr hc M =>
+  | .handle _ _ _ _ hr hc M =>
     ((hr.sugarAt p).orElse fun _ => hc.sugarAt p).orElse fun _ => M.sugarAt p
   | .unwind _ _ _ M D N => ((M.sugarAt p).orElse fun _ => D.sugarAt p).orElse fun _ => N.sugarAt p
   | .withbor2r _ _ _ _ _ _ _ _ M => M.sugarAt p
@@ -3442,7 +3442,7 @@ def opsC (c : TCx) : Nat → Comp → List (Nat × Nat)
   | 0, _ => []
   | k + 1, M => match M with
     | .perform _ n i V | .abort _ n i V => (n, i) :: opsV c k V
-    | .handle _ n _ hr hc M => opsV c k hr ++ opsV c k hc ++ (opsC c k M).filter (·.1 != n)
+    | .handle _ n _ _ hr hc M => opsV c k hr ++ opsV c k hc ++ (opsC c k M).filter (·.1 != n)
     | .ret _ V | .absurd _ V => opsV c k V
     | .bind _ _ _ M N _ | .with_ _ M N => opsC c k M ++ opsC c k N
     | .unwind _ _ _ M D N => opsC c k M ++ opsC c k D ++ opsC c k N
@@ -3608,7 +3608,7 @@ def rmSelfInC : Comp → Bool
   | .case _ V _ M _ N | .loop _ _ _ V M N => rmSelfIn V || rmSelfInC M || rmSelfInC N
   | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
   | .nuOut _ M | .ascribe _ M _ => rmSelfInC M
-  | .handle _ _ _ hr hc M => rmSelfIn hr || rmSelfIn hc || rmSelfInC M
+  | .handle _ _ _ _ hr hc M => rmSelfIn hr || rmSelfIn hc || rmSelfInC M
   | .unwind _ _ _ M D N => rmSelfInC M || rmSelfInC D || rmSelfInC N
   | .withbor2r _ _ _ _ _ _ _ _ M => rmSelfInC M
   | _ => false
@@ -4652,7 +4652,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .abort sp k i V => do
       let e := (Frontend.Check.findOp c.E sp "abort" k i).toOption.map (·.2.1.A)
       pure (.abort sp k i (← surfV n c e V))
-    | .handle sp k st hr hc M => do
+    | .handle sp k hf st hr hc M => do
       let hr' ← surfV n c none hr
       let hc' ← surfV n c none hc
       let c ← refresh c
@@ -4661,7 +4661,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         let ⟨Es, _⟩ ← Frontend.Check.clausesRead S R (← c.tyV hc')
         pure (Frontend.Check.effOf
           (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A)
-      pure (.handle sp k st hr' hc' (← surfC n c e M))
+      pure (.handle sp k hf st hr' hc' (← surfC n c e M))
     | .unwind sp x A M D N => do
       let M' ← surfC n c ((A.bind c.elabV).map (Frontend.Check.effOf (c.E.row.getD []))) M
       let c ← refresh c
@@ -4773,7 +4773,7 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     -- The node holds its clauses, each at its type, and the site's record, at the handler's
     -- lifetimes and type arguments here.
     let site := i₀.site.mapTy fun A => (lv A).subst σ
-    let hd : Comp := .handle sp i.n (some site) (.ascribe sp hr hrTy) (.ascribe sp hcV hcTy) M'
+    let hd : Comp := .handle sp i.n .clauses (some site) (.ascribe sp hr hrTy) (.ascribe sp hcV hcTy) M'
     -- A site whose clauses run after it answers its arguments beside its own answer.
     let core ← if i.after.isNone then pure hd else do
       let r : Ident := ⟨s!"io_ar{i.n}", sp⟩
@@ -6272,10 +6272,10 @@ def specC : Nat → TCx → Comp → DM Comp
       | none => pure (.loop sp ℓ src (← specV n c V) M' (← specC n c N))
     | .perform sp k i V => do pure (.perform sp k i (← specV n c V))
     | .abort sp k i V => do pure (.abort sp k i (← specV n c V))
-    | .handle sp k st hr hc M => do
+    | .handle sp k hf st hr hc M => do
       let hr' ← specV n c hr
       let hc' ← specV n c hc
-      pure (.handle sp k st hr' hc' (← specC n c M))
+      pure (.handle sp k hf st hr' hc' (← specC n c M))
     | .unwind sp x A M D N => do
       let t := bindTy c A M
       pure (.unwind sp x A (← specC n c M) (← specC n c.pushDead D) (← specC n (c.push x.name t) N))
