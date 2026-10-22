@@ -98,6 +98,21 @@ def machineOps (c : Frontend.Check.Checked) : MachSet := Id.run do
         out := out.insert (h.n, j.toUInt32)
   return out
 
+/-- **The operations whose every `handle` node keeps `κ`** (SPEC §52): each machine operation
+`(n, j)` whose clause at every node of `n` is `stored`, at a qualifier that is not `unr`. A stack
+machine's frames have one owner there: the stored site whose `κ` holds them. -/
+def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
+  let nodes := hnodes Frontend.Check.copiesFuel c.t
+  let ms := machineOps c
+  let mut out : MachSet := {}
+  for (n, j) in ms.toList do
+    let same := nodes.filter (·.n == n)
+    if !same.isEmpty && same.all (fun g =>
+        (g.ks[j.toNat]?.map (·.kind)) == some .stored &&
+        (g.E[j.toNat]?.map (·.1)).any (· != .unr)) then
+      out := out.insert (n, j)
+  return out
+
 /-- The checker's cell classes (`Checked.cells`) at LIR types. -/
 def cellsOf (k : Backend.CheckedProg) : List (List LTy) :=
   k.main.cells.map fun c => c.tys.filterMap fun t => (ofV (machineOps k.main) t).toOption
@@ -130,12 +145,12 @@ def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Pr
     | none => pure ([], 0, false)
     | some m => pure (← extsOf m, m.caps.length, m.loopB.isSome)
   let ctx := c.ctx.map fun s => (s.ty, s.live)
-  let run (threaded : Std.HashMap Nat LTy) :
-      Except String (Prog × CState × Std.HashMap Nat LTy) := do
+  let run (threaded stacked : Std.HashMap Nat LTy) :
+      Except String (Prog × CState × Std.HashMap Nat LTy × Std.HashMap Nat LTy) := do
     let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c) (machineOps c)
-      threaded
+      threaded stacked
     let p := { p with exits := c.exitsOnDivError }
-    if st.done.isEmpty then return (p, st, {})
+    if st.done.isEmpty then return (p, st, {}, {})
     -- A call in tail position whose callee's suspended computations may be the machine's own
     -- closes a loop of tail calls, and passes its outcome on (SPEC §49, `tailPass`).
     let (g, m) ← Lay.places p
@@ -156,10 +171,14 @@ def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Pr
       | some cls => L.isRec cls
       | none => false
     let (p₂, st₂) ← cellPass st recursive
-    return ({ p with fns := p₂.fns, codes := p₂.codes, ty := p₂.ty }, st₂, threadedOf st recursive)
-  let (p, st, th) ← run {}
-  if th.isEmpty then return (p, st)
-  let (p, st, _) ← run th
+    -- The stack machines (SPEC §52), read off these layouts: each call point's callee's suspended
+    -- computations' classes.
+    let sk := stackedOf st recursive (stackOps c) (suspCodes L)
+    let th := (threadedOf st recursive).filter fun i _ => !sk.contains i
+    return ({ p with fns := p₂.fns, codes := p₂.codes, ty := p₂.ty, statics := p₂.statics }, st₂, th, sk)
+  let (p, st, th, sk) ← run {} {}
+  if th.isEmpty && sk.isEmpty then return (p, st)
+  let (p, st, _, _) ← run th sk
   return (p, st)
 
 /-- **The effect erasure's postcondition**, for a program (`bcc lir --erasure`, SPEC §47, §49): the

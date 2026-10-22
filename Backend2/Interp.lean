@@ -58,6 +58,10 @@ structure St where
   out : ByteArray := .empty
   err : ByteArray := .empty
   data : Array UInt8 := #[]
+  /-- The task stacks (SPEC §52): each stack's object, and its frames' cells, the top last. -/
+  taskStacks : Std.HashMap Nat (Array Nat) := {}
+  /-- The current stack: its object, `0` for none. -/
+  cur : Nat := 0
 
 abbrev IM := StateT St (Except String)
 
@@ -397,6 +401,50 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
     let a := staticAt + k
     modify fun s => { s with mem := s.mem.insert a (some v) }
     pure (.loc a)
+  | .stackSwap _, [.int h] => do
+    let old := (← get).cur
+    if h != 0 && !(← get).taskStacks.contains h.toNat then bad s!"a swap to {h}, which is not a stack"
+    modify fun s => { s with cur := h.toNat }
+    pure (.int old.toUInt64)
+  | .stackFree, [.int h] => do
+    if h == 0 then return .unit
+    match (← get).taskStacks[h.toNat]? with
+    | some fs =>
+      if !fs.isEmpty then bad s!"a free of the stack {h}, which holds {fs.size} frames"
+      if (← get).cur == h.toNat then bad "a free of the current stack"
+      freeObj h.toNat 1
+      modify fun s => { s with taskStacks := s.taskStacks.erase h.toNat }
+      pure .unit
+    | none => bad s!"a free of {h}, which is not a stack"
+  | .framePush _ _, [] => do
+    if (← get).cur == 0 then
+      let h ← newObj 1
+      writeAt h (some .unit)
+      modify fun s => { s with taskStacks := s.taskStacks.insert h #[], cur := h }
+    let h := (← get).cur
+    let f ← newObj 1
+    modify fun s => { s with taskStacks := s.taskStacks.modify h (·.push f) }
+    pure (.loc f)
+  | .frameTop _ _, [] => do
+    let some fs := (← get).taskStacks[(← get).cur]? | bad "frameTop with no current stack"
+    let some f := fs.back? | bad "frameTop of an empty stack"
+    pure (.loc f)
+  | .framePut, [.loc f, v] => do
+    if ← isWritten f then bad "a framePut into a written frame"
+    writeAt f (some v)
+    pure .unit
+  | .framePop _, [.loc f] => do
+    let h := (← get).cur
+    let some fs := (← get).taskStacks[h]? | bad "framePop with no current stack"
+    if fs.back? != some f then bad s!"a pop of the frame {f}, which is not the top"
+    if ← isWritten f then bad "a pop of a written frame"
+    freeObj f 1
+    modify fun s => { s with taskStacks := s.taskStacks.insert h fs.pop }
+    pure .unit
+  | .stackDepth _, [] => do
+    let n := ((← get).taskStacks[(← get).cur]?.map (·.size)).getD 0
+    pure (i32v n.toUInt32)
+  | .unreachable, [] => bad "an unreachable arm reached"
   | op, vs => bad s!"the operation {reprStr op |>.take 40} on {vs.length} values {reprStr vs |>.take 200}"
 
 

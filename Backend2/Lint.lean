@@ -65,6 +65,8 @@ def lintTm (w : String) (p : Prog) : Nat → Std.HashSet Var → Tm → LM Left
       if d.params.length != as.length then
         bad w s!"f{fn} ({d.name}) called on {as.length} arguments for {d.params.length}"
       return some (← useAll w env as)
+    -- A path that reaches `unreachable` is never run, as one that ends at `absurd`.
+    | .prim .unreachable as => do let _ ← useAll w env as; return none
     | .prim _ as => return some (← useAll w env as)
     | .letv x e b => do
       match ← lintTm w p f env e with

@@ -95,11 +95,18 @@ inductive Frame where
   `inr c`, the cell, which each later suspension writes in place and the machine's answer
   releases. -/
   | cellF
+  /-- **The level's frame on the task stack** (SPEC §52), the bottom frame of a stack machine
+  (`Mach.stack`): its arguments are the frame's cell, reserved when the level starts, and the
+  stack's depth there. The level's answer, abort or cancel pops it. -/
+  | stackF
+  /-- A stored site's stack (SPEC §52), held by a forwarding point: freed when it is cancelled. -/
+  | stackH
   deriving Inhabited, BEq
 
 def Frame.own : Frame → Nat
   | .letF _ k | .thenF _ _ k _ | .dropF k => k
-  | .cellF => 1
+  | .cellF | .stackH => 1
+  | .stackF => 2
 
 abbrev Kont := List Frame
 
@@ -121,6 +128,12 @@ structure MPoint where
   callee : Option OutInfo := none
   site : Nat := 0
   inline : Bool := false
+  /-- At a call point: the step's parameter that receives the callee's outcome (the layouts'
+  classes of its suspended computations decide a stack machine, SPEC §52). -/
+  outVar : Option Var := none
+  /-- At a stored site's forwarding point (SPEC §52): the index among its arguments of the site's
+  stack, which is made current around the resume and cancel of the callee's `k`. -/
+  swapAt : Option Nat := none
   deriving Inhabited
 
 /-- A machine being converted: its outcome and its resumption points. -/
@@ -138,6 +151,8 @@ structure Mach where
   /-- With its state cell passed on (`Frame.cellF`, SPEC §50): the state's type at its one
   operation. -/
   cell : Option LTy := none
+  /-- **A stack machine** (SPEC §52): its levels' frames on the task stack, the frame's state type. -/
+  stack : Option LTy := none
   deriving Inhabited
 
 /-- A closure a stored-continuation site's clause builds, a variant of its task body's code
@@ -205,6 +220,11 @@ structure CState where
   /-- **The machines whose state cell is passed on** (SPEC §50), by `Mach.start`, with their state's
   type: read off a first conversion's layouts (`Backend2/Driver.lean`, `lirOf`). -/
   threaded : Std.HashMap Nat LTy := {}
+  /-- **The stack machines** (SPEC §52), by `Mach.start`, with their frame's state type: read off a
+  first conversion's machines and layouts (`Backend2/Driver.lean`, `lirOf`). -/
+  stacked : Std.HashMap Nat LTy := {}
+  /-- The static word that holds the current stack, once a stack machine or a site uses it. -/
+  stackReg : Option Nat := none
 
 abbrev CM := StateT CState (Except String)
 
@@ -724,20 +744,46 @@ def releaseOpt (s : Var) (b : Tm) : CM Tm := do
   let u ← fresh uT; let c ← fresh cT; let r ← fresh .unit
   return .letv r (.case s u (.var u) c (.prim .release [c])) (.drop r b)
 
-/-- `K` and its arguments without the level's cell (`Frame.cellF`, at the bottom), and the cell's
-argument when there is one. -/
-def stripCell (K : Kont) (args : List Var) : Kont × List Var × Option Var :=
+/-- `K` and its arguments without the level's cell (`Frame.cellF`) or frame (`Frame.stackF`), at
+the bottom, and that frame's arguments. -/
+def stripCell (K : Kont) (args : List Var) : Kont × List Var × List Var :=
   match K.getLast?, args.getLast? with
-  | some .cellF, some s => (K.dropLast, args.dropLast, some s)
-  | _, _ => (K, args, none)
+  | some .cellF, some s => (K.dropLast, args.dropLast, [s])
+  | some .stackF, some _ =>
+    if args.length ≥ 2 then (K.dropLast, args.take (args.length - 2), args.drop (args.length - 2))
+    else (K, args, [])
+  | _, _ => (K, args, [])
+
+/-- The static word that holds the current stack (SPEC §52), reserved the first time. -/
+def stackRegister : CM Nat := do
+  match (← get).stackReg with
+  | some k => pure k
+  | none =>
+    let k := (← get).statics.size
+    modify fun s => { s with statics := s.statics.push k, stackReg := some k }
+    pure k
+
+/-- The level's frame `f` (at depth `d`) popped, then `b`. -/
+def popThen (f d : Var) (b : Tm) : CM Tm := do
+  let k ← stackRegister
+  let u ← fresh .unit
+  return .letv u (.prim (.framePop k) [f]) (.drop u (.drop d b))
+
+/-- A stored site's stack `h` freed, then `b`. -/
+def freeStackThen (h : Var) (b : Tm) : CM Tm := do
+  let u ← fresh .unit
+  return .letv u (.prim .stackFree [h]) (.drop u b)
 
 /-- The value `x` handed to the continuation `K` over its arguments: the innermost frame's join,
-or the machine's answer (its cell released first). -/
+or the machine's answer (its cell released, or its frame popped, first). -/
 def applyK (F : OutInfo) : Kont → List Var → Var → CM Tm
   | [], [], x => outValue F x
   | [], _, _ => throw "LIR: a machine's answer with arguments left"
   | [.cellF], [c], x => do releaseOpt c (← outValue F x)
   | .cellF :: _, _, _ => throw "LIR: a level's cell above the bottom of its continuation"
+  | [.stackF], [f, d], x => do popThen f d (← outValue F x)
+  | .stackF :: _, _, _ => throw "LIR: a level's frame above the bottom of its continuation"
+  | .stackH :: _, _, _ => throw "LIR: a value at a site's stack"
   | .letF fn _ :: _, args, x | .thenF fn _ _ _ :: _, args, x => pure (.call fn (args ++ [x]))
   | .dropF _ :: _, _, _ => throw "LIR: a value at a frame that only drops"
 
@@ -763,6 +809,12 @@ def abortK (F : OutInfo) : Kont → List Var → Var → CM Tm
     | .cellF => match own with
       | [c] => releaseOpt c (← abortK F rest more e)
       | _ => throw "LIR: a level's cell frame without its cell"
+    | .stackF => match own with
+      | [fr, d] => popThen fr d (← abortK F rest more e)
+      | _ => throw "LIR: a level's frame without its cell"
+    | .stackH => match own with
+      | [h] => freeStackThen h (← abortK F rest more e)
+      | _ => throw "LIR: a site's stack frame without its stack"
     | _ => return drops own (← abortK F rest more e)
 
 /-- The cancel of `K`, `err` the error kept so far (`1 ⊕ P`, `cp` the cancel row's payload `P`):
@@ -790,6 +842,12 @@ def cancelK (cp : Pay) : Kont → List Var → Var → CM Tm
     | .cellF => match own with
       | [c] => releaseOpt c (← cancelK cp rest more err)
       | _ => throw "LIR: a level's cell frame without its cell"
+    | .stackF => match own with
+      | [fr, d] => popThen fr d (← cancelK cp rest more err)
+      | _ => throw "LIR: a level's frame without its cell"
+    | .stackH => match own with
+      | [h] => freeStackThen h (← cancelK cp rest more err)
+      | _ => throw "LIR: a site's stack frame without its stack"
     | _ => return drops own (← cancelK cp rest more err)
 
 /-! #### Resumption points -/
@@ -801,10 +859,11 @@ def curMach : CM OutInfo := do
 
 /-- Register a resumption point of the current machine; its `mk` function, set by `genMach`. -/
 def newPoint (op : Key) (kTy : Option LTy) (cPay : Option Pay) (argTys : List LTy) (step : Option Nat)
-    (K : Kont) (callee : Option OutInfo := none) (inline : Bool := false) : CM Nat := do
+    (K : Kont) (callee : Option OutInfo := none) (inline : Bool := false)
+    (outVar : Option Var := none) (swapAt : Option Nat := none) : CM Nat := do
   let mk ← reserveFn s!"suspend {op.1}.{op.2}"
   let pt : MPoint := { op, kTy, cPay, argTys, step, kont := K, mkFn := mk, callee,
-                       site := step.getD 0, inline }
+                       site := step.getD 0, inline, outVar, swapAt }
   match (← get).machs with
   | m :: rest =>
     let m' : Mach := { m with points := m.points.push pt }
@@ -873,7 +932,7 @@ def stepTm (F : OutInfo) (K : Kont) (args : List Var) (o : Var) (M : OutInfo) (s
       match reuse with
       | none =>
         let mk ← newPoint op (some (M.kTy b cp)) cp argTys (some stepFn) K' (callee := some M)
-          (inline := true)
+          (inline := true) (outVar := some o)
         return .letv k' (.call mk (k :: args)) (← outSusp F op v k')
       | some r =>
         let some p := r.pts.find? fun p => p.site == stepFn && p.op == op
@@ -952,6 +1011,20 @@ def untuple (v : Var) : List LTy → (List Var → CM Tm) → CM Tm
   | [_], k => k [v]
   | _ :: ts, k => letpairM v fun x r => untuple r ts fun xs => k (x :: xs)
 
+/-- **A stored site's stack made current** (SPEC §52) around a run of the callee's `k` (`run`, the
+binding of its answer), at a forwarding point that holds the stack (`MPoint.swapAt`): the stack
+swapped in before the run and out after it, the arguments then handed on with the stack the
+register held. Elsewhere the run alone. -/
+def aroundRun (p : MPoint) (args : List Var) (run : Tm → Tm) (rest : List Var → CM Tm) : CM Tm := do
+  match p.swapAt with
+  | none => return run (← rest args)
+  | some i =>
+    let some sh := args[i]? | throw "LIR: a forwarding point's stack"
+    let k ← stackRegister
+    let prev ← fresh (.int .w64); let sh' ← fresh (.int .w64)
+    return .letv prev (.prim (.stackSwap k) [sh])
+      (run (.letv sh' (.prim (.stackSwap k) [prev]) (← rest (args.set i sh'))))
+
 /-- The resume of a point's variant `fs` with the answer `y`. -/
 def resumeTm (F : OutInfo) (p : MPoint) (fs : List Var) (y : Var) (reuse : Option Reuse := none)
     (slot : Option Var := none) : CM Tm := do
@@ -979,7 +1052,8 @@ def resumeTm (F : OutInfo) (p : MPoint) (fs : List Var) (y : Var) (reuse : Optio
       -- The step in place: a suspension again at this operation reuses the cell.
       return .letv kr (.sel k 0) (.letv o (.app kr y) (← stepTm F p.kont args o M stepFn reuse))
     | _, _, _ =>
-      released (.letv kr (.sel k 0) (.letv o (.app kr y) (.call stepFn (args ++ [o]))))
+      released (← aroundRun p args (fun t => .letv kr (.sel k 0) (.letv o (.app kr y) t))
+        fun args => pure (.call stepFn (args ++ [o])))
   | none, args, _ => released (← applyK F p.kont args y)
   | _, _, _ => throw "LIR: a resumption point's state"
 
@@ -990,8 +1064,9 @@ def cancelTm (cp : Pay) (p : MPoint) (fs : List Var) : CM Tm := do
   | some kT, k :: args => do
     let cT ← selTy kT 1
     let c ← fresh cT; let err ← fresh (resTy .unit cp)
-    return .letv c (.sel k 1)
-      (.letv err (← coerceRes .unit (p.cPay.getD []) cp c) (← cancelK cp p.kont args err))
+    let coerced ← coerceRes .unit (p.cPay.getD []) cp c
+    aroundRun p args (fun t => .letv c (.sel k 1) t) fun args => do
+      return .letv err coerced (← cancelK cp p.kont args err)
   | none, args => do
     let u ← fresh .unit
     match payTy cp with
@@ -1104,6 +1179,155 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
   readFact "machine:state"
   return kcs
 
+/-- **The codes of a stack machine** (SPEC §52): its levels' frames are on the task stack, each
+level's reserved when it starts (`Frame.stackF`), so a call point's state is first order, the
+callee's `k` left out (its frame is the one above), and a level's `k` is the frame's depth `d`.
+
+- Each point's `mk` writes the state into the level's frame, which stays on the stack, and answers
+  `k` at `d`; at a call point the callee's `k`, at the depth above, is dropped.
+- `k`'s resume entry is a loop from the top of the stack down to its own frame
+  (`kappa_resume_steps` with the nesting kept as positions): the top frame's level continues at its
+  point with the answer (`stack continue`); a level that answers is popped, and the frame below,
+  at its call of it, continues with the value (`stack return`) or its abort (`stack unwind`); a
+  suspension of any level suspends `k` again at `d`, the frames below it as they were, which is
+  the identity that `step_i (susp (p, point_i k')) = susp (p, point_i k')` asks of them. When the
+  frame at `d` has answered, its answer is `k`'s.
+- `k`'s cancel entry pops the frames from the top down to `d`, each frame's continuation unwound
+  under the cancel, the first error kept (`kappa_cancel_steps`, `cancel_prefix`): innermost first.
+- A frame below a finished level is at a call of it, and the top frame at a `perform`: the other
+  arms of the continue and return entries are `unreachable`. -/
+def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
+  let F := m.info
+  let ps := m.points.toList
+  let some p₀ := ps.head? | return []
+  let op := p₀.op
+  unless ps.all (·.op == op) do throw "LIR: a stack machine with points at two operations"
+  let (b, cp) ← opAnswer F op
+  let stPay : Pay := ps.zipIdx.map fun (p, i) => ((0, i.toUInt32), tupleTy p.argTys)
+  let stTy := (payTy stPay).getD .unit
+  unless stTy == S do throw "LIR: a stack machine's frame differs from the first conversion's"
+  let reg ← stackRegister
+  let fT : LTy := .ref stTy
+  let cT := cancelResTy cp
+  readFact "machine:stack frame"
+  let rres ← reserveFn s!"stack resume {op.1}.{op.2}"
+  let rc ← addCode { kind := .lam, fns := [rres], ty := .arr b (.ret F.ty) }
+  let kres ← reserveFn s!"stack resume entry {op.1}.{op.2}"
+  let kcan ← reserveFn s!"stack cancel {op.1}.{op.2}"
+  let kc ← addCode { kind := .amp, fns := [kres, kcan], ty := .amp (.arr b (.ret F.ty)) (.ret cT) }
+  let contY ← reserveFn "stack continue"
+  let contV ← reserveFn "stack return"
+  let contA ← reserveFn "stack unwind"
+  let rstep ← reserveFn "stack step"
+  let cstep ← reserveFn "stack cancel step"
+  let top (k : Var → CM Tm) : CM Tm := do
+    let f ← fresh fT
+    return .letv f (.prim (.frameTop m.start reg) []) (← k f)
+  let depth (k : Var → CM Tm) : CM Tm := do
+    let dd ← fresh i32T
+    return .letv dd (.prim (.stackDepth reg) []) (← k dd)
+  let never (t : LTy) : CM Tm := do
+    let u ← fresh t
+    return .letv u (.prim .unreachable []) (.var u)
+  -- A frame's state taken out, and `k` on the point, the frame and its fields.
+  let atFrame (f : Var) (k : MPoint → Var → List Var → CM Tm) : CM Tm := do
+    let pr ← fresh (.pair fT stTy); let f' ← fresh fT; let st ← fresh stTy
+    let arms ← casePay stPay st fun i fv => do
+      let some p := ps[i]? | throw "LIR: a stack machine's point"
+      untuple fv p.argTys fun args => k p f' args
+    return .letv pr (.prim .take [f]) (.letpair f' st pr arms)
+  -- The entries that continue a frame: at a `perform` with the answer, at a call with the callee's
+  -- value, at a call with the callee's abort.
+  let y₀ ← fresh b; let f₀ ← fresh fT
+  let bY ← atFrame f₀ fun p f args => do
+    if p.kTy.isSome then return ← never F.ty
+    depth fun dd => applyK F (p.kont ++ [.stackF]) (args ++ [f, dd]) y₀
+  setFn contY { name := "stack continue", params := [f₀, y₀], body := bY, ret := F.ty }
+  let r₁ ← fresh F.r; let f₁ ← fresh fT
+  let bV ← atFrame f₁ fun p f args => do
+    if p.kTy.isNone then return ← never F.ty
+    depth fun dd => applyK F (p.kont ++ [.stackF]) (args ++ [f, dd]) r₁
+  setFn contV { name := "stack return", params := [f₁, r₁], body := bV, ret := F.ty }
+  let pF? := payTy F.pay
+  if let some pF := pF? then
+    let e₂ ← fresh pF; let f₂ ← fresh fT
+    let bA ← atFrame f₂ fun p f args => do
+      let some M := p.callee | return ← never F.ty
+      let some pM := payTy M.pay | return ← never F.ty
+      let _ := pM
+      let e' ← fresh pF
+      depth fun dd => do
+        return .letv e' (← coercePay M.pay F.pay e₂ fun v => pure (.var v))
+          (← abortK F (p.kont ++ [.stackF]) (args ++ [f, dd]) e')
+    setFn contA { name := "stack unwind", params := [f₂, e₂], body := bA, ret := F.ty }
+  else
+    setFn contA { name := "stack unwind", params := [], body := ← never F.ty, ret := F.ty }
+  -- The step of the loop: a level's outcome, the frames down to `d` left to continue.
+  let d₃ ← fresh i32T; let o₃ ← fresh F.ty
+  let w ← fresh F.body; let x ← fresh F.r; let ex ← fresh F.xTy
+  let d₃' ← fresh i32T
+  let below (arm : Var → CM Tm) (here : CM Tm) : CM Tm := depth fun dd =>
+    ifLt dd d₃' (do return .drop d₃ (← here)) (top fun f => do
+      let o' ← fresh F.ty
+      return .letv o' (← arm f) (.call rstep [d₃, o']))
+  let valArm ← below (fun f => pure (.call contV [f, x])) (outValue F x)
+  let suspArms (sv : Var) : CM Tm := casePay F.sPay sv fun j pv => do
+    let some (key, _, _, _) := F.ms[j]? | throw "LIR: a suspension's summand"
+    letpairM pv fun v k' => do
+      let k₂ ← fresh (F.kTy b cp)
+      return .drop d₃' (.drop k' (.letv k₂ (.clos kc [d₃]) (← outSusp F key v k₂)))
+  let exits ← match pF? with
+    | none => suspArms ex
+    | some pT => do
+      let e ← fresh pT; let sv ← fresh F.sTy
+      pure (Tm.case ex e (← below (fun f => pure (.call contA [f, e])) (outAbort F e)) sv (← suspArms sv))
+  setFn rstep { name := "stack step", params := [d₃, o₃],
+                body := .copy d₃ d₃' (.letv w (.prim .unroll [o₃]) (.case w x valArm ex exits)),
+                ret := F.ty }
+  -- `k` at `d`: its resume entry, and its resume.
+  let d₄ ← fresh i32T
+  setFn kres { name := s!"stack resume entry {op.1}.{op.2}", params := [d₄], body := .clos rc [d₄],
+               ret := .thunk (.arr b (.ret F.ty)) }
+  let d₅ ← fresh i32T; let y₅ ← fresh b; let o₅ ← fresh F.ty
+  let b₅ ← top fun f => pure (.letv o₅ (.call contY [f, y₅]) (.call rstep [d₅, o₅]))
+  setFn rres { name := s!"stack resume {op.1}.{op.2}", params := [d₅, y₅], body := b₅, ret := F.ty }
+  -- The cancel: the frames from the top down to `d`, each unwound under the cancel.
+  let d₆ ← fresh i32T
+  match cp with
+  | none =>
+    setFn kcan { name := s!"stack cancel {op.1}.{op.2}", params := [d₆], body := .drop d₆ .unit, ret := cT }
+    setFn cstep { name := "stack cancel step", params := [], body := ← never cT, ret := cT }
+  | some cpP =>
+    let errT := resTy .unit cpP
+    let d₇ ← fresh i32T; let d₇' ← fresh i32T; let err₇ ← fresh errT
+    let bC ← depth fun dd => ifLt dd d₇' (do return .drop d₇ (.var err₇)) (top fun f => do
+      let err' ← fresh errT
+      let arms ← atFrame f fun p f' args => depth fun dd' =>
+        cancelK cpP (p.kont ++ [.stackF]) (args ++ [f', dd']) err₇
+      return .letv err' arms (.call cstep [d₇, err']))
+    setFn cstep { name := "stack cancel step", params := [d₇, err₇], body := .copy d₇ d₇' bC, ret := errT }
+    let u ← fresh .unit; let err₀ ← fresh errT
+    let start : Tm := match payTy cpP with
+      | none => .var u
+      | some _ => .inj false u
+    setFn kcan { name := s!"stack cancel {op.1}.{op.2}", params := [d₆],
+                 body := .letv u .unit (.letv err₀ start (.call cstep [d₆, err₀])), ret := cT }
+  -- Each point's `mk`: the state into the level's frame, and `k` at its depth.
+  for (p, i) in ps.zipIdx do
+    let kv? ← p.kTy.mapM fresh
+    let xs ← p.argTys.mapM fresh
+    let f ← fresh fT; let d ← fresh i32T
+    let body ← mkTuple xs fun t => injectPay stPay i t fun sv => do
+      let u ← fresh .unit
+      return .letv u (.prim .framePut [f, sv]) (.drop u (.clos kc [d]))
+    let body := match kv? with
+      | some kv => Tm.drop kv body
+      | none => body
+    setFn p.mkFn { name := s!"suspend {op.1}.{op.2}", params := kv?.toList ++ xs ++ [f, d], body,
+                   ret := F.kTy b cp }
+  readFact "machine:state"
+  return [(op, kc)]
+
 /-- The machine begun last (`withMachine`, `withMachineK`), its body `t` converted: its tail
 calls' functions, then its codes. -/
 def finishMachine (F : OutInfo) (t : Tm) : CM Tm := do
@@ -1129,7 +1353,9 @@ def finishMachine (F : OutInfo) (t : Tm) : CM Tm := do
     modify fun s => { s with machs := rest }
     if m.cell.isSome && !m.tails.isEmpty then
       throw "LIR: a level's cell passed on at a machine with calls in tail position"
-    let kcs ← genMach m
+    let kcs ← match m.stack with
+      | some S => genStackMach m S
+      | none => genMach m
     let i := (← get).done.size
     modify fun s => { s with done := s.done.push (m, kcs),
                              tailSites := s.tailSites ++ wrapped.map fun (fn, o, M) => (fn, o, M, i) }
@@ -1149,15 +1375,23 @@ at the start: the machine's first suspension allocates the cell, each later one 
 place, and the machine's answer releases it. Otherwise `K` and its arguments are empty. -/
 def withMachineK (F : OutInfo) (act : Kont → List Var → CM Tm) : CM Tm := do
   let start := (← get).begun
-  let cell := (← get).threaded[start]?
+  let stack := (← get).stacked[start]?
+  let th := (← get).threaded[start]?
+  let cell := if stack.isSome then none else th
   modify fun s => { s with begun := s.begun + 1,
-                           machs := { info := F, start, threadable := true, cell } :: s.machs }
-  let t ← match cell with
-    | some stT => do
+                           machs := { info := F, start, threadable := true, cell, stack } :: s.machs }
+  let t ← match stack, cell with
+    | some S, _ => do
+      -- The level's frame reserved on the task stack (SPEC §52), and the depth there.
+      let reg ← stackRegister
+      let f ← fresh (.ref S); let d ← fresh i32T
+      pure (Tm.letv f (.prim (.framePush start reg) []) (.letv d (.prim (.stackDepth reg) [])
+        (← act [.stackF] [f, d])))
+    | none, some stT => do
       readFact "machine:level cell passed on"
       let u ← fresh .unit; let s₀ ← fresh (.sum .unit (.ref stT))
       pure (Tm.letv u .unit (.letv s₀ (.inj false u) (← act [.cellF] [s₀])))
-    | none => act [] []
+    | none, none => act [] []
   finishMachine F t
 
 /-! ### Loops generated per site -/
@@ -1883,7 +2117,7 @@ drive, which writes it in place when the computation suspends there again, and r
 does not; its cancel entry releases it. -/
 def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driveFn : Nat)
     (hvTys : List LTy) (cM : Option OutInfo) (cPay : Pay) (cell : Bool := false)
-    (slotTy : Option LTy := none) : CM Nat := do
+    (slotTy : Option LTy := none) (swap : Bool := false) : CM Nat := do
   let .thunk kL := kT | throw s!"LIR: κ's type {kT}"
   let .amp (.arr bT (.ret oT)) cK := kL | throw s!"LIR: κ's type {kT}"
   unless oT == outTy do throw s!"LIR: κ resumes to {oT}, the handler answers {outTy}"
@@ -1912,27 +2146,45 @@ def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driv
   let k₀ ← fresh (if cell then cT else kIn); let hv₀ ← if cell then pure [] else hvTys.mapM fresh
   setFn kres { name := s!"kappa {n}.{idx} resume entry", params := k₀ :: hv₀,
                body := .clos rc (k₀ :: hv₀), ret := .thunk (.arr bT (.ret oT)) }
+  -- With `swap` (SPEC §52), the last handler value is the site's stack: made current around each
+  -- run of `k`, then handed back (`run` binds the run, `rest` gets the stack it answers); a
+  -- cancelled `κ` frees it.
+  let aroundK (hv : List Var) (run : Tm → Tm) (rest : List Var → Option Var → CM Tm) : CM Tm := do
+    if swap then
+      let some sh := hv.getLast? | throw "LIR: κ's stack"
+      let reg ← stackRegister
+      let prev ← fresh (.int .w64); let sh' ← fresh (.int .w64)
+      return .letv prev (.prim (.stackSwap reg) [sh])
+        (run (.letv sh' (.prim (.stackSwap reg) [prev]) (← rest hv.dropLast (some sh'))))
+    else return run (← rest hv none)
   let y ← fresh bT
   let (ps₁, b₁) ← envOf fun c k hv => do
     let kr ← fresh (← selTy kIn 0); let o ← fresh T.ty
-    -- With a cell, the drive gets it back (`inr c`) to write in place.
-    match c with
-    | some c =>
-      let sl ← fresh (.sum .unit cT)
-      return .letv sl (.inj true c) (.letv kr (.sel k 0) (.letv o (.app kr y) (.call driveFn (hv ++ [sl, o]))))
-    | none =>
-      -- A drive with a slot that this `κ` does not fill: `inl ()`.
-      match slotTy with
-      | some slT =>
-        let u ← fresh .unit; let sl ← fresh slT
-        return .letv u .unit (.letv sl (.inj false u)
-          (.letv kr (.sel k 0) (.letv o (.app kr y) (.call driveFn (hv ++ [sl, o])))))
-      | none => return .letv kr (.sel k 0) (.letv o (.app kr y) (.call driveFn (hv ++ [o])))
+    aroundK hv (fun t => .letv kr (.sel k 0) (.letv o (.app kr y) t)) fun hv sh => do
+      let hv := hv ++ sh.toList
+      -- With a cell, the drive gets it back (`inr c`) to write in place.
+      match c with
+      | some c =>
+        let sl ← fresh (.sum .unit cT)
+        return .letv sl (.inj true c) (.call driveFn (hv ++ [sl, o]))
+      | none =>
+        -- A drive with a slot that this `κ` does not fill: `inl ()`.
+        match slotTy with
+        | some slT =>
+          let u ← fresh .unit; let sl ← fresh slT
+          return .letv u .unit (.letv sl (.inj false u) (.call driveFn (hv ++ [sl, o])))
+        | none => return .call driveFn (hv ++ [o])
   setFn kapR { name := s!"kappa {n}.{idx}", params := ps₁ ++ [y], body := b₁, ret := oT }
+  let freeSh (sh : Option Var) (t : Tm) : CM Tm := match sh with
+    | some h => freeStackThen h t
+    | none => pure t
   match cK with
   | .top =>
     let (ps₂, b₂) ← envOf fun c k hv => do
-      let t := Tm.drop k (drops hv .unit)
+      let t ← if swap then do
+          let some sh := hv.getLast? | throw "LIR: κ's stack"
+          freeStackThen sh (Tm.drop k (drops hv.dropLast .unit))
+        else pure (Tm.drop k (drops hv .unit))
       match c with
       | some c => releaseThen c t
       | none => pure t
@@ -1945,7 +2197,8 @@ def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driv
     let (ps₂, b₂) ← envOf fun c k hv => do
       let cv ← fresh (cancelResTy cpIn)
       let body ← toResult .unit (cpIn.getD []) cM cPay cv
-      let t := Tm.letv cv (.sel k 1) (drops hv body)
+      let t ← aroundK hv (fun t => .letv cv (.sel k 1) t) fun hv sh => do
+        freeSh sh (drops hv body)
       match c with
       | some c => releaseThen c t
       | none => pure t
@@ -2561,6 +2814,20 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
   let driveFn ← reserveFn s!"drive {n}"
   let oP ← fresh T.ty
   let ctxs' := cs'.toList
+  -- **The site's stack** (SPEC §52): where the program has stack machines, a stored-continuation
+  -- site runs its handled computation on a stack of its own, made current around each run (the
+  -- first, `κ`'s resume and cancel, a forwarding point's) and swapped out after it. The drive takes
+  -- it after the handler's values, and `κ` holds it as its last; it is made at the first frame
+  -- reserved (`0` until then) and freed where the computation answers, aborts or is cancelled.
+  let stored := ks.any fun k => k.kind == .stored
+  let siteSw := stored && !(← get).stacked.isEmpty
+  let shP? : Option Var ← if siteSw then do readFact "effHandleV:site stack"; pure (some (← fresh (.int .w64)))
+    else pure none
+  let shTys : List LTy := if siteSw then [.int .w64] else []
+  let kHvTys := hvTys ++ shTys
+  let freeSh (b : Tm) : CM Tm := match shP? with
+    | some h => freeStackThen h b
+    | none => pure b
   -- **`κ` in a cell** (SPEC §52): at a stored-continuation site, the first operation whose clause
   -- keeps `κ` (`stored`) and whose `κ` is not `unr` keeps `κ`'s environment in one cell, which `κ`
   -- owns: allocated when the computation first suspends there, written in place each time it
@@ -2574,7 +2841,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
       if out.isSome then break
       let some o := E[j]? | continue
       if k.kind == .stored && o.1 != .unr && T.ms.any (·.1 == (n, j.toUInt32)) then
-        out := some (j, tupleTy ((← kTyAt T (n, j.toUInt32)) :: hvTys))
+        out := some (j, tupleTy ((← kTyAt T (n, j.toUInt32)) :: kHvTys))
     pure out
   let cellSt := cellAt.map (·.2)
   let cellOp (j : Nat) : CM Bool := pure ((cellAt.map (·.1)) == some j)
@@ -2622,11 +2889,11 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
   let dbody : CM Tm := do
     let w ← fresh T.body; let a ← fresh T.r; let ex ← fresh T.xTy
     let some cR' := ctxs'[0]? | throw "LIR: the return clause"
-    let retArm ← relSlot (dropAll (some 0) (← clauseApp cR' tR a))
+    let retArm ← freeSh (← relSlot (dropAll (some 0) (← clauseApp cR' tR a)))
     let abortArms (e : Var) : CM Tm := casePay T.pay e fun j v => do
       let some (key, _) := T.pay[j]? | throw "LIR: a payload's summand"
-      if key.1 == n then relSlot (← applyClause key.2.toNat v)
-      else relSlot (dropAll none (← abortOut key v))
+      if key.1 == n then freeSh (← relSlot (← applyClause key.2.toNat v))
+      else freeSh (← relSlot (dropAll none (← abortOut key v)))
     let suspArms (sv : Var) : CM Tm := casePay T.sPay sv fun j pv => do
       let some (key, _, bT, cpT) := T.ms[j]? | throw "LIR: a suspension's summand"
       letpairM pv fun v k => do
@@ -2641,7 +2908,8 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
             | none => pure []
           let inCell ← cellOp idx
           let slotTy ← slP?.mapM tyOf
-          let kap ← genKap n idx kT T outTy driveFn hvTys cM cPay (cell := inCell) (slotTy := slotTy)
+          let kap ← genKap n idx kT T outTy driveFn kHvTys cM cPay (cell := inCell) (slotTy := slotTy)
+            (swap := siteSw)
           -- `κ` holds the suspended computation and a copy of each of the handler's values.
           let hvAll := ctxs'.flatMap live
           let mut copies : List (Tm → Tm) := []
@@ -2657,13 +2925,13 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
           let t : Tm ← match inCell, slP? with
             | true, some sl => do
               -- The environment written into the slot's cell, or a cell allocated for it.
-              mkTuple (k :: hvC) fun st => do
+              mkTuple (k :: hvC ++ shP?.toList) fun st => do
                 let cT ← tyOf sl
                 let .sum _ rT := cT | throw "LIR: κ's slot"
                 let u ← fresh .unit; let c₀ ← fresh rT; let c ← fresh rT
                 return .letv c (.case sl u (.drop u (.prim .alloc [st])) c₀ (.prim .put [c₀, st]))
                   (.letv kv (.clos kap [c]) (.letv pr (.pair v kv) body))
-            | _, _ => relSlot (.letv kv (.clos kap (k :: hvC)) (.letv pr (.pair v kv) body))
+            | _, _ => relSlot (.letv kv (.clos kap (k :: hvC ++ shP?.toList)) (.letv pr (.pair v kv) body))
           return copies.foldr (fun (f : Tm → Tm) (t : Tm) => f t) t
         else
           let some O := outM
@@ -2674,11 +2942,15 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
             | some sl => ([sl], [Frame.cellF], [sl])
             | none => ([], [], [])
           let slTys ← slTys.mapM tyOf
-          let mk ← newPoint key (some (T.kTy bT cpT)) cpT (hvTys ++ slTys) (some driveFn)
-            ([.dropF hvTys.length] ++ slK)
+          -- The site's stack too: made current around the callee's resume and cancel
+          -- (`MPoint.swapAt`), and freed by a cancel (`Frame.stackH`).
+          let shK : List Frame := if siteSw then [.stackH] else []
+          let mk ← newPoint key (some (T.kTy bT cpT)) cpT (hvTys ++ shTys ++ slTys) (some driveFn)
+            ([.dropF hvTys.length] ++ shK ++ slK)
+            (swapAt := if siteSw then some hvTys.length else none)
           let k' ← fresh (← kTyAt O key)
           readFact "effHandleV:forward"
-          return .letv k' (.call mk (k :: ctxs'.flatMap live ++ slV)) (← outSusp O key v k')
+          return .letv k' (.call mk (k :: ctxs'.flatMap live ++ shP?.toList ++ slV)) (← outSusp O key v k')
     let exits ← match payTy T.pay with
       | none => suspArms ex
       | some pT => do
@@ -2687,7 +2959,6 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
     return .letv w (.prim .unroll [oP]) (.case w a retArm ex exits)
   -- A stored-continuation site (a clause keeps `κ`): the closures its clauses answer are its task
   -- body's code (`genMerges`), keyed by the handler and the `def`s its handled computation uses.
-  let stored := ks.any fun k => k.kind == .stored
   let saved := (← get).siteMerge
   if stored then
     let keys := useKeys 64 te
@@ -2701,15 +2972,24 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
     | some O => withMachine O dbody
     | none => dbody
   modify fun st => { st with siteMerge := saved }
-  setFn driveFn { name := s!"drive {n}", params := hvInner ++ slP?.toList ++ [oP], body := dTm,
-                  ret := outTy }
+  setFn driveFn { name := s!"drive {n}", params := hvInner ++ shP?.toList ++ slP?.toList ++ [oP],
+                  body := dTm, ret := outTy }
   let o ← fresh T.ty
-  match slP? with
-  | some sl => do
-    let u ← fresh .unit; let s₀ ← freshLike sl
-    return .letv o (.call bodyFn bOuter)
-      (.letv u .unit (.letv s₀ (.inj false u) (.call driveFn (hvOuter ++ [s₀, o]))))
-  | none => return .letv o (.call bodyFn bOuter) (.call driveFn (hvOuter ++ [o]))
+  -- The first run: on a stack of its own (none yet) when the site has one.
+  let run (rest : List Var → CM Tm) : CM Tm := do
+    match shP? with
+    | some _ =>
+      let reg ← stackRegister
+      let z ← fresh (.int .w64); let prev ← fresh (.int .w64); let sh ← fresh (.int .w64)
+      return .letv z (.lit (.i64 0)) (.letv prev (.prim (.stackSwap reg) [z])
+        (.letv o (.call bodyFn bOuter) (.letv sh (.prim (.stackSwap reg) [prev]) (← rest [sh]))))
+    | none => return .letv o (.call bodyFn bOuter) (← rest [])
+  run fun shs => do
+    match slP? with
+    | some sl => do
+      let u ← fresh .unit; let s₀ ← freshLike sl
+      return .letv u .unit (.letv s₀ (.inj false u) (.call driveFn (hvOuter ++ shs ++ [s₀, o])))
+    | none => return .call driveFn (hvOuter ++ shs ++ [o])
 
 /-- The function `tF` applied to `a`: a λ's body at `a` (through transparent nodes and lifetime
 abstractions, `lamOf`), or a closure call. -/
@@ -3343,7 +3623,7 @@ def cellPass (s : CState) (recursive : Nat → Bool) : Except String (Prog × CS
   let act : CM Unit := do
     for (m, kcs) in s.done do
       let ops := kcs.filterMap fun (op, kc) => if recursive kc then some op else none
-      unless ops.isEmpty || m.cell.isSome do
+      unless ops.isEmpty || m.cell.isSome || m.stack.isSome do
         let _ ← genMach m ops
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
@@ -3365,12 +3645,39 @@ def threadedOf (s : CState) (recursive : Nat → Bool) : Std.HashMap Nat LTy := 
     | _ => pure ()
   return out
 
+/-- **The stack machines** (SPEC §52), from a conversion's machines and the layouts: each machine
+whose level's cell `threadedOf` passes on (its suspended computation's class holds itself, its
+points at one operation, no call in tail position, not `unr`), whose every call point calls a
+level of itself (`calleeCodes`, the layouts' classes of the callee's suspended computations, are
+its own code), and whose operation is in `stackOps` (every `handle` node of it keeps `κ`: a stored
+site, which gives the frames one owner): its number and its frame's state type, each call point's
+state without the callee's `k`. -/
+def stackedOf (s : CState) (recursive : Nat → Bool) (stackOps : MachSet)
+    (calleeCodes : Var → OutInfo → List Nat) : Std.HashMap Nat LTy := Id.run do
+  let th := threadedOf s recursive
+  let mut out : Std.HashMap Nat LTy := {}
+  for (m, kcs) in s.done do
+    unless th.contains m.start do continue
+    let [(op, kc)] := kcs | continue
+    unless stackOps.contains op do continue
+    let self := m.points.all fun p => match p.kTy, p.outVar, p.callee with
+      | none, _, _ => true
+      | some _, some o, some M => M.ty == m.info.ty && (calleeCodes o M).all (· == kc) &&
+          p.swapAt.isNone
+      | _, _, _ => false
+    unless self do continue
+    let ps := m.points.toList
+    out := out.insert m.start
+      ((payTy (ps.zipIdx.map fun (p, i) => ((0, i.toUInt32), tupleTy p.argTys))).getD .unit)
+  return out
+
 /-- Convert a checked `main` to a program; `threaded` the machines whose level's cell is passed on
-(`threadedOf` of a first conversion). -/
+(`threadedOf` of a first conversion), `stacked` the stack machines (`stackedOf`). -/
 def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) (ncaps : Nat)
     (loops : Bool) (census : Bool := false) (direct : Std.HashMap UInt32 (List Bool) := {})
-    (mach : MachSet := {}) (threaded : Std.HashMap Nat LTy := {}) : Except String (Prog × CState) := do
-  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run { census, direct, mach, threaded }
+    (mach : MachSet := {}) (threaded : Std.HashMap Nat LTy := {})
+    (stacked : Std.HashMap Nat LTy := {}) : Except String (Prog × CState) := do
+  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run { census, direct, mach, threaded, stacked }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
             statics := s.statics.size }, s)
 

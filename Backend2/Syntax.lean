@@ -126,6 +126,24 @@ inductive Op where
   /-- A capability's cell (SPEC §11, §34): the `k`-th static word of the program's data, holding
   the argument. Freeing it frees nothing. -/
   | staticCell (k : Nat)
+  /-- **The task stack** (SPEC §52). `stackSwap h`: the current stack becomes `h` (`0`: none yet),
+  and the one it was is the result; the register is the static word `k`. -/
+  | stackSwap (k : Nat)
+  /-- `stackFree h`: the stack `h`, empty, freed; nothing at `0`. -/
+  | stackFree
+  /-- A frame of machine `m` reserved on top of the current stack, unwritten; the stack is made
+  when there is none (the register `k`). The result is the frame's cell. -/
+  | framePush (m k : Nat)
+  /-- The top frame of the current stack, a frame of machine `m` (the register `k`): its cell. -/
+  | frameTop (m k : Nat)
+  /-- `framePut f v`: `v` moved into the frame `f`, which stays on the stack. -/
+  | framePut
+  /-- `framePop f`: the frame `f`, unwritten and on top of the current stack, popped. -/
+  | framePop (k : Nat)
+  /-- The number of frames on the current stack (the register `k`). -/
+  | stackDepth (k : Nat)
+  /-- Never reached: the frame below a finished level is at a call of it (SPEC §52). -/
+  | unreachable
   deriving Inhabited, BEq, Repr
 
 

@@ -25,6 +25,9 @@ def ppOp : Op → String
   | .len => "len" | .emptyFam => "emptyFam" | .replace => "replace" | .swapSlots => "swapSlots"
   | .tab fi => s!"tab[f{fi}]" | .tabLit fi => s!"tabLit[f{fi}]"
   | .roll => "roll" | .unroll => "unroll" | .clampLen => "clampLen" | .cntLt => "cntLt" | .cntSucc => "cntSucc" | .cntPred => "cntPred"
+  | .stackSwap _ => "stackSwap" | .stackFree => "stackFree" | .framePush m _ => s!"framePush[m{m}]"
+  | .frameTop m _ => s!"frameTop[m{m}]" | .framePut => "framePut" | .framePop _ => "framePop"
+  | .stackDepth _ => "stackDepth" | .unreachable => "unreachable"
 
 def v (x : Var) : String := s!"x{x}"
 

@@ -57,6 +57,9 @@ structure GState where
   fnRet : Std.HashMap Nat Nat := {}
   /-- The joins left to do: a work list, so that joining recursive nodes terminates. -/
   todo : List (Nat × Nat) := []
+  /-- Each stack machine's frame node (SPEC §52): every frame of it is one cell's node, as the
+  frames pass through the stack. -/
+  frames : Std.HashMap Nat Nat := {}
 
 abbrev GM := StateT GState (Except String)
 
@@ -349,6 +352,11 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
       | _ => throw "layout: a tab loop's parameters"
       join dst (← fnRetNode p fi)
     | .roll | .unroll => join dst (← a 0)
+    | .framePush m _ | .frameTop m _ => do
+      match (← get).frames[m]? with
+      | some fn => join fn dst
+      | none => modify fun s => { s with frames := s.frames.insert m dst }
+    | .framePut => join (← kid (← a 0) 0) (← a 1)
     | .io .readByte | .io .clockNow => join (← kid dst 0) (← a 0)
     | .io .writeByte | .io .writeAll | .io .clockSleep => join dst (← kid (← a 0) 0)
     | .io .readInto => do
