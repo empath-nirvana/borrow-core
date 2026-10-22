@@ -64,17 +64,20 @@ def findIn (parent : Array Nat) : Nat → Nat → Nat
   | 0, i => i
   | f + 1, i => let p := parent[i]!; if p == i then i else findIn parent f p
 
-/-- The representative of `i`, compressing the path to it. -/
-def find (i : Nat) : GM Nat := do
-  let r := findIn (← get).parent (← get).parent.size i
-  -- Path compression: every node on the way points at the representative.
-  let mut j := i
-  for _ in [0:64] do
-    let p := (← get).parent[j]!
-    if p == j || p == r then break
-    modify fun s => { s with parent := s.parent.set! j r }
-    j := p
-  return r
+/-- Point every node on the path from `j` at `r`, at most `f` of them. -/
+def compress (r : Nat) : Nat → Array Nat → Nat → Array Nat
+  | 0, parent, _ => parent
+  | f + 1, parent, j =>
+    let p := parent[j]!
+    if p == j || p == r then parent else compress r f (parent.set! j r) p
+
+/-- The representative of `i`, compressing the path to it: the parent array is taken out of the
+state, so that the compression writes it in place. -/
+def find (i : Nat) : GM Nat := modifyGet fun s =>
+  let parent := s.parent
+  let s := { s with parent := #[] }
+  let r := findIn parent parent.size i
+  (r, { s with parent := compress r parent.size parent i })
 
 def newNode (k : NK) (o : LTy) : GM Nat := modifyGet fun s =>
   (s.nodes.size, { s with nodes := s.nodes.push k, parent := s.parent.push s.nodes.size,
@@ -228,11 +231,14 @@ def joinRe (c v : Nat) : GM Unit := do
 
 /-- The class of a closure node: its children. -/
 def closOf (i : Nat) : GM (CodeKind × Option Nat × List Nat) := do
-  match (← get).nodes[← find i]! with
+  let r ← find i
+  match (← get).nodes[r]! with
   | .clos k p r => pure (k, p, r)
   | k => throw s!"layout: a call of a non-closure node {reprStr k |>.take 40}"
 
-def childrenOf (i : Nat) : GM NK := return (← get).nodes[← find i]!
+def childrenOf (i : Nat) : GM NK := do
+  let r ← find i
+  return (← get).nodes[r]!
 
 
 /-! ### The places of a program -/
