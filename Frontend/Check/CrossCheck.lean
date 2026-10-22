@@ -53,6 +53,7 @@ deriving instance ToExpr for Frontend.BorrowKind
 deriving instance ToExpr for Frontend.FoldKind
 deriving instance ToExpr for Frontend.SiteKind
 deriving instance ToExpr for Frontend.SiteRec
+deriving instance ToExpr for Frontend.HForm
 deriving instance ToExpr for Frontend.HInfo
 deriving instance ToExpr for Frontend.ItInfo
 deriving instance ToExpr for Frontend.FieldCand
