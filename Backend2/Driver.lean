@@ -101,8 +101,9 @@ def machineOps (c : Frontend.Check.Checked) : MachSet := Id.run do
   return out
 
 /-- **The operations whose every `handle` node keeps `κ` boxed** (SPEC §52): each machine operation
-`(n, j)` whose clause at every node of `n` is `stored`, at a qualifier that is not `unr`, and every
-node of `n` is `effHandleVB` (BOXED-κ, SPEC §28). A stack machine's frames have one owner there:
+`(n, j)` whose clause at every node of `n` is `stored`, every node of `n` is `effHandleVB` (BOXED-κ,
+SPEC §28) and no operation of any node of `n` is `unr` (a site with a stack has no `κ` that may be
+copied). A stack machine's frames have one owner there:
 the stored site whose `κ` holds them, which keeps a stack. -/
 def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
   let nodes := hnodes Frontend.Check.copiesFuel c.t
@@ -110,7 +111,7 @@ def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
   let mut out : MachSet := {}
   for (n, j) in ms.toList do
     let same := nodes.filter (·.n == n)
-    if !same.isEmpty && same.all (fun g => g.boxed &&
+    if !same.isEmpty && same.all (fun g => g.boxed && g.E.all (·.1 != .unr) &&
         (g.ks[j.toNat]?.map (·.kind)) == some .stored &&
         (g.E[j.toNat]?.map (·.1)).any (· != .unr)) then
       out := out.insert (n, j)

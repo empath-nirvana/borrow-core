@@ -1,0 +1,35 @@
+-- SPEC §52 stress: a recursive task cancelled while 400 levels deep, its frames over more than one
+-- chunk of its stack. Each level owns a cell it frees after its `await`; the cancel pops the frames
+-- from the top down, each level's cell freed by its drop glue, innermost first. A second task is
+-- cancelled at its first `await`, before any level below the first.
+--
+-- Answer: `i32[3]`, the three resumes made before the cancels, and `live 0`: every level's cell and
+-- each task's stack were freed by the cancels.
+
+include rec
+include async
+
+fn down(n: i32) -> i32 with Async, Exhausted =
+  if n < 1 { await(); 0 } else {
+    let c = alloc(n);
+    let r = down(n - 1);
+    await();
+    free(c);
+    r + 1
+  }
+
+fn lin(n: i32) -> i32 with Async = with on_exhausted(!{ u -> 0 - 1 }) { down(n) }
+
+main -> i32 =
+  let t = with spawn { lin(400) };
+  let u = with spawn { lin(3) };
+  match resume(t) {
+    inl v -> cancel(u); v
+  | inr t2 -> match resume(t2) {
+      inl v -> cancel(u); v
+    | inr t3 -> match resume(t3) {
+        inl v -> cancel(u); v
+      | inr t4 -> cancel(t4); cancel(u); 3
+      }
+    }
+  }

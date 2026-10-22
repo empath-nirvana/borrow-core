@@ -2814,7 +2814,8 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
   -- it after the handler's values, and `κ` holds it as its last; it is made at the first frame
   -- reserved (`0` until then) and freed where the computation answers, aborts or is cancelled.
   let stored := ks.any fun k => k.kind == .stored
-  let siteSw := stored && boxed && !(← get).stacked.isEmpty
+  -- No operation of the node is `unr`: a copied `κ` would hold the stack twice (SPEC §52).
+  let siteSw := stored && boxed && E.all (·.1 != .unr) && !(← get).stacked.isEmpty
   let shP? : Option Var ← if siteSw then do readFact "effHandleV:site stack"; pure (some (← fresh (.int .w64)))
     else pure none
   let shTys : List LTy := if siteSw then [.int .w64] else []
@@ -3637,7 +3638,8 @@ def stackedOf (s : CState) (recursive : Nat → Bool) (stackOps : MachSet)
     unless stackOps.contains op do continue
     let self := m.points.all fun p => match p.kTy, p.outVar, p.callee with
       | none, _, _ => true
-      | some _, some o, some M => M.ty == m.info.ty && (calleeCodes o M).all (· == kc) &&
+      | some _, some o, some M => M.ty == m.info.ty && !(calleeCodes o M).isEmpty &&
+          (calleeCodes o M).all (· == kc) &&
           p.swapAt.isNone
       | _, _, _ => false
     unless self do continue

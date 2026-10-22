@@ -1,0 +1,39 @@
+-- SPEC §52 stress: a recursive task whose levels run past its stack's first chunk. `down(n)` awaits
+-- on the way down and on the way back, so its frames grow into new chunks and shrink out of them
+-- many times; two such tasks of different depths and a recursive tree task interleave in one queue.
+-- Each level holds a cell it owns across its `await`s and frees after.
+--
+-- Answer: the list [2400, 300, 2047]: `down(1200)` counts two per level, `down(150)` the same, and
+-- the tree over 0 .. 2047 one per node. `live 0`.
+
+include rec
+include async
+
+fn down(n: i32) -> i32 with Async, Exhausted =
+  if n < 1 { 0 } else {
+    let c = alloc(n);
+    await();
+    let r = down(n - 1);
+    await();
+    free(c);
+    r + 2
+  }
+
+fn tsum(lo: i32, hi: i32) -> i32 with Async, Exhausted =
+  if lo < hi {
+    let m = lo + (hi - lo) / 2;
+    let a = tsum(lo, m);
+    await();
+    let b = tsum(m + 1, hi);
+    a + 1 + b
+  } else { 0 }
+
+fn lin(n: i32) -> i32 with Async = with on_exhausted(!{ u -> 0 - 1 }) { down(n) }
+fn tree(n: i32) -> i32 with Async = with on_exhausted(!{ u -> 0 - 1 }) { tsum(0, n) }
+
+main -> List[i32] =
+  let q = queue[i32]();
+  let q = push(q, with spawn { lin(1200) });
+  let q = push(q, with spawn { lin(150) });
+  let q = push(q, with spawn { tree(2047) });
+  run_until_empty(q)

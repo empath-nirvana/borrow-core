@@ -8720,7 +8720,8 @@ One rule per construct:
   cell is passed on (§50: its suspended computation's class holds itself, its points at one
   operation, no call in tail position, not `unr`), every call point of it calls a level of itself
   (the layouts' classes of the callee's suspended computations are its own code, `suspCodes`), and
-  every `handle` node of its operation is a BOXED-κ site whose clause is `stored` (`stackOps`).
+  every `handle` node of its operation is a BOXED-κ site whose clause is `stored`, with no operation
+  of the node at `unr` (`stackOps`).
   Each level reserves its frame on the current stack when it starts (`Op.framePush`; the bottom of
   its continuation is `Frame.stackF`, the frame and its address) and pops it where it answers,
   aborts or is cancelled (`Op.framePop`), so a level's frame is directly above its caller's. A
@@ -8757,14 +8758,18 @@ One rule per construct:
   frame is reserved, which makes it, and it is freed where the computation answers, aborts or is
   cancelled (`Op.stackFree`). With a `κ` region the site makes the stack at the first run; without
   one the first frame reserved makes it.
-  - *One owner, frames in order.* Only stack machines reserve frames. Their levels call only
-    themselves, so a stack holds one recursion's frames at a time, contiguous at its top, nested
-    as the calls are. They suspend only at an operation every node of which is a stored BOXED-κ
-    site, so the suspension reaches the site through drives that pass it on (forwarding) and run
-    no code of the program meanwhile; the site's `κ` holds the stack, and every resume or cancel
-    of it goes through the site's own entries, which make the stack current. So frames are pushed
-    and popped in order on the stack they were reserved on, and a resume finds its frames at the
-    top.
+  - *No `unr` site.* A site switches stacks only when no operation of its node is `unr`: a `κ`
+    that may be copied would hold the stack twice, and a second resume would swap in a stack the
+    first had freed. `corpus/async-unr-site.bc` is such a site in a program with a stack machine
+    (a `multi ctl` operation whose clause resumes two copies of `κ`): it does not switch.
+  - *One owner, frames in order* (the invariant the native code relies on). Only stack machines
+    reserve frames. Their levels call only themselves, so a stack holds one recursion's frames at
+    a time, contiguous at its top, nested as the calls are. They suspend only at an operation
+    every node of which is a stored BOXED-κ site, so the suspension reaches the site through
+    drives that pass it on (forwarding) and run no code of the program meanwhile; the site's `κ`,
+    affine or linear, holds the stack, and every resume or cancel of it goes through the site's
+    own entries, which make the stack current. So frames are pushed and popped in order on the
+    stack they were reserved on, and a resume finds its frames at the top.
   - *The stack* (`Backend2/Lower.lean`, `stack push`, `stack pop`): a header (the next free word,
     the chunk's end, the chunk) and a first chunk of 256 words, one allocation; a frame that does
     not fit opens a chunk of 4096 words or its own size, linked to the one before, and freed when
@@ -8781,6 +8786,32 @@ One rule per construct:
   so a profiler's backtraces reach past `bc_entry` (#664's method note). On the three async
   benchmarks it costs nothing measurable (CPU time, median of 9: 302.7 against 303.4 ms, 105.2
   against 105.5, 45.7 against 46.7).
+
+### Checked, tested, trusted
+
+- **Checked** in the conversion's facts: one recursion's machine per stack (`stackedOf`: every call
+  point's callee classes non-empty and the machine's own), one owner (`stackOps`: every node of
+  the operation a stored BOXED-κ site, none `unr`; `κ` affine or linear by the kernel's typing),
+  and the frame's state type against the first conversion's. Checked at run time by the LIR
+  interpreter (`Backend2/Interp.lean`), on every program the new backend compiles at the gate:
+  a stack swapped in is a live stack; a frame is pushed on the current stack and popped only as
+  its top and unwritten; `framePut` writes only an unwritten frame; `frameTop` takes the top of a
+  non-empty current stack; a `κ` region is written only when empty and taken only when written; a
+  stack is freed only when it holds no frame and an empty region and is not current.
+- **Tested** at the LIR interpreter, the word IR, Wasm and natively, against the reference
+  interpreter's goldens: the async corpus, and stress programs for the stack —
+  `async-stack-deep` (two linear recursions 1200 and 150 deep, awaiting on the way down and back,
+  growing into new chunks and out of them, interleaved with a tree task in one queue),
+  `async-stack-cancel` (a task cancelled 400 levels deep, each level owning a cell its drop glue
+  frees, and one cancelled at its first `await`), `async-stack-nested` (a recursive task that
+  spawns and drives a recursive task at each level, two stacks switched at different depths) and
+  `async-unr-site` (above).
+- **Trusted**: the native and Wasm code does not check the frame stack at run time. That every
+  frame it touches is live, of the right machine, and taken by the `k` it belongs to rests on the
+  conversion emitting code with the shape the invariant above assumes, as the rest of the backend's
+  lowering is trusted (no compiler proof, decision #15). A proof of the invariant over an abstract
+  model of the stack operations is assessed in #664 (tractable as a design proof; linking it to the
+  emitted code is the compiler proof the project does not build).
 
 ### Facts read
 
@@ -8855,6 +8886,8 @@ unchanged on both backends.
 - **The array scheduler's bounds checks.** `array_replace` checks its index; no fact puts a counted
   loop's index in range of an array it does not read through a view (§46).
 - `run_logged` and `run_in` still build list nodes per round.
+- **A chunk boundary.** A recursion that goes back and forth across the end of a chunk allocates
+  and frees the next chunk each time it crosses; a spare chunk kept on the stack would end it.
 
 ---
 
