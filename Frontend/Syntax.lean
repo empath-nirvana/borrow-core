@@ -590,6 +590,12 @@ inductive VSugar where
   `Div` elaboration closes what the loops around hold and leaves the body with the residual by
   name.  `[spec §14, §16]` -/
   | rowClose
+  /-- The work of a `for` over a generator whose body performs `Div` (`[handle-last]`, SPEC §65):
+  a `!` function from the element and the threaded variables `ws` at the work's row, its body the
+  loop's body. The `Div` elaboration walks the body, a close inside it handing `ws` back, and
+  answers the closed body as the work's exit `inr (ws, inr ())`; `ret` is set when a `return`
+  inside the body's loops leaves the `for`.  `[spec §65]` -/
+  | workStep (ws : List String) (ret : Bool)
   deriving DecidableEq, Repr, Inhabited
 
 /-- What a loop walks, as the program writes it (`docs/loops.md` §2.1), with the loop's value

@@ -7,6 +7,7 @@ import Backend2.Flow
 import Backend2.Lint
 import Backend2.LayoutCheck
 import Frontend.Check.Handled
+import Frontend.Check.TFacts
 
 /-!
 # Backend2 — driver
@@ -55,6 +56,101 @@ structure HNode where
   depth : Nat := 0
   /-- At a rule-written handler, its answering functions' or works' tuple, as erased. -/
   fns : Option Expr := none
+  /-- The frames its handled computation holds (`inside`, pinned by the typed rule:
+  `TDerivesAt.inside_eqL`). -/
+  inside : ClauseKinds.HIn := {}
+  /-- The shapes of the code its handled computation takes in (`codeShapesV` of its free
+  variables' types, `freeTys`); `none` when it may take in code of any type. -/
+  codeIn : Option (List String) := none
+
+mutual
+/-- **The shape of a type**, its rows, lifetimes and qualifiers dropped: what `[sub]`, a row
+instantiation and a lifetime's do not change. -/
+def shapeV : VTy → String
+  | .unit => "1" | .zero => "0" | .unk => "?" | .int w => s!"i{repr w}" | .opq _ => "o"
+  | .tvar n => s!"#{n}"
+  | .tensor A B => s!"({shapeV A}*{shapeV B})"
+  | .sum A B => s!"({shapeV A}+{shapeV B})"
+  | .thunk C => s!"U{shapeC C}"
+  | .ref A => s!"R{shapeV A}" | .imm _ A => s!"I{shapeV A}" | .mut _ A => s!"M{shapeV A}"
+  | .box _ A => s!"B{shapeV A}" | .bang A => s!"!{shapeV A}" | .mu A => s!"mu{shapeV A}"
+  | .fam A => s!"[{shapeV A}]"
+def shapeC : CTy → String
+  | .ret A => s!"F{shapeV A}"
+  | .arr A C => s!"({shapeV A}-o{shapeC C})"
+  | .amp C D => s!"({shapeC C}&{shapeC D})"
+  | .top => "T"
+  | .all _ _ C => shapeC C
+  | .nu C => s!"nu{shapeC C}"
+  | .eff _ _ _ _ _ _ _ C => shapeC C
+end
+
+mutual
+/-- The shapes of the code a value of the type may hold: each `U C` in it; `none` when it may
+hold code of any type (a type variable, `Unk`). -/
+def codeShapesV : VTy → Option (List String)
+  | .unit | .zero | .int _ | .opq _ => some []
+  | .unk | .tvar _ => none
+  | .tensor A B | .sum A B => do pure ((← codeShapesV A) ++ (← codeShapesV B))
+  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .mu A | .fam A => codeShapesV A
+  | .thunk C => do pure (shapeC C :: (← codeShapesC C))
+def codeShapesC : CTy → Option (List String)
+  | .ret A => codeShapesV A
+  | .arr A C => do pure ((← codeShapesV A) ++ (← codeShapesC C))
+  | .amp C D => do pure ((← codeShapesC C) ++ (← codeShapesC D))
+  | .top => some []
+  | .all _ _ C | .nu C => codeShapesC C
+  | .eff _ _ _ A B _ _ C => do pure ((← codeShapesV A) ++ (← codeShapesV B) ++ (← codeShapesC C))
+end
+
+/-- The types of the variables free in `t` (indices at or past the binders inside it, `d`), read
+off its `var` nodes; a child at a fresh context reads no slot outside. -/
+def freeTys : Nat → Nat → TExpr → List VTy
+  | 0, _, _ => [.unk]
+  | f + 1, d, t =>
+    (match t with
+      | .var _ _ i A => if i ≥ d then [A] else []
+      | _ => []) ++
+    t.children.flatMap fun (sc, c) => match sc with
+      | .push k => freeTys f (d + k) c
+      | .fresh _ => []
+
+/-- The code values of the typed term: each `thunkV` and `bangThunkV` node, its type's shape, the
+frames its body holds (`Expr.hin` of its erasure) and the shapes of the code its body takes in. -/
+def codeNodes : Nat → TExpr → List (String × ClauseKinds.HIn × Option (List String))
+  | 0, _ => []
+  | f + 1, t =>
+    let here := match t with
+      | .thunkV _ _ C b | .bangThunkV _ _ C b =>
+        [(shapeC C, b.erase.hin, ((freeTys Frontend.Check.copiesFuel 0 b).mapM codeShapesV).map List.flatten)]
+      | _ => []
+    here ++ t.children.flatMap fun (_, c) => codeNodes f c
+
+/-- **The frames code a handled computation takes in may hold**  `[spec §65]`: from the shapes of
+the code its free variables' types hold, the frames of every code value of the typed term of one
+of those shapes, and of the code those take in, to a fixed point; `none` (any frame) when a type
+may hold code of any type. A value of a type holds code of a code value at that type's shape
+(`[sub]`, a row's or a lifetime's instantiation change only what the shape drops), or a
+continuation, whose frames a storing handler's flow record holds (`Checked.flowsKept`). -/
+def takenFrames (nodes : List (String × ClauseKinds.HIn × Option (List String)))
+    (shapes : List String) : Option ClauseKinds.HIn := Id.run do
+  let mut seen : List String := []
+  let mut todo := shapes
+  let mut acc : ClauseKinds.HIn := {}
+  for _ in [0:nodes.length + shapes.length + 1] do
+    match todo with
+    | [] => return some acc
+    | sh :: rest =>
+      todo := rest
+      if seen.contains sh then continue
+      seen := sh :: seen
+      for (sh', hin, ins) in nodes do
+        if sh' == sh then
+          acc := acc ++ hin
+          match ins with
+          | some more => todo := todo ++ more
+          | none => return none
+  return if todo.isEmpty then some acc else none
 
 /-- The `handle` nodes of a typed term, within the depth `fuel`. At `effHandleT` and `effHandleL`
 the clauses are the rule's (`tailKind`, `lastKind`), written out from the node's tuples as the
@@ -64,21 +160,24 @@ def hnodes (fuel : Nat) (t : TExpr) (depth : Nat := 0) : List HNode :=
   | 0 => []
   | f + 1 =>
     let here : List HNode := match t with
-      | .effHandleV _ _ S E _ n _ _ _ ks _ _ tc _ =>
-          [⟨n, E, S, ks, tc.erase, false, none, Check.handlerNames E tc.erase, S, depth, none⟩]
-      | .effHandleVB _ _ S E _ n _ _ _ _ ks _ _ tc _ =>
-          [⟨n, E, S, ks, tc.erase, true, none, Check.handlerNames E tc.erase, S, depth, none⟩]
-      | .effHandleT _ _ S SN E _ n _ _ _ _ _ _ tc _ =>
+      | .effHandleV _ _ S E _ n _ _ _ ks _ ins tc te =>
+          [⟨n, E, S, ks, tc.erase, false, none, Check.handlerNames E tc.erase, S, depth, none, ins,
+            (((freeTys Frontend.Check.copiesFuel 0 te).mapM codeShapesV).map List.flatten)⟩]
+      | .effHandleVB _ _ S E _ n _ _ _ _ ks _ ins tc te =>
+          [⟨n, E, S, ks, tc.erase, true, none, Check.handlerNames E tc.erase, S, depth, none, ins,
+            (((freeTys Frontend.Check.copiesFuel 0 te).mapM codeShapesV).map List.flatten)⟩]
+      | .effHandleT _ _ S SN E _ n _ _ _ _ _ ins tc te =>
           [⟨n, E, S, E.map ClauseKinds.tailKind,
             .pair (Expr.pairL tc.erase) (tailTuple E 0 (Expr.pairR tc.erase)), false, none,
-            Check.ruleNames E (Expr.pairR tc.erase), SN, depth, some (Expr.pairR tc.erase)⟩]
-      | .effHandleL _ _ S SW E fs Xs n _ _ _ _ _ tc _ =>
+            Check.ruleNames E (Expr.pairR tc.erase), SN, depth, some (Expr.pairR tc.erase), ins,
+            (((freeTys Frontend.Check.copiesFuel 0 te).mapM codeShapesV).map List.flatten)⟩]
+      | .effHandleL _ _ S SW E fs Xs n _ _ _ _ ins tc te =>
           [⟨n, E, S, E.map ClauseKinds.lastKind,
             .pair (Expr.pairL tc.erase) (lastTuple E 0 (Expr.pairL (Expr.pairR tc.erase))
               (Expr.pairR (Expr.pairR tc.erase))), false,
             some (SW, Xs, (List.range E.length).all fun j => decide (fs j = .ret .unit)),
             Check.ruleNames E (Expr.pairL (Expr.pairR tc.erase)), SW, depth,
-            some (Expr.pairL (Expr.pairR tc.erase))⟩]
+            some (Expr.pairL (Expr.pairR tc.erase)), ins, (((freeTys Frontend.Check.copiesFuel 0 te).mapM codeShapesV).map List.flatten)⟩]
       | _ => []
     here ++ t.children.flatMap fun (sc, c) =>
       hnodes f c (match sc with | .push k => depth + k | .fresh k => k)
@@ -159,16 +258,47 @@ def divHandlers : Nat → TExpr → Nat
       | _ => 0
     here + (t.children.map fun (_, c) => divHandlers f c).foldl (· + ·) 0
 
+/-- The handlers of `Div` in the typed term are `main`'s `reify` alone, or none: no frame of any
+context between a `perform` and its handler is a handler of `Div` (`main`'s `reify` is outside
+every node).  `[spec §62, §65]` -/
+def divAtMainOnly (c : Frontend.Check.Checked) : Bool :=
+  divHandlers Frontend.Check.copiesFuel c.t == (if (mainReify? c.t).isSome then 1 else 0)
+
+/-- **`DirectOK`, the checked fact at a `[handle-last]` operation** (#564's T-B2 spike, `DirectOK`
+and `ActiveOK`; the user's decision of 2026-10-22)  `[spec §65]`: the work of operation `j` of
+the node `h` runs in place of its `perform`, inside the context `K` between the `perform` and the
+node, when
+- **F-names**: no handler in `K` serves a name the work performs or raises: the work's own names
+  (`ruleNames`, its row `Σ_W`'s where it has none), other than `Div`'s, are ones the frames of
+  `K` cannot catch, bound by the frames the node's handled computation holds (`inside`, pinned by
+  the typed rule), the cancel delimiter and the frames code flowing in may hold
+  (`Checked.flowsKept`), at `cond2B`; and `Div`'s `tick` is caught by no frame of `K` when the
+  typed term's only handler of `Div` is `main`'s `reify` (`divAtMainOnly`);
+- **F-fin**: the cancel rows are the empty ones the checker emits, so every finaliser in `K` is
+  at the empty row (`[then]`'s `hfin` at the empty cancel row): it performs and raises nothing;
+- **the exit indices are in bounds**: `2·|E| < 2³²`.
+Where it fails, the node is the fallback (a drive, SPEC §49): correct, not an error. -/
+def directOK (c : Frontend.Check.Checked) (h : HNode) (j : Nat) (emptyFins : Bool) : Bool :=
+  let names := Frontend.Check.cond2Names (h.codeRow.map (·.n)).eraseDups ((h.names[j]?).getD none)
+  let taken := match h.codeIn with
+    | some [] => some ({} : ClauseKinds.HIn)
+    | some shs => if c.storing.isEmpty then takenFrames (codeNodes Frontend.Check.copiesFuel c.t) shs
+        else none
+    | none => none
+  let bound := c.insideOf h.n ++ ClauseKinds.HIn.one 0 ++ taken.getD c.flowsKept
+  emptyFins && decide (2 * h.E.length < 2 ^ 32) &&
+    Frontend.Check.cond2B bound (names.filter (· != divName)) &&
+    (!names.contains divName || divAtMainOnly c)
+
 /-- **The `[handle-last]` works the checked facts license to call where their operation is
-performed**  `[spec §64]`: for each static name, for each of its operations, whether every
+performed**  `[spec §64, §65]`: for each static name, for each of its operations, whether every
 `handle` node of the name is a `[handle-last]` node (`effHandleL`, its clauses `lastKind`'s) that
 - holds one handler for it, closed but for `main`'s I/O externs (`openOK`), at one outer row and
-  one signature, so that the work a `perform` calls is the one its node runs (`last_resume_direct`, `last_cancel_direct`);
-- whose work performs nothing: every operation of its row `Σ_W` is abortive or `Div`'s `tick`
-  (T-B1/B1′'s premise; a work that performs another, T-B2, is not licensed);
-- whose cancel rows are the empty ones the checker emits, so the finalisers of the computation
-  between a `perform` and the node perform nothing (`[then]`'s `hfin` at the empty cancel row) and
-  its cancel unwinds to the node running them (`cancel_prefix`, `cancelOf_steps`).
+  one signature, so that the work a `perform` calls is the one its node runs (`last_resume_direct`,
+  `last_cancel_direct`);
+- meets `DirectOK` (`directOK`): the work's operations reach the handlers outside the node, and
+  `K`'s finalisers perform nothing, so its cancel unwinds to the node running them
+  (`cancel_prefix`, `cancelOf_steps`).
 Each licensed operation's cancel summand (`cancelSummand`): its exit's argument, beside the work's
 raises. -/
 def lastFacts (c : Frontend.Check.Checked) (io : Nat × (Nat → Bool) := (0, fun _ => false)) :
@@ -176,13 +306,14 @@ def lastFacts (c : Frontend.Check.Checked) (io : Nat × (Nat → Bool) := (0, fu
   let nodes := hnodes Frontend.Check.copiesFuel c.t c.ctx.length
   let mut out : Std.HashMap (UInt32 × UInt32) (VTy × Row) := {}
   for h in nodes do
-    let some (SW, Xs, emptyFins) := h.last | continue
+    let some (SW, Xs, _) := h.last | continue
     let same := nodes.filter (·.n == h.n)
     for (k, j) in h.ks.zipIdx do
       if k.kind != .last then continue
-      let ok := emptyFins && openOK io h.depth h.H &&
-        SW.all (fun o => o.abort || o.n == divName) &&
-        same.all fun g => g.last.isSome && g.H == h.H &&
+      let ok := openOK io h.depth h.H &&
+        same.all fun g => g.H == h.H && (match g.last with
+            | some (_, _, ef) => directOK c g j ef
+            | none => false) &&
           decide (CTy.effOf g.S .unit = CTy.effOf h.S .unit) && decide (g.E = h.E)
       if ok then out := out.insert (h.n, j.toUInt32) (Xs j, SW)
   return out

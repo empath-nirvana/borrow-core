@@ -1157,6 +1157,13 @@ def Cx.aborts (cx : Cx) (i : Inst) : Bool :=
   | some e => !e.ops.isEmpty && e.ops.all (·.abortive)
   | none => false
 
+/-- Every operation of the instance's effect is abortive or affine: what `[handle-last]`'s work
+may perform (`effHandleL`'s `Σ_W ≤ Σ`, `¬ Σ.UnrD`).  `[spec §65]` -/
+def Cx.lastOps (cx : Cx) (i : Inst) : Bool :=
+  match cx.env.eff? i.eff with
+  | some e => !e.ops.isEmpty && e.ops.all fun o => o.abortive || o.kind == .ctl .aff
+  | none => false
+
 def Cx.ctlV (cx : Cx) (V : Val) : Bool := !(cx.ctl (rowV cx.env fuel V)).isEmpty
 def Cx.ctlC (cx : Cx) (M : Comp) : Bool := !(cx.ctl (rowC cx.env fuel M)).isEmpty
 
@@ -1802,10 +1809,9 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
       match src, cx.env.iterCall? V with
       | .each x, some (g, gs, i, f, W) =>
         -- The body is the clause of the site: the kernel's tail-resuming rule or `[handle-last]`
-        -- (SPEC §64), whose work may raise. A body that performs a control operation that
-        -- resumes needs the erasure law at a work that performs (T-B2), and one that loops a
-        -- work that ticks: the `for` drains the stored generator instead.
-        if (cx.ctl (rowC cx.env fuel M)).all cx.aborts && !mayLoop fuel M then
+        -- (SPEC §64, §65), whose work may raise, perform the affine operations of the sites
+        -- outside, and loop (a work that ticks).
+        if (cx.ctl (rowC cx.env fuel M)).all cx.lastOps then
           forSite n cx cs wrap sp ℓ x g gs i f W M N
         else
           let (bs, V') ← pullSite n cx cs sp g gs i f W
