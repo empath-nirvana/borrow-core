@@ -637,7 +637,7 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.DivDrive.reify_first_done
 #print axioms BoCa.Fig16.LogRel.Core.DivDrive.drive_first_tick
 #print axioms BoCa.Fig16.LogRel.Core.DivDrive.drive_first_done
--- SPEC §50 (entry 49): `[handle-last]`
+-- SPEC §51 (entry 50): `[handle-last]`
 #print axioms BoCa.Fig16.LogRel.Core.cwpF_frame_then
 #print axioms BoCa.Fig16.LogRel.Core.cwp_then
 #print axioms BoCa.Fig16.LogRel.Core.lastFinOK_nil

@@ -1,7 +1,7 @@
 import Core.DivHandle
 
 /-!
-# Core — `[handle-last]`: a clause that uses `κ` once, last  `[spec §14, §19, §27, §50]`
+# Core — `[handle-last]`: a clause that uses `κ` once, last  `[spec §14, §19, §27, §51]`
 
 `hnd_m H e`, `e` at a row that may hold `Div`, `m ≠ Div`, at clauses of one class: the clause
 works on the operation's argument, then resumes `κ` in tail position or cancels it and leaves,
@@ -45,7 +45,7 @@ attribute [local simp] Expr.subst Val.val_shift Expr.shift_shift Expr.shift_zero
 /-- The clause of the `j`-th operation, from the tuples `Hw` of works and `Hn` of exits: at a
 non-abortive operation
 `λ(x, κ). (w_j x) then r. case r {inl y → κ.1 y | inr z → κ.2 (); nf_j z} unwind κ.2 ()`,
-at an abortive one `λx. w_j x`.  `[spec §50]` -/
+at an abortive one `λx. w_j x`.  `[spec §51]` -/
 def lastClause (j : Nat) (abort : Bool) (Hw Hn : Expr) : Expr :=
   if abort then .lam (.app (pickE j (Hw.shift 1 0)) (.var 0))
   else .lam (.letpair (.var 0)
@@ -60,27 +60,27 @@ def lastClause (j : Nat) (abort : Bool) (Hw Hn : Expr) : Expr :=
       -- `M`
       (.app (pickE j (Hw.shift 3 0)) (.var 1))))
 
-/-- The clauses, from the `j`-th on.  `[spec §50]` -/
+/-- The clauses, from the `j`-th on.  `[spec §51]` -/
 def lastTuple : List (Qual × VTy × VTy) → Nat → Expr → Expr → Expr
   | [], _, _, _ => .val .unit
   | (q, _, B) :: E, j, Hw, Hn =>
       .pair (lastClause j (B.isZero && q != .lin) Hw Hn) (lastTuple E (j + 1) Hw Hn)
 
 /-- A work's type: `!U(A ⊸ F_{Σ_W}(B ⊕ X))`, or the clause's `!U(A ⊸ F_Σ R)` at an abortive
-operation.  `[spec §50]` -/
+operation.  `[spec §51]` -/
 def workTy (S SW : Row) (R X : VTy) : Qual × VTy × VTy → VTy
   | (q, A, B) => if (B.isZero && q != .lin) then .bang (.thunk (.arr A (CTy.effOf S R)))
       else .bang (.thunk (.arr A (CTy.effOf SW (.sum B X))))
 
-/-- The works' tuple's type, the `j`-th exit's argument at `Xs j`.  `[spec §50]` -/
+/-- The works' tuple's type, the `j`-th exit's argument at `Xs j`.  `[spec §51]` -/
 def worksTy (S SW : Row) (R : VTy) (Xs : Nat → VTy) : List (Qual × VTy × VTy) → Nat → VTy
   | [], _ => .unit
   | o :: E, j => .tensor (workTy S SW R (Xs j) o) (worksTy S SW R Xs E (j + 1))
 
-/-- An exit's type, `!U(X ⊸ F_Σ R)`.  `[spec §50]` -/
+/-- An exit's type, `!U(X ⊸ F_Σ R)`.  `[spec §51]` -/
 def exitTy (S : Row) (R X : VTy) : VTy := .bang (.thunk (.arr X (CTy.effOf S R)))
 
-/-- The exits' tuple's type.  `[spec §50]` -/
+/-- The exits' tuple's type.  `[spec §51]` -/
 def exitsTy (S : Row) (R : VTy) (Xs : Nat → VTy) : List (Qual × VTy × VTy) → Nat → VTy
   | [], _ => .unit
   | _ :: E, j => .tensor (exitTy S R (Xs j)) (exitsTy S R Xs E (j + 1))
@@ -325,7 +325,7 @@ theorem lastD_steps (κ : Val) :
 `cancelTy Σ F = F_{F ⊕ Σ} 1`, around a capturable operation `o` of `Σ` asks, through `[then]`'s
 `hfin` (`ThenLe o.fin (F ⊕ Σ) o.fin`), that `o`'s cancel row be `⊤` or find `o`'s own key: the
 finaliser's row holds `o` itself.  `[handle-last]` writes its clauses and gives `κ`'s cancel the
-table of the operation's own cancel row instead, so this does not arise there.  `[spec §50]` -/
+table of the operation's own cancel row instead, so this does not arise there.  `[spec §51]` -/
 def KappaFinSelf : Prop :=
   ∀ (F : CTy) (S : Row) (o : OpSig), o ∈ S → Row.find S o.n o.i = some o →
     capB o.q o.B = true → ThenLe o.fin (F.rowOf ++ S) o.fin →
@@ -352,7 +352,7 @@ outer row `Σ` and the exit's argument `X`: `F` is not `⊤`, it is below `Σ` (
 `hfin`, `κ.2 ()` being the finaliser), the errors pending at the finaliser are persistent where
 `F` has an unrestricted operation (`[then]`'s `hP`), and `X` drops where `F` has an operation
 with weakening: `z : X` is held across `κ.2 ()`, which may raise or be captured and cancelled
-(`[let]`'s `hW`).  `[spec §27, §50]` -/
+(`[let]`'s `hW`).  `[spec §27, §51]` -/
 def LastFinOK (S SW : Row) (F : CTy) (X : VTy) : Prop :=
   F.isTop = false ∧ RowLe F.rowOf S ∧ Row.divB F.rowOf = false ∧
   (∀ m i o o', Row.find SW m i = some o → Row.find S m i = some o' →
@@ -360,7 +360,7 @@ def LastFinOK (S SW : Row) (F : CTy) (X : VTy) : Prop :=
   (Row.UnrD F.rowOf → SW.PendPers) ∧ (Row.Weak F.rowOf → X.Drop)
 
 /-- **At the empty cancel row**, the one the checker emits, `LastFinOK` is `[then]`'s `hfin` at
-the empty finaliser row.  `[spec §27, §50]` -/
+the empty finaliser row.  `[spec §27, §51]` -/
 theorem lastFinOK_nil {S SW : Row} {X : VTy}
     (h : ∀ m i o o', Row.find SW m i = some o → Row.find S m i = some o' →
       capB o.q o.B = true → ThenLe o.fin [] o'.fin) :
@@ -369,7 +369,7 @@ theorem lastFinOK_nil {S SW : Row} {X : VTy}
     fun ⟨_, h, _⟩ => by simp [CTy.rowOf] at h⟩
 
 /-- `LastFinOK` at the empty cancel row, where `Σ_W` finds what `Σ` finds (`Σ_W = Σ`, or a part of
-`Σ` ahead of the rest): every operation's cancel row is its own, `ThenLe.nil`.  `[spec §50]` -/
+`Σ` ahead of the rest): every operation's cancel row is its own, `ThenLe.nil`.  `[spec §51]` -/
 theorem lastFinOK_nil_of_find {S SW : Row} {X : VTy}
     (h : ∀ m i o, Row.find SW m i = some o → Row.find S m i = some o) :
     LastFinOK S SW (.ret .unit) X :=
@@ -410,7 +410,7 @@ theorem find_not_unr {G S : Row} (hGS : RowLe G S) (hSu : ¬ S.UnrD) {n i : UInt
 
 /-- **The finaliser frame's answer**: `inl y` resumes `κ` at `y`; `inr z` cancels `κ`, at the
 table of its cancel row `G`, beside `z`, which the cancel leaves held (left behind where `G` may
-raise or be captured, so `X` drops there), and then runs the exit at `z`.  `[spec §50]` -/
+raise or be captured, so `X` drops there), and then runs the exit at `z`.  `[spec §51]` -/
 theorem last_cont {δ : LSub} {T' : OpTab} {Px' : Table} (hPx' : Px'.Mono) {G : Row}
     (hGT : (Row.tab G δ).Le T') (hGu : ∀ n i o, Row.find G n i = some o → o.q ≠ .unr)
     {X : VTy} (hXd : G.Weak → X.Drop) {Qout : List SRec → Val → WProp} {en : OpEnt}
@@ -684,7 +684,7 @@ include hnd hn0 hnS hlen hNZ hSW hSu hAff hFin hVr hVw hVn in
 /-- **`[handle-last]` at a row holding `Div`**, by coinduction with the candidate `lastY`: the
 handled computations under the handler (`ewp_handle_or`, the inner tick passing the handler),
 and the finaliser frame around a work, one segment each (`cwpF_frame_then`), `κ` resumed or
-cancelled by the frame's answer (`last_cont`).  `[spec §14, §19, §27, §50]` -/
+cancelled by the frame's answer (`last_cont`).  `[spec §14, §19, §27, §51]` -/
 theorem cwp_handle_last (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {ρ : WRes}
     (h : cwp (Row.tab (Row.ofEff n E 0 fs ++ S) δ) (fun ls v => vC true A ls δ v) ls e ρ) :
     cwp (Row.tab S δ) (fun ls v => vC true R ls δ v) ls (hndE (lastH n E vr vw vn) e) ρ := by
@@ -829,7 +829,7 @@ variable {δ : LSub} {S SW : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → 
 include hn0 hnS hlen hNZ hSW hSu hAff hFin hVr hVw hVn in
 /-- **A `[handle-last]` handler at a row that does not hold `Div`**: Core's `ewp_handle`; a
 clause's work runs at its row under the finaliser frame (`ewp_frame_then`), whose answer is
-`last_cont`.  `[spec §19, §27, §50]` -/
+`last_cont`.  `[spec §19, §27, §51]` -/
 theorem ewp_handle_last (hSd : Row.divB S = false) {ls : List SRec} {e : Expr} {ρ : WRes}
     (h : ewpTS ls e (opTable (Row.tab (Row.ofEff n E 0 fs ++ S) δ)) (fun ls v => vC true A ls δ v) ρ) :
     ewpTS ls (hndE (lastH n E vr vw vn) e) (opTable (Row.tab S δ)) (fun ls v => vC true R ls δ v) ρ := by
@@ -894,7 +894,7 @@ the work's row `Σ_W ≤ Σ`, `Σ` with no unrestricted operation at any depth (
 persistent), and each operation's cancel row as `LastFinOK` says.  At a row holding `Div` the
 handled computation's ticks pass the handler (`cwp_handle_last`); elsewhere it is Core's handler
 (`ewp_handle_last`).  The Fundamental Property is applied to `h_ret`, the works, the exits and
-`e`; no term the rule reads mentions `κ`.  `[spec §14, §19, §27, §50]` -/
+`e`; no term the rule reads mentions `κ`.  `[spec §14, §19, §27, §51]` -/
 theorem handleL_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hw Hn e : Expr} {S SW : Row}
     {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {Xs : Nat → VTy} {n : UInt32} {A R : VTy}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁)
