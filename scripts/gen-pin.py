@@ -260,11 +260,13 @@ EXTRA = {"effHandleV": [("ks", "List ClauseKinds.HKind"), ("site", "Option HSite
                         ("inside", "ClauseKinds.HIn")],
          "effHandleVB": [("ks", "List ClauseKinds.HKind"), ("site", "Option HSite"),
                          ("inside", "ClauseKinds.HIn")],
-         "effHandleT": [("site", "Option HSite"), ("inside", "ClauseKinds.HIn")]}
+         "effHandleT": [("site", "Option HSite"), ("inside", "ClauseKinds.HIn")],
+         "effHandleL": [("site", "Option HSite"), ("inside", "ClauseKinds.HIn")]}
 
 # Premises the typed rule adds to its rule's, which pin a field of `EXTRA` to the node's children:
 # `inside` is the handled computation's frames. The projection to `CDerives` drops them.
-EXTRA_PREM = {r: [("hins", "inside = Expr.hin e")] for r in ("effHandleV", "effHandleVB", "effHandleT")}
+EXTRA_PREM = {r: [("hins", "inside = Expr.hin e")] for r in ("effHandleV", "effHandleVB", "effHandleT",
+                                                         "effHandleL")}
 
 
 # Rule arguments that are terms but are determined by an equation on a child's erasure: the node
@@ -272,6 +274,8 @@ EXTRA_PREM = {r: [("hins", "inside = Expr.hin e")] for r in ("effHandleV", "effH
 # `scripts/pin/TExpr.tmpl.lean`). No node holds an untyped term (`lint_texpr`).
 DERIVED = {
     "effHandleT": {"Hr": "(Expr.pairL (tc.erase))", "Hc": "(Expr.pairR (tc.erase))"},
+    "effHandleL": {"Hr": "(Expr.pairL (tc.erase))", "Hw": "(Expr.pairL (Expr.pairR (tc.erase)))",
+                   "Hn": "(Expr.pairR (Expr.pairR (tc.erase)))"},
     "reify": {"res": "(Expr.toVal (tres.erase))"},
     "letPoly": {"b": "(Expr.lamBody (tV.erase))", "N": "(Expr.letBody (tN.erase) (tV.erase))"},
 }

@@ -185,7 +185,9 @@ effect).
   `[then]` (`cwp_then`). `iterate` (`DivIterate.lean`, `cwp_iterate`), `div_fuel` (`DivFuel.lean`,
   `fuel_total`) and `reify` (`DivReify.lean`, `reify_compat`) are constants with their rules;
   `effHandleT` (`DivHandle.lean`, `cwp_handle_tail`) is `[handle]` around a computation that ticks,
-  at clauses resuming `κ` in tail position (decision 68). `divResidual` (`DivPrograms.lean`) is a
+  at clauses resuming `κ` in tail position (decision 68), and `effHandleL` (`DivHandleLast.lean`,
+  `cwp_handle_last`, SPEC §50) at clauses that work, then resume or cancel `κ`, with `κ`'s cancel
+  their unwind finaliser (`cwpF_frame_then`). `divResidual` (`DivPrograms.lean`) is a
   loop holding a cell closed by `div_fuel 3`, tied and run (`div-residual`); `divFuel_every_run`
   and `runtime_every_run` (`DivRuntime.lean`) are adequacy at the row of `Div`.
 - **Effect safety** (`SPEC.md` §19 *Laws*, `EffSafety.lean`). Every configuration a typed closed

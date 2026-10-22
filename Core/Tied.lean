@@ -429,6 +429,20 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
       CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) e)
         (.comp (CTy.effOf S R))
+  /-- `[handle-last]`, the handled row tied to `Ξ`.  `[spec §14, §19, §27, §50]` -/
+  | effHandleL {Δ Γ Γ₁ Γ₂} {Hr Hw Hn e : Expr} {S SW : Row} {E : List (Qual × VTy × VTy)}
+      {fs : Nat → CTy} {Xs : Nat → VTy} {n : UInt32} {A R : VTy}
+      (hAt : RowAt Ξ (Row.ofEff n E 0 fs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
+      (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHw : Hw.ValFormIn Γ₁) (hHn : Hn.ValFormIn Γ₁)
+      (hc : CDerivesAt Ξ Δ Γ₁ (.pair Hr (.pair Hw Hn))
+        (.val (.tensor (retTy S A R) (.tensor (worksTy S SW R Xs E 0) (exitsTy S R Xs E 0)))))
+      (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+      (hNZ : S.NZ) (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true)
+      (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
+      (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
+      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
+      CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (lastTuple E 0 Hw Hn)) e)
+        (.comp (CTy.effOf S R))
   /-- `[let-poly]`: `let x = λy. b in N` for a closed λ-value, from `N` with the λ-value for `x`,
   `x`'s slot dead.  Each occurrence of the λ-value in `N` is typed on its own, at its own row: the
   kernel's row polymorphism, with the value restriction.  `[spec §24]` -/
@@ -544,6 +558,8 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
       exact .effHandleVB hs hd hH ihc hn0 hnS hlen hdv ihe hΓd hSd
   | effHandleT _ hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
       exact .effHandleT hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
+  | effHandleL _ hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hAff hSW hSu hFin _ ihc ihe =>
+      exact .effHandleL hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hAff hSW hSu hFin ihe
   | iterate S St B R _ hS hΓ => exact .iterate S St B R hS hΓ
   | divFuel S A _ hS hΓ => exact .divFuel S A hS hΓ
   | reify S B R res _ hS hcl _ hΓ ih => exact .reify S B R res hS hcl ih hΓ
@@ -912,7 +928,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | effThen hs hNZ hUq hU hMS hDS hfin hP hSD _ _ _ ih1 ih2 ih3 =>
       exact .effThen hs hNZ hUq hU hMS hDS hfin hP hSD (ih1 (by eff_free)) (ih2 (by eff_free))
         (ih3 (by eff_free))
-  | effHandleV | effHandleVB | effHandleT =>
+  | effHandleV | effHandleVB | effHandleT | effHandleL =>
       simp [hndExpr, Expr.effFree, Expr.val, Val.prim] at he
   | iterate => simp [Expr.effFree, Expr.val, Val.prim] at he
   | divFuel => simp [divFuelV, fuelH, BoCa.BoLo.hndVal, BoCa.BoLo.hndE, Expr.effFree, Expr.val, Val.prim,

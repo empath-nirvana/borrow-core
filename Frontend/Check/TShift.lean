@@ -210,6 +210,8 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
       .effHandleVB i j S E fs n A R a (u.ins d c) ks st ins (tc.shift d c) (te.shift d c)
   | .effHandleT i j S SN E fs n A R u st ins tc te =>
       .effHandleT i j S SN E fs n A R (u.ins d c) st ins (tc.shift d c) (te.shift d c)
+  | .effHandleL i j S SW E fs Xs n A R u st ins tc te =>
+      .effHandleL i j S SW E fs Xs n A R (u.ins d c) st ins (tc.shift d c) (te.shift d c)
   | .letPoly i j C j' tV tN => .letPoly i j C j' tV (tN.shift d (c + 1))
   | .use i j n k τ ab t => .use i j n k τ ab (t.shift d c)
   | .litFn i j bs t => .litFn i j bs (t.shift d c)
@@ -314,8 +316,9 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
       AbsF.orO (AbsF.withO (.atom .pers) (tc.absF Δ)) (AbsF.withO (.atom (.outl Δ d)) (te.absF Δ))
   | .lendR .. | .lendLoopR .. | .nilDead .. => none
   -- Not placed at a wider context: rules the checker does not apply (the tail-resumptive
-  -- `[handle]` of `Div`'s rows, and `[let-poly]`, whose copies are `use` nodes).
-  | .effHandleT .. | .letPoly .. => none
+  -- `[handle]` and `[handle-last]` of `Div`'s rows, and `[let-poly]`, whose copies are `use`
+  -- nodes).
+  | .effHandleT .. | .effHandleL .. | .letPoly .. => none
   | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => some .ff
   | .use _ _ _ _ _ ab _ => ab

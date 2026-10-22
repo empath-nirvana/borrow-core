@@ -750,6 +750,7 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
         by simp only [TExpr.shift, TExpr.erase, qres, Expr.toVal_val]
            exact (shift_closed0 (reifyV_closed hcl) _ _).symm⟩
   | effHandleT => intro _ _ _ _ _ hf _; cases hf
+  | effHandleL => intro _ _ _ _ _ hf _; cases hf
   | letPoly => intro _ _ _ _ _ hf _; cases hf
   | lendR => intro _ _ _ _ _ hf _; cases hf
   | lendLoopR => intro _ _ _ _ _ hf _; cases hf
@@ -1295,6 +1296,7 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
         by simp only [TExpr.shift, TExpr.erase, qres, Expr.toVal_val]
            exact (shift_closed0 (reifyV_closed hcl) _ _).symm⟩
   | effHandleT => intro _ _ _ _ _ hf _; cases hf
+  | effHandleL => intro _ _ _ _ _ hf _; cases hf
   | letPoly => intro _ _ _ _ _ hf _; cases hf
   | dtor hA hc he hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
