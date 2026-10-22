@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.03 · 2026-10-22
+Version 1.04 · 2026-10-22
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1849,10 +1849,13 @@ a type only (it is not reserved), with no counterpart in `Core/`. The call is a 
 clause does not resume: it answers the element with the continuation as the rest,
 `thunkv nu_in ⟨(force k).1 (), (force k).2⟩`, so nothing runs until the first observation, the
 next observation resumes the generator where it yielded, and `close` cancels it (`R = 1`). When
-the generator's body loops, the stored generator is `unfold` over the loop value of its call
-(`reify` of its start, §52) or such a rest: an observation handles one turn of the loop; a
-resumed rest that ends the turn runs the next turn at once, so that a loop that yields once per
-turn gives an element at every observation.
+the generator's body loops, the stored generator is `unfold` over the call's start, the loop
+value of its call (`reify` of its start, §52), or such a rest: an observation handles one turn of
+the loop; a resumed rest that ends the turn runs the next turn at once, so that a loop that yields
+once per turn gives an element at every observation. The start is `thunkv < made, g__close W >`:
+its first projection makes the loop value and returns it without observing it, and the
+observation that takes the start observes the loop value it makes where every later observation
+observes one, at the one handler site (§55, *The first observation of a stored loop*).
 
 A `for` over a stored generator observes it until it returns (§14's drain, div). The adapters
 (`lib/adapters.bc`: `map`, `filter`, `take`, `skip`, `enumerate`, `chain`, `flat_map`,
@@ -9206,6 +9209,36 @@ stored loop's making and its observations, whose layouts then joined into cycles
 - **Layouts** (§35): `find` compresses its path in place, and a node's address kinds are computed
   once (compile time; the output is byte-identical).
 
+### The first observation of a stored loop
+
+`Frontend/Sugar.lean` (`eStartSplit`, `pullView`). A stored generator whose body loops (§15)
+observed `eStart`'s loop value first: `nu_in < first, g__close W >`, whose `first` makes the loop
+value (`reify` of the call's start) and observes it inside its own computation. The pull site's
+handled computation was then of two codes, `first` and an observation of a loop value, and the
+continuation the site's clause stores was of two codes: the first observation's machine, which
+makes the loop, and the observation drive's forwarding. Resuming it was a dispatched call.
+
+The stored generator now keeps the call's start in its state until the first observation:
+
+    start  = thunkv < made, g__close W >          : U (F_Σ U(Loop_Σ B R) & F_Σ R)
+    made   = rf <- return (unbang reify_res); rt <- return (thunkv fun u -> start′); (force rf) rt
+    St     = (U (F_Σ U(Loop_Σ B R) & F_Σ R) + U(Loop_Σ B R)) + U Q
+    turn s = handle_with[n](…) (l <- case s { inl t -> (force t).1 | inr l -> return l };
+                                (nu_out (force l)).1)
+    close  = handle_with[n](…) (case s { inl t -> (force t).2 | inr l -> (nu_out (force l)).2 })
+
+`start′` is `eStart`'s start (`iterate` over `W` whose first turn moves on at once), so `made` runs
+none of the call. The site's handled computation is one code, `turn`, whose observation is of a
+loop value only, and the continuation the clause stores is that one machine's. A turn that ends
+without the operation is a skip whose state is `inl (inr l)`; a rest that ends the turn runs
+`turn (inr l)` at once, as before. A generator written to return its loop (not a div function)
+has the start `thunkv < return g(e), (nu_out (force g(e))).2 >`.
+
+This is sugar into existing core terms (`thunkv`, `&`, `case`, `reify_res`, `iterate`,
+`handle_with`, `unfold`), checked by the unchanged checker: the start is a value at the storage
+site, and `made` runs in the pull site's handled computation, inside its handler. No kernel rule,
+no layout (§35) and no backend code changes. Outputs, goldens and exit statuses are unchanged:
+the first observation still makes the loop and observes it.
 
 ### Programs
 
@@ -9223,27 +9256,27 @@ with no state machine (318 before).
   `U (pull …)` (`for-data-div`, `gen-borrowed`, `gen-close`, `gen-div`, `gen-fib`, `gen-pipeline`,
   `gen-tokenize-parse`, `gen-value`, `yield-callback`, the book's block at 221), `zip`'s
   sources (`gen-adapters`), `flat_map`'s stored generators (`gen-adapters-fail`), `io-fuel`.
-  Their allocations and loads are at or below `main`'s (c429cbc); their dispatched calls are
-  not (*Open*).
+  With the first observation of a stored loop at the pull site's one handled computation (above),
+  each is at `main`'s counts (c429cbc), dispatched calls included.
 
 | program | allocs / indirect / loads | `main` (c429cbc) | §54 |
 |---|---|---|---|
-| `gen-adapters` | 5 / 17 / 15 | 5 / 0 / 15 | 80 / 303 / 2707 |
-| `gen-adapters-fail` | 8 / 6 / 24 | 8 / 0 / 24 | 57 / 222 / 773 |
+| `gen-adapters` | 5 / 0 / 15 | 5 / 0 / 15 | 80 / 303 / 2707 |
+| `gen-adapters-fail` | 8 / 0 / 24 | 8 / 0 / 24 | 57 / 222 / 773 |
 | `gen-pipeline-adapters` | 0 / 0 / 0 | 0 / 0 / 0 | 32 / 108 / 1130 |
 | `gen-pipeline-pipe` | 0 / 0 / 0 | 0 / 0 / 0 | 56 / 195 / 1904 |
 | `block-yield-inner` | 0 / 0 / 0 | 0 / 0 / 0 | 3 / 14 / 39 |
 | `gen-from` | 0 / 0 / 0 | 0 / 0 / 0 | 2 / 18 / 28 |
 | `gen-nested` | 0 / 0 / 0 | 0 / 0 / 0 | 3 / 28 / 39 |
-| `for-data-div` | 3 / 6 / 17 | 3 / 0 / 17 | 7 / 19 / 83 |
-| `gen-borrowed` | 2 / 6 / 11 | 2 / 0 / 11 | 6 / 12 / 99 |
-| `gen-close` | 4 / 5 / 12 | 4 / 0 / 12 | 7 / 11 / 54 |
-| `gen-div` | 0 / 14 / 0 | 0 / 0 / 0 | 7 / 102 / 91 |
-| `gen-fib` | 0 / 21 / 0 | 0 / 0 / 0 | 11 / 43 / 143 |
-| `gen-pipeline` | 0 / 40 / 0 | 0 / 0 / 0 | 20 / 74 / 420 |
-| `gen-tokenize-parse` | 0 / 34 / 34 | 0 / 0 / 34 | 17 / 55 / 357 |
-| `gen-value` | 0 / 13 / 0 | 0 / 0 / 0 | 7 / 38 / 98 |
-| `yield-callback` | 0 / 6 / 0 | 0 / 0 / 0 | 3 / 14 / 39 |
+| `for-data-div` | 3 / 0 / 17 | 3 / 0 / 17 | 7 / 19 / 83 |
+| `gen-borrowed` | 2 / 0 / 11 | 2 / 0 / 11 | 6 / 12 / 99 |
+| `gen-close` | 4 / 0 / 12 | 4 / 0 / 12 | 7 / 11 / 54 |
+| `gen-div` | 0 / 0 / 0 | 0 / 0 / 0 | 7 / 102 / 91 |
+| `gen-fib` | 0 / 0 / 0 | 0 / 0 / 0 | 11 / 43 / 143 |
+| `gen-pipeline` | 0 / 0 / 0 | 0 / 0 / 0 | 20 / 74 / 420 |
+| `gen-tokenize-parse` | 0 / 0 / 34 | 0 / 0 / 34 | 17 / 55 / 357 |
+| `gen-value` | 0 / 0 / 0 | 0 / 0 / 0 | 7 / 38 / 98 |
+| `yield-callback` | 0 / 0 / 0 | 0 / 0 / 0 | 3 / 14 / 39 |
 | `io-fuel` | 0 / 0 / 11 | 0 / 0 / 11 | 0 / 12 / 11 |
 
 `scripts/compile-scaling.sh --guard` passes: 1× 3.1 s, 8× 38.8 s, ratio 12.6 (19.3 before). The
@@ -9268,14 +9301,9 @@ backends; `corpus/comp-param-for.bc` moves from `pending/` to the corpus, and
   the run, not proved here.
 - A source parameter's argument is a call tree of generators; a block whose body is more than a
   call, or a stored generator passed at a source parameter, is refused there.
-- **Dispatched calls at a stored generator.** The pull handler's stored `κ` resumes one of two
-  codes: the machine of the stored generator's first observation, which makes its loop (`eStart`'s
-  `first`), or the observation drive's forwarding. So each element costs one or two dispatched
-  calls where `main`'s per-body machine made none (the table above). Merging the two codes makes
-  the layout cyclic (through the close path); making the loop where the generator is stored
-  performs the stored site's operation outside its handler, which the kernel refuses. Parity needs
-  a layout that tells the two apart by context (§35), or a first observation typed so that it
-  does not make the loop in a machine of its own.
+- **The start's `made` performs nothing before its first tick** (`eStart`'s start moves on at
+  once). The backend does not use this: the pull site's machine keeps a suspension state for
+  `made` that no run reaches.
 
 ---
 
@@ -9685,11 +9713,19 @@ Entry 54 (§55) is implemented in `lib/adapters.bc`, `Frontend/Elab/Effects.lean
 `lastFacts`, `machineOps`, `reifyReach`), `Backend2/Convert.lean` (`prepWorks`,
 `lastClauseDrive`, the fallback's ticks, drives and merged codes), `Backend2/Types.lean`
 (`cancelSummand`), `Backend2/Layout.lean`, `Backend2/Lower.lean` and the old backend's flow
-(`Backend/Clos/Flow.lean`); no change to `CDerives`, `Core/`, `Paper/` or `Support/`.
+(`Backend/Clos/Flow.lean`); the first observation of a stored loop in `Frontend/Sugar.lean`
+(`eStartSplit`, `pullView`); no change to `CDerives`, `Core/`, `Paper/` or `Support/`.
 
 ---
 
 ## Changelog
+
+- **1.04** (2026-10-22) — §55 (#564): a stored generator whose body loops keeps its call's start
+  until the first observation, which makes the loop value in the pull site's one handled
+  computation; the site's stored continuation is of one code. The eleven programs that store a
+  generator reach `main`'s counts (c429cbc), dispatched calls included; the old backend's
+  dispatched calls fall at the same programs (`corpus/counts.expected`). No output, golden or
+  status changes.
 
 - **1.03** (2026-10-22) — §55 (#564 R-1, #644 B2): a `for` body that yields to an outer site or
   loops is `[handle-last]`'s work; the adapters take their source as a source parameter,
