@@ -166,7 +166,6 @@ def inFn (params : Nat) (act : LM α) : LM (α × Nat × List Nat) := do
   let (a, n, _, ps) ← inFnF params act
   pure (a, n, ps)
 
-
 /-- Where a term's words go: locals, returned (padded to `k` words), or bound to a variable. -/
 inductive Dest where
   | to (ls : List Nat)
