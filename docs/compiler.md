@@ -589,8 +589,75 @@ erases what the old stage cannot hold. The order runs front to back: types into 
    fact of every compiled program. It also checks that every `copy` is of a value the copy helper
    duplicates soundly: its type (no `ref`, `mut`, capability or owning family), and at the
    layouts every closure class it reaches (no code with an environment value of such a type).
-5. **The effect-erasure postcondition** (§3.2), pinned per program in `counts.expected`.
-6. **`bcc-counts --sites`** reports a "recognised" column, the sites lowered by a recogniser rather
+5. **The closure classes are checked on every compile** (#674, `Backend2/LayoutCheck.lean`,
+   wired into every path that computes layouts in `Backend2/Driver.lean`: `checkedLayouts`,
+   `checkedFlow`). `Layouts` comes from a whole-program analysis (`Backend2/Layout.lean`): a
+   union-find over the places a value moves between, then a resolution into closure classes, boxes
+   and widths. The closure flow (`Backend2/Flow.lean`) is an inclusion-based 0-CFA over it. Neither
+   analysis is proved. The checker verifies their *results*. It does not use their solvers, and it
+   runs in time linear in the LIR and the layouts. A failure is the compiler's error:
+   `internal: closure classes not a fixed point: …`.
+   - **What it establishes.** The layouts are a solution of the constraints the analysis generates:
+     - at every site, each pair of places the analysis joins has one node (`Layout.lean` `walk`,
+       every term former and every primitive; `joinRe` for a read through a shared borrow);
+     - a closure of code `c` made at a node is in that node's class's codes, and `c`'s class
+       (`codeClass`) is that class. Every move joins its places, so a call's class holds every
+       code that can reach the call;
+     - every code of a class has the class's kind and components, argument and answer nodes, and
+       `codeEnv` as its environment. A class holds no code twice, and `codeClass` is its inverse;
+     - every variable's node, every function's answer node and `main`'s node are a layout of its
+       `LTy` (`build`), up to the formers `join` lets share a node;
+     - the fields not boxed, together with the environments of the classes not on the heap, have no
+       cycle. Every node's width and triviality are `resolve`'s equations over its children;
+     - every pointer node's cell holds its contents' width, or is a slot of the contents' integer
+       width. Where one run-time cell is seen at two pointer nodes (`swap`, `lend`, a pointer read
+       through a shared borrow), both have one size;
+     - each machine's frame node and each site's `κ` region node is unique, and the region is the
+       one in `Layouts.regions`;
+     - the flow's sets satisfy its inclusion constraints, and every direct call (`known`) is of a
+       set of one code.
+   - **What it does not check.** Whether the boxes and heap classes are minimal: any choice that
+     satisfies the equations is a sound layout. Whether a cell's width is the widest of its
+     checker cell class (`Checked.cells`): the check is the flow-level property the lowering
+     needs, not the type-level rule that produced it. And whether the checker's constraints
+     cover every run-time move: they are the same moves the analysis reads, re-derived
+     independently, so a move both miss is missed.
+   - **What stays trusted.** That `Lower` uses the checked facts correctly: it reads each
+     variable's node, each class's codes and tags, the boxes, widths and cells, and the direct
+     calls, as they mean.
+   - **Reject tests** (`scripts/check-layout-reject.sh`, a gate step, through `bcc lir
+     --layout-reject`). These perturb a program's computed layouts and flow:
+     - drop a code from a class or from `codeClass`;
+     - merge two classes of different widths;
+     - change a width;
+     - unbox a boxed field;
+     - keep a heap class inline;
+     - shrink a cell;
+     - split a variable's node from its places;
+     - drop a code from a flow set;
+     - claim a direct call where two codes reach.
+
+     The check must refuse every one on a fixed set of programs.
+   - **Its first finding.** The flow's solver linked a code to each variable's call sites once per
+     (variable, component, code), not once per site. A variable called in several arms of a `case`
+     got its answer and argument moves only at its first site. `for-yield-branch` and
+     `state-machine` failed the check: a call's answer set was empty where its class's code
+     reaches it. Their classes held one code, so the call was direct anyway. A set missing a code
+     but holding one other would have licensed a direct call of the wrong code. The solver now
+     links each site.
+   - **Cost** (`bcc compile --backend new --timings` on `scripts/compile-scaling.sh`'s body). The
+     layout check takes 20 ms at 1× (layout 295 ms), 198 ms at 8× (4376 ms) and 525 ms at 16×
+     (20858 ms). The flow check takes 1, 20 and 45 ms. The whole compile grows by about 3% at 1×
+     and 8× (1377 → 1415 ms, 18308 → 18918 ms). This includes the checks of the layouts the
+     conversion reads for its state machines. The output is byte-identical.
+   - **This is not the final state.** It makes the classes a checked fact without proving the
+     analysis. #674 replaces it with one of three options:
+     - (a) defunctionalisation in Core, re-checked by the kernel (whole-program compilation);
+     - (b) closure types in Core that distinguish codes, specialised per instance (a kernel
+       change);
+     - (c) uniform boxed closures (no analysis, and no zero cost).
+6. **The effect-erasure postcondition** (§3.2), pinned per program in `counts.expected`.
+7. **`bcc-counts --sites`** reports a "recognised" column, the sites lowered by a recogniser rather
    than a node's field. It is pinned at 0.
 
 ### 5.3 Predicted #537 rows
