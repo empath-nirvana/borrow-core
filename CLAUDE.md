@@ -70,6 +70,11 @@ re-establish its safety with a lint, an invariant or a runtime check.
 - **Hard stop:** stop and report `STOP: KERNEL WORK` before writing a lowering that invents a
   value the kernel never typed and decides its copies, drops or lifetime.
 - **When the kernel cannot express what a lowering needs,** change the kernel (Changing Core).
+
+This is about the kernel's purpose, not doctrine. Ordinary compiler bookkeeping that cannot
+affect ownership, linearity or borrow safety (register choice, block layout, a loop counter's
+representation) is fine outside the kernel. The alarm is an unproved pass rebuilding what the
+kernel exists to guarantee.
 <!-- ANCHOR_END: every-stage-scope -->
 
 ## Growth discipline
