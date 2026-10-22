@@ -583,7 +583,12 @@ erases what the old stage cannot hold. The order runs front to back: types into 
 4. **Lints verify, never derive.** After each stage the gate runs a lint of its output (GHC's Core
    Lint): every variable has its type, every node's annotation agrees with its children's, every
    variable is consumed once, every pointer has a mode and an allocation class. A lint may reject.
-   It may not fill in an annotation. A missing annotation is the producing stage's bug.
+   It may not fill in an annotation. A missing annotation is the producing stage's bug. The LIR
+   lint runs on every compile, not only in the gate (`Backend2/Driver.lean`, `lintedLirOf`): the
+   lowering does not track consumption, so the lint is what makes single consumption a checked
+   fact of every compiled program. It also checks that every `copy` is of a value the copy helper
+   duplicates soundly: its type (no `ref`, `mut`, capability or owning family), and at the
+   layouts every closure class it reaches (no code with an environment value of such a type).
 5. **The effect-erasure postcondition** (§3.2), pinned per program in `counts.expected`.
 6. **`bcc-counts --sites`** reports a "recognised" column, the sites lowered by a recogniser rather
    than a node's field. It is pinned at 0.

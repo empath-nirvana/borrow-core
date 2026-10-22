@@ -136,7 +136,7 @@ echo "  (t, m)"
 # Seconds of stage $2 in timings file $1 (the total when $2 is `total`).
 stageMs() { awk -F': ' -v s="$2" '$1 == s { split($2, a, " "); print a[1] }' "$1"; }
 
-stages=("check" "lir" "layout" "flow" "lower" "wasm" "print" "total")
+stages=("check" "lir" "lint" "layout" "lint copies" "flow" "lower" "wasm" "print" "total")
 for k in "${scales[@]}"; do
   gen "$k" > "$tmp/scale$k.bc"
   "$bcc" compile --backend new --timings "$tmp/scale$k.bc" -o "$tmp/scale$k.wat" 2> "$tmp/scale$k.times"
