@@ -1,0 +1,37 @@
+-- #669 spike: `corpus/reject/gen-self-borrow.bc` at its `for` site, as an effect-free core term.
+--
+-- The surface program is refused: its `yield` is inside a borrow block of the generator's own
+-- cell, and a lend callback's row has only abortive operations (T1, #172). At `main`'s `for` the
+-- clause (`acc = acc + x`) resumes in tail position, so after `tail_resumes` the `yield` is a call
+-- of the work: the borrow is held across a call, not across a suspension, and the plain borrow rule
+-- types it. The cell is borrowed for the one call and handed back to be freed.
+--
+-- Answer: i32[5] (the surface program's meaning), `live 0`.
+
+def work : !U (i32 * i32 -o F i32) =
+  !thunkv fun (p : i32 * i32) ->
+      let (x, acc) = p;
+      return (unbang host[add32]) (acc, x)
+
+-- `selfref`'s copy for `main`'s site, the work called where it performed `yield(*b)`.
+def selfref : !U (i32 -o F i32) =
+  !thunkv fun (acc : i32) ->
+      v0 : i32 <- return i32[5];
+      c <- return alloc[i32] v0;
+      lend <- return withbor1['x, i32, i32] c (thunkv Fun 'x < dom.
+            return (thunkv fun (b : imm 'x i32) ->
+                v <- return withload['x, 'y, i32, i32] b (thunkv Fun 'y < dom.
+                      return (thunkv fun (dv : view 'y i32) ->
+                          return boxed['y] dv));
+                wk <- return unbang work;
+                a <- return (v, acc);
+                acc2 <- force wk a;
+                return boxed['x] acc2));
+      let (c, acc3) = lend;
+      d <- return free[i32] c;
+      return acc3
+
+main : F i32 =
+  s <- return unbang selfref;
+  a : i32 <- return i32[0];
+  force s a

@@ -1,0 +1,39 @@
+-- #669 spike: `p5-self-borrow-stored.bc` with the machine boxed as a value form (no let-bound
+-- thunk, `p7-box-let-bound.bc`), so that the box rule sees what it captures. Expected to be refused.
+--
+-- With `κ` defunctionalised, the stored generator's state at the `yield` holds the borrow `b` of
+-- the generator's own cell. The borrow exists only inside `withbor1`'s callback, so the machine
+-- that holds it must be returned out of the callback, boxed at the borrow's lifetime, and its
+-- owner handed back beside it. The box rule refuses the result: a thunk whose environment holds
+-- `imm 'x i32` does not outlive `'x`'s scope. Typing it needs a lend whose scope is the codata's
+-- lifetime (SPEC §7 *Open*, lifetime-indexed iteration; §14 *Borrow scopes over loops*, the
+-- spanning lend of `experiments/LoopBorrow`), with the owner inside the machine: a self-borrow.
+
+type Pull = U (nu X. F (i32 * U X + (0 + U X)) & F 1)
+
+main : F i32 =
+  v0 : i32 <- return i32[5];
+  c <- return alloc[i32] v0;
+  lend <- return withbor1['x, i32, Pull] c (thunkv Fun 'x < dom.
+        return (thunkv fun (b : imm 'x i32) ->
+            st <- return (!thunkv fun (s : imm 'x i32 + 1) ->
+                < case s {
+                    inl b2 -> v <- return withload['x, 'y, i32, i32] b2 (thunkv Fun 'y < dom.
+                          return (thunkv fun (dv : view 'y i32) -> return boxed['y] dv));
+                      return (inl (v, (inr () : imm 'x i32 + 1)) : i32 * (imm 'x i32 + 1) + (0 + (imm 'x i32 + 1)))
+                  | inr u -> return (inr (inr (inr () : imm 'x i32 + 1)) : i32 * (imm 'x i32 + 1) + (0 + (imm 'x i32 + 1)))
+                  },
+                  case s { inl b2 -> return () | inr u -> return () } >);
+            f <- return unfold[nu X. F (i32 * U X + (0 + U X)) & F 1, imm 'x i32 + 1] st;
+            s0 : imm 'x i32 + 1 <- return inl b;
+            return boxed['x] (thunkv nu_in < fu <- return unbang f; (nu_out force fu s0).1,
+                fu <- return unbang f; (nu_out force fu s0).2 >)));
+  let (c, g) = lend;
+  o <- (nu_out force g).1;
+  d <- return free[i32] c;
+  case o {
+    inl p -> let (x, g2) = p;
+      e <- (nu_out force g2).2;
+      return x
+  | inr q -> case q { inl z -> absurd z | inr g2 -> e <- (nu_out force g2).2; return i32[0] }
+  }

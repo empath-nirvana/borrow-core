@@ -1,0 +1,17 @@
+-- #669 spike: a syntactic hazard for Core → Core rewrites. Expected to be refused, kept as evidence.
+--
+-- `p3`'s finished task, with the thunk let-bound before it is boxed. `boxed[top] (thunkv …)` is
+-- accepted (as `lib/async.bc` writes it, and `p3-async-tree-iter.bc`); the same value bound to a
+-- variable first is refused: a variable of type `U C` is a leaf of the outlives judgment, so the box
+-- rule cannot see that what it captures outlives `top`. A rewrite that let-floats a thunk out of a
+-- `boxed` (or binds an `unbang unfold[…]` before a box) turns an accepted term into a refused one.
+
+type TaskU = U (nu X. F (i64 + box top U X) & F 1)
+
+main : F i64 =
+  v : i64 <- return i64[7];
+  t : TaskU <- return (thunkv nu_in < return (inl v : i64 + box top TaskU), return () >);
+  b <- return boxed[top] t;
+  u <- return unbox b;
+  o <- (nu_out force u).1;
+  case o { inl x -> return x | inr r -> u2 <- return unbox r; c <- (nu_out force u2).2; return i64[0] }

@@ -1,0 +1,43 @@
+-- #669 spike: a lend from outside held across a suspension, encoded without storing the borrow:
+-- the suspended computation gives the borrow back at each suspension, and the lender passes it
+-- again at each resume. `κ`'s observation takes the borrow as an argument (SPEC §22: an observation
+-- with an argument in which `X` does not occur).
+--
+-- The generator adds `k` to the lender's cell through a `mut` borrow at each step and yields the
+-- cell's value. Its machine's state is `k` alone; `next` takes `mut 'a i32` and hands it back with
+-- the element. The lender (`main`) lends its cell once, at `'a`, and resumes the machine three times
+-- inside that lend, passing the borrow each time; then it closes the machine. The borrow's extent is
+-- the lender's scope; the machine never holds it between observations.
+--
+-- Answer: i32[25]: the cell goes 5 → 6 → 8 → 11 (k = 1, 2, 3), and 6 + 8 + 11 = 25; `live 0`.
+
+main : F i32 =
+  v0 : i32 <- return i32[5];
+  c <- return alloc[i32] v0;
+  r <- return withbor2['a, top, i32, i32] c (thunkv Fun 'a < dom.
+        return (thunkv fun (m : mut 'a i32) ->
+            st <- return (!thunkv fun (k : i32) ->
+                  < fun (b : mut 'a i32) ->
+                      w <- return withswap['a, i32, i32] b (thunkv fun (x : i32) ->
+                            y <- return (unbang host[add32]) (x, k);
+                            return (y, y));
+                      let (b2, y) = w;
+                      return (b2, (y, (unbang host[add32]) (k, i32[1]))),
+                    return () >);
+            f <- return unbang unfold[nu X. (mut 'a i32 -o F (mut 'a i32 * (i32 * U X))) & F 1, i32] st;
+            k0 : i32 <- return i32[1];
+            g <- return (thunkv nu_in < (nu_out force f k0).1, (nu_out force f k0).2 >);
+            o1 <- (nu_out force g).1 m;
+            let (m1, p1) = o1;
+            let (x1, g1) = p1;
+            o2 <- (nu_out force g1).1 m1;
+            let (m2, p2) = o2;
+            let (x2, g2) = p2;
+            o3 <- (nu_out force g2).1 m2;
+            let (m3, p3) = o3;
+            let (x3, g3) = p3;
+            e <- (nu_out force g3).2;
+            return boxed['a] (unbang host[add32]) ((unbang host[add32]) (x1, x2), x3)));
+  let (c, s) = r;
+  d <- return free[i32] c;
+  return s

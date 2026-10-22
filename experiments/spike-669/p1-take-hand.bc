@@ -1,0 +1,68 @@
+-- #669 spike, program 1: `corpus/capture-take-hand.bc` as an effect-free core term, written by hand.
+--
+-- The `for`'s clause is `[handle-last]`'s shape (SPEC §51): its work `take_work` answers `inl w`
+-- (resume with the threaded variables) or `inr z` (cancel, then leave with `z`). T-B1
+-- (`last_resume_direct`) replaces each `perform` of the producer by a call of the work and, on
+-- `inl w`, the rest of the producer at `w`; T-B1′ (`last_cancel_direct`, `kappa_cancel_steps`)
+-- replaces, on `inr z`, the cancel of `κ` by the finalisers of the region between the `perform`
+-- and the `handle` (here the drop of `c`, `free`) followed by the exit `inr (z, ())`. H-ret
+-- (`catch_ret`) gives the end of the producer `inl (w, ())`. The handle node is gone: `main`
+-- calls the producer. No row in any type; nothing is captured.
+--
+-- Answer: inr (), with `live 0`, as the golden `corpus/capture-take-hand.out`.
+
+-- The clause's work: the body of the `for`, at the threaded variables (n, stopped).
+def take_work : !U (1 * (i32 * (1 + 1)) -o F (i32 * (1 + 1) + i32 * (1 + 1))) =
+  !thunkv fun (p : 1 * (i32 * (1 + 1))) ->
+      let (x, w) = p;
+      let () = x;
+      let (n, stopped) = w;
+      case (unbang host[eq32]) (n, i32[0]) {
+        inl e -> return inl ((unbang host[sub32]) (n, i32[1]), stopped)
+      | inr t -> return inr (n, (inr () : 1 + 1))
+      }
+
+-- The producer with the clause's work called where it performed. Each `inr` arm is the cancel of
+-- the region: its one finaliser, the drop of `c`, then the exit.
+def producer : !U ((i32 * (1 + 1)) * 1 -o F ((i32 * (1 + 1)) * 1 + (i32 * (1 + 1)) * 1)) =
+  !thunkv fun (pp : (i32 * (1 + 1)) * 1) ->
+      let (w0, u) = pp;
+      let () = u;
+      v : 1 + 1 <- return inl ();
+      c <- return alloc[1 + 1] v;
+      wk <- return unbang take_work;
+      a1 <- return ((), w0);
+      r1 <- force wk a1;
+      case r1 {
+        inl w1 -> wk <- return unbang take_work;
+          a2 <- return ((), w1);
+          r2 <- force wk a2;
+          case r2 {
+            inl w2 -> wk <- return unbang take_work;
+              a3 <- return ((), w2);
+              r3 <- force wk a3;
+              case r3 {
+                inl w3 -> d <- return free[1 + 1] c;
+                  return inl (w3, ())
+              | inr z -> d <- return free[1 + 1] c;
+                  return inr (z, ())
+              }
+          | inr z -> d <- return free[1 + 1] c;
+              return inr (z, ())
+          }
+      | inr z -> d <- return free[1 + 1] c;
+          return inr (z, ())
+      }
+
+main : F (1 + 1) =
+  pg <- return unbang producer;
+  a0 : (i32 * (1 + 1)) * 1 <- return ((i32[1], (inl () : 1 + 1)), ());
+  j <- force pg a0;
+  jj : (i32 * (1 + 1)) * 1 <- case j {
+      inl a -> return a
+    | inr e -> return e
+    };
+  let (w, g) = jj;
+  let () = g;
+  let (n, stopped) = w;
+  return stopped

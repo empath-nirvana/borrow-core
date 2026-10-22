@@ -1,0 +1,23 @@
+-- #669 spike: `corpus/reject/for-lend-resumes.bc` at its `for` site, effect-free. Written at the
+-- surface with no effect: the elaboration is sugar into core (a counted walk of `&a`), and the
+-- kernel checks the result.
+--
+-- The surface program is refused: the `for` over `&a` lends `a` around the whole loop, and its body
+-- performs `yield`, which resumes (T1, #172). `main`'s clause (`acc = acc + x`) resumes in tail
+-- position, so after `tail_resumes` the `yield(*x)` is a call of the work, and the lend of `a`
+-- spans calls only.
+--
+-- Answer: i32[6] (1 + 2 + 3, the surface program's meaning), `live 0`.
+
+fn tab(i: i32) -> i32 = i + 1
+
+fn work(x: i32, acc: i32) -> i32 = acc + x
+
+-- `elems_of`'s copy for `main`'s site, the work called where it performed `yield`.
+fn elems_of(acc0: i32) -> i32 =
+  let a = array_new[i32] (3, tab);
+  let mut acc = acc0;
+  for x in &a { acc = work(*x, acc) };
+  acc
+
+main -> i32 = elems_of(0)

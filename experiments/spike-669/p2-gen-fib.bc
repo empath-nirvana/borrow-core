@@ -1,0 +1,85 @@
+-- #669 spike, program 2: `corpus/gen-fib.bc` as an effect-free core term, written by hand.
+--
+-- `take(10, fib())` stores `fib`'s generator: a handler site whose clause keeps `κ` (`stored`,
+-- SPEC §15 *Stored generators*): `yield(v)` answers `inl (v, rest)` with
+-- `rest = thunkv nu_in ⟨(force κ).1 (), (force κ).2⟩`. Here `κ` is a core value: the generator's
+-- machine at the resumption point after the `yield`, with the variables live there. `κ` is
+-- defunctionalised: the point is a summand of the machine's state, its live variables (a, b) the
+-- summand's payload, resuming it (`kappa_resume_steps`) is the step's arm for that summand, and
+-- cancelling it (`kappa_cancel_steps`) is the close of that state, which drops what it holds. The
+-- stored generator is then an `unfold` at `pull i32 0 1` (§7 coiteration), with no row.
+--
+-- `take` is a generator whose `for` site is `main`'s, with a tail-resumptive clause
+-- (`acc = acc + x`): its copy for that site calls the work where it performed `yield`
+-- (`tail_resumes`), and the copy's loop has no row. `break` closes the source (`(nu_out it).2`) and
+-- finishes the copy's loop with the threaded `acc`.
+--
+-- Answer: i32[88], `live 0`, as `corpus/gen-fib.out`.
+
+type Pull = U (nu X. F (i32 * U X + (0 + U X)) & F 1)
+
+-- `fib`'s machine. State: `inl ()` before the first observation (it runs nothing when called);
+-- `inr (a, b)` suspended at the `yield` of `a`, i.e. its stored `κ`. Each `next` resumes the
+-- point: the code after the `yield` (c = a + b; a = b; b = c), the loop's back edge, then the
+-- next `yield`, which suspends again.
+def fib_step : !U (1 + i32 * i32 -o F (i32 * (1 + i32 * i32) + (0 + (1 + i32 * i32))) & F 1) =
+  !thunkv fun (s : 1 + i32 * i32) ->
+      < case s {
+          inl u -> return inl (i32[0], (inr (i32[0], i32[1]) : 1 + i32 * i32))
+        | inr ab -> let (a, b) = ab;
+            c <- return (unbang host[add32]) (a, b);
+            return inl (b, (inr (b, c) : 1 + i32 * i32))
+        },
+        case s { inl u -> return () | inr ab -> let (a, b) = ab; return () } >
+
+def fib : !(1 => Pull) =
+  !thunkv fun (u : 1) ->
+      f <- return unbang unfold[nu X. F (i32 * U X + (0 + U X)) & F 1, 1 + i32 * i32] fib_step;
+      s0 : 1 + i32 * i32 <- return inl u;
+      return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >)
+
+-- The site's work: `acc = acc + x`, resumed in tail position.
+def work : !U (i32 * i32 -o F i32) =
+  !thunkv fun (p : i32 * i32) ->
+      let (x, acc) = p;
+      return (unbang host[add32]) (acc, x)
+
+-- `take`'s copy for `main`'s site, its body's one loop (the `for` over `it`). State: the source,
+-- the counter `i`, `n` and the threaded `acc`.
+def take_step : !U (Pull * (i32 * (i32 * i32)) -o F (i32 + Pull * (i32 * (i32 * i32))) & F 1) =
+  !thunkv fun (s : Pull * (i32 * (i32 * i32))) ->
+      < let (it, r) = s;
+        let (i, r2) = r;
+        let (n, acc) = r2;
+        o <- (nu_out force it).1;
+        case o {
+          inl xr -> let (x, it2) = xr;
+            case (unbang host[lt_s32]) (i, n) {
+              inl ge -> c <- (nu_out force it2).2;
+                return inl acc
+            | inr lt -> wk <- return unbang work;
+                a <- return (x, acc);
+                acc2 <- force wk a;
+                return inr (it2, ((unbang host[add32]) (i, i32[1]), (n, acc2)))
+            }
+        | inr q -> case q {
+            inl z -> absurd z
+          | inr it2 -> return inr (it2, (i, (n, acc)))
+          }
+        },
+        let (it, r) = s;
+        let (i, r2) = r;
+        (nu_out force it).2 >
+
+def take : !(i32 * (Pull * i32) => U loop i32 1) =
+  !thunkv fun (p : i32 * (Pull * i32)) ->
+      let (n, q) = p;
+      let (it, acc) = q;
+      f <- return unbang unfold[loop i32 1, Pull * (i32 * (i32 * i32))] take_step;
+      s0 : Pull * (i32 * (i32 * i32)) <- return (it, (i32[0], (n, acc)));
+      return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >)
+
+main : F U loop i32 1 =
+  g <- return (unbang fib) ();
+  a <- return (i32[10], (g, i32[0]));
+  return (unbang take) a

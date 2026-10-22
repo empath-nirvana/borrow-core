@@ -1,0 +1,172 @@
+-- #669 spike, program 1b: `corpus/for-yield-branch.bc` as an effect-free core term, written by hand.
+--
+-- `range` loops (a `while`), so its body is one `unfold` at `Loop_Σ` (SPEC §14, §15) whose
+-- observations perform `yield`. Each `for` is a site with its own copy of the generator (§15); the
+-- rewrite puts the site's clause into the copy:
+--
+-- * loops 1 and 2: the clause resumes in tail position on every path (`effHandleT`); its work is
+--   called where the copy performs (`tail_resumes`, `kappa_resume_steps`), and the copy's step
+--   goes on with the work's answer;
+-- * loop 3: the clause is `[handle-last]`'s (§51): `inl w` resumes (T-B1), `inr z` cancels `κ`
+--   and leaves with `z` (T-B1′). The region between the `perform` and the `handle` holds no owned
+--   value, so the cancel's finalisers are none, and the step finishes the loop with `inr z`.
+--
+-- The handled copy's loop is then a `Loop` with no row: `Loop W 1` (loops 1, 2) or
+-- `Loop (W + W) 1` (loop 3, finished or broken). `main` is one state machine (§14, *One state
+-- machine per body*) whose states hold the copy's loop and the variables live after it, and the
+-- runtime drives it. No `handle`, no `perform`, no row.
+--
+-- Answer: i32[206495], `live 0`, as `corpus/for-yield-branch.out`.
+
+-- Loop 1's work: (x, (evens, odds)).
+def work1 : !U (i32 * (i32 * i32) -o F (i32 * i32)) =
+  !thunkv fun (p : i32 * (i32 * i32)) ->
+      let (x, w) = p;
+      let (evens, odds) = w;
+      m <- case (unbang host[rem_s32]) (x, i32[2]) { inl q -> return q | inr u -> return i32[0] };
+      case (unbang host[eq32]) (m, i32[0]) {
+        inl e -> return (evens, (unbang host[add32]) (odds, i32[1]))
+      | inr t -> return ((unbang host[add32]) (evens, x), odds)
+      }
+
+-- Loop 2's work: (x, big).
+def work2 : !U (i32 * i32 -o F i32) =
+  !thunkv fun (p : i32 * i32) ->
+      let (x, big) = p;
+      y <- return (unbang host[mul32]) (x, x);
+      case (unbang host[gt_s32]) (y, i32[50]) {
+        inl e -> case (unbang host[gt_s32]) (y, i32[10]) {
+            inl e2 -> return big
+          | inr t2 -> return (unbang host[add32]) (big, i32[1])
+          }
+      | inr t -> return (unbang host[add32]) (big, y)
+      }
+
+-- Loop 3's work: (x, first); `inr` is `break`.
+def work3 : !U (i32 * i32 -o F (i32 + i32)) =
+  !thunkv fun (p : i32 * i32) ->
+      let (x, first) = p;
+      case (unbang host[gt_s32]) ((unbang host[mul32]) (x, x), i32[20]) {
+        inl e -> return inl first
+      | inr t -> return inr x
+      }
+
+-- The copy of `range` for loop 1, with work1 called where it performed `yield`.
+def range1_step : !U (i32 * (i32 * (i32 * i32)) -o F ((i32 * i32) + i32 * (i32 * (i32 * i32))) & F 1) =
+  !thunkv fun (s : i32 * (i32 * (i32 * i32))) ->
+      < let (i, r) = s;
+        let (hi, w) = r;
+        case (unbang host[lt_s32]) (i, hi) {
+          inl f -> return inl w
+        | inr t -> wk <- return unbang work1;
+            a <- return (i, w);
+            w2 <- force wk a;
+            return inr ((unbang host[add32]) (i, i32[1]), (hi, w2))
+        },
+        let (i, r) = s;
+        let (hi, w) = r;
+        return () >
+
+def range1 : !(i32 * (i32 * (i32 * i32)) => U loop (i32 * i32) 1) =
+  !thunkv fun (s0 : i32 * (i32 * (i32 * i32))) ->
+      f <- return unbang unfold[loop (i32 * i32) 1, i32 * (i32 * (i32 * i32))] range1_step;
+      return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >)
+
+def range2_step : !U (i32 * (i32 * i32) -o F (i32 + i32 * (i32 * i32)) & F 1) =
+  !thunkv fun (s : i32 * (i32 * i32)) ->
+      < let (i, r) = s;
+        let (hi, w) = r;
+        case (unbang host[lt_s32]) (i, hi) {
+          inl f -> return inl w
+        | inr t -> wk <- return unbang work2;
+            a <- return (i, w);
+            w2 <- force wk a;
+            return inr ((unbang host[add32]) (i, i32[1]), (hi, w2))
+        },
+        let (i, r) = s;
+        let (hi, w) = r;
+        return () >
+
+def range2 : !(i32 * (i32 * i32) => U loop i32 1) =
+  !thunkv fun (s0 : i32 * (i32 * i32)) ->
+      f <- return unbang unfold[loop i32 1, i32 * (i32 * i32)] range2_step;
+      return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >)
+
+-- Loop 3's copy: the work's `inr z` finishes the loop with `inr z` (the cancel of κ: no
+-- finaliser in the region).
+def range3_step : !U (i32 * (i32 * i32) -o F ((i32 + i32) + i32 * (i32 * i32)) & F 1) =
+  !thunkv fun (s : i32 * (i32 * i32)) ->
+      < let (i, r) = s;
+        let (hi, w) = r;
+        case (unbang host[lt_s32]) (i, hi) {
+          inl f -> return inl (inl w : i32 + i32)
+        | inr t -> wk <- return unbang work3;
+            a <- return (i, w);
+            o <- force wk a;
+            case o {
+              inl w2 -> return inr ((unbang host[add32]) (i, i32[1]), (hi, w2))
+            | inr z -> return inl (inr z : i32 + i32)
+            }
+        },
+        let (i, r) = s;
+        let (hi, w) = r;
+        return () >
+
+def range3 : !(i32 * (i32 * i32) => U loop (i32 + i32) 1) =
+  !thunkv fun (s0 : i32 * (i32 * i32)) ->
+      f <- return unbang unfold[loop (i32 + i32) 1, i32 * (i32 * i32)] range3_step;
+      return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >)
+
+type L1 = U loop (i32 * i32) 1
+type L2 = U loop i32 1
+type L3 = U loop (i32 + i32) 1
+type S = L1 + ((L2 * (i32 * i32)) + (L3 * (i32 * (i32 * i32))))
+
+-- `main`'s machine: one state per copy's loop, with what follows it uses.
+def main_step : !U (S -o F (i32 + S) & F 1) =
+  !thunkv fun (s : S) ->
+      < case s {
+          inl l1 -> o <- (nu_out force l1).1;
+            case o {
+              inl w -> let (evens, odds) = w;
+                a <- return (i32[0], (i32[10], i32[0]));
+                l2 <- return (unbang range2) a;
+                return inr (inr (inl (l2, (evens, odds))) : S)
+            | inr l1b -> return inr (inl l1b : S)
+            }
+        | inr s2 -> case s2 {
+            inl q -> let (l2, eo) = q;
+              o <- (nu_out force l2).1;
+              case o {
+                inl big -> a <- return (i32[1], (i32[10], i32[0]));
+                  l3 <- return (unbang range3) a;
+                  return inr (inr (inr (l3, (big, eo))) : S)
+              | inr l2b -> return inr (inr (inl (l2b, eo)) : S)
+              }
+          | inr q -> let (l3, rest) = q;
+              let (big, eo) = rest;
+              o <- (nu_out force l3).1;
+              case o {
+                inl fin -> first <- case fin { inl a -> return a | inr b -> return b };
+                  let (evens, odds) = eo;
+                  return inl (unbang host[add32]) ((unbang host[add32]) ((unbang host[add32]) ((unbang host[mul32]) (evens, i32[10000]), (unbang host[mul32]) (odds, i32[1000])), (unbang host[mul32]) (big, i32[10])), first)
+              | inr l3b -> return inr (inr (inr (l3b, (big, eo))) : S)
+              }
+          }
+        },
+        case s {
+          inl l1 -> (nu_out force l1).2
+        | inr s2 -> case s2 {
+            inl q -> let (l2, eo) = q;
+              (nu_out force l2).2
+          | inr q -> let (l3, rest) = q;
+              (nu_out force l3).2
+          }
+        } >
+
+main : F U loop i32 1 =
+  a <- return (i32[0], (i32[10], (i32[0], i32[0])));
+  l1 <- return (unbang range1) a;
+  f <- return unbang unfold[loop i32 1, S] main_step;
+  s0 : S <- return inl l1;
+  return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >)

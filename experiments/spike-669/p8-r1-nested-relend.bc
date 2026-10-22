@@ -1,0 +1,100 @@
+-- #669 spike: `corpus/async-r1-nested.bc` as an effect-free core term, written by hand: a stored
+-- generator that holds `mut` lends of its own cells across its `yield`s (the relaxed lend R1, SPEC
+-- §29, under `PinLaw`), at two depths: `m` of `c` spans both `yield`s, `n` of `d` spans the first.
+--
+-- With `κ` defunctionalised the state at each `yield` would hold the open lends with their owners,
+-- which core refuses (`p5-self-borrow-stored.bc`). This term re-encodes them instead: the state
+-- holds the owners `c` and `d`, and each lend is opened again inside the observation that uses it
+-- (SPEC §14 *Borrow scopes over loops, per observation*). The same cells are written and read in
+-- the same order; the lends' extents are narrowed to the observations that use them. That is a
+-- program transformation that is legal here because nothing derived from a lend (a view, a
+-- reborrow, an iterator) is held across a `yield`; it is not one of the handler laws.
+--
+-- States: `inl ()` not started; `inr inl (c, d)` after `yield(1)`; `inr inr (c, (w, e))` after
+-- `yield(2)`. `close` frees what the state owns (the cancel's finalisers, innermost first).
+--
+-- Answer: i32[19], `live 0`, as `corpus/async-r1-nested.out`.
+
+type Pull = U (nu X. F (i32 * U X + (i32 + U X)) & F 1)
+type S = 1 + (ref i32 * ref i32 + ref i32 * (i32 * i32))
+type R = i32 * S + (i32 + S)
+
+-- The read of a cell through a `mut` lend that writes its value back (`modify x { x -> (x, x) }`).
+def peek : !(ref i32 => ref i32 * i32) =
+  !thunkv fun (c : ref i32) ->
+      return withbor2['l, top, i32, i32] c (thunkv Fun 'l < dom.
+          return (thunkv fun (m : mut 'l i32) ->
+              r <- return withswap['l, i32, i32] m (thunkv fun (x : i32) -> return (x, x));
+              let (m2, a) = r;
+              return boxed['l] a))
+
+def nested_step : !U (S -o F R & F 1) =
+  !thunkv fun (s : S) ->
+      < case s {
+          inl u -> c <- return alloc[i32] i32[5];
+            d <- return alloc[i32] i32[7];
+            return (inl (i32[1], (inr (inl (c, d) : ref i32 * ref i32 + ref i32 * (i32 * i32)) : S)) : R)
+        | inr t -> case t {
+            inl cd -> let (c, d) = cd;
+              pd <- return (unbang peek) d;
+              let (d, w) = pd;
+              e <- return free[i32] d;
+              return (inl (i32[2], (inr (inr (c, (w, e)) : ref i32 * ref i32 + ref i32 * (i32 * i32)) : S)) : R)
+          | inr cwe -> let (c, we) = cwe;
+              let (w, e) = we;
+              pc <- return (unbang peek) c;
+              let (c, a) = pc;
+              f <- return free[i32] c;
+              return (inr (inl (unbang host[add32]) ((unbang host[add32]) (a, w), e) : i32 + S) : R)
+          }
+        },
+        case s {
+          inl u -> return ()
+        | inr t -> case t {
+            inl cd -> let (c, d) = cd;
+              y <- return free[i32] d;
+              x <- return free[i32] c;
+              return ()
+          | inr cwe -> let (c, we) = cwe;
+              x <- return free[i32] c;
+              return ()
+          }
+        } >
+
+def nested : !(1 => Pull) =
+  !thunkv fun (u : 1) ->
+      f <- return unbang unfold[nu X. F (i32 * U X + (i32 + U X)) & F 1, S] nested_step;
+      s0 : S <- return inl u;
+      return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >)
+
+def step : !(Pull => i32 * Pull + i32) =
+  !thunkv fun (it : Pull) ->
+      o <- (nu_out force it).1;
+      case o {
+        inl p -> let (x, it1) = p;
+          return inl (x, it1)
+      | inr d -> case d {
+            inl r -> return inr r
+          | inr it2 -> return inl (i32[0], it2)
+          }
+      }
+
+main : F i32 =
+  g <- return (unbang nested) ();
+  o1 <- return (unbang step) g;
+  case o1 {
+    inl p1 -> let (x, g1) = p1;
+      o2 <- return (unbang step) g1;
+      case o2 {
+        inl p2 -> let (y, g2) = p2;
+          o3 <- return (unbang step) g2;
+          case o3 {
+            inl p3 -> let (z, g3) = p3;
+              c <- (nu_out force g3).2;
+              return i32[0]
+          | inr r -> return r
+          }
+      | inr r -> return r
+      }
+  | inr r -> return r
+  }

@@ -1,0 +1,199 @@
+-- #669 spike, program 3: `bench/async-tree-iter/main.bc` as an effect-free core term, written by hand
+-- (at n = 1000 keys and 4 tasks, answering the sum of the tasks' values instead of printing them).
+--
+-- The surface program spawns each task with `with spawn { task(n, r) }` (`lib/async.bc`): a handler
+-- whose `await` clause keeps `κ` (`stored`) and answers the task `boxed[top] (thunkv nu_in
+-- ⟨κ.1 (), κ.2⟩)`; `on_exhausted` is an abortive handler of `descend`'s recursion budget. Here:
+--
+-- * `κ` is defunctionalised: the one resumption point (the `await` in the loop body) is the state
+--   `St` of an `unfold` at the task's observation type, its payload the variables live there
+--   (`i`, `n`, `r`, the stack, `m`, `h`, `s`). Resuming `κ` (`kappa_resume_steps`) is the step's
+--   `next`: the rest of the turn after the `await`, then the next turn up to its `await`. Its
+--   cancel (`kappa_cancel_steps`) is the step's `close`: the region's finalisers, here the drops of
+--   the two arrays, which the checker inserts (SPEC §12). The handler's return clause (`catch_ret`)
+--   is the finished task.
+-- * The task's `await` loop is the unfold itself; the counted loop's `bounded_fix` at the resuming
+--   row is gone (one turn per observation).
+-- * `Exhausted` (abortive) is a sum: `descend` answers `Stack + 1`, and the task's handler of it
+--   (`catch_abort`) is the `case` that finishes the task with `-1`.
+-- * The scheduler (`queue`, `push`, `run_until_empty`, `resume`, `cancel` of `lib/async.bc`) was
+--   already effect-free core over `Task[A]`, and is used unchanged.
+--
+-- Answer: i64[1998000], the sum of the four values the surface program prints at `1000 4` (499500
+-- each: a task's sum of `(k * 7919 + r) % 1000` over its keys), `live 0`.
+
+include async
+
+def value : !(i32 * i32 => i32) =
+  !thunkv fun (p : i32 * i32) ->
+      let (k, r) = p;
+      x <- return (unbang host[add32]) ((unbang host[mul32]) (k, i32[7919]), r);
+      case (unbang host[rem_s32]) (x, i32[1000]) { inl q -> return q | inr u -> return i32[0] }
+
+def zero : !(i32 => i32) = !thunkv fun (i : i32) -> return i32[0]
+
+def put : !(array i32 * (i32 * i32) => array i32) =
+  !thunkv fun (p : array i32 * (i32 * i32)) ->
+      let (a, q) = p;
+      let (i, x) = q;
+      t <- return (unbang array_replace[i32]) (a, (i, x));
+      let (a, d) = t;
+      return a
+
+type Stack = array i32 * (array i32 * i32)
+
+-- `descend`'s recursion as `bounded_fix` (SPEC §20), with the budget's end an `inr ()` in place of
+-- the abort of `Exhausted`: the arrays are dropped there.
+def descend_step : !U ((1 + !U (1 -o Stack * (i32 * i32) -o F (Stack + 1))) * 1 -o Stack * (i32 * i32) -o F (Stack + 1)) =
+  !thunkv fun (sp0 : (1 + !U (1 -o Stack * (i32 * i32) -o F (Stack + 1))) * 1) ->
+      let (self, u) = sp0;
+      let () = u;
+      fun (p : Stack * (i32 * i32)) ->
+        let (st, q) = p;
+        let (lo, hi) = q;
+        case (unbang host[lt_s32]) (lo, hi) {
+          inl e -> return inl st
+        | inr t -> h2 <- case (unbang host[div_s32]) ((unbang host[sub32]) (hi, lo), i32[2]) {
+                inl d -> return d
+              | inr d -> return i32[0]
+              };
+            m <- return (unbang host[add32]) (lo, h2);
+            let (ms, rest) = st;
+            let (his, sp) = rest;
+            ms2 <- return (unbang put) (ms, (sp, m));
+            his2 <- return (unbang put) (his, (sp, hi));
+            case self {
+              inl x -> return inr ()
+            | inr g -> f <- return unbang g;
+                z <- return ();
+                a <- return ((ms2, (his2, (unbang host[add32]) (sp, i32[1]))), (lo, m));
+                force f z a
+            }
+        }
+
+def descend : !U (Stack * (i32 * i32) -o F (Stack + 1)) =
+  !thunkv fun (p : Stack * (i32 * i32)) ->
+      st <- return descend_step;
+      bf <- return unbang bounded_fix[1, Stack * (i32 * i32) -o F (Stack + 1)];
+      ba <- return (st, (i32[10000], ()));
+      force bf ba p
+
+def get : !(all 'a < top. array_imm 'a i32 * i32 => imm 'a i32 + 1) =
+  !thunkv Fun 'a < top.
+      return (thunkv fun (p : array_imm 'a i32 * i32) ->
+          let (v, i) = p;
+          return (unbang array_get['a, i32]) (v, i))
+
+def at : !(all 'a < top. array_imm 'a i32 * (i32 * i32) => i32) =
+  !thunkv Fun 'a < top.
+      return (thunkv fun (p : array_imm 'a i32 * (i32 * i32)) ->
+          let (v, q) = p;
+          let (i, d) = q;
+          case (unbang get) ['a] (v, i) {
+            inl g -> return withload['a, 'y, i32, i32] g (thunkv Fun 'y < dom.
+                  return (thunkv fun (dv : view 'y i32) -> return boxed['y] dv))
+          | inr u -> return d
+          })
+
+-- The read of slot `i` of an owned array, lent for the read.
+def read : !(array i32 * i32 => array i32 * i32) =
+  !thunkv fun (p : array i32 * i32) ->
+      let (a, i) = p;
+      return slice_borrow_imm['l, top, i32, i32] a (thunkv Fun 'l < dom.
+          return (thunkv fun (v : array_imm 'l i32) ->
+              x <- return (unbang at) ['l] (v, (i, i32[0]));
+              return boxed['l] x))
+
+-- The task's state at its `await`: (i, (n, (r, (stack, ((m, h), s))))).
+type St = i32 * (i32 * (i32 * (Stack * ((i32 * i32) * i64))))
+
+-- A turn of the loop from its head at `i`, up to its `await` (`inr` the state there) or past the
+-- loop's end (`inl s`).
+def turn : !(i32 * (i32 * (i32 * (Stack * i64))) => i64 + St) =
+  !thunkv fun (p : i32 * (i32 * (i32 * (Stack * i64)))) ->
+      let (i, q) = p;
+      let (n, q2) = q;
+      let (r, q3) = q2;
+      let (st, s) = q3;
+      case (unbang host[lt_s32]) (i, n) {
+        inl e -> return (inl s : i64 + St)
+      | inr t -> let (ms, rest) = st;
+          let (his, sp) = rest;
+          sp1 <- return (unbang host[sub32]) (sp, i32[1]);
+          rm <- return (unbang read) (ms, sp1);
+          let (ms, m) = rm;
+          rh <- return (unbang read) (his, sp1);
+          let (his, h) = rh;
+          return (inr (i, (n, (r, ((ms, (his, sp1)), ((m, h), s))))) : i64 + St)
+      }
+
+type TaskU = U (nu X. F (i64 + box top U X) & F 1)
+
+-- `κ` at the `await`: `next` resumes it (the rest of the turn, then the next turn to its `await`),
+-- `close` cancels it (the arrays dropped).
+def task_step : !U (St -o F (i64 + box top St) & F 1) =
+  !thunkv fun (k : St) ->
+      < let (i, q) = k;
+        let (n, q2) = q;
+        let (r, q3) = q2;
+        let (st, q4) = q3;
+        let (mh, s) = q4;
+        let (m, h) = mh;
+        s2 <- return (unbang host[add64]) (s, (unbang host[extend_s]) ((unbang value) (m, r)));
+        ds <- return unbang descend;
+        da <- return (st, ((unbang host[add32]) (m, i32[1]), h));
+        d <- force ds da;
+        case d {
+          inl st2 -> o <- return (unbang turn) ((unbang host[add32]) (i, i32[1]), (n, (r, (st2, s2))));
+            case o {
+              inl v -> return (inl v : i64 + box top St)
+            | inr k2 -> return (inr boxed[top] k2 : i64 + box top St)
+            }
+        | inr x -> return (inl (unbang host[sub64]) (i64[0], i64[1]) : i64 + box top St)
+        },
+        let (i, q) = k;
+        let (n, q2) = q;
+        let (r, q3) = q2;
+        let (st, q4) = q3;
+        return () >
+
+def finished : !(i64 => Task[i64]) =
+  !thunkv fun (v : i64) ->
+      return boxed[top] (thunkv nu_in < return (inl v : i64 + box top TaskU), return () >)
+
+-- `with spawn { task(n, r) }`: the task run to its first `await`.
+def spawn_task : !(i32 * i32 => Task[i64]) =
+  !thunkv fun (p : i32 * i32) ->
+      let (n, r) = p;
+      a1 <- return (unbang array_new[i32]) (i32[64], zero);
+      a2 <- return (unbang array_new[i32]) (i32[64], zero);
+      ds <- return unbang descend;
+      da <- return ((a1, (a2, i32[0])), (i32[0], n));
+      d <- force ds da;
+      case d {
+        inl st -> o <- return (unbang turn) (i32[0], (n, (r, (st, i64[0]))));
+          case o {
+            inl v -> return (unbang finished) v
+          | inr k -> f <- return unfold[nu X. F (i64 + box top U X) & F 1, St] task_step;
+              return boxed[top] (thunkv nu_in < fu <- return unbang f; (nu_out force fu k).1,
+                  fu <- return unbang f; (nu_out force fu k).2 >)
+          }
+      | inr x -> return (unbang finished) ((unbang host[sub64]) (i64[0], i64[1]))
+      }
+
+fn sum(xs: List[i64]) -> i64 =
+  let mut cur = xs;
+  let mut acc = i64[0];
+  let mut more = true;
+  while more {
+    match unroll cur {
+      inl u -> more = false; cur = (roll inl () : List[i64])
+    | inr (x, rest) -> acc = acc + x; cur = rest
+    }
+  };
+  acc
+
+main -> i64 =
+  let mut q = queue[i64]();
+  for r in 0..4 { q = push(q, spawn_task(1000, r)) };
+  sum(run_until_empty(q))

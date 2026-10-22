@@ -1,0 +1,57 @@
+-- #669 spike: `corpus/reject/gen-self-borrow.bc` as a STORED generator, effect-free, with the
+-- borrow not stored: the machine's state owns the cell, and the step that needs the borrow lends
+-- it again from the owned state (SPEC §14 *Borrow scopes over loops, per observation*). No
+-- self-pointer is held between observations. Compare `p5-self-borrow-stored.bc`, which stores the
+-- borrow and is refused by the box rule.
+--
+-- States: `inl ()` not started (the cell not yet allocated); `inr c` suspended at the `yield`,
+-- owning `c`. `next` from `inl` allocates, lends, reads and yields; from `inr` it frees the cell and
+-- finishes. `close` frees what the state owns.
+--
+-- Answer: i32[5] (the surface program's meaning), `live 0`.
+
+type Pull = U (nu X. F (i32 * U X + (1 + U X)) & F 1)
+type S = 1 + ref i32
+
+def read : !(ref i32 => ref i32 * i32) =
+  !thunkv fun (c : ref i32) ->
+      return withbor1['x, i32, i32] c (thunkv Fun 'x < dom.
+          return (thunkv fun (b : imm 'x i32) ->
+              v <- return withload['x, 'y, i32, i32] b (thunkv Fun 'y < dom.
+                    return (thunkv fun (dv : view 'y i32) -> return boxed['y] dv));
+              return boxed['x] v))
+
+def gen_step : !U (S -o F (i32 * S + (1 + S)) & F 1) =
+  !thunkv fun (s : S) ->
+      < case s {
+          inl u -> v0 : i32 <- return i32[5];
+            c <- return alloc[i32] v0;
+            r <- return (unbang read) c;
+            let (c, v) = r;
+            return (inl (v, (inr c : S)) : i32 * S + (1 + S))
+        | inr c -> d <- return free[i32] c;
+            return (inr (inl () : 1 + S) : i32 * S + (1 + S))
+        },
+        case s { inl u -> return () | inr c -> d <- return free[i32] c; return () } >
+
+main : F U loop i32 1 =
+  f <- return unbang unfold[nu X. F (i32 * U X + (1 + U X)) & F 1, S] gen_step;
+  s0 : S <- return inl ();
+  g : Pull <- return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >);
+  -- `main`'s `for x in selfref() { acc = acc + x }` over the stored generator: a drain (div).
+  st : !U (Pull * i32 -o F (i32 + Pull * i32) & F 1) <- return (!thunkv fun (p : Pull * i32) ->
+        < let (it, acc) = p;
+          o <- (nu_out force it).1;
+          case o {
+            inl xr -> let (x, it2) = xr;
+              return (inr (it2, (unbang host[add32]) (acc, x)) : i32 + Pull * i32)
+          | inr q -> case q {
+              inl u -> return (inl acc : i32 + Pull * i32)
+            | inr it2 -> return (inr (it2, acc) : i32 + Pull * i32)
+            }
+          },
+          let (it, acc) = p;
+          (nu_out force it).2 >);
+  l <- return unbang unfold[loop i32 1, Pull * i32] st;
+  a : Pull * i32 <- return (g, i32[0]);
+  return (thunkv nu_in < (nu_out force l a).1, (nu_out force l a).2 >)

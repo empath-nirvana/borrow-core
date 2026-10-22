@@ -1,0 +1,23 @@
+-- #669 spike: the lend-passed-at-resume encoding (`p9-lend-passed-at-resume.bc`) where the machine
+-- outlives any one lend: the lender owns its cell outside every lend, and lends it afresh for each
+-- resume, at a new lifetime each time (as a scheduler holding a task in its queue would). `κ`'s
+-- observation must then be generic in the lend's lifetime: `all 'b < top. mut 'b i32 -o …`.
+-- Expected to be refused, and kept as evidence of the rule that refuses it.
+
+type G = U (nu X. (forall 'b < top. (mut 'b i32 -o F (mut 'b i32 * (i32 * U X)))) & F 1)
+
+main : F i32 =
+  st <- return (!thunkv fun (k : i32) ->
+        < Fun 'b < top.
+            return (thunkv fun (b : mut 'b i32) ->
+              w <- return withswap['b, i32, i32] b (thunkv fun (x : i32) ->
+                    y <- return (unbang host[add32]) (x, k);
+                    return (y, y));
+              let (b2, y) = w;
+              return (b2, (y, (unbang host[add32]) (k, i32[1])))),
+          return () >);
+  f <- return unbang unfold[nu X. (forall 'b < top. (mut 'b i32 -o F (mut 'b i32 * (i32 * U X)))) & F 1, i32] st;
+  k0 : i32 <- return i32[1];
+  g : G <- return (thunkv nu_in < (nu_out force f k0).1, (nu_out force f k0).2 >);
+  e <- (nu_out force g).2;
+  return i32[0]
