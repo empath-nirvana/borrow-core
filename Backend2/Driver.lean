@@ -84,23 +84,25 @@ def shapeC : CTy → String
   | .eff _ _ _ _ _ _ C => shapeC C
 end
 
-mutual
-/-- The shapes of the code a value of the type may hold: each `U C` in it; `none` when it may
-hold code of any type (a type variable, `Unk`). -/
+/-- A computation type a continuation may have: `&` or `ν`, under `∀` and rows. -/
+def mayKont : CTy → Bool
+  | .amp .. | .nu _ => true
+  | .all _ _ C | .eff _ _ _ _ _ _ C => mayKont C
+  | _ => false
+
+/-- **The shapes of the code a value of the type holds**: each `U C` in it, outside the arrows.
+Code a function returns or is given is made by code of the program, whose frames that code holds
+(`Expr.hin` counts the frames of every λ and handled computation inside it). `none` when the
+value may hold code of any type (`Unk`) or a continuation (a `&` or a `ν`: `κ`,
+a stored generator), whose frames are another computation's.  `[spec §55]` -/
 def codeShapesV : VTy → Option (List String)
   | .unit | .zero | .int _ | .opq _ => some []
-  | .unk | .tvar _ => none
+  -- The typed term's types are closed: a type variable is a `μ`'s.
+  | .tvar _ => some []
+  | .unk => none
   | .tensor A B | .sum A B => do pure ((← codeShapesV A) ++ (← codeShapesV B))
   | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .mu A | .fam A => codeShapesV A
-  | .thunk C => do pure (shapeC C :: (← codeShapesC C))
-def codeShapesC : CTy → Option (List String)
-  | .ret A => codeShapesV A
-  | .arr A C => do pure ((← codeShapesV A) ++ (← codeShapesC C))
-  | .amp C D => do pure ((← codeShapesC C) ++ (← codeShapesC D))
-  | .top => some []
-  | .all _ _ C | .nu C => codeShapesC C
-  | .eff _ _ _ A B _ C => do pure ((← codeShapesV A) ++ (← codeShapesV B) ++ (← codeShapesC C))
-end
+  | .thunk C => if mayKont C then none else some [shapeC C]
 
 /-- The types of the variables free in `t` (indices at or past the binders inside it, `d`), read
 off its `var` nodes; a child at a fresh context reads no slot outside. -/
@@ -278,12 +280,11 @@ def directOK (c : Frontend.Check.Checked) (h : HNode) (j : Nat) (emptyFins : Boo
   let names := Frontend.Check.cond2Names (h.codeRow.map (·.n)).eraseDups ((h.names[j]?).getD none)
   let taken := match h.codeIn with
     | some [] => some ({} : ClauseKinds.HIn)
-    | some shs => if c.storing.isEmpty then takenFrames (codeNodes Frontend.Check.copiesFuel c.t) shs
-        else none
+    | some shs => takenFrames (codeNodes Frontend.Check.copiesFuel c.t) shs
     | none => none
   let bound := c.insideOf h.n ++ ClauseKinds.HIn.one 0 ++ taken.getD c.flowsKept
   emptyFins && decide (2 * h.E.length < 2 ^ 32) &&
-    Frontend.Check.cond2B bound (names.filter (· != divName)) &&
+    (names.filter (· != divName)).all (fun m => !(bound.names.contains m || bound.any)) &&
     (!names.contains divName || divAtMainOnly c)
 
 /-- **The `[handle-last]` works the checked facts license to call where their operation is
@@ -324,21 +325,37 @@ def machineOps (c : Frontend.Check.Checked) (io : Nat × (Nat → Bool) := (0, f
     MachSet := Id.run do
   let nodes := hnodes Frontend.Check.copiesFuel c.t c.ctx.length
   let direct := directFacts c io
-  let last := lastFacts c io
-  let mut out : MachSet := {}
-  for h in nodes do
-    for (k, j) in h.ks.zipIdx do
-      unless k.kind == .abortive || (k.kind == .tail && (direct.getD h.n [])[j]? == some true) ||
-          (k.kind == .last && last.contains (h.n, j.toUInt32)) do
-        out := out.insert (h.n, j.toUInt32)
-  -- A stored loop's `reify` (any but `main`'s): its observations suspend at each tick, so `tick` is
-  -- a machine operation (SPEC §54).
+  let mut last := lastFacts c io
   let mainR := if (mainReify? c.t).isSome then 1 else 0
-  if divHandlers Frontend.Check.copiesFuel c.t > mainR then out := out.insert (divName, 0)
-  let mut lt : Std.HashMap (UInt32 × UInt32) LTy := {}
-  for (key, (X, SW)) in last.toList do
-    if let .ok t := cancelSummand out X SW then lt := lt.insert key t
-  return { out with last := lt }
+  let mut out : MachSet := {}
+  -- A work whose row `Σ_W` holds a machine operation would suspend inside the code that performs
+  -- its operation, which its type does not say: that operation is a machine operation too, to a
+  -- fixed point (`last` only shrinks).  [spec §55]
+  for _ in [0:last.size + 1] do
+    out := {}
+    for h in nodes do
+      for (k, j) in h.ks.zipIdx do
+        unless k.kind == .abortive || (k.kind == .tail && (direct.getD h.n [])[j]? == some true) ||
+            (k.kind == .last && last.contains (h.n, j.toUInt32)) do
+          out := out.insert (h.n, j.toUInt32)
+    -- A stored loop's `reify` (any but `main`'s): its observations suspend at each tick, so `tick`
+    -- is a machine operation (SPEC §54).
+    if divHandlers Frontend.Check.copiesFuel c.t > mainR then out := out.insert (divName, 0)
+    let last' := last.filter fun _ (_, SW) => SW.all fun o => !out.contains (o.n, o.i)
+    if last'.size == last.size then break
+    last := last'
+  -- The cancel summands, a work's holding those of the operations its row holds: to a fixed
+  -- point.
+  let mut ms : MachSet := out
+  for _ in [0:last.size + 1] do
+    let mut more := false
+    for (key, (X, SW)) in last.toList do
+      if ms.last.contains key then continue
+      if let .ok (some t) := cancelSummand ms (fun k => last.contains k && !ms.last.contains k) X SW then
+        ms := { ms with last := ms.last.insert key t }
+        more := true
+    if !more then break
+  return ms
 
 /-- **The runtime answers every tick**  `[spec §53]`: the typed term's handlers of `Div` are
 `main`'s `reify` alone, when `main` is a loop the runtime drives (SPEC §11) and its value is

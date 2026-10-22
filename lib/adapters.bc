@@ -1,75 +1,79 @@
--- Generator adapters (SPEC §15). Each is a generic generator, written once and instantiated at the
--- types of each call: the instance is ordinary code at those types, so an adapter over a pure
--- source and one over a source that fails are two instances of one definition. Each body's loop
--- is `iterate` at its row (SPEC §14, §52), so a pipeline of adapters whose functions are known
--- makes no allocation; its dispatched calls are the loops' steps and resumes until B3 lowers
--- `iterate` natively.
+-- Generator adapters (SPEC §15, §55). Each is a generic generator, written once and instantiated at
+-- the types of each call: the instance is ordinary code at those types, so an adapter over a pure
+-- source and one over a source that fails are two instances of one definition.
 --
--- A source is a stored generator `U (pull A K R)` (`lib/yield.bc`): it gives `A`s, returns `K`,
--- and, closed early, hands back `R`; the call of a generator at a parameter of that type is its
--- stored generator. An adapter that runs its source to the end returns the source's `K`. One that
--- may stop the source early (`take`, `take_until`, `zip`) needs a source that returns what it
--- hands back when closed, `U (pull A K K)`: a pure source (`1`). A source that fails returns an
--- error it hands back no part of when closed (`i32 + 1`, closed `1`): stopped early it has no
--- error to report, and it is rejected there (`corpus/reject/take-failing.bc`).
+-- A source is a computation parameter that provides the iteration effect it yields by (SPEC §33):
+-- `it: (1 => K with Yield[A])`, a computation that yields `A`s and returns `K`. The adapter is a
+-- template in its source as it is in its types (SPEC §55): a call `map(range(0, 10), f)` is a
+-- call of `map`'s instance for the source `range(…)`, whose `for x in it(())` is the `for` over
+-- `range`'s call itself, so each `yield` of the source is a direct call of the adapter's loop
+-- body, and a pipeline of adapters is a nest of direct calls. The argument at a source is a call
+-- of a generator, or of an adapter at its own source (`take(filter(map(range(0, 10), f), p), 3)`,
+-- or `range(0, 10) |> map(f) |> filter(p) |> take(3)`). An adapter that stops its source early
+-- (`take`, `take_until`) cancels it, which hands nothing back: its source returns `1`, and one
+-- that fails (returns an error) is rejected there (`corpus/reject/take-failing.bc`).
+--
+-- `zip` steps two sources by hand, so it takes stored generators `U (pull A K R)` (`lib/yield.bc`):
+-- a call of a generator at a parameter of that type is its stored generator.
 --
 -- `include adapters` puts them in scope; only those a program calls are elaborated.
 
 include yield
 
 -- Each element `x` as `f(x)`.
-fn map[A, B, K, R](it: U (pull A K R), f: !(A => B)) -> K with Yield[B] =
-  let k = for x in it { yield(f(x)) };
+fn map[A, B, K](it: (1 => K with Yield[A]), f: !(A => B)) -> K with Yield[B] =
+  let k = for x in it(()) { yield(f(x)) };
   k
 
 -- The elements for which `p` holds. `p` takes the element and `filter` yields it after, so the
 -- element is copied: an `i32`, a `bool` or a tuple of them.
-fn filter[A, K, R](it: U (pull A K R), p: !(A => bool)) -> K with Yield[A] =
-  let k = for x in it { if p(x) { yield(x) } else { () } };
+fn filter[A, K](it: (1 => K with Yield[A]), p: !(A => bool)) -> K with Yield[A] =
+  let k = for x in it(()) { if p(x) { yield(x) } else { () } };
   k
 
--- The first `n` elements. The source is closed after the `n`-th, before it computes another.
-fn take[A, K](it: U (pull A K K), n: i32) -> K with Yield[A] =
-  if n <= 0 { k <- (nu_out (force it)).2; k } else {
+-- The first `n` elements. The source is cancelled after the `n`-th, before it computes another,
+-- and not run at all when `n <= 0`.
+fn take[A](it: (1 => 1 with Yield[A]), n: i32) -> 1 with Yield[A] =
+  if n <= 0 { () } else {
     let mut i = 0;
-    let k = for x in it { yield(x); i = i + 1; if i == n { break } else { () } };
-    k
+    for x in it(()) { yield(x); i = i + 1; if i == n { break } else { () } };
+    ()
   }
 
 -- The elements after the first `n`.
-fn skip[A, K, R](it: U (pull A K R), n: i32) -> K with Yield[A] =
+fn skip[A, K](it: (1 => K with Yield[A]), n: i32) -> K with Yield[A] =
   let mut i = 0;
-  let k = for x in it { if i < n { i = i + 1 } else { yield(x) } };
+  let k = for x in it(()) { if i < n { i = i + 1 } else { yield(x) } };
   k
 
 -- Each element with its position, from 0.
-fn enumerate[A, K, R](it: U (pull A K R)) -> K with Yield[i32 * A] =
+fn enumerate[A, K](it: (1 => K with Yield[A])) -> K with Yield[i32 * A] =
   let mut i = 0;
-  let k = for x in it { yield((i, x)); i = i + 1 };
+  let k = for x in it(()) { yield((i, x)); i = i + 1 };
   k
 
--- The elements of `a`, then those of `b`, which holds nothing (it is dropped, closed, if `a` is
--- closed first).
-fn chain[A, K, R](a: U (pull A K R), b: U (pull A 1 1)) -> K with Yield[A] =
-  let k = for x in a { yield(x) };
-  for x in b { yield(x) };
+-- The elements of `a`, then those of `b`, which returns `1` (it does not run if `a` is cancelled
+-- first).
+fn chain[A, K](a: (1 => K with Yield[A]), b: (1 => 1 with Yield[A])) -> K with Yield[A] =
+  let k = for x in a(()) { yield(x) };
+  for x in b(()) { yield(x) };
   k
 
 -- The elements of each `f(x)`, in order.
-fn flat_map[A, B, K, R](it: U (pull A K R), f: !(A => U (pull B 1 1))) -> K with Yield[B] =
-  let k = for x in it { for y in f(x) { yield(y) } };
+fn flat_map[A, B, K](it: (1 => K with Yield[A]), f: !(A => U (pull B 1 1))) -> K with Yield[B] =
+  let k = for x in it(()) { for y in f(x) { yield(y) } };
   k
 
--- The elements before the first for which `p` holds; the source is closed there.
-fn take_until[A, K](it: U (pull A K K), p: !(A => bool)) -> K with Yield[A] =
-  let k = for x in it { if p(x) { break } else { yield(x) } };
-  k
+-- The elements before the first for which `p` holds; the source is cancelled there.
+fn take_until[A](it: (1 => 1 with Yield[A]), p: !(A => bool)) -> 1 with Yield[A] =
+  for x in it(()) { if p(x) { break } else { yield(x) } };
+  ()
 
 -- The successive states `f(s, x)` from `s` (a running total). The state is yielded and kept, so it
 -- is copied.
-fn scan[A, S, K, R](it: U (pull A K R), s: S, f: !(S * A => S)) -> K with Yield[S] =
+fn scan[A, S, K](it: (1 => K with Yield[A]), s: S, f: !(S * A => S)) -> K with Yield[S] =
   let mut s = s;
-  let k = for x in it { s = f(s, x); yield(s) };
+  let k = for x in it(()) { s = f(s, x); yield(s) };
   k
 
 -- Pairs of an element of `a` and one of `b`, until either ends; `b` holds nothing. Each turn
@@ -113,10 +117,10 @@ fn zip[A, K, B](a: U (pull A K K), b: U (pull B 1 1)) -> K with Yield[A * B] =
   }
 
 -- The elements in lists of `n`, the last one shorter; each list holds its elements last first.
-fn chunks[A, K, R](it: U (pull A K R), n: i32) -> K with Yield[mu X. 1 + (A * X)] =
+fn chunks[A, K](it: (1 => K with Yield[A]), n: i32) -> K with Yield[mu X. 1 + (A * X)] =
   let mut acc = (roll inl () : mu X. 1 + (A * X));
   let mut m = 0;
-  let k = for x in it {
+  let k = for x in it(()) {
     acc = (roll inr (x, acc) : mu X. 1 + (A * X));
     m = m + 1;
     if m == n { yield(acc); acc = (roll inl () : mu X. 1 + (A * X)); m = 0 } else { () }
@@ -126,10 +130,10 @@ fn chunks[A, K, R](it: U (pull A K R), n: i32) -> K with Yield[mu X. 1 + (A * X)
 
 -- A source of bytes split into lines, each a list of its bytes, last first, without its newline;
 -- a last line without a newline is yielded too.
-fn lines[K, R](it: U (pull u8 K R)) -> K with Yield[mu X. 1 + (u8 * X)] =
+fn lines[K](it: (1 => K with Yield[u8])) -> K with Yield[mu X. 1 + (u8 * X)] =
   let mut line = (roll inl () : mu X. 1 + (u8 * X));
   let mut any = false;
-  let k = for b in it {
+  let k = for b in it(()) {
     if b == 10 {
       yield(line);
       line = (roll inl () : mu X. 1 + (u8 * X));
@@ -145,10 +149,10 @@ fn lines[K, R](it: U (pull u8 K R)) -> K with Yield[mu X. 1 + (u8 * X)] =
 -- Elements added into a state by `add`, which says when the state is full: then it is yielded and
 -- the next starts again from `s0`; a last state that is not full is yielded if anything was added
 -- to it. `chunks` is `batch` into lists by count; `batch` also groups by size or by a separator.
-fn batch[A, S, K, R](it: U (pull A K R), s0: S, add: !(S * A => S * bool)) -> K with Yield[S] =
+fn batch[A, S, K](it: (1 => K with Yield[A]), s0: S, add: !(S * A => S * bool)) -> K with Yield[S] =
   let mut s = s0;
   let mut any = false;
-  let k = for x in it {
+  let k = for x in it(()) {
     let (s2, full) = add(s, x);
     if full { yield(s2); s = s0; any = false } else { s = s2; any = true }
   };

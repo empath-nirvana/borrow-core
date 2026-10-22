@@ -528,6 +528,41 @@ where
 def matchTy (tps : List String) (σ : TySubst) (P A : VTy) : Option TySubst :=
   matchTyBy (fun a b => a.strip == b.strip) tps σ P A
 
+/-- `A` with `σ` applied until no name it binds is left (`σ` binds no name to a type that mentions
+it): the substitution a unification found, solved.  `[spec §55]` -/
+def substAll (σ : TySubst) (A : VTy) : VTy :=
+  (List.range (σ.length + 1)).foldl (fun A _ => A.subst σ) A
+
+/-- **First-order unification** of two types whose names `vs` are unknowns (on either side): the
+bindings `σ` extended, or `none` when they differ.  `[spec §55]` -/
+def unifyTy (vs : List String) (σ : TySubst) (P A : VTy) : Option TySubst :=
+  go fuel σ P A
+where
+  go : Nat → TySubst → VTy → VTy → Option TySubst
+    | 0, _, _, _ => none
+    | k + 1, σ, P, A =>
+      let P := substAll σ P
+      let A := substAll σ A
+      let both (P₁ A₁ P₂ A₂ : VTy) : Option TySubst := do go k (← go k σ P₁ A₁) P₂ A₂
+      match P, A with
+      | .name _ x, .name _ y => if x == y then some σ
+        else if vs.contains x then some ((x, A) :: σ)
+        else if vs.contains y then some ((y, P) :: σ) else none
+      | .name _ x, A => if vs.contains x && !A.tyNames.contains x then some ((x, A) :: σ) else
+          if P.strip == A.strip then some σ else none
+      | P, .name _ y => if vs.contains y && !P.tyNames.contains y then some ((y, P) :: σ) else
+          if P.strip == A.strip then some σ else none
+      | .tensor _ P₁ P₂, .tensor _ A₁ A₂ => both P₁ A₁ P₂ A₂
+      | .sum _ P₁ P₂, .sum _ A₁ A₂ => both P₁ A₁ P₂ A₂
+      | .lolli _ P₁ P₂, .lolli _ A₁ A₂ => both P₁ A₁ P₂ A₂
+      | .bang _ P', .bang _ A' => go k σ P' A'
+      | .ref _ P', .ref _ A' => go k σ P' A'
+      | .array _ P', .array _ A' => go k σ P' A'
+      | .app _ P₁ P₂, .app _ A₁ A₂ => both P₁ A₁ P₂ A₂
+      | .mu _ X P', .mu _ Y A' => if X.name == Y.name then go k σ P' A' else
+          if P.strip == A.strip then some σ else none
+      | P, A => if P.strip == A.strip then some σ else none
+
 /-- The type names `A` mentions among `tps`. -/
 def mentions (tps : List String) (A : VTy) : Bool :=
   tps.any fun x => (A.subst [(x, .unk .none)]).strip != A.strip
@@ -1163,6 +1198,10 @@ def Cx.lastOps (cx : Cx) (i : Inst) : Bool :=
   | some e => !e.ops.isEmpty && e.ops.all fun o => o.abortive || o.kind == .ctl .aff
   | none => false
 
+/-- The context with a source instance (`srcInst`) among its functions.  `[spec §55]` -/
+def Cx.withInst (cx : Cx) (g : FSig) (A : VTy) : Cx :=
+  { cx with env := { cx.env with fns := g :: cx.env.fns, sigs := (g.name, A) :: cx.env.sigs } }
+
 def Cx.ctlV (cx : Cx) (V : Val) : Bool := !(cx.ctl (rowV cx.env fuel V)).isEmpty
 def Cx.ctlC (cx : Cx) (M : Comp) : Bool := !(cx.ctl (rowC cx.env fuel M)).isEmpty
 
@@ -1759,6 +1798,132 @@ def bindValue (sp : Span) (x : Ident) (A : Option VTy) (rsp : Span) (bs : List B
     | _, _ => pure ()
   chain bs (.bind sp x A (.ret rsp V') N lin)
 
+/-! ### Source parameters  `[spec §55]`
+
+A **source parameter** is a computation parameter (§33) that provides an iteration effect and that
+the function's body uses once, as the source of a `for`: `for x in it(()) { … }`. A function with
+one is a template in the source, as it is in its type parameters (§15, *Generic functions*): a
+call of it at a call of a generator `g(W)` there is a call of its instance for the source, the
+template with the `for` over `g`'s call itself, `g`'s arguments the instance's parameters. The
+source of an instance may be a call of another such function, whose source is again a call: the
+instance is made for the whole call tree, its leaves (the arguments at parameters that are not
+sources) passed in. So the `for` is over a call of a generator, a handler site (§15, §54), and a
+pipeline of adapters is a nest of direct calls. -/
+
+/-- `M` with the source `V` of each `for x in p(())` replaced by `rep`, outside nested
+closures, and how many it replaced. -/
+def mapLoopSrc (p : String) (rep : Span → Val → Comp → Comp) : Nat → Comp → Comp × Nat
+  | 0, M => (M, 0)
+  | k + 1, M =>
+    let go := mapLoopSrc p rep k
+    match M with
+    | .loop sp ℓ (.each x) V B N =>
+      let (B', a) := go B
+      let (N', b) := go N
+      match V with
+      | .app _ f (.unit _) =>
+        if headName f == some p then (rep sp V (.loop sp ℓ (.each x) V B' N'), a + b + 1)
+        else (.loop sp ℓ (.each x) V B' N', a + b)
+      | _ => (.loop sp ℓ (.each x) V B' N', a + b)
+    | .loop sp ℓ src V B N =>
+      let (B', a) := go B
+      let (N', b) := go N
+      (.loop sp ℓ src V B' N', a + b)
+    | .bind sp x A M N lin =>
+      let (M', a) := go M
+      let (N', b) := go N
+      (.bind sp x A M' N' lin, a + b)
+    | .with_ sp M N =>
+      let (M', a) := go M
+      let (N', b) := go N
+      (.with_ sp M' N', a + b)
+    | .case sp V x M y N =>
+      let (M', a) := go M
+      let (N', b) := go N
+      (.case sp V x M' y N', a + b)
+    | .unwind sp x A M D N =>
+      let (M', a) := go M
+      let (D', b) := go D
+      let (N', c) := go N
+      (.unwind sp x A M' D' N', a + b + c)
+    | .letUnit sp V M => let (M', a) := go M; (.letUnit sp V M', a)
+    | .letPair sp x y V M => let (M', a) := go M; (.letPair sp x y V M', a)
+    | .lam sp x A M => let (M', a) := go M; (.lam sp x A M', a)
+    | .lamL sp x b M => let (M', a) := go M; (.lamL sp x b M', a)
+    | M => (M, 0)
+
+/-- The source parameters of `x` (`g`): each by index and name.  `[spec §55]` -/
+def Env.srcParams (env : Env) (x : String) (g : FSig) : List (Nat × String) :=
+  let cps := (env.comps.lookup x).getD []
+  match g.decl with
+  | .def_ dsp n _ A V _ => match fnParts dsp n.name A V with
+    | .ok f => cps.filterMap fun (j, p, prov) =>
+        let (M', uses) := mapLoopSrc p (fun sp _ _ => .ret sp (.unit sp)) fuel f.body
+        if prov.any (fun (e, _) => env.iterEff e.name) && uses == 1 && !(refsC fuel M').contains p
+        then some (j, p) else none
+    | .error _ => []
+  | _ => []
+
+/-- The computation an argument at a source parameter is: a block of no argument whose body is a
+value is that value (`e` of `|>`'s `{ () -> e }`, §33).  `[spec §55]` -/
+def unblock (V : Val) : Val :=
+  match V with
+  | .thunkv _ (.lam _ u _ (.letUnit _ (.var _ u') (.ret _ e)))
+  | .bangThunkv _ (.lam _ u _ (.letUnit _ (.var _ u') (.ret _ e))) => if u.name == u' then e else V
+  | _ => V
+
+/-- What a source parameter's written type, `(1 => K with E[A])` or `!(…)`, says its argument
+yields and returns: `A` and `K`.  `[spec §55]` -/
+def srcPat (A : VTy) : Option (VTy × VTy) := do
+  let es ← provOf A
+  let (_, [Y]) ← es.head? | none
+  match unrowed A with
+  | .lolli _ _ K | .bang _ (.lolli _ _ K) => some (Y, K)
+  | _ => none
+
+/-- `let (x₁, (x₂, …)) = v; M`, its intermediate variables named after `v`. -/
+def destructPure (sp : Span) (v : String) : Nat → List String → Comp → Comp
+  | _, [], M => .letUnit sp (.var sp v) M
+  | _, [x], M => .bind sp ⟨x, sp⟩ none (.ret sp (.var sp v)) M false
+  | i, x :: xs, M =>
+    let r := s!"{v}__r{i}"
+    .letPair sp ⟨x, sp⟩ ⟨r, sp⟩ (.var sp v) (destructPure sp r (i + 1) xs M)
+
+/-- A written row's entries and a template's mark at the instance's types `σ`; a template only
+while it has type parameters.  `[spec §55]` -/
+def _root_.Frontend.Mark.srcInst (σ : TySubst) (generic : Bool) : Mark → Mark
+  | .row es m ns => .row (es.map fun (e, As) => (e, As.map (·.subst σ))) (Mark.srcInst σ generic m) ns
+  | .template m bs => if generic then .template m bs else m
+  | m => m
+
+/-- Each type parameter of a template renamed for its node `i` of a source tree. -/
+def renameTps (ps : List Ident) (i : Nat) : TySubst :=
+  ps.map fun t => (t.name, .name t.span s!"{t.name}__s{i}")
+
+/-- What a source tree is, made for an instance (`srcTree`): its key, the call as the instance
+writes it (over the leaves' variables), its leaves (each with its variable, type and argument),
+the bindings made before the call, its type parameters, and what it yields and returns. -/
+structure STree where
+  key : String
+  tree : Val
+  leaves : List (String × VTy × Val)
+  binds : List Bind
+  tps : List Ident
+  yieldTy : VTy
+  retTy : VTy
+
+/-- A right-nested tuple of values, `()` of none. -/
+def tupleOfVals (sp : Span) : List Val → Val
+  | [] => .unit sp
+  | [V] => V
+  | V :: Vs => .pair sp V (tupleOfVals sp Vs)
+
+/-- A right-nested tuple type, `1` of none. -/
+def tupleOfTys (sp : Span) : List VTy → VTy
+  | [] => .unit sp
+  | [A] => A
+  | A :: As => .tensor sp A (tupleOfTys sp As)
+
 mutual
 /-- `M` with its operations resolved, handing the capabilities `cs` back beside its result: each
 terminal answering `v` answers `(c₁, (…, (cₙ, v)))`. With `wrap := false` (the body of a loop,
@@ -1807,6 +1972,10 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
     | .loop sp ℓ src V M N =>
       match src, cx.env.iterCall? V with
       | .each x, some (g, gs, i, f, W) =>
+        -- Over a call at a source parameter: over the call of the instance (SPEC §55).
+        if let some (bS, g', gs', A', W') ← srcInst n cx cs sp g gs W then
+          return ← chain bS (← trC n (cx.withInst gs' A') cs wrap
+            (.loop sp ℓ src (.app V.span (.var f.span g') W') M N))
         -- The body is the clause of the site: the kernel's tail-resuming rule or `[handle-last]`
         -- (SPEC §54, §55), whose work may raise, perform the affine operations of the sites
         -- outside, and loop (a work that ticks).
@@ -2020,6 +2189,11 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
         -- A call of a block parameter of a copy made for effectful blocks (SPEC §30).
         if let some (ss, bcs) := cx.cbs.lookup x then
           return ← blockParamCall k cx cs sp f x ss bcs W
+        -- A call at a source parameter: a call of the instance for the source (SPEC §55).
+        if let some g := cx.env.fn? x then
+          if let some (bS, x', g', A', W') ← srcInst k cx cs sp x g W then
+            let (b, V') ← goV k (cx.withInst g' A') cs (.app sp (.var f.span x') W')
+            return (bS ++ b, V')
         -- An argument at a stored generator's parameter: the stored generator of the call.
         let (bP, W) ← pullArgsV k cx cs x W
         -- Effectful blocks passed: a call of the callee's copy at their rows (SPEC §30); a
@@ -2877,6 +3051,11 @@ def pullSite : Nat → Cx → List Cap → Span → String → FSig → Inst →
     EM (List Bind × Val)
   | 0, _, _, sp, _, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, sp, gname, g, i, f, W => do
+    -- A call at a source parameter: the stored generator of the instance's call (SPEC §55).
+    if let some (bS, g', gs', A', W') ← srcInst k cx cs sp gname g W then
+      if let some i' := gs'.row.find? (cx.env.iterEff ·.eff) then
+        let (b, V) ← pullSite k (cx.withInst gs' A') cs sp g' gs' i' (.var f.span g') W'
+        return (bS ++ b, V)
     let some As := i.args
       | throw ⟨sp, s!"`{gname}` performs `{i.eff}`, and its type arguments are not determined: " ++
           s!"write them, `with {i.eff}[…]`"⟩
@@ -2910,6 +3089,152 @@ def pullSite : Nat → Cx → List Cap → Span → String → FSig → Inst →
     let pv : Val := .app sp (.sugar sp (.pullSite ⟨n, T, "", gname, siteR⟩)) (.app sp f' W')
     let bind : Bind := .one sp v none (.ret sp pv) false
     pure (bs ++ [bind], .var sp v)
+
+/-- **The source tree** of the argument `V` at a source parameter (SPEC §55): a call of a
+generator, whose arguments at its own source parameters are source trees again and whose others
+are leaves; a leaf at a stored generator's parameter is the stored generator, made here
+(`pullSite`). The type parameters of each node are its template's, renamed for the node
+(`renameTps`), those its sources fix by what they yield and return bound (`matchTy`). -/
+def srcTree : Nat → Cx → List Cap → Span → Nat → Val → EM (STree × Nat)
+  | 0, _, _, sp, _, _ => throw ⟨sp, "internal error: a source nested too deeply"⟩
+  | k + 1, cx, cs, sp, i₀, V₀ => do
+    let V := unblock V₀
+    let err : Error := ⟨V₀.span, "the argument at a source parameter is a call of a generator " ++
+      "(SPEC §55): write the call there, `f(g(…), …)` or `g(…) |> f(…)`"⟩
+    let .app asp f W := V | throw err
+    let some y := headName f | throw err
+    let some gy := cx.env.fn? y | throw err
+    let some it := gy.row.find? (cx.env.iterEff ·.eff) | throw err
+    if gy.row.length != 1 then
+      throw ⟨asp, s!"`{y}` performs effects besides what it yields: at a source parameter it is " ++
+        "not provided (SPEC §55)"⟩
+    let .def_ dsp n ps A Vd _ := gy.decl | throw err
+    let fy ← (fnParts dsp n.name A Vd : Except Error FnParts)
+    let ren := renameTps ps i₀
+    let rtps := ren.filterMap fun (_, T) => match T with | .name _ X => some X | _ => none
+    let srcs := cx.env.srcParams y gy
+    let some P := (cx.env.sigs.lookup y).bind paramTyOf | throw err
+    let nps := (paramNames fy).length
+    let comps := argComps (nps - 1) P W
+    let mut σ : TySubst := []
+    let mut i := i₀ + 1
+    let mut parts : List Val := []
+    let mut leaves : List (String × VTy × Val) := []
+    let mut binds : List Bind := []
+    let mut tps : List Ident := []
+    let mut keys : List String := []
+    for ((Aj, Vj), j) in comps.zipIdx do
+      if srcs.any (·.1 == j) then
+        let (t, i') ← srcTree k cx cs sp i Vj
+        i := i'
+        let some (yp, rp) := srcPat (Aj.subst ren)
+          | throw ⟨Vj.span, s!"internal error: the source parameter {j} of `{y}`"⟩
+        let vs := rtps ++ (tps ++ t.tps).map (·.name)
+        σ := (unifyTy vs σ yp t.yieldTy).getD σ
+        σ := (unifyTy vs σ rp t.retTy).getD σ
+        parts := parts ++ [t.tree]
+        leaves := leaves ++ t.leaves
+        binds := binds ++ t.binds
+        tps := tps ++ t.tps
+        keys := keys ++ [t.key]
+      else if (match Aj, Vj with | .unit _, .unit _ => true | _, _ => false) then
+        parts := parts ++ [Vj]
+      else
+        let v ← fresh "fx_sl"
+        -- A call at a stored generator's parameter is the stored generator, made here.
+        let (b, Vv) ← match isPullTy Aj, cx.env.iterCall? Vj with
+          | true, some (g, gs, ii, ff, Wj) => pullSite k cx cs Vj.span g gs ii ff Wj
+          | _, _ => pure ([], Vj)
+        leaves := leaves ++ [(v, Aj.subst ren, Vv)]
+        binds := binds ++ b
+        parts := parts ++ [.var Vj.span v]
+    let leavesσ := leaves.map fun (v, T, a) => (v, substAll σ T, a)
+    let yieldTy : VTy := match it.args with
+      | some [T] => substAll σ (T.subst ren)
+      | _ => .unk asp
+    let mine := (ps.zip ren).filterMap fun (t, (_, T)) => match T with
+      | .name _ X => some (⟨X, t.span⟩ : Ident)
+      | _ => none
+    let key := y ++ (if keys.isEmpty then "" else "_" ++ "_".intercalate keys)
+    pure ({ key, tree := .app asp f (tupleOfVals asp parts), leaves := leavesσ, binds,
+            tps := (mine ++ tps).filter (fun t => !σ.any (·.1 == t.name)),
+            yieldTy, retTy := substAll σ (fy.T.subst ren) }, i)
+
+/-- **A call of a function with source parameters, at calls of generators there** (SPEC §55):
+the call of its instance for the sources, `x__of_…`, the template with each `for x in p(())` over
+the source's call tree (`srcTree`) and the parameter `p` its leaves; the instance's type
+parameters the template's that the sources do not fix, and the trees'. The bindings made before
+the call (stored generators at leaves), the instance's name, signature and written type, and the
+call's argument. `none` when `x` has no source parameter. -/
+def srcInst : Nat → Cx → List Cap → Span → String → FSig → Val →
+    EM (Option (List Bind × String × FSig × VTy × Val))
+  | 0, _, _, sp, _, _, _ => throw ⟨sp, "internal error: a source nested too deeply"⟩
+  | k + 1, cx, cs, sp, x, g, W => do
+    let srcs := cx.env.srcParams x g
+    if srcs.isEmpty then return none
+    let .def_ dsp n ps A Vd mk := g.decl | return none
+    let f ← (fnParts dsp n.name A Vd : Except Error FnParts)
+    let nps := (paramNames f).length
+    let some P := (cx.env.sigs.lookup x).bind paramTyOf | return none
+    let comps := argComps (nps - 1) P W
+    let tpNames := ps.map (·.name)
+    let mut σ : TySubst := []
+    let mut i := 0
+    -- The instance's parameters, one per leaf at a source and one per other parameter, and the
+    -- call's arguments; the template's parameter tuple rebuilt from them.
+    let mut params : List (String × VTy) := []
+    let mut args : List Val := []
+    let mut orig : List Val := []
+    let mut binds : List Bind := []
+    let mut tps : List Ident := []
+    let mut keys : List String := []
+    let mut reps : List (String × STree) := []
+    for ((Aj, Vj), j) in comps.zipIdx do
+      match srcs.find? (·.1 == j) with
+      | some (_, p) =>
+        let (t, i') ← srcTree k cx cs sp i Vj
+        i := i'
+        let some (yp, rp) := srcPat Aj
+          | throw ⟨Vj.span, s!"internal error: the source parameter {j} of `{x}`"⟩
+        let vs := tpNames ++ (tps ++ t.tps).map (·.name)
+        match unifyTy vs σ yp t.yieldTy with
+        | some σ' => σ := σ'
+        | none => throw ⟨Vj.span, s!"this argument of `{x}` yields `{(substAll σ t.yieldTy).pp 0}`, " ++
+            s!"which is not `{(substAll σ yp).pp 0}`"⟩
+        match unifyTy vs σ rp t.retTy with
+        | some σ' => σ := σ'
+        | none => throw ⟨Vj.span, s!"this argument of `{x}` returns `{(substAll σ t.retTy).pp 0}`, " ++
+            s!"which is not `{(substAll σ rp).pp 0}`"⟩
+        params := params ++ t.leaves.map fun (v, T, _) => (v, T)
+        args := args ++ t.leaves.map (·.2.2)
+        orig := orig ++ [tupleOfVals Vj.span (t.leaves.map fun (v, _, _) => .var Vj.span v)]
+        binds := binds ++ t.binds
+        tps := tps ++ t.tps
+        keys := keys ++ [t.key]
+        reps := reps ++ [(p, t)]
+      | none =>
+        let v := s!"fx_sa{j}"
+        params := params ++ [(v, Aj)]
+        args := args ++ [Vj]
+        orig := orig ++ [.var Vj.span v]
+    let name := s!"{x}__of_{"_".intercalate keys}"
+    let newTps := (ps ++ tps).filter fun t => !σ.any (·.1 == t.name)
+    let P' := substAll σ (tupleOfTys dsp (params.map (·.2)))
+    let body := reps.foldl (fun M (p, t) =>
+      (mapLoopSrc p (fun lsp _ L => match L with
+        | .loop _ ℓ src _ B N => destructPure lsp p 0 (t.leaves.map (·.1)) (.loop lsp ℓ src t.tree B N)
+        | L => L) fuel M).1) f.body
+    let pv : Ident := ⟨"io_psrc", dsp⟩
+    let body := destructPure dsp pv.name 0 (params.map (·.1))
+      (.bind dsp f.p none (.ret dsp (tupleOfVals dsp orig)) body false)
+    let σ' : TySubst := σ.map fun (x, T) => (x, substAll σ T)
+    let f' : FnParts := { f with p := pv, P := P', T := substAll σ f.T, body := body.subst σ' }
+    let (A', V') := f'.build dsp
+    let mk' := mk.srcInst σ' (!newTps.isEmpty)
+    let g' : FSig := { name, row := g.row.map fun i => { i with args := i.args.map (·.map (·.subst σ')) },
+                       decl := .def_ dsp ⟨name, n.span⟩ newTps A' V' mk' }
+    report sp "call" s!"{x} → `{name}`, its instance for the source{if reps.length == 1 then "" else "s"} written here"
+    pure (some (binds, name, g', A', tupleOfVals sp args))
 
 /-- The arguments of a call of `x` with each call at a stored generator's parameter that performs
 an iteration effect replaced by its stored generator (`pullSite`). -/
@@ -3949,8 +4274,12 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
           if (groups.find? (·.contains n.name)).isSome && member n.name V then
             throw ⟨n.span, s!"`{n.name}` is recursive and takes a computation parameter: not provided " ++
               "(SPEC §33)"⟩
+          -- A source parameter (SPEC §55) is used through the instances for its sources.
+          let srcs := { env with comps := (n.name, cps) :: env.comps }.srcParams n.name
+            { name := n.name, row := [], decl := .def_ sp n ps A V mk }
           if let some f := (fnParts sp n.name A V).toOption then
-            if let some fsp := forOverParam (cps.map (·.2.1)) fuel f.body then
+            if let some fsp := forOverParam ((cps.map (·.2.1)).filter fun x => !srcs.any (·.2 == x))
+                fuel f.body then
               throw ⟨fsp, s!"a `for` over a call of a computation parameter of `{n.name}`: not " ++
                 "provided (its loop's variables would be threaded through the argument, SPEC §33 " ++
                 "*Open*); handle the parameter's iteration effect with a handler, `f(()) |> h`"⟩

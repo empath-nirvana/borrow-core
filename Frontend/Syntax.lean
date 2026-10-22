@@ -556,9 +556,9 @@ inductive VSugar where
   | rowClose
   /-- The work of a `for` over a generator whose body performs `Div` (`[handle-last]`, SPEC §55):
   a `!` function from the element and the threaded variables `ws` at the work's row, its body the
-  loop's body. The `Div` elaboration walks the body, a close inside it handing `ws` back, and
-  answers the closed body as the work's exit `inr (ws, inr ())`; `ret` is set when a `return`
-  inside the body's loops leaves the `for`.  `[spec §55]` -/
+  loop's body. The `Div` elaboration walks the body, a close inside it handing back the variables
+  of `ws` that have no destructor, and answers the closed body as the work's exit `inr (inr l)`;
+  `ret` is set when a `return` inside the body's loops leaves the `for`.  `[spec §55]` -/
   | workStep (ws : List String) (ret : Bool)
   deriving DecidableEq, Repr, Inhabited
 
