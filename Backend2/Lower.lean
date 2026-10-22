@@ -101,33 +101,43 @@ a borrow's word, a family's base, a boxed field's pointer (`some true`); a sum's
 where the arms agree, padding (`none`) agreeing with either; a closure's captured word where its
 class's codes agree. A heap class's word is `2t + 1` or an address, so it is not one. Read off the
 layout node, which is the variable's type (`Backend2/Layout.lean`). -/
-def addrKinds (L : Layouts) : Nat → Nat → List (Option Bool)
-  | 0, n => List.replicate (L.w n) (some false)
-  | f + 1, n =>
-    let field (k c : Nat) : List (Option Bool) := if L.isBoxed n k then [some true] else addrKinds L f c
+def addrKinds (L : Layouts) : Nat → Nat →
+    StateM (Std.HashMap Nat (List (Option Bool))) (List (Option Bool))
+  | 0, n => pure (List.replicate (L.w n) (some false))
+  | f + 1, n => do
+    if let some ks := (← get)[n]? then return ks
+    let field (k c : Nat) : StateM (Std.HashMap Nat (List (Option Bool))) (List (Option Bool)) :=
+      if L.isBoxed n k then pure [some true] else addrKinds L f c
     let pad (k : Nat) (xs : List (Option Bool)) : List (Option Bool) := xs ++ List.replicate (k - xs.length) none
-    match L.sh n with
-    | .ref _ | .imm _ | .mut _ => [some true]
-    | .fam _ => [some true, some false]
-    | .pair a b => field 0 a ++ field 1 b
-    | .sum a b =>
-      let pw := L.w n - 1
-      some false :: List.zipWith agree (pad pw (field 0 a)) (pad pw (field 1 b))
-    | .clos .. =>
-      if L.isRec n then [some false] else
-      let pw := L.w n - 1
-      some false :: (L.unionOf n).toList.foldl (fun acc c =>
-        List.zipWith agree acc (pad pw ((L.codeEnv.getD c []).flatMap (addrKinds L f ·))))
-        (List.replicate pw none)
-    | _ => List.replicate (L.w n) (some false)
+    let ks ← match L.sh n with
+      | .ref _ | .imm _ | .mut _ => pure [some true]
+      | .fam _ => pure [some true, some false]
+      | .pair a b => do pure ((← field 0 a) ++ (← field 1 b))
+      | .sum a b => do
+        let pw := L.w n - 1
+        pure (some false :: List.zipWith agree (pad pw (← field 0 a)) (pad pw (← field 1 b)))
+      | .clos .. =>
+        if L.isRec n then pure [some false] else do
+        let pw := L.w n - 1
+        let mut acc := List.replicate pw none
+        for c in (L.unionOf n).toList do
+          let mut env : List (Option Bool) := []
+          for x in L.codeEnv.getD c [] do env := env ++ (← addrKinds L f x)
+          acc := List.zipWith agree acc (pad pw env)
+        pure (some false :: acc)
+      | _ => pure (List.replicate (L.w n) (some false))
+    -- Each node's kinds once: a node's are its type's, whichever path reaches it.
+    modify (·.insert n ks)
+    return ks
 
 /-- The locals `ls`, the words of a value at node `n`: each voted a pointer or not by the node. -/
 def vote (n : Nat) (ls : List Nat) : LM Unit := do
   let ks ← match (← get).kinds[n]? with
     | some ks => pure ks
     | none => do
-      let ks := addrKinds (← read).L 256 n
-      modify fun s => { s with kinds := s.kinds.insert n ks }
+      let L ← L
+      let (ks, cache) := (addrKinds L 256 n).run (← get).kinds
+      modify fun s => { s with kinds := cache }
       pure ks
   if ks.length != ls.length then return
   for (l, k) in ls.zip ks do
