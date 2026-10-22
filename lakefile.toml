@@ -180,3 +180,9 @@ roots = ["LetMutState"]
 name = "DepSpike"
 srcDir = "experiments/DepSpike"
 roots = ["DepSpike"]
+
+# #670 spike: linearity of Backend2's conversion. Not a default target.
+[[lean_lib]]
+name = "Spike670"
+srcDir = "experiments/spike-670"
+roots = ["Spike670"]
