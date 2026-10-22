@@ -1,6 +1,6 @@
 import Core.Handlers
 import Core.EffRules
-import Core.DivHandle
+import Core.DivHandleLast
 
 /-!
 # Core — the premises of the clause kinds  `[spec §19]`
@@ -347,6 +347,9 @@ inductive ClauseKind where
   | resumeOnce (state : Bool)
   /-- Anything else: `κ` may be kept. -/
   | stored
+  /-- `[handle-last]`'s clause (§51), written by its rule: the work, then a resume of `κ` in tail
+  position or `κ`'s cancel and the exit, `κ`'s cancel the work's finaliser (`lastClause`). -/
+  | last
   deriving DecidableEq, Repr, Inhabited
 
 /-- An operation's clause at a handler: the operation's qualifier and the clause's kind. -/
@@ -369,6 +372,7 @@ def ClauseKind.BodyPremise : ClauseKind → Expr → Prop
   | .resumeOnce false, M => OnPaths Once 0 M
   | .resumeOnce true, M => OnPaths (StateFn Once) 0 M
   | .stored, _ => True
+  | .last, M => ∃ j Hw Hn, Expr.lam (.letpair (.var 0) M) = lastClause j false Hw Hn
 
 /-- Whether the operation `o = A ↠^q B` is abortive: its clause takes no `κ` (`clauseTy`). -/
 def isAbortive (o : Qual × VTy × VTy) : Bool := o.2.2.isZero && o.1 != .lin
@@ -441,6 +445,24 @@ theorem tailClause_premise (o : Qual × VTy × VTy) (j : Nat) (Hc : Expr) :
     refine ⟨ha, _, rfl, _, .bind ?_ (.resume (by simp [mentions]))⟩
     simp only [mentions, Bool.or_eq_false_iff]
     exact ⟨mentions_pickE j (mentions_shift (by omega) (by omega) Hc), by simp⟩
+  · simp only [if_true]; exact ha
+
+/-! ### The clauses of `effHandleL` -/
+
+/-- The kind `effHandleL` gives an operation by its rule (§51): its clauses are written out from
+works and exits (`lastClause`). -/
+def lastKind (o : Qual × VTy × VTy) : HKind :=
+  ⟨o.1, if isAbortive o then .abortive else .last⟩
+
+/-- **`effHandleL`'s clauses are of the `last` kind**: the clause of a control operation is the
+rule's `lastClause`, and an abortive one's is `effHandleT`'s, of the `abortive` kind.
+`[spec §51, §64]` -/
+theorem lastClause_premise (o : Qual × VTy × VTy) (j : Nat) (Hw Hn : Expr) :
+    (lastKind o).kind.Premise o (lastClause j (isAbortive o) Hw Hn) := by
+  unfold lastKind
+  cases ha : isAbortive o
+  · simp only [Bool.false_eq_true, if_false]
+    exact ⟨ha, _, rfl, j, Hw, Hn, rfl⟩
   · simp only [if_true]; exact ha
 
 end BoCa.Fig16.LogRel.Core.ClauseKinds

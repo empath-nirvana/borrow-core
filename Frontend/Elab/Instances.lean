@@ -305,7 +305,7 @@ def walkC (d : Decls) (owner : String) (names : List String) : Nat → TCx → C
       | none => walkC d owner names n c.pushDead M
     | .app _ M _ | .proj _ _ M | .inst _ M _ | .nuIn _ M | .nuOut _ M | .ascribe _ M _ =>
       walkC d owner names n c M
-    | .handle _ _ _ hr hc M => do
+    | .handle _ _ _ _ hr hc M => do
       walkV d owner names n c hr
       walkV d owner names n c hc
       walkC d owner names n c M

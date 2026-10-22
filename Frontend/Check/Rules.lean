@@ -679,6 +679,90 @@ def rEffHandleB {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R 
           ⟨defines_of_wf hwf, fun s hsm hl => outlivesB_sound Δ d s.ty (ho s hsm hl)⟩
           (ansOutlivesB_sound hSd)⟩
 
+/-- A value form that is a pair has value forms for its components. -/
+theorem valFormIn_pair {Γ : Ctx CVTy} {a b : BoCa.Expr}
+    (h : (BoCa.Expr.pair a b).ValFormIn Γ) : a.ValFormIn Γ ∧ b.ValFormIn Γ := by
+  generalize he : BoCa.Expr.pair a b = e at h
+  cases h with
+  | pair ha hb => cases he; exact ⟨ha, hb⟩
+  | val v =>
+      obtain ⟨e', hv⟩ := v
+      change BoCa.Expr.pair a b = e' at he
+      subst he
+      cases hv with
+      | pair h₁ h₂ => exact ⟨.val ⟨a, h₁⟩, .val ⟨b, h₂⟩⟩
+  | var => cases he
+  | inj₁ => cases he
+  | inj₂ => cases he
+
+/-- **`[handle]` at clauses written by the tail-resuming rule** (`handle_tail`, `effHandleT`):
+`h_ret` (`rr`) and the answering functions' tuple (`rc`), checked as a pair whose erasure is a
+value form over persistent slots; `Σ_N ≤ Σ` of linear operations (`hSN`, `hLin`); `n` not `Div`.
+It reads the handled row, which may hold `Div`. The checker writes it ungraded (§63).
+`[spec §14, §64]` -/
+def rEffHandleT {S SN : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy}
+    (site : Option HSite) (rr : Res Δ T (.val (BoCa.Fig16.LogRel.Core.retTy S A R)))
+    (rc : Res Δ T (.val (BoCa.Fig16.LogRel.Core.ansesTy S SN R E)))
+    (hov : overlapOK T rr.F.u rc.F.u = true)
+    (hp : usedSat BoCa.Fig16.LogRel.Core.VTy.persistent T (rPair i rr rc hov).F.u = true)
+    (hv : valFormB (rPair i rr rc hov).F.u (rPair i rr rc hov).t.erase = true)
+    (hn0 : n ≠ 0) (hnd : n ≠ BoCa.divEff) (hnS : ∀ o ∈ S, o.n ≠ n)
+    (hlen : E.length ≤ 2 ^ 32) (hSN : rowLeB SN S = true)
+    (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
+    (rM : Res Δ T (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
+    (h : overlapOK T (rPair i rr rc hov).F.u rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
+  let rH := rPair i rr rc hov
+  have hlu : rH.F.u.length = rM.F.u.length := rH.F.hu.trans rM.F.hu.symm
+  ⟨.effHandleT i (.comp (effOf S R)) S SN E BoCa.Fig16.LogRel.Core.finsNil n false A R
+      (Masks.of rH.F.u rM.F.u) site rM.t.erase.hin rH.t rM.t,
+    (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ (rH.sigs ∪ rM.sigs), rH.pins ++ rM.pins,
+    ((rH.F.restrict BoCa.Fig16.LogRel.Core.VTy.persistent hp).withUse.split rM.F h).map
+      fun _ ⟨_, _, hs, hm, ⟨⟨hH, hl⟩, hsub, hlen'⟩, he⟩ => by
+        have hvf := valFormB_sound rH.F.hu hlen' hsub hv
+        obtain ⟨hHr, hHc⟩ := valFormIn_pair (a := rr.t.erase) (b := rc.t.erase) hvf
+        exact TTied.effHandleT i _ site hs hm.rel_of ⟨rH.covers.of₁ hlu, rM.covers.of₂ hlu⟩
+            (deadP_of_live hl) hHr hHc hH rfl
+            hn0 hnd hnS hlen (rowLeB_sound hSN) hLin (fun h => by cases h) he⟩
+
+/-- **`[handle-last]`** (`handle_last`, `effHandleL`): `h_ret` (`rr`), the works' tuple (`rw`) and
+the exits' tuple (`rn`), checked as the pair `(h_ret, (ws, nfs))` whose erasure is a value form
+over persistent slots; the operations affine or abortive (`hAff`); `Σ_W ≤ Σ` (`hSW`, which gives
+`LastFinOK` at the empty cancel rows, `lastFinOK_of_rowLeB`); `Σ.NZ`; `¬ Σ.UnrD` (`Row.unrDB`); `n`
+not `Div`. It reads the handled row, which may hold `Div`.  `[spec §51, §64]` -/
+def rEffHandleL {S SW : CRow} {E : List (CQual × CVTy × CVTy)} {Xs : Nat → CVTy} {n : UInt32}
+    {A R : CVTy} (site : Option HSite) (rr : Res Δ T (.val (BoCa.Fig16.LogRel.Core.retTy S A R)))
+    (rw : Res Δ T (.val (BoCa.Fig16.LogRel.Core.worksTy S SW R Xs E 0)))
+    (rn : Res Δ T (.val (BoCa.Fig16.LogRel.Core.exitsTy S R Xs E 0)))
+    (hov₁ : overlapOK T rw.F.u rn.F.u = true)
+    (hov : overlapOK T rr.F.u (rPair i rw rn hov₁).F.u = true)
+    (hp : usedSat BoCa.Fig16.LogRel.Core.VTy.persistent T
+      (rPair i rr (rPair i rw rn hov₁) hov).F.u = true)
+    (hv : valFormB (rPair i rr (rPair i rw rn hov₁) hov).F.u
+      (rPair i rr (rPair i rw rn hov₁) hov).t.erase = true)
+    (hn0 : n ≠ 0) (hnd : n ≠ BoCa.divEff) (hnS : ∀ o ∈ S, o.n ≠ n)
+    (hlen : E.length ≤ 2 ^ 32) (hNZ : Row.nzB S = true)
+    (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true)
+    (hSW : rowLeB SW S = true) (hSu : Row.unrDB S = false)
+    (rM : Res Δ T (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
+    (h : overlapOK T (rPair i rr (rPair i rw rn hov₁) hov).F.u rM.F.u = true) :
+    Res Δ T (.comp (effOf S R)) :=
+  let rH := rPair i rr (rPair i rw rn hov₁) hov
+  have hlu : rH.F.u.length = rM.F.u.length := rH.F.hu.trans rM.F.hu.symm
+  ⟨.effHandleL i (.comp (effOf S R)) S SW E BoCa.Fig16.LogRel.Core.finsNil Xs n A R
+      (Masks.of rH.F.u rM.F.u) site rM.t.erase.hin rH.t rM.t,
+    (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) ∪ (rH.sigs ∪ rM.sigs), rH.pins ++ rM.pins,
+    ((rH.F.restrict BoCa.Fig16.LogRel.Core.VTy.persistent hp).withUse.split rM.F h).map
+      fun _ ⟨_, _, hs, hm, ⟨⟨hH, hl⟩, hsub, hlen'⟩, he⟩ => by
+        have hvf := valFormB_sound rH.F.hu hlen' hsub hv
+        obtain ⟨hHr, hHwn⟩ := valFormIn_pair (a := rr.t.erase)
+          (b := BoCa.Expr.pair rw.t.erase rn.t.erase) hvf
+        obtain ⟨hHw, hHn⟩ := valFormIn_pair hHwn
+        exact TTied.effHandleL i _ site hs hm.rel_of ⟨rH.covers.of₁ hlu, rM.covers.of₂ hlu⟩
+          (deadP_of_live hl) hHr hHw hHn hH rfl
+          hn0 hnd hnS hlen (Row.nzB_sound hNZ) hAff (rowLeB_sound hSW)
+          (fun hU => absurd (Row.unrDB_iff.mpr hU) (by simp [hSu]))
+          (fun _ _ => lastFinOK_of_rowLeB hSW _) he⟩
+
 end
 
 end Frontend.Check

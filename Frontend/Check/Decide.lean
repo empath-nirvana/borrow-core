@@ -782,6 +782,18 @@ theorem rowLeB_sound {S S' : Row} (h : rowLeB S S' = true) : RowLe S S' := by
   · exact ⟨o, h', OpSig.LeF.refl o⟩
   · exact ⟨_, h', ⟨⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => FinLe.refl o.fin, fun _ => rfl⟩⟩
 
+/-- **`[handle-last]`'s cancel rows at the checker's empty ones** (SPEC §51, `LastFinOK`): where
+`Σ_W` is below `Σ` (`rowLeB`), `Σ` finds each operation of `Σ_W` as itself or its graded form (§63),
+with the same cancel row, so `LastFinOK` holds at the empty cancel row (`lastFinOK_nil`).
+`[spec §51, §64]` -/
+theorem lastFinOK_of_rowLeB {S SW : Row} (h : rowLeB SW S = true) (X : VTy) :
+    LastFinOK S SW (.ret .unit) X :=
+  lastFinOK_nil fun _ _ o o' hf hf' _ => by
+    obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
+    have := List.all_eq_true.mp h o hm
+    simp only [Bool.or_eq_true, beq_iff_eq] at this
+    rcases this with h' | h' <;> rw [h'] at hf' <;> cases hf' <;> exact ThenLe.nil o.fin
+
 /-- `Row.NZ`, decided. -/
 def Row.nzB (S : Row) : Bool := S.all fun o => o.n != 0
 

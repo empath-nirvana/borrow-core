@@ -232,11 +232,14 @@ theorem classify_sound (o : Qual × VTy × VTy) (c : TExpr) :
         rw [heq]; rfl
       have hne : classifyBody tM ≠ .abortive := by
         unfold classifyBody; split_ifs <;> simp
-      revert hP hne
+      have hnl : classifyBody tM ≠ .last := by
+        unfold classifyBody; split_ifs <;> simp
+      revert hP hne hnl
       generalize classifyBody tM = k
-      intro hP hne
+      intro hP hne hnl
       cases k with
       | abortive => exact absurd rfl hne
+      | last => exact absurd rfl hnl
       | stored => trivial
       | tail => exact ⟨ha', _, he, hP⟩
       | tailState => exact ⟨ha', _, he, hP⟩

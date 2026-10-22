@@ -470,7 +470,104 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     | .abort sp k i V => do
       let ⟨_, r⟩ ← abortIt n E Δ T sp k i V .zero
       pure ⟨_, r⟩
-    | .handle sp k st hr hc M => do
+    | .handle sp k (.tail qs) st hr hc M => do
+      -- `handle_tail[n: qs](h_ret, gs) M` (`effHandleT`, SPEC §14): the clauses written out by the
+      -- rule from the answering functions `gs`; the handled row may hold `Div`.
+      let ⟨Tr, rr⟩ ← synV n E Δ T hr
+      let ⟨Tc, rc⟩ ← synV n E Δ T hc
+      let some ⟨S, A, R, hr'⟩ := retRead Tr
+        | err hr.span (s!"the answer clause of the handler must have a type `!U(A -o F[…] R)`, " ++
+            s!"but it has type `{E.ppV Tr}`")
+      let some ⟨SN, Es, hc'⟩ := ansesRead S R (qs.map Qual.toCore) Tc
+        | err hc.span (s!"the answering functions of `handle_tail` must have the types " ++
+            s!"`!U(A -o F[Σ_N] B)` of the operations, but they have type `{E.ppV Tc}`")
+      let rr' : Res Δ T (.val (BoCa.Fig16.LogRel.Core.retTy S A R)) := cast (by rw [hr']) rr
+      let rc' : Res Δ T (.val (BoCa.Fig16.LogRel.Core.ansesTy S SN R Es)) := cast (by rw [hc']) rc
+      unless k < 2 ^ 32 ∧ k ≠ 0 do err sp s!"a handler's name is between 1 and 2^32 - 1, not {k}"
+      let nm := UInt32.ofNat k
+      if hn0 : nm ≠ 0 then
+       if hnd : nm ≠ BoCa.divEff then
+        if hnS : ∀ o ∈ S, o.n ≠ nm then
+         if hlen : Es.length ≤ 2 ^ 32 then
+          if hSN : rowLeB SN S = true then
+           if hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false then
+            if hov : overlapOK T rr'.F.u rc'.F.u = true then
+             if hp : usedSat BoCa.Fig16.LogRel.Core.VTy.persistent T
+                 (rPair (at_ sp) rr' rc' hov).F.u = true then
+              if hv : valFormB (rPair (at_ sp) rr' rc' hov).F.u
+                  (rPair (at_ sp) rr' rc' hov).t.erase = true then
+               let site ← siteOf E Δ sp k st Es
+               let rM ← chkC n E Δ T M
+                 (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) A)
+               if h₂ : overlapOK T (rPair (at_ sp) rr' rc' hov).F.u rM.F.u = true then
+                 pure ⟨_, rEffHandleT (at_ sp) site rr' rc' hov hp hv hn0 hnd hnS hlen hSN hLin rM h₂⟩
+               else throw (splitErr E T sp (rPair (at_ sp) rr' rc' hov).F.u rM.F.u)
+              else err sp "the handler's answering functions must be values"
+             else err sp "a handler's answering functions use only persistent variables"
+            else throw (splitErr E T sp rr'.F.u rc'.F.u)
+           else err hc.span (s!"the answering functions of `handle_tail` perform only linear " ++
+             s!"operations, but their row is `{ppRow E SN}`")
+          else err hc.span (s!"the answering functions' row `{ppRow E SN}` is not below the " ++
+            s!"handler's row `{ppRow E S}`")
+         else err sp "a handler has at most 2^32 operations"
+        else err sp s!"the name {k} is already in the row `{ppRow E S}` of the handler's answer"
+       else err sp "a handler's name is not `Div`'s"
+      else err sp "a handler's name is not 0"
+    | .handle sp k (.last qs) st hr hc M => do
+      -- `handle_last[n: qs](h_ret, (ws, nfs)) M` (`effHandleL`, SPEC §51): the clauses written out
+      -- by the rule from the works `ws` and the exits `nfs`; the handled row may hold `Div`.
+      let .pair _ hw hn := hc
+        | err hc.span "the clauses of `handle_last` are a pair `(works, exits)`"
+      let ⟨Tr, rr⟩ ← synV n E Δ T hr
+      let ⟨Tw, rw⟩ ← synV n E Δ T hw
+      let ⟨Tn, rn⟩ ← synV n E Δ T hn
+      let some ⟨S, A, R, hr'⟩ := retRead Tr
+        | err hr.span (s!"the answer clause of the handler must have a type `!U(A -o F[…] R)`, " ++
+            s!"but it has type `{E.ppV Tr}`")
+      let some ⟨SW, Es, Xs, hW, hN⟩ := lastRead S R (qs.map Qual.toCore) Tw Tn
+        | err hc.span (s!"the works and exits of `handle_last` must have the types " ++
+            s!"`!U(A -o F[Σ_W] (B + X))` and `!U(X -o F[Σ] R)`, but they have types " ++
+            s!"`{E.ppV Tw}` and `{E.ppV Tn}`")
+      let rr' : Res Δ T (.val (BoCa.Fig16.LogRel.Core.retTy S A R)) := cast (by rw [hr']) rr
+      let rw' : Res Δ T (.val (BoCa.Fig16.LogRel.Core.worksTy S SW R Xs Es 0)) := cast (by rw [hW]) rw
+      let rn' : Res Δ T (.val (BoCa.Fig16.LogRel.Core.exitsTy S R Xs Es 0)) := cast (by rw [hN]) rn
+      unless k < 2 ^ 32 ∧ k ≠ 0 do err sp s!"a handler's name is between 1 and 2^32 - 1, not {k}"
+      let nm := UInt32.ofNat k
+      if hn0 : nm ≠ 0 then
+       if hnd : nm ≠ BoCa.divEff then
+        if hnS : ∀ o ∈ S, o.n ≠ nm then
+         if hlen : Es.length ≤ 2 ^ 32 then
+          if hNZ : Row.nzB S = true then
+           if hAff : ∀ o ∈ Es, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true then
+            if hSW : rowLeB SW S = true then
+             if hSu : Row.unrDB S = false then
+              if hov₁ : overlapOK T rw'.F.u rn'.F.u = true then
+               if hov : overlapOK T rr'.F.u (rPair (at_ sp) rw' rn' hov₁).F.u = true then
+                let rH := rPair (at_ sp) rr' (rPair (at_ sp) rw' rn' hov₁) hov
+                if hp : usedSat BoCa.Fig16.LogRel.Core.VTy.persistent T rH.F.u = true then
+                 if hv : valFormB rH.F.u rH.t.erase = true then
+                  let site ← siteOf E Δ sp k st Es
+                  let rM ← chkC n E Δ T M
+                    (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) A)
+                  if h₂ : overlapOK T rH.F.u rM.F.u = true then
+                    pure ⟨_, rEffHandleL (at_ sp) site rr' rw' rn' hov₁ hov hp hv hn0 hnd hnS hlen
+                      hNZ hAff hSW hSu rM h₂⟩
+                  else throw (splitErr E T sp rH.F.u rM.F.u)
+                 else err sp "the handler's works and exits must be values"
+                else err sp "a handler's works and exits use only persistent variables"
+               else throw (splitErr E T sp rr'.F.u (rPair (at_ sp) rw' rn' hov₁).F.u)
+              else throw (splitErr E T sp rw'.F.u rn'.F.u)
+             else err sp (s!"`handle_last` is at a row with no unrestricted operation, but its " ++
+               s!"row is `{ppRow E S}`")
+            else err hc.span (s!"the works' row `{ppRow E SW}` is not below the handler's row " ++
+              s!"`{ppRow E S}`")
+           else err sp "the operations of `handle_last` are affine or abortive"
+          else err sp "the operation's name 0 is not in a handler's row"
+         else err sp "a handler has at most 2^32 operations"
+        else err sp s!"the name {k} is already in the row `{ppRow E S}` of the handler's answer"
+       else err sp "a handler's name is not `Div`'s"
+      else err sp "a handler's name is not 0"
+    | .handle sp k _ st hr hc M => do
       -- The handler's pair: the answer clause and the clauses, values checked here, whose
       -- slots are persistent (`[handle]`'s `Γ₁`).
       let what (V : Val) (d : String) : String := match V with

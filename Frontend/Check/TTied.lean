@@ -422,6 +422,33 @@ theorem effHandleT (u : Masks) (site : Option HSite) {p₁ p₂ : Pins} {s₁ s�
       (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right hΞ))) rfl,
     .effHandleT hs hm hcv hd hHr hHc hc.2 qc hn0 hnd hnS hlen hSN hLin hCN he.2 rfl⟩
 
+/-- `[handle-last]` reads its handled row, as `CDerivesAt.effHandleL`: the clauses written out by
+the rule from the works `Hw` and the exits `Hn`.  `[spec §51, §64]` -/
+theorem effHandleL (u : Masks) (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow}
+    {Γ₁ Γ₂ : Ctx CVTy} {tc te : TExpr} {Hr Hw Hn : BoCa.Expr} {S SW : CRow}
+    {E : List (CQual × CVTy × CVTy)} {fs : Nat → CCTy} {Xs : Nat → CVTy} {n : UInt32} {A R : CVTy}
+    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    (hcv : Covers u.u₁ 0 tc.erase ∧ Covers u.u₂ 0 te.erase) (hd : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ₁)
+    (hHr : Hr.ValFormIn Γ₁) (hHw : Hw.ValFormIn Γ₁) (hHn : Hn.ValFormIn Γ₁)
+    (hc : TTied p₁ s₁ Δ Γ₁ tc (.val (.tensor (BoCa.Fig16.LogRel.Core.retTy S A R)
+      (.tensor (BoCa.Fig16.LogRel.Core.worksTy S SW R Xs E 0)
+        (BoCa.Fig16.LogRel.Core.exitsTy S R Xs E 0)))))
+    (qc : tc.erase = .pair Hr (.pair Hw Hn)) (hn0 : n ≠ 0) (hnd : n ≠ divEff)
+    (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (hNZ : S.NZ)
+    (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true)
+    (hSW : BoCa.Fig16.LogRel.Core.RowLe SW S) (hSu : ¬ S.UnrD)
+    (hFin : ∀ j, j < E.length → BoCa.Fig16.LogRel.Core.LastFinOK S SW (fs j) (Xs j))
+    (he : TTied p₂ s₂ Δ Γ₂ te
+      (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) A))) :
+    TTied (p₁ ++ p₂) ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) ∪ (s₁ ∪ s₂)) Δ Γ
+      (.effHandleL i (.comp (effOf S R)) S SW E fs Xs n A R u site te.erase.hin tc te)
+      (.comp (effOf S R)) :=
+  ⟨fun hn Ξ hΞ => .effHandleL (rowAt_of_union_left hΞ) hs hm hcv hd hHr hHw hHn
+      (hc.1 (nilL hn) Ξ (sigsAt_union_left (sigsAt_union_right hΞ))) qc
+      hn0 hnd hnS hlen hNZ hAff hSW hSu hFin
+      (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right hΞ))) rfl,
+    .effHandleL hs hm hcv hd hHr hHw hHn hc.2 qc hn0 hnd hnS hlen hNZ hAff hSW hSu hFin he.2 rfl⟩
+
 /-! ### Derived forms -/
 
 /-- `dtorE T xᵢ; M`, as `drop_derives`: `unitE` over `lolliE` of the variable and the

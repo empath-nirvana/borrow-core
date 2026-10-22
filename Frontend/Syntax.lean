@@ -81,6 +81,17 @@ def Qual.str : Qual → String
   | .unr => "unr"
   | .call => "call"
 
+/-- The form of a `handle` node: its clauses written by the program (`handle_with`, `[handle]`),
+or written out by the kernel's rule from a tuple of answering functions (`handle_tail`,
+`effHandleT`, SPEC §14) or from tuples of works and exits (`handle_last`, `effHandleL`, SPEC §51).
+The rule-written forms name their operations' qualifiers, which their tuples' types do not hold.
+`[spec §14, §19, §51, §64]` -/
+inductive HForm where
+  | clauses
+  | tail (qs : List Qual)
+  | last (qs : List Qual)
+  deriving DecidableEq, Repr, Inhabited
+
 /-- The host resource kinds the surface names (SPEC §11, §34): `input`, `output`, `clock`,
 `args`. -/
 inductive HostKind where
@@ -739,8 +750,10 @@ inductive Comp where
   the value `hr` and whose clauses are the tuple `hc` (`[handle]`), each a value form: the
   elaboration writes both inline, a program may write variables. `site` is the elaboration's
   record of the handler site, with its types in the frame of this node's code; none when the
-  program writes the node.  `[spec §19]` -/
-  | handle (sp : Span) (n : Nat) (site : Option SiteRec) (hr hc : Val) (M : Comp)
+  program writes the node. `form` is `handle_with`'s, or `handle_tail[n: qs](hr, gs) M`'s
+  (`effHandleT`: `gs` the answering functions), or `handle_last[n: qs](hr, (ws, nfs)) M`'s
+  (`effHandleL`: `ws` the works, `nfs` the exits).  `[spec §14, §19, §51, §64]` -/
+  | handle (sp : Span) (n : Nat) (form : HForm) (site : Option SiteRec) (hr hc : Val) (M : Comp)
   /-- `x <- M unwind (D); N` (`x : A <- …` with the annotation): `M then x. N unwind D`, the
   finaliser `D` under one dead binder (`[then]`).  `[spec §19]` -/
   | unwind (sp : Span) (x : Ident) (A : Option VTy) (M D N : Comp)
@@ -1053,7 +1066,7 @@ def Comp.strip : Comp → Comp
   | .loop _ ℓ src V M N => .loop .none (ℓ.map Ident.strip) src.strip V.strip M.strip N.strip
   | .perform _ n i V => .perform .none n i V.strip
   | .abort _ n i V => .abort .none n i V.strip
-  | .handle _ n st hr hc M => .handle .none n (st.map SiteRec.strip) hr.strip hc.strip M.strip
+  | .handle _ n hf st hr hc M => .handle .none n hf (st.map SiteRec.strip) hr.strip hc.strip M.strip
   | .unwind _ x A M D N => .unwind .none x.strip (A.map VTy.strip) M.strip D.strip N.strip
   | .withbor2r _ x b A B r p m M =>
       .withbor2r .none x.strip b.strip A.strip B.strip r.strip p.strip m.strip M.strip
@@ -1109,7 +1122,7 @@ def Comp.span : Comp → Span
   | .ret sp _ | .bind sp _ _ _ _ _ | .force sp _ | .lam sp _ _ _ | .app sp _ _ | .with_ sp _ _
   | .proj sp _ _ | .top sp | .letUnit sp _ _ | .letPair sp _ _ _ _ | .case sp _ _ _ _ _
   | .absurd sp _ | .lamL sp _ _ _ | .inst sp _ _ | .nuIn sp _ | .nuOut sp _
-  | .ascribe sp _ _ | .loop sp _ _ _ _ _ | .perform sp _ _ _ | .abort sp _ _ _ | .handle sp _ _ _ _ _
+  | .ascribe sp _ _ | .loop sp _ _ _ _ _ | .perform sp _ _ _ | .abort sp _ _ _ | .handle sp _ _ _ _ _ _
   | .unwind sp _ _ _ _ _ | .withbor2r sp _ _ _ _ _ _ _ _ => sp
 
 def Life.span : Life → Span
@@ -1167,7 +1180,7 @@ def Comp.anySugar (p : VSugar → Bool) : Comp → Bool
   | .case _ V _ M _ N => V.anySugar p || M.anySugar p || N.anySugar p
   | .loop _ _ _ V M N => V.anySugar p || M.anySugar p || N.anySugar p
   | .perform _ _ _ V | .abort _ _ _ V => V.anySugar p
-  | .handle _ _ _ hr hc M => hr.anySugar p || hc.anySugar p || M.anySugar p
+  | .handle _ _ _ _ hr hc M => hr.anySugar p || hc.anySugar p || M.anySugar p
   | .unwind _ _ _ M D N => M.anySugar p || D.anySugar p || N.anySugar p
   | .withbor2r _ _ _ _ _ _ _ _ M => M.anySugar p
   | .force .. | .top _ => false
