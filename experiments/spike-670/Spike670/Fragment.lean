@@ -61,8 +61,8 @@ theorem slice1_linear : ∀ (fuel : Nat) (t : TExpr), InSlice fuel t →
     case allE => exact node_allE (slice1_linear f _ hs) hw hm h
     case allI => exact node_allI (slice1_linear f _ hs) hw hm h
     case nilDead => exact node_nilDead (slice1_linear f _ hs) hw hm h
-    case lam => exact (node_lam (slice1_linear f _ hs) hw hm h).1
-    case thunkF => exact (node_thunkF (slice1_linear f _ hs) hw hm h).1
+    case lam => exact node_lam (slice1_linear f _ hs) hw hm h
+    case thunkF => exact node_thunkF (slice1_linear f _ hs) hw hm h
     case app =>
       exact node_app (slice1_linear f _ hs.1)
         (fun i' j' A' C' body hh => slice1_linear f _ (hs.2 i' j' A' C' body hh)) (hD _) hw hm h

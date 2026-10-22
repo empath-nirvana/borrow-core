@@ -154,7 +154,7 @@ theorem mkClos_spec {name : String} {ctx : Ctx} {k : LCTy} {param : Option LTy} 
       Post D ctx' s₁ b s₂)
     (hw : WF ctx s) (hm : s.mach.isEmpty = true)
     (h : Ok (mkClos name ctx k param ret body) s tm s') :
-    Post D ctx s tm s' ∧ ∃ fi d s₁ s₂ u, Ok (setFn fi d) s₁ u s₂ ∧ FnBodyOK D d := by
+    Post D ctx s tm s' := by
   simp only [mkClos] at h
   obtain ⟨⟨outer, inner, ctx'⟩, s₁, h₁, h⟩ := ok_bind h
   obtain ⟨g₁, rfl, hli, hni, hri⟩ := ok_envOf h₁
@@ -185,19 +185,7 @@ theorem mkClos_spec {name : String} {ctx : Ctx} {k : LCTy} {param : Option LTy} 
     rw [liveF_cons_some] at l
     have gs : Grows s s' := ((((g₁.trans k₂.grows).trans ⟨by vomega, hm₃⟩).trans ka.grows).trans
       (gb.trans kb.grows)).trans (((ok_setFn h₅).trans (ok_addCode h₆)).trans k₇).grows
-    refine ⟨post_closTerm hw gs ht, fi, _, _, _, _, h₅, ?_, ?_, nd, ?_⟩
-    · simp only [List.nodup_append, hni, List.nodup_singleton, true_and, List.mem_singleton]
-      intro a ha b hb e; rw [hb] at e; rw [e] at ha; have := hinner _ ha; vomega
-    · refine ⟨Δ, ?_, cl⟩
-      convert l using 1
-      ext z; simp [liveF, hli]
-    · intro y hy hp
-      have := (rg y hy).1
-      rw [ka.1, hn₃] at this
-      simp only [List.mem_append, List.mem_singleton] at hp
-      rcases hp with hp | rfl
-      · have := hinner y hp; vomega
-      · vomega
+    exact post_closTerm hw gs ht
   | none =>
     obtain ⟨⟨b, sites⟩, s₄, h₄, h⟩ := ok_bind h
     obtain ⟨sa, sb, ka, hb, kb⟩ := ok_outsideSite h₄
@@ -212,13 +200,7 @@ theorem mkClos_spec {name : String} {ctx : Ctx} {k : LCTy} {param : Option LTy} 
     obtain ⟨gb, ⟨⟨Δ, l, cl⟩, nd, rg⟩⟩ := hbody _ sa b sb hwb (by rw [ka.2]; exact hm₂) hb
     have gs : Grows s s' := (((g₁.trans k₂.grows).trans ka.grows).trans
       (gb.trans kb.grows)).trans (((ok_setFn h₅).trans (ok_addCode h₆)).trans k₇).grows
-    refine ⟨post_closTerm hw gs ht, fi, _, _, _, _, h₅, hni, ⟨Δ, ?_, cl⟩, nd, ?_⟩
-    · convert l using 1
-      ext z; simp [liveF, hli]
-    · intro y hy hp
-      have := (rg y hy).1
-      rw [ka.1] at this
-      have := hinner y hp; vomega
+    exact post_closTerm hw gs ht
 
 /-- A code's body, with no machine operation, is `conv`'s. -/
 theorem convBody_spec {fuel : Nat} {t : TExpr} (IH : Spec D (fun c => conv fuel c t)) :
@@ -256,7 +238,7 @@ argument. -/
 theorem node_lam {fuel : Nat} {ctx : Ctx} {info j A C c} {s s' : CState} {tm : Tm}
     (IH : Spec D (fun c' => conv fuel c' c)) (hw : WF ctx s) (hm : s.mach.isEmpty = true)
     (h : Ok (conv (fuel + 1) ctx (.lam info j A C c)) s tm s') :
-    Post D ctx s tm s' ∧ ∃ fi d s₁ s₂ u, Ok (setFn fi d) s₁ u s₂ ∧ FnBodyOK D d := by
+    Post D ctx s tm s' := by
   open_conv h hm s₁ hk
   have hm₁ : s₁.mach.isEmpty = true := hk.2 ▸ hm
   obtain ⟨rT, s₂, h₁, h⟩ := ok_bind h
@@ -265,15 +247,14 @@ theorem node_lam {fuel : Nat} {ctx : Ctx} {info j A C c} {s s' : CState} {tm : T
   obtain ⟨ar, s₃, h₂, h⟩ := ok_bind h
   obtain ⟨aT, s₄, h₃, h⟩ := ok_bind h
   have k₄ : Keeps s₁ s₄ := ((ok_repJ h₁).trans (ok_answerOf h₂ ▸ Keeps.refl _)).trans (ok_vty h₃)
-  obtain ⟨p, rest⟩ := mkClos_spec (convBody_spec IH) (hw.keeps (hk.trans k₄))
-    (by rw [k₄.2]; exact hm₁) h
-  exact ⟨⟨(hk.trans k₄).grows.trans p.1, by rw [← (hk.trans k₄).1]; exact p.2⟩, rest⟩
+  have p := mkClos_spec (convBody_spec IH) (hw.keeps (hk.trans k₄)) (by rw [k₄.2]; exact hm₁) h
+  exact ⟨(hk.trans k₄).grows.trans p.1, by rw [← (hk.trans k₄).1]; exact p.2⟩
 
 /-- **`thunkF`**: a closure of a code of its own, taking no argument. -/
 theorem node_thunkF {fuel : Nat} {ctx : Ctx} {info j A c} {s s' : CState} {tm : Tm}
     (IH : Spec D (fun c' => conv fuel c' c)) (hw : WF ctx s) (hm : s.mach.isEmpty = true)
     (h : Ok (conv (fuel + 1) ctx (.thunkF info j A c)) s tm s') :
-    Post D ctx s tm s' ∧ ∃ fi d s₁ s₂ u, Ok (setFn fi d) s₁ u s₂ ∧ FnBodyOK D d := by
+    Post D ctx s tm s' := by
   open_conv h hm s₁ hk
   have hm₁ : s₁.mach.isEmpty = true := hk.2 ▸ hm
   obtain ⟨rT, s₂, h₁, h⟩ := ok_bind h
@@ -281,11 +262,11 @@ theorem node_thunkF {fuel : Nat} {ctx : Ctx} {info j A c} {s s' : CState} {tm : 
   swap; · exact (ok_throw h).elim
   obtain ⟨rr, s₃, h₂, h⟩ := ok_bind h
   have k₃ : Keeps s₁ s₃ := (ok_repJ h₁).trans (ok_repK h₂ ▸ Keeps.refl _)
-  obtain ⟨p, rest⟩ := mkClos_spec (fun c' s b s' hw hm hb => by
+  have p := mkClos_spec (fun c' s b s' hw hm hb => by
       have := convBody_spec IH (none :: c') s b s' ⟨by rw [live_cons_none]; exact hw.1,
         fun y hy => hw.2 y (by rwa [live_cons_none] at hy)⟩ hm hb
       rwa [Post, liveF_cons_none] at this)
     (hw.keeps (hk.trans k₃)) (by rw [k₃.2]; exact hm₁) h
-  exact ⟨⟨(hk.trans k₃).grows.trans p.1, by rw [← (hk.trans k₃).1]; exact p.2⟩, rest⟩
+  exact ⟨(hk.trans k₃).grows.trans p.1, by rw [← (hk.trans k₃).1]; exact p.2⟩
 
 end Backend2.Spike670
