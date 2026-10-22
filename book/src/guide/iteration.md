@@ -98,8 +98,10 @@ main -> i32 =
 
 The `for` is a handler of `Yield` with a static name of its own (see [Effects](effects.md)):
 the loop's variables travel through the operation, so the body is the handler's clause, and it
-resumes the generator at its end. When the body does nothing else, each `yield` compiles to a
-direct call of the body: the program above allocates nothing and dispatches no call.
+resumes the generator at its end. When the body raises at most, each `yield` compiles to a
+direct call of the body, and `break` or `return` unwinds the generator to the loop. A body that
+yields itself, as `squares`'s does, is not yet such a clause: `squares` loops over the stored
+`range`, a state machine on the new backend.
 
 A generator's `while` and `loop` are loops of a div body (see [Divergence](../elaboration/divergence.md)),
 whose every turn may yield: one turn per observation, so every observation terminates. A `for`

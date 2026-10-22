@@ -103,7 +103,10 @@ machine operation as a suspension, `lendR`'s relaxed lend in a machine, and the 
 site by its handled computation's `use` keys: the 64 programs that were outside, 380 in all.
 B2 (#644, SPEC §52, §53) elaborates every loop to `iterate` and adds `iterate`'s row and type,
 `main`'s `reify` and `tick` answered *next* under the runtime: 352 programs in all, the stored
-loops (a generator that loops, observed one step at a time) outside.
+loops (a generator that loops, observed one step at a time) outside. SPEC §54 (#644, #564 R-1)
+adds `effHandleT` and `effHandleL`, produced at every `for` over a generator whose body resumes,
+leaves early or raises, each work called where `yield` is performed, and the fallback at a stored
+loop (`tick` a machine operation, `reify` a drive): 374 programs in all, none outside.
 
 ## 2. Classes
 
@@ -180,9 +183,9 @@ baseline).
 | 50 | [`countFold`](../Core/Fundamental.lean#L217) | §16 | 165 | 1018 | 3377 | erasure only (`count_loop`, `Flat/Lower.lean:1405`) | **A** | — |
 | 51 | [`countTry`](../Core/Fundamental.lean#L221) | §16 | 70 | 174 | 457 | erasure only (`count_try_loop`, `Flat/Lower.lean:1439`); the new backend's native loop from the node's type, its exit `inr e` leaving it (`genCountTry`, `Backend2/Convert.lean`; SPEC §43) | **A** | — |
 | 52 | [`boundedFix`](../Core/Fundamental.lean#L226) | §20, §48 | 61 | 150 | 190 | the new backend reads the node's type: its machine step, a function per node whose self-reference counts the budget down (`genFix`, `Backend2/Convert.lean`; SPEC §48), in 43 programs; the old backend (the default until N6) compiles the erasure (`fixValue`, `Convert.lean:243`) | **A** | — |
-| 53 | [`iterate`](../Core/Fundamental.lean#L230) | §14, §52, §53 | 158 | 445 | 456 | the new backend reads the node's row `S` and type: a function per node whose back edge is a tail call, each tick answered *next* by the runtime (`genIter`, `Backend2/Convert.lean`; SPEC §53), in 136 programs; the old backend's `expandIter` turns it into a fixed point | **A** | a stored loop's (SPEC §53 *Open*) |
+| 53 | [`iterate`](../Core/Fundamental.lean#L230) | §14, §52, §53, §54 | 158 | 362 | 372 | the new backend reads the node's row `S` and type: a function per node whose back edge is a tail call, each tick answered *next* by the runtime (`genIter`, `Backend2/Convert.lean`; SPEC §53); at a program with a stored loop a machine per node whose back edge suspends at `tick` (`genIterK`, SPEC §54); the old backend's `expandIter` turns it into a fixed point | **A** | — |
 | 54 | [`divFuel`](../Core/Fundamental.lean#L235) | §14 | 0 | 0 | 0 | generic; reached only by the kernel program `div-residual` | **C** | B2, then N4 |
-| 55 | [`reify`](../Core/Fundamental.lean#L240) | §14, §52, §53 | 158 | 255 | 257 | the new backend reads `main`'s: its row, `B` and `R` (`mainReify?`, `runtimeMain`; SPEC §53), in 136 programs; a stored loop's `reify` is outside its fragment | **B** | a stored loop's `reify` (SPEC §53 *Open*) |
+| 55 | [`reify`](../Core/Fundamental.lean#L240) | §14, §52, §53, §54 | 158 | 213 | 215 | the new backend reads `main`'s: its row, `B` and `R` (`mainReify?`, `runtimeMain`; SPEC §53); a stored loop's: a drive with `reifyH`'s clauses, `tick` a machine operation (`genReify`, SPEC §54), in 17 programs | **B** | a stored loop's `reify` is the fallback at a stored κ: every tick a suspension (SPEC §54 *Open*) |
 | 56 | [`sliceBorrowM`](../Core/Fundamental.lean#L247) | §9 | 109 | 133 | 139 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `noalias` on the leaf borrows (#555 choice 6) |
 | 57 | [`sliceBorrowI`](../Core/Fundamental.lean#L254) | §9 | 151 | 655 | 1442 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `readonly` on the leaf borrows |
 | 58 | [`sliceGetM`](../Core/Fundamental.lean#L259) | §9 | 10 | 11 | 20 | erasure only | **A** | — |
@@ -222,7 +225,8 @@ baseline).
 | 92 | [`effThen`](../Core/Fundamental.lean#L412) | §19, §27 | 79 | 279 | 342 | the new backend reads the masks and `S`, `SM`, `SD`: `N` on a value, on an abort the finaliser then the abort, or its own (`Backend2/Convert.lean:1166`; SPEC §47); the old backend re-recognises the frame (`markUbinds`, `Convert.lean:463`) | **A** | N6 (`markUbinds` deleted) |
 | 93 | [`effHandleV`](../Core/Fundamental.lean#L427) | §19, §24 | 148 | 523 | 606 | the new backend reads `n`, `E`, `S`, the masks, the clause kinds `ks` and the clauses of the pair in place: `abortive` clauses at the handler's join, `tail` clauses called directly where `directFacts` (`Backend2/Driver.lean:64`) licenses them from `ks`, `handlerNames` and `cond2B` at `Checked.flows` (`convHandle`, `Backend2/Convert.lean:1322`; SPEC §47); a clause of another kind leaves the program with the old backend, which re-derives the kinds (`tailClause?`, `Capture.lean:625`) and drops the qualifiers (`Convert.lean:740`); `inside` is not read; `site` is read for `main_div_error` (`Checked.exitsOnDivError`) and its handler's name (a task body's key, SPEC §49). Since N3 (SPEC §49) a node with a machine operation is a drive: the handled computation a machine of its own, its outcome taken apart by the node's fields, a suspension at one of its operations its clause on the argument and `κ` (by `E`'s qualifier: `kTy`, `cancelTy` at `fs`), one at `Σ`'s forwarded (`convDrive`) | **B** | the qualifiers' cells (κ's linear cancel branch is `⊤`, read); the `tail+state` and `resume-or-cancel` direct rules (SPEC §47 *Open*) |
 | 94 | [`effHandleVB`](../Core/Fundamental.lean#L438) | §28 | 16 | 29 | 37 | as `effHandleV`, in the new backend, a drive (SPEC §49); the box lifetime `d` is not read | **B** | the box lifetime (N5, storage from lifetimes) |
-| 95 | [`effHandleT`](../Core/Fundamental.lean#L451) | §14, §19 | 0 | 0 | 0 | — | **C** | B1/B2 (`tick`'s handlers): no checker producer and no typed Core program |
+| 95 | [`effHandleT`](../Core/Fundamental.lean#L451) | §14, §19, §54 | 21 | 42 | 42 | the checker produces it at a `for` over a generator whose body resumes on every path and raises nothing (`handle_tail`, `rEffHandleT`); the new backend calls each answering function where its operation is performed (`ensureAns`, `directFacts` at its row `Σ_N`; `tail_resume_direct`), a drive around a computation with a machine operation | **A** | — |
+| 95′ | [`effHandleL`](../Core/Fundamental.lean#L468) | §51, §54 | 6 | 6 | 6 | the checker produces it at a `for` over a generator whose body leaves early or raises (`handle_last`, `rEffHandleL`); the new backend calls each work where its operation is performed, `inr` unwinding to the node at the operation's cancel summand (`ensureLastWork`, `lastPerform`, `lastFacts`; `last_resume_direct`, `last_cancel_direct`) | **A** | a work that performs (T-B2, #564) |
 | 96 | [`letPoly`](../Core/Fundamental.lean#L463) | §24 | 0 | 0 | 0 | `polyLet?` (`Convert.lean:606`) recognises its erasure; rows re-derived (`Backend/Clos/Poly.lean`) | **C** | rule table: an elaboration rule for a let used at several rows (pipeline-architecture A11), else a deletion candidate. no checker producer; reached only by the kernel programs `hof-two-rows`, `poly-id` |
 
 ## 4. `CDerivesP`-only rules (§29, under `PinLaw`)
@@ -422,10 +426,11 @@ with `Collapse` reading the node. `iterate`, `divFuel` and `reify` once B2 produ
      bounds-checked.
    - `divLit`'s nonzero divisor proves the error arm is dead. 10 programs have one, and the arm
      is still compiled.
-3. **The checker has no producer at all for `divFuel`, `effHandleT`, `letPoly` or `lendLoopR`.**
+3. **The checker has no producer at all for `divFuel`, `letPoly` or `lendLoopR`.**
    - The only programs that reach them are the kernel programs `div-residual` (`divFuel`),
      `hof-two-rows` and `poly-id` (`letPoly`).
-   - `effHandleT` has no typed program anywhere: no Core derivation and no checker producer.
+   - `effHandleT` and `effHandleL` have one since SPEC §54 (`handle_tail`, `handle_last`): a `for`
+     over a generator.
    - `iterate` and `reify` have one since B2 (SPEC §52): every loop and loop value.
 4. **Qualifiers.**
    - Over 152 programs, `[handle]` nodes type 573 affine operations, 2 linear ones and no
