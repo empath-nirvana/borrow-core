@@ -486,15 +486,27 @@ def sumTys (c : TCx) (V : Val) : Option CVTy × Option CVTy :=
 
 /-- A call found in a value, described. -/
 def callMsg (sp : Span) : Option String → Span × String
-  | some f =>
-    -- The loop a `for` over a generator whose body loops runs (`forYield`).
-    if f.startsWith "io_hwf" then (sp, "it has a `for` over a generator whose body loops")
-    else (sp, s!"it calls the div function `{(f.splitOn "__").headD f}`")
+  | some f => (sp, s!"it calls the div function `{(f.splitOn "__").headD f}`")
   | none => (sp, "it calls a div function")
+
+/-- **A rule-written handler around a call of a div function**: `handle_tail` or `handle_last`
+(SPEC §14, §51) whose handled computation is a call of a div function in direct style, as a `for`
+over a generator that loops is (`forYield`): itself a call of a div function, whose answer is its
+own answer type beside the callee's residual (its answer clause hands the residual on). The callee
+and the residual.  `[spec §54]` -/
+def handleDivCall? (c : TCx) : Comp → Option (Val × CVTy)
+  | .handle _ _ (.tail _) _ _ _ M₀ | .handle _ _ (.last _) _ _ _ M₀ =>
+    let callee : Option Val := match M₀ with
+      | .ret _ (.app _ f _) => some f
+      | M₀ => (divCallC? c M₀).map (·.1)
+    callee.bind fun f => ((c.tyV f).bind divFnOf).map fun (_, _, _, R) => (f, R)
+  | _ => none
 
 /-- A call run in direct style in a bound or returned value: at its top (reported at the
 computation) or below it. -/
 def headLoops (c : TCx) (exp : Option CVTy) : Comp → Option (Span × String)
+  | M@(.handle ..) => (handleDivCall? c M).map fun _ =>
+    (M.span, "it has a `for` over a generator that loops")
   | M@(.ret _ V) => match directCall c exp V with
     | some _ => some (callMsg M.span (calleeName V))
     | none => (nestedCall c exp V).map fun (sp, f) => callMsg sp f
@@ -1479,6 +1491,12 @@ def eStart (c : TCx) (sp : Span) (sfx : String) (S : Frontend.Check.CRow) (B R :
 `g <- return f; a <- return W; (force g) a`. A call of a div function placed for the empty row,
 at a row, is a call of its loop value. -/
 def eDivCall? (m : DCx) (c : TCx) (exp : Option CVTy) (M : Comp) : EM (Option (DCall × CVTy × CVTy)) := do
+  -- A rule-written handler around a call of a div function is one: its answer is the binding's,
+  -- beside the callee's residual.  [spec §54]
+  if let some (_, R) := handleDivCall? c M then
+    match exp with
+    | some B => return some (.call M, B, R)
+    | none => throw ⟨M.span, "internal error: the answer of a `for` over a generator that loops"⟩
   let k ← eFresh ""
   let fw : Option (Val × Comp) := match M with
     | .ret _ (.app _ f W) => some (f, eCallAt c M.span k f W)
@@ -5457,30 +5475,52 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let Rts ← pp Rt
     let Et := if hasRet then s!"({Vs}) + ({Rts})" else Vs
     let Jt := s!"(({Wt}) * ({Bt})) + (({Wt}) * ({Et}))"
-    -- The answer of an observation of `g`'s loop, handled: what `g` returns or how the body left
-    -- (`Jt`), or the rest of the loop.
-    let Lg ← pp Res
-    let Ot := if looping then s!"({Jt}) + {Lg}" else Jt
-    let K ← do pure s!"U ((({Wt}) -o {← F Ot}) & {← F "1"})"
-    let clT ← do pure s!"!U ((({Tt}) * ({Wt})) * {K} -o {← F Ot})"
-    let hrIn := if looping then s!"(({Wt}) * ({Bt})) + {Lg}" else s!"({Wt}) * ({Bt})"
+    -- The node's answer: what `g` returns or how the body left (`Jt`), and, when `g` loops, its
+    -- residual beside it: the node is then a call of a div function in direct style (`eDivCall?`).
+    let Rgs ← match Rg? with
+      | some Rg => pp Rg
+      | none => pure "1"
+    let Ot := if looping then s!"({Jt}) + ({Rgs})" else Jt
+    -- The outer row: the `for`'s, and `Div` first when `g`'s loop ticks under the node.
+    let Fo (A : String) : DM String := do
+      if !looping then return ← F A
+      let es ← S.mapM fun o => do
+        pure s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q} {← pp o.A} ~> {← pp o.B}"
+      pure s!"F[{", ".intercalate ("div" :: es)}] ({A})"
+    -- The body's row: the abortive operations of the outer row it performs (it performs no other,
+    -- `Frontend.Elab.Effects`, `forSite`).
+    let bodyOps := opsC c divFuel M
+    let SW := S.filter fun o => o.abort && bodyOps.contains (o.n.toNat, o.i.toNat)
+    let FW (A : String) : DM String := do
+      if SW.isEmpty then return s!"F ({A})"
+      let es ← SW.mapM fun o => do
+        pure s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q} {← pp o.A} ~> {← pp o.B}"
+      pure s!"F[{", ".intercalate es}] ({A})"
+    -- `[handle-last]` when the body leaves early or raises (its work answers `inl` to resume,
+    -- `inr` to leave); the tail-resuming rule otherwise.  [spec §14, §51, §54]
+    let last := !M.spineBreaks.isEmpty || hasRet || !SW.isEmpty
+    let hrIn := if looping then s!"(({Wt}) * ({Bt})) + ({Rgs})" else s!"({Wt}) * ({Bt})"
     let hrBody := if looping then
         s!"case io_hv{sfx} \{ inl io_ha{sfx} -> return (inl (inl io_ha{sfx})) | inr io_hl{sfx} -> return (inr io_hl{sfx}) }"
       else s!"return (inl io_hv{sfx})"
-    -- The site's handler pair, written inline in its `handle_with`.
-    let handler := s!"((!thunkv fun (io_hv{sfx} : {hrIn}) -> {hrBody}) : !U ({hrIn} -o {← F Ot})),
-  (((!thunkv fun (io_hp{sfx} : (({Tt}) * ({Wt})) * {K}) ->
-    let (io_hxw{sfx}, io_k{sfx}) = io_hp{sfx};
-    let ({x.name}, io_hw{sfx}) = io_hxw{sfx};
-    {destructSrc s!"io_hw{sfx}" wsN}force io_hole_body), ()) : ({clT}) * 1)"
-    -- The body: its terminals resume, and its exits cancel the rest of `g` and leave.
+    let Xt := s!"({Wt}) * ({Et})"
+    let workIn := s!"(({Tt}) * ({Wt}))"
+    let workHead := s!"!thunkv fun (io_hp{sfx} : {workIn}) ->
+    let ({x.name}, io_hw{sfx}) = io_hp{sfx};
+    {destructSrc s!"io_hw{sfx}" wsN}force io_hole_body"
+    let handler ← if last then do
+        let exitBody := if looping then s!"return (inl (inr io_hz{sfx}))" else s!"return (inr io_hz{sfx})"
+        pure s!"((!thunkv fun (io_hv{sfx} : {hrIn}) -> {hrBody}) : !U ({hrIn} -o {← Fo Ot})),
+  (((({workHead}) : !U ({workIn} -o {← FW s!"({Wt}) + ({Xt})"})), ()),
+   (((!thunkv fun (io_hz{sfx} : {Xt}) -> {exitBody}) : !U (({Xt}) -o {← Fo Ot})), ()))"
+      else do
+        pure s!"((!thunkv fun (io_hv{sfx} : {hrIn}) -> {hrBody}) : !U ({hrIn} -o {← Fo Ot})),
+  ((({workHead}) : !U ({workIn} -o F ({Wt}))), ())"
+    -- The body: its terminals resume, and its exits leave.
     let leave (tsp : Span) (o : Val) : Comp :=
-      let ex : Val := .inr tsp (.pair tsp (tupleVal tsp wsN) o)
-      .bind tsp ⟨s!"io_c{sfx}", tsp⟩ none (.proj tsp false (.force tsp ⟨s!"io_k{sfx}", tsp⟩))
-        (.ret tsp (if looping then .inl tsp ex else ex)) false
+      .ret tsp (.inr tsp (.pair tsp (tupleVal tsp wsN) o))
     let resume (tsp : Span) : Comp :=
-      .bind tsp ⟨s!"io_wv{sfx}", tsp⟩ none (.ret tsp (tupleVal tsp wsN))
-        (.app tsp (.proj tsp true (.force tsp ⟨s!"io_k{sfx}", tsp⟩)) ⟨s!"io_wv{sfx}", tsp⟩) false
+      .ret tsp (if last then .inl tsp (tupleVal tsp wsN) else tupleVal tsp wsN)
     let brk (tsp : Span) (e : Val) : Val := if hasRet then .inl tsp e else e
     let body := wrapTail (fun
       | .ret tsp (.sugar _ .brk) => leave tsp (brk tsp (.unit tsp))
@@ -5511,34 +5551,14 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
 | inr io_rv{sfx} -> force io_hole_ret }"
       else s!"let (io_jx{sfx}, io_v{sfx}) = io_jj{sfx};\n{destructSrc s!"io_jx{sfx}" wsN}{r}force io_hole_rest"
     let bindW := s!"{i.w} : {Wt} <- return {tupleSrc wsN};\n"
-    let plain := s!"{bindW}io_j{sfx} : {Jt} <- handle_with[{i.n}]({handler}) (force io_hole_call);\n"
-    let core ← if !looping then pure plain else do
-      let some Rg := Rg? | throw ⟨sp, "internal error: a generator's loop"⟩
-      let Rgs ← pp Rg
-      let fOb ← F s!"({Jt}) + U X"
-      let fCl ← F Rgs
-      let Lw := if S.isEmpty then s!"loop ({Jt}) ({Rgs})" else s!"nu X. {fOb} & {fCl}"
-      let Kc ← do pure s!"U ((({Wt}) -o {← F Rgs}) & {← F "1"})"
-      let closer := s!"((!thunkv fun (io_cv{sfx} : {Rgs}) -> return io_cv{sfx}) : !U ({Rgs} -o {← F Rgs})),
-  (((!thunkv fun (io_cp{sfx} : (({Tt}) * ({Wt})) * {Kc}) ->
-    let (io_cxw{sfx}, io_ck{sfx}) = io_cp{sfx};
-    let (io_cx{sfx}, io_cw{sfx}) = io_cxw{sfx};
-    (force io_ck{sfx}).1 io_cw{sfx}), ()) : (!U ((({Tt}) * ({Wt})) * {Kc} -o {← F Rgs})) * 1)"
-      pure s!"{bindW}io_l{sfx} : {Lg} <- force io_hole_call;
-io_hwf{sfx} : !({Lg} => U ({Lw})) <- return (!thunkv fun (io_hl{sfx} : {Lg}) ->
-  io_hf{sfx} <- return (unbang (unfold[{Lw}, {Lg}] (!thunkv fun (io_hs{sfx} : {Lg}) ->
-    < handle_with[{i.n}]({handler}) ((nu_out (force io_hs{sfx})).1),
-      handle_with[{i.n}]({closer}) ((nu_out (force io_hs{sfx})).2) >)));
-  return (thunkv nu_in < (nu_out (force io_hf{sfx} io_hl{sfx})).1, (nu_out (force io_hf{sfx} io_hl{sfx})).2 >));
-io_j{sfx} : {Jt} <- return ((unbang io_hwf{sfx}) io_l{sfx});
-"
+    let quals := ", ".intercalate ((rowG.filter (·.n.toNat == i.n)).map fun o => Frontend.Check.qualStr o.q)
+    let form := if last then "handle_last" else "handle_tail"
+    let core := s!"{bindW}io_j{sfx} : {Jt} <- {form}[{i.n}: {quals}]({handler}) (force io_hole_call);\n"
     let what := "a `for` over a generator"
     let site ← siteAtCall cw sp g i.site
     let L ← (template sp what (core ++ join ++ after) : SM Comp)
-    -- The generator's loop value, when it is a div function: `reify` of its call (`eStart`).
-    let callC ← match divG, call', Rg? with
-      | true, .app _ f W, some Rg => ((eStart cw sp sfx rowG Bw Rg f W).run' 0 : SM Comp)
-      | _, _, _ => pure (.ret sp call')
+    -- The generator's call in direct style, under the node.
+    let callC : Comp := .ret sp call'
     let hc (h : String) : Option Comp :=
       if h == "io_hole_body" then some body else if h == "io_hole_rest" then some (restOf N)
       else if h == "io_hole_call" then some callC

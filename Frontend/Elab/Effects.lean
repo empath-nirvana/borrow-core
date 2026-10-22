@@ -1150,6 +1150,12 @@ def Cx.lcallV (cx : Cx) (V : Val) : Bool :=
 /-- The control effects of `row`. -/
 def Cx.ctl (cx : Cx) (row : List Inst) : List Inst := row.filter (!cx.env.answering ·.eff)
 
+/-- Every operation of the instance's effect is abortive.  `[spec §54]` -/
+def Cx.aborts (cx : Cx) (i : Inst) : Bool :=
+  match cx.env.eff? i.eff with
+  | some e => !e.ops.isEmpty && e.ops.all (·.abortive)
+  | none => false
+
 def Cx.ctlV (cx : Cx) (V : Val) : Bool := !(cx.ctl (rowV cx.env fuel V)).isEmpty
 def Cx.ctlC (cx : Cx) (M : Comp) : Bool := !(cx.ctl (rowC cx.env fuel M)).isEmpty
 
@@ -1794,15 +1800,16 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
     | .loop sp ℓ src V M N =>
       match src, cx.env.iterCall? V with
       | .each x, some (g, gs, i, f, W) =>
-        if (cx.ctl (rowC cx.env fuel M)).isEmpty && !mayLoop fuel M then
+        -- The body is the clause of the site: the kernel's tail-resuming rule or `[handle-last]`
+        -- (SPEC §54), whose work may raise. A body that performs a control operation that
+        -- resumes needs the erasure law at a work that performs (T-B2), and one that loops a
+        -- work that ticks: the `for` drains the stored generator instead.
+        if (cx.ctl (rowC cx.env fuel M)).all cx.aborts && !mayLoop fuel M then
           forSite n cx cs wrap sp ℓ x g gs i f W M N
         else
-          -- A body that performs a control operation would hold the continuation across it,
-          -- which has no destructor (its cancel performs at the site's row), and one that loops
-          -- cannot be a clause, which is total: the `for` drains the stored generator instead.
           let (bs, V') ← pullSite n cx cs sp g gs i f W
-          report sp "lowering" (s!"for over {g}: its body performs a control operation or " ++
-            "loops, so it drains the stored generator")
+          report sp "lowering" (s!"for over {g}: its body performs a control operation that " ++
+            "resumes, or loops, so it drains the stored generator")
           chain bs (.loop sp ℓ src V' (← trC n cx [] false M) (← trC n cx cs wrap N))
       | _, _ =>
         let (bs, V') ← trV n cx cs V

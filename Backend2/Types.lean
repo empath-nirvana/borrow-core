@@ -154,8 +154,19 @@ def divName : UInt32 := 0xFFFFFFFF
 
 /-- The program's machine operations (SPEC §49): the control operations `(n, i)` whose clause at
 some `handle` node of `n` is not called where it is performed (`Backend2/Driver.lean`,
-`machineOps`). -/
-abbrev MachSet := Std.HashSet (UInt32 × UInt32)
+`machineOps`); and the operations of `[handle-last]` nodes whose work is called where they are
+performed (SPEC §54, `lastOps`), each with its exit's argument `X` and its work's row `Σ_W`: the
+operation's cancel, `inr z` of the work or a raise from it, is a way out of the computation to the
+node, a summand of the row's payload holding `X`, or `X ⊕ P_W` with `P_W` the payload of `Σ_W`
+(`cancelSummand`). -/
+structure MachSet where
+  ops : Std.HashSet (UInt32 × UInt32) := {}
+  last : Std.HashMap (UInt32 × UInt32) LTy := {}
+  deriving Inhabited
+
+def MachSet.contains (ms : MachSet) (k : UInt32 × UInt32) : Bool := ms.ops.contains k
+def MachSet.insert (ms : MachSet) (k : UInt32 × UInt32) : MachSet := { ms with ops := ms.ops.insert k }
+def MachSet.isEmpty (ms : MachSet) : Bool := ms.ops.isEmpty
 
 /-- What cancelling a computation suspended at an operation answers (SPEC §49): `()`, or the first
 error its finalisers raised, one of the operation's cancel row's abortive operations (`cp`, its
@@ -231,6 +242,8 @@ def ofC (ms : MachSet) : CTy → Except String LCTy
     if abortB q B then return .ret (outcomeTy r (((n, i), ← ofV ms A) :: ps) qs)
     else if ms.contains (n, i) then
       return .ret (outcomeTy r ps (((n, i), ← ofV ms A, ← ofV ms B, ← ofFin ms fin) :: qs))
+    else if let some t := ms.last[(n, i)]? then
+      return .ret (outcomeTy r (((n, i), t) :: ps) qs)
     else return .ret (outcomeTy r ps qs)
 
 /-- The layers of `F_Σ R` (`CTy.effOf`): each abortive operation's key and argument type, each
@@ -244,6 +257,7 @@ def ofEff (ms : MachSet) : CTy →
     let (ps, qs, r) ← ofEff ms C
     if abortB q B then return (((n, i), ← ofV ms A) :: ps, qs, r)
     else if ms.contains (n, i) then return (ps, ((n, i), ← ofV ms A, ← ofV ms B, ← ofFin ms fin) :: qs, r)
+    else if let some t := ms.last[(n, i)]? then return (((n, i), t) :: ps, qs, r)
     else return (ps, qs, r)
   | _ => throw "a row's layers over a type that is not `F R`"
 
@@ -260,6 +274,17 @@ def ofFin (ms : MachSet) : CTy → Except String (Option (List ((UInt32 × UInt3
     else return rest
   | _ => throw "a cancel row that is not a row"
 end
+
+/-- **A `[handle-last]` operation's cancel summand** (SPEC §54): the exit's argument `X`, or
+`X ⊕ P_W` when the work's row `Σ_W` has abortive operations (`P_W` their payload). -/
+def cancelSummand (ms : MachSet) (X : VTy) (SW : Row) : Except String LTy := do
+  let x ← ofV ms X
+  let mut ps : List ((UInt32 × UInt32) × LTy) := []
+  for o in SW do
+    if abortB o.q o.B then ps := ps ++ [((o.n, o.i), ← ofV ms o.A)]
+  return match payOf ps with
+    | none => x
+    | some p => .sum x p
 
 /-- The LIR type of a judgment: a value type, or the closure type a computation's value has
 (`rep`). -/
