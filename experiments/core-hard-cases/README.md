@@ -367,8 +367,8 @@ The only competitive owned-tree form is the destructive walk.
   - **L11** (in-place reuse) is needed only if the frames stay a `mu` list.
   - **L12 / `Layouts`** for zero indirect calls where the closure class is open.
 
-Measured over the cases: 7 of 8 have a kernel-checked form with no extension. H3 types too, but
-not at an acceptable cost; H8 needs E2. So the hand-lowered residue is the R1/`lendR` class:
+Measured over the cases: 6 of 8 (H1, H2, H4–H7) have a kernel-checked form with no extension at
+an acceptable cost. H3 types, but fails on cost; H8 needs E2. So the hand-lowered residue is the R1/`lendR` class:
 self-borrows that must hold a position across a stop at O(1).
 
 ## Not verified
