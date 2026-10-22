@@ -52,6 +52,26 @@ existing core terms. It must never do the borrow calculus's work, and must never
   An elaborator workaround is never the fix.
 <!-- ANCHOR_END: elaborator-scope -->
 
+## No stage does the kernel's work
+
+<!-- ANCHOR: every-stage-scope -->
+The rule above covers every stage, not only the elaborator. That includes pre-kernel IR passes,
+the backends and their lowerings, and the runtime library. The kernel decides ownership,
+linearity, aliasing, lend extents and escape. A later stage that needs to express or decide one
+of these for a value the kernel cannot type stops: it does not build the value itself and then
+re-establish its safety with a lint, an invariant or a runtime check.
+
+- **Effects are eliminated inside the kernel's language.** Handler laws are Core → Core rewrites
+  whose output the kernel checks again. A continuation, a state machine or a task's frames are
+  Core values.
+- **Below the kernel, only representation is chosen:** boxed or unboxed, inlined or called, the
+  layout of a sum. Ownership and linearity are read from the checked term, never decided or
+  re-checked there.
+- **Hard stop:** stop and report `STOP: KERNEL WORK` before writing a lowering that invents a
+  value the kernel never typed and decides its copies, drops or lifetime.
+- **When the kernel cannot express what a lowering needs,** change the kernel (Changing Core).
+<!-- ANCHOR_END: every-stage-scope -->
+
 ## Growth discipline
 
 <!-- ANCHOR: growth -->
