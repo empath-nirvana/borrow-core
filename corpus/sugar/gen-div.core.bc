@@ -1,6 +1,8 @@
 -- The elaboration of `gen-div.bc` in core, as `bcc desugar` prints it: `steps` is a div function
 -- at the row `div, Yield`, which calls `collatz`, a loop written in core, by draining its loop
--- with `iterate`; the `for` over it observes its loop value, `reify` of its call (SPEC §14, §15).
+-- with `iterate`; the `for` over it is the generator's call in direct style under the kernel's
+-- tail-resuming rule (`handle_tail`), a call of a div function itself (SPEC §14, §15, §54).
+
 def collatz_step : !U (i32 * i32 -o F (i32 + i32 * i32) & F 1) =
   !thunkv fun (s : i32 * i32) ->
       < let (n, k) = s;
@@ -67,94 +69,30 @@ main : F U loop i32 1 =
       let () = io_u;
       acc <- return i32[0];
       fx_w1 : i32 <- return acc;
-      io_l40_3 : U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1) <- return (thunkv nu_in < io_rl40_3 <- (io_rf40_3 <- return unbang reify[i32 * 1, 1, [1.0 aff i32 * i32 ~> i32]](!thunkv fun (io_b : i32 * 1) ->
-                      return ());
-              io_rt40_3 : U (1 -o F[div, 1.0 aff i32 * i32 ~> i32] (i32 * 1 + 1)) <- return (thunkv fun (io_u : 1) ->
-                    let () = io_u;
-                    io_si40_3 <- return unbang iterate[i32 * i32 + i32 * i32, i32 * 1 + 1, 1, [div, 1.0 aff i32 * i32 ~> i32]];
-                    io_sp040_3 : !U (i32 * i32 + i32 * i32 -o F[div, 1.0 aff i32 * i32 ~> i32] ((i32 * 1 + 1) + i32 * i32 + i32 * i32) & F[div, 1.0 aff i32 * i32 ~> i32] 1) * (i32 * i32 + i32 * i32) <- return (!thunkv fun (io_ss40_3 : i32 * i32 + i32 * i32) ->
-                          < case io_ss40_3 {
-                              inl io_sp40_3 -> return inr inr io_sp40_3
-                            | inr io_sp40_3 -> io_sx40_3 <- (io_fgs40_3 <- return unbang steps__n1__g0;
-                                  io_fas40_3 <- return io_sp40_3;
-                                  force io_fgs40_3 io_fas40_3);
-                                return inl io_sx40_3
-                            },
-                            case io_ss40_3 {
-                              inl io_sp40_3 -> io_fgc40_3 <- return unbang steps__n1__g0__close;
-                                io_fac40_3 <- return io_sp40_3;
-                                force io_fgc40_3 io_fac40_3
-                            | inr io_sp40_3 -> io_fgd40_3 <- return unbang steps__n1__g0__close;
-                                io_fad40_3 <- return io_sp40_3;
-                                force io_fgd40_3 io_fad40_3
-                            } >, inl (fx_w1, i32[27]));
-                    io_sr40_3 <- force io_si40_3 io_sp040_3;
-                    case io_sr40_3 {
-                      inl io_sa -> return io_sa
-                    | inr io_sq -> return inr io_sq
-                    });
-              force io_rf40_3 io_rt40_3);
-            (nu_out force io_rl40_3).1,
-            io_fge40_3 <- return unbang steps__n1__g0__close;
-            io_fae40_3 <- return (fx_w1, i32[27]);
-            force io_fge40_3 io_fae40_3 >);
-      io_hwf40_3 : !(U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1) => U loop (i32 * 1 + i32 * 1) 1) <- return (!thunkv fun (io_hl40_3 : U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)) ->
-            io_hf40_3 <- return unbang unfold[loop (i32 * 1 + i32 * 1) 1, U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)] (!thunkv fun (io_hs40_3 : U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)) ->
-                  < handle_with[1](((!thunkv fun (io_hv40_3 : i32 * 1 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)) ->
-                          case io_hv40_3 {
-                            inl io_ha40_3 -> return inl inl io_ha40_3
-                          | inr io_hl40_3 -> return inr io_hl40_3
-                          }) : !U (i32 * 1 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1) -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1)))), ((!thunkv fun (io_hp40_3 : (i32 * i32) * U ((i32 -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) & F 1)) ->
-                          let (io_hxw40_3, io_k40_3) = io_hp40_3;
-                          let (k, io_hw40_3) = io_hxw40_3;
-                          acc <- return io_hw40_3;
-                          acc <- return (unbang host[add32]) (acc, k);
-                          io_wv40_3 <- return acc;
-                          force io_k40_3.1 io_wv40_3, ()) : !U ((i32 * i32) * U ((i32 -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) & F 1) -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 aff i32 * i32 ~> i32] 1))) * 1)) (nu_out force io_hs40_3).1,
-                    handle_with[1](((!thunkv fun (io_cv40_3 : 1) ->
-                          return io_cv40_3) : !U (1 -o F 1)), ((!thunkv fun (io_cp40_3 : (i32 * i32) * U ((i32 -o F 1) & F 1)) ->
-                          let (io_cxw40_3, io_ck40_3) = io_cp40_3;
-                          let (io_cx40_3, io_cw40_3) = io_cxw40_3;
-                          force io_ck40_3.1 io_cw40_3, ()) : !U ((i32 * i32) * U ((i32 -o F 1) & F 1) -o F 1) * 1)) (nu_out force io_hs40_3).2 >);
-            return (thunkv nu_in < (nu_out force io_hf40_3 io_hl40_3).1,
-                (nu_out force io_hf40_3 io_hl40_3).2 >));
-      io_dl5 <- return (unbang io_hwf40_3) io_l40_3;
-      io_step9 : !U (U delay (i32 * 1 + i32 * 1) -o F[div] (((i32 * 1 + i32 * 1) + i32 + 1) + U delay (i32 * 1 + i32 * 1)) & F[div] 1) <- return (!thunkv fun (io_s9 : U delay (i32 * 1 + i32 * 1)) ->
-            < io_dl5 <- return io_s9;
-              io_o <- (nu_out force io_dl5).1;
-              case io_o {
-                inl io_jb5 -> return inl inl io_jb5
-              | inr io_dl5 -> return inr io_dl5
-              },
-              io_dl5 <- return io_s9;
-              io_r <- (nu_out force io_dl5).2;
-              let () = io_r;
-              return () >);
-      io_s09 : U delay (i32 * 1 + i32 * 1) <- return io_dl5;
-      io_x9 : ((i32 * 1 + i32 * 1) + i32 + 1) + 1 <- (io_n9 <- perform[4294967295.0] ();
-        case io_n9 {
-          inl io_u -> io_iter9 <- return unbang iterate[U delay (i32 * 1 + i32 * 1), (i32 * 1 + i32 * 1) + i32 + 1, 1, [div]];
-            io_p9 : !U (U delay (i32 * 1 + i32 * 1) -o F[div] (((i32 * 1 + i32 * 1) + i32 + 1) + U delay (i32 * 1 + i32 * 1)) & F[div] 1) * U delay (i32 * 1 + i32 * 1) <- return (io_step9, io_s09);
-            force io_iter9 io_p9
-        | inr io_u -> io_sf9 <- return unbang io_step9;
-            io_q9 <- force io_sf9 io_s09.2;
-            return inr io_q9
-        });
-      case io_x9 {
-        inl io_l9 -> case io_l9 {
-            inl io_j5 -> io_jb5 <- return io_j5;
-              io_j40_3 : i32 * 1 + i32 * 1 <- return io_jb5;
-              io_jj40_3 : i32 * 1 <- case io_j40_3 {
-                  inl io_ja40_3 -> let (io_jw40_3, io_jg40_3) = io_ja40_3;
-                    return (io_jw40_3, ())
-                | inr io_je40_3 -> let (io_jw40_3, io_jo40_3) = io_je40_3;
-                    return (io_jw40_3, io_jo40_3)
-                };
-              let (io_jx40_3, io_v40_3) = io_jj40_3;
-              acc <- return io_jx40_3;
-              let () = io_v40_3;
-              return inl acc
-          | inr io_a9 -> return io_a9
-          }
-      | inr io_r9 -> return inr io_r9
+      io_d2 <- handle_tail[1: aff](((!thunkv fun (io_hv40_3 : i32 * 1 + 1) ->
+              case io_hv40_3 {
+                inl io_ha40_3 -> return inl inl io_ha40_3
+              | inr io_hl40_3 -> return inr io_hl40_3
+              }) : !U (i32 * 1 + 1 -o F[div] ((i32 * 1 + i32 * 1) + 1))), (((!thunkv fun (io_hp40_3 : i32 * i32) ->
+              let (k, io_hw40_3) = io_hp40_3;
+              acc <- return io_hw40_3;
+              acc <- return (unbang host[add32]) (acc, k);
+              return acc) : !U (i32 * i32 -o F i32)), ())) (io_fg40_3 <- return unbang steps__n1__g0;
+        io_fa40_3 <- return (fx_w1, i32[27]);
+        force io_fg40_3 io_fa40_3);
+      case io_d2 {
+        inl io_b -> io_j40_3 : i32 * 1 + i32 * 1 <- return io_b;
+          io_jj40_3 : i32 * 1 <- case io_j40_3 {
+              inl io_ja40_3 -> let (io_jw40_3, io_jg40_3) = io_ja40_3;
+                return (io_jw40_3, ())
+            | inr io_je40_3 -> let (io_jw40_3, io_jo40_3) = io_je40_3;
+                return (io_jw40_3, io_jo40_3)
+            };
+          let (io_jx40_3, io_v40_3) = io_jj40_3;
+          acc <- return io_jx40_3;
+          let () = io_v40_3;
+          return inl acc
+      | inr io_r -> let () = io_r;
+          io_res6 <- return ();
+          return inr io_res6
       })

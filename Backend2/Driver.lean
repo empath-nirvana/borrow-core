@@ -48,30 +48,59 @@ structure HNode where
   /-- The names each operation's code performs or raises: the clause's (`handlerNames`), or at a
   rule-written handler its answering function's or work's (`ruleNames`). -/
   names : List (Option (List UInt32)) := []
+  /-- The row that code runs at: `Σ`, or `Σ_N` (`effHandleT`), or `Σ_W` (`effHandleL`). -/
+  codeRow : Row := []
+  /-- The length of the node's context. -/
+  depth : Nat := 0
 
 /-- The `handle` nodes of a typed term, within the depth `fuel`. At `effHandleT` and `effHandleL`
 the clauses are the rule's (`tailKind`, `lastKind`), written out from the node's tuples as the
 handler runs them. -/
-def hnodes : Nat → TExpr → List HNode
-  | 0, _ => []
-  | f + 1, t =>
+def hnodes (fuel : Nat) (t : TExpr) (depth : Nat := 0) : List HNode :=
+  match fuel with
+  | 0 => []
+  | f + 1 =>
     let here : List HNode := match t with
       | .effHandleV _ _ S E _ n _ _ _ ks _ _ tc _ =>
-          [⟨n, E, S, ks, tc.erase, none, Check.handlerNames E tc.erase⟩]
+          [⟨n, E, S, ks, tc.erase, none, Check.handlerNames E tc.erase, S, depth⟩]
       | .effHandleVB _ _ S E _ n _ _ _ _ ks _ _ tc _ =>
-          [⟨n, E, S, ks, tc.erase, none, Check.handlerNames E tc.erase⟩]
-      | .effHandleT _ _ S _ E _ n _ _ _ _ _ tc _ =>
+          [⟨n, E, S, ks, tc.erase, none, Check.handlerNames E tc.erase, S, depth⟩]
+      | .effHandleT _ _ S SN E _ n _ _ _ _ _ tc _ =>
           [⟨n, E, S, E.map ClauseKinds.tailKind,
             .pair (Expr.pairL tc.erase) (tailTuple E 0 (Expr.pairR tc.erase)), none,
-            Check.ruleNames E (Expr.pairR tc.erase)⟩]
+            Check.ruleNames E (Expr.pairR tc.erase), SN, depth⟩]
       | .effHandleL _ _ S SW E fs Xs n _ _ _ _ _ tc _ =>
           [⟨n, E, S, E.map ClauseKinds.lastKind,
             .pair (Expr.pairL tc.erase) (lastTuple E 0 (Expr.pairL (Expr.pairR tc.erase))
               (Expr.pairR (Expr.pairR tc.erase))),
             some (SW, Xs, (List.range E.length).all fun j => decide (fs j = .ret .unit)),
-            Check.ruleNames E (Expr.pairL (Expr.pairR tc.erase))⟩]
+            Check.ruleNames E (Expr.pairL (Expr.pairR tc.erase)), SW, depth⟩]
       | _ => []
-    here ++ t.children.flatMap fun (_, c) => hnodes f c
+    here ++ t.children.flatMap fun (sc, c) =>
+      hnodes f c (match sc with | .push k => depth + k | .fresh k => k)
+
+/-- `main`'s externs whose values are the platform's operations (`ExternSpec`'s I/O roles, persistent
+closures with no state), by `main`'s context slot (`Backend2/Convert.lean`, `convMain`): code that
+reads only these of its context is closed but for them, and is made again where it runs
+(`mainIO`).  `[spec §54]` -/
+def ioSlots (k : Backend.CheckedProg) : Nat × (Nat → Bool) :=
+  match k.io with
+  | none => (0, fun _ => false)
+  | some m =>
+    let n := k.main.ctx.length
+    let roles := m.externs.toArray
+    (n, fun i => match roles[n - 1 - i]? with
+      | some x => match x.role with
+        | .readByte | .writeByte | .writeAll | .readInto | .clockNow | .clockSleep => true
+        | _ => false
+      | none => false)
+
+/-- The code `e` at a node whose context has `depth` slots reads none of them but `main`'s I/O
+externs (`ioSlots`, the last `n`). -/
+def openOK (io : Nat × (Nat → Bool)) (depth : Nat) (e : Expr) : Bool :=
+  let (n, ext) := io
+  closedAt depth e && (List.range depth).all fun v =>
+    !ClauseKinds.mentions v e || (depth ≥ n && v ≥ depth - n && ext (v - (depth - n)))
 
 /-- **The direct calls the checked facts license**  `[spec §47]`: for each static name, for each of
 its operations, whether every `handle` node of the name
@@ -81,8 +110,9 @@ its operations, whether every `handle` node of the name
   `Checked.unhandledNames`: no frame between a `perform` and its handler catches them), and
 - holds one clause for it, closed (`closedAt 0`), at one outer row and one signature,
 so that the clause a `perform` reaches is known and needs nothing from its handler's frame. -/
-def directFacts (c : Frontend.Check.Checked) : Std.HashMap UInt32 (List Bool) := Id.run do
-  let nodes := hnodes Frontend.Check.copiesFuel c.t
+def directFacts (c : Frontend.Check.Checked) (io : Nat × (Nat → Bool) := (0, fun _ => false)) :
+    Std.HashMap UInt32 (List Bool) := Id.run do
+  let nodes := hnodes Frontend.Check.copiesFuel c.t c.ctx.length
   let flows := c.flows
   let mut out : Std.HashMap UInt32 (List Bool) := {}
   for h in nodes do
@@ -93,21 +123,31 @@ def directFacts (c : Frontend.Check.Checked) : Std.HashMap UInt32 (List Bool) :=
       same.all fun g =>
         let gs := match g.H with | .pair _ hs => some hs | _ => none
         let names := g.names
-        let row := (g.S.map (·.n)).eraseDups
+        let row := (g.codeRow.map (·.n)).eraseDups
         let cl := gs.bind fun hs => Check.clauseExpr hs j
         (g.ks[j]?.map (·.kind)) == some .tail &&
           Frontend.Check.cond2B flows (Frontend.Check.cond2Names row ((names[j]?).getD none)) &&
-          (match cl with | some e => closedAt 0 e | none => false) &&
+          (match cl with | some e => openOK io g.depth e | none => false) &&
           cl == hs.bind (fun hs => Check.clauseExpr hs j) &&
           decide (CTy.effOf g.S .unit = CTy.effOf h.S .unit) && decide (g.E = h.E)
     out := out.insert h.n ok
   return out
 
+/-- The handlers of `Div` in a typed term, within the depth `fuel`: its `reify` and `div_fuel`
+nodes (SPEC §14). -/
+def divHandlers : Nat → TExpr → Nat
+  | 0, _ => 0
+  | f + 1, t =>
+    let here := match t with
+      | .reify .. | .divFuel .. => 1
+      | _ => 0
+    here + (t.children.map fun (_, c) => divHandlers f c).foldl (· + ·) 0
+
 /-- **The `[handle-last]` works the checked facts license to call where their operation is
 performed**  `[spec §54]`: for each static name, for each of its operations, whether every
 `handle` node of the name is a `[handle-last]` node (`effHandleL`, its clauses `lastKind`'s) that
-- holds one closed handler for it (`closedAt 0`), at one outer row and one signature, so that the
-  work a `perform` calls is the one its node runs (`last_resume_direct`, `last_cancel_direct`);
+- holds one handler for it, closed but for `main`'s I/O externs (`openOK`), at one outer row and
+  one signature, so that the work a `perform` calls is the one its node runs (`last_resume_direct`, `last_cancel_direct`);
 - whose work performs nothing: every operation of its row `Σ_W` is abortive or `Div`'s `tick`
   (T-B1/B1′'s premise; a work that performs another, T-B2, is not licensed);
 - whose cancel rows are the empty ones the checker emits, so the finalisers of the computation
@@ -115,15 +155,16 @@ performed**  `[spec §54]`: for each static name, for each of its operations, wh
   its cancel unwinds to the node running them (`cancel_prefix`, `cancelOf_steps`).
 Each licensed operation's cancel summand (`cancelSummand`): its exit's argument, beside the work's
 raises. -/
-def lastFacts (c : Frontend.Check.Checked) : Std.HashMap (UInt32 × UInt32) (VTy × Row) := Id.run do
-  let nodes := hnodes Frontend.Check.copiesFuel c.t
+def lastFacts (c : Frontend.Check.Checked) (io : Nat × (Nat → Bool) := (0, fun _ => false)) :
+    Std.HashMap (UInt32 × UInt32) (VTy × Row) := Id.run do
+  let nodes := hnodes Frontend.Check.copiesFuel c.t c.ctx.length
   let mut out : Std.HashMap (UInt32 × UInt32) (VTy × Row) := {}
   for h in nodes do
     let some (SW, Xs, emptyFins) := h.last | continue
     let same := nodes.filter (·.n == h.n)
     for (k, j) in h.ks.zipIdx do
       if k.kind != .last then continue
-      let ok := emptyFins && closedAt 0 h.H &&
+      let ok := emptyFins && openOK io h.depth h.H &&
         SW.all (fun o => o.abort || o.n == divName) &&
         same.all fun g => g.last.isSome && g.H == h.H &&
           decide (CTy.effOf g.S .unit = CTy.effOf h.S .unit) && decide (g.E = h.E)
@@ -136,30 +177,25 @@ clause at some `handle` node of `n` is neither abortive nor called where it is p
 clause on the argument and `κ`. Read off the nodes' kinds (`ks`, `classifyHandler_sound`) and the
 direct calls' facts. With them, the licensed `[handle-last]` operations' cancel summands
 (`MachSet.last`). -/
-def machineOps (c : Frontend.Check.Checked) : MachSet := Id.run do
-  let nodes := hnodes Frontend.Check.copiesFuel c.t
-  let direct := directFacts c
-  let last := lastFacts c
+def machineOps (c : Frontend.Check.Checked) (io : Nat × (Nat → Bool) := (0, fun _ => false)) :
+    MachSet := Id.run do
+  let nodes := hnodes Frontend.Check.copiesFuel c.t c.ctx.length
+  let direct := directFacts c io
+  let last := lastFacts c io
   let mut out : MachSet := {}
   for h in nodes do
     for (k, j) in h.ks.zipIdx do
       unless k.kind == .abortive || (k.kind == .tail && (direct.getD h.n [])[j]? == some true) ||
           (k.kind == .last && last.contains (h.n, j.toUInt32)) do
         out := out.insert (h.n, j.toUInt32)
+  -- A stored loop's `reify` (any but `main`'s): its observations suspend at each tick, so `tick` is
+  -- a machine operation (SPEC §54).
+  let mainR := if (mainReify? c.t).isSome then 1 else 0
+  if divHandlers Frontend.Check.copiesFuel c.t > mainR then out := out.insert (divName, 0)
   let mut lt : Std.HashMap (UInt32 × UInt32) LTy := {}
   for (key, (X, SW)) in last.toList do
     if let .ok t := cancelSummand out X SW then lt := lt.insert key t
   return { out with last := lt }
-
-/-- The handlers of `Div` in a typed term, within the depth `fuel`: its `reify` and `div_fuel`
-nodes (SPEC §14). -/
-def divHandlers : Nat → TExpr → Nat
-  | 0, _ => 0
-  | f + 1, t =>
-    let here := match t with
-      | .reify .. | .divFuel .. => 1
-      | _ => 0
-    here + (t.children.map fun (_, c) => divHandlers f c).foldl (· + ·) 0
 
 /-- **The runtime answers every tick**  `[spec §53]`: the typed term's handlers of `Div` are
 `main`'s `reify` alone, when `main` is a loop the runtime drives (SPEC §11) and its value is
@@ -171,7 +207,7 @@ def divRuntime (c : Frontend.Check.Checked) (loops : Bool) : Bool :=
 
 /-- The checker's cell classes (`Checked.cells`) at LIR types. -/
 def cellsOf (k : Backend.CheckedProg) : List (List LTy) :=
-  k.main.cells.map fun c => c.tys.filterMap fun t => (ofV (machineOps k.main) t).toOption
+  k.main.cells.map fun c => c.tys.filterMap fun t => (ofV (machineOps k.main (ioSlots k)) t).toOption
 
 /-- The codes of the suspended computations an outcome `o` (of `M`) may hold, by the layouts: the
 closure classes of each suspension's `k`.  `[spec §49]` -/
@@ -203,7 +239,8 @@ def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Pr
   let ctx := c.ctx.map fun s => (s.ty, s.live)
   let run (threaded : Std.HashMap Nat LTy) :
       Except String (Prog × CState × Std.HashMap Nat LTy) := do
-    let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c) (machineOps c)
+    let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c (ioSlots k))
+      (machineOps c (ioSlots k))
       (divRuntime c loops) threaded
     let p := { p with exits := c.exitsOnDivError }
     if st.done.isEmpty then return (p, st, {})
@@ -242,9 +279,9 @@ outside the fragment it counts the `handle` nodes with a clause of kind `once` o
 stored-continuation sites) and the others no rule takes. -/
 def erasureLine (k : Backend.CheckedProg) : String := Id.run do
   let c := k.main
-  let nodes := hnodes Frontend.Check.copiesFuel c.t
-  let direct := directFacts c
-  let last := lastFacts c
+  let nodes := hnodes Frontend.Check.copiesFuel c.t c.ctx.length
+  let direct := directFacts c (ioSlots k)
+  let last := lastFacts c (ioSlots k)
   let erasable (g : HNode) : Bool := g.ks.zipIdx.all fun (h, j) =>
     h.kind == .abortive || (h.kind == .tail && (direct.getD g.n [])[j]? == some true) ||
       (h.kind == .last && last.contains (g.n, j.toUInt32))

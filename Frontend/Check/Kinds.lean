@@ -254,7 +254,8 @@ structure HandleSite where
   ks : List HKind
   boxed : Bool
   site : Option HSite
-  /-- The names of the handler's outer row `Σ`, the row its clauses run at. -/
+  /-- The names of the handler's outer row `Σ`, the row its clauses run at; at a rule-written
+  handler, the row its answering functions or works run at (`Σ_N`, `Σ_W`). -/
   row : List UInt32
   /-- The frames its handled computation holds (`inside`). -/
   inside : HIn
@@ -277,12 +278,13 @@ def TExpr.handleSites : Nat → TExpr → List HandleSite
       | .effHandleVB i _ S E _ n _ _ _ _ ks st ins tc _ =>
           [⟨i.sp, n, ks, true, st, (S.map (·.n)).eraseDups, ins, handlerNames E tc.erase⟩]
       -- `effHandleT`'s clauses are tail-resumptive by its rule (`tailClause_premise`).
-      | .effHandleT i _ S _ E _ n _ _ _ st ins tc _ =>
-          [⟨i.sp, n, E.map tailKind, false, st, (S.map (·.n)).eraseDups, ins,
+      -- Its answering functions run at their row `Σ_N`, its works at `Σ_W`.
+      | .effHandleT i _ _ SN E _ n _ _ _ st ins tc _ =>
+          [⟨i.sp, n, E.map tailKind, false, st, (SN.map (·.n)).eraseDups, ins,
             ruleNames E (Expr.pairR tc.erase)⟩]
       -- `effHandleL`'s clauses are its rule's (`lastClause_premise`).
-      | .effHandleL i _ S _ E _ _ n _ _ _ st ins tc _ =>
-          [⟨i.sp, n, E.map lastKind, false, st, (S.map (·.n)).eraseDups, ins,
+      | .effHandleL i _ _ SW E _ _ n _ _ _ st ins tc _ =>
+          [⟨i.sp, n, E.map lastKind, false, st, (SW.map (·.n)).eraseDups, ins,
             ruleNames E (Expr.pairL (Expr.pairR tc.erase))⟩]
       | _ => []
     match here, t.children with

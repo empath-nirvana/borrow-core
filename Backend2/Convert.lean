@@ -184,6 +184,9 @@ structure CState where
   `Backend2/Driver.lean`, `lastFacts`), by operation: the work's function, the payload of its row
   `Σ_W` and the exit's argument's type. -/
   lasts : Std.HashMap (UInt32 × Nat) (Nat × List ((UInt32 × UInt32) × LTy) × LTy) := {}
+  /-- `main`'s I/O externs by its context slot, each with its type: the persistent closures a
+  rule-written handler's code may read, made again where that code runs (`ioCtx`). -/
+  mainIO : Array (Option (IOKind × VTy)) := #[]
   /-- The `handle`, `perform` and `raise` nodes erased (`bcc lir --erasure`). -/
   erased : Std.HashMap String Nat := {}
   /-- **The program's machine operations** (SPEC §49, `Backend2/Driver.lean`, `machineOps`). -/
@@ -1610,6 +1613,218 @@ def genIter (fT ansT : LTy) (pay : Pay) (p : Var) : CM Tm := do
   setFn fi { name := "iterate", params := [f, s], body, ret := ansT }
   letpairM p fun f s => pure (.call fi [f, s])
 
+/-! ### The fallback at a stored loop: `tick` a machine operation  `[spec §54]`
+
+Where the typed term has a `reify` other than `main`'s (a stored loop: the loop value of a stored
+generator, of a block that loops, an argument at a loop's type), its observations suspend at each
+tick, so `Div`'s `tick` is a machine operation of the program (`Backend2/Driver.lean`,
+`machineOps`): a computation at a row that holds `Div` is a machine (SPEC §49), `iterate`'s back
+edge suspends there (`genIterK`), and each `reify` is a drive of its computation's outcome with
+`reifyH`'s clauses (`genReify`). -/
+
+/-- The value `x` as an answer of `F_Σ A`: the outcome's value at a row with machine operations
+(`O`), else `x`, or `inl x` beside the row's payload. -/
+def valueAt (O : Option OutInfo) (p : Pay) (x : Var) : CM Tm := do
+  match O with
+  | some F => outValue F x
+  | none => match payTy p with
+    | none => pure (.var x)
+    | some _ => pure (.inj false x)
+
+/-- The type of `F_Σ A`'s answer at the row `S`: its outcome, or `A ⊕ P`, or `A`. -/
+def answerTyAt (a : LTy) (S : Row) : CM (Option OutInfo × LTy) := do
+  match ← outInfo? a S with
+  | some F => pure (some F, F.ty)
+  | none => pure (none, resTy a (← rowPay S))
+
+/-- **`iterate (f, s)` at a row whose `tick` is a machine operation**  `[spec §14, §54]`: a
+machine per node. A turn `(f s).1` answers `inl b`, finished with `inl b`, or `inr s′`, after which
+`iterate` performs `tick`, a suspension; resumed with *next* it goes on with `iterate (f, s′)`, with *close*
+it closes, `(f s′).2`, its residual `inr r` (`Head.iterate`, `iter_step`, `iterK_inr`,
+`turnK_next`). The turn's own suspensions are the machine's, at a call point. -/
+def genIterK (fT : LTy) (S : Row) (B R St : LTy) (p : Var) : CM Tm := do
+  let valT : LTy := .sum B R
+  let some F ← outInfo? valT S | throw "LIR: iterate at a row with no machine operation"
+  let some Mt ← outInfo? (.sum B St) S | throw "LIR: iterate's turn"
+  let some Mc ← outInfo? R S | throw "LIR: iterate's close"
+  let fi ← reserveFn "iterate"
+  let f ← fresh fT; let s ← fresh St
+  let (_, gT) ← answerOf fT
+  let body ← withMachine F do
+    -- After the turn: finished, or a tick before the next.
+    let fA ← reserveFn "iterate turn"
+    let fA₁ ← fresh fT; let x ← fresh (.sum B St)
+    -- After the tick: *next* goes on, *close* closes.
+    let fB ← reserveFn "iterate tick"
+    let fB₁ ← fresh fT; let s₁ ← fresh St; let n ← fresh boolT
+    -- After the close: the residual.
+    let fC ← reserveFn "iterate close"
+    let r ← fresh R
+    let rv ← fresh valT
+    setFn fC { name := "iterate close", params := [r], body := .letv rv (.inj true r) (← outValue F rv),
+               ret := F.ty }
+    let un ← fresh .unit; let uc ← fresh .unit
+    let g₁ ← fresh gT
+    let closeTm ← pointK [.letF fC 0] [] (.letv g₁ (.app fB₁ s₁) (.sel g₁ 1)) Mc
+    setFn fB { name := "iterate tick", params := [fB₁, s₁, n],
+               body := .case n un (.drop un (.call fi [fB₁, s₁])) uc (.drop uc closeTm), ret := F.ty }
+    let b ← fresh B; let v ← fresh valT; let s' ← fresh St; let u ← fresh .unit
+    let tickTm ← performK [.letF fB 2] [fA₁, s'] (divName, 0) u
+    setFn fA { name := "iterate turn", params := [fA₁, x],
+               body := .case x b (.drop fA₁ (.letv v (.inj false b) (← outValue F v))) s'
+                 (.letv u .unit tickTm), ret := F.ty }
+    let f' ← freshLike f; let g ← fresh gT
+    let turn ← pointK [.letF fA 1] [f] (.letv g (.app f' s) (.sel g 0)) Mt
+    pure (.copy f f' turn)
+  setFn fi { name := "iterate", params := [f, s], body, ret := F.ty }
+  readFact "iterate:machine"
+  letpairM p fun f s => pure (.call fi [f, s])
+
+/-- **A stored loop's `reify`, a drive** (`reify_res`, SPEC §14, §54): a closure that runs its
+computation `t ()`, whose outcome (at `tick, Σ`) the drive `reifyR`/`reifyC` takes apart
+(`Core/DivReify.lean`): a value `inl b` is `inl b`, `inr r` the loop `closed r`; a suspension at
+`tick` with its suspended computation `k` is the loop `tickLoop k` (`reifyC`), whose *next*
+resumes `k` with *next* and drives again, and whose *close* resumes it with *close*, drives, and
+closes what that answers (`closeKV`); a suspension at one of `Σ`'s machine operations suspends the
+drive (forwarding), and an abort of `Σ`'s is handed on. The first answer is made a loop: `done b`
+(`rkV`). `res : !U(B ⊸ F_Σ R)` is the residual of a result.  `[spec §54]` -/
+def genReify (S : Row) (B R : VTy) (resV : Tm) (resT : LTy) (jT : LTy) : CM Tm := do
+  let bT ← vty B; let rT ← vty R
+  let loopT ← vty (.thunk (CTy.loopEff S B R))
+  let .thunk loopK := loopT | throw "LIR: a loop's type"
+  let (OB, nextT) ← answerTyAt (.sum bT loopT) S   -- `F_Σ(B ⊕ U Loop)`, an observation's answer
+  let (OR, closeT) ← answerTyAt rT S               -- `F_Σ R`
+  let (OL, mkT) ← answerTyAt loopT S               -- `F_Σ U Loop`, `reify`'s answer
+  let pS ← rowPay S
+  let some T ← outInfo? (.sum bT rT) (tickSig :: S) | throw "LIR: a reified computation's outcome"
+  -- The loops' codes: `done b`, `closed r`, `tickLoop k`; one function per observation.
+  let cDoneN ← reserveFn "done next"; let cDoneC ← reserveFn "done close"
+  let cDone ← addCode { kind := .amp, fns := [cDoneN, cDoneC], ty := loopK }
+  let cClN ← reserveFn "closed next"; let cClC ← reserveFn "closed close"
+  let cCl ← addCode { kind := .amp, fns := [cClN, cClC], ty := loopK }
+  let cTkN ← reserveFn "tick next"; let cTkC ← reserveFn "tick close"
+  let cTk ← addCode { kind := .amp, fns := [cTkN, cTkC], ty := loopK }
+  let drive ← reserveFn "reify drive"
+  let kT ← kTyAt T (divName, 0)
+  let wrapM (O : Option OutInfo) (act : CM Tm) : CM Tm := match O with
+    | some F => withMachine F act
+    | none => act
+  -- `done b`: *next* finishes with `b`; *close* hands back `res b`.
+  do
+    let b ← fresh bT; let rs ← fresh resT; let w ← fresh (.sum bT loopT)
+    setFn cDoneN { name := "done next", params := [b, rs], ret := nextT,
+                   body := .drop rs (.letv w (.inj false b) (← wrapM OB (valueAt OB pS w))) }
+    let b ← fresh bT; let rs ← fresh resT
+    setFn cDoneC { name := "done close", params := [b, rs], ret := closeT, body := .app rs b }
+  -- `closed r`: *next* skips, `closed r` again; *close* hands back `r`.
+  do
+    let r ← fresh rT; let l ← fresh loopT; let w ← fresh (.sum bT loopT)
+    setFn cClN { name := "closed next", params := [r], ret := nextT,
+                 body := .letv l (.clos cCl [r]) (.letv w (.inj true l) (← wrapM OB (valueAt OB pS w))) }
+    let r ← fresh rT
+    setFn cClC { name := "closed close", params := [r], ret := closeT, body := ← wrapM OR (valueAt OR pS r) }
+  -- `tickLoop k`: *next* resumes `k` with *next* and drives; *close* resumes it with *close*,
+  -- drives, and closes what that answers.
+  do
+    let k ← fresh kT; let rs ← fresh resT
+    let kr ← fresh (← selTy kT 0); let o ← fresh T.ty
+    let u ← fresh .unit; let nx ← fresh boolT
+    setFn cTkN { name := "tick next", params := [k, rs], ret := nextT,
+                 body := .letv kr (.sel k 0) (.letv u .unit (.letv nx (.inj false u)
+                   (.letv o (.app kr nx) (.call drive [rs, o])))) }
+    let k ← fresh kT; let rs ← fresh resT; let rs' ← freshLike rs
+    let kr ← fresh (← selTy kT 0); let o ← fresh T.ty
+    let u ← fresh .unit; let cl ← fresh boolT
+    let x ← fresh nextT
+    -- What the drive answers, closed: `inl b` hands back `res b`, `inr L` closes `L`.
+    let closeOf (rs : Var) (x : Var) : CM Tm := do
+      let b ← fresh bT; let l ← fresh loopT
+      return .case x b (.app rs b) l (.drop rs (.sel l 1))
+    let body ← match OB with
+      | none => match payTy pS with
+        | none => closeOf rs' x
+        | some pT => do
+          -- The drive's abort is handed on as the close's.
+          let x' ← fresh (.sum bT loopT); let e ← fresh pT
+          pure (Tm.case x x' (← closeOf rs' x') e (.drop rs' (.inj true e)))
+      | some FB => do
+        let some FR := OR | throw "LIR: a stored loop's close"
+        withMachine FR do
+          let fj ← reserveFn "tick close join"
+          let rsJ ← fresh resT; let xJ ← fresh (.sum bT loopT)
+          setFn fj { name := "tick close join", params := [rsJ, xJ], body := ← closeOf rsJ xJ,
+                     ret := FR.ty }
+          pointK [.letF fj 1] [rs'] (.var x) FB
+    setFn cTkC { name := "tick close", params := [k, rs], ret := closeT,
+                 body := .copy rs rs' (.letv kr (.sel k 0) (.letv u .unit (.letv cl (.inj true u)
+                   (.letv o (.app kr cl) (.letv x (.call drive [rs, o]) body))))) }
+  -- The drive: the reified computation's outcome `o` taken apart.
+  do
+    let rs ← fresh resT; let o ← fresh T.ty
+    let dbody : CM Tm := do
+      let w ← fresh T.body; let v ← fresh T.r; let ex ← fresh T.xTy
+      let b ← fresh bT; let r ← fresh rT
+      let l₁ ← fresh loopT; let w₁ ← fresh (.sum bT loopT); let w₂ ← fresh (.sum bT loopT)
+      let valArm : Tm := .drop rs (.case v b (.letv w₁ (.inj false b) (← valueAt OB pS w₁))
+        r (.letv l₁ (.clos cCl [r]) (.letv w₂ (.inj true l₁) (← valueAt OB pS w₂))))
+      let abortArm (e : Var) : CM Tm := do
+        match OB with
+        | some FB =>
+          let some pF := payTy FB.pay | throw "LIR: a stored loop's abort"
+          let e' ← fresh pF
+          return .drop rs (.letv e' (← coercePay T.pay FB.pay e fun x => pure (.var x)) (← outAbort FB e'))
+        | none => return .drop rs (← coercePay T.pay pS e fun x => pure (.inj true x))
+      let suspArms (sv : Var) : CM Tm := casePay T.sPay sv fun j pv => do
+        let some (key, _, bK, cpK) := T.ms[j]? | throw "LIR: a suspension's summand"
+        letpairM pv fun a k => do
+          if key == (divName, 0) then
+            -- `reifyC`: the loop at the tick.
+            let l ← fresh loopT; let w ← fresh (.sum bT loopT)
+            return .drop a (.letv l (.clos cTk [k, rs]) (.letv w (.inj true l) (← valueAt OB pS w)))
+          let some FB := OB | throw "LIR: a stored loop forwards a suspension where its row has no machine operation"
+          -- Forwarding: the drive suspends at `key`, resumed by resuming `k` and driving again.
+          let mk ← newPoint key (some (T.kTy bK cpK)) cpK [resT] (some drive) [.dropF 1]
+          let k' ← fresh (← kTyAt FB key)
+          readFact "reify:forward"
+          return .letv k' (.call mk [k, rs]) (← outSusp FB key a k')
+      let exits ← match payTy T.pay with
+        | none => suspArms ex
+        | some pT => do
+          let e ← fresh pT; let sv ← fresh T.sTy
+          pure (Tm.case ex e (← abortArm e) sv (← suspArms sv))
+      return .letv w (.prim .unroll [o]) (.case w v valArm ex exits)
+    setFn drive { name := "reify drive", params := [rs, o], body := ← wrapM OB dbody, ret := nextT }
+  -- The closure `reify_res`: `t ()` driven; its first answer made a loop (`rkV`).
+  readFact "reify:stored, a drive"
+  modify fun st => { st with erased := st.erased.insert "machine" (st.erased.getD "machine" 0 + 1) }
+  let some (tkT, _) := (match jT with
+      | .thunk (.arr a k) => some (a, k)
+      | _ => none) | throw s!"LIR: reify's type {jT}"
+  let mkFn ← reserveFn "reify"
+  let rs ← fresh resT; let tk ← fresh tkT
+  let rs₁ ← freshLike rs; let o ← fresh T.ty; let x ← fresh nextT; let tu ← fresh .unit
+  let rkOf (rs : Var) (x : Var) : CM Tm := do
+    let b ← fresh bT; let l ← fresh loopT; let ld ← fresh loopT
+    return .case x b (.letv ld (.clos cDone [b, rs]) (← valueAt OL pS ld)) l (.drop rs (← valueAt OL pS l))
+  let mkBody ← match OB, OL with
+    | none, none => match payTy pS with
+      | none => do pure (Tm.letv tu .unit (.letv o (.app tk tu) (.letv x (.call drive [rs₁, o]) (← rkOf rs x))))
+      | some pT => do
+        let x' ← fresh (.sum bT loopT); let e ← fresh pT
+        pure (Tm.letv tu .unit (.letv o (.app tk tu) (.letv x (.call drive [rs₁, o])
+          (.case x x' (← rkOf rs x') e (.drop rs (.inj true e))))))
+    | some FB, some FL => withMachine FL do
+        let fj ← reserveFn "reify join"
+        let rsJ ← fresh resT; let xJ ← fresh (.sum bT loopT)
+        setFn fj { name := "reify join", params := [rsJ, xJ], body := ← rkOf rsJ xJ, ret := FL.ty }
+        let pt ← pointK [.letF fj 1] [rs] (.call drive [rs₁, o]) FB
+        pure (Tm.letv tu .unit (.letv o (.app tk tu) pt))
+    | _, _ => throw "LIR: a stored loop's observations and its making at different rows"
+  setFn mkFn { name := "reify", params := [rs, tk], body := .copy rs rs₁ mkBody, ret := mkT }
+  let c ← addCode { kind := .lam, fns := [mkFn], ty := .arr tkT (.ret mkT) }
+  let rv ← fresh resT
+  return .letv rv resV (.clos c [rv])
+
 /-- **`tick` under the runtime** (SPEC §53): its clause `λ((), κ). κ next` resumes in tail position
 with the literal *next* (`tail_resumes`), and `drive_reify_tick` (`Core/DivDrive.lean`) is the
 runtime's drive of `main`'s loop answering it so. The perform's argument `v` is dropped and *next*
@@ -2145,7 +2360,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let some j := payIdx p (o.n, o.i) | throw s!"LIR: a raise of ({o.n}, {o.i}) outside its row"
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay p j v fun w => pure (.inj true w)
   | .effPerform _ _ S o c => do
-    if o.n == divName then
+    if o.n == divName && !(← get).mach.contains (o.n, o.i) then
       -- `tick` under the runtime: *next* where it is performed.  [spec §53]
       tickAtRuntime
       let p ← rowPay S
@@ -2301,8 +2516,14 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     -- [spec §54]
     convHandle fuel ctx S E fs n A R u (E.map ClauseKinds.tailKind) none tc te (rule := true)
   | .effHandleL _ _ S _ E fs _ n A R u _ _ tc te => convHandleL fuel ctx S E fs n A R u tc te
-  | .lendR .. | .lendLoopR .. | .divFuel ..
-  | .reify .. | .letPoly .. => outside t
+  | .reify _ j S B R tr => do
+    -- A stored loop's `reify` (`main`'s, when the runtime answers every tick, is `runtimeMain`'s):
+    -- a drive, at a program whose `tick` is a machine operation.  [spec §54]
+    unless (← get).mach.contains (divName, 0) do outside t
+    let resT ← repJ tr.jdg
+    let resV ← conv fuel [] tr
+    return leaf ctx none (← genReify S B R resV resT (← repJ j))
+  | .lendR .. | .lendLoopR .. | .divFuel .. | .letPoly .. => outside t
   | t =>
     match transparent? t with
     | some c => conv fuel ctx c
@@ -2416,12 +2637,34 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     let some j := payIdx F.pay (o.n, o.i) | throw s!"LIR: a raise of ({o.n}, {o.i}) outside its row"
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay F.pay j v fun e => abortK F K args e
   | .effPerform _ _ S o c => do
-    if o.n == divName then
+    if o.n == divName && !(← get).mach.contains (o.n, o.i) then
       -- `tick` under the runtime: *next* where it is performed, handed to `K`.  [spec §53]
       tickAtRuntime
       let p ← rowPay S
       return ← bindTm (← conv fuel ctx c) .unit fun v => do
         resultK K args (← tickTm v p) boolT p
+    if let some (fi, phW, xT) := (← get).lasts[(o.n, o.i.toNat)]? then
+      -- `[handle-last]`'s work called where its operation is performed, in a machine: `inl y`
+      -- handed to `K`, `inr z` or a raise from the work through `K`'s frames to the node at the
+      -- operation's cancel summand.  [spec §54]
+      readFact "effPerform:last direct call"
+      modify fun st => { st with erased := st.erased.insert "perform" (st.erased.getD "perform" 0 + 1) }
+      let F ← curMach
+      let some jc := payIdx F.pay (o.n, o.i)
+        | throw s!"LIR: `effPerform` of ({o.n}, {o.i}) at a machine without its cancel summand"
+      let bT ← vty o.B
+      let leave (w : Var) : CM Tm := injectPay F.pay jc w fun e => abortK F K args e
+      return ← bindTm (← conv fuel ctx c) (← vty o.A) fun v => do
+        let bx ← fresh (.sum bT xT); let y ← fresh bT; let z ← fresh xT
+        match payTy phW with
+        | none =>
+          return .letv bx (.call fi [v]) (.case bx y (← applyK F K args y) z (← leave z))
+        | some pwT =>
+          let r ← fresh (.sum (.sum bT xT) pwT); let e ← fresh pwT
+          let sT := LTy.sum xT pwT
+          let wz ← fresh sT; let we ← fresh sT
+          return .letv r (.call fi [v]) (.case r bx (.case bx y (← applyK F K args y) z
+            (.letv wz (.inj false z) (← leave wz))) e (.letv we (.inj true e) (← leave we)))
     if (← get).mach.contains (o.n, o.i) then
       readFact "effPerform:machine"
       bindTm (← conv fuel ctx c) (← vty o.A) fun v => performK K args (o.n, o.i) v
@@ -2739,8 +2982,6 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)
   -- The handled computation's outcome: with a machine operation (one of the node's clauses that is
   -- not called where it is performed, or one of `Σ`'s), the node is a drive (SPEC §49).
   let teM ← outInfoJ te.jdg
-  if rule && teM.isSome then
-    throw "LIR: `effHandleT` around a computation with a machine operation is outside the fragment"
   if teM.isNone then
     for (k, j) in ks.zipIdx do
       match k.kind with
@@ -2841,6 +3082,30 @@ def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
     setFn fi { name := s!"clause {n}.{j}", params := [x], body := .letv kv .unit body, ret }
   | _ => throw s!"LIR: the clause {n}.{j} is not `λp. let (x, κ) = p; M`"
 
+/-- **The context of a rule-written handler's code run where its operation is performed**
+(`openOK`): at a node whose context has `depth` slots, each slot dead but `main`'s I/O externs the
+code `body` reads (under its `k` binders), each made again here (`ioClos`, as `convMain` makes
+it). The slots, and the bindings that make them.  `[spec §54]` -/
+def ioCtx (depth k : Nat) (body : Expr) : CM (Ctx × (Tm → Tm)) := do
+  let io := (← get).mainIO
+  let n := io.size
+  let mut ctx : Ctx := []
+  let mut binds : Tm → Tm := id
+  for p in List.range depth do
+    let slot ← if depth ≥ n && p ≥ depth - n && ClauseKinds.mentions (p + k) body then
+        match io[p - (depth - n)]? with
+        | some (some (op, A)) => do
+          let aT ← vty A
+          let x ← fresh aT
+          let c ← ioClos 8 op aT
+          let b := binds
+          binds := fun t => b (.letv x c t)
+          pure (some x)
+        | _ => pure none
+      else pure none
+    ctx := ctx ++ [slot]
+  return (ctx, binds)
+
 /-- **The tail-resuming rule's answering function**, the function a `perform` of its operation
 calls (`effHandleT`, `tail_resume_direct`): the `j`-th answering function `g : !U(A ⊸ F_{Σ_N} B)`
 of the node's tuple, its λ's body at the argument, at the payload of `Σ_N` (linear operations: none
@@ -2856,8 +3121,9 @@ def ensureAns (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (SN : Row)
   let bT ← vty o.2.2
   let fi ← reserveFn s!"clause {n}.{j}"
   modify fun st => { st with works := st.works.insert (n, j) (fi, ph, none) }
-  let b ← conv fuel (some x :: (List.replicate k none ++ List.replicate depth none)) body
-  setFn fi { name := s!"clause {n}.{j}", params := [x], body := b, ret := resTy bT ph }
+  let (cw, binds) ← ioCtx depth (k + 1) body.erase
+  let b ← conv fuel (some x :: (List.replicate k none ++ cw)) body
+  setFn fi { name := s!"clause {n}.{j}", params := [x], body := binds b, ret := resTy bT ph }
 
 /-- **A `[handle-last]` operation's work**, the function a `perform` of its operation calls
 (`effHandleL`, `last_resume_direct`, `last_cancel_direct`): the `j`-th work
@@ -2875,8 +3141,10 @@ def ensureLastWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (SW : Row)
   let xT ← vty X
   let fi ← reserveFn s!"work {n}.{j}"
   modify fun st => { st with lasts := st.lasts.insert (n, j) (fi, phW, xT) }
-  let b ← conv fuel (some x :: (List.replicate k none ++ List.replicate depth none)) body
-  setFn fi { name := s!"work {n}.{j}", params := [x], body := b, ret := resTy (.sum bT xT) phW }
+  let (cw, binds) ← ioCtx depth (k + 1) body.erase
+  let b ← conv fuel (some x :: (List.replicate k none ++ cw)) body
+  setFn fi { name := s!"work {n}.{j}", params := [x], body := binds b,
+             ret := resTy (.sum bT xT) phW }
 
 /-- **`perform` of a `[handle-last]` operation, erased** (SPEC §54): the work called on the
 argument; `inl y` answers `y` where the operation is performed (`last_resume_direct`); `inr z`
@@ -2927,8 +3195,7 @@ def convHandleL (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy
   for (o, j) in E.zipIdx do
     unless ClauseKinds.isAbortive o || lasts.contains (n, j) do
       throw s!"LIR: `effHandleL`: the work {n}.{j} is not licensed to be called where it is performed (a work that performs, or a node of its name that differs): outside the fragment"
-  if (← outInfoJ te.jdg).isSome then
-    throw "LIR: `effHandleL` around a computation with a machine operation is outside the fragment"
+  let teM ← outInfoJ te.jdg
   let (pre, c₁, c₂) ← splitCtx ctx u "effHandleL"
   let .tensorI _ _ _ _ uH tR tWN := tc
     | throw "LIR: `effHandleL`: a handler not written in place is outside the fragment"
@@ -2952,6 +3219,27 @@ def convHandleL (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy
     return (parts, pres, cur)
   let (works, preWs, wTail) ← partsOf cW tW
   let (exits, preNs, nTail) ← partsOf cN tN
+  let wrapD (b : Tm) : Tm :=
+    pre (preH (preWN (preWs.foldr (fun f t => f t) (preNs.foldr (fun f t => f t) b))))
+  -- With a machine operation of `Σ` in the handled computation (a stored loop's `tick`, SPEC §54),
+  -- the node is a drive (SPEC §49): an abortive operation's clause is its work, a control one's
+  -- cancel goes to its exit, a suspension of `Σ`'s is forwarded.
+  if let some T := teM then
+    let union (a b : Ctx) : Ctx := a.zipWith (fun x y => x <|> y) b
+    let mut parts : Array (Ctx × TExpr) := #[]
+    let mut unused : Ctx := union wTail nTail
+    for (o, j) in E.zipIdx do
+      let some w := works[j]? | throw "LIR: a work"
+      let some nf := exits[j]? | throw "LIR: an exit"
+      if ClauseKinds.isAbortive o then
+        parts := parts.push w; unused := union unused nf.1
+      else
+        let some (_, phW, _) := lasts[(n, j)]? | throw "LIR: a work"
+        unless (payTy phW).isNone do
+          throw "LIR: `effHandleL` whose work raises, around a computation with a machine operation, is outside the fragment"
+        parts := parts.push nf; unused := union unused w.1
+    return wrapD (← convDrive fuel S E fs n R (E.map ClauseKinds.lastKind) none c₂ te T cR tR parts
+      unused none)
   let ctxs : List Ctx := cR :: works.toList.map (·.1) ++ [wTail] ++ exits.toList.map (·.1) ++ [nTail]
   let dropAll (keep : Option Nat) (b : Tm) : Tm :=
     drops ((ctxs.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
@@ -3310,7 +3598,12 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     let .pair sT _ := pT | throw "LIR: bounded_fix's argument"
     readFact "boundedFix:budget"
     genFix sT p
-  | .iterate _ j S _ _ _, [p] => do
+  | .iterate _ j S St B R, [p] => do
+    let (pT, rT) ← arrowOf (← repJ j)
+    let .pair fT _ := pT | throw "LIR: iterate's argument"
+    -- At a stored loop's program, `tick` is a machine operation: a machine per node.  [spec §54]
+    if (← get).mach.contains (divName, 0) then
+      return ← genIterK fT S (← vty B) (← vty R) (← vty St) p
     -- `iterate` under the runtime: a function per node, its back edge a tail call.  [spec §53]
     unless (← get).divRt do
       throw "LIR: `iterate` whose ticks the runtime does not answer (a stored loop's `reify`) is outside the pure fragment"
@@ -3492,6 +3785,9 @@ def convMain (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) 
       let c ← ioClos 8 op aT
       binds := (fun b => .letv x c b) :: binds
     cx := cx.push (some x)
+  modify fun st => { st with mainIO := (ctx.zipIdx.map fun ((A, _), i) => match exts[n - 1 - i]? with
+    | some (.io op) => some (op, A)
+    | _ => none).toArray }
   prepWorks (1 <<< 22) cx.size t
   if loops && (← get).divRt then
     if let some (u, ta, S, B, R) := mainReify? t then

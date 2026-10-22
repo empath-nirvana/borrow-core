@@ -23,16 +23,12 @@ def pair__n2__g1 : !U (i32 * 1 -o F[2.0 aff i32 * i32 ~> i32] (i32 * i32)) =
 main : F i32 =
   acc <- return i32[0];
   fx_w1 : i32 <- return acc;
-  io_j19_3 : i32 * i32 + i32 * i32 <- handle_with[1](
-      ((!thunkv fun (io_hv19_3 : i32 * i32) ->
-        return inl io_hv19_3) : !U (i32 * i32 -o F (i32 * i32 + i32 * i32))),
-      ((!thunkv fun (io_hp19_3 : (i32 * i32) * U ((i32 -o F (i32 * i32 + i32 * i32)) & F 1)) ->
-        let (io_hxw19_3, io_k19_3) = io_hp19_3;
-        let (x, io_hw19_3) = io_hxw19_3;
-        acc <- return io_hw19_3;
-        acc <- return (unbang host[add32]) (acc, x);
-        io_wv19_3 <- return acc;
-        force io_k19_3.1 io_wv19_3, ()) : !U ((i32 * i32) * U ((i32 -o F (i32 * i32 + i32 * i32)) & F 1) -o F (i32 * i32 + i32 * i32)) * 1)) (io_fg19_3 <- return unbang pair__n1__g0;
+  io_j19_3 : i32 * i32 + i32 * i32 <- handle_tail[1: aff](((!thunkv fun (io_hv19_3 : i32 * i32) ->
+          return inl io_hv19_3) : !U (i32 * i32 -o F (i32 * i32 + i32 * i32))), (((!thunkv fun (io_hp19_3 : i32 * i32) ->
+          let (x, io_hw19_3) = io_hp19_3;
+          acc <- return io_hw19_3;
+          acc <- return (unbang host[add32]) (acc, x);
+          return acc) : !U (i32 * i32 -o F i32)), ())) (io_fg19_3 <- return unbang pair__n1__g0;
     io_fa19_3 <- return (fx_w1, ());
     force io_fg19_3 io_fa19_3);
   io_jj19_3 : i32 * i32 <- case io_j19_3 {
@@ -46,20 +42,16 @@ main : F i32 =
   r : i32 <- return io_v19_3;
   n <- return (unbang host[add32]) ((unbang host[mul32]) (acc, i32[10]), r);
   fx_w2 : i32 <- return n;
-  io_j21_3 : i32 * i32 + i32 * i32 <- handle_with[2](
-      ((!thunkv fun (io_hv21_3 : i32 * i32) ->
-        return inl io_hv21_3) : !U (i32 * i32 -o F (i32 * i32 + i32 * i32))),
-      ((!thunkv fun (io_hp21_3 : (i32 * i32) * U ((i32 -o F (i32 * i32 + i32 * i32)) & F 1)) ->
-        let (io_hxw21_3, io_k21_3) = io_hp21_3;
-        let (x, io_hw21_3) = io_hxw21_3;
-        n <- return io_hw21_3;
-        case (unbang host[eq32]) (x, i32[2]) {
-          inl io_else -> n <- return (unbang host[add32]) (n, x);
-            io_wv21_3 <- return n;
-            force io_k21_3.1 io_wv21_3
-        | inr io_then -> io_c21_3 <- force io_k21_3.2;
-            return inr (n, i32[40])
-        }, ()) : !U ((i32 * i32) * U ((i32 -o F (i32 * i32 + i32 * i32)) & F 1) -o F (i32 * i32 + i32 * i32)) * 1)) (io_fg21_3 <- return unbang pair__n2__g1;
+  io_j21_3 : i32 * i32 + i32 * i32 <- handle_last[2: aff](((!thunkv fun (io_hv21_3 : i32 * i32) ->
+          return inl io_hv21_3) : !U (i32 * i32 -o F (i32 * i32 + i32 * i32))), ((((!thunkv fun (io_hp21_3 : i32 * i32) ->
+          let (x, io_hw21_3) = io_hp21_3;
+          n <- return io_hw21_3;
+          case (unbang host[eq32]) (x, i32[2]) {
+            inl io_else -> n <- return (unbang host[add32]) (n, x);
+              return inl n
+          | inr io_then -> return inr (n, i32[40])
+          }) : !U (i32 * i32 -o F (i32 + i32 * i32))), ()), (((!thunkv fun (io_hz21_3 : i32 * i32) ->
+          return inr io_hz21_3) : !U (i32 * i32 -o F (i32 * i32 + i32 * i32))), ()))) (io_fg21_3 <- return unbang pair__n2__g1;
     io_fa21_3 <- return (fx_w2, ());
     force io_fg21_3 io_fa21_3);
   io_jj21_3 : i32 * i32 <- case io_j21_3 {
