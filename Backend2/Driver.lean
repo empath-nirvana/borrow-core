@@ -250,6 +250,13 @@ def directFacts (c : Frontend.Check.Checked) (io : Nat × (Nat → Bool) := (0, 
     out := out.insert h.n ok
   return out
 
+/-- The `div_fuel` nodes of a typed term, within the depth `fuel`. -/
+def divFuels : Nat → TExpr → Nat
+  | 0, _ => 0
+  | f + 1, t =>
+    (match t with | .divFuel .. => 1 | _ => 0) +
+      (t.children.map fun (_, c) => divFuels f c).foldl (· + ·) 0
+
 /-- The handlers of `Div` in a typed term, within the depth `fuel`: its `reify` and `div_fuel`
 nodes (SPEC §14). -/
 def divHandlers : Nat → TExpr → Nat
@@ -515,6 +522,37 @@ def suspCodes (L : Lay.Layouts) (o : Var) (M : OutInfo) : List Nat := Id.run do
     | .pair _ kn => (L.unionOf kn).toList
     | _ => []
 
+/-- **The functions a stored loop's `reify` may run**  `[spec §65]`: from the code it is given and
+the suspended computations its drives resume (`CState.reifyRuns`), every function a call may
+reach: a direct call, a closure's call at the codes the closure flow gives its variable
+(`Flow.solution`, whose sets over-approximate every flow), a loop's function. -/
+def reifyReach (p : Prog) (fs : Flow.St) (roots : Array Var) : Std.HashSet Nat := Id.run do
+  let codesFns (x : Var) : List Nat :=
+    ((fs.sets.getD x {}).toList.filterMap fun c => p.codes[c]?).flatMap (·.fns)
+  let rec calls : Nat → Tm → List Nat
+    | 0, _ => []
+    | f + 1, t => match t with
+      | .call fn _ => [fn]
+      | .app g _ | .app0 g | .sel g _ => codesFns g
+      | .prim (.tab fi) _ | .prim (.tabLit fi ..) _ => [fi]
+      | .letv _ e b => calls f e ++ calls f b
+      | .letpair _ _ _ b | .copy _ _ b | .drop _ b => calls f b
+      | .case _ _ b₁ _ b₂ => calls f b₁ ++ calls f b₂
+      | _ => []
+  let mut seen : Std.HashSet Nat := {}
+  let mut todo : List Nat := roots.toList.flatMap codesFns
+  for _ in [0:p.fns.size + 1] do
+    match todo with
+    | [] => break
+    | fn :: rest =>
+      todo := rest
+      if seen.contains fn then continue
+      seen := seen.insert fn
+      if let some fd := p.fns[fn]? then
+        todo := calls (1 <<< 22) fd.body ++ todo
+  -- The bound above counts functions, and each is entered once: the search ends within it.
+  return seen
+
 /-- The LIR of a checked program, and what the conversion read. With state machines (SPEC §49), the
 layouts of the converted program decide the calls in tail position that close a loop
 (`tailPass`) and the machines whose state is a cell (`cellPass`). A machine whose state is a cell
@@ -528,10 +566,10 @@ def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) : Except String 
     | none => pure ([], 0, false, (Frontend.Check.rtMainOf c.C).isSome)
     | some m => pure (← extsOf m, m.caps.length, m.loopB.isSome && !m.rt, m.rt)
   let ctx := c.ctx.map fun s => (s.ty, s.live)
-  let run (threaded stacked : Std.HashMap Nat LTy) :
+  let run (threaded stacked : Std.HashMap Nat LTy) (atRt : Std.HashSet Nat) :
       Except String (Prog × CState × Std.HashMap Nat LTy × Std.HashMap Nat LTy) := do
     let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c (ioSlots k))
-      (machineOps c (ioSlots k)) (divRuntime c loops) threaded stacked classes rt (ruleFVs c)
+      (machineOps c (ioSlots k)) (divRuntime c loops) threaded stacked classes rt (ruleFVs c) atRt
     let p := { p with exits := c.exitsOnDivError }
     if st.done.isEmpty then return (p, st, {}, {})
     -- A call in tail position whose callee's suspended computations may be the machine's own
@@ -557,9 +595,28 @@ def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) : Except String 
     let sk := stackedOf st recursive (stackOps c (ioSlots k)) (suspCodes L)
     let th := (threadedOf st recursive).filter fun i _ => !sk.contains i
     return ({ p with fns := p₂.fns, codes := p₂.codes, ty := p₂.ty, statics := p₂.statics }, st₂, th, sk)
-  let (p, st, th, sk) ← run {} {}
-  if th.isEmpty && sk.isEmpty then return (p, st)
-  let (p, st, _, _) ← run th sk
+  let (p, st, th, sk) ← run {} {} {}
+  -- The ticks whose code no stored loop's `reify` runs are answered where they are performed
+  -- (SPEC §65): read off the first conversion's closure flow, when `main` is driven by the
+  -- runtime and no `div_fuel` node counts ticks.
+  -- UNPROVED: that a tick point `reifyReach` does not reach is performed under `main`'s `reify`
+  -- alone, so the runtime answers it *next* in place. It should hold because `reifyReach`
+  -- over-approximates the functions a stored loop's `reify` runs (every code the checked flow
+  -- lets its closures and their callees reach), and the second conversion numbers the tick points
+  -- as the first does (one conversion of the same typed term). If it fails, a tick inside a
+  -- stored loop is answered *next* in place and the loop's observation never suspends: the
+  -- loop runs ahead of its consumer.
+  let atRt : Std.HashSet Nat ← do
+    if st.tickPoints.isEmpty || !loops || (mainReify? c.t).isNone ||
+        divFuels Frontend.Check.copiesFuel c.t > 0 then
+      pure {}
+    else
+      let L ← checkedLayouts p
+      let (fs, _) ← checkedFlow p L
+      let reach := reifyReach p fs st.reifyRuns
+      pure (st.tickPoints.fold (fun acc t mk => if reach.contains mk then acc else acc.insert t) {})
+  if th.isEmpty && sk.isEmpty && atRt.isEmpty then return (p, st)
+  let (p, st, _, _) ← run th sk atRt
   return (p, st)
 
 /-- The LIR of a checked program (`lirOf₀`), with its frame slots (`slotsOf`). -/

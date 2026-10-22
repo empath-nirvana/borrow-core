@@ -265,6 +265,19 @@ structure CState where
   (no other `reify` and no `div_fuel` node: `Backend2/Driver.lean`, `divRuntime`). A tick is then
   answered *next*, where it is performed. -/
   divRt : Bool := false
+  /-- **The ticks a stored loop cannot hold**  `[spec §65]`: the `tick`s, by the order the
+  conversion meets them (`tickSeen`), whose code no stored loop's `reify` runs
+  (`Backend2/Driver.lean`, `lirOf`, read off a first conversion): each is answered *next* where it
+  is performed, as the runtime answers it (`tail_resumes`, `drive_reify_tick`). -/
+  ticksAtRt : Std.HashSet Nat := {}
+  /-- The `tick`s met so far. -/
+  tickSeen : Nat := 0
+  /-- At a first conversion, each tick's suspension's function (`performK`'s point), by the order
+  the conversion met it. -/
+  tickPoints : Std.HashMap Nat Nat := {}
+  /-- The variables of the code a stored loop's `reify` runs: the computation it is given, and the
+  suspended computations its drives resume (`genReify`). -/
+  reifyRuns : Array Var := #[]
 
 abbrev CM := StateT CState (Except String)
 
@@ -945,15 +958,24 @@ def kTyAt (F : OutInfo) (op : Key) : CM LTy := do
 
 /-- **A `perform` of a machine operation**, `K` its continuation: the machine suspends here, its
 state the continuation's arguments (`[op]`, the continuation the rest of the machine).  -/
-def performK (K : Kont) (args : List Var) (op : Key) (v : Var) : CM Tm := do
+def performK (K : Kont) (args : List Var) (op : Key) (v : Var) (tick? : Option Nat := none) :
+    CM Tm := do
   let F ← curMach
   -- With the level's cell passed on, the state is the other arguments; `mk` takes the cell's
   -- argument last (`genMach`).
   let (K', args', _) := stripCell K args
   let mk ← newPoint op none none (← args'.mapM tyOf) none K'
+  if let some t := tick? then modify fun st => { st with tickPoints := st.tickPoints.insert t mk }
   let k ← fresh (← kTyAt F op)
   modify fun st => { st with erased := st.erased.insert "suspend" (st.erased.getD "suspend" 0 + 1) }
   return .letv k (.call mk args) (← outSusp F op v k)
+
+/-- **A `tick` met by the conversion**  `[spec §65]`: its number, and whether no stored loop runs
+its code (`ticksAtRt`), so that it is answered *next* where it is performed. -/
+def tickMet : CM (Nat × Bool) := do
+  let t := (← get).tickSeen
+  modify fun st => { st with tickSeen := t + 1 }
+  return (t, (← get).ticksAtRt.contains t)
 
 /-- The cell `c` released, then `b`. -/
 def releaseThen (c : Var) (b : Tm) : CM Tm := do
@@ -1992,7 +2014,14 @@ def genIterK (fT : LTy) (S : Row) (B R St : LTy) (p : Var) : CM Tm := do
     setFn fB { name := "iterate tick", params := [fB₁, s₁, n],
                body := .case n un (.drop un (.call fi [fB₁, s₁])) uc (.drop uc closeTm), ret := F.ty }
     let b ← fresh B; let v ← fresh valT; let s' ← fresh St; let u ← fresh .unit
-    let tickTm ← performK [.letF fB 2] [fA₁, s'] (divName, 0) u
+    -- The back edge's tick: a suspension, or *next* at once where no stored loop runs the
+    -- loop (`ticksAtRt`), the tick's continuation `fB` called on it (`drive_reify_tick`).
+    let (tk, atRt) ← tickMet
+    let tickTm ← if atRt then do
+        readFact "effPerform:tick at the runtime"
+        let nx ← fresh boolT
+        pure (Tm.letv nx (.inj false u) (.call fB [fA₁, s', nx]))
+      else performK [.letF fB 2] [fA₁, s'] (divName, 0) u (some tk)
     setFn fA { name := "iterate turn", params := [fA₁, x],
                body := .case x b (.drop fA₁ (.letv v (.inj false b) (← outValue F v))) s'
                  (.letv u .unit tickTm), ret := F.ty }
@@ -2027,7 +2056,28 @@ def genReify (S : Row) (B R : VTy) (resV : Tm) (resT : LTy) (jT : LTy) : CM Tm :
   let cCl ← addCode { kind := .amp, fns := [cClN, cClC], ty := loopK }
   let cTkN ← reserveFn "tick next"; let cTkC ← reserveFn "tick close"
   let cTk ← addCode { kind := .amp, fns := [cTkN, cTkC], ty := loopK }
+  -- One drive per observation that runs one (making, *next*, *close*), each its own function, so
+  -- that each answers its own outcome.
   let drive ← reserveFn "reify drive"
+  -- The loops of one `reify` node are variants of one code, as a task body's closures are
+  -- (SPEC §49, `genMerges`): those its drives make, and a closure whose body holds the node and
+  -- is of the loop type (a stored loop before its first observation, `closOf`'s `inner`).
+  let loopKey := s!"reify{drive}"
+  -- The loop type unrolled, as a closure made by `nu_in` has it.
+  let loopKU : LCTy := match loopK with
+    | .nu b => b.unrollNu
+    | k => k
+  modify fun st => { st with sitesIn := ([.thunk loopKU], loopKey) :: st.sitesIn }
+  let loopClos (c : Nat) (env : List Var) : CM Tm := do
+    let g := s!"{loopKey}|{loopKU}"
+    let mk ← reserveFn "task variant"
+    let v : SiteVar := { code := c, mkFn := mk, envTys := ← env.mapM tyOf }
+    modify fun st => { st with merges := st.merges.insert g ((st.merges.getD g #[]).push v),
+                               merged := if st.merges.contains g then st.merged else st.merged.push g }
+    readFact "reify:loop variant"
+    return .call mk env
+  let driveN ← reserveFn "reify drive next"
+  let driveC ← reserveFn "reify drive close"
   let kT ← kTyAt T (divName, 0)
   let wrapM (O : Option OutInfo) (act : CM Tm) : CM Tm := match O with
     | some F => withMachine F act
@@ -2043,7 +2093,7 @@ def genReify (S : Row) (B R : VTy) (resV : Tm) (resT : LTy) (jT : LTy) : CM Tm :
   do
     let r ← fresh rT; let l ← fresh loopT; let w ← fresh (.sum bT loopT)
     setFn cClN { name := "closed next", params := [r], ret := nextT,
-                 body := .letv l (.clos cCl [r]) (.letv w (.inj true l) (← wrapM OB (valueAt OB pS w))) }
+                 body := .letv l (← loopClos cCl [r]) (.letv w (.inj true l) (← wrapM OB (valueAt OB pS w))) }
     let r ← fresh rT
     setFn cClC { name := "closed close", params := [r], ret := closeT, body := ← wrapM OR (valueAt OR pS r) }
   -- `tickLoop k`: *next* resumes `k` with *next* and drives; *close* resumes it with *close*,
@@ -2052,9 +2102,10 @@ def genReify (S : Row) (B R : VTy) (resV : Tm) (resT : LTy) (jT : LTy) : CM Tm :
     let k ← fresh kT; let rs ← fresh resT
     let kr ← fresh (← selTy kT 0); let o ← fresh T.ty
     let u ← fresh .unit; let nx ← fresh boolT
+    modify fun st => { st with reifyRuns := st.reifyRuns.push k }
     setFn cTkN { name := "tick next", params := [k, rs], ret := nextT,
                  body := .letv kr (.sel k 0) (.letv u .unit (.letv nx (.inj false u)
-                   (.letv o (.app kr nx) (.call drive [rs, o])))) }
+                   (.letv o (.app kr nx) (.call driveN [rs, o])))) }
     let k ← fresh kT; let rs ← fresh resT; let rs' ← freshLike rs
     let kr ← fresh (← selTy kT 0); let o ← fresh T.ty
     let u ← fresh .unit; let cl ← fresh boolT
@@ -2078,18 +2129,19 @@ def genReify (S : Row) (B R : VTy) (resV : Tm) (resT : LTy) (jT : LTy) : CM Tm :
           setFn fj { name := "tick close join", params := [rsJ, xJ], body := ← closeOf rsJ xJ,
                      ret := FR.ty }
           pointK [.letF fj 1] [rs'] (.var x) FB
+    modify fun st => { st with reifyRuns := st.reifyRuns.push k }
     setFn cTkC { name := "tick close", params := [k, rs], ret := closeT,
                  body := .copy rs rs' (.letv kr (.sel k 0) (.letv u .unit (.letv cl (.inj true u)
-                   (.letv o (.app kr cl) (.letv x (.call drive [rs, o]) body))))) }
+                   (.letv o (.app kr cl) (.letv x (.call driveC [rs, o]) body))))) }
   -- The drive: the reified computation's outcome `o` taken apart.
-  do
+  for drive in [drive, driveN, driveC] do
     let rs ← fresh resT; let o ← fresh T.ty
     let dbody : CM Tm := do
       let w ← fresh T.body; let v ← fresh T.r; let ex ← fresh T.xTy
       let b ← fresh bT; let r ← fresh rT
       let l₁ ← fresh loopT; let w₁ ← fresh (.sum bT loopT); let w₂ ← fresh (.sum bT loopT)
       let valArm : Tm := .drop rs (.case v b (.letv w₁ (.inj false b) (← valueAt OB pS w₁))
-        r (.letv l₁ (.clos cCl [r]) (.letv w₂ (.inj true l₁) (← valueAt OB pS w₂))))
+        r (.letv l₁ (← loopClos cCl [r]) (.letv w₂ (.inj true l₁) (← valueAt OB pS w₂))))
       let abortArm (e : Var) : CM Tm := do
         match OB with
         | some FB =>
@@ -2100,10 +2152,11 @@ def genReify (S : Row) (B R : VTy) (resV : Tm) (resT : LTy) (jT : LTy) : CM Tm :
       let suspArms (sv : Var) : CM Tm := casePay T.sPay sv fun j pv => do
         let some (key, _, bK, cpK) := T.ms[j]? | throw "LIR: a suspension's summand"
         letpairM pv fun a k => do
+          modify fun st => { st with reifyRuns := st.reifyRuns.push k }
           if key == (divName, 0) then
             -- `reifyC`: the loop at the tick.
             let l ← fresh loopT; let w ← fresh (.sum bT loopT)
-            return .drop a (.letv l (.clos cTk [k, rs]) (.letv w (.inj true l) (← valueAt OB pS w)))
+            return .drop a (.letv l (← loopClos cTk [k, rs]) (.letv w (.inj true l) (← valueAt OB pS w)))
           let some FB := OB | throw "LIR: a stored loop forwards a suspension where its row has no machine operation"
           -- Forwarding: the drive suspends at `key`, resumed by resuming `k` and driving again.
           let mk ← newPoint key (some (T.kTy bK cpK)) cpK [resT] (some drive) [.dropF 1]
@@ -2125,10 +2178,11 @@ def genReify (S : Row) (B R : VTy) (resV : Tm) (resT : LTy) (jT : LTy) : CM Tm :
       | _ => none) | throw s!"LIR: reify's type {jT}"
   let mkFn ← reserveFn "reify"
   let rs ← fresh resT; let tk ← fresh tkT
+  modify fun st => { st with reifyRuns := st.reifyRuns.push tk }
   let rs₁ ← freshLike rs; let o ← fresh T.ty; let x ← fresh nextT; let tu ← fresh .unit
   let rkOf (rs : Var) (x : Var) : CM Tm := do
     let b ← fresh bT; let l ← fresh loopT; let ld ← fresh loopT
-    return .case x b (.letv ld (.clos cDone [b, rs]) (← valueAt OL pS ld)) l (.drop rs (← valueAt OL pS l))
+    return .case x b (.letv ld (← loopClos cDone [b, rs]) (← valueAt OL pS ld)) l (.drop rs (← valueAt OL pS l))
   let mkBody ← match OB, OL with
     | none, none => match payTy pS with
       | none => do pure (Tm.letv tu .unit (.letv o (.app tk tu) (.letv x (.call drive [rs₁, o]) (← rkOf rs x))))
@@ -3115,6 +3169,16 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
           return .letv r (.call fi [v]) (.case r bx (.case bx y (← applyK F K args y) z
             (.letv wz (.inj false z) (← leave wz))) e (.letv we (.inj true e) (← leave we)))
     if (← get).mach.contains (o.n, o.i) then
+      if o.n == divName then
+        -- `tick` at a machine: a suspension, or *next* where it is performed where no stored
+        -- loop runs its code (`ticksAtRt`).  [spec §62, §65]
+        let (tk, atRt) ← tickMet
+        if atRt then
+          let p ← rowPay S
+          return ← bindTm (← conv fuel ctx c) .unit fun v => do
+            resultK K args (← tickTm v p) boolT p
+        readFact "effPerform:machine"
+        return ← bindTm (← conv fuel ctx c) (← vty o.A) fun v => performK K args (o.n, o.i) v (some tk)
       readFact "effPerform:machine"
       bindTm (← conv fuel ctx c) (← vty o.A) fun v => performK K args (o.n, o.i) v
     else
@@ -4632,10 +4696,10 @@ def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CT
     (loops : Bool) (census : Bool := false) (direct : Std.HashMap UInt32 (List Bool) := {})
     (mach : MachSet := {}) (divRt : Bool := false) (threaded : Std.HashMap Nat LTy := {})
     (stacked : Std.HashMap Nat LTy := {}) (classes : List (VTy × List LTy) := [])
-    (rt : Bool := false) (workFV : Std.HashMap (UInt32 × Nat) (List Nat) := {}) :
-    Except String (Prog × CState) := do
+    (rt : Bool := false) (workFV : Std.HashMap (UInt32 × Nat) (List Nat) := {})
+    (ticksAtRt : Std.HashSet Nat := {}) : Except String (Prog × CState) := do
   let ((m, mT), s) ← (convMain exts ctx t C ncaps loops rt).run
-    { census, direct, mach, divRt, threaded, stacked, classes, workFV }
+    { census, direct, mach, divRt, threaded, stacked, classes, workFV, ticksAtRt }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
             statics := s.statics, lits := s.lits, stackKs := s.stackKs }, s)
 
