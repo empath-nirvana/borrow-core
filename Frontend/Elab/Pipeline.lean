@@ -31,8 +31,9 @@ structure Elaborated where
   keys : List DefKey := []
 
 /-- Elaborate a parsed program for the checker. -/
-def elaborate (p : Program) : Except Error Elaborated := do
-  let s ← Sugar.elaborateO p
+def elaborate (p : Program) (cnts : Frontend.Check.CntTable := {}) :
+    Except Error Elaborated := do
+  let s ← Sugar.elaborateO p cnts
   let keys := s.origins.filterMap fun | (_, .defKey k) => some k | _ => none
   pure ⟨s.prog, s.lib, s.origins, keys⟩
 

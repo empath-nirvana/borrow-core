@@ -39,7 +39,7 @@ def extsOf (m : Frontend.Check.IOMain) : Except String (List Ext) :=
 outer row, clauses' kinds and its handler pair's erasure. -/
 structure HNode where
   n : UInt32
-  E : List (Qual × VTy × VTy)
+  E : List (Count × VTy × VTy)
   S : Row
   ks : List ClauseKinds.HKind
   H : Expr
@@ -102,9 +102,8 @@ def machineOps (c : Frontend.Check.Checked) : MachSet := Id.run do
   return out
 
 /-- **The operations whose every `handle` node keeps `κ` boxed** (SPEC §52): each machine operation
-`(n, j)` whose clause at every node of `n` is `stored`, every node of `n` is `effHandleVB` (BOXED-κ,
-SPEC §28) and no operation of any node of `n` is `unr` (a site with a stack has no `κ` that may be
-copied). A stack machine's frames have one owner there:
+`(n, j)` whose clause at every node of `n` is `stored` and every node of `n` is `effHandleVB`
+(BOXED-κ, SPEC §28); no `κ` may be copied (SPEC §53). A stack machine's frames have one owner there:
 the stored site whose `κ` holds them, which keeps a stack. -/
 def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
   let nodes := hnodes Frontend.Check.copiesFuel c.t
@@ -112,9 +111,8 @@ def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
   let mut out : MachSet := {}
   for (n, j) in ms.toList do
     let same := nodes.filter (·.n == n)
-    if !same.isEmpty && same.all (fun g => g.boxed && g.E.all (·.1 != .unr) &&
-        (g.ks[j.toNat]?.map (·.kind)) == some .stored &&
-        (g.E[j.toNat]?.map (·.1)).any (· != .unr)) then
+    if !same.isEmpty && same.all (fun g => g.boxed &&
+        (g.ks[j.toNat]?.map (·.kind)) == some .stored && (g.E[j.toNat]?).isSome) then
       out := out.insert (n, j)
   return out
 

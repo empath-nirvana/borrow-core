@@ -53,11 +53,13 @@ def TCx.pushDead (c : TCx) : TCx := { c with E := c.E.push none, T := .unit :: c
 
 /-- The context of a body among the declarations `scope`: every extern when `all`, else the
 persistent ones (the context of a `def`, SPEC §11). -/
-def TCx.ofScope (scope : List Decl) (all : Bool) : TCx :=
+def TCx.ofScope (scope : List Decl) (all : Bool)
+    (cnts : Frontend.Check.CntTable := {}) : TCx :=
   let ds := scope.toArray
   let xs := externsBefore ds ds.size
   let vars := (xs.map (fun (x, B) => if all || B.persistent then some x else none)).reverse
-  { E := Env.mk ⟨ds, ds.size, []⟩ vars [] [] [] xs.length none, T := (xs.map (·.2)).reverse }
+  { E := Env.mk { decls := ds, upto := ds.size, cnts } vars [] [] [] xs.length none,
+    T := (xs.map (·.2)).reverse }
 
 /-- A written type, elaborated. -/
 def TCx.elabV (c : TCx) (A : VTy) : Option CVTy := (c.E.elabV c.Δ A).toOption

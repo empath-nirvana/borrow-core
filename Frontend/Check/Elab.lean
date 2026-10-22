@@ -32,6 +32,7 @@ abbrev CCTy := BoCa.Fig16.LogRel.Core.CTy
 abbrev CShape := BoCa.Fig16.LogRel.Core.Shape
 abbrev CLife := BoCa.Lifetime.Life
 abbrev CQual := BoCa.Fig16.LogRel.Core.Qual
+abbrev CCount := BoCa.Fig16.LogRel.Core.Count
 abbrev COpSig := BoCa.Fig16.LogRel.Core.OpSig
 /-- A row of the kernel, `List OpSig`.  `[spec §19]` -/
 abbrev CRow := BoCa.Fig16.LogRel.Core.Row
@@ -39,16 +40,10 @@ abbrev CRow := BoCa.Fig16.LogRel.Core.Row
 /-- `F_Σ A`: the row's operations over `F A`.  `[spec §19]` -/
 abbrev effOf : CRow → CVTy → CCTy := BoCa.Fig16.LogRel.Core.CTy.effOf
 
-/-- A qualifier of the surface as the kernel's. -/
-def _root_.Frontend.Qual.toCore : Frontend.Qual → CQual
-  | .lin => .lin
-  | .aff => .aff
-  | .unr => .unr
-
-def qualStr : CQual → String
-  | .lin => "lin"
-  | .aff => "aff"
-  | .unr => "unr"
+/-- A count as a row writes it: `lin` at `1`, `aff` at `0` and `1?`. -/
+def cntStr : CCount → String
+  | .one => "lin"
+  | .zero | .opt => "aff"
 
 /-- `pull A B R = νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R`: a stored generator (SPEC §15). It is an
 abbreviation of the frontend over `ν` (SPEC §7: a new codata shape is a new abbreviation), with no
@@ -57,12 +52,34 @@ def pullTy (A B R : CVTy) : CCTy :=
   .nu (.amp (.ret (.sum (.tensor (A.rename Nat.succ) (.tvar 0)) (.sum (B.rename Nat.succ) (.tvar 0))))
     (.ret (R.rename Nat.succ)))
 
+/-- **The counts the checker gives a program's rows** (SPEC §53): the counts it inferred, by
+operation `n.i` (`Frontend/Check/Grades.lean`); and, with `relax`, a `lin` entry read as `ctl`,
+for the check that finds which handler forces a `linear ctl` operation above `1`. -/
+structure CntTable where
+  ops : List ((Nat × Nat) × CCount) := []
+  relax : Bool := false
+  deriving Inhabited
+
 /-- The declarations visible at a point: those before index `upto`. -/
 structure Scope where
   decls : Array Decl
   upto : Nat
   /-- The key of each `def` the elaboration generates (`DefKey`), read at its uses. -/
   keys : List DefKey := []
+  /-- The counts the checker gives the rows (`CntTable`).  `[spec §53]` -/
+  cnts : CntTable := {}
+
+/-- **The kernel's count of the operation `n.i`, answering `B`, as a row writes it**
+(SPEC §53): `lin` is `1`; `aff` is `1?`, or `0` at an answer `0`; `ctl` is the count inferred for
+the operation (`Scope.cnts`), and where none is, as `aff`.  An operation whose count is inferred is
+a handler site's (`SiteRec`), whose name only the elaboration writes: an `aff` entry of it is the
+elaboration's own, a row it reads back from a type it computed before the count was inferred
+(`TCx.surface`), and it reads the inferred count too. -/
+def Scope.cntOf (sc : Scope) (n i : Nat) (q : Frontend.Qual) (B : CVTy) : CCount :=
+  let weak : CCount := if B.isZero then .zero else .opt
+  match q with
+  | .lin => if sc.cnts.relax then (sc.cnts.ops.lookup (n, i)).getD weak else .one
+  | .aff | .infer => (sc.cnts.ops.lookup (n, i)).getD weak
 
 /-- A `type` declaration in scope: its type and lifetime parameters, body and own scope. -/
 structure TypeInfo where
@@ -191,15 +208,15 @@ def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
   | .nu (.amp (.ret (.sum (.tensor A (.tvar 0)) R)) (.ret R')) =>
       parenIf (p > 5) s!"iter {ppV nm 0 6 A} {ppV nm 0 6 R} {ppV nm 0 6 R'}"
   | .nu C => parenIf (p > 0) s!"nu {tvName 0}. {ppC nm 0 C}"
-  | .eff n i q A B fin C =>
+  | .eff n i q _ A B fin C =>
       let (es, r) := ppEff nm C
       parenIf (p > 5)
-        s!"F[{", ".intercalate (s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es)}] {r}"
+        s!"F[{", ".intercalate (s!"{n}.{i} {cntStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es)}] {r}"
 /-- The entries of a row's layers `F_Σ`, and what is under them. -/
 def ppEff (nm : List (String × LifeVar)) : CCTy → List String × String
-  | .eff n i q A B fin C =>
+  | .eff n i q _ A B fin C =>
       let (es, r) := ppEff nm C
-      (s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es, r)
+      (s!"{n}.{i} {cntStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es, r)
   | .ret A => ([], ppV nm 0 6 A)
   | C => ([], ppC nm 6 C)
 end
@@ -391,20 +408,19 @@ def elabC : Nat → TyEnv → CTy → Except Error CCTy
     | .eff sp r A => do
         let S ← elabRow n E sp r
         pure (BoCa.Fig16.LogRel.Core.CTy.effOf S (← elabV n E A))
-/-- A row: each operation's name and index below `2^32`, and no unrestricted operation answering
-`0`: an abortive operation is affine (decision 63).  `[spec §18, §19]` -/
+/-- A row: each operation's name and index below `2^32`, each entry at its count
+(`Scope.cntOf`).  `[spec §18, §19, §53]` -/
 def elabRow : Nat → TyEnv → Span → Row → Except Error CRow
   | 0, _, sp, _ => err sp "type abbreviations nested too deeply"
   | n + 1, E, sp, r => match r with
     | .nil => pure []
     | .cons k i q A B r => do
         if k < 2 ^ 32 ∧ i < 2 ^ 32 then
-          let o : COpSig :=
-            ⟨UInt32.ofNat k, UInt32.ofNat i, q.toCore, ← elabV n E A, ← elabV n E B, .ret .unit⟩
-          if o.q == .unr && o.B.isZero then
-            err sp (s!"the operation {k}.{i} is unrestricted and answers `0`: an abortive " ++
-              s!"operation is affine, `{k}.{i} aff … ~> 0` (decision 63)")
-          else pure (o :: (← elabRow n E sp r))
+          let A' ← elabV n E A
+          let B' ← elabV n E B
+          let o : COpSig := ⟨UInt32.ofNat k, UInt32.ofNat i, E.scope.cntOf k i q B', .top, A', B',
+            .ret .unit⟩
+          pure (o :: (← elabRow n E sp r))
         else err sp s!"the operation {k}.{i}: a name and an index are below 2^32"
 /-- A shape. -/
 def elabS : Nat → TyEnv → Shape → Except Error CShape

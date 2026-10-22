@@ -1,4 +1,4 @@
-effect 17:1: Fail: raise (ctl, affine, abortive)
+effect 17:1: Fail: raise (ctl, abortive)
 row 21:1: share: Fail[DivError]
 row 29:1: either: Fail[DivError], Fail[E]
 lowering 21:1: copy `share__n1`: `share` for the site 1 of `Fail`

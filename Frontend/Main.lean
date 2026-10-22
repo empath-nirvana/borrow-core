@@ -34,8 +34,14 @@ import Backend2.Driver
                                 a never-reuse allocator (`fresh`), with lend tags (`tags`), or
                                 with the least-free allocator (`least`); a failed check is an
                                 error; `--stats` writes the run's counts to standard error
-    lake exe bcc desugar <file> print the program with its I/O sugar elaborated (SPEC §11)
+    lake exe bcc desugar [--counted] <file>
+                                print the program with its I/O sugar elaborated (SPEC §11); with
+                                `--counted`, at the counts the checker infers, its `ctl` entries
+                                written at them (SPEC §53)
     lake exe bcc erase <file>   print the erasure of the checked `main`
+    lake exe bcc grades <file>  the grade census: each `handle` node's operations, their counts
+                                (inferred, declared or written), what pins a `1?`, their world,
+                                position and storage (SPEC §53)
     lake exe bcc alpha [--map] <file>
                                 print the program with every variable renamed to a name of its
                                 own (`alphaRename`), or with `--map` the renaming
@@ -138,6 +144,43 @@ def desugar (file : String) : IO UInt32 := do
     | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
     | .ok el => IO.print el.prog.pp; return 0
 
+/-- A printed program's row entries `n.i ctl` and `n.i aff` at the counts `tbl` gives them, `lin`
+at `1` and `aff` otherwise (`Frontend.Check.Scope.cntOf`): the core text of the elaboration at
+those counts. -/
+def resolveCounts (tbl : List ((Nat × Nat) × BoCa.Fig16.LogRel.Core.Count)) (s : String) :
+    String :=
+  let one (q : String) (s : String) : String :=
+    match s.splitOn s!" {q} " with
+    | [] => s
+    | w :: rest => rest.foldl (init := w) fun acc w' =>
+        -- the entry's name, the last word before the count
+        let c := match (((acc.splitOn " ").getLast!.splitOn "[").getLast!).splitOn "." with
+          | [n, i] => match n.toNat?, i.toNat? with
+            | some n, some i => tbl.lookup (n, i)
+            | _, _ => none
+          | _ => none
+        let q' := match c with
+          | some .one => "lin"
+          | some _ => "aff"
+          | none => if q == "ctl" then "aff" else q
+        acc ++ s!" {q'} " ++ w'
+  one "aff" (one "ctl" s)
+
+/-- Print `file` with its sugar elaborated at the counts the checker infers (SPEC §53): the core
+text the checked program is. -/
+def desugarCounted (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+  | .ok p =>
+    match Check.checkAt p {} with
+    | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+    | .ok (rep, _) =>
+      let tbl := (BoCa.Fig16.LogRel.Core.Check.inferCounts rep.handles).table
+      match Frontend.Elab.elaborate p { ops := tbl } with
+      | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+      | .ok el => IO.print (resolveCounts tbl el.prog.pp); return 0
+
 /-- Print the erasure of `file`'s checked `main`. -/
 def erase (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
@@ -182,6 +225,21 @@ def kinds (file : String) : IO UInt32 := do
       for h in r.handles do
         let ks := (List.range h.ks.length).zip h.ks |>.map fun (i, k) => k.render h.n i
         IO.println s!"{h.sp.start.render}: handle {h.n}{if h.boxed then " (boxed κ)" else ""}: {"; ".intercalate ks}"
+      return 0
+
+/-- **The grade census of `file`** (SPEC §53): each `handle` node of its checked terms, with each
+operation's count, how the count is fixed (inferred, declared, or written in a core row), the node
+and reason that pin a `1?`, its world, its clause's position and where `κ` is kept. -/
+def grades (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+  | .ok p =>
+    match Check.checkProgram p with
+    | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+    | .ok r =>
+      for h in r.handles do
+        IO.println (h.gradeLine r.grades)
       return 0
 
 /-- A set of frames as `bcc handled` prints it: its handler names, sorted, then whether it holds a
@@ -572,9 +630,11 @@ def main (argv : List String) : IO UInt32 := do
     | none => IO.eprintln "usage: bcc tailcalls <n>"; return 2
   | ["trusted", file] => trusted file
   | ["kinds", file] => kinds file
+  | ["grades", file] => grades file
   | ["handled", file] => handled file
   | ["sites", file] => sites file
   | ["desugar", file] => desugar file
+  | ["desugar", "--counted", file] => desugarCounted file
   | ["erase", file] => erase file
   | ["lir", "--typed", file] => typedDump file
   | ["lir", file] => lirDump file

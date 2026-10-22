@@ -319,7 +319,7 @@ theorem effThenA (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ
 form over a part `Γ₁` of the context whose live slots are persistent.  `[spec §19]` -/
 theorem effHandle (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind)
     (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tc te : TExpr}
-    {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy}
+    {S : CRow} {E : List (CCount × CVTy × CVTy)} {n : UInt32} {A R : CVTy}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
     (hd : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ₁) (hH : tc.erase.ValFormIn Γ₁)
     (hc : TTied p₁ s₁ Δ Γ₁ tc (.val (.tensor (BoCa.Fig16.LogRel.Core.retTy S A R)
@@ -339,7 +339,7 @@ theorem effHandle (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKin
 /-- BOXED-κ reads its handled row, as `CDerivesAt.effHandleB`.  `[spec §28]` -/
 theorem effHandleB (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind)
     (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tc te : TExpr}
-    {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {d : CLife}
+    {S : CRow} {E : List (CCount × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {d : CLife}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
     (hd : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ₁) (hH : tc.erase.ValFormIn Γ₁)
     (hc : TTied p₁ s₁ Δ Γ₁ tc (.val (.tensor (BoCa.Fig16.LogRel.Core.retTy S A R)
@@ -388,7 +388,7 @@ theorem reify {p : Pins} {s : CRow} {t : TExpr} (S : CRow) (B R : CVTy) (res : B
 /-- `[handle]` at clauses that resume `κ` in tail position reads its handled row, as
 `CDerivesAt.effHandleT`.  `[spec §14, §19]` -/
 theorem effHandleT (u : Masks) (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy}
-    {tc te : TExpr} {Hr Hc : BoCa.Expr} {S SN : CRow} {E : List (CQual × CVTy × CVTy)}
+    {tc te : TExpr} {Hr Hc : BoCa.Expr} {S SN : CRow} {E : List (CCount × CVTy × CVTy)}
     {fs : Nat → CCTy} {n : UInt32} {A R : CVTy}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hd : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ₁)
     (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)

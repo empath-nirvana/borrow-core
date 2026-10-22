@@ -1,12 +1,9 @@
--- SPEC §52's `unr` guard: a stored BOXED-κ site whose operation is `multi ctl` (an `unr` `κ`) in a
--- program that has a stack machine (`tsum`, run by `spawn`). The clause copies its `κ` and resumes
--- both copies, which the typing allows at `unr`. Such a site does not switch the task stack: its
--- `κ` may be copied, so it could not be the stack's one owner (`stackOps` and `convDrive`'s
--- `siteSw` both ask that no operation of the node be `unr`). The `spawn` site still runs `tsum`'s
--- recursion on a stack of its own.
---
--- Answer: `i32[5]`: `grab`'s computation answers 5 at the first resume; the second resume of the
--- copy answers it again. `live 0`.
+-- reject: syntax
+-- expect: 11:15: `multi ctl`: an unrestricted continuation is not a type; an operation is `ctl`, its count inferred, or `linear ctl` (SPEC §53)
+-- An unrestricted continuation is not a type (SPEC §53): `multi ctl` is removed, and with it the
+-- stored BOXED-κ site whose clause copied its `κ` and resumed both copies, which SPEC §52's task
+-- stack guarded against (a site whose `κ` may be copied did not switch stacks). An operation is
+-- `ctl`, its count inferred (`0`, `1` or `1?`), or `linear ctl`.
 
 include rec
 include async

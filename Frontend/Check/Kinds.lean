@@ -163,7 +163,7 @@ def TExpr.unUse : TExpr → TExpr
 /-- **The kind of the clause `c` of the operation `o`**, with the operation's qualifier: abortive
 when the signature gives the clause no `κ`; the kind of its body `M` when it is a control clause
 `!thunkv λp. let (x, κ) = p; M`; otherwise `stored`. -/
-def classifyClause (o : Qual × VTy × VTy) (c : Option TExpr) : HKind :=
+def classifyClause (o : Count × VTy × VTy) (c : Option TExpr) : HKind :=
   ⟨o.1, if isAbortive o then .abortive else
     match c.map TExpr.unUse with
     | some (.bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM))) =>
@@ -179,11 +179,70 @@ def clauseParts : Nat → TExpr → List (Option TExpr)
 
 /-- The kinds of a handler's clauses, from the handler's pair `tH`, the `handle` node's own
 `(h_ret, hs)`. -/
-def classifyHandler (E : List (Qual × VTy × VTy)) (tH : TExpr) : List HKind :=
+def classifyHandler (E : List (Count × VTy × VTy)) (tH : TExpr) : List HKind :=
   let parts := match tH with
     | .tensorI _ _ _ _ _ _ tc => clauseParts E.length tc
     | _ => List.replicate E.length none
   E.zipWith (fun o c => classifyClause o c) (parts ++ List.replicate E.length none)
+
+/-! ### What a clause asks of its operation's count  `[spec §53]` -/
+
+/-- **What a clause asks of its operation's count** (SPEC §53): `0` at an abortive operation (its
+clause takes no `κ`); `1` when it resumes `κ` exactly once on every path, provided each operation
+of `deps` is at `1`: the operations of the rows of the `[let]`s that hold `κ` across their bound
+computation, each with the count the check gave it (`[let]`'s `hW`: at a row with an operation
+with weakening, `κ` would have to drop); `1?` otherwise, for the reason `why`. -/
+inductive Need where
+  | zero
+  | one (deps : List ((UInt32 × UInt32) × Count))
+  | opt (why : String)
+  deriving Inhabited, BEq
+
+/-- `κ` in the slot `k` resumed or cancelled once on each path, a cancel nowhere: `onceB` with its
+cancel leaf taken out. -/
+def onceResumeB (k : Nat) : TExpr → Bool
+  | .bind _ _ _ _ _ tM tN => onceResumeB k tM && !mentions (k + 1) tN.erase
+  | .effLet _ _ _ _ _ _ tM tN => onceResumeB k tM && !mentions (k + 1) tN.erase
+  | .effSub _ _ _ _ _ t => onceResumeB k t
+  | t => resumeB k t
+
+/-- **The operations a clause holds `κ` across**: along the paths `onPaths` reads, the operations
+of the row of each `[let]` at a row whose body uses `κ` (the slot `k`), with their counts. -/
+def liveDeps : Nat → TExpr → List ((UInt32 × UInt32) × Count)
+  | k, .sumE _ _ _ _ _ _ _ t₁ t₂ => liveDeps (k + 1) t₁ ++ liveDeps (k + 1) t₂
+  | k, .tensorE _ _ _ _ _ _ _ tM => liveDeps (k + 2) tM
+  | k, .unitE _ _ _ _ _ tM => liveDeps k tM
+  | k, .bind _ _ _ _ _ tM tN =>
+      if isVarB k tM.erase then liveDeps 0 tN else liveDeps (k + 1) tN
+  | k, .effLet _ _ _ _ S _ tM tN =>
+      (if mentions (k + 1) tN.erase then S.map fun o => ((o.n, o.i), o.cnt) else []) ++
+        (if isVarB k tM.erase then liveDeps 0 tN else liveDeps (k + 1) tN)
+  | k, .effSub _ _ _ _ _ t => liveDeps k t
+  | k, .ret _ _ _ (.thunkV _ _ _ (.lam _ _ _ _ tS)) => liveDeps (k + 1) tS
+  | _, _ => []
+
+/-- **What the clause `c` of the operation `o` asks of its count**: `0` at an abortive operation;
+at a control clause, `1` when its kind resumes `κ` once on every path (`tail`, `tail+state`, or
+`once` with no cancel), else `1?`; `1?` at a clause that may keep `κ`. -/
+def clauseNeed (o : Count × VTy × VTy) (c : Option TExpr) : Need :=
+  if isAbortive o then .zero else
+    match c.map TExpr.unUse with
+    | some (.bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM))) =>
+        match classifyBody tM with
+        | .tail | .tailState => .one (liveDeps 0 tM)
+        | .resumeOnce s =>
+            if onPaths (if s then stateFnB onceResumeB else onceResumeB) 0 tM then .one (liveDeps 0 tM)
+            else .opt "it cancels its continuation on a path"
+        | .resumeOrCancel _ => .opt "it may cancel its continuation"
+        | .abortive | .stored => .opt "it may keep its continuation"
+    | _ => .opt "it may keep its continuation"
+
+/-- What each clause of a handler asks of its operation's count, from the handler's pair `tH`. -/
+def handlerNeeds (E : List (Count × VTy × VTy)) (tH : TExpr) : List Need :=
+  let parts := match tH with
+    | .tensorI _ _ _ _ _ _ tc => clauseParts E.length tc
+    | _ => List.replicate E.length none
+  E.zipWith (fun o c => clauseNeed o c) (parts ++ List.replicate E.length none)
 
 /-! ### The names a clause's own code performs or raises -/
 
@@ -191,7 +250,7 @@ def classifyHandler (E : List (Qual × VTy × VTy)) (tH : TExpr) : List HKind :=
 names in the continuation*): an abortive clause `λx. M`'s body's; a control clause
 `λp. let (x, κ) = p; M`'s body's, `κ` its continuation slot. `none` where the clause may run code
 it does not hold, or is not of its operation's shape. -/
-def clauseNames (o : Qual × VTy × VTy) (c : Expr) : Option (List UInt32) :=
+def clauseNames (o : Count × VTy × VTy) (c : Expr) : Option (List UInt32) :=
   if isAbortive o then match c with
     | .lam M => M.own []
     | _ => none
@@ -224,7 +283,7 @@ theorem clauseExpr_of_clauseAt : ∀ {hs : Expr} {j : Nat} {c : Val},
 /-- **The names of each clause of a handler** whose erasure is `H = (h_ret, hs)`: the clause the
 machine runs for the operation `j` (`clauseExpr hs j`, `BoLo.clauseAt` at `[op]` and
 `[unwind]`), read by `clauseNames`. -/
-def handlerNames (E : List (Qual × VTy × VTy)) (H : Expr) : List (Option (List UInt32)) :=
+def handlerNames (E : List (Count × VTy × VTy)) (H : Expr) : List (Option (List UInt32)) :=
   match H with
   | .pair _ hs => ((List.range E.length).zip E).map fun (j, o) =>
       (clauseExpr hs j).bind (clauseNames o)
@@ -236,7 +295,8 @@ def handlerNames (E : List (Qual × VTy × VTy)) (H : Expr) : List (Option (List
 its clauses receive `κ` boxed (BOXED-κ, §28), its site as the elaboration records it, the names of
 its outer row and the frames its handled computation holds. At `effHandleV` and `effHandleVB` the kinds are the
 checker's classification (`ks`); at `effHandleT` they are its rule's, `tail` or `abortive`
-(`tailKind`), which `tailClause_premise` shows are the same `tail` kind. -/
+(`tailKind`), which `tailClause_premise` shows are the same `tail` kind; at `effHandleL` its rule's,
+`resume-or-cancel` or `abortive` (§51). -/
 structure HandleSite where
   sp : Frontend.Span
   n : UInt32
@@ -250,6 +310,10 @@ structure HandleSite where
   /-- The names each clause's own code performs or raises (`handlerNames`), at the clauses the
   node's erasure holds. -/
   names : List (Option (List UInt32))
+  /-- What each clause asks of its operation's count (`handlerNeeds`).  `[spec §53]` -/
+  needs : List Need := []
+  /-- The lifetime its clauses receive `κ` boxed at (BOXED-κ), at `effHandleVB`. -/
+  boxAt : Option Lifetime.Life := none
   deriving Inhabited
 
 /-- Two `handle` nodes report alike when their sources, names, kinds and boxing agree. -/
@@ -262,13 +326,24 @@ def TExpr.handleSites : Nat → TExpr → List HandleSite
   | f + 1, t =>
     let here : List HandleSite := match t with
       | .effHandleV i _ S E _ n _ _ _ ks st ins tc _ =>
-          [⟨i.sp, n, ks, false, st, (S.map (·.n)).eraseDups, ins, handlerNames E tc.erase⟩]
-      | .effHandleVB i _ S E _ n _ _ _ _ ks st ins tc _ =>
-          [⟨i.sp, n, ks, true, st, (S.map (·.n)).eraseDups, ins, handlerNames E tc.erase⟩]
-      -- `effHandleT`'s clauses are tail-resumptive by its rule (`tailClause_premise`).
+          [⟨i.sp, n, ks, false, st, (S.map (·.n)).eraseDups, ins, handlerNames E tc.erase,
+            handlerNeeds E tc, none⟩]
+      | .effHandleVB i _ S E _ n _ _ d _ ks st ins tc _ =>
+          [⟨i.sp, n, ks, true, st, (S.map (·.n)).eraseDups, ins, handlerNames E tc.erase,
+            handlerNeeds E tc, some d⟩]
+      -- `effHandleT`'s clauses are tail-resumptive by its rule (`tailClause_premise`), at rows of
+      -- linear operations (`hLin`).
       | .effHandleT i _ S _ E _ n _ _ _ st ins tc _ =>
           [⟨i.sp, n, E.map tailKind, false, st, (S.map (·.n)).eraseDups, ins,
-            handlerNames E (.pair (Expr.pairL tc.erase) (tailTuple E 0 (Expr.pairR tc.erase)))⟩]
+            handlerNames E (.pair (Expr.pairL tc.erase) (tailTuple E 0 (Expr.pairR tc.erase))),
+            E.map fun o => if isAbortive o then .zero else .one [], none⟩]
+      -- `effHandleL`'s clauses resume `κ` in tail position or cancel it (§51), at affine or abortive
+      -- operations (`hAff`).
+      | .effHandleL i _ S _ E _ _ n _ _ _ st ins tc _ =>
+          [⟨i.sp, n, E.map fun o => ⟨o.1, if isAbortive o then .abortive else .resumeOrCancel false⟩,
+            false, st, (S.map (·.n)).eraseDups, ins, E.map fun _ => none,
+            E.map fun o => if isAbortive o then .zero else
+              .opt "it may cancel its continuation ([handle-last])", none⟩]
       | _ => []
     match here, t.children with
     | _ :: _, (_, tc) :: rest =>
@@ -320,7 +395,7 @@ def _root_.BoCa.Fig16.LogRel.Core.ClauseKinds.ClauseKind.tag : ClauseKind → St
 
 /-- The operation `n.i`'s clause, for `bcc kinds`. -/
 def _root_.BoCa.Fig16.LogRel.Core.ClauseKinds.HKind.render (n : UInt32) (i : Nat) (h : HKind) : String :=
-  s!"{n}.{i} {qualWord h.q} {h.kind.tag}"
+  s!"{n}.{i} {qualWord h.cnt.toQual} {h.kind.tag}"
 
 /-- A handler site's operations as the report says them, from the kinds of the `handle` nodes of
 its static name `n` among `hs`: each operation with its qualifier and its clause's kind, one kind
@@ -332,6 +407,6 @@ def siteOps (hs : List HandleSite) (n : Nat) (ops : List String) : String :=
     | [] => s!"{op}: in no checked term"
     | k :: ks =>
       if k.kind == .abortive && ks.isEmpty then s!"{op} {k.kind.describe}"
-      else s!"{op} {qualWord k.q}: {" / ".intercalate ((k :: ks).map (·.kind.describe))}")
+      else s!"{op} {qualWord k.cnt.toQual}: {" / ".intercalate ((k :: ks).map (·.kind.describe))}")
 
 end BoCa.Fig16.LogRel.Core.Check

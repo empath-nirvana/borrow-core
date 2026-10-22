@@ -4,7 +4,7 @@ import Core.Fundamental
 # Core — decision R: a derivation tied to its program's effect context  `[spec §19]`
 
 An **effect context** `Ξ` gives each operation name its signature: the `i`-th operation of the
-name `n` is `(Ξ n)[i] = (q, A, B)`.  A row is **tied** to `Ξ` (`RowAt`) when every operation it
+name `n` is `(Ξ n)[i] = (c, A, B)`, its count `c` and its types.  A row is **tied** to `Ξ` (`RowAt`) when every operation it
 finds is of a nonzero name with at most `2³²` operations, at the signature `Ξ` gives it.
 
 **`CDerivesAt Ξ`** is `CDerives` with the premise `RowAt Ξ` at the three rules that read an
@@ -24,9 +24,7 @@ a derivation: every instance of a handler site has one protocol (§19 *Names*).
   handler value's tags are a prefix of `Ξ`'s qualifiers of `n` (`hndTags_of_rowAt`).
 * `SigsAt Ξ S`: every entry of the list `S` is at `Ξ`'s signature; it ties every row whose
   entries are among `S`'s (`rowAt_of_sigsAt`).
-* `EffCtx.NoUnrExn`: no operation of `Ξ` is unrestricted and answers `0`.  An abortive operation
-  is affine (decision 63's restriction, §18); in a row tied to such a context an unrestricted
-  operation resumes (`abort_false_of_rowAt`).
+* `EffCtx.CntOk`: each operation's count is `0` exactly where it is abortive (§53).
 -/
 
 namespace BoCa.Fig16.LogRel.Core
@@ -36,13 +34,13 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 /-! ### Effect contexts and tied rows -/
 
 /-- An effect context: each name's signature, its operations numbered from `0`.  `[spec §19]` -/
-abbrev EffCtx := UInt32 → List (Qual × VTy × VTy)
+abbrev EffCtx := UInt32 → List (Count × VTy × VTy)
 
 /-- **A row tied to the effect context**: every operation the row finds is of a nonzero name with
 at most `2³²` operations, at the signature `Ξ` gives it.  `[spec §19]` -/
 def RowAt (Ξ : EffCtx) (S : Row) : Prop :=
   ∀ n i o, Row.find S n i = some o →
-    n ≠ 0 ∧ (Ξ n).length ≤ 2 ^ 32 ∧ (Ξ n)[i.toNat]? = some (o.q, o.A, o.B)
+    n ≠ 0 ∧ (Ξ n).length ≤ 2 ^ 32 ∧ (Ξ n)[i.toNat]? = some (o.cnt, o.A, o.B)
 
 /-- A row tied to an effect context that gives `Div`'s name no operation does not hold `Div`. -/
 theorem Row.divB_of_rowAt {Ξ : EffCtx} {S : Row} (hAt : RowAt Ξ S) (hΞ : Ξ divEff = []) :
@@ -400,7 +398,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   `Ξ`.  The `j`-th operation's cancel row is `fs j`, and its clause's `κ` has its cancel branch at
   `cancelTy Σ (fs j)`.  At two variables and empty cancel rows it is `hndTerm`
   (`CDerivesAt.effHandle`).  `[spec §19, §24, §27]` -/
-  | effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+  | effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy}
       {n : UInt32} {A R : VTy} (hAt : RowAt Ξ (Row.ofEff n E 0 fs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
       (hc : CDerivesAt Ξ Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))))
@@ -409,7 +407,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
       CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
   /-- BOXED-κ, the handled row tied to `Ξ`.  `[spec §28]` -/
-  | effHandleVB {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+  | effHandleVB {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy}
       {n : UInt32} {A R : VTy} {d : Lifetime.Life} (hAt : RowAt Ξ (Row.ofEff n E 0 fs ++ S))
       (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
       (hc : CDerivesAt Ξ Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs))))
@@ -420,7 +418,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
   /-- `[handle]` at clauses that resume `κ` in tail position, the handled row tied to `Ξ`.
   `[spec §14, §19]` -/
-  | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+  | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy}
       {n : UInt32} {A R : VTy} (hAt : RowAt Ξ (Row.ofEff n E 0 fs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
       (hc : CDerivesAt Ξ Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
@@ -430,14 +428,14 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) e)
         (.comp (CTy.effOf S R))
   /-- `[handle-last]`, the handled row tied to `Ξ`.  `[spec §14, §19, §27, §51]` -/
-  | effHandleL {Δ Γ Γ₁ Γ₂} {Hr Hw Hn e : Expr} {S SW : Row} {E : List (Qual × VTy × VTy)}
+  | effHandleL {Δ Γ Γ₁ Γ₂} {Hr Hw Hn e : Expr} {S SW : Row} {E : List (Count × VTy × VTy)}
       {fs : Nat → CTy} {Xs : Nat → VTy} {n : UInt32} {A R : VTy}
       (hAt : RowAt Ξ (Row.ofEff n E 0 fs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHw : Hw.ValFormIn Γ₁) (hHn : Hn.ValFormIn Γ₁)
       (hc : CDerivesAt Ξ Δ Γ₁ (.pair Hr (.pair Hw Hn))
         (.val (.tensor (retTy S A R) (.tensor (worksTy S SW R Xs E 0) (exitsTy S R Xs E 0)))))
       (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-      (hNZ : S.NZ) (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true)
+      (hNZ : S.NZ) (hAff : ∀ o ∈ E, o.1.toQual = .aff ∨ (o.2.2.isZero && o.1.toQual != .lin) = true)
       (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
       (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
       (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
@@ -580,7 +578,7 @@ theorem CDerivesAt.effThenA {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row
 /-- `[handle]` at two variables, tied: `CDerives.effHandle` with the handled row tied to `Ξ`.
 `[spec §19]` -/
 theorem CDerivesAt.effHandle {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row}
-    {E : List (Qual × VTy × VTy)} {n : UInt32} {A R : VTy} {ir ic : Nat}
+    {E : List (Count × VTy × VTy)} {n : UInt32} {A R : VTy} {ir ic : Nat}
     (hAt : RowAt Ξ (Row.ofEff n E 0 ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc)
     (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
@@ -598,7 +596,7 @@ theorem CDerivesAt.effHandle {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Ro
 /-- BOXED-κ at two variables, tied: `CDerivesAt.effHandle` with the clauses at `clausesTyB`.
 `[spec §28]` -/
 theorem CDerivesAt.effHandleB {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row}
-    {E : List (Qual × VTy × VTy)} {n : UInt32} {A R : VTy} {ir ic : Nat} {d : Lifetime.Life}
+    {E : List (Count × VTy × VTy)} {n : UInt32} {A R : VTy} {ir ic : Nat} {d : Lifetime.Life}
     (hAt : RowAt Ξ (Row.ofEff n E 0 ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc)
     (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTyB S R d E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
@@ -653,7 +651,7 @@ theorem ofEff_wf (Ξ : EffCtx) (n : UInt32) (hn : n ≠ 0) (hlen : (Ξ n).length
   simp [List.getElem?_eq_getElem hj]
 
 /-- A signature's row finds each of its operations by index. -/
-theorem find_ofEff_isSome (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k j : Nat) (i : UInt32),
+theorem find_ofEff_isSome (n : UInt32) : ∀ (E : List (Count × VTy × VTy)) (k j : Nat) (i : UInt32),
     i.toNat = k + j → k + j < 2 ^ 32 → j < E.length → (Row.find (Row.ofEff n E k) n i).isSome
   | [], _, _, _, _, _, h => absurd h (by simp)
   | (q, A, B) :: E, k, 0, i, hi, hk, _ => by
@@ -675,10 +673,10 @@ theorem find_ofEff_isSome (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k 
       exact ih
 
 /-- A signature's row finds its `j`-th operation at the index `j`, below `2³²`. -/
-theorem find_ofEff_at (n : UInt32) (E : List (Qual × VTy × VTy)) (j : Nat) (hj : j < E.length)
+theorem find_ofEff_at (n : UInt32) (E : List (Count × VTy × VTy)) (j : Nat) (hj : j < E.length)
     (hlen : E.length ≤ 2 ^ 32) :
     Row.find (Row.ofEff n E 0) n (UInt32.ofNat j) =
-      some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2, .ret .unit⟩ := by
+      some ⟨n, UInt32.ofNat j, E[j].1, .top, E[j].2.1, E[j].2.2, .ret .unit⟩ := by
   have hj' : j < 2 ^ 32 := by omega
   have hi : (UInt32.ofNat j).toNat = 0 + j := by
     rw [Nat.zero_add]; exact UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)
@@ -694,24 +692,24 @@ theorem find_ofEff_at (n : UInt32) (E : List (Qual × VTy × VTy)) (j : Nat) (hj
   rw [ho, Nat.zero_add]
 
 /-- A name's row at the signature `Ξ` gives it, before a row tied to `Ξ`, is tied to `Ξ`. -/
-theorem rowAt_ofEff_append {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy × VTy)} {S : Row}
+theorem rowAt_ofEff_append {Ξ : EffCtx} {n : UInt32} {E : List (Count × VTy × VTy)} {S : Row}
     (hE : Ξ n = E) (hn : n ≠ 0) (hlen : E.length ≤ 2 ^ 32) (hS : RowAt Ξ S) :
     RowAt Ξ (Row.ofEff n E 0 ++ S) := by
   subst hE
   exact rowAt_append (ofEff_wf Ξ n hn hlen) hS
 
 /-- **An effect's row finds, at each key, operations of the same signature at any cancel rows.** -/
-theorem find_ofEff_sig (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : Nat) (fs fs' : Nat → CTy)
+theorem find_ofEff_sig (n : UInt32) : ∀ (E : List (Count × VTy × VTy)) (k : Nat) (fs fs' : Nat → CTy)
     (m i : UInt32) (o : OpSig), Row.find (Row.ofEff n E k fs) m i = some o →
       ∃ o', Row.find (Row.ofEff n E k fs') m i = some o' ∧ o.Sig o'
   | [], _, _, _, _, _, _, h => by simp [Row.ofEff, Row.find] at h
   | (q, A, B) :: E, k, fs, fs', m, i, o, h => by
       by_cases hk : m = n ∧ i = UInt32.ofNat k
       · have h₁ : Row.find (Row.ofEff n ((q, A, B) :: E) k fs) m i =
-            some ⟨n, UInt32.ofNat k, q, A, B, fs 0⟩ := by
+            some ⟨n, UInt32.ofNat k, q, .top, A, B, fs 0⟩ := by
           simp [Row.ofEff, Row.find, hk]
         have h₂ : Row.find (Row.ofEff n ((q, A, B) :: E) k fs') m i =
-            some ⟨n, UInt32.ofNat k, q, A, B, fs' 0⟩ := by
+            some ⟨n, UInt32.ofNat k, q, .top, A, B, fs' 0⟩ := by
           simp [Row.ofEff, Row.find, hk]
         rw [h₁] at h; cases h
         exact ⟨_, h₂, rfl, rfl, rfl, rfl, rfl⟩
@@ -727,7 +725,7 @@ theorem find_ofEff_sig (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : N
 
 /-- **The tie reads no cancel row**: an effect's row before a tied row is tied at any cancel rows
 when it is at some. -/
-theorem rowAt_ofEff_fs {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy × VTy)}
+theorem rowAt_ofEff_fs {Ξ : EffCtx} {n : UInt32} {E : List (Count × VTy × VTy)}
     {fs fs' : Nat → CTy} {S : Row} (h : RowAt Ξ (Row.ofEff n E 0 fs ++ S)) :
     RowAt Ξ (Row.ofEff n E 0 fs' ++ S) := by
   intro m i o hf
@@ -753,14 +751,14 @@ theorem rowAt_ofEff_fs {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy × VTy)
 
 /-- **A tied handler's signature is a prefix of the context's**: the handled row `(n)↑E ⊙ Σ`, tied
 to `Ξ`, finds each operation of `E` at the signature `Ξ n` gives at its index.  `[spec §19]` -/
-theorem sig_prefix_of_rowAt {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy × VTy)} {S : Row}
+theorem sig_prefix_of_rowAt {Ξ : EffCtx} {n : UInt32} {E : List (Count × VTy × VTy)} {S : Row}
     (h : RowAt Ξ (Row.ofEff n E 0 ++ S)) (hlen : E.length ≤ 2 ^ 32) : E <+: Ξ n := by
   rw [List.prefix_iff_eq_take]
   apply List.ext_getElem?
   intro j
   by_cases hj : j < E.length
   · have hf : Row.find (Row.ofEff n E 0 ++ S) n (UInt32.ofNat j) =
-        some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2, .ret .unit⟩ := by
+        some ⟨n, UInt32.ofNat j, E[j].1, .top, E[j].2.1, E[j].2.2, .ret .unit⟩ := by
       rw [Row.find_append, find_ofEff_at n E j hj hlen, Option.some_or]
     obtain ⟨-, -, hg⟩ := h n _ _ hf
     rw [UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)] at hg
@@ -771,7 +769,7 @@ theorem sig_prefix_of_rowAt {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy ×
 
 /-- **A tied handler's tags are a prefix of the context's qualifiers** of its name (§25: a handler
 value carries its operations' qualifiers, `E.map Prod.fst`).  `[spec §19, §25]` -/
-theorem hndTags_of_rowAt {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy × VTy)} {S : Row}
+theorem hndTags_of_rowAt {Ξ : EffCtx} {n : UInt32} {E : List (Count × VTy × VTy)} {S : Row}
     (h : RowAt Ξ (Row.ofEff n E 0 ++ S)) (hlen : E.length ≤ 2 ^ 32) :
     E.map Prod.fst <+: (Ξ n).map Prod.fst :=
   (sig_prefix_of_rowAt h hlen).map Prod.fst
@@ -942,9 +940,9 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
 /-! ### Signature lists -/
 
 /-- The operation is at `Ξ`'s signature: of a nonzero name with at most `2³²` operations, whose
-`o.i`-th is `o`'s qualifier, argument and answer. -/
+`o.i`-th is `o`'s count, argument and answer. -/
 def OpAt (Ξ : EffCtx) (o : OpSig) : Prop :=
-  o.n ≠ 0 ∧ (Ξ o.n).length ≤ 2 ^ 32 ∧ (Ξ o.n)[o.i.toNat]? = some (o.q, o.A, o.B)
+  o.n ≠ 0 ∧ (Ξ o.n).length ≤ 2 ^ 32 ∧ (Ξ o.n)[o.i.toNat]? = some (o.cnt, o.A, o.B)
 
 /-- Every entry of the list is at `Ξ`'s signature. -/
 def SigsAt (Ξ : EffCtx) (S : Row) : Prop := ∀ o ∈ S, OpAt Ξ o
@@ -963,28 +961,21 @@ theorem rowAt_of_sigsAt {Ξ : EffCtx} {S : Row} (h : SigsAt Ξ S) : RowAt Ξ S :
   obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
   exact h o hm
 
-/-! ### No unrestricted abortive operation -/
+/-! ### Counts -/
 
-/-- **No abortive operation is unrestricted**: every operation `Ξ` gives at `unr` answers
-something other than `0`, so an abortive operation (answer `0` at a qualifier with weakening) is
-affine.  Decision 63's restriction: `multi ctl op(…) -> never` is not provided.
-`[spec §18, §19]` -/
-def EffCtx.NoUnrExn (Ξ : EffCtx) : Prop := ∀ n, ∀ p ∈ Ξ n, p.1 = .unr → p.2.2.isZero = false
+/-- **The count is `0` exactly at an abortive operation**: an operation `Ξ` gives answers `0` at a
+count with weakening (its clause takes no `κ`) exactly when its count is `0`.  The count is then a
+grade the signature agrees with: `1` resumes, `1?` resumes or is cancelled or dropped, `0` never
+resumes.  `[spec §53]` -/
+def EffCtx.CntOk (Ξ : EffCtx) : Prop :=
+  ∀ n, ∀ p ∈ Ξ n, (p.1 = .zero ↔ (p.2.2.isZero && p.1.toQual != .lin) = true)
 
-/-- At such a context no name's signature is one unrestricted abortive operation. -/
-theorem EffCtx.NoUnrExn.ne_exn {Ξ : EffCtx} (h : Ξ.NoUnrExn) (n : UInt32) (A : VTy) :
-    Ξ n ≠ [(.unr, A, .zero)] := by
-  intro he
-  have := h n (.unr, A, .zero) (by rw [he]; exact List.mem_singleton_self _) rfl
-  simp [VTy.isZero] at this
-
-/-- **In a row tied to such a context an unrestricted operation resumes**: it is not abortive.
-`[spec §19]` -/
-theorem abort_false_of_rowAt {Ξ : EffCtx} (hx : Ξ.NoUnrExn) {S : Row} (h : RowAt Ξ S)
-    {n i : UInt32} {o : OpSig} (hf : Row.find S n i = some o) (hq : o.q = .unr) :
-    o.abort = false := by
+/-- In a row tied to such a context, an operation is abortive exactly when its count is `0`.
+`[spec §53]` -/
+theorem cnt_zero_iff_of_rowAt {Ξ : EffCtx} (hx : Ξ.CntOk) {S : Row} (h : RowAt Ξ S)
+    {n i : UInt32} {o : OpSig} (hf : Row.find S n i = some o) :
+    o.cnt = .zero ↔ o.abort = true := by
   obtain ⟨-, -, hget⟩ := h n i o hf
-  have hz := hx n (o.q, o.A, o.B) (List.mem_of_getElem? hget) hq
-  simp only [OpSig.abort, hz, Bool.false_and]
+  exact hx n (o.cnt, o.A, o.B) (List.mem_of_getElem? hget)
 
 end BoCa.Fig16.LogRel.Core

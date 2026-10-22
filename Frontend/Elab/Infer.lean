@@ -324,7 +324,7 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
     | .handle _ k _ hr hc M => do
       let ar ← inferV n E Δ T none hr
       let ac ← inferV n E Δ T none hc
-      let sig : Option (CRow × CVTy × CVTy × List (CQual × CVTy × CVTy)) := do
+      let sig : Option (CRow × CVTy × CVTy × List (CCount × CVTy × CVTy)) := do
         let ⟨S, A, R, _⟩ ← retRead (← ar.ty.v?)
         let ⟨Es, _⟩ ← clausesRead S R (← ac.ty.v?)
         pure (S, A, R, Es)
@@ -367,7 +367,7 @@ def externsBefore (ds : Array Decl) (upto : Nat) : List (String × CVTy) :=
   (List.range upto).foldl (init := []) fun acc k =>
     match (ds[k]? : Option Decl) with
     | some (.extern _ n A) =>
-      match (⟨⟨ds, k, []⟩, [], [], [], [], 0, none⟩ : Env).elabV LifeCtx.empty A with
+      match (⟨{ decls := ds, upto := k }, [], [], [], [], 0, none⟩ : Env).elabV LifeCtx.empty A with
       | .ok A' => acc ++ [(n.name, A')]
       | .error _ => acc
     | _ => acc

@@ -122,10 +122,11 @@ def litFnE (bs : List Nat) : Expr :=
 node: the effect it serves and its type arguments there, the handler (a control handler's name,
 or the function a `for` or a stored generator runs), the name the `with` gives it (SPEC §38), the
 kind of site the elaboration claims, and the handler's state: the parameters its clauses are
-passed as a state (SPEC §19, *Handler state*), each with its type, none when it has no state.
+passed as a state (SPEC §19, *Handler state*), each with its type, none when it has no state;
+and each operation's count as the effect declares it, `ctl` (inferred) or `linear ctl` (SPEC §53).
 The types are core types, elaborated by the checker at the node from the record the node carries
 (`Frontend/Check/Checker.lean`, `siteOf`), which also checks that the record's operations are the
-node's `E`.  `[spec §19]` -/
+node's `E`.  `[spec §19, §53]` -/
 structure HSite where
   eff : String
   args : List VTy
@@ -133,6 +134,7 @@ structure HSite where
   slot : Option String
   kind : Frontend.SiteKind
   state : List (String × VTy)
+  decl : List Frontend.Qual := []
   deriving Inhabited
 
 /-! ### The schemes of the marked derived nodes

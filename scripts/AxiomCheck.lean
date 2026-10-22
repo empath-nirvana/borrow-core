@@ -45,7 +45,7 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.TailResumesAt.mentions_le
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.UnhandledIn.hasHnd
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.unhandledIn_nil
-#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.resumeCT_tail
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.resumeC_tail
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.unhandled_not_decided
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.fl_le_hin
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.hin_subst
@@ -360,10 +360,9 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.sig_prefix_of_rowAt
 #print axioms BoCa.Fig16.LogRel.Core.hndTags_of_rowAt
 #print axioms BoCa.Fig16.LogRel.Core.rowAt_of_sigsAt
-#print axioms BoCa.Fig16.LogRel.Core.EffCtx.NoUnrExn.ne_exn
-#print axioms BoCa.Fig16.LogRel.Core.abort_false_of_rowAt
+#print axioms BoCa.Fig16.LogRel.Core.cnt_zero_iff_of_rowAt
 #print axioms Frontend.Check.sigsAt_effCtxOf
-#print axioms Frontend.Check.noUnrExn_effCtxOf
+#print axioms Frontend.Check.cntOk_effCtxOf
 #print axioms Frontend.Check.checkProgram_tied
 #print axioms Frontend.Check.checkProgram_tiedAt
 #print axioms Frontend.Check.checkProgram_sound
@@ -460,10 +459,7 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.dAt_progOutT
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_cancels
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_cancel_prefix
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.noUnrExn_Ξ₁₂A
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.dAt_progOutTA
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutTA_cancels
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutTA_cancel_prefix
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.cntOk_Ξ₁₂
 -- SPEC §19, *Laws* item 4 and *Programs*: a continuation's use, and the programs no derivation types
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.fv_live
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.der_var
@@ -513,8 +509,8 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.bodyT_run
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progT_run
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_run
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_cancelCT
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_resumeCT
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_cancelC
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_resumeC
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_then₂
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_inner₂
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_progT
@@ -522,30 +518,26 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progFinT_cancel
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progFinOpT_run
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progNC₁T_run
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_constC_op
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_thenP
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_innerP
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_midP
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_progFinOpT
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_progNC₁T
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progKDT_cancel
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progDropT_run
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progKeepT_run
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_thenK₁
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_thenK₂
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_midK
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_progKDT
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_progDropT
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_progKeepT
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.cancelKeptT_run
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_then₃
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_cancelKeptT
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progReT_run
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_fRe
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_fReT
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_thenRe
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_progReT
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progNCrecT_run
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutTA_run
 -- SPEC §27, *Programs*: the programs §27's typing rejects, by inversion of `CDerives`
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.JR.rowLe
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.der_hndJ
@@ -563,10 +555,10 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.not_der_e7c
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.dAt_e7c_lift
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_e7c_lift
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.noUnrExn_Ξe7c
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.cntOk_Ξe7c
 -- SPEC §19 *Programs*: the effect properties' programs, typed at `ΞE` and run by `runM`
 #print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead
-#print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.noUnrExn_ΞE
+#print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.cntOk_ΞE
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.dAt_hQ
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.dAt_hofTwoRows
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.d_hofTwoRows
@@ -651,3 +643,16 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.der_hndJ₁
 #print axioms BoCa.Fig16.LogRel.Core.kappaFinSelf
 #print axioms BoCa.Fig16.LogRel.Core.lastFinOK_nil_of_find
+/-! §53: the grade on `eff`. -/
+#print axioms BoCa.Fig16.LogRel.Core.Count.toQual_ne_unr
+#print axioms BoCa.Fig16.LogRel.Core.Count.toQual_eq_lin
+#print axioms BoCa.Fig16.LogRel.Core.World.eq
+#print axioms BoCa.Fig16.LogRel.Core.OpSig.Sig.q_eq
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.qualsVal_inj
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.catchA_steps
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.cancelT_start
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.resumeT_start
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.cancelC_jr
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_cancels
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_cancel_prefix
+#print axioms Frontend.Check.checkProgram_tiedAt

@@ -1,4 +1,4 @@
-effect 18:1: Exhausted: exhausted (ctl, affine, abortive)
+effect 18:1: Exhausted: exhausted (ctl, abortive)
 row 20:1: counted: Count
 row 22:1: traced: Log
 row 24:1: sum: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)

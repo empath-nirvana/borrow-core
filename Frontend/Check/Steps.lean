@@ -196,7 +196,7 @@ def Env.ppL (E : Env) (a : CLife) : String := ppLifeP E.lenv 1 a
 /-- `C` as a returner chain `F_Σ A`: its row and answer. -/
 def effRow? : CCTy → Option (CRow × CVTy)
   | .ret A => some ([], A)
-  | .eff n i q A B fin C => (effRow? C).map fun (S, R) => (⟨n, i, q, A, B, fin⟩ :: S, R)
+  | .eff n i q wq A B fin C => (effRow? C).map fun (S, R) => (⟨n, i, q, wq, A, B, fin⟩ :: S, R)
   | _ => none
 
 /-- The environment of a computation checked against `C`: the row of `C` when it is a returner
@@ -211,7 +211,7 @@ def Env.forVal (E : Env) : Env := { E with own := [], row := none }
 
 def ppRow (E : Env) (S : CRow) : String :=
   "[" ++ ", ".intercalate (S.map fun o =>
-    s!"{o.n}.{o.i} {qualStr o.q} {E.ppV o.A} ~> {E.ppV o.B}") ++ "]"
+    s!"{o.n}.{o.i} {cntStr o.cnt} {E.ppV o.A} ~> {E.ppV o.B}") ++ "]"
 
 theorem Row.weak_of_unr {S : CRow} (h : S.Unr) : S.Weak := by
   obtain ⟨o, ho, hq⟩ := h
@@ -232,31 +232,30 @@ def findOp (E : Env) (sp : Span) (what : String) (k i : Nat) :
       | none => throw ⟨sp, s!"the operation {k}.{i} is not in the row `{ppRow E S}`"⟩
     else throw ⟨sp, s!"the operation {k}.{i}: a name and an index are below 2^32"⟩
 
-/-- `κ`'s type `kTy S R q B`, read back: the qualifier and the operation's answer. -/
-def kRead : CVTy → Option (CQual × CVTy)
-  | .thunk (.amp (.arr B _) .top) => some (.lin, B)
-  | .thunk (.amp (.arr B _) _) => some (.aff, B)
-  | .bang (.thunk (.amp (.arr B _) _)) => some (.unr, B)
+/-- `κ`'s type `kTy S R q B`, read back: the count and the operation's answer. -/
+def kRead : CVTy → Option (CCount × CVTy)
+  | .thunk (.amp (.arr B _) .top) => some (.one, B)
+  | .thunk (.amp (.arr B _) _) => some (.opt, B)
   | _ => none
 
 /-- The operations a clause's type may be the type of: a control operation `A ↠^q B` (its
-argument `A ⊗ κ`), then an abortive one `A ↠^aff 0`. -/
-def clauseCands : CVTy → List (CQual × CVTy × CVTy)
+argument `A ⊗ κ`), then an abortive one `A ↠^0 0`. -/
+def clauseCands : CVTy → List (CCount × CVTy × CVTy)
   | .bang (.thunk (.arr (.tensor A K) _)) =>
       (match kRead K with | some (q, B) => [(q, A, B)] | none => []) ++
-        [(.aff, .tensor A K, .zero)]
-  | .bang (.thunk (.arr A _)) => [(.aff, A, .zero)]
+        [(.zero, .tensor A K, .zero)]
+  | .bang (.thunk (.arr A _)) => [(.zero, A, .zero)]
   | _ => []
 
 /-- The first candidate whose clause type is `c`. -/
 def firstClause (S : CRow) (R c : CVTy) :
-    List (CQual × CVTy × CVTy) → Option {e // BoCa.Fig16.LogRel.Core.clauseTy S R e = c}
+    List (CCount × CVTy × CVTy) → Option {e // BoCa.Fig16.LogRel.Core.clauseTy S R e = c}
   | [] => none
   | e :: es => if h : BoCa.Fig16.LogRel.Core.clauseTy S R e = c then some ⟨e, h⟩
       else firstClause S R c es
 
 /-- The operations `E` of a handler read back from the type of its clauses' tuple, with
-`clausesTy S R E` that type. An abortive operation is read as affine: `aff` and `unr` give it
+`clausesTy S R E` that type. An abortive operation is read at the count `0`: `0` and `1?` give it
 the same clause type. -/
 def clausesRead (S : CRow) (R : CVTy) :
     (Tc : CVTy) → Option {E // BoCa.Fig16.LogRel.Core.clausesTy S R E = Tc}
@@ -269,16 +268,16 @@ def clausesRead (S : CRow) (R : CVTy) :
 
 /-- The operations a clause's type under BOXED-κ may be the type of (`[spec §28]`): a control
 operation `A ↠^q B` (its argument `A ⊗ [@d] κ`), then an abortive one. -/
-def clauseCandsB : CVTy → List (CQual × CVTy × CVTy)
+def clauseCandsB : CVTy → List (CCount × CVTy × CVTy)
   | .bang (.thunk (.arr (.tensor A (.box d K)) _)) =>
       (match kRead K with | some (q, B) => [(q, A, B)] | none => []) ++
-        [(.aff, .tensor A (.box d K), .zero)]
-  | .bang (.thunk (.arr A _)) => [(.aff, A, .zero)]
+        [(.zero, .tensor A (.box d K), .zero)]
+  | .bang (.thunk (.arr A _)) => [(.zero, A, .zero)]
   | _ => []
 
 /-- The first candidate whose clause type under BOXED-κ at `@d` is `c`. -/
 def firstClauseB (S : CRow) (R : CVTy) (d : CLife) (c : CVTy) :
-    List (CQual × CVTy × CVTy) → Option {e // BoCa.Fig16.LogRel.Core.clauseTyB S R d e = c}
+    List (CCount × CVTy × CVTy) → Option {e // BoCa.Fig16.LogRel.Core.clauseTyB S R d e = c}
   | [] => none
   | e :: es => if h : BoCa.Fig16.LogRel.Core.clauseTyB S R d e = c then some ⟨e, h⟩
       else firstClauseB S R d c es

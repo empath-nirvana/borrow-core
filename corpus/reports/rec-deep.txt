@@ -1,4 +1,4 @@
-effect 18:1: Exhausted: exhausted (ctl, affine, abortive)
+effect 18:1: Exhausted: exhausted (ctl, abortive)
 row 22:1: tot: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
 row 24:1: even, odd: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
 row 31:1: spine: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)

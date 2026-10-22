@@ -61,19 +61,19 @@ def lastClause (j : Nat) (abort : Bool) (Hw Hn : Expr) : Expr :=
       (.app (pickE j (Hw.shift 3 0)) (.var 1))))
 
 /-- The clauses, from the `j`-th on.  `[spec §51]` -/
-def lastTuple : List (Qual × VTy × VTy) → Nat → Expr → Expr → Expr
+def lastTuple : List (Count × VTy × VTy) → Nat → Expr → Expr → Expr
   | [], _, _, _ => .val .unit
   | (q, _, B) :: E, j, Hw, Hn =>
-      .pair (lastClause j (B.isZero && q != .lin) Hw Hn) (lastTuple E (j + 1) Hw Hn)
+      .pair (lastClause j (B.isZero && q.toQual != .lin) Hw Hn) (lastTuple E (j + 1) Hw Hn)
 
 /-- A work's type: `!U(A ⊸ F_{Σ_W}(B ⊕ X))`, or the clause's `!U(A ⊸ F_Σ R)` at an abortive
 operation.  `[spec §51]` -/
-def workTy (S SW : Row) (R X : VTy) : Qual × VTy × VTy → VTy
-  | (q, A, B) => if (B.isZero && q != .lin) then .bang (.thunk (.arr A (CTy.effOf S R)))
+def workTy (S SW : Row) (R X : VTy) : Count × VTy × VTy → VTy
+  | (q, A, B) => if (B.isZero && q.toQual != .lin) then .bang (.thunk (.arr A (CTy.effOf S R)))
       else .bang (.thunk (.arr A (CTy.effOf SW (.sum B X))))
 
 /-- The works' tuple's type, the `j`-th exit's argument at `Xs j`.  `[spec §51]` -/
-def worksTy (S SW : Row) (R : VTy) (Xs : Nat → VTy) : List (Qual × VTy × VTy) → Nat → VTy
+def worksTy (S SW : Row) (R : VTy) (Xs : Nat → VTy) : List (Count × VTy × VTy) → Nat → VTy
   | [], _ => .unit
   | o :: E, j => .tensor (workTy S SW R (Xs j) o) (worksTy S SW R Xs E (j + 1))
 
@@ -81,24 +81,24 @@ def worksTy (S SW : Row) (R : VTy) (Xs : Nat → VTy) : List (Qual × VTy × VTy
 def exitTy (S : Row) (R X : VTy) : VTy := .bang (.thunk (.arr X (CTy.effOf S R)))
 
 /-- The exits' tuple's type.  `[spec §51]` -/
-def exitsTy (S : Row) (R : VTy) (Xs : Nat → VTy) : List (Qual × VTy × VTy) → Nat → VTy
+def exitsTy (S : Row) (R : VTy) (Xs : Nat → VTy) : List (Count × VTy × VTy) → Nat → VTy
   | [], _ => .unit
   | _ :: E, j => .tensor (exitTy S R (Xs j)) (exitsTy S R Xs E (j + 1))
 
-theorem workTy_persistent (S SW : Row) (R X : VTy) (o : Qual × VTy × VTy) :
+theorem workTy_persistent (S SW : Row) (R X : VTy) (o : Count × VTy × VTy) :
     (workTy S SW R X o).Persistent := by
   obtain ⟨q, A, B⟩ := o
   simp only [workTy]; split <;> rfl
 
 theorem worksTy_persistent (S SW : Row) (R : VTy) (Xs : Nat → VTy) :
-    ∀ (E : List (Qual × VTy × VTy)) (j : Nat), (worksTy S SW R Xs E j).Persistent
+    ∀ (E : List (Count × VTy × VTy)) (j : Nat), (worksTy S SW R Xs E j).Persistent
   | [], _ => rfl
   | o :: E, j => by
       simp only [VTy.Persistent, VTy.persistent, worksTy, Bool.and_eq_true]
       exact ⟨workTy_persistent S SW R (Xs j) o, worksTy_persistent S SW R Xs E (j + 1)⟩
 
 theorem exitsTy_persistent (S : Row) (R : VTy) (Xs : Nat → VTy) :
-    ∀ (E : List (Qual × VTy × VTy)) (j : Nat), (exitsTy S R Xs E j).Persistent
+    ∀ (E : List (Count × VTy × VTy)) (j : Nat), (exitsTy S R Xs E j).Persistent
   | [], _ => rfl
   | _ :: E, j => by
       simp only [VTy.Persistent, VTy.persistent, exitsTy, Bool.and_eq_true]
@@ -125,7 +125,7 @@ theorem lastClause_psub (j : Nat) (b : Bool) (γ : List Val) (Hw Hn : Expr) :
     simp
 
 theorem lastTuple_psub (γ : List Val) (Hw Hn : Expr) :
-    ∀ (E : List (Qual × VTy × VTy)) (j : Nat),
+    ∀ (E : List (Count × VTy × VTy)) (j : Nat),
       Expr.psub 0 γ (lastTuple E j Hw Hn) = lastTuple E j (Expr.psub 0 γ Hw) (Expr.psub 0 γ Hn)
   | [], _ => by simp [lastTuple, Expr.psub, Val.unit]
   | _ :: E, j => by
@@ -147,7 +147,7 @@ theorem lastClause_shift (j : Nat) (b : Bool) (d c : Nat) (Hw Hn : Expr) :
     simp
 
 theorem lastTuple_shift (d c : Nat) (Hw Hn : Expr) :
-    ∀ (E : List (Qual × VTy × VTy)) (j : Nat),
+    ∀ (E : List (Count × VTy × VTy)) (j : Nat),
       Expr.shift d c (lastTuple E j Hw Hn) = lastTuple E j (Hw.shift d c) (Hn.shift d c)
   | [], _ => by simp [lastTuple, Expr.shift, Val.unit]
   | _ :: E, j => by
@@ -155,7 +155,7 @@ theorem lastTuple_shift (d c : Nat) (Hw Hn : Expr) :
 
 theorem closedAt_lastTuple {k : Nat} {Hw Hn : Expr} (hw : closedAt k Hw = true)
     (hn : closedAt k Hn = true) :
-    ∀ (E : List (Qual × VTy × VTy)) (j : Nat), closedAt k (lastTuple E j Hw Hn) = true
+    ∀ (E : List (Count × VTy × VTy)) (j : Nat), closedAt k (lastTuple E j Hw Hn) = true
   | [], _ => rfl
   | (q, _, B) :: E, j => by
       simp only [lastTuple, closedAt, closedAt_lastTuple hw hn E (j + 1), Bool.and_true]
@@ -172,15 +172,15 @@ theorem isVal_lastClause (j : Nat) (b : Bool) (Hw Hn : Expr) : IsVal (lastClause
   cases b <;> simp only [lastClause, Bool.false_eq_true, if_false, if_true] <;> exact .lam
 
 theorem isVal_lastTuple (Hw Hn : Expr) :
-    ∀ (E : List (Qual × VTy × VTy)) (j : Nat), IsVal (lastTuple E j Hw Hn)
+    ∀ (E : List (Count × VTy × VTy)) (j : Nat), IsVal (lastTuple E j Hw Hn)
   | [], _ => .unit
   | _ :: E, j => .pair (isVal_lastClause _ _ _ _) (isVal_lastTuple Hw Hn E (j + 1))
 
 /-- The `j`-th clause of the tuple. -/
 theorem clauseAt_lastTuple (Hw Hn : Expr) :
-    ∀ (E : List (Qual × VTy × VTy)) (k j : Nat) (hj : j < E.length),
+    ∀ (E : List (Count × VTy × VTy)) (k j : Nat) (hj : j < E.length),
       clauseAt (lastTuple E k Hw Hn) j =
-        some ⟨lastClause (k + j) (E[j].2.2.isZero && E[j].1 != .lin) Hw Hn,
+        some ⟨lastClause (k + j) (E[j].2.2.isZero && E[j].1.toQual != .lin) Hw Hn,
           isVal_lastClause _ _ _ _⟩
   | [], _, _, hj => by simp at hj
   | (q, A, B) :: E, k, 0, _ => by
@@ -197,7 +197,7 @@ theorem clauseAt_lastTuple (Hw Hn : Expr) :
 /-- **The works**: a tuple of the works' type holds, at each operation, the function `pickE j`
 steps to, at the empty resource. -/
 theorem worksTy_at {S SW : Row} {R : VTy} {Xs : Nat → VTy} {ls : List SRec} {δ : LSub} :
-    ∀ (E : List (Qual × VTy × VTy)) (k : Nat) {vc : Val} {ρ : WRes},
+    ∀ (E : List (Count × VTy × VTy)) (k : Nat) {vc : Val} {ρ : WRes},
       vC true (worksTy S SW R Xs E k) ls δ vc ρ →
       ∀ j (h : j < E.length), ∃ g, PureSteps (pickE j (.val vc)) (.val g) ∧
         vC true (workTy S SW R (Xs (k + j)) E[j]) ls δ g PMap.empty
@@ -219,7 +219,7 @@ theorem worksTy_at {S SW : Row} {R : VTy} {Xs : Nat → VTy} {ls : List SRec} {�
 
 /-- **The exits**, as the works. -/
 theorem exitsTy_at {S : Row} {R : VTy} {Xs : Nat → VTy} {ls : List SRec} {δ : LSub} :
-    ∀ (E : List (Qual × VTy × VTy)) (k : Nat) {vc : Val} {ρ : WRes},
+    ∀ (E : List (Count × VTy × VTy)) (k : Nat) {vc : Val} {ρ : WRes},
       vC true (exitsTy S R Xs E k) ls δ vc ρ →
       ∀ j, j < E.length → ∃ g, PureSteps (pickE j (.val vc)) (.val g) ∧
         vC true (exitTy S R (Xs (k + j))) ls δ g PMap.empty
@@ -404,7 +404,7 @@ theorem find_not_unr {G S : Row} (hGS : RowLe G S) (hSu : ¬ S.UnrD) {n i : UInt
     (hf : Row.find G n i = some o) : o.q ≠ .unr := by
   intro hq
   obtain ⟨o', hf', hle⟩ := hGS n i o hf
-  exact hSu ⟨o', (Row.find_mem hf').1, Or.inl (hle.1.2.2.1 ▸ hq)⟩
+  exact hSu ⟨o', (Row.find_mem hf').1, Or.inl (hle.1.q_eq ▸ hq)⟩
 
 /-! ### The frame's answer -/
 
@@ -471,7 +471,7 @@ theorem lastD_post : ∀ (ls : List SRec) (v : Val) (ρ : WRes),
 
 /-- The handler value of a `[handle-last]` handler: the clauses written out from the works and the
 exits. -/
-def lastH (n : UInt32) (E : List (Qual × VTy × VTy)) (vr vw vn : Val) : Val :=
+def lastH (n : UInt32) (E : List (Count × VTy × VTy)) (vr vw vn : Val) : Val :=
   hndVal n (qualsVal (E.map Prod.fst)) vr ⟨lastTuple E 0 (.val vw) (.val vn), isVal_lastTuple _ _ E 0⟩
 
 /-- `κ`'s cancel branch at the operation `i`: the table of its own cancel row. -/
@@ -479,10 +479,10 @@ def lastTc (fs : Nat → CTy) (δ : LSub) (i : UInt32) : Option OpTab :=
   some (Row.tab (fs i.toNat).rowOf δ)
 
 section
-variable {δ : LSub} {S SW : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {Xs : Nat → VTy}
+variable {δ : LSub} {S SW : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {Xs : Nat → VTy}
   {n : UInt32} {A R : VTy} (hnd : n ≠ divEff) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
   (hlen : E.length ≤ 2 ^ 32) (hNZ : S.NZ) (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
-  (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true)
+  (hAff : ∀ o ∈ E, o.1.toQual = .aff ∨ (o.2.2.isZero && o.1.toQual != .lin) = true)
   (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
   {vr vw vn : Val} {ls₀ : List SRec}
   (hVr : vC true (retTy S A R) ls₀ δ vr PMap.empty)
@@ -494,7 +494,7 @@ include hnS hlen hVw hVn in
 theorem last_clause_of {i : UInt32} {en : OpEnt}
     (hT : Row.tab (Row.ofEff n E 0 fs ++ S) δ n i = some en) :
     ∃ j, ∃ hj : j < E.length, i.toNat = j ∧
-      en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩ ∧
+      en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, .top, E[j].2.1, E[j].2.2, fs j⟩ ∧
       clauseAt (lastTuple E 0 (.val vw) (.val vn)) i.toNat =
         some ⟨lastClause j en.abort (.val vw) (.val vn), isVal_lastClause _ _ _ _⟩ ∧
       (∃ g, PureSteps (pickE j (.val vw)) (.val g) ∧
@@ -523,8 +523,8 @@ theorem last_hTc {T : OpTab} (hT₀ : ∀ i en, T n i = some en →
   rw [OpSig.ent_fin, if_pos hcap, finObl_eq, if_neg (by simp [(hFin j hj).1])]
 
 /-- A non-abortive operation of the handler is affine. -/
-theorem last_aff (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true) {j : Nat}
-    (hj : j < E.length) (ha : (E[j].2.2.isZero && E[j].1 != .lin) = false) : E[j].1 ≠ .lin := by
+theorem last_aff (hAff : ∀ o ∈ E, o.1.toQual = .aff ∨ (o.2.2.isZero && o.1.toQual != .lin) = true) {j : Nat}
+    (hj : j < E.length) (ha : (E[j].2.2.isZero && E[j].1.toQual != .lin) = false) : E[j].1.toQual ≠ .lin := by
   rcases hAff E[j] (List.getElem_mem hj) with h | h
   · rw [h]; decide
   · rw [ha] at h; cases h
@@ -569,7 +569,7 @@ theorem last_closing (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {ρ :
       rw [hTcj] at hσ
       generalize hEj : E[j] = t at hVg ha hσ hq
       obtain ⟨q, A', B'⟩ := t
-      have ha' : (B'.isZero && q != .lin) = false := ha
+      have ha' : (B'.isZero && q.toQual != .lin) = false := ha
       simp only [workTy, ha'] at hVg
       obtain ⟨σa, σk, hck, hA', hK⟩ := hσ
       refine ewp_pureSteps (opTable_mono _) (lastClause_steps j vw vn g v κ hg) _ _ σ ?_
@@ -582,12 +582,12 @@ theorem last_closing (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {ρ :
         · exact closing_of_cwp hy'
       refine closing_then hSd hFd hNZ hSW hFS hFth hFP (lastN j κ vn) (lastD κ)
         (fun ls => KapRel (Row.tab S δ).closeAt (fun ls v => vC true R ls δ v)
-          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩) (some (Row.tab (fs j).rowOf δ))
+          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, .top, A', B', fs j⟩) (some (Row.tab (fs j).rowOf δ))
           ls κ)
         KapRelT.same KapRelT.ext (fun hu => absurd hu hSu) lastD_post
         (fun ls => lastD_run hq ls) _ _ (fun ls w τ hτ => ?_) hyc hK hck
       refine hb.mp (last_cont (T' := (Row.tab S δ).closeAt) (B := B')
-        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩) Table.bot_const.mono
+        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, .top, A', B', fs j⟩) Table.bot_const.mono
         (tab_le_closeAt hFS hSd hFd) (fun _ _ _ hf => find_not_unr hFS hSu hf) hFX hq
         (fun _ _ _ h => h) hnf (fun ls z τ hz => hb.mpr ?_) ?_)
       · have hf := (hVnf.2 ls (ext_empty' ls₀ ls)) z τ τ hz (compS_empty_left τ)
@@ -659,10 +659,10 @@ theorem lastY_unfold {ls : List SRec} {x : Expr} {ρ : WRes} (h : lastY Ti TW To
 end candidate
 
 section
-variable {δ : LSub} {S SW : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {Xs : Nat → VTy}
+variable {δ : LSub} {S SW : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {Xs : Nat → VTy}
   {n : UInt32} {A R : VTy} (hnd : n ≠ divEff) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
   (hlen : E.length ≤ 2 ^ 32) (hNZ : S.NZ) (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
-  (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true)
+  (hAff : ∀ o ∈ E, o.1.toQual = .aff ∨ (o.2.2.isZero && o.1.toQual != .lin) = true)
   (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
   {vr vw vn : Val} {ls₀ : List SRec}
   (hVr : vC true (retTy S A R) ls₀ δ vr PMap.empty)
@@ -670,12 +670,12 @@ variable {δ : LSub} {S SW : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → 
   (hVn : vC true (exitsTy S R Xs E 0) ls₀ δ vn PMap.empty)
 
 /-- What the candidate's frame reads of the `j`-th operation. -/
-def lastP (δ : LSub) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (Xs : Nat → VTy)
+def lastP (δ : LSub) (S : Row) (E : List (Count × VTy × VTy)) (fs : Nat → CTy) (Xs : Nat → VTy)
     (n : UInt32) (R : VTy) (vn : Val) (ls₀ : List SRec) :
     Val → OpEnt → OpTab → (List SRec → Val → WProp) → Val → Val → Prop :=
   fun κ en Tk Q₁ Nv Dv => ∃ j, ∃ hj : j < E.length, ∃ nfv : Val,
-    (E[j].2.2.isZero && E[j].1 != .lin) = false ∧
-    en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩ ∧
+    (E[j].2.2.isZero && E[j].1.toQual != .lin) = false ∧
+    en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, .top, E[j].2.1, E[j].2.2, fs j⟩ ∧
     Tk = Row.tab (fs j).rowOf δ ∧ Q₁ = (fun ls v => vC true (.sum E[j].2.2 (Xs j)) ls δ v) ∧
     Nv = lastN j κ vn ∧ Dv = lastD κ ∧ PureSteps (pickE j (.val vn)) (.val nfv) ∧
     vC true (exitTy S R (Xs j)) ls₀ δ nfv PMap.empty
@@ -713,7 +713,7 @@ theorem cwp_handle_last (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
     refine cwpF_frame_then hSd hFd hNZ hSW hFS hFth hFP (lastN j κ vn) (lastD κ)
       (fun ls => KapRelT (divTab (Row.tab S δ) (fun ls v => vC true R ls δ v) Y)
         (fun ls v => vC true R ls δ v)
-        (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩)
+        (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, .top, E[j].2.1, E[j].2.2, fs j⟩)
         (some (Row.tab (fs j).rowOf δ)) ls κ)
       KapRelT.same KapRelT.ext (fun hu => absurd hu hSu) lastD_post (fun ls => lastD_run hq ls) _ _
       Y (fun ls y' ρ' ρ₂ ρ'' hy' hF hc' => lastY_fold (Or.inr (Or.inl ⟨κ, y', _, _, _, _, _, ρ',
@@ -721,7 +721,7 @@ theorem cwp_handle_last (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
       ?_ ?_ hy hk hcy
     · intro ls w τ hτ
       refine last_cont (T' := (Row.tab S δ).erase0) (B := E[j].2.2)
-        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩)
+        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, .top, E[j].2.1, E[j].2.2, fs j⟩)
         (Table.Const.mono fun _ _ _ _ _ h => h) (tab_le_erase0 hFS hSd hFd)
         (fun _ _ _ hf => find_not_unr hFS hSu hf) hFX hq (fun _ _ _ h => h) hnf
         (fun ls z τ hz => ?_) hτ
@@ -731,7 +731,7 @@ theorem cwp_handle_last (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
       exact hc _ _ _ this
     · intro ls w τ hτ
       refine closing_of_cwpF (last_cont (T' := (Row.tab S δ).erase0) (B := E[j].2.2)
-        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩)
+        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, .top, E[j].2.1, E[j].2.2, fs j⟩)
         (Table.Const.mono fun _ _ _ _ _ h => h) (tab_le_erase0 hFS hSd hFd)
         (fun _ _ _ hf => find_not_unr hFS hSu hf) hFX hq (fun _ _ _ h => h) hnf
         (fun ls z τ hz => ?_) hτ)
@@ -781,7 +781,7 @@ theorem cwp_handle_last (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
         rw [ha]
         have hTcj : lastTc fs δ i = some (Row.tab (fs j).rowOf δ) := by simp [lastTc, hji]
         rw [hTcj] at hσ
-        have ha' : (E[j].2.2.isZero && E[j].1 != .lin) = false := ha
+        have ha' : (E[j].2.2.isZero && E[j].1.toQual != .lin) = false := ha
         have hVg' := hVg
         simp only [workTy, ha'] at hVg'
         obtain ⟨σa, σk, hck, hA', hK⟩ := hσ
@@ -816,10 +816,10 @@ theorem cwp_handle_last (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
 end
 
 section
-variable {δ : LSub} {S SW : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {Xs : Nat → VTy}
+variable {δ : LSub} {S SW : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {Xs : Nat → VTy}
   {n : UInt32} {A R : VTy} (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
   (hlen : E.length ≤ 2 ^ 32) (hNZ : S.NZ) (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
-  (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true)
+  (hAff : ∀ o ∈ E, o.1.toQual = .aff ∨ (o.2.2.isZero && o.1.toQual != .lin) = true)
   (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
   {vr vw vn : Val} {ls₀ : List SRec}
   (hVr : vC true (retTy S A R) ls₀ δ vr PMap.empty)
@@ -854,7 +854,7 @@ theorem ewp_handle_last (hSd : Row.divB S = false) {ls : List SRec} {e : Expr} {
       obtain ⟨-, hFS, -, hFth, hFP, hFX⟩ := hFin j hj
       have hTcj : lastTc fs δ i = some (Row.tab (fs j).rowOf δ) := by simp [lastTc, hji]
       rw [hTcj] at hσ
-      have ha' : (E[j].2.2.isZero && E[j].1 != .lin) = false := ha
+      have ha' : (E[j].2.2.isZero && E[j].1.toQual != .lin) = false := ha
       have hVg' := hVg
       simp only [workTy, ha'] at hVg'
       obtain ⟨σa, σk, hck, hA', hK⟩ := hσ
@@ -863,12 +863,12 @@ theorem ewp_handle_last (hSd : Row.divB S = false) {ls : List SRec} {e : Expr} {
       have hy' := (cC_effOf SW (.sum E[j].2.2 (Xs j)) ls' δ _ σa hSWd).mp hy
       refine ewp_frame_then δ S SW (fs j).rowOf hNZ hSW hFS hFth hFP (lastN j κ vn) (lastD κ)
         (fun ls => KapRel (Row.tab S δ) (fun ls v => vC true R ls δ v)
-          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩)
+          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, .top, E[j].2.1, E[j].2.2, fs j⟩)
           (some (Row.tab (fs j).rowOf δ)) ls κ)
         KapRelT.same KapRelT.ext (fun hu => absurd hu hSu) lastD_post
         (fun ls => lastD_run hq ls) _ _ (fun ls w τ hτ => ?_) hy' hK hck
       refine hb.mp (last_cont (T' := Row.tab S δ) (B := E[j].2.2)
-        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩)
+        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, .top, E[j].2.1, E[j].2.2, fs j⟩)
         Table.bot_const.mono (Row.tab_le δ hFS) (fun _ _ _ hf => find_not_unr hFS hSu hf) hFX hq
         (fun _ _ _ h => h) hnf (fun ls z τ hz => hb.mpr ?_) ?_)
       · have hf := (hVnf.2 ls (ext_empty' ls₀ ls)) z τ τ hz (compS_empty_left τ)
@@ -896,13 +896,13 @@ handled computation's ticks pass the handler (`cwp_handle_last`); elsewhere it i
 (`ewp_handle_last`).  The Fundamental Property is applied to `h_ret`, the works, the exits and
 `e`; no term the rule reads mentions `κ`.  `[spec §14, §19, §27, §51]` -/
 theorem handleL_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hw Hn e : Expr} {S SW : Row}
-    {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {Xs : Nat → VTy} {n : UInt32} {A R : VTy}
+    {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {Xs : Nat → VTy} {n : UInt32} {A R : VTy}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁)
     (hHw : Hw.ValFormIn Γ₁) (hHn : Hn.ValFormIn Γ₁)
     (hc : SemV Δ Γ₁ (.pair Hr (.pair Hw Hn))
       (.tensor (retTy S A R) (.tensor (worksTy S SW R Xs E 0) (exitsTy S R Xs E 0))))
     (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-    (hNZ : S.NZ) (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true)
+    (hNZ : S.NZ) (hAff : ∀ o ∈ E, o.1.toQual = .aff ∨ (o.2.2.isZero && o.1.toQual != .lin) = true)
     (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
     (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
     (he : SemC Δ Γ₂ e (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) :

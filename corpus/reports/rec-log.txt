@@ -1,4 +1,4 @@
-effect 18:1: Exhausted: exhausted (ctl, affine, abortive)
+effect 18:1: Exhausted: exhausted (ctl, abortive)
 row 18:1: depth: Log, Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
 lowering 18:1: recursive group depth: the generator `depth__step__tally_n1`, the record of its members, each taking the capabilities as its environment; each member's copy is bounded_fix of it at the budget 10000, its calls of itself direct calls of the self-reference, the exhaustion effect at the site 1
 lowering 22:11: with tally (Log): a borrow block of its state (lent from `c`); its operations are calls of the clauses on the capability

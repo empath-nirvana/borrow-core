@@ -63,21 +63,20 @@ theorem UnhandledIn.hasHnd {S : Row} {K : Kont} (h : UnhandledIn S K) {o : OpSig
 everywhere. -/
 theorem unhandledIn_nil (K : Kont) : UnhandledIn [] K := fun _ h => absurd h (by simp)
 
-/-- The handler of the name `1` of `unhandled_not_decided`: the answer clause `λx. x` and the
-clause `λ(x, κ). (λk'. k'.1 x) κ`, which resumes in tail position through an alias of `κ`. -/
-def hRes : Val := hU 1 idV resumeCT
+/-- The handler of the name `1` of `unhandled_not_decided`, its operation at `1?`: the answer clause
+`λx. x` and the clause `λ(x, κ). κ.1 x`, which resumes in tail position. -/
+def hRes : Val := hA 1 idV resumeC
 
-/-- The clause `λ(x, κ). (λk'. k'.1 x) κ` meets the `tail` kind's premise: through the alias of
-`κ` (`OnPaths.rebind`), its resume `k'.1 x` in tail position. -/
-theorem resumeCT_tail : ClauseKind.tail.Premise (.unr, .unit, .unit) resumeCT.1 := by
+/-- The clause `λ(x, κ). κ.1 x` meets the `tail` kind's premise: its resume in tail position. -/
+theorem resumeC_tail : ClauseKind.tail.Premise (.opt, .unit, .unit) resumeC.1 := by
   refine ⟨rfl, _, rfl, ?_⟩
-  refine ⟨_, .rebind (by simp [mentions]) (.resume (by simp [mentions]))⟩
+  exact ⟨_, .resume (by simp [mentions])⟩
 
 theorem d_hRes_clauses {Δ : LifeCtx} :
-    CDerives Δ [] (.pair (.val idV) (.pair (.val resumeCT) (.val Val.unit)))
+    CDerives Δ [] (.pair (.val idV) (.pair (.val resumeC) (.val Val.unit)))
       (.val (.tensor (retTy [rSig 2] .unit .unit)
-        (clausesTy [rSig 2] .unit [(.unr, .unit, .unit)] (fun _ => finR 2)))) :=
-  .tensorI .nil (d_idV _ .unit) (.tensorI .nil (d_resumeCT _ _ _) (.unitI .nil))
+        (clausesTy [rSig 2] .unit [(.opt, .unit, .unit)] (fun _ => finR 2)))) :=
+  .tensorI .nil (d_idV _ .unit) (.tensorI .nil (d_resumeC _ _ _) (.unitI .nil))
 
 /-- `perform (1, (0, ()))`, at the handled row of `hRes`: `{1⟨{2}⟩, 2}`. -/
 theorem d_perform₁ {Δ : LifeCtx} :
@@ -92,32 +91,32 @@ theorem d_perform₁ {Δ : LifeCtx} :
 
 /-- `hnd (2, H₂) (perform 1 then x. x unwind raise 2)`, at the handled row of `hRes`. -/
 theorem d_inner₁ {Δ : LifeCtx} :
-    CDerives Δ [] ((K 2).plug (performU 1)) (.comp (CTy.effOf [pSig 1 (finR 2), rSig 2] .unit)) := by
+    CDerives Δ [] ((KT 2).plug (performU 1)) (.comp (CTy.effOf [pSig 1 (finR 2), rSig 2] .unit)) := by
   refine .effSub (RowLe.of_mem fun o ho => ?_) d_inner₂
   simp only [List.mem_singleton] at ho
   subst ho
   exact ⟨pSig 1 (finR 2), rfl, OpSig.LeF.refl _⟩
 
 /-- `hRes`'s `[handle]` over a handled computation `e` at its handled row: the node at the name
-`1`, the outer row `{2}`, the operation `1 ↠^unr 1` at the cancel row `{2}`, the types `1`. -/
+`1`, the outer row `{2}`, the operation `1 ↠^{1?} 1` at the cancel row `{2}`, the types `1`. -/
 theorem d_hRes {Δ : LifeCtx} {e : Expr}
     (he : CDerives Δ [] e (.comp (CTy.effOf [pSig 1 (finR 2), rSig 2] .unit))) :
     CDerives Δ [] (hndE hRes e) (.comp (CTy.effOf [rSig 2] .unit)) :=
-  .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.unr, .unit, .unit)]) (fs := fun _ => finR 2)
+  .effHandleV (Γ₁ := []) (Γ₂ := []) (E := [(.opt, .unit, .unit)]) (fs := fun _ => finR 2)
     .nil .nil (.pair (.val _) (.pair (.val _) (.val _))) d_hRes_clauses
     (by decide) (by simp [rSig]) (by simp) rfl he
 
 /-- **The rows do not decide that the clause's names are unhandled in `K`.** One `[handle]` node,
-the same tail-resumptive clause (`resumeCT_tail`) at the same row `Σ = {2}`, over two handled
+the same tail-resumptive clause (`resumeC_tail`) at the same row `Σ = {2}`, over two handled
 computations at the same row, each the operation `perform 1` in the hole of a continuation `K`:
 both programs are typed, and the name `2` of `Σ` is unhandled in the one `K` (empty) and handled
 in the other (`hnd 2 …`).  `[spec §19]` -/
 theorem unhandled_not_decided {Δ : LifeCtx} :
-    ClauseKind.tail.Premise (.unr, .unit, .unit) resumeCT.1 ∧
+    ClauseKind.tail.Premise (.opt, .unit, .unit) resumeC.1 ∧
     CDerives Δ [] (hndE hRes (Kont.hole.plug (performU 1))) (.comp (CTy.effOf [rSig 2] .unit)) ∧
-    CDerives Δ [] (hndE hRes ((K 2).plug (performU 1))) (.comp (CTy.effOf [rSig 2] .unit)) ∧
-    UnhandledIn [rSig 2] Kont.hole ∧ ¬ UnhandledIn [rSig 2] (K 2) := by
-  refine ⟨resumeCT_tail, d_hRes d_perform₁, d_hRes d_inner₁, fun _ _ => rfl, fun h => ?_⟩
+    CDerives Δ [] (hndE hRes ((KT 2).plug (performU 1))) (.comp (CTy.effOf [rSig 2] .unit)) ∧
+    UnhandledIn [rSig 2] Kont.hole ∧ ¬ UnhandledIn [rSig 2] (KT 2) := by
+  refine ⟨resumeC_tail, d_hRes d_perform₁, d_hRes d_inner₁, fun _ _ => rfl, fun h => ?_⟩
   have := h (rSig 2) (by simp)
   revert this
   decide

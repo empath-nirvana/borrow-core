@@ -124,7 +124,7 @@ def dtorAt : Bool → VTy → Expr
 theorem dtorAt_thunk : ∀ (b : Bool) (C : CTy), dtorAt b (.thunk C) = dtorAt false (.thunk C)
   | _, .nu (.amp _ (.ret _)) | _, .nu (.amp _ (.arr _ _)) | _, .nu (.amp _ (.amp _ _))
   | _, .nu (.amp _ .top) | _, .nu (.amp _ (.all _ _ _)) | _, .nu (.amp _ (.nu _))
-  | _, .nu (.amp _ (.eff _ _ _ _ _ _ _)) | _, .nu (.eff _ _ _ _ _ _ _) | _, .eff _ _ _ _ _ _ _
+  | _, .nu (.amp _ (.eff _ _ _ _ _ _ _ _)) | _, .nu (.eff _ _ _ _ _ _ _ _) | _, .eff _ _ _ _ _ _ _ _
   | _, .nu (.ret _) | _, .nu (.arr _ _) | _, .nu .top | _, .nu (.all _ _ _) | _, .nu (.nu _)
   | _, .ret _ | _, .arr _ _ | _, .amp _ _ | _, .top | _, .all _ _ _ => rfl
 

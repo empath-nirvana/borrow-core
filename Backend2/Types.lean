@@ -131,8 +131,8 @@ def LCTy.whnf : Nat → LCTy → LCTy
   | f + 1, .nu k => LCTy.whnf f k.unrollNu
   | _, k => k
 
-/-- An operation of a row is abortive: answer `0` at a qualifier with weakening (`OpSig.abort`). -/
-def abortB (q : Qual) (B : VTy) : Bool := B.isZero && q != .lin
+/-- An operation of a row is abortive: answer `0` at a count with weakening (`OpSig.abort`). -/
+def abortB (q : Count) (B : VTy) : Bool := B.isZero && q.toQual != .lin
 
 /-- The payload of a row's abortive operations (`ofEff`'s list): each key once, its first, as
 `Row.find` reads a row; their argument types a right-nested sum, one summand per operation, in
@@ -222,7 +222,7 @@ def ofC (ms : MachSet) : CTy → Except String LCTy
   | .top => pure .top
   | .all _ _ C => ofC ms C
   | .nu C => return .nu (← ofC ms C)
-  | .eff n i q A B fin C => do
+  | .eff n i q _ A B fin C => do
     -- `F_Σ R`: `R`, `R ⊕ P` with the payload of `Σ`'s abortive operations (SPEC §47), or the
     -- outcome at its machine operations (SPEC §49).
     if n == divName then
@@ -240,7 +240,7 @@ def ofEff (ms : MachSet) : CTy →
     Except String (List ((UInt32 × UInt32) × LTy) ×
       List ((UInt32 × UInt32) × LTy × LTy × Option (List ((UInt32 × UInt32) × LTy))) × LTy)
   | .ret R => return ([], [], ← ofV ms R)
-  | .eff n i q A B fin C => do
+  | .eff n i q _ A B fin C => do
     if n == divName then
       throw s!"an operation ({n}, {i}) in a computation type: outside the pure fragment"
     let (ps, qs, r) ← ofEff ms C
@@ -254,7 +254,7 @@ finaliser that may suspend) is outside the fragment.  [spec §27, §49] -/
 def ofFin (ms : MachSet) : CTy → Except String (Option (List ((UInt32 × UInt32) × LTy)))
   | .top => pure none
   | .ret _ => pure (some [])
-  | .eff n i q A B _ C => do
+  | .eff n i q _ A B _ C => do
     let rest ← ofFin ms C
     if abortB q B then return rest.map (((n, i), ← ofV ms A) :: ·)
     else if ms.contains (n, i) then

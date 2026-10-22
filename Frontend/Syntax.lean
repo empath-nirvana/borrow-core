@@ -65,18 +65,19 @@ inductive Mode where
   | imm
   deriving DecidableEq, Repr, Inhabited
 
-/-- The qualifier of an operation's continuation in a row (SPEC §19): linear, affine or
-unrestricted. -/
+/-- The count of an operation's continuation as a row writes it (SPEC §19, §53): `lin`, exactly `1`;
+`aff`, `1?` (`0` at an operation answering `0`); or `ctl`, the count the checker infers for the
+operation's name, the strictest its handlers allow (`Frontend/Check/Grades.lean`). -/
 inductive Qual where
   | lin
   | aff
-  | unr
+  | infer
   deriving DecidableEq, Repr, Inhabited
 
 def Qual.str : Qual → String
   | .lin => "lin"
   | .aff => "aff"
-  | .unr => "unr"
+  | .infer => "ctl"
 
 /-- The host resource kinds the surface names (SPEC §11, §34): `input`, `output`, `clock`,
 `args`. -/
@@ -715,8 +716,8 @@ inductive Mark where
   | row (effs : List (Ident × List VTy)) (m : Mark) (names : List (Option Ident))
   deriving DecidableEq, Repr, Inhabited
 
-/-- The kind of an operation (SPEC §19): answering (`fn`), or control (`ctl`) with the structural
-qualifier of its continuation (`ctl` affine, `linear ctl`, `multi ctl` unrestricted). -/
+/-- The kind of an operation (SPEC §19, §53): answering (`fn`), or control (`ctl`) with the count of
+its continuation as declared: `ctl`, inferred (`infer`), or `linear ctl`, exactly `1` (`lin`). -/
 inductive OpKind where
   | fn
   | ctl (q : Qual)

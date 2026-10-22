@@ -50,7 +50,7 @@ open BoCa.Fig16.LogRel.Core.CancelIntercept in
 /-- `prog₃` (`Core/EffCancel.lean`) with `H₃`'s answer clause `λx. inj₁ x`: `inl ()` when the cancel
 ends cleanly, `inr ()` when the finaliser's error reaches `H₃`. -/
 def cancelKept : BoCa.Expr :=
-  BoCa.BoLo.hndE (BoCa.BoLo.hndVal 3 (BoCa.Fig16.LogRel.Core.qualsVal [.unr])
+  BoCa.BoLo.hndE (BoCa.BoLo.hndVal 3 plainTags
     (BoCa.Val.lam (.inj₁ (.var 0))) (BoCa.Val.pair c₃ BoCa.Val.unit))
     (body 3)
 
@@ -164,7 +164,7 @@ raises `exn`; so it is lowered per use (`Backend/Clos/Poly.lean`). -/
 def polyId : Expr :=
   letE (.lam (.var 0))
     (letE (letE (appE (.var 0) pureCbE) (appE (.var 0) .unit))
-      (letE (BoCa.BoLo.hndE (toResultH 1 .aff)
+      (letE (BoCa.BoLo.hndE (toResultH 1 .zero)
           (letE (appE (.var 1) (failCbE 1)) (appE (.var 0) .unit)))
         (.pair (.var 1) (.var 0))))
 

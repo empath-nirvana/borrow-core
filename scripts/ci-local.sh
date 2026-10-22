@@ -74,6 +74,7 @@ steps=(
   "parse corpus"     "scripts/parse-corpus.sh"
   "check corpus"     "scripts/check-corpus.sh"
   "clause kinds"     "scripts/check-kinds.sh"
+  "grade census"     "scripts/check-grades.sh"
   "handled names"    "scripts/check-handled.sh"
   "cell classes"     "scripts/check-cells.sh"
   "compile corpus"   "scripts/compile-corpus.sh"
@@ -108,7 +109,7 @@ if [ "$changed" = 1 ]; then
   done
   if [ "$lean" = 0 ]; then
     all=0
-    corpus=("parse corpus" "check corpus" "clause kinds" "handled names" "cell classes" "compile corpus" "backend2 corpus" "layout rejects" "native facts" "sugar pairs" "native" "renaming")
+    corpus=("parse corpus" "check corpus" "clause kinds" "grade census" "handled names" "cell classes" "compile corpus" "backend2 corpus" "layout rejects" "native facts" "sugar pairs" "native" "renaming")
     for f in $files; do
       case "$f" in
         corpus/kernel-counts.expected) add "compile kernel" ;;
@@ -119,6 +120,7 @@ if [ "$changed" = 1 ]; then
         scripts/parse-corpus.sh) add "parse corpus" ;;
         scripts/check-corpus.sh) add "check corpus" ;;
         scripts/check-kinds.sh) add "clause kinds" ;;
+        scripts/check-grades.sh) add "grade census" ;;
         scripts/check-handled.sh) add "handled names" ;;
         scripts/check-cells.sh) add "cell classes" ;;
         scripts/compile-corpus.sh) add "compile corpus" ;;

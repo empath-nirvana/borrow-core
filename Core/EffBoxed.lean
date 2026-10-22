@@ -274,21 +274,21 @@ theorem ewp_handleS (α : Life) (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
 
 /-- A clause's type with `κ` at `[@d] K`: `!U(A ⊗ [@d] K ⊸ F_Σ R)`, or `!U(A ⊸ F_Σ R)` at an
 abortive operation (no `κ`). -/
-def clauseTyB (S : Row) (R : VTy) (d : Lifetime.Life) (o : Qual × VTy × VTy)
+def clauseTyB (S : Row) (R : VTy) (d : Lifetime.Life) (o : Count × VTy × VTy)
     (F : CTy := .ret .unit) : VTy :=
   match o with
-  | (q, A, B) => if (B.isZero && q != .lin) then .bang (.thunk (.arr A (CTy.effOf S R)))
-      else .bang (.thunk (.arr (.tensor A (.box d (kTy S R q B F))) (CTy.effOf S R)))
+  | (q, A, B) => if (B.isZero && q.toQual != .lin) then .bang (.thunk (.arr A (CTy.effOf S R)))
+      else .bang (.thunk (.arr (.tensor A (.box d (kTy S R q.toQual B F))) (CTy.effOf S R)))
 
 /-- The clauses' type with boxed continuations: `clausesTy`'s tuple at `clauseTyB`. -/
-def clausesTyB (S : Row) (R : VTy) (d : Lifetime.Life) (E : List (Qual × VTy × VTy))
+def clausesTyB (S : Row) (R : VTy) (d : Lifetime.Life) (E : List (Count × VTy × VTy))
     (fs : Nat → CTy := finsNil) : VTy :=
   match E with
   | [] => .unit
   | o :: E => .tensor (clauseTyB S R d o (fs 0)) (clausesTyB S R d E (fun j => fs (j + 1)))
 
 theorem clausesTyB_at {S : Row} {R : VTy} {d : Lifetime.Life} {ls : List SRec} {δ : LSub} :
-    ∀ (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) {hs : Val} {ρ : WRes},
+    ∀ (E : List (Count × VTy × VTy)) (fs : Nat → CTy) {hs : Val} {ρ : WRes},
       vC true (clausesTyB S R d E fs) ls δ hs ρ →
       ∀ j (h : j < E.length), ∃ c, clauseAt hs.1 j = some c ∧
         vC true (clauseTyB S R d E[j] (fs j)) ls δ c PMap.empty
@@ -310,7 +310,7 @@ theorem clausesTyB_at {S : Row} {R : VTy} {d : Lifetime.Life} {ls : List SRec} {
 
 /-- The clauses hold nothing. -/
 theorem clausesTyB_empty {S : Row} {R : VTy} {d : Lifetime.Life} {ls : List SRec} {δ : LSub} :
-    ∀ (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) {hs : Val} {ρ : WRes},
+    ∀ (E : List (Count × VTy × VTy)) (fs : Nat → CTy) {hs : Val} {ρ : WRes},
       vC true (clausesTyB S R d E fs) ls δ hs ρ → ρ = PMap.empty
   | [], _, _, _, h => h.1
   | (q, A, B) :: E, fs, hs, ρ, h => by
@@ -323,7 +323,7 @@ theorem clausesTyB_empty {S : Row} {R : VTy} {d : Lifetime.Life} {ls : List SRec
 
 /-- The clauses' type is persistent: a tuple of `!` types. -/
 theorem clausesTyB_persistent (S : Row) (R : VTy) (d : Lifetime.Life) :
-    ∀ (E : List (Qual × VTy × VTy)) (fs : Nat → CTy), (clausesTyB S R d E fs).Persistent
+    ∀ (E : List (Count × VTy × VTy)) (fs : Nat → CTy), (clausesTyB S R d E fs).Persistent
   | [], _ => rfl
   | (q, A, B) :: E, fs => by
       have h := clausesTyB_persistent S R d E (fun j => fs (j + 1))
@@ -337,7 +337,7 @@ theorem clausesTyB_persistent (S : Row) (R : VTy) (d : Lifetime.Life) :
 /-- **A handler at clause values, `κ` boxed at `@d`**: `ewp_handle_vals` at `clausesTyB`, the
 handled computation in `ewpTS` at the stratified table at `α = δ(d)`. `κ`'s relation at `K` is
 `vC_kTy_of_kapRel`'s; its share in `Res_α` makes it `[@d] K`. -/
-theorem ewp_handle_valsB {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
+theorem ewp_handle_valsB {S : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
     {A R : VTy} {d : Lifetime.Life} {α : Life} {δ : LSub} {ls₀ : List SRec} {vr vc : Val}
     (hd : d.interp δ = some α) (hS : Row.divB S = false) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
     (hlen : E.length ≤ 2 ^ 32) (hVr : vC true (retTy S A R) ls₀ δ vr PMap.empty)
@@ -382,7 +382,7 @@ theorem ewp_handle_valsB {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat →
       rw [hji] at hK
       have hκ := vC_kTy_of_kapRel (S := S) (R := R) (B := B') (q := q) (F := fs j) A' n
         (UInt32.ofNat (0 + j)) hK
-      have hκB : vC true (.box d (kTy S R q B' (fs j))) ls' δ κ σk := ⟨α, hd, hκ, hσk⟩
+      have hκB : vC true (.box d (kTy S R q.toQual B' (fs j))) ls' δ κ σk := ⟨α, hd, hκ, hσk⟩
       have hf := (hVcl.2 ls' (ext_empty' ls₀ ls')) (Val.pair v κ) σ σ
         ⟨v, κ, pure_sep_mk rfl ⟨σa, σk, hck, hA', hκB⟩⟩ (compS_empty_left σ)
       exact (cC_effOf S R ls' δ _ σ hS).mp hf
@@ -397,7 +397,7 @@ theorem ewp_handle_valsB {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat →
 /-- **BOXED-κ at variables** (`handle_compatC` with `κ : [@d] K`): the clauses at `clausesTyB`,
 and the handled computation's context and answer types outliving `@d`. -/
 theorem handle_compatCB {Δ : LifeCtx} {Γ Γ₁ Γ₂ Γr Γc : Ctx VTy} {e : Expr} {S : Row}
-    {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy} {ir ic : Nat}
+    {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy} {ir ic : Nat}
     {d : Lifetime.Life}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hsp₁ : Ctx.SplitP Γ₁ Γr Γc)
     (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTyB S R d E fs))
@@ -435,7 +435,7 @@ theorem handle_compatCB {Δ : LifeCtx} {Γ Γ₁ Γ₂ Γr Γc : Ctx VTy} {e : E
 persistent slots at `retTy Σ A R ⊗ clausesTyB Σ R d E fs`; `e` at `F_{E_n ⊕ Σ} A` under `Γ₂`, with
 `Δ ⊨ Γ₂ ⊐ @d` and every non-abortive answer type of `E_n ⊕ Σ` outliving `@d`. -/
 theorem handleV_compatCB {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {H e : Expr} {S : Row}
-    {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
+    {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     {d : Lifetime.Life}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
     (hc : SemV Δ Γ₁ H (.tensor (retTy S A R) (clausesTyB S R d E fs)))

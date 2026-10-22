@@ -75,8 +75,6 @@ structure OutInfo where
   /-- Each machine operation's key, argument, answer, and its cancel row's payload (`none` at
   `⊤`). -/
   ms : List (Key × LTy × LTy × Option Pay)
-  /-- The machine operations at the qualifier `unr`, whose continuation may be copied. -/
-  unrs : List Key := []
   deriving Inhabited
 
 /-- **A frame of a machine's continuation** (SPEC §49): what is done, inside one machine, with the
@@ -278,7 +276,7 @@ def formersC (acc : List String) : CTy → List String
   | .amp C D => formersC (formersC ("C.amp" :: acc) C) D
   | .all _ _ C => formersC ("C.all" :: acc) C
   | .nu C => formersC ("C.nu" :: acc) C
-  | .eff _ _ _ A B fin C => formersC (formersC (formersV (formersV ("C.eff" :: acc) A) B) fin) C
+  | .eff _ _ _ _ A B fin C => formersC (formersC (formersV (formersV ("C.eff" :: acc) A) B) fin) C
   | .top => "C.top" :: acc
 end
 
@@ -649,8 +647,7 @@ def outInfo? (r : LTy) (S : Row) : CM (Option OutInfo) := do
   if ms.isEmpty then return none
   let pay ← rowPay S
   let ty := outcomeTy r pay ms
-  let unrs := (S.filter fun o => o.q == .unr).map fun o => (o.n, o.i)
-  let o : OutInfo := { ty, r, pay, ms, unrs }
+  let o : OutInfo := { ty, r, pay, ms }
   match ty with
   | .mu b => unless LTy.unrollMu b == o.body do throw s!"LIR: the outcome {ty} does not unroll to {o.body}"
   | _ => throw "LIR: an outcome that is not a μ"
@@ -658,7 +655,7 @@ def outInfo? (r : LTy) (S : Row) : CM (Option OutInfo) := do
 
 /-- The row and value type of `F_Σ R`, through `∀`s. -/
 def effParts : CTy → Option (Row × VTy)
-  | .eff n i q A B fin C => (effParts C).map fun (S, R) => (⟨n, i, q, A, B, fin⟩ :: S, R)
+  | .eff n i q wq A B fin C => (effParts C).map fun (S, R) => (⟨n, i, q, wq, A, B, fin⟩ :: S, R)
   | .ret R => some ([], R)
   | .all _ _ C => effParts C
   | _ => none
@@ -1104,9 +1101,8 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
     -- class holds itself: a recursion through a resumption point, a clause resuming `κ` before it
     -- answers; `cellPass`). The state is a cell, allocated when the machine first suspends and
     -- written in place each time it suspends again at the operation; its suspended computation
-    -- is a word. Otherwise the state is the closure's environment, as it always is at `unr`, whose
-    -- suspended computation may be copied (§19).
-    let cellMode := threaded || (cellOps.contains op && !F.unrs.contains op)
+    -- is a word. Otherwise the state is the closure's environment.
+    let cellMode := threaded || cellOps.contains op
     let envTy : LTy := if cellMode then .ref stTy else stTy
     let slotTy : LTy := .sum .unit envTy
     let rres ← reserveFn s!"resume {op.1}.{op.2}"
@@ -2778,7 +2774,7 @@ whose resume entry resumes the computation and drives its outcome again (the han
 whose cancel entry cancels it (`kappa_cancel_steps`); a suspension at one of `Σ`'s machine
 operations suspends the drive (forwarding), resumed by resuming the computation and driving
 again. The handler's values are the drive's parameters. -/
-def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32)
+def convDrive (fuel : Nat) (S : Row) (E : List (Count × VTy × VTy)) (fs : Nat → CTy) (n : UInt32)
     (R : VTy) (ks : List ClauseKinds.HKind) (site : Option HSite) (c₂ : Ctx) (te : TExpr)
     (T : OutInfo) (cR : Ctx) (tR : TExpr)
     (parts : Array (Ctx × TExpr)) (tailCtx : Ctx) (tupleAt : Option Nat) (boxed : Bool := false) :
@@ -2814,8 +2810,8 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
   -- it after the handler's values, and `κ` holds it as its last; it is made at the first frame
   -- reserved (`0` until then) and freed where the computation answers, aborts or is cancelled.
   let stored := ks.any fun k => k.kind == .stored
-  -- No operation of the node is `unr`: a copied `κ` would hold the stack twice (SPEC §52).
-  let siteSw := stored && boxed && E.all (·.1 != .unr) && !(← get).stacked.isEmpty
+  -- `κ` is not copied: its count is `0`, `1` or `1?` (SPEC §53), so it holds the stack once.
+  let siteSw := stored && boxed && !(← get).stacked.isEmpty
   let shP? : Option Var ← if siteSw then do readFact "effHandleV:site stack"; pure (some (← fresh (.int .w64)))
     else pure none
   let shTys : List LTy := if siteSw then [.int .w64] else []
@@ -2824,7 +2820,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
     | some h => freeStackThen h b
     | none => pure b
   -- **`κ` in the site's stack** (SPEC §52): at a site with a stack, the first operation whose
-  -- clause keeps `κ` (`stored`) and whose `κ` is not `unr` keeps `κ`'s environment but the stack in
+  -- clause keeps `κ` (`stored`) keeps `κ`'s environment but the stack in
   -- the stack's `κ` region: the stack is made at the first run, holding the region, and `κ` is the
   -- stack. Each suspension there writes the region, `κ`'s resume entry takes it out, and the stack's
   -- free ends it. One operation: a region shared by two would join their computations' classes.
@@ -2833,7 +2829,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
     for (k, j) in ks.zipIdx do
       if out.isSome then break
       let some o := E[j]? | continue
-      if siteSw && k.kind == .stored && o.1 != .unr && T.ms.any (·.1 == (n, j.toUInt32)) then
+      if siteSw && k.kind == .stored && T.ms.any (·.1 == (n, j.toUInt32)) then
         out := some j
     pure out
   let siteTag ← fresh .unit
@@ -2886,7 +2882,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
         if key.1 == n then
           let idx := key.2.toNat
           let some o := E[idx]? | throw "LIR: an operation"
-          let kT ← vty (kTy S R o.1 o.2.2 (fs idx))
+          let kT ← vty (kTy S R o.1.toQual o.2.2 (fs idx))
           let cancelC := cancelTy S (fs idx)
           let cM ← outInfoC cancelC
           let cPay ← match effParts cancelC with
@@ -2983,7 +2979,7 @@ stored-continuation site, left to the state machines (N3). The handled computati
 its value goes to `h_ret`, an abort of one of `n`'s operations to that operation's clause (the
 handler's join: `catch_abort`), an abort of `Σ`'s handed on (`fwd_abort`). A tail-resumptive
 clause is called where it is performed (`effPerform`). -/
-def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy)
+def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Count × VTy × VTy)) (fs : Nat → CTy)
     (n : UInt32) (A R : VTy) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite)
     (tc te : TExpr) (boxed : Bool := false) : CM Tm := do
   let direct := (← get).direct.getD n []
@@ -3070,7 +3066,7 @@ replaced by its answer (`TailResumesAt 0 M M'`, which the clause's kind gives,
 `classifyHandler_sound`). It takes the argument `x` and answers the operation's answer, at the
 payload of the handler's outer row `Σ`. Made once per operation. -/
 def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
-    (o : Qual × VTy × VTy) (c : TExpr) : CM Unit := do
+    (o : Count × VTy × VTy) (c : TExpr) : CM Unit := do
   if (← get).works.contains (n, j) then return
   match c.unUse with
   | .bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => do
@@ -3475,7 +3471,7 @@ def prepWorks (fuel : Nat) (depth : Nat) (t : TExpr) : CM Unit := do
   match fuel with
   | 0 => throw "LIR: the typed term is too deep"
   | fuel + 1 =>
-  let here : Option (Row × List (Qual × VTy × VTy) × UInt32 × List ClauseKinds.HKind × TExpr) :=
+  let here : Option (Row × List (Count × VTy × VTy) × UInt32 × List ClauseKinds.HKind × TExpr) :=
     match t with
     | .effHandleV _ _ S E _ n _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
     | .effHandleVB _ _ S E _ n _ _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
@@ -3608,22 +3604,22 @@ def cellPass (s : CState) (recursive : Nat → Bool) : Except String (Prog × CS
 /-- **The levels whose state cell is passed on** (SPEC §50), from a conversion's machines and the
 layouts' recursive classes (`recursive`, as `cellPass` reads them): each machine whose body takes
 its continuation (`withMachineK`), with no call in tail position, whose points are all at one
-operation and whose state there is a cell (its suspended computation's class holds itself, not
-at `unr`): its number and its state's type. -/
+operation and whose state there is a cell (its suspended computation's class holds itself): its
+number and its state's type. -/
 def threadedOf (s : CState) (recursive : Nat → Bool) : Std.HashMap Nat LTy := Id.run do
   let mut out : Std.HashMap Nat LTy := {}
   for (m, kcs) in s.done do
     unless m.threadable && m.tails.isEmpty do continue
     match kcs with
     | [(op, kc)] =>
-      if recursive kc && !m.info.unrs.contains op && m.points.all (·.op == op) then
+      if recursive kc && m.points.all (·.op == op) then
         out := out.insert m.start (machStateTy m op)
     | _ => pure ()
   return out
 
 /-- **The stack machines** (SPEC §52), from a conversion's machines and the layouts: each machine
 whose level's cell `threadedOf` passes on (its suspended computation's class holds itself, its
-points at one operation, no call in tail position, not `unr`), whose every call point calls a
+points at one operation, no call in tail position), whose every call point calls a
 level of itself (`calleeCodes`, the layouts' classes of the callee's suspended computations, are
 its own code), and whose operation is in `stackOps` (every `handle` node of it keeps `κ`: a stored
 site, which gives the frames one owner): its number and its frame's state type, each call point's

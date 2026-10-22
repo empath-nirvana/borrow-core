@@ -52,7 +52,7 @@ def rtR : Val := .lam (.var 0)
 def rtC : Val := .lam (.letpair (.var 0) (.app (.app (.var 0) (.val (Val.inj₁ .unit))) (.val nextV)))
 
 /-- The runtime's handler value. -/
-def rtH : Val := hndVal divEff (qualsVal [.lin]) rtR (Val.pair rtC .unit)
+def rtH : Val := hndVal divEff (qualsVal [.one]) rtR (Val.pair rtC .unit)
 
 /-- The table of the row of `Div` alone. -/
 abbrev T0 : OpTab := Row.tab [tickSig] LSub.empty
@@ -275,7 +275,7 @@ theorem rt_safe {μ : Heap} {e : Expr} (h : RT (ℍ := ℍ) Q μ e) :
       · simp only [not_exists] at hx
         rcases post_cases Q (seg_stopped Q hg hs hx) with ⟨v, rfl⟩ | ⟨K₁, rfl, hK, -⟩
         · exact .inr ⟨_, _, (catch_ret μ divEff _ _ _ v .hole).1⟩
-        · exact .inr ⟨_, _, (catch_step μ (qs := qualsVal [.lin]) (hr := rtR) .unit
+        · exact .inr ⟨_, _, (catch_step μ (qs := qualsVal [.one]) (hr := rtR) .unit
             (clauseAt_one rtC) hK .hole).1⟩
   | ret => exact .inr ⟨_, _, Step1.head (Head.beta μ _ _)⟩
   | @val _ v => exact .inl v.2
@@ -307,7 +307,7 @@ theorem rt_step {μ μ' : Heap} {e e' : Expr} (h : RT (ℍ := ℍ) Q μ e)
         rcases post_cases Q (seg_stopped Q hg hx₁ hx) with ⟨v, rfl⟩ | ⟨K₁, rfl, hK, hg'⟩
         · obtain ⟨rfl, rfl⟩ := (catch_ret μ divEff _ _ _ v .hole).2 _ _ hs
           exact .ret
-        · obtain ⟨rfl, rfl⟩ := (catch_step μ (qs := qualsVal [.lin]) (hr := rtR) .unit
+        · obtain ⟨rfl, rfl⟩ := (catch_step μ (qs := qualsVal [.one]) (hr := rtR) .unit
             (clauseAt_one rtC) hK .hole).2 _ _ hs
           refine .hs hg' (.inl ⟨rfl, ?_⟩)
           simp only [Kont.plug]

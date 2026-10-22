@@ -363,8 +363,7 @@ def Decl.pp : Decl → String
       (match o.kind with
         | .fn => "fn "
         | .ctl .lin => "linear ctl "
-        | .ctl .aff => "ctl "
-        | .ctl .unr => "multi ctl ") ++
+        | .ctl _ => "ctl ") ++
       o.name.name ++
         (if o.lives.isEmpty then "" else "<" ++ ", ".intercalate (o.lives.map fun (a, b) =>
           (Life.var a.span a.name).pp ++ (match b with | .top _ => "" | b => " < " ++ b.pp)) ++ ">") ++

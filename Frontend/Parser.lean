@@ -757,7 +757,7 @@ def opNameNI (what : String) : P (Nat × Nat) := do
   | _ => expected what
 
 /-- The entries of a row up to its `]`: `n.i q A ~> B`, separated by `,`; `q` is `lin`, `aff` or
-`unr`, read as a name here and nowhere else. -/
+`ctl` (the count inferred), read as a name here and nowhere else. -/
 def rowEntries : Nat → P Row
   | 0 => outOfFuel
   | n + 1 => do
@@ -767,8 +767,10 @@ def rowEntries : Nat → P Row
     let q ← match tq.tok with
       | .ident "lin" => discard bump; pure Qual.lin
       | .ident "aff" => discard bump; pure Qual.aff
-      | .ident "unr" => discard bump; pure Qual.unr
-      | _ => expected "a qualifier `lin`, `aff` or `unr`"
+      | .ident "ctl" => discard bump; pure Qual.infer
+      | .ident "unr" => failAt tq.span ("`unr`: an unrestricted continuation is not a type; a " ++
+          "row's count is `lin`, `aff` or `ctl` (SPEC §53)")
+      | _ => expected "a count `lin`, `aff` or `ctl`"
     let A ← rvty n
     expectSym "~>"
     let B ← rvty n
@@ -2752,8 +2754,10 @@ def decl (n : Nat) : P Decl := do
         else do
           let q ← if ← isKw "linear" then do discard bump; pure Qual.lin
             else match (← peek).tok with
-              | .ident "multi" => do discard bump; pure Qual.unr
-              | _ => pure Qual.aff
+              | .ident "multi" => do
+                failAt (← peek).span ("`multi ctl`: an unrestricted continuation is not a type; " ++
+                  "an operation is `ctl`, its count inferred, or `linear ctl` (SPEC §53)")
+              | _ => pure Qual.infer
           match (← peek).tok with
           | .ident "ctl" => do discard bump; pure (OpKind.ctl q)
           | _ => expected "`fn` or `ctl` (an operation)"

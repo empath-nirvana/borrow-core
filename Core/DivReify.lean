@@ -89,7 +89,7 @@ def reifyC (res : Val) : Val := .lam (.letpair (.var 0) (.inj₂ (.val (.lam (tl
 
 /-- The handler value: the name `Div`, the tick linear. -/
 def reifyH (res : Val) : Val :=
-  hndVal divEff (qualsVal [.lin]) reifyR (Val.pair (reifyC res) .unit)
+  hndVal divEff (qualsVal [.one]) reifyR (Val.pair (reifyC res) .unit)
 
 /-- `λx. case x { inl b → done b | inr L → L }`. -/
 def rkV (res : Val) : Val := .lam (.case (.var 0) (.val (.lam (dlX res))) (.var 0))
@@ -501,7 +501,7 @@ theorem reifyH_closed {res : Val} (hres : closedAt 0 res.1 = true) :
     closedAt 0 (reifyH res).1 = true := by
   have hk := closeKV_closed res hres
   have hcl : closedAt 0 clV.1 = true := selfV_closed clB_closed
-  simp [reifyH, hndVal, qualsVal, reifyR, reifyC, tlX, closedAt, Val.pair, Val.i32, Qual.tag,
+  simp [reifyH, hndVal, qualsVal, reifyR, reifyC, tlX, closedAt, Val.pair, Val.i32, Qual.tag, Count.toQual,
     closedAt_mono _ hcl (Nat.zero_le _), closedAt_mono _ hk (Nat.zero_le _), nextV, closeV]
 
 theorem reifyV_closed {res : Val} (hres : closedAt 0 res.1 = true) :
