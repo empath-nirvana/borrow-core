@@ -205,7 +205,7 @@ structure CState where
   /-- **The machines whose state cell is passed on** (SPEC §50), by `Mach.start`, with their state's
   type: read off a first conversion's layouts (`Backend2/Driver.lean`, `lirOf`). -/
   threaded : Std.HashMap Nat LTy := {}
-  /-- **The runtime answers every tick**  `[spec §51]`: `main` is a loop the runtime drives (SPEC
+  /-- **The runtime answers every tick**  `[spec §53]`: `main` is a loop the runtime drives (SPEC
   §11), its value `reify` of its body, and that `reify` is the typed term's one handler of `Div`
   (no other `reify` and no `div_fuel` node: `Backend2/Driver.lean`, `divRuntime`). A tick is then
   answered *next*, where it is performed. -/
@@ -1560,15 +1560,15 @@ def genFix (sT : LTy) (p : Var) : CM Tm := do
   setFn fi { name := "bounded_fix", params := [s, k, a], body, ret := rT }
   letpairM p fun s r => letpairM r fun k a => pure (.call fi [s, k, a])
 
-/-! ### `Div`'s loops under the runtime  `[spec §51]` -/
+/-! ### `Div`'s loops under the runtime  `[spec §53]` -/
 
-/-- **`iterate (f, s)` under the runtime** (SPEC §14, §51): the loop `iterate`'s machine step
+/-- **`iterate (f, s)` under the runtime** (SPEC §14, §53): the loop `iterate`'s machine step
 unrolls (`Head.iterate`, `iter_step`), its back edge a tail call. A turn `(f s).1` answers
 `inl b`, finished, or `inr s′`, after which `iterate` ticks; the runtime answers the tick *next*
 (`tail_resumes` at its clause `λ((), κ). κ next`; `drive_reify_tick`), so the turn's `case` on the
 answer goes on with `iterate (f, s′)` (`iterK_inr`, `turnK_next`): the close `(f s′).2` is never
 observed. `inl b` is the node's answer (`iterK_inl`). An abort of the row's payload `pay` is
-handed on. `ansT` is the node's answer `B ⊕ R` at `pay`.  `[spec §51]` -/
+handed on. `ansT` is the node's answer `B ⊕ R` at `pay`.  `[spec §53]` -/
 def genIter (fT ansT : LTy) (pay : Pay) (p : Var) : CM Tm := do
   let fi ← reserveFn "iterate"
   let f ← fresh fT
@@ -1601,7 +1601,7 @@ def genIter (fT ansT : LTy) (pay : Pay) (p : Var) : CM Tm := do
   setFn fi { name := "iterate", params := [f, s], body, ret := ansT }
   letpairM p fun f s => pure (.call fi [f, s])
 
-/-- **`tick` under the runtime** (SPEC §51): its clause `λ((), κ). κ next` resumes in tail position
+/-- **`tick` under the runtime** (SPEC §53): its clause `λ((), κ). κ next` resumes in tail position
 with the literal *next* (`tail_resumes`), and `drive_reify_tick` (`Core/DivDrive.lean`) is the
 runtime's drive of `main`'s loop answering it so. The perform's argument `v` is dropped and *next*
 is its value, at the row's payload `p`. -/
@@ -2137,7 +2137,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay p j v fun w => pure (.inj true w)
   | .effPerform _ _ S o c => do
     if o.n == divName then
-      -- `tick` under the runtime: *next* where it is performed.  [spec §51]
+      -- `tick` under the runtime: *next* where it is performed.  [spec §53]
       tickAtRuntime
       let p ← rowPay S
       return ← bindTm (← conv fuel ctx c) .unit fun v => tickTm v p
@@ -2396,7 +2396,7 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay F.pay j v fun e => abortK F K args e
   | .effPerform _ _ S o c => do
     if o.n == divName then
-      -- `tick` under the runtime: *next* where it is performed, handed to `K`.  [spec §51]
+      -- `tick` under the runtime: *next* where it is performed, handed to `K`.  [spec §53]
       tickAtRuntime
       let p ← rowPay S
       return ← bindTm (← conv fuel ctx c) .unit fun v => do
@@ -3139,7 +3139,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     readFact "boundedFix:budget"
     genFix sT p
   | .iterate _ j S _ _ _, [p] => do
-    -- `iterate` under the runtime: a function per node, its back edge a tail call.  [spec §51]
+    -- `iterate` under the runtime: a function per node, its back edge a tail call.  [spec §53]
     unless (← get).divRt do
       throw "LIR: `iterate` whose ticks the runtime does not answer (a stored loop's `reify`) is outside the pure fragment"
     let (pT, rT) ← arrowOf (← repJ j)
@@ -3261,10 +3261,10 @@ def genDrive (lT : LTy) : CM Nat := do
              body := .letv r (.sel l 0) (.case r v (.var v) l' (.call fi [l'])) }
   return fi
 
-/-- `main`'s value as `reify` of its body (SPEC §50: a `main` that loops is the loop value of its
+/-- `main`'s value as `reify` of its body (SPEC §52: a `main` that loops is the loop value of its
 body): through the nodes that keep their child's value, the `reify` constant applied to the
 body's thunk. Its split's masks, the thunk, and the `reify` node's row `Σ`, result `B` and
-residual `R`.  `[spec §51]` -/
+residual `R`.  `[spec §53]` -/
 def mainReify? (t : TExpr) : Option (Masks × TExpr × Row × VTy × VTy) :=
   match peel 64 t with
   | .lolliE _ _ _ _ u ta tf => match headOf 64 tf with
@@ -3331,7 +3331,7 @@ where
     match t with
     | .pair _ a => pure a
     | t => throw s!"LIR: main's value with capabilities is not a pair: {t}"
-  /-- **`main`'s loop under the runtime**  `[spec §51]`: `main`'s value is `reify` of its body
+  /-- **`main`'s loop under the runtime**  `[spec §53]`: `main`'s value is `reify` of its body
   `t ()`, which the runtime drives with *next* until it finishes (SPEC §11). The drive answers
   *next* to every tick of the body (`drive_reify_tick`, `Core/DivDrive.lean`), so the program is
   the body run with each tick answered *next* where it is performed (`tickTm`): `inl b` finishes

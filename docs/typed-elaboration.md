@@ -249,7 +249,7 @@ function to be div.
 `g(f(x), y + 1)` becomes a sequence of binds, left to right. This is the order the value-level
 application `lolliE` already evaluates in. The bind of a div call then becomes a state of the
 body's state machine that holds the callee's loop, with the rest of the body run when it finishes
-(SPEC §14, §15; §7 below); `div_bind` is the same bind as library code. Since B2 (SPEC §50) a div
+(SPEC §14, §15; §7 below); `div_bind` is the same bind as library code. Since B2 (SPEC §52) a div
 call is a call at the row `div`, whose `inr` hands the caller's residual back. So a div call may stand in an
 argument, an operand, a `let`, a `match` scrutinee or a tail, not only at the head `return (f V)`.
 Because inference types every call, no syntactic pattern is involved.
@@ -688,7 +688,7 @@ main : F (U (loop ((In * Out) * (i32 * (i32 * i32))) ((In * Out) * 1))) =
 callee's residual, and `stdout` is the caller's own.
 
 This is the draft's form. As built before B2, `main` was one state machine (§7, *Whole-body state
-machines*); since B2 (SPEC §50) the call of `count` is a call at the row `div`, whose `inr` binds
+machines*); since B2 (SPEC §52) the call of `count` is a call at the row `div`, whose `inr` binds
 `stdin` from the callee's residual in the same way.
 
 ### 6.2 `map-reuse` (block constructors, `fold_reuse`, `&mut` on a `let mut`)
@@ -898,7 +898,7 @@ counts. Pairs: `corpus/sugar/surface-mut.bc`, `surface-lend.bc`, `surface-bool.b
 its borrow the unwinding form at the row `div` (`LoopLend.blockLoops`), and the kernel refuses the
 lend (`Row.Unwind`). `let r = &x` is a borrow block over the rest of the body (`lendLet`).
 
-**Whole-body state machines, as built until B2** (deleted by SPEC §50, which elaborates loops to
+**Whole-body state machines, as built until B2** (deleted by SPEC §52, which elaborates loops to
 `Div`; before it SPEC §14, *One state machine per body*; #109 item 8;
 decisions 42 and 56 of `docs/decisions.md`). `mWalk` in `Sugar.lean` walks a div body once, on
 the same typing context as the rest of the elaboration, and records a point for each loop head,

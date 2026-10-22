@@ -1,7 +1,7 @@
 -- A block whose body loops (typed elaboration, decision 2). `{ once(4) }` calls the div function
 -- `once` in direct style, so the block is a loop, which runs nothing until it is first observed:
 -- its first observation makes the loop value of the block's body (`reify`) and observes it, and
--- its close before that hands back the residual without running anything (SPEC §50). `div_fuel` observes it. `surface-defer.core.bc` is its elaboration in core, as
+-- its close before that hands back the residual without running anything (SPEC §52). `div_fuel` observes it. `surface-defer.core.bc` is its elaboration in core, as
 -- `bcc desugar` prints it.
 -- Answer: `inl 5`.
 

@@ -1,7 +1,7 @@
 # Pipeline architecture: carry what the frontend knows (#552)
 
 **Status (2026-10-21).** B1 (#563) and B2 (#644) are built: loops elaborate to the kernel's `Div`
-(SPEC §50). §3.2's elaboration is as built, with three refinements of the placement that the
+(SPEC §52). §3.2's elaboration is as built, with three refinements of the placement that the
 simulation of unknown 3 needed: a terminal before any loop or call ticks at the empty row; a call,
 from a body at a row, of a div function of the empty row's placement is a drain of its loop value;
 and the loop value of a call at a row starts with a back edge, so it runs nothing until observed

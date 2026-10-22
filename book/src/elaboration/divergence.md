@@ -179,7 +179,7 @@ function holds (or `()`). Each loop is the kernel's `iterate` over the variables
 call of a div function in direct style is a call. Where a loop is expected (`div_fuel`'s
 argument, `main`'s result), the call's loop value is `reify` of it, a loop that runs the call one
 turn per observation. `bcc desugar` shows all of it; the checker sees only core
-(SPEC [§50](https://github.com/empath-nirvana/borrow-core/blob/main/SPEC.md#50-entry-49--loops-elaborate-to-div-b2)).
+(SPEC [§52](https://github.com/empath-nirvana/borrow-core/blob/main/SPEC.md#52-entry-51--loops-elaborate-to-div-b2)).
 
 ## What is proved
 

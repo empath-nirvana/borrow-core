@@ -1,7 +1,7 @@
 -- Divergence is inferred (SPEC §14). `two_lines` is written with a plain result and no marker;
 -- it calls the div function `line_length` twice in direct style, so it is div, and so is `main`.
 -- `div-infer.core.bc` is its elaboration in core, as `bcc desugar` prints it: `two_lines` and
--- `main` at the row `div`, each call a call there (SPEC §50). Both erase to one term.
+-- `main` at the row `div`, each call a call there (SPEC §52). Both erase to one term.
 extern stdin : ref input
 extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (u8 + 1))
 

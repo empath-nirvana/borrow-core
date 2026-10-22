@@ -29,7 +29,7 @@ annotated first (`Frontend.Elab.fillProgram`), and each decision below reads tho
   with the capabilities read by name where the path ends (`wrapTail`).
 * **`for x in V { M }; N`**, `V` an iterator made from a capability, in any function or `main`
   becomes `iterate` over the state (iterator, other capabilities, threaded variables at their
-  inferred types), and makes the function div (§14, §50, *The `Div` elaboration* below).
+  inferred types), and makes the function div (§14, §52, *The `Div` elaboration* below).
 * **`&c`** in the head of `x <- M; N` becomes `r <- M[c/&c]; let (c, x) = r; N` (`Comp.elab`).
 
 The generated code is a template, printed and parsed, whose holes are filled with the program's
@@ -284,7 +284,7 @@ def parseComp (src : String) : Except Error Comp := do
   | some M => pure M
   | none => throw ⟨Span.none, "internal error: a template without main"⟩
 
-/-! ### Divergence  `[spec §14, §50]`
+/-! ### Divergence  `[spec §14, §52]`
 
 A **div function** is one whose computation performs `Div`: `A ⇒ F_{div, Σ}(B ⊕ R)`, which
 finishes with `inl b`, or, closed early at a tick, hands back the residual `R` as `inr r`. A

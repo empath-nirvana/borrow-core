@@ -108,7 +108,7 @@ def divHandlers : Nat → TExpr → Nat
       | _ => 0
     here + (t.children.map fun (_, c) => divHandlers f c).foldl (· + ·) 0
 
-/-- **The runtime answers every tick**  `[spec §51]`: the typed term's handlers of `Div` are
+/-- **The runtime answers every tick**  `[spec §53]`: the typed term's handlers of `Div` are
 `main`'s `reify` alone, when `main` is a loop the runtime drives (SPEC §11) and its value is
 `reify` of its body (`mainReify?`), or there are none. Every tick of the program is then performed
 inside `main`'s body, and the runtime's drive answers it *next* (`drive_reify_tick`). -/

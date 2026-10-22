@@ -2,7 +2,7 @@
 -- `A` returning `B`, `U (loop B R)`, finishes with `B` or, closed early, hands back the residual
 -- `R`. This is ordinary library code over `unfold` (SPEC §7), checked with the program and emitted
 -- when the elaborated program names it. An elaborated div body is a computation at the row `div`
--- (SPEC §50), whose loop value is `reify` of it; the elaboration emits neither `div_bind` nor
+-- (SPEC §52), whose loop value is `reify` of it; the elaboration emits neither `div_bind` nor
 -- `div_defer`, which stay for loop values written by hand.
 
 -- The bind's state: in the first loop, with the continuation; or in the continuation's loop.

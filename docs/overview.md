@@ -34,7 +34,7 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
 - **Divergence as an effect:** a function whose body may loop without bound has a loop in its
   type; this is inferred, and `total def` asserts its absence (§14).
 - **Generators:** `gen fn` with `yield`; each loop of a generator's body is `iterate` at its row,
-  and generic adapters over them are in `lib/adapters.bc` (§15, §50).
+  and generic adapters over them are in `lib/adapters.bc` (§15, §52).
 - **Counted loops and `for`:** a loop over a count, with an early exit, and `for` over counts,
   arrays, views and iterators (§16).
 - **Buffers, text and literals:** a growable `buf A`, UTF-8 `string` and text views, and string

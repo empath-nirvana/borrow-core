@@ -2,7 +2,7 @@
 # at the flat IR and Wasm; and, at the flat IR, loads (each `load`/`load8` evaluated), stores (each `store`/`store8` run; heap and frame slots, never
 # locals) and bounds checks (each test of an index against an array's length an access makes: `idx`, `split`, a literal's byte; not a loop's end test).
 # name allocs indirect copies loads stores bounds
-# Since SPEC §50 (B2, #644) every loop is `iterate`, which this backend compiles as a fixed point whose step is a closure, and every loop value is `reify`,
+# Since SPEC §52 (B2, #644) every loop is `iterate`, which this backend compiles as a fixed point whose step is a closure, and every loop value is `reify`,
 # lowered by Capture: `indirect` counts each turn's call of the step and each resume of a loop value's continuation, until B3 lowers both natively.
 13-2-sum-prog 37 9 0 153 111 0
 aff-capture 1 0 0 3 3 0 # the log; the scope cell `d` holds `1` and takes no words, and the closure captures a borrow and allocates nothing

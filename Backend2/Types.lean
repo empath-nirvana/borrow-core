@@ -23,7 +23,7 @@ the image of a type the checker put on a node of the typed term.
   performed has no run-time content in the type (`Backend2/Convert.lean`). `Div`'s `tick` is
   linear, so it is not abortive, and it is not a machine operation (no `handle` node handles it):
   it has no run-time content in the type, and its handler, the runtime, answers it where it is
-  performed (SPEC §51).
+  performed (SPEC §53).
 * A row's **machine operations** (SPEC §49), the control operations of the program's set `ms`
   (those whose clause at some `handle` node of their name is not called where they are
   performed), make `F_Σ R` an *outcome*: `μY. R ⊕ (P ⊕ S)`, `S` one summand per machine
@@ -226,7 +226,7 @@ def ofC (ms : MachSet) : CTy → Except String LCTy
   | .nu C => return .nu (← ofC ms C)
   | .eff n i q A B fin C => do
     -- `F_Σ R`: `R`, `R ⊕ P` with the payload of `Σ`'s abortive operations (SPEC §47), or the
-    -- outcome at its machine operations (SPEC §49). `Div`'s `tick` is neither (SPEC §51).
+    -- outcome at its machine operations (SPEC §49). `Div`'s `tick` is neither (SPEC §53).
     let (ps, qs, r) ← ofEff ms C
     if abortB q B then return .ret (outcomeTy r (((n, i), ← ofV ms A) :: ps) qs)
     else if ms.contains (n, i) then
@@ -235,7 +235,7 @@ def ofC (ms : MachSet) : CTy → Except String LCTy
 
 /-- The layers of `F_Σ R` (`CTy.effOf`): each abortive operation's key and argument type, each
 machine operation's key, argument type, answer type and cancel row's payload, in the row's order,
-and `R`. `Div`'s `tick` is neither, so not a layer (SPEC §51).  [spec §47, §49, §51] -/
+and `R`. `Div`'s `tick` is neither, so not a layer (SPEC §53).  [spec §47, §49, §53] -/
 def ofEff (ms : MachSet) : CTy →
     Except String (List ((UInt32 × UInt32) × LTy) ×
       List ((UInt32 × UInt32) × LTy × LTy × Option (List ((UInt32 × UInt32) × LTy))) × LTy)
