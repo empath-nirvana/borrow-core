@@ -131,6 +131,12 @@ inductive Op where
   | stackSwap (k : Nat)
   /-- `stackFree h`: the stack `h`, empty, freed; nothing at `0`. -/
   | stackFree
+  /-- A stack made for the site `s`, with a `κ` region (SPEC §52): its handle. It is not current. -/
+  | stackNew (s : Nat)
+  /-- `kappaPut h v`: `v` written into the `κ` region of the stack `h` (site `s`), empty before. -/
+  | kappaPut (s : Nat)
+  /-- `kappaTake h`: `(h, v)`, the contents of the `κ` region of the stack `h` (site `s`) taken out. -/
+  | kappaTake (s : Nat)
   /-- A frame of machine `m` reserved on top of the current stack, unwritten; the stack is made
   when there is none (the register `k`). The result is the frame's cell and its address. -/
   | framePush (m k : Nat)

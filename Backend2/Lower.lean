@@ -169,6 +169,10 @@ def inFn (params : Nat) (act : LM α) : LM (α × Nat × List Nat) := do
   let (a, n, _, ps) ← inFnF params act
   pure (a, n, ps)
 
+/-- The words of a stack's first chunk, and of each later one (SPEC §52). -/
+def stackChunk0 : Nat := 256
+def stackChunk : Nat := 4096
+
 /-- Where a term's words go: locals, returned (padded to `k` words), or bound to a variable. -/
 inductive Dest where
   | to (ls : List Nat)
@@ -680,6 +684,29 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let f := (← arg 0).headD 0
     return [.call [] (← helper .stackPop) [r, .loc f]] ++ (← emit d [])
   | .unreachable => return [.trap] ++ (← emit d (zeros (← wordsN n)))
+  | .stackNew s => do
+    -- A stack's header (bump, end, chunk), the site's `κ` region, then its first chunk (header and
+    -- words), as `stack push` makes one with no region.
+    let w ← match (← L).regions[s]? with
+      | some r => wordsN r
+      | none => pure 0
+    let h ← fresh1
+    let base := 8 * (3 + w)
+    return [.set h (.alloc (.c64 (6 + w + stackChunk0).toUInt64)),
+      .store (.loc h) 0 (add64 (.loc h) (.c64 (base + 24).toUInt64)),
+      .store (.loc h) 1 (add64 (.loc h) (.c64 (base + 24 + 8 * stackChunk0).toUInt64)),
+      .store (.loc h) 2 (add64 (.loc h) (.c64 base.toUInt64)),
+      .store (.loc h) (3 + w) (.c64 0), .store (.loc h) (4 + w) (.c64 0),
+      .store (.loc h) (5 + w) (.c64 0)] ++ (← emit d [.loc h])
+  | .kappaPut s => do
+    let some _ := (← L).regions[s]? | throw "word IR: a κ region with no node"
+    let h := (← arg 0).headD 0
+    return storeAt (.gep (.loc h) (.c64 24)) 0 (locs (← arg 1)) ++ (← emit d [])
+  | .kappaTake s => do
+    let some r := (← L).regions[s]? | throw "word IR: a κ region with no node"
+    let h := (← arg 0).headD 0
+    let (st, vs) ← loadAt (.gep (.loc h) (.c64 24)) 0 (← wordsN r)
+    return st ++ (← emit d ([.loc h] ++ locs vs))
   | .litByte => do
     let o := (← arg 0).headD 0
     let cnt := (← arg 1).headD 0
@@ -856,10 +883,6 @@ def printField (n k : Nat) (ls : List Nat) (atom : Bool) : LM (List Stmt) := do
 
 /-- The captured values' nodes of code `c`. -/
 def envNodes (c : Nat) : LM (List Nat) := return (← L).codeEnv.getD c []
-
-/-- The words of a stack's first chunk, and of each later one (SPEC §52). -/
-def stackChunk0 : Nat := 256
-def stackChunk : Nat := 4096
 
 def genHelper (h : Helper) : LM Backend.Flat.Fn := do
   let L ← L

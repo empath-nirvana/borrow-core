@@ -27,7 +27,8 @@ def ppOp : Op → String
   | .roll => "roll" | .unroll => "unroll" | .clampLen => "clampLen" | .cntLt => "cntLt" | .cntSucc => "cntSucc" | .cntPred => "cntPred"
   | .stackSwap _ => "stackSwap" | .stackFree => "stackFree" | .framePush m _ => s!"framePush[m{m}]"
   | .frameTop m _ => s!"frameTop[m{m}]" | .framePut => "framePut" | .framePop _ => "framePop"
-  | .unreachable => "unreachable"
+  | .unreachable => "unreachable" | .stackNew s => s!"stackNew[{s}]"
+  | .kappaPut s => s!"kappaPut[{s}]" | .kappaTake s => s!"kappaTake[{s}]"
 
 def v (x : Var) : String := s!"x{x}"
 

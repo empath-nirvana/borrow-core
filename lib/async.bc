@@ -111,12 +111,13 @@ fn round[A](n: i32, xs: array Slot[A]) -> array Slot[A] * bool =
   };
   (a, pending)
 
--- The values of the `n` slots, in order; a task still pending is cancelled, in order.
+-- The values of the `n` slots, in order, read from the last; a task still pending is cancelled
+-- (`run_until_empty` leaves none).
 fn values[A](n: i32, xs: array Slot[A]) -> List[A] =
   let mut acc = (roll inl () : List[A]);
   let mut a = xs;
-  for i in 0..n {
-    let (b, s) = array_replace[Slot[A]] (a, i, inl ());
+  for k in 0..n {
+    let (b, s) = array_replace[Slot[A]] (a, n - 1 - k, inl ());
     a = b;
     match s {
       inl o -> match o {
@@ -126,7 +127,7 @@ fn values[A](n: i32, xs: array Slot[A]) -> List[A] =
     | inr x -> ()
     }
   };
-  rev(n, acc)
+  acc
 
 -- Run the queue round robin until no task is pending: the tasks' values, in the order they were
 -- queued. The slots are an array, resumed in place, so a round allocates nothing. The rounds are

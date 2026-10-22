@@ -62,6 +62,8 @@ structure St where
   taskStacks : Std.HashMap Nat (Array Nat) := {}
   /-- The current stack: its object, `0` for none. -/
   cur : Nat := 0
+  /-- Each stack's `κ` region, while written (SPEC §52). -/
+  regions : Std.HashMap Nat LV := {}
 
 abbrev IM := StateT St (Except String)
 
@@ -406,8 +408,23 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
     if h != 0 && !(← get).taskStacks.contains h.toNat then bad s!"a swap to {h}, which is not a stack"
     modify fun s => { s with cur := h.toNat }
     pure (.int old.toUInt64)
+  | .stackNew _, [] => do
+    let h ← newObj 1
+    writeAt h (some .unit)
+    modify fun s => { s with taskStacks := s.taskStacks.insert h #[] }
+    pure (.int h.toUInt64)
+  | .kappaPut _, [.int h, v] => do
+    unless (← get).taskStacks.contains h.toNat do bad s!"a kappaPut to {h}, which is not a stack"
+    if (← get).regions.contains h.toNat then bad "a kappaPut into a written region"
+    modify fun s => { s with regions := s.regions.insert h.toNat v }
+    pure .unit
+  | .kappaTake _, [.int h] => do
+    match (← get).regions[h.toNat]? with
+    | some v => modify (fun s => { s with regions := s.regions.erase h.toNat }); pure (.pair (.int h) v)
+    | none => bad s!"a kappaTake of the stack {h}, whose region is empty"
   | .stackFree, [.int h] => do
     if h == 0 then return .unit
+    if (← get).regions.contains h.toNat then bad "a free of a stack whose region is written"
     match (← get).taskStacks[h.toNat]? with
     | some fs =>
       if !fs.isEmpty then bad s!"a free of the stack {h}, which holds {fs.size} frames"

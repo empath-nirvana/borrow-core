@@ -60,6 +60,8 @@ structure GState where
   /-- Each stack machine's frame node (SPEC §52): every frame of it is one cell's node, as the
   frames pass through the stack. -/
   frames : Std.HashMap Nat Nat := {}
+  /-- Each site's `κ` region's contents node (SPEC §52). -/
+  regions : Std.HashMap Nat Nat := {}
 
 abbrev GM := StateT GState (Except String)
 
@@ -358,6 +360,13 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
       | some fn => join fn c
       | none => modify fun s => { s with frames := s.frames.insert m c }
     | .framePut => join (← kid (← a 0) 0) (← a 1)
+    | .kappaPut s | .kappaTake s => do
+      let c ← match op with
+        | .kappaPut _ => a 1
+        | _ => kid dst 1
+      match (← get).regions[s]? with
+      | some r => join r c
+      | none => modify fun st => { st with regions := st.regions.insert s c }
     | .io .readByte | .io .clockNow => join (← kid dst 0) (← a 0)
     | .io .writeByte | .io .writeAll | .io .clockSleep => join dst (← kid (← a 0) 0)
     | .io .readInto => do
@@ -418,6 +427,8 @@ structure Layouts where
   /-- Each code's class, and its functions' environment nodes. -/
   codeClass : Std.HashMap Nat Nat
   codeEnv : Std.HashMap Nat (List Nat)
+  /-- Each site's `κ` region's contents node (SPEC §52). -/
+  regions : Std.HashMap Nat Nat := {}
 
 namespace Layouts
 
@@ -686,6 +697,7 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) (cells : List (List LTy)) :
   let varNode := s.varNode.fold (fun m x i => m.insert x rep[i]!) {}
   let fnRet := s.fnRet.fold (fun m f i => m.insert f rep[i]!) {}
   return { rep, shape, union, recCls, boxed, width, trivial, cellWords, slotBytes, varNode,
-           fnRet, mainNode := rep[mainNode]!, codeClass, codeEnv }
+           fnRet, mainNode := rep[mainNode]!, codeClass, codeEnv,
+           regions := s.regions.fold (fun m k i => m.insert k rep[i]!) {} }
 
 end Backend2.Lay

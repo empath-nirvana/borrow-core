@@ -2120,44 +2120,46 @@ resumes `k` with the answer and drives the outcome again (`driveFn`): the handle
 cancel entry cancels `k`, every frame of the region unwound, and answers at `κ`'s cancel type
 (`cancelTy`: the outcome `cM` or the payload `cPay`); at `⊤` (a linear `κ`) it is never run.
 
-With `cell` (SPEC §52, a stored site's `κ` that is not `unr`), `κ`'s environment is one cell
-holding `k` and the handler's values: its resume entry takes them out and hands the cell to the
-drive, which writes it in place when the computation suspends there again, and releases it when it
-does not; its cancel entry releases it. -/
+With `swap` (SPEC §52), the last handler value is the site's stack, made current around each run
+of `k` and freed by a cancel. With `region` too (the site's tag), `κ`'s environment is that stack
+alone: `k` and the other handler values are in the stack's `κ` region (`Op.kappaTake`), which the
+drive writes when the computation suspends there again. -/
 def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driveFn : Nat)
-    (hvTys : List LTy) (cM : Option OutInfo) (cPay : Pay) (cell : Bool := false)
-    (slotTy : Option LTy := none) (swap : Bool := false) : CM Nat := do
+    (hvTys : List LTy) (cM : Option OutInfo) (cPay : Pay) (region : Option Nat := none)
+    (swap : Bool := false) : CM Nat := do
   let .thunk kL := kT | throw s!"LIR: κ's type {kT}"
   let .amp (.arr bT (.ret oT)) cK := kL | throw s!"LIR: κ's type {kT}"
   unless oT == outTy do throw s!"LIR: κ resumes to {oT}, the handler answers {outTy}"
   let (_, cpIn) ← opAnswer T (n, idx.toUInt32)
   let kIn ← kTyAt T (n, idx.toUInt32)
-  let stT := tupleTy (kIn :: hvTys)
-  let cT : LTy := .ref stT
+  let hTy : LTy := .int .w64
   let kapR ← reserveFn s!"kappa {n}.{idx}"
   let rc ← addCode { kind := .lam, fns := [kapR], ty := .arr bT (.ret oT) }
   let kres ← reserveFn s!"kappa {n}.{idx} resume entry"
   let kcan ← reserveFn s!"kappa {n}.{idx} cancel"
   let kc ← addCode { kind := .amp, fns := [kres, kcan], ty := kL }
-  -- The environment's variables, and `k` and the handler's values out of them: with a cell, its
-  -- contents taken (`take`), and `body` given the emptied cell.
-  let envOf (body : Option Var → Var → List Var → CM Tm) : CM (List Var × Tm) := do
-    if cell then
-      let c ← fresh cT
-      let pr ← fresh (.pair cT stT); let c' ← fresh cT; let st ← fresh stT
-      let b ← untuple st (kIn :: hvTys) fun xs => match xs with
-        | k :: hv => body (some c') k hv
-        | [] => throw "LIR: κ's cell"
-      return ([c], .letv pr (.prim .take [c]) (.letpair c' st pr b))
-    else
+  -- The environment's variables, and `k` and the handler's values out of them: with a region, the
+  -- stack alone, the rest taken out of its region.
+  let envOf (body : Var → List Var → CM Tm) : CM (List Var × Tm) := do
+    match region with
+    | some s =>
+      let rTys := kIn :: hvTys.dropLast
+      let stT := tupleTy rTys
+      let h ← fresh hTy
+      let pr ← fresh (.pair hTy stT); let h' ← fresh hTy; let st ← fresh stT
+      let b ← untuple st rTys fun xs => match xs with
+        | k :: hv => body k (hv ++ [h'])
+        | [] => throw "LIR: κ's region"
+      return ([h], .letv pr (.prim (.kappaTake s) [h]) (.letpair h' st pr b))
+    | none =>
       let k ← fresh kIn; let hv ← hvTys.mapM fresh
-      return (k :: hv, ← body none k hv)
-  let k₀ ← fresh (if cell then cT else kIn); let hv₀ ← if cell then pure [] else hvTys.mapM fresh
-  setFn kres { name := s!"kappa {n}.{idx} resume entry", params := k₀ :: hv₀,
-               body := .clos rc (k₀ :: hv₀), ret := .thunk (.arr bT (.ret oT)) }
-  -- With `swap` (SPEC §52), the last handler value is the site's stack: made current around each
-  -- run of `k`, then handed back (`run` binds the run, `rest` gets the stack it answers); a
-  -- cancelled `κ` frees it.
+      return (k :: hv, ← body k hv)
+  let env₀ : List LTy := if region.isSome then [hTy] else kIn :: hvTys
+  let e₀ ← env₀.mapM fresh
+  setFn kres { name := s!"kappa {n}.{idx} resume entry", params := e₀,
+               body := .clos rc e₀, ret := .thunk (.arr bT (.ret oT)) }
+  -- The site's stack made current around each run of `k` (`run` binds the run, `rest` gets the
+  -- stack it answers).
   let aroundK (hv : List Var) (run : Tm → Tm) (rest : List Var → Option Var → CM Tm) : CM Tm := do
     if swap then
       let some sh := hv.getLast? | throw "LIR: κ's stack"
@@ -2167,50 +2169,32 @@ def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driv
         (run (.letv sh' (.prim (.stackSwap reg) [prev]) (← rest hv.dropLast (some sh'))))
     else return run (← rest hv none)
   let y ← fresh bT
-  let (ps₁, b₁) ← envOf fun c k hv => do
+  let (ps₁, b₁) ← envOf fun k hv => do
     let kr ← fresh (← selTy kIn 0); let o ← fresh T.ty
-    aroundK hv (fun t => .letv kr (.sel k 0) (.letv o (.app kr y) t)) fun hv sh => do
-      let hv := hv ++ sh.toList
-      -- With a cell, the drive gets it back (`inr c`) to write in place.
-      match c with
-      | some c =>
-        let sl ← fresh (.sum .unit cT)
-        return .letv sl (.inj true c) (.call driveFn (hv ++ [sl, o]))
-      | none =>
-        -- A drive with a slot that this `κ` does not fill: `inl ()`.
-        match slotTy with
-        | some slT =>
-          let u ← fresh .unit; let sl ← fresh slT
-          return .letv u .unit (.letv sl (.inj false u) (.call driveFn (hv ++ [sl, o])))
-        | none => return .call driveFn (hv ++ [o])
+    aroundK hv (fun t => .letv kr (.sel k 0) (.letv o (.app kr y) t)) fun hv sh =>
+      pure (.call driveFn (hv ++ sh.toList ++ [o]))
   setFn kapR { name := s!"kappa {n}.{idx}", params := ps₁ ++ [y], body := b₁, ret := oT }
   let freeSh (sh : Option Var) (t : Tm) : CM Tm := match sh with
     | some h => freeStackThen h t
     | none => pure t
   match cK with
   | .top =>
-    let (ps₂, b₂) ← envOf fun c k hv => do
-      let t ← if swap then do
-          let some sh := hv.getLast? | throw "LIR: κ's stack"
-          freeStackThen sh (Tm.drop k (drops hv.dropLast .unit))
-        else pure (Tm.drop k (drops hv .unit))
-      match c with
-      | some c => releaseThen c t
-      | none => pure t
+    let (ps₂, b₂) ← envOf fun k hv => do
+      if swap then
+        let some sh := hv.getLast? | throw "LIR: κ's stack"
+        freeStackThen sh (Tm.drop k (drops hv.dropLast .unit))
+      else pure (Tm.drop k (drops hv .unit))
     setFn kcan { name := s!"kappa {n}.{idx} cancel", params := ps₂, body := b₂, ret := .unit }
   | .ret cT' =>
     let want := match cM with
       | some O => O.ty
       | none => resTy .unit cPay
     unless cT' == want do throw s!"LIR: κ's cancel answers {cT'}, its row {want}"
-    let (ps₂, b₂) ← envOf fun c k hv => do
+    let (ps₂, b₂) ← envOf fun k hv => do
       let cv ← fresh (cancelResTy cpIn)
       let body ← toResult .unit (cpIn.getD []) cM cPay cv
-      let t ← aroundK hv (fun t => .letv cv (.sel k 1) t) fun hv sh => do
+      aroundK hv (fun t => .letv cv (.sel k 1) t) fun hv sh => do
         freeSh sh (drops hv body)
-      match c with
-      | some c => releaseThen c t
-      | none => pure t
     setFn kcan { name := s!"kappa {n}.{idx} cancel", params := ps₂, body := b₂, ret := cT' }
   | k => throw s!"LIR: κ's cancel branch at {k}"
   return kc
@@ -2838,30 +2822,21 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
   let freeSh (b : Tm) : CM Tm := match shP? with
     | some h => freeStackThen h b
     | none => pure b
-  -- **`κ` in a cell** (SPEC §52): at a stored-continuation site, the first operation whose clause
-  -- keeps `κ` (`stored`) and whose `κ` is not `unr` keeps `κ`'s environment in one cell, which `κ`
-  -- owns: allocated when the computation first suspends there, written in place each time it
-  -- suspends there again, released when it answers, aborts, suspends elsewhere or is cancelled.
-  -- The drive takes the cell's slot (`1 + ref S`) after the handler's values: `inl ()` at the first
-  -- run, `inr c` from `κ`'s resume entry. One operation: a cell shared by two would join their
-  -- suspended computations' classes.
-  let cellAt : Option (Nat × LTy) ← do
-    let mut out : Option (Nat × LTy) := none
+  -- **`κ` in the site's stack** (SPEC §52): at a site with a stack, the first operation whose
+  -- clause keeps `κ` (`stored`) and whose `κ` is not `unr` keeps `κ`'s environment but the stack in
+  -- the stack's `κ` region: the stack is made at the first run, holding the region, and `κ` is the
+  -- stack. Each suspension there writes the region, `κ`'s resume entry takes it out, and the stack's
+  -- free ends it. One operation: a region shared by two would join their computations' classes.
+  let cellAt : Option Nat ← do
+    let mut out : Option Nat := none
     for (k, j) in ks.zipIdx do
       if out.isSome then break
       let some o := E[j]? | continue
-      if boxed && k.kind == .stored && o.1 != .unr && T.ms.any (·.1 == (n, j.toUInt32)) then
-        out := some (j, tupleTy ((← kTyAt T (n, j.toUInt32)) :: kHvTys))
+      if siteSw && k.kind == .stored && o.1 != .unr && T.ms.any (·.1 == (n, j.toUInt32)) then
+        out := some j
     pure out
-  let cellSt := cellAt.map (·.2)
-  let cellOp (j : Nat) : CM Bool := pure ((cellAt.map (·.1)) == some j)
-  let slP? : Option Var ← match cellSt with
-    | some S₀ => do readFact "effHandleV:kappa cell"; pure (some (← fresh (.sum .unit (.ref S₀))))
-    | none => pure none
-  -- The slot released, then `b`: where the computation does not suspend again at a cell's operation.
-  let relSlot (b : Tm) : CM Tm := match slP? with
-    | some sl => releaseOpt sl b
-    | none => pure b
+  let siteTag ← fresh .unit
+  if cellAt.isSome then readFact "effHandleV:kappa region"
   let dropAll (keep : Option Nat) (b : Tm) : Tm :=
     drops ((ctxs'.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
   let clauseApp (cc : Ctx) (c : TExpr) (a : Var) : CM Tm :=
@@ -2899,11 +2874,11 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
   let dbody : CM Tm := do
     let w ← fresh T.body; let a ← fresh T.r; let ex ← fresh T.xTy
     let some cR' := ctxs'[0]? | throw "LIR: the return clause"
-    let retArm ← freeSh (← relSlot (dropAll (some 0) (← clauseApp cR' tR a)))
+    let retArm ← freeSh (dropAll (some 0) (← clauseApp cR' tR a))
     let abortArms (e : Var) : CM Tm := casePay T.pay e fun j v => do
       let some (key, _) := T.pay[j]? | throw "LIR: a payload's summand"
-      if key.1 == n then freeSh (← relSlot (← applyClause key.2.toNat v))
-      else freeSh (← relSlot (dropAll none (← abortOut key v)))
+      if key.1 == n then freeSh (← applyClause key.2.toNat v)
+      else freeSh (dropAll none (← abortOut key v))
     let suspArms (sv : Var) : CM Tm := casePay T.sPay sv fun j pv => do
       let some (key, _, bT, cpT) := T.ms[j]? | throw "LIR: a suspension's summand"
       letpairM pv fun v k => do
@@ -2916,10 +2891,9 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
           let cPay ← match effParts cancelC with
             | some (Sc, _) => rowPay Sc
             | none => pure []
-          let inCell ← cellOp idx
-          let slotTy ← slP?.mapM tyOf
-          let kap ← genKap n idx kT T outTy driveFn kHvTys cM cPay (cell := inCell) (slotTy := slotTy)
-            (swap := siteSw)
+          let inCell := cellAt == some idx
+          let kap ← genKap n idx kT T outTy driveFn kHvTys cM cPay
+            (region := if inCell then some siteTag else none) (swap := siteSw)
           -- `κ` holds the suspended computation and a copy of each of the handler's values.
           let hvAll := ctxs'.flatMap live
           let mut copies : List (Tm → Tm) := []
@@ -2932,35 +2906,29 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
           let pr ← fresh (.pair (← tyOf v) kT)
           readFact "effHandleV:kappa"
           let body ← applyClause idx pr
-          let t : Tm ← match inCell, slP? with
-            | true, some sl => do
-              -- The environment written into the slot's cell, or a cell allocated for it.
-              mkTuple (k :: hvC ++ shP?.toList) fun st => do
-                let cT ← tyOf sl
-                let .sum _ rT := cT | throw "LIR: κ's slot"
-                let u ← fresh .unit; let c₀ ← fresh rT; let c ← fresh rT
-                return .letv c (.case sl u (.drop u (.prim .alloc [st])) c₀ (.prim .put [c₀, st]))
-                  (.letv kv (.clos kap [c]) (.letv pr (.pair v kv) body))
-            | _, _ => relSlot (.letv kv (.clos kap (k :: hvC ++ shP?.toList)) (.letv pr (.pair v kv) body))
+          let t : Tm ← match inCell, shP? with
+            | true, some sh => do
+              -- The environment written into the stack's region; `κ` is the stack.
+              mkTuple (k :: hvC) fun st => do
+                let sh' ← fresh (.int .w64); let u ← fresh .unit
+                return .copy sh sh' (.letv u (.prim (.kappaPut siteTag) [sh', st])
+                  (.drop u (.letv kv (.clos kap [sh]) (.letv pr (.pair v kv) body))))
+            | _, _ => pure (.letv kv (.clos kap (k :: hvC ++ shP?.toList)) (.letv pr (.pair v kv) body))
           return copies.foldr (fun (f : Tm → Tm) (t : Tm) => f t) t
         else
           let some O := outM
             | throw "LIR: a suspension forwarded where the handler's row has no machine operation"
           -- The slot is part of the point's state: resumed, the drive gets it back; cancelled, its
           -- cell is released (`Frame.cellF`).
-          let (slTys, slK, slV) := match slP? with
-            | some sl => ([sl], [Frame.cellF], [sl])
-            | none => ([], [], [])
-          let slTys ← slTys.mapM tyOf
           -- The site's stack too: made current around the callee's resume and cancel
           -- (`MPoint.swapAt`), and freed by a cancel (`Frame.stackH`).
           let shK : List Frame := if siteSw then [.stackH] else []
-          let mk ← newPoint key (some (T.kTy bT cpT)) cpT (hvTys ++ shTys ++ slTys) (some driveFn)
-            ([.dropF hvTys.length] ++ shK ++ slK)
+          let mk ← newPoint key (some (T.kTy bT cpT)) cpT (hvTys ++ shTys) (some driveFn)
+            ([.dropF hvTys.length] ++ shK)
             (swapAt := if siteSw then some hvTys.length else none)
           let k' ← fresh (← kTyAt O key)
           readFact "effHandleV:forward"
-          return .letv k' (.call mk (k :: ctxs'.flatMap live ++ shP?.toList ++ slV)) (← outSusp O key v k')
+          return .letv k' (.call mk (k :: ctxs'.flatMap live ++ shP?.toList)) (← outSusp O key v k')
     let exits ← match payTy T.pay with
       | none => suspArms ex
       | some pT => do
@@ -2982,7 +2950,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
     | some O => withMachine O dbody
     | none => dbody
   modify fun st => { st with siteMerge := saved }
-  setFn driveFn { name := s!"drive {n}", params := hvInner ++ shP?.toList ++ slP?.toList ++ [oP],
+  setFn driveFn { name := s!"drive {n}", params := hvInner ++ shP?.toList ++ [oP],
                   body := dTm, ret := outTy }
   let o ← fresh T.ty
   -- The first run: on a stack of its own (none yet) when the site has one.
@@ -2991,15 +2959,12 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
     | some _ =>
       let reg ← stackRegister
       let z ← fresh (.int .w64); let prev ← fresh (.int .w64); let sh ← fresh (.int .w64)
-      return .letv z (.lit (.i64 0)) (.letv prev (.prim (.stackSwap reg) [z])
+      -- With a region, the stack is made here, holding it; else at its first frame.
+      let mk : Tm := if cellAt.isSome then .prim (.stackNew siteTag) [] else .lit (.i64 0)
+      return .letv z mk (.letv prev (.prim (.stackSwap reg) [z])
         (.letv o (.call bodyFn bOuter) (.letv sh (.prim (.stackSwap reg) [prev]) (← rest [sh]))))
     | none => return .letv o (.call bodyFn bOuter) (← rest [])
-  run fun shs => do
-    match slP? with
-    | some sl => do
-      let u ← fresh .unit; let s₀ ← freshLike sl
-      return .letv u .unit (.letv s₀ (.inj false u) (.call driveFn (hvOuter ++ shs ++ [s₀, o])))
-    | none => return .call driveFn (hvOuter ++ shs ++ [o])
+  run fun shs => return .call driveFn (hvOuter ++ shs ++ [o])
 
 /-- The function `tF` applied to `a`: a λ's body at `a` (through transparent nodes and lifetime
 abstractions, `lamOf`), or a closure call. -/
