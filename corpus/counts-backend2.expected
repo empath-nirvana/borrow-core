@@ -26,12 +26,12 @@ array-refs 5 0 0 8 8 1
 array-replace 2 0 0 12 12 5
 array-sum 1 0 0 3000 3000 2024
 ascii-upper 1 0 0 4285 4178 192
-async-bank-inbox 26 0 0 396 388 0
-async-cancel 10 0 0 113 110 0
-async-lend-slots 22 0 0 294 282 0
-async-logged 22 0 0 206 188 0
-async-map 27 0 0 245 222 0
-async-mapreduce 54 0 1 498 480 0
+async-bank-inbox 15 0 0 286 278 16 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit; a task's κ in one cell (§52)
+async-cancel 8 0 0 72 69 6 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit; a task's κ in one cell (§52)
+async-lend-slots 11 0 0 232 220 16 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit; a task's κ in one cell (§52)
+async-logged 24 0 0 218 200 0 # a task's κ in one cell (§52), allocated per task, its contents moved by a resume
+async-map 20 0 0 235 212 10 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit; a task's κ in one cell (§52)
+async-mapreduce 28 0 1 504 453 30 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit; a task's κ in one cell (§52); a recursion's frames on its task's stack
 async-r1-cancel 4 0 0 5 5 0
 async-r1-cancel-finaliser-writes 1 0 0 2 2 0
 async-r1-drain 1 0 0 4 4 0
@@ -39,12 +39,12 @@ async-r1-effects 2 0 0 8 8 0
 async-r1-generator 1 0 0 4 4 0
 async-r1-local-borrows 2 0 0 7 7 0
 async-r1-nested 2 0 0 4 4 0
-async-race 3 0 0 3 3 0
-async-scheduler 24 0 0 398 392 0
-async-scoped 25 0 0 263 253 0
-async-timers 40 5 0 398 380 0
-async-try-join 28 0 0 378 372 0
-async-workers-scoped 43 0 1 756 740 0
+async-race 7 0 0 109 109 0 # a task's κ in one cell (§52): a task held in locals now moves through its cell
+async-scheduler 9 0 0 256 250 20 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit; a task's κ in one cell (§52)
+async-scoped 27 0 0 211 201 0 # a task's κ in one cell (§52)
+async-timers 43 5 0 316 298 0 # a task's κ in one cell (§52)
+async-try-join 34 0 0 314 308 0 # a task's κ in one cell (§52)
+async-workers-scoped 45 0 1 420 404 0 # a task's κ in one cell (§52)
 axes/borrow-across-loop 2 0 0 30 13 4
 axes/codata-coeffects 2 0 0 27 10 16
 axes/codata-effects 0 0 0 11 1 0
@@ -197,7 +197,7 @@ io-hex 0 0 0 46 2 0
 io-laws 10 0 0 434 226 121
 io-lines 0 0 0 19 2 0
 io-sections 0 0 0 28 2 0
-io-task 28 7 0 457 445 0
+io-task 30 7 0 247 235 0 # a task's κ in one cell (§52)
 io-upper 0 0 0 135 2 0
 io-upper-effects 0 0 0 135 2 0
 io-wc 0 0 0 61 2 0
@@ -355,9 +355,9 @@ reconcile-chain 16 3 0 398 380 0
 reconcile-clock 21 8 0 279 243 0
 retry-block 2 0 0 5 5 0
 reverse-bytes 1 0 0 132 91 39
-sched-a 43 18 0 445 441 0
-sched-a-div 11 5 0 381 377 0
-sched-b 44 18 0 448 442 0
+sched-a 45 18 0 281 277 0 # a task's κ in one cell (§52)
+sched-a-div 13 5 0 217 213 0 # a task's κ in one cell (§52)
+sched-b 46 18 0 319 313 0 # a task's κ in one cell (§52)
 slice-imm 1 0 0 6 5 2
 slice-lib 3 0 0 38 25 30
 slice-mut 1 0 0 8 8 4
