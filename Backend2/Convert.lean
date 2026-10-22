@@ -2656,6 +2656,19 @@ def machNode : TExpr → Bool
   | .lendScope _ _ _ t => machNode t
   | _ => false
 
+/-- The free variables of a term, each once (`ClauseKinds.mentions` at every index).  `[spec §64]` -/
+def freeVars (e : Expr) : List Nat :=
+  (go 0 e []).eraseDups
+where
+  go (k : Nat) : Expr → List Nat → List Nat
+    | .var i, acc => if i ≥ k then (i - k) :: acc else acc
+    | .unit, acc | .loc _, acc | .prim _, acc => acc
+    | .pair a b, acc | .seq a b, acc | .app a b, acc => go k a (go k b acc)
+    | .inj₁ a, acc | .inj₂ a, acc => go k a acc
+    | .lam b, acc => go (k + 1) b acc
+    | .letpair a b, acc => go k a (go (k + 2) b acc)
+    | .case e a b, acc => go k e (go (k + 1) a (go (k + 1) b acc))
+
 /-- The outside of the pure fragment. -/
 def outside (t : TExpr) : CM α :=
   throw s!"LIR: `{ruleName t}` is outside the pure fragment (N2 and later)"
@@ -3562,10 +3575,11 @@ it). The slots, and the bindings that make them.  `[spec §64]` -/
 def ioCtx (depth k : Nat) (body : Expr) : CM (Ctx × (Tm → Tm)) := do
   let io := (← get).mainIO
   let n := io.size
+  let fv := freeVars body
   let mut ctx : Ctx := []
   let mut binds : Tm → Tm := id
   for p in List.range depth do
-    let slot ← if depth ≥ n && p ≥ depth - n && ClauseKinds.mentions (p + k) body then
+    let slot ← if depth ≥ n && p ≥ depth - n && fv.contains (p + k) then
         match io[p - (depth - n)]? with
         | some (some (op, A)) => do
           let aT ← vty A
