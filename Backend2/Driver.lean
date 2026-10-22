@@ -42,14 +42,16 @@ structure HNode where
   S : Row
   ks : List ClauseKinds.HKind
   H : Expr
+  /-- The node is `effHandleVB`: its clauses receive `κ` boxed (BOXED-κ, SPEC §28). -/
+  boxed : Bool := false
 
 /-- The `handle` nodes of a typed term, within the depth `fuel`. -/
 def hnodes : Nat → TExpr → List HNode
   | 0, _ => []
   | f + 1, t =>
     let here : List HNode := match t with
-      | .effHandleV _ _ S E _ n _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase⟩]
-      | .effHandleVB _ _ S E _ n _ _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase⟩]
+      | .effHandleV _ _ S E _ n _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, false⟩]
+      | .effHandleVB _ _ S E _ n _ _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, true⟩]
       | _ => []
     here ++ t.children.flatMap fun (_, c) => hnodes f c
 
@@ -98,16 +100,17 @@ def machineOps (c : Frontend.Check.Checked) : MachSet := Id.run do
         out := out.insert (h.n, j.toUInt32)
   return out
 
-/-- **The operations whose every `handle` node keeps `κ`** (SPEC §52): each machine operation
-`(n, j)` whose clause at every node of `n` is `stored`, at a qualifier that is not `unr`. A stack
-machine's frames have one owner there: the stored site whose `κ` holds them. -/
+/-- **The operations whose every `handle` node keeps `κ` boxed** (SPEC §52): each machine operation
+`(n, j)` whose clause at every node of `n` is `stored`, at a qualifier that is not `unr`, and every
+node of `n` is `effHandleVB` (BOXED-κ, SPEC §28). A stack machine's frames have one owner there:
+the stored site whose `κ` holds them, which keeps a stack. -/
 def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
   let nodes := hnodes Frontend.Check.copiesFuel c.t
   let ms := machineOps c
   let mut out : MachSet := {}
   for (n, j) in ms.toList do
     let same := nodes.filter (·.n == n)
-    if !same.isEmpty && same.all (fun g =>
+    if !same.isEmpty && same.all (fun g => g.boxed &&
         (g.ks[j.toNat]?.map (·.kind)) == some .stored &&
         (g.E[j.toNat]?.map (·.1)).any (· != .unr)) then
       out := out.insert (n, j)

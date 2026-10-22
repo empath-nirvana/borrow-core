@@ -424,11 +424,11 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
     let h := (← get).cur
     let f ← newObj 1
     modify fun s => { s with taskStacks := s.taskStacks.modify h (·.push f) }
-    pure (.loc f)
+    pure (.pair (.loc f) (.int f.toUInt64))
   | .frameTop _ _, [] => do
     let some fs := (← get).taskStacks[(← get).cur]? | bad "frameTop with no current stack"
     let some f := fs.back? | bad "frameTop of an empty stack"
-    pure (.loc f)
+    pure (.pair (.loc f) (.int f.toUInt64))
   | .framePut, [.loc f, v] => do
     if ← isWritten f then bad "a framePut into a written frame"
     writeAt f (some v)
@@ -441,9 +441,6 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
     freeObj f 1
     modify fun s => { s with taskStacks := s.taskStacks.insert h fs.pop }
     pure .unit
-  | .stackDepth _, [] => do
-    let n := ((← get).taskStacks[(← get).cur]?.map (·.size)).getD 0
-    pure (i32v n.toUInt32)
   | .unreachable, [] => bad "an unreachable arm reached"
   | op, vs => bad s!"the operation {reprStr op |>.take 40} on {vs.length} values {reprStr vs |>.take 200}"
 

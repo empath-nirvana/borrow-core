@@ -132,16 +132,15 @@ inductive Op where
   /-- `stackFree h`: the stack `h`, empty, freed; nothing at `0`. -/
   | stackFree
   /-- A frame of machine `m` reserved on top of the current stack, unwritten; the stack is made
-  when there is none (the register `k`). The result is the frame's cell. -/
+  when there is none (the register `k`). The result is the frame's cell and its address. -/
   | framePush (m k : Nat)
-  /-- The top frame of the current stack, a frame of machine `m` (the register `k`): its cell. -/
+  /-- The top frame of the current stack, a frame of machine `m` (the register `k`): its cell and
+  its address. -/
   | frameTop (m k : Nat)
   /-- `framePut f v`: `v` moved into the frame `f`, which stays on the stack. -/
   | framePut
   /-- `framePop f`: the frame `f`, unwritten and on top of the current stack, popped. -/
   | framePop (k : Nat)
-  /-- The number of frames on the current stack (the register `k`). -/
-  | stackDepth (k : Nat)
   /-- Never reached: the frame below a finished level is at a call of it (SPEC §52). -/
   | unreachable
   deriving Inhabited, BEq, Repr

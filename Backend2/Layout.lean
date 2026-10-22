@@ -353,9 +353,10 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
       join dst (← fnRetNode p fi)
     | .roll | .unroll => join dst (← a 0)
     | .framePush m _ | .frameTop m _ => do
+      let c ← kid dst 0
       match (← get).frames[m]? with
-      | some fn => join fn dst
-      | none => modify fun s => { s with frames := s.frames.insert m dst }
+      | some fn => join fn c
+      | none => modify fun s => { s with frames := s.frames.insert m c }
     | .framePut => join (← kid (← a 0) 0) (← a 1)
     | .io .readByte | .io .clockNow => join (← kid dst 0) (← a 0)
     | .io .writeByte | .io .writeAll | .io .clockSleep => join dst (← kid (← a 0) 0)

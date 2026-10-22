@@ -1181,19 +1181,20 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
 
 /-- **The codes of a stack machine** (SPEC §52): its levels' frames are on the task stack, each
 level's reserved when it starts (`Frame.stackF`), so a call point's state is first order, the
-callee's `k` left out (its frame is the one above), and a level's `k` is the frame's depth `d`.
+callee's `k` left out (its frame is the one above), and a level's `k` is its frame's address.
 
 - Each point's `mk` writes the state into the level's frame, which stays on the stack, and answers
-  `k` at `d`; at a call point the callee's `k`, at the depth above, is dropped.
-- `k`'s resume entry is a loop from the top of the stack down to its own frame
-  (`kappa_resume_steps` with the nesting kept as positions): the top frame's level continues at its
-  point with the answer (`stack continue`); a level that answers is popped, and the frame below,
-  at its call of it, continues with the value (`stack return`) or its abort (`stack unwind`); a
-  suspension of any level suspends `k` again at `d`, the frames below it as they were, which is
-  the identity that `step_i (susp (p, point_i k')) = susp (p, point_i k')` asks of them. When the
-  frame at `d` has answered, its answer is `k`'s.
-- `k`'s cancel entry pops the frames from the top down to `d`, each frame's continuation unwound
-  under the cancel, the first error kept (`kappa_cancel_steps`, `cancel_prefix`): innermost first.
+  `k` at the frame; at a call point the callee's `k`, at the frame above, is dropped.
+- `k`'s resume entry is a loop from the top of the stack down to its own frame, the *base*
+  (`kappa_resume_steps` with the nesting kept as positions): the top frame's level continues at
+  its point with the answer (`stack continue`); a level that answers has popped its frame, and the
+  frame below, at its call of it, continues with the value (`stack return`) or its abort (`stack
+  unwind`); a suspension of any level suspends `k` again at the base, the frames below it as they
+  were, which is the identity that `step_i (susp (p, point_i k')) = susp (p, point_i k')` asks of
+  them. When the base's level has answered, its answer is `k`'s.
+- `k`'s cancel entry pops the frames from the top down to the base, each frame's continuation
+  unwound under the cancel, the first error kept (`kappa_cancel_steps`, `cancel_prefix`):
+  innermost first.
 - A frame below a finished level is at a call of it, and the top frame at a `perform`: the other
   arms of the continue and return entries are `unreachable`. -/
 def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
@@ -1208,6 +1209,7 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
   unless stTy == S do throw "LIR: a stack machine's frame differs from the first conversion's"
   let reg ← stackRegister
   let fT : LTy := .ref stTy
+  let aT : LTy := .int .w64
   let cT := cancelResTy cp
   readFact "machine:stack frame"
   let rres ← reserveFn s!"stack resume {op.1}.{op.2}"
@@ -1220,12 +1222,15 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
   let contA ← reserveFn "stack unwind"
   let rstep ← reserveFn "stack step"
   let cstep ← reserveFn "stack cancel step"
-  let top (k : Var → CM Tm) : CM Tm := do
-    let f ← fresh fT
-    return .letv f (.prim (.frameTop m.start reg) []) (← k f)
-  let depth (k : Var → CM Tm) : CM Tm := do
-    let dd ← fresh i32T
-    return .letv dd (.prim (.stackDepth reg) []) (← k dd)
+  -- The top frame: its cell and its address.
+  let top (k : Var → Var → CM Tm) : CM Tm := do
+    let fa ← fresh (.pair fT aT); let f ← fresh fT; let a ← fresh aT
+    return .letv fa (.prim (.frameTop m.start reg) []) (.letpair f a fa (← k f a))
+  -- `yes` when the address `a` is the base's, else `no`; both consumed.
+  let ifBase (a base : Var) (yes no : CM Tm) : CM Tm := do
+    let pr ← fresh (.pair aT aT); let c ← fresh boolT; let u₁ ← fresh .unit; let u₂ ← fresh .unit
+    return .letv pr (.pair a base) (.letv c (.prim (.host (.rel .w64 .eq)) [pr])
+      (.case c u₁ (.drop u₁ (← no)) u₂ (.drop u₂ (← yes))))
   let never (t : LTy) : CM Tm := do
     let u ← fresh t
     return .letv u (.prim .unreachable []) (.var u)
@@ -1236,94 +1241,99 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
       let some p := ps[i]? | throw "LIR: a stack machine's point"
       untuple fv p.argTys fun args => k p f' args
     return .letv pr (.prim .take [f]) (.letpair f' st pr arms)
-  -- The entries that continue a frame: at a `perform` with the answer, at a call with the callee's
-  -- value, at a call with the callee's abort.
-  let y₀ ← fresh b; let f₀ ← fresh fT
+  -- The entries that continue a frame (its cell and address): at a `perform` with the answer, at a
+  -- call with the callee's value, at a call with the callee's abort.
+  let y₀ ← fresh b; let f₀ ← fresh fT; let a₀ ← fresh aT
   let bY ← atFrame f₀ fun p f args => do
     if p.kTy.isSome then return ← never F.ty
-    depth fun dd => applyK F (p.kont ++ [.stackF]) (args ++ [f, dd]) y₀
-  setFn contY { name := "stack continue", params := [f₀, y₀], body := bY, ret := F.ty }
-  let r₁ ← fresh F.r; let f₁ ← fresh fT
+    applyK F (p.kont ++ [.stackF]) (args ++ [f, a₀]) y₀
+  setFn contY { name := "stack continue", params := [f₀, a₀, y₀], body := bY, ret := F.ty }
+  let r₁ ← fresh F.r; let f₁ ← fresh fT; let a₁ ← fresh aT
   let bV ← atFrame f₁ fun p f args => do
     if p.kTy.isNone then return ← never F.ty
-    depth fun dd => applyK F (p.kont ++ [.stackF]) (args ++ [f, dd]) r₁
-  setFn contV { name := "stack return", params := [f₁, r₁], body := bV, ret := F.ty }
+    applyK F (p.kont ++ [.stackF]) (args ++ [f, a₁]) r₁
+  setFn contV { name := "stack return", params := [f₁, a₁, r₁], body := bV, ret := F.ty }
   let pF? := payTy F.pay
   if let some pF := pF? then
-    let e₂ ← fresh pF; let f₂ ← fresh fT
+    let e₂ ← fresh pF; let f₂ ← fresh fT; let a₂ ← fresh aT
     let bA ← atFrame f₂ fun p f args => do
       let some M := p.callee | return ← never F.ty
-      let some pM := payTy M.pay | return ← never F.ty
-      let _ := pM
       let e' ← fresh pF
-      depth fun dd => do
-        return .letv e' (← coercePay M.pay F.pay e₂ fun v => pure (.var v))
-          (← abortK F (p.kont ++ [.stackF]) (args ++ [f, dd]) e')
-    setFn contA { name := "stack unwind", params := [f₂, e₂], body := bA, ret := F.ty }
+      return .letv e' (← coercePay M.pay F.pay e₂ fun v => pure (.var v))
+        (← abortK F (p.kont ++ [.stackF]) (args ++ [f, a₂]) e')
+    setFn contA { name := "stack unwind", params := [f₂, a₂, e₂], body := bA, ret := F.ty }
   else
     setFn contA { name := "stack unwind", params := [], body := ← never F.ty, ret := F.ty }
-  -- The step of the loop: a level's outcome, the frames down to `d` left to continue.
-  let d₃ ← fresh i32T; let o₃ ← fresh F.ty
+  -- The step of the loop: the outcome of the level whose frame was at `a`, the frames down to the
+  -- base left to continue.
+  let base₃ ← fresh aT; let a₃ ← fresh aT; let o₃ ← fresh F.ty
   let w ← fresh F.body; let x ← fresh F.r; let ex ← fresh F.xTy
-  let d₃' ← fresh i32T
-  let below (arm : Var → CM Tm) (here : CM Tm) : CM Tm := depth fun dd =>
-    ifLt dd d₃' (do return .drop d₃ (← here)) (top fun f => do
+  let base₃' ← fresh aT
+  let below (arm : Var → Var → CM Tm) (here : CM Tm) : CM Tm :=
+    ifBase a₃ base₃' (do return .drop base₃ (← here)) (top fun f a => do
       let o' ← fresh F.ty
-      return .letv o' (← arm f) (.call rstep [d₃, o']))
-  let valArm ← below (fun f => pure (.call contV [f, x])) (outValue F x)
+      let a' ← fresh aT
+      return .copy a a' (.letv o' (← arm f a) (.call rstep [base₃, a', o'])))
+  let valArm ← below (fun f a => pure (.call contV [f, a, x])) (outValue F x)
   let suspArms (sv : Var) : CM Tm := casePay F.sPay sv fun j pv => do
     let some (key, _, _, _) := F.ms[j]? | throw "LIR: a suspension's summand"
     letpairM pv fun v k' => do
       let k₂ ← fresh (F.kTy b cp)
-      return .drop d₃' (.drop k' (.letv k₂ (.clos kc [d₃]) (← outSusp F key v k₂)))
+      return .drop a₃ (.drop base₃' (.drop k' (.letv k₂ (.clos kc [base₃]) (← outSusp F key v k₂))))
   let exits ← match pF? with
     | none => suspArms ex
     | some pT => do
       let e ← fresh pT; let sv ← fresh F.sTy
-      pure (Tm.case ex e (← below (fun f => pure (.call contA [f, e])) (outAbort F e)) sv (← suspArms sv))
-  setFn rstep { name := "stack step", params := [d₃, o₃],
-                body := .copy d₃ d₃' (.letv w (.prim .unroll [o₃]) (.case w x valArm ex exits)),
+      pure (Tm.case ex e (← below (fun f a => pure (.call contA [f, a, e])) (outAbort F e)) sv
+        (← suspArms sv))
+  setFn rstep { name := "stack step", params := [base₃, a₃, o₃],
+                body := .copy base₃ base₃' (.letv w (.prim .unroll [o₃]) (.case w x valArm ex exits)),
                 ret := F.ty }
-  -- `k` at `d`: its resume entry, and its resume.
-  let d₄ ← fresh i32T
-  setFn kres { name := s!"stack resume entry {op.1}.{op.2}", params := [d₄], body := .clos rc [d₄],
-               ret := .thunk (.arr b (.ret F.ty)) }
-  let d₅ ← fresh i32T; let y₅ ← fresh b; let o₅ ← fresh F.ty
-  let b₅ ← top fun f => pure (.letv o₅ (.call contY [f, y₅]) (.call rstep [d₅, o₅]))
-  setFn rres { name := s!"stack resume {op.1}.{op.2}", params := [d₅, y₅], body := b₅, ret := F.ty }
-  -- The cancel: the frames from the top down to `d`, each unwound under the cancel.
-  let d₆ ← fresh i32T
+  -- `k` at its base: its resume entry, and its resume.
+  let base₄ ← fresh aT
+  setFn kres { name := s!"stack resume entry {op.1}.{op.2}", params := [base₄],
+               body := .clos rc [base₄], ret := .thunk (.arr b (.ret F.ty)) }
+  let base₅ ← fresh aT; let y₅ ← fresh b; let o₅ ← fresh F.ty
+  let b₅ ← top fun f a => do
+    let a' ← fresh aT
+    return .copy a a' (.letv o₅ (.call contY [f, a, y₅]) (.call rstep [base₅, a', o₅]))
+  setFn rres { name := s!"stack resume {op.1}.{op.2}", params := [base₅, y₅], body := b₅, ret := F.ty }
+  -- The cancel: the frames from the top down to the base, each unwound under the cancel.
+  let base₆ ← fresh aT
   match cp with
   | none =>
-    setFn kcan { name := s!"stack cancel {op.1}.{op.2}", params := [d₆], body := .drop d₆ .unit, ret := cT }
+    setFn kcan { name := s!"stack cancel {op.1}.{op.2}", params := [base₆], body := .drop base₆ .unit,
+                 ret := cT }
     setFn cstep { name := "stack cancel step", params := [], body := ← never cT, ret := cT }
   | some cpP =>
     let errT := resTy .unit cpP
-    let d₇ ← fresh i32T; let d₇' ← fresh i32T; let err₇ ← fresh errT
-    let bC ← depth fun dd => ifLt dd d₇' (do return .drop d₇ (.var err₇)) (top fun f => do
-      let err' ← fresh errT
-      let arms ← atFrame f fun p f' args => depth fun dd' =>
-        cancelK cpP (p.kont ++ [.stackF]) (args ++ [f', dd']) err₇
-      return .letv err' arms (.call cstep [d₇, err']))
-    setFn cstep { name := "stack cancel step", params := [d₇, err₇], body := .copy d₇ d₇' bC, ret := errT }
+    let base₇ ← fresh aT; let base₇' ← fresh aT; let err₇ ← fresh errT
+    let bC ← top fun f a => do
+      let err' ← fresh errT; let a' ← fresh aT
+      let arms ← atFrame f fun p f' args =>
+        cancelK cpP (p.kont ++ [.stackF]) (args ++ [f', a']) err₇
+      return .copy a a' (.letv err' arms
+        (← ifBase a base₇' (do return .drop base₇ (.var err')) (pure (.call cstep [base₇, err']))))
+    setFn cstep { name := "stack cancel step", params := [base₇, err₇], body := .copy base₇ base₇' bC,
+                  ret := errT }
     let u ← fresh .unit; let err₀ ← fresh errT
     let start : Tm := match payTy cpP with
       | none => .var u
       | some _ => .inj false u
-    setFn kcan { name := s!"stack cancel {op.1}.{op.2}", params := [d₆],
-                 body := .letv u .unit (.letv err₀ start (.call cstep [d₆, err₀])), ret := cT }
-  -- Each point's `mk`: the state into the level's frame, and `k` at its depth.
+    setFn kcan { name := s!"stack cancel {op.1}.{op.2}", params := [base₆],
+                 body := .letv u .unit (.letv err₀ start (.call cstep [base₆, err₀])), ret := cT }
+  -- Each point's `mk`: the state into the level's frame, and `k` at it.
   for (p, i) in ps.zipIdx do
     let kv? ← p.kTy.mapM fresh
     let xs ← p.argTys.mapM fresh
-    let f ← fresh fT; let d ← fresh i32T
+    let f ← fresh fT; let a ← fresh aT
     let body ← mkTuple xs fun t => injectPay stPay i t fun sv => do
       let u ← fresh .unit
-      return .letv u (.prim .framePut [f, sv]) (.drop u (.clos kc [d]))
+      return .letv u (.prim .framePut [f, sv]) (.drop u (.clos kc [a]))
     let body := match kv? with
       | some kv => Tm.drop kv body
       | none => body
-    setFn p.mkFn { name := s!"suspend {op.1}.{op.2}", params := kv?.toList ++ xs ++ [f, d], body,
+    setFn p.mkFn { name := s!"suspend {op.1}.{op.2}", params := kv?.toList ++ xs ++ [f, a], body,
                    ret := F.kTy b cp }
   readFact "machine:state"
   return [(op, kc)]
@@ -1382,11 +1392,10 @@ def withMachineK (F : OutInfo) (act : Kont → List Var → CM Tm) : CM Tm := do
                            machs := { info := F, start, threadable := true, cell, stack } :: s.machs }
   let t ← match stack, cell with
     | some S, _ => do
-      -- The level's frame reserved on the task stack (SPEC §52), and the depth there.
+      -- The level's frame reserved on the task stack (SPEC §52), and its address.
       let reg ← stackRegister
-      let f ← fresh (.ref S); let d ← fresh i32T
-      pure (Tm.letv f (.prim (.framePush start reg) []) (.letv d (.prim (.stackDepth reg) [])
-        (← act [.stackF] [f, d])))
+      let fa ← fresh (.pair (.ref S) (.int .w64)); let f ← fresh (.ref S); let a ← fresh (.int .w64)
+      pure (Tm.letv fa (.prim (.framePush start reg) []) (.letpair f a fa (← act [.stackF] [f, a])))
     | none, some stT => do
       readFact "machine:level cell passed on"
       let u ← fresh .unit; let s₀ ← fresh (.sum .unit (.ref stT))
@@ -2408,7 +2417,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   | .effHandleV _ _ S E fs n A R u ks site _ tc te =>
     convHandle fuel ctx S E fs n A R u ks site tc te
   | .effHandleVB _ _ S E fs n A R _ u ks site _ tc te =>
-    convHandle fuel ctx S E fs n A R u ks site tc te
+    convHandle fuel ctx S E fs n A R u ks site tc te (boxed := true)
   | .bind _ _ A _ u tM tN => convBind fuel ctx A u tM tN
   | .force _ j i C => do
     match ctx[i]? with
@@ -2788,7 +2797,8 @@ again. The handler's values are the drive's parameters. -/
 def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32)
     (R : VTy) (ks : List ClauseKinds.HKind) (site : Option HSite) (c₂ : Ctx) (te : TExpr)
     (T : OutInfo) (cR : Ctx) (tR : TExpr)
-    (parts : Array (Ctx × TExpr)) (tailCtx : Ctx) (tupleAt : Option Nat) : CM Tm := do
+    (parts : Array (Ctx × TExpr)) (tailCtx : Ctx) (tupleAt : Option Nat) (boxed : Bool := false) :
+    CM Tm := do
   readFact "effHandleV:machine"
   modify fun st => { st with erased := st.erased.insert "machine" (st.erased.getD "machine" 0 + 1) }
   let rT ← vty R
@@ -2820,7 +2830,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
   -- it after the handler's values, and `κ` holds it as its last; it is made at the first frame
   -- reserved (`0` until then) and freed where the computation answers, aborts or is cancelled.
   let stored := ks.any fun k => k.kind == .stored
-  let siteSw := stored && !(← get).stacked.isEmpty
+  let siteSw := stored && boxed && !(← get).stacked.isEmpty
   let shP? : Option Var ← if siteSw then do readFact "effHandleV:site stack"; pure (some (← fresh (.int .w64)))
     else pure none
   let shTys : List LTy := if siteSw then [.int .w64] else []
@@ -2840,7 +2850,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
     for (k, j) in ks.zipIdx do
       if out.isSome then break
       let some o := E[j]? | continue
-      if k.kind == .stored && o.1 != .unr && T.ms.any (·.1 == (n, j.toUInt32)) then
+      if boxed && k.kind == .stored && o.1 != .unr && T.ms.any (·.1 == (n, j.toUInt32)) then
         out := some (j, tupleTy ((← kTyAt T (n, j.toUInt32)) :: kHvTys))
     pure out
   let cellSt := cellAt.map (·.2)
@@ -3009,7 +3019,7 @@ handler's join: `catch_abort`), an abort of `Σ`'s handed on (`fwd_abort`). A ta
 clause is called where it is performed (`effPerform`). -/
 def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy)
     (n : UInt32) (A R : VTy) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite)
-    (tc te : TExpr) : CM Tm := do
+    (tc te : TExpr) (boxed : Bool := false) : CM Tm := do
   let direct := (← get).direct.getD n []
   readFact "effHandleV:kinds"
   -- The handled computation's outcome: with a machine operation (one of the node's clauses that is
@@ -3058,12 +3068,12 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)
   let wrap (b : Tm) : Tm := pre (preH (preCs.foldr (fun f t => f t) b))
   if let some T := teM then
     match tuple with
-    | none => return wrap (← convDrive fuel S E fs n R ks site c₂ te T cR tR parts tailCtx none)
+    | none => return wrap (← convDrive fuel S E fs n R ks site c₂ te T cR tR parts tailCtx none boxed)
     | some tt =>
       readFact "effHandleV:clause tuple"
       let tv ← fresh (← repJ tt.jdg)
       return wrap (.letv tv (← conv fuel tailCtx tt)
-        (← convDrive fuel S E fs n R ks site c₂ te T cR tR parts [some tv] (some parts.size)))
+        (← convDrive fuel S E fs n R ks site c₂ te T cR tR parts [some tv] (some parts.size) boxed))
   let ctxs : List Ctx := cR :: parts.toList.map (·.1) ++ [tailCtx]
   let dropAll (keep : Option Nat) (b : Tm) : Tm :=
     drops ((ctxs.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
