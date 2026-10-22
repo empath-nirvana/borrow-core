@@ -290,7 +290,7 @@ leetcode/trees/0208-implement-trie 25 0 0 8067 7610 2373
 leetcode/trees/0211-design-add-and-search-words-data-structure 46 0 0 10900 9038 4453
 leetcode/trees/0212-word-search-ii 102 0 0 21673 17226 12863
 leetcode/trees/0226-invert-binary-tree 39 0 0 5074 4770 174
-leetcode/trees/0230-kth-smallest-element-in-a-bst 94 0 0 5504 5070 307
+leetcode/trees/0230-kth-smallest-element-in-a-bst 89 0 0 5434 5000 307
 leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree 74 0 0 5788 5270 489
 leetcode/trees/0297-serialize-and-deserialize-binary-tree 80 0 0 6183 5696 570
 leetcode/trees/0572-subtree-of-another-tree 70 0 0 6505 6062 380
