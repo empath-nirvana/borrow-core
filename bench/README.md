@@ -56,7 +56,9 @@ rather than the language. #213 asks for those to be reported separately.
 | gen-tree | 178 (146–198) | 104 (103–105) | — | **1.72×** | — | 4.1K / 214K / — | 50K / 334K / — | 0.38 (0.19 + 0.20) / 0.12 / — |
 | gen-tree-dyn | 167 (161–197) | 3999 (3972–4020) | — | 0.04× | — | 4.1K / 216K / — | 50K / 350K / — | 0.38 (0.19 + 0.20) / 0.14 / — |
 | gen-tree-cb | 178 (161–188) | 90.8 (90.4–94.8) | 89.7 (87.7–93.0) | **1.96×** | 1.98× | 4.1K / 214K / 0.3K | 50K / 334K / 33K | 0.38 (0.19 + 0.20) / 0.11 / 0.04 |
-| async-tree | 253 (246–257) | 301 (297–308) | — | 0.84× | — | 12K / 216K / — | 50K / 351K / — | 0.70 (0.27 + 0.43) / 0.15 / — |
+| async-tree | 1580 (1561–1594) | 107 (107–110) | — | **14.8×** | — | 12K / 216K / — | 50K / 351K / — | 0.59 (0.22 + 0.37) / 0.15 / — |
+| async-tree-iter | 903 (902–927) | 108 (106–114) | — | **8.40×** | — | 17K / 216K / — | 66K / 351K / — | 0.87 (0.28 + 0.59) / 0.15 / — |
+| async-tree-boxed | 250 (242–253) | 304 (294–314) | — | 0.82× | — | 12K / 216K / — | 50K / 351K / — | 0.60 (0.22 + 0.38) / 0.15 / — |
 | raise-small | 159 (159–160) | 123 (123–124) | — | 1.30× | — | 4.2K / 214K / — | 50K / 334K / — | 0.39 (0.18 + 0.21) / 0.11 / — |
 | raise-large | 126 (126–127) | 123 (122–124) | — | 1.03× | — | 4.1K / 214K / — | 50K / 334K / — | 0.40 (0.19 + 0.21) / 0.12 / — |
 | handlers-di | 111 (110–112) | 113 (112–113) | 182 (182–183) | 0.98× | 0.61× | 5.6K / 214K / 0.5K | 50K / 334K / 33K | 0.51 (0.24 + 0.27) / 0.12 / 0.04 |
@@ -108,7 +110,7 @@ Lomuto with the middle pivot. That is what they measure, so the Rust side is not
 | benchmark | hypothesis and mechanism | result |
 |---|---|---|
 | gen-tree, gen-tree-dyn, gen-tree-cb | A recursive generator (in-order `yield` over a tree) is a state machine with no allocation. Rust needs a `Box<dyn Iterator>` per level, or a hand-written stack. | **Supported against `Box<dyn Iterator>`**: 23× faster. Ours makes 0 allocations and 0 dispatched calls; Rust boxes every node. **Not supported** against Rust's hand-written stack iterator (1.72×), Rust's closure callback (1.96×) or C's recursion (1.98×). The cause is below. The tree is implicit (each node is a key range), so only the traversal is measured. |
-| async-tree | Recursive async tasks are sized state machines, where Rust needs `Box::pin` per recursive call. | **Supported, 0.84×, but by another mechanism.** Ours allocates more, not less: 3 objects per `await` (`bcc-counts`: 3081 allocations at n = 1024, 6153 at 2048) and one dispatched call per resume. It wins because a resume jumps straight to the suspended frame, while Rust re-polls the chain of about 20 nested boxed futures on every wake. xctrace: Rust spends 62% in the poll closures and about 25% in malloc/free; ours spends 69% in one resume code and 11% in `bc_alloc`/`bc_free`. The Rust executor is a minimal std-only round robin. |
+| async-tree, async-tree-iter, async-tree-boxed | Recursive async tasks are sized state machines, where Rust needs `Box::pin` per recursive call. | **Supported only against Rust's boxed recursion** (async-tree-boxed, 0.82×; the new backend 0.80×). **Not supported against the task a Rust programmer writes**: async-tree's Rust side walks the tree with an explicit stack in one `async fn`, one boxed future per task and no allocation per `await`, and ours is 14.8× slower (13.5× on the new backend). With the same iterative algorithm on both sides (async-tree-iter) ours is 8.40× (6.59× on the new backend). The 0.84× this row claimed before compared our recursion with Rust's boxed recursion only. Per `await` ours allocates 3 objects on either backend (`bcc-counts`: 3081 at n = 1024; the new backend's was 4, 4104, until #661): a level's state cell (each level of the recursion, one per node, allocates one when it first suspends and keeps it across its later suspensions) and the scheduler queue's two list nodes; async-tree-iter allocates the queue's two. The cause is the walk, not the allocator: a resume enters every suspended level of the recursion, about 20, as Rust re-polls its chain of boxed futures; the new backend spends 72% in that one resume code and 13% in `bc_alloc`/`bc_free` (xctrace). In async-tree-iter, everything is inlined into one loop and 21% is `bc_alloc`/`bc_free` for the queue's list nodes (`lib/async.bc`'s `Slots`, rebuilt and reversed each round), where Rust's is a `VecDeque`. The Rust executor is a minimal std-only round robin. |
 | raise-small, raise-large | `raise` four levels deep inside counted loops is an abort, against `Result` and `?` at every level plus `try_fold`. Two error sizes. | **Not supported.** After inlining, both sides are a branch per level, and Rust's `Result` costs nothing at either size (123 ms at both). Ours is at parity with the 64-byte error (1.03×) and 1.30× slower with the `i32` error. The cause is below. |
 | handlers-di, handlers-di-generic | Handlers as dependency injection (a logger and a clock) are erased to direct calls, against `&mut dyn Trait` and against generic parameters. | **Parity with `dyn`** (0.98×). Rust devirtualises the clock after inlining, and its logger's `blr` runs only every eighth step. **0.54× against generics and 0.61× against C function pointers**, but the generic win is not dispatch: LLVM if-converted Rust's every-eighth-step update into a `csel` chain that runs every step. Ours is a direct inline loop with 0 indirect calls. The clock's state is loaded and stored through its cell on every step: `ldr x2,[x21]; add x2,x2,#3; str x2,[x21]`. |
 | compile time and binary size | Measured honestly; #509's copies may make us lose. | **Size: we win against Rust, lose to C.** Our machine code is 3–6K (12K for async-tree) against Rust's 213K (std) and C's 0.3–1.2K. **Compile time: we lose**, 2–8× Rust's. See *Compile time and size*. |
@@ -216,6 +218,10 @@ base)` (`Native/Lower.lean`, `ptrAt`). The optimised loop is
 Out of the program, the same loop written with `inttoptr` stays scalar, and written with
 `getelementptr i64, ptr %base, i64 %i` vectorises to `add.2d` ×4. The two functions are
 `@sum_int` and `@sum_gep` in `bench/repro/vectorize.ll`.
+
+**On the new backend** (#661, N5: typed pointers and `getelementptr` from bases, SPEC §50) the
+loop vectorises (`add.2d`): 116 ms against Rust's 110, 1.06× (the old backend 1.87× in the same
+interleaved run).
 
 **Not diagnosed.**
 - A prototype that rewrites the addresses of clang's optimised IR as `getelementptr` from an
@@ -412,8 +418,12 @@ Ranked by measured impact. None is filed (#537: the list is agreed first).
 9. **Handler state in a register for the duration of `with`.**
    - By scalar replacement, or `noalias` on the state cell (#531).
    - Expected: one load and one store fewer per operation; handlers-di would pass Rust's `dyn`.
-10. **Async: one sized state object per task.** Not three allocations per `await`. Expected:
-    a further gain on async-tree, which already wins at 0.84×; the allocator is 11% of its time.
+10. **Async: one sized state object per task.** Not three allocations per `await`. async-tree
+    loses 13.5× to Rust's iterative task and wins 0.80× only against its boxed recursion; the
+    allocator is 13% of its time. #661 (N5) keeps one cell per recursion level across the level's
+    suspensions (3 allocations per `await` on the new backend, 4 before): one object per task, for
+    a recursion of unbounded depth, needs a stack the task owns. The rest of the gap is a resume
+    entering every suspended level, and the library queue's list nodes.
 11. **Allocator fast path inline, counters only in counting builds**, plus a null-pointer niche
     for boxed sum payloads (SPEC §35 *Open*). Expected: about 4% and 8% on binary-trees.
 12. **Compile time.**
