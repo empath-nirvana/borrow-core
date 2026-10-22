@@ -574,7 +574,7 @@ Only the site table remains in M (N3: user clause kinds' codes, copy groups, con
 | row | now | predicted | units | why |
 |---|---|---|---|---|
 | sieve | 5.63× | ≤ 1.4× (sieve-for 1.30×) | B3 | its `while`s are `iterate`; the runtime's tick is a direct call |
-| chain-yield | 2.10× | ≤ 1.2× (chain-for 0.99×) | B3 | `yield` direct (#547); `range`'s `while` native |
+| chain-yield | 2.10× (0.95× on the new backend, SPEC §54) | ≤ 1.2× (chain-for 0.99×) | B3 | `yield` direct (#547); `range`'s `while` native |
 | chain-gen | 21.5× | ≤ 1.3× | B3, 7 | push stages; without 7, two `reify` machines per element stay |
 | gen-tree | 1.72× | ≤ 1.4× | 8 | unchanged by this design |
 | async-tree | 0.84×, indirect 201 | ≤ 0.84×, indirect 0 | 5, 9 | — |

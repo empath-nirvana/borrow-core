@@ -596,7 +596,7 @@ unit of §6.1 it rests on.
 | row | now | predicted | units | why |
 |---|---|---|---|---|
 | sieve | 5.63× | ≤ 1.4× (sieve-for 1.30×) | B2, N4 | `while` is `iterate`; the runtime's `tick` is a back edge |
-| chain-yield | 2.10× | ≤ 1.2× (chain-for 0.99×) | B2, N2, N4 | `yield` a direct call; `range`'s `while` native |
+| chain-yield | 2.10× (0.95× on the new backend, SPEC §54) | ≤ 1.2× (chain-for 0.99×) | B2, N2, N4 | `yield` a direct call; `range`'s `while` native |
 | chain-gen | 21.5× | ≤ 1.3× | N2, N4, push stages (effect-lowering 7) | as `docs/pipeline-architecture.md` §6.2 |
 | gen-tree | 1.72× | ≤ 1.4× | N2 | the re-injection after the right call is the abortive rule's identity, so the call is a tail call (#537 fix 3) |
 | gen-tree-cb | 1.96× | ≤ 1.4× | N2 | the same cause (`bench/README.md`, *gen-tree*) |

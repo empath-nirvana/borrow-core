@@ -9040,6 +9040,10 @@ interpreter, the word IR, Wasm and natively (352, with 22 outside, before; 380 o
   core forms are the push elaboration (`for-value`, `gen-div`, `gen-from`, `gen-range`,
   `gen-return`, `gen-yields`). `corpus/reject/for-free-bound.bc`'s message names a `for` over a
   generator that loops.
+- **Benches** (native, the new backend against Rust, the median of 11 interleaved runs):
+  `chain-yield` 0.95×, `gen-tree` 0.98×, `raise-small` 1.02×, `handlers-di` 1.00×, `sieve` 1.59×
+  (its `while`'s aggregate phi, §53 *Open*; no generator), `async-tree-iter` 6.44× (its scheduler's
+  stored tasks, §49).
 - No program moves to `corpus/pending/`; none of its twelve lend programs (§52), and neither
   `corpus/reject/gen-self-borrow.bc` nor `for-lend-resumes.bc`, type: each holds a lend across a
   `yield` or a tick.
