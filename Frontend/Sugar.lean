@@ -1572,6 +1572,11 @@ def eWalk (m : DCx) : Nat → TCx → Comp → EM Comp
       let K' ← eWalk ms n (c.push q.name (some Pt)) K
       let M' : Comp := .ret rsp (.bangThunkv vsp (.lam lsp q T K'))
       return .bind sp x A M' (← eWalk m n (c.push x.name (some Fty)) N) lin
+    -- A `for`'s node whose work performs `Div` (`VSugar.workStep`): the work's body walked.
+    let M ← match M with
+      | .handle hsp k form site hr hc M₀ => do
+        pure (.handle hsp k form site hr (← eWorks m n c hc) M₀)
+      | M => pure M
     -- A call of a div function as the computation it is, at the tail: bound, then returned.
     if (divCallC? c (.bind sp x A M N lin)).isSome then
       return ← eWalk m n c (.bind sp ⟨"io_t", sp⟩ none (.bind sp x A M N lin) (.ret sp (.var sp "io_t")) false)
@@ -1666,6 +1671,37 @@ def eWalk (m : DCx) : Nat → TCx → Comp → EM Comp
     -- The end of a loop's body: back to its head.
     | some _ => pure (thenGo T (← eBack m T.span))
     | none => eFinish m T
+
+/-- **The works of a `for`'s node whose body performs `Div`** (`VSugar.workStep`, SPEC §55): each
+is a div body of its own at the work's row, whose answer is the work's, `inl ws` or `inr (ws, e)`,
+and whose close hands back the threaded variables, which the work answers as its exit
+`inr (ws, inr ())`; a `return` inside its loops leaves the `for` (`retOf`). -/
+def eWorks (m : DCx) : Nat → TCx → Val → EM Val
+  | 0, _, V => pure V
+  | n + 1, c, V => match V with
+    | .pair sp a b => do pure (.pair sp (← eWorks m n c a) (← eWorks m n c b))
+    | .ascribe asp (.app _ (.sugar _ (.workStep ws ret)) (.bangThunkv vsp (.lam lsp q T K))) Ty => do
+      let some Fty := c.elabV Ty
+        | throw ⟨asp, "internal error: a `for`'s work has no type"⟩
+      let (Pt, Bs) ← match Fty with
+        | .bang (.thunk (.arr P C)) => match Frontend.Check.effRow? C with
+          | some (_, Bs) => pure (P, Bs)
+          | _ => throw ⟨asp, "internal error: a `for`'s work"⟩
+        | _ => throw ⟨asp, "internal error: a `for`'s work"⟩
+      let caps ← ws.mapM fun y => match c.tyV (.var asp y) with
+        | some Ty => pure (y, Ty)
+        | none => (throw ⟨asp, s!"the loop threads `{y}`, whose type is not determined: ascribe it"⟩ : EM _)
+      let Rs : CVTy := tupleT (caps.map (·.2))
+      let cx : LoopCx := ⟨Bs, Rs, Rs, if caps.isEmpty then [] else [caps], false⟩
+      let retOf : Option (Span → Val → Val) := if !ret then none else some fun tsp v =>
+        .inl tsp (.inr tsp (.pair tsp (tupleVal tsp ws) (.inl tsp (.inr tsp v))))
+      let mw : DCx := { L := cx, row := m.row, fwd := m.fwd, pp := m.pp, pre := false, retOf }
+      let K' ← eWalk mw n (c.push q.name (some Pt)) K
+      let K'' ← eTpl lsp "a `for`'s work" (s!"io_wr : {m.pp (.sum Bs Rs)} <- force io_hole_k;\n" ++
+        "case io_wr { inl io_wo -> return io_wo | inr io_wc -> return (inr (io_wc, inr ())) }")
+        [] [("io_hole_k", K')]
+      pure (.ascribe asp (.bangThunkv vsp (.lam lsp q T K'')) Ty)
+    | V => pure V
 
 /-- `x <- f W; N`, a call of a div function in direct style: on `inl` it binds `x` and goes on;
 on `inr`, closed early, it hands the body's residual back. -/
@@ -3883,6 +3919,9 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       -- The step's body is at the loop's row, which the `Div` elaboration gives it: its own
       -- type is the step's after that elaboration.
       pure (.app sp (.sugar ksp (.rowStep ws r)) (← surfV n c none V))
+    | .app sp (.sugar ksp (.workStep ws r)) V => do
+      -- A `for`'s work whose body performs `Div`: as a counted loop's step, at the work's row.
+      pure (.app sp (.sugar ksp (.workStep ws r)) (← surfV n c none V))
     | .app sp (.sugar osp (.checked o)) (.pair psp a b) => surfOp n c exp sp osp psp o true a b
     | .app sp (.sugar ksp (.call k)) W => do
       let W' ← surfV n c none W
@@ -5443,8 +5482,29 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let Bg ← match Bw with
       | .tensor _ B => pure B
       | _ => throw ⟨sp, "internal error: a generator's copy for a `for` hands its variables back"⟩
+    -- Whether the body performs `Div`: its elaboration, run once and discarded, loops on its
+    -- spine (`loopsAt`: a loop, or a call of a div function). Its work is then a div body of its
+    -- own at the row `div, Σ_W` (`VSugar.workStep`), which a close inside it leaves with the
+    -- threaded variables, and the node's outer row holds `Div`.  [spec §55]
+    let (bodyLoops, bodyOps₀) ← do
+      let s₀ ← get
+      let o₀ ← getThe Origins
+      let ex₀ : LoopExit := .total .unit (fun tsp _ => .ret tsp (.unit tsp)) true
+      modify fun s => { s with quiet := true }
+      modify fun s => { s with machine := false }
+      modify fun s => { s with exits := ex₀ :: s.exits }
+      let cB := ws.foldl (fun c (y, T) => c.push y (some T)) (c.push x.name (some Tc))
+      let r ← tryCatch (do
+          let B ← surfC n cB none M
+          let cB ← refresh cB
+          pure ((← get).machine || (loopsAt cB none B).isSome, opsC cB divFuel B))
+        (fun _ => pure (false, []))
+      set s₀
+      set o₀
+      pure r
+    let looping' := looping || bodyLoops
     -- The body of a counted loop, or of a `for` over a generator, is one total step.
-    if looping then if let some (.total _ _ counted) := st.exits.head? then
+    if looping' then if let some (.total _ _ counted) := st.exits.head? then
       -- Inside a counted loop, the counted loop is a loop of the machine (`forData`'s class).
       if counted then modify fun st => { st with machine := true } else
       throw ⟨sp, s!"`{i.callee}` loops, so a `for` over it is div, and it is inside the body of a " ++
@@ -5473,7 +5533,9 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let Bt ← pp Bg
     let Vs ← pp Vt
     let Rts ← pp Rt
-    let Et := if hasRet then s!"({Vs}) + ({Rts})" else Vs
+    let Et₀ := if hasRet then s!"({Vs}) + ({Rts})" else Vs
+    -- With `Div` in the body, a close inside the work is an exit of its own, `inr ()`.
+    let Et := if bodyLoops then s!"({Et₀}) + 1" else Et₀
     let Jt := s!"(({Wt}) * ({Bt})) + (({Wt}) * ({Et}))"
     -- The node's answer: what `g` returns or how the body left (`Jt`), and, when `g` loops, its
     -- residual beside it: the node is then a call of a div function in direct style (`eDivCall?`).
@@ -5483,22 +5545,25 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let Ot := if looping then s!"({Jt}) + ({Rgs})" else Jt
     -- The outer row: the `for`'s, and `Div` first when `g`'s loop ticks under the node.
     let Fo (A : String) : DM String := do
-      if !looping then return ← F A
+      if !looping' then return ← F A
       let es ← S.mapM fun o => do
         pure s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q} {← pp o.A} ~> {← pp o.B}"
       pure s!"F[{", ".intercalate ("div" :: es)}] ({A})"
-    -- The body's row: the abortive operations of the outer row it performs (it performs no other,
-    -- `Frontend.Elab.Effects`, `forSite`).
-    let bodyOps := opsC c divFuel M
-    let SW := S.filter fun o => o.abort && bodyOps.contains (o.n.toNat, o.i.toNat)
+    -- The body's row `Σ_W`: the operations of the outer row it performs, abortive or affine
+    -- (`Frontend.Elab.Effects`, `forSite`).  [spec §55]
+    let bodyOps := opsC c divFuel M ++ bodyOps₀
+    -- A body that performs `Div` is at the row around the `for`, as a counted loop's step is.
+    let SW := if bodyLoops then S else S.filter fun o => bodyOps.contains (o.n.toNat, o.i.toNat)
     let FW (A : String) : DM String := do
-      if SW.isEmpty then return s!"F ({A})"
+      if SW.isEmpty && !bodyLoops then return s!"F ({A})"
       let es ← SW.mapM fun o => do
         pure s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q} {← pp o.A} ~> {← pp o.B}"
+      let es := if bodyLoops then "div" :: es else es
       pure s!"F[{", ".intercalate es}] ({A})"
-    -- `[handle-last]` when the body leaves early or raises (its work answers `inl` to resume,
-    -- `inr` to leave); the tail-resuming rule otherwise.  [spec §14, §51, §54]
-    let last := !M.spineBreaks.isEmpty || hasRet || !SW.isEmpty
+    -- `[handle-last]` when the body leaves early, raises, performs an operation outside or
+    -- `Div` (its work answers `inl` to resume, `inr` to leave); the tail-resuming rule otherwise.
+    -- [spec §14, §51, §54, §55]
+    let last := !M.spineBreaks.isEmpty || hasRet || !SW.isEmpty || bodyLoops
     let hrIn := if looping then s!"(({Wt}) * ({Bt})) + ({Rgs})" else s!"({Wt}) * ({Bt})"
     let hrBody := if looping then
         s!"case io_hv{sfx} \{ inl io_ha{sfx} -> return (inl (inl io_ha{sfx})) | inr io_hl{sfx} -> return (inr io_hl{sfx}) }"
@@ -5508,17 +5573,18 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let workHead := s!"!thunkv fun (io_hp{sfx} : {workIn}) ->
     let ({x.name}, io_hw{sfx}) = io_hp{sfx};
     {destructSrc s!"io_hw{sfx}" wsN}force io_hole_body"
+    let workV := if bodyLoops then "io_hole_work" else s!"({workHead})"
     let handler ← if last then do
         let exitBody := if looping then s!"return (inl (inr io_hz{sfx}))" else s!"return (inr io_hz{sfx})"
         pure s!"((!thunkv fun (io_hv{sfx} : {hrIn}) -> {hrBody}) : !U ({hrIn} -o {← Fo Ot})),
-  (((({workHead}) : !U ({workIn} -o {← FW s!"({Wt}) + ({Xt})"})), ()),
+  ((({workV} : !U ({workIn} -o {← FW s!"({Wt}) + ({Xt})"})), ()),
    (((!thunkv fun (io_hz{sfx} : {Xt}) -> {exitBody}) : !U (({Xt}) -o {← Fo Ot})), ()))"
       else do
         pure s!"((!thunkv fun (io_hv{sfx} : {hrIn}) -> {hrBody}) : !U ({hrIn} -o {← Fo Ot})),
   ((({workHead}) : !U ({workIn} -o F ({Wt}))), ())"
     -- The body: its terminals resume, and its exits leave.
     let leave (tsp : Span) (o : Val) : Comp :=
-      .ret tsp (.inr tsp (.pair tsp (tupleVal tsp wsN) o))
+      .ret tsp (.inr tsp (.pair tsp (tupleVal tsp wsN) (if bodyLoops then .inl tsp o else o)))
     let resume (tsp : Span) : Comp :=
       .ret tsp (if last then .inl tsp (tupleVal tsp wsN) else tupleVal tsp wsN)
     let brk (tsp : Span) (e : Val) : Val := if hasRet then .inl tsp e else e
@@ -5537,9 +5603,20 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let exitArm := if hasRet then
         s!"case io_jo{sfx} \{ inl io_jb{sfx} -> return (inl (io_jw{sfx}, io_jb{sfx})) | inr io_jr{sfx} -> return (inr io_jr{sfx}) }"
       else s!"return (io_jw{sfx}, io_jo{sfx})"
-    let join := s!"io_jj{sfx} : {JJt} <- case io_j{sfx} \{
+    let join := if !bodyLoops then s!"io_jj{sfx} : {JJt} <- case io_j{sfx} \{
     inl io_ja{sfx} -> let (io_jw{sfx}, io_jg{sfx}) = io_ja{sfx}; {endRet}
   | inr io_je{sfx} -> let (io_jw{sfx}, io_jo{sfx}) = io_je{sfx}; {exitArm}
+  };
+"
+      -- A close inside the work: the threaded variables bound, the body closed there
+      -- (`VSugar.rowClose`).
+      else s!"io_jc{sfx} : ({JJt}) + ({Wt}) <- case io_j{sfx} \{
+    inl io_ja{sfx} -> let (io_jw{sfx}, io_jg{sfx}) = io_ja{sfx}; io_jk{sfx} : {JJt} <- {endRet}; return (inl io_jk{sfx} : ({JJt}) + ({Wt}))
+  | inr io_je{sfx} -> let (io_jw{sfx}, io_jq{sfx}) = io_je{sfx};
+      case io_jq{sfx} \{
+        inl io_jo{sfx} -> io_jk{sfx} : {JJt} <- {exitArm}; return (inl io_jk{sfx} : ({JJt}) + ({Wt}))
+      | inr io_ju{sfx} -> return (inr io_jw{sfx} : ({JJt}) + ({Wt}))
+      }
   };
 "
     let r := match keep with
@@ -5556,14 +5633,27 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let core := s!"{bindW}io_j{sfx} : {Jt} <- {form}[{i.n}: {quals}]({handler}) (force io_hole_call);\n"
     let what := "a `for` over a generator"
     let site ← siteAtCall cw sp g i.site
-    let L ← (template sp what (core ++ join ++ after) : SM Comp)
+    let full := if !bodyLoops then core ++ join ++ after else
+      core ++ join ++ s!"case io_jc{sfx} \{
+  inl io_jj{sfx} -> {after}
+| inr io_cl{sfx} -> {destructSrc s!"io_cl{sfx}" wsN}force io_hole_close }"
+    let L ← (template sp what full : SM Comp)
     -- The generator's call in direct style, under the node.
     let callC : Comp := .ret sp call'
     let hc (h : String) : Option Comp :=
       if h == "io_hole_body" then some body else if h == "io_hole_rest" then some (restOf N)
       else if h == "io_hole_call" then some callC
       else if h == "io_hole_ret" then some (retOut sp (.var sp s!"io_rv{sfx}")) else none
-    let L := L.fillS (fun _ => none) hc fun k => if k == i.n then some site else none
+    let hc (h : String) : Option Comp :=
+      if h == "io_hole_close" then some (.ret sp (.sugar sp .rowClose)) else hc h
+    -- The work whose body performs `Div`, marked for the `Div` elaboration (`VSugar.workStep`).
+    let hv : String → Option Val ← if !bodyLoops then pure (fun _ => none) else do
+      let .ret _ wv ← (template sp what s!"return ({workHead})" : SM Comp)
+        | throw ⟨sp, "internal error: a `for`'s work"⟩
+      let wv := wv.fill (fun (_ : String) => (none : Option Val)) hc
+      let wv := Val.app sp (.sugar sp (.workStep wsN hasRet)) wv
+      pure (fun h => if h == "io_hole_work" then some wv else none)
+    let L := L.fillS hv hc fun k => if k == i.n then some site else none
     if !(← get).quiet then
       report sp (if looping then s!"`for` is div: `{i.callee}` loops" else
         s!"`for` is total: `{i.callee}` does not loop")
@@ -5573,7 +5663,7 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
           "returns, and its body does not `break`)")
     -- The loops inside the body leave by this loop's exit on `return`.
     let ret (tsp : Span) (v : Val) : Comp := leave tsp (.inr tsp v)
-    modify fun s => { s with exits := .total Rt ret :: s.exits }
+    modify fun s => { s with exits := .total Rt ret true :: s.exits }
     let L' ← surfC n c exp L
     modify fun s => { s with exits := s.exits.drop 1 }
     pure L'

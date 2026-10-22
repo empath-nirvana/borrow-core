@@ -184,6 +184,9 @@ structure CState where
   `Backend2/Driver.lean`, `lastFacts`), by operation: the work's function, the payload of its row
   `Σ_W` and the exit's argument's type. -/
   lasts : Std.HashMap (UInt32 × Nat) (Nat × List ((UInt32 × UInt32) × LTy) × LTy) := {}
+  /-- The functions of `works` and `lasts` whose code is made: `prepWorks` reserves every one
+  before it makes any, so a work that performs another's operation calls it however they nest. -/
+  made : Std.HashSet Nat := {}
   /-- `main`'s I/O externs by its context slot, each with its type: the persistent closures a
   rule-written handler's code may read, made again where that code runs (`ioCtx`). -/
   mainIO : Array (Option (IOKind × VTy)) := #[]
@@ -3037,7 +3040,8 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)
     if k.kind == .tail && direct[j]? == some true then
       let some (cc, c) := parts[j]? | throw "LIR: a clause"
       let some o := E[j]? | throw "LIR: an operation"
-      ensureWork fuel n j cc.length S o c
+      -- Made by `prepWorks` (the rule's answering function at `effHandleT`), or here.
+      unless (← get).works.contains (n, j) do ensureWork fuel n j cc.length S o c
   let wrap (b : Tm) : Tm := pre (preH (preCs.foldr (fun f t => f t) b))
   if let some T := teM then
     match tuple with
@@ -3077,8 +3081,9 @@ replaced by its answer (`TailResumesAt 0 M M'`, which the clause's kind gives,
 `classifyHandler_sound`). It takes the argument `x` and answers the operation's answer, at the
 payload of the handler's outer row `Σ`. Made once per operation. -/
 def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
-    (o : Qual × VTy × VTy) (c : TExpr) : CM Unit := do
-  if (← get).works.contains (n, j) then return
+    (o : Qual × VTy × VTy) (c : TExpr) (fill : Bool := true) : CM Unit := do
+  if let some (fi, _, _) := (← get).works[(n, j)]? then
+    if !fill || (← get).made.contains fi then return
   match c.unUse with
   | .bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => do
     readFact "effHandleV:tail work"
@@ -3086,10 +3091,16 @@ def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
     let kv ← fresh .unit
     let ph ← rowPay S
     let bT ← vty o.2.2
-    let fi ← reserveFn s!"clause {n}.{j}"
     -- At an outer row with machine operations the work is a machine (SPEC §49).
     let wm ← outInfo? bT S
-    modify fun st => { st with works := st.works.insert (n, j) (fi, ph, wm) }
+    let fi ← match (← get).works[(n, j)]? with
+      | some (fi, _, _) => pure fi
+      | none => do
+        let fi ← reserveFn s!"clause {n}.{j}"
+        modify fun st => { st with works := st.works.insert (n, j) (fi, ph, wm) }
+        pure fi
+    if !fill then return
+    modify fun st => { st with made := st.made.insert fi }
     let ctx₀ : Ctx := some kv :: some x :: none :: List.replicate depth none
     let (body, ret) ← match wm with
       | none => pure (← convWork fuel 0 ph ctx₀ tM, resTy bT ph)
@@ -3128,16 +3139,23 @@ calls (`effHandleT`, `tail_resume_direct`): the `j`-th answering function `g : !
 of the node's tuple, its λ's body at the argument, at the payload of `Σ_N` (linear operations: none
 but `Div`'s `tick`, answered where it is performed). Made once per operation.  `[spec §54]` -/
 def ensureAns (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (SN : Row)
-    (o : Qual × VTy × VTy) (g : TExpr) : CM Unit := do
-  if (← get).works.contains (n, j) then return
+    (o : Qual × VTy × VTy) (g : TExpr) (fill : Bool := true) : CM Unit := do
+  if let some (fi, _, _) := (← get).works[(n, j)]? then
+    if !fill || (← get).made.contains fi then return
   let some (k, .lam _ _ _ _ body) := lamOf 64 g
     | throw s!"LIR: the answering function {n}.{j} is not a λ"
   readFact "effHandleT:answering function"
-  let x ← fresh (← vty o.2.1)
   let ph ← rowPay SN
   let bT ← vty o.2.2
-  let fi ← reserveFn s!"clause {n}.{j}"
-  modify fun st => { st with works := st.works.insert (n, j) (fi, ph, none) }
+  let fi ← match (← get).works[(n, j)]? with
+    | some (fi, _, _) => pure fi
+    | none => do
+      let fi ← reserveFn s!"clause {n}.{j}"
+      modify fun st => { st with works := st.works.insert (n, j) (fi, ph, none) }
+      pure fi
+  if !fill then return
+  modify fun st => { st with made := st.made.insert fi }
+  let x ← fresh (← vty o.2.1)
   let (cw, binds) ← ioCtx depth (n, j)
   let b ← conv fuel (some x :: (List.replicate k none ++ cw)) body
   setFn fi { name := s!"clause {n}.{j}", params := [x], body := binds b, ret := resTy bT ph }
@@ -3147,17 +3165,24 @@ def ensureAns (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (SN : Row)
 `w : !U(A ⊸ F_{Σ_W}(B ⊕ X))` of the node's tuple, its λ's body at the argument, at the payload of
 `Σ_W`. Made once per operation.  `[spec §54]` -/
 def ensureLastWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (SW : Row)
-    (o : Qual × VTy × VTy) (X : VTy) (w : TExpr) : CM Unit := do
-  if (← get).lasts.contains (n, j) then return
+    (o : Qual × VTy × VTy) (X : VTy) (w : TExpr) (fill : Bool := true) : CM Unit := do
+  if let some (fi, _, _) := (← get).lasts[(n, j)]? then
+    if !fill || (← get).made.contains fi then return
   let some (k, .lam _ _ _ _ body) := lamOf 64 w
     | throw s!"LIR: the work {n}.{j} is not a λ"
   readFact "effHandleL:work"
-  let x ← fresh (← vty o.2.1)
   let phW ← rowPay SW
   let bT ← vty o.2.2
   let xT ← vty X
-  let fi ← reserveFn s!"work {n}.{j}"
-  modify fun st => { st with lasts := st.lasts.insert (n, j) (fi, phW, xT) }
+  let fi ← match (← get).lasts[(n, j)]? with
+    | some (fi, _, _) => pure fi
+    | none => do
+      let fi ← reserveFn s!"work {n}.{j}"
+      modify fun st => { st with lasts := st.lasts.insert (n, j) (fi, phW, xT) }
+      pure fi
+  if !fill then return
+  modify fun st => { st with made := st.made.insert fi }
+  let x ← fresh (← vty o.2.1)
   let (cw, binds) ← ioCtx depth (n, j)
   let b ← conv fuel (some x :: (List.replicate k none ++ cw)) body
   setFn fi { name := s!"work {n}.{j}", params := [x], body := binds b,
@@ -3688,7 +3713,7 @@ def clausesOf : Nat → TExpr → List TExpr
 converted before its handler's node (a function made before the `handle` and called inside it).
 Each tail-resumptive clause whose direct call is licensed, at the first `handle` node of its
 name, with the depth of the node's context.  `[spec §47]` -/
-def prepWorks (fuel : Nat) (depth : Nat) (t : TExpr) : CM Unit := do
+def prepWorks (fuel : Nat) (depth : Nat) (t : TExpr) (fill : Bool := true) : CM Unit := do
   match fuel with
   | 0 => throw "LIR: the typed term is too deep"
   | fuel + 1 =>
@@ -3703,7 +3728,7 @@ def prepWorks (fuel : Nat) (depth : Nat) (t : TExpr) : CM Unit := do
     for (k, j) in ks.zipIdx do
       if k.kind == .tail && direct[j]? == some true then
         if let (some c, some o) := (cs[j]?, E[j]?) then
-          ensureWork (1 <<< 22) n j depth S o c
+          ensureWork (1 <<< 22) n j depth S o c fill
   -- The tail-resuming rule's answering functions, and `[handle-last]`'s works.  [spec §54]
   match t with
   | .effHandleT _ _ _ SN E _ n _ _ _ _ _ (.tensorI _ _ _ _ _ _ tCs) _ =>
@@ -3711,16 +3736,16 @@ def prepWorks (fuel : Nat) (depth : Nat) (t : TExpr) : CM Unit := do
     let cs := clausesOf E.length tCs
     for (o, j) in E.zipIdx do
       if !ClauseKinds.isAbortive o && direct[j]? == some true then
-        if let some g := cs[j]? then ensureAns (1 <<< 22) n j depth SN o g
+        if let some g := cs[j]? then ensureAns (1 <<< 22) n j depth SN o g fill
   | .effHandleL _ _ _ SW E _ Xs n _ _ _ _ _ (.tensorI _ _ _ _ _ _ (.tensorI _ _ _ _ _ tW _)) _ =>
     let ws := clausesOf E.length tW
     for (o, j) in E.zipIdx do
       if !ClauseKinds.isAbortive o && (← get).mach.last.contains (n, j.toUInt32) then
-        if let some w := ws[j]? then ensureLastWork (1 <<< 22) n j depth SW o (Xs j) w
+        if let some w := ws[j]? then ensureLastWork (1 <<< 22) n j depth SW o (Xs j) w fill
   | _ => pure ()
   for (sc, c) in t.children do
     let d := match sc with | .push k => depth + k | .fresh k => k
-    prepWorks fuel d c
+    prepWorks fuel d c fill
 
 /-! ### `main` -/
 
@@ -3805,6 +3830,7 @@ def convMain (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) 
   modify fun st => { st with mainIO := (ctx.zipIdx.map fun ((A, _), i) => match exts[n - 1 - i]? with
     | some (.io op) => some (op, A)
     | _ => none).toArray }
+  prepWorks (1 <<< 22) cx.size t false
   prepWorks (1 <<< 22) cx.size t
   if loops && (← get).divRt then
     if let some (u, ta, S, B, R) := mainReify? t then
