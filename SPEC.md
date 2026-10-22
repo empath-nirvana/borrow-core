@@ -8812,6 +8812,11 @@ One rule per construct:
   lowering is trusted (no compiler proof, decision #15). A proof of the invariant over an abstract
   model of the stack operations is assessed in #664 (tractable as a design proof; linking it to the
   emitted code is the compiler proof the project does not build).
+- **Not leak-free.** Core's `adequacyC` proves the elaborated term leak-free, but this lowering
+  does not keep that. A task that is dropped rather than cancelled leaks its continuation's cell
+  and its stack, as §49's state cells already do on a dropped suspension. Nothing checks or tests
+  for this: the LIR interpreter's checks cover use, not eventual release, and no corpus program
+  drops a task. Whether a kernel-typed program can reach it is open (#671).
 
 ### Facts read
 
@@ -8882,7 +8887,10 @@ unchanged on both backends.
   levels call other machines, one at an operation that a site does not keep boxed (a generator).
 - **The register is one word.** With threads (decision: threads are required) the current stack is
   per thread.
-- **A dropped task** (affine, not cancelled) leaks its cell and its stack, as §49's state cells do.
+- **A dropped task leaks** (affine, not cancelled): its cell and its stack, as §49's state cells
+  do. See *Checked, tested, trusted* and #671. Under the finaliser algebra, dropping a suspension
+  that holds resources would have to run its cancel path, which makes `drop` control flow that can
+  raise. That is a decision for where the kernel types the dropped value, not a backend patch.
 - **The array scheduler's bounds checks.** `array_replace` checks its index; no fact puts a counted
   loop's index in range of an array it does not read through a view (§46).
 - `run_logged` and `run_in` still build list nodes per round.
