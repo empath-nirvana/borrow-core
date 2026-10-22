@@ -269,7 +269,10 @@ program's data is the global `@bc_data`, and its addresses are the flat IR's `Ex
 (the closure IR's `Op.dataAddr`, a literal's address, and a capability cell's): `@bc_data + off`
 natively, `dataBase + off` in Wasm and in the flat-IR interpreter. The data is writable, since a
 capability's cell is a word of it; `bc_free` skips an address in it, as Wasm's `$free` skips one
-below the heap.
+below the heap. The new backend's flat IR says which locals hold an address (`Fn.ptrs`) and computes
+addresses from bases (`Exp.gep`); the emitter's typed mode, which only the new backend uses, holds
+those as `ptr`s, computes addresses with `getelementptr`, and states the parameters' facts
+(`Fn.facts`: `noalias`, `readonly`, `nonnull`, `dereferenceable`) as attributes (SPEC §50).
 
 **Host operations, with no undefined behaviour or poison.** Each `HostOp` is emitted as follows
 (`Native/Lower.lean`, `hostOp`), with no `nsw`, `nuw`, `exact` or fast-math flag anywhere:

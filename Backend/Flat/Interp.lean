@@ -52,6 +52,8 @@ structure FState where
   stores : Nat := 0
   /-- Bounds checks so far: each `tickBound` run (the counting build marks every one). -/
   bounds : Nat := 0
+  /-- Frame slots started so far (`Exp.slot`). -/
+  slotsStarted : Nat := 0
   /-- The end of the read-only data: an address below it is not freed. -/
   staticEnd : Nat := 0
   /-- Live frame slots: start ↦ length in words. They are not ranges: `live` does not count
@@ -192,7 +194,7 @@ def startSlot (off n : Nat) : FM UInt64 := do
   let a := fp + 8 * off
   if s.slots.contains a then throw s!"flat IR: the slot at {a} is already live"
   let mem := (List.range n).foldl (fun m i => m.insert (a + 8 * i) none) s.mem
-  set { s with mem, slots := s.slots.insert a n }
+  set { s with mem, slots := s.slots.insert a n, slotsStarted := s.slotsStarted + 1 }
   pure a.toUInt64
 
 /-- End the life of the slot at `a`. -/
@@ -279,6 +281,7 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
     | .stat 1 => do pure (← get).indirect.toUInt64
     | .stat _ => do pure (← get).copies.toUInt64
     | .data off => pure (dataBase + off).toUInt64
+    | .gep a k => do pure ((← evalExp p n fr a) + (← evalExp p n fr k))
 
 def evalArgs (p : Prog) : Nat → Array UInt64 → List Exp → FM (List UInt64)
   | 0, _, _ => throw "flat IR: out of fuel"
@@ -406,11 +409,13 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
     | .trap => throw "flat IR: trap"
 end
 
-/-- The memory operations of a run: its loads, its stores and its bounds checks. -/
+/-- The memory operations of a run: its loads, its stores and its bounds checks; and the frame
+slots it started. -/
 structure MemCounts where
   loads : Nat
   stores : Nat
   bounds : Nat
+  slots : Nat := 0
 
 /-- Run the entry function on the standard input `input`: what it writes, and its memory
 operations. -/
@@ -426,7 +431,7 @@ def interpMem (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 :=
   let (_, s) ← (callFn p fuel p.entry [] (some 0)).run
     { mem, ranges := {}, next, input, args, out := .empty, err := .empty,
       staticEnd := if L == 0 then 0 else staticEnd L }
-  pure (⟨s.out, s.err, s.status⟩, ⟨s.loads, s.stores, s.bounds⟩)
+  pure (⟨s.out, s.err, s.status⟩, { loads := s.loads, stores := s.stores, bounds := s.bounds, slots := s.slotsStarted })
 
 /-- Run the entry function on the standard input `input`: what it writes. -/
 def interp (fuel : Nat) (p : Prog) (input : List UInt8) (args : List UInt8 := []) :

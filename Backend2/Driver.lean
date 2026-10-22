@@ -121,37 +121,46 @@ def suspCodes (L : Lay.Layouts) (o : Var) (M : OutInfo) : List Nat := Id.run do
 
 /-- The LIR of a checked program, and what the conversion read. With state machines (SPEC §49), the
 layouts of the converted program decide the calls in tail position that close a loop
-(`tailPass`) and the machines whose state is a cell (`cellPass`). -/
+(`tailPass`) and the machines whose state is a cell (`cellPass`). A machine whose state is a cell
+and whose body takes its continuation is converted again with the level's cell passed on to its
+next point (`threadedOf`, SPEC §50): the conversion's second run, at those machines. -/
 def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
   let c := k.main
   let (exts, ncaps, loops) ← match k.io with
     | none => pure ([], 0, false)
     | some m => pure (← extsOf m, m.caps.length, m.loopB.isSome)
   let ctx := c.ctx.map fun s => (s.ty, s.live)
-  let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c) (machineOps c)
-  let p := { p with exits := c.exitsOnDivError }
-  if st.done.isEmpty then return (p, st)
-  -- A call in tail position whose callee's suspended computations may be the machine's own
-  -- closes a loop of tail calls, and passes its outcome on (SPEC §49, `tailPass`).
-  let (g, m) ← Lay.places p
-  let L₁ := Lay.resolve p g m (cellsOf k)
-  let loop (site : Nat × Var × OutInfo × Nat) : Bool :=
-    let (_, o, M, i) := site
-    let own := (st.done[i]?.map fun (_, kcs) => kcs.map (·.2)).getD []
-    (suspCodes L₁ o M).any own.contains
-  let (p, st) ← if st.tailSites.any loop then do
-      let (p₁, st₁) ← tailPass st loop
-      pure ({ p with fns := p₁.fns, codes := p₁.codes, ty := p₁.ty }, st₁)
-    else pure (p, st)
-  -- The machines whose suspended computation's class holds itself keep their state in a cell
-  -- (SPEC §49, `cellPass`), read off the layouts' recursive classes.
-  let (g, m) ← Lay.places p
-  let L := Lay.resolve p g m (cellsOf k)
-  let recursive (kc : Nat) : Bool := match L.codeClass[kc]? with
-    | some cls => L.isRec cls
-    | none => false
-  let (p₂, st₂) ← cellPass st recursive
-  return ({ p with fns := p₂.fns, codes := p₂.codes, ty := p₂.ty }, st₂)
+  let run (threaded : Std.HashMap Nat LTy) :
+      Except String (Prog × CState × Std.HashMap Nat LTy) := do
+    let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c) (machineOps c)
+      threaded
+    let p := { p with exits := c.exitsOnDivError }
+    if st.done.isEmpty then return (p, st, {})
+    -- A call in tail position whose callee's suspended computations may be the machine's own
+    -- closes a loop of tail calls, and passes its outcome on (SPEC §49, `tailPass`).
+    let (g, m) ← Lay.places p
+    let L₁ := Lay.resolve p g m (cellsOf k)
+    let loop (site : Nat × Var × OutInfo × Nat) : Bool :=
+      let (_, o, M, i) := site
+      let own := (st.done[i]?.map fun (_, kcs) => kcs.map (·.2)).getD []
+      (suspCodes L₁ o M).any own.contains
+    let (p, st) ← if st.tailSites.any loop then do
+        let (p₁, st₁) ← tailPass st loop
+        pure ({ p with fns := p₁.fns, codes := p₁.codes, ty := p₁.ty }, st₁)
+      else pure (p, st)
+    -- The machines whose suspended computation's class holds itself keep their state in a cell
+    -- (SPEC §49, `cellPass`), read off the layouts' recursive classes.
+    let (g, m) ← Lay.places p
+    let L := Lay.resolve p g m (cellsOf k)
+    let recursive (kc : Nat) : Bool := match L.codeClass[kc]? with
+      | some cls => L.isRec cls
+      | none => false
+    let (p₂, st₂) ← cellPass st recursive
+    return ({ p with fns := p₂.fns, codes := p₂.codes, ty := p₂.ty }, st₂, threadedOf st recursive)
+  let (p, st, th) ← run {}
+  if th.isEmpty then return (p, st)
+  let (p, st, _) ← run th
+  return (p, st)
 
 /-- **The effect erasure's postcondition**, for a program (`bcc lir --erasure`, SPEC §47, §49): the
 LIR has no `handle` and no `perform`, so a program the new backend compiles has none left. The
@@ -185,6 +194,15 @@ def lintOf (k : Backend.CheckedProg) : Except String Unit := do
   let (p, _) ← lirOf k
   Lint.lint p
 
+/-- **The frame slots** (`bcc lir --frames`, SPEC §50): of the cells allocated for one lend
+(`Op.allocLent`), how many are placed in a frame slot (`Frames.framed`) and how many on the heap. -/
+def framesLine (k : Backend.CheckedProg) : Except String String := do
+  let (p, _) ← lirOf k
+  let all := Frames.lentCells p
+  let fr := Frames.framed p
+  let n := (all.filter fr.contains).length
+  pure s!"framed {n} allocated {all.length - n}"
+
 /-- The layouts of a program's LIR. -/
 def layoutsOf (k : Backend.CheckedProg) (p : Prog) : Except String Lay.Layouts := do
   let (g, m) ← Lay.places p
@@ -213,9 +231,12 @@ def flatOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String Ba
 def watOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String String := do
   pure (Backend.Wasm.printModule (Backend.Wasm.lowerProg (← flatOf k counts) counts))
 
-/-- The program as LLVM IR by the new backend. -/
-def llOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String String := do
-  Backend.Native.printProg (← flatOf k counts) Backend.nativeTriple counts
+/-- The program as LLVM IR by the new backend: typed pointers, and with `facts` the parameters'
+facts as attributes (SPEC §50); without, for the differential run, which must print the same. -/
+def llOf (k : Backend.CheckedProg) (counts : Bool := false) (facts : Bool := true) :
+    Except String String := do
+  Backend.Native.printProg (← flatOf k counts) Backend.nativeTriple counts (typed := true)
+    (attrs := facts)
 
 /-- **The new backend's compile, timed** (`bcc compile --backend new --timings`): `file`'s WAT, each
 stage's time and output size written to standard error as `Backend.compileWatTimed` writes the

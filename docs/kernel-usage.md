@@ -368,10 +368,15 @@ and `lendR` in them; one code per task body by `use` keys. Left: the box lifetim
 **N4 (codata and loops):** `nuIn`, `nuOut`, `unfoldN` and their instances (`fixD`, `unfoldS`, …),
 with `Collapse` reading the node. `iterate`, `divFuel` and `reify` once B2 produces them.
 
-**N5 (target facts):**
-- Modes and extents of every borrow: `withbor1/2/3`, `withload`, `withswap`, the slice borrows,
-  the `…U` forms, `withborSM`, `withborF2M` → `noalias`/`readonly`.
-- Storage from lifetimes: `alloc`/`free`, `allocS`/`freeS`, `lendCell` (delete `markScoped`), `V.box`, `C.all`.
+**N5 (target facts, SPEC §50, built in part):**
+- Modes of every borrow: built as the types the borrows give their callbacks' parameters (`imm`,
+  `mut`, a family's leaves), read at each function's parameters → `noalias`/`readonly`/`nonnull`/
+  `dereferenceable`. Their extents (the lend's lifetime) are not read: a parameter attribute
+  covers the function's run, which a live borrow outlives.
+- Storage from lifetimes: `lendCell`'s frame slots (N1's rule, compared per run with
+  `markScoped`'s); a recursion's level keeps its state cell across its suspensions. Not built:
+  `alloc`/`free`, `allocS`/`freeS`, `V.box` (no storage of the new backend depends on a box's
+  lifetime yet), `C.all`.
 - Bounds checks elided by `walk`'s proved fact (`walk_index_lt`).
 
 **B1/B2 (`Div` in the kernel, its elaboration as typed schemes):** `iterate`, `divFuel`, `reify`,

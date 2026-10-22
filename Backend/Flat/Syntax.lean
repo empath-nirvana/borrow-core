@@ -58,6 +58,10 @@ inductive Exp where
   /-- The address of byte `off` of the program's data (`Prog.data`): `dataBase + off` in Wasm's
   memory and the flat-IR interpreter's, the address of a global natively. -/
   | data (off : Nat)
+  /-- The address `off` bytes past the address `base`: the word `base + off`, which a target with
+  typed pointers computes from the base pointer (LLVM's `getelementptr`) rather than from integer
+  arithmetic. -/
+  | gep (base off : Exp)
   deriving Repr, Inhabited
 
 inductive Stmt where
@@ -102,6 +106,27 @@ inductive Stmt where
   | trap
   deriving Repr, Inhabited
 
+/-- A fact about the address a parameter holds, which the producing backend read off the typed
+term and which a target may state (LLVM's parameter attributes). -/
+inductive PFact where
+  /-- No address not based on the parameter reaches the memory it reaches and the function
+  writes, while the function runs. -/
+  | noalias
+  /-- The function writes nothing through it. -/
+  | readonly
+  | nonnull
+  /-- At least `bytes` bytes at the address may be read. -/
+  | deref (bytes : Nat)
+  deriving Repr, Inhabited, BEq
+
+/-- The facts of parameter `param` (a word of the function's parameters) and the checked fact they
+are read from (`cite`). -/
+structure ParamFacts where
+  param : Nat
+  facts : List PFact
+  cite : String
+  deriving Repr, Inhabited
+
 structure Fn where
   name : String
   params : Nat
@@ -112,6 +137,13 @@ structure Fn where
   and given back on return. -/
   frame : Nat := 0
   body : List Stmt
+  /-- The locals (parameters among them) that hold an address, by their layout: a target with
+  typed pointers holds them as pointers. Empty for a producer that does not say. -/
+  ptrs : List Nat := []
+  /-- The parameters' facts (`PFact`). -/
+  facts : List ParamFacts := []
+  /-- The function is to be inlined at every call (LLVM's `alwaysinline`), with the reason. -/
+  inline : Option String := none
   deriving Repr, Inhabited
 
 structure Prog where

@@ -183,6 +183,9 @@ structure Fn where
   body : Tm
   /-- The type of the value it answers. -/
   ret : LTy
+  /-- The function is part of its caller's code and is to be inlined at every call, with the
+  reason (the native target's `alwaysinline`, checked: SPEC §50). -/
+  inline : Option String := none
   deriving Inhabited
 
 /-- A program: its functions, its codes, `main`'s term and every variable's type. -/

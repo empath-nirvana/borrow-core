@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.98 · 2026-10-21
+Version 0.99 · 2026-10-22
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -7239,7 +7239,8 @@ for byte, and every output, golden and count is unchanged.
 
 - Performance tuning: native output is unbuffered, as Wasm's is, and no optimization is aimed at
   native code (#530).
-- Aliasing attributes from the borrow invariants (`noalias`, `readonly`, #531).
+- Aliasing attributes from the borrow invariants (`noalias`, `readonly`, #531) for the old
+  backend; the new backend's are §50's.
 - Detection of stack overflow, debug information, linking with C (#532).
 - A target other than the host's: the IR has no triple, and `clang` builds it for the host.
 
@@ -8431,11 +8432,125 @@ were taken), at the LIR interpreter, the word IR, Wasm and natively.
   `resume_or_cancel_direct`): the handler-state programs above compile as machines, with the old
   backend's dispatches; their rules would make them zero cost.
 - A level's state cell passed on to the machine's next point, so that a recursion's levels keep
-  one object each across their own suspensions (`rec-emit`).
+  one object each across their own suspensions (`rec-emit`): built in §50.
 - A loop that may diverge (§14's one machine per body): `chain-yield` stays at the old backend's
   time until `iterate` (B2, parked).
 - An evidence slot for the direct-call rules (E's slot for `tail+state` and RC-3): N3's drives
   carry the handler's values with `κ` and need none.
+
+---
+
+## 50. Entry 49 — the new backend: target facts (N5)
+
+### Motivation
+
+Unit N5 (`docs/compiler.md` §6.1, #661) gives the native target what the checker establishes
+about addresses, which §40 left out: every word an `i64` and every address `inttoptr` of integer
+arithmetic, no attribute on any parameter (§40 *Not provided*), and so no vectorised loop over an
+array (#537 fix 5). It also carries two items N3 left (§49 *Open*): a level's state cell passed
+on to its machine's next point, and an aggregate `phi` LLVM does not thread (sieve).
+
+Everything here is backend: no change to the language, `CDerives`, the relation, `Core/`, the
+checker or the old backend's output. `bcc` gains `--no-facts` (the native build without the
+facts), `bcc lir --frames` and `bcc-counts --frames`.
+
+### Lowering
+
+- **Typed pointers.** Which words of a value hold an address is read off its layout node, which
+  is its type (§35, `Backend2/Lower.lean`, `addrKinds`): a cell's or a borrow's word, a family's
+  base and a boxed field's pointer do; a sum's payload word does where its arms agree (padding
+  agrees with either); a closure's captured word where its class's codes agree; a heap class's
+  word (`2t + 1` or an address) does not. A local is a pointer when every variable's layout that
+  places it says so (`Fn.ptrs`). The word IR's address arithmetic is `Exp.gep base off`, a word
+  `base + off` in Wasm and at the word IR's interpreter. Natively (the emitter's typed mode, the
+  new backend's only) a pointer local is a `ptr`, an address is a `getelementptr` from its base,
+  the frame's slots and the data are `getelementptr`s of their `alloca` and global, and a
+  parameter is a `ptr` where every function of its tail-call class holds an address there
+  (`classPtrs`), since `musttail` asks a class's prototypes to agree. `inttoptr` and `ptrtoint`
+  are left where an address passes through a word that is not one everywhere: a mixed sum's
+  payload, a heap class's word, a result.
+- **Facts.** Each parameter word's facts are read off the parameter's type (its `LTy`; a layout
+  node may be shared by an owner and its borrows, so a node's shape does not give the mode), and
+  emitted as LLVM attributes where the parameter is a `ptr`, each cited in a comment above the
+  definition:
+
+  | parameter word | attributes | the guarantee it cites |
+  |---|---|---|
+  | a `mut` borrow of a cell with words | `noalias nonnull dereferenceable(b)` | a `mut` lend is unique: `●` joins `imm` cells only (`CellU.CompatS.kinds`, `Support/Model/Composition.lean`); a live borrow points at a live cell: no run is stuck (`adequacyD`, §13), so a load through it succeeds |
+  | an `imm` borrow of a cell with words | `noalias readonly nonnull dereferenceable(b)` | an `imm` lend is not written while live: `▶◀` relates `imm` cells at one value (`CellU.CompatS`), and the LIR's writes (`put`, `swap`, `slotPut`, `replace`) take a `mut` borrow or the owner; a live borrow points at a live cell, as above |
+  | the base of a borrowed family | `noalias`, and `readonly` at `imm` leaves | its leaves' mode, as above; the base is `0` for an empty family or in the program's data, so it is neither `nonnull` nor `dereferenceable` |
+
+  `b` is the cell's bytes (its class's widest, §35). A cell of no words (its borrow is `0`) gets
+  none. A pair's fields are its words in order; a sum's depend on its arm and get none. These are
+  facts, not forcing annotations: no performance target rests on LLVM's use of them
+  (`docs/compiler.md` choice 6).
+- **`musttail`** on every tail call, as §40; LLVM's verifier rejects one it cannot honour, and the
+  native stage of `scripts/compile-backend2.sh` builds every program.
+- **`alwaysinline`** where the LIR asks for it (`Fn.inline`, with its reason): a call point's
+  step (§49), which is its machine's code after the call, a function only so that the resume
+  entry can enter it again.
+- **One exit block.** A function that returns by value stores its result words in slots and
+  branches to one `ret`, so where returns join after inlining each word is a scalar `phi`, not a
+  `phi` of the aggregate, which LLVM does not split (sieve's inner loop).
+- **Frame slots by rule** (§35, as built in N1, `Backend2/Frames.lean`): a cell allocated for one
+  lend (`lendCell`, `withbor (alloc v) cb`) is a slot of its function's frame when its owner's one
+  consumer, followed through the LIR's moves (each variable consumed once, from the masks), is a
+  `free` in that function. `bcc lir --frames` counts the sites; `bcc-counts --frames` counts the
+  slots a run starts.
+- **A level's state cell passed on** (§49 *Open*). A machine whose state is a cell (its suspended
+  computation's class holds itself) and whose body takes its continuation, with no call in tail
+  position and its points at one operation, is converted again with the level's cell as the
+  bottom frame of its continuation (`Frame.cellF`): `inl ()` until the level first suspends, then
+  the cell, which each later suspension writes in place and the level's answer, abort or cancel
+  releases. The machines are read off the first conversion's layouts, as `cellPass` reads them
+  (`threadedOf`); a program with none is converted once. A recursion's levels keep one object
+  each across their own suspensions, as the old backend's did.
+
+### Tests
+
+`scripts/native-facts.sh`, a step of the gate, on every corpus program the new backend compiles:
+
+- **The differential run.** Built at `clang -O2` without the facts (`bcc run --backend new
+  --native --no-facts`), each prints its golden output and error and ends with its golden
+  status, as `scripts/compile-backend2.sh`'s native stage checks with them.
+- **`alwaysinline`.** No call of a function the LIR asks to inline is left in `clang -O2`'s IR
+  (52 programs ask).
+- **Frame slots.** Where the old backend has a scoped cell, the slots a run starts at the new
+  backend's word IR are at least the old backend's (the static sites differ: one `use` body is
+  one site of the new backend's and a site per copy of the old's).
+
+### Facts read
+
+Each parameter's type (the borrow modes of `imm`, `mut` and a family's leaves), the layouts (an
+address's words, a cell's bytes, a class's agreement), the LIR's step functions, and a first
+conversion's machines and layouts for the levels' cells.
+
+### Programs
+
+The 380 programs of §49 at their goldens with the facts and without. `corpus/counts-backend2.expected`
+changes in `allocs` only: `rec-emit` 16 → 6 (the old backend's 6), `async-map` 29 → 27 and
+`async-mapreduce` 57 → 54 (the old backend's 29 and 57). `corpus/erasure-backend2.expected`,
+`corpus/counts.expected` and `kernel-counts.expected` are unchanged.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `Core/`, `Paper/`, `Support/`, the checker,
+the elaboration or a kernel program. The word IR gains `Exp.gep`, `Fn.ptrs`, `Fn.facts` and
+`Fn.inline`, which the old backend does not produce; its native emission is unchanged. The word
+IR's interpreter counts the frame slots a run starts.
+
+### Open
+
+- **One object per task.** A recursive task's levels are one cell each (one per level active at
+  a suspension), not one object for the task: a recursion of unbounded depth needs a stack the
+  task owns, which N5 does not build.
+- **Handler state in a register (#537 fix 9).** handlers-di's clock is kept in a register only
+  with the facts: without them its cell is stored at every step. Under choice 6 that does not
+  count; the state as a local of the LIR remains.
+- **The box lifetime of `effHandleVB`** is not read. No storage of the new backend depends on it:
+  `κ`'s environment is by value, and a level's cell lives as long as its level. It would matter
+  where a box's contents are allocated, to place them in the scope the lifetime names.
+- **`!noalias` and `!alias.scope`** (#531), where a parameter attribute is too coarse; Alive2.
 
 ---
 
@@ -8818,12 +8933,25 @@ payloads, `convHandle`, `ensureWork`, `convWork`, `prepWorks`, `genLendU`, the e
 implemented in `Backend2/Convert.lean` (`genFix`, the `boundedFix` case), `Op.cntPred` in
 `Backend2/Syntax.lean`, `Interp.lean`, `Lower.lean` and `Print.lean`, `Backend2/Driver.lean`
 (`watTimed`) and `Core/DivDrive.lean`; no change to `CDerives`, `Paper/`, `Support/`, the checker or
-the old backend.
+the old backend. Entry 49 (§50) is implemented in `Backend/Flat/Syntax.lean` (`Exp.gep`, `PFact`,
+`Fn.ptrs`, `Fn.facts`, `Fn.inline`), `Backend/Native/Lower.lean` (the typed mode: `texpr`,
+`tstmt`, `tlowerFn`, `classPtrs`), `Backend2/Lower.lean` (`addrKinds`, `vote`, `paramFacts`),
+`Backend2/Convert.lean` (`Frame.cellF`, `withMachineK`, `threadedOf`, `stepInline`),
+`Backend2/Driver.lean` (`lirOf`'s second conversion, `framesLine`) and
+`scripts/native-facts.sh`; no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the checker or
+the old backend's output.
 
 ---
 
 ## Changelog
 
+- **0.99** (2026-10-22) — §50 (#661, N5): the new backend's native target has typed pointers
+  (a `ptr` where a layout places an address, `getelementptr` from bases), the parameters' facts
+  as cited `noalias`/`readonly`/`nonnull`/`dereferenceable`, `alwaysinline` on a call point's
+  step (checked after `-O2`) and one exit block per function that returns by value; a
+  recursion's level keeps its state cell across its own suspensions. `rec-emit` allocates 6
+  objects (16 before), `async-map` 27 and `async-mapreduce` 54. No output, golden or status
+  changes, with the facts or without; the old backend's output is unchanged.
 - **0.98** (2026-10-21) — §18, §20 (#659): a call of the recursive group's self-reference, and a
   layer's `call`, is a call's binding like every other call, so a terminal that is its answer is
   the call in tail position (`t <- C; let (E, r) = t; return (E, r)` is `C`, the right unit and

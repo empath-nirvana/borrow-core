@@ -80,6 +80,7 @@ steps=(
   "compile kernel"   "scripts/compile-kernel.sh"
   "backend2 fence"   "scripts/check-backend2.sh"
   "backend2 corpus"  "scripts/compile-backend2.sh"
+  "native facts"     "scripts/native-facts.sh"
   "native"           "scripts/compile-native.sh"
   "sugar pairs"      "scripts/check-sugar.sh"
   "let mut combos"   "scripts/mut-combos.py --gate --count 400"
@@ -106,7 +107,7 @@ if [ "$changed" = 1 ]; then
   done
   if [ "$lean" = 0 ]; then
     all=0
-    corpus=("parse corpus" "check corpus" "clause kinds" "handled names" "cell classes" "compile corpus" "backend2 corpus" "sugar pairs" "native" "renaming")
+    corpus=("parse corpus" "check corpus" "clause kinds" "handled names" "cell classes" "compile corpus" "backend2 corpus" "native facts" "sugar pairs" "native" "renaming")
     for f in $files; do
       case "$f" in
         corpus/kernel-counts.expected) add "compile kernel" ;;
@@ -122,6 +123,7 @@ if [ "$changed" = 1 ]; then
         scripts/compile-corpus.sh) add "compile corpus" ;;
         scripts/compile-kernel.sh) add "compile kernel" ;;
         scripts/compile-backend2.sh) add "backend2 corpus" ;;
+        scripts/native-facts.sh) add "native facts" ;;
         scripts/check-backend2.sh) add "backend2 fence" ;;
         scripts/compile-native.sh) add "native" ;;
         scripts/compile-scaling.sh) add "compile scaling" ;;

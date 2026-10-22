@@ -10,6 +10,7 @@ import Backend2.Driver
     lake exe bcc-counts --kernel [--sites] <name>
     lake exe bcc-counts --native <file> [-- arg…]
     lake exe bcc-counts --cells <file>
+    lake exe bcc-counts [--backend new] --frames <file> [-- arg…]
 
 Run the program at the flat IR (`Backend/Flat/Interp.lean`) and under `wasmtime`, each built to
 count, and print `allocs N indirect M copies K loads L stores S bounds B`: the objects the run
@@ -46,6 +47,10 @@ With `--native`, the second run is the native build (`bcc run --native`, SPEC §
 `wasmtime`'s, and the two must agree on the counts and the exit status.
 
 With `--kernel`, the program is the kernel program `name` (`Backend/Kernel.lean`).
+
+With `--frames`, print only `slots N`: the frame slots the run starts at the flat IR (`Exp.slot`),
+the cells placed in a frame slot rather than allocated, per run. `scripts/native-facts.sh`
+compares the new backend's with the old backend's (SPEC §50).
 
 With `--backend new` first, the program is compiled by the new backend (`Backend2/`, the pure
 fragment): its word IR and its Wasm or native build, counted the same way.
@@ -197,6 +202,11 @@ def main (argv₀ : List String) : IO UInt32 := do
     match sites file (← IO.FS.readFile file) with
     | .ok s => IO.println s; return 0
     | .error e => IO.eprintln e; return 1
+  -- `--frames`: the frame slots a run starts (the flat IR's `Exp.slot`), at the old or new
+  -- backend's lowering: the cells placed in a frame slot, per run (SPEC §50).
+  let (frames, argv) := match argv with
+    | "--frames" :: rest => (true, rest)
+    | _ => (false, argv)
   let (file, args) ← match argv with
     | [file] => pure (file, [])
     | file :: "--" :: args => pure (file, args)
@@ -211,6 +221,9 @@ def main (argv₀ : List String) : IO UInt32 := do
   let (flat, status, mem) ← match memR with
     | .ok (o, m) => pure (String.fromUTF8! o.out, o.status, m)
     | .error e => IO.eprintln e; return 1
+  if frames then
+    IO.println s!"slots {mem.slots}"
+    return 0
   let wat ← match k >>= (fun k => if new then Backend2.watOf k true else k.wat true) with
     | .ok w => pure w
     | .error e => IO.eprintln e; return 1

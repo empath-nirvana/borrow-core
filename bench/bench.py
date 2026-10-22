@@ -45,6 +45,7 @@ BC_CFLAGS = ["-O2", "-w", "-pthread"]
 ORDER = ["sum", "prefix", "sieve", "sieve-for", "matmul", "quicksort", "chain-for", "chain-yield",
          "chain-gen", "sort-generic", "parse", "binary-trees", "n-body", "mandelbrot",
          "spectral-norm", "wordcount", "gen-tree", "gen-tree-dyn", "gen-tree-cb", "async-tree",
+         "async-tree-iter", "async-tree-boxed",
          "raise-small", "raise-large", "handlers-di", "handlers-di-generic"]
 
 
