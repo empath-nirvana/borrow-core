@@ -7,6 +7,7 @@ import Backend2.Flow
 import Backend2.Frames
 import Backend2.LitViews
 import Backend2.Lint
+import Backend2.LayoutCheck
 import Frontend.Check.Handled
 
 /-!
@@ -121,6 +122,35 @@ def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
 def cellsOf (k : Backend.CheckedProg) : List (List LTy) :=
   k.main.cells.map fun c => c.tys.filterMap fun t => (ofV (machineOps k.main) t).toOption
 
+/-- **The check of a program's layouts** (`Backend2/LayoutCheck.lean`), as the compiler's error. -/
+def checkLayouts (p : Prog) (L : Lay.Layouts) : Except String Unit :=
+  match LayCheck.check p L with
+  | .ok () => pure ()
+  | .error e => throw s!"internal: closure classes not a fixed point: {e}"
+
+/-- **The layouts of a program's LIR, checked**: `Layouts`'s analysis (`Lay.places`,
+`Lay.resolve`), then the check that its result is a solution of the program's constraints
+(`checkLayouts`). Every layout the compiler reads is one of these. A failure is the compiler's
+error, not the program's. -/
+def checkedLayouts (cells : List (List LTy)) (p : Prog) : Except String Lay.Layouts := do
+  let (g, m) ← Lay.places p
+  let L := Lay.resolve p g m cells
+  checkLayouts p L
+  pure L
+
+/-- **The check of a program's closure flow** (`LayCheck.checkFlow`): the direct calls `fs`
+licenses (`Flow.known`), its sets checked a solution of the flow's constraints. -/
+def checkFlow (p : Prog) (L : Lay.Layouts) (fs : Flow.St) : Except String (Std.HashMap Var Nat) := do
+  let kn := Flow.known p L fs
+  match LayCheck.checkFlow p L fs.sets kn with
+  | .ok () => pure kn
+  | .error e => throw s!"internal: closure classes not a fixed point: closure flow: {e}"
+
+/-- **The closure flow of a program's LIR, checked**: `Flow.solution`, then `checkFlow`. -/
+def checkedFlow (p : Prog) (L : Lay.Layouts) : Except String (Flow.St × Std.HashMap Var Nat) := do
+  let fs := Flow.solution p L
+  pure (fs, ← checkFlow p L fs)
+
 /-- The codes of the suspended computations an outcome `o` (of `M`) may hold, by the layouts: the
 closure classes of each suspension's `k`.  `[spec §49]` -/
 def suspCodes (L : Lay.Layouts) (o : Var) (M : OutInfo) : List Nat := Id.run do
@@ -157,8 +187,7 @@ def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Pr
     if st.done.isEmpty then return (p, st, {}, {})
     -- A call in tail position whose callee's suspended computations may be the machine's own
     -- closes a loop of tail calls, and passes its outcome on (SPEC §49, `tailPass`).
-    let (g, m) ← Lay.places p
-    let L₁ := Lay.resolve p g m (cellsOf k)
+    let L₁ ← checkedLayouts (cellsOf k) p
     let loop (site : Nat × Var × OutInfo × Nat) : Bool :=
       let (_, o, M, i) := site
       let own := (st.done[i]?.map fun (_, kcs) => kcs.map (·.2)).getD []
@@ -169,8 +198,7 @@ def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Pr
       else pure (p, st)
     -- The machines whose suspended computation's class holds itself keep their state in a cell
     -- (SPEC §49, `cellPass`), read off the layouts' recursive classes.
-    let (g, m) ← Lay.places p
-    let L := Lay.resolve p g m (cellsOf k)
+    let L ← checkedLayouts (cellsOf k) p
     let recursive (kc : Nat) : Bool := match L.codeClass[kc]? with
       | some cls => L.isRec cls
       | none => false
@@ -236,10 +264,9 @@ def framesLine (k : Backend.CheckedProg) : Except String String := do
   let n := (all.filter fr.contains).length
   pure s!"framed {n} allocated {all.length - n}"
 
-/-- The layouts of a program's LIR. -/
-def layoutsOf (k : Backend.CheckedProg) (p : Prog) : Except String Lay.Layouts := do
-  let (g, m) ← Lay.places p
-  pure (Lay.resolve p g m (cellsOf k))
+/-- The layouts of a program's LIR, checked (`checkedLayouts`). -/
+def layoutsOf (k : Backend.CheckedProg) (p : Prog) : Except String Lay.Layouts :=
+  checkedLayouts (cellsOf k) p
 
 /-- Convert and lint a program (`bcc lir --lint`): an error outside the pure fragment, or the
 lint's, its copies read at the layouts too. -/
@@ -258,14 +285,37 @@ def layoutReport (k : Backend.CheckedProg) : Except String (List String) := do
   let boxes := L.boxed.toList.map fun (v, i) => s!"boxed {v}.{i}"
   pure (cls ++ boxes)
 
+/-- **The checks refuse wrong layouts** (`bcc lir --layout-reject`, the reject tests): the
+program's layouts and closure flow as computed, accepted; then each perturbation of them
+(`LayCheck.perturbLayouts`, `LayCheck.perturbFlow`), refused, with the refusal. A line
+`ACCEPTED` is a perturbation the checks let through. -/
+def rejectReport (k : Backend.CheckedProg) : Except String (List String) := do
+  let (p, _) ← lintedLirOf k
+  let (g, m) ← Lay.places p
+  let L := Lay.resolve p g m (cellsOf k)
+  let fs := Flow.solution p L
+  let kn := Flow.known p L fs
+  let base := match LayCheck.check p L, LayCheck.checkFlow p L fs.sets kn with
+    | .ok (), .ok () => "accepted: the layouts and the closure flow as computed"
+    | .error e, _ | _, .error e => s!"REFUSED as computed: {e}"
+  let line (name : String) (r : Option (Except String Unit)) : String := match r with
+    | none => s!"n/a: {name}"
+    | some (.ok ()) => s!"ACCEPTED: {name}"
+    | some (.error e) => s!"refused: {name}: {e.take 160}"
+  let ls := (LayCheck.perturbLayouts p L).map fun (name, L') =>
+    line name (L'.map fun L' => LayCheck.check p L')
+  let fl := (LayCheck.perturbFlow p fs.sets kn).map fun (name, x) =>
+    line name (x.map fun (s, kn') => LayCheck.checkFlow p L s kn')
+  pure (base :: ls ++ fl)
+
 /-- The word IR of a checked program by the new backend; with `counts`, the counting build. -/
 def flatOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String Backend.Flat.Prog := do
   let (p, cs) ← lintedLirOf k
   let L ← layoutsOf k p
   copiesChecked p L
-  let fs := Flow.solution p L
+  let (fs, kn) ← checkedFlow p L
   let p := LitViews.rewrite p cs.lits fs.sets
-  Low.lowerProg p L (Flow.known p L fs) (Frames.framed p) counts
+  Low.lowerProg p L kn (Frames.framed p) counts
 
 /-- The program as WAT by the new backend. -/
 def watOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String String := do
@@ -281,7 +331,8 @@ def llOf (k : Backend.CheckedProg) (counts : Bool := false) (facts : Bool := tru
 /-- **The new backend's compile, timed** (`bcc compile --backend new --timings`): `file`'s WAT, each
 stage's time and output size written to standard error as `Backend.compileWatTimed` writes the
 old backend's, then their total. The stages are the frontend's (parse, check, `main`'s I/O) and the
-new backend's (the LIR, its lint, its layouts, the lint's copies at them, the 0-CFA, the word IR,
+new backend's (the LIR, its lint, its layouts and their check, the lint's copies at them, the 0-CFA
+and its check, the word IR,
 Wasm, the printed module).
 A measurement of the new backend's compile time, outside the gate (SPEC §48). -/
 def watTimed (file src : String) : IO (Except String String) := do
@@ -306,13 +357,17 @@ def watTimed (file src : String) : IO (Except String String) := do
     ExceptT.mk <| stage "lint" (fun _ => "") fun _ => match Lint.lint p with
       | .ok () => pure ()
       | .error e => throw s!"{file}: internal: LIR not linear: {e}"
-    let L ← ExceptT.mk <| stage "layout" (fun _ => "") fun _ => layoutsOf k p
+    let L ← ExceptT.mk <| stage "layout" (fun _ => "") fun _ => do
+      let (g, m) ← Lay.places p
+      pure (Lay.resolve p g m (cellsOf k))
+    ExceptT.mk <| stage "layout check" (fun _ => "") fun _ => checkLayouts p L
     ExceptT.mk <| stage "lint copies" (fun _ => "") fun _ => copiesChecked p L
     let fs ← ExceptT.mk <| stage "flow" (fun _ => "") fun _ => pure (Flow.solution p L)
+    let kn ← ExceptT.mk <| stage "flow check" (fun _ => "") fun _ => checkFlow p L fs
     let flat ← ExceptT.mk <| stage "lower" (fun (q : Backend.Flat.Prog) => s!"{q.fns.size} functions")
       fun _ => do
         let p := LitViews.rewrite p cs.lits fs.sets
-        Low.lowerProg p L (Flow.known p L fs) (Frames.framed p) false
+        Low.lowerProg p L kn (Frames.framed p) false
     let wasm ← ExceptT.mk <| stage "wasm" (fun (m : Backend.Wasm.Module) => s!"{m.funcs.length} functions")
       fun _ => pure (Backend.Wasm.lowerProg flat)
     let wat ← ExceptT.mk <| stage "print" (fun (s : String) => s!"{s.utf8ByteSize} bytes")
