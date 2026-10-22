@@ -205,6 +205,11 @@ structure CState where
   /-- **The machines whose state cell is passed on** (SPEC §50), by `Mach.start`, with their state's
   type: read off a first conversion's layouts (`Backend2/Driver.lean`, `lirOf`). -/
   threaded : Std.HashMap Nat LTy := {}
+  /-- **The runtime answers every tick**  `[spec §51]`: `main` is a loop the runtime drives (SPEC
+  §11), its value `reify` of its body, and that `reify` is the typed term's one handler of `Div`
+  (no other `reify` and no `div_fuel` node: `Backend2/Driver.lean`, `divRuntime`). A tick is then
+  answered *next*, where it is performed. -/
+  divRt : Bool := false
 
 abbrev CM := StateT CState (Except String)
 
@@ -500,8 +505,6 @@ operations. -/
 def rowPay (S : Row) : CM Pay := do
   let mut acc : Pay := []
   for o in S do
-    if o.n == divName then
-      throw s!"an operation ({o.n}, {o.i}) in a computation type: outside the pure fragment"
     if o.abort && !(acc.any (·.1 == (o.n, o.i))) then
       acc := acc ++ [((o.n, o.i), ← vty o.A)]
   return acc
@@ -615,8 +618,6 @@ def rowMs (S : Row) : CM (List (Key × LTy × LTy × Option Pay)) := do
   if ms.isEmpty then return []
   let mut acc : List (Key × LTy × LTy × Option Pay) := []
   for o in S do
-    if o.n == divName then
-      throw s!"an operation ({o.n}, {o.i}) in a computation type: outside the pure fragment"
     if !o.abort && ms.contains (o.n, o.i) && !(acc.any (·.1 == (o.n, o.i))) then
       let cp ← lift (ofFin ms o.fin)
       acc := acc ++ [((o.n, o.i), ← vty o.A, ← vty o.B, cp.map dedupPay)]
@@ -1559,6 +1560,65 @@ def genFix (sT : LTy) (p : Var) : CM Tm := do
   setFn fi { name := "bounded_fix", params := [s, k, a], body, ret := rT }
   letpairM p fun s r => letpairM r fun k a => pure (.call fi [s, k, a])
 
+/-! ### `Div`'s loops under the runtime  `[spec §51]` -/
+
+/-- **`iterate (f, s)` under the runtime** (SPEC §14, §51): the loop `iterate`'s machine step
+unrolls (`Head.iterate`, `iter_step`), its back edge a tail call. A turn `(f s).1` answers
+`inl b`, finished, or `inr s′`, after which `iterate` ticks; the runtime answers the tick *next*
+(`tail_resumes` at its clause `λ((), κ). κ next`; `drive_reify_tick`), so the turn's `case` on the
+answer goes on with `iterate (f, s′)` (`iterK_inr`, `turnK_next`): the close `(f s′).2` is never
+observed. `inl b` is the node's answer (`iterK_inl`). An abort of the row's payload `pay` is
+handed on. `ansT` is the node's answer `B ⊕ R` at `pay`.  `[spec §51]` -/
+def genIter (fT ansT : LTy) (pay : Pay) (p : Var) : CM Tm := do
+  let fi ← reserveFn "iterate"
+  let f ← fresh fT
+  let (some sT, gT) ← answerOf fT | throw "LIR: iterate's step takes no state"
+  let s ← fresh sT
+  let xT ← selTy gT 0
+  let valT ← match payTy pay, ansT with
+    | none, t => pure t
+    | some _, .sum t _ => pure t
+    | some _, t => throw s!"LIR: iterate's answer at a row with aborts: {t}"
+  let .sum _ _ := valT | throw s!"LIR: iterate's answer is not `B ⊕ R`: {valT}"
+  let body ← dup f fun f f' => do
+    let g ← fresh gT
+    let x ← fresh xT
+    let turn (o : Var) : CM Tm := do
+      let .sum oB oS := (← tyOf o) | throw "LIR: iterate's turn does not answer `B ⊕ S`"
+      let b ← fresh oB; let s' ← fresh oS
+      let w ← fresh valT
+      let done : Tm := match payTy pay with
+        | none => .drop f (.letv w (.inj false b) (.var w))
+        | some _ => .drop f (.letv w (.inj false b) (.inj false w))
+      return .case o b done s' (.call fi [f, s'])
+    let rest ← match payTy pay with
+      | none => turn x
+      | some pT => do
+        let .sum oT _ := (← tyOf x) | throw "LIR: iterate's turn at a row with aborts"
+        let o ← fresh oT; let e ← fresh pT
+        return .case x o (← turn o) e (.drop f (.inj true e))
+    return .letv g (.app f' s) (.letv x (.sel g 0) rest)
+  setFn fi { name := "iterate", params := [f, s], body, ret := ansT }
+  letpairM p fun f s => pure (.call fi [f, s])
+
+/-- **`tick` under the runtime** (SPEC §51): its clause `λ((), κ). κ next` resumes in tail position
+with the literal *next* (`tail_resumes`), and `drive_reify_tick` (`Core/DivDrive.lean`) is the
+runtime's drive of `main`'s loop answering it so. The perform's argument `v` is dropped and *next*
+is its value, at the row's payload `p`. -/
+def tickTm (v : Var) (p : Pay) : CM Tm := do
+  readFact "effPerform:tick at the runtime"
+  modify fun st => { st with erased := st.erased.insert "perform" (st.erased.getD "perform" 0 + 1) }
+  let u ← fresh .unit
+  let nx ← fresh boolT
+  match payTy p with
+  | none => return .drop v (.letv u .unit (.inj false u))
+  | some _ => return .drop v (.letv u .unit (.letv nx (.inj false u) (.inj false nx)))
+
+/-- The tick's handler is the runtime (`divRt`), or the perform is outside the fragment. -/
+def tickAtRuntime : CM Unit := do
+  unless (← get).divRt do
+    throw "LIR: a tick whose handler is not the runtime (a stored loop's `reify`) is outside the pure fragment"
+
 /-! ### Destructors (SPEC §12)
 
 `dtor A` (the checker's `dtorE A`, at an owned value that goes unused) is the destructor its type
@@ -1736,7 +1796,7 @@ def constArity : TExpr → Option Nat
   | .arrNew .. | .arrFree .. | .arrSize .. | .arrReplace .. | .arrLen .. | .arrGet .. | .arrCopy ..
   | .arrForget .. | .countFold .. | .countTry .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
   | .sliceSplitM .. | .sliceReplaceM .. | .sliceSwapM .. | .dtor .. | .foldImm .. | .foldOwn ..
-  | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. | .boundedFix .. => some 1
+  | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. | .boundedFix .. | .iterate .. => some 1
   | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU ..
@@ -2076,6 +2136,11 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let some j := payIdx p (o.n, o.i) | throw s!"LIR: a raise of ({o.n}, {o.i}) outside its row"
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay p j v fun w => pure (.inj true w)
   | .effPerform _ _ S o c => do
+    if o.n == divName then
+      -- `tick` under the runtime: *next* where it is performed.  [spec §51]
+      tickAtRuntime
+      let p ← rowPay S
+      return ← bindTm (← conv fuel ctx c) .unit fun v => tickTm v p
     -- `perform` of a tail-resumptive clause: a direct call of the clause's work (`tail_resumes`,
     -- `TailResumesAt.subst_kappa`, `tail_clause_names`, `Checked.unhandledNames`).  [spec §47]
     if (← get).mach.contains (o.n, o.i) then
@@ -2215,7 +2280,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     -- `[nil-dead]` (SPEC §29): the term at the empty context, the context's slots consumed.
     readFact "nilDead:context"
     return drops (live ctx) (← conv fuel [] c)
-  | .effHandleT .. | .lendR .. | .lendLoopR .. | .iterate .. | .divFuel ..
+  | .effHandleT .. | .lendR .. | .lendLoopR .. | .divFuel ..
   | .reify .. | .letPoly .. => outside t
   | t =>
     match transparent? t with
@@ -2329,7 +2394,13 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     let F ← curMach
     let some j := payIdx F.pay (o.n, o.i) | throw s!"LIR: a raise of ({o.n}, {o.i}) outside its row"
     bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay F.pay j v fun e => abortK F K args e
-  | .effPerform _ _ _ o c => do
+  | .effPerform _ _ S o c => do
+    if o.n == divName then
+      -- `tick` under the runtime: *next* where it is performed, handed to `K`.  [spec §51]
+      tickAtRuntime
+      let p ← rowPay S
+      return ← bindTm (← conv fuel ctx c) .unit fun v => do
+        resultK K args (← tickTm v p) boolT p
     if (← get).mach.contains (o.n, o.i) then
       readFact "effPerform:machine"
       bindTm (← conv fuel ctx c) (← vty o.A) fun v => performK K args (o.n, o.i) v
@@ -3067,6 +3138,14 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     let .pair sT _ := pT | throw "LIR: bounded_fix's argument"
     readFact "boundedFix:budget"
     genFix sT p
+  | .iterate _ j S _ _ _, [p] => do
+    -- `iterate` under the runtime: a function per node, its back edge a tail call.  [spec §51]
+    unless (← get).divRt do
+      throw "LIR: `iterate` whose ticks the runtime does not answer (a stored loop's `reify`) is outside the pure fragment"
+    let (pT, rT) ← arrowOf (← repJ j)
+    let .pair fT _ := pT | throw "LIR: iterate's argument"
+    readFact "iterate:row"
+    genIter fT rT (← rowPay S) p
   | .withbor1 .., [x, cb] | .withbor2 .., [x, cb] | .sliceBorrowM .., [x, cb]
   | .sliceBorrowI .., [x, cb] => genLend .lend x (← tyOf cb) (callCb cb)
   | .withbor3 .., [m, cb] => genLend .relend m (← tyOf cb) (callCb cb)
@@ -3182,6 +3261,23 @@ def genDrive (lT : LTy) : CM Nat := do
              body := .letv r (.sel l 0) (.case r v (.var v) l' (.call fi [l'])) }
   return fi
 
+/-- `main`'s value as `reify` of its body (SPEC §50: a `main` that loops is the loop value of its
+body): through the nodes that keep their child's value, the `reify` constant applied to the
+body's thunk. Its split's masks, the thunk, and the `reify` node's row `Σ`, result `B` and
+residual `R`.  `[spec §51]` -/
+def mainReify? (t : TExpr) : Option (Masks × TExpr × Row × VTy × VTy) :=
+  match peel 64 t with
+  | .lolliE _ _ _ _ u ta tf => match headOf 64 tf with
+    | .reify _ _ S B R _ => some (u, ta, S, B, R)
+    | _ => none
+  | _ => none
+where
+  peel : Nat → TExpr → TExpr
+    | 0, t => t
+    | f + 1, t => match transparent? t with
+      | some c => peel f c
+      | none => t
+
 /-- **The LIR of `main`**: its externs bound to their implementations (`exts`, in declaration
 order; the context's slot `i` is extern `n − 1 − i`), its typed term converted, and its
 capabilities taken back. With `loops`, `main`'s value is a loop, driven until it finishes. -/
@@ -3211,6 +3307,11 @@ def convMain (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) 
       binds := (fun b => .letv x c b) :: binds
     cx := cx.push (some x)
   prepWorks (1 <<< 22) cx.size t
+  if loops && (← get).divRt then
+    if let some (u, ta, S, B, R) := mainReify? t then
+      let r ← runtimeMain cx.toList u ta S B R binds
+      genMerges
+      return r
   let body ← conv (1 <<< 22) cx.toList t
   genMerges
   let mT ← repJ (.comp C)
@@ -3230,6 +3331,35 @@ where
     match t with
     | .pair _ a => pure a
     | t => throw s!"LIR: main's value with capabilities is not a pair: {t}"
+  /-- **`main`'s loop under the runtime**  `[spec §51]`: `main`'s value is `reify` of its body
+  `t ()`, which the runtime drives with *next* until it finishes (SPEC §11). The drive answers
+  *next* to every tick of the body (`drive_reify_tick`, `Core/DivDrive.lean`), so the program is
+  the body run with each tick answered *next* where it is performed (`tickTm`): `inl b` finishes
+  with `b` (`drive_reify_done`); `inr r` is a loop closed with its residual, which the drive
+  observes without end (`drive_reify_closed`), a run that does not finish. -/
+  runtimeMain (cx : Ctx) (u : Masks) (ta : TExpr) (S : Row) (B R : VTy)
+      (binds : List (Tm → Tm)) : CM (Tm × LTy) := do
+    readFact "reify:main, at the runtime"
+    modify fun st => { st with erased := st.erased.insert "handle" (st.erased.getD "handle" 0 + 1) }
+    let p ← rowPay S
+    if (payTy p).isSome then
+      throw "LIR: `main`'s loop at a row with aborts (the platform's handler) is outside the pure fragment"
+    let (pre, cA, cF) ← splitCtx cx u "lolliE"
+    let unitV ← fresh .unit
+    let body ← applyTo (1 <<< 22) cA ta unitV
+    let bT ← vty B; let rT ← vty R
+    let r ← fresh (.sum bT rT)
+    let b ← fresh bT; let x ← fresh rT
+    let resT ← resultTy bT
+    let ep ← epilogue b ncaps
+    -- The loop `closed r`, which every observation skips: it holds the residual, and does not
+    -- finish.
+    let spin ← reserveFn "closed"
+    let x₁ ← fresh rT
+    setFn spin { name := "closed", params := [x₁], body := .call spin [x₁], ret := resT }
+    let tm := pre (leaf cF none (.letv unitV .unit (.letv r body
+      (.case r b ep x (.call spin [x])))))
+    return (binds.foldl (fun t f => f t) tm, resT)
 
 /-- **Loops of tail calls** (SPEC §49): each call in tail position made a point whose callee's
 outcome may hold the machine's own suspended computation (`loop`, read off the layouts'
@@ -3281,8 +3411,9 @@ def threadedOf (s : CState) (recursive : Nat → Bool) : Std.HashMap Nat LTy := 
 (`threadedOf` of a first conversion). -/
 def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) (ncaps : Nat)
     (loops : Bool) (census : Bool := false) (direct : Std.HashMap UInt32 (List Bool) := {})
-    (mach : MachSet := {}) (threaded : Std.HashMap Nat LTy := {}) : Except String (Prog × CState) := do
-  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run { census, direct, mach, threaded }
+    (mach : MachSet := {}) (divRt : Bool := false) (threaded : Std.HashMap Nat LTy := {}) :
+    Except String (Prog × CState) := do
+  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run { census, direct, mach, divRt, threaded }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
             statics := s.statics.size }, s)
 

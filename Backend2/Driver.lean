@@ -98,6 +98,24 @@ def machineOps (c : Frontend.Check.Checked) : MachSet := Id.run do
         out := out.insert (h.n, j.toUInt32)
   return out
 
+/-- The handlers of `Div` in a typed term, within the depth `fuel`: its `reify` and `div_fuel`
+nodes (SPEC §14). -/
+def divHandlers : Nat → TExpr → Nat
+  | 0, _ => 0
+  | f + 1, t =>
+    let here := match t with
+      | .reify .. | .divFuel .. => 1
+      | _ => 0
+    here + (t.children.map fun (_, c) => divHandlers f c).foldl (· + ·) 0
+
+/-- **The runtime answers every tick**  `[spec §51]`: the typed term's handlers of `Div` are
+`main`'s `reify` alone, when `main` is a loop the runtime drives (SPEC §11) and its value is
+`reify` of its body (`mainReify?`), or there are none. Every tick of the program is then performed
+inside `main`'s body, and the runtime's drive answers it *next* (`drive_reify_tick`). -/
+def divRuntime (c : Frontend.Check.Checked) (loops : Bool) : Bool :=
+  let main := if loops && (mainReify? c.t).isSome then 1 else 0
+  divHandlers Frontend.Check.copiesFuel c.t == main
+
 /-- The checker's cell classes (`Checked.cells`) at LIR types. -/
 def cellsOf (k : Backend.CheckedProg) : List (List LTy) :=
   k.main.cells.map fun c => c.tys.filterMap fun t => (ofV (machineOps k.main) t).toOption
@@ -133,7 +151,7 @@ def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Pr
   let run (threaded : Std.HashMap Nat LTy) :
       Except String (Prog × CState × Std.HashMap Nat LTy) := do
     let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c) (machineOps c)
-      threaded
+      (divRuntime c loops) threaded
     let p := { p with exits := c.exitsOnDivError }
     if st.done.isEmpty then return (p, st, {})
     -- A call in tail position whose callee's suspended computations may be the machine's own

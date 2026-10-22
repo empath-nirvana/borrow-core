@@ -101,6 +101,9 @@ nodes' kinds and the direct calls' facts, `C.eff`'s suspensions and each operati
 `effHandleV`/`effHandleVB` as drives whose clauses run on the argument and `κ`, `effPerform` of a
 machine operation as a suspension, `lendR`'s relaxed lend in a machine, and the task body of a
 site by its handled computation's `use` keys: the 64 programs that were outside, 380 in all.
+B2 (#644, SPEC §50, §51) elaborates every loop to `iterate` and adds `iterate`'s row and type,
+`main`'s `reify` and `tick` answered *next* under the runtime: 352 programs in all, the stored
+loops (a generator that loops, observed one step at a time) outside.
 
 ## 2. Classes
 
@@ -176,10 +179,10 @@ baseline).
 | 49 | [`arrForget`](../Core/Fundamental.lean#L213) | §9 | 111 | 588 | 725 | erasure only | **A** | — |
 | 50 | [`countFold`](../Core/Fundamental.lean#L217) | §16 | 165 | 1018 | 3377 | erasure only (`count_loop`, `Flat/Lower.lean:1405`) | **A** | — |
 | 51 | [`countTry`](../Core/Fundamental.lean#L221) | §16 | 70 | 174 | 457 | erasure only (`count_try_loop`, `Flat/Lower.lean:1439`); the new backend's native loop from the node's type, its exit `inr e` leaving it (`genCountTry`, `Backend2/Convert.lean`; SPEC §43) | **A** | — |
-| 52 | [`boundedFix`](../Core/Fundamental.lean#L226) | §20, §48 | 59 | 148 | 188 | the new backend reads the node's type: its machine step, a function per node whose self-reference counts the budget down (`genFix`, `Backend2/Convert.lean`; SPEC §48), in 43 programs; the old backend (the default until N6) compiles the erasure (`fixValue`, `Convert.lean:243`) | **A** | — |
-| 53 | [`iterate`](../Core/Fundamental.lean#L230) | §14 | 0 | 0 | 0 | `expandIter` (`Convert.lean:875`) turns it into a fixed point; reached only by the kernel program `div-residual` | **C** | B2 (the `Div` elaboration as typed schemes), then N4 (`iterate` as an LIR loop). SPEC.md:7574: "the frontend does not elaborate to it yet" |
+| 52 | [`boundedFix`](../Core/Fundamental.lean#L226) | §20, §48 | 61 | 150 | 190 | the new backend reads the node's type: its machine step, a function per node whose self-reference counts the budget down (`genFix`, `Backend2/Convert.lean`; SPEC §48), in 43 programs; the old backend (the default until N6) compiles the erasure (`fixValue`, `Convert.lean:243`) | **A** | — |
+| 53 | [`iterate`](../Core/Fundamental.lean#L230) | §14, §50, §51 | 158 | 445 | 456 | the new backend reads the node's row `S` and type: a function per node whose back edge is a tail call, each tick answered *next* by the runtime (`genIter`, `Backend2/Convert.lean`; SPEC §51), in 136 programs; the old backend's `expandIter` turns it into a fixed point | **A** | a stored loop's (SPEC §51 *Open*) |
 | 54 | [`divFuel`](../Core/Fundamental.lean#L235) | §14 | 0 | 0 | 0 | generic; reached only by the kernel program `div-residual` | **C** | B2, then N4 |
-| 55 | [`reify`](../Core/Fundamental.lean#L240) | §14 | 0 | 0 | 0 | — | **C** | B2/N4 (N4's acceptance "no `drive` outside `reify`" plans it); no checker producer and no typed Core program |
+| 55 | [`reify`](../Core/Fundamental.lean#L240) | §14, §50, §51 | 158 | 255 | 257 | the new backend reads `main`'s: its row, `B` and `R` (`mainReify?`, `runtimeMain`; SPEC §51), in 136 programs; a stored loop's `reify` is outside its fragment | **B** | a stored loop's `reify` (SPEC §51 *Open*) |
 | 56 | [`sliceBorrowM`](../Core/Fundamental.lean#L247) | §9 | 109 | 133 | 139 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `noalias` on the leaf borrows (#555 choice 6) |
 | 57 | [`sliceBorrowI`](../Core/Fundamental.lean#L254) | §9 | 151 | 655 | 1442 | erasure only (`withbor`'s λ-term, generic arms `Convert.lean:797–855`); the mode, the lend's lifetime and its extent are not read | **B** | N5: `readonly` on the leaf borrows |
 | 58 | [`sliceGetM`](../Core/Fundamental.lean#L259) | §9 | 10 | 11 | 20 | erasure only | **A** | — |
@@ -211,7 +214,7 @@ baseline).
 | 84 | [`foldReuse`](../Core/Fundamental.lean#L373) | §6 | 3 | 3 | 3 | as `foldOwn`: the emptied cell handed to the algebra as the node's type says (`travF`'s reuse, `Backend2/Convert.lean:444`) | **A** | B6 |
 | 85 | [`nuIn`](../Core/Fundamental.lean#L377) | §7, §45 | 204 | 768 | 814 | erasure only (identity); the η-thunk around it is the derived node `nuEta`, which the new backend reads (row 113); the old backend (the default until N6) re-recognises it (`collapse?`, `Backend/Clos/Collapse.lean:74`) | **A** | N6 (the old backend deleted) |
 | 86 | [`nuOut`](../Core/Fundamental.lean#L379) | §7, §45 | 204 | 2434 | 2604 | as `nuIn` | **A** | N6 |
-| 87 | [`unfoldN`](../Core/Fundamental.lean#L383) | §7, §45 | 197 | 634 | 663 | the new backend reads `C` and `S` (`genUnfold`) and that a `bind` binds `unfold step` (`isUnfoldApp`, `Backend2/Convert.lean:903`), so a `nuEta` over it is the call `f s` | **A** | N6 |
+| 87 | [`unfoldN`](../Core/Fundamental.lean#L383) | §7, §45 | 83 | 188 | 205 | the new backend reads `C` and `S` (`genUnfold`) and that a `bind` binds `unfold step` (`isUnfoldApp`, `Backend2/Convert.lean:903`), so a `nuEta` over it is the call `f s` | **A** | N6 |
 | 88 | [`effSub`](../Core/Fundamental.lean#L386) | §19 | 151 | 3024 | 3844 | the new backend reads `S` and `S'`: the payload of `S`'s abortive operations re-injected at `S'`'s (`coerceRes`, `Backend2/Convert.lean:1138`; SPEC §47); the old backend (the default until N6) re-derives the rows by the 0-CFA (`SFacts.of`, `Backend/Clos/Capture.lean:469`) | **A** | N6 (the old backend deleted) |
 | 89 | [`effPerform`](../Core/Fundamental.lean#L389) | §19 | 73 | 269 | 284 | the new backend reads `S` and the signature `o`: a direct call of the clause's work where the facts license it (`CState.works`; SPEC §47), otherwise, at a machine operation (`machineOps`), a suspension of the machine at its continuation (`performK`, `Backend2/Convert.lean`; SPEC §49); the old backend (the default until N6) re-derives the row by the 0-CFA and control vs. abortive from the prim (`Ops.of`, `Capture.lean:178`) | **A** | the `tail+state` and `resume-or-cancel` direct rules (SPEC §47 *Open*), zero-cost upgrades of programs §49 compiles |
 | 90 | [`effRaise`](../Core/Fundamental.lean#L394) | §19 | 108 | 469 | 649 | the new backend reads `S` and `o`: the payload at the operation's summand, a branch to the handler's join (`Backend2/Convert.lean:1144`; SPEC §47); the old backend (the default until N6) re-derives the row (`UFacts.solve`, `Backend/Clos/Unwind.lean:386`) | **A** | N6 |
@@ -419,13 +422,11 @@ with `Collapse` reading the node. `iterate`, `divFuel` and `reify` once B2 produ
      bounds-checked.
    - `divLit`'s nonzero divisor proves the error arm is dead. 10 programs have one, and the arm
      is still compiled.
-3. **The checker has no producer at all for `iterate`, `divFuel`, `reify`, `effHandleT`, `letPoly` or
-   `lendLoopR`.**
-   - These are six proved rules, five of them with a `TExpr` constructor.
-   - The only programs that reach them are the kernel programs `div-residual` (`iterate`,
-     `divFuel`), `hof-two-rows` and `poly-id` (`letPoly`).
-   - `reify` and `effHandleT` have no typed program anywhere: no Core derivation and no checker
-     producer.
+3. **The checker has no producer at all for `divFuel`, `effHandleT`, `letPoly` or `lendLoopR`.**
+   - The only programs that reach them are the kernel programs `div-residual` (`divFuel`),
+     `hof-two-rows` and `poly-id` (`letPoly`).
+   - `effHandleT` has no typed program anywhere: no Core derivation and no checker producer.
+   - `iterate` and `reify` have one since B2 (SPEC §50): every loop and loop value.
 4. **Qualifiers.**
    - Over 152 programs, `[handle]` nodes type 573 affine operations, 2 linear ones and no
      unrestricted one.

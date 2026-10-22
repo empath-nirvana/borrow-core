@@ -10,8 +10,7 @@
 -- edges ticks, a control operation that resumes; the borrow of `config` that `let cfg = &config` at
 -- 41:13 opens for the rest of `main` spans the ticks of the `for` over the input at 43:3. The
 -- kernel's rule for a lend at a row has only abortive operations (`Row.Unwind`), so it refuses the
--- lend. It needs a lend held across the loop's ticks: call-graded operations (#654), which are
--- parked pending a grade algebra.
+-- lend. It needs call-graded operations (#654), which are parked pending a grade algebra.
 --
 -- Once it lands: on the input `1203`, `i32[54]`, `live 0`: the configuration is (step 10, limit
 -- 100, bias 2); each digit adds `10 * d + 2`, giving 12, 34, 36, 68, under the limit, less 7 * 2
