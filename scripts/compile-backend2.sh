@@ -9,9 +9,9 @@
 # `corpus/counts-backend2.expected` (`name allocs indirect copies loads stores bounds`), the new
 # backend's own table; they are also printed beside the old backend's (`corpus/counts.expected`),
 # which they are compared with at the switch (docs/compiler.md §5.4, criterion 6). The effect
-# erasure's postcondition (SPEC §47, `bcc lir --erasure`): the program has no `handle` or `perform`
-# left, and the `handle`, `perform` and `raise` nodes erased are its line of
-# `corpus/erasure-backend2.expected`.
+# erasure's postcondition (SPEC §47, §49, `bcc lir --erasure`): the program has no `handle` or
+# `perform` left, and the `handle`, `perform` and `raise` nodes erased, and those compiled as state
+# machines, are its line of `corpus/erasure-backend2.expected`.
 #
 #     scripts/compile-backend2.sh [file.bc…]
 #     scripts/compile-backend2.sh --write-counts [file.bc…]
@@ -116,7 +116,7 @@ if [ "$write" = 1 ]; then
   { echo "# The new backend's counts per run (scripts/compile-backend2.sh, bcc-counts --backend new): name allocs indirect copies loads stores bounds."; cat "$tmp/new"; } > "$expected"
   echo "wrote $expected"
   cat "$tmp"/erasure.* 2>/dev/null | sort > "$tmp/newe"
-  { echo "# The effect erasure per program the new backend compiles (scripts/compile-backend2.sh, bcc lir --erasure; SPEC §47): name, the handle, perform and raise nodes erased, and the handle nodes left (stored-continuation sites, other)."; cat "$tmp/newe"; } > "$erasure"
+  { echo "# The effect erasure per program the new backend compiles (scripts/compile-backend2.sh, bcc lir --erasure; SPEC §47, §49): name, the handle, perform and raise nodes erased, the handle nodes compiled as drives and the performs as suspensions of state machines (machines, suspends), and the handle nodes left (stored-continuation sites, other)."; cat "$tmp/newe"; } > "$erasure"
   echo "wrote $erasure"
 fi
 echo "the new backend: $(cat "$tmp"/counts.* 2>/dev/null | wc -l | tr -d ' ') program(s) at their goldens, $(ls "$tmp"/out.* 2>/dev/null | wc -l | tr -d ' ') outside its fragment; $par_failed failure(s)."

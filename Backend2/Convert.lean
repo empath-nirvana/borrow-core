@@ -29,6 +29,10 @@ conversion follows the derivation node by node:
 - **Derived nodes** are read: `divLit` is its division with no error arm, `litFn` a literal's
   table in the program's data, `walk` a counted walk whose reads are in range, `dtor` the drop of
   its type.
+- **Effects** are erased by handler law where the checked facts license it (SPEC §47); at the
+  machine operations, the stored-continuation sites, a computation answers its outcome and is
+  converted as a state machine with its continuation (`convK`), and a `handle` node is a drive
+  (`convDrive`, SPEC §49).
 -/
 
 namespace Backend2
@@ -53,6 +57,83 @@ inductive Ext where
   /-- An operation. -/
   | io (k : IOKind)
   deriving Inhabited, BEq
+
+/-- The payload of a row: its abortive operations, each key once with its argument's type, in the
+row's order (`Types.payOf`'s list).  `[spec §47]` -/
+abbrev Pay := List ((UInt32 × UInt32) × LTy)
+
+/-- An operation's key: its name and index. -/
+abbrev Key := UInt32 × UInt32
+
+/-- **The outcome of a computation** at a row with machine operations (`Types.outcomeTy`,
+SPEC §49): its type, the value's type `r`, the abortive payload `pay` and the machine operations
+`ms` (key, argument, answer), each in the row's order. -/
+structure OutInfo where
+  ty : LTy
+  r : LTy
+  pay : Pay
+  /-- Each machine operation's key, argument, answer, and its cancel row's payload (`none` at
+  `⊤`). -/
+  ms : List (Key × LTy × LTy × Option Pay)
+  /-- The machine operations at the qualifier `unr`, whose continuation may be copied. -/
+  unrs : List Key := []
+  deriving Inhabited
+
+/-- **A frame of a machine's continuation** (SPEC §49): what is done, inside one machine, with the
+value of the computation being converted, up to the machine's own answer. Each frame owns the
+next `own` of the continuation's arguments (the variables of its context). -/
+inductive Frame where
+  /-- `x <- [·]; N`: `N` is the join `fn`, on every argument and the value. -/
+  | letF (fn : Nat) (own : Nat)
+  /-- `[·] then x. N unwind D`: `N` the join `fnN`; `D` the finaliser `fnD`, on the frame's own
+  arguments, answering at its row's payload `pd`. -/
+  | thenF (fnN fnD : Nat) (own : Nat) (pd : Pay)
+  /-- Arguments dropped when the machine is cancelled; a forwarding drive's handler values. -/
+  | dropF (own : Nat)
+  deriving Inhabited
+
+def Frame.own : Frame → Nat
+  | .letF _ k | .thenF _ _ k _ | .dropF k => k
+
+abbrev Kont := List Frame
+
+/-- **A resumption point** of a machine (SPEC §49): the operation it suspends at; at a call
+point the callee's suspended computation's type `kTy`, the callee's abortive payload `cPay` and the
+step function (`step`, on the arguments and the callee's outcome); the arguments' types; the
+continuation; the function `mk` that builds the machine's suspended computation from the callee's
+and the arguments. -/
+structure MPoint where
+  op : Key
+  kTy : Option LTy
+  cPay : Option Pay
+  argTys : List LTy
+  step : Option Nat
+  kont : Kont
+  mkFn : Nat
+  /-- At a call point: the callee's outcome, and whether its step is the machine's own (a step
+  function made by `pointK`, `site` its index) rather than a drive's. -/
+  callee : Option OutInfo := none
+  site : Nat := 0
+  inline : Bool := false
+  deriving Inhabited
+
+/-- A machine being converted: its outcome and its resumption points. -/
+structure Mach where
+  info : OutInfo
+  points : Array MPoint := #[]
+  /-- The calls in tail position at its own outcome, each a function on the callee's outcome:
+  the identity when the machine has no other point (a wrapper passes its callee's outcome on),
+  else the step of a point. -/
+  tails : Array (Nat × OutInfo) := #[]
+  deriving Inhabited
+
+/-- A closure a stored-continuation site's clause builds, a variant of its task body's code
+(SPEC §49): its own code, the function that builds the variant, and its captured values' types. -/
+structure SiteVar where
+  code : Nat
+  mkFn : Nat
+  envTys : List LTy
+  deriving Inhabited
 
 structure CState where
   next : Nat := 0
@@ -85,9 +166,27 @@ structure CState where
   direct : Std.HashMap UInt32 (List Bool) := {}
   /-- The function of each directly called clause, by its operation, with the payload of its
   handler's outer row: the clause's work, its resumes removed (`TailResumesAt`). -/
-  works : Std.HashMap (UInt32 × Nat) (Nat × List ((UInt32 × UInt32) × LTy)) := {}
+  works : Std.HashMap (UInt32 × Nat) (Nat × List ((UInt32 × UInt32) × LTy) × Option OutInfo) := {}
   /-- The `handle`, `perform` and `raise` nodes erased (`bcc lir --erasure`). -/
   erased : Std.HashMap String Nat := {}
+  /-- **The program's machine operations** (SPEC §49, `Backend2/Driver.lean`, `machineOps`). -/
+  mach : MachSet := {}
+  /-- The machines being converted, innermost first. -/
+  machs : List Mach := []
+  /-- The machines converted, each with its suspended computations' codes by operation. -/
+  done : Array (Mach × List (Key × Nat)) := #[]
+  /-- The calls in tail position made points: each one's function, its parameter (the callee's
+  outcome), the callee's outcome and its machine (an index of `done`). -/
+  tailSites : Array (Nat × Var × OutInfo × Nat) := #[]
+  /-- While a stored-continuation site's clauses are converted: the closure types of its answer
+  and its task body's key (SPEC §49). -/
+  siteMerge : Option (List LTy × String) := none
+  /-- The closures of each task body's code, by the body's key and the closure type. -/
+  merges : Std.HashMap String (Array SiteVar) := {}
+  merged : Array String := #[]
+  /-- The stored-continuation sites converted inside the closure body being converted: their
+  answer's closure types and task bodies' keys. -/
+  sitesIn : List (List LTy × String) := []
 
 abbrev CM := StateT CState (Except String)
 
@@ -100,6 +199,12 @@ def tyOf (x : Var) : CM LTy := do
   | none => throw s!"LIR: variable {x} has no type"
 
 def freshLike (x : Var) : CM Var := do fresh (← tyOf x)
+
+/-- `freshLike`, the variable's mark (`unfolds`) kept. -/
+def freshMarked (x : Var) : CM Var := do
+  let x' ← freshLike x
+  if (← get).unfolds.contains x then modify fun st => { st with unfolds := st.unfolds.insert x' }
+  return x'
 
 /-- Record that the conversion read a fact of the typed term. -/
 def readFact (k : String) : CM Unit :=
@@ -144,8 +249,8 @@ def readFormers (fs : List String) : CM Unit := do
   if (← get).census then
     for f in fs.eraseDups do readFact s!"{f}:layout"
 
-def vty (A : VTy) : CM LTy := do readFormers (formersV [] A); lift (ofV A)
-def cty (C : CTy) : CM LCTy := do readFormers (formersC [] C); lift (ofC C)
+def vty (A : VTy) : CM LTy := do readFormers (formersV [] A); lift (ofV (← get).mach A)
+def cty (C : CTy) : CM LCTy := do readFormers (formersC [] C); lift (ofC (← get).mach C)
 
 /-- The type of a node's value: a value type's, `F A`'s `A`, and otherwise the closure the
 computation's λ-value is. -/
@@ -229,6 +334,37 @@ def envOf (ctx : Ctx) : CM (List Var × List Var × Ctx) := do
     | none => ctx' := ctx'.push none
   return (outer.toList, inner.toList, ctx'.toList)
 
+/-- A closure's body converted with no site's clauses around it; the stored-continuation sites it
+holds are answered with it. -/
+def outsideSite (act : CM α) : CM (α × List (List LTy × String)) := do
+  let m := (← get).siteMerge
+  let outer := (← get).sitesIn
+  modify fun s => { s with siteMerge := none, sitesIn := [] }
+  let r ← act
+  let inner := (← get).sitesIn
+  modify fun s => { s with siteMerge := m, sitesIn := outer ++ inner }
+  return (r, inner)
+
+/-- **A closure of code `c` over `outer`**: a variant of a task body's code (SPEC §49,
+`genMerges`) when it is of a closure type of a stored-continuation site's answer and either a
+clause of the site builds it, or its body holds the site (a stored generator before its first
+observation). -/
+def closOf (c : Nat) (k : LCTy) (outer : List Var) (inner : List (List LTy × String)) : CM Tm := do
+  let key? : Option String := match (← get).siteMerge with
+    | some (tys, key) => if tys.contains (.thunk k) then some key else none
+    | none => none
+  let key? := key?.orElse fun _ => (inner.find? fun (tys, _) => tys.contains (.thunk k)).map (·.2)
+  match key? with
+  | some key =>
+    let g := s!"{key}|{k}"
+    let mk ← reserveFn "task variant"
+    let v : SiteVar := { code := c, mkFn := mk, envTys := ← outer.mapM tyOf }
+    modify fun s => { s with merges := s.merges.insert g ((s.merges.getD g #[]).push v),
+                             merged := if s.merges.contains g then s.merged else s.merged.push g }
+    readFact "effHandleV:task body"
+    return .call mk outer
+  | none => return .clos c outer
+
 /-- A closure of the closure type `k`, made in `ctx`, of a code of one function: `lam` when
 `param` gives its argument's type, `unit` otherwise; `body` converts its body at the code's
 context (its argument's slot pushed when it has one). -/
@@ -239,29 +375,31 @@ def mkClos (name : String) (ctx : Ctx) (k : LCTy) (param : Option LTy) (ret : LT
   match param with
   | some pt =>
     let p ← fresh pt
-    let b ← body (some p :: ctx')
+    let (b, sites) ← outsideSite (body (some p :: ctx'))
     setFn fi { name, params := inner ++ [p], body := b, ret }
     let c ← addCode { kind := .lam, fns := [fi], ty := k }
-    return .clos c outer
+    closOf c k outer sites
   | none =>
-    let b ← body ctx'
+    let (b, sites) ← outsideSite (body ctx')
     setFn fi { name, params := inner, body := b, ret }
     let c ← addCode { kind := .unit, fns := [fi], ty := k }
-    return .clos c outer
+    closOf c k outer sites
 
 /-- A closure of a `&`: one function per component over one environment. -/
 def mkAmp (name : String) (ctx : Ctx) (k : LCTy) (rets : List LTy)
     (bodies : List (Ctx → CM Tm)) : CM Tm := do
   let (outer, _, _) ← envOf ctx
   let mut fis : Array Nat := #[]
+  let mut sites : List (List LTy × String) := []
   for (b, r) in bodies.zip rets do
     let (_, inner, ctx') ← envOf ctx
     let fi ← reserveFn name
-    let t ← b ctx'
+    let (t, ss) ← outsideSite (b ctx')
+    sites := sites ++ ss
     setFn fi { name, params := inner, body := t, ret := r }
     fis := fis.push fi
   let c ← addCode { kind := .amp, fns := fis.toList, ty := k }
-  return .clos c outer
+  closOf c k outer sites
 
 /-- The argument and answer of a closure type `A ⊸ F B`. -/
 def arrowOf : LTy → CM (LTy × LTy)
@@ -341,10 +479,6 @@ their arguments (`Backend2/Types.lean`, `payOf`), and `R` otherwise. The payload
 row a node carries; each operation is a summand, at its index among the row's abortive
 operations. -/
 
-/-- The payload of a row: its abortive operations, each key once with its argument's type, in the
-row's order (`Types.payOf`'s list).  `[spec §47]` -/
-abbrev Pay := List ((UInt32 × UInt32) × LTy)
-
 def rowPay (S : Row) : CM Pay := do
   let mut acc : Pay := []
   for o in S do
@@ -409,6 +543,511 @@ def coerceRes (a : LTy) (p q : Pay) (r : Var) : CM Tm := do
     let x ← fresh a; let e ← fresh pT
     return .case r x (.inj false x) e (← coercePay p q e fun e' => pure (.inj true e'))
   | some _, none => throw "LIR: an abort where the row holds no abortive operation"
+
+/-- The type of component `j` of a `&` closure. -/
+def selTy (t : LTy) (j : Nat) : CM LTy := do
+  match t with
+  | .thunk k =>
+    match k.whnf 8, j with
+    | .amp k₁ _, 0 => repK k₁
+    | .amp _ k₂, _ => repK k₂
+    | k, _ => throw s!"LIR: an observation of a closure of {k}"
+  | t => throw s!"LIR: an observation of a non-closure: {t}"
+where
+  repK : LCTy → CM LTy
+    | .ret a => pure a
+    | .top => pure .unit
+    | k => pure (.thunk k)
+
+/-! ### Machines  `[spec §49]`
+
+A computation at a row with machine operations answers its **outcome** (`Types.outcomeTy`): its
+value, an abort's payload, or a suspension at a machine operation, the operation's argument beside
+the suspended computation `k`, a closure of `(B ⊸ F O) & F (1 ⊕ P)`: resumed with the answer it
+answers the outcome again, cancelled it unwinds and answers `()` or the first error its finalisers
+raised (§19 *Cancels*).
+
+A **machine** is the code of one function whose answer is an outcome, with the joins and steps
+its conversion makes (`convK`). Each resumption point of the machine is a variant of its
+**state**, per operation: the variables live there and, at a call point, the callee's `k`. So a
+caller's state holds its callee's `k`, and the machine's `k` is one closure of one code per
+operation (`genMach`): its resume entry switches on the state and continues at the point, its
+cancel entry unwinds the point's frames innermost first. -/
+
+namespace OutInfo
+/-- The suspended computation at an operation answering `b`, cancelled at the payload `cp`. -/
+def kTy (o : OutInfo) (b : LTy) (cp : Option Pay) : LTy :=
+  .thunk (.amp (.arr b (.ret o.ty)) (.ret (cancelResTy cp)))
+/-- The suspensions' summands: each machine operation's argument and `k`. -/
+def sPay (o : OutInfo) : Pay := o.ms.map fun (k, a, b, cp) => (k, .pair a (o.kTy b cp))
+def sTy (o : OutInfo) : LTy := (payTy o.sPay).getD .unit
+/-- The exits: an abort's payload or a suspension. -/
+def xTy (o : OutInfo) : LTy := match payTy o.pay with
+  | none => o.sTy
+  | some p => .sum p o.sTy
+/-- The outcome unrolled. -/
+def body (o : OutInfo) : LTy := .sum o.r o.xTy
+def keys (o : OutInfo) : List Key × List Key := (o.pay.map (·.1), o.ms.map (·.1))
+end OutInfo
+
+/-- The machine operations of a row, each key once with its argument and answer types, in the
+row's order.  `[spec §49]` -/
+def rowMs (S : Row) : CM (List (Key × LTy × LTy × Option Pay)) := do
+  let ms := (← get).mach
+  if ms.isEmpty then return []
+  let mut acc : List (Key × LTy × LTy × Option Pay) := []
+  for o in S do
+    if o.n == divName then
+      throw s!"an operation ({o.n}, {o.i}) in a computation type: outside the pure fragment"
+    if !o.abort && ms.contains (o.n, o.i) && !(acc.any (·.1 == (o.n, o.i))) then
+      let cp ← lift (ofFin ms o.fin)
+      acc := acc ++ [((o.n, o.i), ← vty o.A, ← vty o.B, cp.map dedupPay)]
+  return acc
+
+/-- The outcome of a computation answering `r` at the row `S`; `none` when `S` has no machine
+operation. The outcome unrolls to its body (checked).  `[spec §49]` -/
+def outInfo? (r : LTy) (S : Row) : CM (Option OutInfo) := do
+  let ms ← rowMs S
+  if ms.isEmpty then return none
+  let pay ← rowPay S
+  let ty := outcomeTy r pay ms
+  let unrs := (S.filter fun o => o.q == .unr).map fun o => (o.n, o.i)
+  let o : OutInfo := { ty, r, pay, ms, unrs }
+  match ty with
+  | .mu b => unless LTy.unrollMu b == o.body do throw s!"LIR: the outcome {ty} does not unroll to {o.body}"
+  | _ => throw "LIR: an outcome that is not a μ"
+  return some o
+
+/-- The row and value type of `F_Σ R`, through `∀`s. -/
+def effParts : CTy → Option (Row × VTy)
+  | .eff n i q A B fin C => (effParts C).map fun (S, R) => (⟨n, i, q, A, B, fin⟩ :: S, R)
+  | .ret R => some ([], R)
+  | .all _ _ C => effParts C
+  | _ => none
+
+/-- A computation type through its `∀`s, which the LIR erases (SPEC §44). -/
+def stripAll : CTy → CTy
+  | .all _ _ C => stripAll C
+  | C => C
+
+def outInfoC (C : CTy) : CM (Option OutInfo) := do
+  match effParts C with
+  | some (S, R) => if S.isEmpty then pure none else outInfo? (← vty R) S
+  | none => pure none
+
+def outInfoJ : Jdg → CM (Option OutInfo)
+  | .comp C => outInfoC C
+  | .val _ => pure none
+
+/-- The outcome whose type is `ty` (a `ν`'s observation, its `X` substituted), at the row `S`. -/
+def outInfoTy (ty : LTy) (S : Row) : CM (Option OutInfo) := do
+  match ty with
+  | .mu b =>
+    match LTy.unrollMu b with
+    | .sum r _ => do
+      let some o ← outInfo? r S | return none
+      unless o.ty == ty do throw s!"LIR: an outcome's type {ty} is not its row's {o.ty}"
+      return some o
+    | _ => return none
+  | _ => return none
+
+/-! #### The outcome's forms -/
+
+def outExit (F : OutInfo) (x : Var) : CM Tm := do
+  let w ← fresh F.body
+  return .letv w (.inj true x) (.prim .roll [w])
+
+/-- The machine answers the value `x`. -/
+def outValue (F : OutInfo) (x : Var) : CM Tm := do
+  let w ← fresh F.body
+  return .letv w (.inj false x) (.prim .roll [w])
+
+/-- The machine answers the abort `e`, at its payload. -/
+def outAbort (F : OutInfo) (e : Var) : CM Tm := do
+  match payTy F.pay with
+  | none => throw "LIR: an abort at a row with no abortive operation"
+  | some _ =>
+    let x ← fresh F.xTy
+    return .letv x (.inj false e) (← outExit F x)
+
+/-- The machine suspends at `op` with the argument `v` and its suspended computation `k`. -/
+def outSusp (F : OutInfo) (op : Key) (v k : Var) : CM Tm := do
+  let some j := F.ms.findIdx? (·.1 == op)
+    | throw s!"LIR: a suspension at {op} where the machine's row does not hold it"
+  let s ← fresh (.pair (← tyOf v) (← tyOf k))
+  return .letv s (.pair v k) (← injectPay F.sPay j s fun w => do
+    match payTy F.pay with
+    | none => outExit F w
+    | some _ =>
+      let x ← fresh F.xTy
+      return .letv x (.inj true w) (← outExit F x))
+
+/-- A non-outcome result `r` (answering `a` at the payload `p`) as one of `target` (an outcome),
+or of the payload `q`.  `[spec §47, §49]` -/
+def toResult (a : LTy) (p : Pay) (target : Option OutInfo) (q : Pay) (r : Var) : CM Tm := do
+  match target with
+  | none => coerceRes a p q r
+  | some O =>
+    match payTy p with
+    | none => outValue O r
+    | some pT =>
+      let x ← fresh a; let e ← fresh pT
+      let some pO := payTy O.pay | throw "LIR: an abort where the row holds no abortive operation"
+      let e' ← fresh pO
+      return .case r x (← outValue O x) e
+        (.letv e' (← coercePay p O.pay e fun v => pure (.var v)) (← outAbort O e'))
+
+/-! #### Continuations -/
+
+/-- The value `x` handed to the continuation `K` over its arguments: the innermost frame's join,
+or the machine's answer. -/
+def applyK (F : OutInfo) : Kont → List Var → Var → CM Tm
+  | [], [], x => outValue F x
+  | [], _, _ => throw "LIR: a machine's answer with arguments left"
+  | .letF fn _ :: _, args, x | .thenF fn _ _ _ :: _, args, x => pure (.call fn (args ++ [x]))
+  | .dropF _ :: _, _, _ => throw "LIR: a value at a frame that only drops"
+
+/-- The abort `e` (at the machine's payload) through `K`: each frame's arguments dropped, a
+finaliser run, its own abort superseding (`then_fin`, `unwind_prefix`); then the machine's
+answer. -/
+def abortK (F : OutInfo) : Kont → List Var → Var → CM Tm
+  | [], _, e => outAbort F e
+  | f :: rest, args, e => do
+    let own := args.take f.own
+    let more := args.drop f.own
+    match f with
+    | .thenF _ fnD _ pd =>
+      let d ← fresh (resTy .unit pd)
+      match payTy pd with
+      | none => return .letv d (.call fnD own) (.drop d (← abortK F rest more e))
+      | some pdT =>
+        let some pF := payTy F.pay | throw "LIR: a finaliser's abort where the row holds none"
+        let e' ← fresh pF; let u ← fresh .unit; let e₂ ← fresh pdT
+        let sup ← coercePay pd F.pay e₂ fun v => pure (.var v)
+        return .letv d (.call fnD own) (.letv e' (.case d u (.drop u (.var e)) e₂ (.drop e sup))
+          (← abortK F rest more e'))
+    | _ => return drops own (← abortK F rest more e)
+
+/-- The cancel of `K`, `err` the error kept so far (`1 ⊕ P`, `cp` the cancel row's payload `P`):
+each frame's arguments dropped, a finaliser run under the cancel, the first error kept (§19
+*Cancels*, `[cfin-raise]`); a finaliser's error is one of the cancel row's (§27). -/
+def cancelK (cp : Pay) : Kont → List Var → Var → CM Tm
+  | [], _, err => pure (.var err)
+  | f :: rest, args, err => do
+    let own := args.take f.own
+    let more := args.drop f.own
+    match f with
+    | .thenF _ fnD _ pd =>
+      let d ← fresh (resTy .unit pd)
+      match payTy cp, payTy pd with
+      | _, none => return .letv d (.call fnD own) (.drop d (← cancelK cp rest more err))
+      | none, some _ => throw "LIR: a finaliser's error outside its operation's cancel row"
+      | some pF, some pdT =>
+        let err' ← fresh (resTy .unit cp)
+        let u₀ ← fresh .unit; let e₀ ← fresh pF
+        let u₁ ← fresh .unit; let e₁ ← fresh pdT; let u₂ ← fresh .unit; let e₂ ← fresh pdT
+        let sup ← coercePay pd cp e₁ fun v => pure (.inj true v)
+        let kept : Tm := .case err u₀ (.case d u₁ (.drop u₁ (.inj false u₀)) e₁ (.drop u₀ sup))
+          e₀ (.case d u₂ (.drop u₂ (.inj true e₀)) e₂ (.drop e₂ (.inj true e₀)))
+        return .letv d (.call fnD own) (.letv err' kept (← cancelK cp rest more err'))
+    | _ => return drops own (← cancelK cp rest more err)
+
+/-! #### Resumption points -/
+
+def curMach : CM OutInfo := do
+  match (← get).machs with
+  | m :: _ => pure m.info
+  | [] => throw "LIR: a machine's computation outside a machine"
+
+/-- Register a resumption point of the current machine; its `mk` function, set by `genMach`. -/
+def newPoint (op : Key) (kTy : Option LTy) (cPay : Option Pay) (argTys : List LTy) (step : Option Nat)
+    (K : Kont) (callee : Option OutInfo := none) (inline : Bool := false) : CM Nat := do
+  let mk ← reserveFn s!"suspend {op.1}.{op.2}"
+  let pt : MPoint := { op, kTy, cPay, argTys, step, kont := K, mkFn := mk, callee,
+                       site := step.getD 0, inline }
+  match (← get).machs with
+  | m :: rest =>
+    let m' : Mach := { m with points := m.points.push pt }
+    modify fun s => { s with machs := m' :: rest }
+  | [] => throw "LIR: a suspension outside a machine"
+  return mk
+
+/-- The answer `b` and cancel row's payload of the machine operation `op` at a machine. -/
+def opAnswer (F : OutInfo) (op : Key) : CM (LTy × Option Pay) := do
+  match F.ms.find? (·.1 == op) with
+  | some (_, _, b, cp) => pure (b, cp)
+  | none => throw s!"LIR: a suspension at {op} where the machine's row does not hold it"
+
+/-- `F.kTy` at the operation `op`. -/
+def kTyAt (F : OutInfo) (op : Key) : CM LTy := do
+  let (b, cp) ← opAnswer F op
+  return F.kTy b cp
+
+/-- **A `perform` of a machine operation**, `K` its continuation: the machine suspends here, its
+state the continuation's arguments (`[op]`, the continuation the rest of the machine).  -/
+def performK (K : Kont) (args : List Var) (op : Key) (v : Var) : CM Tm := do
+  let F ← curMach
+  let mk ← newPoint op none none (← args.mapM tyOf) none K
+  let k ← fresh (← kTyAt F op)
+  modify fun st => { st with erased := st.erased.insert "suspend" (st.erased.getD "suspend" 0 + 1) }
+  return .letv k (.call mk args) (← outSusp F op v k)
+
+/-- The cell `c` released, then `b`. -/
+def releaseThen (c : Var) (b : Tm) : CM Tm := do
+  let u ← fresh .unit
+  return .letv u (.prim .release [c]) (.drop u b)
+
+/-- A step's reuse of its machine's state cell (SPEC §49): the cell `cell`, its contents taken,
+of the operation `op`; the points of the machine, each with the function that builds its
+suspended computation in a given cell (`mkCells`). -/
+structure Reuse where
+  cell : Var
+  op : Key
+  pts : List MPoint
+  mkCells : Std.HashMap Nat Nat
+
+/-- The step at a call point: the callee's outcome `o` (of `M`) taken apart. A value goes to `K`,
+an abort through `K`'s frames, a suspension suspends the machine at this point, its state the
+callee's `k` and `K`'s arguments. With `reuse` (the resume entry of a machine whose state is a cell), a suspension
+again at the cell's operation writes the cell in place. -/
+def stepTm (F : OutInfo) (K : Kont) (args : List Var) (o : Var) (M : OutInfo) (stepFn : Nat)
+    (reuse : Option Reuse := none) : CM Tm := do
+  let w ← fresh M.body; let x ← fresh M.r; let ex ← fresh M.xTy
+  let argTys ← args.mapM tyOf
+  -- With a cell to reuse: released where the machine does not suspend again at its operation.
+  let released (b : Tm) : CM Tm := match reuse with
+    | some r => releaseThen r.cell b
+    | none => pure b
+  let abortArm (e : Var) : CM Tm := do
+    let some pF := payTy F.pay | throw "LIR: an abort where the machine's row holds none"
+    let e' ← fresh pF
+    released (.letv e' (← coercePay M.pay F.pay e fun v => pure (.var v)) (← abortK F K args e'))
+  let suspArms (s : Var) : CM Tm := casePay M.sPay s fun j sv => do
+    let some (op, _, b, cp) := M.ms[j]? | throw "LIR: a suspension's summand"
+    letpairM sv fun v k => do
+      let k' ← fresh (← kTyAt F op)
+      match reuse with
+      | none =>
+        let mk ← newPoint op (some (M.kTy b cp)) cp argTys (some stepFn) K (callee := some M)
+          (inline := true)
+        return .letv k' (.call mk (k :: args)) (← outSusp F op v k')
+      | some r =>
+        let some p := r.pts.find? fun p => p.site == stepFn && p.op == op
+          | throw "LIR: a call point's suspension"
+        if op == r.op then
+          let some mc := r.mkCells[p.mkFn]? | throw "LIR: a state cell's point"
+          return .letv k' (.call mc (r.cell :: k :: args)) (← outSusp F op v k')
+        releaseThen r.cell (.letv k' (.call p.mkFn (k :: args)) (← outSusp F op v k'))
+  let exits ← match payTy M.pay with
+    | none => suspArms ex
+    | some pT => do
+      let e ← fresh pT; let s ← fresh M.sTy
+      pure (Tm.case ex e (← abortArm e) s (← suspArms s))
+  return .letv w (.prim .unroll [o]) (.case w x (← released (← applyK F K args x)) ex exits)
+
+/-- **A call point**: `e` answers the callee's outcome (of `M`), handed to `K`: a step function,
+which the resume entry calls again, so the callee's `k` is in the machine's state and the machine
+is one code. In tail position at the machine's own outcome the step is made when the machine is
+complete (`withMachine`): a machine with that call and no other point passes its callee's
+outcome on; a call that closes a loop of tail calls passes it on too (`tailPass`). -/
+def pointK (K : Kont) (args : List Var) (e : Tm) (M : OutInfo) : CM Tm := do
+  let F ← curMach
+  if K.isEmpty && args.isEmpty && M.ty == F.ty && M.keys == F.keys then
+    let fn ← reserveFn "tail"
+    let o ← fresh M.ty
+    match (← get).machs with
+    | m :: rest =>
+      let m' : Mach := { m with tails := m.tails.push (fn, M) }
+      modify fun s => { s with machs := m' :: rest }
+    | [] => throw "LIR: a call point outside a machine"
+    return .letv o e (.call fn [o])
+  let o ← fresh M.ty
+  let stepFn ← reserveFn "step"
+  let argPs ← args.mapM freshLike
+  let oP ← fresh M.ty
+  let body ← stepTm F K argPs oP M stepFn
+  setFn stepFn { name := "step", params := argPs ++ [oP], body, ret := F.ty }
+  readFact "machine:call point"
+  return .letv o e (.call stepFn (args ++ [o]))
+
+/-- A result that is not an outcome (`a` at the payload `p`) handed to `K`. -/
+def resultK (K : Kont) (args : List Var) (e : Tm) (a : LTy) (p : Pay) : CM Tm := do
+  let F ← curMach
+  match payTy p with
+  | none => bindTm e a fun x => applyK F K args x
+  | some pT =>
+    let r ← fresh (.sum a pT); let x ← fresh a; let e₀ ← fresh pT
+    let some pF := payTy F.pay | throw "LIR: an abort where the machine's row holds none"
+    let e' ← fresh pF
+    return .letv r e (.case r x (← applyK F K args x) e₀
+      (.letv e' (← coercePay p F.pay e₀ fun v => pure (.var v)) (← abortK F K args e')))
+
+/-! #### The machine's codes -/
+
+def tupleTy : List LTy → LTy
+  | [] => .unit
+  | [t] => t
+  | t :: ts => .pair t (tupleTy ts)
+
+/-- The variables as a right-nested tuple. -/
+def mkTuple : List Var → (Var → CM Tm) → CM Tm
+  | [], k => do let u ← fresh .unit; return .letv u .unit (← k u)
+  | [x], k => k x
+  | x :: xs, k => mkTuple xs fun r => do
+    let p ← fresh (.pair (← tyOf x) (← tyOf r))
+    return .letv p (.pair x r) (← k p)
+
+/-- A right-nested tuple of the types `tys` taken apart. -/
+def untuple (v : Var) : List LTy → (List Var → CM Tm) → CM Tm
+  | [], k => do return .drop v (← k [])
+  | [_], k => k [v]
+  | _ :: ts, k => letpairM v fun x r => untuple r ts fun xs => k (x :: xs)
+
+/-- The resume of a point's variant `fs` with the answer `y`. -/
+def resumeTm (F : OutInfo) (p : MPoint) (fs : List Var) (y : Var) (reuse : Option Reuse := none) :
+    CM Tm := do
+  let released (b : Tm) : CM Tm := match reuse with
+    | some r => releaseThen r.cell b
+    | none => pure b
+  match p.kTy, fs, p.step with
+  | some kT, k :: args, some stepFn => do
+    let krT ← selTy kT 0
+    let (_, mT) ← answerOf krT
+    let kr ← fresh krT; let o ← fresh mT
+    match reuse, p.callee, p.inline with
+    | some _, some M, true =>
+      -- The step in place: a suspension again at this operation reuses the cell.
+      return .letv kr (.sel k 0) (.letv o (.app kr y) (← stepTm F p.kont args o M stepFn reuse))
+    | _, _, _ =>
+      released (.letv kr (.sel k 0) (.letv o (.app kr y) (.call stepFn (args ++ [o]))))
+  | none, args, _ => released (← applyK F p.kont args y)
+  | _, _, _ => throw "LIR: a resumption point's state"
+
+/-- The cancel of a point's variant `fs`, `cp` the operation's cancel row's payload: the callee's
+`k` cancelled first, then the point's frames. -/
+def cancelTm (cp : Pay) (p : MPoint) (fs : List Var) : CM Tm := do
+  match p.kTy, fs with
+  | some kT, k :: args => do
+    let cT ← selTy kT 1
+    let c ← fresh cT; let err ← fresh (resTy .unit cp)
+    return .letv c (.sel k 1)
+      (.letv err (← coerceRes .unit (p.cPay.getD []) cp c) (← cancelK cp p.kont args err))
+  | none, args => do
+    let u ← fresh .unit
+    match payTy cp with
+    | none => return .letv u .unit (← cancelK cp p.kont args u)
+    | some _ =>
+      let err ← fresh (resTy .unit cp)
+      return .letv u .unit (.letv err (.inj false u) (← cancelK cp p.kont args err))
+  | _, _ => throw "LIR: a resumption point's state"
+
+/-- **The codes of a machine**, once its points are known: per operation, its state (one variant
+per point), the suspended computation's `&` code (`resume`, `cancel`), the resume code that
+switches on the state, and each point's `mk`.  `[spec §49]` -/
+def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
+  let F := m.info
+  let mut kcs : List (Key × Nat) := []
+  for (op, _, b, cp) in F.ms do
+    let ps := m.points.toList.filter (·.op == op)
+    let cT := cancelResTy cp
+    if ps.isEmpty then continue
+    let fieldsOf (p : MPoint) : List LTy := p.kTy.toList ++ p.argTys
+    let stPay : Pay := ps.zipIdx.map fun (p, i) => ((0, i.toUInt32), tupleTy (fieldsOf p))
+    let stTy := (payTy stPay).getD .unit
+    -- **A state cell** where the machine's state holds its own suspended computation (its closure
+    -- class holds itself: a recursion through a resumption point, a clause resuming `κ` before it
+    -- answers; `cellPass`). The state is a cell, allocated when the machine first suspends and
+    -- written in place each time it suspends again at the operation; its suspended computation
+    -- is a word. Otherwise the state is the closure's environment, as it always is at `unr`, whose
+    -- suspended computation may be copied (§19).
+    let cellMode := cellOps.contains op && !F.unrs.contains op
+    let envTy : LTy := if cellMode then .ref stTy else stTy
+    let rres ← reserveFn s!"resume {op.1}.{op.2}"
+    let rc ← addCode { kind := .lam, fns := [rres], ty := .arr b (.ret F.ty) }
+    let kres ← reserveFn s!"resume entry {op.1}.{op.2}"
+    let kcan ← reserveFn s!"cancel {op.1}.{op.2}"
+    let kc ← addCode { kind := .amp, fns := [kres, kcan], ty := .amp (.arr b (.ret F.ty)) (.ret cT) }
+    kcs := kcs ++ [(op, kc)]
+    let s₀ ← fresh envTy
+    setFn kres { name := s!"resume entry {op.1}.{op.2}", params := [s₀], body := .clos rc [s₀],
+                 ret := .thunk (.arr b (.ret F.ty)) }
+    let mut mkCells : Std.HashMap Nat Nat := {}
+    if cellMode then
+      readFact "machine:state cell"
+      for p in ps do mkCells := mkCells.insert p.mkFn (← reserveFn s!"suspend in place {op.1}.{op.2}")
+    -- The state, out of the environment or out of its cell.
+    let withState (e : Var) (k : Option Var → Var → CM Tm) : CM Tm := do
+      if cellMode then
+        let pr ← fresh (.pair envTy stTy); let c ← fresh envTy; let st ← fresh stTy
+        return .letv pr (.prim .take [e]) (.letpair c st pr (← k (some c) st))
+      else k none e
+    let s₁ ← fresh envTy; let y ← fresh b
+    let rb ← withState s₁ fun c st => casePay stPay st fun i fv => do
+      let some p := ps[i]? | throw "LIR: a machine's point"
+      let reuse : Option Reuse := c.map fun c => { cell := c, op, pts := m.points.toList, mkCells }
+      untuple fv (fieldsOf p) fun fs => resumeTm F p fs y reuse
+    setFn rres { name := s!"resume {op.1}.{op.2}", params := [s₁, y], body := rb, ret := F.ty }
+    let s₂ ← fresh envTy
+    -- At a cancel row `⊤` (a linear operation) the cancel entry is never run.
+    let cb ← match cp with
+      | none => pure (.drop s₂ .unit)
+      | some cp => withState s₂ fun c st => do
+        let arms ← casePay stPay st fun i fv => do
+          let some p := ps[i]? | throw "LIR: a machine's point"
+          untuple fv (fieldsOf p) fun fs => cancelTm cp p fs
+        match c with
+        | some c => releaseThen c arms
+        | none => pure arms
+    setFn kcan { name := s!"cancel {op.1}.{op.2}", params := [s₂], body := cb, ret := cT }
+    for (p, i) in ps.zipIdx do
+      let xs ← (fieldsOf p).mapM fresh
+      let body ← mkTuple xs fun t => injectPay stPay i t fun st => do
+        if cellMode then
+          let c ← fresh envTy
+          return .letv c (.prim .alloc [st]) (.clos kc [c])
+        else pure (.clos kc [st])
+      setFn p.mkFn { name := s!"suspend {op.1}.{op.2}", params := xs, body, ret := F.kTy b cp }
+      if let some mc := mkCells[p.mkFn]? then
+        let c ← fresh envTy
+        let xs ← (fieldsOf p).mapM fresh
+        let body ← mkTuple xs fun t => injectPay stPay i t fun st => do
+          let c' ← fresh envTy
+          return .letv c' (.prim .put [c, st]) (.clos kc [c'])
+        setFn mc { name := s!"suspend in place {op.1}.{op.2}", params := c :: xs, body,
+                   ret := F.kTy b cp }
+  readFact "machine:state"
+  return kcs
+
+/-- Convert `act` as the body of a machine of the outcome `F`, then make its codes. -/
+def withMachine (F : OutInfo) (act : CM Tm) : CM Tm := do
+  modify fun s => { s with machs := { info := F } :: s.machs }
+  let t ← act
+  -- The tail calls: a machine with one and no other point passes its callee's outcome on (its
+  -- `k` is the callee's); otherwise each is a point, so the machine's `k` is one code.
+  let mut wrapped : Array (Nat × Var × OutInfo) := #[]
+  match (← get).machs with
+  | m :: _ =>
+    let wrapper := m.tails.size == 1 && m.points.isEmpty
+    for (fn, M) in m.tails do
+      let oP ← fresh M.ty
+      if wrapper then
+        readFact "machine:tail call"
+        setFn fn { name := "tail", params := [oP], body := .var oP, ret := F.ty }
+      else
+        let body ← stepTm F [] [] oP M fn
+        readFact "machine:call point"
+        setFn fn { name := "step", params := [oP], body, ret := F.ty }
+        wrapped := wrapped.push (fn, oP, M)
+  | [] => throw "LIR: a machine's stack"
+  match (← get).machs with
+  | m :: rest =>
+    modify fun s => { s with machs := rest }
+    let kcs ← genMach m
+    let i := (← get).done.size
+    modify fun s => { s with done := s.done.push (m, kcs),
+                             tailSites := s.tailSites ++ wrapped.map fun (fn, o, M) => (fn, o, M, i) }
+  | [] => throw "LIR: a machine's stack"
+  return t
 
 /-! ### Loops generated per site -/
 
@@ -605,21 +1244,6 @@ def genFoldFns (k : FoldKind) (F : FShape) (muT cellT gT : LTy) : CM (Nat × Nat
 for `νX. C`; an observation runs `g s` along its path (`nodeV`'s `childV`, the step run at the
 observation's leaf) and maps each state at an `X` of the answer to `unfold g` of it (`mapV`). -/
 
-/-- The type of component `j` of a `&` closure. -/
-def selTy (t : LTy) (j : Nat) : CM LTy := do
-  match t with
-  | .thunk k =>
-    match k.whnf 8, j with
-    | .amp k₁ _, 0 => repK k₁
-    | .amp _ k₂, _ => repK k₂
-    | k, _ => throw s!"LIR: an observation of a closure of {k}"
-  | t => throw s!"LIR: an observation of a non-closure: {t}"
-where
-  repK : LCTy → CM LTy
-    | .ret a => pure a
-    | .top => pure .unit
-    | k => pure (.thunk k)
-
 /-- The type variable `n` occurs at a `⊗`/`⊕` position of `a`. -/
 def occursAt (n : Nat) : LTy → Bool
   | .tvar m => m == n
@@ -644,37 +1268,71 @@ mutual
 /-- The answer of the observation tree `C` at the path `steps`, over the step `g` and the state
 `s` (consumed): at an `F A` leaf the step run and its states mapped; else a closure of the rest of
 the tree. `obs` is the code of `unfold g s` itself. -/
-def nodeAt (fuel : Nat) (obs : Nat) (C : LCTy) (steps : List PathStep) (g s : Var) : CM Tm := do
+def nodeAt (fuel : Nat) (obs : Nat) (C : LCTy) (Cv : CTy) (steps : List PathStep) (g s : Var) :
+    CM Tm := do
   match fuel with
   | 0 => throw "LIR: an observation tree too deep"
   | fuel + 1 =>
-  match C with
-  | .ret A => do
+  match C, stripAll Cv with
+  | .ret A, Cv' => do
     let (_, stT) ← answerOf (← tyOf g)
     let g' ← freshLike g
     let st ← fresh stT
-    let t ← runPath fuel st steps fun r => mapStates fuel obs A g r
-    return .copy g g' (.letv st (.app g' s) t)
-  | .amp C₁ C₂ => do
+    -- An observation at an outcome (an effectful step, SPEC §49): the step's outcome is a call
+    -- point of the observation's machine, its value mapped by a join.
+    let nu ← nuTyOf obs
+    let leaf? ← match effParts Cv' with
+      | some (S, Rv) => do
+        match ← outInfoTy (LTy.subst 0 nu A) S with
+        | some F => pure (some (S, Rv, F))
+        | none => pure none
+      | none => pure none
+    match leaf? with
+    | some (S, Rv, F) =>
+      withMachine F do
+        let rPre ← vty Rv
+        let t ← runPath fuel st steps fun r => do
+          let some M ← outInfoTy (← tyOf r) S | throw "LIR: an observation's step at no outcome"
+          let fnMap ← reserveFn "observe map"
+          let gP ← freshLike g
+          let xP ← fresh M.r
+          let v ← fresh F.r
+          let mb ← mapStates fuel obs rPre gP xP
+          setFn fnMap { name := "observe map", params := [gP, xP], body := .letv v mb (← outValue F v),
+                        ret := F.ty }
+          readFact "unfoldN:machine"
+          pointK [.letF fnMap 1] [g] (.var r) M
+        return .copy g g' (.letv st (.app g' s) t)
+    | none =>
+      let t ← runPath fuel st steps fun r => mapStates fuel obs A g r
+      return .copy g g' (.letv st (.app g' s) t)
+  | .amp C₁ C₂, Cv' => do
+    let (Cv₁, Cv₂) ← match Cv' with
+      | .amp a b => pure (a, b)
+      | _ => throw "LIR: an observation tree's `&` at a type that is not one"
     let nu ← nuTyOf obs
     let k : LCTy := LCTy.subst 0 nu (.amp C₁ C₂)
     let ctx : Ctx := [some g, some s] ++ (steps.filterMap fun | .arg x => some (some x) | _ => none)
     let r₁ ← resOf (LCTy.subst 0 nu C₁)
     let r₂ ← resOf (LCTy.subst 0 nu C₂)
     mkAmp "observe" ctx k [r₁, r₂] [
-      fun ctx' => bodyAt fuel obs C₁ (steps ++ [.sel 0]) ctx',
-      fun ctx' => bodyAt fuel obs C₂ (steps ++ [.sel 1]) ctx']
-  | .arr A D => do
+      fun ctx' => bodyAt fuel obs C₁ Cv₁ (steps ++ [.sel 0]) ctx',
+      fun ctx' => bodyAt fuel obs C₂ Cv₂ (steps ++ [.sel 1]) ctx']
+  | .arr A D, Cv' => do
+    let Dv ← match Cv' with
+      | .arr _ d => pure d
+      | _ => throw "LIR: an observation tree's `⊸` at a type that is not one"
     let ctx : Ctx := [some g, some s] ++ (steps.filterMap fun | .arg x => some (some x) | _ => none)
     let nu ← nuTyOf obs
     mkClos "observe" ctx (LCTy.subst 0 nu (.arr A D)) (some (LTy.subst 0 nu A))
       (← resOf (LCTy.subst 0 nu D)) fun ctx' => do
       match ctx' with
-      | some x :: rest => bodyAt fuel obs D (steps ++ [.arg x]) (rest ++ [some x])
+      | some x :: rest => bodyAt fuel obs D Dv (steps ++ [.arg x]) (rest ++ [some x])
       | _ => throw "LIR: an observation's argument"
-  | C => throw s!"LIR: an observation tree at {C}"
+  | C, _ => throw s!"LIR: an observation tree at {C}"
 /-- `nodeAt` in a code whose context holds `g`, `s` and the path's arguments, in that order. -/
-def bodyAt (fuel : Nat) (obs : Nat) (C : LCTy) (steps : List PathStep) (ctx : Ctx) : CM Tm := do
+def bodyAt (fuel : Nat) (obs : Nat) (C : LCTy) (Cv : CTy) (steps : List PathStep) (ctx : Ctx) :
+    CM Tm := do
   match fuel, ctx with
   | 0, _ => throw "LIR: an observation tree too deep"
   | fuel + 1, some g :: some s :: args =>
@@ -686,7 +1344,7 @@ def bodyAt (fuel : Nat) (obs : Nat) (C : LCTy) (steps : List PathStep) (ctx : Ct
       | .arg _, a :: rest => steps' := steps'.push (.arg a); as := rest
       | .sel j, _ => steps' := steps'.push (.sel j)
       | .arg _, [] => throw "LIR: an observation's arguments"
-    nodeAt fuel obs C steps'.toList g s
+    nodeAt fuel obs C Cv steps'.toList g s
   | _, _ => throw "LIR: an observation's environment"
 /-- Run the path on the step's answer `st`. -/
 def runPath (fuel : Nat) (st : Var) : List PathStep → (Var → CM Tm) → CM Tm
@@ -741,16 +1399,17 @@ end
 
 /-- The code of `unfold g s` at the body `C` (a `&` of observation trees, `CTy.NuOk`), its step
 of type `gT` and state of type `sT`. -/
-def genUnfold (C : LCTy) (gT sT : LTy) : CM Nat := do
+def genUnfold (C : LCTy) (Cv : CTy) (gT sT : LTy) : CM Nat := do
   let .amp C₁ C₂ := C | throw s!"LIR: unfold at a body that is not a `&`: {C}"
+  let .amp Cv₁ Cv₂ := stripAll Cv | throw "LIR: unfold at a body that is not a `&`"
   let obs ← addCode { kind := .amp, fns := [], ty := .nu C }
   let nu : LTy := .thunk (.nu C)
   let mut fis : Array Nat := #[]
-  for (Cj, j) in [(C₁, 0), (C₂, 1)] do
+  for (Cj, Cvj, j) in [(C₁, Cv₁, 0), (C₂, Cv₂, 1)] do
     let g ← fresh gT
     let st ← fresh sT
     let fi ← reserveFn "observe"
-    let b ← nodeAt 64 obs Cj [.sel j] g st
+    let b ← nodeAt 64 obs Cj Cvj [.sel j] g st
     setFn fi { name := "observe", params := [g, st], body := b, ret := ← resOf (LCTy.subst 0 nu Cj) }
     fis := fis.push fi
   modify fun s => { s with codes := s.codes.set! obs { kind := .amp, fns := fis.toList, ty := .nu C } }
@@ -814,7 +1473,7 @@ def genDtor (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
     return .letv c (.prim .free [x]) (← genDtor f A c)
   | .box _ A => genDtor f A x
   | .mu T => do
-    let key := ppVT (.mu T)
+    let key := ppVT (.mu T) (← get).mach
     let fi ← match (← get).dtors[key]? with
       | some fi => pure fi
       | none => do
@@ -831,7 +1490,11 @@ def genDtor (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
     let rT ← selTy (← tyOf x) 1
     let r ← fresh rT
     return .letv r (.sel x 1) (← genDtor f R r)
-  | .thunk _ => return .sel x 1
+  | .thunk C => do
+    if let .nu (.amp _ D) := stripAll C then
+      if (← outInfoC D).isSome then
+        throw "LIR: the destructor of codata whose close may suspend is outside the fragment"
+    return .sel x 1
   | .fam (.ref A) => do
     let aT ← tyOf x
     let .fam (.ref eT) := aT | throw "LIR: an array's destructor"
@@ -1066,8 +1729,8 @@ def takesClosK : Nat → LCTy → Bool
 end
 
 /-- The key of a `use`: the declaration, its type arguments and the elaborator's key. -/
-def useKey (decl : Nat) (targs : List VTy) (info : TInfo) (j : Jdg) : String :=
-  s!"{decl}|{", ".intercalate (targs.map ppVT)}|{reprStr info.key}|{ppJ j}"
+def useKey (decl : Nat) (targs : List VTy) (info : TInfo) (j : Jdg) (ms : MachSet) : String :=
+  s!"{decl}|{", ".intercalate (targs.map (ppVT · ms))}|{reprStr info.key}|{ppJ j ms}"
 
 /-- Rename every variable a term binds to a fresh one, and its free ones by `m`. -/
 def renameTm (m : Std.HashMap Var Var) : Tm → CM Tm
@@ -1097,6 +1760,123 @@ def renameTm (m : Std.HashMap Var Var) : Tm → CM Tm
     return .copy (m.getD x x) x'' (← renameTm (m.insert x' x'') b)
   | .drop x b => return .drop (m.getD x x) (← renameTm m b)
 
+/-- **`κ`'s code** at the clause `idx` of a drive (SPEC §49): a `&` closure over the handled
+computation's suspended `k` and the handler's values, `kT` its type (`kTy`). Its resume entry
+resumes `k` with the answer and drives the outcome again (`driveFn`): the handler is deep. Its
+cancel entry cancels `k`, every frame of the region unwound, and answers at `κ`'s cancel type
+(`cancelTy`: the outcome `cM` or the payload `cPay`); at `⊤` (a linear `κ`) it is never run. -/
+def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driveFn : Nat)
+    (hvTys : List LTy) (cM : Option OutInfo) (cPay : Pay) : CM Nat := do
+  let .thunk kL := kT | throw s!"LIR: κ's type {kT}"
+  let .amp (.arr bT (.ret oT)) cK := kL | throw s!"LIR: κ's type {kT}"
+  unless oT == outTy do throw s!"LIR: κ resumes to {oT}, the handler answers {outTy}"
+  let (_, cpIn) ← opAnswer T (n, idx.toUInt32)
+  let kIn ← kTyAt T (n, idx.toUInt32)
+  let kapR ← reserveFn s!"kappa {n}.{idx}"
+  let rc ← addCode { kind := .lam, fns := [kapR], ty := .arr bT (.ret oT) }
+  let kres ← reserveFn s!"kappa {n}.{idx} resume entry"
+  let kcan ← reserveFn s!"kappa {n}.{idx} cancel"
+  let kc ← addCode { kind := .amp, fns := [kres, kcan], ty := kL }
+  let k₀ ← fresh kIn; let hv₀ ← hvTys.mapM fresh
+  setFn kres { name := s!"kappa {n}.{idx} resume entry", params := k₀ :: hv₀,
+               body := .clos rc (k₀ :: hv₀), ret := .thunk (.arr bT (.ret oT)) }
+  let k₁ ← fresh kIn; let hv₁ ← hvTys.mapM fresh; let y ← fresh bT
+  let kr ← fresh (← selTy kIn 0); let o ← fresh T.ty
+  setFn kapR { name := s!"kappa {n}.{idx}", params := k₁ :: hv₁ ++ [y],
+               body := .letv kr (.sel k₁ 0) (.letv o (.app kr y) (.call driveFn (hv₁ ++ [o]))),
+               ret := oT }
+  let k₂ ← fresh kIn; let hv₂ ← hvTys.mapM fresh
+  match cK with
+  | .top =>
+    setFn kcan { name := s!"kappa {n}.{idx} cancel", params := k₂ :: hv₂,
+                 body := .drop k₂ (drops hv₂ .unit), ret := .unit }
+  | .ret cT =>
+    let want := match cM with
+      | some O => O.ty
+      | none => resTy .unit cPay
+    unless cT == want do throw s!"LIR: κ's cancel answers {cT}, its row {want}"
+    let c ← fresh (cancelResTy cpIn)
+    let body ← toResult .unit (cpIn.getD []) cM cPay c
+    setFn kcan { name := s!"kappa {n}.{idx} cancel", params := k₂ :: hv₂,
+                 body := .letv c (.sel k₂ 1) (drops hv₂ body), ret := cT }
+  | k => throw s!"LIR: κ's cancel branch at {k}"
+  return kc
+
+/-- **One code per task body**  `[spec §49]`: the closures of one closure type that the clauses of
+the stored-continuation sites of one task body build (a task's or a stored generator's value:
+finished, or pending on `κ`) are variants of one code, its environment a sum of theirs, each
+component a `case` on it that calls the variant's own function. A representation of the closure
+type, with the same observations: a value of it is one code, as a coroutine of one body is one
+type. A body built once is its own code. -/
+def genMerges : CM Unit := do
+  for g in (← get).merged do
+    let vs := (← get).merges.getD g #[]
+    let some v₀ := vs[0]? | continue
+    let some c₀ := (← get).codes[v₀.code]? | throw "LIR: a task variant's code"
+    if vs.size == 1 then
+      let xs ← v₀.envTys.mapM fresh
+      setFn v₀.mkFn { name := "task variant", params := xs, body := .clos v₀.code xs, ret := .thunk c₀.ty }
+      continue
+    readFact "effHandleV:task body code"
+    let stPay : Pay := vs.toList.zipIdx.map fun (v, i) => ((0, i.toUInt32), tupleTy v.envTys)
+    let stTy := (payTy stPay).getD .unit
+    let mut fns : Array Nat := #[]
+    for (f₀, j) in c₀.fns.zipIdx do
+      let some d₀ := (← get).fns[f₀]? | throw "LIR: a task variant's function"
+      let fi ← reserveFn "task"
+      let st ← fresh stTy
+      let a? ← match c₀.kind, d₀.params.getLast? with
+        | .lam, some p => pure (some (← freshLike p))
+        | _, _ => pure none
+      let body ← casePay stPay st fun i fv => do
+        let some v := vs[i]? | throw "LIR: a task variant"
+        let some c := (← get).codes[v.code]? | throw "LIR: a task variant's code"
+        untuple fv v.envTys fun fs => pure (.call (c.fns.getD j 0) (fs ++ a?.toList))
+      setFn fi { name := "task", params := st :: a?.toList, body, ret := d₀.ret }
+      fns := fns.push fi
+    let m ← addCode { kind := c₀.kind, fns := fns.toList, ty := c₀.ty }
+    for (v, i) in vs.toList.zipIdx do
+      let xs ← v.envTys.mapM fresh
+      let body ← mkTuple xs fun t => injectPay stPay i t fun w => pure (.clos m [w])
+      setFn v.mkFn { name := "task variant", params := xs, body, ret := .thunk c₀.ty }
+
+/-- The keys of the `def`s a term uses (`use` nodes, their bodies not entered): a handled
+computation's task body, as copies of one `def` at several sites share it (`DefKey.body`).  -/
+def useKeys : Nat → TExpr → List String
+  | 0, _ => []
+  | f + 1, t => match t with
+    | .use info _ name _ targs _ _ =>
+      [s!"{(info.key.map (·.body)).getD name}[{", ".intercalate (targs.map (ppVT ·))}]"]
+    | t => t.children.flatMap fun (_, c) => useKeys f c
+
+/-- The closure types at the `⊗` and `⊕` positions of a value type, a `ν` also unrolled (its
+closures are of its unrolling, `nuIn`). -/
+def closTys : Nat → LTy → List LTy
+  | 0, _ => []
+  | f + 1, t => match t with
+    | .thunk k => [t, .thunk (k.whnf 8)]
+    | .pair a b | .sum a b => closTys f a ++ closTys f b
+    | _ => []
+
+/-- A join of the current machine, its body made by `body` at the context `c₂` renamed with the
+value pushed and the continuation's arguments renamed. -/
+def joinWith (c₂ : Ctx) (A : VTy) (args : List Var) (body : Ctx → List Var → CM Tm) : CM Nat := do
+  let F ← curMach
+  let (_, inner, c₂') ← envOf c₂
+  let args' ← args.mapM freshMarked
+  let x ← fresh (← vty A)
+  let fn ← reserveFn "join"
+  let b ← body (some x :: c₂') args'
+  setFn fn { name := "join", params := inner ++ args' ++ [x], body := b, ret := F.ty }
+  return fn
+
+/-- The computation nodes a machine's conversion takes apart with its continuation (`convK`):
+at an outcome, each is converted inside a machine.  `[spec §49]` -/
+def machNode : TExpr → Bool
+  | .effLet .. | .effThen .. | .bind .. | .sumE .. | .tensorE .. | .unitE .. | .zeroE .. | .effSub ..
+  | .effRaise .. | .effPerform .. | .nilDead .. | .lendR .. => true
+  | _ => false
+
 /-- The outside of the pure fragment. -/
 def outside (t : TExpr) : CM α :=
   throw s!"LIR: `{ruleName t}` is outside the pure fragment (N2 and later)"
@@ -1109,6 +1889,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   | 0 => throw "LIR: the typed term is too deep"
   | fuel + 1 =>
   readFact s!"{ruleName t}:node"
+  -- A computation at an outcome, in a value's position: a machine of its own.  [spec §49]
+  if machNode t && !(← get).mach.isEmpty then
+    if let some M ← outInfoJ t.jdg then return ← subMachine fuel ctx t M
   match t with
   | .var _ _ i _ =>
     match ctx[i]? with
@@ -1130,17 +1913,17 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     bindTm (← conv fuel ctx c) bT fun a => pure (.inj true a)
   | .thunkF _ j _ c | .bangThunkF _ j _ c => do
     let .thunk k ← repJ j | throw "LIR: a thunk at a non-closure type"
-    mkClos "thunk" ctx k none (← repK k) fun ctx' => conv fuel (none :: ctx') c
+    mkClos "thunk" ctx k none (← repK k) fun ctx' => convBody fuel (none :: ctx') c
   | .lam _ j A _ c => do
     let .thunk k ← repJ j | throw "LIR: a λ at a non-closure type"
     let (_, r) ← answerOf (.thunk k)
-    mkClos "lam" ctx k (some (← vty A)) r fun ctx' => conv fuel ctx' c
+    mkClos "lam" ctx k (some (← vty A)) r fun ctx' => convBody fuel ctx' c
   | .lamDead _ j _ _ c => do
     let .thunk k ← repJ j | throw "LIR: a λ at a non-closure type"
     let (_, r) ← answerOf (.thunk k)
     mkClos "lam" ctx k (some .unit) r fun ctx' => do
       match ctx' with
-      | some p :: rest => return .drop p (← conv fuel (none :: rest) c)
+      | some p :: rest => return .drop p (← convBody fuel (none :: rest) c)
       | _ => throw "LIR: a dead λ's parameter"
   | .allI _ _ _ _ _ _ c => do
     -- `Λ. M` is `M` (`allI_inst`)  [spec §44]: its body erases to a λ-value, so the binder's slot
@@ -1153,8 +1936,8 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let r₁ ← selTy (.thunk k) 0
     let r₂ ← selTy (.thunk k) 1
     readFact "withI:code kind"
-    mkAmp "with" ctx k [r₁, r₂] [fun ctx' => conv fuel (none :: none :: ctx') tM,
-      fun ctx' => conv fuel (none :: none :: ctx') tN]
+    mkAmp "with" ctx k [r₁, r₂] [fun ctx' => convBody fuel (none :: none :: ctx') tM,
+      fun ctx' => convBody fuel (none :: none :: ctx') tN]
   | .effLet _ _ A B S u tM tN => do
     match payTy (← rowPay S) with
     | none => convBind fuel ctx A u tM tN
@@ -1184,7 +1967,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   | .effPerform _ _ S o c => do
     -- `perform` of a tail-resumptive clause: a direct call of the clause's work (`tail_resumes`,
     -- `TailResumesAt.subst_kappa`, `tail_clause_names`, `Checked.unhandledNames`).  [spec §47]
-    let some (fi, ph) := (← get).works[(o.n, o.i.toNat)]?
+    if (← get).mach.contains (o.n, o.i) then
+      throw s!"LIR: `effPerform` of the machine operation ({o.n}, {o.i}) outside a machine"
+    let some (fi, ph, _) := (← get).works[(o.n, o.i.toNat)]?
       | throw s!"LIR: `effPerform` of ({o.n}, {o.i}) with no direct call is outside the pure fragment (N3)"
     readFact "effPerform:direct call"
     modify fun st => { st with erased := st.erased.insert "perform" (st.erased.getD "perform" 0 + 1) }
@@ -1216,10 +2001,10 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
           pure (Tm.letv d dTm (.case d w (.drop w pass) e₂
             (.drop e (← coercePay pd ps e₂ fun e' => pure (.inj true e')))))
       return pre (.letv m (← conv fuel c₁ tM) (.case m x (← conv fuel (some x :: c₂) tN) e fin))
-  | .effHandleV _ _ S E fs n A R u ks _ _ tc te =>
-    convHandle fuel ctx S E fs n A R u ks tc te
-  | .effHandleVB _ _ S E fs n A R _ u ks _ _ tc te =>
-    convHandle fuel ctx S E fs n A R u ks tc te
+  | .effHandleV _ _ S E fs n A R u ks site _ tc te =>
+    convHandle fuel ctx S E fs n A R u ks site tc te
+  | .effHandleVB _ _ S E fs n A R _ u ks site _ tc te =>
+    convHandle fuel ctx S E fs n A R u ks site tc te
   | .bind _ _ A _ u tM tN => convBind fuel ctx A u tM tN
   | .force _ j i C => do
     match ctx[i]? with
@@ -1315,7 +2100,11 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
         else conv fuel ctx c
       | _ => conv fuel ctx c
     | _, _ => conv fuel ctx c
-  | .effHandleT .. | .lendR .. | .lendLoopR .. | .nilDead .. | .iterate .. | .divFuel ..
+  | .nilDead _ _ _ c => do
+    -- `[nil-dead]` (SPEC §29): the term at the empty context, the context's slots consumed.
+    readFact "nilDead:context"
+    return drops (live ctx) (← conv fuel [] c)
+  | .effHandleT .. | .lendR .. | .lendLoopR .. | .iterate .. | .divFuel ..
   | .reify .. | .letPoly .. => outside t
   | t =>
     match transparent? t with
@@ -1335,6 +2124,394 @@ def convBind (fuel : Nat) (ctx : Ctx) (A : VTy) (u : Masks) (tM tN : TExpr) : CM
       modify fun st => { st with unfolds := st.unfolds.insert x }
     conv fuel (some x :: c₂) tN)
 
+/-- **A machine's computation**  `[spec §49]`: `t`'s value handed to the continuation `K` over its
+arguments `args`, the term answering the current machine's outcome. A `[let]` or `[then]` at an
+outcome makes its body a join of the machine and converts its premise with the frame pushed, so a
+suspension inside the premise suspends the whole machine, its state the variables live there and
+nothing nested; the arms of a `case` take `K` each. A `perform` of a machine operation suspends
+the machine (`performK`), a `raise` unwinds `K` (`abortK`), and any other computation at an
+outcome is a call point (`pointK`). A computation at no outcome is converted as §47 converts it,
+its value or abort handed to `K`. -/
+def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM Tm := do
+  match fuel with
+  | 0 => throw "LIR: the typed term is too deep"
+  | fuel + 1 =>
+  match ← outInfoJ t.jdg with
+  | none =>
+    match t.jdg with
+    | .comp C =>
+      match effParts C with
+      | some (S, R) => resultK K args (← conv fuel ctx t) (← vty R) (← rowPay S)
+      | none => throw s!"LIR: a machine's computation at {ppJ t.jdg}"
+    | .val _ => throw "LIR: a machine's computation at a value"
+  | some M =>
+  match t with
+  | .effLet _ _ A _ _ u tM tN => do
+    let (pre, c₁, c₂) ← splitCtx ctx u "effLet"
+    let inner := unSubK 8 tM
+    if (← outInfoJ inner.jdg).isNone then
+      -- A premise that cannot suspend: `N` in place, an abort through `K`.
+      let some (S, _) := (match inner.jdg with | .comp C => effParts C | _ => none)
+        | throw "LIR: a `[let]`'s premise is not a returner"
+      let p ← rowPay S
+      let aT ← vty A
+      match payTy p with
+      | none =>
+        return pre (← bindTm (← conv fuel c₁ inner) aT fun x => convK fuel (some x :: c₂) tN K args)
+      | some pT =>
+        let F ← curMach
+        let some pF := payTy F.pay | throw "LIR: an abort where the machine's row holds none"
+        let r ← fresh (.sum aT pT); let x ← fresh aT; let e ← fresh pT; let e' ← fresh pF
+        return pre (.letv r (← conv fuel c₁ inner) (.case r x (← convK fuel (some x :: c₂) tN K args)
+          e (drops (live c₂) (.letv e' (← coercePay p F.pay e fun v => pure (.var v))
+            (← abortK F K args e')))))
+    readFact "effLet:machine join"
+    let fn ← joinFn fuel c₂ A tN K args
+    let own := live c₂
+    return pre (← convK fuel c₁ tM (.letF fn own.length :: K) (own ++ args))
+  | .effThen _ _ A _ _ _ SD u tM tN tD => do
+    readFact "effThen:machine join"
+    let (pre, c₁, c₂) ← splitCtx ctx u "effThen"
+    unless (← rowMs SD).isEmpty do
+      throw "LIR: a finaliser that may suspend is outside the fragment"
+    let fn ← joinFn fuel c₂ A tN K args
+    let pd ← rowPay SD
+    let (_, inner, cD) ← envOf c₂
+    let fnD ← reserveFn "finaliser"
+    let dTm ← conv fuel (none :: cD) tD
+    setFn fnD { name := "finaliser", params := inner, body := dTm, ret := resTy .unit pd }
+    let own := live c₂
+    return pre (← convK fuel c₁ tM (.thenF fn fnD own.length pd :: K) (own ++ args))
+  | .bind _ _ A _ u tM tN => do
+    let (pre, c₁, c₂) ← splitCtx ctx u "bind"
+    let unf := isUnfoldApp tM
+    return pre (← bindTm (← conv fuel c₁ tM) (← vty A) fun x => do
+      if unf then
+        readFact "bind:unfold step"
+        modify fun st => { st with unfolds := st.unfolds.insert x }
+      convK fuel (some x :: c₂) tN K args)
+  | .sumE _ _ A B _ u tV t₁ t₂ => do
+    let (pre, c₁, c₂) ← splitCtx ctx u "sumE"
+    let aT ← vty A; let bT ← vty B
+    return pre (← bindTm (← conv fuel c₁ tV) (.sum aT bT) fun sv => do
+      let x ← fresh aT; let y ← fresh bT
+      return .case sv x (← convK fuel (some x :: c₂) t₁ K args)
+        y (← convK fuel (some y :: c₂) t₂ K args))
+  | .tensorE _ _ A B _ u tV tM => do
+    let (pre, c₁, c₂) ← splitCtx ctx u "tensorE"
+    let aT ← vty A; let bT ← vty B
+    return pre (← bindTm (← conv fuel c₁ tV) (.pair aT bT) fun p => do
+      let x ← fresh aT; let y ← fresh bT
+      return .letpair x y p (← convK fuel (some y :: some x :: c₂) tM K args))
+  | .unitE _ _ _ u tV tM => do
+    let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
+    return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop v (← convK fuel c₂ tM K args))
+  | .zeroE _ _ _ u tV => do
+    let (pre, c₁, _) ← splitCtx ctx u "zeroE"
+    return pre (← bindTm (← conv fuel c₁ tV) .zero fun v => pure (.absurd v))
+  | .effSub _ _ _ _ _ c => do
+    readFact "effSub:rows"
+    convK fuel ctx c K args
+  | .effRaise _ _ _ o _ c => do
+    readFact "effRaise:op"
+    modify fun st => { st with erased := st.erased.insert "raise" (st.erased.getD "raise" 0 + 1) }
+    let F ← curMach
+    let some j := payIdx F.pay (o.n, o.i) | throw s!"LIR: a raise of ({o.n}, {o.i}) outside its row"
+    bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay F.pay j v fun e => abortK F K args e
+  | .effPerform _ _ _ o c => do
+    if (← get).mach.contains (o.n, o.i) then
+      readFact "effPerform:machine"
+      bindTm (← conv fuel ctx c) (← vty o.A) fun v => performK K args (o.n, o.i) v
+    else
+      -- A direct call (SPEC §47), its answer handed to `K`.
+      let some (fi, ph, wm) := (← get).works[(o.n, o.i.toNat)]?
+        | throw s!"LIR: `effPerform` of ({o.n}, {o.i}) with no direct call is outside the fragment"
+      readFact "effPerform:direct call"
+      modify fun st => { st with erased := st.erased.insert "perform" (st.erased.getD "perform" 0 + 1) }
+      let bT ← vty o.B
+      bindTm (← conv fuel ctx c) (← vty o.A) fun v => match wm with
+        | some W => pointK K args (.call fi [v]) W
+        | none => resultK K args (.call fi [v]) bT ph
+  | .nilDead _ _ _ c => do
+    readFact "nilDead:context"
+    return drops (live ctx) (← convK fuel [] c K args)
+  | .lendR _ _ _ _ T _ _ td tM => do
+    -- `[lend-R]` (SPEC §29): §19's unwinding borrow at a resuming row. The owner is lent as the
+    -- callback's view; the callback's value `b` gives `(r, b)`; a cancel of the machine inside the
+    -- callback runs the finaliser `d` on the owner. The owner's cell stays where it is: the
+    -- machine's state holds its location.
+    readFact "lendR:machine"
+    let F ← curMach
+    let some (some r) := ctx[0]? | throw "LIR: a relaxed lend's owner is not live"
+    let rT ← tyOf r
+    let .pair _ bT := M.r | throw "LIR: a relaxed lend's answer is not a pair"
+    let mT : LTy := .mut (← vty T)
+    let fnD ← reserveFn "lend finaliser"
+    let oD ← fresh rT
+    let dT ← repJ td.jdg
+    let f ← fresh dT
+    let du ← fresh .unit
+    setFn fnD { name := "lend finaliser", params := [oD],
+                body := .letv f (← conv fuel [] td) (.letv du (.app f oD) (.var du)), ret := .unit }
+    let fnN ← reserveFn "join"
+    let oN ← fresh rT; let argsN ← args.mapM freshLike; let b ← fresh bT
+    let pv ← fresh (.pair rT bT)
+    setFn fnN { name := "join", params := [oN] ++ argsN ++ [b],
+                body := .letv pv (.pair oN b) (← applyK F K argsN pv), ret := F.ty }
+    let pr ← fresh (.pair rT mT); let o ← fresh rT; let m ← fresh mT
+    let body ← convK fuel [some m] tM (.thenF fnN fnD 1 [] :: K) (o :: args)
+    readFact "lend"
+    return leaf ctx (some 0) (.letv pr (.prim .lend [r]) (.letpair o m pr body))
+  | .app _ _ i _ _ u tM =>
+    match headOf 64 tM with
+    | .lam _ _ _ _ body => if true then pointAt fuel ctx t K args M else do
+      -- A λ applied in place: its body in the machine (β).
+      let (pre, c₁, c₂) ← splitCtx ctx u "app"
+      let some (some x) := c₂[i]? | throw s!"LIR: the argument {i} is not live"
+      return pre (leaf c₂ (some i) (← convK fuel (some x :: c₁) body K args))
+    | _ => pointAt fuel ctx t K args M
+  | .lolliE .. =>
+    let (as, h) := spineOf 4096 t
+    match lamOf 64 h, as with
+    | some (k, .lam _ _ _ _ body), [(u, ta)] => if true then pointAt fuel ctx t K args M else do
+      -- A λ applied in place to one argument: its body in the machine (β).
+      readFact "lolliE:beta"
+      let (pre, cA, cF) ← splitCtx ctx u "lolliE"
+      let aT ← repJ ta.jdg
+      return pre (← bindTm (← conv fuel cA ta) aT fun a =>
+        convK fuel (some a :: (List.replicate k none ++ cF)) body K args)
+    | _, _ => pointAt fuel ctx t K args M
+  | _ => pointAt fuel ctx t K args M
+
+/-- A call point of the current machine at `t`. -/
+def pointAt (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) (M : OutInfo) :
+    CM Tm := do
+  pointK K args (← conv fuel ctx t) M
+
+/-- A computation through its `[sub]`s. -/
+def unSubK : Nat → TExpr → TExpr
+  | f + 1, .effSub _ _ _ _ _ c => unSubK f c
+  | _, t => t
+
+/-- **A join of a machine**: the body `N` of a `[let]` or `[then]`, a function of its context's
+live variables, the continuation's arguments and the value, answering the machine's outcome. -/
+def joinFn (fuel : Nat) (c₂ : Ctx) (A : VTy) (tN : TExpr) (K : Kont) (args : List Var) : CM Nat :=
+  joinWith c₂ A args fun ctx' args' => convK fuel ctx' tN K args'
+
+/-- **A tail-resumptive clause's work in a machine** (SPEC §49): `convWork`'s paths, at a handler
+whose outer row has machine operations, each resume's answer handed to `K`; the premise of a
+`[let]` on a path converted in the machine with the rest of the path its join. -/
+def convWorkK (fuel : Nat) (k : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) :
+    CM Tm := do
+  match fuel with
+  | 0 => throw "LIR: the typed term is too deep"
+  | fuel + 1 =>
+  let F ← curMach
+  if resumeB k t then
+    match t.unSub with
+    | .app _ _ y _ _ u _ => do
+      let (pre, c₁, c₂) ← splitCtx ctx u "app"
+      let some (some yv) := c₂[y]? | throw "LIR: a resume's answer is not live"
+      return pre (drops (live c₁) (leaf c₂ (some y) (← applyK F K args yv)))
+    | _ => throw "LIR: a resume"
+  match t with
+  | .bind _ _ A _ u tM tN | .effLet _ _ A _ _ u tM tN =>
+    if tailLeafB k tM && returns0B tN then
+      let (pre, c₁, c₂) ← splitCtx ctx u "bind"
+      return pre (drops (live c₂) (← convWorkK fuel k c₁ tM K args))
+    else if aliasOf 64 tM == some k then
+      let (pre, c₁, c₂) ← splitCtx ctx u "bind"
+      let some (some kv) := c₁[k]? | throw "LIR: an alias of a continuation that is not live"
+      return pre (leaf c₁ (some k) (← convWorkK fuel 0 (some kv :: c₂) tN K args))
+    else
+      let (pre, c₁, c₂) ← splitCtx ctx u "bind"
+      let fn ← joinWith c₂ A args fun ctx' args' => convWorkK fuel (k + 1) ctx' tN K args'
+      let own := live c₂
+      return pre (← convK fuel c₁ tM (.letF fn own.length :: K) (own ++ args))
+  | .sumE _ _ A B _ u tV t₁ t₂ => do
+    let (pre, c₁, c₂) ← splitCtx ctx u "sumE"
+    let aT ← vty A; let bT ← vty B
+    return pre (← bindTm (← conv fuel c₁ tV) (.sum aT bT) fun sv => do
+      let x ← fresh aT; let y ← fresh bT
+      return .case sv x (← convWorkK fuel (k + 1) (some x :: c₂) t₁ K args)
+        y (← convWorkK fuel (k + 1) (some y :: c₂) t₂ K args))
+  | .tensorE _ _ A B _ u tV tM => do
+    let (pre, c₁, c₂) ← splitCtx ctx u "tensorE"
+    let aT ← vty A; let bT ← vty B
+    return pre (← bindTm (← conv fuel c₁ tV) (.pair aT bT) fun pv => do
+      let x ← fresh aT; let y ← fresh bT
+      return .letpair x y pv (← convWorkK fuel (k + 2) (some y :: some x :: c₂) tM K args))
+  | .unitE _ _ _ u tV tM => do
+    let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
+    return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop v (← convWorkK fuel k c₂ tM K args))
+  | .effSub _ _ _ _ _ c => convWorkK fuel k ctx c K args
+  | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
+
+/-- A computation at an outcome, in a value's position: a function of its context, the body of a
+machine of its own.  `[spec §49]` -/
+def subMachine (fuel : Nat) (ctx : Ctx) (t : TExpr) (M : OutInfo) : CM Tm := do
+  let (outer, inner, ctx') ← envOf ctx
+  let fn ← reserveFn "machine"
+  let body ← withMachine M (convK fuel ctx' t [] [])
+  setFn fn { name := "machine", params := inner, body, ret := M.ty }
+  readFact "machine:body"
+  return .call fn outer
+
+/-- A code's body: at an outcome, the code's function is the machine, `self` the code's closure
+type.  `[spec §49]` -/
+def convBody (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
+  if machNode t && !(← get).mach.isEmpty then
+    if let some M ← outInfoJ t.jdg then
+      readFact "machine:body"
+      return ← withMachine M (convK fuel ctx t [] [])
+  conv fuel ctx t
+
+/-- A clause applied to `a` inside a drive's machine: a λ's body converted in the machine. -/
+def applyToK (fuel : Nat) (ctx : Ctx) (tF : TExpr) (a : Var) : CM Tm := do
+  match lamOf 64 tF with
+  | some (k, .lam _ _ _ _ body) => convK fuel (some a :: (List.replicate k none ++ ctx)) body [] []
+  | _ => applyTo fuel ctx tF a
+
+/-- **A `handle` node as a drive**  `[spec §49]`: the handled computation is a machine of its own
+(`handled`), and the drive takes its outcome apart, read from the node: a value goes to `h_ret`
+(`[ret]`), an abort of the node's operation to its clause (`catch_abort`), an abort of `Σ`'s on
+outward (`fwd_abort`); a suspension at one of the node's operations runs its clause on the
+argument and `κ` (`[op]`): a closure of the suspended computation and the handler's values,
+whose resume entry resumes the computation and drives its outcome again (the handler is deep) and
+whose cancel entry cancels it (`kappa_cancel_steps`); a suspension at one of `Σ`'s machine
+operations suspends the drive (forwarding), resumed by resuming the computation and driving
+again. The handler's values are the drive's parameters. -/
+def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32)
+    (R : VTy) (ks : List ClauseKinds.HKind) (site : Option HSite) (c₂ : Ctx) (te : TExpr)
+    (T : OutInfo) (cR : Ctx) (tR : TExpr)
+    (parts : Array (Ctx × TExpr)) (tailCtx : Ctx) (tupleAt : Option Nat) : CM Tm := do
+  readFact "effHandleV:machine"
+  modify fun st => { st with erased := st.erased.insert "machine" (st.erased.getD "machine" 0 + 1) }
+  let rT ← vty R
+  let outM ← outInfo? rT S
+  let outPay ← rowPay S
+  let outTy : LTy := match outM with
+    | some O => O.ty
+    | none => resTy rT outPay
+  -- The handled computation: a machine of its own.
+  let (bOuter, bInner, bCtx) ← envOf c₂
+  let bodyFn ← reserveFn s!"handled {n}"
+  let bBody ← withMachine T (convK fuel bCtx te [] [])
+  setFn bodyFn { name := s!"handled {n}", params := bInner, body := bBody, ret := T.ty }
+  -- The handler's values: the drive's parameters.
+  let ctxs : List Ctx := cR :: parts.toList.map (·.1) ++ [tailCtx]
+  let mut hvOuter : List Var := []
+  let mut hvInner : List Var := []
+  let mut cs' : Array Ctx := #[]
+  for c in ctxs do
+    let (o, i, c') ← envOf c
+    hvOuter := hvOuter ++ o; hvInner := hvInner ++ i; cs' := cs'.push c'
+  let hvTys ← hvInner.mapM tyOf
+  let driveFn ← reserveFn s!"drive {n}"
+  let oP ← fresh T.ty
+  let ctxs' := cs'.toList
+  let dropAll (keep : Option Nat) (b : Tm) : Tm :=
+    drops ((ctxs'.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
+  let clauseApp (cc : Ctx) (c : TExpr) (a : Var) : CM Tm :=
+    match outM with
+    | some _ => applyToK fuel cc c a
+    | none => applyTo fuel cc c a
+  -- Clause `idx` applied to `a`: written in place, or a component of the clauses' value (the last
+  -- context, `tupleAt` the index of its first clause), taken apart and called.
+  let applyClause (idx : Nat) (a : Var) : CM Tm := do
+    match tupleAt with
+    | some s₀ =>
+      if idx ≥ s₀ then
+        let some [tv] := (ctxs'.getLast?).map live | throw "LIR: the clauses' value"
+        let keep := ctxs'.length - 1
+        let rec proj : Nat → Nat → Var → CM Tm
+          | 0, _, _ => throw "LIR: the clauses' value too deep"
+          | f + 1, i, v => do
+            match ← tyOf v with
+            | .pair cT rT =>
+              let x ← fresh cT; let y ← fresh rT
+              if i == 0 then return .letpair x y v (.drop y (.app x a))
+              else return .letpair x y v (.drop x (← proj f (i - 1) y))
+            | t => throw s!"LIR: a clause of the clauses' value at {t}"
+        return dropAll (some keep) (← proj 64 (idx - s₀) tv)
+      else pure ()
+    | none => pure ()
+    match ctxs'[idx + 1]?, parts[idx]? with
+    | some cc, some (_, c) => return dropAll (some (idx + 1)) (← clauseApp cc c a)
+    | _, _ => throw "LIR: a clause"
+  let abortOut (key : Key) (v : Var) : CM Tm := do
+    let some j' := payIdx outPay key | throw s!"LIR: an abort of {key} outside the handler's row"
+    injectPay outPay j' v fun e => match outM with
+      | some O => outAbort O e
+      | none => pure (.inj true e)
+  let dbody : CM Tm := do
+    let w ← fresh T.body; let a ← fresh T.r; let ex ← fresh T.xTy
+    let some cR' := ctxs'[0]? | throw "LIR: the return clause"
+    let retArm := dropAll (some 0) (← clauseApp cR' tR a)
+    let abortArms (e : Var) : CM Tm := casePay T.pay e fun j v => do
+      let some (key, _) := T.pay[j]? | throw "LIR: a payload's summand"
+      if key.1 == n then applyClause key.2.toNat v
+      else return dropAll none (← abortOut key v)
+    let suspArms (sv : Var) : CM Tm := casePay T.sPay sv fun j pv => do
+      let some (key, _, bT, cpT) := T.ms[j]? | throw "LIR: a suspension's summand"
+      letpairM pv fun v k => do
+        if key.1 == n then
+          let idx := key.2.toNat
+          let some o := E[idx]? | throw "LIR: an operation"
+          let kT ← vty (kTy S R o.1 o.2.2 (fs idx))
+          let cancelC := cancelTy S (fs idx)
+          let cM ← outInfoC cancelC
+          let cPay ← match effParts cancelC with
+            | some (Sc, _) => rowPay Sc
+            | none => pure []
+          let kap ← genKap n idx kT T outTy driveFn hvTys cM cPay
+          -- `κ` holds the suspended computation and a copy of each of the handler's values.
+          let hvAll := ctxs'.flatMap live
+          let mut copies : List (Tm → Tm) := []
+          let mut hvC : List Var := []
+          for x in hvAll do
+            let x' ← freshLike x
+            copies := copies ++ [fun (t : Tm) => Tm.copy x x' t]
+            hvC := hvC ++ [x']
+          let kv ← fresh kT
+          let pr ← fresh (.pair (← tyOf v) kT)
+          readFact "effHandleV:kappa"
+          let body ← applyClause idx pr
+          let t : Tm := .letv kv (.clos kap (k :: hvC)) (.letv pr (.pair v kv) body)
+          return copies.foldr (fun (f : Tm → Tm) (t : Tm) => f t) t
+        else
+          let some O := outM
+            | throw "LIR: a suspension forwarded where the handler's row has no machine operation"
+          let mk ← newPoint key (some (T.kTy bT cpT)) cpT hvTys (some driveFn) [.dropF hvTys.length]
+          let k' ← fresh (← kTyAt O key)
+          readFact "effHandleV:forward"
+          return .letv k' (.call mk (k :: ctxs'.flatMap live)) (← outSusp O key v k')
+    let exits ← match payTy T.pay with
+      | none => suspArms ex
+      | some pT => do
+        let e ← fresh pT; let sv ← fresh T.sTy
+        pure (Tm.case ex e (← abortArms e) sv (← suspArms sv))
+    return .letv w (.prim .unroll [oP]) (.case w a retArm ex exits)
+  -- A stored-continuation site (a clause keeps `κ`): the closures its clauses answer are its task
+  -- body's code (`genMerges`), keyed by the handler and the `def`s its handled computation uses.
+  let stored := ks.any fun k => k.kind == .stored
+  let saved := (← get).siteMerge
+  if stored then
+    let keys := useKeys 64 te
+    let key ← if keys.isEmpty then do
+        let i := (← get).next
+        pure s!"site {n} #{i}"
+      else pure s!"{(site.map (·.handler)).getD ""}|{" ".intercalate keys}"
+    modify fun st => { st with siteMerge := some (closTys 64 rT, key),
+                               sitesIn := st.sitesIn ++ [(closTys 64 rT, key)] }
+  let dTm ← match outM with
+    | some O => withMachine O dbody
+    | none => dbody
+  modify fun st => { st with siteMerge := saved }
+  setFn driveFn { name := s!"drive {n}", params := hvInner ++ [oP], body := dTm, ret := outTy }
+  let o ← fresh T.ty
+  return .letv o (.call bodyFn bOuter) (.call driveFn (hvOuter ++ [o]))
+
 /-- The function `tF` applied to `a`: a λ's body at `a` (through transparent nodes and lifetime
 abstractions, `lamOf`), or a closure call. -/
 def applyTo (fuel : Nat) (ctx : Ctx) (tF : TExpr) (a : Var) : CM Tm := do
@@ -1352,18 +2529,23 @@ its value goes to `h_ret`, an abort of one of `n`'s operations to that operation
 handler's join: `catch_abort`), an abort of `Σ`'s handed on (`fwd_abort`). A tail-resumptive
 clause is called where it is performed (`effPerform`). -/
 def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy)
-    (n : UInt32) (A R : VTy) (u : Masks) (ks : List ClauseKinds.HKind) (tc te : TExpr) : CM Tm := do
+    (n : UInt32) (A R : VTy) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite)
+    (tc te : TExpr) : CM Tm := do
   let direct := (← get).direct.getD n []
   readFact "effHandleV:kinds"
-  for (k, j) in ks.zipIdx do
-    match k.kind with
-    | .abortive => pure ()
-    | .tail =>
-      unless direct[j]? == some true do
-        throw s!"LIR: `effHandleV`: the clause {n}.{j} is tail-resumptive, but its direct call is not licensed (condition 2, or one closed clause at its nodes): outside the pure fragment"
-    | .resumeOnce _ | .stored =>
-      throw s!"LIR: `effHandleV`: the clause {n}.{j} is `{k.kind.tag}`, a stored-continuation site (N3): outside the pure fragment"
-    | kd => throw s!"LIR: `effHandleV`: the clause {n}.{j} is `{kd.tag}`, whose rule is not built: outside the pure fragment"
+  -- The handled computation's outcome: with a machine operation (one of the node's clauses that is
+  -- not called where it is performed, or one of `Σ`'s), the node is a drive (SPEC §49).
+  let teM ← outInfoJ te.jdg
+  if teM.isNone then
+    for (k, j) in ks.zipIdx do
+      match k.kind with
+      | .abortive => pure ()
+      | .tail =>
+        unless direct[j]? == some true do
+          throw s!"LIR: `effHandleV`: the clause {n}.{j} is tail-resumptive, but its direct call is not licensed (condition 2, or one closed clause at its nodes): outside the pure fragment"
+      | .resumeOnce _ | .stored =>
+        throw s!"LIR: `effHandleV`: the clause {n}.{j} is `{k.kind.tag}`, a stored-continuation site (N3): outside the pure fragment"
+      | kd => throw s!"LIR: `effHandleV`: the clause {n}.{j} is `{kd.tag}`, whose rule is not built: outside the pure fragment"
   let (pre, c₁, c₂) ← splitCtx ctx u "effHandleV"
   -- The handler's pair, written in place: `h_ret` and each clause with its part of the context.
   let .tensorI _ _ _ _ uH tR tCs := tc
@@ -1373,21 +2555,36 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)
   let mut cur := cCs
   let mut tcur := tCs
   let mut preCs : Array (Tm → Tm) := #[]
+  -- The clauses not written in place, as one value: a drive takes them apart (SPEC §49).
+  let mut tuple : Option TExpr := none
   for _ in E do
+    if tuple.isSome then break
     match tcur with
     | .tensorI _ _ _ _ uc c rest => do
       let (pc, cc, cr) ← splitCtx cur uc "effHandleV"
       preCs := preCs.push pc
       parts := parts.push (cc, c)
       cur := cr; tcur := rest
-    | _ => throw "LIR: `effHandleV`: a clause tuple not written in place is outside the pure fragment"
+    | t =>
+      if teM.isNone then
+        throw "LIR: `effHandleV`: a clause tuple not written in place is outside the pure fragment"
+      tuple := some t
   let tailCtx := cur
   -- The direct calls' functions, made at the first node of the name.
   for (k, j) in ks.zipIdx do
-    if k.kind == .tail then
+    if k.kind == .tail && direct[j]? == some true then
       let some (cc, c) := parts[j]? | throw "LIR: a clause"
       let some o := E[j]? | throw "LIR: an operation"
       ensureWork fuel n j cc.length S o c
+  let wrap (b : Tm) : Tm := pre (preH (preCs.foldr (fun f t => f t) b))
+  if let some T := teM then
+    match tuple with
+    | none => return wrap (← convDrive fuel S E fs n R ks site c₂ te T cR tR parts tailCtx none)
+    | some tt =>
+      readFact "effHandleV:clause tuple"
+      let tv ← fresh (← repJ tt.jdg)
+      return wrap (.letv tv (← conv fuel tailCtx tt)
+        (← convDrive fuel S E fs n R ks site c₂ te T cR tR parts [some tv] (some parts.size)))
   let ctxs : List Ctx := cR :: parts.toList.map (·.1) ++ [tailCtx]
   let dropAll (keep : Option Nat) (b : Tm) : Tm :=
     drops ((ctxs.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
@@ -1396,7 +2593,6 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)
   let aT ← vty A
   modify fun st => { st with erased := st.erased.insert "handle" (st.erased.getD "handle" 0 + 1) }
   let retArm (a : Var) : CM Tm := do return dropAll (some 0) (← applyTo fuel cR tR a)
-  let wrap (b : Tm) : Tm := pre (preH (preCs.foldr (fun f t => f t) b))
   match payTy pt with
   | none => return wrap (← bindTm (← conv fuel c₂ te) aT retArm)
   | some ptT =>
@@ -1429,11 +2625,15 @@ def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
     let ph ← rowPay S
     let bT ← vty o.2.2
     let fi ← reserveFn s!"clause {n}.{j}"
-    modify fun st => { st with works := st.works.insert (n, j) (fi, ph) }
-    let body ← convWork fuel 0 ph (some kv :: some x :: none :: List.replicate depth none) tM
+    -- At an outer row with machine operations the work is a machine (SPEC §49).
+    let wm ← outInfo? bT S
+    modify fun st => { st with works := st.works.insert (n, j) (fi, ph, wm) }
+    let ctx₀ : Ctx := some kv :: some x :: none :: List.replicate depth none
+    let (body, ret) ← match wm with
+      | none => pure (← convWork fuel 0 ph ctx₀ tM, resTy bT ph)
+      | some W => pure (← withMachine W (convWorkK fuel 0 ctx₀ tM [] []), W.ty)
     -- `κ`'s slot holds a unit: every resume of it is its answer, and it is dropped there.
-    setFn fi { name := s!"clause {n}.{j}", params := [x], body := .letv kv .unit body,
-               ret := resTy bT ph }
+    setFn fi { name := s!"clause {n}.{j}", params := [x], body := .letv kv .unit body, ret }
   | _ => throw s!"LIR: the clause {n}.{j} is not `λp. let (x, κ) = p; M`"
 
 /-- The variable a term answers through the nodes that keep their premise's value (`ret`,
@@ -1599,7 +2799,7 @@ def convLendCell (fuel : Nat) (ctx : Ctx) (t inner : TExpr) : CM Tm := do
 /-- A `use` of a `def`: its body's term made once per key, instantiated at each later use. -/
 def convUse (fuel : Nat) (ctx : Ctx) (info : TInfo) (j : Jdg) (decl : Nat) (targs : List VTy)
     (body : TExpr) : CM Tm := do
-  let key := useKey decl targs info j
+  let key := useKey decl targs info j (← get).mach
   let slots : List (Nat × Var) := ctx.zipIdx.filterMap fun (s, i) => s.map (i, ·)
   -- A body that takes a closure is specialised to each use, as it is to each set of argument codes
   -- (docs/compiler.md §3.1): its codes would join the closures of every use otherwise.
@@ -1797,7 +2997,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
   | .unfoldN _ _ C _, [g] => do
     let .thunk uk := resT | throw "LIR: unfold's answer is not a closure"
     let (some sT, _) ← answerOf resT | throw "LIR: unfold takes no state"
-    let obs ← genUnfold (← cty C) (← tyOf g) sT
+    let obs ← genUnfold (← cty C) C (← tyOf g) sT
     mkClos "unfold" [some g] uk (some sT) (.thunk (.nu (← cty C))) fun ctx' => do
       match ctx' with
       | some st :: some g' :: _ => return .clos obs [g', st]
@@ -1901,6 +3101,7 @@ def convMain (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) 
     cx := cx.push (some x)
   prepWorks (1 <<< 22) cx.size t
   let body ← conv (1 <<< 22) cx.toList t
+  genMerges
   let mT ← repJ (.comp C)
   let r ← fresh mT
   let (tm, resT) ← if loops then do
@@ -1919,11 +3120,41 @@ where
     | .pair _ a => pure a
     | t => throw s!"LIR: main's value with capabilities is not a pair: {t}"
 
+/-- **Loops of tail calls** (SPEC §49): each call in tail position made a point whose callee's
+outcome may hold the machine's own suspended computation (`loop`, read off the layouts'
+classes) passes its callee's outcome on instead: the call closes a loop of tail calls through the
+machine (a recursion's next turn, a drive's clause resuming `κ`), which stays a loop in constant
+space. -/
+def tailPass (s : CState) (loop : Nat × Var × OutInfo × Nat → Bool) : Except String (Prog × CState) := do
+  let act : CM Unit := do
+    for site in s.tailSites do
+      if loop site then
+        let (fn, _, M, _) := site
+        let oP ← fresh M.ty
+        readFact "machine:tail call"
+        setFn fn { name := "tail", params := [oP], body := .var oP, ret := M.ty }
+  let ((), s') ← act.run s
+  return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
+            data := s'.data, statics := s'.statics.size }, s')
+
+/-- **State cells** (SPEC §49): each machine operation whose suspended computation's closure class
+holds itself (`recursive`, the layouts' classes that keep their environment on the heap, §35)
+has its codes made again with its state in a cell, written in place. -/
+def cellPass (s : CState) (recursive : Nat → Bool) : Except String (Prog × CState) := do
+  let act : CM Unit := do
+    for (m, kcs) in s.done do
+      let ops := kcs.filterMap fun (op, kc) => if recursive kc then some op else none
+      unless ops.isEmpty do
+        let _ ← genMach m ops
+  let ((), s') ← act.run s
+  return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
+            data := s'.data, statics := s'.statics.size }, s')
+
 /-- Convert a checked `main` to a program. -/
 def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) (ncaps : Nat)
-    (loops : Bool) (census : Bool := false) (direct : Std.HashMap UInt32 (List Bool) := {}) :
-    Except String (Prog × CState) := do
-  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run { census, direct }
+    (loops : Bool) (census : Bool := false) (direct : Std.HashMap UInt32 (List Bool) := {})
+    (mach : MachSet := {}) : Except String (Prog × CState) := do
+  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run { census, direct, mach }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
             statics := s.statics.size }, s)
 

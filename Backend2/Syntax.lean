@@ -49,6 +49,9 @@ inductive Op where
   | allocLent
   /-- The cell's contents; the cell is freed. -/
   | free
+  /-- The cell freed, its contents taken (`take`) and not put back: a machine's state cell when
+  the machine does not suspend again (SPEC §49). -/
+  | release
   /-- `swap ℓ v`: `(ℓ, old)`, the old contents moved out and `v` moved in. -/
   | swap
   /-- A borrow of the cell or family the argument owns, at the result's mode: `(owner, borrow)`,

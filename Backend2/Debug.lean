@@ -26,13 +26,13 @@ def texprNames : Array String := ctorNames2% TExpr
 
 def ruleName (t : TExpr) : String := texprNames[t.ctorIdx]!
 
-def ppJ (j : Jdg) : String :=
-  match ofJ j with
+def ppJ (j : Jdg) (ms : MachSet := {}) : String :=
+  match ofJ ms j with
   | .ok (.inl a) => a.pp
   | .ok (.inr k) => "{" ++ k.pp ++ "}"
   | .error e => s!"<{e}>"
 
-def ppVT (A : VTy) : String := match ofV A with
+def ppVT (A : VTy) (ms : MachSet := {}) : String := match ofV ms A with
   | .ok a => a.pp
   | .error e => s!"<{e}>"
 

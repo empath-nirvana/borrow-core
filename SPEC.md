@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.96 · 2026-10-21
+Version 0.97 · 2026-10-21
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8282,6 +8282,159 @@ backend's stages; the gate's compile-time guard is unchanged. `corpus/counts.exp
   built.
 - A `selfCall`'s fact (§21) is not read: the call is direct by the 0-CFA, not by the node.
 
+## 49. Entry 48 — the new backend: state machines at stored-continuation sites (N3)
+
+### Motivation
+
+Unit N3 (`docs/compiler.md` §6.1, #657) compiles the `handle` nodes that §47's rules leave: a
+clause that keeps `κ` (`stored`: a stored generator, a task), resumes it before it answers
+(`once`), resumes or cancels it (`resume-or-cancel`, the decided RC-0 of #647), keeps a state
+(`tail+state`), or is tail-resumptive at a node whose direct call the facts do not license. After
+§48 these left 64 programs outside the new backend. Each is now a state machine, as §19
+*Lowering* describes the old backend's, built on the typed term: the state at a resumption point
+is its live variables at their types, a suspended computation is one code per machine, and a task
+body is one code.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration or semantics.
+
+### Lowering
+
+`Backend2/`, read from the typed term and from the layouts of the LIR it converts to.
+
+- **Machine operations** (`Backend2/Driver.lean`, `machineOps`): each control operation `(n, j)`
+  whose clause at some `handle` node of `n` is neither `abortive` nor `tail` with its direct call
+  licensed (§47, `directFacts`), read off the nodes' kinds (`ks`, `classifyHandler_sound`).
+  Every other operation is lowered by §47.
+- **The outcome** (`Backend2/Types.lean`, `outcomeTy`): `F_Σ R` at a row with machine operations
+  answers `μY. R ⊕ (P ⊕ S)`, `P` the payload of `Σ`'s abortive operations (§47) and `S` one
+  summand per machine operation `A ↠ B` of `Σ`, in the row's order: its argument and the
+  suspended computation `k : U((B ⊸ F Y) & F C)`, `C` what its cancel answers, `1 ⊕` the payload
+  of the operation's cancel row (`fin`, §27; `1` at `⊤`). `k` is the continuation `[op]` captures,
+  as §19's `κ` is: its first component resumes it, its second cancels it.
+- **A machine** (`convK`) is a function whose answer is an outcome, with the joins and steps its
+  conversion makes. A computation is converted with its continuation inside the machine (the
+  frames to the machine's answer): a `[let]` or `[then]` at an outcome makes its body a join and
+  pushes its frame, so the frames of a resumption point are flat in the machine's state, never
+  nested; the arms of a `case`, `(λx. N) V` and a premise that cannot suspend take the frames in
+  place. At a node:
+  - `perform` of a machine operation suspends the machine (`performK`): its state the frames'
+    variables, its `k` the machine's own (`[op]`);
+  - `raise` unwinds the frames: each `[then]`'s finaliser runs, its own abort superseding
+    (`then_fin`, `unwind_prefix`), then the machine answers the abort (`catch_abort` at its
+    drive);
+  - any other computation at an outcome (a call, a drive) is a **call point** (`pointK`): its
+    outcome is taken apart by a step, its value to the frames, its abort through them, its
+    suspension a suspension of the machine whose state holds the callee's `k` and the frames'
+    variables. Suspension through calls nests (§19 *Lowering*).
+- **The machine's codes** (`genMach`), per operation: the state, one variant per point of the
+  operation; the `&` code of `k` over it, whose resume entry switches on the state and continues
+  at the point (a call point resumes its callee's `k` and steps again; `kappa_resume_steps`), and
+  whose cancel entry cancels the callee's `k` first, then runs the point's frames' finalisers
+  innermost first, keeping the first error (§19 *Cancels*, `[cfin-raise]`, `cancel_prefix`,
+  `kappa_cancel_steps`). A finaliser that may suspend, or a cancel row with a machine operation,
+  is outside the fragment.
+- **A `handle` node as a drive** (`convDrive`), when its handled computation's row has a machine
+  operation (of its own name, or of `Σ`). The handled computation is a machine of its own. The
+  drive takes its outcome apart, read from the node: a value to `h_ret` (`[ret]`, `catch_ret`), an
+  abort of one of the node's operations to its clause (`catch_abort`), one of `Σ`'s outward
+  (`fwd_abort`); a suspension at operation `j` of the node runs clause `j` on the argument and
+  `κ` (`[op]`), `κ` at the node's qualifier (`kTy`, `cancelTy` at `fs j`): a closure over the
+  handled computation's `k` and the handler's values, whose resume entry resumes `k` and drives
+  its outcome again (the handler is deep, `[op]`'s `hnd (n, H) K[y]`), and whose cancel entry
+  cancels `k`, every frame of the region unwound and no clause of its handlers run (the region's
+  handlers are dead, §19 *Cancels*). A linear `κ`'s cancel branch is `⊤` and never run. A
+  suspension at one of `Σ`'s machine operations suspends the drive (forwarding): resumed, it
+  resumes `k` and drives again. The clauses run in the drive's machine.
+- **Frame access by evidence (E, #647).** The handler's frame is what the node's clauses capture
+  and its own context's parts. They are the drive's parameters, and `κ`'s environment holds them:
+  a stored `κ` is resumed after the node's activation has ended, so its evidence is carried with
+  it as values, as the machine's `κ` holds `H`. No machine reads a handler's frame otherwise: a
+  suspension returns to its drive. No global slot per name (G) is used.
+- **Tail calls.** A call in tail position at the machine's own outcome is a point, so a machine's
+  `k` is one code. A machine whose only point is one such call passes its callee's outcome on (a
+  wrapper). A call whose callee's suspended computations may be the machine's own (the layouts'
+  class of the callee's `k` holds one of the machine's codes: a recursion's next turn through
+  `bounded_fix`'s self-reference, §48; a drive's clause resuming `κ` in tail position) closes a
+  loop of tail calls and passes its outcome on (`tailPass`): such a loop runs in constant space.
+- **State cells.** A machine operation whose `k`'s class holds itself (the layouts' recursive
+  classes, §35: a recursion through a resumption point, a clause that resumes `κ` before it
+  answers) keeps its state in a cell (`cellPass`), allocated when the machine first suspends
+  there and written in place each time it suspends again at the operation (`Op.release` frees it
+  when it does not); its `k` is then a word. One object per level of a recursion, as Rust's
+  `Box::pin`. At `unr` the state stays in the environment, since that `κ` may be copied.
+- **One code per task body.** The closures of the handler's answer type that a stored-continuation
+  site's clauses build (a task's or stored generator's value: finished, or pending on `κ`), and
+  the closure whose observation runs the site (a stored generator before its first observation),
+  are variants of one code (`genMerges`), keyed by the site's handler (`HSite.handler`) and its
+  handled computation's task body: the keys of the `def`s it uses (`use` nodes, `DefKey.body`,
+  which copies of one `def` at several sites share). A value of the closure type is then one code,
+  as a coroutine of one body is one type. Tasks of different bodies in one queue keep their
+  codes, and a resume dispatches among them (class (a) of `docs/effect-lowering.md` §1.4, as
+  Rust's `dyn Future`).
+- **Work at a machine row.** A tail-resumptive clause called where it is performed (§47) whose
+  handler's outer row has a machine operation is a machine of its own (`convWorkK`), its resumes
+  its answer, and the `perform` a call point of it.
+- **`lendR`** (§29): the unwinding borrow at a resuming row, converted in its machine: the owner
+  lent as the callback's view, `(r, b)` at the callback's value, the owner's finaliser `d` at a
+  cancel inside the callback. The owner's cell stays where it is, and the machine's state holds
+  its location (§29 *Lowering*). `nilDead` is its term at the empty context.
+
+### The postcondition
+
+The LIR has no `handle` and no `perform` former. `bcc lir --erasure` prints, for a program with
+machines, `machines M suspends P` after §47's counts: the `handle` nodes converted as drives and
+the `perform`s converted as suspensions (each `use` body once per key), then `left 0 0`.
+`scripts/compile-backend2.sh` pins the line in `corpus/erasure-backend2.expected`.
+
+### Facts read
+
+The nodes' clause kinds and qualifiers (`ks`, `E`), the direct calls' facts (`directFacts`), each
+row's operations with their signatures and cancel rows (`OpSig.fin`), the handler's answer type
+`R`, `HSite.handler`, and the `use` keys of a handled computation; and, after conversion, the
+layouts' closure classes (§35) for the tail calls and the state cells. Nothing is recognised from
+a term's shape.
+
+### Programs
+
+380 corpus programs at their goldens at the LIR interpreter, the word IR, Wasm and natively (316
+before): the 64 programs that §48 left outside, among them every async and generator program, the
+RC-0 programs (`async-r1-cancel-finaliser-writes`, `capture-take-hand`, `core-yield-loop`,
+`state-machine`, `div-infer`, `effects-cancel-two-sites`,
+`leetcode/trees/0230-kth-smallest-element-in-a-bst`) and the `tail+state` programs
+(`hygiene-handler-state`, `answers-two-types`, `clause-captures`, `reconcile-clock`). Their
+counts and erasure lines are pinned; the 316 earlier programs keep theirs.
+
+Against the old backend (`corpus/counts.expected`): `indirect` falls to 0 in every class-(c)
+program of `docs/effect-lowering.md` §1.4 but the seven with a handler state (`answers-two-types`
+2, `clause-captures` 3, `div-infer` 4, `effects-cancel-two-sites` 4, `hygiene-handler-state` 2,
+`reconcile-chain` 3, `reconcile-clock` 8, as the old backend's: the state-passing answer's
+dispatch, §19 *Handler state*; `binder-copies`, whose `two(base)` is such a handler, keeps its 2
+too), and stays at the old backend's in class (a) (`async-timers` 5,
+`io-task` 7, `sched-a-div` 5, `sched-a` 18, `sched-b` 18). `allocs` is no higher except in
+`rec-emit` (16 against 6): a level's state cell is allocated again after each of its own
+`perform`s, where the old backend kept one object per level.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `Core/`, the checker, the elaboration, the
+old backend (still `bcc`'s default) or a kernel program. `corpus/counts.expected` and
+`kernel-counts.expected` are unchanged. The LIR gains `Op.release` (a cell freed whose contents
+were taken), at the LIR interpreter, the word IR, Wasm and natively.
+
+### Open
+
+- The `tail+state` and `resume-or-cancel` direct rules (#647, `hnd_state_cell`,
+  `resume_or_cancel_direct`): the handler-state programs above compile as machines, with the old
+  backend's dispatches; their rules would make them zero cost.
+- A level's state cell passed on to the machine's next point, so that a recursion's levels keep
+  one object each across their own suspensions (`rec-emit`).
+- A loop that may diverge (§14's one machine per body): `chain-yield` stays at the old backend's
+  time until `iterate` (B2, parked).
+- An evidence slot for the direct-call rules (E's slot for `tail+state` and RC-3): N3's drives
+  carry the handler's values with `κ` and need none.
+
 ---
 
 ## Status
@@ -8668,6 +8821,15 @@ the old backend.
 ---
 
 ## Changelog
+
+- **0.97** (2026-10-21) — §49 (#657, N3): the new backend compiles the stored-continuation sites
+  as state machines: the machine operations from the nodes' kinds, the outcome of a row with one
+  (its value, an abort or a suspension with its continuation), a machine's state per point with
+  its frames flat, `handle` nodes as drives whose clauses run on the argument and `κ`, frame access
+  by the handler's values carried with `κ`, state cells for recursive machines, and one code per
+  task body by `use` keys. 64 programs join the new backend's fragment (380 in all); `indirect`
+  falls to 0 in the async and generator programs but the handler-state and class-(a) ones. No
+  change to the language or to the old backend's output.
 
 - **0.96** (2026-10-21) — §48 (#652, N4's loop part): the new backend compiles `bounded_fix` as
   its machine step. It is one function per node whose self-reference is a closure of its own code,
