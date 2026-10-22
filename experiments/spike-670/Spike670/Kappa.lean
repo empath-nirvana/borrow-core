@@ -300,3 +300,80 @@ theorem genKap_linear {n : UInt32} {idx : Nat} {kT : LTy} {T : OutInfo} {outTy :
     exact ⟨sf, g.next, p.closed, p.nodup, fun y hy => (p.range y hy).1⟩) hF h
 
 end Backend2.Spike670
+
+namespace Backend2.Spike670
+open Backend2
+
+variable {D : Var → Prop}
+
+/-! ### The κ site (`convDrive`, `suspArms`, a clause of the node's own operation) -/
+
+/-- The site's copies of the handler's values, `x` copied to `x'`, outermost first. -/
+def copiesOf (ps : List (Var × Var)) (t : Tm) : Tm := ps.foldr (fun (x, x') t => .copy x x' t) t
+
+/-- Copies made in turn: each original owned and duplicable, each copy new. -/
+theorem LinL.copies {Γ : Finset Var} {t : Tm} {Δ : Option (Finset Var)} :
+    ∀ (ps : List (Var × Var)), (∀ p ∈ ps, p.1 ∈ Γ ∧ D p.1) →
+      LinL D (Γ ∪ (ps.map Prod.snd).toFinset) t Δ → LinL D Γ (copiesOf ps t) Δ
+  | [], _, h => by simpa [copiesOf] using h
+  | (x, x') :: ps, hp, h => by
+    simp only [copiesOf, List.foldr_cons]
+    refine .copy (hp (x, x') (by simp)).1 (hp (x, x') (by simp)).2 ?_
+    refine LinL.copies ps (fun p hp' => ⟨Finset.mem_insert_of_mem (hp p (by simp [hp'])).1,
+      (hp p (by simp [hp'])).2⟩) ?_
+    convert h using 1
+    ext z; simp <;> tauto
+
+/-- Consuming a list disjoint from the rest. -/
+theorem useAll_append : ∀ {A : Finset Var} {L : List Var}, L.Nodup → (∀ x ∈ L, x ∉ A) →
+    UseAll (A ∪ L.toFinset) L A
+  | _, [], _, _ => by simpa using UseAll.nil
+  | A, x :: L, hn, hd => by
+    refine .cons (by simp) ?_
+    have : (A ∪ (x :: L).toFinset).erase x = A ∪ L.toFinset := by
+      ext z; by_cases hz : z = x
+      · subst hz; simp [hd z (by simp), (List.nodup_cons.1 hn).1]
+      · simp [hz]
+    rw [this]; exact useAll_append (List.nodup_cons.1 hn).2 (fun y hy => hd y (by simp [hy]))
+
+/-- **The κ site's term**: the handler's values copied into `κ = clos kap (k :: copies)`, the
+clause's body on `(v, κ)`. It consumes `k`, `v` and the handler's values, once each, when the body
+consumes the pair and the handler's values. -/
+theorem kappaSite_lin {k v kv pr kap : Var} {hv hvC : List Var} {body : Tm}
+    {Δ : Option (Finset Var)}
+    (hlen : hv.length = hvC.length) (hnC : hvC.Nodup)
+    (hD : ∀ x ∈ hv, D x)
+    (hC : ∀ x ∈ hvC, x ∉ hv ∧ x ≠ k ∧ x ≠ v)
+    (hkv : k ≠ v) (hk : k ∉ hv) (hv' : v ∉ hv)
+    (hkvf : kv ∉ hv ∧ kv ≠ v) (hpr : pr ∉ hv)
+    (hb : LinL D (insert pr hv.toFinset) body Δ) :
+    LinL D (insert k (insert v hv.toFinset))
+      (copiesOf (hv.zip hvC) (.letv kv (.clos kap (k :: hvC)) (.letv pr (.pair v kv) body))) Δ := by
+  refine LinL.copies _ (fun p hp => ?_) ?_
+  · obtain ⟨x, x'⟩ := p
+    have := List.of_mem_zip hp
+    exact ⟨by simp [this.1], hD x this.1⟩
+  · rw [List.map_snd_zip (by omega)]
+    refine .letv (Γ₁ := insert v hv.toFinset) (.ops rfl ?_) (.letv (Γ₁ := hv.toFinset) (.ops rfl ?_) hb)
+    · refine .cons (by simp) ?_
+      have e : (insert k (insert v hv.toFinset) ∪ hvC.toFinset).erase k =
+          insert v hv.toFinset ∪ hvC.toFinset := by
+        ext z; by_cases hz : z = k
+        · subst hz; simp [hkv, hk]; intro h; exact (hC z h).2.1 rfl
+        · simp [hz]
+      rw [e]
+      exact useAll_append hnC (fun x hx h => by
+        simp at h; rcases h with rfl | h
+        · exact (hC _ hx).2.2 rfl
+        · exact (hC _ hx).1 h)
+    · refine .cons (by simp) (.cons ?_ ?_)
+      · simp; exact fun h => hkvf.2 h
+      · have e : ((insert kv (insert v hv.toFinset)).erase v).erase kv = hv.toFinset := by
+          ext z; by_cases hz : z = kv
+          · subst hz; simp [hkvf.1]
+          · by_cases hz' : z = v
+            · subst hz'; simp [hv']
+            · simp [hz, hz']
+        rw [e]; exact .nil
+
+end Backend2.Spike670
