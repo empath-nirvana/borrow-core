@@ -79,6 +79,7 @@ capture-tick-hand 0 0 0 0 0 0 # equal to the kernel program tick-native
 clause-captures 6 3 0 10 10 0 # the counter and the cells; the indirect calls are the state-passing answers of `asking`, as in the probe P4(a) (a native handler parameter is not built)
 clone-reuse 6 0 1 36 27 0
 comp-param 0 0 0 0 0 0 # every argument is a closed block and every error a branch
+comp-param-for 0 0 0 0 0 0
 core-callback-dead 0 0 0 0 0 0 # the callback and the function it answers are closed λs; each call's code is known
 core-effects-borrow-abort 1 0 0 1 1 0 # the cell, freed by the finaliser on the unwind
 core-effects-borrows 2 0 0 3 3 1

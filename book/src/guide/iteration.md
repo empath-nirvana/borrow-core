@@ -98,10 +98,10 @@ main -> i32 =
 
 The `for` is a handler of `Yield` with a static name of its own (see [Effects](effects.md)):
 the loop's variables travel through the operation, so the body is the handler's clause, and it
-resumes the generator at its end. When the body raises at most, each `yield` compiles to a
-direct call of the body, and `break` or `return` unwinds the generator to the loop. A body that
-yields itself, as `squares`'s does, is not yet such a clause: `squares` loops over the stored
-`range`, a state machine on the new backend.
+resumes the generator at its end. Each `yield` compiles to a direct call of the body, and
+`break` or `return` unwinds the generator to the loop. A body that yields itself, as `squares`'s
+does, or loops, is such a clause too: its own `yield` is a direct call of the loop around
+`squares`'s call, so the two loops are nested direct calls.
 
 A generator's `while` and `loop` are loops of a div body (see [Divergence](../elaboration/divergence.md)),
 whose every turn may yield: one turn per observation, so every observation terminates. A `for`
@@ -248,8 +248,11 @@ main -> i32 =
 ```
 
 The adapters of `include adapters` (`map`, `filter`, `take`, `skip`, `enumerate`, `chain`,
-`flat_map`, `take_until`, `scan`, `zip`, `chunks`, `lines`, `batch`) are generic generators over
-stored generators, so a pipeline is written as calls:
+`flat_map`, `take_until`, `scan`, `zip`, `chunks`, `lines`, `batch`) are generic generators over a
+source computation: each takes its source as a computation parameter, `(1 => K with Yield[A])`,
+and a call at a call of a generator there is a call of the adapter's instance for that source,
+whose `for` is over the source's call. So a pipeline is written as calls, and runs as nested
+direct calls (only `zip`, which steps two sources by hand, takes stored generators):
 
 ```bc
 -- answer: i32[320]
@@ -273,7 +276,7 @@ main -> i32 =
 
 `e |> f(a, …)` is `f(e, a, …)`: the value on the left is the first argument of the call on the
 right, so a chain of adapters reads left to right. A generator's call piped into an adapter is
-stored there, as above.
+its source, as above.
 
 ```bc
 include adapters

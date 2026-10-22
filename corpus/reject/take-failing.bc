@@ -1,8 +1,7 @@
--- expect: 16:17: this argument of `take` has type `U (pull i32 (i32 + 1) 1)`, which is not `U pull A K K`
--- `take` stops its source and closes it, so it takes a stored generator that hands back, when
--- closed, what it returns (`U (pull A K K)`, `lib/adapters.bc`). A source that fails returns an
--- error (`i32 + 1`) it cannot hand back when closed before it computed one (it hands back `1`):
--- closed by `take`, it has no error to report, and `take` nothing to return.
+-- expect: 16:17: this argument of `take` returns `i32 + 1`, which is not `1`
+-- `take` stops its source early, cancelling it, which hands nothing back: its source returns `1`
+-- (`lib/adapters.bc`, SPEC §55). A source that fails returns an error (`i32 + 1`): cancelled by
+-- `take` before it computed one, it has no error to report, and `take` nothing to return.
 
 include adapters
 

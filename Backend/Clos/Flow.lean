@@ -250,6 +250,11 @@ def gen (codes : Array Code) : Tm → GM Key
   | .con t _ a => holding (.con t (.var a))
   | .when s t _ x b r => do
       emit (.outN (.var s) t (.var x))
+      -- Before the effects are lowered (`Capture`'s analysis), a `perform`'s payload is the pair
+      -- `(n, (i, v))` that `drive`'s `when` takes the variant of: `v` is its argument.
+      let k ← freshKey
+      emit (.proj (.var s) 1 k)
+      emit (.proj k 1 (.var x))
       let k₁ ← gen codes b
       let k₂ ← gen codes r
       let k ← freshKey

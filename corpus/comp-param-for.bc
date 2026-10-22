@@ -1,0 +1,13 @@
+-- A `for` over a call of a computation parameter (SPEC §33, §55): `gen` provides `Yield[bool]` to
+-- `any`, which uses it once, as the source of its `for`, so `gen` is a source parameter and `any`
+-- a template in it: `any(gen1)` is a call of its instance for the source `gen1(())`, whose `for`
+-- is over `gen1`'s call, a handler site whose body is called at each `yield` (SPEC §54).
+--
+-- Answer: `inr ()`, true; `live 0`.
+include yield
+fn gen1() -> 1 with Yield[bool] = yield(false); yield(true)
+fn any(gen: !(1 => 1 with Yield[bool])) -> bool =
+  let mut r = false;
+  for x in gen(()) { if x { r = true } else { () } };
+  r
+main -> bool = any(gen1)
