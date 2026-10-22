@@ -532,6 +532,19 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       rw [shift_hndExpr]
       simp only [Expr.shift, tailTuple_shift]
       exact .effHandleT hs' (deadP_insert hd Γa₁ hdd) hHr' hHc' ec hn0 hnd hnS hlen hSN hLin ee
+  | effHandleL hs hdd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hAff hSW hSu hFin _ ihc ihe =>
+      intro Γa Γb hΓ; subst hΓ
+      obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
+      have ec := ihc Γa₁ Γb₁ rfl
+      have ee := ihe Γa₂ Γb₂ rfl
+      have hHr' := valFormIn_insert (Γd := Γd) Γa₁ hHr
+      have hHw' := valFormIn_insert (Γd := Γd) Γa₁ hHw
+      have hHn' := valFormIn_insert (Γd := Γd) Γa₁ hHn
+      rw [h₁] at ec hHr' hHw' hHn'; rw [h₂] at ee
+      rw [shift_hndExpr]
+      simp only [Expr.shift, lastTuple_shift]
+      exact .effHandleL hs' (deadP_insert hd Γa₁ hdd) hHr' hHw' hHn' ec hn0 hnd hnS hlen hNZ hAff
+        hSW hSu hFin ee
   | @letPoly _ _ N _ _ b hcl hV _ _ ihN =>
       intro Γa Γb hΓ; subst hΓ
       have eN := ihN (⟨.unit, false⟩ :: Γa) Γb rfl
@@ -873,6 +886,19 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       simp only [Expr.shift, tailTuple_shift]
       exact .effHandleT hAt hs' (deadP_insert hd Γa₁ hdd) hHr' hHc' ec hn0 hnd hnS hlen hSN hLin
         ee
+  | effHandleL hAt hs hdd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hAff hSW hSu hFin _ ihc ihe =>
+      intro Γa Γb hΓ; subst hΓ
+      obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
+      have ec := ihc Γa₁ Γb₁ rfl
+      have ee := ihe Γa₂ Γb₂ rfl
+      have hHr' := valFormIn_insert (Γd := Γd) Γa₁ hHr
+      have hHw' := valFormIn_insert (Γd := Γd) Γa₁ hHw
+      have hHn' := valFormIn_insert (Γd := Γd) Γa₁ hHn
+      rw [h₁] at ec hHr' hHw' hHn'; rw [h₂] at ee
+      rw [shift_hndExpr]
+      simp only [Expr.shift, lastTuple_shift]
+      exact .effHandleL hAt hs' (deadP_insert hd Γa₁ hdd) hHr' hHw' hHn' ec hn0 hnd hnS hlen hNZ
+        hAff hSW hSu hFin ee
   | @letPoly _ _ N _ _ b hcl hV _ _ ihN =>
       intro Γa Γb hΓ; subst hΓ
       have eN := ihN (⟨.unit, false⟩ :: Γa) Γb rfl

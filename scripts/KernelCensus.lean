@@ -114,7 +114,8 @@ def own : Nat → Own → TExpr → Own
     nodes := acc.nodes.add texprNames[t.ctorIdx]!,
     formers := (formersJ t.jdg).fold (fun m f => m.add f) acc.formers }
   let acc := match t with
-    | .effHandleV _ _ _ E .. | .effHandleVB _ _ _ E .. | .effHandleT _ _ _ _ E .. =>
+    | .effHandleV _ _ _ E .. | .effHandleVB _ _ _ E .. | .effHandleT _ _ _ _ E ..
+    | .effHandleL _ _ _ _ E .. =>
       { acc with quals := E.foldl (fun m (q, _, _) => m.add (qualName q)) acc.quals }
     | _ => acc
   match t with

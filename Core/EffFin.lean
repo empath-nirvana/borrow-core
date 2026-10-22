@@ -1122,40 +1122,54 @@ theorem closing_then
     · exact hU ⟨o', ho', hu⟩
 
 include hSd hSDd hNZ hMS hDS hfin hP hFs hFe hU hQd hD in
-/-- **`[then]` at `cwp`**, by coinduction up to `cwp`: each segment is `ewp_frame_then_or` at
-the tables without the tick; a tick inside the frame owes the frame around its continuation, in
-the candidate and, by `closing_then`, in `Closing`.  `[spec §14, §19, §27]` -/
+/-- **A finaliser frame around a computation of `cwp`, one segment**, at any target candidate `Y`
+that holds the frame around every computation of `cwp` (`hY`): the segment is
+`ewp_frame_then_or` at the tables without the tick; a tick inside the frame owes the frame around
+its continuation, in `Y` and, by `closing_then`, in `Closing`.  `N` is read only through `hk`, so
+its answer may land in `Y` itself.  `cwpF_frame` at the finaliser frame.  `[spec §14, §19, §27]` -/
+theorem cwpF_frame_then (Y : List SRec → Expr → WProp)
+    (hY : ∀ ls e ρ ρ₂ ρ', cwp (Row.tab SM δ) Q₁ ls e ρ → Fr ls ρ₂ → ResU.CompS ρ ρ₂ ρ' →
+      Y ls ((ubindK Nv Dv).plug e) ρ')
+    (hk : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls) (cwpF (Row.tab S δ) Q Y ls ((ubindK Nv Dv).plug (.val v))))
+    (hkc : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls) (Closing (Row.tab S δ) Q ls ((ubindK Nv Dv).plug (.val v)))) :
+    ∀ {ls : List SRec} {e : Expr} {ρ : WRes}, cwp (Row.tab SM δ) Q₁ ls e ρ →
+      ∀ {ρ₂ ρ' : WRes}, Fr ls ρ₂ → ResU.CompS ρ ρ₂ ρ' →
+        cwpF (Row.tab S δ) Q Y ls ((ubindK Nv Dv).plug e) ρ' := by
+  have hTM := Row.divOK_of_le hMS hSd δ
+  have hDk := Row.find_key_none hDS hSd hSDd
+  intro ls e ρ he ρ₂ ρ' hF hc
+  refine ewp_frame_then_or δ S SM SD hNZ hMS hDS true (fun _ => hDk) hfin hP Nv Dv Fr hFs hFe hU
+    hQd hD _ _ (Table.Const.mono fun _ _ _ _ _ h => h) ?_ Q₁ Q hk (cwp_out he) hF hc
+  intro ls' t Φ Φ' σ₁ σ₂ σ hp hF' hcσ
+  obtain ⟨K₁, en, rfl, hK₁, hT0, ht, hcont⟩ := tickStop_inv hTM hp
+  obtain ⟨o, hf, ho⟩ := Row.divB_find hSd
+  have h₀ : Row.tab S δ divEff 0 = some (o.ent δ) := Row.tab_find hf
+  rw [← Kont.plug_comp]
+  refine tickStop_mk h₀ (OpSig.isTick_ent δ ho) ((ubindK Nv Dv).comp K₁)
+    (by rw [hasHnd_comp, hK₁]; simp [Kont.HasHnd, Expr.val, Val.pair]) fun ls'' he w hw => ?_
+  have ho' := hcont ls'' (he.left hcσ) w hw
+  have hF'' := hFe ls' ls'' σ₂ (he.right hcσ) hF'
+  rw [Kont.plug_comp]
+  exact ⟨hY _ _ _ σ₂ σ ho'.1 hF'' hcσ,
+    closing_then hSd hSDd hNZ hMS hDS hfin hP Nv Dv Fr hFs hFe hU hQd hD Q₁ Q hkc ho'.2 hF'' hcσ⟩
+
+include hSd hSDd hNZ hMS hDS hfin hP hFs hFe hU hQd hD in
+/-- **`[then]` at `cwp`**, by coinduction up to `cwp`, the candidate the finaliser frame around a
+computation of `cwp`, one segment at a time (`cwpF_frame_then`).  `[spec §14, §19, §27]` -/
 theorem cwp_then
     (hk : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls) (cwp (Row.tab S δ) Q ls ((ubindK Nv Dv).plug (.val v))))
     {ls : List SRec} {e : Expr} {ρ : WRes} (h : cwp (Row.tab SM δ) Q₁ ls e ρ)
     {ρ₂ ρ' : WRes} (hF : Fr ls ρ₂) (hc : ResU.CompS ρ ρ₂ ρ') :
     cwp (Row.tab S δ) Q ls ((ubindK Nv Dv).plug e) ρ' := by
-  have hTM := Row.divOK_of_le hMS hSd δ
-  have hDk := Row.find_key_none hDS hSd hSDd
-  have hcl := fun {ls e ρ} (h : Closing (Row.tab SM δ) Q₁ ls e ρ) {ρ₂ ρ'} (hF : Fr ls ρ₂)
-      (hc : ResU.CompS ρ ρ₂ ρ') =>
-    closing_then hSd hSDd hNZ hMS hDS hfin hP Nv Dv Fr hFs hFe hU hQd hD Q₁ Q
-      (fun ls v σ hσ => closing_of_cwp (hk ls v σ hσ)) h hF hc
   let W : List SRec → Expr → WProp := fun ls x ρ' => ∃ e ρ ρ₂, x = (ubindK Nv Dv).plug e ∧
     cwp (Row.tab SM δ) Q₁ ls e ρ ∧ Fr ls ρ₂ ∧ ResU.CompS ρ ρ₂ ρ'
   have hW' : ∀ ls x ρ, W ls x ρ →
       cwpF (Row.tab S δ) Q (fun ls e ρ => W ls e ρ ∨ cwp (Row.tab S δ) Q ls e ρ) ls x ρ := by
     rintro ls x ρ' ⟨e, ρ, ρ₂, rfl, he, hF, hc⟩
-    refine ewp_frame_then_or δ S SM SD hNZ hMS hDS true (fun _ => hDk) hfin hP Nv Dv Fr hFs hFe hU
-      hQd hD _ _ (Table.Const.mono fun _ _ _ _ _ h => h) ?_ Q₁ Q
+    exact cwpF_frame_then hSd hSDd hNZ hMS hDS hfin hP Nv Dv Fr hFs hFe hU hQd hD Q₁ Q _
+      (fun ls e ρ ρ₂ ρ' he hF hc => Or.inl ⟨e, ρ, ρ₂, rfl, he, hF, hc⟩)
       (fun ls v σ hσ => cwpF_mono (fun _ _ _ h => Or.inr h) (cwp_out (hk ls v σ hσ)))
-      (cwp_out he) hF hc
-    intro ls' t Φ Φ' σ₁ σ₂ σ hp hF' hcσ
-    obtain ⟨K₁, en, rfl, hK₁, hT0, ht, hcont⟩ := tickStop_inv hTM hp
-    obtain ⟨o, hf, ho⟩ := Row.divB_find hSd
-    have h₀ : Row.tab S δ divEff 0 = some (o.ent δ) := Row.tab_find hf
-    rw [← Kont.plug_comp]
-    refine tickStop_mk h₀ (OpSig.isTick_ent δ ho) ((ubindK Nv Dv).comp K₁)
-      (by rw [hasHnd_comp, hK₁]; simp [Kont.HasHnd, Expr.val, Val.pair]) fun ls'' he w hw => ?_
-    have ho' := hcont ls'' (he.left hcσ) w hw
-    have hF'' := hFe ls' ls'' σ₂ (he.right hcσ) hF'
-    rw [Kont.plug_comp]
-    exact ⟨Or.inl ⟨_, _, σ₂, rfl, ho'.1, hF'', hcσ⟩, hcl ho'.2 hF'' hcσ⟩
+      (fun ls v σ hσ => closing_of_cwp (hk ls v σ hσ)) he hF hc
   exact cwp_coind_up hW' ⟨e, ρ, ρ₂, rfl, h, hF, hc⟩
 
 end

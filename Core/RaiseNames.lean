@@ -1423,6 +1423,20 @@ theorem rcE_tailTuple {Hc : Expr} (h : rcE q Hc = true) :
       · have := rcE_pickE (q := q) j (t := Hc.shift 3 0) (by rw [rcE_shift]; exact h)
         simp [rcE, rcE_app this, resumeB, Val.lam]
 
+theorem rcE_lastTuple {Hw Hn : Expr} (hw : rcE q Hw = true) (hn : rcE q Hn = true) :
+    ∀ (E : List (Qual × VTy × VTy)) (j : Nat), rcE q (lastTuple E j Hw Hn) = true
+  | [], _ => rfl
+  | (_, _, _) :: E, j => by
+      simp only [lastTuple, rcE, rcE_lastTuple hw hn E (j + 1), Bool.and_true]
+      unfold lastClause
+      split
+      · have := rcE_pickE (q := q) j (t := Hw.shift 1 0) (by rw [rcE_shift]; exact hw)
+        show rcE q (.app (pickE j (Hw.shift 1 0)) (.var 0)) = true
+        rw [rcE_app this]; rfl
+      · have h₃ := rcE_pickE (q := q) j (t := Hw.shift 3 0) (by rw [rcE_shift]; exact hw)
+        have h₆ := rcE_pickE (q := q) j (t := Hn.shift 6 0) (by rw [rcE_shift]; exact hn)
+        simp [rcE, thenE, rcE_app h₃, rcE_app h₆, Val.lam, Val.prim, Val.inj₁, Val.inj₂, Val.unit]
+
 theorem rcE_reifyV {res : Val} (h : rcE q res.1 = true) : rcE q (reifyV res).1 = true := by
   simp [reifyV, rkV, dlX, reifyH, reifyR, reifyC, tlX, closeKV, clV, BoCa.BoLo.hndE,
     BoCa.BoLo.hndVal, rcE, rcE_app, rcE_qualsVal, rcE_selfV, clB, Val.pair, Val.i32, nextV,
@@ -1481,6 +1495,10 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
   | effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
       simp only [rcE, Bool.and_eq_true] at ihc
       simp [hndExpr, Val.i32, rcE, rcE_app, rcE_qualsVal, ihc.1, ihe, rcE_tailTuple ihc.2]
+  | effHandleL _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ ihc ihe =>
+      simp only [rcE, Bool.and_eq_true] at ihc
+      simp [hndExpr, Val.i32, rcE, rcE_app, rcE_qualsVal, ihc.1, ihe,
+        rcE_lastTuple ihc.2.1 ihc.2.2]
   | reify _ _ _ _ _ _ _ _ _ ihres => exact rcE_reifyV ihres
   | divFuel => exact rcE_divFuelV
   | @letPoly _ _ N _ _ b hcl _ _ ihV ihN =>
