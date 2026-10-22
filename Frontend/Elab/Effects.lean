@@ -1894,8 +1894,16 @@ def destructPure (sp : Span) (v : String) : Nat → List String → Comp → Com
 while it has type parameters.  `[spec §65]` -/
 def _root_.Frontend.Mark.srcInst (σ : TySubst) (generic : Bool) : Mark → Mark
   | .row es m ns => .row (es.map fun (e, As) => (e, As.map (·.subst σ))) (Mark.srcInst σ generic m) ns
-  | .template m bs => if generic then .template m bs else m
+  | .template m bs =>
+    let m' := Mark.srcInst σ generic m
+    if generic then .template m' bs else m'
   | m => m
+
+/-- The mark holds a written row.  `[spec §65]` -/
+def _root_.Frontend.Mark.hasRow : Mark → Bool
+  | .row .. => true
+  | .template m _ => Mark.hasRow m
+  | _ => false
 
 /-- Each type parameter of a template renamed for its node `i` of a source tree. -/
 def renameTps (ps : List Ident) (i : Nat) : TySubst :=
@@ -2193,7 +2201,10 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
         -- A call at a source parameter: a call of the instance for the source (SPEC §65).
         if let some g := cx.env.fn? x then
           if let some (bS, x', g', A', W') ← srcInst k cx cs sp x g W then
-            let (b, V') ← goV k (cx.withInst g' A') cs (.app sp (.var f.span x') W')
+            let cx' := if g'.row.isEmpty then
+                { cx with env := { cx.env with sigs := (x', A') :: cx.env.sigs } }
+              else cx.withInst g' A'
+            let (b, V') ← goV k cx' cs (.app sp (.var f.span x') W')
             return (bS ++ b, V')
         -- An argument at a stored generator's parameter: the stored generator of the call.
         let (bP, W) ← pullArgsV k cx cs x W
@@ -3099,7 +3110,10 @@ are leaves; a leaf at a stored generator's parameter is the stored generator, ma
 def srcTree : Nat → Cx → List Cap → Span → Nat → Val → EM (STree × Nat)
   | 0, _, _, sp, _, _ => throw ⟨sp, "internal error: a source nested too deeply"⟩
   | k + 1, cx, cs, sp, i₀, V₀ => do
-    let V := unblock V₀
+    -- A generator named there is its call at `()` (§33: `f(g)` is `f({ () -> g(()) })`).
+    let V : Val := match unblock V₀ with
+      | .var vsp y => if (cx.env.fn? y).isSome then Val.app vsp (Val.var vsp y) (Val.unit vsp) else Val.var vsp y
+      | V => V
     let err : Error := ⟨V₀.span, "the argument at a source parameter is a call of a generator " ++
       "(SPEC §65): write the call there, `f(g(…), …)` or `g(…) |> f(…)`"⟩
     let .app asp f W := V | throw err
@@ -3232,7 +3246,19 @@ def srcInst : Nat → Cx → List Cap → Span → String → FSig → Val →
     let f' : FnParts := { f with p := pv, P := P', T := substAll σ f.T, body := body.subst σ' }
     let (A', V') := f'.build dsp
     let mk' := mk.srcInst σ' (!newTps.isEmpty)
-    let g' : FSig := { name, row := g.row.map fun i => { i with args := i.args.map (·.map (·.subst σ')) },
+    -- Its row: what its body performs, its sources' operations handled by its `for`s, each at the
+    -- template's entry of its effect.
+    let row := (rowV cx.env fuel V').map fun i =>
+      match g.row.find? (·.eff == i.eff) with
+      | some w => { i with args := w.args.map (·.map (·.subst σ')), name := w.name }
+      | none => i
+    -- An instance that performs nothing is a plain function, made here once.
+    if row.isEmpty && !(← get).made.any (·.1 == name) && !(← get).started.contains name then
+      modify fun st => { st with started := name :: st.started }
+      let (bs, V'') ← trV k { env := cx.env, caps := [] } [] V'
+      unless bs.isEmpty do throw ⟨sp, "internal error: an instance's value was taken apart"⟩
+      modify fun st => { st with made := st.made.push (name, .def_ dsp ⟨name, n.span⟩ newTps A' V'' (mk.srcInst σ' (!newTps.isEmpty))) }
+    let g' : FSig := { name, row,
                        decl := .def_ dsp ⟨name, n.span⟩ newTps A' V' mk' }
     report sp "call" s!"{x} → `{name}`, its instance for the source{if reps.length == 1 then "" else "s"} written here"
     pure (some (binds, name, g', A', tupleOfVals sp args))

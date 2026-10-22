@@ -248,8 +248,10 @@ main -> 1 =
 ```
 
 `include adapters` gives you the usual ones (`map`, `filter`, `take`, `skip`, `enumerate`,
-`chain`, `flat_map`, `take_until`, `scan`, `zip`, `chunks`, `lines`, `batch`), all generic
-generators over stored generators, so a pipeline is just calls:
+`chain`, `flat_map`, `take_until`, `scan`, `zip`, `chunks`, `lines`, `batch`). Each takes its
+source as a computation parameter, `(1 => K with Yield[A])`, and a call of a generator there is
+its source, so a pipeline is just calls, and runs as nested direct calls (only `zip`, which steps
+two sources by hand, takes stored generators):
 
 ```bc
 include textio
@@ -274,8 +276,8 @@ main -> 1 =
 ### Pipelines
 
 `e |> f(a, …)` is `f(e, a, …)`: the value on the left becomes the first argument of the call on
-the right, so a chain of adapters reads left to right. The adapters are listed in
-[adapters](../stdlib.md#adapters).
+the right, so a chain of adapters reads left to right; a generator's call piped into an adapter is
+its source. The adapters are listed in [adapters](../stdlib.md#adapters).
 
 ```bc
 include textio

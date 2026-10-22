@@ -507,27 +507,29 @@ The effect a generator performs. [Generators](guide/iteration.md#generators) tea
 
 ## adapters
 
-Generic generators over stored generators. A source `U (pull A K R)` yields `A`s, returns `K`
-when it finishes, and hands back `R` when closed early
-([Stored generators](guide/iteration.md#stored-generators)). An adapter that runs its source to
-the end returns the source's `K`; those that may stop it early take a source with `R = K`. Chain
-them with `|>` ([Pipelines](guide/iteration.md#pipelines)).
+Generic generators over a source computation. A source `(1 => K with Yield[A])` is a
+computation parameter that yields `A`s and returns `K`; a call of a generator, or of an adapter, at
+a source is that source, so a pipeline runs as nested direct calls. `take` and `take_until` stop
+their source early, which hands nothing back: their source returns `1`. `zip` steps two sources by
+hand, so it takes stored generators `U (pull A K R)`
+([Stored generators](guide/iteration.md#stored-generators)). Chain them with `|>`
+([Pipelines](guide/iteration.md#pipelines)).
 
 | name | signature | yields |
 |---|---|---|
-| `map` | `map[A, B, K, R](it: U (pull A K R), f: !(A => B)) -> K with Yield[B]` | `f(x)` for each `x` |
-| `filter` | `filter[A, K, R](it: U (pull A K R), p: !(A => bool)) -> K with Yield[A]` | the elements `p` holds of (`A` copyable) |
-| `take` | `take[A, K](it: U (pull A K K), n: i32) -> K with Yield[A]` | the first `n` |
-| `skip` | `skip[A, K, R](it: U (pull A K R), n: i32) -> K with Yield[A]` | all after the first `n` |
-| `take_until` | `take_until[A, K](it: U (pull A K K), p: !(A => bool)) -> K with Yield[A]` | the elements before the first `p` holds of |
-| `enumerate` | `enumerate[A, K, R](it: U (pull A K R)) -> K with Yield[i32 * A]` | each element with its position |
-| `chain` | `chain[A, K, R](a: U (pull A K R), b: U (pull A 1 1)) -> K with Yield[A]` | `a`'s elements, then `b`'s |
-| `flat_map` | `flat_map[A, B, K, R](it: U (pull A K R), f: !(A => U (pull B 1 1))) -> K with Yield[B]` | the elements of each `f(x)` |
-| `scan` | `scan[A, S, K, R](it: U (pull A K R), s: S, f: !(S * A => S)) -> K with Yield[S]` | the running states `f(s, x)` |
+| `map` | `map[A, B, K](it: (1 => K with Yield[A]), f: !(A => B)) -> K with Yield[B]` | `f(x)` for each `x` |
+| `filter` | `filter[A, K](it: (1 => K with Yield[A]), p: !(A => bool)) -> K with Yield[A]` | the elements `p` holds of (`A` copyable) |
+| `take` | `take[A](it: (1 => 1 with Yield[A]), n: i32) -> 1 with Yield[A]` | the first `n` |
+| `skip` | `skip[A, K](it: (1 => K with Yield[A]), n: i32) -> K with Yield[A]` | all after the first `n` |
+| `take_until` | `take_until[A](it: (1 => 1 with Yield[A]), p: !(A => bool)) -> 1 with Yield[A]` | the elements before the first `p` holds of |
+| `enumerate` | `enumerate[A, K](it: (1 => K with Yield[A])) -> K with Yield[i32 * A]` | each element with its position |
+| `chain` | `chain[A, K](a: (1 => K with Yield[A]), b: (1 => 1 with Yield[A])) -> K with Yield[A]` | `a`'s elements, then `b`'s |
+| `flat_map` | `flat_map[A, B, K](it: (1 => K with Yield[A]), f: !(A => U (pull B 1 1))) -> K with Yield[B]` | the elements of each `f(x)` |
+| `scan` | `scan[A, S, K](it: (1 => K with Yield[A]), s: S, f: !(S * A => S)) -> K with Yield[S]` | the running states `f(s, x)` |
 | `zip` | `zip[A, K, B](a: U (pull A K K), b: U (pull B 1 1)) -> K with Yield[A * B]` | pairs, until either ends |
-| `chunks` | `chunks[A, K, R](it: U (pull A K R), n: i32) -> K with Yield[List[A]]` | lists of `n`, each last first |
-| `batch` | `batch[A, S, K, R](it: U (pull A K R), s0: S, add: !(S * A => S * bool)) -> K with Yield[S]` | states filled by `add` until it says full |
-| `lines` | `lines[K, R](it: U (pull u8 K R)) -> K with Yield[List[u8]]` | a byte source's lines, each last first |
+| `chunks` | `chunks[A, K](it: (1 => K with Yield[A]), n: i32) -> K with Yield[List[A]]` | lists of `n`, each last first |
+| `batch` | `batch[A, S, K](it: (1 => K with Yield[A]), s0: S, add: !(S * A => S * bool)) -> K with Yield[S]` | states filled by `add` until it says full |
+| `lines` | `lines[K](it: (1 => K with Yield[u8])) -> K with Yield[List[u8]]` | a byte source's lines, each last first |
 
 ```bc
 include textio
