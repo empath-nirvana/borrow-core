@@ -147,11 +147,11 @@ for-view-local erased handles 0 performs 0 raises 0 left 0 0
 for-yield-branch erased handles 4 performs 3 raises 0 left 0 0
 format erased handles 0 performs 0 raises 0 left 0 0
 gen-adapters erased handles 0 performs 12 raises 0 machines 26 suspends 20 left 0 0
-gen-adapters-fail erased handles 0 performs 25 raises 0 machines 26 suspends 16 left 0 0
+gen-adapters-fail erased handles 0 performs 25 raises 0 machines 26 suspends 15 left 0 0
 gen-borrowed erased handles 0 performs 0 raises 0 machines 6 suspends 6 left 0 0
 gen-cell erased handles 2 performs 1 raises 0 left 0 0
 gen-close erased handles 0 performs 1 raises 0 machines 5 suspends 3 left 0 0
-gen-div erased handles 0 performs 3 raises 0 machines 6 suspends 4 left 0 0
+gen-div erased handles 0 performs 3 raises 0 machines 6 suspends 3 left 0 0
 gen-fib erased handles 0 performs 1 raises 0 machines 5 suspends 3 left 0 0
 gen-from erased handles 4 performs 4 raises 0 left 0 0
 gen-nested erased handles 4 performs 4 raises 0 left 0 0

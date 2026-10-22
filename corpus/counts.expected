@@ -141,7 +141,7 @@ float-roundtrip 3721 0 0 258052 129687 218143 # each case's strings, and the big
 fn-lifetime 7 0 0 39 24 0
 for-adapters 1 0 0 12 6 7
 for-data 1 0 0 47 6 27
-for-data-div 3 17 0 17 9 6 # the two arrays and the cell the views are lent from
+for-data-div 3 11 0 17 9 6 # the two arrays and the cell the views are lent from
 for-data-gen-loop 0 4 0 0 0 0
 for-finite 0 0 0 0 0 0
 for-in-if-lend 1 0 0 4 2 2
@@ -151,22 +151,22 @@ for-view-effect-copy 1 0 0 11 5 9 # the string the view lends
 for-view-local 1 0 0 3 3 3
 for-yield-branch 0 28 0 0 0 0
 format 1 0 0 38 31 37 # the string, built at its capacity
-gen-adapters 5 188 0 30 30 0 # the nodes of the lists `chunks` builds; each generator one state machine, each stored generator one handler site, each `yield` to a `for` a direct call
-gen-adapters-fail 8 110 0 48 48 0 # the nodes of the lists `chunks` and `lines` build
-gen-borrowed 2 10 0 11 7 2
+gen-adapters 5 174 0 30 30 0 # the nodes of the lists `chunks` builds; each generator one state machine, each stored generator one handler site, each `yield` to a `for` a direct call
+gen-adapters-fail 8 104 0 48 48 0 # the nodes of the lists `chunks` and `lines` build
+gen-borrowed 2 4 0 11 7 2
 gen-cell 1 5 0 11 6 0
-gen-close 4 9 0 12 12 0 # the list; the drop glue across each yield shares it with the rest (a finaliser frame's clauses one code, SPEC §19), so it is not copied
-gen-div 0 95 0 0 0 0 # the generator that read the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
-gen-fib 47 33 0 1024 1060 0
+gen-close 4 5 0 12 12 0 # the list; the drop glue across each yield shares it with the rest (a finaliser frame's clauses one code, SPEC §19), so it is not copied
+gen-div 0 87 0 0 0 0 # the generator that read the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
+gen-fib 47 21 0 976 1012 0
 gen-from 0 13 0 0 0 0 # the generator that echoed the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
 gen-nested 0 22 0 0 0 0
-gen-pipeline 0 54 0 0 0 0
+gen-pipeline 0 32 0 0 0 0
 gen-pipeline-adapters 0 63 0 0 0 0
 gen-pipeline-pipe 0 114 0 0 0 0 # as gen-pipeline-adapters: the pipelines are its nested calls
 gen-produce 0 0 0 0 0 0
 gen-return 0 23 0 14 1 0
-gen-tokenize-parse 0 38 0 34 0 17 # the stored generator's state is a stack value, and literal views are read-only data
-gen-value 0 39 0 0 0 0
+gen-tokenize-parse 0 19 0 34 0 17 # the stored generator's state is a stack value, and literal views are read-only data
+gen-value 0 31 0 0 0 0
 generated-names 1 0 0 2 2 0
 generic-in-def 0 0 0 0 0 0
 generic-pair-arg 0 0 0 0 0 0
@@ -378,4 +378,4 @@ tree-map 29 0 2 209 161 0 # the trees' nodes, one object per node; the copies ar
 trim-replace 5 1 0 4639 4178 4707 # the input string, and one replaced string per line (four)
 utf8-count 1 48 0 341 109 263 # the line buffer, reused; the stdin, stdout and stderr cells are words of the program's data
 while-in-counted-for 0 11 0 0 0 0
-yield-callback 0 11 0 0 0 0
+yield-callback 0 7 0 0 0 0
