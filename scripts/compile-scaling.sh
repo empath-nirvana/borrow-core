@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Compile time against program size (#122). Generates programs whose `main` is k copies of one
-# body, for k in 1 2 4 8 16, and compiles each with `bcc compile --timings`, which writes every
-# stage's time and output size (Backend/Driver.lean, `compileWatTimed`). Prints the table of
+# body, for k in 1 2 4 8 16, and compiles each by the new backend with
+# `bcc compile --backend new --timings`, which writes every stage's time and output size
+# (Backend2/Driver.lean, `watTimed`). Prints the table of
 # times per stage and scale, and each stage's fitted growth: the exponent b of time ≈ a·kᵇ, by
 # least squares on log time against log k (b = 1 is linear).
 #
@@ -10,8 +11,9 @@
 # a loop: over a pipeline of the adapters of `lib/adapters.bc` (`corpus/gen-adapters.bc`), over
 # a pipeline of generators reading an array through an `imm` borrow taken at each step
 # (`corpus/axes/scope-loop-lend.bc`), and writing a cell through a `mut` borrow taken at each step. `main` gets a loop over a
-# pipeline and a call of the four functions, each a div call in direct style, so `main`'s state
-# machine (SPEC §14) grows by five points per copy, and a loop over the input at its end.
+# pipeline and a call of the four functions, each a div call in direct style, and a loop over the
+# input at its end. The adapters are stored generators, so the new backend compiles the program at
+# its fallback at a stored loop (SPEC §54): `tick` a machine operation.
 #
 #     scripts/compile-scaling.sh             the table and the fitted growth
 #     scripts/compile-scaling.sh 1 2 4       other scales
@@ -134,10 +136,10 @@ echo "  (t, m)"
 # Seconds of stage $2 in timings file $1 (the total when $2 is `total`).
 stageMs() { awk -F': ' -v s="$2" '$1 == s { split($2, a, " "); print a[1] }' "$1"; }
 
-stages=("check" "elaborate" "convert" "collapse" "flat" "wasm" "print" "total")
+stages=("check" "lir" "layout" "flow" "lower" "wasm" "print" "total")
 for k in "${scales[@]}"; do
   gen "$k" > "$tmp/scale$k.bc"
-  "$bcc" compile --timings "$tmp/scale$k.bc" -o "$tmp/scale$k.wat" 2> "$tmp/scale$k.times"
+  "$bcc" compile --backend new --timings "$tmp/scale$k.bc" -o "$tmp/scale$k.wat" 2> "$tmp/scale$k.times"
 done
 
 if [ "$guard" = 1 ]; then

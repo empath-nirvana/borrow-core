@@ -99,8 +99,7 @@ def ioSlots (k : Backend.CheckedProg) : Nat × (Nat → Bool) :=
 externs (`ioSlots`, the last `n`). -/
 def openOK (io : Nat × (Nat → Bool)) (depth : Nat) (e : Expr) : Bool :=
   let (n, ext) := io
-  closedAt depth e && (List.range depth).all fun v =>
-    !ClauseKinds.mentions v e || (depth ≥ n && v ≥ depth - n && ext (v - (depth - n)))
+  (freeVars e).all fun v => v < depth && depth ≥ n && v ≥ depth - n && ext (v - (depth - n))
 
 /-- **The direct calls the checked facts license**  `[spec §47]`: for each static name, for each of
 its operations, whether every `handle` node of the name
