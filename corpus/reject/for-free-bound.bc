@@ -1,4 +1,4 @@
--- expect: 17:3: `first_ten` is declared `total`, but it has a `for` over a generator whose body loops (SPEC §14)
+-- expect: 17:3: `first_ten` is declared `total`, but it has a `for` over a generator that loops (SPEC §14)
 -- A number is not a bound (SPEC §16). A `for` is total when its source is data, whose length
 -- bounds the loop, or a generator whose body does not loop; `take(g, 10)` of a stored generator
 -- is a generator whose body loops (`lib/adapters.bc`), its turns unbounded, so the function is

@@ -43,14 +43,34 @@ structure HNode where
   H : Expr
   /-- The node is `effHandleVB`: its clauses receive `κ` boxed (BOXED-κ, SPEC §28). -/
   boxed : Bool := false
+  /-- At a `[handle-last]` node (SPEC §51): its works' row `Σ_W`, its exits' arguments and whether
+  its cancel rows are the empty ones the checker emits. -/
+  last : Option (Row × (Nat → VTy) × Bool) := none
+  /-- The names each operation's code performs or raises: the clause's (`handlerNames`), or at a
+  rule-written handler its answering function's or work's (`ruleNames`). -/
+  names : List (Option (List UInt32)) := []
 
-/-- The `handle` nodes of a typed term, within the depth `fuel`. -/
+/-- The `handle` nodes of a typed term, within the depth `fuel`. At `effHandleT` and `effHandleL`
+the clauses are the rule's (`tailKind`, `lastKind`), written out from the node's tuples as the
+handler runs them. -/
 def hnodes : Nat → TExpr → List HNode
   | 0, _ => []
   | f + 1, t =>
     let here : List HNode := match t with
-      | .effHandleV _ _ S E _ n _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, false⟩]
-      | .effHandleVB _ _ S E _ n _ _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, true⟩]
+      | .effHandleV _ _ S E _ n _ _ _ ks _ _ tc _ =>
+          [⟨n, E, S, ks, tc.erase, false, none, Check.handlerNames E tc.erase⟩]
+      | .effHandleVB _ _ S E _ n _ _ _ _ ks _ _ tc _ =>
+          [⟨n, E, S, ks, tc.erase, true, none, Check.handlerNames E tc.erase⟩]
+      | .effHandleT _ _ S _ E _ n _ _ _ _ _ _ tc _ =>
+          [⟨n, E, S, E.map ClauseKinds.tailKind,
+            .pair (Expr.pairL tc.erase) (tailTuple E 0 (Expr.pairR tc.erase)), false, none,
+            Check.ruleNames E (Expr.pairR tc.erase)⟩]
+      | .effHandleL _ _ S SW E fs Xs n _ _ _ _ _ tc _ =>
+          [⟨n, E, S, E.map ClauseKinds.lastKind,
+            .pair (Expr.pairL tc.erase) (lastTuple E 0 (Expr.pairL (Expr.pairR tc.erase))
+              (Expr.pairR (Expr.pairR tc.erase))), false,
+            some (SW, Xs, (List.range E.length).all fun j => decide (fs j = .ret .unit)),
+            Check.ruleNames E (Expr.pairL (Expr.pairR tc.erase))⟩]
       | _ => []
     here ++ t.children.flatMap fun (_, c) => hnodes f c
 
@@ -73,7 +93,7 @@ def directFacts (c : Frontend.Check.Checked) : Std.HashMap UInt32 (List Bool) :=
     let ok := h.E.zipIdx.map fun (_, j) =>
       same.all fun g =>
         let gs := match g.H with | .pair _ hs => some hs | _ => none
-        let names := Check.handlerNames g.E g.H
+        let names := g.names
         let row := (g.S.map (·.n)).eraseDups
         let cl := gs.bind fun hs => Check.clauseExpr hs j
         (g.ks[j]?.map (·.kind)) == some .tail &&
@@ -84,20 +104,53 @@ def directFacts (c : Frontend.Check.Checked) : Std.HashMap UInt32 (List Bool) :=
     out := out.insert h.n ok
   return out
 
+/-- **The `[handle-last]` works the checked facts license to call where their operation is
+performed**  `[spec §64]`: for each static name, for each of its operations, whether every
+`handle` node of the name is a `[handle-last]` node (`effHandleL`, its clauses `lastKind`'s) that
+- holds one closed handler for it (`closedAt 0`), at one outer row and one signature, so that the
+  work a `perform` calls is the one its node runs (`last_resume_direct`, `last_cancel_direct`);
+- whose work performs nothing: every operation of its row `Σ_W` is abortive or `Div`'s `tick`
+  (T-B1/B1′'s premise; a work that performs another, T-B2, is not licensed);
+- whose cancel rows are the empty ones the checker emits, so the finalisers of the computation
+  between a `perform` and the node perform nothing (`[then]`'s `hfin` at the empty cancel row) and
+  its cancel unwinds to the node running them (`cancel_prefix`, `cancelOf_steps`).
+Each licensed operation's cancel summand (`cancelSummand`): its exit's argument, beside the work's
+raises. -/
+def lastFacts (c : Frontend.Check.Checked) : Std.HashMap (UInt32 × UInt32) (VTy × Row) := Id.run do
+  let nodes := hnodes Frontend.Check.copiesFuel c.t
+  let mut out : Std.HashMap (UInt32 × UInt32) (VTy × Row) := {}
+  for h in nodes do
+    let some (SW, Xs, emptyFins) := h.last | continue
+    let same := nodes.filter (·.n == h.n)
+    for (k, j) in h.ks.zipIdx do
+      if k.kind != .last then continue
+      let ok := emptyFins && closedAt 0 h.H &&
+        SW.all (fun o => o.abort || o.n == divName) &&
+        same.all fun g => g.last.isSome && g.H == h.H &&
+          decide (CTy.effOf g.S .unit = CTy.effOf h.S .unit) && decide (g.E = h.E)
+      if ok then out := out.insert (h.n, j.toUInt32) (Xs j, SW)
+  return out
+
 /-- **The program's machine operations**  `[spec §49]`: each control operation `(n, j)` whose
 clause at some `handle` node of `n` is neither abortive nor called where it is performed
-(`directFacts`): its `perform` suspends the computation, and the node's drive runs the clause on
-the argument and `κ`. Read off the nodes' kinds (`ks`, `classifyHandler_sound`) and the direct
-calls' facts. -/
+(`directFacts`, `lastFacts`): its `perform` suspends the computation, and the node's drive runs the
+clause on the argument and `κ`. Read off the nodes' kinds (`ks`, `classifyHandler_sound`) and the
+direct calls' facts. With them, the licensed `[handle-last]` operations' cancel summands
+(`MachSet.last`). -/
 def machineOps (c : Frontend.Check.Checked) : MachSet := Id.run do
   let nodes := hnodes Frontend.Check.copiesFuel c.t
   let direct := directFacts c
+  let last := lastFacts c
   let mut out : MachSet := {}
   for h in nodes do
     for (k, j) in h.ks.zipIdx do
-      unless k.kind == .abortive || (k.kind == .tail && (direct.getD h.n [])[j]? == some true) do
+      unless k.kind == .abortive || (k.kind == .tail && (direct.getD h.n [])[j]? == some true) ||
+          (k.kind == .last && last.contains (h.n, j.toUInt32)) do
         out := out.insert (h.n, j.toUInt32)
-  return out
+  let mut lt : Std.HashMap (UInt32 × UInt32) LTy := {}
+  for (key, (X, SW)) in last.toList do
+    if let .ok t := cancelSummand out X SW then lt := lt.insert key t
+  return { out with last := lt }
 
 /-- **The operations whose every `handle` node keeps `κ` boxed** (SPEC §52): each machine operation
 `(n, j)` whose clause at every node of `n` is `stored`, every node of `n` is `effHandleVB` (BOXED-κ,
@@ -108,7 +161,7 @@ def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
   let nodes := hnodes Frontend.Check.copiesFuel c.t
   let ms := machineOps c
   let mut out : MachSet := {}
-  for (n, j) in ms.toList do
+  for (n, j) in ms.ops.toList do
     let same := nodes.filter (·.n == n)
     if !same.isEmpty && same.all (fun g => g.boxed && g.E.all (·.1 != .unr) &&
         (g.ks[j.toNat]?.map (·.kind)) == some .stored &&
@@ -325,8 +378,10 @@ def erasureLine (k : Backend.CheckedProg) : String := Id.run do
   let c := k.main
   let nodes := hnodes Frontend.Check.copiesFuel c.t
   let direct := directFacts c
+  let last := lastFacts c
   let erasable (g : HNode) : Bool := g.ks.zipIdx.all fun (h, j) =>
-    h.kind == .abortive || (h.kind == .tail && (direct.getD g.n [])[j]? == some true)
+    h.kind == .abortive || (h.kind == .tail && (direct.getD g.n [])[j]? == some true) ||
+      (h.kind == .last && last.contains (g.n, j.toUInt32))
   let storedB (g : HNode) : Bool := g.ks.any fun h => match h.kind with
     | .stored | .resumeOnce _ => true
     | _ => false

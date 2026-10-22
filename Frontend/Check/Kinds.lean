@@ -232,6 +232,16 @@ def handlerNames (E : List (Qual × VTy × VTy)) (H : Expr) : List (Option (List
       (clauseExpr hs j).bind (clauseNames o)
   | _ => E.map fun _ => none
 
+/-- **The names of each operation's code at a rule-written handler** (`effHandleT`'s answering
+functions, `effHandleL`'s works; SPEC §14, §51): the `j`-th function of the tuple `fs`, `λx. M`,
+`M`'s own names (`Expr.own`). The clause the rule writes runs it on the argument, then resumes or
+cancels `κ`, or runs the exit (at `effHandleL`), which performs at the outer row.  `[spec §64]` -/
+def ruleNames (E : List (Qual × VTy × VTy)) (fs : Expr) : List (Option (List UInt32)) :=
+  ((List.range E.length).zip E).map fun (j, _) =>
+    (clauseExpr fs j).bind fun
+      | .lam M => M.own []
+      | _ => none
+
 /-! ### The handler sites of a typed term -/
 
 /-- A `handle` node of a typed term: its source, its static name, its clauses' kinds, whether
@@ -271,12 +281,11 @@ def TExpr.handleSites : Nat → TExpr → List HandleSite
       -- `effHandleT`'s clauses are tail-resumptive by its rule (`tailClause_premise`).
       | .effHandleT i _ S _ E _ n _ _ _ _ st ins tc _ =>
           [⟨i.sp, n, E.map tailKind, false, st, (S.map (·.n)).eraseDups, ins,
-            handlerNames E (.pair (Expr.pairL tc.erase) (tailTuple E 0 (Expr.pairR tc.erase)))⟩]
+            ruleNames E (Expr.pairR tc.erase)⟩]
       -- `effHandleL`'s clauses are its rule's (`lastClause_premise`).
       | .effHandleL i _ S _ E _ _ n _ _ _ st ins tc _ =>
           [⟨i.sp, n, E.map lastKind, false, st, (S.map (·.n)).eraseDups, ins,
-            handlerNames E (.pair (Expr.pairL tc.erase) (lastTuple E 0
-              (Expr.pairL (Expr.pairR tc.erase)) (Expr.pairR (Expr.pairR tc.erase))))⟩]
+            ruleNames E (Expr.pairL (Expr.pairR tc.erase))⟩]
       | _ => []
     match here, t.children with
     | _ :: _, (_, tc) :: rest =>
