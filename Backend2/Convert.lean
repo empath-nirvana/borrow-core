@@ -1875,41 +1875,81 @@ def renameTm (m : Std.HashMap Var Var) : Tm → CM Tm
 computation's suspended `k` and the handler's values, `kT` its type (`kTy`). Its resume entry
 resumes `k` with the answer and drives the outcome again (`driveFn`): the handler is deep. Its
 cancel entry cancels `k`, every frame of the region unwound, and answers at `κ`'s cancel type
-(`cancelTy`: the outcome `cM` or the payload `cPay`); at `⊤` (a linear `κ`) it is never run. -/
+(`cancelTy`: the outcome `cM` or the payload `cPay`); at `⊤` (a linear `κ`) it is never run.
+
+With `cell` (SPEC §52, a stored site's `κ` that is not `unr`), `κ`'s environment is one cell
+holding `k` and the handler's values: its resume entry takes them out and hands the cell to the
+drive, which writes it in place when the computation suspends there again, and releases it when it
+does not; its cancel entry releases it. -/
 def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driveFn : Nat)
-    (hvTys : List LTy) (cM : Option OutInfo) (cPay : Pay) : CM Nat := do
+    (hvTys : List LTy) (cM : Option OutInfo) (cPay : Pay) (cell : Bool := false)
+    (slotTy : Option LTy := none) : CM Nat := do
   let .thunk kL := kT | throw s!"LIR: κ's type {kT}"
   let .amp (.arr bT (.ret oT)) cK := kL | throw s!"LIR: κ's type {kT}"
   unless oT == outTy do throw s!"LIR: κ resumes to {oT}, the handler answers {outTy}"
   let (_, cpIn) ← opAnswer T (n, idx.toUInt32)
   let kIn ← kTyAt T (n, idx.toUInt32)
+  let stT := tupleTy (kIn :: hvTys)
+  let cT : LTy := .ref stT
   let kapR ← reserveFn s!"kappa {n}.{idx}"
   let rc ← addCode { kind := .lam, fns := [kapR], ty := .arr bT (.ret oT) }
   let kres ← reserveFn s!"kappa {n}.{idx} resume entry"
   let kcan ← reserveFn s!"kappa {n}.{idx} cancel"
   let kc ← addCode { kind := .amp, fns := [kres, kcan], ty := kL }
-  let k₀ ← fresh kIn; let hv₀ ← hvTys.mapM fresh
+  -- The environment's variables, and `k` and the handler's values out of them: with a cell, its
+  -- contents taken (`take`), and `body` given the emptied cell.
+  let envOf (body : Option Var → Var → List Var → CM Tm) : CM (List Var × Tm) := do
+    if cell then
+      let c ← fresh cT
+      let pr ← fresh (.pair cT stT); let c' ← fresh cT; let st ← fresh stT
+      let b ← untuple st (kIn :: hvTys) fun xs => match xs with
+        | k :: hv => body (some c') k hv
+        | [] => throw "LIR: κ's cell"
+      return ([c], .letv pr (.prim .take [c]) (.letpair c' st pr b))
+    else
+      let k ← fresh kIn; let hv ← hvTys.mapM fresh
+      return (k :: hv, ← body none k hv)
+  let k₀ ← fresh (if cell then cT else kIn); let hv₀ ← if cell then pure [] else hvTys.mapM fresh
   setFn kres { name := s!"kappa {n}.{idx} resume entry", params := k₀ :: hv₀,
                body := .clos rc (k₀ :: hv₀), ret := .thunk (.arr bT (.ret oT)) }
-  let k₁ ← fresh kIn; let hv₁ ← hvTys.mapM fresh; let y ← fresh bT
-  let kr ← fresh (← selTy kIn 0); let o ← fresh T.ty
-  setFn kapR { name := s!"kappa {n}.{idx}", params := k₁ :: hv₁ ++ [y],
-               body := .letv kr (.sel k₁ 0) (.letv o (.app kr y) (.call driveFn (hv₁ ++ [o]))),
-               ret := oT }
-  let k₂ ← fresh kIn; let hv₂ ← hvTys.mapM fresh
+  let y ← fresh bT
+  let (ps₁, b₁) ← envOf fun c k hv => do
+    let kr ← fresh (← selTy kIn 0); let o ← fresh T.ty
+    -- With a cell, the drive gets it back (`inr c`) to write in place.
+    match c with
+    | some c =>
+      let sl ← fresh (.sum .unit cT)
+      return .letv sl (.inj true c) (.letv kr (.sel k 0) (.letv o (.app kr y) (.call driveFn (hv ++ [sl, o]))))
+    | none =>
+      -- A drive with a slot that this `κ` does not fill: `inl ()`.
+      match slotTy with
+      | some slT =>
+        let u ← fresh .unit; let sl ← fresh slT
+        return .letv u .unit (.letv sl (.inj false u)
+          (.letv kr (.sel k 0) (.letv o (.app kr y) (.call driveFn (hv ++ [sl, o])))))
+      | none => return .letv kr (.sel k 0) (.letv o (.app kr y) (.call driveFn (hv ++ [o])))
+  setFn kapR { name := s!"kappa {n}.{idx}", params := ps₁ ++ [y], body := b₁, ret := oT }
   match cK with
   | .top =>
-    setFn kcan { name := s!"kappa {n}.{idx} cancel", params := k₂ :: hv₂,
-                 body := .drop k₂ (drops hv₂ .unit), ret := .unit }
-  | .ret cT =>
+    let (ps₂, b₂) ← envOf fun c k hv => do
+      let t := Tm.drop k (drops hv .unit)
+      match c with
+      | some c => releaseThen c t
+      | none => pure t
+    setFn kcan { name := s!"kappa {n}.{idx} cancel", params := ps₂, body := b₂, ret := .unit }
+  | .ret cT' =>
     let want := match cM with
       | some O => O.ty
       | none => resTy .unit cPay
-    unless cT == want do throw s!"LIR: κ's cancel answers {cT}, its row {want}"
-    let c ← fresh (cancelResTy cpIn)
-    let body ← toResult .unit (cpIn.getD []) cM cPay c
-    setFn kcan { name := s!"kappa {n}.{idx} cancel", params := k₂ :: hv₂,
-                 body := .letv c (.sel k₂ 1) (drops hv₂ body), ret := cT }
+    unless cT' == want do throw s!"LIR: κ's cancel answers {cT'}, its row {want}"
+    let (ps₂, b₂) ← envOf fun c k hv => do
+      let cv ← fresh (cancelResTy cpIn)
+      let body ← toResult .unit (cpIn.getD []) cM cPay cv
+      let t := Tm.letv cv (.sel k 1) (drops hv body)
+      match c with
+      | some c => releaseThen c t
+      | none => pure t
+    setFn kcan { name := s!"kappa {n}.{idx} cancel", params := ps₂, body := b₂, ret := cT' }
   | k => throw s!"LIR: κ's cancel branch at {k}"
   return kc
 
@@ -2521,6 +2561,30 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
   let driveFn ← reserveFn s!"drive {n}"
   let oP ← fresh T.ty
   let ctxs' := cs'.toList
+  -- **`κ` in a cell** (SPEC §52): at a stored-continuation site, the first operation whose clause
+  -- keeps `κ` (`stored`) and whose `κ` is not `unr` keeps `κ`'s environment in one cell, which `κ`
+  -- owns: allocated when the computation first suspends there, written in place each time it
+  -- suspends there again, released when it answers, aborts, suspends elsewhere or is cancelled.
+  -- The drive takes the cell's slot (`1 + ref S`) after the handler's values: `inl ()` at the first
+  -- run, `inr c` from `κ`'s resume entry. One operation: a cell shared by two would join their
+  -- suspended computations' classes.
+  let cellAt : Option (Nat × LTy) ← do
+    let mut out : Option (Nat × LTy) := none
+    for (k, j) in ks.zipIdx do
+      if out.isSome then break
+      let some o := E[j]? | continue
+      if k.kind == .stored && o.1 != .unr && T.ms.any (·.1 == (n, j.toUInt32)) then
+        out := some (j, tupleTy ((← kTyAt T (n, j.toUInt32)) :: hvTys))
+    pure out
+  let cellSt := cellAt.map (·.2)
+  let cellOp (j : Nat) : CM Bool := pure ((cellAt.map (·.1)) == some j)
+  let slP? : Option Var ← match cellSt with
+    | some S₀ => do readFact "effHandleV:kappa cell"; pure (some (← fresh (.sum .unit (.ref S₀))))
+    | none => pure none
+  -- The slot released, then `b`: where the computation does not suspend again at a cell's operation.
+  let relSlot (b : Tm) : CM Tm := match slP? with
+    | some sl => releaseOpt sl b
+    | none => pure b
   let dropAll (keep : Option Nat) (b : Tm) : Tm :=
     drops ((ctxs'.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
   let clauseApp (cc : Ctx) (c : TExpr) (a : Var) : CM Tm :=
@@ -2558,11 +2622,11 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
   let dbody : CM Tm := do
     let w ← fresh T.body; let a ← fresh T.r; let ex ← fresh T.xTy
     let some cR' := ctxs'[0]? | throw "LIR: the return clause"
-    let retArm := dropAll (some 0) (← clauseApp cR' tR a)
+    let retArm ← relSlot (dropAll (some 0) (← clauseApp cR' tR a))
     let abortArms (e : Var) : CM Tm := casePay T.pay e fun j v => do
       let some (key, _) := T.pay[j]? | throw "LIR: a payload's summand"
-      if key.1 == n then applyClause key.2.toNat v
-      else return dropAll none (← abortOut key v)
+      if key.1 == n then relSlot (← applyClause key.2.toNat v)
+      else relSlot (dropAll none (← abortOut key v))
     let suspArms (sv : Var) : CM Tm := casePay T.sPay sv fun j pv => do
       let some (key, _, bT, cpT) := T.ms[j]? | throw "LIR: a suspension's summand"
       letpairM pv fun v k => do
@@ -2575,7 +2639,9 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
           let cPay ← match effParts cancelC with
             | some (Sc, _) => rowPay Sc
             | none => pure []
-          let kap ← genKap n idx kT T outTy driveFn hvTys cM cPay
+          let inCell ← cellOp idx
+          let slotTy ← slP?.mapM tyOf
+          let kap ← genKap n idx kT T outTy driveFn hvTys cM cPay (cell := inCell) (slotTy := slotTy)
           -- `κ` holds the suspended computation and a copy of each of the handler's values.
           let hvAll := ctxs'.flatMap live
           let mut copies : List (Tm → Tm) := []
@@ -2588,15 +2654,31 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
           let pr ← fresh (.pair (← tyOf v) kT)
           readFact "effHandleV:kappa"
           let body ← applyClause idx pr
-          let t : Tm := .letv kv (.clos kap (k :: hvC)) (.letv pr (.pair v kv) body)
+          let t : Tm ← match inCell, slP? with
+            | true, some sl => do
+              -- The environment written into the slot's cell, or a cell allocated for it.
+              mkTuple (k :: hvC) fun st => do
+                let cT ← tyOf sl
+                let .sum _ rT := cT | throw "LIR: κ's slot"
+                let u ← fresh .unit; let c₀ ← fresh rT; let c ← fresh rT
+                return .letv c (.case sl u (.drop u (.prim .alloc [st])) c₀ (.prim .put [c₀, st]))
+                  (.letv kv (.clos kap [c]) (.letv pr (.pair v kv) body))
+            | _, _ => relSlot (.letv kv (.clos kap (k :: hvC)) (.letv pr (.pair v kv) body))
           return copies.foldr (fun (f : Tm → Tm) (t : Tm) => f t) t
         else
           let some O := outM
             | throw "LIR: a suspension forwarded where the handler's row has no machine operation"
-          let mk ← newPoint key (some (T.kTy bT cpT)) cpT hvTys (some driveFn) [.dropF hvTys.length]
+          -- The slot is part of the point's state: resumed, the drive gets it back; cancelled, its
+          -- cell is released (`Frame.cellF`).
+          let (slTys, slK, slV) := match slP? with
+            | some sl => ([sl], [Frame.cellF], [sl])
+            | none => ([], [], [])
+          let slTys ← slTys.mapM tyOf
+          let mk ← newPoint key (some (T.kTy bT cpT)) cpT (hvTys ++ slTys) (some driveFn)
+            ([.dropF hvTys.length] ++ slK)
           let k' ← fresh (← kTyAt O key)
           readFact "effHandleV:forward"
-          return .letv k' (.call mk (k :: ctxs'.flatMap live)) (← outSusp O key v k')
+          return .letv k' (.call mk (k :: ctxs'.flatMap live ++ slV)) (← outSusp O key v k')
     let exits ← match payTy T.pay with
       | none => suspArms ex
       | some pT => do
@@ -2619,9 +2701,15 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
     | some O => withMachine O dbody
     | none => dbody
   modify fun st => { st with siteMerge := saved }
-  setFn driveFn { name := s!"drive {n}", params := hvInner ++ [oP], body := dTm, ret := outTy }
+  setFn driveFn { name := s!"drive {n}", params := hvInner ++ slP?.toList ++ [oP], body := dTm,
+                  ret := outTy }
   let o ← fresh T.ty
-  return .letv o (.call bodyFn bOuter) (.call driveFn (hvOuter ++ [o]))
+  match slP? with
+  | some sl => do
+    let u ← fresh .unit; let s₀ ← freshLike sl
+    return .letv o (.call bodyFn bOuter)
+      (.letv u .unit (.letv s₀ (.inj false u) (.call driveFn (hvOuter ++ [s₀, o]))))
+  | none => return .letv o (.call bodyFn bOuter) (.call driveFn (hvOuter ++ [o]))
 
 /-- The function `tF` applied to `a`: a λ's body at `a` (through transparent nodes and lifetime
 abstractions, `lamOf`), or a closure call. -/
