@@ -8615,8 +8615,8 @@ corpus or a golden.
 - **The erasure laws**: T-B1 `last_resume_direct` and T-B1′ `last_cancel_direct`, at a work that
   performs nothing, are §54's. T-B2, at a work that performs, is a two-run correspondence, open.
 - **The elaboration**: the checker's producer, its clause kinds and handled names and the `for`
-  over a generator are §54's. A body that performs an operation that resumes, a body that loops,
-  and the adapters over a source computation (R-1's 2a) are open (§54 *Open*).
+  over a generator are §54's; a body that performs an operation that resumes, a body that loops,
+  and the adapters over a source computation (R-1's 2a) are §55's.
 - **Handler state** (R-2, `effHandleLS`).
 - **Finalisers are total, as a theorem** (decision 69, §14 *Open*): a work, like `effHandleT`'s
   answering function, may tick without end.
@@ -9679,6 +9679,13 @@ the old backend. Entry 53 (§54) is implemented in `Core/DivHandleLastRuns.lean`
 (`Cx.aborts`) and `Backend2/` (`MachSet.last`, `cancelSummand`, `lastFacts`, `ioSlots`, `openOK`,
 `ensureAns`, `ensureLastWork`, `lastPerform`, `convHandleL`, `ioCtx`, `genIterK`, `genReify`);
 no change to `CDerives`, `Paper/`, `Support/` or the old backend.
+Entry 54 (§55) is implemented in `lib/adapters.bc`, `Frontend/Elab/Effects.lean` (`Cx.lastOps`,
+`srcParams`, `srcTree`, `srcInst`, `unifyTy`), `Frontend/Sugar.lean` (`forYield`'s work that loops,
+`VSugar.workStep`, `eWorks`), `Backend2/Driver.lean` (`directOK`, `DirectCx`, `takenFrames`,
+`lastFacts`, `machineOps`, `reifyReach`), `Backend2/Convert.lean` (`prepWorks`,
+`lastClauseDrive`, the fallback's ticks, drives and merged codes), `Backend2/Types.lean`
+(`cancelSummand`), `Backend2/Layout.lean`, `Backend2/Lower.lean` and the old backend's flow
+(`Backend/Clos/Flow.lean`); no change to `CDerives`, `Core/`, `Paper/` or `Support/`.
 
 ---
 
