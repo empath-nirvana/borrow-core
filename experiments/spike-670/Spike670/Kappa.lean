@@ -31,8 +31,6 @@ variable {D : Var → Prop}
 def AllFnsOK (D : Var → Prop) (s : CState) : Prop :=
   ∀ (i : Nat) (d : Fn), s.fns[i]? = some d → FnBodyOK D d
 
-/-- The action leaves the functions as they were. -/
-def SameFns (s s' : CState) : Prop := s'.fns = s.fns
 
 theorem AllFnsOK.same {s s' : CState} (h : AllFnsOK D s) (e : SameFns s s') : AllFnsOK D s' := by
   unfold SameFns at e; intro i d hd; rw [e] at hd; exact h i d hd
@@ -67,12 +65,6 @@ theorem same_addCode {c : Code} {s s' : CState} {i : Nat} (h : Ok (addCode c) s 
     SameFns s s' := by
   have := ok_modifyGet h; simp only [Prod.mk.injEq] at this; rw [this.2]; rfl
 
-theorem same_fresh {t : LTy} {s s' : CState} {x : Var} (h : Ok (fresh t) s x s') :
-    SameFns s s' := by
-  have := ok_modifyGet h; simp only [Prod.mk.injEq] at this; rw [this.2]; rfl
-
-theorem SameFns.trans {a b c : CState} (h₁ : SameFns a b) (h₂ : SameFns b c) : SameFns a c := by
-  unfold SameFns at *; rw [h₂, h₁]
 
 /-- `tys.mapM fresh`: consecutive fresh variables. -/
 theorem ok_mapM_fresh : ∀ {tys : List LTy} {s s' : CState} {xs : List Var},
@@ -205,7 +197,7 @@ theorem can_ret_record (b L : Nat) (name : String) (ret : LTy) (body : Tm)
 theorem genKap_fnsOK {n : UInt32} {idx : Nat} {kT : LTy} {T : OutInfo} {outTy : LTy}
     {driveFn : Nat} {hvTys : List LTy} {cM : Option OutInfo} {cPay : Pay} {s s' : CState}
     {kc : Nat}
-    (hres : ∀ cpIn c s₁ b s₂, Ok (toResult .unit cpIn cM cPay c) s₁ b s₂ →
+    (hres : ∀ cpIn c s₁ b s₂, c < s₁.next → Ok (toResult .unit cpIn cM cPay c) s₁ b s₂ →
       SameFns s₁ s₂ ∧ s₁.next ≤ s₂.next ∧ ClosedL D {c} b ∧ (bnd b).Nodup ∧
         ∀ y ∈ bnd b, s₁.next ≤ y)
     (hF : AllFnsOK D s) (h : Ok (genKap n idx kT T outTy driveFn hvTys cM cPay) s kc s') :
@@ -289,7 +281,7 @@ theorem genKap_fnsOK {n : UInt32} {idx : Nat} {kT : LTy} {T : OutInfo} {outTy : 
       obtain ⟨rfl, hn₂₀, -⟩ := ok_fresh h₂₀
       have F₂₀ := F₁₉.same (same_fresh h₂₀)
       obtain ⟨body, s₂₁, h₂₁, h⟩ := ok_bind h
-      obtain ⟨sf, -, cl, nd, rg⟩ := hres _ _ _ _ _ h₂₁
+      obtain ⟨sf, -, cl, nd, rg⟩ := hres _ _ _ _ _ (by rw [hn₂₀]; vomega) h₂₁
       have F₂₁ := F₂₀.same sf
       obtain ⟨_, s₂₂, h₂₂, h⟩ := ok_bind h
       obtain ⟨-, rfl⟩ := ok_pure h
@@ -297,5 +289,14 @@ theorem genKap_fnsOK {n : UInt32} {idx : Nat} {kT : LTy} {T : OutInfo} {outTy : 
       rw [hn₁₉, hn₁₈] at cl ⊢
       exact can_ret_record _ _ _ _ _ cl nd (fun y hy => by
         have := rg y hy; rw [hn₂₀, hn₁₉, hn₁₈] at this; vomega)
+
+/-- **`κ`'s functions are linear**, the cancel's answer by `toResult_spec`. -/
+theorem genKap_linear {n : UInt32} {idx : Nat} {kT : LTy} {T : OutInfo} {outTy : LTy}
+    {driveFn : Nat} {hvTys : List LTy} {cM : Option OutInfo} {cPay : Pay} {s s' : CState}
+    {kc : Nat} (hF : AllFnsOK D s) (h : Ok (genKap n idx kT T outTy driveFn hvTys cM cPay) s kc s') :
+    AllFnsOK D s' :=
+  genKap_fnsOK (fun _ _ _ _ _ hc hr => by
+    obtain ⟨sf, g, p⟩ := toResult_spec (D := D) hr hc
+    exact ⟨sf, g.next, p.closed, p.nodup, fun y hy => (p.range y hy).1⟩) hF h
 
 end Backend2.Spike670
