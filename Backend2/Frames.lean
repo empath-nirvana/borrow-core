@@ -101,6 +101,11 @@ where
       | _ => acc
 
 
+/-- The cells allocated for one lend (`Op.allocLent`) in the program's functions and `main`: their
+variables. -/
+def lentCells (p : Prog) : List Var :=
+  (p.main :: p.fns.toList.map (·.body)).flatMap fun b => framed.allocsOf (1 <<< 22) b []
+
 /-- The array `x` (or its component `field`) is only read before its destructor: it is lent
 shared, its size taken, and then destroyed by a generated destructor (`array_dtor`, or
 `array_free`'s loop) or freed. -/

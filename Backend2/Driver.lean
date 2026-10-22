@@ -185,6 +185,15 @@ def lintOf (k : Backend.CheckedProg) : Except String Unit := do
   let (p, _) ← lirOf k
   Lint.lint p
 
+/-- **The frame slots** (`bcc lir --frames`, SPEC §50): of the cells allocated for one lend
+(`Op.allocLent`), how many are placed in a frame slot (`Frames.framed`) and how many on the heap. -/
+def framesLine (k : Backend.CheckedProg) : Except String String := do
+  let (p, _) ← lirOf k
+  let all := Frames.lentCells p
+  let fr := Frames.framed p
+  let n := (all.filter fr.contains).length
+  pure s!"framed {n} allocated {all.length - n}"
+
 /-- The layouts of a program's LIR. -/
 def layoutsOf (k : Backend.CheckedProg) (p : Prog) : Except String Lay.Layouts := do
   let (g, m) ← Lay.places p
@@ -213,9 +222,12 @@ def flatOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String Ba
 def watOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String String := do
   pure (Backend.Wasm.printModule (Backend.Wasm.lowerProg (← flatOf k counts) counts))
 
-/-- The program as LLVM IR by the new backend. -/
-def llOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String String := do
-  Backend.Native.printProg (← flatOf k counts) Backend.nativeTriple counts
+/-- The program as LLVM IR by the new backend: typed pointers, and with `facts` the parameters'
+facts as attributes (SPEC §50); without, for the differential run, which must print the same. -/
+def llOf (k : Backend.CheckedProg) (counts : Bool := false) (facts : Bool := true) :
+    Except String String := do
+  Backend.Native.printProg (← flatOf k counts) Backend.nativeTriple counts (typed := true)
+    (attrs := facts)
 
 /-- **The new backend's compile, timed** (`bcc compile --backend new --timings`): `file`'s WAT, each
 stage's time and output size written to standard error as `Backend.compileWatTimed` writes the

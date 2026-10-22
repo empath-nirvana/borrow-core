@@ -1,3 +1,4 @@
+import Std.Data.HashSet
 import Backend.Flat.Syntax
 import Backend.Flat.Host
 
@@ -51,12 +52,27 @@ structure Ctx where
   cnt : Bool
   /-- Each function's parameters in LLVM: the most of its tail-call class (`classArity`). -/
   arity : Array Nat
+  /-- **Typed pointers** (`typedProg`): a local the producer says holds an address (`Fn.ptrs`) is
+  a `ptr`, an address is computed by `getelementptr` from its base, and a parameter is a `ptr`
+  where every function of its tail-call class holds an address there (`classPtrs`). Off, every
+  word is an `i64`, as the old backend's flat IR is emitted. -/
+  typed : Bool := false
+  /-- With `typed`: the parameters' facts (`Fn.facts`) as LLVM attributes. Off, for the
+  differential run, which must print what a run with them prints. -/
+  attrs : Bool := true
+  /-- With `typed`: each function's parameters in LLVM, whether each is a `ptr`. -/
+  ptrParams : Array (Array Bool) := #[]
 
 structure St where
   n : Nat := 0
   body : Array String := #[]
   allocas : Array String := #[]
   trapUsed : Bool := false
+  /-- With `typed`: the current function's locals that hold an address. -/
+  ptrs : Std.HashSet Nat := {}
+  /-- With `typed`: the current function returns through its exit block, its result words in
+  the slots `%r0`, `%r1`, … (`exitBlock`). -/
+  viaExit : Bool := false
 
 abbrev EM := ReaderT Ctx (StateT St (Except String))
 
@@ -342,6 +358,10 @@ def expr (fp : String) : Exp → EM String
   | .data off => do
     let p ← val s!"getelementptr i8, ptr @bc_data, i64 {off}"
     val s!"ptrtoint ptr {p} to i64"
+  | .gep a k => do
+    let a ← expr fp a
+    let k ← expr fp k
+    val s!"add i64 {a}, {k}"
 where
   exprs (fp : String) : List Exp → EM (List String)
     | [] => pure []
@@ -349,6 +369,89 @@ where
       let v ← expr fp e
       let vs ← exprs fp es
       pure (v :: vs)
+
+/-! ### Typed pointers -/
+
+/-- A value of type `ptr` (`true`) or `i64` (`false`) as one of type `p`. -/
+def conv (v : String) (isP p : Bool) : EM String :=
+  if isP == p then pure v
+  else if p then val s!"inttoptr i64 {v} to ptr"
+  else val s!"ptrtoint ptr {v} to i64"
+
+def tyName (p : Bool) : String := if p then "ptr" else "i64"
+
+/-- With `typed`: an expression's value and whether it is a `ptr`, `want` the type its user takes
+(a load is made at it; any other form at its own type). -/
+def texpr (want : Bool) : Exp → EM (String × Bool)
+  | .loc i => do
+    let p := (← get).ptrs.contains i
+    pure (← val s!"load {tyName p}, ptr %l{i}", p)
+  | .c64 n => pure (if want && n == 0 then ("null", true) else (lit n, false))
+  | .c32 n => pure (toString n.toNat, false)
+  | .load a off => do
+    let q ← addr a off
+    pure (← val s!"load {tyName want}, ptr {q}, align 8", want)
+  | .load8 a => do
+    let q ← addr a 0
+    let b ← val s!"load i8, ptr {q}, align 1"
+    pure (← val s!"zext i8 {b} to i64", false)
+  | .load32 a => do
+    let q ← addr a 0
+    let b ← val s!"load i32, ptr {q}, align 4"
+    pure (← val s!"zext i32 {b} to i64", false)
+  | .op o args => do pure (← hostOp o (← ints args), false)
+  | .alloc w => do pure (← val s!"call i64 @bc_alloc(i64 {← int w})", false)
+  | .slot off _ => do pure (← val s!"getelementptr i8, ptr %frame, i64 {8 * off}", true)
+  | .live => do pure (← val "load i64, ptr @bc_live", false)
+  | .getc fd => do pure (← val s!"call i64 @bc_getc(i64 {← int fd})", false)
+  | .getv fd a k => do
+    let fd ← int fd
+    let a ← int a
+    let k ← int k
+    pure (← val s!"call i64 @bc_getv(i64 {fd}, i64 {a}, i64 {k})", false)
+  | .now c => do pure (← val s!"call i64 @bc_now(i64 {← int c})", false)
+  | .stat k => do pure (← val s!"load i64, ptr {statName k}", false)
+  | .data off => do pure (← val s!"getelementptr i8, ptr @bc_data, i64 {off}", true)
+  | .gep a k => do
+    let (b, q) ← texpr true a
+    let b ← conv b q true
+    let o ← int k
+    pure (← val s!"getelementptr i8, ptr {b}, i64 {o}", true)
+where
+  int (e : Exp) : EM String := do
+    let (v, q) ← texpr false e
+    conv v q false
+  /-- The address `off` words past the address `a`. -/
+  addr (a : Exp) (off : Nat) : EM String := do
+    let (b, q) ← texpr true a
+    let b ← conv b q true
+    if off == 0 then pure b else val s!"getelementptr i8, ptr {b}, i64 {8 * off}"
+  ints : List Exp → EM (List String)
+    | [] => pure []
+    | e :: es => do
+      let v ← int e
+      let vs ← ints es
+      pure (v :: vs)
+
+/-- With `typed`: an expression's value as a `ptr` (`p`) or an `i64`. -/
+def tget (p : Bool) (e : Exp) : EM String := do
+  let (v, q) ← texpr p e
+  conv v q p
+
+/-- With `typed`: the address `off` words past the address `a`. -/
+def taddr (a : Exp) (off : Nat) : EM String := texpr.addr a off
+
+/-- With `typed`: the arguments of a call of `g` on `args`, each at the type of `g`'s parameter,
+then `poison` up to `g`'s class's parameters. -/
+def targs (g : Nat) (out : Option String) (args : List Exp) : EM String := do
+  let ps := ((← read).ptrParams[g]?).getD #[]
+  let n := ((← read).arity[g]?).getD args.length
+  let mut vs : Array String := #[]
+  for (e, i) in args.zipIdx do
+    let p := ps.getD i false
+    vs := vs.push s!"{tyName p} {← tget p e}"
+  let pads := (List.range' args.length (n - args.length)).map fun i => s!"{tyName (ps.getD i false)} poison"
+  pure (", ".intercalate ((out.map ("ptr " ++ ·)).toList ++ vs.toList ++ pads))
 
 /-- The arguments of a call of `g`: `vs`, then `poison` up to `g`'s class's parameters. The
 call's result pointer, if any, is `out`. -/
@@ -518,6 +621,140 @@ where
       cases fp results lj ls cs
     | _, _ => pure ()
 
+/-- With `typed`: a statement of a function of `results` results. Addresses are `ptr`s from their
+bases; a return of a function that returns by value goes through its exit block (`exitBlock`). -/
+def tstmt (results : Nat) : Stmt → EM Unit
+  | .set i e => do
+    let p := (← get).ptrs.contains i
+    let v ← tget p e
+    ins s!"store {tyName p} {v}, ptr %l{i}"
+  | .store a off v => do
+    let q ← taddr a off
+    let (v, isP) ← texpr false v
+    ins s!"store {tyName isP} {v}, ptr {q}, align 8"
+  | .store8 a v => do
+    let q ← taddr a 0
+    let v ← tget false v
+    let b ← val s!"trunc i64 {v} to i8"
+    ins s!"store i8 {b}, ptr {q}, align 1"
+  | .store32 a v => do
+    let q ← taddr a 0
+    let v ← tget false v
+    let b ← val s!"trunc i64 {v} to i32"
+    ins s!"store i32 {b}, ptr {q}, align 4"
+  | .free a => do ins s!"call void @bc_free(i64 {← tget false a})"
+  | .unslot _ => pure ()
+  | .out b => do ins s!"call void @bc_putc(i64 1, i64 {← tget false b})"
+  | .putc fd b => do
+    let fd ← tget false fd
+    let b ← tget false b
+    ins s!"call void @bc_putc(i64 {fd}, i64 {b})"
+  | .putv fd a k => do
+    let fd ← tget false fd
+    let a ← tget false a
+    let k ← tget false k
+    ins s!"call void @bc_putv(i64 {fd}, i64 {a}, i64 {k})"
+  | .sleep c ns => do
+    let c ← tget false c
+    let ns ← tget false ns
+    ins s!"call void @bc_sleep(i64 {c}, i64 {ns})"
+  | .ite c t e => do
+    let v ← tget false c
+    let b ← val s!"icmp ne i64 {v}, 0"
+    let lt ← fresh "then"
+    let le ← fresh "else"
+    let lj ← fresh "join"
+    ins s!"br i1 {b}, label %{lt}, label %{le}"
+    startBlock lt
+    block results t
+    ins s!"br label %{lj}"
+    startBlock le
+    block results e
+    ins s!"br label %{lj}"
+    startBlock lj
+  | .switch e cs d => do
+    let v ← tget false e
+    let lj ← fresh "join"
+    let ld ← fresh "default"
+    let mut ls : Array String := #[]
+    for _ in cs do ls := ls.push (← fresh "case")
+    let arms := String.join (ls.toList.zipIdx.map fun (l, i) => s!" i64 {i}, label %{l}")
+    ins s!"switch i64 {v}, label %{ld} [{arms} ]"
+    cases results lj ls.toList cs
+    startBlock ld
+    block results d
+    ins s!"br label %{lj}"
+    startBlock lj
+  | .call ds g args => do
+    let gf ← callee g args.length
+    if gf.results != ds.length then
+      throw s!"native: {gf.name} answers {gf.results} results, not {ds.length}"
+    let wide := (← read).wide
+    let r := ds.length
+    let t := resTy wide r
+    let store (dst : Nat) (w : String) : EM Unit := do
+      let p := (← get).ptrs.contains dst
+      ins s!"store {tyName p} {← conv w false p}, ptr %l{dst}"
+    if r == 0 then ins s!"call void @f{g}({← targs g none args})"
+    else if r > wide then
+      let buf ← fresh "buf"
+      modify fun st => { st with allocas := st.allocas.push s!"  %{buf} = alloca [{r} x i64], align 8" }
+      ins s!"call void @f{g}({← targs g (some s!"%{buf}") args})"
+      for (dst, i) in ds.zipIdx do
+        let p ← val s!"getelementptr i64, ptr %{buf}, i64 {i}"
+        let w ← val s!"load i64, ptr {p}, align 8"
+        store dst w
+    else
+      let rv ← val s!"call {t} @f{g}({← targs g none args})"
+      if r == 1 then store (ds.headD 0) rv
+      else
+        for (dst, i) in ds.zipIdx do
+          let w ← val s!"extractvalue {t} {rv}, {i}"
+          store dst w
+  | .ret es => do
+    let vs ← texpr.ints es
+    if vs.length != results then throw s!"native: a return of {vs.length} results, not {results}"
+    if (← get).viaExit then
+      for (v, i) in vs.zipIdx do ins s!"store i64 {v}, ptr %r{i}"
+      ins "br label %exit"
+    else retWith vs
+    deadBlock
+  | .tailCall g args => do
+    let gf ← callee g args.length
+    if gf.results != results then
+      throw s!"native: a tail call of {gf.name}, of {gf.results} results, from a function of {results}"
+    let wide := (← read).wide
+    let t := resTy wide results
+    if results == 0 then
+      ins s!"musttail call void @f{g}({← targs g none args})"
+      ins "ret void"
+    else if results > wide then
+      ins s!"musttail call void @f{g}({← targs g (some "%out") args})"
+      ins "ret void"
+    else
+      let rv ← val s!"musttail call {t} @f{g}({← targs g none args})"
+      ins s!"ret {t} {rv}"
+    deadBlock
+  | .tick => do if (← read).cnt then bump "@bc_indirect"
+  | .tickCopy => do if (← read).cnt then bump "@bc_copies"
+  | .tickBound => pure ()
+  | .status c => do ins s!"call void @bc_status(i64 {← tget false c})"
+  | .trap => do
+    ins "call void @llvm.trap()"
+    ins "unreachable"
+    deadBlock
+where
+  block (results : Nat) : List Stmt → EM Unit
+    | [] => pure ()
+    | s :: ss => do tstmt results s; block results ss
+  cases (results : Nat) (lj : String) : List String → List (List Stmt) → EM Unit
+    | l :: ls, c :: cs => do
+      startBlock l
+      block results c
+      ins s!"br label %{lj}"
+      cases results lj ls cs
+    | _, _ => pure ()
+
 /-- Function `k`'s definition. -/
 def lowerFn (k : Nat) (f : Fn) : EM (List String) := do
   modify fun st => { st with body := #[], allocas := #[], trapUsed := false }
@@ -538,6 +775,73 @@ def lowerFn (k : Nat) (f : Fn) : EM (List String) := do
     s!"define internal {resTy wide f.results} @f{k}({", ".intercalate ps}) nounwind \{",
     "entry:"] ++ locals ++ frame ++ st.allocas.toList ++ ["  br label %body", "body:"] ++
     st.body.toList ++ trap ++ ["}", ""])
+
+/-- An LLVM parameter attribute for a fact. -/
+def pfactAttr : PFact → String
+  | .noalias => "noalias"
+  | .readonly => "readonly"
+  | .nonnull => "nonnull"
+  | .deref b => s!"dereferenceable({b})"
+
+/-- With `typed`: function `k`'s definition. Each parameter is a `ptr` where its class's
+parameters are (`Ctx.ptrParams`), with its facts as attributes when `attrs` (each cited in a
+comment above the definition); a local is a `ptr` where `f.ptrs` says it holds an address; a
+function that returns by value returns through one exit block, so each result word is one value
+at its return (a scalar where the returns join, not an aggregate). -/
+def tlowerFn (k : Nat) (f : Fn) : EM (List String) := do
+  let wide := (← read).wide
+  let viaExit := f.results ≥ 1 && f.results ≤ wide
+  modify fun st => { st with body := #[], allocas := #[], trapUsed := false,
+                             ptrs := f.ptrs.foldl (·.insert ·) {}, viaExit }
+  tstmt.block f.results f.body
+  ins "unreachable"
+  let st ← get
+  let n := ((← read).arity[k]?).getD f.params
+  let pp := ((← read).ptrParams[k]?).getD #[]
+  let attrs := (← read).attrs
+  let factsOf (i : Nat) : List PFact :=
+    if attrs && pp.getD i false then (f.facts.filter (·.param == i)).flatMap (·.facts) else []
+  let ps := (if f.results > wide then ["ptr %out"] else []) ++ (List.range n).map fun i =>
+    let as := (factsOf i).map pfactAttr
+    s!"{tyName (pp.getD i false)}{String.join (as.map (" " ++ ·))} %a{i}"
+  let cites := if attrs then (f.facts.filter fun pf => pp.getD pf.param false).map fun pf =>
+      s!"; %a{pf.param}: {" ".intercalate (pf.facts.map pfactAttr)} — {pf.cite}" else []
+  let mut locals : List String := []
+  for i in List.range (f.params + f.locals) do
+    let lp := st.ptrs.contains i
+    let init ← if i < f.params then
+        (if pp.getD i false == lp then pure s!"%a{i}"
+         else pure s!"%c{i}")
+      else pure (if lp then "null" else "0")
+    let cvt := if i < f.params && pp.getD i false != lp then
+        [if lp then s!"  %c{i} = inttoptr i64 %a{i} to ptr" else s!"  %c{i} = ptrtoint ptr %a{i} to i64"]
+      else []
+    locals := locals ++ [s!"  %l{i} = alloca {tyName lp}, align 8"] ++ cvt ++
+      [s!"  store {tyName lp} {init}, ptr %l{i}"]
+  let frame := if f.frame == 0 then [] else [s!"  %frame = alloca [{f.frame} x i64], align 8"]
+  let rslots := if viaExit then (List.range f.results).map (s!"  %r{·} = alloca i64, align 8") else []
+  let exit ← if !viaExit then pure [] else do
+    let t := resTy wide f.results
+    let mut out : List String := ["exit:"]
+    let mut acc := "poison"
+    let mut rs : List String := []
+    for i in List.range f.results do
+      out := out ++ [s!"  %rv{i} = load i64, ptr %r{i}"]
+      rs := rs ++ [s!"%rv{i}"]
+    if f.results == 1 then pure (out ++ [s!"  ret i64 %rv0"]) else
+    for (v, i) in rs.zipIdx do
+      out := out ++ [s!"  %ra{i} = insertvalue {t} {acc}, i64 {v}, {i}"]
+      acc := s!"%ra{i}"
+    pure (out ++ [s!"  ret {t} {acc}"])
+  let trap := if st.trapUsed then ["trap:", "  call void @llvm.trap()", "  unreachable"] else []
+  let fattrs := if f.inline.isSome then " alwaysinline" else ""
+  let why := match f.inline with
+    | some r => [s!"; alwaysinline — {r}"]
+    | none => []
+  pure ([s!"; {f.name}"] ++ why ++ cites ++
+    [s!"define internal {resTy wide f.results} @f{k}({", ".intercalate ps}) nounwind{fattrs} \{",
+    "entry:"] ++ locals ++ frame ++ rslots ++ st.allocas.toList ++ ["  br label %body", "body:"] ++
+    st.body.toList ++ exit ++ trap ++ ["}", ""])
 
 /-! ### Tail-call classes -/
 
@@ -581,6 +885,32 @@ def classArity (fns : Array Fn) : Array Nat := Id.run do
     most := most.set! r (max (most.getD r 0) f.params)
   pure ((Array.range fns.size).map fun k => most.getD (findRoot parent k) 0)
 
+/-- Each function's parameters in LLVM with typed pointers: at each position, whether it is a
+`ptr`, which it is where every function of the tail-call class with a parameter there holds an
+address in it (`Fn.ptrs`), since `musttail` asks the prototypes of a class to agree. -/
+def classPtrs (fns : Array Fn) (arity : Array Nat) : Array (Array Bool) := Id.run do
+  let mut parent : Array Nat := Array.range fns.size
+  for (f, k) in fns.toList.zipIdx do
+    for g in tailCallees.blockCallees f.body do
+      let a := findRoot parent k
+      let b := findRoot parent g
+      if a != b then parent := parent.set! a b
+  -- Per class: each position's agreement so far (`none`: no member has the position yet).
+  let mut agree : Std.HashMap Nat (Array (Option Bool)) := {}
+  for (f, k) in fns.toList.zipIdx do
+    let r := findRoot parent k
+    let n := arity.getD k f.params
+    let cur := agree.getD r (Array.replicate n none)
+    let mut nxt := cur
+    for i in [0:f.params] do
+      let here := f.ptrs.contains i
+      nxt := nxt.set! i (some (match cur.getD i none with
+        | none => here
+        | some b => b && here))
+    agree := agree.insert r nxt
+  pure ((Array.range fns.size).map fun k =>
+    ((agree.getD (findRoot parent k) #[]).map (·.getD false)))
+
 /-- The data's bytes as an LLVM string constant. -/
 def dataConst (bs : Array UInt8) : String :=
   let hex (d : Nat) : Char := if d < 10 then Char.ofNat (48 + d) else Char.ofNat (55 + d)
@@ -607,14 +937,17 @@ def runtimeDecls : List String := [
 /-- The program as LLVM IR text for target `triple`; with `cnt`, every dispatched call and
 counted copy adds one to the runtime's count. `bc_entry` (the C calling convention) gives the
 runtime the data's bounds and runs the entry. -/
-def printProg (p : Prog) (triple : String) (cnt : Bool := false) : Except String String := do
+def printProg (p : Prog) (triple : String) (cnt : Bool := false) (typed : Bool := false)
+    (attrs : Bool := true) : Except String String := do
   let some e := p.fns[p.entry]? | throw "native: no entry function"
   if e.params != 0 || e.results != 0 then throw "native: the entry takes or answers words"
-  let ctx : Ctx := { fns := p.fns, wide := regResults triple, cnt, arity := classArity p.fns }
+  let arity := classArity p.fns
+  let ctx : Ctx := { fns := p.fns, wide := regResults triple, cnt, arity, typed, attrs,
+                     ptrParams := if typed then classPtrs p.fns arity else #[] }
   let go : EM (List String) := do
     let mut ls : List String := []
     for (f, k) in p.fns.toList.zipIdx do
-      ls := ls ++ (← lowerFn k f)
+      ls := ls ++ (← if typed then tlowerFn k f else lowerFn k f)
     pure ls
   let (fns, _) ← (go.run ctx).run {}
   let L := p.data.size
@@ -622,7 +955,8 @@ def printProg (p : Prog) (triple : String) (cnt : Bool := false) : Except String
     else s!"@bc_data = internal global [{L} x i8] {dataConst p.data}, align 8"
   let entry := ["define void @bc_entry() nounwind {",
     s!"  call void @bc_init(ptr @bc_data, i64 {L})",
-    s!"  call void @f{p.entry}({", ".intercalate (List.replicate (ctx.arity.getD p.entry 0) "i64 poison")})",
+    s!"  call void @f{p.entry}({", ".intercalate ((List.range (ctx.arity.getD p.entry 0)).map fun i =>
+      s!"{tyName ((ctx.ptrParams[p.entry]?.getD #[]).getD i false)} poison")})",
     "  ret void", "}"]
   let lines := ["; borrow-core: native code from the flat IR (Backend/Native/Lower.lean)", data] ++
     runtimeDecls ++ intrinsics ++ [""] ++ fns ++ entry

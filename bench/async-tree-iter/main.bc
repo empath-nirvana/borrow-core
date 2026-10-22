@@ -1,0 +1,74 @@
+-- Async tasks over the in-order walk with an explicit stack: `tasks` tasks, each walking the
+-- implicit balanced search tree of the keys `0 .. n` in order with a stack of pending ranges (as
+-- bench/gen-tree's Rust side does) and awaiting once at every node, run round robin by the
+-- library's scheduler (`run_until_empty`, `lib/async.bc`). Each task's sum of its keys' values is
+-- printed. The same algorithm as `main.rs`: the walk is a counted loop, so the task is one
+-- machine. The stack is two arrays of 64 slots (a balanced tree of `2³¹` keys is 32 deep), and
+-- `descend` is a tail recursion rather than a `while`, which would make `tsum` a div function.
+
+include textio
+include io
+include rec
+include async
+
+-- The first argument as a number, or `d` when there is none or it is not one.
+fn arg_i32(d: i32) -> i32 =
+  let (s, got) = next_arg(string_new(16));
+  let n = borrow imm s { t -> with default(d) { parse_i32(t) } };
+  if got { n } else { d }
+
+fn value(k: i32, r: i32) -> i32 = (k * 7919 + r) % 1000
+
+fn zero(i: i32) -> i32 = 0
+
+-- `x` in slot `i` of `a`.
+fn put(a: array i32, i: i32, x: i32) -> array i32 = let (a, _) = array_replace[i32] (a, i, x); a
+
+-- The pending ranges whose left part is done: each one's key (`ms`) and end (`his`), and the
+-- number held.
+type Stack = array i32 * (array i32 * i32)
+
+-- The ranges of the left spine of `[lo, hi)` pushed, the root's first.
+fn descend(st: Stack, lo: i32, hi: i32) -> Stack with Exhausted =
+  if lo < hi {
+    let m = lo + (hi - lo) / 2;
+    let (ms, rest) = st;
+    let (his, sp) = rest;
+    descend((put(ms, sp, m), (put(his, sp, hi), sp + 1)), lo, m)
+  } else { st }
+
+-- The values of the keys of `[0, n)` in task `r`, summed; one `await` per node.
+fn tsum(n: i32, r: i32) -> i64 with Async, Exhausted =
+  let mut st = descend((array_new[i32](64, zero), (array_new[i32](64, zero), 0)), 0, n);
+  let mut s = i64[0];
+  for _ in 0..n {
+    let (ms, rest) = st;
+    let (his, sp) = rest;
+    let m = at(&ms, sp - 1, 0);
+    let h = at(&his, sp - 1, 0);
+    await();
+    s = s + host[extend_s](value(m, r));
+    st = descend((ms, (his, sp - 1)), m + 1, h)
+  };
+  s
+
+fn task(n: i32, r: i32) -> i64 with Async = with on_exhausted(!{ u -> i64[0] - 1 }) { tsum(n, r) }
+
+fn print_all(xs: List[i64]) -> 1 =
+  let mut cur = xs;
+  let mut more = true;
+  while more {
+    match unroll cur {
+      inl u -> more = false; cur = (roll inl () : List[i64])
+    | inr (x, rest) -> print_dec64(x); print_byte(b'\n'); cur = rest
+    }
+  };
+  ()
+
+main -> i32 =
+  let n = arg_i32(1000);
+  let tasks = arg_i32(1);
+  let mut q = queue[i64]();
+  for r in 0..tasks { q = push(q, with spawn { task(n, r) }) };
+  print_all(run_until_empty(q));
+  0

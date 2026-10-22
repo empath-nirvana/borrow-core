@@ -61,6 +61,12 @@ structure LState where
   slots : Std.HashSet Nat := {}
   helpers : Std.HashMap Helper Nat := {}
   queue : Array Helper := #[]
+  /-- The locals some variable's layout places an address in (`addrKinds`), and those some
+  variable's layout places another word in: a local is a pointer when it is only the first. -/
+  ptrVote : Std.HashSet Nat := {}
+  intVote : Std.HashSet Nat := {}
+  /-- `addrKinds` per node, as computed. -/
+  kinds : Std.HashMap Nat (List (Option Bool)) := {}
 
 abbrev LM := ReaderT LCtx (StateT LState (Except String))
 
@@ -79,13 +85,62 @@ def nodeV (x : Var) : LM Nat := return (← L).node x
 def wordsN (n : Nat) : LM Nat := return (← L).w n
 def wordsV (x : Var) : LM Nat := do wordsN (← nodeV x)
 
+/-! ### Addresses -/
+
+/-- Two words' kinds where a sum's arms or a class's codes share them: `none` is padding. -/
+def agree : Option Bool → Option Bool → Option Bool
+  | none, x => x
+  | x, none => x
+  | some a, some b => some (a && b)
+
+/-- **Which words of a value at node `n` hold an address** (SPEC §35, typed pointers): a cell's or
+a borrow's word, a family's base, a boxed field's pointer (`some true`); a sum's payload word
+where the arms agree, padding (`none`) agreeing with either; a closure's captured word where its
+class's codes agree. A heap class's word is `2t + 1` or an address, so it is not one. Read off the
+layout node, which is the variable's type (`Backend2/Layout.lean`). -/
+def addrKinds (L : Layouts) : Nat → Nat → List (Option Bool)
+  | 0, n => List.replicate (L.w n) (some false)
+  | f + 1, n =>
+    let field (k c : Nat) : List (Option Bool) := if L.isBoxed n k then [some true] else addrKinds L f c
+    let pad (k : Nat) (xs : List (Option Bool)) : List (Option Bool) := xs ++ List.replicate (k - xs.length) none
+    match L.sh n with
+    | .ref _ | .imm _ | .mut _ => [some true]
+    | .fam _ => [some true, some false]
+    | .pair a b => field 0 a ++ field 1 b
+    | .sum a b =>
+      let pw := L.w n - 1
+      some false :: List.zipWith agree (pad pw (field 0 a)) (pad pw (field 1 b))
+    | .clos .. =>
+      if L.isRec n then [some false] else
+      let pw := L.w n - 1
+      some false :: (L.unionOf n).toList.foldl (fun acc c =>
+        List.zipWith agree acc (pad pw ((L.codeEnv.getD c []).flatMap (addrKinds L f ·))))
+        (List.replicate pw none)
+    | _ => List.replicate (L.w n) (some false)
+
+/-- The locals `ls`, the words of a value at node `n`: each voted a pointer or not by the node. -/
+def vote (n : Nat) (ls : List Nat) : LM Unit := do
+  let ks ← match (← get).kinds[n]? with
+    | some ks => pure ks
+    | none => do
+      let ks := addrKinds (← read).L 256 n
+      modify fun s => { s with kinds := s.kinds.insert n ks }
+      pure ks
+  if ks.length != ls.length then return
+  for (l, k) in ls.zip ks do
+    match k with
+    | some true => modify fun s => { s with ptrVote := s.ptrVote.insert l }
+    | some false => modify fun s => { s with intVote := s.intVote.insert l }
+    | none => pure ()
+
 def vals (x : Var) : LM (List Nat) := do
   match (← get).locals[x]? with
   | some ls => pure ls
   | none => throw s!"word IR: variable x{x} has no locals"
 
-def bindVals (x : Var) (ls : List Nat) : LM Unit :=
+def bindVals (x : Var) (ls : List Nat) : LM Unit := do
   modify fun s => { s with locals := s.locals.insert x ls }
+  vote ((← read).L.node x) ls
 
 def helper (h : Helper) : LM Nat := do
   match (← get).helpers[h]? with
@@ -95,20 +150,22 @@ def helper (h : Helper) : LM Nat := do
     modifyGet fun s => (base + s.queue.size,
       { s with helpers := s.helpers.insert h (base + s.queue.size), queue := s.queue.push h })
 
-/-- Run `act` as the body of a function of `params` words: the locals beyond them. -/
-def inFnF (params : Nat) (act : LM α) : LM (α × Nat × Nat) := do
+/-- Run `act` as the body of a function of `params` words: the locals beyond them, the frame's
+words, and the locals that hold an address (`ptrVote`, `intVote`). -/
+def inFnF (params : Nat) (act : LM α) : LM (α × Nat × Nat × List Nat) := do
   let saved ← get
-  set { saved with locals := {}, next := params, frame := 0, slots := {} }
+  set { saved with locals := {}, next := params, frame := 0, slots := {}, ptrVote := {}, intVote := {} }
   let a ← act
-  let n := (← get).next
-  let fw := (← get).frame
+  let st ← get
+  let ptrs := st.ptrVote.toList.filter (!st.intVote.contains ·) |>.mergeSort (· ≤ ·)
   modify fun s => { s with locals := saved.locals, next := saved.next, frame := saved.frame,
-                           slots := saved.slots }
-  pure (a, n - params, fw)
+                           slots := saved.slots, ptrVote := saved.ptrVote, intVote := saved.intVote }
+  pure (a, st.next - params, st.frame, ptrs)
 
-def inFn (params : Nat) (act : LM α) : LM (α × Nat) := do
-  let (a, n, _) ← inFnF params act
-  pure (a, n)
+def inFn (params : Nat) (act : LM α) : LM (α × Nat × List Nat) := do
+  let (a, n, _, ps) ← inFnF params act
+  pure (a, n, ps)
+
 
 /-- Where a term's words go: locals, returned (padded to `k` words), or bound to a variable. -/
 inductive Dest where
@@ -493,7 +550,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
       let off := env.headD (.c64 0)
       let len := env.getD 1 (.c64 0)
       return es ++ [.ite (.op (.rel .w64 .le_u) [.loc k, len])
-          (dr ++ [.set (ts.headD 0) (add64 (.data 0) off), .set (ts.getD 1 0) (.loc k)])
+          (dr ++ [.set (ts.headD 0) (.gep (.data 0) off), .set (ts.getD 1 0) (.loc k)])
           (mk ++ [.call ts (fnIndex fi) args])] ++ (← emit d (locs ts))
     | _ => lowerCall mk (fnIndex fi) args 2 d
   | .newArr => do
@@ -510,14 +567,14 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let st ← slotStride leaf
     let a ← arg 0
     let i ← one (args.getD 1 0)
-    let addr := add64 (.loc (a.headD 0)) (mul64 i (.c64 st.toUInt64))
+    let addr := Exp.gep (.loc (a.headD 0)) (mul64 i (.c64 st.toUInt64))
     return (← storeCell leaf addr (locs (← arg 2))) ++ (← emit d (locs a))
   | .slotTake => do
     let leaf ← leafOf (← argN 0)
     let st ← slotStride leaf
     let a ← arg 0
     let i ← one (args.getD 1 0)
-    let addr := add64 (.loc (a.headD 0)) (mul64 i (.c64 st.toUInt64))
+    let addr := Exp.gep (.loc (a.headD 0)) (mul64 i (.c64 st.toUInt64))
     let (s, vs) ← loadCell leaf addr (← wordsN (← contents leaf))
     return s ++ (← emit d (locs a ++ locs vs))
   | .freeArr => do
@@ -533,7 +590,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let st ← slotStride leaf
     match ← arg 0, ← arg 1 with
     | [b, k], [i] =>
-      let addr := add64 (.loc b) (mul64 (.loc i) (.c64 st.toUInt64))
+      let addr := Exp.gep (.loc b) (mul64 (.loc i) (.c64 st.toUInt64))
       if !check then return ← emit d [.c64 0, addr]
       let t₀ ← fresh1
       let t₁ ← fresh1
@@ -548,7 +605,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     | [b, k], [i] =>
       let pn ← child n 0
       let (s₁, vp) ← mkPair pn [.loc b, .loc i]
-        [add64 (.loc b) (mul64 (.loc i) (.c64 st.toUInt64)), .op (.bin .w64 .sub) [.loc k, .loc i]]
+        [.gep (.loc b) (mul64 (.loc i) (.c64 st.toUInt64)), .op (.bin .w64 .sub) [.loc k, .loc i]]
       let (s₂, vl) ← mkInj n false vp
       let (s₃, vr) ← mkInj n true [.loc b, .loc k]
       let ts ← fresh vl.length
@@ -562,7 +619,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     match ← arg 0, ← arg 1 with
     | [b, k], [i] =>
       let x ← arg 2
-      let addr := add64 (.loc b) (mul64 (.loc i) (.c64 st.toUInt64))
+      let addr := Exp.gep (.loc b) (mul64 (.loc i) (.c64 st.toUInt64))
       let on ← child n 1
       let (sL, old) ← loadCell leaf addr (← wordsN (← contents leaf))
       let sS ← storeCell leaf addr (locs x)
@@ -578,8 +635,8 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let st ← slotStride leaf
     match ← arg 0, ← arg 1, ← arg 2 with
     | [b, k], [i], [j] =>
-      let ai := add64 (.loc b) (mul64 (.loc i) (.c64 st.toUInt64))
-      let aj := add64 (.loc b) (mul64 (.loc j) (.c64 st.toUInt64))
+      let ai := Exp.gep (.loc b) (mul64 (.loc i) (.c64 st.toUInt64))
+      let aj := Exp.gep (.loc b) (mul64 (.loc j) (.c64 st.toUInt64))
       let w ← wordsN (← contents leaf)
       let (l₁, x) ← loadCell leaf ai w
       let (l₂, y) ← loadCell leaf aj w
@@ -597,7 +654,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let r ← fresh1
     return (← boundTick) ++
       [.ite (ltu64 (.loc i) (.loc cnt))
-        [.set r (.load8 (add64 (add64 (.data 0) (.loc o)) (.loc i)))]
+        [.set r (.load8 (.gep (.gep (.data 0) (.loc o)) (.loc i)))]
         [.set r (.c64 0)]] ++ (← emit d [.loc r])
   | .litView _ => throw "word IR: litView is not built yet"
   | .io .readByte => do
@@ -772,8 +829,9 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
   match h with
   | .copy n =>
     let w := L.w n
-    let (body, nloc) ← inFn w do
+    let (body, nloc, ptrs) ← inFn w do
       let ps := List.range w
+      vote n ps
       match L.sh n with
       | .clos .. =>
         if L.isRec n then
@@ -809,11 +867,12 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
           (s₁ ++ [.ret ([.c64 0] ++ a ++ zeros (w - 1 - a.length))])
           (s₂ ++ [.ret ([.c64 1] ++ b ++ zeros (w - 1 - b.length))])]
       | _ => pure [.ret (locs ps)]
-    pure { name := "copy", params := w, results := w, locals := nloc, body := body ++ [.trap] }
+    pure { name := "copy", params := w, results := w, locals := nloc, body := body ++ [.trap], ptrs }
   | .drop n =>
     let w := L.w n
-    let (body, nloc) ← inFn w do
+    let (body, nloc, ptrs) ← inFn w do
       let ps := List.range w
+      vote n ps
       match L.sh n with
       | .clos .. =>
         let s ← onCode n ps fun c => do
@@ -837,11 +896,12 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
       | .sum .. => pure [.ite (eqz64 (.loc 0)) (← dropField n 0 (← fieldLocals n 0 ps))
           (← dropField n 1 (← fieldLocals n 1 ps)), .ret []]
       | _ => pure [.ret []]
-    pure { name := "drop", params := w, results := 0, locals := nloc, body }
+    pure { name := "drop", params := w, results := 0, locals := nloc, body, ptrs }
   | .print n =>
     let w := L.w n
-    let (body, nloc) ← inFn w do
+    let (body, nloc, ptrs) ← inFn w do
       let ps := List.range w
+      vote n ps
       match L.sh n with
       | .unit | .zero => pure (outStr "()")
       | .int .w32 => pure (outStr "i32[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
@@ -856,16 +916,17 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
           (← printField n 1 (← fieldLocals n 1 ps) false) ++ outStr ")")
       | .sum .. => pure [.ite (eqz64 (.loc 0)) (outStr "inl " ++ (← printField n 0 (← fieldLocals n 0 ps) true))
           (outStr "inr " ++ (← printField n 1 (← fieldLocals n 1 ps) true))]
-    pure { name := "print", params := w, results := 0, locals := nloc, body := body ++ [.ret []] }
+    pure { name := "print", params := w, results := 0, locals := nloc, body := body ++ [.ret []], ptrs }
   | .reCopy c n =>
     -- The contents at `c` read through `Imm̲` at `n`: a closure is `Unk` (no words), a pointer the
     -- word, a boxed field copied, as `copy` copies.
     let wc := L.w c
     let wn := L.w n
-    let (body, nloc) ← inFn wc do
+    let (body, nloc, ptrs) ← inFn wc do
+      vote c (List.range wc)
       let (s, vs) ← reVals 64 c n (List.range wc)
       pure (s ++ [.ret vs])
-    pure { name := "reborrow", params := wc, results := wn, locals := nloc, body := body ++ [.trap] }
+    pure { name := "reborrow", params := wc, results := wn, locals := nloc, body := body ++ [.trap], ptrs }
   | .apply cls j =>
     let some rn := ((match L.sh cls with | .clos _ _ r => r | _ => [])[j]?) | throw "word IR: an apply's class"
     let (k, param, _) ← classOf cls
@@ -874,13 +935,15 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
       | _, _ => pure 0
     let cw := L.w cls
     let rw := L.w rn
-    let (body, nloc) ← inFn (cw + pw) do
+    let (body, nloc, ptrs) ← inFn (cw + pw) do
       let ps := List.range cw
+      vote cls ps
+      if let some p := param then vote p (List.range' cw pw)
       let arg := locs (List.range' cw pw)
       onCode cls ps fun c => do
         let (s, env) ← envOf cls c ps
         return s ++ [.tailCall (← codeFn c j) (env ++ arg)]
-    pure { name := "apply", params := cw + pw, results := rw, locals := nloc, body := body ++ [.trap] }
+    pure { name := "apply", params := cw + pw, results := rw, locals := nloc, body := body ++ [.trap], ptrs }
 where
   /-- The reading of `c`'s words `ls` at `n`, each field by its own reading's function. -/
   reVals (_fuel : Nat) (c n : Nat) (ls : List Nat) : LM (List Stmt × List Exp) := do
@@ -924,19 +987,75 @@ where
 
 /-! ### Functions and the program -/
 
+/-- The cited guarantee of a `mut` borrow's facts (SPEC §50). -/
+def citeMut : String :=
+  "a `mut` lend is unique (`●` joins `imm` cells only: `CellU.CompatS.kinds`); " ++
+  "a live borrow points at a live cell (every run safe: `adequacyD`, SPEC §13)"
+
+/-- The cited guarantee of an `imm` borrow's facts (SPEC §50). -/
+def citeImm : String :=
+  "an `imm` lend is not written while live (`▶◀` relates `imm` cells at one value: " ++
+  "`CellU.CompatS`; the LIR's writes take a `mut` borrow or the owner); " ++
+  "a live borrow points at a live cell (every run safe: `adequacyD`, SPEC §13)"
+
+/-- The cited guarantee of a borrowed family's base (SPEC §50): its leaves' mode; the base may be
+`0` (an empty family) or in the program's data, so it is neither `nonnull` nor `dereferenceable`. -/
+def citeFam (imm : Bool) : String :=
+  s!"the leaves of a borrowed family are {if imm then "`imm`" else "`mut`"} borrows: " ++
+    (if imm then citeImm else citeMut)
+
+/-- **The facts of a function's parameters** (SPEC §50), read off each parameter's type (its
+`LTy`, the checked type; a layout node may be shared by an owner and its borrows, so its shape
+does not give the mode): a word that is an `imm` or `mut` borrow of a cell with words is
+`noalias`, `nonnull` and `dereferenceable` by the cell's bytes, and `readonly` at `imm`; a
+borrowed family's base is `noalias`, and `readonly` at `imm` leaves. A pair's fields are its words
+in order (a boxed field one pointer, given none); a sum's words depend on its arm and are given
+none. -/
+def paramFacts (fd : Backend2.Fn) : LM (List Backend.Flat.ParamFacts) := do
+  let L ← L
+  let cellBytes (n : Nat) : Option Nat :=
+    match L.slotBytes[L.r n]? with
+    | some b => some b
+    | none => let w := L.cellWords.getD (L.r n) 1; if w == 0 then none else some (8 * w)
+  let rec walk (fuel off n : Nat) (t : LTy) : List Backend.Flat.ParamFacts :=
+    match fuel with
+    | 0 => []
+    | f + 1 =>
+    match t, L.sh n with
+    | .mut _, .mut _ | .mut _, .imm _ | .mut _, .ref _ => match cellBytes n with
+      | some b => [⟨off, [.noalias, .nonnull, .deref b], citeMut⟩]
+      | none => []
+    | .imm _, .mut _ | .imm _, .imm _ | .imm _, .ref _ => match cellBytes n with
+      | some b => [⟨off, [.noalias, .readonly, .nonnull, .deref b], citeImm⟩]
+      | none => []
+    | .fam (.imm _), .fam _ => [⟨off, [.noalias, .readonly], citeFam true⟩]
+    | .fam (.mut _), .fam _ => [⟨off, [.noalias], citeFam false⟩]
+    | .pair ta tb, .pair a b =>
+      (if L.isBoxed n 0 then [] else walk f off a ta) ++
+        (if L.isBoxed n 1 then [] else walk f (off + L.fieldW n 0) b tb)
+    | _, _ => []
+  let mut out : List Backend.Flat.ParamFacts := []
+  let mut off := 0
+  for x in fd.params do
+    let n := L.node x
+    if let some t := (← read).p.ty[x]? then out := out ++ walk 64 off n t
+    off := off + L.w n
+  return out
+
 def lowerFn (i : Nat) (fd : Backend2.Fn) : LM Backend.Flat.Fn := do
   let L ← L
   let some rn := L.fnRet[i]? | throw s!"word IR: no node of f{i}'s answer"
   let pws := fd.params.map fun x => L.w (L.node x)
   let total := pws.foldl (· + ·) 0
   let k := L.w rn
-  let (body, nloc, frame) ← inFnF total do
+  let (body, nloc, frame, ptrs) ← inFnF total do
     let mut off := 0
     for (x, w) in fd.params.zip pws do
       bindVals x (List.range' off w)
       off := off + w
     pure ((← lowerTm (1 <<< 22) fd.body rn (.ret k)) ++ [.trap])
-  pure { name := fd.name, params := total, results := k, locals := nloc, frame, body }
+  pure { name := fd.name, params := total, results := k, locals := nloc, frame, body, ptrs,
+         facts := ← paramFacts fd }
 
 def countsReport : List Stmt :=
   outStr "allocs " ++ [.call [] fPrintDec [.stat 0]] ++ outStr "\nindirect " ++
@@ -948,8 +1067,9 @@ counts. -/
 def entryFn (fMain : Nat) (exits : Bool) : LM Backend.Flat.Fn := do
   let L ← L
   let n := L.mainNode
-  let (body, nloc) ← inFn 0 do
+  let (body, nloc, ptrs) ← inFn 0 do
     let m ← fresh (L.w n)
+    vote n m
     -- With `exits` (SPEC §39), `main`'s value is `inl v`, whose `v` is printed, or `inr ()`, which
     -- prints nothing and ends the run with the exit status `1`.
     let (pr, status) ← if exits then do
@@ -962,7 +1082,7 @@ def entryFn (fMain : Nat) (exits : Bool) : LM Backend.Flat.Fn := do
     let dr ← dropVals n m
     pure ([Stmt.call m fMain []] ++ pr ++ dr ++ outStr "live " ++ [.call [] fPrintDec [.live]] ++
       outStr "\n" ++ (if (← read).counts then countsReport else []) ++ status ++ [.ret []])
-  pure { name := "entry", params := 0, results := 0, locals := nloc, body }
+  pure { name := "entry", params := 0, results := 0, locals := nloc, body, ptrs }
 
 /-- The word IR of a program at its layouts; with `counts`, the counting build. -/
 def lowerProg (p : Prog) (L : Layouts) (known : Std.HashMap Var Nat) (framed : Std.HashSet Var)
@@ -974,9 +1094,9 @@ def lowerProg (p : Prog) (L : Layouts) (known : Std.HashMap Var Nat) (framed : S
   let act : LM (List Backend.Flat.Fn) := do
     let fns ← p.fns.toList.zipIdx.mapM fun (fd, i) => lowerFn i fd
     let k := L.w L.mainNode
-    let (body, nloc, frame) ← inFnF 0 do
+    let (body, nloc, frame, ptrs) ← inFnF 0 do
       pure ((← lowerTm (1 <<< 22) p.main L.mainNode (.ret k)) ++ [.trap])
-    let main : Backend.Flat.Fn := { name := "main", params := 0, results := k, locals := nloc, frame, body }
+    let main : Backend.Flat.Fn := { name := "main", params := 0, results := k, locals := nloc, frame, body, ptrs }
     let entry ← entryFn fMain p.exits
     let mut gen : Array Backend.Flat.Fn := #[]
     let mut i := 0
