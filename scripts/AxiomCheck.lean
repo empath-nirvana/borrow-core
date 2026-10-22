@@ -84,6 +84,7 @@ import Frontend.Elab.DivPlacement
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.clauseTy_abortive
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.clauseTy_control
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.tailClause_premise
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.lastClause_premise
 #print axioms BoCa.Fig16.LogRel.Core.Check.classify_sound
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.kinds_free
 #print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesAt.site_free
