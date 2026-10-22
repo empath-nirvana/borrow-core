@@ -85,7 +85,7 @@ corpus/binder-copies.bc 3.0 affine stored: machine: a path of the clause does no
 corpus/binder-copies.bc 2.0 affine tail+state: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/binder-copies.bc 1.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/block-yield-inner.bc 1.0 affine tail: -; agree
-corpus/block-yield-inner.bc 3.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/block-yield-inner.bc 3.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/block-yield-inner.bc 2.0 affine tail: direct; agree
 corpus/capture-await-raise.bc 1.0 affine tail: direct; agree
 corpus/capture-await-raise.bc 2.0 affine abortive: branch; agree
@@ -95,6 +95,7 @@ corpus/capture-take-hand.bc 1.0 affine last: machine: a path of the clause does 
 corpus/clause-captures.bc 3.0 affine abortive: branch; agree
 corpus/clause-captures.bc 2.0 affine abortive: branch; agree
 corpus/clause-captures.bc 1.0 affine tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/comp-param-for.bc 1.0 affine tail: direct; agree
 corpus/comp-param.bc 1.0 affine abortive: -; agree
 corpus/comp-param.bc 3.0 affine abortive: -; agree
 corpus/comp-param.bc 5.0 affine abortive: -; agree
@@ -196,46 +197,46 @@ corpus/for-never.bc 2.0 affine tail: -; agree
 corpus/for-yield-branch.bc 1.0 affine tail: direct; agree
 corpus/for-yield-branch.bc 2.0 affine tail: direct; agree
 corpus/for-yield-branch.bc 3.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
-corpus/gen-adapters-fail.bc 2.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-adapters-fail.bc 2.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 4.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 6.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 8.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 10.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 11.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 14.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 16.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 18.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 20.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 23.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters-fail.bc 22.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-adapters-fail.bc 1.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 4.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-adapters-fail.bc 3.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 6.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-adapters-fail.bc 5.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 8.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-adapters-fail.bc 7.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 10.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-adapters-fail.bc 11.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-adapters-fail.bc 9.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 13.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-adapters-fail.bc 12.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 14.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-adapters-fail.bc 16.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-adapters-fail.bc 13.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-adapters-fail.bc 15.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 18.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-adapters-fail.bc 17.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 20.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-adapters-fail.bc 19.0 affine tail: direct; agree
-corpus/gen-adapters-fail.bc 23.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-adapters-fail.bc 22.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-adapters-fail.bc 21.0 affine tail: direct; agree
-corpus/gen-adapters.bc 5.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-adapters.bc 4.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-adapters.bc 3.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-adapters.bc 2.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-adapters.bc 5.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 4.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 3.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 2.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 10.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 12.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 9.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 11.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 8.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 15.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 19.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 18.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-adapters.bc 17.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-adapters.bc 1.0 affine tail: direct; agree
-corpus/gen-adapters.bc 9.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-adapters.bc 8.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-adapters.bc 11.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-adapters.bc 12.0 affine stored,tail: machine: the handlers of the name have 4 clauses for it; agree
-corpus/gen-adapters.bc 10.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-adapters.bc 7.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-adapters.bc 6.0 affine tail: direct; agree
-corpus/gen-adapters.bc 15.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-adapters.bc 7.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-adapters.bc 14.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-adapters.bc 19.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-adapters.bc 18.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-adapters.bc 17.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-adapters.bc 16.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-adapters.bc 13.0 affine tail: direct; agree
 corpus/gen-borrowed.bc 2.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
@@ -248,26 +249,26 @@ corpus/gen-div.bc 1.0 affine tail: direct; agree
 corpus/gen-div.bc 3.0 affine tail: direct; agree
 corpus/gen-fib.bc 2.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-fib.bc 1.0 affine tail: direct; agree
-corpus/gen-from.bc 3.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-from.bc 3.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-from.bc 1.0 affine tail: direct; agree
 corpus/gen-from.bc 2.0 affine tail: direct; agree
-corpus/gen-nested.bc 1.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-nested.bc 2.0 affine tail: direct; agree
+corpus/gen-nested.bc 1.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-nested.bc 3.0 affine tail: direct; agree
-corpus/gen-pipeline-adapters.bc 5.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-pipeline-adapters.bc 4.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-pipeline-adapters.bc 3.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-pipeline-adapters.bc 2.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-pipeline-adapters.bc 5.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-pipeline-adapters.bc 4.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-pipeline-adapters.bc 3.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-pipeline-adapters.bc 2.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-pipeline-adapters.bc 1.0 affine tail: direct; agree
-corpus/gen-pipeline-pipe.bc 5.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-pipeline-pipe.bc 4.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-pipeline-pipe.bc 3.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-pipeline-pipe.bc 2.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
+corpus/gen-pipeline-pipe.bc 5.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-pipeline-pipe.bc 4.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-pipeline-pipe.bc 3.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-pipeline-pipe.bc 2.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-pipeline-pipe.bc 10.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-pipeline-pipe.bc 9.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-pipeline-pipe.bc 8.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/gen-pipeline-pipe.bc 7.0 affine last: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/gen-pipeline-pipe.bc 1.0 affine tail: direct; agree
-corpus/gen-pipeline-pipe.bc 10.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-pipeline-pipe.bc 9.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-pipeline-pipe.bc 8.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
-corpus/gen-pipeline-pipe.bc 7.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-pipeline-pipe.bc 6.0 affine tail: direct; agree
 corpus/gen-pipeline.bc 3.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree
 corpus/gen-pipeline.bc 2.0 affine stored,tail: machine: the handlers of the name have 2 clauses for it; agree

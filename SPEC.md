@@ -9182,11 +9182,74 @@ raises; a name the work performs shadowed by a generator's own handler).
   given in an operation's argument reaches its calls (`block-yield-inner`: a block called from a
   work, which suspended unseen).
 
-FALLBACK-PLACEHOLDER
+### The fallback at a stored loop
+
+`Backend2/Convert.lean`, `Backend2/Driver.lean` (`reifyReach`, `lirOf`), `Backend2/Layout.lean`,
+`Backend2/Lower.lean`. §54's fallback made `tick` a machine operation of the whole program, so
+every loop of a program that stores a generator suspended at each tick, and one drive served a
+stored loop's making and its observations, whose layouts then joined into cycles kept in cells.
+
+- **A tick no stored loop runs is answered where it is performed.** A first conversion's closure
+  flow gives the functions a stored loop's `reify` may run (`reifyReach`): its roots are the
+  computation the `reify` is given and the suspended computations its drives resume, followed
+  through direct calls and closure calls at their flow's codes. Every other tick, in a machine
+  (`effPerform`) or at `iterate`'s back edge (`genIterK`), is converted on a second conversion
+  and answered *next* (`tail_resumes`, `drive_reify_tick`, §53). A tick a stored loop may run
+  still suspends (`reifyC`). This holds only when `main` is the runtime's loop and no `div_fuel`
+  node counts ticks.
+- **One drive per observation.** A stored loop's `reify` has one drive for its making (`rkV`),
+  one for *next* and one for *close* (`reifyR`, `reifyC`, `tickLoop`, `closeKV`), each answering
+  its own outcome.
+- **One code per loop.** The loops a `reify` node's drives make (`done b`, `closed r`,
+  `tickLoop k`), and a closure of the loop type whose body holds the node, are variants of one
+  code (`genMerges`, §49).
+- **Layouts** (§35): `find` compresses its path in place, and a node's address kinds are computed
+  once (compile time; the output is byte-identical).
+
 
 ### Programs
 
-PROGRAMS-PLACEHOLDER
+375 corpus programs at their goldens at the LIR interpreter, the word IR, Wasm and natively; 323
+with no state machine (318 before).
+
+- **Directly, no state machine** (new): `block-yield-inner` (a block that yields to `main`'s site,
+  called from `each_sum`'s work), `gen-from` (delegation inside a `for` body that loops),
+  `gen-nested` (works that loop), `comp-param-for` (moved from `corpus/pending/`),
+  `gen-pipeline-adapters`, `gen-pipeline-pipe`, and the book's `guide/iteration.md` blocks at 80,
+  252 and 276: 0 allocations, dispatched calls and loads each. `gen-adapters`' and
+  `gen-adapters-fail`'s pipelines but the `zip` and the stored generators `flat_map`'s function
+  makes are direct too.
+- **At the fallback**, the consumers that keep a generator: the programs that write
+  `U (pull …)` (`for-data-div`, `gen-borrowed`, `gen-close`, `gen-div`, `gen-fib`, `gen-pipeline`,
+  `gen-tokenize-parse`, `gen-value`, `yield-callback`, the book's block at 221), `zip`'s
+  sources (`gen-adapters`), `flat_map`'s stored generators (`gen-adapters-fail`), `io-fuel`.
+  Their allocations and loads are at or below `main`'s (c429cbc); their dispatched calls are
+  not (*Open*).
+
+| program | allocs / indirect / loads | `main` (c429cbc) | §54 |
+|---|---|---|---|
+| `gen-adapters` | 5 / 17 / 15 | 5 / 0 / 15 | 80 / 303 / 2707 |
+| `gen-adapters-fail` | 8 / 6 / 24 | 8 / 0 / 24 | 57 / 222 / 773 |
+| `gen-pipeline-adapters` | 0 / 0 / 0 | 0 / 0 / 0 | 32 / 108 / 1130 |
+| `gen-pipeline-pipe` | 0 / 0 / 0 | 0 / 0 / 0 | 56 / 195 / 1904 |
+| `block-yield-inner` | 0 / 0 / 0 | 0 / 0 / 0 | 3 / 14 / 39 |
+| `gen-from` | 0 / 0 / 0 | 0 / 0 / 0 | 2 / 18 / 28 |
+| `gen-nested` | 0 / 0 / 0 | 0 / 0 / 0 | 3 / 28 / 39 |
+| `for-data-div` | 3 / 6 / 17 | 3 / 0 / 17 | 7 / 19 / 83 |
+| `gen-borrowed` | 2 / 6 / 11 | 2 / 0 / 11 | 6 / 12 / 99 |
+| `gen-close` | 4 / 5 / 12 | 4 / 0 / 12 | 7 / 11 / 54 |
+| `gen-div` | 0 / 14 / 0 | 0 / 0 / 0 | 7 / 102 / 91 |
+| `gen-fib` | 0 / 21 / 0 | 0 / 0 / 0 | 11 / 43 / 143 |
+| `gen-pipeline` | 0 / 40 / 0 | 0 / 0 / 0 | 20 / 74 / 420 |
+| `gen-tokenize-parse` | 0 / 34 / 34 | 0 / 0 / 34 | 17 / 55 / 357 |
+| `gen-value` | 0 / 13 / 0 | 0 / 0 / 0 | 7 / 38 / 98 |
+| `yield-callback` | 0 / 6 / 0 | 0 / 0 / 0 | 3 / 14 / 39 |
+| `io-fuel` | 0 / 0 / 11 | 0 / 0 / 11 | 0 / 12 / 11 |
+
+`scripts/compile-scaling.sh --guard` passes: 1× 3.1 s, 8× 38.8 s, ratio 12.6 (19.3 before). The
+benches (`chain-yield`, `gen-tree`, `sieve`, `raise-small`, `handlers-di`) are unchanged.
+`corpus/counts.expected` (the old backend) falls in dispatched calls at the programs whose `for`
+is now direct; `corpus/kinds.expected` and `corpus/handled.expected` record the `last` nodes.
 
 ### Baseline
 
@@ -9205,6 +9268,14 @@ backends; `corpus/comp-param-for.bc` moves from `pending/` to the corpus, and
   the run, not proved here.
 - A source parameter's argument is a call tree of generators; a block whose body is more than a
   call, or a stored generator passed at a source parameter, is refused there.
+- **Dispatched calls at a stored generator.** The pull handler's stored `κ` resumes one of two
+  codes: the machine of the stored generator's first observation, which makes its loop (`eStart`'s
+  `first`), or the observation drive's forwarding. So each element costs one or two dispatched
+  calls where `main`'s per-body machine made none (the table above). Merging the two codes makes
+  the layout cyclic (through the close path); making the loop where the generator is stored
+  performs the stored site's operation outside its handler, which the kernel refuses. Parity needs
+  a layout that tells the two apart by context (§35), or a first observation typed so that it
+  does not make the loop in a machine of its own.
 
 ---
 
@@ -9616,7 +9687,9 @@ no change to `CDerives`, `Paper/`, `Support/` or the old backend.
 - **1.03** (2026-10-22) — §55 (#564 R-1, #644 B2): a `for` body that yields to an outer site or
   loops is `[handle-last]`'s work; the adapters take their source as a source parameter,
   instantiated per source call tree; the checked fact `DirectOK` licenses each direct call, and
-  where it does not hold the node's drive runs the rule's clause. CHANGELOG-PLACEHOLDER
+  where it does not hold the node's drive runs the rule's clause. The fallback at a stored loop answers in place the ticks no stored
+  loop runs and keeps a drive per observation: allocations and loads at `main`'s. Compile scaling
+  passes (12.6). No output, golden or status changes; `comp-param-for` joins the corpus.
 
 - **1.02** (2026-10-22) — §54 (#644 B2, #564 R-1): `for` over a generator is pushed. The erasure
   law at a work that performs nothing (`last_resume_direct`, `last_cancel_direct`,

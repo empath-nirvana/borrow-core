@@ -218,11 +218,10 @@ corpus/block-capability-inner.bc flows [0, 4294967295]; main []
 corpus/block-capability.bc flows [0, 4294967295]; main []
 corpus/block-swap.bc flows [0, 4294967295]; main []
 corpus/block-yield-inner.bc flows [0, 2, 3, 4294967295], finaliser; main [2, 3, 4294967295], finaliser
-corpus/block-yield-inner.bc 26:3: handle 2: inside [3, 4294967295], finaliser; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
-corpus/block-yield-inner.bc 18:3: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
-corpus/block-yield-inner.bc 18:3: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/block-yield-inner.bc 26:3: handle 2: inside [3], finaliser; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/block-yield-inner.bc 18:3: handle 3: inside []; row [2]; ops 3.0 last; names 3.0 row; condition 2 fails at 2
 corpus/block-yield-inner.bc 2.0 tail: direct; condition 2 holds; agree
-corpus/block-yield-inner.bc 3.0 stored,tail: machine; condition 2 holds; -
+corpus/block-yield-inner.bc 3.0 last: machine; condition 2 fails; -
 corpus/borrow-in-scope.bc flows [0, 4294967295]; main []
 corpus/bytes-upper.bc flows [0, 4294967295]; main []
 corpus/capture-await-raise.bc flows [0, 1, 2, 4294967295]; main [1, 2]
@@ -249,6 +248,9 @@ corpus/clause-captures.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/clause-captures.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/clause-captures.bc 1.0 tail+state: machine; condition 2 holds; -
 corpus/clone-reuse.bc flows [0, 4294967295]; main []
+corpus/comp-param-for.bc flows [0, 1, 4294967295]; main [1]
+corpus/comp-param-for.bc 11:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/comp-param-for.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/comp-param.bc flows [0, 3, 5, 4294967295]; main [2, 3, 4, 5, 6]
 corpus/comp-param.bc 21:56: handle 6: inside []; row []; ops 6.0 abortive; names 6.0 []; condition 2 holds
 corpus/comp-param.bc 28:11: handle 4: inside [5]; row []; ops 4.0 abortive; names 4.0 []; condition 2 holds
@@ -540,118 +542,93 @@ corpus/for-yield-branch.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/for-yield-branch.bc 3.0 last: machine; condition 2 holds; -
 corpus/format.bc flows [0, 4294967295]; main []
 corpus/gen-adapters-fail.bc flows [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 4294967295], finaliser
-corpus/gen-adapters-fail.bc 56:24: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 56:24: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 56:3: handle 1: inside [], finaliser; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 58:27: handle 4: inside []; row []; ops 4.0 stored; names 4.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 58:27: handle 4: inside []; row []; ops 4.0 tail; names 4.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 58:3: handle 3: inside [], finaliser; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 60:25: handle 6: inside []; row []; ops 6.0 stored; names 6.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 60:25: handle 6: inside []; row []; ops 6.0 tail; names 6.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 60:3: handle 5: inside [], finaliser; row []; ops 5.0 tail; names 5.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 62:30: handle 8: inside []; row []; ops 8.0 stored; names 8.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 62:30: handle 8: inside []; row []; ops 8.0 tail; names 8.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 62:3: handle 7: inside [], finaliser; row []; ops 7.0 tail; names 7.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 64:26: handle 10: inside []; row []; ops 10.0 stored; names 10.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 64:26: handle 10: inside []; row []; ops 10.0 tail; names 10.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 64:42: handle 11: inside []; row []; ops 11.0 stored; names 11.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 64:42: handle 11: inside []; row []; ops 11.0 tail; names 11.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 64:3: handle 9: inside [], finaliser; row []; ops 9.0 tail; names 9.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 66:29: handle 13: inside []; row []; ops 13.0 stored; names 13.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 66:29: handle 13: inside []; row []; ops 13.0 tail; names 13.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 66:3: handle 12: inside [14, 4294967295], finaliser; row []; ops 12.0 tail; names 12.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 66:53: handle 14: inside []; row []; ops 14.0 stored; names 14.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 66:53: handle 14: inside []; row []; ops 14.0 tail; names 14.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 68:25: handle 16: inside []; row []; ops 16.0 stored; names 16.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 68:25: handle 16: inside []; row []; ops 16.0 tail; names 16.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 68:3: handle 15: inside [], finaliser; row []; ops 15.0 tail; names 15.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 70:27: handle 18: inside []; row []; ops 18.0 stored; names 18.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 70:27: handle 18: inside []; row []; ops 18.0 tail; names 18.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 70:3: handle 17: inside [], finaliser; row []; ops 17.0 tail; names 17.0 row; condition 2 holds
-corpus/gen-adapters-fail.bc 72:26: handle 20: inside []; row []; ops 20.0 stored; names 20.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 72:26: handle 20: inside []; row []; ops 20.0 tail; names 20.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 72:3: handle 19: inside [], finaliser; row []; ops 19.0 tail; names 19.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 76:30: handle 23: inside []; row []; ops 23.0 stored; names 23.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 76:30: handle 23: inside []; row []; ops 23.0 tail; names 23.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 76:26: handle 22: inside []; row []; ops 22.0 stored; names 22.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 76:26: handle 22: inside []; row []; ops 22.0 tail; names 22.0 []; condition 2 holds
-corpus/gen-adapters-fail.bc 76:3: handle 21: inside [], finaliser; row []; ops 21.0 tail; names 21.0 row; condition 2 holds
-corpus/gen-adapters-fail.bc 2.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-adapters-fail.bc 56:3: handle 1: inside [2], finaliser; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 25:3: handle 2: inside []; row [1]; ops 2.0 last; names 2.0 row; condition 2 fails at 1
+corpus/gen-adapters-fail.bc 58:3: handle 3: inside [4], finaliser; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 31:3: handle 4: inside []; row [3]; ops 4.0 last; names 4.0 row; condition 2 fails at 3
+corpus/gen-adapters-fail.bc 60:3: handle 5: inside [6], finaliser; row []; ops 5.0 tail; names 5.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 46:3: handle 6: inside []; row [5]; ops 6.0 last; names 6.0 [5]; condition 2 fails at 5
+corpus/gen-adapters-fail.bc 62:3: handle 7: inside [8], finaliser; row []; ops 7.0 tail; names 7.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 52:3: handle 8: inside []; row [7]; ops 8.0 last; names 8.0 [7]; condition 2 fails at 7
+corpus/gen-adapters-fail.bc 64:3: handle 9: inside [10, 11], finaliser; row []; ops 9.0 tail; names 9.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 58:3: handle 10: inside []; row [9]; ops 10.0 last; names 10.0 [9]; condition 2 fails at 9
+corpus/gen-adapters-fail.bc 59:3: handle 11: inside []; row [9]; ops 11.0 last; names 11.0 [9]; condition 2 fails at 9
+corpus/gen-adapters-fail.bc 66:3: handle 12: inside [13, 14, 4294967295], finaliser; row []; ops 12.0 tail; names 12.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 64:3: handle 14: inside []; row [4294967295, 12]; ops 14.0 last; names 14.0 row; condition 2 fails at 4294967295, 12
+corpus/gen-adapters-fail.bc 66:53: handle 13: inside []; row []; ops 13.0 stored; names 13.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 66:53: handle 13: inside []; row []; ops 13.0 tail; names 13.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 68:3: handle 15: inside [16], finaliser; row []; ops 15.0 tail; names 15.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 76:3: handle 16: inside []; row [15]; ops 16.0 last; names 16.0 row; condition 2 fails at 15
+corpus/gen-adapters-fail.bc 70:3: handle 17: inside [18], finaliser; row []; ops 17.0 tail; names 17.0 row; condition 2 holds
+corpus/gen-adapters-fail.bc 123:3: handle 18: inside []; row [17]; ops 18.0 last; names 18.0 [17]; condition 2 fails at 17
+corpus/gen-adapters-fail.bc 72:3: handle 19: inside [20], finaliser; row []; ops 19.0 tail; names 19.0 []; condition 2 holds
+corpus/gen-adapters-fail.bc 155:3: handle 20: inside []; row [19]; ops 20.0 last; names 20.0 row; condition 2 fails at 19
+corpus/gen-adapters-fail.bc 76:3: handle 21: inside [22, 23], finaliser; row []; ops 21.0 tail; names 21.0 row; condition 2 holds
+corpus/gen-adapters-fail.bc 136:3: handle 22: inside [23], finaliser; row [21]; ops 22.0 last; names 22.0 [21]; condition 2 fails at 21
+corpus/gen-adapters-fail.bc 25:3: handle 23: inside []; row [22]; ops 23.0 last; names 23.0 row; condition 2 fails at 22
 corpus/gen-adapters-fail.bc 1.0 tail: direct; condition 2 holds; agree
-corpus/gen-adapters-fail.bc 4.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-adapters-fail.bc 2.0 last: machine; condition 2 fails; -
 corpus/gen-adapters-fail.bc 3.0 tail: direct; condition 2 holds; agree
-corpus/gen-adapters-fail.bc 6.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-adapters-fail.bc 4.0 last: machine; condition 2 fails; -
 corpus/gen-adapters-fail.bc 5.0 tail: direct; condition 2 holds; agree
-corpus/gen-adapters-fail.bc 8.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-adapters-fail.bc 6.0 last: machine; condition 2 fails; -
 corpus/gen-adapters-fail.bc 7.0 tail: direct; condition 2 holds; agree
-corpus/gen-adapters-fail.bc 10.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-adapters-fail.bc 11.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-adapters-fail.bc 8.0 last: machine; condition 2 fails; -
 corpus/gen-adapters-fail.bc 9.0 tail: direct; condition 2 holds; agree
-corpus/gen-adapters-fail.bc 13.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-adapters-fail.bc 10.0 last: machine; condition 2 fails; -
+corpus/gen-adapters-fail.bc 11.0 last: machine; condition 2 fails; -
 corpus/gen-adapters-fail.bc 12.0 tail: direct; condition 2 holds; agree
-corpus/gen-adapters-fail.bc 14.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-adapters-fail.bc 16.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-adapters-fail.bc 14.0 last: machine; condition 2 fails; -
+corpus/gen-adapters-fail.bc 13.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-adapters-fail.bc 15.0 tail: direct; condition 2 holds; agree
-corpus/gen-adapters-fail.bc 18.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-adapters-fail.bc 16.0 last: machine; condition 2 fails; -
 corpus/gen-adapters-fail.bc 17.0 tail: direct; condition 2 holds; agree
-corpus/gen-adapters-fail.bc 20.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-adapters-fail.bc 18.0 last: machine; condition 2 fails; -
 corpus/gen-adapters-fail.bc 19.0 tail: direct; condition 2 holds; agree
-corpus/gen-adapters-fail.bc 23.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-adapters-fail.bc 22.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-adapters-fail.bc 20.0 last: machine; condition 2 fails; -
 corpus/gen-adapters-fail.bc 21.0 tail: direct; condition 2 holds; agree
+corpus/gen-adapters-fail.bc 22.0 last: machine; condition 2 fails; -
+corpus/gen-adapters-fail.bc 23.0 last: machine; condition 2 fails; -
 corpus/gen-adapters.bc flows [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 4294967295], finaliser
-corpus/gen-adapters.bc 40:33: handle 5: inside []; row []; ops 5.0 stored; names 5.0 []; condition 2 holds
-corpus/gen-adapters.bc 40:33: handle 5: inside []; row []; ops 5.0 tail; names 5.0 []; condition 2 holds
-corpus/gen-adapters.bc 40:29: handle 4: inside []; row []; ops 4.0 stored; names 4.0 []; condition 2 holds
-corpus/gen-adapters.bc 40:29: handle 4: inside []; row []; ops 4.0 tail; names 4.0 []; condition 2 holds
-corpus/gen-adapters.bc 40:22: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
-corpus/gen-adapters.bc 40:22: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
-corpus/gen-adapters.bc 40:17: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
-corpus/gen-adapters.bc 40:17: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
-corpus/gen-adapters.bc 40:3: handle 1: inside [], finaliser; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
-corpus/gen-adapters.bc 44:33: handle 9: inside []; row []; ops 9.0 stored; names 9.0 []; condition 2 holds
-corpus/gen-adapters.bc 44:33: handle 9: inside []; row []; ops 9.0 tail; names 9.0 []; condition 2 holds
-corpus/gen-adapters.bc 44:28: handle 8: inside []; row []; ops 8.0 stored; names 8.0 []; condition 2 holds
-corpus/gen-adapters.bc 44:28: handle 8: inside []; row []; ops 8.0 tail; names 8.0 []; condition 2 holds
-corpus/gen-adapters.bc 45:37: handle 11: inside []; row []; ops 11.0 stored; names 11.0 []; condition 2 holds
-corpus/gen-adapters.bc 45:37: handle 11: inside []; row []; ops 11.0 tail; names 11.0 []; condition 2 holds
-corpus/gen-adapters.bc 45:58: handle 12: inside []; row []; ops 12.0 stored; names 12.0 []; condition 2 holds
-corpus/gen-adapters.bc 45:58: handle 12: inside []; row []; ops 12.0 tail; names 12.0 []; condition 2 holds
-corpus/gen-adapters.bc 45:28: handle 10: inside []; row []; ops 10.0 stored; names 10.0 []; condition 2 holds
-corpus/gen-adapters.bc 45:28: handle 10: inside []; row []; ops 10.0 tail; names 10.0 []; condition 2 holds
-corpus/gen-adapters.bc 44:22: handle 7: inside []; row []; ops 7.0 stored; names 7.0 []; condition 2 holds
-corpus/gen-adapters.bc 44:22: handle 7: inside []; row []; ops 7.0 tail; names 7.0 []; condition 2 holds
-corpus/gen-adapters.bc 44:3: handle 6: inside [], finaliser; row []; ops 6.0 tail; names 6.0 []; condition 2 holds
-corpus/gen-adapters.bc 50:22: handle 15: inside []; row []; ops 15.0 stored; names 15.0 []; condition 2 holds
-corpus/gen-adapters.bc 50:22: handle 15: inside []; row []; ops 15.0 tail; names 15.0 []; condition 2 holds
+corpus/gen-adapters.bc 40:3: handle 1: inside [2, 3, 4, 5], finaliser; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/gen-adapters.bc 39:5: handle 2: inside [3, 4, 5], finaliser; row [1]; ops 2.0 last; names 2.0 [1]; condition 2 fails at 1
+corpus/gen-adapters.bc 46:3: handle 3: inside [4, 5], finaliser; row [2]; ops 3.0 last; names 3.0 [2]; condition 2 fails at 2
+corpus/gen-adapters.bc 31:3: handle 4: inside [5], finaliser; row [3]; ops 4.0 last; names 4.0 row; condition 2 fails at 3
+corpus/gen-adapters.bc 25:3: handle 5: inside []; row [4]; ops 5.0 last; names 5.0 row; condition 2 fails at 4
+corpus/gen-adapters.bc 44:3: handle 6: inside [7, 8, 9, 10, 11, 12, 4294967295], finaliser; row []; ops 6.0 tail; names 6.0 []; condition 2 holds
+corpus/gen-adapters.bc 52:3: handle 8: inside [9, 10, 11, 12], finaliser; row [6]; ops 8.0 last; names 8.0 [6]; condition 2 fails at 6
+corpus/gen-adapters.bc 58:3: handle 9: inside [10], finaliser; row [8]; ops 9.0 last; names 9.0 [8]; condition 2 fails at 8
+corpus/gen-adapters.bc 76:3: handle 10: inside []; row [9]; ops 10.0 last; names 10.0 row; condition 2 fails at 9
+corpus/gen-adapters.bc 59:3: handle 11: inside [12], finaliser; row [8]; ops 11.0 last; names 11.0 [8]; condition 2 fails at 8
+corpus/gen-adapters.bc 64:3: handle 12: inside []; row [4294967295, 11]; ops 12.0 last; names 12.0 row; condition 2 fails at 4294967295, 11
+corpus/gen-adapters.bc 45:58: handle 7: inside []; row []; ops 7.0 stored; names 7.0 []; condition 2 holds
+corpus/gen-adapters.bc 45:58: handle 7: inside []; row []; ops 7.0 tail; names 7.0 []; condition 2 holds
+corpus/gen-adapters.bc 155:3: handle 15: inside []; row [14]; ops 15.0 last; names 15.0 row; condition 2 fails at 14
 corpus/gen-adapters.bc 50:16: handle 14: inside []; row []; ops 14.0 stored; names 14.0 []; condition 2 holds
 corpus/gen-adapters.bc 50:16: handle 14: inside []; row []; ops 14.0 tail; names 14.0 []; condition 2 holds
-corpus/gen-adapters.bc 51:38: handle 19: inside []; row []; ops 19.0 stored; names 19.0 []; condition 2 holds
-corpus/gen-adapters.bc 51:38: handle 19: inside []; row []; ops 19.0 tail; names 19.0 []; condition 2 holds
-corpus/gen-adapters.bc 51:27: handle 18: inside []; row []; ops 18.0 stored; names 18.0 []; condition 2 holds
-corpus/gen-adapters.bc 51:27: handle 18: inside []; row []; ops 18.0 tail; names 18.0 []; condition 2 holds
-corpus/gen-adapters.bc 51:20: handle 17: inside []; row []; ops 17.0 stored; names 17.0 []; condition 2 holds
-corpus/gen-adapters.bc 51:20: handle 17: inside []; row []; ops 17.0 tail; names 17.0 []; condition 2 holds
+corpus/gen-adapters.bc 25:3: handle 17: inside [18, 19], finaliser; row [16]; ops 17.0 last; names 17.0 row; condition 2 fails at 16
+corpus/gen-adapters.bc 123:3: handle 18: inside [19], finaliser; row [17]; ops 18.0 last; names 18.0 [17]; condition 2 fails at 17
+corpus/gen-adapters.bc 69:3: handle 19: inside []; row [18]; ops 19.0 last; names 19.0 row; condition 2 fails at 18
 corpus/gen-adapters.bc 51:16: handle 16: inside []; row []; ops 16.0 stored; names 16.0 []; condition 2 holds
 corpus/gen-adapters.bc 51:16: handle 16: inside []; row []; ops 16.0 tail; names 16.0 []; condition 2 holds
 corpus/gen-adapters.bc 50:3: handle 13: inside [], finaliser; row []; ops 13.0 tail; names 13.0 []; condition 2 holds
-corpus/gen-adapters.bc 5.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-adapters.bc 4.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-adapters.bc 3.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-adapters.bc 2.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-adapters.bc 1.0 tail: direct; condition 2 holds; agree
-corpus/gen-adapters.bc 9.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-adapters.bc 8.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-adapters.bc 11.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-adapters.bc 12.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-adapters.bc 10.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-adapters.bc 7.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-adapters.bc 2.0 last: machine; condition 2 fails; -
+corpus/gen-adapters.bc 3.0 last: machine; condition 2 fails; -
+corpus/gen-adapters.bc 4.0 last: machine; condition 2 fails; -
+corpus/gen-adapters.bc 5.0 last: machine; condition 2 fails; -
 corpus/gen-adapters.bc 6.0 tail: direct; condition 2 holds; agree
-corpus/gen-adapters.bc 15.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-adapters.bc 8.0 last: machine; condition 2 fails; -
+corpus/gen-adapters.bc 9.0 last: machine; condition 2 fails; -
+corpus/gen-adapters.bc 10.0 last: machine; condition 2 fails; -
+corpus/gen-adapters.bc 11.0 last: machine; condition 2 fails; -
+corpus/gen-adapters.bc 12.0 last: machine; condition 2 fails; -
+corpus/gen-adapters.bc 7.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-adapters.bc 15.0 last: machine; condition 2 fails; -
 corpus/gen-adapters.bc 14.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-adapters.bc 19.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-adapters.bc 18.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-adapters.bc 17.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-adapters.bc 17.0 last: machine; condition 2 fails; -
+corpus/gen-adapters.bc 18.0 last: machine; condition 2 fails; -
+corpus/gen-adapters.bc 19.0 last: machine; condition 2 fails; -
 corpus/gen-adapters.bc 16.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-adapters.bc 13.0 tail: direct; condition 2 holds; agree
 corpus/gen-borrowed.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2, 4294967295], finaliser
@@ -686,64 +663,50 @@ corpus/gen-fib.bc 2.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-fib.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/gen-from.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3, 4294967295], finaliser
 corpus/gen-from.bc 33:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
-corpus/gen-from.bc 34:3: handle 2: inside [3, 4294967295], finaliser; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
-corpus/gen-from.bc 28:3: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
-corpus/gen-from.bc 28:3: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/gen-from.bc 34:3: handle 2: inside [3], finaliser; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/gen-from.bc 28:3: handle 3: inside []; row [4294967295, 2]; ops 3.0 last; names 3.0 row; condition 2 fails at 4294967295, 2
 corpus/gen-from.bc 1.0 tail: direct; condition 2 holds; agree
 corpus/gen-from.bc 2.0 tail: direct; condition 2 holds; agree
-corpus/gen-from.bc 3.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-nested.bc flows [0, 1, 2, 3, 4294967295]; main [1, 2, 3, 4294967295]
-corpus/gen-nested.bc 18:3: handle 1: inside []; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
-corpus/gen-nested.bc 18:3: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/gen-from.bc 3.0 last: machine; condition 2 fails; -
+corpus/gen-nested.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3, 4294967295], finaliser
 corpus/gen-nested.bc 19:5: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/gen-nested.bc 18:3: handle 1: inside []; row [4294967295]; ops 1.0 last; names 1.0 row; condition 2 fails at 4294967295
 corpus/gen-nested.bc 22:17: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
-corpus/gen-nested.bc 1.0 stored,tail: machine; condition 2 holds; -
 corpus/gen-nested.bc 2.0 tail: direct; condition 2 holds; agree
+corpus/gen-nested.bc 1.0 last: machine; condition 2 fails; -
 corpus/gen-nested.bc 3.0 tail: direct; condition 2 holds; agree
 corpus/gen-pipeline-adapters.bc flows [0, 1, 2, 3, 4, 5, 4294967295], finaliser; main [1, 2, 3, 4, 5, 4294967295], finaliser
-corpus/gen-pipeline-adapters.bc 24:38: handle 5: inside []; row []; ops 5.0 stored; names 5.0 []; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:38: handle 5: inside []; row []; ops 5.0 tail; names 5.0 []; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:28: handle 4: inside []; row []; ops 4.0 stored; names 4.0 []; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:28: handle 4: inside []; row []; ops 4.0 tail; names 4.0 []; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:24: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:24: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:17: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:17: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
-corpus/gen-pipeline-adapters.bc 24:3: handle 1: inside [], finaliser; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
-corpus/gen-pipeline-adapters.bc 5.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-pipeline-adapters.bc 4.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-pipeline-adapters.bc 3.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-pipeline-adapters.bc 2.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-pipeline-adapters.bc 24:3: handle 1: inside [2, 3, 4, 5], finaliser; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/gen-pipeline-adapters.bc 39:5: handle 2: inside [3, 4, 5], finaliser; row [1]; ops 2.0 last; names 2.0 [1]; condition 2 fails at 1
+corpus/gen-pipeline-adapters.bc 31:3: handle 3: inside [4, 5], finaliser; row [2]; ops 3.0 last; names 3.0 row; condition 2 fails at 2
+corpus/gen-pipeline-adapters.bc 25:3: handle 4: inside [5], finaliser; row [3]; ops 4.0 last; names 4.0 row; condition 2 fails at 3
+corpus/gen-pipeline-adapters.bc 52:3: handle 5: inside []; row [4]; ops 5.0 last; names 5.0 [4]; condition 2 fails at 4
 corpus/gen-pipeline-adapters.bc 1.0 tail: direct; condition 2 holds; agree
+corpus/gen-pipeline-adapters.bc 2.0 last: machine; condition 2 fails; -
+corpus/gen-pipeline-adapters.bc 3.0 last: machine; condition 2 fails; -
+corpus/gen-pipeline-adapters.bc 4.0 last: machine; condition 2 fails; -
+corpus/gen-pipeline-adapters.bc 5.0 last: machine; condition 2 fails; -
 corpus/gen-pipeline-pipe.bc flows [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 4294967295], finaliser
-corpus/gen-pipeline-pipe.bc 26:12: handle 5: inside []; row []; ops 5.0 stored; names 5.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:12: handle 5: inside []; row []; ops 5.0 tail; names 5.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:12: handle 4: inside []; row []; ops 4.0 stored; names 4.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:12: handle 4: inside []; row []; ops 4.0 tail; names 4.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:12: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:12: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:12: handle 2: inside []; row []; ops 2.0 stored; names 2.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:12: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 26:3: handle 1: inside [], finaliser; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:12: handle 10: inside []; row []; ops 10.0 stored; names 10.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:12: handle 10: inside []; row []; ops 10.0 tail; names 10.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:12: handle 9: inside []; row []; ops 9.0 stored; names 9.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:12: handle 9: inside []; row []; ops 9.0 tail; names 9.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:12: handle 8: inside []; row []; ops 8.0 stored; names 8.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:12: handle 8: inside []; row []; ops 8.0 tail; names 8.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:12: handle 7: inside []; row []; ops 7.0 stored; names 7.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:12: handle 7: inside []; row []; ops 7.0 tail; names 7.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 28:3: handle 6: inside [], finaliser; row []; ops 6.0 tail; names 6.0 []; condition 2 holds
-corpus/gen-pipeline-pipe.bc 5.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-pipeline-pipe.bc 4.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-pipeline-pipe.bc 3.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-pipeline-pipe.bc 2.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-pipeline-pipe.bc 26:3: handle 1: inside [2, 3, 4, 5], finaliser; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 39:5: handle 2: inside [3, 4, 5], finaliser; row [1]; ops 2.0 last; names 2.0 [1]; condition 2 fails at 1
+corpus/gen-pipeline-pipe.bc 31:3: handle 3: inside [4, 5], finaliser; row [2]; ops 3.0 last; names 3.0 row; condition 2 fails at 2
+corpus/gen-pipeline-pipe.bc 25:3: handle 4: inside [5], finaliser; row [3]; ops 4.0 last; names 4.0 row; condition 2 fails at 3
+corpus/gen-pipeline-pipe.bc 52:3: handle 5: inside []; row [4]; ops 5.0 last; names 5.0 [4]; condition 2 fails at 4
+corpus/gen-pipeline-pipe.bc 28:3: handle 6: inside [7, 8, 9, 10], finaliser; row []; ops 6.0 tail; names 6.0 []; condition 2 holds
+corpus/gen-pipeline-pipe.bc 39:5: handle 7: inside [8, 9, 10], finaliser; row [6]; ops 7.0 last; names 7.0 [6]; condition 2 fails at 6
+corpus/gen-pipeline-pipe.bc 46:3: handle 8: inside [9, 10], finaliser; row [7]; ops 8.0 last; names 8.0 [7]; condition 2 fails at 7
+corpus/gen-pipeline-pipe.bc 31:3: handle 9: inside [10], finaliser; row [8]; ops 9.0 last; names 9.0 row; condition 2 fails at 8
+corpus/gen-pipeline-pipe.bc 25:3: handle 10: inside []; row [9]; ops 10.0 last; names 10.0 row; condition 2 fails at 9
 corpus/gen-pipeline-pipe.bc 1.0 tail: direct; condition 2 holds; agree
-corpus/gen-pipeline-pipe.bc 10.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-pipeline-pipe.bc 9.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-pipeline-pipe.bc 8.0 stored,tail: machine; condition 2 holds; -
-corpus/gen-pipeline-pipe.bc 7.0 stored,tail: machine; condition 2 holds; -
+corpus/gen-pipeline-pipe.bc 2.0 last: machine; condition 2 fails; -
+corpus/gen-pipeline-pipe.bc 3.0 last: machine; condition 2 fails; -
+corpus/gen-pipeline-pipe.bc 4.0 last: machine; condition 2 fails; -
+corpus/gen-pipeline-pipe.bc 5.0 last: machine; condition 2 fails; -
 corpus/gen-pipeline-pipe.bc 6.0 tail: direct; condition 2 holds; agree
+corpus/gen-pipeline-pipe.bc 7.0 last: machine; condition 2 fails; -
+corpus/gen-pipeline-pipe.bc 8.0 last: machine; condition 2 fails; -
+corpus/gen-pipeline-pipe.bc 9.0 last: machine; condition 2 fails; -
+corpus/gen-pipeline-pipe.bc 10.0 last: machine; condition 2 fails; -
 corpus/gen-pipeline.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3, 4294967295], finaliser
 corpus/gen-pipeline.bc 31:30: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
 corpus/gen-pipeline.bc 31:30: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
