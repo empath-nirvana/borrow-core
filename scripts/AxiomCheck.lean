@@ -652,4 +652,11 @@ import Frontend.Elab.DivPlacement
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.der_hndJ₁
 #print axioms BoCa.Fig16.LogRel.Core.kappaFinSelf
 #print axioms BoCa.Fig16.LogRel.Core.lastFinOK_nil_of_find
+-- SPEC §54: [handle-last]'s erasure law at a work that performs nothing (T-B1, T-B1′)
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.last_op_work
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.last_resume_direct
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.last_cancel_direct
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.last_cancel_exit
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.cancelOf_steps
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.tail_resume_direct
 #print axioms Frontend.Elab.DivPlacement.sim_loop
