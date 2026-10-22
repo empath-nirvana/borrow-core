@@ -211,11 +211,21 @@ def erasureLine (k : Backend.CheckedProg) : String := Id.run do
     s!"erased handles {r "handle"} performs {r "perform"} raises {r "raise"}{m} left 0 0"
   | .error _ => s!"outside left {stored} {other}"
 
-/-- Convert and lint a program (`bcc lir --lint`): an error outside the pure fragment, or the
-lint's. -/
-def lintOf (k : Backend.CheckedProg) : Except String Unit := do
-  let (p, _) ← lirOf k
-  Lint.lint p
+/-- **The LIR every compile reads**: `lirOf`'s, linted (`Backend2/Lint.lean`). The lowering does
+not track consumption (`Lower.vals`), so a variable used twice would lower to a use after free;
+the lint makes each variable's single consumption, and the duplicability of what is copied, a
+checked fact of every compiled program. A failure is the compiler's error, not the program's. -/
+def lintedLirOf (k : Backend.CheckedProg) : Except String (Prog × CState) := do
+  let (p, cs) ← lirOf k
+  match Lint.lint p with
+  | .ok () => pure (p, cs)
+  | .error e => throw s!"internal: LIR not linear: {e}"
+
+/-- The lint's copies at the layouts (`Lint.copiesDup`), as the compiler's error. -/
+def copiesChecked (p : Prog) (L : Lay.Layouts) : Except String Unit :=
+  match Lint.copiesDup p L with
+  | .ok () => pure ()
+  | .error e => throw s!"internal: LIR not linear: {e}"
 
 /-- **The frame slots** (`bcc lir --frames`, SPEC §50): of the cells allocated for one lend
 (`Op.allocLent`), how many are placed in a frame slot (`Frames.framed`) and how many on the heap. -/
@@ -231,6 +241,12 @@ def layoutsOf (k : Backend.CheckedProg) (p : Prog) : Except String Lay.Layouts :
   let (g, m) ← Lay.places p
   pure (Lay.resolve p g m (cellsOf k))
 
+/-- Convert and lint a program (`bcc lir --lint`): an error outside the pure fragment, or the
+lint's, its copies read at the layouts too. -/
+def lintOf (k : Backend.CheckedProg) : Except String Unit := do
+  let (p, _) ← lintedLirOf k
+  copiesChecked p (← layoutsOf k p)
+
 /-- The closure classes of a program's layouts, one a line: its codes, its width, whether its
 environment is on the heap (`bcc lir --layout`). -/
 def layoutReport (k : Backend.CheckedProg) : Except String (List String) := do
@@ -244,8 +260,9 @@ def layoutReport (k : Backend.CheckedProg) : Except String (List String) := do
 
 /-- The word IR of a checked program by the new backend; with `counts`, the counting build. -/
 def flatOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String Backend.Flat.Prog := do
-  let (p, cs) ← lirOf k
+  let (p, cs) ← lintedLirOf k
   let L ← layoutsOf k p
+  copiesChecked p L
   let fs := Flow.solution p L
   let p := LitViews.rewrite p cs.lits fs.sets
   Low.lowerProg p L (Flow.known p L fs) (Frames.framed p) counts
@@ -264,7 +281,8 @@ def llOf (k : Backend.CheckedProg) (counts : Bool := false) (facts : Bool := tru
 /-- **The new backend's compile, timed** (`bcc compile --backend new --timings`): `file`'s WAT, each
 stage's time and output size written to standard error as `Backend.compileWatTimed` writes the
 old backend's, then their total. The stages are the frontend's (parse, check, `main`'s I/O) and the
-new backend's (the LIR, its layouts, the 0-CFA, the word IR, Wasm, the printed module).
+new backend's (the LIR, its lint, its layouts, the lint's copies at them, the 0-CFA, the word IR,
+Wasm, the printed module).
 A measurement of the new backend's compile time, outside the gate (SPEC §48). -/
 def watTimed (file src : String) : IO (Except String String) := do
   let tot ← IO.mkRef 0
@@ -285,7 +303,11 @@ def watTimed (file src : String) : IO (Except String String) := do
         | .error e => throw s!"{file}: {e}"
     let (p, cs) ← ExceptT.mk <| stage "lir" (fun (q : Prog × CState) =>
         s!"{q.1.fns.size} functions, {q.1.codes.size} codes") fun _ => lirOf k
+    ExceptT.mk <| stage "lint" (fun _ => "") fun _ => match Lint.lint p with
+      | .ok () => pure ()
+      | .error e => throw s!"{file}: internal: LIR not linear: {e}"
     let L ← ExceptT.mk <| stage "layout" (fun _ => "") fun _ => layoutsOf k p
+    ExceptT.mk <| stage "lint copies" (fun _ => "") fun _ => copiesChecked p L
     let fs ← ExceptT.mk <| stage "flow" (fun _ => "") fun _ => pure (Flow.solution p L)
     let flat ← ExceptT.mk <| stage "lower" (fun (q : Backend.Flat.Prog) => s!"{q.fns.size} functions")
       fun _ => do
@@ -305,7 +327,7 @@ word IR's interpreter at the new backend's lowering. -/
 def interpStage (stage : String) (k : Except String Backend.CheckedProg) (input : List UInt8)
     (args : List UInt8 := []) : Except String Backend.Output := do
   match stage with
-  | "lir" => runLIR (← lirOf (← k)).1 Backend.runFuel input args
+  | "lir" => runLIR (← lintedLirOf (← k)).1 Backend.runFuel input args
   | "lflat" => Backend.Flat.interp Backend.runFuel (← flatOf (← k)) input args
   | "lflat-counts" => Backend.Flat.interp Backend.runFuel (← flatOf (← k) true) input args
   | _ => throw s!"unknown stage `{stage}`"
