@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.00 · 2026-10-22
+Version 1.01 · 2026-10-22
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8666,6 +8666,239 @@ corpus or a golden.
 
 ---
 
+## 52. Entry 51 — the new backend: a stack each task owns (#664, option B)
+
+### Motivation
+
+#664's investigation measured two costs of the new backend's async programs (§49, §50).
+`async-tree`, a recursive task, resumes by entering every suspended level: a level's state holds
+its callee's `k`, so a resume is a chain of non-tail calls as deep as the recursion, and each
+level's state is a cell of its own (72% of the run in one resume code, one allocation per level).
+`async-tree-iter`, a task of constant depth, spends its time in the scheduler: a task is its
+continuation by value (26 words there), copied into two new list nodes at every `await`. The
+user's decision (#664, comment 6339030614) is option B: each task owns a stack of first-order
+frames, so a suspended task is small and the queue holds it with no list node per `await`. The
+corpus's counts (`corpus/counts-backend2.expected`) are not to rise for it.
+
+Decision 25 holds: every lowering is stackless and portable, and no native stack is switched. The
+stack is a heap record of frames, as §20's `deep` driver's buffer is.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration or semantics. `lib/async.bc`'s scheduler
+changes its representation, not its meaning (*The scheduler*, below).
+
+### Lowering
+
+`Backend2/`, read from the typed term, the nodes' kinds and the layouts of a first conversion.
+One rule per construct:
+
+| construct | rule | law |
+|---|---|---|
+| a BOXED-κ site's `κ`, where the site has a stack | its environment is the stack's `κ` region, written in place; `κ` is the stack | `[op]`, `kappa_resume_steps` |
+| a stack machine's level | its state is a frame on the current task stack, reserved when the level starts; a call point's state leaves the callee's `k` out | `kappa_resume_steps`, the nesting kept as positions |
+| a stack machine's `k` | its frame's address; resumed from the top of the stack down to it | `kappa_resume_steps` |
+| a stack machine's cancel | the frames from the top down to it, innermost first | `kappa_cancel_steps`, `cancel_prefix` |
+| a BOXED-κ site | runs its handled computation on a stack of its own, made current around each run | one owner (BOXED-κ, §28) |
+
+- **`κ` in the site's stack** (`convDrive`, `genKap`). At a site that has a stack (*The task
+  stack*, below), the first operation whose clause is `stored` (`ks`, `classifyHandler_sound`) and
+  whose qualifier is not `unr` keeps `κ`'s environment, the handled computation's `k` and the
+  handler's values (§49 *A `handle` node as a drive*), in the stack's `κ` region, and `κ`'s own
+  environment is the stack alone. The site makes the stack at the computation's first run, the
+  region inside its one allocation (`Op.stackNew`). A suspension there writes the region
+  (`Op.kappaPut`) and answers `κ`; `κ`'s resume entry takes it out (`Op.kappaTake`). By `[op]`,
+  `κ` is the closure over `(k, H)` and `resume κ y` drives `resume k y` again, so the region's
+  contents before and after a resume are the old and the new `κ`'s environments. The stack's free
+  ends it, where the computation answers, aborts or is cancelled. The task's value, the closure of
+  its body's one code (§49 *One code per task body*), is then its variant's tag and one word, and
+  the task owns one allocation: its stack. One operation a site: a region shared by two would join
+  their computations' classes, and a resume would dispatch between them. At a site with no stack,
+  `κ`'s environment stays by value (§49): a cell there would be an allocation a task did not make
+  before.
+- **Stack machines** (`stackedOf`, `genStackMach`). A machine is a stack machine when its level's
+  cell is passed on (§50: its suspended computation's class holds itself, its points at one
+  operation, no call in tail position, not `unr`), every call point of it calls a level of itself
+  (the layouts' classes of the callee's suspended computations are its own code, `suspCodes`), and
+  every `handle` node of its operation is a BOXED-κ site whose clause is `stored`, with no operation
+  of the node at `unr` (`stackOps`).
+  Each level reserves its frame on the current stack when it starts (`Op.framePush`; the bottom of
+  its continuation is `Frame.stackF`, the frame and its address) and pops it where it answers,
+  aborts or is cancelled (`Op.framePop`), so a level's frame is directly above its caller's. A
+  point's state is first order, its continuation's variables: at a call point the callee's `k`,
+  which stands for the frames above, is left out. A point's `mk` writes the state into the frame
+  (`Op.framePut`), which stays on the stack, and answers the level's `k`: a closure of one code
+  whose environment is the frame's address.
+  - *Resume.* `kappa_resume_steps`: `resume (point_i k) y = step_i (resume k y)` and
+    `step_i (susp (p, k')) = susp (p, point_i k')`. With `k'` the frames above `point_i`'s frame
+    and `point_i`'s frame in place, the outer steps of a suspension that leaves the frames below
+    as they were are the identity: a level's step that receives a suspension writes its own state
+    and answers its own `k`, and nothing below it is entered again. `k`'s resume entry is a loop
+    from the top of the stack down to `k`'s frame, the base (`stack resume`, `stack step`): the top
+    frame's level continues at its `perform` with the answer (`stack continue`); a level that
+    answers has popped its frame, and the frame below, at its call of that level, continues with
+    the value (`stack return`, `step_i`'s value arm, `[ret]` of the frame's continuation) or with
+    the abort (`stack unwind`, its abort arm, `then_fin`, `unwind_prefix`); any level's suspension
+    suspends `k` again at the base. When the base's level answers, its answer is `k`'s. The loop
+    is a tail call, so a resume runs in constant native stack.
+  - *Cancel.* `kappa_cancel_steps`, `cancel_prefix`: `k`'s cancel entry pops the frames from the
+    top down to the base, each frame's continuation unwound under the cancel (§19 *Cancels*,
+    `cancelK`), the first error kept: innermost first.
+  - *Unreachable arms.* The top frame is at a `perform` and a frame below a level that answered is
+    at its call of that level: the other arms of `stack continue` and `stack return` are
+    `Op.unreachable` (a trap; the LIR lint reads a path that reaches it as one that ends at
+    `absurd`).
+- **The task stack** (`convDrive`, `genKap`, `MPoint.swapAt`). Where the program has a stack
+  machine, each stored BOXED-κ site runs its handled computation on a stack of its own. A static
+  word of the program's data holds the current stack (`Op.stackSwap`, `CState.stackReg`): the
+  site swaps its stack in around every run of the computation — its first run, `κ`'s resume and
+  cancel, a forwarding point's resume and cancel of the computation's `k` — and swaps the one it
+  displaced back after. The site's stack is a drive parameter after the handler's values, `κ`'s
+  last value, and part of a forwarding point's state (`Frame.stackH`); it is `0` until the first
+  frame is reserved, which makes it, and it is freed where the computation answers, aborts or is
+  cancelled (`Op.stackFree`). With a `κ` region the site makes the stack at the first run; without
+  one the first frame reserved makes it.
+  - *No `unr` site.* A site switches stacks only when no operation of its node is `unr`: a `κ`
+    that may be copied would hold the stack twice, and a second resume would swap in a stack the
+    first had freed. `corpus/async-unr-site.bc` is such a site in a program with a stack machine
+    (a `multi ctl` operation whose clause resumes two copies of `κ`): it does not switch.
+  - *One owner, frames in order* (the invariant the native code relies on). Only stack machines
+    reserve frames. Their levels call only themselves, so a stack holds one recursion's frames at
+    a time, contiguous at its top, nested as the calls are. They suspend only at an operation
+    every node of which is a stored BOXED-κ site, so the suspension reaches the site through
+    drives that pass it on (forwarding) and run no code of the program meanwhile; the site's `κ`,
+    affine or linear, holds the stack, and every resume or cancel of it goes through the site's
+    own entries, which make the stack current. So frames are pushed and popped in order on the
+    stack they were reserved on, and a resume finds its frames at the top.
+  - *The stack* (`Backend2/Lower.lean`, `stack push`, `stack pop`): a header (the next free word,
+    the chunk's end, the chunk) and a first chunk of 256 words, one allocation; a frame that does
+    not fit opens a chunk of 4096 words or its own size, linked to the one before, and freed when
+    its first frame is popped. The top frame is the free word less the frame's words: one
+    recursion's frames are one machine's, of one size.
+- **The scheduler** (`lib/async.bc`). `run_until_empty` moves the queue's slots, a list the last
+  queued first, into an array in queued order once, and each round resumes each pending task in
+  its slot in place (`array_replace`): no list node per `await`, and a queue slot is a task's two
+  words. `push`, `queue` and the types are unchanged; `run_logged` and `run_in` keep their lists.
+  The old backend's `array_replace` (`Core/Arrays.lean`, `replaceV`: `(λold. store c x; old)
+  (load c)`) is a swap at the slot, its copy and drop cancelled as the axiom `swap`'s are
+  (`Backend/Clos/Convert.lean`, `Op.swapSlot`, whose contents keep their type).
+- **Frame pointers.** The native target's typed mode marks each function `"frame-pointer"="all"`,
+  so a profiler's backtraces reach past `bc_entry` (#664's method note). On the three async
+  benchmarks it costs nothing measurable (CPU time, median of 9: 302.7 against 303.4 ms, 105.2
+  against 105.5, 45.7 against 46.7).
+
+### Checked, tested, trusted
+
+- **Checked** in the conversion's facts: one recursion's machine per stack (`stackedOf`: every call
+  point's callee classes non-empty and the machine's own), one owner (`stackOps`: every node of
+  the operation a stored BOXED-κ site, none `unr`; `κ` affine or linear by the kernel's typing),
+  and the frame's state type against the first conversion's. Checked at run time by the LIR
+  interpreter (`Backend2/Interp.lean`), on every program the new backend compiles at the gate:
+  a stack swapped in is a live stack; a frame is pushed on the current stack and popped only as
+  its top and unwritten; `framePut` writes only an unwritten frame; `frameTop` takes the top of a
+  non-empty current stack; a `κ` region is written only when empty and taken only when written; a
+  stack is freed only when it holds no frame and an empty region and is not current.
+- **Tested** at the LIR interpreter, the word IR, Wasm and natively, against the reference
+  interpreter's goldens: the async corpus, and stress programs for the stack —
+  `async-stack-deep` (two linear recursions 1200 and 150 deep, awaiting on the way down and back,
+  growing into new chunks and out of them, interleaved with a tree task in one queue),
+  `async-stack-cancel` (a task cancelled 400 levels deep, each level owning a cell its drop glue
+  frees, and one cancelled at its first `await`), `async-stack-nested` (a recursive task that
+  spawns and drives a recursive task at each level, two stacks switched at different depths) and
+  `async-unr-site` (above).
+- **Trusted**: the native and Wasm code does not check the frame stack at run time. That every
+  frame it touches is live, of the right machine, and taken by the `k` it belongs to rests on the
+  conversion emitting code with the shape the invariant above assumes, as the rest of the backend's
+  lowering is trusted (no compiler proof, decision #15). A proof of the invariant over an abstract
+  model of the stack operations is assessed in #664 (tractable as a design proof; linking it to the
+  emitted code is the compiler proof the project does not build).
+- **Not leak-free.** Core's `adequacyC` proves the elaborated term leak-free, but this lowering
+  does not keep that. A task that is dropped rather than cancelled leaks its continuation's cell
+  and its stack, as §49's state cells already do on a dropped suspension. Nothing checks or tests
+  for this: the LIR interpreter's checks cover use, not eventual release, and no corpus program
+  drops a task. Whether a kernel-typed program can reach it is open (#671).
+
+### Facts read
+
+The nodes' former (`effHandleVB`), clause kinds (`ks`) and qualifiers (`E`); the machine
+operations (§49); and, after a first conversion, the layouts' recursive classes (§35), each call
+point's callee's suspended computations' classes (`MPoint.outVar`, `suspCodes`) and the machines
+whose cell is passed on (§50, `threadedOf`). The backend guesses neither the frames' owner (the
+BOXED-κ site's `κ`, its one owner) nor the frame set (one machine's levels, by the layouts).
+
+### Programs
+
+The 380 programs of §49 at their goldens at the LIR interpreter, the word IR, Wasm and natively.
+`async-tree` and `async-mapreduce` are the corpus's and benchmarks' programs with a stack machine.
+The bench rows, the new backend natively (CPU time, median of 7, interleaved, the benchmarks'
+arguments; #664's method):
+
+| benchmark (`args`) | before: ms, ns per `await`, allocations per `await` | after | Rust | after / Rust |
+|---|---|---|---|---|
+| `async-tree` (`1048576 28`) | 1504, 51.2, 3.0 | 254, 8.7, 0 (87 in all) | 111 (its walk iterative) | 2.30× |
+| `async-tree-iter` (`1048576 28`) | 722, 24.6, 2.0 | 155, 5.3, 0 (115 in all) | 109 | 1.42× |
+| `async-tree-boxed` (`1048576 4`) | 251, 59.9, 3.0 | 42, 9.9, 0 (15 in all) | 314 (`Box::pin` a level) | 0.13× |
+
+`async-tree-iter` has no stack machine, so its task keeps `κ` by value (26 words) and the
+scheduler moves it into and out of its slot; with `κ` in a cell of its own it ran at 0.95×, one
+allocation per task more. The old backend, with the array scheduler and `Op.swapSlot`:
+`async-tree` 1625 → 1263 ms, `async-tree-iter` 916 → 199, `async-tree-boxed` 251 → 211.
+
+Counts. `corpus/counts-backend2.expected` rises in the six programs that run `run_until_empty`
+and nowhere else; each row's note says why:
+
+| program | main (allocs indirect copies loads stores bounds) | now |
+|---|---|---|
+| `async-bank-inbox` | 26 0 0 396 388 0 | 11 0 0 450 442 16 |
+| `async-cancel` | 10 0 0 113 110 0 | 5 0 0 137 134 6 |
+| `async-lend-slots` | 22 0 0 294 282 0 | 7 0 0 334 322 16 |
+| `async-map` | 27 0 0 245 222 0 | 18 0 0 251 228 10 |
+| `async-mapreduce` | 54 0 1 498 480 0 | 22 0 1 489 435 30 |
+| `async-scheduler` | 24 0 0 398 392 0 | 5 0 0 446 440 20 |
+
+`bounds` rises by a check per slot visit: `array_replace` tests its index, and no checked fact
+puts a counted loop's index in range of an array the loop moves elements of (§46 covers a read
+through a view, and at a unique view the split's own test stays): *Open*. `loads` and `stores`
+rise where the task is held by value: the array's fill and the passes into and out of it cost a
+pass more than the list's, and a round moves each task as the list did. `corpus/counts.expected`
+(the old backend) rises in the same six, with notes. `kernel-counts.expected` and
+`corpus/erasure-backend2.expected` are unchanged.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `Core/`, `Paper/`, `Support/`, the checker, the
+elaboration or a kernel program. The LIR gains `Op.stackSwap`, `stackFree`, `framePush`,
+`frameTop`, `framePut`, `framePop`, `stackNew`, `kappaPut`, `kappaTake` and `unreachable`, at the LIR interpreter, the word IR, Wasm and
+natively; the old backend's closure IR gains `Op.swapSlot`. Every output, golden and exit status is
+unchanged on both backends.
+
+### Open
+
+- **The in-range fact for a moving walk.** A counted loop over an array's length that moves each
+  slot out and back (`array_replace`, or a unique view's split) keeps its index test: the fact
+  that the index is below the array's length at a unique view (§46's `n − i`) is not proved. Until
+  it is, the array scheduler's `bounds` count stays up.
+- **`κ` by value at a site with no stack.** A non-recursive task is its continuation by value
+  (`async-tree-iter`: 26 words moved per slot visit); a cell of its own would be one allocation per
+  task.
+- **A leaf level reserves its frame.** A level that answers without a call or a `perform` still
+  pushes and pops its frame; reserving it at the level's first point needs §50's slot.
+- **Other recursions keep cells** (§49, §50): a recursion through several machines, one whose
+  levels call other machines, one at an operation that a site does not keep boxed (a generator).
+- **The register is one word.** With threads (decision: threads are required) the current stack is
+  per thread.
+- **A dropped task leaks** (affine, not cancelled): its cell and its stack, as §49's state cells
+  do. See *Checked, tested, trusted* and #671. Under the finaliser algebra, dropping a suspension
+  that holds resources would have to run its cancel path, which makes `drop` control flow that can
+  raise. That is a decision for where the kernel types the dropped value, not a backend patch.
+- **The array scheduler's bounds checks.** `array_replace` checks its index; no fact puts a counted
+  loop's index in range of an array it does not read through a view (§46).
+- `run_logged` and `run_in` still build list nodes per round.
+- **A chunk boundary.** A recursion that goes back and forth across the end of a chunk allocates
+  and frees the next chunk each time it crosses; a spare chunk kept on the stack would end it.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -9051,12 +9284,26 @@ the old backend. Entry 49 (§50) is implemented in `Backend/Flat/Syntax.lean` (`
 `Backend2/Convert.lean` (`Frame.cellF`, `withMachineK`, `threadedOf`, `stepInline`),
 `Backend2/Driver.lean` (`lirOf`'s second conversion, `framesLine`) and
 `scripts/native-facts.sh`; no change to `CDerives`, `Core/`, `Paper/`, `Support/`, the checker or
-the old backend's output.
+the old backend's output. Entry 51 (§52) is implemented in `Backend2/Convert.lean`
+(`genKap`'s region and swap, `convDrive`'s site stack, `Frame.stackF`, `Frame.stackH`,
+`genStackMach`, `stackedOf`), `Backend2/Driver.lean` (`stackOps`, `lirOf`), `Backend2/Syntax.lean`,
+`Interp.lean`, `Layout.lean`, `Lint.lean`, `Lower.lean` and `Print.lean` (the stack operations and
+the stack's push and pop), `Backend/Native/Lower.lean` (frame pointers), `Backend/Clos/`
+(`Op.swapSlot`) and `lib/async.bc`; no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the
+checker.
 
 ---
 
 ## Changelog
 
+- **1.01** (2026-10-22) — §52 (#664, option B): a task owns a stack. At a BOXED-κ site with a
+  stack `κ`'s environment is the stack's region, written in place; a recursion whose levels call only themselves and
+  suspend only at boxed stored sites keeps its levels' states as first-order frames on its task's
+  stack, and a resume runs from the top frame down instead of entering every level; the scheduler
+  resumes its slots in an array in place. `async-tree` runs at 2.30× Rust (13.6× before),
+  `async-tree-iter` at 1.42× (6.65×), `async-tree-boxed` at 0.13× (0.80×), with no allocation per
+  `await`; the six `run_until_empty` programs' counts rise (`bounds`, and loads and stores). The native typed mode keeps frame pointers. The old backend's `array_replace` moves the
+  old element (`Op.swapSlot`). No output, golden or status changes.
 - **1.00** (2026-10-22) — §51 (#564, R-1): `[handle-last]`, the kernel rule `effHandleL` for a
   clause that works on the argument, then resumes `κ` in tail position or cancels it and runs an
   exit, with `κ`'s cancel its unwind finaliser while it works; the handled row may hold `Div`. Its

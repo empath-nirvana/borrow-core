@@ -26,12 +26,12 @@ array-refs 5 0 0 8 8 1
 array-replace 2 0 0 12 12 5
 array-sum 1 0 0 3000 3000 2024
 ascii-upper 1 0 0 4285 4178 192
-async-bank-inbox 26 0 0 396 388 0
-async-cancel 10 0 0 113 110 0
-async-lend-slots 22 0 0 294 282 0
+async-bank-inbox 11 0 0 450 442 16 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
+async-cancel 5 0 0 137 134 6 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
+async-lend-slots 7 0 0 334 322 16 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
 async-logged 22 0 0 206 188 0
-async-map 27 0 0 245 222 0
-async-mapreduce 54 0 1 498 480 0
+async-map 18 0 0 251 228 10 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
+async-mapreduce 22 0 1 489 435 30 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value; the recursion's frames on its task's stack, κ in the stack's region
 async-r1-cancel 4 0 0 5 5 0
 async-r1-cancel-finaliser-writes 1 0 0 2 2 0
 async-r1-drain 1 0 0 4 4 0
@@ -40,10 +40,14 @@ async-r1-generator 1 0 0 4 4 0
 async-r1-local-borrows 2 0 0 7 7 0
 async-r1-nested 2 0 0 4 4 0
 async-race 3 0 0 3 3 0
-async-scheduler 24 0 0 398 392 0
+async-scheduler 5 0 0 446 440 20 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
 async-scoped 25 0 0 263 253 0
+async-stack-cancel 406 0 0 4917 2495 0 # SPEC §52 stress: each level's cell, freed by the cancel
+async-stack-deep 1364 4750 0 268155 230102 14412 # SPEC §52 stress: each level's cell; a resume dispatches between the two task bodies' codes
+async-stack-nested 13 0 0 1251 1087 40 # SPEC §52 stress: the inner tasks' stacks
 async-timers 40 5 0 398 380 0
 async-try-join 28 0 0 378 372 0
+async-unr-site 4 0 0 408 328 18 # SPEC §52: an unr site does not switch stacks
 async-workers-scoped 43 0 1 756 740 0
 axes/borrow-across-loop 2 0 0 30 13 4
 axes/codata-coeffects 2 0 0 27 10 16

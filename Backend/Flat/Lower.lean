@@ -538,7 +538,7 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       let dr ← dropVals a old
       let s := if dr.isEmpty then [] else s ++ dr
       return s ++ (← storeCell (← vty l) p (locs (← vals v))) ++ (← emit d [])
-  | .swap, [l, v], d => do
+  | .swap, [l, v], d | .swapSlot, [l, v], d => do
       let a ← locElem (← vty l)
       let m := (← vals l).headD 0
       let (s, old) ← loadCell (← vty l) (.loc m) (← words a)

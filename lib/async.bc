@@ -69,52 +69,76 @@ fn rev[T](n: i32, xs: List[T]) -> List[T] =
   };
   match unroll cur { inl u -> acc | inr (x, r) -> acc }
 
--- One round over `n` slots in order: each pending task resumed once. Answers the slots reversed,
--- and whether a task is still pending.
-fn round[A](n: i32, xs: Slots[A]) -> Slots[A] * bool =
-  let mut acc = (roll inl () : Slots[A]);
-  let mut cur = xs;
-  let mut pending = false;
-  for _ in 0..n {
-    match unroll cur {
-      inl u -> cur = (roll inl () : Slots[A])
-    | inr (s, r) ->
-        cur = r;
-        match s {
-          inl v -> acc = (roll inr (inl v, acc) : Slots[A])
-        | inr t ->
-            match resume(t) {
-              inl v -> acc = (roll inr (inl v, acc) : Slots[A])
-            | inr t2 -> pending = true; acc = (roll inr (inr t2, acc) : Slots[A])
-            }
-        }
-    }
-  };
-  match unroll cur { inl u -> (acc, pending) | inr (s, r) -> (acc, pending) }
+-- A queue's slot while it runs: a task that finished, with its value, or one still pending; `inl ()`
+-- while its task is taken out to be resumed.
+type Slot[A] = 1 + (A + Task[A])
 
--- The values of `n` slots, in order; a task still pending is cancelled.
-fn values[A](n: i32, xs: Slots[A]) -> List[A] =
-  let mut acc = (roll inl () : List[A]);
+-- The `n` slots of a list, the last queued first, moved into an array in the order they were
+-- queued: one allocation, and the list's nodes freed.
+fn slots_of[A](n: i32, xs: Slots[A]) -> array Slot[A] =
+  let mut a = array_new[Slot[A]] (n, !{ i -> inl () });
   let mut cur = xs;
-  for _ in 0..n {
+  for k in 0..n {
     match unroll cur {
       inl u -> cur = (roll inl () : Slots[A])
-    | inr (s, r) ->
-        cur = r;
-        match s { inl v -> acc = (roll inr (v, acc) : List[A]) | inr t -> cancel(t); () }
+    | inr (s, r) -> cur = r; let (b, _) = array_replace[Slot[A]] (a, n - 1 - k, inr s); a = b
     }
   };
-  match unroll cur { inl u -> rev(n, acc) | inr (s, r) -> rev(n, acc) }
+  match unroll cur { inl u -> a | inr (s, r) -> a }
+
+-- One round over the `n` slots in order, in place: each pending task resumed once, and put back in
+-- its slot. Answers whether a task is still pending. Nothing is allocated.
+fn round[A](n: i32, xs: array Slot[A]) -> array Slot[A] * bool =
+  let mut a = xs;
+  let mut pending = false;
+  for i in 0..n {
+    let (b, s) = array_replace[Slot[A]] (a, i, inl ());
+    match s {
+      inl o -> match o {
+        inl u -> a = b
+      | inr e -> match e {
+          inl v -> let (c, _) = array_replace[Slot[A]] (b, i, inr (inl v)); a = c
+        | inr t -> match resume(t) {
+            inl v -> let (c, _) = array_replace[Slot[A]] (b, i, inr (inl v)); a = c
+          | inr t2 ->
+              pending = true;
+              let (c, _) = array_replace[Slot[A]] (b, i, inr (inr t2)); a = c
+          }
+        }
+      }
+    | inr x -> a = b
+    }
+  };
+  (a, pending)
+
+-- The values of the `n` slots, in order, read from the last; a task still pending is cancelled
+-- (`run_until_empty` leaves none).
+fn values[A](n: i32, xs: array Slot[A]) -> List[A] =
+  let mut acc = (roll inl () : List[A]);
+  let mut a = xs;
+  for k in 0..n {
+    let (b, s) = array_replace[Slot[A]] (a, n - 1 - k, inl ());
+    a = b;
+    match s {
+      inl o -> match o {
+        inl u -> ()
+      | inr e -> match e { inl v -> acc = (roll inr (v, acc) : List[A]) | inr t -> cancel(t); () }
+      }
+    | inr x -> ()
+    }
+  };
+  acc
 
 -- Run the queue round robin until no task is pending: the tasks' values, in the order they were
--- queued. The rounds are unbounded, so this loops (div, SPEC §14).
+-- queued. The slots are an array, resumed in place, so a round allocates nothing. The rounds are
+-- unbounded, so this loops (div, SPEC §14).
 fn run_until_empty[A](q: Queue[A]) -> List[A] =
   let (n, s) = q;
-  let mut slots = rev(n, s);
+  let mut slots = slots_of(n, s);
   let mut more = true;
   while more {
     let (b, p) = round(n, slots);
-    slots = rev(n, b);
+    slots = b;
     more = p
   };
   values(n, slots)

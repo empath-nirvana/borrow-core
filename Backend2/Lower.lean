@@ -38,6 +38,9 @@ inductive Helper where
   | reCopy (c d : Nat)
   /-- The dispatcher of a closure class, at its component `j`. -/
   | apply (cls j : Nat)
+  /-- The task stack's push and pop (SPEC §52), on the register's address. -/
+  | stackPush
+  | stackPop
   deriving BEq, Hashable, Inhabited
 
 structure LCtx where
@@ -165,6 +168,10 @@ def inFnF (params : Nat) (act : LM α) : LM (α × Nat × Nat × List Nat) := do
 def inFn (params : Nat) (act : LM α) : LM (α × Nat × List Nat) := do
   let (a, n, _, ps) ← inFnF params act
   pure (a, n, ps)
+
+/-- The words of a stack's first chunk, and of each later one (SPEC §52). -/
+def stackChunk0 : Nat := 256
+def stackChunk : Nat := 4096
 
 /-- Where a term's words go: locals, returned (padded to `k` words), or bound to a variable. -/
 inductive Dest where
@@ -646,6 +653,60 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
       return (← boundTick) ++ (← boundTick) ++ [.ite ok (l₁ ++ l₂ ++ s₁ ++ s₂) []] ++ (← emit d [.loc b, .loc k])
     | _, _, _ => throw "word IR: swap of a non-family"
   | .roll | .unroll => do emit d (locs (← arg 0))
+  | .stackSwap k => do
+    let r := Exp.data ((← read).staticBase + 8 * k)
+    let h := (← arg 0).headD 0
+    let t ← fresh1
+    return [.set t (.load r 0), .store r 0 (.loc h)] ++ (← emit d [.loc t])
+  | .stackFree => do
+    let h := Exp.loc ((← arg 0).headD 0)
+    return [.ite (eqz64 h) [] [.free h]] ++ (← emit d [])
+  | .framePush _ k => do
+    let r := Exp.data ((← read).staticBase + 8 * k)
+    let fn ← child n 0
+    let w := max 1 ((← L).cellWords.getD ((← L).r fn) 1)
+    let t ← fresh1
+    return [.call [t] (← helper .stackPush) [r, .c64 w.toUInt64]] ++ (← emit d [.loc t, .loc t])
+  | .frameTop _ k => do
+    let r := Exp.data ((← read).staticBase + 8 * k)
+    let fn ← child n 0
+    let w := max 1 ((← L).cellWords.getD ((← L).r fn) 1)
+    let t ← fresh1
+    return [.set t (.op (.bin .w64 .sub) [.load (.load r 0) 0, .c64 (8 * w).toUInt64])] ++
+      (← emit d [.loc t, .loc t])
+  | .framePut => do
+    let pn ← argN 0
+    let f := (← arg 0).headD 0
+    if ← zeroCell pn then return ← emit d []
+    return (← storeCell pn (.loc f) (locs (← arg 1))) ++ (← emit d [])
+  | .framePop k => do
+    let r := Exp.data ((← read).staticBase + 8 * k)
+    let f := (← arg 0).headD 0
+    return [.call [] (← helper .stackPop) [r, .loc f]] ++ (← emit d [])
+  | .unreachable => return [.trap] ++ (← emit d (zeros (← wordsN n)))
+  | .stackNew s => do
+    -- A stack's header (bump, end, chunk), the site's `κ` region, then its first chunk (header and
+    -- words), as `stack push` makes one with no region.
+    let w ← match (← L).regions[s]? with
+      | some r => wordsN r
+      | none => pure 0
+    let h ← fresh1
+    let base := 8 * (3 + w)
+    return [.set h (.alloc (.c64 (6 + w + stackChunk0).toUInt64)),
+      .store (.loc h) 0 (add64 (.loc h) (.c64 (base + 24).toUInt64)),
+      .store (.loc h) 1 (add64 (.loc h) (.c64 (base + 24 + 8 * stackChunk0).toUInt64)),
+      .store (.loc h) 2 (add64 (.loc h) (.c64 base.toUInt64)),
+      .store (.loc h) (3 + w) (.c64 0), .store (.loc h) (4 + w) (.c64 0),
+      .store (.loc h) (5 + w) (.c64 0)] ++ (← emit d [.loc h])
+  | .kappaPut s => do
+    let some _ := (← L).regions[s]? | throw "word IR: a κ region with no node"
+    let h := (← arg 0).headD 0
+    return storeAt (.gep (.loc h) (.c64 24)) 0 (locs (← arg 1)) ++ (← emit d [])
+  | .kappaTake s => do
+    let some r := (← L).regions[s]? | throw "word IR: a κ region with no node"
+    let h := (← arg 0).headD 0
+    let (st, vs) ← loadAt (.gep (.loc h) (.c64 24)) 0 (← wordsN r)
+    return st ++ (← emit d ([.loc h] ++ locs vs))
   | .litByte => do
     let o := (← arg 0).headD 0
     let cnt := (← arg 1).headD 0
@@ -926,6 +987,43 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
       let (s, vs) ← reVals 64 c n (List.range wc)
       pure (s ++ [.ret vs])
     pure { name := "reborrow", params := wc, results := wn, locals := nloc, body := body ++ [.trap], ptrs }
+  | .stackPush =>
+    -- (register, words) → the frame's address. A stack is its header (bump, end, chunk) and its
+    -- first chunk; a chunk is its header (the previous chunk, its bump and end) and its words. A
+    -- chunk that cannot hold the frame is followed by a new one.
+    let (r, w, h, b, c, sz) := (0, 1, 2, 3, 4, 5)
+    let st (a : Exp) (o : Nat) (v : Exp) : Stmt := .store a o v
+    let mk : List Stmt :=
+      [.set h (.alloc (.c64 (6 + stackChunk0).toUInt64)),
+       st (.loc h) 0 (add64 (.loc h) (.c64 48)),
+       st (.loc h) 1 (add64 (.loc h) (.c64 (48 + 8 * stackChunk0).toUInt64)),
+       st (.loc h) 2 (add64 (.loc h) (.c64 24)),
+       st (.loc h) 3 (.c64 0), st (.loc h) 4 (.c64 0), st (.loc h) 5 (.c64 0),
+       st (.loc r) 0 (.loc h)]
+    let grow : List Stmt :=
+      [.ite (ltu64 (.loc w) (.c64 stackChunk.toUInt64)) [.set sz (.c64 stackChunk.toUInt64)] [.set sz (.loc w)],
+       .set c (.alloc (add64 (.loc sz) (.c64 3))),
+       st (.loc c) 0 (.load (.loc h) 2), st (.loc c) 1 (.loc b), st (.loc c) 2 (.load (.loc h) 1),
+       st (.loc h) 2 (.loc c), .set b (add64 (.loc c) (.c64 24)),
+       st (.loc h) 1 (add64 (.loc b) (mul64 (.loc sz) (.c64 8)))]
+    let body : List Stmt :=
+      [.set h (.load (.loc r) 0), .ite (eqz64 (.loc h)) mk [],
+       .set b (.load (.loc h) 0),
+       .ite (ltu64 (.load (.loc h) 1) (add64 (.loc b) (mul64 (.loc w) (.c64 8)))) grow [],
+       st (.loc h) 0 (add64 (.loc b) (mul64 (.loc w) (.c64 8))),
+       .ret [.loc b]]
+    pure { name := "stack push", params := 2, results := 1, locals := 4, body }
+  | .stackPop =>
+    -- (register, frame): the frame popped; a chunk left empty, after the first, is freed.
+    let (r, f, h, c) := (0, 1, 2, 3)
+    let body : List Stmt :=
+      [.set h (.load (.loc r) 0), .set c (.load (.loc h) 2),
+       .ite (and32 (eq64 (.loc f) (add64 (.loc c) (.c64 24))) (.op (.rel .w64 .ne) [.load (.loc c) 0, .c64 0]))
+         [.store (.loc h) 0 (.load (.loc c) 1), .store (.loc h) 1 (.load (.loc c) 2),
+          .store (.loc h) 2 (.load (.loc c) 0), .free (.loc c)]
+         [.store (.loc h) 0 (.loc f)],
+       .ret []]
+    pure { name := "stack pop", params := 2, results := 0, locals := 2, body }
   | .apply cls j =>
     let some rn := ((match L.sh cls with | .clos _ _ r => r | _ => [])[j]?) | throw "word IR: an apply's class"
     let (k, param, _) ← classOf cls

@@ -206,7 +206,7 @@ def applyOp : Op → List CV → IM CV
       deepDrop objFuel c
       setObj a (.cell v)
       pure .unit
-  | .swap, [l, v] => do
+  | .swap, [l, v] | .swapSlot, [l, v] => do
       let (a, c) ← cellOf l
       setObj a (.cell v)
       allocObj (.pair l c)
