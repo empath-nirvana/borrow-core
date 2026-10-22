@@ -313,6 +313,10 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
     if a ≥ staticAt then return v
     freeObj a 1
     pure v
+  | .release, [.loc a] => do
+    if ← isWritten a then bad "a release of a written cell"
+    freeObj a 1
+    pure .unit
   | .swap, [.loc a, v] => do
     let old ← readAt a
     writeAt a (some v)

@@ -438,6 +438,10 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let (s, vs) ← loadCell pn a (← wordsN (← contents pn))
     let rel := if (← get).slots.contains al then Stmt.unslot a else .free a
     return s ++ [rel] ++ (← emit d (locs vs))
+  | .release => do
+    let pn ← argN 0
+    if ← zeroCell pn then return ← emit d []
+    return [.free (.loc ((← arg 0).headD 0))] ++ (← emit d [])
   | .swap => do
     let pn ← argN 0
     let m := (← arg 0).headD 0

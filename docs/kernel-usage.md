@@ -95,7 +95,12 @@ derived node `nuEta` with the `bind` of `unfold step` it calls, and a walk's `re
 and `effThen` and the unwinding borrows on the abort path, for the 50 effectful programs whose
 handlers are abortive or directly called and that have no `bounded_fix`: 272 programs in all; `effSub`,
 `effPerform`, `effRaise`, `effLet`, `effThen` and the `…U` borrows move to A. N4's loop part (#652,
-SPEC §48) adds `bounded_fix`'s type (its machine step), in 43 programs of the census.
+SPEC §48) adds `bounded_fix`'s type (its machine step), in 43 programs of the census. N3 (#657,
+SPEC §49) adds the state machines at stored-continuation sites: the machine operations from the
+nodes' kinds and the direct calls' facts, `C.eff`'s suspensions and each operation's cancel row,
+`effHandleV`/`effHandleVB` as drives whose clauses run on the argument and `κ`, `effPerform` of a
+machine operation as a suspension, `lendR`'s relaxed lend in a machine, and the task body of a
+site by its handled computation's `use` keys: the 64 programs that were outside, 380 in all.
 
 ## 2. Classes
 
@@ -208,12 +213,12 @@ baseline).
 | 86 | [`nuOut`](../Core/Fundamental.lean#L379) | §7, §45 | 204 | 2434 | 2604 | as `nuIn` | **A** | N6 |
 | 87 | [`unfoldN`](../Core/Fundamental.lean#L383) | §7, §45 | 197 | 634 | 663 | the new backend reads `C` and `S` (`genUnfold`) and that a `bind` binds `unfold step` (`isUnfoldApp`, `Backend2/Convert.lean:903`), so a `nuEta` over it is the call `f s` | **A** | N6 |
 | 88 | [`effSub`](../Core/Fundamental.lean#L386) | §19 | 151 | 3024 | 3844 | the new backend reads `S` and `S'`: the payload of `S`'s abortive operations re-injected at `S'`'s (`coerceRes`, `Backend2/Convert.lean:1138`; SPEC §47); the old backend (the default until N6) re-derives the rows by the 0-CFA (`SFacts.of`, `Backend/Clos/Capture.lean:469`) | **A** | N6 (the old backend deleted) |
-| 89 | [`effPerform`](../Core/Fundamental.lean#L389) | §19 | 73 | 269 | 284 | the new backend reads `S` and the signature `o`: a direct call of the clause's work where the facts license it (`Backend2/Convert.lean:1152`, `CState.works`; SPEC §47); any other `perform` leaves its program with the old backend, which re-derives the row by the 0-CFA and control vs. abortive from the prim (`Ops.of`, `Capture.lean:178`) | **A** | N3 (the stored-continuation sites); the `tail+state` and `resume-or-cancel` rules (SPEC §47 *Open*) |
+| 89 | [`effPerform`](../Core/Fundamental.lean#L389) | §19 | 73 | 269 | 284 | the new backend reads `S` and the signature `o`: a direct call of the clause's work where the facts license it (`CState.works`; SPEC §47), otherwise, at a machine operation (`machineOps`), a suspension of the machine at its continuation (`performK`, `Backend2/Convert.lean`; SPEC §49); the old backend (the default until N6) re-derives the row by the 0-CFA and control vs. abortive from the prim (`Ops.of`, `Capture.lean:178`) | **A** | the `tail+state` and `resume-or-cancel` direct rules (SPEC §47 *Open*), zero-cost upgrades of programs §49 compiles |
 | 90 | [`effRaise`](../Core/Fundamental.lean#L394) | §19 | 108 | 469 | 649 | the new backend reads `S` and `o`: the payload at the operation's summand, a branch to the handler's join (`Backend2/Convert.lean:1144`; SPEC §47); the old backend (the default until N6) re-derives the row (`UFacts.solve`, `Backend/Clos/Unwind.lean:386`) | **A** | N6 |
 | 91 | [`effLet`](../Core/Fundamental.lean#L399) | §19 | 129 | 784 | 977 | the new backend reads the masks and the row `S`: `N` on a value, the abort handed on and `N`'s context dropped (`Backend2/Convert.lean:1126`; SPEC §47); the old backend (the default until N6) re-derives copies and drops (`plan2`) and the row | **A** | N6 |
 | 92 | [`effThen`](../Core/Fundamental.lean#L412) | §19, §27 | 79 | 279 | 342 | the new backend reads the masks and `S`, `SM`, `SD`: `N` on a value, on an abort the finaliser then the abort, or its own (`Backend2/Convert.lean:1166`; SPEC §47); the old backend re-recognises the frame (`markUbinds`, `Convert.lean:463`) | **A** | N6 (`markUbinds` deleted) |
-| 93 | [`effHandleV`](../Core/Fundamental.lean#L427) | §19, §24 | 148 | 523 | 606 | the new backend reads `n`, `E`, `S`, the masks, the clause kinds `ks` and the clauses of the pair in place: `abortive` clauses at the handler's join, `tail` clauses called directly where `directFacts` (`Backend2/Driver.lean:64`) licenses them from `ks`, `handlerNames` and `cond2B` at `Checked.flows` (`convHandle`, `Backend2/Convert.lean:1322`; SPEC §47); a clause of another kind leaves the program with the old backend, which re-derives the kinds (`tailClause?`, `Capture.lean:625`) and drops the qualifiers (`Convert.lean:740`); `inside` and `site` are not read but for `main_div_error` (`Checked.exitsOnDivError`) | **B** | N3 (`once`, `stored`: κ's cell by qualifier); the `tail+state` and `resume-or-cancel` rules (SPEC §47 *Open*) |
-| 94 | [`effHandleVB`](../Core/Fundamental.lean#L438) | §28 | 16 | 29 | 37 | as `effHandleV`, in the new backend; every corpus program with one has a `stored` clause (N3); the box lifetime `d` is not read | **B** | N3 (stored continuations) |
+| 93 | [`effHandleV`](../Core/Fundamental.lean#L427) | §19, §24 | 148 | 523 | 606 | the new backend reads `n`, `E`, `S`, the masks, the clause kinds `ks` and the clauses of the pair in place: `abortive` clauses at the handler's join, `tail` clauses called directly where `directFacts` (`Backend2/Driver.lean:64`) licenses them from `ks`, `handlerNames` and `cond2B` at `Checked.flows` (`convHandle`, `Backend2/Convert.lean:1322`; SPEC §47); a clause of another kind leaves the program with the old backend, which re-derives the kinds (`tailClause?`, `Capture.lean:625`) and drops the qualifiers (`Convert.lean:740`); `inside` is not read; `site` is read for `main_div_error` (`Checked.exitsOnDivError`) and its handler's name (a task body's key, SPEC §49). Since N3 (SPEC §49) a node with a machine operation is a drive: the handled computation a machine of its own, its outcome taken apart by the node's fields, a suspension at one of its operations its clause on the argument and `κ` (by `E`'s qualifier: `kTy`, `cancelTy` at `fs`), one at `Σ`'s forwarded (`convDrive`) | **B** | the qualifiers' cells (κ's linear cancel branch is `⊤`, read); the `tail+state` and `resume-or-cancel` direct rules (SPEC §47 *Open*) |
+| 94 | [`effHandleVB`](../Core/Fundamental.lean#L438) | §28 | 16 | 29 | 37 | as `effHandleV`, in the new backend, a drive (SPEC §49); the box lifetime `d` is not read | **B** | the box lifetime (N5, storage from lifetimes) |
 | 95 | [`effHandleT`](../Core/Fundamental.lean#L451) | §14, §19 | 0 | 0 | 0 | — | **C** | B1/B2 (`tick`'s handlers): no checker producer and no typed Core program |
 | 96 | [`letPoly`](../Core/Fundamental.lean#L463) | §24 | 0 | 0 | 0 | `polyLet?` (`Convert.lean:606`) recognises its erasure; rows re-derived (`Backend/Clos/Poly.lean`) | **C** | rule table: an elaboration rule for a let used at several rows (pipeline-architecture A11), else a deletion candidate. no checker producer; reached only by the kernel programs `hof-two-rows`, `poly-id` |
 
@@ -221,9 +226,9 @@ baseline).
 
 | # | rule | §  | progs | static | expanded | read by the backend | class | what would change it |
 |---|---|---|---|---|---|---|---|---|
-| 97 | [`lendR`](../Core/PinDerives.lean#L483) | §29 | 10 | 16 | 16 | erasure only (`withborUV`/`lendCb`, no recogniser); the PinLaw lend is not read | **B** | N3 (state machines at stored-continuation sites) |
+| 97 | [`lendR`](../Core/PinDerives.lean#L483) | §29 | 10 | 16 | 16 | the old backend compiles the erasure (`withborUV`/`lendCb`, no recogniser); the new backend reads the node: the owner lent as the callback's view, the callback converted in the machine with the finaliser `d` on the owner at a cancel, the owner's cell where it was (its location in the machine's state; SPEC §29, §49); the PinLaw lend is not read | **B** | the PinLaw lend (an assertion's reading, `docs/unsafe.md`) |
 | 98 | [`lendLoopR`](../Core/PinDerives.lean#L504) | §29 | 0 | 0 | 0 | — | **C** | #632 (LoopLend D3) / async U6 (`docs/async-capabilities.md:567`): LoopLend should emit it instead of rebuilding per-turn lends. no checker producer |
-| 99 | [`nilDead`](../Core/PinDerives.lean#L520) | §29 | 10 | 16 | 16 | erasure only (identity) | **A** | — |
+| 99 | [`nilDead`](../Core/PinDerives.lean#L520) | §29 | 10 | 16 | 16 | erasure only (identity); the new backend converts the term at the empty context, the slots consumed (SPEC §49) | **A** | — |
 
 ## 5. Derived nodes and `use`
 
@@ -276,7 +281,7 @@ ones have their run facts (`Frontend/Check/Derived.lean`).
 | 134 | `C.top` | 2 | 12 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2); its two programs are effectful, outside the new backend's fragment | **B** | N2 |
 | 135 | `C.all` | 248 | 22488 | the new backend erases it from the LIR's types (SPEC §44, `ofU`); the lifetime it binds is not read | **B** | N5: lifetimes → storage |
 | 136 | `C.nu` | 204 | 46531 | no: types are erased; layout types are re-derived by unification (`Backend/Clos/Types.lean`, pipeline-architecture B2) | **B** | N4 |
-| 137 | `C.eff` | 154 | 36816 | the new backend reads each row's layers: `F_Σ R` is `R ⊕ P`, `P` the payload of `Σ`'s abortive operations (`ofC`, `Backend2/Types.lean:119`; SPEC §47); a non-abortive operation has no run-time content; the old backend (the default until N6) re-derives layout types by unification | **A** | N6 |
+| 137 | `C.eff` | 154 | 36816 | the new backend reads each row's layers: `F_Σ R` is `R ⊕ P`, `P` the payload of `Σ`'s abortive operations (`ofC`, `Backend2/Types.lean`; SPEC §47); a directly called operation has no run-time content; a machine operation a suspension, with its cancel row `fin` (`outcomeTy`, `ofFin`; SPEC §49); the old backend (the default until N6) re-derives layout types by unification | **A** | N6 |
 
 ## 7. Derived forms with no node
 
@@ -356,7 +361,9 @@ produces, and `withI`'s code kind; `foldOwn`, `foldReuse`; `litFn`, `divLit`; `u
   `stored` are N3's.
 - Finaliser frames from `effThen` (`markUbinds` goes with the old backend, N6).
 
-**N3 (state machines):** `lendR` (R1's PinLaw lend held across a suspension), `effHandleVB`.
+**N3 (state machines, SPEC §49, built):** machines at stored-continuation sites, `effHandleVB`
+and `lendR` in them; one code per task body by `use` keys. Left: the box lifetime of
+`effHandleVB` (N5), the PinLaw lend's reading.
 
 **N4 (codata and loops):** `nuIn`, `nuOut`, `unfoldN` and their instances (`fixD`, `unfoldS`, …),
 with `Collapse` reading the node. `iterate`, `divFuel` and `reify` once B2 produces them.

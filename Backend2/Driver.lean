@@ -83,23 +83,83 @@ def directFacts (c : Frontend.Check.Checked) : Std.HashMap UInt32 (List Bool) :=
     out := out.insert h.n ok
   return out
 
-/-- The LIR of a checked program, and what the conversion read. -/
+/-- **The program's machine operations**  `[spec §49]`: each control operation `(n, j)` whose
+clause at some `handle` node of `n` is neither abortive nor called where it is performed
+(`directFacts`): its `perform` suspends the computation, and the node's drive runs the clause on
+the argument and `κ`. Read off the nodes' kinds (`ks`, `classifyHandler_sound`) and the direct
+calls' facts. -/
+def machineOps (c : Frontend.Check.Checked) : MachSet := Id.run do
+  let nodes := hnodes Frontend.Check.copiesFuel c.t
+  let direct := directFacts c
+  let mut out : MachSet := {}
+  for h in nodes do
+    for (k, j) in h.ks.zipIdx do
+      unless k.kind == .abortive || (k.kind == .tail && (direct.getD h.n [])[j]? == some true) do
+        out := out.insert (h.n, j.toUInt32)
+  return out
+
+/-- The checker's cell classes (`Checked.cells`) at LIR types. -/
+def cellsOf (k : Backend.CheckedProg) : List (List LTy) :=
+  k.main.cells.map fun c => c.tys.filterMap fun t => (ofV (machineOps k.main) t).toOption
+
+/-- The codes of the suspended computations an outcome `o` (of `M`) may hold, by the layouts: the
+closure classes of each suspension's `k`.  `[spec §49]` -/
+def suspCodes (L : Lay.Layouts) (o : Var) (M : OutInfo) : List Nat := Id.run do
+  let n := L.node o
+  let .sum _ x := L.sh n | return []
+  let s := if (payTy M.pay).isSome then (match L.sh x with | .sum _ s => s | _ => x) else x
+  let mut leaves : List Nat := []
+  let mut cur := s
+  for i in [0:M.ms.length] do
+    if i + 1 == M.ms.length then leaves := leaves ++ [cur]
+    else match L.sh cur with
+      | .sum a b => leaves := leaves ++ [a]; cur := b
+      | _ => leaves := leaves ++ [cur]
+  return leaves.flatMap fun l => match L.sh l with
+    | .pair _ kn => (L.unionOf kn).toList
+    | _ => []
+
+/-- The LIR of a checked program, and what the conversion read. With state machines (SPEC §49), the
+layouts of the converted program decide the calls in tail position that close a loop
+(`tailPass`) and the machines whose state is a cell (`cellPass`). -/
 def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
   let c := k.main
   let (exts, ncaps, loops) ← match k.io with
     | none => pure ([], 0, false)
     | some m => pure (← extsOf m, m.caps.length, m.loopB.isSome)
   let ctx := c.ctx.map fun s => (s.ty, s.live)
-  let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c)
-  return ({ p with exits := c.exitsOnDivError }, st)
+  let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c) (machineOps c)
+  let p := { p with exits := c.exitsOnDivError }
+  if st.done.isEmpty then return (p, st)
+  -- A call in tail position whose callee's suspended computations may be the machine's own
+  -- closes a loop of tail calls, and passes its outcome on (SPEC §49, `tailPass`).
+  let (g, m) ← Lay.places p
+  let L₁ := Lay.resolve p g m (cellsOf k)
+  let loop (site : Nat × Var × OutInfo × Nat) : Bool :=
+    let (_, o, M, i) := site
+    let own := (st.done[i]?.map fun (_, kcs) => kcs.map (·.2)).getD []
+    (suspCodes L₁ o M).any own.contains
+  let (p, st) ← if st.tailSites.any loop then do
+      let (p₁, st₁) ← tailPass st loop
+      pure ({ p with fns := p₁.fns, codes := p₁.codes, ty := p₁.ty }, st₁)
+    else pure (p, st)
+  -- The machines whose suspended computation's class holds itself keep their state in a cell
+  -- (SPEC §49, `cellPass`), read off the layouts' recursive classes.
+  let (g, m) ← Lay.places p
+  let L := Lay.resolve p g m (cellsOf k)
+  let recursive (kc : Nat) : Bool := match L.codeClass[kc]? with
+    | some cls => L.isRec cls
+    | none => false
+  let (p₂, st₂) ← cellPass st recursive
+  return ({ p with fns := p₂.fns, codes := p₂.codes, ty := p₂.ty }, st₂)
 
-/-- **The effect erasure's postcondition**, for a program (`bcc lir --erasure`, SPEC §47): the LIR
-has no `handle` and no `perform`, so a program the new backend compiles has none left. The line
-counts, at a compiled program, the `handle`, `perform` and `raise` nodes the conversion erased
-(each `use` body once per key); at any program, the `handle` nodes left for the state machines
-(a clause of kind `once` or `stored`: the stored-continuation sites, N3) and those left by a rule
-not built (`tail+state`, `resume-or-cancel`, or a tail-resumptive clause whose direct call the
-facts do not license). -/
+/-- **The effect erasure's postcondition**, for a program (`bcc lir --erasure`, SPEC §47, §49): the
+LIR has no `handle` and no `perform`, so a program the new backend compiles has none left. The
+line counts, at a compiled program, the `handle`, `perform` and `raise` nodes the conversion
+erased, and with state machines the `handle` nodes compiled as drives and the `perform`s as
+suspensions (each `use` body once per key); a compiled program leaves no node. At a program
+outside the fragment it counts the `handle` nodes with a clause of kind `once` or `stored` (the
+stored-continuation sites) and the others no rule takes. -/
 def erasureLine (k : Backend.CheckedProg) : String := Id.run do
   let c := k.main
   let nodes := hnodes Frontend.Check.copiesFuel c.t
@@ -114,7 +174,9 @@ def erasureLine (k : Backend.CheckedProg) : String := Id.run do
   match lirOf k with
   | .ok (_, st) =>
     let r (key : String) := st.erased.getD key 0
-    s!"erased handles {r "handle"} performs {r "perform"} raises {r "raise"} left {stored} {other}"
+    -- A compiled program leaves no node: each is erased (SPEC §47) or a machine's drive (§49).
+    let m := if r "machine" > 0 then s!" machines {r "machine"} suspends {r "suspend"}" else ""
+    s!"erased handles {r "handle"} performs {r "perform"} raises {r "raise"}{m} left 0 0"
   | .error _ => s!"outside left {stored} {other}"
 
 /-- Convert and lint a program (`bcc lir --lint`): an error outside the pure fragment, or the
@@ -122,10 +184,6 @@ lint's. -/
 def lintOf (k : Backend.CheckedProg) : Except String Unit := do
   let (p, _) ← lirOf k
   Lint.lint p
-
-/-- The checker's cell classes (`Checked.cells`) at LIR types. -/
-def cellsOf (k : Backend.CheckedProg) : List (List LTy) :=
-  k.main.cells.map fun c => c.tys.filterMap fun t => (ofV t).toOption
 
 /-- The layouts of a program's LIR. -/
 def layoutsOf (k : Backend.CheckedProg) (p : Prog) : Except String Lay.Layouts := do
