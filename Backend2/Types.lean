@@ -415,16 +415,22 @@ theorem ofV_drops {ms : MachSet} {A : VTy} (hA : A.Drop) : ∀ {t : LTy}, ofV ms
       cases hA : ofV ms A <;> cases hB : ofV ms B <;> rw [hA, hB] at h <;> cases h
       simp [LTy.drops, ihA hA, ihB hB]
 
-/-- **A `[handle-last]` operation's cancel summand** (SPEC §64): the exit's argument `X`, or
-`X ⊕ P_W` when the work's row `Σ_W` has abortive operations (`P_W` their payload). -/
-def cancelSummand (ms : MachSet) (X : VTy) (SW : Row) : Except String LTy := do
+/-- **A `[handle-last]` operation's cancel summand** (SPEC §64, §65): the exit's argument `X`, or
+`X ⊕ P_W` when the work's row `Σ_W` has a payload: its abortive operations' arguments and the
+cancel summands of the `[handle-last]` operations it holds (`ms.last`), as the row's payload is
+(`rowPay`); `none` while one of those is not known yet. -/
+def cancelSummand (ms : MachSet) (pending : (UInt32 × UInt32) → Bool) (X : VTy) (SW : Row) :
+    Except String (Option LTy) := do
   let x ← ofV ms X
   let mut ps : List ((UInt32 × UInt32) × LTy) := []
   for o in SW do
-    if abortB o.q o.B then ps := ps ++ [((o.n, o.i), ← ofV ms o.A)]
-  return match payOf ps with
+    if ps.any (·.1 == (o.n, o.i)) then continue
+    if o.abort then ps := ps ++ [((o.n, o.i), ← ofV ms o.A)]
+    else if let some t := ms.last[(o.n, o.i)]? then ps := ps ++ [((o.n, o.i), t)]
+    else if pending (o.n, o.i) then return none
+  return some (match payOf ps with
     | none => x
-    | some p => .sum x p
+    | some p => .sum x p)
 
 /-- The LIR type of a judgment: a value type, or the closure type a computation's value has
 (`rep`). -/

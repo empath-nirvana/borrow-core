@@ -1824,14 +1824,16 @@ def eWorks (m : DCx) : Nat → TCx → Val → EM Val
       let caps ← ws.mapM fun y => match c.tyV (.var asp y) with
         | some Ty => pure (y, Ty)
         | none => (throw ⟨asp, s!"the loop threads `{y}`, whose type is not determined: ascribe it"⟩ : EM _)
+      -- A close hands back the threaded variables that have no destructor.
+      let caps := caps.filter fun (_, T) => isLinear T
       let Rs : CVTy := tupleT (caps.map (·.2))
       let cx : LoopCx := ⟨Bs, Rs, Rs, if caps.isEmpty then [] else [caps], false⟩
       let retOf : Option (Span → Val → Val) := if !ret then none else some fun tsp v =>
-        .inl tsp (.inr tsp (.pair tsp (tupleVal tsp ws) (.inl tsp (.inr tsp v))))
+        .inl tsp (.inr tsp (.inl tsp (.pair tsp (tupleVal tsp ws) (.inr tsp v))))
       let mw : DCx := { L := cx, row := m.row, fwd := m.fwd, pp := m.pp, pre := false, retOf }
       let K' ← eWalk mw n (c.push q.name (some Pt)) K
       let K'' ← eTpl lsp "a `for`'s work" (s!"io_wr : {m.pp (.sum Bs Rs)} <- force io_hole_k;\n" ++
-        "case io_wr { inl io_wo -> return io_wo | inr io_wc -> return (inr (io_wc, inr ())) }")
+        "case io_wr { inl io_wo -> return io_wo | inr io_wc -> return (inr (inr io_wc)) }")
         [] [("io_hole_k", K')]
       pure (.ascribe asp (.bangThunkv vsp (.lam lsp q T K'')) Ty)
     | V => pure V
@@ -5830,10 +5832,13 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let Bt ← pp Bg
     let Vs ← pp Vt
     let Rts ← pp Rt
-    let Et₀ := if hasRet then s!"({Vs}) + ({Rts})" else Vs
-    -- With `Div` in the body, a close inside the work is an exit of its own, `inr ()`.
-    let Et := if bodyLoops then s!"({Et₀}) + 1" else Et₀
-    let Jt := s!"(({Wt}) * ({Bt})) + (({Wt}) * ({Et}))"
+    let Et := if hasRet then s!"({Vs}) + ({Rts})" else Vs
+    -- With `Div` in the body, a close inside the work is an exit of its own, which hands back the
+    -- threaded variables that have no destructor (`Lt`).
+    let linW := ws.filter fun (_, T) => isLinear T
+    let Lt ← pp (tupleT (linW.map (·.2)))
+    let Xt := if bodyLoops then s!"((({Wt}) * ({Et})) + ({Lt}))" else s!"(({Wt}) * ({Et}))"
+    let Jt := s!"(({Wt}) * ({Bt})) + {Xt}"
     -- The node's answer: what `g` returns or how the body left (`Jt`), and, when `g` loops, its
     -- residual beside it: the node is then a call of a div function in direct style (`eDivCall?`).
     let Rgs ← match Rg? with
@@ -5865,7 +5870,6 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let hrBody := if looping then
         s!"case io_hv{sfx} \{ inl io_ha{sfx} -> return (inl (inl io_ha{sfx})) | inr io_hl{sfx} -> return (inr io_hl{sfx}) }"
       else s!"return (inl io_hv{sfx})"
-    let Xt := s!"({Wt}) * ({Et})"
     let workIn := s!"(({Tt}) * ({Wt}))"
     let workHead := s!"!thunkv fun (io_hp{sfx} : {workIn}) ->
     let ({x.name}, io_hw{sfx}) = io_hp{sfx};
@@ -5881,7 +5885,8 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
   ((({workHead}) : !U ({workIn} -o F ({Wt}))), ())"
     -- The body: its terminals resume, and its exits leave.
     let leave (tsp : Span) (o : Val) : Comp :=
-      .ret tsp (.inr tsp (.pair tsp (tupleVal tsp wsN) (if bodyLoops then .inl tsp o else o)))
+      let x := Val.pair tsp (tupleVal tsp wsN) o
+      .ret tsp (.inr tsp (if bodyLoops then .inl tsp x else x))
     let resume (tsp : Span) : Comp :=
       .ret tsp (if last then .inl tsp (tupleVal tsp wsN) else tupleVal tsp wsN)
     let brk (tsp : Span) (e : Val) : Val := if hasRet then .inl tsp e else e
@@ -5907,13 +5912,13 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
 "
       -- A close inside the work: the threaded variables bound, the body closed there
       -- (`VSugar.rowClose`).
-      else s!"io_jc{sfx} : ({JJt}) + ({Wt}) <- case io_j{sfx} \{
-    inl io_ja{sfx} -> let (io_jw{sfx}, io_jg{sfx}) = io_ja{sfx}; io_jk{sfx} : {JJt} <- {endRet}; return (inl io_jk{sfx} : ({JJt}) + ({Wt}))
-  | inr io_je{sfx} -> let (io_jw{sfx}, io_jq{sfx}) = io_je{sfx};
-      case io_jq{sfx} \{
-        inl io_jo{sfx} -> io_jk{sfx} : {JJt} <- {exitArm}; return (inl io_jk{sfx} : ({JJt}) + ({Wt}))
-      | inr io_ju{sfx} -> return (inr io_jw{sfx} : ({JJt}) + ({Wt}))
-      }
+      else s!"io_jc{sfx} : ({JJt}) + ({Lt}) <- case io_j{sfx} \{
+    inl io_ja{sfx} -> let (io_jw{sfx}, io_jg{sfx}) = io_ja{sfx}; io_jk{sfx} : {JJt} <- {endRet}; return (inl io_jk{sfx} : ({JJt}) + ({Lt}))
+  | inr io_je{sfx} -> case io_je{sfx} \{
+      inl io_jx{sfx} -> let (io_jw{sfx}, io_jo{sfx}) = io_jx{sfx};
+        io_jk{sfx} : {JJt} <- {exitArm}; return (inl io_jk{sfx} : ({JJt}) + ({Lt}))
+    | inr io_jl{sfx} -> return (inr io_jl{sfx} : ({JJt}) + ({Lt}))
+    }
   };
 "
     let r := match keep with
@@ -5933,7 +5938,7 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let full := if !bodyLoops then core ++ join ++ after else
       core ++ join ++ s!"case io_jc{sfx} \{
   inl io_jj{sfx} -> {after}
-| inr io_cl{sfx} -> {destructSrc s!"io_cl{sfx}" wsN}force io_hole_close }"
+| inr io_cl{sfx} -> {destructSrc s!"io_cl{sfx}" (linW.map (·.1))}force io_hole_close }"
     let L ← (template sp what full : SM Comp)
     -- The generator's call in direct style, under the node.
     let callC : Comp := .ret sp call'

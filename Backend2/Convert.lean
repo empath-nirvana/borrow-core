@@ -218,6 +218,9 @@ structure CState where
   /-- The functions of `works` and `lasts` whose code is made: `prepWorks` reserves every one
   before it makes any, so a work that performs another's operation calls it however they nest. -/
   made : Std.HashSet Nat := {}
+  /-- The `[handle-last]` works that are machines (SPEC §65): their row `Σ_W` has a machine
+  operation, so a call of one is a call point. -/
+  lastMach : Std.HashMap (UInt32 × Nat) OutInfo := {}
   /-- `main`'s I/O externs by its context slot, each with its type: the persistent closures a
   rule-written handler's code may read, made again where that code runs (`ioCtx`). -/
   mainIO : Array (Option (IOKind × VTy)) := #[]
@@ -2698,7 +2701,10 @@ def withLitView (act : CM Tm) : CM Tm := do
   modify fun st => { st with litPending := false }
   return r
 
+-- The conversion's functions recurse on `fuel`; the termination proof's `wf_preprocess` pass over
+-- this block exceeds `simp`'s step bound, and the block needs none of its rewrites.
 set_option maxHeartbeats 4000000 in
+set_option wf.preprocess false in
 mutual
 /-- **The conversion of a node** at its context: the term of its value. -/
 def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
@@ -3084,6 +3090,19 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
         | throw s!"LIR: `effPerform` of ({o.n}, {o.i}) at a machine without its cancel summand"
       let bT ← vty o.B
       let leave (w : Var) : CM Tm := injectPay F.pay jc w fun e => abortK F K args e
+      if let some W := (← get).lastMach[(o.n, o.i.toNat)]? then
+        -- A work that is a machine (SPEC §65): a call point, whose value a join takes apart,
+        -- `inl y` to `K`, `inr z` through `K`'s frames at the cancel summand; its aborts and
+        -- suspensions go through `K` as a call point's do (no handler in `K` serves a name the
+        -- work performs or raises: `DirectOK`).
+        let jfn ← reserveFn "last join"
+        let argPs ← args.mapM freshLike
+        let bx ← fresh (.sum bT xT); let y ← fresh bT; let z ← fresh xT
+        let leaveP (w : Var) : CM Tm := injectPay F.pay jc w fun e => abortK F K argPs e
+        setFn jfn { name := "last join", params := argPs ++ [bx],
+                    body := .case bx y (← applyK F K argPs y) z (← leaveP z), ret := F.ty }
+        return ← bindTm (← conv fuel ctx c) (← vty o.A) fun v =>
+          pointK (.letF jfn 0 :: K) args (.call fi [v]) W
       return ← bindTm (← conv fuel ctx c) (← vty o.A) fun v => do
         let bx ← fresh (.sum bT xT); let y ← fresh bT; let z ← fresh xT
         match payTy phW with
@@ -3264,7 +3283,8 @@ again. The handler's values are the drive's parameters. -/
 def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32)
     (R : VTy) (ks : List ClauseKinds.HKind) (site : Option HSite) (c₂ : Ctx) (te : TExpr)
     (T : OutInfo) (cR : Ctx) (tR : TExpr)
-    (parts : Array (Ctx × TExpr)) (tailCtx : Ctx) (tupleAt : Option Nat) (boxed : Bool := false) :
+    (parts : Array (Ctx × TExpr)) (tailCtx : Ctx) (tupleAt : Option Nat) (boxed : Bool := false)
+    (lastCls : List (Nat × Nat × Pay × LTy × LTy) := []) (lastRaise : List (Nat × Pay) := []) :
     CM Tm := do
   readFact "effHandleV:machine"
   modify fun st => { st with erased := st.erased.insert "machine" (st.erased.getD "machine" 0 + 1) }
@@ -3355,17 +3375,99 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
     injectPay outPay j' v fun e => match outM with
       | some O => outAbort O e
       | none => pure (.inj true e)
+  -- **`[handle-last]`'s clause at an operation whose work is not called where it is performed**
+  -- (SPEC §51, §65; the fallback where `DirectOK` or the work's row does not license the direct
+  -- call): the rule's clause `λ(x, κ). (w x) then r. case r { inl y → κ.1 y | inr z → κ.2 ();
+  -- nf z } unwind κ.2 ()`, with `κ` (`genKap`) whose cancel is at the operation's own cancel row,
+  -- the empty one (R-1a: `κ`'s type never appears in a program); the work's raise cancels `κ`
+  -- and goes on outward.
+  let lastClauseDrive (idx ei : Nat) (phW : Pay) (bT xT : LTy) (v k : Var) : CM Tm := do
+    let kT : LTy := .thunk (.amp (.arr bT (.ret outTy)) (.ret .unit))
+    let kap ← genKap n idx kT T outTy driveFn hvTys none []
+    let hvAll := ctxs'.flatMap live
+    let mut copies : List (Tm → Tm) := []
+    let mut hvC : List Var := []
+    for x in hvAll do
+      let x' ← freshLike x
+      copies := copies ++ [fun (t : Tm) => Tm.copy x x' t]
+      hvC := hvC ++ [x']
+    let some ccW := ctxs'[idx + 1]? | throw "LIR: a work's context"
+    let some ccN := ctxs'[ei + 1]? | throw "LIR: an exit's context"
+    unless (live ccN).isEmpty do
+      throw "LIR: `effHandleL`'s exit reads its context: outside the fragment"
+    let some (_, w) := parts[idx]? | throw "LIR: a work"
+    let some (_, nf) := parts[ei]? | throw "LIR: an exit"
+    let some (kw, .lam _ _ _ _ wb) := lamOf 64 w | throw "LIR: a work is not a λ"
+    let some (kn, .lam _ _ _ _ nb) := lamOf 64 nf | throw "LIR: an exit is not a λ"
+    let keep (b : Tm) : Tm :=
+      drops ((ctxs'.zipIdx.filter fun (_, i) => i != idx + 1).flatMap fun (c, _) => live c) b
+    let kTr ← selTy kT 0
+    let resume (kv y : Var) : CM Tm := do
+      let k1 ← fresh kTr
+      return .letv k1 (.sel kv 0) (.app k1 y)
+    let cancel (kv : Var) (rest : Tm) : CM Tm := do
+      let c ← fresh .unit
+      return .letv c (.sel kv 1) (.drop c rest)
+    let kv ← fresh kT
+    readFact "effHandleL:kappa"
+    let clause ← match outM with
+      | none => do
+        let wTm ← conv fuel (some v :: (List.replicate kw none ++ ccW)) wb
+        let bx ← fresh (.sum bT xT); let y ← fresh bT; let z ← fresh xT
+        let exitTm ← conv fuel (some z :: (List.replicate kn none ++ ccN)) nb
+        let arms : Tm := .case bx y (← resume kv y) z (← cancel kv exitTm)
+        match payTy phW with
+        | none => pure (.letv bx wTm arms)
+        | some pwT => do
+          let r ← fresh (.sum (.sum bT xT) pwT); let e ← fresh pwT
+          let outE ← casePay phW e fun j' u => do
+            let some (key', _) := phW[j']? | throw "LIR: a work's raise"
+            abortOut key' u
+          pure (.letv r wTm (.case r bx arms e (← cancel kv outE)))
+      | some O => do
+        -- In the drive's machine: `κ.2 ()` is the work's finaliser frame, the join takes its
+        -- answer apart.
+        let kvD ← fresh kT
+        let fnD ← reserveFn "kappa cancel finaliser"
+        setFn fnD { name := "kappa cancel finaliser", params := [kvD],
+                    body := ← cancel kvD .unit, ret := .unit }
+        let kvN ← fresh kT; let rN ← fresh (.sum bT xT); let y ← fresh bT; let z ← fresh xT
+        let fnN ← reserveFn "last join"
+        let exitTm ← convK fuel (some z :: (List.replicate kn none ++ ccN)) nb [] []
+        setFn fnN { name := "last join", params := [kvN, rN],
+                    body := .case rN y (← resume kvN y) z (← cancel kvN exitTm), ret := O.ty }
+        convK fuel (some v :: (List.replicate kw none ++ ccW)) wb [.thenF fnN fnD 1 []] [kv]
+    return copies.foldr (fun (f : Tm → Tm) (t : Tm) => f t)
+      (.letv kv (.clos kap (k :: hvC)) (keep clause))
   let dbody : CM Tm := do
     let w ← fresh T.body; let a ← fresh T.r; let ex ← fresh T.xTy
     let some cR' := ctxs'[0]? | throw "LIR: the return clause"
     let retArm ← freeSh (dropAll (some 0) (← clauseApp cR' tR a))
     let abortArms (e : Var) : CM Tm := casePay T.pay e fun j v => do
       let some (key, _) := T.pay[j]? | throw "LIR: a payload's summand"
-      if key.1 == n then freeSh (← applyClause key.2.toNat v)
+      if key.1 == n then
+        -- A `[handle-last]` operation's cancel summand, the work's raises beside the exit's
+        -- argument (SPEC §64, §65): `inl z` to the exit, `inr e` on outward.
+        match lastRaise.lookup key.2.toNat with
+        | some phW =>
+          let some pwT := payTy phW | freeSh (← applyClause key.2.toNat v)
+          let xT ← match ← tyOf v with
+            | .sum xT _ => pure xT
+            | t => throw s!"LIR: a cancel summand at {t}"
+          let z ← fresh xT; let ew ← fresh pwT
+          let outE ← casePay phW ew fun j' u => do
+            let some (key', _) := phW[j']? | throw "LIR: a work's raise"
+            return dropAll none (← abortOut key' u)
+          freeSh (.case v z (← applyClause key.2.toNat z) ew outE)
+        | none => freeSh (← applyClause key.2.toNat v)
       else freeSh (dropAll none (← abortOut key v))
     let suspArms (sv : Var) : CM Tm := casePay T.sPay sv fun j pv => do
       let some (key, _, bT, cpT) := T.ms[j]? | throw "LIR: a suspension's summand"
       letpairM pv fun v k => do
+        if key.1 == n && (lastCls.find? (·.1 == key.2.toNat)).isSome then
+          let idx := key.2.toNat
+          let some (_, ei, phW, bT, xT) := lastCls.find? (·.1 == idx) | throw "LIR: a work"
+          return ← lastClauseDrive idx ei phW bT xT v k
         if key.1 == n then
           let idx := key.2.toNat
           let some o := E[idx]? | throw "LIR: an operation"
@@ -3653,13 +3755,18 @@ def ensureLastWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (SW : Row)
       let fi ← reserveFn s!"work {n}.{j}"
       modify fun st => { st with lasts := st.lasts.insert (n, j) (fi, phW, xT) }
       pure fi
+  -- At a row `Σ_W` with a machine operation the work is a machine (SPEC §49, §65).
+  let wm ← outInfo? (.sum bT xT) SW
+  if let some W := wm then modify fun st => { st with lastMach := st.lastMach.insert (n, j) W }
   if !fill then return
   modify fun st => { st with made := st.made.insert fi }
   let x ← fresh (← vty o.2.1)
   let (cw, binds) ← ioCtx depth (n, j)
-  let b ← conv fuel (some x :: (List.replicate k none ++ cw)) body
-  setFn fi { name := s!"work {n}.{j}", params := [x], body := binds b,
-             ret := resTy (.sum bT xT) phW }
+  let ctx₀ := some x :: (List.replicate k none ++ cw)
+  let (b, ret) ← match wm with
+    | none => pure (← conv fuel ctx₀ body, resTy (.sum bT xT) phW)
+    | some W => pure (← withMachineK W (convK fuel ctx₀ body), W.ty)
+  setFn fi { name := s!"work {n}.{j}", params := [x], body := binds b, ret }
 
 /-- **`perform` of a `[handle-last]` operation, erased** (SPEC §64): the work called on the
 argument; `inl y` answers `y` where the operation is performed (`last_resume_direct`); `inr z`
@@ -3670,6 +3777,8 @@ runs first, as `[finalise]` runs it). The summand is the node's own: no handler 
 the node holds the operation's name, so nothing between catches it. -/
 def lastPerform (fuel : Nat) (ctx : Ctx) (S : Row) (o : OpSig) (fi : Nat)
     (phW : List ((UInt32 × UInt32) × LTy)) (xT : LTy) (c : TExpr) : CM Tm := do
+  if (← get).lastMach.contains (o.n, o.i.toNat) then
+    throw s!"LIR: the work {o.n}.{o.i} is a machine, performed outside a machine: outside the fragment (row {S.map fun o => (o.n, o.i)})"
   readFact "effPerform:last direct call"
   modify fun st => { st with erased := st.erased.insert "perform" (st.erased.getD "perform" 0 + 1) }
   let p ← rowPay S
@@ -3707,9 +3816,6 @@ def convHandleL (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy
     (fs : Nat → CTy) (n : UInt32) (A R : VTy) (u : Masks) (tc te : TExpr) : CM Tm := do
   readFact "effHandleL:kinds"
   let lasts := (← get).lasts
-  for (o, j) in E.zipIdx do
-    unless ClauseKinds.isAbortive o || lasts.contains (n, j) do
-      throw s!"LIR: `effHandleL`: the work {n}.{j} is not licensed to be called where it is performed (a work that performs, or a node of its name that differs): outside the fragment"
   let teM ← outInfoJ te.jdg
   let (pre, c₁, c₂) ← splitCtx ctx u "effHandleL"
   let .tensorI _ _ _ _ uH tR tWN := tc
@@ -3737,24 +3843,45 @@ def convHandleL (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy
   let wrapD (b : Tm) : Tm :=
     pre (preH (preWN (preWs.foldr (fun f t => f t) (preNs.foldr (fun f t => f t) b))))
   -- With a machine operation of `Σ` in the handled computation (a stored loop's `tick`, SPEC §64),
-  -- the node is a drive (SPEC §49): an abortive operation's clause is its work, a control one's
-  -- cancel goes to its exit, a suspension of `Σ`'s is forwarded.
+  -- or of the node's own name (an operation whose work is not called where it is performed, SPEC
+  -- §65), the node is a drive (SPEC §49): an abortive operation's clause is its work; a licensed
+  -- control one's cancel summand goes to its exit, its work's raises on outward; another's
+  -- suspension runs the rule's clause (`lastClauseDrive`); a suspension of `Σ`'s is forwarded.
   if let some T := teM then
     let union (a b : Ctx) : Ctx := a.zipWith (fun x y => x <|> y) b
     let mut parts : Array (Ctx × TExpr) := #[]
+    let mut extra : Array (Ctx × TExpr) := #[]
+    let mut lastCls : List (Nat × Nat × Pay × LTy × LTy) := []
+    let mut lastRaise : List (Nat × Pay) := []
     let mut unused : Ctx := union wTail nTail
     for (o, j) in E.zipIdx do
       let some w := works[j]? | throw "LIR: a work"
       let some nf := exits[j]? | throw "LIR: an exit"
       if ClauseKinds.isAbortive o then
         parts := parts.push w; unused := union unused nf.1
-      else
-        let some (_, phW, _) := lasts[(n, j)]? | throw "LIR: a work"
-        unless (payTy phW).isNone do
-          throw "LIR: `effHandleL` whose work raises, around a computation with a machine operation, is outside the fragment"
-        parts := parts.push nf; unused := union unused w.1
-    return wrapD (← convDrive fuel S E fs n R (E.map ClauseKinds.lastKind) none c₂ te T cR tR parts
-      unused none)
+      else match lasts[(n, j)]? with
+        | some (_, phW, _) =>
+          parts := parts.push nf; unused := union unused w.1
+          lastRaise := lastRaise ++ [(j, phW)]
+        | none =>
+          readFact "effHandleL:clause"
+          let bT ← vty o.2.2
+          let some (_, .lam _ _ _ _ _) := lamOf 64 w.2 | throw "LIR: a work is not a λ"
+          -- The work `!U(A ⊸ F_{Σ_W}(B ⊕ X))`: its row's payload and its exit's argument.
+          let wC? : Option CTy := match w.2.jdg with
+            | .val (.thunk (.arr _ C)) | .val (.bang (.thunk (.arr _ C))) => some C
+            | _ => none
+          let some (SW, .sum _ X) := wC?.bind effParts | throw "LIR: a work's type"
+          let phW ← rowPay SW
+          let xT ← vty X
+          parts := parts.push w
+          extra := extra.push nf
+          lastCls := lastCls ++ [(j, E.length + extra.size - 1, phW, bT, xT)]
+    return wrapD (← convDrive fuel S E fs n R (E.map ClauseKinds.lastKind) none c₂ te T cR tR
+      (parts ++ extra) unused none (lastCls := lastCls) (lastRaise := lastRaise))
+  for (o, j) in E.zipIdx do
+    unless ClauseKinds.isAbortive o || lasts.contains (n, j) do
+      throw s!"LIR: `effHandleL`: the work {n}.{j} is not licensed to be called where it is performed, and the handled computation is not a machine: outside the fragment"
   let ctxs : List Ctx := cR :: works.toList.map (·.1) ++ [wTail] ++ exits.toList.map (·.1) ++ [nTail]
   let dropAll (keep : Option Nat) (b : Tm) : Tm :=
     drops ((ctxs.zipIdx.filter fun (_, i) => some i != keep).flatMap fun (c, _) => live c) b
@@ -4236,7 +4363,8 @@ def prepWorks (fuel : Nat) (depth : Nat) (t : TExpr) (fill : Bool := true) : CM 
   | .effHandleL _ _ _ SW E _ Xs n _ _ _ _ _ (.tensorI _ _ _ _ _ _ (.tensorI _ _ _ _ _ tW _)) _ =>
     let ws := clausesOf E.length tW
     for (o, j) in E.zipIdx do
-      if !ClauseKinds.isAbortive o && (← get).mach.last.contains (n, j.toUInt32) then
+      let lc := (← get).mach.last.contains (n, j.toUInt32)
+      if !ClauseKinds.isAbortive o && lc then
         if let some w := ws[j]? then ensureLastWork (1 <<< 22) n j depth SW o (Xs j) w fill
   | _ => pure ()
   for (sc, c) in t.children do
