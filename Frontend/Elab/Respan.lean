@@ -144,6 +144,7 @@ def Const.respan (sp : Span) : Const → Const
       .sliceBorrowMutU (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
   | .sliceBorrowImmU x b A B r =>
       .sliceBorrowImmU (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
+  | .iterate St B R r => .iterate (St.respan sp) (B.respan sp) (R.respan sp) (r.respan sp)
 
 mutual
 def Val.respan (sp : Span) : Val → Val
@@ -173,6 +174,7 @@ def Val.respan (sp : Span) : Val → Val
   | .lend _ x m => .lend sp (x.respan sp) m
   | .sugar _ s => .sugar sp s
   | .mark _ k V => .mark sp k (V.respan sp)
+  | .reify _ B R r V => .reify sp (B.respan sp) (R.respan sp) (r.respan sp) (V.respan sp)
 
 def Comp.respan (sp : Span) : Comp → Comp
   | .ret _ V => .ret sp (V.respan sp)

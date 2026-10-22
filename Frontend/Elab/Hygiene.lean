@@ -106,6 +106,7 @@ def _root_.Frontend.Val.hygD (defs : Ren) (glob : String → Bool) (ρ : Ren) : 
   | .sugar sp (.pullSite i) => pure (.sugar sp (.pullSite { i with w := look ρ i.w }))
   | .sugar sp s => pure (.sugar sp s)
   | .mark sp k V => do pure (.mark sp k (← V.hygD defs glob ρ))
+  | .reify sp B R r V => do pure (.reify sp B R r (← V.hygD defs glob ρ))
 
 /-- `M` with its binders renamed by `glob` and its occurrences by `ρ`. -/
 def _root_.Frontend.Comp.hygD (defs : Ren) (glob : String → Bool) (ρ : Ren) : Comp → HM Comp

@@ -1,6 +1,6 @@
--- `for` in `main` (SPEC §11, §14): a loop by `unfold` over (the stream, the other capabilities,
--- the threaded variables), a state of `main`'s machine (SPEC §15). `main` is div,
--- so it returns the loop, which the runtime drives. `for.core.bc` is the elaborated program, as
+-- `for` in `main` (SPEC §11, §14): `iterate` over (the stream, the other capabilities, the
+-- threaded variables) (SPEC §50). `main` is div, so it returns the loop value of its body, which
+-- the runtime drives. `for.core.bc` is the elaborated program, as
 -- `bcc desugar` prints it.
 main : F i32 =
   n : i32 <- return i32[0];

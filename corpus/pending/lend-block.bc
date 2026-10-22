@@ -1,0 +1,44 @@
+-- pending: a lend held across a loop's ticks (T1, #172): needs call-graded operations, parked pending a grade algebra (#654)
+-- now: 38:11: the row of an unwinding borrow's callback has only abortive operations, of names other than 0, whose arguments outlive every lifetime and do not mention its lifetime
+--
+-- A borrow block over a loop: the table's cell `t` is borrowed around code before a
+-- `for`, the `for`, and code after it, each of which reads it.
+--
+-- Needs a lend held across a tick. Every loop is at the row `div` (SPEC §14), and each of its back
+-- edges ticks, a control operation that resumes; the borrow of `t` at 38:11 spans the ticks of the
+-- `for` at 41:5. The kernel's rule for a lend at a row has only abortive operations (`Row.Unwind`),
+-- so it refuses the lend. It needs a lend held across the loop's ticks: call-graded operations
+-- (#654), which are parked pending a grade algebra.
+--
+-- Once it lands: `i32[134]`, `live 0`: the entries at 4, 3, 2, 1 of 10 * i sum to 100, the first
+-- entry read before the loop is 10 (added once per step, 40), and the entry read after it is 0 less
+-- 6.
+
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return ((unbang host[mul32]) (i, i32[10]))
+
+-- The numbers from `n` down to 1.
+def down : i32 => U (iter i32 1 1) =
+  thunkv fun (n : i32) ->
+    f <- return (unbang (unfold[iter i32 1 1, i32] (!thunkv fun (k : i32) ->
+      < case (unbang host[eqz32]) k {
+          inl nz -> return (inl (k, (unbang host[sub32]) (k, i32[1])))
+        | inr z -> return (inr ())
+        },
+        return () >)));
+    return (thunkv nu_in < (nu_out (force f n)).1, (nu_out (force f n)).2 >)
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let n = borrow imm t { b ->
+    let first = get(b, 1);
+    let mut acc = 0;
+    for i in down(4) { acc = acc + first + get(b, i) };
+    acc - 6 + get(b, 0)
+  };
+  n

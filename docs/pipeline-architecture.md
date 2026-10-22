@@ -1,5 +1,13 @@
 # Pipeline architecture: carry what the frontend knows (#552)
 
+**Status (2026-10-21).** B1 (#563) and B2 (#644) are built: loops elaborate to the kernel's `Div`
+(SPEC §50). §3.2's elaboration is as built, with three refinements of the placement that the
+simulation of unknown 3 needed: a terminal before any loop or call ticks at the empty row; a call,
+from a body at a row, of a div function of the empty row's placement is a drain of its loop value;
+and the loop value of a call at a row starts with a back edge, so it runs nothing until observed
+(`Frontend/Elab/DivPlacement.lean`, `sim_loop`). `main`'s loop is `reify` of its body until B3
+puts it under the runtime's clause. The rest of this document is the design as written.
+
 A design for how the structure the frontend knows reaches the backend. It changes no code. Each
 claim is marked:
 
@@ -320,9 +328,10 @@ has no cancel, so closing a loop is a *resume* with `close`, never a cancel (§4
 - **Totality** is the row without `Div`. A `total fn`'s written row has no `Div`.
 - **What stays.** `Loop`, `unfold`, `div_bind` and `div_defer` remain the kernel library of loop
   *values*: `reify`'s result, and hand-written core.
-- **Borrows.** `tick` is a non-abortive control operation, so it cannot cross a borrow (T1).
-  `LoopLend`'s per-observation lends stay (SPEC §14 *Borrow scopes over loops*). The native loop
-  runs those lends one turn at a time.
+- **Borrows.** `tick` is a non-abortive control operation, so it cannot cross a borrow (T1). A
+  borrow block around a loop is elaborated as written, at the row `div`, and the kernel refuses
+  it (SPEC §14 *Borrow scopes over loops*); the per-observation lend is retired (#644). A lend held
+  across a tick needs call-graded operations (#654), parked pending a grade algebra.
 
 ### 3.3 Where state machines are built
 

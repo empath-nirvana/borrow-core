@@ -265,18 +265,22 @@ def compileWatTimed (file src : String) : IO (Except String String) := do
         s!"{q.codes.size} codes, {q.size} nodes") fun _ => match io with
       | none => Clos.convert c.e
       | some m => do Clos.convertMain (← extImpls m) m.loopB.isSome c.e
+    -- As `lowerEffects`: when the layout types fail, the control operations' answers are
+    -- carried as variants.
     let clos ← ExceptT.mk <| stage "effects" (fun (q : Clos.Prog) =>
-        s!"{q.codes.size} codes, {q.size} nodes") fun _ => do (← clos.capture).unwind
+        s!"{q.codes.size} codes, {q.size} nodes") fun _ => do
+      let q ← (← clos.capture).unwind
+      if q.collapseT.2.isSome then pure q else (← clos.capture (wrapAnswers := true)).unwind
     let _ ← ExceptT.mk <| analysis "  flow (converted)" flowSize fun _ =>
       pure (Clos.solve clos.codes clos.constraints (1 <<< 40))
-    let _ ← ExceptT.mk <| analysis "  types (converted)" (fun (T : Clos.Types) =>
+    let _ ← analysis "  types (converted)" (fun (T : Clos.Types) =>
       s!"{T.rep.size} type nodes") fun _ => clos.types
     let (col, colT) ← ExceptT.mk <| stage "collapse" (fun (q : Clos.Prog × Option Clos.Types) =>
         s!"{q.1.codes.size} codes, {q.1.liveCodes.size} live, {q.1.size} nodes") fun _ =>
       pure clos.collapseT
     let _ ← ExceptT.mk <| analysis "  flow (collapsed)" flowSize fun _ =>
       pure (Clos.solve col.codes col.constraints (1 <<< 40))
-    let _ ← ExceptT.mk <| analysis "  types (collapsed)" (fun (T : Clos.Types) =>
+    let _ ← analysis "  types (collapsed)" (fun (T : Clos.Types) =>
       s!"{T.rep.size} type nodes") fun _ => col.types
     let flat ← ExceptT.mk <| stage "flat" (fun (q : Flat.Prog) =>
         s!"{q.fns.size} functions, {q.fns.foldl (fun k f => k + Flat.Stmt.sizes f.body) 0} statements")

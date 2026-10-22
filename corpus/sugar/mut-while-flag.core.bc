@@ -1,43 +1,67 @@
--- `mut-while-flag.bc` as its elaboration should read: written by hand in core.
--- The step is bound in `main` before the machine is built from the first state (SPEC §14,
--- *Moves*); the program's own bindings and writes of `i` and `found` stay, and the close binds the
--- state's variables by name.
-def true : 1 + 1 = inr ()
+-- `mut-while-flag.bc` in core, as `bcc desugar` prints it: the `while` is `iterate` over the
+-- variables it threads (SPEC §14); the program's own bindings and writes of `i` and `found` stay,
+-- and the step's close binds the state's variables by name.
+def true : 1 + 1 =
+  inr ()
 
-def false : 1 + 1 = inl ()
+def false : 1 + 1 =
+  inl ()
 
 def not : !(1 + 1 => 1 + 1) =
   !thunkv fun (b : 1 + 1) ->
-    case b {
-      inl u -> return true
-    | inr u -> return false
-    }
+      case b {
+        inl u -> return true
+      | inr u -> return false
+      }
 
 def to_i32 : !(u8 => i32) =
-  !thunkv fun (b : u8) -> return (unbang host[extend8_u]) b
+  !thunkv fun (b : u8) ->
+      return (unbang host[extend8_u]) b
 
 def to_u8 : !(i32 => u8) =
-  !thunkv fun (i : i32) -> return (unbang host[wrap8]) i
+  !thunkv fun (i : i32) ->
+      return (unbang host[wrap8]) i
 
 main : F U loop (i32 * (1 + 1)) 1 =
-  turn : !U (i32 * (1 + 1) -o F (i32 * (1 + 1) + i32 * (1 + 1)) & F 1) <- return (!thunkv fun (s : i32 * (1 + 1)) ->
-    < let (i, found) = s;
-      case run case (unbang host[lt_s32]) (i, i32[10]) {
-          inl u -> return false
-        | inr u -> return (unbang not) found
-        } {
-        inl u -> return inl (i, found)
-      | inr u -> case (unbang host[gt_s32]) ((unbang host[mul32]) (i, i), i32[20]) {
-            inl u -> i <- return (unbang host[add32]) (i, i32[1]);
-              return inr (i, found)
-          | inr u -> found <- return true;
-              return inr (i, found)
+  return (unbang reify[i32 * (1 + 1), 1, []](!thunkv fun (io_b : i32 * (1 + 1)) ->
+        return ())) (thunkv fun (io_u : 1) ->
+      let () = io_u;
+      i <- return i32[0];
+      found <- return false;
+      io_step8 : !U (i32 * (1 + 1) -o F[div] ((i32 * (1 + 1) + i32 * (1 + 1) + 1) + i32 * (1 + 1)) & F[div] 1) <- return (!thunkv fun (io_s8 : i32 * (1 + 1)) ->
+            < let (i, io_s8t) = io_s8;
+              found <- return io_s8t;
+              case run case (unbang host[lt_s32]) (i, i32[10]) {
+                inl io_sc -> return (inl () : 1 + 1)
+              | inr io_sc -> return (unbang not) found
+              } {
+                inl io_f -> return inl inl (i, found)
+              | inr io_t -> case (unbang host[gt_s32]) ((unbang host[mul32]) (i, i), i32[20]) {
+                    inl io_else -> i <- return (unbang host[add32]) (i, i32[1]);
+                      return inr (i, found)
+                  | inr io_then -> found <- return true;
+                      return inr (i, found)
+                  }
+              },
+              let (i, io_s8t) = io_s8;
+              found <- return io_s8t;
+              return () >);
+      io_s08 : i32 * (1 + 1) <- return (i, found);
+      io_x8 : (i32 * (1 + 1) + i32 * (1 + 1) + 1) + 1 <- (io_n8 <- perform[4294967295.0] ();
+        case io_n8 {
+          inl io_u -> io_it8 <- return unbang iterate[i32 * (1 + 1), i32 * (1 + 1) + i32 * (1 + 1) + 1, 1, [div]];
+            io_p8 : !U (i32 * (1 + 1) -o F[div] ((i32 * (1 + 1) + i32 * (1 + 1) + 1) + i32 * (1 + 1)) & F[div] 1) * i32 * (1 + 1) <- return (io_step8, io_s08);
+            force io_it8 io_p8
+        | inr io_u -> io_sf8 <- return unbang io_step8;
+            io_q8 <- force io_sf8 io_s08.2;
+            return inr io_q8
+        });
+      case io_x8 {
+        inl io_l8 -> case io_l8 {
+            inl io_j2 -> let (i, io_j2t) = io_j2;
+              found <- return io_j2t;
+              return inl (i, found)
+          | inr io_a8 -> return io_a8
           }
-      },
-      let (i, found) = s;
-      return () >);
-  i <- return i32[0];
-  found <- return false;
-  f <- return unbang unfold[loop (i32 * (1 + 1)) 1, i32 * (1 + 1)] turn;
-  s <- return (i, found);
-  return (thunkv nu_in < (nu_out force f s).1, (nu_out force f s).2 >)
+      | inr io_r8 -> return inr io_r8
+      })

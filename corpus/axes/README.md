@@ -39,7 +39,7 @@ today, and the golden once it lands).
 | `scope-data-effects.bc` | data × effects × scope | an in-place `fold_reuse` under a `mut` borrow; a `fold_imm` with output inside an `imm` borrow block | runs |
 | `scope-codata-effects.bc` | codata × effects × scope | an iterator holding `mut 'x output` inside `borrow mut stdout` | runs |
 | `scope-loop-lend.bc` | codata × effects × coeffects × scope | a `for` over the input that lends a table `imm` on every step | runs |
-| `borrow-across-loop.bc` | codata × effects × coeffects × scope | a `for` over the input inside a borrow block of a table, lent per observation (SPEC §14) | runs |
+| `borrow-across-loop.bc` | codata × effects × coeffects × scope | a `for` over the input inside a borrow block of a table (SPEC §14) | `corpus/pending/`: a lend held across a tick |
 | `scope-boxed-iter.bc` | codata × coeffects × scope | an iterator holding a borrow leaves an inner borrow block as `[@w] U(iter …)` (the account's §6, test case 2) | runs |
 | `free-monad.bc` | effects × data | a program of `write` operations as data, handled by two folds (the account's §3: handlers are folds) | runs |
 | `codata-generic.bc` | codata × effects, independence | one consumer written once, run on a pure iterator and an I/O iterator (the account's §6, test case 1) | runs |
@@ -129,12 +129,11 @@ there is a runtime), `needs-stdout.bc` (ambient `main` and `&mut` cover the comm
 
 **Blocked for a reason not in the list of current limits.**
 
-- **A loop inside a borrow scope** (`borrow-across-loop.bc`, now running). A borrow block's body
-  is one computation of `F`, and a div body returns a loop, which cannot leave the scope that
-  holds its borrow. This is the account's "`withbor` is a scoped, non-algebraic operation" met by
-  the div effect. It is met by lending again at each observation (SPEC §14, borrow scopes over
-  loops): the elaborated program is `scope-loop-lend.bc`'s. What remains is a loop whose codata
-  holds the borrow itself (a pipeline over a borrowed source); it also bounds scoped spawning for
+- **A loop inside a borrow scope** (`corpus/pending/borrow-across-loop.bc`). A borrow block's
+  body is one computation, and a loop ticks at each turn, a control operation that resumes: the
+  lend is held across a suspension (T1, #172). This is the account's "`withbor` is a scoped,
+  non-algebraic operation" met by the div effect. It needs call-graded operations (#654), parked pending a grade algebra; a borrow taken
+  at each step by the program, `scope-loop-lend.bc`, runs. It also bounds scoped spawning for
   async (#52).
 - **A div callback inside a fold's algebra is not specialized** (`map-div-fold.bc`), even in the
   whole program: SPEC §14's specialization reaches callbacks called on a function's spine, not

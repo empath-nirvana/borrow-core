@@ -9,7 +9,7 @@
 -- allow it, without `break` (its continuation cannot be cancelled). What is missing is a
 -- continuation whose cancel hands back a residual, or a capability with a destructor.
 --
--- now: 18:27: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its type has no destructor: an abortive operation of the bound computation would abandon it
+-- now: 18:27: `io_it0`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its type has no destructor: an abortive operation of the bound computation would abandon it
 
 include yield
 

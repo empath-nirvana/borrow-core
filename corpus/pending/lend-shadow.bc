@@ -1,0 +1,32 @@
+-- pending: a lend held across a loop's ticks (T1, #172): needs call-graded operations, parked pending a grade algebra (#654)
+-- now: 27:11: the row of an unwinding borrow's callback has only abortive operations, of names other than 0, whose arguments outlive every lifetime and do not mention its lifetime
+--
+-- A name bound inside a borrow block over a loop, beside a variable of the same name outside it:
+-- the block's `let mut acc` is a variable of its own (SPEC §41, rule R1), and the `acc` read
+-- after the block is `main`'s.
+--
+-- Needs a lend held across a tick. Every loop is at the row `div` (SPEC §14), and each of its back
+-- edges ticks, a control operation that resumes; the borrow of `t` at 27:11 spans the ticks of the
+-- `for` over the input at 29:5. The kernel's rule for a lend at a row has only abortive operations
+-- (`Row.Unwind`), so it refuses the lend. It needs a lend held across the loop's ticks: call-graded
+-- operations (#654), which are parked pending a grade algebra.
+--
+-- Once it lands: on the input `1234`, `i32[105]`, `live 0`: 10 + 20 + 30 + 40, the newline's entry
+-- 0, and `main`'s 5.
+fn tab(i: i32) -> i32 = i * 10
+
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let acc = 5;
+  let r = borrow imm t { b ->
+    let mut acc = 0;
+    for c in bytes(&mut stdin) { acc = acc + get(b, to_i32(c) - 48) };
+    acc
+  };
+  acc + r

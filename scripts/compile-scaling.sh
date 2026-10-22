@@ -8,8 +8,8 @@
 # The body is corpus-like code, and grows a program as programs grow: more functions, more
 # generators and adapters, a longer `main`. Each copy adds a generator, and four functions, each
 # a loop: over a pipeline of the adapters of `lib/adapters.bc` (`corpus/gen-adapters.bc`), over
-# a pipeline of generators read through an `imm` borrow of an array (`corpus/lend-pipeline.bc`),
-# and writing a cell through a `mut` borrow (`corpus/lend-mut.bc`). `main` gets a loop over a
+# a pipeline of generators reading an array through an `imm` borrow taken at each step
+# (`corpus/axes/scope-loop-lend.bc`), and writing a cell through a `mut` borrow taken at each step. `main` gets a loop over a
 # pipeline and a call of the four functions, each a div call in direct style, so `main`'s state
 # machine (SPEC §14) grows by five points per copy, and a loop over the input at its end.
 #
@@ -111,17 +111,11 @@ fn pc$i(k: i32) -> i32 =
 
 fn pd$i(k: i32) -> i32 =
   let t = alloc(array_new[i32] (101, tab));
-  let n = borrow imm t { b ->
-    let mut acc = k;
-    for x in above(20, squares(range(1, 11))) { acc = acc + get(b, x) + $i };
-    acc
-  };
+  let mut acc = k;
+  for x in above(20, squares(range(1, 11))) { let v = get(&t, x); acc = acc + v + $i };
   let _ = free(t);
-  let c = alloc(n);
-  let u = borrow mut c { m ->
-    for x in range(0, 5) { modify m { v -> v + x } };
-    ()
-  };
+  let c = alloc(acc);
+  for x in range(0, 5) { borrow mut c { m -> modify m { v -> v + x } } };
   free(c)
 B
 done

@@ -1,8 +1,9 @@
 -- Generator adapters (SPEC §15). Each is a generic generator, written once and instantiated at the
 -- types of each call: the instance is ordinary code at those types, so an adapter over a pure
--- source and one over a source that fails are two instances of one definition. Each body is one
--- state machine (SPEC §14), so a pipeline of adapters whose functions are known makes no
--- allocation and no dispatched call.
+-- source and one over a source that fails are two instances of one definition. Each body's loop
+-- is `iterate` at its row (SPEC §14, §50), so a pipeline of adapters whose functions are known
+-- makes no allocation; its dispatched calls are the loops' steps and resumes until B3 lowers
+-- `iterate` natively.
 --
 -- A source is a stored generator `U (pull A K R)` (`lib/yield.bc`): it gives `A`s, returns `K`,
 -- and, closed early, hands back `R`; the call of a generator at a parameter of that type is its

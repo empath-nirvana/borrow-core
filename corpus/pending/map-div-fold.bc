@@ -66,4 +66,4 @@ main -> i32 * i32 =
   let a = digits(map(double, cons(1, cons(2, cons(3, nil)))));
   let b = digits(map(steps, cons(6, cons(7, cons(27, nil)))));
   (a, b)
--- now: 60:93: type mismatch: expected `i32`, but this has type `U (delay i32)`
+-- now: 60:93: this is applied, so it must have a type `A => B`, but it has type `U (i32 -o F[div] (i32 + 1))`

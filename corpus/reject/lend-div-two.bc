@@ -1,8 +1,7 @@
--- expect: 14:14: `both` loops, so it is called in direct style one step at a time, and a borrow at `'a` cannot stay open across its steps: it may take one borrow of a cell at `'a`, `imm 'a A` or `mut 'a A`, which it borrows again at each step (SPEC §14, borrow scopes over loops)
--- A div function with a lifetime parameter that takes two borrows at it (SPEC §14, borrow scopes
--- over loops). A div function over a borrow is elaborated to take the owner and borrow it again
--- at each step of its loop; one owner is lent that way, so a second borrow at the same lifetime
--- would have to stay open across the steps.
+-- expect: 17:28: `y` is used twice here, and its type `imm 'a i32` is not persistent
+-- A div function with a lifetime parameter that takes two borrows at it and reads both at each turn
+-- of its loop. A borrow is not persistent, so the loop's body cannot use it again at each turn: the
+-- kernel refuses the second use (SPEC §10, §14).
 
 include yield
 

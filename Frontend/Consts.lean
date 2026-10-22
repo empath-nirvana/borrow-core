@@ -29,6 +29,7 @@ inductive CKw where
   | sliceSplitImm | sliceSplitMut | sliceEmptyImm | sliceEmptyMut | sliceReplaceMut | sliceSwapMut
   | countFold | countTry | boundedFix
   | withbor1U | withbor2U | withbor3U | withloadU | sliceBorrowMutU | sliceBorrowImmU
+  | iterate
   deriving DecidableEq, Repr
 
 /-- A constant keyword's spelling. -/
@@ -58,6 +59,7 @@ def CKw.str : CKw → String
   | .withbor1U => "withbor1u" | .withbor2U => "withbor2u" | .withbor3U => "withbor3u"
   | .withloadU => "withloadu" | .sliceBorrowMutU => "slice_borrow_mut_u"
   | .sliceBorrowImmU => "slice_borrow_imm_u"
+  | .iterate => "iterate"
 
 def CKw.all : List CKw :=
   [.alloc, .free, .swap, .copy, .copyBang, .forgetImm, .forgetMut, .forgetUnk, .forgetBang,
@@ -69,7 +71,8 @@ def CKw.all : List CKw :=
    .sliceSplitImm, .sliceSplitMut, .sliceEmptyImm, .sliceEmptyMut, .sliceReplaceMut,
    .sliceSwapMut,
    .countFold, .countTry, .boundedFix,
-   .withbor1U, .withbor2U, .withbor3U, .withloadU, .sliceBorrowMutU, .sliceBorrowImmU]
+   .withbor1U, .withbor2U, .withbor3U, .withloadU, .sliceBorrowMutU, .sliceBorrowImmU,
+   .iterate]
 
 def CKw.ofString? (s : String) : Option CKw := CKw.all.find? (·.str == s)
 
@@ -103,6 +106,7 @@ def CKw.sig : CKw → List ArgKind
   | .withbor1U => [binder, ty, ty, row]
   | .withbor2U | .sliceBorrowMutU | .sliceBorrowImmU => [binder, life, ty, ty, row]
   | .withbor3U | .withloadU => [life, binder, ty, ty, row]
+  | .iterate => [ty, ty, ty, row]
 
 /-- A constant from its keyword and arguments; `none` when they do not fit its signature. -/
 def Const.ofArgs : CKw → List Arg → Option Const
@@ -169,6 +173,7 @@ def Const.ofArgs : CKw → List Arg → Option Const
       some (.sliceBorrowMutU x b A B r)
   | .sliceBorrowImmU, [.binder x, .life b, .ty A, .ty B, .row r] =>
       some (.sliceBorrowImmU x b A B r)
+  | .iterate, [.ty St, .ty B, .ty R, .row r] => some (.iterate St B R r)
   | _, _ => none
 
 /-- A constant's keyword and bracket arguments. -/
@@ -234,6 +239,7 @@ def Const.toArgs : Const → CKw × List Arg
   | .withloadU a x A B r => (.withloadU, [.life a, .binder x, .ty A, .ty B, .row r])
   | .sliceBorrowMutU x b A B r => (.sliceBorrowMutU, [.binder x, .life b, .ty A, .ty B, .row r])
   | .sliceBorrowImmU x b A B r => (.sliceBorrowImmU, [.binder x, .life b, .ty A, .ty B, .row r])
+  | .iterate St B R r => (.iterate, [.ty St, .ty B, .ty R, .row r])
 
 theorem Const.ofArgs_toArgs (c : Const) : Const.ofArgs c.toArgs.1 c.toArgs.2 = some c := by
   cases c with

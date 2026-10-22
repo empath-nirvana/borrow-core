@@ -1,10 +1,7 @@
--- expect: 20:11: this borrow block's result has type `(imm 'x array i32 * i32) * i32`, which has the block's lifetime `'x`: nothing borrowed at `'x` outlives the block. When the body loops, each step borrows the place again, so the loop cannot keep what is borrowed before it (SPEC §14, borrow scopes over loops)
--- A borrow block over a loop whose loop keeps something borrowed before it (SPEC §14, borrow
--- scopes over loops). The block is lent per observation: the stretch before the loop borrows the
--- table for itself, and hands on to the loop what it binds, here `q`, a pair that holds the
--- borrow. Nothing borrowed at `'x` outlives that stretch's borrow, so the loop cannot hold it
--- between steps; the loop must use `b` (or a copy of it, `let b2 = b`), which each step borrows
--- again.
+-- expect: 17:11: the row of an unwinding borrow's callback has only abortive operations, of names other than 0, whose arguments outlive every lifetime and do not mention its lifetime
+-- A borrow block over a loop whose loop keeps something borrowed before it. The block's body
+-- loops, so its lend is held across the loop's ticks, and the kernel refuses the lend at the row
+-- `div` (`Row.Unwind`; T1, SPEC §14, §19).
 
 fn tab(i: i32) -> i32 = i * 10
 

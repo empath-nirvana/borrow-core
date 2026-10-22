@@ -2,9 +2,9 @@
 -- `two_lines` adds one to each line's length, calling the div function `line_length` inside the
 -- argument of `inc`, twice in one tuple. Inference sees that each call's type is a loop where a
 -- number is expected, so each is run in direct style: the value's applications are lifted out
--- into bindings in evaluation order, and each call of `line_length` becomes a state of the body's
--- machine. `div-nested.core.bc` is its elaboration in core, as `bcc desugar` prints it.
--- their loop types, each call a `div_bind`. Both erase to one term.
+-- into bindings in evaluation order, and each call of `line_length` is a call at the row `div`
+-- (SPEC §50). `div-nested.core.bc` is its elaboration in core, as `bcc desugar` prints it.
+-- Both erase to one term.
 extern stdin : ref input
 extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (u8 + 1))
 

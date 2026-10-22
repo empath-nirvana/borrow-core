@@ -1,0 +1,24 @@
+-- pending: a lend held across a loop's ticks (T1, #172): needs call-graded operations, parked pending a grade algebra (#654)
+-- now: 17:11: the row of an unwinding borrow's callback has only abortive operations, of names other than 0, whose arguments outlive every lifetime and do not mention its lifetime
+--
+-- A borrow block whose body loops, with a local of the block named as a function: the local
+-- does not stay in scope after the block, so `k()` after it is the declared `k` (hygiene, #481).
+--
+-- Needs a lend held across a tick. Every loop is at the row `div` (SPEC §14), and each of its back
+-- edges ticks, a control operation that resumes; the borrow of `t` at 17:11 spans the ticks of the
+-- `while` at 20:5. The kernel's rule for a lend at a row has only abortive operations
+-- (`Row.Unwind`), so it refuses the lend. It needs a lend held across the loop's ticks: call-graded
+-- operations (#654), which are parked pending a grade algebra.
+--
+-- Once it lands: `i32[207]`, `live 0`: the loop's 2, times 100, plus the declared `k`, 7.
+fn k() -> i32 = 7
+main -> i32 =
+  let t = alloc(1);
+  let r = borrow imm t { 'x, b ->
+    let k: !(1 => i32) = !{ u -> 1 };
+    let mut i = 0;
+    while i < 2 { i = i + *b };
+    i
+  };
+  let v = free(t);
+  r * 100 + k()
