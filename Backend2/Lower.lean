@@ -1055,7 +1055,7 @@ def lowerFn (i : Nat) (fd : Backend2.Fn) : LM Backend.Flat.Fn := do
       off := off + w
     pure ((← lowerTm (1 <<< 22) fd.body rn (.ret k)) ++ [.trap])
   pure { name := fd.name, params := total, results := k, locals := nloc, frame, body, ptrs,
-         facts := ← paramFacts fd }
+         facts := ← paramFacts fd, inline := fd.inline }
 
 def countsReport : List Stmt :=
   outStr "allocs " ++ [.call [] fPrintDec [.stat 0]] ++ outStr "\nindirect " ++
