@@ -504,7 +504,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       | [], rM =>
         let ⟨C, rN⟩ ← synC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N
         let FN ← popL E x.span x.name rN.F lin
-        if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rBind (atB sp [x.name]) rM FN h⟩
+        if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rBind { atB sp [x.name] with ann := oA.isSome, lin } rM FN h⟩
         else throw (splitErr E T sp rM.F.u FN.u)
       | o :: os, rM =>
         -- The head performs operations (SPEC §19): the binding is at the current row.
@@ -512,7 +512,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
         let rM' ← liftRow E M.span S rM
         let ⟨_, rN⟩ ← atRow E N.span S
           (← synC n { (E.minus rM.F.u).pushOwn x.name A lin with row := some S } Δ (A :: T) N)
-        pure ⟨_, ← effBind E sp x lin rM' rN⟩
+        pure ⟨_, ← effBind E sp x lin rM' rN (ann := oA.isSome)⟩
     | .unwind sp x oA M D N => do
       let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
       let S := E.row.getD S'
@@ -522,7 +522,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
         (effOf [] .unit)
       let FN ← popL E x.span x.name rN.F
-      pure ⟨_, ← thenIt E sp x.name rM' FN rD⟩
+      pure ⟨_, ← thenIt E sp x.name rM' FN rD (written := true) (ann := oA.isSome)⟩
     | .perform sp k i V => do
       let ⟨_, o, hf⟩ ← findOp E sp "perform" k i
       if hna : o.abort = false then
@@ -880,7 +880,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       | [], rM =>
         let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N C
         let FN ← popL E x.span x.name rN.F lin
-        if h : overlapOK T rM.F.u FN.u = true then pure (rBind (atB sp [x.name]) rM FN h)
+        if h : overlapOK T rM.F.u FN.u = true then pure (rBind { atB sp [x.name] with ann := oA.isSome, lin } rM FN h)
         else throw (splitErr E T sp rM.F.u FN.u)
       | o :: os, rM =>
         -- The head performs operations (SPEC §19): the binding is at the row of `C`.
@@ -889,7 +889,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           if hC : effOf S B = C then do
             let rM' ← liftRow E M.span S rM
             let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N (effOf S B)
-            pure (hC ▸ (← effBind E sp x lin rM' rN))
+            pure (hC ▸ (← effBind E sp x lin rM' rN (ann := oA.isSome)))
           else err sp "internal error: a returner chain"
         | none => err sp (s!"the bound computation performs the operations " ++
             s!"`{ppRow E (o :: os)}`, so this must have a type `F[…] B`, but `{E.ppC C}` is expected")
@@ -903,7 +903,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
             (effOf [] .unit)
           let FN ← popL E x.span x.name rN.F
-          pure (hC ▸ (← thenIt E sp x.name rM' FN rD))
+          pure (hC ▸ (← thenIt E sp x.name rM' FN rD (written := true) (ann := oA.isSome)))
         else err sp "internal error: a returner chain"
       | none => err sp s!"`x <- M unwind (D); N` is checked against `{E.ppC C}`, which is not `F[…] B`"
     | .abort sp k i V =>

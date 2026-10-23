@@ -737,11 +737,13 @@ def markIt {j : Jdg} (sp : Span) (k : SchemeMark) (r : Res Δ T j) : Except Erro
   | some r' => pure r'
   | none => err sp s!"internal error: a marked scheme ({repr k}) is not the scheme's term"
 
-/-- `[then]` at the row `S`: `N` (its binder `x` closed) and the finaliser `D` at one context. -/
+/-- `[then]` at the row `S`: `N` (its binder `x` closed) and the finaliser `D` at one context;
+`written` when the program writes `D`, `ann` when it annotates `x`, `lin` when it declares `x`
+`linear` (`TInfo`). -/
 def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow} {pN : Pins}
     (rM : Res Δ T (.comp (effOf S A)))
     (FN : Fam T (fun L => TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B))))
-    (rD : Res Δ (.unit :: T) (.comp (effOf [] .unit))) :
+    (rD : Res Δ (.unit :: T) (.comp (effOf [] .unit))) (written ann lin : Bool := false) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
   if hNZ : Row.nzB S = true then
     if hUq : Row.uniqB S = true then
@@ -763,7 +765,7 @@ def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExp
                 | none => throw ⟨sp, "internal error: an unrestricted row"⟩
             else pure (F.map fun _ h => ⟨h, fun hU => absurd (Row.unrDB_iff.mpr hU) (by simp [hu])⟩)
           if h : overlapOK T rM.F.u F'.u = true then
-            pure (rEffThen (atB sp [x]) (Row.nzB_sound hNZ) (Row.uniqB_sound hUq) rM F' h)
+            pure (rEffThen { atB sp [x] with written, ann, lin } (Row.nzB_sound hNZ) (Row.uniqB_sound hUq) rM F' h)
           else throw (splitErr E T sp rM.F.u F'.u)
         else throw (mergeErr E T sp "the finaliser" "the rest" "after this computation, "
           FD.u FD.w FN.u FN.w)
@@ -772,11 +774,13 @@ def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExp
     else throw ⟨sp, s!"the row `{ppRow E S}` has an operation twice"⟩
   else throw ⟨sp, s!"the row `{ppRow E S}` has an operation of the reserved name 0"⟩
 
-/-- `x <- M; N` whose head `M` performs operations, at the row `S` (SPEC §19). At a row with no
+/-- `x <- M; N` whose head `M` performs operations, at the row `S` (SPEC §19); `ann` when the
+program annotates `x` (`TInfo.ann`). At a row with no
 weakening, or when every slot `N` uses drops (and is `!` at an unrestricted row), `[let]`;
 otherwise `[then]`, with the finaliser `finalOf`: the destructors of the slots `N` uses. -/
 def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVTy}
-    (rM : Res Δ T (.comp (effOf S A))) (rN : Res Δ (A :: T) (.comp (effOf S B))) :
+    (rM : Res Δ T (.comp (effOf S A))) (rN : Res Δ (A :: T) (.comp (effOf S B)))
+    (ann : Bool := false) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
   let FN ← popL E x.span x.name rN.F lin
   if hw : Row.weakB S = true then
@@ -795,18 +799,18 @@ def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVT
             · exact h')⟩ :
           TTied rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.t (.comp (effOf S B)) ∧
             (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
-      if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet (atB sp [x.name]) rM FN' h)
+      if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet { atB sp [x.name] with ann, lin } rM FN' h)
       else throw (splitErr E T sp rM.F.u FN'.u)
     else
       let rD ← finalOf E sp S FN.u
-      thenIt E sp x.name rM FN rD
+      thenIt E sp x.name rM FN rD (ann := ann) (lin := lin)
   else
     let FN' := FN.map fun _ h =>
       (⟨h, fun hW => absurd (Row.weakB_iff.mpr hW) (by simp [hw]),
         fun hU => absurd (Row.weakB_iff.mpr (Row.weak_of_unr hU)) (by simp [hw])⟩ :
         TTied rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.t (.comp (effOf S B)) ∧
           (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
-    if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet (atB sp [x.name]) rM FN' h)
+    if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet { atB sp [x.name] with ann, lin } rM FN' h)
     else throw (splitErr E T sp rM.F.u FN'.u)
 
 end

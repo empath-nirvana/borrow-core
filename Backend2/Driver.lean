@@ -9,6 +9,7 @@ import Backend2.LitViews
 import Backend2.Lint
 import Backend2.LayoutCheck
 import Frontend.Check.Handled
+import Rewrite.Driver
 
 /-!
 # Backend2 — driver
@@ -171,7 +172,8 @@ layouts of the converted program decide the calls in tail position that close a 
 (`tailPass`) and the machines whose state is a cell (`cellPass`). A machine whose state is a cell
 and whose body takes its continuation is converted again with the level's cell passed on to its
 next point (`threadedOf`, SPEC §50): the conversion's second run, at those machines. -/
-def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
+def lirOfChecked (k : Backend.CheckedProg) (census : Bool := false) :
+    Except String (Prog × CState) := do
   let c := k.main
   let (exts, ncaps, loops) ← match k.io with
     | none => pure ([], 0, false)
@@ -181,7 +183,7 @@ def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Pr
       Except String (Prog × CState × Std.HashMap Nat LTy × Std.HashMap Nat LTy) := do
     let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c) (machineOps c)
       threaded stacked
-    let p := { p with exits := c.exitsOnDivError }
+    let p := { p with exits := k.exits }
     if st.done.isEmpty then return (p, st, {}, {})
     -- A call in tail position whose callee's suspended computations may be the machine's own
     -- closes a loop of tail calls, and passes its outcome on (SPEC §49, `tailPass`).
@@ -211,6 +213,15 @@ def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Pr
   let (p, st, _, _) ← run th sk
   return (p, st)
 
+/-- **The checked program the new backend compiles**: the Core → Core rewriter's (`Rewrite.run`,
+SPEC §54), run once on a program; its refusal is the compile's error. -/
+def rewritten (k : Backend.CheckedProg) : Except String Backend.CheckedProg :=
+  if k.rewritten then pure k else do pure (← Rewrite.run k).1
+
+/-- The LIR of a checked program (`lirOfChecked`), after the rewriter (`rewritten`). -/
+def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
+  lirOfChecked (← rewritten k) census
+
 /-- **The effect erasure's postcondition**, for a program (`bcc lir --erasure`, SPEC §47, §49): the
 LIR has no `handle` and no `perform`, so a program the new backend compiles has none left. The
 line counts, at a compiled program, the `handle`, `perform` and `raise` nodes the conversion
@@ -219,6 +230,9 @@ suspensions (each `use` body once per key); a compiled program leaves no node. A
 outside the fragment it counts the `handle` nodes with a clause of kind `once` or `stored` (the
 stored-continuation sites) and the others no rule takes. -/
 def erasureLine (k : Backend.CheckedProg) : String := Id.run do
+  let k ← match rewritten k with
+    | .ok k => pure k
+    | .error e => return s!"error: {e}"
   let c := k.main
   let nodes := hnodes Frontend.Check.copiesFuel c.t
   let direct := directFacts c
@@ -236,6 +250,22 @@ def erasureLine (k : Backend.CheckedProg) : String := Id.run do
     let m := if r "machine" > 0 then s!" machines {r "machine"} suspends {r "suspend"}" else ""
     s!"erased handles {r "handle"} performs {r "perform"} raises {r "raise"}{m} left 0 0"
   | .error _ => s!"outside left {stored} {other}"
+
+/-- **The identity criterion of the rewriter's step 0** (SPEC §54), as one line
+(`bcc rewrite --identity`): the keys read back as declarations; whether the rewritten `main` erases
+to the source's, and how many keys' bodies do (`Rewrite.identity`); the LIR of the rewritten
+program against the source's, byte for byte (`same`, both outside the fragment with one message
+`outside`, or `differs`); and the typed term's mismatches by node kind. -/
+def identityLine (k : Backend.CheckedProg) : Except String String := do
+  let (k', rep) ← Rewrite.run k
+  let id ← Rewrite.identity k.main k'.main
+  let lir := match lirOfChecked k, lirOfChecked k' with
+    | .ok (p, _), .ok (p', _) => if p.pp == p'.pp then "same" else "differs"
+    | .error e, .error e' => if e == e' then "outside" else "differs"
+    | _, _ => "differs"
+  let ms := id.mismatches.map fun (m, n) => s!" {m}:{n}"
+  pure (s!"keys {rep.keys} erasure {if id.mainEq then "same" else "differs"} " ++
+    s!"bodies {id.keysEq}/{id.keys} lir {lir} mismatches {id.mismatches.length}" ++ String.join ms)
 
 /-- **The LIR every compile reads**: `lirOf`'s, linted (`Backend2/Lint.lean`). The lowering does
 not track consumption (`Lower.vals`), so a variable used twice would lower to a use after free;
@@ -256,6 +286,7 @@ def copiesChecked (p : Prog) (L : Lay.Layouts) : Except String Unit :=
 /-- **The frame slots** (`bcc lir --frames`, SPEC §50): of the cells allocated for one lend
 (`Op.allocLent`), how many are placed in a frame slot (`Frames.framed`) and how many on the heap. -/
 def framesLine (k : Backend.CheckedProg) : Except String String := do
+  let k ← rewritten k
   let (p, _) ← lirOf k
   let all := Frames.lentCells p
   let fr := Frames.framed p
@@ -269,12 +300,14 @@ def layoutsOf (k : Backend.CheckedProg) (p : Prog) : Except String Lay.Layouts :
 /-- Convert and lint a program (`bcc lir --lint`): an error outside the pure fragment, or the
 lint's, its copies read at the layouts too. -/
 def lintOf (k : Backend.CheckedProg) : Except String Unit := do
+  let k ← rewritten k
   let (p, _) ← lintedLirOf k
   copiesChecked p (← layoutsOf k p)
 
 /-- The closure classes of a program's layouts, one a line: its codes, its width, whether its
 environment is on the heap (`bcc lir --layout`). -/
 def layoutReport (k : Backend.CheckedProg) : Except String (List String) := do
+  let k ← rewritten k
   let (p, _) ← lirOf k
   let L ← layoutsOf k p
   let cls := (L.union.toList.filter (!·.2.isEmpty)).map fun (r, cs) =>
@@ -288,6 +321,7 @@ program's layouts and closure flow as computed, accepted; then each perturbation
 (`LayCheck.perturbLayouts`, `LayCheck.perturbFlow`), refused, with the refusal. A line
 `ACCEPTED` is a perturbation the checks let through. -/
 def rejectReport (k : Backend.CheckedProg) : Except String (List String) := do
+  let k ← rewritten k
   let (p, _) ← lintedLirOf k
   let (g, m) ← Lay.places p
   let L := Lay.resolve p g m (cellsOf k)
@@ -308,6 +342,7 @@ def rejectReport (k : Backend.CheckedProg) : Except String (List String) := do
 
 /-- The word IR of a checked program by the new backend; with `counts`, the counting build. -/
 def flatOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String Backend.Flat.Prog := do
+  let k ← rewritten k
   let (p, cs) ← lintedLirOf k
   let L ← layoutsOf k p
   copiesChecked p L
@@ -348,8 +383,13 @@ def watTimed (file src : String) : IO (Except String String) := do
     let some c := r.main | throw s!"{file}: no `main`"
     let k ← ExceptT.mk <| stage "io main" (fun _ => "") fun _ =>
       match Frontend.Check.ioMainOf r.el.prog c with
-        | .ok io => pure (⟨r.el.prog, c, io, { ops := r.grades.table }⟩ : Backend.CheckedProg)
+        | .ok io =>
+          let cnts : Frontend.Check.CntTable := { ops := r.grades.table }
+          pure ({ prog := r.el.prog, main := c, io := io, cnts := cnts, el := r.el,
+                  exits := c.exitsOnDivError } : Backend.CheckedProg)
         | .error e => throw s!"{file}: {e}"
+    let k ← ExceptT.mk <| stage "rewrite" (fun (_ : Backend.CheckedProg) => "") fun _ =>
+      (rewritten k).mapError fun e => s!"{file}: {e}"
     let (p, cs) ← ExceptT.mk <| stage "lir" (fun (q : Prog × CState) =>
         s!"{q.1.fns.size} functions, {q.1.codes.size} codes") fun _ => lirOf k
     ExceptT.mk <| stage "lint" (fun _ => "") fun _ => match Lint.lint p with

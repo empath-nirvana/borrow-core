@@ -71,6 +71,19 @@ structure TInfo where
   binders : List String := []
   /-- At a `use` of a `def` the elaboration generates, its key (`Frontend.DefKey`). -/
   key : Option Frontend.DefKey := none
+  /-- At `[then]`, whether the program writes its finaliser (`x <- M unwind (D); N`), rather than
+  the checker inserting it as drop glue (`finalOf`, SPEC §19). Read by the rewriter's read-back
+  (SPEC §54). -/
+  written : Bool := false
+  /-- At a binding (`[bind]`, `[let]`, `[then]`), whether the program annotates its variable
+  (`x : A <- M; N`), and whether it declares it `linear` (SPEC §12). Read by the rewriter's
+  read-back (SPEC §54). -/
+  ann : Bool := false
+  lin : Bool := false
+  /-- At a borrow whose rule takes a witness lifetime that its node does not hold (`withbor2`,
+  `withbor2u`, `slice_borrow_mut`, `slice_borrow_imm` and their unwinding forms, `withbor_f2_mut`),
+  the witness the program writes, elaborated. Read by the rewriter's read-back (SPEC §54). -/
+  wit : Option Lifetime.Life := none
   deriving Inhabited
 
 /-- What an unused live slot of a type must satisfy for a derivation to be given it: one atom of a
