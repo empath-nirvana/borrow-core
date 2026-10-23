@@ -310,8 +310,6 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progRe_run
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progFinOp_run
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progNC₁_run
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progDrop_run
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progKeep_run
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.not_thenAbort_compatC
 -- SPEC §19, *Laws*: the handler laws and an abort's absorption, as machine lemmas
 #print axioms BoCa.Fig16.LogRel.Core.step1Only_plug
@@ -322,6 +320,8 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.catch_ret
 #print axioms BoCa.Fig16.LogRel.Core.catch_step
 #print axioms BoCa.Fig16.LogRel.Core.catch_unr
+#print axioms BoCa.Fig16.LogRel.Core.kappaAt_qualsVal
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.not_der_dropC
 #print axioms BoCa.Fig16.LogRel.Core.catch_cell
 #print axioms BoCa.Fig16.LogRel.Core.catchEv_cell
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.kappa_resume_steps
@@ -361,9 +361,7 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.sig_prefix_of_rowAt
 #print axioms BoCa.Fig16.LogRel.Core.hndTags_of_rowAt
 #print axioms BoCa.Fig16.LogRel.Core.rowAt_of_sigsAt
-#print axioms BoCa.Fig16.LogRel.Core.cnt_zero_iff_of_rowAt
 #print axioms Frontend.Check.sigsAt_effCtxOf
-#print axioms Frontend.Check.cntOk_effCtxOf
 #print axioms Frontend.Check.checkProgram_tied
 #print axioms Frontend.Check.checkProgram_tiedAt
 #print axioms Frontend.Check.checkProgram_sound
@@ -460,7 +458,6 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.dAt_progOutT
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_cancels
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_cancel_prefix
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.cntOk_Ξ₁₂
 -- SPEC §19, *Laws* item 4 and *Programs*: a continuation's use, and the programs no derivation types
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.fv_live
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.der_var
@@ -556,10 +553,8 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.not_der_e7c
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.dAt_e7c_lift
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_e7c_lift
-#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.cntOk_Ξe7c
 -- SPEC §19 *Programs*: the effect properties' programs, typed at `ΞE` and run by `runM`
 #print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead
-#print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.cntOk_ΞE
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.dAt_hQ
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.dAt_hofTwoRows
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.d_hofTwoRows

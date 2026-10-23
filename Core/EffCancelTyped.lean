@@ -28,8 +28,8 @@ Each typed program is derived (`d_…`) and its run computed (`…_run`):
 | `progNC₁T` | `{4}`: the outer `4` cancels the finaliser's continuation (`[cfin-cancel]`) | `()` |
 | `progKeepT` | `{2, 4⟨{2}⟩}`: the kept `2` pending at the second finaliser's `4` (`pend`); `H₄ₒ` resumes `κ₄`, and the kept `2` reaches `H₂ₒ` | `inj₂ ()` |
 
-A clause that drops its `κ` (the untyped `progDrop`) has no typing: a `κ` at `1?` has no weakening
-(§25, decision 56).
+A clause that drops its `κ` has no typing at a resuming operation (`not_der_dropC`): a `κ` at a
+count has no weakening (§25, decision 56).
 
 **The rejections (decision D3)**, each by inversion of `CDerives` (`Core/Inversions.lean`): the
 program is read from the outside in, each step by its rule and then the rules that conclude with
@@ -232,6 +232,23 @@ theorem d_resumeC {Δ : LifeCtx} (S : Row) (R : VTy) (F : CTy) :
     (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf S R)) (cancelTy S F))
       (.here (.cons (.cons .nil)))))
     (.there (.here (.cons .nil)))
+
+/-- **A clause that drops its `κ` has no typing at a resuming operation**: `λ_. inj₁ ()`, the
+untyped `progDrop`'s clause, returns at a context where the slot of `(x, κ)` is live, and `κ`'s
+type (`kTy`) is not persistent at a count (§53, decision 56).  `[spec §25, §53]` -/
+theorem not_der_dropC {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Count} {A B : VTy}
+    {F : CTy} (hres : (q == .zero) = false) :
+    ¬ CDerives Δ Γ (constC (Val.inj₁ Val.unit)).1 (.val (clauseTy S R (q, A, B) F)) := by
+  intro h
+  rw [Inversions.clauseTy_resuming hres] at h
+  obtain ⟨-, hb⟩ := Inversions.lam_bang h (fun h => by cases h) (by not_withPair) (by not_const)
+  obtain ⟨A₁, B₁, hu, -⟩ := Inversions.der_inj₁ hb _ rfl
+  rcases Inversions.der_unit hu rfl with ⟨hd, -⟩ | hr
+  · have hp := Inversions.deadP_slot hd (k := 0) rfl
+    simp only [VTy.Persistent, VTy.persistent, Bool.and_eq_true] at hp
+    exact Inversions.kTy_not_persistent (Count.toQual_ne_unr q) hp.2
+  · obtain ⟨S', Y, he⟩ := hr.comp_val
+    exact Inversions.effOf_ne_top S' Y he.symm
 
 /-- **The `[then]` of `progT`**: `perform 1 then x. x unwind raise 2` at `{2, 1⟨{2}⟩}`.  The cancel
 row of `perform 1`'s continuation holds the finaliser's raise (`F ⋈ {2} ≤ {2}`). -/

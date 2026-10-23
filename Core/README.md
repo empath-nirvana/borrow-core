@@ -164,9 +164,9 @@ effect).
 - **The handler laws as machine lemmas** (`SPEC.md` §19 *Laws*, §25, `EffMachine.lean`), in every
   context, each step its configuration's only step (`Step1Only`, `step1Only_plug`) but an
   allocation. H-ret (`catch_ret`); H-op: the catch hands the clause `kappa` at the machine's tag `2`,
-  which no count gives (`catch_unr`), and at a linear or affine one allocates `κ`'s cell at a free
-  location and
-  hands `kappaC` there (`catch_cell`), every run from the catch a prefix of those three steps or
+  which no count gives (`catch_unr`; a handler a derivation types holds its counts' tags, at each
+  of which `[op]` allocates the cell, `kappaAt_qualsVal`), and at a linear or affine one allocates
+  `κ`'s cell at a free location and hands `kappaC` there (`catch_cell`), every run from the catch a prefix of those three steps or
   going on from them (`catchEv_cell`); resuming `kappaC` releases the cell and runs `hnd H K[w]`
   (`kappaC_resume`), an affine cancel releases it and cancels (`kappaC_cancel`), a linear cancel has
   no step (`kappaC_cancel_lin`), and on a run to a value a use of `κ` releases its cell three steps

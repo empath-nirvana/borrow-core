@@ -2902,11 +2902,9 @@ where `err ∨ e` is `err` when `err ≠ none`, and `e` otherwise: the first err
   `ccatch` is dead, and the new cancel passes the `cfin` by `[cfin-cancel]`, which keeps the
   earlier error, the first cancel's. The first region's remaining finalisers run under the new
   cancel, which ends at its own `ccatch` (`progNC₁`).
-- **An unrestricted continuation dropped.** When the finaliser's continuation is unrestricted and
-  its handler discards it, the kept error and the region's remaining finalisers go with it
-  (`progDrop`; resumed instead, the error reaches its live handler, `progKeep`). This is the case
-  of any discarded unrestricted continuation, which never runs its region's finalisers: `unr` is
-  tolerated, never designed for.
+- **A continuation is not dropped.** A clause that discards its `κ` has no typing at a resuming
+  operation (`not_der_dropC`, §53): a `κ` at a count has no weakening. Resumed, the finaliser's
+  continuation carries the kept error to its live handler (`progKeepT`).
 - Ordinary unwinding (a `raise` of a name other than `⊥`) is unchanged: a finaliser's raise
   supersedes the pending one and is caught by the live handlers around the finaliser.
 - `Core/EffCancel.lean` machine-checks each outcome, as runs (`Steps` of `Head` steps) and by the
@@ -2920,8 +2918,6 @@ where `err ∨ e` is `err` when `err ≠ none`, and `e` otherwise: the first err
   | `progRe` | `f ()` re-enters the site `3`; the finaliser raises `3`; a live `3` outside | `inj₂ ()` |
   | `progFinOp` | a dead `4`; the finaliser performs `4`; a live `4` outside resumes it | `inj₁ ()` |
   | `progNC₁` | as `progFinOp`, the live `4` cancelling the finaliser's continuation | `()` |
-  | `progDrop` | a finaliser raises `2` (kept); a later one performs `4`, whose `unr` clause drops its continuation | `inj₁ ()`; the live `2` never runs |
-  | `progKeep` | as `progDrop`, the clause resuming | `inj₂ ()`: the kept `2` reaches the live `2` |
 
 **Why this rule.** Deadness is decided where the region is known: `[op]` builds `κ` from `K`, and
 removing the dead frames there makes every cancel rule local. No rule reads a name, and a dead
@@ -3427,8 +3423,7 @@ each by inversion of `CDerives` (`Core/Inversions.lean`):
 - `at13`: a clause that forgets `κ` (`not_der_at13`).
 
 **The effect properties** (`Core/EffTier1Programs.lean`). Each program is a closed term with a
-derivation tied to its effect context `ΞE` (`CDerivesAt`, read in `CDerives`), whose counts are
-`0` exactly at its abortive operations (`cntOk_ΞE`, §53), and a run computed by `runM` from the empty memory
+derivation tied to its effect context `ΞE` (`CDerivesAt`, read in `CDerives`), and a run computed by `runM` from the empty memory
 to its answer at the empty memory (`runM_val`):
 - E1, a function at several rows: `hofTwoRows`, `hof = λg. g ()` let-bound once (§24's
   `[let-poly]`) and called with a pure callback, with one that raises `exn` under `toResult`, and
@@ -4765,13 +4760,12 @@ cancel is invoked.
   take entries at any cancel rows.
 - **No unrestricted `exn`** (decision 63's restriction, 2026-10-12). An abortive operation is
   affine (§18), so a checked program's effect context has no unrestricted abortive operation
-  (`EffCtx.NoUnrExn`; since §53, no operation is unrestricted and the context is `EffCtx.CntOk`).
+  (`EffCtx.NoUnrExn`; since §53 no operation is unrestricted, and the restriction is gone).
   E9's stored closure holds `x : bool` across `cancel k`, a `[let]` at
   a row holding `exnₒ`, and `[let]` asks a persistent context at a row with an unrestricted
   operation, an abortive one included; so E9, as E5, is typed where no `exn` is unrestricted, which
   is every context the restriction leaves: `storedKFin` and `nestedFailOutside` (§19 *Programs*)
-  are typed at `ΞE`, whose `exn` is abortive at `0` (`dAt_storedKFin`, `dAt_nestedFailOutside`,
-  `cntOk_ΞE`).
+  are typed at `ΞE`, whose `exn` is abortive at `0` (`dAt_storedKFin`, `dAt_nestedFailOutside`).
 
 ### Semantics
 
@@ -4822,16 +4816,15 @@ catch and released at `κ`'s use (`cancelT_start`, `resumeT_start`):
   inversion through `[handle]`, `[then]` and the clause); its run ends at a raise of `2` that no
   handler catches (`progT_run`).
 - **`progOutT`**: `progT` under a live handler of `2`, typed at `F (1 ⊕ 1)` (`d_progOutT`); its run
-  reaches `inj₂ ()` (`progOutT_run`), and a tied derivation types it at `Ξ₁₂`, which is `CntOk`
-  (`dAt_progOutT`, `cntOk_Ξ₁₂`).
+  reaches `inj₂ ()` (`progOutT_run`), and a tied derivation types it at `Ξ₁₂` (`dAt_progOutT`).
 - **`cancelKeptT`** and **`progReT`**: the kept raise of `3` caught by a live `3` outside the
   region, the region re-entering the site `3` in `progReT` (`f ()` at `{1}`); cancel row `{3}`.
 - **`progFinOpT`** and **`progNC₁T`**: the finaliser performs `4`, whose live instance at the
   cancel is the outer handler, which resumes it, or cancels its continuation (`[cfin-cancel]`);
   cancel row `{4}`.
 - **`progKeepT`**: a finaliser raises `2`, kept, and a later finaliser performs `4` with `2`
-  pending: cancel row `{2, 4⟨{2}⟩}` (`pend`). `H₄ₒ` resumes the continuation (`inj₂ ()`). The
-  clause that dropped it (`progDropT`) has no typing since §53: a `κ` at `1?` has no weakening.
+  pending: cancel row `{2, 4⟨{2}⟩}` (`pend`). `H₄ₒ` resumes the continuation (`inj₂ ()`). A
+  clause that drops it has no typing since §53 (`not_der_dropC`): a `κ` at `1?` has no weakening.
 - **`progNCrecT`** (the leftover clause): two finalisers perform `4` under the handler of `4` that
   cancels. The second is a leftover of the first one's cancel, so `⋈` puts `4` in the cancel row of
   the `4` in the cancel row of `1`, which the cancelling handler's clause row, its own outer row,
@@ -4842,16 +4835,16 @@ catch and released at `κ`'s use (`cancelT_start`, `resumeT_start`):
   handled only inside the cancelled region. `[then]` puts `exnᵢ` in `wait`'s cancel row, and the
   clause reads `κ`'s cancel branch at its own row, so no derivation types the program at a row
   without `exnᵢ` (`not_der_e7c`). At the row of `exnᵢ` it is typed, by a tied derivation at an
-  effect context declaring `wait` and `exnᵢ` (`dAt_e7c_lift`, `d_e7c_lift`); at `exnᵢ`'s count
-  `0` that context is `CntOk` (`cntOk_Ξe7c`).
+  effect context declaring `wait` and `exnᵢ` (`dAt_e7c_lift`, `d_e7c_lift`), at `exnᵢ`'s count
+  `0`.
 
 ### Lowering
 
 The backend lowers a finaliser that raises (`Backend/Clos/Capture.lean`, `Backend/Clos/Unwind.lean`),
 not one that may suspend, performing an operation of a control handler: an unwind and a cancel arm
-call a finaliser directly. `Capture` rejects such a finaliser with a message. The four shapes, a
+call a finaliser directly. `Capture` rejects such a finaliser with a message. The shapes, a
 finaliser that performs (`progFinOp`), a cancel nested in a cancel (`progNC₁`), and a kept error
-dropped with an unrestricted continuation or resumed (`progDrop`, `progKeep`), are Lean runs
+pending at a later finaliser's operation (`progKeepT`), are Lean runs
 (`Core/EffCancel.lean`, `Core/EffCancelTyped.lean`) and interpreter runs, not kernel programs. The
 checker emits no such finaliser: its finalisers are destructors at `F 1`. No kernel program and
 no count changes. Finalisers that raise run at every stage in the kernel programs `e7a`, `e7b`,
@@ -9012,12 +9005,17 @@ at `1?` (handlers `1`, `4`) and `0` (the raises), with the untyped programs' cla
 `resumeC`), which read `κ` at its slot. A `κ` at `1?` owns a cell, so each typed run is stated at a
 memory with a free location, allocated at the catch and released at `κ`'s use (`catchA_steps`,
 `cancelT_start`, `resumeT_start`). `progDropT`, whose clause dropped its `κ`, has no typing at
-counts (a `κ` at `1?` has no weakening, decision 56) and is removed; its untyped run stays
-(`progDrop_run`, at the tag `2`). `progOutTA` is `progOutT` now, and `cancel_prefix`'s instance is
-`progOutT_cancel_prefix` at `Ξ₁₂`, which is `CntOk` (`cntOk_Ξ₁₂`), its start after the cell's
-release. The rejections (`not_der_progT`, `not_der_progNCrecT`, `not_der_e7c`) read a clause's
+counts (a `κ` at `1?` has no weakening, decision 56: `not_der_dropC`) and is removed, with its
+untyped run `progDrop` and its sibling `progKeep` (`progKeepT` is the typed one). `progOutTA` is
+`progOutT` now, and `cancel_prefix`'s instance is `progOutT_cancel_prefix` at `Ξ₁₂`, its start
+after the cell's release. The kernel programs `cancel-reraised`, `cancel-reentered` and
+`cancel-propagated` are the typed `cancelKeptT`, `progReT` and `progOutT`, at the tag `1` with
+`κ`'s cell. A handler a derivation types holds its counts' tags (`hndExpr n (E.map Prod.fst)`),
+at each of which `[op]` allocates `κ`'s cell (`kappaAt_qualsVal`); the machine's tag `2`, whose
+`κ` has no cell, is written by no count and held only by `Core/EffCancel.lean`'s untyped runs. The rejections (`not_der_progT`, `not_der_progNCrecT`, `not_der_e7c`) read a clause's
 count abstractly, at a count with weakening (`cancelC_jr`, `timeoutCl_finds`). `ClauseNames`'
-`unhandled_not_decided` is at `1?` (`resumeC_tail`).
+`unhandled_not_decided` is at `1?`, its clause still aliasing `κ` (`resumeCT_tail`, through
+`OnPaths.rebind`).
 
 ### Baseline
 
@@ -9207,7 +9205,7 @@ Safety (§19 *Laws*) is stated of the runs of typed closed programs, with no cha
 
 Decision R (§19 *Typing*) is implemented, with no change to `CDerives`, the machine or the
 relation: `EffCtx`, `RowAt`, `CDerivesAt`, `CDerivesAt.toCDerives`, `CDerivesAt.ofEffFree`,
-`sig_prefix_of_rowAt`, `hndTags_of_rowAt` and `EffCtx.CntOk` (§53) in `Core/Tied.lean`; the checker
+`sig_prefix_of_rowAt` and `hndTags_of_rowAt` in `Core/Tied.lean`; the checker
 builds every derivation tied (`Frontend/Check/Tied.lean`, `Frontend/Check/Rules.lean`), and
 `checkProgram_tied` and `checkProgram_tiedAt` read it off (`Frontend/Check/Program.lean`). The
 restriction to affine abortive operations (§18) is the checker's (`elabRow`,

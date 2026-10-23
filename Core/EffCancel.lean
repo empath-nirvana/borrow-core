@@ -24,13 +24,13 @@ instance of their name.
 * `progNC₁`: as `progFinOp`, but the outer `4` cancels the finaliser's continuation: that cancel
   passes the running finaliser's `cfin` (`[cfin-cancel]`) and ends at its own `ccatch`
   (`progNC₁_run`).
-* `progDrop`, `progKeep`: a finaliser raises `2`, kept; a later finaliser performs `4`, whose
-  handler at the tag `2` drops its continuation, and the kept error with it (`progDrop_run`), or
-  resumes it, and the kept error reaches the live `2` (`progKeep_run`).
 
 The handlers hold the machine's tag `2` (`plainTags`), so `[op]` hands each clause `kappa`, which
-owns no cell (§25), and the runs allocate nothing.  No count gives that tag (`Count.toQual`): these
-are runs of the machine, untyped; the typed programs are `Core/EffCancelTyped.lean`'s.
+owns no cell (§25), and the runs allocate nothing.  No count gives that tag: a handler a derivation
+types holds its counts' tags, at which `[op]` allocates `κ`'s cell (`kappaAt_qualsVal`).  These are
+runs of the machine, untyped; the typed programs are `Core/EffCancelTyped.lean`'s, at the tag `1`
+with `κ`'s cell, among them `progKeepT`; a clause that drops its `κ` has no typing
+(`not_der_dropC`).
 -/
 
 noncomputable section
@@ -337,64 +337,6 @@ theorem progNC₁_run (μ : Heap) : Steps (ℍ := ℍ) μ progNC₁ μ (.val Val
   refine .more (st .hole (Head.cancel μ .hole rfl)) ?_
   exact .refl _ _
 
-/-- `hnd (2, H₂ₒ) (hnd (4, H₄ₒ) (hnd (1, H₁) (((perform 1) then x. x unwind raise 2) then y. y
-unwind perform 4)))`, with `H₂ₒ`'s clause answering `inj₂ ()`, and `H₄ₒ`'s answer clause
-`λx. inj₁ x` and clause `c`. -/
-def progKD (c : Val) : Expr :=
-  hndE (hU 2 idV (constC (Val.inj₂ Val.unit))) (hndE (hU 4 injlV c)
-    (hndE H₁ (thenU (thenU (performU 1) (raiseU 2)) (performU 4))))
-
-/-- `H₄ₒ`'s clause answers `inj₁ ()` and drops its continuation. -/
-def progDrop : Expr := progKD (constC (Val.inj₁ Val.unit))
-
-/-- `H₄ₒ`'s clause resumes its continuation. -/
-def progKeep : Expr := progKD resumeC
-
-/-- `progKD`'s cancel: the inner finaliser's raise of `2` is kept, and the outer finaliser performs
-`4` with the kept error in its `cfin`. -/
-theorem progKD_cancel (μ : Heap) (c : Val) :
-    Steps (ℍ := ℍ) μ (progKD c) μ
-      ((hF (hU 2 idV (constC (Val.inj₂ Val.unit))) (hF (hU 4 injlV c) .hole)).plug
-        ((ccF (cfF (cancelVal (some (opPayload 2 0 Val.unit))) .hole)).plug (performU 4))) := by
-  let Ko : Kont := hF (hU 2 idV (constC (Val.inj₂ Val.unit))) (hF (hU 4 injlV c) .hole)
-  refine (Steps.plug Ko (cancel_start μ 1 idV (uF (performU 4) (uF (raiseU 2) .hole)) rfl)).trans ?_
-  show Steps μ ((Ko.comp (ccF (uF (performU 4) .hole))).plug
-    (ubindE (Val.pair idV (finV (raiseU 2))) (raiseE (.val (cancelVal none))))) μ _
-  refine (Steps.plug (Ko.comp (ccF (uF (performU 4) .hole))) (fin_cancel μ (raiseU 2) none)).trans ?_
-  refine .more (st (Ko.comp (ccF (uF (performU 4) .hole)))
-    (Head.cferr μ none 2 0 Val.unit .hole (by decide) rfl)) ?_
-  show Steps μ ((Ko.comp (ccF .hole)).plug (ubindE (Val.pair idV (finV (performU 4)))
-    (raiseE (.val (cancelVal (some (opPayload 2 0 Val.unit))))))) μ _
-  exact Steps.plug (Ko.comp (ccF .hole)) (fin_cancel μ (performU 4) _)
-
-/-- **`progDrop`**: `H₄ₒ`'s clause, at the tag `2`, drops the continuation that holds the kept error
-`2`, so `H₂ₒ`'s clause never runs. -/
-theorem progDrop_run (μ : Heap) : Steps (ℍ := ℍ) μ progDrop μ (.val (Val.inj₁ Val.unit)) := by
-  refine (progKD_cancel μ _).trans ?_
-  refine (Steps.plug (hF (hU 2 idV (constC (Val.inj₂ Val.unit))) .hole) (const_start μ 4 injlV
-    (Val.inj₁ Val.unit) (fun _ => rfl) (ccF (cfF (cancelVal (some (opPayload 2 0 Val.unit))) .hole))
-    rfl)).trans ?_
-  refine .more (st .hole (Head.hret μ 2 plainTags idV
-    (Val.pair (constC (Val.inj₂ Val.unit)) Val.unit) (Val.inj₁ Val.unit))) ?_
-  refine .more (st .hole (Head.beta μ _ (Val.inj₁ Val.unit))) ?_
-  exact .refl _ _
-
-/-- **`progKeep`**: `H₄ₒ` resumes the finaliser; the finaliser returns, the cancel re-raises the
-kept error `2` at the canceller, and the live `H₂ₒ` catches it. -/
-theorem progKeep_run (μ : Heap) : Steps (ℍ := ℍ) μ progKeep μ (.val (Val.inj₂ Val.unit)) := by
-  refine (progKD_cancel μ _).trans ?_
-  refine (Steps.plug (hF (hU 2 idV (constC (Val.inj₂ Val.unit))) .hole) (resume_start μ 4 injlV
-    (ccF (cfF (cancelVal (some (opPayload 2 0 Val.unit))) .hole)) rfl)).trans ?_
-  refine .more (st (hF (hU 2 idV (constC (Val.inj₂ Val.unit)))
-    (hF (hU 4 injlV resumeC) (ccF .hole))) (Head.cfret μ _ Val.unit)) ?_
-  refine .more (st (hF (hU 2 idV (constC (Val.inj₂ Val.unit))) (hF (hU 4 injlV resumeC) .hole))
-    (Head.creraise μ (opPayload 2 0 Val.unit) .hole rfl)) ?_
-  refine .more (st .hole (Head.hunwind μ 2 0 plainTags idV
-    (Val.pair (constC (Val.inj₂ Val.unit)) Val.unit) (constC (Val.inj₂ Val.unit)) Val.unit
-    (hF (hU 4 injlV resumeC) .hole) (hcl _) rfl)) ?_
-  refine .more (st .hole (Head.beta μ _ Val.unit)) ?_
-  exact .refl _ _
-
 /-! ### `[then]` with its finaliser at the abortive row
 
 Before SPEC §24's option A, `[then]` typed its finaliser at the row's abortive operations.  That
@@ -585,14 +527,6 @@ theorem progFinOp_eval :
 
 theorem progNC₁_eval :
     (match eval progNC₁ with | .value ⟨.unit, _⟩ false => true | _ => false) = true := by
-  decide
-
-theorem progDrop_eval :
-    (match eval progDrop with | .value ⟨.inj₁ .unit, _⟩ false => true | _ => false) = true := by
-  decide
-
-theorem progKeep_eval :
-    (match eval progKeep with | .value ⟨.inj₂ .unit, _⟩ false => true | _ => false) = true := by
   decide
 
 end BoCa.Fig16.LogRel.Core.CancelIntercept
