@@ -80,6 +80,9 @@ inductive Seed where
   | dropAnswer
   | weakenLin
   | keepNode
+  /-- R1's fault on obligations: every operation of the row of a `&`'s second component (a codata
+  thunk's finish) removed, the eliminated name's and every other (G-qual). -/
+  | eraseOther
   deriving DecidableEq, Repr, Inhabited
 
 /-- A seed by its name. -/
@@ -97,6 +100,7 @@ def Seed.ofString? : String → Option Seed
   | "dropAnswer" => some .dropAnswer
   | "weakenLin" => some .weakenLin
   | "keepNode" => some .keepNode
+  | "eraseOther" => some .eraseOther
   | _ => none
 
 /-- What R0's run records for the guard, per node visited (a `def`'s body at each use), and the

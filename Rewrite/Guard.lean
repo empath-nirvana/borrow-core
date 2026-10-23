@@ -1,4 +1,5 @@
 import Rewrite.Abort
+import Rewrite.Obl
 
 /-!
 # Rewrite — the guard  `[spec §54]`
@@ -10,11 +11,12 @@ checked terms; none reads a backend's state.
 * **G-main**: `c′`'s type, context and externs are `c`'s (`exitsOnDivError` is carried from `c`,
   `Rewrite.run`).
 * **G-assure**: `c′.pins ⊆ c.pins`: the rewrite adds no use of a relaxed rule.
-* **G-qual**: each non-persistent binder of `c` keeps its class at its image under `π`
-  (`qualClass`): a linear binder stays linear, a droppable one is not made persistent. The source
-  binder's class is its type's with the operations of R1's names removed from its rows (`eraseV`):
-  a type whose class came from one of them (a codata type whose finish performs it, which then has
-  no destructor) loses that class with the operation, and no other drop is allowed.
+* **G-qual**: each non-persistent binder of `c` keeps, at its image under `π`, every obligation of
+  its type (`obl`, `Rewrite/Obl.lean`: the reasons it has no destructor, each with its source) whose
+  source is not an operation of a name the rules eliminate, and is not made persistent. Eliminating
+  a name discharges exactly its operations' obligations (`obl_tV`, `Rewrite/OblTail.lean`): a type
+  whose obligations were all one name's (a codata type whose finish performs it) is droppable after
+  the name is eliminated, and no other weakening is allowed.
 * **G-κ**: each handled operation's count at `c′` is its count at `c`, for every operation no
   rule rewrites.
 * **G-bang**: `c′` has no more `!`-introductions, `!` copies or forgets, or forgets of `unk`, than
@@ -221,48 +223,27 @@ def piOf (bs bs' : Array (Option String × String × CVTy × Bool)) (inv : List 
       else throw s!"guard: the binder `{x}` has no image in the rewritten `main`"
   pure π.toList
 
-mutual
-/-- `A` with the operations of the names `ns` removed from every row it mentions. -/
-def eraseV (ns : List UInt32) : CVTy → CVTy
-  | .tensor A B => .tensor (eraseV ns A) (eraseV ns B)
-  | .sum A B => .sum (eraseV ns A) (eraseV ns B)
-  | .thunk C => .thunk (eraseC ns C)
-  | .ref A => .ref (eraseV ns A)
-  | .imm l A => .imm l (eraseV ns A)
-  | .mut l A => .mut l (eraseV ns A)
-  | .box l A => .box l (eraseV ns A)
-  | .bang A => .bang (eraseV ns A)
-  | .mu A => .mu (eraseV ns A)
-  | .fam L => .fam (eraseV ns L)
-  | A => A
-/-- `C` with the operations of the names `ns` removed from every row it mentions. -/
-def eraseC (ns : List UInt32) : BoCa.Fig16.LogRel.Core.CTy → BoCa.Fig16.LogRel.Core.CTy
-  | .ret A => .ret (eraseV ns A)
-  | .arr A C => .arr (eraseV ns A) (eraseC ns C)
-  | .amp C D => .amp (eraseC ns C) (eraseC ns D)
-  | .top => .top
-  | .all x b C => .all x b (eraseC ns C)
-  | .nu C => .nu (eraseC ns C)
-  | .eff m i c w A B fin C =>
-    if ns.contains m then eraseC ns C
-    else .eff m i c w (eraseV ns A) (eraseV ns B) (eraseC ns fin) (eraseC ns C)
-end
+/-- **A binder keeps its obligations** (G-qual): every obligation of the source's type `A`
+(`obl`, `Rewrite/Obl.lean`) whose source is not an operation of an eliminated name (`ruled`) is an
+obligation of the image's type `A'`, and a binder that is not persistent is not made persistent.
+None when it holds; else the obligation it loses. -/
+def lostObligation (ruled : List UInt32) (A A' : CVTy) : Option String :=
+  if A.persistent then none
+  else if A'.persistent then some "its persistence: the image is persistent"
+  else
+    let need := (obl false A).filter fun o => !ruled.any (o.of ·)
+    let have_ := obl false A'
+    (need.find? (!have_.contains ·)).map fun o => s!"the obligation {repr o}"
 
-/-- Each id's binders' classes and declarations, joined over its copies: the source's strictest,
-the image's loosest. A source binder's class is its type's with the operations of the names `er`
-removed from its rows (`eraseV`): R1 removes those names' operations, and a type whose class came
-from one (a codata type whose finish performs it, so that it has no destructor, `dtorB`) loses that
-class with it. -/
-def byId (bs : Array (Option String × String × CVTy × Bool)) (src : Bool) (er : List UInt32 := []) :
-    Std.HashMap String (Nat × Bool) := Id.run do
-  let mut m : Std.HashMap String (Nat × Bool) := {}
+/-- Each id's binders' types and declarations, over its copies. -/
+def byId (bs : Array (Option String × String × CVTy × Bool)) :
+    Std.HashMap String (List CVTy × Bool) := Id.run do
+  let mut m : Std.HashMap String (List CVTy × Bool) := {}
   for (id?, _, A, lin) in bs do
     if let some id := id? then
-      let A := if src && !er.isEmpty then eraseV er A else A
-      let q := if A.persistent then 0 else qualClass A
       m := match m.get? id with
-        | none => m.insert id (q, lin)
-        | some (q₀, l₀) => m.insert id (if src then (max q₀ q, l₀ || lin) else (min q₀ q, l₀ && lin))
+        | none => m.insert id ([A], lin)
+        | some (As, l₀) => m.insert id (As ++ [A], l₀ || lin)
   return m
 
 /-- **The guard** over the source `c`, the re-checked `c′`, the names of the operations the rewrite
@@ -280,23 +261,27 @@ def guard (fuel : Nat) (c c' : Checked) (t₀ : TExpr) (ruledAbort ruledTail : L
   -- The source as the rules read it: numbered (`numberBinders`) where a rule rewrites it.
   let fs ← facts fuel t₀ {}
   let fs' ← facts fuel c'.t {}
-  -- G-qual, through π: a binder keeps its class and, declared `linear`, stays declared so.
+  -- G-qual, through π: a binder keeps every obligation no eliminated name's operation is the source
+  -- of (`lostObligation`) and, declared `linear`, stays declared so.
   let π ← piOf fs.binders fs'.binders inv
   if fs.binders.all (·.1.isNone) then
     for (k, img) in π do
       let some (_, x, A, lin) := fs.binders[k]? | throw "guard: a binder out of range"
       let .binder k' := img | continue
       let some (_, _, A', lin') := fs'.binders[k']? | throw "guard G-qual: a binder with no image"
-      if !A.persistent && qualClass A' < qualClass A then
-        throw s!"guard G-qual: the binder `{x}` of class {qualClass A} is made class {qualClass A'}"
+      if let some why := lostObligation ruled A A' then
+        throw s!"guard G-qual: the binder `{x}` loses {why}"
       if lin && !lin' then throw s!"guard G-qual: the binder `{x}` is declared `linear` and its image is not"
   else
-    let src := byId fs.binders true ruledTail
-    let img := byId fs'.binders false
-    for (id, (q, lin)) in src.toList do
-      let some (q', lin') := img.get? id
+    let src := byId fs.binders
+    let img := byId fs'.binders
+    for (id, (As, lin)) in src.toList do
+      let some (As', lin') := img.get? id
         | if inv.contains id then continue else throw s!"guard G-qual: the binder {id} has no image"
-      if q' < q then throw s!"guard G-qual: the binder {id} of class {q} is made class {q'}"
+      for A in As do
+        for A' in As' do
+          if let some why := lostObligation ruled A A' then
+            throw s!"guard G-qual: the binder {id} loses {why}, whose source is no eliminated name's operation"
       if lin && !lin' then throw s!"guard G-qual: the binder {id} is declared `linear` and its image is not"
   -- G-κ.
   let keep (o : UInt32 × Nat × BoCa.Fig16.LogRel.Core.Count) := !ruled.contains o.1

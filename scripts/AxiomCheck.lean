@@ -7,6 +7,7 @@ import Frontend.Check.Program
 import Frontend.Check.Handled
 import Frontend.Check.TFacts
 import Frontend.Check.Derived
+import Rewrite.OblAbort
 /-! The theorems `SPEC.md` names, with their axioms. -/
 #print axioms BoCa.Fig16.LogRel.Typed.fundamentalProperty
 #print axioms BoCa.Fig16.LogRel.Typed.adequacy
@@ -44,6 +45,9 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.Check.tail_rule_names
 #print axioms BoCa.Fig16.LogRel.Core.cet_clauseTailReplace_hyps
 #print axioms BoCa.Fig16.LogRel.Core.handleTransparent_hyp_val
+#print axioms Rewrite.dtorB_iff_obl
+#print axioms Rewrite.obl_tV
+#print axioms Rewrite.obl_trV
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.RetFrames.answer
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.Returns0.run
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.subst_comm_closed

@@ -100,9 +100,9 @@ core-r0-pi-instances erased handles 0 performs 0 raises 0 rewritten 1 0 1 left 0
 core-r0-two-ops erased handles 0 performs 0 raises 0 rewritten 1 0 2 left 0 0
 core-r0-unwind erased handles 0 performs 0 raises 0 rewritten 1 0 1 left 0 0
 core-r0-unwind-linear erased handles 0 performs 0 raises 0 rewritten 1 0 1 left 0 0
+core-r1-cell erased handles 0 performs 0 raises 0 machines 1 suspends 1 tail 1 1 left 0 0
 core-r1-linear erased handles 0 performs 0 raises 0 tail 1 1 left 0 0
 core-r1-opt erased handles 0 performs 0 raises 0 tail 1 2 left 0 0
-core-r1-performs erased handles 0 performs 0 raises 0 machines 1 suspends 1 tail 1 1 left 0 0
 core-r1-two-ops erased handles 0 performs 0 raises 0 tail 1 2 left 0 0
 core-r1-two-ops-eq erased handles 0 performs 0 raises 0 tail 1 2 left 0 0
 core-r1-unused erased handles 0 performs 0 raises 0 tail 1 1 left 0 0

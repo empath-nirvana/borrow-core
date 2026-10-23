@@ -105,6 +105,7 @@ core-r0-pi-instances 1 0 0 1 1 0
 core-r0-two-ops 0 0 0 0 0 0
 core-r0-unwind 2 0 0 2 2 0
 core-r0-unwind-linear 0 0 0 0 0 0
+core-r1-cell 0 0 0 0 0 0
 core-r1-linear 1 0 0 1 1 0
 core-r1-opt 0 0 0 0 0 0
 core-r1-performs 0 0 0 0 0 0

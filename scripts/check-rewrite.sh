@@ -86,6 +86,7 @@ seeds=(
   "wrongWork corpus/core-r1-two-ops.bc kernel"
   "dropAnswer corpus/core-effects-tail.bc kernel"
   "weakenLin corpus/core-r1-linear.bc guard G-qual"
+  "eraseOther corpus/core-r1-cell.bc guard G-qual"
 )
 for t in "${seeds[@]}"; do
   read -r sd f by g <<< "$t"

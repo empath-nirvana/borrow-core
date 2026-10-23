@@ -161,6 +161,8 @@ corpus/core-r0-two-ops.bc 1.0 affine abortive: branch; agree
 corpus/core-r0-two-ops.bc 1.1 affine abortive: branch; agree
 corpus/core-r0-unwind-linear.bc 1.0 affine abortive: branch; agree
 corpus/core-r0-unwind.bc 1.0 affine abortive: branch; agree
+corpus/core-r1-cell.bc 4.0 linear tail: machine: the clause captures values; disagree
+corpus/core-r1-cell.bc 3.0 linear tail: direct; agree
 corpus/core-r1-linear.bc 2.0 linear tail: direct; agree
 corpus/core-r1-opt.bc 2.0 affine tail: direct; agree
 corpus/core-r1-performs.bc 5.0 linear tail: direct; agree

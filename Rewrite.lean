@@ -4,6 +4,9 @@ import Rewrite.R0
 import Rewrite.Hom
 import Rewrite.Admission
 import Rewrite.Tail
+import Rewrite.Obl
+import Rewrite.OblTail
+import Rewrite.OblAbort
 import Rewrite.ReadBack
 import Rewrite.Guard
 import Rewrite.Report

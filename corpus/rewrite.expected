@@ -101,9 +101,10 @@ corpus/core-r0-pi-instances.bc instances 4 decls 4 poly 0 R0 1:rewritten raises 
 corpus/core-r0-two-ops.bc instances 3 decls 3 poly 0 R0 1:rewritten raises 2 handles 1 lets 0 thens 0 subs 1 performs 0 forwards 0 ulends 0 pi 19 lir ok
 corpus/core-r0-unwind-linear.bc instances 4 decls 4 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 1 subs 2 performs 0 forwards 0 ulends 0 pi 20 lir ok
 corpus/core-r0-unwind.bc instances 4 decls 4 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 1 subs 2 performs 0 forwards 0 ulends 0 pi 18 lir ok
+corpus/core-r1-cell.bc instances 3 decls 3 poly 0 R1 3:rewritten calls 1 nodes 1 works 1 pi 23 lir ok
 corpus/core-r1-linear.bc instances 3 decls 3 poly 0 R1 2:rewritten calls 1 nodes 1 works 1 pi 5 lir ok
 corpus/core-r1-opt.bc instances 3 decls 3 poly 0 R1 2:rewritten calls 2 nodes 1 works 1 pi 5 lir ok
-corpus/core-r1-performs.bc instances 3 decls 3 poly 0 R1 5:rewritten calls 1 nodes 1 works 1 R1left 4:condition-2 pi 8 lir ok
+corpus/core-r1-performs.bc instances 3 decls 3 poly 0 R1 5:rewritten calls 1 nodes 1 works 1 R1left 4:condition-2 pi 8 lir outside
 corpus/core-r1-two-ops-eq.bc instances 4 decls 4 poly 0 R1 3:rewritten calls 2 nodes 1 works 2 pi 5 lir ok
 corpus/core-r1-two-ops.bc instances 4 decls 4 poly 0 R1 3:rewritten calls 2 nodes 1 works 2 pi 7 lir ok
 corpus/core-r1-unused.bc instances 3 decls 3 poly 0 R1 6:rewritten calls 1 nodes 1 works 1 pi 4 lir ok

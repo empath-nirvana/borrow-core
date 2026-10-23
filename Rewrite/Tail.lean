@@ -233,6 +233,43 @@ def tl (a : TailName) (ws : List TExpr) (base : Nat) : Nat → TExpr → TlM TEx
       else homLayer m (tl a ws base f) t
     | _ => homLayer m (tl a ws base f) t
 
+mutual
+/-- The planted fault `eraseOther`: the row of every `&`'s second component emptied, a codata
+thunk's finish among them. -/
+def eraseFinV : VTy → VTy
+  | .tensor A B => .tensor (eraseFinV A) (eraseFinV B)
+  | .sum A B => .sum (eraseFinV A) (eraseFinV B)
+  | .thunk C => .thunk (eraseFinC C)
+  | .ref A => .ref (eraseFinV A)
+  | .imm l A => .imm l (eraseFinV A)
+  | .mut l A => .mut l (eraseFinV A)
+  | .box l A => .box l (eraseFinV A)
+  | .bang A => .bang (eraseFinV A)
+  | .mu A => .mu (eraseFinV A)
+  | .fam L => .fam (eraseFinV L)
+  | A => A
+def eraseFinC : CTy → CTy
+  | .ret A => .ret (eraseFinV A)
+  | .arr A C => .arr (eraseFinV A) (eraseFinC C)
+  | .amp C D => .amp (eraseFinC C) (dropChain D)
+  | .top => .top
+  | .all x b C => .all x b (eraseFinC C)
+  | .nu C => .nu (eraseFinC C)
+  | .eff m i c w A B fin C => .eff m i c w (eraseFinV A) (eraseFinV B) (eraseFinC fin) (eraseFinC C)
+/-- A returner chain's operations removed. -/
+def dropChain : CTy → CTy
+  | .eff _ _ _ _ _ _ _ C => dropChain C
+  | C => eraseFinC C
+end
+
+/-- The fault `eraseOther` over a typed term. -/
+def eraseFin : Nat → TExpr → Except String TExpr
+  | 0, _ => throw "R1: a term nested too deeply"
+  | f + 1, t => homLayer ⟨eraseFinV, eraseFinC, fun S => S.map fun o =>
+      { o with A := eraseFinV o.A, B := eraseFinV o.B, fin := eraseFinC o.fin },
+      fun o => { o with A := eraseFinV o.A, B := eraseFinV o.B, fin := eraseFinC o.fin }⟩
+      (eraseFin f) t
+
 /-- **R1's pass for the name `a`**: its works translated (the planted fault `weakenLin` applied to
 them), each the declaration `base + j`; the typed term `t` and the earlier works `prev` rewritten.
 Returns the term, the earlier works rewritten, and the name's works. -/
@@ -244,6 +281,7 @@ def r1Pass (a : TailName) (base : Nat) (t : TExpr) (prev : List (Nat × String �
       pure ws'
     else pure ws
   let t' ← tl a ws base fuel t
+  let t' ← if (← get).seed == .eraseOther then eraseFin fuel t' else pure t'
   let prev' ← prev.mapM fun (d, nm, w) => do pure (d, nm, ← tl a ws base fuel w)
   pure (t', prev', ws.zipIdx.map fun (w, j) => (base + j, workName a.n j, w))
 

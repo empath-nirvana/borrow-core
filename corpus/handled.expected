@@ -401,6 +401,11 @@ corpus/core-r0-unwind-linear.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/core-r0-unwind.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
 corpus/core-r0-unwind.bc 32:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-r0-unwind.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/core-r1-cell.bc flows [0, 3, 4, 4294967295]; main [3, 4]
+corpus/core-r1-cell.bc 31:3: handle 4: inside [3]; row []; ops 4.0 tail; names 4.0 row; condition 2 holds
+corpus/core-r1-cell.bc 39:4: handle 3: inside []; row [4]; ops 3.0 tail; names 3.0 []; condition 2 holds
+corpus/core-r1-cell.bc 4.0 tail: machine; condition 2 holds; -
+corpus/core-r1-cell.bc 3.0 tail: direct; condition 2 holds; agree
 corpus/core-r1-linear.bc flows [0, 2, 4294967295]; main [2]
 corpus/core-r1-linear.bc 19:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
 corpus/core-r1-linear.bc 2.0 tail: direct; condition 2 holds; agree

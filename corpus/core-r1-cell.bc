@@ -1,0 +1,57 @@
+-- R1 (SPEC §54) and a type's obligations (G-qual): a codata thunk whose finish row holds two
+-- names' operations, `3.0 lin 1 ~> i32` (R1's: its clause resumes in tail position) and
+-- `4.0 lin 1 ~> i32` (whose clause reads `ten`, a `!` value of its context, so that R1's licence
+-- leaves it). `t0 : U(νX. F[3.0, 4.0](i32 + U X) & F[3.0, 4.0] 1)` has no destructor: its finish
+-- may perform both. Eliminating `3` discharges `3.0`'s obligations only; `4.0`'s stays, so `t0`
+-- stays linear, which G-qual checks. The reject test `eraseOther` drops `4.0` from the codata
+-- finishes too, which the kernel accepts (the finish performs nothing) and G-qual refuses
+-- (`scripts/check-rewrite.sh`).
+--
+-- Answer: i32[11].
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def step : !U (i32 -o F[3.0 lin 1 ~> i32, 4.0 lin 1 ~> i32] (i32 + i32) & F[3.0 lin 1 ~> i32, 4.0 lin 1 ~> i32] 1) =
+  !thunkv fun (s : i32) ->
+    < d <- perform[3.0] ();
+      e <- perform[4.0] ();
+      n <- return (plus (s, plus (d, e)));
+      c <- return ((unbang host[lt_s32]) (n, i32[10]));
+      case c {
+        inl ge -> return (inl n)
+      | inr lt -> return (inr n)
+      },
+      return () >
+
+main : F i32 =
+  ten <- return (!thunk return i32[0]);
+  f <- return (unbang (unfold[nu X. F[3.0 lin 1 ~> i32, 4.0 lin 1 ~> i32] (i32 + U X) & F[3.0 lin 1 ~> i32, 4.0 lin 1 ~> i32] 1, i32] step));
+  z <- return i32[1];
+  t0 <- return (thunkv nu_in < (nu_out (force f z)).1, (nu_out (force f z)).2 >);
+  handle_with[4](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (p : 1 * U ((i32 -o F i32) & top)) ->
+        let (u, k) = p;
+        let () = u;
+        g <- return (unbang ten);
+        x <- force g;
+        (force k).1 x), ()) : !U (1 * U ((i32 -o F i32) & top) -o F i32) * 1))
+  (handle_with[3](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F[4.0 lin 1 ~> i32] i32)),
+      (((!thunkv fun (p : 1 * U ((i32 -o F[4.0 lin 1 ~> i32] i32) & top)) ->
+        let (u, k) = p;
+        let () = u;
+        x <- return i32[5];
+        (force k).1 x), ()) : !U (1 * U ((i32 -o F[4.0 lin 1 ~> i32] i32) & top) -o F[4.0 lin 1 ~> i32] i32) * 1)) (
+    o1 <- (nu_out (force t0)).1;
+    case o1 {
+      inl a -> return a
+    | inr t1 ->
+        o2 <- (nu_out (force t1)).1;
+        case o2 {
+          inl b -> return b
+        | inr t2 ->
+            u <- (nu_out (force t2)).2;
+            return i32[0]
+        }
+    }))
