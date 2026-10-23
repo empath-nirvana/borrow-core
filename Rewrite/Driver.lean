@@ -1,6 +1,7 @@
 import Rewrite.ReadBack
 import Rewrite.Guard
 import Rewrite.Report
+import Rewrite.R0
 import Backend.Driver
 import Frontend.Elab.RenameLife
 
@@ -8,7 +9,7 @@ import Frontend.Elab.RenameLife
 # Rewrite — the driver  `[spec §54]`
 
 **The Core → Core rewriter** (#680), on the new backend's path (`Backend2.lirOf`): from a checked
-program `k`, the rules over its typed program (none at step 0), the read-back of the typed program
+program `k`, the rules over its typed program (R0, `rules`), the read-back of the typed program
 into a program (`readBack`), the kernel's one re-check of that program at the counts the source's
 check inferred (`checkEl` at `k.cnts`, no elaboration and no inference), and the guard
 (`Rewrite/Guard.lean`). The result is `k` with the re-checked `main`; `exitsOnDivError` is carried
@@ -115,16 +116,16 @@ def externNames (ds : List Decl) : List String :=
   ds.filterMap fun | .extern _ n _ => some n.name | _ => none
 
 /-- **The read-back of a checked program**: the elaborated program `el` with its `def`s replaced
-by one declaration per instance (`declOf`), and `main` read back from `c`; the number of
+by one declaration per instance (`declOf`), and `main` read back from `t` (`c`'s typed term, or the rules' rewrite of it); the number of
 instances, of declarations, and of polymorphic ones. -/
-def readBack (el : Frontend.Elab.Elaborated) (c : Checked) (tbl : Frontend.Check.CntTable) :
-    Except String (Frontend.Elab.Elaborated × Nat × Nat × Nat) := do
+def readBack (el : Frontend.Elab.Elaborated) (c : Checked) (tbl : Frontend.Check.CntTable)
+    (t : TExpr := c.t) : Except String (Frontend.Elab.Elaborated × Nat × Nat × Nat) := do
   let ds := el.prog.decls
   let some (msp, _) := ds.findSome? (fun | .main sp C _ => some (sp, C) | _ => none)
     | throw "rewrite: the program has no `main`"
   let exts := externNames ds
   let extVars : List (Option String) := (exts.map some).reverse
-  let uses ← collect fuel c.ctx.length exts.length ⟨[]⟩ c.t []
+  let uses ← collect fuel c.ctx.length exts.length ⟨[]⟩ t []
   -- Each instance's declaration, inner instances first; one declaration per distinct read-back.
   let mut decls : List (Key × DeclOf) := []
   let mut defs : List Decl := []
@@ -155,7 +156,7 @@ def readBack (el : Frontend.Elab.Elaborated) (c : Checked) (tbl : Frontend.Check
       if let some k := u.dkey then keys := keys ++ [{ k with name }]
   let cx0 : Cx := { vars := extVars, nExt := exts.length, decls, tbl }
   let C ← rbC tbl msp fuel [] c.C
-  let M ← (← rd fuel cx0 c.t).comp
+  let M ← (← rd fuel cx0 t).comp
   let kept := ds.zipIdx.filter fun (d, _) => match d with
     | .def_ .. | .main .. => false
     | _ => true
@@ -163,18 +164,86 @@ def readBack (el : Frontend.Elab.Elaborated) (c : Checked) (tbl : Frontend.Check
   let ds' := kept.map (·.1) ++ defs ++ [Decl.main msp C M]
   pure ({ el with prog := ⟨ds'⟩, lib, keys := el.keys ++ keys }, uses.length, defs.length, poly)
 
-/-- **The rewriter's run** on a checked program: no rule (step 0), the read-back, the kernel's one
-re-check at the source's counts, and the guard. -/
-def run (k : Backend.CheckedProg) : Except String (Backend.CheckedProg × Report) := do
+/-- **The rules over the typed program**: R0 over each name its keys rewrite, in their order
+(`r0Keys`, `ab`), on `main`'s typed term and every `def` body at each use. -/
+def rules (c : Checked) (seed : Seed := .none) :
+    Except String (TExpr × List (AbortName × R0Status) × AbStats) := do
+  let keys ← r0Keys c fuel
+  let mut t := c.t
+  let mut st : AbStats := { seed }
+  for (a, s) in keys do
+    if s == .rewritten then
+      let (t', st') ← (ab a t).run st
+      t := t'
+      st := st'
+  pure (t, keys, st)
+
+/-- The source nodes R0 rewrites, by rule. -/
+structure R0Count where
+  handles : Nat := 0
+  performs : Nat := 0
+  raises : Nat := 0
+  lets : Nat := 0
+  thens : Nat := 0
+  subs : Nat := 0
+  forwards : Nat := 0
+  ulends : Nat := 0
+  deriving Inhabited
+
+/-- R0's nodes of a typed term outside the bodies of its uses, for the names `ruled`: their
+handler nodes, the `perform`s of other names, `[let]`s, `[then]`s, `[sub]`s into a row and other
+names' handler nodes at a row holding one, their `raise`s, and the unwinding borrows at a row
+holding one. -/
+def r0Nodes (ruled : List UInt32) : Nat → TExpr → R0Count → Except String R0Count
+  | 0, _, _ => throw "rewrite: a term nested too deeply to count"
+  | f + 1, t, c => do
+    let has (S : BoCa.Fig16.LogRel.Core.Row) := S.any (ruled.contains ·.n)
+    let c := match t with
+      | .effHandleV _ _ S _ _ n .. | .effHandleVB _ _ S _ _ n .. | .effHandleT _ _ S _ _ _ n ..
+      | .effHandleL _ _ S _ _ _ _ n .. =>
+        if ruled.contains n then { c with handles := c.handles + 1 }
+        else if has S then { c with forwards := c.forwards + 1 } else c
+      | .effPerform _ _ S _ _ => if has S then { c with performs := c.performs + 1 } else c
+      | .effRaise _ _ _ o _ _ => if ruled.contains o.n then { c with raises := c.raises + 1 } else c
+      | .effLet _ _ _ _ S _ _ _ => if has S then { c with lets := c.lets + 1 } else c
+      | .effThen _ _ _ _ S _ _ _ _ _ _ => if has S then { c with thens := c.thens + 1 } else c
+      | .effSub _ _ S S' _ _ => if !has S && has S' then { c with subs := c.subs + 1 } else c
+      | .withbor1U _ _ _ _ S _ _ | .withbor2U _ _ _ _ S _ _ | .withbor3U _ _ _ _ _ S _ _
+      | .withloadU _ _ _ _ _ S _ | .sliceBorrowMU _ _ _ _ S _ _ | .sliceBorrowIU _ _ _ _ S _ _ =>
+        if has S then { c with ulends := c.ulends + 1 } else c
+      | _ => c
+    match t with
+    | .use .. => pure c
+    | _ => t.children.foldlM (init := c) fun c (_, t') => r0Nodes ruled f t' c
+
+/-- **R0's rewrites, per instance**: the source nodes R0 rewrites in `main`'s typed term and in
+each instance's body once (`collect`), as the new backend's erasure line counts nodes. -/
+def r0Counts (c : Checked) (ruled : List UInt32) : Except String R0Count := do
+  let uses ← collect fuel c.ctx.length 0 ⟨[]⟩ c.t []
+  uses.foldlM (init := ← r0Nodes ruled fuel c.t {}) fun acc u => r0Nodes ruled fuel u.body acc
+
+/-- **The rewriter's run** on a checked program: the rules (R0), the read-back, the kernel's one
+re-check at the source's counts, and the guard. `seed` plants a fault in R0 for the reject tests
+(`Seed`); the compile passes none. -/
+def run (k : Backend.CheckedProg) (seed : Seed := .none) :
+    Except String (Backend.CheckedProg × Report) := do
   let c := k.main
-  let (el', nkeys, ndecls, poly) ← readBack k.el c k.cnts
+  let (t, keys, st) ← rules c seed
+  let (el', nkeys, ndecls, poly) ← readBack k.el c k.cnts t
+  let ruled := keys.filterMap fun (a, s) => if s == .rewritten then some a.n else none
+  let rows := if ruled.isEmpty then "" else s!" (R0 at the names {ruled})"
   let (rep', terms') ← (checkEl el' k.cnts).mapError fun e =>
-    s!"rewrite: the kernel refuses the rewritten program at {e.span.start.render}: {e.msg}"
+    s!"rewrite: the kernel refuses the rewritten program{rows} at {e.span.start.render}: {e.msg}"
   let some c' := rep'.main | throw "rewrite: the rewritten program has no `main`"
   unless externNames el'.prog.decls == externNames k.el.prog.decls do
     throw "guard G-main: the rewritten program has other externs"
-  guard fuel c c' [] [] 0 terms'
-  pure ({ k with main := c', rewritten := true }, { keys := nkeys, decls := ndecls, poly })
+  let π ← guard fuel c c' ruled st.bangs terms'
+  let r0 := keys.map fun (a, s) => (a.n, match s with
+    | .rewritten => "rewritten"
+    | .left r => s!"left: {r}")
+  pure ({ k with main := c', rewritten := true },
+    { keys := nkeys, decls := ndecls, poly, r0, stats := st,
+      moved := (π.filter fun (k, img) => img != .binder k).length })
 
 /-- **The identity criterion** of step 0, between the source's checked `main` `c` and the
 rewritten `c′`: the typed terms compared node by node and field by field at every use

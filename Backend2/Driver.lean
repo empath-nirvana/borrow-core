@@ -228,11 +228,19 @@ line counts, at a compiled program, the `handle`, `perform` and `raise` nodes th
 erased, and with state machines the `handle` nodes compiled as drives and the `perform`s as
 suspensions (each `use` body once per key); a compiled program leaves no node. At a program
 outside the fragment it counts the `handle` nodes with a clause of kind `once` or `stored` (the
-stored-continuation sites) and the others no rule takes. -/
-def erasureLine (k : Backend.CheckedProg) : String := Id.run do
-  let k ← match rewritten k with
-    | .ok k => pure k
+stored-continuation sites) and the others no rule takes. At a program R0 rewrites (SPEC §54), the
+line also counts what R0 rewrote in Core before the conversion (`rewritten H P R`: the handler
+nodes, the `perform`s at a row holding an abortive name, and the `raise`s, each instance's body
+once). -/
+def erasureLine (k₀ : Backend.CheckedProg) : String := Id.run do
+  let (k, rep) ← match Rewrite.run k₀ with
+    | .ok r => pure r
     | .error e => return s!"error: {e}"
+  -- R0's rewrites (SPEC §54), per instance: the handler nodes, `perform`s and `raise`s.
+  let ruled := rep.r0.filterMap fun (n, st) => if st == "rewritten" then some n else none
+  let rw := if ruled.isEmpty then "" else match Rewrite.r0Counts k₀.main ruled with
+    | .ok n => s!" rewritten {n.handles} {n.performs} {n.raises}"
+    | .error e => s!" rewritten error: {e}"
   let c := k.main
   let nodes := hnodes Frontend.Check.copiesFuel c.t
   let direct := directFacts c
@@ -248,25 +256,43 @@ def erasureLine (k : Backend.CheckedProg) : String := Id.run do
     let r (key : String) := st.erased.getD key 0
     -- A compiled program leaves no node: each is erased (SPEC §47) or a machine's drive (§49).
     let m := if r "machine" > 0 then s!" machines {r "machine"} suspends {r "suspend"}" else ""
-    s!"erased handles {r "handle"} performs {r "perform"} raises {r "raise"}{m} left 0 0"
-  | .error _ => s!"outside left {stored} {other}"
+    s!"erased handles {r "handle"} performs {r "perform"} raises {r "raise"}{m}{rw} left 0 0"
+  | .error _ => s!"outside{rw} left {stored} {other}"
 
-/-- **The identity criterion of the rewriter's step 0** (SPEC §54), as one line
-(`bcc rewrite --identity`): the instances read back, the declarations and the polymorphic ones
-among them, the uses; the rewritten `main`'s erasure against the source's and the typed terms'
-mismatches by node kind and field (`Rewrite.identity`); and the LIR of the rewritten program
+/-- **The rewriter's line** (SPEC §54, `bcc rewrite --identity`): the instances read back, the
+declarations and the polymorphic ones among them, the uses. A program no rule rewrites is held to
+step 0's identity criterion: the rewritten `main`'s erasure against the source's and the typed
+terms' mismatches by node kind and field (`Rewrite.identity`), and the LIR of the rewritten program
 against the source's, byte for byte (`same`, both outside the fragment with one message
-`outside`, or `differs`). -/
+`outside`, or `differs`). A program R0 rewrites lists its abortive names, each rewritten or left
+with its reason, the source nodes R0 rewrote by rule (`main` and each instance's body once), the
+binders `π` moves,
+and whether the new backend compiles the rewritten program (`ok`), both are outside its fragment
+(`outside`), or only the source compiles (`red`). -/
 def identityLine (k : Backend.CheckedProg) : Except String String := do
   let (k', rep) ← Rewrite.run k
-  let id ← Rewrite.identity k.main k'.main
-  let lir := match lirOfChecked k, lirOfChecked k' with
-    | .ok (p, _), .ok (p', _) => if p.pp == p'.pp then "same" else "differs"
-    | .error e, .error e' => if e == e' then "outside" else "differs"
-    | _, _ => "differs"
-  let ms := id.mismatches.map fun (m, n) => s!" {m}:{n}"
-  pure (s!"instances {rep.keys} decls {rep.decls} poly {rep.poly} uses {id.uses} " ++
-    s!"erasure {id.erasure} lir {lir} mismatches {id.mismatches.length}" ++ String.join ms)
+  let head := s!"instances {rep.keys} decls {rep.decls} poly {rep.poly}"
+  let r0 := if rep.r0.isEmpty then "" else
+    " R0" ++ String.join (rep.r0.map fun (n, st) => s!" {n}:{st.replace " " ""}")
+  let ruled := rep.r0.filterMap fun (n, st) => if st == "rewritten" then some n else none
+  if !ruled.isEmpty then
+    let st ← Rewrite.r0Counts k.main ruled
+    let lir := match lirOfChecked k, lirOfChecked k' with
+      | _, .ok _ => "ok"
+      | .error e, .error e' => if e == e' then "outside" else "outside*"
+      | .ok _, .error _ => "red"
+    pure (head ++ r0 ++ s!" raises {st.raises} handles {st.handles} lets {st.lets} thens {st.thens}" ++
+      s!" subs {st.subs} performs {st.performs} forwards {st.forwards} ulends {st.ulends}" ++
+      s!" pi {rep.moved} lir {lir}")
+  else
+    let id ← Rewrite.identity k.main k'.main
+    let lir := match lirOfChecked k, lirOfChecked k' with
+      | .ok (p, _), .ok (p', _) => if p.pp == p'.pp then "same" else "differs"
+      | .error e, .error e' => if e == e' then "outside" else "differs"
+      | _, _ => "differs"
+    let ms := id.mismatches.map fun (m, n) => s!" {m}:{n}"
+    pure (s!"{head} uses {id.uses} " ++
+      s!"erasure {id.erasure} lir {lir} mismatches {id.mismatches.length}" ++ String.join ms ++ r0)
 
 /-- **The LIR every compile reads**: `lirOf`'s, linted (`Backend2/Lint.lean`). The lowering does
 not track consumption (`Lower.vals`), so a variable used twice would lower to a use after free;

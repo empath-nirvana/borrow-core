@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.04 · 2026-10-23
+Version 1.05 · 2026-10-23
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -9077,7 +9077,7 @@ program with each `ctl` entry and `kont` at its count (`countedQual`, over the s
 - **The world** is `⊤` only (stage 2, #654's `ℓ_op`).
 - **The rewrite table's bridges** (design §3.2, B1 and B2) are unproved; nothing here uses them.
 
-## 54. Entry 53 — Core → Core effect rewrites (#680): R-pre, the rule-written handlers' producers; step 0, the identity rewrite
+## 54. Entry 53 — Core → Core effect rewrites (#680): R-pre, the rule-written handlers' producers; step 0, the identity rewrite; R0, abort
 
 ### Motivation
 
@@ -9201,6 +9201,130 @@ The rewriter's pass, applying no rule, on the new backend's path (`Rewrite/`, th
 
 No type, typing rule, machine step, relation clause or elaboration changes; the census is the
 source check's report. No output, golden, count or census row of an existing program changes.
+
+### R0: abort
+
+The first rule of the rewriter (the scope's §R0). It eliminates every **abortive name** by the
+standard exceptions-as-sums translation, inside the kernel's language, before the new backend's
+conversion. The rule is in `Rewrite/Types.lean` (types), `Rewrite/Abort.lean` (one rule per
+`TExpr` constructor) and `Rewrite/R0.lean` (keys and order). `Rewrite.run` applies it, then reads
+back, re-checks once and runs the guard, as step 0 does.
+
+**The key.** A name `n` is keyed when every handler node of `n` holds every operation at the count
+`0` (`E[j].1 = 0`, the counts the check inferred, §53). No name is mixed. Names are rewritten one at
+a time, inside out: in the post-order of the handler nodes, each name at its first node. The sums
+nest in that order: `(A ⊕ P_n) ⊕ P_m` when `n` comes before `m`. Backend2's T2 laid the payload out
+flat; R0 does not.
+
+**Types.** The translation is homomorphic on every former but the returner chain:
+- `⟦F_Σ A⟧ₙ = F_{Σ∖n}(⟦A⟧ₙ ⊕ P_n)` when `n ∈ Σ`, and `F_Σ ⟦A⟧ₙ` otherwise;
+- `P_n` is the sum of `n`'s operations' arguments, nested to the right, and a name of one operation
+  pays its argument;
+- every function type, `def` types included, translates through its codomain. `trC_effOf` states
+  the chain's translation.
+
+**Terms**, at a row holding `n`:
+- `raise_{n.j} V ↦ return (inr (ι_j V))`.
+- The `[sub]` of a computation `M` at a row without `n` into one with it: `M to x. return (inl x)`.
+  This is how `return V` reaches a row holding `n`.
+- `perform_{m.i} V ↦ perform_{m.i} V to y. return (inl y)`, for `m ≠ n`.
+- `[let]`: `⟦M⟧ to r. case r { inl x → ⟦N⟧ | inr p → return (inr p) }`.
+- `[then]`: the same, with the abort arm `⟦D⟧ to d. return (inr p)`. It runs the finaliser once,
+  first. A `[then]` whose row keeps another abortive name stays a `[then]` with `D`.
+- A handler of another name `m` whose outer row holds `n` keeps its node. Its answer clause becomes
+  `λr. case r { inl a → h a | inr p → return (inr p) }`, so `n`'s payload passes unread.
+- A handler of `n`, at any of the forms `[handle]`, BOXED-κ or `handle_tail`:
+  `⟦e⟧ to r. case r { inl a → h a | inr (ι_j v) → c_j v }`. The clauses' tuple is taken apart
+  once.
+- An unwinding borrow `withborkU td` becomes its η-expansion, rewritten:
+  `λr. λf. withbork r (Λ'x. λm. box-lift (f ['x] m)) to (r, s). case s { inl b → return (inl (r, b)) | inr p → td r; return (inr p) }`.
+  - `box-lift` is `case s { inl b → return (boxed['x] (inl (unbox b))) | inr p → return (boxed['x] (inr p)) }`.
+  - `withbork` is the borrow's non-unwinding form at `⟦B⟧ₙ ⊕ P_n`.
+  - The payload outlives `'x` by `Row.Unwind`.
+  - Every one of the six unwinding forms is rewritten in the corpus, so none is `left: U-lend`.
+- Every other constructor is homomorphic.
+
+The `inr` arms' drops are licensed by `[let]`'s `Σ.Weak → Γ.Drops` and by `[then]`'s finaliser.
+The re-check places them (§12) and verifies them. Drop glue reads back as `return ()`, and the
+re-check places its drops again in the abort arm.
+
+**What the rules write where a source node held a type.** The checker synthesizes neither an
+injection nor a term that a removed node checked. So:
+- each injection R0 writes is ascribed its sum type;
+- the handled computation of a removed handler is ascribed the translation of the type `[handle]`
+  checked it at;
+- the `[sub]` rule's binding is annotated with the answer the node held;
+- an annotated `[let]`/`[then]` keeps its annotation, translated.
+
+The read-back numbers R0's own binders by depth (`%R0.d`, `Cx.binder`), and no source binder is
+named so.
+
+**Left alone, with the reason recorded** (`corpus/rewrite.expected`):
+- **`left: lendR`.** A name in a relaxed lend's row. It is unreachable: R1's row admits no abortive
+  operation (`Row.resumeOB`), so 0 names cross a `lendR` by the kernel's rule as well as by
+  measurement.
+- **`left: cancel row`.** A name in the outer row of a handler node with an operation at `1?`.
+  - That operation's `κ` cancels at the handler's outer row: `cancelTy Σ F = F_{F.rowOf ++ Σ} 1`
+    (§38), whose answer `[handle]` fixes at `1`.
+  - The homomorphic translation gives the cancel run the answer `1 ⊕ P_n`, which no `[handle]`
+    types.
+  - The scope has no rule for this case. It is reported as a STOP on #680.
+  - It occurs in 5 programs: `div-infer`, `effects-cancel-two-sites`, `0230-kth-smallest`,
+    `reconcile-chain` and `reconcile-clock`. In `div-infer` and the two `reconcile` programs, the
+    other names are rewritten.
+
+**The guard**, for real:
+- **π** maps each source binder to the binder of `c′` with the same node span and name, the `k`-th
+  to the `k`-th. A binder with no image is a failure, so π is total. It is non-empty at every
+  rewritten program (`pi` in the table).
+- **G-qual** reads π.
+- **G-bang** allows R0's own `!`-introductions: the forwarding answer clauses, each over the
+  source's persistent answer clause.
+- **G-fin** checks two things, reading the two checked terms:
+  - a source finaliser stays a finaliser of `c′` exactly while its row keeps an operation no rule
+    rewrites that may end the computation without resuming;
+  - for each rewritten name of its row, the abort arm R0 writes runs it first: a written `D` at its
+    span and erasure, drop glue as `return ()`, or `td`'s destructor on the lent source.
+- **G-main**, **G-assure**, **G-κ** and `implicitCopy` are as at step 0.
+- **The reject tests** (`scripts/check-rewrite.sh`, `bcc rewrite --seed`) plant faults in the
+  `[then]` rule:
+  - the finaliser left off the abort arm is refused by the guard at `core-r0-unwind`, and by the
+    kernel at `core-r0-unwind-linear`, whose finaliser runs a value with no destructor;
+  - the finaliser run twice is refused by the kernel at both.
+
+**Laws.**
+- Each source construct's step laws are [est]: `catch_ret`, `catch_abort`, `then_ret`, `then_fin`,
+  `abort_absorbs`, `abort_to`, `fwd_abort` (`Core/EffMachine.lean`); `abort_passes`,
+  `return_resumes` (`Core/Handlers.lean`); `unwind_prefix` (`Core/EffCancelRuns.lean`).
+- The translation's agreement with them, end to end, is [ours] (Plotkin–Pretnar's exceptions as
+  sums, not proved here).
+- `box-lift` and the U-lend rule are [ours].
+- The type translation's chain lemma `trC_effOf` is proved.
+
+**Programs and counts.**
+- On the corpus before this entry's new programs, R0 rewrites 222 names in 119 programs and leaves
+  10 names in 5 programs (above; 2 of them have no name rewritten). Per instance (`main` and each
+  instance's body once) it rewrites 269 handler nodes, 498 `raise`s, 432 `[let]`s, 220 `[then]`s,
+  1098 `[sub]`s, 41 `perform`s, 13 forwarding handlers and 10 unwinding borrows.
+- The new backend compiles every rewritten program to its golden at every stage.
+  `core-handle-tail-abort` (an `effHandleT` of an abortive name) now compiles; before R0 it was
+  outside the new backend's fragment.
+- `corpus/erasure-backend2.expected`: an R0 program's line counts what R0 rewrote
+  (`rewritten H P R`), and Convert's own counts drop accordingly.
+- `corpus/counts-backend2.expected`: allocations, indirect calls, copies and bounds checks are
+  unchanged everywhere. Loads and stores rise in 9 machine programs (`async-logged`, `async-map`,
+  `async-mapreduce`, `async-stack-cancel`, `async-stack-deep`, `async-stack-nested`,
+  `async-try-join`, `reconcile-chain`, `reconcile-clock`). Each row is recorded with #687
+  (recovery: R5, then L5).
+- Five new core programs, each with its golden: `core-r0-two-ops`, `core-r0-unwind`,
+  `core-r0-unwind-linear`, `core-r0-forward`, `core-r0-nested`.
+
+**Deletes.** None. The scope deletes Backend2's abort layer (E2's `effRaise` arm and `genLendU`,
+E3's abort join, T2, E1) once no abortive name is left. The 5 `left: cancel row` programs still
+reach it through Convert.
+
+No type, typing rule, machine step, relation clause or elaboration changes; the census is the
+source check's report.
 
 ## Status
 
@@ -9611,10 +9735,18 @@ their checker arms (`Frontend/Check/Checker.lean`, `Rules.lean`), the per-perfor
 `Rewrite/` (`ReadBack.lean`, `Driver.lean`, `Guard.lean`, `Report.lean`), hooked in
 `Backend2/Driver.lean`'s `lirOf`, the `TInfo` facts in `Frontend/Check/TExpr.lean` (set by
 `Checker.lean`, `Steps.lean`, `Rules.lean`, `Consts.lean`; `Reinfo.lean`), and the identity gate
-`scripts/check-rewrite.sh`. No rule (R0, R1, …) is implemented.
+`scripts/check-rewrite.sh`. R0 is implemented (`Rewrite/Types.lean`, `Abort.lean`, `R0.lean`):
+every abortive name but those in a cancel row (5 programs, reported on #680) is rewritten before the
+new backend's conversion. R1 and later rows are not.
 
 ## Changelog
 
+- **1.05** (2026-10-23) — §54 (#680, R0): the abort rewrite, the exceptions-as-sums translation of
+  every abortive name over the typed program, before the new backend's conversion, re-checked
+  once and guarded (π by span and name, G-fin on each abort arm, G-bang with the rule's own `!`);
+  names in a cancel row are left, reported. 119 programs rewritten; five new core programs; the
+  reject tests of seeded faults. Goldens unchanged; the new backend's erasure lines count R0's
+  rewrites; loads and stores rise in 9 machine programs (#687).
 - **1.04** (2026-10-23) — §54 (#680, step 0): the rewriter's identity pass on the new backend's
   path: the typed program read back into a program (one declaration per instance, keyed by the
   checker's instance key; lifetime-polymorphic by Core's `∀` where an instance mentions its
