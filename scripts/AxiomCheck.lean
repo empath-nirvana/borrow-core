@@ -45,7 +45,8 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.TailResumesAt.mentions_le
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.UnhandledIn.hasHnd
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.unhandledIn_nil
-#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.resumeC_tail
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.resumeCT_tail
+#print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.d_resumeCT
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.unhandled_not_decided
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.fl_le_hin
 #print axioms BoCa.Fig16.LogRel.Core.ClauseKinds.hin_subst
