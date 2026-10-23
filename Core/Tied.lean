@@ -24,7 +24,6 @@ a derivation: every instance of a handler site has one protocol (§19 *Names*).
   handler value's tags are a prefix of `Ξ`'s qualifiers of `n` (`hndTags_of_rowAt`).
 * `SigsAt Ξ S`: every entry of the list `S` is at `Ξ`'s signature; it ties every row whose
   entries are among `S`'s (`rowAt_of_sigsAt`).
-* `EffCtx.CntOk`: each operation's count is `0` exactly where it is abortive (§53).
 -/
 
 namespace BoCa.Fig16.LogRel.Core
@@ -387,7 +386,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
       (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
       (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-        capB o.q o.B = true → ThenLe o.fin SD o'.fin)
+        capB o.cnt = true → ThenLe o.fin SD o'.fin)
       (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
       (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A)))
       (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
@@ -435,7 +434,7 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hc : CDerivesAt Ξ Δ Γ₁ (.pair Hr (.pair Hw Hn))
         (.val (.tensor (retTy S A R) (.tensor (worksTy S SW R Xs E 0) (exitsTy S R Xs E 0)))))
       (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-      (hNZ : S.NZ) (hAff : ∀ o ∈ E, o.1.toQual = .aff ∨ (o.2.2.isZero && o.1.toQual != .lin) = true)
+      (hNZ : S.NZ) (hAff : ∀ o ∈ E, o.1.toQual = .aff ∨ (o.1 == .zero) = true)
       (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
       (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
       (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
@@ -960,22 +959,5 @@ theorem rowAt_of_sigsAt {Ξ : EffCtx} {S : Row} (h : SigsAt Ξ S) : RowAt Ξ S :
   intro n i o hf
   obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
   exact h o hm
-
-/-! ### Counts -/
-
-/-- **The count is `0` exactly at an abortive operation**: an operation `Ξ` gives answers `0` at a
-count with weakening (its clause takes no `κ`) exactly when its count is `0`.  The count is then a
-grade the signature agrees with: `1` resumes, `1?` resumes or is cancelled or dropped, `0` never
-resumes.  `[spec §53]` -/
-def EffCtx.CntOk (Ξ : EffCtx) : Prop :=
-  ∀ n, ∀ p ∈ Ξ n, (p.1 = .zero ↔ (p.2.2.isZero && p.1.toQual != .lin) = true)
-
-/-- In a row tied to such a context, an operation is abortive exactly when its count is `0`.
-`[spec §53]` -/
-theorem cnt_zero_iff_of_rowAt {Ξ : EffCtx} (hx : Ξ.CntOk) {S : Row} (h : RowAt Ξ S)
-    {n i : UInt32} {o : OpSig} (hf : Row.find S n i = some o) :
-    o.cnt = .zero ↔ o.abort = true := by
-  obtain ⟨-, -, hget⟩ := h n i o hf
-  exact hx n (o.cnt, o.A, o.B) (List.mem_of_getElem? hget)
 
 end BoCa.Fig16.LogRel.Core

@@ -12,8 +12,7 @@ closed term with a derivation tied to its effect context (`CDerivesAt ΞE`), rea
 (`CDerivesAt.toCDerives`), and a run computed by `runM` from the empty memory to its answer at the
 empty memory (`runM_val`). `ΞE` declares `exn : 1 ↠ 0` at the names `1` and `6`,
 `wait : 1 ↠ 1` at `2` and `yield : bool ↠ 1` at `3`, all affine, and `log : bool ↠ 1` at `4`
-and `tick : 1 ↠ 1` at `5`, linear. Its counts are `0` exactly at its abortive operations
-(`cntOk_ΞE`), as at the effect context of every program the checker accepts.
+and `tick : 1 ↠ 1` at `5`, linear.
 
 | program | shows | answer |
 |---|---|---|
@@ -443,13 +442,6 @@ theorem ΞE_4 : ΞE 4 = [(.one, boolT, .unit)] := rfl
 theorem ΞE_5 : ΞE 5 = [(.one, .unit, .unit)] := rfl
 theorem ΞE_6 : ΞE 6 = [(.zero, .unit, .zero)] := rfl
 
-/-- **`ΞE`'s counts are `0` exactly at its abortive operations**, as the effect context of every
-program the checker accepts has (`checkProgram_tiedAt`). -/
-theorem cntOk_ΞE : ΞE.CntOk := by
-  intro n p hp
-  simp only [ΞE] at hp
-  split_ifs at hp <;> simp_all [VTy.isZero, Count.toQual]
-
 /-! ### E7 and E8b: finalisers that raise, at §27's cancel rows -/
 
 section E7
@@ -490,7 +482,7 @@ theorem dAt_e7b {Δ : LifeCtx} :
 
 /-- `exn` at the name `n` is not capturable. -/
 theorem not_capB_exnRow {n : UInt32} {o : OpSig} (ho : o ∈ exnRow n .zero) :
-    capB o.q o.B = false := by
+    capB o.cnt = false := by
   simp only [Row.ofEff, List.mem_cons, List.not_mem_nil, or_false] at ho
   subst ho
   rfl
@@ -662,9 +654,9 @@ theorem dAt_kResume {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {S : Row} 
 /-- **The clause `op (_, k) ⇒ resume k ()`** at a resuming linear or affine operation `A ↠ 1`,
 `A` persistent (the argument is dropped). -/
 theorem dAt_resumeCl {Δ : LifeCtx} (S : Row) (R : VTy) {q : Count} {A : VTy}
-    (hA : A.Persistent) :
+    (hA : A.Persistent) (hq : (q == .zero) = false := by decide) :
     CDerivesAt Ξ Δ [] (.val resumeClV) (.val (clauseTy S R (q, A, .unit))) := by
-  rw [Inversions.clauseTy_resuming rfl]
+  rw [Inversions.clauseTy_resuming hq]
   refine .bangThunkV (dead_noLive .nil) rfl (.lam (.tensorE (.left .nil) (.var (.here .nil)) ?_))
   refine .bind (.right (.left (.dead .nil))) (.ret (.unitI (.cons (.drop hA (.cons .nil))))) ?_
   exact dAt_kResume (Γ := [⟨A, false⟩, ⟨.tensor A (kTy S R q.toQual .unit), false⟩])
@@ -685,7 +677,7 @@ theorem dAt_fwrap {Δ : LifeCtx} {r : Row} (hr : RowAt ΞE r) (hnr : ∀ o ∈ r
       (.comp (.arr (.thunk (.arr .unit (CTy.effOf r boolT))) (CTy.effOf r boolT))) := by
   refine .lam (dAt_hQ (.right .nil) (.cons .nil) ΞE_6 (by decide) hr hnr (F := .ret .unit)
     (X := boolT) (CDerivesAt.ofEffFree (d_idV r boolT) rfl) ?_ ?_)
-  · rw [clauseTy_abortive (by decide)]
+  · rw [clauseTy_abortive]
     exact CDerivesAt.ofEffFree (d_constC_raise r (.sumI₁ (.unitI (.cons .nil)))) rfl
   · exact .effSub (rowLe_ofEff_cons _ _ hnr) (dAt_callVar .nil (.unitI (.cons .nil)))
 

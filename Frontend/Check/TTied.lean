@@ -303,7 +303,7 @@ theorem effThenA (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ
       (.effThen i (.comp (effOf S B)) A B S S [] u tM tN tD) (.comp (effOf S B)) :=
   have hfin : ∀ n k o o', BoCa.Fig16.LogRel.Core.Row.find S n k = some o →
       BoCa.Fig16.LogRel.Core.Row.find S n k = some o' →
-      BoCa.Fig16.LogRel.Core.capB o.q o.B = true →
+      BoCa.Fig16.LogRel.Core.capB o.cnt = true →
       BoCa.Fig16.LogRel.Core.ThenLe o.fin [] o'.fin :=
     fun _ _ o _ hf hf' _ => by rw [hf] at hf'; cases hf'; exact BoCa.Fig16.LogRel.Core.ThenLe.nil o.fin
   have hP : BoCa.Fig16.LogRel.Core.Row.UnrD [] → S.PendPers :=

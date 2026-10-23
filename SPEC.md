@@ -3016,10 +3016,8 @@ Six rules, over `CDerives` with its context premises (§10):
     (`checkProgram_tiedAt`). A program whose rows give one operation two signatures is rejected.
     For an elaborated program those are its effect declarations' signatures at its handler sites:
     the elaborator writes each row and each handler's clauses from the declarations (§18).
-  - **An abortive operation is at the count `0`** (§53). The effect context of a checked program
-    has its counts at `0` exactly at its abortive operations (`EffCtx.CntOk`,
-    `checkProgram_tiedAt`), and in a row tied to such a context an operation is abortive exactly
-    at the count `0` (`cnt_zero_iff_of_rowAt`).
+  - **An operation is abortive exactly at the count `0`** (§53): `OpSig.abort` reads the count, so
+    no invariant of the effect context ties the two.
   - **The names a run raises** (`Core/RaiseNames.lean`). `[raise]` finds its operation in a row
     tied to `Ξ`, and no rule types a `cfin`, so a tied term is at `Ξ`'s names
     (`raiseOK_of_derivesAt`): each raise in it is of a name `Ξ` declares, or a cancel whose kept
@@ -3311,8 +3309,7 @@ does not hold. Safety is stated of the runs of typed programs (`Core/EffSafety.l
    memory with finitely many cells (`finAlone_of_finRow`; at the empty row, to `()`,
    `finOK_of_finRow`). A finaliser that performs an operation a handler outside it answers (§27) is
    not covered (§27 *Open*). `progOutT` meets the hypotheses (`progOutT_cancel_prefix`): a tied
-   derivation types it at an effect context that is `CntOk` (`cntOk_Ξ₁₂`, §53), the shape the
-   checker gives every program it accepts (`checkProgram_tiedAt`); its run allocates `κ`'s cell
+   derivation types it at `Ξ₁₂`; its run allocates `κ`'s cell
    and cancels `κ`, the cancel run starting after the cell's release; and its region's finaliser
    raises `2`.
 6. **The finally law; a finaliser's raise propagates; a raise with no live handler is a type
@@ -8942,10 +8939,12 @@ machine keeps its tag `2`, at which `[op]` hands `kappa` with no cell; no count 
 **`[sub]` keeps the count.** `OpSig.Sig` asks equal counts (it asked equal qualifiers), so a count
 never moves under `[sub]`, `FinLe` or `RowLe`; only the world could, and there is one.
 
-**The effect context.** `Ξ n` lists `(c, A, B)`. `EffCtx.CntOk Ξ`: each count is `0` exactly where
-its operation is abortive (`B = 0` at a count with weakening). It replaces `EffCtx.NoUnrExn`
-(decision 63's restriction, which has nothing left to restrict): the checker decides it
-(`sigsOkB`), and `checkProgram_tiedAt` states it of every program it accepts.
+**The effect context.** `Ξ n` lists `(c, A, B)`. An operation is abortive exactly when its count is
+`0` (`OpSig.abort := cnt = 0`): abortiveness is read off the grade, not off `B`, so no invariant of
+`Ξ` ties the two and no checker test decides one. `EffCtx.NoUnrExn` (decision 63's restriction) is
+gone: with no `ω` count it has nothing to restrict. `Row.Unwind` asks each operation of its row
+abortive (count `0`) and its answer type free of the region's variable, which followed from `B = 0`
+when abortiveness was read off `B`.
 
 **The surface.** `ctl op(…)` declares an operation whose count is inferred; `linear ctl` declares
 `1`; `ctl op(…) -> never` is abortive, `0`. A core row writes `lin` (`1`), `aff` (`1?`, `0` at an

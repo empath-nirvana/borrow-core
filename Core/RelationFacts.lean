@@ -1121,7 +1121,7 @@ theorem cC_tyEq_aux : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
       have hT := effTab_tyEq C hC
       have hR := effRet_tyEq C hC
       have hz := TyEq.isZero_eq B hB
-      intro ls; funext e; simp only [cC, ihA, ihB, ihF, hT, hR, hz, hd]; rw [capB_congr hz]
+      intro ls; funext e; simp only [cC, ihA, ihB, ihF, hT, hR, hz, hd]
 theorem effTab_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' →
     effTab C δ = effTab C' δ'
   | .eff n i q _ A B fin C, C', δ, δ', h => by
@@ -1132,7 +1132,7 @@ theorem effTab_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
       have ihF := finObl_tyEq fin hF
       have hT := effTab_tyEq C hC
       have hz := TyEq.isZero_eq B hB
-      simp only [effTab, ihA, ihB, ihF, hT, hz]; rw [capB_congr hz]
+      simp only [effTab, ihA, ihB, ihF, hT, hz]
   | .ret _, C', _, _, h | .arr _ _, C', _, _, h | .amp _ _, C', _, _, h | .top, C', _, _, h
   | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h <;> simp only [effTab]
@@ -1146,7 +1146,7 @@ theorem finObl_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
       have ihF := finObl_tyEq fin hF
       have hT := effTab_tyEq C hC
       have hz := TyEq.isZero_eq B hB
-      simp only [finObl, ihA, ihB, ihF, hT, hz]; rw [capB_congr hz]
+      simp only [finObl, ihA, ihB, ihF, hT, hz]
   | .ret _, C', _, _, h | .arr _ _, C', _, _, h | .amp _ _, C', _, _, h | .top, C', _, _, h
   | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h <;> simp only [finObl]
@@ -1198,7 +1198,7 @@ theorem cB_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' �
       have hT := effTab_tyEq C hC
       have hR := effRetE_tyEq C hC η η' hη
       have hz := TyEq.isZero_eq B hB
-      funext e; simp only [cB, ihA, ihB, ihF, hT, hR, hz, hd]; rw [capB_congr hz]
+      funext e; simp only [cB, ihA, ihB, ihF, hT, hR, hz, hd]
   | .arr A D, C', _, _, h, η, η', hη, ls => by
       cases C' <;> simp only [CTyEq] at h
       have ihA := vCE_tyEq A none none h.1 (envEq_none _ _) true ls

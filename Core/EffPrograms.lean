@@ -102,7 +102,7 @@ theorem Sf_unwind (x : LifeVar) : Sf.Unwind x := by
   intro o ho
   simp only [Sf, List.mem_singleton] at ho
   subst ho
-  exact ⟨rfl, by decide, by simp [failSig, VFree], fun _ _ => .unit⟩
+  exact ⟨rfl, by decide, by simp [failSig, VFree], by simp [failSig, VFree], fun _ _ => .unit⟩
 
 theorem Sf_not_unr : ¬ Sf.Unr := by
   rintro ⟨o, ho, h⟩

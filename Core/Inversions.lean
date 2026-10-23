@@ -1377,10 +1377,10 @@ theorem clausesTyO_cons (S : Row) (R : VTy) (ob : Option Lifetime.Life) (o : Cou
 
 /-- A capturing clause's type: `!U(A ⊗ κ ⊸ F_Σ R)`, `κ` at `kBoxO ob K`. -/
 theorem clauseTyO_cap (S : Row) (R : VTy) (ob : Option Lifetime.Life) {q : Count} {A B : VTy}
-    (F : CTy) (hB : B.isZero = false) :
+    (F : CTy) (hq : (q == .zero) = false) :
     clauseTyO S R ob (q, A, B) F =
       .bang (.thunk (.arr (.tensor A (kBoxO ob (kTy S R q.toQual B F))) (CTy.effOf S R))) := by
-  cases ob <;> simp [clauseTyO, clauseTy, clauseTyB, kBoxO, hB]
+  cases ob <;> simp [clauseTyO, clauseTy, clauseTyB, kBoxO, hq]
 
 /-- **A handler term is `[handle]`'s or BOXED-κ's**: its tags are its signature's, and the handler
 pair is typed at the tensor of the return clause's type and the clauses', `κ` bare or boxed, over a
@@ -2300,7 +2300,7 @@ def ThenBase (Δ : LifeCtx) (Γ : Ctx VTy) (D M : Expr) (j₀ : Jdg) : Prop :=
   ∃ (Γ₁ Γ₂ : Ctx VTy) (A B : VTy) (S SM SD : Row), Ctx.SplitP Γ Γ₁ Γ₂ ∧
     RowLe SM S ∧ RowLe SD S ∧
     (∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-      capB o.q o.B = true → ThenLe o.fin SD o'.fin) ∧
+      capB o.cnt = true → ThenLe o.fin SD o'.fin) ∧
     CDerives Δ Γ₁ M (.comp (CTy.effOf SM A)) ∧
     CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit)) ∧
     j₀ = .comp (CTy.effOf S B)
@@ -2757,7 +2757,7 @@ def cancelResumeCl : Val := ⟨.lam (.letpair (.var 0) cancelResumeBody), .lam�
 
 /-- At a resuming operation a clause is at `!U(A ⊗ kTy ⊸ F_Σ R)`. -/
 theorem clauseTy_resuming {S : Row} {R : VTy} {q : Count} {A B : VTy} {F : CTy}
-    (h : (B.isZero && q.toQual != .lin) = false) :
+    (h : (q == .zero) = false) :
     clauseTy S R (q, A, B) F =
       .bang (.thunk (.arr (.tensor A (kTy S R q.toQual B F)) (CTy.effOf S R))) := by
   simp [clauseTy, h]
@@ -2771,7 +2771,7 @@ theorem kTy_not_persistent {S : Row} {R : VTy} {q : Qual} {B : VTy} {F : CTy} (h
 `k : kTy` live in slot `0` and `v : A` in slot `1`, at a computation type from which the same-term
 rules reach the clause's row. -/
 theorem der_clause_body {Δ : LifeCtx} {Γ : Ctx VTy} {X : Expr} {S : Row} {R : VTy} {q : Count}
-    {A B : VTy} {F : CTy} (hres : (B.isZero && q.toQual != .lin) = false)
+    {A B : VTy} {F : CTy} (hres : (q == .zero) = false)
     (hw : ∀ M₁ M₂, Expr.lam (.letpair (.var 0) X) ≠ withPair M₁ M₂)
     (hc : NotConst (.lam (.letpair (.var 0) X)))
     (h : CDerives Δ Γ (.lam (.letpair (.var 0) X)) (.val (clauseTy S R (q, A, B) F))) :
@@ -2837,7 +2837,7 @@ theorem der_cancel_lin {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {S : Row} {R B : 
 /-- **R1's clause is refused at a resuming linear or affine operation**: `return ff` consumes its
 context, where the slot of `k : kTy` is live, and `kTy` is not persistent. -/
 theorem refuses_dropClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Count}
-    {A B : VTy} {F : CTy} (hres : (B.isZero && q.toQual != .lin) = false) :
+    {A B : VTy} {F : CTy} (hres : (q == .zero) = false) :
     ¬ CDerives Δ Γ dropCl.1 (.val (clauseTy S R (q, A, B) F)) := by
   intro h
   obtain ⟨Γb, C, hX, -⟩ := der_clause_body (X := .inj₁ .unit) hres (by not_withPair)
@@ -2851,7 +2851,7 @@ theorem refuses_dropClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q 
 /-- **R2's clause is refused at a resuming linear or affine operation**: `resume k () to _.
 resume k ()` reads `k` on both sides of a bind, so its slot would be persistent. -/
 theorem refuses_twiceClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Count}
-    {A B : VTy} {F : CTy} (hres : (B.isZero && q.toQual != .lin) = false) :
+    {A B : VTy} {F : CTy} (hres : (q == .zero) = false) :
     ¬ CDerives Δ Γ twiceCl.1 (.val (clauseTy S R (q, A, B) F)) := by
   intro h
   obtain ⟨Γb, C, hX, -⟩ := der_clause_body (X := twiceBody) hres
@@ -2865,7 +2865,7 @@ theorem refuses_twiceClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q
 /-- **R4's clause is refused at a resuming linear or affine operation**: `cancel k to _.
 resume k ()` reads `k` on both sides of a bind. -/
 theorem refuses_cancelResumeClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Count}
-    {A B : VTy} {F : CTy} (hres : (B.isZero && q.toQual != .lin) = false) :
+    {A B : VTy} {F : CTy} (hres : (q == .zero) = false) :
     ¬ CDerives Δ Γ cancelResumeCl.1 (.val (clauseTy S R (q, A, B) F)) := by
   intro h
   obtain ⟨Γb, C, hX, -⟩ := der_clause_body (X := cancelResumeBody) hres
@@ -2898,7 +2898,7 @@ theorem refuses_cancelClause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VT
 /-- **The clause typing refuses R1–R4's clauses** at the classes S6's witnesses name: R1, R2 and R4
 at every resuming linear or affine operation, R3 at every linear one, at every cancel row. -/
 theorem refuses_R_clauses {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Count} {A B : VTy}
-    {F : CTy} (hres : (B.isZero && q.toQual != .lin) = false) :
+    {F : CTy} (hres : (q == .zero) = false) :
     ¬ CDerives Δ Γ dropCl.1 (.val (clauseTy S R (q, A, B) F)) ∧
     ¬ CDerives Δ Γ twiceCl.1 (.val (clauseTy S R (q, A, B) F)) ∧
     ¬ CDerives Δ Γ cancelCl.1 (.val (clauseTy S R (.one, A, B) F)) ∧

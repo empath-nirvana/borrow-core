@@ -141,8 +141,8 @@ theorem Row.divB_of_abort {S : Row} (h : ∀ o ∈ S, o.abort = true) : Row.divB
   refine Row.divB_false_of_find fun o hf => ?_
   have ha := h o (Row.find_mem hf).1
   obtain ⟨n, i, q, w, A, B, fin⟩ := o
-  simp only [OpSig.abort, OpSig.q, Count.toQual_eq_lin, Bool.and_eq_true, bne_iff_ne, ne_eq] at ha
-  simp [tickB, ha.2]
+  simp only [OpSig.abort, beq_iff_eq] at ha
+  simp [tickB, ha]
 
 /-- A row whose operations found at `Div`'s key are abortive does not hold `Div`. -/
 theorem Row.divB_of_find_abort {S : Row} (h : ∀ n i o, Row.find S n i = some o → o.abort = true) :
@@ -150,8 +150,8 @@ theorem Row.divB_of_find_abort {S : Row} (h : ∀ n i o, Row.find S n i = some o
   refine Row.divB_false_of_find fun o hf => ?_
   have ha := h _ _ o hf
   obtain ⟨n, i, q, w, A, B, fin⟩ := o
-  simp only [OpSig.abort, OpSig.q, Count.toQual_eq_lin, Bool.and_eq_true, bne_iff_ne, ne_eq] at ha
-  simp [tickB, ha.2]
+  simp only [OpSig.abort, beq_iff_eq] at ha
+  simp [tickB, ha]
 
 /-- A row without `Div`'s name does not hold `Div`. -/
 theorem Row.divB_of_without {S : Row} (h : ∀ o ∈ S, o.n ≠ divEff) : Row.divB S = false := by

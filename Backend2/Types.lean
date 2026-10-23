@@ -132,7 +132,7 @@ def LCTy.whnf : Nat → LCTy → LCTy
   | _, k => k
 
 /-- An operation of a row is abortive: answer `0` at a count with weakening (`OpSig.abort`). -/
-def abortB (q : Count) (B : VTy) : Bool := B.isZero && q.toQual != .lin
+def abortB (q : Count) (B : VTy) : Bool := q == .zero
 
 /-- The payload of a row's abortive operations (`ofEff`'s list): each key once, its first, as
 `Row.find` reads a row; their argument types a right-nested sum, one summand per operation, in

@@ -37,14 +37,14 @@ abbrev Row := List OpSig
 def Row.find (S : Row) (n i : UInt32) : Option OpSig :=
   S.find? fun o => decide (n = o.n ∧ i = o.i)
 
-/-- An operation is abortive: answer `0` at a qualifier with weakening. -/
-def OpSig.abort (o : OpSig) : Bool := o.B.isZero && o.q != .lin
+/-- An operation is abortive: at the count `0`, its clause takes no `κ`.  `[spec §19, §53]` -/
+def OpSig.abort (o : OpSig) : Bool := o.cnt == .zero
 
 /-- The entry of an operation at `δ`, with its cancel row's obligation at a capturable operation.
 -/
 def OpSig.ent (δ : LSub) (o : OpSig) : OpEnt :=
   ⟨o.q, o.abort, fun ls v => vC true o.A ls δ v, fun ls v => vC true o.B ls δ v,
-    if capB o.q o.B then finObl o.fin δ else none⟩
+    if capB o.cnt then finObl o.fin δ else none⟩
 
 /-- The operation table of a row at `δ`. -/
 def Row.tab (S : Row) (δ : LSub) : OpTab := fun n i => (Row.find S n i).map (OpSig.ent δ)
@@ -103,8 +103,8 @@ theorem cC_effOf_wp (S : Row) (R : VTy) (ls : List SRec) (δ : LSub) (e : Expr) 
       have hd := divAt_effOf (o :: S) R
       simp only [CTy.effOf] at h hr hd
       simp only [CTy.effOf, cC]
-      rw [show OpTab.ext o.n o.i ⟨o.q, o.B.isZero && o.q != .lin, fun ls v => vCE none true o.A ls δ v,
-          fun ls v => vCE none true o.B ls δ v, if capB o.q o.B then finObl o.fin δ else none⟩
+      rw [show OpTab.ext o.n o.i ⟨o.q, o.cnt == .zero, fun ls v => vCE none true o.A ls δ v,
+          fun ls v => vCE none true o.B ls δ v, if capB o.cnt then finObl o.fin δ else none⟩
           (effTab (CTy.effOf S R) δ) = Row.tab (o :: S) δ from h,
         show effRet (CTy.effOf S R) δ = _ from hr, hd]
 
@@ -962,13 +962,13 @@ def Row.Unr (S : Row) : Prop := ∃ o ∈ S, o.q = .unr
 /-- A cancel row may perform an unrestricted operation, at some depth: a layer at `unr`, or one in
 the cancel row of a capturable layer.  `[spec §27]` -/
 def CTy.FinUnr : CTy → Prop
-  | .eff _ _ q _ _ B f C => q.toQual = .unr ∨ (capB q.toQual B = true ∧ f.FinUnr) ∨ C.FinUnr
+  | .eff _ _ q _ _ B f C => q.toQual = .unr ∨ (capB q = true ∧ f.FinUnr) ∨ C.FinUnr
   | _ => False
 
 /-- A row has an unrestricted operation at its top, or in the cancel row of a capturable operation
 at some depth, where a cancel may stop at it: what a finaliser frame, which runs in the cancels
 below it, meets (`[then]`).  `[spec §27]` -/
-def Row.UnrD (S : Row) : Prop := ∃ o ∈ S, o.q = .unr ∨ (capB o.q o.B = true ∧ o.fin.FinUnr)
+def Row.UnrD (S : Row) : Prop := ∃ o ∈ S, o.q = .unr ∨ (capB o.cnt = true ∧ o.fin.FinUnr)
 
 @[simp] theorem CTy.finUnr_ret (A : VTy) : (CTy.ret A).FinUnr ↔ False := Iff.rfl
 
@@ -1115,7 +1115,7 @@ theorem OpSig.weak_of_ent {o : OpSig} {δ : LSub} (h : (o.ent δ).q ≠ .lin ∨
     o.q ≠ .lin := by
   rcases h with h | h
   · exact h
-  · simp only [OpSig.ent, OpSig.abort, Bool.and_eq_true, bne_iff_ne, ne_eq] at h; exact h.2
+  · simp only [OpSig.ent, OpSig.abort, beq_iff_eq] at h; simp [OpSig.q, h, Count.toQual]
 
 /-- `M then x. N unwind D`: `ubind (λx. N, λ_. D) M`. -/
 def thenE (N D M : Expr) : Expr :=
@@ -1153,7 +1153,7 @@ def kTy (S : Row) (R : VTy) (q : Qual) (B : VTy) (F : CTy := .ret .unit) : VTy :
 operation's cancel row `F`.  `[spec §19, §27]` -/
 def clauseTy (S : Row) (R : VTy) (o : Count × VTy × VTy) (F : CTy := .ret .unit) : VTy :=
   match o with
-  | (q, A, B) => if (B.isZero && q.toQual != .lin) then .bang (.thunk (.arr A (CTy.effOf S R)))
+  | (q, A, B) => if (q == .zero) then .bang (.thunk (.arr A (CTy.effOf S R)))
       else .bang (.thunk (.arr (.tensor A (kTy S R q.toQual B F)) (CTy.effOf S R)))
 
 /-- The clauses' type: a right-nested tuple, the `j`-th clause at index `j`, at the cancel row

@@ -14,9 +14,8 @@ the row it reads; a constant reads no row, and its `CDerives` derivation is tied
 `CDerivesAt.ofEffFree`.
 
 `checkMain` (`Program.lean`) decides that `main`'s list gives each operation one signature, of a
-nonzero name, and no unrestricted operation answering `0` (`sigsOkB`); the program's effect context
-is the one the list gives (`effCtxOf`), at which `main`'s derivation is `CDerivesAt`
-(`sigsAt_effCtxOf`), and whose counts are `0` exactly at its abortive operations (`cntOk_effCtxOf`).
+nonzero name (`sigsOkB`); the program's effect context is the one the list gives (`effCtxOf`), at
+which `main`'s derivation is `CDerivesAt` (`sigsAt_effCtxOf`).
 -/
 
 namespace Frontend.Check
@@ -686,10 +685,9 @@ def effCtxOf (s : CRow) : EffCtx := fun n =>
     | some o => (o.cnt, o.A, o.B)
     | none => (.one, .unit, .unit)
 
-/-- The list gives each operation one signature, of a nonzero name, at the count `0` exactly where
-it is abortive, decided.  `[spec §18, §19, §53]` -/
+/-- The list gives each operation one signature, of a nonzero name, decided.  `[spec §18, §19]` -/
 def sigsOkB (s : CRow) : Bool :=
-  s.all fun o => o.n != 0 && ((o.cnt == .zero) == o.abort) &&
+  s.all fun o => o.n != 0 &&
     s.all fun o' => !(o'.n == o.n && o'.i == o.i) || (o'.cnt == o.cnt && o'.A == o.A && o'.B == o.B)
 
 theorem lt_idxBound {s : CRow} {o : COpSig} (ho : o ∈ s) : o.i.toNat < idxBound s o.n := by
@@ -714,7 +712,7 @@ theorem sigsAt_effCtxOf {s : CRow} (h : sigsOkB s = true) : SigsAt (effCtxOf s) 
   intro o ho
   have ho' := List.all_eq_true.mp h o ho
   simp only [Bool.and_eq_true, bne_iff_ne, ne_eq] at ho'
-  obtain ⟨⟨hn0, -⟩, hall⟩ := ho'
+  obtain ⟨hn0, hall⟩ := ho'
   have hlt := lt_idxBound ho
   refine ⟨hn0, by
     simp only [effCtxOf, List.length_map, List.length_range]; exact idxBound_le s o.n, ?_⟩
@@ -730,27 +728,5 @@ theorem sigsAt_effCtxOf {s : CRow} (h : sigsOkB s = true) : SigsAt (effCtxOf s) 
     Bool.and_eq_true, beq_iff_eq] at hc
   obtain ⟨⟨hq, hA⟩, hB⟩ := hc
   simp [hq, hA, hB]
-
-/-- **The effect context the list gives has its counts at `0` exactly at its abortive operations**,
-when `sigsOkB` holds of it.  `[spec §18, §19, §53]` -/
-theorem cntOk_effCtxOf {s : CRow} (h : sigsOkB s = true) : (effCtxOf s).CntOk := by
-  intro n p hp
-  simp only [effCtxOf, List.mem_map, List.mem_range] at hp
-  obtain ⟨i, -, rfl⟩ := hp
-  split
-  · rename_i o hf
-    have ho := List.all_eq_true.mp h o (List.mem_of_find?_eq_some hf)
-    simp only [Bool.and_eq_true, bne_iff_ne, ne_eq] at ho
-    have h₂ : (o.cnt == .zero) = o.abort := by simpa using ho.1.2
-    dsimp only
-    constructor
-    · intro hz
-      rw [hz] at h₂
-      simpa [BoCa.Fig16.LogRel.Core.OpSig.abort] using h₂.symm
-    · intro ha
-      have : o.abort = true := by simpa [BoCa.Fig16.LogRel.Core.OpSig.abort] using ha
-      rw [this] at h₂
-      simpa using h₂
-  · simp [BoCa.Fig16.LogRel.Core.Count.toQual, BoCa.Fig16.LogRel.Core.VTy.isZero]
 
 end Frontend.Check

@@ -340,12 +340,12 @@ theorem checkProgram_tied {p : Program} {r : Report} {c : Checked}
     ∀ Ξ : EffCtx, SigsAt Ξ c.sigs → CDerivesAt Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
   c.tied.tied.1 hp
 
-/-- **At the program's own effect context**, whose counts are `0` exactly at its abortive
-operations: `main`'s derivation is `CDerivesAt c.Ξ`, and `c.Ξ` is `CntOk`.  `[spec §18, §19, §53]` -/
+/-- **At the program's own effect context**: `main`'s derivation is `CDerivesAt c.Ξ`.
+`[spec §18, §19]` -/
 theorem checkProgram_tiedAt {p : Program} {r : Report} {c : Checked}
     (_h : checkProgram p = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
-    CDerivesAt c.Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) ∧ c.Ξ.CntOk :=
-  ⟨c.derivAt hp, cntOk_effCtxOf c.ok⟩
+    CDerivesAt c.Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
+  c.derivAt hp
 
 /-- **The checker's copies are `[let-poly]`'s premise** (decision 45): a `def` is checked at each
 use, so `main`'s erasure holds a function at each of its uses. For a closed λ-value `λb` typed at

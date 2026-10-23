@@ -277,7 +277,7 @@ abortive operation (no `κ`). -/
 def clauseTyB (S : Row) (R : VTy) (d : Lifetime.Life) (o : Count × VTy × VTy)
     (F : CTy := .ret .unit) : VTy :=
   match o with
-  | (q, A, B) => if (B.isZero && q.toQual != .lin) then .bang (.thunk (.arr A (CTy.effOf S R)))
+  | (q, A, B) => if (q == .zero) then .bang (.thunk (.arr A (CTy.effOf S R)))
       else .bang (.thunk (.arr (.tensor A (.box d (kTy S R q.toQual B F))) (CTy.effOf S R)))
 
 /-- The clauses' type with boxed continuations: `clausesTy`'s tuple at `clauseTyB`. -/

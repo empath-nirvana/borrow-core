@@ -133,12 +133,12 @@ def tailClause (j : Nat) (abort : Bool) (Hc : Expr) : Expr :=
 /-- The clauses, from the `j`-th on.  `[spec §14, §19]` -/
 def tailTuple : List (Count × VTy × VTy) → Nat → Expr → Expr
   | [], _, _ => .val .unit
-  | (q, _, B) :: E, j, Hc => .pair (tailClause j (B.isZero && q.toQual != .lin) Hc) (tailTuple E (j + 1) Hc)
+  | (q, _, B) :: E, j, Hc => .pair (tailClause j (q == .zero) Hc) (tailTuple E (j + 1) Hc)
 
 /-- An answering function's type: `!U(A ⊸ F_{Σ_N} B)`, or the clause's `!U(A ⊸ F_Σ R)` at an
 abortive operation.  `[spec §14, §19]` -/
 def ansTy (S SN : Row) (R : VTy) : Count × VTy × VTy → VTy
-  | (q, A, B) => if (B.isZero && q.toQual != .lin) then .bang (.thunk (.arr A (CTy.effOf S R)))
+  | (q, A, B) => if (q == .zero) then .bang (.thunk (.arr A (CTy.effOf S R)))
       else .bang (.thunk (.arr A (CTy.effOf SN B)))
 
 /-- The answering functions' tuple's type.  `[spec §14, §19]` -/
@@ -208,7 +208,7 @@ theorem isVal_tailTuple (Hc : Expr) :
 /-- The `j`-th clause of the tuple. -/
 theorem clauseAt_tailTuple (Hc : Expr) :
     ∀ (E : List (Count × VTy × VTy)) (k j : Nat) (hj : j < E.length),
-      clauseAt (tailTuple E k Hc) j = some ⟨tailClause (k + j) (E[j].2.2.isZero && E[j].1.toQual != .lin) Hc,
+      clauseAt (tailTuple E k Hc) j = some ⟨tailClause (k + j) (E[j].1 == .zero) Hc,
         isVal_tailClause _ _ _⟩
   | [], _, _, hj => by simp at hj
   | (q, A, B) :: E, k, 0, _ => by
@@ -578,7 +578,7 @@ theorem cwp_handle_tail (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
         rw [ha]
         generalize hEj : E[j] = t at hVg ha hσ
         obtain ⟨q, A', B'⟩ := t
-        have ha' : (B'.isZero && q.toQual != .lin) = false := ha
+        have ha' : (q == .zero) = false := ha
         simp only [ansTy, ha'] at hVg
         obtain ⟨σa, σk, hck, hA', hK⟩ := hσ
         have hA'' : vC true A' ls' δ v σa := hA'
@@ -644,7 +644,7 @@ theorem ewp_handle_tail (hSd : Row.divB S = false) {ls : List SRec} {e : Expr} {
       rw [ha]
       generalize hEj : E[j] = t at hVg ha hσ
       obtain ⟨q, A', B'⟩ := t
-      have ha' : (B'.isZero && q.toQual != .lin) = false := ha
+      have ha' : (q == .zero) = false := ha
       simp only [ansTy, ha'] at hVg
       obtain ⟨σa, σk, hck, hA', hK⟩ := hσ
       have hA'' : vC true A' ls' δ v σa := hA'
@@ -665,7 +665,7 @@ theorem ewp_handle_tail (hSd : Row.divB S = false) {ls : List SRec} {e : Expr} {
       rw [ha]
       generalize hEj : E[j] = t at hVg ha hσ
       obtain ⟨q, A', B'⟩ := t
-      have ha' : (B'.isZero && q.toQual != .lin) = true := ha
+      have ha' : (q == .zero) = true := ha
       simp only [ansTy, ha'] at hVg
       refine ewp_pureSteps (opTable_mono _) (tailClauseA_steps j vc g v hg) _ _ σ ?_
       have hy := (hVg.2 ls' (ext_empty' ls₀ ls')) v σ σ hσ (compS_empty_left σ)

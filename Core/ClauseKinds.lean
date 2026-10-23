@@ -371,7 +371,7 @@ def ClauseKind.BodyPremise : ClauseKind → Expr → Prop
   | .stored, _ => True
 
 /-- Whether the operation `o = A ↠^q B` is abortive: its clause takes no `κ` (`clauseTy`). -/
-def isAbortive (o : Count × VTy × VTy) : Bool := o.2.2.isZero && o.1.toQual != .lin
+def isAbortive (o : Count × VTy × VTy) : Bool := o.1 == .zero
 
 /-- **The premise of the kind's law**, for the operation `o` and its clause `c` (erased). An
 abortive operation's clause takes its argument alone (`clauseTy_abortive`); a control clause is

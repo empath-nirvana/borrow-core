@@ -201,13 +201,18 @@ abbrev OpSig.q (o : OpSig) : Qual := o.cnt.toQual
 
 theorem OpSig.q_ne_unr (o : OpSig) : o.q ≠ .unr := Count.toQual_ne_unr o.cnt
 
-/-- An operation `A ↠^q B` is capturable: not linear, and not abortive (its answer type is not
-`0`), so a continuation captured at it has a cancel branch, and its cancel row is read.
-`[spec §27]` -/
-def capB (q : Qual) (B : VTy) : Bool := q != .lin && !B.isZero
+/-- An operation at the count `c` is capturable: at `1?`, so a continuation captured at it has a
+cancel branch, and its cancel row is read.  `[spec §27, §53]` -/
+def capB (c : Count) : Bool := c == .opt
 
-theorem capB_congr {q : Qual} {B B' : VTy} (h : B.isZero = B'.isZero) : capB q B = capB q B' := by
-  simp only [capB, h]
+@[simp] theorem capB_opt : capB .opt = true := rfl
+@[simp] theorem capB_one : capB .one = false := rfl
+@[simp] theorem capB_zero : capB .zero = false := rfl
+
+/-- An affine count that is not `0` is `1?`. -/
+theorem capB_of_aff {c : Count} (hq : c.toQual = .aff) (hz : (c == .zero) = false) :
+    capB c = true := by
+  cases c <;> simp_all [Count.toQual]
 
 /-- `F_Σ R`: the row's operations stacked over `F R`; `F_∅ R = F R`.  `[spec §19]` -/
 def CTy.effOf : List OpSig → VTy → CTy

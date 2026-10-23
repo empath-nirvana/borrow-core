@@ -42,8 +42,7 @@ is one (`path_of_steps`).
   hypotheses (`supersede_prefix`), and its fired finaliser runs alone to its raise of `2`
   (`finAloneAt_supersedeE`), so `finaliserOrder_at` holds of it (`supersede_finaliserOrder`).
   `progOutT` (`Core/EffCancelTyped.lean`) is typed by a tied derivation (`dAt_progOutT`) at
-  `Ξ₁₂`, whose counts are `0` exactly at its abortive operation (`cntOk_Ξ₁₂`), the shape the
-  checker gives every program it accepts (`checkProgram_tiedAt`); its run allocates `κ`'s cell and
+  `Ξ₁₂`; its run allocates `κ`'s cell and
   cancels `κ` (`progOutT_cancels`), and its region's finaliser raises `2`: it meets
   `cancel_prefix`'s hypotheses (`progOutT_cancel_prefix`).
 -/
@@ -1941,13 +1940,6 @@ theorem supersede_finaliserOrder : FinaliserOrder (ℍ := ℍ) supersedeE :=
 /-- The effect context of `progOutT`: `1 : 1 ↠^{1?} 1` and the abortive `2 : 1 ↠^0 0`. -/
 def Ξ₁₂ : EffCtx := fun n => if n = 1 then [(.opt, .unit, .unit)] else
   if n = 2 then [(.zero, .unit, .zero)] else []
-
-/-- **`Ξ₁₂`'s counts are `0` exactly at its abortive operation**, the shape the checker gives every
-program it accepts (`checkProgram_tiedAt`, `Frontend/Check/Program.lean`). -/
-theorem cntOk_Ξ₁₂ : Ξ₁₂.CntOk := by
-  intro n p hp
-  simp only [Ξ₁₂] at hp
-  split_ifs at hp <;> simp_all [VTy.isZero, Count.toQual]
 
 theorem opAt_rSig2 : OpAt Ξ₁₂ (rSig 2) := ⟨by decide, by simp [Ξ₁₂, rSig], by simp [Ξ₁₂, rSig]⟩
 

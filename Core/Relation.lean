@@ -167,23 +167,23 @@ def cC : CTy → List SRec → LSub → Expr → WProp
       ∃ R : CPred, R.Le (fun ls' e' => cB (some (nuEnv C R)) C ls' δ e') ∧ R ls e ρ
   | .eff n i q wq A B fin C, ls, δ, e =>
       effWp (CTy.eff n i q wq A B fin C).divAt (OpTab.ext n i
-        ⟨q.toQual, B.isZero && q.toQual != .lin, fun ls v => vCE none true A ls δ v,
-          fun ls v => vCE none true B ls δ v, if capB q.toQual B then finObl fin δ else none⟩
+        ⟨q.toQual, q == .zero, fun ls v => vCE none true A ls δ v,
+          fun ls v => vCE none true B ls δ v, if capB q then finObl fin δ else none⟩
           (effTab C δ)) (effRet C δ) ls e
 /-- The operation table of a row `F_Σ R`'s layers, each capturable entry with its cancel row's
 obligation.  `[spec §19, §27]` -/
 def effTab : CTy → LSub → OpTab
   | .eff n i q _ A B fin C, δ => OpTab.ext n i
-      ⟨q.toQual, B.isZero && q.toQual != .lin, fun ls v => vCE none true A ls δ v,
-        fun ls v => vCE none true B ls δ v, if capB q.toQual B then finObl fin δ else none⟩ (effTab C δ)
+      ⟨q.toQual, q == .zero, fun ls v => vCE none true A ls δ v,
+        fun ls v => vCE none true B ls δ v, if capB q then finObl fin δ else none⟩ (effTab C δ)
   | _, _ => OpTab.empty
 /-- The cancel obligation of a cancel row: `none` at `⊤`; otherwise the cancel run at the table
 of the row's layers (`cancelObl (effTab F δ)`, `finObl_eq`).  `[spec §27]` -/
 def finObl : CTy → LSub → Option (List SRec → Expr → WProp)
   | .top, _ => none
   | .eff n i q _ A B fin C, δ => some (cancelObl (OpTab.ext n i
-      ⟨q.toQual, B.isZero && q.toQual != .lin, fun ls v => vCE none true A ls δ v,
-        fun ls v => vCE none true B ls δ v, if capB q.toQual B then finObl fin δ else none⟩
+      ⟨q.toQual, q == .zero, fun ls v => vCE none true A ls δ v,
+        fun ls v => vCE none true B ls δ v, if capB q then finObl fin δ else none⟩
         (effTab C δ)))
   | _, _ => some (cancelObl OpTab.empty)
 /-- The answer relation of a row `F_Σ R`: `𝒱⟦R⟧`.  `[spec §19]` -/
@@ -209,8 +209,8 @@ def cB : Option (Nat → TEnt) → CTy → List SRec → LSub → Expr → WProp
       cB η C ls δ (.app e (.val (.inj₁ .unit))) ρ ∧ cB η D ls δ (.app e (.val (.inj₂ .unit))) ρ
   | η, .eff n i q wq A B fin C, ls, δ, e =>
       effWp (CTy.eff n i q wq A B fin C).divAt (OpTab.ext n i
-        ⟨q.toQual, B.isZero && q.toQual != .lin, fun ls v => vCE none true A ls δ v,
-          fun ls v => vCE none true B ls δ v, if capB q.toQual B then finObl fin δ else none⟩
+        ⟨q.toQual, q == .zero, fun ls v => vCE none true A ls δ v,
+          fun ls v => vCE none true B ls δ v, if capB q then finObl fin δ else none⟩
           (effTab C δ)) (effRetE η C δ) ls e
   | η, .arr A D, ls, δ, e => fun ρ =>
       ∀ v, (vCE none true A ls δ v ─⋆ cB η D ls δ (.app e (.val v))) ρ

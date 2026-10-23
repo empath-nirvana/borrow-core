@@ -806,7 +806,7 @@ theorem Row.unrB_iff {S : Row} : Row.unrB S = true ↔ S.Unr := by
 
 /-- `CTy.FinUnr`, decided. -/
 def finUnrB : CTy → Bool
-  | .eff _ _ q _ _ B f C => q.toQual == .unr || (capB q.toQual B && finUnrB f) || finUnrB C
+  | .eff _ _ q _ _ B f C => q.toQual == .unr || (capB q && finUnrB f) || finUnrB C
   | _ => false
 
 theorem finUnrB_iff : ∀ C : CTy, finUnrB C = true ↔ C.FinUnr
@@ -817,20 +817,21 @@ theorem finUnrB_iff : ∀ C : CTy, finUnrB C = true ↔ C.FinUnr
       simp [finUnrB, CTy.FinUnr]
 
 /-- `Row.UnrD`, decided. -/
-def Row.unrDB (S : Row) : Bool := S.any fun o => o.q == .unr || (capB o.q o.B && finUnrB o.fin)
+def Row.unrDB (S : Row) : Bool := S.any fun o => o.q == .unr || (capB o.cnt && finUnrB o.fin)
 
 theorem Row.unrDB_iff {S : Row} : Row.unrDB S = true ↔ S.UnrD := by
   simp [Row.unrDB, Row.UnrD, finUnrB_iff]
 
 /-- `Row.Unwind S x`, decided: every operation abortive, named, its argument free of `'x` and
-outliving every lifetime (`outlivesAllB`). -/
+outliving every lifetime (`outlivesAllB`), its answer free of `'x`. -/
 def Row.unwindB (S : Row) (x : LifeVar) : Bool :=
-  S.all fun o => o.abort && o.n != 0 && !vfreeB x o.A && outlivesAllB o.A
+  S.all fun o => o.abort && o.n != 0 && !vfreeB x o.A && !vfreeB x o.B && outlivesAllB o.A
 
 theorem Row.unwindB_sound {S : Row} {x : LifeVar} (h : Row.unwindB S x = true) : S.Unwind x := by
   intro o ho
   have := List.all_eq_true.mp h o ho
   simp only [Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true'] at this
-  exact ⟨this.1.1.1, this.1.1.2, not_vfree_of_vfreeB this.1.2, outlivesAllB_sound _ this.2⟩
+  exact ⟨this.1.1.1.1, this.1.1.1.2, not_vfree_of_vfreeB this.1.1.2, not_vfree_of_vfreeB this.1.2,
+    outlivesAllB_sound _ this.2⟩
 
 end BoCa.Fig16.LogRel.Core.Check

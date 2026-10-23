@@ -130,13 +130,10 @@ theorem ewp_box_end {T : OpTab} (hA : T.AbortOnly) {α : Life}
 
 /-- The row of a callback that may unwind out of a borrow of lifetime `'x`: every operation is
 abortive and named (not the reserved `0`), and its argument type is closed data: free of `'x` and
-outliving every lifetime ("operation types are closed in lifetimes", §19).  `[spec §19]` -/
+outliving every lifetime ("operation types are closed in lifetimes", §19); its answer type is free
+of `'x` too.  `[spec §19, §53]` -/
 def Row.Unwind (S : Row) (x : LifeVar) : Prop :=
-  ∀ o ∈ S, o.abort = true ∧ o.n ≠ 0 ∧ ¬ VFree x o.A ∧ ∀ Δ a, VOutlives Δ a o.A
-
-theorem OpSig.B_zero {o : OpSig} (h : o.abort = true) : o.B = .zero := by
-  simp only [OpSig.abort, Bool.and_eq_true] at h
-  cases hB : o.B <;> simp_all [VTy.isZero]
+  ∀ o ∈ S, o.abort = true ∧ o.n ≠ 0 ∧ ¬ VFree x o.A ∧ ¬ VFree x o.B ∧ ∀ Δ a, VOutlives Δ a o.A
 
 theorem Row.Unwind.nz {S : Row} {x : LifeVar} (hS : S.Unwind x) : S.NZ :=
   fun o ho => (hS o ho).2.1
@@ -159,9 +156,9 @@ theorem Row.Unwind.tab_extend {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LS
   cases hf : Row.find S n i with
   | none => rfl
   | some o =>
-      obtain ⟨ha, -, hx, -⟩ := hS o (Row.find_mem hf).1
-      have hB : ¬ VFree x o.B := by rw [OpSig.B_zero ha]; exact id
-      have hc : capB o.q o.B = false := by simp [capB, OpSig.B_zero ha, VTy.isZero]
+      obtain ⟨ha, -, hx, hB, -⟩ := hS o (Row.find_mem hf).1
+      have hc : capB o.cnt = false := by
+        simp only [OpSig.abort, beq_iff_eq] at ha; simp [ha]
       simp only [Option.map_some, OpSig.ent, vC_extend_of_not_free hx,
         vC_extend_of_not_free hB, hc, Bool.false_eq_true, if_false]
 
@@ -170,7 +167,7 @@ theorem Row.Unwind.out {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (α
     ∀ n i en, Row.tab S δ n i = some en → ∀ ls v ρ, en.PA ls v ρ → BoLo.Outlives ρ α := by
   intro n i en hT ls v ρ hPA
   obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
-  obtain ⟨-, -, hx, hO⟩ := hS o (Row.find_mem hf).1
+  obtain ⟨-, -, hx, -, hO⟩ := hS o (Row.find_mem hf).1
   have h' : vC true o.A ls (δ.extend x α) v ρ := by
     rw [vC_extend_of_not_free hx]; exact hPA
   exact vC_outlives (Δ := LifeCtx.empty) (a := .var x) (models_empty_any _)

@@ -171,9 +171,9 @@ def pSig (n : UInt32) (F : CTy) : OpSig := ⟨n, 0, .opt, .top, .unit, .unit, F�
 abbrev finR (m : UInt32) : CTy := CTy.effOf [rSig m] .unit
 
 /-- An abortive operation's clause type does not read its count: `!U(A ⊸ F_Σ R)`. -/
-theorem clauseTy_abortive {S : Row} {R A : VTy} {q : Count} {F : CTy} (hq : q ≠ .one) :
-    clauseTy S R (q, A, .zero) F = .bang (.thunk (.arr A (CTy.effOf S R))) := by
-  cases q <;> simp_all [clauseTy, VTy.isZero, Count.toQual]
+theorem clauseTy_abortive {S : Row} {R A : VTy} {F : CTy} :
+    clauseTy S R (.zero, A, .zero) F = .bang (.thunk (.arr A (CTy.effOf S R))) := by
+  simp [clauseTy]
 
 theorem ofEff_raise (n : UInt32) : Row.ofEff n [(.zero, .unit, .zero)] 0 finsNil = [rSig n] := rfl
 
@@ -338,7 +338,7 @@ open BoCa.Fig16.LogRel.Core.Inversions
 count with weakening (`0` or `1?`), `B` no `0`, at the cancel row `F`, the same-term rules reach the
 clause's `F_Σ R` from `κ`'s cancel branch `cancelTy Σ F`. -/
 theorem cancelC_jr {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F : CTy} {q : Count}
-    {ob : Option Lifetime.Life} (hq : q.toQual = .aff) (hB : B.isZero = false)
+    {ob : Option Lifetime.Life} (hq : q.toQual = .aff) (hB : (q == .zero) = false)
     (h : CDerives Δ Γ (.val cancelC) (.val (clauseTyO S R ob (q, A, B) F))) :
     JR (.comp (cancelTy S F)) (.comp (CTy.effOf S R)) := by
   rw [clauseTyO_cap S R ob F hB, hq] at h
@@ -418,15 +418,15 @@ theorem not_der_progT {Δ : LifeCtx} {Γ : Ctx VTy} {S' : Row} {Y : VTy}
   cases hf₅'
   have hsig : oM₀.Sig ⟨1, 0, q₁, .top, A₁, B₁, fs 0⟩ :=
     hleM.1.trans (hle₃.1.trans (hle₄.1.trans hle₅.1))
-  have hB₁ : B₁.isZero = false := by
+  have hB₁ : (q₁ == .zero) = false := by
     have := hsig.abort_eq
     rw [ha₄] at this
-    simpa [OpSig.abort, hq₁a] using this.symm
-  have hcap₀ : capB oM₀.q oM₀.B = true := by
-    rw [hsig.capB_eq]; simp [capB, hB₁, hq₁a]
-  have hcapM : capB oM.q oM.B = true := hleM.1.capB_eq ▸ hcap₀
-  have hcap₃ : capB o₃.q o₃.B = true := hle₃.1.capB_eq ▸ hcapM
-  have hcap₄ : capB o₄.q o₄.B = true := hle₄.1.capB_eq ▸ hcap₃
+    simpa [OpSig.abort] using this.symm
+  have hcap₀ : capB oM₀.cnt = true := by
+    rw [hsig.capB_eq]; exact capB_of_aff hq₁a hB₁
+  have hcapM : capB oM.cnt = true := hleM.1.capB_eq ▸ hcap₀
+  have hcap₃ : capB o₃.cnt = true := hle₃.1.capB_eq ▸ hcapM
+  have hcap₄ : capB o₄.cnt = true := hle₄.1.capB_eq ▸ hcap₃
   -- `2` in the cancel row of `1`, or the cancel row `⊤`
   have h₃₄ : FinLe o₃.fin o₄.fin := hle₄.2 hcap₃
   have h₄₅ : FinLe o₄.fin (fs 0) := hle₅.2 hcap₄
@@ -477,7 +477,7 @@ theorem not_der_progT_ret {Δ : LifeCtx} {Γ : Ctx VTy} {Y : VTy} :
 `(λx. x, (cancelC, ()))` at `[handle]`'s type, its one operation `A ↠ B` at a count with weakening,
 `B` no `0`. -/
 theorem cancelPair_jr {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A R A₁ B₁ : VTy} {fs : Nat → CTy}
-    {q₁ : Count} {ob : Option Lifetime.Life} (hq₁ : q₁.toQual = .aff) (hB₁ : B₁.isZero = false)
+    {q₁ : Count} {ob : Option Lifetime.Life} (hq₁ : q₁.toQual = .aff) (hB₁ : (q₁ == .zero) = false)
     (hH : CDerives Δ Γ (.pair (.val idV) (.pair (.val cancelC) (.val Val.unit)))
       (.val (.tensor (retTy S A R) (clausesTyO S R ob [(q₁, A₁, B₁)] fs)))) :
     JR (.comp (cancelTy S (fs 0))) (.comp (CTy.effOf S R)) := by
@@ -1089,11 +1089,11 @@ def FindsAt (m : UInt32) (G : CTy) : Prop := G.isTop = true ∨ ∃ y, Row.find 
 
 /-- `G` is `⊤`, or finds a capturable operation of `m`. -/
 def FindsCap (m : UInt32) (G : CTy) : Prop :=
-  G.isTop = true ∨ ∃ x, Row.find G.rowOf m 0 = some x ∧ capB x.q x.B = true
+  G.isTop = true ∨ ∃ x, Row.find G.rowOf m 0 = some x ∧ capB x.cnt = true
 
 /-- `G` is `⊤`, or finds a capturable operation of `m` whose own cancel row is `⊤` or finds `m`. -/
 def FindsRec (m : UInt32) (G : CTy) : Prop :=
-  G.isTop = true ∨ ∃ x, Row.find G.rowOf m 0 = some x ∧ capB x.q x.B = true ∧ FindsAt m x.fin
+  G.isTop = true ∨ ∃ x, Row.find G.rowOf m 0 = some x ∧ capB x.cnt = true ∧ FindsAt m x.fin
 
 theorem FindsAt.mono {m : UInt32} {G G' : CTy} (h : FinLe G G') (hG : FindsAt m G) :
     FindsAt m G' := by
@@ -1122,7 +1122,7 @@ theorem FindsRec.mono {m : UInt32} {G G' : CTy} (h : FinLe G G') (hG : FindsRec 
 /-- **The finaliser below a cancel row**: a capturable operation of `m` in `E` puts one in
 `F ⋈ E`. -/
 theorem thenLe_findsCap {m : UInt32} {F T : CTy} {E : Row} (h : ThenLe F E T) {z : OpSig}
-    (hz : Row.find E m 0 = some z) (hc : capB z.q z.B = true) : FindsCap m T := by
+    (hz : Row.find E m 0 = some z) (hc : capB z.cnt = true) : FindsCap m T := by
   rw [ThenLe] at h
   rcases h with h | ⟨-, -, hE⟩
   · exact .inl h
@@ -1228,16 +1228,16 @@ theorem not_der_progNCrecT {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives
   cases hf₁
   have hsig₁ : oP₀.Sig ⟨1, 0, q₁, .top, A₁, B₁, fs₁ 0⟩ :=
     hleP.1.trans (hle₄₁.1.trans (hle₃₁.1.trans (hle₂₁.1.trans (hle₂₁'.1.trans hle₁.1))))
-  have hB₁ : B₁.isZero = false := by
+  have hB₁ : (q₁ == .zero) = false := by
     have := hsig₁.abort_eq
     rw [ha₅] at this
-    simpa [OpSig.abort, hq₁a] using this.symm
-  have hcap₁ : capB oP₀.q oP₀.B = true := by rw [hsig₁.capB_eq]; simp [capB, hB₁, hq₁a]
-  have hcapP : capB oP.q oP.B = true := hleP.1.capB_eq ▸ hcap₁
-  have hcap₄₁ : capB o₄₁.q o₄₁.B = true := hle₄₁.1.capB_eq ▸ hcapP
-  have hcap₃₁ : capB o₃₁.q o₃₁.B = true := hle₃₁.1.capB_eq ▸ hcap₄₁
-  have hcap₂₁ : capB o₂₁.q o₂₁.B = true := hle₂₁.1.capB_eq ▸ hcap₃₁
-  have hcap₂₁' : capB o₂₁'.q o₂₁'.B = true := hle₂₁'.1.capB_eq ▸ hcap₂₁
+    simpa [OpSig.abort] using this.symm
+  have hcap₁ : capB oP₀.cnt = true := by rw [hsig₁.capB_eq]; exact capB_of_aff hq₁a hB₁
+  have hcapP : capB oP.cnt = true := hleP.1.capB_eq ▸ hcap₁
+  have hcap₄₁ : capB o₄₁.cnt = true := hle₄₁.1.capB_eq ▸ hcapP
+  have hcap₃₁ : capB o₃₁.cnt = true := hle₃₁.1.capB_eq ▸ hcap₄₁
+  have hcap₂₁ : capB o₂₁.cnt = true := hle₂₁.1.capB_eq ▸ hcap₃₁
+  have hcap₂₁' : capB o₂₁'.cnt = true := hle₂₁'.1.capB_eq ▸ hcap₂₁
   -- the first finaliser's `4`, up to the inner `[handle] 4`: unrestricted, its answer no `0`
   obtain ⟨d₄, hfd₄, hled₄⟩ := hDS₄ 4 0 oD hfD
   obtain ⟨d₃, hfd₃, hled₃⟩ := hS₄ 4 0 d₄ hfd₄
@@ -1248,12 +1248,12 @@ theorem not_der_progNCrecT {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives
   cases hfd₁
   have hsigD : oD₀.Sig ⟨4, 0, q₂, .top, A₂', B₂', fs₂ 0⟩ :=
     hleD.1.trans (hled₄.1.trans (hled₃.1.trans (hled₂.1.trans hled₁.1)))
-  have hB₂ : B₂'.isZero = false := by
+  have hB₂ : (q₂ == .zero) = false := by
     have := hsigD.abort_eq
     rw [ha₆] at this
-    simpa [OpSig.abort, hq₂a] using this.symm
-  have hcapD₀ : capB oD₀.q oD₀.B = true := by rw [hsigD.capB_eq]; simp [capB, hB₂, hq₂a]
-  have hcapD : capB oD.q oD.B = true := hleD.1.capB_eq ▸ hcapD₀
+    simpa [OpSig.abort] using this.symm
+  have hcapD₀ : capB oD₀.cnt = true := by rw [hsigD.capB_eq]; exact capB_of_aff hq₂a hB₂
+  have hcapD : capB oD.cnt = true := hleD.1.capB_eq ▸ hcapD₀
   -- the first finaliser puts `4` in the cancel row of `1`; the second, a leftover of that `4`'s
   -- cancel, puts `4` in its cancel row in turn
   have h₄ : FindsCap 4 o₄₁.fin := thenLe_findsCap (hfin₄ 1 0 oP o₄₁ hfP hf₄₁ hcapP) hfD hcapD
@@ -1266,16 +1266,15 @@ theorem not_der_progNCrecT {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives
   · rw [ht] at hnt₁; cases hnt₁
   obtain ⟨x₀, hx₀, hlex₀⟩ := hle₁' 4 0 x₁ (by rw [Row.find_append, hx₁]; rfl)
   have hfx₀ : FindsAt 4 x₀.fin := hfx₁.mono (hlex₀.2 hcx₁)
-  have hcx₀ : capB x₀.q x₀.B = true := hlex₀.1.capB_eq ▸ hcx₁
+  have hcx₀ : capB x₀.cnt = true := hlex₀.1.capB_eq ▸ hcx₁
   -- so does the outer handler of `4`'s clause row, its own outer row
   obtain ⟨y₀, hy₀, hley₀⟩ := hS₁ 4 0 x₀ hx₀
   rw [Row.find_append, show Row.find (Row.ofEff 4 [(q₀, A₀, B₀)] 0 fs₀) 4 0 =
     some ⟨4, 0, q₀, .top, A₀, B₀, fs₀ 0⟩ from rfl, Option.some_or] at hy₀
   cases hy₀
-  have hB₀ : B₀.isZero = false := by
+  have hB₀ : (q₀ == .zero) = false := by
     have := hley₀.1.capB_eq ▸ hcx₀
-    simp only [capB, Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true'] at this
-    exact this.2
+    cases h : q₀ <;> simp_all [capB]
   have hfs₀ : FindsAt 4 (fs₀ 0) := hfx₀.mono (hley₀.2 hcx₀)
   obtain ⟨hnt₀, hle₀⟩ := cancelTy_rowLe (cancelPair_jr hq₀a hB₀ hH₀)
   rcases hfs₀ with ht | ⟨y, hy⟩
@@ -1325,7 +1324,7 @@ open BoCa.Fig16.LogRel.Core.Inversions
 the same-term rules read at the clause's row `Σ` or below: `F` is no `⊤`, and `Σ` finds each
 operation `F` finds. -/
 theorem timeoutCl_finds {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R A B : VTy} {F : CTy} {q : Count}
-    {ob : Option Lifetime.Life} (hq : q.toQual = .aff) (hB : B.isZero = false)
+    {ob : Option Lifetime.Life} (hq : q.toQual = .aff) (hB : (q == .zero) = false)
     (h : CDerives Δ Γ (.val timeoutCl) (.val (clauseTyO S R ob (q, A, B) F))) :
     F.isTop = false ∧ ∀ n i o, Row.find F.rowOf n i = some o → ∃ o', Row.find S n i = some o' := by
   rw [clauseTyO_cap S R ob F hB, hq] at h
@@ -1435,15 +1434,15 @@ theorem not_der_e7c {Δ : LifeCtx} {Γ : Ctx VTy} {nw ni : UInt32} {qi : Count} 
   cases hf₅'
   have hsig : oM₀.Sig ⟨nw, 0, q₁, .top, A₁, B₁, fs 0⟩ :=
     hleM.1.trans (hle₃.1.trans (hle₄.1.trans hle₅.1))
-  have hB₁ : B₁.isZero = false := by
+  have hB₁ : (q₁ == .zero) = false := by
     have := hsig.abort_eq
     rw [ha₄] at this
-    simpa [OpSig.abort, hq₁a] using this.symm
-  have hcap₀ : capB oM₀.q oM₀.B = true := by
-    rw [hsig.capB_eq]; simp [capB, hB₁, hq₁a]
-  have hcapM : capB oM.q oM.B = true := hleM.1.capB_eq ▸ hcap₀
-  have hcap₃ : capB o₃.q o₃.B = true := hle₃.1.capB_eq ▸ hcapM
-  have hcap₄ : capB o₄.q o₄.B = true := hle₄.1.capB_eq ▸ hcap₃
+    simpa [OpSig.abort] using this.symm
+  have hcap₀ : capB oM₀.cnt = true := by
+    rw [hsig.capB_eq]; exact capB_of_aff hq₁a hB₁
+  have hcapM : capB oM.cnt = true := hleM.1.capB_eq ▸ hcap₀
+  have hcap₃ : capB o₃.cnt = true := hle₃.1.capB_eq ▸ hcapM
+  have hcap₄ : capB o₄.cnt = true := hle₄.1.capB_eq ▸ hcap₃
   -- `exnᵢ` in the cancel row of `wait`, or that cancel row `⊤`
   have h₃₄ : FinLe o₃.fin o₄.fin := hle₄.2 hcap₃
   have h₄₅ : FinLe o₄.fin (fs 0) := hle₅.2 hcap₄
@@ -1528,11 +1527,11 @@ theorem rowLe_of_find_eq {S S' : Row} (h : ∀ n i, Row.find S n i = Row.find S'
 
 /-- **A finaliser that raises `exn`**, below a continuation whose cancel row is empty, puts the
 raise in that cancel row: `[] ⋈ exn ≤ {exn}`. -/
-theorem thenLe_exn (n : UInt32) (q : Count) : ThenLe (.ret .unit) (exnRow n q) (finExn n q) := by
+theorem thenLe_exn (n : UInt32) (q : Count) (hq : q = .zero := by decide) : ThenLe (.ret .unit) (exnRow n q) (finExn n q) := by
   rw [ThenLe]
   refine .inr ⟨rfl, fun _ _ _ hf => by simp [CTy.rowOf, Row.find] at hf, fun m i o hf => ?_⟩
   obtain ⟨rfl, rfl, rfl⟩ := find_ofEff_one hf
-  refine ⟨_, ?_, OpSig.Sig.refl _, fun hc => by simp [capB, VTy.isZero] at hc⟩
+  refine ⟨_, ?_, OpSig.Sig.refl _, fun hc => by subst hq; simp [capB] at hc⟩
   rw [CTy.rowOf_effOf]
   exact hf
 
@@ -1588,13 +1587,13 @@ theorem dAt_timeout {Δ : LifeCtx} {nw : UInt32} (hw : Ξ nw = [(.opt, .unit, .u
 /-- **`toResult M`**, tied: at the row `S`, `M` at `exn`'s row before `S`, `exn` affine or
 unrestricted. -/
 theorem dAt_toResult {Δ : LifeCtx} {ne : UInt32} {q : Count} (he : Ξ ne = [(q, .unit, .zero)])
-    (hne : ne ≠ 0) (hq : q ≠ .one) {S : Row} (hS : RowAt Ξ S) (hnS : ∀ o ∈ S, o.n ≠ ne) {A : VTy}
+    (hne : ne ≠ 0) (hq : q = .zero) {S : Row} (hS : RowAt Ξ S) (hnS : ∀ o ∈ S, o.n ≠ ne) {A : VTy}
     {M : Expr} (hM : CDerivesAt Ξ Δ [] M (.comp (CTy.effOf (exnRow ne q ++ S) A)))
     (hdv : Row.divB (exnRow ne q ++ S) = false := by div_free) :
     CDerivesAt Ξ Δ [] (hndE (toResultH ne q) M) (.comp (CTy.effOf S (.sum A .unit))) := by
   have hcl : CDerives Δ [] (.val (constC (Val.inj₂ Val.unit)))
       (.val (clauseTy S (.sum A .unit) (q, .unit, .zero))) := by
-    rw [clauseTy_abortive hq]
+    subst hq; rw [clauseTy_abortive]
     exact d_constC_raise S (.sumI₂ (.unitI (.cons .nil)))
   show CDerivesAt Ξ Δ [] (hndExpr ne [q] (.pair (.val injlV)
     (.pair (.val (constC (Val.inj₂ Val.unit))) (.val Val.unit))) M) _
@@ -1606,11 +1605,11 @@ theorem dAt_toResult {Δ : LifeCtx} {ne : UInt32} {q : Count} (he : Ξ ne = [(q,
 
 /-- The raise of `exn`, tied, at its row. -/
 theorem dAt_raiseU {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) {n : UInt32} {q : Count}
-    (hn : Ξ n = [(q, .unit, .zero)]) (hn0 : n ≠ 0) (hq : q ≠ .one) (B : VTy) :
+    (hn : Ξ n = [(q, .unit, .zero)]) (hn0 : n ≠ 0) (hq : q = .zero) (B : VTy) :
     CDerivesAt Ξ Δ Γ (raiseU n) (.comp (CTy.effOf (exnRow n q) B)) :=
   .effRaise (o := ⟨n, 0, q, .top, .unit, .zero, .ret .unit⟩)
     (rowAt_left (S' := []) (rowAt_ofEff_append hn hn0 (by simp) (rowAt_nil Ξ)))
-    (by simp [Row.ofEff, Row.find]) (by cases q <;> simp_all [OpSig.abort, VTy.isZero]) .unit
+    (by simp [Row.ofEff, Row.find]) (by subst hq; rfl) .unit
     (.unitI hΓ)
 
 /-- **`(wait (); return tt) then x. x unwind D`**, tied, at the handled row `wait⟨F⟩ ⊙ S` of a
@@ -1653,7 +1652,7 @@ theorem dAt_bodyF {Δ : LifeCtx} {nw : UInt32} (hw : Ξ nw = [(.opt, .unit, .uni
 instance of `exnᵢ`, recorded in `wait`'s cancel row and live at the `timeout` clause's row.
 `[spec §27]` -/
 theorem dAt_e7c_lift {Δ : LifeCtx} {nw ni : UInt32} {qi : Count}
-    (hw : Ξ nw = [(.opt, .unit, .unit)]) (hi : Ξ ni = [(qi, .unit, .zero)]) (hqi : qi ≠ .one)
+    (hw : Ξ nw = [(.opt, .unit, .unit)]) (hi : Ξ ni = [(qi, .unit, .zero)]) (hqi : qi = .zero)
     (hnw : nw ≠ 0) (hni : ni ≠ 0) (hne : nw ≠ ni) :
     CDerivesAt Ξ Δ [] (e7c nw ni qi)
       (.comp (CTy.effOf (exnRow ni qi) (.sum (.sum (.sum .unit .unit) .unit) .unit))) := by
@@ -1679,7 +1678,7 @@ theorem dAt_e7c_lift {Δ : LifeCtx} {nw ni : UInt32} {qi : Count}
   -- the body at `wait`'s row before `exnᵢ`'s, read at `exnᵢ`'s before `wait`'s
   have hB := dAt_bodyF (Δ := Δ) hw hnw (S := exnRow ni qi) (SD := exnRow ni qi) (F := finExn ni qi)
     ?_ ?_
-    (rowLe_ofEff_cons _ _ hnSi) (thenLe_exn ni qi) (dAt_raiseU (.cons .nil) hi hni hqi .unit)
+    (rowLe_ofEff_cons _ _ hnSi) (thenLe_exn ni qi hqi) (dAt_raiseU (.cons .nil) hi hni hqi .unit)
   · refine .effSub (rowLe_of_find_eq fun n i => ?_) hB
     simp only [Row.find_append]
     by_cases hn : n = nw
@@ -1701,21 +1700,9 @@ qualifier `qi` at `ni`. -/
 def Ξe7c (nw ni : UInt32) (qi : Count) : EffCtx := fun n =>
   if n = nw then [(.opt, .unit, .unit)] else if n = ni then [(qi, .unit, .zero)] else []
 
-/-- At an abortive `exnᵢ` (count `0`), `e7c`'s effect context has its counts at `0` exactly at its
-abortive operations, as the context of every program the checker accepts has
-(`checkProgram_tiedAt`). -/
-theorem cntOk_Ξe7c {nw ni : UInt32} : (Ξe7c nw ni .zero).CntOk := by
-  intro n p hp
-  unfold Ξe7c at hp
-  split at hp
-  · simp only [List.mem_singleton] at hp; subst hp; simp [VTy.isZero]
-  · split at hp
-    · simp only [List.mem_singleton] at hp; subst hp; simp [VTy.isZero, Count.toQual]
-    · cases hp
-
 /-- **`e7c` is typed at the row of `exnᵢ`** (decision D1), at an abortive `exnᵢ`, at a count with weakening:
 the rejection `not_der_e7c` is at the rows without `exnᵢ`, and at no other.  `[spec §27]` -/
-theorem d_e7c_lift {Δ : LifeCtx} {nw ni : UInt32} {qi : Count} (hqi : qi ≠ .one) (hnw : nw ≠ 0)
+theorem d_e7c_lift {Δ : LifeCtx} {nw ni : UInt32} {qi : Count} (hqi : qi = .zero) (hnw : nw ≠ 0)
     (hni : ni ≠ 0) (hne : nw ≠ ni) :
     CDerives Δ [] (e7c nw ni qi)
       (.comp (CTy.effOf (exnRow ni qi) (.sum (.sum (.sum .unit .unit) .unit) .unit))) :=

@@ -79,23 +79,20 @@ theorem finObl_eq (δ : LSub) (F : CTy) :
 
 /-- An operation's entry reads its cancel row at a capturable operation only. -/
 theorem OpSig.ent_fin (δ : LSub) (o : OpSig) :
-    (o.ent δ).fin = if capB o.q o.B then finObl o.fin δ else none := rfl
+    (o.ent δ).fin = if capB o.cnt then finObl o.fin δ else none := rfl
 
 /-- A capturable entry: not abortive, not linear. -/
 theorem capB_of_ent {δ : LSub} {o : OpSig} (ha : (o.ent δ).abort = false) (hq : (o.ent δ).q ≠ .lin) :
-    capB o.q o.B = true := by
-  simp only [OpSig.ent, OpSig.abort, Bool.and_eq_false_iff, bne_eq_false_iff_eq] at ha hq
-  simp only [capB, Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true']
-  rcases ha with ha | ha
-  · exact ⟨hq, ha⟩
-  · exact absurd ha hq
+    capB o.cnt = true := by
+  simp only [OpSig.ent, OpSig.abort, OpSig.q] at ha hq
+  cases h : o.cnt <;> simp_all [Count.toQual]
 
-theorem not_lin_of_capB {q : Qual} {B : VTy} (h : capB q B = true) : q ≠ .lin := by
-  simp only [capB, Bool.and_eq_true, bne_iff_ne] at h; exact h.1
+theorem not_lin_of_capB {q : Count} (h : capB q = true) : q.toQual ≠ .lin := by
+  cases q <;> simp_all [capB, Count.toQual]
 
-theorem abort_false_of_capB {o : OpSig} (h : capB o.q o.B = true) : o.abort = false := by
-  simp only [capB, Bool.and_eq_true, bne_iff_ne, Bool.not_eq_true'] at h
-  simp [OpSig.abort, h.2]
+theorem abort_false_of_capB {o : OpSig} (h : capB o.cnt = true) : o.abort = false := by
+  simp only [capB, beq_iff_eq] at h
+  simp [OpSig.abort, h]
 
 /-- The operations are one: name, index, count, argument and answer types.  The world may differ
 (`[sub]` moves it), and the count may not: `[sub]` never moves it.  `[spec §27, §53]` -/
@@ -111,11 +108,11 @@ theorem OpSig.Sig.trans {o o' o'' : OpSig} (h : o.Sig o') (h' : o'.Sig o'') : o.
 /-- One operation has one qualifier. -/
 theorem OpSig.Sig.q_eq {o o' : OpSig} (h : o.Sig o') : o.q = o'.q := congrArg Count.toQual h.2.2.1
 
-theorem OpSig.Sig.capB_eq {o o' : OpSig} (h : o.Sig o') : capB o.q o.B = capB o'.q o'.B := by
-  rw [h.q_eq, h.2.2.2.2]
+theorem OpSig.Sig.capB_eq {o o' : OpSig} (h : o.Sig o') : capB o.cnt = capB o'.cnt := by
+  rw [h.2.2.1]
 
 theorem OpSig.Sig.abort_eq {o o' : OpSig} (h : o.Sig o') : o.abort = o'.abort := by
-  simp only [OpSig.abort, h.q_eq, h.2.2.2.2]
+  simp only [OpSig.abort, h.2.2.1]
 
 /-! ### The cancel-row order -/
 
@@ -125,13 +122,13 @@ the one `F′` finds at its key, with, at a capturable operation, a cancel row b
 def FinLe (F F' : CTy) : Prop :=
   F'.isTop = true ∨ (F.isTop = false ∧ ∀ n i o, Row.find F.rowOf n i = some o →
     ∃ o', Row.find F'.rowOf n i = some o' ∧ o.Sig o' ∧
-      (capB o.q o.B = true → FinLe o.fin o'.fin))
+      (capB o.cnt = true → FinLe o.fin o'.fin))
 termination_by sizeOf F
 decreasing_by exact rowOf_fin_lt F (Row.find_mem (by assumption)).1
 
 /-- `o ≤ o′`: the same operation, its cancel row grown at a capturable operation.
 `[spec §27]` -/
-def OpSig.LeF (o o' : OpSig) : Prop := o.Sig o' ∧ (capB o.q o.B = true → FinLe o.fin o'.fin)
+def OpSig.LeF (o o' : OpSig) : Prop := o.Sig o' ∧ (capB o.cnt = true → FinLe o.fin o'.fin)
 
 /-- **`Σ ⊆ Σ′` as rows** (`[sub]`): every operation `Σ` finds is below the one `Σ′` finds at its
 key; an entry's cancel row may only grow.  `[spec §19, §27]` -/
@@ -246,10 +243,10 @@ termination_by sizeOf F
 decreasing_by exact rowOf_fin_lt F (Row.find_mem hf).1
 
 /-- The entries of one operation, not capturable, at two cancel rows are one entry. -/
-theorem OpSig.ent_eq_of_sig (δ : LSub) {o o' : OpSig} (h : o.Sig o') (hc : capB o.q o.B = false) :
+theorem OpSig.ent_eq_of_sig (δ : LSub) {o o' : OpSig} (h : o.Sig o') (hc : capB o.cnt = false) :
     o.ent δ = o'.ent δ := by
-  have hc' : capB o'.q o'.B = false := h.capB_eq ▸ hc
-  simp only [OpSig.ent, OpSig.abort, hc', h.q_eq, h.2.2.2.1, h.2.2.2.2, Bool.false_eq_true,
+  have hc' : capB o'.cnt = false := h.capB_eq ▸ hc
+  simp only [OpSig.ent, OpSig.abort, hc, hc', h.2.2.1, h.q_eq, h.2.2.2.1, h.2.2.2.2, Bool.false_eq_true,
     if_false]
 
 /-- An operation's entry grows with the operation. -/
@@ -269,7 +266,7 @@ theorem Row.tab_le {S S' : Row} (δ : LSub) (h : RowLe S S') : (Row.tab S δ).Le
   exact ⟨o'.ent δ, Row.tab_find hf', OpSig.ent_le δ hle⟩
 
 theorem finUnr_of_mem : ∀ {G : CTy} {o : OpSig}, o ∈ G.rowOf →
-    (o.q = .unr ∨ (capB o.q o.B = true ∧ o.fin.FinUnr)) → G.FinUnr
+    (o.q = .unr ∨ (capB o.cnt = true ∧ o.fin.FinUnr)) → G.FinUnr
   | .eff n i q _ A B f C, o, ho, h => by
       simp only [CTy.rowOf, List.mem_cons] at ho
       rcases ho with rfl | ho
@@ -283,7 +280,7 @@ theorem finUnr_of_mem : ∀ {G : CTy} {o : OpSig}, o ∈ G.rowOf →
 /-- A capturable entry of a row's table, its obligation the cancel run at its cancel row's table. -/
 theorem ent_fin_some {δ : LSub} {o : OpSig} {P : List SRec → Expr → WProp}
     (h : (o.ent δ).fin = some P) :
-    capB o.q o.B = true ∧ o.fin.isTop = false ∧ P = cancelObl (Row.tab o.fin.rowOf δ) := by
+    capB o.cnt = true ∧ o.fin.isTop = false ∧ P = cancelObl (Row.tab o.fin.rowOf δ) := by
   rw [OpSig.ent_fin] at h
   split at h
   · rename_i hc
@@ -370,7 +367,7 @@ nested cancel of its continuation runs.  `pend P ⊤ = ⊤`.  `[spec §27]` -/
 def PendLe (P : Row) (G G' : CTy) : Prop :=
   G'.isTop = true ∨ (G.isTop = false ∧
     (∀ n i o, Row.find G.rowOf n i = some o → ∃ o', Row.find G'.rowOf n i = some o' ∧ o.Sig o' ∧
-      (capB o.q o.B = true → PendLe P o.fin o'.fin)) ∧
+      (capB o.cnt = true → PendLe P o.fin o'.fin)) ∧
     (∀ n i o, Row.find P n i = some o → o.abort = true →
       ∃ o', Row.find G'.rowOf n i = some o' ∧ o.Sig o'))
 termination_by sizeOf G
@@ -384,9 +381,9 @@ too); each operation `E` finds is `T`'s, a capturable one's cancel row with `F`'
 def ThenLe (F : CTy) (E : Row) (T : CTy) : Prop :=
   T.isTop = true ∨ (F.isTop = false ∧
     (∀ n i o, Row.find F.rowOf n i = some o → ∃ o', Row.find T.rowOf n i = some o' ∧ o.Sig o' ∧
-      (capB o.q o.B = true → ThenLe o.fin E o'.fin)) ∧
+      (capB o.cnt = true → ThenLe o.fin E o'.fin)) ∧
     (∀ n i o, Row.find E n i = some o → ∃ o', Row.find T.rowOf n i = some o' ∧ o.Sig o' ∧
-      (capB o.q o.B = true → PendLe F.rowOf o.fin o'.fin)))
+      (capB o.cnt = true → PendLe F.rowOf o.fin o'.fin)))
 termination_by sizeOf F
 decreasing_by exact rowOf_fin_lt F (Row.find_mem (by assumption)).1
 
@@ -402,18 +399,18 @@ decreasing_by exact rowOf_fin_lt F (Row.find_mem (by assumption)).1
 
 /-- The errors a cancel row may keep, at every depth, have persistent arguments.  `[spec §27]` -/
 def CTy.FinPers : CTy → Prop
-  | .eff _ _ q _ A B f C => ((B.isZero && q.toQual != .lin) = true → A.Persistent) ∧
-      (capB q.toQual B = true → f.FinPers) ∧ C.FinPers
+  | .eff _ _ q _ A B f C => ((q == .zero) = true → A.Persistent) ∧
+      (capB q = true → f.FinPers) ∧ C.FinPers
   | _ => True
 
 /-- The errors that may be pending at a finaliser below which the row `Σ` runs have persistent
 arguments: `Σ`'s abortive operations (a pending `raise`), and those of its capturable operations'
 cancel rows at every depth (a cancel's kept error).  `[spec §27]` -/
 def Row.PendPers (S : Row) : Prop :=
-  ∀ o ∈ S, (o.abort = true → o.A.Persistent) ∧ (capB o.q o.B = true → o.fin.FinPers)
+  ∀ o ∈ S, (o.abort = true → o.A.Persistent) ∧ (capB o.cnt = true → o.fin.FinPers)
 
 theorem finPers_of_mem : ∀ {F : CTy} {o : OpSig}, F.FinPers → o ∈ F.rowOf →
-    (o.abort = true → o.A.Persistent) ∧ (capB o.q o.B = true → o.fin.FinPers)
+    (o.abort = true → o.A.Persistent) ∧ (capB o.cnt = true → o.fin.FinPers)
   | .eff n i q _ A B f C, o, h, ho => by
       simp only [CTy.rowOf, List.mem_cons] at ho
       rcases ho with rfl | ho
@@ -455,7 +452,7 @@ theorem sub_of_sig {S S' : Row}
   exact ⟨o', hf', hs⟩
 
 theorem finUnr_of_find {G : CTy} {n i : UInt32} {o : OpSig} (hf : Row.find G.rowOf n i = some o)
-    (h : o.q = .unr ∨ (capB o.q o.B = true ∧ o.fin.FinUnr)) : G.FinUnr :=
+    (h : o.q = .unr ∨ (capB o.cnt = true ∧ o.fin.FinUnr)) : G.FinUnr :=
   finUnr_of_mem (Row.find_mem hf).1 h
 
 /-- **A nested cancel past a running finaliser's `cfin`** (`[cfin-cancel]`): a cancel run at the
@@ -525,7 +522,7 @@ theorem cfin_cancel (δ : LSub) (P : Row) (err : Option Val) (G : CTy) :
         (errOk_local (Row.tab_local P δ) (hext.right hk') he') hu hcz
     · intro Q hQ
       obtain ⟨hcap', hnT, rfl⟩ := ent_fin_some hQ
-      have hcap : capB o.q o.B = true := hs.capB_eq ▸ hcap'
+      have hcap : capB o.cnt = true := hs.capB_eq ▸ hcap'
       have hq₀ : (o.ent δ).q ≠ .lin := not_lin_of_capB hcap
       have hfin' := hfin hcap
       have hoT : o.fin.isTop = false := by
@@ -542,7 +539,7 @@ termination_by sizeOf G
 decreasing_by exact rowOf_fin_lt G (Row.find_mem hf).1
 
 theorem unr_of_find {E : Row} {n i : UInt32} {o : OpSig} (hf : Row.find E n i = some o)
-    (h : o.q = .unr ∨ (capB o.q o.B = true ∧ o.fin.FinUnr)) : E.UnrD :=
+    (h : o.q = .unr ∨ (capB o.cnt = true ∧ o.fin.FinUnr)) : E.UnrD :=
   ⟨o, (Row.find_mem hf).1, h⟩
 
 /-- **A finaliser running under a cancel's `cfin`**: `D` at the row `E`, the cancel keeping an error
@@ -553,7 +550,7 @@ handler, and a cancel of that continuation passes the `cfin` (`cfin_cancel`).  T
 nothing where `E` may stop at an unrestricted operation.  `[spec §27]` -/
 theorem cfin_run (δ : LSub) (E P : Row) (err : Option Val) {T : CTy}
     (hE : ∀ n i o, Row.find E n i = some o → ∃ o', Row.find T.rowOf n i = some o' ∧ o.Sig o' ∧
-      (capB o.q o.B = true → PendLe P o.fin o'.fin))
+      (capB o.cnt = true → PendLe P o.fin o'.fin))
     (hP : ∀ n i o, Row.find P n i = some o → o.abort = true →
       ∃ o', Row.find T.rowOf n i = some o' ∧ o.Sig o')
     (hNZ : ∀ n i o, Row.find E n i = some o → o.n ≠ 0)
@@ -599,7 +596,7 @@ theorem cfin_run (δ : LSub) (E P : Row) (err : Option Val) {T : CTy}
         (errOk_local (Row.tab_local P δ) (hext.right hk') he') hu hcz
     · intro Q hQ
       obtain ⟨hcap', hnT, rfl⟩ := ent_fin_some hQ
-      have hcap : capB o.q o.B = true := hs.capB_eq ▸ hcap'
+      have hcap : capB o.cnt = true := hs.capB_eq ▸ hcap'
       have hfin' := hfin hcap
       have hoT : o.fin.isTop = false := by
         rw [PendLe, hnT] at hfin'
@@ -691,7 +688,7 @@ theorem then_cancel (δ : LSub) (E : Row) (hNZ : ∀ n i o, Row.find E n i = som
       exact (hcont ls'' (hext.left hk')).1 w τ₃ z hB' hz (hFe ls' ls'' τ₂ (hext.right hk') hF') hcz
     · intro Q hQ
       obtain ⟨hcap', hnT, rfl⟩ := ent_fin_some hQ
-      have hcap : capB o.q o.B = true := hs.capB_eq ▸ hcap'
+      have hcap : capB o.cnt = true := hs.capB_eq ▸ hcap'
       have hfin' := hfin hcap
       have hoT : o.fin.isTop = false := by
         rw [ThenLe, hnT] at hfin'
@@ -816,7 +813,7 @@ as `hPx` says: a tick at a row holding `Div` (`cwp_then`).  `[spec §14, §19, �
 theorem ewp_frame_then_or (δ : LSub) (S SM SD : Row) (hNZ : S.NZ) (hMS : RowLe SM S)
     (hDS : RowLe SD S) (er : Bool) (hSD : er = true → Row.find SD divEff 0 = none)
     (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-      capB o.q o.B = true → ThenLe o.fin SD o'.fin)
+      capB o.cnt = true → ThenLe o.fin SD o'.fin)
     (hP : SD.UnrD → SM.PendPers) (Nv Dv : Val) (Fr : List SRec → WProp)
     (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr ls) (Fr ls'))
     (hFe : ∀ ls ls' ρ, Ext ls ls' ρ → Fr ls ρ → Fr ls' ρ)
@@ -876,7 +873,7 @@ theorem ewp_frame_then_or (δ : LSub) (S SM SD : Row) (hNZ : S.NZ) (hMS : RowLe 
       exact (hcont ls'' (he.left hk')).1 w τ₁ z hB' hz (hFe ls' ls'' σ₂ (he.right hk') hF') hcz
     · intro Q' hQ'
       obtain ⟨hcap', hnT, rfl⟩ := ent_fin_some hQ'
-      have hcap : capB o.q o.B = true := hle.1.capB_eq ▸ hcap'
+      have hcap : capB o.cnt = true := hle.1.capB_eq ▸ hcap'
       have hth := hfin n i o o' hf hf' hcap
       have hoT : o.fin.isTop = false := by
         rw [ThenLe, hnT] at hth
@@ -913,7 +910,7 @@ beside the tables).  `[spec §19, §27]` -/
 theorem ewp_frame_then (δ : LSub) (S SM SD : Row) (hNZ : S.NZ) (hMS : RowLe SM S)
     (hDS : RowLe SD S)
     (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-      capB o.q o.B = true → ThenLe o.fin SD o'.fin)
+      capB o.cnt = true → ThenLe o.fin SD o'.fin)
     (hP : SD.UnrD → SM.PendPers) (Nv Dv : Val) (Fr : List SRec → WProp)
     (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr ls) (Fr ls'))
     (hFe : ∀ ls ls' ρ, Ext ls ls' ρ → Fr ls ρ → Fr ls' ρ)
@@ -1066,7 +1063,7 @@ section
 variable {δ : LSub} {S SM SD : Row} (hSd : Row.divB S = true) (hSDd : Row.divB SD = false)
   (hNZ : S.NZ) (hMS : RowLe SM S) (hDS : RowLe SD S)
   (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-    capB o.q o.B = true → ThenLe o.fin SD o'.fin)
+    capB o.cnt = true → ThenLe o.fin SD o'.fin)
   (hP : SD.UnrD → SM.PendPers) (Nv Dv : Val) (Fr : List SRec → WProp)
   (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr ls) (Fr ls'))
   (hFe : ∀ ls ls' ρ, Ext ls ls' ρ → Fr ls ρ → Fr ls' ρ)
@@ -1279,7 +1276,7 @@ theorem then_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A
     {S SM SD : Row} (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hU : S.UnrD → Persistent Γ₂)
     (hMS : RowLe SM S) (hDS : RowLe SD S)
     (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-      capB o.q o.B = true → ThenLe o.fin SD o'.fin)
+      capB o.cnt = true → ThenLe o.fin SD o'.fin)
     (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
     (hM : SemC Δ Γ₁ M (CTy.effOf SM A)) (hN : SemC Δ (⟨A, true⟩ :: Γ₂) N (CTy.effOf S B))
     (hD : SemC Δ (⟨.unit, false⟩ :: Γ₂) D (CTy.effOf SD .unit)) :
