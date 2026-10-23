@@ -1,5 +1,5 @@
--- pending: #172 (adapters over a generator of views of borrowed data, held across steps)
--- now: 38:27: this argument of `filter` has type `1`, which is not `U pull A K R`
+-- pending: #172 (adapters over a generator of views of borrowed data, held across steps); first #686
+-- now: 43:27: this argument of `filter` has type `1`, which is not `U pull A K R`
 -- Hard problem 10: a pipeline of generator adapters over borrowed vectors. `views` yields a view
 -- of each element of a borrowed vector; `filter` keeps the views whose element is above 2, `map`
 -- turns the other vector's views into numbers, and `zip` pairs them. Each adapter holds its
@@ -14,9 +14,14 @@
 -- every adapter is a struct bounded by `'a`, and the items are `&'a i32`.
 --
 -- Today: refused at the call of `views` passed to `filter` inside the borrow blocks: the call is
--- typed `1` there, not stored as a generator (observed; the cause was not investigated). Both
+-- typed `1` there (#686: the same happens to `filter(upto(5), p)`, borrowing nothing, in a block
+-- that has used its view). Both
 -- backends stop at the same message. Iterating `views(vs)` directly in the block is refused
 -- instead by SPEC §14 (the iterator holds the borrow; `corpus/reject/lend-iter-borrow.bc`).
+--
+-- Also needs: implicit copies of `imm` views (`corpus/pending/hard-imm-view-copy.bc`): this
+-- program uses a view twice: `filter` hands each element to its predicate and then keeps it
+-- (`corpus/pending/hard-filter-views.bc`).
 --
 -- Once it lands: i32[260]: 3 × 10 + 4 × 20 + 5 × 30; `live 0`.
 

@@ -1,5 +1,5 @@
 -- pending: #682 (H3: a task that owns a pointer-linked tree and walks it at O(1) per step)
--- now: 36:11: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a continuation held across a lend is T1, #172)
+-- now: 39:11: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a continuation held across a lend is T1, #172)
 -- Hard problem 4: a task owns a binary search tree, which it builds itself, and walks it in order
 -- without taking it apart, awaiting after every node. Its cursor is a stack of views of its own
 -- tree's nodes, live across each `await`; each step pushes or pops one view, O(1), with no path
@@ -15,6 +15,9 @@
 --
 -- Today: refused at the task's borrow of its own tree: the body performs `await`, which resumes,
 -- and a continuation held across a lend is T1 (#172). Both backends stop at the same message.
+--
+-- Also needs: implicit copies of `imm` views (`corpus/pending/hard-imm-view-copy.bc`): this
+-- program uses a view twice (`cons(cur, todo)` after `match cur`).
 --
 -- Once it lands: `inr (i32[28], inr (i32[280], inl ()))`, the list [28, 280]: the keys 1 … 7 and
 -- 10 … 70 summed by the two tasks, their turns interleaved; `live 0` (each task frees its tree).

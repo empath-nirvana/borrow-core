@@ -1,8 +1,9 @@
--- expect: 12:3: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a continuation held across a lend is T1, #172)
+-- expect: 13:3: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a continuation held across a lend is T1, #172)
+-- rejected today; intended to run: pending #172, corpus/pending/hard-gen-owned-yields-refs.bc
 -- A generator that would hold a borrow of its own local across a `yield` (a self-reference,
 -- which Rust's generators forbid and its `async` needs `Pin` for). A borrow block's body may
 -- perform only abortive operations (SPEC §19): `yield` resumes, and a continuation held across a
--- lend is T1 (#172). What is allowed is to own the cell in the generator's state and borrow it
+-- lend is T1 (#172). What runs today is to own the cell in the generator's state and borrow it
 -- anew at each step (`corpus/gen-cell.bc`).
 
 include yield

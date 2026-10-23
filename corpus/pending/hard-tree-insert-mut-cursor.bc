@@ -1,0 +1,45 @@
+-- pending: SPEC §5 *Open* (E5 at `mut`: a cursor that moves from a `mut` node to its child); first #686
+-- now: 31:41: this borrow block's place has type `1`: `borrow imm`/`borrow mut` take a cell `ref A` or an array (a pair of cells for a family), `modify` a `mut` borrow
+-- Coverage: E5 for exclusive borrows. `insert` adds a key to a binary search tree it is lent `mut`,
+-- with a loop: its cursor starts at the root and moves to the left or right child until it reaches
+-- a leaf, which it replaces with a new node. The cursor is a `mut` view of a node, and each child it
+-- moves to is viewed at the lifetime of the borrow of the root. No suspension.
+--
+-- Issue: SPEC §5 *Open* and #669's E5, at `mut` (rows 3, 4 and 13 of `HARD-PROBLEMS.md` are `imm`).
+--
+-- Rust: `let mut cur = &mut root; while let Node(l, k, r) = cur { cur = if key < *k { l } else { r } }
+-- *cur = Node(Leaf, key, Leaf);` (the loop that NLL accepts with `&mut` reborrowing).
+--
+-- Today: refused at `modify key`: the binder of the `match` on the `mut` node is typed `1` (#686), as
+-- at `imm` (rows 3 and 13). Both backends stop at the same message.
+--
+-- Once it lands: i32[17]: 5 is inserted as the left child of 6 in the tree 2 ← 4 → 6, and the
+-- consuming sum gives 2 + 4 + 5 + 6; `live 0`.
+
+include rec
+
+data Tree = Leaf | Node(left: Tree, key: i32, right: Tree)
+
+fn tip(k: i32) -> Tree = box Node(Leaf, k, Leaf)
+
+fn insert<'a>(t: mut 'a Tree, k: i32) -> 1 =
+  let mut cur = t;
+  let mut more = true;
+  while more {
+    match cur {
+      Leaf -> modify cur { old -> tip(k) }; more = false
+    | Node(l, key, r) -> let v = modify key { x -> (x, x) }; if k < v { cur = l } else { cur = r }
+    }
+  };
+  ()
+
+fn sum(t: Tree) -> i32 =
+  match t {
+    Leaf -> 0
+  | box Node(l, v, r) -> sum(l) + v + sum(r)
+  }
+
+main -> i32 =
+  let mut t = box Node(tip(2), 4, tip(6));
+  insert(&mut t, 5);
+  with on_exhausted(!{ u -> 0 - 1 }) { sum(t) }

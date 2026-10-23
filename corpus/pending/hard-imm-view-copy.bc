@@ -1,0 +1,29 @@
+-- pending: #58 (implicit copies of `imm` views, inserted by the elaborator and checked by the kernel)
+-- now: 21:38: `x` is used twice here, and its type `imm 'a i32` is not persistent
+-- A requirement under several hard problems: a shared view used twice. `twice` reads its view two
+-- times; `main` passes one view to two calls. A user expects a shared view to be copied where it is
+-- used again, as Rust's `&T` is `Copy`. The copy is `copy['a, A]`, which the kernel types; the
+-- elaborator would insert it, as it inserts `&`.
+--
+-- Issue: #58 (implicit copies of `imm` borrows). Rows of `corpus/pending/HARD-PROBLEMS.md` that use a
+-- view twice and so need this once their own obstacle is gone: the tree cursors (`cons(cur, todo)`
+-- after `match cur`), the tree lookup (`*key` twice), the tokenizer (`len(w)` twice) and `filter`
+-- over views (`corpus/pending/hard-filter-views.bc`). `corpus/async-scoped.bc` writes the copy by
+-- hand.
+--
+-- Rust: `fn twice(x: &i32) -> i32 { *x + *x }`; `&i32: Copy`.
+--
+-- Today: refused at `twice`: `x` is used twice and `imm 'a i32` is not persistent. Both backends
+-- stop at the same message.
+--
+-- Once it lands: i32[28]: twice 7 is 14, and 14 + 7 + 7; `live 0`.
+
+fn twice<'a>(x: imm 'a i32) -> i32 = *x + *x
+
+fn plus<'a>(x: imm 'a i32, y: i32) -> i32 = *x + y
+
+main -> i32 =
+  let c = alloc(7);
+  let r = borrow imm c { v -> let a = twice(v); plus(v, a + *v) };
+  let _ = free(c);
+  r

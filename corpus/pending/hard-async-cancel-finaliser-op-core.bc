@@ -1,0 +1,50 @@
+-- pending: SPEC §27 (a cancel row in the core text: a finaliser of `[then]` that performs an operation)
+-- now: 43:14: the operation 2.0 is not in the row `[]`
+-- Hard problem 9 in the core text, modelled on `corpus/async-r1-cancel-finaliser-writes.bc`. A
+-- relaxed lend (`withbor2r`) of `c` holds `m` across `perform[1.0]`, guarded by a `[then]`
+-- finaliser. The inner handler cancels the continuation at that operation. The finaliser runs with
+-- the lend still open: it swaps 99 into the cell through `m`, reading the old value, and performs
+-- `2.0` with it, an operation of the outer handler, which resumes and adds the value to the answer.
+--
+-- Issue: SPEC §27 (finalisers with effects, decisions D2 and D3): `[then]` types the finaliser at
+-- its own row `Σ_D ≤ Σ`, and each operation whose continuation may be cancelled records `D`'s
+-- effects in its cancel row (`OpSig.fin`). The surface spelling of the same program is
+-- `corpus/pending/hard-async-cancel-finaliser-op.bc`.
+--
+-- Today: refused at the finaliser's `perform[2.0]`: the finaliser is typed at the empty row. The
+-- core text's row entries are `n.i q A ~> B` (`rowEntries`), with no cancel row, so `1.0`'s cancel
+-- row is `[]` and cannot carry `2.0`. Whether the kernel rule admits the program once the cancel
+-- row can be written is not verified. Both backends stop at the same message.
+--
+-- Once it lands: `inl i32[11]`: the inner handler answers `inl 1`, the value performed before the
+-- cancel, and the outer handler adds 10, the value the finaliser read through the view; `live 0`.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+main : F (i32 + i32) =
+  handle_with[2](
+      ((!thunkv fun (r : i32 + i32) -> return r) : !U (i32 + i32 -o F (i32 + i32))),
+      (((!thunkv fun (q : i32 * U ((1 -o F (i32 + i32)) & F 1)) ->
+        let (x, k) = q;
+        u <- return ();
+        r <- (force k).1 u;
+        match r { inl a -> return (inl (plus (a, x))) | inr b -> return (inr (plus (b, x))) }),
+        ()) : !U (i32 * U ((1 -o F (i32 + i32)) & F 1) -o F (i32 + i32)) * 1)) (
+  c <- return (alloc[i32] i32[10]);
+  handle_with[1](
+      ((!thunkv fun (p : ref i32 * i32) ->
+        let (c, v) = p; w <- return (free[i32] c); return (inr (plus (v, w)))) : !U (ref i32 * i32 -o F (i32 + i32))),
+      (((!thunkv fun (q : i32 * U ((1 -o F (i32 + i32)) & F 1)) ->
+        let (x, k) = q; u <- (force k).2; return (inl x)), ()) : !U (i32 * U ((1 -o F (i32 + i32)) & F 1) -o F (i32 + i32)) * 1)) (
+    withbor2r['x, dom, i32, i32, [1.0 aff i32 ~> 1, 2.0 aff i32 ~> 1]](c, m) (
+      u <- perform[1.0] i32[1] unwind (
+        q <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) -> return (i32[99], v)));
+        let (m, seen) = q;
+        z <- perform[2.0] seen;
+        let () = z;
+        return (forget_mut['x, i32] m));
+      q <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) ->
+        return (plus (v, i32[1]), plus (v, i32[1]))));
+      let (m, r) = q;
+      let () = forget_mut['x, i32] m;
+      return (boxed['x] r))))

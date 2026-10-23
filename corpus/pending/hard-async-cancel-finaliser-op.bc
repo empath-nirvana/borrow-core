@@ -1,16 +1,18 @@
--- pending: SPEC §27 *Open* (a finaliser that performs an operation, run when a task holding a lend is cancelled)
--- now: 39:10: unknown variable `await`
+-- pending: U2 and SPEC §27 (a finaliser that performs an operation, run when a task holding a lend is cancelled)
+-- now: 41:10: unknown variable `await`
 -- Hard problem 9: a task lends a buffer it owns, holds the view across its `await`, and guards the
 -- `await` with a finaliser. When `main` cancels the task, the finaliser runs with the lend still
 -- open: it reads and overwrites the buffer through the view, and reports the value it saw by
 -- performing `note`, an operation of the `Audit` handler around the whole run. Then the lend
 -- ends and the buffer is freed.
 --
--- Issue: SPEC §27 *Open* and docs/async-capabilities.md A6 (a finaliser that logs); #682 (the lend
--- held across the `await`). Today a lend's finaliser is typed pure at the empty context (R1's
--- `· ⊢ d : Ref T ⊸ 1`), the surface has no finaliser form (U2), and the backend does not lower a
--- finaliser that performs a control operation. `corpus/async-cancel.bc` cancels a task holding a
--- lend with no finaliser of its own.
+-- Issue: SPEC §27 (finalisers with effects) and docs/async-capabilities.md A6 (a finaliser that
+-- logs); U2 (the surface has no finaliser form); #682 (the lend held across the `await`). The
+-- finaliser here is the body's `[then]`, which SPEC §27 types at its own row and lets perform
+-- operations; R1's `· ⊢ d : Ref T ⊸ 1` is the lend's own finaliser, a different one. The core-text
+-- form is `corpus/pending/hard-async-cancel-finaliser-op-core.bc`, refused because the core text
+-- cannot write the cancel row that would carry `note`. `corpus/async-cancel.bc` cancels a task
+-- holding a lend with no finaliser of its own.
 --
 -- Rust: a guard whose `Drop` holds the `&mut` and writes through it when the future is dropped; a
 -- `Drop` cannot `.await` (async drop is unstable), so an operation it performs must be synchronous.

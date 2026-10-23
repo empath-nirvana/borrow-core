@@ -1,23 +1,24 @@
--- pending: #682 (a view derived from a borrow at a lifetime of its own, held across a suspension)
--- now: 28:39: an operation of `Async` is performed inside a closure or block that is not run in place: it cannot reach its handler (effectful callbacks, #161)
+-- pending: #682 (an iterator over a borrowed vector held across `await`); first #686
+-- now: 30:24: `*` reads an `imm` borrow or a cell, but this has type `1`
 -- Hard problem 1: an iterator into borrowed data held across `await`. `main` owns a vector in a
--- cell and lends the cell `imm` to a task (Rust's `&Vec<i32>`). The task loads the vector's view
--- from the borrow, which is a view derived from the borrow at a lifetime `'z` of its own, below the
--- borrow's, and iterates it, awaiting after every element: the view and the iterator over it are
--- live across each `await`.
+-- cell and lends the cell `imm` to a task (Rust's `&Vec<i32>`). The task iterates the vector and
+-- awaits after every element. The vector's elements are a view loaded from the borrow, at a
+-- lifetime of its own below the borrow's, and that view and the iterator over it are live across
+-- each `await`.
 --
 -- Issue: #682 (derived views held across a suspension; #669's H8, E2). The same loop over a view
--- the task is given, at the lender's own lifetime, runs today: `corpus/async-slice-iter-await.bc`.
--- The surface has no form for loading the view of a borrowed vector, so the load is written as
--- the core's `withload`, as `corpus/gen-borrowed.bc` does.
+-- the task is given (`&[i32]`), at the lender's own lifetime, runs today:
+-- `corpus/async-slice-iter-await.bc`. The same loop with no suspension is
+-- `corpus/pending/hard-iter-borrowed-vec.bc`, refused by SPEC §14. Written with the core's
+-- `withload` and the loop inside its callback, the program is refused at the callback instead
+-- (#161: an `await` inside a closure that is not run in place).
 --
--- Rust: `async fn sum_slowly(v: &Vec<i32>)` with `for x in v.iter() { …; yield_now().await }`;
--- `v.iter()` derefs `&Vec` to `&[i32]` at the same `'a`, and the future, bounded by `'a`, holds the
--- iterator across the `.await`.
+-- Rust: `async fn sum_slowly(v: &Vec<i32>)` with `for x in v { …; yield_now().await }`; `v.iter()`
+-- derefs `&Vec` to `&[i32]` at the same `'a`, and the future, bounded by `'a`, holds the iterator
+-- across the `.await`.
 --
--- Today: refused. The load's callback is a closure the checker does not run in place, so the
--- `await` inside it cannot reach the scheduler (#161); a callback whose body resumes would hold
--- the lend across the suspension, which is T1 (#172). Both backends stop at the same message.
+-- Today: refused at `*x`: the loop's element is typed `1` (#686, an expression the elaborator could
+-- not elaborate is typed `1`). Both backends stop at the same message.
 --
 -- Once it lands: i32[100], the sum 10 + 20 + 30 + 40, read one element per turn; `live 0`.
 
@@ -25,10 +26,9 @@ include async
 
 -- The sum of the elements, letting the other tasks run after each one.
 fn sum_slowly<'a>(v: imm 'a (array i32)) -> i32 with Async =
-  withload['a, 'z, array i32, i32] v (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
-    let mut s = 0;
-    for x in xs { s = s + *x; await() };
-    boxed['z] s))
+  let mut s = 0;
+  for x in v { s = s + *x; await() };
+  s
 
 fn tab(i: i32) -> i32 = 10 * (i + 1)
 

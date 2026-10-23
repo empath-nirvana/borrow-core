@@ -1,39 +1,35 @@
--- pending: #682 (views derived through two levels of `withload`, held across `yield`)
--- now: 26:41: an operation of `Yield` is performed inside a closure or block that is not run in place: it cannot reach its handler (effectful callbacks, #161)
--- Hard problem 12: a generator over a borrowed vector of rows yields every cell, row by row. While
--- it is suspended it holds an iterator over the outer view and, inside it, an iterator over the
--- current row: the row is a leaf view at the borrow's lifetime `'a`, and the row's elements are a
--- view loaded from it at a lifetime `'z` of its own, both live across each `yield`.
+-- pending: #682 (views loaded at two levels from a borrowed vector of vectors, held across `yield`); first #686
+-- now: 24:39: `*` reads an `imm` borrow or a cell, but this has type `1`
+-- Hard problem 12: a generator over a borrowed vector of rows (Rust's `&Vec<Vec<i32>>`) yields every
+-- cell, row by row. While it is suspended it holds an iterator over the outer vector and, inside
+-- it, an iterator over the current row: the rows are a view loaded from the borrow, and each row's
+-- elements a view loaded from a row, each at a lifetime of its own, both live across each `yield`.
 --
 -- Issue: #682 (derived views held across a suspension, at several levels; #669's H8 is one level
--- and an index). The surface has no form for loading the view of a borrowed vector, so the inner
--- load is written as the core's `withload`, as `corpus/gen-borrowed.bc` does.
+-- and an index). Written with the core's `withload` for the inner load, the program is refused at
+-- the load's callback instead (#161: a `yield` inside a closure that is not run in place).
 --
 -- Rust: `m.iter().flat_map(|row| row.iter().copied())`, or a `gen` block with `for row in m { for
 -- x in row { yield *x } }`; both iterators borrow `m` for `'a`, and the generator holds them.
 --
--- Today: refused. The inner load's callback is a closure the checker does not run in place, so the
--- `yield` inside it cannot reach its handler (#161). Both backends stop at the same message.
+-- Today: refused at `*x`: the inner loop's element is typed `1` (#686). Both backends stop at the
+-- same message.
 --
 -- Once it lands: i32[121212]: the three rows [1, 2] read in order as decimal digits;
 -- `live 0`.
 
 include yield
 
--- Each row of the view is a borrow of a cell holding a vector; its elements are loaded from it.
-fn cells<'a>(m: array_imm 'a (array i32)) -> 1 with Yield[i32] =
-  for row in m {
-    withload['a, 'z, array i32, 1] row (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
-      for x in xs { yield(*x) };
-      boxed['z] ()))
-  };
+fn cells<'a>(m: imm 'a (array (array i32))) -> 1 with Yield[i32] =
+  for row in m { for x in row { yield(*x) } };
   ()
 
 fn idx1(j: i32) -> i32 = j + 1
 fn row(i: i32) -> array i32 = array_new[i32](2, idx1)
 
 main -> i32 =
-  let m = array_new[array i32](3, row);
+  let m = alloc(array_new[array i32](3, row));
   let mut acc = 0;
   for x in cells(&m) { acc = acc * 10 + x };
+  let _ = free(m);
   acc

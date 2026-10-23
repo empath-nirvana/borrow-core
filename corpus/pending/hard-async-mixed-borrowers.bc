@@ -1,5 +1,5 @@
 -- pending: #52 (a scheduler holding tasks of different bodies whose borrows have different lifetimes)
--- now: 56:7: cannot show that `U (delay (mu X. 1 + i32 * X))` outlives `('l1 /\ 'l0 /\ top)`
+-- now: 59:7: cannot show that `U (delay (mu X. 1 + i32 * X))` outlives `('l1 /\ 'l0 /\ top)`
 -- Hard problem 7: one queue of three tasks with different bodies, each holding a borrow of
 -- different data across its `await`s: `lookup` a view of one entry of a borrowed table, `bump` a
 -- `mut` borrow of a counter, `scan` an iterator over a borrowed list of weights. The borrows are
@@ -18,6 +18,9 @@
 -- Today: refused. `spawn` boxes each task at `top`, and the scheduler's loop runs without bound
 -- inside the three borrows, so its answer cannot be shown to outlive them. Both backends stop at
 -- the same message.
+--
+-- `lookup`'s `copy['t, i32] e` is a workaround: with implicit copies of `imm` views
+-- (`corpus/pending/hard-imm-view-copy.bc`) it would read `*e` twice.
 --
 -- Once it lands: `inr (i32[60], inr (i32[3], inr (i32[10], inl ())))`, the list [60, 3, 10]: the
 -- entry 30 read before and after an `await`, the counter bumped three times, and the weights
