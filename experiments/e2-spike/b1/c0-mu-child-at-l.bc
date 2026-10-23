@@ -1,0 +1,28 @@
+-- B1, core probe: the child of a borrowed `mu` node at the lender's lifetime. A stack of `&Node`
+-- over H3's tree needs, from `b : imm 'l Tree`, the left child as an `imm 'l Tree` (Rust's
+-- `c.l.as_deref()`, at the tree's lifetime). `withload` is the only way into the node: its
+-- callback sees the node at a fresh `'y ⊏ 'l` and its children as `imm 'y Tree` (`Imm̲` at `mu`,
+-- SPEC §6), and answers `box 'y R`. Here `R = imm 'l Tree + 1`, the child answered at `'l`.
+type Tree = mu X. 1 + (ref X * (i32 * ref X))
+
+main : F i32 =
+  lc <- return (alloc[Tree] (roll inl () : Tree));
+  rc <- return (alloc[Tree] (roll inl () : Tree));
+  c <- return (alloc[Tree] (roll inr (lc, (i32[2], rc)) : Tree));
+  r <- return withbor1['l, Tree, i32] c (thunkv Fun 'l < dom.
+      return (thunkv fun (b : imm 'l Tree) ->
+          o <- return withload['l, 'y, Tree, imm 'l Tree + 1] b (thunkv Fun 'y < dom.
+              return (thunkv fun (t : view 'y Tree) ->
+                  case unroll t {
+                    inl e -> return boxed['y] (inr () : imm 'l Tree + 1)
+                  | inr nd -> let (l, q) = nd; let (k, rr) = q;
+                      let () = forget_imm['y, Tree] rr;
+                      return boxed['y] (inl l : imm 'l Tree + 1)
+                  }));
+          case o {
+            inl g -> let () = forget_imm['l, Tree] g; return boxed['l] i32[1]
+          | inr u -> return boxed['l] i32[0]
+          }));
+  let (c, n) = r;
+  t <- return (free[Tree] c);
+  return n

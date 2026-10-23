@@ -1,0 +1,190 @@
+-- B1, surface: a tree OWNED BY `main` and BORROWED by the tasks, each walking it in order with a
+-- stack of positions (`imm 'l Node`, Rust's `&Node`) held across every `await`. The trees are an
+-- arena: one array of nodes `(key, left, right)`, children by index (`-1` none), the `tasks`
+-- trees side by side. `main` lends the arena `imm` (`'l`), opens a unit cell's scope `'d` below it,
+-- and spawns each task with `spawn_in` (`lib/async.bc`: the continuation boxed at `'d`, not `top`).
+-- The scheduler (`round_at`, `run_at`) is `lib/async.bc`'s array round (`round`, in place) at
+-- `TaskIn[A]<'d>`, run for a counted number of rounds so that it stays inside the lend.
+--
+-- Answer: the sum of the tasks' values, as `h3/src-owned-tree.bc` (n = 200, tasks = 3: 297900).
+include async
+
+type Node = i32 * (i32 * i32)
+
+fn value(k: i32, r: i32) -> i32 = (k * 7919 + r) % 1000
+
+fn mid(lo: i32, hi: i32) -> i32 = lo + (hi - lo) / 2
+
+-- The arena of `tasks` balanced search trees of the keys `0 .. n`: tree `t`'s node of key `m` at
+-- `t * n + m`. A work list of intervals `(lo, (hi, base))`, so no recursion; a
+-- counted loop (each interval is pushed once, so `2 n tasks + tasks` turns suffice).
+fn build(n: i32, tasks: i32) -> array Node =
+  let mut a = array_new[Node] (n * tasks, !{ i -> (0, (0 - 1, 0 - 1)) });
+  let mut ws = array_new[i32 * (i32 * i32)] (64 + tasks, !{ i -> (0, (0, 0)) });
+  for t in 0..tasks {
+    let (w1, _) = array_replace[i32 * (i32 * i32)] (ws, t, (0, (n, t * n)));
+    ws = w1
+  };
+  let mut sp = tasks;
+  for _ in 0..(2 * n * tasks + tasks) {
+    if sp <= 0 { break } else { () };
+    sp = sp - 1;
+    let (w2, o) = array_replace[i32 * (i32 * i32)] (ws, sp, (0, (0, 0)));
+    ws = w2;
+    let (lo, (hi, base)) = match o { inl p -> p | inr p -> (0, (0, 0)) };
+    if lo < hi {
+      let m = mid(lo, hi);
+      let lc = if lo < m { base + mid(lo, m) } else { 0 - 1 };
+      let rc = if m + 1 < hi { base + mid(m + 1, hi) } else { 0 - 1 };
+      let (a2, _) = array_replace[Node] (a, base + m, (m, (lc, rc)));
+      a = a2;
+      let (w3, _) = array_replace[i32 * (i32 * i32)] (ws, sp, (m + 1, (hi, base)));
+      let (w4, _) = array_replace[i32 * (i32 * i32)] (w3, sp + 1, (lo, (m, base)));
+      ws = w4;
+      sp = sp + 2
+    } else { () }
+  };
+  a
+
+
+-- The walk: the stack of positions is an array of `imm 'l Node`, held across each `await`. Each
+-- loop is counted (a tree of `n` keys has `n` nodes and depth below 64), with an exit.
+fn walk<'l>(v: array_imm 'l Node, root: i32, n: i32, r: i32) -> i64 with Async =
+  let mut st = array_new[1 + imm 'l Node] (64, !{ i -> inl () });
+  let mut sp = 0;
+  let mut s = i64[0];
+  let mut v = v;
+  let mut i = root;
+  for _ in 0..64 {
+    if i < 0 { break } else { () };
+    let (v1, v2) = array_copy['l, Node] v;
+    v = v1;
+    match array_get['l, Node] (v2, i) {
+      inl g -> let (g1, g2) = copy['l, Node] g;
+        let (k, (l, rr)) = *g1;
+        let (st2, _) = array_replace[1 + imm 'l Node] (st, sp, inr g2);
+        st = st2; sp = sp + 1; i = l
+    | inr u -> i = 0 - 1
+    }
+  };
+  for _ in 0..n {
+    if sp <= 0 { break } else { () };
+    sp = sp - 1;
+    let (st3, o) = array_replace[1 + imm 'l Node] (st, sp, inl ());
+    st = st3;
+    match o {
+      inl e -> match e {
+          inl u -> ()
+        | inr c ->
+            await();
+            let (k, (l, rr)) = *c;
+            s = s + host[extend_s](value(k, r));
+            let mut j = rr;
+            for _ in 0..64 {
+              if j < 0 { break } else { () };
+              let (v1, v2) = array_copy['l, Node] v;
+              v = v1;
+              match array_get['l, Node] (v2, j) {
+                inl g -> let (g1, g2) = copy['l, Node] g;
+                  let (k2, (l2, r2)) = *g1;
+                  let (st4, _) = array_replace[1 + imm 'l Node] (st, sp, inr g2);
+                  st = st4; sp = sp + 1; j = l2
+              | inr u -> j = 0 - 1
+              }
+            }
+        }
+    | inr e -> ()
+    }
+  };
+  s
+
+-- A slot of the scoped queue: finished, pending, or `inl ()` while its task is out.
+type SlotAt[A]<'d> = 1 + (A + TaskIn[A]<'d>)
+
+-- One round in place over the slots, as `lib/async.bc`'s `round`, at tasks boxed at `'d`.
+fn round_at[A]<'d>(n: i32, xs: array SlotAt[A]<'d>) -> array SlotAt[A]<'d> * bool =
+  let mut a = xs;
+  let mut pending = false;
+  for i in 0..n {
+    let (b, s) = array_replace[SlotAt[A]<'d>] (a, i, inl ());
+    match s {
+      inl o -> match o {
+        inl u -> a = b
+      | inr e -> match e {
+          inl v -> let (c, _) = array_replace[SlotAt[A]<'d>] (b, i, inr (inl v)); a = c
+        | inr t -> match resume_in(t) {
+            inl v -> let (c, _) = array_replace[SlotAt[A]<'d>] (b, i, inr (inl v)); a = c
+          | inr t2 ->
+              pending = true;
+              let (c, _) = array_replace[SlotAt[A]<'d>] (b, i, inr (inr t2)); a = c
+          }
+        }
+      }
+    | inr x -> a = b
+    }
+  };
+  (a, pending)
+
+-- The sum of the slots' values; a task still pending is cancelled.
+fn total_at<'d>(n: i32, xs: array SlotAt[i64]<'d>) -> i64 =
+  let mut a = xs;
+  let mut acc = i64[0];
+  for i in 0..n {
+    let (b, s) = array_replace[SlotAt[i64]<'d>] (a, i, inl ());
+    a = b;
+    match s {
+      inl o -> match o {
+        inl u -> ()
+      | inr e -> match e { inl v -> acc = acc + v | inr t -> cancel_in(t); () }
+      }
+    | inr x -> ()
+    }
+  };
+  acc
+
+-- The `n` slots of a queue of bounded tasks (the last queued first), moved into an array in the
+-- order they were queued, as `lib/async.bc`'s `slots_of`.
+fn slots_at[A]<'d>(q: QueueIn[A]<'d>) -> i32 * array SlotAt[A]<'d> =
+  let (n, xs) = q;
+  let mut a = array_new[SlotAt[A]<'d>] (n, !{ i -> inl () });
+  let mut cur = xs;
+  for k in 0..n {
+    match unroll cur {
+      inl u -> cur = (roll inl () : SlotsIn[A]<'d>)
+    | inr (s, r) -> cur = r; let (b, _) = array_replace[SlotAt[A]<'d>] (a, n - 1 - k, inr s); a = b
+    }
+  };
+  match unroll cur { inl u -> (n, a) | inr (s, r) -> (n, a) }
+
+-- The scoped scheduler: the queue's slots run round robin in place for at most `rounds` rounds (a
+-- counted loop, so it runs inside the lend the tasks borrow from), then summed; a task still
+-- pending is cancelled.
+fn run_at<'d>(q: QueueIn[i64]<'d>, rounds: i32) -> i64 =
+  let (n, a) = slots_at(q);
+  let mut slots = a;
+  let mut more = true;
+  for _ in 0..rounds {
+    if more { let (b, p) = round_at(n, slots); slots = b; more = p } else { () }
+  };
+  total_at(n, slots)
+
+main -> i64 =
+  let n = 200;
+  let tasks = 3;
+  let arena = build(n, tasks);
+  let d = alloc(());
+  let (d, tot) = borrow imm arena { 'l, v ->
+    let tt = borrow mut d { 'd, e ->
+      let mut q = queue_in[i64]();
+      let mut v = v;
+      for t in 0..tasks {
+        let (v1, v2) = array_copy['l, Node] v;
+        v = v1;
+        q = push_in(q, with spawn_in { walk(v2, t * n + mid(0, n), n, t) })
+      };
+      let _ = array_forget['l, Node] v;
+      run_at(q, n + 2) };
+    (d, tt) };
+  let _ = free(d);
+  let _ = arena;
+  tot

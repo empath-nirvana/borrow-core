@@ -1,0 +1,44 @@
+-- B1, the arena's build alone (`c1-arena-held.bc`'s `build`, the `tasks` trees), then dropped: the
+-- cost to subtract for a walk-only figure. Answer: i64[0].
+type Node = i32 * (i32 * i32)
+
+fn mid(lo: i32, hi: i32) -> i32 = lo + (hi - lo) / 2
+
+-- The arena of `tasks` balanced search trees of the keys `0 .. n`: tree `t`'s node of key `m` at
+-- `t * n + m`. A work list of intervals `(lo, (hi, base))`, so no recursion; a
+-- counted loop (each interval is pushed once, so `2 n tasks + tasks` turns suffice).
+fn build(n: i32, tasks: i32) -> array Node =
+  let mut a = array_new[Node] (n * tasks, !{ i -> (0, (0 - 1, 0 - 1)) });
+  let mut ws = array_new[i32 * (i32 * i32)] (64 + tasks, !{ i -> (0, (0, 0)) });
+  for t in 0..tasks {
+    let (w1, _) = array_replace[i32 * (i32 * i32)] (ws, t, (0, (n, t * n)));
+    ws = w1
+  };
+  let mut sp = tasks;
+  for _ in 0..(2 * n * tasks + tasks) {
+    if sp <= 0 { break } else { () };
+    sp = sp - 1;
+    let (w2, o) = array_replace[i32 * (i32 * i32)] (ws, sp, (0, (0, 0)));
+    ws = w2;
+    let (lo, (hi, base)) = match o { inl p -> p | inr p -> (0, (0, 0)) };
+    if lo < hi {
+      let m = mid(lo, hi);
+      let lc = if lo < m { base + mid(lo, m) } else { 0 - 1 };
+      let rc = if m + 1 < hi { base + mid(m + 1, hi) } else { 0 - 1 };
+      let (a2, _) = array_replace[Node] (a, base + m, (m, (lc, rc)));
+      a = a2;
+      let (w3, _) = array_replace[i32 * (i32 * i32)] (ws, sp, (m + 1, (hi, base)));
+      let (w4, _) = array_replace[i32 * (i32 * i32)] (w3, sp + 1, (lo, (m, base)));
+      ws = w4;
+      sp = sp + 2
+    } else { () }
+  };
+  a
+
+
+main -> i64 =
+  let n = 200;
+  let tasks = 3;
+  let arena = build(n, tasks);
+  let _ = arena;
+  i64[0]

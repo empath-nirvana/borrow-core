@@ -1,0 +1,319 @@
+-- B1, effect-free core, H3's tree: `main` OWNS the `tasks` trees (`mu X. 1 + (ref X * (i32 *
+-- ref X))`, an array of them) and lends them `imm` at `'l`; each task gets one tree's root as a leaf
+-- view `imm 'l Tree` and holds it across its `await`s, boxed at `'d ⊏ 'l` (`TaskAt[i64]<'d>`, as
+-- `c1-arena-held.bc`). Positions below the root cannot be held (`c0-mu-child-at-l.bc`: a child is
+-- reached only at `withload`'s `'y`), so the state holds the root's borrow and the path, and each
+-- resume walks the path again from the root (`h3/r3-owned-tree-reborrow.bc`'s `nav`, unchanged),
+-- with no lend of its own: O(depth) a step.
+--
+-- Answer: as `h3/src-owned-tree.bc` (n = 200, tasks = 3: 297900).
+
+type Tree = mu X. 1 + (ref X * (i32 * ref X))
+
+def value : !(i32 * i32 => i32) =
+  !thunkv fun (p : i32 * i32) ->
+      let (k, r) = p;
+      x <- return (unbang host[add32]) ((unbang host[mul32]) (k, i32[7919]), r);
+      case (unbang host[rem_s32]) (x, i32[1000]) { inl q -> return q | inr u -> return i32[0] }
+
+def mid : !(i32 * i32 => i32) =
+  !thunkv fun (p : i32 * i32) ->
+      let (lo, hi) = p;
+      h2 <- case (unbang host[div_s32]) ((unbang host[sub32]) (hi, lo), i32[2]) {
+          inl d -> return d
+        | inr d -> return i32[0]
+        };
+      return (unbang host[add32]) (lo, h2)
+
+-- The balanced search tree of the keys `[lo, hi)`; `inr ()` at the budget's end.
+def build_step : !U ((1 + !U (1 -o i32 * i32 -o F (Tree + 1))) * 1 -o i32 * i32 -o F (Tree + 1)) =
+  !thunkv fun (sp0 : (1 + !U (1 -o i32 * i32 -o F (Tree + 1))) * 1) ->
+      let (self, u) = sp0;
+      let () = u;
+      fun (p : i32 * i32) ->
+        let (lo, hi) = p;
+        case (unbang host[lt_s32]) (lo, hi) {
+          inl e -> return (inl (roll inl () : Tree) : Tree + 1)
+        | inr t -> m <- return (unbang mid) (lo, hi);
+            case self {
+              inl x -> return (inr () : Tree + 1)
+            | inr g -> f <- return unbang g;
+                z <- return ();
+                a1 <- return (lo, m);
+                o1 <- force f z a1;
+                case o1 {
+                  inl lt -> f2 <- return unbang g;
+                    z2 <- return ();
+                    a2 <- return ((unbang host[add32]) (m, i32[1]), hi);
+                    o2 <- force f2 z2 a2;
+                    case o2 {
+                      inl rt -> return (inl (roll inr (alloc[Tree] lt, (m, alloc[Tree] rt)) : Tree) : Tree + 1)
+                    | inr x -> return (inr () : Tree + 1)
+                    }
+                | inr x -> return (inr () : Tree + 1)
+                }
+            }
+        }
+
+def build : !U (i32 * i32 -o F (Tree + 1)) =
+  !thunkv fun (p : i32 * i32) ->
+      st <- return build_step;
+      bf <- return unbang bounded_fix[1, i32 * i32 -o F (Tree + 1)];
+      ba <- return (st, (i32[10000], ()));
+      force bf ba p
+
+-- `x` at slot `i` of the path.
+def put : !(array i32 * (i32 * i32) => array i32) =
+  !thunkv fun (p : array i32 * (i32 * i32)) ->
+      let (a, q) = p;
+      let (i, x) = q;
+      t <- return (unbang array_replace[i32]) (a, (i, x));
+      let (a, d) = t;
+      return a
+
+-- Slot `i` of the path (taken out and put back).
+def dir : !(array i32 * i32 => array i32 * i32) =
+  !thunkv fun (p : array i32 * i32) ->
+      let (a, i) = p;
+      t <- return (unbang array_replace[i32]) (a, (i, i32[0]));
+      let (a2, x) = t;
+      case x {
+        inl v -> a3 <- return (unbang put) (a2, (i, v)); return (a3, v)
+      | inr v -> return (a2, i32[0])
+      }
+
+-- The walk's mode at a node of depth `i`: following the path (`Follow i`); entered as the right
+-- child of the current node (`Right (i, k)`, `k` its parent's key); entered as a left child while
+-- descending to the leftmost node (`Left (i, k)`).
+type Mode = i32 + ((i32 * i32) + (i32 * i32))
+-- The walk's data: the path, the current node's depth `d`, the deepest ancestor on the path that
+-- the path leaves to the left (its depth, `-1` for none, and its key), and the mode.
+type W = array i32 * (i32 * ((i32 * i32) * Mode))
+-- The walk's answer: the path, and the successor's depth and key, or none (`inr ()`).
+type R = array i32 * ((i32 * i32) + 1)
+
+def nav_step : !U ((1 + !U (1 -o (forall 'a < top. imm 'a Tree * W -o F (box 'a (R + 1))))) * 1 -o (forall 'a < top. imm 'a Tree * W -o F (box 'a (R + 1)))) =
+  !thunkv fun (sp0 : (1 + !U (1 -o (forall 'a < top. imm 'a Tree * W -o F (box 'a (R + 1))))) * 1) ->
+      let (self, u) = sp0;
+      let () = u;
+      Fun 'a < top.
+        fun (bw : imm 'a Tree * W) ->
+          let (b, w) = bw;
+          v <- return withload['a, 'y, Tree, R + 1] b (thunkv Fun 'y < dom.
+            return (thunkv fun (t : view 'y Tree) ->
+              let (path, w2) = w;
+              let (d, w3) = w2;
+              let (ll, mode) = w3;
+              let (lld, llk) = ll;
+              case unroll t {
+                inl e -> case mode {
+                    inl i -> return boxed['y] (inr () : R + 1)
+                  | inr m2 -> case m2 {
+                      inl rk -> case (unbang host[lt_s32]) (lld, i32[0]) {
+                          inl has -> return boxed['y] (inl (path, (inl (lld, llk) : (i32 * i32) + 1)) : R + 1)
+                        | inr none -> return boxed['y] (inl (path, (inr () : (i32 * i32) + 1)) : R + 1)
+                        }
+                    | inr lk -> let (i, pk) = lk;
+                        case (unbang host[lt_s32]) (i32[0], i) {
+                          inl root -> return boxed['y] (inl (path, (inr () : (i32 * i32) + 1)) : R + 1)
+                        | inr below -> return boxed['y] (inl (path, (inl ((unbang host[sub32]) (i, i32[1]), pk) : (i32 * i32) + 1)) : R + 1)
+                        }
+                    }
+                  }
+              | inr nd -> let (l, q) = nd;
+                  let (k, rr) = q;
+                  case self {
+                    inl x -> return boxed['y] (inr () : R + 1)
+                  | inr g -> f <- return unbang g;
+                      z <- return ();
+                      case mode {
+                        inl i -> case (unbang host[lt_s32]) (i, d) {
+                            inl atd -> w4 : W <- return (path, (d, ((lld, llk), (inr (inl ((unbang host[add32]) (i, i32[1]), k) : (i32 * i32) + (i32 * i32)) : Mode))));
+                              a4 <- return (rr, w4);
+                              o <- force f z ['y] a4;
+                              return boxed['y] unbox o
+                          | inr above -> pd <- return (unbang dir) (path, i);
+                              let (path2, dv) = pd;
+                              case (unbang host[lt_s32]) (i32[0], dv) {
+                                inl goleft -> w4 : W <- return (path2, (d, ((i, k), (inl ((unbang host[add32]) (i, i32[1])) : Mode))));
+                                  a4 <- return (l, w4);
+                                  o <- force f z ['y] a4;
+                                  return boxed['y] unbox o
+                              | inr goright -> w4 : W <- return (path2, (d, ((lld, llk), (inl ((unbang host[add32]) (i, i32[1])) : Mode))));
+                                  a4 <- return (rr, w4);
+                                  o <- force f z ['y] a4;
+                                  return boxed['y] unbox o
+                              }
+                          }
+                      | inr m2 -> case m2 {
+                          inl rk -> let (i, pk) = rk;
+                            path2 <- return (unbang put) (path, ((unbang host[sub32]) (i, i32[1]), i32[1]));
+                            w4 : W <- return (path2, (d, ((lld, llk), (inr (inr ((unbang host[add32]) (i, i32[1]), k) : (i32 * i32) + (i32 * i32)) : Mode))));
+                            a4 <- return (l, w4);
+                            o <- force f z ['y] a4;
+                            return boxed['y] unbox o
+                        | inr lk -> let (i, pk) = lk;
+                            path2 <- case (unbang host[lt_s32]) (i32[0], i) {
+                                inl root -> return path
+                              | inr below -> return (unbang put) (path, ((unbang host[sub32]) (i, i32[1]), i32[0]))
+                              };
+                            w4 : W <- return (path2, (d, ((lld, llk), (inr (inr ((unbang host[add32]) (i, i32[1]), k) : (i32 * i32) + (i32 * i32)) : Mode))));
+                            a4 <- return (l, w4);
+                            o <- force f z ['y] a4;
+                            return boxed['y] unbox o
+                        }
+                      }
+                  }
+              }));
+          return boxed['a] v
+
+def nav : !U (forall 'a < top. imm 'a Tree * W -o F (box 'a (R + 1))) =
+  !thunkv Fun 'a < top.
+      fun (bw : imm 'a Tree * W) ->
+        st <- return nav_step;
+        bf <- return unbang bounded_fix[1, forall 'a < top. imm 'a Tree * W -o F (box 'a (R + 1))];
+        ba <- return (st, (i32[10000], ()));
+        force bf ba ['a] bw
+
+-- One step: the root's borrow copied, the successor found from the root.
+fn advance_at<'l>(b: imm 'l Tree, w: W) -> imm 'l Tree * (R + 1) =
+  q <- return (copy['l, Tree] b);
+  let (b1, b2) = q;
+  nv <- return unbang nav;
+  bw <- return (b1, w);
+  o <- force nv ['l] bw;
+  return (b2, unbox o)
+
+-- The task at its `await`: the root's borrow, the path, the current depth and key, `r`, the sum.
+type St<'l> = imm 'l Tree * (array i32 * (i32 * (i32 * (i32 * i64))))
+
+-- After a step: suspended at the next node's `await`, or finished with the sum.
+fn settle_at<'l>(cr: imm 'l Tree * (R + 1), r: i32, s: i64) -> i64 + St<'l> =
+  let (c, o) = cr;
+  match o {
+    inl pr -> let (path, nx) = pr;
+      match nx {
+        inl dk -> let (d, k) = dk; inr (c, (path, (d, (k, (r, s)))))
+      | inr none -> inl s
+      }
+  | inr x -> inl (i64[0] - i64[1])
+  }
+
+-- `κ`'s resume: the node's value added, then the next node's `await`.
+fn adv_at<'l>(k: St<'l>) -> i64 + St<'l> =
+  let (c, (path, (d, (key, (r, s))))) = k;
+  let s2 = s + host[extend_s](value(key, r));
+  let w = (path, (d, ((0 - 1, 0), (inl 0 : Mode))));
+  settle_at(advance_at(c, w), r, s2)
+
+-- The task's first segment: the walk to its first node's `await`.
+fn start_at<'l>(b: imm 'l Tree, r: i32) -> i64 + St<'l> =
+  let path = array_new[i32] (64, !{ i -> 0 });
+  let w = (path, (0, ((0 - 1, 0), (inr (inr (0, 0)) : Mode))));
+  settle_at(advance_at(b, w), r, i64[0])
+
+fn buildt(n: i32) -> Tree =
+  bd <- return unbang build;
+  ba <- return (i32[0], n);
+  t <- force bd ba;
+  case t { inl tr -> return tr | inr x -> return (roll inl () : Tree) }
+
+-- A task bounded by `'d`: `lib/async.bc`'s `TaskIn`.
+type TaskAt[A]<'d> = box 'd U (nu X. F (A + box 'd U X) & F 1)
+type SlotAt[A]<'d> = 1 + (A + TaskAt[A]<'d>)
+
+fn resume_at[A]<'d>(t: TaskAt[A]<'d>) -> A + TaskAt[A]<'d> = g <- return (unbox t); (nu_out (force g)).1
+
+fn cancel_at[A]<'d>(t: TaskAt[A]<'d>) -> 1 = g <- return (unbox t); (nu_out (force g)).2
+
+-- One round in place over the slots, as `lib/async.bc`'s `round`.
+fn round_at[A]<'d>(n: i32, xs: array SlotAt[A]<'d>) -> array SlotAt[A]<'d> * bool =
+  let mut a = xs;
+  let mut pending = false;
+  for i in 0..n {
+    let (b, s) = array_replace[SlotAt[A]<'d>] (a, i, inl ());
+    match s {
+      inl o -> match o {
+        inl u -> a = b
+      | inr e -> match e {
+          inl v -> let (c, _) = array_replace[SlotAt[A]<'d>] (b, i, inr (inl v)); a = c
+        | inr t -> match resume_at(t) {
+            inl v -> let (c, _) = array_replace[SlotAt[A]<'d>] (b, i, inr (inl v)); a = c
+          | inr t2 ->
+              pending = true;
+              let (c, _) = array_replace[SlotAt[A]<'d>] (b, i, inr (inr t2)); a = c
+          }
+        }
+      }
+    | inr x -> a = b
+    }
+  };
+  (a, pending)
+
+-- The sum of the slots' values; a task still pending is cancelled.
+fn total_at<'d>(n: i32, xs: array SlotAt[i64]<'d>) -> i64 =
+  let mut a = xs;
+  let mut acc = i64[0];
+  for i in 0..n {
+    let (b, s) = array_replace[SlotAt[i64]<'d>] (a, i, inl ());
+    a = b;
+    match s {
+      inl o -> match o {
+        inl u -> ()
+      | inr e -> match e { inl v -> acc = acc + v | inr t -> cancel_at(t); () }
+      }
+    | inr x -> ()
+    }
+  };
+  acc
+
+-- Run the slots for `rounds` rounds (a counted loop, so it stays inside the lends), then sum.
+fn run_at<'d>(n: i32, rounds: i32, xs: array SlotAt[i64]<'d>) -> i64 =
+  let mut slots = xs;
+  let mut more = true;
+  for _ in 0..rounds {
+    if more { let (b, p) = round_at(n, slots); slots = b; more = p } else { () }
+  };
+  total_at(n, slots)
+
+main -> i64 =
+  let n = 200;
+  let tasks = 3;
+  let mut trees = array_new[Tree] (tasks, !{ i -> roll inl () });
+  for t in 0..tasks {
+    let (a, old) = array_replace[Tree] (trees, t, buildt(n));
+    trees = a
+  };
+  let d = alloc(());
+  let (d, tot) = borrow imm trees { 'l, v ->
+    let tt = borrow mut d { 'd, e ->
+      f <- return unfold[nu X. F (i64 + box 'd U X) & F 1, St<'l>] (!thunkv fun (s : St<'l>) ->
+            < o <- return adv_at(s);
+              case o {
+                inl x -> return (inl x : i64 + box 'd St<'l>)
+              | inr s2 -> return (inr boxed['d] s2 : i64 + box 'd St<'l>)
+              },
+              return () >);
+      let mut slots = array_new[SlotAt[i64]<'d>] (tasks, !{ i -> inl () });
+      let mut v = v;
+      for t in 0..tasks {
+        let (v1, v2) = array_copy['l, Tree] v;
+        v = v1;
+        let sl = match array_get['l, Tree] (v2, t) {
+            inl g -> match start_at(g, t) {
+                inl x -> (inr (inl x) : SlotAt[i64]<'d>)
+              | inr s0 ->
+                  (inr (inr boxed['d] (thunkv nu_in < fu <- return unbang f; (nu_out force fu s0).1,
+                      fu <- return unbang f; (nu_out force fu s0).2 >)) : SlotAt[i64]<'d>)
+              }
+          | inr u -> (inr (inl i64[0]) : SlotAt[i64]<'d>)
+          };
+        let (b, _) = array_replace[SlotAt[i64]<'d>] (slots, t, sl);
+        slots = b
+      };
+      let _ = array_forget['l, Tree] v;
+      run_at(tasks, n + 2, slots) };
+    (d, tt) };
+  let _ = free(d);
+  let _ = trees;
+  tot

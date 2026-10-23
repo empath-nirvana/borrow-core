@@ -1,0 +1,20 @@
+# experiments/e2-spike/bench.py --runs 9: native, CPU ms (user + sys), median (min-max), n = 1048576, 8 tasks; main's bcc (8555116), Apple clang -O2
+rs H3 task owns tree, Vec<&Node>                    204.6 ms  (200.4-226.0)  out 144471560
+rs H3 build only                                    165.2 ms  (164.6-185.3)  out 0
+rs B1 main owns trees, tasks borrow, Vec<&Node>     200.4 ms  (197.3-225.6)  out 144471560
+rs B1 build only                                    165.1 ms  (161.6-185.9)  out 0
+rs B1 arena, tasks borrow, Vec<&ANode>               62.3 ms  (61.7-65.5)  out 144471560
+rs B1 one shared tree, Vec<&Node>                    52.6 ms  (52.0-55.3)  out 144471560
+rs B1 one tree build only                            21.6 ms  (21.3-23.0)  out 0
+rs B1 arena build only                               28.3 ms  (28.1-30.3)  out 0
+main H3 src consume (task stacks)                   187.7 ms  (186.8-192.2)  out i64[144471560]
+main H3 build only                                  109.7 ms  (108.6-114.2)  out i64[0]
+B1 s1 surface arena, views held                     100.4 ms  (99.5-104.8)  out i64[144471560]
+B1 c1 core arena, views held, nu at 'd               60.3 ms  (59.6-63.1)  out i64[144471560]
+B1 c1d core arena, views held, defun                 57.3 ms  (56.5-60.2)  out i64[144471560]
+B1 c2s core one shared mu tree, root held, path     393.1 ms  (387.1-398.8)  out i64[144471560]
+B1 one mu tree build only                            15.2 ms  (14.7-16.4)  out i64[0]
+B1 arena build only                                  33.3 ms  (32.5-34.2)  out i64[0]
+B2 p1 r3 owned mu, re-lend + path                   511.0 ms  (508.1-546.9)  out i64[144471560]
+B2 p1c r3 CACHED (unchecked LLVM edit)              152.4 ms  (151.2-186.3)  out i64[144471560]
+B2 p2 owned arena, re-lend + index                   54.4 ms  (54.2-65.3)  out i64[144471560]

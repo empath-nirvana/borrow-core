@@ -1,0 +1,53 @@
+-- H3, the source for main: `tasks` tasks, each OWNING a materialised balanced search tree of the
+-- keys `0 .. n` (a `mu` type whose children are boxed in cells), walked in order with one `await`
+-- per node, run round robin by the library's scheduler. Each task's sum of its keys' values,
+-- summed by `main`.
+--
+-- What main can compile: a task cannot hold an `imm` borrow of its tree across `await` (an `imm`
+-- block whose body resumes is refused, SPEC §29; R1 is `mut` over a cell only). So the walk here
+-- CONSUMES the tree: each node is taken apart by value and its subtrees' cells freed as it goes.
+-- The walk is a recursive task: a stack machine, on a task stack (SPEC §52). Nothing is borrowed.
+include rec
+include async
+
+type Tree = mu X. 1 + (ref X * (i32 * ref X))
+
+fn value(k: i32, r: i32) -> i32 = (k * 7919 + r) % 1000
+
+fn build(lo: i32, hi: i32) -> Tree with Exhausted =
+  if lo < hi {
+    let m = lo + (hi - lo) / 2;
+    roll inr (alloc(build(lo, m)), (m, alloc(build(m + 1, hi))))
+  } else { roll inl () }
+
+fn tsum(t: Tree, r: i32) -> i64 with Async, Exhausted =
+  match unroll t {
+    inl u -> i64[0]
+  | inr (l, (k, rr)) ->
+      let a = tsum(free(l), r);
+      await();
+      let b = tsum(free(rr), r);
+      a + host[extend_s](value(k, r)) + b
+  }
+
+fn task(n: i32, r: i32) -> i64 with Async =
+  with on_exhausted(!{ u -> i64[0] - 1 }) { tsum(build(0, n), r) }
+
+fn sum_all(xs: List[i64]) -> i64 =
+  let mut cur = xs;
+  let mut acc = i64[0];
+  let mut more = true;
+  while more {
+    match unroll cur {
+      inl u -> more = false; cur = (roll inl () : List[i64])
+    | inr (x, rest) -> acc = acc + x; cur = rest
+    }
+  };
+  acc
+
+main -> i64 =
+  let n = 200;
+  let tasks = 3;
+  let mut q = queue[i64]();
+  for r in 0..tasks { q = push(q, with spawn { task(n, r) }) };
+  sum_all(run_until_empty(q))

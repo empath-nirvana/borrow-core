@@ -1,0 +1,68 @@
+-- B1, `c2s-mu-path-shared.bc`'s build alone: one tree built in a cell, then freed (its destructor
+-- frees every node). Subtracted from `c2s` for a walk-only figure. Answer: i64[0].
+type Tree = mu X. 1 + (ref X * (i32 * ref X))
+
+def value : !(i32 * i32 => i32) =
+  !thunkv fun (p : i32 * i32) ->
+      let (k, r) = p;
+      x <- return (unbang host[add32]) ((unbang host[mul32]) (k, i32[7919]), r);
+      case (unbang host[rem_s32]) (x, i32[1000]) { inl q -> return q | inr u -> return i32[0] }
+
+def mid : !(i32 * i32 => i32) =
+  !thunkv fun (p : i32 * i32) ->
+      let (lo, hi) = p;
+      h2 <- case (unbang host[div_s32]) ((unbang host[sub32]) (hi, lo), i32[2]) {
+          inl d -> return d
+        | inr d -> return i32[0]
+        };
+      return (unbang host[add32]) (lo, h2)
+
+-- The balanced search tree of the keys `[lo, hi)`; `inr ()` at the budget's end.
+def build_step : !U ((1 + !U (1 -o i32 * i32 -o F (Tree + 1))) * 1 -o i32 * i32 -o F (Tree + 1)) =
+  !thunkv fun (sp0 : (1 + !U (1 -o i32 * i32 -o F (Tree + 1))) * 1) ->
+      let (self, u) = sp0;
+      let () = u;
+      fun (p : i32 * i32) ->
+        let (lo, hi) = p;
+        case (unbang host[lt_s32]) (lo, hi) {
+          inl e -> return (inl (roll inl () : Tree) : Tree + 1)
+        | inr t -> m <- return (unbang mid) (lo, hi);
+            case self {
+              inl x -> return (inr () : Tree + 1)
+            | inr g -> f <- return unbang g;
+                z <- return ();
+                a1 <- return (lo, m);
+                o1 <- force f z a1;
+                case o1 {
+                  inl lt -> f2 <- return unbang g;
+                    z2 <- return ();
+                    a2 <- return ((unbang host[add32]) (m, i32[1]), hi);
+                    o2 <- force f2 z2 a2;
+                    case o2 {
+                      inl rt -> return (inl (roll inr (alloc[Tree] lt, (m, alloc[Tree] rt)) : Tree) : Tree + 1)
+                    | inr x -> return (inr () : Tree + 1)
+                    }
+                | inr x -> return (inr () : Tree + 1)
+                }
+            }
+        }
+
+def build : !U (i32 * i32 -o F (Tree + 1)) =
+  !thunkv fun (p : i32 * i32) ->
+      st <- return build_step;
+      bf <- return unbang bounded_fix[1, i32 * i32 -o F (Tree + 1)];
+      ba <- return (st, (i32[10000], ()));
+      force bf ba p
+
+-- `x` at slot `i` of the path.
+fn buildt(n: i32) -> Tree =
+  bd <- return unbang build;
+  ba <- return (i32[0], n);
+  t <- force bd ba;
+  case t { inl tr -> return tr | inr x -> return (roll inl () : Tree) }
+
+main -> i64 =
+  let n = 200;
+  let c = alloc(buildt(n));
+  let _ = free(c);
+  i64[0]

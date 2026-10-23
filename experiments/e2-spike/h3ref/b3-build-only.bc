@@ -1,0 +1,101 @@
+-- H3, the build's cost alone: each task builds its tree (as `r3`, `z3` and `src-owned-tree.bc` do),
+-- awaits once, and drops it (its destructor frees every node). Subtracted from the walks' times.
+
+type Tree = mu X. 1 + (ref X * (i32 * ref X))
+
+def mid : !(i32 * i32 => i32) =
+  !thunkv fun (p : i32 * i32) ->
+      let (lo, hi) = p;
+      h2 <- case (unbang host[div_s32]) ((unbang host[sub32]) (hi, lo), i32[2]) {
+          inl d -> return d
+        | inr d -> return i32[0]
+        };
+      return (unbang host[add32]) (lo, h2)
+
+-- The balanced search tree of the keys `[lo, hi)`; `inr ()` at the budget's end.
+def build_step : !U ((1 + !U (1 -o i32 * i32 -o F (Tree + 1))) * 1 -o i32 * i32 -o F (Tree + 1)) =
+  !thunkv fun (sp0 : (1 + !U (1 -o i32 * i32 -o F (Tree + 1))) * 1) ->
+      let (self, u) = sp0;
+      let () = u;
+      fun (p : i32 * i32) ->
+        let (lo, hi) = p;
+        case (unbang host[lt_s32]) (lo, hi) {
+          inl e -> return (inl (roll inl () : Tree) : Tree + 1)
+        | inr t -> m <- return (unbang mid) (lo, hi);
+            case self {
+              inl x -> return (inr () : Tree + 1)
+            | inr g -> f <- return unbang g;
+                z <- return ();
+                a1 <- return (lo, m);
+                o1 <- force f z a1;
+                case o1 {
+                  inl lt -> f2 <- return unbang g;
+                    z2 <- return ();
+                    a2 <- return ((unbang host[add32]) (m, i32[1]), hi);
+                    o2 <- force f2 z2 a2;
+                    case o2 {
+                      inl rt -> return (inl (roll inr (alloc[Tree] lt, (m, alloc[Tree] rt)) : Tree) : Tree + 1)
+                    | inr x -> return (inr () : Tree + 1)
+                    }
+                | inr x -> return (inr () : Tree + 1)
+                }
+            }
+        }
+
+def build : !U (i32 * i32 -o F (Tree + 1)) =
+  !thunkv fun (p : i32 * i32) ->
+      st <- return build_step;
+      bf <- return unbang bounded_fix[1, i32 * i32 -o F (Tree + 1)];
+      ba <- return (st, (i32[10000], ()));
+      force bf ba p
+
+type St = Tree
+
+def adv : !(St => i64 + St) =
+  !thunkv fun (t : St) -> return (inl i64[0] : i64 + St)
+
+def spawn0 : !(i32 * i32 => i64 + St) =
+  !thunkv fun (p : i32 * i32) ->
+      let (n, r) = p;
+      bd <- return unbang build;
+      ba <- return (i32[0], n);
+      t <- force bd ba;
+      case t {
+        inl tr -> return (inr tr : i64 + St)
+      | inr x -> return (inl (unbang host[sub64]) (i64[0], i64[1]) : i64 + St)
+      }
+
+fn spawn_r(r: i32) -> i64 + St = spawn0(200, r)
+
+-- Round robin over the slots until none is pending, then the values summed (p3c's scheduler).
+main -> i64 =
+  let tasks = 3;
+  let mut ts = array_new[i64 + St] (tasks, spawn_r);
+  let mut more = true;
+  while more {
+    more = false;
+    for i in 0..tasks {
+      let (t2, old) = array_replace[i64 + St] (ts, i, (inl i64[0] : i64 + St));
+      ts = t2;
+      match old {
+        inl cur -> match cur {
+            inl v -> let (t3, _) = array_replace[i64 + St] (ts, i, (inl v : i64 + St)); ts = t3
+          | inr k -> match adv(k) {
+              inl v -> let (t3, _) = array_replace[i64 + St] (ts, i, (inl v : i64 + St)); ts = t3
+            | inr k2 -> more = true; let (t3, _) = array_replace[i64 + St] (ts, i, (inr k2 : i64 + St)); ts = t3
+            }
+          }
+      | inr back -> ()
+      }
+    }
+  };
+  let mut acc = i64[0];
+  for i in 0..tasks {
+    let (t2, old) = array_replace[i64 + St] (ts, i, (inl i64[0] : i64 + St));
+    ts = t2;
+    match old {
+      inl cur -> match cur { inl v -> acc = acc + v | inr k -> () }
+    | inr back -> ()
+    }
+  };
+  acc

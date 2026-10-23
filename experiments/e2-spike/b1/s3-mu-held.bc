@@ -1,0 +1,78 @@
+-- B1, surface: H3's tree (`mu X. 1 + (ref X * (i32 * ref X))`, children in cells) OWNED BY `main`
+-- and BORROWED by the tasks, each holding a stack of child positions `imm 'l Tree` across its
+-- `await`s (Rust's `Vec<&Node>`). The tasks are spawned with `spawn_in` below the lend. Each
+-- child is reached through the view of its parent (`match unroll`), so this asks for the child
+-- at the parent's lifetime `'l`.
+include async
+
+type Tree = mu X. 1 + (ref X * (i32 * ref X))
+
+fn value(k: i32, r: i32) -> i32 = (k * 7919 + r) % 1000
+
+fn build(lo: i32, hi: i32) -> Tree with Exhausted =
+  if lo < hi {
+    let m = lo + (hi - lo) / 2;
+    roll inr (alloc(build(lo, m)), (m, alloc(build(m + 1, hi))))
+  } else { roll inl () }
+
+-- The leftmost chain below `t` pushed on `st`: each node's view kept, its left child entered. A
+-- borrowed `mu` value is not matched at the surface (`unroll` needs an owned `mu`), so the node is
+-- entered by `withload`, whose callback sees it at `'y ⊏ 'l`; the child is answered at `'l`.
+fn descend<'l>(t: imm 'l Tree, st: List[imm 'l Tree]) -> List[imm 'l Tree] =
+  let mut cur = (inl t : imm 'l Tree + 1);
+  let mut st = st;
+  for _ in 0..64 {
+    match cur {
+      inr u -> cur = (inr () : imm 'l Tree + 1)
+    | inl c ->
+        let (c1, c2) = copy['l, Tree] c;
+        let o = withload['l, 'y, Tree, imm 'l Tree + 1] c1 (thunkv Fun 'y < dom.
+          return (thunkv fun (w : view 'y Tree) ->
+            case unroll w {
+              inl e -> return boxed['y] (inr () : imm 'l Tree + 1)
+            | inr nd -> let (l, q) = nd; let (k, rr) = q;
+                let () = forget_imm['y, Tree] rr;
+                return boxed['y] (inl l : imm 'l Tree + 1)
+            }));
+        st = cons(c2, st);
+        cur = o
+    }
+  };
+  st
+
+fn walk<'l>(t: imm 'l Tree, r: i32) -> i64 with Async =
+  let mut st = descend(t, nil[imm 'l Tree]());
+  let mut s = i64[0];
+  let mut more = true;
+  while more {
+    match unroll st {
+      inl u -> more = false; st = nil[imm 'l Tree]()
+    | inr (c, rest) ->
+        await();
+        match unroll c {
+          inl u -> st = rest
+        | inr (l, (k, rr)) -> s = s + host[extend_s](value(k, r)); st = descend(rr, rest)
+        }
+    }
+  };
+  s
+
+main -> i64 =
+  let t = with on_exhausted(!{ u -> roll inl () }) { build(0, 200) };
+  let c = alloc(t);
+  let d = alloc(());
+  let tot = borrow imm c { 'l, v ->
+    borrow mut d { 'd, e ->
+      let tk = with spawn_in { walk(v, 0) };
+      let mut cur = (inr tk : i64 + TaskIn[i64]<'d>);
+      let mut acc = i64[0];
+      for _ in 0..210 {
+        match cur {
+          inl x -> cur = (inl x : i64 + TaskIn[i64]<'d>)
+        | inr t1 -> cur = resume_in(t1)
+        }
+      };
+      match cur { inl x -> x | inr t2 -> cancel_in(t2); i64[0] - 1 } } };
+  let _ = free(d);
+  let _ = free(c);
+  tot

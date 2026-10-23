@@ -1,0 +1,193 @@
+-- B1, negative: `c1-arena-held.bc` with the tasks' slots handed out of both lends and run after
+-- the arena is back with its owner (a task holding a view of `main`'s tree outlives the lend).
+-- Expected: refused.
+-- B1, effect-free core: `s1-arena-held.bc` by hand. `main` owns the arena (the `tasks` trees side
+-- by side, nodes `(key, left, right)`, children by index) and lends it `imm` at `'l`; a unit
+-- cell's lend gives `'d ⊏ 'l`. Each task is an `unfold` whose state holds the family of leaf views
+-- `array_imm 'l Node` and a stack of positions `imm 'l Node` (Rust's `Vec<&Node>`), with `r` and
+-- the sum; it is boxed at `'d` (`TaskAt[i64]<'d>`, `lib/async.bc`'s `TaskIn`), not at `top`. A
+-- resume pops a position, adds its value and pushes the right child's leftmost chain; it answers
+-- the rest boxed at `'d`, or the sum when the stack is empty. Its close drops the state. The
+-- scheduler is `lib/async.bc`'s in-place array round at `TaskAt[i64]<'d>`, for a counted number of
+-- rounds, inside both lends.
+--
+-- Answer: as `s1-arena-held.bc` (n = 200, tasks = 3: 297900).
+
+type Node = i32 * (i32 * i32)
+
+-- A task bounded by `'d`: `lib/async.bc`'s `TaskIn`.
+type TaskAt[A]<'d> = box 'd U (nu X. F (A + box 'd U X) & F 1)
+type SlotAt[A]<'d> = 1 + (A + TaskAt[A]<'d>)
+
+fn resume_at[A]<'d>(t: TaskAt[A]<'d>) -> A + TaskAt[A]<'d> = g <- return (unbox t); (nu_out (force g)).1
+
+fn cancel_at[A]<'d>(t: TaskAt[A]<'d>) -> 1 = g <- return (unbox t); (nu_out (force g)).2
+
+fn value(k: i32, r: i32) -> i32 = (k * 7919 + r) % 1000
+
+fn mid(lo: i32, hi: i32) -> i32 = lo + (hi - lo) / 2
+
+-- The arena of `tasks` balanced search trees of the keys `0 .. n`: tree `t`'s node of key `m` at
+-- `t * n + m`. A work list of intervals `(lo, (hi, base))`, so no recursion; a
+-- counted loop (each interval is pushed once, so `2 n tasks + tasks` turns suffice).
+fn build(n: i32, tasks: i32) -> array Node =
+  let mut a = array_new[Node] (n * tasks, !{ i -> (0, (0 - 1, 0 - 1)) });
+  let mut ws = array_new[i32 * (i32 * i32)] (64 + tasks, !{ i -> (0, (0, 0)) });
+  for t in 0..tasks {
+    let (w1, _) = array_replace[i32 * (i32 * i32)] (ws, t, (0, (n, t * n)));
+    ws = w1
+  };
+  let mut sp = tasks;
+  for _ in 0..(2 * n * tasks + tasks) {
+    if sp <= 0 { break } else { () };
+    sp = sp - 1;
+    let (w2, o) = array_replace[i32 * (i32 * i32)] (ws, sp, (0, (0, 0)));
+    ws = w2;
+    let (lo, (hi, base)) = match o { inl p -> p | inr p -> (0, (0, 0)) };
+    if lo < hi {
+      let m = mid(lo, hi);
+      let lc = if lo < m { base + mid(lo, m) } else { 0 - 1 };
+      let rc = if m + 1 < hi { base + mid(m + 1, hi) } else { 0 - 1 };
+      let (a2, _) = array_replace[Node] (a, base + m, (m, (lc, rc)));
+      a = a2;
+      let (w3, _) = array_replace[i32 * (i32 * i32)] (ws, sp, (m + 1, (hi, base)));
+      let (w4, _) = array_replace[i32 * (i32 * i32)] (w3, sp + 1, (lo, (m, base)));
+      ws = w4;
+      sp = sp + 2
+    } else { () }
+  };
+  a
+
+
+-- The task's state at its `await`: the leaf views, the stack of positions and its depth, `r`, the
+-- sum so far.
+type Stk<'l> = array (1 + imm 'l Node)
+type S<'l> = array_imm 'l Node * (Stk<'l> * (i32 * (i32 * i64)))
+
+-- The leftmost chain from index `i` pushed: each node's leaf view kept, its left child entered.
+fn push_left<'l>(v: array_imm 'l Node, st: Stk<'l>, sp: i32, i: i32) -> array_imm 'l Node * (Stk<'l> * i32) =
+  let mut v = v;
+  let mut st = st;
+  let mut sp = sp;
+  let mut i = i;
+  for _ in 0..64 {
+    if i < 0 { break } else { () };
+    let (v1, v2) = array_copy['l, Node] v;
+    v = v1;
+    match array_get['l, Node] (v2, i) {
+      inl g -> let (g1, g2) = copy['l, Node] g;
+        let (k, (l, rr)) = *g1;
+        let (st2, _) = array_replace[1 + imm 'l Node] (st, sp, inr g2);
+        st = st2; sp = sp + 1; i = l
+    | inr u -> i = 0 - 1
+    }
+  };
+  (v, (st, sp))
+
+-- The task's first segment: the root's leftmost chain, then its first `await` (or its end).
+fn start<'l>(v: array_imm 'l Node, root: i32, r: i32) -> i64 + S<'l> =
+  let st = array_new[1 + imm 'l Node] (64, !{ i -> inl () });
+  let (v, (st, sp)) = push_left(v, st, 0, root);
+  if sp > 0 { inr (v, (st, (sp, (r, i64[0])))) } else { inl i64[0] }
+
+-- A resume: the top position's value added, the right child's leftmost chain pushed; the next
+-- `await`, or the sum.
+fn step<'l>(s: S<'l>) -> i64 + S<'l> =
+  let (v, (st, (sp, (r, sum)))) = s;
+  let (st, o) = array_replace[1 + imm 'l Node] (st, sp - 1, inl ());
+  match o {
+    inl e -> match e {
+        inl u -> inl sum
+      | inr c ->
+          let (k, (l, rr)) = *c;
+          let sum = sum + host[extend_s](value(k, r));
+          let (v, (st, sp)) = push_left(v, st, sp - 1, rr);
+          if sp > 0 { inr (v, (st, (sp, (r, sum)))) } else { inl sum }
+      }
+  | inr e -> inl sum
+  }
+
+-- One round in place over the slots, as `lib/async.bc`'s `round`.
+fn round_at[A]<'d>(n: i32, xs: array SlotAt[A]<'d>) -> array SlotAt[A]<'d> * bool =
+  let mut a = xs;
+  let mut pending = false;
+  for i in 0..n {
+    let (b, s) = array_replace[SlotAt[A]<'d>] (a, i, inl ());
+    match s {
+      inl o -> match o {
+        inl u -> a = b
+      | inr e -> match e {
+          inl v -> let (c, _) = array_replace[SlotAt[A]<'d>] (b, i, inr (inl v)); a = c
+        | inr t -> match resume_at(t) {
+            inl v -> let (c, _) = array_replace[SlotAt[A]<'d>] (b, i, inr (inl v)); a = c
+          | inr t2 ->
+              pending = true;
+              let (c, _) = array_replace[SlotAt[A]<'d>] (b, i, inr (inr t2)); a = c
+          }
+        }
+      }
+    | inr x -> a = b
+    }
+  };
+  (a, pending)
+
+-- The sum of the slots' values; a task still pending is cancelled.
+fn total_at<'d>(n: i32, xs: array SlotAt[i64]<'d>) -> i64 =
+  let mut a = xs;
+  let mut acc = i64[0];
+  for i in 0..n {
+    let (b, s) = array_replace[SlotAt[i64]<'d>] (a, i, inl ());
+    a = b;
+    match s {
+      inl o -> match o {
+        inl u -> ()
+      | inr e -> match e { inl v -> acc = acc + v | inr t -> cancel_at(t); () }
+      }
+    | inr x -> ()
+    }
+  };
+  acc
+
+-- Run the slots for `rounds` rounds (a counted loop, so it stays inside the lends), then sum.
+fn run_at<'d>(n: i32, rounds: i32, xs: array SlotAt[i64]<'d>) -> i64 =
+  let mut slots = xs;
+  let mut more = true;
+  for _ in 0..rounds {
+    if more { let (b, p) = round_at(n, slots); slots = b; more = p } else { () }
+  };
+  total_at(n, slots)
+
+main -> i64 =
+  let n = 200;
+  let tasks = 3;
+  let arena = build(n, tasks);
+  let d = alloc(());
+  let (d, tot) = borrow imm arena { 'l, v ->
+    let tt = borrow mut d { 'd, e ->
+      f <- return unfold[nu X. F (i64 + box 'd U X) & F 1, S<'l>] (!thunkv fun (s : S<'l>) ->
+            < o <- return step(s);
+              case o {
+                inl x -> return (inl x : i64 + box 'd S<'l>)
+              | inr s2 -> return (inr boxed['d] s2 : i64 + box 'd S<'l>)
+              },
+              return () >);
+      let mut slots = array_new[SlotAt[i64]<'d>] (tasks, !{ i -> inl () });
+      let mut v = v;
+      for t in 0..tasks {
+        let (v1, v2) = array_copy['l, Node] v;
+        v = v1;
+        let sl = match start(v2, t * n + mid(0, n), t) {
+            inl x -> (inr (inl x) : SlotAt[i64]<'d>)
+          | inr s0 ->
+              (inr (inr boxed['d] (thunkv nu_in < fu <- return unbang f; (nu_out force fu s0).1,
+                  fu <- return unbang f; (nu_out force fu s0).2 >)) : SlotAt[i64]<'d>)
+          };
+        let (b, _) = array_replace[SlotAt[i64]<'d>] (slots, t, sl);
+        slots = b
+      };
+      let _ = array_forget['l, Node] v;
+      slots };
+    (d, tt) };
+  let _ = free(d);
+  let _ = arena;
+  run_at(3, 202, tot)

@@ -1,0 +1,4 @@
+p1-r3-owned-reborrow | proven: i64[297900] live 0 | cached: i64[297900] live 0 stale pops 0 
+inv-b-owner-mutated | proven: i64[297900] live 0 | cached (--hook auto 50): i64[224778] live 0 stale pops 3 
+inv-c-owner-moved | proven: i64[297900] live 0 | cached (--move 50): i64[297900] live 0 stale pops 0 
+inv-c2-owner-moved-fresh | proven: i64[297900] live 0 | cached (--move-fresh 50): i64[297900] live 0 stale pops 1 

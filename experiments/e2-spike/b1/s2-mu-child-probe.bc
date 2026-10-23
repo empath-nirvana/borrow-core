@@ -1,0 +1,21 @@
+-- B1, surface probe: a child's position at the parent's lifetime. Rust's `Vec<&Node>` walk pushes
+-- `&*c.l`, a borrow of the child at the tree's lifetime `'l`. Here the tree is `data Tree`
+-- (SPEC §42: `mu X. 1 + (ref X * (ref i32 * ref X))`, a block a node) and `left` asks for the
+-- child of an `imm 'l Tree` at `'l` itself, by a constructor pattern on the view (§42: "on a view
+-- the cells' views").
+include rec
+
+data Tree = Leaf | Node(left: Tree, key: i32, right: Tree)
+
+fn left<'l>(t: imm 'l Tree) -> imm 'l Tree + 1 =
+  match t {
+    Leaf -> inr ()
+  | Node(l, k, rr) -> inl l
+  }
+
+main -> i32 =
+  let t = box Node(box Node(Leaf, 1, Leaf), 2, Leaf);
+  let c = alloc(t);
+  let n = borrow imm c { 'l, v -> match left(v) { inl w -> 1 | inr u -> 0 } };
+  let _ = free(c);
+  n

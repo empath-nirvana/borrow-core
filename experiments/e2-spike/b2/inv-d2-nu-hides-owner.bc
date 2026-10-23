@@ -1,0 +1,14 @@
+-- B2.3, probe: the holder of a machine whose state is behind `ν` tries to take the state apart to
+-- reach the owner's cell, as `inv-d-holder-moves-owner.bc`'s scheduler does to a defunctionalised
+-- state. The machine is an `unfold` over `ref i32 * i32`; its holder sees only
+-- `U (nu X. F (i32 + U X) & F 1)`.
+main : F i32 =
+  c <- return (alloc[i32] i32[5]);
+  st <- return (!thunkv fun (s : ref i32 * i32) ->
+        < let (c, n) = s; return (inr (c, n) : i32 + (ref i32 * i32)),
+          let (c, n) = s; z <- return (free[i32] c); return () >);
+  f <- return unbang unfold[nu X. F (i32 + U X) & F 1, ref i32 * i32] st;
+  s0 : ref i32 * i32 <- return (c, i32[0]);
+  g <- return (thunkv nu_in < (nu_out force f s0).1, (nu_out force f s0).2 >);
+  let (c2, n) = g;
+  return n

@@ -1,0 +1,141 @@
+-- B2.1 over an arena, the proven form at O(1) a step: each task OWNS its tree as an arena (an
+-- array of nodes `(key, left, right)`, children by index, `c1-arena-held.bc`'s layout, one tree),
+-- held in its state with a stack of node INDICES (first-order data, no borrow). Each resume lends
+-- the arena `imm` (`slice_borrow_imm`), re-derives the top position's view from its index
+-- (`array_get`, a bounds check), adds its value, pushes the right child's leftmost chain, and ends
+-- the lend: the state between steps holds the owner and indices, never a borrow. The state is
+-- defunctionalised as `p1-r3-owned-reborrow.bc`'s (`i64 + SO` in the scheduler's array), with its
+-- scheduler.
+--
+-- Answer: as `p1-r3-owned-reborrow.bc` (n = 200, tasks = 3: 297900).
+
+type Node = i32 * (i32 * i32)
+
+fn value(k: i32, r: i32) -> i32 = (k * 7919 + r) % 1000
+
+fn mid(lo: i32, hi: i32) -> i32 = lo + (hi - lo) / 2
+
+-- The arena of `tasks` balanced search trees of the keys `0 .. n`: tree `t`'s node of key `m` at
+-- `t * n + m`. A work list of intervals `(lo, (hi, base))`, so no recursion; a
+-- counted loop (each interval is pushed once, so `2 n tasks + tasks` turns suffice).
+fn build(n: i32, tasks: i32) -> array Node =
+  let mut a = array_new[Node] (n * tasks, !{ i -> (0, (0 - 1, 0 - 1)) });
+  let mut ws = array_new[i32 * (i32 * i32)] (64 + tasks, !{ i -> (0, (0, 0)) });
+  for t in 0..tasks {
+    let (w1, _) = array_replace[i32 * (i32 * i32)] (ws, t, (0, (n, t * n)));
+    ws = w1
+  };
+  let mut sp = tasks;
+  for _ in 0..(2 * n * tasks + tasks) {
+    if sp <= 0 { break } else { () };
+    sp = sp - 1;
+    let (w2, o) = array_replace[i32 * (i32 * i32)] (ws, sp, (0, (0, 0)));
+    ws = w2;
+    let (lo, (hi, base)) = match o { inl p -> p | inr p -> (0, (0, 0)) };
+    if lo < hi {
+      let m = mid(lo, hi);
+      let lc = if lo < m { base + mid(lo, m) } else { 0 - 1 };
+      let rc = if m + 1 < hi { base + mid(m + 1, hi) } else { 0 - 1 };
+      let (a2, _) = array_replace[Node] (a, base + m, (m, (lc, rc)));
+      a = a2;
+      let (w3, _) = array_replace[i32 * (i32 * i32)] (ws, sp, (m + 1, (hi, base)));
+      let (w4, _) = array_replace[i32 * (i32 * i32)] (w3, sp + 1, (lo, (m, base)));
+      ws = w4;
+      sp = sp + 2
+    } else { () }
+  };
+  a
+
+
+-- The task at its `await`: its arena (owned), the stack of indices and its depth, `r`, the sum.
+type SO = array Node * (array i32 * (i32 * (i32 * i64)))
+
+-- The leftmost chain from index `i` pushed, read through the arena's leaf views.
+fn push_left_ix<'x>(v: array_imm 'x Node, st: array i32, sp: i32, i: i32) -> array_imm 'x Node * (array i32 * i32) =
+  let mut v = v;
+  let mut st = st;
+  let mut sp = sp;
+  let mut i = i;
+  for _ in 0..64 {
+    if i < 0 { break } else { () };
+    let (v1, v2) = array_copy['x, Node] v;
+    v = v1;
+    match array_get['x, Node] (v2, i) {
+      inl g -> let (k, (l, rr)) = *g;
+        let (st2, _) = array_replace[i32] (st, sp, i);
+        st = st2; sp = sp + 1; i = l
+    | inr u -> i = 0 - 1
+    }
+  };
+  (v, (st, sp))
+
+-- Inside one lend: the top index's node read, its value added, its right child's chain pushed.
+fn visit<'x>(v: array_imm 'x Node, st: array i32, sp: i32, r: i32, sum: i64) -> array i32 * (i32 * i64) =
+  let (st, o) = array_replace[i32] (st, sp - 1, 0);
+  let i = match o { inl j -> j | inr j -> 0 - 1 };
+  let (v1, v2) = array_copy['x, Node] v;
+  match array_get['x, Node] (v2, i) {
+    inl g -> let (k, (l, rr)) = *g;
+      let (v3, (st, sp2)) = push_left_ix(v1, st, sp - 1, rr);
+      let _ = array_forget['x, Node] v3;
+      (st, (sp2, sum + host[extend_s](value(k, r))))
+  | inr u -> let _ = array_forget['x, Node] v1; (st, (0, sum))
+  }
+
+-- A resume: one lend of the arena, then the next `await`, or the sum.
+fn step_own(s: SO) -> i64 + SO =
+  let (a, (st, (sp, (r, sum)))) = s;
+  q <- return slice_borrow_imm['x, top, Node, array i32 * (i32 * i64)] a (thunkv Fun 'x < dom.
+      return (thunkv fun (v : array_imm 'x Node) ->
+        o <- return visit(v, st, sp, r, sum);
+        return boxed['x] o));
+  let (a, (st, (sp, sum))) = q;
+  if sp > 0 { inr (a, (st, (sp, (r, sum)))) } else { inl sum }
+
+-- `with spawn { task(n, r) }`: the arena built, then its root's chain pushed under one lend.
+fn start_own(n: i32, r: i32) -> i64 + SO =
+  let a = build(n, 1);
+  let st = array_new[i32] (64, !{ i -> 0 });
+  q <- return slice_borrow_imm['x, top, Node, array i32 * i32] a (thunkv Fun 'x < dom.
+      return (thunkv fun (v : array_imm 'x Node) ->
+        o <- return push_left_ix(v, st, 0, mid(0, n));
+        let (v2, p) = o;
+        let () = array_forget['x, Node] v2;
+        return boxed['x] p));
+  let (a, (st, sp)) = q;
+  if sp > 0 { inr (a, (st, (sp, (r, i64[0])))) } else { inl i64[0] }
+
+fn start_r(r: i32) -> i64 + SO = start_own(200, r)
+
+-- Round robin over the slots until none is pending, then the values summed (p3c's scheduler).
+main -> i64 =
+  let tasks = 3;
+  let mut ts = array_new[i64 + SO] (tasks, start_r);
+  let mut more = true;
+  while more {
+    more = false;
+    for i in 0..tasks {
+      let (t2, old) = array_replace[i64 + SO] (ts, i, (inl i64[0] : i64 + SO));
+      ts = t2;
+      match old {
+        inl cur -> match cur {
+            inl v -> let (t3, _) = array_replace[i64 + SO] (ts, i, (inl v : i64 + SO)); ts = t3
+          | inr k -> match step_own(k) {
+              inl v -> let (t3, _) = array_replace[i64 + SO] (ts, i, (inl v : i64 + SO)); ts = t3
+            | inr k2 -> more = true; let (t3, _) = array_replace[i64 + SO] (ts, i, (inr k2 : i64 + SO)); ts = t3
+            }
+          }
+      | inr back -> ()
+      }
+    }
+  };
+  let mut acc = i64[0];
+  for i in 0..tasks {
+    let (t2, old) = array_replace[i64 + SO] (ts, i, (inl i64[0] : i64 + SO));
+    ts = t2;
+    match old {
+      inl cur -> match cur { inl v -> acc = acc + v | inr k -> () }
+    | inr back -> ()
+    }
+  };
+  acc
