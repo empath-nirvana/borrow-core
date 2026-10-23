@@ -45,11 +45,13 @@ async-r1-nested 2 3 0 4 4 0 # the two lent cells
 async-race 3 15 0 3 3 0 # the three tasks' buffers; one indirect call per resume or cancel of a task, whose code `race` does not know
 async-scheduler 5 6 0 470 464 20 # the scheduler's list nodes, four per round of `run_until_empty`; one indirect call per resume of a stored task, whose code the queue does not know; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
 async-scoped 25 4 0 283 273 0 # the read cell `cfg`, the scheduler's list nodes, rebuilt at each round, and the result list's; the scope's unit cell `d` takes no words; an indirect call per resume of a stored task
+async-slice-iter-await 21 5 0 374 370 4
 async-stack-cancel 808 5 0 10015 11617 0
 async-stack-deep 6104 4750 0 20838453 23785275 14412
 async-stack-nested 24 46 0 1030 1098 40
 async-timers 40 5 0 440 422 0 # the pending and finished lists' nodes; one indirect call per wake or cancel of a stored task
 async-try-join 28 17 0 498 492 0 # the groups' list nodes and the jobs' cells; one indirect call per resume or cancel of a task
+async-two-readers-views 41 8 0 750 737 7
 async-workers-scoped 43 7 1 792 776 0
 axes/borrow-across-loop 2 0 0 30 13 4
 axes/codata-coeffects 2 0 0 27 10 16

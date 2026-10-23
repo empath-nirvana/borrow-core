@@ -50,6 +50,9 @@ corpus/async-scheduler.bc 32:19: handle 1: 1.0 1? inferred (pinned at 32:19: it 
 corpus/async-scoped.bc 30:26: handle 3: 3.0 1? inferred (pinned at 30:26: it may keep its continuation), world top, -, stored @d; 3.1 1 inferred, world top, tail, in-clause
 corpus/async-scoped.bc 31:26: handle 2: 2.0 1? inferred (pinned at 31:26: it may keep its continuation), world top, -, stored @d; 2.1 1 inferred, world top, tail, in-clause
 corpus/async-scoped.bc 32:7: handle 1: 1.0 0 inferred, world top, -, -
+corpus/async-slice-iter-await.bc 31:40: handle 3: 3.0 1? inferred (pinned at 31:40: it may keep its continuation), world top, -, stored @d; 3.1 1 inferred, world top, tail, in-clause
+corpus/async-slice-iter-await.bc 32:7: handle 2: 2.0 0 inferred, world top, -, -
+corpus/async-slice-iter-await.bc 35:3: handle 1: 1.0 0 inferred, world top, -, -
 corpus/async-stack-cancel.bc 21:36: handle 2: 2.0 0 inferred, world top, -, -
 corpus/async-stack-cancel.bc 21:36: handle 4: 4.0 0 inferred, world top, -, -
 corpus/async-stack-cancel.bc 24:11: handle 3: 3.0 1? inferred (pinned at 24:11: it may keep its continuation), world top, -, stored @top; 3.1 1 inferred, world top, tail, in-clause
@@ -77,6 +80,9 @@ corpus/async-try-join.bc 77:3: handle 3: 3.0 0 inferred, world top, -, -
 corpus/async-try-join.bc 78:13: handle 6: 6.0 0 inferred, world top, -, -
 corpus/async-try-join.bc 79:13: handle 5: 5.0 0 inferred, world top, -, -
 corpus/async-try-join.bc 80:13: handle 4: 4.0 0 inferred, world top, -, -
+corpus/async-two-readers-views.bc 47:26: handle 3: 3.0 1? inferred (pinned at 47:26: it may keep its continuation), world top, -, stored @d; 3.1 1 inferred, world top, tail, in-clause
+corpus/async-two-readers-views.bc 48:26: handle 2: 2.0 1? inferred (pinned at 48:26: it may keep its continuation), world top, -, stored @d; 2.1 1 inferred, world top, tail, in-clause
+corpus/async-two-readers-views.bc 49:7: handle 1: 1.0 0 inferred, world top, -, -
 corpus/async-workers-scoped.bc 33:26: handle 4: 4.0 1? inferred (pinned at 33:26: it may keep its continuation), world top, -, stored @d; 4.1 1 inferred, world top, tail, in-clause
 corpus/async-workers-scoped.bc 34:26: handle 3: 3.0 1? inferred (pinned at 34:26: it may keep its continuation), world top, -, stored @d; 3.1 1 inferred, world top, tail, in-clause
 corpus/async-workers-scoped.bc 35:7: handle 2: 2.0 0 inferred, world top, -, -

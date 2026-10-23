@@ -159,6 +159,14 @@ corpus/async-scoped.bc 3.1 tail: -; condition 2 holds; -
 corpus/async-scoped.bc 2.0 stored: machine; condition 2 holds; -
 corpus/async-scoped.bc 2.1 tail: -; condition 2 holds; -
 corpus/async-scoped.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/async-slice-iter-await.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
+corpus/async-slice-iter-await.bc 31:40: handle 3: inside [], finaliser; row []; ops 3.0 stored, 3.1 tail; names 3.0 [], 3.1 []; condition 2 holds
+corpus/async-slice-iter-await.bc 32:7: handle 2: inside [], finaliser; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/async-slice-iter-await.bc 35:3: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/async-slice-iter-await.bc 3.0 stored: machine; condition 2 holds; -
+corpus/async-slice-iter-await.bc 3.1 tail: -; condition 2 holds; -
+corpus/async-slice-iter-await.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/async-slice-iter-await.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/async-stack-cancel.bc flows [0, 1, 2, 3, 4, 4294967295], finaliser; main [1, 2, 3, 4], finaliser
 corpus/async-stack-cancel.bc 24:11: handle 3: inside [4], finaliser; row []; ops 3.0 stored, 3.1 tail; names 3.0 [], 3.1 []; condition 2 holds
 corpus/async-stack-cancel.bc 21:36: handle 4: inside [], finaliser; row [3]; ops 4.0 abortive; names 4.0 []; condition 2 holds
@@ -226,6 +234,15 @@ corpus/async-try-join.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/async-try-join.bc 6.0 abortive: branch; condition 2 holds; -
 corpus/async-try-join.bc 5.0 abortive: branch; condition 2 holds; -
 corpus/async-try-join.bc 4.0 abortive: branch; condition 2 holds; -
+corpus/async-two-readers-views.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
+corpus/async-two-readers-views.bc 47:26: handle 3: inside [], finaliser; row []; ops 3.0 stored, 3.1 tail; names 3.0 [], 3.1 []; condition 2 holds
+corpus/async-two-readers-views.bc 48:26: handle 2: inside []; row []; ops 2.0 stored, 2.1 tail; names 2.0 [], 2.1 []; condition 2 holds
+corpus/async-two-readers-views.bc 49:7: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/async-two-readers-views.bc 3.0 stored: machine; condition 2 holds; -
+corpus/async-two-readers-views.bc 3.1 tail: -; condition 2 holds; -
+corpus/async-two-readers-views.bc 2.0 stored: machine; condition 2 holds; -
+corpus/async-two-readers-views.bc 2.1 tail: -; condition 2 holds; -
+corpus/async-two-readers-views.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/async-workers-scoped.bc flows [0, 1, 2, 3, 4, 4294967295], finaliser; main [1, 2, 3, 4], finaliser
 corpus/async-workers-scoped.bc 33:26: handle 4: inside []; row []; ops 4.0 stored, 4.1 tail; names 4.0 [], 4.1 []; condition 2 holds
 corpus/async-workers-scoped.bc 34:26: handle 3: inside []; row []; ops 3.0 stored, 3.1 tail; names 3.0 [], 3.1 []; condition 2 holds
