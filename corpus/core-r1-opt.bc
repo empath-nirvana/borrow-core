@@ -1,0 +1,26 @@
+-- R1 (SPEC §54) at the count `1?` (the scope's `1?` cell): the operation `2.0 aff 1 ~> i32` is
+-- written at `1?`, so its clause receives `κ` with a cancel branch, `U((i32 -o F i32) & F 1)`; the
+-- clause resumes `κ` once, in tail position, with `10`, and never cancels it. The checker writes
+-- the tail-resuming rule's node, and R1 makes each `perform` a call of the work `λu. return 10`
+-- and removes the node: a tail clause's call does not read its operation's count.
+--
+-- Answer: i32[20].
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def twice : !U (1 -o F[2.0 aff 1 ~> i32] i32) =
+  !thunkv fun (u : 1) ->
+    a <- perform[2.0] u;
+    b <- perform[2.0] ();
+    return (plus (a, b))
+
+main : F i32 =
+  f <- return (unbang twice);
+  u <- return ();
+  handle_with[2](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (p : 1 * U ((i32 -o F i32) & F 1)) ->
+        let (u, k) = p;
+        let () = u;
+        x <- return i32[10];
+        (force k).1 x), ()) : !U (1 * U ((i32 -o F i32) & F 1) -o F i32) * 1)) (force f u)

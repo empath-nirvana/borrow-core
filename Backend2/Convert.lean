@@ -185,14 +185,6 @@ structure CState where
   walkRead : Bool := false
   /-- Converting a walk's read (`TExpr.walkGet`) inside such a walk: its index is in range. -/
   inRange : Bool := false
-  /-- **The direct calls the checked facts license**  `[spec §47]`: at each static name, for each
-  of its operations, whether every `handle` node of the name classifies its clause `tail`, its
-  names meet condition 2 at the program's flow record (`cond2B`, `Checked.flows`), and the nodes
-  hold one closed clause for it (`Backend2/Driver.lean`, `directFacts`). -/
-  direct : Std.HashMap UInt32 (List Bool) := {}
-  /-- The function of each directly called clause, by its operation, with the payload of its
-  handler's outer row: the clause's work, its resumes removed (`TailResumesAt`). -/
-  works : Std.HashMap (UInt32 × Nat) (Nat × List ((UInt32 × UInt32) × LTy) × Option OutInfo) := {}
   /-- The `handle`, `perform` and `raise` nodes erased (`bcc lir --erasure`). -/
   erased : Std.HashMap String Nat := {}
   /-- **The program's machine operations** (SPEC §49, `Backend2/Driver.lean`, `machineOps`). -/
@@ -2349,22 +2341,11 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let a ← vty A
     bindTm (← conv fuel ctx c) (resTy a p) fun r => coerceRes a p q r
   | .effRaise .. => throw "LIR: an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
-  | .effPerform _ _ S o c => do
-    -- `perform` of a tail-resumptive clause: a direct call of the clause's work (`tail_resumes`,
-    -- `TailResumesAt.subst_kappa`, `tail_clause_names`, `Checked.unhandledNames`).  [spec §47]
+  | .effPerform _ _ _ o _ => do
+    -- Every operation a `perform` reaches outside a machine is R1's (SPEC §54): its call is Core's.
     if (← get).mach.contains (o.n, o.i) then
       throw s!"LIR: `effPerform` of the machine operation ({o.n}, {o.i}) outside a machine"
-    let some (fi, ph, _) := (← get).works[(o.n, o.i.toNat)]?
-      | throw s!"LIR: `effPerform` of ({o.n}, {o.i}) with no direct call is outside the pure fragment (N3)"
-    readFact "effPerform:direct call"
-    modify fun st => { st with erased := st.erased.insert "perform" (st.erased.getD "perform" 0 + 1) }
-    let p ← rowPay S
-    unless ph.all fun k => (payIdx p k.1).isSome do
-      throw s!"LIR: `effPerform` of ({o.n}, {o.i}) at a row that does not hold its clause's aborts is outside the pure fragment"
-    let bT ← vty o.B
-    bindTm (← conv fuel ctx c) (← vty o.A) fun v => do
-      let r ← fresh (resTy bT ph)
-      return .letv r (.call fi [v]) (← coerceRes bT ph p r)
+    throw s!"LIR: `effPerform` of ({o.n}, {o.i}), not a machine operation, is outside the pure fragment: its handler's rule is not built (R1, SPEC §54, makes each one whose direct call the licence admits a call in Core)"
   | .effThen _ _ A _ S SM SD u tM tN tD => do
     -- `M then x. N unwind D`: `N` on a value; on an abort the finaliser `D`, then the abort, or
     -- the finaliser's own, handed on (`then_ret`, `then_fin`, `unwind_prefix`).  [spec §47]
@@ -2489,7 +2470,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     -- `[nil-dead]` (SPEC §29): the term at the empty context, the context's slots consumed.
     readFact "nilDead:context"
     return drops (live ctx) (← conv fuel [] c)
-  | .effHandleT .. | .effHandleL .. | .lendR .. | .lendLoopR .. | .iterate .. | .divFuel ..
+  | .effHandleT .. =>
+    throw "internal: an `effHandleT` node reaches the conversion: R1 (SPEC §54) rewrites every one in Core"
+  | .effHandleL .. | .lendR .. | .lendLoopR .. | .iterate .. | .divFuel ..
   | .reify .. | .letPoly .. => outside t
   | t =>
     match transparent? t with
@@ -2599,19 +2582,10 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     convK fuel ctx c K args
   | .effRaise .. => throw "LIR: an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
   | .effPerform _ _ _ o c => do
-    if (← get).mach.contains (o.n, o.i) then
-      readFact "effPerform:machine"
-      bindTm (← conv fuel ctx c) (← vty o.A) fun v => performK K args (o.n, o.i) v
-    else
-      -- A direct call (SPEC §47), its answer handed to `K`.
-      let some (fi, ph, wm) := (← get).works[(o.n, o.i.toNat)]?
-        | throw s!"LIR: `effPerform` of ({o.n}, {o.i}) with no direct call is outside the fragment"
-      readFact "effPerform:direct call"
-      modify fun st => { st with erased := st.erased.insert "perform" (st.erased.getD "perform" 0 + 1) }
-      let bT ← vty o.B
-      bindTm (← conv fuel ctx c) (← vty o.A) fun v => match wm with
-        | some W => pointK K args (.call fi [v]) W
-        | none => resultK K args (.call fi [v]) bT ph
+    unless (← get).mach.contains (o.n, o.i) do
+      throw s!"LIR: `effPerform` of ({o.n}, {o.i}), not a machine operation, is outside the pure fragment: its handler's rule is not built (R1, SPEC §54, makes each one whose direct call the licence admits a call in Core)"
+    readFact "effPerform:machine"
+    bindTm (← conv fuel ctx c) (← vty o.A) fun v => performK K args (o.n, o.i) v
   | .nilDead _ _ _ c => do
     readFact "nilDead:context"
     return drops (live ctx) (← convK fuel [] c K args)
@@ -2677,55 +2651,6 @@ def unSubK : Nat → TExpr → TExpr
 live variables, the continuation's arguments and the value, answering the machine's outcome. -/
 def joinFn (fuel : Nat) (c₂ : Ctx) (A : VTy) (tN : TExpr) (K : Kont) (args : List Var) : CM Nat :=
   joinWith c₂ A args fun ctx' args' => convK fuel ctx' tN K args'
-
-/-- **A tail-resumptive clause's work in a machine** (SPEC §49): `convWork`'s paths, at a handler
-whose outer row has machine operations, each resume's answer handed to `K`; the premise of a
-`[let]` on a path converted in the machine with the rest of the path its join. -/
-def convWorkK (fuel : Nat) (k : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) :
-    CM Tm := do
-  match fuel with
-  | 0 => throw "LIR: the typed term is too deep"
-  | fuel + 1 =>
-  let F ← curMach
-  if resumeB k t then
-    match t.unSub with
-    | .app _ _ y _ _ u _ => do
-      let (pre, c₁, c₂) ← splitCtx ctx u "app"
-      let some (some yv) := c₂[y]? | throw "LIR: a resume's answer is not live"
-      return pre (drops (live c₁) (leaf c₂ (some y) (← applyK F K args yv)))
-    | _ => throw "LIR: a resume"
-  match t with
-  | .bind _ _ A _ u tM tN | .effLet _ _ A _ _ u tM tN =>
-    if tailLeafB k tM && returns0B tN then
-      let (pre, c₁, c₂) ← splitCtx ctx u "bind"
-      return pre (drops (live c₂) (← convWorkK fuel k c₁ tM K args))
-    else if aliasOf 64 tM == some k then
-      let (pre, c₁, c₂) ← splitCtx ctx u "bind"
-      let some (some kv) := c₁[k]? | throw "LIR: an alias of a continuation that is not live"
-      return pre (leaf c₁ (some k) (← convWorkK fuel 0 (some kv :: c₂) tN K args))
-    else
-      let (pre, c₁, c₂) ← splitCtx ctx u "bind"
-      let fn ← joinWith c₂ A args fun ctx' args' => convWorkK fuel (k + 1) ctx' tN K args'
-      let own := live c₂
-      return pre (← convK fuel c₁ tM (.letF fn own.length :: K) (own ++ args))
-  | .sumE _ _ A B _ u tV t₁ t₂ => do
-    let (pre, c₁, c₂) ← splitCtx ctx u "sumE"
-    let aT ← vty A; let bT ← vty B
-    return pre (← bindTm (← conv fuel c₁ tV) (.sum aT bT) fun sv => do
-      let x ← fresh aT; let y ← fresh bT
-      return .case sv x (← convWorkK fuel (k + 1) (some x :: c₂) t₁ K args)
-        y (← convWorkK fuel (k + 1) (some y :: c₂) t₂ K args))
-  | .tensorE _ _ A B _ u tV tM => do
-    let (pre, c₁, c₂) ← splitCtx ctx u "tensorE"
-    let aT ← vty A; let bT ← vty B
-    return pre (← bindTm (← conv fuel c₁ tV) (.pair aT bT) fun pv => do
-      let x ← fresh aT; let y ← fresh bT
-      return .letpair x y pv (← convWorkK fuel (k + 2) (some y :: some x :: c₂) tM K args))
-  | .unitE _ _ _ u tV tM => do
-    let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
-    return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop v (← convWorkK fuel k c₂ tM K args))
-  | .effSub _ _ _ _ _ c => convWorkK fuel k ctx c K args
-  | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
 
 /-- A computation at an outcome, in a value's position: a function of its context, the body of a
 machine of its own.  `[spec §49]` -/
@@ -2961,15 +2886,12 @@ def applyTo (fuel : Nat) (ctx : Ctx) (tF : TExpr) (a : Var) : CM Tm := do
 
 /-- **`handle_n e with (h_ret, hs)`, erased**  `[spec §47]`. Read from the node: its name `n`, its
 operations `E`, its clauses' kinds `ks`, its outer row `Σ` and the masks. Every clause must be
-`abortive`, or `tail` with its direct call licensed (`CState.direct`); any other kind is a
-stored-continuation site, left to the state machines (N3). The handled computation runs in place;
-its value goes to `h_ret`, an abort of one of `n`'s operations to that operation's clause (the
-handler's join: `catch_abort`), an abort of `Σ`'s handed on (`fwd_abort`). A tail-resumptive
-clause is called where it is performed (`effPerform`). -/
+a machine operation's, the node a drive (SPEC §49): an abortive one is R0's and a tail-resumptive one
+whose direct call the licence admits is R1's, each rewritten in Core (SPEC §54). With no machine
+operation the handled computation runs in place, its value to `h_ret`. -/
 def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Count × VTy × VTy)) (fs : Nat → CTy)
     (n : UInt32) (A R : VTy) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite)
     (tc te : TExpr) (boxed : Bool := false) : CM Tm := do
-  let direct := (← get).direct.getD n []
   readFact "effHandleV:kinds"
   -- The handled computation's outcome: with a machine operation (one of the node's clauses that is
   -- not called where it is performed, or one of `Σ`'s), the node is a drive (SPEC §49).
@@ -2979,8 +2901,7 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Count × VTy × VTy
       match k.kind with
       | .abortive => throw "LIR: an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
       | .tail =>
-        unless direct[j]? == some true do
-          throw s!"LIR: `effHandleV`: the clause {n}.{j} is tail-resumptive, but its direct call is not licensed (condition 2, or one closed clause at its nodes): outside the pure fragment"
+        throw s!"internal: `effHandleV`: the clause {n}.{j} is tail-resumptive at a node with no machine operation: R1 (SPEC §54) rewrites the name in Core, or its operation is a machine's"
       | .resumeOnce _ | .stored =>
         throw s!"LIR: `effHandleV`: the clause {n}.{j} is `{k.kind.tag}`, a stored-continuation site (N3): outside the pure fragment"
       | kd => throw s!"LIR: `effHandleV`: the clause {n}.{j} is `{kd.tag}`, whose rule is not built: outside the pure fragment"
@@ -3008,12 +2929,6 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Count × VTy × VTy
         throw "LIR: `effHandleV`: a clause tuple not written in place is outside the pure fragment"
       tuple := some t
   let tailCtx := cur
-  -- The direct calls' functions, made at the first node of the name.
-  for (k, j) in ks.zipIdx do
-    if k.kind == .tail && direct[j]? == some true then
-      let some (cc, c) := parts[j]? | throw "LIR: a clause"
-      let some o := E[j]? | throw "LIR: an operation"
-      ensureWork fuel n j cc.length S o c
   let wrap (b : Tm) : Tm := pre (preH (preCs.foldr (fun f t => f t) b))
   if let some T := teM then
     match tuple with
@@ -3033,107 +2948,6 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Count × VTy × VTy
   let retArm (a : Var) : CM Tm := do return dropAll (some 0) (← applyTo fuel cR tR a)
   unless pt.isEmpty && ps.isEmpty do throw "LIR: an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
   return wrap (← bindTm (← conv fuel c₂ te) aT retArm)
-
-/-- **A tail-resumptive clause's work**, the function a `perform` of its operation calls
-(`[spec §47]`, `tail_resumes`): the clause `λp. let (x, κ) = p; M` with each resume of `κ`
-replaced by its answer (`TailResumesAt 0 M M'`, which the clause's kind gives,
-`classifyHandler_sound`). It takes the argument `x` and answers the operation's answer, at the
-payload of the handler's outer row `Σ`. Made once per operation. -/
-def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
-    (o : Count × VTy × VTy) (c : TExpr) : CM Unit := do
-  if (← get).works.contains (n, j) then return
-  match c.unUse with
-  | .bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => do
-    readFact "effHandleV:tail work"
-    let x ← fresh (← vty o.2.1)
-    let kv ← fresh .unit
-    let ph ← rowPay S
-    let bT ← vty o.2.2
-    let fi ← reserveFn s!"clause {n}.{j}"
-    -- At an outer row with machine operations the work is a machine (SPEC §49).
-    let wm ← outInfo? bT S
-    modify fun st => { st with works := st.works.insert (n, j) (fi, ph, wm) }
-    let ctx₀ : Ctx := some kv :: some x :: none :: List.replicate depth none
-    let (body, ret) ← match wm with
-      | none => pure (← convWork fuel 0 ph ctx₀ tM, resTy bT ph)
-      | some W => pure (← withMachineK W (convWorkK fuel 0 ctx₀ tM), W.ty)
-    -- `κ`'s slot holds a unit: every resume of it is its answer, and it is dropped there.
-    setFn fi { name := s!"clause {n}.{j}", params := [x], body := .letv kv .unit body, ret }
-  | _ => throw s!"LIR: the clause {n}.{j} is not `λp. let (x, κ) = p; M`"
-
-/-- The variable a term answers through the nodes that keep their premise's value (`ret`,
-`unbox`, `[sub]`, …): the alias `return κ`. -/
-def aliasOf : Nat → TExpr → Option Nat
-  | 0, _ => none
-  | f + 1, t => match t with
-    | .var _ _ i _ => some i
-    | .effSub _ _ _ _ _ c => aliasOf f c
-    | t => match transparent? t with
-      | some c => aliasOf f c
-      | none => none
-
-/-- **The clause's body with its resumes removed** (`TailResumesAt`), `κ` in the slot `k`: on
-each path, through `[⊕E]`, `[⊗E]`, `[1E]`, `[let]` and `[sub]`, to the resume `κ.1 y`
-(`resumeB`), whose value is `y`; the right unit `x <- κ.1 y; return x` (`tailLeafB`,
-`returns0B`) is the resume; an alias `κ' <- return κ` moves `κ` to its binder. An abort of the
-path's `[let]`s is handed on at the handler's row's payload `ph`. -/
-def convWork (fuel : Nat) (k : Nat) (ph : Pay) (ctx : Ctx) (t : TExpr) : CM Tm := do
-  match fuel with
-  | 0 => throw "LIR: the typed term is too deep"
-  | fuel + 1 =>
-  let answer (y : Var) : CM Tm := do
-    match payTy ph with
-    | none => return .var y
-    | some _ => return .inj false y
-  if resumeB k t then
-    match t.unSub with
-    | .app _ _ y _ _ u _ => do
-      let (pre, c₁, c₂) ← splitCtx ctx u "app"
-      let some (some yv) := c₂[y]? | throw "LIR: a resume's answer is not live"
-      return pre (drops (live c₁) (leaf c₂ (some y) (← answer yv)))
-    | _ => throw "LIR: a resume"
-  match t with
-  | .bind _ _ A _ u tM tN | .effLet _ _ A _ _ u tM tN =>
-    let row := match t with | .effLet _ _ _ _ S .. => some S | _ => none
-    if tailLeafB k tM && returns0B tN then
-      -- The right unit: the resume's answer is the clause's.
-      let (pre, c₁, c₂) ← splitCtx ctx u "bind"
-      return pre (drops (live c₂) (← convWork fuel k ph c₁ tM))
-    else if aliasOf 64 tM == some k then
-      -- `κ' <- return κ`: the alias's slot holds `κ`.
-      let (pre, c₁, c₂) ← splitCtx ctx u "bind"
-      let some (some kv) := c₁[k]? | throw "LIR: an alias of a continuation that is not live"
-      return pre (leaf c₁ (some k) (← convWork fuel 0 ph (some kv :: c₂) tN))
-    else
-      let (pre, c₁, c₂) ← splitCtx ctx u "bind"
-      let aT ← vty A
-      let p ← match row with | some S => rowPay S | none => pure []
-      match payTy p with
-      | none =>
-        return pre (← bindTm (← conv fuel c₁ tM) aT fun x => convWork fuel (k + 1) ph (some x :: c₂) tN)
-      | some pT =>
-        let m ← fresh (.sum aT pT); let x ← fresh aT; let e ← fresh pT
-        let pass ← coercePay p ph e fun e' => pure (.inj true e')
-        return pre (.letv m (← conv fuel c₁ tM)
-          (.case m x (← convWork fuel (k + 1) ph (some x :: c₂) tN) e (drops (live c₂) pass)))
-  | .sumE _ _ A B _ u tV t₁ t₂ => do
-    let (pre, c₁, c₂) ← splitCtx ctx u "sumE"
-    let aT ← vty A; let bT ← vty B
-    return pre (← bindTm (← conv fuel c₁ tV) (.sum aT bT) fun sv => do
-      let x ← fresh aT; let y ← fresh bT
-      return .case sv x (← convWork fuel (k + 1) ph (some x :: c₂) t₁)
-        y (← convWork fuel (k + 1) ph (some y :: c₂) t₂))
-  | .tensorE _ _ A B _ u tV tM => do
-    let (pre, c₁, c₂) ← splitCtx ctx u "tensorE"
-    let aT ← vty A; let bT ← vty B
-    return pre (← bindTm (← conv fuel c₁ tV) (.pair aT bT) fun pv => do
-      let x ← fresh aT; let y ← fresh bT
-      return .letpair x y pv (← convWork fuel (k + 2) ph (some y :: some x :: c₂) tM))
-  | .unitE _ _ _ u tV tM => do
-    let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
-    return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop v (← convWork fuel k ph c₂ tM))
-  | .effSub _ _ _ _ _ c => convWork fuel k ph ctx c
-  | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
 
 /-- A spine of `lolliE` nodes: its arguments evaluated outermost first, then its function: a
 constant's operation (`expand`), a λ's body (β), or a closure call. -/
@@ -3403,36 +3217,6 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
 end
 
 
-/-- The clauses of a handler pair written in place, `(h_ret, (c₀, (c₁, … ())))`: `n` of them. -/
-def clausesOf : Nat → TExpr → List TExpr
-  | 0, _ => []
-  | n + 1, .tensorI _ _ _ _ _ c rest => c :: clausesOf n rest
-  | _, _ => []
-
-/-- **The directly called clauses' functions, made first** (`ensureWork`): a `perform` may be
-converted before its handler's node (a function made before the `handle` and called inside it).
-Each tail-resumptive clause whose direct call is licensed, at the first `handle` node of its
-name, with the depth of the node's context.  `[spec §47]` -/
-def prepWorks (fuel : Nat) (depth : Nat) (t : TExpr) : CM Unit := do
-  match fuel with
-  | 0 => throw "LIR: the typed term is too deep"
-  | fuel + 1 =>
-  let here : Option (Row × List (Count × VTy × VTy) × UInt32 × List ClauseKinds.HKind × TExpr) :=
-    match t with
-    | .effHandleV _ _ S E _ n _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
-    | .effHandleVB _ _ S E _ n _ _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
-    | _ => none
-  if let some (S, E, n, ks, .tensorI _ _ _ _ _ _ tCs) := here then
-    let direct := (← get).direct.getD n []
-    let cs := clausesOf E.length tCs
-    for (k, j) in ks.zipIdx do
-      if k.kind == .tail && direct[j]? == some true then
-        if let (some c, some o) := (cs[j]?, E[j]?) then
-          ensureWork (1 <<< 22) n j depth S o c
-  for (sc, c) in t.children do
-    let d := match sc with | .push k => depth + k | .fresh k => k
-    prepWorks fuel d c
-
 /-! ### `main` -/
 
 /-- Take the capabilities back from `main`'s value `(caps, a)` (`ncaps` of them, right-nested):
@@ -3496,7 +3280,6 @@ def convMain (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) 
       let c ← ioClos 8 op aT
       binds := (fun b => .letv x c b) :: binds
     cx := cx.push (some x)
-  prepWorks (1 <<< 22) cx.size t
   let body ← conv (1 <<< 22) cx.toList t
   genMerges
   let mT ← repJ (.comp C)
@@ -3593,10 +3376,9 @@ def stackedOf (s : CState) (recursive : Nat → Bool) (stackOps : MachSet)
 /-- Convert a checked `main` to a program; `threaded` the machines whose level's cell is passed on
 (`threadedOf` of a first conversion), `stacked` the stack machines (`stackedOf`). -/
 def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) (ncaps : Nat)
-    (loops : Bool) (census : Bool := false) (direct : Std.HashMap UInt32 (List Bool) := {})
-    (mach : MachSet := {}) (threaded : Std.HashMap Nat LTy := {})
+    (loops : Bool) (census : Bool := false) (mach : MachSet := {}) (threaded : Std.HashMap Nat LTy := {})
     (stacked : Std.HashMap Nat LTy := {}) : Except String (Prog × CState) := do
-  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run { census, direct, mach, threaded, stacked }
+  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run { census, mach, threaded, stacked }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
             statics := s.statics.size }, s)
 

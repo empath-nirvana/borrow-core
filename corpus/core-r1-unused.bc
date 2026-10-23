@@ -1,0 +1,29 @@
+-- R1 (SPEC §54) at a name one of whose operations is never performed: `6.0 lin i32 ~> i32` is,
+-- `6.1 lin i32 ~> i32` is not. R1 declares the work of `6.0` and calls it; `6.1`'s work is reached
+-- by no `perform`, so it is not declared, and its binders have no image in the rewritten program
+-- (`π`'s `inv`, R1's schema names them).
+--
+-- Answer: i32[18].
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def one : !U (i32 -o F[6.0 lin i32 ~> i32, 6.1 lin i32 ~> i32] i32) =
+  !thunkv fun (x : i32) ->
+    a <- perform[6.0] x;
+    return (plus (a, x))
+
+main : F i32 =
+  f <- return (unbang one);
+  x <- return i32[4];
+  handle_with[6](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (p : i32 * U ((i32 -o F i32) & top)) ->
+        let (y, k) = p;
+        z <- return (plus (y, i32[10]));
+        (force k).1 z),
+       ((!thunkv fun (p : i32 * U ((i32 -o F i32) & top)) ->
+        let (w, k) = p;
+        z <- return (plus (w, w));
+        (force k).1 z), ()))
+        : !U (i32 * U ((i32 -o F i32) & top) -o F i32)
+          * (!U (i32 * U ((i32 -o F i32) & top) -o F i32) * 1))) (force f x)

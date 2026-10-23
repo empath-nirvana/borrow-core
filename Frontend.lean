@@ -25,6 +25,7 @@ import Frontend.Check.Copies
 import Frontend.Check.Cells
 import Frontend.Check.Program
 import Frontend.Check.Handled
+import Frontend.Check.Licence
 import Frontend.Check.CrossCheck
 import Frontend.Check.Externs
 import Frontend.Elab.Respan

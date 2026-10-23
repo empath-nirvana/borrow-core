@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.05 · 2026-10-23
+Version 1.06 · 2026-10-23
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -9077,7 +9077,7 @@ program with each `ctl` entry and `kont` at its count (`countedQual`, over the s
 - **The world** is `⊤` only (stage 2, #654's `ℓ_op`).
 - **The rewrite table's bridges** (design §3.2, B1 and B2) are unproved; nothing here uses them.
 
-## 54. Entry 53 — Core → Core effect rewrites (#680): R-pre, the rule-written handlers' producers; step 0, the identity rewrite; R0, abort
+## 54. Entry 53 — Core → Core effect rewrites (#680): R-pre, the rule-written handlers' producers; step 0, the identity rewrite; R0, abort; R1, tail
 
 ### Motivation
 
@@ -9141,12 +9141,10 @@ every existing program. The new core programs (`core-handle-tail`, `core-handle-
 
 ### Open
 
-- **The emission** (the user's decision, #680 comment 6363859134). The checker's emission of
-  `effHandleT` where its classification of a node's clauses is `tail` lands with R1, in R1's
-  entry, gated by R1's admission (§47's licence: every node of the name classifies `tail`). R1
-  rewrites every such node away before the new backend's conversion, so the new backend gains no
-  arm for `effHandleT` or `effHandleL` (OQ4 is withdrawn); a name pinned by a stored node stays
-  `[handle]`'s until R1-ev.
+- **The emission** (the user's decision, #680 comment 6363859134) landed with R1 (below): the
+  checker writes `effHandleT` at the names R1's licence admits, and R1 rewrites every such node
+  away before the new backend's conversion, which gains no arm for `effHandleT` or `effHandleL`
+  (OQ4 is withdrawn); a name pinned by a stored node stays `[handle]`'s until R1-ev.
 - **`clause_tail_replace`** (`ClauseTailReplace`, stated, not proved): the clause
   `λp. let (x, κ) = p; M` and the rule's `tailClause j false vc`, whose work is `M` without its
   resumes, reach the same values at the same memories. Its hypotheses are met at `core-effects-tail`'s
@@ -9367,6 +9365,161 @@ Kept, and why:
 - E1's abort functions (`coercePay`, `coerceRes`, `toResult`, `outAbort`, the `pay` of an outcome):
   the scope deletes E1 after T3's outcome type has no abort summand, which is R5's. They are now
   reached only at an empty payload.
+
+No type, typing rule, machine step, relation clause or elaboration changes; the census is the
+source check's report.
+
+### R1: tail
+
+The second rule of the rewriter (the scope's §R1, both cells, counts `1` and `1?`; the user's
+decision of 2026-10-23, #680 comment 6363859134). The checker writes the tail-resuming rule's node
+(`effHandleT`, §14) at the names its licence admits, and R1 removes every such node before the new
+backend's conversion: each `perform` becomes a direct call of the clause's work, a declaration of
+the program. The new backend has no arm for `effHandleT`: one that reached the conversion would be
+a hard error there.
+
+**The emission** (`Frontend/Check/Checker.lean`, `Frontend/Check/Program.lean`). Where the checker
+classifies every non-abortive clause of a `[handle]` node `tail` (§19), and there is one, at a name
+other than `Div`'s, it writes each such clause's **work**: the clause `!thunkv λp. let (x, κ) = p; M`
+as `!thunkv λx. M′`, `M′` the body with each resume `κ.1 y` replaced by `return y` along the paths
+`TailResumesAt` follows (`dropResumes`: the arms of a `case`, the bodies of `let (a, b)`, `let ()`
+and a `[let]` whose bound computation does not use `κ`, the right unit `x <- X; return x`, an alias
+`κ' <- return κ`); an abortive clause is its own work. The works are at the row `Σ_N` of the
+operations the clauses perform (`tailRow`, from `handlerNames`), and `rEffHandleT`'s premises check
+them (`tailIt`, `hSN`, `hLin`); the handled computation is the one `[handle]`'s arm checked. Where
+the checker does so is the count table's `tail` (`TailGate`):
+- `none`: nowhere, every node `[handle]`'s;
+- `all`: at every such node whose works the rule's premises accept, and `[handle]`'s elsewhere;
+- `names L`: at the nodes of the names `L`; a node of one of them the rule refuses is an internal
+  error.
+
+`checkCounted` checks a program as before (§53), then, where a typed term has such a node, checks
+it again at the same counts at `all`, reads the licence off that check (below, over every typed
+term it returns, at its flow record), and checks it at `names L`, `L` the admitted names, which is
+the program's check: the `all` check itself when it admits every name with a node of the rule. The
+licence read off the program's check admits exactly `L`, an internal error otherwise. The counts are
+the first checks' (§53): the rule's node asks of no operation's count more than `[handle]`'s does.
+The census tables (`kinds`, `grades`, `handled`) are unchanged for every existing program
+(`HandleSite` reports a node of the rule with its rule's kinds, §54 R-pre). `bcc licence` prints the
+licence.
+
+**The licence** (`Frontend/Check/Licence.lean`, §47's, read off the rule's nodes): a name is admitted
+when every `handle` node of it in the checked terms
+- is the tail-resuming rule's;
+- holds no abortive operation;
+- is at one outer row `Σ`, one works' row `Σ_N` and one signature `E`;
+- holds its works written in place (a tuple, `tupleParts`), equal at every node, each closed
+  (`closedAt 0`), at a `Σ_N` whose operations' types mention no operation of the name;
+- holds works that mention no lifetime variable of the node's context (`TExpr.lifeFreeIn`): a work
+  becomes a declaration of the program, at the empty context;
+- meets condition 2 at each operation (`cond2B` at the program's flow record over the names the
+  work performs, `tailNames`, `tail_rule_names`).
+
+A name left reports the first conjunct it fails. `cond2B` and `cond2Names` move here from
+`Frontend/Check/Handled.lean`, which the checker cannot import.
+
+**The rule** (`Rewrite/Admission.lean`, `Rewrite/Tail.lean`, `Rewrite/Hom.lean`). R1's names are the
+names with a node of the rule in the source's `main` but those R0 rewrites, each of which the
+licence over `main` must admit (a hard error otherwise). R1 runs after R0, one name at a time in the
+order of their first nodes, on `main`'s typed term and every `def` body at each use, and on the
+works of the names before it. For a name `n`, its works `g_j` the typed works of its first node (the
+node's `tc`, review S2):
+
+```
+work_{n.j} : !U(A_j ⊸ F_{Σ_N} B_j) = g_j                     a declaration of the program
+perform_{n.j} V : F_Σ B_j   ↦  f <- return (unbang work_{n.j}); (force f) V    (F_{Σ_N} B_j ≤ F_⟦Σ⟧)
+handle_n e with (h, gs)     ↦  a <- e; hf <- return (unbang h); (force hf) a
+⟦Σ⟧ = (Σ ∖ n) ++ (Σ_N ∖ Σ)  at a row holding n; every other row's operations translated
+```
+
+Every type translates homomorphically but at a returner chain holding `n` (`tV`, `tC`, `trRow1`);
+every other constructor is homomorphic (`homLayer`, one layer over every constructor). A `raise` of
+`n`, a node of `n` not the rule's, and a loop node (`iterate`, `divFuel`, `reify`) at a row holding
+`n` (R7: no producer) are hard errors. At a count `1?` the rule's clause never cancels its
+continuation, so the `1?` cell has the same schema. What the rule writes where a source node held a
+type: a `perform`'s argument that is not a variable is bound at the operation's argument type, and
+the removed node's handled computation is written at the type `[handle]` checked it at, translated.
+
+**The works are declarations.** A work's `use` names the declaration `workBase + k`, past every
+declaration of the program; the read-back (`Rewrite/Driver.lean`) declares each work a `perform`
+reaches once, at the empty context, after the instances its body uses and before every declaration
+that calls it. A work no `perform` reaches is not declared.
+
+**Binders.** R1 moves whole typed subterms (a work, a `perform`'s argument, a removed node's handled
+computation and answer clause) with every node's `TInfo`, so every source binder keeps its name, id
+and `linear` declaration; the binders R1 writes are its own (`%R1`) and carry no id. The binders of a
+work no `perform` reaches have no image: `π` maps them to `inv(R1, work)`, R1's schema naming the
+works.
+
+**The guard.** As at R0, with:
+- **G-qual**: a source binder's class is its type's with R1's names' operations removed from its
+  rows (`eraseV`). A type whose class came from such an operation (a codata type whose finish
+  performs it, so that it has no destructor, `dtorB`) loses that class with the operation; no other
+  drop is allowed (`core-effects-loop`: `t0 : U(νX. F[3.0 lin](i32 + U X) & F[3.0 lin] 1)`, linear,
+  becomes droppable). Pending the user's decision on #680: the scope's §4 states R1 one to one.
+- **G-fin**: a written finaliser stays a finaliser of `c′` while its row keeps an operation R0 does
+  not rewrite (R1 keeps a written `[then]` at its translated row), drop glue while its row keeps an
+  operation at `1?` no rule rewrites; the abort arms are R0's names'.
+- **G-bang**: R1's own `!`s are its works', one work's at each call, each the source's persistent
+  work.
+
+**Reject tests and controls** (`scripts/check-rewrite.sh`):
+
+| fault | program | refused by |
+|---|---|---|
+| a `perform` calls the other operation's work (`wrongWork`) | `core-r1-two-ops` | the kernel |
+| a `perform` answers its argument, the work's answer dropped (`dropAnswer`) | `core-effects-tail` | the kernel |
+| a moved work's `linear` binding loses its declaration (`weakenLin`) | `core-r1-linear` | the guard (G-qual) |
+| the node kept (`keepNode`) | `core-effects-tail` | the new backend's conversion (a hard error) |
+
+Two controls are faults the kernel and the guard accept, between operations of one signature:
+`wrongWork` and `dropAnswer` at `core-r1-two-ops-eq`. The gate checks that each is accepted and
+changes the program's output: only the goldens see them.
+
+**Laws.**
+- Per `perform`, at a work that performs nothing: `tail_resume_direct` (`Core/DivHandleLastRuns.lean`),
+  under `tailH`, the value an `effHandleT` node runs as. At a work that performs: [ours] (no corpus
+  program has one: a name such a work performs that the program handles fails condition 2 at the
+  flow record, `core-r1-performs`).
+- The checker's clause conversion: `ClauseTailReplace` [ours] (R-pre).
+- The node's removal over a computation that performs no operation of its name:
+  `HandleTransparent` (`Core/DivHandleLastRuns.lean`), stated, not proved, [ours]; its hypothesis is
+  met at a value (`handleTransparent_hyp_val`). Its route composes `catch_ret` with the frame's
+  invisibility to every step that is not a `perform` of its name.
+- [est] `tail_resumes`, `tail_resumes_answer` (`Core/Handlers.lean`), `kappa_resume_steps`
+  (`Core/EffCancel.lean`); [paper] Xie & Leijen 2021, Thm 5.
+
+**Programs and counts.**
+- At `all`, the rule's premises accept 132 nodes (by source span) of the corpus before this entry's
+  new programs, in 48 programs; none whose works perform. The licence admits 20 names, a node each,
+  in 19 programs: the 11 whose `perform`s §47's direct calls reached in the new backend
+  (`answers-two-types`, `capture-await-raise`, `core-effects-loop`, `core-effects-tail`,
+  `core-r0-forward`, `effects-hof-two-rows`, `gen-produce`, `hygiene-clause-global`,
+  `rec-await-exhausted`, `rec-yield`, `tree-map`, two names) and 8 `corpus/sugar/` programs. It
+  leaves 112 names: 69 with a node that stays `[handle]`'s (a stored node pins the name: R1-ev's
+  target), 40 whose nodes' works differ. `core-handle-tail`'s node, which the program writes, is
+  admitted too, and the new backend now compiles it.
+- `corpus/rewrite.expected`: a program R1 rewrites lists its names, the `perform`s made calls and
+  the nodes removed (at every use) and the works declared; every program lists the names the
+  licence leaves, with the conjunct (`R1left`).
+- `corpus/erasure-backend2.expected`: the conversion erases no `handle` or `perform` of a name R1
+  rewrites; the line counts R1's rewrites (`tail H C`, each instance's body once).
+- `corpus/counts-backend2.expected`: the 11 programs' counts are main's, every count. Five programs
+  rise (`async-map`, `async-mapreduce`, `async-stack-cancel`, `async-stack-deep`,
+  `async-stack-nested`): §47's direct calls were per operation, and licensed the `tail` operation
+  `n.1` of a node that keeps `κ` at `n.0`, which no `perform` reaches; with them gone, `n.1` is a
+  machine operation (DR2) and every row holding it a machine's outcome (T3). Recovery: R5, which
+  deletes DR2 and T3. Each row is recorded.
+- Six new core programs, each with its golden: `core-r1-opt` (the `1?` cell), `core-r1-two-ops`,
+  `core-r1-two-ops-eq`, `core-r1-performs`, `core-r1-linear`, `core-r1-unused`.
+
+**Deletes.** No `perform` of a name §47's licence admits reaches the new backend's conversion.
+Removed: `directFacts` (DR1, and `HNode`'s row and clauses), the direct calls' functions
+(`ensureWork`, `convWork`, `aliasOf`, `prepWorks`, `clausesOf`; E4a, E4b), the work in a machine
+(`convWorkK`, E13), the direct `perform` arms and `convHandle`'s licence checks, and
+`CState.direct` and `CState.works`. `machineOps` (DR2) loses its direct-call conjunct: every
+non-abortive operation of a `[handle]` node is a machine operation. A `perform` of another
+operation is outside the new backend's fragment (its handler's rule, `handle_last`, is not built).
 
 No type, typing rule, machine step, relation clause or elaboration changes; the census is the
 source check's report.
@@ -9743,8 +9896,8 @@ the word IR), the word IR's `load32`/`store32` in `Backend/Flat/`, `Backend/Wasm
 `walkGets`, `TTied.walkGet`, the shift and weakening cases, `walk_copy_len`, `walk_get_split`) and
 `Backend2/Convert.lean`; no change to `CDerives`, `Core/`, `Paper/` or `Support/`. Entry 46 (§47)
 is implemented in `Backend2/Types.lean` (`ofC`'s rows, `payOf`), `Backend2/Convert.lean` (the
-payloads, `convHandle`, `ensureWork`, `convWork`, `prepWorks`, `genLendU`, the effect cases),
-`Backend2/Driver.lean` (`directFacts`, `erasureLine`), the exit status in `Backend2/Interp.lean` and
+payloads, `convHandle`, the effect cases; its direct calls are Core's since §54 *R1*),
+`Backend2/Driver.lean` (`erasureLine`), the exit status in `Backend2/Interp.lean` and
 `Backend2/Lower.lean`, `bcc lir --erasure` and `scripts/compile-backend2.sh`; no change to
 `CDerives`, `Core/`, `Paper/`, `Support/`, the checker or the old backend. Entry 47 (§48) is
 implemented in `Backend2/Convert.lean` (`genFix`, the `boundedFix` case), `Op.cntPred` in
@@ -9782,10 +9935,21 @@ their checker arms (`Frontend/Check/Checker.lean`, `Rules.lean`), the per-perfor
 `Checker.lean`, `Steps.lean`, `Rules.lean`, `Consts.lean`; `Reinfo.lean`), and the identity gate
 `scripts/check-rewrite.sh`. R0 is implemented (`Rewrite/Types.lean`, `Abort.lean`, `R0.lean`):
 every abortive name is rewritten before the new backend's conversion, and Backend2's abort layer
-is removed (§54 *R0*). R1 and later rows are not.
+is removed (§54 *R0*). R1 is implemented: the emission in `Frontend/Check/Checker.lean` and
+`Program.lean` (`tailChecked`), the licence in `Frontend/Check/Licence.lean`, the rule in
+`Rewrite/Admission.lean`, `Tail.lean` and `Hom.lean`, the works' declarations in
+`Rewrite/Driver.lean`, `HandleTransparent` in `Core/DivHandleLastRuns.lean`; Backend2's direct calls
+are removed (§54 *R1*). R7 and later rows are not.
 
 ## Changelog
 
+- **1.06** (2026-10-23) — §54 (#680, R1): the checker writes `effHandleT` at the names its licence
+  admits (`TailGate`, `Frontend/Check/Licence.lean`, §47's licence read off the rule's nodes), and
+  R1 removes every such node before the new backend's conversion: each work a declaration, each
+  `perform` a call of it, the node `a <- e; h a`; both cells (`1`, `1?`). `HandleTransparent` stated
+  [ours]. Backend2's direct calls removed (DR1, E4a, E4b, E13). Six new core programs; reject tests
+  and controls. Goldens and census unchanged; the 11 direct-call programs keep their counts; five
+  async programs rise (recorded, recovery R5).
 - **1.05** (2026-10-23) — §54 (#680, R0): the abort rewrite, the exceptions-as-sums translation of
   every abortive name over the typed program, before the new backend's conversion, re-checked
   once and guarded (π by binder id, G-fin on each abort arm, G-bang with the rule's own `!`); the

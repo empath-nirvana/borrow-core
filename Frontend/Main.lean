@@ -183,7 +183,8 @@ def typedDump (file : String) : IO UInt32 := do
     return 0
 
 /-- Print `file` as the rewriter reads it back (SPEC §54), once: the program's declarations after
-the library's, one declaration per instance, and `main`; then what the read-back made. With `identity`, the
+the library's, one declaration per instance and per R1 work, and `main`; then what the read-back
+made and the names R0 and R1 rewrote. With `identity`, the
 line of the identity criterion (`Backend2.identityLine`). -/
 def rewriteDump (identity : Bool) (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
@@ -194,13 +195,13 @@ def rewriteDump (identity : Bool) (file : String) : IO UInt32 := do
       match Backend2.identityLine k with
       | .error e => IO.eprintln s!"{file}: {e}"; return 1
       | .ok l => IO.println l; return 0
-    match Rewrite.rules k.main >>= fun (_, t, keys, _) =>
-        (Rewrite.readBack k.el k.main k.cnts t).map (·, keys) with
+    match Rewrite.rules k.main >>= fun r =>
+        (Rewrite.readBack k.el k.main k.cnts r.t r.works).map (·, r.keys, r.r1) with
     | .error e => IO.eprintln s!"{file}: {e}"; return 1
-    | .ok ((el', nkeys, ndecls, poly), keys) =>
+    | .ok ((el', nkeys, ndecls, poly), keys, r1) =>
       IO.print (Program.pp ⟨el'.prog.decls.drop el'.lib⟩)
       let r0 := keys.map fun (a, st) => s!"{a.n} {repr st}"
-      IO.println s!"-- rewrite: {nkeys} instances, {ndecls} declarations, {poly} polymorphic; R0 {r0}"
+      IO.println s!"-- rewrite: {nkeys} instances, {ndecls} declarations, {poly} polymorphic; R0 {r0}; R1 {r1}"
       return 0
 
 /-- Print `file`'s LIR (`Backend2/`). -/
@@ -218,6 +219,25 @@ def trusted (file : String) : IO UInt32 := do
   match Backend.trusted file src with
   | .ok s => IO.print s; return 0
   | .error e => IO.eprintln e; return 1
+
+/-- **The tail-resuming rule's licence of `file`** (SPEC §54): each name with a node whose works
+the rule's premises accept, admitted or left with the conjunct it fails, with its number of such
+nodes over the check's typed terms, and the names at whose nodes the program's check writes the
+rule's node. -/
+def licenceDump (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+  | .ok p =>
+    match Check.checkProgram p with
+    | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+    | .ok r =>
+      for (n, l) in r.licence do
+        IO.println s!"{n} {l.word} nodes {(r.tailNodes.lookup n).getD 0}"
+      match r.tail with
+      | .names ns => IO.println s!"tail {ns}"
+      | _ => pure ()
+      return 0
 
 /-- Each `handle` node of `file`'s checked terms, with its clauses' kinds (SPEC §19). -/
 def kinds (file : String) : IO UInt32 := do
@@ -636,6 +656,7 @@ def main (argv : List String) : IO UInt32 := do
     | none => IO.eprintln "usage: bcc tailcalls <n>"; return 2
   | ["trusted", file] => trusted file
   | ["kinds", file] => kinds file
+  | ["licence", file] => licenceDump file
   | ["grades", file] => grades file
   | ["handled", file] => handled file
   | ["sites", file] => sites file

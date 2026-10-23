@@ -11,18 +11,22 @@ checked terms; none reads a backend's state.
   `Rewrite.run`).
 * **G-assure**: `c′.pins ⊆ c.pins`: the rewrite adds no use of a relaxed rule.
 * **G-qual**: each non-persistent binder of `c` keeps its class at its image under `π`
-  (`qualClass`): a linear binder stays linear, a droppable one is not made persistent.
+  (`qualClass`): a linear binder stays linear, a droppable one is not made persistent. The source
+  binder's class is its type's with the operations of R1's names removed from its rows (`eraseV`):
+  a type whose class came from one of them (a codata type whose finish performs it, which then has
+  no destructor) loses that class with the operation, and no other drop is allowed.
 * **G-κ**: each handled operation's count at `c′` is its count at `c`, for every operation no
   rule rewrites.
 * **G-bang**: `c′` has no more `!`-introductions, `!` copies or forgets, or forgets of `unk`, than
   `c` and the rules' own (R0's forwarding answer clauses, each over the source's persistent
-  answer clause).
+  answer clause; R1's works, one work's at each call, each the source's persistent work).
 * **G-fin**: every finaliser of `c` (`[then]`'s `D`, an unwinding borrow's `td`) is reached once on
   each abort path of `c′`, matched by finaliser id (`finIdOf?`: the numbering pass's, carried by
   the rules in the binders' names), checked total. It is a finaliser of `c′` while its row keeps an operation no rule
   rewrites that may end the computation without resuming it (its count is not `1`; for a
-  finaliser the program writes, any operation no rule rewrites: the re-check binds a row of
-  operations at `1` by `[let]`, with no finaliser). For each name of its row a rule rewrites, an
+  finaliser the program writes, any operation R0 does not rewrite: the re-check binds a row of
+  operations at `1` by `[let]`, with no finaliser, and R1 keeps a written `[then]` at its
+  translated row). For each name of its row R0 rewrites, an
   abort arm of `c′` (the `inr` arm of the `case` R0 writes at the finaliser's node) runs it first:
   a written `D` itself (`⟦D⟧ to d. …`, at `D`'s span and erasure), drop glue as the `return ()`
   its drops are read back to (the re-check places the drops), or `td`'s destructor on the lent
@@ -35,9 +39,10 @@ source binder gets an id (`numberBinders`), written into its name (`x#s.k`), whi
 writes and the re-check keeps; every rule that moves a binder moves its `TInfo`, so its id with
 it, and a rule that copies a term (a finaliser on two abort paths) copies its ids. `π` is id
 equality, checked total (every source id has an image) and injective (an image carries one id).
-The binders a rule writes are named by the rule (`%R0…`, `Cx.binder`) and carry no id; R0 maps no
-source binder to `ctl` or `inv`. A program no rule rewrites is not numbered, and `π` is the
-identity binder by binder. **G-qual** reads `π`: a binder keeps its class and, declared `linear`,
+The binders a rule writes are named by the rule (`%R0…`, `%R1…`, `Cx.binder`) and carry no id; no
+source binder maps to `ctl`, and to `inv` only a binder of one of R1's works that no `perform`
+reaches (`inv`, R1's schema names its works), which is not declared. A program no rule rewrites is
+not numbered, and `π` is the identity binder by binder. **G-qual** reads `π`: a binder keeps its class and, declared `linear`,
 stays declared so.
 -/
 
@@ -190,7 +195,8 @@ abbrev Pi := List (Nat × Image)
 /-- **`π`**: each binder of `c` to the binder of `c′` at its node's span and with its name, the
 `k`-th to the `k`-th; the binders a rule writes (`%…`) are no source binder's image. A binder with
 no image is a failure. -/
-def piOf (bs bs' : Array (Option String × String × CVTy × Bool)) : Except String Pi := do
+def piOf (bs bs' : Array (Option String × String × CVTy × Bool)) (inv : List String := []) :
+    Except String Pi := do
   -- An unnumbered source (no rule rewrote it): the identity, binder by binder.
   if bs.all (·.1.isNone) then
     unless bs.size == bs'.size do throw "guard: the rewritten `main` has other binders"
@@ -209,16 +215,50 @@ def piOf (bs bs' : Array (Option String × String × CVTy × Bool)) : Except Str
     seen := seen.insert id
     match img.get? id with
     | some k' => π := π.push (k, .binder k')
-    | none => throw s!"guard: the binder `{x}` has no image in the rewritten `main`"
+    | none =>
+      -- A binder of one of R1's works no `perform` reaches: the work is not declared.
+      if inv.contains id then π := π.push (k, .inv "R1" "work")
+      else throw s!"guard: the binder `{x}` has no image in the rewritten `main`"
   pure π.toList
 
+mutual
+/-- `A` with the operations of the names `ns` removed from every row it mentions. -/
+def eraseV (ns : List UInt32) : CVTy → CVTy
+  | .tensor A B => .tensor (eraseV ns A) (eraseV ns B)
+  | .sum A B => .sum (eraseV ns A) (eraseV ns B)
+  | .thunk C => .thunk (eraseC ns C)
+  | .ref A => .ref (eraseV ns A)
+  | .imm l A => .imm l (eraseV ns A)
+  | .mut l A => .mut l (eraseV ns A)
+  | .box l A => .box l (eraseV ns A)
+  | .bang A => .bang (eraseV ns A)
+  | .mu A => .mu (eraseV ns A)
+  | .fam L => .fam (eraseV ns L)
+  | A => A
+/-- `C` with the operations of the names `ns` removed from every row it mentions. -/
+def eraseC (ns : List UInt32) : BoCa.Fig16.LogRel.Core.CTy → BoCa.Fig16.LogRel.Core.CTy
+  | .ret A => .ret (eraseV ns A)
+  | .arr A C => .arr (eraseV ns A) (eraseC ns C)
+  | .amp C D => .amp (eraseC ns C) (eraseC ns D)
+  | .top => .top
+  | .all x b C => .all x b (eraseC ns C)
+  | .nu C => .nu (eraseC ns C)
+  | .eff m i c w A B fin C =>
+    if ns.contains m then eraseC ns C
+    else .eff m i c w (eraseV ns A) (eraseV ns B) (eraseC ns fin) (eraseC ns C)
+end
+
 /-- Each id's binders' classes and declarations, joined over its copies: the source's strictest,
-the image's loosest. -/
-def byId (bs : Array (Option String × String × CVTy × Bool)) (src : Bool) :
+the image's loosest. A source binder's class is its type's with the operations of the names `er`
+removed from its rows (`eraseV`): R1 removes those names' operations, and a type whose class came
+from one (a codata type whose finish performs it, so that it has no destructor, `dtorB`) loses that
+class with it. -/
+def byId (bs : Array (Option String × String × CVTy × Bool)) (src : Bool) (er : List UInt32 := []) :
     Std.HashMap String (Nat × Bool) := Id.run do
   let mut m : Std.HashMap String (Nat × Bool) := {}
   for (id?, _, A, lin) in bs do
     if let some id := id? then
+      let A := if src && !er.isEmpty then eraseV er A else A
       let q := if A.persistent then 0 else qualClass A
       m := match m.get? id with
         | none => m.insert id (q, lin)
@@ -227,8 +267,9 @@ def byId (bs : Array (Option String × String × CVTy × Bool)) (src : Bool) :
 
 /-- **The guard** over the source `c`, the re-checked `c′`, the names of the operations the rewrite
 eliminates, the `!`-introductions its rules write, and the re-check's typed terms. Returns `π`. -/
-def guard (fuel : Nat) (c c' : Checked) (t₀ : TExpr) (ruled : List UInt32) (ruleBangs : Nat)
-    (terms' : List (Nat × TExpr)) : Except String Pi := do
+def guard (fuel : Nat) (c c' : Checked) (t₀ : TExpr) (ruledAbort ruledTail : List UInt32)
+    (ruleBangs : Nat) (inv : List String) (terms' : List (Nat × TExpr)) : Except String Pi := do
+  let ruled := ruledAbort ++ ruledTail
   -- G-main.
   unless c'.C == c.C do throw "guard G-main: the rewritten `main` has another type"
   unless (c'.ctx.map fun s => (s.ty, s.live)) == (c.ctx.map fun s => (s.ty, s.live)) do
@@ -240,7 +281,7 @@ def guard (fuel : Nat) (c c' : Checked) (t₀ : TExpr) (ruled : List UInt32) (ru
   let fs ← facts fuel t₀ {}
   let fs' ← facts fuel c'.t {}
   -- G-qual, through π: a binder keeps its class and, declared `linear`, stays declared so.
-  let π ← piOf fs.binders fs'.binders
+  let π ← piOf fs.binders fs'.binders inv
   if fs.binders.all (·.1.isNone) then
     for (k, img) in π do
       let some (_, x, A, lin) := fs.binders[k]? | throw "guard: a binder out of range"
@@ -250,10 +291,11 @@ def guard (fuel : Nat) (c c' : Checked) (t₀ : TExpr) (ruled : List UInt32) (ru
         throw s!"guard G-qual: the binder `{x}` of class {qualClass A} is made class {qualClass A'}"
       if lin && !lin' then throw s!"guard G-qual: the binder `{x}` is declared `linear` and its image is not"
   else
-    let src := byId fs.binders true
+    let src := byId fs.binders true ruledTail
     let img := byId fs'.binders false
     for (id, (q, lin)) in src.toList do
-      let some (q', lin') := img.get? id | throw s!"guard G-qual: the binder {id} has no image"
+      let some (q', lin') := img.get? id
+        | if inv.contains id then continue else throw s!"guard G-qual: the binder {id} has no image"
       if q' < q then throw s!"guard G-qual: the binder {id} of class {q} is made class {q'}"
       if lin && !lin' then throw s!"guard G-qual: the binder {id} is declared `linear` and its image is not"
   -- G-κ.
@@ -277,7 +319,7 @@ def guard (fuel : Nat) (c c' : Checked) (t₀ : TExpr) (ruled : List UInt32) (ru
     -- Each finaliser kept while its row keeps an operation no rule rewrites that may end the
     -- computation without resuming it (a finaliser the program writes: any such operation) …
     let kept := fs.fins.toList.filter fun fn =>
-      fn.ops.any fun (n, weak) => !ruled.contains n && (fn.written || weak)
+      fn.ops.any fun (n, weak) => (fn.written && !ruledAbort.contains n) || (weak && !ruled.contains n)
     let ids := (fs.fins.toList.filterMap (·.fid)).eraseDups
     for f in ids do
       let want := count kept (·.fid == some f)
@@ -288,7 +330,7 @@ def guard (fuel : Nat) (c c' : Checked) (t₀ : TExpr) (ruled : List UInt32) (ru
     -- drop glue as `return ()`, `td`'s destructor on the arm's spine.
     for f in ids do
       let atF := fs.fins.toList.filter (·.fid == some f)
-      let want := atF.foldl (fun n g => n + count g.names ruled.contains) 0
+      let want := atF.foldl (fun n g => n + count g.names ruledAbort.contains) 0
       let some fn := atF.head? | continue
       let runs := fs'.arms.toList.filter fun (g, b, d) =>
         g == some f &&

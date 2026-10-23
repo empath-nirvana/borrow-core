@@ -72,6 +72,14 @@ inductive Seed where
   | injIndex
   | swapDispatch
   | swapFwd
+  /-- R1's faults (`Rewrite/Tail.lean`): a `perform` of the operation `j` calls the work of
+  `j + 1` (`wrongWork`); a `perform` answers its argument, the work's answer dropped
+  (`dropAnswer`); a moved work's `linear` binding loses its declaration (`weakenLin`); the node is
+  kept, not removed (`keepNode`). `wrongWork` and `dropAnswer` are controls where the types agree. -/
+  | wrongWork
+  | dropAnswer
+  | weakenLin
+  | keepNode
   deriving DecidableEq, Repr, Inhabited
 
 /-- A seed by its name. -/
@@ -85,6 +93,10 @@ def Seed.ofString? : String → Option Seed
   | "injIndex" => some .injIndex
   | "swapDispatch" => some .swapDispatch
   | "swapFwd" => some .swapFwd
+  | "wrongWork" => some .wrongWork
+  | "dropAnswer" => some .dropAnswer
+  | "weakenLin" => some .weakenLin
+  | "keepNode" => some .keepNode
   | _ => none
 
 /-- What R0's run records for the guard, per node visited (a `def`'s body at each use), and the

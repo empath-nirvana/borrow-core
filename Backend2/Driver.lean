@@ -36,14 +36,12 @@ def extsOf (m : Frontend.Check.IOMain) : Except String (List Ext) :=
     | .clockSleep => pure (.io .clockSleep)
     | .harness => throw s!"extern `{x.name}` is the model's harness and is not compiled"
 
-/-- A `handle` node of the typed term, as the direct-call facts read it: its name, operations,
-outer row, clauses' kinds and its handler pair's erasure. -/
+/-- A `handle` node of the typed term, as the machine operations read it: its name, operations
+and clauses' kinds. -/
 structure HNode where
   n : UInt32
   E : List (Count × VTy × VTy)
-  S : Row
   ks : List ClauseKinds.HKind
-  H : Expr
   /-- The node is `effHandleVB`: its clauses receive `κ` boxed (BOXED-κ, SPEC §28). -/
   boxed : Bool := false
 
@@ -52,53 +50,22 @@ def hnodes : Nat → TExpr → List HNode
   | 0, _ => []
   | f + 1, t =>
     let here : List HNode := match t with
-      | .effHandleV _ _ S E _ n _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, false⟩]
-      | .effHandleVB _ _ S E _ n _ _ _ _ ks _ _ tc _ => [⟨n, E, S, ks, tc.erase, true⟩]
+      | .effHandleV _ _ _ E _ n _ _ _ ks _ _ _ _ => [⟨n, E, ks, false⟩]
+      | .effHandleVB _ _ _ E _ n _ _ _ _ ks _ _ _ _ => [⟨n, E, ks, true⟩]
       | _ => []
     here ++ t.children.flatMap fun (_, c) => hnodes f c
 
-/-- **The direct calls the checked facts license**  `[spec §47]`: for each static name, for each of
-its operations, whether every `handle` node of the name
-- classifies the operation's clause `tail` (`ks`, `classifyHandler_sound`),
-- holds names of the clause's own code (`handlerNames`; its row's names where it has none) that
-  `main`'s flow record cannot catch (`cond2B` at `Checked.flows`, which gives
-  `Checked.unhandledNames`: no frame between a `perform` and its handler catches them), and
-- holds one clause for it, closed (`closedAt 0`), at one outer row and one signature,
-so that the clause a `perform` reaches is known and needs nothing from its handler's frame. -/
-def directFacts (c : Frontend.Check.Checked) : Std.HashMap UInt32 (List Bool) := Id.run do
-  let nodes := hnodes Frontend.Check.copiesFuel c.t
-  let flows := c.flows
-  let mut out : Std.HashMap UInt32 (List Bool) := {}
-  for h in nodes do
-    if out.contains h.n then continue
-    let same := nodes.filter (·.n == h.n)
-    let hs := match h.H with | .pair _ hs => some hs | _ => none
-    let ok := h.E.zipIdx.map fun (_, j) =>
-      same.all fun g =>
-        let gs := match g.H with | .pair _ hs => some hs | _ => none
-        let names := Check.handlerNames g.E g.H
-        let row := (g.S.map (·.n)).eraseDups
-        let cl := gs.bind fun hs => Check.clauseExpr hs j
-        (g.ks[j]?.map (·.kind)) == some .tail &&
-          Frontend.Check.cond2B flows (Frontend.Check.cond2Names row ((names[j]?).getD none)) &&
-          (match cl with | some e => closedAt 0 e | none => false) &&
-          cl == hs.bind (fun hs => Check.clauseExpr hs j) &&
-          decide (CTy.effOf g.S .unit = CTy.effOf h.S .unit) && decide (g.E = h.E)
-    out := out.insert h.n ok
-  return out
-
-/-- **The program's machine operations**  `[spec §49]`: each control operation `(n, j)` whose
-clause at some `handle` node of `n` is neither abortive nor called where it is performed
-(`directFacts`): its `perform` suspends the computation, and the node's drive runs the clause on
-the argument and `κ`. Read off the nodes' kinds (`ks`, `classifyHandler_sound`) and the direct
-calls' facts. -/
+/-- **The program's machine operations**  `[spec §49]`: each control operation `(n, j)` of a
+`handle` node of `n` that is not abortive: its `perform` suspends the computation, and the node's
+drive runs the clause on the argument and `κ`. Read off the nodes' kinds (`ks`,
+`classifyHandler_sound`). An abortive operation is R0's and an operation whose direct call the
+licence admits R1's, each rewritten in Core (SPEC §54): neither reaches the conversion. -/
 def machineOps (c : Frontend.Check.Checked) : MachSet := Id.run do
   let nodes := hnodes Frontend.Check.copiesFuel c.t
-  let direct := directFacts c
   let mut out : MachSet := {}
   for h in nodes do
     for (k, j) in h.ks.zipIdx do
-      unless k.kind == .abortive || (k.kind == .tail && (direct.getD h.n [])[j]? == some true) do
+      unless k.kind == .abortive do
         out := out.insert (h.n, j.toUInt32)
   return out
 
@@ -181,8 +148,7 @@ def lirOfChecked (k : Backend.CheckedProg) (census : Bool := false) :
   let ctx := c.ctx.map fun s => (s.ty, s.live)
   let run (threaded stacked : Std.HashMap Nat LTy) :
       Except String (Prog × CState × Std.HashMap Nat LTy × Std.HashMap Nat LTy) := do
-    let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c) (machineOps c)
-      threaded stacked
+    let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (machineOps c) threaded stacked
     let p := { p with exits := k.exits }
     if st.done.isEmpty then return (p, st, {}, {})
     -- A call in tail position whose callee's suspended computations may be the machine's own
@@ -231,7 +197,8 @@ outside the fragment it counts the `handle` nodes with a clause of kind `once` o
 stored-continuation sites) and the others no rule takes. At a program R0 rewrites (SPEC §54), the
 line also counts what R0 rewrote in Core before the conversion (`rewritten H P R`: the handler
 nodes, the `perform`s at a row holding an abortive name, and the `raise`s, each instance's body
-once). -/
+once); at a program R1 rewrites, what R1 rewrote (`tail H C`: the nodes removed and the
+`perform`s made calls, each instance's body once). -/
 def erasureLine (k₀ : Backend.CheckedProg) : String := Id.run do
   let (k, rep) ← match Rewrite.run k₀ with
     | .ok r => pure r
@@ -241,11 +208,14 @@ def erasureLine (k₀ : Backend.CheckedProg) : String := Id.run do
   let rw := if ruled.isEmpty then "" else match Rewrite.r0Counts k₀.main ruled with
     | .ok n => s!" rewritten {n.handles} {n.performs} {n.raises}"
     | .error e => s!" rewritten error: {e}"
+  -- R1's rewrites (SPEC §54), per instance: the nodes removed and the `perform`s made calls.
+  let tl := if rep.r1.isEmpty then "" else match Rewrite.r1Counts k₀.main rep.r1 with
+    | .ok (h, p) => s!" tail {h} {p}"
+    | .error e => s!" tail error: {e}"
+  let rw := rw ++ tl
   let c := k.main
   let nodes := hnodes Frontend.Check.copiesFuel c.t
-  let direct := directFacts c
-  let erasable (g : HNode) : Bool := g.ks.zipIdx.all fun (h, j) =>
-    h.kind == .abortive || (h.kind == .tail && (direct.getD g.n [])[j]? == some true)
+  let erasable (g : HNode) : Bool := g.ks.all fun h => h.kind == .abortive
   let storedB (g : HNode) : Bool := g.ks.any fun h => match h.kind with
     | .stored | .resumeOnce _ => true
     | _ => false
@@ -274,16 +244,25 @@ def identityLine (k : Backend.CheckedProg) : Except String String := do
   let head := s!"instances {rep.keys} decls {rep.decls} poly {rep.poly}"
   let r0 := if rep.r0.isEmpty then "" else
     " R0" ++ String.join (rep.r0.map fun (n, st) => s!" {n}:{st.replace " " ""}")
+  -- The licence's names R1 leaves (SPEC §54), each with the conjunct it fails.
+  let left := k.licence.filterMap fun (n, l) => match l with
+    | .left why => some s!" {n}:{why.replace " " "-"}"
+    | .admitted => none
+  let r1left := if left.isEmpty then "" else " R1left" ++ String.join left
   let ruled := rep.r0.filterMap fun (n, st) => if st == "rewritten" then some n else none
-  if !ruled.isEmpty then
-    let st ← Rewrite.r0Counts k.main ruled
+  if !ruled.isEmpty || !rep.r1.isEmpty then
     let lir := match lirOfChecked k, lirOfChecked k' with
       | _, .ok _ => "ok"
       | .error _, .error _ => "outside"
       | .ok _, .error _ => "red"
-    pure (head ++ r0 ++ s!" raises {st.raises} handles {st.handles} lets {st.lets} thens {st.thens}" ++
-      s!" subs {st.subs} performs {st.performs} forwards {st.forwards} ulends {st.ulends}" ++
-      s!" pi {rep.moved} lir {lir}")
+    let r0s ← if ruled.isEmpty then pure "" else do
+      let st ← Rewrite.r0Counts k.main ruled
+      pure (s!" raises {st.raises} handles {st.handles} lets {st.lets} thens {st.thens}" ++
+        s!" subs {st.subs} performs {st.performs} forwards {st.forwards} ulends {st.ulends}")
+    let r1 := if rep.r1.isEmpty then "" else
+      " R1" ++ String.join (rep.r1.map fun n => s!" {n}:rewritten") ++
+        s!" calls {rep.r1calls} nodes {rep.r1nodes} works {rep.r1works}"
+    pure (head ++ r0 ++ r0s ++ r1 ++ r1left ++ s!" pi {rep.moved} lir {lir}")
   else
     let id ← Rewrite.identity k.main k'.main
     let lir := match lirOfChecked k, lirOfChecked k' with
@@ -292,7 +271,8 @@ def identityLine (k : Backend.CheckedProg) : Except String String := do
       | _, _ => "differs"
     let ms := id.mismatches.map fun (m, n) => s!" {m}:{n}"
     pure (s!"{head} uses {id.uses} " ++
-      s!"erasure {id.erasure} lir {lir} mismatches {id.mismatches.length}" ++ String.join ms ++ r0)
+      s!"erasure {id.erasure} lir {lir} mismatches {id.mismatches.length}" ++ String.join ms ++ r0 ++
+      r1left)
 
 /-- **The LIR every compile reads**: `lirOf`'s, linted (`Backend2/Lint.lean`). The lowering does
 not track consumption (`Lower.vals`), so a variable used twice would lower to a use after free;
@@ -411,9 +391,9 @@ def watTimed (file src : String) : IO (Except String String) := do
     let k ← ExceptT.mk <| stage "io main" (fun _ => "") fun _ =>
       match Frontend.Check.ioMainOf r.el.prog c with
         | .ok io =>
-          let cnts : Frontend.Check.CntTable := { ops := r.grades.table }
+          let cnts : Frontend.Check.CntTable := { ops := r.grades.table, tail := r.tail }
           pure ({ prog := r.el.prog, main := c, io := io, cnts := cnts, el := r.el,
-                  exits := c.exitsOnDivError } : Backend.CheckedProg)
+                  exits := c.exitsOnDivError, licence := r.licence } : Backend.CheckedProg)
         | .error e => throw s!"{file}: {e}"
     let k ← ExceptT.mk <| stage "rewrite" (fun (_ : Backend.CheckedProg) => "") fun _ =>
       (rewritten k).mapError fun e => s!"{file}: {e}"

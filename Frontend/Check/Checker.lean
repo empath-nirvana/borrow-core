@@ -260,6 +260,88 @@ def lastIt (E : Env) {Δ : LifeCtx} {T : List CVTy} (sp hcSp : Span) (k : Nat)
    else err sp "a handler's name is not `Div`'s"
   else err sp "a handler's name is not 0"
 
+/-! #### The tail-resuming rule's works, from a classified clause  `[spec §54]`
+
+At a `handle` node whose clauses the checker classified (`classifyHandler`) `tail` at every
+non-abortive operation, each such operation's clause gets its **work**: the clause
+`!thunkv λp. let (x, κ) = p; M` written as `!thunkv λx. M′`, `M′` the body `M` with each resume
+`κ.1 y` replaced by its answer `return y`, along the paths `TailResumesAt` follows: the arms of a
+`case`, the bodies of `let (a, b)`, `let ()` and a `[let]` whose bound computation does not use
+`κ`, the right unit `x <- X; return x` (whose frame is dropped), and an alias `κ' <- return κ`
+(whose binding is dropped). An abortive operation's clause is its work. The works are then checked,
+at the rule's types, by `rEffHandleT`'s premises (`tailIt`). Where the checker writes the node is
+`CntTable.tail` (`TailGate`). -/
+
+/-- `N` answers the variable `x`, through `[let]`s of `return x` that rebind it (`returns0B`). -/
+def returnsVar (x : String) : Comp → Bool
+  | .ret _ (.var _ y) => y == x
+  | .bind _ z _ (.ret _ (.var _ y)) N _ => y == x && returnsVar z.name N
+  | _ => false
+
+/-- `M` with each resume of `κ` (the name `k`) on its paths replaced by its answer
+(`TailResumesAt`); none where a path does not end in a resume, or uses `κ` on the way. -/
+def dropResumes (k : String) : Comp → Option Comp
+  | .app sp (.proj _ true (.force _ κ)) y =>
+      if κ.name == k && y.name != k then some (.ret sp (.var y.span y.name)) else none
+  | .bind sp x A M N lin =>
+      -- The right unit `x <- X; return x`: `X` without its resumes.
+      (if returnsVar x.name N then dropResumes k M else none) <|>
+      -- `x <- e; B`, `e` not using `κ`.
+      (if !mentionsC k M && x.name != k then
+        (fun N' => Comp.bind sp x A M N' lin) <$> dropResumes k N else none) <|>
+      -- The alias `κ' <- return κ; B`, `B` not using `κ`.
+      (match M with
+        | .ret _ (.var _ y) =>
+            if y == k && x.name != k && !mentionsC k N then dropResumes x.name N else none
+        | _ => none)
+  | .case sp V x M y N =>
+      if !mentionsV k V && x.name != k && y.name != k then do
+        pure (.case sp V x (← dropResumes k M) y (← dropResumes k N))
+      else none
+  | .letPair sp a b V M =>
+      if !mentionsV k V && a.name != k && b.name != k then
+        (Comp.letPair sp a b V ·) <$> dropResumes k M
+      else none
+  | .letUnit sp V M => if !mentionsV k V then (Comp.letUnit sp V ·) <$> dropResumes k M else none
+  | _ => none
+
+/-- The work of a `tail` clause: `!thunkv λp. let (x, κ) = p; M` as `!thunkv λx. M′`
+(`dropResumes`), the argument at the type the clause's binder writes for it. -/
+def tailWork : Val → Option Val
+  | .bangThunkv csp (.lam lsp p (.tensor _ As _) (.letPair _ x κ (.var _ p') M)) =>
+      if p' == p.name && x.name != κ.name && !mentionsC p.name M then
+        (fun M' => Val.bangThunkv csp (.lam lsp x As M')) <$> dropResumes κ.name M
+      else none
+  | _ => none
+
+/-- The components of a clause tuple `(c₀, (c₁, … ()))` as written, through its ascription. -/
+def clauseVals : Val → Option (List Val)
+  | .ascribe _ V _ => clauseVals V
+  | .pair _ c rest => (c :: ·) <$> clauseVals rest
+  | .unit _ => some []
+  | _ => none
+
+/-- **The works of a node whose every non-abortive clause the checker classified `tail`**: each
+`tail` clause's work (`tailWork`), each abortive one's clause, as the tuple `(g₀, (g₁, … ()))`;
+none where an operation's clause is neither, or is not written in place. -/
+def tailWorks (sp : Span) (hc : Val) (Es : List (CCount × CVTy × CVTy))
+    (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind) : Option Val := do
+  let cs ← clauseVals hc
+  if cs.length != Es.length || ks.length != Es.length then none
+  let gs ← ((cs.zip Es).zip ks).mapM fun ((c, o), kd) =>
+    if o.1 == .zero then some c
+    else if kd.kind == .tail then tailWork c
+    else none
+  pure (gs.foldr (fun g t => Val.pair sp g t) (.unit sp))
+
+/-- **The row the works run at** (`Σ_N`): the operations of the handler's outer row `S` of the
+names the clauses' own code performs or raises (`handlerNames`), at the non-abortive operations;
+none where a clause's names are not read. -/
+def tailRow (S : CRow) (Es : List (CCount × CVTy × CVTy)) (H : CExpr) : Option CRow := do
+  let ns ← ((handlerNames Es H).zip Es).filterMapM fun (nm, o) =>
+    if o.1 == .zero then pure none else nm.map some
+  pure (S.filter fun o => ns.any (·.contains o.n))
+
 /-! ### The checker -/
 
 set_option maxHeartbeats 400000 in
@@ -643,8 +725,42 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                         let rM ← chkC n E Δ T M
                           (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) A)
                         if h₂ : overlapOK T rH.F.u rM.F.u = true then
-                          pure ⟨_, rEffHandle { sp, srec := st } (classifyHandler Es rH.t) site hr' hc' rH hp hv
-                            hn0 hnS hlen hdv rM h₂⟩
+                          let ks := classifyHandler Es rH.t
+                          -- The tail-resuming rule's node (`effHandleT`, SPEC §54), where the
+                          -- classification is `tail` at every non-abortive operation, and there
+                          -- is one: its works written from the classified clauses (`tailWorks`),
+                          -- at the row of the operations the clauses perform (`tailRow`), and
+                          -- checked by `rEffHandleT`'s premises (`tailIt`). The handled
+                          -- computation is the one checked here. Where the checker writes it is
+                          -- `CntTable.tail`; otherwise the node is `[handle]`'s.
+                          let tailNode : CheckM (Option (Res Δ T (.comp (effOf S R)))) := do
+                            unless nm != BoCa.divEff do return none
+                            unless (Es.zip ks).all (fun (o, kd) => o.1 == .zero || kd.kind == .tail) &&
+                                Es.any (·.1 != .zero) do
+                              return none
+                            let some gs := tailWorks hc.span hc Es ks | return none
+                            let some SN := tailRow S Es rH.t.erase | return none
+                            let rc ← chkV n E Δ T gs (BoCa.Fig16.LogRel.Core.ansesTy S SN R Es)
+                            let rr' : Res Δ T (.val (BoCa.Fig16.LogRel.Core.retTy S A R)) :=
+                              cast (by rw [hr']) rr
+                            pure (some (← tailIt E sp hc.span k site st rr' rc rM))
+                          let vNode : Res Δ T (.comp (effOf S R)) :=
+                            rEffHandle { sp, srec := st } ks site hr' hc' rH hp hv hn0 hnS hlen hdv rM h₂
+                          match E.scope.cnts.tail with
+                          | .none => pure ⟨_, vNode⟩
+                          | .all =>
+                            match ← attempt tailNode with
+                            | .ok (some r) => pure ⟨_, r⟩
+                            | _ => pure ⟨_, vNode⟩
+                          | .names ns =>
+                            if ns.contains nm then
+                              match ← attempt tailNode with
+                              | .ok (some r) => pure ⟨_, r⟩
+                              | .ok none => err sp (s!"internal error: the licence admits the name {k} " ++
+                                  "(SPEC §54), but this node's clauses are not all `tail`")
+                              | .error e => err sp (s!"internal error: the licence admits the name {k} " ++
+                                  s!"(SPEC §54), but the tail-resuming rule refuses this node: {e.msg}")
+                            else pure ⟨_, vNode⟩
                         else throw (splitErr E T sp rH.F.u rM.F.u)
                        else err sp divHandleMsg
                       else err sp "a handler has at most 2^32 operations"

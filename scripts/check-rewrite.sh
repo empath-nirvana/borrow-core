@@ -10,15 +10,18 @@
 #   against the source's, byte for byte (`same`; `outside` when both are outside the new backend's
 #   fragment with one message; `differs`); and the typed terms' mismatches, node by node and field
 #   by field modulo spans, by node kind and field (`poly:` inside a polymorphic declaration's body);
-# * at a program R0 rewrites: its abortive names, each `rewritten` or `left` with its reason; the
-#   source nodes R0 rewrote, by rule (`main` and each instance's body once); the binders `π` maps
-#   elsewhere; and whether the new backend compiles the rewritten program (`ok`), both are outside
-#   its fragment (`outside`), or only the source compiles (`red`).
+# * at a program R0 or R1 rewrites: R0's abortive names, each `rewritten` or `left` with its
+#   reason, and the source nodes R0 rewrote, by rule (`main` and each instance's body once); R1's
+#   names, the `perform`s it made calls and the nodes it removed (at every use) and the works it
+#   declared; the binders `π` maps elsewhere; and whether the new backend compiles the rewritten
+#   program (`ok`), both are outside its fragment (`outside`), or only the source compiles (`red`);
+# * at every program, the names the tail-resuming rule's licence leaves (`R1left`), each with the
+#   conjunct it fails (SPEC §54).
 #
 # The gate: every line of a program no rule rewrites has `erasure same` or `beta` and `lir same`
-# or `outside`, and every line of a program R0 rewrites `lir ok` or `outside`; the table is pinned
-# in corpus/rewrite.expected, so a change shows here; R0's seeded faults are refused; and its
-# controls (faults only the goldens see) change the output.
+# or `outside`, and every line of a program R0 or R1 rewrites `lir ok` or `outside`; the table is
+# pinned in corpus/rewrite.expected, so a change shows here; the rules' seeded faults are refused;
+# and their controls (faults only the goldens see) change the output.
 #
 #     scripts/check-rewrite.sh            compare with corpus/rewrite.expected
 #     scripts/check-rewrite.sh --write    write it
@@ -49,7 +52,7 @@ table() {
 out=$(mktemp)
 trap 'rm -rf "$out"' EXIT
 table > "$out"
-bad=$(awk '/ R0 .*:rewritten/ { if (!/ lir (ok|outside)$/) print; next }
+bad=$(awk '/ R[01] .*:rewritten/ { if (!/ lir (ok|outside)$/) print; next }
           !/ erasure (same|beta) / || !/ lir (same|outside) / { print }' "$out")
 if [ "${1:-}" = "--write" ]; then
   cp "$out" corpus/rewrite.expected
@@ -80,22 +83,37 @@ seeds=(
   "tdReplaced corpus/core-effects-borrow-abort.bc guard G-fin"
   "dupClauses corpus/core-r0-two-ops.bc guard G-bang"
   "widenLin corpus/core-r0-forward.bc kernel"
+  "wrongWork corpus/core-r1-two-ops.bc kernel"
+  "dropAnswer corpus/core-effects-tail.bc kernel"
+  "weakenLin corpus/core-r1-linear.bc guard G-qual"
 )
 for t in "${seeds[@]}"; do
   read -r sd f by g <<< "$t"
   got=$("$bcc" rewrite --seed "$sd" "$f" 2>&1 || true)
   case "$by:$got" in
     "guard:refused: guard${g:+ $g}"*|"kernel:refused: rewrite: the kernel refuses"*) ;;
-    *) echo "check-rewrite: R0 seeded with $sd on $f is not refused by the $by ${g:-}: $got"; fail=1 ;;
+    *) echo "check-rewrite: the rewriter seeded with $sd on $f is not refused by the $by ${g:-}: $got"; fail=1 ;;
   esac
 done
-# R0's controls: faults the kernel and the guard accept, which only the goldens catch (a wrong
+# R1's node kept (`keepNode`): the kernel and the guard accept the program, whose `perform`s are
+# calls, and the new backend's conversion refuses the `effHandleT` node that reaches it, a hard
+# error (SPEC §54: R1 rewrites every one in Core).
+got=$("$bcc" rewrite --seed-run keepNode corpus/core-effects-tail.bc 2>&1 || true)
+case "$got" in
+  *"an \`effHandleT\` node reaches the conversion"*) ;;
+  *) echo "check-rewrite: R1 seeded with keepNode is not refused by the conversion: $got"; fail=1 ;;
+esac
+# The controls: faults the kernel and the guard accept, which only the goldens catch. R0's: a wrong
 # injection index, the payload's `case` arms swapped, the forwarding answer clause's arms swapped,
-# each between summands of one type): accepted, and the program's output differs from its golden.
+# each between summands of one type. R1's: a `perform` calling the other operation's work, and one
+# answering its argument with the work's answer dropped, each between operations of one signature.
+# Each is accepted, and the program's output differs from its golden.
 controls=(
   "injIndex corpus/core-r0-two-ops.bc"
   "swapDispatch corpus/core-r0-two-ops.bc"
   "swapFwd corpus/core-r0-forward.bc"
+  "wrongWork corpus/core-r1-two-ops-eq.bc"
+  "dropAnswer corpus/core-r1-two-ops-eq.bc"
 )
 for t in "${controls[@]}"; do
   read -r sd f <<< "$t"
@@ -107,4 +125,4 @@ for t in "${controls[@]}"; do
   fi
 done
 [ "$fail" = 0 ] || exit 1
-echo "check-rewrite: $(wc -l < "$out" | tr -d " ") programs read back and checked again, as pinned: every program no rule rewrites the identity (its erasure and LIR the source's, up to the instantiations of polymorphic declarations), every program R0 rewrites compiled; ${#seeds[@]} seeded faults refused, ${#controls[@]} controls caught by the goldens only"
+echo "check-rewrite: $(wc -l < "$out" | tr -d " ") programs read back and checked again, as pinned: every program no rule rewrites the identity (its erasure and LIR the source's, up to the instantiations of polymorphic declarations), every program R0 or R1 rewrites compiled; $((${#seeds[@]} + 1)) seeded faults refused, ${#controls[@]} controls caught by the goldens only"

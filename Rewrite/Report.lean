@@ -146,6 +146,12 @@ structure Report where
   stats : AbStats := {}
   /-- The binders `π` maps to another position. -/
   moved : Nat := 0
+  /-- R1's names, each rewritten (SPEC §54, R1), in R1's order. -/
+  r1 : List UInt32 := []
+  /-- What R1 rewrote: its `perform`s made calls, its nodes removed, and its works declared. -/
+  r1calls : Nat := 0
+  r1nodes : Nat := 0
+  r1works : Nat := 0
   deriving Inhabited
 
 /-- **The identity criterion**: whether `main`'s erasure is the source's (`same`), or differs only

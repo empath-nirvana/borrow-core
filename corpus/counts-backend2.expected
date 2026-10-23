@@ -30,8 +30,8 @@ async-bank-inbox 11 0 0 450 442 16 # the slots an array resumed in place (§52):
 async-cancel 5 0 0 137 134 6 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
 async-lend-slots 7 0 0 334 322 16 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
 async-logged 22 0 0 214 196 0 # R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687)
-async-map 18 0 0 263 240 10 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value; R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687)
-async-mapreduce 22 0 1 495 441 30 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value; the recursion's frames on its task's stack, κ in the stack's region; R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687)
+async-map 20 0 0 263 240 10 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value; R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687); R1 (#680): with §47's per-operation direct calls gone from the new backend, the `tail` operation `n.1` that no `perform` reaches, of a node that keeps `κ` at `n.0`, is a machine operation (DR2) and every row holding it a machine's outcome (T3); recovery: R5, which deletes DR2 and T3
+async-mapreduce 28 0 1 558 540 30 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value; the recursion's frames on its task's stack, κ in the stack's region; R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687); R1 (#680): with §47's per-operation direct calls gone from the new backend, the `tail` operation `n.1` that no `perform` reaches, of a node that keeps `κ` at `n.0`, is a machine operation (DR2) and every row holding it a machine's outcome (T3); recovery: R5, which deletes DR2 and T3
 async-r1-cancel 4 0 0 5 5 0
 async-r1-cancel-finaliser-writes 1 0 0 2 2 0
 async-r1-drain 1 0 0 4 4 0
@@ -43,9 +43,9 @@ async-race 3 0 0 3 3 0
 async-scheduler 5 0 0 446 440 20 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
 async-scoped 25 0 0 263 253 0
 async-slice-iter-await 21 0 0 302 298 4
-async-stack-cancel 406 0 0 4922 2500 0 # SPEC §52 stress: each level's cell, freed by the cancel; R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687)
-async-stack-deep 1364 4750 0 272902 234849 14412 # SPEC §52 stress: each level's cell; a resume dispatches between the two task bodies' codes; R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687)
-async-stack-nested 13 0 0 1289 1125 40 # SPEC §52 stress: the inner tasks' stacks; R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687)
+async-stack-cancel 811 0 0 8413 8413 0 # SPEC §52 stress: each level's cell, freed by the cancel; R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687); R1 (#680): with §47's per-operation direct calls gone from the new backend, the `tail` operation `n.1` that no `perform` reaches, of a node that keeps `κ` at `n.0`, is a machine operation (DR2) and every row holding it a machine's outcome (T3); recovery: R5, which deletes DR2 and T3
+async-stack-deep 9498 4750 0 12104415 12104406 14412 # SPEC §52 stress: each level's cell; a resume dispatches between the two task bodies' codes; R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687); R1 (#680): with §47's per-operation direct calls gone from the new backend, the `tail` operation `n.1` that no `perform` reaches, of a node that keeps `κ` at `n.0`, is a machine operation (DR2) and every row holding it a machine's outcome (T3); recovery: R5, which deletes DR2 and T3
+async-stack-nested 54 0 0 1104 1098 40 # SPEC §52 stress: the inner tasks' stacks; R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687); R1 (#680): with §47's per-operation direct calls gone from the new backend, the `tail` operation `n.1` that no `perform` reaches, of a node that keeps `κ` at `n.0`, is a machine operation (DR2) and every row holding it a machine's outcome (T3); recovery: R5, which deletes DR2 and T3
 async-timers 40 5 0 398 380 0
 async-try-join 28 0 0 398 392 0 # R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687)
 async-two-readers-views 41 8 0 606 593 7
@@ -88,6 +88,7 @@ core-effects-loop 0 0 0 0 0 0
 core-effects-reborrows 3 0 0 5 4 0
 core-effects-result 0 0 0 0 0 0
 core-effects-tail 0 0 0 0 0 0
+core-handle-tail 0 0 0 0 0 0
 core-handle-tail-abort 0 0 0 0 0 0
 core-r0-fin-instances 2 0 0 2 2 0
 core-r0-forward 2 0 0 2 2 0
@@ -98,6 +99,12 @@ core-r0-pi-instances 1 0 0 1 1 0
 core-r0-two-ops 0 0 0 0 0 0
 core-r0-unwind 2 0 0 2 2 0
 core-r0-unwind-linear 0 0 0 0 0 0
+core-r1-linear 1 0 0 1 1 0
+core-r1-opt 0 0 0 0 0 0
+core-r1-performs 0 0 0 0 0 0
+core-r1-two-ops 0 0 0 0 0 0
+core-r1-two-ops-eq 0 0 0 0 0 0
+core-r1-unused 0 0 0 0 0 0
 core-yield-loop 0 0 0 0 0 0
 core-yield-pull 0 0 0 0 0 0
 count-down 0 0 0 0 0 0

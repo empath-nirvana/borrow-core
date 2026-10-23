@@ -6,7 +6,7 @@ aff-counter erased handles 0 performs 0 raises 0 left 0 0
 aff-depth erased handles 0 performs 0 raises 0 left 0 0
 aff-drop erased handles 0 performs 0 raises 0 left 0 0
 aff-higher erased handles 0 performs 0 raises 0 left 0 0
-answers-two-types erased handles 0 performs 1 raises 0 machines 2 suspends 1 left 0 0
+answers-two-types erased handles 0 performs 0 raises 0 machines 1 suspends 1 tail 1 1 left 0 0
 aoc/2020-08 erased handles 0 performs 0 raises 0 left 0 0
 aoc/2021-06 erased handles 0 performs 0 raises 0 left 0 0
 aoc/2021-10 erased handles 0 performs 0 raises 0 left 0 0
@@ -71,7 +71,7 @@ block-swap erased handles 0 performs 0 raises 0 left 0 0
 block-yield-inner erased handles 0 performs 0 raises 0 machines 4 suspends 2 left 0 0
 borrow-in-scope erased handles 0 performs 0 raises 0 left 0 0
 bytes-upper erased handles 0 performs 0 raises 0 left 0 0
-capture-await-raise erased handles 1 performs 1 raises 0 rewritten 1 1 1 left 0 0
+capture-await-raise erased handles 0 performs 0 raises 0 rewritten 1 1 1 tail 1 1 left 0 0
 capture-log-hand erased handles 0 performs 0 raises 0 left 0 0
 capture-store-cancel-hand erased handles 0 performs 0 raises 0 left 0 0
 capture-store-raise erased handles 0 performs 0 raises 0 machines 1 suspends 1 rewritten 1 1 1 left 0 0
@@ -84,13 +84,14 @@ core-callback-dead erased handles 0 performs 0 raises 0 left 0 0
 core-effects-borrow-abort erased handles 0 performs 0 raises 0 rewritten 1 0 1 left 0 0
 core-effects-borrows erased handles 0 performs 0 raises 0 rewritten 2 0 2 left 0 0
 core-effects-drop-glue erased handles 0 performs 0 raises 0 rewritten 2 0 1 left 0 0
-core-effects-loop erased handles 1 performs 1 raises 0 left 0 0
+core-effects-loop erased handles 0 performs 0 raises 0 tail 1 1 left 0 0
 core-effects-reborrows erased handles 0 performs 0 raises 0 rewritten 3 0 3 left 0 0
 core-effects-result erased handles 0 performs 0 raises 0 rewritten 2 0 1 left 0 0
-core-effects-tail erased handles 1 performs 2 raises 0 left 0 0
+core-effects-tail erased handles 0 performs 0 raises 0 tail 1 2 left 0 0
+core-handle-tail erased handles 0 performs 0 raises 0 tail 1 2 left 0 0
 core-handle-tail-abort erased handles 0 performs 0 raises 0 rewritten 1 0 1 left 0 0
 core-r0-fin-instances erased handles 0 performs 0 raises 0 rewritten 2 0 1 left 0 0
-core-r0-forward erased handles 1 performs 1 raises 0 rewritten 1 1 1 left 0 0
+core-r0-forward erased handles 0 performs 0 raises 0 rewritten 1 1 1 tail 1 1 left 0 0
 core-r0-lend-two erased handles 0 performs 0 raises 0 rewritten 2 0 3 left 0 0
 core-r0-linear erased handles 0 performs 0 raises 0 rewritten 1 0 1 left 0 0
 core-r0-nested erased handles 0 performs 0 raises 0 rewritten 2 0 2 left 0 0
@@ -98,6 +99,12 @@ core-r0-pi-instances erased handles 0 performs 0 raises 0 rewritten 1 0 1 left 0
 core-r0-two-ops erased handles 0 performs 0 raises 0 rewritten 1 0 2 left 0 0
 core-r0-unwind erased handles 0 performs 0 raises 0 rewritten 1 0 1 left 0 0
 core-r0-unwind-linear erased handles 0 performs 0 raises 0 rewritten 1 0 1 left 0 0
+core-r1-linear erased handles 0 performs 0 raises 0 tail 1 1 left 0 0
+core-r1-opt erased handles 0 performs 0 raises 0 tail 1 2 left 0 0
+core-r1-performs erased handles 0 performs 0 raises 0 machines 1 suspends 1 tail 1 1 left 0 0
+core-r1-two-ops erased handles 0 performs 0 raises 0 tail 1 2 left 0 0
+core-r1-two-ops-eq erased handles 0 performs 0 raises 0 tail 1 2 left 0 0
+core-r1-unused erased handles 0 performs 0 raises 0 tail 1 1 left 0 0
 core-yield-loop erased handles 0 performs 0 raises 0 machines 2 suspends 1 left 0 0
 core-yield-pull erased handles 0 performs 0 raises 0 machines 4 suspends 2 left 0 0
 count-down erased handles 0 performs 0 raises 0 left 0 0
@@ -130,7 +137,7 @@ effects-fail-list erased handles 0 performs 0 raises 0 rewritten 3 0 2 left 0 0
 effects-fold erased handles 0 performs 0 raises 0 rewritten 8 0 10 left 0 0
 effects-fold-sum erased handles 0 performs 0 raises 0 left 0 0
 effects-generic erased handles 0 performs 0 raises 0 left 0 0
-effects-hof-two-rows erased handles 1 performs 1 raises 0 rewritten 1 0 1 left 0 0
+effects-hof-two-rows erased handles 0 performs 0 raises 0 rewritten 1 0 1 tail 1 1 left 0 0
 effects-instances erased handles 0 performs 0 raises 0 rewritten 9 0 13 left 0 0
 effects-log-fail erased handles 0 performs 0 raises 0 rewritten 2 0 2 left 0 0
 effects-map erased handles 0 performs 0 raises 0 left 0 0
@@ -171,7 +178,7 @@ gen-nested erased handles 0 performs 0 raises 0 machines 6 suspends 3 left 0 0
 gen-pipeline erased handles 0 performs 0 raises 0 machines 6 suspends 3 left 0 0
 gen-pipeline-adapters erased handles 0 performs 0 raises 0 machines 10 suspends 5 left 0 0
 gen-pipeline-pipe erased handles 0 performs 0 raises 0 machines 20 suspends 10 left 0 0
-gen-produce erased handles 1 performs 3 raises 0 left 0 0
+gen-produce erased handles 0 performs 0 raises 0 tail 1 3 left 0 0
 gen-return erased handles 0 performs 0 raises 0 machines 6 suspends 5 left 0 0
 gen-tokenize-parse erased handles 0 performs 0 raises 0 machines 2 suspends 3 rewritten 2 0 8 left 0 0
 gen-value erased handles 0 performs 0 raises 0 machines 8 suspends 4 left 0 0
@@ -183,7 +190,7 @@ http-request erased handles 0 performs 0 raises 0 left 0 0
 hygiene-answering-state erased handles 0 performs 0 raises 0 left 0 0
 hygiene-borrow-loop erased handles 0 performs 0 raises 0 left 0 0
 hygiene-box-lib erased handles 0 performs 0 raises 0 left 0 0
-hygiene-clause-global erased handles 1 performs 1 raises 0 rewritten 1 0 1 left 0 0
+hygiene-clause-global erased handles 0 performs 0 raises 0 rewritten 1 0 1 tail 1 1 left 0 0
 hygiene-clause-name erased handles 0 performs 0 raises 0 left 0 0
 hygiene-for-global erased handles 0 performs 0 raises 0 left 0 0
 hygiene-handler-after erased handles 0 performs 0 raises 0 rewritten 1 0 0 left 0 0
@@ -350,7 +357,7 @@ poly-operators erased handles 0 performs 0 raises 0 left 0 0
 poly-providers erased handles 0 performs 0 raises 0 left 0 0
 print-borrowed-array erased handles 0 performs 0 raises 0 left 0 0
 quicksort erased handles 0 performs 0 raises 0 left 0 0
-rec-await-exhausted erased handles 1 performs 1 raises 0 rewritten 1 1 1 left 0 0
+rec-await-exhausted erased handles 0 performs 0 raises 0 rewritten 1 1 1 tail 1 1 left 0 0
 rec-deep erased handles 0 performs 0 raises 0 left 0 0
 rec-emit erased handles 0 performs 0 raises 0 machines 1 suspends 2 rewritten 1 2 1 left 0 0
 rec-even-odd erased handles 0 performs 0 raises 0 rewritten 1 0 2 left 0 0
@@ -365,7 +372,7 @@ rec-mixed erased handles 0 performs 0 raises 0 rewritten 1 0 2 left 0 0
 rec-overflow erased handles 0 performs 0 raises 0 rewritten 2 0 2 left 0 0
 rec-parser erased handles 0 performs 0 raises 0 rewritten 3 0 26 left 0 0
 rec-tree erased handles 0 performs 0 raises 0 rewritten 1 0 4 left 0 0
-rec-yield erased handles 1 performs 2 raises 0 rewritten 1 2 1 left 0 0
+rec-yield erased handles 0 performs 0 raises 0 rewritten 1 2 1 tail 1 2 left 0 0
 reconcile-chain erased handles 0 performs 0 raises 0 machines 8 suspends 14 rewritten 4 2 4 left 0 0
 reconcile-clock erased handles 0 performs 0 raises 0 machines 12 suspends 20 rewritten 8 4 8 left 0 0
 retry-block erased handles 0 performs 0 raises 0 rewritten 2 0 2 left 0 0
@@ -397,7 +404,7 @@ surface/io-wc erased handles 0 performs 0 raises 0 left 0 0
 surface/map-reuse erased handles 0 performs 0 raises 0 left 0 0
 text-lend-lifetime erased handles 0 performs 0 raises 0 left 0 0
 text-wordfreq erased handles 0 performs 0 raises 0 rewritten 2 0 14 left 0 0
-tree-map erased handles 2 performs 2 raises 0 rewritten 3 2 14 left 0 0
+tree-map erased handles 0 performs 0 raises 0 rewritten 3 2 14 tail 2 2 left 0 0
 trim-replace erased handles 0 performs 0 raises 0 rewritten 1 0 1 left 0 0
 utf8-count erased handles 0 performs 0 raises 0 rewritten 1 0 1 left 0 0
 yield-callback erased handles 0 performs 0 raises 0 machines 4 suspends 2 left 0 0

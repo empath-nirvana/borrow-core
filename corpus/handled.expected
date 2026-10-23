@@ -396,6 +396,29 @@ corpus/core-r0-unwind-linear.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/core-r0-unwind.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
 corpus/core-r0-unwind.bc 32:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-r0-unwind.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/core-r1-linear.bc flows [0, 2, 4294967295]; main [2]
+corpus/core-r1-linear.bc 19:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/core-r1-linear.bc 2.0 tail: direct; condition 2 holds; agree
+corpus/core-r1-opt.bc flows [0, 2, 4294967295]; main [2]
+corpus/core-r1-opt.bc 20:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/core-r1-opt.bc 2.0 tail: direct; condition 2 holds; agree
+corpus/core-r1-performs.bc flows [0, 4, 5, 4294967295]; main [4, 5]
+corpus/core-r1-performs.bc 21:3: handle 5: inside [4]; row []; ops 5.0 tail; names 5.0 []; condition 2 holds
+corpus/core-r1-performs.bc 27:6: handle 4: inside []; row [5]; ops 4.0 tail; names 4.0 [5]; condition 2 fails at 5
+corpus/core-r1-performs.bc 5.0 tail: direct; condition 2 holds; agree
+corpus/core-r1-performs.bc 4.0 tail: machine; condition 2 fails; -
+corpus/core-r1-two-ops-eq.bc flows [0, 3, 4294967295]; main [3]
+corpus/core-r1-two-ops-eq.bc 20:3: handle 3: inside []; row []; ops 3.0 tail, 3.1 tail; names 3.0 [], 3.1 []; condition 2 holds
+corpus/core-r1-two-ops-eq.bc 3.0 tail: direct; condition 2 holds; agree
+corpus/core-r1-two-ops-eq.bc 3.1 tail: direct; condition 2 holds; agree
+corpus/core-r1-two-ops.bc flows [0, 3, 4294967295]; main [3]
+corpus/core-r1-two-ops.bc 19:3: handle 3: inside []; row []; ops 3.0 tail, 3.1 tail; names 3.0 [], 3.1 []; condition 2 holds
+corpus/core-r1-two-ops.bc 3.0 tail: direct; condition 2 holds; agree
+corpus/core-r1-two-ops.bc 3.1 tail: direct; condition 2 holds; agree
+corpus/core-r1-unused.bc flows [0, 6, 4294967295]; main [6]
+corpus/core-r1-unused.bc 18:3: handle 6: inside []; row []; ops 6.0 tail, 6.1 tail; names 6.0 [], 6.1 []; condition 2 holds
+corpus/core-r1-unused.bc 6.0 tail: direct; condition 2 holds; agree
+corpus/core-r1-unused.bc 6.1 tail: -; condition 2 holds; -
 corpus/core-yield-loop.bc flows [0, 1, 4294967295]; main [1]
 corpus/core-yield-loop.bc 36:7: handle 1: inside []; row []; ops 1.0 resume-or-cancel; names 1.0 []; condition 2 holds
 corpus/core-yield-loop.bc 48:12: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds

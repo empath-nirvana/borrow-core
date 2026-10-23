@@ -58,6 +58,8 @@ structure CheckedProg where
   exits : Bool
   /-- `main` is the rewriter's (`Rewrite.run`, SPEC §54). -/
   rewritten : Bool := false
+  /-- The tail-resuming rule's licence (`Report.licence`, SPEC §54): reported, read by no rule. -/
+  licence : List (UInt32 × Frontend.Check.Licence) := []
 
 /-- Parse and check `src`; a `main` with externs must be a standard I/O program (SPEC §11). -/
 def checkedOf (file src : String) : Except String CheckedProg := do
@@ -70,8 +72,9 @@ def checkedOf (file src : String) : Except String CheckedProg := do
   let some c := r.main | throw s!"{file}: no `main`"
   match Frontend.Check.ioMainOf r.el.prog c with
   | .ok io =>
-    let cnts : Frontend.Check.CntTable := { ops := r.grades.table }
-    pure { prog := r.el.prog, main := c, io := io, cnts := cnts, el := r.el, exits := c.exitsOnDivError }
+    let cnts : Frontend.Check.CntTable := { ops := r.grades.table, tail := r.tail }
+    pure { prog := r.el.prog, main := c, io := io, cnts := cnts, el := r.el, exits := c.exitsOnDivError,
+           licence := r.licence }
   | .error e => throw s!"{file}: {e}"
 
 /-- The host implementation of each extern, in declaration order. -/

@@ -4,6 +4,7 @@ import Frontend.Check.Copies
 import Frontend.Check.KindsSound
 import Frontend.Check.Cells
 import Frontend.Check.Grades
+import Frontend.Check.Licence
 
 /-!
 # Frontend — Check — programs
@@ -119,6 +120,14 @@ structure Report where
   handles : List HandleSite := []
   /-- The counts of the program's operations, as inference fixed them (SPEC §53). -/
   grades : Grades := {}
+  /-- Where the check wrote the tail-resuming rule's node (`TailGate`, SPEC §54): at the names the
+  licence admits. -/
+  tail : TailGate := .none
+  /-- The licence of each name with a node the rule's premises accept (`licence`, SPEC §54), read
+  off the check that writes the rule's node wherever they do. -/
+  licence : List (UInt32 × Licence) := []
+  /-- The nodes of the tail-resuming rule of each name in that check, over its typed terms. -/
+  tailNodes : List (UInt32 × Nat) := []
 
 /-- The depth bound for checking a term. -/
 def checkFuel : Nat := 1 <<< 20
@@ -234,7 +243,7 @@ def checkEl (el : Frontend.Elab.Elaborated) (cnts : CntTable) :
   let ds := el.prog.decls.toArray
   let lib := el.lib
   let r : Except Error (Report × List (Nat × TExpr)) :=
-    ((List.range ds.size).foldlM (init := ((⟨[], none, el, [], {}⟩ : Report), [])) fun (acc, ts) k =>
+    ((List.range ds.size).foldlM (init := (({ lines := [], main := none, el } : Report), [])) fun (acc, ts) k =>
       match (ds[k]? : Option Decl) with
       | some d => do
           let (line, m, t) ← checkDecl ds k el.keys cnts d
@@ -255,14 +264,48 @@ def linearCtlErr (k : OpKey) (sp : Span) (why : String) : Error :=
   ⟨sp, s!"the operation {k.1}.{k.2} is declared `linear ctl`, and this handler's clause asks " ++
     s!"more of its continuation: {why} (SPEC §53)"⟩
 
+/-- **The tail-resuming rule's nodes** (SPEC §54, R1), for the elaborated program `el` checked at
+the counts `ops` (`rt`, every node `[handle]`'s, with its grades). Where a node's clauses are
+classified `tail` at every non-abortive operation, the program is checked again at the same counts
+writing the rule's node wherever its premises accept the works written from the clauses
+(`TailGate.all`); the licence is read off that check (`licence`, at its flow record and over every
+typed term it returns); and the program's check writes the rule's node at the admitted names only
+(`TailGate.names`): that check itself when the licence admits every name with a node of the rule,
+else a check at the admitted names. The licence read off the program's check admits exactly those
+names, an internal error otherwise. With no name admitted the program's check is `rt`'s. The counts
+are `rt`'s (SPEC §53): the rule's node asks of no operation's count more than `[handle]`'s does. -/
+def tailChecked (el : Frontend.Elab.Elaborated) (ops : List ((Nat × Nat) × CCount))
+    (rt : Report × List (Nat × TExpr)) : Except Error (Report × List (Nat × TExpr)) := do
+  let (rep, terms) := rt
+  let internal (m : String) : Error :=
+    ⟨Span.none, s!"internal error: the tail-resuming rule's licence (SPEC §54): {m}"⟩
+  let some_ ← (terms.anyM fun (p : Nat × TExpr) => tailCandidate licenceFuel p.2).mapError internal
+  unless some_ do return rt
+  let licOf (r : Report) (ts : List (Nat × TExpr)) : Except Error (List (UInt32 × Licence)) :=
+    match r.main with
+    | some c => (licence (BoCa.Fig16.LogRel.Core.ClauseKinds.flows c.e) (ts.map (·.2))).mapError internal
+    | none => pure []
+  let (repA, termsA) ← (checkEl el { ops, tail := .all }).mapError fun e => internal e.msg
+  let lA ← licOf repA termsA
+  let nA ← (tailNodes (termsA.map (·.2))).mapError internal
+  let L := admittedOf lA
+  if L.isEmpty then return ({ rep with licence := lA, tailNodes := nA }, terms)
+  let (repL, termsL) ← if lA.all (·.2 == .admitted) then pure (repA, termsA)
+    else (checkEl el { ops, tail := .names L }).mapError fun e => internal e.msg
+  let lL ← licOf repL termsL
+  unless lL.map (·.1) == L && lL.all (·.2 == .admitted) do
+    throw (internal s!"the check at the admitted names {L} admits {admittedOf lL} of {lL.map (·.1)}")
+  return ({ repL with grades := rep.grades, tail := .names L, licence := lA, tailNodes := nA }, termsL)
+
 /-- **The counts, inferred and checked** (SPEC §53). The program is elaborated once; its
 elaboration writes each operation whose count is inferred `ctl`, and each clause's `κ` as
 `kont[n.i q]`, so that the elaborated program does not depend on the counts. It is checked at
 the counts its rows write, each `ctl` operation at `1?` (or `0`); the counts of its `ctl`
 operations are inferred from the `handle` nodes of that check (`inferCounts`); and where one is
-lower, the same elaborated program is checked again at them, which is the check the program has.
-The grades are that check's: inference over its own nodes gives the table it was checked at, an
-internal error otherwise. A check that fails at the first counts is checked again with each
+lower, the same elaborated program is checked again at them. The grades are that check's: inference
+over its own nodes gives the table it was checked at, an internal error otherwise. The check the
+program has then writes the tail-resuming rule's node at the names its licence admits
+(`tailChecked`, SPEC §54). A check that fails at the first counts is checked again with each
 `linear ctl` operation read as `ctl`: a node that forces one of them above `1` is the error then,
 named. -/
 def checkCounted (p : Program) : Except Error (Report × List (Nat × TExpr)) := do
@@ -272,14 +315,14 @@ def checkCounted (p : Program) : Except Error (Report × List (Nat × TExpr)) :=
     let g := inferCounts rep.handles
     if let some (k, sp, why) := g.violation then throw (linearCtlErr k sp why)
     if g.table.all (·.2 != .one) then
-      return ({ rep with grades := g }, terms)
+      return ← tailChecked el g.table ({ rep with grades := g }, terms)
     match checkEl el { ops := g.table } with
     | .ok (rep₂, terms₂) =>
       let g₂ := inferCounts rep₂.handles
       if g₂.table != g.table then
         throw ⟨Span.none, "internal error: the counts inferred (SPEC §53) are not inferred again " ++
           "from the check at them"⟩
-      return ({ rep₂ with grades := g₂ }, terms₂)
+      tailChecked el g.table ({ rep₂ with grades := g₂ }, terms₂)
     | .error e => throw { e with msg := s!"internal error: at the counts inferred (SPEC §53): {e.msg}" }
   | .error e =>
     match checkEl el { relax := true } with

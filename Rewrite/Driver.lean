@@ -2,6 +2,7 @@ import Rewrite.ReadBack
 import Rewrite.Guard
 import Rewrite.Report
 import Rewrite.R0
+import Rewrite.Tail
 import Backend.Driver
 import Frontend.Elab.RenameLife
 
@@ -9,7 +10,7 @@ import Frontend.Elab.RenameLife
 # Rewrite — the driver  `[spec §54]`
 
 **The Core → Core rewriter** (#680), on the new backend's path (`Backend2.lirOf`): from a checked
-program `k`, the rules over its typed program (R0, `rules`), the read-back of the typed program
+program `k`, the rules over its typed program (R0, then R1, `rules`), the read-back of the typed program
 into a program (`readBack`), the kernel's one re-check of that program at the counts the source's
 check inferred (`checkEl` at `k.cnts`, no elaboration and no inference), and the guard
 (`Rewrite/Guard.lean`). The result is `k` with the re-checked `main`; `exitsOnDivError` is carried
@@ -35,6 +36,10 @@ instantiates it at those variables (`inst`); its bounds name only variables befo
 context, so Core states every one. The checker checks the declaration's body again at each use,
 at the use's context extended by the abstraction's binders: its erasure is the source's, under the
 instantiation (`beta`, `Rewrite.identity`).
+
+**R1's works** (`Rewrite/Tail.lean`) are declarations of the read-back program: each work a
+`perform` reaches (`worksUsed`), read back once at the empty context, after the instances its body
+uses and before every declaration that calls it; a `use` of one reads back as a reference to it.
 
 **Records carried, not rebuilt** (the scope's §2, amended by the user's decision of 2026-10-23):
 a use's key (`TInfo.key`, which the checker records) is the declaration's key, named by it; a
@@ -62,12 +67,14 @@ structure Use where
   sp : Span
 
 /-- **The instances of a typed term**, each at its first use, inner instances (those an instance's
-body uses) before it. -/
+body uses) before it. A use of one of R1's works (a declaration from `workBase`) is not one: the
+work's declaration is read back on its own (`readBack`). -/
 def collect : Nat → Nat → Nat → BoCa.Lifetime.LifeCtx → TExpr → List Use → Except String (List Use)
   | 0, _, _, _, _, _ => throw "rewrite: a term nested too deeply to collect its instances"
   | f + 1, len, nExt, Δ, t, acc => do
     match t with
     | .use i (.val A) name decl targs _ b =>
+      if decl ≥ workBase then pure acc else
       let k : Key := (decl, targs, Δ.entries, nExt)
       if acc.any (·.key == k) then pure acc
       else do
@@ -119,13 +126,24 @@ def externNames (ds : List Decl) : List String :=
 by one declaration per instance (`declOf`), and `main` read back from `t` (`c`'s typed term, or the rules' rewrite of it); the number of
 instances, of declarations, and of polymorphic ones. -/
 def readBack (el : Frontend.Elab.Elaborated) (c : Checked) (tbl : Frontend.Check.CntTable)
-    (t : TExpr := c.t) : Except String (Frontend.Elab.Elaborated × Nat × Nat × Nat) := do
+    (t : TExpr := c.t) (works : List (Nat × String × TExpr) := []) :
+    Except String (Frontend.Elab.Elaborated × Nat × Nat × Nat) := do
   let ds := el.prog.decls
   let some (msp, _) := ds.findSome? (fun | .main sp C _ => some (sp, C) | _ => none)
     | throw "rewrite: the program has no `main`"
   let exts := externNames ds
   let extVars : List (Option String) := (exts.map some).reverse
-  let uses ← collect fuel c.ctx.length exts.length ⟨[]⟩ t []
+  -- R1's works the term uses (SPEC §54), each a declaration at the empty context (a work is closed
+  -- and mentions no lifetime of its node's context, the admission), after the instances its body
+  -- uses; a work refers only to the works of names R1 rewrote after its own, so those first.
+  let used := (← worksUsed fuel t).eraseDups
+  let mut uses : List Use := []
+  for (d, nm, w) in works.reverse do
+    if used.contains d then
+      let .val A := w.jdg | throw "rewrite: an R1 work at a computation type"
+      uses ← collect fuel 0 0 ⟨[]⟩ w uses
+      uses := uses ++ [⟨(d, [], [], 0), nm, A, w, none, 0, 0, ⟨[]⟩, w.info.sp⟩]
+  uses ← collect fuel c.ctx.length exts.length ⟨[]⟩ t uses
   -- Each instance's declaration, inner instances first; one declaration per distinct read-back.
   let mut decls : List (Key × DeclOf) := []
   let mut defs : List Decl := []
@@ -164,13 +182,28 @@ def readBack (el : Frontend.Elab.Elaborated) (c : Checked) (tbl : Frontend.Check
   let ds' := kept.map (·.1) ++ defs ++ [Decl.main msp C M]
   pure ({ el with prog := ⟨ds'⟩, lib, keys := el.keys ++ keys }, uses.length, defs.length, poly)
 
+/-- What the rules made of a typed program: the source's term as they read it (numbered, where a
+rule rewrites it), the rewritten term, R0's keys and record, R1's names and record, R1's works
+(each its declaration, name and typed term), and the ids of the source binders of the works no
+`perform` reaches, which have no image (`π`'s `inv`, R1's schema names them). -/
+structure Ruled where
+  t₀ : TExpr
+  t : TExpr
+  keys : List (AbortName × R0Status)
+  st : AbStats
+  r1 : List UInt32 := []
+  tst : TlStats := {}
+  works : List (Nat × String × TExpr) := []
+  inv : List String := []
+
 /-- **The rules over the typed program**: R0 over each name its keys rewrite, in their order
-(`r0Keys`, `ab`), on `main`'s typed term and every `def` body at each use. -/
-def rules (c : Checked) (seed : Seed := .none) :
-    Except String (TExpr × TExpr × List (AbortName × R0Status) × AbStats) := do
+(`r0Keys`, `ab`), then R1 over each name it admits, in its order (`r1Keys`, `r1Pass`), on `main`'s
+typed term and every `def` body at each use. -/
+def rules (c : Checked) (seed : Seed := .none) : Except String Ruled := do
   let keys ← r0Keys c fuel
+  let tails := (← Frontend.Check.licence c.flows [c.t]).map (·.1)
   -- The source's binders numbered (`numberBinders`) where a rule will rewrite it: `π`'s ids.
-  let t₀ ← if keys.any (·.2 == .rewritten) then numberBinders c.t else pure c.t
+  let t₀ ← if keys.any (·.2 == .rewritten) || !tails.isEmpty then numberBinders c.t else pure c.t
   let mut t := t₀
   let mut st : AbStats := { seed }
   for (a, s) in keys do
@@ -178,7 +211,22 @@ def rules (c : Checked) (seed : Seed := .none) :
       let (t', st') ← (ab a t).run st
       t := t'
       st := st'
-  pure (t₀, t, keys, st)
+  -- R1 (SPEC §54), on R0's rewrite: each name's works the declarations from `workBase`.
+  let names ← r1Keys c t fuel (keys.filterMap fun (a, s) => if s == .rewritten then some a.n else none)
+  let mut tst : TlStats := { seed }
+  let mut works : List (Nat × String × TExpr) := []
+  let mut next := workBase
+  for a in names do
+    let ((t', prev, ws), tst') ← (r1Pass a next t works).run tst
+    t := t'
+    works := prev ++ ws
+    tst := tst'
+    next := next + a.works.length
+  let used := (← worksUsed fuel t).eraseDups
+  let mut inv : List String := []
+  for (d, _, w) in works do
+    unless used.contains d do inv := inv ++ (← binderIds fuel w)
+  pure { t₀, t, keys, st, r1 := names.map (·.n), tst, works, inv }
 
 /-- The source nodes R0 rewrites, by rule. -/
 structure R0Count where
@@ -224,28 +272,53 @@ def r0Counts (c : Checked) (ruled : List UInt32) : Except String R0Count := do
   let uses ← collect fuel c.ctx.length 0 ⟨[]⟩ c.t []
   uses.foldlM (init := ← r0Nodes ruled fuel c.t {}) fun acc u => r0Nodes ruled fuel u.body acc
 
+/-- R1's nodes of a typed term outside the bodies of its uses, for the names `ruled`: their
+handler nodes, and their `perform`s, added to `acc`. -/
+def r1Nodes (ruled : List UInt32) : Nat → TExpr → Nat × Nat → Except String (Nat × Nat)
+  | 0, _, _ => throw "rewrite: a term nested too deeply to count"
+  | f + 1, t, (h, p) => do
+    let acc := match t with
+      | .effHandleT _ _ _ _ _ _ n .. => if ruled.contains n then (h + 1, p) else (h, p)
+      | .effPerform _ _ _ o _ => if ruled.contains o.n then (h, p + 1) else (h, p)
+      | _ => (h, p)
+    match t with
+    | .use .. => pure acc
+    | _ => t.children.foldlM (init := acc) fun acc (_, t') => r1Nodes ruled f t' acc
+
+/-- **R1's rewrites, per instance**: the nodes R1 removes and the `perform`s it makes calls, in
+`main`'s typed term and in each instance's body once (`collect`). -/
+def r1Counts (c : Checked) (ruled : List UInt32) : Except String (Nat × Nat) := do
+  let uses ← collect fuel c.ctx.length 0 ⟨[]⟩ c.t []
+  uses.foldlM (init := ← r1Nodes ruled fuel c.t (0, 0)) fun acc u => r1Nodes ruled fuel u.body acc
+
 /-- **The rewriter's run** on a checked program: the rules (R0), the read-back, the kernel's one
 re-check at the source's counts, and the guard. `seed` plants a fault in R0 for the reject tests
 (`Seed`); the compile passes none. -/
 def run (k : Backend.CheckedProg) (seed : Seed := .none) :
     Except String (Backend.CheckedProg × Report) := do
   let c := k.main
-  let (t₀, t, keys, st) ← rules c seed
-  let (el', nkeys, ndecls, poly) ← readBack k.el c k.cnts t
-  let ruled := keys.filterMap fun (a, s) => if s == .rewritten then some a.n else none
-  let rows := if ruled.isEmpty then "" else s!" (R0 at the names {ruled})"
+  let r ← rules c seed
+  let keys := r.keys
+  let (el', nkeys, ndecls, poly) ← readBack k.el c k.cnts r.t r.works
+  let ruledAbort := keys.filterMap fun (a, s) => if s == .rewritten then some a.n else none
+  let rows := (if ruledAbort.isEmpty then "" else s!" (R0 at the names {ruledAbort})") ++
+    (if r.r1.isEmpty then "" else s!" (R1 at the names {r.r1})")
   let (rep', terms') ← (checkEl el' k.cnts).mapError fun e =>
     s!"rewrite: the kernel refuses the rewritten program{rows} at {e.span.start.render}: {e.msg}"
   let some c' := rep'.main | throw "rewrite: the rewritten program has no `main`"
   unless externNames el'.prog.decls == externNames k.el.prog.decls do
     throw "guard G-main: the rewritten program has other externs"
-  let π ← guard fuel c c' t₀ ruled st.bangs terms'
+  let π ← guard fuel c c' r.t₀ ruledAbort r.r1 (r.st.bangs + r.tst.bangs) r.inv terms'
   let r0 := keys.map fun (a, s) => (a.n, match s with
     | .rewritten => "rewritten"
     | .left r => s!"left: {r}")
+  let used := (← worksUsed fuel r.t).eraseDups
   pure ({ k with main := c', rewritten := true },
-    { keys := nkeys, decls := ndecls, poly, r0, stats := st,
-      moved := (π.filter fun (k, img) => img != .binder k).length })
+    { keys := nkeys, decls := ndecls, poly, r0, stats := r.st,
+      moved := (π.filter fun (k, img) => match img with
+        | .binder k' => k' != k
+        | _ => false).length,
+      r1 := r.r1, r1calls := r.tst.performs, r1nodes := r.tst.handles, r1works := used.length })
 
 /-- **The identity criterion** of step 0, between the source's checked `main` `c` and the
 rewritten `c′`: the typed terms compared node by node and field by field at every use

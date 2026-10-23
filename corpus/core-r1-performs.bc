@@ -1,0 +1,34 @@
+-- R1's admission (SPEC §54) at a work that performs: the clause of `4.0 lin i32 ~> i32` performs
+-- `5.0 lin i32 ~> i32` of the handler around it before it resumes. The checker writes the
+-- tail-resuming rule's node for it, its works at the row `Σ_N = [5.0]`, but the licence leaves `4`
+-- at condition 2: the program's flow record may catch `5`, which the work performs, so a call of
+-- the work where `4.0` is performed could be caught by a frame its node's clause is not under. `4`
+-- stays `[handle]`'s, a machine operation of the new backend; `5`, whose clause performs nothing,
+-- is admitted and rewritten.
+--
+-- Answer: i32[106]: `4.0 3` performs `5.0 3`, which answers `3 + 100`; the result is `103 + 3`.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def go : !U (i32 -o F[4.0 lin i32 ~> i32, 5.0 lin i32 ~> i32] i32) =
+  !thunkv fun (x : i32) ->
+    a <- perform[4.0] x;
+    return (plus (a, x))
+
+main : F i32 =
+  f <- return (unbang go);
+  x <- return i32[3];
+  handle_with[5](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (p : i32 * U ((i32 -o F i32) & top)) ->
+        let (y, k) = p;
+        z <- return (plus (y, i32[100]));
+        (force k).1 z), ()) : !U (i32 * U ((i32 -o F i32) & top) -o F i32) * 1))
+    (handle_with[4](
+        ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F[5.0 lin i32 ~> i32] i32)),
+        (((!thunkv fun (p : i32 * U ((i32 -o F[5.0 lin i32 ~> i32] i32) & top)) ->
+          let (y, k) = p;
+          z <- perform[5.0] y;
+          (force k).1 z), ())
+          : !U (i32 * U ((i32 -o F[5.0 lin i32 ~> i32] i32) & top) -o F[5.0 lin i32 ~> i32] i32) * 1))
+      (force f x))

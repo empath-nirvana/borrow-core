@@ -218,4 +218,34 @@ theorem cet_clauseTailReplace_hyps :
   exact .seq (by simp [ClauseKinds.mentions])
     (.bind (by simp [ClauseKinds.mentions]) (.resume (by simp [ClauseKinds.mentions])))
 
+/-! ### The node's removal: an open statement  `[spec §54]`
+
+R1 (SPEC §54) makes every `perform` of an admitted name a call of its work, and then removes the
+name's node: `handle_n e with (h, gs)` becomes `e to a. h a`. `HandleTransparent` states that a
+handler is transparent over a computation that performs none of its operations: the two reach the
+same values at the same memories. It is not proved here: no result depends on it. The route its
+proof is to take composes `catch_ret` (the node's answer clause at a value) with the frame's
+invisibility to every step that is not a `perform` of its name. -/
+
+/-- **A handler's transparency** (`HandleTransparent`, SPEC §54), stated, not proved: at a handler
+value `hndVal n qs hr hs` and a computation `e` none of whose runs, from any memory, reaches a
+`perform` of an operation of `n`, `hnd H e` and `(λa. hr a) e` (the computation's answer handed to
+the answer clause) run to the same values at the same memories. -/
+def HandleTransparent (ℍ : BoCa.Host) [BoCa.HostIs ℍ] : Prop :=
+  ∀ (n : UInt32) (qs hr hs : Val) (e : Expr),
+    (∀ {μ μ' : BoCa.BoLo.Heap} {e' : Expr}, BoCa.BoLo.Steps (ℍ := ℍ) μ e μ' e' →
+      ∀ (K : Kont) (i : UInt32) (v : Val), e' ≠ K.plug (performE (.val (opPayload n i v)))) →
+  ∀ (μ μ' : BoCa.BoLo.Heap) (w : Val),
+    BoCa.BoLo.Steps (ℍ := ℍ) μ (hndE (hndVal n qs hr hs) e) μ' w.1 ↔
+      BoCa.BoLo.Steps (ℍ := ℍ) μ (.app (.lam (.app (hr.1.shift 1 0) (.var 0))) e) μ' w.1
+
+/-- **`HandleTransparent`'s hypothesis at a value**: a run from a value performs nothing, so the
+statement is not vacuous. -/
+theorem handleTransparent_hyp_val (n : UInt32) (w : Val) :
+    ∀ {μ μ' : BoCa.BoLo.Heap} {e' : Expr}, BoCa.BoLo.Steps (ℍ := ℍ) μ w.1 μ' e' →
+      ∀ (K : Kont) (i : UInt32) (v : Val), e' ≠ K.plug (performE (.val (opPayload n i v))) := by
+  intro μ μ' e' h K i v he
+  obtain ⟨_, h₂⟩ := BoCa.BoLo.steps_val_inv (w := w) h
+  exact plug_perform_ne_val K (opPayload n i v) w (he ▸ h₂)
+
 end BoCa.Fig16.LogRel.Core

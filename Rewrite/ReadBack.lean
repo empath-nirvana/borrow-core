@@ -40,6 +40,10 @@ abbrev RB := Except String
 /-- The depth bound of every traversal of the read-back. -/
 def fuel : Nat := 1 <<< 20
 
+/-- The declarations of R1's works are numbered from here, past every declaration of a program:
+the `k`-th work's `use` nodes name the declaration `workBase + k` (SPEC §54). -/
+def workBase : Nat := 1 <<< 30
+
 /-! ### Types -/
 
 /-- The name a lifetime variable is written by. -/
@@ -361,7 +365,9 @@ def rdForm : Nat → Cx → TExpr → RB Syn
     | .lendCell _ _ m c => return .v (.mark sp (.lendCell m) (← val cx c))
     | .use _ _ _ decl targs _ _ => do
       -- The instance's declaration, instantiated at the use's lifetimes when it is polymorphic.
-      let d ← cx.declOf (decl, targs, cx.Δ.entries, cx.nExt)
+      -- One of R1's works (a declaration from `workBase`) is declared once, at the empty context.
+      let k : Key := if decl ≥ workBase then (decl, [], [], 0) else (decl, targs, cx.Δ.entries, cx.nExt)
+      let d ← cx.declOf k
       return .v (d.vars.foldl (fun V x => .inst sp V (.var sp (lname x))) (.var sp d.name))
     -- Computations.
     | .effSub i _ _ _ _ c =>

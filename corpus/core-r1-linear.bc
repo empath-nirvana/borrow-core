@@ -1,0 +1,26 @@
+-- R1 (SPEC §54) at a work with a binding the program declares `linear`: the clause of
+-- `2.0 lin i32 ~> i32` allocates a cell, binds it `linear c`, reads and frees it, and resumes with
+-- the value read. R1 moves the work whole into its declaration, every binder with its `TInfo`, so
+-- `c` stays declared `linear`; the guard checks it (G-qual), and the reject test `weakenLin`, which
+-- drops the declaration in the moved work, is refused there (`scripts/check-rewrite.sh`).
+--
+-- Answer: i32[14], and `live 0`.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def ask : !U (i32 -o F[2.0 lin i32 ~> i32] i32) =
+  !thunkv fun (x : i32) ->
+    a <- perform[2.0] x;
+    return (plus (a, x))
+
+main : F i32 =
+  f <- return (unbang ask);
+  x <- return i32[7];
+  handle_with[2](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (p : i32 * U ((i32 -o F i32) & top)) ->
+        let (y, k) = p;
+        linear c <- return (alloc[i32] y);
+        v <- return (free[i32] c);
+        (force k).1 v), ()) : !U (i32 * U ((i32 -o F i32) & top) -o F i32) * 1))
+    (force f x)

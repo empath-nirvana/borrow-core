@@ -5,7 +5,7 @@ corpus/aff-counter.bc instances 6 decls 6 poly 0 uses 6 erasure same lir same mi
 corpus/aff-depth.bc instances 11 decls 8 poly 0 uses 11 erasure same lir same mismatches 0
 corpus/aff-drop.bc instances 8 decls 7 poly 0 uses 8 erasure same lir same mismatches 0
 corpus/aff-higher.bc instances 17 decls 15 poly 0 uses 17 erasure same lir same mismatches 0
-corpus/answers-two-types.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
+corpus/answers-two-types.bc instances 2 decls 2 poly 0 R1 2:rewritten calls 1 nodes 1 works 1 pi 11 lir ok
 corpus/aoc/2020-08.bc instances 46 decls 38 poly 0 uses 46 erasure same lir same mismatches 0
 corpus/aoc/2021-06.bc instances 34 decls 28 poly 0 uses 34 erasure same lir same mismatches 0
 corpus/aoc/2021-10.bc instances 55 decls 48 poly 0 uses 55 erasure same lir same mismatches 0
@@ -67,10 +67,10 @@ corpus/binder-copies.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same 
 corpus/block-capability-inner.bc instances 3 decls 2 poly 0 uses 3 erasure same lir same mismatches 0
 corpus/block-capability.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same mismatches 0
 corpus/block-swap.bc instances 0 decls 0 poly 0 uses 0 erasure same lir same mismatches 0
-corpus/block-yield-inner.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0
+corpus/block-yield-inner.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0 R1left 1:a-node-not-the-tail-resuming-rule's 3:a-node-not-the-tail-resuming-rule's 2:the-nodes'-works-differ
 corpus/borrow-in-scope.bc instances 0 decls 0 poly 0 uses 0 erasure same lir same mismatches 0
 corpus/bytes-upper.bc instances 7 decls 7 poly 0 uses 7 erasure same lir same mismatches 0
-corpus/capture-await-raise.bc instances 1 decls 1 poly 0 R0 2:rewritten raises 1 handles 1 lets 1 thens 0 subs 1 performs 1 forwards 0 ulends 0 pi 16 lir ok
+corpus/capture-await-raise.bc instances 2 decls 2 poly 0 R0 2:rewritten raises 1 handles 1 lets 1 thens 0 subs 1 performs 1 forwards 0 ulends 0 R1 1:rewritten calls 1 nodes 1 works 1 pi 21 lir ok
 corpus/capture-log-hand.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
 corpus/capture-store-cancel-hand.bc instances 0 decls 0 poly 0 uses 0 erasure same lir same mismatches 0
 corpus/capture-store-raise.bc instances 1 decls 1 poly 0 R0 2:rewritten raises 1 handles 1 lets 1 thens 0 subs 1 performs 1 forwards 0 ulends 0 pi 23 lir ok
@@ -83,16 +83,16 @@ corpus/core-callback-dead.bc instances 1 decls 1 poly 0 uses 1 erasure same lir 
 corpus/core-effects-borrow-abort.bc instances 0 decls 0 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 0 subs 0 performs 0 forwards 0 ulends 1 pi 7 lir ok
 corpus/core-effects-borrows.bc instances 0 decls 0 poly 0 R0 1:rewritten raises 2 handles 2 lets 0 thens 0 subs 0 performs 0 forwards 0 ulends 2 pi 17 lir ok
 corpus/core-effects-drop-glue.bc instances 3 decls 3 poly 0 R0 1:rewritten raises 1 handles 2 lets 0 thens 1 subs 2 performs 0 forwards 0 ulends 0 pi 17 lir ok
-corpus/core-effects-loop.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same mismatches 0
+corpus/core-effects-loop.bc instances 3 decls 3 poly 0 R1 3:rewritten calls 1 nodes 1 works 1 pi 16 lir ok
 corpus/core-effects-reborrows.bc instances 0 decls 0 poly 0 R0 1:rewritten raises 3 handles 3 lets 0 thens 0 subs 0 performs 0 forwards 0 ulends 3 pi 31 lir ok
 corpus/core-effects-result.bc instances 1 decls 1 poly 0 R0 1:rewritten raises 1 handles 2 lets 0 thens 0 subs 1 performs 0 forwards 0 ulends 0 pi 12 lir ok
-corpus/core-effects-tail.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same mismatches 0
+corpus/core-effects-tail.bc instances 3 decls 3 poly 0 R1 2:rewritten calls 2 nodes 1 works 1 pi 5 lir ok
 corpus/core-handle-last.bc instances 2 decls 2 poly 0 uses 2 erasure same lir outside mismatches 0
 corpus/core-handle-tail-abort.bc instances 2 decls 2 poly 0 R0 2:rewritten raises 1 handles 1 lets 1 thens 0 subs 0 performs 0 forwards 0 ulends 0 pi 4 lir ok
-corpus/core-handle-tail.bc instances 2 decls 2 poly 0 uses 2 erasure same lir outside mismatches 0
+corpus/core-handle-tail.bc instances 3 decls 3 poly 0 R1 2:rewritten calls 2 nodes 1 works 1 pi 4 lir ok
 corpus/core-r0-fin-instances.bc instances 6 decls 6 poly 0 R0 1:rewritten raises 1 handles 2 lets 0 thens 2 subs 3 performs 0 forwards 0 ulends 0 pi 32 lir ok
 corpus/core-r0-forward-last.bc instances 3 decls 3 poly 0 R0 1:rewritten raises 1 handles 1 lets 2 thens 0 subs 2 performs 2 forwards 1 ulends 0 pi 17 lir outside
-corpus/core-r0-forward.bc instances 3 decls 3 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 1 subs 2 performs 1 forwards 1 ulends 0 pi 21 lir ok
+corpus/core-r0-forward.bc instances 4 decls 4 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 1 subs 2 performs 1 forwards 1 ulends 0 R1 2:rewritten calls 2 nodes 2 works 1 pi 19 lir ok
 corpus/core-r0-lend-two.bc instances 2 decls 2 poly 0 R0 2:rewritten 1:rewritten raises 3 handles 2 lets 0 thens 0 subs 1 performs 0 forwards 0 ulends 1 pi 21 lir ok
 corpus/core-r0-linear.bc instances 4 decls 4 poly 0 R0 1:rewritten raises 1 handles 1 lets 1 thens 0 subs 2 performs 0 forwards 0 ulends 0 pi 15 lir ok
 corpus/core-r0-nested.bc instances 3 decls 3 poly 0 R0 2:rewritten 1:rewritten raises 2 handles 2 lets 0 thens 0 subs 3 performs 0 forwards 0 ulends 0 pi 20 lir ok
@@ -100,7 +100,13 @@ corpus/core-r0-pi-instances.bc instances 4 decls 4 poly 0 R0 1:rewritten raises 
 corpus/core-r0-two-ops.bc instances 3 decls 3 poly 0 R0 1:rewritten raises 2 handles 1 lets 0 thens 0 subs 1 performs 0 forwards 0 ulends 0 pi 19 lir ok
 corpus/core-r0-unwind-linear.bc instances 4 decls 4 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 1 subs 2 performs 0 forwards 0 ulends 0 pi 20 lir ok
 corpus/core-r0-unwind.bc instances 4 decls 4 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 1 subs 2 performs 0 forwards 0 ulends 0 pi 18 lir ok
-corpus/core-yield-loop.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0
+corpus/core-r1-linear.bc instances 3 decls 3 poly 0 R1 2:rewritten calls 1 nodes 1 works 1 pi 5 lir ok
+corpus/core-r1-opt.bc instances 3 decls 3 poly 0 R1 2:rewritten calls 2 nodes 1 works 1 pi 5 lir ok
+corpus/core-r1-performs.bc instances 3 decls 3 poly 0 R1 5:rewritten calls 1 nodes 1 works 1 R1left 4:condition-2 pi 8 lir ok
+corpus/core-r1-two-ops-eq.bc instances 4 decls 4 poly 0 R1 3:rewritten calls 2 nodes 1 works 2 pi 5 lir ok
+corpus/core-r1-two-ops.bc instances 4 decls 4 poly 0 R1 3:rewritten calls 2 nodes 1 works 2 pi 7 lir ok
+corpus/core-r1-unused.bc instances 3 decls 3 poly 0 R1 6:rewritten calls 1 nodes 1 works 1 pi 4 lir ok
+corpus/core-yield-loop.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0 R1left 1:a-node-not-the-tail-resuming-rule's
 corpus/core-yield-pull.bc instances 17 decls 17 poly 0 uses 17 erasure same lir same mismatches 0
 corpus/count-down-exact.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0
 corpus/count-down.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same mismatches 0
@@ -132,7 +138,7 @@ corpus/effects-fail-list.bc instances 9 decls 9 poly 0 R0 3:rewritten 2:rewritte
 corpus/effects-fold-sum.bc instances 13 decls 13 poly 0 uses 13 erasure same lir same mismatches 0
 corpus/effects-fold.bc instances 15 decls 15 poly 0 R0 2:rewritten 1:rewritten 4:rewritten 3:rewritten 5:rewritten raises 10 handles 8 lets 5 thens 7 subs 28 performs 0 forwards 0 ulends 0 pi 320 lir ok
 corpus/effects-generic.bc instances 4 decls 4 poly 0 uses 4 erasure same lir same mismatches 0
-corpus/effects-hof-two-rows.bc instances 4 decls 4 poly 0 R0 2:rewritten raises 1 handles 1 lets 0 thens 0 subs 0 performs 0 forwards 0 ulends 0 pi 27 lir ok
+corpus/effects-hof-two-rows.bc instances 5 decls 5 poly 0 R0 2:rewritten raises 1 handles 1 lets 0 thens 0 subs 0 performs 0 forwards 0 ulends 0 R1 1:rewritten calls 1 nodes 1 works 1 pi 25 lir ok
 corpus/effects-instances.bc instances 14 decls 13 poly 0 R0 4:rewritten 3:rewritten 1:rewritten 2:rewritten 6:rewritten 5:rewritten raises 13 handles 9 lets 11 thens 7 subs 38 performs 0 forwards 0 ulends 0 pi 380 lir ok
 corpus/effects-log-fail.bc instances 6 decls 5 poly 0 R0 1:rewritten 2:rewritten raises 2 handles 2 lets 3 thens 0 subs 5 performs 0 forwards 0 ulends 1 pi 75 lir ok
 corpus/effects-map-fail.bc instances 6 decls 6 poly 0 R0 1:rewritten raises 2 handles 2 lets 2 thens 1 subs 7 performs 0 forwards 0 ulends 0 pi 125 lir ok
@@ -152,31 +158,31 @@ corpus/float-ordered.bc instances 85 decls 81 poly 0 uses 85 erasure same lir sa
 corpus/float-roundtrip.bc instances 163 decls 76 poly 0 R0 1:rewritten 2:rewritten raises 16 handles 8 lets 8 thens 12 subs 88 performs 0 forwards 0 ulends 0 pi 2260 lir ok
 corpus/fn-lifetime.bc instances 4 decls 4 poly 0 uses 4 erasure same lir same mismatches 0
 corpus/for-adapters.bc instances 12 decls 12 poly 0 uses 12 erasure same lir same mismatches 0
-corpus/for-data-div.bc instances 8 decls 8 poly 0 uses 8 erasure same lir same mismatches 0
+corpus/for-data-div.bc instances 8 decls 8 poly 0 uses 8 erasure same lir same mismatches 0 R1left 2:the-nodes'-works-differ 3:a-node-not-the-tail-resuming-rule's 4:a-node-not-the-tail-resuming-rule's 1:the-nodes'-works-differ
 corpus/for-data.bc instances 10 decls 8 poly 0 uses 10 erasure same lir same mismatches 0
 corpus/for-finite.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
 corpus/for-in-if-lend.bc instances 4 decls 4 poly 0 uses 4 erasure same lir same mismatches 0
-corpus/for-never.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same mismatches 0
+corpus/for-never.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same mismatches 0 R1left 1:a-node-not-the-tail-resuming-rule's 2:the-nodes'-works-differ
 corpus/for-return.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0
 corpus/for-view-effect-copy.bc instances 8 decls 8 poly 0 uses 8 erasure same lir same mismatches 0
-corpus/for-yield-branch.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0
+corpus/for-yield-branch.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0 R1left 2:the-nodes'-works-differ 3:a-node-not-the-tail-resuming-rule's 1:the-nodes'-works-differ
 corpus/format.bc instances 18 decls 18 poly 0 uses 18 erasure same lir same mismatches 0
-corpus/gen-adapters-fail.bc instances 32 decls 32 poly 0 uses 32 erasure same lir same mismatches 0
-corpus/gen-adapters.bc instances 24 decls 24 poly 0 uses 24 erasure same lir same mismatches 0
-corpus/gen-borrowed.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0
-corpus/gen-cell.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
-corpus/gen-close.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0
-corpus/gen-div.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0
-corpus/gen-fib.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same mismatches 0
-corpus/gen-from.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0
-corpus/gen-nested.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0
-corpus/gen-pipeline-adapters.bc instances 7 decls 7 poly 0 uses 7 erasure same lir same mismatches 0
-corpus/gen-pipeline-pipe.bc instances 12 decls 12 poly 0 uses 12 erasure same lir same mismatches 0
-corpus/gen-pipeline.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0
-corpus/gen-produce.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
-corpus/gen-return.bc instances 9 decls 9 poly 0 uses 9 erasure same lir same mismatches 0
-corpus/gen-tokenize-parse.bc instances 15 decls 15 poly 0 R0 2:rewritten 1:rewritten raises 8 handles 2 lets 15 thens 0 subs 16 performs 0 forwards 0 ulends 0 pi 307 lir ok
-corpus/gen-value.bc instances 4 decls 4 poly 0 uses 4 erasure same lir same mismatches 0
+corpus/gen-adapters-fail.bc instances 32 decls 32 poly 0 uses 32 erasure same lir same mismatches 0 R1left 4:a-node-not-the-tail-resuming-rule's 3:the-nodes'-works-differ 6:a-node-not-the-tail-resuming-rule's 5:the-nodes'-works-differ 8:a-node-not-the-tail-resuming-rule's 7:the-nodes'-works-differ 10:a-node-not-the-tail-resuming-rule's 11:a-node-not-the-tail-resuming-rule's 9:the-nodes'-works-differ 13:a-node-not-the-tail-resuming-rule's 14:a-node-not-the-tail-resuming-rule's 12:the-nodes'-works-differ 16:a-node-not-the-tail-resuming-rule's 15:the-nodes'-works-differ 18:a-node-not-the-tail-resuming-rule's 17:a-node-not-the-tail-resuming-rule's 20:a-node-not-the-tail-resuming-rule's 19:the-nodes'-works-differ 23:a-node-not-the-tail-resuming-rule's 22:a-node-not-the-tail-resuming-rule's 21:a-node-not-the-tail-resuming-rule's 2:a-node-not-the-tail-resuming-rule's 1:the-nodes'-works-differ
+corpus/gen-adapters.bc instances 24 decls 24 poly 0 uses 24 erasure same lir same mismatches 0 R1left 9:a-node-not-the-tail-resuming-rule's 8:a-node-not-the-tail-resuming-rule's 11:a-node-not-the-tail-resuming-rule's 12:a-node-not-the-tail-resuming-rule's 10:a-node-not-the-tail-resuming-rule's 7:a-node-not-the-tail-resuming-rule's 6:the-nodes'-works-differ 15:a-node-not-the-tail-resuming-rule's 14:a-node-not-the-tail-resuming-rule's 19:a-node-not-the-tail-resuming-rule's 18:a-node-not-the-tail-resuming-rule's 17:a-node-not-the-tail-resuming-rule's 16:a-node-not-the-tail-resuming-rule's 13:the-nodes'-works-differ 5:a-node-not-the-tail-resuming-rule's 4:a-node-not-the-tail-resuming-rule's 3:a-node-not-the-tail-resuming-rule's 2:a-node-not-the-tail-resuming-rule's 1:the-nodes'-works-differ
+corpus/gen-borrowed.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0 R1left 2:a-node-not-the-tail-resuming-rule's 1:a-node-not-the-tail-resuming-rule's
+corpus/gen-cell.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0 R1left 1:the-nodes'-works-differ
+corpus/gen-close.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0 R1left 2:a-node-not-the-tail-resuming-rule's 1:the-nodes'-works-differ
+corpus/gen-div.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0 R1left 3:the-nodes'-works-differ 2:a-node-not-the-tail-resuming-rule's 1:the-nodes'-works-differ
+corpus/gen-fib.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same mismatches 0 R1left 2:a-node-not-the-tail-resuming-rule's 1:the-nodes'-works-differ
+corpus/gen-from.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0 R1left 3:a-node-not-the-tail-resuming-rule's 2:the-nodes'-works-differ 1:the-nodes'-works-differ
+corpus/gen-nested.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0 R1left 2:the-nodes'-works-differ 3:the-nodes'-works-differ 1:a-node-not-the-tail-resuming-rule's
+corpus/gen-pipeline-adapters.bc instances 7 decls 7 poly 0 uses 7 erasure same lir same mismatches 0 R1left 5:a-node-not-the-tail-resuming-rule's 4:a-node-not-the-tail-resuming-rule's 3:a-node-not-the-tail-resuming-rule's 2:a-node-not-the-tail-resuming-rule's 1:the-nodes'-works-differ
+corpus/gen-pipeline-pipe.bc instances 12 decls 12 poly 0 uses 12 erasure same lir same mismatches 0 R1left 10:a-node-not-the-tail-resuming-rule's 9:a-node-not-the-tail-resuming-rule's 8:a-node-not-the-tail-resuming-rule's 7:a-node-not-the-tail-resuming-rule's 6:the-nodes'-works-differ 5:a-node-not-the-tail-resuming-rule's 4:a-node-not-the-tail-resuming-rule's 3:a-node-not-the-tail-resuming-rule's 2:a-node-not-the-tail-resuming-rule's 1:the-nodes'-works-differ
+corpus/gen-pipeline.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0 R1left 3:a-node-not-the-tail-resuming-rule's 2:a-node-not-the-tail-resuming-rule's 1:the-nodes'-works-differ
+corpus/gen-produce.bc instances 2 decls 2 poly 0 R1 1:rewritten calls 3 nodes 1 works 1 pi 27 lir ok
+corpus/gen-return.bc instances 9 decls 9 poly 0 uses 9 erasure same lir same mismatches 0 R1left 2:a-node-not-the-tail-resuming-rule's 3:a-node-not-the-tail-resuming-rule's 1:the-nodes'-works-differ
+corpus/gen-tokenize-parse.bc instances 15 decls 15 poly 0 R0 2:rewritten 1:rewritten raises 8 handles 2 lets 15 thens 0 subs 16 performs 0 forwards 0 ulends 0 R1left 3:a-node-not-the-tail-resuming-rule's pi 307 lir ok
+corpus/gen-value.bc instances 4 decls 4 poly 0 uses 4 erasure same lir same mismatches 0 R1left 3:a-node-not-the-tail-resuming-rule's 2:the-nodes'-works-differ 4:a-node-not-the-tail-resuming-rule's 1:the-nodes'-works-differ
 corpus/generated-names.bc instances 0 decls 0 poly 0 uses 0 erasure same lir same mismatches 0
 corpus/generic-in-def.bc instances 7 decls 7 poly 0 uses 7 erasure same lir same mismatches 0
 corpus/generic-pair-arg.bc instances 4 decls 4 poly 0 uses 4 erasure same lir same mismatches 0
@@ -185,7 +191,7 @@ corpus/http-request.bc instances 26 decls 24 poly 0 uses 26 erasure same lir sam
 corpus/hygiene-answering-state.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
 corpus/hygiene-borrow-loop.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
 corpus/hygiene-box-lib.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
-corpus/hygiene-clause-global.bc instances 1 decls 1 poly 0 R0 2:rewritten raises 1 handles 1 lets 0 thens 0 subs 1 performs 0 forwards 0 ulends 0 pi 22 lir ok
+corpus/hygiene-clause-global.bc instances 2 decls 2 poly 0 R0 2:rewritten raises 1 handles 1 lets 0 thens 0 subs 1 performs 0 forwards 0 ulends 0 R1 1:rewritten calls 1 nodes 1 works 1 pi 20 lir ok
 corpus/hygiene-clause-name.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
 corpus/hygiene-for-global.bc instances 0 decls 0 poly 0 uses 0 erasure same lir same mismatches 0
 corpus/hygiene-handler-after.bc instances 0 decls 0 poly 0 R0 1:rewritten raises 0 handles 1 lets 0 thens 0 subs 1 performs 0 forwards 0 ulends 0 pi 11 lir ok
@@ -313,12 +319,12 @@ corpus/leetcode/trees/0297-serialize-and-deserialize-binary-tree.bc instances 75
 corpus/leetcode/trees/0572-subtree-of-another-tree.bc instances 56 decls 45 poly 0 R0 1:rewritten raises 6 handles 1 lets 4 thens 7 subs 11 performs 0 forwards 0 ulends 0 pi 511 lir ok
 corpus/lend-config.bc instances 7 decls 7 poly 0 uses 7 erasure same lir same mismatches 0
 corpus/lend-copy.bc instances 8 decls 8 poly 0 uses 8 erasure same lir same mismatches 0
-corpus/lend-div.bc instances 4 decls 4 poly 0 uses 4 erasure same lir same mismatches 0
+corpus/lend-div.bc instances 4 decls 4 poly 0 uses 4 erasure same lir same mismatches 0 R1left 1:a-node-not-the-tail-resuming-rule's
 corpus/lend-lib-each.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0
 corpus/lend-lib-gen.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0
 corpus/lend-lib-loop.bc instances 12 decls 12 poly 0 uses 12 erasure same lir same mismatches 0
 corpus/lend-mut.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0
-corpus/lend-pipeline.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0
+corpus/lend-pipeline.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0 R1left 3:a-node-not-the-tail-resuming-rule's 2:a-node-not-the-tail-resuming-rule's 1:a-node-not-the-tail-resuming-rule's
 corpus/lend-server.bc instances 7 decls 7 poly 0 uses 7 erasure same lir same mismatches 0
 corpus/lend-shadow.bc instances 7 decls 7 poly 0 uses 7 erasure same lir same mismatches 0
 corpus/list-blocks.bc instances 13 decls 13 poly 0 R0 3:rewritten 2:rewritten 1:rewritten raises 4 handles 3 lets 4 thens 2 subs 10 performs 0 forwards 0 ulends 0 pi 129 lir ok
@@ -352,7 +358,7 @@ corpus/poly-operators.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same
 corpus/poly-providers.bc instances 53 decls 39 poly 0 uses 53 erasure same lir same mismatches 0
 corpus/print-borrowed-array.bc instances 9 decls 7 poly 0 uses 9 erasure same lir same mismatches 0
 corpus/quicksort.bc instances 21 decls 19 poly 0 uses 21 erasure same lir same mismatches 0
-corpus/rec-await-exhausted.bc instances 4 decls 4 poly 0 R0 2:rewritten raises 1 handles 1 lets 1 thens 1 subs 2 performs 1 forwards 0 ulends 0 pi 34 lir ok
+corpus/rec-await-exhausted.bc instances 5 decls 5 poly 0 R0 2:rewritten raises 1 handles 1 lets 1 thens 1 subs 2 performs 1 forwards 0 ulends 0 R1 1:rewritten calls 1 nodes 1 works 1 pi 42 lir ok
 corpus/rec-deep.bc instances 32 decls 32 poly 0 uses 32 erasure same lir same mismatches 0
 corpus/rec-emit.bc instances 2 decls 2 poly 0 R0 1:rewritten raises 1 handles 1 lets 3 thens 0 subs 3 performs 2 forwards 1 ulends 0 pi 36 lir ok
 corpus/rec-even-odd.bc instances 5 decls 5 poly 0 R0 1:rewritten raises 2 handles 1 lets 2 thens 0 subs 3 performs 0 forwards 0 ulends 0 pi 37 lir ok
@@ -367,7 +373,7 @@ corpus/rec-mixed.bc instances 5 decls 5 poly 0 R0 1:rewritten raises 2 handles 1
 corpus/rec-overflow.bc instances 4 decls 4 poly 0 R0 2:rewritten 1:rewritten raises 2 handles 2 lets 0 thens 2 subs 4 performs 0 forwards 0 ulends 0 pi 63 lir ok
 corpus/rec-parser.bc instances 10 decls 10 poly 0 R0 3:rewritten 2:rewritten 1:rewritten raises 26 handles 3 lets 16 thens 0 subs 21 performs 0 forwards 0 ulends 0 pi 273 lir ok
 corpus/rec-tree.bc instances 6 decls 6 poly 0 R0 1:rewritten raises 4 handles 1 lets 3 thens 2 subs 4 performs 0 forwards 0 ulends 0 pi 75 lir ok
-corpus/rec-yield.bc instances 3 decls 3 poly 0 R0 1:rewritten raises 1 handles 1 lets 4 thens 0 subs 4 performs 2 forwards 1 ulends 0 pi 60 lir ok
+corpus/rec-yield.bc instances 4 decls 4 poly 0 R0 1:rewritten raises 1 handles 1 lets 4 thens 0 subs 4 performs 2 forwards 1 ulends 0 R1 2:rewritten calls 2 nodes 1 works 1 pi 58 lir ok
 corpus/reconcile-chain.bc instances 10 decls 10 poly 0 R0 5:rewritten 4:rewritten 11:rewritten 10:rewritten raises 4 handles 4 lets 12 thens 0 subs 22 performs 2 forwards 2 ulends 0 pi 313 lir ok
 corpus/reconcile-clock.bc instances 29 decls 26 poly 0 R0 4:rewritten 3:rewritten 9:rewritten 8:rewritten 14:rewritten 13:rewritten 19:rewritten 18:rewritten raises 8 handles 8 lets 24 thens 0 subs 44 performs 4 forwards 4 ulends 0 pi 698 lir ok
 corpus/retry-block.bc instances 4 decls 4 poly 0 R0 2:rewritten 1:rewritten raises 2 handles 2 lets 1 thens 0 subs 3 performs 0 forwards 0 ulends 0 pi 115 lir ok
@@ -408,20 +414,20 @@ corpus/sugar/effects-counter.core.bc instances 1 decls 1 poly 0 uses 1 erasure s
 corpus/sugar/for-count.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
 corpus/sugar/for-count.core.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
 corpus/sugar/for-untyped.bc instances 6 decls 6 poly 0 uses 6 erasure same lir same mismatches 0
-corpus/sugar/for-value.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same mismatches 0
-corpus/sugar/for-value.core.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same mismatches 0
+corpus/sugar/for-value.bc instances 3 decls 3 poly 0 R1 1:rewritten calls 2 nodes 1 works 1 pi 62 lir ok
+corpus/sugar/for-value.core.bc instances 3 decls 3 poly 0 R1 1:rewritten calls 2 nodes 1 works 1 pi 62 lir ok
 corpus/sugar/for.bc instances 6 decls 6 poly 0 uses 6 erasure same lir same mismatches 0
 corpus/sugar/for.core.bc instances 6 decls 6 poly 0 uses 6 erasure same lir same mismatches 0
-corpus/sugar/gen-div.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0
-corpus/sugar/gen-div.core.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0
-corpus/sugar/gen-from.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same mismatches 0
-corpus/sugar/gen-from.core.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same mismatches 0
-corpus/sugar/gen-range.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
-corpus/sugar/gen-range.core.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
-corpus/sugar/gen-return.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
-corpus/sugar/gen-return.core.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
-corpus/sugar/gen-yields.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
-corpus/sugar/gen-yields.core.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
+corpus/sugar/gen-div.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0 R1left 1:the-nodes'-works-differ
+corpus/sugar/gen-div.core.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0 R1left 1:the-nodes'-works-differ
+corpus/sugar/gen-from.bc instances 3 decls 3 poly 0 R1 1:rewritten calls 4 nodes 1 works 1 pi 39 lir ok
+corpus/sugar/gen-from.core.bc instances 3 decls 3 poly 0 R1 1:rewritten calls 4 nodes 1 works 1 pi 39 lir ok
+corpus/sugar/gen-range.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0 R1left 1:the-nodes'-works-differ
+corpus/sugar/gen-range.core.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0 R1left 1:the-nodes'-works-differ
+corpus/sugar/gen-return.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0 R1left 1:the-nodes'-works-differ
+corpus/sugar/gen-return.core.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0 R1left 1:the-nodes'-works-differ
+corpus/sugar/gen-yields.bc instances 2 decls 2 poly 0 R1 1:rewritten calls 3 nodes 1 works 1 pi 27 lir ok
+corpus/sugar/gen-yields.core.bc instances 2 decls 2 poly 0 R1 1:rewritten calls 3 nodes 1 works 1 pi 27 lir ok
 corpus/sugar/generic-fn.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same mismatches 0
 corpus/sugar/generic-fn.core.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same mismatches 0
 corpus/sugar/generic-infer.bc instances 2 decls 2 poly 0 uses 2 erasure same lir same mismatches 0
@@ -448,8 +454,8 @@ corpus/sugar/lend.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mis
 corpus/sugar/lend.core.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
 corpus/sugar/loop-main.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
 corpus/sugar/loop-main.core.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
-corpus/sugar/mut-await.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
-corpus/sugar/mut-await.core.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
+corpus/sugar/mut-await.bc instances 2 decls 2 poly 0 R1 1:rewritten calls 2 nodes 1 works 1 pi 10 lir ok
+corpus/sugar/mut-await.core.bc instances 2 decls 2 poly 0 R1 1:rewritten calls 2 nodes 1 works 1 pi 10 lir ok
 corpus/sugar/mut-block.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
 corpus/sugar/mut-block.core.bc instances 1 decls 1 poly 0 uses 1 erasure same lir same mismatches 0
 corpus/sugar/mut-for-acc.bc instances 0 decls 0 poly 0 uses 0 erasure same lir same mismatches 0
@@ -491,7 +497,7 @@ corpus/surface/io-wc.bc instances 14 decls 14 poly 0 uses 14 erasure same lir sa
 corpus/surface/map-reuse.bc instances 6 decls 6 poly 0 uses 6 erasure same lir same mismatches 0
 corpus/text-lend-lifetime.bc instances 16 decls 14 poly 0 uses 16 erasure same lir same mismatches 0
 corpus/text-wordfreq.bc instances 57 decls 50 poly 0 R0 2:rewritten 1:rewritten raises 14 handles 2 lets 5 thens 16 subs 28 performs 0 forwards 0 ulends 0 pi 770 lir ok
-corpus/tree-map.bc instances 20 decls 20 poly 0 R0 3:rewritten 2:rewritten 1:rewritten raises 14 handles 3 lets 16 thens 10 subs 23 performs 2 forwards 2 ulends 0 pi 406 lir ok
+corpus/tree-map.bc instances 22 decls 22 poly 0 R0 3:rewritten 2:rewritten 1:rewritten raises 14 handles 3 lets 16 thens 10 subs 23 performs 2 forwards 2 ulends 0 R1 5:rewritten 4:rewritten calls 2 nodes 2 works 2 pi 402 lir ok
 corpus/trim-replace.bc instances 68 decls 42 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 0 subs 1 performs 0 forwards 0 ulends 0 pi 758 lir ok
 corpus/utf8-count.bc instances 29 decls 24 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 0 subs 1 performs 0 forwards 0 ulends 0 pi 338 lir ok
-corpus/yield-callback.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0
+corpus/yield-callback.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0 R1left 2:a-node-not-the-tail-resuming-rule's 1:the-nodes'-works-differ

@@ -137,6 +137,13 @@ corpus/core-r0-pi-instances.bc 26:3: handle 1: 1.0 0 abortive, world top, -, -
 corpus/core-r0-two-ops.bc 29:5: handle 1: 1.0 0 abortive, world top, -, -; 1.1 0 abortive, world top, -, -
 corpus/core-r0-unwind-linear.bc 36:5: handle 1: 1.0 0 abortive, world top, -, -
 corpus/core-r0-unwind.bc 32:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-r1-linear.bc 19:3: handle 2: 2.0 1 written, world top, tail, in-clause
+corpus/core-r1-opt.bc 20:3: handle 2: 2.0 1? written, world top, tail, in-clause
+corpus/core-r1-performs.bc 21:3: handle 5: 5.0 1 written, world top, tail, in-clause
+corpus/core-r1-performs.bc 27:6: handle 4: 4.0 1 written, world top, tail, in-clause
+corpus/core-r1-two-ops-eq.bc 20:3: handle 3: 3.0 1 written, world top, tail, in-clause; 3.1 1 written, world top, tail, in-clause
+corpus/core-r1-two-ops.bc 19:3: handle 3: 3.0 1 written, world top, tail, in-clause; 3.1 1 written, world top, tail, in-clause
+corpus/core-r1-unused.bc 18:3: handle 6: 6.0 1 written, world top, tail, in-clause; 6.1 1 written, world top, tail, in-clause
 corpus/core-yield-loop.bc 36:7: handle 1: 1.0 1? written, world top, tail, in-clause
 corpus/core-yield-loop.bc 48:12: handle 1: 1.0 1? written, world top, tail, in-clause
 corpus/core-yield-pull.bc 58:22: handle 1: 1.0 1? written, world top, -, stored

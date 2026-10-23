@@ -1,0 +1,31 @@
+-- R1 (SPEC §54) at a name of two operations of other argument types, `3.0 lin i32 ~> i32` (twice
+-- its argument) and `3.1 lin 1 ~> i32` (a constant). Each `perform` becomes a call of its own
+-- operation's work. A `perform` sent to the other operation's work does not type (the reject test
+-- `wrongWork`, `scripts/check-rewrite.sh`): the kernel's re-check refuses it.
+--
+-- Answer: i32[47]: `double 5` is `10`, the constant `37`.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def both : !U (i32 -o F[3.0 lin i32 ~> i32, 3.1 lin 1 ~> i32] i32) =
+  !thunkv fun (x : i32) ->
+    a <- perform[3.0] x;
+    b <- perform[3.1] ();
+    return (plus (a, b))
+
+main : F i32 =
+  f <- return (unbang both);
+  x <- return i32[5];
+  handle_with[3](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (p : i32 * U ((i32 -o F i32) & top)) ->
+        let (y, k) = p;
+        z <- return (plus (y, y));
+        (force k).1 z),
+       ((!thunkv fun (p : 1 * U ((i32 -o F i32) & top)) ->
+        let (u, k) = p;
+        let () = u;
+        c <- return i32[37];
+        (force k).1 c), ()))
+        : !U (i32 * U ((i32 -o F i32) & top) -o F i32)
+          * (!U (1 * U ((i32 -o F i32) & top) -o F i32) * 1))) (force f x)

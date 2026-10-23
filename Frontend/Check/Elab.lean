@@ -56,12 +56,25 @@ def pullTy (A B R : CVTy) : CCTy :=
   .nu (.amp (.ret (.sum (.tensor (A.rename Nat.succ) (.tvar 0)) (.sum (B.rename Nat.succ) (.tvar 0))))
     (.ret (R.rename Nat.succ)))
 
+/-- **Where the checker writes the tail-resuming rule's node** (`effHandleT`, SPEC §54, R1), at a
+`handle` node whose every operation it classifies `tail`: nowhere (`none`, every node is
+`[handle]`'s); at every such node whose works the rule's premises accept (`all`, the check the
+licence is read from, `Frontend/Check/Licence.lean`); or at the nodes of the names the licence
+admits (`names`), where a node the rule refuses is an internal error. -/
+inductive TailGate where
+  | none
+  | all
+  | names (ns : List UInt32)
+  deriving Inhabited, BEq, Repr
+
 /-- **The counts the checker gives a program's rows** (SPEC §53): the counts it inferred, by
 operation `n.i` (`Frontend/Check/Grades.lean`); and, with `relax`, a `lin` entry read as `ctl`,
-for the check that finds which handler forces a `linear ctl` operation above `1`. -/
+for the check that finds which handler forces a `linear ctl` operation above `1`. `tail` is where
+the checker writes the tail-resuming rule's node (`TailGate`, SPEC §54). -/
 structure CntTable where
   ops : List ((Nat × Nat) × CCount) := []
   relax : Bool := false
+  tail : TailGate := .none
   deriving Inhabited
 
 /-- The declarations visible at a point: those before index `upto`. -/

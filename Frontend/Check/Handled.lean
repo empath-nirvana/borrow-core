@@ -198,9 +198,8 @@ open BoCa.Fig16.LogRel.Core.Check
 
 /-! ### The record at the program -/
 
-/-- **Condition 2, decided**: no name of the row `Σ` (its names `row`) is one the record `V` may
-catch.  `[spec §19]` -/
-def cond2B (V : HIn) (row : List UInt32) : Bool := row.all fun m => !V.catchesB m
+/-! `cond2B`, condition 2 decided, and `cond2Names` are in `Frontend/Check/Licence.lean`, which the
+checker reads them from (SPEC §54). -/
 
 theorem cond2B_sound {V : HIn} {S : CRow} (h : cond2B V (S.map (·.n)) = true) :
     ∀ o ∈ S, ¬ V.Catches o.n := by
@@ -218,10 +217,6 @@ theorem cond2B_names_sound {V : HIn} {ns : List UInt32} (h : cond2B V ns = true)
   have := h m hm
   rw [HIn.catchesB_iff.mpr hc] at this
   cases this
-
-/-- **The names condition 2 is over at a clause** (form (b), SPEC §19): the names its own code
-performs or raises (`clauseNames`), or, where it may run code it does not hold, its row's. -/
-def cond2Names (row : List UInt32) (ns : Option (List UInt32)) : List UInt32 := ns.getD row
 
 /-- **What may flow in a run of `main`**: `ClauseKinds.flows` of the checked term.  `[spec §19]` -/
 def Checked.flows (c : Checked) : HIn := ClauseKinds.flows c.e
