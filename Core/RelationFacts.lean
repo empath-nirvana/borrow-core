@@ -146,7 +146,7 @@ theorem CTyEq.applyLSub : ∀ (C : CTy) (σ : Lifetime.LSubst) (δ δ' : LSub),
   | .top, _, _, _, _ => trivial
   | .nu C, σ, δ, δ', h => CTyEq.applyLSub C σ δ δ' h
   | .eff _ _ _ _ A B fin C, σ, δ, δ', h =>
-      ⟨rfl, rfl, rfl, TyEq.applyLSub A σ δ δ' (fun y hy => h y (Or.inl hy)),
+      ⟨rfl, rfl, rfl, rfl, TyEq.applyLSub A σ δ δ' (fun y hy => h y (Or.inl hy)),
        TyEq.applyLSub B σ δ δ' (fun y hy => h y (Or.inr (Or.inl hy))),
        CTyEq.applyLSub fin σ δ δ' (fun y hy => h y (Or.inr (Or.inr (Or.inl hy)))),
        CTyEq.applyLSub C σ δ δ' (fun y hy => h y (Or.inr (Or.inr (Or.inr hy))))⟩
@@ -934,7 +934,8 @@ theorem CTyEq.effLeaf_iff : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ
       exact TyEq.poly_iff A h
   | .eff n i q _ A B fin C, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h
-      obtain ⟨rfl, rfl, rfl, hA, hB, -, hC⟩ := h
+      cases_type* World
+      obtain ⟨rfl, rfl, rfl, -, hA, hB, -, hC⟩ := h
       exact and_congr (TyEq.Cl_iff A 0 hA) (and_congr (TyEq.Cl_iff B 0 hB)
         (CTyEq.effLeaf_iff C hC))
   | .arr _ _, C', _, _, h | .top, C', _, _, h | .all _ _ _, C', _, _, h | .nu _, C', _, _, h
@@ -950,8 +951,9 @@ theorem CTyEq.nuLeaf_iff : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ 
       cases C' <;> simp only [CTyEq] at h
       exact and_congr (CTyEq.nuLeaf_iff C h.1) (CTyEq.nuLeaf_iff D h.2)
   | .eff n i q wq A B fin C, C', _, _, h => by
-      cases C' <;> simp only [CTyEq] at h
-      exact CTyEq.effLeaf_iff (.eff n i q wq A B fin C) (C' := .eff _ _ _ _ _ _ _ _) h
+      cases C'
+      case eff => exact CTyEq.effLeaf_iff (.eff n i q wq A B fin C) h
+      all_goals simp only [CTyEq] at h
   | .arr A D, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h
       exact and_congr (TyEq.Cl_iff A 0 h.1) (CTyEq.nuLeaf_iff D h.2)
@@ -972,7 +974,8 @@ theorem CTyEq.divAt_eq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C'
     C.divAt = C'.divAt
   | .eff n i q _ A B fin C, C', δ, δ', h => by
       cases C' <;> simp only [CTyEq] at h
-      obtain ⟨rfl, rfl, rfl, hA, hB, -, hC⟩ := h
+      cases_type* World
+      obtain ⟨rfl, rfl, rfl, -, hA, hB, -, hC⟩ := h
       simp only [CTy.divAt, tickB, TyEq.isUnitB_eq A hA, TyEq.isNextB_eq B hB,
         CTyEq.divAt_eq C hC]
   | .ret _, C', _, _, h | .arr _ _, C', _, _, h | .amp _ _, C', _, _, h | .top, C', _, _, h
@@ -1114,7 +1117,8 @@ theorem cC_tyEq_aux : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
   | .eff n i q wq A B fin C, C', δ, δ', h => by
       have hd := CTyEq.divAt_eq (.eff n i q wq A B fin C) h
       cases C' <;> simp only [CTyEq] at h
-      obtain ⟨rfl, rfl, rfl, hA, hB, hF, hC⟩ := h
+      cases_type* World
+      obtain ⟨rfl, rfl, rfl, -, hA, hB, hF, hC⟩ := h
       have ihA := vCE_tyEq A none none hA (envEq_none _ _) true
       have ihB := vCE_tyEq B none none hB (envEq_none _ _) true
       have ihF := finObl_tyEq fin hF
@@ -1126,7 +1130,8 @@ theorem effTab_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
     effTab C δ = effTab C' δ'
   | .eff n i q _ A B fin C, C', δ, δ', h => by
       cases C' <;> simp only [CTyEq] at h
-      obtain ⟨rfl, rfl, rfl, hA, hB, hF, hC⟩ := h
+      cases_type* World
+      obtain ⟨rfl, rfl, rfl, -, hA, hB, hF, hC⟩ := h
       have ihA := vCE_tyEq A none none hA (envEq_none _ _) true
       have ihB := vCE_tyEq B none none hB (envEq_none _ _) true
       have ihF := finObl_tyEq fin hF
@@ -1140,7 +1145,8 @@ theorem finObl_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
     finObl C δ = finObl C' δ'
   | .eff n i q _ A B fin C, C', δ, δ', h => by
       cases C' <;> simp only [CTyEq] at h
-      obtain ⟨rfl, rfl, rfl, hA, hB, hF, hC⟩ := h
+      cases_type* World
+      obtain ⟨rfl, rfl, rfl, -, hA, hB, hF, hC⟩ := h
       have ihA := vCE_tyEq A none none hA (envEq_none _ _) true
       have ihB := vCE_tyEq B none none hB (envEq_none _ _) true
       have ihF := finObl_tyEq fin hF
@@ -1159,7 +1165,7 @@ theorem effRet_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
   | .eff _ _ _ _ _ _ _ C, C', δ, δ', h => by
       cases C' <;> simp only [CTyEq] at h
       simp only [effRet]
-      exact effRet_tyEq C h.2.2.2.2.2.2
+      exact effRet_tyEq C h.2.2.2.2.2.2.2
   | .arr _ _, C', _, _, h | .amp _ _, C', _, _, h | .top, C', _, _, h
   | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h <;> simp only [effRet]
@@ -1172,7 +1178,7 @@ theorem effRetE_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' �
   | .eff _ _ _ _ _ _ _ C, C', δ, δ', h, η, η', hη => by
       cases C' <;> simp only [CTyEq] at h
       simp only [effRetE]
-      exact effRetE_tyEq C h.2.2.2.2.2.2 η η' hη
+      exact effRetE_tyEq C h.2.2.2.2.2.2.2 η η' hη
   | .arr _ _, C', _, _, h, _, _, _ | .amp _ _, C', _, _, h, _, _, _ | .top, C', _, _, h, _, _, _
   | .all _ _ _, C', _, _, h, _, _, _ | .nu _, C', _, _, h, _, _, _ => by
       cases C' <;> simp_all [CTyEq, effRetE]
@@ -1191,7 +1197,8 @@ theorem cB_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' �
   | .eff n i q wq A B fin C, C', δ, δ', h, η, η', hη, ls => by
       have hd := CTyEq.divAt_eq (.eff n i q wq A B fin C) h
       cases C' <;> simp only [CTyEq] at h
-      obtain ⟨rfl, rfl, rfl, hA, hB, hF, hC⟩ := h
+      cases_type* World
+      obtain ⟨rfl, rfl, rfl, -, hA, hB, hF, hC⟩ := h
       have ihA := vCE_tyEq A none none hA (envEq_none _ _) true
       have ihB := vCE_tyEq B none none hB (envEq_none _ _) true
       have ihF := finObl_tyEq fin hF

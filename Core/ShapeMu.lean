@@ -548,8 +548,9 @@ theorem cTyEq_symm : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ'
       exact cTyEq_symm C h
   | .eff _ _ _ _ A B fin C, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h ⊢
-      exact ⟨h.1.symm, h.2.1.symm, h.2.2.1.symm, tyEq_symm A h.2.2.2.1, tyEq_symm B h.2.2.2.2.1,
-        cTyEq_symm fin h.2.2.2.2.2.1, cTyEq_symm C h.2.2.2.2.2.2⟩
+      obtain ⟨h₁, h₂, h₃, -, hA, hB, hf, hC⟩ := h
+      exact ⟨h₁.symm, h₂.symm, h₃.symm, trivial, tyEq_symm A hA, tyEq_symm B hB,
+        cTyEq_symm fin hf, cTyEq_symm C hC⟩
 end
 
 theorem TyEq.symm {S S' : VTy} {δ δ' : LSub} (h : TyEq S δ S' δ') : TyEq S' δ' S δ :=
@@ -633,10 +634,10 @@ theorem cTyEq_trans : ∀ (C : CTy) {C' C'' : CTy} {δ δ' δ'' : LSub}, CTyEq C
   | .eff _ _ _ _ A B fin C, C', C'', _, _, _, h, h' => by
       cases C' <;> simp only [CTyEq] at h
       cases C'' <;> simp only [CTyEq] at h' ⊢
-      exact ⟨h.1.trans h'.1, h.2.1.trans h'.2.1, h.2.2.1.trans h'.2.2.1,
-        tyEq_trans A h.2.2.2.1 h'.2.2.2.1, tyEq_trans B h.2.2.2.2.1 h'.2.2.2.2.1,
-        cTyEq_trans fin h.2.2.2.2.2.1 h'.2.2.2.2.2.1,
-        cTyEq_trans C h.2.2.2.2.2.2 h'.2.2.2.2.2.2⟩
+      obtain ⟨h₁, h₂, h₃, -, hA, hB, hf, hC⟩ := h
+      obtain ⟨h₁', h₂', h₃', -, hA', hB', hf', hC'⟩ := h'
+      exact ⟨h₁.trans h₁', h₂.trans h₂', h₃.trans h₃', trivial, tyEq_trans A hA hA',
+        tyEq_trans B hB hB', cTyEq_trans fin hf hf', cTyEq_trans C hC hC'⟩
 end
 
 theorem TyEq.trans {S S' S'' : VTy} {δ δ' δ'' : LSub} (h : TyEq S δ S' δ')
@@ -685,7 +686,7 @@ theorem CTyEq.of_agree : ∀ (C : CTy) {δ₁ δ₂ : LSub},
       · rw [find?_extend_ne _ _ hxy, find?_extend_ne _ _ hxy]
         exact h y (Or.inr ⟨Ne.symm hxy, hy⟩)
   | .nu C, _, _, h => CTyEq.of_agree C h
-  | .eff _ _ _ _ A B fin C, _, _, h => ⟨rfl, rfl, rfl, TyEq.of_agree A (fun y hy => h y (Or.inl hy)),
+  | .eff _ _ _ _ A B fin C, _, _, h => ⟨rfl, rfl, rfl, rfl, TyEq.of_agree A (fun y hy => h y (Or.inl hy)),
       TyEq.of_agree B (fun y hy => h y (Or.inr (Or.inl hy))),
       CTyEq.of_agree fin (fun y hy => h y (Or.inr (Or.inr (Or.inl hy)))),
       CTyEq.of_agree C (fun y hy => h y (Or.inr (Or.inr (Or.inr hy))))⟩

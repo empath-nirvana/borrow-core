@@ -45,6 +45,10 @@ def cntStr : CCount → String
   | .one => "lin"
   | .zero | .opt => "aff"
 
+/-- The world of a row entry as the surface writes it: `⊤` is left unwritten.  `[spec §53]` -/
+def wldStr : BoCa.Fig16.LogRel.Core.World → String
+  | .top => ""
+
 /-- `pull A B R = νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R`: a stored generator (SPEC §15). It is an
 abbreviation of the frontend over `ν` (SPEC §7: a new codata shape is a new abbreviation), with no
 counterpart in `Core/`. -/
@@ -208,15 +212,15 @@ def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
   | .nu (.amp (.ret (.sum (.tensor A (.tvar 0)) R)) (.ret R')) =>
       parenIf (p > 5) s!"iter {ppV nm 0 6 A} {ppV nm 0 6 R} {ppV nm 0 6 R'}"
   | .nu C => parenIf (p > 0) s!"nu {tvName 0}. {ppC nm 0 C}"
-  | .eff n i q _ A B fin C =>
+  | .eff n i q w A B fin C =>
       let (es, r) := ppEff nm C
       parenIf (p > 5)
-        s!"F[{", ".intercalate (s!"{n}.{i} {cntStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es)}] {r}"
+        s!"F[{", ".intercalate (s!"{n}.{i} {cntStr q}{wldStr w} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es)}] {r}"
 /-- The entries of a row's layers `F_Σ`, and what is under them. -/
 def ppEff (nm : List (String × LifeVar)) : CCTy → List String × String
-  | .eff n i q _ A B fin C =>
+  | .eff n i q w A B fin C =>
       let (es, r) := ppEff nm C
-      (s!"{n}.{i} {cntStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es, r)
+      (s!"{n}.{i} {cntStr q}{wldStr w} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es, r)
   | .ret A => ([], ppV nm 0 6 A)
   | C => ([], ppC nm 6 C)
 end

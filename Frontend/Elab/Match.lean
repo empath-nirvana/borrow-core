@@ -90,8 +90,8 @@ def matchC (m : MatchSt) (d : Nat) : CCTy → CCTy → Option MatchSt
   | .amp C D, .amp C' D' => (matchC m d C C').bind (matchC · d D D')
   | .nu C, .nu C' => matchC m (d + 1) C C'
   | .all _ _ C, .all _ _ C' => matchC m d C C'
-  | .eff n i q _ A B fin C, .eff n' i' q' _ A' B' fin' C' =>
-    if n == n' && i == i' && q == q' then
+  | .eff n i q w A B fin C, .eff n' i' q' w' A' B' fin' C' =>
+    if n == n' && i == i' && q == q' && w == w' then
       (matchV m d A A').bind fun m => (matchV m d B B').bind fun m =>
         (matchC m d fin fin').bind (matchC · d C C')
     else none
