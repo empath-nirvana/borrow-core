@@ -287,8 +287,12 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
         " unwind (" ++ D.pp 0 (k + 2) ++ ");" ++ nl k ++ N.pp 0 k
     | .perform _ n i V => s!"perform[{n}.{i}] " ++ V.pp 1 k
     | .abort _ n i V => s!"abort[{n}.{i}] " ++ V.pp 1 k
-    | .handle _ n _ hr hc M =>
-      s!"handle_with[{n}](" ++ hr.pp 0 (k + 2) ++ ", " ++ hc.pp 0 (k + 2) ++ ") " ++ M.pp 1 k
+    | .handle _ n hf _ hr hc M =>
+      let head := match hf with
+        | .clauses => s!"handle_with[{n}]("
+        | .tail qs => s!"handle_tail[{n}: {", ".intercalate (qs.map OpCount.str)}]("
+        | .last qs => s!"handle_last[{n}: {", ".intercalate (qs.map OpCount.str)}]("
+      head ++ hr.pp 0 (k + 2) ++ ", " ++ hc.pp 0 (k + 2) ++ ") " ++ M.pp 1 k
     | .withbor2r _ x b A B r p m M =>
       let as := (Const.withbor2U x b A B r).toArgs.2
       "withbor2r[" ++ ", ".intercalate (as.map Arg.pp) ++ s!"]({p.name}, {m.name}) " ++ M.pp 1 k

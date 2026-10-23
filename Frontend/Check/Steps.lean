@@ -304,6 +304,62 @@ def clausesReadBoxed (S : CRow) (R : CVTy) (Tc : CVTy) :
   let r ← clausesReadB S R d Tc
   pure ⟨d, r⟩
 
+/-- The core count a rule-written handler's form names.  `[spec §53, §54]` -/
+def _root_.Frontend.OpCount.toCore : Frontend.OpCount → CCount
+  | .zero => .zero
+  | .one => .one
+  | .opt => .opt
+
+/-- The components of a right-nested tuple's type `T₁ ⊗ (T₂ ⊗ … ⊗ 1)`. -/
+def tupleTys : CVTy → Option (List CVTy)
+  | .unit => some []
+  | .tensor c rest => (tupleTys rest).map (c :: ·)
+  | _ => none
+
+/-- **`handle_tail`'s operations, read back** (`effHandleT`, SPEC §14): from the counts `qs` and
+the answering functions' tuple type, each `!U(A ⊸ F_{Σ_N} B)` at an operation `A ↠^q B` whose
+count is not `0`, or `!U(A ⊸ F_Σ R)` at an abortive one `A ↠^0 0`; `Σ_N` the first non-abortive
+one's row. With `ansesTy S SN R E` the type.  `[spec §14, §53, §54]` -/
+def ansesRead (S : CRow) (R : CVTy) (qs : List CCount) (Tc : CVTy) :
+    Option (Σ' (SN : CRow) (E : List (CCount × CVTy × CVTy)),
+      BoCa.Fig16.LogRel.Core.ansesTy S SN R E = Tc) := do
+  let cs ← tupleTys Tc
+  if cs.length != qs.length then none
+  let parts ← (qs.zip cs).mapM fun (q, c) => match c with
+    | .bang (.thunk (.arr A C)) => (effRow? C).map fun (Sx, B) => (q, A, Sx, B)
+    | _ => none
+  let SN := ((parts.find? fun (q, _, _, _) => q != .zero).map (·.2.2.1)).getD []
+  let E := parts.map fun (q, A, _, B) =>
+    if q == .zero then (q, A, (BoCa.Fig16.LogRel.Core.VTy.zero)) else (q, A, B)
+  if h : BoCa.Fig16.LogRel.Core.ansesTy S SN R E = Tc then some ⟨SN, E, h⟩ else none
+
+/-- **`handle_last`'s operations, read back** (`effHandleL`, SPEC §51): from the counts `qs`, the
+works' tuple type, each `!U(A ⊸ F_{Σ_W}(B ⊕ X))` at an operation `A ↠^q B` whose count is not `0`
+or `!U(A ⊸ F_Σ R)` at an abortive one, and the exits' tuple type, each `!U(X ⊸ F_Σ R)`: the
+operations, `Σ_W` and the exits' arguments `Xs`. With `worksTy` and `exitsTy` the types.
+`[spec §51, §53, §54]` -/
+def lastRead (S : CRow) (R : CVTy) (qs : List CCount) (Tw Tn : CVTy) :
+    Option (Σ' (SW : CRow) (E : List (CCount × CVTy × CVTy)) (Xs : Nat → CVTy),
+      BoCa.Fig16.LogRel.Core.worksTy S SW R Xs E 0 = Tw ∧
+        BoCa.Fig16.LogRel.Core.exitsTy S R Xs E 0 = Tn) := do
+  let ws ← tupleTys Tw
+  let ns ← tupleTys Tn
+  if ws.length != qs.length || ns.length != qs.length then none
+  let xs ← ns.mapM fun c => match c with
+    | .bang (.thunk (.arr X _)) => some X
+    | _ => none
+  let parts ← (qs.zip ws).mapM fun (q, c) => match c with
+    | .bang (.thunk (.arr A C)) => (effRow? C).map fun (Sx, T) => (q, A, Sx, T)
+    | _ => none
+  let SW := ((parts.find? fun (q, _, _, _) => q != .zero).map (·.2.2.1)).getD []
+  let E := parts.map fun (q, A, _, T) => match q, T with
+    | .zero, _ => (q, A, (BoCa.Fig16.LogRel.Core.VTy.zero))
+    | _, .sum B _ => (q, A, B)
+    | _, _ => (q, A, (BoCa.Fig16.LogRel.Core.VTy.zero))
+  let Xs : Nat → CVTy := fun j => xs.getD j .unit
+  if h : BoCa.Fig16.LogRel.Core.worksTy S SW R Xs E 0 = Tw ∧
+      BoCa.Fig16.LogRel.Core.exitsTy S R Xs E 0 = Tn then some ⟨SW, E, Xs, h⟩ else none
+
 /-- `h_ret`'s type `!U(A -o F_S R)` read back. -/
 def retRead (Tr : CVTy) :
     Option (Σ' (S : CRow) (A R : CVTy), BoCa.Fig16.LogRel.Core.retTy S A R = Tr) :=
@@ -494,7 +550,7 @@ def mentionsC (x : String) : Comp → Bool
       (z.name != x && mentionsC x N)
   | .loop _ _ src V M N => mentionsV x V || (!src.bound.contains x && mentionsC x M) || mentionsC x N
   | .perform _ _ _ V | .abort _ _ _ V => mentionsV x V
-  | .handle _ _ _ hr hc M => mentionsV x hr || mentionsV x hc || mentionsC x M
+  | .handle _ _ _ _ hr hc M => mentionsV x hr || mentionsV x hc || mentionsC x M
   | .unwind _ y _ M D N => mentionsC x M || mentionsC x D || (y.name != x && mentionsC x N)
   | .withbor2r _ _ _ _ _ _ p m M => p.name == x || (m.name != x && mentionsC x M)
 end

@@ -1003,7 +1003,7 @@ def refsC : Nat → Comp → List String
     | .bind _ _ _ M N _ | .with_ _ M N => refsC n M ++ refsC n N
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
     | .nuOut _ M | .ascribe _ M _ => refsC n M
-    | .handle _ _ _ hr hc M => refsV n hr ++ refsV n hc ++ refsC n M
+    | .handle _ _ _ _ hr hc M => refsV n hr ++ refsV n hc ++ refsC n M
     | .letUnit _ V M | .letPair _ _ _ V M => refsV n V ++ refsC n M
     | .case _ V _ M _ N | .loop _ _ _ V M N => refsV n V ++ refsC n M ++ refsC n N
     | .unwind _ _ _ M D N => refsC n M ++ refsC n D ++ refsC n N
@@ -1035,7 +1035,7 @@ def unboxesC (k : String) : Nat → Comp → Bool
     | .bind _ _ _ M N _ | .with_ _ M N => unboxesC k n M || unboxesC k n N
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
     | .nuOut _ M | .ascribe _ M _ => unboxesC k n M
-    | .handle _ _ _ hr hc M => unboxesV k n hr || unboxesV k n hc || unboxesC k n M
+    | .handle _ _ _ _ hr hc M => unboxesV k n hr || unboxesV k n hc || unboxesC k n M
     | .letUnit _ V M | .letPair _ _ _ V M => unboxesV k n V || unboxesC k n M
     | .case _ V _ M _ N | .loop _ _ _ V M N => unboxesV k n V || unboxesC k n M || unboxesC k n N
     | .unwind _ _ _ M D N => unboxesC k n M || unboxesC k n D || unboxesC k n N
@@ -3653,10 +3653,10 @@ def pipesC (pe : PipeEnv) : Nat → Comp → EM Comp
     | .loop sp ℓ src V M N => do pure (.loop sp ℓ src (← pipesV pe k V) (← pipesC pe k M) (← pipesC pe k N))
     | .perform sp n i V => do pure (.perform sp n i (← pipesV pe k V))
     | .abort sp n i V => do pure (.abort sp n i (← pipesV pe k V))
-    | .handle sp n st hr hc M => do
+    | .handle sp n hf st hr hc M => do
       let hr' ← pipesV pe k hr
       let hc' ← pipesV pe k hc
-      pure (.handle sp n st hr' hc' (← pipesC pe k M))
+      pure (.handle sp n hf st hr' hc' (← pipesC pe k M))
     | .unwind sp x A M D N => do
       pure (.unwind sp x A (← pipesC pe k M) (← pipesC pe k D) (← pipesC pe k N))
     | M => pure M

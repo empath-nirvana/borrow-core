@@ -779,6 +779,16 @@ theorem rowLeB_sound {S S' : Row} (h : rowLeB S S' = true) : RowLe S S' := by
   have := List.all_eq_true.mp h o hm
   simpa using this
 
+/-- **`[handle-last]`'s cancel rows at the checker's empty ones** (SPEC §51, `LastFinOK`): where
+`Σ_W` is below `Σ` (`rowLeB`), `Σ_W` finds what `Σ` finds, so `LastFinOK` holds at the empty cancel
+row (`lastFinOK_nil_of_find`).  `[spec §51, §54]` -/
+theorem lastFinOK_of_rowLeB {S SW : Row} (h : rowLeB SW S = true) (X : VTy) :
+    LastFinOK S SW (.ret .unit) X :=
+  lastFinOK_nil_of_find fun _ _ o hf => by
+    obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
+    have := List.all_eq_true.mp h o hm
+    simpa using this
+
 /-- `Row.NZ`, decided. -/
 def Row.nzB (S : Row) : Bool := S.all fun o => o.n != 0
 

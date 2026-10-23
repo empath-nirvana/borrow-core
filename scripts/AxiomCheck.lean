@@ -33,6 +33,14 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.Check.ansOutlivesB_sound
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.tail_resumes
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.tail_resumes_answer
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.tail_resume_direct
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.last_resume_direct
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.last_cancel_direct
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.last_cancel_exit
+#print axioms BoCa.Fig16.LogRel.Core.LastRuns.cancelOf_steps
+#print axioms Frontend.Check.TTied.effHandleL
+#print axioms BoCa.Fig16.LogRel.Core.Check.lastFinOK_of_rowLeB
+#print axioms Frontend.Check.valFormIn_pair
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.RetFrames.answer
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.Returns0.run
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.subst_comm_closed

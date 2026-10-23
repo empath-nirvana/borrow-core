@@ -1,0 +1,22 @@
+-- SPEC §14, §54 in the core text: `core-effects-tail`'s handler written by the tail-resuming rule,
+-- `handle_tail[2: lin]`. Its one operation `2.0 lin 1 ~> i32` is at the count `1`, and its
+-- answering function `!U(1 -o F i32)` answers `10` at the empty row; the rule writes the clause
+-- that resumes `κ` with that answer (`effHandleT`).
+--
+-- Answer: i32[20].
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def twice : !U (1 -o F[2.0 lin 1 ~> i32] i32) =
+  !thunkv fun (u : 1) ->
+    a <- perform[2.0] u;
+    b <- perform[2.0] ();
+    return (plus (a, b))
+
+main : F i32 =
+  f <- return (unbang twice);
+  u <- return ();
+  handle_tail[2: lin](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (u : 1) -> let () = u; return i32[10]), ()) : !U (1 -o F i32) * 1))
+    (force f u)

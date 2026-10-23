@@ -289,6 +289,15 @@ def handlerNames (E : List (Count × VTy × VTy)) (H : Expr) : List (Option (Lis
       (clauseExpr hs j).bind (clauseNames o)
   | _ => E.map fun _ => none
 
+/-- **The names of each clause of a tail-resuming rule's node** (`effHandleT`), whose answering
+functions are the tuple `Hc`: the clause `tailClause j _ Hc` runs the `j`-th function `λx. M′`
+(`pickE`) and resumes `κ` with its answer, so its own code is the function's, and its names are
+`M′`'s (`Expr.own`). -/
+def tailNames (E : List (Count × VTy × VTy)) (Hc : Expr) : List (Option (List UInt32)) :=
+  (List.range E.length).map fun j => (clauseExpr Hc j).bind fun
+    | .lam M => M.own []
+    | _ => none
+
 /-! ### The handler sites of a typed term -/
 
 /-- A `handle` node of a typed term: its source, its static name, its clauses' kinds, whether
@@ -335,7 +344,7 @@ def TExpr.handleSites : Nat → TExpr → List HandleSite
       -- linear operations (`hLin`).
       | .effHandleT i _ S _ E _ n _ _ _ st ins tc _ =>
           [⟨i.sp, n, E.map tailKind, false, st, (S.map (·.n)).eraseDups, ins,
-            handlerNames E (.pair (Expr.pairL tc.erase) (tailTuple E 0 (Expr.pairR tc.erase))),
+            tailNames E (Expr.pairR tc.erase),
             E.map fun o => if isAbortive o then .zero else .one [], none⟩]
       -- `effHandleL`'s clauses resume `κ` in tail position or cancel it (§51), at affine or abortive
       -- operations (`hAff`).

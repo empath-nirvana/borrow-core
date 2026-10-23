@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.01 · 2026-10-22
+Version 1.03 · 2026-10-23
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -9077,6 +9077,77 @@ program with each `ctl` entry and `kont` at its count (`countedQual`, over the s
 - **The world** is `⊤` only (stage 2, #654's `ℓ_op`).
 - **The rewrite table's bridges** (design §3.2, B1 and B2) are unproved; nothing here uses them.
 
+## 54. Entry 53 — Core → Core effect rewrites (#680): R-pre, the rule-written handlers' producers
+
+### Motivation
+
+The kernel's tail-resuming rule `effHandleT` (§14) and `[handle-last]`'s `effHandleL` (§51) are
+proved, with their compatibility lemmas, but nothing on main produces them: the checker types every
+handler by `[handle]` (`effHandleV`, `effHandleVB`). #680's rewriter reads a node's rule, and the
+per-perform law of a rule-written node travels with it (the user's decision R-pre, #680 comment
+6356355522; the scope `~/repos/680-work/scope.md` v2, approved in #680 comment 6356672166). R-pre
+is the first step: the producers, the forms they check, and the per-perform laws at counts (§53).
+
+### Language
+
+- **Two core forms** (`HForm`, `Frontend/Syntax.lean`): `handle_tail[n: q, …](h_ret, gs) M`, the
+  clauses written out by `effHandleT`'s rule from the answering functions `gs`, and
+  `handle_last[n: q, …](h_ret, (ws, nfs)) M`, written out by `effHandleL`'s from the works `ws` and
+  the exits `nfs`. The forms name their operations' counts, which their tuples' types do not hold:
+  `0`, `lin` (`1`) or `aff` (`1?`) (`OpCount`). `handle_with` is the form `clauses`.
+- **Two checker arms** (`Frontend/Check/Checker.lean`): the operations are read back from the
+  tuples' types (`ansesRead`, `lastRead`, `Frontend/Check/Steps.lean`), and the rule's premises are
+  decided over the checked premises (`tailIt`, `lastIt`), which build `rEffHandleT` and
+  `rEffHandleL` (`Frontend/Check/Rules.lean`): `Σ_N ≤ Σ` of operations at the count `1`, not
+  abortive (`hLin`); for `[handle-last]` the operations at `1?` or `0` (`hAff`), `Σ_W ≤ Σ`,
+  `Σ.NZ`, `¬ Σ.UnrD`, and `LastFinOK` at the empty cancel rows (`lastFinOK_of_rowLeB`). The handled
+  row may hold `Div`. `TTied.effHandleL` ties the node, as `TTied.effHandleT` does.
+- **The census reads a rule-written node's own code.** At `effHandleT` the names each clause's
+  own code performs or raises (`HandleSite.names`, §19) are those of its answering function's body
+  (`tailNames`): the rule's clause runs the function it projects from the node's tuple and resumes
+  `κ` with its answer.
+
+No type, typing rule, machine step, relation clause or elaboration changes. No program the
+elaborator writes uses the forms; `corpus/core-handle-tail.bc` and `corpus/core-handle-last.bc`
+write them in core.
+
+### The proof
+
+The per-perform laws (`Core/DivHandleLastRuns.lean`), at counts:
+
+- **`tail_resume_direct`**: under `tailH n E vr vc` (the value an `effHandleT` node runs as), at an
+  operation `i = j` whose count is not `0`, whose answering function `g` applied to `v` runs to `w`,
+  `K₀[hnd H K[perform (n, (i, v))]]` reaches `K₀[hnd H K[w]]`, `κ`'s cell released.
+- **`last_resume_direct`**, **`last_cancel_direct`**, **`last_cancel_exit`**: under `lastH`, at an
+  operation at `1?`, a work that runs to `inl y` resumes at `y`; one that runs to `inr z` reaches
+  `κ`'s cancel run under the exit's frame, and, when the run answers `()`, the exit at `z`.
+
+The counts replace the qualifiers: an operation's tag is `Count.toQual`, never unrestricted, so
+the premise `q ≠ unr` is gone; a non-abortive operation is one whose count is not `0`. Each law
+covers a work that runs to a value without performing: a work that performs an operation of a
+handler outside the node is not covered.
+
+### Baseline
+
+`fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`, `fundamentalC_pin`, `adequacyC_pin`,
+`checked_sem`, `checked_runs` and every borrow guarantee keep their statements. No change to
+`CDerives`' indices, the machine or the relation. Every corpus program keeps its golden output at
+every stage of both backends; the census tables (`kinds`, `grades`, `handled`) are unchanged.
+
+### Open
+
+- **The emission.** The checker is to emit `effHandleT` wherever its classification of a node's
+  clauses is `tail` (the scope's R-pre §1). It is not in this entry: the new backend's conversion
+  (`Backend2/Convert.lean`) reads a `[handle]` node's typed clauses, which take `κ`, and an
+  `effHandleT` node holds typed answering functions instead, so the one pass-through arm the
+  approved OQ4 allows cannot compile it without new lowering logic (#680).
+- **`clause_tail_replace`** (`ClauseTailReplace`, stated, not proved): the clause
+  `λp. let (x, κ) = p; M` and the rule's `tailClause j false vc`, whose work is `M` without its
+  resumes, reach the same values at the same memories.
+- **A work that performs** an operation of a handler outside the node: its per-perform law.
+- **`effHandleL` from a `resume-or-cancel` clause** (OQ2): its conversion's equivalence is B1's
+  statement at the clause.
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -9480,6 +9551,13 @@ checked at the inferred counts (`Frontend/Check/Program.lean`'s `checkCounted`),
 
 ## Changelog
 
+- **1.03** (2026-10-23) — §54 (#680, R-pre): the core forms `handle_tail[n: q, …]` and
+  `handle_last[n: q, …]`, checked by the rules `rEffHandleT` and `rEffHandleL` at counts
+  (`TTied.effHandleL`, `ansesRead`, `lastRead`); the per-perform laws `tail_resume_direct`,
+  `last_resume_direct`, `last_cancel_direct` and `last_cancel_exit` at counts; the census reads an
+  `effHandleT` node's names from its answering functions. `clause_tail_replace` is stated, open. The
+  checker's emission of `effHandleT` is not in this version. No output, golden, count or census
+  changes.
 - **1.02** (2026-10-22) — §53 (#675, M1 stage 1): the grade on `eff`, a count `0`, `1` or `1?`
   and a world (`⊤` only), replaces the qualifier; `Qual` stays as the run-time tag
   (`Count.toQual`), so the machine and the relation are unchanged. `[sub]` keeps the count; an
