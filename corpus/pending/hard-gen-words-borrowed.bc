@@ -1,0 +1,46 @@
+-- pending: #682 (a generator that yields sub-slices of borrowed text, holding its position across `yield`)
+-- now: 45:3: the call's result mentions the lifetime of the lent array other than as the view it hands back, so the array cannot be handed back after it
+-- Hard problem 14: a tokenizer. `words` is given a borrowed byte string and yields each word as a
+-- view of the string itself, at the borrow's lifetime, not as a copy. Between `yield`s it holds
+-- the rest of the string, a sub-slice of the one it was given. The consumer measures each word and
+-- keeps the longest length.
+--
+-- Issue: #682 (views derived from a borrow, held across a suspension and handed out of it). The
+-- refusal today is about the extent of the lend `&text` made for one call, whose result mentions its
+-- lifetime; that is closer to #54's question of where a lend's scope ends than to holding a view
+-- across `yield`.
+--
+-- Rust: `s.split(' ')`, an iterator whose items are `&'a str` and which holds the remaining
+-- `&'a str`; the consumer may keep any item for as long as `'a`.
+--
+-- Today: refused at `words(&text)`: the generator's elements mention the lifetime of the lend made
+-- for the call, so the array cannot be handed back after it. Both backends stop at the same
+-- message.
+--
+-- Also needs: implicit copies of `imm` views (`corpus/pending/hard-imm-view-copy.bc`): this
+-- program uses a view twice (`len(w)` twice).
+--
+-- Once it lands: i32[5]: the longest word of "a quick fox" is "quick"; `live 0`.
+
+include yield
+include slice
+
+-- The words of `s`, separated by single spaces, each a view of `s`.
+fn words<'a>(s: array_imm 'a u8) -> 1 with Yield[array_imm 'a u8] =
+  let mut rest = s;
+  let mut more = true;
+  while more {
+    match find(rest, b' ', !{ (x, y) -> x == y }) {
+      inl i -> match split_at(rest, i) {
+          inl (w, tail) -> yield(w); match split_first(tail) { inl (sp, t) -> rest = t | inr u -> more = false }
+        | inr r -> more = false }
+    | inr u -> yield(rest); more = false
+    }
+  };
+  ()
+
+main -> i32 =
+  let text = "a quick fox";
+  let mut best = 0;
+  for w in words(&text) { if len(w) > best { best = len(w) } else { () } };
+  best

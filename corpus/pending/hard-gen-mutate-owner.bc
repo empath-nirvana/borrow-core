@@ -1,0 +1,42 @@
+-- pending: #501 / SPEC §14 first (a `for` over a buffer's view inside its borrow block), then #682 (a machine that mutates what it owns between yields while it holds views of it)
+-- now: 34:32: the iterator of this `for` holds the borrow of `v`: a borrow block over a loop lends its place again at each step, so what the loop holds between steps must not hold the borrow (SPEC §14, borrow scopes over loops)
+-- Hard problem 5: `rounds` owns a growable buffer. In its first pass it holds an exclusive view of
+-- each element across the element's `yield` and writes the element after the consumer resumes
+-- it. Then, between two `yield`s, it pushes onto the full buffer, which moves its elements to a
+-- new array, and in a second pass it holds shared views of the grown buffer across its `yield`s.
+-- Views live across a suspension, and the owner they point into changes between suspensions.
+--
+-- Issue: #682. This is the case where caching the views across steps is wrong (#682's
+-- Investigation B, B2.3 `inv-b`): a view derived before the push points into the freed array.
+-- Holding views must be sound with the owner mutated between them, not only when it is read-only.
+--
+-- Rust: an `async` block (or `static` coroutine) owning a `Vec<i32>`: `for x in v.iter_mut() {
+-- yield; *x *= 2 }`, then `v.push(100)`, then `for x in v.iter() { yield }`; the borrow checker
+-- ends the first pass's borrow before the push (NLL), and the pinned frame never moves `v`.
+--
+-- Today: refused at the first pass by #501's restriction, which `corpus/pending/for-buf-borrow.bc`
+-- records: the `for`'s iterator holds the borrow `v` between steps, and a borrow block over a loop
+-- lends its place again at each step (SPEC §14). With the `yield`s deleted it is refused the same
+-- way, so this row sits behind #501 before it reaches #682. Both backends stop at the same
+-- message.
+--
+-- Once it lands: i32[118]: the first pass yields 1, 2, 3 (each doubled after its yield) and the
+-- second 2, 4, 6, 100; `live 0`. A view kept from the first pass would read the freed array.
+
+include buf
+include yield
+
+fn rounds() -> 1 with Yield[i32] =
+  let mut b = box buf[i32](3);
+  push(&mut b, 1);
+  push(&mut b, 2);
+  push(&mut b, 3);
+  borrow mut b { v -> for x in v { let y = modify x { y -> (y, y) }; yield(y); modify x { y -> y * 2 } } };
+  push(&mut b, 100);
+  borrow imm b { v -> for x in v { yield(*x) } };
+  ()
+
+main -> i32 =
+  let mut acc = 0;
+  for x in rounds() { acc = acc + x };
+  acc

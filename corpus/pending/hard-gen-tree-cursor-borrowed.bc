@@ -1,0 +1,53 @@
+-- pending: SPEC §5 *Open* (E5: a child of an `imm` node viewed at the parent's lifetime); first #686
+-- now: 43:59: `*` reads an `imm` borrow or a cell, but this has type `1`
+-- Hard problem 3: a cursor into a borrowed recursive tree, held across `yield`. `keys` walks a
+-- borrowed binary search tree in order and yields each key. Its cursor is a stack of views of
+-- the nodes still to visit; each view is a child of a node it was given, at the same lifetime
+-- `'a` as the borrow of the root, and the stack is live across every `yield`. Each step is O(1):
+-- nothing is copied and no path is walked again.
+--
+-- Issue: #682 and #669's E5 (a partial walk of `mu` under `imm`: a child of an `imm` node is
+-- `imm` at the same lifetime; SPEC §5 *Open*). E2 alone does not give it.
+--
+-- Rust: `struct Keys<'a> { stack: Vec<&'a Node> }` implementing `Iterator`; `&node.left` has the
+-- parent's lifetime `'a`, so the stack holds child references with no re-borrow.
+--
+-- Today: refused at `*k`: the binder is typed `1` (#686, the elaborator's fallback). Without the
+-- `*`, the same match reports the intended obstacle, ``unroll V` needs `V : mu X. A`, but
+-- `V : imm 'a (mu …)`` (E5; #686 records the probe). Both backends stop at the same message.
+--
+-- Also needs: implicit copies of `imm` views (`corpus/pending/hard-imm-view-copy.bc`): this
+-- program uses a view twice (`cons(cur, todo)` after `match cur`).
+--
+-- Once it lands: i32[1234567], the keys 1 … 7 in order, read as decimal digits; `live 0` (the
+-- tree's destructor frees its seven nodes).
+
+include list
+include yield
+
+data Tree = Leaf | Node(left: Tree, key: i32, right: Tree)
+
+fn branch(l: Tree, k: i32, r: Tree) -> Tree = box Node(l, k, r)
+fn tip(k: i32) -> Tree = box Node(Leaf, k, Leaf)
+
+-- The keys of `t` in order. `todo` holds the nodes whose key is still to be yielded, the next on top.
+fn keys<'a>(t: imm 'a Tree) -> 1 with Yield[i32] =
+  let mut todo : List[imm 'a Tree] = roll inl ();
+  let mut cur = t;
+  let mut more = true;
+  while more {
+    match cur {
+      Node(l, k, r) -> todo = cons(cur, todo); cur = l
+    | Leaf -> match unroll todo {
+        inl u -> more = false
+      | inr (n, rest) -> match n { Node(l, k, r) -> yield(*k); todo = rest; cur = r | Leaf -> () }
+      }
+    }
+  };
+  ()
+
+main -> i32 =
+  let t = branch(branch(tip(1), 2, tip(3)), 4, branch(tip(5), 6, tip(7)));
+  let mut acc = 0;
+  for k in keys(&t) { acc = acc * 10 + k };
+  acc

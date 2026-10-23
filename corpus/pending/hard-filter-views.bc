@@ -1,0 +1,37 @@
+-- pending: #58 (implicit copies of `imm` views), with `filter` over a generator of views; first SPEC §14 and #686
+-- now: 27:1: `big_sum` loops, so it is called in direct style one step at a time, and a borrow at `'a` cannot stay open across its steps: it may take one borrow of a cell at `'a`, `imm 'a A` or `mut 'a A`, which it borrows again at each step (SPEC §14, borrow scopes over loops)
+-- A generator yields a view of each element of a slice it is given; `filter` keeps the views whose
+-- element is above 2, and the loop sums what they point to. `filter` hands each element to its
+-- predicate and then yields it (`lib/adapters.bc`), so it uses each view twice.
+--
+-- Issue: #58 (implicit copies of `imm` borrows; `corpus/pending/hard-imm-view-copy.bc`), #682. The
+-- library's `filter` asks its element type to be persistent, and a view is not.
+--
+-- Rust: `xs.iter().filter(|x| **x > 2).sum::<i32>()`; the predicate takes `&&i32`.
+--
+-- Today: refused first by SPEC §14: `big_sum`'s `for` drains a stored generator that holds the
+-- view `xs`, so the loop cannot keep the borrow across its steps. Storing the same `filter(…)`
+-- with no loop is refused at #686 (the call of `views` passed to `filter` is typed `1`). The
+-- duplication itself is refused as in `corpus/pending/hard-imm-view-copy.bc`. Both backends stop
+-- at the same message.
+--
+-- Once it lands: i32[12]: 3 + 4 + 5; `live 0`.
+
+include adapters
+
+-- A view of each element of the slice.
+fn views<'a>(xs: array_imm 'a i32) -> 1 with Yield[imm 'a i32] =
+  for x in xs { yield(x) };
+  ()
+
+fn big_sum<'a>(xs: array_imm 'a i32) -> i32 =
+  let mut s = 0;
+  for x in filter(views(xs), !{ x -> *x > 2 }) { s = s + *x };
+  s
+
+fn idx1(i: i32) -> i32 = i + 1
+
+main -> i32 =
+  let v = array_new[i32](5, idx1);
+  let s = big_sum(&v);
+  s

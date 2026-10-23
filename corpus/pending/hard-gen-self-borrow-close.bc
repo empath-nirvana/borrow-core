@@ -1,0 +1,34 @@
+-- pending: #172 (closing a self-borrowing generator early)
+-- now: 26:3: the body of this `for` performs an operation that resumes (the operation 2.0), and its source `&buf` lends `buf` around the whole loop: an operation that resumes cannot cross a borrow (T1, #172). Iterate an owned array, or a view the function is given
+-- Coverage: a generator that owns a vector and holds an iterator into it across `yield` is closed
+-- before it ends, twice: `take(…, 2)` stops pulling after two elements, and a `for` breaks out at the
+-- first element above 3. At each close the lend the generator holds must end and its vector be freed,
+-- with no further element produced.
+--
+-- Issue: #172 (E2: the owner comes back at `close`), #682. Row 2 of `corpus/pending/HARD-PROBLEMS.md`
+-- (`hard-gen-owned-yields-refs.bc`) runs the generator to its end.
+--
+-- Rust: dropping a pinned self-referential coroutine runs its drop glue: the borrow ends and the
+-- `Vec` is freed.
+--
+-- Today: refused in `squares`, at the `for` over `&buf` whose body yields (T1, #172). Both backends
+-- stop at the same message.
+--
+-- Once it lands: i32[104]: `take` sums 0 + 1 = 1, and the `for` breaks at 4, the first square
+-- above 3: 1 × 100 + 4; `live 0` (both vectors freed by the closes).
+
+include adapters
+
+fn sq(i: i32) -> i32 = i * i
+
+fn squares(n: i32) -> 1 with Yield[i32] =
+  let buf = array_new[i32](n, sq);
+  for x in &buf { yield(*x) };
+  ()
+
+main -> i32 =
+  let mut a = 0;
+  for x in take(squares(5), 2) { a = a + x };
+  let mut b = 0;
+  for x in squares(5) { if x > 3 { b = x; break } else { () } };
+  a * 100 + b

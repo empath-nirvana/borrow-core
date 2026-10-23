@@ -1,0 +1,66 @@
+-- pending: #52 (a scheduler holding tasks of different bodies whose borrows have different lifetimes)
+-- now: 59:7: cannot show that `U (delay (mu X. 1 + i32 * X))` outlives `('l1 /\ 'l0 /\ top)`
+-- Hard problem 7: one queue of three tasks with different bodies, each holding a borrow of
+-- different data across its `await`s: `lookup` a view of one entry of a borrowed table, `bump` a
+-- `mut` borrow of a counter, `scan` an iterator over a borrowed list of weights. The borrows are
+-- made by three separate blocks, so they have three lifetimes, and the queue holds all three
+-- tasks at once, run round robin until every task is done.
+--
+-- Issue: #52's open question (a scheduler holding tasks whose borrows have different lifetimes),
+-- #682 (the views derived from those borrows, held across `await`). #669's `h4c` types two
+-- borrowing bodies in one `TaskIn<'d>` queue, with `'d` fixed inside every lend and the rounds
+-- counted; here the scheduler runs until the queue is empty and one task holds a derived view.
+--
+-- Rust: `futures::future::join_all(vec![lookup(&table).boxed_local(), bump(&mut n).boxed_local(),
+-- scan(&w).boxed_local()])`: the futures are `Pin<Box<dyn Future + '_>>`, bounded by the
+-- shortest borrow, and the borrows end when `join_all` returns.
+--
+-- Today: refused. `spawn` boxes each task at `top`, and the scheduler's loop runs without bound
+-- inside the three borrows, so its answer cannot be shown to outlive them. Both backends stop at
+-- the same message.
+--
+-- `lookup`'s `copy['t, i32] e` is a workaround: with implicit copies of `imm` views
+-- (`corpus/pending/hard-imm-view-copy.bc`) it would read `*e` twice.
+--
+-- Once it lands: `inr (i32[60], inr (i32[3], inr (i32[10], inl ())))`, the list [60, 3, 10]: the
+-- entry 30 read before and after an `await`, the counter bumped three times, and the weights
+-- 1 + 2 + 3 + 4; `live 0`.
+
+include async
+include slice
+
+-- The entry at `i`, read once before and once after letting the others run, through one view.
+fn lookup<'t>(table: array_imm 't i32, i: i32) -> i32 with Async =
+  match get(table, i) {
+    inl e -> let (e1, e2) = copy['t, i32] e; let a = *e1; await(); a + *e2
+  | inr u -> 0
+  }
+
+-- Adds one to the counter three times, awaiting after each.
+fn bump<'c>(n: mut 'c i32) -> i32 with Async =
+  for i in 0..3 { modify n { x -> x + 1 }; await() };
+  modify n { x -> (x, x) }
+
+-- The sum of the weights, awaiting after each.
+fn scan<'w>(ws: array_imm 'w i32) -> i32 with Async =
+  let mut s = 0;
+  for w in ws { s = s + *w; await() };
+  s
+
+fn tens(i: i32) -> i32 = 10 * i
+fn ones(i: i32) -> i32 = i + 1
+
+main -> List[i32] =
+  let table = array_new[i32](5, tens);
+  let counter = alloc(0);
+  let weights = array_new[i32](4, ones);
+  let out = borrow imm table { 't, tb ->
+    borrow mut counter { 'c, n ->
+      borrow imm weights { 'w, ws ->
+        let q = queue[i32]();
+        let q = push(q, with spawn { lookup(tb, 3) });
+        let q = push(q, with spawn { bump(n) });
+        let q = push(q, with spawn { scan(ws) });
+        run_until_empty(q) } } };
+  let _ = free(counter);
+  out

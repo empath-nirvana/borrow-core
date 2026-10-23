@@ -64,6 +64,10 @@ corpus/async-scoped.bc 3.1 linear tail: -; agree
 corpus/async-scoped.bc 2.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-scoped.bc 2.1 linear tail: -; agree
 corpus/async-scoped.bc 1.0 affine abortive: branch; agree
+corpus/async-slice-iter-await.bc 3.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-slice-iter-await.bc 3.1 linear tail: -; agree
+corpus/async-slice-iter-await.bc 2.0 affine abortive: branch; agree
+corpus/async-slice-iter-await.bc 1.0 affine abortive: branch; agree
 corpus/async-stack-cancel.bc 2.0 affine abortive: branch; agree
 corpus/async-stack-cancel.bc 4.0 affine abortive: branch; agree
 corpus/async-stack-cancel.bc 3.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
@@ -99,6 +103,11 @@ corpus/async-try-join.bc 3.0 affine abortive: branch; agree
 corpus/async-try-join.bc 6.0 affine abortive: branch; agree
 corpus/async-try-join.bc 5.0 affine abortive: branch; agree
 corpus/async-try-join.bc 4.0 affine abortive: branch; agree
+corpus/async-two-readers-views.bc 3.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-two-readers-views.bc 3.1 linear tail: -; agree
+corpus/async-two-readers-views.bc 2.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-two-readers-views.bc 2.1 linear tail: -; agree
+corpus/async-two-readers-views.bc 1.0 affine abortive: branch; agree
 corpus/async-workers-scoped.bc 4.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-workers-scoped.bc 4.1 linear tail: -; agree
 corpus/async-workers-scoped.bc 3.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
