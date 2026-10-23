@@ -225,12 +225,12 @@ def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey) (cnts : CntTable 
       let c ← checkMain ds k keys cnts sp C M
       pure (s!"main : {ppCTy c.C}", some c, [(c.ctx.length, c.t)])
 
-/-- One check of a program at the counts `cnts`, after elaborating it at them
-(`Frontend.Elab.elaborate`: the sugar of SPEC §11 and §14): the report, with the `handle` nodes of
-its checked terms, and those terms. The lines of the libraries, when they are included, are not
-reported. An error in code generated for a sugar names the sugar (`Frontend.Elab.renderError`). -/
-def checkAt (p : Program) (cnts : CntTable) : Except Error (Report × List (Nat × TExpr)) := do
-  let el ← Frontend.Elab.elaborate p cnts
+/-- One check of an elaborated program at the counts `cnts`: the report, with the `handle` nodes
+of its checked terms, and those terms. The lines of the libraries, when they are included, are
+not reported. An error in code generated for a sugar names the sugar
+(`Frontend.Elab.renderError`). -/
+def checkEl (el : Frontend.Elab.Elaborated) (cnts : CntTable) :
+    Except Error (Report × List (Nat × TExpr)) := do
   let ds := el.prog.decls.toArray
   let lib := el.lib
   let r : Except Error (Report × List (Nat × TExpr)) :=
@@ -245,31 +245,47 @@ def checkAt (p : Program) (cnts : CntTable) : Except Error (Report × List (Nat 
   let handles := (terms.flatMap fun (_, t) => t.handleSites copiesFuel).eraseDups
   pure ({ rep with handles }, terms)
 
-/-- **The counts, inferred and checked** (SPEC §53): the program is checked at the counts its
-rows write, each `ctl` operation at `1?` (or `0`); the counts of its `ctl` operations are inferred
-from the `handle` nodes of that check (`inferCounts`); and where one is lower, the program is
-checked again at them, which is the check the program has. A check that fails at the first counts
-is checked again with each `linear ctl` operation read as `ctl`: a node that forces one of them
-above `1` is the error then, named. -/
+/-- One check of a program at the counts `cnts`, after elaborating it
+(`Frontend.Elab.elaborate`: the sugar of SPEC §11 and §14). -/
+def checkAt (p : Program) (cnts : CntTable) : Except Error (Report × List (Nat × TExpr)) := do
+  checkEl (← Frontend.Elab.elaborate p) cnts
+
+/-- The error of a declared `linear ctl` operation a node forces above `1`. -/
+def linearCtlErr (k : OpKey) (sp : Span) (why : String) : Error :=
+  ⟨sp, s!"the operation {k.1}.{k.2} is declared `linear ctl`, and this handler's clause asks " ++
+    s!"more of its continuation: {why} (SPEC §53)"⟩
+
+/-- **The counts, inferred and checked** (SPEC §53). The program is elaborated once; its
+elaboration writes each operation whose count is inferred `ctl`, and each clause's `κ` as
+`kont[n.i q]`, so that the elaborated program does not depend on the counts. It is checked at
+the counts its rows write, each `ctl` operation at `1?` (or `0`); the counts of its `ctl`
+operations are inferred from the `handle` nodes of that check (`inferCounts`); and where one is
+lower, the same elaborated program is checked again at them, which is the check the program has.
+The grades are that check's: inference over its own nodes gives the table it was checked at, an
+internal error otherwise. A check that fails at the first counts is checked again with each
+`linear ctl` operation read as `ctl`: a node that forces one of them above `1` is the error then,
+named. -/
 def checkCounted (p : Program) : Except Error (Report × List (Nat × TExpr)) := do
-  match checkAt p {} with
+  let el ← Frontend.Elab.elaborate p
+  match checkEl el {} with
   | .ok (rep, terms) =>
     let g := inferCounts rep.handles
-    if let some (k, sp, why) := g.violation then
-      throw ⟨sp, s!"the operation {k.1}.{k.2} is declared `linear ctl`, and this handler's clause " ++
-        s!"asks more of its continuation: {why} (SPEC §53)"⟩
+    if let some (k, sp, why) := g.violation then throw (linearCtlErr k sp why)
     if g.table.all (·.2 != .one) then
       return ({ rep with grades := g }, terms)
-    match checkAt p { ops := g.table } with
-    | .ok (rep₂, terms₂) => return ({ rep₂ with grades := g }, terms₂)
+    match checkEl el { ops := g.table } with
+    | .ok (rep₂, terms₂) =>
+      let g₂ := inferCounts rep₂.handles
+      if g₂.table != g.table then
+        throw ⟨Span.none, "internal error: the counts inferred (SPEC §53) are not inferred again " ++
+          "from the check at them"⟩
+      return ({ rep₂ with grades := g₂ }, terms₂)
     | .error e => throw { e with msg := s!"internal error: at the counts inferred (SPEC §53): {e.msg}" }
   | .error e =>
-    match checkAt p { relax := true } with
+    match checkEl el { relax := true } with
     | .ok (rep, _) =>
       match (inferCounts rep.handles).violation with
-      | some (k, sp, why) =>
-        throw ⟨sp, s!"the operation {k.1}.{k.2} is declared `linear ctl`, and this handler's " ++
-          s!"clause asks more of its continuation: {why} (SPEC §53)"⟩
+      | some (k, sp, why) => throw (linearCtlErr k sp why)
       | none => throw e
     | .error _ => throw e
 

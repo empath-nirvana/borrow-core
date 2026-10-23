@@ -5,14 +5,15 @@ import Frontend.Syntax
 
 `renameLife f` replaces every lifetime variable `'x` a term, type or constant uses, at `s`, by
 `f s x` (another variable, or a lifetime: `substLives`), and keeps every binder's name and every
-span. `mentionsLife x M` holds when `M` uses the lifetime
+span. Both it and `requal g`, which maps each row entry's qualifier, are `mapLQ`. `mentionsLife x M` holds when `M` uses the lifetime
 `'x`: renaming `'x` changes it. The functions follow `respan` (`Frontend/Elab/Respan.lean`).
 -/
 
 namespace Frontend
 
 /-- A binder's name is kept: only the lifetimes a term uses are renamed. -/
-def Ident.renameLife (_f : Span → String → Life) (x : Ident) : Ident := x
+def Ident.mapLQ (_f : Span → String → Life) (_g : Nat → Nat → Qual → Qual) (x : Ident) : Ident :=
+  x
 
 
 
@@ -23,185 +24,220 @@ def Life.renameLife (f : Span → String → Life) : Life → Life
   | .meet s a b => .meet s (a.renameLife f) (b.renameLife f)
   | .join s a b => .join s (a.renameLife f) (b.renameLife f)
 
+/-- A lifetime holds no row entry: only its variables are renamed. -/
+def Life.mapLQ (f : Span → String → Life) (_g : Nat → Nat → Qual → Qual) (a : Life) : Life :=
+  a.renameLife f
+
 mutual
-def VTy.renameLife (f : Span → String → Life) : VTy → VTy
+def VTy.mapLQ (f : Span → String → Life) (g : Nat → Nat → Qual → Qual) : VTy → VTy
   | .unit s => .unit s
   | .zero s => .zero s
-  | .tensor s A B => .tensor s (A.renameLife f) (B.renameLife f)
-  | .sum s A B => .sum s (A.renameLife f) (B.renameLife f)
-  | .thunk s C => .thunk s (C.renameLife f)
-  | .ref s A => .ref s (A.renameLife f)
-  | .imm s a A => .imm s (a.renameLife f) (A.renameLife f)
-  | .mut s a A => .mut s (a.renameLife f) (A.renameLife f)
-  | .box s a A => .box s (a.renameLife f) (A.renameLife f)
-  | .bang s A => .bang s (A.renameLife f)
+  | .tensor s A B => .tensor s (A.mapLQ f g) (B.mapLQ f g)
+  | .sum s A B => .sum s (A.mapLQ f g) (B.mapLQ f g)
+  | .thunk s C => .thunk s (C.mapLQ f g)
+  | .ref s A => .ref s (A.mapLQ f g)
+  | .imm s a A => .imm s (a.mapLQ f g) (A.mapLQ f g)
+  | .mut s a A => .mut s (a.mapLQ f g) (A.mapLQ f g)
+  | .box s a A => .box s (a.mapLQ f g) (A.mapLQ f g)
+  | .bang s A => .bang s (A.mapLQ f g)
   | .unk s => .unk s
   | .int s w => .int s w
   | .handle s o => .handle s o
-  | .mu s X A => .mu s (X.renameLife f) (A.renameLife f)
+  | .mu s X A => .mu s (X.mapLQ f g) (A.mapLQ f g)
   | .name s n => .name s n
-  | .lolli s A B => .lolli s (A.renameLife f) (B.renameLife f)
-  | .all s x b A => .all s (x.renameLife f) (b.renameLife f) (A.renameLife f)
-  | .block s σ => .block s (σ.renameLife f)
-  | .val s σ => .val s (σ.renameLife f)
-  | .fam s m a σ => .fam s m (a.renameLife f) (σ.renameLife f)
-  | .view s a A => .view s (a.renameLife f) (A.renameLife f)
-  | .array s A => .array s (A.renameLife f)
-  | .arrayImm s a A => .arrayImm s (a.renameLife f) (A.renameLife f)
-  | .arrayMut s a A => .arrayMut s (a.renameLife f) (A.renameLife f)
-  | .sized s D S A => .sized s (D.renameLife f) (S.renameLife f) (A.renameLife f)
-  | .app s G A => .app s (G.renameLife f) (A.renameLife f)
-  | .lapp s G a => .lapp s (G.renameLife f) (a.renameLife f)
-  | .rowed s G r => .rowed s (G.renameLife f) (r.renameLife f)
+  | .lolli s A B => .lolli s (A.mapLQ f g) (B.mapLQ f g)
+  | .all s x b A => .all s (x.mapLQ f g) (b.mapLQ f g) (A.mapLQ f g)
+  | .block s σ => .block s (σ.mapLQ f g)
+  | .val s σ => .val s (σ.mapLQ f g)
+  | .fam s m a σ => .fam s m (a.mapLQ f g) (σ.mapLQ f g)
+  | .view s a A => .view s (a.mapLQ f g) (A.mapLQ f g)
+  | .array s A => .array s (A.mapLQ f g)
+  | .arrayImm s a A => .arrayImm s (a.mapLQ f g) (A.mapLQ f g)
+  | .arrayMut s a A => .arrayMut s (a.mapLQ f g) (A.mapLQ f g)
+  | .sized s D S A => .sized s (D.mapLQ f g) (S.mapLQ f g) (A.mapLQ f g)
+  | .app s G A => .app s (G.mapLQ f g) (A.mapLQ f g)
+  | .lapp s G a => .lapp s (G.mapLQ f g) (a.mapLQ f g)
+  | .rowed s G r => .rowed s (G.mapLQ f g) (r.mapLQ f g)
+  | .kont s n i q B C => .kont s n i (g n i q) (B.mapLQ f g) (C.mapLQ f g)
 
-def CTy.renameLife (f : Span → String → Life) : CTy → CTy
-  | .ret s A => .ret s (A.renameLife f)
-  | .arr s A C => .arr s (A.renameLife f) (C.renameLife f)
-  | .amp s C D => .amp s (C.renameLife f) (D.renameLife f)
+def CTy.mapLQ (f : Span → String → Life) (g : Nat → Nat → Qual → Qual) : CTy → CTy
+  | .ret s A => .ret s (A.mapLQ f g)
+  | .arr s A C => .arr s (A.mapLQ f g) (C.mapLQ f g)
+  | .amp s C D => .amp s (C.mapLQ f g) (D.mapLQ f g)
   | .top s => .top s
-  | .all s x b C => .all s (x.renameLife f) (b.renameLife f) (C.renameLife f)
-  | .nu s X C => .nu s (X.renameLife f) (C.renameLife f)
+  | .all s x b C => .all s (x.mapLQ f g) (b.mapLQ f g) (C.mapLQ f g)
+  | .nu s X C => .nu s (X.mapLQ f g) (C.mapLQ f g)
   | .name s n => .name s n
-  | .delay s A => .delay s (A.renameLife f)
-  | .stream s A => .stream s (A.renameLife f)
-  | .iter s A R R' => .iter s (A.renameLife f) (R.renameLife f) (R'.renameLife f)
-  | .loop s A B => .loop s (A.renameLife f) (B.renameLife f)
-  | .pull s A B R => .pull s (A.renameLife f) (B.renameLife f) (R.renameLife f)
-  | .eff s r A => .eff s (r.renameLife f) (A.renameLife f)
+  | .delay s A => .delay s (A.mapLQ f g)
+  | .stream s A => .stream s (A.mapLQ f g)
+  | .iter s A R R' => .iter s (A.mapLQ f g) (R.mapLQ f g) (R'.mapLQ f g)
+  | .loop s A B => .loop s (A.mapLQ f g) (B.mapLQ f g)
+  | .pull s A B R => .pull s (A.mapLQ f g) (B.mapLQ f g) (R.mapLQ f g)
+  | .eff s r A => .eff s (r.mapLQ f g) (A.mapLQ f g)
 
-def Row.renameLife (f : Span → String → Life) : Row → Row
+def Row.mapLQ (f : Span → String → Life) (g : Nat → Nat → Qual → Qual) : Row → Row
   | .nil => .nil
-  | .cons n i q A B r => .cons n i q (A.renameLife f) (B.renameLife f) (r.renameLife f)
+  | .cons n i q A B r => .cons n i (g n i q) (A.mapLQ f g) (B.mapLQ f g) (r.mapLQ f g)
 
-def Shape.renameLife (f : Span → String → Life) : Shape → Shape
-  | .leaf s A => .leaf s (A.renameLife f)
-  | .node s σ τ => .node s (σ.renameLife f) (τ.renameLife f)
+def Shape.mapLQ (f : Span → String → Life) (g : Nat → Nat → Qual → Qual) : Shape → Shape
+  | .leaf s A => .leaf s (A.mapLQ f g)
+  | .node s σ τ => .node s (σ.mapLQ f g) (τ.mapLQ f g)
   | .name s n => .name s n
 end
 
-def Const.renameLife (f : Span → String → Life) : Const → Const
-  | .alloc A => .alloc (A.renameLife f)
-  | .free A => .free (A.renameLife f)
-  | .swap A B => .swap (A.renameLife f) (B.renameLife f)
-  | .copy a A => .copy (a.renameLife f) (A.renameLife f)
-  | .copyBang A => .copyBang (A.renameLife f)
-  | .forgetImm a A => .forgetImm (a.renameLife f) (A.renameLife f)
-  | .forgetMut a A => .forgetMut (a.renameLife f) (A.renameLife f)
+def Const.mapLQ (f : Span → String → Life) (g : Nat → Nat → Qual → Qual) : Const → Const
+  | .alloc A => .alloc (A.mapLQ f g)
+  | .free A => .free (A.mapLQ f g)
+  | .swap A B => .swap (A.mapLQ f g) (B.mapLQ f g)
+  | .copy a A => .copy (a.mapLQ f g) (A.mapLQ f g)
+  | .copyBang A => .copyBang (A.mapLQ f g)
+  | .forgetImm a A => .forgetImm (a.mapLQ f g) (A.mapLQ f g)
+  | .forgetMut a A => .forgetMut (a.mapLQ f g) (A.mapLQ f g)
   | .forgetUnk => .forgetUnk
-  | .forgetBang A => .forgetBang (A.renameLife f)
-  | .withbor1 x A B => .withbor1 (x.renameLife f) (A.renameLife f) (B.renameLife f)
-  | .withbor2 x b A B => .withbor2 (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f)
-  | .withbor3 a x A B => .withbor3 (a.renameLife f) (x.renameLife f) (A.renameLife f) (B.renameLife f)
-  | .withload a x A B => .withload (a.renameLife f) (x.renameLife f) (A.renameLife f) (B.renameLife f)
-  | .withswap a A B => .withswap (a.renameLife f) (A.renameLife f) (B.renameLife f)
-  | .foldImm F y c R => .foldImm (F.renameLife f) (y.renameLife f) (c.renameLife f) (R.renameLife f)
-  | .foldOwn F R => .foldOwn (F.renameLife f) (R.renameLife f)
-  | .foldReuse F R => .foldReuse (F.renameLife f) (R.renameLife f)
-  | .fixd A S => .fixd (A.renameLife f) (S.renameLife f)
-  | .unfoldS A S => .unfoldS (A.renameLife f) (S.renameLife f)
-  | .unfold C S => .unfold (C.renameLife f) (S.renameLife f)
+  | .forgetBang A => .forgetBang (A.mapLQ f g)
+  | .withbor1 x A B => .withbor1 (x.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g)
+  | .withbor2 x b A B => .withbor2 (x.mapLQ f g) (b.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g)
+  | .withbor3 a x A B => .withbor3 (a.mapLQ f g) (x.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g)
+  | .withload a x A B => .withload (a.mapLQ f g) (x.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g)
+  | .withswap a A B => .withswap (a.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g)
+  | .foldImm F y c R => .foldImm (F.mapLQ f g) (y.mapLQ f g) (c.mapLQ f g) (R.mapLQ f g)
+  | .foldOwn F R => .foldOwn (F.mapLQ f g) (R.mapLQ f g)
+  | .foldReuse F R => .foldReuse (F.mapLQ f g) (R.mapLQ f g)
+  | .fixd A S => .fixd (A.mapLQ f g) (S.mapLQ f g)
+  | .unfoldS A S => .unfoldS (A.mapLQ f g) (S.mapLQ f g)
+  | .unfold C S => .unfold (C.mapLQ f g) (S.mapLQ f g)
   | .lit c => .lit c
   | .host op => .host op
-  | .allocS σ => .allocS (σ.renameLife f)
-  | .freeS σ => .freeS (σ.renameLife f)
-  | .withborS m σ c T => .withborS m (σ.renameLife f) (c.renameLife f) (T.renameLife f)
+  | .allocS σ => .allocS (σ.mapLQ f g)
+  | .freeS σ => .freeS (σ.mapLQ f g)
+  | .withborS m σ c T => .withborS m (σ.mapLQ f g) (c.mapLQ f g) (T.mapLQ f g)
   | .withborF2Mut c a b w A B T =>
-      .withborF2Mut (c.renameLife f) (a.renameLife f) (b.renameLife f) (w.renameLife f) (A.renameLife f) (B.renameLife f) (T.renameLife f)
-  | .withborF2Imm c a b A B T => .withborF2Imm (c.renameLife f) (a.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f) (T.renameLife f)
-  | .arrayNew A => .arrayNew (A.renameLife f)
-  | .arrayFree A => .arrayFree (A.renameLife f)
-  | .arraySize A => .arraySize (A.renameLife f)
-  | .arrayReplace A => .arrayReplace (A.renameLife f)
-  | .arrayLen a A => .arrayLen (a.renameLife f) (A.renameLife f)
-  | .arrayGet a A => .arrayGet (a.renameLife f) (A.renameLife f)
-  | .arrayCopy a A => .arrayCopy (a.renameLife f) (A.renameLife f)
-  | .arrayForget a A => .arrayForget (a.renameLife f) (A.renameLife f)
+      .withborF2Mut (c.mapLQ f g) (a.mapLQ f g) (b.mapLQ f g) (w.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g) (T.mapLQ f g)
+  | .withborF2Imm c a b A B T => .withborF2Imm (c.mapLQ f g) (a.mapLQ f g) (b.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g) (T.mapLQ f g)
+  | .arrayNew A => .arrayNew (A.mapLQ f g)
+  | .arrayFree A => .arrayFree (A.mapLQ f g)
+  | .arraySize A => .arraySize (A.mapLQ f g)
+  | .arrayReplace A => .arrayReplace (A.mapLQ f g)
+  | .arrayLen a A => .arrayLen (a.mapLQ f g) (A.mapLQ f g)
+  | .arrayGet a A => .arrayGet (a.mapLQ f g) (A.mapLQ f g)
+  | .arrayCopy a A => .arrayCopy (a.mapLQ f g) (A.mapLQ f g)
+  | .arrayForget a A => .arrayForget (a.mapLQ f g) (A.mapLQ f g)
   | .sliceBorrowMut x b A B =>
-      .sliceBorrowMut (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f)
+      .sliceBorrowMut (x.mapLQ f g) (b.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g)
   | .sliceBorrowImm x b A B =>
-      .sliceBorrowImm (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f)
-  | .sliceGetMut a A => .sliceGetMut (a.renameLife f) (A.renameLife f)
-  | .sliceLenMut a A => .sliceLenMut (a.renameLife f) (A.renameLife f)
-  | .sliceSplitImm a A => .sliceSplitImm (a.renameLife f) (A.renameLife f)
-  | .sliceSplitMut a A => .sliceSplitMut (a.renameLife f) (A.renameLife f)
-  | .sliceEmptyImm a A => .sliceEmptyImm (a.renameLife f) (A.renameLife f)
-  | .sliceEmptyMut a A => .sliceEmptyMut (a.renameLife f) (A.renameLife f)
-  | .sliceReplaceMut a A => .sliceReplaceMut (a.renameLife f) (A.renameLife f)
-  | .sliceSwapMut a A => .sliceSwapMut (a.renameLife f) (A.renameLife f)
-  | .countFold S => .countFold (S.renameLife f)
-  | .countTry S E => .countTry (S.renameLife f) (E.renameLife f)
-  | .boundedFix A C => .boundedFix (A.renameLife f) (C.renameLife f)
-  | .withbor1U x A B r => .withbor1U (x.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)
+      .sliceBorrowImm (x.mapLQ f g) (b.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g)
+  | .sliceGetMut a A => .sliceGetMut (a.mapLQ f g) (A.mapLQ f g)
+  | .sliceLenMut a A => .sliceLenMut (a.mapLQ f g) (A.mapLQ f g)
+  | .sliceSplitImm a A => .sliceSplitImm (a.mapLQ f g) (A.mapLQ f g)
+  | .sliceSplitMut a A => .sliceSplitMut (a.mapLQ f g) (A.mapLQ f g)
+  | .sliceEmptyImm a A => .sliceEmptyImm (a.mapLQ f g) (A.mapLQ f g)
+  | .sliceEmptyMut a A => .sliceEmptyMut (a.mapLQ f g) (A.mapLQ f g)
+  | .sliceReplaceMut a A => .sliceReplaceMut (a.mapLQ f g) (A.mapLQ f g)
+  | .sliceSwapMut a A => .sliceSwapMut (a.mapLQ f g) (A.mapLQ f g)
+  | .countFold S => .countFold (S.mapLQ f g)
+  | .countTry S E => .countTry (S.mapLQ f g) (E.mapLQ f g)
+  | .boundedFix A C => .boundedFix (A.mapLQ f g) (C.mapLQ f g)
+  | .withbor1U x A B r => .withbor1U (x.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g) (r.mapLQ f g)
   | .withbor2U x b A B r =>
-      .withbor2U (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)
+      .withbor2U (x.mapLQ f g) (b.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g) (r.mapLQ f g)
   | .withbor3U a x A B r =>
-      .withbor3U (a.renameLife f) (x.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)
+      .withbor3U (a.mapLQ f g) (x.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g) (r.mapLQ f g)
   | .withloadU a x A B r =>
-      .withloadU (a.renameLife f) (x.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)
+      .withloadU (a.mapLQ f g) (x.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g) (r.mapLQ f g)
   | .sliceBorrowMutU x b A B r =>
-      .sliceBorrowMutU (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)
+      .sliceBorrowMutU (x.mapLQ f g) (b.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g) (r.mapLQ f g)
   | .sliceBorrowImmU x b A B r =>
-      .sliceBorrowImmU (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)
+      .sliceBorrowImmU (x.mapLQ f g) (b.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g) (r.mapLQ f g)
 
 mutual
-def Val.renameLife (f : Span → String → Life) : Val → Val
+def Val.mapLQ (f : Span → String → Life) (g : Nat → Nat → Qual → Qual) : Val → Val
   | .var s x => .var s x
   | .clone s x => .clone s x
-  | .defApp s n args => .defApp s n (args.map ((VTy.renameLife f)))
+  | .defApp s n args => .defApp s n (args.map ((VTy.mapLQ f g)))
   | .unit s => .unit s
-  | .pair s V W => .pair s (V.renameLife f) (W.renameLife f)
-  | .inl s V => .inl s (V.renameLife f)
-  | .inr s V => .inr s (V.renameLife f)
-  | .thunk s M => .thunk s (M.renameLife f)
-  | .thunkv s M => .thunkv s (M.renameLife f)
-  | .bangThunk s M => .bangThunk s (M.renameLife f)
-  | .bangThunkv s M => .bangThunkv s (M.renameLife f)
-  | .unbang s V => .unbang s (V.renameLife f)
-  | .boxed s a V => .boxed s (a.renameLife f) (V.renameLife f)
-  | .unbox s V => .unbox s (V.renameLife f)
-  | .sub s V a => .sub s (V.renameLife f) (a.renameLife f)
-  | .roll s V => .roll s (V.renameLife f)
-  | .unroll s V => .unroll s (V.renameLife f)
-  | .run s M => .run s (M.renameLife f)
-  | .app s V W => .app s (V.renameLife f) (W.renameLife f)
-  | .inst s V a => .inst s (V.renameLife f) (a.renameLife f)
-  | .ascribe s V A => .ascribe s (V.renameLife f) (A.renameLife f)
-  | .const s c => .const s (c.renameLife f)
-  | .shorten s m σ a V => .shorten s m (σ.renameLife f) (a.renameLife f) (V.renameLife f)
-  | .lend s x m => .lend s (x.renameLife f) m
+  | .pair s V W => .pair s (V.mapLQ f g) (W.mapLQ f g)
+  | .inl s V => .inl s (V.mapLQ f g)
+  | .inr s V => .inr s (V.mapLQ f g)
+  | .thunk s M => .thunk s (M.mapLQ f g)
+  | .thunkv s M => .thunkv s (M.mapLQ f g)
+  | .bangThunk s M => .bangThunk s (M.mapLQ f g)
+  | .bangThunkv s M => .bangThunkv s (M.mapLQ f g)
+  | .unbang s V => .unbang s (V.mapLQ f g)
+  | .boxed s a V => .boxed s (a.mapLQ f g) (V.mapLQ f g)
+  | .unbox s V => .unbox s (V.mapLQ f g)
+  | .sub s V a => .sub s (V.mapLQ f g) (a.mapLQ f g)
+  | .roll s V => .roll s (V.mapLQ f g)
+  | .unroll s V => .unroll s (V.mapLQ f g)
+  | .run s M => .run s (M.mapLQ f g)
+  | .app s V W => .app s (V.mapLQ f g) (W.mapLQ f g)
+  | .inst s V a => .inst s (V.mapLQ f g) (a.mapLQ f g)
+  | .ascribe s V A => .ascribe s (V.mapLQ f g) (A.mapLQ f g)
+  | .const s c => .const s (c.mapLQ f g)
+  | .shorten s m σ a V => .shorten s m (σ.mapLQ f g) (a.mapLQ f g) (V.mapLQ f g)
+  | .lend s x m => .lend s (x.mapLQ f g) m
   | .sugar s g => .sugar s g
-  | .mark s k V => .mark s k (V.renameLife f)
+  | .mark s k V => .mark s k (V.mapLQ f g)
 
-def Comp.renameLife (f : Span → String → Life) : Comp → Comp
-  | .ret s V => .ret s (V.renameLife f)
-  | .bind s x A M N lin => .bind s (x.renameLife f) (A.map ((VTy.renameLife f))) (M.renameLife f) (N.renameLife f) lin
-  | .force s x => .force s (x.renameLife f)
-  | .lam s x A M => .lam s (x.renameLife f) (A.renameLife f) (M.renameLife f)
-  | .app s M x => .app s (M.renameLife f) (x.renameLife f)
-  | .with_ s M N => .with_ s (M.renameLife f) (N.renameLife f)
-  | .proj s i M => .proj s i (M.renameLife f)
+def Comp.mapLQ (f : Span → String → Life) (g : Nat → Nat → Qual → Qual) : Comp → Comp
+  | .ret s V => .ret s (V.mapLQ f g)
+  | .bind s x A M N lin => .bind s (x.mapLQ f g) (A.map ((VTy.mapLQ f g))) (M.mapLQ f g) (N.mapLQ f g) lin
+  | .force s x => .force s (x.mapLQ f g)
+  | .lam s x A M => .lam s (x.mapLQ f g) (A.mapLQ f g) (M.mapLQ f g)
+  | .app s M x => .app s (M.mapLQ f g) (x.mapLQ f g)
+  | .with_ s M N => .with_ s (M.mapLQ f g) (N.mapLQ f g)
+  | .proj s i M => .proj s i (M.mapLQ f g)
   | .top s => .top s
-  | .letUnit s V M => .letUnit s (V.renameLife f) (M.renameLife f)
-  | .letPair s x y V M => .letPair s (x.renameLife f) (y.renameLife f) (V.renameLife f) (M.renameLife f)
-  | .case s V x M y N => .case s (V.renameLife f) (x.renameLife f) (M.renameLife f) (y.renameLife f) (N.renameLife f)
-  | .absurd s V => .absurd s (V.renameLife f)
-  | .lamL s x b M => .lamL s (x.renameLife f) (b.renameLife f) (M.renameLife f)
-  | .inst s M a => .inst s (M.renameLife f) (a.renameLife f)
-  | .nuIn s M => .nuIn s (M.renameLife f)
-  | .nuOut s M => .nuOut s (M.renameLife f)
-  | .ascribe s M C => .ascribe s (M.renameLife f) (C.renameLife f)
-  | .loop s ℓ src V M N => .loop s ℓ src (V.renameLife f) (M.renameLife f) (N.renameLife f)
-  | .perform s n i V => .perform s n i (V.renameLife f)
-  | .abort s n i V => .abort s n i (V.renameLife f)
+  | .letUnit s V M => .letUnit s (V.mapLQ f g) (M.mapLQ f g)
+  | .letPair s x y V M => .letPair s (x.mapLQ f g) (y.mapLQ f g) (V.mapLQ f g) (M.mapLQ f g)
+  | .case s V x M y N => .case s (V.mapLQ f g) (x.mapLQ f g) (M.mapLQ f g) (y.mapLQ f g) (N.mapLQ f g)
+  | .absurd s V => .absurd s (V.mapLQ f g)
+  | .lamL s x b M => .lamL s (x.mapLQ f g) (b.mapLQ f g) (M.mapLQ f g)
+  | .inst s M a => .inst s (M.mapLQ f g) (a.mapLQ f g)
+  | .nuIn s M => .nuIn s (M.mapLQ f g)
+  | .nuOut s M => .nuOut s (M.mapLQ f g)
+  | .ascribe s M C => .ascribe s (M.mapLQ f g) (C.mapLQ f g)
+  | .loop s ℓ src V M N => .loop s ℓ src (V.mapLQ f g) (M.mapLQ f g) (N.mapLQ f g)
+  | .perform s n i V => .perform s n i (V.mapLQ f g)
+  | .abort s n i V => .abort s n i (V.mapLQ f g)
   | .handle s n st hr hc M =>
-    .handle s n (st.map (SiteRec.mapTy (VTy.renameLife f)))
-      (hr.renameLife f) (hc.renameLife f) (M.renameLife f)
+    .handle s n (st.map (SiteRec.mapTy (VTy.mapLQ f g)))
+      (hr.mapLQ f g) (hc.mapLQ f g) (M.mapLQ f g)
   | .unwind s x A M D N =>
-      .unwind s (x.renameLife f) (A.map (VTy.renameLife f)) (M.renameLife f) (D.renameLife f) (N.renameLife f)
+      .unwind s (x.mapLQ f g) (A.map (VTy.mapLQ f g)) (M.mapLQ f g) (D.mapLQ f g) (N.mapLQ f g)
   | .withbor2r s x b A B r p m M =>
-      .withbor2r s (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f)
-        (r.renameLife f) p m (M.renameLife f)
+      .withbor2r s (x.mapLQ f g) (b.mapLQ f g) (A.mapLQ f g) (B.mapLQ f g)
+        (r.mapLQ f g) p m (M.mapLQ f g)
 end
+
+/-- The qualifier map that keeps every row entry's. -/
+def keepQ : Nat → Nat → Qual → Qual := fun _ _ q => q
+
+/-- The variable map that keeps every lifetime. -/
+def keepL : Span → String → Life := fun s x => .var s x
+
+def VTy.renameLife (f : Span → String → Life) (A : VTy) : VTy := A.mapLQ f keepQ
+def CTy.renameLife (f : Span → String → Life) (C : CTy) : CTy := C.mapLQ f keepQ
+def Row.renameLife (f : Span → String → Life) (r : Row) : Row := r.mapLQ f keepQ
+def Shape.renameLife (f : Span → String → Life) (σ : Shape) : Shape := σ.mapLQ f keepQ
+def Const.renameLife (f : Span → String → Life) (c : Const) : Const := c.mapLQ f keepQ
+def Val.renameLife (f : Span → String → Life) (V : Val) : Val := V.mapLQ f keepQ
+def Comp.renameLife (f : Span → String → Life) (M : Comp) : Comp := M.mapLQ f keepQ
+
+/-- **The row entries' qualifiers mapped** (SPEC §53): each entry `n.i q` of a row, and each
+`kont[n.i q]`, at `g n i q`; lifetimes and spans kept. -/
+def Comp.requal (g : Nat → Nat → Qual → Qual) (M : Comp) : Comp := M.mapLQ keepL g
+def Val.requal (g : Nat → Nat → Qual → Qual) (V : Val) : Val := V.mapLQ keepL g
+def VTy.requal (g : Nat → Nat → Qual → Qual) (A : VTy) : VTy := A.mapLQ keepL g
+def CTy.requal (g : Nat → Nat → Qual → Qual) (C : CTy) : CTy := C.mapLQ keepL g
+
+/-- A declaration's types and terms at `requal g`. -/
+def Decl.requal (g : Nat → Nat → Qual → Qual) : Decl → Decl
+  | .type sp n tps lps A => .type sp n tps lps (A.requal g)
+  | .shape sp n σ => .shape sp n (σ.mapLQ keepL g)
+  | .def_ sp n ps A V mk => .def_ sp n ps (A.requal g) (V.requal g) mk
+  | .extern sp n A => .extern sp n (A.requal g)
+  | .main sp C M => .main sp (C.requal g) (M.requal g)
+  | d => d
 
 /-- The lifetime variables of `σ` replaced by their lifetimes.  `[spec §32]` -/
 def substLives (σ : List (String × Life)) (s : Span) (x : String) : Life :=

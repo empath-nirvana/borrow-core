@@ -76,6 +76,8 @@ inductive RTy where
   | lapp (sp : Span) (F : RTy) (a : Life)
   /-- `(A => B with E₁, E₂[T])`: a function type with a provided row (`VTy.rowed`).  `[spec §33]` -/
   | rowed (sp : Span) (F : RTy) (effs : List (Ident × List VTy))
+  /-- `kont[n.i q] B C` (`VTy.kont`).  `[spec §53]` -/
+  | kont (sp : Span) (n i : Nat) (q : Qual) (B C : RTy)
 
 def RTy.span : RTy → Span
   | .unit sp | .zero sp | .tensor sp _ _ | .sum sp _ _ | .U sp _ | .F sp _ | .ref sp _
@@ -84,7 +86,7 @@ def RTy.span : RTy → Span
   | .top sp | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _ | .nu sp _ _ | .delay sp _
   | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .pull sp _ _ _ | .array sp _ | .arrayImm sp _ _
   | .arrayMut sp _ _ | .sized sp _ _ _ | .eff sp _ _ | .app sp _ _ | .lapp sp _ _
-  | .rowed sp _ _ => sp
+  | .rowed sp _ _ | .kont sp _ _ _ _ _ => sp
 
 /-- What a raw type is, for sort errors. -/
 def RTy.former : RTy → String
@@ -135,6 +137,7 @@ def RTy.toV : RTy → Except Error VTy
     match ← G.toV with
     | H@(.lolli ..) => pure (.rowed sp H (VTy.ofRowEffs sp es))
     | H => .error ⟨H.span, "a provided row `with E` is written on a function type `A => B`"⟩
+  | .kont sp n i q B C => return .kont sp n i q (← B.toV) (← C.toC)
   | t@(.F ..) | t@(.arr ..) | t@(.forall_ ..) | t@(.amp ..) | t@(.top ..) | t@(.nu ..)
   | t@(.delay ..) | t@(.stream ..) | t@(.iter ..) | t@(.loop ..) | t@(.pull ..)
   | t@(.eff ..) => sortErr t true
@@ -601,6 +604,18 @@ def rtyPrefix : Nat → P RTy
       let R ← rtyPrefix n
       let R' ← rtyPrefix n
       pure (.iter (← spanFrom st) A R R')
+    -- `kont[n.i q] B C`, the continuation of the operation `n.i` (SPEC §53), read in a type only.
+    | .ident "kont" =>
+      if (← peekAt 1).tok == .sym "[" then
+        discard bump
+        discard bump
+        let (k, i) ← opNameNI "an operation `n.i`"
+        let q ← rowQual
+        expectSym "]"
+        let B ← rtyPrefix n
+        let C ← rtyPrefix n
+        pure (.kont (← spanFrom st) k i q B C)
+      else rtyAtom n
     -- `pull A B R`, read in a type only: `pull` is not reserved.
     | .ident "pull" =>
       discard bump
@@ -756,6 +771,17 @@ def opNameNI (what : String) : P (Nat × Nat) := do
     | none => expected what
   | _ => expected what
 
+/-- A row entry's count word: `lin`, `aff` or `ctl` (the count inferred).  `[spec §53]` -/
+def rowQual : P Qual := do
+  let tq ← peek
+  match tq.tok with
+  | .ident "lin" => discard bump; pure Qual.lin
+  | .ident "aff" => discard bump; pure Qual.aff
+  | .ident "ctl" => discard bump; pure Qual.infer
+  | .ident "unr" => failAt tq.span ("`unr`: an unrestricted continuation is not a type; a " ++
+      "row's count is `lin`, `aff` or `ctl` (SPEC §53)")
+  | _ => expected "a count `lin`, `aff` or `ctl`"
+
 /-- The entries of a row up to its `]`: `n.i q A ~> B`, separated by `,`; `q` is `lin`, `aff` or
 `ctl` (the count inferred), read as a name here and nowhere else. -/
 def rowEntries : Nat → P Row
@@ -763,14 +789,7 @@ def rowEntries : Nat → P Row
   | n + 1 => do
     if ← isSym "]" then return .nil
     let (k, i) ← opNameNI "an operation `n.i` of a row"
-    let tq ← peek
-    let q ← match tq.tok with
-      | .ident "lin" => discard bump; pure Qual.lin
-      | .ident "aff" => discard bump; pure Qual.aff
-      | .ident "ctl" => discard bump; pure Qual.infer
-      | .ident "unr" => failAt tq.span ("`unr`: an unrestricted continuation is not a type; a " ++
-          "row's count is `lin`, `aff` or `ctl` (SPEC §53)")
-      | _ => expected "a count `lin`, `aff` or `ctl`"
+    let q ← rowQual
     let A ← rvty n
     expectSym "~>"
     let B ← rvty n

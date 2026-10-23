@@ -75,15 +75,13 @@ structure Scope where
 
 /-- **The kernel's count of the operation `n.i`, answering `B`, as a row writes it**
 (SPEC §53): `lin` is `1`; `aff` is `1?`, or `0` at an answer `0`; `ctl` is the count inferred for
-the operation (`Scope.cnts`), and where none is, as `aff`.  An operation whose count is inferred is
-a handler site's (`SiteRec`), whose name only the elaboration writes: an `aff` entry of it is the
-elaboration's own, a row it reads back from a type it computed before the count was inferred
-(`TCx.surface`), and it reads the inferred count too. -/
+the operation (`Scope.cnts`), and where none is, as `aff`. -/
 def Scope.cntOf (sc : Scope) (n i : Nat) (q : Frontend.Qual) (B : CVTy) : CCount :=
   let weak : CCount := if B.isZero then .zero else .opt
   match q with
   | .lin => if sc.cnts.relax then (sc.cnts.ops.lookup (n, i)).getD weak else .one
-  | .aff | .infer => (sc.cnts.ops.lookup (n, i)).getD weak
+  | .aff => weak
+  | .infer => (sc.cnts.ops.lookup (n, i)).getD weak
 
 /-- A `type` declaration in scope: its type and lifetime parameters, body and own scope. -/
 structure TypeInfo where
@@ -283,6 +281,12 @@ def _root_.Frontend.VTy.spine : VTy → Option (String × List VTy × List Front
   | .lapp _ G a => (G.spine).map fun (n, As, ls) => (n, As, ls ++ [a])
   | _ => none
 
+/-- `C` as a returner chain `F_Σ A`: its row and answer. -/
+def effRow? : CCTy → Option (CRow × CVTy)
+  | .ret A => some ([], A)
+  | .eff n i q wq A B fin C => (effRow? C).map fun (S, R) => (⟨n, i, q, wq, A, B, fin⟩ :: S, R)
+  | _ => none
+
 def indexOf? (x : String) : List String → Option Nat
   | [] => none
   | y :: ys => if x == y then some 0 else (indexOf? x ys).map (· + 1)
@@ -365,6 +369,13 @@ def elabV : Nat → TyEnv → VTy → Except Error CVTy
     | .rowed sp _ _ =>
         err sp ("a function type with a provided row is the type of a computation parameter " ++
           "(SPEC §33): it is written on a parameter of a function")
+    | .kont sp k i q B C => do
+        -- `κ` of `k.i` at its count: the kernel's `kTy`, its cancel at `Σ` (SPEC §53).
+        let B' ← elabV n E B
+        match effRow? (← elabC n E C) with
+        | some (S, R) =>
+          pure (BoCa.Fig16.LogRel.Core.kTy S R (E.scope.cntOf k i q B').toQual B')
+        | none => err sp "`kont[n.i q] B C` resumes into a row's computation type `F[…] R`"
     | A@(.app sp _ _) | A@(.lapp sp _ _) =>
         -- `N[A, …]<'a, …>`: the arguments elaborated at the use, then `N`'s body in its own scope
         -- with its parameters bound to them.  `[spec §7]`

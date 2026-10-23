@@ -70,18 +70,18 @@ main : F U loop i32 1 =
                       case io_hv19_3 {
                         inl io_ha19_3 -> return inl inl io_ha19_3
                       | inr io_hl19_3 -> return inr io_hl19_3
-                      }) : !U (i32 * 1 + U (nu X. F[1.0 lin i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 lin i32 * i32 ~> i32] 1) -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 lin i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 lin i32 * i32 ~> i32] 1)))), ((!thunkv fun (io_hp19_3 : (i32 * i32) * U ((i32 -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 lin i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 lin i32 * i32 ~> i32] 1))) & top)) ->
+                      }) : !U (i32 * 1 + U (nu X. F[1.0 lin i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 lin i32 * i32 ~> i32] 1) -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 lin i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 lin i32 * i32 ~> i32] 1)))), ((!thunkv fun (io_hp19_3 : (i32 * i32) * kont[1.0 lin] i32 (F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 lin i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 lin i32 * i32 ~> i32] 1)))) ->
                       let (io_hxw19_3, io_k19_3) = io_hp19_3;
                       let (x, io_hw19_3) = io_hxw19_3;
                       acc <- return io_hw19_3;
                       acc <- return (unbang host[add32]) (acc, x);
                       io_wv19_3 <- return acc;
-                      force io_k19_3.1 io_wv19_3, ()) : !U ((i32 * i32) * U ((i32 -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 lin i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 lin i32 * i32 ~> i32] 1))) & top) -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 lin i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 lin i32 * i32 ~> i32] 1))) * 1)) (nu_out force io_hs19_3).1,
+                      force io_k19_3.1 io_wv19_3, ()) : !U ((i32 * i32) * kont[1.0 lin] i32 (F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 lin i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 lin i32 * i32 ~> i32] 1))) -o F ((i32 * 1 + i32 * 1) + U (nu X. F[1.0 lin i32 * i32 ~> i32] (i32 * 1 + U X) & F[1.0 lin i32 * i32 ~> i32] 1))) * 1)) (nu_out force io_hs19_3).1,
                 handle_with[1](((!thunkv fun (io_cv19_3 : 1) ->
-                      return io_cv19_3) : !U (1 -o F 1)), ((!thunkv fun (io_cp19_3 : (i32 * i32) * U ((i32 -o F 1) & top)) ->
+                      return io_cv19_3) : !U (1 -o F 1)), ((!thunkv fun (io_cp19_3 : (i32 * i32) * kont[1.0 lin] i32 (F 1)) ->
                       let (io_cxw19_3, io_ck19_3) = io_cp19_3;
                       let (io_cx19_3, io_cw19_3) = io_cxw19_3;
-                      force io_ck19_3.1 io_cw19_3, ()) : !U ((i32 * i32) * U ((i32 -o F 1) & top) -o F 1) * 1)) (nu_out force io_hs19_3).2 >);
+                      force io_ck19_3.1 io_cw19_3, ()) : !U ((i32 * i32) * kont[1.0 lin] i32 (F 1) -o F 1) * 1)) (nu_out force io_hs19_3).2 >);
         return (thunkv nu_in < (nu_out force io_hf19_3 io_hl19_3).1,
             (nu_out force io_hf19_3 io_hl19_3).2 >));
   io_d0 <- return (unbang io_hwf19_3) io_l19_3;

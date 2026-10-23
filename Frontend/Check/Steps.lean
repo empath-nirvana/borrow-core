@@ -193,12 +193,6 @@ def Env.ppL (E : Env) (a : CLife) : String := ppLifeP E.lenv 1 a
 
 /-! ### Rows  `[spec §19]` -/
 
-/-- `C` as a returner chain `F_Σ A`: its row and answer. -/
-def effRow? : CCTy → Option (CRow × CVTy)
-  | .ret A => some ([], A)
-  | .eff n i q wq A B fin C => (effRow? C).map fun (S, R) => (⟨n, i, q, wq, A, B, fin⟩ :: S, R)
-  | _ => none
-
 /-- The environment of a computation checked against `C`: the row of `C` when it is a returner
 chain.  `[spec §19]` -/
 def Env.atC (E : Env) (C : CCTy) : Env :=

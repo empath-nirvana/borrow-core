@@ -47,7 +47,10 @@ rejects() {
   want=$(sed -n 's/^-- expect: //p; s/^-- expect| //p' "$f")
   if grep -q '^-- reject: syntax' "$f"; then
     # A form the grammar no longer has (SPEC §53's `unr`, `multi ctl`): the parser refuses it.
-    if out=$("$bcc" parse "$f" 2>&1); then
+    # Only such a form is refused before the checker: its expected message cites SPEC §53.
+    if [[ "$want" != *"(SPEC §53)"* ]]; then
+      echo "$f: \`-- reject: syntax\` is for a form SPEC §53 removed, and its message does not cite it"; return 1
+    elif out=$("$bcc" parse "$f" 2>&1); then
       echo "$f: parses, but its form must be refused by the parser"; return 1
     elif [ "$out" != "$f:$want" ]; then
       echo "$f: wrong error"; echo "  want: $want"; echo "  got:  ${out#"$f:"}"; return 1

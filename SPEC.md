@@ -8919,15 +8919,18 @@ value that does not drop across it.
 | `1?` | resumed at most once, or cancelled or dropped: `κ : U((B ⊸ F_Σ R) & C)` |
 
 There is no `ω`: an unrestricted continuation is not a type. At this stage the one world is `⊤`
-(`World.top`; `World.eq` is the lemma a second world must revisit, and `CTyEq` does not compare
-worlds). Position (`tail`, `once`) and storage (in-clause, `stored`, `stored @d`) stay on the
+(`World.top`; `World.eq` is the lemma a second world must revisit). `CTyEq`, the elaborator's
+`matchC` and the printer `ppC` read the world; at the one world the comparison is discharged by
+case analysis on `World`, and `ppC` writes nothing for `⊤` (`wldStr`). Position (`tail`, `once`) and storage (in-clause, `stored`, `stored @d`) stay on the
 `handle` node (its clause kinds and its rule, §19, §28).
 
 **The run-time tag.** `Qual` stays: it is the tag a handler value holds (§25) and the relation's
 `OpEnt.q`. A count's tag is `Count.toQual`: `1` is `lin`, `0` and `1?` are `aff`, and `OpSig.q` is
 `cnt.toQual`. So the machine, the relation and every run lemma read what they read before. The
-machine keeps its tag `2`, at which `[op]` hands `kappa` with no cell; no count gives it, and only
-§19's untyped cancel runs (`Core/EffCancel.lean`, `plainTags`) use it.
+machine keeps its tag `2`, at which `[op]` hands `kappa` with no cell; no count gives it: a
+handler a derivation types holds its counts' tags, at each of which `[op]` allocates `κ`'s cell
+(`kappaAt_qualsVal`). Only §19's untyped cancel runs (`Core/EffCancel.lean`, `plainTags`) hold the
+tag `2`.
 
 **`[sub]` keeps the count.** `OpSig.Sig` asks equal counts (it asked equal qualifiers), so a count
 never moves under `[sub]`, `FinLe` or `RowLe`; only the world could, and there is one.
@@ -8943,6 +8946,12 @@ when abortiveness was read off `B`.
 `1`; `ctl op(…) -> never` is abortive, `0`. A core row writes `lin` (`1`), `aff` (`1?`, `0` at an
 answer `0`) or `ctl` (inferred). `multi ctl` and the core qualifier `unr` are removed: each is a
 parse error that says so.
+
+**`kont[n.i q] B C`** (`VTy.kont`) is the continuation a clause of `n.i`, written at `q`, receives,
+answering `B` and resuming into `C = F_Σ R`. The checker writes it as the kernel's
+`kTy Σ R c B` at the operation's count `c` (`Scope.cntOf`): at `1` its cancel is `⊤`, at `1?` it is
+`F_Σ 1`. The elaboration writes every clause's `κ` this way (a handler site's clauses, a `for`'s
+site and a stored generator's), so the clause's type is the same at every count.
 
 ### Count inference
 
@@ -8964,18 +8973,21 @@ Each `1?` records the node that pins it and the reason (`Grade.pin`).
 
 **A declared count is a bound.** A `linear ctl` operation is at `1`; a node that asks more is
 refused, naming that node and its reason. The first check reads `lin` exactly, so such a program
-fails there; it is checked again with each `lin` entry read as `ctl` (`CntTable.relax`) to find the
-node.
+fails there; the same elaborated program is checked again with each `lin` entry read as `ctl`
+(`CntTable.relax`) to find the node (`corpus/reject/effect-linear-ctl-cancels.bc`).
 
-**The checker does it; the kernel checks it** (`checkCounted`). The program is elaborated and
-checked once at the counts its rows write (each `ctl` operation at `1?` or `0`); the counts are
-inferred from that check's `handle` nodes; where one is lower, the program is elaborated and
-checked again at them (`CntTable`, read by `Scope.cntOf`), and that check is the program's. The
-elaboration takes the counts as given (`Sugar.elaborateO`): a handler's clauses take `κ` at their
-operation's count, and an `aff` entry of an inferred operation, a row the elaboration reads back
-from a type it computed, reads the inferred count too. Lowering a count from `1?` to `1` only
-weakens what a performer is asked; a clause that passes the kind check at `1` is typed at `1` by
-the kernel, or the second check refuses the program as an internal error.
+**The checker does it; the kernel checks it** (`checkCounted`). The program is elaborated once,
+and the elaborated program does not depend on the counts: each entry of an operation its effect
+declares `ctl` is written `ctl` (the elaboration's own types are kernel types, whose counts cannot
+say that one is inferred, so it relabels those entries once, `Decl.requal`), and each clause's `κ`
+is `kont`. That one elaborated program is checked at the counts its rows write (each `ctl`
+operation at `1?` or `0`); the counts are inferred from that check's `handle` nodes; where one is
+lower, the same elaborated program is checked again at them (`CntTable`, read by `Scope.cntOf`),
+and that check is the program's. The grades are that second check's: inference over its own nodes
+gives the table it was checked at, an internal error otherwise. Lowering a count from `1?` to `1`
+only weakens what a performer is asked; a clause that passes the kind check at `1` is typed at `1`
+by the kernel, or the second check refuses the program as an internal error. `aff` is the
+explicit bound `1?`: `Scope.cntOf` reads it so, never through the table.
 
 **Granularity.** The unit is the kernel's operation name `n.i`. Each `with` site has a static name
 of its own, so a site's operations are inferred from its own nodes: the copies of a function the
@@ -9039,15 +9051,23 @@ them, at 564 `handle` nodes):
 | `tail` written `aff` in a core text | 4 | `1?` |
 
 No operation is `ω`, and no node holds `κ` across an operation that is not at `1` in the corpus,
-so no `1` is lost to `[let]`'s `hW`. Every pin of a `tail` node by another node of its name is a
+so no `1` is lost to `[let]`'s `hW`: the demotion (`demote`, `liveDeps`) is not exercised by any
+corpus program. A `κ` held across an operation of the clause's row is refused at `1?` as at `1`
+(its cancel row is not empty, so it has no destructor), and a `[let]` whose bound computation
+handles its own operation has none of them in its row; the second check at the inferred counts is
+the backstop. Every pin of a `tail` node by another node of its name is a
 `yield` in a program that also stores a generator of it (`gen-adapters` 16, `gen-adapters-fail`
 13, `gen-pipeline-pipe` 8, `gen-pipeline-adapters` 4, then 1 or 2 each). One file stops typing:
-`async-unr-site` (`multi ctl`), now `corpus/reject/async-unr-site.bc`. Every corpus program
+`async-unr-site` (`multi ctl`), now `corpus/reject/async-unr-site.bc`, a parse error; at `ctl`
+the same site is refused by the checker, its `κ` at `1?` having no `!`
+(`corpus/reject/async-ctl-site-copies.bc`). A reject the parser refuses (`-- reject: syntax`)
+is a form §53 removed, and `scripts/check-corpus.sh` asks its message to cite §53. Every corpus program
 keeps its golden output at every stage of both backends; no count rises. `bcc kinds` reads
 `linear` at the operations at `1`; seven programs' flow records lose a finaliser frame
 (`bcc handled`): a performer at a `1` operation needs no drop-glue `[then]` for what it holds.
 The core forms of seven sugar pairs (`corpus/sugar/*.core.bc`) are written at the counts their
-sugared forms infer (`bcc desugar --counted`).
+sugared forms infer: `bcc desugar --counted` checks the program and prints its elaborated
+program with each `ctl` entry and `kont` at its count (`countedQual`, over the syntax).
 
 ### Open
 
@@ -9453,21 +9473,24 @@ checker.
 ---
 
 Entry 52 (§53) is implemented: the count and the world on `CTy.eff` and `OpSig`, `Count.toQual`
-and `World.eq` in `Core/Types.lean`, `EffCtx.CntOk` in `Core/Tied.lean`, the count inference and
-the census in `Frontend/Check/Grades.lean` (`checkCounted`, `bcc grades`), and the elaboration at
-the inferred counts (`Frontend/Check/Elab.lean`'s `Scope.cntOf`, `Frontend/Sugar.lean`'s `cnts`).
+and `World.eq` in `Core/Types.lean`, `OpSig.abort` at the count `0` in `Core/EffRules.lean`, the
+count inference and the census in `Frontend/Check/Grades.lean` (`bcc grades`), one elaboration
+checked at the inferred counts (`Frontend/Check/Program.lean`'s `checkCounted`), `kont` in
+`Frontend/Syntax.lean` and the counts read by `Frontend/Check/Elab.lean`'s `Scope.cntOf`.
 
 ## Changelog
 
 - **1.02** (2026-10-22) — §53 (#675, M1 stage 1): the grade on `eff`, a count `0`, `1` or `1?`
   and a world (`⊤` only), replaces the qualifier; `Qual` stays as the run-time tag
-  (`Count.toQual`), so the machine and the relation are unchanged. `[sub]` keeps the count;
-  `EffCtx.CntOk` replaces `NoUnrExn`. The checker infers a `ctl` operation's count, the strictest
-  its handlers allow, and checks the program again at it; `linear ctl` is a bound. `multi ctl`
+  (`Count.toQual`), so the machine and the relation are unchanged. `[sub]` keeps the count; an
+  operation is abortive exactly at the count `0`, and `NoUnrExn` is removed. The checker infers a
+  `ctl` operation's count, the strictest its handlers allow, and checks the one elaborated program
+  again at it (`κ` written `kont`, inferred entries `ctl`); `linear ctl` is a bound. `multi ctl`
   and `unr` are removed (`async-unr-site` is a reject). `bcc grades` and the gate step
   *grade census*. §27's typed cancel programs are at counts, their runs with `κ`'s cell
-  (`progDropT` removed); §52's stack guard reads no `unr`. Goldens unchanged; the kinds,
-  handled-names and report pins change where an operation is now `1`.
+  (`progDropT`, `progDrop` and `progKeep` removed; the kernel's cancel programs are the typed
+  ones); §52's stack guard reads no `unr`. Goldens unchanged; the kinds, handled-names and report
+  pins change where an operation is now `1`.
 - **1.01** (2026-10-22) — §52 (#664, option B): a task owns a stack. At a BOXED-κ site with a
   stack `κ`'s environment is the stack's region, written in place; a recursion whose levels call only themselves and
   suspend only at boxed stored sites keeps its levels' states as first-order frames on its task's

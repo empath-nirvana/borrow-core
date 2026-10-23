@@ -1665,10 +1665,10 @@ def _root_.Frontend.VTy.mayReturnLoop : VTy → Bool
 functions when it is one. A div function is `thunkv fun (x : A) -> M` at `A => B`, or
 `!thunkv fun (x : A) -> M` at `!(A => B)`. `scope` is the declarations before it, the
 libraries first.  `[spec §14]` -/
-def elabDef (scope : List Decl) (cnts : Frontend.Check.CntTable := {}) :
+def elabDef (scope : List Decl) :
     Decl → SM (Decl × Option (String × VTy))
   | d@(.def_ sp n ps A V mk) => do
-    let c := TCx.ofScope scope false cnts
+    let c := TCx.ofScope scope false
     if (loopSig A).isSome || (A.mayReturnLoop && ((c.elabV A).bind loopFnOf).isSome) then
       return (d, some (n.name, A))
     -- `fn f<'a, …>`: the lifetime parameters, outermost first, then the function.
@@ -1869,9 +1869,6 @@ structure DivSt where
   /-- The `poly` families and their cases, all of the program's, known before any call is
   elaborated.  `[spec §36]` -/
   polys : PolyTab := {}
-  /-- The counts the checker inferred, by operation `n.i` (`Frontend.Check.Scope.cnts`): a
-  handler's clauses take `κ` at its operation's count.  `[spec §53]` -/
-  cnts : Frontend.Check.CntTable := {}
 
 /-- Elaboration with the state of the declarations. -/
 abbrev DM := StateT DivSt SM
@@ -2531,7 +2528,7 @@ made while elaborating the declaration it is in). -/
 def refresh (c : TCx) : DM TCx := do
   let st ← get
   let ds := (st.lib ++ st.out ++ st.caps).toArray
-  pure { c with E := { c.E with scope := { decls := ds, upto := ds.size, cnts := st.cnts } } }
+  pure { c with E := { c.E with scope := { decls := ds, upto := ds.size } } }
 
 /-! #### The total `for` over data  `[spec §16]`
 
@@ -3414,14 +3411,14 @@ end
 /-- The machine `g__mach : !(A => Out) * !(K * B => Out)` of a recursive group's source
 `g__mach_src` whose sugar is elaborated (SPEC §20, `rmWalk`): `start` on the tagged argument, and
 `resume` on a frame and the answer. -/
-def recMachine (scope : List Decl) (d : Decl) (cnts : Frontend.Check.CntTable := {}) :
+def recMachine (scope : List Decl) (d : Decl) :
     SM Decl := do
   let .def_ sp n _ Ty V _ := d | return d
   let g := (n.name.dropEnd "__mach_src".length).toString
   let err (what : String) : Error := ⟨sp, s!"internal error: the machine of `{g}`: {what}"⟩
   let .bangThunkv _ (.lam _ p Pt M₀) := V | throw (err "its source")
   let .bang _ (.lolli _ _ (.bang _ (.lolli _ _ B))) := Ty | throw (err "its type")
-  let c₀ := TCx.ofScope scope false cnts
+  let c₀ := TCx.ofScope scope false
   let some Pc := c₀.elabV Pt | throw (err "the self-references' type")
   let some Bc := c₀.elabV B | throw (err "the answer type")
   let rec peel : Nat → TCx → Comp → Except Error (TCx × Ident × VTy × Comp)
@@ -4358,21 +4355,32 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
         let body' ← surfC n (cS.push x.name (some A)) (some ans) (body.subst σ)
         pure (Val.bangThunkv sp (.lam lsp x As body'))
       | _ => throw ⟨sp, "internal error: a handler's return clause"⟩
-    -- The operation clauses, each at its type.
+    -- The operation clauses, each at its type. A clause of a resuming operation binds `κ` at
+    -- `kont[n.j q] B (F_Σ R)`, which the checker writes as the kernel's `kTy` at the operation's
+    -- count (SPEC §53): the clause's type is the same at every count. Under BOXED-κ `κ` is boxed
+    -- at the handler's lifetime.
+    let Cs ← (cP.surfaceC sp ans : Except Error CTy)
+    let kBoundS : Frontend.Life := if σL.isEmpty then .top sp else dS
     let mut hcs : List Val := []
-    for (cl, (q, Ai, Bi)) in (clauseList cls).zip ops do
+    let mut hcTs : List VTy := []
+    for ((cl, (q, Ai, Bi)), j) in ((clauseList cls).zip ops).zipIdx do
       match cl with
       | .thunkv csp (.lam lsp x _ body) =>
         let K := BoCa.Fig16.LogRel.Core.kTy S Rc q.toQual Bi
         let T : CVTy := if q == .zero then Ai
           else .tensor Ai (if i.boxK then .box kBound K else K)
         let body' ← surfC n (cS.push x.name (some T)) (some ans) (body.subst σ)
-        hcs := hcs ++ [.bangThunkv csp (.lam lsp x (← (cP.surface lsp T : Except Error VTy)) body')]
+        let As ← (cP.surface lsp Ai : Except Error VTy)
+        let Ts ← if q == .zero then pure As else do
+          let qd := ((i.ents[j]?).map (·.1)).getD .aff
+          let Ks : VTy := .kont lsp i.n j qd (← (cP.surface lsp Bi : Except Error VTy)) Cs
+          pure (VTy.tensor lsp As (if i.boxK then .box lsp kBoundS Ks else Ks))
+        hcs := hcs ++ [.bangThunkv csp (.lam lsp x Ts body')]
+        hcTs := hcTs ++ [.bang sp (.thunk sp (.arr sp Ts Cs))]
       | _ => throw ⟨sp, "internal error: a handler's clause"⟩
     let hcV := hcs.foldr (fun v t => Val.pair sp v t) (.unit sp)
     let hrTy ← (cP.surface sp (BoCa.Fig16.LogRel.Core.retTy S A Rc) : Except Error VTy)
-    let hcTy ← (cP.surface sp (if i.boxK then BoCa.Fig16.LogRel.Core.clausesTyB S Rc kBound ops
-      else BoCa.Fig16.LogRel.Core.clausesTy S Rc ops) : Except Error VTy)
+    let hcTy : VTy := hcTs.foldr (fun T t => VTy.tensor sp T t) (.unit sp)
     -- The node holds its clauses, each at its type, and the site's record, at the handler's
     -- lifetimes and type arguments here.
     let site := i₀.site.mapTy fun A => (lv A).subst σ
@@ -4992,10 +5000,10 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     -- (`Jt`), or the rest of the loop.
     let Lg ← pp Res
     let Ot := if looping then s!"({Jt}) + {Lg}" else Jt
-    -- `κ` at the operation's count (SPEC §53): at `1` its cancel is `⊤`.
-    let lin := c.E.scope.cnts.ops.lookup (i.n, 0) == some .one
-    let can ← if lin then pure "top" else F "1"
-    let K ← do pure s!"U (({Wt} -o {← F Ot}) & {can})"
+    -- `κ` of the site's one operation, `kont`, which the checker writes at the operation's count
+    -- (SPEC §53).
+    let kq := (((i.site.ents.head?).map (fun (e : Qual × VTy × VTy) => e.1)).getD Qual.aff).str
+    let K ← do pure s!"kont[{i.n}.0 {kq}] ({Wt}) ({← F Ot})"
     let clT ← do pure s!"!U ((({Tt}) * ({Wt})) * {K} -o {← F Ot})"
     let hrIn := if looping then s!"(({Wt}) * ({Bt})) + {Lg}" else s!"({Wt}) * ({Bt})"
     let hrBody := if looping then
@@ -5052,7 +5060,7 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
       let fOb ← F s!"({Jt}) + U X"
       let fCl ← F Rgs
       let Lw := if S.isEmpty then s!"loop ({Jt}) ({Rgs})" else s!"nu X. {fOb} & {fCl}"
-      let Kc ← do pure s!"U (({Wt} -o {← F Rgs}) & {can})"
+      let Kc ← do pure s!"kont[{i.n}.0 {kq}] ({Wt}) ({← F Rgs})"
       let closer := s!"((!thunkv fun (io_cv{sfx} : {Rgs}) -> return io_cv{sfx}) : !U ({Rgs} -o {← F Rgs})),
   (((!thunkv fun (io_cp{sfx} : (({Tt}) * ({Wt})) * {Kc}) ->
     let (io_cxw{sfx}, io_ck{sfx}) = io_cp{sfx};
@@ -5118,10 +5126,12 @@ def pullView : Nat → TCx → Span → ItInfo → Val → DM Comp
       | throw ⟨sp, s!"the type of what `{i.callee}` yields is not determined here"⟩
     let Tt ← pp Tc
     let Bt ← pp Bg
+    -- `κ` of the site's one operation, `kont`, at the count the checker infers (SPEC §53).
+    let kq := (((i.site.ents.head?).map (fun (e : Qual × VTy × VTy) => e.1)).getD Qual.aff).str
     let src ← if !looping then do
       let Q := s!"iter ({Tt}) ({Bt}) 1"
       let R := s!"(({Tt}) * U ({Q})) + ({Bt})"
-      let K := s!"U ((1 -o F ({R})) & F 1)"
+      let K := s!"kont[{i.n}.0 {kq}] 1 (F ({R}))"
       pure s!"io_pq{sfx} : U ({Q}) <- return (thunkv nu_in <
     handle_with[{i.n}](((!thunkv fun (io_pv{sfx} : {Bt}) -> return (inr io_pv{sfx})) : !({Bt} => {R})),
       (((!thunkv fun (io_pp{sfx} : ({Tt}) * {K}) ->
@@ -5143,8 +5153,8 @@ return (thunkv nu_in < (nu_out (force io_pf{sfx} io_pq{sfx})).1, (nu_out (force 
         s!"F[{", ".intercalate es}] ({A})"
       let Q := s!"nu Y. F (({Tt}) * U Y + (({Bt}) + {Lg})) & F 1"
       let R := s!"(({Tt}) * U ({Q})) + (({Bt}) + {Lg})"
-      let K := s!"U ((1 -o F ({R})) & F 1)"
-      let Kc := s!"U ((1 -o F ({Rgs})) & F 1)"
+      let K := s!"kont[{i.n}.0 {kq}] 1 (F ({R}))"
+      let Kc := s!"kont[{i.n}.0 {kq}] 1 (F ({Rgs}))"
       let St := s!"{Lg} + U ({Q})"
       let _ := Fn
       pure s!"io_pl{sfx} <- force io_hole_call;
@@ -5204,7 +5214,7 @@ def surfDecl : Nat → Decl → DM Decl
   | 0, d => pure d
   | n + 1, .def_ sp nm ps A V mk => do
     let st ← get
-    let c := TCx.ofScope (st.lib ++ st.out) false st.cnts
+    let c := TCx.ofScope (st.lib ++ st.out) false
     -- A `return` in a loop's body returns from the function: its loop is moved onto the body's
     -- spine, so that what follows the loop is the rest of the body (`forData`).
     let V ← (mapFnBody (fun M => if M.hasRet then normExits divFuel M else pure M) V : Except Error Val)
@@ -5221,7 +5231,7 @@ def surfDecl : Nat → Decl → DM Decl
     let M ← (if M.hasRet then normExits divFuel M else pure M : Except Error Comp)
     let st := { st with exits := [] }
     let caps := capNames.map fun x => Decl.extern Span.none ⟨x, Span.none⟩ (capTy Span.none x)
-    let c := TCx.ofScope (st.lib ++ st.out ++ caps) true st.cnts
+    let c := TCx.ofScope (st.lib ++ st.out ++ caps) true
     let exp := match (c.E.elabC c.Δ C).toOption with
       | some (.ret A) => some (BoCa.Fig16.LogRel.Core.CTy.ret A)
       | e => e
@@ -5658,17 +5668,17 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
       | .def_ _ nm _ _ _ _ => st.libNames.contains nm.name
       | _ => false }
     -- A div function taking a borrow takes the owner, lent at each step (`LoopLend.lentDef`).
-    let c₀ := TCx.ofScope (st.lib ++ st.out) false st.cnts
+    let c₀ := TCx.ofScope (st.lib ++ st.out) false
     let d := (← (Frontend.Elab.LoopLend.lentDef c₀ (dataFor st.sizedFns) d :
       Except Error (Option Decl))).getD d
     let (d, st) ← (surfDecl fuel d).run st
     -- A recursive group's source under a heap driver: its machine (SPEC §20).
     let d ← match d with
       | .def_ _ nm _ _ _ _ =>
-        if nm.name.endsWith "__mach_src" then recMachine (st.lib ++ st.out) d st.cnts else pure d
+        if nm.name.endsWith "__mach_src" then recMachine (st.lib ++ st.out) d else pure d
       | d => pure d
     let (d, st) ← (specDecl fuel d).run st
-    let (d', e) ← elabDef (st.lib ++ st.out) st.cnts d
+    let (d', e) ← elabDef (st.lib ++ st.out) d
     let elaborated := e.isSome && decide (d' ≠ d)
     pure { st with srcs := d :: st.srcs, out := st.out ++ [d'], any := st.any || elaborated }
 
@@ -5678,12 +5688,12 @@ def specDecl : Nat → Decl → DM Decl
   | 0, d => pure d
   | n + 1, .def_ sp nm ps A V mk => do
     let st ← get
-    let c := TCx.ofScope (st.lib ++ st.out) false st.cnts
+    let c := TCx.ofScope (st.lib ++ st.out) false
     pure (.def_ sp nm ps A (← specV n c V) mk)
   | n + 1, .main sp C M => do
     let st ← get
     let caps := capNames.map fun x => Decl.extern Span.none ⟨x, Span.none⟩ (capTy Span.none x)
-    let c := TCx.ofScope (st.lib ++ st.out ++ caps) true st.cnts
+    let c := TCx.ofScope (st.lib ++ st.out ++ caps) true
     set { st with caps := caps }
     let M' ← specC n c M
     modify fun st => { st with caps := [] }
@@ -5801,14 +5811,14 @@ end
 /-- The declarations with divergence inferred, in order (copies before their first use), and
 whether any body was elaborated as a loop. -/
 def elabDivs (lib decls : List Decl) (libNames : List String) (perTurn : List Nat := [])
-    (polys : PolyTab := {}) (cnts : Frontend.Check.CntTable := {}) :
+    (polys : PolyTab := {}) :
     SM (List Decl × Bool) := do
   -- Every family and case is known before any call is elaborated, so that a case is chosen
   -- among all of them (SPEC §36).
-  (polyCheck (TCx.ofScope (lib ++ decls) false cnts) polys : Except Error Unit)
+  (polyCheck (TCx.ofScope (lib ++ decls) false) polys : Except Error Unit)
   let names := polys.fams.map (·.1) ++ polys.cases.map (·.name)
   let templates := decls.filter fun | .def_ _ m _ _ _ _ => names.contains m.name | _ => false
-  let st ← decls.foldlM (init := ({ lib, libNames, perTurn, polys, templates, cnts } : DivSt))
+  let st ← decls.foldlM (init := ({ lib, libNames, perTurn, polys, templates } : DivSt))
     (elabDecl divFuel)
   pure (st.out, st.any)
 
@@ -5967,7 +5977,7 @@ def polyDecls (ds : List Decl) : Except Error (List Decl × PolyTab × List (Dec
 
 /-- The program with its sugar elaborated and the number of library declarations it begins with,
 recording the origins of generated code.  `[spec §11, §14]` -/
-def elaborateS (p : Program) (cnts : Frontend.Check.CntTable := {}) :
+def elaborateS (p : Program) :
     SM (Program × Nat) := do
   let libRaw (m : String) : Except Error (List Decl) :=
     match library m with
@@ -6097,9 +6107,9 @@ def elaborateS (p : Program) (cnts : Frontend.Check.CntTable := {}) :
     | .def_ _ m _ _ _ _ =>
       if (libNames ++ libFns).any (fun l => m.name.startsWith (l ++ "__")) then some m.name else none
     | _ => none)
-  let (decls, anyDiv) ← elabDivs typing p.decls libNames perTurn polys cnts
+  let (decls, anyDiv) ← elabDivs typing p.decls libNames perTurn polys
   let rest := decls.filter fun | .main .. => false | _ => true
-  let mc := TCx.ofScope (typing ++ rest ++ capDecls) true cnts
+  let mc := TCx.ofScope (typing ++ rest ++ capDecls) true
   let mainLoops := match decls.findSome? (fun | .main _ C M => some (C, M) | _ => none) with
     | some (C@(.ret _ B), M) => !C.returnsLoop && (loopsAt mc (mc.elabV B) M).isSome
     | _ => false
@@ -6138,7 +6148,13 @@ def elaborateS (p : Program) (cnts : Frontend.Check.CntTable := {}) :
     | .def_ sp n ps A V mk => return .def_ sp n ps A (← V.elab false) mk
     | .main sp C M => return .main sp C (← M.elab false)
     | d => pure d
-  pure (⟨decls⟩, lib.length + ioN)
+  -- The elaboration types its code at kernel types, whose counts cannot say that one is inferred:
+  -- each entry of an operation declared `ctl` is written `ctl` (SPEC §53), for the checker to
+  -- read at the count it infers.
+  let ctl := fxr.ctl
+  let markCtl : Nat → Nat → Qual → Qual := fun n i q =>
+    if q == .aff && ctl.contains (n, i) then .infer else q
+  pure (⟨decls.map (Decl.requal markCtl)⟩, lib.length + ioN)
 
 /-- A program with its sugar elaborated: its declarations, the number of library declarations it
 begins with, and the origins of its generated code. -/
@@ -6147,11 +6163,9 @@ structure Sugared where
   lib : Nat
   origins : Origins
 
-/-- The program with its sugar elaborated, with the origins of its generated code, a handler's
-clauses at the counts `cnts` (`Frontend.Check.Scope.cnts`). -/
-def elaborateO (p : Program) (cnts : Frontend.Check.CntTable := {}) :
-    Except Error Sugared := do
-  let ((q, n), os) ← (elaborateS p cnts).run []
+/-- The program with its sugar elaborated, with the origins of its generated code. -/
+def elaborateO (p : Program) : Except Error Sugared := do
+  let ((q, n), os) ← (elaborateS p).run []
   pure ⟨q, n, os⟩
 
 /-- The program with its sugar elaborated, and the number of library declarations it begins

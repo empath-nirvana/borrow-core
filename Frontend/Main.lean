@@ -144,42 +144,27 @@ def desugar (file : String) : IO UInt32 := do
     | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
     | .ok el => IO.print el.prog.pp; return 0
 
-/-- A printed program's row entries `n.i ctl` and `n.i aff` at the counts `tbl` gives them, `lin`
-at `1` and `aff` otherwise (`Frontend.Check.Scope.cntOf`): the core text of the elaboration at
-those counts. -/
-def resolveCounts (tbl : List ((Nat × Nat) × BoCa.Fig16.LogRel.Core.Count)) (s : String) :
-    String :=
-  let one (q : String) (s : String) : String :=
-    match s.splitOn s!" {q} " with
-    | [] => s
-    | w :: rest => rest.foldl (init := w) fun acc w' =>
-        -- the entry's name, the last word before the count
-        let c := match (((acc.splitOn " ").getLast!.splitOn "[").getLast!).splitOn "." with
-          | [n, i] => match n.toNat?, i.toNat? with
-            | some n, some i => tbl.lookup (n, i)
-            | _, _ => none
-          | _ => none
-        let q' := match c with
-          | some .one => "lin"
-          | some _ => "aff"
-          | none => if q == "ctl" then "aff" else q
-        acc ++ s!" {q'} " ++ w'
-  one "aff" (one "ctl" s)
+/-- The qualifier of a row entry, or of a `kont`, at the counts `tbl` (SPEC §53): a `ctl` entry
+`lin` at `1` and `aff` otherwise (`Frontend.Check.Scope.cntOf`); every other entry as written. -/
+def countedQual (tbl : List ((Nat × Nat) × BoCa.Fig16.LogRel.Core.Count)) (n i : Nat) (q : Qual) :
+    Qual :=
+  if q != .infer then q else match tbl.lookup (n, i) with
+    | some .one => .lin
+    | _ => .aff
 
-/-- Print `file` with its sugar elaborated at the counts the checker infers (SPEC §53): the core
-text the checked program is. -/
+/-- Print `file` with its sugar elaborated, each `ctl` entry at the count the checker infers
+(SPEC §53, `countedQual`): the core text the checked program is. -/
 def desugarCounted (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
   match parseProgram src (lib := Frontend.Sugar.libSrc) with
   | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
   | .ok p =>
-    match Check.checkAt p {} with
+    match Check.checkCounted p with
     | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
     | .ok (rep, _) =>
-      let tbl := (BoCa.Fig16.LogRel.Core.Check.inferCounts rep.handles).table
-      match Frontend.Elab.elaborate p { ops := tbl } with
-      | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
-      | .ok el => IO.print (resolveCounts tbl el.prog.pp); return 0
+      let q := countedQual rep.grades.table
+      IO.print (Program.mk (rep.el.prog.decls.map (Decl.requal q))).pp
+      return 0
 
 /-- Print the erasure of `file`'s checked `main`. -/
 def erase (file : String) : IO UInt32 := do

@@ -1,0 +1,36 @@
+-- `async-unr-site.bc` at `ctl`: the stored BOXED-κ site whose clause copies its `κ` and resumes
+-- both copies. With no unrestricted count (SPEC §53) the clause's `κ` is at `1?` at most, which
+-- has no `!`: `unbang` of it is refused, and the copy with it.
+-- expect: 15:43: `unbang V` needs `V : !A`, but `V : U ((1 -o F box top U (nu X. F (i32 + box top U X) & F 1)) & F 1)`
+include rec
+include async
+
+effect Many { ctl pick() }
+
+type T = box top U (nu X. F (i32 + box top U X) & F 1)
+
+handler grab: Many, i32 -> T = {
+  return(v) = boxed[top] (thunkv nu_in < return (inl v), return () >);
+  pick(k) = boxed[top] (thunkv nu_in <
+    kb <- return (unbox k); kk <- return (unbang kb); u <- return (); t1 <- (force kk).1 u; kk2 <- return (unbang kb); u2 <- return (); t <- (force kk2).1 u2; let _ = t1; return (inr t),
+    kb <- return (unbox k); kk <- return (unbang kb); (force kk).2 >)
+}
+
+fn step(t: T) -> i32 + T = g <- return (unbox t); (nu_out (force g)).1
+
+fn tsum(lo: i32, hi: i32) -> i64 with Async, Exhausted =
+  if lo < hi {
+    let m = lo + (hi - lo) / 2;
+    let a = tsum(lo, m);
+    await();
+    let b = tsum(m + 1, hi);
+    a + b + i64[1]
+  } else { i64[0] }
+
+fn task(n: i32) -> i64 with Async = with on_exhausted(!{ u -> i64[0] - 1 }) { tsum(0, n) }
+
+main -> i32 =
+  let t = with grab { pick(); 5 };
+  let q = push(queue[i64](), with spawn { task(7) });
+  let vs = run_until_empty(q);
+  match step(t) { inl v -> v | inr t2 -> match step(t2) { inl v -> v | inr t3 -> 7 } }

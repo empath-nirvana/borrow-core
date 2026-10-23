@@ -53,12 +53,11 @@ def TCx.pushDead (c : TCx) : TCx := { c with E := c.E.push none, T := .unit :: c
 
 /-- The context of a body among the declarations `scope`: every extern when `all`, else the
 persistent ones (the context of a `def`, SPEC §11). -/
-def TCx.ofScope (scope : List Decl) (all : Bool)
-    (cnts : Frontend.Check.CntTable := {}) : TCx :=
+def TCx.ofScope (scope : List Decl) (all : Bool) : TCx :=
   let ds := scope.toArray
   let xs := externsBefore ds ds.size
   let vars := (xs.map (fun (x, B) => if all || B.persistent then some x else none)).reverse
-  { E := Env.mk { decls := ds, upto := ds.size, cnts } vars [] [] [] xs.length none,
+  { E := Env.mk { decls := ds, upto := ds.size } vars [] [] [] xs.length none,
     T := (xs.map (·.2)).reverse }
 
 /-- A written type, elaborated. -/
@@ -142,6 +141,12 @@ def TCx.surface (c : TCx) (sp : Span) (A : CVTy) : Except Error VTy := do
   match parseProgram s!"type IoT = {src}\n" with
   | .ok ⟨[.type _ _ _ _ B]⟩ => pure (B.respan sp)
   | _ => throw ⟨sp, s!"internal error: the type `{src}` does not print as surface syntax"⟩
+
+/-- A computation type as surface syntax in a context (`TCx.surface` of its thunk). -/
+def TCx.surfaceC (c : TCx) (sp : Span) (C : CCTy) : Except Error CTy := do
+  match ← c.surface sp (.thunk C) with
+  | .thunk _ C' => pure C'
+  | _ => throw ⟨sp, s!"internal error: the type `{ppC c.E.lenv 0 C}` does not print as surface syntax"⟩
 
 /-- A lifetime as surface syntax in a context. -/
 def TCx.surfaceL (c : TCx) (sp : Span) : BoCa.Lifetime.Life → Except Error Frontend.Life
