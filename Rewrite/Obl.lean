@@ -65,7 +65,7 @@ def obl : Bool → VTy → List Ob
   | _, .fam (.unit) | _, .fam (.tensor _ _) | _, .fam .zero | _, .fam (.sum _ _) | _, .fam (.thunk _)
   | _, .fam (.box _ _) | _, .fam (.bang _) | _, .fam .unk | _, .fam (.tvar _) | _, .fam (.mu _)
   | _, .fam (.int _) | _, .fam (.opq _) | _, .fam (.fam _) => [.cell "a family"]
-  | _, .opq _ => [.cell "an opaque handle"]
+  | _, .opq _ => [.cell "a host handle"]
 /-- A thunk's obligations: its top-level returner chain's operations, then `U(C & F 1)`'s and
 `U(νX. C & F R)`'s. -/
 def thunkObl : CTy → List Ob
