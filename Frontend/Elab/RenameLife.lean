@@ -199,8 +199,8 @@ def Comp.mapLQ (f : Span → String → Life) (g : Nat → Nat → Qual → Qual
   | .loop s ℓ src V M N => .loop s ℓ src (V.mapLQ f g) (M.mapLQ f g) (N.mapLQ f g)
   | .perform s n i V => .perform s n i (V.mapLQ f g)
   | .abort s n i V => .abort s n i (V.mapLQ f g)
-  | .handle s n st hr hc M =>
-    .handle s n (st.map (SiteRec.mapTy (VTy.mapLQ f g)))
+  | .handle s n hf st hr hc M =>
+    .handle s n hf (st.map (SiteRec.mapTy (VTy.mapLQ f g)))
       (hr.mapLQ f g) (hc.mapLQ f g) (M.mapLQ f g)
   | .unwind s x A M D N =>
       .unwind s (x.mapLQ f g) (A.map (VTy.mapLQ f g)) (M.mapLQ f g) (D.mapLQ f g) (N.mapLQ f g)

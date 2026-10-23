@@ -1,0 +1,28 @@
+-- SPEC §51, §54 in the core text: a handler written by `[handle-last]`'s rule,
+-- `handle_last[2: aff]`. Its one operation `2.0 aff 1 + 1 ~> i32` is at the count `1?`. Its work
+-- `!U(1 + 1 -o F (i32 + 1))` answers `inl 10` at `inl ()`, so the rule's clause resumes `κ` with
+-- `10` (`last_resume_direct`), and `inr ()` at `inr ()`, so the clause cancels `κ` and runs the
+-- exit `!U(1 -o F i32)`, which answers `7` (`last_cancel_direct`, `last_cancel_exit`). `twice`
+-- performs both: its second perform does not return, and the handler answers the exit's `7`.
+--
+-- Answer: i32[7].
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def twice : !U (1 -o F[2.0 aff 1 + 1 ~> i32] i32) =
+  !thunkv fun (u : 1) ->
+    let () = u;
+    a <- perform[2.0] (inl ());
+    b <- perform[2.0] (inr ());
+    return (plus (a, b))
+
+main : F i32 =
+  f <- return (unbang twice);
+  u <- return ();
+  handle_last[2: aff](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      ((((!thunkv fun (s : 1 + 1) ->
+           case s { inl x -> let () = x; return (inl i32[10]) | inr y -> let () = y; return (inr ()) }),
+         ()) : !U (1 + 1 -o F (i32 + 1)) * 1),
+       (((!thunkv fun (z : 1) -> let () = z; return i32[7]), ()) : !U (1 -o F i32) * 1)))
+    (force f u)

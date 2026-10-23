@@ -114,6 +114,9 @@ corpus/core-effects-reborrows.bc 31:10: handle 1: 1.0 0 abortive, world top, -, 
 corpus/core-effects-result.bc 18:9: handle 1: 1.0 0 abortive, world top, -, -
 corpus/core-effects-result.bc 22:9: handle 1: 1.0 0 abortive, world top, -, -
 corpus/core-effects-tail.bc 19:3: handle 2: 2.0 1 written, world top, tail, in-clause
+corpus/core-handle-last.bc 22:3: handle 2: 2.0 1? written, world top, tail, in-clause
+corpus/core-handle-tail-abort.bc 18:3: handle 2: 2.0 0 abortive, world top, -, -
+corpus/core-handle-tail.bc 19:3: handle 2: 2.0 1 written, world top, tail, in-clause
 corpus/core-yield-loop.bc 36:7: handle 1: 1.0 1? written, world top, tail, in-clause
 corpus/core-yield-loop.bc 48:12: handle 1: 1.0 1? written, world top, tail, in-clause
 corpus/core-yield-pull.bc 58:22: handle 1: 1.0 1? written, world top, -, stored

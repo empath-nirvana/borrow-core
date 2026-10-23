@@ -151,10 +151,10 @@ def _root_.Frontend.Comp.hygD (defs : Ren) (glob : String → Bool) (ρ : Ren) :
     pure (.loop sp ℓ src V' M' (← N.hygD defs glob ρ))
   | .perform sp n i V => do pure (.perform sp n i (← V.hygD defs glob ρ))
   | .abort sp n i V => do pure (.abort sp n i (← V.hygD defs glob ρ))
-  | .handle sp n st hr hc M => do
+  | .handle sp n hf st hr hc M => do
     let hr' ← hr.hygD defs glob ρ
     let hc' ← hc.hygD defs glob ρ
-    pure (.handle sp n st hr' hc' (← M.hygD defs glob ρ))
+    pure (.handle sp n hf st hr' hc' (← M.hygD defs glob ρ))
   | .unwind sp x A M D N => do
     let M' ← M.hygD defs glob ρ
     let D' ← D.hygD defs glob ρ

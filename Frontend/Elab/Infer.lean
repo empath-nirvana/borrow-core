@@ -321,12 +321,12 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       let o := (findOp E sp "abort" k i).toOption
       let a ← inferV n E Δ T (o.map (·.2.1.A)) V
       pure (node (o.map fun ⟨S, _, _⟩ => effOf S .zero) [a])
-    | .handle _ k _ hr hc M => do
+    | .handle _ k hf _ hr hc M => do
       let ar ← inferV n E Δ T none hr
       let ac ← inferV n E Δ T none hc
       let sig : Option (CRow × CVTy × CVTy × List (CCount × CVTy × CVTy)) := do
         let ⟨S, A, R, _⟩ ← retRead (← ar.ty.v?)
-        let ⟨Es, _⟩ ← clausesRead S R (← ac.ty.v?)
+        let Es ← formOps hf S R (← ac.ty.v?)
         pure (S, A, R, Es)
       let e := sig.map fun (S, A, _, Es) =>
         effOf (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A

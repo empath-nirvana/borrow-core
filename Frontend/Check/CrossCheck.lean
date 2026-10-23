@@ -58,6 +58,8 @@ deriving instance ToExpr for Frontend.FieldCand
 deriving instance ToExpr for Frontend.VSugar
 deriving instance ToExpr for Frontend.LoopSrc
 deriving instance ToExpr for Frontend.SchemeMark
+deriving instance ToExpr for Frontend.OpCount
+deriving instance ToExpr for Frontend.HForm
 deriving instance ToExpr for Frontend.Val, Frontend.Comp
 deriving instance ToExpr for Frontend.Mark
 deriving instance ToExpr for Frontend.OpKind

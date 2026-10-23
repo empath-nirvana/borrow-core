@@ -331,6 +331,15 @@ corpus/core-effects-result.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/core-effects-tail.bc flows [0, 2, 4294967295]; main [2]
 corpus/core-effects-tail.bc 19:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
 corpus/core-effects-tail.bc 2.0 tail: direct; condition 2 holds; agree
+corpus/core-handle-last.bc flows [0, 2, 4294967295], finaliser; main [2], finaliser
+corpus/core-handle-last.bc 22:3: handle 2: inside []; row []; ops 2.0 resume-or-cancel; names 2.0 row; condition 2 holds
+corpus/core-handle-last.bc 2.0 resume-or-cancel: machine; condition 2 holds; -
+corpus/core-handle-tail-abort.bc flows [0, 4294967295]; main [2]
+corpus/core-handle-tail-abort.bc 18:3: handle 2: inside []; row []; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/core-handle-tail-abort.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/core-handle-tail.bc flows [0, 2, 4294967295]; main [2]
+corpus/core-handle-tail.bc 19:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/core-handle-tail.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/core-yield-loop.bc flows [0, 1, 4294967295]; main [1]
 corpus/core-yield-loop.bc 36:7: handle 1: inside []; row []; ops 1.0 resume-or-cancel; names 1.0 []; condition 2 holds
 corpus/core-yield-loop.bc 48:12: handle 1: inside []; row []; ops 1.0 tail; names 1.0 []; condition 2 holds

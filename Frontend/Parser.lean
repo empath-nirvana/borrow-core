@@ -782,6 +782,21 @@ def rowQual : P Qual := do
       "row's count is `lin`, `aff` or `ctl` (SPEC §53)")
   | _ => expected "a count `lin`, `aff` or `ctl`"
 
+/-- The operations' counts of `handle_tail[n: q, …]` and `handle_last[n: q, …]`, at most `f` of
+them: `0`, `lin` (`1`) or `aff` (`1?`).  `[spec §53, §54]` -/
+def countList : Nat → P (List OpCount)
+  | 0 => pure []
+  | f + 1 => do
+    let q ← match (← peek).tok with
+      | .int 0 => discard bump; pure OpCount.zero
+      | .ident "lin" => discard bump; pure OpCount.one
+      | .ident "aff" => discard bump; pure OpCount.opt
+      | _ => expected "a count `0`, `lin` or `aff`"
+    if ← isSym "," then
+      discard bump
+      return q :: (← countList f)
+    return [q]
+
 /-- The entries of a row up to its `]`: `n.i q A ~> B`, separated by `,`; `q` is `lin`, `aff` or
 `ctl` (the count inferred), read as a name here and nowhere else. -/
 def rowEntries : Nat → P Row
@@ -1032,7 +1047,7 @@ def Comp.lentNames (vars : Bool := false) : Comp → List String
   | .case _ V _ M _ N | .loop _ _ _ V M N => V.lentNames vars ++ M.lentNames vars ++ N.lentNames vars
   | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.lentNames vars
   | .perform _ _ _ V | .abort _ _ _ V => V.lentNames vars
-  | .handle _ _ _ hr hc M => hr.lentNames vars ++ hc.lentNames vars ++ M.lentNames vars
+  | .handle _ _ _ _ hr hc M => hr.lentNames vars ++ hc.lentNames vars ++ M.lentNames vars
   | .unwind _ _ _ M D N => M.lentNames vars ++ D.lentNames vars ++ N.lentNames vars
   | _ => []
 end
@@ -1064,7 +1079,7 @@ def Comp.withPlaces (loc : List String) : Comp → List String
   | .loop _ _ src V M N => V.withPlaces loc ++ M.withPlaces (src.bound ++ loc) ++ N.withPlaces loc
   | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.withPlaces loc
   | .perform _ _ _ V | .abort _ _ _ V => V.withPlaces loc
-  | .handle _ _ _ hr hc M => hr.withPlaces loc ++ hc.withPlaces loc ++ M.withPlaces loc
+  | .handle _ _ _ _ hr hc M => hr.withPlaces loc ++ hc.withPlaces loc ++ M.withPlaces loc
   | .unwind _ x _ M D N => M.withPlaces loc ++ D.withPlaces loc ++ N.withPlaces (x.name :: loc)
   | _ => []
 end
@@ -1078,7 +1093,7 @@ def Comp.boundNames : Comp → List String
   | .lam _ x _ M => x.name :: M.boundNames
   | .letUnit _ _ M | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M =>
     M.boundNames
-  | .handle _ _ _ _ _ M => M.boundNames
+  | .handle _ _ _ _ _ _ M => M.boundNames
   | .unwind _ x _ M D N => x.name :: (M.boundNames ++ D.boundNames ++ N.boundNames)
   | _ => []
 
@@ -1169,7 +1184,8 @@ def startsComp (t : Tok) : Bool :=
   match t with
   | .kw "return" | .kw "absurd" | .kw "nu_in" | .kw "delay_in" | .kw "stream_in" | .kw "nu_out"
   | .kw "delay_out" | .kw "stream_out" | .kw "force" | .sym "<" | .kw "case" | .kw "match"
-  | .kw "if" | .kw "perform" | .kw "abort" | .kw "handle_with" | .kw "withbor2r" => true
+  | .kw "if" | .kw "perform" | .kw "abort" | .kw "handle_with" | .kw "handle_tail"
+  | .kw "handle_last" | .kw "withbor2r" => true
   | _ => false
 
 /-- A binary operator: one of the surface's arithmetic and comparisons, or `&&`/`||`, which are
@@ -2299,13 +2315,19 @@ def compPrefix : Nat → P Comp
       let V ← valPrefix n
       let sp ← spanFrom st
       pure (if t.tok == .kw "perform" then .perform sp k i V else .abort sp k i V)
-    | .kw "handle_with" =>
-      -- `handle_with[n](V, W) M` (SPEC §19): the answer clause and the clauses, values.
+    | .kw "handle_with" | .kw "handle_tail" | .kw "handle_last" =>
+      -- `handle_with[n](V, W) M` (SPEC §19): the answer clause and the clauses, values;
+      -- `handle_tail[n: q, …](V, W) M` (SPEC §14) and `handle_last[n: q, …](V, (W, X)) M` (SPEC
+      -- §51): the clauses written out by the rule, the operations' counts named.  `[spec §54]`
       discard bump
       expectSym "["
       let k ← match (← peek).tok with
         | .int k => discard bump; pure k
         | _ => expected "the name `n` of a handler"
+      let form ← if t.tok == .kw "handle_with" then pure HForm.clauses else do
+        expectSym ":"
+        let qs ← countList 64
+        pure (if t.tok == .kw "handle_tail" then HForm.tail qs else HForm.last qs)
       expectSym "]"
       expectSym "("
       let angle := (← get).angle
@@ -2316,7 +2338,7 @@ def compPrefix : Nat → P Comp
       expectSym ")"
       modify fun s => { s with angle }
       let M ← compPrefix n
-      pure (.handle (← spanFrom st) k none hr hc M)
+      pure (.handle (← spanFrom st) k form none hr hc M)
     | .kw "withbor2r" =>
       -- `withbor2r['x, @b, A, B, [ROW]](p, m) M`, the relaxed lend (SPEC §29).
       discard bump
