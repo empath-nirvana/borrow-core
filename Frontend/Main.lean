@@ -194,11 +194,13 @@ def rewriteDump (identity : Bool) (file : String) : IO UInt32 := do
       match Backend2.identityLine k with
       | .error e => IO.eprintln s!"{file}: {e}"; return 1
       | .ok l => IO.println l; return 0
-    match Rewrite.readBack k.el k.main k.cnts with
+    match Rewrite.rules k.main >>= fun (_, t, keys, _) =>
+        (Rewrite.readBack k.el k.main k.cnts t).map (·, keys) with
     | .error e => IO.eprintln s!"{file}: {e}"; return 1
-    | .ok (el', nkeys, ndecls, poly) =>
+    | .ok ((el', nkeys, ndecls, poly), keys) =>
       IO.print (Program.pp ⟨el'.prog.decls.drop el'.lib⟩)
-      IO.println s!"-- rewrite: {nkeys} instances, {ndecls} declarations, {poly} polymorphic, no rule"
+      let r0 := keys.map fun (a, st) => s!"{a.n} {repr st}"
+      IO.println s!"-- rewrite: {nkeys} instances, {ndecls} declarations, {poly} polymorphic; R0 {r0}"
       return 0
 
 /-- Print `file`'s LIR (`Backend2/`). -/
@@ -642,6 +644,36 @@ def main (argv : List String) : IO UInt32 := do
   | ["erase", file] => erase file
   | ["rewrite", file] => rewriteDump false file
   | ["rewrite", "--identity", file] => rewriteDump true file
+  | ["rewrite", "--typed", file] => do
+    -- The rewritten `main`'s typed term, as `bcc lir --typed` prints the source's.
+    let src ← IO.FS.readFile file
+    match Backend.checkedOf file src >>= fun k => Rewrite.run k with
+    | .error e => IO.eprintln e; return 1
+    | .ok (k', _) =>
+      for l in Backend2.dumpT 100000 0 k'.main.t do IO.println l
+      return 0
+  | ["rewrite", "--seed-run", sd, file] => do
+    -- R0's controls (SPEC §54): the program rewritten with a planted fault the kernel accepts,
+    -- run at the new backend's LIR interpreter, whose output the reject tests compare with the
+    -- golden.
+    let some seed := Rewrite.Seed.ofString? sd | IO.eprintln s!"unknown seed {sd}"; return 2
+    let src ← IO.FS.readFile file
+    match Backend.checkedOf file src >>= fun k => Rewrite.run k seed with
+    | .error e => IO.eprintln s!"refused: {e}"; return 1
+    | .ok (k', _) =>
+      match Backend2.interpStage "lir" (pure k') [] with
+      | .error e => IO.eprintln e; return 1
+      | .ok o => (← IO.getStdout).write o.out; return 0
+  | ["rewrite", "--seed", sd, file] => do
+    -- The reject tests (SPEC §54): R0 with a planted fault, which the kernel or the guard refuses.
+    let some seed := Rewrite.Seed.ofString? sd | IO.eprintln s!"unknown seed {sd}"; return 2
+    let src ← IO.FS.readFile file
+    match Backend.checkedOf file src with
+    | .error e => IO.eprintln e; return 1
+    | .ok k =>
+      match Rewrite.run k seed with
+      | .error e => IO.println s!"refused: {e}"; return 0
+      | .ok _ => IO.println "ACCEPTED"; return 1
   | ["rewrite", "--diff", file] => do
     let src ← IO.FS.readFile file
     match Backend.checkedOf file src with
@@ -661,6 +693,15 @@ def main (argv : List String) : IO UInt32 := do
         return 0
   | ["lir", "--typed", file] => typedDump file
   | ["lir", file] => lirDump file
+  | ["lir", "--source", file] => do
+    -- The LIR of the source's checked program, before the rewriter (SPEC §54): what R0's counts
+    -- are measured against.
+    let src ← IO.FS.readFile file
+    match Backend.checkedOf file src >>= fun k => Backend2.lirOfChecked k with
+    | .error e => IO.eprintln e; return 1
+    | .ok (p, _) =>
+      for l in p.pp do IO.println l
+      return 0
   | ["lir", "--erasure", file] => do
     let src ← IO.FS.readFile file
     match Backend.checkedOf file src with

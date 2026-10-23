@@ -180,10 +180,14 @@ def Cx.slot (cx : Cx) (i : Nat) : RB String :=
   | _ => throw s!"read-back: the slot {i} has no name"
 
 /-- The name a binder is written with: its source name when the node records one, else a name no
-program writes, by the binder's depth. -/
+program writes, by the binder's depth; a binder a rule writes (named by the rule, `%R0`) is
+numbered by its depth too. -/
 def Cx.binder (cx : Cx) (nm : Option String) : String :=
   match nm with
-  | some x => if x.isEmpty then s!"_%{cx.vars.length}" else x
+  | some x =>
+    if x.isEmpty then s!"_%{cx.vars.length}"
+    else if x.startsWith "%" then s!"{x}.{cx.vars.length}"
+    else x
   | none => s!"_%{cx.vars.length}"
 
 /-- The declaration of an instance. -/

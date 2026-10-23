@@ -1,4 +1,5 @@
 import Frontend.Check.Program
+import Rewrite.Abort
 
 /-!
 # Rewrite — the report  `[spec §54]`
@@ -133,12 +134,18 @@ def kindOf : TExpr → String
   | .use .. => "use"
 
 /-- What a run did: the instances read back as declarations, the declarations among them that are
-lifetime-polymorphic, and the rules applied (none at step 0). -/
+lifetime-polymorphic, R0's keys and what its rules recorded for the guard, and the binders `π`
+maps elsewhere. -/
 structure Report where
   keys : Nat
   decls : Nat
   poly : Nat := 0
-  rules : List String := []
+  /-- R0's keys: each abortive name, rewritten or left with its reason, in R0's order. -/
+  r0 : List (UInt32 × String) := []
+  /-- What R0's rules recorded for the guard (its own `!`-introductions). -/
+  stats : AbStats := {}
+  /-- The binders `π` maps to another position. -/
+  moved : Nat := 0
   deriving Inhabited
 
 /-- **The identity criterion**: whether `main`'s erasure is the source's (`same`), or differs only

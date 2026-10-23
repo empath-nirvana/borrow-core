@@ -123,6 +123,20 @@ corpus/core-effects-tail.bc 19:3: handle 2: 2.0 1 written, world top, tail, in-c
 corpus/core-handle-last.bc 22:3: handle 2: 2.0 1? written, world top, tail, in-clause
 corpus/core-handle-tail-abort.bc 18:3: handle 2: 2.0 0 abortive, world top, -, -
 corpus/core-handle-tail.bc 19:3: handle 2: 2.0 1 written, world top, tail, in-clause
+corpus/core-r0-fin-instances.bc 33:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-r0-forward-last.bc 21:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-r0-forward-last.bc 24:7: handle 2: 2.0 1? written, world top, tail, in-clause
+corpus/core-r0-forward.bc 27:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-r0-forward.bc 30:7: handle 2: 2.0 1 written, world top, tail, in-clause
+corpus/core-r0-lend-two.bc 22:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-r0-lend-two.bc 25:7: handle 2: 2.0 0 abortive, world top, -, -
+corpus/core-r0-linear.bc 26:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-r0-nested.bc 27:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-r0-nested.bc 30:7: handle 2: 2.0 0 abortive, world top, -, -
+corpus/core-r0-pi-instances.bc 26:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-r0-two-ops.bc 29:5: handle 1: 1.0 0 abortive, world top, -, -; 1.1 0 abortive, world top, -, -
+corpus/core-r0-unwind-linear.bc 36:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-r0-unwind.bc 32:5: handle 1: 1.0 0 abortive, world top, -, -
 corpus/core-yield-loop.bc 36:7: handle 1: 1.0 1? written, world top, tail, in-clause
 corpus/core-yield-loop.bc 48:12: handle 1: 1.0 1? written, world top, tail, in-clause
 corpus/core-yield-pull.bc 58:22: handle 1: 1.0 1? written, world top, -, stored

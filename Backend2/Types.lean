@@ -131,9 +131,6 @@ def LCTy.whnf : Nat → LCTy → LCTy
   | f + 1, .nu k => LCTy.whnf f k.unrollNu
   | _, k => k
 
-/-- An operation of a row is abortive: answer `0` at a count with weakening (`OpSig.abort`). -/
-def abortB (q : Count) (B : VTy) : Bool := q == .zero
-
 /-- The payload of a row's abortive operations (`ofEff`'s list): each key once, its first, as
 `Row.find` reads a row; their argument types a right-nested sum, one summand per operation, in
 the row's order; `none` at none.  `[spec §47]` -/
@@ -228,7 +225,7 @@ def ofC (ms : MachSet) : CTy → Except String LCTy
     if n == divName then
       throw s!"an operation ({n}, {i}) in a computation type: outside the pure fragment"
     let (ps, qs, r) ← ofEff ms C
-    if abortB q B then return .ret (outcomeTy r (((n, i), ← ofV ms A) :: ps) qs)
+    if q == .zero then throw "an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
     else if ms.contains (n, i) then
       return .ret (outcomeTy r ps (((n, i), ← ofV ms A, ← ofV ms B, ← ofFin ms fin) :: qs))
     else return .ret (outcomeTy r ps qs)
@@ -244,7 +241,7 @@ def ofEff (ms : MachSet) : CTy →
     if n == divName then
       throw s!"an operation ({n}, {i}) in a computation type: outside the pure fragment"
     let (ps, qs, r) ← ofEff ms C
-    if abortB q B then return (((n, i), ← ofV ms A) :: ps, qs, r)
+    if q == .zero then throw "an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
     else if ms.contains (n, i) then return (ps, ((n, i), ← ofV ms A, ← ofV ms B, ← ofFin ms fin) :: qs, r)
     else return (ps, qs, r)
   | _ => throw "a row's layers over a type that is not `F R`"
@@ -256,7 +253,7 @@ def ofFin (ms : MachSet) : CTy → Except String (Option (List ((UInt32 × UInt3
   | .ret _ => pure (some [])
   | .eff n i q _ A B _ C => do
     let rest ← ofFin ms C
-    if abortB q B then return rest.map (((n, i), ← ofV ms A) :: ·)
+    if q == .zero then throw "an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
     else if ms.contains (n, i) then
       throw s!"a cancel row holding the machine operation ({n}, {i}): outside the fragment"
     else return rest

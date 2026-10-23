@@ -1,0 +1,46 @@
+-- R0 (SPEC §54) in the core text: an abortive name of two operations of one argument type,
+-- `1.0 aff i32 ~> 0` and `1.1 aff i32 ~> 0`. R0 rewrites them to a sum: a computation at the row
+-- answers `A + (i32 + i32)`, each `abort` is the injection of its operation's argument into the
+-- payload `i32 + i32`, and the handler becomes a `case` that sends each summand to its clause.
+-- The two summands have one type, so an injection or an arm that is swapped still type-checks and
+-- only the answer shows it (the controls `injIndex`, `swapDispatch`, `scripts/check-rewrite.sh`).
+--
+-- Answer: (i32[5], (i32[107], i32[1002])): `check` returns `5`, aborts `1.0` with `7` at `0`,
+-- which its clause answers `7 + 100`, and aborts `1.1` with `2` at `1`, which its clause answers
+-- `2 + 1000`.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def check : !U (i32 -o F[1.0 aff i32 ~> 0, 1.1 aff i32 ~> 0] i32) =
+  !thunkv fun (x : i32) ->
+    z <- return ((unbang host[eqz32]) x);
+    case z {
+      inl nz ->
+        w <- return ((unbang host[eq32]) (x, i32[1]));
+        case w {
+          inl ne -> return x
+        | inr eq -> abort[1.1] (plus (x, x))
+        }
+    | inr isz -> abort[1.0] i32[7]
+    }
+
+def handled : !U (i32 -o F i32) =
+  !thunkv fun (a : i32) ->
+    handle_with[1](
+        ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+        (((!thunkv fun (e : i32) -> return (plus (e, i32[100]))),
+          ((!thunkv fun (e : i32) -> return (plus (e, i32[1000]))), ()))
+          : !U (i32 -o F i32) * (!U (i32 -o F i32) * 1)))
+      (f <- return (unbang check); force f a)
+
+main : F (i32 * (i32 * i32)) =
+  f <- return (unbang handled);
+  a <- return i32[5];
+  r1 <- force f a;
+  g <- return (unbang handled);
+  b <- return i32[0];
+  r2 <- force g b;
+  h <- return (unbang handled);
+  c <- return i32[1];
+  r3 <- force h c;
+  return (r1, (r2, r3))

@@ -1,0 +1,29 @@
+-- R0 (SPEC §54) in the core text: the guard's binder map `π` across two instances of one generic
+-- `def`. `ident[A]` is used at `i32` in a clause of `handle_with[1]` and at `ref i32` in its handled
+-- computation. R0 writes the handled computation before the clauses, the reverse of the order the
+-- checker visits them in; `π` pairs binders by the ids the rewriter gives them, so the binder of
+-- `ident[ref i32]` is paired with itself, and keeps its class.
+--
+-- Answer: i32[7], and `live 0`.
+
+def ident[A] : !U (A -o F A) = !thunkv fun (x : A) -> return x
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def check : !U (ref i32 -o F[1.0 aff i32 ~> 0] i32) =
+  !thunkv fun (c : ref i32) ->
+    f <- return (unbang ident[ref i32]);
+    d <- force f c;
+    v <- return (free[i32] d);
+    z <- return ((unbang host[eqz32]) v);
+    case z {
+      inl nz -> return v
+    | inr isz -> abort[1.0] i32[3]
+    }
+
+main : F i32 =
+  c <- return (alloc[i32] i32[0]);
+  handle_with[1](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (e : i32) -> g <- return (unbang ident[i32]); w <- force g e; return (plus (w, i32[4]))), ()) : !U (i32 -o F i32) * 1))
+    (f <- return (unbang check); force f c)

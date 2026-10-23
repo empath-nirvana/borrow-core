@@ -29,9 +29,9 @@ ascii-upper 1 0 0 4285 4178 192
 async-bank-inbox 11 0 0 450 442 16 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
 async-cancel 5 0 0 137 134 6 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
 async-lend-slots 7 0 0 334 322 16 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
-async-logged 22 0 0 206 188 0
-async-map 18 0 0 251 228 10 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
-async-mapreduce 22 0 1 489 435 30 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value; the recursion's frames on its task's stack, κ in the stack's region
+async-logged 22 0 0 214 196 0 # R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687)
+async-map 18 0 0 263 240 10 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value; R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687)
+async-mapreduce 22 0 1 495 441 30 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value; the recursion's frames on its task's stack, κ in the stack's region; R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687)
 async-r1-cancel 4 0 0 5 5 0
 async-r1-cancel-finaliser-writes 1 0 0 2 2 0
 async-r1-drain 1 0 0 4 4 0
@@ -43,11 +43,11 @@ async-race 3 0 0 3 3 0
 async-scheduler 5 0 0 446 440 20 # the slots an array resumed in place (§52): no list node per await; a bounds check per slot visit, which no checked fact removes; the fill and the moves into and out of slots of a task held by value
 async-scoped 25 0 0 263 253 0
 async-slice-iter-await 21 0 0 302 298 4
-async-stack-cancel 406 0 0 4917 2495 0 # SPEC §52 stress: each level's cell, freed by the cancel
-async-stack-deep 1364 4750 0 268155 230102 14412 # SPEC §52 stress: each level's cell; a resume dispatches between the two task bodies' codes
-async-stack-nested 13 0 0 1251 1087 40 # SPEC §52 stress: the inner tasks' stacks
+async-stack-cancel 406 0 0 4922 2500 0 # SPEC §52 stress: each level's cell, freed by the cancel; R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687)
+async-stack-deep 1364 4750 0 272902 234849 14412 # SPEC §52 stress: each level's cell; a resume dispatches between the two task bodies' codes; R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687)
+async-stack-nested 13 0 0 1289 1125 40 # SPEC §52 stress: the inner tasks' stacks; R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687)
 async-timers 40 5 0 398 380 0
-async-try-join 28 0 0 378 372 0
+async-try-join 28 0 0 398 392 0 # R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687)
 async-two-readers-views 41 8 0 606 593 7
 async-workers-scoped 43 0 1 756 740 0
 axes/borrow-across-loop 2 0 0 30 13 4
@@ -88,6 +88,16 @@ core-effects-loop 0 0 0 0 0 0
 core-effects-reborrows 3 0 0 5 4 0
 core-effects-result 0 0 0 0 0 0
 core-effects-tail 0 0 0 0 0 0
+core-handle-tail-abort 0 0 0 0 0 0
+core-r0-fin-instances 2 0 0 2 2 0
+core-r0-forward 2 0 0 2 2 0
+core-r0-lend-two 2 0 0 2 2 0
+core-r0-linear 1 0 0 1 1 0
+core-r0-nested 0 0 0 0 0 0
+core-r0-pi-instances 1 0 0 1 1 0
+core-r0-two-ops 0 0 0 0 0 0
+core-r0-unwind 2 0 0 2 2 0
+core-r0-unwind-linear 0 0 0 0 0 0
 core-yield-loop 0 0 0 0 0 0
 core-yield-pull 0 0 0 0 0 0
 count-down 0 0 0 0 0 0
@@ -356,8 +366,8 @@ rec-overflow 10101 0 0 10101 10101 0
 rec-parser 22 0 0 66 66 0
 rec-tree 127 0 0 635 635 0
 rec-yield 0 0 0 0 0 0
-reconcile-chain 16 3 0 398 380 0
-reconcile-clock 21 8 0 279 243 0
+reconcile-chain 26 3 0 384 366 0 # R0 (#680): allocations rise, the closure `ε κ` of each forwarding clause at `1?` (a′); loads and stores move with them; recovery L1 (the known closure's observations inlined), then R5/L5 (#687)
+reconcile-clock 29 8 0 311 275 0 # R0 (#680): allocations rise, the closure `ε κ` of each forwarding clause at `1?` (a′); loads and stores move with them; recovery L1 (the known closure's observations inlined), then R5/L5 (#687)
 retry-block 2 0 0 5 5 0
 reverse-bytes 1 0 0 132 91 39
 rewrite-case-ascription 0 0 0 0 0 0
@@ -374,6 +384,10 @@ sort-lines 2 0 0 4465 4272 272
 sort-numbers 1 0 0 165 131 136
 split-at-mut 1 0 0 132 92 41
 state-machine 0 0 0 0 0 0
+sugar/data-box-tree.lowered 9 0 0 27 27 0
+sugar/data-config.lowered 2 0 0 161 25 202
+sugar/data-particles.lowered 1 0 0 667 651 150
+sugar/data-turnstile.lowered 1 0 0 51 19 18
 sum-i32 7 0 0 30 15 0
 sum-prog-exact 37 9 3 120 78 0
 surface/array-sum 1 0 0 3000 3000 2024

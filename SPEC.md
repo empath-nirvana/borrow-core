@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.04 · 2026-10-23
+Version 1.05 · 2026-10-23
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -9077,7 +9077,7 @@ program with each `ctl` entry and `kont` at its count (`countedQual`, over the s
 - **The world** is `⊤` only (stage 2, #654's `ℓ_op`).
 - **The rewrite table's bridges** (design §3.2, B1 and B2) are unproved; nothing here uses them.
 
-## 54. Entry 53 — Core → Core effect rewrites (#680): R-pre, the rule-written handlers' producers; step 0, the identity rewrite
+## 54. Entry 53 — Core → Core effect rewrites (#680): R-pre, the rule-written handlers' producers; step 0, the identity rewrite; R0, abort
 
 ### Motivation
 
@@ -9201,6 +9201,175 @@ The rewriter's pass, applying no rule, on the new backend's path (`Rewrite/`, th
 
 No type, typing rule, machine step, relation clause or elaboration changes; the census is the
 source check's report. No output, golden, count or census row of an existing program changes.
+
+### R0: abort
+
+The first rule of the rewriter (the scope's §R0, with its amendment (a′), user decision of
+2026-10-23). It eliminates every **abortive name** by the standard exceptions-as-sums translation,
+inside the kernel's language, before the new backend's conversion. The rule is in
+`Rewrite/Types.lean` (types), `Rewrite/Abort.lean` (one rule per `TExpr` constructor) and
+`Rewrite/R0.lean` (keys and order). `Rewrite.run` numbers the source's binders, applies the rule,
+reads back, re-checks once and runs the guard.
+
+**The key.** A name `n` is keyed when every handler node of `n` holds every operation at the count
+`0` (`E[j].1 = 0`, the counts the check inferred, §53). No name is mixed. Names are rewritten one at
+a time, inside out: in the post-order of the handler nodes, each name at its first node. The sums
+nest in that order: `(A ⊕ P_n) ⊕ P_m` when `n` comes before `m`. Backend2's T2 laid the payload out
+flat; R0 does not.
+
+**Types.** The translation is homomorphic on every former but the returner chain:
+- `⟦F_Σ A⟧ₙ = F_{Σ∖n}(⟦A⟧ₙ ⊕ P_n)` when `n ∈ Σ`, and `F_Σ ⟦A⟧ₙ` otherwise;
+- `P_n` is the sum of `n`'s operations' arguments, nested to the right, and a name of one operation
+  pays its argument;
+- every function type, `def` types included, translates through its codomain. `trC_effOf` states
+  the chain's translation; no rule uses it (each builds its types directly, and the re-check is what
+  carries typing).
+
+**Terms**, at a row holding `n`:
+- `raise_{n.j} V ↦ return (inr (ι_j V))`.
+- The `[sub]` of a computation `M` at a row without `n` into one with it: `M to x. return (inl x)`.
+  This is how `return V` reaches a row holding `n`.
+- `perform_{m.i} V ↦ perform_{m.i} V to y. return (inl y)`, for `m ≠ n`.
+- `[let]`: `⟦M⟧ to r. case r { inl x → ⟦N⟧ | inr p → return (inr p) }`. A binder the program
+  declares `linear` stays declared: `inl r' → linear x <- return r'; ⟦N⟧`.
+- `[then]`: the same, with the abort arm `⟦D⟧ to d. return (inr p)`. It runs the finaliser once,
+  first. A `[then]` whose row keeps another abortive name stays a `[then]` with `D`.
+- A handler of another name `m` whose outer row holds `n` (`[handle]`, BOXED-κ, `handle_tail`,
+  `handle_last`) keeps its node:
+  - its answer clause becomes `λr. case r { inl a → h a | inr p → return (inr p) }`, so `n`'s
+    payload passes unread;
+  - **(a′)** each clause of an operation at `1?` is given `ε κ'` where `κ` is introduced:
+    `!thunkv λ(a, κ'). force (unbang ⟦c_j⟧) (a, ε κ')`, `ε κ' = thunk ⟨(force κ').1, (force κ').2 to
+    u. return (inl u)⟩`. The kernel's `κ'` cancels at `F_{⟦Σ⟧ₙ} 1` (`cancelTy`, §38); the source's
+    `κ`, translated, at `F_{⟦Σ⟧ₙ}(1 ⊕ P_n)`. `ε`'s cancel half is the `[sub]` rule's term. At BOXED-κ,
+    `ε` is taken under the box;
+  - at `handle_last`, the works and the exits translate homomorphically; a work at a row holding
+    `n` is a hard error (no program has one).
+- A handler of `n`, at any of `[handle]`, BOXED-κ or `handle_tail`:
+  `⟦e⟧ to r. case r { inl a → h a | inr (ι_j v) → c_j v }`. The clauses' tuple is taken apart
+  once.
+- An unwinding borrow `withborkU td` becomes its η-expansion, rewritten. At a row that keeps no
+  other name, `λr. λf. withbork r (Λ'x. λm. box-lift (f ['x] m)) to (r, s). case s { inl b → return
+  (inl (r, b)) | inr p → td r; return (inr p) }`, `withbork` the non-unwinding form at
+  `⟦B⟧ₙ ⊕ P_n`. At a row that keeps one, the unwinding form stays, at the reduced row, with `td` for
+  the names it keeps (as the `[then]` rule keeps its node). `box-lift` is
+  `case s { inl b → return (boxed['x] (inl (unbox b))) | inr p → return (boxed['x] (inr p)) }`; the
+  payload outlives `'x` by `Row.Unwind`.
+- Every other constructor is homomorphic.
+
+The `inr` arms' drops are licensed by `[let]`'s `Σ.Weak → Γ.Drops` and by `[then]`'s finaliser.
+The re-check places them (§12) and verifies them. Drop glue reads back as `return ()`, and the
+re-check places its drops again in the abort arm.
+
+**What the rules write where a source node held a type.** The checker synthesizes neither an
+injection nor a term that a removed node checked. So:
+- each injection R0 writes is ascribed its sum type;
+- the handled computation of a removed handler is ascribed the translation of the type `[handle]`
+  checked it at;
+- the `[sub]` rule's binding is annotated with the answer the node held;
+- an annotated `[let]`/`[then]` keeps its annotation, translated.
+
+**Binders.**
+- Before the rules, every source binder gets an id, written into its name (`x#s.k`, the `k`-th binder
+  of the scope `s`: `main`, or an instance's declaration at its type arguments), which the read-back
+  writes and the re-check keeps (`numberBinders`).
+- A rule that moves a source binder moves it through its handle (`SrcBinder`, taken from the
+  source node's `TInfo`), so its id and its `linear` declaration go with it.
+- The binders a rule writes are named by the rule (`%R0`, numbered by depth by `Cx.binder`) and
+  carry no id.
+
+**Left alone, with the reason recorded:** `left: lendR`, a name in a relaxed lend's row. It is
+unreachable: R1's row admits no abortive operation (`Row.resumeOB`). No name is left in the
+corpus.
+
+**The guard:**
+- **π** is id equality: each source id to its binders in `c′`, checked total (every source id has
+  an image) and injective (an image carries one id). The copies of one id (an instance's body at
+  each use, a finaliser on each abort path) are joined.
+- **G-qual** reads π: a binder keeps its class, and a binder declared `linear` stays declared so.
+  This is a second line behind `SrcBinder`.
+- **G-bang** allows R0's own `!`-introductions: the forwarding answer clauses and the (a′) wrappers,
+  each over the source's persistent clauses.
+- **G-fin**, by finaliser id, reading the two checked terms. The numbering pass gives every source
+  finaliser an id (a `[then]` its binder's, an unwinding borrow its own, `#F…`); a `[then]` R0 keeps
+  carries it in its binder's name (`%R0#F…`) and each abort arm R0 writes in its payload binder's
+  (`%R0#A…`). The check is total: every source finaliser has an id. `core-r0-fin-instances` has
+  two finalisers at one span.
+  - a source finaliser stays a finaliser of `c′` exactly while its row keeps an operation no rule
+    rewrites that may end the computation without resuming;
+  - for each rewritten name of its row, the abort arm R0 writes runs it: a written `D` first, at
+    its span and erasure; drop glue as `return ()`; or `td`'s destructor on the lent source, on the
+    arm's spine (where the re-check places it).
+- **G-main**, **G-assure**, **G-κ** and `implicitCopy` are as at step 0.
+
+**Reject tests and controls** (`scripts/check-rewrite.sh`, `bcc rewrite --seed`, `--seed-run`):
+
+| fault | program | refused by |
+|---|---|---|
+| a written finaliser left off the abort arm (`dropFin`) | `core-r0-unwind` | the guard (π: the finaliser's binder has no image) |
+| the same | `core-r0-unwind-linear` | the kernel (a value with no destructor is left unconsumed) |
+| a finaliser run twice (`dupFin`) | `core-r0-unwind`, `core-r0-unwind-linear` | the kernel |
+| drop glue's arm left off (`dropGlue`) | `core-effects-drop-glue` | G-fin |
+| an unwinding borrow's source freed by `free`, not its destructor (`tdReplaced`) | `core-effects-borrow-abort` | G-fin's `td` arm |
+| a handler's clauses copied into each arm of the payload's `case` (`dupClauses`) | `core-r0-two-ops` | G-bang |
+| an operation at `1` given a continuation at `1?` (`widenLin`, G-κ's fault) | `core-r0-forward` | the kernel |
+
+No fault the kernel accepts reaches G-κ: a handler's row is its clauses' operations, at the counts
+the source's check inferred, at which every row is read back.
+
+Three controls are faults the kernel and the guard accept: the next operation's injection
+(`injIndex`), the payload's `case` arms swapped (`swapDispatch`), and the forwarding answer
+clause's arms swapped (`swapFwd`). Each lies between summands of one type. The gate checks that
+each is accepted and changes its program's output against the golden: only the goldens see
+them.
+
+**Laws.**
+- Each source construct's step laws are [est]: `catch_ret`, `catch_abort`, `then_ret`, `then_fin`,
+  `abort_absorbs`, `abort_to`, `fwd_abort` (`Core/EffMachine.lean`); `abort_passes`,
+  `return_resumes` (`Core/Handlers.lean`); `unwind_prefix` (`Core/EffCancelRuns.lean`).
+- The translation's agreement with them, end to end, is [ours] (Plotkin–Pretnar's exceptions as
+  sums, not proved here).
+- `box-lift`, the U-lend rule and the forwarding `handle_last` rule are [ours].
+- (a′): a cancel run performs no operation of `n`. It runs finalisers, at the empty row by
+  `rEffThen`, and destructors. [ours].
+- The type translation's chain lemma `trC_effOf` is proved.
+
+**Programs and counts.**
+- On the corpus before this entry's new programs, R0 rewrites 232 names in 121 programs and leaves
+  none. Per instance (`main` and each instance's body once) it rewrites 279 handler nodes, 510
+  `raise`s, 451 `[let]`s, 224 `[then]`s, 1124 `[sub]`s, 42 `perform`s, 16 forwarding handlers and
+  10 unwinding borrows.
+- The new backend compiles every rewritten program to its golden at every stage, but
+  `core-r0-forward-last`, whose `handle_last` it does not convert (as `core-handle-last`).
+  `core-handle-tail-abort` now compiles.
+- `corpus/erasure-backend2.expected`: an R0 program's line counts what R0 rewrote
+  (`rewritten H P R`), and Convert's own counts drop accordingly.
+- `corpus/counts-backend2.expected`:
+  - copies and bounds checks are unchanged everywhere;
+  - loads and stores rise in 9 machine programs, and allocations rise in 2 of them
+    (`reconcile-chain`, `reconcile-clock`, the closure `ε κ'`);
+  - each row is recorded with #687. The recovery attribution (L1, L3/L5, R5) is unmeasured.
+- The four `corpus/sugar/*.lowered` programs now run in the new backend's corpus, with goldens.
+- Ten new core programs, each with its golden: `core-r0-two-ops`, `core-r0-unwind`,
+  `core-r0-unwind-linear`, `core-r0-forward`, `core-r0-nested`, `core-r0-forward-last`,
+  `core-r0-lend-two`, `core-r0-linear`, `core-r0-pi-instances`, `core-r0-fin-instances`.
+
+**Deletes.** No abortive operation reaches the new backend's conversion; one that did is now a
+hard error there. Removed:
+- E2's `effRaise` arms (pure and machine);
+- `genLendU` and the unwinding borrows' arms;
+- E3's abort join and the abortive clause kind in `convHandle`;
+- T2's `abortB` and the abort branches of `ofEff`, `ofFin` and the outcome type.
+
+Kept, and why:
+- `payOf`/`payTy`, `casePay` and `injectPay`: T3's suspension payload is built from them, and
+  removing them breaks the machine programs;
+- E1's abort functions (`coercePay`, `coerceRes`, `toResult`, `outAbort`, the `pay` of an outcome):
+  the scope deletes E1 after T3's outcome type has no abort summand, which is R5's. They are now
+  reached only at an empty payload.
+
+No type, typing rule, machine step, relation clause or elaboration changes; the census is the
+source check's report.
 
 ## Status
 
@@ -9611,10 +9780,19 @@ their checker arms (`Frontend/Check/Checker.lean`, `Rules.lean`), the per-perfor
 `Rewrite/` (`ReadBack.lean`, `Driver.lean`, `Guard.lean`, `Report.lean`), hooked in
 `Backend2/Driver.lean`'s `lirOf`, the `TInfo` facts in `Frontend/Check/TExpr.lean` (set by
 `Checker.lean`, `Steps.lean`, `Rules.lean`, `Consts.lean`; `Reinfo.lean`), and the identity gate
-`scripts/check-rewrite.sh`. No rule (R0, R1, …) is implemented.
+`scripts/check-rewrite.sh`. R0 is implemented (`Rewrite/Types.lean`, `Abort.lean`, `R0.lean`):
+every abortive name is rewritten before the new backend's conversion, and Backend2's abort layer
+is removed (§54 *R0*). R1 and later rows are not.
 
 ## Changelog
 
+- **1.05** (2026-10-23) — §54 (#680, R0): the abort rewrite, the exceptions-as-sums translation of
+  every abortive name over the typed program, before the new backend's conversion, re-checked
+  once and guarded (π by binder id, G-fin on each abort arm, G-bang with the rule's own `!`); the
+  cancel row translated by the coercion `ε κ` (a′); a forwarding `handle_last`; an unwinding borrow
+  kept at a reduced row; `linear` carried; G-fin by finaliser id. Backend2's abort layer removed. Ten new core programs;
+  reject tests and controls. Goldens unchanged; the new backend's erasure lines count R0's
+  rewrites; loads and stores rise in 9 machine programs, allocations in 2 (#687).
 - **1.04** (2026-10-23) — §54 (#680, step 0): the rewriter's identity pass on the new backend's
   path: the typed program read back into a program (one declaration per instance, keyed by the
   checker's instance key; lifetime-polymorphic by Core's `∀` where an instance mentions its
