@@ -10,12 +10,8 @@ use), and its run over them.
   the count `0` (`E[j].1 = 0`, the counts the check inferred, §53). No name is mixed: a name with
   an operation at another count is not keyed.
 * **Left alone, with the reason recorded:** a name in the row of an R1 relaxed lend (`lendR`): its
-  abort crosses a lend the rule does not rewrite through (`left: lendR`). A name in the outer row
-  of a handler node with an operation at `1?` (`left: cancel row`): that operation's `κ` cancels
-  at the handler's outer row (`cancelTy Σ F = F_{F ++ Σ} 1`, SPEC §38), so `κ`'s type holds the
-  name in a cancel run whose answer the kernel fixes at `1`; the scope's translation of `κ`'s
-  type, homomorphic, gives it the answer `1 ⊕ P_n`, which no `[handle]` types. The scope has no
-  rule for it (reported, #680).
+  abort crosses a lend the rule does not rewrite through (`left: lendR`). It does not arise: R1's
+  row admits no abortive operation (`Row.resumeOB`).
 * **The order**: inside out, the post-order of the handler nodes (a node's handled computation
   before the node), each name at its first node there. The sums nest in that order:
   `(A ⊕ P_n) ⊕ P_m` for `n` before `m`.
@@ -33,9 +29,6 @@ operations in post-order, and the names in each `lendR`'s row. -/
 structure R0Scan where
   handled : Array (UInt32 × List (Count × VTy × VTy)) := #[]
   lendR : Array UInt32 := #[]
-  /-- The names of the outer row of each handler node with an operation at `1?`: its `κ`'s cancel
-  run is at that row (`cancelTy`, SPEC §38). -/
-  cancel : Array UInt32 := #[]
 
 /-- The scan of a typed term, added to `acc`. -/
 def scan : Nat → TExpr → R0Scan → Except String R0Scan
@@ -46,11 +39,9 @@ def scan : Nat → TExpr → R0Scan → Except String R0Scan
       | .lendR _ _ _ _ _ _ S _ _ => { acc with lendR := acc.lendR ++ (S.map (·.n)).toArray }
       | _ => acc
     pure <| match t with
-      | .effHandleV _ _ S E _ n .. | .effHandleVB _ _ S E _ n .. | .effHandleT _ _ S _ E _ n ..
-      | .effHandleL _ _ S _ E _ _ n .. =>
-        { acc with handled := acc.handled.push (n, E),
-                   cancel := if E.any (·.1 == .opt) then acc.cancel ++ (S.map (·.n)).toArray
-                             else acc.cancel }
+      | .effHandleV _ _ _ E _ n .. | .effHandleVB _ _ _ E _ n .. | .effHandleT _ _ _ _ E _ n ..
+      | .effHandleL _ _ _ _ E _ _ n .. =>
+        { acc with handled := acc.handled.push (n, E) }
       | _ => acc
 
 /-- A name's status under R0. -/
@@ -77,7 +68,6 @@ def r0Keys (c : Frontend.Check.Checked) (fuel : Nat) :
     if args.any (fun A => decide (trV a A ≠ A)) then
       throw s!"R0: an argument of the abortive name {n} mentions it"
     if sc.lendR.contains n then out := out ++ [(a, .left "lendR")]
-    else if sc.cancel.contains n then out := out ++ [(a, .left "cancel row")]
     else out := out ++ [(a, .rewritten)]
   pure out
 

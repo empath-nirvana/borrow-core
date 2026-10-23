@@ -520,8 +520,7 @@ def rowPay (S : Row) : CM Pay := do
   for o in S do
     if o.n == divName then
       throw s!"an operation ({o.n}, {o.i}) in a computation type: outside the pure fragment"
-    if o.abort && !(acc.any (·.1 == (o.n, o.i))) then
-      acc := acc ++ [((o.n, o.i), ← vty o.A)]
+    if o.abort then throw "LIR: an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
   return acc
 
 /-- The payload's type: `none` at no operation. -/
@@ -2349,14 +2348,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let p ← rowPay S; let q ← rowPay S'
     let a ← vty A
     bindTm (← conv fuel ctx c) (resTy a p) fun r => coerceRes a p q r
-  | .effRaise _ _ S o _ c => do
-    -- `raise`: the abort at its operation's summand, handed to the handler's join (`catch_abort`,
-    -- `abort_absorbs`).  [spec §47]
-    readFact "effRaise:op"
-    modify fun st => { st with erased := st.erased.insert "raise" (st.erased.getD "raise" 0 + 1) }
-    let p ← rowPay S
-    let some j := payIdx p (o.n, o.i) | throw s!"LIR: a raise of ({o.n}, {o.i}) outside its row"
-    bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay p j v fun w => pure (.inj true w)
+  | .effRaise .. => throw "LIR: an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
   | .effPerform _ _ S o c => do
     -- `perform` of a tail-resumptive clause: a direct call of the clause's work (`tail_resumes`,
     -- `TailResumesAt.subst_kappa`, `tail_clause_names`, `Checked.unhandledNames`).  [spec §47]
@@ -2497,7 +2489,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     -- `[nil-dead]` (SPEC §29): the term at the empty context, the context's slots consumed.
     readFact "nilDead:context"
     return drops (live ctx) (← conv fuel [] c)
-  | .effHandleT .. | .lendR .. | .lendLoopR .. | .iterate .. | .divFuel ..
+  | .effHandleT .. | .effHandleL .. | .lendR .. | .lendLoopR .. | .iterate .. | .divFuel ..
   | .reify .. | .letPoly .. => outside t
   | t =>
     match transparent? t with
@@ -2605,12 +2597,7 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
   | .effSub _ _ _ _ _ c => do
     readFact "effSub:rows"
     convK fuel ctx c K args
-  | .effRaise _ _ _ o _ c => do
-    readFact "effRaise:op"
-    modify fun st => { st with erased := st.erased.insert "raise" (st.erased.getD "raise" 0 + 1) }
-    let F ← curMach
-    let some j := payIdx F.pay (o.n, o.i) | throw s!"LIR: a raise of ({o.n}, {o.i}) outside its row"
-    bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay F.pay j v fun e => abortK F K args e
+  | .effRaise .. => throw "LIR: an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
   | .effPerform _ _ _ o c => do
     if (← get).mach.contains (o.n, o.i) then
       readFact "effPerform:machine"
@@ -2990,7 +2977,7 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Count × VTy × VTy
   if teM.isNone then
     for (k, j) in ks.zipIdx do
       match k.kind with
-      | .abortive => pure ()
+      | .abortive => throw "LIR: an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
       | .tail =>
         unless direct[j]? == some true do
           throw s!"LIR: `effHandleV`: the clause {n}.{j} is tail-resumptive, but its direct call is not licensed (condition 2, or one closed clause at its nodes): outside the pure fragment"
@@ -3044,21 +3031,8 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Count × VTy × VTy
   let aT ← vty A
   modify fun st => { st with erased := st.erased.insert "handle" (st.erased.getD "handle" 0 + 1) }
   let retArm (a : Var) : CM Tm := do return dropAll (some 0) (← applyTo fuel cR tR a)
-  match payTy pt with
-  | none => return wrap (← bindTm (← conv fuel c₂ te) aT retArm)
-  | some ptT =>
-    readFact "effHandleV:join"
-    let b ← fresh (.sum aT ptT); let a ← fresh aT; let e ← fresh ptT
-    let arms ← casePay pt e fun j v => do
-      let some (key, _) := pt[j]? | throw "LIR: a payload's summand"
-      if key.1 == n then
-        let idx := key.2.toNat
-        let some (cc, c) := parts[idx]? | throw "LIR: an abortive clause"
-        return dropAll (some (idx + 1)) (← applyTo fuel cc c v)
-      else
-        let some j' := payIdx ps key | throw s!"LIR: an abort of {key} outside the handler's row"
-        return dropAll none (← injectPay ps j' v fun w => pure (.inj true w))
-    return wrap (.letv b (← conv fuel c₂ te) (.case b a (← retArm a) e arms))
+  unless pt.isEmpty && ps.isEmpty do throw "LIR: an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
+  return wrap (← bindTm (← conv fuel c₂ te) aT retArm)
 
 /-- **A tail-resumptive clause's work**, the function a `perform` of its operation calls
 (`[spec §47]`, `tail_resumes`): the clause `λp. let (x, κ) = p; M` with each resume of `κ`
@@ -3316,31 +3290,6 @@ where
         if k == 0 then expand fuel c got'.reverse.reverse rT
         else curry fuel c rT got' k
 
-/-- **An unwinding borrow** (`withborUE d`, SPEC §19): `(f [] r) then b. (r, b) unwind d r`. The
-owner lent as `genLend` does; the callback's value `b` gives `(r, b)`; its abort ends the lend, runs
-the finaliser `d` on the owner, and is handed on (`then_fin`).  `[spec §47]` -/
-def genLendU (fuel : Nat) (op : Op) (src : Var) (cbT : LTy) (call : Var → CM Tm) (td : TExpr) :
-    CM Tm := do
-  match fuel with
-  | 0 => throw "LIR: the typed term is too deep"
-  | fuel + 1 =>
-  let (some bT, rT) ← answerOf cbT | throw "LIR: a borrow's callback takes no borrow"
-  match rT with
-  | .sum vT eT => do
-    readFact "withborU:finaliser"
-    let pr ← fresh (.pair (← tyOf src) bT)
-    let o ← freshLike src; let b ← fresh bT
-    let r ← fresh rT
-    let v ← fresh vT; let e ← fresh eT
-    let q ← fresh (.pair (← tyOf src) vT)
-    let u ← fresh .unit
-    let fin ← match constArity (headOf 64 td) with
-      | some 1 => expand fuel (headOf 64 td) [o] .unit
-      | _ => throw "LIR: an unwinding borrow's finaliser that is not a constant is outside the pure fragment"
-    return .letv pr (.prim op [src]) (.letpair o b pr (.letv r (← call b)
-      (.case r v (.letv q (.pair o v) (.inj false q)) e (.letv u fin (.drop u (.inj true e))))))
-  | _ => genLend op src cbT call
-
 /-- A borrowing constant applied to its first argument `x`, its callback's call given by `call`. -/
 def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM Tm) (resT : LTy) :
     CM Tm := do
@@ -3351,10 +3300,9 @@ def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM 
   | .withload .. => genWithload x cbT call
   | .withswap .. => genWithswap x cbT call
   | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I .. => genLendTree x cbT call
-  | .withbor1U _ _ _ _ _ _ td | .withbor2U _ _ _ _ _ _ td | .sliceBorrowMU _ _ _ _ _ _ td
-  | .sliceBorrowIU _ _ _ _ _ _ td => genLendU _fuel .lend x cbT call td
-  | .withbor3U _ _ _ _ _ _ _ td => genLendU _fuel .relend x cbT call td
-  | .withloadU .. => genWithload x cbT call
+  | .withbor1U .. | .withbor2U .. | .sliceBorrowMU .. | .sliceBorrowIU .. | .withbor3U ..
+  | .withloadU .. =>
+    throw "LIR: an unwinding borrow reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
   | c => throw s!"LIR: `{ruleName c}` is not a borrow (answer {resT})"
 
 /-- **A constant applied to its arguments**, `args` in the order they apply, its answer of type
@@ -3418,11 +3366,9 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     freeTree v vT
   | .withborSM .., [x, cb] | .withborSI .., [x, cb] | .withborF2M .., [x, cb]
   | .withborF2I .., [x, cb] => genLendTree x (← tyOf cb) (callCb cb)
-  | .withbor1U _ _ _ _ _ _ td, [x, cb] | .withbor2U _ _ _ _ _ _ td, [x, cb]
-  | .sliceBorrowMU _ _ _ _ _ _ td, [x, cb] | .sliceBorrowIU _ _ _ _ _ _ td, [x, cb] =>
-    genLendU fuel .lend x (← tyOf cb) (callCb cb) td
-  | .withbor3U _ _ _ _ _ _ _ td, [m, cb] => genLendU fuel .relend m (← tyOf cb) (callCb cb) td
-  | .withloadU .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
+  | .withbor1U .., _ | .withbor2U .., _ | .sliceBorrowMU .., _ | .sliceBorrowIU .., _
+  | .withbor3U .., _ | .withloadU .., _ =>
+    throw "LIR: an unwinding borrow reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
   | .foldOwn _ _ F _, [g] | .foldReuse _ _ F _, [g] => do
     let k : FoldKind := match c with | .foldReuse .. => .reuse | _ => .own
     let .thunk fk := resT | throw "LIR: a fold's answer is not a closure"

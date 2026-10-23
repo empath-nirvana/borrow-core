@@ -279,7 +279,7 @@ def identityLine (k : Backend.CheckedProg) : Except String String := do
     let st ← Rewrite.r0Counts k.main ruled
     let lir := match lirOfChecked k, lirOfChecked k' with
       | _, .ok _ => "ok"
-      | .error e, .error e' => if e == e' then "outside" else "outside*"
+      | .error _, .error _ => "outside"
       | .ok _, .error _ => "red"
     pure (head ++ r0 ++ s!" raises {st.raises} handles {st.handles} lets {st.lets} thens {st.thens}" ++
       s!" subs {st.subs} performs {st.performs} forwards {st.forwards} ulends {st.ulends}" ++

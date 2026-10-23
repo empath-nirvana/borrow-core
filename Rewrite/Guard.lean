@@ -1,4 +1,4 @@
-import Frontend.Check.Program
+import Rewrite.Abort
 
 /-!
 # Rewrite — the guard  `[spec §54]`
@@ -29,11 +29,15 @@ checked terms; none reads a backend's state.
 * **Implicit copies**: `implicitCopy` over the re-check's typed terms, the check `checkProgram`
   runs and `checkMain` does not.
 
-**`π`** (`piOf`) maps each binder of `c` to its image in `c′`: the binder at the same node span with
-the same name (the `k`-th such binder of `c` to the `k`-th of `c′`). A binder a rule writes is
-named by the rule (`%R0…`, `Cx.binder`) and is no source binder's image; a binder the program does
-not name is named by its depth in `c′`'s read-back (`_%…`) and is compared unnamed. `π` is total:
-a binder of `c` with no image is a failure.
+**`π`** (`piOf`) maps each binder of `c` to its images in `c′` by id. Before the rules, every
+source binder gets an id (`numberBinders`), written into its name (`x#s.k`), which the read-back
+writes and the re-check keeps; every rule that moves a binder moves its `TInfo`, so its id with
+it, and a rule that copies a term (a finaliser on two abort paths) copies its ids. `π` is id
+equality, checked total (every source id has an image) and injective (an image carries one id).
+The binders a rule writes are named by the rule (`%R0…`, `Cx.binder`) and carry no id; R0 maps no
+source binder to `ctl` or `inv`. A program no rule rewrites is not numbered, and `π` is the
+identity binder by binder. **G-qual** reads `π`: a binder keeps its class and, declared `linear`,
+stays declared so.
 -/
 
 namespace Rewrite
@@ -43,10 +47,6 @@ open BoCa.Fig16.LogRel.Core.Check (TExpr)
 /-- A binder's class: `0` persistent, `1` droppable, `2` linear. -/
 def qualClass (A : CVTy) : Nat :=
   if A.persistent then 0 else if hasDtorB A then 1 else 2
-
-/-- A binder's name as `π` matches it: a name the read-back gives a binder the program does not
-name (`_%…`) is the empty name. -/
-def binderKey (x : String) : String := if x.startsWith "_%" then "" else x
 
 /-- A finaliser node of a typed term: its span, the names of its row, and its finaliser's root span
 and erasure (`[then]`'s `D`; an unwinding borrow's `td`, a destructor of its type). -/
@@ -66,7 +66,9 @@ structure Fin where
 operations `(n, i, count)` in pre-order, its numbers of `!`-introductions, copies and forgets, its
 finaliser nodes, and its `case` nodes' `inr` arms as G-fin reads them. -/
 structure Facts where
-  binders : Array (Frontend.Span × String × CVTy) := #[]
+  /-- Each term binder: its id (`Rewrite.idOf?` of its name, at a numbered program), its name,
+  its type, and whether it is declared `linear`. -/
+  binders : Array (Option String × String × CVTy × Bool) := #[]
   ops : Array (UInt32 × Nat × BoCa.Fig16.LogRel.Core.Count) := #[]
   bangs : Nat := 0
   fins : Array Fin := #[]
@@ -105,26 +107,38 @@ def peelSub : Nat → TExpr → TExpr
     | .effSub i _ _ _ _ c => if i.ins then peelSub f c else t
     | t => t
 
-/-- The head of an abort arm: a binding (its span and its head's erasure), or a drop of a variable
-by a destructor (the destructor's type). -/
+/-- The first drop of a variable by a destructor on an abort arm's spine, past the inserted `[sub]`s
+and the bindings of values (`x <- return V`), where the re-check places a drop (§12): the
+destructor's type. -/
+def spineDrop : Nat → TExpr → Option CVTy
+  | 0, _ => none
+  | f + 1, t => match peelSub 8 t with
+    | .unitE _ _ _ _ (.lolliE _ _ _ _ _ (.var ..) (.dtor _ _ A)) _ => some A
+    | .bind _ _ _ _ _ (.ret ..) tN => spineDrop f tN
+    | .effLet _ _ _ _ _ _ (.ret ..) tN => spineDrop f tN
+    | _ => none
+
+/-- The head of an abort arm: a binding (its span and its head's erasure), and the first drop by
+a destructor on its spine (`spineDrop`). -/
 def armHead (t : TExpr) : Option (Frontend.Span × BoCa.Expr) × Option CVTy :=
+  let d := spineDrop 16 t
   match peelSub 8 t with
-  | .bind i _ _ _ _ tM _ => (some (i.sp, tM.erase), none)
-  | .unitE _ _ _ _ (.lolliE _ _ _ _ _ (.var ..) (.dtor _ _ A)) _ => (none, some A)
-  | _ => (none, none)
+  | .bind i _ _ _ _ tM _ => (some (i.sp, tM.erase), d)
+  | _ => (none, d)
 
 /-- The guard's facts of a typed term, added to `acc`. -/
 def facts : Nat → TExpr → Facts → Except String Facts
   | 0, _, _ => throw "guard: a term nested too deeply"
   | f + 1, t, acc => do
     let i := t.info
-    let nm (k : Nat) : String := binderKey ((i.binders[k]?).getD "")
-    let bs : List (Frontend.Span × String × CVTy) := match t with
+    let b (x : String) (A : CVTy) (lin : Bool) := (idOf? x, x, A, lin)
+    let nm (k : Nat) : String := (i.binders[k]?).getD ""
+    let bs := match t with
       | .bind _ _ A _ _ _ _ | .effLet _ _ A _ _ _ _ _ | .effThen _ _ A _ _ _ _ _ _ _ _ =>
-        [(i.sp, nm 0, A)]
-      | .lam _ _ A _ _ => [(i.sp, binderKey i.name, A)]
-      | .tensorE _ _ A B _ _ _ _ => [(i.sp, nm 0, A), (i.sp, nm 1, B)]
-      | .sumE _ _ A B _ _ _ _ _ => [(i.sp, nm 0, A), (i.sp, nm 1, B)]
+        [b (nm 0) A i.lin]
+      | .lam _ _ A _ _ => [b i.name A false]
+      | .tensorE _ _ A B _ _ _ _ => [b (nm 0) A false, b (nm 1) B false]
+      | .sumE _ _ A B _ _ _ _ _ => [b (nm 0) A false, b (nm 1) B false]
       | _ => []
     let os : List (UInt32 × Nat × BoCa.Fig16.LogRel.Core.Count) := match t with
       | .effHandleV _ _ _ E _ n .. | .effHandleVB _ _ _ E _ n .. | .effHandleT _ _ _ _ E _ n ..
@@ -142,7 +156,11 @@ def facts : Nat → TExpr → Facts → Except String Facts
                             | some fn => acc.fins.push fn
                             | none => acc.fins,
                           arms }
-    t.children.foldlM (init := acc) fun acc (_, c) => facts f c acc
+    match t with
+    -- R1's relaxed lend: its λ is the lend's own (`withbor2r`), which the read-back writes as the
+    -- lend's binder (`TInfo` of `lendR`); `π` reads the lend's.
+    | .nilDead _ _ _ (.lam _ _ _ _ body) => facts f body acc
+    | _ => t.children.foldlM (init := acc) fun acc (_, c) => facts f c acc
 
 /-- A binder's image under the rewrite: an output binder (by its position in `c′`'s binder
 order), a control operation (`ctl`), or a binder a rule's schema names (`inv`). -/
@@ -159,29 +177,44 @@ abbrev Pi := List (Nat × Image)
 /-- **`π`**: each binder of `c` to the binder of `c′` at its node's span and with its name, the
 `k`-th to the `k`-th; the binders a rule writes (`%…`) are no source binder's image. A binder with
 no image is a failure. -/
-def piOf (bs bs' : Array (Frontend.Span × String × CVTy)) : Except String Pi := do
-  let mut seen : Std.HashMap (Nat × Nat × Nat × Nat × String) Nat := {}
-  let mut idx : Std.HashMap (Nat × Nat × Nat × Nat × String × Nat) Nat := {}
-  for ((sp, x, _), k') in bs'.toList.zipIdx do
-    unless x.startsWith "%" do
-      let key := (sp.start.line, sp.start.col, sp.stop.line, sp.stop.col, x)
-      let o := seen.getD key 0
-      seen := seen.insert key (o + 1)
-      idx := idx.insert (sp.start.line, sp.start.col, sp.stop.line, sp.stop.col, x, o) k'
-  let mut seen0 : Std.HashMap (Nat × Nat × Nat × Nat × String) Nat := {}
-  let mut π : Pi := []
-  for ((sp, x, _), k) in bs.toList.zipIdx do
-    let key := (sp.start.line, sp.start.col, sp.stop.line, sp.stop.col, x)
-    let o := seen0.getD key 0
-    seen0 := seen0.insert key (o + 1)
-    match idx.get? (sp.start.line, sp.start.col, sp.stop.line, sp.stop.col, x, o) with
-    | some k' => π := (k, .binder k') :: π
-    | none => throw s!"guard: the binder `{x}` at {sp.start.render} has no image in the rewritten `main`"
-  pure π.reverse
+def piOf (bs bs' : Array (Option String × String × CVTy × Bool)) : Except String Pi := do
+  -- An unnumbered source (no rule rewrote it): the identity, binder by binder.
+  if bs.all (·.1.isNone) then
+    unless bs.size == bs'.size do throw "guard: the rewritten `main` has other binders"
+    return (List.range bs.size).map fun k => (k, .binder k)
+  -- Each id's first binder in `c′` (the binders of one id are the copies of one source binder:
+  -- an instance's body at each use, a finaliser on each abort path).
+  let mut img : Std.HashMap String Nat := {}
+  for ((id?, _, _, _), k') in bs'.toList.zipIdx do
+    if let some id := id? then
+      unless img.contains id do img := img.insert id k'
+  let mut seen : Std.HashSet String := {}
+  let mut π : Array (Nat × Image) := #[]
+  for ((id?, x, _, _), k) in bs.toList.zipIdx do
+    let some id := id? | throw s!"guard: the source binder `{x}` has no id"
+    if seen.contains id then continue
+    seen := seen.insert id
+    match img.get? id with
+    | some k' => π := π.push (k, .binder k')
+    | none => throw s!"guard: the binder `{x}` has no image in the rewritten `main`"
+  pure π.toList
+
+/-- Each id's binders' classes and declarations, joined over its copies: the source's strictest,
+the image's loosest. -/
+def byId (bs : Array (Option String × String × CVTy × Bool)) (src : Bool) :
+    Std.HashMap String (Nat × Bool) := Id.run do
+  let mut m : Std.HashMap String (Nat × Bool) := {}
+  for (id?, _, A, lin) in bs do
+    if let some id := id? then
+      let q := if A.persistent then 0 else qualClass A
+      m := match m.get? id with
+        | none => m.insert id (q, lin)
+        | some (q₀, l₀) => m.insert id (if src then (max q₀ q, l₀ || lin) else (min q₀ q, l₀ && lin))
+  return m
 
 /-- **The guard** over the source `c`, the re-checked `c′`, the names of the operations the rewrite
 eliminates, the `!`-introductions its rules write, and the re-check's typed terms. Returns `π`. -/
-def guard (fuel : Nat) (c c' : Checked) (ruled : List UInt32) (ruleBangs : Nat)
+def guard (fuel : Nat) (c c' : Checked) (t₀ : TExpr) (ruled : List UInt32) (ruleBangs : Nat)
     (terms' : List (Nat × TExpr)) : Except String Pi := do
   -- G-main.
   unless c'.C == c.C do throw "guard G-main: the rewritten `main` has another type"
@@ -190,20 +223,26 @@ def guard (fuel : Nat) (c c' : Checked) (ruled : List UInt32) (ruleBangs : Nat)
   -- G-assure.
   unless c'.pins.all c.pins.contains do
     throw "guard G-assure: the rewritten `main` uses a relaxed rule the source does not"
-  let fs ← facts fuel c.t {}
+  -- The source as the rules read it: numbered (`numberBinders`) where a rule rewrites it.
+  let fs ← facts fuel t₀ {}
   let fs' ← facts fuel c'.t {}
-  -- G-qual, through π.
+  -- G-qual, through π: a binder keeps its class and, declared `linear`, stays declared so.
   let π ← piOf fs.binders fs'.binders
-  for (k, img) in π do
-    let some (_, _, A) := fs.binders[k]? | throw "guard: a binder out of range"
-    match img with
-    | .binder k' =>
-      match fs'.binders[k']? with
-      | some (_, _, A') =>
-        if !A.persistent && qualClass A' < qualClass A then
-          throw s!"guard G-qual: the binder {k} of class {qualClass A} is made class {qualClass A'}"
-      | none => throw s!"guard G-qual: the binder {k} has no image in the rewritten `main`"
-    | .ctl | .inv .. => pure ()
+  if fs.binders.all (·.1.isNone) then
+    for (k, img) in π do
+      let some (_, x, A, lin) := fs.binders[k]? | throw "guard: a binder out of range"
+      let .binder k' := img | continue
+      let some (_, _, A', lin') := fs'.binders[k']? | throw "guard G-qual: a binder with no image"
+      if !A.persistent && qualClass A' < qualClass A then
+        throw s!"guard G-qual: the binder `{x}` of class {qualClass A} is made class {qualClass A'}"
+      if lin && !lin' then throw s!"guard G-qual: the binder `{x}` is declared `linear` and its image is not"
+  else
+    let src := byId fs.binders true
+    let img := byId fs'.binders false
+    for (id, (q, lin)) in src.toList do
+      let some (q', lin') := img.get? id | throw s!"guard G-qual: the binder {id} has no image"
+      if q' < q then throw s!"guard G-qual: the binder {id} of class {q} is made class {q'}"
+      if lin && !lin' then throw s!"guard G-qual: the binder {id} is declared `linear` and its image is not"
   -- G-κ.
   let keep (o : UInt32 × Nat × BoCa.Fig16.LogRel.Core.Count) := !ruled.contains o.1
   unless fs'.ops.filter keep == fs.ops.filter keep do

@@ -194,7 +194,7 @@ def rewriteDump (identity : Bool) (file : String) : IO UInt32 := do
       match Backend2.identityLine k with
       | .error e => IO.eprintln s!"{file}: {e}"; return 1
       | .ok l => IO.println l; return 0
-    match Rewrite.rules k.main >>= fun (t, keys, _) =>
+    match Rewrite.rules k.main >>= fun (_, t, keys, _) =>
         (Rewrite.readBack k.el k.main k.cnts t).map (·, keys) with
     | .error e => IO.eprintln s!"{file}: {e}"; return 1
     | .ok ((el', nkeys, ndecls, poly), keys) =>
@@ -652,12 +652,21 @@ def main (argv : List String) : IO UInt32 := do
     | .ok (k', _) =>
       for l in Backend2.dumpT 100000 0 k'.main.t do IO.println l
       return 0
+  | ["rewrite", "--seed-run", sd, file] => do
+    -- R0's controls (SPEC §54): the program rewritten with a planted fault the kernel accepts,
+    -- run at the new backend's LIR interpreter, whose output the reject tests compare with the
+    -- golden.
+    let some seed := Rewrite.Seed.ofString? sd | IO.eprintln s!"unknown seed {sd}"; return 2
+    let src ← IO.FS.readFile file
+    match Backend.checkedOf file src >>= fun k => Rewrite.run k seed with
+    | .error e => IO.eprintln s!"refused: {e}"; return 1
+    | .ok (k', _) =>
+      match Backend2.interpStage "lir" (pure k') [] with
+      | .error e => IO.eprintln e; return 1
+      | .ok o => (← IO.getStdout).write o.out; return 0
   | ["rewrite", "--seed", sd, file] => do
     -- The reject tests (SPEC §54): R0 with a planted fault, which the kernel or the guard refuses.
-    let seed ← match sd with
-      | "dropFin" => pure Rewrite.Seed.dropFin
-      | "dupFin" => pure Rewrite.Seed.dupFin
-      | _ => IO.eprintln s!"unknown seed {sd}"; return 2
+    let some seed := Rewrite.Seed.ofString? sd | IO.eprintln s!"unknown seed {sd}"; return 2
     let src ← IO.FS.readFile file
     match Backend.checkedOf file src with
     | .error e => IO.eprintln e; return 1

@@ -144,10 +144,16 @@ corpus/core-effects-tail.bc 2.0 linear tail: direct; agree
 corpus/core-handle-last.bc 2.0 affine resume-or-cancel: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/core-handle-tail-abort.bc 2.0 affine abortive: branch; agree
 corpus/core-handle-tail.bc 2.0 linear tail: direct; agree
+corpus/core-r0-forward-last.bc 1.0 affine abortive: branch; agree
+corpus/core-r0-forward-last.bc 2.0 affine resume-or-cancel: machine: the handlers of the name have 2 clauses for it; agree
 corpus/core-r0-forward.bc 1.0 affine abortive: branch; agree
 corpus/core-r0-forward.bc 2.0 linear tail: machine: the handlers of the name have 2 clauses for it; disagree
+corpus/core-r0-lend-two.bc 1.0 affine abortive: branch; agree
+corpus/core-r0-lend-two.bc 2.0 affine abortive: branch; agree
+corpus/core-r0-linear.bc 1.0 affine abortive: branch; agree
 corpus/core-r0-nested.bc 1.0 affine abortive: branch; agree
 corpus/core-r0-nested.bc 2.0 affine abortive: branch; agree
+corpus/core-r0-pi-instances.bc 1.0 affine abortive: branch; agree
 corpus/core-r0-two-ops.bc 1.0 affine abortive: branch; agree
 corpus/core-r0-two-ops.bc 1.1 affine abortive: branch; agree
 corpus/core-r0-unwind-linear.bc 1.0 affine abortive: branch; agree

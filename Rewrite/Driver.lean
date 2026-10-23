@@ -167,16 +167,18 @@ def readBack (el : Frontend.Elab.Elaborated) (c : Checked) (tbl : Frontend.Check
 /-- **The rules over the typed program**: R0 over each name its keys rewrite, in their order
 (`r0Keys`, `ab`), on `main`'s typed term and every `def` body at each use. -/
 def rules (c : Checked) (seed : Seed := .none) :
-    Except String (TExpr × List (AbortName × R0Status) × AbStats) := do
+    Except String (TExpr × TExpr × List (AbortName × R0Status) × AbStats) := do
   let keys ← r0Keys c fuel
-  let mut t := c.t
+  -- The source's binders numbered (`numberBinders`) where a rule will rewrite it: `π`'s ids.
+  let t₀ ← if keys.any (·.2 == .rewritten) then numberBinders c.t else pure c.t
+  let mut t := t₀
   let mut st : AbStats := { seed }
   for (a, s) in keys do
     if s == .rewritten then
       let (t', st') ← (ab a t).run st
       t := t'
       st := st'
-  pure (t, keys, st)
+  pure (t₀, t, keys, st)
 
 /-- The source nodes R0 rewrites, by rule. -/
 structure R0Count where
@@ -228,7 +230,7 @@ re-check at the source's counts, and the guard. `seed` plants a fault in R0 for 
 def run (k : Backend.CheckedProg) (seed : Seed := .none) :
     Except String (Backend.CheckedProg × Report) := do
   let c := k.main
-  let (t, keys, st) ← rules c seed
+  let (t₀, t, keys, st) ← rules c seed
   let (el', nkeys, ndecls, poly) ← readBack k.el c k.cnts t
   let ruled := keys.filterMap fun (a, s) => if s == .rewritten then some a.n else none
   let rows := if ruled.isEmpty then "" else s!" (R0 at the names {ruled})"
@@ -237,7 +239,7 @@ def run (k : Backend.CheckedProg) (seed : Seed := .none) :
   let some c' := rep'.main | throw "rewrite: the rewritten program has no `main`"
   unless externNames el'.prog.decls == externNames k.el.prog.decls do
     throw "guard G-main: the rewritten program has other externs"
-  let π ← guard fuel c c' ruled st.bangs terms'
+  let π ← guard fuel c c' t₀ ruled st.bangs terms'
   let r0 := keys.map fun (a, s) => (a.n, match s with
     | .rewritten => "rewritten"
     | .left r => s!"left: {r}")
