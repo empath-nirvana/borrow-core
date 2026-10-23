@@ -82,7 +82,7 @@ seeds=(
   "dropGlue corpus/core-effects-drop-glue.bc guard G-fin"
   "tdReplaced corpus/core-effects-borrow-abort.bc guard G-fin"
   "dupClauses corpus/core-r0-two-ops.bc guard G-bang"
-  "widenLin corpus/core-r0-forward.bc kernel"
+  "widenLin corpus/core-r0-forward-v.bc kernel"
   "wrongWork corpus/core-r1-two-ops.bc kernel"
   "dropAnswer corpus/core-effects-tail.bc kernel"
   "weakenLin corpus/core-r1-linear.bc guard G-qual"

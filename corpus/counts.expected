@@ -97,6 +97,7 @@ core-handle-tail-abort 0 0 0 0 0 0
 core-r0-fin-instances 2 0 0 2 2 0
 core-r0-forward 2 0 0 2 2 0
 core-r0-forward-last 0 0 0 0 0 0
+core-r0-forward-v 2 0 0 2 2 0
 core-r0-lend-two 2 0 0 2 2 0
 core-r0-linear 1 0 0 1 1 0
 core-r0-nested 0 0 0 0 0 0

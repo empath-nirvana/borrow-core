@@ -9310,7 +9310,7 @@ corpus.
 | drop glue's arm left off (`dropGlue`) | `core-effects-drop-glue` | G-fin |
 | an unwinding borrow's source freed by `free`, not its destructor (`tdReplaced`) | `core-effects-borrow-abort` | G-fin's `td` arm |
 | a handler's clauses copied into each arm of the payload's `case` (`dupClauses`) | `core-r0-two-ops` | G-bang |
-| an operation at `1` given a continuation at `1?` (`widenLin`, G-κ's fault) | `core-r0-forward` | the kernel |
+| an operation at `1` given a continuation at `1?` (`widenLin`, G-κ's fault) | `core-r0-forward-v` | the kernel |
 
 No fault the kernel accepts reaches G-κ: a handler's row is its clauses' operations, at the counts
 the source's check inferred, at which every row is read back.
@@ -9508,10 +9508,15 @@ changes the program's output: only the goldens see them.
   rise (`async-map`, `async-mapreduce`, `async-stack-cancel`, `async-stack-deep`,
   `async-stack-nested`): §47's direct calls were per operation, and licensed the `tail` operation
   `n.1` of a node that keeps `κ` at `n.0`, which no `perform` reaches; with them gone, `n.1` is a
-  machine operation (DR2) and every row holding it a machine's outcome (T3). Recovery: R5, which
-  deletes DR2 and T3. Each row is recorded.
-- Six new core programs, each with its golden: `core-r1-opt` (the `1?` cell), `core-r1-two-ops`,
-  `core-r1-two-ops-eq`, `core-r1-performs`, `core-r1-linear`, `core-r1-unused`.
+  machine operation (DR2) and every row holding it a machine's outcome (T3), and `n.1`, not
+  `stored`, keeps the name off §52's stack machines (`stackOps`). Recovery: R5, which deletes DR2
+  and T3. Each row is recorded. With no stack machine left in `async-stack-deep`, two of the layout
+  checks' perturbations (a κ region's node, a machine's frame node) have no program to be refused
+  on (`scripts/check-layout-reject.sh`). Pending the user's decision on #680.
+- Seven new core programs, each with its golden: `core-r1-opt` (the `1?` cell), `core-r1-two-ops`,
+  `core-r1-two-ops-eq`, `core-r1-performs`, `core-r1-linear`, `core-r1-unused`, and
+  `core-r0-forward-v`: R0's forwarding through a `[handle]` node, which `core-r0-forward`'s node,
+  now R1's, no longer is; R0's seed `widenLin` runs on it.
 
 **Deletes.** No `perform` of a name §47's licence admits reaches the new backend's conversion.
 Removed: `directFacts` (DR1, and `HNode`'s row and clauses), the direct calls' functions
@@ -9947,7 +9952,7 @@ are removed (§54 *R1*). R7 and later rows are not.
   admits (`TailGate`, `Frontend/Check/Licence.lean`, §47's licence read off the rule's nodes), and
   R1 removes every such node before the new backend's conversion: each work a declaration, each
   `perform` a call of it, the node `a <- e; h a`; both cells (`1`, `1?`). `HandleTransparent` stated
-  [ours]. Backend2's direct calls removed (DR1, E4a, E4b, E13). Six new core programs; reject tests
+  [ours]. Backend2's direct calls removed (DR1, E4a, E4b, E13). Seven new core programs; reject tests
   and controls. Goldens and census unchanged; the 11 direct-call programs keep their counts; five
   async programs rise (recorded, recovery R5).
 - **1.05** (2026-10-23) — §54 (#680, R0): the abort rewrite, the exceptions-as-sums translation of

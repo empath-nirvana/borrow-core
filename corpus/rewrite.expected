@@ -92,6 +92,7 @@ corpus/core-handle-tail-abort.bc instances 2 decls 2 poly 0 R0 2:rewritten raise
 corpus/core-handle-tail.bc instances 3 decls 3 poly 0 R1 2:rewritten calls 2 nodes 1 works 1 pi 4 lir ok
 corpus/core-r0-fin-instances.bc instances 6 decls 6 poly 0 R0 1:rewritten raises 1 handles 2 lets 0 thens 2 subs 3 performs 0 forwards 0 ulends 0 pi 32 lir ok
 corpus/core-r0-forward-last.bc instances 3 decls 3 poly 0 R0 1:rewritten raises 1 handles 1 lets 2 thens 0 subs 2 performs 2 forwards 1 ulends 0 pi 17 lir outside
+corpus/core-r0-forward-v.bc instances 3 decls 3 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 1 subs 2 performs 1 forwards 1 ulends 0 pi 22 lir ok
 corpus/core-r0-forward.bc instances 4 decls 4 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 1 subs 2 performs 1 forwards 1 ulends 0 R1 2:rewritten calls 2 nodes 2 works 1 pi 19 lir ok
 corpus/core-r0-lend-two.bc instances 2 decls 2 poly 0 R0 2:rewritten 1:rewritten raises 3 handles 2 lets 0 thens 0 subs 1 performs 0 forwards 0 ulends 1 pi 21 lir ok
 corpus/core-r0-linear.bc instances 4 decls 4 poly 0 R0 1:rewritten raises 1 handles 1 lets 1 thens 0 subs 2 performs 0 forwards 0 ulends 0 pi 15 lir ok

@@ -1,0 +1,50 @@
+-- R0 (SPEC §54) in the core text: an abort through a handler of another name, whose clause reads
+-- `ten`, a `!` value, from the context, so that it is `[handle]`'s (R1's licence leaves it: its work is not
+-- closed, `core-r0-forward` is the same with a closed clause, which R1 rewrites). `go` asks the
+-- control operation `2.0 lin 1 ~> i32` (resumed in tail position) with a cell `c` live across the
+-- ask, then aborts `1.0 aff i32 ~> 0` at `0`. The handler of `2` is inside the handler of `1`, so
+-- its outer row holds `1.0`: R0 writes its answer clause to forward `1`'s payload unread, the
+-- `perform` at the row holding `1.0` to inject its answer, and the `[then]` that drops `c` on the
+-- abort path to run the drop in its abort arm. After R0 the ask's row holds a linear operation
+-- only, at which the re-check binds by `[let]`.
+--
+-- Answer: (inl i32[13], inr i32[9]), and `live 0`.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def go : !U (i32 -o F[2.0 lin 1 ~> i32, 1.0 aff i32 ~> 0] i32) =
+  !thunkv fun (a : i32) ->
+    c <- return (alloc[i32] i32[3]);
+    u <- return ();
+    b <- perform[2.0] u;
+    x <- return (free[i32] c);
+    z <- return ((unbang host[eqz32]) a);
+    case z {
+      inl nz -> return (plus (b, x))
+    | inr isz -> abort[1.0] i32[9]
+    }
+
+def handled : !U (i32 -o F (i32 + i32)) =
+  !thunkv fun (a : i32) ->
+    ten <- return (!thunk return i32[10]);
+    handle_with[1](
+        ((!thunkv fun (v : i32) -> return (inl v)) : !U (i32 -o F (i32 + i32))),
+        (((!thunkv fun (e : i32) -> return (inr e)), ()) : !U (i32 -o F (i32 + i32)) * 1)) (
+      handle_with[2](
+          ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F[1.0 aff i32 ~> 0] i32)),
+          (((!thunkv fun (p : 1 * U ((i32 -o F[1.0 aff i32 ~> 0] i32) & top)) ->
+            let (u, k) = p;
+            let () = u;
+            g <- return (unbang ten);
+            x <- force g;
+            (force k).1 x), ()) : !U (1 * U ((i32 -o F[1.0 aff i32 ~> 0] i32) & top) -o F[1.0 aff i32 ~> 0] i32) * 1))
+        (f <- return (unbang go); force f a))
+
+main : F ((i32 + i32) * (i32 + i32)) =
+  f <- return (unbang handled);
+  a <- return i32[5];
+  r1 <- force f a;
+  g <- return (unbang handled);
+  b <- return i32[0];
+  r2 <- force g b;
+  return (r1, r2)

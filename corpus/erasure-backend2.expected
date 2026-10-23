@@ -92,6 +92,7 @@ core-handle-tail erased handles 0 performs 0 raises 0 tail 1 2 left 0 0
 core-handle-tail-abort erased handles 0 performs 0 raises 0 rewritten 1 0 1 left 0 0
 core-r0-fin-instances erased handles 0 performs 0 raises 0 rewritten 2 0 1 left 0 0
 core-r0-forward erased handles 0 performs 0 raises 0 rewritten 1 1 1 tail 1 1 left 0 0
+core-r0-forward-v erased handles 0 performs 0 raises 0 machines 1 suspends 1 rewritten 1 1 1 left 0 0
 core-r0-lend-two erased handles 0 performs 0 raises 0 rewritten 2 0 3 left 0 0
 core-r0-linear erased handles 0 performs 0 raises 0 rewritten 1 0 1 left 0 0
 core-r0-nested erased handles 0 performs 0 raises 0 rewritten 2 0 2 left 0 0
