@@ -4257,7 +4257,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let c ← refresh c
       let e : Option CCTy := do
         let ⟨S, A, R, _⟩ ← Frontend.Check.retRead (← c.tyV hr')
-        let ⟨Es, _⟩ ← Frontend.Check.clausesRead S R (← c.tyV hc')
+        let Es ← Frontend.Check.formOps hf S R (← c.tyV hc')
         pure (Frontend.Check.effOf
           (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A)
       pure (.handle sp k hf st hr' hc' (← surfC n c e M))

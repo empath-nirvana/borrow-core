@@ -190,4 +190,32 @@ def ClauseTailReplace (ℍ : BoCa.Host) [BoCa.HostIs ℍ] : Prop :=
     BoCa.BoLo.Steps (ℍ := ℍ) μ (.app (.lam (.letpair (.var 0) M)) (.val (Val.pair v κ))) μ' w.1 ↔
       BoCa.BoLo.Steps (ℍ := ℍ) μ (.app (tailClause j false (.val vc)) (.val (Val.pair v κ))) μ' w.1
 
+/-! #### Its hypotheses, met at a corpus clause
+
+`corpus/core-effects-tail.bc`'s clause, erased (`bcc erase`), is `λp. let (u, κ) = p; M` with
+`M = u; (λx. κ.1 x) 10`: `M` resumes `κ` in tail position (`TailResumesAt 0 M M′`, through `[1E]`
+and `[let]`), `M′ = u; (λx. x) 10`, and the tuple `(λu. M′[()/κ], ())` holds the work at `0`. So
+`ClauseTailReplace`'s hypotheses are met there, and the statement is not vacuous. -/
+
+/-- `core-effects-tail`'s clause body, `κ` in the slot `0` and `u` in `1`. -/
+def cetBody : Expr :=
+  .seq (.var 1) (.app (.lam (.app (ClauseKinds.resumeAt 1) (.var 0))) (.prim (.lit (.i32 10))))
+
+/-- The body without its resume. -/
+def cetBody' : Expr := .seq (.var 1) (.app (.lam (.var 0)) (.prim (.lit (.i32 10))))
+
+/-- The work: the body without its resume, `κ`'s binder dropped. -/
+def cetWork : Val := ⟨.lam (cetBody'.subst 0 .unit), .lam⟩
+
+/-- **`ClauseTailReplace`'s hypotheses at `core-effects-tail`'s clause**: the body resumes in tail
+position with `cetBody'` its answer, and the tuple `(cetWork, ())` gives the work at `0`. -/
+theorem cet_clauseTailReplace_hyps :
+    ClauseKinds.TailResumesAt 0 cetBody cetBody' ∧
+      PureSteps (pickE 0 (.val (Val.pair cetWork Val.unit))) (.val cetWork) ∧
+      cetWork.1 = .lam (cetBody'.subst 0 .unit) := by
+  refine ⟨?_, pickE_steps 0 cetWork Val.unit _ rfl cetWork (fun _ => rfl)
+    (fun _ h => by cases h), rfl⟩
+  exact .seq (by simp [ClauseKinds.mentions])
+    (.bind (by simp [ClauseKinds.mentions]) (.resume (by simp [ClauseKinds.mentions])))
+
 end BoCa.Fig16.LogRel.Core

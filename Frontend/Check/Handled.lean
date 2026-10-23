@@ -158,6 +158,37 @@ theorem tail_clause_names (E : List (Count × VTy × VTy)) (tH : TExpr) {j : Nat
   simp only [clauseNames, ha, Bool.false_eq_true, if_false] at hcn
   exact ⟨M, M', hc, hM, fun hW _ _ _ hs _ _ _ _ => tail_work_names hM hcn hW hs⟩
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ] in
+/-- **A tail-resuming rule's clause performs and raises only its names** (`effHandleT`, SPEC §54),
+the counterpart of `tail_clause_names`. At a node whose answering functions are the tuple `Hc` and
+whose names for the operation `j` are `ns` (`tailNames`), the clause the machine runs for `j` is
+the rule's `tailClause j _ Hc` (`clauseAt_tailTuple`), the `j`-th component of `Hc` is a function
+`λx. M`, and every run of `M`, at any values of its variables, from any memory, performs and
+raises only names of `ns` (`fo_of_own` at no continuation slot). The rule's clause adds to `M`
+only the projection of `Hc` and the resume of `κ`, a call of a continuation slot.
+`[spec §19, §54]` -/
+theorem tail_rule_names (E : List (Count × VTy × VTy)) (Hc : Expr) {j : Nat}
+    {ns : List UInt32} (hj : j < E.length) (hn : (tailNames E Hc)[j]? = some (some ns)) :
+    BoLo.clauseAt (tailTuple E 0 Hc) j =
+        some ⟨tailClause j (E[j].1 == .zero) Hc, isVal_tailClause _ _ _⟩ ∧
+      ∃ M, clauseExpr Hc j = some (.lam M) ∧
+      ∀ {W : Expr}, SubstOf M W → ∀ {μ μ' : BoLo.Heap} {e : Expr},
+        BoLo.Steps (ℍ := ℍ) μ W μ' e → ∀ {K : BoLo.Kont} {m i : UInt32} {v : Val},
+          (e = K.plug (BoLo.performE (.val (BoLo.opPayload m i v))) → m ∈ ns) ∧
+          (e = K.plug (BoLo.raiseE (.val (BoLo.opPayload m i v))) → m ∈ ns) := by
+  refine ⟨by rw [clauseAt_tailTuple Hc E 0 j hj, Nat.zero_add], ?_⟩
+  unfold tailNames at hn
+  rw [List.getElem?_map, List.getElem?_range hj] at hn
+  simp only [Option.map_some, Option.some.injEq] at hn
+  obtain ⟨g, hg, hgn⟩ := Option.bind_eq_some_iff.mp hn
+  cases g with
+  | lam M =>
+      have hfo : Fo ns M := (fo_of_own (.lam M) (C := []) hgn (by simp)).2 M rfl
+      exact ⟨M, hg, fun hW _ _ _ hs _ _ _ _ =>
+        have h := (hfo.substOf hW).steps hs
+        ⟨fun he => Fo.perform_mem (he ▸ h), fun he => Fo.raise_mem (he ▸ h)⟩⟩
+  | _ => simp at hgn
+
 end BoCa.Fig16.LogRel.Core.Check
 
 namespace Frontend.Check

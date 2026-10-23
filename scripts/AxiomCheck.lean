@@ -41,6 +41,8 @@ import Frontend.Check.Derived
 #print axioms Frontend.Check.TTied.effHandleL
 #print axioms BoCa.Fig16.LogRel.Core.Check.lastFinOK_of_rowLeB
 #print axioms Frontend.Check.valFormIn_pair
+#print axioms BoCa.Fig16.LogRel.Core.Check.tail_rule_names
+#print axioms BoCa.Fig16.LogRel.Core.cet_clauseTailReplace_hyps
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.RetFrames.answer
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.Returns0.run
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.subst_comm_closed

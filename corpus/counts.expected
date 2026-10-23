@@ -91,6 +91,7 @@ core-effects-result 0 0 0 0 0 0
 core-effects-tail 0 0 0 0 0 0
 core-handle-last 0 0 0 0 0 0
 core-handle-tail 0 0 0 0 0 0
+core-handle-tail-abort 0 0 0 0 0 0
 core-yield-loop 0 0 0 0 0 0 # its clause resumes or cancels: a state machine, with no allocation and no dispatched call
 core-yield-pull 0 0 0 0 0 0 # equal to corpus/gen-fib.bc, its surface form
 count-down 0 0 0 0 0 0

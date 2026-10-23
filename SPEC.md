@@ -9105,11 +9105,14 @@ is the first step: the producers, the forms they check, and the per-perform laws
 - **The census reads a rule-written node's own code.** At `effHandleT` the names each clause's
   own code performs or raises (`HandleSite.names`, §19) are those of its answering function's body
   (`tailNames`): the rule's clause runs the function it projects from the node's tuple and resumes
-  `κ` with its answer.
+  `κ` with its answer. `tail_rule_names` (`Frontend/Check/Handled.lean`) is `tail_clause_names`'s
+  counterpart: the names `tailNames` reads are those the rule's clause performs and raises.
 
 No type, typing rule, machine step, relation clause or elaboration changes. No program the
-elaborator writes uses the forms; `corpus/core-handle-tail.bc` and `corpus/core-handle-last.bc`
-write them in core.
+elaborator writes uses the forms; `corpus/core-handle-tail.bc`, `corpus/core-handle-tail-abort.bc`
+(an abortive operation) and `corpus/core-handle-last.bc` (both endings) write them in core, and
+`corpus/reject/handle-tail-opt-row.bc` (`hLin`) and `corpus/reject/handle-last-lin.bc` (`hAff`)
+are refused.
 
 ### The proof
 
@@ -9132,18 +9135,22 @@ handler outside the node is not covered.
 `fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`, `fundamentalC_pin`, `adequacyC_pin`,
 `checked_sem`, `checked_runs` and every borrow guarantee keep their statements. No change to
 `CDerives`' indices, the machine or the relation. Every corpus program keeps its golden output at
-every stage of both backends; the census tables (`kinds`, `grades`, `handled`) are unchanged.
+every stage of both backends; the census tables (`kinds`, `grades`, `handled`) are unchanged for
+every existing program. The new core programs (`core-handle-tail`, `core-handle-tail-abort`,
+`core-handle-last`) are outside the new backend's fragment, as decided (*Open*).
 
 ### Open
 
-- **The emission.** The checker is to emit `effHandleT` wherever its classification of a node's
-  clauses is `tail` (the scope's R-pre §1). It is not in this entry: the new backend's conversion
-  (`Backend2/Convert.lean`) reads a `[handle]` node's typed clauses, which take `κ`, and an
-  `effHandleT` node holds typed answering functions instead, so the one pass-through arm the
-  approved OQ4 allows cannot compile it without new lowering logic (#680).
+- **The emission** (the user's decision, #680 comment 6363859134). The checker's emission of
+  `effHandleT` where its classification of a node's clauses is `tail` lands with R1, in R1's
+  entry, gated by R1's admission (§47's licence: every node of the name classifies `tail`). R1
+  rewrites every such node away before the new backend's conversion, so the new backend gains no
+  arm for `effHandleT` or `effHandleL` (OQ4 is withdrawn); a name pinned by a stored node stays
+  `[handle]`'s until R1-ev.
 - **`clause_tail_replace`** (`ClauseTailReplace`, stated, not proved): the clause
   `λp. let (x, κ) = p; M` and the rule's `tailClause j false vc`, whose work is `M` without its
-  resumes, reach the same values at the same memories.
+  resumes, reach the same values at the same memories. Its hypotheses are met at `core-effects-tail`'s
+  clause (`cet_clauseTailReplace_hyps`).
 - **A work that performs** an operation of a handler outside the node: its per-perform law.
 - **`effHandleL` from a `resume-or-cancel` clause** (OQ2): its conversion's equivalence is B1's
   statement at the clause.
@@ -9556,8 +9563,8 @@ checked at the inferred counts (`Frontend/Check/Program.lean`'s `checkCounted`),
   (`TTied.effHandleL`, `ansesRead`, `lastRead`); the per-perform laws `tail_resume_direct`,
   `last_resume_direct`, `last_cancel_direct` and `last_cancel_exit` at counts; the census reads an
   `effHandleT` node's names from its answering functions. `clause_tail_replace` is stated, open. The
-  checker's emission of `effHandleT` is not in this version. No output, golden, count or census
-  changes.
+  checker's emission of `effHandleT` lands with R1 (#680 comment 6363859134). No output, golden,
+  count or census changes for an existing program.
 - **1.02** (2026-10-22) — §53 (#675, M1 stage 1): the grade on `eff`, a count `0`, `1` or `1?`
   and a world (`⊤` only), replaces the qualifier; `Qual` stays as the run-time tag
   (`Count.toQual`), so the machine and the relation are unchanged. `[sub]` keeps the count; an

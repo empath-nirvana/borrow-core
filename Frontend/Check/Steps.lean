@@ -360,6 +360,17 @@ def lastRead (S : CRow) (R : CVTy) (qs : List CCount) (Tw Tn : CVTy) :
   if h : BoCa.Fig16.LogRel.Core.worksTy S SW R Xs E 0 = Tw ∧
       BoCa.Fig16.LogRel.Core.exitsTy S R Xs E 0 = Tn then some ⟨SW, E, Xs, h⟩ else none
 
+/-- **A `handle` node's operations, read back by its form**: from its clauses' tuple type
+(`clausesRead`, `handle_with`), its answering functions' (`ansesRead`, `handle_tail`), or its pair
+of works' and exits' (`lastRead`, `handle_last`).  `[spec §19, §54]` -/
+def formOps (hf : Frontend.HForm) (S : CRow) (R : CVTy) (Tc : CVTy) :
+    Option (List (CCount × CVTy × CVTy)) :=
+  match hf, Tc with
+  | .clauses, Tc => (clausesRead S R Tc).map (·.1)
+  | .tail qs, Tc => (ansesRead S R (qs.map Frontend.OpCount.toCore) Tc).map (·.2.1)
+  | .last qs, .tensor Tw Tn => (lastRead S R (qs.map Frontend.OpCount.toCore) Tw Tn).map (·.2.1)
+  | .last _, _ => none
+
 /-- `h_ret`'s type `!U(A -o F_S R)` read back. -/
 def retRead (Tr : CVTy) :
     Option (Σ' (S : CRow) (A R : CVTy), BoCa.Fig16.LogRel.Core.retTy S A R = Tr) :=

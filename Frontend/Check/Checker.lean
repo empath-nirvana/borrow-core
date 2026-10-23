@@ -206,7 +206,7 @@ def tailIt (E : Env) {Δ : LifeCtx} {T : List CVTy} (sp hcSp : Span) (k : Nat)
          else err sp "a handler's answering functions use only persistent variables"
         else throw (splitErr E T sp rr.F.u rc.F.u)
        else err hcSp (s!"the answering functions of `handle_tail` perform only operations at " ++
-         s!"the count 1, but their row is `{ppRow E SN}`")
+         s!"the count 1 that are not abortive, but their row is `{ppRow E SN}`")
       else err hcSp (s!"the answering functions' row `{ppRow E SN}` is not below the handler's " ++
         s!"row `{ppRow E S}`")
      else err sp "a handler has at most 2^32 operations"
@@ -573,7 +573,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let rM ← chkC n E Δ T M
         (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A)
       pure ⟨_, ← lastIt E sp hc.span k site rr' rw' rn' rM⟩
-    | .handle sp k _ st hr hc M => do
+    | .handle sp k .clauses st hr hc M => do
       -- The handler's pair: the answer clause and the clauses, values checked here, whose
       -- slots are persistent (`[handle]`'s `Γ₁`).
       let what (V : Val) (d : String) : String := match V with
