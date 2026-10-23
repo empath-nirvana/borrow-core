@@ -18,7 +18,8 @@ checked terms; none reads a backend's state.
   `c` and the rules' own (R0's forwarding answer clauses, each over the source's persistent
   answer clause).
 * **G-fin**: every finaliser of `c` (`[then]`'s `D`, an unwinding borrow's `td`) is reached once on
-  each abort path of `c′`. It is a finaliser of `c′` while its row keeps an operation no rule
+  each abort path of `c′`, matched by finaliser id (`finIdOf?`: the numbering pass's, carried by
+  the rules in the binders' names), checked total. It is a finaliser of `c′` while its row keeps an operation no rule
   rewrites that may end the computation without resuming it (its count is not `1`; for a
   finaliser the program writes, any operation no rule rewrites: the re-check binds a row of
   operations at `1` by `[let]`, with no finaliser). For each name of its row a rule rewrites, an
@@ -52,6 +53,8 @@ def qualClass (A : CVTy) : Nat :=
 and erasure (`[then]`'s `D`; an unwinding borrow's `td`, a destructor of its type). -/
 structure Fin where
   sp : Frontend.Span
+  /-- Its id (`finIdOf?`), at a numbered program. -/
+  fid : Option String
   names : List UInt32
   /-- The row's operations: each one's name and whether it may end the computation without
   resuming (its count is not `1`). -/
@@ -74,7 +77,7 @@ structure Facts where
   fins : Array Fin := #[]
   /-- Each `case`'s span, and the head of its `inr` arm: a binding's span and its head's erasure,
   or a drop's destructor's type. -/
-  arms : Array (Frontend.Span × Option (Frontend.Span × BoCa.Expr) × Option CVTy) := #[]
+  arms : Array (Option String × Option (Frontend.Span × BoCa.Expr) × Option CVTy) := #[]
 
 def isBangIntro : TExpr → Bool
   | .bangThunkF .. | .bangThunkV .. | .copyBang .. | .forgetBang .. | .forgetUnk .. => true
@@ -88,16 +91,22 @@ def opsOf (S : BoCa.Fig16.LogRel.Core.Row) : List (UInt32 × Bool) :=
 its drops are the re-check's. -/
 def unitE : BoCa.Expr := (TExpr.unitI default (.val .unit)).erase
 
+/-- The finaliser id an abort arm's payload binder names (`armName`). -/
+def armIdOf? (x : String) : Option String :=
+  match x.splitOn "#A" with
+  | [_, r] => some ((r.splitOn ".").headD r)
+  | _ => none
+
 /-- A finaliser node: `[then]`, or an unwinding borrow with a destructor. -/
 def finOf : TExpr → Option Fin
   | .effThen i _ _ _ S _ _ _ _ _ tD =>
-    some ⟨i.sp, S.map (·.n), opsOf S, tD.info.sp, tD.erase, none, i.written⟩
+    some ⟨i.sp, finIdInfo? i, S.map (·.n), opsOf S, tD.info.sp, tD.erase, none, i.written⟩
   | .withbor1U i _ _ _ S _ td | .withbor2U i _ _ _ S _ td | .withbor3U i _ _ _ _ S _ td
   | .sliceBorrowMU i _ _ _ S _ td | .sliceBorrowIU i _ _ _ S _ td =>
     let dty := match td with
       | .dtor _ _ A => some A
       | _ => none
-    some ⟨i.sp, S.map (·.n), opsOf S, td.info.sp, td.erase, dty, false⟩
+    some ⟨i.sp, finIdInfo? i, S.map (·.n), opsOf S, td.info.sp, td.erase, dty, false⟩
   | _ => none
 
 /-- An arm with the `[sub]` the checker inserts around it peeled. -/
@@ -147,8 +156,12 @@ def facts : Nat → TExpr → Facts → Except String Facts
       | _ => []
     let arms := match t with
       | .sumE i _ _ _ _ _ _ _ t₂ =>
-        let (b, d) := armHead t₂
-        acc.arms.push (i.sp, b, d)
+        -- An abort arm R0 writes for a finaliser names it in its payload binder (`armName`).
+        match (i.binders[1]?).bind armIdOf? with
+        | some f =>
+          let (b, d) := armHead t₂
+          acc.arms.push (some f, b, d)
+        | none => acc.arms
       | _ => acc.arms
     let acc := { acc with binders := acc.binders ++ bs.toArray, ops := acc.ops ++ os.toArray,
                           bangs := acc.bangs + (if isBangIntro t then 1 else 0),
@@ -250,31 +263,46 @@ def guard (fuel : Nat) (c c' : Checked) (t₀ : TExpr) (ruled : List UInt32) (ru
   -- G-bang.
   unless fs'.bangs ≤ fs.bangs + ruleBangs do
     throw "guard G-bang: the rewritten `main` introduces, copies or forgets a `!` the source does not"
-  -- G-fin: each finaliser kept while its row keeps an operation no rule rewrites that may end the
-  -- computation without resuming it …
-  let spKey (sp : Frontend.Span) := (sp.start.line, sp.start.col, sp.stop.line, sp.stop.col)
-  let kept := fs.fins.toList.filter fun fn =>
-    fn.ops.any fun (n, weak) => !ruled.contains n && (fn.written || weak)
+  -- G-fin, by finaliser id (`finIdOf?`), as `π` is by binder id. At a program no rule rewrites
+  -- (unnumbered), every finaliser is kept: as many in `c′` as in `c`.
   let count {α} (l : List α) (p : α → Bool) := (l.filter p).length
-  for fn in fs.fins.toList do
-    let want := count kept (spKey ·.sp == spKey fn.sp)
-    let got := count fs'.fins.toList (spKey ·.sp == spKey fn.sp)
-    unless got == want do
-      throw s!"guard G-fin: the finaliser at {fn.sp.start.render} is a finaliser of the rewritten `main` {got} times, not {want}"
-  -- … and run first on the abort arm of each name of its row a rule rewrites.
-  for fn in fs.fins.toList do
-    let atSp := fs.fins.toList.filter (spKey ·.sp == spKey fn.sp)
-    let want := atSp.foldl (fun n g => n + count g.names ruled.contains) 0
-    let runs := fs'.arms.toList.filter fun (sp, b, d) =>
-      spKey sp == spKey fn.sp &&
-        match fn.dty with
-        | some A => d == some A
-        | none => match b with
-          | some (dsp, e) => spKey dsp == spKey fn.dsp &&
-              e == (if fn.written then fn.dexp.shift 1 1 else unitE)
-          | none => false
-    unless runs.length == want do
-      throw s!"guard G-fin: the finaliser at {fn.sp.start.render} runs first on {runs.length} abort arms of the rewritten `main`, not {want}"
+  if fs.binders.all (·.1.isNone) then
+    unless fs'.fins.size == fs.fins.size do
+      throw "guard G-fin: the rewritten `main` has another number of finalisers"
+  else
+    -- Total: every source finaliser has an id.
+    for fn in fs.fins.toList do
+      if fn.fid.isNone then
+        throw s!"guard G-fin: the finaliser at {fn.sp.start.render} has no id"
+    -- Each finaliser kept while its row keeps an operation no rule rewrites that may end the
+    -- computation without resuming it (a finaliser the program writes: any such operation) …
+    let kept := fs.fins.toList.filter fun fn =>
+      fn.ops.any fun (n, weak) => !ruled.contains n && (fn.written || weak)
+    let ids := (fs.fins.toList.filterMap (·.fid)).eraseDups
+    for f in ids do
+      let want := count kept (·.fid == some f)
+      let got := count fs'.fins.toList (·.fid == some f)
+      unless got == want do
+        throw s!"guard G-fin: the finaliser {f} is a finaliser of the rewritten `main` {got} times, not {want}"
+    -- … and run on the abort arm of each name of its row a rule rewrites: a written `D` first,
+    -- drop glue as `return ()`, `td`'s destructor on the arm's spine.
+    for f in ids do
+      let atF := fs.fins.toList.filter (·.fid == some f)
+      let want := atF.foldl (fun n g => n + count g.names ruled.contains) 0
+      let some fn := atF.head? | continue
+      let runs := fs'.arms.toList.filter fun (g, b, d) =>
+        g == some f &&
+          match fn.dty with
+          | some A => d == some A
+          | none => match b with
+            | some (_, e) => e == (if fn.written then fn.dexp.shift 1 1 else unitE)
+            | none => false
+      unless runs.length == want do
+        throw s!"guard G-fin: the finaliser {f} runs on {runs.length} abort arms of the rewritten `main`, not {want}"
+    -- No abort arm for a finaliser the source does not have.
+    for (g, _, _) in fs'.arms.toList do
+      if let some f := g then
+        unless ids.contains f do throw s!"guard G-fin: an abort arm of the finaliser {f}, which the source does not have"
   -- Implicit copies.
   if let some e := implicitCopy terms' then
     throw s!"guard: implicit copy at {e.span.start.render}: {e.msg}"

@@ -113,9 +113,41 @@ def idName (x s : String) (k : Nat) : String := s!"{x}#{s}.{k}"
 
 /-- The id a binder's name carries. -/
 def idOf? (x : String) : Option String :=
+  if x.startsWith "%" then none else
   match x.splitOn "#" with
   | [_, i] => some i
   | _ => none
+
+/-- **A source finaliser's id** (G-fin's, as `π`'s for binders): a `[then]`'s is its binder's id,
+an unwinding borrow's the numbering pass writes into its `TInfo` (`#F…`); a `[then]` R0 keeps
+carries it in its binder's name (`%R0#F…`), and the abort arm R0 writes for it in its payload
+binder's (`%R0#A…`). Read back, a rule's name is numbered by depth (`….d`), which the id omits. -/
+def finIdOf? (x : String) : Option String :=
+  let after (tag : String) : Option String :=
+    match x.splitOn tag with
+    | [_, r] => some ((r.splitOn ".").headD r)
+    | _ => none
+  if (x.splitOn "#F").length == 2 then after "#F"
+  else if x.startsWith "%" then none
+  else (idOf? x).map fun i => i.replace "." "_"
+
+/-- The finaliser id a node's `TInfo` carries (its first binder's name). -/
+def finIdInfo? (i : TInfo) : Option String := (i.binders.head?).bind finIdOf?
+
+/-- The abort arm's payload binder of the finaliser `f`, and a kept `[then]`'s binder. -/
+def armName (f : Option String) : String := match f with
+  | some f => s!"%R0#A{f}"
+  | none => "%R0"
+def keptName (f : Option String) : String := match f with
+  | some f => s!"%R0#F{f}"
+  | none => "%R0"
+
+/-- At the numbering pass, an unwinding borrow's finaliser given its id (`#F…`, `finIdOf?`). -/
+def numberFin (i : TInfo) : AbM TInfo := do
+  let st ← get
+  if !st.numbering then return i
+  set { st with ctr := st.ctr + 1 }
+  return { i with binders := [s!"#F{st.scope}_{st.ctr}"] }
 
 /-- At the numbering pass, the node's binders (`n` of them) given their ids. -/
 def numberInfo (i : TInfo) (n : Nat) (lam : Bool := false) : AbM TInfo := do
@@ -164,8 +196,9 @@ def inrAt (sp : Frontend.Span) (A B : VTy) (t : TExpr) : TExpr :=
 def retAt (sp : Frontend.Span) (A : VTy) (t : TExpr) : TExpr := .ret (infoAt sp) (.comp (.ret A)) A t
 
 /-- `case V { inl x → M | inr y → N }` at `C`, `V : A ⊕ B`; `x` named `nm`. -/
-def caseAt (sp : Frontend.Span) (nm : String) (A B : VTy) (C : CTy) (tV t₁ t₂ : TExpr) : TExpr :=
-  .sumE { sp, binders := [nm, r0B] } (.comp C) A B C noMasks tV t₁ t₂
+def caseAt (sp : Frontend.Span) (nm : String) (A B : VTy) (C : CTy) (tV t₁ t₂ : TExpr)
+    (pn : String := r0B) : TExpr :=
+  .sumE { sp, binders := [nm, pn] } (.comp C) A B C noMasks tV t₁ t₂
 
 /-- **`ι_j V`**, the injection of the operation `j`'s argument into the payload of `args`. -/
 def injPay (sp : Frontend.Span) : List VTy → Nat → TExpr → Except String TExpr
@@ -419,7 +452,7 @@ def uLend (a : AbortName) (t : TExpr) : AbM TExpr := do
               (.free (infoAt sp) (.val (.lolli src' A)) A))) (ret₂ 1)
         | _, _ => dropR 2 (ret₂ 0)
       pure (TExpr.tensorE { sp, binders := [r0B, r0B] } (.comp Cres') src' B'' Cres' noMasks tV
-        (caseAt sp r0B B' P Cres' (varAt sp 0 B'') arm₁ arm₂))
+        (caseAt sp r0B B' P Cres' (varAt sp 0 B'') arm₁ arm₂ (armName (finIdInfo? t.info))))
     else
       pure (caseAt sp r0B B' P Cres' tV
         (liftR (inlAt sp B' P (varAt sp 0 B'))) (liftR (inrAt sp B' P (varAt sp 0 P))))
@@ -594,18 +627,23 @@ def ab (a : AbortName) (t : TExpr) : AbM TExpr := do
   | .withload i j l A B x => pure (.withload i (tJ j) l (tV A) (tV B) x)
   | .withswap i j l A B => pure (.withswap i (tJ j) l (tV A) (tV B))
   -- The unwinding borrows: R0's U-lend rule at a row holding `n`.
-  | .withbor1U i j A B S x td =>
-    if has S then uLend a t else return .withbor1U i (tJ j) (tV A) (tV B) (tR S) x (← ab a td)
-  | .withbor2U i j A B S x td =>
-    if has S then uLend a t else return .withbor2U i (tJ j) (tV A) (tV B) (tR S) x (← ab a td)
-  | .withbor3U i j l A B S x td =>
-    if has S then uLend a t else return .withbor3U i (tJ j) l (tV A) (tV B) (tR S) x (← ab a td)
+  | .withbor1U i j A B S x td => do
+    let i ← numberFin i
+    if has S then uLend a (t.setInfo i) else return .withbor1U i (tJ j) (tV A) (tV B) (tR S) x (← ab a td)
+  | .withbor2U i j A B S x td => do
+    let i ← numberFin i
+    if has S then uLend a (t.setInfo i) else return .withbor2U i (tJ j) (tV A) (tV B) (tR S) x (← ab a td)
+  | .withbor3U i j l A B S x td => do
+    let i ← numberFin i
+    if has S then uLend a (t.setInfo i) else return .withbor3U i (tJ j) l (tV A) (tV B) (tR S) x (← ab a td)
   | .withloadU i j l A B S x =>
     if has S then uLend a t else pure (.withloadU i (tJ j) l (tV A) (tV B) (tR S) x)
-  | .sliceBorrowMU i j A B S x td =>
-    if has S then uLend a t else return .sliceBorrowMU i (tJ j) (tV A) (tV B) (tR S) x (← ab a td)
-  | .sliceBorrowIU i j A B S x td =>
-    if has S then uLend a t else return .sliceBorrowIU i (tJ j) (tV A) (tV B) (tR S) x (← ab a td)
+  | .sliceBorrowMU i j A B S x td => do
+    let i ← numberFin i
+    if has S then uLend a (t.setInfo i) else return .sliceBorrowMU i (tJ j) (tV A) (tV B) (tR S) x (← ab a td)
+  | .sliceBorrowIU i j A B S x td => do
+    let i ← numberFin i
+    if has S then uLend a (t.setInfo i) else return .sliceBorrowIU i (tJ j) (tV A) (tV B) (tR S) x (← ab a td)
   | .lolliE i j A B u ta tf => return .lolliE i (tJ j) (tV A) (tV B) u (← ab a ta) (← ab a tf)
   | .allEV i j x b l A c => return .allEV i (tJ j) x b l (tV A) (← ab a c)
   | .ofRet i j A c => return .ofRet i (tJ j) (tV A) (← ab a c)
@@ -697,11 +735,11 @@ def ab (a : AbortName) (t : TExpr) : AbM TExpr := do
             ((tD'.shift 1 1).shift 1 0) (retP 2))
         | _ => runD (retP 1)
       let (x, arm₁) := sourceArm sp (SrcBinder.ofInfo i) A' C tN'
-      let body := caseAt sp x A' P C (varAt sp 0 (.sum A' P)) arm₁ arm₂
+      let body := caseAt sp x A' P C (varAt sp 0 (.sum A' P)) arm₁ arm₂ (armName (finIdInfo? i))
       if S₁.isEmpty then pure (bindAt sp r0B [] (.sum A' P) (.sum B' P) tM' body (ann := i.ann))
       else
         -- The `[then]` stays for the abortive names its row keeps, with its finaliser.
-        pure (.effThen { i with binders := [r0B], lin := false } (.comp C)
+        pure (.effThen { i with binders := [keptName (finIdInfo? i)], lin := false } (.comp C)
           (.sum A' P) (.sum B' P) S₁ S₁ [] u tM' body tD')
     else pure (.effThen i (tJ j) (tV A) (tV B) (tR S) (tR SM) (tR SD) u tM' tN' tD')
   -- Handlers.

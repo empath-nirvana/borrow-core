@@ -357,6 +357,9 @@ corpus/core-handle-tail-abort.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/core-handle-tail.bc flows [0, 2, 4294967295]; main [2]
 corpus/core-handle-tail.bc 19:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
 corpus/core-handle-tail.bc 2.0 tail: direct; condition 2 holds; agree
+corpus/core-r0-fin-instances.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/core-r0-fin-instances.bc 33:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/core-r0-fin-instances.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/core-r0-forward-last.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
 corpus/core-r0-forward-last.bc 21:5: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/core-r0-forward-last.bc 24:7: handle 2: inside []; row [1]; ops 2.0 resume-or-cancel; names 2.0 row; condition 2 fails at 1

@@ -123,6 +123,7 @@ corpus/core-effects-tail.bc 19:3: handle 2: 2.0 1 written, world top, tail, in-c
 corpus/core-handle-last.bc 22:3: handle 2: 2.0 1? written, world top, tail, in-clause
 corpus/core-handle-tail-abort.bc 18:3: handle 2: 2.0 0 abortive, world top, -, -
 corpus/core-handle-tail.bc 19:3: handle 2: 2.0 1 written, world top, tail, in-clause
+corpus/core-r0-fin-instances.bc 33:5: handle 1: 1.0 0 abortive, world top, -, -
 corpus/core-r0-forward-last.bc 21:5: handle 1: 1.0 0 abortive, world top, -, -
 corpus/core-r0-forward-last.bc 24:7: handle 2: 2.0 1? written, world top, tail, in-clause
 corpus/core-r0-forward.bc 27:5: handle 1: 1.0 0 abortive, world top, -, -

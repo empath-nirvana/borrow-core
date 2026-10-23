@@ -9290,7 +9290,11 @@ corpus.
   This is a second line behind `SrcBinder`.
 - **G-bang** allows R0's own `!`-introductions: the forwarding answer clauses and the (a′) wrappers,
   each over the source's persistent clauses.
-- **G-fin**, reading the two checked terms:
+- **G-fin**, by finaliser id, reading the two checked terms. The numbering pass gives every source
+  finaliser an id (a `[then]` its binder's, an unwinding borrow its own, `#F…`); a `[then]` R0 keeps
+  carries it in its binder's name (`%R0#F…`) and each abort arm R0 writes in its payload binder's
+  (`%R0#A…`). The check is total: every source finaliser has an id. `core-r0-fin-instances` has
+  two finalisers at one span.
   - a source finaliser stays a finaliser of `c′` exactly while its row keeps an operation no rule
     rewrites that may end the computation without resuming;
   - for each rewritten name of its row, the abort arm R0 writes runs it: a written `D` first, at
@@ -9346,9 +9350,9 @@ them.
     (`reconcile-chain`, `reconcile-clock`, the closure `ε κ'`);
   - each row is recorded with #687. The recovery attribution (L1, L3/L5, R5) is unmeasured.
 - The four `corpus/sugar/*.lowered` programs now run in the new backend's corpus, with goldens.
-- Nine new core programs, each with its golden: `core-r0-two-ops`, `core-r0-unwind`,
+- Ten new core programs, each with its golden: `core-r0-two-ops`, `core-r0-unwind`,
   `core-r0-unwind-linear`, `core-r0-forward`, `core-r0-nested`, `core-r0-forward-last`,
-  `core-r0-lend-two`, `core-r0-linear`, `core-r0-pi-instances`.
+  `core-r0-lend-two`, `core-r0-linear`, `core-r0-pi-instances`, `core-r0-fin-instances`.
 
 **Deletes.** No abortive operation reaches the new backend's conversion; one that did is now a
 hard error there. Removed:
@@ -9786,7 +9790,7 @@ is removed (§54 *R0*). R1 and later rows are not.
   every abortive name over the typed program, before the new backend's conversion, re-checked
   once and guarded (π by binder id, G-fin on each abort arm, G-bang with the rule's own `!`); the
   cancel row translated by the coercion `ε κ` (a′); a forwarding `handle_last`; an unwinding borrow
-  kept at a reduced row; `linear` carried. Backend2's abort layer removed. Nine new core programs;
+  kept at a reduced row; `linear` carried; G-fin by finaliser id. Backend2's abort layer removed. Ten new core programs;
   reject tests and controls. Goldens unchanged; the new backend's erasure lines count R0's
   rewrites; loads and stores rise in 9 machine programs, allocations in 2 (#687).
 - **1.04** (2026-10-23) — §54 (#680, step 0): the rewriter's identity pass on the new backend's
