@@ -308,4 +308,127 @@ end
 
 end
 
+
+/-! ### Rows over `F` are kept, and the rules compose -/
+
+section
+variable (a : TailName)
+
+mutual
+theorem rowsV_tV (hSN : a.SN = []) : ∀ A : VTy, rowsV A = true → rowsV (tV a A) = true
+  | .tensor A B, h | .sum A B, h => by
+      simp only [rowsV, Bool.and_eq_true] at h
+      simp only [tV, rowsV, Bool.and_eq_true]; exact ⟨rowsV_tV hSN A h.1, rowsV_tV hSN B h.2⟩
+  | .thunk C, h => by simp only [rowsV] at h; simp only [tV, rowsV]; exact rowsC_tC hSN C h
+  | .ref A, h | .imm _ A, h | .mut _ A, h | .box _ A, h | .bang A, h | .mu A, h | .fam A, h => by
+      simp only [rowsV] at h; simp only [tV, rowsV]; exact rowsV_tV hSN A h
+  | .unit, _ | .zero, _ | .unk, _ | .tvar _, _ | .int _, _ | .opq _, _ => rfl
+theorem rowsC_tC (hSN : a.SN = []) : ∀ C : CTy, rowsC C = true → rowsC (tC a C) = true
+  | .ret A, h => by simp only [rowsC] at h; simp only [tC, rowsC]; exact rowsV_tV hSN A h
+  | .arr A C, h => by
+      simp only [rowsC, Bool.and_eq_true] at h
+      simp only [tC, rowsC, Bool.and_eq_true]; exact ⟨rowsV_tV hSN A h.1, rowsC_tC hSN C h.2⟩
+  | .amp C D, h => by
+      simp only [rowsC, Bool.and_eq_true] at h
+      simp only [tC, rowsC, Bool.and_eq_true]; exact ⟨rowsC_tC hSN C h.1, rowsC_tC hSN D h.2⟩
+  | .top, _ => rfl
+  | .all _ _ C, h | .nu C, h => by simp only [rowsC] at h; simp only [tC, rowsC]; exact rowsC_tC hSN C h
+  | .eff m i c w A B fin C, h => by
+      simp only [rowsC, Bool.and_eq_true] at h
+      rw [tC_eff a hSN]
+      split
+      · exact rowsC_tC hSN C h.2
+      · simp only [rowsC, Bool.and_eq_true]
+        exact ⟨⟨⟨⟨rowsV_tV hSN A h.1.1.1.1, rowsV_tV hSN B h.1.1.1.2⟩, rowsC_tC hSN fin h.1.1.2⟩,
+          endsRet_tC a hSN C h.1.2⟩, rowsC_tC hSN C h.2⟩
+end
+end
+
+section
+variable (a : AbortName)
+
+mutual
+theorem rowsV_trV (hP : rowsV a.P = true) : ∀ A : VTy, rowsV A = true → rowsV (trV a A) = true
+  | .tensor A B, h | .sum A B, h => by
+      simp only [rowsV, Bool.and_eq_true] at h
+      simp only [trV, rowsV, Bool.and_eq_true]; exact ⟨rowsV_trV hP A h.1, rowsV_trV hP B h.2⟩
+  | .thunk C, h => by
+      simp only [rowsV] at h; simp only [trV, rowsV, trC_eq a C]; exact rowsC_trChain hP _ C h
+  | .ref A, h | .imm _ A, h | .mut _ A, h | .box _ A, h | .bang A, h | .mu A, h | .fam A, h => by
+      simp only [rowsV] at h; simp only [trV, rowsV]; exact rowsV_trV hP A h
+  | .unit, _ | .zero, _ | .unk, _ | .tvar _, _ | .int _, _ | .opq _, _ => rfl
+theorem rowsC_trChain (hP : rowsV a.P = true) :
+    ∀ (has : Bool) (C : CTy), rowsC C = true → rowsC (trChain a has C) = true
+  | has, .ret A, h => by
+      simp only [rowsC] at h; simp only [trChain]
+      split
+      · simp only [rowsC, rowsV, Bool.and_eq_true]; exact ⟨rowsV_trV hP A h, hP⟩
+      · simp only [rowsC]; exact rowsV_trV hP A h
+  | _, .arr A C, h => by
+      simp only [rowsC, Bool.and_eq_true] at h
+      simp only [trChain, rowsC, Bool.and_eq_true, trC_eq a C]
+      exact ⟨rowsV_trV hP A h.1, rowsC_trChain hP _ C h.2⟩
+  | _, .amp C D, h => by
+      simp only [rowsC, Bool.and_eq_true] at h
+      simp only [trChain, rowsC, Bool.and_eq_true, trC_eq a C, trC_eq a D]
+      exact ⟨rowsC_trChain hP _ C h.1, rowsC_trChain hP _ D h.2⟩
+  | _, .top, _ => rfl
+  | _, .all _ _ C, h | _, .nu C, h => by
+      simp only [rowsC] at h; simp only [trChain, rowsC, trC_eq a C]; exact rowsC_trChain hP _ C h
+  | has, .eff m i c w A B fin C, h => by
+      simp only [rowsC, Bool.and_eq_true] at h
+      simp only [trChain]
+      split
+      · exact rowsC_trChain hP has C h.2
+      · simp only [rowsC, Bool.and_eq_true, trC_eq a fin]
+        exact ⟨⟨⟨⟨rowsV_trV hP A h.1.1.1.1, rowsV_trV hP B h.1.1.1.2⟩, rowsC_trChain hP _ fin h.1.1.2⟩,
+          endsRet_trChain a has C h.1.2⟩, rowsC_trChain hP has C h.2⟩
+end
+end
+
+/-- **A rule's step** of a run's type translation: R0's at an abortive name, or R1's. -/
+inductive Step where
+  | abort (a : AbortName)
+  | tail (a : TailName)
+
+/-- The step's name. -/
+def Step.n : Step → UInt32
+  | .abort a => a.n
+  | .tail a => a.n
+
+/-- The step's translation of a value type. -/
+def Step.ty : Step → VTy → VTy
+  | .abort a => trV a
+  | .tail a => tV a
+
+/-- The step's premises: R0's payload has rows over `F`; R1's works perform nothing (`Σ_N = []`,
+the licence's conjunct). -/
+def Step.ok : Step → Prop
+  | .abort a => rowsV a.P = true
+  | .tail a => a.SN = []
+
+/-- **The run's translation keeps every obligation that is not an eliminated name's**: the steps
+of a run (R0's names, then R1's, in their order), composed, at a type whose rows are returner
+chains over `F`. This is G-qual's check (`lostObligation`), at once over every eliminated name. -/
+theorem obl_steps : ∀ (ss : List Step), (∀ s ∈ ss, s.ok) → ∀ (A : VTy), rowsV A = true →
+    ∀ o, o ∈ obl false A → (∀ s ∈ ss, o.of s.n = false) →
+      o ∈ obl false (ss.foldl (fun A s => s.ty A) A)
+  | [], _, _, _, o, ho, _ => ho
+  | s :: ss, hok, A, h, o, ho, hk => by
+      simp only [List.foldl]
+      have hs := hok s (by simp)
+      have hks : o.of s.n = false := hk s (by simp)
+      cases s with
+      | abort a =>
+        exact obl_steps ss (fun s hs' => hok s (by simp [hs'])) (trV a A) (rowsV_trV a hs A h) o
+          (obl_trV a false A h o ho hks) (fun s hs' => hk s (by simp [hs']))
+      | tail a =>
+        have hm : o ∈ obl false (tV a A) := by
+          rw [obl_tV a hs false A h, List.mem_filter]
+          refine ⟨ho, ?_⟩
+          simp only [Step.n] at hks
+          simp [keep, hks]
+        exact obl_steps ss (fun s hs' => hok s (by simp [hs'])) (tV a A) (rowsV_tV a hs A h) o hm
+          (fun s hs' => hk s (by simp [hs']))
+
 end Rewrite

@@ -83,6 +83,10 @@ inductive Seed where
   /-- R1's fault on obligations: every operation of the row of a `&`'s second component (a codata
   thunk's finish) removed, the eliminated name's and every other (G-qual). -/
   | eraseOther
+  /-- R1's fault: a `perform` calls a work of another name R1 rewrites (G-call). -/
+  | wrongName
+  /-- The guard's own test of G-qual's persistence arm: a source binder's image read as `1`. -/
+  | persistImage
   deriving DecidableEq, Repr, Inhabited
 
 /-- A seed by its name. -/
@@ -101,6 +105,8 @@ def Seed.ofString? : String → Option Seed
   | "weakenLin" => some .weakenLin
   | "keepNode" => some .keepNode
   | "eraseOther" => some .eraseOther
+  | "wrongName" => some .wrongName
+  | "persistImage" => some .persistImage
   | _ => none
 
 /-- What R0's run records for the guard, per node visited (a `def`'s body at each use), and the
@@ -533,6 +539,19 @@ structure SrcBinder where
 
 /-- The handle of a binding node's binder. -/
 def SrcBinder.ofInfo (i : TInfo) : SrcBinder := ⟨i.binders.head?.getD "", i.lin, i.ann⟩
+
+/-- The handles of a node's own binders, each with its declaration: a binding's, a λ's, a pair's
+or a `case`'s two. -/
+def SrcBinder.ofNode (t : TExpr) : List SrcBinder :=
+  let i := t.info
+  match t with
+  | .bind .. | .effLet .. | .effThen .. => [SrcBinder.ofInfo i]
+  | .lam .. => [⟨i.name, false, false⟩]
+  | .tensorE .. | .sumE .. => i.binders.map fun x => ⟨x, false, false⟩
+  | _ => []
+
+/-- The id a handle's binder carries (`idName`), at a numbered program. -/
+def SrcBinder.id? (b : SrcBinder) : Option String := idOf? b.name
 
 /-- **The `inl` arm of the `[let]`/`[then]` rules**: the source's binder `x` (its handle, so its
 id) on the arm, over `⟦N⟧` (at `x :: Γ`, moved past the rule's `r`). A binder declared `linear`

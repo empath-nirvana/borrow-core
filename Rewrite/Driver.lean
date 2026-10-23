@@ -195,13 +195,15 @@ structure Ruled where
   tst : TlStats := {}
   works : List (Nat × String × TExpr) := []
   inv : List String := []
+  calls : List (Frontend.Span × UInt32 × UInt32) := []
 
 /-- **The rules over the typed program**: R0 over each name its keys rewrite, in their order
 (`r0Keys`, `ab`), then R1 over each name it admits, in its order (`r1Keys`, `r1Pass`), on `main`'s
 typed term and every `def` body at each use. -/
-def rules (c : Checked) (seed : Seed := .none) : Except String Ruled := do
+def rules (c : Checked) (lic : List (UInt32 × Frontend.Check.Licence)) (seed : Seed := .none) :
+    Except String Ruled := do
   let keys ← r0Keys c fuel
-  let tails := (← Frontend.Check.licence c.flows [c.t]).map (·.1)
+  let tails := (← Frontend.Check.tailNodes [c.t]).map (·.1)
   -- The source's binders numbered (`numberBinders`) where a rule will rewrite it: `π`'s ids.
   let t₀ ← if keys.any (·.2 == .rewritten) || !tails.isEmpty then numberBinders c.t else pure c.t
   let mut t := t₀
@@ -212,7 +214,7 @@ def rules (c : Checked) (seed : Seed := .none) : Except String Ruled := do
       t := t'
       st := st'
   -- R1 (SPEC §54), on R0's rewrite: each name's works the declarations from `workBase`.
-  let names ← r1Keys c t fuel (keys.filterMap fun (a, s) => if s == .rewritten then some a.n else none)
+  let names ← r1Keys lic c t fuel (keys.filterMap fun (a, s) => if s == .rewritten then some a.n else none)
   let mut tst : TlStats := { seed }
   let mut works : List (Nat × String × TExpr) := []
   let mut next := workBase
@@ -222,11 +224,8 @@ def rules (c : Checked) (seed : Seed := .none) : Except String Ruled := do
     works := prev ++ ws
     tst := tst'
     next := next + a.works.length
-  let used := (← worksUsed fuel t).eraseDups
-  let mut inv : List String := []
-  for (d, _, w) in works do
-    unless used.contains d do inv := inv ++ (← binderIds fuel w)
-  pure { t₀, t, keys, st, r1 := names.map (·.n), tst, works, inv }
+  pure { t₀, t, keys, st, r1 := names.map (·.n), tst, works, inv := tst.inv.filterMap (·.id?),
+         calls := tst.calls }
 
 /-- The source nodes R0 rewrites, by rule. -/
 structure R0Count where
@@ -297,7 +296,7 @@ re-check at the source's counts, and the guard. `seed` plants a fault in R0 for 
 def run (k : Backend.CheckedProg) (seed : Seed := .none) :
     Except String (Backend.CheckedProg × Report) := do
   let c := k.main
-  let r ← rules c seed
+  let r ← rules c k.licence seed
   let keys := r.keys
   let (el', nkeys, ndecls, poly) ← readBack k.el c k.cnts r.t r.works
   let ruledAbort := keys.filterMap fun (a, s) => if s == .rewritten then some a.n else none
@@ -308,7 +307,8 @@ def run (k : Backend.CheckedProg) (seed : Seed := .none) :
   let some c' := rep'.main | throw "rewrite: the rewritten program has no `main`"
   unless externNames el'.prog.decls == externNames k.el.prog.decls do
     throw "guard G-main: the rewritten program has other externs"
-  let π ← guard fuel c c' r.t₀ ruledAbort r.r1 (r.st.bangs + r.tst.bangs) r.inv terms'
+  let π ← guard fuel c c' r.t₀ ruledAbort r.r1 (r.st.bangs + r.tst.bangs) r.inv r.calls terms'
+    (seed == .persistImage)
   let r0 := keys.map fun (a, s) => (a.n, match s with
     | .rewritten => "rewritten"
     | .left r => s!"left: {r}")

@@ -195,7 +195,7 @@ def rewriteDump (identity : Bool) (file : String) : IO UInt32 := do
       match Backend2.identityLine k with
       | .error e => IO.eprintln s!"{file}: {e}"; return 1
       | .ok l => IO.println l; return 0
-    match Rewrite.rules k.main >>= fun r =>
+    match Rewrite.rules k.main k.licence >>= fun r =>
         (Rewrite.readBack k.el k.main k.cnts r.t r.works).map (·, r.keys, r.r1) with
     | .error e => IO.eprintln s!"{file}: {e}"; return 1
     | .ok ((el', nkeys, ndecls, poly), keys, r1) =>
@@ -232,8 +232,9 @@ def licenceDump (file : String) : IO UInt32 := do
     match Check.checkProgram p with
     | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
     | .ok r =>
-      for (n, l) in r.licence do
+      for (n, l) in r.licenceAll do
         IO.println s!"{n} {l.word} nodes {(r.tailNodes.lookup n).getD 0}"
+      for (n, l) in r.licence do IO.println s!"final {n} {l.word}"
       match r.tail with
       | .names ns => IO.println s!"tail {ns}"
       | _ => pure ()

@@ -123,9 +123,13 @@ structure Report where
   /-- Where the check wrote the tail-resuming rule's node (`TailGate`, SPEC §54): at the names the
   licence admits. -/
   tail : TailGate := .none
-  /-- The licence of each name with a node the rule's premises accept (`licence`, SPEC §54), read
-  off the check that writes the rule's node wherever they do. -/
+  /-- The licence of each name with a node of the tail-resuming rule in this check's typed terms
+  (`licence`, SPEC §54): the one R1 reads (`Rewrite/Admission.lean`). -/
   licence : List (UInt32 × Licence) := []
+  /-- The licence of each name with a node the rule's premises accept, read off the check that
+  writes the rule's node wherever they do (`TailGate.all`): reported, each left name with the
+  conjunct it fails. -/
+  licenceAll : List (UInt32 × Licence) := []
   /-- The nodes of the tail-resuming rule of each name in that check, over its typed terms. -/
   tailNodes : List (UInt32 × Nat) := []
 
@@ -271,9 +275,9 @@ writing the rule's node wherever its premises accept the works written from the 
 (`TailGate.all`); the licence is read off that check (`licence`, at its flow record and over every
 typed term it returns); and the program's check writes the rule's node at the admitted names only
 (`TailGate.names`): that check itself when the licence admits every name with a node of the rule,
-else a check at the admitted names. The licence read off the program's check admits exactly those
-names, an internal error otherwise. With no name admitted the program's check is `rt`'s. The counts
-are `rt`'s (SPEC §53): the rule's node asks of no operation's count more than `[handle]`'s does. -/
+else a check at the admitted names. With no name admitted the program's check is `rt`'s. The grades are the
+program's check's own: inference over its nodes must give back the table it was checked at (SPEC
+§53), an internal error otherwise. -/
 def tailChecked (el : Frontend.Elab.Elaborated) (ops : List ((Nat × Nat) × CCount))
     (rt : Report × List (Nat × TExpr)) : Except Error (Report × List (Nat × TExpr)) := do
   let (rep, terms) := rt
@@ -289,13 +293,16 @@ def tailChecked (el : Frontend.Elab.Elaborated) (ops : List ((Nat × Nat) × CCo
   let lA ← licOf repA termsA
   let nA ← (tailNodes (termsA.map (·.2))).mapError internal
   let L := admittedOf lA
-  if L.isEmpty then return ({ rep with licence := lA, tailNodes := nA }, terms)
+  if L.isEmpty then return ({ rep with licenceAll := lA, tailNodes := nA }, terms)
   let (repL, termsL) ← if lA.all (·.2 == .admitted) then pure (repA, termsA)
     else (checkEl el { ops, tail := .names L }).mapError fun e => internal e.msg
-  let lL ← licOf repL termsL
-  unless lL.map (·.1) == L && lL.all (·.2 == .admitted) do
-    throw (internal s!"the check at the admitted names {L} admits {admittedOf lL} of {lL.map (·.1)}")
-  return ({ repL with grades := rep.grades, tail := .names L, licence := lA, tailNodes := nA }, termsL)
+  -- The grades are the program's check's own (SPEC §53): inference over its nodes gives back the
+  -- table it was checked at.
+  let gL := inferCounts repL.handles
+  unless gL.table == rep.grades.table do
+    throw ⟨Span.none, "internal error: the counts inferred (SPEC §53) at the check that writes " ++
+      "the tail-resuming rule's nodes (SPEC §54) are not the counts it was checked at"⟩
+  return ({ repL with grades := gL, tail := .names L, licenceAll := lA, tailNodes := nA }, termsL)
 
 /-- **The counts, inferred and checked** (SPEC §53). The program is elaborated once; its
 elaboration writes each operation whose count is inferred `ctl`, and each clause's `κ` as
@@ -308,7 +315,7 @@ program has then writes the tail-resuming rule's node at the names its licence a
 (`tailChecked`, SPEC §54). A check that fails at the first counts is checked again with each
 `linear ctl` operation read as `ctl`: a node that forces one of them above `1` is the error then,
 named. -/
-def checkCounted (p : Program) : Except Error (Report × List (Nat × TExpr)) := do
+def checkCounted₀ (p : Program) : Except Error (Report × List (Nat × TExpr)) := do
   let el ← Frontend.Elab.elaborate p
   match checkEl el {} with
   | .ok (rep, terms) =>
@@ -331,6 +338,18 @@ def checkCounted (p : Program) : Except Error (Report × List (Nat × TExpr)) :=
       | some (k, sp, why) => throw (linearCtlErr k sp why)
       | none => throw e
     | .error _ => throw e
+
+/-- **The program's check** (`checkCounted₀`), with the tail-resuming rule's licence of its
+typed terms (`Report.licence`, SPEC §54), the one R1 reads. -/
+def checkCounted (p : Program) : Except Error (Report × List (Nat × TExpr)) := do
+  let (rep, terms) ← checkCounted₀ p
+  -- The licence of the program's check (SPEC §54), over its typed terms: the one R1 reads.
+  match rep.main with
+  | some c =>
+    let lic ← (licence (BoCa.Fig16.LogRel.Core.ClauseKinds.flows c.e) (terms.map (·.2))).mapError
+      fun m => (⟨Span.none, s!"internal error: the tail-resuming rule's licence (SPEC §54): {m}"⟩ : Error)
+    pure ({ rep with licence := lic }, terms)
+  | none => pure (rep, terms)
 
 /-- Check a program (`checkCounted`): the checker sees only the elaborated program, which the
 report carries, so that nothing after the check elaborates the program again. A checked program

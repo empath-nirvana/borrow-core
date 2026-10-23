@@ -45,6 +45,7 @@ corpus/async-slice-iter-await.bc instances 16 decls 16 poly 0 R0 2:rewritten 1:r
 corpus/async-stack-cancel.bc instances 8 decls 8 poly 0 R0 4:rewritten 2:rewritten raises 2 handles 2 lets 2 thens 4 subs 4 performs 4 forwards 0 ulends 0 pi 103 lir ok
 corpus/async-stack-deep.bc instances 19 decls 19 poly 0 R0 6:rewritten 4:rewritten 2:rewritten raises 4 handles 3 lets 3 thens 6 subs 6 performs 5 forwards 0 ulends 0 pi 289 lir ok
 corpus/async-stack-nested.bc instances 21 decls 21 poly 0 R0 2:rewritten 6:rewritten 4:rewritten raises 3 handles 3 lets 9 thens 0 subs 6 performs 6 forwards 0 ulends 0 pi 289 lir ok
+corpus/async-stack-pause.bc instances 19 decls 19 poly 0 R0 6:rewritten 4:rewritten 2:rewritten raises 4 handles 3 lets 3 thens 6 subs 6 performs 5 forwards 0 ulends 0 pi 277 lir ok
 corpus/async-timers.bc instances 19 decls 19 poly 0 R0 1:rewritten raises 5 handles 2 lets 2 thens 7 subs 13 performs 0 forwards 0 ulends 0 pi 178 lir ok
 corpus/async-try-join.bc instances 27 decls 27 poly 0 R0 2:rewritten 6:rewritten 5:rewritten 4:rewritten 3:rewritten raises 21 handles 5 lets 19 thens 7 subs 30 performs 1 forwards 0 ulends 0 pi 411 lir ok
 corpus/async-two-readers-views.bc instances 17 decls 17 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 1 subs 2 performs 0 forwards 0 ulends 0 pi 171 lir ok
@@ -102,12 +103,17 @@ corpus/core-r0-two-ops.bc instances 3 decls 3 poly 0 R0 1:rewritten raises 2 han
 corpus/core-r0-unwind-linear.bc instances 4 decls 4 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 1 subs 2 performs 0 forwards 0 ulends 0 pi 20 lir ok
 corpus/core-r0-unwind.bc instances 4 decls 4 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 1 subs 2 performs 0 forwards 0 ulends 0 pi 18 lir ok
 corpus/core-r1-cell.bc instances 3 decls 3 poly 0 R1 3:rewritten calls 1 nodes 1 works 1 pi 23 lir ok
+corpus/core-r1-lifetime.bc instances 0 decls 0 poly 0 uses 0 erasure same lir same mismatches 0 R1left 2:a-work-mentions-a-lifetime-of-its-node's-context
 corpus/core-r1-linear.bc instances 3 decls 3 poly 0 R1 2:rewritten calls 1 nodes 1 works 1 pi 5 lir ok
+corpus/core-r1-not-in-place.bc error: corpus/core-r1-not-in-place.bc: R1: the name 2 has a node of the tail-resuming rule, and the licence leaves it (works not written in place): outside the pure fragment, the node would reach the conversion
 corpus/core-r1-opt.bc instances 3 decls 3 poly 0 R1 2:rewritten calls 2 nodes 1 works 1 pi 5 lir ok
-corpus/core-r1-performs.bc instances 3 decls 3 poly 0 R1 5:rewritten calls 1 nodes 1 works 1 R1left 4:condition-2 pi 8 lir outside
+corpus/core-r1-performs.bc instances 3 decls 3 poly 0 R1 5:rewritten calls 1 nodes 1 works 1 R1left 4:a-work-performs pi 8 lir ok
+corpus/core-r1-two-names.bc instances 4 decls 4 poly 0 R1 4:rewritten 3:rewritten calls 2 nodes 2 works 2 pi 8 lir ok
+corpus/core-r1-two-nodes.bc instances 5 decls 5 poly 0 R1 3:rewritten calls 4 nodes 2 works 2 pi 12 lir ok
 corpus/core-r1-two-ops-eq.bc instances 4 decls 4 poly 0 R1 3:rewritten calls 2 nodes 1 works 2 pi 5 lir ok
 corpus/core-r1-two-ops.bc instances 4 decls 4 poly 0 R1 3:rewritten calls 2 nodes 1 works 2 pi 7 lir ok
 corpus/core-r1-unused.bc instances 3 decls 3 poly 0 R1 6:rewritten calls 1 nodes 1 works 1 pi 4 lir ok
+corpus/core-r1-works-differ.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0 R1left 3:the-nodes'-works-differ
 corpus/core-yield-loop.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0 R1left 1:a-node-not-the-tail-resuming-rule's
 corpus/core-yield-pull.bc instances 17 decls 17 poly 0 uses 17 erasure same lir same mismatches 0
 corpus/count-down-exact.bc instances 3 decls 3 poly 0 uses 3 erasure same lir same mismatches 0

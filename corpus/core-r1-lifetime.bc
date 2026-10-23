@@ -1,0 +1,25 @@
+-- R1's licence (SPEC §54) at a work that mentions a lifetime of its node's context: inside a
+-- borrow's callback `Fun 'x < top`, the operation `2.0 lin imm 'x i32 ~> i32` drops the view it is
+-- given, so its work `λ(r : imm 'x i32). …` mentions `'x`. A work is a declaration of the program,
+-- at the empty lifetime context, so the licence leaves `2` (a work mentions a lifetime of its
+-- node's context): its node stays `[handle]`'s.
+--
+-- Answer: (i32[7], i32[8]), and `live 0`.
+
+main : F (i32 * i32) =
+  c <- return (alloc[i32] i32[7]);
+  q <- return (withbor1['x, i32, i32] c
+         (thunkv Fun 'x < top. return (thunkv fun (b : imm 'x i32) ->
+            n <- handle_with[2](
+                ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+                (((!thunkv fun (p : imm 'x i32 * U ((i32 -o F i32) & top)) ->
+                  let (r, k) = p;
+                  u <- return (forget_imm['x, i32] r);
+                  let () = u;
+                  v <- return i32[7];
+                  (force k).1 v), ()) : !U (imm 'x i32 * U ((i32 -o F i32) & top) -o F i32) * 1))
+              (perform[2.0] b);
+            return (boxed['x] n))));
+  let (r2, n) = q;
+  m <- return (free[i32] r2);
+  return (n, (unbang host[add32]) (m, i32[1]))

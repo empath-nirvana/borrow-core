@@ -1,0 +1,3 @@
+# Programs a rule rewrites whose rewritten program the new backend does not compile (scripts/check-rewrite.sh): each line names the program and why, with its issue. Every other program a rule rewrites must read `lir ok`.
+corpus/core-r0-forward-last.bc # its `handle_last` node, which no rule rewrites and the new backend does not convert (OQ2/R2, #680)
+corpus/core-r1-not-in-place.bc # its `handle_tail` node's works are not written in place, which the licence leaves and R1 refuses (the licence's conjunct, SPEC §54; no rule reads a work from a variable, #680)

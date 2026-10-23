@@ -1,0 +1,158 @@
+-- SPEC §52's stack machines at an effect whose every operation keeps `κ`: the scheduler of
+-- `lib/async.bc` with its effect cut to `pause` alone (`Pause`), and `async-stack-deep`'s tasks.
+-- Every node of `Pause` is BOXED-κ and `stored`, so each recursion's levels are frames on a stack
+-- its task owns (`stackOps`), and its continuation lives in the stack's region: the layout checks'
+-- families "a κ region's node" and "a machine's frame node" have a program here
+-- (`scripts/check-layout-reject.sh`).
+--
+-- Answer: the list [120, 40, 63]. `live 0`.
+
+include rec
+include list
+
+effect Pause { ctl pause() }
+
+-- A task of `A`: at its next observation, its value or the rest of it, boxed at `top` so that a
+-- queue may hold it.
+type PTask[A] = box top U (nu X. F (A + box top U X) & F 1)
+
+-- A queue's slot: a task that finished, with its value, or one still pending.
+type PSlots[A] = mu X. 1 + ((A + PTask[A]) * X)
+
+-- A queue: its length and its slots, the last queued first.
+type PQueue[A] = i32 * PSlots[A]
+
+-- The spawn handler: the return clause is a task that finished; the clause of `await` receives the
+-- continuation boxed at `top` (it takes `k` out of its box) and answers the rest of the task,
+-- whose next observation resumes it and whose close cancels it.
+handler spawn_p[A]: Pause, A -> PTask[A] = {
+  return(v) = boxed[top] (thunkv nu_in < return (inl v), return () >);
+  pause(k) = boxed[top] (thunkv nu_in <
+    kk <- return (unbox k); u <- return (); t <- (force kk).1 u; return (inr t),
+    kk <- return (unbox k); (force kk).2 >);
+}
+
+-- Run a task to its next `await` (`inr` the rest) or its end (`inl` its value).
+fn presume[A](t: PTask[A]) -> A + PTask[A] = g <- return (unbox t); (nu_out (force g)).1
+
+-- Cancel a task: its continuation's finalisers run, innermost first.
+fn pcancel[A](t: PTask[A]) -> 1 = g <- return (unbox t); (nu_out (force g)).2
+
+fn pqueue[A]() -> PQueue[A] = (0, roll inl ())
+
+fn ppush[A](q: PQueue[A], t: PTask[A]) -> PQueue[A] = let (n, s) = q; (n + 1, roll inr (inr t, s))
+
+-- The first `n` elements of a list, reversed.
+fn prev[T](n: i32, xs: List[T]) -> List[T] =
+  let mut acc = (roll inl () : List[T]);
+  let mut cur = xs;
+  for _ in 0..n {
+    match unroll cur {
+      inl u -> cur = (roll inl () : List[T])
+    | inr (x, r) -> acc = (roll inr (x, acc) : List[T]); cur = r
+    }
+  };
+  match unroll cur { inl u -> acc | inr (x, r) -> acc }
+
+-- A queue's slot while it runs: a task that finished, with its value, or one still pending; `inl ()`
+-- while its task is taken out to be resumed.
+type PSlot[A] = 1 + (A + PTask[A])
+
+-- The `n` slots of a list, the last queued first, moved into an array in the order they were
+-- queued: one allocation, and the list's nodes freed.
+fn pslots_of[A](n: i32, xs: PSlots[A]) -> array PSlot[A] =
+  let mut a = array_new[PSlot[A]] (n, !{ i -> inl () });
+  let mut cur = xs;
+  for k in 0..n {
+    match unroll cur {
+      inl u -> cur = (roll inl () : PSlots[A])
+    | inr (s, r) -> cur = r; let (b, _) = array_replace[PSlot[A]] (a, n - 1 - k, inr s); a = b
+    }
+  };
+  match unroll cur { inl u -> a | inr (s, r) -> a }
+
+-- One round over the `n` slots in order, in place: each pending task resumed once, and put back in
+-- its slot. Answers whether a task is still pending. Nothing is allocated.
+fn pround[A](n: i32, xs: array PSlot[A]) -> array PSlot[A] * bool =
+  let mut a = xs;
+  let mut pending = false;
+  for i in 0..n {
+    let (b, s) = array_replace[PSlot[A]] (a, i, inl ());
+    match s {
+      inl o -> match o {
+        inl u -> a = b
+      | inr e -> match e {
+          inl v -> let (c, _) = array_replace[PSlot[A]] (b, i, inr (inl v)); a = c
+        | inr t -> match presume(t) {
+            inl v -> let (c, _) = array_replace[PSlot[A]] (b, i, inr (inl v)); a = c
+          | inr t2 ->
+              pending = true;
+              let (c, _) = array_replace[PSlot[A]] (b, i, inr (inr t2)); a = c
+          }
+        }
+      }
+    | inr x -> a = b
+    }
+  };
+  (a, pending)
+
+-- The values of the `n` slots, in order, read from the last; a task still pending is cancelled
+-- (`run_until_empty` leaves none).
+fn pvalues[A](n: i32, xs: array PSlot[A]) -> List[A] =
+  let mut acc = (roll inl () : List[A]);
+  let mut a = xs;
+  for k in 0..n {
+    let (b, s) = array_replace[PSlot[A]] (a, n - 1 - k, inl ());
+    a = b;
+    match s {
+      inl o -> match o {
+        inl u -> ()
+      | inr e -> match e { inl v -> acc = (roll inr (v, acc) : List[A]) | inr t -> pcancel(t); () }
+      }
+    | inr x -> ()
+    }
+  };
+  acc
+
+-- Run the queue round robin until no task is pending: the tasks' values, in the order they were
+-- queued. The slots are an array, resumed in place, so a round allocates nothing. The rounds are
+-- unbounded, so this loops (div, SPEC §14).
+fn prun[A](q: PQueue[A]) -> List[A] =
+  let (n, s) = q;
+  let mut slots = pslots_of(n, s);
+  let mut more = true;
+  while more {
+    let (b, p) = pround(n, slots);
+    slots = b;
+    more = p
+  };
+  pvalues(n, slots)
+
+fn down(n: i32) -> i32 with Pause, Exhausted =
+  if n < 1 { 0 } else {
+    let c = alloc(n);
+    pause();
+    let r = down(n - 1);
+    pause();
+    free(c);
+    r + 2
+  }
+
+fn tsum(lo: i32, hi: i32) -> i32 with Pause, Exhausted =
+  if lo < hi {
+    let m = lo + (hi - lo) / 2;
+    let a = tsum(lo, m);
+    pause();
+    let b = tsum(m + 1, hi);
+    a + 1 + b
+  } else { 0 }
+
+fn lin(n: i32) -> i32 with Pause = with on_exhausted(!{ u -> 0 - 1 }) { down(n) }
+fn tree(n: i32) -> i32 with Pause = with on_exhausted(!{ u -> 0 - 1 }) { tsum(0, n) }
+
+main -> List[i32] =
+  let q = pqueue[i32]();
+  let q = ppush(q, with spawn_p { lin(60) });
+  let q = ppush(q, with spawn_p { lin(20) });
+  let q = ppush(q, with spawn_p { tree(63) });
+  prun(q)

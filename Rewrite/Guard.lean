@@ -22,6 +22,9 @@ checked terms; none reads a backend's state.
 * **G-bang**: `c′` has no more `!`-introductions, `!` copies or forgets, or forgets of `unk`, than
   `c` and the rules' own (R0's forwarding answer clauses, each over the source's persistent
   answer clause; R1's works, one work's at each call, each the source's persistent work).
+* **G-call**: every call of one of R1's works in `c′` is a call of the work of its `perform`'s
+  operation, the name included, and every `perform` R1 rewrites has its call, by `π` from `perform`
+  to call (R1's `calls`).
 * **G-fin**: every finaliser of `c` (`[then]`'s `D`, an unwinding borrow's `td`) is reached once on
   each abort path of `c′`, matched by finaliser id (`finIdOf?`: the numbering pass's, carried by
   the rules in the binders' names), checked total. It is a finaliser of `c′` while its row keeps an operation no rule
@@ -85,6 +88,9 @@ structure Facts where
   /-- Each `case`'s span, and the head of its `inr` arm: a binding's span and its head's erasure,
   or a drop's destructor's type. -/
   arms : Array (Option String × Option (Frontend.Span × BoCa.Expr) × Option CVTy) := #[]
+  /-- Each `use` of one of R1's works (a declaration it names `%R1work…`): its span and the
+  operation whose work it is. -/
+  calls : Array (Frontend.Span × UInt32 × UInt32) := #[]
 
 def isBangIntro : TExpr → Bool
   | .bangThunkF .. | .bangThunkV .. | .copyBang .. | .forgetBang .. | .forgetUnk .. => true
@@ -142,6 +148,15 @@ def armHead (t : TExpr) : Option (Frontend.Span × BoCa.Expr) × Option CVTy :=
   | .bind i _ _ _ _ tM _ => (some (i.sp, tM.erase), d)
   | _ => (none, d)
 
+/-- The operation `n.j` whose R1 work a declaration's name names (`%R1work{n}.{j}#k`). -/
+def workOp? (nm : String) : Option (UInt32 × UInt32) := do
+  guard (nm.startsWith "%R1work")
+  let rest := (nm.drop 7).toString
+  let core := (rest.splitOn "#").headD rest
+  match core.splitOn "." with
+  | [n, j] => pure ((← n.toNat?).toUInt32, (← j.toNat?).toUInt32)
+  | _ => none
+
 /-- The guard's facts of a typed term, added to `acc`. -/
 def facts : Nat → TExpr → Facts → Except String Facts
   | 0, _, _ => throw "guard: a term nested too deeply"
@@ -170,7 +185,12 @@ def facts : Nat → TExpr → Facts → Except String Facts
           acc.arms.push (some f, b, d)
         | none => acc.arms
       | _ => acc.arms
-    let acc := { acc with binders := acc.binders ++ bs.toArray, ops := acc.ops ++ os.toArray,
+    let calls := match t with
+      | .use ui _ nm _ _ _ _ => match workOp? nm with
+        | some (n, j) => acc.calls.push (ui.sp, n, j)
+        | none => acc.calls
+      | _ => acc.calls
+    let acc := { acc with binders := acc.binders ++ bs.toArray, ops := acc.ops ++ os.toArray, calls,
                           bangs := acc.bangs + (if isBangIntro t then 1 else 0),
                           fins := match finOf t with
                             | some fn => acc.fins.push fn
@@ -223,12 +243,15 @@ def piOf (bs bs' : Array (Option String × String × CVTy × Bool)) (inv : List 
       else throw s!"guard: the binder `{x}` has no image in the rewritten `main`"
   pure π.toList
 
-/-- **A binder keeps its obligations** (G-qual): every obligation of the source's type `A`
+/-- **A binder keeps its obligations** (G-qual): the source's type `A` has rows over `F` only
+(`rowsV`, the scope of `obl_tV`, `obl_trV` and `obl_steps`, decided here: a type outside it is
+refused), and every obligation of `A`
 (`obl`, `Rewrite/Obl.lean`) whose source is not an operation of an eliminated name (`ruled`) is an
 obligation of the image's type `A'`, and a binder that is not persistent is not made persistent.
 None when it holds; else the obligation it loses. -/
 def lostObligation (ruled : List UInt32) (A A' : CVTy) : Option String :=
-  if A.persistent then none
+  if !rowsV A then some "the statement's scope: a row of its type is not a returner chain over `F`"
+  else if A.persistent then none
   else if A'.persistent then some "its persistence: the image is persistent"
   else
     let need := (obl false A).filter fun o => !ruled.any (o.of ·)
@@ -249,7 +272,8 @@ def byId (bs : Array (Option String × String × CVTy × Bool)) :
 /-- **The guard** over the source `c`, the re-checked `c′`, the names of the operations the rewrite
 eliminates, the `!`-introductions its rules write, and the re-check's typed terms. Returns `π`. -/
 def guard (fuel : Nat) (c c' : Checked) (t₀ : TExpr) (ruledAbort ruledTail : List UInt32)
-    (ruleBangs : Nat) (inv : List String) (terms' : List (Nat × TExpr)) : Except String Pi := do
+    (ruleBangs : Nat) (inv : List String) (calls : List (Frontend.Span × UInt32 × UInt32))
+    (terms' : List (Nat × TExpr)) (persistSeed : Bool := false) : Except String Pi := do
   let ruled := ruledAbort ++ ruledTail
   -- G-main.
   unless c'.C == c.C do throw "guard G-main: the rewritten `main` has another type"
@@ -261,6 +285,22 @@ def guard (fuel : Nat) (c c' : Checked) (t₀ : TExpr) (ruledAbort ruledTail : L
   -- The source as the rules read it: numbered (`numberBinders`) where a rule rewrites it.
   let fs ← facts fuel t₀ {}
   let fs' ← facts fuel c'.t {}
+  -- The guard's own test of G-qual's persistence arm (`Seed.persistImage`): the first image of a
+  -- source binder that is not persistent read as `1`.
+  let fs' := if !persistSeed then fs' else
+    match (fs'.binders.toList.zipIdx.find? fun ((id?, _, A, _), _) => id?.isSome && !A.persistent) with
+    | some ((id?, x, _, lin), k) => { fs' with binders := fs'.binders.set! k (id?, x, .unit, lin) }
+    | none => fs'
+  -- G-call, by `π` from each `perform` to its call (`calls`, R1's): every call of an R1 work is a
+  -- call of the work of its `perform`'s operation, the name included, and every `perform` R1
+  -- rewrites has its call.
+  for (sp, n, j) in fs'.calls.toList do
+    unless calls.contains (sp, n, j) do
+      let at_ := (calls.filter (·.1 == sp)).map fun (_, n', j') => s!"{n'}.{j'}"
+      throw s!"guard G-call: the call at {sp.start.render} is of the work of {n}.{j}, and its `perform` is of {at_}"
+  for (sp, n, j) in calls do
+    unless fs'.calls.contains (sp, n, j) do
+      throw s!"guard G-call: the `perform` of {n}.{j} at {sp.start.render} has no call of its work"
   -- G-qual, through π: a binder keeps every obligation no eliminated name's operation is the source
   -- of (`lostObligation`) and, declared `linear`, stays declared so.
   let π ← piOf fs.binders fs'.binders inv

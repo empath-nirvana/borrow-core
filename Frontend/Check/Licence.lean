@@ -13,8 +13,9 @@ import Core.Fix
   the rule's premises accept the works written from them (`Frontend/Check/Checker.lean`);
 - holds no abortive operation;
 - is at one outer row `Σ`, one row `Σ_N` of its works, and one signature `E`;
-- holds one tuple of works written in place, equal at every node, each closed (`closedAt 0`), at a
-  row `Σ_N` whose operations' types mention no operation of `n`;
+- holds one tuple of works written in place, equal at every node, each closed (`closedAt 0`), at
+  the empty row `Σ_N = []`: a work performs nothing, the scope of the per-perform law
+  `tail_resume_direct` and of `obl_tV`;
 - holds works that mention no lifetime variable of the node's context (`TExpr.lifeFreeIn`): a work
   is a declaration of the program (R1), at the empty lifetime context;
 - meets condition 2 at each operation (`cond2B` at the program's flow record, over the names the
@@ -67,23 +68,6 @@ def TExpr.lifeFreeIn (xs : List LifeVar) : Nat → TExpr → Except String Bool
   | f + 1, t => do
     if xs.any (fun x => jdgFree x t.jdg || (lifeArgs t).any (·.mentions x)) then return true
     t.children.anyM fun (_, c) => TExpr.lifeFreeIn xs f c
-
-mutual
-/-- The names of the operations the rows of a value type hold. -/
-def vNames : BoCa.Fig16.LogRel.Core.VTy → List UInt32
-  | .tensor A B | .sum A B => vNames A ++ vNames B
-  | .thunk C => cNames C
-  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .mu A | .fam A => vNames A
-  | .unit | .zero | .unk | .tvar _ | .int _ | .opq _ => []
-/-- The names of the operations the rows of a computation type hold. -/
-def cNames : BoCa.Fig16.LogRel.Core.CTy → List UInt32
-  | .ret A => vNames A
-  | .arr A C => vNames A ++ cNames C
-  | .amp C D => cNames C ++ cNames D
-  | .all _ _ C | .nu C => cNames C
-  | .top => []
-  | .eff m _ _ _ A B fin C => m :: (vNames A ++ vNames B ++ cNames fin ++ cNames C)
-end
 
 /-- The components of a tuple written in place, `(g₀, (g₁, … ()))`, `n` of them. -/
 def tupleParts : Nat → TExpr → Option (List TExpr)
@@ -164,8 +148,7 @@ def licenceOf (V : HIn) (ns : List LNode) : Licence := Id.run do
     return .left "the nodes' rows or signatures differ"
   unless ns.all (·.inPlace) do return .left "works not written in place"
   unless ns.all (fun g => g.Hc == h.Hc) do return .left "the nodes' works differ"
-  if h.SN.any (fun o => (vNames o.A ++ vNames o.B ++ cNames o.fin).contains h.n) then
-    return .left "the works' row mentions the name"
+  unless h.SN.isEmpty do return .left "a work performs"
   let works := (List.range h.E.length).map fun j => clauseExpr h.Hc j
   unless works.all (fun w => match w with
       | some w => BoCa.Fig16.LogRel.Core.closedAt 0 w

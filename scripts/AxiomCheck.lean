@@ -48,6 +48,7 @@ import Rewrite.OblAbort
 #print axioms Rewrite.dtorB_iff_obl
 #print axioms Rewrite.obl_tV
 #print axioms Rewrite.obl_trV
+#print axioms Rewrite.obl_steps
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.RetFrames.answer
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.Returns0.run
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.subst_comm_closed

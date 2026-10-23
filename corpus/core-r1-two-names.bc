@@ -1,0 +1,32 @@
+-- R1 (SPEC §54) at two names of one signature, `3.0 lin i32 ~> i32` (add `1`) and
+-- `4.0 lin i32 ~> i32` (times `10`), both admitted. Each `perform` becomes a call of its own
+-- name's work, which G-call checks by `π` from the `perform` to its call: the reject test
+-- `wrongName`, a call of the other name's work, types and is refused there
+-- (`scripts/check-rewrite.sh`).
+--
+-- Answer: (i32[6], i32[50]).
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def both : !U (i32 -o F[3.0 lin i32 ~> i32, 4.0 lin i32 ~> i32] (i32 * i32)) =
+  !thunkv fun (x : i32) ->
+    a <- perform[3.0] x;
+    b <- perform[4.0] x;
+    return (a, b)
+
+main : F (i32 * i32) =
+  f <- return (unbang both);
+  x <- return i32[5];
+  handle_with[4](
+      ((!thunkv fun (v : i32 * i32) -> return v) : !U (i32 * i32 -o F (i32 * i32))),
+      (((!thunkv fun (p : i32 * U ((i32 -o F (i32 * i32)) & top)) ->
+        let (y, k) = p;
+        z <- return ((unbang host[mul32]) (y, i32[10]));
+        (force k).1 z), ()) : !U (i32 * U ((i32 -o F (i32 * i32)) & top) -o F (i32 * i32)) * 1))
+    (handle_with[3](
+        ((!thunkv fun (v : i32 * i32) -> return v) : !U (i32 * i32 -o F[4.0 lin i32 ~> i32] (i32 * i32))),
+        (((!thunkv fun (p : i32 * U ((i32 -o F[4.0 lin i32 ~> i32] (i32 * i32)) & top)) ->
+          let (y, k) = p;
+          z <- return (plus (y, i32[1]));
+          (force k).1 z), ()) : !U (i32 * U ((i32 -o F[4.0 lin i32 ~> i32] (i32 * i32)) & top) -o F[4.0 lin i32 ~> i32] (i32 * i32)) * 1))
+      (force f x))

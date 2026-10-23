@@ -12,7 +12,8 @@ cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc >/dev/null
 bcc=.lake/build/bin/bcc
 # Programs chosen so that every perturbation has a target in one of them: closure classes of
-# several codes and widths, recursive types with boxed fields, a class kept on the heap, cells.
+# several codes and widths, recursive types with boxed fields, a class kept on the heap, cells, and
+# §52's stack machines (`async-stack-pause`: a κ region and a machine's frames).
 progs=(
   corpus/aff-higher.bc
   corpus/deep-list.bc
@@ -20,6 +21,7 @@ progs=(
   corpus/sched-a.bc
   corpus/async-scheduler.bc
   corpus/async-stack-deep.bc
+  corpus/async-stack-pause.bc
 )
 # Each perturbation, and the refusal of its family (an extended regular expression).
 families=(

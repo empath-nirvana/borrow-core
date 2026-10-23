@@ -193,4 +193,23 @@ theorem thunk_iff_obl : ∀ (alg : Bool) (C : CTy), dtorB alg (.thunk C) = true 
   | _, .nu (.eff _ _ _ _ _ _ _ _) => by simp [dtorB, thunkObl]
 end
 
+mutual
+/-- Every returner chain of a value type, at any depth, ends in `F A`: the rows the checker writes
+(`CTy.effOf`). -/
+def rowsV : VTy → Bool
+  | .tensor A B | .sum A B => rowsV A && rowsV B
+  | .thunk C => rowsC C
+  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .mu A | .fam A => rowsV A
+  | .unit | .zero | .unk | .tvar _ | .int _ | .opq _ => true
+/-- Every returner chain of a computation type ends in `F A`. -/
+def rowsC : CTy → Bool
+  | .ret A => rowsV A
+  | .arr A C => rowsV A && rowsC C
+  | .amp C D => rowsC C && rowsC D
+  | .top => true
+  | .all _ _ C | .nu C => rowsC C
+  | .eff _ _ _ _ A B fin C => rowsV A && rowsV B && rowsC fin && endsRet C && rowsC C
+end
+
+
 end Rewrite

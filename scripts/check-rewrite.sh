@@ -19,9 +19,10 @@
 #   conjunct it fails (SPEC §54).
 #
 # The gate: every line of a program no rule rewrites has `erasure same` or `beta` and `lir same`
-# or `outside`, and every line of a program R0 or R1 rewrites `lir ok` or `outside`; the table is
-# pinned in corpus/rewrite.expected, so a change shows here; the rules' seeded faults are refused;
-# and their controls (faults only the goldens see) change the output.
+# or `outside`, and every line of a program R0 or R1 rewrites `lir ok`, but the programs
+# corpus/rewrite-red.expected names, each with its reason and issue; the table is pinned in
+# corpus/rewrite.expected, so a change shows here; the rules' seeded faults are refused; and their
+# controls (faults only the goldens see) change the output.
 #
 #     scripts/check-rewrite.sh            compare with corpus/rewrite.expected
 #     scripts/check-rewrite.sh --write    write it
@@ -52,8 +53,10 @@ table() {
 out=$(mktemp)
 trap 'rm -rf "$out"' EXIT
 table > "$out"
-bad=$(awk '/ R[01] .*:rewritten/ { if (!/ lir (ok|outside)$/) print; next }
-          !/ erasure (same|beta) / || !/ lir (same|outside) / { print }' "$out")
+bad=$(awk 'NR == FNR { if ($0 !~ /^#/) ok[$1] = 1; next }
+          ($1 in ok) { next }
+          / R[01] .*:rewritten/ { if (!/ lir ok$/) print; next }
+          !/ erasure (same|beta) / || !/ lir (same|outside) / { print }' corpus/rewrite-red.expected "$out")
 if [ "${1:-}" = "--write" ]; then
   cp "$out" corpus/rewrite.expected
   echo "corpus/rewrite.expected: $(wc -l < corpus/rewrite.expected | tr -d " ") programs"
@@ -87,6 +90,9 @@ seeds=(
   "dropAnswer corpus/core-effects-tail.bc kernel"
   "weakenLin corpus/core-r1-linear.bc guard G-qual"
   "eraseOther corpus/core-r1-cell.bc guard G-qual"
+  "wrongWork corpus/core-r1-two-ops-eq.bc guard G-call"
+  "wrongName corpus/core-r1-two-names.bc guard G-call"
+  "persistImage corpus/core-effects-tail.bc guard G-qual"
 )
 for t in "${seeds[@]}"; do
   read -r sd f by g <<< "$t"
@@ -106,14 +112,13 @@ case "$got" in
 esac
 # The controls: faults the kernel and the guard accept, which only the goldens catch. R0's: a wrong
 # injection index, the payload's `case` arms swapped, the forwarding answer clause's arms swapped,
-# each between summands of one type. R1's: a `perform` calling the other operation's work, and one
-# answering its argument with the work's answer dropped, each between operations of one signature.
+# each between summands of one type. R1's: a `perform` answering its argument with the work's answer
+# dropped, each between operations of one signature.
 # Each is accepted, and the program's output differs from its golden.
 controls=(
   "injIndex corpus/core-r0-two-ops.bc"
   "swapDispatch corpus/core-r0-two-ops.bc"
   "swapFwd corpus/core-r0-forward.bc"
-  "wrongWork corpus/core-r1-two-ops-eq.bc"
   "dropAnswer corpus/core-r1-two-ops-eq.bc"
 )
 for t in "${controls[@]}"; do
@@ -126,4 +131,4 @@ for t in "${controls[@]}"; do
   fi
 done
 [ "$fail" = 0 ] || exit 1
-echo "check-rewrite: $(wc -l < "$out" | tr -d " ") programs read back and checked again, as pinned: every program no rule rewrites the identity (its erasure and LIR the source's, up to the instantiations of polymorphic declarations), every program R0 or R1 rewrites compiled; $((${#seeds[@]} + 1)) seeded faults refused, ${#controls[@]} controls caught by the goldens only"
+echo "check-rewrite: $(wc -l < "$out" | tr -d " ") programs read back and checked again, as pinned: every program no rule rewrites the identity (its erasure and LIR the source's, up to the instantiations of polymorphic declarations), every program R0 or R1 rewrites compiled but the $(grep -vc "^#" corpus/rewrite-red.expected) corpus/rewrite-red.expected names; $((${#seeds[@]} + 1)) seeded faults refused, ${#controls[@]} controls caught by the goldens only"

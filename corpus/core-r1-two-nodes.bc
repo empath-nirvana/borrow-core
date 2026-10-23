@@ -1,0 +1,52 @@
+-- R1 (SPEC §54) at a name with two nodes: `core-r1-two-ops`'s handler of `3` written twice, with
+-- the same clauses, around two runs of `both`. The licence admits `3`: its works are equal at both
+-- nodes. R1 declares the first node's works and removes both nodes; the second node's works are
+-- dropped with it, and `π` maps their binders to `inv(R1, work)` by their handles.
+--
+-- Answer: (i32[47], i32[49]): `5 + 5 + 37`, then `6 + 6 + 37`.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def both : !U (i32 -o F[3.0 lin i32 ~> i32, 3.1 lin 1 ~> i32] i32) =
+  !thunkv fun (x : i32) ->
+    a <- perform[3.0] x;
+    b <- perform[3.1] ();
+    return (plus (a, b))
+
+def runIt : !U (i32 -o F i32) =
+  !thunkv fun (x : i32) ->
+    f <- return (unbang both);
+    handle_with[3](
+        ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+        (((!thunkv fun (p : i32 * U ((i32 -o F i32) & top)) ->
+          let (y, k) = p;
+          z <- return (plus (y, y));
+          (force k).1 z),
+         ((!thunkv fun (p : 1 * U ((i32 -o F i32) & top)) ->
+          let (u, k) = p;
+          let () = u;
+          c <- return i32[37];
+          (force k).1 c), ()))
+          : !U (i32 * U ((i32 -o F i32) & top) -o F i32)
+            * (!U (1 * U ((i32 -o F i32) & top) -o F i32) * 1))) (force f x)
+
+main : F (i32 * i32) =
+  r <- return (unbang runIt);
+  x <- return i32[5];
+  a <- force r x;
+  f <- return (unbang both);
+  y <- return i32[6];
+  b <- handle_with[3](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (p : i32 * U ((i32 -o F i32) & top)) ->
+        let (y, k) = p;
+        z <- return (plus (y, y));
+        (force k).1 z),
+       ((!thunkv fun (p : 1 * U ((i32 -o F i32) & top)) ->
+        let (u, k) = p;
+        let () = u;
+        c <- return i32[37];
+        (force k).1 c), ()))
+        : !U (i32 * U ((i32 -o F i32) & top) -o F i32)
+          * (!U (1 * U ((i32 -o F i32) & top) -o F i32) * 1))) (force f y);
+  return (a, b)

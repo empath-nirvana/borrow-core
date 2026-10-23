@@ -92,6 +92,12 @@ corpus/async-stack-nested.bc 5.0 affine stored: machine: a path of the clause do
 corpus/async-stack-nested.bc 5.1 linear tail: -; agree
 corpus/async-stack-nested.bc 3.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-stack-nested.bc 3.1 linear tail: -; agree
+corpus/async-stack-pause.bc 2.0 affine abortive: branch; agree
+corpus/async-stack-pause.bc 4.0 affine abortive: branch; agree
+corpus/async-stack-pause.bc 6.0 affine abortive: branch; agree
+corpus/async-stack-pause.bc 5.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-stack-pause.bc 3.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/async-stack-pause.bc 1.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-timers.bc 4.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-timers.bc 3.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/async-timers.bc 2.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
@@ -163,16 +169,24 @@ corpus/core-r0-unwind-linear.bc 1.0 affine abortive: branch; agree
 corpus/core-r0-unwind.bc 1.0 affine abortive: branch; agree
 corpus/core-r1-cell.bc 4.0 linear tail: machine: the clause captures values; disagree
 corpus/core-r1-cell.bc 3.0 linear tail: direct; agree
+corpus/core-r1-lifetime.bc 2.0 linear tail: direct; agree
 corpus/core-r1-linear.bc 2.0 linear tail: direct; agree
+corpus/core-r1-not-in-place.bc 2.0 linear tail: machine: the clause captures values; disagree
 corpus/core-r1-opt.bc 2.0 affine tail: direct; agree
 corpus/core-r1-performs.bc 5.0 linear tail: direct; agree
 corpus/core-r1-performs.bc 4.0 linear tail: machine: the clause suspends; disagree
+corpus/core-r1-two-names.bc 4.0 linear tail: direct; agree
+corpus/core-r1-two-names.bc 3.0 linear tail: direct; agree
+corpus/core-r1-two-nodes.bc 3.0 linear tail: machine: the handlers of the name have 2 clauses for it; disagree
+corpus/core-r1-two-nodes.bc 3.1 linear tail: machine: the handlers of the name have 2 clauses for it; disagree
 corpus/core-r1-two-ops-eq.bc 3.0 linear tail: direct; agree
 corpus/core-r1-two-ops-eq.bc 3.1 linear tail: direct; agree
 corpus/core-r1-two-ops.bc 3.0 linear tail: direct; agree
 corpus/core-r1-two-ops.bc 3.1 linear tail: direct; agree
 corpus/core-r1-unused.bc 6.0 linear tail: direct; agree
 corpus/core-r1-unused.bc 6.1 linear tail: -; agree
+corpus/core-r1-works-differ.bc 3.0 linear tail: machine: the handlers of the name have 2 clauses for it; disagree
+corpus/core-r1-works-differ.bc 3.1 linear tail: machine: the handlers of the name have 2 clauses for it; disagree
 corpus/core-yield-loop.bc 1.0 affine resume-or-cancel,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/core-yield-pull.bc 1.0 affine stored,tail: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/core-yield-pull.bc 2.0 affine tail: direct; agree
