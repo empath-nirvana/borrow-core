@@ -1,0 +1,45 @@
+-- pending: #682 (a view derived from a borrow at a lifetime of its own, held across a suspension)
+-- now: 28:39: an operation of `Async` is performed inside a closure or block that is not run in place: it cannot reach its handler (effectful callbacks, #161)
+-- Hard problem 1: an iterator into borrowed data held across `await`. `main` owns a vector in a
+-- cell and lends the cell `imm` to a task (Rust's `&Vec<i32>`). The task loads the vector's view
+-- from the borrow, which is a view derived from the borrow at a lifetime `'z` of its own, below the
+-- borrow's, and iterates it, awaiting after every element: the view and the iterator over it are
+-- live across each `await`.
+--
+-- Issue: #682 (derived views held across a suspension; #669's H8, E2). The same loop over a view
+-- the task is given, at the lender's own lifetime, runs today: `corpus/async-slice-iter-await.bc`.
+-- The surface has no form for loading the view of a borrowed vector, so the load is written as
+-- the core's `withload`, as `corpus/gen-borrowed.bc` does.
+--
+-- Rust: `async fn sum_slowly(v: &Vec<i32>)` with `for x in v.iter() { …; yield_now().await }`;
+-- `v.iter()` derefs `&Vec` to `&[i32]` at the same `'a`, and the future, bounded by `'a`, holds the
+-- iterator across the `.await`.
+--
+-- Today: refused. The load's callback is a closure the checker does not run in place, so the
+-- `await` inside it cannot reach the scheduler (#161); a callback whose body resumes would hold
+-- the lend across the suspension, which is T1 (#172). Both backends stop at the same message.
+--
+-- Once it lands: i32[100], the sum 10 + 20 + 30 + 40, read one element per turn; `live 0`.
+
+include async
+
+-- The sum of the elements, letting the other tasks run after each one.
+fn sum_slowly<'a>(v: imm 'a (array i32)) -> i32 with Async =
+  withload['a, 'z, array i32, i32] v (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+    let mut s = 0;
+    for x in xs { s = s + *x; await() };
+    boxed['z] s))
+
+fn tab(i: i32) -> i32 = 10 * (i + 1)
+
+main -> i32 =
+  let v = alloc(array_new[i32](4, tab));
+  let d = alloc(());
+  let (d, sums) = borrow imm v { 'r, b ->
+    let sums = borrow mut d { 'd, e ->
+      let q = push_in(queue_in[i32](), with spawn_in { sum_slowly(b) });
+      with on_exhausted(!{ u -> nil() }) { run_in(q, 8) } };
+    (d, sums) };
+  let _ = free(d);
+  let _ = free(v);
+  with on_exhausted(!{ u -> 0 }) { fold(sums, 0, !{ (a, x) -> a + x }) }

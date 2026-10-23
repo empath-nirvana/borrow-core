@@ -1,0 +1,52 @@
+-- pending: #682 (nested lends held across a suspension, with a derived view at the inner one)
+-- now: 38:3: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a continuation held across a lend is T1, #172)
+-- Hard problem 8: a task owns a record of two buffers. It lends the record `mut`, lends the
+-- record's second buffer from it, takes the back half of that buffer as a slice, and holds the
+-- slice across `await`s: three lends open at once, the slice derived from the innermost. Between
+-- the `await`s it writes through the slice; after the inner lends end it reads the record again
+-- through the outer one, and awaits once more.
+--
+-- Issue: #682 (E2 at depth: `corpus/async-r1-nested.bc` holds nested lends of cells across a
+-- `yield` under `PinLaw`, but nothing derived from the inner lend; #669's H8 is one level).
+--
+-- Rust: `async fn` with `let r = &mut rec; let b = &mut r.back; let (_, tail) =
+-- b.split_at_mut(2);` and `tail[0] += …; yield_now().await;` in a loop; the pinned future holds
+-- all three borrows across the `.await`s.
+--
+-- Today: refused at the outer borrow block: its body performs `await`, which resumes, and a
+-- continuation held across a lend is T1 (#172). Both backends stop at the same message.
+--
+-- Once it lands: `inr (i32[117], inl ())`, the list [117]: the back buffer [1, 2, 3, 4] has its
+-- tail [3, 4] doubled to [6, 8] over two turns, so the record's sums are 10 (the front, 0 … 4) and
+-- 17 (1 + 2 + 6 + 8), answered as 10 × 10 + 17; `live 0`.
+
+include async
+include slice
+
+data Rec = { front: array i32, back: array i32 }
+
+fn idx(i: i32) -> i32 = i
+fn ones(i: i32) -> i32 = i + 1
+
+fn sum_of<'a>(xs: array_imm 'a i32) -> i32 =
+  let mut s = 0;
+  for x in xs { s = s + *x };
+  s
+
+fn worker() -> i32 with Async =
+  let mut r = Rec { front: array_new[i32](5, idx), back: array_new[i32](4, ones) };
+  borrow mut r { 'r, rm ->
+    borrow mut rm.back { 'b, b ->
+      match split_at_mut(b, 2) {
+        inl (head, tail) -> for x in tail { modify x { y -> y * 2 }; await() }
+      | inr b -> ()
+      } };
+    let f = borrow imm rm.front { 'f, fv -> sum_of(fv) };
+    let k = borrow imm rm.back { 'k, kv -> sum_of(kv) };
+    let s = f * 10 + k;
+    await();
+    s }
+
+main -> List[i32] =
+  let q = push(queue[i32](), with spawn { worker() });
+  run_until_empty(q)

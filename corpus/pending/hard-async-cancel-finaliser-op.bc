@@ -1,0 +1,51 @@
+-- pending: SPEC §27 *Open* (a finaliser that performs an operation, run when a task holding a lend is cancelled)
+-- now: 39:10: unknown variable `await`
+-- Hard problem 9: a task lends a buffer it owns, holds the view across its `await`, and guards the
+-- `await` with a finaliser. When `main` cancels the task, the finaliser runs with the lend still
+-- open: it reads and overwrites the buffer through the view, and reports the value it saw by
+-- performing `note`, an operation of the `Audit` handler around the whole run. Then the lend
+-- ends and the buffer is freed.
+--
+-- Issue: SPEC §27 *Open* and docs/async-capabilities.md A6 (a finaliser that logs); #682 (the lend
+-- held across the `await`). Today a lend's finaliser is typed pure at the empty context (R1's
+-- `· ⊢ d : Ref T ⊸ 1`), the surface has no finaliser form (U2), and the backend does not lower a
+-- finaliser that performs a control operation. `corpus/async-cancel.bc` cancels a task holding a
+-- lend with no finaliser of its own.
+--
+-- Rust: a guard whose `Drop` holds the `&mut` and writes through it when the future is dropped; a
+-- `Drop` cannot `.await` (async drop is unstable), so an operation it performs must be synchronous.
+--
+-- Spelling (a hypothesis): the core text's `x <- M unwind (D); N` written in a surface body.
+--
+-- Today: refused before the borrow is reached. The surface has no finaliser form, and the core's
+-- binding form `x <- M unwind (D)` takes a core computation, so `await()` is an unknown variable
+-- there. All three stages (`bcc check`, `bcc run --backend old`, `--backend new`) stop there.
+--
+-- Once it lands: i32[110]: `note(1)` before the `await`, then the finaliser's `note(10)`, the value
+-- it read through the view; `live 0` (the buffer freed after the lend ends).
+
+include async
+
+effect Audit { fn note(x: i32) }
+
+handler audit(mut seen: i32): Audit = {
+  note(x) = { seen = seen * 100 + x; () }
+}
+
+fn victim() -> i32 with Async, Audit =
+  let buf = alloc(10);
+  let v = borrow mut buf { m ->
+    note(1);
+    u <- await() unwind (note(modify m { x -> (99, x) }));
+    modify m { x -> (x + 1, x) }
+  };
+  let _ = free(buf);
+  v
+
+main -> i32 =
+  let log = alloc(0);
+  let u = with audit(&mut log) {
+    let t = with spawn { victim() };
+    cancel(t)
+  };
+  free(log)

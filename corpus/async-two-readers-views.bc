@@ -1,0 +1,52 @@
+-- Two independent tasks holding shared views of one vector across `await` (SPEC §32): `main`
+-- lends a view of the vector `imm`, copies it, and gives a copy to each task. `prefix_max` holds an
+-- iterator into the view across its `await`s; `ends` holds the leaf views of the first and the
+-- last element across one `await` and reads both after it. Leaf views of a family `array_imm 'r
+-- i32` are at the lender's lifetime `'r` (SPEC §9), so both tasks are boxed below it by `spawn_in`,
+-- inside a unit cell's scope `'d`, and `run_in` interleaves them for at most 8 rounds inside the
+-- borrow. No lend is held across an `await`: `assurance: unconditional`. It is the eleventh of the
+-- hard problems (`corpus/pending/HARD-PROBLEMS.md`), and runs today; a view loaded from a borrow of
+-- a cell, at a lifetime of its own, is `corpus/pending/hard-async-iter-borrowed.bc`.
+--
+-- Rust: `join!(prefix_max(&v), ends(&v))`: both futures hold `&'a i32`s and a `slice::Iter<'a>` of
+-- the same `Vec` across `.await`.
+--
+-- Answer: `inr (i32[9], inr (i32[19], inl ()))`, the list [9, 19]: the largest of [3, 9, 4, 1, 8],
+-- and 3 + 2 × 8; `live 0`.
+
+include async
+include slice
+
+-- The largest element, awaiting after each.
+fn prefix_max<'a>(xs: array_imm 'a i32) -> i32 with Async =
+  let mut m = 0;
+  for x in xs { let v = *x; if v > m { m = v } else { () }; await() };
+  m
+
+-- The first element plus twice the last, both views taken before the `await`.
+fn ends<'a>(xs: array_imm 'a i32) -> i32 with Async =
+  let (xs, ys) = array_copy['a, i32](xs);
+  let n = len(ys);
+  let (xs, ys) = array_copy['a, i32](xs);
+  match get(xs, 0) {
+    inl first -> match get(ys, n - 1) {
+        inl last -> await(); *first + 2 * *last
+      | inr u -> 0 }
+  | inr u -> 0
+  }
+
+fn tab(i: i32) -> i32 = if i == 0 { 3 } else if i == 1 { 9 } else if i == 2 { 4 } else if i == 3 { 1 } else { 8 }
+
+main -> List[i32] =
+  let v = array_new[i32](5, tab);
+  let d = alloc(());
+  let (d, out) = borrow imm v { 'r, xs ->
+    let out = borrow mut d { 'd, e ->
+      let (x1, x2) = array_copy['r, i32](xs);
+      let q = queue_in[i32]();
+      let q = push_in(q, with spawn_in { prefix_max(x1) });
+      let q = push_in(q, with spawn_in { ends(x2) });
+      with on_exhausted(!{ u -> nil() }) { run_in(q, 8) } };
+    (d, out) };
+  let _ = free(d);
+  out

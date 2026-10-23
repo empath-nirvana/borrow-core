@@ -1,0 +1,35 @@
+-- pending: #172 (a generator that owns a collection and lends views into it across `yield`)
+-- now: 29:3: the body of this `for` performs an operation that resumes (the operation 1.0), and its source `&buf` lends `buf` around the whole loop: an operation that resumes cannot cross a borrow (T1, #172). Iterate an owned array, or a view the function is given
+-- Hard problem 2: self-reference. `squares` owns the vector it builds, and yields a view of each
+-- element instead of a copy. Between two `yield`s the generator holds its iterator into its own
+-- vector, and each element it yields is a borrow of its own state, valid until the consumer asks
+-- for the next one (a lending generator).
+--
+-- Issue: #172 (the spanning lend: a borrow held across observations of codata), #682 (derived
+-- views held across a suspension). `corpus/reject/gen-self-borrow.bc` and
+-- `corpus/reject/for-lend-resumes.bc` record the refusal of the same class today.
+--
+-- Rust: a `static` coroutine (or an `async` block) may hold `&self.buf`'s iterator across a
+-- yield because it is pinned; yielding `&'self T` itself needs a lending iterator, which `Iterator`
+-- cannot express (GATs and a borrow of the iterator per `next`).
+--
+-- Today: refused at the `for` over `&buf`, whose body yields: the lend around the loop would be held
+-- across the suspension (T1, #172). Both backends stop at the same message.
+--
+-- Once it lands: i32[30], 0 + 1 + 4 + 9 + 16 read through the views, then the vector freed by
+-- the generator when it finishes; `live 0`.
+
+include yield
+
+fn sq(i: i32) -> i32 = i * i
+
+-- The squares below `n`, each yielded as a view into the generator's own vector.
+fn squares<'g>(n: i32) -> 1 with Yield[imm 'g i32] =
+  let buf = array_new[i32](n, sq);
+  for x in &buf { yield(x) };
+  ()
+
+main -> i32 =
+  let mut acc = 0;
+  for x in squares(5) { acc = acc + *x };
+  acc
