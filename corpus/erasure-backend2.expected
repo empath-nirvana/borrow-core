@@ -358,6 +358,9 @@ reconcile-chain erased handles 0 performs 0 raises 4 machines 12 suspends 14 lef
 reconcile-clock erased handles 0 performs 0 raises 8 machines 20 suspends 20 left 0 0
 retry-block erased handles 2 performs 0 raises 2 left 0 0
 reverse-bytes erased handles 0 performs 0 raises 0 left 0 0
+rewrite-case-ascription erased handles 0 performs 0 raises 0 left 0 0
+rewrite-instance-dom erased handles 0 performs 0 raises 0 left 0 0
+rewrite-instance-targs erased handles 0 performs 0 raises 0 left 0 0
 sched-a erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
 sched-a-div erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
 sched-b erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0

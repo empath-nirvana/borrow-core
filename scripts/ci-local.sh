@@ -81,6 +81,7 @@ steps=(
   "compile kernel"   "scripts/compile-kernel.sh"
   "backend2 fence"   "scripts/check-backend2.sh"
   "backend2 corpus"  "scripts/compile-backend2.sh"
+  "core rewrite"     "scripts/check-rewrite.sh"
   "layout rejects"   "scripts/check-layout-reject.sh"
   "native facts"     "scripts/native-facts.sh"
   "native"           "scripts/compile-native.sh"
@@ -109,7 +110,7 @@ if [ "$changed" = 1 ]; then
   done
   if [ "$lean" = 0 ]; then
     all=0
-    corpus=("parse corpus" "check corpus" "clause kinds" "grade census" "handled names" "cell classes" "compile corpus" "backend2 corpus" "layout rejects" "native facts" "sugar pairs" "native" "renaming")
+    corpus=("parse corpus" "check corpus" "clause kinds" "grade census" "handled names" "cell classes" "compile corpus" "backend2 corpus" "core rewrite" "layout rejects" "native facts" "sugar pairs" "native" "renaming")
     for f in $files; do
       case "$f" in
         corpus/kernel-counts.expected) add "compile kernel" ;;
@@ -126,6 +127,7 @@ if [ "$changed" = 1 ]; then
         scripts/compile-corpus.sh) add "compile corpus" ;;
         scripts/compile-kernel.sh) add "compile kernel" ;;
         scripts/compile-backend2.sh) add "backend2 corpus" ;;
+        scripts/check-rewrite.sh) add "core rewrite" ;;
         scripts/check-layout-reject.sh) add "layout rejects" ;;
         scripts/native-facts.sh) add "native facts" ;;
         scripts/check-backend2.sh) add "backend2 fence" ;;

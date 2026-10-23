@@ -316,13 +316,14 @@ def rAllEV {x : LifeVar} {b : CLife} {A : CVTy} (a : CLife) (hlt : ltB Δ a b = 
 def rRet {A : CVTy} (r : Res Δ T (.val A)) : Res Δ T (.comp (.ret A)) :=
   ⟨.ret i (.comp (.ret A)) A r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.ret i h⟩
 
-/-- `x <- M; N`: `N`'s binder closed live, then split. -/
+/-- `x <- M; N`: `N`'s binder closed live, then split; the node records whether the program
+annotates `x` and declares it `linear` (`TInfo.ann`, `TInfo.lin`). -/
 def rBind {A : CVTy} {C : CCTy} {tN : TExpr} {sN : CRow} {pN : Pins}
     (rM : Res Δ T (.comp (.ret A)))
     (FN : Fam T (fun L => TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp C)))
-    (h : overlapOK T rM.F.u FN.u = true) : Res Δ T (.comp C) :=
-  ⟨.bind i (.comp C) A C (Masks.of rM.F.u FN.u) rM.t tN, rM.sigs ∪ sN, rM.pins ++ pN,
-    (rM.F.split FN h).map fun _ ⟨_, _, hs, hm, h₁, h₂⟩ => TTied.bind i _ hs hm.rel_of h₁ h₂⟩
+    (h : overlapOK T rM.F.u FN.u = true) (ann lin : Bool) : Res Δ T (.comp C) :=
+  ⟨.bind { i with ann, lin } (.comp C) A C (Masks.of rM.F.u FN.u) rM.t tN, rM.sigs ∪ sN, rM.pins ++ pN,
+    (rM.F.split FN h).map fun _ ⟨_, _, hs, hm, h₁, h₂⟩ => TTied.bind _ _ hs hm.rel_of h₁ h₂⟩
 
 def rLam {A : CVTy} {C : CCTy} {tM : TExpr} {sM : CRow} {pM : Pins}
     (FM : Fam T (fun L => TTied pM sM Δ (mkCtx (A :: T) (true :: L)) tM (.comp C))) :
@@ -428,11 +429,11 @@ def rNuOut {C : CCTy} (hC : C.NuOk) (r : Res Δ T (.comp (.nu C))) : Res Δ T (.
 
 /-! ### Effects  `[spec §19]` -/
 
-/-- `[sub]`: `F_Σ A ≤ F_Σ′ A` at `Σ ⊆ Σ′`. -/
-def rEffSub {S S' : CRow} {A : CVTy} (hle : rowLeB S S' = true) (r : Res Δ T (.comp (effOf S A))) :
-    Res Δ T (.comp (effOf S' A)) :=
-  ⟨.effSub i (.comp (effOf S' A)) S S' A r.t, r.sigs, r.pins,
-    r.F.map fun _ h => TTied.effSub i (rowLeB_sound hle) h⟩
+/-- `[sub]`: `F_Σ A ≤ F_Σ′ A` at `Σ ⊆ Σ′`; `ins` when the checker inserts it (`TInfo.ins`). -/
+def rEffSub {S S' : CRow} {A : CVTy} (hle : rowLeB S S' = true) (r : Res Δ T (.comp (effOf S A)))
+    (ins : Bool) : Res Δ T (.comp (effOf S' A)) :=
+  ⟨.effSub { i with ins } (.comp (effOf S' A)) S S' A r.t, r.sigs, r.pins,
+    r.F.map fun _ h => TTied.effSub _ (rowLeB_sound hle) h⟩
 
 /-- `[perform]`: a non-abortive operation of the row, at its argument; it reads the row. -/
 def rPerform {S : CRow} {o : COpSig} (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o)
@@ -449,26 +450,28 @@ def rRaise {S : CRow} {o : COpSig} (B : CVTy)
     r.F.map fun _ h => TTied.effRaise i hf ha (dropB_sound _ hd) h⟩
 
 /-- `[let]`: `M to x. N` at a row, `N`'s context dropping at a row with weakening and persistent
-at an unrestricted row. -/
+at an unrestricted row; the node records whether the program annotates `x` and declares it
+`linear` (`TInfo`). -/
 def rEffLet {S : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow} {pN : Pins}
     (rM : Res Δ T (.comp (effOf S A)))
     (FN : Fam T (fun L => TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B)) ∧
       (S.Weak → (mkCtx T L).Drops) ∧ (S.Unr → Persistent (mkCtx T L))))
-    (h : overlapOK T rM.F.u FN.u = true) : Res Δ T (.comp (effOf S B)) :=
-  ⟨.effLet i (.comp (effOf S B)) A B S (Masks.of rM.F.u FN.u) rM.t tN, rM.sigs ∪ sN, rM.pins ++ pN,
-    (rM.F.split FN h).map fun _ ⟨_, _, hs, hm, h₁, h₂, hW, hU⟩ => TTied.effLet i _ hs hm.rel_of hW hU h₁ h₂⟩
+    (h : overlapOK T rM.F.u FN.u = true) (ann lin : Bool) : Res Δ T (.comp (effOf S B)) :=
+  ⟨.effLet { i with ann, lin } (.comp (effOf S B)) A B S (Masks.of rM.F.u FN.u) rM.t tN, rM.sigs ∪ sN, rM.pins ++ pN,
+    (rM.F.split FN h).map fun _ ⟨_, _, hs, hm, h₁, h₂, hW, hU⟩ => TTied.effLet _ _ hs hm.rel_of hW hU h₁ h₂⟩
 
-/-- `[then]`: `M then x. N unwind D`, `N` and the finaliser `D` at one context. -/
+/-- `[then]`: `M then x. N unwind D`, `N` and the finaliser `D` at one context; the node records
+whether the program writes `D`, annotates `x` and declares it `linear` (`TInfo`). -/
 def rEffThen {S : CRow} {A B : CVTy} {tN tD : TExpr} {sN sD : CRow} {pN pD : Pins} (hNZ : S.NZ)
     (hUq : S.Uniq) (rM : Res Δ T (.comp (effOf S A)))
     (F : Fam T (fun L => (TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B)) ∧
       TTied pD sD Δ (mkCtx (.unit :: T) (false :: L)) tD
         (.comp (effOf [] .unit))) ∧
       (S.UnrD → Persistent (mkCtx T L))))
-    (h : overlapOK T rM.F.u F.u = true) : Res Δ T (.comp (effOf S B)) :=
-  ⟨.effThen i (.comp (effOf S B)) A B S S [] (Masks.of rM.F.u F.u) rM.t tN tD, rM.sigs ∪ (sN ∪ sD),
+    (h : overlapOK T rM.F.u F.u = true) (written ann lin : Bool) : Res Δ T (.comp (effOf S B)) :=
+  ⟨.effThen { i with written, ann, lin } (.comp (effOf S B)) A B S S [] (Masks.of rM.F.u F.u) rM.t tN tD, rM.sigs ∪ (sN ∪ sD),
     rM.pins ++ (pN ++ pD), (rM.F.split F h).map
-    fun _ ⟨_, _, hs, hm, h₁, ⟨hN, hD⟩, hU⟩ => TTied.effThenA i _ hs hm.rel_of hNZ hUq hU h₁ hN hD⟩
+    fun _ ⟨_, _, hs, hm, h₁, ⟨hN, hD⟩, hU⟩ => TTied.effThenA _ _ hs hm.rel_of hNZ hUq hU h₁ hN hD⟩
 
 /-! ### `[handle]`  `[spec §19]` -/
 

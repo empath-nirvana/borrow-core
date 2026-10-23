@@ -182,6 +182,25 @@ def typedDump (file : String) : IO UInt32 := do
     for l in Backend2.dumpT 100000 0 k.main.t do IO.println l
     return 0
 
+/-- Print `file` as the rewriter reads it back (SPEC §54), once: the program's declarations after
+the library's, one declaration per instance, and `main`; then what the read-back made. With `identity`, the
+line of the identity criterion (`Backend2.identityLine`). -/
+def rewriteDump (identity : Bool) (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match Backend.checkedOf file src with
+  | .error e => IO.eprintln e; return 1
+  | .ok k =>
+    if identity then
+      match Backend2.identityLine k with
+      | .error e => IO.eprintln s!"{file}: {e}"; return 1
+      | .ok l => IO.println l; return 0
+    match Rewrite.readBack k.el k.main k.cnts with
+    | .error e => IO.eprintln s!"{file}: {e}"; return 1
+    | .ok (el', nkeys, ndecls, poly) =>
+      IO.print (Program.pp ⟨el'.prog.decls.drop el'.lib⟩)
+      IO.println s!"-- rewrite: {nkeys} instances, {ndecls} declarations, {poly} polymorphic, no rule"
+      return 0
+
 /-- Print `file`'s LIR (`Backend2/`). -/
 def lirDump (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
@@ -621,6 +640,25 @@ def main (argv : List String) : IO UInt32 := do
   | ["desugar", file] => desugar file
   | ["desugar", "--counted", file] => desugarCounted file
   | ["erase", file] => erase file
+  | ["rewrite", file] => rewriteDump false file
+  | ["rewrite", "--identity", file] => rewriteDump true file
+  | ["rewrite", "--diff", file] => do
+    let src ← IO.FS.readFile file
+    match Backend.checkedOf file src with
+    | .error e => IO.eprintln e; return 1
+    | .ok k =>
+      match Rewrite.run k with
+      | .error e => IO.eprintln e; return 1
+      | .ok (k', _) =>
+        let ps ← match Rewrite.mismatchPairs 3 Rewrite.fuel k.main.t k'.main.t [] with
+          | .ok ps => pure ps
+          | .error e => IO.eprintln e; return 1
+        for (a, b) in ps do
+          IO.println s!"== at {a.info.sp.start.render}: source"
+          for l in (Backend2.dumpT 6 0 a).take 40 do IO.println l
+          IO.println "== rewritten"
+          for l in (Backend2.dumpT 6 0 b).take 40 do IO.println l
+        return 0
   | ["lir", "--typed", file] => typedDump file
   | ["lir", file] => lirDump file
   | ["lir", "--erasure", file] => do

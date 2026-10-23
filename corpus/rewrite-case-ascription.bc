@@ -1,0 +1,11 @@
+-- A `case` whose first arm the program ascribes and whose second it does not (#684 review, S1):
+-- the checker checks the second arm against the first's type, so the read-back must write the
+-- one ascription the program writes, read from the node (`TInfo.asc`), and no other (SPEC §54,
+-- step 0).
+--
+-- Answer: inr ().
+
+main : F (1 + 1) =
+  b <- return (inr () : 1 + 1);
+  x <- case b { inl a -> return (inl a : 1 + 1) | inr c -> return (inr c) };
+  return x

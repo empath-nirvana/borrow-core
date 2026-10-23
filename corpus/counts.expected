@@ -364,6 +364,9 @@ reconcile-chain 19 3 0 457 458 0 # the journals' list nodes, and the continuatio
 reconcile-clock 25 8 0 397 377 0 # the fake clock's cells, the journals' list nodes, and the continuations the clauses that resume before they answer capture; the platform's clock cell is a word of the program's data; the indirect calls are of `on_clock`'s answer, a function of its state (the clock capability) built by its return clause or by its `pause` clause (SPEC §19, *Handler state*)
 retry-block 2 0 0 5 5 0 # the clock cells
 reverse-bytes 1 0 0 132 91 41
+rewrite-case-ascription 0 0 0 0 0 0
+rewrite-instance-dom 1 0 0 2 1 0
+rewrite-instance-targs 1 0 0 2 1 0
 sched-a 63 18 0 1558 897 0
 sched-a-div 31 5 0 1462 801 0
 sched-b 64 18 0 1561 898 0

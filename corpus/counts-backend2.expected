@@ -358,6 +358,9 @@ reconcile-chain 16 3 0 398 380 0
 reconcile-clock 21 8 0 279 243 0
 retry-block 2 0 0 5 5 0
 reverse-bytes 1 0 0 132 91 39
+rewrite-case-ascription 0 0 0 0 0 0
+rewrite-instance-dom 1 0 0 2 1 0
+rewrite-instance-targs 1 0 0 2 1 0
 sched-a 43 18 0 445 441 0
 sched-a-div 11 5 0 381 377 0
 sched-b 44 18 0 448 442 0
