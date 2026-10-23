@@ -450,7 +450,7 @@ def convC (E : Env) (sp : Span) (C : CCTy) : (Σ D : CCTy, Res Δ T (.comp D)) �
     | some (S', A'), some (S, _) =>
       if hD : effOf S' A' = D then
         if hC : effOf S A' = C then
-          if hle : rowLeB S' S = true then pure (hC ▸ rEffSub (at_ sp) hle (hD ▸ r))
+          if hle : rowLeB S' S = true then pure (hC ▸ rEffSub (at_ sp) hle (hD ▸ r) (ins := true))
           else throw ⟨sp, s!"type mismatch: expected `{E.ppC C}`, but this has type " ++
             s!"`{E.ppC D}`: its row `{ppRow E S'}` is not within `{ppRow E S}`"⟩
         else throw (mismatch sp (E.ppC C) (E.ppC D))
@@ -654,14 +654,14 @@ def caseIt {A B : CVTy} {C : CCTy} (E : Env) (T : List CVTy) (sp : Span) (x y : 
     else throw (mergeErr E T sp "the `inl` arm" "the `inr` arm" "in this `case`, " F₁.u F₁.w F₂.u F₂.w)
   else throw (mergeErr E T sp "the `inl` arm" "the `inr` arm" "in this `case`, " F₁.u F₁.w F₂.u F₂.w)
 
-/-- `Fun 'x < @b. M`. -/
+/-- `Fun 'x < @b. M`; `dom` when the program writes the bound `dom` (`TInfo.dom`). -/
 def funIt {v : LifeVar} {bl : CLife} {C : CCTy} (E : Env) (T : List CVTy) (sp : Span)
-    (name : String) (rM : Res (Δ.extend v bl) (.unit :: T) (.comp C)) :
+    (name : String) (rM : Res (Δ.extend v bl) (.unit :: T) (.comp C)) (dom : Bool) :
     Except Error (Res Δ T (.comp (.all v bl C))) := do
   if hbx : bl.mentions v = false then
     if hΔx : boundsAvoidB Δ v = true then
       let F ← popD sp rM.F
-      if hs : usedSat (fun A => !vfreeB v A) T F.u = true then pure (rAllI (at_ sp) hbx hΔx F hs)
+      if hs : usedSat (fun A => !vfreeB v A) T F.u = true then pure (rAllI { sp, dom } hbx hΔx F hs)
       else match firstBad (fun A => !vfreeB v A) T F.u with
         | some i => throw ⟨sp, s!"`Fun '{name}`: {E.slotName i}, of type `{E.slotTy T i}`, is " ++
             s!"used inside, and its type mentions `'{name}` ({ppLVar v})"⟩
@@ -697,7 +697,7 @@ def lamIt {A : CVTy} {C : CCTy} (E : Env) (sp : Span) (x : Ident) (rM : Res Δ (
 /-- A computation at the row `S′`, at the row `S` by `[sub]`. -/
 def liftRow (E : Env) (sp : Span) {S' : CRow} {A : CVTy} (S : CRow)
     (r : Res Δ T (.comp (effOf S' A))) : Except Error (Res Δ T (.comp (effOf S A))) :=
-  if hle : rowLeB S' S = true then pure (rEffSub (at_ sp) hle r)
+  if hle : rowLeB S' S = true then pure (rEffSub (at_ sp) hle r (ins := true))
   else throw ⟨sp, s!"this computation performs the operations `{ppRow E S'}`, which are not " ++
     s!"within the row `{ppRow E S}` here"⟩
 
@@ -765,7 +765,7 @@ def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExp
                 | none => throw ⟨sp, "internal error: an unrestricted row"⟩
             else pure (F.map fun _ h => ⟨h, fun hU => absurd (Row.unrDB_iff.mpr hU) (by simp [hu])⟩)
           if h : overlapOK T rM.F.u F'.u = true then
-            pure (rEffThen { atB sp [x] with written, ann, lin } (Row.nzB_sound hNZ) (Row.uniqB_sound hUq) rM F' h)
+            pure (rEffThen (atB sp [x]) (Row.nzB_sound hNZ) (Row.uniqB_sound hUq) rM F' h written ann lin)
           else throw (splitErr E T sp rM.F.u F'.u)
         else throw (mergeErr E T sp "the finaliser" "the rest" "after this computation, "
           FD.u FD.w FN.u FN.w)
@@ -799,7 +799,7 @@ def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVT
             · exact h')⟩ :
           TTied rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.t (.comp (effOf S B)) ∧
             (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
-      if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet { atB sp [x.name] with ann, lin } rM FN' h)
+      if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet (atB sp [x.name]) rM FN' h ann lin)
       else throw (splitErr E T sp rM.F.u FN'.u)
     else
       let rD ← finalOf E sp S FN.u
@@ -810,7 +810,7 @@ def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVT
         fun hU => absurd (Row.weakB_iff.mpr (Row.weak_of_unr hU)) (by simp [hw])⟩ :
         TTied rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.t (.comp (effOf S B)) ∧
           (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
-    if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet { atB sp [x.name] with ann, lin } rM FN' h)
+    if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet (atB sp [x.name]) rM FN' h ann lin)
     else throw (splitErr E T sp rM.F.u FN'.u)
 
 end

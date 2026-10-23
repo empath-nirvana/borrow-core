@@ -80,6 +80,20 @@ structure TInfo where
   read-back (SPEC §54). -/
   ann : Bool := false
   lin : Bool := false
+  /-- The lifetime the node's rule takes as a bound or a witness is written `dom` (`⊓Δ`, at the
+  context the node is checked at): `Fun 'x < dom` (`allI`), R1's bound, and the witness of a borrow
+  that records one (`wit`). Read by the rewriter's read-back (SPEC §54). -/
+  dom : Bool := false
+  /-- The program ascribes the term this node is the root of (`(V : A)`, `(M : C)`): set by the
+  checker's two `ascribe` arms on the root of the ascribed term's check (`Res.withAsc`). Read by
+  the rewriter's read-back (SPEC §54). -/
+  asc : Bool := false
+  /-- At `[sub]`, that the checker inserts it (`liftRow`, `convC`, `return` checked at a row): no
+  program writes `[sub]`. Read by the rewriter's read-back (SPEC §54). -/
+  ins : Bool := false
+  /-- At `[handle]`, the elaboration's record of the site, as the checker reads it (`siteOf`):
+  carried by the rewriter's read-back (SPEC §54). -/
+  srec : Option Frontend.SiteRec := none
   /-- At a borrow whose rule takes a witness lifetime that its node does not hold (`withbor2`,
   `withbor2u`, `slice_borrow_mut`, `slice_borrow_imm` and their unwinding forms, `withbor_f2_mut`),
   the witness the program writes, elaborated. Read by the rewriter's read-back (SPEC §54). -/

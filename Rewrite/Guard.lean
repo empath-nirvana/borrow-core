@@ -16,8 +16,9 @@ checked terms; none reads a backend's state.
   rule rewrites.
 * **G-bang**: `c′` has no more `!`-introductions, `!` copies or forgets, or forgets of `unk`, than
   `c`.
-* **G-fin**: `c′` has as many finalisers (`[then]`'s `D`, an unwinding borrow's `td`) as `c`, but
-  for the ones a rule accounts for.
+* **G-fin**: every finaliser of `c` (`[then]`'s `D`, an unwinding borrow's `td`) is a finaliser of
+  `c′` or one a rule moves into its own term, which the rule accounts for (`finMoved`); the check
+  holds whatever rules run.
 * **Implicit copies**: `implicitCopy` over the re-check's typed terms, the check `checkProgram`
   runs and `checkMain` does not.
 
@@ -84,8 +85,10 @@ def facts : Nat → TExpr → Facts → Except String Facts
     t.children.foldlM (init := acc) fun acc (_, c) => facts f c acc
 
 /-- **The guard** over the source `c`, the re-checked `c′`, the binder map `π`, the names of the
-operations the rewrite eliminates, and the re-check's typed terms. -/
-def guard (fuel : Nat) (c c' : Checked) (π : Pi) (ruled : List UInt32)
+operations the rewrite eliminates, the finalisers its rules move out of a `[then]` or an unwinding
+borrow into their own term (each reached there once on its abort path, as the rule's schema
+places it: R0's `inr` arm), and the re-check's typed terms. -/
+def guard (fuel : Nat) (c c' : Checked) (π : Pi) (ruled : List UInt32) (finMoved : Nat)
     (terms' : List (Nat × TExpr)) : Except String Unit := do
   -- G-main.
   unless c'.C == c.C do throw "guard G-main: the rewritten `main` has another type"
@@ -115,8 +118,8 @@ def guard (fuel : Nat) (c c' : Checked) (π : Pi) (ruled : List UInt32)
   unless fs'.bangs ≤ fs.bangs do
     throw "guard G-bang: the rewritten `main` introduces, copies or forgets a `!` the source does not"
   -- G-fin.
-  unless ruled.length > 0 || fs'.fins == fs.fins do
-    throw "guard G-fin: the rewritten `main` has another number of finalisers"
+  unless fs'.fins + finMoved == fs.fins do
+    throw "guard G-fin: a finaliser of the source is not reached once in the rewritten `main`"
   -- Implicit copies.
   if let some e := implicitCopy terms' then
     throw s!"guard: implicit copy at {e.span.start.render}: {e.msg}"

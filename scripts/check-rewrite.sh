@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # The Core → Core rewriter's step 0, the identity (SPEC §54, #680): for every corpus program that
 # checks and has a `main`, the program read back from its typed term and checked again
-# (`bcc rewrite --identity`). Its line: the keys read back as declarations; whether the rewritten
-# `main` erases to the source's; how many keys' bodies do, of how many; the LIR of the rewritten
-# program against the source's, byte for byte (`same`; `outside` when both are outside the new
-# backend's fragment with one message; `differs`); and the typed term's mismatches, by node kind.
+# (`bcc rewrite --identity`). Its line: the instances of `def`s read back, the declarations and
+# the lifetime-polymorphic ones among them, the uses; the rewritten `main`'s erasure against the
+# source's (`same`, or `beta`: other only at the instantiations of polymorphic declarations, the
+# typed terms agreeing everywhere else); the LIR of the rewritten program against the source's,
+# byte for byte (`same`; `outside` when both are outside the new backend's fragment with one
+# message; `differs`); and the typed terms' mismatches, node by node and field by field modulo
+# spans, by node kind and field (`poly:` inside a polymorphic declaration's body).
 #
-# The gate: every line has `erasure same`, all its bodies the same, and `lir same` or `outside`;
-# and the table, mismatches included, is pinned in corpus/rewrite.expected, so a change shows here.
+# The gate: every line has `erasure same` or `beta` and `lir same` or `outside`; and the table,
+# mismatches included, is pinned in corpus/rewrite.expected, so a change shows here.
 #
 #     scripts/check-rewrite.sh            compare with corpus/rewrite.expected
 #     scripts/check-rewrite.sh --write    write it
@@ -38,8 +41,7 @@ table() {
 out=$(mktemp)
 trap 'rm -rf "$out"' EXIT
 table > "$out"
-bad=$(awk '!/ erasure same / || !/ lir (same|outside) / { print; next }
-  { for (i = 1; i <= NF; i++) if ($i == "bodies") { split($(i + 1), b, "/"); if (b[1] != b[2]) print } }' "$out")
+bad=$(awk '!/ erasure (same|beta) / || !/ lir (same|outside) / { print }' "$out")
 if [ "${1:-}" = "--write" ]; then
   cp "$out" corpus/rewrite.expected
   echo "corpus/rewrite.expected: $(wc -l < corpus/rewrite.expected | tr -d " ") programs"
@@ -54,4 +56,4 @@ if ! diff -u corpus/rewrite.expected "$out"; then
   echo "check-rewrite: the rewriter's identity table changed (corpus/rewrite.expected)"; fail=1
 fi
 [ "$fail" = 0 ] || exit 1
-echo "check-rewrite: $(wc -l < "$out" | tr -d " ") programs read back and checked again: every erasure and every LIR the source's, as pinned"
+echo "check-rewrite: $(wc -l < "$out" | tr -d " ") programs read back and checked again: every erasure and every LIR the source's (up to the instantiations of polymorphic declarations), as pinned"

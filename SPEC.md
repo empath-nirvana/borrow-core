@@ -9161,37 +9161,46 @@ The rewriter's pass, applying no rule, on the new backend's path (`Rewrite/`, th
 `Backend2.lirOf`). Every later row (R0, R1, …) is a rule over the typed program inside this pass.
 
 - **The read-back** (`Rewrite/ReadBack.lean`): the typed program read back into core syntax, one
-  rule per `TExpr` constructor, emitting the form the checker typed the node from. The nodes the
-  checker inserts stay implicit by the rule of the node they are inserted at: SPEC §12's drops,
-  §19's `[sub]` where the position's rule inserts one (`liftRow`, `atRow`, `convC`, `return` at a
-  row), `[then]`'s drop glue and §45's η-thunk. An ascription is written exactly where a node's
-  form is checked and its position synthesizes: `inl`, `inr`, `roll`, `absurd`, `abort` at an
-  answer other than `0`, a `[sub]` no rule of the position inserts, and a thunk whose type holds a
-  row. A lifetime that is the meet of the node's
-  lifetime context is written `dom`. Types are read back structurally.
-- **Facts the checker records for it** (`TInfo`): whether a `[then]`'s finaliser is written
-  (`written`), whether a binding is annotated or `linear` (`ann`, `lin`), and the witness lifetime
-  of a borrow whose node does not hold it (`wit`: `withbor2`, `slice_borrow_*`, their unwinding
-  forms, `withbor_f2_mut`). They constrain no derivation.
+  rule per `TExpr` constructor, emitting the form the checker typed the node from. Types and
+  lifetimes are read back structurally. The nodes the checker inserts stay implicit: §12's drops,
+  the `[sub]` it records inserting (`TInfo.ins`: `liftRow`, `convC`, `return` checked at a row),
+  `[then]`'s drop glue and §45's η-thunk.
+- **Facts the checker records for it** (`TInfo`), each where the program writes what no node's rule
+  holds: an ascription (`asc`, set by the two `ascribe` arms on the root of the ascribed term's
+  check, `Res.withAsc`, `Frontend/Check/Reinfo.lean`), a `[then]`'s written finaliser
+  (`written`), a binding's annotation and `linear` (`ann`, `lin`, arguments of `rBind`, `rEffLet`,
+  `rEffThen`), the witness lifetime of a borrow whose node does not hold it (`wit`), a bound or
+  witness written `dom` (`dom`), a handler site's record (`srec`), and a `[sub]` the checker
+  inserts (`ins`). They constrain no derivation: `TExpr.setInfo` keeps every typed derivation
+  (`TDerivesAt.setInfo`, `TDerivesP.setInfo`, `TTied.setInfo`).
 - **A program, not a term** (`Rewrite/Driver.lean`): the elaborated program the checker checked
-  (`Report.el`, carried by `CheckedProg.el`) with its `def`s replaced by one monomorphic `def` per
-  key `(decl, targs)` of a `use` node, each read back once from the key's typed body (inner keys
-  first), then `main`. A use reads back as a reference to its key's declaration; no body is placed
-  at its use. The declaration carries the elaborator's key (`DefKey`), its body naming the source's
-  `def` at its type arguments, so that copies the source shares stay shared.
+  (`Report.el`, carried by `CheckedProg.el`) with its `def`s replaced by one declaration per
+  instance of a `use` node, keyed by the checker's instance key (declaration, type arguments,
+  lifetime context, extern context), its body read back once (inner instances first), then
+  `main`. A use reads back as a reference to its instance's declaration; no body is placed at its
+  use. The monomorphic instances of one `def` at one type arguments share one declaration. An
+  instance that mentions a variable of its lifetime context (through its type arguments, or a type
+  written with `dom`) is declared polymorphic in that context by Core's `∀`, each variable at its
+  bound, and instantiated at each use. A use's key (`TInfo.key`) and a site's record (`srec`) are
+  carried verbatim and read by no rule (the scope's §2, amended by the user's decision of
+  2026-10-23).
 - **One re-check**: `checkEl` at the counts the source's check inferred (`CheckedProg.cnts`), with no
   elaboration and no inference. A refusal is the compile's error; there is no fallback.
   `exitsOnDivError` is carried from the source's check (`CheckedProg.exits`).
-- **The guard** (`Rewrite/Guard.lean`): G-main, G-assure, G-qual, G-κ, G-bang, G-fin, and
-  `implicitCopy` over the re-check's terms. The binder map of the identity is empty.
+- **The guard** (`Rewrite/Guard.lean`): G-main, G-assure, G-qual, G-κ, G-bang, G-fin (every
+  finaliser of the source reached once, whatever rules run), and `implicitCopy` over the
+  re-check's terms. The binder map of the identity is empty.
 - **The identity criterion** (`bcc rewrite --identity`, the gate step *core rewrite*,
-  `corpus/rewrite.expected`): on every corpus program that checks, the rewritten `main` erases to
-  the source's, so does each key's body, and the LIR is the source's byte for byte (or both are
-  outside the new backend's fragment with one message). The typed terms' mismatches by node kind
-  are recorded: there are none.
+  `corpus/rewrite.expected`): on every corpus program that checks, the typed terms are compared node
+  by node and field by field modulo spans at every use; the rewritten `main` erases to the
+  source's, or (at a polymorphic declaration) to it under the instantiation; and the LIR is the
+  source's byte for byte (or both are outside the new backend's fragment with one message). The
+  corpus has no mismatch outside the bodies of the two polymorphic declarations of
+  `rewrite-instance-targs` and `rewrite-instance-dom`, whose bodies are checked at the use's context
+  extended by the abstraction's binders.
 
 No type, typing rule, machine step, relation clause or elaboration changes; the census is the
-source check's report. No output, golden, count or census row changes.
+source check's report. No output, golden, count or census row of an existing program changes.
 
 ## Status
 
@@ -9600,16 +9609,21 @@ Entry 53 (§54) is in progress. R-pre is implemented: the forms `handle_tail` an
 their checker arms (`Frontend/Check/Checker.lean`, `Rules.lean`), the per-perform laws in
 `Core/DivHandleLastRuns.lean`. Step 0 is implemented: the read-back, the re-check and the guard in
 `Rewrite/` (`ReadBack.lean`, `Driver.lean`, `Guard.lean`, `Report.lean`), hooked in
-`Backend2/Driver.lean`'s `lirOf`, the `TInfo` facts in `Frontend/Check/TExpr.lean`, and the identity
-gate `scripts/check-rewrite.sh`. No rule (R0, R1, …) is implemented.
+`Backend2/Driver.lean`'s `lirOf`, the `TInfo` facts in `Frontend/Check/TExpr.lean` (set by
+`Checker.lean`, `Steps.lean`, `Rules.lean`, `Consts.lean`; `Reinfo.lean`), and the identity gate
+`scripts/check-rewrite.sh`. No rule (R0, R1, …) is implemented.
 
 ## Changelog
 
 - **1.04** (2026-10-23) — §54 (#680, step 0): the rewriter's identity pass on the new backend's
-  path: the typed program read back into a program (one monomorphic `def` per key), checked again
-  once at the inferred counts, and guarded; `TInfo` records `written`, `ann`, `lin` and `wit`;
-  `bcc rewrite` and the gate step *core rewrite*. Every erasure and every LIR is the source's. No
-  output, golden, count or census changes.
+  path: the typed program read back into a program (one declaration per instance, keyed by the
+  checker's instance key; lifetime-polymorphic by Core's `∀` where an instance mentions its
+  lifetime context), checked again once at the inferred counts, and guarded; `TInfo` records
+  `asc`, `ins`, `written`, `ann`, `lin`, `wit`, `dom` and `srec` (`TExpr.setInfo` keeps every
+  typed derivation); `bcc rewrite` and the gate step *core rewrite*. Every erasure and every LIR is
+  the source's (under the instantiations of polymorphic declarations). Three new core programs
+  (`rewrite-instance-targs`, `rewrite-instance-dom`, `rewrite-case-ascription`). No output,
+  golden, count or census changes for an existing program.
 - **1.03** (2026-10-23) — §54 (#680, R-pre): the core forms `handle_tail[n: q, …]` and
   `handle_last[n: q, …]`, checked by the rules `rEffHandleT` and `rEffHandleL` at counts
   (`TTied.effHandleL`, `ansesRead`, `lastRead`); the per-perform laws `tail_resume_direct`,

@@ -252,10 +252,11 @@ def erasureLine (k : Backend.CheckedProg) : String := Id.run do
   | .error _ => s!"outside left {stored} {other}"
 
 /-- **The identity criterion of the rewriter's step 0** (SPEC §54), as one line
-(`bcc rewrite --identity`): the keys read back as declarations; whether the rewritten `main` erases
-to the source's, and how many keys' bodies do (`Rewrite.identity`); the LIR of the rewritten
-program against the source's, byte for byte (`same`, both outside the fragment with one message
-`outside`, or `differs`); and the typed term's mismatches by node kind. -/
+(`bcc rewrite --identity`): the instances read back, the declarations and the polymorphic ones
+among them, the uses; the rewritten `main`'s erasure against the source's and the typed terms'
+mismatches by node kind and field (`Rewrite.identity`); and the LIR of the rewritten program
+against the source's, byte for byte (`same`, both outside the fragment with one message
+`outside`, or `differs`). -/
 def identityLine (k : Backend.CheckedProg) : Except String String := do
   let (k', rep) ← Rewrite.run k
   let id ← Rewrite.identity k.main k'.main
@@ -264,8 +265,8 @@ def identityLine (k : Backend.CheckedProg) : Except String String := do
     | .error e, .error e' => if e == e' then "outside" else "differs"
     | _, _ => "differs"
   let ms := id.mismatches.map fun (m, n) => s!" {m}:{n}"
-  pure (s!"keys {rep.keys} erasure {if id.mainEq then "same" else "differs"} " ++
-    s!"bodies {id.keysEq}/{id.keys} lir {lir} mismatches {id.mismatches.length}" ++ String.join ms)
+  pure (s!"instances {rep.keys} decls {rep.decls} poly {rep.poly} uses {id.uses} " ++
+    s!"erasure {id.erasure} lir {lir} mismatches {id.mismatches.length}" ++ String.join ms)
 
 /-- **The LIR every compile reads**: `lirOf`'s, linted (`Backend2/Lint.lean`). The lowering does
 not track consumption (`Lower.vals`), so a variable used twice would lower to a use after free;

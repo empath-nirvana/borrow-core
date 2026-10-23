@@ -2,6 +2,7 @@ import Rewrite.ReadBack
 import Rewrite.Guard
 import Rewrite.Report
 import Backend.Driver
+import Frontend.Elab.RenameLife
 
 /-!
 # Rewrite — the driver  `[spec §54]`
@@ -15,45 +16,62 @@ from the source's check (`CheckedProg.exits`). A refused re-check, a read-back w
 node and a failed guard are each a hard error: there is no fallback to the unrewritten program.
 
 **The read-back is a program.** Its declarations are the elaborated program's (`k.el`) but its
-`def`s, then one monomorphic `def` per key `(decl, targs)` of a `use` node of `main`'s typed term,
-its body read back once from the key's typed body (inner keys first), then `main` read back. Each
-use reads back as a reference to its key's declaration; no body is placed at its use. A key's
-declaration carries the elaborated program's key of the `def` (`DefKey`), its body naming the
-source's `def` at its type arguments, so that copies the source shares stay shared.
+`def`s, then one declaration per instance of a `def` that `main`'s typed term uses (`Key`, the
+checker's instance key: declaration, type arguments, lifetime context, extern context), its body
+read back once from the instance's typed body (inner instances first), then `main` read back.
+Each use reads back as a reference to its instance's declaration; no body is placed at its use.
+The monomorphic instances of one `def` at one type arguments and extern context share one
+declaration, the `def`'s text at them, which the checker instantiates at each use; polymorphic
+instances whose declarations read back alike share one.
 
-The read-back carries verbatim the records the checker's input holds and its output keeps: a
-`def`'s key (from the elaborated program) and a handler site's record (from the node's `HSite`),
-so that the re-checked program is the source's. No rule reads them (the scope's §2).
+**A lifetime-polymorphic declaration.** An instance checked under a use's lifetime binders may
+mention them: through its type arguments, or through a type the program writes with `dom`, which
+elaborates to the meet of the context. (A bound or witness the program writes `dom` is read back
+as `dom`, `TInfo.dom`, and mentions none.) A top-level declaration cannot name them, so such an
+instance is declared polymorphic in its whole lifetime context, by Core's `∀` (`VTy.all`,
+`Fun 'x < @b`) at each of the context's variables with its bound, outermost first, and each use
+instantiates it at those variables (`inst`); its bounds name only variables before them in the
+context, so Core states every one. The checker checks the declaration's body again at each use,
+at the use's context extended by the abstraction's binders: its erasure is the source's, under the
+instantiation (`beta`, `Rewrite.identity`).
+
+**Records carried, not rebuilt** (the scope's §2, amended by the user's decision of 2026-10-23):
+a use's key (`TInfo.key`, which the checker records) is the declaration's key, named by it; a
+handler site's record is the one the checker records on its node (`TInfo.srec`). No rule reads
+them.
 -/
 
 namespace Rewrite
 open Frontend (Span Ident Decl Program DefKey)
-open Frontend.Check (CVTy Checked ppVTy checkEl)
+open Frontend.Check (CVTy Checked checkEl)
 open BoCa.Fig16.LogRel.Core.Check (TExpr TInfo TScope)
 
-/-- A key's first use in `main`'s typed term: the `def`'s name, its type at the key, its typed
-body, and the use's context: its number of slots and of extern slots, and its lifetime context. -/
+/-- An instance's first use in `main`'s typed term: the `def`'s name, its type at the instance,
+its typed body, the key the checker records at the use, and the use's context: its number of
+slots and of extern slots, and its lifetime context. -/
 structure Use where
   key : Key
   name : String
   A : CVTy
   body : TExpr
+  dkey : Option DefKey
   len : Nat
   nExt : Nat
   Δ : BoCa.Lifetime.LifeCtx
   sp : Span
 
-/-- **The keys of a typed term**, each at its first use, inner keys (those a key's body uses)
-before it. -/
+/-- **The instances of a typed term**, each at its first use, inner instances (those an instance's
+body uses) before it. -/
 def collect : Nat → Nat → Nat → BoCa.Lifetime.LifeCtx → TExpr → List Use → Except String (List Use)
-  | 0, _, _, _, _, _ => throw "rewrite: a term nested too deeply to collect its keys"
+  | 0, _, _, _, _, _ => throw "rewrite: a term nested too deeply to collect its instances"
   | f + 1, len, nExt, Δ, t, acc => do
     match t with
     | .use i (.val A) name decl targs _ b =>
-      if acc.any (·.key == (decl, targs)) then pure acc
+      let k : Key := (decl, targs, Δ.entries, nExt)
+      if acc.any (·.key == k) then pure acc
       else do
         let acc ← collect f len nExt Δ b acc
-        pure (acc ++ [⟨(decl, targs), name, A, b, len, nExt, Δ, i.sp⟩])
+        pure (acc ++ [⟨k, name, A, b, i.key, len, nExt, Δ, i.sp⟩])
     | .use .. => throw "rewrite: a `use` node at a computation type"
     | t =>
       -- The lifetime context of the children: `Fun`'s binder, and R1's at its body.
@@ -64,73 +82,112 @@ def collect : Nat → Nat → Nat → BoCa.Lifetime.LifeCtx → TExpr → List U
         | .push n => collect f (len + n) nExt Δc c acc
         | .fresh n => collect f n 0 Δc c acc
 
-/-- The declaration name of a key: its `def`'s name and its position among the keys, which no
-program writes. -/
-def keyName (u : Use) (k : Nat) : String := s!"{u.name}#{k}"
+/-- The read-back mentions the lifetime variable `v` (`Frontend.Comp.mentionsLife`'s renaming).
+No binder of an instance's body is a variable of its lifetime context: a binder is numbered fresh
+for the context the body is checked at (`LifeCtx.freshVar`). -/
+def mentionsV (v : Nat) (V : Frontend.Val) : Bool :=
+  V.renameLife (fun s y => .var s (if y == lname v then y ++ "'" else y)) != V
 
-/-- The elaborator's key of a key's declaration: the elaborated program's key of the `def`
-(`Elaborated.keys`, by the `def`'s name, as the checker finds it at a use), carried verbatim, its
-body naming the `def` (or its copy) at the key's type arguments, so that two keys share a body
-exactly when the source's do. No rule reads it. -/
-def keyOf (keys : List DefKey) (u : Use) (name : String) : DefKey :=
-  let dk := keys.find? (·.name == u.name)
-  let body := (dk.map (·.body)).getD u.name
-  { name, origin := (dk.map (·.origin)).getD u.name, keys := (dk.map (·.keys)).getD [],
-    body := s!"{body}[{", ".intercalate (u.key.2.map ppVTy)}]" }
+def mentionsT (v : Nat) (A : Frontend.VTy) : Bool :=
+  A.renameLife (fun s y => .var s (if y == lname v then y ++ "'" else y)) != A
+
+/-- An instance's declaration, named `name`: its type and body read back; polymorphic in its
+lifetime context (outermost first) when they mention one of its variables. -/
+def declOf (tbl : Frontend.Check.CntTable) (cx : Cx) (u : Use) (name : String) :
+    Except String (Decl × List Nat) := do
+  let V ← (← rd fuel cx u.body).val
+  let A ← rbV tbl u.sp fuel [] u.A
+  let ctx := u.Δ.entries.reverse
+  if ctx.any fun (v, _) => mentionsV v V || mentionsT v A then
+    let A' := ctx.foldr (fun (x, b) A => .all u.sp ⟨lname x, u.sp⟩ (rbL u.sp b) A) A
+    let V' := ctx.foldr (fun (x, b) V =>
+      .thunkv u.sp (.lamL u.sp ⟨lname x, u.sp⟩ (rbL u.sp b) (.ret u.sp V))) V
+    pure (.def_ u.sp ⟨name, u.sp⟩ [] A' V' .none, ctx.map (·.1))
+  else pure (.def_ u.sp ⟨name, u.sp⟩ [] A V .none, [])
+
+/-- The declaration with another name. -/
+def Decl.rename (x : String) : Decl → Decl
+  | .def_ sp n ps A V mk => .def_ sp { n with name := x } ps A V mk
+  | d => d
 
 /-- The names of the externs of a program, in declaration order. -/
 def externNames (ds : List Decl) : List String :=
   ds.filterMap fun | .extern _ n _ => some n.name | _ => none
 
 /-- **The read-back of a checked program**: the elaborated program `el` with its `def`s replaced
-by one monomorphic `def` per key, and `main` read back from `c`. -/
+by one declaration per instance (`declOf`), and `main` read back from `c`; the number of
+instances, of declarations, and of polymorphic ones. -/
 def readBack (el : Frontend.Elab.Elaborated) (c : Checked) (tbl : Frontend.Check.CntTable) :
-    Except String (Frontend.Elab.Elaborated × Nat) := do
+    Except String (Frontend.Elab.Elaborated × Nat × Nat × Nat) := do
   let ds := el.prog.decls
   let some (msp, _) := ds.findSome? (fun | .main sp C _ => some (sp, C) | _ => none)
     | throw "rewrite: the program has no `main`"
   let exts := externNames ds
   let extVars : List (Option String) := (exts.map some).reverse
   let uses ← collect fuel c.ctx.length exts.length ⟨[]⟩ c.t []
-  let names := uses.zipIdx.map fun (u, k) => (u.key, keyName u k)
-  let cx0 : Cx := { vars := extVars, nExt := exts.length, names, tbl }
-  let defs ← uses.zipIdx.mapM fun (u, k) => do
+  -- Each instance's declaration, inner instances first; one declaration per distinct read-back.
+  let mut decls : List (Key × DeclOf) := []
+  let mut defs : List Decl := []
+  let mut keys : List DefKey := []
+  let mut poly := 0
+  let mut mono : List ((Nat × List CVTy × Nat) × String) := []
+  for u in uses do
     unless u.len ≥ u.nExt do throw "rewrite: a use's context is shorter than its externs"
     let vars := List.replicate (u.len - u.nExt) none ++ (if u.nExt == 0 then [] else extVars)
-    let V ← (← rd fuel { cx0 with vars, nExt := u.nExt, Δ := u.Δ } true false u.body).val
-    let A ← rbV ⟨tbl, u.Δ⟩ u.sp fuel [] u.A
-    pure (Decl.def_ u.sp ⟨keyName u k, u.sp⟩ [] A V .none)
-  let C ← rbC ⟨tbl, ⟨[]⟩⟩ msp fuel [] c.C
-  let M ← (← rd fuel cx0 true false c.t).comp
+    let cx : Cx := { vars, nExt := u.nExt, Δ := u.Δ, decls, tbl }
+    let name := s!"{u.name}#{defs.length}"
+    let (d, vs) ← declOf tbl cx u name
+    -- A monomorphic instance's declaration is the `def`'s text at its type arguments, which does
+    -- not depend on the lifetime context: the instances of one `def` at one type arguments and
+    -- extern context share it, and the checker instantiates it at each use.
+    let mk := (u.key.1, u.key.2.1, u.key.2.2.2)
+    let shared := if vs.isEmpty then mono.lookup mk else
+      (defs.find? (fun e => Decl.rename name e == d)).bind fun
+        | .def_ _ n _ _ _ _ => some n.name
+        | _ => none
+    match shared with
+    | some n => decls := decls ++ [(u.key, ⟨n, vs⟩)]
+    | none =>
+      if vs.isEmpty then mono := mono ++ [(mk, name)]
+      decls := decls ++ [(u.key, ⟨name, vs⟩)]
+      defs := defs ++ [d]
+      if !vs.isEmpty then poly := poly + 1
+      if let some k := u.dkey then keys := keys ++ [{ k with name }]
+  let cx0 : Cx := { vars := extVars, nExt := exts.length, decls, tbl }
+  let C ← rbC tbl msp fuel [] c.C
+  let M ← (← rd fuel cx0 c.t).comp
   let kept := ds.zipIdx.filter fun (d, _) => match d with
     | .def_ .. | .main .. => false
     | _ => true
   let lib := (kept.filter (·.2 < el.lib)).length
   let ds' := kept.map (·.1) ++ defs ++ [Decl.main msp C M]
-  let keys := uses.zipIdx.map fun (u, k) => keyOf el.keys u (keyName u k)
-  pure ({ el with prog := ⟨ds'⟩, lib, keys := el.keys ++ keys }, uses.length)
+  pure ({ el with prog := ⟨ds'⟩, lib, keys := el.keys ++ keys }, uses.length, defs.length, poly)
 
 /-- **The rewriter's run** on a checked program: no rule (step 0), the read-back, the kernel's one
 re-check at the source's counts, and the guard. -/
 def run (k : Backend.CheckedProg) : Except String (Backend.CheckedProg × Report) := do
   let c := k.main
-  let (el', nkeys) ← readBack k.el c k.cnts
+  let (el', nkeys, ndecls, poly) ← readBack k.el c k.cnts
   let (rep', terms') ← (checkEl el' k.cnts).mapError fun e =>
     s!"rewrite: the kernel refuses the rewritten program at {e.span.start.render}: {e.msg}"
   let some c' := rep'.main | throw "rewrite: the rewritten program has no `main`"
   unless externNames el'.prog.decls == externNames k.el.prog.decls do
     throw "guard G-main: the rewritten program has other externs"
-  guard fuel c c' [] [] terms'
-  pure ({ k with main := c', rewritten := true }, { keys := nkeys, decls := el'.prog.decls.length })
+  guard fuel c c' [] [] 0 terms'
+  pure ({ k with main := c', rewritten := true }, { keys := nkeys, decls := ndecls, poly })
 
 /-- **The identity criterion** of step 0, between the source's checked `main` `c` and the
-rewritten `c′`: `main`'s erasure, each key's body's erasure (the key's first use in each), and the
-typed term's mismatches by node kind. -/
+rewritten `c′`: the typed terms compared node by node and field by field at every use
+(`cmpT`), and `main`'s erasure: the source's (`same`), or other only at the instantiations of
+lifetime-polymorphic declarations (`beta`: no mismatch outside those declarations' bodies, whose
+erasures are the source's). -/
 def identity (c c' : Checked) : Except String Identity := do
-  let src ← collect fuel c.ctx.length 0 ⟨[]⟩ c.t []
-  let out ← collect fuel c'.ctx.length 0 ⟨[]⟩ c'.t []
-  let keysEq := (src.zip out).filter (fun (a, b) => a.body.erase == b.body.erase) |>.length
-  pure { mainEq := c.t.erase == c'.t.erase, keysEq, keys := src.length,
-         mismatches := ← mismatches fuel c.t c'.t [] }
+  let ms ← cmpT "" fuel c.t c'.t []
+  let uses := (← collect fuel c.ctx.length 0 ⟨[]⟩ c.t []).length
+  -- Other than the source's only at the instantiations of polymorphic declarations: no mismatch
+  -- outside their bodies, and none of their bodies' erasures.
+  let outside := ms.filter fun (m, _) => !m.startsWith "poly:"
+  let erasure := if c.t.erase == c'.t.erase then "same" else if outside.isEmpty then "beta" else "differs"
+  pure { erasure, uses, mismatches := ms }
 
 end Rewrite

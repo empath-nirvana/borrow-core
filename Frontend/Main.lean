@@ -182,8 +182,8 @@ def typedDump (file : String) : IO UInt32 := do
     for l in Backend2.dumpT 100000 0 k.main.t do IO.println l
     return 0
 
-/-- Print `file` as the rewriter reads it back (SPEC §54): the program's declarations after the
-library's, one monomorphic `def` per key, and `main`; then the run's report. With `identity`, the
+/-- Print `file` as the rewriter reads it back (SPEC §54), once: the program's declarations after
+the library's, one declaration per instance, and `main`; then what the read-back made. With `identity`, the
 line of the identity criterion (`Backend2.identityLine`). -/
 def rewriteDump (identity : Bool) (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
@@ -196,13 +196,10 @@ def rewriteDump (identity : Bool) (file : String) : IO UInt32 := do
       | .ok l => IO.println l; return 0
     match Rewrite.readBack k.el k.main k.cnts with
     | .error e => IO.eprintln s!"{file}: {e}"; return 1
-    | .ok (el', _) =>
+    | .ok (el', nkeys, ndecls, poly) =>
       IO.print (Program.pp ⟨el'.prog.decls.drop el'.lib⟩)
-      match Rewrite.run k with
-      | .error e => IO.eprintln s!"{file}: {e}"; return 1
-      | .ok (_, rep) =>
-        IO.println s!"-- rewrite: {rep.keys} keys, {rep.decls} declarations, rules: {rep.rules}"
-        return 0
+      IO.println s!"-- rewrite: {nkeys} instances, {ndecls} declarations, {poly} polymorphic, no rule"
+      return 0
 
 /-- Print `file`'s LIR (`Backend2/`). -/
 def lirDump (file : String) : IO UInt32 := do
