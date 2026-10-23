@@ -24,8 +24,8 @@ The rewriter (#680) works on the typed program and hands the kernel a program to
   (`wit`).
 * **An ascription is written exactly where the node's form is checked and its position
   synthesizes**: `inl`, `inr`, `roll`, `absurd`, `abort` at an answer other than `0`, a `[sub]` no
-  rule of the position inserts, a `[let]` or `[then]` whose body was checked against the row (not
-  lifted to it), and a thunk whose type holds a row (a thunk synthesized is checked at no row).
+  rule of the position inserts, and a thunk whose type holds a row (a thunk synthesized is
+  checked at no row).
   The ascribed type is the node's judgment.
 * **A use of a `def`** (`TExpr.use`) reads back as a reference to the monomorphic declaration of
   its key `(decl, targs)` (`Key`), whose body is read back once from the use's typed body.
@@ -475,17 +475,11 @@ def rd : Nat → Cx → Bool → Bool → TExpr → RB Syn
       -- the program ascribes it.
       let M : Comp := .abort sp o.n.toNat o.i.toNat (← val cx true c)
       if chk || B == .zero then pure (.c M) else return .c (.ascribe sp M (← cty (← jC j)))
-    | .effLet i j A _ _ _ tM tN => do
-      -- Synthesized, the body is lifted to the row (`atRow`): a body that is not was checked
-      -- against the row, and the program ascribes the binding.
-      if !chk && !(tN matches .effSub ..) then
-        return .c (.ascribe sp (← comp cx true false t) (← cty (← jC j)))
+    | .effLet i _ A _ _ _ tM tN => do
       let x := cx.binder i.binders.head?
       let oA ← if i.ann then some <$> ty A else pure none
       return .c (.bind sp ⟨x, sp⟩ oA (← comp cx i.ann true tM) (← comp (cx.push x) chk (!chk) tN) i.lin)
-    | .effThen i j A _ _ _ _ _ tM tN tD => do
-      if !chk && !(tN matches .effSub ..) then
-        return .c (.ascribe sp (← comp cx true false t) (← cty (← jC j)))
+    | .effThen i _ A _ _ _ _ _ tM tN tD => do
       let x := cx.binder i.binders.head?
       let oA ← if i.ann then some <$> ty A else pure none
       let M ← comp cx i.ann true tM

@@ -9166,8 +9166,8 @@ The rewriter's pass, applying no rule, on the new backend's path (`Rewrite/`, th
   §19's `[sub]` where the position's rule inserts one (`liftRow`, `atRow`, `convC`, `return` at a
   row), `[then]`'s drop glue and §45's η-thunk. An ascription is written exactly where a node's
   form is checked and its position synthesizes: `inl`, `inr`, `roll`, `absurd`, `abort` at an
-  answer other than `0`, a `[sub]` no rule of the position inserts, a `[let]` whose body was checked
-  against the row, and a thunk whose type holds a row. A lifetime that is the meet of the node's
+  answer other than `0`, a `[sub]` no rule of the position inserts, and a thunk whose type holds a
+  row. A lifetime that is the meet of the node's
   lifetime context is written `dom`. Types are read back structurally.
 - **Facts the checker records for it** (`TInfo`): whether a `[then]`'s finaliser is written
   (`written`), whether a binding is annotated or `linear` (`ann`, `lin`), and the witness lifetime
