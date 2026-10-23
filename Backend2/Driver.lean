@@ -348,7 +348,7 @@ def watTimed (file src : String) : IO (Except String String) := do
     let some c := r.main | throw s!"{file}: no `main`"
     let k ← ExceptT.mk <| stage "io main" (fun _ => "") fun _ =>
       match Frontend.Check.ioMainOf r.el.prog c with
-        | .ok io => pure (⟨r.el.prog, c, io⟩ : Backend.CheckedProg)
+        | .ok io => pure (⟨r.el.prog, c, io, { ops := r.grades.table }⟩ : Backend.CheckedProg)
         | .error e => throw s!"{file}: {e}"
     let (p, cs) ← ExceptT.mk <| stage "lir" (fun (q : Prog × CState) =>
         s!"{q.1.fns.size} functions, {q.1.codes.size} codes") fun _ => lirOf k

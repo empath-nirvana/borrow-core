@@ -278,9 +278,12 @@ report carries, so that nothing after the check elaborates the program again. A 
 is then rejected if it copies recursive data implicitly (`Frontend.Check.implicitCopy`, on the typed
 terms the check returns): such a use is written `clone(x)`. With `copies := false` that check is
 skipped: for a program rebuilt from the printed core of one already checked with it (`run_io`'s
-wrapper). -/
-def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := do
-  let (rep, terms) ← checkCounted p
+wrapper), which is checked at that program's counts `cnts`, as given (SPEC §53). -/
+def checkProgram (p : Program) (copies : Bool := true) (cnts : Option CntTable := none) :
+    Except Error Report := do
+  let (rep, terms) ← match cnts with
+    | none => checkCounted p
+    | some t => checkAt p t
   let el := rep.el
   let handles := rep.handles
   -- What the elaboration reports about the program's loops (SPEC §16): total or div, and code
