@@ -41,11 +41,13 @@ corpus/async-r1-nested.bc instances 2 decls 2 poly 0 uses 2 erasure same lir sam
 corpus/async-race.bc instances 10 decls 10 poly 0 R0 2:rewritten raises 1 handles 1 lets 2 thens 1 subs 6 performs 0 forwards 0 ulends 0 pi 107 lir ok
 corpus/async-scheduler.bc instances 12 decls 12 poly 0 uses 12 erasure same lir same mismatches 0
 corpus/async-scoped.bc instances 14 decls 14 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 1 subs 2 performs 0 forwards 0 ulends 0 pi 172 lir ok
+corpus/async-slice-iter-await.bc instances 16 decls 16 poly 0 R0 2:rewritten 1:rewritten raises 2 handles 2 lets 0 thens 1 subs 3 performs 0 forwards 0 ulends 0 pi 211 lir ok
 corpus/async-stack-cancel.bc instances 8 decls 8 poly 0 R0 4:rewritten 2:rewritten raises 2 handles 2 lets 2 thens 4 subs 4 performs 4 forwards 0 ulends 0 pi 103 lir ok
 corpus/async-stack-deep.bc instances 19 decls 19 poly 0 R0 6:rewritten 4:rewritten 2:rewritten raises 4 handles 3 lets 3 thens 6 subs 6 performs 5 forwards 0 ulends 0 pi 289 lir ok
 corpus/async-stack-nested.bc instances 21 decls 21 poly 0 R0 2:rewritten 6:rewritten 4:rewritten raises 3 handles 3 lets 9 thens 0 subs 6 performs 6 forwards 0 ulends 0 pi 289 lir ok
 corpus/async-timers.bc instances 19 decls 19 poly 0 R0 1:rewritten raises 5 handles 2 lets 2 thens 7 subs 13 performs 0 forwards 0 ulends 0 pi 178 lir ok
 corpus/async-try-join.bc instances 27 decls 27 poly 0 R0 2:rewritten 6:rewritten 5:rewritten 4:rewritten 3:rewritten raises 21 handles 5 lets 19 thens 7 subs 30 performs 1 forwards 0 ulends 0 pi 411 lir ok
+corpus/async-two-readers-views.bc instances 17 decls 17 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 1 subs 2 performs 0 forwards 0 ulends 0 pi 171 lir ok
 corpus/async-workers-scoped.bc instances 16 decls 16 poly 0 R0 2:rewritten 1:rewritten raises 2 handles 2 lets 0 thens 1 subs 3 performs 0 forwards 0 ulends 0 pi 214 lir ok
 corpus/axes/borrow-across-loop.bc instances 7 decls 7 poly 0 uses 7 erasure same lir same mismatches 0
 corpus/axes/codata-coeffects.bc instances 5 decls 5 poly 0 uses 5 erasure same lir same mismatches 0
