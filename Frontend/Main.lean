@@ -34,8 +34,14 @@ import Backend2.Driver
                                 a never-reuse allocator (`fresh`), with lend tags (`tags`), or
                                 with the least-free allocator (`least`); a failed check is an
                                 error; `--stats` writes the run's counts to standard error
-    lake exe bcc desugar <file> print the program with its I/O sugar elaborated (SPEC §11)
+    lake exe bcc desugar [--counted] <file>
+                                print the program with its I/O sugar elaborated (SPEC §11); with
+                                `--counted`, at the counts the checker infers, its `ctl` entries
+                                written at them (SPEC §53)
     lake exe bcc erase <file>   print the erasure of the checked `main`
+    lake exe bcc grades <file>  the grade census: each `handle` node's operations, their counts
+                                (inferred, declared or written), what pins a `1?`, their world,
+                                position and storage (SPEC §53)
     lake exe bcc alpha [--map] <file>
                                 print the program with every variable renamed to a name of its
                                 own (`alphaRename`), or with `--map` the renaming
@@ -138,6 +144,28 @@ def desugar (file : String) : IO UInt32 := do
     | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
     | .ok el => IO.print el.prog.pp; return 0
 
+/-- The qualifier of a row entry, or of a `kont`, at the counts `tbl` (SPEC §53): a `ctl` entry
+`lin` at `1` and `aff` otherwise (`Frontend.Check.Scope.cntOf`); every other entry as written. -/
+def countedQual (tbl : List ((Nat × Nat) × BoCa.Fig16.LogRel.Core.Count)) (n i : Nat) (q : Qual) :
+    Qual :=
+  if q != .infer then q else match tbl.lookup (n, i) with
+    | some .one => .lin
+    | _ => .aff
+
+/-- Print `file` with its sugar elaborated, each `ctl` entry at the count the checker infers
+(SPEC §53, `countedQual`): the core text the checked program is. -/
+def desugarCounted (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+  | .ok p =>
+    match Check.checkCounted p with
+    | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+    | .ok (rep, _) =>
+      let q := countedQual rep.grades.table
+      IO.print (Program.mk (rep.el.prog.decls.map (Decl.requal q))).pp
+      return 0
+
 /-- Print the erasure of `file`'s checked `main`. -/
 def erase (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
@@ -182,6 +210,21 @@ def kinds (file : String) : IO UInt32 := do
       for h in r.handles do
         let ks := (List.range h.ks.length).zip h.ks |>.map fun (i, k) => k.render h.n i
         IO.println s!"{h.sp.start.render}: handle {h.n}{if h.boxed then " (boxed κ)" else ""}: {"; ".intercalate ks}"
+      return 0
+
+/-- **The grade census of `file`** (SPEC §53): each `handle` node of its checked terms, with each
+operation's count, how the count is fixed (inferred, declared, or written in a core row), the node
+and reason that pin a `1?`, its world, its clause's position and where `κ` is kept. -/
+def grades (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match parseProgram src (lib := Frontend.Sugar.libSrc) with
+  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+  | .ok p =>
+    match Check.checkProgram p with
+    | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
+    | .ok r =>
+      for h in r.handles do
+        IO.println (h.gradeLine r.grades)
       return 0
 
 /-- A set of frames as `bcc handled` prints it: its handler names, sorted, then whether it holds a
@@ -572,9 +615,11 @@ def main (argv : List String) : IO UInt32 := do
     | none => IO.eprintln "usage: bcc tailcalls <n>"; return 2
   | ["trusted", file] => trusted file
   | ["kinds", file] => kinds file
+  | ["grades", file] => grades file
   | ["handled", file] => handled file
   | ["sites", file] => sites file
   | ["desugar", file] => desugar file
+  | ["desugar", "--counted", file] => desugarCounted file
   | ["erase", file] => erase file
   | ["lir", "--typed", file] => typedDump file
   | ["lir", file] => lirDump file

@@ -163,9 +163,10 @@ effect).
   program's run to a value is proved by `rfl` (`runM_val`).
 - **The handler laws as machine lemmas** (`SPEC.md` §19 *Laws*, §25, `EffMachine.lean`), in every
   context, each step its configuration's only step (`Step1Only`, `step1Only_plug`) but an
-  allocation. H-ret (`catch_ret`); H-op: the catch hands the clause `kappa` at an unrestricted
-  operation (`catch_unr`), and at a linear or affine one allocates `κ`'s cell at a free location and
-  hands `kappaC` there (`catch_cell`), every run from the catch a prefix of those three steps or
+  allocation. H-ret (`catch_ret`); H-op: the catch hands the clause `kappa` at the machine's tag `2`,
+  which no count gives (`catch_unr`; a handler a derivation types holds its counts' tags, at each
+  of which `[op]` allocates the cell, `kappaAt_qualsVal`), and at a linear or affine one allocates
+  `κ`'s cell at a free location and hands `kappaC` there (`catch_cell`), every run from the catch a prefix of those three steps or
   going on from them (`catchEv_cell`); resuming `kappaC` releases the cell and runs `hnd H K[w]`
   (`kappaC_resume`), an affine cancel releases it and cancels (`kappaC_cancel`), a linear cancel has
   no step (`kappaC_cancel_lin`), and on a run to a value a use of `κ` releases its cell three steps
@@ -203,9 +204,9 @@ effect).
   `[raise]` and `[handle]`, every other rule verbatim; a tied derivation is a `CDerives` derivation
   (`CDerivesAt.toCDerives`), and one of a term with no `perform`, `raise` or `hnd` is tied at every
   context (`CDerivesAt.ofEffFree`). At a handler its signature is a prefix of `Ξ`'s
-  (`sig_prefix_of_rowAt`, `hndTags_of_rowAt`). `EffCtx.NoUnrExn`: no abortive operation is
-  unrestricted (§18); in a row tied to such a context an unrestricted operation resumes
-  (`abort_false_of_rowAt`). The checker builds every derivation tied (`Frontend/Check/Tied.lean`).
+  (`sig_prefix_of_rowAt`, `hndTags_of_rowAt`). An operation is abortive exactly when its count
+  is `0` (`OpSig.abort`, §53). The checker builds every derivation tied
+  (`Frontend/Check/Tied.lean`).
 - **The names a run raises** (`SPEC.md` §19 *Typing*, `RaiseNames.lean`). `Expr.RaiseOK P`: every
   raise of a term is of a name in `P` or a cancel, every cancel state keeps none or a raise of a
   name in `P`, and `cfin` holds only a cancel state. No step leaves it, nor stores a value that
@@ -229,8 +230,7 @@ effect).
   `finOK_of_finRow`, through `ownWorld` and `wpG_seg`). On complete runs, given that each fired
   finaliser runs alone to a value or an uncaught raise (`FinAloneAt`): `finaliserOrder_at`
   (`CancelRun`, `UnwindRun`). `progOutT` meets `cancel_prefix`'s hypotheses
-  (`progOutT_cancel_prefix`), and so does `progOutTA`, the same program at an affine raise, typed
-  at an effect context with no unrestricted abortive operation (`progOutTA_cancel_prefix`).
+  (`progOutT_cancel_prefix`): typed at `Ξ₁₂`, its run allocates `κ`'s cell and cancels `κ`.
 - **Inversions, and what no derivation types** (`SPEC.md` §19 *Laws* item 4 and *Programs*,
   `Inversions.lean`, `Rejections.lean`). Each inversion is an induction on `CDerives` that carries a
   class of judgements through the rules concluding with their premise's term: a variable is read at
@@ -252,8 +252,7 @@ effect).
   (`not_der_progNCrecT`), and E7c (`e7c`) none at a row without `exnᵢ` (`not_der_e7c`), while at
   the row of `exnᵢ` it is typed by a tied derivation (`dAt_e7c_lift`, `d_e7c_lift`).
 - **The effect properties as programs** (`SPEC.md` §19 *Programs*, `EffTier1Programs.lean`). Each
-  is a closed term with a derivation tied to the effect context `ΞE`, which has no unrestricted
-  abortive operation (`noUnrExn_ΞE`), and a run computed by `runM` to its answer at the empty
+  is a closed term with a derivation tied to the effect context `ΞE`, and a run computed by `runM` to its answer at the empty
   memory: a function let-bound once and used at several rows by `[let-poly]` (`hofTwoRows`,
   `sumGen`, `timeoutProg`), a deep handler under a handler of `tick` that counts (`deepGen`) and
   one that resumes (`deepGenPlain`), nested handlers in both orders

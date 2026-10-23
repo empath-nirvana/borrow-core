@@ -38,7 +38,7 @@ def VTy.level : VTy → Nat
   | .sum .. => 2
   | .tensor .. => 3
   | .thunk .. | .ref .. | .imm .. | .mut .. | .box .. | .bang .. | .block .. | .val ..
-  | .fam .. | .view .. | .array .. | .arrayImm .. | .arrayMut .. | .sized .. => 4
+  | .fam .. | .view .. | .array .. | .arrayImm .. | .arrayMut .. | .sized .. | .kont .. => 4
   | _ => 5
 
 def CTy.level : CTy → Nat
@@ -102,6 +102,7 @@ def VTy.pp (A : VTy) (lvl : Nat := 0) : String :=
     | .rowed _ F r =>
       let (_, ts, _) := r.ppArgs
       "(" ++ F.pp 0 ++ " with " ++ ", ".intercalate ts ++ ")"
+    | .kont _ n i q B C => s!"kont[{n}.{i} {q.str}] " ++ B.pp 5 ++ " " ++ C.pp 5
 
 /-- `N[A, …]<'a, …>`: the head name, the printed type arguments and lifetime arguments. -/
 def VTy.ppArgs : VTy → String × List String × List String
@@ -363,8 +364,7 @@ def Decl.pp : Decl → String
       (match o.kind with
         | .fn => "fn "
         | .ctl .lin => "linear ctl "
-        | .ctl .aff => "ctl "
-        | .ctl .unr => "multi ctl ") ++
+        | .ctl _ => "ctl ") ++
       o.name.name ++
         (if o.lives.isEmpty then "" else "<" ++ ", ".intercalate (o.lives.map fun (a, b) =>
           (Life.var a.span a.name).pp ++ (match b with | .top _ => "" | b => " < " ++ b.pp)) ++ ">") ++

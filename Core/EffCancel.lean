@@ -24,12 +24,13 @@ instance of their name.
 * `progNC₁`: as `progFinOp`, but the outer `4` cancels the finaliser's continuation: that cancel
   passes the running finaliser's `cfin` (`[cfin-cancel]`) and ends at its own `ccatch`
   (`progNC₁_run`).
-* `progDrop`, `progKeep`: a finaliser raises `2`, kept; a later finaliser performs `4`, whose
-  unrestricted handler drops its continuation, and the kept error with it (`progDrop_run`), or
-  resumes it, and the kept error reaches the live `2` (`progKeep_run`).
 
-The handlers' operations are unrestricted (`qualsVal [.unr]`), so `κ` owns no cell (§25) and the
-runs allocate nothing.
+The handlers hold the machine's tag `2` (`plainTags`), so `[op]` hands each clause `kappa`, which
+owns no cell (§25), and the runs allocate nothing.  No count gives that tag: a handler a derivation
+types holds its counts' tags, at which `[op]` allocates `κ`'s cell (`kappaAt_qualsVal`).  These are
+runs of the machine, untyped; the typed programs are `Core/EffCancelTyped.lean`'s, at the tag `1`
+with `κ`'s cell, among them `progKeepT`; a clause that drops its `κ` has no typing
+(`not_der_dropC`).
 -/
 
 noncomputable section
@@ -62,9 +63,13 @@ def resumeC : Val :=
 /-- The clause `λ_. v`: answer `v`. -/
 def constC (v : Val) : Val := Val.lam (.val v)
 
-/-- The handler of name `n` with one unrestricted operation, the answer clause `hr` and the
+/-- The machine's tag `2` for one operation: `[op]` hands its clause `kappa`, no cell (§25).  No
+count gives it. -/
+def plainTags : Val := Val.pair (Val.i32 2) Val.unit
+
+/-- The handler of name `n` with one operation at the tag `2`, the answer clause `hr` and the
 clause `c`. -/
-def hU (n : UInt32) (hr c : Val) : Val := hndVal n (qualsVal [.unr]) hr (Val.pair c Val.unit)
+def hU (n : UInt32) (hr c : Val) : Val := hndVal n plainTags hr (Val.pair c Val.unit)
 
 /-- `perform (m, (0, ()))`. -/
 def performU (m : UInt32) : Expr := performE (.val (opPayload m 0 Val.unit))
@@ -98,7 +103,7 @@ theorem st (K' : Kont) {μ : Heap} {a a' : Expr} (h : Head (ℍ := ℍ) μ a μ 
 theorem hcl (c : Val) : clauseAt (Val.pair c Val.unit).1 (0 : UInt32).toNat = some c := by
   simp [clauseAt, Val.pair, c.2]
 
-/-- `κ` at an unrestricted operation is `kappa`. -/
+/-- `κ` at the tag `2` is `kappa`. -/
 theorem isVal_kappa (H : Val) (K : Kont) : IsVal (kappa H K) := by unfold kappa; exact .lam
 
 /-- A value shifted past a binder and substituted there is itself. -/
@@ -132,7 +137,7 @@ theorem cancel_start (μ : Heap) (n : UInt32) (hr : Val) (K : Kont) (hK : K.HasH
     Steps (ℍ := ℍ) μ (hndE (hU n hr cancelC) (K.plug (performU n))) μ
       (ccatchE (K.dead.plug (raiseE (.val (cancelVal none))))) := by
   let κv : Val := ⟨kappa (hU n hr cancelC) K, isVal_kappa _ _⟩
-  refine .more (st .hole (Head.hop μ n 0 (qualsVal [.unr]) hr (Val.pair cancelC Val.unit) cancelC
+  refine .more (st .hole (Head.hop μ n 0 plainTags hr (Val.pair cancelC Val.unit) cancelC
     Val.unit K (hcl cancelC) hK)) ?_
   refine .more (st .hole (Head.beta μ _ (Val.pair Val.unit κv))) ?_
   refine .more (st .hole (Head.letpair μ Val.unit κv _)) ?_
@@ -146,7 +151,7 @@ theorem resume_start (μ : Heap) (n : UInt32) (hr : Val) (K : Kont) (hK : K.HasH
     Steps (ℍ := ℍ) μ (hndE (hU n hr resumeC) (K.plug (performU n))) μ
       (hndE (hU n hr resumeC) (K.plug (.val Val.unit))) := by
   let κv : Val := ⟨kappa (hU n hr resumeC) K, isVal_kappa _ _⟩
-  refine .more (st .hole (Head.hop μ n 0 (qualsVal [.unr]) hr (Val.pair resumeC Val.unit) resumeC
+  refine .more (st .hole (Head.hop μ n 0 plainTags hr (Val.pair resumeC Val.unit) resumeC
     Val.unit K (hcl resumeC) hK)) ?_
   refine .more (st .hole (Head.beta μ _ (Val.pair Val.unit κv))) ?_
   refine .more (st .hole (Head.letpair μ Val.unit κv _)) ?_
@@ -160,7 +165,7 @@ closed value `v`; the continuation is dropped. -/
 theorem const_start (μ : Heap) (n : UInt32) (hr v : Val) (hv : ∀ s, Expr.subst 0 s v.1 = v.1)
     (K : Kont) (hK : K.HasHnd n = false) :
     Steps (ℍ := ℍ) μ (hndE (hU n hr (constC v)) (K.plug (performU n))) μ (.val v) := by
-  refine .more (st .hole (Head.hop μ n 0 (qualsVal [.unr]) hr (Val.pair (constC v) Val.unit)
+  refine .more (st .hole (Head.hop μ n 0 plainTags hr (Val.pair (constC v) Val.unit)
     (constC v) Val.unit K (hcl (constC v)) hK)) ?_
   refine .more (st .hole (Head.beta μ _ (Val.pair Val.unit ⟨_, isVal_kappa _ _⟩))) ?_
   show Steps μ (Expr.subst 0 _ v.1) μ _
@@ -237,7 +242,7 @@ theorem prog_final (μ : Heap) : ∀ μ' e', ¬ Step1 (ℍ := ℍ) μ (raiseU 2)
 outside the region. -/
 theorem prog₃_run (μ : Heap) : Steps (ℍ := ℍ) μ prog₃ μ (.val (Val.inj₂ Val.unit)) := by
   refine (Steps.plug (hF H₃ .hole) (body_run 3 (by decide) μ)).trans ?_
-  refine .more (st .hole (Head.hunwind μ 3 0 (qualsVal [.unr]) idV (Val.pair c₃ Val.unit) c₃
+  refine .more (st .hole (Head.hunwind μ 3 0 plainTags idV (Val.pair c₃ Val.unit) c₃
     Val.unit .hole (hcl c₃) rfl)) ?_
   refine .more (st .hole (Head.beta μ _ Val.unit)) ?_
   exact .refl _ _
@@ -249,7 +254,7 @@ def progOut : Expr := hndE (hU 2 injlV (constC (Val.inj₂ Val.unit))) prog
 the live instance outside it. -/
 theorem progOut_run (μ : Heap) : Steps (ℍ := ℍ) μ progOut μ (.val (Val.inj₂ Val.unit)) := by
   refine (Steps.plug (hF (hU 2 injlV (constC (Val.inj₂ Val.unit))) .hole) (prog_run μ)).trans ?_
-  refine .more (st .hole (Head.hunwind μ 2 0 (qualsVal [.unr]) injlV
+  refine .more (st .hole (Head.hunwind μ 2 0 plainTags injlV
     (Val.pair (constC (Val.inj₂ Val.unit)) Val.unit) (constC (Val.inj₂ Val.unit)) Val.unit .hole
     (hcl _) rfl)) ?_
   refine .more (st .hole (Head.beta μ _ Val.unit)) ?_
@@ -282,7 +287,7 @@ theorem progRe_run (μ : Heap) : Steps (ℍ := ℍ) μ progRe μ (.val (Val.inj�
     (Head.cferr μ none 3 0 Val.unit .hole (by decide) rfl)) ?_
   refine .more (st (hF (hU 3 injlV c₃) .hole)
     (Head.creraise μ (opPayload 3 0 Val.unit) .hole rfl)) ?_
-  refine .more (st .hole (Head.hunwind μ 3 0 (qualsVal [.unr]) injlV (Val.pair c₃ Val.unit) c₃
+  refine .more (st .hole (Head.hunwind μ 3 0 plainTags injlV (Val.pair c₃ Val.unit) c₃
     Val.unit .hole (hcl c₃) rfl)) ?_
   refine .more (st .hole (Head.beta μ _ Val.unit)) ?_
   exact .refl _ _
@@ -316,7 +321,7 @@ theorem progFinOp_run (μ : Heap) : Steps (ℍ := ℍ) μ progFinOp μ (.val (Va
   refine (resume_start μ 4 injlV (ccF (cfF (cancelVal none) .hole)) rfl).trans ?_
   refine .more (st (hF (hU 4 injlV resumeC) (ccF .hole)) (Head.cfret μ none Val.unit)) ?_
   refine .more (st (hF (hU 4 injlV resumeC) .hole) (Head.cancel μ .hole rfl)) ?_
-  refine .more (st .hole (Head.hret μ 4 (qualsVal [.unr]) injlV (Val.pair resumeC Val.unit)
+  refine .more (st .hole (Head.hret μ 4 plainTags injlV (Val.pair resumeC Val.unit)
     Val.unit)) ?_
   refine .more (st .hole (Head.beta μ _ Val.unit)) ?_
   exact .refl _ _
@@ -330,64 +335,6 @@ theorem progNC₁_run (μ : Heap) : Steps (ℍ := ℍ) μ progNC₁ μ (.val Val
   show Steps μ ((ccF (cfF (cancelVal none) .hole)).plug (raiseE (.val (cancelVal none)))) μ _
   refine .more (st (ccF .hole) (Head.cfcancel μ none none .hole rfl)) ?_
   refine .more (st .hole (Head.cancel μ .hole rfl)) ?_
-  exact .refl _ _
-
-/-- `hnd (2, H₂ₒ) (hnd (4, H₄ₒ) (hnd (1, H₁) (((perform 1) then x. x unwind raise 2) then y. y
-unwind perform 4)))`, with `H₂ₒ`'s clause answering `inj₂ ()`, and `H₄ₒ`'s answer clause
-`λx. inj₁ x` and clause `c`. -/
-def progKD (c : Val) : Expr :=
-  hndE (hU 2 idV (constC (Val.inj₂ Val.unit))) (hndE (hU 4 injlV c)
-    (hndE H₁ (thenU (thenU (performU 1) (raiseU 2)) (performU 4))))
-
-/-- `H₄ₒ`'s clause answers `inj₁ ()` and drops its continuation. -/
-def progDrop : Expr := progKD (constC (Val.inj₁ Val.unit))
-
-/-- `H₄ₒ`'s clause resumes its continuation. -/
-def progKeep : Expr := progKD resumeC
-
-/-- `progKD`'s cancel: the inner finaliser's raise of `2` is kept, and the outer finaliser performs
-`4` with the kept error in its `cfin`. -/
-theorem progKD_cancel (μ : Heap) (c : Val) :
-    Steps (ℍ := ℍ) μ (progKD c) μ
-      ((hF (hU 2 idV (constC (Val.inj₂ Val.unit))) (hF (hU 4 injlV c) .hole)).plug
-        ((ccF (cfF (cancelVal (some (opPayload 2 0 Val.unit))) .hole)).plug (performU 4))) := by
-  let Ko : Kont := hF (hU 2 idV (constC (Val.inj₂ Val.unit))) (hF (hU 4 injlV c) .hole)
-  refine (Steps.plug Ko (cancel_start μ 1 idV (uF (performU 4) (uF (raiseU 2) .hole)) rfl)).trans ?_
-  show Steps μ ((Ko.comp (ccF (uF (performU 4) .hole))).plug
-    (ubindE (Val.pair idV (finV (raiseU 2))) (raiseE (.val (cancelVal none))))) μ _
-  refine (Steps.plug (Ko.comp (ccF (uF (performU 4) .hole))) (fin_cancel μ (raiseU 2) none)).trans ?_
-  refine .more (st (Ko.comp (ccF (uF (performU 4) .hole)))
-    (Head.cferr μ none 2 0 Val.unit .hole (by decide) rfl)) ?_
-  show Steps μ ((Ko.comp (ccF .hole)).plug (ubindE (Val.pair idV (finV (performU 4)))
-    (raiseE (.val (cancelVal (some (opPayload 2 0 Val.unit))))))) μ _
-  exact Steps.plug (Ko.comp (ccF .hole)) (fin_cancel μ (performU 4) _)
-
-/-- **`progDrop`**: `H₄ₒ`'s unrestricted clause drops the continuation that holds the kept error
-`2`, so `H₂ₒ`'s clause never runs. -/
-theorem progDrop_run (μ : Heap) : Steps (ℍ := ℍ) μ progDrop μ (.val (Val.inj₁ Val.unit)) := by
-  refine (progKD_cancel μ _).trans ?_
-  refine (Steps.plug (hF (hU 2 idV (constC (Val.inj₂ Val.unit))) .hole) (const_start μ 4 injlV
-    (Val.inj₁ Val.unit) (fun _ => rfl) (ccF (cfF (cancelVal (some (opPayload 2 0 Val.unit))) .hole))
-    rfl)).trans ?_
-  refine .more (st .hole (Head.hret μ 2 (qualsVal [.unr]) idV
-    (Val.pair (constC (Val.inj₂ Val.unit)) Val.unit) (Val.inj₁ Val.unit))) ?_
-  refine .more (st .hole (Head.beta μ _ (Val.inj₁ Val.unit))) ?_
-  exact .refl _ _
-
-/-- **`progKeep`**: `H₄ₒ` resumes the finaliser; the finaliser returns, the cancel re-raises the
-kept error `2` at the canceller, and the live `H₂ₒ` catches it. -/
-theorem progKeep_run (μ : Heap) : Steps (ℍ := ℍ) μ progKeep μ (.val (Val.inj₂ Val.unit)) := by
-  refine (progKD_cancel μ _).trans ?_
-  refine (Steps.plug (hF (hU 2 idV (constC (Val.inj₂ Val.unit))) .hole) (resume_start μ 4 injlV
-    (ccF (cfF (cancelVal (some (opPayload 2 0 Val.unit))) .hole)) rfl)).trans ?_
-  refine .more (st (hF (hU 2 idV (constC (Val.inj₂ Val.unit)))
-    (hF (hU 4 injlV resumeC) (ccF .hole))) (Head.cfret μ _ Val.unit)) ?_
-  refine .more (st (hF (hU 2 idV (constC (Val.inj₂ Val.unit))) (hF (hU 4 injlV resumeC) .hole))
-    (Head.creraise μ (opPayload 2 0 Val.unit) .hole rfl)) ?_
-  refine .more (st .hole (Head.hunwind μ 2 0 (qualsVal [.unr]) idV
-    (Val.pair (constC (Val.inj₂ Val.unit)) Val.unit) (constC (Val.inj₂ Val.unit)) Val.unit
-    (hF (hU 4 injlV resumeC) .hole) (hcl _) rfl)) ?_
-  refine .more (st .hole (Head.beta μ _ Val.unit)) ?_
   exact .refl _ _
 
 /-! ### `[then]` with its finaliser at the abortive row
@@ -409,7 +356,7 @@ def ThenAbortCompat : Prop :=
     SemC (ℍ := ℍ) Δ Γ (thenE N D M) (CTy.effOf S B)
 
 /-- The row of `prog`'s `[then]`: the abortive `2` and the affine `1`. -/
-def S₁₂ : Row := [⟨2, 0, .aff, .unit, .zero, .ret .unit⟩, ⟨1, 0, .aff, .unit, .unit, .ret .unit⟩]
+def S₁₂ : Row := [⟨2, 0, .zero, .top, .unit, .zero, .ret .unit⟩, ⟨1, 0, .opt, .top, .unit, .unit, .ret .unit⟩]
 
 /-- `prog`'s `[then]`: `perform 1 then x. x unwind raise 2`. -/
 def thenProg : Expr := thenE (.var 0) (raiseU 2) (performU 1)
@@ -424,12 +371,12 @@ theorem semC_thenProg (h : ThenAbortCompat (ℍ := ℍ)) :
     SemC (ℍ := ℍ) LifeCtx.empty [] thenProg (CTy.effOf S₁₂ .unit) := by
   have hM : CDerives LifeCtx.empty [] (performE (opArgE 1 0 (.val .unit)))
       (.comp (CTy.effOf S₁₂ .unit)) :=
-    .effPerform (o := ⟨1, 0, .aff, .unit, .unit, .ret .unit⟩) (by rfl) rfl (.unitI .nil)
+    .effPerform (o := ⟨1, 0, .opt, .top, .unit, .unit, .ret .unit⟩) (by rfl) rfl (.unitI .nil)
   have hN : CDerives LifeCtx.empty [⟨.unit, true⟩] (.var 0) (.comp (CTy.effOf S₁₂ .unit)) :=
     .effSub (S := []) (fun _ _ _ h => by simp [Row.find] at h) (.ret (.var (.here .nil)))
   have hD : CDerives LifeCtx.empty [⟨.unit, false⟩] (raiseE (opArgE 2 0 (.val .unit)))
       (.comp (CTy.effOf S₁₂.abortOnly .unit)) :=
-    .effRaise (o := ⟨2, 0, .aff, .unit, .zero, .ret .unit⟩) (by rfl) rfl .unit (.unitI (.cons .nil))
+    .effRaise (o := ⟨2, 0, .zero, .top, .unit, .zero, .ret .unit⟩) (by rfl) rfl .unit (.unitI (.cons .nil))
   exact h .nil (by intro o ho; simp [S₁₂] at ho; rcases ho with rfl | rfl <;> decide)
     (by simp [Row.Uniq, S₁₂]) (fun _ s hs => absurd hs List.not_mem_nil)
     (fundamentalC hM) (fundamentalC hN) (fundamentalC hD)
@@ -511,7 +458,7 @@ theorem not_thenAbort_compatC : ¬ ThenAbortCompat (ℍ := ℍ) := by
   obtain ⟨⟨hK, -, hT, -⟩, ρa, ρk, hcak, hPA, hcont⟩ := pure_sep_iff.mp hp
   obtain ⟨rfl, hpay⟩ := plug_perform_inj (thenProg_eq.symm.trans hK)
   obtain ⟨rfl, rfl, rfl⟩ := opPayload_inj hpay
-  have hen : en = OpSig.ent LSub.empty ⟨1, 0, .aff, .unit, .unit, .ret .unit⟩ := by
+  have hen : en = OpSig.ent LSub.empty ⟨1, 0, .opt, .top, .unit, .unit, .ret .unit⟩ := by
     simp [Row.tab, Row.find, S₁₂] at hT; exact hT.symm
   subst hen
   have hρa : ρa = PMap.empty := hPA.1
@@ -580,14 +527,6 @@ theorem progFinOp_eval :
 
 theorem progNC₁_eval :
     (match eval progNC₁ with | .value ⟨.unit, _⟩ false => true | _ => false) = true := by
-  decide
-
-theorem progDrop_eval :
-    (match eval progDrop with | .value ⟨.inj₁ .unit, _⟩ false => true | _ => false) = true := by
-  decide
-
-theorem progKeep_eval :
-    (match eval progKeep with | .value ⟨.inj₂ .unit, _⟩ false => true | _ => false) = true := by
   decide
 
 end BoCa.Fig16.LogRel.Core.CancelIntercept

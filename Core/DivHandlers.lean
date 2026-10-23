@@ -55,10 +55,10 @@ theorem clauseAt_one (c : Val) : clauseAt (Val.pair c Val.unit).1 0 = some c := 
   simp [clauseAt, Val.pair]; exact c.2
 
 theorem kappaAt_lin (d : UInt32) (hr c : Val) (K : Kont) :
-    kappaAt (capTag (qualsVal [.lin]).1 (UInt32.toNat 0))
-      (hndVal d (qualsVal [Qual.lin]) hr (c.pair Val.unit)) K =
-      kappaCell false (hndVal d (qualsVal [Qual.lin]) hr (c.pair Val.unit)) K := by
-  simp only [kappaAt, qualsVal, Qual.tag, Val.pair, Val.i32]; rfl
+    kappaAt (capTag (qualsVal [.one]).1 (UInt32.toNat 0))
+      (hndVal d (qualsVal [Count.one]) hr (c.pair Val.unit)) K =
+      kappaCell false (hndVal d (qualsVal [Count.one]) hr (c.pair Val.unit)) K := by
+  simp only [kappaAt, qualsVal, Qual.tag, Count.toQual, Val.pair, Val.i32]; rfl
 
 /-- A linear `κ` at its cell, as a value. -/
 def kapV (ℓ : Loc) (H : Val) (K : Kont) : Val := ⟨kappaC false ℓ H K, isVal_kappaC false ℓ H K⟩
@@ -68,17 +68,17 @@ clause, with `κ` given its cell. -/
 theorem hnd_tick {Tb : Table} (hTb : Tb.Mono) (hr c : Val) (K₀ K₁ : Kont)
     (hK₁ : K₁.HasHnd divEff = false) {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
     (h : ∀ ℓ : Loc, (ptoOwn ℓ Val.unit ─⋆ ewpTS ls (K₀.plug (.app (.val c)
-      (.val (Val.pair .unit (kapV ℓ (hndVal divEff (qualsVal [.lin]) hr (c.pair .unit)) K₁)))))
+      (.val (Val.pair .unit (kapV ℓ (hndVal divEff (qualsVal [.one]) hr (c.pair .unit)) K₁)))))
         Tb Q) ρ) :
-    ewpTS ls (K₀.plug (hndE (hndVal divEff (qualsVal [.lin]) hr (c.pair .unit)) (K₁.plug tickE)))
+    ewpTS ls (K₀.plug (hndE (hndVal divEff (qualsVal [.one]) hr (c.pair .unit)) (K₁.plug tickE)))
       Tb Q ρ := by
-  refine ewp_step hTb (fun μ => (Step1N.head (Head.hop μ divEff 0 (qualsVal [.lin]) hr
+  refine ewp_step hTb (fun μ => (Step1N.head (Head.hop μ divEff 0 (qualsVal [.one]) hr
     (Val.pair c .unit) c .unit K₁ (clauseAt_one c) hK₁) rfl).plug K₀) ls Q ρ ?_
   rw [kappaAt_lin]
   have e : K₀.plug (.app (.val c) (.pair (.val .unit)
-      (kappaCell false (hndVal divEff (qualsVal [Qual.lin]) hr (c.pair Val.unit)) K₁))) =
+      (kappaCell false (hndVal divEff (qualsVal [Count.one]) hr (c.pair Val.unit)) K₁))) =
       (K₀.comp (.appR (.val c) (.pairR .unit .hole))).plug
-        (kappaCell false (hndVal divEff (qualsVal [Qual.lin]) hr (c.pair Val.unit)) K₁) := by
+        (kappaCell false (hndVal divEff (qualsVal [Count.one]) hr (c.pair Val.unit)) K₁) := by
     rw [Kont.plug_comp]; rfl
   rw [e]
   refine ewp_kappaCell hTb false _ K₁ _ (fun ℓ σ₁ σ₂ hp hc => ?_)

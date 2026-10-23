@@ -3,7 +3,8 @@
 # `corpus/axes/*.bc`, `corpus/aoc/*.bc` and `corpus/leetcode/*/*.bc` must check, except a file marked `-- check: parse-only`
 # (it is for the parser); every `corpus/reject/*.bc` must parse and be rejected by the checker
 # with the message on its `-- expect:` line (`line:col: message`), continued by any `-- expect| `
-# lines for a message of several lines.
+# lines for a message of several lines. A reject file marked `-- reject: syntax` holds a form the
+# grammar no longer has, and the parser must refuse it with that message.
 #
 # Reports. For every corpus/reports/<name>.txt, the effects lines `bcc check corpus/<name>.bc` prints
 # (`effect`, `row`, `lowering`, `call`: SPEC §18) must be exactly that file: the rows, the lowering
@@ -44,7 +45,19 @@ checks() {
 rejects() {
   local f=$1 want out
   want=$(sed -n 's/^-- expect: //p; s/^-- expect| //p' "$f")
-  if ! "$bcc" parse "$f" >/dev/null 2>&1; then
+  if grep -q '^-- reject: syntax' "$f"; then
+    # A form the grammar no longer has (SPEC §53's `unr`, `multi ctl`): the parser refuses it.
+    # Only such a form is refused before the checker: its expected message cites SPEC §53.
+    if [[ "$want" != *"(SPEC §53)"* ]]; then
+      echo "$f: \`-- reject: syntax\` is for a form SPEC §53 removed, and its message does not cite it"; return 1
+    elif out=$("$bcc" parse "$f" 2>&1); then
+      echo "$f: parses, but its form must be refused by the parser"; return 1
+    elif [ "$out" != "$f:$want" ]; then
+      echo "$f: wrong error"; echo "  want: $want"; echo "  got:  ${out#"$f:"}"; return 1
+    else
+      echo "$f: rejected as expected"
+    fi
+  elif ! "$bcc" parse "$f" >/dev/null 2>&1; then
     echo "$f: does not parse, so it does not test the checker"; return 1
   elif out=$("$bcc" check "$f" 2>&1); then
     echo "$f: accepted, but must be rejected"; return 1

@@ -349,13 +349,13 @@ inductive ClauseKind where
   | stored
   deriving DecidableEq, Repr, Inhabited
 
-/-- An operation's clause at a handler: the operation's qualifier and the clause's kind. -/
+/-- An operation's clause at a handler: the operation's count and the clause's kind. -/
 structure HKind where
-  q : Qual
+  cnt : Count
   kind : ClauseKind
   deriving DecidableEq, Repr
 
-instance : Inhabited HKind := ⟨⟨.lin, .stored⟩⟩
+instance : Inhabited HKind := ⟨⟨.one, .stored⟩⟩
 
 /-- The kind's premise on the body `M` of the clause `λp. let (x, κ) = p; M`, `κ` in the slot
 `0` of `M`. -/
@@ -371,28 +371,28 @@ def ClauseKind.BodyPremise : ClauseKind → Expr → Prop
   | .stored, _ => True
 
 /-- Whether the operation `o = A ↠^q B` is abortive: its clause takes no `κ` (`clauseTy`). -/
-def isAbortive (o : Qual × VTy × VTy) : Bool := o.2.2.isZero && o.1 != .lin
+def isAbortive (o : Count × VTy × VTy) : Bool := o.1 == .zero
 
 /-- **The premise of the kind's law**, for the operation `o` and its clause `c` (erased). An
 abortive operation's clause takes its argument alone (`clauseTy_abortive`); a control clause is
 `λp. let (x, κ) = p; M` with `M`'s premise. -/
-def ClauseKind.Premise : ClauseKind → (Qual × VTy × VTy) → Expr → Prop
+def ClauseKind.Premise : ClauseKind → (Count × VTy × VTy) → Expr → Prop
   | .abortive, o, _ => isAbortive o = true
   | .stored, _, _ => True
   | k, o, c => isAbortive o = false ∧
       ∃ M, c = .val (.lam (.letpair (.var 0) M)) ∧ k.BodyPremise M
 
 /-- An abortive operation's clause type has no `κ`: `!U(A ⊸ F_Σ R)`. -/
-theorem clauseTy_abortive {S : Row} {R : VTy} {o : Qual × VTy × VTy} {F : CTy}
+theorem clauseTy_abortive {S : Row} {R : VTy} {o : Count × VTy × VTy} {F : CTy}
     (h : isAbortive o = true) : clauseTy S R o F = .bang (.thunk (.arr o.2.1 (CTy.effOf S R))) := by
   obtain ⟨q, A, B⟩ := o
   simp only [isAbortive] at h
   simp [clauseTy, h]
 
 /-- A control operation's clause type takes `κ`: `!U(A ⊗ K ⊸ F_Σ R)`. -/
-theorem clauseTy_control {S : Row} {R : VTy} {o : Qual × VTy × VTy} {F : CTy}
+theorem clauseTy_control {S : Row} {R : VTy} {o : Count × VTy × VTy} {F : CTy}
     (h : isAbortive o = false) :
-    clauseTy S R o F = .bang (.thunk (.arr (.tensor o.2.1 (kTy S R o.1 o.2.2 F)) (CTy.effOf S R))) := by
+    clauseTy S R o F = .bang (.thunk (.arr (.tensor o.2.1 (kTy S R o.1.toQual o.2.2 F)) (CTy.effOf S R))) := by
   obtain ⟨q, A, B⟩ := o
   simp only [isAbortive] at h
   simp [clauseTy, h]
@@ -401,7 +401,7 @@ theorem clauseTy_control {S : Row} {R : VTy} {o : Qual × VTy × VTy} {F : CTy}
 
 /-- The kind `effHandleT` gives an operation by its rule (§14, decision 68): its clauses are
 written out from answering functions (`tailClause`), each resuming `κ` in tail position. -/
-def tailKind (o : Qual × VTy × VTy) : HKind :=
+def tailKind (o : Count × VTy × VTy) : HKind :=
   ⟨o.1, if isAbortive o then .abortive else .tail⟩
 
 theorem mentions_shift {d c k : Nat} (hk : c ≤ k) (hd : k < c + d) :
@@ -433,7 +433,7 @@ theorem mentions_pickE : ∀ (j : Nat) {k : Nat} {t : Expr}, mentions k t = fals
 out from an answering function, `λ(x, κ). (λw. κ.1 w) (g x)`, meets the `tail` kind's premise,
 and an abortive one the `abortive` kind's. So the rule's class is an instance of `tail`, the one
 definition of tail-resumptive.  `[spec §14, §19]` -/
-theorem tailClause_premise (o : Qual × VTy × VTy) (j : Nat) (Hc : Expr) :
+theorem tailClause_premise (o : Count × VTy × VTy) (j : Nat) (Hc : Expr) :
     (tailKind o).kind.Premise o (tailClause j (isAbortive o) Hc) := by
   unfold tailKind
   cases ha : isAbortive o

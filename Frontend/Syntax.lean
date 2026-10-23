@@ -65,18 +65,19 @@ inductive Mode where
   | imm
   deriving DecidableEq, Repr, Inhabited
 
-/-- The qualifier of an operation's continuation in a row (SPEC §19): linear, affine or
-unrestricted. -/
+/-- The count of an operation's continuation as a row writes it (SPEC §19, §53): `lin`, exactly `1`;
+`aff`, `1?` (`0` at an operation answering `0`); or `ctl`, the count the checker infers for the
+operation's name, the strictest its handlers allow (`Frontend/Check/Grades.lean`). -/
 inductive Qual where
   | lin
   | aff
-  | unr
+  | infer
   deriving DecidableEq, Repr, Inhabited
 
 def Qual.str : Qual → String
   | .lin => "lin"
   | .aff => "aff"
-  | .unr => "unr"
+  | .infer => "ctl"
 
 /-- The host resource kinds the surface names (SPEC §11, §34): `input`, `output`, `clock`,
 `args`. -/
@@ -155,6 +156,11 @@ inductive VTy where
   instances in order, each the effect's name applied to its type arguments (`VTy.rowEffs`).
   Elaborated away by `Frontend.Elab.Effects`.  `[spec §33]` -/
   | rowed (sp : Span) (F : VTy) (row : VTy)
+  /-- `kont[n.i q] B C`: the continuation `κ` a clause of the operation `n.i`, written at `q`,
+  receives, answering `B` and resuming into `C = F_Σ R`. The checker writes it as the kernel's
+  `kTy Σ R` at the operation's count (SPEC §53), so the elaboration that writes a clause's type
+  does not need the count.  `[spec §19, §53]` -/
+  | kont (sp : Span) (n i : Nat) (q : Qual) (B : VTy) (C : CTy)
 
 /-- Computation types (syntax-core §4). -/
 inductive CTy where
@@ -715,8 +721,8 @@ inductive Mark where
   | row (effs : List (Ident × List VTy)) (m : Mark) (names : List (Option Ident))
   deriving DecidableEq, Repr, Inhabited
 
-/-- The kind of an operation (SPEC §19): answering (`fn`), or control (`ctl`) with the structural
-qualifier of its continuation (`ctl` affine, `linear ctl`, `multi ctl` unrestricted). -/
+/-- The kind of an operation (SPEC §19, §53): answering (`fn`), or control (`ctl`) with the count of
+its continuation as declared: `ctl`, inferred (`infer`), or `linear ctl`, exactly `1` (`lin`). -/
 inductive OpKind where
   | fn
   | ctl (q : Qual)
@@ -844,6 +850,7 @@ def VTy.strip : VTy → VTy
   | .app _ G A => .app .none G.strip A.strip
   | .lapp _ G a => .lapp .none G.strip a.strip
   | .rowed _ F r => .rowed .none F.strip r.strip
+  | .kont _ n i q B C => .kont .none n i q B.strip C.strip
 
 def CTy.strip : CTy → CTy
   | .ret _ A => .ret .none A.strip
@@ -1061,7 +1068,7 @@ def VTy.span : VTy → Span
   | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .handle sp _ | .mu sp _ _ | .name sp _
   | .lolli sp _ _ | .all sp _ _ _ | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _
   | .array sp _ | .arrayImm sp _ _ | .arrayMut sp _ _ | .sized sp _ _ _ | .app sp _ _
-  | .lapp sp _ _ | .rowed sp _ _ => sp
+  | .lapp sp _ _ | .rowed sp _ _ | .kont sp _ _ _ _ _ => sp
 
 def CTy.span : CTy → Span
   | .ret sp _ | .arr sp _ _ | .amp sp _ _ | .top sp | .all sp _ _ _ | .nu sp _ _ | .name sp _

@@ -413,7 +413,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
       (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
       (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-        capB o.q o.B = true → ThenLe o.fin SD o'.fin)
+        capB o.cnt = true → ThenLe o.fin SD o'.fin)
       (hP : SD.UnrD → SM.PendPers) (hSD : Row.divB SD = false)
       (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf SM A)))
       (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
@@ -425,7 +425,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   handled row does not hold `Div`: a handler of `Div`, or of another name around a computation
   that ticks, is `effHandleT` (decision 68).  At two variables and empty cancel rows it is
   `hndTerm` (`CDerives.effHandle`).  `[spec §14, §19, §24, §27]` -/
-  | effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+  | effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy}
       {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
       (hc : CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))))
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
@@ -436,7 +436,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   (the clauses at `clausesTyB Σ R d E fs`). The handled computation's context outlives `@d`, and
   so does the answer type of every non-abortive operation of its row, handled or forwarded.
   `[spec §28]` -/
-  | effHandleVB {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+  | effHandleVB {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy}
       {n : UInt32} {A R : VTy} {d : Lifetime.Life} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
       (hH : H.ValFormIn Γ₁)
       (hc : CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyB S R d E fs))))
@@ -449,7 +449,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   clauses written out from a tuple `gs` of answering functions (`tailTuple`), each at a row `Σ_N`
   of linear operations below `Σ`; an abortive operation's clause is its function itself.  The
   handled row may hold `Div` (decision 68).  `[spec §14, §19]` -/
-  | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+  | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy}
       {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
       (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
       (hc : CDerives Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
@@ -465,13 +465,13 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   runs; an abortive operation's clause is its work.  The operations are affine or abortive, `Σ_W ≤
   Σ`, `Σ` has no unrestricted operation at any depth, and each cancel row is as `LastFinOK` says.
   The handled row may hold `Div`.  `[spec §14, §19, §27, §51]` -/
-  | effHandleL {Δ Γ Γ₁ Γ₂} {Hr Hw Hn e : Expr} {S SW : Row} {E : List (Qual × VTy × VTy)}
+  | effHandleL {Δ Γ Γ₁ Γ₂} {Hr Hw Hn e : Expr} {S SW : Row} {E : List (Count × VTy × VTy)}
       {fs : Nat → CTy} {Xs : Nat → VTy} {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHw : Hw.ValFormIn Γ₁) (hHn : Hn.ValFormIn Γ₁)
       (hc : CDerives Δ Γ₁ (.pair Hr (.pair Hw Hn))
         (.val (.tensor (retTy S A R) (.tensor (worksTy S SW R Xs E 0) (exitsTy S R Xs E 0)))))
       (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-      (hNZ : S.NZ) (hAff : ∀ o ∈ E, o.1 = .aff ∨ (o.2.2.isZero && o.1 != .lin) = true)
+      (hNZ : S.NZ) (hAff : ∀ o ∈ E, o.1.toQual = .aff ∨ (o.1 == .zero) = true)
       (hSW : RowLe SW S) (hSu : ¬ S.UnrD)
       (hFin : ∀ j, j < E.length → LastFinOK S SW (fs j) (Xs j))
       (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
@@ -500,7 +500,7 @@ theorem CDerives.effThenA {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row} (hs : Ctx.Spli
 /-- `[handle]` at two variables: `handle_n e with (h_ret, hs)`, `h_ret` and `hs` variables of
 slots at their types.  An instance of `effHandleV`: `(h_ret, hs)` is a value form, typed by
 `[⊗I]`, over slots that are persistent.  `[spec §19]` -/
-theorem CDerives.effHandle {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)}
+theorem CDerives.effHandle {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Count × VTy × VTy)}
     {n : UInt32} {A R : VTy} {ir ic : Nat} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc)
     (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)

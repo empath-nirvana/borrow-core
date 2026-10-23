@@ -90,15 +90,18 @@ def siteErr (sp : Span) (r : SiteRec) (what : String) : Error :=
 def siteTy (E : Env) (Δ : LifeCtx) (sp : Span) (r : SiteRec) (A : VTy) : Except Error CVTy :=
   (E.elabV Δ A).mapError fun e => siteErr sp r s!"has a type that is not one here: {e.msg}"
 
-/-- The record's operations, elaborated. -/
+/-- The record's operations, elaborated, each at its count (`Scope.cntOf`).  `[spec §53]` -/
 def siteEnts (E : Env) (Δ : LifeCtx) (sp : Span) (r : SiteRec) :
-    Except Error (List (CQual × CVTy × CVTy)) :=
-  r.ents.mapM fun (q, A, B) => do pure (q.toCore, ← siteTy E Δ sp r A, ← siteTy E Δ sp r B)
+    Except Error (List (CCount × CVTy × CVTy)) :=
+  r.ents.mapIdxM fun j (q, A, B) => do
+    let A' ← siteTy E Δ sp r A
+    let B' ← siteTy E Δ sp r B
+    pure (E.scope.cntOf r.n j q B', A', B')
 
 /-- The operations a site of the kind `k` whose effect's operations are `ents` handles, among the
 node's `Es`: a `for`'s site threads the variables its body uses, `W`, through its operations, each
 passing them beside its argument and answering them (SPEC §15); any other, `ents`. -/
-def recOps (k : SiteKind) (ents Es : List (CQual × CVTy × CVTy)) : List (CQual × CVTy × CVTy) :=
+def recOps (k : SiteKind) (ents Es : List (CCount × CVTy × CVTy)) : List (CCount × CVTy × CVTy) :=
   match k, Es.head? with
   | .forSite, some (_, _, W) => ents.map fun (q, A, _) => (q, .tensor A W, W)
   | _, _ => ents
@@ -109,7 +112,7 @@ with no record (one the program writes in core). The record names the node's nam
 operations are the node's `E`, the operations the derivation handles (`recOps`,
 `siteOf_ops`): a record that does not is an internal error.  `[spec §19]` -/
 def siteOf (E : Env) (Δ : LifeCtx) (sp : Span) (n : Nat) (st : Option SiteRec)
-    (Es : List (CQual × CVTy × CVTy)) : Except Error (Option HSite) := do
+    (Es : List (CCount × CVTy × CVTy)) : Except Error (Option HSite) := do
   let some r := st | return none
   unless r.n == n do throw (siteErr sp r s!"is at the `handle` node of the name {n}")
   let ents ← siteEnts E Δ sp r
@@ -117,13 +120,14 @@ def siteOf (E : Env) (Δ : LifeCtx) (sp : Span) (n : Nat) (st : Option SiteRec)
     throw (siteErr sp r "does not have its `handle` node's operations")
   let args ← r.args.mapM (siteTy E Δ sp r)
   let state ← r.state.mapM fun (x, A) => do pure (x, ← siteTy E Δ sp r A)
-  pure (some { eff := r.eff, args, handler := r.handler, slot := r.slot, kind := r.kind, state })
+  let decl := r.ents.map (·.1)
+  pure (some { eff := r.eff, args, handler := r.handler, slot := r.slot, kind := r.kind, state, decl })
 
 /-- **A site's record has its node's operations**: when `siteOf` gives the node a site, the
 record the node carries names the node, and its operations, elaborated in the node's frame, are
 the node's `E` (at a `for`'s site, with the threaded variables).  `[spec §19]` -/
 theorem siteOf_ops {E : Env} {Δ : LifeCtx} {sp : Span} {n : Nat} {st : Option SiteRec}
-    {Es : List (CQual × CVTy × CVTy)} {s : HSite} (h : siteOf E Δ sp n st Es = .ok (some s)) :
+    {Es : List (CCount × CVTy × CVTy)} {s : HSite} (h : siteOf E Δ sp n st Es = .ok (some s)) :
     ∃ r ents, st = some r ∧ r.n = n ∧ siteEnts E Δ sp r = .ok ents ∧
       recOps r.kind ents Es = Es ∧ s.kind = r.kind ∧ s.eff = r.eff := by
   cases st with

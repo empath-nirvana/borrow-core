@@ -1,0 +1,564 @@
+corpus/answers-two-types.bc 23:21: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/answers-two-types.bc 23:40: handle 2: 2.0 1 inferred, world top, tail, in-clause
+corpus/aoc/2021-15.bc 64:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/aoc/2021-15.bc 72:11: handle 1: 1.0 0 abortive, world top, -, -
+corpus/aoc/2021-15.bc 37:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/aoc/2021-15.bc 90:1: handle 1: 1.0 0 abortive, world top, -, -
+corpus/aoc/2022-01.bc 390:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/aoc/2022-01.bc 393:15: handle 3: 3.0 0 inferred, world top, -, -
+corpus/aoc/2022-01.bc 394:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/aoc/2022-01.bc 22:23: handle 1: 1.0 0 abortive, world top, -, -
+corpus/aoc/2022-21.bc 134:5: handle 1: 1.0 0 inferred, world top, -, -
+corpus/ascii-upper.bc 16:9: handle 1: 1.0 0 inferred, world top, -, -
+corpus/async-bank-inbox.bc 37:13: handle 1: 1.0 0 inferred, world top, -, -
+corpus/async-bank-inbox.bc 60:19: handle 3: 3.0 1? inferred (pinned at 60:19: it may keep its continuation), world top, -, stored @top; 3.1 1 inferred, world top, tail, in-clause
+corpus/async-bank-inbox.bc 61:19: handle 2: 2.0 1? inferred (pinned at 61:19: it may keep its continuation), world top, -, stored @top; 2.1 1 inferred, world top, tail, in-clause
+corpus/async-cancel.bc 42:11: handle 2: 2.0 1? inferred (pinned at 42:11: it may keep its continuation), world top, -, stored @top; 2.1 1 inferred, world top, tail, in-clause
+corpus/async-cancel.bc 44:19: handle 1: 1.0 1? inferred (pinned at 44:19: it may keep its continuation), world top, -, stored @top; 1.1 1 inferred, world top, tail, in-clause
+corpus/async-lend-slots.bc 35:19: handle 2: 2.0 1? inferred (pinned at 35:19: it may keep its continuation), world top, -, stored @top; 2.1 1 inferred, world top, tail, in-clause
+corpus/async-lend-slots.bc 36:19: handle 1: 1.0 1? inferred (pinned at 36:19: it may keep its continuation), world top, -, stored @top; 1.1 1 inferred, world top, tail, in-clause
+corpus/async-logged.bc 31:13: handle 2: 2.0 0 inferred, world top, -, -
+corpus/async-logged.bc 31:13: handle 4: 4.0 0 inferred, world top, -, -
+corpus/async-logged.bc 44:20: handle 1: 1.0 1? inferred (pinned at 44:20: it may keep its continuation), world top, -, stored @top; 1.1 1? inferred (pinned at 44:20: it may keep its continuation), world top, -, stored @top
+corpus/async-logged.bc 43:20: handle 3: 3.0 1? inferred (pinned at 43:20: it may keep its continuation), world top, -, stored @top; 3.1 1? inferred (pinned at 43:20: it may keep its continuation), world top, -, stored @top
+corpus/async-map.bc 29:14: handle 3: 3.0 0 inferred, world top, -, -
+corpus/async-map.bc 31:19: handle 1: 1.0 1? inferred (pinned at 31:19: it may keep its continuation), world top, -, stored @top; 1.1 1 inferred, world top, tail, in-clause
+corpus/async-map.bc 31:32: handle 2: 2.0 0 inferred, world top, -, -
+corpus/async-mapreduce.bc 32:13: handle 1: 1.0 0 inferred, world top, -, -
+corpus/async-mapreduce.bc 27:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/async-mapreduce.bc 29:15: handle 3: 3.0 1? inferred (pinned at 29:15: it may keep its continuation), world top, -, stored @top; 3.1 1 inferred, world top, tail, in-clause
+corpus/async-mapreduce.bc 29:28: handle 4: 4.0 0 inferred, world top, -, -
+corpus/async-r1-cancel-finaliser-writes.bc 17:3: handle 1: 1.0 1? written, world top, tail, in-clause
+corpus/async-r1-cancel.bc 47:3: handle 1: 1.0 1? inferred (pinned at 47:3: it may keep its continuation), world top, -, stored
+corpus/async-r1-cancel.bc 48:3: handle 2: 2.0 1? inferred (pinned at 48:3: it may keep its continuation), world top, -, stored
+corpus/async-r1-drain.bc 29:11: handle 1: 1.0 1? inferred (pinned at 29:11: it may keep its continuation), world top, -, stored
+corpus/async-r1-effects.bc 24:13: handle 2: 2.0 0 inferred, world top, -, -
+corpus/async-r1-effects.bc 24:13: handle 4: 4.0 0 inferred, world top, -, -
+corpus/async-r1-effects.bc 44:3: handle 1: 1.0 1? inferred (pinned at 44:3: it may keep its continuation), world top, -, stored
+corpus/async-r1-effects.bc 45:3: handle 3: 3.0 1? inferred (pinned at 45:3: it may keep its continuation), world top, -, stored
+corpus/async-r1-generator.bc 38:3: handle 1: 1.0 1? inferred (pinned at 38:3: it may keep its continuation), world top, -, stored
+corpus/async-r1-local-borrows.bc 52:3: handle 1: 1.0 1? inferred (pinned at 52:3: it may keep its continuation), world top, -, stored
+corpus/async-r1-local-borrows.bc 53:3: handle 2: 2.0 1? inferred (pinned at 53:3: it may keep its continuation), world top, -, stored
+corpus/async-r1-nested.bc 37:3: handle 1: 1.0 1? inferred (pinned at 37:3: it may keep its continuation), world top, -, stored
+corpus/async-race.bc 28:40: handle 1: 1.0 1? inferred (pinned at 28:40: it may keep its continuation), world top, -, stored @top; 1.1 1 inferred, world top, tail, in-clause
+corpus/async-race.bc 52:11: handle 5: 5.0 1? inferred (pinned at 52:11: it may keep its continuation), world top, -, stored @top; 5.1 1 inferred, world top, tail, in-clause
+corpus/async-race.bc 53:11: handle 4: 4.0 1? inferred (pinned at 53:11: it may keep its continuation), world top, -, stored @top; 4.1 1 inferred, world top, tail, in-clause
+corpus/async-race.bc 54:11: handle 3: 3.0 1? inferred (pinned at 54:11: it may keep its continuation), world top, -, stored @top; 3.1 1 inferred, world top, tail, in-clause
+corpus/async-race.bc 55:3: handle 2: 2.0 0 inferred, world top, -, -
+corpus/async-scheduler.bc 31:19: handle 2: 2.0 1? inferred (pinned at 31:19: it may keep its continuation), world top, -, stored @top; 2.1 1 inferred, world top, tail, in-clause
+corpus/async-scheduler.bc 32:19: handle 1: 1.0 1? inferred (pinned at 32:19: it may keep its continuation), world top, -, stored @top; 1.1 1 inferred, world top, tail, in-clause
+corpus/async-scoped.bc 30:26: handle 3: 3.0 1? inferred (pinned at 30:26: it may keep its continuation), world top, -, stored @d; 3.1 1 inferred, world top, tail, in-clause
+corpus/async-scoped.bc 31:26: handle 2: 2.0 1? inferred (pinned at 31:26: it may keep its continuation), world top, -, stored @d; 2.1 1 inferred, world top, tail, in-clause
+corpus/async-scoped.bc 32:7: handle 1: 1.0 0 inferred, world top, -, -
+corpus/async-stack-cancel.bc 21:36: handle 2: 2.0 0 inferred, world top, -, -
+corpus/async-stack-cancel.bc 21:36: handle 4: 4.0 0 inferred, world top, -, -
+corpus/async-stack-cancel.bc 24:11: handle 3: 3.0 1? inferred (pinned at 24:11: it may keep its continuation), world top, -, stored @top; 3.1 1 inferred, world top, tail, in-clause
+corpus/async-stack-cancel.bc 25:11: handle 1: 1.0 1? inferred (pinned at 25:11: it may keep its continuation), world top, -, stored @top; 1.1 1 inferred, world top, tail, in-clause
+corpus/async-stack-deep.bc 32:37: handle 2: 2.0 0 inferred, world top, -, -
+corpus/async-stack-deep.bc 31:36: handle 4: 4.0 0 inferred, world top, -, -
+corpus/async-stack-deep.bc 31:36: handle 6: 6.0 0 inferred, world top, -, -
+corpus/async-stack-deep.bc 36:19: handle 5: 5.0 1? inferred (pinned at 36:19: it may keep its continuation), world top, -, stored @top; 5.1 1 inferred, world top, tail, in-clause
+corpus/async-stack-deep.bc 37:19: handle 3: 3.0 1? inferred (pinned at 37:19: it may keep its continuation), world top, -, stored @top; 3.1 1 inferred, world top, tail, in-clause
+corpus/async-stack-deep.bc 38:19: handle 1: 1.0 1? inferred (pinned at 38:19: it may keep its continuation), world top, -, stored @top; 1.1 1 inferred, world top, tail, in-clause
+corpus/async-stack-nested.bc 16:38: handle 2: 2.0 0 inferred, world top, -, -
+corpus/async-stack-nested.bc 20:39: handle 1: 1.0 1? inferred (pinned at 20:39: it may keep its continuation), world top, -, stored @top; 1.1 1 inferred, world top, tail, in-clause
+corpus/async-stack-nested.bc 42:38: handle 4: 4.0 0 inferred, world top, -, -
+corpus/async-stack-nested.bc 42:38: handle 6: 6.0 0 inferred, world top, -, -
+corpus/async-stack-nested.bc 46:19: handle 5: 5.0 1? inferred (pinned at 46:19: it may keep its continuation), world top, -, stored @top; 5.1 1 inferred, world top, tail, in-clause
+corpus/async-stack-nested.bc 47:19: handle 3: 3.0 1? inferred (pinned at 47:19: it may keep its continuation), world top, -, stored @top; 3.1 1 inferred, world top, tail, in-clause
+corpus/async-timers.bc 99:24: handle 4: 4.0 1? inferred (pinned at 99:24: it may keep its continuation), world top, -, stored @top
+corpus/async-timers.bc 100:25: handle 3: 3.0 1? inferred (pinned at 100:25: it may keep its continuation), world top, -, stored @top
+corpus/async-timers.bc 101:25: handle 2: 2.0 1? inferred (pinned at 101:25: it may keep its continuation), world top, -, stored @top
+corpus/async-timers.bc 102:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/async-timers.bc 105:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/async-try-join.bc 30:51: handle 1: 1.0 1? inferred (pinned at 30:51: it may keep its continuation), world top, -, stored @top; 1.1 1 inferred, world top, tail, in-clause
+corpus/async-try-join.bc 30:64: handle 2: 2.0 0 inferred, world top, -, -
+corpus/async-try-join.bc 77:3: handle 3: 3.0 0 inferred, world top, -, -
+corpus/async-try-join.bc 78:13: handle 6: 6.0 0 inferred, world top, -, -
+corpus/async-try-join.bc 79:13: handle 5: 5.0 0 inferred, world top, -, -
+corpus/async-try-join.bc 80:13: handle 4: 4.0 0 inferred, world top, -, -
+corpus/async-workers-scoped.bc 33:26: handle 4: 4.0 1? inferred (pinned at 33:26: it may keep its continuation), world top, -, stored @d; 4.1 1 inferred, world top, tail, in-clause
+corpus/async-workers-scoped.bc 34:26: handle 3: 3.0 1? inferred (pinned at 34:26: it may keep its continuation), world top, -, stored @d; 3.1 1 inferred, world top, tail, in-clause
+corpus/async-workers-scoped.bc 35:7: handle 2: 2.0 0 inferred, world top, -, -
+corpus/async-workers-scoped.bc 39:13: handle 1: 1.0 0 inferred, world top, -, -
+corpus/binder-copies.bc 22:11: handle 3: 3.0 1? inferred (pinned at 22:11: it may keep its continuation), world top, -, stored
+corpus/binder-copies.bc 23:11: handle 2: 2.0 1 inferred, world top, tail, in-clause
+corpus/binder-copies.bc 24:11: handle 1: 1.0 1? inferred (pinned at 24:11: it may keep its continuation), world top, -, stored
+corpus/block-yield-inner.bc 18:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/block-yield-inner.bc 18:3: handle 3: 3.0 1? inferred (pinned at 18:3: it may keep its continuation), world top, -, stored
+corpus/block-yield-inner.bc 18:3: handle 3: 3.0 1? inferred (pinned at 18:3: it may keep its continuation), world top, tail, in-clause
+corpus/block-yield-inner.bc 26:3: handle 2: 2.0 1 inferred, world top, tail, in-clause
+corpus/capture-await-raise.bc 13:21: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/capture-await-raise.bc 13:33: handle 2: 2.0 0 inferred, world top, -, -
+corpus/capture-store-raise.bc 23:11: handle 1: 1.0 1? inferred (pinned at 23:11: it may keep its continuation), world top, -, stored
+corpus/capture-store-raise.bc 23:23: handle 2: 2.0 0 inferred, world top, -, -
+corpus/capture-take-hand.bc 26:3: handle 1: 1.0 1? inferred (pinned at 26:3: it may cancel its continuation), world top, tail, in-clause
+corpus/clause-captures.bc 40:13: handle 3: 3.0 0 inferred, world top, -, -
+corpus/clause-captures.bc 41:13: handle 2: 2.0 0 inferred, world top, -, -
+corpus/clause-captures.bc 42:13: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/comp-param.bc 23:40: handle 1: 1.0 0 inferred, world top, -, -
+corpus/comp-param.bc 23:40: handle 3: 3.0 0 inferred, world top, -, -
+corpus/comp-param.bc 23:40: handle 5: 5.0 0 inferred, world top, -, -
+corpus/comp-param.bc 21:56: handle 6: 6.0 0 inferred, world top, -, -
+corpus/comp-param.bc 28:11: handle 4: 4.0 0 inferred, world top, -, -
+corpus/comp-param.bc 29:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/core-effects-borrow-abort.bc 10:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-effects-borrows.bc 9:9: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-effects-borrows.bc 17:9: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-effects-drop-glue.bc 30:9: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-effects-drop-glue.bc 34:9: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-effects-loop.bc 27:3: handle 3: 3.0 1 written, world top, tail, in-clause
+corpus/core-effects-reborrows.bc 11:9: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-effects-reborrows.bc 20:10: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-effects-reborrows.bc 31:10: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-effects-result.bc 18:9: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-effects-result.bc 22:9: handle 1: 1.0 0 abortive, world top, -, -
+corpus/core-effects-tail.bc 19:3: handle 2: 2.0 1 written, world top, tail, in-clause
+corpus/core-yield-loop.bc 36:7: handle 1: 1.0 1? written, world top, tail, in-clause
+corpus/core-yield-loop.bc 48:12: handle 1: 1.0 1? written, world top, tail, in-clause
+corpus/core-yield-pull.bc 58:22: handle 1: 1.0 1? written, world top, -, stored
+corpus/core-yield-pull.bc 69:18: handle 1: 1.0 1? written, world top, tail, in-clause
+corpus/core-yield-pull.bc 127:7: handle 2: 2.0 1? written, world top, tail, in-clause
+corpus/core-yield-pull.bc 128:12: handle 2: 2.0 1? written, world top, tail, in-clause
+corpus/data-box-tree.bc 27:3: handle 1: 1.0 0 inferred, world top, -, -
+corpus/data-config.bc 390:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/data-config.bc 393:15: handle 3: 3.0 0 inferred, world top, -, -
+corpus/data-config.bc 394:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/data-config.bc 56:33: handle 1: 1.0 0 abortive, world top, -, -
+corpus/data-group.bc 21:3: handle 1: 1.0 0 inferred, world top, -, -
+corpus/data-option.bc 38:11: handle 1: 1.0 0 inferred, world top, -, -
+corpus/div-abstraction.bc 22:3: handle 2: 2.0 0 inferred, world top, -, -
+corpus/div-abstraction.bc 26:3: handle 1: 1.0 0 inferred, world top, -, -
+corpus/div-abstraction.bc 32:37: handle 3: 3.0 0 inferred, world top, -, -
+corpus/div-euclid.bc 26:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/div-euclid.bc 22:1: handle 1: 1.0 0 inferred, world top, -, -
+corpus/div-infer.bc 56:32: handle 1: 1.0 0 inferred, world top, -, -
+corpus/div-infer.bc 56:54: handle 2: 2.0 1? inferred (pinned at 56:54: it may cancel its continuation), world top, tail, in-clause
+corpus/div-infer.bc 32:3: handle 3: 3.0 0 abortive, world top, -, -
+corpus/div-infer.bc 58:1: handle 3: 3.0 0 abortive, world top, -, -
+corpus/div-infer.bc 62:11: handle 4: 4.0 0 inferred, world top, -, -
+corpus/div-innermost.bc 12:1: handle 1: 1.0 0 inferred, world top, -, -
+corpus/div-innermost.bc 14:11: handle 3: 3.0 0 inferred, world top, -, -
+corpus/div-innermost.bc 15:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/div-overflow.bc 27:11: handle 5: 5.0 0 inferred, world top, -, -
+corpus/div-overflow.bc 23:1: handle 1: 1.0 0 inferred, world top, -, -
+corpus/div-overflow.bc 29:11: handle 4: 4.0 0 inferred, world top, -, -
+corpus/div-overflow.bc 33:11: handle 3: 3.0 0 inferred, world top, -, -
+corpus/div-overflow.bc 34:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/div-own-fail.bc 24:3: handle 1: 1.0 0 inferred, world top, -, -
+corpus/div-own-fail.bc 24:30: handle 2: 2.0 0 inferred, world top, -, -
+corpus/div-own-fail.bc 27:3: handle 3: 3.0 0 inferred, world top, -, -
+corpus/div-own-fail.bc 27:30: handle 4: 4.0 0 inferred, world top, -, -
+corpus/div-own-fail.bc 32:11: handle 5: 5.0 0 inferred, world top, -, -
+corpus/div-own-fail.bc 32:38: handle 6: 6.0 0 inferred, world top, -, -
+corpus/div-recover.bc 23:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/div-recover.bc 31:9: handle 1: 1.0 0 abortive, world top, -, -
+corpus/div-recover.bc 34:11: handle 5: 5.0 0 inferred, world top, -, -
+corpus/div-recover.bc 35:11: handle 4: 4.0 0 inferred, world top, -, -
+corpus/div-recover.bc 36:11: handle 3: 3.0 0 inferred, world top, -, -
+corpus/div-recover.bc 37:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/div-recursive.bc 15:1: handle 1: 1.0 0 inferred, world top, -, -
+corpus/div-recursive.bc 16:4: handle 2: 2.0 0 inferred, world top, -, -
+corpus/div-recursive.bc 17:4: handle 3: 3.0 0 inferred, world top, -, -
+corpus/div-recursive.bc 17:21: handle 4: 4.0 0 inferred, world top, -, -
+corpus/div-unhandled.bc 27:1: handle 1: 1.0 0 inferred, world top, -, -
+corpus/effects-abstraction.bc 27:3: handle 2: 2.0 0 inferred, world top, -, -
+corpus/effects-abstraction.bc 31:3: handle 1: 1.0 0 inferred, world top, -, -
+corpus/effects-abstraction.bc 39:3: handle 3: 3.0 0 inferred, world top, -, -
+corpus/effects-borrow-raise.bc 15:3: handle 1: 1.0 0 inferred, world top, -, -
+corpus/effects-cancel-two-sites.bc 24:3: handle 1: 1.0 0 inferred, world top, -, -
+corpus/effects-cancel-two-sites.bc 24:36: handle 2: 2.0 0 inferred, world top, -, -
+corpus/effects-cancel-two-sites.bc 24:53: handle 3: 3.0 1? inferred (pinned at 24:53: it may cancel its continuation), world top, tail, in-clause
+corpus/effects-fail-list.bc 27:70: handle 2: 2.0 0 inferred, world top, -, -
+corpus/effects-fail-list.bc 27:70: handle 3: 3.0 0 inferred, world top, -, -
+corpus/effects-fail-list.bc 40:3: handle 1: 1.0 0 inferred, world top, -, -
+corpus/effects-fold.bc 30:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/effects-fold.bc 33:9: handle 2: 2.0 0 inferred, world top, -, -
+corpus/effects-fold.bc 39:52: handle 1: 1.0 0 abortive, world top, -, -
+corpus/effects-fold.bc 30:3: handle 3: 3.0 0 abortive, world top, -, -
+corpus/effects-fold.bc 33:9: handle 4: 4.0 0 inferred, world top, -, -
+corpus/effects-fold.bc 42:49: handle 3: 3.0 0 abortive, world top, -, -
+corpus/effects-fold.bc 48:3: handle 5: 5.0 0 abortive, world top, -, -
+corpus/effects-fold.bc 58:9: handle 5: 5.0 0 abortive, world top, -, -
+corpus/effects-hof-two-rows.bc 24:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/effects-hof-two-rows.bc 25:11: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/effects-instances.bc 390:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/effects-instances.bc 393:15: handle 4: 4.0 0 inferred, world top, -, -
+corpus/effects-instances.bc 394:11: handle 3: 3.0 0 inferred, world top, -, -
+corpus/effects-instances.bc 46:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/effects-instances.bc 46:43: handle 2: 2.0 0 inferred, world top, -, -
+corpus/effects-instances.bc 38:3: handle 5: 5.0 0 abortive, world top, -, -
+corpus/effects-instances.bc 38:3: handle 6: 6.0 0 abortive, world top, -, -
+corpus/effects-instances.bc 50:3: handle 5: 5.0 0 abortive, world top, -, -
+corpus/effects-instances.bc 50:43: handle 6: 6.0 0 abortive, world top, -, -
+corpus/effects-log-fail.bc 24:32: handle 1: 1.0 0 inferred, world top, -, -
+corpus/effects-log-fail.bc 28:40: handle 2: 2.0 0 inferred, world top, -, -
+corpus/effects-map-fail.bc 21:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/effects-map-fail.bc 28:13: handle 1: 1.0 0 abortive, world top, -, -
+corpus/effects-row-inferred.bc 11:38: handle 1: 1.0 0 inferred, world top, -, -
+corpus/effects-row-inferred.bc 11:67: handle 2: 2.0 0 inferred, world top, -, -
+corpus/effects-sum-gen.bc 29:51: handle 2: 2.0 1 inferred, world top, once, in-clause
+corpus/effects-sum-gen.bc 29:51: handle 3: 3.0 1 inferred, world top, once, in-clause
+corpus/effects-sum-gen.bc 33:11: handle 1: 1.0 0 inferred, world top, -, -
+corpus/effects-tunnel.bc 12:37: handle 1: 1.0 0 inferred, world top, -, -
+corpus/effects-tunnel.bc 12:37: handle 3: 3.0 0 inferred, world top, -, -
+corpus/effects-tunnel.bc 14:20: handle 2: 2.0 0 inferred, world top, -, -
+corpus/float-roundtrip.bc 592:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/float-roundtrip.bc 592:5: handle 2: 2.0 0 abortive, world top, -, -
+corpus/float-roundtrip.bc 66:16: handle 1: 1.0 0 abortive, world top, -, -
+corpus/float-roundtrip.bc 65:19: handle 2: 2.0 0 abortive, world top, -, -
+corpus/for-data-div.bc 51:3: handle 2: 2.0 1 inferred, world top, tail, in-clause
+corpus/for-data-div.bc 56:7: handle 3: 3.0 1? inferred (pinned at 56:7: it may keep its continuation), world top, -, stored
+corpus/for-data-div.bc 56:7: handle 3: 3.0 1? inferred (pinned at 56:7: it may keep its continuation), world top, tail, in-clause
+corpus/for-data-div.bc 57:7: handle 4: 4.0 1? inferred (pinned at 57:7: it may keep its continuation), world top, -, stored
+corpus/for-data-div.bc 57:7: handle 4: 4.0 1? inferred (pinned at 57:7: it may keep its continuation), world top, tail, in-clause
+corpus/for-data-div.bc 49:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/for-never.bc 17:3: handle 1: 1.0 1? inferred (pinned at 17:3: it may cancel its continuation), world top, tail, in-clause
+corpus/for-never.bc 17:3: handle 1: 1.0 1? inferred (pinned at 17:3: it may cancel its continuation), world top, tail, in-clause
+corpus/for-never.bc 23:3: handle 2: 2.0 1 inferred, world top, tail, in-clause
+corpus/for-yield-branch.bc 26:3: handle 2: 2.0 1 inferred, world top, tail, in-clause
+corpus/for-yield-branch.bc 31:3: handle 3: 3.0 1? inferred (pinned at 31:3: it may cancel its continuation), world top, tail, in-clause
+corpus/for-yield-branch.bc 31:3: handle 3: 3.0 1? inferred (pinned at 31:3: it may cancel its continuation), world top, tail, in-clause
+corpus/for-yield-branch.bc 22:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/gen-adapters-fail.bc 58:27: handle 4: 4.0 1? inferred (pinned at 58:27: it may keep its continuation), world top, -, stored
+corpus/gen-adapters-fail.bc 58:27: handle 4: 4.0 1? inferred (pinned at 58:27: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters-fail.bc 58:3: handle 3: 3.0 1 inferred, world top, tail, in-clause
+corpus/gen-adapters-fail.bc 60:25: handle 6: 6.0 1? inferred (pinned at 60:25: it may keep its continuation), world top, -, stored
+corpus/gen-adapters-fail.bc 60:25: handle 6: 6.0 1? inferred (pinned at 60:25: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters-fail.bc 60:3: handle 5: 5.0 1 inferred, world top, tail, in-clause
+corpus/gen-adapters-fail.bc 62:30: handle 8: 8.0 1? inferred (pinned at 62:30: it may keep its continuation), world top, -, stored
+corpus/gen-adapters-fail.bc 62:30: handle 8: 8.0 1? inferred (pinned at 62:30: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters-fail.bc 62:3: handle 7: 7.0 1 inferred, world top, tail, in-clause
+corpus/gen-adapters-fail.bc 64:26: handle 10: 10.0 1? inferred (pinned at 64:26: it may keep its continuation), world top, -, stored
+corpus/gen-adapters-fail.bc 64:26: handle 10: 10.0 1? inferred (pinned at 64:26: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters-fail.bc 64:42: handle 11: 11.0 1? inferred (pinned at 64:42: it may keep its continuation), world top, -, stored
+corpus/gen-adapters-fail.bc 64:42: handle 11: 11.0 1? inferred (pinned at 64:42: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters-fail.bc 64:3: handle 9: 9.0 1 inferred, world top, tail, in-clause
+corpus/gen-adapters-fail.bc 66:29: handle 13: 13.0 1? inferred (pinned at 66:29: it may keep its continuation), world top, -, stored
+corpus/gen-adapters-fail.bc 66:29: handle 13: 13.0 1? inferred (pinned at 66:29: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters-fail.bc 66:53: handle 14: 14.0 1? inferred (pinned at 66:53: it may keep its continuation), world top, -, stored
+corpus/gen-adapters-fail.bc 66:53: handle 14: 14.0 1? inferred (pinned at 66:53: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters-fail.bc 66:3: handle 12: 12.0 1 inferred, world top, tail, in-clause
+corpus/gen-adapters-fail.bc 68:25: handle 16: 16.0 1? inferred (pinned at 68:25: it may keep its continuation), world top, -, stored
+corpus/gen-adapters-fail.bc 68:25: handle 16: 16.0 1? inferred (pinned at 68:25: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters-fail.bc 68:3: handle 15: 15.0 1 inferred, world top, tail, in-clause
+corpus/gen-adapters-fail.bc 70:27: handle 18: 18.0 1? inferred (pinned at 70:27: it may keep its continuation), world top, -, stored
+corpus/gen-adapters-fail.bc 70:27: handle 18: 18.0 1? inferred (pinned at 70:27: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters-fail.bc 70:3: handle 17: 17.0 1 inferred, world top, tail, in-clause
+corpus/gen-adapters-fail.bc 72:26: handle 20: 20.0 1? inferred (pinned at 72:26: it may keep its continuation), world top, -, stored
+corpus/gen-adapters-fail.bc 72:26: handle 20: 20.0 1? inferred (pinned at 72:26: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters-fail.bc 72:3: handle 19: 19.0 1 inferred, world top, tail, in-clause
+corpus/gen-adapters-fail.bc 76:30: handle 23: 23.0 1? inferred (pinned at 76:30: it may keep its continuation), world top, -, stored
+corpus/gen-adapters-fail.bc 76:30: handle 23: 23.0 1? inferred (pinned at 76:30: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters-fail.bc 76:26: handle 22: 22.0 1? inferred (pinned at 76:26: it may keep its continuation), world top, -, stored
+corpus/gen-adapters-fail.bc 76:26: handle 22: 22.0 1? inferred (pinned at 76:26: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters-fail.bc 76:3: handle 21: 21.0 1 inferred, world top, tail, in-clause
+corpus/gen-adapters-fail.bc 56:24: handle 2: 2.0 1? inferred (pinned at 56:24: it may keep its continuation), world top, -, stored
+corpus/gen-adapters-fail.bc 56:24: handle 2: 2.0 1? inferred (pinned at 56:24: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters-fail.bc 56:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/gen-adapters.bc 44:33: handle 9: 9.0 1? inferred (pinned at 44:33: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 44:33: handle 9: 9.0 1? inferred (pinned at 44:33: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 44:28: handle 8: 8.0 1? inferred (pinned at 44:28: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 44:28: handle 8: 8.0 1? inferred (pinned at 44:28: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 45:37: handle 11: 11.0 1? inferred (pinned at 45:37: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 45:37: handle 11: 11.0 1? inferred (pinned at 45:37: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 45:58: handle 12: 12.0 1? inferred (pinned at 45:58: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 45:58: handle 12: 12.0 1? inferred (pinned at 45:58: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 45:28: handle 10: 10.0 1? inferred (pinned at 45:28: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 45:28: handle 10: 10.0 1? inferred (pinned at 45:28: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 44:22: handle 7: 7.0 1? inferred (pinned at 44:22: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 44:22: handle 7: 7.0 1? inferred (pinned at 44:22: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 44:3: handle 6: 6.0 1 inferred, world top, tail, in-clause
+corpus/gen-adapters.bc 50:22: handle 15: 15.0 1? inferred (pinned at 50:22: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 50:22: handle 15: 15.0 1? inferred (pinned at 50:22: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 50:16: handle 14: 14.0 1? inferred (pinned at 50:16: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 50:16: handle 14: 14.0 1? inferred (pinned at 50:16: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 51:38: handle 19: 19.0 1? inferred (pinned at 51:38: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 51:38: handle 19: 19.0 1? inferred (pinned at 51:38: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 51:27: handle 18: 18.0 1? inferred (pinned at 51:27: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 51:27: handle 18: 18.0 1? inferred (pinned at 51:27: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 51:20: handle 17: 17.0 1? inferred (pinned at 51:20: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 51:20: handle 17: 17.0 1? inferred (pinned at 51:20: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 51:16: handle 16: 16.0 1? inferred (pinned at 51:16: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 51:16: handle 16: 16.0 1? inferred (pinned at 51:16: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 50:3: handle 13: 13.0 1 inferred, world top, tail, in-clause
+corpus/gen-adapters.bc 40:33: handle 5: 5.0 1? inferred (pinned at 40:33: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 40:33: handle 5: 5.0 1? inferred (pinned at 40:33: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 40:29: handle 4: 4.0 1? inferred (pinned at 40:29: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 40:29: handle 4: 4.0 1? inferred (pinned at 40:29: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 40:22: handle 3: 3.0 1? inferred (pinned at 40:22: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 40:22: handle 3: 3.0 1? inferred (pinned at 40:22: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 40:17: handle 2: 2.0 1? inferred (pinned at 40:17: it may keep its continuation), world top, -, stored
+corpus/gen-adapters.bc 40:17: handle 2: 2.0 1? inferred (pinned at 40:17: it may keep its continuation), world top, tail, in-clause
+corpus/gen-adapters.bc 40:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/gen-borrowed.bc 49:42: handle 2: 2.0 1? inferred (pinned at 49:42: it may keep its continuation), world top, -, stored
+corpus/gen-borrowed.bc 49:42: handle 2: 2.0 1? inferred (pinned at 49:42: it may keep its continuation), world top, tail, in-clause
+corpus/gen-borrowed.bc 49:7: handle 1: 1.0 1? inferred (pinned at 49:7: it may keep its continuation), world top, -, stored
+corpus/gen-borrowed.bc 49:7: handle 1: 1.0 1? inferred (pinned at 49:7: it may keep its continuation), world top, tail, in-clause
+corpus/gen-cell.bc 26:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/gen-close.bc 37:20: handle 2: 2.0 1? inferred (pinned at 37:20: it may keep its continuation), world top, -, stored
+corpus/gen-close.bc 37:20: handle 2: 2.0 1? inferred (pinned at 37:20: it may keep its continuation), world top, tail, in-clause
+corpus/gen-close.bc 37:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/gen-div.bc 56:3: handle 3: 3.0 1 inferred, world top, tail, in-clause
+corpus/gen-div.bc 55:18: handle 2: 2.0 1? inferred (pinned at 55:18: it may keep its continuation), world top, -, stored
+corpus/gen-div.bc 55:18: handle 2: 2.0 1? inferred (pinned at 55:18: it may keep its continuation), world top, tail, in-clause
+corpus/gen-div.bc 55:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/gen-fib.bc 34:21: handle 2: 2.0 1? inferred (pinned at 34:21: it may keep its continuation), world top, -, stored
+corpus/gen-fib.bc 34:21: handle 2: 2.0 1? inferred (pinned at 34:21: it may keep its continuation), world top, tail, in-clause
+corpus/gen-fib.bc 34:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/gen-from.bc 28:3: handle 3: 3.0 1? inferred (pinned at 28:3: it may keep its continuation), world top, -, stored
+corpus/gen-from.bc 28:3: handle 3: 3.0 1? inferred (pinned at 28:3: it may keep its continuation), world top, tail, in-clause
+corpus/gen-from.bc 34:3: handle 2: 2.0 1 inferred, world top, tail, in-clause
+corpus/gen-from.bc 33:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/gen-nested.bc 19:5: handle 2: 2.0 1 inferred, world top, tail, in-clause
+corpus/gen-nested.bc 22:17: handle 3: 3.0 1 inferred, world top, tail, in-clause
+corpus/gen-nested.bc 18:3: handle 1: 1.0 1? inferred (pinned at 18:3: it may keep its continuation), world top, -, stored
+corpus/gen-nested.bc 18:3: handle 1: 1.0 1? inferred (pinned at 18:3: it may keep its continuation), world top, tail, in-clause
+corpus/gen-pipeline-adapters.bc 24:38: handle 5: 5.0 1? inferred (pinned at 24:38: it may keep its continuation), world top, -, stored
+corpus/gen-pipeline-adapters.bc 24:38: handle 5: 5.0 1? inferred (pinned at 24:38: it may keep its continuation), world top, tail, in-clause
+corpus/gen-pipeline-adapters.bc 24:28: handle 4: 4.0 1? inferred (pinned at 24:28: it may keep its continuation), world top, -, stored
+corpus/gen-pipeline-adapters.bc 24:28: handle 4: 4.0 1? inferred (pinned at 24:28: it may keep its continuation), world top, tail, in-clause
+corpus/gen-pipeline-adapters.bc 24:24: handle 3: 3.0 1? inferred (pinned at 24:24: it may keep its continuation), world top, -, stored
+corpus/gen-pipeline-adapters.bc 24:24: handle 3: 3.0 1? inferred (pinned at 24:24: it may keep its continuation), world top, tail, in-clause
+corpus/gen-pipeline-adapters.bc 24:17: handle 2: 2.0 1? inferred (pinned at 24:17: it may keep its continuation), world top, -, stored
+corpus/gen-pipeline-adapters.bc 24:17: handle 2: 2.0 1? inferred (pinned at 24:17: it may keep its continuation), world top, tail, in-clause
+corpus/gen-pipeline-adapters.bc 24:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/gen-pipeline-pipe.bc 28:12: handle 10: 10.0 1? inferred (pinned at 28:12: it may keep its continuation), world top, -, stored
+corpus/gen-pipeline-pipe.bc 28:12: handle 10: 10.0 1? inferred (pinned at 28:12: it may keep its continuation), world top, tail, in-clause
+corpus/gen-pipeline-pipe.bc 28:12: handle 9: 9.0 1? inferred (pinned at 28:12: it may keep its continuation), world top, -, stored
+corpus/gen-pipeline-pipe.bc 28:12: handle 9: 9.0 1? inferred (pinned at 28:12: it may keep its continuation), world top, tail, in-clause
+corpus/gen-pipeline-pipe.bc 28:12: handle 8: 8.0 1? inferred (pinned at 28:12: it may keep its continuation), world top, -, stored
+corpus/gen-pipeline-pipe.bc 28:12: handle 8: 8.0 1? inferred (pinned at 28:12: it may keep its continuation), world top, tail, in-clause
+corpus/gen-pipeline-pipe.bc 28:12: handle 7: 7.0 1? inferred (pinned at 28:12: it may keep its continuation), world top, -, stored
+corpus/gen-pipeline-pipe.bc 28:12: handle 7: 7.0 1? inferred (pinned at 28:12: it may keep its continuation), world top, tail, in-clause
+corpus/gen-pipeline-pipe.bc 28:3: handle 6: 6.0 1 inferred, world top, tail, in-clause
+corpus/gen-pipeline-pipe.bc 26:12: handle 5: 5.0 1? inferred (pinned at 26:12: it may keep its continuation), world top, -, stored
+corpus/gen-pipeline-pipe.bc 26:12: handle 5: 5.0 1? inferred (pinned at 26:12: it may keep its continuation), world top, tail, in-clause
+corpus/gen-pipeline-pipe.bc 26:12: handle 4: 4.0 1? inferred (pinned at 26:12: it may keep its continuation), world top, -, stored
+corpus/gen-pipeline-pipe.bc 26:12: handle 4: 4.0 1? inferred (pinned at 26:12: it may keep its continuation), world top, tail, in-clause
+corpus/gen-pipeline-pipe.bc 26:12: handle 3: 3.0 1? inferred (pinned at 26:12: it may keep its continuation), world top, -, stored
+corpus/gen-pipeline-pipe.bc 26:12: handle 3: 3.0 1? inferred (pinned at 26:12: it may keep its continuation), world top, tail, in-clause
+corpus/gen-pipeline-pipe.bc 26:12: handle 2: 2.0 1? inferred (pinned at 26:12: it may keep its continuation), world top, -, stored
+corpus/gen-pipeline-pipe.bc 26:12: handle 2: 2.0 1? inferred (pinned at 26:12: it may keep its continuation), world top, tail, in-clause
+corpus/gen-pipeline-pipe.bc 26:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/gen-pipeline.bc 31:30: handle 3: 3.0 1? inferred (pinned at 31:30: it may keep its continuation), world top, -, stored
+corpus/gen-pipeline.bc 31:30: handle 3: 3.0 1? inferred (pinned at 31:30: it may keep its continuation), world top, tail, in-clause
+corpus/gen-pipeline.bc 31:22: handle 2: 2.0 1? inferred (pinned at 31:22: it may keep its continuation), world top, -, stored
+corpus/gen-pipeline.bc 31:22: handle 2: 2.0 1? inferred (pinned at 31:22: it may keep its continuation), world top, tail, in-clause
+corpus/gen-pipeline.bc 31:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/gen-produce.bc 21:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/gen-return.bc 47:3: handle 2: 2.0 1 inferred, world top, tail, in-clause
+corpus/gen-return.bc 52:3: handle 3: 3.0 1 inferred, world top, tail, in-clause
+corpus/gen-return.bc 46:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/gen-tokenize-parse.bc 89:3: handle 3: 3.0 1? inferred (pinned at 89:3: it may keep its continuation), world top, -, stored
+corpus/gen-tokenize-parse.bc 89:3: handle 3: 3.0 1? inferred (pinned at 89:3: it may keep its continuation), world top, tail, in-clause
+corpus/gen-tokenize-parse.bc 95:23: handle 1: 1.0 0 inferred, world top, -, -
+corpus/gen-tokenize-parse.bc 95:60: handle 2: 2.0 0 inferred, world top, -, -
+corpus/gen-value.bc 34:29: handle 3: 3.0 1? inferred (pinned at 34:29: it may keep its continuation), world top, -, stored
+corpus/gen-value.bc 34:29: handle 3: 3.0 1? inferred (pinned at 34:29: it may keep its continuation), world top, tail, in-clause
+corpus/gen-value.bc 34:3: handle 2: 2.0 1 inferred, world top, tail, in-clause
+corpus/gen-value.bc 35:3: handle 4: 4.0 1? inferred (pinned at 35:3: it may cancel its continuation), world top, tail, in-clause
+corpus/gen-value.bc 35:3: handle 4: 4.0 1? inferred (pinned at 35:3: it may cancel its continuation), world top, tail, in-clause
+corpus/gen-value.bc 33:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/hygiene-clause-global.bc 14:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/hygiene-clause-global.bc 15:11: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/hygiene-handler-after.bc 9:11: handle 1: 1.0 0 inferred, world top, -, -
+corpus/hygiene-handler-args.bc 10:3: handle 1: 1.0 0 inferred, world top, -, -
+corpus/hygiene-handler-generic.bc 10:3: handle 1: 1.0 0 inferred, world top, -, -
+corpus/hygiene-handler-param.bc 8:14: handle 1: 1.0 0 inferred, world top, -, -
+corpus/hygiene-handler-resume.bc 13:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/hygiene-handler-resume.bc 15:11: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/hygiene-handler-state.bc 11:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/io-task.bc 28:24: handle 3: 3.0 1? inferred (pinned at 28:24: it may keep its continuation), world top, -, stored @d; 3.1 1 inferred, world top, tail, in-clause
+corpus/io-task.bc 29:24: handle 2: 2.0 1? inferred (pinned at 29:24: it may keep its continuation), world top, -, stored @d; 2.1 1 inferred, world top, tail, in-clause
+corpus/io-task.bc 30:5: handle 1: 1.0 0 inferred, world top, -, -
+corpus/key-value.bc 37:9: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/dp/0039-combination-sum.bc 61:9: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/dp/0070-climbing-stairs.bc 36:9: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/graphs/0200-number-of-islands.bc 44:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/graphs/0200-number-of-islands.bc 53:7: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/graphs/0200-number-of-islands.bc 57:9: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/graphs/0200-number-of-islands.bc 82:1: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/graphs/0200-number-of-islands.bc 87:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 54:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 62:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 67:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 90:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 100:1: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/graphs/0417-pacific-atlantic-water-flow.bc 105:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 390:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 393:15: handle 3: 3.0 0 inferred, world top, -, -
+corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 394:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/leetcode/heaps/0295-find-median-from-data-stream-f64.bc 75:31: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 390:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 393:15: handle 3: 3.0 0 inferred, world top, -, -
+corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 394:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/leetcode/heaps/0295-find-median-from-data-stream.bc 89:31: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/lists/0019-remove-nth-node-from-end-of-list.bc 81:11: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/lists/0021-merge-two-sorted-lists.bc 85:11: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/lists/0023-merge-k-sorted-lists.bc 118:11: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/lists/0143-reorder-list.bc 118:24: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/lists/0206-reverse-linked-list.bc 82:24: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/matrix/0079-word-search.bc 59:11: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/strings/0271-encode-and-decode-strings.bc 390:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/strings/0271-encode-and-decode-strings.bc 393:15: handle 3: 3.0 0 inferred, world top, -, -
+corpus/leetcode/strings/0271-encode-and-decode-strings.bc 394:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/leetcode/strings/0271-encode-and-decode-strings.bc 65:19: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 390:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 393:15: handle 3: 3.0 0 inferred, world top, -, -
+corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 394:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/leetcode/strings/0424-longest-repeating-character-replacement.bc 72:23: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/trees/0098-validate-binary-search-tree.bc 119:24: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/trees/0100-same-tree.bc 114:24: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/trees/0102-binary-tree-level-order-traversal.bc 140:24: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/trees/0104-maximum-depth-of-binary-tree.bc 111:24: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-traversal.bc 131:24: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/trees/0124-binary-tree-maximum-path-sum.bc 120:24: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/trees/0212-word-search-ii.bc 155:3: handle 2: 2.0 0 abortive, world top, -, -
+corpus/leetcode/trees/0212-word-search-ii.bc 155:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/trees/0212-word-search-ii.bc 170:1: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/trees/0212-word-search-ii.bc 179:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/leetcode/trees/0212-word-search-ii.bc 183:25: handle 2: 2.0 0 abortive, world top, -, -
+corpus/leetcode/trees/0226-invert-binary-tree.bc 105:24: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/trees/0230-kth-smallest-element-in-a-bst.bc 103:3: handle 2: 2.0 1? inferred (pinned at 103:3: it may cancel its continuation), world top, tail, in-clause
+corpus/leetcode/trees/0230-kth-smallest-element-in-a-bst.bc 127:24: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree.bc 120:24: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/trees/0297-serialize-and-deserialize-binary-tree.bc 133:24: handle 1: 1.0 0 inferred, world top, -, -
+corpus/leetcode/trees/0572-subtree-of-another-tree.bc 147:24: handle 1: 1.0 0 inferred, world top, -, -
+corpus/lend-div.bc 35:5: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/lend-pipeline.bc 43:32: handle 3: 3.0 1? inferred (pinned at 43:32: it may keep its continuation), world top, -, stored
+corpus/lend-pipeline.bc 43:32: handle 3: 3.0 1? inferred (pinned at 43:32: it may keep its continuation), world top, tail, in-clause
+corpus/lend-pipeline.bc 43:24: handle 2: 2.0 1? inferred (pinned at 43:24: it may keep its continuation), world top, -, stored
+corpus/lend-pipeline.bc 43:24: handle 2: 2.0 1? inferred (pinned at 43:24: it may keep its continuation), world top, tail, in-clause
+corpus/lend-pipeline.bc 43:5: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/list-blocks.bc 19:3: handle 1: 1.0 0 inferred, world top, -, -
+corpus/list-blocks.bc 19:20: handle 2: 2.0 0 inferred, world top, -, -
+corpus/list-blocks.bc 22:12: handle 3: 3.0 0 inferred, world top, -, -
+corpus/list-capability.bc 16:19: handle 1: 1.0 0 inferred, world top, -, -
+corpus/list-generic.bc 19:3: handle 1: 1.0 0 inferred, world top, -, -
+corpus/loop-handler-binder.bc 390:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/loop-handler-binder.bc 393:15: handle 3: 3.0 0 inferred, world top, -, -
+corpus/loop-handler-binder.bc 394:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/loop-handler-binder.bc 21:13: handle 1: 1.0 0 abortive, world top, -, -
+corpus/loop-row-answer.bc 20:21: handle 1: 1.0 1 inferred, world top, once, in-clause
+corpus/operator-rounds.bc 44:48: handle 1: 1.0 0 inferred, world top, -, -
+corpus/operator-rounds.bc 47:3: handle 2: 2.0 0 inferred, world top, -, -
+corpus/operator-rounds.bc 79:11: handle 4: 4.0 0 inferred, world top, -, -
+corpus/operator-rounds.bc 102:7: handle 3: 3.0 0 abortive, world top, -, -
+corpus/operator-rounds.bc 103:9: handle 3: 3.0 0 abortive, world top, -, -
+corpus/parse-int.bc 27:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/parse-int.bc 30:15: handle 3: 3.0 0 inferred, world top, -, -
+corpus/parse-int.bc 31:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/parse-int.bc 47:15: handle 1: 1.0 0 abortive, world top, -, -
+corpus/parse-recover.bc 121:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/parse-recover.bc 126:15: handle 2: 2.0 0 inferred, world top, -, -
+corpus/parse-recover.bc 135:3: handle 1: 1.0 0 abortive, world top, -, -
+corpus/pipe-handlers.bc 33:68: handle 6: 6.0 1 inferred, world top, once, in-clause
+corpus/pipe-handlers.bc 33:68: handle 5: 5.0 0 inferred, world top, -, -
+corpus/pipe-handlers.bc 39:11: handle 9: 9.0 1 inferred, world top, once, in-clause
+corpus/pipe-handlers.bc 39:11: handle 10: 10.0 0 inferred, world top, -, -
+corpus/pipe-handlers.bc 40:11: handle 7: 7.0 1 inferred, world top, once, in-clause
+corpus/pipe-handlers.bc 40:26: handle 8: 8.0 0 inferred, world top, -, -
+corpus/pipe-handlers.bc 42:11: handle 3: 3.0 0 inferred, world top, -, -
+corpus/pipe-handlers.bc 42:11: handle 4: 4.0 1 inferred, world top, once, in-clause
+corpus/pipe-handlers.bc 43:11: handle 1: 1.0 0 inferred, world top, -, -
+corpus/pipe-handlers.bc 43:11: handle 2: 2.0 1 inferred, world top, once, in-clause
+corpus/rec-await-exhausted.bc 16:13: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/rec-await-exhausted.bc 16:25: handle 2: 2.0 0 inferred, world top, -, -
+corpus/rec-emit.bc 23:15: handle 1: 1.0 0 inferred, world top, -, -
+corpus/rec-emit.bc 23:52: handle 2: 2.0 1 inferred, world top, once, in-clause
+corpus/rec-even-odd.bc 14:23: handle 1: 1.0 0 inferred, world top, -, -
+corpus/rec-fib.bc 18:15: handle 1: 1.0 0 inferred, world top, -, -
+corpus/rec-generic-layer.bc 19:47: handle 1: 1.0 0 inferred, world top, -, -
+corpus/rec-generic-mutual.bc 17:34: handle 1: 1.0 0 inferred, world top, -, -
+corpus/rec-layer.bc 29:47: handle 2: 2.0 0 inferred, world top, -, -
+corpus/rec-layer.bc 31:5: handle 1: 1.0 0 inferred, world top, -, -
+corpus/rec-lifetimes.bc 33:35: handle 3: 3.0 0 inferred, world top, -, -
+corpus/rec-lifetimes.bc 34:35: handle 2: 2.0 0 inferred, world top, -, -
+corpus/rec-lifetimes.bc 35:35: handle 1: 1.0 0 inferred, world top, -, -
+corpus/rec-log.bc 22:32: handle 1: 1.0 0 inferred, world top, -, -
+corpus/rec-mixed.bc 15:3: handle 1: 1.0 0 inferred, world top, -, -
+corpus/rec-overflow.bc 25:15: handle 2: 2.0 0 inferred, world top, -, -
+corpus/rec-overflow.bc 26:13: handle 1: 1.0 0 inferred, world top, -, -
+corpus/rec-parser.bc 63:37: handle 1: 1.0 0 inferred, world top, -, -
+corpus/rec-parser.bc 64:11: handle 3: 3.0 0 inferred, world top, -, -
+corpus/rec-parser.bc 65:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/rec-tree.bc 27:15: handle 1: 1.0 0 inferred, world top, -, -
+corpus/rec-yield.bc 19:3: handle 2: 2.0 1 inferred, world top, tail, in-clause
+corpus/rec-yield.bc 22:15: handle 1: 1.0 0 inferred, world top, -, -
+corpus/reconcile-chain.bc 72:61: handle 6: 6.0 1? inferred (pinned at 72:61: it may cancel its continuation), world top, tail, in-clause
+corpus/reconcile-chain.bc 79:11: handle 5: 5.0 0 inferred, world top, -, -
+corpus/reconcile-chain.bc 72:61: handle 12: 12.0 1? inferred (pinned at 72:61: it may cancel its continuation), world top, tail, in-clause
+corpus/reconcile-chain.bc 79:11: handle 11: 11.0 0 inferred, world top, -, -
+corpus/reconcile-chain.bc 99:4: handle 1: 1.0 1 inferred, world top, once, in-clause
+corpus/reconcile-chain.bc 99:19: handle 2: 2.0 1 inferred, world top, tail, in-clause
+corpus/reconcile-chain.bc 99:37: handle 3: 3.0 1 inferred, world top, once, in-clause
+corpus/reconcile-chain.bc 99:55: handle 4: 4.0 0 inferred, world top, -, -
+corpus/reconcile-chain.bc 100:4: handle 7: 7.0 1 inferred, world top, once, in-clause
+corpus/reconcile-chain.bc 100:19: handle 8: 8.0 1 inferred, world top, tail, in-clause
+corpus/reconcile-chain.bc 100:37: handle 9: 9.0 1 inferred, world top, once, in-clause
+corpus/reconcile-chain.bc 100:55: handle 10: 10.0 0 inferred, world top, -, -
+corpus/reconcile-clock.bc 52:61: handle 5: 5.0 1? inferred (pinned at 52:61: it may cancel its continuation), world top, tail, in-clause
+corpus/reconcile-clock.bc 66:11: handle 4: 4.0 0 inferred, world top, -, -
+corpus/reconcile-clock.bc 52:61: handle 10: 10.0 1? inferred (pinned at 52:61: it may cancel its continuation), world top, tail, in-clause
+corpus/reconcile-clock.bc 66:11: handle 9: 9.0 0 inferred, world top, -, -
+corpus/reconcile-clock.bc 92:17: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/reconcile-clock.bc 92:33: handle 2: 2.0 1 inferred, world top, once, in-clause
+corpus/reconcile-clock.bc 92:48: handle 3: 3.0 0 inferred, world top, -, -
+corpus/reconcile-clock.bc 94:17: handle 6: 6.0 1 inferred, world top, tail, in-clause
+corpus/reconcile-clock.bc 94:33: handle 7: 7.0 1 inferred, world top, once, in-clause
+corpus/reconcile-clock.bc 94:48: handle 8: 8.0 0 inferred, world top, -, -
+corpus/reconcile-clock.bc 52:61: handle 15: 15.0 1? inferred (pinned at 52:61: it may cancel its continuation), world top, tail, in-clause
+corpus/reconcile-clock.bc 66:11: handle 14: 14.0 0 inferred, world top, -, -
+corpus/reconcile-clock.bc 52:61: handle 20: 20.0 1? inferred (pinned at 52:61: it may cancel its continuation), world top, tail, in-clause
+corpus/reconcile-clock.bc 66:11: handle 19: 19.0 0 inferred, world top, -, -
+corpus/reconcile-clock.bc 92:17: handle 11: 11.0 1 inferred, world top, tail, in-clause
+corpus/reconcile-clock.bc 92:33: handle 12: 12.0 1 inferred, world top, once, in-clause
+corpus/reconcile-clock.bc 92:48: handle 13: 13.0 0 inferred, world top, -, -
+corpus/reconcile-clock.bc 94:17: handle 16: 16.0 1 inferred, world top, tail, in-clause
+corpus/reconcile-clock.bc 94:33: handle 17: 17.0 1 inferred, world top, once, in-clause
+corpus/reconcile-clock.bc 94:48: handle 18: 18.0 0 inferred, world top, -, -
+corpus/retry-block.bc 40:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/retry-block.bc 50:5: handle 1: 1.0 0 inferred, world top, -, -
+corpus/sched-a-div.bc 91:5: handle 1: 1.0 1? written, world top, -, stored @top
+corpus/sched-a.bc 111:5: handle 1: 1.0 1? written, world top, -, stored @top
+corpus/sched-b.bc 101:5: handle 1: 1.0 1? written, world top, -, stored @d
+corpus/sort-lines.bc 34:9: handle 1: 1.0 0 inferred, world top, -, -
+corpus/state-machine.bc 65:13: handle 2: 2.0 0 inferred, world top, -, -
+corpus/state-machine.bc 62:3: handle 1: 1.0 1? inferred (pinned at 62:3: it may cancel its continuation), world top, tail, in-clause
+corpus/sugar/data-box-tree.lowered.bc 27:3: handle 1: 1.0 0 inferred, world top, -, -
+corpus/sugar/data-config.lowered.bc 390:5: handle 1: 1.0 0 abortive, world top, -, -
+corpus/sugar/data-config.lowered.bc 393:15: handle 3: 3.0 0 inferred, world top, -, -
+corpus/sugar/data-config.lowered.bc 394:11: handle 2: 2.0 0 inferred, world top, -, -
+corpus/sugar/data-config.lowered.bc 55:13: handle 1: 1.0 0 abortive, world top, -, -
+corpus/sugar/for-value.bc 19:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/sugar/for-value.bc 21:3: handle 2: 2.0 1? inferred (pinned at 21:3: it may cancel its continuation), world top, tail, in-clause
+corpus/sugar/for-value.core.bc 26:39: handle 1: 1.0 1 written, world top, tail, in-clause
+corpus/sugar/for-value.core.bc 47:39: handle 2: 2.0 1? written, world top, tail, in-clause
+corpus/sugar/gen-div.bc 40:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/sugar/gen-div.core.bc 88:17: handle 1: 1.0 1 written, world top, tail, in-clause
+corpus/sugar/gen-div.core.bc 99:17: handle 1: 1.0 1 written, world top, tail, in-clause
+corpus/sugar/gen-from.bc 21:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/sugar/gen-from.core.bc 30:39: handle 1: 1.0 1 written, world top, tail, in-clause
+corpus/sugar/gen-range.bc 19:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/sugar/gen-range.core.bc 69:17: handle 1: 1.0 1 written, world top, tail, in-clause
+corpus/sugar/gen-range.core.bc 80:17: handle 1: 1.0 1 written, world top, tail, in-clause
+corpus/sugar/gen-return.bc 21:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/sugar/gen-return.core.bc 74:17: handle 1: 1.0 1 written, world top, tail, in-clause
+corpus/sugar/gen-return.core.bc 85:17: handle 1: 1.0 1 written, world top, tail, in-clause
+corpus/sugar/gen-yields.bc 16:3: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/sugar/gen-yields.core.bc 17:35: handle 1: 1.0 1 written, world top, tail, in-clause
+corpus/sugar/mut-await.bc 16:15: handle 1: 1.0 1 inferred, world top, tail, in-clause
+corpus/sugar/mut-await.core.bc 14:3: handle 1: 1.0 1 written, world top, tail, in-clause
+corpus/text-wordfreq.bc 102:11: handle 1: 1.0 0 inferred, world top, -, -
+corpus/text-wordfreq.bc 104:7: handle 2: 2.0 0 inferred, world top, -, -
+corpus/tree-map.bc 63:3: handle 4: 4.0 1 inferred, world top, tail, in-clause
+corpus/tree-map.bc 58:3: handle 5: 5.0 1 inferred, world top, tail, in-clause
+corpus/tree-map.bc 67:3: handle 1: 1.0 0 inferred, world top, -, -
+corpus/tree-map.bc 82:17: handle 3: 3.0 0 inferred, world top, -, -
+corpus/tree-map.bc 84:19: handle 2: 2.0 0 inferred, world top, -, -
+corpus/trim-replace.bc 58:9: handle 1: 1.0 0 inferred, world top, -, -
+corpus/utf8-count.bc 21:15: handle 1: 1.0 0 inferred, world top, -, -
+corpus/yield-callback.bc 23:12: handle 2: 2.0 1? inferred (pinned at 23:12: it may keep its continuation), world top, -, stored
+corpus/yield-callback.bc 23:12: handle 2: 2.0 1? inferred (pinned at 23:12: it may keep its continuation), world top, tail, in-clause
+corpus/yield-callback.bc 27:3: handle 1: 1.0 1 inferred, world top, tail, in-clause

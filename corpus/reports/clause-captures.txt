@@ -1,5 +1,5 @@
-effect 17:1: Fail: raise (ctl, affine, abortive)
-effect 20:1: Ask: ask (ctl, affine)
+effect 17:1: Fail: raise (ctl, abortive)
+effect 20:1: Ask: ask (ctl)
 effect 21:1: Count: tick
 row 35:1: check: Fail[i32]
 lowering 23:1: handler count (Count): call — each clause resumes once, in tail position (fun): a direct call on the lent state (withswap), with no allocation and no dispatch
@@ -10,7 +10,7 @@ lowering 40:13: with releasing: every operation abortive, so its clauses run aft
 lowering 40:13: with releasing (Fail): a handler, the static name 3; raise abortive: a branch per call (final ctl)
 lowering 41:13: with releasing: every operation abortive, so its clauses run after the handler, in the scope of the `with`
 lowering 41:13: with releasing (Fail): a handler, the static name 2; raise abortive: a branch per call (final ctl)
-lowering 42:13: with asking (Ask): a handler, the static name 1; ask affine: tail-resumptive on every path, with the handler's state
+lowering 42:13: with asking (Ask): a handler, the static name 1; ask linear: tail-resumptive on every path, with the handler's state
 lowering 42:13: with asking: a handler with a state, its parameters and the capabilities its clauses use, passed to each clause and to the continuation at each resume
 call 27:14: tick (Count) → `count__tick`, on the state of `count`
 call 32:49: tick (Count) → `count__tick`, on the state of `count`

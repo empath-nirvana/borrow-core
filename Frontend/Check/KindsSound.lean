@@ -211,7 +211,7 @@ theorem classifyBody_sound (tM : TExpr) : (classifyBody tM).BodyPremise tM.erase
 /-- **The kind the checker records gives its law's premise** at the clause the handler runs: an
 abortive operation's clause takes no `κ`; a control clause is `λp. let (x, κ) = p; M` and `M`
 meets the kind's premise (`ClauseKind.Premise`).  `[spec §19]` -/
-theorem classify_sound (o : Qual × VTy × VTy) (c : TExpr) :
+theorem classify_sound (o : Count × VTy × VTy) (c : TExpr) :
     (classifyClause o (some c)).kind.Premise o c.erase := by
   unfold classifyClause
   by_cases ha : isAbortive o = true
@@ -273,8 +273,8 @@ theorem clauseParts_erase : ∀ (n : Nat) (t : TExpr) (j : Nat) (c : TExpr),
 holds**: the kind of the operation `j` gives that kind's premise (`ClauseKind.Premise`) at the
 `j`-th clause of the erasure of the node's own pair `tH`, the clause the handler runs for it.
 `[spec §19]` -/
-theorem classifyHandler_sound (E : List (Qual × VTy × VTy)) (tH : TExpr) {j : Nat}
-    {o : Qual × VTy × VTy} {k : HKind} {e : Expr} (ho : E[j]? = some o)
+theorem classifyHandler_sound (E : List (Count × VTy × VTy)) (tH : TExpr) {j : Nat}
+    {o : Count × VTy × VTy} {k : HKind} {e : Expr} (ho : E[j]? = some o)
     (hk : (classifyHandler E tH)[j]? = some k) (he : clauseAt j tH.erase = some e) :
     k.kind.Premise o e := by
   unfold classifyHandler at hk
@@ -304,9 +304,9 @@ theorem classifyHandler_sound (E : List (Qual × VTy × VTy)) (tH : TExpr) {j : 
         subst hc
         exact classify_sound o c
 
-theorem zipWith_fst_append {α β : Type} (E : List α) (f : α → β → HKind) (g : α → Qual)
-    (hf : ∀ a b, (f a b).q = g a) : ∀ (xs ys : List β), E.length ≤ ys.length →
-    (E.zipWith f (xs ++ ys)).map (·.q) = E.map g := by
+theorem zipWith_fst_append {α β : Type} (E : List α) (f : α → β → HKind) (g : α → Count)
+    (hf : ∀ a b, (f a b).cnt = g a) : ∀ (xs ys : List β), E.length ≤ ys.length →
+    (E.zipWith f (xs ++ ys)).map (·.cnt) = E.map g := by
   induction E with
   | nil => intros; simp
   | cons a E ih =>
@@ -323,10 +323,10 @@ theorem zipWith_fst_append {α β : Type} (E : List α) (f : α → β → HKind
       simp only [List.cons_append, List.zipWith_cons_cons, List.map_cons, hf]
       rw [ih xs ys (by simp at hl; omega)]
 
-/-- **The qualifiers travel with the kinds**: the `handle` node's `ks` has one entry per
-operation, carrying that operation's qualifier, the one `E` gives it.  `[spec §19, §25]` -/
-theorem classifyHandler_quals (E : List (Qual × VTy × VTy)) (tH : TExpr) :
-    (classifyHandler E tH).map (·.q) = E.map Prod.fst := by
+/-- **The counts travel with the kinds**: the `handle` node's `ks` has one entry per operation,
+carrying that operation's count, the one `E` gives it.  `[spec §19, §25, §53]` -/
+theorem classifyHandler_quals (E : List (Count × VTy × VTy)) (tH : TExpr) :
+    (classifyHandler E tH).map (·.cnt) = E.map Prod.fst := by
   unfold classifyHandler
   exact zipWith_fst_append E _ Prod.fst (fun _ _ => rfl) _ _ (by simp)
 

@@ -1,5 +1,5 @@
 import Core.EffPrograms
-import Core.EffCancel
+import Core.EffCancelTyped
 import Core.EffExamples
 import Core.Rejections
 import Core.EffTier1Programs
@@ -15,11 +15,12 @@ lowers their operations in `Backend/Clos/Capture.lean` and `Backend/Clos/Unwind.
   `Core/EffPrograms.lean`.
 - The two handled programs of `Core/EffExamples.lean`, typed there: a clause that resumes `κ` in
   tail position (`prog`), and one that cancels it (`progC`).
-- The cancels of `Core/EffCancel.lean`, a finaliser that raises during a cancel, its error kept and
-  re-raised at the canceller: `prog₃` with an answer clause that tags the value, the error caught
-  outside the region (`prog₃_run`); `progRe`, the region re-entering the site of the error's
-  name, whose dead inner instance does not catch it and whose live outer one does (`progRe_run`);
-  and `progOut`, `prog` under a live outer handler of the error's name (`progOut_run`).
+- The cancels of `Core/EffCancelTyped.lean`, a finaliser that raises during a cancel, its error
+  kept and re-raised at the canceller, each typed, its handlers at the tag `1` with `κ`'s cell:
+  `cancelKeptT`, the error caught outside the region (`d_cancelKeptT`, `cancelKeptT_run`);
+  `progReT`, the region re-entering the site of the error's name, whose dead inner instance does
+  not catch it and whose live outer one does (`progReT_run`); and `progOutT`, `progT` under a live
+  outer handler of the error's name (`progOutT_run`).
 - `Core/Rejections.lean`'s `at08Once`, the typed control of the refused AT08: a clause that moves
   `κ` through a cell with `alloc`, `swap` and `free`, and resumes it once (`d_at08Once`,
   `at08Once_runs`).
@@ -35,24 +36,16 @@ lowers their operations in `Backend/Clos/Capture.lean` and `Backend/Clos/Unwind.
   `div_fuel 3`, which hands the cell back (`dAt_divResidual`, `divResidual_runs`).
 - Terms that exercise the lowering's other shapes (*Shapes*, below).
 
-The cancels and the shapes are not typed: each stage is compared with `Support`'s interpreter on
-them.  `Core/EffCancel.lean`'s `prog` is not compiled: its finaliser raises a name handled only
-inside the cancelled region, whose handlers are dead, so its run ends at a raise no handler catches
-(`prog_run`, `prog_final`), and a typing of finalisers rejects it (SPEC §19, *Cancels*).  Its
-other runs (a finaliser that performs, a cancel nested in a cancel, an unrestricted continuation
-dropped with a kept error) are Lean runs there.
+The shapes are not typed: each stage is compared with `Support`'s interpreter on them.
+`Core/EffCancelTyped.lean`'s `progT` is not compiled: its finaliser raises a name handled only
+inside the cancelled region, whose handlers are dead, so its run ends at a raise no handler
+catches, and it is typed only at a row that holds that name (`not_der_progT`, SPEC §19,
+*Cancels*).  Its other runs (a finaliser that performs, a cancel nested in a cancel) are Lean runs
+there.
 -/
 
 namespace Backend
 open BoCa.Fig16.LogRel.Core.EffPrograms
-
-open BoCa.Fig16.LogRel.Core.CancelIntercept in
-/-- `prog₃` (`Core/EffCancel.lean`) with `H₃`'s answer clause `λx. inj₁ x`: `inl ()` when the cancel
-ends cleanly, `inr ()` when the finaliser's error reaches `H₃`. -/
-def cancelKept : BoCa.Expr :=
-  BoCa.BoLo.hndE (BoCa.BoLo.hndVal 3 (BoCa.Fig16.LogRel.Core.qualsVal [.unr])
-    (BoCa.Val.lam (.inj₁ (.var 0))) (BoCa.Val.pair c₃ BoCa.Val.unit))
-    (body 3)
 
 /-! ### Shapes
 
@@ -164,7 +157,7 @@ raises `exn`; so it is lowered per use (`Backend/Clos/Poly.lean`). -/
 def polyId : Expr :=
   letE (.lam (.var 0))
     (letE (letE (appE (.var 0) pureCbE) (appE (.var 0) .unit))
-      (letE (BoCa.BoLo.hndE (toResultH 1 .aff)
+      (letE (BoCa.BoLo.hndE (toResultH 1 .zero)
           (letE (appE (.var 1) (failCbE 1)) (appE (.var 0) .unit)))
         (.pair (.var 1) (.var 0))))
 
@@ -185,9 +178,9 @@ def kernelPrograms : List (String × BoCa.Expr) :=
     ("store-cancel", storeCancel),
     ("resume-tail", BoCa.Fig16.LogRel.Core.EffExamples.prog),
     ("cancel-now", BoCa.Fig16.LogRel.Core.EffExamples.progC),
-    ("cancel-reraised", cancelKept),
-    ("cancel-reentered", BoCa.Fig16.LogRel.Core.CancelIntercept.progRe),
-    ("cancel-propagated", BoCa.Fig16.LogRel.Core.CancelIntercept.progOut),
+    ("cancel-reraised", BoCa.Fig16.LogRel.Core.CancelIntercept.cancelKeptT),
+    ("cancel-reentered", BoCa.Fig16.LogRel.Core.CancelIntercept.progReT),
+    ("cancel-propagated", BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT),
     ("at08-once", BoCa.Fig16.LogRel.Core.Rejections.at08Once),
     ("hof-two-rows", BoCa.Fig16.LogRel.Core.Tier1Programs.hofTwoRows),
     ("sum-gen", BoCa.Fig16.LogRel.Core.Tier1Programs.sumGen),

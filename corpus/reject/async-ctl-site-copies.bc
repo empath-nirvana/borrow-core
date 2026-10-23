@@ -1,17 +1,11 @@
--- SPEC §52's `unr` guard: a stored BOXED-κ site whose operation is `multi ctl` (an `unr` `κ`) in a
--- program that has a stack machine (`tsum`, run by `spawn`). The clause copies its `κ` and resumes
--- both copies, which the typing allows at `unr`. Such a site does not switch the task stack: its
--- `κ` may be copied, so it could not be the stack's one owner (`stackOps` and `convDrive`'s
--- `siteSw` both ask that no operation of the node be `unr`). The `spawn` site still runs `tsum`'s
--- recursion on a stack of its own.
---
--- Answer: `i32[5]`: `grab`'s computation answers 5 at the first resume; the second resume of the
--- copy answers it again. `live 0`.
-
+-- `async-unr-site.bc` at `ctl`: the stored BOXED-κ site whose clause copies its `κ` and resumes
+-- both copies. With no unrestricted count (SPEC §53) the clause's `κ` is at `1?` at most, which
+-- has no `!`: `unbang` of it is refused, and the copy with it.
+-- expect: 15:43: `unbang V` needs `V : !A`, but `V : U ((1 -o F box top U (nu X. F (i32 + box top U X) & F 1)) & F 1)`
 include rec
 include async
 
-effect Many { multi ctl pick() }
+effect Many { ctl pick() }
 
 type T = box top U (nu X. F (i32 + box top U X) & F 1)
 

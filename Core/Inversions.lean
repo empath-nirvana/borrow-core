@@ -269,9 +269,10 @@ theorem effOf_inj : ∀ {S S' : Row} {Y Y' : VTy}, CTy.effOf S Y = CTy.effOf S' 
   | _ :: _, [], _, _, h => by simp [CTy.effOf] at h
   | o :: S, o' :: S', _, _, h => by
       simp only [CTy.effOf, CTy.eff.injEq] at h
-      obtain ⟨h1, h2, h3, h4, h5, h6, h7⟩ := h
-      obtain ⟨rfl, rfl⟩ := effOf_inj h7
+      obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8⟩ := h
+      obtain ⟨rfl, rfl⟩ := effOf_inj h8
       cases o; cases o'
+      cases World.eq ‹World› ‹World›
       simp_all
 
 /-- The judgements a value of type `T` is read at: its views, and rows over its views. -/
@@ -649,7 +650,7 @@ theorem hasVar_pickE : ∀ (j : Nat) {t : Expr} {k : Nat}, (pickE j t).HasVar k 
       exact h.resolve_right fun h' => by have := hasVar_pickE j h'; simp [Expr.HasVar] at this
 
 /-- A variable of the clauses written out from `Hc` is one of `Hc`'s. -/
-theorem hasVar_tailTuple {Hc : Expr} : ∀ (E : List (Qual × VTy × VTy)) (j k : Nat),
+theorem hasVar_tailTuple {Hc : Expr} : ∀ (E : List (Count × VTy × VTy)) (j k : Nat),
     (tailTuple E j Hc).HasVar k → Hc.HasVar k
   | [], _, _, h => by simp [tailTuple, Expr.HasVar, Val.unit] at h
   | (q, A, B) :: E, j, k, h => by
@@ -671,7 +672,7 @@ theorem hasVar_tailTuple {Hc : Expr} : ∀ (E : List (Qual × VTy × VTy)) (j k 
       · exact hasVar_tailTuple E (j + 1) k h
 
 /-- A variable of the clauses written out from `Hw` and `Hn` is one of theirs. -/
-theorem hasVar_lastTuple {Hw Hn : Expr} : ∀ (E : List (Qual × VTy × VTy)) (j k : Nat),
+theorem hasVar_lastTuple {Hw Hn : Expr} : ∀ (E : List (Count × VTy × VTy)) (j k : Nat),
     (lastTuple E j Hw Hn).HasVar k → Hw.HasVar k ∨ Hn.HasVar k
   | [], _, _, h => by simp [lastTuple, Expr.HasVar, Val.unit] at h
   | (q, A, B) :: E, j, k, h => by
@@ -700,7 +701,7 @@ theorem slot_succ {Γ : Ctx VTy} {s : Slot VTy} {k : Nat} {T : VTy}
 theorem slot_succ₂ {Γ : Ctx VTy} {s s' : Slot VTy} {k : Nat} {T : VTy}
     (h : (s :: s' :: Γ)[k + 2]? = some ⟨T, true⟩) : Γ[k]? = some ⟨T, true⟩ := by simpa using h
 
-theorem qualsVal_noVar (qs : List Qual) {k : Nat} : ¬ (qualsVal qs).1.HasVar k :=
+theorem qualsVal_noVar (qs : List Count) {k : Nat} : ¬ (qualsVal qs).1.HasVar k :=
   not_hasVar_closed (closedAt_qualsVal 0 qs)
 
 /-- **Every free variable of a typed term has a live slot.** -/
@@ -1351,12 +1352,12 @@ theorem der_then {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
 /-- The clauses' type with each capturing clause's `κ` bare (`none`: `[handle]`) or boxed at `@d`
 (`some d`: BOXED-κ, `[spec §28]`). -/
 def clausesTyO (S : Row) (R : VTy) :
-    Option Lifetime.Life → List (Qual × VTy × VTy) → (Nat → CTy) → VTy
+    Option Lifetime.Life → List (Count × VTy × VTy) → (Nat → CTy) → VTy
   | none, E, fs => clausesTy S R E fs
   | some d, E, fs => clausesTyB S R d E fs
 
 /-- A clause's type, `κ` bare or boxed. -/
-def clauseTyO (S : Row) (R : VTy) : Option Lifetime.Life → Qual × VTy × VTy → CTy → VTy
+def clauseTyO (S : Row) (R : VTy) : Option Lifetime.Life → Count × VTy × VTy → CTy → VTy
   | none, o, F => clauseTy S R o F
   | some d, o, F => clauseTyB S R d o F
 
@@ -1368,18 +1369,18 @@ def kBoxO : Option Lifetime.Life → VTy → VTy
 theorem clausesTyO_nil (S : Row) (R : VTy) (ob : Option Lifetime.Life) (fs : Nat → CTy) :
     clausesTyO S R ob [] fs = .unit := by cases ob <;> rfl
 
-theorem clausesTyO_cons (S : Row) (R : VTy) (ob : Option Lifetime.Life) (o : Qual × VTy × VTy)
-    (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) :
+theorem clausesTyO_cons (S : Row) (R : VTy) (ob : Option Lifetime.Life) (o : Count × VTy × VTy)
+    (E : List (Count × VTy × VTy)) (fs : Nat → CTy) :
     clausesTyO S R ob (o :: E) fs =
       .tensor (clauseTyO S R ob o (fs 0)) (clausesTyO S R ob E (fun j => fs (j + 1))) := by
   cases ob <;> rfl
 
 /-- A capturing clause's type: `!U(A ⊗ κ ⊸ F_Σ R)`, `κ` at `kBoxO ob K`. -/
-theorem clauseTyO_cap (S : Row) (R : VTy) (ob : Option Lifetime.Life) {q : Qual} {A B : VTy}
-    (F : CTy) (hB : B.isZero = false) :
+theorem clauseTyO_cap (S : Row) (R : VTy) (ob : Option Lifetime.Life) {q : Count} {A B : VTy}
+    (F : CTy) (hq : (q == .zero) = false) :
     clauseTyO S R ob (q, A, B) F =
-      .bang (.thunk (.arr (.tensor A (kBoxO ob (kTy S R q B F))) (CTy.effOf S R))) := by
-  cases ob <;> simp [clauseTyO, clauseTy, clauseTyB, kBoxO, hB]
+      .bang (.thunk (.arr (.tensor A (kBoxO ob (kTy S R q.toQual B F))) (CTy.effOf S R))) := by
+  cases ob <;> simp [clauseTyO, clauseTy, clauseTyB, kBoxO, hq]
 
 /-- **A handler term is `[handle]`'s or BOXED-κ's**: its tags are its signature's, and the handler
 pair is typed at the tensor of the return clause's type and the clauses', `κ` bare or boxed, over a
@@ -1387,15 +1388,15 @@ consumed context. -/
 theorem der_hnd {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ (n : UInt32) (Q H M : Expr),
       e = .app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) (.pair Q H))) M →
-      (∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
+      (∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Count × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
         (ob : Option Lifetime.Life),
         Ctx.SplitP Γ Γ₁ Γ₂ ∧ Ctx.DeadP Γ₁ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧
         CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyO S R ob E fs)))) ∨
-      (∃ (Γ₁ Γ₂ : Ctx VTy) (S SN : Row) (E : List (Qual × VTy × VTy)) (A R : VTy) (Hr Hc : Expr),
+      (∃ (Γ₁ Γ₂ : Ctx VTy) (S SN : Row) (E : List (Count × VTy × VTy)) (A R : VTy) (Hr Hc : Expr),
         Ctx.SplitP Γ Γ₁ Γ₂ ∧ Ctx.DeadP Γ₁ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧
         H = .pair Hr (tailTuple E 0 Hc) ∧
         CDerives Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E)))) ∨
-      (∃ (Γ₁ Γ₂ : Ctx VTy) (S SW : Row) (E : List (Qual × VTy × VTy)) (Xs : Nat → VTy) (A R : VTy)
+      (∃ (Γ₁ Γ₂ : Ctx VTy) (S SW : Row) (E : List (Count × VTy × VTy)) (Xs : Nat → VTy) (A R : VTy)
         (Hr Hw Hn : Expr),
         Ctx.SplitP Γ Γ₁ Γ₂ ∧ Ctx.DeadP Γ₁ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧
         H = .pair Hr (lastTuple E 0 Hw Hn) ∧
@@ -2016,8 +2017,9 @@ theorem VarCls.val {T Y : VTy} (h : VarCls T (.val Y)) : VView T Y := by
   · obtain ⟨S, A, rfl⟩ := hr.comp_val
     rw [effOf_isRet] at hC; cases hC
 
-/-- A list of qualifiers is told apart by its tags. -/
-theorem qualsVal_inj : ∀ {qs qs' : List Qual}, (qualsVal qs).1 = (qualsVal qs').1 → qs = qs'
+/-- A list of counts is told apart by its tags up to the qualifiers they give. -/
+theorem qualsVal_inj : ∀ {qs qs' : List Count}, (qualsVal qs).1 = (qualsVal qs').1 →
+    qs.map Count.toQual = qs'.map Count.toQual
   | [], [], _ => rfl
   | [], _ :: _, h => by simp [qualsVal, Val.unit, Val.pair] at h
   | _ :: _, [], h => by simp [qualsVal, Val.unit, Val.pair] at h
@@ -2025,15 +2027,15 @@ theorem qualsVal_inj : ∀ {qs qs' : List Qual}, (qualsVal qs).1 = (qualsVal qs'
       simp only [qualsVal, Val.pair, Val.i32, Expr.pair.injEq, Expr.prim.injEq, Prim.lit.injEq,
         IntLit.i32.injEq] at h
       obtain ⟨hq, hqs⟩ := h
-      rw [qualsVal_inj hqs]
+      simp only [List.map_cons, qualsVal_inj hqs, List.cons.injEq, and_true]
       cases q <;> cases q' <;> first | rfl | exact absurd hq (by decide)
 
 /-- **A handler's clause tuple**: in `handle_n M with (X, x₁)`, the slot of `x₁` is live and its
 type views to the clauses' type, `κ` bare or boxed, whose signature carries the handler's tags. -/
-theorem hnd_clauses {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {qs : List Qual} {X M : Expr}
+theorem hnd_clauses {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {qs : List Count} {X M : Expr}
     {j : Jdg} (h : CDerives Δ Γ (hndExpr n qs (.pair X (.var 1)) M) j) :
     ∃ T S R E fs ob, Γ[1]? = some ⟨T, true⟩ ∧ VView T (clausesTyO S R ob E fs) ∧
-      E.map Prod.fst = qs := by
+      (E.map Prod.fst).map Count.toQual = qs.map Count.toQual := by
   obtain ⟨Γ₁, Γ₂, S, E, fs, A, R, ob, hs, -, hQ, hH⟩ | ⟨_, _, _, _, E, _, _, _, _, -, -, -, hH, -⟩ |
       ⟨_, _, _, _, E, _, _, _, _, _, _, -, -, -, hH, -⟩ := der_hnd h n _ _ M rfl
   rotate_left
@@ -2041,7 +2043,7 @@ theorem hnd_clauses {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {qs : List Qual} 
     cases E <;> simp [tailTuple, Val.unit] at hH
   · simp only [Expr.pair.injEq] at hH
     cases E <;> simp [lastTuple, Val.unit] at hH
-  have hE : E.map Prod.fst = qs := (qualsVal_inj hQ).symm
+  have hE : (E.map Prod.fst).map Count.toQual = qs.map Count.toQual := (qualsVal_inj hQ).symm
   rcases der_pair hH X (.var 1) rfl with ⟨Γ₁₁, Γ₁₂, A', B', hs', -, hv, hc⟩ | he
   · obtain ⟨-, rfl⟩ := vview_tensor hc
     obtain ⟨T, hT, hcT⟩ := der_var hv 1 rfl
@@ -2150,19 +2152,19 @@ theorem JR.rowLe {S S' : Row} {Y Y' : VTy}
 
 /-- `[handle]`'s premises, at its conclusion `j₀`. -/
 def HndBase (Δ : LifeCtx) (Γ : Ctx VTy) (n : UInt32) (Q H M : Expr) (j₀ : Jdg) : Prop :=
-  (∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
+  (∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Count × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
     (ob : Option Lifetime.Life),
     Ctx.SplitP Γ Γ₁ Γ₂ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧
     CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyO S R ob E fs))) ∧
     CDerives Δ Γ₂ M (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) ∧
     (∀ o ∈ S, o.n ≠ n) ∧ j₀ = .comp (CTy.effOf S R)) ∨
-  (∃ (Γ₁ Γ₂ : Ctx VTy) (S SN : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
+  (∃ (Γ₁ Γ₂ : Ctx VTy) (S SN : Row) (E : List (Count × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
     (Hr Hc : Expr),
     Ctx.SplitP Γ Γ₁ Γ₂ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧ H = .pair Hr (tailTuple E 0 Hc) ∧
     CDerives Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))) ∧
     CDerives Δ Γ₂ M (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) ∧
     (∀ o ∈ S, o.n ≠ n) ∧ j₀ = .comp (CTy.effOf S R)) ∨
-  (∃ (Γ₁ Γ₂ : Ctx VTy) (S SW : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy)
+  (∃ (Γ₁ Γ₂ : Ctx VTy) (S SW : Row) (E : List (Count × VTy × VTy)) (fs : Nat → CTy)
     (Xs : Nat → VTy) (A R : VTy) (Hr Hw Hn : Expr),
     Ctx.SplitP Γ Γ₁ Γ₂ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧
     H = .pair Hr (lastTuple E 0 Hw Hn) ∧
@@ -2262,7 +2264,7 @@ theorem der_hndJ₁ {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} {n : UInt32} {Q H M 
     (h : CDerives Δ Γ (.app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) (.pair Q H))) M) j)
     (hT : (∀ Hr E Hc, H ≠ .pair Hr (tailTuple E 0 Hc)) ∧
       ∀ Hr E Hw Hn, H ≠ .pair Hr (lastTuple E 0 Hw Hn)) :
-    ∃ j₀, (∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
+    ∃ j₀, (∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Count × VTy × VTy)) (fs : Nat → CTy) (A R : VTy)
       (ob : Option Lifetime.Life),
       Ctx.SplitP Γ Γ₁ Γ₂ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧
       CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTyO S R ob E fs))) ∧
@@ -2298,7 +2300,7 @@ def ThenBase (Δ : LifeCtx) (Γ : Ctx VTy) (D M : Expr) (j₀ : Jdg) : Prop :=
   ∃ (Γ₁ Γ₂ : Ctx VTy) (A B : VTy) (S SM SD : Row), Ctx.SplitP Γ Γ₁ Γ₂ ∧
     RowLe SM S ∧ RowLe SD S ∧
     (∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
-      capB o.q o.B = true → ThenLe o.fin SD o'.fin) ∧
+      capB o.cnt = true → ThenLe o.fin SD o'.fin) ∧
     CDerives Δ Γ₁ M (.comp (CTy.effOf SM A)) ∧
     CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit)) ∧
     j₀ = .comp (CTy.effOf S B)
@@ -2754,10 +2756,10 @@ def cancelResumeBody : Expr := bindE (cancelE (.var 0)) (resumeE (.var 1) .unit)
 def cancelResumeCl : Val := ⟨.lam (.letpair (.var 0) cancelResumeBody), .lam⟩
 
 /-- At a resuming operation a clause is at `!U(A ⊗ kTy ⊸ F_Σ R)`. -/
-theorem clauseTy_resuming {S : Row} {R : VTy} {q : Qual} {A B : VTy} {F : CTy}
-    (h : (B.isZero && q != .lin) = false) :
+theorem clauseTy_resuming {S : Row} {R : VTy} {q : Count} {A B : VTy} {F : CTy}
+    (h : (q == .zero) = false) :
     clauseTy S R (q, A, B) F =
-      .bang (.thunk (.arr (.tensor A (kTy S R q B F)) (CTy.effOf S R))) := by
+      .bang (.thunk (.arr (.tensor A (kTy S R q.toQual B F)) (CTy.effOf S R))) := by
   simp [clauseTy, h]
 
 /-- A linear or affine `κ` is no persistent type. -/
@@ -2768,12 +2770,12 @@ theorem kTy_not_persistent {S : Row} {R : VTy} {q : Qual} {B : VTy} {F : CTy} (h
 /-- **A clause `λp. let (v, k) = p in X` at a resuming operation's clause type** types `X` with
 `k : kTy` live in slot `0` and `v : A` in slot `1`, at a computation type from which the same-term
 rules reach the clause's row. -/
-theorem der_clause_body {Δ : LifeCtx} {Γ : Ctx VTy} {X : Expr} {S : Row} {R : VTy} {q : Qual}
-    {A B : VTy} {F : CTy} (hres : (B.isZero && q != .lin) = false)
+theorem der_clause_body {Δ : LifeCtx} {Γ : Ctx VTy} {X : Expr} {S : Row} {R : VTy} {q : Count}
+    {A B : VTy} {F : CTy} (hres : (q == .zero) = false)
     (hw : ∀ M₁ M₂, Expr.lam (.letpair (.var 0) X) ≠ withPair M₁ M₂)
     (hc : NotConst (.lam (.letpair (.var 0) X)))
     (h : CDerives Δ Γ (.lam (.letpair (.var 0) X)) (.val (clauseTy S R (q, A, B) F))) :
-    ∃ Γb C, CDerives Δ (⟨kTy S R q B F, true⟩ :: ⟨A, true⟩ :: Γb) X (.comp C) ∧
+    ∃ Γb C, CDerives Δ (⟨kTy S R q.toQual B F, true⟩ :: ⟨A, true⟩ :: Γb) X (.comp C) ∧
       JR (.comp C) (.comp (CTy.effOf S R)) := by
   rw [clauseTy_resuming hres] at h
   obtain ⟨-, hb⟩ := lam_bang h (fun h => by cases h) hw hc
@@ -2834,42 +2836,42 @@ theorem der_cancel_lin {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {S : Row} {R B : 
 
 /-- **R1's clause is refused at a resuming linear or affine operation**: `return ff` consumes its
 context, where the slot of `k : kTy` is live, and `kTy` is not persistent. -/
-theorem refuses_dropClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Qual}
-    {A B : VTy} {F : CTy} (hq : q ≠ .unr) (hres : (B.isZero && q != .lin) = false) :
+theorem refuses_dropClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Count}
+    {A B : VTy} {F : CTy} (hres : (q == .zero) = false) :
     ¬ CDerives Δ Γ dropCl.1 (.val (clauseTy S R (q, A, B) F)) := by
   intro h
   obtain ⟨Γb, C, hX, -⟩ := der_clause_body (X := .inj₁ .unit) hres (by not_withPair)
     (by not_const) h
   obtain ⟨A₁, B₁, hu, -⟩ := der_inj₁ hX _ rfl
   rcases der_unit hu rfl with ⟨hd, -⟩ | hr
-  · exact kTy_not_persistent hq (deadP_slot hd (k := 0) rfl)
+  · exact kTy_not_persistent (Count.toQual_ne_unr q) (deadP_slot hd (k := 0) rfl)
   · obtain ⟨S', Y, he⟩ := hr.comp_val
     exact effOf_ne_top S' Y he.symm
 
 /-- **R2's clause is refused at a resuming linear or affine operation**: `resume k () to _.
 resume k ()` reads `k` on both sides of a bind, so its slot would be persistent. -/
-theorem refuses_twiceClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Qual}
-    {A B : VTy} {F : CTy} (hq : q ≠ .unr) (hres : (B.isZero && q != .lin) = false) :
+theorem refuses_twiceClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Count}
+    {A B : VTy} {F : CTy} (hres : (q == .zero) = false) :
     ¬ CDerives Δ Γ twiceCl.1 (.val (clauseTy S R (q, A, B) F)) := by
   intro h
   obtain ⟨Γb, C, hX, -⟩ := der_clause_body (X := twiceBody) hres
     (by simp only [twiceBody, resumeE]; not_withPair)
     (by simp only [twiceBody, resumeE]; not_const) h
-  exact kTy_not_persistent hq (k_twice hX (by simp [resumeE]) (by simp [resumeE])
+  exact kTy_not_persistent (Count.toQual_ne_unr q) (k_twice hX (by simp [resumeE]) (by simp [resumeE])
     (by simp [resumeE]) (by simp [resumeE]) (by simp [resumeE])
     (by simp only [resumeE]; not_withPair) (by simp only [resumeE]; not_const)
     (by simp [resumeE, Expr.HasVar, Expr.shift]) (by simp [resumeE, Expr.HasVar, Expr.shift]))
 
 /-- **R4's clause is refused at a resuming linear or affine operation**: `cancel k to _.
 resume k ()` reads `k` on both sides of a bind. -/
-theorem refuses_cancelResumeClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Qual}
-    {A B : VTy} {F : CTy} (hq : q ≠ .unr) (hres : (B.isZero && q != .lin) = false) :
+theorem refuses_cancelResumeClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Count}
+    {A B : VTy} {F : CTy} (hres : (q == .zero) = false) :
     ¬ CDerives Δ Γ cancelResumeCl.1 (.val (clauseTy S R (q, A, B) F)) := by
   intro h
   obtain ⟨Γb, C, hX, -⟩ := der_clause_body (X := cancelResumeBody) hres
     (by simp only [cancelResumeBody, cancelE, resumeE]; not_withPair)
     (by simp only [cancelResumeBody, cancelE, resumeE]; not_const) h
-  exact kTy_not_persistent hq (k_twice hX (by simp [cancelE]) (by simp [cancelE])
+  exact kTy_not_persistent (Count.toQual_ne_unr q) (k_twice hX (by simp [cancelE]) (by simp [cancelE])
     (by simp [cancelE]) (by simp [cancelE]) (by simp [cancelE])
     (by simp only [resumeE]; not_withPair) (by simp only [resumeE]; not_const)
     (by simp [cancelE, Expr.HasVar]) (by simp [resumeE, Expr.HasVar, Expr.shift]))
@@ -2877,7 +2879,7 @@ theorem refuses_cancelResumeClause {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : 
 /-- **R3's clause is refused at a linear operation**: a linear `κ`'s cancel is at `⊤` only
 (`der_cancel_lin`), and a bind takes its computation at a row. -/
 theorem refuses_cancelClause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {A B : VTy}
-    {F : CTy} : ¬ CDerives Δ Γ cancelCl.1 (.val (clauseTy S R (.lin, A, B) F)) := by
+    {F : CTy} : ¬ CDerives Δ Γ cancelCl.1 (.val (clauseTy S R (.one, A, B) F)) := by
   intro h
   obtain ⟨Γb, C, hX, -⟩ := der_clause_body (X := cancelBody) (by simp)
     (by simp only [cancelBody, cancelE]; not_withPair)
@@ -2895,14 +2897,14 @@ theorem refuses_cancelClause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VT
 
 /-- **The clause typing refuses R1–R4's clauses** at the classes S6's witnesses name: R1, R2 and R4
 at every resuming linear or affine operation, R3 at every linear one, at every cancel row. -/
-theorem refuses_R_clauses {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Qual} {A B : VTy}
-    {F : CTy} (hq : q ≠ .unr) (hres : (B.isZero && q != .lin) = false) :
+theorem refuses_R_clauses {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {q : Count} {A B : VTy}
+    {F : CTy} (hres : (q == .zero) = false) :
     ¬ CDerives Δ Γ dropCl.1 (.val (clauseTy S R (q, A, B) F)) ∧
     ¬ CDerives Δ Γ twiceCl.1 (.val (clauseTy S R (q, A, B) F)) ∧
-    ¬ CDerives Δ Γ cancelCl.1 (.val (clauseTy S R (.lin, A, B) F)) ∧
+    ¬ CDerives Δ Γ cancelCl.1 (.val (clauseTy S R (.one, A, B) F)) ∧
     ¬ CDerives Δ Γ cancelResumeCl.1 (.val (clauseTy S R (q, A, B) F)) :=
-  ⟨refuses_dropClause hq hres, refuses_twiceClause hq hres, refuses_cancelClause_lin,
-    refuses_cancelResumeClause hq hres⟩
+  ⟨refuses_dropClause hres, refuses_twiceClause hres, refuses_cancelClause_lin,
+    refuses_cancelResumeClause hres⟩
 
 /-! ### The refusals pin `κ`'s use -/
 
@@ -2910,7 +2912,7 @@ open EffExamples in
 /-- **A clause that cancels `κ` is refused at a linear operation**: `x; κ (inj₂ ())` answers at `⊤`,
 and the clause at a row. -/
 theorem refuses_clC_lin {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy} {A B : VTy} {F : CTy} :
-    ¬ CDerives Δ Γ clC (.val (clauseTy S R (.lin, A, B) F)) := by
+    ¬ CDerives Δ Γ clC (.val (clauseTy S R (.one, A, B) F)) := by
   intro h
   obtain ⟨Γb, C, hX, hr⟩ := der_clause_body (X := .seq (.var 1) (cancelE (.var 0))) (by simp)
     (by simp only [cancelE]; not_withPair) (by simp only [cancelE]; not_const) h
@@ -2928,16 +2930,16 @@ open EffExamples in
 operation `1 ↠ 1`, a clause that resumes `κ` once is typed (`cl₀`) and R1–R4's clauses are not; a
 clause that cancels `κ` (`clC`) is typed at an affine operation and refused at a linear one. -/
 theorem clauseRefusals_pinned :
-    (CDerives LifeCtx.empty [] cl₀ (.val (clauseTy [] .unit (.lin, .unit, .unit))) ∧
-      ¬ CDerives LifeCtx.empty [] dropCl.1 (.val (clauseTy [] .unit (.lin, .unit, .unit))) ∧
-      ¬ CDerives LifeCtx.empty [] twiceCl.1 (.val (clauseTy [] .unit (.lin, .unit, .unit))) ∧
-      ¬ CDerives LifeCtx.empty [] cancelCl.1 (.val (clauseTy [] .unit (.lin, .unit, .unit))) ∧
+    (CDerives LifeCtx.empty [] cl₀ (.val (clauseTy [] .unit (.one, .unit, .unit))) ∧
+      ¬ CDerives LifeCtx.empty [] dropCl.1 (.val (clauseTy [] .unit (.one, .unit, .unit))) ∧
+      ¬ CDerives LifeCtx.empty [] twiceCl.1 (.val (clauseTy [] .unit (.one, .unit, .unit))) ∧
+      ¬ CDerives LifeCtx.empty [] cancelCl.1 (.val (clauseTy [] .unit (.one, .unit, .unit))) ∧
       ¬ CDerives LifeCtx.empty [] cancelResumeCl.1
-        (.val (clauseTy [] .unit (.lin, .unit, .unit)))) ∧
-    (CDerives LifeCtx.empty [] clC (.val (clauseTy [] .unit (.aff, .unit, .unit))) ∧
-      ¬ CDerives LifeCtx.empty [] clC (.val (clauseTy [] .unit (.lin, .unit, .unit)))) :=
-  ⟨⟨cl₀_derives, refuses_dropClause (by simp) (by simp), refuses_twiceClause (by simp) (by simp),
-      refuses_cancelClause_lin, refuses_cancelResumeClause (by simp) (by simp)⟩,
+        (.val (clauseTy [] .unit (.one, .unit, .unit)))) ∧
+    (CDerives LifeCtx.empty [] clC (.val (clauseTy [] .unit (.opt, .unit, .unit))) ∧
+      ¬ CDerives LifeCtx.empty [] clC (.val (clauseTy [] .unit (.one, .unit, .unit)))) :=
+  ⟨⟨cl₀_derives, refuses_dropClause (by simp [Count.toQual]), refuses_twiceClause (by simp [Count.toQual]),
+      refuses_cancelClause_lin, refuses_cancelResumeClause (by simp [Count.toQual])⟩,
     clC_derives, refuses_clC_lin⟩
 
 end BoCa.Fig16.LogRel.Core.Inversions

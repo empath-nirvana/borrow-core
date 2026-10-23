@@ -55,6 +55,7 @@ def VTy.respan (sp : Span) : VTy → VTy
   | .app _ G A => .app sp (G.respan sp) (A.respan sp)
   | .lapp _ G a => .lapp sp (G.respan sp) (a.respan sp)
   | .rowed _ G r => .rowed sp (G.respan sp) (r.respan sp)
+  | .kont _ n i q B C => .kont sp n i q (B.respan sp) (C.respan sp)
 
 def CTy.respan (sp : Span) : CTy → CTy
   | .ret _ A => .ret sp (A.respan sp)

@@ -149,7 +149,7 @@ theorem TDerivesAt.withbor2_witness_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx 
 /-- **The clause kinds are the checker's, not the derivation's**: a typed derivation of a
 `handle` node is one at any kinds. -/
 theorem TDerivesAt.kinds_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J : Jdg}
-    {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
+    {S : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     {u : Masks} {ks : List ClauseKinds.HKind} (ks' : List ClauseKinds.HKind)
     {site : Option HSite} {ins : ClauseKinds.HIn} {tc te : TExpr}
     (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site ins tc te) J) :
@@ -161,7 +161,7 @@ theorem TDerivesAt.kinds_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : T
 /-- **The site is the elaboration's, not the derivation's**: a typed derivation of a `handle`
 node is one at any site record. -/
 theorem TDerivesAt.site_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J : Jdg}
-    {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
+    {S : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     {u : Masks} {ks : List ClauseKinds.HKind} {site : Option HSite} (site' : Option HSite)
     {ins : ClauseKinds.HIn} {tc te : TExpr}
     (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site ins tc te) J) :

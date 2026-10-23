@@ -1,4 +1,4 @@
-effect 17:1: Fail: raise (ctl, affine, abortive)
+effect 17:1: Fail: raise (ctl, abortive)
 row 21:1: mean: Fail[DivError], Fail[i32]
 lowering 21:1: copy `mean__n2_n1`: `mean` for the site 2 of `Fail`, the site 1 of `Fail`
 lowering 21:1: copy `mean__n6_n5`: `mean` for the site 6 of `Fail`, the site 5 of `Fail`

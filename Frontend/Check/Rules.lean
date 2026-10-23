@@ -539,7 +539,7 @@ def _root_.BoCa.Fig16.LogRel.Core.Check.Fam.withUse {P : List Bool → Prop} (F 
 /-- **`[handle]`**: `handle_n e with H`, the handler's pair `H` checked (`rH`), its erasure a
 value form over the slots it uses (`hv`), each of which is persistent (`hp`). It reads the handled
 row. The node records the clause kinds `ks` and the site `site`. -/
-def rEffHandle {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R Tr Tc : CVTy}
+def rEffHandle {S : CRow} {E : List (CCount × CVTy × CVTy)} {n : UInt32} {A R Tr Tc : CVTy}
     (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind) (site : Option HSite)
     (hr : BoCa.Fig16.LogRel.Core.retTy S A R = Tr) (hc : BoCa.Fig16.LogRel.Core.clausesTy S R E = Tc)
     (rH : Res Δ T (.val (.tensor Tr Tc)))
@@ -560,7 +560,7 @@ def rEffHandle {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R T
 /-- BOXED-κ: `[handle]` at the clauses `clausesTyB S R d E`, each capturing clause's `κ` boxed at
 `@d`; `@d` defined, every live slot `e` uses outliving it, and every non-abortive answer type of
 the handled row outliving it. It reads the handled row.  `[spec §28]` -/
-def rEffHandleB {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R Tr Tc : CVTy}
+def rEffHandleB {S : CRow} {E : List (CCount × CVTy × CVTy)} {n : UInt32} {A R Tr Tc : CVTy}
     {d : CLife} (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind) (site : Option HSite)
     (hr : BoCa.Fig16.LogRel.Core.retTy S A R = Tr)
     (hc : BoCa.Fig16.LogRel.Core.clausesTyB S R d E = Tc) (rH : Res Δ T (.val (.tensor Tr Tc)))

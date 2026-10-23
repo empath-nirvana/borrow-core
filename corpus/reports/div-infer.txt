@@ -1,5 +1,5 @@
-effect 17:1: Fail: raise (ctl, affine, abortive)
-effect 43:1: Ask: ask (ctl, affine)
+effect 17:1: Fail: raise (ctl, abortive)
+effect 43:1: Ask: ask (ctl)
 row 28:1: quot: Fail[DivError]
 row 30:1: harmonic: Fail[DivError]
 row 35:1: half: Fail[DivError]

@@ -50,6 +50,7 @@ def _root_.Frontend.VTy.tyNames : VTy → List String
   | .sized _ D S A => D.tyNames ++ S.tyNames ++ A.tyNames
   | .thunk _ C => C.tyNames
   | .rowed _ F r => F.tyNames ++ r.tyNames
+  | .kont _ _ _ _ B C => B.tyNames ++ C.tyNames
   | .block _ σ | .val _ σ | .fam _ _ _ σ => σ.tyNames
   | _ => []
 

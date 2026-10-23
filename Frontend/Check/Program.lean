@@ -3,6 +3,7 @@ import Frontend.Elab.Pipeline
 import Frontend.Check.Copies
 import Frontend.Check.KindsSound
 import Frontend.Check.Cells
+import Frontend.Check.Grades
 
 /-!
 # Frontend — Check — programs
@@ -116,21 +117,23 @@ structure Report where
   /-- The `handle` nodes of the checked terms, each once: their static names and clause kinds
   (SPEC §19, *Clause kinds*). -/
   handles : List HandleSite := []
+  /-- The counts of the program's operations, as inference fixed them (SPEC §53). -/
+  grades : Grades := {}
 
 /-- The depth bound for checking a term. -/
 def checkFuel : Nat := 1 <<< 20
 
 /-- The environment at the top of the declaration `k`, with the keys of the `def`s the
 elaboration generates (`DefKey`). -/
-def Env.top (ds : Array Decl) (k : Nat) (keys : List DefKey := []) : Env :=
-  ⟨⟨ds, k, keys⟩, [], [], [], [], 0, none⟩
+def Env.top (ds : Array Decl) (k : Nat) (keys : List DefKey := []) (cnts : CntTable := {}) : Env :=
+  ⟨{ decls := ds, upto := k, keys, cnts }, [], [], [], [], 0, none⟩
 
 /-- The externs, in declaration order, each elaborated in the declarations before it. -/
-def externs (ds : Array Decl) : Except Error (List (String × CVTy)) :=
+def externs (ds : Array Decl) (cnts : CntTable := {}) : Except Error (List (String × CVTy)) :=
   (List.range ds.size).foldlM (init := []) fun acc k =>
     match (ds[k]? : Option Decl) with
     | some (.extern _ n A) => do
-        let A' ← (Env.top ds k).elabV LifeCtx.empty A
+        let A' ← (Env.top ds k [] cnts).elabV LifeCtx.empty A
         pure (acc ++ [(n.name, A')])
     | _ => pure acc
 
@@ -140,28 +143,30 @@ def firstUnconsumed : List Bool → List Bool → Option Nat
   | _, _ => none
 
 /-- Why the rows `main`'s derivation reads fail `sigsOkB`: an operation of the reserved name `0`,
-an unrestricted operation answering `0`, or an operation with two signatures.  `[spec §18, §19]` -/
+an operation whose count is `0` where it is not abortive or other than `0` where it is, or an
+operation with two signatures.  `[spec §18, §19, §53]` -/
 def sigsErr (s : CRow) : String :=
-  let sig (o : COpSig) : String := s!"`{qualStr o.q} {ppVTy o.A} ~> {ppVTy o.B}`"
+  let sig (o : COpSig) : String := s!"`{cntStr o.cnt} {ppVTy o.A} ~> {ppVTy o.B}`"
   match s.find? (·.n == 0) with
   | some o => s!"`main` performs or handles the operation 0.{o.i}, of the reserved name 0"
   | none =>
-    match s.find? (fun o => o.q == .unr && o.B.isZero) with
-    | some o => s!"the operation {o.n}.{o.i} is unrestricted and answers `0`: an abortive " ++
-        "operation is affine (decision 63)"
+    match s.find? (fun o => (o.cnt == .zero) != o.abort) with
+    | some o => s!"internal error: the operation {o.n}.{o.i} is at the count " ++
+        s!"{o.cnt.word}, and {if o.abort then "is" else "is not"} abortive"
     | none =>
       match s.findSome? (fun o => (s.find? fun o' => o'.n == o.n && o'.i == o.i &&
-          !(o'.q == o.q && o'.A == o.A && o'.B == o.B)).map (o, ·)) with
+          !(o'.cnt == o.cnt && o'.A == o.A && o'.B == o.B)).map (o, ·)) with
       | some (o, o') => s!"the operation {o.n}.{o.i} has two signatures in this program, " ++
           s!"{sig o} and {sig o'}: an operation has one signature (decision R)"
       | none => "internal error: the operations' signatures"
 
 /-- Check `main : C = M`. -/
-def checkMain (ds : Array Decl) (k : Nat) (keys : List DefKey) (sp : Span) (C : CTy) (M : Comp) :
-    CheckM Checked := do
-  let xs ← externs ds
+def checkMain (ds : Array Decl) (k : Nat) (keys : List DefKey) (cnts : CntTable) (sp : Span)
+    (C : CTy) (M : Comp) : CheckM Checked := do
+  let xs ← externs ds cnts
   let T := (xs.map (·.2)).reverse
-  let E : Env := { Env.top ds k keys with vars := (xs.map (some ·.1)).reverse, nExt := xs.length }
+  let E₀ := Env.top ds k keys cnts
+  let E : Env := { E₀ with vars := (xs.map (some ·.1)).reverse, nExt := xs.length }
   let C' ← E.elabC LifeCtx.empty C
   let r ← chkC checkFuel E LifeCtx.empty T M C'
   if h : subL (allL T) (orL r.F.u r.F.w) = true then
@@ -180,10 +185,10 @@ def checkMain (ds : Array Decl) (k : Nat) (keys : List DefKey) (sp : Span) (C : 
 /-- Check one declaration; the line `bcc check` prints for it, `main`'s result, and the typed term
 of a `def` without parameters checked at its declaration, at its context's length. That check is
 its key's at `Δ = ∅` and the externs before it (`DefEntry`), which its uses read. -/
-def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey) :
+def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey) (cnts : CntTable := {}) :
     Decl → CheckM (String × Option Checked × List (Nat × TExpr))
   | .type _ n [] [] A => do
-      let A' ← (Env.top ds k).elabV LifeCtx.empty A
+      let A' ← (Env.top ds k [] cnts).elabV LifeCtx.empty A
       pure (s!"type {n.name} = {ppVTy A'}", none, [])
   | .type _ n ps ls _ =>
       -- A parameterised abbreviation is elaborated at each use, at its arguments.
@@ -191,14 +196,14 @@ def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey) :
       let lps := if ls.isEmpty then "" else s!"<{", ".intercalate (ls.map ("'" ++ ·.name))}>"
       pure (s!"type {n.name}{tps}{lps} : elaborated at each use", none, [])
   | .shape _ n σ => do
-      let _ ← (Env.top ds k).elabS LifeCtx.empty σ
+      let _ ← (Env.top ds k [] cnts).elabS LifeCtx.empty σ
       pure (s!"shape {n.name}", none, [])
   | .def_ _ n ps A V _ =>
       if ps.isEmpty then do
         -- At the persistent externs declared before it (SPEC §11).
-        let xs ← externs (ds.extract 0 k)
+        let xs ← externs (ds.extract 0 k) cnts
         let T := (xs.map (·.2)).reverse
-        let E : Env := { Env.top ds k keys with
+        let E : Env := { Env.top ds k keys cnts with
           vars := (xs.map fun (x, B) => if B.persistent then some x else none).reverse,
           nExt := xs.length }
         let A' ← E.elabV LifeCtx.empty A
@@ -214,45 +219,100 @@ def checkDecl (ds : Array Decl) (k : Nat) (keys : List DefKey) :
   | .poly sp n _ _ _ _ _ => throw ⟨sp, s!"internal error: `poly {n.name}` was not elaborated"⟩
   | .data sp d => throw ⟨sp, s!"internal error: `data {d.name.name}` was not elaborated"⟩
   | .extern _ n A => do
-      let A' ← (Env.top ds k).elabV LifeCtx.empty A
+      let A' ← (Env.top ds k [] cnts).elabV LifeCtx.empty A
       pure (s!"extern {n.name} : {ppVTy A'}", none, [])
   | .main sp C M => do
-      let c ← checkMain ds k keys sp C M
+      let c ← checkMain ds k keys cnts sp C M
       pure (s!"main : {ppCTy c.C}", some c, [(c.ctx.length, c.t)])
 
-/-- Check a program, after elaborating it (`Frontend.Elab.elaborate`: the sugar of SPEC §11 and
-§14): the checker sees only the elaborated program, which the report carries, so that nothing
-after the check elaborates the program again. The lines of the libraries, when they are included,
-are not reported. An error in code generated for a sugar names the sugar
-(`Frontend.Elab.renderError`). A checked program is then rejected if it copies recursive data
-implicitly (`Frontend.Check.implicitCopy`, on the typed terms the check returns): such a use is
-written `clone(x)`. With `copies := false` that check is skipped: for a program rebuilt from the
-printed core of one already checked with it (`run_io`'s wrapper). -/
-def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := do
-  let el ← Frontend.Elab.elaborate p
+/-- One check of an elaborated program at the counts `cnts`: the report, with the `handle` nodes
+of its checked terms, and those terms. The lines of the libraries, when they are included, are
+not reported. An error in code generated for a sugar names the sugar
+(`Frontend.Elab.renderError`). -/
+def checkEl (el : Frontend.Elab.Elaborated) (cnts : CntTable) :
+    Except Error (Report × List (Nat × TExpr)) := do
   let ds := el.prog.decls.toArray
   let lib := el.lib
   let r : Except Error (Report × List (Nat × TExpr)) :=
-    ((List.range ds.size).foldlM (init := ((⟨[], none, el, []⟩ : Report), [])) fun (acc, ts) k =>
+    ((List.range ds.size).foldlM (init := ((⟨[], none, el, [], {}⟩ : Report), [])) fun (acc, ts) k =>
       match (ds[k]? : Option Decl) with
       | some d => do
-          let (line, m, t) ← checkDecl ds k el.keys d
+          let (line, m, t) ← checkDecl ds k el.keys cnts d
           pure ({ acc with lines := if k < lib then acc.lines else acc.lines ++ [line],
                            main := m <|> acc.main }, ts ++ t)
       | none => pure (acc, ts) : CheckM _).run' []
   let (rep, terms) ← r.mapError (Frontend.Elab.renderError el.origins)
+  let handles := (terms.flatMap fun (_, t) => t.handleSites copiesFuel).eraseDups
+  pure ({ rep with handles }, terms)
+
+/-- One check of a program at the counts `cnts`, after elaborating it
+(`Frontend.Elab.elaborate`: the sugar of SPEC §11 and §14). -/
+def checkAt (p : Program) (cnts : CntTable) : Except Error (Report × List (Nat × TExpr)) := do
+  checkEl (← Frontend.Elab.elaborate p) cnts
+
+/-- The error of a declared `linear ctl` operation a node forces above `1`. -/
+def linearCtlErr (k : OpKey) (sp : Span) (why : String) : Error :=
+  ⟨sp, s!"the operation {k.1}.{k.2} is declared `linear ctl`, and this handler's clause asks " ++
+    s!"more of its continuation: {why} (SPEC §53)"⟩
+
+/-- **The counts, inferred and checked** (SPEC §53). The program is elaborated once; its
+elaboration writes each operation whose count is inferred `ctl`, and each clause's `κ` as
+`kont[n.i q]`, so that the elaborated program does not depend on the counts. It is checked at
+the counts its rows write, each `ctl` operation at `1?` (or `0`); the counts of its `ctl`
+operations are inferred from the `handle` nodes of that check (`inferCounts`); and where one is
+lower, the same elaborated program is checked again at them, which is the check the program has.
+The grades are that check's: inference over its own nodes gives the table it was checked at, an
+internal error otherwise. A check that fails at the first counts is checked again with each
+`linear ctl` operation read as `ctl`: a node that forces one of them above `1` is the error then,
+named. -/
+def checkCounted (p : Program) : Except Error (Report × List (Nat × TExpr)) := do
+  let el ← Frontend.Elab.elaborate p
+  match checkEl el {} with
+  | .ok (rep, terms) =>
+    let g := inferCounts rep.handles
+    if let some (k, sp, why) := g.violation then throw (linearCtlErr k sp why)
+    if g.table.all (·.2 != .one) then
+      return ({ rep with grades := g }, terms)
+    match checkEl el { ops := g.table } with
+    | .ok (rep₂, terms₂) =>
+      let g₂ := inferCounts rep₂.handles
+      if g₂.table != g.table then
+        throw ⟨Span.none, "internal error: the counts inferred (SPEC §53) are not inferred again " ++
+          "from the check at them"⟩
+      return ({ rep₂ with grades := g₂ }, terms₂)
+    | .error e => throw { e with msg := s!"internal error: at the counts inferred (SPEC §53): {e.msg}" }
+  | .error e =>
+    match checkEl el { relax := true } with
+    | .ok (rep, _) =>
+      match (inferCounts rep.handles).violation with
+      | some (k, sp, why) => throw (linearCtlErr k sp why)
+      | none => throw e
+    | .error _ => throw e
+
+/-- Check a program (`checkCounted`): the checker sees only the elaborated program, which the
+report carries, so that nothing after the check elaborates the program again. A checked program
+is then rejected if it copies recursive data implicitly (`Frontend.Check.implicitCopy`, on the typed
+terms the check returns): such a use is written `clone(x)`. With `copies := false` that check is
+skipped: for a program rebuilt from the printed core of one already checked with it (`run_io`'s
+wrapper), which is checked at that program's counts `cnts`, as given (SPEC §53). -/
+def checkProgram (p : Program) (copies : Bool := true) (cnts : Option CntTable := none) :
+    Except Error Report := do
+  let (rep, terms) ← match cnts with
+    | none => checkCounted p
+    | some t => checkAt p t
+  let el := rep.el
+  let handles := rep.handles
   -- What the elaboration reports about the program's loops (SPEC §16): total or div, and code
   -- that does not run after a loop that never ends.
   let loops := el.origins.filterMap fun (_, o) => match o with
     | .loop m => some ("loop " ++ m)
     | _ => none
-  -- What the elaboration of effects reports (SPEC §18): each function's row, each handler's
-  -- shape, and each operation's call; and at each handler site, its operations' lowering, read
-  -- from the kinds the checker gave their clauses at the `handle` nodes of its name (SPEC §19).
-  let handles := (terms.flatMap fun (_, t) => t.handleSites copiesFuel).eraseDups
   -- The kind of site the elaboration of effects claims, checked against the clause kinds.
   if let some (h, what) := siteKindMismatch handles then
     throw ⟨h.sp, s!"internal error: the site {h.n} is {what}"⟩
+  -- What the elaboration of effects reports (SPEC §18): each function's row, each handler's
+  -- shape, and each operation's call; and at each handler site, its operations' lowering, read
+  -- from the kinds the checker gave their clauses at the `handle` nodes of its name (SPEC §19).
   let fx := el.origins.filterMap fun (sp, o) => match o with
     | .effects (.line k m) => some s!"{k} {sp.start.render}: {m}"
     | .effects (.site n head ops tail) =>
@@ -263,7 +323,7 @@ def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := 
   let assurance := match rep.main with
     | some c => [c.pins.assurance]
     | none => []
-  let rep := { rep with lines := rep.lines ++ loops.eraseDups ++ fx.eraseDups ++ assurance, handles }
+  let rep := { rep with lines := rep.lines ++ loops.eraseDups ++ fx.eraseDups ++ assurance }
   if !copies then return rep
   match implicitCopy terms with
   | some e => throw (Frontend.Elab.renderError el.origins e)
@@ -296,13 +356,12 @@ theorem checkProgram_tied {p : Program} {r : Report} {c : Checked}
     ∀ Ξ : EffCtx, SigsAt Ξ c.sigs → CDerivesAt Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
   c.tied.tied.1 hp
 
-/-- **At the program's own effect context**, whose abortive operations are affine (decision 63):
-`main`'s derivation is `CDerivesAt c.Ξ`, and `c.Ξ` has no unrestricted operation answering `0`.
+/-- **At the program's own effect context**: `main`'s derivation is `CDerivesAt c.Ξ`.
 `[spec §18, §19]` -/
 theorem checkProgram_tiedAt {p : Program} {r : Report} {c : Checked}
     (_h : checkProgram p = .ok r) (_hc : r.main = some c) (hp : c.pins = []) :
-    CDerivesAt c.Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) ∧ c.Ξ.NoUnrExn :=
-  ⟨c.derivAt hp, noUnrExn_effCtxOf c.ok⟩
+    CDerivesAt c.Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) :=
+  c.derivAt hp
 
 /-- **The checker's copies are `[let-poly]`'s premise** (decision 45): a `def` is checked at each
 use, so `main`'s erasure holds a function at each of its uses. For a closed λ-value `λb` typed at

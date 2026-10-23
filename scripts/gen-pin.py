@@ -228,7 +228,7 @@ NAME_TY = {"A": "VTy", "B": "VTy", "R": "VTy", "S": "VTy", "T": "VTy", "C": "CTy
            "i": "Nat", "j": "Jdg"}
 EXPR_NAMES = {"e", "e₁", "e₂", "M", "N", "V", "H", "f", "d", "M₁", "M₂", "K", "s0"}
 DATA_TY = {"VTy", "CTy", "Row", "LifeVar", "Lifetime.Life", "IntLit", "HostOp", "FShape", "Expr",
-           "Jdg", "OpSig", "UInt32", "Nat", "List (Qual × VTy × VTy)", "Nat → CTy", "Val"}
+           "Jdg", "OpSig", "UInt32", "Nat", "List (Count × VTy × VTy)", "Nat → CTy", "Val"}
 TOKEN = r"[^\s()\[\]{}⟨⟩,.:]+"
 # erasures that are a `λ` whatever the children's (`withPair M N = λs. case s {…}`)
 LAM_HEADS = ("(withPair ",)

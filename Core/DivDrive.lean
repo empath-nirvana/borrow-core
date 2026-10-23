@@ -105,7 +105,7 @@ theorem reify_seg_tick {μ : Heap} {ℓ : Loc} (hℓ : μ ℓ = none) (K₀ K : 
     (hK : K.HasHnd divEff = false) :
     Steps (ℍ := ℍ) μ (K₀.plug (hndE (H res) (K.plug tickE))) (μ.upd ℓ .unit)
       (K₀.plug (.val (Val.inj₂ (tickLoop res (kap res ℓ K))))) := by
-  have h₁ := (catch_step (ℍ := ℍ) μ (n := divEff) (i := 0) (qs := qualsVal [.lin]) (hr := reifyR)
+  have h₁ := (catch_step (ℍ := ℍ) μ (n := divEff) (i := 0) (qs := qualsVal [.one]) (hr := reifyR)
     (hs := Val.pair (reifyC res) .unit) Val.unit (clauseAt_one (reifyC res)) hK K₀).1
   rw [kappaAt_lin, plug_kappaCell] at h₁
   rw [tickE_eq]

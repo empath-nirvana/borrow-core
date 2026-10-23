@@ -1,5 +1,5 @@
-effect 14:1: Ask: ask (ctl, affine)
-effect 17:1: Fail: raise (ctl, affine, abortive)
+effect 14:1: Ask: ask (ctl)
+effect 17:1: Fail: raise (ctl, abortive)
 row 21:1: two: Ask
 lowering 21:1: copy `two__n3`: `two` for the site 3 of `Ask`
 lowering 24:3: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`

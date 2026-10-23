@@ -122,10 +122,11 @@ def litFnE (bs : List Nat) : Expr :=
 node: the effect it serves and its type arguments there, the handler (a control handler's name,
 or the function a `for` or a stored generator runs), the name the `with` gives it (SPEC §38), the
 kind of site the elaboration claims, and the handler's state: the parameters its clauses are
-passed as a state (SPEC §19, *Handler state*), each with its type, none when it has no state.
+passed as a state (SPEC §19, *Handler state*), each with its type, none when it has no state;
+and each operation's count as the effect declares it, `ctl` (inferred) or `linear ctl` (SPEC §53).
 The types are core types, elaborated by the checker at the node from the record the node carries
 (`Frontend/Check/Checker.lean`, `siteOf`), which also checks that the record's operations are the
-node's `E`.  `[spec §19]` -/
+node's `E`.  `[spec §19, §53]` -/
 structure HSite where
   eff : String
   args : List VTy
@@ -133,6 +134,7 @@ structure HSite where
   slot : Option String
   kind : Frontend.SiteKind
   state : List (String × VTy)
+  decl : List Frontend.Qual := []
   deriving Inhabited
 
 /-! ### The schemes of the marked derived nodes
@@ -526,10 +528,10 @@ inductive TExpr where
   | effRaise (info : TInfo) (jdg : Jdg) (S : Row) (o : OpSig) (B : VTy) (t : TExpr)
   | effLet (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (u : Masks) (tM tN : TExpr)
   | effThen (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (S : Row) (SM : Row) (SD : Row) (u : Masks) (tM tN tD : TExpr)
-  | effHandleV (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
-  | effHandleVB (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (d : Lifetime.Life) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
-  | effHandleT (info : TInfo) (jdg : Jdg) (S : Row) (SN : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
-  | effHandleL (info : TInfo) (jdg : Jdg) (S : Row) (SW : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (Xs : Nat → VTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
+  | effHandleV (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Count × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
+  | effHandleVB (info : TInfo) (jdg : Jdg) (S : Row) (E : List (Count × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (d : Lifetime.Life) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
+  | effHandleT (info : TInfo) (jdg : Jdg) (S : Row) (SN : Row) (E : List (Count × VTy × VTy)) (fs : Nat → CTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
+  | effHandleL (info : TInfo) (jdg : Jdg) (S : Row) (SW : Row) (E : List (Count × VTy × VTy)) (fs : Nat → CTy) (Xs : Nat → VTy) (n : UInt32) (A : VTy) (R : VTy) (u : Masks) (site : Option HSite) (inside : ClauseKinds.HIn) (tc te : TExpr)
   | letPoly (info : TInfo) (jdg : Jdg) (C : CTy) (j : Jdg) (tV tN : TExpr)
   | lendR (info : TInfo) (jdg : Jdg) (x : LifeVar) (b : Lifetime.Life) (T : VTy) (B : VTy) (S : Row) (td tM : TExpr)
   | lendLoopR (info : TInfo) (jdg : Jdg) (x : LifeVar) (A : VTy) (S : VTy) (B : VTy) (R : VTy) (tN tK ts0 : TExpr)

@@ -47,7 +47,6 @@ async-stack-deep erased handles 0 performs 0 raises 4 machines 6 suspends 5 left
 async-stack-nested erased handles 0 performs 0 raises 3 machines 6 suspends 6 left 0 0
 async-timers erased handles 2 performs 0 raises 5 machines 3 suspends 3 left 0 0
 async-try-join erased handles 4 performs 0 raises 31 machines 2 suspends 1 left 0 0
-async-unr-site erased handles 0 performs 0 raises 2 machines 3 suspends 2 left 0 0
 async-workers-scoped erased handles 2 performs 0 raises 2 machines 2 suspends 2 left 0 0
 axes/borrow-across-loop erased handles 0 performs 0 raises 0 left 0 0
 axes/codata-coeffects erased handles 0 performs 0 raises 0 left 0 0

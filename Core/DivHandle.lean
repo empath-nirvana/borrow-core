@@ -131,28 +131,28 @@ def tailClause (j : Nat) (abort : Bool) (Hc : Expr) : Expr :=
     (.app (pickE j (Hc.shift 3 0)) (.var 1))))
 
 /-- The clauses, from the `j`-th on.  `[spec §14, §19]` -/
-def tailTuple : List (Qual × VTy × VTy) → Nat → Expr → Expr
+def tailTuple : List (Count × VTy × VTy) → Nat → Expr → Expr
   | [], _, _ => .val .unit
-  | (q, _, B) :: E, j, Hc => .pair (tailClause j (B.isZero && q != .lin) Hc) (tailTuple E (j + 1) Hc)
+  | (q, _, B) :: E, j, Hc => .pair (tailClause j (q == .zero) Hc) (tailTuple E (j + 1) Hc)
 
 /-- An answering function's type: `!U(A ⊸ F_{Σ_N} B)`, or the clause's `!U(A ⊸ F_Σ R)` at an
 abortive operation.  `[spec §14, §19]` -/
-def ansTy (S SN : Row) (R : VTy) : Qual × VTy × VTy → VTy
-  | (q, A, B) => if (B.isZero && q != .lin) then .bang (.thunk (.arr A (CTy.effOf S R)))
+def ansTy (S SN : Row) (R : VTy) : Count × VTy × VTy → VTy
+  | (q, A, B) => if (q == .zero) then .bang (.thunk (.arr A (CTy.effOf S R)))
       else .bang (.thunk (.arr A (CTy.effOf SN B)))
 
 /-- The answering functions' tuple's type.  `[spec §14, §19]` -/
-def ansesTy (S SN : Row) (R : VTy) : List (Qual × VTy × VTy) → VTy
+def ansesTy (S SN : Row) (R : VTy) : List (Count × VTy × VTy) → VTy
   | [] => .unit
   | o :: E => .tensor (ansTy S SN R o) (ansesTy S SN R E)
 
-theorem ansTy_persistent (S SN : Row) (R : VTy) (o : Qual × VTy × VTy) :
+theorem ansTy_persistent (S SN : Row) (R : VTy) (o : Count × VTy × VTy) :
     (ansTy S SN R o).Persistent := by
   obtain ⟨q, A, B⟩ := o
   simp only [ansTy]; split <;> rfl
 
 theorem ansesTy_persistent (S SN : Row) (R : VTy) :
-    ∀ E : List (Qual × VTy × VTy), (ansesTy S SN R E).Persistent
+    ∀ E : List (Count × VTy × VTy), (ansesTy S SN R E).Persistent
   | [] => rfl
   | o :: E => by
       simp only [VTy.Persistent, VTy.persistent, ansesTy, Bool.and_eq_true]
@@ -190,7 +190,7 @@ theorem tailClause_psub (j : Nat) (b : Bool) (γ : List Val) (Hc : Expr) :
     simp
 
 theorem tailTuple_psub (γ : List Val) (Hc : Expr) :
-    ∀ (E : List (Qual × VTy × VTy)) (j : Nat),
+    ∀ (E : List (Count × VTy × VTy)) (j : Nat),
       Expr.psub 0 γ (tailTuple E j Hc) = tailTuple E j (Expr.psub 0 γ Hc)
   | [], _ => by simp [tailTuple, Expr.psub, Val.unit]
   | _ :: E, j => by
@@ -201,14 +201,14 @@ theorem isVal_tailClause (j : Nat) (b : Bool) (Hc : Expr) : IsVal (tailClause j 
   cases b <;> simp only [tailClause, Bool.false_eq_true, if_false, if_true] <;> exact .lam
 
 theorem isVal_tailTuple (Hc : Expr) :
-    ∀ (E : List (Qual × VTy × VTy)) (j : Nat), IsVal (tailTuple E j Hc)
+    ∀ (E : List (Count × VTy × VTy)) (j : Nat), IsVal (tailTuple E j Hc)
   | [], _ => .unit
   | _ :: E, j => .pair (isVal_tailClause _ _ _) (isVal_tailTuple Hc E (j + 1))
 
 /-- The `j`-th clause of the tuple. -/
 theorem clauseAt_tailTuple (Hc : Expr) :
-    ∀ (E : List (Qual × VTy × VTy)) (k j : Nat) (hj : j < E.length),
-      clauseAt (tailTuple E k Hc) j = some ⟨tailClause (k + j) (E[j].2.2.isZero && E[j].1 != .lin) Hc,
+    ∀ (E : List (Count × VTy × VTy)) (k j : Nat) (hj : j < E.length),
+      clauseAt (tailTuple E k Hc) j = some ⟨tailClause (k + j) (E[j].1 == .zero) Hc,
         isVal_tailClause _ _ _⟩
   | [], _, _, hj => by simp at hj
   | (q, A, B) :: E, k, 0, _ => by
@@ -237,7 +237,7 @@ theorem pickE_steps : ∀ (j : Nat) (g r : Val) (vc : Val), vc = Val.pair g r �
 /-- **The answering functions**: a tuple of the answering functions' type holds, at each
 operation, the function `pickE j` steps to, at the empty resource. -/
 theorem ansesTy_at {S SN : Row} {R : VTy} {ls : List SRec} {δ : LSub} :
-    ∀ (E : List (Qual × VTy × VTy)) {vc : Val} {ρ : WRes},
+    ∀ (E : List (Count × VTy × VTy)) {vc : Val} {ρ : WRes},
       vC true (ansesTy S SN R E) ls δ vc ρ →
       ∀ j (h : j < E.length), ∃ g, PureSteps (pickE j (.val vc)) (.val g) ∧
         vC true (ansTy S SN R E[j]) ls δ g PMap.empty
@@ -298,13 +298,13 @@ theorem tailClauseA_steps (j : Nat) (vc g v : Val)
 
 /-! ### The rows -/
 
-theorem Row.tab_ofEff_ne {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
+theorem Row.tab_ofEff_ne {S : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
     (δ : LSub) {m i : UInt32} (hm : m ≠ n) :
     Row.tab (Row.ofEff n E 0 fs ++ S) δ m i = Row.tab S δ m i := by
   simp [Row.tab, Row.find_append, Row.find_ofEff_ne n E 0 fs m i hm]
 
 /-- A handled row of another name holds `Div` as the outer row does. -/
-theorem Row.divB_ofEff_eq {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
+theorem Row.divB_ofEff_eq {S : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
     (hnd : n ≠ divEff) : Row.divB (Row.ofEff n E 0 fs ++ S) = Row.divB S := by
   have hf : Row.find (Row.ofEff n E 0 fs ++ S) divEff 0 = Row.find S divEff 0 := by
     rw [Row.find_append, Row.find_ofEff_ne n E 0 fs _ _ (Ne.symm hnd)]; rfl
@@ -359,11 +359,11 @@ theorem lin_conds {T : OpTab} (hL : ∀ n i en, T n i = some en → en.q = .lin 
 /-! ### The handler -/
 
 /-- The handler value of a tail-resuming handler: the clauses written out from the tuple. -/
-def tailH (n : UInt32) (E : List (Qual × VTy × VTy)) (vr vc : Val) : Val :=
+def tailH (n : UInt32) (E : List (Count × VTy × VTy)) (vr vc : Val) : Val :=
   hndVal n (qualsVal (E.map Prod.fst)) vr ⟨tailTuple E 0 (.val vc), isVal_tailTuple _ E 0⟩
 
 section
-variable {δ : LSub} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
+variable {δ : LSub} {S SN : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
   {A R : VTy} (hnd : n ≠ divEff) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
   (hlen : E.length ≤ 2 ^ 32) (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
   {vr vc : Val} {ls₀ : List SRec}
@@ -374,7 +374,7 @@ include hnS hlen hVc in
 /-- The clause of an operation of the handler, from its entry. -/
 theorem tail_clause_of {i : UInt32} {en : OpEnt}
     (hT : Row.tab (Row.ofEff n E 0 fs ++ S) δ n i = some en) :
-    ∃ j, ∃ hj : j < E.length, en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1,
+    ∃ j, ∃ hj : j < E.length, en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, .top, E[j].2.1,
       E[j].2.2, fs j⟩ ∧
       clauseAt (tailTuple E 0 (.val vc)) i.toNat =
         some ⟨tailClause j en.abort (.val vc), isVal_tailClause _ _ _⟩ ∧
@@ -432,7 +432,7 @@ theorem tail_closing (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {ρ :
         · exact closing_of_cwp hy'
       obtain ⟨hW, hU, hK'⟩ := lin_conds (fun _ _ _ h => Row.tab_lin hLin δ h) (resK κ)
         (fun ls => KapRelT (opTable (Row.tab S δ).closeAt) (fun ls v => vC true R ls δ v)
-          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩) none ls κ)
+          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, .top, A', B', fs j⟩) none ls κ)
       exact closing_frame hSNle (resK κ) (resK_plain κ).1 (resK_plain κ).2 _ KapRelT.same
         KapRelT.ext hW hU hK' _ _ (fun ls w τ hτ => kapRelT_resume (opTable_mono _) hτ) hyc hK
         hck
@@ -495,7 +495,7 @@ theorem tailY_unfold {ls : List SRec} {x : Expr} {ρ : WRes} (h : tailY Ti TN To
 end candidate
 
 section
-variable {δ : LSub} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
+variable {δ : LSub} {S SN : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
   {A R : VTy} (hnd : n ≠ divEff) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
   (hlen : E.length ≤ 2 ^ 32) (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
   {vr vc : Val} {ls₀ : List SRec}
@@ -578,14 +578,14 @@ theorem cwp_handle_tail (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
         rw [ha]
         generalize hEj : E[j] = t at hVg ha hσ
         obtain ⟨q, A', B'⟩ := t
-        have ha' : (B'.isZero && q != .lin) = false := ha
+        have ha' : (q == .zero) = false := ha
         simp only [ansTy, ha'] at hVg
         obtain ⟨σa, σk, hck, hA', hK⟩ := hσ
         have hA'' : vC true A' ls' δ v σa := hA'
         refine ewp_pureSteps (divTab_mono _ _ _) (tailClause_steps j vc g v κ hg) _ _ σ ?_
         have hy := (hVg.2 ls' (ext_empty' ls₀ ls')) v σa σa hA'' (compS_empty_left σa)
         have hy' := (cC_effOf_wp SN B' ls' δ _ σa).mp hy
-        have hyc : cwp (Row.tab SN δ) (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩).PB ls'
+        have hyc : cwp (Row.tab SN δ) (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, .top, A', B', fs j⟩).PB ls'
             (.app (.val g) (.val v)) σa := by
           cases hb : Row.divB SN <;> rw [hb] at hy'
           · exact cwp_of_ewp hTN.keyNA hy'
@@ -613,7 +613,7 @@ theorem cwp_handle_tail (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
 end
 
 section
-variable {δ : LSub} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
+variable {δ : LSub} {S SN : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
   {A R : VTy} (hnd : n ≠ divEff) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
   (hlen : E.length ≤ 2 ^ 32) (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
   {vr vc : Val} {ls₀ : List SRec}
@@ -644,18 +644,18 @@ theorem ewp_handle_tail (hSd : Row.divB S = false) {ls : List SRec} {e : Expr} {
       rw [ha]
       generalize hEj : E[j] = t at hVg ha hσ
       obtain ⟨q, A', B'⟩ := t
-      have ha' : (B'.isZero && q != .lin) = false := ha
+      have ha' : (q == .zero) = false := ha
       simp only [ansTy, ha'] at hVg
       obtain ⟨σa, σk, hck, hA', hK⟩ := hσ
       have hA'' : vC true A' ls' δ v σa := hA'
       refine ewp_pureSteps (opTable_mono _) (tailClause_steps j vc g v κ hg) _ _ σ ?_
       have hy := (hVg.2 ls' (ext_empty' ls₀ ls')) v σa σa hA'' (compS_empty_left σa)
       have hy' : ewpTS ls' (.app (.val g) (.val v)) (opTable (Row.tab SN δ))
-          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩).PB σa :=
+          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, .top, A', B', fs j⟩).PB σa :=
         (cC_effOf SN B' ls' δ _ σa hSNd).mp hy
       obtain ⟨hW, hU, hK'⟩ := lin_conds (fun _ _ _ h => Row.tab_lin hLin δ h) (resK κ)
         (fun ls => KapRel (Row.tab S δ) (fun ls v => vC true R ls δ v)
-          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩) none ls κ)
+          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, .top, A', B', fs j⟩) none ls κ)
       exact (ewp_orBot (opTable_mono _)).mp (ewp_frame_plain_or _ _ hSNle Table.bot Table.bot
         Table.bot_const.mono (resK κ) (resK_plain κ).1 (resK_plain κ).2 _ KapRelT.same KapRelT.ext
         hW hU hK' (fun _ _ _ _ _ _ _ h => h.elim) _ _
@@ -665,7 +665,7 @@ theorem ewp_handle_tail (hSd : Row.divB S = false) {ls : List SRec} {e : Expr} {
       rw [ha]
       generalize hEj : E[j] = t at hVg ha hσ
       obtain ⟨q, A', B'⟩ := t
-      have ha' : (B'.isZero && q != .lin) = true := ha
+      have ha' : (q == .zero) = true := ha
       simp only [ansTy, ha'] at hVg
       refine ewp_pureSteps (opTable_mono _) (tailClauseA_steps j vc g v hg) _ _ σ ?_
       have hy := (hVg.2 ls' (ext_empty' ls₀ ls')) v σ σ hσ (compS_empty_left σ)
@@ -678,7 +678,7 @@ clauses written out from the answering functions `gs` (`tailTuple`).  At a row h
 handled computation's ticks pass the handler (`cwp_handle_tail`); elsewhere it is Core's handler
 (`ewp_handle_tail`).  `[spec §14, §19]` -/
 theorem handleT_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hc e : Expr} {S SN : Row}
-    {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
+    {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
     (hc : SemV Δ Γ₁ (.pair Hr Hc) (.tensor (retTy S A R) (ansesTy S SN R E)))
     (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
@@ -785,7 +785,7 @@ theorem closedAt_pickE : ∀ (j : Nat) {k : Nat} {t : Expr}, closedAt k t = true
       exact closedAt_pickE j (by simp [closedAt])
 
 theorem closedAt_tailTuple {k : Nat} {Hc : Expr} (h : closedAt k Hc = true) :
-    ∀ (E : List (Qual × VTy × VTy)) (j : Nat), closedAt k (tailTuple E j Hc) = true
+    ∀ (E : List (Count × VTy × VTy)) (j : Nat), closedAt k (tailTuple E j Hc) = true
   | [], _ => rfl
   | (q, _, B) :: E, j => by
       simp only [tailTuple, closedAt, closedAt_tailTuple h E (j + 1), Bool.and_true]
@@ -864,7 +864,7 @@ theorem tailClause_shift (j : Nat) (b : Bool) (d c : Nat) (Hc : Expr) :
     simp [Expr.shift]
 
 theorem tailTuple_shift (d c : Nat) (Hc : Expr) :
-    ∀ (E : List (Qual × VTy × VTy)) (j : Nat),
+    ∀ (E : List (Count × VTy × VTy)) (j : Nat),
       Expr.shift d c (tailTuple E j Hc) = tailTuple E j (Hc.shift d c)
   | [], _ => by simp [tailTuple, Expr.shift, Val.unit]
   | _ :: E, j => by

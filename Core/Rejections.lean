@@ -45,14 +45,14 @@ open BoCa.Fig16.LogRel.Core.EffPrograms (dFlag d_hrS)
 /-! ### The handlers -/
 
 /-- `Foo : 1 ↠^lin 1`, the operation `0` of the name `5`. -/
-def fooSig : OpSig := ⟨5, 0, .lin, .unit, .unit, .ret .unit⟩
+def fooSig : OpSig := ⟨5, 0, .one, .top, .unit, .unit, .ret .unit⟩
 
 /-- `foo ()`. -/
 def fooE : Expr := performE (opArgE 5 0 (.val .unit))
 
 /-- `handle_n e` with the identity answer clause and the one clause `cl`, its operation's
 qualifier `q`: `hs ← (cl, ()); hr ← λx. x; hnd (n, ([q], (hr, hs))) e`. -/
-def handleWith (n : UInt32) (q : Qual) (cl : Expr) (e : Expr) : Expr :=
+def handleWith (n : UInt32) (q : Count) (cl : Expr) (e : Expr) : Expr :=
   bindE (.pair cl (.val .unit)) (bindE (.val (.lam (.var 0))) (hndTerm n [q] 0 1 e))
 
 /-- A term is no λ-constant, by unfolding, the handlers' terms included. -/
@@ -201,7 +201,7 @@ theorem not_forget_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
 
 /-- **The clause tuple's type**: in `handleWith n q cl M` typed at any judgement, the tuple
 `(cl, ())` is read at a row over a type viewing to `clausesTy S R E`, whose tags are `[q]`. -/
-theorem handleWith_clause {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {q : Qual} {cl M : Expr}
+theorem handleWith_clause {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {q : Count} {cl M : Expr}
     {j : Jdg} (h : CDerives Δ Γ (handleWith n q cl M) j)
     (hcl' : ∀ b, Expr.pair cl .unit ≠ .lam b)
     (hNc : NotConst (.lam (bindE (.val (.lam (.var 0))) (hndTerm n [q] 0 1 M))))
@@ -209,7 +209,7 @@ theorem handleWith_clause {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {q : Qual} 
     (hM : ((M.subst 0 (Val.lam (.var 0))).shift 1 0) = M) :
     ∃ Γ₁ S₁ T₁ S R E fs ob, CtxLe Γ₁ Γ ∧
       CDerives Δ Γ₁ (.pair cl .unit) (.comp (CTy.effOf S₁ T₁)) ∧
-      VView T₁ (clausesTyO S R ob E fs) ∧ E.map Prod.fst = [q] := by
+      VView T₁ (clausesTyO S R ob E fs) ∧ (E.map Prod.fst).map Count.toQual = [q.toQual] := by
   obtain ⟨Γ₁, Γ', T₁, b, S₁, j₁, hle₁, -, hP, hN₁⟩ := der_bind (M := .pair cl .unit) h
     (fun i h => by cases h) (fun b h => hcl' b h) (fun h => by cases h) (fun h => by cases h)
     (fun h => by cases h) (by not_withPairH) hNc
@@ -239,9 +239,9 @@ theorem handleWith_clause {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {q : Qual} 
 /-- The clause tuple's clause is read at the clause type of its handler's one operation: at a linear
 operation, `!U(A ⊗ kTy ⊸ F_Σ R)`. -/
 theorem clause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {cl : Expr} {S₁ : Row} {T₁ : VTy} {S : Row}
-    {R : VTy} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {ob : Option Lifetime.Life}
+    {R : VTy} {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {ob : Option Lifetime.Life}
     (hP : CDerives Δ Γ (.pair cl .unit) (.comp (CTy.effOf S₁ T₁)))
-    (hv : VView T₁ (clausesTyO S R ob E fs)) (hE : E.map Prod.fst = [.lin]) :
+    (hv : VView T₁ (clausesTyO S R ob E fs)) (hE : (E.map Prod.fst).map Count.toQual = [.lin]) :
     ∃ Γ' A₀ B₀, CtxLe Γ' Γ ∧ CDerives Δ Γ' cl
       (.val (.bang (.thunk (.arr (.tensor A₀
         (kBoxO ob (.thunk (.amp (.arr B₀ (CTy.effOf S R)) .top)))) (CTy.effOf S R))))) := by
@@ -252,15 +252,15 @@ theorem clause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {cl : Expr} {S₁ : Row} {T₁ 
         cases E' with
         | nil => exact ⟨e, rfl⟩
         | cons => simp at hE
-  simp only [List.map_cons, List.map_nil, List.cons.injEq, and_true] at hE
+  simp only [List.map_cons, List.map_nil, List.cons.injEq, and_true, Count.toQual_eq_lin] at hE
   subst hE
   obtain ⟨Γ', A, B, hle, hcl, hv'⟩ := pair_row hP (fun c h => by cases h)
   rw [clausesTyO_cons, clausesTyO_nil] at hv
   obtain ⟨rfl, -⟩ := vview_tensor (hv'.trans hv)
-  have hty : clauseTyO S R ob (.lin, A₀, B₀) (fs 0) =
+  have hty : clauseTyO S R ob (.one, A₀, B₀) (fs 0) =
       .bang (.thunk (.arr (.tensor A₀ (kBoxO ob (.thunk (.amp (.arr B₀ (CTy.effOf S R)) .top))))
         (CTy.effOf S R))) := by
-    cases ob <;> simp [clauseTyO, clauseTy, clauseTyB, kBoxO, kTy]
+    cases ob <;> simp [clauseTyO, clauseTy, clauseTyB, kBoxO, kTy, Count.toQual]
   rw [hty] at hcl
   exact ⟨Γ', A₀, B₀, hle, hcl⟩
 
@@ -271,7 +271,7 @@ abbrev at13Cl : Expr := .lam (.letpair (.var 0) (.seq (.app forget (.var 0)) uni
 
 /-- **AT13**: `forget κ`.  A linear or affine continuation has no weakening, and the `forget`
 constants are at `Imm`, `Mut`, `!` and `Unk`; discarding `κ` is an explicit cancel. -/
-def at13 : Expr := handleWith 5 .lin at13Cl fooE
+def at13 : Expr := handleWith 5 .one at13Cl fooE
 
 /-- **AT13 has no derivation**: the clause's `κ` is at `kTy` at `lin` (the clause tuple is
 `[handle]`'s), and `forget κ` has no derivation there (`not_forget_kappa`). -/
@@ -339,7 +339,7 @@ abbrev at06Body : Expr := bindE fooE (dropB (.app free' (.var 3)))
 /-- **AT06**: a clause that writes a place the suspended body uses.  The clause captures the cell
 `c`, which the body also releases; clauses are `!U`, so they capture only persistent values, and `c`
 is linear. -/
-def at06 : Expr := bindE (.app alloc' (.inj₁ unit')) (handleWith 5 .lin at06Cl at06Body)
+def at06 : Expr := bindE (.app alloc' (.inj₁ unit')) (handleWith 5 .one at06Cl at06Body)
 
 /-- **AT06 has no derivation**: the clause is in `[handle]`'s clause tuple, so at a `!` type, typed
 over a persistent context; it uses the cell `c`, whose slot is a view of a `Ref`. -/
@@ -419,7 +419,7 @@ argument:
                 r ← resume k₁ u; r; resume k₂ a
 
 The two `swap`s are a `load` of the cell. -/
-def at08 : Expr := handleWith 5 .lin at08Cl fooE
+def at08 : Expr := handleWith 5 .one at08Cl fooE
 
 /-- **AT08 has no derivation**: the clause's `κ` is at `kTy` at `lin`, a thunk of an `&` (the
 clause tuple is `[handle]`'s).  `alloc` stores a view of it; `swap` is typed at its axiom alone, so
@@ -483,12 +483,12 @@ back into the cell and only `k₂` resumed, `u` consumed by `;`:
     op (a, κ) ⇒ c ← alloc κ; (c, k₁) ← swap c (); (c, u) ← swap c k₁; k₂ ← free c; u; resume k₂ a
 
 The kernel program `at08-once`. -/
-def at08Once : Expr := handleWith 5 .lin at08OnceCl fooE
+def at08Once : Expr := handleWith 5 .one at08OnceCl fooE
 
 /-- The clause of `at08Once` at its clause type: `alloc`, `swap` and `free` at `κ`'s type, `k₂`
 resumed once. -/
 theorem d_at08OnceCl {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives LifeCtx.empty Γ at08OnceCl (.val (clauseTy [] .unit (.lin, .unit, .unit))) := by
+    CDerives LifeCtx.empty Γ at08OnceCl (.val (clauseTy [] .unit (.one, .unit, .unit))) := by
   refine .bangThunkV (persistent_dead hΓ) rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
   refine .bind (A := .ref (kTy [] .unit .lin .unit)) (.left (.right (.dead (deadSplit hΓ))))
@@ -514,7 +514,7 @@ writes at `κ`'s type are typed, and AT08 differs from it only by the copy's sec
 theorem d_at08Once : CDerives LifeCtx.empty [] at08Once (.comp (.ret .unit)) := by
   refine .bind .nil (.ret (.tensorI .nil (d_at08OnceCl .nil) (.unitI .nil))) ?_
   refine .bind (.right .nil) (.ret (d_hrS (.cons .nil))) ?_
-  exact .effHandle (S := []) (E := [(.lin, .unit, .unit)]) (n := 5) (A := .unit) (R := .unit)
+  exact .effHandle (S := []) (E := [(.one, .unit, .unit)]) (n := 5) (A := .unit) (R := .unit)
     (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
     (by decide) (by simp) (by simp) rfl (.effPerform (o := fooSig) rfl rfl (.unitI (by cdead)))
 

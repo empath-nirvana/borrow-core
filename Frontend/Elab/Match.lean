@@ -90,8 +90,8 @@ def matchC (m : MatchSt) (d : Nat) : CCTy → CCTy → Option MatchSt
   | .amp C D, .amp C' D' => (matchC m d C C').bind (matchC · d D D')
   | .nu C, .nu C' => matchC m (d + 1) C C'
   | .all _ _ C, .all _ _ C' => matchC m d C C'
-  | .eff n i q A B fin C, .eff n' i' q' A' B' fin' C' =>
-    if n == n' && i == i' && q == q' then
+  | .eff n i q w A B fin C, .eff n' i' q' w' A' B' fin' C' =>
+    if n == n' && i == i' && q == q' && w == w' then
       (matchV m d A A').bind fun m => (matchV m d B B').bind fun m =>
         (matchC m d fin fin').bind (matchC · d C C')
     else none
@@ -113,7 +113,7 @@ def hasPhC : CCTy → Bool
   | .amp C D => hasPhC C || hasPhC D
   | .nu C | .all _ _ C => hasPhC C
   | .top => false
-  | .eff _ _ _ A B fin C => hasPhV A || hasPhV B || hasPhC fin || hasPhC C
+  | .eff _ _ _ _ A B fin C => hasPhV A || hasPhV B || hasPhC fin || hasPhC C
 end
 
 mutual
@@ -140,8 +140,8 @@ def solvedC (σ : Array (Option CVTy)) (d : Nat) : CCTy → CCTy
   | .nu C => .nu (solvedC σ (d + 1) C)
   | .all v b C => .all v b (solvedC σ d C)
   | .top => .top
-  | .eff n i q A B fin C =>
-      .eff n i q (solvedV σ d A) (solvedV σ d B) (solvedC σ d fin) (solvedC σ d C)
+  | .eff n i q wq A B fin C =>
+      .eff n i q wq (solvedV σ d A) (solvedV σ d B) (solvedC σ d fin) (solvedC σ d C)
 end
 
 /-- A pattern with what matching found: its placeholders and its lifetime parameters solved. -/

@@ -219,8 +219,8 @@ def CTyEq : CTy → LSub → CTy → LSub → Prop
   | .all x b C, δ, .all x' b' C', δ' =>
       b.interp δ = b'.interp δ' ∧ ∀ α : Life, CTyEq C (δ.extend x α) C' (δ'.extend x' α)
   | .nu C, δ, .nu C', δ' => CTyEq C δ C' δ'
-  | .eff n i q A B fin C, δ, .eff n' i' q' A' B' fin' C', δ' =>
-      n = n' ∧ i = i' ∧ q = q' ∧ TyEq A δ A' δ' ∧ TyEq B δ B' δ' ∧ CTyEq fin δ fin' δ' ∧
+  | .eff n i q w A B fin C, δ, .eff n' i' q' w' A' B' fin' C', δ' =>
+      n = n' ∧ i = i' ∧ q = q' ∧ w = w' ∧ TyEq A δ A' δ' ∧ TyEq B δ B' δ' ∧ CTyEq fin δ fin' δ' ∧
         CTyEq C δ C' δ'
   | _, _, _, _ => False
 end

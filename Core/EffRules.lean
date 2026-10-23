@@ -37,14 +37,14 @@ abbrev Row := List OpSig
 def Row.find (S : Row) (n i : UInt32) : Option OpSig :=
   S.find? fun o => decide (n = o.n ∧ i = o.i)
 
-/-- An operation is abortive: answer `0` at a qualifier with weakening. -/
-def OpSig.abort (o : OpSig) : Bool := o.B.isZero && o.q != .lin
+/-- An operation is abortive: at the count `0`, its clause takes no `κ`.  `[spec §19, §53]` -/
+def OpSig.abort (o : OpSig) : Bool := o.cnt == .zero
 
 /-- The entry of an operation at `δ`, with its cancel row's obligation at a capturable operation.
 -/
 def OpSig.ent (δ : LSub) (o : OpSig) : OpEnt :=
   ⟨o.q, o.abort, fun ls v => vC true o.A ls δ v, fun ls v => vC true o.B ls δ v,
-    if capB o.q o.B then finObl o.fin δ else none⟩
+    if capB o.cnt then finObl o.fin δ else none⟩
 
 /-- The operation table of a row at `δ`. -/
 def Row.tab (S : Row) (δ : LSub) : OpTab := fun n i => (Row.find S n i).map (OpSig.ent δ)
@@ -103,8 +103,8 @@ theorem cC_effOf_wp (S : Row) (R : VTy) (ls : List SRec) (δ : LSub) (e : Expr) 
       have hd := divAt_effOf (o :: S) R
       simp only [CTy.effOf] at h hr hd
       simp only [CTy.effOf, cC]
-      rw [show OpTab.ext o.n o.i ⟨o.q, o.B.isZero && o.q != .lin, fun ls v => vCE none true o.A ls δ v,
-          fun ls v => vCE none true o.B ls δ v, if capB o.q o.B then finObl o.fin δ else none⟩
+      rw [show OpTab.ext o.n o.i ⟨o.q, o.cnt == .zero, fun ls v => vCE none true o.A ls δ v,
+          fun ls v => vCE none true o.B ls δ v, if capB o.cnt then finObl o.fin δ else none⟩
           (effTab (CTy.effOf S R) δ) = Row.tab (o :: S) δ from h,
         show effRet (CTy.effOf S R) δ = _ from hr, hd]
 
@@ -770,12 +770,12 @@ def Qual.tag : Qual → UInt32
 
 /-- The tags of a list of qualifiers, as the right-nested tuple a handler value holds.
 `[spec §25]` -/
-def qualsVal : List Qual → Val
+def qualsVal : List Count → Val
   | [] => Val.unit
-  | q :: qs => Val.pair (Val.i32 q.tag) (qualsVal qs)
+  | q :: qs => Val.pair (Val.i32 q.toQual.tag) (qualsVal qs)
 
-theorem capTag_qualsVal : ∀ (qs : List Qual) (j : Nat) (h : j < qs.length),
-    capTag (qualsVal qs).1 j = qs[j].tag
+theorem capTag_qualsVal : ∀ (qs : List Count) (j : Nat) (h : j < qs.length),
+    capTag (qualsVal qs).1 j = qs[j].toQual.tag
   | [], _, h => by simp at h
   | q :: qs, 0, _ => by simp [qualsVal, capTag, Val.pair, Val.i32]
   | q :: qs, j + 1, h => by
@@ -783,19 +783,19 @@ theorem capTag_qualsVal : ∀ (qs : List Qual) (j : Nat) (h : j < qs.length),
       exact capTag_qualsVal qs j (by simpa using h)
 
 @[simp] theorem psub_qualsVal (k : Nat) (γ : List Val) :
-    ∀ qs : List Qual, Expr.psub k γ (qualsVal qs).1 = (qualsVal qs).1
+    ∀ qs : List Count, Expr.psub k γ (qualsVal qs).1 = (qualsVal qs).1
   | [] => rfl
   | q :: qs => by
       simp only [qualsVal, Val.pair, Val.i32, Expr.psub, psub_qualsVal k γ qs]
 
 @[simp] theorem shift_qualsVal (d c : Nat) :
-    ∀ qs : List Qual, Expr.shift d c (qualsVal qs).1 = (qualsVal qs).1
+    ∀ qs : List Count, Expr.shift d c (qualsVal qs).1 = (qualsVal qs).1
   | [] => rfl
   | q :: qs => by
       simp only [qualsVal, Val.pair, Val.i32, Expr.shift, shift_qualsVal d c qs]
 
 @[simp] theorem subst_qualsVal (j : Nat) (s : Val) :
-    ∀ qs : List Qual, Expr.subst j s (qualsVal qs).1 = (qualsVal qs).1
+    ∀ qs : List Count, Expr.subst j s (qualsVal qs).1 = (qualsVal qs).1
   | [] => rfl
   | q :: qs => by
       simp only [qualsVal, Val.pair, Val.i32, Expr.subst, subst_qualsVal j s qs]
@@ -962,13 +962,13 @@ def Row.Unr (S : Row) : Prop := ∃ o ∈ S, o.q = .unr
 /-- A cancel row may perform an unrestricted operation, at some depth: a layer at `unr`, or one in
 the cancel row of a capturable layer.  `[spec §27]` -/
 def CTy.FinUnr : CTy → Prop
-  | .eff _ _ q _ B f C => q = .unr ∨ (capB q B = true ∧ f.FinUnr) ∨ C.FinUnr
+  | .eff _ _ q _ _ B f C => q.toQual = .unr ∨ (capB q = true ∧ f.FinUnr) ∨ C.FinUnr
   | _ => False
 
 /-- A row has an unrestricted operation at its top, or in the cancel row of a capturable operation
 at some depth, where a cancel may stop at it: what a finaliser frame, which runs in the cancels
 below it, meets (`[then]`).  `[spec §27]` -/
-def Row.UnrD (S : Row) : Prop := ∃ o ∈ S, o.q = .unr ∨ (capB o.q o.B = true ∧ o.fin.FinUnr)
+def Row.UnrD (S : Row) : Prop := ∃ o ∈ S, o.q = .unr ∨ (capB o.cnt = true ∧ o.fin.FinUnr)
 
 @[simp] theorem CTy.finUnr_ret (A : VTy) : (CTy.ret A).FinUnr ↔ False := Iff.rfl
 
@@ -1115,7 +1115,7 @@ theorem OpSig.weak_of_ent {o : OpSig} {δ : LSub} (h : (o.ent δ).q ≠ .lin ∨
     o.q ≠ .lin := by
   rcases h with h | h
   · exact h
-  · simp only [OpSig.ent, OpSig.abort, Bool.and_eq_true, bne_iff_ne, ne_eq] at h; exact h.2
+  · simp only [OpSig.ent, OpSig.abort, beq_iff_eq] at h; simp [OpSig.q, h, Count.toQual]
 
 /-- `M then x. N unwind D`: `ubind (λx. N, λ_. D) M`. -/
 def thenE (N D M : Expr) : Expr :=
@@ -1128,11 +1128,11 @@ abbrev finsNil : Nat → CTy := fun _ => .ret .unit
 
 /-- An effect's operations, as a row of the name `n`: the `j`-th at index `k + j`, with the
 cancel row `fs j`.  `[spec §19, §27]` -/
-def Row.ofEff (n : UInt32) (E : List (Qual × VTy × VTy)) (k : Nat) (fs : Nat → CTy := finsNil) :
+def Row.ofEff (n : UInt32) (E : List (Count × VTy × VTy)) (k : Nat) (fs : Nat → CTy := finsNil) :
     Row :=
   match E with
   | [] => []
-  | (q, A, B) :: E => ⟨n, UInt32.ofNat k, q, A, B, fs 0⟩ :: Row.ofEff n E (k + 1) (fun j => fs (j + 1))
+  | (q, A, B) :: E => ⟨n, UInt32.ofNat k, q, .top, A, B, fs 0⟩ :: Row.ofEff n E (k + 1) (fun j => fs (j + 1))
 
 /-- The type of `κ`'s cancel branch at a handler whose outer row is `Σ`, for an operation whose
 cancel row is `F`: `F_{F ⊕ Σ} 1`, the cancel row's operations ahead of `Σ`, or `⊤` when `F` is
@@ -1151,14 +1151,14 @@ def kTy (S : Row) (R : VTy) (q : Qual) (B : VTy) (F : CTy := .ret .unit) : VTy :
 
 /-- A clause's type: `!U(A ⊗ K ⊸ F_Σ R)`, or `!U(A ⊸ F_Σ R)` at an abortive operation, `K` at the
 operation's cancel row `F`.  `[spec §19, §27]` -/
-def clauseTy (S : Row) (R : VTy) (o : Qual × VTy × VTy) (F : CTy := .ret .unit) : VTy :=
+def clauseTy (S : Row) (R : VTy) (o : Count × VTy × VTy) (F : CTy := .ret .unit) : VTy :=
   match o with
-  | (q, A, B) => if (B.isZero && q != .lin) then .bang (.thunk (.arr A (CTy.effOf S R)))
-      else .bang (.thunk (.arr (.tensor A (kTy S R q B F)) (CTy.effOf S R)))
+  | (q, A, B) => if (q == .zero) then .bang (.thunk (.arr A (CTy.effOf S R)))
+      else .bang (.thunk (.arr (.tensor A (kTy S R q.toQual B F)) (CTy.effOf S R)))
 
 /-- The clauses' type: a right-nested tuple, the `j`-th clause at index `j`, at the cancel row
 `fs j`.  `[spec §19, §27]` -/
-def clausesTy (S : Row) (R : VTy) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy := finsNil) :
+def clausesTy (S : Row) (R : VTy) (E : List (Count × VTy × VTy)) (fs : Nat → CTy := finsNil) :
     VTy :=
   match E with
   | [] => .unit
@@ -1169,14 +1169,14 @@ def retTy (S : Row) (A R : VTy) : VTy := .bang (.thunk (.arr A (CTy.effOf S R)))
 
 /-- `handle_n e with (h_ret, hs)`, `h_ret` and `hs` variables, the handler's tags those of the
 qualifiers `qs` (`qualsVal`).  `[spec §19, §25]` -/
-def hndTerm (n : UInt32) (qs : List Qual) (ir ic : Nat) (e : Expr) : Expr :=
+def hndTerm (n : UInt32) (qs : List Count) (ir ic : Nat) (e : Expr) : Expr :=
   .app (.app (.val (.prim .hnd)) (.pair (.val (Val.i32 n))
     (.pair (.val (qualsVal qs)) (.pair (.var ir) (.var ic))))) e
 
-theorem Row.find_ofEff (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : Nat) (fs : Nat → CTy)
+theorem Row.find_ofEff (n : UInt32) : ∀ (E : List (Count × VTy × VTy)) (k : Nat) (fs : Nat → CTy)
     (m i : UInt32) (o : OpSig), Row.find (Row.ofEff n E k fs) m i = some o →
       m = n ∧ ∃ j, ∃ h : j < E.length, i = UInt32.ofNat (k + j) ∧
-        o = ⟨n, UInt32.ofNat (k + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩
+        o = ⟨n, UInt32.ofNat (k + j), E[j].1, .top, E[j].2.1, E[j].2.2, fs j⟩
   | [], _, _, _, _, _, h => by simp [Row.ofEff, Row.find] at h
   | (q, A, B) :: E, k, fs, m, i, o, h => by
       unfold Row.find at h
@@ -1191,7 +1191,7 @@ theorem Row.find_ofEff (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : N
         exact ⟨hm, j + 1, by simp; omega, by rw [hi]; congr 1; omega,
           by rw [ho]; simp [show k + 1 + j = k + (j + 1) by omega]⟩
 
-theorem Row.find_ofEff_ne (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : Nat)
+theorem Row.find_ofEff_ne (n : UInt32) : ∀ (E : List (Count × VTy × VTy)) (k : Nat)
     (fs : Nat → CTy) (m i : UInt32), m ≠ n → Row.find (Row.ofEff n E k fs) m i = none
   | [], _, _, _, _, _ => by simp [Row.ofEff, Row.find]
   | (q, A, B) :: E, k, fs, m, i, hm => by
@@ -1206,7 +1206,7 @@ theorem Row.find_append (S S' : Row) (m i : UInt32) :
   unfold Row.find; rw [List.find?_append]
 
 theorem clausesTy_at {S : Row} {R : VTy} {ls : List SRec} {δ : LSub} :
-    ∀ (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) {hs : Val} {ρ : WRes},
+    ∀ (E : List (Count × VTy × VTy)) (fs : Nat → CTy) {hs : Val} {ρ : WRes},
       vC true (clausesTy S R E fs) ls δ hs ρ →
       ∀ j (h : j < E.length), ∃ c, clauseAt hs.1 j = some c ∧
         vC true (clauseTy S R E[j] (fs j)) ls δ c PMap.empty
@@ -1228,7 +1228,7 @@ theorem clausesTy_at {S : Row} {R : VTy} {ls : List SRec} {δ : LSub} :
 
 /-- The clauses hold nothing. -/
 theorem clausesTy_empty {S : Row} {R : VTy} {ls : List SRec} {δ : LSub} :
-    ∀ (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) {hs : Val} {ρ : WRes},
+    ∀ (E : List (Count × VTy × VTy)) (fs : Nat → CTy) {hs : Val} {ρ : WRes},
       vC true (clausesTy S R E fs) ls δ hs ρ → ρ = PMap.empty
   | [], _, _, _, h => h.1
   | (q, A, B) :: E, fs, hs, ρ, h => by
@@ -1246,11 +1246,11 @@ theorem substAll_var_some {γ : List Val} {i : Nat} {v : Val} (hv : γ[i]? = som
 
 /-- An operation of the handler's name in `Σ` extended by the handler's effect is the effect's
 `j`-th, at index `j`. -/
-theorem Row.tab_ofEff_self {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
+theorem Row.tab_ofEff_self {S : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
     {δ : LSub} (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) {i : UInt32} {en : OpEnt}
     (hT : Row.tab (Row.ofEff n E 0 fs ++ S) δ n i = some en) :
     ∃ j, ∃ hj : j < E.length, i.toNat = j ∧ i = UInt32.ofNat (0 + j) ∧
-      en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩ := by
+      en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, .top, E[j].2.1, E[j].2.2, fs j⟩ := by
   obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
   have hfo : Row.find (Row.ofEff n E 0 fs) n i = some o := by
     rw [Row.find_append] at hf
@@ -1267,7 +1267,7 @@ theorem Row.tab_ofEff_self {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat �
 
 /-- A handler records its effect's qualifiers: the tag at each operation's index is its
 qualifier's.  `[spec §25]` -/
-theorem capTag_ofEff {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
+theorem capTag_ofEff {S : Row} {E : List (Count × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
     {δ : LSub} (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (i : UInt32) (en : OpEnt)
     (hT : Row.tab (Row.ofEff n E 0 fs ++ S) δ n i = some en) :
     capTag (qualsVal (E.map Prod.fst)).1 i.toNat = en.q.tag := by
@@ -1279,22 +1279,22 @@ theorem capTag_ofEff {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy
 
 /-- `handle_n e with H`, `H` the handler's pair `(h_ret, hs)` as an expression.  `hndTerm` is its
 instance at two variables (`hndTerm_eq`).  `[spec §19, §24]` -/
-def hndExpr (n : UInt32) (qs : List Qual) (H e : Expr) : Expr :=
+def hndExpr (n : UInt32) (qs : List Count) (H e : Expr) : Expr :=
   .app (.app (.val (.prim .hnd)) (.pair (.val (Val.i32 n)) (.pair (.val (qualsVal qs)) H))) e
 
-theorem hndTerm_eq (n : UInt32) (qs : List Qual) (ir ic : Nat) (e : Expr) :
+theorem hndTerm_eq (n : UInt32) (qs : List Count) (ir ic : Nat) (e : Expr) :
     hndTerm n qs ir ic e = hndExpr n qs (.pair (.var ir) (.var ic)) e := rfl
 
 /-- A closing substitution of `handle_n e with H` closes `H` and `e`. -/
-theorem psub_hndExpr (k : Nat) (γ : List Val) (n : UInt32) (qs : List Qual) (H e : Expr) :
+theorem psub_hndExpr (k : Nat) (γ : List Val) (n : UInt32) (qs : List Count) (H e : Expr) :
     Expr.psub k γ (hndExpr n qs H e) = hndExpr n qs (Expr.psub k γ H) (Expr.psub k γ e) := by
   simp only [hndExpr, Expr.psub, Expr.val, Val.prim, Val.i32, psub_qualsVal]
 
-theorem shift_hndExpr (d c : Nat) (n : UInt32) (qs : List Qual) (H e : Expr) :
+theorem shift_hndExpr (d c : Nat) (n : UInt32) (qs : List Count) (H e : Expr) :
     Expr.shift d c (hndExpr n qs H e) = hndExpr n qs (Expr.shift d c H) (Expr.shift d c e) := by
   simp only [hndExpr, Expr.shift, Expr.val, Val.prim, Val.i32, shift_qualsVal]
 
-theorem subst_hndExpr (j : Nat) (s : Val) (n : UInt32) (qs : List Qual) (H e : Expr) :
+theorem subst_hndExpr (j : Nat) (s : Val) (n : UInt32) (qs : List Count) (H e : Expr) :
     Expr.subst j s (hndExpr n qs H e) = hndExpr n qs (Expr.subst j s H) (Expr.subst j s e) := by
   simp only [hndExpr, Expr.subst, Expr.val, Val.prim, Val.i32, subst_qualsVal]
 
@@ -1371,7 +1371,7 @@ theorem retTy_persistent (S : Row) (A R : VTy) : (retTy S A R).Persistent := rfl
 
 /-- The clauses' type is persistent: a tuple of `!` types. -/
 theorem clausesTy_persistent (S : Row) (R : VTy) :
-    ∀ (E : List (Qual × VTy × VTy)) (fs : Nat → CTy), (clausesTy S R E fs).Persistent
+    ∀ (E : List (Count × VTy × VTy)) (fs : Nat → CTy), (clausesTy S R E fs).Persistent
   | [], _ => rfl
   | (q, A, B) :: E, fs => by
       have h := clausesTy_persistent S R E (fun j => fs (j + 1))
