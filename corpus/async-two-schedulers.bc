@@ -1,0 +1,29 @@
+-- One asynchronous job run under two schedulers. `trial` is given a job, a block that awaits and
+-- logs, and runs it once under `lib/async.bc`'s plain scheduler (`spawn`, whose answer is a
+-- `Task[i32]`) and once under the logging one (`spawn_logged`, whose answer is a `Stopped[i32]`),
+-- as a test harness compares a job's result with and without tracing: two handlers of `Async`, at
+-- the one value type `i32`, with different answer types, around one job.
+--
+-- The job is a computation parameter (SPEC §33) given a named function, so `trial` is
+-- specialised at the call (`trial__b0`) and each `with` handles a known call: no first-class
+-- computation at row `Async` is forced, and no answer-type polymorphism is needed. The
+-- first-class form, a list of jobs (#692), is `pending/hard-async-two-schedulers.bc`.
+--
+-- Rust: `fn trial<F: Future<Output = i32>>(job: impl Fn() -> F) -> (i32, i32) {
+-- (tokio_rt.block_on(job()), traced_rt.block_on(job())) }`.
+--
+-- Answer: `(inr (i32[7], inl ()), (inr (i32[7], inl ()), inr (i32[1], inr (i32[2], inl ()))))`:
+-- the plain run answers [7]; the logged run answers [7] and the log [1, 2]; `live 0`.
+
+include async
+
+fn job(u: 1) -> i32 with Async = log(1); await(); log(2); 7
+
+fn trial(job: !(1 => i32 with Async)) -> List[i32] * (List[i32] * List[i32]) =
+  let q = push(queue[i32](), with spawn { job(()) });
+  let plain = run_until_empty(q);
+  let l = lpush(lqueue[i32](), with spawn_logged { job(()) });
+  let traced = run_logged(l);
+  (plain, traced)
+
+main -> List[i32] * (List[i32] * List[i32]) = trial(job)

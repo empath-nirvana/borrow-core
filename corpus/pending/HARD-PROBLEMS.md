@@ -44,6 +44,14 @@ meets an obstacle other than its own, the `pending:` line names it first ("first
 | `hard-tree-insert-mut-cursor.bc` | BST insert by a loop whose `mut` cursor moves to a child (E5 at `mut`) | E5 | refused at `modify key`: the binder is typed `1` (#686) |
 | `hard-gen-pinloop.bc` | PinLoop: a self-borrow made once and held across the observations of an endless generator | #172 | refused: T1 at the borrow block |
 
+### Kernel gaps of the R5 fallback (#680)
+
+| program | problem | issue | today |
+|---|---|---|---|
+| `hard-async-stream-awaits.bc` | an asynchronous stream: a generator that awaits before each `yield`, read through `take` inside a task, so each observation of the stored generator performs `await`, handled by the enclosing `spawn` | #691 | refused at `take(feed(n), want)`: a generator that performs operations besides what it yields has no stored generator |
+| `hard-async-two-schedulers.bc` | a suite of jobs taken from a list, each run under `spawn` (answer `Task[i32]`) and `spawn_logged` (answer `Stopped[i32]`): a first-class computation forced under two handlers of `Async` with different answer types | first #161, then #692 | refused at the list's first element: a function that performs `Async` passed as a value (#161) |
+| `../async-two-schedulers.bc` | the same harness with one named job | #692 | **runs**: `trial` is specialised at its call, so no first-class computation is forced |
+
 ### Implicit copies of `imm` views
 
 | program | problem | issue | today |

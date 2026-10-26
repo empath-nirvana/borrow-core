@@ -49,6 +49,7 @@ async-stack-nested erased handles 0 performs 0 raises 0 machines 3 suspends 6 re
 async-timers erased handles 0 performs 0 raises 0 machines 3 suspends 3 rewritten 2 0 5 left 0 0
 async-try-join erased handles 0 performs 0 raises 0 machines 1 suspends 1 rewritten 5 1 21 left 0 0
 async-two-readers-views erased handles 0 performs 0 raises 0 machines 2 suspends 2 rewritten 1 0 1 left 0 0
+async-two-schedulers erased handles 0 performs 0 raises 0 machines 2 suspends 3 left 0 0
 async-workers-scoped erased handles 0 performs 0 raises 0 machines 2 suspends 2 rewritten 2 0 2 left 0 0
 axes/borrow-across-loop erased handles 0 performs 0 raises 0 left 0 0
 axes/codata-coeffects erased handles 0 performs 0 raises 0 left 0 0

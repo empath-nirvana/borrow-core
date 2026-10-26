@@ -1,0 +1,44 @@
+-- pending: #161 (effectful callbacks as values), then #692 (answer-type polymorphism)
+-- now: 44:68: `quick` performs `Async` and is passed as a value: it can only be called (effectful callbacks, #161)
+-- Coverage: a suite of asynchronous jobs, each run under two schedulers. `trial_all` walks a list
+-- of jobs and runs each once under `lib/async.bc`'s plain scheduler (`spawn`, whose answer is a
+-- `Task[i32]`) and once under the logging one (`spawn_logged`, whose answer is a `Stopped[i32]`),
+-- as a test harness compares each job with and without tracing. A job taken out of the list is a
+-- first-class computation at row `Async`, forced in an open region under two handlers of `Async`
+-- whose answer types differ at the one value type `i32`. With a single named job, `trial` is
+-- specialised at its call and runs today (`../async-two-schedulers.bc`).
+--
+-- Issue: #692 (answer-type polymorphism, `∀R`; R5 scope, #680: A9 fails, the gap `left: answer
+-- types differ at n`). First #161: a function that performs `Async` cannot be put in a list.
+--
+-- Intended answer: a job's suspension is translated once, polymorphic in the answer type, and each
+-- scheduler instantiates it at its own.
+--
+-- Rust: `for job in &jobs { (rt.block_on(job()), traced_rt.block_on(job())) }` over
+-- `Vec<Box<dyn Fn() -> BoxFuture<'static, i32>>>`, one future type run by two executors.
+--
+-- Today: refused at the list's first element, `quick` passed as a value (#161). Both backends stop
+-- at the same message.
+--
+-- Once it lands: a list of two results, `quick`'s ([7], ([7], [1, 2])) and `slow`'s
+-- ([9], ([9], [3, 4])); `live 0`.
+
+include async
+
+fn quick(u: 1) -> i32 with Async = log(1); await(); log(2); 7
+fn slow(u: 1) -> i32 with Async = log(3); await(); await(); log(4); 9
+
+fn trial(job: !(1 => i32 with Async)) -> List[i32] * (List[i32] * List[i32]) =
+  let q = push(queue[i32](), with spawn { job(()) });
+  let plain = run_until_empty(q);
+  let l = lpush(lqueue[i32](), with spawn_logged { job(()) });
+  let traced = run_logged(l);
+  (plain, traced)
+
+fn trial_all(jobs: List[!(1 => i32 with Async)]) -> List[List[i32] * (List[i32] * List[i32])] =
+  match unroll jobs {
+    inl u -> nil()
+  | inr (j, rest) -> cons(trial(j), trial_all(rest))
+  }
+
+main -> List[List[i32] * (List[i32] * List[i32])] = trial_all(cons(quick, cons(slow, nil())))
