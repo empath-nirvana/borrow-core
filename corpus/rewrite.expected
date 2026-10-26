@@ -103,9 +103,10 @@ corpus/core-r0-two-ops.bc instances 3 decls 3 poly 0 R0 1:rewritten raises 2 han
 corpus/core-r0-unwind-linear.bc instances 4 decls 4 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 1 subs 2 performs 0 forwards 0 ulends 0 pi 20 lir ok
 corpus/core-r0-unwind.bc instances 4 decls 4 poly 0 R0 1:rewritten raises 1 handles 1 lets 0 thens 1 subs 2 performs 0 forwards 0 ulends 0 pi 18 lir ok
 corpus/core-r1-cell.bc instances 3 decls 3 poly 0 R1 3:rewritten calls 1 nodes 1 works 1 pi 23 lir ok
+corpus/core-r1-left-tail.bc instances 2 decls 2 poly 0 R1 2:rewritten-handle calls 0 nodes 2 works 0 pi 7 lir ok
 corpus/core-r1-lifetime.bc instances 0 decls 0 poly 0 uses 0 erasure same lir same mismatches 0 R1left 2:a-work-mentions-a-lifetime-of-its-node's-context
 corpus/core-r1-linear.bc instances 3 decls 3 poly 0 R1 2:rewritten calls 1 nodes 1 works 1 pi 5 lir ok
-corpus/core-r1-not-in-place.bc error: corpus/core-r1-not-in-place.bc: R1: the name 2 has a node of the tail-resuming rule, and the licence leaves it (works not written in place): outside the pure fragment, the node would reach the conversion
+corpus/core-r1-not-in-place.bc instances 2 decls 2 poly 0 R1 2:rewritten-handle calls 0 nodes 1 works 0 pi 1 lir ok
 corpus/core-r1-opt.bc instances 3 decls 3 poly 0 R1 2:rewritten calls 2 nodes 1 works 1 pi 5 lir ok
 corpus/core-r1-performs.bc instances 3 decls 3 poly 0 R1 5:rewritten calls 1 nodes 1 works 1 R1left 4:a-work-performs pi 8 lir ok
 corpus/core-r1-two-names.bc instances 4 decls 4 poly 0 R1 4:rewritten 3:rewritten calls 2 nodes 2 works 2 pi 8 lir ok

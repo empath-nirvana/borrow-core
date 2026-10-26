@@ -1,8 +1,7 @@
 -- R1's licence (SPEC §54) at works not written in place: `core-handle-tail`'s node, its answering
 -- functions bound to `gs` first. The tail-resuming rule types the node; the licence leaves `2`
--- (works not written in place), and R1, which reads a work from the node's tuple, refuses the
--- program for the new backend: the node would reach its conversion
--- (`corpus/rewrite-red.expected`).
+-- (works not written in place), and R1 writes the node as the `[handle]` node it erases to: `gs`
+-- taken apart outside it, its clauses the rule's own, which the kernel checks again.
 --
 -- Answer: i32[20].
 

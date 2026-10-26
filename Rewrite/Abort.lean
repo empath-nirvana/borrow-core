@@ -85,8 +85,8 @@ inductive Seed where
   | eraseOther
   /-- R1's fault: a `perform` calls a work of another name R1 rewrites (G-call). -/
   | wrongName
-  /-- The guard's own test of G-qual's persistence arm: a source binder's image read as `1`. -/
-  | persistImage
+  /-- R1's fault: a binder of a declared work loses its id (its image), droppable (G-qual). -/
+  | dropWorkBinder
   deriving DecidableEq, Repr, Inhabited
 
 /-- A seed by its name. -/
@@ -106,7 +106,7 @@ def Seed.ofString? : String → Option Seed
   | "keepNode" => some .keepNode
   | "eraseOther" => some .eraseOther
   | "wrongName" => some .wrongName
-  | "persistImage" => some .persistImage
+  | "dropWorkBinder" => some .dropWorkBinder
   | _ => none
 
 /-- What R0's run records for the guard, per node visited (a `def`'s body at each use), and the
@@ -170,6 +170,20 @@ def numberFin (i : TInfo) : AbM TInfo := do
   if !st.numbering then return i
   set { st with ctr := st.ctr + 1 }
   return { i with binders := [s!"#F{st.scope}_{st.ctr}"] }
+
+/-- At the numbering pass, a `perform` given its id (`#P…`, `performIdOf?`), which R1 carries into
+the binder of its call (G-call, `Rewrite/Guard.lean`). -/
+def numberPerform (i : TInfo) : AbM TInfo := do
+  let st ← get
+  if !st.numbering then return i
+  set { st with ctr := st.ctr + 1 }
+  return { i with binders := [s!"#P{st.scope}_{st.ctr}"] }
+
+/-- The id of a `perform` a name carries (`#P…`, up to a `.`), at a numbered program. -/
+def performIdOf? (x : String) : Option String :=
+  match x.splitOn "#P" with
+  | [_, r] => some ((r.splitOn ".").headD r)
+  | _ => none
 
 /-- At the numbering pass, the node's binders (`n` of them) given their ids. -/
 def numberInfo (i : TInfo) (n : Nat) (lam : Bool := false) : AbM TInfo := do
@@ -705,6 +719,7 @@ def ab (a : AbortName) (t : TExpr) : AbM TExpr := do
     else pure (.effSub i (tJ j) (tR S) (tR S') (tV A) c')
   -- `perform` of another name at a row holding `n`.
   | .effPerform i j S o c => do
+    let i ← numberPerform i
     let c' ← ab a c
     if has S then
       let sp := i.sp

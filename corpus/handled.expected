@@ -211,12 +211,12 @@ corpus/async-stack-nested.bc 3.0 stored: machine; condition 2 holds; -
 corpus/async-stack-nested.bc 3.1 tail: -; condition 2 holds; -
 corpus/async-stack-nested.bc 4.0 abortive: branch; condition 2 holds; -
 corpus/async-stack-pause.bc flows [0, 1, 2, 3, 4, 5, 6, 4294967295], finaliser; main [1, 2, 3, 4, 5, 6], finaliser
-corpus/async-stack-pause.bc 155:20: handle 5: inside [6], finaliser; row []; ops 5.0 stored; names 5.0 []; condition 2 holds
-corpus/async-stack-pause.bc 150:36: handle 6: inside [], finaliser; row [5]; ops 6.0 abortive; names 6.0 []; condition 2 holds
-corpus/async-stack-pause.bc 156:20: handle 3: inside [4], finaliser; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
-corpus/async-stack-pause.bc 150:36: handle 4: inside [], finaliser; row [3]; ops 4.0 abortive; names 4.0 []; condition 2 holds
-corpus/async-stack-pause.bc 157:20: handle 1: inside [2]; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
-corpus/async-stack-pause.bc 151:37: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
+corpus/async-stack-pause.bc 159:20: handle 5: inside [6], finaliser; row []; ops 5.0 stored; names 5.0 []; condition 2 holds
+corpus/async-stack-pause.bc 154:36: handle 6: inside [], finaliser; row [5]; ops 6.0 abortive; names 6.0 []; condition 2 holds
+corpus/async-stack-pause.bc 160:20: handle 3: inside [4], finaliser; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
+corpus/async-stack-pause.bc 154:36: handle 4: inside [], finaliser; row [3]; ops 4.0 abortive; names 4.0 []; condition 2 holds
+corpus/async-stack-pause.bc 161:20: handle 1: inside [2]; row []; ops 1.0 stored; names 1.0 []; condition 2 holds
+corpus/async-stack-pause.bc 155:37: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
 corpus/async-stack-pause.bc 5.0 stored: machine; condition 2 holds; -
 corpus/async-stack-pause.bc 6.0 abortive: branch; condition 2 holds; -
 corpus/async-stack-pause.bc 3.0 stored: machine; condition 2 holds; -
@@ -419,6 +419,10 @@ corpus/core-r1-cell.bc 31:3: handle 4: inside [3]; row []; ops 4.0 tail; names 4
 corpus/core-r1-cell.bc 39:4: handle 3: inside []; row [4]; ops 3.0 tail; names 3.0 []; condition 2 holds
 corpus/core-r1-cell.bc 4.0 tail: machine; condition 2 holds; -
 corpus/core-r1-cell.bc 3.0 tail: direct; condition 2 holds; agree
+corpus/core-r1-left-tail.bc flows [0, 2, 4294967295]; main [2]
+corpus/core-r1-left-tail.bc 21:9: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/core-r1-left-tail.bc 27:9: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
+corpus/core-r1-left-tail.bc 2.0 tail: machine; condition 2 holds; -
 corpus/core-r1-lifetime.bc flows [0, 2, 4294967295]; main [2]
 corpus/core-r1-lifetime.bc 13:18: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
 corpus/core-r1-lifetime.bc 2.0 tail: direct; condition 2 holds; agree
@@ -426,14 +430,14 @@ corpus/core-r1-linear.bc flows [0, 2, 4294967295]; main [2]
 corpus/core-r1-linear.bc 19:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
 corpus/core-r1-linear.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/core-r1-not-in-place.bc flows [0, 2, 4294967295]; main [2]
-corpus/core-r1-not-in-place.bc 21:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 row; condition 2 holds
+corpus/core-r1-not-in-place.bc 20:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 row; condition 2 holds
 corpus/core-r1-not-in-place.bc 2.0 tail: machine; condition 2 holds; -
 corpus/core-r1-opt.bc flows [0, 2, 4294967295]; main [2]
 corpus/core-r1-opt.bc 20:3: handle 2: inside []; row []; ops 2.0 tail; names 2.0 []; condition 2 holds
 corpus/core-r1-opt.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/core-r1-performs.bc flows [0, 4, 5, 4294967295]; main [4, 5]
-corpus/core-r1-performs.bc 21:3: handle 5: inside [4]; row []; ops 5.0 tail; names 5.0 []; condition 2 holds
-corpus/core-r1-performs.bc 27:6: handle 4: inside []; row [5]; ops 4.0 tail; names 4.0 [5]; condition 2 fails at 5
+corpus/core-r1-performs.bc 23:3: handle 5: inside [4]; row []; ops 5.0 tail; names 5.0 []; condition 2 holds
+corpus/core-r1-performs.bc 29:6: handle 4: inside []; row [5]; ops 4.0 tail; names 4.0 [5]; condition 2 fails at 5
 corpus/core-r1-performs.bc 5.0 tail: direct; condition 2 holds; agree
 corpus/core-r1-performs.bc 4.0 tail: machine; condition 2 fails; -
 corpus/core-r1-two-names.bc flows [0, 3, 4, 4294967295]; main [3, 4]

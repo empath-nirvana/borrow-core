@@ -1,10 +1,12 @@
 -- R1's admission (SPEC §54) at a work that performs: the clause of `4.0 lin i32 ~> i32` performs
--- `5.0 lin i32 ~> i32` of the handler around it before it resumes. The checker writes the
--- tail-resuming rule's node for it, its works at the row `Σ_N = [5.0]`, but the licence leaves `4`
--- at condition 2: the program's flow record may catch `5`, which the work performs, so a call of
--- the work where `4.0` is performed could be caught by a frame its node's clause is not under. `4`
--- stays `[handle]`'s, a machine operation of the new backend; `5`, whose clause performs nothing,
--- is admitted and rewritten.
+-- `5.0 lin i32 ~> i32` of the handler around it before it resumes. At the check that writes the
+-- tail-resuming rule's node wherever its premises accept it, its works are at the row
+-- `Σ_N = [5.0]`, and the licence leaves `4`
+-- (a work performs: it admits only works at `Σ_N = []`, #693; condition 2 would leave it too, since
+-- the program's flow record may catch `5`, but no closed work reaches that conjunct now). The
+-- checker writes the rule's node only at admitted names, so `4`'s node stays `[handle]`'s, a
+-- machine operation of the new backend; `5`, whose clause performs nothing, is admitted and
+-- rewritten.
 --
 -- Answer: i32[106]: `4.0 3` performs `5.0 3`, which answers `3 + 100`; the result is `103 + 3`.
 

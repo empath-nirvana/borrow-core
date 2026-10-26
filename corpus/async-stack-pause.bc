@@ -5,6 +5,10 @@
 -- families "a κ region's node" and "a machine's frame node" have a program here
 -- (`scripts/check-layout-reject.sh`).
 --
+-- A fixture: no program that uses `lib/async.bc` reaches §52's stack machines since R1 (#680) took
+-- out §47's per-operation licence, which kept `log` out of the machine operations. It is retired,
+-- or retargeted, at R5.
+--
 -- Answer: the list [120, 40, 63]. `live 0`.
 
 include rec

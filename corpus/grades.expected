@@ -69,12 +69,12 @@ corpus/async-stack-nested.bc 42:38: handle 4: 4.0 0 inferred, world top, -, -
 corpus/async-stack-nested.bc 42:38: handle 6: 6.0 0 inferred, world top, -, -
 corpus/async-stack-nested.bc 46:19: handle 5: 5.0 1? inferred (pinned at 46:19: it may keep its continuation), world top, -, stored @top; 5.1 1 inferred, world top, tail, in-clause
 corpus/async-stack-nested.bc 47:19: handle 3: 3.0 1? inferred (pinned at 47:19: it may keep its continuation), world top, -, stored @top; 3.1 1 inferred, world top, tail, in-clause
-corpus/async-stack-pause.bc 151:37: handle 2: 2.0 0 inferred, world top, -, -
-corpus/async-stack-pause.bc 150:36: handle 4: 4.0 0 inferred, world top, -, -
-corpus/async-stack-pause.bc 150:36: handle 6: 6.0 0 inferred, world top, -, -
-corpus/async-stack-pause.bc 155:20: handle 5: 5.0 1? inferred (pinned at 155:20: it may keep its continuation), world top, -, stored @top
-corpus/async-stack-pause.bc 156:20: handle 3: 3.0 1? inferred (pinned at 156:20: it may keep its continuation), world top, -, stored @top
-corpus/async-stack-pause.bc 157:20: handle 1: 1.0 1? inferred (pinned at 157:20: it may keep its continuation), world top, -, stored @top
+corpus/async-stack-pause.bc 155:37: handle 2: 2.0 0 inferred, world top, -, -
+corpus/async-stack-pause.bc 154:36: handle 4: 4.0 0 inferred, world top, -, -
+corpus/async-stack-pause.bc 154:36: handle 6: 6.0 0 inferred, world top, -, -
+corpus/async-stack-pause.bc 159:20: handle 5: 5.0 1? inferred (pinned at 159:20: it may keep its continuation), world top, -, stored @top
+corpus/async-stack-pause.bc 160:20: handle 3: 3.0 1? inferred (pinned at 160:20: it may keep its continuation), world top, -, stored @top
+corpus/async-stack-pause.bc 161:20: handle 1: 1.0 1? inferred (pinned at 161:20: it may keep its continuation), world top, -, stored @top
 corpus/async-timers.bc 99:24: handle 4: 4.0 1? inferred (pinned at 99:24: it may keep its continuation), world top, -, stored @top
 corpus/async-timers.bc 100:25: handle 3: 3.0 1? inferred (pinned at 100:25: it may keep its continuation), world top, -, stored @top
 corpus/async-timers.bc 101:25: handle 2: 2.0 1? inferred (pinned at 101:25: it may keep its continuation), world top, -, stored @top
@@ -147,12 +147,14 @@ corpus/core-r0-unwind-linear.bc 36:5: handle 1: 1.0 0 abortive, world top, -, -
 corpus/core-r0-unwind.bc 32:5: handle 1: 1.0 0 abortive, world top, -, -
 corpus/core-r1-cell.bc 31:3: handle 4: 4.0 1 written, world top, tail, in-clause
 corpus/core-r1-cell.bc 39:4: handle 3: 3.0 1 written, world top, tail, in-clause
+corpus/core-r1-left-tail.bc 21:9: handle 2: 2.0 1 written, world top, tail, in-clause
+corpus/core-r1-left-tail.bc 27:9: handle 2: 2.0 1 written, world top, tail, in-clause
 corpus/core-r1-lifetime.bc 13:18: handle 2: 2.0 1 written, world top, tail, in-clause
 corpus/core-r1-linear.bc 19:3: handle 2: 2.0 1 written, world top, tail, in-clause
-corpus/core-r1-not-in-place.bc 21:3: handle 2: 2.0 1 written, world top, tail, in-clause
+corpus/core-r1-not-in-place.bc 20:3: handle 2: 2.0 1 written, world top, tail, in-clause
 corpus/core-r1-opt.bc 20:3: handle 2: 2.0 1? written, world top, tail, in-clause
-corpus/core-r1-performs.bc 21:3: handle 5: 5.0 1 written, world top, tail, in-clause
-corpus/core-r1-performs.bc 27:6: handle 4: 4.0 1 written, world top, tail, in-clause
+corpus/core-r1-performs.bc 23:3: handle 5: 5.0 1 written, world top, tail, in-clause
+corpus/core-r1-performs.bc 29:6: handle 4: 4.0 1 written, world top, tail, in-clause
 corpus/core-r1-two-names.bc 20:3: handle 4: 4.0 1 written, world top, tail, in-clause
 corpus/core-r1-two-names.bc 26:6: handle 3: 3.0 1 written, world top, tail, in-clause
 corpus/core-r1-two-nodes.bc 19:5: handle 3: 3.0 1 written, world top, tail, in-clause; 3.1 1 written, world top, tail, in-clause

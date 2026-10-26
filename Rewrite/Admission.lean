@@ -50,21 +50,25 @@ def firstTail (n : UInt32) : Nat → TExpr → Except String (Option (Row × Row
 /-- **R1's names** in the source's checked `main` `c`, in the order of their first nodes, read off
 the term `t` the rules have reached (R0's rewrite of `c.t`, whose works R0 keeps as they are): each
 name with a node of the tail-resuming rule but those R0 rewrote (`r0`: a node of the rule whose
-operations are all abortive is R0's). Each must be admitted by the licence of the program's check,
-`lic` (`Report.licence`, over every typed term of that check): R1 reads it and computes no other. -/
+operations are all abortive is R0's), read in the licence of the program's check, `lic`
+(`Report.licence`, over every typed term of that check), which R1 reads and computes no other: the
+names it admits, which R1 rewrites, and the names it leaves, whose nodes R1 writes as the
+`[handle]` nodes they erase to (`tToV`). -/
 def r1Keys (lic : List (UInt32 × Frontend.Check.Licence)) (c : Frontend.Check.Checked) (t : TExpr)
-    (fuel : Nat) (r0 : List UInt32 := []) : Except String (List TailName) := do
+    (fuel : Nat) (r0 : List UInt32 := []) : Except String (List TailName × List UInt32) := do
   let names := ((← Frontend.Check.tailNodes [c.t]).map (·.1)).filter fun n => !r0.contains n
-  names.mapM fun n => do
+  let mut admitted : List TailName := []
+  let mut left : List UInt32 := []
+  for n in names do
     match lic.lookup n with
-    | some .admitted => pure ()
-    | some (.left why) =>
-      throw s!"R1: the name {n} has a node of the tail-resuming rule, and the licence leaves it ({why}): outside the pure fragment, the node would reach the conversion"
+    | some .admitted =>
+      let some (S, SN, E, tw) ← firstTail n fuel t
+        | throw s!"R1: no node of the tail-resuming rule of the name {n} in the rewritten term"
+      let some works := tupleParts E.length tw
+        | throw s!"R1: the works of the name {n} are not written in place"
+      admitted := admitted ++ [({ n, S, SN, E, works } : TailName)]
+    | some (.left _) => left := left ++ [n]
     | none => throw s!"R1: the name {n} has a node of the tail-resuming rule the licence does not read"
-    let some (S, SN, E, tw) ← firstTail n fuel t
-      | throw s!"R1: no node of the tail-resuming rule of the name {n} in the rewritten term"
-    let some works := tupleParts E.length tw
-      | throw s!"R1: the works of the name {n} are not written in place"
-    pure { n, S, SN, E, works }
+  pure (admitted, left)
 
 end Rewrite

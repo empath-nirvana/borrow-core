@@ -431,4 +431,19 @@ theorem obl_steps : ∀ (ss : List Step), (∀ s ∈ ss, s.ok) → ∀ (A : VTy)
         exact obl_steps ss (fun s hs' => hok s (by simp [hs'])) (tV a A) (rowsV_tV a hs A h) o hm
           (fun s hs' => hk s (by simp [hs']))
 
+
+/-! ### Persistence is kept -/
+
+theorem persistent_tV (a : TailName) : ∀ A : VTy, (tV a A).persistent = A.persistent
+  | .tensor A B | .sum A B => by simp only [tV, VTy.persistent, persistent_tV a A, persistent_tV a B]
+  | .box _ A | .mu A => by simp only [tV, VTy.persistent, persistent_tV a A]
+  | .ref _ | .imm _ _ | .mut _ _ | .bang _ | .fam _ | .thunk _ | .unit | .zero | .unk | .tvar _
+  | .int _ | .opq _ => rfl
+
+theorem persistent_trV (a : AbortName) : ∀ A : VTy, (trV a A).persistent = A.persistent
+  | .tensor A B | .sum A B => by simp only [trV, VTy.persistent, persistent_trV a A, persistent_trV a B]
+  | .box _ A | .mu A => by simp only [trV, VTy.persistent, persistent_trV a A]
+  | .ref _ | .imm _ _ | .mut _ _ | .bang _ | .fam _ | .thunk _ | .unit | .zero | .unk | .tvar _
+  | .int _ | .opq _ => rfl
+
 end Rewrite

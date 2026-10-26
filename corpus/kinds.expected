@@ -169,6 +169,7 @@ corpus/core-r0-unwind-linear.bc 1.0 affine abortive: branch; agree
 corpus/core-r0-unwind.bc 1.0 affine abortive: branch; agree
 corpus/core-r1-cell.bc 4.0 linear tail: machine: the clause captures values; disagree
 corpus/core-r1-cell.bc 3.0 linear tail: direct; agree
+corpus/core-r1-left-tail.bc 2.0 linear tail: machine: the handlers of the name have 2 clauses for it; disagree
 corpus/core-r1-lifetime.bc 2.0 linear tail: direct; agree
 corpus/core-r1-linear.bc 2.0 linear tail: direct; agree
 corpus/core-r1-not-in-place.bc 2.0 linear tail: machine: the clause captures values; disagree

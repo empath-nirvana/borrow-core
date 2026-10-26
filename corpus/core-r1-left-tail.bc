@@ -1,0 +1,31 @@
+-- R1 (SPEC §54) at written `handle_tail` nodes the licence leaves: `core-handle-tail`'s node
+-- written twice, its works in place and closed but different (`10`, then `20`). The licence leaves
+-- `2` (the nodes' works differ), and R1 writes each node as the `[handle]` node it erases to, its
+-- clauses the rule's own (`tailClause`: the work's answer resumes `κ`), which the kernel checks
+-- again: no node of the rule reaches the new backend's conversion, and `2.0` is a machine
+-- operation there.
+--
+-- Answer: (i32[20], i32[40]).
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def twice : !U (1 -o F[2.0 lin 1 ~> i32] i32) =
+  !thunkv fun (u : 1) ->
+    a <- perform[2.0] u;
+    b <- perform[2.0] ();
+    return (plus (a, b))
+
+main : F (i32 * i32) =
+  f <- return (unbang twice);
+  u <- return ();
+  r1 <- handle_tail[2: lin](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (u : 1) -> let () = u; return i32[10]), ()) : !U (1 -o F i32) * 1))
+    (force f u);
+  g <- return (unbang twice);
+  w <- return ();
+  r2 <- handle_tail[2: lin](
+      ((!thunkv fun (v : i32) -> return v) : !U (i32 -o F i32)),
+      (((!thunkv fun (u : 1) -> let () = u; return i32[20]), ()) : !U (1 -o F i32) * 1))
+    (force g w);
+  return (r1, r2)

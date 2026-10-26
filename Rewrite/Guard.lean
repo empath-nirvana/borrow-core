@@ -1,5 +1,6 @@
 import Rewrite.Abort
 import Rewrite.Obl
+import Rewrite.Admission
 
 /-!
 # Rewrite — the guard  `[spec §54]`
@@ -22,9 +23,11 @@ checked terms; none reads a backend's state.
 * **G-bang**: `c′` has no more `!`-introductions, `!` copies or forgets, or forgets of `unk`, than
   `c` and the rules' own (R0's forwarding answer clauses, each over the source's persistent
   answer clause; R1's works, one work's at each call, each the source's persistent work).
-* **G-call**: every call of one of R1's works in `c′` is a call of the work of its `perform`'s
-  operation, the name included, and every `perform` R1 rewrites has its call, by `π` from `perform`
-  to call (R1's `calls`).
+* **G-call**, by `π` from each `perform` to its call (R1's `calls`: the `perform`'s id, `#P…`, which
+  the call's binder carries): every call R1 writes calls a declaration whose re-checked body erases to
+  the work of its `perform`'s operation at that name's node of the source (`clauseExpr Hc j`), every
+  `perform` R1 records has its call, and every `perform` of a name R1 rewrites is recorded. The
+  binders of a called work are taken out of `inv`: they must have their images.
 * **G-fin**: every finaliser of `c` (`[then]`'s `D`, an unwinding borrow's `td`) is reached once on
   each abort path of `c′`, matched by finaliser id (`finIdOf?`: the numbering pass's, carried by
   the rules in the binders' names), checked total. It is a finaliser of `c′` while its row keeps an operation no rule
@@ -88,9 +91,11 @@ structure Facts where
   /-- Each `case`'s span, and the head of its `inr` arm: a binding's span and its head's erasure,
   or a drop's destructor's type. -/
   arms : Array (Option String × Option (Frontend.Span × BoCa.Expr) × Option CVTy) := #[]
-  /-- Each `use` of one of R1's works (a declaration it names `%R1work…`): its span and the
-  operation whose work it is. -/
-  calls : Array (Frontend.Span × UInt32 × UInt32) := #[]
+  /-- Each call R1 writes (a binding whose binder carries a `perform`'s id, `#P…`): the id and the
+  erasure of the declaration it calls (the body of its `use`). -/
+  calls : Array (String × BoCa.Expr) := #[]
+  /-- Each `perform` carrying an id (`#P…`), with its name. -/
+  performs : Array (String × UInt32) := #[]
 
 def isBangIntro : TExpr → Bool
   | .bangThunkF .. | .bangThunkV .. | .copyBang .. | .forgetBang .. | .forgetUnk .. => true
@@ -148,14 +153,18 @@ def armHead (t : TExpr) : Option (Frontend.Span × BoCa.Expr) × Option CVTy :=
   | .bind i _ _ _ _ tM _ => (some (i.sp, tM.erase), d)
   | _ => (none, d)
 
-/-- The operation `n.j` whose R1 work a declaration's name names (`%R1work{n}.{j}#k`). -/
-def workOp? (nm : String) : Option (UInt32 × UInt32) := do
-  guard (nm.startsWith "%R1work")
-  let rest := (nm.drop 7).toString
-  let core := (rest.splitOn "#").headD rest
-  match core.splitOn "." with
-  | [n, j] => pure ((← n.toNat?).toUInt32, (← j.toNat?).toUInt32)
-  | _ => none
+/-- The `j`-th component of a tuple written in place. -/
+def nthPart : Nat → TExpr → Option TExpr
+  | 0, .tensorI _ _ _ _ _ c _ => some c
+  | k + 1, .tensorI _ _ _ _ _ _ r => nthPart k r
+  | _, _ => none
+
+/-- The ids of the source binders of a typed term (`SrcBinder.ofNode`), every `use` body included. -/
+def binderIdsOf : Nat → TExpr → Except String (List String)
+  | 0, _ => throw "guard: a term nested too deeply"
+  | f + 1, t => do
+    t.children.foldlM (init := (SrcBinder.ofNode t).filterMap (·.id?)) fun acc (_, c) => do
+      pure (acc ++ (← binderIdsOf f c))
 
 /-- The guard's facts of a typed term, added to `acc`. -/
 def facts : Nat → TExpr → Facts → Except String Facts
@@ -186,11 +195,18 @@ def facts : Nat → TExpr → Facts → Except String Facts
         | none => acc.arms
       | _ => acc.arms
     let calls := match t with
-      | .use ui _ nm _ _ _ _ => match workOp? nm with
-        | some (n, j) => acc.calls.push (ui.sp, n, j)
+      | .bind bi _ _ _ _ (.ret _ _ _ (.bangE _ _ _ (.use _ _ _ _ _ _ body))) _ =>
+        match (bi.binders.head?).bind performIdOf? with
+        | some id => acc.calls.push (id, body.erase)
         | none => acc.calls
       | _ => acc.calls
+    let performs := match t with
+      | .effPerform pi _ _ o _ => match (pi.binders.head?).bind performIdOf? with
+        | some id => acc.performs.push (id, o.n)
+        | none => acc.performs
+      | _ => acc.performs
     let acc := { acc with binders := acc.binders ++ bs.toArray, ops := acc.ops ++ os.toArray, calls,
+                          performs,
                           bangs := acc.bangs + (if isBangIntro t then 1 else 0),
                           fins := match finOf t with
                             | some fn => acc.fins.push fn
@@ -240,7 +256,7 @@ def piOf (bs bs' : Array (Option String × String × CVTy × Bool)) (inv : List 
     | none =>
       -- A binder of one of R1's works no `perform` reaches: the work is not declared.
       if inv.contains id then π := π.push (k, .inv "R1" "work")
-      else throw s!"guard: the binder `{x}` has no image in the rewritten `main`"
+      else throw s!"guard G-qual (π): the binder `{x}` has no image in the rewritten `main`"
   pure π.toList
 
 /-- **A binder keeps its obligations** (G-qual): the source's type `A` has rows over `F` only
@@ -258,6 +274,10 @@ def lostObligation (ruled : List UInt32) (A A' : CVTy) : Option String :=
     let have_ := obl false A'
     (need.find? (!have_.contains ·)).map fun o => s!"the obligation {repr o}"
 
+/-- G-qual's persistence arm, which no rule's translation reaches (`persistent_tV`,
+`persistent_trV`): a non-persistent binder whose image is persistent is refused. -/
+example : (lostObligation [] (.ref .unit) .unit).isSome = true := by decide
+
 /-- Each id's binders' types and declarations, over its copies. -/
 def byId (bs : Array (Option String × String × CVTy × Bool)) :
     Std.HashMap String (List CVTy × Bool) := Id.run do
@@ -272,8 +292,8 @@ def byId (bs : Array (Option String × String × CVTy × Bool)) :
 /-- **The guard** over the source `c`, the re-checked `c′`, the names of the operations the rewrite
 eliminates, the `!`-introductions its rules write, and the re-check's typed terms. Returns `π`. -/
 def guard (fuel : Nat) (c c' : Checked) (t₀ : TExpr) (ruledAbort ruledTail : List UInt32)
-    (ruleBangs : Nat) (inv : List String) (calls : List (Frontend.Span × UInt32 × UInt32))
-    (terms' : List (Nat × TExpr)) (persistSeed : Bool := false) : Except String Pi := do
+    (ruleBangs : Nat) (inv : List String) (calls : List (String × UInt32 × UInt32))
+    (terms' : List (Nat × TExpr)) : Except String Pi := do
   let ruled := ruledAbort ++ ruledTail
   -- G-main.
   unless c'.C == c.C do throw "guard G-main: the rewritten `main` has another type"
@@ -285,22 +305,38 @@ def guard (fuel : Nat) (c c' : Checked) (t₀ : TExpr) (ruledAbort ruledTail : L
   -- The source as the rules read it: numbered (`numberBinders`) where a rule rewrites it.
   let fs ← facts fuel t₀ {}
   let fs' ← facts fuel c'.t {}
-  -- The guard's own test of G-qual's persistence arm (`Seed.persistImage`): the first image of a
-  -- source binder that is not persistent read as `1`.
-  let fs' := if !persistSeed then fs' else
-    match (fs'.binders.toList.zipIdx.find? fun ((id?, _, A, _), _) => id?.isSome && !A.persistent) with
-    | some ((id?, x, _, lin), k) => { fs' with binders := fs'.binders.set! k (id?, x, .unit, lin) }
-    | none => fs'
-  -- G-call, by `π` from each `perform` to its call (`calls`, R1's): every call of an R1 work is a
-  -- call of the work of its `perform`'s operation, the name included, and every `perform` R1
-  -- rewrites has its call.
-  for (sp, n, j) in fs'.calls.toList do
-    unless calls.contains (sp, n, j) do
-      let at_ := (calls.filter (·.1 == sp)).map fun (_, n', j') => s!"{n'}.{j'}"
-      throw s!"guard G-call: the call at {sp.start.render} is of the work of {n}.{j}, and its `perform` is of {at_}"
-  for (sp, n, j) in calls do
-    unless fs'.calls.contains (sp, n, j) do
-      throw s!"guard G-call: the `perform` of {n}.{j} at {sp.start.render} has no call of its work"
+  -- G-call, by `π` from each `perform` to its call (`calls`, R1's: the `perform`'s id, which its
+  -- call's binder carries): every call R1 writes calls a declaration whose body is the work of its
+  -- `perform`'s operation at that name's node of the source as R1 reads it (the `j`-th component of
+  -- the node's works, `clauseExpr Hc j`), and every `perform` R1 rewrites has its call.
+  let mut expect : List (UInt32 × UInt32 × BoCa.Expr) := []
+  for (_, n, j) in calls do
+    unless expect.any (fun (n', j', _) => n' == n && j' == j) do
+      let some (_, _, _, tw) ← firstTail n fuel t₀
+        | throw s!"guard G-call: no node of the name {n} in the source"
+      let some w := BoCa.Fig16.LogRel.Core.Check.clauseExpr tw.erase j.toNat
+        | throw s!"guard G-call: the source node of {n} has no work {j}"
+      expect := expect ++ [(n, j, w)]
+  for (id, body) in fs'.calls.toList do
+    let some (_, n, j) := calls.find? (·.1 == id)
+      | throw s!"guard G-call: a call of a work whose `perform` {id} R1 does not record"
+    let some (_, _, w) := expect.find? (fun (n', j', _) => n' == n && j' == j)
+      | throw "guard G-call: internal"
+    unless body == w do
+      throw s!"guard G-call: the call of the `perform` {id} of {n}.{j} calls a declaration whose body is not the work of {n}.{j}"
+  for (id, n, j) in calls do
+    unless fs'.calls.any (·.1 == id) do
+      throw s!"guard G-call: the `perform` {id} of {n}.{j} has no call"
+  for (id, n) in fs.performs.toList do
+    if ruledTail.contains n && !calls.any (·.1 == id) then
+      throw s!"guard G-call: the `perform` {id} of the name {n} R1 rewrites has no recorded call"
+  -- `π`'s `inv(R1, work)` never covers a binder of a work a call reaches (a declared work): those
+  -- have their images, which G-qual checks.
+  let mut called : List String := []
+  for (_, n, j) in calls do
+    if let some (_, _, _, tw) ← firstTail n fuel t₀ then
+      if let some w := nthPart j.toNat tw then called := called ++ (← binderIdsOf fuel w)
+  let inv := inv.filter (!called.contains ·)
   -- G-qual, through π: a binder keeps every obligation no eliminated name's operation is the source
   -- of (`lostObligation`) and, declared `linear`, stays declared so.
   let π ← piOf fs.binders fs'.binders inv

@@ -250,7 +250,7 @@ def identityLine (k : Backend.CheckedProg) : Except String String := do
     | .admitted => none
   let r1left := if left.isEmpty then "" else " R1left" ++ String.join left
   let ruled := rep.r0.filterMap fun (n, st) => if st == "rewritten" then some n else none
-  if !ruled.isEmpty || !rep.r1.isEmpty then
+  if !ruled.isEmpty || !rep.r1.isEmpty || !rep.r1v.isEmpty then
     let lir := match lirOfChecked k, lirOfChecked k' with
       | _, .ok _ => "ok"
       | .error _, .error _ => "outside"
@@ -259,8 +259,9 @@ def identityLine (k : Backend.CheckedProg) : Except String String := do
       let st ← Rewrite.r0Counts k.main ruled
       pure (s!" raises {st.raises} handles {st.handles} lets {st.lets} thens {st.thens}" ++
         s!" subs {st.subs} performs {st.performs} forwards {st.forwards} ulends {st.ulends}")
-    let r1 := if rep.r1.isEmpty then "" else
+    let r1 := if rep.r1.isEmpty && rep.r1v.isEmpty then "" else
       " R1" ++ String.join (rep.r1.map fun n => s!" {n}:rewritten") ++
+        String.join (rep.r1v.map fun n => s!" {n}:rewritten-handle") ++
         s!" calls {rep.r1calls} nodes {rep.r1nodes} works {rep.r1works}"
     pure (head ++ r0 ++ r0s ++ r1 ++ r1left ++ s!" pi {rep.moved} lir {lir}")
   else

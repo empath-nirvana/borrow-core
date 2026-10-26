@@ -148,6 +148,8 @@ structure Report where
   moved : Nat := 0
   /-- R1's names, each rewritten (SPEC §54, R1), in R1's order. -/
   r1 : List UInt32 := []
+  /-- The names the licence leaves whose nodes R1 writes as the `[handle]` nodes they erase to. -/
+  r1v : List UInt32 := []
   /-- What R1 rewrote: its `perform`s made calls, its nodes removed, and its works declared. -/
   r1calls : Nat := 0
   r1nodes : Nat := 0

@@ -45,7 +45,9 @@ def chainKeys : CTy → List (UInt32 × UInt32)
   | .eff m i _ _ _ _ _ C => (m, i) :: chainKeys C
   | _ => []
 
-/-- The operations of the works' row `Σ_N` a row whose keys are `ks` does not hold. -/
+/-- The operations of the works' row `Σ_N` a row whose keys are `ks` does not hold. Unreachable while
+the licence admits only works at `Σ_N = []` (#693), as is `stackOps` and `tChain`'s arm that uses it:
+kept for the translation's general form `(Σ ∖ n) ++ (Σ_N ∖ Σ)`. -/
 def TailName.extra (a : TailName) (ks : List (UInt32 × UInt32)) : Row :=
   a.SN.filter fun o => !ks.contains (o.n, o.i)
 
@@ -129,12 +131,11 @@ structure TlStats where
   performs : Nat := 0
   handles : Nat := 0
   /-- The source binders of the subterms R1 drops (each removed node's works' tuple), by their
-  handles: `π` maps them to `inv(R1, work)` where they have no image (a work no call reaches, a
-  node's copy of the works). -/
+  handles: `π` maps to `inv(R1, work)` those that are no binder of a declared work (`rules`). -/
   inv : List SrcBinder := []
-  /-- `π` from each `perform` to its call: the `perform`'s span and operation, whose work the call
-  targets (G-call). -/
-  calls : List (Frontend.Span × UInt32 × UInt32) := []
+  /-- `π` from each `perform` to its call: the `perform`'s id (`#P…`, which the call's binder
+  carries) and operation, whose work the call targets (G-call). -/
+  calls : List (String × UInt32 × UInt32) := []
 
 /-- R1's monad. -/
 abbrev TlM := StateT TlStats (Except String)
@@ -175,8 +176,8 @@ def unLin : Nat → TExpr → StateT Bool (Except String) TExpr
 /-- **A `perform` of `n.j`** at the row `S`, its argument `c'` rewritten: a call of the work
 `w` (the declaration `wd`, named `nm`), `F_{Σ_N} B ≤ F_{⟦Σ⟧} B`. An argument that is a variable is
 passed as it is; another is bound first, written at the operation's argument type. -/
-def performCall (a : TailName) (sp : Frontend.Span) (S : Row) (w : TExpr) (wd : Nat) (nm : String)
-    (c' : TExpr) (seed : Seed) : Except String TExpr := do
+def performCall (a : TailName) (sp : Frontend.Span) (pid : String) (S : Row) (w : TExpr) (wd : Nat)
+    (nm : String) (c' : TExpr) (seed : Seed) : Except String TExpr := do
   let .val W := w.jdg | throw "R1: a work at a computation type"
   let .bang U := W | throw "R1: a work's type is not `!U(A ⊸ F_{Σ_N} B)`"
   let .thunk (.arr A' CW) := U | throw "R1: a work's type is not `!U(A ⊸ F_{Σ_N} B)`"
@@ -193,8 +194,9 @@ def performCall (a : TailName) (sp : Frontend.Span) (S : Row) (w : TExpr) (wd : 
     else call k
   let C : CTy := CTy.effOf S' B'
   let withF (k : Nat) : TExpr :=
-    .bind { sp, binders := [r1B] } (.comp C) U C noMasks (retAt sp U (.bangE (infoAt sp) (.val U) U use))
-      (body (k + 1))
+    -- The call's binder carries its `perform`'s id (`#P…`): `π` from `perform` to call (G-call).
+    .bind { sp, binders := [s!"{r1B}#P{pid}"] } (.comp C) U C noMasks
+      (retAt sp U (.bangE (infoAt sp) (.val U) U use)) (body (k + 1))
   match c' with
   | .var _ _ k _ => pure (withF k)
   | _ =>
@@ -225,9 +227,11 @@ def tl (a : TailName) (ws : List TExpr) (base : Nat) (others : List (Nat × Stri
         | _, _ => (base + jw, workName a.n jw, w)
       let c' ← tl a ws base others f c
       let b ← bangsIn fuel w
+      let some pid := (i.binders.head?).bind performIdOf?
+        | throw s!"R1: a `perform` of {o.n}.{o.i} with no id"
       modify fun st => { st with bangs := st.bangs + b, performs := st.performs + 1,
-                                 calls := st.calls ++ [(i.sp, o.n, o.i)] }
-      performCall a i.sp S w wd wn c' seed
+                                 calls := st.calls ++ [(pid, o.n, o.i)] }
+      performCall a i.sp pid S w wd wn c' seed
     | .effHandleT i _ S _ _ _ nm A R _ _ _ tc te =>
       if nm != a.n || seed == .keepNode then homLayer m (tl a ws base others f) t else
       let .tensorI _ _ _ _ _ tr tw := tc | throw "R1: a handler's pair is not a pair"
@@ -257,6 +261,87 @@ def tl (a : TailName) (ws : List TExpr) (base : Nat) (others : List (Nat × Stri
       if has S then throw "R7: no producer (a loop node at a row holding a name R1 rewrites)"
       else homLayer m (tl a ws base others f) t
     | _ => homLayer m (tl a ws base others f) t
+
+/-! ### A node the licence leaves -/
+
+/-- **The rule's clause of the operation `j`, as a `[handle]` clause** (`tailClause j (q == 0) Hc`):
+`λ(x, κ). (λw. κ.1 w) (g_j x)` at a non-abortive operation, `λx. g_j x` at an abortive one, `g_j`
+the variable `g` (bound outside the node: the tuple's `j`-th component, a `!` value). -/
+def ruleClause (sp : Frontend.Span) (S : Row) (R : VTy) (F : CTy) (g : Nat) (o : Count × VTy × VTy) :
+    TExpr :=
+  let (q, A, B) := o
+  let C := CTy.effOf S R
+  let gw (k : Nat) (U : VTy) (body : TExpr) : TExpr :=
+    -- `gw <- return (unbang g); body`, `g` at the slot `k`.
+    .bind { sp, binders := [r1B] } (.comp C) U C noMasks
+      (retAt sp U (.bangE (infoAt sp) (.val U) U (varAt sp k (.bang U)))) body
+  if q == .zero then
+    -- At `x :: Γ`: `g` at `g + 1`; after `gw`, `x` at `1`.
+    let U : VTy := .thunk (.arr A C)
+    let call := TExpr.app (infoAt sp) (.comp C) 1 A C noMasks
+      (.force (infoAt sp) (.comp (.arr A C)) 0 (.arr A C))
+    let Cw : CTy := .arr A C
+    .bangThunkV (infoAt sp) (.val (.bang (.thunk Cw))) Cw
+      (.lam { sp, name := r1B } (.comp Cw) A C (gw (g + 1) U call))
+  else
+    let K := BoCa.Fig16.LogRel.Core.kTy S R q.toQual B F
+    let D : CTy := match K with
+      | .thunk (.amp _ D) => D
+      | _ => .top
+    let CB : CTy := .arr B C
+    let FB : CTy := CTy.effOf [] B
+    let U : VTy := .thunk (.arr A FB)
+    -- At `k :: x :: p :: Γ`: `g` at `g + 3`; after `gw`, `x` at `2`; after `w`, `k` at `2`.
+    let resume := TExpr.app (infoAt sp) (.comp C) 0 B C noMasks
+      (.proj₁ (infoAt sp) (.comp CB) CB D (.force (infoAt sp) (.comp (.amp CB D)) 2 (.amp CB D)))
+    let callW := TExpr.app (infoAt sp) (.comp FB) 2 A FB noMasks
+      (.force (infoAt sp) (.comp (.arr A FB)) 0 (.arr A FB))
+    let body := TExpr.bind { sp, binders := [r1B] } (.comp C) B C noMasks callW resume
+    let P : VTy := .tensor A K
+    let Cw : CTy := .arr P C
+    .bangThunkV (infoAt sp) (.val (.bang (.thunk Cw))) Cw
+      (.lam { sp, name := r1B } (.comp Cw) P C
+        (.tensorE { sp, binders := [r1B, r1B] } (.comp C) A K C noMasks (varAt sp 0 P)
+          (gw (g + 3) U body)))
+
+/-- The rule's clauses, as a tuple, the `j`-th's `g` at the slot `2 (e - 1 - j) + 1`. -/
+def ruleClauses (sp : Frontend.Span) (S : Row) (R : VTy) (fs : Nat → CTy) (e : Nat) :
+    List (Count × VTy × VTy) → Nat → TExpr
+  | [], _ => .unitI (infoAt sp) (.val .unit)
+  | o :: E, j =>
+    .tensorI (infoAt sp) (.val .unit) .unit .unit noMasks
+      (ruleClause sp S R (fs j) (2 * (e - 1 - j) + 1) o) (ruleClauses sp S R fs e E (j + 1))
+
+/-- The works' tuple taken apart, `k` components on (`let (g, r) = v; …`), then `body`. -/
+def takeApart (sp : Frontend.Span) (C : CTy) : Nat → TExpr → TExpr → TExpr
+  | 0, _, body => body
+  | k + 1, v, body =>
+    .tensorE { sp, binders := [r1B, r1B] } (.comp C) .unit .unit C noMasks v
+      (takeApart sp C k (varAt sp 0 .unit) body)
+
+/-- **A node of a name the licence leaves** (`tToV`), written as the `[handle]` node it erases to:
+its works' tuple taken apart (`takeApart`: each work a `!` value, bound outside the node); its
+clauses the rule's own (`tailClause`, `ruleClause`), each over its work; its answer clause and
+handled computation as they are. The kernel's re-check types it as `[handle]`'s, and no node of the
+rule reaches the conversion. Records the clauses' `!`-introductions (G-bang). -/
+def tToV (n : UInt32) : Nat → TExpr → TlM TExpr
+  | 0, _ => throw "R1: a term nested too deeply"
+  | f + 1, t => do
+    match t with
+    | .effHandleT i j S _ E fs nm A R u site ins tc te =>
+      if nm != n then homLayer ⟨id, id, id, id⟩ (tToV n f) t else
+      let .tensorI ti _ _ _ _ tr tw := tc | throw "R1: a handler's pair is not a pair"
+      let tr' ← tToV n f tr
+      let tw' ← tToV n f tw
+      let te' ← tToV n f te
+      let e := E.length
+      let cls := ruleClauses i.sp S R fs e E 0
+      modify fun st => { st with bangs := st.bangs + e, handles := st.handles + 1 }
+      let tc' := TExpr.tensorI ti (.val .unit) .unit .unit noMasks (tr'.shift (2 * e) 0) cls
+      let node := TExpr.effHandleV i j S E fs nm A R u (E.map BoCa.Fig16.LogRel.Core.ClauseKinds.tailKind)
+        site ins tc' (te'.shift (2 * e) 0)
+      pure (takeApart i.sp (CTy.effOf S R) e tw' node)
+    | _ => homLayer ⟨id, id, id, id⟩ (tToV n f) t
 
 mutual
 /-- The planted fault `eraseOther`: the row of every `&`'s second component emptied, a codata
@@ -295,6 +380,20 @@ def eraseFin : Nat → TExpr → Except String TExpr
       fun o => { o with A := eraseFinV o.A, B := eraseFinV o.B, fin := eraseFinC o.fin }⟩
       (eraseFin f) t
 
+/-- The planted fault `dropWorkBinder`: the first binding of a typed term whose binder carries an
+id loses it (`%R1`): the source binder has no image. -/
+def stripId : Nat → TExpr → StateT Bool (Except String) TExpr
+  | 0, _ => throw "R1: a term nested too deeply"
+  | f + 1, t => do
+    if !(← get) then
+      match t with
+      | .bind i .. | .effLet i .. =>
+        if ((i.binders.head?).bind idOf?).isSome then
+          set true
+          return t.setInfo { i with binders := [r1B] }
+      | _ => pure ()
+    homLayer ⟨id, id, id, id⟩ (stripId f) t
+
 /-- **R1's pass for the name `a`**: its works translated (the planted fault `weakenLin` applied to
 them), each the declaration `base + j`; the typed term `t` and the earlier works `prev` rewritten.
 Returns the term, the earlier works rewritten, and the name's works. -/
@@ -303,6 +402,10 @@ def r1Pass (a : TailName) (base : Nat) (t : TExpr) (prev : List (Nat × String �
   let ws ← a.works.mapM (tl a [] base [] fuel)
   let ws ← if (← get).seed == .weakenLin then
       let (ws', _) ← (ws.mapM (unLin fuel)).run false
+      pure ws'
+    else pure ws
+  let ws ← if (← get).seed == .dropWorkBinder then
+      let (ws', _) ← (ws.mapM (stripId fuel)).run false
       pure ws'
     else pure ws
   let t' ← tl a ws base prev fuel t

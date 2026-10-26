@@ -184,8 +184,9 @@ def readBack (el : Frontend.Elab.Elaborated) (c : Checked) (tbl : Frontend.Check
 
 /-- What the rules made of a typed program: the source's term as they read it (numbered, where a
 rule rewrites it), the rewritten term, R0's keys and record, R1's names and record, R1's works
-(each its declaration, name and typed term), and the ids of the source binders of the works no
-`perform` reaches, which have no image (`π`'s `inv`, R1's schema names them). -/
+(each its declaration, name and typed term), `π`'s `inv(R1, work)` (the ids of the binders R1 drops
+that are no binder of a declared work), `π` from each `perform` to its call, and the names the
+licence leaves whose nodes R1 writes as `[handle]`'s. -/
 structure Ruled where
   t₀ : TExpr
   t : TExpr
@@ -195,7 +196,9 @@ structure Ruled where
   tst : TlStats := {}
   works : List (Nat × String × TExpr) := []
   inv : List String := []
-  calls : List (Frontend.Span × UInt32 × UInt32) := []
+  calls : List (String × UInt32 × UInt32) := []
+  /-- The names the licence leaves whose nodes R1 writes as `[handle]`'s. -/
+  r1v : List UInt32 := []
 
 /-- **The rules over the typed program**: R0 over each name its keys rewrite, in their order
 (`r0Keys`, `ab`), then R1 over each name it admits, in its order (`r1Keys`, `r1Pass`), on `main`'s
@@ -213,8 +216,10 @@ def rules (c : Checked) (lic : List (UInt32 × Frontend.Check.Licence)) (seed : 
       let (t', st') ← (ab a t).run st
       t := t'
       st := st'
-  -- R1 (SPEC §54), on R0's rewrite: each name's works the declarations from `workBase`.
-  let names ← r1Keys lic c t fuel (keys.filterMap fun (a, s) => if s == .rewritten then some a.n else none)
+  -- R1 (SPEC §54), on R0's rewrite: each admitted name's works the declarations from `workBase`;
+  -- each node of a name the licence leaves written as the `[handle]` node it erases to.
+  let (names, left) ← r1Keys lic c t fuel
+    (keys.filterMap fun (a, s) => if s == .rewritten then some a.n else none)
   let mut tst : TlStats := { seed }
   let mut works : List (Nat × String × TExpr) := []
   let mut next := workBase
@@ -224,8 +229,18 @@ def rules (c : Checked) (lic : List (UInt32 × Frontend.Check.Licence)) (seed : 
     works := prev ++ ws
     tst := tst'
     next := next + a.works.length
-  pure { t₀, t, keys, st, r1 := names.map (·.n), tst, works, inv := tst.inv.filterMap (·.id?),
-         calls := tst.calls }
+  for n in left do
+    let (t', tst') ← (tToV n fuel t).run tst
+    t := t'
+    tst := tst'
+  -- `π`'s `inv(R1, work)`: the dropped binders that are no binder of a declared work (a work a
+  -- call reaches); a declared work's binder has its image, which G-qual checks.
+  let used := (← worksUsed fuel t).eraseDups
+  let mut declared : List String := []
+  for (d, _, w) in works do
+    if used.contains d then declared := declared ++ ((← nodeBinders fuel w).filterMap (·.id?))
+  let inv := (tst.inv.filterMap (·.id?)).filter (!declared.contains ·)
+  pure { t₀, t, keys, st, r1 := names.map (·.n), r1v := left, tst, works, inv, calls := tst.calls }
 
 /-- The source nodes R0 rewrites, by rule. -/
 structure R0Count where
@@ -301,14 +316,14 @@ def run (k : Backend.CheckedProg) (seed : Seed := .none) :
   let (el', nkeys, ndecls, poly) ← readBack k.el c k.cnts r.t r.works
   let ruledAbort := keys.filterMap fun (a, s) => if s == .rewritten then some a.n else none
   let rows := (if ruledAbort.isEmpty then "" else s!" (R0 at the names {ruledAbort})") ++
-    (if r.r1.isEmpty then "" else s!" (R1 at the names {r.r1})")
+    (if r.r1.isEmpty then "" else s!" (R1 at the names {r.r1})") ++
+    (if r.r1v.isEmpty then "" else s!" (R1's `[handle]` at the names {r.r1v})")
   let (rep', terms') ← (checkEl el' k.cnts).mapError fun e =>
     s!"rewrite: the kernel refuses the rewritten program{rows} at {e.span.start.render}: {e.msg}"
   let some c' := rep'.main | throw "rewrite: the rewritten program has no `main`"
   unless externNames el'.prog.decls == externNames k.el.prog.decls do
     throw "guard G-main: the rewritten program has other externs"
   let π ← guard fuel c c' r.t₀ ruledAbort r.r1 (r.st.bangs + r.tst.bangs) r.inv r.calls terms'
-    (seed == .persistImage)
   let r0 := keys.map fun (a, s) => (a.n, match s with
     | .rewritten => "rewritten"
     | .left r => s!"left: {r}")
@@ -318,7 +333,8 @@ def run (k : Backend.CheckedProg) (seed : Seed := .none) :
       moved := (π.filter fun (k, img) => match img with
         | .binder k' => k' != k
         | _ => false).length,
-      r1 := r.r1, r1calls := r.tst.performs, r1nodes := r.tst.handles, r1works := used.length })
+      r1 := r.r1, r1v := r.r1v, r1calls := r.tst.performs, r1nodes := r.tst.handles,
+      r1works := used.length })
 
 /-- **The identity criterion** of step 0, between the source's checked `main` `c` and the
 rewritten `c′`: the typed terms compared node by node and field by field at every use

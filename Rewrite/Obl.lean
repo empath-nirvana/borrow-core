@@ -18,9 +18,10 @@ recursion of `dtorB` (SPEC §12, `Frontend/Check/Steps.lean`), each with its sou
 `dtorB alg A = true ↔ obl alg A = []` (`dtorB_iff_obl`): droppability is the absence of
 obligations. An operation's contribution is its own entries, so eliminating a name discharges the
 obligations whose source is one of its operations (`Ob.of`) and no other: R1's type translation
-gives `obl (⟦A⟧) = (obl A).filter (¬ of n)` (`obl_tV`), at a works' row `Σ_N = []` (every name R1
-admits in the corpus) and at a type whose rows are returner chains over `F` (`wfV`, every row the
-checker writes). The guard checks the statement per binder (G-qual, `Rewrite/Guard.lean`).
+gives `obl (⟦A⟧) = (obl A).filter (¬ of n)` (`obl_tV`, `Rewrite/OblTail.lean`), at a works' row
+`Σ_N = []` (the licence's conjunct: every name R1 admits; #693) and at a type whose rows are returner
+chains over `F` (`rowsV`, which G-qual decides). The guard checks the statement per binder (G-qual,
+`Rewrite/Guard.lean`).
 -/
 
 namespace Rewrite

@@ -92,7 +92,7 @@ seeds=(
   "eraseOther corpus/core-r1-cell.bc guard G-qual"
   "wrongWork corpus/core-r1-two-ops-eq.bc guard G-call"
   "wrongName corpus/core-r1-two-names.bc guard G-call"
-  "persistImage corpus/core-effects-tail.bc guard G-qual"
+  "dropWorkBinder corpus/core-effects-tail.bc guard G-qual"
 )
 for t in "${seeds[@]}"; do
   read -r sd f by g <<< "$t"
