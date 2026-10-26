@@ -49,6 +49,7 @@ async-stack-nested 13 0 0 1289 1125 40 # SPEC §52 stress: the inner tasks' stac
 async-timers 40 5 0 398 380 0
 async-try-join 28 0 0 398 392 0 # R0 (#680): loads and stores rise, the abort payload a sum in the machine's answer; recovery R5 then L5 (#687)
 async-two-readers-views 41 8 0 606 593 7
+async-two-schedulers 13 0 0 122 110 6 # the scheduler's and the log's list nodes and each task's boxed continuation; a resume of a stored task a static call of its machine; a bounds check per slot visit
 async-workers-scoped 43 0 1 756 740 0
 axes/borrow-across-loop 2 0 0 30 13 4
 axes/codata-coeffects 2 0 0 27 10 16

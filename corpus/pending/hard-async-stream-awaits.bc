@@ -1,0 +1,43 @@
+-- pending: #691 (codata whose observations perform a handled operation)
+-- now: 36:17: `feed` performs operations besides what it yields: its stored generator is not provided
+-- Coverage: an asynchronous stream. `feed` is a generator whose next element has to be awaited
+-- (a page fetched, a message received): it performs `await` before each `yield`. A task reads the
+-- first few elements through `take` and sums them, and two such tasks run under `lib/async.bc`'s
+-- scheduler. `take` stores the generator (codata, `U (pull i32 1 1)`) and observes it; each
+-- observation performs `await`, which is handled by `spawn`, the stored handler enclosing the task.
+--
+-- Issue: #691 (codata whose observations perform a handled operation; R5 scope, #680, the gap
+-- `left: codata at row n`: the CPS'd observation leaf puts `X` in an argument, which `NuOk`
+-- refuses).
+--
+-- Intended answer: the observation's operation is passed out to the enclosing handler, as a direct
+-- `await` in the task is; the task suspends inside `take`'s observation and resumes there.
+--
+-- Rust: `stream! { for i in 1..=n { recv().await; yield i * 10 } }.take(want).fold(0, |s, x| s + x)
+-- .await` inside a spawned task (an async generator, `futures::Stream`).
+--
+-- Today: refused at `take(feed(n), want)`: a generator that performs `Async` besides `Yield` has no
+-- stored generator (`pull` has no row). Both backends stop at the same message.
+--
+-- Once it lands: `inr (i32[60], inr (i32[100], inl ()))`: the list [60, 100]; the first task takes
+-- 10, 20, 30 of five, the second 10, 20, 30, 40 of four; `live 0` (the first feed closed by
+-- `take`).
+
+include async
+include adapters
+
+fn feed(n: i32) -> 1 with Yield[i32], Async =
+  let mut i = 1;
+  while i <= n { await(); yield(i * 10); i = i + 1 };
+  ()
+
+fn reader(n: i32, want: i32) -> i32 with Async =
+  let mut sum = 0;
+  for x in take(feed(n), want) { sum = sum + x };
+  sum
+
+main -> List[i32] =
+  let q = queue[i32]();
+  let q = push(q, with spawn { reader(5, 3) });
+  let q = push(q, with spawn { reader(4, 4) });
+  run_until_empty(q)
