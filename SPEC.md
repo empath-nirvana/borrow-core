@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.05 · 2026-10-23
+Version 1.06 · 2026-10-26
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -9371,6 +9371,90 @@ Kept, and why:
 No type, typing rule, machine step, relation clause or elaboration changes; the census is the
 source check's report.
 
+### R5-0: stored nodes, the admission (report only)
+
+The first step of R5 (#680; the R5 scope v5, §6): the checked facts R5 reads, and the form R5
+gives each `handle` node, decided from them. Nothing is rewritten: every output, golden and LIR is
+the source's.
+
+**Facts, recorded by the checker.**
+- **`StoredAtX`** (`Frontend/Check/StoredAtX.lean`, the scope's §3.B): a clause the checker
+  classifies `stored` is in the grammar when its answer `R` is `P`-shaped for a codata type
+  `P = νX. C` (`R = Rx[U P/X]`, the template `Rx` being `X`, `X` boxed, or an observation leaf
+  of `C`) and its body, `κ` in its slot, after a prefix that performs nothing and does not use
+  `κ`, answers a value at `Rx` whose `κ` occurs only in
+  ν-introductions at `X` positions, each observation being `κ`-free, a resume (in tail position,
+  or bound and its answer placed where the leaf's template is `Rx`) or a close, `κ` at most once
+  on each path. `storedAtXB` decides it; **`storedAtXB_sound`** (by `sxB_sound`, standard axioms)
+  states that a clause it accepts is in the grammar. At `[handle]` and `[handle-boxed]` the checker
+  records, per operation, the derivation it found (`TInfo.sshape`, `storedShapes`): the codata
+  body, the template, machine- or observation-shaped, and each ν-introduction's path, box,
+  captures besides `κ` and `Env_N`, and its observations' productions; **`storedShapes_sound`**:
+  a record the checker writes is a derivation of the grammar at the clause the node's erasure runs.
+- **`Env_N`'s persistence** (A8, `Frontend/Check/EnvN.lean`): every slot a node's clauses use is
+  live in its context at a persistent type, from the rule's premise `Ctx.DeadP Γ₁` and the node's
+  masks (`TDerivesP.handleV_env_persistent`, `TDerivesP.handleVB_env_persistent`). Every node of
+  a checked program has its derivation (`Checked.tied`), so A8 is never a reason; the admission
+  decides it again at the masks, and a failure is its error.
+- **Not recorded: the typed tail work `tw_j`** of an in-clause `tail` operation at a stored node.
+  The scope places it on `TInfo`, but `TInfo` is a field of every `TExpr` node and is defined
+  before `TExpr`, so it cannot hold one. A2 reads the kind `tail` (`classifyHandler_sound`: the
+  clause resumes in tail position, `TailResumesAt`); the work itself is R5-2's input. Open.
+
+**The admission** (`Rewrite/Admission.lean`), per node with an operation R0 does not rewrite:
+- `R5 opt`: a stored node (A1) where every other non-abortive operation is `tail` (A2), every
+  stored clause has a record (A3), the region is closed (A4), and no gap holds;
+- `R5 fallback (<conjuncts>)`: a stored node where A2, A3 or A4 fails and no gap holds;
+- `left: <gap>` at a stored node: `lendR (T1, PinLaw.stop at L:C)` first (OQ1), then in §3.C's
+  order `codata at row n (#691)`, `answer types differ at n (#692)` (A9, at an open region only),
+  `div region` (A7), `state does not outlive d (slot x)` (A6), `a finaliser that performs`, and
+  `perform path crosses handler m (<row>, in Backend2)`;
+- `left: <sibling row>` at a node with no stored operation: `R3` (`once`), `R2` (`resume-or-cancel`,
+  and the resume-or-cancel rule's node), `R2σ`, `R1σ` (`tail+state`), `R1-ev` (a `[handle]` node
+  whose operations are all `tail`), `R1` (the tail-resuming rule's node). On main, where R1 is not
+  merged, the `[handle]` nodes R1's licence would take are among the `R1-ev` ones.
+
+`Region(N)` is the handled computation and the instances it reaches whose type holds `n`, an
+inner node of `n`'s handled computation excluded. Its points, `lendR`s, `Div` rows and
+`reify`/`iterate`/`div_fuel`, finalisers that perform in scope at a point, and the nodes of other
+names a point lies inside are read lexically. The **call walk** runs the region from the handled
+computation following its calls, with the origin of each value it can follow (an instance, a
+closed `!` value, a pair of them, `bounded_fix` and its self-reference, an inner stored node's
+answer), so that a `!`-parameter bound at the use to a closed `!` value is known, as R5-1
+substitutes it. A `force` at a row holding `n` of any other value is an open region (A4); an
+observation of codata whose observations perform `n`, of a value that is not an inner node's, is
+#691. At each point the walk records the live slots (`Live_p`, by the masks) and the calls in
+progress; a call under which a point is reached is suspending; the region is `lexical`, `flat`
+(the suspending calls a tree) or `array` (a callee called from two suspending sites, or a cycle).
+A6 asks that every slot of a point, of a suspending call's frame and of `Env_N` outlive `d`
+(`outlivesB`), an inner node's answer excepted (R5-4). No `HSite`, key string, `Layouts`, `Flow`
+or `.expected` file is read. Every walk is bounded by a fuel whose exhaustion is a hard error.
+
+**Report.** `bcc rewrite --admission` prints a line per node; `bcc rewrite --identity` appends
+the compact forms (`R5 L:C/n=<form>`) to the rewriter's line (`corpus/rewrite.expected`).
+`scripts/check-admission.sh` (gate step `r5 admission`) pins the detail in
+`corpus/admission.expected` and fails on a `left` reason not in this list, or a `lendR` node
+without its pin position.
+
+**Measured** (the corpus, R5 v5's §11):
+- 335 nodes; 111 stored, in 47 programs (71 V, 40 VB): 25 opt (24 VB, 1 V), 13 fallback
+  (11 A4, all VB; 2 A3), 73 left (59 `codata at row n (#691)`, all V; 14 `lendR`).
+- The 59 #691 nodes are the stored generators whose body loops: the stored node handles one
+  observation of the body's `Loop` codata, whose observations perform the node's name.
+- The 11 A4 nodes are tasks whose body the node reaches as a `U` value: `spawn_in`'s body, which
+  holds a borrow, and a task taken out of a box (`sched-a`, `sched-a-div`, `sched-b`).
+- The 2 A3 nodes are clauses that drop `κ` at an answer with no codata type (`binder-copies`).
+- 224 non-stored nodes: `R1-ev` 176, `R2` 18 (2 at the resume-or-cancel rule's nodes), `R2σ` 2,
+  `R3` 17, `R1σ` 10, `R1` 1.
+- PinLaw sites: each of the 11 sites of the 9 PinLaw programs with stored nodes is in a stored
+  node's region, and that node is left at `lendR` with its pin; the twelfth site
+  (`async-r1-cancel-finaliser-writes`) is at a node with no stored operation.
+- Region shapes of the stored nodes: 70 lexical, 19 flat, 21 array (recursive), 1 array (shared);
+  of the 25 opt nodes, 19 array (recursive) and 6 flat.
+- No `U` slot in a boxed state at an admitted node; no stored node R0 forwards through (its `ε`);
+  no stored node left by the crossing conjunct.
+- No program of `corpus/pending/` checks, so none is admitted.
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -9786,6 +9870,12 @@ is removed (§54 *R0*). R1 and later rows are not.
 
 ## Changelog
 
+- **1.06** (2026-10-26) — §54 (#680, R5-0): R5's facts and admission, report only: the checker
+  records each stored clause's `StoredAtX` derivation (`TInfo.sshape`, `storedAtXB_sound`,
+  `storedShapes_sound`); `Env_N`'s persistence read from the rule's premise
+  (`TDerivesP.handleV_env_persistent`); each node's form (`R5 opt`, `R5 fallback (…)`,
+  `left: …`) in `bcc rewrite`'s report, pinned by `corpus/admission.expected`. No output, golden,
+  LIR, census or typing rule changes; the typed tail work `tw_j` is not recorded.
 - **1.05** (2026-10-23) — §54 (#680, R0): the abort rewrite, the exceptions-as-sums translation of
   every abortive name over the typed program, before the new backend's conversion, re-checked
   once and guarded (π by binder id, G-fin on each abort arm, G-bang with the rule's own `!`); the

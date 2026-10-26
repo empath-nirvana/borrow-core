@@ -1,5 +1,6 @@
 import Frontend.Check.Pin
 import Frontend.Check.Kinds
+import Frontend.Check.StoredAtX
 import Frontend.Check.Reinfo
 
 /-!
@@ -610,7 +611,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                             let rM ← chkC n E Δ T M (effOf Sh A)
                             if hso : usedSat (outlivesB Δ d) T rM.F.u = true then
                               if h₂ : overlapOK T rH.F.u rM.F.u = true then
-                                pure ⟨_, rEffHandleB { sp, srec := st } (classifyHandler Es rH.t) site hr' hc' rH
+                                pure ⟨_, rEffHandleB { sp, srec := st, sshape := storedShapes Es R rH.t (classifyHandler Es rH.t) }
+                                  (classifyHandler Es rH.t) site hr' hc' rH
                                   hp hv hn0 hnS hlen hdv hwf hSd rM hso h₂⟩
                               else throw (splitErr E T sp rH.F.u rM.F.u)
                             else match firstBad (outlivesB Δ d) T rM.F.u with
@@ -643,7 +645,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                         let rM ← chkC n E Δ T M
                           (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) A)
                         if h₂ : overlapOK T rH.F.u rM.F.u = true then
-                          pure ⟨_, rEffHandle { sp, srec := st } (classifyHandler Es rH.t) site hr' hc' rH hp hv
+                          pure ⟨_, rEffHandle { sp, srec := st, sshape := storedShapes Es R rH.t (classifyHandler Es rH.t) }
+                            (classifyHandler Es rH.t) site hr' hc' rH hp hv
                             hn0 hnS hlen hdv rM h₂⟩
                         else throw (splitErr E T sp rH.F.u rM.F.u)
                        else err sp divHandleMsg

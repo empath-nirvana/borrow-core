@@ -13,7 +13,10 @@
 # * at a program R0 rewrites: its abortive names, each `rewritten` or `left` with its reason; the
 #   source nodes R0 rewrote, by rule (`main` and each instance's body once); the binders `π` maps
 #   elsewhere; and whether the new backend compiles the rewritten program (`ok`), both are outside
-#   its fragment (`outside`), or only the source compiles (`red`).
+#   its fragment (`outside`), or only the source compiles (`red`);
+# * then, at a program with a `handle` node whose operations R0 does not all rewrite, R5's
+#   admission, report only (R5-0): each such node's position, name and form, `opt`,
+#   `fallback(<conjuncts>)` or `left:<conjunct>` (scripts/check-admission.sh pins the detail).
 #
 # The gate: every line of a program no rule rewrites has `erasure same` or `beta` and `lir same`
 # or `outside`, and every line of a program R0 rewrites `lir ok` or `outside`; the table is pinned
@@ -49,7 +52,7 @@ table() {
 out=$(mktemp)
 trap 'rm -rf "$out"' EXIT
 table > "$out"
-bad=$(awk '/ R0 .*:rewritten/ { if (!/ lir (ok|outside)$/) print; next }
+bad=$(awk '/ R0 .*:rewritten/ { if (!/ lir (ok|outside)( R5 .*)?$/) print; next }
           !/ erasure (same|beta) / || !/ lir (same|outside) / { print }' "$out")
 if [ "${1:-}" = "--write" ]; then
   cp "$out" corpus/rewrite.expected

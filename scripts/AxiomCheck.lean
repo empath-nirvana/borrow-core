@@ -7,6 +7,8 @@ import Frontend.Check.Program
 import Frontend.Check.Handled
 import Frontend.Check.TFacts
 import Frontend.Check.Derived
+import Frontend.Check.StoredAtX
+import Frontend.Check.EnvN
 /-! The theorems `SPEC.md` names, with their axioms. -/
 #print axioms BoCa.Fig16.LogRel.Typed.fundamentalProperty
 #print axioms BoCa.Fig16.LogRel.Typed.adequacy
@@ -662,3 +664,8 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_cancels
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_cancel_prefix
 #print axioms Frontend.Check.checkProgram_tiedAt
+#print axioms BoCa.Fig16.LogRel.Core.Check.sxB_sound
+#print axioms BoCa.Fig16.LogRel.Core.Check.storedAtXB_sound
+#print axioms BoCa.Fig16.LogRel.Core.Check.storedShapes_sound
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.handleV_env_persistent
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.handleVB_env_persistent

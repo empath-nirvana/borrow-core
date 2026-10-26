@@ -6,6 +6,7 @@ import Backend.Driver
 import Backend.FalsifyTests
 import Backend.Native.Tests
 import Backend2.Driver
+import Rewrite.Admission
 /-!
 # Frontend — `bcc`
 
@@ -191,9 +192,10 @@ def rewriteDump (identity : Bool) (file : String) : IO UInt32 := do
   | .error e => IO.eprintln e; return 1
   | .ok k =>
     if identity then
-      match Backend2.identityLine k with
-      | .error e => IO.eprintln s!"{file}: {e}"; return 1
-      | .ok l => IO.println l; return 0
+      -- The identity criterion's line, then R5's admission (SPEC §54, R5-0: report only).
+      match Backend2.identityLine k, Rewrite.admissionField k.main with
+      | .error e, _ | _, .error e => IO.eprintln s!"{file}: {e}"; return 1
+      | .ok l, .ok r5 => IO.println (l ++ r5); return 0
     match Rewrite.rules k.main >>= fun (_, t, keys, _) =>
         (Rewrite.readBack k.el k.main k.cnts t).map (·, keys) with
     | .error e => IO.eprintln s!"{file}: {e}"; return 1
@@ -644,6 +646,17 @@ def main (argv : List String) : IO UInt32 := do
   | ["erase", file] => erase file
   | ["rewrite", file] => rewriteDump false file
   | ["rewrite", "--identity", file] => rewriteDump true file
+  | ["rewrite", "--admission", file] => do
+    -- R5's admission, report only (SPEC §54, R5-0): each `handle` node with an operation R0 does
+    -- not rewrite, the form R5 gives it and what the admission read.
+    let src ← IO.FS.readFile file
+    match Backend.checkedOf file src with
+    | .error e => IO.eprintln e; return 1
+    | .ok k =>
+      match Rewrite.admissionOf k.main with
+      | .error e => IO.eprintln s!"{file}: {e}"; return 1
+      | .ok as => for a in as do IO.println a.line
+                  return 0
   | ["rewrite", "--typed", file] => do
     -- The rewritten `main`'s typed term, as `bcc lir --typed` prints the source's.
     let src ← IO.FS.readFile file
