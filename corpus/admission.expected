@@ -1,0 +1,335 @@
+corpus/answers-two-types.bc 23:21 1 V left: R1σ
+corpus/answers-two-types.bc 23:40 2 V left: R1-ev
+corpus/async-bank-inbox.bc 60:19 3 VB left: lendR (T1, PinLaw.stop at 45:17) | points 1 tails 0 shape array (recursive) suspending 4 env 0 uslots 0 eps no inner 0 pins [R1 at 45:17] also [state does not outlive d (slot mut)]
+corpus/async-bank-inbox.bc 61:19 2 VB left: lendR (T1, PinLaw.stop at 45:17) | points 1 tails 0 shape array (recursive) suspending 4 env 0 uslots 0 eps no inner 0 pins [R1 at 45:17] also [state does not outlive d (slot mut)]
+corpus/async-cancel.bc 42:11 2 VB left: lendR (T1, PinLaw.stop at 25:11) | points 2 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0 pins [R1 at 25:11] also [state does not outlive d (slot *)]
+corpus/async-cancel.bc 44:19 1 VB R5 opt | points 1 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0
+corpus/async-lend-slots.bc 35:19 2 VB R5 opt | points 2 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0
+corpus/async-lend-slots.bc 36:19 1 VB R5 opt | points 2 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0
+corpus/async-logged.bc 44:20 1 VB left: lendR (T1, PinLaw.stop at 23:11) | points 3 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0 pins [R1 at 23:11] also [state does not outlive d (slot mut)]
+corpus/async-logged.bc 43:20 3 VB left: lendR (T1, PinLaw.stop at 23:11) | points 3 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0 pins [R1 at 23:11] also [state does not outlive d (slot mut)]
+corpus/async-map.bc 31:19 1 VB R5 opt | points 1 tails 0 shape array (recursive) suspending 5 env 0 uslots 0 eps no inner 0
+corpus/async-mapreduce.bc 29:15 3 VB R5 opt | points 1 tails 0 shape array (recursive) suspending 3 env 0 uslots 0 eps no inner 0
+corpus/async-r1-cancel-finaliser-writes.bc 17:3 1 V left: R2
+corpus/async-r1-cancel.bc 47:3 1 V left: lendR (T1, PinLaw.stop at 17:11) | points 2 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0 pins [R1 at 17:11]
+corpus/async-r1-cancel.bc 48:3 2 V left: lendR (T1, PinLaw.stop at 17:11) | points 2 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0 pins [R1 at 17:11]
+corpus/async-r1-drain.bc 29:11 1 V left: lendR (T1, PinLaw.stop at 12:3) | points 2 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0 pins [R1 at 12:3]
+corpus/async-r1-effects.bc 44:3 1 V left: lendR (T1, PinLaw.stop at 19:11) | points 2 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0 pins [R1 at 19:11]
+corpus/async-r1-effects.bc 45:3 3 V left: lendR (T1, PinLaw.stop at 19:11) | points 2 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0 pins [R1 at 19:11]
+corpus/async-r1-generator.bc 38:3 1 V left: lendR (T1, PinLaw.stop at 15:3) | points 2 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0 pins [R1 at 15:3]
+corpus/async-r1-local-borrows.bc 52:3 1 V left: lendR (T1, PinLaw.stop at 22:11) | points 1 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0 pins [R1 at 22:11]
+corpus/async-r1-local-borrows.bc 53:3 2 V left: lendR (T1, PinLaw.stop at 34:11) | points 1 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0 pins [R1 at 34:11]
+corpus/async-r1-nested.bc 37:3 1 V left: lendR (T1, PinLaw.stop at 15:11) | points 2 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0 pins [R1 at 15:11, R1 at 17:13]
+corpus/async-race.bc 52:11 5 VB R5 opt | points 1 tails 0 shape array (recursive) suspending 3 env 0 uslots 0 eps no inner 0
+corpus/async-race.bc 53:11 4 VB R5 opt | points 1 tails 0 shape array (recursive) suspending 3 env 0 uslots 0 eps no inner 0
+corpus/async-race.bc 54:11 3 VB R5 opt | points 1 tails 0 shape array (recursive) suspending 3 env 0 uslots 0 eps no inner 0
+corpus/async-race.bc 28:40 1 VB R5 opt | points 1 tails 0 shape array (recursive) suspending 3 env 0 uslots 0 eps no inner 0
+corpus/async-scheduler.bc 31:19 2 VB R5 opt | points 1 tails 0 shape array (recursive) suspending 4 env 0 uslots 0 eps no inner 0
+corpus/async-scheduler.bc 32:19 1 VB R5 opt | points 1 tails 0 shape array (recursive) suspending 4 env 0 uslots 0 eps no inner 0
+corpus/async-scoped.bc 30:26 3 VB R5 fallback (A4: open region, force at 30:42) | points 1 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0 opens [30:42]
+corpus/async-scoped.bc 31:26 2 VB R5 fallback (A4: open region, force at 31:42) | points 1 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0 opens [31:42]
+corpus/async-slice-iter-await.bc 31:40 3 VB R5 fallback (A4: open region, force at 31:56) | points 1 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0 opens [31:56]
+corpus/async-stack-cancel.bc 24:11 3 VB R5 opt | points 2 tails 0 shape array (recursive) suspending 4 env 0 uslots 0 eps no inner 0
+corpus/async-stack-cancel.bc 25:11 1 VB R5 opt | points 2 tails 0 shape array (recursive) suspending 4 env 0 uslots 0 eps no inner 0
+corpus/async-stack-deep.bc 36:19 5 VB R5 opt | points 2 tails 0 shape array (recursive) suspending 4 env 0 uslots 0 eps no inner 0
+corpus/async-stack-deep.bc 37:19 3 VB R5 opt | points 2 tails 0 shape array (recursive) suspending 4 env 0 uslots 0 eps no inner 0
+corpus/async-stack-deep.bc 38:19 1 VB R5 opt | points 1 tails 0 shape array (recursive) suspending 5 env 0 uslots 0 eps no inner 0
+corpus/async-stack-nested.bc 46:19 5 VB R5 opt | points 2 tails 0 shape array (recursive) suspending 4 env 0 uslots 0 eps no inner 0
+corpus/async-stack-nested.bc 20:39 1 VB R5 opt | points 2 tails 0 shape array (recursive) suspending 4 env 0 uslots 0 eps no inner 0
+corpus/async-stack-nested.bc 47:19 3 VB R5 opt | points 2 tails 0 shape array (recursive) suspending 4 env 0 uslots 0 eps no inner 0
+corpus/async-timers.bc 99:24 4 VB R5 opt | points 1 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0
+corpus/async-timers.bc 100:25 3 VB R5 opt | points 1 tails 0 shape array (recursive) suspending 4 env 0 uslots 0 eps no inner 0
+corpus/async-timers.bc 101:25 2 VB R5 opt | points 1 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0
+corpus/async-try-join.bc 30:51 1 VB R5 opt | points 1 tails 0 shape array (recursive) suspending 4 env 0 uslots 0 eps no inner 0
+corpus/async-two-readers-views.bc 47:26 3 VB R5 fallback (A4: open region, force at 47:42) | points 1 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0 opens [47:42]
+corpus/async-two-readers-views.bc 48:26 2 VB R5 fallback (A4: open region, force at 48:42) | points 1 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0 opens [48:42]
+corpus/async-workers-scoped.bc 33:26 4 VB R5 fallback (A4: open region, force at 33:42) | points 1 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0 opens [33:42]
+corpus/async-workers-scoped.bc 34:26 3 VB R5 fallback (A4: open region, force at 34:42) | points 1 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0 opens [34:42]
+corpus/binder-copies.bc 22:11 3 V R5 fallback (A3: κ not at X at 3.0) | points 1 tails 0 shape flat suspending 2 env 0 uslots 0 eps no inner 0
+corpus/binder-copies.bc 23:11 2 V left: R1σ
+corpus/binder-copies.bc 24:11 1 V R5 fallback (A3: κ not at X at 1.0) | points 1 tails 0 shape array (shared) suspending 3 env 0 uslots 0 eps no inner 0
+corpus/block-yield-inner.bc 18:3 3 V left: codata at row n (#691, at 18:3) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/block-yield-inner.bc 18:3 3 V left: R1-ev
+corpus/block-yield-inner.bc 26:3 2 V left: R1-ev
+corpus/block-yield-inner.bc 26:3 2 V left: R1-ev
+corpus/capture-await-raise.bc 13:21 1 V left: R1-ev
+corpus/capture-store-raise.bc 23:11 1 V R5 opt | points 1 tails 0 shape flat suspending 1 env 0 uslots 0 eps no inner 0
+corpus/capture-take-hand.bc 26:3 1 V left: R2
+corpus/clause-captures.bc 42:13 1 V left: R1σ
+corpus/core-effects-loop.bc 27:3 3 V left: R1-ev
+corpus/core-effects-tail.bc 19:3 2 V left: R1-ev
+corpus/core-handle-last.bc 22:3 2 L left: R2
+corpus/core-handle-tail.bc 19:3 2 T left: R1
+corpus/core-r0-forward-last.bc 24:7 2 L left: R2
+corpus/core-r0-forward.bc 30:7 2 V left: R1-ev
+corpus/core-yield-loop.bc 36:7 1 V left: R2
+corpus/core-yield-loop.bc 48:12 1 V left: R1-ev
+corpus/core-yield-pull.bc 127:7 2 V left: R1-ev
+corpus/core-yield-pull.bc 128:12 2 V left: R1-ev
+corpus/core-yield-pull.bc 58:22 1 V left: codata at row n (#691, at 58:65) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/core-yield-pull.bc 69:18 1 V left: R1-ev
+corpus/div-infer.bc 56:54 2 V left: R2σ
+corpus/effects-cancel-two-sites.bc 24:53 3 V left: R2σ
+corpus/effects-hof-two-rows.bc 25:11 1 V left: R1-ev
+corpus/effects-sum-gen.bc 29:51 3 V left: R3
+corpus/effects-sum-gen.bc 29:51 2 V left: R3
+corpus/for-data-div.bc 51:3 2 V left: R1-ev
+corpus/for-data-div.bc 51:3 2 V left: R1-ev
+corpus/for-data-div.bc 56:7 3 V left: codata at row n (#691, at 56:7) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/for-data-div.bc 56:7 3 V left: R1-ev
+corpus/for-data-div.bc 57:7 4 V left: codata at row n (#691, at 57:7) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/for-data-div.bc 57:7 4 V left: R1-ev
+corpus/for-data-div.bc 49:3 1 V left: R1-ev
+corpus/for-data-div.bc 49:3 1 V left: R1-ev
+corpus/for-never.bc 17:3 1 V left: R2
+corpus/for-never.bc 17:3 1 V left: R1-ev
+corpus/for-yield-branch.bc 26:3 2 V left: R1-ev
+corpus/for-yield-branch.bc 26:3 2 V left: R1-ev
+corpus/for-yield-branch.bc 31:3 3 V left: R2
+corpus/for-yield-branch.bc 31:3 3 V left: R1-ev
+corpus/for-yield-branch.bc 22:3 1 V left: R1-ev
+corpus/for-yield-branch.bc 22:3 1 V left: R1-ev
+corpus/gen-adapters-fail.bc 58:27 4 V left: codata at row n (#691, at 58:27) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters-fail.bc 58:27 4 V left: R1-ev
+corpus/gen-adapters-fail.bc 58:3 3 V left: R1-ev
+corpus/gen-adapters-fail.bc 58:3 3 V left: R1-ev
+corpus/gen-adapters-fail.bc 60:25 6 V left: codata at row n (#691, at 60:25) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters-fail.bc 60:25 6 V left: R1-ev
+corpus/gen-adapters-fail.bc 60:3 5 V left: R1-ev
+corpus/gen-adapters-fail.bc 60:3 5 V left: R1-ev
+corpus/gen-adapters-fail.bc 62:30 8 V left: codata at row n (#691, at 62:30) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters-fail.bc 62:30 8 V left: R1-ev
+corpus/gen-adapters-fail.bc 62:3 7 V left: R1-ev
+corpus/gen-adapters-fail.bc 62:3 7 V left: R1-ev
+corpus/gen-adapters-fail.bc 64:26 10 V left: codata at row n (#691, at 64:26) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters-fail.bc 64:26 10 V left: R1-ev
+corpus/gen-adapters-fail.bc 64:42 11 V left: codata at row n (#691, at 64:42) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters-fail.bc 64:42 11 V left: R1-ev
+corpus/gen-adapters-fail.bc 64:3 9 V left: R1-ev
+corpus/gen-adapters-fail.bc 64:3 9 V left: R1-ev
+corpus/gen-adapters-fail.bc 66:29 13 V left: codata at row n (#691, at 66:29) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters-fail.bc 66:29 13 V left: R1-ev
+corpus/gen-adapters-fail.bc 66:53 14 V left: codata at row n (#691, at 66:53) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters-fail.bc 66:53 14 V left: R1-ev
+corpus/gen-adapters-fail.bc 66:3 12 V left: R1-ev
+corpus/gen-adapters-fail.bc 66:3 12 V left: R1-ev
+corpus/gen-adapters-fail.bc 68:25 16 V left: codata at row n (#691, at 68:25) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters-fail.bc 68:25 16 V left: R1-ev
+corpus/gen-adapters-fail.bc 68:3 15 V left: R1-ev
+corpus/gen-adapters-fail.bc 68:3 15 V left: R1-ev
+corpus/gen-adapters-fail.bc 70:27 18 V left: codata at row n (#691, at 70:27) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters-fail.bc 70:27 18 V left: R1-ev
+corpus/gen-adapters-fail.bc 70:3 17 V left: R1-ev
+corpus/gen-adapters-fail.bc 70:3 17 V left: R1-ev
+corpus/gen-adapters-fail.bc 72:26 20 V left: codata at row n (#691, at 72:26) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters-fail.bc 72:26 20 V left: R1-ev
+corpus/gen-adapters-fail.bc 72:3 19 V left: R1-ev
+corpus/gen-adapters-fail.bc 72:3 19 V left: R1-ev
+corpus/gen-adapters-fail.bc 76:30 23 V left: codata at row n (#691, at 76:30) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters-fail.bc 76:30 23 V left: R1-ev
+corpus/gen-adapters-fail.bc 76:26 22 V left: codata at row n (#691, at 76:26) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters-fail.bc 76:26 22 V left: R1-ev
+corpus/gen-adapters-fail.bc 76:3 21 V left: R1-ev
+corpus/gen-adapters-fail.bc 76:3 21 V left: R1-ev
+corpus/gen-adapters-fail.bc 56:24 2 V left: codata at row n (#691, at 56:24) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters-fail.bc 56:24 2 V left: R1-ev
+corpus/gen-adapters-fail.bc 56:3 1 V left: R1-ev
+corpus/gen-adapters-fail.bc 56:3 1 V left: R1-ev
+corpus/gen-adapters.bc 44:33 9 V left: codata at row n (#691, at 44:33) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 44:33 9 V left: R1-ev
+corpus/gen-adapters.bc 44:28 8 V left: codata at row n (#691, at 44:28) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 44:28 8 V left: R1-ev
+corpus/gen-adapters.bc 45:37 11 V left: codata at row n (#691, at 45:37) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 45:37 11 V left: R1-ev
+corpus/gen-adapters.bc 45:58 12 V left: codata at row n (#691, at 45:58) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 45:58 12 V left: R1-ev
+corpus/gen-adapters.bc 45:28 10 V left: codata at row n (#691, at 45:28) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 45:28 10 V left: R1-ev
+corpus/gen-adapters.bc 44:22 7 V left: codata at row n (#691, at 44:22) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 44:22 7 V left: R1-ev
+corpus/gen-adapters.bc 44:3 6 V left: R1-ev
+corpus/gen-adapters.bc 44:3 6 V left: R1-ev
+corpus/gen-adapters.bc 50:22 15 V left: codata at row n (#691, at 50:22) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 50:22 15 V left: R1-ev
+corpus/gen-adapters.bc 50:16 14 V left: codata at row n (#691, at 50:16) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 50:16 14 V left: R1-ev
+corpus/gen-adapters.bc 51:38 19 V left: codata at row n (#691, at 51:38) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 51:38 19 V left: R1-ev
+corpus/gen-adapters.bc 51:27 18 V left: codata at row n (#691, at 51:27) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 51:27 18 V left: R1-ev
+corpus/gen-adapters.bc 51:20 17 V left: codata at row n (#691, at 51:20) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 51:20 17 V left: R1-ev
+corpus/gen-adapters.bc 51:16 16 V left: codata at row n (#691, at 51:16) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 51:16 16 V left: R1-ev
+corpus/gen-adapters.bc 50:3 13 V left: R1-ev
+corpus/gen-adapters.bc 50:3 13 V left: R1-ev
+corpus/gen-adapters.bc 40:33 5 V left: codata at row n (#691, at 40:33) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 40:33 5 V left: R1-ev
+corpus/gen-adapters.bc 40:29 4 V left: codata at row n (#691, at 40:29) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 40:29 4 V left: R1-ev
+corpus/gen-adapters.bc 40:22 3 V left: codata at row n (#691, at 40:22) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 40:22 3 V left: R1-ev
+corpus/gen-adapters.bc 40:17 2 V left: codata at row n (#691, at 40:17) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-adapters.bc 40:17 2 V left: R1-ev
+corpus/gen-adapters.bc 40:3 1 V left: R1-ev
+corpus/gen-adapters.bc 40:3 1 V left: R1-ev
+corpus/gen-borrowed.bc 49:42 2 V left: codata at row n (#691, at 49:42) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-borrowed.bc 49:42 2 V left: R1-ev
+corpus/gen-borrowed.bc 49:7 1 V left: codata at row n (#691, at 49:7) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-borrowed.bc 49:7 1 V left: R1-ev
+corpus/gen-cell.bc 26:3 1 V left: R1-ev
+corpus/gen-cell.bc 26:3 1 V left: R1-ev
+corpus/gen-close.bc 37:20 2 V left: codata at row n (#691, at 37:20) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-close.bc 37:20 2 V left: R1-ev
+corpus/gen-close.bc 37:3 1 V left: R1-ev
+corpus/gen-close.bc 37:3 1 V left: R1-ev
+corpus/gen-div.bc 56:3 3 V left: R1-ev
+corpus/gen-div.bc 56:3 3 V left: R1-ev
+corpus/gen-div.bc 55:18 2 V left: codata at row n (#691, at 55:18) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-div.bc 55:18 2 V left: R1-ev
+corpus/gen-div.bc 55:3 1 V left: R1-ev
+corpus/gen-div.bc 55:3 1 V left: R1-ev
+corpus/gen-fib.bc 34:21 2 V left: codata at row n (#691, at 34:21) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-fib.bc 34:21 2 V left: R1-ev
+corpus/gen-fib.bc 34:3 1 V left: R1-ev
+corpus/gen-fib.bc 34:3 1 V left: R1-ev
+corpus/gen-from.bc 28:3 3 V left: codata at row n (#691, at 28:3) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-from.bc 28:3 3 V left: R1-ev
+corpus/gen-from.bc 34:3 2 V left: R1-ev
+corpus/gen-from.bc 34:3 2 V left: R1-ev
+corpus/gen-from.bc 33:3 1 V left: R1-ev
+corpus/gen-from.bc 33:3 1 V left: R1-ev
+corpus/gen-nested.bc 19:5 2 V left: R1-ev
+corpus/gen-nested.bc 19:5 2 V left: R1-ev
+corpus/gen-nested.bc 22:17 3 V left: R1-ev
+corpus/gen-nested.bc 22:17 3 V left: R1-ev
+corpus/gen-nested.bc 18:3 1 V left: codata at row n (#691, at 18:3) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-nested.bc 18:3 1 V left: R1-ev
+corpus/gen-pipeline-adapters.bc 24:38 5 V left: codata at row n (#691, at 24:38) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-pipeline-adapters.bc 24:38 5 V left: R1-ev
+corpus/gen-pipeline-adapters.bc 24:28 4 V left: codata at row n (#691, at 24:28) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-pipeline-adapters.bc 24:28 4 V left: R1-ev
+corpus/gen-pipeline-adapters.bc 24:24 3 V left: codata at row n (#691, at 24:24) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-pipeline-adapters.bc 24:24 3 V left: R1-ev
+corpus/gen-pipeline-adapters.bc 24:17 2 V left: codata at row n (#691, at 24:17) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-pipeline-adapters.bc 24:17 2 V left: R1-ev
+corpus/gen-pipeline-adapters.bc 24:3 1 V left: R1-ev
+corpus/gen-pipeline-adapters.bc 24:3 1 V left: R1-ev
+corpus/gen-pipeline-pipe.bc 28:12 10 V left: codata at row n (#691, at 28:12) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-pipeline-pipe.bc 28:12 10 V left: R1-ev
+corpus/gen-pipeline-pipe.bc 28:12 9 V left: codata at row n (#691, at 28:12) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-pipeline-pipe.bc 28:12 9 V left: R1-ev
+corpus/gen-pipeline-pipe.bc 28:12 8 V left: codata at row n (#691, at 28:12) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-pipeline-pipe.bc 28:12 8 V left: R1-ev
+corpus/gen-pipeline-pipe.bc 28:12 7 V left: codata at row n (#691, at 28:12) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-pipeline-pipe.bc 28:12 7 V left: R1-ev
+corpus/gen-pipeline-pipe.bc 28:3 6 V left: R1-ev
+corpus/gen-pipeline-pipe.bc 28:3 6 V left: R1-ev
+corpus/gen-pipeline-pipe.bc 26:12 5 V left: codata at row n (#691, at 26:12) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-pipeline-pipe.bc 26:12 5 V left: R1-ev
+corpus/gen-pipeline-pipe.bc 26:12 4 V left: codata at row n (#691, at 26:12) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-pipeline-pipe.bc 26:12 4 V left: R1-ev
+corpus/gen-pipeline-pipe.bc 26:12 3 V left: codata at row n (#691, at 26:12) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-pipeline-pipe.bc 26:12 3 V left: R1-ev
+corpus/gen-pipeline-pipe.bc 26:12 2 V left: codata at row n (#691, at 26:12) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-pipeline-pipe.bc 26:12 2 V left: R1-ev
+corpus/gen-pipeline-pipe.bc 26:3 1 V left: R1-ev
+corpus/gen-pipeline-pipe.bc 26:3 1 V left: R1-ev
+corpus/gen-pipeline.bc 31:30 3 V left: codata at row n (#691, at 31:30) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-pipeline.bc 31:30 3 V left: R1-ev
+corpus/gen-pipeline.bc 31:22 2 V left: codata at row n (#691, at 31:22) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-pipeline.bc 31:22 2 V left: R1-ev
+corpus/gen-pipeline.bc 31:3 1 V left: R1-ev
+corpus/gen-pipeline.bc 31:3 1 V left: R1-ev
+corpus/gen-produce.bc 21:3 1 V left: R1-ev
+corpus/gen-return.bc 47:3 2 V left: R1-ev
+corpus/gen-return.bc 47:3 2 V left: R1-ev
+corpus/gen-return.bc 52:3 3 V left: R1-ev
+corpus/gen-return.bc 52:3 3 V left: R1-ev
+corpus/gen-return.bc 46:3 1 V left: R1-ev
+corpus/gen-return.bc 46:3 1 V left: R1-ev
+corpus/gen-tokenize-parse.bc 89:3 3 V left: codata at row n (#691, at 89:3) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-tokenize-parse.bc 89:3 3 V left: R1-ev
+corpus/gen-value.bc 34:29 3 V left: codata at row n (#691, at 34:29) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/gen-value.bc 34:29 3 V left: R1-ev
+corpus/gen-value.bc 34:3 2 V left: R1-ev
+corpus/gen-value.bc 34:3 2 V left: R1-ev
+corpus/gen-value.bc 35:3 4 V left: R2
+corpus/gen-value.bc 35:3 4 V left: R1-ev
+corpus/gen-value.bc 33:3 1 V left: R1-ev
+corpus/gen-value.bc 33:3 1 V left: R1-ev
+corpus/hygiene-clause-global.bc 15:11 1 V left: R1-ev
+corpus/hygiene-handler-resume.bc 15:11 1 V left: R1-ev
+corpus/hygiene-handler-state.bc 11:3 1 V left: R1σ
+corpus/io-task.bc 28:24 3 VB R5 fallback (A4: open region, force at 28:40) | points 1 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0 opens [28:40]
+corpus/io-task.bc 29:24 2 VB R5 opt | points 1 tails 0 shape array (recursive) suspending 3 env 0 uslots 0 eps no inner 0
+corpus/leetcode/trees/0230-kth-smallest-element-in-a-bst.bc 103:3 2 V left: R2
+corpus/lend-div.bc 35:5 1 V left: R1-ev
+corpus/lend-div.bc 35:5 1 V left: R1-ev
+corpus/lend-pipeline.bc 43:32 3 V left: codata at row n (#691, at 43:32) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/lend-pipeline.bc 43:32 3 V left: R1-ev
+corpus/lend-pipeline.bc 43:24 2 V left: codata at row n (#691, at 43:24) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/lend-pipeline.bc 43:24 2 V left: R1-ev
+corpus/lend-pipeline.bc 43:5 1 V left: R1-ev
+corpus/lend-pipeline.bc 43:5 1 V left: R1-ev
+corpus/loop-row-answer.bc 20:21 1 V left: R3
+corpus/pipe-handlers.bc 39:11 9 V left: R3
+corpus/pipe-handlers.bc 40:11 7 V left: R3
+corpus/pipe-handlers.bc 33:68 6 V left: R3
+corpus/pipe-handlers.bc 42:11 4 V left: R3
+corpus/pipe-handlers.bc 43:11 2 V left: R3
+corpus/rec-await-exhausted.bc 16:13 1 V left: R1-ev
+corpus/rec-emit.bc 23:52 2 V left: R3
+corpus/rec-yield.bc 19:3 2 V left: R1-ev
+corpus/reconcile-chain.bc 99:4 1 V left: R3
+corpus/reconcile-chain.bc 99:19 2 V left: R1σ
+corpus/reconcile-chain.bc 99:37 3 V left: R3
+corpus/reconcile-chain.bc 72:61 6 V left: R2
+corpus/reconcile-chain.bc 100:4 7 V left: R3
+corpus/reconcile-chain.bc 100:19 8 V left: R1σ
+corpus/reconcile-chain.bc 100:37 9 V left: R3
+corpus/reconcile-chain.bc 72:61 12 V left: R2
+corpus/reconcile-clock.bc 92:17 1 V left: R1σ
+corpus/reconcile-clock.bc 92:33 2 V left: R3
+corpus/reconcile-clock.bc 52:61 5 V left: R2
+corpus/reconcile-clock.bc 94:17 6 V left: R1σ
+corpus/reconcile-clock.bc 94:33 7 V left: R3
+corpus/reconcile-clock.bc 52:61 10 V left: R2
+corpus/reconcile-clock.bc 92:17 11 V left: R1σ
+corpus/reconcile-clock.bc 92:33 12 V left: R3
+corpus/reconcile-clock.bc 52:61 15 V left: R2
+corpus/reconcile-clock.bc 94:17 16 V left: R1σ
+corpus/reconcile-clock.bc 94:33 17 V left: R3
+corpus/reconcile-clock.bc 52:61 20 V left: R2
+corpus/sched-a-div.bc 91:5 1 VB R5 fallback (A4: open region, force at 91:81) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0 opens [91:81]
+corpus/sched-a.bc 111:5 1 VB R5 fallback (A4: open region, force at 111:81) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0 opens [111:81]
+corpus/sched-b.bc 101:5 1 VB R5 fallback (A4: open region, force at 109:160) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0 opens [109:160]
+corpus/state-machine.bc 62:3 1 V left: R2
+corpus/sugar/for-value.bc 19:3 1 V left: R1-ev
+corpus/sugar/for-value.bc 21:3 2 V left: R2
+corpus/sugar/for-value.core.bc 26:39 1 V left: R1-ev
+corpus/sugar/for-value.core.bc 47:39 2 V left: R2
+corpus/sugar/gen-div.bc 40:3 1 V left: R1-ev
+corpus/sugar/gen-div.bc 40:3 1 V left: R1-ev
+corpus/sugar/gen-div.core.bc 88:17 1 V left: R1-ev
+corpus/sugar/gen-div.core.bc 99:17 1 V left: R1-ev
+corpus/sugar/gen-from.bc 21:3 1 V left: R1-ev
+corpus/sugar/gen-from.core.bc 30:39 1 V left: R1-ev
+corpus/sugar/gen-range.bc 19:3 1 V left: R1-ev
+corpus/sugar/gen-range.bc 19:3 1 V left: R1-ev
+corpus/sugar/gen-range.core.bc 69:17 1 V left: R1-ev
+corpus/sugar/gen-range.core.bc 80:17 1 V left: R1-ev
+corpus/sugar/gen-return.bc 21:3 1 V left: R1-ev
+corpus/sugar/gen-return.bc 21:3 1 V left: R1-ev
+corpus/sugar/gen-return.core.bc 74:17 1 V left: R1-ev
+corpus/sugar/gen-return.core.bc 85:17 1 V left: R1-ev
+corpus/sugar/gen-yields.bc 16:3 1 V left: R1-ev
+corpus/sugar/gen-yields.core.bc 17:35 1 V left: R1-ev
+corpus/sugar/mut-await.bc 16:15 1 V left: R1-ev
+corpus/sugar/mut-await.core.bc 14:3 1 V left: R1-ev
+corpus/tree-map.bc 58:3 5 V left: R1-ev
+corpus/tree-map.bc 63:3 4 V left: R1-ev
+corpus/yield-callback.bc 23:12 2 V left: codata at row n (#691, at 23:12) | points 0 tails 0 shape lexical suspending 0 env 0 uslots 0 eps no inner 0
+corpus/yield-callback.bc 23:12 2 V left: R1-ev
+corpus/yield-callback.bc 27:3 1 V left: R1-ev
+corpus/yield-callback.bc 27:3 1 V left: R1-ev

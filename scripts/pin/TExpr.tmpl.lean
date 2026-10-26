@@ -7,6 +7,7 @@ import Core.Dtor
 import Frontend.Check.Masks
 import Core.LetCopy
 import Support.Dynamics.Interpreter
+import Frontend.Check.StoredShape
 
 /-!
 # Frontend — Check — the typed term  `[spec §3, §29]`
@@ -98,6 +99,11 @@ structure TInfo where
   `withbor2u`, `slice_borrow_mut`, `slice_borrow_imm` and their unwinding forms, `withbor_f2_mut`),
   the witness the program writes, elaborated. Read by the rewriter's read-back (SPEC §54). -/
   wit : Option Lifetime.Life := none
+  /-- At `[handle]` and `[handle-boxed]`, per operation, the record of the `StoredAtX` derivation
+  of a clause the checker classifies `stored` (`storedShapes`, `Frontend/Check/StoredAtX.lean`):
+  `none` at an operation of another kind, or whose clause is not in the grammar. Read by the
+  rewriter's R5 admission (SPEC §54). -/
+  sshape : List (Option SShape) := []
   deriving Inhabited
 
 /-- What an unused live slot of a type must satisfy for a derivation to be given it: one atom of a

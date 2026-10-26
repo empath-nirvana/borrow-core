@@ -17,6 +17,9 @@
 #   program (`ok`), both are outside its fragment (`outside`), or only the source compiles (`red`);
 # * at every program, the names the tail-resuming rule's licence leaves (`R1left`), each with the
 #   conjunct it fails (SPEC §54).
+# * then, at a program with a `handle` node whose operations R0 does not all rewrite, R5's
+#   admission, report only (R5-0): each such node's position, name and form, `opt`,
+#   `fallback(<conjuncts>)` or `left:<conjunct>` (scripts/check-admission.sh pins the detail).
 #
 # The gate: every line of a program no rule rewrites has `erasure same` or `beta` and `lir same`
 # or `outside`, and every line of a program R0 or R1 rewrites `lir ok`, but the programs
@@ -55,7 +58,7 @@ trap 'rm -rf "$out"' EXIT
 table > "$out"
 bad=$(awk 'NR == FNR { if ($0 !~ /^#/) ok[$1] = 1; next }
           ($1 in ok) { next }
-          / R[01] .*:rewritten/ { if (!/ lir ok$/) print; next }
+          / R[01] .*:rewritten/ { if (!/ lir ok( R5 .*)?$/) print; next }
           !/ erasure (same|beta) / || !/ lir (same|outside) / { print }' corpus/rewrite-red.expected "$out")
 if [ "${1:-}" = "--write" ]; then
   cp "$out" corpus/rewrite.expected
