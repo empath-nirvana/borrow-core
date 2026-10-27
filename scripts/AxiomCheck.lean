@@ -687,3 +687,17 @@ import Lowering
 #print axioms Lowering.own_dupChecked_low
 #print axioms Lowering.coverage_excludes_missT
 #print axioms Lowering.agreeAt_of_typed
+#print axioms Lowering.lirOf_pr
+#print axioms Lowering.prT_pr
+#print axioms Lowering.big_of_steps
+#print axioms Lowering.big_expand
+#print axioms Lowering.host_corr
+#print axioms Lowering.fwd_lam
+#print axioms Lowering.fwd_case
+#print axioms Lowering.fwd_letpair
+#print axioms Lowering.fwd_app
+#print axioms Lowering.fwd
+#print axioms Lowering.printSimAt_lirOf
+#print axioms Lowering.own_printSimOn
+#print axioms Lowering.own_lir_every_run
+#print axioms Lowering.bindChecked_lir_every_run

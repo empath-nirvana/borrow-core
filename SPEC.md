@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.04 · 2026-10-27
+Version 1.05 · 2026-10-27
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -9135,6 +9135,69 @@ is unchanged.
 
 ---
 
+## 56. Entry 55 — the print to the LIR on the core fragment, simulated (#701, U2 of #698)
+
+### Motivation
+
+§53 states the print's simulation (`PrintSim`) and proves its transfer: a closed `F 1` term in the
+relation whose print is simulated runs every time at the LIR. §54 and §55 put `own`'s output in
+the relation and in the low subset. This entry gives the print and proves its simulation on the
+core fragment, so the chain from a checked program to every run at the LIR is closed there.
+
+### Language
+
+No change. The print is a new stage below the low subset (`Lowering/LIRPrint.lean`); it reads no
+type and decides no ownership: every `copy` and `drop` it writes is the image of a `copy` or
+`forget` that `own` wrote (§54). The checker, the relation, the machine and both backends are
+unchanged.
+
+### Statements
+
+- **The print** (`lirOf`, `printOwn c = lirOf (own c.t)`): closure conversion (a `λb` is the
+  closure of a code of its own, capturing the slots `b` mentions past its binder, `capt b`),
+  named form (each subterm's value bound to a fresh variable, in the machine's order), every call
+  dispatched through its closure (`app`; no direct call, so no flow analysis), `copy`, `forget`
+  and a host operation applied as the LIR's `copy`, `drop` and `prim`, and as values as the
+  closures of codes that do the same. Every variable is at `unit` (`tyTable`): the interpreter
+  reads a type only at `copy`, `drop` and `load`, and the print writes no `load`.
+- **The core fragment** (`coreB`): no location, and no primitive but integer literals and host
+  operations; the term's only constants `copy` and `forget` (`explicitB isCF`).
+- **The print as a relation** (`Pr`, `lirOf_pr`): `lirOf e`'s `main` is a print of `e` over the
+  program's own codes.
+- **The source's runs, big-step** (`BigN`, `Lowering/BigStep.lean`): a run of the machine to a
+  value of a core term is a sized big-step derivation (`big_of_steps`).
+- **Forward simulation** (`fwd`, `Lowering/PrintFwd.lean`): if the source runs to `w` from a
+  frame holding each unconsumed slot's value (`FrameOK`), the interpreter, at every fuel, answers
+  a value related to `w` (`VRel`) or runs out of fuel, and from some fuel on answers it (`Sim`,
+  `Lowering/LIRSim.lean`); the frame is left with exactly the slots the term's returning paths
+  use consumed (`Post`). Explicit ownership is what makes the interpreter's consumption checks
+  pass: a slot is read once on every path (`occ`), so its variable is present when read and
+  absent after.
+- **The simulation** (`printSimAt_lirOf`, `Lowering/PrintCore.lean`): a closed core term in the
+  relation at `F 1` has a run to `()` (`every_run_of_sem`); `fwd` follows it, so the interpreter
+  never faults, answers `()`, and leaves no object. `own_printSimOn` is `PrintSim` for `own` and
+  `printOwn` on the class `PrintSimOn`: no pin, `own c.t` core with only `copy` and `forget` as
+  constants. `own_lir_every_run`: such a checked closed `main : F 1` in the pure fragment runs
+  every time at the LIR.
+- **Non-vacuity**: `bindChecked` (`return () to x. return x`, lowered to `(λx. x) ()`, a closure
+  and a dispatched call) meets every hypothesis (`bindChecked_lir_every_run`).
+
+### Baseline
+
+Every theorem, output, golden and count is unchanged. `scripts/check-lowering.sh` also prints and
+runs, on the LIR interpreter, each program of `corpus/lowering.expected` whose `own` output is in
+the core fragment, and compares its value, frame and live objects with the source run; it lists
+the print's static counts beside `Backend2.lirOf`'s.
+
+### Open
+
+- **Outside the core fragment** (cells, borrows, arrays, walks, folds, the other kernel
+  constants): the print writes `unreachable`. U3–U5.
+- **Typed print**: the LIR's types (layouts) and the path through `Lay`/`Lower` to the targets.
+- **Direct calls** and the closure-free forms Backend2 reaches: the print dispatches every call.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -9543,10 +9606,20 @@ Entry 54 (§55) is implemented in `Frontend/Check/Masks.lean` (`Covers`), the ge
 `Frontend/Check/Weaken.lean` and `Lowering/OwnLow.lean`: `own_lowersInto` is proved with no
 hypothesis on the masks. No change to `CDerives`, the relation, the checker's output or either
 backend.
+Entry 55 (§56) is implemented in `Lowering/LIRPrint.lean`, `Lowering/BigStep.lean`,
+`Lowering/LIRSim.lean`, `Lowering/PrintFwd.lean` and `Lowering/PrintCore.lean`, with the corpus
+run in `scripts/LoweringCheck.lean`: `own_printSimOn` and `own_lir_every_run` are proved on the
+core fragment. No change to `CDerives`, the relation, the checker or either backend.
 
 ---
 
 ## Changelog
+
+- **1.05** (2026-10-27) — §56 (#701, U2 of #698): the print to the LIR (`lirOf`, `printOwn`):
+  closure conversion, named form, dispatched calls, untyped. Its simulation is proved on the core
+  fragment by forward simulation of the source's run (`fwd`, `printSimAt_lirOf`), so a checked
+  closed `main : F 1` with no pin, in the pure fragment, whose lowered term is core runs every
+  time at the LIR (`own_lir_every_run`). No change to the language.
 
 - **1.04** (2026-10-27) — §55 (#701, U2 of #698): a split's masks cover its parts. Every typed
   split rule has the premise `Covers` (each part's term mentions only slots its mask holds); a
