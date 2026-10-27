@@ -39,7 +39,7 @@ open BoCa.Lifetime (LifeCtx)
 /-! ### The program -/
 
 /-- The effect context of `Div` alone. -/
-def ΞDiv : EffCtx := fun n => if n = divEff then [(.one, .unit, nextTy)] else []
+def ΞDiv : EffCtx := fun n => if n = divEff then [(.lin, .unit, nextTy)] else []
 
 abbrev I : VTy := .int .w32
 abbrev St : VTy := .ref I

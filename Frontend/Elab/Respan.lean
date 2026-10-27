@@ -55,7 +55,6 @@ def VTy.respan (sp : Span) : VTy → VTy
   | .app _ G A => .app sp (G.respan sp) (A.respan sp)
   | .lapp _ G a => .lapp sp (G.respan sp) (a.respan sp)
   | .rowed _ G r => .rowed sp (G.respan sp) (r.respan sp)
-  | .kont _ n i q B C => .kont sp n i q (B.respan sp) (C.respan sp)
 
 def CTy.respan (sp : Span) : CTy → CTy
   | .ret _ A => .ret sp (A.respan sp)
@@ -197,8 +196,8 @@ def Comp.respan (sp : Span) : Comp → Comp
     .loop sp (ℓ.map (·.respan sp)) (src.respan sp) (V.respan sp) (M.respan sp) (N.respan sp)
   | .perform _ n i V => .perform sp n i (V.respan sp)
   | .abort _ n i V => .abort sp n i (V.respan sp)
-  | .handle _ n hf st hr hc M =>
-    .handle sp n hf (st.map (SiteRec.mapTy (VTy.respan sp)))
+  | .handle _ n st hr hc M =>
+    .handle sp n (st.map (SiteRec.mapTy (VTy.respan sp)))
       (hr.respan sp) (hc.respan sp) (M.respan sp)
   | .unwind _ x A M D N =>
       .unwind sp (x.respan sp) (A.map (VTy.respan sp)) (M.respan sp) (D.respan sp) (N.respan sp)

@@ -14,8 +14,9 @@ the row it reads; a constant reads no row, and its `CDerives` derivation is tied
 `CDerivesAt.ofEffFree`.
 
 `checkMain` (`Program.lean`) decides that `main`'s list gives each operation one signature, of a
-nonzero name (`sigsOkB`); the program's effect context is the one the list gives (`effCtxOf`), at
-which `main`'s derivation is `CDerivesAt` (`sigsAt_effCtxOf`).
+nonzero name, and no unrestricted operation answering `0` (`sigsOkB`); the program's effect context
+is the one the list gives (`effCtxOf`), at which `main`'s derivation is `CDerivesAt`
+(`sigsAt_effCtxOf`), and whose abortive operations are affine (`noUnrExn_effCtxOf`).
 -/
 
 namespace Frontend.Check
@@ -248,7 +249,7 @@ theorem effThenA {s₁ s₂ s₃ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {M N D : BoCa.
 
 /-- `[handle]` reads its handled row. -/
 theorem effHandle {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : BoCa.Expr} {S : CRow}
-    {E : List (CCount × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {ir ic : Nat}
+    {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {ir ic : Nat}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂)
     (hs₁ : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ₁ Γr Γc)
     (hr : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γr ir (BoCa.Fig16.LogRel.Core.retTy S A R))
@@ -263,7 +264,7 @@ theorem effHandle {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : BoCa.Expr} {S
 
 /-- BOXED-κ reads its handled row.  `[spec §28]` -/
 theorem effHandleB {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : BoCa.Expr} {S : CRow}
-    {E : List (CCount × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {ir ic : Nat} {d : CLife}
+    {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {ir ic : Nat} {d : CLife}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂)
     (hs₁ : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ₁ Γr Γc)
     (hr : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γr ir (BoCa.Fig16.LogRel.Core.retTy S A R))
@@ -582,7 +583,7 @@ theorem effThenA {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ₁ Γ₂ : 
 
 /-- `[handle]` reads its handled row. -/
 theorem effHandle {p : Pins} {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : BoCa.Expr} {S : CRow}
-    {E : List (CCount × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {ir ic : Nat}
+    {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {ir ic : Nat}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂)
     (hs₁ : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ₁ Γr Γc)
     (hr : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γr ir (BoCa.Fig16.LogRel.Core.retTy S A R))
@@ -597,7 +598,7 @@ theorem effHandle {p : Pins} {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : Bo
 
 /-- BOXED-κ reads its handled row.  `[spec §28]` -/
 theorem effHandleB {p : Pins} {s : CRow} {Γ₁ Γ₂ Γr Γc : Ctx CVTy} {e : BoCa.Expr} {S : CRow}
-    {E : List (CCount × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {ir ic : Nat} {d : CLife}
+    {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {ir ic : Nat} {d : CLife}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂)
     (hs₁ : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ₁ Γr Γc)
     (hr : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γr ir (BoCa.Fig16.LogRel.Core.retTy S A R))
@@ -677,18 +678,19 @@ def idxBound (s : CRow) (n : UInt32) : Nat :=
   s.foldr (fun o k => if o.n = n then max k (o.i.toNat + 1) else k) 0
 
 /-- **The effect context a list of operations gives**: the signature of `n` holds, at each index
-below `idxBound s n`, the first entry of the list there, and `1 ↠^1 1` at an index the list
+below `idxBound s n`, the first entry of the list there, and `1 ↠^lin 1` at an index the list
 gives none.  `[spec §19]` -/
 def effCtxOf (s : CRow) : EffCtx := fun n =>
   (List.range (idxBound s n)).map fun i =>
     match s.find? (fun o => o.n == n && o.i.toNat == i) with
-    | some o => (o.cnt, o.A, o.B)
-    | none => (.one, .unit, .unit)
+    | some o => (o.q, o.A, o.B)
+    | none => (.lin, .unit, .unit)
 
-/-- The list gives each operation one signature, of a nonzero name, decided.  `[spec §18, §19]` -/
+/-- The list gives each operation one signature, of a nonzero name, and has no unrestricted
+operation answering `0`, decided.  `[spec §18, §19]` -/
 def sigsOkB (s : CRow) : Bool :=
-  s.all fun o => o.n != 0 &&
-    s.all fun o' => !(o'.n == o.n && o'.i == o.i) || (o'.cnt == o.cnt && o'.A == o.A && o'.B == o.B)
+  s.all fun o => o.n != 0 && !(o.q == .unr && o.B.isZero) &&
+    s.all fun o' => !(o'.n == o.n && o'.i == o.i) || (o'.q == o.q && o'.A == o.A && o'.B == o.B)
 
 theorem lt_idxBound {s : CRow} {o : COpSig} (ho : o ∈ s) : o.i.toNat < idxBound s o.n := by
   induction s with
@@ -712,7 +714,7 @@ theorem sigsAt_effCtxOf {s : CRow} (h : sigsOkB s = true) : SigsAt (effCtxOf s) 
   intro o ho
   have ho' := List.all_eq_true.mp h o ho
   simp only [Bool.and_eq_true, bne_iff_ne, ne_eq] at ho'
-  obtain ⟨hn0, hall⟩ := ho'
+  obtain ⟨⟨hn0, -⟩, hall⟩ := ho'
   have hlt := lt_idxBound ho
   refine ⟨hn0, by
     simp only [effCtxOf, List.length_map, List.length_range]; exact idxBound_le s o.n, ?_⟩
@@ -728,5 +730,21 @@ theorem sigsAt_effCtxOf {s : CRow} (h : sigsOkB s = true) : SigsAt (effCtxOf s) 
     Bool.and_eq_true, beq_iff_eq] at hc
   obtain ⟨⟨hq, hA⟩, hB⟩ := hc
   simp [hq, hA, hB]
+
+/-- **The effect context the list gives has no unrestricted abortive operation**, when
+`sigsOkB` holds of it.  `[spec §18, §19]` -/
+theorem noUnrExn_effCtxOf {s : CRow} (h : sigsOkB s = true) : (effCtxOf s).NoUnrExn := by
+  intro n p hp
+  simp only [effCtxOf, List.mem_map, List.mem_range] at hp
+  obtain ⟨i, -, rfl⟩ := hp
+  split
+  · rename_i o hf
+    intro hq
+    have ho := List.all_eq_true.mp h o (List.mem_of_find?_eq_some hf)
+    simp only [Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true'] at ho
+    have h₂ := ho.1.2
+    dsimp only at hq ⊢
+    simpa [hq] using h₂
+  · intro hq; cases hq
 
 end Frontend.Check

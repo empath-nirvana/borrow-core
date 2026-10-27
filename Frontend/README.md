@@ -200,7 +200,7 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 
     theorem checkProgram_tiedAt {p : Program} {r : Report} {c : Checked}
         (h : checkProgram p = .ok r) (hc : r.main = some c) (hp : c.pins = []) :
-        CDerivesAt c.Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C)
+        CDerivesAt c.Ξ LifeCtx.empty c.ctx c.t.erase (.comp c.C) ∧ c.Ξ.NoUnrExn
 
 `c.t` is `main`'s typed term (`Check/TExpr.lean`): one node per rule application, with its rule's
 arguments, its judgment and its source. `c.e := c.t.erase` is `main`'s erasure, the term the
@@ -229,7 +229,7 @@ it once, its body `main`'s erasure with the λ-value's occurrences replaced by t
 `CDerivesAt Ξ` (`Core/Tied.lean`) at every effect context `Ξ` at which the rows it reads at
 `[perform]`, `[raise]` and `[handle]` are (`TiedDer`, `Check/Tied.lean`), and `checkProgram_tied`
 reads that off. `checkMain` decides that those rows give each operation one signature, of a
-nonzero name (`sigsOkB`), and the program's effect context
+nonzero name, and none unrestricted answering `0` (`sigsOkB`), and the program's effect context
 `c.Ξ` is the one they give (`effCtxOf`). A constant holds no operation, so its derivation is tied
 at every context (`CDerivesAt.ofEffFree`, decided by `Expr.effFree`).
 

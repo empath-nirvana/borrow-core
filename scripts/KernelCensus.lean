@@ -77,7 +77,7 @@ def formersC (acc : Std.HashSet String) : CTy → Std.HashSet String
   | t@(.arr A C) => formersC (formersV (acc.insert (cName t)) A) C
   | t@(.amp C D) => formersC (formersC (acc.insert (cName t)) C) D
   | t@(.all _ _ C) | t@(.nu C) => formersC (acc.insert (cName t)) C
-  | t@(.eff _ _ _ _ A B fin C) =>
+  | t@(.eff _ _ _ A B fin C) =>
     formersC (formersC (formersV (formersV (acc.insert (cName t)) A) B) fin) C
   | t@.top => acc.insert (cName t)
 end
@@ -101,8 +101,8 @@ structure Own where
   quals : Counts := {}
   uses : List (UseKey × TExpr) := []
 
-def qualName : Count → String
-  | .zero => "0" | .one => "1" | .opt => "1?"
+def qualName : Qual → String
+  | .lin => "lin" | .aff => "aff" | .unr => "unr"
 
 /-- The depth bound of the walk: the checker's (`Frontend.Check.checkFuel`). -/
 def ownFuel : Nat := 1 <<< 20
@@ -233,7 +233,7 @@ def main (files : List String) : IO UInt32 := do
     IO.println s!"node\t{k}\t{progs.getD k 0}\t{static.getD k 0}\t{lib.getD k 0}\t{expanded.getD k 0}\t{" ".intercalate (firsts.getD k [])}"
   for k in vtyNames.map ("V." ++ ·) ++ ctyNames.map ("C." ++ ·) do
     IO.println s!"former\t{k}\t{fprogs.getD k 0}\t{fnodes.getD k 0}"
-  for k in ["0", "1", "1?"] do
+  for k in ["lin", "aff", "unr"] do
     IO.println s!"qual\t{k}\t{qprogs.getD k 0}\t{qops.getD k 0}"
   for (k, n) in (rcount.toList.mergeSort (fun a b => a.1 ≤ b.1)) do
     let parts := k.splitOn ":"

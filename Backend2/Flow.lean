@@ -127,12 +127,10 @@ def solve (p : Prog) (base : Nat) (fuel : Nat) : FM Unit := do
       set { s with todo := s.todo.pop }
       let cs := ((← get).sets.getD x {}).toList
       for y in (← get).out.getD x #[] do addCodes y cs
-      -- Each site of `x` is linked on its own: a variable called on several paths (the arms of a
-      -- `case`) has a site on each, with its own argument and answer.
-      for (st, k) in ((← get).sites.getD x #[]).toList.zipIdx do
+      for st in (← get).sites.getD x #[] do
         for c in cs do
-          if !linked.contains (x, k, c) then
-            linked := linked.insert (x, k, c)
+          if !linked.contains (x, st.j, c) then
+            linked := linked.insert (x, st.j, c)
             link p base st c
 
 /-- The function body's answer flows to its pseudo-variable. -/

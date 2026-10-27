@@ -75,6 +75,8 @@ structure OutInfo where
   /-- Each machine operation's key, argument, answer, and its cancel row's payload (`none` at
   `⊤`). -/
   ms : List (Key × LTy × LTy × Option Pay)
+  /-- The machine operations at the qualifier `unr`, whose continuation may be copied. -/
+  unrs : List Key := []
   deriving Inhabited
 
 /-- **A frame of a machine's continuation** (SPEC §49): what is done, inside one machine, with the
@@ -276,7 +278,7 @@ def formersC (acc : List String) : CTy → List String
   | .amp C D => formersC (formersC ("C.amp" :: acc) C) D
   | .all _ _ C => formersC ("C.all" :: acc) C
   | .nu C => formersC ("C.nu" :: acc) C
-  | .eff _ _ _ _ A B fin C => formersC (formersC (formersV (formersV ("C.eff" :: acc) A) B) fin) C
+  | .eff _ _ _ A B fin C => formersC (formersC (formersV (formersV ("C.eff" :: acc) A) B) fin) C
   | .top => "C.top" :: acc
 end
 
@@ -520,7 +522,8 @@ def rowPay (S : Row) : CM Pay := do
   for o in S do
     if o.n == divName then
       throw s!"an operation ({o.n}, {o.i}) in a computation type: outside the pure fragment"
-    if o.abort then throw "LIR: an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
+    if o.abort && !(acc.any (·.1 == (o.n, o.i))) then
+      acc := acc ++ [((o.n, o.i), ← vty o.A)]
   return acc
 
 /-- The payload's type: `none` at no operation. -/
@@ -646,7 +649,8 @@ def outInfo? (r : LTy) (S : Row) : CM (Option OutInfo) := do
   if ms.isEmpty then return none
   let pay ← rowPay S
   let ty := outcomeTy r pay ms
-  let o : OutInfo := { ty, r, pay, ms }
+  let unrs := (S.filter fun o => o.q == .unr).map fun o => (o.n, o.i)
+  let o : OutInfo := { ty, r, pay, ms, unrs }
   match ty with
   | .mu b => unless LTy.unrollMu b == o.body do throw s!"LIR: the outcome {ty} does not unroll to {o.body}"
   | _ => throw "LIR: an outcome that is not a μ"
@@ -654,7 +658,7 @@ def outInfo? (r : LTy) (S : Row) : CM (Option OutInfo) := do
 
 /-- The row and value type of `F_Σ R`, through `∀`s. -/
 def effParts : CTy → Option (Row × VTy)
-  | .eff n i q wq A B fin C => (effParts C).map fun (S, R) => (⟨n, i, q, wq, A, B, fin⟩ :: S, R)
+  | .eff n i q A B fin C => (effParts C).map fun (S, R) => (⟨n, i, q, A, B, fin⟩ :: S, R)
   | .ret R => some ([], R)
   | .all _ _ C => effParts C
   | _ => none
@@ -1100,8 +1104,9 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
     -- class holds itself: a recursion through a resumption point, a clause resuming `κ` before it
     -- answers; `cellPass`). The state is a cell, allocated when the machine first suspends and
     -- written in place each time it suspends again at the operation; its suspended computation
-    -- is a word. Otherwise the state is the closure's environment.
-    let cellMode := threaded || cellOps.contains op
+    -- is a word. Otherwise the state is the closure's environment, as it always is at `unr`, whose
+    -- suspended computation may be copied (§19).
+    let cellMode := threaded || (cellOps.contains op && !F.unrs.contains op)
     let envTy : LTy := if cellMode then .ref stTy else stTy
     let slotTy : LTy := .sum .unit envTy
     let rres ← reserveFn s!"resume {op.1}.{op.2}"
@@ -2348,7 +2353,14 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let p ← rowPay S; let q ← rowPay S'
     let a ← vty A
     bindTm (← conv fuel ctx c) (resTy a p) fun r => coerceRes a p q r
-  | .effRaise .. => throw "LIR: an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
+  | .effRaise _ _ S o _ c => do
+    -- `raise`: the abort at its operation's summand, handed to the handler's join (`catch_abort`,
+    -- `abort_absorbs`).  [spec §47]
+    readFact "effRaise:op"
+    modify fun st => { st with erased := st.erased.insert "raise" (st.erased.getD "raise" 0 + 1) }
+    let p ← rowPay S
+    let some j := payIdx p (o.n, o.i) | throw s!"LIR: a raise of ({o.n}, {o.i}) outside its row"
+    bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay p j v fun w => pure (.inj true w)
   | .effPerform _ _ S o c => do
     -- `perform` of a tail-resumptive clause: a direct call of the clause's work (`tail_resumes`,
     -- `TailResumesAt.subst_kappa`, `tail_clause_names`, `Checked.unhandledNames`).  [spec §47]
@@ -2489,7 +2501,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     -- `[nil-dead]` (SPEC §29): the term at the empty context, the context's slots consumed.
     readFact "nilDead:context"
     return drops (live ctx) (← conv fuel [] c)
-  | .effHandleT .. | .effHandleL .. | .lendR .. | .lendLoopR .. | .iterate .. | .divFuel ..
+  | .effHandleT .. | .lendR .. | .lendLoopR .. | .iterate .. | .divFuel ..
   | .reify .. | .letPoly .. => outside t
   | t =>
     match transparent? t with
@@ -2597,7 +2609,12 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
   | .effSub _ _ _ _ _ c => do
     readFact "effSub:rows"
     convK fuel ctx c K args
-  | .effRaise .. => throw "LIR: an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
+  | .effRaise _ _ _ o _ c => do
+    readFact "effRaise:op"
+    modify fun st => { st with erased := st.erased.insert "raise" (st.erased.getD "raise" 0 + 1) }
+    let F ← curMach
+    let some j := payIdx F.pay (o.n, o.i) | throw s!"LIR: a raise of ({o.n}, {o.i}) outside its row"
+    bindTm (← conv fuel ctx c) (← vty o.A) fun v => injectPay F.pay j v fun e => abortK F K args e
   | .effPerform _ _ _ o c => do
     if (← get).mach.contains (o.n, o.i) then
       readFact "effPerform:machine"
@@ -2761,7 +2778,7 @@ whose resume entry resumes the computation and drives its outcome again (the han
 whose cancel entry cancels it (`kappa_cancel_steps`); a suspension at one of `Σ`'s machine
 operations suspends the drive (forwarding), resumed by resuming the computation and driving
 again. The handler's values are the drive's parameters. -/
-def convDrive (fuel : Nat) (S : Row) (E : List (Count × VTy × VTy)) (fs : Nat → CTy) (n : UInt32)
+def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (n : UInt32)
     (R : VTy) (ks : List ClauseKinds.HKind) (site : Option HSite) (c₂ : Ctx) (te : TExpr)
     (T : OutInfo) (cR : Ctx) (tR : TExpr)
     (parts : Array (Ctx × TExpr)) (tailCtx : Ctx) (tupleAt : Option Nat) (boxed : Bool := false) :
@@ -2797,8 +2814,8 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Count × VTy × VTy)) (fs : Nat 
   -- it after the handler's values, and `κ` holds it as its last; it is made at the first frame
   -- reserved (`0` until then) and freed where the computation answers, aborts or is cancelled.
   let stored := ks.any fun k => k.kind == .stored
-  -- `κ` is not copied: its count is `0`, `1` or `1?` (SPEC §53), so it holds the stack once.
-  let siteSw := stored && boxed && !(← get).stacked.isEmpty
+  -- No operation of the node is `unr`: a copied `κ` would hold the stack twice (SPEC §52).
+  let siteSw := stored && boxed && E.all (·.1 != .unr) && !(← get).stacked.isEmpty
   let shP? : Option Var ← if siteSw then do readFact "effHandleV:site stack"; pure (some (← fresh (.int .w64)))
     else pure none
   let shTys : List LTy := if siteSw then [.int .w64] else []
@@ -2807,7 +2824,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Count × VTy × VTy)) (fs : Nat 
     | some h => freeStackThen h b
     | none => pure b
   -- **`κ` in the site's stack** (SPEC §52): at a site with a stack, the first operation whose
-  -- clause keeps `κ` (`stored`) keeps `κ`'s environment but the stack in
+  -- clause keeps `κ` (`stored`) and whose `κ` is not `unr` keeps `κ`'s environment but the stack in
   -- the stack's `κ` region: the stack is made at the first run, holding the region, and `κ` is the
   -- stack. Each suspension there writes the region, `κ`'s resume entry takes it out, and the stack's
   -- free ends it. One operation: a region shared by two would join their computations' classes.
@@ -2816,7 +2833,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Count × VTy × VTy)) (fs : Nat 
     for (k, j) in ks.zipIdx do
       if out.isSome then break
       let some o := E[j]? | continue
-      if siteSw && k.kind == .stored && T.ms.any (·.1 == (n, j.toUInt32)) then
+      if siteSw && k.kind == .stored && o.1 != .unr && T.ms.any (·.1 == (n, j.toUInt32)) then
         out := some j
     pure out
   let siteTag ← fresh .unit
@@ -2869,7 +2886,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Count × VTy × VTy)) (fs : Nat 
         if key.1 == n then
           let idx := key.2.toNat
           let some o := E[idx]? | throw "LIR: an operation"
-          let kT ← vty (kTy S R o.1.toQual o.2.2 (fs idx))
+          let kT ← vty (kTy S R o.1 o.2.2 (fs idx))
           let cancelC := cancelTy S (fs idx)
           let cM ← outInfoC cancelC
           let cPay ← match effParts cancelC with
@@ -2966,7 +2983,7 @@ stored-continuation site, left to the state machines (N3). The handled computati
 its value goes to `h_ret`, an abort of one of `n`'s operations to that operation's clause (the
 handler's join: `catch_abort`), an abort of `Σ`'s handed on (`fwd_abort`). A tail-resumptive
 clause is called where it is performed (`effPerform`). -/
-def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Count × VTy × VTy)) (fs : Nat → CTy)
+def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy)
     (n : UInt32) (A R : VTy) (u : Masks) (ks : List ClauseKinds.HKind) (site : Option HSite)
     (tc te : TExpr) (boxed : Bool := false) : CM Tm := do
   let direct := (← get).direct.getD n []
@@ -2977,7 +2994,7 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Count × VTy × VTy
   if teM.isNone then
     for (k, j) in ks.zipIdx do
       match k.kind with
-      | .abortive => throw "LIR: an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
+      | .abortive => pure ()
       | .tail =>
         unless direct[j]? == some true do
           throw s!"LIR: `effHandleV`: the clause {n}.{j} is tail-resumptive, but its direct call is not licensed (condition 2, or one closed clause at its nodes): outside the pure fragment"
@@ -3031,8 +3048,21 @@ def convHandle (fuel : Nat) (ctx : Ctx) (S : Row) (E : List (Count × VTy × VTy
   let aT ← vty A
   modify fun st => { st with erased := st.erased.insert "handle" (st.erased.getD "handle" 0 + 1) }
   let retArm (a : Var) : CM Tm := do return dropAll (some 0) (← applyTo fuel cR tR a)
-  unless pt.isEmpty && ps.isEmpty do throw "LIR: an abortive operation reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
-  return wrap (← bindTm (← conv fuel c₂ te) aT retArm)
+  match payTy pt with
+  | none => return wrap (← bindTm (← conv fuel c₂ te) aT retArm)
+  | some ptT =>
+    readFact "effHandleV:join"
+    let b ← fresh (.sum aT ptT); let a ← fresh aT; let e ← fresh ptT
+    let arms ← casePay pt e fun j v => do
+      let some (key, _) := pt[j]? | throw "LIR: a payload's summand"
+      if key.1 == n then
+        let idx := key.2.toNat
+        let some (cc, c) := parts[idx]? | throw "LIR: an abortive clause"
+        return dropAll (some (idx + 1)) (← applyTo fuel cc c v)
+      else
+        let some j' := payIdx ps key | throw s!"LIR: an abort of {key} outside the handler's row"
+        return dropAll none (← injectPay ps j' v fun w => pure (.inj true w))
+    return wrap (.letv b (← conv fuel c₂ te) (.case b a (← retArm a) e arms))
 
 /-- **A tail-resumptive clause's work**, the function a `perform` of its operation calls
 (`[spec §47]`, `tail_resumes`): the clause `λp. let (x, κ) = p; M` with each resume of `κ`
@@ -3040,7 +3070,7 @@ replaced by its answer (`TailResumesAt 0 M M'`, which the clause's kind gives,
 `classifyHandler_sound`). It takes the argument `x` and answers the operation's answer, at the
 payload of the handler's outer row `Σ`. Made once per operation. -/
 def ensureWork (fuel : Nat) (n : UInt32) (j : Nat) (depth : Nat) (S : Row)
-    (o : Count × VTy × VTy) (c : TExpr) : CM Unit := do
+    (o : Qual × VTy × VTy) (c : TExpr) : CM Unit := do
   if (← get).works.contains (n, j) then return
   match c.unUse with
   | .bangThunkV _ _ _ (.lam _ _ _ _ (.tensorE _ _ _ _ _ _ (.var _ _ 0 _) tM)) => do
@@ -3290,6 +3320,31 @@ where
         if k == 0 then expand fuel c got'.reverse.reverse rT
         else curry fuel c rT got' k
 
+/-- **An unwinding borrow** (`withborUE d`, SPEC §19): `(f [] r) then b. (r, b) unwind d r`. The
+owner lent as `genLend` does; the callback's value `b` gives `(r, b)`; its abort ends the lend, runs
+the finaliser `d` on the owner, and is handed on (`then_fin`).  `[spec §47]` -/
+def genLendU (fuel : Nat) (op : Op) (src : Var) (cbT : LTy) (call : Var → CM Tm) (td : TExpr) :
+    CM Tm := do
+  match fuel with
+  | 0 => throw "LIR: the typed term is too deep"
+  | fuel + 1 =>
+  let (some bT, rT) ← answerOf cbT | throw "LIR: a borrow's callback takes no borrow"
+  match rT with
+  | .sum vT eT => do
+    readFact "withborU:finaliser"
+    let pr ← fresh (.pair (← tyOf src) bT)
+    let o ← freshLike src; let b ← fresh bT
+    let r ← fresh rT
+    let v ← fresh vT; let e ← fresh eT
+    let q ← fresh (.pair (← tyOf src) vT)
+    let u ← fresh .unit
+    let fin ← match constArity (headOf 64 td) with
+      | some 1 => expand fuel (headOf 64 td) [o] .unit
+      | _ => throw "LIR: an unwinding borrow's finaliser that is not a constant is outside the pure fragment"
+    return .letv pr (.prim op [src]) (.letpair o b pr (.letv r (← call b)
+      (.case r v (.letv q (.pair o v) (.inj false q)) e (.letv u fin (.drop u (.inj true e))))))
+  | _ => genLend op src cbT call
+
 /-- A borrowing constant applied to its first argument `x`, its callback's call given by `call`. -/
 def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM Tm) (resT : LTy) :
     CM Tm := do
@@ -3300,9 +3355,10 @@ def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM 
   | .withload .. => genWithload x cbT call
   | .withswap .. => genWithswap x cbT call
   | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I .. => genLendTree x cbT call
-  | .withbor1U .. | .withbor2U .. | .sliceBorrowMU .. | .sliceBorrowIU .. | .withbor3U ..
-  | .withloadU .. =>
-    throw "LIR: an unwinding borrow reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
+  | .withbor1U _ _ _ _ _ _ td | .withbor2U _ _ _ _ _ _ td | .sliceBorrowMU _ _ _ _ _ _ td
+  | .sliceBorrowIU _ _ _ _ _ _ td => genLendU _fuel .lend x cbT call td
+  | .withbor3U _ _ _ _ _ _ _ td => genLendU _fuel .relend x cbT call td
+  | .withloadU .. => genWithload x cbT call
   | c => throw s!"LIR: `{ruleName c}` is not a borrow (answer {resT})"
 
 /-- **A constant applied to its arguments**, `args` in the order they apply, its answer of type
@@ -3366,9 +3422,11 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     freeTree v vT
   | .withborSM .., [x, cb] | .withborSI .., [x, cb] | .withborF2M .., [x, cb]
   | .withborF2I .., [x, cb] => genLendTree x (← tyOf cb) (callCb cb)
-  | .withbor1U .., _ | .withbor2U .., _ | .sliceBorrowMU .., _ | .sliceBorrowIU .., _
-  | .withbor3U .., _ | .withloadU .., _ =>
-    throw "LIR: an unwinding borrow reaches the conversion: R0 (SPEC §54) rewrites every one in Core"
+  | .withbor1U _ _ _ _ _ _ td, [x, cb] | .withbor2U _ _ _ _ _ _ td, [x, cb]
+  | .sliceBorrowMU _ _ _ _ _ _ td, [x, cb] | .sliceBorrowIU _ _ _ _ _ _ td, [x, cb] =>
+    genLendU fuel .lend x (← tyOf cb) (callCb cb) td
+  | .withbor3U _ _ _ _ _ _ _ td, [m, cb] => genLendU fuel .relend m (← tyOf cb) (callCb cb) td
+  | .withloadU .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
   | .foldOwn _ _ F _, [g] | .foldReuse _ _ F _, [g] => do
     let k : FoldKind := match c with | .foldReuse .. => .reuse | _ => .own
     let .thunk fk := resT | throw "LIR: a fold's answer is not a closure"
@@ -3417,7 +3475,7 @@ def prepWorks (fuel : Nat) (depth : Nat) (t : TExpr) : CM Unit := do
   match fuel with
   | 0 => throw "LIR: the typed term is too deep"
   | fuel + 1 =>
-  let here : Option (Row × List (Count × VTy × VTy) × UInt32 × List ClauseKinds.HKind × TExpr) :=
+  let here : Option (Row × List (Qual × VTy × VTy) × UInt32 × List ClauseKinds.HKind × TExpr) :=
     match t with
     | .effHandleV _ _ S E _ n _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
     | .effHandleVB _ _ S E _ n _ _ _ _ ks _ _ tc _ => some (S, E, n, ks, tc)
@@ -3550,22 +3608,22 @@ def cellPass (s : CState) (recursive : Nat → Bool) : Except String (Prog × CS
 /-- **The levels whose state cell is passed on** (SPEC §50), from a conversion's machines and the
 layouts' recursive classes (`recursive`, as `cellPass` reads them): each machine whose body takes
 its continuation (`withMachineK`), with no call in tail position, whose points are all at one
-operation and whose state there is a cell (its suspended computation's class holds itself): its
-number and its state's type. -/
+operation and whose state there is a cell (its suspended computation's class holds itself, not
+at `unr`): its number and its state's type. -/
 def threadedOf (s : CState) (recursive : Nat → Bool) : Std.HashMap Nat LTy := Id.run do
   let mut out : Std.HashMap Nat LTy := {}
   for (m, kcs) in s.done do
     unless m.threadable && m.tails.isEmpty do continue
     match kcs with
     | [(op, kc)] =>
-      if recursive kc && m.points.all (·.op == op) then
+      if recursive kc && !m.info.unrs.contains op && m.points.all (·.op == op) then
         out := out.insert m.start (machStateTy m op)
     | _ => pure ()
   return out
 
 /-- **The stack machines** (SPEC §52), from a conversion's machines and the layouts: each machine
 whose level's cell `threadedOf` passes on (its suspended computation's class holds itself, its
-points at one operation, no call in tail position), whose every call point calls a
+points at one operation, no call in tail position, not `unr`), whose every call point calls a
 level of itself (`calleeCodes`, the layouts' classes of the callee's suspended computations, are
 its own code), and whose operation is in `stackOps` (every `handle` node of it keeps `κ`: a stored
 site, which gives the frames one owner): its number and its frame's state type, each call point's

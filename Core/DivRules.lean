@@ -71,9 +71,9 @@ theorem vC_next_iff {ls : List SRec} {δ : LSub} {w : Val} {ρ : WRes} :
     · exact Or.inr ⟨.unit, PMap.empty, PMap.empty, ResU.comp_empty_right _, ⟨rfl, rfl⟩, ⟨rfl, rfl⟩⟩
 
 /-- `tick`'s signature gives `tick`'s entry. -/
-theorem OpSig.isTick_ent {o : OpSig} (δ : LSub) (h : tickB o.cnt o.A o.B = true) :
+theorem OpSig.isTick_ent {o : OpSig} (δ : LSub) (h : tickB o.q o.A o.B = true) :
     (o.ent δ).IsTick := by
-  obtain ⟨n, i, q, w, A, B, fin⟩ := o
+  obtain ⟨n, i, q, A, B, fin⟩ := o
   simp only [tickB, Bool.and_eq_true, beq_iff_eq] at h
   obtain ⟨⟨rfl, hA⟩, hB⟩ := h
   cases A <;> simp [VTy.isUnitB] at hA
@@ -85,7 +85,7 @@ theorem OpSig.isTick_ent {o : OpSig} (δ : LSub) (h : tickB o.cnt o.A o.B = true
 
 /-- **A row holds `Div`** exactly when the operation it finds at `Div`'s key is `tick`. -/
 theorem Row.divB_iff {S : Row} :
-    Row.divB S = true ↔ ∃ o, Row.find S divEff 0 = some o ∧ tickB o.cnt o.A o.B = true := by
+    Row.divB S = true ↔ ∃ o, Row.find S divEff 0 = some o ∧ tickB o.q o.A o.B = true := by
   induction S with
   | nil => simp [Row.divB, CTy.effOf, CTy.divAt, Row.find]
   | cons o S ih =>
@@ -105,7 +105,7 @@ theorem Row.divB_iff {S : Row} :
         rw [hf, ← ih, Row.divB, divAt_effOf]
 
 theorem Row.divB_find {S : Row} (h : Row.divB S = true) :
-    ∃ o, Row.find S divEff 0 = some o ∧ tickB o.cnt o.A o.B = true := Row.divB_iff.mp h
+    ∃ o, Row.find S divEff 0 = some o ∧ tickB o.q o.A o.B = true := Row.divB_iff.mp h
 
 /-- A row that holds `Div` has `tick`'s entry at `Div`'s key. -/
 theorem Row.divOK_of_divB {S : Row} (h : Row.divB S = true) (δ : LSub) :
@@ -118,7 +118,7 @@ theorem Row.divOK_of_divB {S : Row} (h : Row.divB S = true) (δ : LSub) :
 
 /-- A row whose operation at `Div`'s key is not `tick` does not hold `Div`. -/
 theorem Row.divB_false_of_find {S : Row} (h : ∀ o, Row.find S divEff 0 = some o →
-    tickB o.cnt o.A o.B = false) : Row.divB S = false := by
+    tickB o.q o.A o.B = false) : Row.divB S = false := by
   cases hd : Row.divB S with
   | false => rfl
   | true =>
@@ -126,7 +126,7 @@ theorem Row.divB_false_of_find {S : Row} (h : ∀ o, Row.find S divEff 0 = some 
       rw [h o hf] at ho; cases ho
 
 /-- A row none of whose operations has `tick`'s signature does not hold `Div`. -/
-theorem Row.divB_of_noTick {S : Row} (h : ∀ o ∈ S, tickB o.cnt o.A o.B = false) :
+theorem Row.divB_of_noTick {S : Row} (h : ∀ o ∈ S, tickB o.q o.A o.B = false) :
     Row.divB S = false :=
   Row.divB_false_of_find fun o hf => h o (Row.find_mem hf).1
 
@@ -140,18 +140,18 @@ macro "div_free" : tactic => `(tactic| first
 theorem Row.divB_of_abort {S : Row} (h : ∀ o ∈ S, o.abort = true) : Row.divB S = false := by
   refine Row.divB_false_of_find fun o hf => ?_
   have ha := h o (Row.find_mem hf).1
-  obtain ⟨n, i, q, w, A, B, fin⟩ := o
-  simp only [OpSig.abort, beq_iff_eq] at ha
-  simp [tickB, ha]
+  obtain ⟨n, i, q, A, B, fin⟩ := o
+  simp only [OpSig.abort, Bool.and_eq_true, bne_iff_ne, ne_eq] at ha
+  simp [tickB, ha.2]
 
 /-- A row whose operations found at `Div`'s key are abortive does not hold `Div`. -/
 theorem Row.divB_of_find_abort {S : Row} (h : ∀ n i o, Row.find S n i = some o → o.abort = true) :
     Row.divB S = false := by
   refine Row.divB_false_of_find fun o hf => ?_
   have ha := h _ _ o hf
-  obtain ⟨n, i, q, w, A, B, fin⟩ := o
-  simp only [OpSig.abort, beq_iff_eq] at ha
-  simp [tickB, ha]
+  obtain ⟨n, i, q, A, B, fin⟩ := o
+  simp only [OpSig.abort, Bool.and_eq_true, bne_iff_ne, ne_eq] at ha
+  simp [tickB, ha.2]
 
 /-- A row without `Div`'s name does not hold `Div`. -/
 theorem Row.divB_of_without {S : Row} (h : ∀ o ∈ S, o.n ≠ divEff) : Row.divB S = false := by

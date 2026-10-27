@@ -48,7 +48,7 @@ theorem closedAt_of_zero {e : Expr} (h : closedAt 0 e = true) (k : Nat) : closed
   closedAt_mono e h (Nat.zero_le k)
 
 /-- A handler's tags are closed. -/
-theorem closedAt_qualsVal (k : Nat) : ∀ qs : List Count, closedAt k (qualsVal qs).1 = true
+theorem closedAt_qualsVal (k : Nat) : ∀ qs : List Qual, closedAt k (qualsVal qs).1 = true
   | [] => rfl
   | q :: qs => by
       simp only [qualsVal, Val.pair, Val.i32, closedAt, closedAt_qualsVal k qs, Bool.and_true]

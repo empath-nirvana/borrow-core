@@ -65,44 +65,18 @@ inductive Mode where
   | imm
   deriving DecidableEq, Repr, Inhabited
 
-/-- The count of an operation's continuation as a row writes it (SPEC §19, §53): `lin`, exactly `1`;
-`aff`, `1?` (`0` at an operation answering `0`); or `ctl`, the count the checker infers for the
-operation's name, the strictest its handlers allow (`Frontend/Check/Grades.lean`). -/
+/-- The qualifier of an operation's continuation in a row (SPEC §19): linear, affine or
+unrestricted. -/
 inductive Qual where
   | lin
   | aff
-  | infer
+  | unr
   deriving DecidableEq, Repr, Inhabited
 
 def Qual.str : Qual → String
   | .lin => "lin"
   | .aff => "aff"
-  | .infer => "ctl"
-
-/-- An operation's count as a rule-written handler names it (SPEC §53): `0` (abortive), `1` (`lin`)
-or `1?` (`aff`). The rule-written forms name their operations' counts, which their tuples' types
-do not hold.  `[spec §53, §54]` -/
-inductive OpCount where
-  | zero
-  | one
-  | opt
-  deriving DecidableEq, Repr, Inhabited
-
-/-- The word the forms write a count with: `0`, `lin` (`1`) or `aff` (`1?`). -/
-def OpCount.str : OpCount → String
-  | .zero => "0"
-  | .one => "lin"
-  | .opt => "aff"
-
-/-- The form of a `handle` node: its clauses written by the program (`handle_with`, `[handle]`),
-or written out by the kernel's rule from a tuple of answering functions (`handle_tail`,
-`effHandleT`, SPEC §14) or from tuples of works and exits (`handle_last`, `effHandleL`, SPEC §51).
-`[spec §14, §19, §51, §54]` -/
-inductive HForm where
-  | clauses
-  | tail (qs : List OpCount)
-  | last (qs : List OpCount)
-  deriving DecidableEq, Repr, Inhabited
+  | .unr => "unr"
 
 /-- The host resource kinds the surface names (SPEC §11, §34): `input`, `output`, `clock`,
 `args`. -/
@@ -181,11 +155,6 @@ inductive VTy where
   instances in order, each the effect's name applied to its type arguments (`VTy.rowEffs`).
   Elaborated away by `Frontend.Elab.Effects`.  `[spec §33]` -/
   | rowed (sp : Span) (F : VTy) (row : VTy)
-  /-- `kont[n.i q] B C`: the continuation `κ` a clause of the operation `n.i`, written at `q`,
-  receives, answering `B` and resuming into `C = F_Σ R`. The checker writes it as the kernel's
-  `kTy Σ R` at the operation's count (SPEC §53), so the elaboration that writes a clause's type
-  does not need the count.  `[spec §19, §53]` -/
-  | kont (sp : Span) (n i : Nat) (q : Qual) (B : VTy) (C : CTy)
 
 /-- Computation types (syntax-core §4). -/
 inductive CTy where
@@ -714,10 +683,8 @@ inductive Comp where
   the value `hr` and whose clauses are the tuple `hc` (`[handle]`), each a value form: the
   elaboration writes both inline, a program may write variables. `site` is the elaboration's
   record of the handler site, with its types in the frame of this node's code; none when the
-  program writes the node. `form` is `handle_with`'s, or `handle_tail[n: qs](hr, gs) M`'s
-  (`effHandleT`: `gs` the answering functions), or `handle_last[n: qs](hr, (ws, nfs)) M`'s
-  (`effHandleL`: `ws` the works, `nfs` the exits).  `[spec §14, §19, §51, §54]` -/
-  | handle (sp : Span) (n : Nat) (form : HForm) (site : Option SiteRec) (hr hc : Val) (M : Comp)
+  program writes the node.  `[spec §19]` -/
+  | handle (sp : Span) (n : Nat) (site : Option SiteRec) (hr hc : Val) (M : Comp)
   /-- `x <- M unwind (D); N` (`x : A <- …` with the annotation): `M then x. N unwind D`, the
   finaliser `D` under one dead binder (`[then]`).  `[spec §19]` -/
   | unwind (sp : Span) (x : Ident) (A : Option VTy) (M D N : Comp)
@@ -748,8 +715,8 @@ inductive Mark where
   | row (effs : List (Ident × List VTy)) (m : Mark) (names : List (Option Ident))
   deriving DecidableEq, Repr, Inhabited
 
-/-- The kind of an operation (SPEC §19, §53): answering (`fn`), or control (`ctl`) with the count of
-its continuation as declared: `ctl`, inferred (`infer`), or `linear ctl`, exactly `1` (`lin`). -/
+/-- The kind of an operation (SPEC §19): answering (`fn`), or control (`ctl`) with the structural
+qualifier of its continuation (`ctl` affine, `linear ctl`, `multi ctl` unrestricted). -/
 inductive OpKind where
   | fn
   | ctl (q : Qual)
@@ -877,7 +844,6 @@ def VTy.strip : VTy → VTy
   | .app _ G A => .app .none G.strip A.strip
   | .lapp _ G a => .lapp .none G.strip a.strip
   | .rowed _ F r => .rowed .none F.strip r.strip
-  | .kont _ n i q B C => .kont .none n i q B.strip C.strip
 
 def CTy.strip : CTy → CTy
   | .ret _ A => .ret .none A.strip
@@ -1028,7 +994,7 @@ def Comp.strip : Comp → Comp
   | .loop _ ℓ src V M N => .loop .none (ℓ.map Ident.strip) src.strip V.strip M.strip N.strip
   | .perform _ n i V => .perform .none n i V.strip
   | .abort _ n i V => .abort .none n i V.strip
-  | .handle _ n hf st hr hc M => .handle .none n hf (st.map SiteRec.strip) hr.strip hc.strip M.strip
+  | .handle _ n st hr hc M => .handle .none n (st.map SiteRec.strip) hr.strip hc.strip M.strip
   | .unwind _ x A M D N => .unwind .none x.strip (A.map VTy.strip) M.strip D.strip N.strip
   | .withbor2r _ x b A B r p m M =>
       .withbor2r .none x.strip b.strip A.strip B.strip r.strip p.strip m.strip M.strip
@@ -1084,7 +1050,7 @@ def Comp.span : Comp → Span
   | .ret sp _ | .bind sp _ _ _ _ _ | .force sp _ | .lam sp _ _ _ | .app sp _ _ | .with_ sp _ _
   | .proj sp _ _ | .top sp | .letUnit sp _ _ | .letPair sp _ _ _ _ | .case sp _ _ _ _ _
   | .absurd sp _ | .lamL sp _ _ _ | .inst sp _ _ | .nuIn sp _ | .nuOut sp _
-  | .ascribe sp _ _ | .loop sp _ _ _ _ _ | .perform sp _ _ _ | .abort sp _ _ _ | .handle sp _ _ _ _ _ _
+  | .ascribe sp _ _ | .loop sp _ _ _ _ _ | .perform sp _ _ _ | .abort sp _ _ _ | .handle sp _ _ _ _ _
   | .unwind sp _ _ _ _ _ | .withbor2r sp _ _ _ _ _ _ _ _ => sp
 
 def Life.span : Life → Span
@@ -1095,7 +1061,7 @@ def VTy.span : VTy → Span
   | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .handle sp _ | .mu sp _ _ | .name sp _
   | .lolli sp _ _ | .all sp _ _ _ | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _
   | .array sp _ | .arrayImm sp _ _ | .arrayMut sp _ _ | .sized sp _ _ _ | .app sp _ _
-  | .lapp sp _ _ | .rowed sp _ _ | .kont sp _ _ _ _ _ => sp
+  | .lapp sp _ _ | .rowed sp _ _ => sp
 
 def CTy.span : CTy → Span
   | .ret sp _ | .arr sp _ _ | .amp sp _ _ | .top sp | .all sp _ _ _ | .nu sp _ _ | .name sp _
@@ -1142,7 +1108,7 @@ def Comp.anySugar (p : VSugar → Bool) : Comp → Bool
   | .case _ V _ M _ N => V.anySugar p || M.anySugar p || N.anySugar p
   | .loop _ _ _ V M N => V.anySugar p || M.anySugar p || N.anySugar p
   | .perform _ _ _ V | .abort _ _ _ V => V.anySugar p
-  | .handle _ _ _ _ hr hc M => hr.anySugar p || hc.anySugar p || M.anySugar p
+  | .handle _ _ _ hr hc M => hr.anySugar p || hc.anySugar p || M.anySugar p
   | .unwind _ _ _ M D N => M.anySugar p || D.anySugar p || N.anySugar p
   | .withbor2r _ _ _ _ _ _ _ _ M => M.anySugar p
   | .force .. | .top _ => false

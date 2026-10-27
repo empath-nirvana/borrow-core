@@ -360,16 +360,6 @@ theorem kappaAt_cell {q : Qual} (hq : q ≠ .unr) (H : Val) (K : Kont) :
   · rfl
   · exact absurd rfl hq
 
-/-- **A handler a derivation types never reaches the cell-free `κ`**: `[handle]`'s term holds the
-tags `qualsVal` of its operations' counts (`hndExpr n (E.map Prod.fst)`), and at each of its
-operations `[op]` hands the clause `κ` with its cell.  The tag `2` that `kappa` answers is written
-by no count; only the untyped runs of `Core/EffCancel.lean` (`plainTags`) hold it.
-`[spec §25, §53]` -/
-theorem kappaAt_qualsVal (qs : List Count) (j : Nat) (hj : j < qs.length) (H : Val) (K : Kont) :
-    kappaAt (capTag (qualsVal qs).1 j) H K = kappaCell (cellAff qs[j].toQual) H K := by
-  rw [capTag_qualsVal qs j hj]
-  exact kappaAt_cell (Count.toQual_ne_unr _) H K
-
 /-- **H-op at an unrestricted operation**: the catch hands the clause the argument and
 `kappa H K`, and keeps the store; it is the configuration's only step.  `[spec §19, §25]` -/
 theorem catch_unr (μ : Heap) {n i : UInt32} {qs hr hs c : Val} (v : Val) {K : Kont}

@@ -6,7 +6,6 @@ import Backend2.Print
 import Backend2.Driver
 import Backend2.Lint
 import Backend2.Layout
-import Backend2.LayoutCheck
 import Backend2.Flow
 import Backend2.Lower
 import Backend2.Interp

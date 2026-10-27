@@ -193,6 +193,12 @@ def Env.ppL (E : Env) (a : CLife) : String := ppLifeP E.lenv 1 a
 
 /-! ### Rows  `[spec §19]` -/
 
+/-- `C` as a returner chain `F_Σ A`: its row and answer. -/
+def effRow? : CCTy → Option (CRow × CVTy)
+  | .ret A => some ([], A)
+  | .eff n i q A B fin C => (effRow? C).map fun (S, R) => (⟨n, i, q, A, B, fin⟩ :: S, R)
+  | _ => none
+
 /-- The environment of a computation checked against `C`: the row of `C` when it is a returner
 chain.  `[spec §19]` -/
 def Env.atC (E : Env) (C : CCTy) : Env :=
@@ -205,7 +211,7 @@ def Env.forVal (E : Env) : Env := { E with own := [], row := none }
 
 def ppRow (E : Env) (S : CRow) : String :=
   "[" ++ ", ".intercalate (S.map fun o =>
-    s!"{o.n}.{o.i} {cntStr o.cnt} {E.ppV o.A} ~> {E.ppV o.B}") ++ "]"
+    s!"{o.n}.{o.i} {qualStr o.q} {E.ppV o.A} ~> {E.ppV o.B}") ++ "]"
 
 theorem Row.weak_of_unr {S : CRow} (h : S.Unr) : S.Weak := by
   obtain ⟨o, ho, hq⟩ := h
@@ -226,30 +232,31 @@ def findOp (E : Env) (sp : Span) (what : String) (k i : Nat) :
       | none => throw ⟨sp, s!"the operation {k}.{i} is not in the row `{ppRow E S}`"⟩
     else throw ⟨sp, s!"the operation {k}.{i}: a name and an index are below 2^32"⟩
 
-/-- `κ`'s type `kTy S R q B`, read back: the count and the operation's answer. -/
-def kRead : CVTy → Option (CCount × CVTy)
-  | .thunk (.amp (.arr B _) .top) => some (.one, B)
-  | .thunk (.amp (.arr B _) _) => some (.opt, B)
+/-- `κ`'s type `kTy S R q B`, read back: the qualifier and the operation's answer. -/
+def kRead : CVTy → Option (CQual × CVTy)
+  | .thunk (.amp (.arr B _) .top) => some (.lin, B)
+  | .thunk (.amp (.arr B _) _) => some (.aff, B)
+  | .bang (.thunk (.amp (.arr B _) _)) => some (.unr, B)
   | _ => none
 
 /-- The operations a clause's type may be the type of: a control operation `A ↠^q B` (its
-argument `A ⊗ κ`), then an abortive one `A ↠^0 0`. -/
-def clauseCands : CVTy → List (CCount × CVTy × CVTy)
+argument `A ⊗ κ`), then an abortive one `A ↠^aff 0`. -/
+def clauseCands : CVTy → List (CQual × CVTy × CVTy)
   | .bang (.thunk (.arr (.tensor A K) _)) =>
       (match kRead K with | some (q, B) => [(q, A, B)] | none => []) ++
-        [(.zero, .tensor A K, .zero)]
-  | .bang (.thunk (.arr A _)) => [(.zero, A, .zero)]
+        [(.aff, .tensor A K, .zero)]
+  | .bang (.thunk (.arr A _)) => [(.aff, A, .zero)]
   | _ => []
 
 /-- The first candidate whose clause type is `c`. -/
 def firstClause (S : CRow) (R c : CVTy) :
-    List (CCount × CVTy × CVTy) → Option {e // BoCa.Fig16.LogRel.Core.clauseTy S R e = c}
+    List (CQual × CVTy × CVTy) → Option {e // BoCa.Fig16.LogRel.Core.clauseTy S R e = c}
   | [] => none
   | e :: es => if h : BoCa.Fig16.LogRel.Core.clauseTy S R e = c then some ⟨e, h⟩
       else firstClause S R c es
 
 /-- The operations `E` of a handler read back from the type of its clauses' tuple, with
-`clausesTy S R E` that type. An abortive operation is read at the count `0`: `0` and `1?` give it
+`clausesTy S R E` that type. An abortive operation is read as affine: `aff` and `unr` give it
 the same clause type. -/
 def clausesRead (S : CRow) (R : CVTy) :
     (Tc : CVTy) → Option {E // BoCa.Fig16.LogRel.Core.clausesTy S R E = Tc}
@@ -262,16 +269,16 @@ def clausesRead (S : CRow) (R : CVTy) :
 
 /-- The operations a clause's type under BOXED-κ may be the type of (`[spec §28]`): a control
 operation `A ↠^q B` (its argument `A ⊗ [@d] κ`), then an abortive one. -/
-def clauseCandsB : CVTy → List (CCount × CVTy × CVTy)
+def clauseCandsB : CVTy → List (CQual × CVTy × CVTy)
   | .bang (.thunk (.arr (.tensor A (.box d K)) _)) =>
       (match kRead K with | some (q, B) => [(q, A, B)] | none => []) ++
-        [(.zero, .tensor A (.box d K), .zero)]
-  | .bang (.thunk (.arr A _)) => [(.zero, A, .zero)]
+        [(.aff, .tensor A (.box d K), .zero)]
+  | .bang (.thunk (.arr A _)) => [(.aff, A, .zero)]
   | _ => []
 
 /-- The first candidate whose clause type under BOXED-κ at `@d` is `c`. -/
 def firstClauseB (S : CRow) (R : CVTy) (d : CLife) (c : CVTy) :
-    List (CCount × CVTy × CVTy) → Option {e // BoCa.Fig16.LogRel.Core.clauseTyB S R d e = c}
+    List (CQual × CVTy × CVTy) → Option {e // BoCa.Fig16.LogRel.Core.clauseTyB S R d e = c}
   | [] => none
   | e :: es => if h : BoCa.Fig16.LogRel.Core.clauseTyB S R d e = c then some ⟨e, h⟩
       else firstClauseB S R d c es
@@ -303,73 +310,6 @@ def clausesReadBoxed (S : CRow) (R : CVTy) (Tc : CVTy) :
   let d ← clausesBoxOf Tc
   let r ← clausesReadB S R d Tc
   pure ⟨d, r⟩
-
-/-- The core count a rule-written handler's form names.  `[spec §53, §54]` -/
-def _root_.Frontend.OpCount.toCore : Frontend.OpCount → CCount
-  | .zero => .zero
-  | .one => .one
-  | .opt => .opt
-
-/-- The components of a right-nested tuple's type `T₁ ⊗ (T₂ ⊗ … ⊗ 1)`. -/
-def tupleTys : CVTy → Option (List CVTy)
-  | .unit => some []
-  | .tensor c rest => (tupleTys rest).map (c :: ·)
-  | _ => none
-
-/-- **`handle_tail`'s operations, read back** (`effHandleT`, SPEC §14): from the counts `qs` and
-the answering functions' tuple type, each `!U(A ⊸ F_{Σ_N} B)` at an operation `A ↠^q B` whose
-count is not `0`, or `!U(A ⊸ F_Σ R)` at an abortive one `A ↠^0 0`; `Σ_N` the first non-abortive
-one's row. With `ansesTy S SN R E` the type.  `[spec §14, §53, §54]` -/
-def ansesRead (S : CRow) (R : CVTy) (qs : List CCount) (Tc : CVTy) :
-    Option (Σ' (SN : CRow) (E : List (CCount × CVTy × CVTy)),
-      BoCa.Fig16.LogRel.Core.ansesTy S SN R E = Tc) := do
-  let cs ← tupleTys Tc
-  if cs.length != qs.length then none
-  let parts ← (qs.zip cs).mapM fun (q, c) => match c with
-    | .bang (.thunk (.arr A C)) => (effRow? C).map fun (Sx, B) => (q, A, Sx, B)
-    | _ => none
-  let SN := ((parts.find? fun (q, _, _, _) => q != .zero).map (·.2.2.1)).getD []
-  let E := parts.map fun (q, A, _, B) =>
-    if q == .zero then (q, A, (BoCa.Fig16.LogRel.Core.VTy.zero)) else (q, A, B)
-  if h : BoCa.Fig16.LogRel.Core.ansesTy S SN R E = Tc then some ⟨SN, E, h⟩ else none
-
-/-- **`handle_last`'s operations, read back** (`effHandleL`, SPEC §51): from the counts `qs`, the
-works' tuple type, each `!U(A ⊸ F_{Σ_W}(B ⊕ X))` at an operation `A ↠^q B` whose count is not `0`
-or `!U(A ⊸ F_Σ R)` at an abortive one, and the exits' tuple type, each `!U(X ⊸ F_Σ R)`: the
-operations, `Σ_W` and the exits' arguments `Xs`. With `worksTy` and `exitsTy` the types.
-`[spec §51, §53, §54]` -/
-def lastRead (S : CRow) (R : CVTy) (qs : List CCount) (Tw Tn : CVTy) :
-    Option (Σ' (SW : CRow) (E : List (CCount × CVTy × CVTy)) (Xs : Nat → CVTy),
-      BoCa.Fig16.LogRel.Core.worksTy S SW R Xs E 0 = Tw ∧
-        BoCa.Fig16.LogRel.Core.exitsTy S R Xs E 0 = Tn) := do
-  let ws ← tupleTys Tw
-  let ns ← tupleTys Tn
-  if ws.length != qs.length || ns.length != qs.length then none
-  let xs ← ns.mapM fun c => match c with
-    | .bang (.thunk (.arr X _)) => some X
-    | _ => none
-  let parts ← (qs.zip ws).mapM fun (q, c) => match c with
-    | .bang (.thunk (.arr A C)) => (effRow? C).map fun (Sx, T) => (q, A, Sx, T)
-    | _ => none
-  let SW := ((parts.find? fun (q, _, _, _) => q != .zero).map (·.2.2.1)).getD []
-  let E := parts.map fun (q, A, _, T) => match q, T with
-    | .zero, _ => (q, A, (BoCa.Fig16.LogRel.Core.VTy.zero))
-    | _, .sum B _ => (q, A, B)
-    | _, _ => (q, A, (BoCa.Fig16.LogRel.Core.VTy.zero))
-  let Xs : Nat → CVTy := fun j => xs.getD j .unit
-  if h : BoCa.Fig16.LogRel.Core.worksTy S SW R Xs E 0 = Tw ∧
-      BoCa.Fig16.LogRel.Core.exitsTy S R Xs E 0 = Tn then some ⟨SW, E, Xs, h⟩ else none
-
-/-- **A `handle` node's operations, read back by its form**: from its clauses' tuple type
-(`clausesRead`, `handle_with`), its answering functions' (`ansesRead`, `handle_tail`), or its pair
-of works' and exits' (`lastRead`, `handle_last`).  `[spec §19, §54]` -/
-def formOps (hf : Frontend.HForm) (S : CRow) (R : CVTy) (Tc : CVTy) :
-    Option (List (CCount × CVTy × CVTy)) :=
-  match hf, Tc with
-  | .clauses, Tc => (clausesRead S R Tc).map (·.1)
-  | .tail qs, Tc => (ansesRead S R (qs.map Frontend.OpCount.toCore) Tc).map (·.2.1)
-  | .last qs, .tensor Tw Tn => (lastRead S R (qs.map Frontend.OpCount.toCore) Tw Tn).map (·.2.1)
-  | .last _, _ => none
 
 /-- `h_ret`'s type `!U(A -o F_S R)` read back. -/
 def retRead (Tr : CVTy) :
@@ -450,7 +390,7 @@ def convC (E : Env) (sp : Span) (C : CCTy) : (Σ D : CCTy, Res Δ T (.comp D)) �
     | some (S', A'), some (S, _) =>
       if hD : effOf S' A' = D then
         if hC : effOf S A' = C then
-          if hle : rowLeB S' S = true then pure (hC ▸ rEffSub (at_ sp) hle (hD ▸ r) (ins := true))
+          if hle : rowLeB S' S = true then pure (hC ▸ rEffSub (at_ sp) hle (hD ▸ r))
           else throw ⟨sp, s!"type mismatch: expected `{E.ppC C}`, but this has type " ++
             s!"`{E.ppC D}`: its row `{ppRow E S'}` is not within `{ppRow E S}`"⟩
         else throw (mismatch sp (E.ppC C) (E.ppC D))
@@ -561,7 +501,7 @@ def mentionsC (x : String) : Comp → Bool
       (z.name != x && mentionsC x N)
   | .loop _ _ src V M N => mentionsV x V || (!src.bound.contains x && mentionsC x M) || mentionsC x N
   | .perform _ _ _ V | .abort _ _ _ V => mentionsV x V
-  | .handle _ _ _ _ hr hc M => mentionsV x hr || mentionsV x hc || mentionsC x M
+  | .handle _ _ _ hr hc M => mentionsV x hr || mentionsV x hc || mentionsC x M
   | .unwind _ y _ M D N => mentionsC x M || mentionsC x D || (y.name != x && mentionsC x N)
   | .withbor2r _ _ _ _ _ _ p m M => p.name == x || (m.name != x && mentionsC x M)
 end
@@ -654,14 +594,14 @@ def caseIt {A B : CVTy} {C : CCTy} (E : Env) (T : List CVTy) (sp : Span) (x y : 
     else throw (mergeErr E T sp "the `inl` arm" "the `inr` arm" "in this `case`, " F₁.u F₁.w F₂.u F₂.w)
   else throw (mergeErr E T sp "the `inl` arm" "the `inr` arm" "in this `case`, " F₁.u F₁.w F₂.u F₂.w)
 
-/-- `Fun 'x < @b. M`; `dom` when the program writes the bound `dom` (`TInfo.dom`). -/
+/-- `Fun 'x < @b. M`. -/
 def funIt {v : LifeVar} {bl : CLife} {C : CCTy} (E : Env) (T : List CVTy) (sp : Span)
-    (name : String) (rM : Res (Δ.extend v bl) (.unit :: T) (.comp C)) (dom : Bool) :
+    (name : String) (rM : Res (Δ.extend v bl) (.unit :: T) (.comp C)) :
     Except Error (Res Δ T (.comp (.all v bl C))) := do
   if hbx : bl.mentions v = false then
     if hΔx : boundsAvoidB Δ v = true then
       let F ← popD sp rM.F
-      if hs : usedSat (fun A => !vfreeB v A) T F.u = true then pure (rAllI { sp, dom } hbx hΔx F hs)
+      if hs : usedSat (fun A => !vfreeB v A) T F.u = true then pure (rAllI (at_ sp) hbx hΔx F hs)
       else match firstBad (fun A => !vfreeB v A) T F.u with
         | some i => throw ⟨sp, s!"`Fun '{name}`: {E.slotName i}, of type `{E.slotTy T i}`, is " ++
             s!"used inside, and its type mentions `'{name}` ({ppLVar v})"⟩
@@ -697,7 +637,7 @@ def lamIt {A : CVTy} {C : CCTy} (E : Env) (sp : Span) (x : Ident) (rM : Res Δ (
 /-- A computation at the row `S′`, at the row `S` by `[sub]`. -/
 def liftRow (E : Env) (sp : Span) {S' : CRow} {A : CVTy} (S : CRow)
     (r : Res Δ T (.comp (effOf S' A))) : Except Error (Res Δ T (.comp (effOf S A))) :=
-  if hle : rowLeB S' S = true then pure (rEffSub (at_ sp) hle r (ins := true))
+  if hle : rowLeB S' S = true then pure (rEffSub (at_ sp) hle r)
   else throw ⟨sp, s!"this computation performs the operations `{ppRow E S'}`, which are not " ++
     s!"within the row `{ppRow E S}` here"⟩
 
@@ -737,13 +677,11 @@ def markIt {j : Jdg} (sp : Span) (k : SchemeMark) (r : Res Δ T j) : Except Erro
   | some r' => pure r'
   | none => err sp s!"internal error: a marked scheme ({repr k}) is not the scheme's term"
 
-/-- `[then]` at the row `S`: `N` (its binder `x` closed) and the finaliser `D` at one context;
-`written` when the program writes `D`, `ann` when it annotates `x`, `lin` when it declares `x`
-`linear` (`TInfo`). -/
+/-- `[then]` at the row `S`: `N` (its binder `x` closed) and the finaliser `D` at one context. -/
 def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExpr} {sN : CRow} {pN : Pins}
     (rM : Res Δ T (.comp (effOf S A)))
     (FN : Fam T (fun L => TTied pN sN Δ (mkCtx (A :: T) (true :: L)) tN (.comp (effOf S B))))
-    (rD : Res Δ (.unit :: T) (.comp (effOf [] .unit))) (written ann lin : Bool := false) :
+    (rD : Res Δ (.unit :: T) (.comp (effOf [] .unit))) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
   if hNZ : Row.nzB S = true then
     if hUq : Row.uniqB S = true then
@@ -765,7 +703,7 @@ def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExp
                 | none => throw ⟨sp, "internal error: an unrestricted row"⟩
             else pure (F.map fun _ h => ⟨h, fun hU => absurd (Row.unrDB_iff.mpr hU) (by simp [hu])⟩)
           if h : overlapOK T rM.F.u F'.u = true then
-            pure (rEffThen (atB sp [x]) (Row.nzB_sound hNZ) (Row.uniqB_sound hUq) rM F' h written ann lin)
+            pure (rEffThen (atB sp [x]) (Row.nzB_sound hNZ) (Row.uniqB_sound hUq) rM F' h)
           else throw (splitErr E T sp rM.F.u F'.u)
         else throw (mergeErr E T sp "the finaliser" "the rest" "after this computation, "
           FD.u FD.w FN.u FN.w)
@@ -774,13 +712,11 @@ def thenIt (E : Env) (sp : Span) (x : String) {S : CRow} {A B : CVTy} {tN : TExp
     else throw ⟨sp, s!"the row `{ppRow E S}` has an operation twice"⟩
   else throw ⟨sp, s!"the row `{ppRow E S}` has an operation of the reserved name 0"⟩
 
-/-- `x <- M; N` whose head `M` performs operations, at the row `S` (SPEC §19); `ann` when the
-program annotates `x` (`TInfo.ann`). At a row with no
+/-- `x <- M; N` whose head `M` performs operations, at the row `S` (SPEC §19). At a row with no
 weakening, or when every slot `N` uses drops (and is `!` at an unrestricted row), `[let]`;
 otherwise `[then]`, with the finaliser `finalOf`: the destructors of the slots `N` uses. -/
 def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVTy}
-    (rM : Res Δ T (.comp (effOf S A))) (rN : Res Δ (A :: T) (.comp (effOf S B)))
-    (ann : Bool := false) :
+    (rM : Res Δ T (.comp (effOf S A))) (rN : Res Δ (A :: T) (.comp (effOf S B))) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
   let FN ← popL E x.span x.name rN.F lin
   if hw : Row.weakB S = true then
@@ -799,18 +735,18 @@ def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVT
             · exact h')⟩ :
           TTied rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.t (.comp (effOf S B)) ∧
             (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
-      if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet (atB sp [x.name]) rM FN' h ann lin)
+      if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet (atB sp [x.name]) rM FN' h)
       else throw (splitErr E T sp rM.F.u FN'.u)
     else
       let rD ← finalOf E sp S FN.u
-      thenIt E sp x.name rM FN rD (ann := ann) (lin := lin)
+      thenIt E sp x.name rM FN rD
   else
     let FN' := FN.map fun _ h =>
       (⟨h, fun hW => absurd (Row.weakB_iff.mpr hW) (by simp [hw]),
         fun hU => absurd (Row.weakB_iff.mpr (Row.weak_of_unr hU)) (by simp [hw])⟩ :
         TTied rN.pins rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.t (.comp (effOf S B)) ∧
           (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
-    if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet (atB sp [x.name]) rM FN' h ann lin)
+    if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet (atB sp [x.name]) rM FN' h)
     else throw (splitErr E T sp rM.F.u FN'.u)
 
 end

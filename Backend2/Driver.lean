@@ -7,9 +7,7 @@ import Backend2.Flow
 import Backend2.Frames
 import Backend2.LitViews
 import Backend2.Lint
-import Backend2.LayoutCheck
 import Frontend.Check.Handled
-import Rewrite.Driver
 
 /-!
 # Backend2 — driver
@@ -40,7 +38,7 @@ def extsOf (m : Frontend.Check.IOMain) : Except String (List Ext) :=
 outer row, clauses' kinds and its handler pair's erasure. -/
 structure HNode where
   n : UInt32
-  E : List (Count × VTy × VTy)
+  E : List (Qual × VTy × VTy)
   S : Row
   ks : List ClauseKinds.HKind
   H : Expr
@@ -103,8 +101,9 @@ def machineOps (c : Frontend.Check.Checked) : MachSet := Id.run do
   return out
 
 /-- **The operations whose every `handle` node keeps `κ` boxed** (SPEC §52): each machine operation
-`(n, j)` whose clause at every node of `n` is `stored` and every node of `n` is `effHandleVB`
-(BOXED-κ, SPEC §28); no `κ` may be copied (SPEC §53). A stack machine's frames have one owner there:
+`(n, j)` whose clause at every node of `n` is `stored`, every node of `n` is `effHandleVB` (BOXED-κ,
+SPEC §28) and no operation of any node of `n` is `unr` (a site with a stack has no `κ` that may be
+copied). A stack machine's frames have one owner there:
 the stored site whose `κ` holds them, which keeps a stack. -/
 def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
   let nodes := hnodes Frontend.Check.copiesFuel c.t
@@ -112,43 +111,15 @@ def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
   let mut out : MachSet := {}
   for (n, j) in ms.toList do
     let same := nodes.filter (·.n == n)
-    if !same.isEmpty && same.all (fun g => g.boxed &&
-        (g.ks[j.toNat]?.map (·.kind)) == some .stored && (g.E[j.toNat]?).isSome) then
+    if !same.isEmpty && same.all (fun g => g.boxed && g.E.all (·.1 != .unr) &&
+        (g.ks[j.toNat]?.map (·.kind)) == some .stored &&
+        (g.E[j.toNat]?.map (·.1)).any (· != .unr)) then
       out := out.insert (n, j)
   return out
 
 /-- The checker's cell classes (`Checked.cells`) at LIR types. -/
 def cellsOf (k : Backend.CheckedProg) : List (List LTy) :=
   k.main.cells.map fun c => c.tys.filterMap fun t => (ofV (machineOps k.main) t).toOption
-
-/-- **The check of a program's layouts** (`Backend2/LayoutCheck.lean`), as the compiler's error. -/
-def checkLayouts (p : Prog) (L : Lay.Layouts) : Except String Unit :=
-  match LayCheck.check p L with
-  | .ok () => pure ()
-  | .error e => throw s!"internal: closure classes not a fixed point: {e}"
-
-/-- **The layouts of a program's LIR, checked**: `Layouts`'s analysis (`Lay.places`,
-`Lay.resolve`), then the check that its result is a solution of the program's constraints
-(`checkLayouts`). Every layout the compiler reads is one of these. A failure is the compiler's
-error, not the program's. -/
-def checkedLayouts (cells : List (List LTy)) (p : Prog) : Except String Lay.Layouts := do
-  let (g, m) ← Lay.places p
-  let L := Lay.resolve p g m cells
-  checkLayouts p L
-  pure L
-
-/-- **The check of a program's closure flow** (`LayCheck.checkFlow`): the direct calls `fs`
-licenses (`Flow.known`), its sets checked a solution of the flow's constraints. -/
-def checkFlow (p : Prog) (L : Lay.Layouts) (fs : Flow.St) : Except String (Std.HashMap Var Nat) := do
-  let kn := Flow.known p L fs
-  match LayCheck.checkFlow p L fs.sets kn with
-  | .ok () => pure kn
-  | .error e => throw s!"internal: closure classes not a fixed point: closure flow: {e}"
-
-/-- **The closure flow of a program's LIR, checked**: `Flow.solution`, then `checkFlow`. -/
-def checkedFlow (p : Prog) (L : Lay.Layouts) : Except String (Flow.St × Std.HashMap Var Nat) := do
-  let fs := Flow.solution p L
-  pure (fs, ← checkFlow p L fs)
 
 /-- The codes of the suspended computations an outcome `o` (of `M`) may hold, by the layouts: the
 closure classes of each suspension's `k`.  `[spec §49]` -/
@@ -172,8 +143,7 @@ layouts of the converted program decide the calls in tail position that close a 
 (`tailPass`) and the machines whose state is a cell (`cellPass`). A machine whose state is a cell
 and whose body takes its continuation is converted again with the level's cell passed on to its
 next point (`threadedOf`, SPEC §50): the conversion's second run, at those machines. -/
-def lirOfChecked (k : Backend.CheckedProg) (census : Bool := false) :
-    Except String (Prog × CState) := do
+def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
   let c := k.main
   let (exts, ncaps, loops) ← match k.io with
     | none => pure ([], 0, false)
@@ -183,11 +153,12 @@ def lirOfChecked (k : Backend.CheckedProg) (census : Bool := false) :
       Except String (Prog × CState × Std.HashMap Nat LTy × Std.HashMap Nat LTy) := do
     let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c) (machineOps c)
       threaded stacked
-    let p := { p with exits := k.exits }
+    let p := { p with exits := c.exitsOnDivError }
     if st.done.isEmpty then return (p, st, {}, {})
     -- A call in tail position whose callee's suspended computations may be the machine's own
     -- closes a loop of tail calls, and passes its outcome on (SPEC §49, `tailPass`).
-    let L₁ ← checkedLayouts (cellsOf k) p
+    let (g, m) ← Lay.places p
+    let L₁ := Lay.resolve p g m (cellsOf k)
     let loop (site : Nat × Var × OutInfo × Nat) : Bool :=
       let (_, o, M, i) := site
       let own := (st.done[i]?.map fun (_, kcs) => kcs.map (·.2)).getD []
@@ -198,7 +169,8 @@ def lirOfChecked (k : Backend.CheckedProg) (census : Bool := false) :
       else pure (p, st)
     -- The machines whose suspended computation's class holds itself keep their state in a cell
     -- (SPEC §49, `cellPass`), read off the layouts' recursive classes.
-    let L ← checkedLayouts (cellsOf k) p
+    let (g, m) ← Lay.places p
+    let L := Lay.resolve p g m (cellsOf k)
     let recursive (kc : Nat) : Bool := match L.codeClass[kc]? with
       | some cls => L.isRec cls
       | none => false
@@ -213,34 +185,14 @@ def lirOfChecked (k : Backend.CheckedProg) (census : Bool := false) :
   let (p, st, _, _) ← run th sk
   return (p, st)
 
-/-- **The checked program the new backend compiles**: the Core → Core rewriter's (`Rewrite.run`,
-SPEC §54), run once on a program; its refusal is the compile's error. -/
-def rewritten (k : Backend.CheckedProg) : Except String Backend.CheckedProg :=
-  if k.rewritten then pure k else do pure (← Rewrite.run k).1
-
-/-- The LIR of a checked program (`lirOfChecked`), after the rewriter (`rewritten`). -/
-def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
-  lirOfChecked (← rewritten k) census
-
 /-- **The effect erasure's postcondition**, for a program (`bcc lir --erasure`, SPEC §47, §49): the
 LIR has no `handle` and no `perform`, so a program the new backend compiles has none left. The
 line counts, at a compiled program, the `handle`, `perform` and `raise` nodes the conversion
 erased, and with state machines the `handle` nodes compiled as drives and the `perform`s as
 suspensions (each `use` body once per key); a compiled program leaves no node. At a program
 outside the fragment it counts the `handle` nodes with a clause of kind `once` or `stored` (the
-stored-continuation sites) and the others no rule takes. At a program R0 rewrites (SPEC §54), the
-line also counts what R0 rewrote in Core before the conversion (`rewritten H P R`: the handler
-nodes, the `perform`s at a row holding an abortive name, and the `raise`s, each instance's body
-once). -/
-def erasureLine (k₀ : Backend.CheckedProg) : String := Id.run do
-  let (k, rep) ← match Rewrite.run k₀ with
-    | .ok r => pure r
-    | .error e => return s!"error: {e}"
-  -- R0's rewrites (SPEC §54), per instance: the handler nodes, `perform`s and `raise`s.
-  let ruled := rep.r0.filterMap fun (n, st) => if st == "rewritten" then some n else none
-  let rw := if ruled.isEmpty then "" else match Rewrite.r0Counts k₀.main ruled with
-    | .ok n => s!" rewritten {n.handles} {n.performs} {n.raises}"
-    | .error e => s!" rewritten error: {e}"
+stored-continuation sites) and the others no rule takes. -/
+def erasureLine (k : Backend.CheckedProg) : String := Id.run do
   let c := k.main
   let nodes := hnodes Frontend.Check.copiesFuel c.t
   let direct := directFacts c
@@ -256,85 +208,32 @@ def erasureLine (k₀ : Backend.CheckedProg) : String := Id.run do
     let r (key : String) := st.erased.getD key 0
     -- A compiled program leaves no node: each is erased (SPEC §47) or a machine's drive (§49).
     let m := if r "machine" > 0 then s!" machines {r "machine"} suspends {r "suspend"}" else ""
-    s!"erased handles {r "handle"} performs {r "perform"} raises {r "raise"}{m}{rw} left 0 0"
-  | .error _ => s!"outside{rw} left {stored} {other}"
+    s!"erased handles {r "handle"} performs {r "perform"} raises {r "raise"}{m} left 0 0"
+  | .error _ => s!"outside left {stored} {other}"
 
-/-- **The rewriter's line** (SPEC §54, `bcc rewrite --identity`): the instances read back, the
-declarations and the polymorphic ones among them, the uses. A program no rule rewrites is held to
-step 0's identity criterion: the rewritten `main`'s erasure against the source's and the typed
-terms' mismatches by node kind and field (`Rewrite.identity`), and the LIR of the rewritten program
-against the source's, byte for byte (`same`, both outside the fragment with one message
-`outside`, or `differs`). A program R0 rewrites lists its abortive names, each rewritten or left
-with its reason, the source nodes R0 rewrote by rule (`main` and each instance's body once), the
-binders `π` moves,
-and whether the new backend compiles the rewritten program (`ok`), both are outside its fragment
-(`outside`), or only the source compiles (`red`). -/
-def identityLine (k : Backend.CheckedProg) : Except String String := do
-  let (k', rep) ← Rewrite.run k
-  let head := s!"instances {rep.keys} decls {rep.decls} poly {rep.poly}"
-  let r0 := if rep.r0.isEmpty then "" else
-    " R0" ++ String.join (rep.r0.map fun (n, st) => s!" {n}:{st.replace " " ""}")
-  let ruled := rep.r0.filterMap fun (n, st) => if st == "rewritten" then some n else none
-  if !ruled.isEmpty then
-    let st ← Rewrite.r0Counts k.main ruled
-    let lir := match lirOfChecked k, lirOfChecked k' with
-      | _, .ok _ => "ok"
-      | .error _, .error _ => "outside"
-      | .ok _, .error _ => "red"
-    pure (head ++ r0 ++ s!" raises {st.raises} handles {st.handles} lets {st.lets} thens {st.thens}" ++
-      s!" subs {st.subs} performs {st.performs} forwards {st.forwards} ulends {st.ulends}" ++
-      s!" pi {rep.moved} lir {lir}")
-  else
-    let id ← Rewrite.identity k.main k'.main
-    let lir := match lirOfChecked k, lirOfChecked k' with
-      | .ok (p, _), .ok (p', _) => if p.pp == p'.pp then "same" else "differs"
-      | .error e, .error e' => if e == e' then "outside" else "differs"
-      | _, _ => "differs"
-    let ms := id.mismatches.map fun (m, n) => s!" {m}:{n}"
-    pure (s!"{head} uses {id.uses} " ++
-      s!"erasure {id.erasure} lir {lir} mismatches {id.mismatches.length}" ++ String.join ms ++ r0)
-
-/-- **The LIR every compile reads**: `lirOf`'s, linted (`Backend2/Lint.lean`). The lowering does
-not track consumption (`Lower.vals`), so a variable used twice would lower to a use after free;
-the lint makes each variable's single consumption, and the duplicability of what is copied, a
-checked fact of every compiled program. A failure is the compiler's error, not the program's. -/
-def lintedLirOf (k : Backend.CheckedProg) : Except String (Prog × CState) := do
-  let (p, cs) ← lirOf k
-  match Lint.lint p with
-  | .ok () => pure (p, cs)
-  | .error e => throw s!"internal: LIR not linear: {e}"
-
-/-- The lint's copies at the layouts (`Lint.copiesDup`), as the compiler's error. -/
-def copiesChecked (p : Prog) (L : Lay.Layouts) : Except String Unit :=
-  match Lint.copiesDup p L with
-  | .ok () => pure ()
-  | .error e => throw s!"internal: LIR not linear: {e}"
+/-- Convert and lint a program (`bcc lir --lint`): an error outside the pure fragment, or the
+lint's. -/
+def lintOf (k : Backend.CheckedProg) : Except String Unit := do
+  let (p, _) ← lirOf k
+  Lint.lint p
 
 /-- **The frame slots** (`bcc lir --frames`, SPEC §50): of the cells allocated for one lend
 (`Op.allocLent`), how many are placed in a frame slot (`Frames.framed`) and how many on the heap. -/
 def framesLine (k : Backend.CheckedProg) : Except String String := do
-  let k ← rewritten k
   let (p, _) ← lirOf k
   let all := Frames.lentCells p
   let fr := Frames.framed p
   let n := (all.filter fr.contains).length
   pure s!"framed {n} allocated {all.length - n}"
 
-/-- The layouts of a program's LIR, checked (`checkedLayouts`). -/
-def layoutsOf (k : Backend.CheckedProg) (p : Prog) : Except String Lay.Layouts :=
-  checkedLayouts (cellsOf k) p
-
-/-- Convert and lint a program (`bcc lir --lint`): an error outside the pure fragment, or the
-lint's, its copies read at the layouts too. -/
-def lintOf (k : Backend.CheckedProg) : Except String Unit := do
-  let k ← rewritten k
-  let (p, _) ← lintedLirOf k
-  copiesChecked p (← layoutsOf k p)
+/-- The layouts of a program's LIR. -/
+def layoutsOf (k : Backend.CheckedProg) (p : Prog) : Except String Lay.Layouts := do
+  let (g, m) ← Lay.places p
+  pure (Lay.resolve p g m (cellsOf k))
 
 /-- The closure classes of a program's layouts, one a line: its codes, its width, whether its
 environment is on the heap (`bcc lir --layout`). -/
 def layoutReport (k : Backend.CheckedProg) : Except String (List String) := do
-  let k ← rewritten k
   let (p, _) ← lirOf k
   let L ← layoutsOf k p
   let cls := (L.union.toList.filter (!·.2.isEmpty)).map fun (r, cs) =>
@@ -343,39 +242,13 @@ def layoutReport (k : Backend.CheckedProg) : Except String (List String) := do
   let boxes := L.boxed.toList.map fun (v, i) => s!"boxed {v}.{i}"
   pure (cls ++ boxes)
 
-/-- **The checks refuse wrong layouts** (`bcc lir --layout-reject`, the reject tests): the
-program's layouts and closure flow as computed, accepted; then each perturbation of them
-(`LayCheck.perturbLayouts`, `LayCheck.perturbFlow`), refused, with the refusal. A line
-`ACCEPTED` is a perturbation the checks let through. -/
-def rejectReport (k : Backend.CheckedProg) : Except String (List String) := do
-  let k ← rewritten k
-  let (p, _) ← lintedLirOf k
-  let (g, m) ← Lay.places p
-  let L := Lay.resolve p g m (cellsOf k)
-  let fs := Flow.solution p L
-  let kn := Flow.known p L fs
-  let base := match LayCheck.check p L, LayCheck.checkFlow p L fs.sets kn with
-    | .ok (), .ok () => "accepted: the layouts and the closure flow as computed"
-    | .error e, _ | _, .error e => s!"REFUSED as computed: {e}"
-  let line (name : String) (r : Option (Except String Unit)) : String := match r with
-    | none => s!"n/a: {name}"
-    | some (.ok ()) => s!"ACCEPTED: {name}"
-    | some (.error e) => s!"refused: {name}: {e.take 160}"
-  let ls := (LayCheck.perturbLayouts p L).map fun (name, L') =>
-    line name (L'.map fun L' => LayCheck.check p L')
-  let fl := (LayCheck.perturbFlow p fs.sets kn).map fun (name, x) =>
-    line name (x.map fun (s, kn') => LayCheck.checkFlow p L s kn')
-  pure (base :: ls ++ fl)
-
 /-- The word IR of a checked program by the new backend; with `counts`, the counting build. -/
 def flatOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String Backend.Flat.Prog := do
-  let k ← rewritten k
-  let (p, cs) ← lintedLirOf k
+  let (p, cs) ← lirOf k
   let L ← layoutsOf k p
-  copiesChecked p L
-  let (fs, kn) ← checkedFlow p L
+  let fs := Flow.solution p L
   let p := LitViews.rewrite p cs.lits fs.sets
-  Low.lowerProg p L kn (Frames.framed p) counts
+  Low.lowerProg p L (Flow.known p L fs) (Frames.framed p) counts
 
 /-- The program as WAT by the new backend. -/
 def watOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String String := do
@@ -391,9 +264,7 @@ def llOf (k : Backend.CheckedProg) (counts : Bool := false) (facts : Bool := tru
 /-- **The new backend's compile, timed** (`bcc compile --backend new --timings`): `file`'s WAT, each
 stage's time and output size written to standard error as `Backend.compileWatTimed` writes the
 old backend's, then their total. The stages are the frontend's (parse, check, `main`'s I/O) and the
-new backend's (the LIR, its lint, its layouts and their check, the lint's copies at them, the 0-CFA
-and its check, the word IR,
-Wasm, the printed module).
+new backend's (the LIR, its layouts, the 0-CFA, the word IR, Wasm, the printed module).
 A measurement of the new backend's compile time, outside the gate (SPEC §48). -/
 def watTimed (file src : String) : IO (Except String String) := do
   let tot ← IO.mkRef 0
@@ -410,29 +281,16 @@ def watTimed (file src : String) : IO (Except String String) := do
     let some c := r.main | throw s!"{file}: no `main`"
     let k ← ExceptT.mk <| stage "io main" (fun _ => "") fun _ =>
       match Frontend.Check.ioMainOf r.el.prog c with
-        | .ok io =>
-          let cnts : Frontend.Check.CntTable := { ops := r.grades.table }
-          pure ({ prog := r.el.prog, main := c, io := io, cnts := cnts, el := r.el,
-                  exits := c.exitsOnDivError } : Backend.CheckedProg)
+        | .ok io => pure (⟨r.el.prog, c, io⟩ : Backend.CheckedProg)
         | .error e => throw s!"{file}: {e}"
-    let k ← ExceptT.mk <| stage "rewrite" (fun (_ : Backend.CheckedProg) => "") fun _ =>
-      (rewritten k).mapError fun e => s!"{file}: {e}"
     let (p, cs) ← ExceptT.mk <| stage "lir" (fun (q : Prog × CState) =>
         s!"{q.1.fns.size} functions, {q.1.codes.size} codes") fun _ => lirOf k
-    ExceptT.mk <| stage "lint" (fun _ => "") fun _ => match Lint.lint p with
-      | .ok () => pure ()
-      | .error e => throw s!"{file}: internal: LIR not linear: {e}"
-    let L ← ExceptT.mk <| stage "layout" (fun _ => "") fun _ => do
-      let (g, m) ← Lay.places p
-      pure (Lay.resolve p g m (cellsOf k))
-    ExceptT.mk <| stage "layout check" (fun _ => "") fun _ => checkLayouts p L
-    ExceptT.mk <| stage "lint copies" (fun _ => "") fun _ => copiesChecked p L
+    let L ← ExceptT.mk <| stage "layout" (fun _ => "") fun _ => layoutsOf k p
     let fs ← ExceptT.mk <| stage "flow" (fun _ => "") fun _ => pure (Flow.solution p L)
-    let kn ← ExceptT.mk <| stage "flow check" (fun _ => "") fun _ => checkFlow p L fs
     let flat ← ExceptT.mk <| stage "lower" (fun (q : Backend.Flat.Prog) => s!"{q.fns.size} functions")
       fun _ => do
         let p := LitViews.rewrite p cs.lits fs.sets
-        Low.lowerProg p L kn (Frames.framed p) false
+        Low.lowerProg p L (Flow.known p L fs) (Frames.framed p) false
     let wasm ← ExceptT.mk <| stage "wasm" (fun (m : Backend.Wasm.Module) => s!"{m.funcs.length} functions")
       fun _ => pure (Backend.Wasm.lowerProg flat)
     let wat ← ExceptT.mk <| stage "print" (fun (s : String) => s!"{s.utf8ByteSize} bytes")
@@ -447,7 +305,7 @@ word IR's interpreter at the new backend's lowering. -/
 def interpStage (stage : String) (k : Except String Backend.CheckedProg) (input : List UInt8)
     (args : List UInt8 := []) : Except String Backend.Output := do
   match stage with
-  | "lir" => runLIR (← lintedLirOf (← k)).1 Backend.runFuel input args
+  | "lir" => runLIR (← lirOf (← k)).1 Backend.runFuel input args
   | "lflat" => Backend.Flat.interp Backend.runFuel (← flatOf (← k)) input args
   | "lflat-counts" => Backend.Flat.interp Backend.runFuel (← flatOf (← k) true) input args
   | _ => throw s!"unknown stage `{stage}`"

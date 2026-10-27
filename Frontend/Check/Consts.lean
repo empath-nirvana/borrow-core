@@ -184,7 +184,6 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
         .withbor1U x hd.toP hx (scopedB_sound hsc) h₁ h₂ hS hdc
           (.dtor hdt hdc hde hd))
   | .withbor2U _ b A B r => do
-      let dom := b matches .dom _
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
@@ -194,7 +193,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hside⟩ ← outlivesWitness sp b A
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A)
-      (cDeadStrict (fun j => .withbor2U { sp, wit := some b, dom } j A B S x (finNode sp (.ref A))) fun hd _ =>
+      (cDeadStrict (fun j => .withbor2U (at_ sp) j A B S x (finNode sp (.ref A))) fun hd _ =>
         .withbor2U x hd.toP hx hside h₁ h₂ hS hdc
           (.dtor hdt hdc hde hd))
   | .withbor3U a _ A B r => do
@@ -220,7 +219,6 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       (cDead (fun j => .withloadU (at_ sp) j a A B S x) fun hd _ =>
         .withloadU x hd hx h₁ h₂ hS)
   | .sliceBorrowMutU _ b A B r => do
-      let dom := b matches .dom _
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
@@ -231,11 +229,10 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hB⟩ ← outlivesWitness sp b B
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.fam (.ref A))
-      (cDeadStrict (fun j => .sliceBorrowMU { sp, wit := some b, dom } j A B S x (finNode sp (.fam (.ref A))))
+      (cDeadStrict (fun j => .sliceBorrowMU (at_ sp) j A B S x (finNode sp (.fam (.ref A))))
         fun hd _ => .sliceBorrowMU x hd.toP hA hB h₁ h₂ hS hdc
           (.dtor hdt hdc hde hd))
   | .sliceBorrowImmU _ b A B r => do
-      let dom := b matches .dom _
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
@@ -247,7 +244,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hB⟩ ← outlivesWitness sp b B
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.fam (.ref A))
-      (cDeadStrict (fun j => .sliceBorrowIU { sp, wit := some b, dom } j A B S x (finNode sp (.fam (.ref A))))
+      (cDeadStrict (fun j => .sliceBorrowIU (at_ sp) j A B S x (finNode sp (.fam (.ref A))))
         fun hd _ => .sliceBorrowIU x hd.toP (scopedB_sound hsc) hA hB h₁ h₂ hS hdc
           (.dtor hdt hdc hde hd))
   | _ => err sp "internal error: not an unwinding borrow"
@@ -294,14 +291,13 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
       (cDead (fun j => .withbor1 (at_ sp) j A B x) fun hd _ => .withbor1 x hd hx (scopedB_sound hsc) h₁ h₂)
   | .withbor2 _ b A B => do
-      let dom := b matches .dom _
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
       let x := Δ.freshVar
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
       let ⟨hside⟩ ← outlivesWitness sp b A
-      (cDead (fun j => .withbor2 { sp, wit := some b, dom } j A B x) fun hd _ => .withbor2 x hd hx hside h₁ h₂)
+      (cDead (fun j => .withbor2 (at_ sp) j A B x) fun hd _ => .withbor2 x hd hx hside h₁ h₂)
   | .withbor3 a _ A B => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
@@ -386,7 +382,6 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       | .imm => (cDeadStrict (fun j => .withborSI (at_ sp) j s c T') fun hd _ =>
           .withborSI s c T' hσ hT (by simpa [LifeCtx.Ok] using hΔ) (by simpa using hc) hcl he hd)
   | .withborF2Mut _ _ _ w A B T' => do
-      let dom := w matches .dom _
       let w ← E.elabL Δ w
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
@@ -401,7 +396,7 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hTo⟩ ← needB sp (outlivesB (FD₁ Δ x) (.var x) T')
         s!"`{ppVTy T'}` must outlive the family's outer borrow"
       let ⟨he⟩ ← effFreeD sp BoCa.Fig16.LogRel.Core.withborF2
-      (cDeadStrict (fun j => .withborF2M { sp, wit := some w, dom } j c x y A B T') fun hd _ =>
+      (cDeadStrict (fun j => .withborF2M (at_ sp) j c x y A B T') fun hd _ =>
         .withborF2M s hA (outlivesB_sound _ _ _ hBo) (outlivesB_sound _ _ _ hTo) he hd)
   | .arrayNew A => do
       let A ← E.elabV Δ A
@@ -443,7 +438,6 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let C ← E.elabC Δ C
       (cDead (fun j => .boundedFix (at_ sp) j A C) fun hd _ => .boundedFix A C hd)
   | .sliceBorrowMut _ b A B => do
-      let dom := b matches .dom _
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
@@ -451,9 +445,8 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨⟨_, h₁, h₂⟩⟩ ← freshFor (Δ := Δ) sp x A B
       let ⟨hA⟩ ← outlivesWitness sp b A
       let ⟨hB⟩ ← outlivesWitness sp b B
-      (cDead (fun j => .sliceBorrowM { sp, wit := some b, dom } j A B x) fun hd _ => .sliceBorrowM x hd hA hB h₁ h₂)
+      (cDead (fun j => .sliceBorrowM (at_ sp) j A B x) fun hd _ => .sliceBorrowM x hd hA hB h₁ h₂)
   | .sliceBorrowImm _ b A B => do
-      let dom := b matches .dom _
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
@@ -462,7 +455,7 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
       let ⟨hA⟩ ← outlivesWitness sp b A
       let ⟨hB⟩ ← outlivesWitness sp b B
-      (cDead (fun j => .sliceBorrowI { sp, wit := some b, dom } j A B x) fun hd _ => .sliceBorrowI x hd (scopedB_sound hsc) hA hB h₁ h₂)
+      (cDead (fun j => .sliceBorrowI (at_ sp) j A B x) fun hd _ => .sliceBorrowI x hd (scopedB_sound hsc) hA hB h₁ h₂)
   | .sliceGetMut a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
