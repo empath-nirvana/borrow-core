@@ -7,6 +7,7 @@ import Frontend.Check.Program
 import Frontend.Check.Handled
 import Frontend.Check.TFacts
 import Frontend.Check.Derived
+import Lowering
 /-! The theorems `SPEC.md` names, with their axioms. -/
 #print axioms BoCa.Fig16.LogRel.Typed.fundamentalProperty
 #print axioms BoCa.Fig16.LogRel.Typed.adequacy
@@ -651,3 +652,13 @@ import Frontend.Check.Derived
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.der_hndJ₁
 #print axioms BoCa.Fig16.LogRel.Core.kappaFinSelf
 #print axioms BoCa.Fig16.LogRel.Core.lastFinOK_nil_of_find
+#print axioms Lowering.lowered_every_run
+#print axioms Lowering.lowered_every_run_pin
+#print axioms Lowering.erase_lowerSem
+#print axioms Lowering.bang_owns_nothing
+#print axioms Lowering.lir_every_run_of_sem
+#print axioms Lowering.lowered_lir_every_run
+#print axioms Lowering.lowered_lir_every_run_pin
+#print axioms Lowering.lir_every_run_unit
+#print axioms Lowering.lowExpr_copyTwice
+#print axioms Lowering.lowExpr_absurd
