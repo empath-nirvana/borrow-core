@@ -3,7 +3,7 @@ import Core.Demonic
 import Lowering.Low
 
 /-!
-# Lowering — the obligations  `[spec §53]`
+# Lowering — the obligations  `[spec §53, §54]`
 
 A lowering keeps the kernel's guarantees by putting its output in the relation at the source's
 type: `SemC` of the lowered term, at the checked program's context and type, proved once as a
@@ -45,6 +45,15 @@ def LowerSemRel (lower : TExpr → Expr) : Prop :=
 its stored-continuation sites `Site c`. -/
 def LowersInto (Site : Checked → Expr → Prop) (lower : TExpr → Expr) : Prop :=
   ∀ c : Checked, LowExpr (Site c) c.ctx.length (lower c.t)
+
+/-- **The output is low on a class `P` of checked programs.** `LowersInto` is the class of all. -/
+def LowersIntoOn (Site : Checked → Expr → Prop) (P : Checked → Prop) (lower : TExpr → Expr) :
+    Prop :=
+  ∀ c : Checked, P c → LowExpr (Site c) c.ctx.length (lower c.t)
+
+theorem lowersInto_iff (Site : Checked → Expr → Prop) (lower : TExpr → Expr) :
+    LowersInto Site lower ↔ LowersIntoOn Site (fun _ => True) lower :=
+  ⟨fun h c _ => h c, fun h c => h c trivial⟩
 
 /-- A closed `F 1` term in the relation: every run from the empty memory continues to `()` at the
 empty memory (`theorem32D`). -/

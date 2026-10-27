@@ -662,3 +662,23 @@ import Lowering
 #print axioms Lowering.lir_every_run_unit
 #print axioms Lowering.lowExpr_copyTwice
 #print axioms Lowering.lowExpr_absurd
+-- SPEC §54 (entry 53): `own`
+#print axioms Lowering.lowExpr_absurd_ctx
+#print axioms Lowering.not_lowExpr_codiag
+#print axioms Lowering.lowB_sound
+#print axioms Lowering.psub_ren
+#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.toC
+#print axioms Lowering.sem_split
+#print axioms Lowering.own_semP
+#print axioms Lowering.own_lowerSemRel
+#print axioms Lowering.own_lowerSem
+#print axioms Lowering.own_every_run
+#print axioms Lowering.own_every_run_pin
+#print axioms Lowering.ExplicitC.ren
+#print axioms Lowering.exact_copies
+#print axioms Lowering.own_lam
+#print axioms Lowering.own_lowered
+#print axioms Lowering.own_lowersInto
+#print axioms Lowering.own_dupChecked
+#print axioms Lowering.own_dupChecked_low
+#print axioms Lowering.masks_need_not_cover

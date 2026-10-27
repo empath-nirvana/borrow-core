@@ -1,7 +1,7 @@
 import Frontend.Check.TExpr
 
 /-!
-# Lowering — the low subset of `Expr`  `[spec §53]`
+# Lowering — the low subset of `Expr`  `[spec §53, §54]`
 
 The ownership and control layers of the lowering (SPEC §53) are `Expr → Expr` steps whose output
 is in the kernel's relation at the source's type. Their output is in **the low subset** defined
@@ -13,10 +13,13 @@ everything the print would otherwise have to decide:
   `forget` or its destructor `dtorE A` (`dropE`). The print then places no copy and no drop of
   its own: each LIR `copy` and `drop` is the image of one of these constants. This is the LIR's
   own discipline (`Backend2/Syntax.lean`).
-- **A path may end at `absurd`** (`absurdE`, the kernel's `case V {x. x | y. y}` at `V : 0`).
-  The kernel's `[0E]` absorbs the rest of the context, and the LIR's `absurd` ends the path, so
-  a variable may be left unused on a path that ends there. The form is reserved for `absurd`: a
-  low term that needs a codiagonal `A ⊕ A → A` writes it otherwise.
+- **A path may end at `absurd`** (`absurdL`): `case V {x. stuck | y. stuck}`, both arms the
+  machine's stuck term `stuckE` (`() ()`). A lowering writes it where the typed term has `[0E]`
+  (`zeroE`, `V : 0`), so absurdity is read from the checked derivation, not from a term's shape:
+  no typed term applies `()`, so a codiagonal `case V {x. x | y. y}` at `A ⊕ A` is an ordinary
+  `case` here, whose arms must agree (`not_lowExpr_codiag`). The kernel's `[0E]` absorbs the rest
+  of the context and the LIR's `absurd` ends the path, so a variable may be left unused on a path
+  that ends there; an arm, if one were reached, is a stuck redex (`stuckAt_unit_app`).
 - **The kernel's constants are atoms** (`LowConst`): the closed terms the erasure gives a typed
   node with no premise (`copy`, `forget`, `swap`, `dtorE A`, the array and borrow constants, the
   folds, …). Their bodies are the kernel's, not the program's: `copy` itself is `λx. (x, x)`, and
@@ -29,6 +32,8 @@ everything the print would otherwise have to decide:
   machine's own capture as heap frames) `Site` accepts the stored sites' handler terms; under K2
   (state machines in `Expr`) it accepts nothing (`noSite`). `LowExpr.mono` shows that widening
   `Site` keeps every low term low.
+
+`lowB` decides `LowExpr` at no site, the constants given by a predicate (`lowB_sound`).
 -/
 
 namespace Lowering
@@ -87,10 +92,14 @@ def join (a b : Uses) : Option Uses :=
 
 end Uses
 
+/-- **The low subset's `absurd`**: `case V {x. stuck | y. stuck}`, the arms the stuck term `() ()`.
+The form a lowering writes at a `[0E]` node of the typed term (`zeroE`). -/
+def absurdL (V : Expr) : Expr := .case V BoLo.stuckE BoLo.stuckE
+
 /-- The uses of the variable `i` in `e`, in the machine's order (a pair left first, an
 application its argument first); `none` when two arms of a `case` disagree. A `λ` is a closure:
 it consumes the variable once when its body mentions it (its body's own paths are its calls').
-`case V {x. x | y. y}` is `absurd`: its paths end. -/
+`absurdL V` is `absurd`: its paths end. -/
 def occ : Expr → Nat → Option Uses
   | .var j, i => some (if j = i then .one else .zero)
   | .unit, _ | .loc _, _ | .prim _, _ => some .zero
@@ -99,8 +108,9 @@ def occ : Expr → Nat → Option Uses
   | .inj₁ a, i | .inj₂ a, i => occ a i
   | .lam b, i => some ⟨some (if mentions b (i + 1) then 1 else 0), none⟩
   | .letpair a b, i => do pure ((← occ a i).andThen (← occ b (i + 2)))
-  | .case s (.var 0) (.var 0), i => do pure ((← occ s i).andThen .halt)
-  | .case s a b, i => do pure ((← occ s i).andThen (← Uses.join (← occ a (i + 1)) (← occ b (i + 1))))
+  | .case s a b, i =>
+      if a = BoLo.stuckE ∧ b = BoLo.stuckE then do pure ((← occ s i).andThen .halt)
+      else do pure ((← occ s i).andThen (← Uses.join (← occ a (i + 1)) (← occ b (i + 1))))
 
 /-- Consumed exactly once on every returning path, and at most once on a path that ends at
 `absurd`. -/
@@ -193,6 +203,8 @@ inductive Explicit : Expr → Prop where
       (h1 : once (occ b 1) = true) : Explicit (.letpair a b)
   | case {s a b : Expr} (hs : Explicit s) (ha : Explicit a) (hb : Explicit b)
       (h₁ : once (occ a 0) = true) (h₂ : once (occ b 0) = true) : Explicit (.case s a b)
+  /-- `absurd`: its arms are never run, and bind nothing used. -/
+  | absurd {s : Expr} (hs : Explicit s) : Explicit (absurdL s)
   | app {f a : Expr} (hf : Explicit f) (ha : Explicit a) : Explicit (.app f a)
 
 /-! ### The low subset -/
@@ -209,6 +221,178 @@ structure LowExpr (Site : Expr → Prop) (n : Nat) (e : Expr) : Prop where
 theorem LowExpr.mono {Site Site' : Expr → Prop} (hS : ∀ e, Site e → Site' e) {n : Nat}
     {e : Expr} (h : LowExpr Site n e) : LowExpr Site' n e :=
   ⟨h.explicit, h.effects.mono hS, h.context, h.closed⟩
+
+/-! ### The decision -/
+
+/-- One more than the largest free variable of `e` (`0` when it has none). -/
+def fvBound : Expr → Nat
+  | .var i => i + 1
+  | .unit | .loc _ | .prim _ => 0
+  | .pair a b | .seq a b | .app a b => max (fvBound a) (fvBound b)
+  | .inj₁ a | .inj₂ a => fvBound a
+  | .lam b => fvBound b - 1
+  | .letpair a b => max (fvBound a) (fvBound b - 2)
+  | .case s a b => max (fvBound s) (max (fvBound a - 1) (fvBound b - 1))
+
+theorem mentions_lt {e : Expr} {i : Nat} (h : mentions e i = true) : i < fvBound e := by
+  induction e generalizing i with
+  | var j => simp [mentions] at h; simp [fvBound]; omega
+  | unit | loc _ | prim _ => simp [mentions] at h
+  | pair a b iha ihb | seq a b iha ihb | app a b iha ihb =>
+      simp only [mentions, Bool.or_eq_true] at h
+      simp only [fvBound]
+      rcases h with h | h
+      · exact lt_max_of_lt_left (iha h)
+      · exact lt_max_of_lt_right (ihb h)
+  | inj₁ a ih | inj₂ a ih => simp only [mentions] at h; exact ih h
+  | lam b ih => simp only [mentions] at h; have := ih h; simp only [fvBound]; omega
+  | letpair a b iha ihb =>
+      simp only [mentions, Bool.or_eq_true] at h
+      simp only [fvBound]
+      rcases h with h | h
+      · exact lt_max_of_lt_left (iha h)
+      · have := ihb h; exact lt_max_of_lt_right (by omega)
+  | case s a b ihs iha ihb =>
+      simp only [mentions, Bool.or_eq_true] at h
+      simp only [fvBound]
+      rcases h with (h | h) | h
+      · exact lt_max_of_lt_left (ihs h)
+      · have := iha h
+        exact lt_max_of_lt_right (lt_max_of_lt_left (by omega))
+      · have := ihb h
+        exact lt_max_of_lt_right (lt_max_of_lt_right (by omega))
+
+/-- Every variable `j + 1` a `λ`-body mentions is consumed once in it. -/
+def capOnceB (b : Expr) : Bool :=
+  (List.range (fvBound b)).all fun j => !mentions b (j + 1) || once (occ b (j + 1))
+
+/-- `Explicit`, decided, with `isConst` deciding which terms are the kernel's constants. -/
+def explicitB (isConst : Expr → Bool) (e : Expr) : Bool :=
+  isConst e || match e with
+    | .var _ => true
+    | .unit => true
+    | .loc _ => true
+    | .prim _ => true
+    | .pair a b => explicitB isConst a && explicitB isConst b
+    | .seq a b => explicitB isConst a && explicitB isConst b
+    | .app a b => explicitB isConst a && explicitB isConst b
+    | .inj₁ a => explicitB isConst a
+    | .inj₂ a => explicitB isConst a
+    | .lam b => explicitB isConst b && once (occ b 0) && capOnceB b
+    | .letpair a b => explicitB isConst a && explicitB isConst b && once (occ b 0) &&
+        once (occ b 1)
+    | .case s a b =>
+        if a = BoLo.stuckE ∧ b = BoLo.stuckE then explicitB isConst s
+        else explicitB isConst s && explicitB isConst a && explicitB isConst b &&
+          once (occ a 0) && once (occ b 0)
+
+/-- No effect primitive anywhere. -/
+def effFreeB : Expr → Bool
+  | .var _ | .unit | .loc _ => true
+  | .prim p => !effPrim p
+  | .pair a b | .seq a b | .app a b | .letpair a b => effFreeB a && effFreeB b
+  | .inj₁ a | .inj₂ a | .lam a => effFreeB a
+  | .case s a b => effFreeB s && effFreeB a && effFreeB b
+
+/-- `LowExpr` at no site, decided, with `isConst` deciding the kernel's constants. -/
+def lowB (isConst : Expr → Bool) (n : Nat) (e : Expr) : Bool :=
+  explicitB isConst e && effFreeB e && (List.range n).all (fun j => once (occ e j)) &&
+    decide (fvBound e ≤ n)
+
+theorem explicitB_sound {isConst : Expr → Bool} (hc : ∀ e, isConst e = true → LowConst e) :
+    ∀ {e : Expr}, explicitB isConst e = true → Explicit e := by
+  intro e
+  induction e with
+  | var i => intro _; exact .var i
+  | unit => intro _; exact .unit
+  | loc ℓ => intro _; exact .loc ℓ
+  | prim p => intro _; exact .prim p
+  | pair a b iha ihb =>
+      intro h; rw [explicitB.eq_def] at h
+      cases hce : isConst (.pair a b)
+      · simp only [hce, Bool.false_or, Bool.and_eq_true] at h; exact .pair (iha h.1) (ihb h.2)
+      · exact .const (hc _ hce)
+  | seq a b iha ihb =>
+      intro h; rw [explicitB.eq_def] at h
+      cases hce : isConst (.seq a b)
+      · simp only [hce, Bool.false_or, Bool.and_eq_true] at h; exact .seq (iha h.1) (ihb h.2)
+      · exact .const (hc _ hce)
+  | app a b iha ihb =>
+      intro h; rw [explicitB.eq_def] at h
+      cases hce : isConst (.app a b)
+      · simp only [hce, Bool.false_or, Bool.and_eq_true] at h; exact .app (iha h.1) (ihb h.2)
+      · exact .const (hc _ hce)
+  | inj₁ a ih =>
+      intro h; rw [explicitB.eq_def] at h
+      cases hce : isConst (.inj₁ a)
+      · simp only [hce, Bool.false_or] at h; exact .inj₁ (ih h)
+      · exact .const (hc _ hce)
+  | inj₂ a ih =>
+      intro h; rw [explicitB.eq_def] at h
+      cases hce : isConst (.inj₂ a)
+      · simp only [hce, Bool.false_or] at h; exact .inj₂ (ih h)
+      · exact .const (hc _ hce)
+  | lam b ih =>
+      intro h; rw [explicitB.eq_def] at h
+      cases hce : isConst (.lam b)
+      · simp only [hce, Bool.false_or, Bool.and_eq_true] at h
+        refine .lam (ih h.1.1) h.1.2 fun j hj => ?_
+        have := List.all_eq_true.mp h.2 j (List.mem_range.mpr (by have := mentions_lt hj; omega))
+        simpa [hj] using this
+      · exact .const (hc _ hce)
+  | letpair a b iha ihb =>
+      intro h; rw [explicitB.eq_def] at h
+      cases hce : isConst (.letpair a b)
+      · simp only [hce, Bool.false_or, Bool.and_eq_true] at h
+        exact .letpair (iha h.1.1.1) (ihb h.1.1.2) h.1.2 h.2
+      · exact .const (hc _ hce)
+  | case s a b ihs iha ihb =>
+      intro h; rw [explicitB.eq_def] at h
+      cases hce : isConst (.case s a b)
+      · simp only [hce, Bool.false_or] at h
+        by_cases hab : a = BoLo.stuckE ∧ b = BoLo.stuckE
+        · rw [if_pos hab] at h
+          obtain ⟨rfl, rfl⟩ := hab
+          exact .absurd (ihs h)
+        · rw [if_neg hab] at h
+          simp only [Bool.and_eq_true] at h
+          exact .case (ihs h.1.1.1.1) (iha h.1.1.1.2) (ihb h.1.1.2) h.1.2 h.2
+      · exact .const (hc _ hce)
+
+theorem effFreeB_sound {Site : Expr → Prop} : ∀ {e : Expr}, effFreeB e = true → EffOnlyAt Site e
+  | .var i, _ => .var i
+  | .unit, _ => .unit
+  | .loc ℓ, _ => .loc ℓ
+  | .prim p, h => .prim (by simpa [effFreeB] using h)
+  | .pair a b, h => by
+      simp only [effFreeB, Bool.and_eq_true] at h
+      exact .pair (effFreeB_sound h.1) (effFreeB_sound h.2)
+  | .seq a b, h => by
+      simp only [effFreeB, Bool.and_eq_true] at h
+      exact .seq (effFreeB_sound h.1) (effFreeB_sound h.2)
+  | .app a b, h => by
+      simp only [effFreeB, Bool.and_eq_true] at h
+      exact .app (effFreeB_sound h.1) (effFreeB_sound h.2)
+  | .letpair a b, h => by
+      simp only [effFreeB, Bool.and_eq_true] at h
+      exact .letpair (effFreeB_sound h.1) (effFreeB_sound h.2)
+  | .inj₁ a, h => .inj₁ (effFreeB_sound h)
+  | .inj₂ a, h => .inj₂ (effFreeB_sound h)
+  | .lam a, h => .lam (effFreeB_sound h)
+  | .case s a b, h => by
+      simp only [effFreeB, Bool.and_eq_true] at h
+      exact .case (effFreeB_sound h.1.1) (effFreeB_sound h.1.2) (effFreeB_sound h.2)
+
+/-- **The decision is sound**: a term `lowB` accepts is low, at any site. -/
+theorem lowB_sound {isConst : Expr → Bool} (hc : ∀ e, isConst e = true → LowConst e)
+    {Site : Expr → Prop} {n : Nat} {e : Expr} (h : lowB isConst n e = true) : LowExpr Site n e := by
+  simp only [lowB, Bool.and_eq_true, decide_eq_true_eq] at h
+  obtain ⟨⟨⟨hx, hf⟩, hctx⟩, hb⟩ := h
+  refine ⟨explicitB_sound hc hx, effFreeB_sound hf, fun j hj => ?_, fun j hj => ?_⟩
+  · exact List.all_eq_true.mp hctx j (List.mem_range.mpr hj)
+  · cases hm : mentions e j
+    · rfl
+    · have := mentions_lt hm; omega
 
 /-! ### Non-vacuity -/
 
@@ -240,14 +424,30 @@ theorem lowExpr_copyTwice : LowExpr noSite 0 copyTwice := by
 
 /-- `λx. absurd y` at a context of one variable `y`: `x` is left unused on a path that ends at
 `absurd`. -/
-theorem lowExpr_absurd : LowExpr noSite 1 (.lam (absurdE (.var 1))) := by
-  refine ⟨.lam (.case (.var 1) (.var 0) (.var 0) (by decide) (by decide)) (by decide) ?_,
-    .lam (.case (.var 1) (.var 0) (.var 0)), fun j hj => ?_, fun j hj => ?_⟩
+theorem lowExpr_absurd : LowExpr noSite 1 (.lam (absurdL (.var 1))) := by
+  refine ⟨.lam (.absurd (.var 1)) (by decide) ?_, ?_, fun j hj => ?_, fun j hj => ?_⟩
   · intro j hj
-    have : j = 0 := by simpa [mentions, absurdE] using hj
+    have : j = 0 := by simpa [mentions, absurdL, BoLo.stuckE] using hj
     subst this; decide
+  · exact .lam (.case (.var 1) (.app .unit .unit) (.app .unit .unit))
   · have : j = 0 := by omega
     subst this; decide
-  · simp only [mentions, absurdE]; simp; omega
+  · have : j ≠ 0 := by omega
+    simp [mentions, absurdL, BoLo.stuckE, this]
+
+/-- **A codiagonal is not `absurd`**: `case x {a. a | b. b}` at a context `x, y` leaves `y` unused
+on paths that return, so it is not low; `absurd x` there is. The kernel's own `absurdE` has the
+codiagonal's shape; the low subset reads `absurd` only at `absurdL`. -/
+theorem not_lowExpr_codiag : ¬ LowExpr noSite 2 (.case (.var 0) (.var 0) (.var 0)) :=
+  fun h => absurd (h.context 1 (by decide)) (by decide)
+
+/-- `absurd x` at the context `x, y`: `y` is left unused on its path, which ends. -/
+theorem lowExpr_absurd_ctx : LowExpr noSite 2 (absurdL (.var 0)) := by
+  refine ⟨.absurd (.var 0), .case (.var 0) (.app .unit .unit) (.app .unit .unit),
+    fun j hj => ?_, fun j hj => ?_⟩
+  · have : j = 0 ∨ j = 1 := by omega
+    rcases this with rfl | rfl <;> decide
+  · simp [mentions, absurdL, BoLo.stuckE]
+    omega
 
 end Lowering
