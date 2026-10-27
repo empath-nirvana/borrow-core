@@ -3,7 +3,7 @@ import Core.Demonic
 import Lowering.Low
 
 /-!
-# Lowering — the obligations  `[spec §53]`
+# Lowering — the obligations  `[spec §53, §54]`
 
 A lowering keeps the kernel's guarantees by putting its output in the relation at the source's
 type: `SemC` of the lowered term, at the checked program's context and type, proved once as a

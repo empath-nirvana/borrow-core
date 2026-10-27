@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.02 · 2026-10-27
+Version 1.03 · 2026-10-27
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8926,10 +8926,10 @@ No change: no type, rule, term, typing, elaboration, semantics or backend.
   - *Explicit ownership* (`Explicit`, `occ`, `once`): every binder, every variable a `λ` captures
     and every context variable is consumed exactly once on every path, in the machine's order. A
     second use goes through `copy`, an unused value through `forget` or `dtorE A`, so the print
-    places no copy or drop of its own, which is the LIR's discipline. A path may end at `absurdE`
-    with variables unused there, as `[0E]` absorbs them. The kernel's constants are atoms
-    (`LowConst`: the erasure of a typed node with no premise); `copy`'s own body uses its binder
-    twice (`copy_body_not_once`).
+    places no copy or drop of its own, which is the LIR's discipline. A path may end at `absurd`
+    with variables unused there, as `[0E]` absorbs them (written `absurdL` since §54). The
+    kernel's constants are atoms (`LowConst`: the erasure of a typed node with no premise);
+    `copy`'s own body uses its binder twice (`copy_body_not_once`).
   - *Effects only at stored-continuation sites* (`EffOnlyAt Site`): `perform`, `raise`, `hnd`,
     `ubind`, `ccatch`, `cfin` and `iterate` (whose step performs `Div`'s tick) occur only inside a
     subterm `Site` accepts. `Site` is a parameter because the representation of a stored
@@ -8970,10 +8970,9 @@ elaboration, either backend or a kernel program. Every output, golden and count 
 - **The LIR's semantics includes the interpreter's re-checks.** A fault is any failure but
   `outOfFuel`, so it includes the consumption, copy and drop checks (`Backend2/Interp.lean`:
   `takeV`, the `copy` and `drop` arms, `callFn`'s empty frame), which U6 retires. While they stand,
-  U2's simulation must meet them on every reachable path. A path that ends at `absurdE` leaves
-  variables in the frame and fails no check, because no run reaches it; a codiagonal
-  `case V {x. x | y. y}` is read as `absurd` by the low subset, so a lowering that needs one
-  writes it otherwise.
+  U2's simulation must meet them on every reachable path. A path that ends at `absurd` leaves
+  variables in the frame and fails no check, because no run reaches it. Since §54 the low
+  subset's `absurd` is `absurdL`, whose arms are stuck, so a codiagonal is not read as `absurd`.
 - **`iterate` is an effect primitive here.** A `Div` loop whose handler U3 erases needs a low
   form; `boundedFix` and `count` are the loops the low subset keeps.
 - **The host.** The interpreter computes host operations at `lirHost`; U2 proves the simulation
@@ -8982,6 +8981,97 @@ elaboration, either backend or a kernel program. Every output, golden and count 
   input and output are not in the source machine.
 - **Joint non-vacuity at every program** is U1 and U2's: a lowering meeting `LowerSem` and
   `LowersInto` together, and a print meeting `PrintSim`.
+
+---
+
+## 54. Entry 53 — lowering under the semantic relation: explicit ownership, `own` (#700, U1 of #698)
+
+### Motivation
+
+§53 states what a lowering must prove. This entry gives the first lowering: `own`, which writes
+every copy and every drop the kernel leaves implicit, reading them from the checked term, and
+proves it in the relation (`LowerSemRel`) and in the low subset on the pure fragment. The kernel
+leaves two operations implicit, both at a persistent slot (§10), whose value holds no resource: a
+copy at a split (`Ctx.SplitP.dup`) and a drop at a leaf (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`).
+Every other drop is the program's own (`dtor`, §12). The user agreed the plan on 2026-10-27
+(§53).
+
+### Language
+
+No change to a type, rule, term, typing, elaboration, semantics or backend. §53's low subset
+changes its `absurd` form (below).
+
+### Statements
+
+`Lowering/`:
+
+- **`own : TExpr → Expr`** (`Lowering/Own.lean`), `ownAt L t` at the live slots `L` of the
+  node's context:
+  - *Copies* are read off the split's masks: a slot both masks hold, which the typed rule gives to
+    both parts at a persistent type (`TDerivesP.copies`), is copied in front of the node,
+    `let (x₁, x₂) = copy x in …`, and each part renamed to read its copy (`ren`, `copiesE`).
+  - *Drops*: a part receives the live slots its mask holds (`part`); a live slot neither mask
+    holds is dropped at the split, and a leaf drops every live slot but the one it reads, each by
+    `forget x; …` (`dropE`, `splitE`, `leafE`). No occurrence of a variable is counted.
+  - A binder the kernel types dead (the `()` a thunk of `F A` or a `Λ` is forced with) is
+    consumed by `(); …`.
+  - *The pure fragment* (`pureT`): the CBPV and value rules, the coercions, the derived nodes, and
+    the constants free of effect primitives, each lowered node for node. The effect nodes (§19,
+    `iterate`, `divFuel`, `reify`), the unwinding borrows, `[let-poly]` and `[λ-dead]` are left as
+    their erasures (U3, U4); a term with a relaxed rule (§29) is left whole, since its relation
+    rests on `PinLaw`, whose `PinStop` takes the callback as a `CDerivesP` derivation.
+- **`absurd` is read from the typed term.** §53's low subset recognised `absurd` by the shape of
+  the kernel's `absurdE` (`case V {x. x | y. y}`), which is also a codiagonal's. It now
+  recognises `absurdL V := case V {x. stuck | y. stuck}` (`Lowering/Low.lean`), its arms the
+  machine's stuck term `() ()`, which `own` writes only at a `[0E]` node (`zeroE`). A codiagonal
+  is an ordinary `case` (`not_lowExpr_codiag`); `Explicit.absurd` admits `absurdL`; witnesses
+  `lowExpr_absurd`, `lowExpr_absurd_ctx`.
+- **The decision** `lowB` (`Lowering/Low.lean`): `LowExpr` at no site, decided, the constants
+  given by a predicate; sound (`lowB_sound`).
+- **`own` is in the relation** (`Lowering/OwnSem.lean`), proved by induction on the typed
+  derivation, each node by its rule's compatibility lemma at `own`'s parts. A drop and a copy are
+  pure head steps (`sem_drop`, `cC_copy_let`); after the copies, the renamed node at the extended
+  substitution is the node (`psub_ren`, `sem_copies`, `sem_split`). The dead binders' `(); …` and
+  `absurdL` have their own compatibility lemmas. A node left as its erasure is in the relation by
+  the Fundamental Property: a typed derivation with no relaxed rule is a `CDerives` derivation of
+  its erasure (`relaxedFree`, `TDerivesP.toC`, `Lowering/NoRelaxed.lean`). Results:
+  `own_lowerSemRel` (`LowerSemRel own`), `own_lowerSem`, `own_every_run`, `own_every_run_pin`.
+- **`own` lands in the low subset on the pure fragment** (`Lowering/OwnLow.lean`):
+  `own_lowersInto : LowersIntoOn (fun _ => noSite) P own` with `P c` = `c.ctx = []`, `pureT c.t`
+  and `agreeAt [] c.t`. `LowersIntoOn` (`Lowering/Obligations.lean`) is `LowersInto` on a class of
+  programs (`lowersInto_iff`). Each part consumes exactly the live slots it is given (`ExactP`),
+  through injective renamings (`occ_ren`, `ExplicitC.ren`, `Lowering/LowRen.lean`), copies
+  (`exact_copies`) and drops (`exact_splitE`, `exact_leafE`); a thunk of a `λ` stays a `λ`
+  (`own_lam`).
+- **The masks' agreement is a hypothesis** (`agreeAt`): along `own`'s flow, every variable a leaf
+  reads is live where it is read. The checker builds each mask as its part's uses (`Fam.split`),
+  but the typed rules ask less (`SplitMasks`: a slot a mask holds is live in its part):
+  `masks_need_not_cover` is a typed derivation whose masks miss a use, where `own`'s output reads
+  a binder twice.
+- **Non-vacuity**: `dupChecked`, the checked `main` `return (λx. (x, x))`, meets every hypothesis;
+  `own` writes its copy (`own_dupChecked`) and its output is low (`own_dupChecked_low`).
+- **The corpus check** (`scripts/LoweringCheck.lean`, `scripts/check-lowering.sh`, the gate step
+  `lowering`): every corpus program with no capability whose term is in `pureT` has `agreeAt`
+  decided true, `own`'s output decided low (`lowB`), and `own`'s output run by the source
+  interpreter to the erasure's report. The programs in the fragment are pinned in
+  `corpus/lowering.expected`.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `Core/`, `Paper/`, `Support/`, the checker, the
+elaboration, either backend or a kernel program. Every output, golden and count is unchanged.
+
+### Open
+
+- **`agreeAt` is not a theorem of the checker.** Making it one is a premise on the typed split
+  rules (a mask holds every slot its part's leaves read), or a proof about `Fam`.
+- **`use`'s `ab` is not read.** `own` drops a `def` body's absorbed slots where the body's masks
+  (moved by `Masks.ins`) leave them, and needs no slot's type: `forget` is untyped. `ab` is a
+  formula over types (which absorbed slots a body's derivation admits), which a print that frees a
+  persistent value by its layout may need.
+- **The print reads no node marks.** `own`'s output is an `Expr`; the derived nodes' marks
+  (`litFn`, `walk`, `lendCell`, …) that Backend2 reads for representation are not carried.
+- **Programs with capabilities** (U5) and **effect nodes** (U3, U4) are outside the fragment.
 
 ---
 
@@ -9381,11 +9471,23 @@ Entry 52 (§53) is stated in `Lowering/Low.lean`, `Lowering/Obligations.lean` an
 `Lowering/Print.lean`: the low subset, the obligations and their every-run results, the print's
 simulation statement and the transfer are proved; the lowerings and the simulation are U1–U4. No
 change to `CDerives`, `Core/`, `Paper/`, `Support/`, the checker or either backend.
+Entry 53 (§54) is implemented in `Lowering/Rename.lean`, `Lowering/NoRelaxed.lean`,
+`Lowering/Own.lean`, `Lowering/OwnSem.lean`, `Lowering/LowRen.lean`, `Lowering/OwnLow.lean`,
+`Lowering/Low.lean` (`absurdL`, `lowB`) and `Lowering/Obligations.lean` (`LowersIntoOn`), with the
+corpus check `scripts/LoweringCheck.lean` and `scripts/check-lowering.sh`: `LowerSemRel own` and
+`own_lowersInto` are proved. No change to `CDerives`, `Core/`, `Paper/`, `Support/`, the checker or
+either backend.
 
 ---
 
 ## Changelog
 
+- **1.03** (2026-10-27) — §54 (#700, U1 of #698): `own`, explicit ownership. Copies read off a
+  split's masks, drops where a live slot is not passed on, each proved pure steps; `LowerSemRel
+  own`; `own`'s output low on the pure fragment under the masks' agreement with the leaves
+  (`agreeAt`, a hypothesis: the typed rules do not imply it); §53's `absurd` written `absurdL`,
+  read from `[0E]`; the decision `lowB`; the gate step `lowering`. No change to the language, the
+  kernel, the checker or either backend.
 - **1.02** (2026-10-27) — §53 (#699, U0 of #698): lowering under the semantic relation, the
   statements. The low subset of `Expr` (explicit ownership, effect primitives only at
   stored-continuation sites, the site predicate a parameter so K1 and K2 stay open); the

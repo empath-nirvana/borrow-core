@@ -1,7 +1,7 @@
 import Frontend.Check.TExpr
 
 /-!
-# Lowering — the low subset of `Expr`  `[spec §53]`
+# Lowering — the low subset of `Expr`  `[spec §53, §54]`
 
 The ownership and control layers of the lowering (SPEC §53) are `Expr → Expr` steps whose output
 is in the kernel's relation at the source's type. Their output is in **the low subset** defined
