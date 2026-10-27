@@ -180,3 +180,8 @@ roots = ["LetMutState"]
 name = "DepSpike"
 srcDir = "experiments/DepSpike"
 roots = ["DepSpike"]
+
+[[lean_lib]]
+name = "SuspSpike"
+srcDir = "experiments/SuspSpike"
+roots = ["SuspSpike"]
