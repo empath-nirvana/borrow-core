@@ -185,3 +185,9 @@ roots = ["LetMutState"]
 name = "DepSpike"
 srcDir = "experiments/DepSpike"
 roots = ["DepSpike"]
+
+# Not a default target: `own` (SPEC §54) on the pure corpus (`scripts/check-lowering.sh`).
+[[lean_exe]]
+name = "lowering-check"
+srcDir = "scripts"
+root = "LoweringCheck"
