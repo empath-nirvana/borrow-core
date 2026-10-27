@@ -1,4 +1,5 @@
 import Lowering.Rename
+import Lowering.NoRelaxed
 
 /-!
 # Lowering — explicit ownership: `own`  `[spec §54]`
@@ -27,8 +28,8 @@ dead, the `()` a thunk of `F A` or a `Λ` is forced with, is consumed by `(); �
 `own` lowers the nodes of the pure fragment (`PureNode`): the CBPV rules, the value-level rules,
 the coercions and the derived nodes, each node for node. A constant is its erasure, its context's
 live slots dropped. The effect nodes (§19, `iterate`, `divFuel`, `reify`), the unwinding borrows,
-the relaxed rules and `[let-poly]` are left as their erasures: U3 and U4 lower them. `zeroE` is
-written `absurdL`, the low subset's `absurd`.
+`[let-poly]` are left as their erasures, and a term with a relaxed rule is left whole: U3 and U4
+lower them. `zeroE` is written `absurdL`, the low subset's `absurd`.
 -/
 
 namespace Lowering
@@ -114,7 +115,7 @@ def ownAt : List Bool → TExpr → Expr
   | L, .lam _ _ _ _ t => .lam (ownAt (true :: L) t)
   | L, .app _ _ i _ _ u tM =>
       splitE L (mk u.u₁) (argMask i u.u₂) fun r₁ r₂ =>
-        .app (ren r₁ (ownAt (part L (mk u.u₁)) tM)) (.var (r₂ i))
+        .app (ren r₁ (ownAt (part L (mk u.u₁)) tM)) (ren r₂ (.var i))
   | L, .withI _ _ _ _ tM tN =>
       withPair (ownAt (false :: false :: L) tM) (ownAt (false :: false :: L) tN)
   | L, .proj₁ _ _ _ _ t => .app (ownAt L t) (.val (.inj₁ .unit))
@@ -185,7 +186,9 @@ def pureT : TExpr → Bool
   | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t | .use _ _ _ _ _ _ t => pureT t
   | t => constNode t && effFreeB t.erase
 
-/-- **`own`**: a closed `main` (`[spec §54]`). -/
-def own (t : TExpr) : Expr := ownAt [] t
+/-- **`own`**: `main` at no live slot of its own (`[spec §54]`). A term that uses a relaxed rule
+(SPEC §29) is left as its erasure: its relation rests on `PinLaw`, whose `PinStop` takes the
+lend's callback as a `CDerivesP` derivation, which `own`'s output is not (U4). -/
+def own (t : TExpr) : Expr := if relaxedFree t then ownAt [] t else t.erase
 
 end Lowering
