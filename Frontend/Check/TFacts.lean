@@ -67,6 +67,13 @@ A third is a field the checker adds to a node that its rule does not have:
   have no kinds, so the derivation does not constrain `ks` (`TDerivesAt.kinds_free`); that the
   checker writes `classifyHandler E tc` at each node it builds is its construction
   (`rEffHandle`'s argument at `[handle]`), not a statement about every typed term.
+* **The `StoredAtX` records at `[handle]`** (`sshape`, on the node's `TInfo`). For each operation
+  the checker classifies `stored` in `ks`, the derivation of the `StoredAtX` grammar it finds for
+  the clause of the node's pair (`storedShapes E R tc ks`, `Frontend/Check/StoredAtX.lean`), a
+  function of the node's own fields; a record is a derivation of the grammar at the clause of the
+  node's erasure the handler runs, at a `P`-shaped answer (`storedShapes_sound`). As with `ks`,
+  that the checker writes `storedShapes E R tc ks` at each node it builds is its construction, not
+  a statement about every typed term; the rule does not constrain `TInfo`.
 
 A fourth is a field the checker adds to a node and its typed rule pins:
 

@@ -16,7 +16,8 @@
 #   its fragment (`outside`), or only the source compiles (`red`);
 # * then, at a program with a `handle` node whose operations R0 does not all rewrite, R5's
 #   admission, report only (R5-0): each such node's position, name and form, `opt`,
-#   `fallback(<conjuncts>)` or `left:<conjunct>` (scripts/check-admission.sh pins the detail).
+#   `fallback(<conjuncts>)` or `left:<conjunct>` (`bcc rewrite --r5`, apart from the identity
+#   criterion; scripts/check-admission.sh pins the detail).
 #
 # The gate: every line of a program no rule rewrites has `erasure same` or `beta` and `lir same`
 # or `outside`, and every line of a program R0 rewrites `lir ok` or `outside`; the table is pinned
@@ -37,7 +38,11 @@ row() {
     echo "$f error: $(printf '%s' "$l" | head -c 300 | tr '\n' ' ')"
     return 0
   fi
-  echo "$f $l"
+  # R5's admission (R5-0), apart from the identity criterion: its failure is its own.
+  if ! r5=$("$bcc" rewrite --r5 "$f" 2>&1); then
+    r5=" R5 error: $(printf '%s' "$r5" | head -c 300 | tr '\n' ' ')"
+  fi
+  echo "$f $l$r5"
 }
 . scripts/par.sh
 export bcc

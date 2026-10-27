@@ -9394,8 +9394,8 @@ the source's.
 - **`Env_N`'s persistence** (A8, `Frontend/Check/EnvN.lean`): every slot a node's clauses use is
   live in its context at a persistent type, from the rule's premise `Ctx.DeadP Γ₁` and the node's
   masks (`TDerivesP.handleV_env_persistent`, `TDerivesP.handleVB_env_persistent`). Every node of
-  a checked program has its derivation (`Checked.tied`), so A8 is never a reason; the admission
-  decides it again at the masks, and a failure is its error.
+  a checked program has its derivation (`Checked.tied`), so A8 is never a reason, and the
+  admission does not decide it again.
 - **Not recorded: the typed tail work `tw_j`** of an in-clause `tail` operation at a stored node.
   The scope places it on `TInfo`, but `TInfo` is a field of every `TExpr` node and is defined
   before `TExpr`, so it cannot hold one. A2 reads the kind `tail` (`classifyHandler_sound`: the
@@ -9411,8 +9411,9 @@ the source's.
   `perform path crosses handler m (<row>, in Backend2)`;
 - `left: <sibling row>` at a node with no stored operation: `R3` (`once`), `R2` (`resume-or-cancel`,
   and the resume-or-cancel rule's node), `R2σ`, `R1σ` (`tail+state`), `R1-ev` (a `[handle]` node
-  whose operations are all `tail`), `R1` (the tail-resuming rule's node). On main, where R1 is not
-  merged, the `[handle]` nodes R1's licence would take are among the `R1-ev` ones.
+  whose operations are all `tail`), and `R1` at the tail-resuming rule's node, which waits for R1,
+  not a sibling row (added to the scope's §5 with R5-0). On main, where R1 is not merged, the
+  `[handle]` nodes R1's licence would take are among the `R1-ev` ones.
 
 `Region(N)` is the handled computation and the instances it reaches whose type holds `n`, an
 inner node of `n`'s handled computation excluded. Its points, `lendR`s, `Div` rows and
@@ -9422,16 +9423,20 @@ computation following its calls, with the origin of each value it can follow (an
 closed `!` value, a pair of them, `bounded_fix` and its self-reference, an inner stored node's
 answer), so that a `!`-parameter bound at the use to a closed `!` value is known, as R5-1
 substitutes it. A `force` at a row holding `n` of any other value is an open region (A4); an
-observation of codata whose observations perform `n`, of a value that is not an inner node's, is
-#691. At each point the walk records the live slots (`Live_p`, by the masks) and the calls in
+observation of codata whose observations perform `n` is #691; of an inner stored node's answer,
+only if R5 leaves that node. At each point the walk records the live slots (`Live_p`, by the masks) and the calls in
 progress; a call under which a point is reached is suspending; the region is `lexical`, `flat`
 (the suspending calls a tree) or `array` (a callee called from two suspending sites, or a cycle).
 A6 asks that every slot of a point, of a suspending call's frame and of `Env_N` outlive `d`
-(`outlivesB`), an inner node's answer excepted (R5-4). No `HSite`, key string, `Layouts`, `Flow`
+(`outlivesB`); an inner stored node's answer is exempt only if R5 admits that node (R5-4). The
+forms that depend on other nodes' forms (this exemption, and the crossing conjunct) are read to
+a fixed point, each node matched by the id the admission's numbering gives it (`numberHandles`):
+a span is not a node's identity (`gen-close` 37:20 is both a stored node and an `R1-ev` one). No `HSite`, key string, `Layouts`, `Flow`
 or `.expected` file is read. Every walk is bounded by a fuel whose exhaustion is a hard error.
 
-**Report.** `bcc rewrite --admission` prints a line per node; `bcc rewrite --identity` appends
-the compact forms (`R5 L:C/n=<form>`) to the rewriter's line (`corpus/rewrite.expected`).
+**Report.** `bcc rewrite --admission` prints a line per node, and `bcc rewrite --r5` the compact
+forms (`R5 L:C/n=<form>`), which `scripts/check-rewrite.sh` appends to the identity criterion's
+line (`corpus/rewrite.expected`); the identity criterion does not depend on the admission.
 `scripts/check-admission.sh` (gate step `r5 admission`) pins the detail in
 `corpus/admission.expected` and fails on a `left` reason not in this list, or a `lendR` node
 without its pin position.
@@ -9439,8 +9444,10 @@ without its pin position.
 **Measured** (the corpus, R5 v5's §11):
 - 335 nodes; 111 stored, in 47 programs (71 V, 40 VB): 25 opt (24 VB, 1 V), 13 fallback
   (11 A4, all VB; 2 A3), 73 left (59 `codata at row n (#691)`, all V; 14 `lendR`).
-- The 59 #691 nodes are the stored generators whose body loops: the stored node handles one
-  observation of the body's `Loop` codata, whose observations perform the node's name.
+- The 59 #691 nodes are generators passed as `pull` values: the stored node is the frontend's
+  `pull` adapter, whose handled computation is one observation of the generator's `unfold`,
+  `(nu_out (force g)).1`, and the generator's observations perform the node's name. They stay
+  left at #691, a kernel extension (#691), not a structural reading of "R5's own".
 - The 11 A4 nodes are tasks whose body the node reaches as a `U` value: `spawn_in`'s body, which
   holds a borrow, and a task taken out of a box (`sched-a`, `sched-a-div`, `sched-b`).
 - The 2 A3 nodes are clauses that drop `κ` at an answer with no codata type (`binder-copies`).

@@ -93,6 +93,10 @@ structure AbStats where
   seed : Seed := .none
   /-- The numbering pass (`numberBinders`): each source binder's name gets its id. -/
   numbering : Bool := false
+  /-- The admission's numbering of `handle` nodes (`numberHandles`), apart from R0's: each node
+  gets its id (`#H…`, its scope and its pre-order index among the scope's nodes). -/
+  handles : Bool := false
+  hctr : Nat := 0
   /-- The numbering's scope (`m`, or the index of an instance's declaration and type arguments
   in `scopes`) and its counter in that scope. -/
   scope : String := "m"
@@ -158,6 +162,17 @@ def numberInfo (i : TInfo) (n : Nat) (lam : Bool := false) : AbM TInfo := do
   set { st with ctr := st.ctr + n }
   if lam then return { i with name := idName i.name st.scope st.ctr }
   return { i with binders := ids }
+
+/-- At the admission's numbering, a `handle` node given its id (`#H…`, `handleIdOf?`). -/
+def numberHandle (i : TInfo) : AbM TInfo := do
+  let st ← get
+  if !st.handles then return i
+  set { st with hctr := st.hctr + 1 }
+  return { i with binders := [s!"#H{st.scope}_{st.hctr}"] }
+
+/-- The id the admission's numbering gives a `handle` node. -/
+def handleIdOf? (i : TInfo) : Option String :=
+  i.binders.head?.bind fun b => if b.startsWith "#H" then some b else none
 
 /-- The name R0 gives the binders it writes; the read-back numbers each by its depth
 (`Cx.binder`), and no source binder is named so. -/
@@ -744,6 +759,7 @@ def ab (a : AbortName) (t : TExpr) : AbM TExpr := do
     else pure (.effThen i (tJ j) (tV A) (tV B) (tR S) (tR SM) (tR SD) u tM' tN' tD')
   -- Handlers.
   | .effHandleV i j S E fs nm A R u ks site ins tc@(.tensorI _ _ _ _ _ tr tcl) te => do
+    let i ← numberHandle i
     let tr' ← ab a tr
     let tcl' ← ab a tcl
     let te' ← ab a te
@@ -762,6 +778,7 @@ def ab (a : AbortName) (t : TExpr) : AbM TExpr := do
       pure (.effHandleV i (tJ j) (tR S) (trE a E) (fun k => tC (fs k)) nm (tV A) (tV R) u ks
         site ins tc' te')
   | .effHandleVB i j S E fs nm A R d u ks site ins tc@(.tensorI _ _ _ _ _ tr tcl) te => do
+    let i ← numberHandle i
     let tr' ← ab a tr
     let tcl' ← ab a tcl
     let te' ← ab a te
@@ -780,6 +797,7 @@ def ab (a : AbortName) (t : TExpr) : AbM TExpr := do
       pure (.effHandleVB i (tJ j) (tR S) (trE a E) (fun k => tC (fs k)) nm (tV A) (tV R) d u ks
         site ins tc' te')
   | .effHandleT i j S SN E fs nm A R u site ins tc@(.tensorI _ _ _ _ _ tr tcl) te => do
+    let i ← numberHandle i
     let tr' ← ab a tr
     let tcl' ← ab a tcl
     let te' ← ab a te
@@ -797,6 +815,7 @@ def ab (a : AbortName) (t : TExpr) : AbM TExpr := do
       pure (.effHandleT i (tJ j) (tR S) (tR SN) (trE a E) (fun k => tC (fs k)) nm (tV A) (tV R) u
         site ins tc' te')
   | .effHandleL i j S SW E fs Xs nm A R u site ins tc@(.tensorI _ _ _ _ _ tr tcl) te => do
+    let i ← numberHandle i
     -- `[handle-last]` holds operations at `1?` (`hAff`), so no name is keyed at one.
     if nm == a.n then throw "R0: no rule for `handle_last` of an abortive name"
     let tr' ← ab a tr
@@ -844,15 +863,15 @@ def ab (a : AbortName) (t : TExpr) : AbM TExpr := do
     -- At the numbering pass, an instance's body is its own scope: the instances of one
     -- declaration at one type arguments number alike, as they read back to one declaration.
     let st ← get
-    if st.numbering then
+    if st.numbering || st.handles then
       let key : Nat × List VTy × Nat := (decl, targs, 0)
       let idx := match st.scopes.idxOf? key with
         | some k => k
         | none => st.scopes.length
       let scopes := if st.scopes.contains key then st.scopes else st.scopes ++ [key]
-      set { st with scope := s!"d{idx}", ctr := 0, scopes }
+      set { st with scope := s!"d{idx}", ctr := 0, hctr := 0, scopes }
       let c' ← ab a c
-      modify fun st' => { st' with scope := st.scope, ctr := st.ctr }
+      modify fun st' => { st' with scope := st.scope, ctr := st.ctr, hctr := st.hctr }
       return .use i (tJ j) nm decl (targs.map tV) ab' c'
     return .use i (tJ j) nm decl (targs.map tV) ab' (← ab a c)
 
@@ -860,5 +879,11 @@ def ab (a : AbortName) (t : TExpr) : AbM TExpr := do
 R0's traversal at the name `0`, which no row holds, so homomorphic and the identity on types. -/
 def numberBinders (t : TExpr) : Except String TExpr := do
   pure (← (ab ⟨0, []⟩ t).run { numbering := true }).1
+
+/-- **The admission's numbering** (`Rewrite/Admission.lean`): every `handle` node given its id
+(`numberHandle`), in R0's traversal at the name `0`, the identity elsewhere. The instances of one
+declaration at one type arguments number alike, so a node has one id at every use. -/
+def numberHandles (t : TExpr) : Except String TExpr := do
+  pure (← (ab ⟨0, []⟩ t).run { handles := true }).1
 
 end Rewrite

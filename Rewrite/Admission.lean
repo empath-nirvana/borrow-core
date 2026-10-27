@@ -24,8 +24,9 @@ form R5 gives it, decided from checked facts. Nothing is rewritten. Each node's 
 
 **The facts read**, all checked: the node's kind V/VB and `d`, its clause kinds `ks`
 (`classifyHandler_sound`), its counts `E`, the `StoredAtX` records (`storedShapes_sound`), its use
-masks (`Env_N`; A8, its persistence, is the rule's premise, `TDerivesP.handleV_env_persistent`,
-decided again here, a failure the admission's error), the rows and types on the region's nodes,
+masks (`Env_N`; A8, its persistence, is the rule's premise at every node of a checked term,
+`TDerivesP.handleV_env_persistent` and `TDerivesP.handleVB_env_persistent`, and is not decided
+here), the rows and types on the region's nodes,
 its use keys, the masks of its splits, and the program's pins. No `HSite` or key string,
 `Layouts`, `Flow` or `.expected` file is read.
 
@@ -41,14 +42,16 @@ the origin of each value it can follow (`Org`): a `use` instance, a code value a
 closed, a pair, `bounded_fix` and a recursive group's self-reference, a primitive, an inner stored
 node's answer. A `!`-parameter bound at the use to a closed `!` value is known, as R5-1
 substitutes it. A `force` at a row holding `n` of any other value is an open region (A4). An
-observation of codata whose observations perform `n` is #691, unless the value is an inner stored
-node's (R5-4). At each point the walk records the live slots (`Live_p`, the slots the later part
+observation of codata whose observations perform `n` is #691; of an inner stored node's answer,
+only if R5 leaves that node (R5-4 holds an admitted inner node's answer as its state). At each point the walk records the live slots (`Live_p`, the slots the later part
 of each split it lies in uses, by the split's masks) and the calls in progress (its frames). A
 call is suspending when a point is reached under it; a call that re-enters code in progress is a
 cycle. The region is lexical (no suspending call), flat (the suspending calls a tree: each callee
 one call site) or array (a callee with two suspending call sites, or a cycle). At VB, each slot of
-the state, the live slots of a point or of a suspending call's frame and `Env_N`, an inner stored
-node's answer excepted, must outlive `d` (A6, `outlivesB`).
+the state, the live slots of a point or of a suspending call's frame and `Env_N`, must outlive `d`
+(A6, `outlivesB`); an inner stored node's answer only if R5 leaves that node. The forms that
+depend on other nodes' forms are read to a fixed point (`crossing`), each node matched by its id
+(`numberHandles`), never by its span.
 
 Every traversal is bounded by `fuel`, whose exhaustion is a hard error.
 -/
@@ -139,7 +142,7 @@ inductive Org where
   | self (step : Org)
   /-- The answer of a `handle` node of another name with a stored operation (an inner node R5
   rewrites first, inside-out; R5-4 holds its ν-value as its state). -/
-  | inner (sp : Span)
+  | inner (id : String)
 
 instance : Inhabited Org := ⟨.unk⟩
 
@@ -152,7 +155,7 @@ def Org.sig : Org → String
   | .fix => "fix"
   | .prim w => s!"P{w}"
   | .self s => s!"S{s.sig}"
-  | .inner sp => s!"N{sp.start.render}"
+  | .inner id => s!"N{id}"
 
 /-- Known code, as A4 reads it: an instance, a closed code value, a self-reference, a primitive. -/
 def Org.known : Org → Bool
@@ -193,6 +196,8 @@ def vorg (env : List Org) (tys : List (Option VTy)) (Δ : LifeCtx) : Nat → TEx
 /-- A `handle` node of the checked program: its fields, and the origins, types and lifetime
 context of its context's slots where the discovery met it. -/
 structure HNode where
+  /-- The node's id (`numberHandles`): its scope and its pre-order index there. -/
+  id : String
   sp : Span
   n : UInt32
   /-- `V`, `VB`, `T` or `L`. -/
@@ -211,7 +216,7 @@ structure HNode where
   Δ : LifeCtx
 
 instance : Inhabited HNode :=
-  ⟨{ sp := default, n := 0, kind := "", d := none, S := [], E := [], A := .unit, R := .unit,
+  ⟨{ id := "", sp := default, n := 0, kind := "", d := none, S := [], E := [], A := .unit, R := .unit,
      ks := [], sshape := [], u := none, te := .unitI default (.val .unit), env := [], tys := [],
      Δ := ⟨[]⟩ }⟩
 
@@ -277,14 +282,14 @@ def discover : Nat → List Org → List (Option VTy) → LifeCtx → TExpr → 
   | f + 1, env, tys, Δ, t, (seen, acc) => do
     let here : List HNode := match t with
       | .effHandleV i _ S E _ n A R u ks _ _ _ te =>
-          [⟨i.sp, n, "V", none, S, E, A, R, ks, i.sshape, some u, te, env, tys, Δ⟩]
+          [⟨(handleIdOf? i).getD "", i.sp, n, "V", none, S, E, A, R, ks, i.sshape, some u, te, env, tys, Δ⟩]
       | .effHandleVB i _ S E _ n A R d u ks _ _ _ te =>
-          [⟨i.sp, n, "VB", some d, S, E, A, R, ks, i.sshape, some u, te, env, tys, Δ⟩]
+          [⟨(handleIdOf? i).getD "", i.sp, n, "VB", some d, S, E, A, R, ks, i.sshape, some u, te, env, tys, Δ⟩]
       | .effHandleT i _ S _ E _ n A R _ _ _ _ te =>
-          [⟨i.sp, n, "T", none, S, E, A, R, E.map BoCa.Fig16.LogRel.Core.ClauseKinds.tailKind, [],
+          [⟨(handleIdOf? i).getD "", i.sp, n, "T", none, S, E, A, R, E.map BoCa.Fig16.LogRel.Core.ClauseKinds.tailKind, [],
             none, te, env, tys, Δ⟩]
       | .effHandleL i _ S _ E _ _ n A R _ _ _ _ te =>
-          [⟨i.sp, n, "L", none, S, E, A, R, E.map fun o =>
+          [⟨(handleIdOf? i).getD "", i.sp, n, "L", none, S, E, A, R, E.map fun o =>
             ⟨o.1, if isAbortive o then .abortive else .resumeOrCancel false⟩, [], none, te, env,
             tys, Δ⟩]
       | _ => []
@@ -320,6 +325,7 @@ def siblingRows (kind : String) (ks : List HKind) : String :=
 (then its form is its own admission's); otherwise the sibling row it waits for. -/
 structure Crossed where
   m : UInt32
+  id : String
   sp : Span
   stored : Bool
   row : String
@@ -384,7 +390,7 @@ def regionScan (n : UInt32) (jst : List Nat) (ruled : List UInt32) :
           | .effHandleVB _ _ _ _ _ _ _ _ _ _ ks .. => ("VB", ks)
           | .effHandleT .. => ("T", [])
           | _ => ("L", [])
-        let c : Crossed := { m, sp := i.sp, stored := ks.any (·.kind == .stored),
+        let c : Crossed := { m, id := (handleIdOf? i).getD "", sp := i.sp, stored := ks.any (·.kind == .stored),
                              row := siblingRows kind ks }
         -- A node R0 rewrites is gone before R5 (its name is one of R0's).
         let crossed' := if ruled.contains m then crossed else crossed ++ [c]
@@ -434,6 +440,8 @@ structure CAcc where
   opens : List Span := []
   /-- Observations of codata whose observations perform `n`, of a value not R5's own (#691). -/
   codata : List Span := []
+  /-- Those of an inner stored node's answer, with the node's id. -/
+  codataIn : List (String × Span) := []
   /-- Walks done, by callee and arguments, with the call that did them. -/
   memo : List (String × Nat) := []
   /-- Calls in progress: id and walk key. -/
@@ -535,7 +543,7 @@ def cw (cfg : CCfg) : Nat → List Org → List (Option VTy) → LifeCtx → Lis
           | .effHandleV _ _ _ _ _ _ _ _ _ ks .. | .effHandleVB _ _ _ _ _ _ _ _ _ _ ks .. =>
             ks.any (·.kind == .stored)
           | _ => false
-        pure (if hasSt then .inner t.info.sp else .unk)
+        pure (if hasSt then .inner ((handleIdOf? t.info).getD "") else .unk)
     | .lendR _ _ x b _ _ _ td tM => do
       let _ ← cw cfg f [] [] Δ [] td
       let _ ← cw cfg f [.unk] [none] (Δ.extend x b) [] tM
@@ -556,13 +564,15 @@ def cw (cfg : CCfg) : Nat → List Org → List (Option VTy) → LifeCtx → Lis
         let o := env.getD g .unk
         if ctyHas cfg.n C && !o.known then
           modify fun s => { s with opens := s.opens ++ [i.sp] }
-        -- An observation of codata whose observations perform `n` (#691), unless the value is an
-        -- inner node's that R5 rewrites first (R5-4).
-        match C, es.head?, o with
-        | _, _, .inner _ => pure ()
-        | .nu D, some .out, _ =>
-          if ctyHas cfg.n D then modify fun s => { s with codata := s.codata ++ [i.sp] }
-        | _, _, _ => pure ()
+        -- An observation of codata whose observations perform `n` (#691). Of an inner node's
+        -- answer, it is a gap only if R5 leaves that node (R5-4; `crossing` reads its form).
+        match C, es.head? with
+        | .nu D, some .out =>
+          if ctyHas cfg.n D then
+            match o with
+            | .inner id => modify fun s => { s with codataIn := s.codataIn ++ [(id, i.sp)] }
+            | _ => modify fun s => { s with codata := s.codata ++ [i.sp] }
+        | _, _ => pure ()
         call cfg f i.sp o es cur
       | .lam .. | .lamDead .. | .withI .. | .nuIn .. | .allI .. =>
         apply cfg f env tys Δ cur h es
@@ -690,6 +700,8 @@ structure Admit where
   gaps : List String := []
   /-- The observations of codata whose observations perform `n`. -/
   codata : List Span := []
+  /-- The gaps that hold if R5 leaves an inner node: its id, and the gap. -/
+  cond : List (String × String) := []
 
 instance : Inhabited Admit := ⟨{ node := default, form := "" }⟩
 
@@ -721,32 +733,35 @@ def admitNode (all : List HNode) (ruled : List UInt32) (pins : Frontend.Check.Pi
     else if susp.any (·.cyc) then "array (recursive)"
     else if susp.any (fun c => (susp.filter (·.callee == c.callee)).length > 1) then "array (shared)"
     else "flat"
-  -- `Env_N`: the slots the clauses use, at the node's context (persistent: A8, the rule's
-  -- premise, `TDerivesP.handleV_env_persistent`).
+  -- `Env_N`: the slots the clauses use, at the node's context. A8, their persistence, is the
+  -- rule's premise at every node of a checked term (`TDerivesP.handleV_env_persistent`,
+  -- `TDerivesP.handleVB_env_persistent`); it is not decided here.
   let env : List (Org × Option VTy) := match h.u with
     | some u => (u.ms.zip (h.env.zip h.tys)).filterMap fun ((a, _), sl) => if a then some sl else none
     | none => []
   -- The slots of the state `Q_N`: the live slots of each point and of each suspending call's
-  -- frame, and `Env_N`. An inner node's answer that R5 rewrites first is held as its state (R5-4),
-  -- not as this slot's value.
-  -- A8, decided at the slots the masks give the clauses: it holds at every node of a checked term
-  -- (`c.tied`, and `TDerivesP.handleV_env_persistent`), so a failure is the admission's error.
-  if let some (_, some A) := env.find? fun (_, ty) => match ty with
-      | some A => !A.persistent
-      | none => false then
-    throw s!"R5 admission: A8: the clauses' context of the node at {spStr h.sp} holds a slot of type {vHead A} that is not persistent, against the rule's premise"
+  -- frame, and `Env_N`. An inner node's answer is held as its state when R5 admits that node
+  -- (R5-4), so its slot is a gap only if R5 leaves it (`crossing` reads its form).
   let slots : List ((Org × Option VTy) × LifeCtx) :=
     (ca.points.flatMap fun p => p.live.map (·, p.Δ)) ++ (susp.flatMap fun c => c.live.map (·, c.Δ)) ++
       env.map (·, h.Δ)
-  let slots := slots.filter fun ((o, _), _) => match o with
-    | .inner _ => false
-    | _ => true
+  let innerOf : Org → Option String := fun
+    | .inner id => some id
+    | _ => none
   -- A6, at VB: every slot of the state outlives `d`.
-  let a6 : List String := match h.d with
+  let bad : List ((Org × Option VTy) × LifeCtx) := match h.d with
     | none => []
-    | some d => slots.filterMap fun ((_, ty), Δ) => match ty with
-        | some A => if outlivesB Δ d A then none else some (vHead A)
-        | none => some "?"
+    | some d => slots.filter fun ((_, ty), Δ) => match ty with
+        | some A => !outlivesB Δ d A
+        | none => true
+  let slotName : Option VTy → String := fun
+    | some A => vHead A
+    | none => "?"
+  let a6 : List String := (bad.filter fun ((o, _), _) => (innerOf o).isNone).map fun ((_, ty), _) =>
+    slotName ty
+  let a6In : List (String × String) := bad.filterMap fun ((o, ty), _) =>
+    (innerOf o).map (·, s!"state does not outlive d (slot {slotName ty})")
+  let slots := slots.filter fun ((o, _), _) => (innerOf o).isNone
   let uslots := match h.d with
     | none => 0
     | some _ => (slots.filter fun ((_, ty), _) => match ty with
@@ -770,6 +785,7 @@ def admitNode (all : List HNode) (ruled : List UInt32) (pins : Frontend.Check.Pi
       crossed := sc.points.flatMap (·.crossed)
       envN := env.length
       codata := ca.codata
+      cond := (ca.codataIn.map fun (id, sp) => (id, s!"codata at row n (#691, at {spStr sp})")) ++ a6In
       mismatch := ca.mismatch
       stored := true
       inner := sc.inner }
@@ -795,26 +811,36 @@ def admitNode (all : List HNode) (ruled : List UInt32) (pins : Frontend.Check.Pi
     s!"A3: κ not at X at {h.n}.{j}"
   let a4 := (ca.opens.head?.map fun sp => s!"A4: open region, force at {spStr sp}").toList
   match a2 ++ a3 ++ a4 with
-  | [] => return { base with form := "R5 opt" }
+  | [] => return { base with form := "R5 opt", own := some "R5 opt" }
   | rs => return { base with form := s!"R5 fallback ({"; ".intercalate rs})",
                               own := some s!"R5 fallback ({"; ".intercalate rs})" }
 
-/-- **The crossing conjunct**, at the forms of the other nodes: a stored node one of whose points
-lies in the handled computation of a node of another name that R0, R1 and R5 do not rewrite (a
-node with no stored operation, or a stored node left) is left, whole. Read to a fixed point, the
-nodes of a name keyed by their spans. -/
+/-- **The forms that depend on other nodes' forms**, read to a fixed point, each node matched by its
+id (`numberHandles`):
+* an inner stored node's answer, observed as codata whose observations perform `n` or held in a
+  boxed state that it does not outlive, is a gap of the outer node only if R5 leaves the inner
+  node (R5-4 holds an admitted inner node's answer as its state);
+* **the crossing conjunct**: a stored node one of whose points lies in the handled computation of
+  a node of another name that R0, R1 and R5 do not rewrite (a node with no stored operation, or a
+  stored node left) is left, whole.
+
+It starts from every node's own form and only leaves nodes, so it ends. -/
 def crossing (as : List Admit) : List Admit := Id.run do
   let mut cur := as
   for _ in [0:as.length + 1] do
+    let leftId : String → Bool := fun id =>
+      match cur.find? (fun (a : Admit) => a.stored && a.node.id == id) with
+      | some a => a.form.startsWith "left"
+      | none => true
     -- A crossed node with no stored operation stays in Backend2 until its sibling row lands; a
-    -- stored one, when its own admission leaves it.
+    -- stored one, when its admission leaves it.
     let rewritten (c : Crossed) : Option String :=
-      if !c.stored then some c.row else
-      match cur.find? fun a => a.stored && a.node.n == c.m && a.node.sp == c.sp with
-      | some a => if a.form.startsWith "left" then some "R5 left" else none
-      | none => some "R5 left"
+      if !c.stored then some c.row else if leftId c.id then some "R5 left" else none
     let next := cur.map fun a =>
       if !a.stored || (a.own.map (·.startsWith "left")).getD false then a else
+      match a.cond.find? (fun (id, _) => leftId id) with
+      | some (_, g) => { a with form := s!"left: {g}", gaps := a.gaps ++ [g] }
+      | none =>
       match a.crossed.findSome? fun c => (rewritten c).map (c.m, ·) with
       | some (m, row) => { a with form := s!"left: perform path crosses handler {m} ({row}, in Backend2)" }
       | none => { a with form := a.own.getD "R5 opt" }
@@ -827,7 +853,12 @@ rewrite (`ruled` are R0's names), its form and what the admission read. -/
 def admission (c : Frontend.Check.Checked) (ruled : List UInt32) : Except String (List Admit) := do
   let env0 : List Org := c.ctx.map fun _ => .unk
   let tys0 : List (Option VTy) := c.ctx.map fun s => some s.ty
-  let (_, nodes) ← discover fuel env0 tys0 ⟨[]⟩ c.t ([], [])
+  -- Every node given its id, so that nodes are matched by id, never by span.
+  let t ← numberHandles c.t
+  let (_, nodes) ← discover fuel env0 tys0 ⟨[]⟩ t ([], [])
+  let ids := nodes.map (·.id)
+  if ids.any (· == "") || ids.eraseDups.length != ids.length then
+    throw "R5 admission: the numbering gives two handle nodes one id, or a node none"
   let nodes := nodes.filter fun h => !(h.E.all isAbortive)
   let as ← nodes.mapM (admitNode nodes ruled c.pins)
   pure (crossing as)
