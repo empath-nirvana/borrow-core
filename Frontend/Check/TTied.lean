@@ -71,13 +71,14 @@ theorem force {k : Nat} {C : CCTy} (h : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γ k (.
   ofAt fun _ => .force h
 
 theorem tensorI (u : Masks) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {t₁ t₂ : TExpr} {A B : CVTy}
-    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (h₁ : TTied p₁ s₁ Δ Γ₁ t₁ (.val A))
+    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    (hcv : Covers u.u₁ 0 t₁.erase ∧ Covers u.u₂ 0 t₂.erase) (h₁ : TTied p₁ s₁ Δ Γ₁ t₁ (.val A))
     (h₂ : TTied p₂ s₂ Δ Γ₂ t₂ (.val B)) :
     TTied (p₁ ++ p₂) (s₁ ∪ s₂) Δ Γ (.tensorI i (.val (.tensor A B)) A B u t₁ t₂)
       (.val (.tensor A B)) :=
-  ⟨fun hn Ξ h => .tensorI hs hm (h₁.1 (nilL hn) Ξ (sigsAt_union_left h))
+  ⟨fun hn Ξ h => .tensorI hs hm hcv (h₁.1 (nilL hn) Ξ (sigsAt_union_left h))
       (h₂.1 (nilR hn) Ξ (sigsAt_union_right h)),
-    .tensorI hs hm h₁.2 h₂.2⟩
+    .tensorI hs hm hcv h₁.2 h₂.2⟩
 
 theorem sumI₁ {p : Pins} {s : CRow} {t : TExpr} {A B : CVTy} (h : TTied p s Δ Γ t (.val A)) :
     TTied p s Δ Γ (.sumI₁ i (.val (.sum A B)) A B t) (.val (.sum A B)) :=
@@ -103,11 +104,12 @@ theorem ret {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} (h : TTied p s Δ Γ t 
 
 theorem bind {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tM tN : TExpr} {A : CVTy}
     {C : CCTy} (u : Masks) (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    (hcv : Covers u.u₁ 0 tM.erase ∧ Covers u.u₂ 1 tN.erase)
     (hM : TTied p₁ s₁ Δ Γ₁ tM (.comp (.ret A))) (hN : TTied p₂ s₂ Δ (⟨A, true⟩ :: Γ₂) tN (.comp C)) :
     TTied (p₁ ++ p₂) (s₁ ∪ s₂) Δ Γ (.bind i (.comp C) A C u tM tN) (.comp C) :=
-  ⟨fun hn Ξ h => .bind hs hm (hM.1 (nilL hn) Ξ (sigsAt_union_left h))
+  ⟨fun hn Ξ h => .bind hs hm hcv (hM.1 (nilL hn) Ξ (sigsAt_union_left h))
       (hN.1 (nilR hn) Ξ (sigsAt_union_right h)),
-    .bind hs hm hM.2 hN.2⟩
+    .bind hs hm hcv hM.2 hN.2⟩
 
 theorem lam {p : Pins} {s : CRow} {t : TExpr} {A : CVTy} {C : CCTy}
     (h : TTied p s Δ (⟨A, true⟩ :: Γ) t (.comp C)) :
@@ -122,10 +124,11 @@ theorem lamDead {p : Pins} {s : CRow} {t : TExpr} {S : CRow} {B : CVTy}
   ⟨fun hn Ξ hΞ => .lamDead (h.1 hn Ξ hΞ), .lamDead h.2⟩
 
 theorem app (u : Masks) {p : Pins} {s : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tM : TExpr} {k : Nat} {A : CVTy} {C : CCTy}
-    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hM : TTied p s Δ Γ₁ tM (.comp (.arr A C)))
+    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    (hcv : Covers u.u₁ 0 tM.erase ∧ Covers u.u₂ 0 (.var k)) (hM : TTied p s Δ Γ₁ tM (.comp (.arr A C)))
     (hx : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γ₂ k A) :
     TTied p s Δ Γ (.app i (.comp C) k A C u tM) (.comp C) :=
-  ⟨fun hn Ξ hΞ => .app hs hm (hM.1 hn Ξ hΞ) hx, .app hs hm hM.2 hx⟩
+  ⟨fun hn Ξ hΞ => .app hs hm hcv (hM.1 hn Ξ hΞ) hx, .app hs hm hcv hM.2 hx⟩
 
 theorem withI {p₁ p₂ : Pins} {s₁ s₂ : CRow} {tM tN : TExpr} {C D : CCTy}
     (hM : TTied p₁ s₁ Δ (BoCa.Fig16.LogRel.Core.withCtx Γ) tM (.comp C))
@@ -146,37 +149,41 @@ theorem proj₂ {p : Pins} {s : CRow} {t : TExpr} {C D : CCTy}
   ⟨fun hn Ξ hΞ => .proj₂ (h.1 hn Ξ hΞ), .proj₂ h.2⟩
 
 theorem unitE (u : Masks) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tV tM : TExpr} {C : CCTy}
-    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hV : TTied p₁ s₁ Δ Γ₁ tV (.val .unit))
+    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    (hcv : Covers u.u₁ 0 tV.erase ∧ Covers u.u₂ 0 tM.erase) (hV : TTied p₁ s₁ Δ Γ₁ tV (.val .unit))
     (hM : TTied p₂ s₂ Δ Γ₂ tM (.comp C)) :
     TTied (p₁ ++ p₂) (s₁ ∪ s₂) Δ Γ (.unitE i (.comp C) C u tV tM) (.comp C) :=
-  ⟨fun hn Ξ h => .unitE hs hm (hV.1 (nilL hn) Ξ (sigsAt_union_left h))
+  ⟨fun hn Ξ h => .unitE hs hm hcv (hV.1 (nilL hn) Ξ (sigsAt_union_left h))
       (hM.1 (nilR hn) Ξ (sigsAt_union_right h)),
-    .unitE hs hm hV.2 hM.2⟩
+    .unitE hs hm hcv hV.2 hM.2⟩
 
 theorem tensorE (u : Masks) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γp Γb : Ctx CVTy} {tV tM : TExpr} {A B : CVTy}
     {C : CCTy} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γp Γb) (hm : u.Rel Γp Γb)
+    (hcv : Covers u.u₁ 0 tV.erase ∧ Covers u.u₂ 2 tM.erase)
     (hV : TTied p₁ s₁ Δ Γp tV (.val (.tensor A B)))
     (hM : TTied p₂ s₂ Δ (⟨B, true⟩ :: ⟨A, true⟩ :: Γb) tM (.comp C)) :
     TTied (p₁ ++ p₂) (s₁ ∪ s₂) Δ Γ (.tensorE i (.comp C) A B C u tV tM) (.comp C) :=
-  ⟨fun hn Ξ h => .tensorE hs hm (hV.1 (nilL hn) Ξ (sigsAt_union_left h))
+  ⟨fun hn Ξ h => .tensorE hs hm hcv (hV.1 (nilL hn) Ξ (sigsAt_union_left h))
       (hM.1 (nilR hn) Ξ (sigsAt_union_right h)),
-    .tensorE hs hm hV.2 hM.2⟩
+    .tensorE hs hm hcv hV.2 hM.2⟩
 
 theorem sumE (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γs Γb : Ctx CVTy} {tV t₁ t₂ : TExpr}
     {A B : CVTy} {C : CCTy} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γs Γb) (hm : u.Rel Γs Γb)
+    (hcv : Covers u.u₁ 0 tV.erase ∧ Covers u.u₂ 1 t₁.erase ∧ Covers u.u₂ 1 t₂.erase)
     (hV : TTied p₁ s₁ Δ Γs tV (.val (.sum A B)))
     (h₁ : TTied p₂ s₂ Δ (⟨A, true⟩ :: Γb) t₁ (.comp C))
     (h₂ : TTied p₃ s₃ Δ (⟨B, true⟩ :: Γb) t₂ (.comp C)) :
     TTied (p₁ ++ (p₂ ++ p₃)) (s₁ ∪ (s₂ ∪ s₃)) Δ Γ (.sumE i (.comp C) A B C u tV t₁ t₂) (.comp C) :=
-  ⟨fun hn Ξ h => .sumE hs hm (hV.1 (nilL hn) Ξ (sigsAt_union_left h))
+  ⟨fun hn Ξ h => .sumE hs hm hcv (hV.1 (nilL hn) Ξ (sigsAt_union_left h))
       (h₁.1 (nilL (nilR hn)) Ξ (sigsAt_union_left (sigsAt_union_right h)))
       (h₂.1 (nilR (nilR hn)) Ξ (sigsAt_union_right (sigsAt_union_right h))),
-    .sumE hs hm hV.2 h₁.2 h₂.2⟩
+    .sumE hs hm hcv hV.2 h₁.2 h₂.2⟩
 
 theorem zeroE (u : Masks) {p : Pins} {s : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tV : TExpr} {C : CCTy}
-    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hV : TTied p s Δ Γ₁ tV (.val .zero)) :
+    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    (hcv : Covers u.u₁ 0 tV.erase) (hV : TTied p s Δ Γ₁ tV (.val .zero)) :
     TTied p s Δ Γ (.zeroE i (.comp C) C u tV) (.comp C) :=
-  ⟨fun hn Ξ hΞ => .zeroE hs hm (hV.1 hn Ξ hΞ), .zeroE hs hm hV.2⟩
+  ⟨fun hn Ξ hΞ => .zeroE hs hm hcv (hV.1 hn Ξ hΞ), .zeroE hs hm hcv hV.2⟩
 
 theorem allI {p : Pins} {s : CRow} {x : LifeVar} {b : CLife} {t : TExpr} {S : CVTy} {C : CCTy}
     (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
@@ -225,12 +232,13 @@ theorem mutSub {p : Pins} {s : CRow} {t : TExpr} {a b : CLife} {A : CVTy}
   ⟨fun hn Ξ hΞ => .mutSub (h.1 hn Ξ hΞ) hle, .mutSub h.2 hle⟩
 
 theorem lolliE (u : Masks) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {ta tf : TExpr} {A B : CVTy}
-    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (ha : TTied p₁ s₁ Δ Γ₁ ta (.val A))
+    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    (hcv : Covers u.u₁ 0 ta.erase ∧ Covers u.u₂ 0 tf.erase) (ha : TTied p₁ s₁ Δ Γ₁ ta (.val A))
     (hf : TTied p₂ s₂ Δ Γ₂ tf (.val (.lolli A B))) :
     TTied (p₁ ++ p₂) (s₁ ∪ s₂) Δ Γ (.lolliE i (.val B) A B u ta tf) (.val B) :=
-  ⟨fun hn Ξ h => .lolliE hs hm (ha.1 (nilL hn) Ξ (sigsAt_union_left h))
+  ⟨fun hn Ξ h => .lolliE hs hm hcv (ha.1 (nilL hn) Ξ (sigsAt_union_left h))
       (hf.1 (nilR hn) Ξ (sigsAt_union_right h)),
-    .lolliE hs hm ha.2 hf.2⟩
+    .lolliE hs hm hcv ha.2 hf.2⟩
 
 theorem allEV {p : Pins} {s : CRow} {t : TExpr} {x : LifeVar} {b a : CLife} {A : CVTy}
     (h : TTied p s Δ Γ t (.val (.all x b A))) (hlt : Δ.EntailsLt a b) :
@@ -284,18 +292,20 @@ theorem effRaise {p : Pins} {s : CRow} {t : TExpr} {S : CRow} {o : COpSig} {B : 
     .effRaise hf ha hd h.2⟩
 
 theorem effLet (u : Masks) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tM tN : TExpr} {A B : CVTy}
-    {S : CRow} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hW : S.Weak → Γ₂.Drops)
+    {S : CRow} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    (hcv : Covers u.u₁ 0 tM.erase ∧ Covers u.u₂ 1 tN.erase) (hW : S.Weak → Γ₂.Drops)
     (hU : S.Unr → Persistent Γ₂) (hM : TTied p₁ s₁ Δ Γ₁ tM (.comp (effOf S A)))
     (hN : TTied p₂ s₂ Δ (⟨A, true⟩ :: Γ₂) tN (.comp (effOf S B))) :
     TTied (p₁ ++ p₂) (s₁ ∪ s₂) Δ Γ (.effLet i (.comp (effOf S B)) A B S u tM tN)
       (.comp (effOf S B)) :=
-  ⟨fun hn Ξ h => .effLet hs hm hW hU (hM.1 (nilL hn) Ξ (sigsAt_union_left h))
+  ⟨fun hn Ξ h => .effLet hs hm hcv hW hU (hM.1 (nilL hn) Ξ (sigsAt_union_left h))
       (hN.1 (nilR hn) Ξ (sigsAt_union_right h)),
-    .effLet hs hm hW hU hM.2 hN.2⟩
+    .effLet hs hm hcv hW hU hM.2 hN.2⟩
 
 /-- `[then]` with its finaliser at the pure row, as `CDerivesAt.effThenA`.  `[spec §24, §27]` -/
 theorem effThenA (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tM tN tD : TExpr}
-    {A B : CVTy} {S : CRow} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hNZ : S.NZ)
+    {A B : CVTy} {S : CRow} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    (hcv : Covers u.u₁ 0 tM.erase ∧ Covers u.u₂ 1 tN.erase ∧ Covers u.u₂ 1 tD.erase) (hNZ : S.NZ)
     (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂) (hM : TTied p₁ s₁ Δ Γ₁ tM (.comp (effOf S A)))
     (hN : TTied p₂ s₂ Δ (⟨A, true⟩ :: Γ₂) tN (.comp (effOf S B)))
     (hD : TTied p₃ s₃ Δ (⟨.unit, false⟩ :: Γ₂) tD (.comp (.ret .unit))) :
@@ -308,11 +318,11 @@ theorem effThenA (u : Masks) {p₁ p₂ p₃ : Pins} {s₁ s₂ s₃ : CRow} {Γ
     fun _ _ o _ hf hf' _ => by rw [hf] at hf'; cases hf'; exact BoCa.Fig16.LogRel.Core.ThenLe.nil o.fin
   have hP : BoCa.Fig16.LogRel.Core.Row.UnrD [] → S.PendPers :=
     fun ⟨_, h, _⟩ => absurd h List.not_mem_nil
-  ⟨fun hn Ξ h => .effThen hs hm hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
+  ⟨fun hn Ξ h => .effThen hs hm hcv hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
       (BoCa.Fig16.LogRel.Core.RowLe.nil S) hfin hP rfl (hM.1 (nilL hn) Ξ (sigsAt_union_left h))
       (hN.1 (nilL (nilR hn)) Ξ (sigsAt_union_left (sigsAt_union_right h)))
       (hD.1 (nilR (nilR hn)) Ξ (sigsAt_union_right (sigsAt_union_right h))),
-    .effThen hs hm hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
+    .effThen hs hm hcv hNZ hUq hU (BoCa.Fig16.LogRel.Core.RowLe.refl S)
       (BoCa.Fig16.LogRel.Core.RowLe.nil S) hfin hP rfl hM.2 hN.2 hD.2⟩
 
 /-- `[handle]` reads its handled row, as `CDerivesAt.effHandleV`: the handler's pair `tc` a value
@@ -321,6 +331,7 @@ theorem effHandle (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKin
     (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tc te : TExpr}
     {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    (hcv : Covers u.u₁ 0 tc.erase ∧ Covers u.u₂ 0 te.erase)
     (hd : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ₁) (hH : tc.erase.ValFormIn Γ₁)
     (hc : TTied p₁ s₁ Δ Γ₁ tc (.val (.tensor (BoCa.Fig16.LogRel.Core.retTy S A R)
       (BoCa.Fig16.LogRel.Core.clausesTy S R E))))
@@ -331,16 +342,17 @@ theorem effHandle (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKin
       (.effHandleV i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R u ks site
         te.erase.hin tc te)
       (.comp (effOf S R)) :=
-  ⟨fun hn Ξ h => .effHandleV (rowAt_of_union_left h) hs hm hd hH
+  ⟨fun hn Ξ h => .effHandleV (rowAt_of_union_left h) hs hm hcv hd hH
       (hc.1 (nilL hn) Ξ (sigsAt_union_left (sigsAt_union_right h))) hn0 hnS hlen hdv
       (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) rfl,
-    .effHandleV hs hm hd hH hc.2 hn0 hnS hlen hdv he.2 rfl⟩
+    .effHandleV hs hm hcv hd hH hc.2 hn0 hnS hlen hdv he.2 rfl⟩
 
 /-- BOXED-κ reads its handled row, as `CDerivesAt.effHandleB`.  `[spec §28]` -/
 theorem effHandleB (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKind)
     (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy} {tc te : TExpr}
     {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy} {d : CLife}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    (hcv : Covers u.u₁ 0 tc.erase ∧ Covers u.u₂ 0 te.erase)
     (hd : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ₁) (hH : tc.erase.ValFormIn Γ₁)
     (hc : TTied p₁ s₁ Δ Γ₁ tc (.val (.tensor (BoCa.Fig16.LogRel.Core.retTy S A R)
       (BoCa.Fig16.LogRel.Core.clausesTyB S R d E))))
@@ -353,10 +365,10 @@ theorem effHandleB (u : Masks) (ks : List BoCa.Fig16.LogRel.Core.ClauseKinds.HKi
       (.effHandleVB i (.comp (effOf S R)) S E BoCa.Fig16.LogRel.Core.finsNil n A R d u ks site
         te.erase.hin tc te)
       (.comp (effOf S R)) :=
-  ⟨fun hn Ξ h => .effHandleVB (rowAt_of_union_left h) hs hm hd hH
+  ⟨fun hn Ξ h => .effHandleVB (rowAt_of_union_left h) hs hm hcv hd hH
       (hc.1 (nilL hn) Ξ (sigsAt_union_left (sigsAt_union_right h))) hn0 hnS hlen hdv
       (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right h))) hΓd hSd rfl,
-    .effHandleVB hs hm hd hH hc.2 hn0 hnS hlen hdv he.2 hΓd hSd rfl⟩
+    .effHandleVB hs hm hcv hd hH hc.2 hn0 hnS hlen hdv he.2 hΓd hSd rfl⟩
 
 /-- `iterate` reads its row, which holds `Div`.  `[spec §14]` -/
 theorem iterate (S : CRow) (St B R : CVTy) (hS : BoCa.Fig16.LogRel.Core.Row.divB S = true)
@@ -390,7 +402,8 @@ theorem reify {p : Pins} {s : CRow} {t : TExpr} (S : CRow) (B R : CVTy) (res : B
 theorem effHandleT (u : Masks) (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy}
     {tc te : TExpr} {Hr Hc : BoCa.Expr} {S SN : CRow} {E : List (CQual × CVTy × CVTy)}
     {fs : Nat → CCTy} {n : UInt32} {A R : CVTy}
-    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂) (hd : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ₁)
+    (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
+    (hcv : Covers u.u₁ 0 tc.erase ∧ Covers u.u₂ 0 te.erase) (hd : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ₁)
     (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
     (hc : TTied p₁ s₁ Δ Γ₁ tc (.val (.tensor (BoCa.Fig16.LogRel.Core.retTy S A R)
       (BoCa.Fig16.LogRel.Core.ansesTy S SN R E))))
@@ -402,11 +415,11 @@ theorem effHandleT (u : Masks) (site : Option HSite) {p₁ p₂ : Pins} {s₁ s�
     TTied (p₁ ++ p₂) ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) ∪ (s₁ ∪ s₂)) Δ Γ
       (.effHandleT i (.comp (effOf S R)) S SN E fs n A R u site te.erase.hin tc te)
       (.comp (effOf S R)) :=
-  ⟨fun hn Ξ hΞ => .effHandleT (rowAt_of_union_left hΞ) hs hm hd hHr hHc
+  ⟨fun hn Ξ hΞ => .effHandleT (rowAt_of_union_left hΞ) hs hm hcv hd hHr hHc
       (hc.1 (nilL hn) Ξ (sigsAt_union_left (sigsAt_union_right hΞ))) qc
       hn0 hnd hnS hlen hSN hLin
       (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right hΞ))) rfl,
-    .effHandleT hs hm hd hHr hHc hc.2 qc hn0 hnd hnS hlen hSN hLin he.2 rfl⟩
+    .effHandleT hs hm hcv hd hHr hHc hc.2 qc hn0 hnd hnS hlen hSN hLin he.2 rfl⟩
 
 /-! ### Derived forms -/
 
@@ -414,7 +427,7 @@ theorem effHandleT (u : Masks) (site : Option HSite) {p₁ p₂ : Pins} {s₁ s�
 destructor's derived node.  `[spec §12]` -/
 theorem drop (ix : TInfo) (u₁ u₂ : List Bool) {p : Pins} {s : CRow} {Γ₁ Γ₂ : Ctx CVTy} {k : Nat}
     {T : CVTy} {t : TExpr} {C : CCTy} (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂)
-    (hm : SplitMasks Γ₁ Γ₂ u₁ u₂)
+    (hm : SplitMasks Γ₁ Γ₂ u₁ u₂) (hcv : Covers u₁ 0 (.var k) ∧ Covers u₂ 0 t.erase)
     (hx : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γ₁ k T) (hT : HasDtor T)
     (hc : BoCa.Fig16.LogRel.Core.closedAt 0 (dtorE T) = true) (hE : (dtorE T).effFree = true)
     (h : TTied p s Δ Γ₂ t (.comp C)) :
@@ -424,9 +437,13 @@ theorem drop (ix : TInfo) (u₁ u₂ : List Bool) {p : Pins} {s : CRow} {Γ₁ �
   have hd : TTied [] [] Δ (BoCa.Fig16.LogRel.Core.kill Γ₁) (.dtor ix (.val (.lolli T .unit)) T)
       (.val (.lolli T .unit)) :=
     ofAt fun _ => .dtor hT hc hE (BoCa.Fig16.LogRel.Core.kill_dead Γ₁)
+  have hl₁ : u₁.length = (noUse u₁).length := by simp [noUse]
+  have hl₂ : u₁.length = u₂.length := by have := hm.length; omega
   have hl := lolliE (Δ := Δ) ix (Masks.of u₁ (noUse u₁)) (BoCa.Fig16.LogRel.Core.split_kill' Γ₁).toP
-    (SplitMasks.kill_right hm.left_live).rel_of (var ix hx) hd
-  simpa using unitE i (Masks.of u₁ u₂) hs hm.rel_of hl h
+    (SplitMasks.kill_right hm.left_live).rel_of
+    (by exact ⟨hcv.1.of₁ hl₁, Covers.of₂ hl₁ (Covers.closed hc)⟩) (var ix hx) hd
+  simpa using unitE i (Masks.of u₁ u₂) hs hm.rel_of
+    (by exact ⟨Covers.of₁ hl₂ (Covers.app (Covers.closed hc) hcv.1), hcv.2.of₂ hl₂⟩) hl h
 
 /-- `⇓σ t` (`shortenE`) as typed nodes, at a borrow former `M` whose `⊑` node is `leaf`: the leaf's
 `⊑` at a leaf, and `let (x, y) = t; return (⇓σ₁ x, ⇓σ₂ y)` at a node, as `shortenE_wfAt`. `u` is
@@ -460,39 +477,65 @@ theorem shortenT_erase {M : CLife → CVTy → CVTy} {leaf : TInfo → CLife →
       simp only [shortenT, TExpr.erase, BoCa.Fig16.LogRel.Core.shortenE,
         shortenT_erase hl i a b s₁, shortenT_erase hl i a b s₂]
 
+/-- A typed term is covered by a mask that holds every slot live in its context, past the `n`
+binders it is under (`CDerivesP.mentions_live`).  `[spec §55]` -/
+theorem covers {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (h : TTied p s Δ Γ t j)
+    {u : List Bool} {n : Nat} (hu : ∀ k, BoCa.Fig16.LogRel.Core.Ctx.LiveAt Γ (k + n) →
+      u.getD k false = true) : Covers u n t.erase :=
+  fun k hk => hu k (h.2.erase.mentions_live _ hk)
+
+/-- The slots live in two slots before a consumed context. -/
+theorem liveAt_two_kill {S T : CVTy} {Γ' : Ctx CVTy} {a b : Bool} {u : List Bool}
+    (h0 : a = true → u.getD 0 false = true) (h1 : b = true → u.getD 1 false = true) :
+    ∀ k, BoCa.Fig16.LogRel.Core.Ctx.LiveAt (⟨S, a⟩ :: ⟨T, b⟩ :: BoCa.Fig16.LogRel.Core.kill Γ') k →
+      u.getD k false = true
+  | 0, ⟨_, hs, hl⟩ => h0 (by simp at hs; subst hs; exact hl)
+  | 1, ⟨_, hs, hl⟩ => h1 (by simp at hs; subst hs; exact hl)
+  | k + 2, hl => absurd (by simpa [BoCa.Fig16.LogRel.Core.Ctx.LiveAt] using hl)
+      (BoCa.Fig16.LogRel.Core.Ctx.Dead.not_liveAt (BoCa.Fig16.LogRel.Core.kill_dead Γ') k)
+
 /-- `⇓σ`, typed, as `shortenE_wfAt`: a family moved to a shorter lifetime, leaf by leaf, by the
 former's `⊑` rule `sub`.  `[spec §5]` -/
 theorem shorten {M : CLife → CVTy → CVTy} {leaf : TInfo → CLife → CLife → CVTy → TExpr → TExpr}
     (sub : ∀ {p : Pins} {s : CRow} {Δ : LifeCtx} {Γ : Ctx CVTy} {t : TExpr} {a b : CLife} {A : CVTy},
       TTied p s Δ Γ t (.val (M b A)) → Δ.EntailsLe a b → TTied p s Δ Γ (leaf i a b A t) (.val (M a A)))
     {a b : CLife} : ∀ {σ : CShape} (u : List Bool) {p : Pins} {s : CRow} {Γ : Ctx CVTy} {t : TExpr},
-    UsedLive u Γ → TTied p s Δ Γ t (.val (σ.famTy M b)) → Δ.EntailsLe a b →
+    UsedLive u Γ → Covers u 0 t.erase → TTied p s Δ Γ t (.val (σ.famTy M b)) → Δ.EntailsLe a b →
     TTied p s Δ Γ (shortenT M leaf i a b σ u t) (.val (σ.famTy M a))
-  | .leaf _, _, _, _, _, _, _, h, hle => sub h hle
-  | .node s₁ s₂, u, p, s, Γ, t, hu, h, hle => by
+  | .leaf _, _, _, _, _, _, _, _, h, hle => sub h hle
+  | .node s₁ s₂, u, p, s, Γ, t, hu, hcov, h, hle => by
       have hk := BoCa.Fig16.LogRel.Core.kill_dead Γ
       have hl : (u.map fun _ => false).length = (BoCa.Fig16.LogRel.Core.kill Γ).length := by
         simp [BoCa.Fig16.LogRel.Core.kill, hu.1]
       have hn := SplitMasks.dead (u := u.map fun _ => false) hk hl
       have hn' : noUse (u.map fun _ => false) = u.map fun _ => false := by simp [noUse]
       rw [hn'] at hn
+      have h₁ := shorten sub (σ := s₁) (false :: true :: u.map fun _ => false)
+        ⟨by simpa using hl, fun k hk' => by
+          match k, hk' with
+          | 1, _ => rfl
+          | k + 2, hk' => simp at hk'⟩ (Covers.var rfl)
+        (var i (Γ := ⟨s₂.famTy M b, false⟩ :: ⟨s₁.famTy M b, true⟩ :: BoCa.Fig16.LogRel.Core.kill Γ)
+          (.there (.here hk))) hle
+      have h₂ := shorten sub (σ := s₂) (true :: false :: u.map fun _ => false)
+        ⟨by simpa using hl, fun k hk' => by
+          match k, hk' with
+          | 0, _ => rfl
+          | k + 2, hk' => simp at hk'⟩ (Covers.var rfl)
+        (var i (Γ := ⟨s₂.famTy M b, true⟩ :: ⟨s₁.famTy M b, false⟩ :: BoCa.Fig16.LogRel.Core.kill Γ)
+          (.here (.cons hk))) hle
+      have hp := ret i (tensorI i
+        (Masks.of (false :: true :: u.map fun _ => false) (true :: false :: u.map fun _ => false))
+        (.right (.left (BoCa.Fig16.LogRel.Core.deadSplit hk)))
+        (SplitMasks.rel_of (.cons (by simp) (by simp) (by simp) (.cons (by simp) (by simp) (by simp) hn)))
+        ⟨Covers.of₁ (by simp) (h₁.covers fun k hl => liveAt_two_kill (by simp) (fun _ => rfl) k hl),
+          Covers.of₂ (by simp) (h₂.covers fun k hl => liveAt_two_kill (fun _ => rfl) (by simp) k hl)⟩
+        h₁ h₂)
       have hr := ofRet i (tensorE i (Masks.of u (u.map fun _ => false))
-        (BoCa.Fig16.LogRel.Core.split_kill' Γ).toP (SplitMasks.kill_right hu).rel_of h (ret i
-        (tensorI i (Masks.of (false :: true :: u.map fun _ => false) (true :: false :: u.map fun _ => false))
-          (.right (.left (BoCa.Fig16.LogRel.Core.deadSplit hk)))
-          (SplitMasks.rel_of (.cons (by simp) (by simp) (by simp) (.cons (by simp) (by simp) (by simp) hn)))
-          (shorten sub (σ := s₁) (false :: true :: u.map fun _ => false)
-            ⟨by simpa using hl, fun k hk' => by
-              match k, hk' with
-              | 1, _ => rfl
-              | k + 2, hk' => simp at hk'⟩
-            (var i (.there (.here hk))) hle)
-          (shorten sub (σ := s₂) (true :: false :: u.map fun _ => false)
-            ⟨by simpa using hl, fun k hk' => by
-              match k, hk' with
-              | 0, _ => rfl
-              | k + 2, hk' => simp at hk'⟩
-            (var i (.here (.cons hk))) hle))))
+        (BoCa.Fig16.LogRel.Core.split_kill' Γ).toP (SplitMasks.kill_right hu).rel_of
+        ⟨hcov.of₁ (by simp), Covers.of₂ (by simp) (hp.covers fun k hl => absurd
+          (by simpa [BoCa.Fig16.LogRel.Core.Ctx.LiveAt] using hl)
+          (BoCa.Fig16.LogRel.Core.Ctx.Dead.not_liveAt hk k))⟩ h hp)
       exact of_sigs (s' := s ∪ []) (fun _ hΞ o ho => hΞ o (by simpa using ho))
         (by simpa [shortenT, BoCa.Fig16.LogRel.Core.Shape.famTy] using hr)
 

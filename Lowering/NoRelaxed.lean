@@ -85,7 +85,7 @@ theorem TDerivesP.toC {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro hf
       dsimp only [TExpr.erase]
       exact CDerives.unitI a0
-  | tensorI a0 a1 a2 a3 ih0 ih1 =>
+  | tensorI a0 a1 _ a2 a3 ih0 ih1 =>
       intro hf
       simp only [relaxedFree, Bool.and_eq_true] at hf
       have ih0 := ih0 hf.1
@@ -124,7 +124,7 @@ theorem TDerivesP.toC {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       have ih0 := ih0 hf
       dsimp only [TExpr.erase]
       exact CDerives.ret ih0
-  | bind a0 a1 a2 a3 ih0 ih1 =>
+  | bind a0 a1 _ a2 a3 ih0 ih1 =>
       intro hf
       simp only [relaxedFree, Bool.and_eq_true] at hf
       have ih0 := ih0 hf.1
@@ -147,7 +147,7 @@ theorem TDerivesP.toC {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       have ih0 := ih0 hf
       dsimp only [TExpr.erase]
       exact CDerives.lamDead ih0
-  | app a0 a1 a2 a3 ih0 =>
+  | app a0 a1 _ a2 a3 ih0 =>
       intro hf
       simp only [relaxedFree] at hf
       have ih0 := ih0 hf
@@ -176,21 +176,21 @@ theorem TDerivesP.toC {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro hf
       dsimp only [TExpr.erase]
       exact CDerives.topI
-  | unitE a0 a1 a2 a3 ih0 ih1 =>
+  | unitE a0 a1 _ a2 a3 ih0 ih1 =>
       intro hf
       simp only [relaxedFree, Bool.and_eq_true] at hf
       have ih0 := ih0 hf.1
       have ih1 := ih1 hf.2
       dsimp only [TExpr.erase]
       exact CDerives.unitE a0 ih0 ih1
-  | tensorE a0 a1 a2 a3 ih0 ih1 =>
+  | tensorE a0 a1 _ a2 a3 ih0 ih1 =>
       intro hf
       simp only [relaxedFree, Bool.and_eq_true] at hf
       have ih0 := ih0 hf.1
       have ih1 := ih1 hf.2
       dsimp only [TExpr.erase]
       exact CDerives.tensorE a0 ih0 ih1
-  | sumE a0 a1 a2 a3 a4 ih0 ih1 ih2 =>
+  | sumE a0 a1 _ a2 a3 a4 ih0 ih1 ih2 =>
       intro hf
       simp only [relaxedFree, Bool.and_eq_true] at hf
       have ih0 := ih0 hf.1.1
@@ -198,7 +198,7 @@ theorem TDerivesP.toC {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       have ih2 := ih2 hf.2
       dsimp only [TExpr.erase]
       exact CDerives.sumE a0 ih0 ih1 ih2
-  | zeroE a0 a1 a2 ih0 =>
+  | zeroE a0 a1 _ a2 ih0 =>
       intro hf
       simp only [relaxedFree] at hf
       have ih0 := ih0 hf
@@ -459,7 +459,7 @@ theorem TDerivesP.toC {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       have ih0 := ih0 hf
       dsimp only [TExpr.erase]
       exact CDerives.sliceBorrowIU a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0
-  | lolliE a0 a1 a2 a3 ih0 ih1 =>
+  | lolliE a0 a1 _ a2 a3 ih0 ih1 =>
       intro hf
       simp only [relaxedFree, Bool.and_eq_true] at hf
       have ih0 := ih0 hf.1
@@ -536,14 +536,14 @@ theorem TDerivesP.toC {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       have ih0 := ih0 hf
       dsimp only [TExpr.erase]
       exact CDerives.effRaise a0 a1 a2 ih0
-  | effLet a0 a1 a2 a3 a4 a5 ih0 ih1 =>
+  | effLet a0 a1 _ a2 a3 a4 a5 ih0 ih1 =>
       intro hf
       simp only [relaxedFree, Bool.and_eq_true] at hf
       have ih0 := ih0 hf.1
       have ih1 := ih1 hf.2
       dsimp only [TExpr.erase]
       exact CDerives.effLet a0 a2 a3 ih0 ih1
-  | effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 ih2 =>
+  | effThen a0 a1 _ a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 ih2 =>
       intro hf
       simp only [relaxedFree, Bool.and_eq_true] at hf
       have ih0 := ih0 hf.1.1
@@ -551,21 +551,21 @@ theorem TDerivesP.toC {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       have ih2 := ih2 hf.2
       dsimp only [TExpr.erase]
       exact CDerives.effThen a0 a2 a3 a4 a5 a6 a7 a8 a9 ih0 ih1 ih2
-  | effHandleV a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0 ih1 =>
+  | effHandleV a0 a1 _ a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0 ih1 =>
       intro hf
       simp only [relaxedFree, Bool.and_eq_true] at hf
       have ih0 := ih0 hf.1
       have ih1 := ih1 hf.2
       dsimp only [TExpr.erase]
       exact CDerives.effHandleV a0 a2 a3 ih0 a5 a6 a7 a8 ih1
-  | effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 =>
+  | effHandleVB a0 a1 _ a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 =>
       intro hf
       simp only [relaxedFree, Bool.and_eq_true] at hf
       have ih0 := ih0 hf.1
       have ih1 := ih1 hf.2
       dsimp only [TExpr.erase]
       exact CDerives.effHandleVB a0 a2 a3 ih0 a5 a6 a7 a8 ih1 a10 a11
-  | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 ih0 ih1 =>
+  | effHandleT a0 a1 _ a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 ih0 ih1 =>
       intro hf
       simp only [relaxedFree, Bool.and_eq_true] at hf
       have ih0 := ih0 hf.1
@@ -574,7 +574,7 @@ theorem TDerivesP.toC {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       rw [a6] at ih0
       rw [a6]
       exact CDerives.effHandleT a0 a2 a3 a4 ih0 a7 a8 a9 a10 a11 a12 ih1
-  | effHandleL a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 ih0 ih1 =>
+  | effHandleL a0 a1 _ a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 ih0 ih1 =>
       intro hf
       simp only [relaxedFree, Bool.and_eq_true] at hf
       have ih0 := ih0 hf.1

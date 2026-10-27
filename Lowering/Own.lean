@@ -189,9 +189,9 @@ def pureT : TExpr → Bool
 /-! ### Masks that agree with the leaves -/
 
 /-- **The masks agree with the leaves**: along `own`'s flow of live slots, every variable a leaf
-reads (`var`, `force`, `M x`'s argument) is live where it is read. The checker's masks are its
-parts' uses (`Fam.split`), so its typed terms have this; the typed rules ask less of a mask
-(`SplitMasks`: a slot a mask holds is live in its part). -/
+reads (`var`, `force`, `M x`'s argument) is live where it is read. Every typed term of the pure
+fragment has it (`agreeAt_of_typed`, `Lowering/OwnLow.lean`): a split's masks cover its parts
+(`Covers`). -/
 def agreeAt : List Bool → TExpr → Bool
   | L, .var _ _ i _ => lv L i
   | L, .force _ _ i _ => lv L i

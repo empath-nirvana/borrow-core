@@ -9,8 +9,8 @@ import Lowering.Own
 Each program is checked as `bcc check` does. A program is in the pure fragment when it has no
 capability (`main` has no externs) and its typed term is in `Lowering.pureT`. For each:
 
-* the hypothesis of `Lowering.own_lowersInto` is decided: the masks agree with the leaves
-  (`Lowering.agreeAt`), so the theorem gives `own`'s output low;
+* the masks' agreement with the leaves (`Lowering.agreeAt`), which `Lowering.agreeAt_of_typed`
+  proves of every typed term in the fragment, is decided as well;
 * `own`'s output is decided low as well (`Lowering.lowB`, sound by `Lowering.lowB_sound`), the
   kernel's constants being `copy`, `forget` and the erasures of the term's constant nodes;
 * the source interpreter runs `own`'s output and the erasure, and the reports (the value and the
