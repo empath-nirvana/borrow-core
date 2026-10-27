@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.01 · 2026-10-22
+Version 1.02 · 2026-10-27
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8897,6 +8897,92 @@ unchanged on both backends.
 - **A chunk boundary.** A recursion that goes back and forth across the end of a chunk allocates
   and frees the next chunk each time it crosses; a spare chunk kept on the stack would end it.
 
+## 53. Entry 52 — lowering under the semantic relation: the statements (#699, U0 of #698)
+
+### Motivation
+
+Neither backend has a theorem: each decides copies, drops, continuations and lifetimes on its
+own, and neither IR interpreter is related to the machine. #698's scoping found that the kernel
+already types the backend's input (`Checked.e := c.t.erase`, `checked_sem`), so a lowering can keep
+the guarantees the way the kernel types its constants (`swap`) and `PinLaw`: by proving its output
+in `SemC` at the source's type, once, as a theorem about the lowering function. That is not a
+check of each compiled program, not a lint, and not a re-derivation of `CDerives` for the output.
+The plan splits the lowering at a low subset of `Expr`: the steps that decide ownership or control
+are `Expr → Expr` steps proved in `SemC` (U1, U3); the steps below it (closure conversion, boxing,
+defunctionalisation, frame slots) are representation, proved by a simulation that reads no type
+(U2). The user agreed the plan on 2026-10-27: "That sounds good. Let's open issues and work through
+them." This entry states the plan's theorems; it proves the transfer, not the lowerings.
+
+### Language
+
+No change: no type, rule, term, typing, elaboration, semantics or backend.
+
+### Statements
+
+`Lowering/`, a library with no executable.
+
+- **The low subset** (`Lowering/Low.lean`, `LowExpr Site n e`): the shape the ownership and
+  control layers lower into.
+  - *Explicit ownership* (`Explicit`, `occ`, `once`): every binder, every variable a `λ` captures
+    and every context variable is consumed exactly once on every path, in the machine's order. A
+    second use goes through `copy`, an unused value through `forget` or `dtorE A`, so the print
+    places no copy or drop of its own, which is the LIR's discipline. A path may end at `absurdE`
+    with variables unused there, as `[0E]` absorbs them. The kernel's constants are atoms
+    (`LowConst`: the erasure of a typed node with no premise); `copy`'s own body uses its binder
+    twice (`copy_body_not_once`).
+  - *Effects only at stored-continuation sites* (`EffOnlyAt Site`): `perform`, `raise`, `hnd`,
+    `ubind`, `ccatch`, `cfin` and `iterate` (whose step performs `Div`'s tick) occur only inside a
+    subterm `Site` accepts. `Site` is a parameter because the representation of a stored
+    continuation is not decided (#703): under K1 it accepts the stored sites' handler terms, under
+    K2 nothing (`noSite`). Widening `Site` keeps a low term low (`LowExpr.mono`).
+- **The obligations** (`Lowering/Obligations.lean`): `LowerSem lower` (every checked `main` with
+  no relaxed rule lowers into `SemC` at its context and type), `LowerSemRel lower` (whatever puts
+  the source in `SemC` puts the lowered term there; with `PinLaw` it covers relaxed rules), and
+  `LowersInto Site lower` (the output is low). Proved: `lowered_every_run` and
+  `lowered_every_run_pin` (every run of a lowered closed `F 1` program from the empty memory
+  continues to `()` at the empty memory, through `theorem32D`); `erase_lowerSem` and
+  `erase_lowerSemRel` (the erasure meets them); `bang_owns_nothing` (a value at `!A` owns no
+  resource, so boxing is below the low subset).
+- **The print's simulation** (`Lowering/Print.lean`). The LIR's semantics is its interpreter
+  (`Backend2/Interp.lean`), a fuelled big-step evaluator: `lirRun p fuel` runs `main` from the
+  state with no input. A run *faults* when it fails at some fuel other than for want of fuel
+  (`outOfFuel`, pinned by `eval_zero`), and *answers* `(v, s)` when it returns them at some fuel.
+  `LIREveryRun p`: no fault, every answer `()` with no live object, and some answer.
+  `SimBy R e p`, through a correspondence `R : Corr` the print chooses (`()` to `()`, the empty
+  memory to no live object): an LIR fault is a source run that gets stuck, an LIR answer a source
+  run to a corresponding value and heap, and a source run that ends is matched by an answer.
+  `PrintSim Site lower print`: every checked closed `main : F 1` whose lowered term is low has its
+  print simulated. Stated, not proved (U2).
+- **The transfer** (proved): `lir_every_run_of_sem` (a closed `F 1` term in `SemC` whose print is
+  simulated has `LIREveryRun`), `lowered_lir_every_run` and `lowered_lir_every_run_pin` (composed
+  with the obligations).
+- **Non-vacuity**: `lowExpr_unit`, `lowExpr_copyTwice` (an explicit `copy`), `lowExpr_absurd` (a
+  binder unused on a path that ends at `absurd`); `sem_unit`, `printSimAt_unit` and
+  `lir_every_run_unit` (the transfer's hypotheses hold together at `()`).
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `Core/`, `Paper/`, `Support/`, the checker, the
+elaboration, either backend or a kernel program. Every output, golden and count is unchanged.
+
+### Open
+
+- **The LIR's semantics includes the interpreter's re-checks.** A fault is any failure but
+  `outOfFuel`, so it includes the consumption, copy and drop checks (`Backend2/Interp.lean`:
+  `takeV`, the `copy` and `drop` arms, `callFn`'s empty frame), which U6 retires. While they stand,
+  U2's simulation must meet them on every reachable path. A path that ends at `absurdE` leaves
+  variables in the frame and fails no check, because no run reaches it; a codiagonal
+  `case V {x. x | y. y}` is read as `absurd` by the low subset, so a lowering that needs one
+  writes it otherwise.
+- **`iterate` is an effect primitive here.** A `Div` loop whose handler U3 erases needs a low
+  form; `boundedFix` and `count` are the loops the low subset keeps.
+- **The host.** The interpreter computes host operations at `lirHost`; U2 proves the simulation
+  at `ℍ := lirHost`.
+- **Externs and `main`'s context** (U5): the statements are at closed `main`; the interpreter's
+  input and output are not in the source machine.
+- **Joint non-vacuity at every program** is U1 and U2's: a lowering meeting `LowerSem` and
+  `LowersInto` together, and a print meeting `PrintSim`.
+
 ---
 
 ## Status
@@ -9291,11 +9377,22 @@ the old backend's output. Entry 51 (§52) is implemented in `Backend2/Convert.le
 the stack's push and pop), `Backend/Native/Lower.lean` (frame pointers), `Backend/Clos/`
 (`Op.swapSlot`) and `lib/async.bc`; no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the
 checker.
+Entry 52 (§53) is stated in `Lowering/Low.lean`, `Lowering/Obligations.lean` and
+`Lowering/Print.lean`: the low subset, the obligations and their every-run results, the print's
+simulation statement and the transfer are proved; the lowerings and the simulation are U1–U4. No
+change to `CDerives`, `Core/`, `Paper/`, `Support/`, the checker or either backend.
 
 ---
 
 ## Changelog
 
+- **1.02** (2026-10-27) — §53 (#699, U0 of #698): lowering under the semantic relation, the
+  statements. The low subset of `Expr` (explicit ownership, effect primitives only at
+  stored-continuation sites, the site predicate a parameter so K1 and K2 stay open); the
+  obligations `LowerSem`, `LowerSemRel` and `LowersInto` with `lowered_every_run` and its `PinLaw`
+  form; the LIR's runs read off its interpreter, the print's simulation `PrintSim` (stated), and the
+  transfer to every-run safety, termination and no live object at the LIR (proved). No change to
+  the language, the kernel, the checker or either backend.
 - **1.01** (2026-10-22) — §52 (#664, option B): a task owns a stack. At a BOXED-κ site with a
   stack `κ`'s environment is the stack's region, written in place; a recursion whose levels call only themselves and
   suspend only at boxed stored sites keeps its levels' states as first-order frames on its task's

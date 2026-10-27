@@ -1,5 +1,5 @@
 name = "borrow_core"
-defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "Backend", "Backend2", "bcc", "bcc-counts"]
+defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "Backend", "Backend2", "Lowering", "bcc", "bcc-counts"]
 
 [[require]]
 name = "mathlib"
@@ -27,6 +27,11 @@ name = "Backend"
 # The new backend (docs/compiler.md, N1): compiles the typed term.
 [[lean_lib]]
 name = "Backend2"
+
+# Lowering under the semantic relation (SPEC §53): the low subset, the obligations, the print's
+# simulation statement.
+[[lean_lib]]
+name = "Lowering"
 
 [[lean_exe]]
 name = "bcc"
