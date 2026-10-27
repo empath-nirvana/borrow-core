@@ -34,7 +34,7 @@ theorem once_iff {u : Option Uses} : once u = true ↔
     ∃ r s, u = some ⟨r, s⟩ ∧ (r = some 1 ∨ r = none) ∧ (s = none ∨ ∃ k, s = some k ∧ k ≤ 1) := by
   rcases u with _ | ⟨r, s⟩
   · simp [once]
-  · rcases s with _ | k <;> simp [once] <;> omega
+  · rcases s with _ | k <;> simp [once]
 
 theorem zeroU_iff {u : Option Uses} : ZeroU u ↔
     ∃ r s, u = some ⟨r, s⟩ ∧ (r = some 0 ∨ r = none) ∧ (s = none ∨ s = some 0) := Iff.rfl

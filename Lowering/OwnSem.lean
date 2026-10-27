@@ -350,17 +350,17 @@ theorem own_semP (O : ∀ {Δ Γ t j}, TDerivesP Δ Γ t j → relaxedFree t = t
     relaxedFree t = true → SemJ (ℍ := ℍ) Δ Γ t.erase j → ∀ L, LiveIn L Γ →
       SemJ (ℍ := ℍ) Δ Γ (ownAt L t) j := by
   induction h with
-  | var h => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact sem_leaf hL _ (var_compatC h)
-  | unitI h => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact sem_leaf hL _ (unitI_compatC h)
+  | var h => intro _ _ L hL; exact sem_leaf hL _ (var_compatC h)
+  | unitI h => intro _ _ L hL; exact sem_leaf hL _ (unitI_compatC h)
   | tensorI hs hm h₁ h₂ ih₁ ih₂ =>
-      intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr
+      intro hr _ L hL; simp only [relaxedFree, Bool.and_eq_true] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [ren_id])
         (tensorI_compatC hs (ih₁ hr.1 (O h₁ hr.1) _ (LiveIn.part₁ (L := L) hm)) (ih₂ hr.2 (O h₂ hr.2) _ (LiveIn.part₂ (L := L) hm)))
-  | sumI₁ h ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact sumI₁_compatC (ih hr (O h hr) L hL)
-  | sumI₂ h ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact sumI₂_compatC (ih hr (O h hr) L hL)
-  | thunkF h ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact thunkF_seq_compatC (ih hr (O h hr) _ (hL.cons _ _))
+  | sumI₁ h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact sumI₁_compatC (ih hr (O h hr) L hL)
+  | sumI₂ h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact sumI₂_compatC (ih hr (O h hr) L hL)
+  | thunkF h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact thunkF_seq_compatC (ih hr (O h hr) _ (hL.cons _ _))
   | thunkV hC h q ih =>
-      intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr
+      intro hr _ L hL; simp only [relaxedFree] at hr
       show SemV _ _ (match ownAt L _ with | .lam N => .lam N | _ => _) _
       split
       · next N hN =>
@@ -371,49 +371,49 @@ theorem own_semP (O : ∀ {Δ Γ t j}, TDerivesP Δ Γ t j → relaxedFree t = t
         simp only [SemJ] at this
         rw [q] at this ⊢
         exact thunkV_compatC hC this
-  | ret h ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact ret_compatC (ih hr (O h hr) L hL)
+  | ret h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact ret_compatC (ih hr (O h hr) L hL)
   | bind hs hm hM hN ihM ihN =>
-      intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr
+      intro hr _ L hL; simp only [relaxedFree, Bool.and_eq_true] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [liftR_id, ren_id]; rfl)
         (bind_compatC hs (ihM hr.1 (O hM hr.1) _ (LiveIn.part₁ (L := L) hm)) (ihN hr.2 (O hN hr.2) _ ((LiveIn.part₂ (L := L) hm).live _)))
-  | force h => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact sem_leaf hL _ (force_compatC h)
-  | lam h ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact lam_compatC (ih hr (O h hr) _ (hL.live _))
+  | force h => intro _ _ L hL; exact sem_leaf hL _ (force_compatC h)
+  | lam h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact lam_compatC (ih hr (O h hr) _ (hL.live _))
   | app hs hm hM hx ih =>
-      intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr
+      intro hr _ L hL; simp only [relaxedFree] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [ren_id])
         (app_compatC hs (ih hr (O hM hr) _ (LiveIn.part₁ (L := L) hm)) hx)
   | withI hM hN ihM ihN =>
-      intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr
+      intro hr _ L hL; simp only [relaxedFree, Bool.and_eq_true] at hr
       exact withI_compatC (ihM hr.1 (O hM hr.1) _ ((hL.cons _ _).cons _ _)) (ihN hr.2 (O hN hr.2) _ ((hL.cons _ _).cons _ _))
-  | proj₁ h ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact proj₁_compatC (ih hr (O h hr) L hL)
-  | proj₂ h ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact proj₂_compatC (ih hr (O h hr) L hL)
-  | topI => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact sem_leaf hL _ topI_compatC
+  | proj₁ h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact proj₁_compatC (ih hr (O h hr) L hL)
+  | proj₂ h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact proj₂_compatC (ih hr (O h hr) L hL)
+  | topI => intro _ _ L hL; exact sem_leaf hL _ topI_compatC
   | unitE hs hm hV hM ihV ihM =>
-      intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr
+      intro hr _ L hL; simp only [relaxedFree, Bool.and_eq_true] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [ren_id])
         (unitE_compatC hs (ihV hr.1 (O hV hr.1) _ (LiveIn.part₁ (L := L) hm)) (ihM hr.2 (O hM hr.2) _ (LiveIn.part₂ (L := L) hm)))
   | tensorE hs hm hV hM ihV ihM =>
-      intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr
+      intro hr _ L hL; simp only [relaxedFree, Bool.and_eq_true] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [liftR_id, ren_id])
         (tensorE_compatC hs (ihV hr.1 (O hV hr.1) _ (LiveIn.part₁ (L := L) hm))
           (ihM hr.2 (O hM hr.2) _ (((LiveIn.part₂ (L := L) hm).live _).live _)))
   | sumE hs hm hV h₁ h₂ ihV ih₁ ih₂ =>
-      intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr
+      intro hr _ L hL; simp only [relaxedFree, Bool.and_eq_true] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [liftR_id, ren_id])
         (sumE_compatC hs (ihV hr.1.1 (O hV hr.1.1) _ (LiveIn.part₁ (L := L) hm))
           (ih₁ hr.1.2 (O h₁ hr.1.2) _ ((LiveIn.part₂ (L := L) hm).live _)) (ih₂ hr.2 (O h₂ hr.2) _ ((LiveIn.part₂ (L := L) hm).live _)))
   | zeroE hs hm hV ih =>
-      intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr
+      intro hr _ L hL; simp only [relaxedFree] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [ren_id])
         (absurdL_compatC hs (ih hr (O hV hr) _ (LiveIn.part₁ (L := L) hm)))
   | allI hbx hΔx hΓx h ih =>
-      intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr
+      intro hr _ L hL; simp only [relaxedFree] at hr
       exact allI_seq_compatC hbx hΔx hΓx
         ((semC_liveEq (.dead (LiveEq.refl _))).mp (ih hr (O h hr) _ (hL.cons _ _)))
-  | allE h hlt ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact allE_compatC (ih hr (O h hr) L hL) hlt
-  | bangThunkF hp h ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact bangThunkF_seq_compatC hp (ih hr (O h hr) _ (hL.cons _ _))
+  | allE h hlt ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact allE_compatC (ih hr (O h hr) L hL) hlt
+  | bangThunkF hp h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact bangThunkF_seq_compatC hp (ih hr (O h hr) _ (hL.cons _ _))
   | bangThunkV hp hC h q ih =>
-      intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr
+      intro hr _ L hL; simp only [relaxedFree] at hr
       show SemV _ _ (match ownAt L _ with | .lam N => .lam N | _ => _) _
       split
       · next N hN =>
@@ -424,29 +424,29 @@ theorem own_semP (O : ∀ {Δ Γ t j}, TDerivesP Δ Γ t j → relaxedFree t = t
         simp only [SemJ] at this
         rw [q] at this ⊢
         exact bangThunkV_compatC hp hC this
-  | bangE h ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact bangE_compatC (ih hr (O h hr) L hL)
-  | boxI h hΓ ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact boxI_compatC (ih hr (O h hr) L hL) hΓ
-  | boxE h ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact boxE_compatC (ih hr (O h hr) L hL)
-  | immSub h hle ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact immSub_compatC (ih hr (O h hr) L hL) hle
-  | mutSub h hle ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact mutSub_compatC (ih hr (O h hr) L hL) hle
+  | bangE h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact bangE_compatC (ih hr (O h hr) L hL)
+  | boxI h hΓ ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact boxI_compatC (ih hr (O h hr) L hL) hΓ
+  | boxE h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact boxE_compatC (ih hr (O h hr) L hL)
+  | immSub h hle ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact immSub_compatC (ih hr (O h hr) L hL) hle
+  | mutSub h hle ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact mutSub_compatC (ih hr (O h hr) L hL) hle
   | lolliE hs hm ha hfn iha ihf =>
-      intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr
+      intro hr _ L hL; simp only [relaxedFree, Bool.and_eq_true] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [ren_id])
         (lolliE_compatX hs (iha hr.1 (O ha hr.1) _ (LiveIn.part₁ (L := L) hm)) (ihf hr.2 (O hfn hr.2) _ (LiveIn.part₂ (L := L) hm)))
-  | allEV h hlt ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact allE_compatX (ih hr (O h hr) L hL) hlt
-  | ofRet h ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact ih hr (O h hr) L hL
-  | roll hA hc h ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact roll_compatX hA hc (ih hr (O h hr) L hL)
-  | unroll h ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact unroll_compatX (ih hr (O h hr) L hL)
-  | nuIn hC h ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact nuIn_compatX hC (ih hr (O h hr) L hL)
-  | nuOut hC h ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact nuOut_compatX hC (ih hr (O h hr) L hL)
-  | litFn h _ _ ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact ih hr (O h hr) L hL
-  | divLit h _ _ ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact ih hr (O h hr) L hL
-  | walk h _ _ ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact ih hr (O h hr) L hL
-  | walkGet h _ ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact ih hr (O h hr) L hL
-  | selfCall h _ ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact ih hr (O h hr) L hL
-  | lendCell h _ ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact ih hr (O h hr) L hL
-  | nuEta h _ ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact ih hr (O h hr) L hL
-  | use h _ ih => intro hr _ L hL; try simp only [relaxedFree, Bool.and_eq_true] at hr; exact ih hr (O h hr) L hL
+  | allEV h hlt ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact allE_compatX (ih hr (O h hr) L hL) hlt
+  | ofRet h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact ih hr (O h hr) L hL
+  | roll hA hc h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact roll_compatX hA hc (ih hr (O h hr) L hL)
+  | unroll h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact unroll_compatX (ih hr (O h hr) L hL)
+  | nuIn hC h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact nuIn_compatX hC (ih hr (O h hr) L hL)
+  | nuOut hC h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact nuOut_compatX hC (ih hr (O h hr) L hL)
+  | litFn h _ _ ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact ih hr (O h hr) L hL
+  | divLit h _ _ ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact ih hr (O h hr) L hL
+  | walk h _ _ ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact ih hr (O h hr) L hL
+  | walkGet h _ ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact ih hr (O h hr) L hL
+  | selfCall h _ ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact ih hr (O h hr) L hL
+  | lendCell h _ ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact ih hr (O h hr) L hL
+  | nuEta h _ ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact ih hr (O h hr) L hL
+  | use h _ ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact ih hr (O h hr) L hL
   | _ => intro _ hs L hL; exact own_default rfl hL hs
 
 /-- The oracle: a typed derivation with no relaxed rule is in the relation at its erasure

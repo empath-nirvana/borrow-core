@@ -17,13 +17,17 @@ That a part's leaves read only slots its mask holds is the checker's constructio
 gives a part its uses as its mask), not a premise of the typed rules: `SplitMasks` asks only that
 a slot a mask holds be live in its part. It is the hypothesis `agreeAt` here, decided on every
 program the corpus check runs (`scripts/LoweringCheck.lean`). `masks_need_not_cover` is a typed
-derivation whose masks miss a use, at which `own`'s output is not low.
+derivation whose masks miss a use, at which `own`'s output reads a binder twice.
+
+`own_dupChecked_low` is a checked `main` meeting the hypotheses: `return (λx. (x, x))`, whose
+copy `own` writes (`own_dupChecked`).
 -/
 
 namespace Lowering
 open BoCa BoCa.Fig16 BoCa.Fig16.LogRel.Core BoCa.Fig16.LogRel.Core.Check
 open BoCa.Fig16.LogRel.Core (closedAt)
 open BoCa.Lifetime (LifeCtx)
+open Frontend.Check (Checked)
 
 /-! ### Consuming exactly a set of slots -/
 
@@ -95,7 +99,7 @@ theorem explicitC_lam {P : Nat → Prop} {b : Expr} (hx : ExplicitC b) (hb : Exa
 /-- `(); e` at the dead binder `0`: the binder consumed. -/
 theorem exact_seq_var0 {P : Nat → Prop} {M : Expr} (hM : ExactP P M) (h0 : ¬ P 0) :
     ExactP (fun k => k = 0 ∨ P k) (.seq (.var 0) M) :=
-  exact_seqO (exact_var 0) hM (fun k ⟨h, hp⟩ => h0 (h ▸ hp)) (fun _ => rfl) (fun _ => rfl)
+  exact_seqO (exact_var 0) hM (fun _ ⟨h, hp⟩ => h0 (h ▸ hp)) (fun _ => rfl) (fun _ => rfl)
 
 /-! ### Drops -/
 
@@ -351,7 +355,7 @@ theorem own_lam {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg} (h : TDerive
       intro L C N hj _ he
       first
         | (cases hj; done)
-        | (simp [TExpr.erase, withPair, absurdE] at he; done)
+        | (simp [TExpr.erase, absurdE] at he; done)
         | exact ⟨N, (rfl : ownAt L _ = _).trans he⟩
 
 /-! ### A node at a split -/
@@ -754,7 +758,7 @@ theorem relaxedFree_of_pureT {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
     (h : TDerivesP Δ Γ t j) : pureT t = true → relaxedFree t = true := by
   induction h <;> intro hp <;> first
     | rfl
-    | (cases hp; done)
+    | cases hp
     | (simp only [pureT, relaxedFree, Bool.and_eq_true] at hp ⊢; simp_all)
 
 /-- **`own` lands in the low subset** on the pure fragment: every closed `main` whose typed term
@@ -770,6 +774,93 @@ theorem own_lowersInto :
   obtain ⟨hx, hf, hex⟩ := own_lowered c.typedP [] hp ha
   exact ⟨hx.explicit, effFreeB_sound hf, fun j hj => absurd hj (Nat.not_lt_zero _),
     fun j _ => (hex j).2 (by simp [lv])⟩
+
+/-! ### Witnesses -/
+
+/-- `λx. (x, x)` at `x : I32`: the split of a pair gives `x` to both components, and both masks
+hold it. -/
+def dupT : TExpr :=
+  .lam default (.comp (.arr (.int .w32) (.ret (.tensor (.int .w32) (.int .w32))))) (.int .w32)
+    (.ret (.tensor (.int .w32) (.int .w32)))
+    (.ret default (.comp (.ret (.tensor (.int .w32) (.int .w32)))) (.tensor (.int .w32) (.int .w32))
+      (.tensorI default (.val (.tensor (.int .w32) (.int .w32))) (.int .w32) (.int .w32)
+        ⟨[(true, true)]⟩ (.var default (.val (.int .w32)) 0 (.int .w32))
+        (.var default (.val (.int .w32)) 0 (.int .w32))))
+
+/-- `return (λx. (x, x))`, a computation of `F (U(I32 ⊸ F(I32 ⊗ I32)))`. -/
+def dupMain : TExpr :=
+  .ret default (.comp (.ret (.thunk (.arr (.int .w32) (.ret (.tensor (.int .w32) (.int .w32)))))))
+    (.thunk (.arr (.int .w32) (.ret (.tensor (.int .w32) (.int .w32)))))
+    (.thunkV default (.val (.thunk (.arr (.int .w32) (.ret (.tensor (.int .w32) (.int .w32))))))
+      (.arr (.int .w32) (.ret (.tensor (.int .w32) (.int .w32)))) dupT)
+
+theorem dupSplit : Ctx.SplitP [⟨.int .w32, true⟩] [⟨.int .w32, true⟩] [⟨.int .w32, true⟩] :=
+  .dup rfl .nil
+
+theorem dupMasks : (Masks.mk [(true, true)]).Rel [⟨.int .w32, true⟩] [⟨.int .w32, true⟩] :=
+  .cons (fun _ => rfl) (fun _ => rfl) (fun _ _ => ⟨rfl, rfl⟩) .nil
+
+theorem dupMain_typedAt (Ξ : EffCtx) :
+    TDerivesAt Ξ LifeCtx.empty [] dupMain (.comp (.ret (.thunk (.arr (.int .w32)
+      (.ret (.tensor (.int .w32) (.int .w32))))))) :=
+  .ret (.thunkV rfl (.lam (.ret (.tensorI dupSplit dupMasks (.var (.here .nil))
+    (.var (.here .nil))))) rfl)
+
+theorem dupMain_typedP :
+    TDerivesP LifeCtx.empty [] dupMain (.comp (.ret (.thunk (.arr (.int .w32)
+      (.ret (.tensor (.int .w32) (.int .w32))))))) :=
+  .ret (.thunkV rfl (.lam (.ret (.tensorI dupSplit dupMasks (.var (.here .nil))
+    (.var (.here .nil))))) rfl)
+
+/-- The checked `main` `return (λx. (x, x))`. -/
+def dupChecked : Checked where
+  ctx := []
+  t := dupMain
+  C := .ret (.thunk (.arr (.int .w32) (.ret (.tensor (.int .w32) (.int .w32)))))
+  sigs := []
+  ok := rfl
+  pins := []
+  tied := ⟨fun _ Ξ _ => dupMain_typedAt Ξ, dupMain_typedP⟩
+  cells := []
+  cellsOk := rfl
+
+/-- `own` writes `dupChecked`'s copy: `λx. let (x₁, x₂) = copy x in (x₁, x₂)`. -/
+theorem own_dupChecked :
+    own dupChecked.t = .lam (.letpair (.app copy (.var 0)) (.pair (.var 1) (.var 0))) := by
+  show own dupMain = _
+  decide
+
+/-- **Non-vacuity**: `dupChecked` meets `own_lowersInto`'s hypotheses, so `own`'s output is in
+the relation (`own_lowerSem`) and low, its copy explicit. -/
+theorem own_dupChecked_low : LowExpr noSite 0 (own dupChecked.t) :=
+  own_lowersInto dupChecked ⟨rfl, by show pureT dupMain = true; decide,
+    by show agreeAt [] dupMain = true; decide⟩
+
+/-- **The typed rules do not make the masks the parts' uses**: `λx. (x, ())` at `x : 1`, typed
+with the split giving `x` to the pair's first component but both masks empty (`SplitMasks` asks
+only that a slot a mask holds be live). Its masks do not agree with its leaves, and `own`'s output
+reads `x` twice: dropped at the split, read by the first component. The checker's masks are its
+parts' uses (`Fam.split`), so `own_lowersInto` takes their agreement (`agreeAt`) as its hypothesis.
+-/
+def missT : TExpr :=
+  .lam default (.comp (.arr .unit (.ret (.tensor .unit .unit)))) .unit (.ret (.tensor .unit .unit))
+    (.ret default (.comp (.ret (.tensor .unit .unit))) (.tensor .unit .unit)
+      (.tensorI default (.val (.tensor .unit .unit)) .unit .unit ⟨[(false, false)]⟩
+        (.var default (.val .unit) 0 .unit) (.unitI default (.val .unit))))
+
+theorem missT_typedP :
+    TDerivesP LifeCtx.empty [] missT (.comp (.arr .unit (.ret (.tensor .unit .unit)))) :=
+  .lam (.ret (.tensorI (.left .nil)
+    (.cons (fun h => absurd h (by decide)) (fun h => absurd h (by decide))
+      (fun _ h => absurd h (by decide)) .nil)
+    (.var (.here .nil)) (.unitI (.cons .nil))))
+
+theorem masks_need_not_cover :
+    TDerivesP LifeCtx.empty [] missT (.comp (.arr .unit (.ret (.tensor .unit .unit)))) ∧
+      pureT missT = true ∧ agreeAt [] missT = false ∧
+      own missT = .lam (.seq (.app forget (.var 0)) (.pair (.var 0) .unit)) ∧
+      once (occ (.seq (.app forget (.var 0)) (.pair (.var 0) .unit)) 0) = false :=
+  ⟨missT_typedP, by decide, by decide, by decide, by decide⟩
 
 end Lowering
 

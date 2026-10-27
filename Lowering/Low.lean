@@ -445,8 +445,7 @@ theorem lowExpr_absurd_ctx : LowExpr noSite 2 (absurdL (.var 0)) := by
     fun j hj => ?_, fun j hj => ?_⟩
   · have : j = 0 ∨ j = 1 := by omega
     rcases this with rfl | rfl <;> decide
-  · have h0 : j ≠ 0 := by omega
-    simp [mentions, absurdL, BoLo.stuckE, h0]
+  · simp [mentions, absurdL, BoLo.stuckE]
     omega
 
 end Lowering
