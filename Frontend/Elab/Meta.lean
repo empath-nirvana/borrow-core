@@ -57,8 +57,7 @@ def TCx.ofScope (scope : List Decl) (all : Bool) : TCx :=
   let ds := scope.toArray
   let xs := externsBefore ds ds.size
   let vars := (xs.map (fun (x, B) => if all || B.persistent then some x else none)).reverse
-  { E := Env.mk { decls := ds, upto := ds.size } vars [] [] [] xs.length none,
-    T := (xs.map (·.2)).reverse }
+  { E := Env.mk ⟨ds, ds.size, []⟩ vars [] [] [] xs.length none, T := (xs.map (·.2)).reverse }
 
 /-- A written type, elaborated. -/
 def TCx.elabV (c : TCx) (A : VTy) : Option CVTy := (c.E.elabV c.Δ A).toOption
@@ -141,12 +140,6 @@ def TCx.surface (c : TCx) (sp : Span) (A : CVTy) : Except Error VTy := do
   match parseProgram s!"type IoT = {src}\n" with
   | .ok ⟨[.type _ _ _ _ B]⟩ => pure (B.respan sp)
   | _ => throw ⟨sp, s!"internal error: the type `{src}` does not print as surface syntax"⟩
-
-/-- A computation type as surface syntax in a context (`TCx.surface` of its thunk). -/
-def TCx.surfaceC (c : TCx) (sp : Span) (C : CCTy) : Except Error CTy := do
-  match ← c.surface sp (.thunk C) with
-  | .thunk _ C' => pure C'
-  | _ => throw ⟨sp, s!"internal error: the type `{ppC c.E.lenv 0 C}` does not print as surface syntax"⟩
 
 /-- A lifetime as surface syntax in a context. -/
 def TCx.surfaceL (c : TCx) (sp : Span) : BoCa.Lifetime.Life → Except Error Frontend.Life
@@ -388,7 +381,7 @@ def _root_.Frontend.Comp.annotate (ann : List (Span × VTy)) : Comp → Comp
   | .letPair sp x y V M => .letPair sp x y V (M.annotate ann)
   | .case sp V x M y N => .case sp V x (M.annotate ann) y (N.annotate ann)
   | .loop sp ℓ src V M N => .loop sp ℓ src V (M.annotate ann) (N.annotate ann)
-  | .handle sp k hf st hr hc M => .handle sp k hf st hr hc (M.annotate ann)
+  | .handle sp k st hr hc M => .handle sp k st hr hc (M.annotate ann)
   | .unwind sp x A M D N => .unwind sp x A (M.annotate ann) (D.annotate ann) (N.annotate ann)
   | M => M
 
@@ -397,7 +390,7 @@ def _root_.Frontend.Comp.needsFill : Comp → Bool
   | .bind _ _ A M N _ => (A.isNone && M.synthInj) || M.needsFill || N.needsFill
   | .letUnit _ _ M | .letPair _ _ _ _ M => M.needsFill
   | .case _ _ _ M _ N | .loop _ _ _ _ M N => M.needsFill || N.needsFill
-  | .handle _ _ _ _ _ _ M => M.needsFill
+  | .handle _ _ _ _ _ M => M.needsFill
   | .unwind _ _ _ M D N => M.needsFill || D.needsFill || N.needsFill
   | _ => false
 

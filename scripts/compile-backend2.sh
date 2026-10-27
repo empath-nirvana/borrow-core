@@ -27,7 +27,7 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-[ ${#files[@]} -gt 0 ] || files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc corpus/sugar/*.lowered.bc)
+[ ${#files[@]} -gt 0 ] || files=(corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc corpus/aoc/*.bc corpus/leetcode/*/*.bc)
 command -v wasmtime >/dev/null || { echo "wasmtime is not on PATH"; exit 1; }
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
 . scripts/par.sh

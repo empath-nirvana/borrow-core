@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.05 · 2026-10-23
+Version 1.01 · 2026-10-22
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2403,18 +2403,19 @@ they emit (*Laws*, below), and the cost of each is measured against the program 
 
 ### Declarations
 
-    effect E[T, …] { fn op(x₁: A₁, …) -> B; ctl op(…) -> B; linear ctl …; … }
+    effect E[T, …] { fn op(x₁: A₁, …) -> B; ctl op(…) -> B; linear ctl …; multi ctl …; … }
     handler h(mut s: S): E = { op(x₁, …) = e; … }                                   (answering)
     handler h[T, …](p: A, …): E[A, …], A -> R with E₂[…] = { return(x) = M; op(x, …, k) = N; … }
     with h[A, …](e, …) { M }          with h(&mut c) { M }
     fn f(…) -> T with E₁, E₂[A] = …                                       (a written row)
 
 An **effect** declares its operations, each **answering** (`fn`, Koka's `fun`) or **control**
-(`ctl`, its continuation's count inferred, or `linear ctl`, exactly once: §53). An effect is one
-kind or the other. A control operation whose answer is `never` (the type `0`) at a count with
-weakening is **abortive** (§19), at the count `0`. There is no unrestricted operation (§53:
-`multi ctl` and a row's `unr` are removed). An effect may take type parameters (a control effect
-only).
+(`ctl`, with the structural qualifier of §19: affine by default, `linear ctl`, `multi ctl` for
+unrestricted). An effect is one kind or the other. A control operation whose answer is `never`
+(the type `0`) at a qualifier with weakening is **abortive** (§19). An abortive operation is
+affine: `multi ctl op(…) -> never` is rejected, and so is an unrestricted operation answering `0`
+in a row of the core text (decision 63's restriction, 2026-10-12; §27 *Typing*). An effect may
+take type parameters (a control effect only).
 
 A **handler** is a value implementing an effect. An answering handler has a state, its `mut`
 parameter, a `let mut` variable in each clause, which the clause may assign; the clause's value is
@@ -2523,7 +2524,8 @@ it is the block that calls it (§33; stored callbacks, #161 part B; for a fold's
 raises, K4 below); a lend `&mut x` in the arguments of a call that
 threads a capability; an operation of an answering effect inside a clause of an answering handler;
 a function with a row whose written result is a computation (a loop); type parameters on an
-answering effect; an effect with both kinds of operation; a `let mut` declared outside a control `with` and assigned in it, or
+answering effect; an effect with both kinds of operation; an unrestricted operation that answers
+`never` (`multi ctl`, above); a `let mut` declared outside a control `with` and assigned in it, or
 a place lent in it; a borrow of a buffer or a literal crossed by an abort. Several instances of one
 effect are §38's, with what it does not provide.
 
@@ -2902,9 +2904,11 @@ where `err ∨ e` is `err` when `err ≠ none`, and `e` otherwise: the first err
   `ccatch` is dead, and the new cancel passes the `cfin` by `[cfin-cancel]`, which keeps the
   earlier error, the first cancel's. The first region's remaining finalisers run under the new
   cancel, which ends at its own `ccatch` (`progNC₁`).
-- **A continuation is not dropped.** A clause that discards its `κ` has no typing at a resuming
-  operation (`not_der_dropC`, §53): a `κ` at a count has no weakening. Resumed, the finaliser's
-  continuation carries the kept error to its live handler (`progKeepT`).
+- **An unrestricted continuation dropped.** When the finaliser's continuation is unrestricted and
+  its handler discards it, the kept error and the region's remaining finalisers go with it
+  (`progDrop`; resumed instead, the error reaches its live handler, `progKeep`). This is the case
+  of any discarded unrestricted continuation, which never runs its region's finalisers: `unr` is
+  tolerated, never designed for.
 - Ordinary unwinding (a `raise` of a name other than `⊥`) is unchanged: a finaliser's raise
   supersedes the pending one and is caught by the live handlers around the finaliser.
 - `Core/EffCancel.lean` machine-checks each outcome, as runs (`Steps` of `Head` steps) and by the
@@ -2918,6 +2922,8 @@ where `err ∨ e` is `err` when `err ≠ none`, and `e` otherwise: the first err
   | `progRe` | `f ()` re-enters the site `3`; the finaliser raises `3`; a live `3` outside | `inj₂ ()` |
   | `progFinOp` | a dead `4`; the finaliser performs `4`; a live `4` outside resumes it | `inj₁ ()` |
   | `progNC₁` | as `progFinOp`, the live `4` cancelling the finaliser's continuation | `()` |
+  | `progDrop` | a finaliser raises `2` (kept); a later one performs `4`, whose `unr` clause drops its continuation | `inj₁ ()`; the live `2` never runs |
+  | `progKeep` | as `progDrop`, the clause resuming | `inj₂ ()`: the kept `2` reaches the live `2` |
 
 **Why this rule.** Deadness is decided where the region is known: `[op]` builds `κ` from `K`, and
 removing the dead frames there makes every cancel rule local. No rule reads a name, and a dead
@@ -3012,8 +3018,10 @@ Six rules, over `CDerives` with its context premises (§10):
     (`checkProgram_tiedAt`). A program whose rows give one operation two signatures is rejected.
     For an elaborated program those are its effect declarations' signatures at its handler sites:
     the elaborator writes each row and each handler's clauses from the declarations (§18).
-  - **An operation is abortive exactly at the count `0`** (§53): `OpSig.abort` reads the count, so
-    no invariant of the effect context ties the two.
+  - **Abortive operations are affine** (§18). The kernel's `[raise]` admits an unrestricted
+    abortive operation; the checker rejects one, so the effect context of a checked program has
+    none (`EffCtx.NoUnrExn`, `checkProgram_tiedAt`). In a row tied to such a context an
+    unrestricted operation resumes (`abort_false_of_rowAt`).
   - **The names a run raises** (`Core/RaiseNames.lean`). `[raise]` finds its operation in a row
     tied to `Ξ`, and no rule types a `cfin`, so a tied term is at `Ξ`'s names
     (`raiseOK_of_derivesAt`): each raise in it is of a name `Ξ` declares, or a cancel whose kept
@@ -3304,10 +3312,12 @@ does not hold. Safety is stated of the runs of typed programs (`Core/EffSafety.l
    operations of the context's names (`FinRow`). Typing then gives that it runs alone from every
    memory with finitely many cells (`finAlone_of_finRow`; at the empty row, to `()`,
    `finOK_of_finRow`). A finaliser that performs an operation a handler outside it answers (§27) is
-   not covered (§27 *Open*). `progOutT` meets the hypotheses (`progOutT_cancel_prefix`): a tied
-   derivation types it at `Ξ₁₂`; its run allocates `κ`'s cell
-   and cancels `κ`, the cancel run starting after the cell's release; and its region's finaliser
-   raises `2`.
+   not covered (§27 *Open*). `progOutT` meets the hypotheses: a tied derivation types it, its run
+   cancels `κ`, and its region's finaliser raises `2` (`progOutT_cancel_prefix`). So does
+   `progOutTA`, the same program at an affine raise of `2` (`progOutTA_cancel_prefix`), typed by a
+   tied derivation at an effect context with no unrestricted abortive operation (`EffCtx.NoUnrExn`,
+   §18; `noUnrExn_Ξ₁₂A`): the shape the checker gives every program it accepts
+   (`checkProgram_tiedAt`).
 6. **The finally law; a finaliser's raise propagates; a raise with no live handler is a type
    error.**
    - *Finally*: `(raise e) then x. N unwind D = D (); raise e`. `[finalise]` steps
@@ -3423,7 +3433,8 @@ each by inversion of `CDerives` (`Core/Inversions.lean`):
 - `at13`: a clause that forgets `κ` (`not_der_at13`).
 
 **The effect properties** (`Core/EffTier1Programs.lean`). Each program is a closed term with a
-derivation tied to its effect context `ΞE` (`CDerivesAt`, read in `CDerives`), and a run computed by `runM` from the empty memory
+derivation tied to its effect context `ΞE` (`CDerivesAt`, read in `CDerives`), which has no
+unrestricted abortive operation (`noUnrExn_ΞE`), and a run computed by `runM` from the empty memory
 to its answer at the empty memory (`runM_val`):
 - E1, a function at several rows: `hofTwoRows`, `hof = λg. g ()` let-bound once (§24's
   `[let-poly]`) and called with a pure callback, with one that raises `exn` under `toResult`, and
@@ -4760,12 +4771,13 @@ cancel is invoked.
   take entries at any cancel rows.
 - **No unrestricted `exn`** (decision 63's restriction, 2026-10-12). An abortive operation is
   affine (§18), so a checked program's effect context has no unrestricted abortive operation
-  (`EffCtx.NoUnrExn`; since §53 no operation is unrestricted, and the restriction is gone).
-  E9's stored closure holds `x : bool` across `cancel k`, a `[let]` at
+  (`EffCtx.NoUnrExn`), and no name's signature is one unrestricted `exn`
+  (`EffCtx.NoUnrExn.ne_exn`). E9's stored closure holds `x : bool` across `cancel k`, a `[let]` at
   a row holding `exnₒ`, and `[let]` asks a persistent context at a row with an unrestricted
   operation, an abortive one included; so E9, as E5, is typed where no `exn` is unrestricted, which
   is every context the restriction leaves: `storedKFin` and `nestedFailOutside` (§19 *Programs*)
-  are typed at `ΞE`, whose `exn` is abortive at `0` (`dAt_storedKFin`, `dAt_nestedFailOutside`).
+  are typed at `ΞE`, whose `exn` is affine (`dAt_storedKFin`, `dAt_nestedFailOutside`,
+  `noUnrExn_ΞE`).
 
 ### Semantics
 
@@ -4804,11 +4816,11 @@ premise read at some depth. No new index.
 
 ### Programs
 
-The runs of §19's cancels are unchanged (`Core/EffCancel.lean`, at the machine's tag `2`). The
-typed programs (`Core/EffCancelTyped.lean`, since §53) are the untyped ones at counts, their
-handlers' operations at `1?` and their raises at `0`, with the untyped clauses (`cancelC`,
-`resumeC`); `κ` owns a cell, so each runs as the untyped one does with the cell allocated at the
-catch and released at `κ`'s use (`cancelT_start`, `resumeT_start`):
+The runs of §19's cancels are unchanged (`Core/EffCancel.lean`). Their handlers' operations are
+unrestricted, so `κ`'s slot is `!U(…)`, and a variable is read at a computation type only from a
+`U` slot: a typed clause binds `κ` first, `(λk. k (inj₂ ())) κ` (`cancelCT`, `resumeCT`). The typed
+programs (`Core/EffCancelTyped.lean`) are the untyped ones with those clauses, and run as they do,
+one β-step longer at each use of `κ`:
 
 - **`progT`** (D3): handler `1` cancels the continuation of `perform 1`, whose region holds a
   handler of `2` and a finaliser that raises `2`. It is typed at a row holding `2`, the cancel row
@@ -4816,15 +4828,17 @@ catch and released at `κ`'s use (`cancelT_start`, `resumeT_start`):
   inversion through `[handle]`, `[then]` and the clause); its run ends at a raise of `2` that no
   handler catches (`progT_run`).
 - **`progOutT`**: `progT` under a live handler of `2`, typed at `F (1 ⊕ 1)` (`d_progOutT`); its run
-  reaches `inj₂ ()` (`progOutT_run`), and a tied derivation types it at `Ξ₁₂` (`dAt_progOutT`).
+  reaches `inj₂ ()` (`progOutT_run`). **`progOutTA`** is the same program at an affine raise of `2`,
+  typed by a tied derivation at a context with no unrestricted abortive operation
+  (`dAt_progOutTA`, `noUnrExn_Ξ₁₂A`), and run alike (`progOutTA_run`).
 - **`cancelKeptT`** and **`progReT`**: the kept raise of `3` caught by a live `3` outside the
   region, the region re-entering the site `3` in `progReT` (`f ()` at `{1}`); cancel row `{3}`.
 - **`progFinOpT`** and **`progNC₁T`**: the finaliser performs `4`, whose live instance at the
   cancel is the outer handler, which resumes it, or cancels its continuation (`[cfin-cancel]`);
   cancel row `{4}`.
-- **`progKeepT`**: a finaliser raises `2`, kept, and a later finaliser performs `4` with `2`
-  pending: cancel row `{2, 4⟨{2}⟩}` (`pend`). `H₄ₒ` resumes the continuation (`inj₂ ()`). A
-  clause that drops it has no typing since §53 (`not_der_dropC`): a `κ` at `1?` has no weakening.
+- **`progDropT`** and **`progKeepT`**: a finaliser raises `2`, kept, and a later finaliser performs
+  `4` with `2` pending: cancel row `{2, 4⟨{2}⟩}` (`pend`). `H₄ₒ`'s unrestricted clause drops the
+  continuation, and the kept error with it (`inj₁ ()`, *Open*), or resumes it (`inj₂ ()`).
 - **`progNCrecT`** (the leftover clause): two finalisers perform `4` under the handler of `4` that
   cancels. The second is a leftover of the first one's cancel, so `⋈` puts `4` in the cancel row of
   the `4` in the cancel row of `1`, which the cancelling handler's clause row, its own outer row,
@@ -4835,16 +4849,16 @@ catch and released at `κ`'s use (`cancelT_start`, `resumeT_start`):
   handled only inside the cancelled region. `[then]` puts `exnᵢ` in `wait`'s cancel row, and the
   clause reads `κ`'s cancel branch at its own row, so no derivation types the program at a row
   without `exnᵢ` (`not_der_e7c`). At the row of `exnᵢ` it is typed, by a tied derivation at an
-  effect context declaring `wait` and `exnᵢ` (`dAt_e7c_lift`, `d_e7c_lift`), at `exnᵢ`'s count
-  `0`.
+  effect context declaring `wait` and `exnᵢ` (`dAt_e7c_lift`, `d_e7c_lift`); at an affine `exnᵢ`
+  that context has no unrestricted abortive operation (`noUnrExn_Ξe7c`).
 
 ### Lowering
 
 The backend lowers a finaliser that raises (`Backend/Clos/Capture.lean`, `Backend/Clos/Unwind.lean`),
 not one that may suspend, performing an operation of a control handler: an unwind and a cancel arm
-call a finaliser directly. `Capture` rejects such a finaliser with a message. The shapes, a
+call a finaliser directly. `Capture` rejects such a finaliser with a message. The four shapes, a
 finaliser that performs (`progFinOp`), a cancel nested in a cancel (`progNC₁`), and a kept error
-pending at a later finaliser's operation (`progKeepT`), are Lean runs
+dropped with an unrestricted continuation or resumed (`progDrop`, `progKeep`), are Lean runs
 (`Core/EffCancel.lean`, `Core/EffCancelTyped.lean`) and interpreter runs, not kernel programs. The
 checker emits no such finaliser: its finalisers are destructors at `F 1`. No kernel program and
 no count changes. Finalisers that raise run at every stage in the kernel programs `e7a`, `e7b`,
@@ -4954,7 +4968,7 @@ Each induction over `CDerives` and `CDerivesAt` takes the rule as a case (`Core/
 tuple at `clausesTyO Σ R ob E fs`, `κ` bare (`ob = none`, `clausesTy`) or boxed (`ob = some d`,
 `clausesTyB`): `der_hnd`, `der_hndJ`'s `HndBase`, `hnd_clauses`. A boxed `κ`'s views keep the thunk
 head (`vview_kBoxO_thunk`, `kviewO`), and `κ`'s cancel branch is read the same way at either
-(`kcancel_jr_aff`, `cancelC_jr`, `timeoutCl_finds`), so the programs no derivation types stay
+(`kcancel_jr_aff`, `cancelCT_jr`, `timeoutCl_finds`), so the programs no derivation types stay
 untyped: `not_der_progT`, `not_der_progNCrecT`, `not_der_e7c` (`Core/EffCancelTyped.lean`),
 `not_der_at06`, `not_der_at08`, `not_der_at13` (`Core/Rejections.lean`).
 
@@ -7885,15 +7899,6 @@ refused by the new backend ("outside the pure fragment") and compiled by the old
   types that own no cell, cell writes, live objects) and the LIR lint (`Backend2/Lint.lean`);
   `scripts/check-backend2.sh` fences `Backend2/`'s imports off the old backend's reconstruction
   and the elaboration, and bans the erasure and the deleted passes' names.
-- **The closure classes, checked** (#674, `Backend2/LayoutCheck.lean`): every compile checks the
-  layouts' and the closure flow's results, not their analyses, before anything reads them. A
-  failure is the compiler's error (`internal: closure classes not a fixed point: …`). The layouts
-  must be a solution of the program's constraints: every move joins its places, every closure
-  reaches a class that holds its code, every code fits its class, every node is its type's, and
-  the widths, boxes, heap classes and cells satisfy their equations. The flow's sets must be a
-  solution of the flow's constraints, and a direct call needs a set of one code. Trusted: that
-  the lowering reads these facts correctly. This is not the final state: #674 replaces the
-  analysis (defunctionalisation in Core, closure types in Core, or uniform boxed closures).
 
 ### Programs
 
@@ -8697,8 +8702,8 @@ One rule per construct:
 | a BOXED-κ site | runs its handled computation on a stack of its own, made current around each run | one owner (BOXED-κ, §28) |
 
 - **`κ` in the site's stack** (`convDrive`, `genKap`). At a site that has a stack (*The task
-  stack*, below), the first operation whose clause is `stored` (`ks`, `classifyHandler_sound`)
-  keeps `κ`'s environment, the handled computation's `k` and the
+  stack*, below), the first operation whose clause is `stored` (`ks`, `classifyHandler_sound`) and
+  whose qualifier is not `unr` keeps `κ`'s environment, the handled computation's `k` and the
   handler's values (§49 *A `handle` node as a drive*), in the stack's `κ` region, and `κ`'s own
   environment is the stack alone. The site makes the stack at the computation's first run, the
   region inside its one allocation (`Op.stackNew`). A suspension there writes the region
@@ -8713,9 +8718,10 @@ One rule per construct:
   before.
 - **Stack machines** (`stackedOf`, `genStackMach`). A machine is a stack machine when its level's
   cell is passed on (§50: its suspended computation's class holds itself, its points at one
-  operation, no call in tail position), every call point of it calls a level of itself
+  operation, no call in tail position, not `unr`), every call point of it calls a level of itself
   (the layouts' classes of the callee's suspended computations are its own code, `suspCodes`), and
-  every `handle` node of its operation is a BOXED-κ site whose clause is `stored` (`stackOps`).
+  every `handle` node of its operation is a BOXED-κ site whose clause is `stored`, with no operation
+  of the node at `unr` (`stackOps`).
   Each level reserves its frame on the current stack when it starts (`Op.framePush`; the bottom of
   its continuation is `Frame.stackF`, the frame and its address) and pops it where it answers,
   aborts or is cancelled (`Op.framePop`), so a level's frame is directly above its caller's. A
@@ -8752,9 +8758,10 @@ One rule per construct:
   frame is reserved, which makes it, and it is freed where the computation answers, aborts or is
   cancelled (`Op.stackFree`). With a `κ` region the site makes the stack at the first run; without
   one the first frame reserved makes it.
-  - *No copied `κ`.* A `κ` that may be copied would hold the stack twice, and a second resume
-    would swap in a stack the first had freed. No `κ` may be copied: a count is `0`, `1` or `1?`
-    (§53), and `multi ctl` is not a type (`corpus/reject/async-unr-site.bc`).
+  - *No `unr` site.* A site switches stacks only when no operation of its node is `unr`: a `κ`
+    that may be copied would hold the stack twice, and a second resume would swap in a stack the
+    first had freed. `corpus/async-unr-site.bc` is such a site in a program with a stack machine
+    (a `multi ctl` operation whose clause resumes two copies of `κ`): it does not switch.
   - *One owner, frames in order* (the invariant the native code relies on). Only stack machines
     reserve frames. Their levels call only themselves, so a stack holds one recursion's frames at
     a time, contiguous at its top, nested as the calls are. They suspend only at an operation
@@ -8784,7 +8791,7 @@ One rule per construct:
 
 - **Checked** in the conversion's facts: one recursion's machine per stack (`stackedOf`: every call
   point's callee classes non-empty and the machine's own), one owner (`stackOps`: every node of
-  the operation a stored BOXED-κ site; `κ` affine or linear by the kernel's typing, §53),
+  the operation a stored BOXED-κ site, none `unr`; `κ` affine or linear by the kernel's typing),
   and the frame's state type against the first conversion's. Checked at run time by the LIR
   interpreter (`Backend2/Interp.lean`), on every program the new backend compiles at the gate:
   a stack swapped in is a live stack; a frame is pushed on the current stack and popped only as
@@ -8797,7 +8804,8 @@ One rule per construct:
   growing into new chunks and out of them, interleaved with a tree task in one queue),
   `async-stack-cancel` (a task cancelled 400 levels deep, each level owning a cell its drop glue
   frees, and one cancelled at its first `await`), `async-stack-nested` (a recursive task that
-  spawns and drives a recursive task at each level, two stacks switched at different depths).
+  spawns and drives a recursive task at each level, two stacks switched at different depths) and
+  `async-unr-site` (above).
 - **Trusted**: the native and Wasm code does not check the frame stack at run time. That every
   frame it touches is live, of the right machine, and taken by the `k` it belongs to rests on the
   conversion emitting code with the shape the invariant above assumes, as the rest of the backend's
@@ -8890,486 +8898,6 @@ unchanged on both backends.
   and frees the next chunk each time it crosses; a spare chunk kept on the stack would end it.
 
 ---
-
----
-
-## 53. Entry 52 — the grade on `eff`: counts, inferred, and no `unr` (#675, M1 stage 1)
-
-### Motivation
-
-#673's design (v3, `~/repos/673-work/design.md` §1, §2, §7, §11) and the user's decision on counts
-(#673 comment 6351217407: "Handlers should default to the strictest mode that works"). An
-operation's qualifier `q ∈ {lin, aff, unr}` said how its continuation is used, and a plain `ctl`
-was affine. Three things were wrong with it. `unr`, a continuation that may be copied, had one
-corpus site (`async-unr-site`), whose copied `κ` would have held a task's stack twice (§52's guard).
-An abortive operation was an affine one answering `0`, so the qualifier did not say it. And a `ctl`
-whose every handler resumes exactly once was affine anyway, so its performers could not hold a
-value that does not drop across it.
-
-### Language
-
-**The grade** (`Core/Types.lean`). `CTy.eff n i c w A B fin C`: the operation's **count**
-`c : Count ∈ {0, 1, 1?}` and its **world** `w : World`, with the cancel row `fin` as before; an
-`OpSig` has the fields `cnt` and `wld`.
-
-| | |
-|---|---|
-| `0` | never resumed: abortive, its clause takes no `κ` |
-| `1` | resumed exactly once: `κ : U((B ⊸ F_Σ R) & ⊤)`, class 3, with no cancel and no drop |
-| `1?` | resumed at most once, or cancelled or dropped: `κ : U((B ⊸ F_Σ R) & C)` |
-
-There is no `ω`: an unrestricted continuation is not a type. At this stage the one world is `⊤`
-(`World.top`; `World.eq` is the lemma a second world must revisit). `CTyEq`, the elaborator's
-`matchC` and the printer `ppC` read the world; at the one world the comparison is discharged by
-case analysis on `World`, and `ppC` writes nothing for `⊤` (`wldStr`). Position (`tail`, `once`) and storage (in-clause, `stored`, `stored @d`) stay on the
-`handle` node (its clause kinds and its rule, §19, §28).
-
-**The run-time tag.** `Qual` stays: it is the tag a handler value holds (§25) and the relation's
-`OpEnt.q`. A count's tag is `Count.toQual`: `1` is `lin`, `0` and `1?` are `aff`, and `OpSig.q` is
-`cnt.toQual`. So the machine, the relation and every run lemma read what they read before. The
-machine keeps its tag `2`, at which `[op]` hands `kappa` with no cell; no count gives it: a
-handler a derivation types holds its counts' tags, at each of which `[op]` allocates `κ`'s cell
-(`kappaAt_qualsVal`). Only §19's untyped cancel runs (`Core/EffCancel.lean`, `plainTags`) hold the
-tag `2`.
-
-**`[sub]` keeps the count.** `OpSig.Sig` asks equal counts (it asked equal qualifiers), so a count
-never moves under `[sub]`, `FinLe` or `RowLe`; only the world could, and there is one.
-
-**The effect context.** `Ξ n` lists `(c, A, B)`. An operation is abortive exactly when its count is
-`0` (`OpSig.abort := cnt = 0`): abortiveness is read off the grade, not off `B`, so no invariant of
-`Ξ` ties the two and no checker test decides one. `EffCtx.NoUnrExn` (decision 63's restriction) is
-gone: with no `ω` count it has nothing to restrict. `Row.Unwind` asks each operation of its row
-abortive (count `0`) and its answer type free of the region's variable, which followed from `B = 0`
-when abortiveness was read off `B`.
-
-**The surface.** `ctl op(…)` declares an operation whose count is inferred; `linear ctl` declares
-`1`; `ctl op(…) -> never` is abortive, `0`. A core row writes `lin` (`1`), `aff` (`1?`, `0` at an
-answer `0`) or `ctl` (inferred). `multi ctl` and the core qualifier `unr` are removed: each is a
-parse error that says so.
-
-**`kont[n.i q] B C`** (`VTy.kont`) is the continuation a clause of `n.i`, written at `q`, receives,
-answering `B` and resuming into `C = F_Σ R`. The checker writes it as the kernel's
-`kTy Σ R c B` at the operation's count `c` (`Scope.cntOf`): at `1` its cancel is `⊤`, at `1?` it is
-`F_Σ 1`. The elaboration writes every clause's `κ` this way (a handler site's clauses, a `for`'s
-site and a stored generator's), so the clause's type is the same at every count.
-
-### Count inference
-
-**The rule** (`Frontend/Check/Grades.lean`). For each operation `n.i` of a handler site whose
-effect declares it `ctl` (`HSite.decl`), the count is the strictest every `handle` node of `n`
-allows. A node's clause asks (`Need`, `clauseNeed`, from its typed term):
-
-- `0` at an abortive operation;
-- `1` when its kind resumes `κ` exactly once on every path (`tail`, `tail+state`, or `once` with no
-  cancel leaf, `onceResumeB`), provided every operation of the row of each `[let]` that holds `κ`
-  across its bound computation is at `1` (`liveDeps`: `[let]`'s `hW` would need `κ` to drop at a
-  row with an operation with weakening, a raise or a `1?` operation);
-- `1?` otherwise: the clause may cancel `κ` (`resume-or-cancel`, a `once` with a cancel) or keep it
-  (`stored`).
-
-The counts are the greatest fixed point from every node's need (`inferCounts`, `demote`): an
-operation at `1` goes to `1?` when one of its nodes holds `κ` across an operation not at `1`.
-Each `1?` records the node that pins it and the reason (`Grade.pin`).
-
-**A declared count is a bound.** A `linear ctl` operation is at `1`; a node that asks more is
-refused, naming that node and its reason. The first check reads `lin` exactly, so such a program
-fails there; the same elaborated program is checked again with each `lin` entry read as `ctl`
-(`CntTable.relax`) to find the node (`corpus/reject/effect-linear-ctl-cancels.bc`).
-
-**The checker does it; the kernel checks it** (`checkCounted`). The program is elaborated once,
-and the elaborated program does not depend on the counts: each entry of an operation its effect
-declares `ctl` is written `ctl` (the elaboration's own types are kernel types, whose counts cannot
-say that one is inferred, so it relabels those entries once, `Decl.requal`), and each clause's `κ`
-is `kont`. That one elaborated program is checked at the counts its rows write (each `ctl`
-operation at `1?` or `0`); the counts are inferred from that check's `handle` nodes; where one is
-lower, the same elaborated program is checked again at them (`CntTable`, read by `Scope.cntOf`),
-and that check is the program's. The grades are that second check's: inference over its own nodes
-gives the table it was checked at, an internal error otherwise. Lowering a count from `1?` to `1`
-only weakens what a performer is asked; a clause that passes the kind check at `1` is typed at `1`
-by the kernel, or the second check refuses the program as an internal error. `aff` is the
-explicit bound `1?`: `Scope.cntOf` reads it so, never through the table.
-
-**Granularity.** The unit is the kernel's operation name `n.i`. Each `with` site has a static name
-of its own, so a site's operations are inferred from its own nodes: the copies of a function the
-site's row reaches (its `def` placed at each use) are nodes of that name.
-
-### The census
-
-`bcc grades <file>` prints one line per `handle` node: each operation's count, how it is fixed
-(`inferred`, `declared`, or `written` in a core row), the node and the reason that pin a `1?`, its
-world, its clause's position (`tail`, `once`, `-`) and where `κ` is kept (`in-clause`, `stored`,
-`stored @top` under BOXED-κ). `handleSites` reads `effHandleL` nodes too. The gate step
-*grade census* (`scripts/check-grades.sh`) pins the table in `corpus/grades.expected`, fails on any
-`ω` or `unr`, and fails on an inferred `1?` with no pin.
-
-### The proof
-
-The relation does not change: `OpEnt` keeps its qualifier, and `effTab`'s entry at a layer of count
-`c` is the one at `c.toQual`. Each reader of `q` keeps its statement through `toQual`:
-`OpSig.ent`, `OpSig.Sig.q_eq` (`capB_eq`, `abort_eq`), the `hU` premises, `contShare`, `KapRelT`,
-`kTy` (at `c.toQual`), `clauseTy`, `capTag_qualsVal` (tags of a list of counts), `kappaAt_cell`,
-`sigsOkB`, `Row.ResumeO`'s `o.q ≠ unr`. `qualsVal_inj` holds up to `toQual` (`0` and `1?` have one
-tag), so the inversions that read a handler's tags (`hnd_clauses`, `handleWith_clause`) give its
-counts' tags. `hAff` (`effHandleL`) is at `toQual`.
-
-**The kernel's programs at counts.** §27's typed cancel programs (`Core/EffCancelTyped.lean`) are
-at `1?` (handlers `1`, `4`) and `0` (the raises), with the untyped programs' clauses (`cancelC`,
-`resumeC`), which read `κ` at its slot. A `κ` at `1?` owns a cell, so each typed run is stated at a
-memory with a free location, allocated at the catch and released at `κ`'s use (`catchA_steps`,
-`cancelT_start`, `resumeT_start`). `progDropT`, whose clause dropped its `κ`, has no typing at
-counts (a `κ` at `1?` has no weakening, decision 56: `not_der_dropC`) and is removed, with its
-untyped run `progDrop` and its sibling `progKeep` (`progKeepT` is the typed one). `progOutTA` is
-`progOutT` now, and `cancel_prefix`'s instance is `progOutT_cancel_prefix` at `Ξ₁₂`, its start
-after the cell's release. The kernel programs `cancel-reraised`, `cancel-reentered` and
-`cancel-propagated` are the typed `cancelKeptT`, `progReT` and `progOutT`, at the tag `1` with
-`κ`'s cell. A handler a derivation types holds its counts' tags (`hndExpr n (E.map Prod.fst)`),
-at each of which `[op]` allocates `κ`'s cell (`kappaAt_qualsVal`); the machine's tag `2`, whose
-`κ` has no cell, is written by no count and held only by `Core/EffCancel.lean`'s untyped runs. The rejections (`not_der_progT`, `not_der_progNCrecT`, `not_der_e7c`) read a clause's
-count abstractly, at a count with weakening (`cancelC_jr`, `timeoutCl_finds`). `ClauseNames`'
-`unhandled_not_decided` is at `1?`, its clause still aliasing `κ` (`resumeCT_tail`, through
-`OnPaths.rebind`).
-
-### Baseline
-
-`fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`, `fundamentalC_pin`, `adequacyC_pin`,
-`checked_sem`, `checked_runs` and every borrow guarantee keep their statements, over the graded
-types. No step index; no change to `CDerives`' indices, the machine or the relation.
-
-### Measured
-
-`bcc grades` over the corpus (`corpus/grades.expected`; 485 operations, as `bcc kinds` counts
-them, at 564 `handle` nodes):
-
-| clause kind | operations | count |
-|---|---|---|
-| abortive | 233 | `0` |
-| `tail`, `tail+state` at every node | 97 inferred, 9 written `lin` | `1` |
-| `once` (no cancel on any path) | 17 | `1` |
-| `tail` at some node, `stored` at another of the name | 58 | `1?`, pinned by the stored node |
-| `resume-or-cancel` (with state, or beside `tail`) | 15 | `1?`, pinned by the cancelling node |
-| `stored` at every node | 48 inferred, 4 written | `1?` |
-| `tail` written `aff` in a core text | 4 | `1?` |
-
-No operation is `ω`, and no node holds `κ` across an operation that is not at `1` in the corpus,
-so no `1` is lost to `[let]`'s `hW`: the demotion (`demote`, `liveDeps`) is not exercised by any
-corpus program. A `κ` held across an operation of the clause's row is refused at `1?` as at `1`
-(its cancel row is not empty, so it has no destructor), and a `[let]` whose bound computation
-handles its own operation has none of them in its row; the second check at the inferred counts is
-the backstop. Every pin of a `tail` node by another node of its name is a
-`yield` in a program that also stores a generator of it (`gen-adapters` 16, `gen-adapters-fail`
-13, `gen-pipeline-pipe` 8, `gen-pipeline-adapters` 4, then 1 or 2 each). One file stops typing:
-`async-unr-site` (`multi ctl`), now `corpus/reject/async-unr-site.bc`, a parse error; at `ctl`
-the same site is refused by the checker, its `κ` at `1?` having no `!`
-(`corpus/reject/async-ctl-site-copies.bc`). A reject the parser refuses (`-- reject: syntax`)
-is a form §53 removed, and `scripts/check-corpus.sh` asks its message to cite §53. Every corpus program
-keeps its golden output at every stage of both backends; no count rises. `bcc kinds` reads
-`linear` at the operations at `1`; seven programs' flow records lose a finaliser frame
-(`bcc handled`): a performer at a `1` operation needs no drop-glue `[then]` for what it holds.
-The core forms of seven sugar pairs (`corpus/sugar/*.core.bc`) are written at the counts their
-sugared forms infer: `bcc desugar --counted` checks the program and prints its elaborated
-program with each `ctl` entry and `kont` at its count (`countedQual`, over the syntax).
-
-### Open
-
-- **Counts are inferred per name.** One node that may cancel or keep `κ` pins its operation at `1?`
-  at every node of the name; a finer inference (per instantiation) needs the count to vary across
-  one name's nodes, which `OpSig.Sig`'s equal counts forbid (design OQ8).
-- **The world** is `⊤` only (stage 2, #654's `ℓ_op`).
-- **The rewrite table's bridges** (design §3.2, B1 and B2) are unproved; nothing here uses them.
-
-## 54. Entry 53 — Core → Core effect rewrites (#680): R-pre, the rule-written handlers' producers; step 0, the identity rewrite; R0, abort
-
-### Motivation
-
-The kernel's tail-resuming rule `effHandleT` (§14) and `[handle-last]`'s `effHandleL` (§51) are
-proved, with their compatibility lemmas, but nothing on main produces them: the checker types every
-handler by `[handle]` (`effHandleV`, `effHandleVB`). #680's rewriter reads a node's rule, and the
-per-perform law of a rule-written node travels with it (the user's decision R-pre, #680 comment
-6356355522; the scope `~/repos/680-work/scope.md` v2, approved in #680 comment 6356672166). R-pre
-is the first step: the producers, the forms they check, and the per-perform laws at counts (§53).
-
-### Language
-
-- **Two core forms** (`HForm`, `Frontend/Syntax.lean`): `handle_tail[n: q, …](h_ret, gs) M`, the
-  clauses written out by `effHandleT`'s rule from the answering functions `gs`, and
-  `handle_last[n: q, …](h_ret, (ws, nfs)) M`, written out by `effHandleL`'s from the works `ws` and
-  the exits `nfs`. The forms name their operations' counts, which their tuples' types do not hold:
-  `0`, `lin` (`1`) or `aff` (`1?`) (`OpCount`). `handle_with` is the form `clauses`.
-- **Two checker arms** (`Frontend/Check/Checker.lean`): the operations are read back from the
-  tuples' types (`ansesRead`, `lastRead`, `Frontend/Check/Steps.lean`), and the rule's premises are
-  decided over the checked premises (`tailIt`, `lastIt`), which build `rEffHandleT` and
-  `rEffHandleL` (`Frontend/Check/Rules.lean`): `Σ_N ≤ Σ` of operations at the count `1`, not
-  abortive (`hLin`); for `[handle-last]` the operations at `1?` or `0` (`hAff`), `Σ_W ≤ Σ`,
-  `Σ.NZ`, `¬ Σ.UnrD`, and `LastFinOK` at the empty cancel rows (`lastFinOK_of_rowLeB`). The handled
-  row may hold `Div`. `TTied.effHandleL` ties the node, as `TTied.effHandleT` does.
-- **The census reads a rule-written node's own code.** At `effHandleT` the names each clause's
-  own code performs or raises (`HandleSite.names`, §19) are those of its answering function's body
-  (`tailNames`): the rule's clause runs the function it projects from the node's tuple and resumes
-  `κ` with its answer. `tail_rule_names` (`Frontend/Check/Handled.lean`) is `tail_clause_names`'s
-  counterpart: the names `tailNames` reads are those the rule's clause performs and raises.
-
-No type, typing rule, machine step, relation clause or elaboration changes. No program the
-elaborator writes uses the forms; `corpus/core-handle-tail.bc`, `corpus/core-handle-tail-abort.bc`
-(an abortive operation) and `corpus/core-handle-last.bc` (both endings) write them in core, and
-`corpus/reject/handle-tail-opt-row.bc` (`hLin`) and `corpus/reject/handle-last-lin.bc` (`hAff`)
-are refused.
-
-### The proof
-
-The per-perform laws (`Core/DivHandleLastRuns.lean`), at counts:
-
-- **`tail_resume_direct`**: under `tailH n E vr vc` (the value an `effHandleT` node runs as), at an
-  operation `i = j` whose count is not `0`, whose answering function `g` applied to `v` runs to `w`,
-  `K₀[hnd H K[perform (n, (i, v))]]` reaches `K₀[hnd H K[w]]`, `κ`'s cell released.
-- **`last_resume_direct`**, **`last_cancel_direct`**, **`last_cancel_exit`**: under `lastH`, at an
-  operation at `1?`, a work that runs to `inl y` resumes at `y`; one that runs to `inr z` reaches
-  `κ`'s cancel run under the exit's frame, and, when the run answers `()`, the exit at `z`.
-
-The counts replace the qualifiers: an operation's tag is `Count.toQual`, never unrestricted, so
-the premise `q ≠ unr` is gone; a non-abortive operation is one whose count is not `0`. Each law
-covers a work that runs to a value without performing: a work that performs an operation of a
-handler outside the node is not covered.
-
-### Baseline
-
-`fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`, `fundamentalC_pin`, `adequacyC_pin`,
-`checked_sem`, `checked_runs` and every borrow guarantee keep their statements. No change to
-`CDerives`' indices, the machine or the relation. Every corpus program keeps its golden output at
-every stage of both backends; the census tables (`kinds`, `grades`, `handled`) are unchanged for
-every existing program. The new core programs (`core-handle-tail`, `core-handle-tail-abort`,
-`core-handle-last`) are outside the new backend's fragment, as decided (*Open*).
-
-### Open
-
-- **The emission** (the user's decision, #680 comment 6363859134). The checker's emission of
-  `effHandleT` where its classification of a node's clauses is `tail` lands with R1, in R1's
-  entry, gated by R1's admission (§47's licence: every node of the name classifies `tail`). R1
-  rewrites every such node away before the new backend's conversion, so the new backend gains no
-  arm for `effHandleT` or `effHandleL` (OQ4 is withdrawn); a name pinned by a stored node stays
-  `[handle]`'s until R1-ev.
-- **`clause_tail_replace`** (`ClauseTailReplace`, stated, not proved): the clause
-  `λp. let (x, κ) = p; M` and the rule's `tailClause j false vc`, whose work is `M` without its
-  resumes, reach the same values at the same memories. Its hypotheses are met at `core-effects-tail`'s
-  clause (`cet_clauseTailReplace_hyps`).
-- **A work that performs** an operation of a handler outside the node: its per-perform law.
-- **`effHandleL` from a `resume-or-cancel` clause** (OQ2): its conversion's equivalence is B1's
-  statement at the clause.
-
-### Step 0: the identity rewrite
-
-The rewriter's pass, applying no rule, on the new backend's path (`Rewrite/`, the hook
-`Backend2.lirOf`). Every later row (R0, R1, …) is a rule over the typed program inside this pass.
-
-- **The read-back** (`Rewrite/ReadBack.lean`): the typed program read back into core syntax, one
-  rule per `TExpr` constructor, emitting the form the checker typed the node from. Types and
-  lifetimes are read back structurally. The nodes the checker inserts stay implicit: §12's drops,
-  the `[sub]` it records inserting (`TInfo.ins`: `liftRow`, `convC`, `return` checked at a row),
-  `[then]`'s drop glue and §45's η-thunk.
-- **Facts the checker records for it** (`TInfo`), each where the program writes what no node's rule
-  holds: an ascription (`asc`, set by the two `ascribe` arms on the root of the ascribed term's
-  check, `Res.withAsc`, `Frontend/Check/Reinfo.lean`), a `[then]`'s written finaliser
-  (`written`), a binding's annotation and `linear` (`ann`, `lin`, arguments of `rBind`, `rEffLet`,
-  `rEffThen`), the witness lifetime of a borrow whose node does not hold it (`wit`), a bound or
-  witness written `dom` (`dom`), a handler site's record (`srec`), and a `[sub]` the checker
-  inserts (`ins`). They constrain no derivation: `TExpr.setInfo` keeps every typed derivation
-  (`TDerivesAt.setInfo`, `TDerivesP.setInfo`, `TTied.setInfo`).
-- **A program, not a term** (`Rewrite/Driver.lean`): the elaborated program the checker checked
-  (`Report.el`, carried by `CheckedProg.el`) with its `def`s replaced by one declaration per
-  instance of a `use` node, keyed by the checker's instance key (declaration, type arguments,
-  lifetime context, extern context), its body read back once (inner instances first), then
-  `main`. A use reads back as a reference to its instance's declaration; no body is placed at its
-  use. The monomorphic instances of one `def` at one type arguments share one declaration. An
-  instance that mentions a variable of its lifetime context (through its type arguments, or a type
-  written with `dom`) is declared polymorphic in that context by Core's `∀`, each variable at its
-  bound, and instantiated at each use. A use's key (`TInfo.key`) and a site's record (`srec`) are
-  carried verbatim and read by no rule (the scope's §2, amended by the user's decision of
-  2026-10-23).
-- **One re-check**: `checkEl` at the counts the source's check inferred (`CheckedProg.cnts`), with no
-  elaboration and no inference. A refusal is the compile's error; there is no fallback.
-  `exitsOnDivError` is carried from the source's check (`CheckedProg.exits`).
-- **The guard** (`Rewrite/Guard.lean`): G-main, G-assure, G-qual, G-κ, G-bang, G-fin (every
-  finaliser of the source reached once, whatever rules run), and `implicitCopy` over the
-  re-check's terms. The binder map of the identity is empty.
-- **The identity criterion** (`bcc rewrite --identity`, the gate step *core rewrite*,
-  `corpus/rewrite.expected`): on every corpus program that checks, the typed terms are compared node
-  by node and field by field modulo spans at every use; the rewritten `main` erases to the
-  source's, or (at a polymorphic declaration) to it under the instantiation; and the LIR is the
-  source's byte for byte (or both are outside the new backend's fragment with one message). The
-  corpus has no mismatch outside the bodies of the two polymorphic declarations of
-  `rewrite-instance-targs` and `rewrite-instance-dom`, whose bodies are checked at the use's context
-  extended by the abstraction's binders.
-
-No type, typing rule, machine step, relation clause or elaboration changes; the census is the
-source check's report. No output, golden, count or census row of an existing program changes.
-
-### R0: abort
-
-The first rule of the rewriter (the scope's §R0, with its amendment (a′), user decision of
-2026-10-23). It eliminates every **abortive name** by the standard exceptions-as-sums translation,
-inside the kernel's language, before the new backend's conversion. The rule is in
-`Rewrite/Types.lean` (types), `Rewrite/Abort.lean` (one rule per `TExpr` constructor) and
-`Rewrite/R0.lean` (keys and order). `Rewrite.run` numbers the source's binders, applies the rule,
-reads back, re-checks once and runs the guard.
-
-**The key.** A name `n` is keyed when every handler node of `n` holds every operation at the count
-`0` (`E[j].1 = 0`, the counts the check inferred, §53). No name is mixed. Names are rewritten one at
-a time, inside out: in the post-order of the handler nodes, each name at its first node. The sums
-nest in that order: `(A ⊕ P_n) ⊕ P_m` when `n` comes before `m`. Backend2's T2 laid the payload out
-flat; R0 does not.
-
-**Types.** The translation is homomorphic on every former but the returner chain:
-- `⟦F_Σ A⟧ₙ = F_{Σ∖n}(⟦A⟧ₙ ⊕ P_n)` when `n ∈ Σ`, and `F_Σ ⟦A⟧ₙ` otherwise;
-- `P_n` is the sum of `n`'s operations' arguments, nested to the right, and a name of one operation
-  pays its argument;
-- every function type, `def` types included, translates through its codomain. `trC_effOf` states
-  the chain's translation; no rule uses it (each builds its types directly, and the re-check is what
-  carries typing).
-
-**Terms**, at a row holding `n`:
-- `raise_{n.j} V ↦ return (inr (ι_j V))`.
-- The `[sub]` of a computation `M` at a row without `n` into one with it: `M to x. return (inl x)`.
-  This is how `return V` reaches a row holding `n`.
-- `perform_{m.i} V ↦ perform_{m.i} V to y. return (inl y)`, for `m ≠ n`.
-- `[let]`: `⟦M⟧ to r. case r { inl x → ⟦N⟧ | inr p → return (inr p) }`. A binder the program
-  declares `linear` stays declared: `inl r' → linear x <- return r'; ⟦N⟧`.
-- `[then]`: the same, with the abort arm `⟦D⟧ to d. return (inr p)`. It runs the finaliser once,
-  first. A `[then]` whose row keeps another abortive name stays a `[then]` with `D`.
-- A handler of another name `m` whose outer row holds `n` (`[handle]`, BOXED-κ, `handle_tail`,
-  `handle_last`) keeps its node:
-  - its answer clause becomes `λr. case r { inl a → h a | inr p → return (inr p) }`, so `n`'s
-    payload passes unread;
-  - **(a′)** each clause of an operation at `1?` is given `ε κ'` where `κ` is introduced:
-    `!thunkv λ(a, κ'). force (unbang ⟦c_j⟧) (a, ε κ')`, `ε κ' = thunk ⟨(force κ').1, (force κ').2 to
-    u. return (inl u)⟩`. The kernel's `κ'` cancels at `F_{⟦Σ⟧ₙ} 1` (`cancelTy`, §38); the source's
-    `κ`, translated, at `F_{⟦Σ⟧ₙ}(1 ⊕ P_n)`. `ε`'s cancel half is the `[sub]` rule's term. At BOXED-κ,
-    `ε` is taken under the box;
-  - at `handle_last`, the works and the exits translate homomorphically; a work at a row holding
-    `n` is a hard error (no program has one).
-- A handler of `n`, at any of `[handle]`, BOXED-κ or `handle_tail`:
-  `⟦e⟧ to r. case r { inl a → h a | inr (ι_j v) → c_j v }`. The clauses' tuple is taken apart
-  once.
-- An unwinding borrow `withborkU td` becomes its η-expansion, rewritten. At a row that keeps no
-  other name, `λr. λf. withbork r (Λ'x. λm. box-lift (f ['x] m)) to (r, s). case s { inl b → return
-  (inl (r, b)) | inr p → td r; return (inr p) }`, `withbork` the non-unwinding form at
-  `⟦B⟧ₙ ⊕ P_n`. At a row that keeps one, the unwinding form stays, at the reduced row, with `td` for
-  the names it keeps (as the `[then]` rule keeps its node). `box-lift` is
-  `case s { inl b → return (boxed['x] (inl (unbox b))) | inr p → return (boxed['x] (inr p)) }`; the
-  payload outlives `'x` by `Row.Unwind`.
-- Every other constructor is homomorphic.
-
-The `inr` arms' drops are licensed by `[let]`'s `Σ.Weak → Γ.Drops` and by `[then]`'s finaliser.
-The re-check places them (§12) and verifies them. Drop glue reads back as `return ()`, and the
-re-check places its drops again in the abort arm.
-
-**What the rules write where a source node held a type.** The checker synthesizes neither an
-injection nor a term that a removed node checked. So:
-- each injection R0 writes is ascribed its sum type;
-- the handled computation of a removed handler is ascribed the translation of the type `[handle]`
-  checked it at;
-- the `[sub]` rule's binding is annotated with the answer the node held;
-- an annotated `[let]`/`[then]` keeps its annotation, translated.
-
-**Binders.**
-- Before the rules, every source binder gets an id, written into its name (`x#s.k`, the `k`-th binder
-  of the scope `s`: `main`, or an instance's declaration at its type arguments), which the read-back
-  writes and the re-check keeps (`numberBinders`).
-- A rule that moves a source binder moves it through its handle (`SrcBinder`, taken from the
-  source node's `TInfo`), so its id and its `linear` declaration go with it.
-- The binders a rule writes are named by the rule (`%R0`, numbered by depth by `Cx.binder`) and
-  carry no id.
-
-**Left alone, with the reason recorded:** `left: lendR`, a name in a relaxed lend's row. It is
-unreachable: R1's row admits no abortive operation (`Row.resumeOB`). No name is left in the
-corpus.
-
-**The guard:**
-- **π** is id equality: each source id to its binders in `c′`, checked total (every source id has
-  an image) and injective (an image carries one id). The copies of one id (an instance's body at
-  each use, a finaliser on each abort path) are joined.
-- **G-qual** reads π: a binder keeps its class, and a binder declared `linear` stays declared so.
-  This is a second line behind `SrcBinder`.
-- **G-bang** allows R0's own `!`-introductions: the forwarding answer clauses and the (a′) wrappers,
-  each over the source's persistent clauses.
-- **G-fin**, by finaliser id, reading the two checked terms. The numbering pass gives every source
-  finaliser an id (a `[then]` its binder's, an unwinding borrow its own, `#F…`); a `[then]` R0 keeps
-  carries it in its binder's name (`%R0#F…`) and each abort arm R0 writes in its payload binder's
-  (`%R0#A…`). The check is total: every source finaliser has an id. `core-r0-fin-instances` has
-  two finalisers at one span.
-  - a source finaliser stays a finaliser of `c′` exactly while its row keeps an operation no rule
-    rewrites that may end the computation without resuming;
-  - for each rewritten name of its row, the abort arm R0 writes runs it: a written `D` first, at
-    its span and erasure; drop glue as `return ()`; or `td`'s destructor on the lent source, on the
-    arm's spine (where the re-check places it).
-- **G-main**, **G-assure**, **G-κ** and `implicitCopy` are as at step 0.
-
-**Reject tests and controls** (`scripts/check-rewrite.sh`, `bcc rewrite --seed`, `--seed-run`):
-
-| fault | program | refused by |
-|---|---|---|
-| a written finaliser left off the abort arm (`dropFin`) | `core-r0-unwind` | the guard (π: the finaliser's binder has no image) |
-| the same | `core-r0-unwind-linear` | the kernel (a value with no destructor is left unconsumed) |
-| a finaliser run twice (`dupFin`) | `core-r0-unwind`, `core-r0-unwind-linear` | the kernel |
-| drop glue's arm left off (`dropGlue`) | `core-effects-drop-glue` | G-fin |
-| an unwinding borrow's source freed by `free`, not its destructor (`tdReplaced`) | `core-effects-borrow-abort` | G-fin's `td` arm |
-| a handler's clauses copied into each arm of the payload's `case` (`dupClauses`) | `core-r0-two-ops` | G-bang |
-| an operation at `1` given a continuation at `1?` (`widenLin`, G-κ's fault) | `core-r0-forward` | the kernel |
-
-No fault the kernel accepts reaches G-κ: a handler's row is its clauses' operations, at the counts
-the source's check inferred, at which every row is read back.
-
-Three controls are faults the kernel and the guard accept: the next operation's injection
-(`injIndex`), the payload's `case` arms swapped (`swapDispatch`), and the forwarding answer
-clause's arms swapped (`swapFwd`). Each lies between summands of one type. The gate checks that
-each is accepted and changes its program's output against the golden: only the goldens see
-them.
-
-**Laws.**
-- Each source construct's step laws are [est]: `catch_ret`, `catch_abort`, `then_ret`, `then_fin`,
-  `abort_absorbs`, `abort_to`, `fwd_abort` (`Core/EffMachine.lean`); `abort_passes`,
-  `return_resumes` (`Core/Handlers.lean`); `unwind_prefix` (`Core/EffCancelRuns.lean`).
-- The translation's agreement with them, end to end, is [ours] (Plotkin–Pretnar's exceptions as
-  sums, not proved here).
-- `box-lift`, the U-lend rule and the forwarding `handle_last` rule are [ours].
-- (a′): a cancel run performs no operation of `n`. It runs finalisers, at the empty row by
-  `rEffThen`, and destructors. [ours].
-- The type translation's chain lemma `trC_effOf` is proved.
-
-**Programs and counts.**
-- On the corpus before this entry's new programs, R0 rewrites 232 names in 121 programs and leaves
-  none. Per instance (`main` and each instance's body once) it rewrites 279 handler nodes, 510
-  `raise`s, 451 `[let]`s, 224 `[then]`s, 1124 `[sub]`s, 42 `perform`s, 16 forwarding handlers and
-  10 unwinding borrows.
-- The new backend compiles every rewritten program to its golden at every stage, but
-  `core-r0-forward-last`, whose `handle_last` it does not convert (as `core-handle-last`).
-  `core-handle-tail-abort` now compiles.
-- `corpus/erasure-backend2.expected`: an R0 program's line counts what R0 rewrote
-  (`rewritten H P R`), and Convert's own counts drop accordingly.
-- `corpus/counts-backend2.expected`:
-  - copies and bounds checks are unchanged everywhere;
-  - loads and stores rise in 9 machine programs, and allocations rise in 2 of them
-    (`reconcile-chain`, `reconcile-clock`, the closure `ε κ'`);
-  - each row is recorded with #687. The recovery attribution (L1, L3/L5, R5) is unmeasured.
-- The four `corpus/sugar/*.lowered` programs now run in the new backend's corpus, with goldens.
-- Ten new core programs, each with its golden: `core-r0-two-ops`, `core-r0-unwind`,
-  `core-r0-unwind-linear`, `core-r0-forward`, `core-r0-nested`, `core-r0-forward-last`,
-  `core-r0-lend-two`, `core-r0-linear`, `core-r0-pi-instances`, `core-r0-fin-instances`.
-
-**Deletes.** No abortive operation reaches the new backend's conversion; one that did is now a
-hard error there. Removed:
-- E2's `effRaise` arms (pure and machine);
-- `genLendU` and the unwinding borrows' arms;
-- E3's abort join and the abortive clause kind in `convHandle`;
-- T2's `abortB` and the abort branches of `ofEff`, `ofFin` and the outcome type.
-
-Kept, and why:
-- `payOf`/`payTy`, `casePay` and `injectPay`: T3's suspension payload is built from them, and
-  removing them breaks the machine programs;
-- E1's abort functions (`coercePay`, `coerceRes`, `toResult`, `outAbort`, the `pay` of an outcome):
-  the scope deletes E1 after T3's outcome type has no abort summand, which is R5's. They are now
-  reached only at an empty payload.
-
-No type, typing rule, machine step, relation clause or elaboration changes; the census is the
-source check's report.
 
 ## Status
 
@@ -9519,7 +9047,7 @@ Safety (§19 *Laws*) is stated of the runs of typed closed programs, with no cha
 
 Decision R (§19 *Typing*) is implemented, with no change to `CDerives`, the machine or the
 relation: `EffCtx`, `RowAt`, `CDerivesAt`, `CDerivesAt.toCDerives`, `CDerivesAt.ofEffFree`,
-`sig_prefix_of_rowAt` and `hndTags_of_rowAt` in `Core/Tied.lean`; the checker
+`sig_prefix_of_rowAt`, `hndTags_of_rowAt` and `EffCtx.NoUnrExn` in `Core/Tied.lean`; the checker
 builds every derivation tied (`Frontend/Check/Tied.lean`, `Frontend/Check/Rules.lean`), and
 `checkProgram_tied` and `checkProgram_tiedAt` read it off (`Frontend/Check/Program.lean`). The
 restriction to affine abortive operations (§18) is the checker's (`elabRow`,
@@ -9766,60 +9294,8 @@ checker.
 
 ---
 
-Entry 52 (§53) is implemented: the count and the world on `CTy.eff` and `OpSig`, `Count.toQual`
-and `World.eq` in `Core/Types.lean`, `OpSig.abort` at the count `0` in `Core/EffRules.lean`, the
-count inference and the census in `Frontend/Check/Grades.lean` (`bcc grades`), one elaboration
-checked at the inferred counts (`Frontend/Check/Program.lean`'s `checkCounted`), `kont` in
-`Frontend/Syntax.lean` and the counts read by `Frontend/Check/Elab.lean`'s `Scope.cntOf`.
-
----
-
-Entry 53 (§54) is in progress. R-pre is implemented: the forms `handle_tail` and `handle_last` and
-their checker arms (`Frontend/Check/Checker.lean`, `Rules.lean`), the per-perform laws in
-`Core/DivHandleLastRuns.lean`. Step 0 is implemented: the read-back, the re-check and the guard in
-`Rewrite/` (`ReadBack.lean`, `Driver.lean`, `Guard.lean`, `Report.lean`), hooked in
-`Backend2/Driver.lean`'s `lirOf`, the `TInfo` facts in `Frontend/Check/TExpr.lean` (set by
-`Checker.lean`, `Steps.lean`, `Rules.lean`, `Consts.lean`; `Reinfo.lean`), and the identity gate
-`scripts/check-rewrite.sh`. R0 is implemented (`Rewrite/Types.lean`, `Abort.lean`, `R0.lean`):
-every abortive name is rewritten before the new backend's conversion, and Backend2's abort layer
-is removed (§54 *R0*). R1 and later rows are not.
-
 ## Changelog
 
-- **1.05** (2026-10-23) — §54 (#680, R0): the abort rewrite, the exceptions-as-sums translation of
-  every abortive name over the typed program, before the new backend's conversion, re-checked
-  once and guarded (π by binder id, G-fin on each abort arm, G-bang with the rule's own `!`); the
-  cancel row translated by the coercion `ε κ` (a′); a forwarding `handle_last`; an unwinding borrow
-  kept at a reduced row; `linear` carried; G-fin by finaliser id. Backend2's abort layer removed. Ten new core programs;
-  reject tests and controls. Goldens unchanged; the new backend's erasure lines count R0's
-  rewrites; loads and stores rise in 9 machine programs, allocations in 2 (#687).
-- **1.04** (2026-10-23) — §54 (#680, step 0): the rewriter's identity pass on the new backend's
-  path: the typed program read back into a program (one declaration per instance, keyed by the
-  checker's instance key; lifetime-polymorphic by Core's `∀` where an instance mentions its
-  lifetime context), checked again once at the inferred counts, and guarded; `TInfo` records
-  `asc`, `ins`, `written`, `ann`, `lin`, `wit`, `dom` and `srec` (`TExpr.setInfo` keeps every
-  typed derivation); `bcc rewrite` and the gate step *core rewrite*. Every erasure and every LIR is
-  the source's (under the instantiations of polymorphic declarations). Three new core programs
-  (`rewrite-instance-targs`, `rewrite-instance-dom`, `rewrite-case-ascription`). No output,
-  golden, count or census changes for an existing program.
-- **1.03** (2026-10-23) — §54 (#680, R-pre): the core forms `handle_tail[n: q, …]` and
-  `handle_last[n: q, …]`, checked by the rules `rEffHandleT` and `rEffHandleL` at counts
-  (`TTied.effHandleL`, `ansesRead`, `lastRead`); the per-perform laws `tail_resume_direct`,
-  `last_resume_direct`, `last_cancel_direct` and `last_cancel_exit` at counts; the census reads an
-  `effHandleT` node's names from its answering functions. `clause_tail_replace` is stated, open. The
-  checker's emission of `effHandleT` lands with R1 (#680 comment 6363859134). No output, golden,
-  count or census changes for an existing program.
-- **1.02** (2026-10-22) — §53 (#675, M1 stage 1): the grade on `eff`, a count `0`, `1` or `1?`
-  and a world (`⊤` only), replaces the qualifier; `Qual` stays as the run-time tag
-  (`Count.toQual`), so the machine and the relation are unchanged. `[sub]` keeps the count; an
-  operation is abortive exactly at the count `0`, and `NoUnrExn` is removed. The checker infers a
-  `ctl` operation's count, the strictest its handlers allow, and checks the one elaborated program
-  again at it (`κ` written `kont`, inferred entries `ctl`); `linear ctl` is a bound. `multi ctl`
-  and `unr` are removed (`async-unr-site` is a reject). `bcc grades` and the gate step
-  *grade census*. §27's typed cancel programs are at counts, their runs with `κ`'s cell
-  (`progDropT`, `progDrop` and `progKeep` removed; the kernel's cancel programs are the typed
-  ones); §52's stack guard reads no `unr`. Goldens unchanged; the kinds, handled-names and report
-  pins change where an operation is now `1`.
 - **1.01** (2026-10-22) — §52 (#664, option B): a task owns a stack. At a BOXED-κ site with a
   stack `κ`'s environment is the stack's region, written in place; a recursion whose levels call only themselves and
   suspend only at boxed stored sites keeps its levels' states as first-order frames on its task's

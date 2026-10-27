@@ -1,5 +1,5 @@
 name = "borrow_core"
-defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "Backend", "Backend2", "Rewrite", "bcc", "bcc-counts"]
+defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "Backend", "Backend2", "bcc", "bcc-counts"]
 
 [[require]]
 name = "mathlib"
@@ -27,10 +27,6 @@ name = "Backend"
 # The new backend (docs/compiler.md, N1): compiles the typed term.
 [[lean_lib]]
 name = "Backend2"
-
-# The Core → Core rewriter (SPEC §54, #680): the typed program read back and checked again.
-[[lean_lib]]
-name = "Rewrite"
 
 [[lean_exe]]
 name = "bcc"

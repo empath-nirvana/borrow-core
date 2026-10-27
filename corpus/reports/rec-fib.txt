@@ -1,4 +1,4 @@
-effect 18:1: Exhausted: exhausted (ctl, abortive)
+effect 18:1: Exhausted: exhausted (ctl, affine, abortive)
 row 16:1: fib: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
 lowering 16:1: recursive group fib: the generator `fib__step__n1`, the record of its members; each member's copy is bounded_fix of it at the budget 10000, its calls of itself direct calls of the self-reference, the exhaustion effect at the site 1
 lowering 18:15: with on_exhausted: every operation abortive, so its clauses run after the handler, in the scope of the `with`

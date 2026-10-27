@@ -447,10 +447,9 @@ end
 
 /-- Check the wrapper and give every extern its model. The wrapper holds `main`'s printed core,
 checked already with its explicit copies (`clone(x)`, printed as `x`), so implicit copies are not
-checked again; and at the program's counts `cnts`, which its printed core does not record
-(SPEC §53). -/
-def ioRunOf (w : Program) (cnts : CntTable := {}) : Except String IORun := do
-  let r ← match checkProgram w (copies := false) (cnts := some cnts) with
+checked again. -/
+def ioRunOf (w : Program) : Except String IORun := do
+  let r ← match checkProgram w (copies := false) with
     | .ok r => pure r
     | .error e => throw s!"run_io:{e.render}"
   let some c := r.main | throw "run_io: no main"

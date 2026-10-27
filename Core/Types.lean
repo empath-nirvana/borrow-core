@@ -31,51 +31,14 @@ open BoCa
 open BoCa.Fig16
 open BoCa.Lifetime (LSub LifeCtx LifeVar LSubst)
 
-/-- The structural qualifier of a control operation's continuation, the run-time tag a handler
-value holds for it (§25): linear (resumed exactly once), affine (resumed at most once, or
-cancelled), unrestricted (resumed any number of times, or cancelled).  A type never carries it: an
-operation's grade is its count (`Count`), whose tag is `Count.toQual`, linear or affine; `unr` is
-the machine's tag `2`, which no count gives.  `[spec §19, §25, §53]` -/
+/-- The structural qualifier of a control operation's continuation: linear (resumed exactly
+once), affine (resumed at most once, or cancelled), unrestricted (resumed any number of times, or
+cancelled).  `[spec §19]` -/
 inductive Qual where
   | lin
   | aff
   | unr
   deriving DecidableEq, Repr
-
-/-- **An operation's count**: how many times a continuation captured at it is used, a resume
-counting `1` and a cancel or a drop `0`.  `0`: never resumed (an abortive operation, its clause
-takes no `κ`); `1`: resumed exactly once; `1?`: resumed at most once, or cancelled or dropped.
-There is no `ω`: an unrestricted continuation is not a type.  `[spec §53]` -/
-inductive Count where
-  /-- `0`. -/
-  | zero
-  /-- `1`. -/
-  | one
-  /-- `1?`. -/
-  | opt
-  deriving DecidableEq, Repr
-
-/-- The run-time tag of a count: `1` is linear, `0` and `1?` affine.  `[spec §25, §53]` -/
-def Count.toQual : Count → Qual
-  | .one => .lin
-  | .zero | .opt => .aff
-
-@[simp] theorem Count.toQual_ne_unr (c : Count) : c.toQual ≠ .unr := by cases c <;> simp [Count.toQual]
-
-@[simp] theorem Count.toQual_eq_lin (c : Count) : c.toQual = .lin ↔ c = .one := by
-  cases c <;> simp [Count.toQual]
-
-/-- **An operation's world**: where a continuation captured at it may be resumed.  At this stage
-the one world is `⊤`: anywhere its type allows.  `[spec §53]` -/
-inductive World where
-  /-- `⊤`. -/
-  | top
-  deriving DecidableEq, Repr
-
-/-- There is one world.  A relation that compares types reads the world through this lemma, and a
-second world must revisit each such reader.  `[spec §53]` -/
-theorem World.eq : ∀ w w' : World, w = w'
-  | .top, .top => rfl
 
 mutual
 /-- Value types.  `[spec §3]` -/
@@ -125,11 +88,10 @@ inductive CTy where
   /-- `νX. C`: the greatest fixed point, with `U X` the type variable `0` in `C`.  `[spec §7]` -/
   | nu (C : CTy)
   /-- One operation of an effect row: `C` extended by the operation `i` of the name `n`,
-  `A ↠^(c, w) B` at the count `c` and the world `w`, with its cancel row `fin`: what cancelling a
-  continuation captured at the operation may raise or perform, `⊤` when it cannot be cancelled,
-  otherwise the operations of `fin`'s layers (`CTy.rowOf`).  `F_Σ R` is a stack of these over
-  `F R` (`CTy.effOf`).  `[spec §19, §27, §53]` -/
-  | eff (n i : UInt32) (cnt : Count) (wld : World) (A B : VTy) (fin : CTy) (C : CTy)
+  `A ↠^q B`, with its cancel row `fin`: what cancelling a continuation captured at the operation
+  may raise or perform, `⊤` when it cannot be cancelled, otherwise the operations of `fin`'s layers
+  (`CTy.rowOf`).  `F_Σ R` is a stack of these over `F R` (`CTy.effOf`).  `[spec §19, §27]` -/
+  | eff (n i : UInt32) (q : Qual) (A B : VTy) (fin : CTy) (C : CTy)
 end
 
 /-- The value-type eliminator with `U C` a leaf. -/
@@ -181,47 +143,34 @@ def CTy.EffFree : CTy → Prop
   | .ret _ | .top => True
   | .arr _ C | .all _ _ C | .nu C => C.EffFree
   | .amp C D => C.EffFree ∧ D.EffFree
-  | .eff _ _ _ _ _ _ _ _ => False
+  | .eff _ _ _ _ _ _ _ => False
 
-/-- An operation of an effect row: the operation `i` of the name `n`, `A ↠^(c, w) B` at its count
-and world, and its cancel row `fin` (`CTy.eff`), the empty row `F 1` by default.
-`[spec §19, §27, §53]` -/
+/-- An operation of an effect row: the operation `i` of the name `n`, `A ↠^q B`, and its cancel
+row `fin` (`CTy.eff`), the empty row `F 1` by default.  `[spec §19, §27]` -/
 structure OpSig where
   n : UInt32
   i : UInt32
-  cnt : Count
-  wld : World := .top
+  q : Qual
   A : VTy
   B : VTy
   fin : CTy := .ret .unit
 
-/-- The operation's qualifier, the tag of its count: what the machine and the relation read.
-`[spec §25, §53]` -/
-abbrev OpSig.q (o : OpSig) : Qual := o.cnt.toQual
+/-- An operation `A ↠^q B` is capturable: not linear, and not abortive (its answer type is not
+`0`), so a continuation captured at it has a cancel branch, and its cancel row is read.
+`[spec §27]` -/
+def capB (q : Qual) (B : VTy) : Bool := q != .lin && !B.isZero
 
-theorem OpSig.q_ne_unr (o : OpSig) : o.q ≠ .unr := Count.toQual_ne_unr o.cnt
-
-/-- An operation at the count `c` is capturable: at `1?`, so a continuation captured at it has a
-cancel branch, and its cancel row is read.  `[spec §27, §53]` -/
-def capB (c : Count) : Bool := c == .opt
-
-@[simp] theorem capB_opt : capB .opt = true := rfl
-@[simp] theorem capB_one : capB .one = false := rfl
-@[simp] theorem capB_zero : capB .zero = false := rfl
-
-/-- An affine count that is not `0` is `1?`. -/
-theorem capB_of_aff {c : Count} (hq : c.toQual = .aff) (hz : (c == .zero) = false) :
-    capB c = true := by
-  cases c <;> simp_all [Count.toQual]
+theorem capB_congr {q : Qual} {B B' : VTy} (h : B.isZero = B'.isZero) : capB q B = capB q B' := by
+  simp only [capB, h]
 
 /-- `F_Σ R`: the row's operations stacked over `F R`; `F_∅ R = F R`.  `[spec §19]` -/
 def CTy.effOf : List OpSig → VTy → CTy
   | [], R => .ret R
-  | o :: os, R => .eff o.n o.i o.cnt o.wld o.A o.B o.fin (CTy.effOf os R)
+  | o :: os, R => .eff o.n o.i o.q o.A o.B o.fin (CTy.effOf os R)
 
 /-- The operations a cancel row holds: its layers, `[]` at any other former.  `[spec §27]` -/
 def CTy.rowOf : CTy → List OpSig
-  | .eff n i c w A B fin C => ⟨n, i, c, w, A, B, fin⟩ :: CTy.rowOf C
+  | .eff n i q A B fin C => ⟨n, i, q, A, B, fin⟩ :: CTy.rowOf C
   | _ => []
 
 /-- The cancel row `⊤`: a continuation captured there cannot be cancelled.  `[spec §27]` -/
@@ -268,7 +217,7 @@ def CFree (x : LifeVar) : CTy → Prop
   | .top => False
   | .all y b C => b.mentions x = true ∨ (x ≠ y ∧ CFree x C)
   | .nu C => CFree x C
-  | .eff _ _ _ _ A B fin C => VFree x A ∨ VFree x B ∨ CFree x fin ∨ CFree x C
+  | .eff _ _ _ A B fin C => VFree x A ∨ VFree x B ∨ CFree x fin ∨ CFree x C
 end
 
 /-! ### Type variables: renaming, substitution, closedness
@@ -1209,7 +1158,7 @@ each `F_Σ A`, whose operation types are closed.  `[spec §7, §19]` -/
 def instT (S : VTy) : CTy → CTy
   | .ret A => .ret (VTy.inst S A)
   | .amp C D => .amp (instT S C) (instT S D)
-  | .eff n i q wq A B fin C => .eff n i q wq A B fin (instT S C)
+  | .eff n i q A B fin C => .eff n i q A B fin (instT S C)
   | .arr A C => .arr A (instT S C)
   | C => C
 
@@ -1217,7 +1166,7 @@ def instT (S : VTy) : CTy → CTy
 `A` polynomial in `X`.  `[spec §19]` -/
 def EffLeaf : CTy → Prop
   | .ret A => A.Poly
-  | .eff _ _ _ _ A B _ C => A.Cl 0 ∧ B.Cl 0 ∧ EffLeaf C
+  | .eff _ _ _ A B _ C => A.Cl 0 ∧ B.Cl 0 ∧ EffLeaf C
   | _ => False
 
 /-- A `&`-tree of observations `F A` and `F_Σ A`, each `A` polynomial in `X`, and observations
@@ -1226,7 +1175,7 @@ with an argument `A ⊸ D` over such a tree, the argument type closed (the affin
 def NuLeaf : CTy → Prop
   | .ret A => A.Poly
   | .amp C D => NuLeaf C ∧ NuLeaf D
-  | .eff n i q wq A B fin C => EffLeaf (.eff n i q wq A B fin C)
+  | .eff n i q A B fin C => EffLeaf (.eff n i q A B fin C)
   | .arr A D => A.Cl 0 ∧ NuLeaf D
   | _ => False
 
@@ -1624,7 +1573,7 @@ def CTy.lifeBound : CTy → Nat
   | .top => 0
   | .all x b C => max (x + 1) (max b.varBound C.lifeBound)
   | .nu C => C.lifeBound
-  | .eff _ _ _ _ A B fin C => max A.lifeBound (max B.lifeBound (max fin.lifeBound C.lifeBound))
+  | .eff _ _ _ A B fin C => max A.lifeBound (max B.lifeBound (max fin.lifeBound C.lifeBound))
 end
 
 mutual
@@ -1661,8 +1610,8 @@ def CTy.applyLSub (σ : LSubst) : CTy → CTy
       else
         .all y (b.applySub σ) (C.applyLSub (lsubDrop σ y))
   | .nu C => .nu (C.applyLSub σ)
-  | .eff n i q wq A B fin C =>
-      .eff n i q wq (A.applyLSub σ) (B.applyLSub σ) (fin.applyLSub σ) (C.applyLSub σ)
+  | .eff n i q A B fin C =>
+      .eff n i q (A.applyLSub σ) (B.applyLSub σ) (fin.applyLSub σ) (C.applyLSub σ)
 end
 
 /-- `A[@a/'x]`. -/
@@ -1737,7 +1686,7 @@ theorem lt_cLifeBound {x : LifeVar} : ∀ {C : CTy}, CFree x C → x < C.lifeBou
       · exact Nat.lt_of_lt_of_le (lt_cLifeBound h)
           (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _))
   | .nu C, h => lt_cLifeBound (C := C) h
-  | .eff _ _ _ _ A B fin C, h => by
+  | .eff _ _ _ A B fin C, h => by
       rcases h with h | h | h | h
       · exact Nat.lt_of_lt_of_le (lt_vLifeBound h) (Nat.le_max_left _ _)
       · exact Nat.lt_of_lt_of_le (lt_vLifeBound h)

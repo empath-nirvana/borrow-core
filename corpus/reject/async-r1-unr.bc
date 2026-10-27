@@ -1,8 +1,7 @@
--- reject: syntax
--- expect: 17:39: `unr`: an unrestricted continuation is not a type; a row's count is `lin`, `aff` or `ctl` (SPEC §53)
+-- expect: 16:5: the row of a relaxed lend's body has only operations that resume once (affine or linear), of names other than 0, answering `1` with the empty cancel row, whose arguments are closed data with no `U` (R1, SPEC §29)
 -- SPEC §29 (docs/async-capabilities.md §6.2 row 14, `n7`), in the core text: an unrestricted
--- (multi-shot) operation inside a relaxed lend, whose copied continuation would hold the view
--- twice. An unrestricted continuation is not a type (SPEC §53): the row cannot be written.
+-- (multi-shot) operation inside a relaxed lend. `Row.ResumeO` admits no unrestricted operation:
+-- a copied continuation would hold the view twice.
 def plus : i32 * i32 => i32 = unbang host[add32]
 
 main : F (i32 + i32) =

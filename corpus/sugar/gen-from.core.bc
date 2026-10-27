@@ -1,6 +1,6 @@
--- The elaboration of `gen-from.bc` in core, as `bcc desugar --counted` prints it (SPEC §53).
+-- The elaboration of `gen-from.bc` in core, as `bcc desugar` prints it.
 
-def two__n1__g1 : !U (i32 * 1 -o F[1.0 lin i32 * i32 ~> i32] (i32 * i32)) =
+def two__n1__g1 : !U (i32 * 1 -o F[1.0 aff i32 * i32 ~> i32] (i32 * i32)) =
   !thunkv fun (fx_pp3 : i32 * 1) ->
       let (fx_w1, io_p2) = fx_pp3;
       let () = io_p2;
@@ -10,7 +10,7 @@ def two__n1__g1 : !U (i32 * 1 -o F[1.0 lin i32 * i32 ~> i32] (i32 * i32)) =
       io_s0 <- return ();
       return (fx_w1, i32[5])
 
-def around__n1__g0 : !U (i32 * 1 -o F[1.0 lin i32 * i32 ~> i32] (i32 * i32)) =
+def around__n1__g0 : !U (i32 * 1 -o F[1.0 aff i32 * i32 ~> i32] (i32 * i32)) =
   !thunkv fun (fx_pp7 : i32 * 1) ->
       let (fx_w1, io_p5) = fx_pp7;
       let () = io_p5;
@@ -28,13 +28,13 @@ main : F i32 =
   acc <- return i32[0];
   fx_w1 : i32 <- return acc;
   io_j21_3 : i32 * i32 + i32 * i32 <- handle_with[1](((!thunkv fun (io_hv21_3 : i32 * i32) ->
-          return inl io_hv21_3) : !U (i32 * i32 -o F (i32 * i32 + i32 * i32))), ((!thunkv fun (io_hp21_3 : (i32 * i32) * kont[1.0 lin] i32 (F (i32 * i32 + i32 * i32))) ->
+          return inl io_hv21_3) : !U (i32 * i32 -o F (i32 * i32 + i32 * i32))), ((!thunkv fun (io_hp21_3 : (i32 * i32) * U ((i32 -o F (i32 * i32 + i32 * i32)) & F 1)) ->
           let (io_hxw21_3, io_k21_3) = io_hp21_3;
           let (x, io_hw21_3) = io_hxw21_3;
           acc <- return io_hw21_3;
           acc <- return (unbang host[add32]) ((unbang host[mul32]) (acc, i32[10]), x);
           io_wv21_3 <- return acc;
-          force io_k21_3.1 io_wv21_3, ()) : !U ((i32 * i32) * kont[1.0 lin] i32 (F (i32 * i32 + i32 * i32)) -o F (i32 * i32 + i32 * i32)) * 1)) (io_fg21_3 <- return unbang around__n1__g0;
+          force io_k21_3.1 io_wv21_3, ()) : !U ((i32 * i32) * U ((i32 -o F (i32 * i32 + i32 * i32)) & F 1) -o F (i32 * i32 + i32 * i32)) * 1)) (io_fg21_3 <- return unbang around__n1__g0;
     io_fa21_3 <- return (fx_w1, ());
     force io_fg21_3 io_fa21_3);
   io_jj21_3 : i32 * i32 <- case io_j21_3 {

@@ -1212,7 +1212,7 @@ theorem rcE_app {a b : Expr} (ha : rcE q a = true) : rcE q (.app a b) = rcE q b 
   rw [rcE.eq_9 q a b (fun m r h₁ _ => by subst h₁; simp [rcE] at ha)]
   simp [ha]
 
-theorem rcE_qualsVal : ∀ qs : List Count, rcE q (qualsVal qs).1 = true
+theorem rcE_qualsVal : ∀ qs : List Qual, rcE q (qualsVal qs).1 = true
   | [] => rfl
   | _ :: qs => by
       simp only [qualsVal, Val.pair, Val.i32, rcE, rcE_qualsVal qs, Bool.and_true]
@@ -1271,7 +1271,7 @@ theorem rcE_mapV : ∀ A : VTy, rcE q (mapV A).1 = true
 theorem rcE_nodeV : ∀ C : CTy, rcE q (nodeV C).1 = true
   | .ret A => by simp [nodeV, bindE, rcE, rcE_app, rcE_mapV]
   | .amp C D => by simp [nodeV, rcE, rcE_app, rcE_nodeV C, rcE_nodeV D]
-  | .eff _ _ _ _ _ _ _ C => by simp [nodeV, bindE, rcE, rcE_app, rcE_mapV]
+  | .eff _ _ _ _ _ _ C => by simp [nodeV, bindE, rcE, rcE_app, rcE_mapV]
   | .arr _ D => by simp [nodeV, rcE, rcE_app, rcE_nodeV D]
   | .top | .all _ _ _ | .nu _ => rfl
 
@@ -1411,7 +1411,7 @@ theorem rcE_pickE : ∀ (j : Nat) {t : Expr}, rcE q t = true → rcE q (pickE j 
   | j + 1, t, h => by simp only [pickE, rcE, h, Bool.true_and]; exact rcE_pickE j rfl
 
 theorem rcE_tailTuple {Hc : Expr} (h : rcE q Hc = true) :
-    ∀ (E : List (Count × VTy × VTy)) (j : Nat), rcE q (tailTuple E j Hc) = true
+    ∀ (E : List (Qual × VTy × VTy)) (j : Nat), rcE q (tailTuple E j Hc) = true
   | [], _ => rfl
   | (_, _, _) :: E, j => by
       simp only [tailTuple, rcE, rcE_tailTuple h E (j + 1), Bool.and_true]
@@ -1424,7 +1424,7 @@ theorem rcE_tailTuple {Hc : Expr} (h : rcE q Hc = true) :
         simp [rcE, rcE_app this, resumeB, Val.lam]
 
 theorem rcE_lastTuple {Hw Hn : Expr} (hw : rcE q Hw = true) (hn : rcE q Hn = true) :
-    ∀ (E : List (Count × VTy × VTy)) (j : Nat), rcE q (lastTuple E j Hw Hn) = true
+    ∀ (E : List (Qual × VTy × VTy)) (j : Nat), rcE q (lastTuple E j Hw Hn) = true
   | [], _ => rfl
   | (_, _, _) :: E, j => by
       simp only [lastTuple, rcE, rcE_lastTuple hw hn E (j + 1), Bool.and_true]

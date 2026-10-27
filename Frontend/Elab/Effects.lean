@@ -7,9 +7,9 @@ import Frontend.Elab.Divisions
 /-!
 # Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21, §30, §32, §34, §38, §39]`
 
-An effect declares operations, each **answering** (`fn`) or **control** (`ctl`, its continuation's
-count inferred by the checker, the strictest its handlers allow; or `linear ctl`, exactly once,
-SPEC §53). An effect is one or the other. This pass resolves every operation to the handler that serves it, before the
+An effect declares operations, each **answering** (`fn`) or **control** (`ctl`, with the
+structural qualifier of its continuation: affine by default, `linear ctl`, `multi ctl`). An effect
+is one or the other. This pass resolves every operation to the handler that serves it, before the
 rest of the sugar; it knows no effect by name.
 
 * **Answering effects** are capabilities (§18): `handler h(s: S) for E { op(x) -> e }` gives each
@@ -81,7 +81,9 @@ What is not provided, with the message that says so: an operation inside a closu
 is not run in place, other than an effectful block; a block parameter stored; a function with a
 row passed as a value (effectful callbacks, #161); a lend `&mut x` in the arguments of a call that threads a capability; an operation of an answering
 effect inside a clause; an effect with both kinds of operation; type parameters on an answering
-effect; a function with a row whose result is a computation (a loop or a generator).
+effect; an unrestricted operation that answers `never` (`multi ctl`: an abortive operation is
+affine, decision 63); a function with a row whose result is a computation (a loop or a
+generator).
 -/
 
 namespace Frontend.Elab.Effects
@@ -320,9 +322,6 @@ structure St where
   exits : Bool := false
   /-- The key of each copy made (`DefKey`), for the checker's `use` nodes. -/
   keys : Array DefKey := #[]
-  /-- The operations `n.i` of the sites made whose count is inferred, each declared `ctl`
-  (SPEC §53).  `[spec §53]` -/
-  ctl : List (Nat × Nat) := []
 
 abbrev EM := StateT St (Except Error)
 
@@ -488,13 +487,6 @@ def Env.siteOps (env : Env) (s : Site) : List (Qual × VTy × VTy) :=
       match s.thr with
       | some (_, W) => (o.qual, .tensor o.name.span A (.name o.name.span W), .name o.name.span W)
       | none => (o.qual, A, o.res.subst σ)
-
-/-- Record the operations of the site `n` of the effect `e` whose count is inferred: those `e`
-declares `ctl`.  `[spec §53]` -/
-def noteCtl (env : Env) (n : Nat) (e : String) : StateT St (Except Error) Unit :=
-  let ks := ((((env.eff? e).map (·.ops)).getD []).zipIdx.filterMap fun (o, j) =>
-    if o.qual == .infer then some (n, j) else none)
-  modify fun s => { s with ctl := s.ctl ++ ks.filter (!s.ctl.contains ·) }
 
 /-- The row entries of the sites `ss`, in order: `n.i q A ~> B`, each site once (two slots of a
 row may be served by one site, SPEC §38). -/
@@ -831,7 +823,6 @@ def _root_.Frontend.VTy.lifeVars : VTy → List String
   | .fam _ _ a _ => a.vars
   | .app _ G A => G.lifeVars ++ A.lifeVars
   | .lapp _ G a => G.lifeVars ++ a.vars
-  | .kont _ _ _ _ B C => B.lifeVars ++ C.lifeVars
   | _ => []
 
 def _root_.Frontend.CTy.lifeVars : CTy → List String
@@ -1003,7 +994,7 @@ def refsC : Nat → Comp → List String
     | .bind _ _ _ M N _ | .with_ _ M N => refsC n M ++ refsC n N
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
     | .nuOut _ M | .ascribe _ M _ => refsC n M
-    | .handle _ _ _ _ hr hc M => refsV n hr ++ refsV n hc ++ refsC n M
+    | .handle _ _ _ hr hc M => refsV n hr ++ refsV n hc ++ refsC n M
     | .letUnit _ V M | .letPair _ _ _ V M => refsV n V ++ refsC n M
     | .case _ V _ M _ N | .loop _ _ _ V M N => refsV n V ++ refsC n M ++ refsC n N
     | .unwind _ _ _ M D N => refsC n M ++ refsC n D ++ refsC n N
@@ -1035,7 +1026,7 @@ def unboxesC (k : String) : Nat → Comp → Bool
     | .bind _ _ _ M N _ | .with_ _ M N => unboxesC k n M || unboxesC k n N
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
     | .nuOut _ M | .ascribe _ M _ => unboxesC k n M
-    | .handle _ _ _ _ hr hc M => unboxesV k n hr || unboxesV k n hc || unboxesC k n M
+    | .handle _ _ _ hr hc M => unboxesV k n hr || unboxesV k n hc || unboxesC k n M
     | .letUnit _ V M | .letPair _ _ _ V M => unboxesV k n V || unboxesC k n M
     | .case _ V _ M _ N | .loop _ _ _ V M N => unboxesV k n V || unboxesC k n M || unboxesC k n N
     | .unwind _ _ _ M D N => unboxesC k n M || unboxesC k n D || unboxesC k n N
@@ -2545,7 +2536,6 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     let n ← match ← (cx.portIn ksp ch.name.name e M : Except Error _) with
       | some p => pure p
       | none => freshSite
-    noteCtl cx.env n e
     -- The instance it handles: at the written type arguments; else the one instance of its effect
     -- the body performs, unnamed or named as this handler (SPEC §38).
     if !(ch.effArgs.all (solvedBy tps σ)) then
@@ -2838,7 +2828,6 @@ def forSite : Nat → Cx → List Cap → Bool → Span → Option Ident → Ide
         "performs an iteration effect and uses a capability is not provided"⟩
     let n ← freshSite
     modify fun s => { s with perTurn := n :: s.perTurn }
-    noteCtl cx.env n i.eff
     let w := s!"fx_w{n}"
     let Wn := s!"fx_W{n}"
     let site : Site := { eff := i.eff, n, args := As, sp, what := "the `for`", thr := some (w, Wn) }
@@ -2882,7 +2871,6 @@ def pullSite : Nat → Cx → List Cap → Span → String → FSig → Inst →
         "the capability, which is not provided"⟩
     let n ← freshSite
     modify fun s => { s with perTurn := n :: s.perTurn }
-    noteCtl cx.env n i.eff
     let site : Site := { eff := i.eff, n, args := As, sp, what := "the stored generator" }
     let cxP : Cx := { cx with sites := site :: cx.sites.filter (·.eff != i.eff),
                               caps := cx.caps.filter (fun c => c.blk || c.eff != i.eff) }
@@ -3258,7 +3246,6 @@ def copyOf : Nat → Env → Span → FSig → List HSig → List Site → Strin
           ps := ps ++ [({ s with sp := dsp, what := "the caller" }, false)]
         else
           let p ← freshSite
-          noteCtl env p e.name
           ps := ps ++ [({ eff := e.name, n := p, args := As, sp := dsp,
                           what := s!"`{g.name}`'s handler of `{e.name}` around `{x}`" }, true)]
       ports := ports ++ [(b.j, ps)]
@@ -3653,10 +3640,10 @@ def pipesC (pe : PipeEnv) : Nat → Comp → EM Comp
     | .loop sp ℓ src V M N => do pure (.loop sp ℓ src (← pipesV pe k V) (← pipesC pe k M) (← pipesC pe k N))
     | .perform sp n i V => do pure (.perform sp n i (← pipesV pe k V))
     | .abort sp n i V => do pure (.abort sp n i (← pipesV pe k V))
-    | .handle sp n hf st hr hc M => do
+    | .handle sp n st hr hc M => do
       let hr' ← pipesV pe k hr
       let hc' ← pipesV pe k hc
-      pure (.handle sp n hf st hr' hc' (← pipesC pe k M))
+      pure (.handle sp n st hr' hc' (← pipesC pe k M))
     | .unwind sp x A M D N => do
       pure (.unwind sp x A (← pipesC pe k M) (← pipesC pe k D) (← pipesC pe k N))
     | M => pure M
@@ -3805,8 +3792,6 @@ structure Result where
   withDivLib : Bool := false
   withPlatform : Bool := false
   keys : List DefKey := []
-  /-- The operations whose count is inferred (`St.ctl`).  `[spec §53]` -/
-  ctl : List (Nat × Nat) := []
 
 /-- The program with its effects elaborated, and the reports for `bcc check`: the effect and
 handler declarations are removed, each answering handler's clauses become functions, each
@@ -3890,12 +3875,15 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
             "an effect has one kind"⟩
         if sig.answering && !tps.isEmpty then
           throw ⟨e.span, s!"`{e.name}` is answering and takes type parameters: not provided"⟩
+        if let some o := ops.find? (fun o => o.abortive && o.kind == .ctl .unr) then
+          throw ⟨o.name.span, s!"`{o.name.name}` is `multi ctl` and answers `never`: an " ++
+            "operation that never resumes is affine, `ctl` (decision 63)"⟩
         env := { env with effs := env.effs ++ [sig],
                           ops := env.ops ++ (ops.zipIdx.map fun (o, i) => ⟨e.name, i, o⟩) }
         report sp "effect" (s!"{e.name}: " ++ ", ".intercalate (ops.map fun o =>
           s!"{o.name.name}{match o.kind with
             | .fn => ""
-            | .ctl q => s!" (ctl{if q == Qual.lin then ", linear" else ""}{
+            | .ctl q => s!" (ctl, {match q with | .lin => "linear" | .aff => "affine" | .unr => "unrestricted"}{
                 if o.abortive then ", abortive" else ""})"}"))
       | .handler sp h st S e cs lent =>
         let some eff := env.eff? e.name
@@ -4030,7 +4018,7 @@ def elaborate (ds : List Decl) (lib : List String := []) (hide : List Decl := []
   | .ok ((ds, spliced), st) =>
     pure { decls := ds, reports := st.reports.toList, perTurn := st.perTurn, platform := st.platform,
            exits := st.exits, withDivLib, withPlatform := spliced,
-           keys := st.keys.toList, ctl := st.ctl }
+           keys := st.keys.toList }
   | .error e => throw e
 
 end Frontend.Elab.Effects

@@ -62,7 +62,7 @@ def fuelBody : Expr :=
 def fuelC : Val := .lam (.letpair (.var 0) (.val (.lam fuelBody)))
 
 /-- The handler value: the name `Div`, the tick linear. -/
-def fuelH : Val := hndVal divEff (qualsVal [.one]) fuelR (Val.pair fuelC .unit)
+def fuelH : Val := hndVal divEff (qualsVal [.lin]) fuelR (Val.pair fuelC .unit)
 
 /-- `bounded_fix`'s step: `λ(self, g). g self`. -/
 def fuelStep : Val := .lam (.letpair (.var 0) (.app (.var 0) (.var 1)))
@@ -89,7 +89,7 @@ theorem fuelStep_closed : closedAt 0 fuelStep.1 = true := rfl
 
 theorem divFuelV_closed : closedAt 0 divFuelV.1 = true := by
   simp [divFuelV, closedAt, fuelStep, fuelH, hndVal, qualsVal, fuelR, fuelC, fuelBody, spentV,
-    Val.pair, Val.i32, BoCa.BoLo.hndE, Qual.tag, Count.toQual, nextV, closeV]
+    Val.pair, Val.i32, BoCa.BoLo.hndE, Qual.tag, nextV, closeV]
 
 /-! ### Frames that hand the self-reference -/
 
@@ -383,7 +383,7 @@ theorem divFuel_steps (t : Val) (k : UInt32) :
   have hs : closedAt 0 fuelStep.1 = true := fuelStep_closed
   have hH : closedAt 0 fuelH.1 = true := by
     simp [fuelH, hndVal, qualsVal, fuelR, fuelC, fuelBody, spentV, closedAt, Val.pair, Val.i32,
-      Qual.tag, Count.toQual, nextV, closeV]
+      Qual.tag, nextV, closeV]
   simp [fuelK, Kont.plug, BoCa.BoLo.hndE, closed_subst hs, closed_subst hH, subst_shift_succ,
     Val.i32, Val.pair]
   exact .refl

@@ -83,19 +83,13 @@ checker holds the function to. An effect is either answering or control (below),
 An operation declared `ctl` is a **control** operation: its clause receives the rest of the
 computation, its continuation `k`, and decides whether and how to go on (SPEC §19). `k(v)`
 resumes the body with `v` as the operation's answer, and answers what the handler answers for
-the rest of the body. How often the continuation is resumed is the operation's **count** (SPEC
-§53):
+the rest of the body. The qualifier says how often the continuation may be resumed:
 
 | declared | the clause |
 |---|---|
 | `ctl op(…) -> B` | resumes `k` at most once; if it does not, the rest of the body is cancelled |
 | `linear ctl op(…) -> B` | resumes `k` exactly once |
 | `ctl op(…) -> never` | receives no `k`: the operation is **abortive**, as `raise` is |
-
-The checker infers the count of a `ctl` operation: the strictest its handlers allow. When every
-handler of it resumes `k` exactly once, on every path, it is `1`, exactly once, and the body may
-hold what cannot be dropped across it; when some handler may cancel `k` or keep it, it is `1?`, at
-most once. `linear ctl` declares `1`: a handler that asks more is refused, by name.
 
 A control handler names the type of the body it handles and what it answers, `Peek, i32 -> i32`
 below, and its `return(a)` clause receives the body's value. Here the handler resumes while the

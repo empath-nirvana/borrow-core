@@ -34,14 +34,8 @@ import Backend2.Driver
                                 a never-reuse allocator (`fresh`), with lend tags (`tags`), or
                                 with the least-free allocator (`least`); a failed check is an
                                 error; `--stats` writes the run's counts to standard error
-    lake exe bcc desugar [--counted] <file>
-                                print the program with its I/O sugar elaborated (SPEC §11); with
-                                `--counted`, at the counts the checker infers, its `ctl` entries
-                                written at them (SPEC §53)
+    lake exe bcc desugar <file> print the program with its I/O sugar elaborated (SPEC §11)
     lake exe bcc erase <file>   print the erasure of the checked `main`
-    lake exe bcc grades <file>  the grade census: each `handle` node's operations, their counts
-                                (inferred, declared or written), what pins a `1?`, their world,
-                                position and storage (SPEC §53)
     lake exe bcc alpha [--map] <file>
                                 print the program with every variable renamed to a name of its
                                 own (`alphaRename`), or with `--map` the renaming
@@ -144,28 +138,6 @@ def desugar (file : String) : IO UInt32 := do
     | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
     | .ok el => IO.print el.prog.pp; return 0
 
-/-- The qualifier of a row entry, or of a `kont`, at the counts `tbl` (SPEC §53): a `ctl` entry
-`lin` at `1` and `aff` otherwise (`Frontend.Check.Scope.cntOf`); every other entry as written. -/
-def countedQual (tbl : List ((Nat × Nat) × BoCa.Fig16.LogRel.Core.Count)) (n i : Nat) (q : Qual) :
-    Qual :=
-  if q != .infer then q else match tbl.lookup (n, i) with
-    | some .one => .lin
-    | _ => .aff
-
-/-- Print `file` with its sugar elaborated, each `ctl` entry at the count the checker infers
-(SPEC §53, `countedQual`): the core text the checked program is. -/
-def desugarCounted (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
-  match parseProgram src (lib := Frontend.Sugar.libSrc) with
-  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
-  | .ok p =>
-    match Check.checkCounted p with
-    | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
-    | .ok (rep, _) =>
-      let q := countedQual rep.grades.table
-      IO.print (Program.mk (rep.el.prog.decls.map (Decl.requal q))).pp
-      return 0
-
 /-- Print the erasure of `file`'s checked `main`. -/
 def erase (file : String) : IO UInt32 := do
   let src ← IO.FS.readFile file
@@ -181,27 +153,6 @@ def typedDump (file : String) : IO UInt32 := do
   | .ok k =>
     for l in Backend2.dumpT 100000 0 k.main.t do IO.println l
     return 0
-
-/-- Print `file` as the rewriter reads it back (SPEC §54), once: the program's declarations after
-the library's, one declaration per instance, and `main`; then what the read-back made. With `identity`, the
-line of the identity criterion (`Backend2.identityLine`). -/
-def rewriteDump (identity : Bool) (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
-  match Backend.checkedOf file src with
-  | .error e => IO.eprintln e; return 1
-  | .ok k =>
-    if identity then
-      match Backend2.identityLine k with
-      | .error e => IO.eprintln s!"{file}: {e}"; return 1
-      | .ok l => IO.println l; return 0
-    match Rewrite.rules k.main >>= fun (_, t, keys, _) =>
-        (Rewrite.readBack k.el k.main k.cnts t).map (·, keys) with
-    | .error e => IO.eprintln s!"{file}: {e}"; return 1
-    | .ok ((el', nkeys, ndecls, poly), keys) =>
-      IO.print (Program.pp ⟨el'.prog.decls.drop el'.lib⟩)
-      let r0 := keys.map fun (a, st) => s!"{a.n} {repr st}"
-      IO.println s!"-- rewrite: {nkeys} instances, {ndecls} declarations, {poly} polymorphic; R0 {r0}"
-      return 0
 
 /-- Print `file`'s LIR (`Backend2/`). -/
 def lirDump (file : String) : IO UInt32 := do
@@ -231,21 +182,6 @@ def kinds (file : String) : IO UInt32 := do
       for h in r.handles do
         let ks := (List.range h.ks.length).zip h.ks |>.map fun (i, k) => k.render h.n i
         IO.println s!"{h.sp.start.render}: handle {h.n}{if h.boxed then " (boxed κ)" else ""}: {"; ".intercalate ks}"
-      return 0
-
-/-- **The grade census of `file`** (SPEC §53): each `handle` node of its checked terms, with each
-operation's count, how the count is fixed (inferred, declared, or written in a core row), the node
-and reason that pin a `1?`, its world, its clause's position and where `κ` is kept. -/
-def grades (file : String) : IO UInt32 := do
-  let src ← IO.FS.readFile file
-  match parseProgram src (lib := Frontend.Sugar.libSrc) with
-  | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
-  | .ok p =>
-    match Check.checkProgram p with
-    | .error e => IO.eprintln s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"; return 1
-    | .ok r =>
-      for h in r.handles do
-        IO.println (h.gradeLine r.grades)
       return 0
 
 /-- A set of frames as `bcc handled` prints it: its handler names, sorted, then whether it holds a
@@ -636,72 +572,12 @@ def main (argv : List String) : IO UInt32 := do
     | none => IO.eprintln "usage: bcc tailcalls <n>"; return 2
   | ["trusted", file] => trusted file
   | ["kinds", file] => kinds file
-  | ["grades", file] => grades file
   | ["handled", file] => handled file
   | ["sites", file] => sites file
   | ["desugar", file] => desugar file
-  | ["desugar", "--counted", file] => desugarCounted file
   | ["erase", file] => erase file
-  | ["rewrite", file] => rewriteDump false file
-  | ["rewrite", "--identity", file] => rewriteDump true file
-  | ["rewrite", "--typed", file] => do
-    -- The rewritten `main`'s typed term, as `bcc lir --typed` prints the source's.
-    let src ← IO.FS.readFile file
-    match Backend.checkedOf file src >>= fun k => Rewrite.run k with
-    | .error e => IO.eprintln e; return 1
-    | .ok (k', _) =>
-      for l in Backend2.dumpT 100000 0 k'.main.t do IO.println l
-      return 0
-  | ["rewrite", "--seed-run", sd, file] => do
-    -- R0's controls (SPEC §54): the program rewritten with a planted fault the kernel accepts,
-    -- run at the new backend's LIR interpreter, whose output the reject tests compare with the
-    -- golden.
-    let some seed := Rewrite.Seed.ofString? sd | IO.eprintln s!"unknown seed {sd}"; return 2
-    let src ← IO.FS.readFile file
-    match Backend.checkedOf file src >>= fun k => Rewrite.run k seed with
-    | .error e => IO.eprintln s!"refused: {e}"; return 1
-    | .ok (k', _) =>
-      match Backend2.interpStage "lir" (pure k') [] with
-      | .error e => IO.eprintln e; return 1
-      | .ok o => (← IO.getStdout).write o.out; return 0
-  | ["rewrite", "--seed", sd, file] => do
-    -- The reject tests (SPEC §54): R0 with a planted fault, which the kernel or the guard refuses.
-    let some seed := Rewrite.Seed.ofString? sd | IO.eprintln s!"unknown seed {sd}"; return 2
-    let src ← IO.FS.readFile file
-    match Backend.checkedOf file src with
-    | .error e => IO.eprintln e; return 1
-    | .ok k =>
-      match Rewrite.run k seed with
-      | .error e => IO.println s!"refused: {e}"; return 0
-      | .ok _ => IO.println "ACCEPTED"; return 1
-  | ["rewrite", "--diff", file] => do
-    let src ← IO.FS.readFile file
-    match Backend.checkedOf file src with
-    | .error e => IO.eprintln e; return 1
-    | .ok k =>
-      match Rewrite.run k with
-      | .error e => IO.eprintln e; return 1
-      | .ok (k', _) =>
-        let ps ← match Rewrite.mismatchPairs 3 Rewrite.fuel k.main.t k'.main.t [] with
-          | .ok ps => pure ps
-          | .error e => IO.eprintln e; return 1
-        for (a, b) in ps do
-          IO.println s!"== at {a.info.sp.start.render}: source"
-          for l in (Backend2.dumpT 6 0 a).take 40 do IO.println l
-          IO.println "== rewritten"
-          for l in (Backend2.dumpT 6 0 b).take 40 do IO.println l
-        return 0
   | ["lir", "--typed", file] => typedDump file
   | ["lir", file] => lirDump file
-  | ["lir", "--source", file] => do
-    -- The LIR of the source's checked program, before the rewriter (SPEC §54): what R0's counts
-    -- are measured against.
-    let src ← IO.FS.readFile file
-    match Backend.checkedOf file src >>= fun k => Backend2.lirOfChecked k with
-    | .error e => IO.eprintln e; return 1
-    | .ok (p, _) =>
-      for l in p.pp do IO.println l
-      return 0
   | ["lir", "--erasure", file] => do
     let src ← IO.FS.readFile file
     match Backend.checkedOf file src with
@@ -717,12 +593,6 @@ def main (argv : List String) : IO UInt32 := do
     match Backend.checkedOf file src >>= Backend2.framesLine with
     | .error e => IO.eprintln e; return 1
     | .ok l => IO.println l; return 0
-  | ["lir", "--layout-reject", file] => do
-    let src ← IO.FS.readFile file
-    match Backend.checkedOf file src >>= Backend2.rejectReport with
-    | .error e => IO.eprintln e; return 1
-    | .ok ls => for l in ls do IO.println l
-                return 0
   | ["lir", "--layout", file] => do
     let src ← IO.FS.readFile file
     match Backend.checkedOf file src >>= Backend2.layoutReport with

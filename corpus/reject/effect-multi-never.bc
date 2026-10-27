@@ -1,7 +1,6 @@
--- An unrestricted operation that answers `never`: an unrestricted continuation is not a type
--- (SPEC §53), so `multi ctl` is removed; an abortive operation's count is `0`.
--- reject: syntax
--- expect: 5:15: `multi ctl`: an unrestricted continuation is not a type; an operation is `ctl`, its count inferred, or `linear ctl` (SPEC §53)
+-- An unrestricted operation that answers `never` (SPEC §18): an abortive operation is affine
+-- (decision 63), so `multi ctl` is not provided for one.
+-- expect: 4:25: `boom` is `multi ctl` and answers `never`: an operation that never resumes is affine, `ctl` (decision 63)
 effect Boom { multi ctl boom() -> never }
 
 main -> i32 = 0

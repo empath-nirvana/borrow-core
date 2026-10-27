@@ -45,13 +45,12 @@ async-r1-nested 2 3 0 4 4 0 # the two lent cells
 async-race 3 15 0 3 3 0 # the three tasks' buffers; one indirect call per resume or cancel of a task, whose code `race` does not know
 async-scheduler 5 6 0 470 464 20 # the scheduler's list nodes, four per round of `run_until_empty`; one indirect call per resume of a stored task, whose code the queue does not know; a bounds check per slot visit; the slots an array resumed in place (§52): no list node per await; the array's fill, its slot moves and a bounds check per slot visit
 async-scoped 25 4 0 283 273 0 # the read cell `cfg`, the scheduler's list nodes, rebuilt at each round, and the result list's; the scope's unit cell `d` takes no words; an indirect call per resume of a stored task
-async-slice-iter-await 21 5 0 374 370 4
 async-stack-cancel 808 5 0 10015 11617 0
 async-stack-deep 6104 4750 0 20838453 23785275 14412
 async-stack-nested 24 46 0 1030 1098 40
 async-timers 40 5 0 440 422 0 # the pending and finished lists' nodes; one indirect call per wake or cancel of a stored task
 async-try-join 28 17 0 498 492 0 # the groups' list nodes and the jobs' cells; one indirect call per resume or cancel of a task
-async-two-readers-views 41 8 0 750 737 7
+async-unr-site 10 11 0 400 417 18
 async-workers-scoped 43 7 1 792 776 0
 axes/borrow-across-loop 2 0 0 30 13 4
 axes/codata-coeffects 2 0 0 27 10 16
@@ -91,19 +90,6 @@ core-effects-loop 0 0 0 0 0 0
 core-effects-reborrows 3 0 0 5 4 0
 core-effects-result 0 0 0 0 0 0
 core-effects-tail 0 0 0 0 0 0
-core-handle-last 0 0 0 0 0 0
-core-handle-tail 0 0 0 0 0 0
-core-handle-tail-abort 0 0 0 0 0 0
-core-r0-fin-instances 2 0 0 2 2 0
-core-r0-forward 2 0 0 2 2 0
-core-r0-forward-last 0 0 0 0 0 0
-core-r0-lend-two 2 0 0 2 2 0
-core-r0-linear 1 0 0 1 1 0
-core-r0-nested 0 0 0 0 0 0
-core-r0-pi-instances 1 0 0 1 1 0
-core-r0-two-ops 0 0 0 0 0 0
-core-r0-unwind 2 0 0 2 2 0
-core-r0-unwind-linear 0 0 0 0 0 0
 core-yield-loop 0 0 0 0 0 0 # its clause resumes or cancels: a state machine, with no allocation and no dispatched call
 core-yield-pull 0 0 0 0 0 0 # equal to corpus/gen-fib.bc, its surface form
 count-down 0 0 0 0 0 0
@@ -376,9 +362,6 @@ reconcile-chain 19 3 0 457 458 0 # the journals' list nodes, and the continuatio
 reconcile-clock 25 8 0 397 377 0 # the fake clock's cells, the journals' list nodes, and the continuations the clauses that resume before they answer capture; the platform's clock cell is a word of the program's data; the indirect calls are of `on_clock`'s answer, a function of its state (the clock capability) built by its return clause or by its `pause` clause (SPEC §19, *Handler state*)
 retry-block 2 0 0 5 5 0 # the clock cells
 reverse-bytes 1 0 0 132 91 41
-rewrite-case-ascription 0 0 0 0 0 0
-rewrite-instance-dom 1 0 0 2 1 0
-rewrite-instance-targs 1 0 0 2 1 0
 sched-a 63 18 0 1558 897 0
 sched-a-div 31 5 0 1462 801 0
 sched-b 64 18 0 1561 898 0

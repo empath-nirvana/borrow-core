@@ -76,8 +76,6 @@ inductive RTy where
   | lapp (sp : Span) (F : RTy) (a : Life)
   /-- `(A => B with E₁, E₂[T])`: a function type with a provided row (`VTy.rowed`).  `[spec §33]` -/
   | rowed (sp : Span) (F : RTy) (effs : List (Ident × List VTy))
-  /-- `kont[n.i q] B C` (`VTy.kont`).  `[spec §53]` -/
-  | kont (sp : Span) (n i : Nat) (q : Qual) (B C : RTy)
 
 def RTy.span : RTy → Span
   | .unit sp | .zero sp | .tensor sp _ _ | .sum sp _ _ | .U sp _ | .F sp _ | .ref sp _
@@ -86,7 +84,7 @@ def RTy.span : RTy → Span
   | .top sp | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _ | .nu sp _ _ | .delay sp _
   | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .pull sp _ _ _ | .array sp _ | .arrayImm sp _ _
   | .arrayMut sp _ _ | .sized sp _ _ _ | .eff sp _ _ | .app sp _ _ | .lapp sp _ _
-  | .rowed sp _ _ | .kont sp _ _ _ _ _ => sp
+  | .rowed sp _ _ => sp
 
 /-- What a raw type is, for sort errors. -/
 def RTy.former : RTy → String
@@ -137,7 +135,6 @@ def RTy.toV : RTy → Except Error VTy
     match ← G.toV with
     | H@(.lolli ..) => pure (.rowed sp H (VTy.ofRowEffs sp es))
     | H => .error ⟨H.span, "a provided row `with E` is written on a function type `A => B`"⟩
-  | .kont sp n i q B C => return .kont sp n i q (← B.toV) (← C.toC)
   | t@(.F ..) | t@(.arr ..) | t@(.forall_ ..) | t@(.amp ..) | t@(.top ..) | t@(.nu ..)
   | t@(.delay ..) | t@(.stream ..) | t@(.iter ..) | t@(.loop ..) | t@(.pull ..)
   | t@(.eff ..) => sortErr t true
@@ -604,18 +601,6 @@ def rtyPrefix : Nat → P RTy
       let R ← rtyPrefix n
       let R' ← rtyPrefix n
       pure (.iter (← spanFrom st) A R R')
-    -- `kont[n.i q] B C`, the continuation of the operation `n.i` (SPEC §53), read in a type only.
-    | .ident "kont" =>
-      if (← peekAt 1).tok == .sym "[" then
-        discard bump
-        discard bump
-        let (k, i) ← opNameNI "an operation `n.i`"
-        let q ← rowQual
-        expectSym "]"
-        let B ← rtyPrefix n
-        let C ← rtyPrefix n
-        pure (.kont (← spanFrom st) k i q B C)
-      else rtyAtom n
     -- `pull A B R`, read in a type only: `pull` is not reserved.
     | .ident "pull" =>
       discard bump
@@ -771,40 +756,19 @@ def opNameNI (what : String) : P (Nat × Nat) := do
     | none => expected what
   | _ => expected what
 
-/-- A row entry's count word: `lin`, `aff` or `ctl` (the count inferred).  `[spec §53]` -/
-def rowQual : P Qual := do
-  let tq ← peek
-  match tq.tok with
-  | .ident "lin" => discard bump; pure Qual.lin
-  | .ident "aff" => discard bump; pure Qual.aff
-  | .ident "ctl" => discard bump; pure Qual.infer
-  | .ident "unr" => failAt tq.span ("`unr`: an unrestricted continuation is not a type; a " ++
-      "row's count is `lin`, `aff` or `ctl` (SPEC §53)")
-  | _ => expected "a count `lin`, `aff` or `ctl`"
-
-/-- The operations' counts of `handle_tail[n: q, …]` and `handle_last[n: q, …]`, at most `f` of
-them: `0`, `lin` (`1`) or `aff` (`1?`).  `[spec §53, §54]` -/
-def countList : Nat → P (List OpCount)
-  | 0 => pure []
-  | f + 1 => do
-    let q ← match (← peek).tok with
-      | .int 0 => discard bump; pure OpCount.zero
-      | .ident "lin" => discard bump; pure OpCount.one
-      | .ident "aff" => discard bump; pure OpCount.opt
-      | _ => expected "a count `0`, `lin` or `aff`"
-    if ← isSym "," then
-      discard bump
-      return q :: (← countList f)
-    return [q]
-
 /-- The entries of a row up to its `]`: `n.i q A ~> B`, separated by `,`; `q` is `lin`, `aff` or
-`ctl` (the count inferred), read as a name here and nowhere else. -/
+`unr`, read as a name here and nowhere else. -/
 def rowEntries : Nat → P Row
   | 0 => outOfFuel
   | n + 1 => do
     if ← isSym "]" then return .nil
     let (k, i) ← opNameNI "an operation `n.i` of a row"
-    let q ← rowQual
+    let tq ← peek
+    let q ← match tq.tok with
+      | .ident "lin" => discard bump; pure Qual.lin
+      | .ident "aff" => discard bump; pure Qual.aff
+      | .ident "unr" => discard bump; pure Qual.unr
+      | _ => expected "a qualifier `lin`, `aff` or `unr`"
     let A ← rvty n
     expectSym "~>"
     let B ← rvty n
@@ -1047,7 +1011,7 @@ def Comp.lentNames (vars : Bool := false) : Comp → List String
   | .case _ V _ M _ N | .loop _ _ _ V M N => V.lentNames vars ++ M.lentNames vars ++ N.lentNames vars
   | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.lentNames vars
   | .perform _ _ _ V | .abort _ _ _ V => V.lentNames vars
-  | .handle _ _ _ _ hr hc M => hr.lentNames vars ++ hc.lentNames vars ++ M.lentNames vars
+  | .handle _ _ _ hr hc M => hr.lentNames vars ++ hc.lentNames vars ++ M.lentNames vars
   | .unwind _ _ _ M D N => M.lentNames vars ++ D.lentNames vars ++ N.lentNames vars
   | _ => []
 end
@@ -1079,7 +1043,7 @@ def Comp.withPlaces (loc : List String) : Comp → List String
   | .loop _ _ src V M N => V.withPlaces loc ++ M.withPlaces (src.bound ++ loc) ++ N.withPlaces loc
   | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.withPlaces loc
   | .perform _ _ _ V | .abort _ _ _ V => V.withPlaces loc
-  | .handle _ _ _ _ hr hc M => hr.withPlaces loc ++ hc.withPlaces loc ++ M.withPlaces loc
+  | .handle _ _ _ hr hc M => hr.withPlaces loc ++ hc.withPlaces loc ++ M.withPlaces loc
   | .unwind _ x _ M D N => M.withPlaces loc ++ D.withPlaces loc ++ N.withPlaces (x.name :: loc)
   | _ => []
 end
@@ -1093,7 +1057,7 @@ def Comp.boundNames : Comp → List String
   | .lam _ x _ M => x.name :: M.boundNames
   | .letUnit _ _ M | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M =>
     M.boundNames
-  | .handle _ _ _ _ _ _ M => M.boundNames
+  | .handle _ _ _ _ _ M => M.boundNames
   | .unwind _ x _ M D N => x.name :: (M.boundNames ++ D.boundNames ++ N.boundNames)
   | _ => []
 
@@ -1184,8 +1148,7 @@ def startsComp (t : Tok) : Bool :=
   match t with
   | .kw "return" | .kw "absurd" | .kw "nu_in" | .kw "delay_in" | .kw "stream_in" | .kw "nu_out"
   | .kw "delay_out" | .kw "stream_out" | .kw "force" | .sym "<" | .kw "case" | .kw "match"
-  | .kw "if" | .kw "perform" | .kw "abort" | .kw "handle_with" | .kw "handle_tail"
-  | .kw "handle_last" | .kw "withbor2r" => true
+  | .kw "if" | .kw "perform" | .kw "abort" | .kw "handle_with" | .kw "withbor2r" => true
   | _ => false
 
 /-- A binary operator: one of the surface's arithmetic and comparisons, or `&&`/`||`, which are
@@ -2315,19 +2278,13 @@ def compPrefix : Nat → P Comp
       let V ← valPrefix n
       let sp ← spanFrom st
       pure (if t.tok == .kw "perform" then .perform sp k i V else .abort sp k i V)
-    | .kw "handle_with" | .kw "handle_tail" | .kw "handle_last" =>
-      -- `handle_with[n](V, W) M` (SPEC §19): the answer clause and the clauses, values;
-      -- `handle_tail[n: q, …](V, W) M` (SPEC §14) and `handle_last[n: q, …](V, (W, X)) M` (SPEC
-      -- §51): the clauses written out by the rule, the operations' counts named.  `[spec §54]`
+    | .kw "handle_with" =>
+      -- `handle_with[n](V, W) M` (SPEC §19): the answer clause and the clauses, values.
       discard bump
       expectSym "["
       let k ← match (← peek).tok with
         | .int k => discard bump; pure k
         | _ => expected "the name `n` of a handler"
-      let form ← if t.tok == .kw "handle_with" then pure HForm.clauses else do
-        expectSym ":"
-        let qs ← countList 64
-        pure (if t.tok == .kw "handle_tail" then HForm.tail qs else HForm.last qs)
       expectSym "]"
       expectSym "("
       let angle := (← get).angle
@@ -2338,7 +2295,7 @@ def compPrefix : Nat → P Comp
       expectSym ")"
       modify fun s => { s with angle }
       let M ← compPrefix n
-      pure (.handle (← spanFrom st) k form none hr hc M)
+      pure (.handle (← spanFrom st) k none hr hc M)
     | .kw "withbor2r" =>
       -- `withbor2r['x, @b, A, B, [ROW]](p, m) M`, the relaxed lend (SPEC §29).
       discard bump
@@ -2795,10 +2752,8 @@ def decl (n : Nat) : P Decl := do
         else do
           let q ← if ← isKw "linear" then do discard bump; pure Qual.lin
             else match (← peek).tok with
-              | .ident "multi" => do
-                failAt (← peek).span ("`multi ctl`: an unrestricted continuation is not a type; " ++
-                  "an operation is `ctl`, its count inferred, or `linear ctl` (SPEC §53)")
-              | _ => pure Qual.infer
+              | .ident "multi" => do discard bump; pure Qual.unr
+              | _ => pure Qual.aff
           match (← peek).tok with
           | .ident "ctl" => do discard bump; pure (OpKind.ctl q)
           | _ => expected "`fn` or `ctl` (an operation)"

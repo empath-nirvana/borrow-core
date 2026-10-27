@@ -48,16 +48,6 @@ structure CheckedProg where
   prog : Frontend.Program
   main : Frontend.Check.Checked
   io : Option Frontend.Check.IOMain
-  /-- The counts the checker inferred (SPEC §53): `run_io`'s wrapper is checked at them. -/
-  cnts : Frontend.Check.CntTable := {}
-  /-- The elaborated program the checker checked (`Report.el`), whose declarations the rewriter
-  reads (`Rewrite/Driver.lean`, SPEC §54). -/
-  el : Frontend.Elab.Elaborated
-  /-- `main` is served `Fail[DivError]` (`Checked.exitsOnDivError`, SPEC §39), read from the
-  source's check and carried through the rewriter, which may remove the node it is read from. -/
-  exits : Bool
-  /-- `main` is the rewriter's (`Rewrite.run`, SPEC §54). -/
-  rewritten : Bool := false
 
 /-- Parse and check `src`; a `main` with externs must be a standard I/O program (SPEC §11). -/
 def checkedOf (file src : String) : Except String CheckedProg := do
@@ -69,9 +59,7 @@ def checkedOf (file src : String) : Except String CheckedProg := do
     | .error e => throw s!"{file}:{e.renderIn src Frontend.Sugar.libSrc}"
   let some c := r.main | throw s!"{file}: no `main`"
   match Frontend.Check.ioMainOf r.el.prog c with
-  | .ok io =>
-    let cnts : Frontend.Check.CntTable := { ops := r.grades.table }
-    pure { prog := r.el.prog, main := c, io := io, cnts := cnts, el := r.el, exits := c.exitsOnDivError }
+  | .ok io => pure ⟨r.el.prog, c, io⟩
   | .error e => throw s!"{file}: {e}"
 
 /-- The host implementation of each extern, in declaration order. -/
@@ -309,7 +297,7 @@ def ioRunOf (file : String) (k : CheckedProg) (m : Frontend.Check.IOMain)
   let w ← match Frontend.Check.ioWrapper k.prog m args with
     | .ok w => pure w
     | .error e => throw s!"{file}: {e}"
-  match Frontend.Check.ioRunOf w k.cnts with
+  match Frontend.Check.ioRunOf w with
   | .ok r => pure r
   | .error e => throw s!"{file}: {e}"
 

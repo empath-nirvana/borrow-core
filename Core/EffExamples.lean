@@ -20,7 +20,7 @@ open BoCa.BoLo (Heap Steps performE)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-- The effect: one linear operation `1 ↠ 1`. -/
-abbrev E₁ : List (Count × VTy × VTy) := [(.one, .unit, .unit)]
+abbrev E₁ : List (Qual × VTy × VTy) := [(.lin, .unit, .unit)]
 
 /-- The clause `λp. let (x, k) = p; (k (inj₁ ())) x`: resume `κ` with the argument. -/
 def cl₀ : Expr := .val (.lam (.letpair (.var 0) (.app (.app (.var 0) (.val (.inj₁ .unit))) (.var 1))))
@@ -33,9 +33,9 @@ def hr : Expr := .val (.lam (.var 0))
 
 /-- The program. -/
 def prog : Expr :=
-  bindE cls (bindE hr (hndTerm 1 [.one] 0 1 (performE (opArgE 1 0 (.val .unit)))))
+  bindE cls (bindE hr (hndTerm 1 [.lin] 0 1 (performE (opArgE 1 0 (.val .unit)))))
 
-theorem cl₀_derives : CDerives LifeCtx.empty [] cl₀ (.val (clauseTy [] .unit (.one, .unit, .unit))) := by
+theorem cl₀_derives : CDerives LifeCtx.empty [] cl₀ (.val (clauseTy [] .unit (.lin, .unit, .unit))) := by
   refine .bangThunkV (fun _ hs => by simp at hs) rfl (.lam ?_)
   refine .tensorE (.left .nil) (.var (.here .nil)) ?_
   refine .app (.left (.right (.dead .nil)))
@@ -50,7 +50,7 @@ theorem prog_derives : CDerives LifeCtx.empty [] prog (.comp (.ret .unit)) := by
   exact .effHandle (S := []) (E := E₁) (A := .unit) (R := .unit)
     (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
     (by decide) (by simp) (by simp) rfl
-    (.effPerform (o := ⟨1, 0, .one, .top, .unit, .unit, .ret .unit⟩) (by rfl) rfl (.unitI (.cons (.cons .nil))))
+    (.effPerform (o := ⟨1, 0, .lin, .unit, .unit, .ret .unit⟩) (by rfl) rfl (.unitI (.cons (.cons .nil))))
 
 /-- **Every run of the handled program reaches `()` at the empty memory.** -/
 theorem prog_runs {μ₁ : Heap} {e₁ : Expr} (hs : Steps Adequacy.emptyMem prog μ₁ e₁) :
@@ -65,9 +65,9 @@ def clC : Expr :=
 
 /-- The program with an affine operation whose clause cancels `κ`. -/
 def progC : Expr :=
-  bindE (.pair clC (.val .unit)) (bindE hr (hndTerm 1 [.opt] 0 1 (performE (opArgE 1 0 (.val .unit)))))
+  bindE (.pair clC (.val .unit)) (bindE hr (hndTerm 1 [.aff] 0 1 (performE (opArgE 1 0 (.val .unit)))))
 
-theorem clC_derives : CDerives LifeCtx.empty [] clC (.val (clauseTy [] .unit (.opt, .unit, .unit))) := by
+theorem clC_derives : CDerives LifeCtx.empty [] clC (.val (clauseTy [] .unit (.aff, .unit, .unit))) := by
   refine .bangThunkV (fun _ hs => by simp at hs) rfl (.lam ?_)
   refine .tensorE (.left .nil) (.var (.here .nil)) ?_
   refine .unitE (.right (.left (.dead .nil))) (.var (.there (.here (.cons .nil)))) ?_
@@ -79,10 +79,10 @@ theorem progC_derives : CDerives LifeCtx.empty [] progC (.comp (.ret .unit)) := 
   refine .bind (.right .nil)
     (.ret (.bangThunkV (C := .arr .unit (.ret .unit)) (fun s hs hl => by
       simp at hs; subst hs; simp at hl) rfl (.lam (.ret (.var (.here (.cons .nil))))))) ?_
-  exact .effHandle (S := []) (E := [(.opt, .unit, .unit)]) (A := .unit) (R := .unit)
+  exact .effHandle (S := []) (E := [(.aff, .unit, .unit)]) (A := .unit) (R := .unit)
     (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
     (by decide) (by simp) (by simp) rfl
-    (.effPerform (o := ⟨1, 0, .opt, .top, .unit, .unit, .ret .unit⟩) (by rfl) rfl (.unitI (.cons (.cons .nil))))
+    (.effPerform (o := ⟨1, 0, .aff, .unit, .unit, .ret .unit⟩) (by rfl) rfl (.unitI (.cons (.cons .nil))))
 
 /-- **Every run of the cancelling program reaches `()` at the empty memory.** -/
 theorem progC_runs {μ₁ : Heap} {e₁ : Expr} (hs : Steps Adequacy.emptyMem progC μ₁ e₁) :

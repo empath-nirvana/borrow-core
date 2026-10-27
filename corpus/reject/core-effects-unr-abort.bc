@@ -1,7 +1,6 @@
--- An unrestricted operation that answers `0`, in a row of the core text: an unrestricted
--- continuation is not a type (SPEC §53), so a row's count is `lin`, `aff` or `ctl`.
--- reject: syntax
--- expect: 5:29: `unr`: an unrestricted continuation is not a type; a row's count is `lin`, `aff` or `ctl` (SPEC §53)
+-- An unrestricted operation that answers `0`, in a row of the core text (SPEC §18, §19): an
+-- abortive operation is affine (decision 63).
+-- expect: 4:23: the operation 1.0 is unrestricted and answers `0`: an abortive operation is affine, `1.0 aff … ~> 0` (decision 63)
 def fail : !U (i32 -o F[1.0 unr i32 ~> 0] i32) =
   !thunkv fun (x : i32) -> abort[1.0] x
 

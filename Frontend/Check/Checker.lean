@@ -1,6 +1,5 @@
 import Frontend.Check.Pin
 import Frontend.Check.Kinds
-import Frontend.Check.Reinfo
 
 /-!
 # Frontend — Check — the bidirectional checker
@@ -91,18 +90,15 @@ def siteErr (sp : Span) (r : SiteRec) (what : String) : Error :=
 def siteTy (E : Env) (Δ : LifeCtx) (sp : Span) (r : SiteRec) (A : VTy) : Except Error CVTy :=
   (E.elabV Δ A).mapError fun e => siteErr sp r s!"has a type that is not one here: {e.msg}"
 
-/-- The record's operations, elaborated, each at its count (`Scope.cntOf`).  `[spec §53]` -/
+/-- The record's operations, elaborated. -/
 def siteEnts (E : Env) (Δ : LifeCtx) (sp : Span) (r : SiteRec) :
-    Except Error (List (CCount × CVTy × CVTy)) :=
-  r.ents.mapIdxM fun j (q, A, B) => do
-    let A' ← siteTy E Δ sp r A
-    let B' ← siteTy E Δ sp r B
-    pure (E.scope.cntOf r.n j q B', A', B')
+    Except Error (List (CQual × CVTy × CVTy)) :=
+  r.ents.mapM fun (q, A, B) => do pure (q.toCore, ← siteTy E Δ sp r A, ← siteTy E Δ sp r B)
 
 /-- The operations a site of the kind `k` whose effect's operations are `ents` handles, among the
 node's `Es`: a `for`'s site threads the variables its body uses, `W`, through its operations, each
 passing them beside its argument and answering them (SPEC §15); any other, `ents`. -/
-def recOps (k : SiteKind) (ents Es : List (CCount × CVTy × CVTy)) : List (CCount × CVTy × CVTy) :=
+def recOps (k : SiteKind) (ents Es : List (CQual × CVTy × CVTy)) : List (CQual × CVTy × CVTy) :=
   match k, Es.head? with
   | .forSite, some (_, _, W) => ents.map fun (q, A, _) => (q, .tensor A W, W)
   | _, _ => ents
@@ -113,7 +109,7 @@ with no record (one the program writes in core). The record names the node's nam
 operations are the node's `E`, the operations the derivation handles (`recOps`,
 `siteOf_ops`): a record that does not is an internal error.  `[spec §19]` -/
 def siteOf (E : Env) (Δ : LifeCtx) (sp : Span) (n : Nat) (st : Option SiteRec)
-    (Es : List (CCount × CVTy × CVTy)) : Except Error (Option HSite) := do
+    (Es : List (CQual × CVTy × CVTy)) : Except Error (Option HSite) := do
   let some r := st | return none
   unless r.n == n do throw (siteErr sp r s!"is at the `handle` node of the name {n}")
   let ents ← siteEnts E Δ sp r
@@ -121,14 +117,13 @@ def siteOf (E : Env) (Δ : LifeCtx) (sp : Span) (n : Nat) (st : Option SiteRec)
     throw (siteErr sp r "does not have its `handle` node's operations")
   let args ← r.args.mapM (siteTy E Δ sp r)
   let state ← r.state.mapM fun (x, A) => do pure (x, ← siteTy E Δ sp r A)
-  let decl := r.ents.map (·.1)
-  pure (some { eff := r.eff, args, handler := r.handler, slot := r.slot, kind := r.kind, state, decl })
+  pure (some { eff := r.eff, args, handler := r.handler, slot := r.slot, kind := r.kind, state })
 
 /-- **A site's record has its node's operations**: when `siteOf` gives the node a site, the
 record the node carries names the node, and its operations, elaborated in the node's frame, are
 the node's `E` (at a `for`'s site, with the threaded variables).  `[spec §19]` -/
 theorem siteOf_ops {E : Env} {Δ : LifeCtx} {sp : Span} {n : Nat} {st : Option SiteRec}
-    {Es : List (CCount × CVTy × CVTy)} {s : HSite} (h : siteOf E Δ sp n st Es = .ok (some s)) :
+    {Es : List (CQual × CVTy × CVTy)} {s : HSite} (h : siteOf E Δ sp n st Es = .ok (some s)) :
     ∃ r ents, st = some r ∧ r.n = n ∧ siteEnts E Δ sp r = .ok ents ∧
       recOps r.kind ents Es = Es ∧ s.kind = r.kind ∧ s.eff = r.eff := by
   cases st with
@@ -176,89 +171,6 @@ def DefEntry.lift? (e : DefEntry) (decl : Nat) (targs : List CVTy) (Δ : LifeCtx
       else none
     else none
   else none
-
-/-! ### The rule-written handlers  `[spec §14, §51, §54]` -/
-
-/-- **`[handle]` at the tail-resuming rule's clauses** (`effHandleT`, SPEC §14): the premises of
-`rEffHandleT` over the checked answer clause `rr`, answering functions `rc` and handled
-computation `rM`, each decided here. -/
-def tailIt (E : Env) {Δ : LifeCtx} {T : List CVTy} (sp hcSp : Span) (k : Nat)
-    (site : Option HSite) (st : Option SiteRec) {S SN : CRow} {Es : List (CCount × CVTy × CVTy)} {A R : CVTy}
-    (rr : Res Δ T (.val (BoCa.Fig16.LogRel.Core.retTy S A R)))
-    (rc : Res Δ T (.val (BoCa.Fig16.LogRel.Core.ansesTy S SN R Es)))
-    (rM : Res Δ T (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A))) :
-    Except Error (Res Δ T (.comp (effOf S R))) := do
-  let nm := UInt32.ofNat k
-  if hn0 : nm ≠ 0 then
-   if hnd : nm ≠ BoCa.divEff then
-    if hnS : ∀ o ∈ S, o.n ≠ nm then
-     if hlen : Es.length ≤ 2 ^ 32 then
-      if hSN : rowLeB SN S = true then
-       if hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false then
-        if hov : overlapOK T rr.F.u rc.F.u = true then
-         if hp : usedSat BoCa.Fig16.LogRel.Core.VTy.persistent T
-             (rPair (at_ sp) rr rc hov).F.u = true then
-          if hv : valFormB (rPair (at_ sp) rr rc hov).F.u
-              (rPair (at_ sp) rr rc hov).t.erase = true then
-           if h₂ : overlapOK T (rPair (at_ sp) rr rc hov).F.u rM.F.u = true then
-             pure (rEffHandleT { sp, srec := st } site rr rc hov hp hv hn0 hnd hnS hlen hSN hLin rM h₂)
-           else throw (splitErr E T sp (rPair (at_ sp) rr rc hov).F.u rM.F.u)
-          else err sp "the handler's answering functions must be values"
-         else err sp "a handler's answering functions use only persistent variables"
-        else throw (splitErr E T sp rr.F.u rc.F.u)
-       else err hcSp (s!"the answering functions of `handle_tail` perform only operations at " ++
-         s!"the count 1 that are not abortive, but their row is `{ppRow E SN}`")
-      else err hcSp (s!"the answering functions' row `{ppRow E SN}` is not below the handler's " ++
-        s!"row `{ppRow E S}`")
-     else err sp "a handler has at most 2^32 operations"
-    else err sp s!"the name {k} is already in the row `{ppRow E S}` of the handler's answer"
-   else err sp "a handler's name is not `Div`'s"
-  else err sp "a handler's name is not 0"
-
-/-- **`[handle-last]`** (`effHandleL`, SPEC §51): the premises of `rEffHandleL` over the checked
-answer clause `rr`, works `rw`, exits `rn` and handled computation `rM`, each decided here. -/
-def lastIt (E : Env) {Δ : LifeCtx} {T : List CVTy} (sp hcSp : Span) (k : Nat)
-    (site : Option HSite) (st : Option SiteRec) {S SW : CRow} {Es : List (CCount × CVTy × CVTy)} {Xs : Nat → CVTy}
-    {A R : CVTy} (rr : Res Δ T (.val (BoCa.Fig16.LogRel.Core.retTy S A R)))
-    (rw : Res Δ T (.val (BoCa.Fig16.LogRel.Core.worksTy S SW R Xs Es 0)))
-    (rn : Res Δ T (.val (BoCa.Fig16.LogRel.Core.exitsTy S R Xs Es 0)))
-    (rM : Res Δ T (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A))) :
-    Except Error (Res Δ T (.comp (effOf S R))) := do
-  let nm := UInt32.ofNat k
-  if hn0 : nm ≠ 0 then
-   if hnd : nm ≠ BoCa.divEff then
-    if hnS : ∀ o ∈ S, o.n ≠ nm then
-     if hlen : Es.length ≤ 2 ^ 32 then
-      if hNZ : Row.nzB S = true then
-       if hAff : ∀ o ∈ Es, o.1.toQual = .aff ∨ (o.1 == .zero) = true then
-        if hSW : rowLeB SW S = true then
-         if hSu : Row.unrDB S = false then
-          if hov₁ : overlapOK T rw.F.u rn.F.u = true then
-           if hov : overlapOK T rr.F.u (rPair (at_ sp) rw rn hov₁).F.u = true then
-            if hp : usedSat BoCa.Fig16.LogRel.Core.VTy.persistent T
-                (rPair (at_ sp) rr (rPair (at_ sp) rw rn hov₁) hov).F.u = true then
-             if hv : valFormB (rPair (at_ sp) rr (rPair (at_ sp) rw rn hov₁) hov).F.u
-                 (rPair (at_ sp) rr (rPair (at_ sp) rw rn hov₁) hov).t.erase = true then
-              if h₂ : overlapOK T (rPair (at_ sp) rr (rPair (at_ sp) rw rn hov₁) hov).F.u
-                  rM.F.u = true then
-                pure (rEffHandleL { sp, srec := st } site rr rw rn hov₁ hov hp hv hn0 hnd hnS hlen hNZ hAff
-                  hSW hSu rM h₂)
-              else throw (splitErr E T sp
-                (rPair (at_ sp) rr (rPair (at_ sp) rw rn hov₁) hov).F.u rM.F.u)
-             else err sp "the handler's works and exits must be values"
-            else err sp "a handler's works and exits use only persistent variables"
-           else throw (splitErr E T sp rr.F.u (rPair (at_ sp) rw rn hov₁).F.u)
-          else throw (splitErr E T sp rw.F.u rn.F.u)
-         else err sp (s!"`handle_last` is at a row with no unrestricted operation, but its " ++
-           s!"row is `{ppRow E S}`")
-        else err hcSp (s!"the works' row `{ppRow E SW}` is not below the handler's row " ++
-          s!"`{ppRow E S}`")
-       else err sp "the operations of `handle_last` are at the count `1?` or `0`"
-      else err sp "the operation's name 0 is not in a handler's row"
-     else err sp "a handler has at most 2^32 operations"
-    else err sp s!"the name {k} is already in the row `{ppRow E S}` of the handler's answer"
-   else err sp "a handler's name is not `Div`'s"
-  else err sp "a handler's name is not 0"
 
 /-! ### The checker -/
 
@@ -393,7 +305,7 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
     | .ascribe _ V A => do
       let A' ← E.elabV Δ A
       let r ← chkV n E Δ T V A'
-      pure ⟨A', r.withAsc⟩
+      pure ⟨A', r⟩
     | .const sp c => synConst E Δ T sp c
     | .shorten sp m σ a V => do
       let s ← E.elabS Δ σ
@@ -505,7 +417,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       | [], rM =>
         let ⟨C, rN⟩ ← synC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N
         let FN ← popL E x.span x.name rN.F lin
-        if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rBind (atB sp [x.name]) rM FN h (ann := oA.isSome) (lin := lin)⟩
+        if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rBind (atB sp [x.name]) rM FN h⟩
         else throw (splitErr E T sp rM.F.u FN.u)
       | o :: os, rM =>
         -- The head performs operations (SPEC §19): the binding is at the current row.
@@ -513,7 +425,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
         let rM' ← liftRow E M.span S rM
         let ⟨_, rN⟩ ← atRow E N.span S
           (← synC n { (E.minus rM.F.u).pushOwn x.name A lin with row := some S } Δ (A :: T) N)
-        pure ⟨_, ← effBind E sp x lin rM' rN (ann := oA.isSome)⟩
+        pure ⟨_, ← effBind E sp x lin rM' rN⟩
     | .unwind sp x oA M D N => do
       let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
       let S := E.row.getD S'
@@ -523,7 +435,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
         (effOf [] .unit)
       let FN ← popL E x.span x.name rN.F
-      pure ⟨_, ← thenIt E sp x.name rM' FN rD (written := true) (ann := oA.isSome)⟩
+      pure ⟨_, ← thenIt E sp x.name rM' FN rD⟩
     | .perform sp k i V => do
       let ⟨_, o, hf⟩ ← findOp E sp "perform" k i
       if hna : o.abort = false then
@@ -533,48 +445,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     | .abort sp k i V => do
       let ⟨_, r⟩ ← abortIt n E Δ T sp k i V .zero
       pure ⟨_, r⟩
-    | .handle sp k (.tail qs) st hr hc M => do
-      -- `handle_tail[n: qs](h_ret, gs) M` (`effHandleT`, SPEC §14): the clauses written out by the
-      -- rule from the answering functions `gs`; the handled row may hold `Div`.
-      let ⟨Tr, rr⟩ ← synV n E Δ T hr
-      let ⟨Tc, rc⟩ ← synV n E Δ T hc
-      let some ⟨S, A, R, hr'⟩ := retRead Tr
-        | err hr.span (s!"the answer clause of the handler must have a type `!U(A -o F[…] R)`, " ++
-            s!"but it has type `{E.ppV Tr}`")
-      let some ⟨SN, Es, hc'⟩ := ansesRead S R (qs.map OpCount.toCore) Tc
-        | err hc.span (s!"the answering functions of `handle_tail` must have the types " ++
-            s!"`!U(A -o F[Σ_N] B)` of the operations, but they have type `{E.ppV Tc}`")
-      let rr' : Res Δ T (.val (BoCa.Fig16.LogRel.Core.retTy S A R)) := cast (by rw [hr']) rr
-      let rc' : Res Δ T (.val (BoCa.Fig16.LogRel.Core.ansesTy S SN R Es)) := cast (by rw [hc']) rc
-      unless k < 2 ^ 32 ∧ k ≠ 0 do err sp s!"a handler's name is between 1 and 2^32 - 1, not {k}"
-      let site ← siteOf E Δ sp k st Es
-      let rM ← chkC n E Δ T M
-        (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A)
-      pure ⟨_, ← tailIt E sp hc.span k site st rr' rc' rM⟩
-    | .handle sp k (.last qs) st hr hc M => do
-      -- `handle_last[n: qs](h_ret, (ws, nfs)) M` (`effHandleL`, SPEC §51): the clauses written out
-      -- by the rule from the works `ws` and the exits `nfs`; the handled row may hold `Div`.
-      let .pair _ hw hn := hc
-        | err hc.span "the clauses of `handle_last` are a pair `(works, exits)`"
-      let ⟨Tr, rr⟩ ← synV n E Δ T hr
-      let ⟨Tw, rw⟩ ← synV n E Δ T hw
-      let ⟨Tn, rn⟩ ← synV n E Δ T hn
-      let some ⟨S, A, R, hr'⟩ := retRead Tr
-        | err hr.span (s!"the answer clause of the handler must have a type `!U(A -o F[…] R)`, " ++
-            s!"but it has type `{E.ppV Tr}`")
-      let some ⟨SW, Es, Xs, hW, hN⟩ := lastRead S R (qs.map OpCount.toCore) Tw Tn
-        | err hc.span (s!"the works and exits of `handle_last` must have the types " ++
-            s!"`!U(A -o F[Σ_W] (B + X))` and `!U(X -o F[Σ] R)`, but they have types " ++
-            s!"`{E.ppV Tw}` and `{E.ppV Tn}`")
-      let rr' : Res Δ T (.val (BoCa.Fig16.LogRel.Core.retTy S A R)) := cast (by rw [hr']) rr
-      let rw' : Res Δ T (.val (BoCa.Fig16.LogRel.Core.worksTy S SW R Xs Es 0)) := cast (by rw [hW]) rw
-      let rn' : Res Δ T (.val (BoCa.Fig16.LogRel.Core.exitsTy S R Xs Es 0)) := cast (by rw [hN]) rn
-      unless k < 2 ^ 32 ∧ k ≠ 0 do err sp s!"a handler's name is between 1 and 2^32 - 1, not {k}"
-      let site ← siteOf E Δ sp k st Es
-      let rM ← chkC n E Δ T M
-        (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A)
-      pure ⟨_, ← lastIt E sp hc.span k site st rr' rw' rn' rM⟩
-    | .handle sp k .clauses st hr hc M => do
+    | .handle sp k st hr hc M => do
       -- The handler's pair: the answer clause and the clauses, values checked here, whose
       -- slots are persistent (`[handle]`'s `Γ₁`).
       let what (V : Val) (d : String) : String := match V with
@@ -610,7 +481,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                             let rM ← chkC n E Δ T M (effOf Sh A)
                             if hso : usedSat (outlivesB Δ d) T rM.F.u = true then
                               if h₂ : overlapOK T rH.F.u rM.F.u = true then
-                                pure ⟨_, rEffHandleB { sp, srec := st } (classifyHandler Es rH.t) site hr' hc' rH
+                                pure ⟨_, rEffHandleB (at_ sp) (classifyHandler Es rH.t) site hr' hc' rH
                                   hp hv hn0 hnS hlen hdv hwf hSd rM hso h₂⟩
                               else throw (splitErr E T sp rH.F.u rM.F.u)
                             else match firstBad (outlivesB Δ d) T rM.F.u with
@@ -643,7 +514,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                         let rM ← chkC n E Δ T M
                           (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) A)
                         if h₂ : overlapOK T rH.F.u rM.F.u = true then
-                          pure ⟨_, rEffHandle { sp, srec := st } (classifyHandler Es rH.t) site hr' hc' rH hp hv
+                          pure ⟨_, rEffHandle (at_ sp) (classifyHandler Es rH.t) site hr' hc' rH hp hv
                             hn0 hnS hlen hdv rM h₂⟩
                         else throw (splitErr E T sp rH.F.u rM.F.u)
                        else err sp divHandleMsg
@@ -739,7 +610,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let v := Δ.freshVar
       let ⟨_, rM⟩ ← synC n { E.push none with lenv := (x.name, v) :: E.lenv } (Δ.extend v bl)
         (.unit :: T) M
-      pure ⟨_, ← funIt E T sp x.name rM (b matches .dom _)⟩
+      pure ⟨_, ← funIt E T sp x.name rM⟩
     | .inst sp M a => do
       let al ← E.elabL Δ a
       let ⟨C, r⟩ ← synC n E Δ T M
@@ -766,7 +637,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     | .ascribe _ M C => do
       let C' ← E.elabC Δ C
       let r ← chkC n E Δ T M C'
-      pure ⟨C', r.withAsc⟩
+      pure ⟨C', r⟩
     | .withbor2r sp x b A B r p m M => do
       -- R1, the relaxed lend (SPEC §29): its body sees the view alone.
       let bl ← E.elabL Δ b
@@ -796,7 +667,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
                       if hM1 : BoCa.Fig16.LogRel.Core.closedAt 1 rM.e = true then
                         if hcb : BoCa.Fig16.LogRel.Core.closedAt 0 (BoCa.Fig16.LogRel.Core.lendCb rM.e).1 = true then
                           if h : overlapOK T (Fam.deadStrict T).u (oneL T i) = true then
-                            pure ⟨_, rLendR { sp, binders := [m.name], dom := b matches .dom _ } ⟨"R1", sp.start.line, sp.start.col⟩ v bl i (hA ▸ hi)
+                            pure ⟨_, rLendR (at_ sp) ⟨"R1", sp.start.line, sp.start.col⟩ v bl i (hA ▸ hi)
                               (defines_of_wf hwf) hx hbx (boundsAvoidB_sound hΔx) hT hB
                               (noThunkB_sound hBn) hside (Row.resumeOB_sound hS) hdt hdc hde rM hL hM1
                               hcb h⟩
@@ -872,7 +743,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
         | some (S, A) =>
           if hC : effOf S A = C then do
             let r : Res Δ T (.comp (effOf [] A)) := rRet (at_ sp) (← chkV n E Δ T V A)
-            pure (hC ▸ rEffSub (at_ sp) (S := []) rfl r (ins := true))
+            pure (hC ▸ rEffSub (at_ sp) (S := []) rfl r)
           else err sp "internal error: a returner chain"
         | none => err sp s!"`return V` is checked against `{E.ppC C}`, which is not an `F` type"
     | .bind sp x oA M N lin => do
@@ -881,7 +752,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       | [], rM =>
         let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N C
         let FN ← popL E x.span x.name rN.F lin
-        if h : overlapOK T rM.F.u FN.u = true then pure (rBind (atB sp [x.name]) rM FN h (ann := oA.isSome) (lin := lin))
+        if h : overlapOK T rM.F.u FN.u = true then pure (rBind (atB sp [x.name]) rM FN h)
         else throw (splitErr E T sp rM.F.u FN.u)
       | o :: os, rM =>
         -- The head performs operations (SPEC §19): the binding is at the row of `C`.
@@ -890,7 +761,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           if hC : effOf S B = C then do
             let rM' ← liftRow E M.span S rM
             let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N (effOf S B)
-            pure (hC ▸ (← effBind E sp x lin rM' rN (ann := oA.isSome)))
+            pure (hC ▸ (← effBind E sp x lin rM' rN))
           else err sp "internal error: a returner chain"
         | none => err sp (s!"the bound computation performs the operations " ++
             s!"`{ppRow E (o :: os)}`, so this must have a type `F[…] B`, but `{E.ppC C}` is expected")
@@ -904,7 +775,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
             (effOf [] .unit)
           let FN ← popL E x.span x.name rN.F
-          pure (hC ▸ (← thenIt E sp x.name rM' FN rD (written := true) (ann := oA.isSome)))
+          pure (hC ▸ (← thenIt E sp x.name rM' FN rD))
         else err sp "internal error: a returner chain"
       | none => err sp s!"`x <- M unwind (D); N` is checked against `{E.ppC C}`, which is not `F[…] B`"
     | .abort sp k i V =>
@@ -970,7 +841,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
         if hb : bl = b₀ then do
           let rM ← chkC n { E.push none with lenv := (x.name, v) :: E.lenv } (Δ.extend v bl)
             (.unit :: T) M C
-          pure (hb ▸ (← funIt E T sp x.name rM (b matches .dom _)))
+          pure (hb ▸ (← funIt E T sp x.name rM))
         else err b.span s!"the bound is `{E.ppL bl}`, but the expected type has bound `{E.ppL b₀}`"
       | C => err sp s!"`Fun` is checked against `{E.ppC C}`, which is not a `forall` type"
     | .nuIn sp M =>

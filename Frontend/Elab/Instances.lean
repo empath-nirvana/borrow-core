@@ -74,7 +74,7 @@ def hasPhC : CCTy → Bool
   | .amp C D => hasPhC C || hasPhC D
   | .nu C | .all _ _ C => hasPhC C
   | .top => false
-  | .eff _ _ _ _ A B fin C => hasPhV A || hasPhV B || hasPhC fin || hasPhC C
+  | .eff _ _ _ A B fin C => hasPhV A || hasPhV B || hasPhC fin || hasPhC C
 end
 
 /-- A type of the frame of a declaration with type parameters `names`, as surface syntax: each
@@ -305,7 +305,7 @@ def walkC (d : Decls) (owner : String) (names : List String) : Nat → TCx → C
       | none => walkC d owner names n c.pushDead M
     | .app _ M _ | .proj _ _ M | .inst _ M _ | .nuIn _ M | .nuOut _ M | .ascribe _ M _ =>
       walkC d owner names n c M
-    | .handle _ _ _ _ hr hc M => do
+    | .handle _ _ _ hr hc M => do
       walkV d owner names n c hr
       walkV d owner names n c hc
       walkC d owner names n c M
