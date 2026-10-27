@@ -186,6 +186,40 @@ def pureT : TExpr → Bool
   | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t | .use _ _ _ _ _ _ t => pureT t
   | t => constNode t && effFreeB t.erase
 
+/-! ### Masks that agree with the leaves -/
+
+/-- **The masks agree with the leaves**: along `own`'s flow of live slots, every variable a leaf
+reads (`var`, `force`, `M x`'s argument) is live where it is read. The checker's masks are its
+parts' uses (`Fam.split`), so its typed terms have this; the typed rules ask less of a mask
+(`SplitMasks`: a slot a mask holds is live in its part). -/
+def agreeAt : List Bool → TExpr → Bool
+  | L, .var _ _ i _ => lv L i
+  | L, .force _ _ i _ => lv L i
+  | L, .tensorI _ _ _ _ u t₁ t₂ | L, .unitE _ _ _ u t₁ t₂ | L, .lolliE _ _ _ _ u t₁ t₂ =>
+      agreeAt (part L (mk u.u₁)) t₁ && agreeAt (part L (mk u.u₂)) t₂
+  | L, .bind _ _ _ _ u tM tN =>
+      agreeAt (part L (mk u.u₁)) tM && agreeAt (true :: part L (mk u.u₂)) tN
+  | L, .tensorE _ _ _ _ _ u tV tM =>
+      agreeAt (part L (mk u.u₁)) tV && agreeAt (true :: true :: part L (mk u.u₂)) tM
+  | L, .sumE _ _ _ _ _ u tV t₁ t₂ =>
+      agreeAt (part L (mk u.u₁)) tV && agreeAt (true :: part L (mk u.u₂)) t₁ &&
+        agreeAt (true :: part L (mk u.u₂)) t₂
+  | L, .zeroE _ _ _ u tV => agreeAt (part L (mk u.u₁)) tV
+  | L, .app _ _ i _ _ u tM => agreeAt (part L (mk u.u₁)) tM && lv L i && mk u.u₂ i
+  | L, .withI _ _ _ _ tM tN =>
+      agreeAt (false :: false :: L) tM && agreeAt (false :: false :: L) tN
+  | L, .thunkF _ _ _ t | L, .allI _ _ _ _ _ _ t | L, .bangThunkF _ _ _ t => agreeAt (false :: L) t
+  | L, .lam _ _ _ _ t => agreeAt (true :: L) t
+  | L, .thunkV _ _ _ t | L, .bangThunkV _ _ _ t
+  | L, .sumI₁ _ _ _ _ t | L, .sumI₂ _ _ _ _ t | L, .ret _ _ _ t | L, .proj₁ _ _ _ _ t
+  | L, .proj₂ _ _ _ _ t | L, .allE _ _ _ _ _ _ t | L, .bangE _ _ _ t | L, .boxI _ _ _ _ t
+  | L, .boxE _ _ _ _ t | L, .immSub _ _ _ _ _ t | L, .mutSub _ _ _ _ _ t
+  | L, .allEV _ _ _ _ _ _ t | L, .ofRet _ _ _ t | L, .roll _ _ _ t | L, .unroll _ _ _ t
+  | L, .nuIn _ _ _ t | L, .nuOut _ _ _ t | L, .litFn _ _ _ t | L, .divLit _ _ _ _ t
+  | L, .walk _ _ _ _ t | L, .walkGet _ _ _ t | L, .selfCall _ _ _ _ t | L, .lendCell _ _ _ t
+  | L, .nuEta _ _ _ _ t | L, .use _ _ _ _ _ _ t => agreeAt L t
+  | _, _ => true
+
 /-- **`own`**: `main` at no live slot of its own (`[spec §54]`). A term that uses a relaxed rule
 (SPEC §29) is left as its erasure: its relation rests on `PinLaw`, whose `PinStop` takes the
 lend's callback as a `CDerivesP` derivation, which `own`'s output is not (U4). -/

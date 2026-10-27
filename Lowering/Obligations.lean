@@ -46,6 +46,15 @@ its stored-continuation sites `Site c`. -/
 def LowersInto (Site : Checked → Expr → Prop) (lower : TExpr → Expr) : Prop :=
   ∀ c : Checked, LowExpr (Site c) c.ctx.length (lower c.t)
 
+/-- **The output is low on a class `P` of checked programs.** `LowersInto` is the class of all. -/
+def LowersIntoOn (Site : Checked → Expr → Prop) (P : Checked → Prop) (lower : TExpr → Expr) :
+    Prop :=
+  ∀ c : Checked, P c → LowExpr (Site c) c.ctx.length (lower c.t)
+
+theorem lowersInto_iff (Site : Checked → Expr → Prop) (lower : TExpr → Expr) :
+    LowersInto Site lower ↔ LowersIntoOn Site (fun _ => True) lower :=
+  ⟨fun h c _ => h c, fun h c => h c trivial⟩
+
 /-- A closed `F 1` term in the relation: every run from the empty memory continues to `()` at the
 empty memory (`theorem32D`). -/
 theorem every_run_of_sem {e : Expr} (hsem : SemC (ℍ := ℍ) LifeCtx.empty [] e (.ret .unit))

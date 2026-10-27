@@ -106,8 +106,9 @@ def occ : Expr → Nat → Option Uses
   | .inj₁ a, i | .inj₂ a, i => occ a i
   | .lam b, i => some ⟨some (if mentions b (i + 1) then 1 else 0), none⟩
   | .letpair a b, i => do pure ((← occ a i).andThen (← occ b (i + 2)))
-  | .case s (.app .unit .unit) (.app .unit .unit), i => do pure ((← occ s i).andThen .halt)
-  | .case s a b, i => do pure ((← occ s i).andThen (← Uses.join (← occ a (i + 1)) (← occ b (i + 1))))
+  | .case s a b, i =>
+      if a = BoLo.stuckE ∧ b = BoLo.stuckE then do pure ((← occ s i).andThen .halt)
+      else do pure ((← occ s i).andThen (← Uses.join (← occ a (i + 1)) (← occ b (i + 1))))
 
 /-- Consumed exactly once on every returning path, and at most once on a path that ends at
 `absurd`. -/

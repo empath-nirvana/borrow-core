@@ -9,8 +9,10 @@ import Lowering.Own
 Each program is checked as `bcc check` does. A program is in the pure fragment when it has no
 capability (`main` has no externs) and its typed term is in `Lowering.pureT`. For each:
 
-* `own`'s output is decided low (`Lowering.lowB`, sound by `Lowering.lowB_sound`), the kernel's
-  constants being the erasures of the term's constant nodes;
+* the hypothesis of `Lowering.own_lowersInto` is decided: the masks agree with the leaves
+  (`Lowering.agreeAt`), so the theorem gives `own`'s output low;
+* `own`'s output is decided low as well (`Lowering.lowB`, sound by `Lowering.lowB_sound`), the
+  kernel's constants being `copy`, `forget` and the erasures of the term's constant nodes;
 * the source interpreter runs `own`'s output and the erasure, and the reports (the value and the
   live cells) must agree.
 
@@ -73,7 +75,8 @@ def main (files : List String) : IO UInt32 := do
         pure := pure + 1
         let e := Lowering.own k.main.t
         let cs := consts [BoCa.copy, BoCa.forget] k.main.t
-        let low := Lowering.lowB (cs.contains ·) k.main.ctx.length e
+        let low := Lowering.lowB (cs.contains ·) k.main.ctx.length e &&
+          Lowering.agreeAt [] k.main.t
         let src := Backend.interpSource Backend.runFuel k.main.e
         let lowered := Backend.interpSource Backend.runFuel e
         let same := match src, lowered with
@@ -88,7 +91,7 @@ def main (files : List String) : IO UInt32 := do
           bad := bad + 1
           IO.println s!"FAIL {f}: low={low} same={same}; erasure: {show' src}; own: {show' lowered}"
           if !low then
-            IO.println s!"  explicit={Lowering.explicitB (cs.contains ·) e} effFree={Lowering.effFreeB e} ctx={(List.range k.main.ctx.length).all fun j => Lowering.once (Lowering.occ e j)} bound={Lowering.fvBound e}"
+            IO.println s!"  agree={Lowering.agreeAt [] k.main.t} explicit={Lowering.explicitB (cs.contains ·) e} effFree={Lowering.effFreeB e} ctx={(List.range k.main.ctx.length).all fun j => Lowering.once (Lowering.occ e j)} bound={Lowering.fvBound e}"
             IO.println s!"  {(why (cs.contains ·) e).getD "-"}"
   IO.println s!"lowering-check: {pure} in the pure fragment, {bad} failed, {skipped} skipped"
   return (if bad == 0 then 0 else 1)
