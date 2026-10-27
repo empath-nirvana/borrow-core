@@ -897,3 +897,36 @@ Each entry: the decision, and why. Newest last.
       #564 does not lift it.
     - The theorem that every run of a finaliser terminates, the handler clauses its operations
       reach included, is open (SPEC §14 *Open*).
+70. **Effects are lowered by a hybrid: Core → Core where it types, a named trusted set where it
+    does not (the user's decision of 2026-10-22, confirmed 2026-10-27; amends how the rule of #668
+    is read).**
+    - In the user's words (10-22): "The core-core rewrite might not be an all or nothing
+      situation. We could do that for transformations that we know type check, right? Then maybe
+      have a left-over that is hand lowered with a lint and a prose argument."
+    - And: "I am okay if the translation from core to core is not entirely proven, as long as it
+      still passes through core. Ie the worst case scenario is wrong semantics not memory
+      safety/leaks."
+    - **Why.** The backend's ad hoc lowerings threw away what the kernel proved and re-decided
+      ownership, copies and dispatch with unproved analyses. That produced bugs, and fixing each by
+      adding a check produced more. The hybrid sends every construct the kernel can type through
+      the kernel.
+    - **Core → Core.** A handler law whose output the kernel types is applied as a Core → Core
+      rewrite, and the kernel checks the output again. The rewrite itself may be unproved.
+    - **The trusted set.** A construct whose Core form does not type yet is lowered by hand in the
+      backend. Each one is listed by name, with its invariant written down, the lint and the
+      `Layouts` check run on every compile, and a prose argument. Today the set is:
+      - stored continuations: the stack machines and the task stack (SPEC §52);
+      - `lendR` in a machine, resting on `PinLaw` (SPEC §29).
+    - The trusted set is a minimal exception for what the kernel cannot type yet. It is never a
+      place to keep a hand lowering for performance, and each entry is a gap the kernel is meant
+      to close. Adding a construct to it is the user's decision.
+    - **Leaving the set.** A construct leaves the trusted set when its Core form types. A count
+      that rises is recorded with the way it will be recovered, not a block: in the user's words
+      (10-22), not "a hard block on reproducing the actual zero-cost counts as long as we have a
+      way of fixing it". That work (#680's R5) is owed, not optional, but it is not a gate on
+      other work.
+    - **What neither route proves.** The kernel's re-check proves the output safe, not that the
+      output keeps the source's obligations. In the user's words: "We could easily drop a
+      finalizer in translation and it would be 100% memory safe and leak free from the
+      translation on, while leaking a resource from the original code." Preservation is open on
+      both routes.

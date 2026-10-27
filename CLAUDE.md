@@ -61,14 +61,16 @@ linearity, aliasing, lend extents and escape. A later stage that needs to expres
 of these for a value the kernel cannot type stops: it does not build the value itself and then
 re-establish its safety with a lint, an invariant or a runtime check.
 
-- **Effects are eliminated inside the kernel's language.** Handler laws are Core → Core rewrites
-  whose output the kernel checks again. A continuation, a state machine or a task's frames are
-  Core values.
+- **Effects are eliminated inside the kernel's language where it can type them.** Handler laws
+  are Core → Core rewrites whose output the kernel checks again. A construct it cannot type yet is
+  in the trusted set (`docs/decisions.md` 70): hand-lowered, named, with a written invariant, and
+  the lint and the `Layouts` check run on every compile.
 - **Below the kernel, only representation is chosen:** boxed or unboxed, inlined or called, the
   layout of a sum. Ownership and linearity are read from the checked term, never decided or
   re-checked there.
 - **Hard stop:** stop and report `STOP: KERNEL WORK` before writing a lowering that invents a
-  value the kernel never typed and decides its copies, drops or lifetime.
+  value the kernel never typed and decides its copies, drops or lifetime, unless the construct is
+  in the trusted set. Adding a construct to the set is the user's decision.
 - **When the kernel cannot express what a lowering needs,** change the kernel (Changing Core).
 
 This is about the kernel's purpose, not doctrine. Ordinary compiler bookkeeping that cannot
