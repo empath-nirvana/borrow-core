@@ -25,11 +25,11 @@ Every other drop is already explicit: a value that owns a resource is consumed b
 through its destructor where the program drops it (`dtor`, `dtor_wf`). A binder the kernel types
 dead, the `()` a thunk of `F A` or a `Λ` is forced with, is consumed by `(); …` (`seq`).
 
-`own` lowers the nodes of the pure fragment (`PureNode`): the CBPV rules, the value-level rules,
+`own` lowers the nodes of the pure fragment (`pureT`): the CBPV rules, the value-level rules,
 the coercions and the derived nodes, each node for node. A constant is its erasure, its context's
 live slots dropped. The effect nodes (§19, `iterate`, `divFuel`, `reify`), the unwinding borrows,
-`[let-poly]` are left as their erasures, and a term with a relaxed rule is left whole: U3 and U4
-lower them. `zeroE` is written `absurdL`, the low subset's `absurd`.
+`[let-poly]` and `[λ-dead]` are left as their erasures, and a term with a relaxed rule is left
+whole: U3 and U4 lower them. `zeroE` is written `absurdL`, the low subset's `absurd`.
 -/
 
 namespace Lowering

@@ -32,6 +32,8 @@ everything the print would otherwise have to decide:
   machine's own capture as heap frames) `Site` accepts the stored sites' handler terms; under K2
   (state machines in `Expr`) it accepts nothing (`noSite`). `LowExpr.mono` shows that widening
   `Site` keeps every low term low.
+
+`lowB` decides `LowExpr` at no site, the constants given by a predicate (`lowB_sound`).
 -/
 
 namespace Lowering
