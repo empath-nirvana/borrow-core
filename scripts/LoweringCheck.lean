@@ -24,15 +24,22 @@ open BoCa BoCa.Fig16 BoCa.Fig16.LogRel.Core BoCa.Fig16.LogRel.Core.Check
 
 namespace LoweringCheck
 
+/-- The depth bound of the walks: the checker's. -/
+def walkFuel : Nat := 1 <<< 20
+
 /-- The erasures of the constant nodes of `t`, each once. -/
-partial def consts (acc : List Expr) (t : TExpr) : List Expr :=
-  let acc := if Lowering.constNode t && !acc.contains t.erase then t.erase :: acc else acc
-  t.children.foldl (fun a (_, c) => consts a c) acc
+def consts : Nat → List Expr → TExpr → List Expr
+  | 0, acc, _ => acc
+  | n + 1, acc, t =>
+    let acc := if Lowering.constNode t && !acc.contains t.erase then t.erase :: acc else acc
+    t.children.foldl (fun a (_, c) => consts n a c) acc
 
 /-- Where `explicitB` fails first, for the report: the failing node, printed short. -/
-partial def why (isConst : Expr → Bool) (e : Expr) : Option String :=
+def why (isConst : Expr → Bool) : Nat → Expr → Option String
+  | 0, _ => none
+  | n + 1, e =>
   if isConst e then none else
-  let sub (xs : List Expr) : Option String := xs.findSome? (why isConst)
+  let sub (xs : List Expr) : Option String := xs.findSome? (why isConst n)
   match e with
   | .var _ | .unit | .loc _ | .prim _ => none
   | .pair a b | .seq a b | .app a b | .letpair a b => match sub [a, b] with
@@ -41,8 +48,8 @@ partial def why (isConst : Expr → Bool) (e : Expr) : Option String :=
       | .letpair _ b => if Lowering.once (Lowering.occ b 0) && Lowering.once (Lowering.occ b 1)
           then none else some s!"letpair binders: {repr (Lowering.occ b 0)} {repr (Lowering.occ b 1)} in {(reprStr e).take 300}"
       | _ => none
-  | .inj₁ a | .inj₂ a => why isConst a
-  | .lam b => match why isConst b with
+  | .inj₁ a | .inj₂ a => why isConst n a
+  | .lam b => match why isConst n b with
     | some w => some w
     | none => if Lowering.once (Lowering.occ b 0) && Lowering.capOnceB b then none
         else some s!"lam: binder {repr (Lowering.occ b 0)} caps {Lowering.capOnceB b} in {(reprStr e).take 400}"
@@ -74,7 +81,7 @@ def main (files : List String) : IO UInt32 := do
       else
         pure := pure + 1
         let e := Lowering.own k.main.t
-        let cs := consts [BoCa.copy, BoCa.forget] k.main.t
+        let cs := consts walkFuel [BoCa.copy, BoCa.forget] k.main.t
         let low := Lowering.lowB (cs.contains ·) k.main.ctx.length e &&
           Lowering.agreeAt [] k.main.t
         let src := Backend.interpSource Backend.runFuel k.main.e
@@ -92,6 +99,6 @@ def main (files : List String) : IO UInt32 := do
           IO.println s!"FAIL {f}: low={low} same={same}; erasure: {show' src}; own: {show' lowered}"
           if !low then
             IO.println s!"  agree={Lowering.agreeAt [] k.main.t} explicit={Lowering.explicitB (cs.contains ·) e} effFree={Lowering.effFreeB e} ctx={(List.range k.main.ctx.length).all fun j => Lowering.once (Lowering.occ e j)} bound={Lowering.fvBound e}"
-            IO.println s!"  {(why (cs.contains ·) e).getD "-"}"
+            IO.println s!"  {(why (cs.contains ·) walkFuel e).getD "-"}"
   IO.println s!"lowering-check: {pure} in the pure fragment, {bad} failed, {skipped} skipped"
   return (if bad == 0 then 0 else 1)

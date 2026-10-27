@@ -1,5 +1,5 @@
 name = "borrow_core"
-defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "Backend", "Backend2", "Lowering", "bcc", "bcc-counts"]
+defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "Backend", "Backend2", "Lowering", "bcc", "bcc-counts", "lowering-check"]
 
 [[require]]
 name = "mathlib"
@@ -186,7 +186,7 @@ name = "DepSpike"
 srcDir = "experiments/DepSpike"
 roots = ["DepSpike"]
 
-# Not a default target: `own` (SPEC §54) on the pure corpus (`scripts/check-lowering.sh`).
+# `own` (SPEC §54) on the pure corpus (`scripts/check-lowering.sh`).
 [[lean_exe]]
 name = "lowering-check"
 srcDir = "scripts"
