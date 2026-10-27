@@ -523,7 +523,7 @@ def shortenAt {M : CLife → CVTy → CVTy} {leaf : TInfo → CLife → CLife �
       TTied p s Δ Γ t (.val (M b A)) → Δ.EntailsLe a b → TTied p s Δ Γ (leaf i a b A t) (.val (M a A)))
     (hle : Δ.EntailsLe a b) : Res Δ T (.val (s.famTy M a)) :=
   ⟨TTied.shortenT M leaf i a b s r.F.u r.t, r.sigs, r.pins,
-    r.F.mapB fun _ hb hd => TTied.shorten i sub r.F.u (btw_usedLive r.F.hu hb) hd hle⟩
+    r.F.mapB fun _ hb hd => TTied.shorten i sub r.F.u (btw_usedLive r.F.hu hb) r.covers hd hle⟩
 
 /-- `shorten_mut[σ, @a] V` / `shorten_imm[σ, @a] V`: `V : fam m @b σ` with `Δ ⊨ @a ⊑ @b`. -/
 def shortenIt {A : CVTy} (_E : Env) (T : List CVTy) (sp : Span) (m : Mode) (s : CShape)

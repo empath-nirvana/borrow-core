@@ -2,7 +2,7 @@
 # `own` (SPEC §54) on the pure corpus. Every corpus program that checks (not the parse-only ones)
 # is given to `lowering-check` (`scripts/LoweringCheck.lean`): a program with no capability whose
 # typed term is in the pure fragment (`Lowering.pureT`) has its masks decided to agree with its
-# leaves (`Lowering.agreeAt`, the hypothesis of `own_lowersInto`), `own`'s output decided low
+# leaves (`Lowering.agreeAt`, a theorem: `agreeAt_of_typed`), `own`'s output decided low
 # (`Lowering.lowB`), and `own`'s output run by the source interpreter to the erasure's report.
 # The programs in the fragment are pinned in corpus/lowering.expected, so a program that leaves or
 # joins the fragment shows here.

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.03 · 2026-10-27
+Version 1.04 · 2026-10-27
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -9037,17 +9037,16 @@ changes its `absurd` form (below).
   its erasure (`relaxedFree`, `TDerivesP.toC`, `Lowering/NoRelaxed.lean`). Results:
   `own_lowerSemRel` (`LowerSemRel own`), `own_lowerSem`, `own_every_run`, `own_every_run_pin`.
 - **`own` lands in the low subset on the pure fragment** (`Lowering/OwnLow.lean`):
-  `own_lowersInto : LowersIntoOn (fun _ => noSite) P own` with `P c` = `c.ctx = []`, `pureT c.t`
-  and `agreeAt [] c.t`. `LowersIntoOn` (`Lowering/Obligations.lean`) is `LowersInto` on a class of
+  `own_lowersInto : LowersIntoOn (fun _ => noSite) P own` with `P c` = `c.ctx = []` and
+  `pureT c.t` (and `agreeAt [] c.t` before §55). `LowersIntoOn` (`Lowering/Obligations.lean`) is `LowersInto` on a class of
   programs (`lowersInto_iff`). Each part consumes exactly the live slots it is given (`ExactP`),
   through injective renamings (`occ_ren`, `ExplicitC.ren`, `Lowering/LowRen.lean`), copies
   (`exact_copies`) and drops (`exact_splitE`, `exact_leafE`); a thunk of a `λ` stays a `λ`
   (`own_lam`).
-- **The masks' agreement is a hypothesis** (`agreeAt`): along `own`'s flow, every variable a leaf
-  reads is live where it is read. The checker builds each mask as its part's uses (`Fam.split`),
-  but the typed rules ask less (`SplitMasks`: a slot a mask holds is live in its part):
-  `masks_need_not_cover` is a typed derivation whose masks miss a use, where `own`'s output reads
-  a binder twice.
+- **The masks' agreement** (`agreeAt`): along `own`'s flow, every variable a leaf reads is live
+  where it is read. Since §55 it is a theorem (`agreeAt_of_typed`): the typed split rules make a
+  split's masks cover its parts, and `coverage_excludes_missT` is a term whose masks
+  `SplitMasks` admits, where `own`'s output reads a binder twice, which coverage excludes.
 - **Non-vacuity**: `dupChecked`, the checked `main` `return (λx. (x, x))`, meets every hypothesis;
   `own` writes its copy (`own_dupChecked`) and its output is low (`own_dupChecked_low`).
 - **The corpus check** (`scripts/LoweringCheck.lean`, `scripts/check-lowering.sh`, the gate step
@@ -9063,8 +9062,7 @@ elaboration, either backend or a kernel program. Every output, golden and count 
 
 ### Open
 
-- **`agreeAt` is not a theorem of the checker.** Making it one is a premise on the typed split
-  rules (a mask holds every slot its part's leaves read), or a proof about `Fam`.
+- **`agreeAt` is a theorem since §55**, by a premise on the typed split rules.
 - **`use`'s `ab` is not read.** `own` drops a `def` body's absorbed slots where the body's masks
   (moved by `Masks.ins`) leave them, and needs no slot's type: `forget` is untyped. `ab` is a
   formula over types (which absorbed slots a body's derivation admits), which a print that frees a
@@ -9072,6 +9070,68 @@ elaboration, either backend or a kernel program. Every output, golden and count 
 - **The print reads no node marks.** `own`'s output is an `Expr`; the derived nodes' marks
   (`litFn`, `walk`, `lendCell`, …) that Backend2 reads for representation are not carried.
 - **Programs with capabilities** (U5) and **effect nodes** (U3, U4) are outside the fragment.
+
+---
+
+## 55. Entry 54 — a split's masks cover its parts (#701, U2 of #698)
+
+### Motivation
+
+§54's `own` gives a split's part the live slots its mask holds, and proves its output low only
+where every slot a part reads is one its mask holds (`agreeAt`). The checker builds each mask as
+its part's uses (`Fam.split`), so its terms have that, but the typed split rules did not say so:
+`SplitMasks` asks only that a slot a mask holds be live in the part's context, and a part's context
+may hold a live slot its mask does not (a persistent slot a leaf drops, or reads). The user decided
+(#701, after #707, option 1): the typed split rules carry the condition, every derivation has it,
+the checker is proved to meet it, and `own_lowersInto` holds without the hypothesis.
+
+### Language
+
+The typed derivations (`TDerivesAt`, `TDerivesP`, `Frontend/Check/TDerives.lean`) change: every
+rule at a split has one premise more. `CDerives`, `CDerivesAt`, `CDerivesP`, the relation, the
+machine, the checker's output and every backend are unchanged; the projections to `CDerivesAt`
+and `CDerivesP` drop the premise as they drop `SplitMasks`.
+
+### Statements
+
+- **Coverage** (`Covers u n e`, `Frontend/Check/Masks.lean`): every slot the term `e` mentions,
+  under the `n` binders its premise pushes, is one the mask `u` holds. Each typed split rule has
+  the premise `hcv`: each part's term, at the binders its premise pushes, is covered by its part's
+  mask; `M x`'s second part is its argument `x`. Generated with the rules (`scripts/gen-pin.py`,
+  `cov_premise`): `tensorI`, `bind`, `app`, `unitE`, `tensorE`, `sumE`, `zeroE`, `lolliE`,
+  `effLet`, `effThen`, `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL`. It is the minimal
+  form of the condition `own` needs: it names the slots a part's term mentions, not its context's
+  liveness, so the checker's masks are unchanged.
+- **A typed term mentions only live slots** (`CDerivesP.mentions_live`, `Core/Mentions.lean`): a
+  term `CDerivesP` types at `Γ` mentions only slots live in `Γ`. Induction on `CDerivesP`, as
+  `closedAt_of_derives`; `[let-poly]` by `mentions_fill`, the clauses of `[handle]`'s tail and last
+  forms by `mentions_tailTuple`, `mentions_lastTuple`.
+- **The checker meets it** (`Frontend/Check/Rules.lean`): a family of derivations holds at every
+  liveness between its uses and its absorption, so at its uses alone (`btw_self`), where every slot
+  it does not use is dead; so its term is covered by its uses (`Fam.covers`, `Res.covers`,
+  `TTied.covers`). Every split builder passes its parts' coverage to the typed rule, and
+  `TTied.drop` and `TTied.shorten` their nodes'.
+- **Weakening keeps it** (`Frontend/Check/Weaken.lean`): a part's term shifted past inserted slots
+  is covered by its mask with the slots inserted (`Covers.ins`); `TExpr.reAb` keeps the erasure.
+- **`own_lowersInto` holds without `agreeAt`**: `agreeAt_of_typed` (`Lowering/OwnLow.lean`)
+  proves the masks' agreement of every typed term of the pure fragment, from coverage and
+  `mentions_live` (a binder typed dead is never read). `own_lowersInto : LowersIntoOn (fun _ =>
+  noSite) P own` with `P c` = `c.ctx = []` and `pureT c.t`.
+- **Non-vacuity**: `own_dupChecked_low` meets the new hypotheses; `coverage_excludes_missT`
+  shows the premise is not implied by `SplitMasks`: `λx. (x, ())` with both masks empty has
+  masks `SplitMasks` admits, is not a typed derivation, and is where `own`'s output reads `x`
+  twice.
+
+### Baseline
+
+The fundamental property, adequacy and every borrow guarantee are unchanged: they are stated over
+`CDerives`/`CDerivesP` and the typed derivations' projections, which are unchanged. The checker's
+masks, its typed terms and every output, golden and count are unchanged. `corpus/lowering.expected`
+is unchanged.
+
+### Open
+
+- **`agreeAt` is still decided by the corpus check**, as a check of the theorem's conclusion.
 
 ---
 
@@ -9477,11 +9537,23 @@ Entry 53 (§54) is implemented in `Lowering/Rename.lean`, `Lowering/NoRelaxed.le
 corpus check `scripts/LoweringCheck.lean` and `scripts/check-lowering.sh`: `LowerSemRel own` and
 `own_lowersInto` are proved. No change to `CDerives`, `Core/`, `Paper/`, `Support/`, the checker or
 either backend.
+Entry 54 (§55) is implemented in `Frontend/Check/Masks.lean` (`Covers`), the generated typed rules
+(`scripts/gen-pin.py`, `Frontend/Check/TDerives.lean`, `Frontend/Check/TLife.lean`),
+`Core/Mentions.lean`, `Frontend/Check/TTied.lean`, `Frontend/Check/Rules.lean`,
+`Frontend/Check/Weaken.lean` and `Lowering/OwnLow.lean`: `own_lowersInto` is proved with no
+hypothesis on the masks. No change to `CDerives`, the relation, the checker's output or either
+backend.
 
 ---
 
 ## Changelog
 
+- **1.04** (2026-10-27) — §55 (#701, U2 of #698): a split's masks cover its parts. Every typed
+  split rule has the premise `Covers` (each part's term mentions only slots its mask holds); a
+  typed term mentions only live slots (`CDerivesP.mentions_live`); the checker meets the premise
+  (`Res.covers`), weakening keeps it, and `own_lowersInto` holds without `agreeAt`
+  (`agreeAt_of_typed`). No change to `CDerives`, the relation, the checker's output or either
+  backend.
 - **1.03** (2026-10-27) — §54 (#700, U1 of #698): `own`, explicit ownership. Copies read off a
   split's masks, drops where a live slot is not passed on, each proved pure steps; `LowerSemRel
   own`; `own`'s output low on the pure fragment under the masks' agreement with the leaves

@@ -1,5 +1,6 @@
 import Core.Fundamental
 import Core.Records
+import Core.Mentions
 
 /-!
 # Frontend — Check — the use masks of a split  `[spec §3, §10]`
@@ -16,6 +17,12 @@ So the slots a split gives to both parts, which `Ctx.SplitP` admits only at a pe
 (`dup`), are exactly the slots both masks hold (`SplitMasks.both_iff`, `SplitMasks.both_persistent`).
 That is the copy set: a persistent value used on both sides of a split is copied, and no other
 (`Frontend/Check/Copies.lean`).
+
+A mask also **covers** its part (`Covers`, a premise of every typed split rule too): every slot
+the part's term mentions is one its mask holds. `SplitMasks` alone does not say so: a part's
+context may hold a live slot its mask does not, which a leaf of the part then reads. With
+coverage, the slots a part reads are its mask's, so a lowering that gives a part the live slots
+its mask holds gives it every slot it reads (`Lowering/OwnLow.lean`).  `[spec §55]`
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Check
@@ -54,6 +61,15 @@ inductive SplitMasks : Ctx VTy → Ctx VTy → List Bool → List Bool → Prop 
 
 /-- Whether slot `k` of `Γ` is live. -/
 def liveAt (Γ : Ctx VTy) (k : Nat) : Bool := (Γ[k]?.map Slot.live).getD false
+
+theorem liveAt_iff {Γ : Ctx VTy} {k : Nat} : liveAt Γ k = true ↔ Ctx.LiveAt Γ k := by
+  unfold liveAt Ctx.LiveAt
+  cases Γ[k]? <;> simp
+
+/-- **A mask covers a part's term**: every slot the term `e` mentions, under the `n` binders its
+premise pushes, is one the mask `u` holds.  `[spec §55]` -/
+def Covers (u : List Bool) (n : Nat) (e : Expr) : Prop :=
+  ∀ k, ClauseKinds.mentions (k + n) e = true → u.getD k false = true
 
 /-- The relation at a node's masks. -/
 abbrev Masks.Rel (m : Masks) (Γ₁ Γ₂ : Ctx VTy) : Prop := SplitMasks Γ₁ Γ₂ m.u₁ m.u₂
@@ -96,6 +112,79 @@ theorem Masks.ins_u₁ (d c : Nat) (m : Masks) : (m.ins d c).u₁ = insMask d c 
 
 theorem Masks.ins_u₂ (d c : Nat) (m : Masks) : (m.ins d c).u₂ = insMask d c m.u₂ :=
   insPair_snd d c m.ms
+
+/-! ### Coverage -/
+
+theorem getD_insMask_lt {d c k : Nat} {u : List Bool} (hk : k < c) :
+    (insMask d c u).getD k false = u.getD k false := by
+  rw [insMask_eq]
+  simp only [List.getD_eq_getElem?_getD, List.append_assoc]
+  by_cases hl : k < u.length
+  · rw [List.getElem?_append_left (by simp; omega), List.getElem?_take_of_lt hk]
+  · rw [List.drop_of_length_le (by omega), List.append_nil, List.take_of_length_le (by omega),
+      List.getElem?_append_right (by omega), List.getElem?_eq_none (l := u) (by omega)]
+    simp only [List.getElem?_replicate]
+    split <;> rfl
+
+theorem getD_insMask_ge {d c k : Nat} {u : List Bool} (hk : c + d ≤ k) :
+    (insMask d c u).getD k false = u.getD (k - d) false := by
+  rw [insMask_eq]
+  simp only [List.getD_eq_getElem?_getD, List.append_assoc]
+  by_cases hc : c ≤ u.length
+  · rw [List.getElem?_append_right (by simp; omega), List.getElem?_append_right (by simp; omega)]
+    simp only [List.length_take, List.length_replicate, List.getElem?_drop]
+    congr 2; omega
+  · rw [List.take_of_length_le (by omega), List.drop_of_length_le (by omega), List.append_nil,
+      List.getElem?_append_right (by omega), List.getElem?_eq_none (by omega : u.length ≤ k - d)]
+    simp only [List.getElem?_replicate]
+    split_ifs <;> first | omega | rfl
+
+/-- **Coverage past inserted slots**: a part's term shifted past `d` slots inserted at `c` is
+covered by its mask with the slots inserted, no part using them. -/
+theorem Covers.ins {u : List Bool} {n : Nat} {e e' : Expr} (h : Covers u n e) {d c : Nat}
+    (he : e' = e.shift d (c + n)) : Covers (insMask d c u) n e' := by
+  subst he
+  intro k hk
+  by_cases h₁ : k < c
+  · rw [mentions_shift_lt e (by omega)] at hk
+    rw [getD_insMask_lt h₁]; exact h k hk
+  · by_cases h₂ : k < c + d
+    · rw [ClauseKinds.mentions_shift (by omega) (by omega)] at hk; cases hk
+    · obtain ⟨k', rfl⟩ : ∃ k', k = k' + d := ⟨k - d, by omega⟩
+      rw [show k' + d + n = k' + n + d by omega, mentions_shift_ge e (by omega)] at hk
+      rw [getD_insMask_ge (by omega), Nat.add_sub_cancel]; exact h k' hk
+
+theorem Covers.ins₁ {m : Masks} {n : Nat} {e e' : Expr} (h : Covers m.u₁ n e) {d c : Nat}
+    (he : e' = e.shift d (c + n)) : Covers (m.ins d c).u₁ n e' := by
+  rw [Masks.ins_u₁]; exact h.ins he
+
+theorem Covers.ins₂ {m : Masks} {n : Nat} {e e' : Expr} (h : Covers m.u₂ n e) {d c : Nat}
+    (he : e' = e.shift d (c + n)) : Covers (m.ins d c).u₂ n e' := by
+  rw [Masks.ins_u₂]; exact h.ins he
+
+/-- A part's term that mentions no slot is covered by any mask. -/
+theorem Covers.closed {u : List Bool} {n : Nat} {e : Expr} (h : closedAt 0 e = true) :
+    Covers u n e := fun k hk => by rw [mentions_of_closed h] at hk; cases hk
+
+theorem Covers.of₁ {a b : List Bool} (hl : a.length = b.length) {n : Nat} {e : Expr}
+    (h : Covers a n e) : Covers (Masks.of a b).u₁ n e := by
+  rw [Masks.of_u₁ hl]; exact h
+
+theorem Covers.of₂ {a b : List Bool} (hl : a.length = b.length) {n : Nat} {e : Expr}
+    (h : Covers b n e) : Covers (Masks.of a b).u₂ n e := by
+  rw [Masks.of_u₂ hl]; exact h
+
+theorem Covers.app {u : List Bool} {n : Nat} {a b : Expr} (ha : Covers u n a) (hb : Covers u n b) :
+    Covers u n (.app a b) := fun k hk => by
+  simp only [ClauseKinds.mentions, Bool.or_eq_true] at hk
+  rcases hk with hk | hk
+  · exact ha k hk
+  · exact hb k hk
+
+theorem Covers.var {u : List Bool} {k : Nat} (h : u.getD k false = true) : Covers u 0 (.var k) :=
+  fun k' hk => by
+    simp only [ClauseKinds.mentions, beq_iff_eq, Nat.add_zero] at hk
+    subst hk; exact h
 
 /-- Whether both parts use slot `i`: the copy set. -/
 def Masks.both (m : Masks) (i : Nat) : Bool := match m.ms[i]? with

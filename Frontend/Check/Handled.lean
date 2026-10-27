@@ -59,7 +59,7 @@ theorem TDerivesAt.inside_eq {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TI
     (h : TDerivesAt Ξ Δ Γ (.effHandleV i J S E fs n A R u ks site ins tc te) J') :
     ins = te.erase.hin := by
   cases h with
-  | effHandleV _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
+  | effHandleV _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
 
 theorem TDerivesAt.inside_eqB {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jdg}
     {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
@@ -68,7 +68,7 @@ theorem TDerivesAt.inside_eqB {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : T
     (h : TDerivesAt Ξ Δ Γ (.effHandleVB i J S E fs n A R d u ks site ins tc te) J') :
     ins = te.erase.hin := by
   cases h with
-  | effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
+  | effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
 
 theorem TDerivesAt.inside_eqT {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jdg}
     {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
@@ -76,7 +76,7 @@ theorem TDerivesAt.inside_eqT {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : T
     (h : TDerivesAt Ξ Δ Γ (.effHandleT i J S SN E fs n A R u site ins tc te) J') :
     ins = te.erase.hin := by
   cases h with
-  | effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
+  | effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
 
 theorem TDerivesP.inside_eq {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jdg}
     {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
@@ -84,7 +84,7 @@ theorem TDerivesP.inside_eq {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jd
     (h : TDerivesP Δ Γ (.effHandleV i J S E fs n A R u ks site ins tc te) J') :
     ins = te.erase.hin := by
   cases h with
-  | effHandleV _ _ _ _ _ _ _ _ _ _ hins => exact hins
+  | effHandleV _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
 
 theorem TDerivesP.inside_eqB {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jdg}
     {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
@@ -93,7 +93,7 @@ theorem TDerivesP.inside_eqB {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : J
     (h : TDerivesP Δ Γ (.effHandleVB i J S E fs n A R d u ks site ins tc te) J') :
     ins = te.erase.hin := by
   cases h with
-  | effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
+  | effHandleVB _ _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
 
 theorem TDerivesP.inside_eqT {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jdg}
     {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
@@ -101,7 +101,7 @@ theorem TDerivesP.inside_eqT {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : J
     (h : TDerivesP Δ Γ (.effHandleT i J S SN E fs n A R u site ins tc te) J') :
     ins = te.erase.hin := by
   cases h with
-  | effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
+  | effHandleT _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ hins => exact hins
 
 /-! ### The names a clause's own code performs or raises -/
 

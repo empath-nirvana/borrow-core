@@ -13,11 +13,10 @@ path, and no effect primitive is left. The proof reads `own`'s output node by no
   one part (`exact_copies`, `exact_splitE`), and every other live slot is read by one part;
 - a leaf reads its variable and drops the others (`exact_leafE`).
 
-That a part's leaves read only slots its mask holds is the checker's construction (`Fam.split`
-gives a part its uses as its mask), not a premise of the typed rules: `SplitMasks` asks only that
-a slot a mask holds be live in its part. It is the hypothesis `agreeAt` here, decided on every
-program the corpus check runs (`scripts/LoweringCheck.lean`). `masks_need_not_cover` is a typed
-derivation whose masks miss a use, at which `own`'s output reads a binder twice.
+A part's leaves read only slots its mask holds (`agreeAt`), because the typed split rules make a
+split's masks cover its parts (`Covers`, SPEC §55) and a binder typed dead is never mentioned
+(`CDerivesP.mentions_live`): `agreeAt_of_typed`. `coverage_excludes_missT` is a term whose masks
+`SplitMasks` admits but which coverage excludes, and at which `own`'s output reads a binder twice.
 
 `own_dupChecked_low` is a checked `main` meeting the hypotheses: `return (λx. (x, x))`, whose
 copy `own` writes (`own_dupChecked`).
@@ -671,40 +670,40 @@ theorem own_lowered {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg} (h : TDe
   | unitI _ => intro L _ _; exact lowered_leaf_closed .unit rfl rfl
   | topI => intro L _ _; exact lowered_leaf_closed .unit rfl rfl
   | force _ => intro L _ ha; exact lowered_forceE ha
-  | tensorI hs hm h₁ h₂ ih₁ ih₂ =>
+  | tensorI hs hm _ h₁ h₂ ih₁ ih₂ =>
       intro L hp ha
       simp only [pureT, agreeAt, Bool.and_eq_true] at hp ha
       exact exact_splitE (good_pair (ih₁ _ hp.1 ha.1) (ih₂ _ hp.2 ha.2))
-  | unitE hs hm hV hM ihV ihM =>
+  | unitE hs hm _ hV hM ihV ihM =>
       intro L hp ha
       simp only [pureT, agreeAt, Bool.and_eq_true] at hp ha
       exact exact_splitE (good_seq (ihV _ hp.1 ha.1) (ihM _ hp.2 ha.2))
-  | lolliE hs hm ha' hf ihA ihF =>
+  | lolliE hs hm _ ha' hf ihA ihF =>
       intro L hp ha
       simp only [pureT, agreeAt, Bool.and_eq_true] at hp ha
       exact exact_splitE (good_app (ihA _ hp.1 ha.1) (ihF _ hp.2 ha.2))
-  | bind hs hm hM hN ihM ihN =>
+  | bind hs hm _ hM hN ihM ihN =>
       intro L hp ha
       simp only [pureT, agreeAt, Bool.and_eq_true] at hp ha
       exact exact_splitE (good_bind (ihM _ hp.1 ha.1)
         (lowered_congr (ihN _ hp.2 ha.2) fun k => lv_true_iff _ k))
-  | tensorE hs hm hV hM ihV ihM =>
+  | tensorE hs hm _ hV hM ihV ihM =>
       intro L hp ha
       simp only [pureT, agreeAt, Bool.and_eq_true] at hp ha
       exact exact_splitE (good_letpair (ihV _ hp.1 ha.1)
         (lowered_congr (ihM _ hp.2 ha.2) fun k => lv_true2_iff _ k))
-  | sumE hs hm hV h₁ h₂ ihV ih₁ ih₂ =>
+  | sumE hs hm _ hV h₁ h₂ ihV ih₁ ih₂ =>
       intro L hp ha
       simp only [pureT, agreeAt, Bool.and_eq_true] at hp ha
       exact exact_splitE (good_case (ihV _ hp.1.1 ha.1.1)
         (lowered_congr (ih₁ _ hp.1.2 ha.1.2) fun k => lv_true_iff _ k)
         (lowered_congr (ih₂ _ hp.2 ha.2) fun k => lv_true_iff _ k))
-  | zeroE hs hm hV ih =>
+  | zeroE hs hm _ hV ih =>
       intro L hp ha
       simp only [pureT, agreeAt] at hp ha
       exact exact_splitE ((good_absurd (ih _ hp ha)).congr (fun _ => Iff.rfl)
         fun k => by simp [lv_part_iff])
-  | app hs hm hM hx ih =>
+  | app hs hm _ hM hx ih =>
       intro L hp ha
       simp only [pureT, agreeAt, Bool.and_eq_true] at hp ha
       exact exact_splitE ((good_appVar (i := _) (ih _ hp ha.1.1)).congr (fun _ => Iff.rfl)
@@ -753,6 +752,143 @@ theorem own_lowered {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg} (h : TDe
         (fun _ _ _ h => by cases h <;> assumption)
         (fun _ _ _ _ _ h => by rcases h with h | h <;> cases h <;> assumption)
 
+/-! ### The masks agree with the leaves -/
+
+/-- A slot a term under a pushed binder mentions past it is live in `b :: L` where it is in `L`. -/
+theorem lv_push {L : List Bool} {e : Expr}
+    (h0 : ClauseKinds.mentions 0 e = true → False)
+    (hs : ∀ k, ClauseKinds.mentions (k + 1) e = true → lv L k = true) :
+    ∀ k, ClauseKinds.mentions k e = true → lv (false :: L) k = true
+  | 0, hk => (h0 hk).elim
+  | k + 1, hk => by rw [lv_cons_succ]; exact hs k hk
+
+theorem lv_pushT {L : List Bool} {e : Expr}
+    (hs : ∀ k, ClauseKinds.mentions (k + 1) e = true → lv L k = true) :
+    ∀ k, ClauseKinds.mentions k e = true → lv (true :: L) k = true
+  | 0, _ => rfl
+  | k + 1, hk => by rw [lv_cons_succ]; exact hs k hk
+
+theorem lv_pushT2 {L : List Bool} {e : Expr}
+    (hs : ∀ k, ClauseKinds.mentions (k + 2) e = true → lv L k = true) :
+    ∀ k, ClauseKinds.mentions k e = true → lv (true :: true :: L) k = true
+  | 0, _ => rfl
+  | 1, _ => rfl
+  | k + 2, hk => by rw [lv_cons_succ, lv_cons_succ]; exact hs k hk
+
+/-- **The masks agree with the leaves** on every typed term of the pure fragment, along a flow of
+live slots that holds every slot the term mentions: a split's masks cover its parts (`Covers`,
+a premise of the typed split rules), and a binder typed dead is never mentioned
+(`CDerivesP.mentions_live`).  `[spec §55]` -/
+theorem agreeAt_of_typed {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
+    (h : TDerivesP Δ Γ t j) : ∀ L, pureT t = true →
+      (∀ k, ClauseKinds.mentions k t.erase = true → lv L k = true) → agreeAt L t = true := by
+  induction h with
+  | var _ =>
+      intro L _ hL; exact hL _ (by simp [TExpr.erase, ClauseKinds.mentions])
+  | @force _ _ i C _ =>
+      intro L _ hL
+      exact hL i (by cases C <;> simp [TExpr.erase, forceE, ClauseKinds.mentions])
+  | tensorI _ _ hcv _ _ ih₁ ih₂ | unitE _ _ hcv _ _ ih₁ ih₂ =>
+      intro L hp hL
+      simp only [pureT, Bool.and_eq_true] at hp
+      simp only [agreeAt, Bool.and_eq_true]
+      exact ⟨ih₁ _ hp.1 fun k hk => lv_part_iff.mpr
+          ⟨hL k (by simp [TExpr.erase, ClauseKinds.mentions, hk]), hcv.1 k hk⟩,
+        ih₂ _ hp.2 fun k hk => lv_part_iff.mpr
+          ⟨hL k (by simp [TExpr.erase, ClauseKinds.mentions, hk]), hcv.2 k hk⟩⟩
+  | lolliE _ _ hcv _ _ ih₁ ih₂ =>
+      intro L hp hL
+      simp only [pureT, Bool.and_eq_true] at hp
+      simp only [agreeAt, Bool.and_eq_true]
+      exact ⟨ih₁ _ hp.1 fun k hk => lv_part_iff.mpr
+          ⟨hL k (by simp [TExpr.erase, ClauseKinds.mentions, hk]), hcv.1 k hk⟩,
+        ih₂ _ hp.2 fun k hk => lv_part_iff.mpr
+          ⟨hL k (by simp [TExpr.erase, ClauseKinds.mentions, hk]), hcv.2 k hk⟩⟩
+  | bind _ _ hcv _ _ ihM ihN =>
+      intro L hp hL
+      simp only [pureT, Bool.and_eq_true] at hp
+      simp only [agreeAt, Bool.and_eq_true]
+      refine ⟨ihM _ hp.1 fun k hk => lv_part_iff.mpr
+          ⟨hL k (by simp [TExpr.erase, ClauseKinds.mentions, hk]), hcv.1 k hk⟩,
+        ihN _ hp.2 (lv_pushT fun k hk => lv_part_iff.mpr
+          ⟨hL k (by simp [TExpr.erase, ClauseKinds.mentions, Expr.val, Val.lam, hk]), hcv.2 k hk⟩)⟩
+  | tensorE _ _ hcv _ _ ihV ihM =>
+      intro L hp hL
+      simp only [pureT, Bool.and_eq_true] at hp
+      simp only [agreeAt, Bool.and_eq_true]
+      refine ⟨ihV _ hp.1 fun k hk => lv_part_iff.mpr
+          ⟨hL k (by simp [TExpr.erase, ClauseKinds.mentions, hk]), hcv.1 k hk⟩,
+        ihM _ hp.2 (lv_pushT2 fun k hk => lv_part_iff.mpr
+          ⟨hL k (by simp [TExpr.erase, ClauseKinds.mentions, hk]), hcv.2 k hk⟩)⟩
+  | sumE _ _ hcv _ _ _ ihV ih₁ ih₂ =>
+      intro L hp hL
+      simp only [pureT, Bool.and_eq_true] at hp
+      simp only [agreeAt, Bool.and_eq_true]
+      refine ⟨⟨ihV _ hp.1.1 fun k hk => lv_part_iff.mpr
+          ⟨hL k (by simp [TExpr.erase, ClauseKinds.mentions, hk]), hcv.1 k hk⟩,
+        ih₁ _ hp.1.2 (lv_pushT fun k hk => lv_part_iff.mpr
+          ⟨hL k (by simp [TExpr.erase, ClauseKinds.mentions, hk]), hcv.2.1 k hk⟩)⟩,
+        ih₂ _ hp.2 (lv_pushT fun k hk => lv_part_iff.mpr
+          ⟨hL k (by simp [TExpr.erase, ClauseKinds.mentions, hk]), hcv.2.2 k hk⟩)⟩
+  | zeroE _ _ hcv _ ih =>
+      intro L hp hL
+      simp only [pureT] at hp
+      simp only [agreeAt]
+      exact ih _ hp fun k hk => lv_part_iff.mpr
+        ⟨hL k (by simp [TExpr.erase, absurdE, ClauseKinds.mentions, hk]), hcv k hk⟩
+  | @app _ _ _ _ i _ _ _ _ _ _ _ hcv _ _ ih =>
+      intro L hp hL
+      simp only [pureT] at hp
+      simp only [agreeAt, Bool.and_eq_true]
+      refine ⟨⟨ih _ hp fun k hk => lv_part_iff.mpr
+          ⟨hL k (by simp [TExpr.erase, ClauseKinds.mentions, hk]), hcv.1 k hk⟩,
+        hL i (by simp [TExpr.erase, ClauseKinds.mentions])⟩,
+        hcv.2 i (by simp [ClauseKinds.mentions])⟩
+  | thunkF hT ih | allI _ _ _ hT ih | bangThunkF _ hT ih =>
+      intro L hp hL
+      simp only [pureT] at hp
+      simp only [agreeAt]
+      exact ih _ hp (lv_push
+        (fun h0 => Ctx.not_liveAt_dead (hT.erase.mentions_live 0 h0))
+        fun k hk => hL k (by simp [TExpr.erase, ClauseKinds.mentions, Expr.val, Val.lam, hk]))
+  | lam _ ih =>
+      intro L hp hL
+      simp only [pureT] at hp
+      simp only [agreeAt]
+      exact ih _ hp (lv_pushT fun k hk =>
+        hL k (by simp [TExpr.erase, ClauseKinds.mentions, Expr.val, Val.lam, hk]))
+  | @withI _ Γ' _ _ _ _ _ hM hN ihM ihN =>
+      intro L hp hL
+      simp only [pureT, Bool.and_eq_true] at hp
+      simp only [agreeAt, Bool.and_eq_true]
+      have hw : ∀ (e : Expr), (∀ k, ClauseKinds.mentions k e = true → Ctx.LiveAt (withCtx Γ') k) →
+          (∀ k, ClauseKinds.mentions (k + 2) e = true → lv L k = true) →
+          ∀ k, ClauseKinds.mentions k e = true → lv (false :: false :: L) k = true := by
+        intro e hl hs k hk
+        match k, hk with
+        | 0, hk => exact (Ctx.not_liveAt_dead (hl 0 hk)).elim
+        | 1, hk => exact absurd (hl 1 hk) (by simp [Ctx.LiveAt, withCtx])
+        | k + 2, hk => rw [lv_cons_succ, lv_cons_succ]; exact hs k hk
+      exact ⟨ihM _ hp.1 (hw _ hM.erase.mentions_live fun k hk =>
+          hL k (by simp [TExpr.erase, withPair, ClauseKinds.mentions, Expr.val, Val.lam, hk])),
+        ihN _ hp.2 (hw _ hN.erase.mentions_live fun k hk =>
+          hL k (by simp [TExpr.erase, withPair, ClauseKinds.mentions, Expr.val, Val.lam, hk]))⟩
+  | thunkV _ _ _ ih | bangThunkV _ _ _ _ ih =>
+      intro L hp hL
+      simp only [pureT] at hp
+      exact ih L hp hL
+  | sumI₁ _ ih | sumI₂ _ ih | ret _ ih | bangE _ ih | boxI _ _ ih | boxE _ ih | immSub _ _ ih
+  | mutSub _ _ ih | ofRet _ ih | roll _ _ _ ih | unroll _ ih | nuIn _ _ ih | nuOut _ _ ih
+  | proj₁ _ ih | proj₂ _ ih | allE _ _ ih | allEV _ _ ih
+  | litFn _ _ _ ih | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih
+  | lendCell _ _ ih | nuEta _ _ ih | use _ _ ih =>
+      intro L hp hL
+      simp only [pureT] at hp
+      simp only [agreeAt]
+      exact ih L hp fun k hk => hL k (by
+        simp [TExpr.erase, ClauseKinds.mentions, Expr.val, Val.inj₁, Val.inj₂, Val.unit, hk])
+  | _ => intro L _ _; rfl
+
 /-- The pure fragment has no relaxed rule. -/
 theorem relaxedFree_of_pureT {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
     (h : TDerivesP Δ Γ t j) : pureT t = true → relaxedFree t = true := by
@@ -762,14 +898,17 @@ theorem relaxedFree_of_pureT {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
     | (simp only [pureT, relaxedFree, Bool.and_eq_true] at hp ⊢; simp_all)
 
 /-- **`own` lands in the low subset** on the pure fragment: every closed `main` whose typed term
-is in `pureT` and whose masks agree with its leaves (`agreeAt`) lowers to a low term, with no
-effect primitive. -/
+is in `pureT` lowers to a low term, with no effect primitive. Its masks agree with its leaves
+(`agreeAt_of_typed`): the typed split rules make them cover their parts (`Covers`). -/
 theorem own_lowersInto :
-    LowersIntoOn (fun _ => noSite) (fun c => c.ctx = [] ∧ pureT c.t = true ∧ agreeAt [] c.t = true)
-      own := by
-  rintro c ⟨hΓ, hp, ha⟩
+    LowersIntoOn (fun _ => noSite) (fun c => c.ctx = [] ∧ pureT c.t = true) own := by
+  rintro c ⟨hΓ, hp⟩
   have hown : own c.t = ownAt [] c.t := by
     unfold own; rw [if_pos (relaxedFree_of_pureT c.typedP hp)]
+  have ha : agreeAt [] c.t = true := agreeAt_of_typed c.typedP [] hp fun k hk => by
+    have hl := c.typedP.erase.mentions_live k hk
+    rw [hΓ] at hl
+    exact absurd hl (Ctx.liveAt_nil k)
   rw [hown, hΓ]
   obtain ⟨hx, hf, hex⟩ := own_lowered c.typedP [] hp ha
   exact ⟨hx.explicit, effFreeB_sound hf, fun j hj => absurd hj (Nat.not_lt_zero _),
@@ -803,14 +942,14 @@ theorem dupMasks : (Masks.mk [(true, true)]).Rel [⟨.int .w32, true⟩] [⟨.in
 theorem dupMain_typedAt (Ξ : EffCtx) :
     TDerivesAt Ξ LifeCtx.empty [] dupMain (.comp (.ret (.thunk (.arr (.int .w32)
       (.ret (.tensor (.int .w32) (.int .w32))))))) :=
-  .ret (.thunkV rfl (.lam (.ret (.tensorI dupSplit dupMasks (.var (.here .nil))
-    (.var (.here .nil))))) rfl)
+  .ret (.thunkV rfl (.lam (.ret (.tensorI dupSplit dupMasks ⟨Covers.var rfl, Covers.var rfl⟩
+    (.var (.here .nil)) (.var (.here .nil))))) rfl)
 
 theorem dupMain_typedP :
     TDerivesP LifeCtx.empty [] dupMain (.comp (.ret (.thunk (.arr (.int .w32)
       (.ret (.tensor (.int .w32) (.int .w32))))))) :=
-  .ret (.thunkV rfl (.lam (.ret (.tensorI dupSplit dupMasks (.var (.here .nil))
-    (.var (.here .nil))))) rfl)
+  .ret (.thunkV rfl (.lam (.ret (.tensorI dupSplit dupMasks ⟨Covers.var rfl, Covers.var rfl⟩
+    (.var (.here .nil)) (.var (.here .nil))))) rfl)
 
 /-- The checked `main` `return (λx. (x, x))`. -/
 def dupChecked : Checked where
@@ -833,34 +972,37 @@ theorem own_dupChecked :
 /-- **Non-vacuity**: `dupChecked` meets `own_lowersInto`'s hypotheses, so `own`'s output is in
 the relation (`own_lowerSem`) and low, its copy explicit. -/
 theorem own_dupChecked_low : LowExpr noSite 0 (own dupChecked.t) :=
-  own_lowersInto dupChecked ⟨rfl, by show pureT dupMain = true; decide,
-    by show agreeAt [] dupMain = true; decide⟩
+  own_lowersInto dupChecked ⟨rfl, by show pureT dupMain = true; decide⟩
 
-/-- **The typed rules do not make the masks the parts' uses**: `λx. (x, ())` at `x : 1`, typed
-with the split giving `x` to the pair's first component but both masks empty (`SplitMasks` asks
-only that a slot a mask holds be live). Its masks do not agree with its leaves, and `own`'s output
-reads `x` twice: dropped at the split, read by the first component. The checker's masks are its
-parts' uses (`Fam.split`), so `own_lowersInto` takes their agreement (`agreeAt`) as its hypothesis.
--/
+/-- `λx. (x, ())` at `x : 1`, the split giving `x` to the pair's first component and both masks
+empty. -/
 def missT : TExpr :=
   .lam default (.comp (.arr .unit (.ret (.tensor .unit .unit)))) .unit (.ret (.tensor .unit .unit))
     (.ret default (.comp (.ret (.tensor .unit .unit))) (.tensor .unit .unit)
       (.tensorI default (.val (.tensor .unit .unit)) .unit .unit ⟨[(false, false)]⟩
         (.var default (.val .unit) 0 .unit) (.unitI default (.val .unit))))
 
-theorem missT_typedP :
-    TDerivesP LifeCtx.empty [] missT (.comp (.arr .unit (.ret (.tensor .unit .unit)))) :=
-  .lam (.ret (.tensorI (.left .nil)
-    (.cons (fun h => absurd h (by decide)) (fun h => absurd h (by decide))
-      (fun _ h => absurd h (by decide)) .nil)
-    (.var (.here .nil)) (.unitI (.cons .nil))))
-
-theorem masks_need_not_cover :
-    TDerivesP LifeCtx.empty [] missT (.comp (.arr .unit (.ret (.tensor .unit .unit)))) ∧
+/-- **Coverage is the premise that excludes `missT`**: its masks are related to its split's
+contexts (`SplitMasks`, which asks only that a slot a mask holds be live), but the first mask does
+not cover the variable the first component reads, so it is not a typed derivation. Its masks do not
+agree with its leaves, and `own`'s output there reads `x` twice: dropped at the split, read by the
+first component. -/
+theorem coverage_excludes_missT :
+    (Masks.mk [(false, false)]).Rel [⟨.unit, true⟩] [⟨.unit, false⟩] ∧
+      ¬ TDerivesP LifeCtx.empty [] missT (.comp (.arr .unit (.ret (.tensor .unit .unit)))) ∧
       pureT missT = true ∧ agreeAt [] missT = false ∧
       own missT = .lam (.seq (.app forget (.var 0)) (.pair (.var 0) .unit)) ∧
-      once (occ (.seq (.app forget (.var 0)) (.pair (.var 0) .unit)) 0) = false :=
-  ⟨missT_typedP, by decide, by decide, by decide, by decide⟩
+      once (occ (.seq (.app forget (.var 0)) (.pair (.var 0) .unit)) 0) = false := by
+  refine ⟨.cons (fun h => absurd h (by decide)) (fun h => absurd h (by decide))
+      (fun _ h => absurd h (by decide)) .nil, ?_, by decide, by decide, by decide, by decide⟩
+  intro h
+  cases h with
+  | lam h =>
+    cases h with
+    | ret h =>
+      cases h with
+      | tensorI _ _ hcv _ _ =>
+        exact absurd (hcv.1 0 (by simp [TExpr.erase, ClauseKinds.mentions])) (by decide)
 
 end Lowering
 

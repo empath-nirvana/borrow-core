@@ -352,7 +352,7 @@ theorem own_semP (O : ∀ {Δ Γ t j}, TDerivesP Δ Γ t j → relaxedFree t = t
   induction h with
   | var h => intro _ _ L hL; exact sem_leaf hL _ (var_compatC h)
   | unitI h => intro _ _ L hL; exact sem_leaf hL _ (unitI_compatC h)
-  | tensorI hs hm h₁ h₂ ih₁ ih₂ =>
+  | tensorI hs hm _ h₁ h₂ ih₁ ih₂ =>
       intro hr _ L hL; simp only [relaxedFree, Bool.and_eq_true] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [ren_id])
         (tensorI_compatC hs (ih₁ hr.1 (O h₁ hr.1) _ (LiveIn.part₁ (L := L) hm)) (ih₂ hr.2 (O h₂ hr.2) _ (LiveIn.part₂ (L := L) hm)))
@@ -372,13 +372,13 @@ theorem own_semP (O : ∀ {Δ Γ t j}, TDerivesP Δ Γ t j → relaxedFree t = t
         rw [q] at this ⊢
         exact thunkV_compatC hC this
   | ret h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact ret_compatC (ih hr (O h hr) L hL)
-  | bind hs hm hM hN ihM ihN =>
+  | bind hs hm _ hM hN ihM ihN =>
       intro hr _ L hL; simp only [relaxedFree, Bool.and_eq_true] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [liftR_id, ren_id]; rfl)
         (bind_compatC hs (ihM hr.1 (O hM hr.1) _ (LiveIn.part₁ (L := L) hm)) (ihN hr.2 (O hN hr.2) _ ((LiveIn.part₂ (L := L) hm).live _)))
   | force h => intro _ _ L hL; exact sem_leaf hL _ (force_compatC h)
   | lam h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact lam_compatC (ih hr (O h hr) _ (hL.live _))
-  | app hs hm hM hx ih =>
+  | app hs hm _ hM hx ih =>
       intro hr _ L hL; simp only [relaxedFree] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [ren_id])
         (app_compatC hs (ih hr (O hM hr) _ (LiveIn.part₁ (L := L) hm)) hx)
@@ -388,21 +388,21 @@ theorem own_semP (O : ∀ {Δ Γ t j}, TDerivesP Δ Γ t j → relaxedFree t = t
   | proj₁ h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact proj₁_compatC (ih hr (O h hr) L hL)
   | proj₂ h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact proj₂_compatC (ih hr (O h hr) L hL)
   | topI => intro _ _ L hL; exact sem_leaf hL _ topI_compatC
-  | unitE hs hm hV hM ihV ihM =>
+  | unitE hs hm _ hV hM ihV ihM =>
       intro hr _ L hL; simp only [relaxedFree, Bool.and_eq_true] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [ren_id])
         (unitE_compatC hs (ihV hr.1 (O hV hr.1) _ (LiveIn.part₁ (L := L) hm)) (ihM hr.2 (O hM hr.2) _ (LiveIn.part₂ (L := L) hm)))
-  | tensorE hs hm hV hM ihV ihM =>
+  | tensorE hs hm _ hV hM ihV ihM =>
       intro hr _ L hL; simp only [relaxedFree, Bool.and_eq_true] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [liftR_id, ren_id])
         (tensorE_compatC hs (ihV hr.1 (O hV hr.1) _ (LiveIn.part₁ (L := L) hm))
           (ihM hr.2 (O hM hr.2) _ (((LiveIn.part₂ (L := L) hm).live _).live _)))
-  | sumE hs hm hV h₁ h₂ ihV ih₁ ih₂ =>
+  | sumE hs hm _ hV h₁ h₂ ihV ih₁ ih₂ =>
       intro hr _ L hL; simp only [relaxedFree, Bool.and_eq_true] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [liftR_id, ren_id])
         (sumE_compatC hs (ihV hr.1.1 (O hV hr.1.1) _ (LiveIn.part₁ (L := L) hm))
           (ih₁ hr.1.2 (O h₁ hr.1.2) _ ((LiveIn.part₂ (L := L) hm).live _)) (ih₂ hr.2 (O h₂ hr.2) _ ((LiveIn.part₂ (L := L) hm).live _)))
-  | zeroE hs hm hV ih =>
+  | zeroE hs hm _ hV ih =>
       intro hr _ L hL; simp only [relaxedFree] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [ren_id])
         (absurdL_compatC hs (ih hr (O hV hr) _ (LiveIn.part₁ (L := L) hm)))
@@ -429,7 +429,7 @@ theorem own_semP (O : ∀ {Δ Γ t j}, TDerivesP Δ Γ t j → relaxedFree t = t
   | boxE h ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact boxE_compatC (ih hr (O h hr) L hL)
   | immSub h hle ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact immSub_compatC (ih hr (O h hr) L hL) hle
   | mutSub h hle ih => intro hr _ L hL; simp only [relaxedFree] at hr; exact mutSub_compatC (ih hr (O h hr) L hL) hle
-  | lolliE hs hm ha hfn iha ihf =>
+  | lolliE hs hm _ ha hfn iha ihf =>
       intro hr _ L hL; simp only [relaxedFree, Bool.and_eq_true] at hr
       exact sem_split_eq hL (by nodeinv) (by simp only [ren_id])
         (lolliE_compatX hs (iha hr.1 (O ha hr.1) _ (LiveIn.part₁ (L := L) hm)) (ihf hr.2 (O hfn hr.2) _ (LiveIn.part₂ (L := L) hm)))

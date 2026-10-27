@@ -134,6 +134,10 @@ import Lowering
 #print axioms BoCa.Fig16.LogRel.Core.steps_plug_split
 #print axioms BoCa.Fig16.LogRel.Core.plug_inj_ctx
 #print axioms BoCa.Fig16.LogRel.Core.closedAt_of_derives
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesP.mentions_live
+#print axioms BoCa.Fig16.LogRel.Core.Check.Covers.ins
+#print axioms Frontend.Check.Res.covers
+#print axioms Frontend.Check.TTied.covers
 #print axioms BoCa.Fig16.LogRel.Core.closed_steps
 #print axioms BoCa.Fig16.LogRel.Core.look_sound
 #print axioms BoCa.Fig16.LogRel.Core.runM_sound
@@ -681,4 +685,5 @@ import Lowering
 #print axioms Lowering.own_lowersInto
 #print axioms Lowering.own_dupChecked
 #print axioms Lowering.own_dupChecked_low
-#print axioms Lowering.masks_need_not_cover
+#print axioms Lowering.coverage_excludes_missT
+#print axioms Lowering.agreeAt_of_typed

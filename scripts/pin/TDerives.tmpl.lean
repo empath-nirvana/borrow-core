@@ -14,8 +14,9 @@ types a term built from other arguments (`thunkV`'s `λN`, `letPoly`'s) carries 
 between the child's erasure and that term. The node's fields are the rule's arguments, so a
 derivation fixes every field: the types, rows, lifetimes and qualifiers a node carries are the
 ones its rule was applied at, and its judgment is the derivation's (`TDerivesP.jdg_eq`). A rule
-at a split has one premise `CDerives` does not: its node's use masks are the ones its parts'
-contexts have (`SplitMasks`), so a slot both parts receive is one both masks hold.
+at a split has two premises `CDerives` does not: its node's use masks are the ones its parts'
+contexts have (`SplitMasks`), so a slot both parts receive is one both masks hold; and each mask
+covers its part (`Covers`, SPEC §55): every slot the part's term mentions is one its mask holds.
 
 * `TDerivesAt.erase`, `TDerivesP.erase`: each projects to `CDerivesAt`/`CDerivesP` at `t.erase`,
   case for case. So FP, adequacy, `PinLaw`'s theorems and decision R's apply to the typed term's

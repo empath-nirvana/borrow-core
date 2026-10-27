@@ -448,6 +448,36 @@ class Rule:
         return f"  | .{self.name} {' '.join(pats)} => {body}"
 
 
+def cov_premise(r):
+    """A split rule's coverage premise (`Covers`, SPEC §55): each term of a part, under the binders
+    its premise pushes, mentions only slots that part's mask holds. `M x`'s second part is its
+    argument `x` (`Ctx.SoloP`)."""
+    jn = r.judg.split()[0]
+    g = top_split(r.split[1])
+    atoms = []
+    for kind, names, ty in r.groups:
+        if kind != "(" or not ty:
+            continue
+        if ty.startswith(jn + " "):
+            for nm in names:
+                p = next(p for p in r.prem if p[0] == nm)
+                ctx = norm(p[3])
+                if ctx.startswith("(") and ctx.endswith(")"):
+                    ctx = ctx[1:-1].strip()
+                tail = ctx.split(" :: ")[-1]
+                side = "u.u₁" if tail == g[2] else "u.u₂" if tail == g[3] else None
+                if side:
+                    atoms.append(f"Covers {side} {ctx.count(' :: ')} {p[1]}.erase")
+        elif ty.startswith("Ctx.SoloP "):
+            a = top_split(ty)
+            side = "u.u₁" if a[1] == g[2] else "u.u₂" if a[1] == g[3] else None
+            if side:
+                atoms.append(f"Covers {side} 0 (.var {a[2]})")
+    if not atoms:
+        sys.exit(f"gen-pin: {r.name}: a split with no part to cover")
+    return " ∧ ".join(atoms)
+
+
 def typed_rule(r, fieldsof):
     """`r`'s typed copy: the constructor of `TDerivesP`/`TDerivesAt`, and its projection case."""
     jn = r.judg.split()[0]
@@ -481,6 +511,7 @@ def typed_rule(r, fieldsof):
         if r.split and ty == r.split[1] and names == r.split[0]:
             g = top_split(ty)
             out.append(f"(hm : u.Rel {g[2]} {g[3]})")
+            out.append(f"(hcv : {cov_premise(r)})")
     impl = "{info : TInfo}" + (" {u : Masks}" if ("u", "Masks") in r.fields else "") + \
         "".join(f" {{{n} : {t}}}" for n, t in EXTRA.get(r.name, [])) + \
         (f" {{{' '.join(r.kids)} : TExpr}}" if r.kids else "")
@@ -507,8 +538,9 @@ def typed_rule(r, fieldsof):
                 if nm not in {q for q, _ in EXTRA_PREM.get(r.name, [])}:
                     args.append(v)
                 if r.split and ty == r.split[1]:
-                    pat.append(f"a{n}")  # the masks' premise, which the projection drops
-                    n += 1
+                    pat.append(f"a{n}")  # the masks' premises, which the projection drops
+                    pat.append(f"a{n + 1}")
+                    n += 2
             else:
                 ih = f"ih{len(ihs)}"
                 ihs.append(ih)
@@ -545,6 +577,7 @@ def typed_explicit(r):
             out.append((nm, p is not None))
             if r.split and ty == r.split[1]:
                 out.append(("hm", False))
+                out.append(("hcv", False))
             if p is not None and not p[6]:
                 out.append(("q" + p[1][1:], False))
     return out
@@ -702,7 +735,9 @@ def weaken_life_case(r):
                 if r.split and ty == r.split[1]:
                     pat.append(f"a{n}")
                     args.append(f"a{n}")
-                    n += 1
+                    pat.append(f"a{n + 1}")
+                    args.append(f"(by simpa only [TExpr.reAb_erase] using a{n + 1})")
+                    n += 2
             else:
                 ih = f"ih{len(ihs)}"
                 ihs.append(ih)
