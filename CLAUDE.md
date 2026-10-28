@@ -52,29 +52,27 @@ existing core terms. It must never do the borrow calculus's work, and must never
   An elaborator workaround is never the fix.
 <!-- ANCHOR_END: elaborator-scope -->
 
-## No stage does the kernel's work
+## Later stages read the kernel's facts
 
 <!-- ANCHOR: every-stage-scope -->
-The rule above covers every stage, not only the elaborator. That includes pre-kernel IR passes,
-the backends and their lowerings, and the runtime library. The kernel decides ownership,
-linearity, aliasing, lend extents and escape. A later stage that needs to express or decide one
-of these for a value the kernel cannot type stops: it does not build the value itself and then
-re-establish its safety with a lint, an invariant or a runtime check.
+This covers every stage after the checker: pre-kernel IR passes, the backends and their
+lowerings, and the runtime library. The language is meant to run, and the bar is Rust's: code
+generation relies on what the checker established. It need not be a verified compiler. The
+failure this guards against is a stage rebuilding, without proof, what the kernel or the surface
+already told us, which is where Backend2's placement bugs came from.
 
-- **Effects are eliminated inside the kernel's language.** Handler laws are Core → Core rewrites
-  whose output the kernel checks again. A continuation, a state machine or a task's frames are
-  Core values.
-- **Below the kernel, only representation is chosen:** boxed or unboxed, inlined or called, the
-  layout of a sum. Ownership and linearity are read from the checked term, never decided or
-  re-checked there.
-- **Hard stop:** stop and report `STOP: KERNEL WORK` before writing a lowering that invents a
-  value the kernel never typed and decides its copies, drops or lifetime.
-- **When the kernel cannot express what a lowering needs,** change the kernel (Changing Core).
+- **Read, don't rebuild.** Where the kernel or the surface already gives a fact (the typed term,
+  `Checked.cells`, derived nodes, the elaborator's marks), read it from there. Do not rebuild it
+  with an analysis of the erased term. If a fact is needed but lost on the way, carry it through
+  the stage that loses it.
+- **Prove what has to be rebuilt, where feasible.** A fact the compiler must establish itself
+  gets a proof when one is tractable.
+- **Flag what is not proved.** Where a rebuilt fact is not proved, say so in a comment at the
+  site, marked `UNPROVED:`. State what is assumed, why it should hold, and what breaks if it
+  does not, so that bugs have an obvious place to look.
 
-This is about the kernel's purpose, not doctrine. Ordinary compiler bookkeeping that cannot
-affect ownership, linearity or borrow safety (register choice, block layout, a loop counter's
-representation) is fine outside the kernel. The alarm is an unproved pass rebuilding what the
-kernel exists to guarantee.
+Ordinary compiler bookkeeping that cannot affect ownership, linearity or borrow safety (register
+choice, block layout, a loop counter's representation) needs none of this.
 <!-- ANCHOR_END: every-stage-scope -->
 
 ## Growth discipline
