@@ -70,6 +70,7 @@ block-swap erased handles 0 performs 0 raises 0 left 0 0
 block-yield-inner erased handles 0 performs 0 raises 0 machines 4 suspends 2 left 0 0
 borrow-in-scope erased handles 0 performs 0 raises 0 left 0 0
 bytes-upper erased handles 0 performs 0 raises 0 left 0 0
+capability-bang-width erased handles 0 performs 0 raises 0 left 0 0
 capability-swap-width erased handles 0 performs 0 raises 0 left 0 0
 capture-await-raise erased handles 2 performs 1 raises 1 left 0 0
 capture-log-hand erased handles 0 performs 0 raises 0 left 0 0

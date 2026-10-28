@@ -12,7 +12,8 @@ cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc >/dev/null
 bcc=.lake/build/bin/bcc
 # Programs chosen so that every perturbation has a target in one of them: closure classes of
-# several codes and widths, recursive types with boxed fields, a class kept on the heap, cells, κ regions and frames.
+# several codes and widths, recursive types with boxed fields, a class kept on the heap, cells,
+# κ regions and frames, a static cell whose width class holds a `!` type.
 progs=(
   corpus/aff-higher.bc
   corpus/deep-list.bc
@@ -20,6 +21,7 @@ progs=(
   corpus/sched-a.bc
   corpus/async-scheduler.bc
   corpus/async-stack-deep.bc
+  corpus/capability-bang-width.bc
 )
 # Each perturbation, and the refusal of its family (an extended regular expression).
 families=(
@@ -36,6 +38,7 @@ families=(
   "shrink a value's bytes in a cell|bytes in a cell, its shape and width give"
   "give an integer the other slot's width|bytes in a cell, its shape and width give"
   "narrow a type's bytes below a value of it|more than its type's most"
+  "shrink a static cell|reserves [0-9]+ bytes, its width class's types take"
   "move a κ region's node|its κ region"
   "move a machine's frame node at one access|machine [0-9]+'s frame"
   "move a reborrowed read's node|a read through a shared borrow of contents"

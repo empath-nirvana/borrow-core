@@ -1191,9 +1191,9 @@ def lowerProg (p : Prog) (L : Layouts) (known : Std.HashMap Var Nat)
   let nf := p.fns.size
   let fMain := 1 + nf
   let pad := (8 - p.data.size % 8) % 8
-  -- The static cells after the literals: each as wide as its width class, a word at least.
-  let words := p.statics.map fun cls =>
-    max 1 ((cls.foldl (fun b t => max b (L.tyBytes.getD t 0)) 0 + 7) / 8)
+  -- The static cells after the literals: each as wide as its width class (`Layouts.staticBytes`),
+  -- a word at least.
+  let words := L.staticBytes.map fun b => max 1 ((b + 7) / 8)
   let staticAt := (words.foldl (fun (acc : Array Nat × Nat) w => (acc.1.push acc.2, acc.2 + 8 * w))
     (#[], p.data.size + pad)).1
   let slotScopes := p.slots.fold (fun s _ sc => s.insert sc) {}

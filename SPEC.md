@@ -7904,7 +7904,8 @@ refused by the new backend ("outside the pure fragment") and compiled by the old
   anything reads them. A failure is the compiler's error (`internal: closure classes not a fixed
   point: …`). The layouts must be a solution of the program's constraints: every move joins its
   places, every closure reaches a class that holds its code, every code fits its class, every node
-  is its type's, and the widths, boxes, heap classes and bytes in a cell satisfy their equations.
+  is its type's, and the widths, boxes, heap classes, bytes in a cell and static cells' bytes
+  satisfy their equations.
   The flow's sets must be a solution of the flow's constraints, and a direct call needs a set of
   one code. Read from the typed term: a cell's width class. Trusted: that the lowering reads these
   facts correctly. This is not the final state: #674 replaces the analysis (defunctionalisation in

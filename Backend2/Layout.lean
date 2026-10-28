@@ -445,6 +445,9 @@ structure Layouts where
   codeEnv : Std.HashMap Nat (List Nat)
   /-- Each site's `κ` region's contents node (SPEC §52). -/
   regions : Std.HashMap Nat Nat := {}
+  /-- **Each static cell's bytes** (`Prog.statics`, `Op.staticCell`): the most bytes of its width
+  class's types, each read through `tyBytes` with its `!`s erased. -/
+  staticBytes : Array Nat := #[]
 
 namespace Layouts
 
@@ -728,6 +731,8 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
   let fnRet := s.fnRet.fold (fun m f i => m.insert f rep[i]!) {}
   return { rep, shape, union, recCls, boxed, width, trivial, bytes, tyBytes, varNode,
            fnRet, mainNode := rep[mainNode]!, codeClass, codeEnv,
-           regions := s.regions.fold (fun m k i => m.insert k rep[i]!) {} }
+           regions := s.regions.fold (fun m k i => m.insert k rep[i]!) {},
+           staticBytes := p.statics.map fun cls =>
+             cls.foldl (fun b t => max b (tyBytes.getD t.unbang 0)) 0 }
 
 end Backend2.Lay

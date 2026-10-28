@@ -70,6 +70,7 @@ block-swap 2 0 0 4 4 0
 block-yield-inner 0 0 0 0 0 0
 borrow-in-scope 2 0 0 4 3 0
 bytes-upper 1 0 0 80 52 54
+capability-bang-width 0 0 0 9 7 0
 capability-swap-width 0 0 0 7 5 0
 capture-await-raise 0 0 0 0 0 0
 capture-log-hand 0 0 0 0 0 0
