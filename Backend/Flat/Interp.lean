@@ -182,8 +182,9 @@ def freeRange (a : Nat) : FM Unit := do
     let mem := (List.range n).foldl (fun m i => m.erase (a + 8 * i)) s.mem
     set { s with mem, ranges := s.ranges.erase a }
   | none =>
-    -- The read-only data is not freed (a literal's view, `litTab`).
-    if a < s.staticEnd then pure ()
+    -- The read-only data is not freed (a literal's view, `litTab`), nor the address `0`, a cell
+    -- of no bytes (as every target's `free` skips it).
+    if a == 0 || a < s.staticEnd then pure ()
     else throw s!"flat IR: free of {a}, not the start of a live range"
 
 /-- The slot at word `off` of the current frame, `n` words, starts its life: its address. -/

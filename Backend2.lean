@@ -9,5 +9,3 @@ import Backend2.Layout
 import Backend2.Flow
 import Backend2.Lower
 import Backend2.Interp
-import Backend2.Frames
-import Backend2.LitViews

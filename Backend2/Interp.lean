@@ -327,7 +327,7 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
     match ← liftE (hostWords o [a, d]) with
     | some r => pure (.int (if byte = true then r &&& 0xff else r))
     | none => bad "a division by a literal that has no answer"
-  | .alloc, [v] | .allocLent, [v] => do
+  | .alloc _, [v] | .allocLent _ _, [v] => do
     let b ← newObj 1
     writeAt b (some v)
     pure (.loc b)
@@ -344,7 +344,7 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
     let old ← readAt a
     writeAt a (some v)
     pure (.pair (.loc a) old)
-  | .lend, [x] | .relend, [x] => pure (.pair x x)
+  | .lend _, [x] | .relend, [x] => pure (.pair x x)
   | .load, [.loc a] => do
     let v ← readAt a
     pure (reborrowV 4096 resTy v)
@@ -564,8 +564,10 @@ def eval (p : Prog) : Nat → LTy → Tm → IM LV
     | .prim (.tabLit fi) [g, n] => do
       let vg ← takeV g
       let .int k ← takeV n | bad "tab of a non-integer"
-      let .clos _ [.int off, .int len] := vg | bad "tabLit of a closure that is not a literal's"
-      if k.toNat ≤ len.toUInt32.toNat then return .fam (dataAt + off.toUInt32.toNat) k.toUInt32
+      -- The literal's bytes, where the tabulator is a literal's table (`Prog.lits`) long enough.
+      if let .clos c [.int off, .int len] := vg then
+        if p.lits == some c && k.toNat ≤ len.toUInt32.toNat then
+          return .fam (dataAt + off.toUInt32.toNat) k.toUInt32
       let arr ← if k.toUInt32 == 0 then pure (LV.fam 0 0) else
         pure (LV.fam (← newObj k.toUInt32.toNat) k.toUInt32)
       callFn p f fi [vg, arr, .int 0, .int k]

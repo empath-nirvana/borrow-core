@@ -12,7 +12,8 @@ verifies and never fills in:
   function: a use consumes it, `copy` keeps it, the two arms of a `case` consume the same
   variables, and a function ends with all of them consumed (a path that ends at `absurd` is
   unreachable);
-- every call has its callee's number of arguments, and every closure its code's environment.
+- every call has its callee's number of arguments, and every closure its code's environment;
+- every `lend` answers a borrow of its kind: `mut` or `imm` (`Op.lend`, SPEC §57).
 -/
 
 namespace Backend2.Lint
@@ -43,6 +44,12 @@ def useAll (w : String) (env : Std.HashSet Var) (xs : List Var) : LM (Std.HashSe
 
 def sameSet (a b : Std.HashSet Var) : Bool := a.size == b.size && a.toList.all b.contains
 
+/-- The kind of a borrow's type: `mut`, `imm`, or neither. -/
+def borrowMode : LTy → Option Bool
+  | .mut _ | .fam (.mut _) => some true
+  | .imm _ | .fam (.imm _) => some false
+  | _ => none
+
 /-- The variables left after `t`, its value consumed by its context. -/
 def lintTm (w : String) (p : Prog) : Nat → Std.HashSet Var → Tm → LM Left
   | 0, _, _ => bad w "a term too deep"
@@ -69,6 +76,11 @@ def lintTm (w : String) (p : Prog) : Nat → Std.HashSet Var → Tm → LM Left
     | .prim .unreachable as => do let _ ← useAll w env as; return none
     | .prim _ as => return some (← useAll w env as)
     | .letv x e b => do
+      if let .prim (.lend m) _ := e then
+        match p.ty[x]? with
+        | some (.pair _ bT) =>
+          if borrowMode bT != some m then bad w s!"x{x}: a lend of kind {m} answers a borrow at {bT}"
+        | t => bad w s!"x{x}: a lend answers {t.map (·.pp)}"
       match ← lintTm w p f env e with
       | none => return none
       | some env' => lintTm w p f (← bindNew w p env' x) b

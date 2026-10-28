@@ -1,0 +1,13 @@
+-- check: old-backend-refuses
+-- A capability's cell swapped to hold a pair and back (#712, `t17`): the cell is as wide as its
+-- width class, which holds the pair, so the swap does not write over the next capability's cell.
+-- The old backend refuses the program.
+--
+-- Answer: `O` on standard output, then i64[10].
+main -> i64 =
+  let (c, o) = swap[output, i64 * i64] stderr (i64[1], i64[9]);
+  let (stderr, p) = swap[i64 * i64, output] c o;
+  let (stdout, u) = putb(stdout, b'O');
+  let (stdout, u2) = putb(stdout, b'\n');
+  let (x, y) = p;
+  x + y

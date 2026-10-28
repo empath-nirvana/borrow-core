@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.06 · 2026-10-28
+Version 1.07 · 2026-10-28
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -9327,6 +9327,67 @@ erasure and Backend2's LIR are byte-identical on the corpus; every golden and co
 
 ---
 
+## 58. Entry 57 — Backend2 reads the facts (#712, part C)
+
+### Motivation
+
+§57 put in the typed term the facts Backend2 rebuilt from its LIR. This entry makes Backend2 read
+them and deletes the passes that rebuilt them (`Backend2/Frames.lean`, `Backend2/LitViews.lean`),
+which miscompiled five checked programs (`docs/compiler.md` §10).
+
+### Language
+
+No change to a type, rule, term, typing, elaboration, semantics or erasure. Backend2's LIR
+changes (`Backend2/Syntax.lean`): `Op.alloc cls` and `Op.allocLent s cls` carry their width
+class, `allocLent` its lend scope `s`, `Op.lend m` its kind; a program carries its static cells'
+classes, the literal tables' code and its frame slots (`Prog.statics`, `lits`, `slots`).
+
+### The reading
+
+- **Frame slots.** A `lendScope` node whose `rel` holds numbers its scope; its cell's
+  `allocLent` carries the number, and the `letpair` that takes the lend's pair apart marks its
+  owner (`withScope`, `markOwner`, `Backend2/Convert.lean`). The conversion places parts of a
+  scope's code in functions of their own (closures, joins, a machine's points), so the cell is a
+  frame slot where the function that allocates it binds the owner and uses it only as the operand
+  of `free` (`slotsOf`, `Backend2/Driver.lean`): every path of that function frees it there, the
+  LIR consuming each variable once on every path, which `Lint.lint` now checks of every program it
+  compiles (`flatOf`). `Lower` places the cell in the frame and ends the slot at that `free` (by
+  the owner's variable, `Prog.slots`), and nowhere else.
+- **Widths.** A value in a cell takes the bytes of its own type (a byte at `u8`, four at `i32`
+  and `f32`, else its words), so a cell is read and written by its contents' type wherever it is
+  reached. An allocation reserves the most bytes of its width class (`Checked.classAt`, written
+  by `Convert` on `Op.alloc`); a capability's cell, which no `alloc` node allocates, gets the class
+  the checker's construction gives its contents (`cellClasses`, checked closed by `cellsOkB`). An
+  allocation of no bytes is the address `0`, which every target's `free` skips (the flat IR's
+  interpreter now too). No width is chosen by a class lookup at a pointer.
+- **Literal views.** A `litView` node's tabulation is `Op.tabLit`; `Lower` points it at the
+  literal's bytes where the closure flow finds the tabulator to be the literal tables' code alone
+  (`Prog.lits`), and reads the environment of that code.
+- **Lend kinds.** `Op.lend m` is the borrow constant's kind; `Lint` checks the borrow it answers
+  is of that kind.
+- **`unfold step`.** A `bind` marks its variable where its bound computation is an `unfoldStep`
+  node; the mark goes with the slot's variable as the conversion renames it.
+
+### Programs
+
+`corpus/lend-owner-returned.bc`, `swap-cell-width.bc`, `literal-array-written.bc`,
+`capability-swap-width.bc` and `lend-owner-joined.bc` (#712's `t4`, `t7`, `t13`, `t17`, `t18`)
+agree with the source at the LIR, the word IR, Wasm and natively. The old backend refuses
+`capability-swap-width.bc`, which is marked so (`-- check: old-backend-refuses`,
+`scripts/compile-corpus.sh`).
+
+### Baseline
+
+No change to `CDerives`, the relation, the checker or the old backend's output. Every golden is
+unchanged; Backend2's counts are unchanged.
+
+### Open
+
+- `!` is not on the LIR's types: `Lint` cannot check that a copied variable is persistent.
+- That a location holds only its class's types at run time is not proved (`TFacts.lean`).
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -9748,11 +9809,20 @@ rules (`scripts/pin/`), `Frontend/Check/TShift.lean`, `Weaken.lean`, `TTied.lean
 `Checker.lean`, `Steps.lean`, `Program.lean`, `TFacts.lean`, `Kinds.lean`, `KindsSound.lean`,
 `Frontend/Sugar.lean`, `Lowering/` and `Backend2/Convert.lean`, `Debug.lean`, `Driver.lean`. No
 change to `CDerives`, the relation, any erasure or Backend2's outputs.
+Entry 57 (§58) is implemented in `Backend2/` (`Syntax.lean`, `Convert.lean`, `Driver.lean`,
+`Layout.lean`, `Lower.lean`, `Lint.lean`, `Interp.lean`, `Print.lean`; `Frames.lean` and
+`LitViews.lean` deleted), `Backend/Flat/Interp.lean` and `scripts/compile-corpus.sh`.
 
 ---
 
 ## Changelog
 
+- **1.07** (2026-10-28) — §58 (#712, part C): Backend2 reads the facts. Frame slots from
+  `lendScope`'s `rel` and the allocating function; widths from the allocation's class
+  (`Checked.classAt`) and the contents' own type; literal views from `litView`; lend kinds on
+  `Op.lend`; `unfold step` from `unfoldStep`. `Frames` and `LitViews` deleted; the LIR linted on
+  the compile path; five regressions in the corpus. No change to the language, the checker or any
+  golden.
 - **1.06** (2026-10-28) — §57 (#712, part B): the facts Backend2 rebuilt, as derived nodes. A
   `lendCell` node's kind is its constant's (`lendKindB`); a lent cell's scope is a `lendScope` node
   whose `rel` is its release on every path (`relT`); a literal's view is a `litView` node; `unfold

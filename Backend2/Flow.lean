@@ -121,8 +121,8 @@ def link (p : Prog) (base : Nat) (s : Site) (c : Nat) : FM Unit := do
 -- layout class (`coarse`), itself joined over every move (`Backend2/Layout.lean`). It is not a
 -- typing fact: the typed term says a value is a closure of a type, not which λ made it. The
 -- loop stops at `fuel` steps with whatever it has. If a code is missing, `known` makes a direct
--- call of the wrong code (`Lower.callTarget`), and `LitViews` takes a tabulator for the literal
--- tables' code.
+-- call of the wrong code (`Lower.callTarget`), and a literal's view takes a tabulator for the
+-- literal tables' code (`Lower`, `tabLit`).
 /-- The least solution. -/
 def solve (p : Prog) (base : Nat) (fuel : Nat) : FM Unit := do
   let mut linked : Std.HashSet (Var × Nat × Nat) := {}

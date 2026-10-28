@@ -308,12 +308,15 @@ lend-lib-each 2 0 0 44 12 11
 lend-lib-gen 1 0 0 4 4 0
 lend-lib-loop 3 0 0 34 22 4
 lend-mut 1 0 0 11 6 0
+lend-owner-joined 2 0 0 2 2 0
+lend-owner-returned 1 0 0 1 1 0
 lend-pipeline 2 0 0 121 103 6
 lend-server 1 0 0 16 3 0
 lend-shadow 2 0 0 33 13 5
 list-blocks 13 0 0 55 43 0
 list-capability 6 0 0 31 22 0
 list-generic 27 0 0 148 102 0 # the lists' nodes, one object each; no frame and no closure is allocated
+literal-array-written 2 0 0 22 11 12
 loop-handler-binder 1 0 0 15 4 16
 loop-labels 0 0 0 0 0 0
 loop-row-answer 0 0 0 0 0 0
@@ -380,6 +383,7 @@ surface/family-swap 2 0 0 4 4 0
 surface/io-upper 0 0 0 135 2 0
 surface/io-wc 0 0 0 61 2 0
 surface/map-reuse 6 0 0 42 42 0
+swap-cell-width 1 0 0 1 1 0
 text-lend-lifetime 1 0 0 81 71 77
 text-wordfreq 966 0 192 5450 3358 65 # the words' and counts' list nodes; the copies are the written `clone`s of words in comparisons and lookups
 tree-map 29 0 2 209 161 0 # the trees' nodes, one object per node; the copies are the written `clone(m)`s

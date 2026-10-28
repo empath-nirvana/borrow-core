@@ -29,6 +29,11 @@
 # compiled stage's output. It refuses a program that fails or leaves cells live; a nonzero exit
 # status is the program's only when the stage wrote its report (`live N`).
 #
+# A program marked `-- check: old-backend-refuses` is one the old backend refuses at compile time
+# (`corpus/capability-swap-width.bc`): it is run at the source stage only here, has no counts
+# here, and the old backend must still refuse it; the new backend runs it at every stage
+# (scripts/compile-backend2.sh).
+#
 # A program marked `-- check: no-source` is too large for the source interpreter
 # (`corpus/deep-list.bc`): its golden is written by hand, and it is run at every other stage.
 #
@@ -195,6 +200,13 @@ program() {
   err=/dev/null; [ -f "$base.err" ] && err="$base.err"
   ok=1
   stages="clos flat wasm"
+  local old=1
+  if grep -q '^-- check: old-backend-refuses' "$f"; then
+    old=0; stages=""
+    if "$bcc" interp --stage flat "$f" < "$in" > /dev/null 2>&1; then
+      echo "$f: marked old-backend-refuses, but the old backend runs it: remove the mark"; return 1
+    fi
+  fi
   if grep -q '^-- check: no-source' "$f"; then :
   elif withSource "$f"; then
     stages="source $stages"
@@ -217,7 +229,8 @@ program() {
   if [ "$ok" = 1 ] && [ "$(tail -1 "$base.out")" != "live 0" ]; then
     echo "$f: agrees, but leaves objects live"; ok=0
   fi
-  if [ "$ok" = 1 ] && ! counts "$f" "$in"; then ok=0; fi
+  if [ "$old" = 0 ]; then cnt="the old backend refuses it"
+  elif [ "$ok" = 1 ] && ! counts "$f" "$in"; then ok=0; fi
   [ "$ok" = 1 ] || return 1
   echo "$f: $(wc -c < "$base.out" | tr -d ' ') bytes as $base.out at $(echo $stages | tr ' ' ,)$note | live 0 | $cnt"
 }

@@ -4,8 +4,6 @@ import Backend2.Print
 import Backend2.Interp
 import Backend2.Lower
 import Backend2.Flow
-import Backend2.Frames
-import Backend2.LitViews
 import Backend2.Lint
 import Frontend.Check.Handled
 
@@ -117,15 +115,87 @@ def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
       out := out.insert (n, j)
   return out
 
-/-- The checker's cell classes (`Checked.cells`) at LIR types, each with its root: the type its
-allocations are at (`Checked.classAt`, SPEC §57). -/
-def cellsRooted (k : Backend.CheckedProg) : List (Option LTy × List LTy) :=
-  k.main.cells.map fun c =>
-    ((ofV (machineOps k.main) c.root).toOption,
-      c.tys.filterMap fun t => (ofV (machineOps k.main) t).toOption)
+/-- **The width classes** (SPEC §57): for each type `main` allocates a cell at, its class
+(`Checked.classAt`, `Checked.classAt_alloc`), and for the contents of each capability's cell (an
+extern, which no `alloc` node allocates) the class the checker's construction gives it
+(`cellClasses`), checked closed under the term's `swap`s (`cellsOkB`, `cellsOkB_sound`): each
+type's LIR types. -/
+def classesOf (k : Backend.CheckedProg) : Except String (List (VTy × List LTy)) := do
+  let c := k.main
+  let ms := machineOps c
+  let lir (tys : List VTy) : List LTy := tys.filterMap fun t => (ofV ms t).toOption
+  let mut out : List (VTy × List LTy) := c.cells.map fun cl => (cl.root, lir cl.tys)
+  let es := c.t.cells.2
+  for s in c.ctx do
+    if let .ref B := s.ty then
+      let B := B.eraseLife
+      if out.any (·.1 == B) then continue
+      let cls := cellClasses [B] es
+      unless cellsOkB [B] es cls do throw s!"internal error: a capability's cell class is not closed"
+      out := out ++ cls.map fun cl => (cl.root, lir cl.tys)
+  return out
 
-/-- The checker's cell classes (`Checked.cells`) at LIR types. -/
-def cellsOf (k : Backend.CheckedProg) : List (List LTy) := (cellsRooted k).map (·.2)
+/-- Each variable's uses in a term: whether each is the operand of a `free`. -/
+def freeUses : Nat → Tm → List (Var × Bool)
+  | 0, _ => []
+  | f + 1, t => match t with
+    | .var x => [(x, false)]
+    | .unit | .lit _ => []
+    | .pair a b => [(a, false), (b, false)]
+    | .inj _ a => [(a, false)]
+    | .clos _ env => env.map (·, false)
+    | .app g a => [(g, false), (a, false)]
+    | .app0 g | .sel g _ => [(g, false)]
+    | .call _ as => as.map (·, false)
+    | .prim op as => as.map (·, op == .free)
+    | .letv _ e b => freeUses f e ++ freeUses f b
+    | .letpair _ _ p b => (p, false) :: freeUses f b
+    | .case s _ b₁ _ b₂ => (s, false) :: (freeUses f b₁ ++ freeUses f b₂)
+    | .absurd s => [(s, false)]
+    | .copy x _ b | .drop x b => (x, false) :: freeUses f b
+
+/-- The lend scopes a term allocates cells for, and the variables its `letpair`s bind first. -/
+def scopesIn : Nat → Tm → List Nat × List Var
+  | 0, _ => ([], [])
+  | f + 1, t => match t with
+    | .letv _ (.prim (.allocLent s _) _) b =>
+      let (ss, xs) := scopesIn f b
+      (s :: ss, xs)
+    | .letv _ e b =>
+      let (s₁, x₁) := scopesIn f e
+      let (s₂, x₂) := scopesIn f b
+      (s₁ ++ s₂, x₁ ++ x₂)
+    | .letpair x _ _ b => let (ss, xs) := scopesIn f b; (ss, x :: xs)
+    | .case _ _ b₁ _ b₂ =>
+      let (s₁, x₁) := scopesIn f b₁
+      let (s₂, x₂) := scopesIn f b₂
+      (s₁ ++ s₂, x₁ ++ x₂)
+    | .copy _ _ b | .drop _ b => scopesIn f b
+    | _ => ([], [])
+
+-- UNPROVED: that a variable its function uses only as the operand of `free` is freed on every
+-- path of that function before it returns. It should hold because the LIR consumes each variable
+-- exactly once on every path, which `Lint.lint` checks of each program it compiles (`flatOf`),
+-- and a lent cell's borrow does not outlive its lend (`withbor`'s fresh `'x`). If it fails, a
+-- frame slot is read or freed after its frame is given back.
+/-- **The frame slots** (SPEC §57): the lend scopes whose cell is a frame slot, by their owners. A
+scope's `rel` (`TExpr.lendScope`) says the owner is released by `free` on every path of the typed
+term; the conversion may place parts of that code in functions of their own (a closure, a join or
+a resumption point of a machine, SPEC §49), and the owner's variable then reaches them as a
+parameter. So a scope's cell is a slot where its function, the one that allocates it, binds its
+owner and uses it only as the operand of `free`: every path of that function frees it there
+(the LIR consumes each variable once on every path, which `Lint.lint` checks of the program). -/
+def slotsOf (p : Prog) (owners : Std.HashMap Var Nat) : Std.HashMap Var Nat := Id.run do
+  let mut out : Std.HashMap Var Nat := {}
+  for b in p.main :: p.fns.toList.map (·.body) do
+    let (ss, xs) := scopesIn (1 <<< 22) b
+    let us := freeUses (1 <<< 22) b
+    for x in xs do
+      let some s := owners[x]? | continue
+      unless ss.contains s do continue
+      let mine := us.filter (·.1 == x)
+      if !mine.isEmpty && mine.all (·.2) then out := out.insert x s
+  return out
 
 /-- The codes of the suspended computations an outcome `o` (of `M`) may hold, by the layouts: the
 closure classes of each suspension's `k`.  `[spec §49]` -/
@@ -149,8 +219,9 @@ layouts of the converted program decide the calls in tail position that close a 
 (`tailPass`) and the machines whose state is a cell (`cellPass`). A machine whose state is a cell
 and whose body takes its continuation is converted again with the level's cell passed on to its
 next point (`threadedOf`, SPEC §50): the conversion's second run, at those machines. -/
-def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
+def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
   let c := k.main
+  let classes ← classesOf k
   let (exts, ncaps, loops) ← match k.io with
     | none => pure ([], 0, false)
     | some m => pure (← extsOf m, m.caps.length, m.loopB.isSome)
@@ -158,13 +229,13 @@ def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Pr
   let run (threaded stacked : Std.HashMap Nat LTy) :
       Except String (Prog × CState × Std.HashMap Nat LTy × Std.HashMap Nat LTy) := do
     let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c) (machineOps c)
-      threaded stacked
+      threaded stacked classes
     let p := { p with exits := c.exitsOnDivError }
     if st.done.isEmpty then return (p, st, {}, {})
     -- A call in tail position whose callee's suspended computations may be the machine's own
     -- closes a loop of tail calls, and passes its outcome on (SPEC §49, `tailPass`).
     let (g, m) ← Lay.places p
-    let L₁ := Lay.resolve p g m (cellsOf k)
+    let L₁ := Lay.resolve p g m
     let loop (site : Nat × Var × OutInfo × Nat) : Bool :=
       let (_, o, M, i) := site
       let own := (st.done[i]?.map fun (_, kcs) => kcs.map (·.2)).getD []
@@ -176,7 +247,7 @@ def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Pr
     -- The machines whose suspended computation's class holds itself keep their state in a cell
     -- (SPEC §49, `cellPass`), read off the layouts' recursive classes.
     let (g, m) ← Lay.places p
-    let L := Lay.resolve p g m (cellsOf k)
+    let L := Lay.resolve p g m
     let recursive (kc : Nat) : Bool := match L.codeClass[kc]? with
       | some cls => L.isRec cls
       | none => false
@@ -190,6 +261,11 @@ def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Pr
   if th.isEmpty && sk.isEmpty then return (p, st)
   let (p, st, _, _) ← run th sk
   return (p, st)
+
+/-- The LIR of a checked program (`lirOf₀`), with its frame slots (`slotsOf`). -/
+def lirOf (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
+  let (p, st) ← lirOf₀ k census
+  pure ({ p with slots := slotsOf p st.owners }, st)
 
 /-- **The effect erasure's postcondition**, for a program (`bcc lir --erasure`, SPEC §47, §49): the
 LIR has no `handle` and no `perform`, so a program the new backend compiles has none left. The
@@ -223,19 +299,19 @@ def lintOf (k : Backend.CheckedProg) : Except String Unit := do
   let (p, _) ← lirOf k
   Lint.lint p
 
-/-- **The frame slots** (`bcc lir --frames`, SPEC §50): of the cells allocated for one lend
-(`Op.allocLent`), how many are placed in a frame slot (`Frames.framed`) and how many on the heap. -/
+/-- **The frame slots** (`bcc lir --frames`, SPEC §50, §57): of the cells allocated for one lend
+(`Op.allocLent`), how many are placed in a frame slot (`slotsOf`) and how many on the heap. -/
 def framesLine (k : Backend.CheckedProg) : Except String String := do
   let (p, _) ← lirOf k
-  let all := Frames.lentCells p
-  let fr := Frames.framed p
-  let n := (all.filter fr.contains).length
+  let all := (p.main :: p.fns.toList.map (·.body)).flatMap fun b => (scopesIn (1 <<< 22) b).1
+  let slots := p.slots.fold (fun s _ sc => s.insert sc) ({} : Std.HashSet Nat)
+  let n := (all.filter slots.contains).length
   pure s!"framed {n} allocated {all.length - n}"
 
 /-- The layouts of a program's LIR. -/
-def layoutsOf (k : Backend.CheckedProg) (p : Prog) : Except String Lay.Layouts := do
+def layoutsOf (_k : Backend.CheckedProg) (p : Prog) : Except String Lay.Layouts := do
   let (g, m) ← Lay.places p
-  pure (Lay.resolve p g m (cellsOf k))
+  pure (Lay.resolve p g m)
 
 /-- The closure classes of a program's layouts, one a line: its codes, its width, whether its
 environment is on the heap (`bcc lir --layout`). -/
@@ -250,11 +326,13 @@ def layoutReport (k : Backend.CheckedProg) : Except String (List String) := do
 
 /-- The word IR of a checked program by the new backend; with `counts`, the counting build. -/
 def flatOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String Backend.Flat.Prog := do
-  let (p, cs) ← lirOf k
+  let (p, _) ← lirOf k
+  -- The LIR is linted on the way: each variable consumed once on every path, which `slotsOf`
+  -- reads.
+  Lint.lint p
   let L ← layoutsOf k p
   let fs := Flow.solution p L
-  let p := LitViews.rewrite p cs.lits fs.sets
-  Low.lowerProg p L (Flow.known p L fs) (Frames.framed p) counts
+  Low.lowerProg p L (Flow.known p L fs) fs.sets counts
 
 /-- The program as WAT by the new backend. -/
 def watOf (k : Backend.CheckedProg) (counts : Bool := false) : Except String String := do
@@ -289,14 +367,14 @@ def watTimed (file src : String) : IO (Except String String) := do
       match Frontend.Check.ioMainOf r.el.prog c with
         | .ok io => pure (⟨r.el.prog, c, io⟩ : Backend.CheckedProg)
         | .error e => throw s!"{file}: {e}"
-    let (p, cs) ← ExceptT.mk <| stage "lir" (fun (q : Prog × CState) =>
+    let (p, _) ← ExceptT.mk <| stage "lir" (fun (q : Prog × CState) =>
         s!"{q.1.fns.size} functions, {q.1.codes.size} codes") fun _ => lirOf k
     let L ← ExceptT.mk <| stage "layout" (fun _ => "") fun _ => layoutsOf k p
     let fs ← ExceptT.mk <| stage "flow" (fun _ => "") fun _ => pure (Flow.solution p L)
     let flat ← ExceptT.mk <| stage "lower" (fun (q : Backend.Flat.Prog) => s!"{q.fns.size} functions")
       fun _ => do
-        let p := LitViews.rewrite p cs.lits fs.sets
-        Low.lowerProg p L (Flow.known p L fs) (Frames.framed p) false
+        Lint.lint p
+        Low.lowerProg p L (Flow.known p L fs) fs.sets false
     let wasm ← ExceptT.mk <| stage "wasm" (fun (m : Backend.Wasm.Module) => s!"{m.funcs.length} functions")
       fun _ => pure (Backend.Wasm.lowerProg flat)
     let wat ← ExceptT.mk <| stage "print" (fun (s : String) => s!"{s.utf8ByteSize} bytes")
