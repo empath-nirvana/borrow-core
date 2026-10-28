@@ -29,9 +29,6 @@ def ppOp : Op → String
   | .stackSwap _ => "stackSwap" | .stackFree => "stackFree" | .framePush m _ => s!"framePush[m{m}]"
   | .frameTop m _ => s!"frameTop[m{m}]" | .framePut => "framePut" | .framePop _ => "framePop"
   | .unreachable => "unreachable" | .stackNew s => s!"stackNew[{s}]"
-  | .cellNew => "cellNew" | .cellsNew => "cellsNew" | .cellFree => "cellFree"
-  | .cellLoad => "cellLoad" | .cellStore => "cellStore" | .locAt l => s!"locAt[{l}]"
-  | .locAdd => "locAdd" | .famIdx => "famIdx" | .famSplit => "famSplit"
   | .kappaPut s => s!"kappaPut[{s}]" | .kappaTake s => s!"kappaTake[{s}]"
 
 def v (x : Var) : String := s!"x{x}"

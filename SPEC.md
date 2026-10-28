@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.08 · 2026-10-28
+Version 1.09 · 2026-10-28
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -8899,177 +8899,27 @@ unchanged on both backends.
 
 ## 53. Entry 52 — lowering under the semantic relation: the statements (#699, U0 of #698)
 
-### Motivation
+### Retired
 
-Neither backend has a theorem: each decides copies, drops, continuations and lifetimes on its
-own, and neither IR interpreter is related to the machine. #698's scoping found that the kernel
-already types the backend's input (`Checked.e := c.t.erase`, `checked_sem`), so a lowering can keep
-the guarantees the way the kernel types its constants (`swap`) and `PinLaw`: by proving its output
-in `SemC` at the source's type, once, as a theorem about the lowering function. That is not a
-check of each compiled program, not a lint, and not a re-derivation of `CDerives` for the output.
-The plan splits the lowering at a low subset of `Expr`: the steps that decide ownership or control
-are `Expr → Expr` steps proved in `SemC` (U1, U3); the steps below it (closure conversion, boxing,
-defunctionalisation, frame slots) are representation, proved by a simulation that reads no type
-(U2). The user agreed the plan on 2026-10-27: "That sounds good. Let's open issues and work through
-them." This entry states the plan's theorems; it proves the transfer, not the lowerings.
-
-### Language
-
-No change: no type, rule, term, typing, elaboration, semantics or backend.
-
-### Statements
-
-`Lowering/`, a library with no executable.
-
-- **The low subset** (`Lowering/Low.lean`, `LowExpr Site n e`): the shape the ownership and
-  control layers lower into.
-  - *Explicit ownership* (`Explicit`, `occ`, `once`): every binder, every variable a `λ` captures
-    and every context variable is consumed exactly once on every path, in the machine's order. A
-    second use goes through `copy`, an unused value through `forget` or `dtorE A`, so the print
-    places no copy or drop of its own, which is the LIR's discipline. A path may end at `absurd`
-    with variables unused there, as `[0E]` absorbs them (written `absurdL` since §54). The
-    kernel's constants are atoms (`LowConst`: the erasure of a typed node with no premise);
-    `copy`'s own body uses its binder twice (`copy_body_not_once`).
-  - *Effects only at stored-continuation sites* (`EffOnlyAt Site`): `perform`, `raise`, `hnd`,
-    `ubind`, `ccatch`, `cfin` and `iterate` (whose step performs `Div`'s tick) occur only inside a
-    subterm `Site` accepts. `Site` is a parameter because the representation of a stored
-    continuation is not decided (#703): under K1 it accepts the stored sites' handler terms, under
-    K2 nothing (`noSite`). Widening `Site` keeps a low term low (`LowExpr.mono`).
-- **The obligations** (`Lowering/Obligations.lean`): `LowerSem lower` (every checked `main` with
-  no relaxed rule lowers into `SemC` at its context and type), `LowerSemRel lower` (whatever puts
-  the source in `SemC` puts the lowered term there; with `PinLaw` it covers relaxed rules), and
-  `LowersInto Site lower` (the output is low). Proved: `lowered_every_run` and
-  `lowered_every_run_pin` (every run of a lowered closed `F 1` program from the empty memory
-  continues to `()` at the empty memory, through `theorem32D`); `erase_lowerSem` and
-  `erase_lowerSemRel` (the erasure meets them); `bang_owns_nothing` (a value at `!A` owns no
-  resource, so boxing is below the low subset).
-- **The print's simulation** (`Lowering/Print.lean`). The LIR's semantics is its interpreter
-  (`Backend2/Interp.lean`), a fuelled big-step evaluator: `lirRun p fuel` runs `main` from the
-  state with no input. A run *faults* when it fails at some fuel other than for want of fuel
-  (`outOfFuel`, pinned by `eval_zero`), and *answers* `(v, s)` when it returns them at some fuel.
-  `LIREveryRun p`: no fault, every answer `()` with no live object, and some answer.
-  `SimBy R e p`, through a correspondence `R : Corr` the print chooses (`()` to `()`, the empty
-  memory to no live object): an LIR fault is a source run that gets stuck, an LIR answer a source
-  run to a corresponding value and heap, and a source run that ends is matched by an answer.
-  `PrintSim Site lower print`: every checked closed `main : F 1` whose lowered term is low has its
-  print simulated. Stated, not proved (U2).
-- **The transfer** (proved): `lir_every_run_of_sem` (a closed `F 1` term in `SemC` whose print is
-  simulated has `LIREveryRun`), `lowered_lir_every_run` and `lowered_lir_every_run_pin` (composed
-  with the obligations).
-- **Non-vacuity**: `lowExpr_unit`, `lowExpr_copyTwice` (an explicit `copy`), `lowExpr_absurd` (a
-  binder unused on a path that ends at `absurd`); `sem_unit`, `printSimAt_unit` and
-  `lir_every_run_unit` (the transfer's hypotheses hold together at `()`).
-
-### Baseline
-
-No change to `CDerives`, the relation, the machine, `Core/`, `Paper/`, `Support/`, the checker, the
-elaboration, either backend or a kernel program. Every output, golden and count is unchanged.
-
-### Open
-
-- **The LIR's semantics includes the interpreter's re-checks.** A fault is any failure but
-  `outOfFuel`, so it includes the consumption, copy and drop checks (`Backend2/Interp.lean`:
-  `takeV`, the `copy` and `drop` arms, `callFn`'s empty frame), which U6 retires. While they stand,
-  U2's simulation must meet them on every reachable path. A path that ends at `absurd` leaves
-  variables in the frame and fails no check, because no run reaches it. Since §54 the low
-  subset's `absurd` is `absurdL`, whose arms are stuck, so a codiagonal is not read as `absurd`.
-- **`iterate` is an effect primitive here.** A `Div` loop whose handler U3 erases needs a low
-  form; `boundedFix` and `count` are the loops the low subset keeps.
-- **The host.** The interpreter computes host operations at `lirHost`; U2 proves the simulation
-  at `ℍ := lirHost`.
-- **Externs and `main`'s context** (U5): the statements are at closed `main`; the interpreter's
-  input and output are not in the source machine.
-- **Joint non-vacuity at every program** is U1 and U2's: a lowering meeting `LowerSem` and
-  `LowersInto` together, and a print meeting `PrintSim`.
+This entry stated the obligations of a lowering proved in the semantic relation (the low subset of
+`Expr`, `LowerSem`, the print's simulation and its transfer to the LIR). The route was dropped
+(user, 2026-10-28): lowering by simulation in `SemC` moves the hard parts into the relation's
+definitions, and a safety relation would still accept a wrong answer. The `Lowering/` library and
+its corpus check are removed. Backend2 is the backend, and it reads the kernel's facts instead
+(#713, #715; CLAUDE.md, *Later stages read the kernel's facts*).
 
 ---
 
 ## 54. Entry 53 — lowering under the semantic relation: explicit ownership, `own` (#700, U1 of #698)
 
-### Motivation
+### Retired
 
-§53 states what a lowering must prove. This entry gives the first lowering: `own`, which writes
-every copy and every drop the kernel leaves implicit, reading them from the checked term, and
-proves it in the relation (`LowerSemRel`) and in the low subset on the pure fragment. The kernel
-leaves two operations implicit, both at a persistent slot (§10), whose value holds no resource: a
-copy at a split (`Ctx.SplitP.dup`) and a drop at a leaf (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`).
-Every other drop is the program's own (`dtor`, §12). The user agreed the plan on 2026-10-27
-(§53).
-
-### Language
-
-No change to a type, rule, term, typing, elaboration, semantics or backend. §53's low subset
-changes its `absurd` form (below).
-
-### Statements
-
-`Lowering/`:
-
-- **`own : TExpr → Expr`** (`Lowering/Own.lean`), `ownAt L t` at the live slots `L` of the
-  node's context:
-  - *Copies* are read off the split's masks: a slot both masks hold, which the typed rule gives to
-    both parts at a persistent type (`TDerivesP.copies`), is copied in front of the node,
-    `let (x₁, x₂) = copy x in …`, and each part renamed to read its copy (`ren`, `copiesE`).
-  - *Drops*: a part receives the live slots its mask holds (`part`); a live slot neither mask
-    holds is dropped at the split, and a leaf drops every live slot but the one it reads, each by
-    `forget x; …` (`dropE`, `splitE`, `leafE`). No occurrence of a variable is counted.
-  - A binder the kernel types dead (the `()` a thunk of `F A` or a `Λ` is forced with) is
-    consumed by `(); …`.
-  - *The pure fragment* (`pureT`): the CBPV and value rules, the coercions, the derived nodes, and
-    the constants free of effect primitives, each lowered node for node. The effect nodes (§19,
-    `iterate`, `divFuel`, `reify`), the unwinding borrows, `[let-poly]` and `[λ-dead]` are left as
-    their erasures (U3, U4); a term with a relaxed rule (§29) is left whole, since its relation
-    rests on `PinLaw`, whose `PinStop` takes the callback as a `CDerivesP` derivation.
-- **`absurd` is read from the typed term.** §53's low subset recognised `absurd` by the shape of
-  the kernel's `absurdE` (`case V {x. x | y. y}`), which is also a codiagonal's. It now
-  recognises `absurdL V := case V {x. stuck | y. stuck}` (`Lowering/Low.lean`), its arms the
-  machine's stuck term `() ()`, which `own` writes only at a `[0E]` node (`zeroE`). A codiagonal
-  is an ordinary `case` (`not_lowExpr_codiag`); `Explicit.absurd` admits `absurdL`; witnesses
-  `lowExpr_absurd`, `lowExpr_absurd_ctx`.
-- **The decision** `lowB` (`Lowering/Low.lean`): `LowExpr` at no site, decided, the constants
-  given by a predicate; sound (`lowB_sound`).
-- **`own` is in the relation** (`Lowering/OwnSem.lean`), proved by induction on the typed
-  derivation, each node by its rule's compatibility lemma at `own`'s parts. A drop and a copy are
-  pure head steps (`sem_drop`, `cC_copy_let`); after the copies, the renamed node at the extended
-  substitution is the node (`psub_ren`, `sem_copies`, `sem_split`). The dead binders' `(); …` and
-  `absurdL` have their own compatibility lemmas. A node left as its erasure is in the relation by
-  the Fundamental Property: a typed derivation with no relaxed rule is a `CDerives` derivation of
-  its erasure (`relaxedFree`, `TDerivesP.toC`, `Lowering/NoRelaxed.lean`). Results:
-  `own_lowerSemRel` (`LowerSemRel own`), `own_lowerSem`, `own_every_run`, `own_every_run_pin`.
-- **`own` lands in the low subset on the pure fragment** (`Lowering/OwnLow.lean`):
-  `own_lowersInto : LowersIntoOn (fun _ => noSite) P own` with `P c` = `c.ctx = []` and
-  `pureT c.t` (and `agreeAt [] c.t` before §55). `LowersIntoOn` (`Lowering/Obligations.lean`) is `LowersInto` on a class of
-  programs (`lowersInto_iff`). Each part consumes exactly the live slots it is given (`ExactP`),
-  through injective renamings (`occ_ren`, `ExplicitC.ren`, `Lowering/LowRen.lean`), copies
-  (`exact_copies`) and drops (`exact_splitE`, `exact_leafE`); a thunk of a `λ` stays a `λ`
-  (`own_lam`).
-- **The masks' agreement** (`agreeAt`): along `own`'s flow, every variable a leaf reads is live
-  where it is read. Since §55 it is a theorem (`agreeAt_of_typed`): the typed split rules make a
-  split's masks cover its parts, and `coverage_excludes_missT` is a term whose masks
-  `SplitMasks` admits, where `own`'s output reads a binder twice, which coverage excludes.
-- **Non-vacuity**: `dupChecked`, the checked `main` `return (λx. (x, x))`, meets every hypothesis;
-  `own` writes its copy (`own_dupChecked`) and its output is low (`own_dupChecked_low`).
-- **The corpus check** (`scripts/LoweringCheck.lean`, `scripts/check-lowering.sh`, the gate step
-  `lowering`): every corpus program with no capability whose term is in `pureT` has `agreeAt`
-  decided true, `own`'s output decided low (`lowB`), and `own`'s output run by the source
-  interpreter to the erasure's report. The programs in the fragment are pinned in
-  `corpus/lowering.expected`.
-
-### Baseline
-
-No change to `CDerives`, the relation, the machine, `Core/`, `Paper/`, `Support/`, the checker, the
-elaboration, either backend or a kernel program. Every output, golden and count is unchanged.
-
-### Open
-
-- **`agreeAt` is a theorem since §55**, by a premise on the typed split rules.
-- **`use`'s `ab` is not read.** `own` drops a `def` body's absorbed slots where the body's masks
-  (moved by `Masks.ins`) leave them, and needs no slot's type: `forget` is untyped. `ab` is a
-  formula over types (which absorbed slots a body's derivation admits), which a print that frees a
-  persistent value by its layout may need.
-- **The print reads no node marks.** `own`'s output is an `Expr`; the derived nodes' marks
-  (`litFn`, `walk`, `lendCell`, …) that Backend2 reads for representation are not carried.
-- **Programs with capabilities** (U5) and **effect nodes** (U3, U4) are outside the fragment.
+This entry gave `own`, a lowering that wrote every copy and drop the kernel leaves implicit, proved
+in the relation and in §53's low subset on the pure fragment. The route was dropped (user,
+2026-10-28): lowering by simulation in `SemC` moves the hard parts into the relation's definitions,
+and a safety relation would still accept a wrong answer. The `Lowering/` library and its corpus
+check are removed. Backend2 is the backend, and it reads the kernel's facts instead (#713, #715;
+CLAUDE.md, *Later stages read the kernel's facts*).
 
 ---
 
@@ -9077,13 +8927,13 @@ elaboration, either backend or a kernel program. Every output, golden and count 
 
 ### Motivation
 
-§54's `own` gives a split's part the live slots its mask holds, and proves its output low only
-where every slot a part reads is one its mask holds (`agreeAt`). The checker builds each mask as
-its part's uses (`Fam.split`), so its terms have that, but the typed split rules did not say so:
+Coverage says every slot a split's part reads is one its mask holds, so a stage that gives a part
+the live slots its mask holds gives it every slot it reads. The checker builds each mask as its
+part's uses (`Fam.split`), so its terms have that, but the typed split rules did not say so:
 `SplitMasks` asks only that a slot a mask holds be live in the part's context, and a part's context
 may hold a live slot its mask does not (a persistent slot a leaf drops, or reads). The user decided
-(#701, after #707, option 1): the typed split rules carry the condition, every derivation has it,
-the checker is proved to meet it, and `own_lowersInto` holds without the hypothesis.
+(#701, option 1): the typed split rules carry the condition, every derivation has it, and the
+checker is proved to meet it. It is a fact of the typed term, which later stages may read.
 
 ### Language
 
@@ -9099,9 +8949,8 @@ and `CDerivesP` drop the premise as they drop `SplitMasks`.
   the premise `hcv`: each part's term, at the binders its premise pushes, is covered by its part's
   mask; `M x`'s second part is its argument `x`. Generated with the rules (`scripts/gen-pin.py`,
   `cov_premise`): `tensorI`, `bind`, `app`, `unitE`, `tensorE`, `sumE`, `zeroE`, `lolliE`,
-  `effLet`, `effThen`, `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL`. It is the minimal
-  form of the condition `own` needs: it names the slots a part's term mentions, not its context's
-  liveness, so the checker's masks are unchanged.
+  `effLet`, `effThen`, `effHandleV`, `effHandleVB`, `effHandleT`, `effHandleL`. It names the slots
+  a part's term mentions, not its context's liveness, so the checker's masks are unchanged.
 - **A typed term mentions only live slots** (`CDerivesP.mentions_live`, `Core/Mentions.lean`): a
   term `CDerivesP` types at `Γ` mentions only slots live in `Γ`. Induction on `CDerivesP`, as
   `closedAt_of_derives`; `[let-poly]` by `mentions_fill`, the clauses of `[handle]`'s tail and last
@@ -9113,145 +8962,27 @@ and `CDerivesP` drop the premise as they drop `SplitMasks`.
   `TTied.drop` and `TTied.shorten` their nodes'.
 - **Weakening keeps it** (`Frontend/Check/Weaken.lean`): a part's term shifted past inserted slots
   is covered by its mask with the slots inserted (`Covers.ins`); `TExpr.reAb` keeps the erasure.
-- **`own_lowersInto` holds without `agreeAt`**: `agreeAt_of_typed` (`Lowering/OwnLow.lean`)
-  proves the masks' agreement of every typed term of the pure fragment, from coverage and
-  `mentions_live` (a binder typed dead is never read). `own_lowersInto : LowersIntoOn (fun _ =>
-  noSite) P own` with `P c` = `c.ctx = []` and `pureT c.t`.
-- **Non-vacuity**: `own_dupChecked_low` meets the new hypotheses; `coverage_excludes_missT`
-  shows the premise is not implied by `SplitMasks`: `λx. (x, ())` with both masks empty has
-  masks `SplitMasks` admits, is not a typed derivation, and is where `own`'s output reads `x`
-  twice.
+- **Non-vacuity**: every checked program carries its typed derivation (`Checked.tied`), so its
+  typed term has the premise at each of its splits.
 
 ### Baseline
 
 The fundamental property, adequacy and every borrow guarantee are unchanged: they are stated over
 `CDerives`/`CDerivesP` and the typed derivations' projections, which are unchanged. The checker's
-masks, its typed terms and every output, golden and count are unchanged. `corpus/lowering.expected`
-is unchanged.
-
-### Open
-
-- **`agreeAt` is still decided by the corpus check**, as a check of the theorem's conclusion.
+masks, its typed terms and every output, golden and count are unchanged.
 
 ---
 
 ## 56. Entry 55 — the print to the LIR, simulated with the source's memory (#701, U2 of #698)
 
-### Motivation
+### Retired
 
-§53 states the print's simulation (`PrintSim`) and proves its transfer to every-run safety,
-termination and no live object at the LIR; §54 and §55 put `own`'s output in the relation and in
-the low subset on the pure fragment. This entry gives the print to Backend2's LIR and proves its
-simulation on the whole pure fragment. In this calculus ownership is the memory: a `Ref` owns a
-cell, a family owns its cells, a borrow is a location the owner keeps. So the simulation carries a
-correspondence of the source's memory and the LIR's from the start, through every allocation,
-free, load and store, and through every kernel constant and primitive the pure fragment reaches:
-cells, the borrow constants (`withbor*`, `withload`, `withswap`, `lendCell`'s cells), `swap`,
-arrays and slices, walks, the counted loops, `bounded_fix`, and the folds.
-
-### Language
-
-No change to a type, rule, term, typing, elaboration or semantics. Backend2's LIR gains operations
-on the source's memory (`Backend2/Syntax.lean`, interpreted in `Backend2/Interp.lean`):
-`cellNew`, `cellsNew` (a cell, or `len(c)` cells, at the region base `next`, which moves on one
-region of `regionSize` addresses), `cellFree`, `cellLoad`, `cellStore`, `locAt ℓ`, `locAdd`,
-`famIdx` and `famSplit` (`idxAns`, `splitAns`). Backend2's own conversion writes none of them and
-its lowering (`Backend2/Lower.lean`) refuses them; every output of Backend2 is unchanged.
-
-### Statements
-
-`Lowering/`:
-
-- **The print** (`Lowering/LIRPrint.lean`; `lirOf e`, `printOwn c = lirOf (own c.t)`). It reads
-  no type; every variable is at `unit` (`tyTable`).
-  - *Closure conversion*: a `λb` is the closure of a code of its own, capturing the slots `b`
-    mentions past its binder (`capt b`). *Named form*: each subterm's value at a fresh variable, in
-    the machine's order. *Every call is dispatched* through its closure; no flow analysis is read.
-  - *The source's memory is kept as it is*: a location is the LIR's address, a cell an object of
-    one address, a family `(ℓ, n)` the pair of its base and its length.
-  - *Copies and drops* (`Out`, `need`): a slot read where the rest of the term reads it again is
-    read through a `copy`; a binder its scope does not read is dropped where it is bound; a `case`
-    arm drops the slots only the other arm reads (`armDrops`). This is how the kernel's constants
-    are printed: they are the kernel's closed terms, atoms of the low subset, whose bodies
-    duplicate their arguments (`copy`'s `λx. (x, x)`, `swap`, `withbor`, the folds' fixed point),
-    and their simulation is the general one, so no constant has a code of its own. On `own`'s
-    output every slot is consumed exactly once on every path that returns (`Explicit`), which
-    leaves the print no copy or drop of its own on such a path outside the constants (an argument
-    from `Explicit`'s definition, not machine-checked here); a path that ends at `absurd` is
-    reached by no run.
-  - *The machine's primitives* are the closures of fixed codes, the program's first (`rtCode`,
-    `rtBodies`, `preludePS`): `alloc`, `free`, `load`, `store` (curried: `store ℓ` is the closure
-    of `store1Code`), `idx`, `split`, `tab` and `drop` (each with its loop, `tabFill` and
-    `dropFill`), `count`, `count_try` and `bounded_fix` (`countNext`, `countTryNext`,
-    `boundedFixNext`; the fixed point's self-reference is `fixBody`'s closure). A host operation's
-    code is written where it is used (`hostFn`). The effect primitives have no code; no term the
-    print is proved on has one.
-- **The print as a relation** (`Pr`, `Lowering/PrintRel.lean`): `prG_pr` (the print of an
-  effect-free term is in it), `lirOf_pr` (`lirOf e`'s `main` is, with the primitives' codes in the
-  program, `RT`).
-- **A run under the LIR's allocator** (`Lowering/AllocRun.lean`): `bumpAlloc` answers the `c`-th
-  allocation at `regionBase c = 16 + c · regionSize` wherever that block is free, which is where
-  the LIR allocates. `arun_of_sem`: a closed `F 1` term in the relation has a run under it from the
-  empty memory to `()` at the empty memory, since `wpTS` asks for a run under every allocator
-  (SPEC §13).
-- **Runs big-step** (`BigN`, `Lowering/BigStep.lean`): a derivation under an allocator, counting
-  allocations, with `storeF` for an application whose function runs to `store`; `big_of_arun`: a
-  run of an effect-free term from a memory of effect-free values to a value is one
-  (`effFree_step`).
-- **Forward simulation** (`Lowering/PrintFwd.lean`, `Lowering/PrintCall.lean`): `fwd_all`, by
-  strong induction on the size of the derivation, gives `FwdOne` for every print (a run of the
-  source to `w` is followed by the interpreter, at every fuel answering a corresponding value or
-  running out of fuel, and from some fuel on answering) and `CallAt` for every call (a head step on
-  a function and an argument and its result's run is followed by the call of the corresponding
-  closure). The invariants:
-  - *Values* (`VRel`): a location is the same address, a primitive the closure of its code,
-    `store ℓ` the closure of `store1Code` on `ℓ`, a `λ` the closure of its code with its captured
-    slots' values.
-  - *Memories* (`HRel`): the source's cells are the LIR's live addresses, each an object of one
-    address holding a corresponding value, every one below the next region base, at which the
-    LIR's `next` stands after as many allocations as the source's count.
-  - *Frames* (`FrameOK`, `Post`): the variables of the slots the term or the rest reads hold their
-    values; the term consumes the slots it reads that the rest does not (`cons`).
-  - *Calls*: each primitive's code against its head step and the run of its reduct (`call_alloc`,
-    `call_free`, `call_load`, `call_store1`, `call_idx`, `call_split`, `call_tab` with
-    `tabLoop_sim`, `call_drop` with `dropLoop_sim`, `call_count`, `call_countTry`, `call_bf`), a
-    callback's call through `CallAt` below (`call_val`), a `λ` by its body's print (`call_lam`).
-- **The simulation** (`Lowering/PrintSim.lean`): `printSimAt_lirOf` (the print of a closed
-  effect-free term in the relation at `F 1` is simulated: the interpreter never faults, answers
-  `()`, and leaves no live object); `own_printSimOn` (`PrintSim` for `own` and `printOwn` on every
-  checked program with no pin, `PrintSimOn`); `own_printSim_pin` (`PrintSim` itself, under
-  `PinLaw`).
-- **End to end**: `own_lir_every_run` — every checked closed `main : F 1` with no pin whose term is
-  in the pure fragment (`pureT`, §54) runs every time at the LIR when printed (`LIREveryRun`);
-  `own_lir_every_run_pin` — every checked closed `main : F 1` in the pure fragment, under
-  `PinLaw`.
-- **No `unreachable`** (`Lowering/PrintTotal.lean`): `lirOf_noUnr` — the print of an effect-free
-  term writes no `unreachable` in `main` or in any code; `printOwn_noUnr` — so does the print of
-  every checked closed `main` in the pure fragment.
-- **Non-vacuity**: `cImmBorrow_lir_every_run` — `cImmBorrow` (`Core/Examples.lean`), which
-  allocates a cell, lends it immutably to a callback that loads through the borrow, and frees it,
-  runs every time at the LIR when printed.
-
-### Baseline
-
-No change to `CDerives`, the relation, the machine, `Core/`, `Paper/`, `Support/`, the checker or
-the elaboration. Backend2's conversion, lowering, outputs, goldens and counts are unchanged.
-`scripts/check-lowering.sh` prints every program of `corpus/lowering.expected` and runs it on the
-LIR interpreter: the print must write no `unreachable`, and the value must be the source run's
-(a literal as its word), with an empty frame and as many live objects as the source run leaves
-cells. All 148 pass.
-
-### Open
-
-- **The typed print**: the LIR's types and layouts, and the path through `Layout`/`Lower` to the
-  targets. The operations on the source's memory are not lowered: a family is Backend2's `fam`
-  there and an array one object, where here each cell is its own object (a run frees an array's
-  cells one by one, `dropFill`). The interpreter's type checks pass because every variable is at
-  `unit`.
-- **Direct calls**: the print dispatches every call, and calls the primitives' codes and the
-  constants' bodies as closures. Over the 148 programs its static counts are 225070 nodes,
-  18740 closures, 20067 dynamic and 592 direct calls, against Backend2's 47650, 1029, 1240 and 550.
-- **The re-checks** of the interpreter (U6), effects (U3, U4) and externs (U5).
+This entry gave a print of `own`'s output to Backend2's LIR and its simulation with the source's
+memory. The route was dropped (user, 2026-10-28): lowering by simulation in `SemC` moves the hard
+parts into the relation's definitions, and a safety relation would still accept a wrong answer. The
+`Lowering/` library, its corpus check and the LIR's operations on the source's memory are removed.
+Backend2 is the backend, and it reads the kernel's facts instead (#713, #715; CLAUDE.md, *Later
+stages read the kernel's facts*).
 
 ---
 
@@ -9310,8 +9041,7 @@ node's location comes from.
 ### Consumers
 
 The checker's other readers see through the new nodes where they read the node under them: the
-clause classifier's paths (`onPaths`, with `onPaths_sound`), `own` and its proofs
-(`Lowering/Own.lean`, `OwnLow.lean`, `OwnSem.lean`), `relaxedFree`, and Backend2's conversion
+clause classifier's paths (`onPaths`, with `onPaths_sound`) and Backend2's conversion
 (`transparent?`, `machNode`, `convK`, `convWork`, `convWorkK`).
 
 ### Baseline
@@ -9843,34 +9573,17 @@ the old backend's output. Entry 51 (§52) is implemented in `Backend2/Convert.le
 the stack's push and pop), `Backend/Native/Lower.lean` (frame pointers), `Backend/Clos/`
 (`Op.swapSlot`) and `lib/async.bc`; no change to `CDerives`, `Core/`, `Paper/`, `Support/` or the
 checker.
-Entry 52 (§53) is stated in `Lowering/Low.lean`, `Lowering/Obligations.lean` and
-`Lowering/Print.lean`: the low subset, the obligations and their every-run results, the print's
-simulation statement and the transfer are proved; the lowerings and the simulation are U1–U4. No
-change to `CDerives`, `Core/`, `Paper/`, `Support/`, the checker or either backend.
-Entry 53 (§54) is implemented in `Lowering/Rename.lean`, `Lowering/NoRelaxed.lean`,
-`Lowering/Own.lean`, `Lowering/OwnSem.lean`, `Lowering/LowRen.lean`, `Lowering/OwnLow.lean`,
-`Lowering/Low.lean` (`absurdL`, `lowB`) and `Lowering/Obligations.lean` (`LowersIntoOn`), with the
-corpus check `scripts/LoweringCheck.lean` and `scripts/check-lowering.sh`: `LowerSemRel own` and
-`own_lowersInto` are proved. No change to `CDerives`, `Core/`, `Paper/`, `Support/`, the checker or
-either backend.
+Entries 52 (§53) and 53 (§54) are retired; their code is removed.
 Entry 54 (§55) is implemented in `Frontend/Check/Masks.lean` (`Covers`), the generated typed rules
 (`scripts/gen-pin.py`, `Frontend/Check/TDerives.lean`, `Frontend/Check/TLife.lean`),
-`Core/Mentions.lean`, `Frontend/Check/TTied.lean`, `Frontend/Check/Rules.lean`,
-`Frontend/Check/Weaken.lean` and `Lowering/OwnLow.lean`: `own_lowersInto` is proved with no
-hypothesis on the masks. No change to `CDerives`, the relation, the checker's output or either
-backend.
-Entry 55 (§56) is implemented in `Lowering/LIRPrint.lean`, `Lowering/PrintRel.lean`,
-`Lowering/AllocRun.lean`, `Lowering/BigStep.lean`, `Lowering/LIRSim.lean`,
-`Lowering/PrintFwd.lean`, `Lowering/PrintCall.lean`, `Lowering/PrintTotal.lean` and
-`Lowering/PrintSim.lean`, with the
-operations on the source's memory in `Backend2/Syntax.lean`, `Interp.lean`, `Lower.lean` and
-`Print.lean`, and the corpus check in `scripts/LoweringCheck.lean`: `own_lir_every_run` is proved
-for every checked closed `main : F 1` with no pin in the pure fragment. No change to `CDerives`,
-the relation, the checker or Backend2's outputs.
+`Core/Mentions.lean`, `Frontend/Check/TTied.lean`, `Frontend/Check/Rules.lean`
+and `Frontend/Check/Weaken.lean`. No change to `CDerives`, the relation, the checker's output or
+either backend.
+Entry 55 (§56) is retired; its code is removed.
 Entry 56 (§57) is implemented in `Frontend/Check/FactNodes.lean`, the generated typed terms and
 rules (`scripts/pin/`), `Frontend/Check/TShift.lean`, `Weaken.lean`, `TTied.lean`, `Rules.lean`,
 `Checker.lean`, `Steps.lean`, `Program.lean`, `TFacts.lean`, `Kinds.lean`, `KindsSound.lean`,
-`Frontend/Sugar.lean`, `Lowering/` and `Backend2/Convert.lean`, `Debug.lean`, `Driver.lean`. No
+`Frontend/Sugar.lean` and `Backend2/Convert.lean`, `Debug.lean`, `Driver.lean`. No
 change to `CDerives`, the relation, any erasure or Backend2's outputs.
 Entry 57 (§58) is implemented in `Backend2/` (`Syntax.lean`, `Convert.lean`, `Driver.lean`,
 `Layout.lean`, `Lower.lean`, `Lint.lean`, `Interp.lean`, `Print.lean`; `Frames.lean` and
@@ -9882,6 +9595,11 @@ Entry 58 (§59) is implemented in `Backend2/` (`Types.lean`, `Syntax.lean`, `Con
 
 ## Changelog
 
+- **1.09** (2026-10-28) — §53, §54 and §56 retired (#698): lowering by simulation in `SemC` was
+  dropped. `Lowering/`, `scripts/LoweringCheck.lean`, `scripts/check-lowering.sh`,
+  `corpus/lowering.expected`, the gate step `lowering` and Backend2's operations on the source's
+  memory (`Op.cellNew` … `Op.famSplit`) are removed. §55's coverage premise stays. No change to the
+  language, the kernel, the checker or either backend's outputs.
 - **1.08** (2026-10-28) — §59 (#714): `!` on the LIR types. `LTy.bang`, kept by `ofV`; the
   representation read through it (`peel`, `sameRep`); `Lint` checks every copy is of a persistent
   type or an `imm` borrow and every drop of a persistent type, one with no owned cell or a family

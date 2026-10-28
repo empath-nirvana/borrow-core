@@ -19,10 +19,6 @@ scripted standard input, the arguments' stream, and collected standard output an
   every slot is unwritten;
 - every heap access is to a live object.
 
-The operations on the source's memory (`Op.cellNew`, …, SPEC §56) are the source machine's: a cell
-is an object of one address, a store writes over its contents, a free frees it, and an allocation
-is at the region base `next`, which moves on one region (`regionSize`).
-
 Its report is the stages' (`Backend.report`): `main`'s value, then the objects live at the end.
 Host operations are `wasmHostAt .negative`'s, as the closure IR's interpreter's, so that output
 that depends on a NaN's sign differs here from the golden (SPEC §37).
@@ -44,10 +40,6 @@ inductive LV where
   | fam (base : Nat) (n : UInt32)
   | unk
   deriving Inhabited, Repr
-
-/-- The addresses one allocation of the source's memory has (`Op.cellNew`, `Op.cellsNew`): at
-least any family's length. -/
-def regionSize : Nat := 1 <<< 32
 
 /-- The base of the program's data, in the interpreter's addresses. -/
 def dataAt : Nat := 1 <<< 40
@@ -128,15 +120,6 @@ def freeObj (b : Nat) (n : Nat) : IM Unit := do
     for i in [0:n] do mem := mem.erase (b + i)
     set { s with mem, objs := s.objs.erase b }
   | none => bad s!"a free of {b}, which is not a live object"
-
-/-- `k` cells holding `()` from the address `a`, each an object of one address. -/
-def fillCells (mem : Std.HashMap Nat (Option LV)) (objs : Std.HashMap Nat Nat) (a : Nat) :
-    Nat → Std.HashMap Nat (Option LV) × Std.HashMap Nat Nat
-  | 0 => (mem, objs)
-  | k + 1 => fillCells (mem.insert a (some .unit)) (objs.insert a 1) (a + 1) k
-
-/-- `len(c)` of a word holding an `i32` (SPEC §9). -/
-def lenOf (c : UInt64) : Nat := if c.toUInt32 < 0x80000000 then c.toUInt32.toNat else 0
 
 /-! ### Host operations -/
 
@@ -478,43 +461,6 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
     modify fun s => { s with taskStacks := s.taskStacks.insert h fs.pop }
     pure .unit
   | .unreachable, [] => bad "an unreachable arm reached"
-  | .cellNew, [v] => do
-    let s ← get
-    let mem := s.mem.insert s.next (some v)
-    let objs := s.objs.insert s.next 1
-    set { s with mem, objs, next := s.next + regionSize }
-    pure (.loc s.next)
-  | .cellsNew, [.int c] => do
-    let s ← get
-    let (mem, objs) := fillCells s.mem s.objs s.next (lenOf c)
-    set { s with mem, objs, next := s.next + regionSize }
-    pure (.loc s.next)
-  | .cellFree, [.loc a] => do
-    match (← get).mem[a]? with
-    | some (some v) =>
-      modify fun s => { s with mem := s.mem.erase a, objs := s.objs.erase a }
-      pure v
-    | _ => bad s!"a free of {a}, which is not a live cell"
-  | .cellLoad, [.loc a] => do
-    match (← get).mem[a]? with
-    | some (some v) => pure v
-    | _ => bad s!"a load of {a}, which is not a live cell"
-  | .cellStore, [.loc a, v] => do
-    match (← get).mem[a]? with
-    | some (some _) =>
-      modify fun s => { s with mem := s.mem.insert a (some v) }
-      pure .unit
-    | _ => bad s!"a store into {a}, which is not a live cell"
-  | .locAt l, [] => pure (.loc l)
-  | .locAdd, [.loc a, .int i] => pure (.loc (a + i.toNat))
-  | .famIdx, [.pair (.loc l) (.int n), .int i] =>
-    pure (if i.toUInt32 < n.toUInt32 then .inj false (.loc (l + i.toUInt32.toNat))
-      else .inj true .unit)
-  | .famSplit, [.pair (.loc l) (.int n), .int i] =>
-    pure (if i.toUInt32 ≤ n.toUInt32 then
-        .inj false (.pair (.pair (.loc l) (.int i.toUInt32.toUInt64))
-          (.pair (.loc (l + i.toUInt32.toNat)) (.int (n.toUInt32 - i.toUInt32).toUInt64)))
-      else .inj true (.pair (.loc l) (.int n.toUInt32.toUInt64)))
   | op, vs => bad s!"the operation {reprStr op |>.take 40} on {vs.length} values {reprStr vs |>.take 200}"
 
 

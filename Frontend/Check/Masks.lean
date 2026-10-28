@@ -21,8 +21,8 @@ That is the copy set: a persistent value used on both sides of a split is copied
 A mask also **covers** its part (`Covers`, a premise of every typed split rule too): every slot
 the part's term mentions is one its mask holds. `SplitMasks` alone does not say so: a part's
 context may hold a live slot its mask does not, which a leaf of the part then reads. With
-coverage, the slots a part reads are its mask's, so a lowering that gives a part the live slots
-its mask holds gives it every slot it reads (`Lowering/OwnLow.lean`).  `[spec §55]`
+coverage, the slots a part reads are its mask's, so a stage that gives a part the live slots its
+mask holds gives it every slot it reads.  `[spec §55]`
 -/
 
 namespace BoCa.Fig16.LogRel.Core.Check

@@ -150,29 +150,6 @@ inductive Op where
   | framePop (k : Nat)
   /-- Never reached: the frame below a finished level is at a call of it (SPEC §52). -/
   | unreachable
-  /-- **The source's memory** (SPEC §56). The print of a low term (`Lowering/LIRPrint.lean`)
-  keeps the source machine's memory as it is: one object of one address for each cell, at the
-  location the source allocates it, a family the pair of its base and its length. `cellNew v`:
-  a cell holding `v` at the region base `next`, which moves on one region (`regionSize`). -/
-  | cellNew
-  /-- `cellsNew c`: `len(c)` cells holding `()`, at consecutive addresses from the region base
-  `next`, which moves on one region; the result is the first's address. -/
-  | cellsNew
-  /-- `cellFree ℓ`: the cell `ℓ` freed; its contents. -/
-  | cellFree
-  /-- `cellLoad ℓ`: the contents of the cell `ℓ`, which keeps them. -/
-  | cellLoad
-  /-- `cellStore ℓ v`: `v` written into the cell `ℓ` over its contents; the result is `()`. -/
-  | cellStore
-  /-- The location `ℓ`. -/
-  | locAt (ℓ : Nat)
-  /-- `locAdd ℓ i`: the location `ℓ + i`. -/
-  | locAdd
-  /-- `famIdx ((ℓ, n), i)`: `inl (ℓ + i)` when `i < n`, else `inr ()` (`idxAns`). -/
-  | famIdx
-  /-- `famSplit ((ℓ, n), i)`: `inl ((ℓ, i), (ℓ + i, n − i))` when `i ≤ n`, else `inr (ℓ, n)`
-  (`splitAns`). -/
-  | famSplit
   deriving Inhabited, BEq, Repr
 
 

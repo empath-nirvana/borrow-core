@@ -7,7 +7,6 @@ import Frontend.Check.Program
 import Frontend.Check.Handled
 import Frontend.Check.TFacts
 import Frontend.Check.Derived
-import Lowering
 import Backend2.Lint
 /-! The theorems `SPEC.md` names, with their axioms. -/
 #print axioms BoCa.Fig16.LogRel.Typed.fundamentalProperty
@@ -676,62 +675,6 @@ import Backend2.Lint
 #print axioms BoCa.Fig16.LogRel.Core.Inversions.der_hndJ₁
 #print axioms BoCa.Fig16.LogRel.Core.kappaFinSelf
 #print axioms BoCa.Fig16.LogRel.Core.lastFinOK_nil_of_find
-#print axioms Lowering.lowered_every_run
-#print axioms Lowering.lowered_every_run_pin
-#print axioms Lowering.erase_lowerSem
-#print axioms Lowering.bang_owns_nothing
-#print axioms Lowering.lir_every_run_of_sem
-#print axioms Lowering.lowered_lir_every_run
-#print axioms Lowering.lowered_lir_every_run_pin
-#print axioms Lowering.lir_every_run_unit
-#print axioms Lowering.lowExpr_copyTwice
-#print axioms Lowering.lowExpr_absurd
--- SPEC §54 (entry 53): `own`
-#print axioms Lowering.lowExpr_absurd_ctx
-#print axioms Lowering.not_lowExpr_codiag
-#print axioms Lowering.lowB_sound
-#print axioms Lowering.psub_ren
-#print axioms BoCa.Fig16.LogRel.Core.Check.TDerivesP.toC
-#print axioms Lowering.sem_split
-#print axioms Lowering.own_semP
-#print axioms Lowering.own_lowerSemRel
-#print axioms Lowering.own_lowerSem
-#print axioms Lowering.own_every_run
-#print axioms Lowering.own_every_run_pin
-#print axioms Lowering.ExplicitC.ren
-#print axioms Lowering.exact_copies
-#print axioms Lowering.own_lam
-#print axioms Lowering.own_lowered
-#print axioms Lowering.own_lowersInto
-#print axioms Lowering.own_dupChecked
-#print axioms Lowering.own_dupChecked_low
-#print axioms Lowering.coverage_excludes_missT
-#print axioms Lowering.agreeAt_of_typed
--- SPEC §56 (entry 55): the print to the LIR, simulated with the source's memory
-#print axioms Lowering.prG_pr
-#print axioms Lowering.lirOf_pr
-#print axioms Lowering.rt_of_ext
-#print axioms Lowering.big_of_arun
-#print axioms Lowering.arun_of_sem
-#print axioms Lowering.fwd_lam
-#print axioms Lowering.fwd_case
-#print axioms Lowering.fwd_app
-#print axioms Lowering.call_lam
-#print axioms Lowering.call_count
-#print axioms Lowering.call_countTry
-#print axioms Lowering.call_bf
-#print axioms Lowering.dropLoop_sim
-#print axioms Lowering.tabLoop_sim
-#print axioms Lowering.callAt_of
-#print axioms Lowering.fwd_all
-#print axioms Lowering.printSimAt_lirOf
-#print axioms Lowering.own_printSimOn
-#print axioms Lowering.own_printSim_pin
-#print axioms Lowering.own_lir_every_run
-#print axioms Lowering.own_lir_every_run_pin
-#print axioms Lowering.cImmBorrow_lir_every_run
-#print axioms Lowering.lirOf_noUnr
-#print axioms Lowering.printOwn_noUnr
 -- `!` on the LIR types (#714): `ofV` keeps it, and what `Lint` reads at a copy and a drop
 #print axioms Backend2.ofV_bang
 #print axioms Backend2.ofV_persistent
