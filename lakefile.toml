@@ -191,3 +191,9 @@ roots = ["DepSpike"]
 name = "lowering-check"
 srcDir = "scripts"
 root = "LoweringCheck"
+
+# Placing an array as one block against the print's simulation (#701): `splitDrop`.
+[[lean_lib]]
+name = "BlockPlace"
+srcDir = "experiments/BlockPlace"
+roots = ["BlockPlace"]
