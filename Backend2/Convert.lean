@@ -1106,6 +1106,13 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
     -- written in place each time it suspends again at the operation; its suspended computation
     -- is a word. Otherwise the state is the closure's environment, as it always is at `unr`, whose
     -- suspended computation may be copied (§19).
+    -- UNPROVED: that a state cell has one owner, the suspended computation `k` that holds it, so
+    -- that a resume may write it in place and a cancel or the machine's answer may release it.
+    -- It should hold because `k` is resumed or cancelled at most once where the operation is not
+    -- `unr` (the row's qualifier, read: `OutInfo.unrs`). Which operations get a cell (`cellOps`,
+    -- `threaded`) is read off the layouts' recursive closure classes (`cellPass`, `threadedOf`),
+    -- which is not a typing fact. If it fails, a resumed copy of `k` reads a state written by
+    -- another, or a released cell.
     let cellMode := threaded || (cellOps.contains op && !F.unrs.contains op)
     let envTy : LTy := if cellMode then .ref stTy else stTy
     let slotTy : LTy := .sum .unit envTy
@@ -2490,6 +2497,12 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     | some (some fv), some si =>
       match ctx[si]? with
       | some (some sv) =>
+        -- UNPROVED: that `fv` holds `unfold step` (`CState.unfolds`: the variables a `bind` of
+        -- `unfold step` binds, followed through copies and captures), so that the η-thunk is
+        -- the call `f s` made now (`nuEta_unfold`). It should hold because the mark is set only
+        -- at such a `bind` and moved only to a copy or a capture of its variable. The `nuEta`
+        -- node does not say what `f` is. If it fails, `f s` runs before it is observed, with
+        -- the effects of `f` moved earlier, and the other slots are dropped as the call's.
         if (← get).unfolds.contains fv then
           readFact "nuEta:unfold call"
           let others := (ctx.zipIdx.filter fun (_, k) => k != f && k != si).filterMap (·.1)
@@ -3263,6 +3276,13 @@ def convUse (fuel : Nat) (ctx : Ctx) (info : TInfo) (j : Jdg) (decl : Nat) (targ
     return ← conv fuel ctx body
   match (← get).uses[key]? with
   | some tp =>
+    -- UNPROVED: that a `use` body converted at one context is, renamed, its conversion at
+    -- another context with the same key, and that a slot live here and not in the template is
+    -- one the body's derivation drops (`Ctx.DeadP`). It should hold because the key fixes the
+    -- declaration, its type arguments and the judgment, and the body reads its slots by index:
+    -- a slot it reads was live at the first use, or that conversion would have failed. It is
+    -- not checked against this use's derivation. If it fails, a live owned value is dropped (a
+    -- leak), or the template's copies and drops are those of another context.
     -- The slots the template reads must be live here; any other live slot is dropped.
     let mut m : Std.HashMap Var Var := {}
     let mut ok := true
@@ -3628,6 +3648,13 @@ level of itself (`calleeCodes`, the layouts' classes of the callee's suspended c
 its own code), and whose operation is in `stackOps` (every `handle` node of it keeps `κ`: a stored
 site, which gives the frames one owner): its number and its frame's state type, each call point's
 state without the callee's `k`. -/
+-- UNPROVED: that a stack machine's frames have one owner each, so that a level's frame may live
+-- on the task stack and be popped by its answer, abort or cancel. It should hold because every
+-- `handle` node of the operation stores `κ`, boxed, at no `unr` operation (`stackOps`, read off
+-- the nodes' clause kinds and qualifiers), so one site's `κ` holds the stack, and because every
+-- call point calls a level of the machine itself. That last fact is read off the layouts'
+-- closure classes (`calleeCodes`), which is not a typing fact. If it fails, a frame is popped
+-- while a level above it still runs, or a level resumes on another stack's frame.
 def stackedOf (s : CState) (recursive : Nat → Bool) (stackOps : MachSet)
     (calleeCodes : Var → OutInfo → List Nat) : Std.HashMap Nat LTy := Id.run do
   let th := threadedOf s recursive

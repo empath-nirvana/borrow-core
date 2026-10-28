@@ -390,6 +390,12 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
   | .copy x x' b => do join (← nv x) (← nv x'); walk p f cc b dst
   | .drop _ b => walk p f cc b dst
 
+-- UNPROVED: that the closure classes hold every code whose closure can reach each place. It
+-- should hold because `walk` joins the two sides of every move a closure makes: a binding, a
+-- copy, an argument, an answer, a constructor's field, a cell's contents. It is not a typing fact
+-- (the typed term gives a closure's type, not its λ), and the operations `walk` passes over
+-- (`| _ => pure ()`) are taken to move no closure. If a code is missing from a class, a call
+-- through the class's dispatcher traps, and the class's width is too narrow for the closure.
 /-- Every place of the program, joined. -/
 def places (p : Prog) : Except String (GState × Nat) := do
   let act : GM Nat := do
@@ -615,6 +621,13 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) (cells : List (List LTy)) :
       | .pair a b | .sum a b => [a, b]
       | .clos .. => envOf v
       | _ => []
+  -- UNPROVED: that a boxed field's object and a heap class's environment have one owner, the
+  -- value that holds them, so that `Lower` frees them where that value is taken apart and copies
+  -- them where it is copied. It should hold because the LIR consumes each variable exactly once
+  -- on every path, which `Lint` checks per program under `bcc lir --lint` and nothing proves of
+  -- the conversion's output. The choice of fields follows SPEC §35's rule on the type's own
+  -- graph: the boxes arise where a `μ` or a closure class holds itself other than through a
+  -- `Ref`. If it fails, an object is freed twice or leaks.
   let (cyc, _) := sccs n succ
   let mut recCls : Std.HashSet Nat := {}
   for v in [0:n] do
@@ -653,6 +666,14 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) (cells : List (List LTy)) :
         | none =>
           let fw (j c : Nat) : Nat := if boxed.contains (v, j) then 1 else width[c]!
           let ft (j c : Nat) : Bool := !boxed.contains (v, j) && trivial[c]!
+          -- UNPROVED: that copying or dropping a cell, a borrow or a family is its words alone
+          -- (`trivial`). It should hold because the conversion copies only a slot both parts of a
+          -- split use (`Ctx.SplitP`'s persistent slot) and the `copy` constants (`imm`), and drops
+          -- only slots the rule's premises make droppable (`Ctx.DeadP`, `Ctx.Drops`: no owned
+          -- cell, `vC_noOwn_of_drop`), so an owned `Ref` or array is never copied or dropped by
+          -- `copy`/`drop`. The LIR erases `!` (`Types.ofV`), so `Lint` cannot check which
+          -- variables may be copied or dropped. If it fails, an owned cell is aliased (freed
+          -- twice) or leaks.
           let (wv, tv) := match shape[v]! with
             | .unit | .zero | .unk => (0, true)
             | .int _ | .opq | .ref _ | .imm _ | .mut _ => (1, true)
@@ -669,6 +690,17 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) (cells : List (List LTy)) :
           color := color.set! v 2
           stack := rest
   -- Cells: the widest type the checker's class of the contents may hold.
+  -- UNPROVED: that every cell reached through a pointer node holds, at every step, only types of
+  -- the class found here, so that the class's widest type fits it, a class of one integer width
+  -- is a narrow slot, and a class of zero-width types needs no allocation (`Lower.zeroCell`).
+  -- It should hold because the checker's classes are closed under the typed term's `swap`
+  -- nodes (`Checked.cells_closed`). That a cell holds only its class's types at run time is not
+  -- proved (`Frontend/Check/TFacts.lean`). The class is chosen per pointer node by its contents'
+  -- type, as the first class whose types hold it, not per allocation (`CellClass.root` is not
+  -- read): a type in two classes gets the first one's width, and pointer nodes that `swap` does
+  -- not join get different widths for one cell. If it fails, a store overruns its cell or a
+  -- neighbour, or a cell is allocated at one width and freed (or not freed) at another. A width
+  -- class per allocation, carried by the typed term, would be read instead.
   let mut byOrigin : Std.HashMap LTy Nat := {}
   for i in [0:n] do
     let o := s.origin[i]!

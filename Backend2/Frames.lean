@@ -33,6 +33,15 @@ inductive Use where
   | freed
   | other
 
+-- UNPROVED: that a variable has one consumer in its function, so that one entry per variable
+-- describes every path. It should hold because the LIR consumes each variable exactly once on
+-- every path (`Backend2/Syntax.lean`), which `Lint` checks per program under `bcc lir --lint` and
+-- nothing proves of the conversion's output. It does not hold across a `case`: each arm consumes
+-- the variable, and the map keeps the second arm's consumer over the first's. Where the arms
+-- differ (one frees the owner, the other returns it), `framed` places in the frame a cell that
+-- outlives it, and `readOnly` calls an array read-only that one arm writes. The typed term fixes
+-- the release at the owner's slot's use, but the `lendCell` node does not point to it
+-- (`Frontend/Check/TFacts.lean`); a node holding the lend and its release would be read instead.
 /-- Each variable's consumer in a term. -/
 def usesOf : Nat → Tm → Option Var → Std.HashMap Var Use → Std.HashMap Var Use
   | 0, _, _, m => m
@@ -79,6 +88,12 @@ def freedIn (uses : Std.HashMap Var Use) : Nat → Var → Option Nat → Bool
     | some (.split a b), some k => freedIn uses f (if k == 0 then a else b) none
     | _, _ => false
 
+-- UNPROVED: that a lent cell whose owner reaches a `free` in its function is dead when the
+-- function returns. It should hold because the callback cannot keep the borrow past the lend
+-- (`withbor`'s fresh `'x`) and the owner, consumed once, is consumed by that `free`. It rests on
+-- `usesOf`'s one consumer per variable (see there) and on fuel (`freedIn`'s 4096 steps, which
+-- answer heap when they run out). If it fails, the slot is read or freed after its frame is
+-- given back.
 /-- The lent cells' variables whose owner is freed in their function: their cells are frame
 slots. -/
 def framed (p : Prog) : Std.HashSet Var := Id.run do
@@ -106,6 +121,14 @@ variables. -/
 def lentCells (p : Prog) : List Var :=
   (p.main :: p.fns.toList.map (·.body)).flatMap fun b => framed.allocsOf (1 <<< 22) b []
 
+-- UNPROVED: that an array whose owner path, as `usesOf` records it, is shared lends and its size
+-- and then a function named `array_dtor` or `array_free` is never written. It should hold
+-- because an `imm` lend's borrow type is a family of `imm` leaves (read here off the LIR type of
+-- the lend's answer) and those destructors only take slots out. It rests on `usesOf`'s one
+-- consumer per variable, which a `case` breaks (see there), and on the destructors' names. If
+-- it fails, `LitViews` points a written array at the literal's bytes in the data, and the write
+-- changes every later view of that literal. A node of the typed term holding the literal's
+-- view (its table, its `imm` lend and its destruction) would be read instead.
 /-- The array `x` (or its component `field`) is only read before its destructor: it is lent
 shared, its size taken, and then destroyed by a generated destructor (`array_dtor`, or
 `array_free`'s loop) or freed. -/

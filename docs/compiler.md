@@ -784,3 +784,60 @@ directory, writing to a scratch directory.
   `bench/chain-gen/main.bc` and `corpus/float-arith.bc`: §1.1's and §1.3's timings.
 - `bcc-counts --sites bench/chain-yield/main.bc`: the version check of the header.
 - The greps of §1.1: `grep -rn 'sigs\|CVTy\|CCTy\|EffCtx' Backend/`, and `grep -n 'noalias\|readonly\|dereferenceable\|nonnull' Backend/Native/`.
+
+## 10. Backend2's rebuilt facts (#712)
+
+CLAUDE.md, *Later stages read the kernel's facts*, applied to `Backend2/` (`Convert`, `Layout`,
+`Flow`, `Frames`, `LitViews`, `Lower`, `Lint`, `Types`, and the `Driver` functions that feed
+them). Every decision about ownership, aliasing, lifetimes, placement, widths or read-only data
+is one row. Lines are at this section's commit. By inspection.
+
+- **read**: the decision reads a node of the typed term, a checker fact or a checked type; the
+  lemma named is the one that pins that fact on the checker's side.
+- **proved**: a lemma states the decision itself. No row is: nothing in the repository states a
+  property of Backend2's passes.
+- **UNPROVED**: rebuilt, with an `UNPROVED:` comment at the site (what is assumed, why it should
+  hold, what breaks).
+
+The known bugs are the programs of #701 (`~/repos/scratch-archive/placement-dive/bc/`).
+
+| fact | where decided | class | source or lemma | readable instead? | known bug |
+|---|---|---|---|---|---|
+| copies and drops at a split | `Convert.lean:327` (`splitCtx`) | read | `TExpr.masks?`; `TDerivesAt.split_masks` (a slot both parts use is `Ctx.SplitP`'s persistent one) | — | — |
+| drops at a leaf, of a dead λ's parameter, at `[nil-dead]` | `Convert.lean:321` (`leaf`), `:2325`, `:2513` | read | the node's rule: `Ctx.DeadP`, `SoloP`; `lamDead`, `nilDead` | — | — |
+| a join's context dropped on an abort or a cancel | `Convert.lean:2356`, `:793` (`abortK`), `:823` (`cancelK`) | read | `[let]`'s premise `hW : S.Weak → Γ₂.Drops` (`Core/Fundamental.lean:401`), `VTy.Drop` holds no owned cell (`vC_noOwn_of_drop`); a `[then]` frame hands its context to the finaliser (`hD`) | — | — |
+| `κ` holds a copy of each handler value; a clause's arm drops the other clauses' contexts | `Convert.lean:2911`, `:2854`, `:3057` | read | `[handle]`'s premise `hd : Ctx.DeadP Γ₁` (`Core/Fundamental.lean:431`, and `effHandleVB`) | — | — |
+| copies of a `!` argument in generated loops and folds (tabulator, consumer, algebra, step) | `Convert.lean:1416`, `:1433`, `:1453`, `:1471`, `:1788`, `:1536` (`travF`), `:1721` (`mapStates`), `nodeAt` | read | the constants' types: `array_new`, `array_free`, `count_fold`, `count_try`, `bounded_fix`, the folds, `unfold` take `!` (`Core/Fundamental.lean:194–230`, `:363–386`) | `!` on the LIR type: `Types.ofV` erases it (`Types.lean:205`), so `Lint` cannot check a copy | — |
+| `copy` and `array_copy` as an LIR copy | `Convert.lean:3392` | read | `axCopyTy`, `arrCopyTy` (`imm`) | — | — |
+| copying or dropping a cell, borrow or family is its words alone (`trivial`) | `Layout.lean:669` | UNPROVED | rests on the four rows above | `!` on the LIR type | — |
+| an owned value's destructor | `Convert.lean:1820` (`genDtor`) | read | the `dtor` node's type (`dtorE`, `Core/Dtor.lean`'s `dtorAt`); the transcription is not proved against `dtorAt` | — | — |
+| a lend's kind, `imm` or `mut` | `Convert.lean:3373`, `:3434` (`withbor1`, `withbor2`, the slice borrows, all to `Op.lend`); `:3245` (`convLendCell`) | read, on the borrow's LIR type only (`Types.lean:202–203`). `Op.lend` carries no kind, and `convLendCell` does not read `lendCell`'s `m` | `withbor1`/`withbor2`, `sliceBorrowI`/`M`, `lendCell`'s `m` | yes: the node's kind on `Op.lend` | `t13`, through `readOnly` |
+| a reborrow | `Convert.lean:3436` | read | `withbor3` | — | — |
+| a cell allocated for one lend (`allocLent`) | `Convert.lean:3245` | read | `lendCell` (`lendCellB`) | — | — |
+| where a lent cell is released: frame slot or heap | `Frames.lean:36` (`usesOf`), `:91` (`framed`); read at `Lower.lean:491` | UNPROVED | the owner's path through the LIR, one consumer per variable; the release is not on the node (`TFacts.lean`) | yes: the lend and its release as one node | `t4`, `t18` |
+| a local holds a frame slot (`unslot` or `free`) | `Lower.lean:186` (`emit`), `:519` | UNPROVED | a per-function record of word-IR locals | yes: the slot or heap decision carried from `allocLent` to its `free` | `t18` |
+| an array is only read (a literal's view) | `Frames.lean:124` (`readOnly`), `LitViews.lean:21` | UNPROVED | the owner's path (`usesOf`); the `imm` lend off the LIR type; the destructor by its function's name | yes: a literal view as one node (its table, its `imm` lend, its destruction) | `t13` |
+| a literal view's tabulator code | `LitViews.lean:21` (the flow's one code); `Lower.lean:571` (the class's first code) | UNPROVED | `Flow`, `Layout` | the literal view node | none known; not run |
+| a cell's width; a narrow slot; a zero-width cell; an array slot's stride | `Layout.lean:693` (`cells.find?` at `:719`); `Driver.lean:121` (`cellsOf` keeps `tys`, not `CellClass.root`); read at `Lower.lean:281` (`zeroCell`), `:275` (`slotStride`), `:491` | UNPROVED | `Checked.cells`, closed under `swap` (`Checked.cells_closed`); that a cell holds only its class's types at run time is not proved (`TFacts.lean`); the class is the first holding the contents' type, per pointer node | yes: a width class per allocation | `t7` |
+| a capability cell's width | `Lower.lean:506`, `Convert.lean:3563` (one static word each) | UNPROVED | a `swap` stores its value's words at the cell | yes: a width class per allocation | `t17` |
+| a parameter's `noalias`, `readonly`, `nonnull`, `dereferenceable` | `Lower.lean:1135` (`paramFacts`) | read (the mode), UNPROVED (the bytes): ambiguous | the parameter's LTy; cites `CellU.CompatS.kinds`, `adequacyD`; `dereferenceable`'s bytes are the cell width row's | the width row's | — |
+| a read through `Imm̲` | `Lower.lean:535`; `Layout.lean:212` (`joinRe`) | read | the `load`'s result type (`withload`'s callback, `fold_imm`'s `immReborrow`) | — | — |
+| which words are pointers | `Lower.lean:104` (`addrKinds`) | read | the layout node, built from the LTy | — | — |
+| an array read with no bounds test | `Convert.lean:2472`, `:2480`, `:3412` | read | `walk` (`read`), `walkGet`; `walk_index_lt`, `walk_fold_index_lt`, `walk_get_leaf`, `walk_get_split`; that the step's read is the one `walkGet` marks is the elaborator's (`TFacts.lean`) | — | — |
+| a block's allocation, release and lend | `Convert.lean:1902`, `:1911`, `:1935` | read | `allocS`, `freeS`, `withborSM`/`SI`, `withborF2M`/`F2I` | — | — |
+| a swap through a `mut` borrow; a fold's cell freed or emptied | `Convert.lean:1512`, `:1536` | read | `withswap`; `foldOwn`, `foldReuse` at their shape | — | — |
+| a relaxed lend: `mut`, its finaliser on a cancel | `Convert.lean:2648` | read | `lendR` | — | — |
+| the capabilities freed at `main`'s end | `Convert.lean:3518` (`epilogue`) | read | `main`'s type `(caps, a)` | — | — |
+| the closure classes: which codes reach a place | `Layout.lean:393` (`places`, `join`) | UNPROVED | joins over every move; not a typing fact | no | — |
+| boxed fields; heap closure environments | `Layout.lean:624` | UNPROVED | SPEC §35's rule; one owner by LIR linearity | no: the classes are not a typing fact | — |
+| a direct call of a known code (the 0-CFA) | `Flow.lean:119`, `:162`; read at `Lower.lean:372` | UNPROVED | the least solution, cut at its fuel; not a typing fact | no | — |
+| every LIR variable consumed once on every path | `Lint.lean:47` | UNPROVED: checked per program in the gate (`scripts/compile-backend2.sh`), not on the compile path (`Driver.lean:246`) | — | — | — |
+| a machine's state in a cell, written in place | `Convert.lean:1109`; `:3618` (`cellPass`), `:3633` (`threadedOf`) | UNPROVED | the qualifier (`OutInfo.unrs`) is read; the cell is chosen from the layouts' recursive classes | the qualifier is; the class is not | — |
+| a stack machine's frames on the task stack | `Convert.lean:3651` (`stackedOf`), `:1207` | UNPROVED | `stackOps` is read (`Driver.lean:108`: clause kinds, `effHandleVB`, qualifiers); the self-calls come from the layouts' classes | no | — |
+| a stored site's own stack and `κ`'s region | `Convert.lean:2831` | read, given the stack machines row | clause kinds (`classifyHandler_sound`), `effHandleVB`, qualifiers | — | — |
+| a `use` body shared by the uses of its key | `Convert.lean:3279` (`convUse`) | UNPROVED | `useKey`; the extra live slots dropped | — | — |
+| an η-thunk of `unfold step` called where it is made | `Convert.lean:2500` | UNPROVED | `CState.unfolds`; `nuEta_unfold` once `f` is `unfold step` | yes: what `f` is, on the `nuEta` node | — |
+| machine operations; direct calls of clauses | `Driver.lean:66`, `:93` | read | clause kinds (`classifyHandler_sound`), `Checked.flows` (`cond2B`) | — | — |
+| a borrow's mode on the LIR type; lifetimes, `[@a]`, `!` erased | `Types.lean:202–205` | read | `ofV` of the checked `VTy` | `!` | — |
+
+`#print axioms` of every lemma named is within `[propext, Classical.choice, Quot.sound]`.

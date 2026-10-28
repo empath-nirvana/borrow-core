@@ -183,6 +183,13 @@ def emit : Dest → List Exp → LM (List Stmt)
   | .to ls, vs => do
     if ls.length != vs.length then throw s!"word IR: {vs.length} words for {ls.length} locals"
     -- A frame slot's address moved to another local is a slot's address there too.
+    -- UNPROVED: that a local which receives a slot's address on one path receives one on every
+    -- path, so that "this local holds a slot" is a fact of the local. It should hold where the
+    -- owner of a framed cell reaches its `free` on every path (`Frames.framed`). The record is
+    -- per function, not per path: a join (`case` into `.to ls`) whose one arm moves a slot's
+    -- address and the other a heap cell's marks the local a slot on both, and `free` then
+    -- unslots the heap cell, which is never freed. The decision, read off an `allocLent` that
+    -- carried it to its `free`, would replace this record.
     for (l, e) in ls.zip vs do
       if let .loc l' := e then
         if (← get).slots.contains l' then modify fun s => { s with slots := s.slots.insert l }
@@ -271,6 +278,11 @@ def slotStride (n : Nat) : LM Nat := do
   | some b => pure b
   | none => pure (8 * L.cellWords.getD (L.r n) 1)
 
+-- UNPROVED: that a cell whose class (`Layouts.cellWords`, `slotBytes`) holds only zero-width
+-- types is never given a value with words, so that it needs no allocation, no `free` and no
+-- store. It rests on the cell classes' assumption (`Backend2/Layout.lean`, `resolve`). If it
+-- fails, a value's words are lost, or a cell allocated through a pointer node of a wider class
+-- is never freed.
 /-- The cell at pointer node `n` takes no words. -/
 def zeroCell (n : Nat) : LM Bool := do
   let L ← L
@@ -491,6 +503,11 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
       else pure (.alloc (.c64 w.toUInt64))
     return [.set t addr] ++ (← storeCell n (.loc t) (locs (← arg 0))) ++ (← emit d [.loc t])
   | .staticCell k => do
+    -- UNPROVED: that a capability's cell, one static word (`Convert.convMain`), only ever holds a
+    -- word. A `swap` stores its new value's words at the cell's address, and the cell's class
+    -- (`Backend2/Layout.lean`, `resolve`) may hold a wider type. It should hold where the program
+    -- swaps nothing wider into a capability. If it fails, the store overwrites the next static
+    -- word, another capability's.
     let a := Exp.data ((← read).staticBase + 8 * k)
     return (← storeCell n a (locs (← arg 0))) ++ (← emit d [a])
   | .free => do
@@ -499,6 +516,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let al := (← arg 0).headD 0
     let a := Exp.loc al
     let (s, vs) ← loadCell pn a (← wordsN (← contents pn))
+    -- UNPROVED: the slot-or-heap record of the local (see `emit`).
     let rel := if (← get).slots.contains al then Stmt.unslot a else .free a
     return s ++ [rel] ++ (← emit d (locs vs))
   | .release => do
@@ -550,6 +568,9 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     | .tabLit _ => do
       let ts ← fresh 2
       let gn ← argN 0
+      -- UNPROVED: that the class's first code is the literal tables' code, which `LitViews`
+      -- found as the flow's one code at the tabulator. They agree when the class holds that code
+      -- alone. If not, the environment of another code is read as the literal's `(off, len)`.
       let some c := (← L).unionOf gn |>.toList.head? | throw "word IR: tabLit of no code"
       let (es, env) ← envOf gn c fw
       let dr ← dropVals gn fw

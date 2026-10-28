@@ -18,6 +18,12 @@ allocates nothing, and otherwise tabulates as `tab` does.
 namespace Backend2.LitViews
 open Backend2
 
+-- UNPROVED: that a `tab` whose tabulator holds only the literal tables' code (the flow's set)
+-- and whose array `Frames.readOnly` accepts may share the literal's bytes. It rests on
+-- `readOnly` (see there) and on the flow (`Backend2/Flow.lean`); `Lower` then reads the
+-- tabulator's environment as that of its class's first code, not of the flow's one code, which
+-- agree when the class holds the literal code alone. If it fails, a write through the array
+-- changes the program's data, or the view reads another closure's environment as `(off, len)`.
 /-- Rewrite each `tab` whose array is a literal's view. -/
 def rewrite (p : Prog) (lits : Option Nat) (sets : Std.HashMap Var (Std.HashSet Nat))
     : Prog := Id.run do
