@@ -277,6 +277,7 @@ corpus/block-yield-inner.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/block-yield-inner.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/borrow-in-scope.bc flows [0, 4294967295]; main []
 corpus/bytes-upper.bc flows [0, 4294967295]; main []
+corpus/capability-bang-width.bc flows [0, 4294967295]; main []
 corpus/capability-swap-width.bc flows [0, 4294967295]; main []
 corpus/capture-await-raise.bc flows [0, 1, 2, 4294967295]; main [1, 2]
 corpus/capture-await-raise.bc 13:21: handle 1: inside [2]; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
@@ -1519,6 +1520,7 @@ corpus/tree-map.bc 5.0 tail: direct; condition 2 holds; agree
 corpus/tree-map.bc 4.0 tail: direct; condition 2 holds; agree
 corpus/tree-map.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/tree-map.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/tree-view-tasks.bc flows [0, 4294967295]; main []
 corpus/trim-replace.bc flows [0, 1, 4294967295]; main [1]
 corpus/trim-replace.bc 58:9: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/trim-replace.bc 1.0 abortive: branch; condition 2 holds; -

@@ -7899,6 +7899,17 @@ refused by the new backend ("outside the pure fragment") and compiled by the old
   types that own no cell, cell writes, live objects) and the LIR lint (`Backend2/Lint.lean`);
   `scripts/check-backend2.sh` fences `Backend2/`'s imports off the old backend's reconstruction
   and the elaboration, and bans the erasure and the deleted passes' names.
+- **The closure classes, checked** (#674, `Backend2/LayoutCheck.lean`, docs/compiler.md §10.1):
+  every compile checks the layouts' and the closure flow's results, not their analyses, before
+  anything reads them. A failure is the compiler's error (`internal: closure classes not a fixed
+  point: …`). The layouts must be a solution of the program's constraints: every move joins its
+  places, every closure reaches a class that holds its code, every code fits its class, every node
+  is its type's, every box and heap class is on a cycle (§35), and the widths, boxes, heap
+  classes, bytes in a cell and static cells' bytes satisfy their equations.
+  The flow's sets must be a solution of the flow's constraints, and a direct call needs a set of
+  one code. Read from the typed term: a cell's width class. Trusted: that the lowering reads these
+  facts correctly. This is not the final state: #674 replaces the analysis (defunctionalisation in
+  Core, closure types in Core, or uniform boxed closures).
 
 ### Programs
 

@@ -442,6 +442,12 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
   let arg (i : Nat) : LM (List Nat) := vals (args.getD i 0)
   let argN (i : Nat) : LM Nat := nodeV (args.getD i 0)
   match op with
+  -- UNPROVED: that the host operations', `divLit`'s and the I/O operations' arguments and answers
+  -- (integers, capabilities, families, and pairs and sums of them) are laid out flat: no field of
+  -- theirs boxed. They read and write those words as they are, ignoring `isBoxed`. It should hold
+  -- because a field is boxed only on a cycle of the fields (SPEC §35), which their types, holding
+  -- no `μ` and no closure, cannot close; that rule is checked on every compile
+  -- (`LayoutCheck.boxesOnCycles`). If it fails, a pointer is read as a value.
   | .host o => do
     let (s, vs) ← hostVals o (← arg 0)
     return s ++ (← emit d vs)
@@ -470,7 +476,8 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     -- hold because the checker's class is closed under every `swap` of the typed term
     -- (`Checked.classAt_alloc`), and only a `swap` changes a cell's type. That a location holds
     -- only its class's types at run time is not proved (`Frontend/Check/TFacts.lean`). If it
-    -- fails, a store overruns the cell.
+    -- fails, a store overruns the cell. A value's bytes and each type's most (`bytes`,
+    -- `tyBytes`) are checked on every compile (`LayoutCheck.cellsOk`); the class is not.
     let b := (← L).clsBytes (← contents n) cls
     if b == 0 then return ← emit d [.c64 0]
     let t ← fresh1
@@ -548,6 +555,12 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
       | _, _, _ => none
     match lit with
     | some c => do
+      -- UNPROVED: that the literal tables' class is not on the heap. `envOf` of a heap class frees
+      -- its object, and the tabulator's words are then dropped (`dropVals`) or passed on: one
+      -- release too many. It should hold because a class is on the heap only where it holds itself
+      -- (SPEC §35), checked on every compile (`LayoutCheck.boxesOnCycles`), and the literal
+      -- tables' code captures two integers. A class that also holds a code capturing that class
+      -- would be on the heap, and this would fail.
       let ts ← fresh 2
       let gn ← argN 0
       let (es, env) ← envOf gn c fw
@@ -976,8 +989,8 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
           (outStr "inr " ++ (← printField n 1 (← fieldLocals n 1 ps) true))]
     pure { name := "print", params := w, results := 0, locals := nloc, body := body ++ [.ret []], ptrs }
   | .reCopy c n =>
-    -- The contents at `c` read through `Imm̲` at `n`: a closure is `Unk` (no words), a pointer the
-    -- word, a boxed field copied, as `copy` copies.
+    -- The contents at `c` read through `Imm̲` at `n`: a closure or an opaque value is `Unk` (no
+    -- words), a pointer the word, a boxed field copied, as `copy` copies.
     let wc := L.w c
     let wn := L.w n
     let (body, nloc, ptrs) ← inFn wc do
@@ -1052,12 +1065,14 @@ where
         return (s, locs ts)
       match L.sh c', L.sh n' with
       | .clos .., .unk => return ([], [])
+      | .opq, .unk => return ([], [])
       | _, _ =>
         if L.triv c' && L.w c' == L.w n' then return ([], locs vs)
         let ts ← fresh (L.w n')
         return ([.call ts (← helper (.reCopy (L.r c') (L.r n'))) (locs vs)], locs ts)
     match L.sh c, L.sh n with
     | .clos .., .unk => return ([], [])
+    | .opq, .unk => return ([], [])
     | .pair .., .pair .. => do
       let (s₀, a, b) ← splitPair c ls false
       let (s₁, va) ← sub (← child c 0) (← child n 0) a
@@ -1185,9 +1200,9 @@ def lowerProg (p : Prog) (L : Layouts) (known : Std.HashMap Var Nat)
   let nf := p.fns.size
   let fMain := 1 + nf
   let pad := (8 - p.data.size % 8) % 8
-  -- The static cells after the literals: each as wide as its width class, a word at least.
-  let words := p.statics.map fun cls =>
-    max 1 ((cls.foldl (fun b t => max b (L.tyBytes.getD t 0)) 0 + 7) / 8)
+  -- The static cells after the literals: each as wide as its width class (`Layouts.staticBytes`),
+  -- a word at least.
+  let words := L.staticBytes.map fun b => max 1 ((b + 7) / 8)
   let staticAt := (words.foldl (fun (acc : Array Nat × Nat) w => (acc.1.push acc.2, acc.2 + 8 * w))
     (#[], p.data.size + pad)).1
   let slotScopes := p.slots.fold (fun s _ sc => s.insert sc) {}

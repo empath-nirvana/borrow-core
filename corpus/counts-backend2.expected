@@ -70,6 +70,7 @@ block-swap 2 0 0 4 4 0
 block-yield-inner 0 0 0 0 0 0
 borrow-in-scope 2 0 0 4 3 0
 bytes-upper 1 0 0 80 52 54
+capability-bang-width 0 0 0 9 7 0
 capability-swap-width 0 0 0 7 5 0
 capture-await-raise 0 0 0 0 0 0
 capture-log-hand 0 0 0 0 0 0
@@ -385,6 +386,7 @@ swap-cell-width 1 0 0 1 1 0
 text-lend-lifetime 1 0 0 81 71 13
 text-wordfreq 966 0 192 5450 3358 0
 tree-map 29 0 2 209 161 0
+tree-view-tasks 1205 600 0 48087 27039 8727
 trim-replace 5 0 0 4639 4178 569
 utf8-count 1 0 0 341 109 199
 yield-callback 0 0 0 0 0 0

@@ -1,0 +1,19 @@
+-- check: old-backend-refuses
+-- A capability's cell swapped to hold a `!` closure of three captured values and back: the cell
+-- is as wide as its width class, whose `!` type is read through (`Layouts.staticBytes`), so the
+-- swap does not write over `stdout`'s cell. The old backend refuses the program.
+--
+-- Answer: `O` on standard output, then i64[110].
+main -> i64 =
+  let a = !{ i64[1] };
+  let b = !{ i64[9] };
+  let c0 = !{ i64[100] };
+  let f = (!thunkv fun (u : 1) ->
+    let a1 = unbang a; let b1 = unbang b; let c1 = unbang c0;
+    x <- force a1; y <- force b1; z <- force c1; return (x + y + z));
+  let (c, o) = swap[output, !(1 => i64)] stderr f;
+  let (stdout, u) = putb(stdout, b'O');
+  let (stdout, u2) = putb(stdout, b'\n');
+  let (stderr, g) = swap[!(1 => i64), output] c o;
+  let g1 = unbang g;
+  g1 ()
