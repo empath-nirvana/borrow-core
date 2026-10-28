@@ -386,6 +386,7 @@ swap-cell-width erased handles 0 performs 0 raises 0 left 0 0
 text-lend-lifetime erased handles 0 performs 0 raises 0 left 0 0
 text-wordfreq erased handles 2 performs 0 raises 14 left 0 0
 tree-map erased handles 5 performs 2 raises 30 left 0 0
+tree-view-tasks erased handles 0 performs 0 raises 0 left 0 0
 trim-replace erased handles 1 performs 0 raises 1 left 0 0
 utf8-count erased handles 1 performs 0 raises 1 left 0 0
 yield-callback erased handles 0 performs 0 raises 0 machines 4 suspends 2 left 0 0

@@ -387,6 +387,7 @@ swap-cell-width 1 0 0 1 1 0
 text-lend-lifetime 1 0 0 81 71 77
 text-wordfreq 966 0 192 5450 3358 65 # the words' and counts' list nodes; the copies are the written `clone`s of words in comparisons and lookups
 tree-map 29 0 2 209 161 0 # the trees' nodes, one object per node; the copies are the written `clone(m)`s
+tree-view-tasks 1205 0 0 50505 29457 8727
 trim-replace 5 0 0 4639 4178 4707 # the input string, and one replaced string per line (four)
 utf8-count 1 0 0 341 109 263 # the line buffer, reused; the stdin, stdout and stderr cells are words of the program's data
 yield-callback 0 0 0 0 0 0

@@ -33,8 +33,10 @@ variable's type is walked once):
 - **Every code of a class fits it** (`codeOk`): its kind is the class's, its functions are the
   class's components, each function's argument and answer are the class's, its environment is
   `codeEnv`; the codes of a class have no repeat and `codeClass` is their inverse.
-- **The widths, the boxes and the heap classes are a layout** (`layoutOk`): the fields not boxed,
-  and the environments of the classes not on the heap, form an acyclic graph; every node's width
+- **The widths, the boxes and the heap classes are a layout** (`layoutOk`): every boxed field and
+  every heap class is on a cycle of the fields and environments (`boxesOnCycles`, SPEC §35); the
+  fields not boxed, and the environments of the classes not on the heap, form an acyclic graph;
+  every node's width
   and triviality are `resolve`'s equations over its children (a boxed field one word, a heap class
   one word); a boxed field is a pair's or a sum's.
 - **A value's bytes in a cell are its node's** (`cellsOk`): every node's `bytes` is `resolve`'s
@@ -49,7 +51,8 @@ its inclusion constraints, and every direct call it licenses (`known`) is of a v
 the one code.
 
 The analysis's choices of *which* fields to box and which classes to keep on the heap are not
-checked to be minimal: any choice that satisfies the equations is a layout. Read from the typed
+checked to be the fewest: any choice on cycles that leaves no cycle inline and satisfies the
+equations is accepted. Read from the typed
 term and not checked here: which types a cell may hold over its life (an allocation's width class,
 `Checked.classAt`, carried on `Op.alloc`; `Lower` marks it `UNPROVED:`). What stays trusted is that
 the lowering reads these facts as it should.
@@ -422,6 +425,88 @@ def fieldT (v j c : Nat) : CM Bool := do
   | some x => pure x
   | none => throw s!"node {c} has no triviality"
 
+/-- Each node's strongly connected component of the graph `succ` (Tarjan's, iterative, in time
+linear in the nodes and edges): two nodes on one cycle have one component. -/
+def sccIds (n : Nat) (succ : Array (Array Nat)) : Array Nat := Id.run do
+  let mut index : Array Nat := Array.replicate n 0
+  let mut low : Array Nat := Array.replicate n 0
+  let mut onStack : Array Bool := Array.replicate n false
+  let mut stk : Array Nat := #[]
+  let mut comp : Array Nat := Array.replicate n n
+  let mut counter := 1
+  let mut ncomp := 0
+  let bound := 2 * (n + succ.foldl (· + ·.size) 0) + 2
+  for root in [0:n] do
+    if index[root]! != 0 then continue
+    index := index.set! root counter
+    low := low.set! root counter
+    counter := counter + 1
+    stk := stk.push root
+    onStack := onStack.set! root true
+    let mut call : List (Nat × Nat) := [(root, 0)]
+    for _ in [0:bound] do
+      match call with
+      | [] => break
+      | (v, i) :: rest =>
+        match (succ[v]!)[i]? with
+        | some w =>
+          call := (v, i + 1) :: rest
+          if w ≥ n then continue
+          if index[w]! == 0 then
+            index := index.set! w counter
+            low := low.set! w counter
+            counter := counter + 1
+            stk := stk.push w
+            onStack := onStack.set! w true
+            call := (w, 0) :: call
+          else if onStack[w]! then
+            low := low.set! v (min low[v]! index[w]!)
+        | none =>
+          call := rest
+          if let (u, _) :: _ := rest then low := low.set! u (min low[u]! low[v]!)
+          if low[v]! == index[v]! then
+            for _ in [0:n] do
+              match stk.back? with
+              | none => break
+              | some x =>
+                stk := stk.pop
+                onStack := onStack.set! x false
+                comp := comp.set! x ncomp
+                if x == v then break
+            ncomp := ncomp + 1
+  return comp
+
+/-- The fields and environments of each representative: a pair's or a sum's two fields, a
+closure class's codes' captured values (`envOf` in `resolve`), boxed or not, on the heap or not;
+with `heap`, a heap class's environment left out. -/
+def fieldGraph (L : Layouts) (heap : Bool) : Array (Array Nat) :=
+  (Array.range L.rep.size).map fun v =>
+    if L.rep[v]! != v then #[] else match L.shape[v]! with
+      | .pair a b | .sum a b => #[L.r a, L.r b]
+      | .clos .. =>
+        if heap && L.recCls.contains v then #[] else
+        (L.union.getD v #[]).foldl (fun acc c => acc ++ ((L.codeEnv.getD c []).map L.r).toArray) #[]
+      | _ => #[]
+
+/-- **Boxes and heap classes only where recursion forces them** (SPEC §35): a heap class is on a
+cycle of the fields and environments, and a boxed field's node and its child are on one cycle of
+them with the heap classes' environments left out. Not that they are the fewest. -/
+def boxesOnCycles (L : Layouts) : CM Unit := do
+  let n := L.rep.size
+  let g := fieldGraph L false
+  let cyc := sccIds n g
+  for v in L.recCls.toList do
+    let self := (g[v]!).contains v
+    let other := (g[v]!).any fun c => c != v && cyc[c]! == cyc[v]!
+    unless self || other do
+      throw s!"heap class {v} is on no cycle of the fields and environments: SPEC §35 puts a class on the heap only where it holds itself"
+  let g' := fieldGraph L true
+  let cyc' := sccIds n g'
+  for (v, j) in L.boxed.toList do
+    let some c := (g'[v]!)[j]? | throw s!"boxed field {v}.{j} is not a field"
+    unless cyc'[c]! == cyc'[v]! do
+      throw s!"boxed field {v}.{j} is on no cycle of the fields: SPEC §35 boxes a field only where its type holds itself"
+
 /-- The children of representative `v` its words hold inline: the fields not boxed, a class's
 codes' environments when the class is not on the heap. -/
 def inlineKids (v : Nat) : CM (Array Nat) := do
@@ -451,6 +536,7 @@ def layoutOk (L : Layouts) : CM Unit := do
   for v in L.recCls.toList do
     unless L.rep[v]? == some v do throw s!"heap class {v} is not a representative"
     let _ ← closOf L s!"heap class {v}" v
+  boxesOnCycles L
   -- No cycle of inline children: a depth-first search, three colours.
   let mut kids : Array (Array Nat) := Array.replicate n #[]
   let mut edges := 0
@@ -606,8 +692,8 @@ def check (p : Prog) (L : Layouts) : Except String Unit := do
       unless (L.union.getD R #[]).contains c do
         throw s!"code c{c}'s class is {R}, whose codes do not hold it"
     layoutOk L
-    cellsOk L roots
     staticsOk p L (← get).statics
+    cellsOk L roots
   let _ ← act.run {}
 
 /-! ### The closure flow -/
@@ -753,6 +839,37 @@ def freshOf (L : Layouts) (i : Nat) : Layouts × Nat :=
   ({ L with rep := L.rep.push n, shape := L.shape.push L.shape[r]!, width := L.width.push L.width[r]!,
             trivial := L.trivial.push L.trivial[r]!, bytes := L.bytes.push L.bytes[r]! }, n)
 
+/-- A fresh copy of node `i` whose first pointer (`i` itself, or within its pairs and sums, to the
+depth `fuel`) is a fresh copy with fresh contents: the copy, and its node. -/
+def freshPtrCopy : Nat → Layouts → Nat → Option (Layouts × Nat)
+  | 0, _, _ => none
+  | f + 1, L, i =>
+    let v := L.r i
+    match L.shape[v]! with
+    | .ref c | .imm c | .mut c =>
+      let (L₁, m) := freshOf L c
+      let (L₂, nv) := freshOf L₁ v
+      let k : NK := match L.shape[v]! with
+        | .ref _ => .ref m
+        | .imm _ => .imm m
+        | _ => .mut m
+      some ({ L₂ with shape := L₂.shape.set! nv k }, nv)
+    | .pair a b | .sum a b =>
+      let mk (x y : Nat) : NK := match L.shape[v]! with
+        | .pair .. => .pair x y
+        | _ => .sum x y
+      match freshPtrCopy f L a with
+      | some (L₁, a') =>
+        let (L₂, nv) := freshOf L₁ v
+        some ({ L₂ with shape := L₂.shape.set! nv (mk a' b) }, nv)
+      | none =>
+        match freshPtrCopy f L b with
+        | some (L₁, b') =>
+          let (L₂, nv) := freshOf L₁ v
+          some ({ L₂ with shape := L₂.shape.set! nv (mk a b') }, nv)
+        | none => none
+    | _ => none
+
 /-- The layouts with variable `x`'s node a fresh copy of it. -/
 def splitNode (L : Layouts) (x : Var) : Layouts :=
   let (L', n) := freshOf L (L.node x)
@@ -884,6 +1001,29 @@ def perturbLayouts (p : Prog) (L : Layouts) : List (String × Option Layouts) :=
   -- A static cell whose class takes bytes, one byte narrower.
   let shrinkStatic := ((List.range L.staticBytes.size).find? (L.staticBytes[·]! > 0)).map fun k =>
     { L with staticBytes := L.staticBytes.set! k (L.staticBytes[k]! - 1) }
+  -- A static cell made with a value wider than it (its bytes past the cell's word and class).
+  let staticSites := match (walkProg p L).run {} with
+    | .ok (_, st) => st.statics
+    | .error _ => #[]
+  let staticWide := staticSites[0]?.map fun (k, c, _) =>
+    { L with bytes := L.bytes.set! (L.r c) (max 8 (L.staticBytes.getD k 0) + 8) }
+  -- A field on no cycle boxed; a class on no cycle kept on the heap (the literal tables' first).
+  let reps := (List.range L.rep.size).filter fun v => L.rep[v]! == v
+  let g' := fieldGraph L true
+  let cyc' := sccIds L.rep.size g'
+  let boxFree := reps.findSome? fun v => match L.shape[v]! with
+    | .pair .. | .sum .. =>
+      ([0, 1].find? fun j => !L.boxed.contains (v, j) &&
+        cyc'[(g'[v]!)[j]!]! != cyc'[v]!).map fun j => { L with boxed := L.boxed.insert (v, j) }
+    | _ => none
+  let g := fieldGraph L false
+  let cyc := sccIds L.rep.size g
+  let heapCands := cls.filter fun R =>
+    !L.recCls.contains R && !(g[R]!).any fun c => cyc[c]! == cyc[R]!
+  let heapCands := match p.lits with
+    | some lc => heapCands.filter (fun R => (L.union.getD R #[]).contains lc) ++ heapCands
+    | none => heapCands
+  let heapFree := heapCands.head?.map fun R => { L with recCls := L.recCls.insert R }
   let region := ((sortedKeys L.regions).head?).map fun s =>
     let (L', n) := freshOf L (L.regions.getD s 0)
     { L' with regions := L'.regions.insert s n }
@@ -915,6 +1055,12 @@ def perturbLayouts (p : Prog) (L : Layouts) : List (String × Option Layouts) :=
       seen := seen.insert r x
     return out
   let split := shared.map (splitNode L)
+  -- A pointer read through a shared borrow (the reading, or the first pointer in its pairs and
+  -- sums), the reading a fresh copy whose pointer has fresh contents.
+  let ptrRead := bs.findSome? fun (x, e) => match e with
+    | .prim .load _ => (freshPtrCopy 8 L (L.node x)).map fun (L', m) =>
+      { L' with varNode := L'.varNode.insert x m }
+    | _ => none
   [("drop a code from its class", dropCode),
    ("drop a code's class", dropClassOf),
    ("merge two classes of one shape and different widths", merge),
@@ -929,9 +1075,13 @@ def perturbLayouts (p : Prog) (L : Layouts) : List (String × Option Layouts) :=
    ("give an integer the other slot's width", slot),
    ("narrow a type's bytes below a value of it", narrow),
    ("shrink a static cell", shrinkStatic),
+   ("make a static cell with a value wider than it", staticWide),
+   ("box a field on no cycle", boxFree),
+   ("keep a class on no cycle on the heap", heapFree),
    ("move a κ region's node", region),
    ("move a machine's frame node at one access", frame),
    ("move a reborrowed read's node", reread),
+   ("move a pointer read's contents", ptrRead),
    ("split a variable's node from the places it is joined with", split)]
 
 /-- The perturbations of the closure flow, each named. -/

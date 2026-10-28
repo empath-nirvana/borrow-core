@@ -442,6 +442,12 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
   let arg (i : Nat) : LM (List Nat) := vals (args.getD i 0)
   let argN (i : Nat) : LM Nat := nodeV (args.getD i 0)
   match op with
+  -- UNPROVED: that the host operations', `divLit`'s and the I/O operations' arguments and answers
+  -- (integers, capabilities, families, and pairs and sums of them) are laid out flat: no field of
+  -- theirs boxed. They read and write those words as they are, ignoring `isBoxed`. It should hold
+  -- because a field is boxed only on a cycle of the fields (SPEC §35), which their types, holding
+  -- no `μ` and no closure, cannot close; that rule is checked on every compile
+  -- (`LayoutCheck.boxesOnCycles`). If it fails, a pointer is read as a value.
   | .host o => do
     let (s, vs) ← hostVals o (← arg 0)
     return s ++ (← emit d vs)
@@ -549,6 +555,12 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
       | _, _, _ => none
     match lit with
     | some c => do
+      -- UNPROVED: that the literal tables' class is not on the heap. `envOf` of a heap class frees
+      -- its object, and the tabulator's words are then dropped (`dropVals`) or passed on: one
+      -- release too many. It should hold because a class is on the heap only where it holds itself
+      -- (SPEC §35), checked on every compile (`LayoutCheck.boxesOnCycles`), and the literal
+      -- tables' code captures two integers. A class that also holds a code capturing that class
+      -- would be on the heap, and this would fail.
       let ts ← fresh 2
       let gn ← argN 0
       let (es, env) ← envOf gn c fw

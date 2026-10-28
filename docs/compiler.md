@@ -803,7 +803,8 @@ The facts the backend once rebuilt from its LIR (`Frames`, `LitViews`, the class
 pointer) are now in the typed term (SPEC §57) and read (SPEC §58). The programs they miscompiled
 are regressions in the corpus: `lend-owner-returned` (`t4`), `swap-cell-width` (`t7`),
 `literal-array-written` (`t13`), `capability-swap-width` (`t17`), `lend-owner-joined` (`t18`); and
-`capability-bang-width`, a capability cell whose class holds a `!` type (§10.1).
+`capability-bang-width`, a capability cell whose class holds a `!` type (§10.1); `tree-view-tasks`
+(#683), a pointer read through a shared borrow at a `ref` node (§10.1).
 
 | fact | where decided | class | source or lemma | readable instead? | known bug |
 |---|---|---|---|---|---|
@@ -815,33 +816,33 @@ are regressions in the corpus: `lend-owner-returned` (`t4`), `swap-cell-width` (
 | `copy` and `array_copy` as an LIR copy | `Convert.lean:3506` | read; checked by `Lint` (`copyable`: an `imm` borrow or a family of them) | `axCopyTy`, `arrCopyTy` (`imm`) | — | — |
 | every `copy` at a persistent type or of `imm` borrows; every `drop` at a persistent type, one with no owned cell, or a family of borrows | `Lint.lean:61` (`copyable`), `:70` (`droppable`) | read (`!` on the LIR type, `Types.lean:274`); checked of every program compiled (`Driver.lean:383`), not proved of `Convert` | `LTy.persistent` and `LTy.drops` are `VTy.persistent`'s and `VTy.Drop`'s images: `ofV_persistent`, `ofV_drops`, so the slots `Ctx.SplitP.dup`, `Ctx.DeadP.drop` and `Ctx.Drops` allow pass (`Lint.copyable_ofV`, `droppable_ofV_persistent`, `droppable_ofV_drop`); a family of borrows, `forget_fam_compatX` | — | — |
 | a stack machine drops a level's suspended computation (a closure) | `Convert.lean:1328`, `:1388` | UNPROVED: no type licenses it; listed in `Prog.stackKs`, which `Lint` lets through | `stackedOf`'s self-calls, read off the layouts' classes (the stack machines row) | no | — |
-| copying or dropping a cell, borrow or family is its words alone (`trivial`) | `Layout.lean:686` | read: every `copy` and `drop` is checked by its type (the row above but one); a persistent value holds no resource (`vP_empty_of_persistent`), a `VTy.Drop` one no owned cell (`vC_noOwn_of_drop`), a family of borrows none. UNPROVED: that a variable's LIR type is its node's checked type (by construction), and the row above | `Lint.copyable`, `Lint.droppable` | — | — |
+| copying or dropping a cell, borrow or family is its words alone (`trivial`) | `Layout.lean:689` | read: every `copy` and `drop` is checked by its type (the row above but one); a persistent value holds no resource (`vP_empty_of_persistent`), a `VTy.Drop` one no owned cell (`vC_noOwn_of_drop`), a family of borrows none. UNPROVED: that a variable's LIR type is its node's checked type (by construction), and the row above | `Lint.copyable`, `Lint.droppable` | — | — |
 | an owned value's destructor | `Convert.lean:1854` (`genDtor`) | read | the `dtor` node's type (`dtorE`, `Core/Dtor.lean`'s `dtorAt`); the transcription is not proved against `dtorAt` | — | — |
 | a lend's kind, `imm` or `mut`, on `Op.lend` | `Convert.lean:3455`, `:3518`; `Lint.lean:82` checks the borrow it answers | read | the borrow constant (`withbor1`/`withbor2`, `sliceBorrowI`/`M`, the block borrows); `lendCell`'s `m` agrees (`lendKindB`, `TDerivesAt.lendCell_kind`) | — | `t13` (fixed) |
 | a reborrow | `Convert.lean:3520` | read | `withbor3` | — | — |
 | a cell allocated for one lend, and its scope | `Convert.lean:3318` (`convLendCell`), `:2339` (`withScope`), `:278` (`markOwner`) | read | `lendCell` (`lendCellB`); `lendScope`'s `rel` (`relT`, `TDerivesAt.lendScope_rel`) | — | — |
-| a lent cell's frame slot | `Driver.lean:188` (`slotsOf`); `Lower.lean:465`, `:493` | read (`rel`) and UNPROVED (that the allocating function frees it on every path, from its uses there and the LIR's linearity, which `Lint` checks on the compile path, `Driver.lean:383`): ambiguous | `TDerivesAt.lendScope_rel` | the backend's own split of the code into functions | `t4`, `t18` (fixed) |
-| a literal's view shares the literal's bytes | `Convert.lean:2348` (`withLitView`), `:1461`; `Lower.lean:530` | read (the view), UNPROVED (the tabulator's code, the closure flow's): ambiguous | `litView` (`litViewT`, `TDerivesAt.litView_shape`); `Prog.lits` | no: which code a table's closure is, is the flow's (`TFacts.lean`) | `t13` (fixed) |
-| an allocation's width; a cell's narrow representation; an array slot's stride | `Convert.lean:269` (`classOf`), `:3473`, `:1936`; `Layout.lean:711`; `Lower.lean:465`, `:270`, `:274` | UNPROVED: the width class. Checked on every compile (§10.1): each node's bytes (`bytes`) and that each type's most bytes (`tyBytes`) cover every variable of the type | `Checked.classAt`, `Checked.classAt_alloc` (closed under `swap`); a value's bytes from its own type; that a location holds only its class's types at run time is not proved (`TFacts.lean`) | — | `t7` (fixed) |
-| a capability cell's width | `Driver.lean:123` (`classesOf`), `Convert.lean:3648`; `Layout.lean:735` (`staticBytes`); `Lower.lean:489`, `:1193` | UNPROVED: the width class. Checked on every compile (§10.1): `staticBytes` is the class's most bytes, `!` erased, and holds the value the cell is made with | the checker's construction (`cellClasses`), checked closed (`cellsOkB`, `cellsOkB_sound`); as the row above | — | `t17` (fixed); a `!` type in the class was read as no bytes (fixed: `capability-bang-width`) |
-| a parameter's `noalias`, `readonly`, `nonnull`, `dereferenceable` | `Lower.lean:1112` (`paramFacts`) | read (the mode, and the bytes of the contents' type) | the parameter's LTy; cites `CellU.CompatS.kinds`, `adequacyD` | — | — |
-| a read through `Imm̲` | `Lower.lean:512`; `Layout.lean:213` (`joinRe`) | read; the reading checked related to the contents as `joinRe` relates them (`reCompat`, §10.1) | the `load`'s result type (`withload`'s callback, `fold_imm`'s `immReborrow`) | — | — |
+| a lent cell's frame slot | `Driver.lean:189` (`slotsOf`); `Lower.lean:471`, `:499` | read (`rel`) and UNPROVED (that the allocating function frees it on every path, from its uses there and the LIR's linearity, which `Lint` checks on the compile path, `Driver.lean:383`): ambiguous | `TDerivesAt.lendScope_rel` | the backend's own split of the code into functions | `t4`, `t18` (fixed) |
+| a literal's view shares the literal's bytes | `Convert.lean:2348` (`withLitView`), `:1461`; `Lower.lean:536` | read (the view), UNPROVED (the tabulator's code, the closure flow's): ambiguous | `litView` (`litViewT`, `TDerivesAt.litView_shape`); `Prog.lits` | no: which code a table's closure is, is the flow's (`TFacts.lean`) | `t13` (fixed) |
+| an allocation's width; a cell's narrow representation; an array slot's stride | `Convert.lean:269` (`classOf`), `:3473`, `:1936`; `Layout.lean:716`; `Lower.lean:471`, `:270`, `:274` | UNPROVED: the width class. Checked on every compile (§10.1): each node's bytes (`bytes`) and that each type's most bytes (`tyBytes`) cover every variable of the type | `Checked.classAt`, `Checked.classAt_alloc` (closed under `swap`); a value's bytes from its own type; that a location holds only its class's types at run time is not proved (`TFacts.lean`) | — | `t7` (fixed) |
+| a capability cell's width | `Driver.lean:124` (`classesOf`), `Convert.lean:3648`; `Layout.lean:735` (`staticBytes`); `Lower.lean:495`, `:1205` | UNPROVED: the width class. Checked on every compile (§10.1): `staticBytes` is the class's most bytes, `!` erased, and holds the value the cell is made with | the checker's construction (`cellClasses`), checked closed (`cellsOkB`, `cellsOkB_sound`); as the row above | — | `t17` (fixed); a `!` type in the class was read as no bytes (fixed: `capability-bang-width`) |
+| a parameter's `noalias`, `readonly`, `nonnull`, `dereferenceable` | `Lower.lean:1124` (`paramFacts`) | read (the mode, and the bytes of the contents' type) | the parameter's LTy; cites `CellU.CompatS.kinds`, `adequacyD` | — | — |
+| a read through `Imm̲` | `Lower.lean:518`; `Layout.lean:213` (`joinRe`) | read; the reading checked related to the contents as `joinRe` relates them (`reCompat`, §10.1) | the `load`'s result type (`withload`'s callback, `fold_imm`'s `immReborrow`) | — | — |
 | which words are pointers | `Lower.lean:104` (`addrKinds`) | read | the layout node, built from the LTy | — | — |
 | an array read with no bounds test | `Convert.lean:2541`, `:2549`, `:3496` | read | `walk` (`read`), `walkGet`; `walk_index_lt`, `walk_fold_index_lt`, `walk_get_leaf`, `walk_get_split`; that the step's read is the one `walkGet` marks is the elaborator's (`TFacts.lean`) | — | — |
 | a block's allocation, release and lend | `Convert.lean:1936`, `:1945`, `:1969` | read | `allocS`, `freeS`, `withborSM`/`SI`, `withborF2M`/`F2I` | — | — |
 | a swap through a `mut` borrow; a fold's cell freed or emptied | `Convert.lean:1546`, `:1570` | read | `withswap`; `foldOwn`, `foldReuse` at their shape | — | — |
 | a relaxed lend: `mut`, its finaliser on a cancel | `Convert.lean:2716` | read | `lendR` | — | — |
 | the capabilities freed at `main`'s end | `Convert.lean:3603` (`epilogue`) | read | `main`'s type `(caps, a)` | — | — |
-| the closure classes: which codes reach a place; each class's codes, tags and width | `Layout.lean:396` (`places`, `join`), `:605` (`resolve`) | UNPROVED: the analysis. Its result is checked on every compile (`Driver.lean:211`, `checkedLayouts`, §10.1): a solution of the program's constraints, before anything reads it | joins over every move; not a typing fact | no: #674 replaces it | — |
-| boxed fields; heap closure environments | `Layout.lean:639` | UNPROVED: one owner (by LIR linearity, which `Lint` checks). Checked on every compile (§10.1): no cycle left inline, and the widths and triviality their equations; not that the boxes are minimal | SPEC §35's rule | no: the classes are not a typing fact | — |
+| the closure classes: which codes reach a place; each class's codes, tags and width | `Layout.lean:406` (`places`, `join`), `:608` (`resolve`) | UNPROVED: the analysis. Its result is checked on every compile (`Driver.lean:211`, `checkedLayouts`, §10.1): a solution of the program's constraints, before anything reads it | joins over every move; not a typing fact | no: #674 replaces it | — |
+| boxed fields; heap closure environments | `Layout.lean:642`; read flat at `Lower.lean:451` (host, `divLit` and I/O operations), `:558` (`tabLit`) | UNPROVED: one owner (by LIR linearity, which `Lint` checks), and the flat readings at `Lower.lean:451`, `:558`. Checked on every compile (§10.1): every box and heap class on a cycle of the fields (SPEC §35's rule, which guards those readings), no cycle left inline, and the widths and triviality their equations; not that they are the fewest | SPEC §35's rule | no: the classes are not a typing fact | — |
 | a direct call of a known code (the 0-CFA) | `Flow.lean:119`, `:168`; read at `Lower.lean:346` | UNPROVED: the analysis, cut at its fuel. Its result is checked on every compile (`Driver.lean:226`, `checkedFlow`, §10.1): the sets satisfy the flow's inclusions, and each direct call's set is its one code | not a typing fact | no: #674 replaces it | the solver linked one site per (variable, component, code) (fixed, §10.1) |
 | every LIR variable consumed once on every path | `Lint.lean:54` | UNPROVED: checked of every program compiled (`Driver.lean:383`), not proved of `Convert` | — | — | — |
 | a machine's state in a cell, written in place | `Convert.lean:1140`; `:3711` (`cellPass`), `:3726` (`threadedOf`) | UNPROVED | the qualifier (`OutInfo.unrs`) is read; the cell is chosen from the layouts' recursive classes | the qualifier is; the class is not | — |
-| a stack machine's frames on the task stack | `Convert.lean:3744` (`stackedOf`), `:1238` | UNPROVED | `stackOps` is read (`Driver.lean:106`: clause kinds, `effHandleVB`, qualifiers); the self-calls come from the layouts' classes | no | — |
+| a stack machine's frames on the task stack | `Convert.lean:3744` (`stackedOf`), `:1238` | UNPROVED | `stackOps` is read (`Driver.lean:107`: clause kinds, `effHandleVB`, qualifiers); the self-calls come from the layouts' classes | no | — |
 | a stored site's own stack and `κ`'s region | `Convert.lean:2903` | read, given the stack machines row | clause kinds (`classifyHandler_sound`), `effHandleVB`, qualifiers | — | — |
 | a `use` body shared by the uses of its key | `Convert.lean:3360` (`convUse`) | UNPROVED | `useKey`; the extra live slots dropped | — | — |
 | an η-thunk of `unfold step` called where it is made | `Convert.lean:2597`, `:2664`, `:2559` | read | the `bind`'s `unfoldStep` node (`TDerivesAt.unfoldStep_shape`), carried with the slot's variable (`CState.unfolds`); `nuEta_unfold` | — | — |
-| machine operations; direct calls of clauses | `Driver.lean:64`, `:91` | read | clause kinds (`classifyHandler_sound`), `Checked.flows` (`cond2B`) | — | — |
+| machine operations; direct calls of clauses | `Driver.lean:65`, `:92` | read | clause kinds (`classifyHandler_sound`), `Checked.flows` (`cond2B`) | — | — |
 | a borrow's mode on the LIR type; lifetimes and `[@a]` erased, `!` kept | `Types.lean:270–274` | read | `ofV` of the checked `VTy` (`ofV_bang`) | — | — |
 | `!A` represented as `A`: layouts, words and the conversion's taking apart read a type through `peel`; its type comparisons are up to `!` | `Types.lean:143` (`peel`), `:169` (`sameRep`) | read | `LTy.sameRep_iff`, `sameRep_bang_left`, `sameRep_bang_right`, `unbang_peel` | — | — |
 
@@ -873,8 +874,11 @@ machines. It does not use the analyses' solvers (`find`, `join`, `walk`, `resolv
     dispatch on it and its environment's words agree.
   - Every variable's, answer's and `main`'s node is a layout of its `LTy` (`build`, `!` read
     through), up to the formers `join` lets share a node.
-  - The unboxed fields and the environments of the classes not on the heap have no cycle. Every
-    node's width and triviality are `resolve`'s equations over its children.
+  - Every boxed field and every heap class lies on a cycle of the fields and environments (SPEC
+    §35: a box or a heap class only where a type or a class holds itself; a box on a cycle with
+    the heap classes' environments left out, as `resolve` chooses them). The unboxed fields and
+    the environments of the classes not on the heap have no cycle. Every node's width and
+    triviality are `resolve`'s equations over its children.
   - Every node's bytes in a cell are its shape's and width's. Each type's most bytes (`tyBytes`,
     `!` erased) cover every variable, answer and `main` of the type: an allocation's width class
     is read through them (`Layouts.clsBytes`).
@@ -885,8 +889,11 @@ machines. It does not use the analyses' solvers (`find`, `join`, `walk`, `resolv
   - The flow's sets satisfy its inclusions (`gen`, `link`, `coarse`), and every direct call
     (`known`) is of a set of one code.
 - **What it does not check.**
-  - That the boxes and heap classes are minimal: any choice that satisfies the equations is a
-    layout.
+  - That the boxes and heap classes are the fewest: any set on cycles that leaves no cycle inline
+    and satisfies the equations is accepted. `Lower` is trusted to read a box or a heap class on a
+    cycle wherever one is. It reads the host, `divLit` and I/O operations' words, and the literal
+    tables' tabulator, as flat and not on the heap (`UNPROVED:` at `Lower.lean:451`, `:558`);
+    the cycle rule guards both, since their types and the literal tables' code close no cycle.
   - That the constraints cover every run-time move. They are the moves the analysis reads,
     re-derived independently, so a move both miss is missed.
 - **Read from the typed term, not checked here.** Which types a cell may hold over its life (an
@@ -910,16 +917,21 @@ machines. It does not use the analyses' solvers (`find`, `join`, `walk`, `resolv
   (`Flow.lean`, `solve`). The output is byte-identical.
 - **Reject tests** (`scripts/check-layout-reject.sh`, a gate step, through `bcc lir
   --layout-reject`). Each perturbs one fact of a program's computed layouts or flow, aimed at one
-  family of the checks, and must be refused by that family's own message, on one of seven programs:
+  family of the checks, and must be refused by that family's own message, on one of ten programs:
   - places and classes: drop a code from a class or from `codeClass`; split a variable's node;
   - codes: move a code's environment, argument or answer node to a fresh node of its shape;
   - widths and triviality: merge two classes of one shape, node for node, the wider into the
     narrower; change a width; call a non-trivial class trivial;
-  - boxes and heap classes: unbox a boxed field; keep a heap class inline;
+  - boxes and heap classes: unbox a boxed field; keep a heap class inline; box a field on no
+    cycle (on `array-replace`, a host operation's pair argument); keep a class on no cycle on the
+    heap (on `div-unhandled`, the literal tables' class);
   - bytes in a cell: shrink a value's bytes; give an integer the other slot's width; narrow a
-    type's bytes below a variable's; shrink a static cell;
+    type's bytes below a variable's; shrink a static cell; make a static cell with a value wider
+    than it;
   - machines: move a `κ` region's node; move a machine's frame node at one access;
-  - reads through a shared borrow: move a reborrowed read's node;
+  - reads through a shared borrow: move a reborrowed read's node; move a pointer read's contents
+    (on `tree-view-tasks`, where the reading and the cell's pointer are both `ref` nodes: the arm
+    `join`'s shared nodes need);
   - the flow: drop a code from a flow set; drop a code from a call's answer (the link the
     solver's bug broke); claim a direct call where two codes reach.
 - **Cost** (`bcc compile --backend new --timings` on `scripts/compile-scaling.sh`'s body; the
@@ -927,13 +939,14 @@ machines. It does not use the analyses' solvers (`find`, `join`, `walk`, `resolv
 
   | scale | layout | layout check | flow | flow check | `lir`, before → after | total, before → after |
   |---|---|---|---|---|---|---|
-  | 1× | 336 ms | 33 ms | 3 ms | 2 ms | 728 → 781 ms | 1559 → 1623 ms |
-  | 8× | 4863 ms | 303 ms | 31 ms | 25 ms | 10289 → 10792 ms | 20560 → 21248 ms |
-  | 16× | 23503 ms | 788 ms | 66 ms | 47 ms | 49637 → 50527 ms | 92285 → 92376 ms |
+  | 1× | 307 ms | 89 ms | 2 ms | 1 ms | 728 → 827 ms | 1559 → 1634 ms |
+  | 8× | 4505 ms | 889 ms | 24 ms | 19 ms | 10289 → 11141 ms | 20560 → 21158 ms |
+  | 16× | 22122 ms | 2521 ms | 55 ms | 41 ms | 49637 → 49979 ms | 92285 → 90111 ms |
 
-  The check grows 2.6× from 8× to 16× (the layout analysis 4.8×): near-linear, since each
-  variable's type is walked. Over the corpus, compiled one program at a time, the total is about
-  3% more (43.0 → 44.3 s).
+  The check grows 2.8× from 8× to 16× (the layout analysis 4.9×): near-linear, since each
+  variable's type is walked. Its two searches for cycles (the boxes' and the heap classes') are
+  about two thirds of it. The totals are noisy at this size. Over the corpus, compiled one program
+  at a time, the total is about 6% more (39.3 → 41.6 s).
 - **This is not the final state.** #674 replaces the analysis with one of:
   - (a) defunctionalisation in Core, re-checked by the kernel (whole-program compilation);
   - (b) closure types in Core that distinguish codes, specialised per instance (a kernel change);
