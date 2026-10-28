@@ -122,7 +122,10 @@ def link (p : Prog) (base : Nat) (s : Site) (c : Nat) : FM Unit := do
 -- typing fact: the typed term says a value is a closure of a type, not which λ made it. The
 -- loop stops at `fuel` steps with whatever it has. If a code is missing, `known` makes a direct
 -- call of the wrong code (`Lower.callTarget`), and a literal's view takes a tabulator for the
--- literal tables' code (`Lower`, `tabLit`).
+-- literal tables' code (`Lower`, `tabLit`). The result is checked on every compile
+-- (`LayoutCheck.checkFlow`, `checkedFlow` in `Backend2/Driver.lean`): the sets satisfy every
+-- inclusion `gen` and `link` make, and each `known` call's set is its one code. A move that both
+-- `gen` and the check pass over is not seen.
 /-- The least solution. -/
 def solve (p : Prog) (base : Nat) (fuel : Nat) : FM Unit := do
   let mut linked : Std.HashSet (Var × Nat × Nat) := {}
@@ -134,10 +137,13 @@ def solve (p : Prog) (base : Nat) (fuel : Nat) : FM Unit := do
       set { s with todo := s.todo.pop }
       let cs := ((← get).sets.getD x {}).toList
       for y in (← get).out.getD x #[] do addCodes y cs
-      for st in (← get).sites.getD x #[] do
+      -- Each site of `x` is linked on its own: a variable called on several paths (the arms of a
+      -- `case`) has a site on each, with its own argument and answer. `gen` alone adds sites, so a
+      -- site's index is fixed through the solve.
+      for (st, k) in ((← get).sites.getD x #[]).toList.zipIdx do
         for c in cs do
-          if !linked.contains (x, st.j, c) then
-            linked := linked.insert (x, st.j, c)
+          if !linked.contains (x, k, c) then
+            linked := linked.insert (x, k, c)
             link p base st c
 
 /-- The function body's answer flows to its pseudo-variable. -/
