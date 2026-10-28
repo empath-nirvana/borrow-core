@@ -682,9 +682,6 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let f := (← arg 0).headD 0
     return [.call [] (← helper .stackPop) [r, .loc f]] ++ (← emit d [])
   | .unreachable => return [.trap] ++ (← emit d (zeros (← wordsN n)))
-  | .cellNew | .cellsNew | .cellFree | .cellLoad | .cellStore | .locAt _ | .locAdd | .famIdx
-  | .famSplit =>
-    throw "word IR: an operation on the source's memory (SPEC §56), which no layout lowers yet"
   | .stackNew s => do
     -- A stack's header (bump, end, chunk), the site's `κ` region, then its first chunk (header and
     -- words), as `stack push` makes one with no region.

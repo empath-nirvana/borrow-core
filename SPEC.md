@@ -8980,14 +8980,9 @@ masks, its typed terms and every output, golden and count are unchanged.
 This entry gave a print of `own`'s output to Backend2's LIR and its simulation with the source's
 memory. The route was dropped (user, 2026-10-28): lowering by simulation in `SemC` moves the hard
 parts into the relation's definitions, and a safety relation would still accept a wrong answer. The
-`Lowering/` library and its corpus check are removed. Backend2 is the backend, and it reads the
-kernel's facts instead (#713, #715; CLAUDE.md, *Later stages read the kernel's facts*).
-
-Backend2's LIR keeps the operations on the source's memory the print wrote (`Backend2/Syntax.lean`,
-interpreted in `Backend2/Interp.lean`): `cellNew`, `cellsNew` (a cell, or `len(c)` cells, at the
-region base `next`, which moves on one region of `regionSize` addresses), `cellFree`, `cellLoad`,
-`cellStore`, `locAt ℓ`, `locAdd`, `famIdx` and `famSplit`. Backend2's conversion writes none of
-them and its lowering (`Backend2/Lower.lean`) refuses them.
+`Lowering/` library, its corpus check and the LIR's operations on the source's memory are removed.
+Backend2 is the backend, and it reads the kernel's facts instead (#713, #715; CLAUDE.md, *Later
+stages read the kernel's facts*).
 
 ---
 
@@ -9584,8 +9579,7 @@ Entry 54 (§55) is implemented in `Frontend/Check/Masks.lean` (`Covers`), the ge
 `Core/Mentions.lean`, `Frontend/Check/TTied.lean`, `Frontend/Check/Rules.lean`
 and `Frontend/Check/Weaken.lean`. No change to `CDerives`, the relation, the checker's output or
 either backend.
-Entry 55 (§56) is retired; what remains of it is the operations on the source's memory in
-`Backend2/Syntax.lean`, `Interp.lean`, `Lower.lean` and `Print.lean`.
+Entry 55 (§56) is retired; its code is removed.
 Entry 56 (§57) is implemented in `Frontend/Check/FactNodes.lean`, the generated typed terms and
 rules (`scripts/pin/`), `Frontend/Check/TShift.lean`, `Weaken.lean`, `TTied.lean`, `Rules.lean`,
 `Checker.lean`, `Steps.lean`, `Program.lean`, `TFacts.lean`, `Kinds.lean`, `KindsSound.lean`,
@@ -9603,8 +9597,9 @@ Entry 58 (§59) is implemented in `Backend2/` (`Types.lean`, `Syntax.lean`, `Con
 
 - **1.09** (2026-10-28) — §53, §54 and §56 retired (#698): lowering by simulation in `SemC` was
   dropped. `Lowering/`, `scripts/LoweringCheck.lean`, `scripts/check-lowering.sh`,
-  `corpus/lowering.expected` and the gate step `lowering` are removed. §55's coverage premise stays.
-  No change to the language, the kernel, the checker or either backend's outputs.
+  `corpus/lowering.expected`, the gate step `lowering` and Backend2's operations on the source's
+  memory (`Op.cellNew` … `Op.famSplit`) are removed. §55's coverage premise stays. No change to the
+  language, the kernel, the checker or either backend's outputs.
 - **1.08** (2026-10-28) — §59 (#714): `!` on the LIR types. `LTy.bang`, kept by `ofV`; the
   representation read through it (`peel`, `sameRep`); `Lint` checks every copy is of a persistent
   type or an `imm` borrow and every drop of a persistent type, one with no owned cell or a family
