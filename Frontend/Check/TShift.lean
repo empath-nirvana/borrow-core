@@ -221,6 +221,9 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | .selfCall i j k n t => .selfCall i j k n (t.shift d c)
   | .lendCell i j m t => .lendCell i j m (t.shift d c)
   | .nuEta i j f s t => .nuEta i j (sIdx d c f) (s.map (sIdx d c)) (t.shift d c)
+  | .lendScope i j r t => .lendScope i j r (t.shift d c)
+  | .litView i j t => .litView i j (t.shift d c)
+  | .unfoldStep i j t => .unfoldStep i j (t.shift d c)
   | t@(.unitI ..) => t
   | t@(.topI ..) => t
   | t@(.copyBang ..) => t
@@ -291,7 +294,8 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .mutSub _ _ _ _ _ t | .allEV _ _ _ _ _ _ t | .ofRet _ _ _ t | .roll _ _ _ t
   | .unroll _ _ _ t | .nuIn _ _ _ t | .nuOut _ _ _ t | .effSub _ _ _ _ _ t
   | .effPerform _ _ _ _ t | .effRaise _ _ _ _ _ t | .litFn _ _ _ t | .divLit _ _ _ _ t
-  | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => t.absF Δ
+  | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t
+  | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => t.absF Δ
   | .bind _ _ _ _ _ t₁ t₂ | .unitE _ _ _ _ t₁ t₂ | .tensorE _ _ _ _ _ _ t₁ t₂
   | .lolliE _ _ _ _ _ t₁ t₂ => AbsF.orO (t₁.absF Δ) (t₂.absF Δ)
   | .app _ _ _ _ _ _ tM => AbsF.orO (tM.absF Δ) (some (.atom .pers))

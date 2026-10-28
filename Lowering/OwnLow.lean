@@ -344,7 +344,8 @@ theorem own_lam {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg} (h : TDerive
       intro L C N hj _ he; cases hj; exact ih L _ N rfl (CTy.unroll_isRet hC₀) he
   | nuOut _ _ ih => intro L C N hj _ he; exact ih L _ N rfl rfl he
   | litFn _ _ _ ih | divLit _ _ _ ih | walk _ _ _ ih => intro L C N hj hC he; exact ih L C N hj hC he
-  | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ ih | nuEta _ _ ih | use _ _ ih =>
+  | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ _ ih | nuEta _ _ ih | use _ _ ih
+  | lendScope _ _ _ ih | litView _ _ ih | unfoldStep _ _ ih =>
       intro L C N hj hC he; exact ih L C N hj hC he
   | force =>
       intro L C N hj hC he
@@ -745,7 +746,8 @@ theorem own_lowered {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg} (h : TDe
   | boxI _ _ ih | immSub _ _ ih | mutSub _ _ ih | nuIn _ _ ih | nuOut _ _ ih => exact ih
   | roll _ _ _ ih => exact ih
   | litFn _ _ _ ih | divLit _ _ _ ih | walk _ _ _ ih => exact ih
-  | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ ih | nuEta _ _ ih | use _ _ ih => exact ih
+  | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ _ ih | nuEta _ _ ih | use _ _ ih => exact ih
+  | lendScope _ _ _ ih | litView _ _ ih | unfoldStep _ _ ih => exact ih
   | _ =>
       intro L hp _
       exact lowered_const rfl rfl hp fun hc => constNode_closed _ hc
@@ -881,7 +883,8 @@ theorem agreeAt_of_typed {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | mutSub _ _ ih | ofRet _ ih | roll _ _ _ ih | unroll _ ih | nuIn _ _ ih | nuOut _ _ ih
   | proj₁ _ ih | proj₂ _ ih | allE _ _ ih | allEV _ _ ih
   | litFn _ _ _ ih | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih
-  | lendCell _ _ ih | nuEta _ _ ih | use _ _ ih =>
+  | lendCell _ _ _ ih | nuEta _ _ ih | use _ _ ih | lendScope _ _ _ ih | litView _ _ ih
+  | unfoldStep _ _ ih =>
       intro L hp hL
       simp only [pureT] at hp
       simp only [agreeAt]

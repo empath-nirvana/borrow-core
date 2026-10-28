@@ -3782,7 +3782,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           (.lam lsp (id "io_lw") (.arrayImm lsp (.var lsp x) U8s) body))))
         let ids (s : String) : Ident := ⟨s, sp⟩
         let litTy : VTy := .tensor sp (.int sp .w32) (.bang sp (.lolli sp (.int sp .w32) U8s))
-        pure <| (fun v => Val.ascribe sp v (.tensor sp litTy Bs)) <| (.run sp (.bind sp (ids "io_lp") none (.ret sp P')
+        -- The scheme is marked as a literal's view (SPEC §57), which the checker checks.
+        pure <| (fun v => Val.ascribe sp (.mark sp .litView v) (.tensor sp litTy Bs)) <| (.run sp (.bind sp (ids "io_lp") none (.ret sp P')
           (.letPair sp (ids "io_ln") (ids "io_lt") (.var sp "io_lp")
             (.bind sp (ids "io_la") none (.ret sp (.app sp (.unbang sp (.const sp (.arrayNew U8s)))
                 (.pair sp (.var sp "io_ln") (.var sp "io_lt"))))

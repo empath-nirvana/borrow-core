@@ -1,0 +1,12 @@
+-- A cell swapped to hold `()` keeps its allocation's width (#712, `t7`): its width class is the
+-- class of the type it is allocated at (`Checked.classAt`), and its `free` frees it whatever it
+-- holds then. A cell allocated at `()` takes no bytes.
+--
+-- Answer: i32[5].
+main -> i32 =
+  let u = alloc(());
+  let k = free(u);
+  let c = alloc(5);
+  let (c, old) = swap[i32, 1] c ();
+  let z = free(c);
+  old

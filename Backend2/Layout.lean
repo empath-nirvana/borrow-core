@@ -22,9 +22,10 @@ both:
   edges of one search over the pair and sum fields, or a sum's payload where that boxes fewer
   (`sumBoxes`). A closure class that holds itself among its codes' captured values keeps its
   environment on the heap.
-- **Cells.** A cell is as wide as the widest type its class may hold: the checker's cell
-  classes (`Checked.cells`) give the class. A cell whose class holds only integers of one width
-  is a slot of that width's bytes: a byte, or 4 bytes for `i32` and `f32` (L-6).
+- **Cells.** A value in a cell takes the bytes of its type: a byte at `u8`, 4 bytes at `i32` and
+  `f32` (L-6), its words otherwise. An allocation is as wide as the widest type of its width
+  class, the checker's class rooted at the type it allocates at (`Checked.classAt`, SPEC §57),
+  which the allocation carries (`Op.alloc`).
 -/
 
 namespace Backend2.Lay
@@ -320,12 +321,12 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
   | .prim op as => do
     let a (i : Nat) : GM Nat := do nv (as.getD i 0)
     match op with
-    | .alloc | .allocLent | .staticCell _ => join (← kid dst 0) (← a 0)
+    | .alloc _ | .allocLent _ _ | .staticCell _ => join (← kid dst 0) (← a 0)
     | .free => join dst (← kid (← a 0) 0)
     | .swap => do
       join (← kid (← kid dst 0) 0) (← a 1)
       join (← kid dst 1) (← kid (← a 0) 0)
-    | .lend => do
+    | .lend _ => do
       join (← kid dst 0) (← a 0)
       join (← kid (← kid dst 1) 0) (← kid (← a 0) 0)
     | .relend => do join (← kid dst 0) (← a 0); join (← kid dst 1) (← a 0)
@@ -390,6 +391,12 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
   | .copy x x' b => do join (← nv x) (← nv x'); walk p f cc b dst
   | .drop _ b => walk p f cc b dst
 
+-- UNPROVED: that the closure classes hold every code whose closure can reach each place. It
+-- should hold because `walk` joins the two sides of every move a closure makes: a binding, a
+-- copy, an argument, an answer, a constructor's field, a cell's contents. It is not a typing fact
+-- (the typed term gives a closure's type, not its λ), and the operations `walk` passes over
+-- (`| _ => pure ()`) are taken to move no closure. If a code is missing from a class, a call
+-- through the class's dispatcher traps, and the class's width is too narrow for the closure.
 /-- Every place of the program, joined. -/
 def places (p : Prog) : Except String (GState × Nat) := do
   let act : GM Nat := do
@@ -418,9 +425,12 @@ structure Layouts where
   boxed : Std.HashSet (Nat × Nat)
   width : Array Nat
   trivial : Array Bool
-  /-- Each pointer node's cell: its words, or its slot's bytes when it is narrower than a word. -/
-  cellWords : Std.HashMap Nat Nat
-  slotBytes : Std.HashMap Nat Nat
+  /-- **A value's bytes in a cell** at each node: `1` at a `u8`, `4` at an `i32` or `f32`, else its
+  words' (`repBytes`). -/
+  bytes : Array Nat
+  /-- The most bytes a value of each type takes in a cell, over the nodes of that type: a width
+  class's types are read through it (`Layouts.clsBytes`). -/
+  tyBytes : Std.HashMap LTy Nat
   varNode : Std.HashMap Var Nat
   fnRet : Std.HashMap Nat Nat
   mainNode : Nat
@@ -452,6 +462,12 @@ def tagOf (L : Layouts) (c : Nat) : Nat :=
   | some k => (L.unionOf k).idxOf c
   | none => 0
 def envWords (L : Layouts) (c : Nat) : Nat := ((L.codeEnv.getD c []).map L.w).foldl (· + ·) 0
+/-- The bytes of a value at node `i` in a cell. -/
+def repB (L : Layouts) (i : Nat) : Nat := L.bytes[L.r i]!
+/-- The bytes a cell of the width class `cls` holding a value at node `c` takes: the most of the
+value's and of each type of the class's (SPEC §57). -/
+def clsBytes (L : Layouts) (c : Nat) (cls : List LTy) : Nat :=
+  cls.foldl (fun b t => max b (L.tyBytes.getD t 0)) (L.repB c)
 
 end Layouts
 
@@ -580,8 +596,7 @@ def sumBoxes (n : Nat) (fs : Nat → Array Nat) (shape : Nat → NK) (comp : Arr
 /-- Resolve the joined places: each class's codes, the heap classes, the boxed fields, every
 node's width and triviality, and each cell's width, by the checker's cell classes `cells` (each
 the types one cell may hold). -/
-def resolve (p : Prog) (s : GState) (mainNode : Nat) (cells : List (List LTy)) :
-    Layouts := Id.run do
+def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
   let n := s.nodes.size
   let rep := (Array.range n).map (findIn s.parent n)
   let norm (k : NK) : NK := match k with
@@ -615,6 +630,13 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) (cells : List (List LTy)) :
       | .pair a b | .sum a b => [a, b]
       | .clos .. => envOf v
       | _ => []
+  -- UNPROVED: that a boxed field's object and a heap class's environment have one owner, the
+  -- value that holds them, so that `Lower` frees them where that value is taken apart and copies
+  -- them where it is copied. It should hold because the LIR consumes each variable exactly once
+  -- on every path, which `Lint` checks of each program it compiles and nothing proves of
+  -- the conversion's output. The choice of fields follows SPEC §35's rule on the type's own
+  -- graph: the boxes arise where a `μ` or a closure class holds itself other than through a
+  -- `Ref`. If it fails, an object is freed twice or leaks.
   let (cyc, _) := sccs n succ
   let mut recCls : Std.HashSet Nat := {}
   for v in [0:n] do
@@ -653,6 +675,14 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) (cells : List (List LTy)) :
         | none =>
           let fw (j c : Nat) : Nat := if boxed.contains (v, j) then 1 else width[c]!
           let ft (j c : Nat) : Bool := !boxed.contains (v, j) && trivial[c]!
+          -- UNPROVED: that copying or dropping a cell, a borrow or a family is its words alone
+          -- (`trivial`). It should hold because the conversion copies only a slot both parts of a
+          -- split use (`Ctx.SplitP`'s persistent slot) and the `copy` constants (`imm`), and drops
+          -- only slots the rule's premises make droppable (`Ctx.DeadP`, `Ctx.Drops`: no owned
+          -- cell, `vC_noOwn_of_drop`), so an owned `Ref` or array is never copied or dropped by
+          -- `copy`/`drop`. The LIR erases `!` (`Types.ofV`), so `Lint` cannot check which
+          -- variables may be copied or dropped. If it fails, an owned cell is aliased (freed
+          -- twice) or leaks.
           let (wv, tv) := match shape[v]! with
             | .unit | .zero | .unk => (0, true)
             | .int _ | .opq | .ref _ | .imm _ | .mut _ => (1, true)
@@ -668,35 +698,23 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) (cells : List (List LTy)) :
           trivial := trivial.set! v tv
           color := color.set! v 2
           stack := rest
-  -- Cells: the widest type the checker's class of the contents may hold.
-  let mut byOrigin : Std.HashMap LTy Nat := {}
+  -- **Cells.** A value in a cell takes its node's bytes (`repB`): a `u8` one, an `i32` or `f32`
+  -- four, any other value its words; so its reads and writes depend on its type alone, whatever
+  -- cell holds it. An allocation reserves the most bytes of its width class's types (the checker's
+  -- `Checked.classAt` of the type it allocates at, which `Convert` writes on the allocation, SPEC
+  -- §57), each read through the most bytes a value of that type takes (`tyBytes`).
+  let bytesOf (v : Nat) : Nat := match shape[v]! with
+    | .int .w8 => 1
+    | .int .w32 | .int .f32 => 4
+    | _ => 8 * width[v]!
+  let bytes := (Array.range n).map fun i => bytesOf rep[i]!
+  let mut tyBytes : Std.HashMap LTy Nat := {}
   for i in [0:n] do
     let o := s.origin[i]!
-    byOrigin := byOrigin.insert o (max (byOrigin.getD o 0) width[rep[i]!]!)
-  let mut cellWords : Std.HashMap Nat Nat := {}
-  let mut slotBytes : Std.HashMap Nat Nat := {}
-  for v in [0:n] do
-    let c := match shape[v]! with
-      | .ref c | .imm c | .mut c => some c
-      | _ => none
-    let some c := c | continue
-    let ct := match s.origin[v]! with
-      | .ref a | .imm a | .mut a => some a
-      | _ => none
-    let cls : List LTy := match ct with
-      | some a => (cells.find? (·.contains a)).getD [a]
-      | none => []
-    let ws := width[c]! :: cls.map (byOrigin.getD · 0)
-    let cw := ws.foldl max 0
-    cellWords := cellWords.insert v cw
-    let ints := (if cls.isEmpty then [s.origin[c]!] else cls).map fun t => match t with
-      | .int .w8 => some 1 | .int .w32 | .int .f32 => some 4 | _ => none
-    match ints with
-    | some b :: rest => if rest.all (· == some b) then slotBytes := slotBytes.insert v b
-    | _ => pure ()
+    tyBytes := tyBytes.insert o (max (tyBytes.getD o 0) bytes[i]!)
   let varNode := s.varNode.fold (fun m x i => m.insert x rep[i]!) {}
   let fnRet := s.fnRet.fold (fun m f i => m.insert f rep[i]!) {}
-  return { rep, shape, union, recCls, boxed, width, trivial, cellWords, slotBytes, varNode,
+  return { rep, shape, union, recCls, boxed, width, trivial, bytes, tyBytes, varNode,
            fnRet, mainNode := rep[mainNode]!, codeClass, codeEnv,
            regions := s.regions.fold (fun m k i => m.insert k rep[i]!) {} }
 

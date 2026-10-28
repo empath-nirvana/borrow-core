@@ -1,4 +1,4 @@
-import Frontend.Check.TShift
+import Frontend.Check.FactNodes
 import Core.Tied
 import Core.PinFundamental
 
@@ -301,13 +301,26 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
       TDerivesAt Ξ Δ Γ (TExpr.selfCall info j k n t) j
   /-- **Derived**: the lend of a cell allocated for it (`lendCellB`). -/
   | lendCell {Δ Γ j} {info : TInfo} {m : Bool} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j)
-      (hb : lendCellB t.erase = true) :
+      (hb : lendCellB t.erase = true) (hm : lendKindB m t = true) :
       TDerivesAt Ξ Δ Γ (TExpr.lendCell info j m t) j
   /-- **Derived**: codata written as an η-thunk: its typed term's erasure is the scheme at `f`, `s`
   (`nuEtaB`).  `[spec §45]` -/
   | nuEta {Δ Γ j} {info : TInfo} {f : Nat} {s : Option Nat} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j)
       (hb : nuEtaB f s t.erase = true) :
       TDerivesAt Ξ Δ Γ (TExpr.nuEta info j f s t) j
+  /-- **Derived**: a lent cell's scope (`lendScopeT`), its release on every path (`lendRelT`).
+  `[spec §57]` -/
+  | lendScope {Δ Γ j} {info : TInfo} {rel : Bool} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j)
+      (hs : lendScopeT t = true) (hr : lendRelT t = rel) :
+      TDerivesAt Ξ Δ Γ (TExpr.lendScope info j rel t) j
+  /-- **Derived**: a literal's view (`litViewT`).  `[spec §57]` -/
+  | litView {Δ Γ j} {info : TInfo} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j)
+      (hb : litViewT t = true) :
+      TDerivesAt Ξ Δ Γ (TExpr.litView info j t) j
+  /-- **Derived**: `unfold step` (`unfoldAppT`).  `[spec §57]` -/
+  | unfoldStep {Δ Γ j} {info : TInfo} {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j)
+      (hb : unfoldAppT t = true) :
+      TDerivesAt Ξ Δ Γ (TExpr.unfoldStep info j t) j
   /-- A `def`'s body at its use. -/
   | use {Δ Γ j} {info : TInfo} {name : String} {decl : Nat} {targs : List VTy} {ab : Option AbsF}
       {t : TExpr} (h : TDerivesAt Ξ Δ Γ t j) (hab : ab = t.absF Δ) :
@@ -579,12 +592,25 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       TDerivesP Δ Γ (TExpr.selfCall info j k n t) j
   /-- **Derived**: the lend of a cell allocated for it (`lendCellB`). -/
   | lendCell {Δ Γ j} {info : TInfo} {m : Bool} {t : TExpr} (h : TDerivesP Δ Γ t j)
-      (hb : lendCellB t.erase = true) :
+      (hb : lendCellB t.erase = true) (hm : lendKindB m t = true) :
       TDerivesP Δ Γ (TExpr.lendCell info j m t) j
   /-- **Derived**: codata written as an η-thunk (`nuEtaB`).  `[spec §45]` -/
   | nuEta {Δ Γ j} {info : TInfo} {f : Nat} {s : Option Nat} {t : TExpr} (h : TDerivesP Δ Γ t j)
       (hb : nuEtaB f s t.erase = true) :
       TDerivesP Δ Γ (TExpr.nuEta info j f s t) j
+  /-- **Derived**: a lent cell's scope (`lendScopeT`), its release on every path (`lendRelT`).
+  `[spec §57]` -/
+  | lendScope {Δ Γ j} {info : TInfo} {rel : Bool} {t : TExpr} (h : TDerivesP Δ Γ t j)
+      (hs : lendScopeT t = true) (hr : lendRelT t = rel) :
+      TDerivesP Δ Γ (TExpr.lendScope info j rel t) j
+  /-- **Derived**: a literal's view (`litViewT`).  `[spec §57]` -/
+  | litView {Δ Γ j} {info : TInfo} {t : TExpr} (h : TDerivesP Δ Γ t j)
+      (hb : litViewT t = true) :
+      TDerivesP Δ Γ (TExpr.litView info j t) j
+  /-- **Derived**: `unfold step` (`unfoldAppT`).  `[spec §57]` -/
+  | unfoldStep {Δ Γ j} {info : TInfo} {t : TExpr} (h : TDerivesP Δ Γ t j)
+      (hb : unfoldAppT t = true) :
+      TDerivesP Δ Γ (TExpr.unfoldStep info j t) j
   /-- A `def`'s body at its use. -/
   | use {Δ Γ j} {info : TInfo} {name : String} {decl : Nat} {targs : List VTy} {ab : Option AbsF}
       {t : TExpr} (h : TDerivesP Δ Γ t j) (hab : ab = t.absF Δ) :
@@ -908,7 +934,8 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
   | withborF2I s hA hB hBo hTo he hΓ =>
       exact CDerivesAt.ofEffFree (withborI2_wf s hA hB hBo hTo hΓ) he
   | litFn _ _ _ ih => exact ih
-  | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ ih | nuEta _ _ ih => exact ih
+  | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ _ ih | nuEta _ _ ih => exact ih
+  | lendScope _ _ _ ih | litView _ _ ih | unfoldStep _ _ ih => exact ih
   | use _ _ ih => exact ih
 
 /-- **A typed derivation is a derivation of the erasure**, in `CDerivesP`.  `[spec §29]` -/
@@ -1237,7 +1264,8 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | withborF2M s hA hBo hTo _ hΓ => exact CDerivesP.ofC (withborM2_wf s hA hBo hTo hΓ)
   | withborF2I s hA hB hBo hTo _ hΓ => exact CDerivesP.ofC (withborI2_wf s hA hB hBo hTo hΓ)
   | litFn _ _ _ ih => exact ih
-  | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ ih | nuEta _ _ ih => exact ih
+  | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ _ ih | nuEta _ _ ih => exact ih
+  | lendScope _ _ _ ih | litView _ _ ih | unfoldStep _ _ ih => exact ih
   | use _ _ ih => exact ih
 
 /-- A tied typed derivation is one of `TDerivesP`, at the same node. -/
@@ -1353,7 +1381,10 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | walk _ hb hr ih => exact .walk ih hb hr
   | walkGet _ hb ih => exact .walkGet ih hb
   | selfCall _ hb ih => exact .selfCall ih hb
-  | lendCell _ hb ih => exact .lendCell ih hb
+  | lendCell _ hb hm ih => exact .lendCell ih hb hm
+  | lendScope _ hs hr ih => exact .lendScope ih hs hr
+  | litView _ hb ih => exact .litView ih hb
+  | unfoldStep _ hb ih => exact .unfoldStep ih hb
   | nuEta _ hb ih => exact .nuEta ih hb
   | use _ hab ih => exact .use ih hab
 

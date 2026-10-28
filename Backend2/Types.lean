@@ -60,7 +60,7 @@ inductive LTy where
   | unk
   /-- A closure of the computation type `K`. -/
   | thunk (k : LCTy)
-  deriving Inhabited, BEq, Hashable
+  deriving Inhabited, BEq, Hashable, Repr
 
 /-- A computation type of the LIR: what a closure answers when it is run. -/
 inductive LCTy where
@@ -70,7 +70,7 @@ inductive LCTy where
   | top
   /-- `νX. C`, binding the type variable `0` (standing for `U (νX. C)`) in `C`'s value types. -/
   | nu (k : LCTy)
-  deriving Inhabited, BEq, Hashable
+  deriving Inhabited, BEq, Hashable, Repr
 end
 
 /-! ### Substitution of type variables

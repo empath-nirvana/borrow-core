@@ -24,10 +24,14 @@ A second is a fact the checker carries beside the term (`Checked.cells`, `Fronte
   contents of a location allocated at `A` are, at every step, of a type a chain of the
   derivation's `swap` applications reaches from `A` (from `swap`'s typing and the location's one
   owned `Ref`). The class is an upper bound: it joins the cells of one type, so a cell can be
-  given a type another cell of its type is swapped to (`corpus/cells.expected`).
+  given a type another cell of its type is swapped to (`corpus/cells.expected`). An allocation's
+  class is the one rooted at its type (`Checked.classAt`, `Checked.classAt_alloc`); a `swap` node
+  is not tied to the allocation whose location it swaps (the location reaches it as a value), so
+  a backend carries the class from the allocation with the location.
 
-Three marked derived nodes (`Frontend/Check/Derived.lean`) record what the elaborator's scheme
-means beside the shape their rule fixes (`walkB`, `selfCallB`, `lendCellB`):
+Marked derived nodes (`Frontend/Check/Derived.lean`, `Frontend/Check/FactNodes.lean`) record what
+the elaborator's scheme means beside the shape their rule fixes (`walkB`, `selfCallB`,
+`lendCellB`, `lendScopeT`, `litViewT`, `unfoldAppT`):
 
 * **A counted walk's view.** The rule fixes that the term is a `count_fold` or a `count_try`, and
   `walk_fold_index_lt`/`walk_index_lt`/`walk_get_leaf`/`walk_split_first` that its step runs below
@@ -45,10 +49,31 @@ means beside the shape their rule fixes (`walkB`, `selfCallB`, `lendCellB`):
   (`Frontend.Elab.Effects.memberCall`). The projections that read member `j` are rule nodes after
   it; the group's generator binds the variable (`boundedFix`'s step), which a check of the
   variable against the generator's binder would pin.
-* **A lent cell's release.** The rule fixes that the term is a borrow of a cell it allocates; that
-  the owner it hands back is freed in the same code, after the lend, is the owner's slot's use (an
-  explicit `free`, or the destructor the checker inserts), which the derivation fixes at that
-  use but the node does not point to.
+* **A lent cell's release.** The rule fixes that the term is a borrow of a cell it allocates, and
+  that its kind `m` is the kind of the borrow constant at its head (`lendKindB`,
+  `TDerivesAt.lendCell_kind`): the erasure cannot say it, both kinds erase to `withbor`. Where
+  the pair the lend answers is taken apart at once, the code after it is a `lendScope` node, whose
+  `rel` the rule fixes (`lendRelT`, `TDerivesAt.lendScope_rel`): on every path, by the masks of its
+  splits (themselves fixed, `split_masks`), the owner's slot reaches `free` or a cell's destructor
+  and nothing else, a `case` passing it to both arms. Not pinned: that at run time the cell is
+  freed there, which a lemma over the machine (`free`'s step at the slot the masks give it) would
+  pin; and whether a resumption point lies between the lend and the release, where a backend
+  splits the code into functions (SPEC §49): `rel` is a fact of the typed term's paths, not of
+  the functions a backend makes of them. A lend whose pair is bound to a variable and taken
+  apart later has no `lendScope` node.
+* **A literal's view.** A `litView` node's rule fixes the elaborator's scheme (`litViewT`,
+  `TDerivesAt.litView_shape`): the place's table tabulated into an array, the array lent by
+  `slice_borrow_imm` (an `imm` family) and, when the lend hands it back, given straight to its
+  destructor. So the array is reached only through the `imm` family between its tabulation and
+  its destruction. Not pinned: that the table is a literal's bytes. The place has the literal's
+  type `i32 ⊗ !(i32 ⇒ u8)`, which any table has; which code the table's closure is, is the flow's
+  (a backend's 0-CFA), not a typing fact.
+* **`unfold step`.** An `unfoldStep` node's rule fixes that its term is the `unfoldN` constant
+  applied to a step (`unfoldAppT`, `TDerivesAt.unfoldStep_shape`). A `bind` whose bound
+  computation is one binds its variable to `unfold step`; a `nuEta` node's `f` is that variable
+  where `f`'s slot is that binder's, which a backend reads through the context it keeps (a split
+  passes the slot to each part, a closure captures it). Not pinned at the `nuEta` node: an `f`
+  that reached it as a parameter, or out of a value, has no such binder.
 
 The `use` node's `TInfo.key` is the elaborator's key of the `def` it uses (`Frontend.DefKey`): the
 template and type arguments of an instance, or the function and keys of a copy for its handlers
@@ -170,6 +195,47 @@ theorem TDerivesAt.site_free {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TI
   | effHandleV hAt hs hm hcv hd hH hc hn0 hnS hlen hdv he hins =>
       exact .effHandleV hAt hs hm hcv hd hH hc hn0 hnS hlen hdv he hins
 
+
+/-! ### The derived nodes' facts are the derivation's  `[spec §57]` -/
+
+/-- **A lend's kind is fixed**: the kind of the borrow constant at the head of its term. -/
+theorem TDerivesAt.lendCell_kind {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jdg}
+    {m : Bool} {t : TExpr} (h : TDerivesAt Ξ Δ Γ (.lendCell i J m t) J') : lendKindB m t = true := by
+  cases h with
+  | lendCell _ _ hm => exact hm
+
+/-- **A lent cell's scope and its release are fixed**: the scope's shape, and `rel` its release on
+every path (`lendRelT`). -/
+theorem TDerivesAt.lendScope_rel {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jdg}
+    {rel : Bool} {t : TExpr} (h : TDerivesAt Ξ Δ Γ (.lendScope i J rel t) J') :
+    lendScopeT t = true ∧ rel = lendRelT t := by
+  cases h with
+  | lendScope _ hs hr => exact ⟨hs, hr.symm⟩
+
+/-- **A literal's view is the scheme**: tabulated, lent `imm`, destroyed. -/
+theorem TDerivesAt.litView_shape {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jdg}
+    {t : TExpr} (h : TDerivesAt Ξ Δ Γ (.litView i J t) J') : litViewT t = true := by
+  cases h with
+  | litView _ hb => exact hb
+
+/-- **`unfold step` is the scheme**: the `unfoldN` constant applied. -/
+theorem TDerivesAt.unfoldStep_shape {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo}
+    {J J' : Jdg} {t : TExpr} (h : TDerivesAt Ξ Δ Γ (.unfoldStep i J t) J') : unfoldAppT t = true := by
+  cases h with
+  | unfoldStep _ hb => exact hb
+
+/-- `TDerivesAt.lendScope_rel`, in `TDerivesP`. -/
+theorem TDerivesP.lendScope_rel {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jdg}
+    {rel : Bool} {t : TExpr} (h : TDerivesP Δ Γ (.lendScope i J rel t) J') :
+    lendScopeT t = true ∧ rel = lendRelT t := by
+  cases h with
+  | lendScope _ hs hr => exact ⟨hs, hr.symm⟩
+
+/-- `TDerivesAt.lendCell_kind`, in `TDerivesP`. -/
+theorem TDerivesP.lendCell_kind {Δ : LifeCtx} {Γ : Ctx VTy} {i : TInfo} {J J' : Jdg}
+    {m : Bool} {t : TExpr} (h : TDerivesP Δ Γ (.lendCell i J m t) J') : lendKindB m t = true := by
+  cases h with
+  | lendCell _ _ hm => exact hm
 
 /-! ### A bound for each node, stated -/
 

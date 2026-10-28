@@ -803,10 +803,22 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.selfCall d (by rw [e]; exact selfCallB_shift hb _ _), e⟩
-  | lendCell _ hb ih =>
+  | lendCell _ hb hm ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.lendCell d (by rw [e]; exact lendCellB_shift hb _ _), e⟩
+      exact ⟨.lendCell d (by rw [e]; exact lendCellB_shift hb _ _) (by rw [lendKindB_shift]; exact hm), e⟩
+  | lendScope _ hs hr ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.lendScope d (by rw [lendScopeT_shift]; exact hs) (by rw [lendRelT_shift]; exact hr), e⟩
+  | litView _ hb ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.litView d (by rw [litViewT_shift]; exact hb), e⟩
+  | unfoldStep _ hb ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.unfoldStep d (by rw [unfoldAppT_shift]; exact hb), e⟩
   | nuEta _ hb ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
@@ -1346,10 +1358,22 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
       exact ⟨.selfCall d (by rw [e]; exact selfCallB_shift hb _ _), e⟩
-  | lendCell _ hb ih =>
+  | lendCell _ hb hm ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
-      exact ⟨.lendCell d (by rw [e]; exact lendCellB_shift hb _ _), e⟩
+      exact ⟨.lendCell d (by rw [e]; exact lendCellB_shift hb _ _) (by rw [lendKindB_shift]; exact hm), e⟩
+  | lendScope _ hs hr ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.lendScope d (by rw [lendScopeT_shift]; exact hs) (by rw [lendRelT_shift]; exact hr), e⟩
+  | litView _ hb ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.litView d (by rw [litViewT_shift]; exact hb), e⟩
+  | unfoldStep _ hb ih =>
+      intro Γa Γb Γp f hΓ hf hp
+      obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp
+      exact ⟨.unfoldStep d (by rw [unfoldAppT_shift]; exact hb), e⟩
   | nuEta _ hb ih =>
       intro Γa Γb Γp f hΓ hf hp
       obtain ⟨d, e⟩ := ih Γa Γb Γp f hΓ hf hp

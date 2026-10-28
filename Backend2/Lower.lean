@@ -48,20 +48,20 @@ structure LCtx where
   p : Prog
   helperBase : Nat
   counts : Bool
-  /-- The offset in the data of the capabilities' static words. -/
-  staticBase : Nat
+  /-- The offset in the data of each static cell (`Prog.statics`). -/
+  staticAt : Array Nat := #[]
   /-- The code of each call's function variable, where the closure flow finds one. -/
   known : Std.HashMap Var Nat := {}
-  /-- The lent cells placed in frame slots (`Backend2/Frames.lean`). -/
-  framed : Std.HashSet Var := {}
+  /-- The codes the closure flow finds at each closure variable (`Backend2/Flow.lean`). -/
+  codes : Std.HashMap Var (Std.HashSet Nat) := {}
+  /-- The lend scopes whose cell is a frame slot (`Prog.slots`). -/
+  slotScopes : Std.HashSet Nat := {}
 
 structure LState where
   locals : Std.HashMap Var (List Nat) := {}
   next : Nat := 0
   /-- The words of the function's frame so far. -/
   frame : Nat := 0
-  /-- The locals holding a frame slot's address. -/
-  slots : Std.HashSet Nat := {}
   helpers : Std.HashMap Helper Nat := {}
   queue : Array Helper := #[]
   /-- The locals some variable's layout places an address in (`addrKinds`), and those some
@@ -157,12 +157,12 @@ def helper (h : Helper) : LM Nat := do
 words, and the locals that hold an address (`ptrVote`, `intVote`). -/
 def inFnF (params : Nat) (act : LM α) : LM (α × Nat × Nat × List Nat) := do
   let saved ← get
-  set { saved with locals := {}, next := params, frame := 0, slots := {}, ptrVote := {}, intVote := {} }
+  set { saved with locals := {}, next := params, frame := 0, ptrVote := {}, intVote := {} }
   let a ← act
   let st ← get
   let ptrs := st.ptrVote.toList.filter (!st.intVote.contains ·) |>.mergeSort (· ≤ ·)
   modify fun s => { s with locals := saved.locals, next := saved.next, frame := saved.frame,
-                           slots := saved.slots, ptrVote := saved.ptrVote, intVote := saved.intVote }
+                           ptrVote := saved.ptrVote, intVote := saved.intVote }
   pure (a, st.next - params, st.frame, ptrs)
 
 def inFn (params : Nat) (act : LM α) : LM (α × Nat × List Nat) := do
@@ -182,10 +182,6 @@ inductive Dest where
 def emit : Dest → List Exp → LM (List Stmt)
   | .to ls, vs => do
     if ls.length != vs.length then throw s!"word IR: {vs.length} words for {ls.length} locals"
-    -- A frame slot's address moved to another local is a slot's address there too.
-    for (l, e) in ls.zip vs do
-      if let .loc l' := e then
-        if (← get).slots.contains l' then modify fun s => { s with slots := s.slots.insert l }
     pure (ls.zip vs |>.map fun (l, e) => .set l e)
   | .ret k, vs => do
     if vs.length > k then throw s!"word IR: {vs.length} words returned for {k}"
@@ -264,38 +260,28 @@ def payload (n : Nat) (r : Bool) (ls : List Nat) (consume : Bool) : LM (List Stm
 
 /-! ### Cells -/
 
-/-- The bytes between two slots of the cell at pointer node `n`. -/
-def slotStride (n : Nat) : LM Nat := do
-  let L ← L
-  match L.slotBytes[L.r n]? with
-  | some b => pure b
-  | none => pure (8 * L.cellWords.getD (L.r n) 1)
-
-/-- The cell at pointer node `n` takes no words. -/
-def zeroCell (n : Nat) : LM Bool := do
-  let L ← L
-  return L.cellWords.getD (L.r n) 1 == 0 && !(L.slotBytes.contains (L.r n))
-
-/-- The contents of the cell at `a`, of pointer node `n`, in `k` fresh locals. -/
-def loadCell (n : Nat) (a : Exp) (k : Nat) : LM (List Stmt × List Nat) := do
-  let L ← L
-  match L.slotBytes[L.r n]? with
-  | some 1 => do let t ← fresh1; return ([.set t (.load8 a)], [t])
-  | some 4 => do let t ← fresh1; return ([.set t (.load32 a)], [t])
-  | _ => loadAt a 0 k
-
-def storeCell (n : Nat) (a : Exp) (vs : List Exp) : LM (List Stmt) := do
-  let L ← L
-  match L.slotBytes[L.r n]? with
-  | some 1 => return [.store8 a (vs.headD (.c64 0))]
-  | some 4 => return [.store32 a (vs.headD (.c64 0))]
-  | _ => return storeAt a 0 vs
-
 /-- The contents' node of a pointer node. -/
 def contents (n : Nat) : LM Nat := do
   match (← L).sh n with
   | .ref c | .imm c | .mut c => pure c
   | s => throw s!"word IR: not a pointer: {reprStr s |>.take 40}"
+
+/-- The bytes between two slots of the cell at pointer node `n`: its contents' bytes in a cell. -/
+def slotStride (n : Nat) : LM Nat := do return (← L).repB (← contents n)
+
+/-- The contents of the cell at `a`, of pointer node `n`, in `k` fresh locals: a byte at `u8`, 4
+bytes at `i32` and `f32`, else `k` words (`Layouts.repB`). -/
+def loadCell (n : Nat) (a : Exp) (k : Nat) : LM (List Stmt × List Nat) := do
+  match (← L).sh (← contents n) with
+  | .int .w8 => do let t ← fresh1; return ([.set t (.load8 a)], [t])
+  | .int .w32 | .int .f32 => do let t ← fresh1; return ([.set t (.load32 a)], [t])
+  | _ => loadAt a 0 k
+
+def storeCell (n : Nat) (a : Exp) (vs : List Exp) : LM (List Stmt) := do
+  match (← L).sh (← contents n) with
+  | .int .w8 => return [.store8 a (vs.headD (.c64 0))]
+  | .int .w32 | .int .f32 => return [.store32 a (vs.headD (.c64 0))]
+  | _ => return storeAt a 0 vs
 
 /-- The leaf node of a family node. -/
 def leafOf (n : Nat) : LM Nat := do
@@ -476,48 +462,55 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let c ← one (args.getD 0 0)
     let t ← fresh1
     return [.ite (ltu32 c (.c64 0x80000000)) [.set t c] [.set t (.c64 0)]] ++ (← emit d [.loc t])
-  | .alloc | .allocLent => do
-    if ← zeroCell n then return ← emit d [.c64 0]
+  | .alloc cls | .allocLent _ cls => do
+    -- UNPROVED: that a cell holds, over its life, only types of the width class its allocation
+    -- carries (`Checked.classAt` of the type it is allocated at, SPEC §57), so that the class's
+    -- most bytes (`Layouts.clsBytes`) hold every value it is given, and a class of values of no
+    -- bytes needs no allocation (the address `0`, which every target's `free` skips). It should
+    -- hold because the checker's class is closed under every `swap` of the typed term
+    -- (`Checked.classAt_alloc`), and only a `swap` changes a cell's type. That a location holds
+    -- only its class's types at run time is not proved (`Frontend/Check/TFacts.lean`). If it
+    -- fails, a store overruns the cell.
+    let b := (← L).clsBytes (← contents n) cls
+    if b == 0 then return ← emit d [.c64 0]
     let t ← fresh1
-    let w := max 1 ((← L).cellWords.getD ((← L).r n) 1)
-    let fr := (← read).framed
-    let inFrame := match op, d with
-      | .allocLent, .bind x => fr.contains x
-      | _, _ => false
+    let w := (b + 7) / 8
+    let slots := (← read).slotScopes
+    let inFrame := match op with
+      | .allocLent s _ => slots.contains s
+      | _ => false
     let addr ← if inFrame then do
         let off := (← get).frame
-        modify fun s => { s with frame := off + w, slots := s.slots.insert t }
+        modify fun s => { s with frame := off + w }
         pure (Exp.slot off w)
       else pure (.alloc (.c64 w.toUInt64))
     return [.set t addr] ++ (← storeCell n (.loc t) (locs (← arg 0))) ++ (← emit d [.loc t])
   | .staticCell k => do
-    let a := Exp.data ((← read).staticBase + 8 * k)
+    -- A capability's cell, as wide as its width class (`Prog.statics`).
+    let a := Exp.data ((← read).staticAt.getD k 0)
     return (← storeCell n a (locs (← arg 0))) ++ (← emit d [a])
   | .free => do
     let pn ← argN 0
-    if ← zeroCell pn then return ← emit d []
-    let al := (← arg 0).headD 0
-    let a := Exp.loc al
+    let a := Exp.loc ((← arg 0).headD 0)
     let (s, vs) ← loadCell pn a (← wordsN (← contents pn))
-    let rel := if (← get).slots.contains al then Stmt.unslot a else .free a
+    -- The owner of a scope whose cell is a frame slot (`Prog.slots`) ends the slot's life.
+    let rel := if (← read).p.slots.contains (args.getD 0 0) then Stmt.unslot a else .free a
     return s ++ [rel] ++ (← emit d (locs vs))
   | .release => do
-    let pn ← argN 0
-    if ← zeroCell pn then return ← emit d []
     return [.free (.loc ((← arg 0).headD 0))] ++ (← emit d [])
   | .swap => do
     let pn ← argN 0
     let m := (← arg 0).headD 0
-    if ← zeroCell pn then return ← emit d ([.loc m] ++ zeros (← wordsN (← contents pn)))
     let (s, old) ← loadCell pn (.loc m) (← wordsN (← contents pn))
-    return s ++ (← storeCell pn (.loc m) (locs (← arg 1))) ++ (← emit d (locs (m :: old)))
-  | .lend | .relend => do
+    -- The old contents read at their type, the new written at theirs: the answer's cell's.
+    let pn' ← child n 0
+    return s ++ (← storeCell pn' (.loc m) (locs (← arg 1))) ++ (← emit d (locs (m :: old)))
+  | .lend _ | .relend => do
     let ls ← arg 0
     emit d (locs ls ++ locs ls)
   | .load => do
     let pn ← argN 0
     let c ← contents pn
-    if ← zeroCell pn then return ← emit d (zeros (← wordsN n))
     let (s, vs) ← loadCell pn (.loc ((← arg 0).headD 0)) (← wordsN c)
     let L ← L
     if L.r c == L.r n || (L.triv c && L.w c == L.w n) then return s ++ (← emit d (locs vs))
@@ -527,15 +520,14 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
   | .take => do
     let pn ← argN 0
     let m := (← arg 0).headD 0
-    if ← zeroCell pn then return ← emit d ([.loc m] ++ zeros (← wordsN (← contents pn)))
     let (s, vs) ← loadCell pn (.loc m) (← wordsN (← contents pn))
     return s ++ (← emit d (locs (m :: vs)))
   | .put => do
     let pn ← argN 0
     let m := (← arg 0).headD 0
-    if ← zeroCell pn then return ← emit d [.loc m]
     return (← storeCell pn (.loc m) (locs (← arg 1))) ++ (← emit d [.loc m])
   | .tab fi | .tabLit fi .. => do
+    let gv := args.head?
     let leaf ← leafOf n
     let st ← slotStride leaf
     let fw ← arg 0
@@ -546,11 +538,18 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let mk := if st == 0 then [Stmt.set b (.c64 0)] else
       [Stmt.ite (eqz64 (.loc k)) [.set b (.c64 0)] [.set b (.alloc words)]]
     let args := locs fw ++ [.loc b, .loc k, .c64 0, .loc k]
-    match op with
-    | .tabLit _ => do
+    -- A literal's view (`TExpr.litView`) whose tabulator the closure flow finds to be the literal
+    -- tables' code alone: its environment is the literal's offset and length.
+    let cx ← read
+    let lit : Option Nat := match op, gv, cx.p.lits with
+      | .tabLit _, some g, some lc =>
+        let cs := cx.codes.getD g {}
+        if cs.size == 1 && cs.contains lc then some lc else none
+      | _, _, _ => none
+    match lit with
+    | some c => do
       let ts ← fresh 2
       let gn ← argN 0
-      let some c := (← L).unionOf gn |>.toList.head? | throw "word IR: tabLit of no code"
       let (es, env) ← envOf gn c fw
       let dr ← dropVals gn fw
       let off := env.headD (.c64 0)
@@ -558,7 +557,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
       return es ++ [.ite (.op (.rel .w64 .le_u) [.loc k, len])
           (dr ++ [.set (ts.headD 0) (.gep (.data 0) off), .set (ts.getD 1 0) (.loc k)])
           (mk ++ [.call ts (fnIndex fi) args])] ++ (← emit d (locs ts))
-    | _ => lowerCall mk (fnIndex fi) args 2 d
+    | none => lowerCall mk (fnIndex fi) args 2 d
   | .newArr => do
     let leaf ← leafOf n
     let st ← slotStride leaf
@@ -654,7 +653,7 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     | _, _, _ => throw "word IR: swap of a non-family"
   | .roll | .unroll => do emit d (locs (← arg 0))
   | .stackSwap k => do
-    let r := Exp.data ((← read).staticBase + 8 * k)
+    let r := Exp.data ((← read).staticAt.getD k 0)
     let h := (← arg 0).headD 0
     let t ← fresh1
     return [.set t (.load r 0), .store r 0 (.loc h)] ++ (← emit d [.loc t])
@@ -662,25 +661,24 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     let h := Exp.loc ((← arg 0).headD 0)
     return [.ite (eqz64 h) [] [.free h]] ++ (← emit d [])
   | .framePush _ k => do
-    let r := Exp.data ((← read).staticBase + 8 * k)
+    let r := Exp.data ((← read).staticAt.getD k 0)
     let fn ← child n 0
-    let w := max 1 ((← L).cellWords.getD ((← L).r fn) 1)
+    let w := max 1 (((← L).repB (← contents fn) + 7) / 8)
     let t ← fresh1
     return [.call [t] (← helper .stackPush) [r, .c64 w.toUInt64]] ++ (← emit d [.loc t, .loc t])
   | .frameTop _ k => do
-    let r := Exp.data ((← read).staticBase + 8 * k)
+    let r := Exp.data ((← read).staticAt.getD k 0)
     let fn ← child n 0
-    let w := max 1 ((← L).cellWords.getD ((← L).r fn) 1)
+    let w := max 1 (((← L).repB (← contents fn) + 7) / 8)
     let t ← fresh1
     return [.set t (.op (.bin .w64 .sub) [.load (.load r 0) 0, .c64 (8 * w).toUInt64])] ++
       (← emit d [.loc t, .loc t])
   | .framePut => do
     let pn ← argN 0
     let f := (← arg 0).headD 0
-    if ← zeroCell pn then return ← emit d []
     return (← storeCell pn (.loc f) (locs (← arg 1))) ++ (← emit d [])
   | .framePop k => do
-    let r := Exp.data ((← read).staticBase + 8 * k)
+    let r := Exp.data ((← read).staticAt.getD k 0)
     let f := (← arg 0).headD 0
     return [.call [] (← helper .stackPop) [r, .loc f]] ++ (← emit d [])
   | .unreachable => return [.trap] ++ (← emit d (zeros (← wordsN n)))
@@ -1114,9 +1112,9 @@ none. -/
 def paramFacts (fd : Backend2.Fn) : LM (List Backend.Flat.ParamFacts) := do
   let L ← L
   let cellBytes (n : Nat) : Option Nat :=
-    match L.slotBytes[L.r n]? with
-    | some b => some b
-    | none => let w := L.cellWords.getD (L.r n) 1; if w == 0 then none else some (8 * w)
+    match L.sh n with
+    | .ref c | .imm c | .mut c => let b := L.repB c; if b == 0 then none else some b
+    | _ => none
   let rec walk (fuel off n : Nat) (t : LTy) : List Backend.Flat.ParamFacts :=
     match fuel with
     | 0 => []
@@ -1185,12 +1183,18 @@ def entryFn (fMain : Nat) (exits : Bool) : LM Backend.Flat.Fn := do
   pure { name := "entry", params := 0, results := 0, locals := nloc, body, ptrs }
 
 /-- The word IR of a program at its layouts; with `counts`, the counting build. -/
-def lowerProg (p : Prog) (L : Layouts) (known : Std.HashMap Var Nat) (framed : Std.HashSet Var)
-    (counts : Bool) : Except String Backend.Flat.Prog := do
+def lowerProg (p : Prog) (L : Layouts) (known : Std.HashMap Var Nat)
+    (codes : Std.HashMap Var (Std.HashSet Nat)) (counts : Bool) : Except String Backend.Flat.Prog := do
   let nf := p.fns.size
   let fMain := 1 + nf
   let pad := (8 - p.data.size % 8) % 8
-  let ctx : LCtx := { L, p, helperBase := fMain + 2, counts, staticBase := p.data.size + pad, known, framed }
+  -- The static cells after the literals: each as wide as its width class, a word at least.
+  let words := p.statics.map fun cls =>
+    max 1 ((cls.foldl (fun b t => max b (L.tyBytes.getD t 0)) 0 + 7) / 8)
+  let staticAt := (words.foldl (fun (acc : Array Nat × Nat) w => (acc.1.push acc.2, acc.2 + 8 * w))
+    (#[], p.data.size + pad)).1
+  let slotScopes := p.slots.fold (fun s _ sc => s.insert sc) {}
+  let ctx : LCtx := { L, p, helperBase := fMain + 2, counts, staticAt, known, codes, slotScopes }
   let act : LM (List Backend.Flat.Fn) := do
     let fns ← p.fns.toList.zipIdx.mapM fun (fd, i) => lowerFn i fd
     let k := L.w L.mainNode
@@ -1208,7 +1212,7 @@ def lowerProg (p : Prog) (L : Layouts) (known : Std.HashMap Var Nat) (framed : S
       else break
     pure ([printDecFn] ++ fns ++ [main, entry] ++ gen.toList)
   let (fns, _) ← (act.run ctx).run {}
-  let data := p.data ++ Array.replicate (pad + 8 * p.statics) 0
+  let data := p.data ++ Array.replicate (pad + 8 * words.foldl (· + ·) 0) 0
   pure { fns := fns.toArray, entry := fMain + 1, data }
 
 end Backend2.Low

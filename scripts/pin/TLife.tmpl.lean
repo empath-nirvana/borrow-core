@@ -148,7 +148,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .dtor .. | .allocS .. | .freeS .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. => []
   | .litFn _ _ _ t | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t
-  | .nuEta _ _ _ _ t
+  | .nuEta _ _ _ _ t | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t
   | .use _ _ _ _ _ _ t => t.lifeBinders
 
 /-- **No rule of the term reads `⊓Δ` or takes a fresh variable of `Δ`**: the borrows, the block
@@ -158,7 +158,7 @@ def TExpr.domFree : TExpr → Bool
   | .dtor .. | .allocS .. | .freeS .. => true
   | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I .. => false
   | .litFn _ _ _ t | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t
-  | .nuEta _ _ _ _ t
+  | .nuEta _ _ _ _ t | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t
   | .use _ _ _ _ _ _ t => t.domFree
 
 /-- **The term at a larger lifetime context `D`**: each `use` node's absorption at its context. -/
@@ -173,11 +173,124 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .selfCall i j k n t => .selfCall i j k n (t.reAb Δr)
   | .lendCell i j m t => .lendCell i j m (t.reAb Δr)
   | .nuEta i j f s t => .nuEta i j f s (t.reAb Δr)
+  | .lendScope i j r t => .lendScope i j r (t.reAb Δr)
+  | .litView i j t => .litView i j (t.reAb Δr)
+  | .unfoldStep i j t => .unfoldStep i j (t.reAb Δr)
   | .use i j n k τ _ t => .use i j n k τ ((t.reAb Δr).absF Δr) (t.reAb Δr)
 
 theorem TExpr.reAb_erase : ∀ (t : TExpr) (Δr : LifeCtx), (t.reAb Δr).erase = t.erase := by
   intro t
   induction t <;> intro Δr <;> simp only [TExpr.reAb, TExpr.erase, *]
+
+/-! ### The derived nodes' shapes at a larger lifetime context  `[spec §57]` -/
+
+theorem TExpr.isVarT_reAb (k : Nat) (Δr : LifeCtx) (t : TExpr) : (t.reAb Δr).isVarT k = t.isVarT k := by
+  cases t <;> rfl
+
+theorem TExpr.isLendCell_reAb (Δr : LifeCtx) (t : TExpr) : (t.reAb Δr).isLendCell = t.isLendCell := by
+  cases t <;> rfl
+
+theorem TExpr.lendKind?_reAb (Δr : LifeCtx) (t : TExpr) : (t.reAb Δr).lendKind? = t.lendKind? := by
+  cases t <;> rfl
+
+theorem TExpr.isUnfoldN_reAb (Δr : LifeCtx) (t : TExpr) : (t.reAb Δr).isUnfoldN = t.isUnfoldN := by
+  cases t <;> rfl
+
+theorem retLendT_reAb (Δr : LifeCtx) (t : TExpr) : retLendT (t.reAb Δr) = retLendT t := by
+  cases t <;> simp only [TExpr.reAb, retLendT, TExpr.isLendCell_reAb]
+
+theorem pairOf0T_reAb (Δr : LifeCtx) (t : TExpr) : pairOf0T (t.reAb Δr) = pairOf0T t := by
+  cases t <;> simp only [TExpr.reAb, pairOf0T, TExpr.isVarT_reAb]
+
+theorem lendScopeT_reAb (Δr : LifeCtx) (t : TExpr) : lendScopeT (t.reAb Δr) = lendScopeT t := by
+  cases t <;> simp only [TExpr.reAb, lendScopeT, TExpr.isLendCell_reAb, retLendT_reAb, pairOf0T_reAb]
+
+theorem TExpr.isRelease_reAb (Δr : LifeCtx) (t : TExpr) : (t.reAb Δr).isRelease = t.isRelease := by
+  cases t <;> rfl
+
+theorem relT_reAb (Δr : LifeCtx) (t : TExpr) : ∀ k, relT k (t.reAb Δr) = relT k t := by
+  induction t
+  case lolliE _ _ _ _ _ ta tf _ _ =>
+    intro k; simp only [TExpr.reAb, relT, TExpr.isVarT_reAb, TExpr.isRelease_reAb]
+  case ret _ _ _ t ih | ofRet _ _ _ t ih | effSub _ _ _ _ _ t ih | lendScope _ _ _ t ih
+    | sumI₁ _ _ _ _ t ih | sumI₂ _ _ _ _ t ih =>
+    intro k; simp only [TExpr.reAb, relT, ih k]
+  case bind _ _ _ _ u tM tN ihM ihN | effLet _ _ _ _ _ u tM tN ihM ihN =>
+    intro k; simp only [TExpr.reAb, relT, ihM k, ihN (k + 1)]
+  case unitE _ _ _ u tV tM ihV ihM | tensorI _ _ _ _ u tV tM ihV ihM => intro k; simp only [TExpr.reAb, relT, ihV k, ihM k]
+  case sumE _ _ _ _ _ u tV t₁ t₂ _ ih₁ ih₂ => intro k; simp only [TExpr.reAb, relT, ih₁ (k + 1), ih₂ (k + 1)]
+  case tensorE _ _ _ _ _ u tV tM _ ihM => intro k; simp only [TExpr.reAb, relT, ihM (k + 2)]
+  case effThen _ _ _ _ _ _ _ u tM tN tD ihM ihN ihD =>
+    intro k; simp only [TExpr.reAb, relT, ihM k, ihN (k + 1), ihD (k + 1)]
+  all_goals intro k; rfl
+
+theorem lendRelT_reAb (Δr : LifeCtx) (t : TExpr) : lendRelT (t.reAb Δr) = lendRelT t := by
+  cases t with
+  | tensorE _ _ _ _ _ _ _ tM => simp only [TExpr.reAb, lendRelT, relT_reAb]
+  | bind _ _ _ _ _ _ tN | effLet _ _ _ _ _ _ _ tN =>
+    cases tN with
+    | tensorE _ _ _ _ _ _ _ tM => simp only [TExpr.reAb, lendRelT, relT_reAb]
+    | _ => rfl
+  | _ => rfl
+
+theorem lendKindB_reAb (m : Bool) (Δr : LifeCtx) (t : TExpr) : lendKindB m (t.reAb Δr) = lendKindB m t := by
+  cases t with
+  | lolliE _ _ _ _ _ _ tf => cases tf <;> simp only [TExpr.reAb, lendKindB, TExpr.lendKind?_reAb]
+  | _ => rfl
+
+theorem litBodyT_reAb (Δr : LifeCtx) (t : TExpr) : litBodyT (t.reAb Δr) = litBodyT t := by
+  cases t with
+  | bind _ _ _ _ _ tA tN =>
+    cases tN with
+    | bind _ _ _ _ _ tL tR =>
+      cases tR with
+      | tensorE _ _ _ _ _ _ tP tU =>
+        cases tU with
+        | unitE _ _ _ _ tD _ =>
+          have hA : tabT (tA.reAb Δr) = tabT tA := by
+            cases tA with
+            | ret _ _ _ t =>
+              cases t with
+              | lolliE _ _ _ _ _ _ tf =>
+                cases tf with
+                | bangE _ _ _ t => cases t <;> rfl
+                | _ => rfl
+              | _ => rfl
+            | _ => rfl
+          have hL : immLendT (tL.reAb Δr) = immLendT tL := by
+            cases tL with
+            | ret _ _ _ t =>
+              cases t with
+              | lolliE _ _ _ _ _ _ tf =>
+                cases tf with
+                | lolliE _ _ _ _ _ x h => cases h <;> simp only [TExpr.reAb, immLendT, TExpr.isVarT_reAb]
+                | _ => rfl
+              | _ => rfl
+            | _ => rfl
+          have hD : dtorOf1T (tD.reAb Δr) = dtorOf1T tD := by
+            cases tD with
+            | lolliE _ _ _ _ _ x h => cases h <;> simp only [TExpr.reAb, dtorOf1T, TExpr.isVarT_reAb]
+            | _ => rfl
+          simp only [TExpr.reAb, litBodyT, hA, hL, hD, TExpr.isVarT_reAb]
+        | _ => rfl
+      | _ => rfl
+    | _ => rfl
+  | _ => rfl
+
+theorem litViewT_reAb (Δr : LifeCtx) (t : TExpr) : litViewT (t.reAb Δr) = litViewT t := by
+  cases t with
+  | ofRet _ _ _ t =>
+    cases t with
+    | bind _ _ _ _ _ _ tN =>
+      cases tN with
+      | tensorE _ _ _ _ _ _ tV tB =>
+        simp only [TExpr.reAb, litViewT, TExpr.isVarT_reAb, litBodyT_reAb]
+      | _ => rfl
+    | _ => rfl
+  | _ => rfl
+
+theorem unfoldAppT_reAb (t : TExpr) : ∀ Δr, unfoldAppT (t.reAb Δr) = unfoldAppT t := by
+  induction t <;> intro Δr <;> simp_all [TExpr.reAb, unfoldAppT, TExpr.isUnfoldN_reAb]
 
 /-- **A typed derivation at a larger lifetime context**, in `TDerivesP`.  `[spec §3, §10]` -/
 theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
@@ -204,8 +317,16 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Δ' he hd; exact .walkGet (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
   | selfCall _ hb ih =>
       intro Δ' he hd; exact .selfCall (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
-  | lendCell _ hb ih =>
-      intro Δ' he hd; exact .lendCell (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
+  | lendCell _ hb hm ih =>
+      intro Δ' he hd
+      exact .lendCell (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb) (by rw [lendKindB_reAb]; exact hm)
+  | lendScope _ hs hr ih =>
+      intro Δ' he hd
+      exact .lendScope (ih Δ' he hd) (by rw [lendScopeT_reAb]; exact hs) (by rw [lendRelT_reAb]; exact hr)
+  | litView _ hb ih =>
+      intro Δ' he hd; exact .litView (ih Δ' he hd) (by rw [litViewT_reAb]; exact hb)
+  | unfoldStep _ hb ih =>
+      intro Δ' he hd; exact .unfoldStep (ih Δ' he hd) (by rw [unfoldAppT_reAb]; exact hb)
   | nuEta _ hb ih =>
       intro Δ' he hd; exact .nuEta (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
   | use _ _ ih => intro Δ' he hd; exact .use (ih Δ' he hd) rfl
@@ -235,8 +356,16 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
       intro Δ' he hd; exact .walkGet (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
   | selfCall _ hb ih =>
       intro Δ' he hd; exact .selfCall (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
-  | lendCell _ hb ih =>
-      intro Δ' he hd; exact .lendCell (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
+  | lendCell _ hb hm ih =>
+      intro Δ' he hd
+      exact .lendCell (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb) (by rw [lendKindB_reAb]; exact hm)
+  | lendScope _ hs hr ih =>
+      intro Δ' he hd
+      exact .lendScope (ih Δ' he hd) (by rw [lendScopeT_reAb]; exact hs) (by rw [lendRelT_reAb]; exact hr)
+  | litView _ hb ih =>
+      intro Δ' he hd; exact .litView (ih Δ' he hd) (by rw [litViewT_reAb]; exact hb)
+  | unfoldStep _ hb ih =>
+      intro Δ' he hd; exact .unfoldStep (ih Δ' he hd) (by rw [unfoldAppT_reAb]; exact hb)
   | nuEta _ hb ih =>
       intro Δ' he hd; exact .nuEta (ih Δ' he hd) (by rw [TExpr.reAb_erase]; exact hb)
   | use _ _ ih => intro Δ' he hd; exact .use (ih Δ' he hd) rfl

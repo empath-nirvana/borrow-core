@@ -2,6 +2,7 @@ import Std.Data.HashMap
 import Backend2.Syntax
 import Backend2.Debug
 import Frontend.Check.Kinds
+import Frontend.Check.Cells
 
 /-!
 # Backend2 — closure conversion of the typed term  `[spec §3, §10]`
@@ -174,14 +175,29 @@ structure CState where
   lits : Option Nat := none
   /-- What the conversion read of the typed term, by rule and fact (`bcc lir --census`). -/
   reads : Std.HashMap String Nat := {}
-  /-- The static words for the capabilities' cells, in the data after the literals. -/
-  statics : Array Nat := #[]
+  /-- The static cells in the data after the literals, each with its width class (none: one word):
+  the capabilities' cells and the stack register. -/
+  statics : Array (List LTy) := #[]
+  /-- **The width classes** (`Checked.classAt`, SPEC §57): for each type a cell is allocated at
+  (lifetimes erased), every type its cells may hold, at LIR types. -/
+  classes : List (VTy × List LTy) := []
+  /-- **The lend scopes** (`TExpr.lendScope`, SPEC §57): the scopes numbered so far; the scope whose
+  `lendCell` is converted next, when its `rel` holds; the scope whose owner is bound next (by the
+  `letpair` that takes its pair apart); and each owner bound, its variable and scope. -/
+  scopes : Nat := 0
+  scopeCell : Option Nat := none
+  scopeOwner : Option Nat := none
+  owners : Std.HashMap Var Nat := {}
+  /-- While a `use` template is renamed (`renameTm`): each of its scopes' number in the copy. -/
+  scopeCopy : Std.HashMap Nat Nat := {}
+  /-- The `array_new` converted next is a literal's view's (`TExpr.litView`, SPEC §57). -/
+  litPending : Bool := false
   /-- Record the type formers the layouts are read from (`readFormers`). -/
   census : Bool := false
   /-- The destructors of `μ` types, generated once per type (`genDtor`). -/
   dtors : Std.HashMap String Nat := {}
-  /-- The variables bound to `unfold step` (a `bind` whose value is the `unfoldN` constant applied
-  to its step), and their copies and captures: the `f` a `nuEta` node may call (SPEC §45). -/
+  /-- The variables bound to `unfold step` (a `bind` whose bound computation is an `unfoldStep`
+  node, SPEC §57), and their copies and captures: the `f` a `nuEta` node may call (SPEC §45). -/
   unfolds : Std.HashSet Var := {}
   /-- Inside a walk whose step reads its view at its index (`TExpr.walk`'s `read`, SPEC §46). -/
   walkRead : Bool := false
@@ -247,6 +263,21 @@ def freshMarked (x : Var) : CM Var := do
 /-- Record that the conversion read a fact of the typed term. -/
 def readFact (k : String) : CM Unit :=
   modify fun s => { s with reads := s.reads.insert k (s.reads.getD k 0 + 1) }
+
+/-- The width class of a cell allocated at `A` (`Checked.classAt`, SPEC §57); none at a type the
+checker allocates no cell at. -/
+def classOf (A : VTy) : CM (List LTy) := do
+  let A := A.eraseLife
+  return (((← get).classes.find? (·.1 == A)).map (·.2)).getD []
+
+/-- A new lend scope: its number. -/
+def newScope : CM Nat := modifyGet fun s => (s.scopes, { s with scopes := s.scopes + 1 })
+
+/-- The variable `x` is bound to the pair's first component a `letpair` takes apart: the owner of
+the scope whose lend was converted last (`scopeOwner`), if any. -/
+def markOwner (x : Var) : CM Unit := do
+  if let some s := (← get).scopeOwner then
+    modify fun st => { st with scopeOwner := none, owners := st.owners.insert x s }
 
 def lift (r : Except String α) : CM α := match r with
   | .ok a => pure a
@@ -760,7 +791,7 @@ def stackRegister : CM Nat := do
   | some k => pure k
   | none =>
     let k := (← get).statics.size
-    modify fun s => { s with statics := s.statics.push k, stackReg := some k }
+    modify fun s => { s with statics := s.statics.push [], stackReg := some k }
     pure k
 
 /-- The level's frame `f` (at depth `d`) popped, then `b`. -/
@@ -1106,6 +1137,13 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
     -- written in place each time it suspends again at the operation; its suspended computation
     -- is a word. Otherwise the state is the closure's environment, as it always is at `unr`, whose
     -- suspended computation may be copied (§19).
+    -- UNPROVED: that a state cell has one owner, the suspended computation `k` that holds it, so
+    -- that a resume may write it in place and a cancel or the machine's answer may release it.
+    -- It should hold because `k` is resumed or cancelled at most once where the operation is not
+    -- `unr` (the row's qualifier, read: `OutInfo.unrs`). Which operations get a cell (`cellOps`,
+    -- `threaded`) is read off the layouts' recursive closure classes (`cellPass`, `threadedOf`),
+    -- which is not a typing fact. If it fails, a resumed copy of `k` reads a state written by
+    -- another, or a released cell.
     let cellMode := threaded || (cellOps.contains op && !F.unrs.contains op)
     let envTy : LTy := if cellMode then .ref stTy else stTy
     let slotTy : LTy := .sum .unit envTy
@@ -1160,11 +1198,11 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
       let body ← mkTuple xs fun t => injectPay stPay i t fun st => do
         if threaded then
           let u ← fresh .unit; let c ← fresh envTy; let c₁ ← fresh envTy; let c₂ ← fresh envTy
-          return .case sl u (.drop u (.letv c₁ (.prim .alloc [st]) (.clos kc [c₁])))
+          return .case sl u (.drop u (.letv c₁ (.prim (.alloc []) [st]) (.clos kc [c₁])))
             c (.letv c₂ (.prim .put [c, st]) (.clos kc [c₂]))
         else if cellMode then
           let c ← fresh envTy
-          return .letv c (.prim .alloc [st]) (.clos kc [c])
+          return .letv c (.prim (.alloc []) [st]) (.clos kc [c])
         else pure (.clos kc [st])
       setFn p.mkFn { name := s!"suspend {op.1}.{op.2}", params := xs ++ (if threaded then [sl] else []),
                      body, ret := F.kTy b cp }
@@ -1420,7 +1458,10 @@ def genTab (aT fT : LTy) (p : Var) : CM Tm := do
   setFn fi { name := "tab", params := [f, a, i, n], body, ret := aT }
   letpairM p fun c f => do
     let n ← fresh i32T
-    return .letv n (.prim .clampLen [c]) (.prim (.tab fi) [f, n])
+    -- A literal's view's tabulation (`TExpr.litView`): the view may be the literal's bytes.
+    let lit := (← get).litPending
+    modify fun s => { s with litPending := false }
+    return .letv n (.prim .clampLen [c]) (.prim ((if lit then Op.tabLit else Op.tab) fi) [f, n])
 
 /-- `drop (f, a)` (`array_free`): each slot's contents to `f`, in order, then the array freed. -/
 def genArrFree (fT aT : LTy) (p : Var) : CM Tm := do
@@ -1892,13 +1933,13 @@ end
 /-! ### Blocks (SPEC §5, §42) -/
 
 /-- A block's allocation at its shape: each leaf a cell. -/
-def allocTree (v : Var) (rT : LTy) : CM Tm := do
-  match rT with
-  | .pair a b => letpairM v fun x y => do
+def allocTree (v : Var) (rT : LTy) (σ : Shape) : CM Tm := do
+  match rT, σ with
+  | .pair a b, .node σ₁ σ₂ => letpairM v fun x y => do
       let x' ← fresh a; let y' ← fresh b
-      return .letv x' (← allocTree x a) (.letv y' (← allocTree y b) (.pair x' y'))
-  | .ref _ => return .prim .alloc [v]
-  | t => throw s!"LIR: a block's handle at {t}"
+      return .letv x' (← allocTree x a σ₁) (.letv y' (← allocTree y b σ₂) (.pair x' y'))
+  | .ref _, .leaf A => return .prim (.alloc (← classOf A)) [v]
+  | t, _ => throw s!"LIR: a block's handle at {t}"
 
 /-- A block's release at its shape. -/
 def freeTree (v : Var) (vT : LTy) : CM Tm := do
@@ -1911,24 +1952,24 @@ def freeTree (v : Var) (vT : LTy) : CM Tm := do
 
 /-- Lend each leaf of the handle `v` at the borrow tree `bT`: the term binds `k`'s owners and
 borrows. -/
-def lendTree (v : Var) (bT : LTy) (k : Var → Var → CM Tm) : CM Tm := do
+def lendTree (m : Bool) (v : Var) (bT : LTy) (k : Var → Var → CM Tm) : CM Tm := do
   match ← tyOf v, bT with
   | .pair _ _, .pair ba bb =>
-    letpairM v (fun x y => lendTree x ba (fun ox bx => lendTree y bb (fun oy byy => do
+    letpairM v (fun x y => lendTree m x ba (fun ox bx => lendTree m y bb (fun oy byy => do
       let o ← fresh (.pair (← tyOf ox) (← tyOf oy))
       let b ← fresh (.pair ba bb)
       return .letv o (.pair ox oy) (.letv b (.pair bx byy) (← k o b)))))
   | vT, _ =>
     let pr ← fresh (.pair vT bT)
     let o ← fresh vT; let b ← fresh bT
-    return .letv pr (.prim .lend [v]) (.letpair o b pr (← k o b))
+    return .letv pr (.prim (.lend m) [v]) (.letpair o b pr (← k o b))
 
 /-- A block borrow (`withborS`, `withborF2`): every leaf lent, the borrows handed to the callback at
 one lifetime; `(handle, answer)`. -/
-def genLendTree (src : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm := do
+def genLendTree (m : Bool) (src : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm := do
   let (some bT, rT) ← answerOf cbT | throw "LIR: a block borrow's callback takes no borrow"
   readFact "lend"
-  lendTree src bT fun o b => do
+  lendTree m src bT fun o b => do
     let r ← fresh rT
     return .letv r (← call b) (.pair o r)
 
@@ -1993,6 +2034,8 @@ def transparent? : TExpr → Option TExpr
   | .bangE _ _ _ t | .boxI _ _ _ _ t | .boxE _ _ _ _ t | .immSub _ _ _ _ _ t | .mutSub _ _ _ _ _ t
   | .ofRet _ _ _ t | .ret _ _ _ t | .thunkV _ _ _ t | .bangThunkV _ _ _ t | .nuIn _ _ _ t
   | .nuOut _ _ _ t => some t
+  -- The derived nodes over a term the conversion reads as it reads the term (SPEC §57).
+  | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => some t
   | _ => none
 
 /-- A function position's head through transparent nodes, and through a `use` whose body is a
@@ -2040,13 +2083,6 @@ where
         | .use _ _ _ _ _ _ b => if tsize (inlineBound + 1) b ≤ inlineBound then allIOf f b else none
         | _ => none
 
-/-- The node is `unfold step`: through transparent nodes, the `unfoldN` constant applied to one
-argument.  `[spec §45]` -/
-def isUnfoldApp (t : TExpr) : Bool :=
-  match headOf 64 t with
-  | .lolliE _ _ _ _ _ _ tf => (headOf 64 tf matches .unfoldN ..)
-  | _ => false
-
 /-- The arguments of a spine of call-by-value applications, outermost first, with each split's
 masks; and the function. -/
 def spineOf : Nat → TExpr → List (Masks × TExpr) × TExpr
@@ -2086,7 +2122,17 @@ end
 def useKey (decl : Nat) (targs : List VTy) (info : TInfo) (j : Jdg) (ms : MachSet) : String :=
   s!"{decl}|{", ".intercalate (targs.map (ppVT · ms))}|{reprStr info.key}|{ppJ j ms}"
 
-/-- Rename every variable a term binds to a fresh one, and its free ones by `m`. -/
+/-- A scope of a `use` template in the copy being made (`renameTm`): a scope of its own. -/
+def copyScope (s : Nat) : CM Nat := do
+  match (← get).scopeCopy[s]? with
+  | some s' => pure s'
+  | none =>
+    let s' ← newScope
+    modify fun st => { st with scopeCopy := st.scopeCopy.insert s s' }
+    pure s'
+
+/-- Rename every variable a term binds to a fresh one, and its free ones by `m`; each lend scope a
+scope of its own, its owner the renamed variable. -/
 def renameTm (m : Std.HashMap Var Var) : Tm → CM Tm
   | .var x => return .var (m.getD x x)
   | .unit => pure .unit
@@ -2098,12 +2144,19 @@ def renameTm (m : Std.HashMap Var Var) : Tm → CM Tm
   | .app0 f => return .app0 (m.getD f f)
   | .sel f j => return .sel (m.getD f f) j
   | .call fn as => return .call fn (as.map fun x => m.getD x x)
-  | .prim op as => return .prim op (as.map fun x => m.getD x x)
+  | .prim op as => do
+    let op ← match op with
+      | .allocLent s cls => pure (Op.allocLent (← copyScope s) cls)
+      | op => pure op
+    return .prim op (as.map fun x => m.getD x x)
   | .letv x e b => do
     let x' ← freshLike x
     return .letv x' (← renameTm m e) (← renameTm (m.insert x x') b)
   | .letpair x y p b => do
     let x' ← freshLike x; let y' ← freshLike y
+    if let some s := (← get).owners[x]? then
+      let s' ← copyScope s
+      modify fun st => { st with owners := st.owners.insert x' s' }
     return .letpair x' y' (m.getD p p) (← renameTm ((m.insert x x').insert y y') b)
   | .case s x b₁ y b₂ => do
     let x' ← freshLike x; let y' ← freshLike y
@@ -2272,11 +2325,31 @@ at an outcome, each is converted inside a machine.  `[spec §49]` -/
 def machNode : TExpr → Bool
   | .effLet .. | .effThen .. | .bind .. | .sumE .. | .tensorE .. | .unitE .. | .zeroE .. | .effSub ..
   | .effRaise .. | .effPerform .. | .nilDead .. | .lendR .. => true
+  | .lendScope _ _ _ t => machNode t
   | _ => false
 
 /-- The outside of the pure fragment. -/
 def outside (t : TExpr) : CM α :=
   throw s!"LIR: `{ruleName t}` is outside the pure fragment (N2 and later)"
+
+/-- **A lent cell's scope** (`TExpr.lendScope`, SPEC §57): `act` converts it. Where its `rel` holds
+(the owner released on every path), its cell is allocated for the scope (`scopeCell`), whose owner
+the `letpair` that takes the lend's pair apart binds (`markOwner`); the program's slots are
+chosen from these (`Backend2/Driver.lean`, `slotsOf`). -/
+def withScope (rel : Bool) (act : CM Tm) : CM Tm := do
+  if rel then
+    let s ← newScope
+    modify fun st => { st with scopeCell := some s }
+  let r ← act
+  modify fun st => { st with scopeCell := none, scopeOwner := none }
+  return r
+
+/-- **A literal's view** (`TExpr.litView`, SPEC §57): `act` converts it, its tabulation a `tabLit`. -/
+def withLitView (act : CM Tm) : CM Tm := do
+  modify fun st => { st with litPending := true }
+  let r ← act
+  modify fun st => { st with litPending := false }
+  return r
 
 set_option maxHeartbeats 4000000 in
 mutual
@@ -2432,6 +2505,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     let bT ← vty B
     return pre (← bindTm (← conv fuel c₁ tV) (.pair aT bT) fun p => do
       let x ← fresh aT; let y ← fresh bT
+      markOwner x
       return .letpair x y p (← conv fuel (some y :: some x :: c₂) tM))
   | .sumE _ _ A B _ u tV t₁ t₂ => do
     let (pre, c₁, c₂) ← splitCtx ctx u "sumE"
@@ -2462,6 +2536,8 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
       pure (.clos c [o, n]))
   | .divLit _ j op c inner => convDivLit fuel ctx j op c inner
   | .lendCell _ _ _ c => convLendCell fuel ctx t c
+  | .lendScope _ _ rel c => withScope rel (conv fuel ctx c)
+  | .litView _ _ c => withLitView (conv fuel ctx c)
   | .walk _ _ _ read c => do
     -- A walk whose step reads its view at its index (`walkReadB`): its read has no test.  [spec §46]
     let old := (← get).walkRead
@@ -2490,6 +2566,10 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     | some (some fv), some si =>
       match ctx[si]? with
       | some (some sv) =>
+        -- `f`'s slot is bound by a `bind` whose bound computation is an `unfoldStep` node (SPEC
+        -- §57), read where the `bind` is converted and kept with the slot's variable as the
+        -- conversion renames it (`CState.unfolds`: a split's copy, a closure's parameter): the
+        -- η-thunk is the call `f s` made now (`nuEta_unfold`).
         if (← get).unfolds.contains fv then
           readFact "nuEta:unfold call"
           let others := (ctx.zipIdx.filter fun (_, k) => k != f && k != si).filterMap (·.1)
@@ -2514,7 +2594,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
 /-- `x <- M; N`: `M`'s value bound, then `N`. -/
 def convBind (fuel : Nat) (ctx : Ctx) (A : VTy) (u : Masks) (tM tN : TExpr) : CM Tm := do
   let (pre, c₁, c₂) ← splitCtx ctx u "bind"
-  let unf := isUnfoldApp tM
+  let unf := tM matches .unfoldStep ..
   return pre (← bindTm (← conv fuel c₁ tM) (← vty A) fun x => do
     if unf then
       readFact "bind:unfold step"
@@ -2581,7 +2661,7 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     return pre (← convK fuel c₁ tM (.thenF fn fnD own.length pd :: K) (own ++ args))
   | .bind _ _ A _ u tM tN => do
     let (pre, c₁, c₂) ← splitCtx ctx u "bind"
-    let unf := isUnfoldApp tM
+    let unf := tM matches .unfoldStep ..
     return pre (← bindTm (← conv fuel c₁ tM) (← vty A) fun x => do
       if unf then
         readFact "bind:unfold step"
@@ -2599,6 +2679,7 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     let aT ← vty A; let bT ← vty B
     return pre (← bindTm (← conv fuel c₁ tV) (.pair aT bT) fun p => do
       let x ← fresh aT; let y ← fresh bT
+      markOwner x
       return .letpair x y p (← convK fuel (some y :: some x :: c₂) tM K args))
   | .unitE _ _ _ u tV tM => do
     let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
@@ -2658,7 +2739,10 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     let pr ← fresh (.pair rT mT); let o ← fresh rT; let m ← fresh mT
     let body ← convK fuel [some m] tM (.thenF fnN fnD 1 [] :: K) (o :: args)
     readFact "lend"
-    return leaf ctx (some 0) (.letv pr (.prim .lend [r]) (.letpair o m pr body))
+    return leaf ctx (some 0) (.letv pr (.prim (.lend true) [r]) (.letpair o m pr body))
+  | .lendScope _ _ rel c => withScope rel (convK fuel ctx c K args)
+  | .litView _ _ c => withLitView (convK fuel ctx c K args)
+  | .unfoldStep _ _ c => convK fuel ctx c K args
   | .app _ _ i _ _ u tM =>
     match headOf 64 tM with
     | .lam _ _ _ _ body => if true then pointAt fuel ctx t K args M else do
@@ -2742,6 +2826,7 @@ def convWorkK (fuel : Nat) (k : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : 
     let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
     return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop v (← convWorkK fuel k c₂ tM K args))
   | .effSub _ _ _ _ _ c => convWorkK fuel k ctx c K args
+  | .lendScope _ _ _ c | .litView _ _ c | .unfoldStep _ _ c => convWorkK fuel k ctx c K args
   | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
 
 /-- A computation at an outcome, in a value's position: a function of its context, the body of a
@@ -3163,6 +3248,7 @@ def convWork (fuel : Nat) (k : Nat) (ph : Pay) (ctx : Ctx) (t : TExpr) : CM Tm :
     let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
     return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop v (← convWork fuel k ph c₂ tM))
   | .effSub _ _ _ _ _ c => convWork fuel k ph ctx c
+  | .lendScope _ _ _ c | .litView _ _ c | .unfoldStep _ _ c => convWork fuel k ph ctx c
   | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
 
 /-- A spine of `lolliE` nodes: its arguments evaluated outermost first, then its function: a
@@ -3235,8 +3321,15 @@ def convLendCell (fuel : Nat) (ctx : Ctx) (t inner : TExpr) : CM Tm := do
   | [(u₁, cb), (u₂, aApp)] =>
     let (bs, ah) := spineOf 8 aApp
     match bs, headOf 64 ah with
-    | [(u₃, v)], .alloc .. => do
+    | [(u₃, v)], .alloc _ _ A => do
       readFact "lendCell:cell"
+      -- The scope this cell is allocated for (`withScope`), taken before the callback is converted.
+      let scope := (← get).scopeCell
+      modify fun st => { st with scopeCell := none }
+      let s ← match scope with
+        | some s => pure s
+        | none => newScope
+      let cls ← classOf A
       let (pre₁, c₁, cF) ← splitCtx ctx u₁ "lolliE"
       let cbv ← fresh (← repJ cb.jdg)
       let cbTm ← conv fuel c₁ cb
@@ -3246,8 +3339,9 @@ def convLendCell (fuel : Nat) (ctx : Ctx) (t inner : TExpr) : CM Tm := do
       let vTm ← conv fuel c₃ v
       let cell ← fresh (← repJ aApp.jdg)
       let body ← expand fuel (headOf 64 h) [cell, cbv] (← repJ t.jdg)
+      if scope.isSome then modify fun st => { st with scopeOwner := some s }
       return pre₁ (.letv cbv cbTm (pre₂ (pre₃ (.letv vv vTm (leaf cA none
-        (.letv cell (.prim .allocLent [vv]) (leaf cH none body)))))))
+        (.letv cell (.prim (.allocLent s cls) [vv]) (leaf cH none body)))))))
     | _, _ => conv fuel ctx inner
   | _ => conv fuel ctx inner
 
@@ -3263,6 +3357,13 @@ def convUse (fuel : Nat) (ctx : Ctx) (info : TInfo) (j : Jdg) (decl : Nat) (targ
     return ← conv fuel ctx body
   match (← get).uses[key]? with
   | some tp =>
+    -- UNPROVED: that a `use` body converted at one context is, renamed, its conversion at
+    -- another context with the same key, and that a slot live here and not in the template is
+    -- one the body's derivation drops (`Ctx.DeadP`). It should hold because the key fixes the
+    -- declaration, its type arguments and the judgment, and the body reads its slots by index:
+    -- a slot it reads was live at the first use, or that conversion would have failed. It is
+    -- not checked against this use's derivation. If it fails, a live owned value is dropped (a
+    -- leak), or the template's copies and drops are those of another context.
     -- The slots the template reads must be live here; any other live slot is dropped.
     let mut m : Std.HashMap Var Var := {}
     let mut ok := true
@@ -3274,6 +3375,7 @@ def convUse (fuel : Nat) (ctx : Ctx) (info : TInfo) (j : Jdg) (decl : Nat) (targ
       readFact "use:key, shared"
       let kept := tp.slots.map (·.1)
       let extra := slots.filter fun (i, _) => !kept.contains i
+      modify fun st => { st with scopeCopy := {} }
       return drops (extra.map (·.2)) (← renameTm m tp.tm)
     conv fuel ctx body
   | none =>
@@ -3350,13 +3452,15 @@ def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM 
     CM Tm := do
   readFact s!"{ruleName c}:expand"
   match c with
-  | .withbor1 .. | .withbor2 .. | .sliceBorrowM .. | .sliceBorrowI .. => genLend .lend x cbT call
+  | .withbor1 .. | .sliceBorrowI .. => genLend (.lend false) x cbT call
+  | .withbor2 .. | .sliceBorrowM .. => genLend (.lend true) x cbT call
   | .withbor3 .. => genLend .relend x cbT call
   | .withload .. => genWithload x cbT call
   | .withswap .. => genWithswap x cbT call
-  | .withborSM .. | .withborSI .. | .withborF2M .. | .withborF2I .. => genLendTree x cbT call
-  | .withbor1U _ _ _ _ _ _ td | .withbor2U _ _ _ _ _ _ td | .sliceBorrowMU _ _ _ _ _ _ td
-  | .sliceBorrowIU _ _ _ _ _ _ td => genLendU _fuel .lend x cbT call td
+  | .withborSM .. | .withborF2M .. => genLendTree true x cbT call
+  | .withborSI .. | .withborF2I .. => genLendTree false x cbT call
+  | .withbor1U _ _ _ _ _ _ td | .sliceBorrowIU _ _ _ _ _ _ td => genLendU _fuel (.lend false) x cbT call td
+  | .withbor2U _ _ _ _ _ _ td | .sliceBorrowMU _ _ _ _ _ _ td => genLendU _fuel (.lend true) x cbT call td
   | .withbor3U _ _ _ _ _ _ _ td => genLendU _fuel .relend x cbT call td
   | .withloadU .. => genWithload x cbT call
   | c => throw s!"LIR: `{ruleName c}` is not a borrow (answer {resT})"
@@ -3366,7 +3470,7 @@ def expandCb (_fuel : Nat) (c : TExpr) (x : Var) (cbT : LTy) (call : Var → CM 
 def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
   readFact s!"{ruleName c}:expand"
   match c, args with
-  | .alloc .., [v] => return .prim .alloc [v]
+  | .alloc _ _ A, [v] => return .prim (.alloc (← classOf A)) [v]
   | .free .., [x] => return .prim .free [x]
   | .swap .., [x, v] => return .prim .swap [x, v]
   | .copy .., [x] | .arrCopy .., [x] => dup x fun x x' => pure (.pair x x')
@@ -3411,20 +3515,21 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     let .pair sT _ := pT | throw "LIR: bounded_fix's argument"
     readFact "boundedFix:budget"
     genFix sT p
-  | .withbor1 .., [x, cb] | .withbor2 .., [x, cb] | .sliceBorrowM .., [x, cb]
-  | .sliceBorrowI .., [x, cb] => genLend .lend x (← tyOf cb) (callCb cb)
+  | .withbor1 .., [x, cb] | .sliceBorrowI .., [x, cb] => genLend (.lend false) x (← tyOf cb) (callCb cb)
+  | .withbor2 .., [x, cb] | .sliceBorrowM .., [x, cb] => genLend (.lend true) x (← tyOf cb) (callCb cb)
   | .withbor3 .., [m, cb] => genLend .relend m (← tyOf cb) (callCb cb)
   | .withload .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
   | .withswap .., [m, f] => genWithswap m (← tyOf f) fun old => pure (.app f old)
-  | .allocS .., [v] => allocTree v resT
+  | .allocS _ _ σ, [v] => allocTree v resT σ
   | .freeS _ j _, [v] => do
     let (_, vT) ← arrowOf (← repJ j)
     freeTree v vT
-  | .withborSM .., [x, cb] | .withborSI .., [x, cb] | .withborF2M .., [x, cb]
-  | .withborF2I .., [x, cb] => genLendTree x (← tyOf cb) (callCb cb)
-  | .withbor1U _ _ _ _ _ _ td, [x, cb] | .withbor2U _ _ _ _ _ _ td, [x, cb]
-  | .sliceBorrowMU _ _ _ _ _ _ td, [x, cb] | .sliceBorrowIU _ _ _ _ _ _ td, [x, cb] =>
-    genLendU fuel .lend x (← tyOf cb) (callCb cb) td
+  | .withborSM .., [x, cb] | .withborF2M .., [x, cb] => genLendTree true x (← tyOf cb) (callCb cb)
+  | .withborSI .., [x, cb] | .withborF2I .., [x, cb] => genLendTree false x (← tyOf cb) (callCb cb)
+  | .withbor1U _ _ _ _ _ _ td, [x, cb] | .sliceBorrowIU _ _ _ _ _ _ td, [x, cb] =>
+    genLendU fuel (.lend false) x (← tyOf cb) (callCb cb) td
+  | .withbor2U _ _ _ _ _ _ td, [x, cb] | .sliceBorrowMU _ _ _ _ _ _ td, [x, cb] =>
+    genLendU fuel (.lend true) x (← tyOf cb) (callCb cb) td
   | .withbor3U _ _ _ _ _ _ _ td, [m, cb] => genLendU fuel .relend m (← tyOf cb) (callCb cb) td
   | .withloadU .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
   | .foldOwn _ _ F _, [g] | .foldReuse _ _ F _, [g] => do
@@ -3543,12 +3648,20 @@ def convMain (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) 
     | .cap fd => do
       let l ← fresh i32T
       let k := (← get).statics.size
-      modify fun s => { s with statics := s.statics.push k }
+      -- A capability's cell is as wide as its class (`Checked.classAt` of its contents, SPEC §57):
+      -- a `swap` may put a wider value in it.
+      let cls ← match A with
+        | .ref B => classOf B
+        | _ => pure []
+      modify fun s => { s with statics := s.statics.push cls }
       binds := (fun b => .letv l (.lit (.i32 fd.toUInt32)) (.letv x (.prim (.staticCell k) [l]) b)) :: binds
     | .clock => do
       let l ← fresh (.int .w64)
       let k := (← get).statics.size
-      modify fun s => { s with statics := s.statics.push k }
+      let cls ← match A with
+        | .ref B => classOf B
+        | _ => pure []
+      modify fun s => { s with statics := s.statics.push cls }
       binds := (fun b => .letv l (.lit (.i64 0)) (.letv x (.prim (.staticCell k) [l]) b)) :: binds
     | .io op => do
       let c ← ioClos 8 op aT
@@ -3590,7 +3703,7 @@ def tailPass (s : CState) (loop : Nat × Var × OutInfo × Nat → Bool) : Excep
         setFn fn { name := "tail", params := [oP], body := .var oP, ret := M.ty }
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics.size }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits }, s')
 
 /-- **State cells** (SPEC §49): each machine operation whose suspended computation's closure class
 holds itself (`recursive`, the layouts' classes that keep their environment on the heap, §35)
@@ -3603,7 +3716,7 @@ def cellPass (s : CState) (recursive : Nat → Bool) : Except String (Prog × CS
         let _ ← genMach m ops
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics.size }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits }, s')
 
 /-- **The levels whose state cell is passed on** (SPEC §50), from a conversion's machines and the
 layouts' recursive classes (`recursive`, as `cellPass` reads them): each machine whose body takes
@@ -3628,6 +3741,13 @@ level of itself (`calleeCodes`, the layouts' classes of the callee's suspended c
 its own code), and whose operation is in `stackOps` (every `handle` node of it keeps `κ`: a stored
 site, which gives the frames one owner): its number and its frame's state type, each call point's
 state without the callee's `k`. -/
+-- UNPROVED: that a stack machine's frames have one owner each, so that a level's frame may live
+-- on the task stack and be popped by its answer, abort or cancel. It should hold because every
+-- `handle` node of the operation stores `κ`, boxed, at no `unr` operation (`stackOps`, read off
+-- the nodes' clause kinds and qualifiers), so one site's `κ` holds the stack, and because every
+-- call point calls a level of the machine itself. That last fact is read off the layouts'
+-- closure classes (`calleeCodes`), which is not a typing fact. If it fails, a frame is popped
+-- while a level above it still runs, or a level resumes on another stack's frame.
 def stackedOf (s : CState) (recursive : Nat → Bool) (stackOps : MachSet)
     (calleeCodes : Var → OutInfo → List Nat) : Std.HashMap Nat LTy := Id.run do
   let th := threadedOf s recursive
@@ -3653,9 +3773,11 @@ def stackedOf (s : CState) (recursive : Nat → Bool) (stackOps : MachSet)
 def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) (ncaps : Nat)
     (loops : Bool) (census : Bool := false) (direct : Std.HashMap UInt32 (List Bool) := {})
     (mach : MachSet := {}) (threaded : Std.HashMap Nat LTy := {})
-    (stacked : Std.HashMap Nat LTy := {}) : Except String (Prog × CState) := do
-  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run { census, direct, mach, threaded, stacked }
+    (stacked : Std.HashMap Nat LTy := {}) (classes : List (VTy × List LTy) := []) :
+    Except String (Prog × CState) := do
+  let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run
+    { census, direct, mach, threaded, stacked, classes }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
-            statics := s.statics.size }, s)
+            statics := s.statics, lits := s.lits }, s)
 
 end Backend2

@@ -116,6 +116,13 @@ def link (p : Prog) (base : Nat) (s : Site) (c : Nat) : FM Unit := do
     modify fun st => { st with out := st.out.insert r ((st.out.getD r #[]).push d) }
     addCodes d ((← get).sets.getD r {}).toList
 
+-- UNPROVED: that the solution holds every code that can reach each variable. It should hold
+-- because every move of the LIR adds an inclusion (`gen`, `link`) and data falls back to its
+-- layout class (`coarse`), itself joined over every move (`Backend2/Layout.lean`). It is not a
+-- typing fact: the typed term says a value is a closure of a type, not which λ made it. The
+-- loop stops at `fuel` steps with whatever it has. If a code is missing, `known` makes a direct
+-- call of the wrong code (`Lower.callTarget`), and a literal's view takes a tabulator for the
+-- literal tables' code (`Lower`, `tabLit`).
 /-- The least solution. -/
 def solve (p : Prog) (base : Nat) (fuel : Nat) : FM Unit := do
   let mut linked : Std.HashSet (Var × Nat × Nat) := {}

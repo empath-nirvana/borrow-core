@@ -70,6 +70,7 @@ block-swap erased handles 0 performs 0 raises 0 left 0 0
 block-yield-inner erased handles 0 performs 0 raises 0 machines 4 suspends 2 left 0 0
 borrow-in-scope erased handles 0 performs 0 raises 0 left 0 0
 bytes-upper erased handles 0 performs 0 raises 0 left 0 0
+capability-swap-width erased handles 0 performs 0 raises 0 left 0 0
 capture-await-raise erased handles 2 performs 1 raises 1 left 0 0
 capture-log-hand erased handles 0 performs 0 raises 0 left 0 0
 capture-store-cancel-hand erased handles 0 performs 0 raises 0 left 0 0
@@ -305,12 +306,15 @@ lend-lib-each erased handles 0 performs 0 raises 0 left 0 0
 lend-lib-gen erased handles 0 performs 0 raises 0 left 0 0
 lend-lib-loop erased handles 0 performs 0 raises 0 left 0 0
 lend-mut erased handles 0 performs 0 raises 0 left 0 0
+lend-owner-joined erased handles 0 performs 0 raises 0 left 0 0
+lend-owner-returned erased handles 0 performs 0 raises 0 left 0 0
 lend-pipeline erased handles 0 performs 0 raises 0 machines 6 suspends 3 left 0 0
 lend-server erased handles 0 performs 0 raises 0 left 0 0
 lend-shadow erased handles 0 performs 0 raises 0 left 0 0
 list-blocks erased handles 3 performs 0 raises 4 left 0 0
 list-capability erased handles 1 performs 0 raises 1 left 0 0
 list-generic erased handles 1 performs 0 raises 9 left 0 0
+literal-array-written erased handles 0 performs 0 raises 0 left 0 0
 loop-handler-binder erased handles 4 performs 0 raises 7 left 0 0
 loop-labels erased handles 0 performs 0 raises 0 left 0 0
 loop-row-answer erased handles 0 performs 0 raises 0 machines 1 suspends 2 left 0 0
@@ -377,6 +381,7 @@ surface/family-swap erased handles 0 performs 0 raises 0 left 0 0
 surface/io-upper erased handles 0 performs 0 raises 0 left 0 0
 surface/io-wc erased handles 0 performs 0 raises 0 left 0 0
 surface/map-reuse erased handles 0 performs 0 raises 0 left 0 0
+swap-cell-width erased handles 0 performs 0 raises 0 left 0 0
 text-lend-lifetime erased handles 0 performs 0 raises 0 left 0 0
 text-wordfreq erased handles 2 performs 0 raises 14 left 0 0
 tree-map erased handles 5 performs 2 raises 30 left 0 0

@@ -1,0 +1,10 @@
+-- A lent cell's owner freed in one arm and moved into the join in the other (#712, `t18`): the
+-- cell is not released by its own `free` on every path (`rel` is false), so it is on the heap,
+-- and the cell the join's `free` releases is freed in either arm.
+--
+-- Answer: i32[6].
+main -> i32 =
+  let (c, r) = borrow mut alloc(5) { 'x, m -> 1 };
+  let s : i32 + i32 = inl 0;
+  let d = match s { inl z -> let k = free(c); alloc(k + r) | inr z -> c };
+  free(d)

@@ -176,7 +176,12 @@ theorem onPaths_sound {leaf : Nat → TExpr → Bool} {L : Nat → Expr → Prop
     rcases h with h | h
     · exact .leaf (hl _ _ h)
     · simp only [TExpr.erase]; exact ih h
-  case case7 => exact .leaf (hl _ _ h)
+  case case7 ih =>
+    simp only [Bool.or_eq_true] at h
+    rcases h with h | h
+    · exact .leaf (hl _ _ h)
+    · simp only [TExpr.erase]; exact ih h
+  case case8 => exact .leaf (hl _ _ h)
 
 theorem stateFnB_sound {leaf : Nat → TExpr → Bool} {L : Nat → Expr → Prop}
     (hl : ∀ k t, leaf k t = true → L k t.erase) {k : Nat} {t : TExpr}

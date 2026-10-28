@@ -42,11 +42,12 @@ inductive Op where
   quotient or remainder itself, with no error arm. The arguments are the dividend and the
   divisor. -/
   | divLit (op : HostOp)
-  /-- A fresh cell holding the argument. -/
-  | alloc
-  /-- A fresh cell holding the argument, allocated for one lend (`TExpr.lendCell`): a frame slot
-  when its owner is freed in its function (`Backend2/Frames.lean`). -/
-  | allocLent
+  /-- A fresh cell holding the argument, as wide as the widest of the types `cls` (its width class,
+  `Checked.classAt`, SPEC §57; none: the argument's own type). -/
+  | alloc (cls : List LTy)
+  /-- A fresh cell holding the argument, allocated for the lend of the scope `s` (`TExpr.lendCell`,
+  `TExpr.lendScope`): a frame slot when `s` is one of the program's `slots`. -/
+  | allocLent (s : Nat) (cls : List LTy)
   /-- The cell's contents; the cell is freed. -/
   | free
   /-- The cell freed, its contents taken (`take`) and not put back: a machine's state cell when
@@ -54,9 +55,9 @@ inductive Op where
   | release
   /-- `swap ℓ v`: `(ℓ, old)`, the old contents moved out and `v` moved in. -/
   | swap
-  /-- A borrow of the cell or family the argument owns, at the result's mode: `(owner, borrow)`,
-  the borrow the owner's address. -/
-  | lend
+  /-- A borrow of the cell or family the argument owns, `mut` when `m` (the borrow constant's kind,
+  `lendKindB`): `(owner, borrow)`, the borrow the owner's address. -/
+  | lend (m : Bool)
   /-- A reborrow of a borrow: `(borrow, borrow')`, the same address. -/
   | relend
   /-- The contents of the cell a borrow points at, read as the result's type (`Imm̲`): a word at a
@@ -72,10 +73,10 @@ inductive Op where
   /-- `tab fi (f, n)` (`array_new`): an array of `n` slots, slot `i` filled with `f i` by the loop
   function `fi`, called on `(f, a, 0, n)`. -/
   | tab (fi : Nat)
-  /-- `tab fi (f, n)` where `f` is a closure of the literal tables' code, whose environment is the
-  literal's offset in the data and its length `len`, and the array is only read before it is
-  destroyed (`Backend2/LitViews.lean`): at `n ≤ len` the array is the literal's bytes in the
-  data, and nothing is allocated; else `tab`'s. -/
+  /-- `tab fi (f, n)` of a literal's view (`TExpr.litView`, SPEC §57: the array is only read
+  before it is destroyed): where `f` is a closure of the literal tables' code (`Prog.lits`), whose
+  environment is the literal's offset in the data and its length `len`, and `n ≤ len`, the array
+  is the literal's bytes in the data and nothing is allocated; else `tab`'s. -/
   | tabLit (fi : Nat)
   /-- `slotPut a i v`: `v` moved into slot `i` of the array `a`, unwritten; the result is `a`. -/
   | slotPut
@@ -243,8 +244,14 @@ structure Prog where
   ty : Std.HashMap Var LTy
   /-- The literals' bytes, the program's read-only data. -/
   data : Array UInt8 := #[]
-  /-- The number of capabilities' static cells (`Op.staticCell`). -/
-  statics : Nat := 0
+  /-- The static words' cells (`Op.staticCell`, the stack register): each one's width class (none:
+  one word). -/
+  statics : Array (List LTy) := #[]
+  /-- The literal tables' code (`Op.litByte`). -/
+  lits : Option Nat := none
+  /-- The lend scopes whose cell is a frame slot (`Op.allocLent`), and each one's owner, the
+  variable its `free` releases (`Backend2/Driver.lean`, `slotsOf`). -/
+  slots : Std.HashMap Var Nat := {}
   /-- `main` is served `Fail[DivError]` by the platform's handler (`Checked.exitsOnDivError`,
   SPEC §39): its value is `inl v`, whose `v` is reported, or `inr ()`, the exit status `1`. -/
   exits : Bool := false
