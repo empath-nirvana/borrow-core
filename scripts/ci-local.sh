@@ -33,7 +33,7 @@
 #   * a `.lean` file outside experiments/, the lakefile, the manifest or the toolchain: every
 #     step, as the full gate (the compiler imports the proofs, so every Lean change reaches it);
 #   * otherwise no Lean step runs (no `lake build` of the library, no hygiene, no axioms): only
-#     `lake build bcc bcc-counts lowering-check`, and the steps whose inputs changed: corpus/ for the corpus
+#     `lake build bcc bcc-counts`, and the steps whose inputs changed: corpus/ for the corpus
 #     steps, lib/ for every step that elaborates a program, book/ for the book, a script for its
 #     own step (source-stage.sh for the corpus and the book), and ci-local.sh or par.sh for all
 #     of them. Documentation alone runs nothing.
@@ -80,7 +80,6 @@ steps=(
   "compile kernel"   "scripts/compile-kernel.sh"
   "backend2 fence"   "scripts/check-backend2.sh"
   "backend2 corpus"  "scripts/compile-backend2.sh"
-  "lowering"         "scripts/check-lowering.sh"
   "native facts"     "scripts/native-facts.sh"
   "native"           "scripts/compile-native.sh"
   "sugar pairs"      "scripts/check-sugar.sh"
@@ -108,7 +107,7 @@ if [ "$changed" = 1 ]; then
   done
   if [ "$lean" = 0 ]; then
     all=0
-    corpus=("parse corpus" "check corpus" "clause kinds" "handled names" "cell classes" "compile corpus" "backend2 corpus" "lowering" "native facts" "sugar pairs" "native" "renaming")
+    corpus=("parse corpus" "check corpus" "clause kinds" "handled names" "cell classes" "compile corpus" "backend2 corpus" "native facts" "sugar pairs" "native" "renaming")
     for f in $files; do
       case "$f" in
         corpus/kernel-counts.expected) add "compile kernel" ;;
@@ -124,7 +123,6 @@ if [ "$changed" = 1 ]; then
         scripts/compile-corpus.sh) add "compile corpus" ;;
         scripts/compile-kernel.sh) add "compile kernel" ;;
         scripts/compile-backend2.sh) add "backend2 corpus" ;;
-        scripts/check-lowering.sh) add "lowering" ;;
         scripts/native-facts.sh) add "native facts" ;;
         scripts/check-backend2.sh) add "backend2 fence" ;;
         scripts/compile-native.sh) add "native" ;;
@@ -147,7 +145,7 @@ wanted() {
 }
 
 if [ "$all" = 1 ]; then step "build" lake build
-else step "build (bcc, bcc-counts, lowering-check)" lake build bcc bcc-counts lowering-check; fi
+else step "build (bcc, bcc-counts)" lake build bcc bcc-counts; fi
 built=$fail
 [ "$built" = 0 ] && export CI_LOCAL_BUILT=1
 

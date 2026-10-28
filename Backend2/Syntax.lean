@@ -150,9 +150,9 @@ inductive Op where
   | framePop (k : Nat)
   /-- Never reached: the frame below a finished level is at a call of it (SPEC §52). -/
   | unreachable
-  /-- **The source's memory** (SPEC §56). The print of a low term (`Lowering/LIRPrint.lean`)
-  keeps the source machine's memory as it is: one object of one address for each cell, at the
-  location the source allocates it, a family the pair of its base and its length. `cellNew v`:
+  /-- **The source's memory** (SPEC §56): the source machine's memory as it is, one object of one
+  address for each cell, at the location the source allocates it, a family the pair of its base
+  and its length. Backend2's conversion writes none of these operations. `cellNew v`:
   a cell holding `v` at the region base `next`, which moves on one region (`regionSize`). -/
   | cellNew
   /-- `cellsNew c`: `len(c)` cells holding `()`, at consecutive addresses from the region base
