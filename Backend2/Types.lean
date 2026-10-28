@@ -5,10 +5,12 @@ import Frontend.Check.TExpr
 # Backend2 — the types of the low IR  `[spec §3]`
 
 The low IR (LIR) is typed by the checked term's types with what has no run-time content erased:
-lifetimes, the lifetime box `[@a] A`, and `!A`. A value type `VTy` becomes an `LTy`, a computation
+lifetimes and the lifetime box `[@a] A`. A value type `VTy` becomes an `LTy`, a computation
 type `CTy` an `LCTy`, constructor for constructor (`ofV`, `ofC`): no type is inferred here, each is
 the image of a type the checker put on a node of the typed term.
 
+* `!A` is kept (`bang`): it has no run-time content (its value is `A`'s), but it is the type's
+  statement that the value is persistent, which `Lint` reads at every copy and drop.
 * `U C` is a closure, `thunk K`. A closure of `F A` takes no argument (the erasure's `λ_. M`,
   applied to `()`), a closure of `A ⊸ C` takes an `A`, and a closure of `C & D` is observed at one
   of its two components. `νX. C` is its unrolling: `U X` is the type variable `0` of `C`'s value
@@ -60,7 +62,9 @@ inductive LTy where
   | unk
   /-- A closure of the computation type `K`. -/
   | thunk (k : LCTy)
-  deriving Inhabited, BEq, Hashable, Repr
+  /-- `!A`: a persistent value, represented as an `A`. -/
+  | bang (a : LTy)
+  deriving Inhabited, DecidableEq, Hashable, Repr
 
 /-- A computation type of the LIR: what a closure answers when it is run. -/
 inductive LCTy where
@@ -70,7 +74,7 @@ inductive LCTy where
   | top
   /-- `νX. C`, binding the type variable `0` (standing for `U (νX. C)`) in `C`'s value types. -/
   | nu (k : LCTy)
-  deriving Inhabited, BEq, Hashable, Repr
+  deriving Inhabited, DecidableEq, Hashable, Repr
 end
 
 /-! ### Substitution of type variables
@@ -90,6 +94,7 @@ def LTy.lift (c : Nat) : LTy → LTy
   | .mut a => .mut (a.lift c)
   | .fam l => .fam (l.lift c)
   | .thunk k => .thunk (k.lift c)
+  | .bang a => .bang (a.lift c)
   | t => t
 def LCTy.lift (c : Nat) : LCTy → LCTy
   | .ret a => .ret (a.lift c)
@@ -111,6 +116,7 @@ def LTy.subst (n : Nat) (S : LTy) : LTy → LTy
   | .mut a => .mut (LTy.subst n S a)
   | .fam l => .fam (LTy.subst n S l)
   | .thunk k => .thunk (LCTy.subst n S k)
+  | .bang a => .bang (LTy.subst n S a)
   | t => t
 def LCTy.subst (n : Nat) (S : LTy) : LCTy → LCTy
   | .ret a => .ret (LTy.subst n S a)
@@ -125,6 +131,70 @@ def LTy.unrollMu (a : LTy) : LTy := LTy.subst 0 (.mu a) a
 
 /-- `C[U(νX. C)/X]`. -/
 def LCTy.unrollNu (k : LCTy) : LCTy := LCTy.subst 0 (.thunk (.nu k)) k
+
+/-! ### `!` up to representation
+
+`!A` is represented as `A`. A decision about a value's representation (its layout, its words, which
+closure it is) reads its type through `peel`, the top-level `!`s removed; one that compares two
+types for a representation compares them with `!` erased throughout (`unbang`, `sameRep`). `Lint`
+reads `!` itself, and the conversion's keys keep it (a `use` body's, a destructor's: a key fixes
+the LIR types of what it converts). -/
+
+/-- The type with its top-level `!`s removed: what the value is represented as. -/
+def LTy.peel : LTy → LTy
+  | .bang a => a.peel
+  | t => t
+
+mutual
+/-- The type with every `!` erased. -/
+def LTy.unbang : LTy → LTy
+  | .pair a b => .pair a.unbang b.unbang
+  | .sum a b => .sum a.unbang b.unbang
+  | .mu a => .mu a.unbang
+  | .ref a => .ref a.unbang
+  | .imm a => .imm a.unbang
+  | .mut a => .mut a.unbang
+  | .fam l => .fam l.unbang
+  | .thunk k => .thunk k.unbang
+  | .bang a => a.unbang
+  | t => t
+def LCTy.unbang : LCTy → LCTy
+  | .ret a => .ret a.unbang
+  | .arr a k => .arr a.unbang k.unbang
+  | .amp k₁ k₂ => .amp k₁.unbang k₂.unbang
+  | .top => .top
+  | .nu k => .nu k.unbang
+end
+
+/-- Two types of one representation: equal with every `!` erased. -/
+def LTy.sameRep (a b : LTy) : Bool := a.unbang == b.unbang
+
+/-- Two closure types of one representation: equal with every `!` erased. -/
+def LCTy.sameRep (a b : LCTy) : Bool := a.unbang == b.unbang
+
+/-- `sameRep` is equality up to `!`: it holds exactly when the two types agree with every `!`
+erased. -/
+theorem LTy.sameRep_iff (a b : LTy) : a.sameRep b = true ↔ a.unbang = b.unbang := by
+  simp [LTy.sameRep]
+
+theorem LCTy.sameRep_iff (a b : LCTy) : a.sameRep b = true ↔ a.unbang = b.unbang := by
+  simp [LCTy.sameRep]
+
+/-- What `sameRep` ignores: a `!`, on either side. -/
+theorem LTy.sameRep_bang_left (a b : LTy) : (LTy.bang a).sameRep b = a.sameRep b := by
+  simp [LTy.sameRep, LTy.unbang]
+
+theorem LTy.sameRep_bang_right (a b : LTy) : a.sameRep (.bang b) = a.sameRep b := by
+  simp [LTy.sameRep, LTy.unbang]
+
+/-- Removing the top-level `!`s keeps the representation. -/
+theorem LTy.unbang_peel : ∀ a : LTy, a.peel.unbang = a.unbang
+  | .bang a => by simp only [LTy.peel, LTy.unbang]; exact LTy.unbang_peel a
+  | .unit | .zero | .int _ | .pair .. | .sum .. | .mu _ | .tvar _ | .ref _ | .imm _ | .mut _
+  | .fam _ | .opq _ | .unk | .thunk _ => rfl
+
+theorem LTy.sameRep_peel (a : LTy) : a.peel.sameRep a = true := by
+  simp [LTy.sameRep, LTy.unbang_peel]
 
 /-- A closure type as its observations see it: `νX. C` unrolled, until it is not a `ν`. -/
 def LCTy.whnf : Nat → LCTy → LCTy
@@ -188,8 +258,8 @@ def outcomeTy (r : LTy) (aborts : List ((UInt32 × UInt32) × LTy))
     .mu (.sum (r.lift 0) x)
 
 mutual
-/-- A value type of the LIR: lifetimes, `[@a]`, `!` and `∀` erased; `ms` the program's machine
-operations. -/
+/-- A value type of the LIR: lifetimes, `[@a]` and `∀` erased, `!` kept; `ms` the program's
+machine operations. -/
 def ofV (ms : MachSet) : VTy → Except String LTy
   | .unit => pure .unit
   | .zero => pure .zero
@@ -202,7 +272,7 @@ def ofV (ms : MachSet) : VTy → Except String LTy
   | .imm _ A => return .imm (← ofV ms A)
   | .mut _ A => return .mut (← ofV ms A)
   | .box _ A => ofV ms A
-  | .bang A => ofV ms A
+  | .bang A => return .bang (← ofV ms A)
   | .fam L => return .fam (← ofV ms L)
   | .opq k => pure (.opq k)
   | .unk => pure .unk
@@ -263,6 +333,76 @@ def ofFin (ms : MachSet) : CTy → Except String (Option (List ((UInt32 × UInt3
   | _ => throw "a cancel row that is not a row"
 end
 
+/-- `ofV` keeps `!`: the LIR type of `!A` is `!` of `A`'s. -/
+theorem ofV_bang (ms : MachSet) (A : VTy) : ofV ms (.bang A) = (ofV ms A).map .bang := by
+  simp only [ofV]
+  cases ofV ms A <;> rfl
+
+/-! ### What `Lint` reads at a copy and a drop
+
+The two predicates are the checker's, on the LIR type: `VTy.persistent` (a slot a split may
+duplicate and a leaf may drop, `Ctx.SplitP.dup`, `Ctx.DeadP.drop`) and `VTy.Drop` (a slot an abort
+may drop, `[let]`'s `Ctx.Drops`). `ofV` keeps both (`ofV_persistent`, `ofV_drops`): `!` is on the
+LIR type, and what `ofV` erases (lifetimes, `[@a]`, `∀`) neither predicate reads. -/
+
+/-- `VTy.persistent` on the LIR type: values that hold no resource. -/
+def LTy.persistent : LTy → Bool
+  | .unit | .zero | .unk | .int _ | .tvar _ | .bang _ => true
+  | .pair a b | .sum a b => a.persistent && b.persistent
+  | .mu a => a.persistent
+  | .opq _ | .ref _ | .imm _ | .mut _ | .fam _ | .thunk _ => false
+
+/-- `VTy.Drop` on the LIR type: values that hold no owned cell. -/
+def LTy.drops : LTy → Bool
+  | .unit | .zero | .int _ | .unk | .opq _ | .bang _ | .imm _ | .mut _ => true
+  | .pair a b | .sum a b => a.drops && b.drops
+  | .mu _ | .tvar _ | .ref _ | .fam _ | .thunk _ => false
+
+/-- The LIR type of a persistent type is persistent. -/
+theorem ofV_persistent {ms : MachSet} : ∀ {A : VTy} {t : LTy}, A.persistent = true →
+    ofV ms A = .ok t → t.persistent = true
+  | .unit, t, _, h | .zero, t, _, h | .unk, t, _, h | .int _, t, _, h | .tvar _, t, _, h => by
+      simp only [ofV] at h; cases h; rfl
+  | .bang A, t, _, h => by
+      rw [ofV_bang] at h
+      cases hA : ofV ms A <;> rw [hA] at h <;> cases h; rfl
+  | .box _ A, t, hp, h => by
+      simp only [ofV] at h
+      exact ofV_persistent (by simpa [VTy.persistent] using hp) h
+  | .mu A, t, hp, h => by
+      simp only [ofV] at h
+      cases hA : ofV ms A <;> rw [hA] at h <;> cases h
+      exact by simpa [LTy.persistent] using ofV_persistent (by simpa [VTy.persistent] using hp) hA
+  | .tensor A B, t, hp, h => by
+      simp only [VTy.persistent, Bool.and_eq_true] at hp
+      simp only [ofV] at h
+      cases hA : ofV ms A <;> cases hB : ofV ms B <;> rw [hA, hB] at h <;> cases h
+      simp [LTy.persistent, ofV_persistent hp.1 hA, ofV_persistent hp.2 hB]
+  | .sum A B, t, hp, h => by
+      simp only [VTy.persistent, Bool.and_eq_true] at hp
+      simp only [ofV] at h
+      cases hA : ofV ms A <;> cases hB : ofV ms B <;> rw [hA, hB] at h <;> cases h
+      simp [LTy.persistent, ofV_persistent hp.1 hA, ofV_persistent hp.2 hB]
+  | .opq _, _, hp, _ | .thunk _, _, hp, _ | .ref _, _, hp, _ | .imm _ _, _, hp, _
+  | .mut _ _, _, hp, _ | .fam _, _, hp, _ => by simp [VTy.persistent] at hp
+
+/-- The LIR type of a `VTy.Drop` type drops. -/
+theorem ofV_drops {ms : MachSet} {A : VTy} (hA : A.Drop) : ∀ {t : LTy}, ofV ms A = .ok t →
+    t.drops = true := by
+  induction hA with
+  | unit | zero | int | unk | opq | imm | «mut» =>
+      intro t h; simp only [ofV] at h
+      first
+        | (cases h; rfl)
+        | (rename_i A; cases hA : ofV ms A <;> rw [hA] at h <;> cases h; rfl)
+  | bang A =>
+      intro t h; rw [ofV_bang] at h
+      cases hA : ofV ms A <;> rw [hA] at h <;> cases h; rfl
+  | @tensor A B _ _ ihA ihB | @sum A B _ _ ihA ihB =>
+      intro t h; simp only [ofV] at h
+      cases hA : ofV ms A <;> cases hB : ofV ms B <;> rw [hA, hB] at h <;> cases h
+      simp [LTy.drops, ihA hA, ihB hB]
+
 /-- The LIR type of a judgment: a value type, or the closure type a computation's value has
 (`rep`). -/
 def ofJ (ms : MachSet := {}) : Jdg → Except String (Sum LTy LCTy)
@@ -291,6 +431,7 @@ def LTy.pp : LTy → String
     | .input => "Input" | .output => "Output" | .clock => "Clock" | .args => "Args"
   | .unk => "Unk"
   | .thunk k => s!"U {k.pp}"
+  | .bang a => s!"!{a.pp}"
 def LCTy.pp : LCTy → String
   | .ret a => s!"F {a.pp}"
   | .arr a k => s!"({a.pp} -o {k.pp})"

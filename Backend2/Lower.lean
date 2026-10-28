@@ -1108,7 +1108,7 @@ does not give the mode): a word that is an `imm` or `mut` borrow of a cell with 
 `noalias`, `nonnull` and `dereferenceable` by the cell's bytes, and `readonly` at `imm`; a
 borrowed family's base is `noalias`, and `readonly` at `imm` leaves. A pair's fields are its words
 in order (a boxed field one pointer, given none); a sum's words depend on its arm and are given
-none. -/
+none. A `!` is read through (`LTy.unbang`): `!A` is represented as `A`. -/
 def paramFacts (fd : Backend2.Fn) : LM (List Backend.Flat.ParamFacts) := do
   let L ← L
   let cellBytes (n : Nat) : Option Nat :=
@@ -1136,7 +1136,7 @@ def paramFacts (fd : Backend2.Fn) : LM (List Backend.Flat.ParamFacts) := do
   let mut off := 0
   for x in fd.params do
     let n := L.node x
-    if let some t := (← read).p.ty[x]? then out := out ++ walk 64 off n t
+    if let some t := (← read).p.ty[x]? then out := out ++ walk 64 off n t.unbang
     off := off + L.w n
   return out
 

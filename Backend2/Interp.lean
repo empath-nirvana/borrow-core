@@ -223,7 +223,7 @@ def LTy.ownsN (mutB : Bool) : Nat → LTy → Bool
     | .ref _ | .fam (.ref _) => true
     | .mut _ | .fam (.mut _) => mutB
     | .pair a b | .sum a b => LTy.ownsN mutB f a || LTy.ownsN mutB f b
-    | .mu a => LTy.ownsN mutB f a
+    | .mu a | .bang a => LTy.ownsN mutB f a
     | _ => false
 
 /-- The contents read through `Imm̲` at the type `t`: a closure is `Unk` there. -/
@@ -235,6 +235,7 @@ def reborrowV : Nat → LTy → LV → LV
     | .sum a _, .inj false x => .inj false (reborrowV f a x)
     | .sum _ b, .inj true x => .inj true (reborrowV f b x)
     | .mu a, v => reborrowV f (LTy.subst 0 (.mu a) a) v
+    | .bang a, v => reborrowV f a v
     | _, v => v
 
 /-! ### Printing -/
@@ -252,6 +253,7 @@ def pvOf : Nat → LTy → LV → Except String Backend.PV
     | .sum a _, .inj false x => return .inj false (← pvOf f a x)
     | .sum _ b, .inj true x => return .inj true (← pvOf f b x)
     | .mu a, v => pvOf f (LTy.subst 0 (.mu a) a) v
+    | .bang a, v => pvOf f a v
     | .thunk _, _ | .unk, _ => .ok .fn
     | .ref _, _ | .imm _, _ | .mut _, _ => .ok .loc
     | .fam _, .fam _ n => .ok (.pair .loc (.i32 n))
@@ -323,7 +325,7 @@ def evalOp (ty : Var → IM LTy) (op : Op) (args : List Var) (resTy : LTy) : IM 
   match op, vs with
   | .host o, [v] => hostOp o v
   | .divLit o, [.int a, .int d] => do
-    let byte : Bool := match o with | .div .w32 _ => resTy == LTy.int .w8 | _ => false
+    let byte : Bool := match o with | .div .w32 _ => resTy.peel == LTy.int .w8 | _ => false
     match ← liftE (hostWords o [a, d]) with
     | some r => pure (.int (if byte = true then r &&& 0xff else r))
     | none => bad "a division by a literal that has no answer"

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.07 · 2026-10-28
+Version 1.08 · 2026-10-28
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -9383,8 +9383,71 @@ unchanged; Backend2's counts are unchanged.
 
 ### Open
 
-- `!` is not on the LIR's types: `Lint` cannot check that a copied variable is persistent.
+- `!` is not on the LIR's types: `Lint` cannot check that a copied variable is persistent. Closed
+  by §59.
 - That a location holds only its class's types at run time is not proved (`TFacts.lean`).
+
+---
+
+## 59. Entry 58 — `!` on the LIR types (#714)
+
+### Motivation
+
+`Types.ofV` erased `!`, so `Lint` could not check that a copied variable is persistent, and
+`Layout`'s `trivial` (copying or dropping a cell, a borrow or a family is its words alone) rested
+on the conversion's copies and drops alone (`docs/compiler.md` §10). `!` is a fact of the checked
+type; this entry carries it to the LIR and has `Lint` read it.
+
+### Language
+
+No change to a type, rule, term, typing, elaboration, semantics or erasure. Backend2's LIR
+changes (`Backend2/Types.lean`, `Syntax.lean`): `LTy` gains `bang`, `!A`, which `ofV` keeps
+(`ofV_bang`); a program carries the variables whose drop no type licenses (`Prog.stackKs`).
+
+### The reading
+
+- **Representation.** `!A` is represented as `A`. Every decision about a value's representation
+  reads its type through `LTy.peel` (its top-level `!`s removed): its layout, its words, which
+  closure it is, the conversion's taking apart of a pair, a sum or a closure type. Where the
+  conversion compares two types (an outcome's, a machine's state, a site's closure types, a width
+  class's keys), it compares them with every `!` erased (`LTy.sameRep`, `LTy.unbang`;
+  `sameRep_iff`, `sameRep_bang_left`, `sameRep_bang_right`). A `use` body's and a destructor's
+  keys keep `!`: a key fixes the LIR types of what it converts.
+- **Copies.** `Lint` checks that every `copy` is of a variable whose LIR type is persistent
+  (`LTy.persistent`, `VTy.persistent`'s image: a slot a split duplicates, `Ctx.SplitP.dup`, and
+  what `clone` copies), or an `imm` borrow or a family of them (the `copy` and `array_copy`
+  constants). `ofV_persistent`: a persistent type's LIR type is persistent, so a slot the masks
+  duplicate passes (`Lint.copyable_ofV`).
+- **Drops.** `Lint` checks that every `drop` is of a variable whose LIR type is persistent
+  (`Ctx.DeadP.drop`), holds no owned cell (`LTy.drops`, `VTy.Drop`'s image: `[let]`'s
+  `Ctx.Drops` and the `forget` constants; `ofV_drops`), or is a family of borrows
+  (`forget_fam_compatX`: `array_forget`, the destructor at `[Mut A]`). The one exception is a stack
+  machine's drop of a level's suspended computation, whose state is on the task stack (SPEC §52):
+  a closure, which no type lets a term discard, listed in `Prog.stackKs` and marked `UNPROVED:`
+  at the conversion.
+- **`trivial`.** A copy or a drop the conversion makes is `Lint`-checked by the variable's type,
+  so an owned `Ref` or array is never copied or dropped by `copy`/`drop` outside a `!` (which owns
+  nothing, `bang_owns_nothing`) on a program that compiles.
+
+### Programs
+
+`Backend2/LintTests.lean`: `Lint` refuses a copy of an owned cell, a linear closure, a `mut`
+borrow, a family that owns its cells and a pair holding a linear closure, and a drop of an owned
+cell, a linear closure and such a family; it accepts the same copies and drops under `!`, of
+data, and of borrows. Every corpus program lints.
+
+### Baseline
+
+No change to `CDerives`, the relation, the checker or the old backend's output. Backend2's WAT and
+LLVM IR are byte-identical on the corpus, its LIR identical but for `!`; every golden and count is
+unchanged.
+
+### Open
+
+- That the LIR type of a variable the conversion makes is the image of its node's checked type is
+  by construction, not proved; `Lint` checks each program it compiles, not the conversion.
+- A stack machine's drop of a level's suspended computation (`Prog.stackKs`) is not checked by a
+  type.
 
 ---
 
@@ -9812,11 +9875,18 @@ change to `CDerives`, the relation, any erasure or Backend2's outputs.
 Entry 57 (§58) is implemented in `Backend2/` (`Syntax.lean`, `Convert.lean`, `Driver.lean`,
 `Layout.lean`, `Lower.lean`, `Lint.lean`, `Interp.lean`, `Print.lean`; `Frames.lean` and
 `LitViews.lean` deleted), `Backend/Flat/Interp.lean` and `scripts/compile-corpus.sh`.
+Entry 58 (§59) is implemented in `Backend2/` (`Types.lean`, `Syntax.lean`, `Convert.lean`,
+`Layout.lean`, `Flow.lean`, `Lower.lean`, `Interp.lean`, `Lint.lean`, `LintTests.lean`).
 
 ---
 
 ## Changelog
 
+- **1.08** (2026-10-28) — §59 (#714): `!` on the LIR types. `LTy.bang`, kept by `ofV`; the
+  representation read through it (`peel`, `sameRep`); `Lint` checks every copy is of a persistent
+  type or an `imm` borrow and every drop of a persistent type, one with no owned cell or a family
+  of borrows, but for a stack machine's levels (`Prog.stackKs`). No change to the language, the
+  checker, any golden or count.
 - **1.07** (2026-10-28) — §58 (#712, part C): Backend2 reads the facts. Frame slots from
   `lendScope`'s `rel` and the allocating function; widths from the allocation's class
   (`Checked.classAt`) and the contents' own type; literal views from `litView`; lend kinds on
