@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# `own` (SPEC §54) on the pure corpus. Every corpus program that checks (not the parse-only ones)
-# is given to `lowering-check` (`scripts/LoweringCheck.lean`): a program with no capability whose
-# typed term is in the pure fragment (`Lowering.pureT`) has its masks decided to agree with its
-# leaves (`Lowering.agreeAt`, a theorem: `agreeAt_of_typed`), `own`'s output decided low
-# (`Lowering.lowB`), and `own`'s output run by the source interpreter to the erasure's report.
+# `own` (SPEC §54) and the print to the LIR (SPEC §56) on the pure corpus. Every corpus program
+# that checks (not the parse-only ones) is given to `lowering-check` (`scripts/LoweringCheck.lean`):
+# a program with no capability whose typed term is in the pure fragment (`Lowering.pureT`) has its
+# masks decided to agree with its leaves (`Lowering.agreeAt`, a theorem: `agreeAt_of_typed`),
+# `own`'s output decided low (`Lowering.lowB`), `own`'s output run by the source interpreter to the
+# erasure's report, and `own`'s output printed (`Lowering.lirOf`, no `unreachable`) and run by the
+# LIR interpreter to the source's value, an empty frame and as many live objects as cells.
 # The programs in the fragment are pinned in corpus/lowering.expected, so a program that leaves or
 # joins the fragment shows here.
 #

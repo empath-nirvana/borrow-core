@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.04 · 2026-10-27
+Version 1.05 · 2026-10-27
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -9135,6 +9135,126 @@ is unchanged.
 
 ---
 
+## 56. Entry 55 — the print to the LIR, simulated with the source's memory (#701, U2 of #698)
+
+### Motivation
+
+§53 states the print's simulation (`PrintSim`) and proves its transfer to every-run safety,
+termination and no live object at the LIR; §54 and §55 put `own`'s output in the relation and in
+the low subset on the pure fragment. This entry gives the print to Backend2's LIR and proves its
+simulation on the whole pure fragment. In this calculus ownership is the memory: a `Ref` owns a
+cell, a family owns its cells, a borrow is a location the owner keeps. So the simulation carries a
+correspondence of the source's memory and the LIR's from the start, through every allocation,
+free, load and store, and through every kernel constant and primitive the pure fragment reaches:
+cells, the borrow constants (`withbor*`, `withload`, `withswap`, `lendCell`'s cells), `swap`,
+arrays and slices, walks, the counted loops, `bounded_fix`, and the folds.
+
+### Language
+
+No change to a type, rule, term, typing, elaboration or semantics. Backend2's LIR gains operations
+on the source's memory (`Backend2/Syntax.lean`, interpreted in `Backend2/Interp.lean`):
+`cellNew`, `cellsNew` (a cell, or `len(c)` cells, at the region base `next`, which moves on one
+region of `regionSize` addresses), `cellFree`, `cellLoad`, `cellStore`, `locAt ℓ`, `locAdd`,
+`famIdx` and `famSplit` (`idxAns`, `splitAns`). Backend2's own conversion writes none of them and
+its lowering (`Backend2/Lower.lean`) refuses them; every output of Backend2 is unchanged.
+
+### Statements
+
+`Lowering/`:
+
+- **The print** (`Lowering/LIRPrint.lean`; `lirOf e`, `printOwn c = lirOf (own c.t)`). It reads
+  no type; every variable is at `unit` (`tyTable`).
+  - *Closure conversion*: a `λb` is the closure of a code of its own, capturing the slots `b`
+    mentions past its binder (`capt b`). *Named form*: each subterm's value at a fresh variable, in
+    the machine's order. *Every call is dispatched* through its closure; no flow analysis is read.
+  - *The source's memory is kept as it is*: a location is the LIR's address, a cell an object of
+    one address, a family `(ℓ, n)` the pair of its base and its length.
+  - *Copies and drops* (`Out`, `need`): a slot read where the rest of the term reads it again is
+    read through a `copy`; a binder its scope does not read is dropped where it is bound; a `case`
+    arm drops the slots only the other arm reads (`armDrops`). This is how the kernel's constants
+    are printed: they are the kernel's closed terms, atoms of the low subset, whose bodies
+    duplicate their arguments (`copy`'s `λx. (x, x)`, `swap`, `withbor`, the folds' fixed point),
+    and their simulation is the general one, so no constant has a code of its own. On `own`'s
+    output every slot is consumed exactly once on every path that returns (`Explicit`), which
+    leaves the print no copy or drop of its own on such a path outside the constants (an argument
+    from `Explicit`'s definition, not machine-checked here); a path that ends at `absurd` is
+    reached by no run.
+  - *The machine's primitives* are the closures of fixed codes, the program's first (`rtCode`,
+    `rtBodies`, `preludePS`): `alloc`, `free`, `load`, `store` (curried: `store ℓ` is the closure
+    of `store1Code`), `idx`, `split`, `tab` and `drop` (each with its loop, `tabFill` and
+    `dropFill`), `count`, `count_try` and `bounded_fix` (`countNext`, `countTryNext`,
+    `boundedFixNext`; the fixed point's self-reference is `fixBody`'s closure). A host operation's
+    code is written where it is used (`hostFn`). The effect primitives have no code; no term the
+    print is proved on has one.
+- **The print as a relation** (`Pr`, `Lowering/PrintRel.lean`): `prG_pr` (the print of an
+  effect-free term is in it), `lirOf_pr` (`lirOf e`'s `main` is, with the primitives' codes in the
+  program, `RT`).
+- **A run under the LIR's allocator** (`Lowering/AllocRun.lean`): `bumpAlloc` answers the `c`-th
+  allocation at `regionBase c = 16 + c · regionSize` wherever that block is free, which is where
+  the LIR allocates. `arun_of_sem`: a closed `F 1` term in the relation has a run under it from the
+  empty memory to `()` at the empty memory, since `wpTS` asks for a run under every allocator
+  (SPEC §13).
+- **Runs big-step** (`BigN`, `Lowering/BigStep.lean`): a derivation under an allocator, counting
+  allocations, with `storeF` for an application whose function runs to `store`; `big_of_arun`: a
+  run of an effect-free term from a memory of effect-free values to a value is one
+  (`effFree_step`).
+- **Forward simulation** (`Lowering/PrintFwd.lean`, `Lowering/PrintCall.lean`): `fwd_all`, by
+  strong induction on the size of the derivation, gives `FwdOne` for every print (a run of the
+  source to `w` is followed by the interpreter, at every fuel answering a corresponding value or
+  running out of fuel, and from some fuel on answering) and `CallAt` for every call (a head step on
+  a function and an argument and its result's run is followed by the call of the corresponding
+  closure). The invariants:
+  - *Values* (`VRel`): a location is the same address, a primitive the closure of its code,
+    `store ℓ` the closure of `store1Code` on `ℓ`, a `λ` the closure of its code with its captured
+    slots' values.
+  - *Memories* (`HRel`): the source's cells are the LIR's live addresses, each an object of one
+    address holding a corresponding value, every one below the next region base, at which the
+    LIR's `next` stands after as many allocations as the source's count.
+  - *Frames* (`FrameOK`, `Post`): the variables of the slots the term or the rest reads hold their
+    values; the term consumes the slots it reads that the rest does not (`cons`).
+  - *Calls*: each primitive's code against its head step and the run of its reduct (`call_alloc`,
+    `call_free`, `call_load`, `call_store1`, `call_idx`, `call_split`, `call_tab` with
+    `tabLoop_sim`, `call_drop` with `dropLoop_sim`, `call_count`, `call_countTry`, `call_bf`), a
+    callback's call through `CallAt` below (`call_val`), a `λ` by its body's print (`call_lam`).
+- **The simulation** (`Lowering/PrintSim.lean`): `printSimAt_lirOf` (the print of a closed
+  effect-free term in the relation at `F 1` is simulated: the interpreter never faults, answers
+  `()`, and leaves no live object); `own_printSimOn` (`PrintSim` for `own` and `printOwn` on every
+  checked program with no pin, `PrintSimOn`); `own_printSim_pin` (`PrintSim` itself, under
+  `PinLaw`).
+- **End to end**: `own_lir_every_run` — every checked closed `main : F 1` with no pin whose term is
+  in the pure fragment (`pureT`, §54) runs every time at the LIR when printed (`LIREveryRun`);
+  `own_lir_every_run_pin` — every checked closed `main : F 1` in the pure fragment, under
+  `PinLaw`.
+- **No `unreachable`** (`Lowering/PrintTotal.lean`): `lirOf_noUnr` — the print of an effect-free
+  term writes no `unreachable` in `main` or in any code; `printOwn_noUnr` — so does the print of
+  every checked closed `main` in the pure fragment.
+- **Non-vacuity**: `cImmBorrow_lir_every_run` — `cImmBorrow` (`Core/Examples.lean`), which
+  allocates a cell, lends it immutably to a callback that loads through the borrow, and frees it,
+  runs every time at the LIR when printed.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine, `Core/`, `Paper/`, `Support/`, the checker or
+the elaboration. Backend2's conversion, lowering, outputs, goldens and counts are unchanged.
+`scripts/check-lowering.sh` prints every program of `corpus/lowering.expected` and runs it on the
+LIR interpreter: the print must write no `unreachable`, and the value must be the source run's
+(a literal as its word), with an empty frame and as many live objects as the source run leaves
+cells. All 148 pass.
+
+### Open
+
+- **The typed print**: the LIR's types and layouts, and the path through `Layout`/`Lower` to the
+  targets. The operations on the source's memory are not lowered: a family is Backend2's `fam`
+  there and an array one object, where here each cell is its own object (a run frees an array's
+  cells one by one, `dropFill`). The interpreter's type checks pass because every variable is at
+  `unit`.
+- **Direct calls**: the print dispatches every call, and calls the primitives' codes and the
+  constants' bodies as closures. Over the 148 programs its static counts are 225070 nodes,
+  18740 closures, 20067 dynamic and 592 direct calls, against Backend2's 47650, 1029, 1240 and 550.
+- **The re-checks** of the interpreter (U6), effects (U3, U4) and externs (U5).
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -9543,11 +9663,27 @@ Entry 54 (§55) is implemented in `Frontend/Check/Masks.lean` (`Covers`), the ge
 `Frontend/Check/Weaken.lean` and `Lowering/OwnLow.lean`: `own_lowersInto` is proved with no
 hypothesis on the masks. No change to `CDerives`, the relation, the checker's output or either
 backend.
+Entry 55 (§56) is implemented in `Lowering/LIRPrint.lean`, `Lowering/PrintRel.lean`,
+`Lowering/AllocRun.lean`, `Lowering/BigStep.lean`, `Lowering/LIRSim.lean`,
+`Lowering/PrintFwd.lean`, `Lowering/PrintCall.lean`, `Lowering/PrintTotal.lean` and
+`Lowering/PrintSim.lean`, with the
+operations on the source's memory in `Backend2/Syntax.lean`, `Interp.lean`, `Lower.lean` and
+`Print.lean`, and the corpus check in `scripts/LoweringCheck.lean`: `own_lir_every_run` is proved
+for every checked closed `main : F 1` with no pin in the pure fragment. No change to `CDerives`,
+the relation, the checker or Backend2's outputs.
 
 ---
 
 ## Changelog
 
+- **1.05** (2026-10-27) — §56 (#701, U2 of #698): the print to the LIR, simulated with the
+  source's memory. Closure conversion, named form and dispatched calls; the source's memory kept,
+  one object a cell, at the LIR's allocator (`bumpAlloc`, under which a term in the relation runs,
+  `arun_of_sem`); the machine's primitives and the kernel's constants printed, none as
+  `unreachable`. Forward simulation with the memories' correspondence (`HRel`), so
+  `own_lir_every_run`: every checked closed `main : F 1` with no pin in the pure fragment runs every
+  time at the LIR. Backend2's LIR gains operations on the source's memory, which its own lowering
+  does not write. No change to the language, the kernel, the checker or Backend2's outputs.
 - **1.04** (2026-10-27) — §55 (#701, U2 of #698): a split's masks cover its parts. Every typed
   split rule has the premise `Covers` (each part's term mentions only slots its mask holds); a
   typed term mentions only live slots (`CDerivesP.mentions_live`); the checker meets the premise
