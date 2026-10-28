@@ -7,3 +7,12 @@ import Lowering.Own
 import Lowering.OwnSem
 import Lowering.LowRen
 import Lowering.OwnLow
+import Lowering.LIRPrint
+import Lowering.BigStep
+import Lowering.AllocRun
+import Lowering.PrintRel
+import Lowering.LIRSim
+import Lowering.PrintFwd
+import Lowering.PrintCall
+import Lowering.PrintSim
+import Lowering.PrintTotal
