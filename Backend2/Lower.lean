@@ -470,7 +470,8 @@ def lowerPrim (op : Op) (args : List Var) (n : Nat) (d : Dest) : LM (List Stmt) 
     -- hold because the checker's class is closed under every `swap` of the typed term
     -- (`Checked.classAt_alloc`), and only a `swap` changes a cell's type. That a location holds
     -- only its class's types at run time is not proved (`Frontend/Check/TFacts.lean`). If it
-    -- fails, a store overruns the cell.
+    -- fails, a store overruns the cell. A value's bytes and each type's most (`bytes`,
+    -- `tyBytes`) are checked on every compile (`LayoutCheck.cellsOk`); the class is not.
     let b := (← L).clsBytes (← contents n) cls
     if b == 0 then return ← emit d [.c64 0]
     let t ← fresh1
@@ -979,8 +980,8 @@ def genHelper (h : Helper) : LM Backend.Flat.Fn := do
           (outStr "inr " ++ (← printField n 1 (← fieldLocals n 1 ps) true))]
     pure { name := "print", params := w, results := 0, locals := nloc, body := body ++ [.ret []], ptrs }
   | .reCopy c n =>
-    -- The contents at `c` read through `Imm̲` at `n`: a closure is `Unk` (no words), a pointer the
-    -- word, a boxed field copied, as `copy` copies.
+    -- The contents at `c` read through `Imm̲` at `n`: a closure or an opaque value is `Unk` (no
+    -- words), a pointer the word, a boxed field copied, as `copy` copies.
     let wc := L.w c
     let wn := L.w n
     let (body, nloc, ptrs) ← inFn wc do
@@ -1055,12 +1056,14 @@ where
         return (s, locs ts)
       match L.sh c', L.sh n' with
       | .clos .., .unk => return ([], [])
+      | .opq, .unk => return ([], [])
       | _, _ =>
         if L.triv c' && L.w c' == L.w n' then return ([], locs vs)
         let ts ← fresh (L.w n')
         return ([.call ts (← helper (.reCopy (L.r c') (L.r n'))) (locs vs)], locs ts)
     match L.sh c, L.sh n with
     | .clos .., .unk => return ([], [])
+    | .opq, .unk => return ([], [])
     | .pair .., .pair .. => do
       let (s₀, a, b) ← splitPair c ls false
       let (s₁, va) ← sub (← child c 0) (← child n 0) a

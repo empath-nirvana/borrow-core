@@ -399,6 +399,9 @@ def walk (p : Prog) : Nat → Std.HashMap Nat Nat → Tm → Nat → GM (Std.Has
 -- (the typed term gives a closure's type, not its λ), and the operations `walk` passes over
 -- (`| _ => pure ()`) are taken to move no closure. If a code is missing from a class, a call
 -- through the class's dispatcher traps, and the class's width is too narrow for the closure.
+-- The result is checked on every compile (`Backend2/LayoutCheck.lean`, `checkedLayouts` in
+-- `Backend2/Driver.lean`): every pair of places `walk` joins is one node, and every closure's code
+-- is in its node's class. A move that both `walk` and the check pass over is not seen.
 /-- Every place of the program, joined. -/
 def places (p : Prog) : Except String (GState × Nat) := do
   let act : GM Nat := do
@@ -639,7 +642,9 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
   -- on every path, which `Lint` checks of each program it compiles and nothing proves of
   -- the conversion's output. The choice of fields follows SPEC §35's rule on the type's own
   -- graph: the boxes arise where a `μ` or a closure class holds itself other than through a
-  -- `Ref`. If it fails, an object is freed twice or leaks.
+  -- `Ref`. If it fails, an object is freed twice or leaks. The boxes and heap classes are checked
+  -- to leave no cycle inline and to satisfy the width equations (`LayoutCheck.layoutOk`); the one
+  -- owner is not.
   let (cyc, _) := sccs n succ
   let mut recCls : Std.HashSet Nat := {}
   for v in [0:n] do
