@@ -328,6 +328,28 @@ theorem Checked.cells_closed (c : Checked) :
       ∀ cl ∈ c.cells, cl.root ∈ cl.tys ∧ ∀ e ∈ c.t.cells.2, e.1 ∈ cl.tys → e.2 ∈ cl.tys :=
   cellsOkB_sound c.cellsOk
 
+/-- **The width class of an allocation** (SPEC §57): the class rooted at the type a cell is
+allocated at (lifetimes erased, `TExpr.cellOps`). Every location allocated at that type holds,
+by its class's closure, only types of the class, so the class's widest type bounds the location's
+contents over its lifetime; that a location holds only its class's types at run time is not
+proved (`Frontend/Check/TFacts.lean`). -/
+def Checked.classAt (c : Checked) (A : BoCa.Fig16.LogRel.Core.VTy) : Option CellClass := c.cells.find? (·.root == A)
+
+/-- **Each allocation type has its class**: the class rooted at it, holding it and closed under
+every `swap` of the term.  `[spec §5, §57]` -/
+theorem Checked.classAt_alloc (c : Checked) {A : BoCa.Fig16.LogRel.Core.VTy} (hA : A ∈ c.t.cells.1) :
+    ∃ cl, c.classAt A = some cl ∧ cl ∈ c.cells ∧ cl.root = A ∧ A ∈ cl.tys ∧
+      ∀ e ∈ c.t.cells.2, e.1 ∈ cl.tys → e.2 ∈ cl.tys := by
+  obtain ⟨h₁, h₂⟩ := c.cells_closed
+  obtain ⟨cl₀, hcl₀, hr₀⟩ := h₁ A hA
+  have hsome : (c.cells.find? (·.root == A)).isSome := by
+    rw [List.find?_isSome]; exact ⟨cl₀, hcl₀, by simp [hr₀]⟩
+  obtain ⟨cl, hcl⟩ := Option.isSome_iff_exists.mp hsome
+  have hmem := List.mem_of_find?_eq_some hcl
+  have hroot : cl.root = A := by simpa using List.find?_some hcl
+  obtain ⟨hin, hcl'⟩ := h₂ cl hmem
+  exact ⟨cl, hcl, hmem, hroot, hroot ▸ hin, hcl'⟩
+
 /-- **Soundness of the checker.** If `bcc` accepts a program and reports `assurance:
 unconditional`, its `main`'s typed term erases to an `Expr` with a `CDerives` derivation at
 `Δ = ∅` and the context of its externs. -/

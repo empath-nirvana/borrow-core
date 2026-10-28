@@ -39,9 +39,9 @@ inductive Use where
 -- nothing proves of the conversion's output. It does not hold across a `case`: each arm consumes
 -- the variable, and the map keeps the second arm's consumer over the first's. Where the arms
 -- differ (one frees the owner, the other returns it), `framed` places in the frame a cell that
--- outlives it, and `readOnly` calls an array read-only that one arm writes. The typed term fixes
--- the release at the owner's slot's use, but the `lendCell` node does not point to it
--- (`Frontend/Check/TFacts.lean`); a node holding the lend and its release would be read instead.
+-- outlives it, and `readOnly` calls an array read-only that one arm writes. The typed term gives
+-- the release on every path as the `lendScope` node's `rel` (SPEC §57,
+-- `TDerivesAt.lendScope_rel`).
 /-- Each variable's consumer in a term. -/
 def usesOf : Nat → Tm → Option Var → Std.HashMap Var Use → Std.HashMap Var Use
   | 0, _, _, m => m
@@ -127,8 +127,8 @@ def lentCells (p : Prog) : List Var :=
 -- the lend's answer) and those destructors only take slots out. It rests on `usesOf`'s one
 -- consumer per variable, which a `case` breaks (see there), and on the destructors' names. If
 -- it fails, `LitViews` points a written array at the literal's bytes in the data, and the write
--- changes every later view of that literal. A node of the typed term holding the literal's
--- view (its table, its `imm` lend and its destruction) would be read instead.
+-- changes every later view of that literal. The typed term gives the elaborator's view (its
+-- table, its `imm` lend and its destruction) as a `litView` node (SPEC §57).
 /-- The array `x` (or its component `field`) is only read before its destructor: it is lent
 shared, its size taken, and then destroyed by a generated destructor (`array_dtor`, or
 `array_free`'s loop) or freed. -/

@@ -232,8 +232,29 @@ def rMarked {j : Jdg} (k : Frontend.SchemeMark) (r : Res Δ T j) : Option (Res �
     else none
   | .lendCell m =>
     if hb : lendCellB r.t.erase = true then
-      some ⟨.lendCell i j m r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.lendCell i m hb h⟩
+      if hm : lendKindB m r.t = true then
+        some ⟨.lendCell i j m r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.lendCell i m hb hm h⟩
+      else none
     else none
+  | .litView =>
+    if hb : litViewT r.t = true then
+      some ⟨.litView i j r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.litView i hb h⟩
+    else none
+
+/-- **A lent cell's scope** (SPEC §57): the node built over `r` when `r` takes apart the pair a
+`lendCell` node answers (`lendScopeT`), its release on every path (`lendRelT`); `r`
+otherwise. -/
+def rScope {j : Jdg} (r : Res Δ T j) : Res Δ T j :=
+  if hs : lendScopeT r.t = true then
+    ⟨.lendScope i j (lendRelT r.t) r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.lendScope i hs h⟩
+  else r
+
+/-- **`unfold step`** (SPEC §57): the node built over `r` when `r` is the `unfoldN` constant applied
+(`unfoldAppT`); `r` otherwise. -/
+def rUnfoldStep {j : Jdg} (r : Res Δ T j) : Res Δ T j :=
+  if hb : unfoldAppT r.t = true then
+    ⟨.unfoldStep i j r.t, r.sigs, r.pins, r.F.map fun _ h => TTied.unfoldStep i hb h⟩
+  else r
 
 /-! ### Structural value rules -/
 

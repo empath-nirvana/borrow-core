@@ -70,6 +70,7 @@ def relaxedFree : TExpr → Bool
   | .letPoly _ _ _ _ tV tN => relaxedFree tV && relaxedFree tN
   | .litFn _ _ _ t => relaxedFree t
   | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t => relaxedFree t
+  | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => relaxedFree t
   | .use _ _ _ _ _ _ t => relaxedFree t
   | _ => true
 
@@ -625,7 +626,8 @@ theorem TDerivesP.toC {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
       simp only [relaxedFree] at hf
       have ih := ih hf
       exact ih
-  | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ ih | nuEta _ _ ih =>
+  | divLit _ _ _ ih | walk _ _ _ ih | walkGet _ _ ih | selfCall _ _ ih | lendCell _ _ _ ih | nuEta _ _ ih
+  | lendScope _ _ _ ih | litView _ _ ih | unfoldStep _ _ ih =>
       intro hf
       simp only [relaxedFree] at hf
       have ih := ih hf

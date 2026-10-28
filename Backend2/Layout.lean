@@ -699,8 +699,9 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) (cells : List (List LTy)) :
   -- type, as the first class whose types hold it, not per allocation (`CellClass.root` is not
   -- read): a type in two classes gets the first one's width, and pointer nodes that `swap` does
   -- not join get different widths for one cell. If it fails, a store overruns its cell or a
-  -- neighbour, or a cell is allocated at one width and freed (or not freed) at another. A width
-  -- class per allocation, carried by the typed term, would be read instead.
+  -- neighbour, or a cell is allocated at one width and freed (or not freed) at another. An
+  -- allocation's class is the one rooted at its type (`Checked.classAt`, SPEC §57), and
+  -- `Driver.cellsRooted` keeps the roots.
   let mut byOrigin : Std.HashMap LTy Nat := {}
   for i in [0:n] do
     let o := s.origin[i]!

@@ -163,6 +163,9 @@ def ownAt : List Bool → TExpr → Expr
   | L, .selfCall _ _ _ _ t => ownAt L t
   | L, .lendCell _ _ _ t => ownAt L t
   | L, .nuEta _ _ _ _ t => ownAt L t
+  | L, .lendScope _ _ _ t => ownAt L t
+  | L, .litView _ _ t => ownAt L t
+  | L, .unfoldStep _ _ t => ownAt L t
   | L, .use _ _ _ _ _ _ t => ownAt L t
   | L, t => if constNode t then leafE L none t.erase else t.erase
 
@@ -183,7 +186,8 @@ def pureT : TExpr → Bool
   | .bangE _ _ _ t | .boxI _ _ _ _ t | .boxE _ _ _ _ t | .immSub _ _ _ _ _ t | .mutSub _ _ _ _ _ t
   | .allEV _ _ _ _ _ _ t | .ofRet _ _ _ t | .roll _ _ _ t | .unroll _ _ _ t | .nuIn _ _ _ t
   | .nuOut _ _ _ t | .litFn _ _ _ t | .divLit _ _ _ _ t | .walk _ _ _ _ t | .walkGet _ _ _ t
-  | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t | .use _ _ _ _ _ _ t => pureT t
+  | .selfCall _ _ _ _ t | .lendCell _ _ _ t | .nuEta _ _ _ _ t | .use _ _ _ _ _ _ t
+  | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => pureT t
   | t => constNode t && effFreeB t.erase
 
 /-! ### Masks that agree with the leaves -/
@@ -217,7 +221,8 @@ def agreeAt : List Bool → TExpr → Bool
   | L, .allEV _ _ _ _ _ _ t | L, .ofRet _ _ _ t | L, .roll _ _ _ t | L, .unroll _ _ _ t
   | L, .nuIn _ _ _ t | L, .nuOut _ _ _ t | L, .litFn _ _ _ t | L, .divLit _ _ _ _ t
   | L, .walk _ _ _ _ t | L, .walkGet _ _ _ t | L, .selfCall _ _ _ _ t | L, .lendCell _ _ _ t
-  | L, .nuEta _ _ _ _ t | L, .use _ _ _ _ _ _ t => agreeAt L t
+  | L, .nuEta _ _ _ _ t | L, .use _ _ _ _ _ _ t | L, .lendScope _ _ _ t | L, .litView _ _ t
+  | L, .unfoldStep _ _ t => agreeAt L t
   | _, _ => true
 
 /-- **`own`**: `main` at no live slot of its own (`[spec §54]`). A term that uses a relaxed rule

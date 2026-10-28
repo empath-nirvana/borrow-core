@@ -583,6 +583,9 @@ inductive SchemeMark where
   /-- The lend of a cell allocated for it (SPEC §35): `withbor (alloc v) cb`; `m` the lend is
   `mut`. -/
   | lendCell (m : Bool)
+  /-- A literal's view (SPEC §57): the literal's table tabulated into an array, the array lent as
+  an `imm` family, and destroyed when the lend hands it back. -/
+  | litView
   deriving DecidableEq, Repr, Inhabited
 
 mutual

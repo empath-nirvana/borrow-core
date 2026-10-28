@@ -117,9 +117,10 @@ def isVarB (k : Nat) : Expr → Bool
   | .var i => i == k
   | _ => false
 
-/-- Every path of `t` ends in a leaf `leaf`, through `[⊕E]`, `[⊗E]`, `[1E]` and `[let]`, with `κ`
-(the slot `k`) not used on the way; a `[let]` of `return κ` (through the nodes that keep their
-premise's term, as `unbox`) moves `κ` to its binder's slot, its body not using the old one. -/
+/-- Every path of `t` ends in a leaf `leaf`, through `[⊕E]`, `[⊗E]`, `[1E]`, `[let]` and a lent
+cell's scope (`lendScope`, its term's paths), with `κ` (the slot `k`) not used on the way; a
+`[let]` of `return κ` (through the nodes that keep their premise's term, as `unbox`) moves `κ` to
+its binder's slot, its body not using the old one. -/
 def onPaths (leaf : Nat → TExpr → Bool) : Nat → TExpr → Bool
   | k, t@(.sumE _ _ _ _ _ _ tV t₁ t₂) =>
       leaf k t || (!mentions k tV.erase && onPaths leaf (k + 1) t₁ && onPaths leaf (k + 1) t₂)
@@ -133,6 +134,7 @@ def onPaths (leaf : Nat → TExpr → Bool) : Nat → TExpr → Bool
       leaf k t || (!mentions k tM.erase && onPaths leaf (k + 1) tN) ||
         (isVarB k tM.erase && !mentions (k + 1) tN.erase && onPaths leaf 0 tN)
   | k, t@(.effSub _ _ _ _ _ t') => leaf k t || onPaths leaf k t'
+  | k, t@(.lendScope _ _ _ t') => leaf k t || onPaths leaf k t'
   | k, t => leaf k t
 
 /-- The clause answers the state-passing function `[thunkV]` of `λs. S`, and `S`'s paths end in

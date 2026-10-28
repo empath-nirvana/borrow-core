@@ -2000,6 +2000,8 @@ def transparent? : TExpr → Option TExpr
   | .bangE _ _ _ t | .boxI _ _ _ _ t | .boxE _ _ _ _ t | .immSub _ _ _ _ _ t | .mutSub _ _ _ _ _ t
   | .ofRet _ _ _ t | .ret _ _ _ t | .thunkV _ _ _ t | .bangThunkV _ _ _ t | .nuIn _ _ _ t
   | .nuOut _ _ _ t => some t
+  -- The derived nodes over a term the conversion reads as it reads the term (SPEC §57).
+  | .lendScope _ _ _ t | .litView _ _ t | .unfoldStep _ _ t => some t
   | _ => none
 
 /-- A function position's head through transparent nodes, and through a `use` whose body is a
@@ -2279,6 +2281,7 @@ at an outcome, each is converted inside a machine.  `[spec §49]` -/
 def machNode : TExpr → Bool
   | .effLet .. | .effThen .. | .bind .. | .sumE .. | .tensorE .. | .unitE .. | .zeroE .. | .effSub ..
   | .effRaise .. | .effPerform .. | .nilDead .. | .lendR .. => true
+  | .lendScope _ _ _ t => machNode t
   | _ => false
 
 /-- The outside of the pure fragment. -/
@@ -2501,7 +2504,8 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
         -- `unfold step` binds, followed through copies and captures), so that the η-thunk is
         -- the call `f s` made now (`nuEta_unfold`). It should hold because the mark is set only
         -- at such a `bind` and moved only to a copy or a capture of its variable. The `nuEta`
-        -- node does not say what `f` is. If it fails, `f s` runs before it is observed, with
+        -- node does not say what `f` is; the `bind` that binds it does, its bound computation an
+        -- `unfoldStep` node (SPEC §57). If it fails, `f s` runs before it is observed, with
         -- the effects of `f` moved earlier, and the other slots are dropped as the call's.
         if (← get).unfolds.contains fv then
           readFact "nuEta:unfold call"
@@ -2672,6 +2676,7 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     let body ← convK fuel [some m] tM (.thenF fnN fnD 1 [] :: K) (o :: args)
     readFact "lend"
     return leaf ctx (some 0) (.letv pr (.prim .lend [r]) (.letpair o m pr body))
+  | .lendScope _ _ _ c | .litView _ _ c | .unfoldStep _ _ c => convK fuel ctx c K args
   | .app _ _ i _ _ u tM =>
     match headOf 64 tM with
     | .lam _ _ _ _ body => if true then pointAt fuel ctx t K args M else do
@@ -2755,6 +2760,7 @@ def convWorkK (fuel : Nat) (k : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : 
     let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
     return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop v (← convWorkK fuel k c₂ tM K args))
   | .effSub _ _ _ _ _ c => convWorkK fuel k ctx c K args
+  | .lendScope _ _ _ c | .litView _ _ c | .unfoldStep _ _ c => convWorkK fuel k ctx c K args
   | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
 
 /-- A computation at an outcome, in a value's position: a function of its context, the body of a
@@ -3176,6 +3182,7 @@ def convWork (fuel : Nat) (k : Nat) (ph : Pay) (ctx : Ctx) (t : TExpr) : CM Tm :
     let (pre, c₁, c₂) ← splitCtx ctx u "unitE"
     return pre (← bindTm (← conv fuel c₁ tV) .unit fun v => return .drop v (← convWork fuel k ph c₂ tM))
   | .effSub _ _ _ _ _ c => convWork fuel k ph ctx c
+  | .lendScope _ _ _ c | .litView _ _ c | .unfoldStep _ _ c => convWork fuel k ph ctx c
   | _ => throw s!"LIR: a tail-resumptive clause's path at `{ruleName t}` ends in no resume"
 
 /-- A spine of `lolliE` nodes: its arguments evaluated outermost first, then its function: a

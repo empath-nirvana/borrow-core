@@ -117,9 +117,15 @@ def stackOps (c : Frontend.Check.Checked) : MachSet := Id.run do
       out := out.insert (n, j)
   return out
 
+/-- The checker's cell classes (`Checked.cells`) at LIR types, each with its root: the type its
+allocations are at (`Checked.classAt`, SPEC §57). -/
+def cellsRooted (k : Backend.CheckedProg) : List (Option LTy × List LTy) :=
+  k.main.cells.map fun c =>
+    ((ofV (machineOps k.main) c.root).toOption,
+      c.tys.filterMap fun t => (ofV (machineOps k.main) t).toOption)
+
 /-- The checker's cell classes (`Checked.cells`) at LIR types. -/
-def cellsOf (k : Backend.CheckedProg) : List (List LTy) :=
-  k.main.cells.map fun c => c.tys.filterMap fun t => (ofV (machineOps k.main) t).toOption
+def cellsOf (k : Backend.CheckedProg) : List (List LTy) := (cellsRooted k).map (·.2)
 
 /-- The codes of the suspended computations an outcome `o` (of `M`) may hold, by the layouts: the
 closure classes of each suspension's `k`.  `[spec §49]` -/

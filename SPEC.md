@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.05 · 2026-10-27
+Version 1.06 · 2026-10-28
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -9255,6 +9255,78 @@ cells. All 148 pass.
 
 ---
 
+## 57. Entry 56 — the facts Backend2 rebuilt, as derived nodes (#712, part B)
+
+### Motivation
+
+Backend2 rebuilt from its own IR facts the typed term has or could have, and five checked
+programs miscompile there (`docs/compiler.md` §10). This entry puts the missing facts in the typed
+term as derived nodes (as `lendCell` and `walk` are), each fixed by its typed rule, so that a
+backend reads them. Backend2 does not read them yet (#712, part C).
+
+### Language
+
+No change to a type, rule of `CDerives`, term, typing, semantics or erasure. The typed
+derivations (`TDerivesAt`, `TDerivesP`) gain three derived nodes and one premise; each projects to
+its child's derivation, so `TDerivesAt.erase`, `TDerivesP.erase` and every theorem over them are
+unchanged. The elaborator marks one more scheme (`SchemeMark.litView`).
+
+### The facts
+
+- **A lend's kind** (`lendKindB`, `Frontend/Check/FactNodes.lean`): the `lendCell` rule has the
+  premise that its `m` is the kind of the borrow constant at its term's head (`withbor2` and
+  `withbor2U` `mut`, `withbor1` and `withbor1U` `imm`). The erasure cannot say it. The checker
+  checks the elaborator's mark against it (`rMarked`).
+- **A lent cell's release** (`TExpr.lendScope`, `lendScopeT`, `lendRelT`): the checker builds the
+  node over `[⊗E]` of a `lendCell` node, or `[let]` of `return` of one whose body is `[⊗E]` of its
+  variable (`rScope`), and its rule fixes `rel`: on every path of the code after the pair is taken
+  apart, the owner's slot, passed to one part at each split by the split's masks, reaches `free`
+  or a cell's destructor and nothing else; a `case` passes it to both arms (`relT`). This covers
+  the `case` whose arms consume the owner differently (`t4`, `t18`): `rel` is `false` there.
+- **A literal's view** (`TExpr.litView`, `litViewT`): the elaboration of `borrow imm "…" { v -> S }`
+  is marked, and its rule fixes the scheme: the place's table tabulated into an array
+  (`array_new`), the array lent by `slice_borrow_imm`, and the array the lend hands back given
+  straight to its destructor.
+- **`unfold step`** (`TExpr.unfoldStep`, `unfoldAppT`): the checker builds the node over the bound
+  computation of a `[let]` that is the `unfoldN` constant applied to a step (`rUnfoldStep`), so
+  the `bind` binds `unfold step` (SPEC §45's `nuEta` reads its `f` there).
+- **An allocation's width class** (`Checked.classAt`, `Frontend/Check/Program.lean`): the cell
+  class rooted at the type an `alloc` node allocates at; `Checked.classAt_alloc`: it exists, holds
+  the type and is closed under every `swap` of the term. Backend2's `Driver.cellsRooted` keeps the
+  roots that `cellsOf` dropped.
+
+Each rule's premise is of the node's own typed term and is kept by the moves to a wider context
+(`relT_shift`, `lendRelT_shift`, `lendScopeT_shift`, `lendKindB_shift`, `litViewT_shift`,
+`unfoldAppT_shift`) and to a larger lifetime context (the `_reAb` lemmas, `Frontend/Check/TLife.lean`).
+`TDerivesAt.lendCell_kind`, `TDerivesAt.lendScope_rel`, `TDerivesAt.litView_shape` and
+`TDerivesAt.unfoldStep_shape` state that a derivation fixes each.
+
+What is not pinned is stated in `Frontend/Check/TFacts.lean`: that the cell is freed at run time
+where `rel` says; whether a resumption point lies between a lend and its release; that a literal
+view's table is a literal's bytes; an `f` that reaches a `nuEta` node other than from such a
+`bind`; that a location holds only its class's types at run time, and which allocation a `swap`
+node's location comes from.
+
+### Consumers
+
+The checker's other readers see through the new nodes where they read the node under them: the
+clause classifier's paths (`onPaths`, with `onPaths_sound`), `own` and its proofs
+(`Lowering/Own.lean`, `OwnLow.lean`, `OwnSem.lean`), `relaxedFree`, and Backend2's conversion
+(`transparent?`, `machNode`, `convK`, `convWork`, `convWorkK`).
+
+### Baseline
+
+`CDerives`, the relation, FP, adequacy and every borrow guarantee are unchanged. Every program's
+erasure and Backend2's LIR are byte-identical on the corpus; every golden and count is unchanged.
+
+### Open
+
+- Backend2 reads the facts (#712, part C): frame slots from `rel`, the lend's kind on `Op.lend`,
+  literal views from `litView`, widths from the allocation's class carried with the location,
+  `nuEta` from the binder's `unfoldStep`.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -9671,11 +9743,22 @@ operations on the source's memory in `Backend2/Syntax.lean`, `Interp.lean`, `Low
 `Print.lean`, and the corpus check in `scripts/LoweringCheck.lean`: `own_lir_every_run` is proved
 for every checked closed `main : F 1` with no pin in the pure fragment. No change to `CDerives`,
 the relation, the checker or Backend2's outputs.
+Entry 56 (§57) is implemented in `Frontend/Check/FactNodes.lean`, the generated typed terms and
+rules (`scripts/pin/`), `Frontend/Check/TShift.lean`, `Weaken.lean`, `TTied.lean`, `Rules.lean`,
+`Checker.lean`, `Steps.lean`, `Program.lean`, `TFacts.lean`, `Kinds.lean`, `KindsSound.lean`,
+`Frontend/Sugar.lean`, `Lowering/` and `Backend2/Convert.lean`, `Debug.lean`, `Driver.lean`. No
+change to `CDerives`, the relation, any erasure or Backend2's outputs.
 
 ---
 
 ## Changelog
 
+- **1.06** (2026-10-28) — §57 (#712, part B): the facts Backend2 rebuilt, as derived nodes. A
+  `lendCell` node's kind is its constant's (`lendKindB`); a lent cell's scope is a `lendScope` node
+  whose `rel` is its release on every path (`relT`); a literal's view is a `litView` node; `unfold
+  step` is an `unfoldStep` node; an allocation's width class is `Checked.classAt`. Each fixed by
+  its rule, kept by weakening. No change to `CDerives`, the relation, any erasure or Backend2's
+  outputs.
 - **1.05** (2026-10-27) — §56 (#701, U2 of #698): the print to the LIR, simulated with the
   source's memory. Closure conversion, named form and dispatched calls; the source's memory kept,
   one object a cell, at the LIR's allocator (`bumpAlloc`, under which a term in the relation runs,

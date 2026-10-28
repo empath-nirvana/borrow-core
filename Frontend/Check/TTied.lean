@@ -573,8 +573,25 @@ theorem selfCall {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (k n : Nat)
 
 /-- **The lend of a cell allocated for it** (SPEC §35). -/
 theorem lendCell {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (m : Bool)
-    (hb : lendCellB t.erase = true) (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.lendCell i j m t) j :=
-  ⟨fun hn Ξ hΞ => .lendCell (h.1 hn Ξ hΞ) hb, .lendCell h.2 hb⟩
+    (hb : lendCellB t.erase = true) (hm : lendKindB m t = true) (h : TTied p s Δ Γ t j) :
+    TTied p s Δ Γ (.lendCell i j m t) j :=
+  ⟨fun hn Ξ hΞ => .lendCell (h.1 hn Ξ hΞ) hb hm, .lendCell h.2 hb hm⟩
+
+/-- **A lent cell's scope**, its release on every path (SPEC §57). -/
+theorem lendScope {p : Pins} {s : CRow} {t : TExpr} {j : Jdg}
+    (hs : lendScopeT t = true) (h : TTied p s Δ Γ t j) :
+    TTied p s Δ Γ (.lendScope i j (lendRelT t) t) j :=
+  ⟨fun hn Ξ hΞ => .lendScope (h.1 hn Ξ hΞ) hs rfl, .lendScope h.2 hs rfl⟩
+
+/-- **A literal's view** (SPEC §57). -/
+theorem litView {p : Pins} {s : CRow} {t : TExpr} {j : Jdg}
+    (hb : litViewT t = true) (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.litView i j t) j :=
+  ⟨fun hn Ξ hΞ => .litView (h.1 hn Ξ hΞ) hb, .litView h.2 hb⟩
+
+/-- **`unfold step`** (SPEC §57). -/
+theorem unfoldStep {p : Pins} {s : CRow} {t : TExpr} {j : Jdg}
+    (hb : unfoldAppT t = true) (h : TTied p s Δ Γ t j) : TTied p s Δ Γ (.unfoldStep i j t) j :=
+  ⟨fun hn Ξ hΞ => .unfoldStep (h.1 hn Ξ hΞ) hb, .unfoldStep h.2 hb⟩
 
 /-- **Codata written as an η-thunk** (SPEC §45): the derived node over the thunk's typed term. -/
 theorem nuEta {p : Pins} {s : CRow} {t : TExpr} {j : Jdg} (f : Nat) (sv : Option Nat)
