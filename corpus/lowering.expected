@@ -67,6 +67,9 @@ corpus/join-let-with.bc
 corpus/lend-lib-each.bc
 corpus/lend-lib-gen.bc
 corpus/lend-lib-loop.bc
+corpus/lend-owner-joined.bc
+corpus/lend-owner-returned.bc
+corpus/literal-array-written.bc
 corpus/loop-shadow-linear.bc
 corpus/loop-shadow-persistent.bc
 corpus/main-lifetime.bc
@@ -146,3 +149,4 @@ corpus/sum-prog-exact.bc
 corpus/surface/array-sum.bc
 corpus/surface/family-swap.bc
 corpus/surface/map-reuse.bc
+corpus/swap-cell-width.bc

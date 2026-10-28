@@ -46,6 +46,9 @@ statusOf() {
 program() {
   local f=$1 w=$PAR_TMP base in err rc=0 got
   if grep -q '^-- check: parse-only' "$f" || ! grep -q '^main' "$f"; then return 0; fi
+  # The old backend refuses it (scripts/compile-corpus.sh); the new backend runs it natively
+  # (scripts/compile-backend2.sh).
+  if grep -q '^-- check: old-backend-refuses' "$f"; then return 0; fi
   base=${f%.bc}
   in=/dev/null; [ -f "$base.in" ] && in="$base.in"
   err=/dev/null; [ -f "$base.err" ] && err="$base.err"

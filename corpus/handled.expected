@@ -277,6 +277,7 @@ corpus/block-yield-inner.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/block-yield-inner.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/borrow-in-scope.bc flows [0, 4294967295]; main []
 corpus/bytes-upper.bc flows [0, 4294967295]; main []
+corpus/capability-swap-width.bc flows [0, 4294967295]; main []
 corpus/capture-await-raise.bc flows [0, 1, 2, 4294967295]; main [1, 2]
 corpus/capture-await-raise.bc 13:21: handle 1: inside [2]; row []; ops 1.0 tail; names 1.0 []; condition 2 holds
 corpus/capture-await-raise.bc 13:33: handle 2: inside []; row [1]; ops 2.0 abortive; names 2.0 []; condition 2 holds
@@ -1091,6 +1092,8 @@ corpus/lend-lib-each.bc flows [0, 4294967295]; main []
 corpus/lend-lib-gen.bc flows [0, 4294967295]; main []
 corpus/lend-lib-loop.bc flows [0, 4294967295]; main []
 corpus/lend-mut.bc flows [0, 4294967295]; main []
+corpus/lend-owner-joined.bc flows [0, 4294967295]; main []
+corpus/lend-owner-returned.bc flows [0, 4294967295]; main []
 corpus/lend-pipeline.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
 corpus/lend-pipeline.bc 43:32: handle 3: inside []; row []; ops 3.0 stored; names 3.0 []; condition 2 holds
 corpus/lend-pipeline.bc 43:32: handle 3: inside []; row []; ops 3.0 tail; names 3.0 []; condition 2 holds
@@ -1115,6 +1118,7 @@ corpus/list-capability.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/list-generic.bc flows [0, 4294967295], finaliser; main [1], finaliser
 corpus/list-generic.bc 19:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/list-generic.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/literal-array-written.bc flows [0, 4294967295]; main []
 corpus/loop-handler-binder.bc flows [0, 1, 2, 3, 4294967295], finaliser; main [1, 2, 3], finaliser
 corpus/loop-handler-binder.bc 21:13: handle 1: inside [1, 2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/loop-handler-binder.bc 390:5: handle 1: inside [2, 3], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
@@ -1497,6 +1501,7 @@ corpus/surface/family-swap.bc flows [0, 4294967295]; main []
 corpus/surface/io-upper.bc flows [0, 4294967295]; main []
 corpus/surface/io-wc.bc flows [0, 4294967295]; main []
 corpus/surface/map-reuse.bc flows [0, 4294967295]; main []
+corpus/swap-cell-width.bc flows [0, 4294967295]; main []
 corpus/text-lend-lifetime.bc flows [0, 4294967295]; main []
 corpus/text-wordfreq.bc flows [0, 2, 4294967295], finaliser; main [1, 2], finaliser
 corpus/text-wordfreq.bc 102:11: handle 1: inside [2], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
