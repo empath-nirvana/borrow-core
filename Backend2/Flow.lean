@@ -42,7 +42,7 @@ structure St where
 abbrev FM := StateT St Id
 
 def isClos (p : Prog) (x : Var) : Bool :=
-  match p.ty[x]? with
+  match p.ty[x]?.map LTy.peel with
   | some (.thunk _) => true
   | _ => false
 
@@ -147,7 +147,8 @@ def genFns (p : Prog) (L : Layouts) (base : Nat) : FM Unit := do
     gen p L base (1 <<< 22) fd.body (if isClosT fd.ret then some (retVar base i) else none)
   gen p L base (1 <<< 22) p.main none
 where
-  isClosT : LTy → Bool
+  isClosT (t : LTy) : Bool :=
+    match t.peel with
     | .thunk _ => true
     | _ => false
 

@@ -255,6 +255,10 @@ structure Prog where
   /-- `main` is served `Fail[DivError]` by the platform's handler (`Checked.exitsOnDivError`,
   SPEC §39): its value is `inl v`, whose `v` is reported, or `inr ()`, the exit status `1`. -/
   exits : Bool := false
+  /-- The variables whose `drop` no type licenses: the callees' suspended computations a stack
+  machine's points drop, their state being on the task stack (SPEC §52; `genStackMach`, an
+  `UNPROVED:` site). `Lint` checks every other drop by its type. -/
+  stackKs : Std.HashSet Var := {}
   deriving Inhabited
 
 end Backend2

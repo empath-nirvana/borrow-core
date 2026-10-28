@@ -789,8 +789,8 @@ directory, writing to a scratch directory.
 
 CLAUDE.md, *Later stages read the kernel's facts*, applied to `Backend2/` (`Convert`, `Layout`,
 `Flow`, `Lower`, `Lint`, `Types`, and the `Driver` functions that feed them). Every decision about
-ownership, aliasing, lifetimes, placement, widths or read-only data is one row. Lines are at this
-section's commit. By inspection.
+ownership, aliasing, lifetimes, placement, widths or read-only data is one row. Lines are at the
+commit that last changed the row. By inspection.
 
 - **read**: the decision reads a node of the typed term, a checker fact or a checked type; the
   lemma named is the one that pins that fact on the checker's side.
@@ -810,9 +810,11 @@ are regressions in the corpus: `lend-owner-returned` (`t4`), `swap-cell-width` (
 | drops at a leaf, of a dead λ's parameter, at `[nil-dead]` | `Convert.lean:352` (`leaf`), `:2391`, `:2580` | read | the node's rule: `Ctx.DeadP`, `SoloP`; `lamDead`, `nilDead` | — | — |
 | a join's context dropped on an abort or a cancel | `Convert.lean:2422`, `:824` (`abortK`), `:854` (`cancelK`) | read | `[let]`'s premise `hW : S.Weak → Γ₂.Drops` (`Core/Fundamental.lean:401`), `VTy.Drop` holds no owned cell (`vC_noOwn_of_drop`); a `[then]` frame hands its context to the finaliser (`hD`) | — | — |
 | `κ` holds a copy of each handler value; a clause's arm drops the other clauses' contexts | `Convert.lean:2983`, `:2926`, `:3129` | read | `[handle]`'s premise `hd : Ctx.DeadP Γ₁` (`Core/Fundamental.lean:431`, and `effHandleVB`) | — | — |
-| copies of a `!` argument in generated loops and folds (tabulator, consumer, algebra, step) | `Convert.lean:1447`, `:1467`, `:1487`, `:1505`, `:1822`, `:1570` (`travF`), `:1755` (`mapStates`), `nodeAt` | read | the constants' types: `array_new`, `array_free`, `count_fold`, `count_try`, `bounded_fix`, the folds, `unfold` take `!` (`Core/Fundamental.lean:194–230`, `:363–386`) | `!` on the LIR type: `Types.ofV` erases it (`Types.lean:205`), so `Lint` cannot check a copy | — |
-| `copy` and `array_copy` as an LIR copy | `Convert.lean:3476` | read | `axCopyTy`, `arrCopyTy` (`imm`) | — | — |
-| copying or dropping a cell, borrow or family is its words alone (`trivial`) | `Layout.lean:678` | UNPROVED | rests on the four rows above | `!` on the LIR type | — |
+| copies of a `!` argument in generated loops and folds (tabulator, consumer, algebra, step) | `Convert.lean:1464`, `:1484`, `:1504`, `:1522`, `:1847`, `:1587` (`travF`), `:1779` (`mapStates`), `nodeAt` | read; checked by `Lint` (`Lint.lean:61`, `copyable`) on every program compiled (`Driver.lean:332`) | the constants' types: `array_new`, `array_free`, `count_fold`, `count_try`, `bounded_fix`, the folds, `unfold` take `!` (`Core/Fundamental.lean:194–230`, `:363–386`), kept on the LIR type (`ofV_bang`) | — | — |
+| `copy` and `array_copy` as an LIR copy | `Convert.lean:3506` | read; checked by `Lint` (`copyable`: an `imm` borrow or a family of them) | `axCopyTy`, `arrCopyTy` (`imm`) | — | — |
+| every `copy` at a persistent type or of `imm` borrows; every `drop` at a persistent type, one with no owned cell, or a family of borrows | `Lint.lean:61` (`copyable`), `:70` (`droppable`) | read (`!` on the LIR type, `Types.lean:274`); checked of every program compiled (`Driver.lean:332`), not proved of `Convert` | `LTy.persistent` and `LTy.drops` are `VTy.persistent`'s and `VTy.Drop`'s images: `ofV_persistent`, `ofV_drops`, so the slots `Ctx.SplitP.dup`, `Ctx.DeadP.drop` and `Ctx.Drops` allow pass (`Lint.copyable_ofV`, `droppable_ofV_persistent`, `droppable_ofV_drop`); a family of borrows, `forget_fam_compatX` | — | — |
+| a stack machine drops a level's suspended computation (a closure) | `Convert.lean:1328`, `:1388` | UNPROVED: no type licenses it; listed in `Prog.stackKs`, which `Lint` lets through | `stackedOf`'s self-calls, read off the layouts' classes (the stack machines row) | no | — |
+| copying or dropping a cell, borrow or family is its words alone (`trivial`) | `Layout.lean:681` | read: every `copy` and `drop` is checked by its type (the row above but one); a persistent value holds no resource (`vP_empty_of_persistent`), a `VTy.Drop` one no owned cell (`vC_noOwn_of_drop`), a family of borrows none. UNPROVED: that a variable's LIR type is its node's checked type (by construction), and the row above | `Lint.copyable`, `Lint.droppable` | — | — |
 | an owned value's destructor | `Convert.lean:1854` (`genDtor`) | read | the `dtor` node's type (`dtorE`, `Core/Dtor.lean`'s `dtorAt`); the transcription is not proved against `dtorAt` | — | — |
 | a lend's kind, `imm` or `mut`, on `Op.lend` | `Convert.lean:3455`, `:3518`; `Lint.lean:82` checks the borrow it answers | read | the borrow constant (`withbor1`/`withbor2`, `sliceBorrowI`/`M`, the block borrows); `lendCell`'s `m` agrees (`lendKindB`, `TDerivesAt.lendCell_kind`) | — | `t13` (fixed) |
 | a reborrow | `Convert.lean:3520` | read | `withbor3` | — | — |
@@ -839,6 +841,7 @@ are regressions in the corpus: `lend-owner-returned` (`t4`), `swap-cell-width` (
 | a `use` body shared by the uses of its key | `Convert.lean:3360` (`convUse`) | UNPROVED | `useKey`; the extra live slots dropped | — | — |
 | an η-thunk of `unfold step` called where it is made | `Convert.lean:2597`, `:2664`, `:2559` | read | the `bind`'s `unfoldStep` node (`TDerivesAt.unfoldStep_shape`), carried with the slot's variable (`CState.unfolds`); `nuEta_unfold` | — | — |
 | machine operations; direct calls of clauses | `Driver.lean:64`, `:91` | read | clause kinds (`classifyHandler_sound`), `Checked.flows` (`cond2B`) | — | — |
-| a borrow's mode on the LIR type; lifetimes, `[@a]`, `!` erased | `Types.lean:202–205` | read | `ofV` of the checked `VTy` | `!` | — |
+| a borrow's mode on the LIR type; lifetimes and `[@a]` erased, `!` kept | `Types.lean:270–274` | read | `ofV` of the checked `VTy` (`ofV_bang`) | — | — |
+| `!A` represented as `A`: layouts, words and the conversion's taking apart read a type through `peel`; its type comparisons are up to `!` | `Types.lean:143` (`peel`), `:169` (`sameRep`) | read | `LTy.sameRep_iff`, `sameRep_bang_left`, `sameRep_bang_right`, `unbang_peel` | — | — |
 
 `#print axioms` of every lemma named is within `[propext, Classical.choice, Quot.sound]`.

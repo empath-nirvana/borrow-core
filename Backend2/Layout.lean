@@ -125,6 +125,8 @@ def build (fuel : Nat) (env : List Nat) (t : LTy) : GM Nat := do
     modify fun s => { s with parent := s.parent.set! i p }
     pure p
   | .thunk k => buildC f env k
+  -- `!A` is represented as `A`.
+  | .bang a => build f env a
 /-- The class node of a closure of `k`. -/
 def buildC (fuel : Nat) (env : List Nat) (k : LCTy) : GM Nat := do
   match fuel with
@@ -429,7 +431,8 @@ structure Layouts where
   words' (`repBytes`). -/
   bytes : Array Nat
   /-- The most bytes a value of each type takes in a cell, over the nodes of that type: a width
-  class's types are read through it (`Layouts.clsBytes`). -/
+  class's types are read through it (`Layouts.clsBytes`). A type is keyed with its `!`s erased
+  (`LTy.unbang`): `!A` is represented as `A`. -/
   tyBytes : Std.HashMap LTy Nat
   varNode : Std.HashMap Var Nat
   fnRet : Std.HashMap Nat Nat
@@ -467,7 +470,7 @@ def repB (L : Layouts) (i : Nat) : Nat := L.bytes[L.r i]!
 /-- The bytes a cell of the width class `cls` holding a value at node `c` takes: the most of the
 value's and of each type of the class's (SPEC §57). -/
 def clsBytes (L : Layouts) (c : Nat) (cls : List LTy) : Nat :=
-  cls.foldl (fun b t => max b (L.tyBytes.getD t 0)) (L.repB c)
+  cls.foldl (fun b t => max b (L.tyBytes.getD t.unbang 0)) (L.repB c)
 
 end Layouts
 
@@ -675,14 +678,18 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
         | none =>
           let fw (j c : Nat) : Nat := if boxed.contains (v, j) then 1 else width[c]!
           let ft (j c : Nat) : Bool := !boxed.contains (v, j) && trivial[c]!
-          -- UNPROVED: that copying or dropping a cell, a borrow or a family is its words alone
-          -- (`trivial`). It should hold because the conversion copies only a slot both parts of a
-          -- split use (`Ctx.SplitP`'s persistent slot) and the `copy` constants (`imm`), and drops
-          -- only slots the rule's premises make droppable (`Ctx.DeadP`, `Ctx.Drops`: no owned
-          -- cell, `vC_noOwn_of_drop`), so an owned `Ref` or array is never copied or dropped by
-          -- `copy`/`drop`. The LIR erases `!` (`Types.ofV`), so `Lint` cannot check which
-          -- variables may be copied or dropped. If it fails, an owned cell is aliased (freed
-          -- twice) or leaks.
+          -- Copying or dropping a cell, a borrow or a family is its words alone (`trivial`): an
+          -- owned `Ref` or array is never copied or dropped by `copy`/`drop` but inside a value
+          -- that owns nothing. `Lint` checks, on every program compiled, that each `copy` is at a
+          -- persistent type or of `imm` borrows and each `drop` at a persistent type, one with no
+          -- owned cell or a family of borrows (`Lint.copyable`, `Lint.droppable`), `!` read off
+          -- the LIR type; a persistent value holds no resource (`vP_empty_of_persistent`), a
+          -- `VTy.Drop` one no owned cell (`vC_noOwn_of_drop`), a family of borrows none
+          -- (`forget_fam_compatX`).
+          -- UNPROVED: that a variable's LIR type is the image of its node's checked type (by
+          -- construction in `Convert`, not proved), and the stack machines' drops of a level's
+          -- suspended computation, which no type licenses (`Prog.stackKs`, at `genStackMach`). If
+          -- either fails, an owned cell is aliased (freed twice) or leaks.
           let (wv, tv) := match shape[v]! with
             | .unit | .zero | .unk => (0, true)
             | .int _ | .opq | .ref _ | .imm _ | .mut _ => (1, true)
@@ -710,7 +717,7 @@ def resolve (p : Prog) (s : GState) (mainNode : Nat) : Layouts := Id.run do
   let bytes := (Array.range n).map fun i => bytesOf rep[i]!
   let mut tyBytes : Std.HashMap LTy Nat := {}
   for i in [0:n] do
-    let o := s.origin[i]!
+    let o := s.origin[i]!.unbang
     tyBytes := tyBytes.insert o (max (tyBytes.getD o 0) bytes[i]!)
   let varNode := s.varNode.fold (fun m x i => m.insert x rep[i]!) {}
   let fnRet := s.fnRet.fold (fun m f i => m.insert f rep[i]!) {}

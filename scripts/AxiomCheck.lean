@@ -8,6 +8,7 @@ import Frontend.Check.Handled
 import Frontend.Check.TFacts
 import Frontend.Check.Derived
 import Lowering
+import Backend2.Lint
 /-! The theorems `SPEC.md` names, with their axioms. -/
 #print axioms BoCa.Fig16.LogRel.Typed.fundamentalProperty
 #print axioms BoCa.Fig16.LogRel.Typed.adequacy
@@ -731,3 +732,16 @@ import Lowering
 #print axioms Lowering.cImmBorrow_lir_every_run
 #print axioms Lowering.lirOf_noUnr
 #print axioms Lowering.printOwn_noUnr
+-- `!` on the LIR types (#714): `ofV` keeps it, and what `Lint` reads at a copy and a drop
+#print axioms Backend2.ofV_bang
+#print axioms Backend2.ofV_persistent
+#print axioms Backend2.ofV_drops
+#print axioms Backend2.LTy.sameRep_iff
+#print axioms Backend2.LCTy.sameRep_iff
+#print axioms Backend2.LTy.sameRep_bang_left
+#print axioms Backend2.LTy.sameRep_bang_right
+#print axioms Backend2.LTy.unbang_peel
+#print axioms Backend2.LTy.sameRep_peel
+#print axioms Backend2.Lint.copyable_ofV
+#print axioms Backend2.Lint.droppable_ofV_persistent
+#print axioms Backend2.Lint.droppable_ofV_drop

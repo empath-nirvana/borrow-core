@@ -13,11 +13,15 @@ verifies and never fills in:
   variables, and a function ends with all of them consumed (a path that ends at `absurd` is
   unreachable);
 - every call has its callee's number of arguments, and every closure its code's environment;
-- every `lend` answers a borrow of its kind: `mut` or `imm` (`Op.lend`, SPEC §57).
+- every `lend` answers a borrow of its kind: `mut` or `imm` (`Op.lend`, SPEC §57);
+- every `copy` is of a variable its type lets the program duplicate (`copyable`): a persistent
+  one, `!` read off the LIR type (`Types.ofV` keeps it), or an `imm` borrow;
+- every `drop` is of a variable its type lets the program discard (`droppable`), but for the
+  callees' suspended computations a stack machine drops (`Prog.stackKs`).
 -/
 
 namespace Backend2.Lint
-open Backend2
+open Backend2 BoCa.Fig16.LogRel.Core
 
 /-- What a path leaves unconsumed; `none` on a path that ends at `absurd`. -/
 abbrev Left := Option (Std.HashSet Var)
@@ -44,11 +48,45 @@ def useAll (w : String) (env : Std.HashSet Var) (xs : List Var) : LM (Std.HashSe
 
 def sameSet (a b : Std.HashSet Var) : Bool := a.size == b.size && a.toList.all b.contains
 
-/-- The kind of a borrow's type: `mut`, `imm`, or neither. -/
-def borrowMode : LTy → Option Bool
+/-- The kind of a borrow's type: `mut`, `imm`, or neither (`!` read through: `LTy.unbang`). -/
+def borrowMode (t : LTy) : Option Bool :=
+  match t.unbang with
   | .mut _ | .fam (.mut _) => some true
   | .imm _ | .fam (.imm _) => some false
   | _ => none
+
+/-- A type whose values `copy` may duplicate: a persistent one (`LTy.persistent`: a slot a split
+duplicates, `Ctx.SplitP.dup`, and what `clone` copies), or an `imm` borrow or a family of them
+(the `copy` and `array_copy` constants, `axCopyTy`, `arrCopyTy`). -/
+def copyable (t : LTy) : Bool :=
+  t.persistent || match t with
+    | .imm _ | .fam (.imm _) => true
+    | _ => false
+
+/-- A type whose values `drop` may discard: a persistent one (`Ctx.DeadP.drop`, `Ctx.SoloP.skip`),
+one that holds no owned cell (`LTy.drops`: `[let]`'s `Ctx.Drops` at an abort, and the `forget`
+constants at `Imm`, `Mut`, `Unk`, `!A`), or a family of borrows (`array_forget`, and the
+destructor at `[Mut A]`, `dtorAt`: `forget_fam_compatX`). -/
+def droppable (t : LTy) : Bool :=
+  t.persistent || t.drops || match t with
+    | .fam (.imm _) | .fam (.mut _) => true
+    | _ => false
+
+/-- A slot a split duplicates (`Ctx.SplitP.dup`: of persistent type) is `copyable` at its LIR
+type. -/
+theorem copyable_ofV {ms : MachSet} {A : VTy} {t : LTy} (hA : A.persistent = true)
+    (h : ofV ms A = .ok t) : copyable t = true := by
+  simp [copyable, ofV_persistent hA h]
+
+/-- A slot a leaf drops (`Ctx.DeadP.drop`: of persistent type) is `droppable` at its LIR type. -/
+theorem droppable_ofV_persistent {ms : MachSet} {A : VTy} {t : LTy} (hA : A.persistent = true)
+    (h : ofV ms A = .ok t) : droppable t = true := by
+  simp [droppable, ofV_persistent hA h]
+
+/-- A slot an abort drops (`Ctx.Drops`: of a `VTy.Drop` type) is `droppable` at its LIR type. -/
+theorem droppable_ofV_drop {ms : MachSet} {A : VTy} {t : LTy} (hA : A.Drop)
+    (h : ofV ms A = .ok t) : droppable t = true := by
+  simp [droppable, ofV_drops hA h]
 
 /-- The variables left after `t`, its value consumed by its context. -/
 def lintTm (w : String) (p : Prog) : Nat → Std.HashSet Var → Tm → LM Left
@@ -101,8 +139,17 @@ def lintTm (w : String) (p : Prog) : Nat → Std.HashSet Var → Tm → LM Left
     | .absurd sv => do let _ ← use w env sv; return none
     | .copy x x' b => do
       if !env.contains x then bad w s!"x{x} copied when it is not owned"
+      match p.ty[x]? with
+      | some t => if !copyable t then bad w s!"x{x} copied at {t}, which is not persistent"
+      | none => bad w s!"x{x} has no type"
       lintTm w p f (← bindNew w p env x') b
-    | .drop x b => do lintTm w p f (← use w env x) b
+    | .drop x b => do
+      match p.ty[x]? with
+      | some t =>
+        if !droppable t && !p.stackKs.contains x then
+          bad w s!"x{x} dropped at {t}, which may own a cell"
+      | none => bad w s!"x{x} has no type"
+      lintTm w p f (← use w env x) b
 
 /-- Lint a program. -/
 def lint (p : Prog) : Except String Unit := do

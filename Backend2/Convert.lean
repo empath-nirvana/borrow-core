@@ -241,6 +241,9 @@ structure CState where
   stacked : Std.HashMap Nat LTy := {}
   /-- The static word that holds the current stack, once a stack machine or a site uses it. -/
   stackReg : Option Nat := none
+  /-- The callees' suspended computations a stack machine's points drop (`genStackMach`,
+  `Prog.stackKs`). -/
+  stackKs : Std.HashSet Var := {}
 
 abbrev CM := StateT CState (Except String)
 
@@ -420,12 +423,13 @@ clause of the site builds it, or its body holds the site (a stored generator bef
 observation). -/
 def closOf (c : Nat) (k : LCTy) (outer : List Var) (inner : List (List LTy × String)) : CM Tm := do
   let key? : Option String := match (← get).siteMerge with
-    | some (tys, key) => if tys.contains (.thunk k) then some key else none
+    | some (tys, key) => if tys.any (·.sameRep (.thunk k)) then some key else none
     | none => none
-  let key? := key?.orElse fun _ => (inner.find? fun (tys, _) => tys.contains (.thunk k)).map (·.2)
+  let key? := key?.orElse fun _ =>
+    (inner.find? fun (tys, _) => tys.any (·.sameRep (.thunk k))).map (·.2)
   match key? with
   | some key =>
-    let g := s!"{key}|{k}"
+    let g := s!"{key}|{k.unbang}"
     let mk ← reserveFn "task variant"
     let v : SiteVar := { code := c, mkFn := mk, envTys := ← outer.mapM tyOf }
     modify fun s => { s with merges := s.merges.insert g ((s.merges.getD g #[]).push v),
@@ -470,20 +474,22 @@ def mkAmp (name : String) (ctx : Ctx) (k : LCTy) (rets : List LTy)
   let c ← addCode { kind := .amp, fns := fis.toList, ty := k }
   closOf c k outer sites
 
-/-- The argument and answer of a closure type `A ⊸ F B`. -/
-def arrowOf : LTy → CM (LTy × LTy)
+/-- The argument and answer of a closure type `A ⊸ F B`, through a `!`. -/
+def arrowOf (t : LTy) : CM (LTy × LTy) :=
+  match t.peel with
   | .thunk (.arr a (.ret b)) => pure (a, b)
-  | t => throw s!"LIR: not a function type: {t}"
+  | _ => throw s!"LIR: not a function type: {t}"
 
-/-- The answer of running a closure of type `t`: its argument's type and its answer's, for a
-`lam` code; its answer's for a `unit` one. -/
-def answerOf : LTy → CM (Option LTy × LTy)
+/-- The answer of running a closure of type `t` (through a `!`): its argument's type and its
+answer's, for a `lam` code; its answer's for a `unit` one. -/
+def answerOf (t : LTy) : CM (Option LTy × LTy) :=
+  match t.peel with
   | .thunk k => do
     match k.whnf 8 with
     | .arr a c => return (some a, ← repC c)
     | .ret a => return (none, a)
     | k => throw s!"LIR: a closure of {k} is not called"
-  | t => throw s!"LIR: a call of a non-closure: {t}"
+  | _ => throw s!"LIR: a call of a non-closure: {t}"
 where
   repC : LCTy → CM LTy
     | .ret a => pure a
@@ -530,7 +536,7 @@ def add1 (i : Var) (k : Var → CM Tm) : CM Tm := do
   return .letv j (.prim .cntSucc [i]) (← k j)
 
 def letpairM (p : Var) (k : Var → Var → CM Tm) : CM Tm := do
-  match ← tyOf p with
+  match (← tyOf p).peel with
   | .pair a b =>
     let x ← fresh a
     let y ← fresh b
@@ -613,15 +619,15 @@ def coerceRes (a : LTy) (p q : Pay) (r : Var) : CM Tm := do
     return .case r x (.inj false x) e (← coercePay p q e fun e' => pure (.inj true e'))
   | some _, none => throw "LIR: an abort where the row holds no abortive operation"
 
-/-- The type of component `j` of a `&` closure. -/
+/-- The type of component `j` of a `&` closure (through a `!`). -/
 def selTy (t : LTy) (j : Nat) : CM LTy := do
-  match t with
+  match t.peel with
   | .thunk k =>
     match k.whnf 8, j with
     | .amp k₁ _, 0 => repK k₁
     | .amp _ k₂, _ => repK k₂
     | k, _ => throw s!"LIR: an observation of a closure of {k}"
-  | t => throw s!"LIR: an observation of a non-closure: {t}"
+  | _ => throw s!"LIR: an observation of a non-closure: {t}"
 where
   repK : LCTy → CM LTy
     | .ret a => pure a
@@ -683,7 +689,7 @@ def outInfo? (r : LTy) (S : Row) : CM (Option OutInfo) := do
   let unrs := (S.filter fun o => o.q == .unr).map fun o => (o.n, o.i)
   let o : OutInfo := { ty, r, pay, ms, unrs }
   match ty with
-  | .mu b => unless LTy.unrollMu b == o.body do throw s!"LIR: the outcome {ty} does not unroll to {o.body}"
+  | .mu b => unless (LTy.unrollMu b).sameRep o.body do throw s!"LIR: the outcome {ty} does not unroll to {o.body}"
   | _ => throw "LIR: an outcome that is not a μ"
   return some o
 
@@ -710,12 +716,12 @@ def outInfoJ : Jdg → CM (Option OutInfo)
 
 /-- The outcome whose type is `ty` (a `ν`'s observation, its `X` substituted), at the row `S`. -/
 def outInfoTy (ty : LTy) (S : Row) : CM (Option OutInfo) := do
-  match ty with
+  match ty.peel with
   | .mu b =>
     match LTy.unrollMu b with
     | .sum r _ => do
       let some o ← outInfo? r S | return none
-      unless o.ty == ty do throw s!"LIR: an outcome's type {ty} is not its row's {o.ty}"
+      unless o.ty.sameRep ty do throw s!"LIR: an outcome's type {ty} is not its row's {o.ty}"
       return some o
     | _ => return none
   | _ => return none
@@ -771,7 +777,7 @@ def toResult (a : LTy) (p : Pay) (target : Option OutInfo) (q : Pay) (r : Var) :
 /-- The level's cell `s` (`Frame.cellF`'s argument, `1 + ref S`) released, then `b`: nothing at
 `inl ()`, the cell freed at `inr c` (its contents were taken when the machine resumed). -/
 def releaseOpt (s : Var) (b : Tm) : CM Tm := do
-  let .sum uT cT ← tyOf s | throw "LIR: a level's cell that is not `1 + ref S`"
+  let .sum uT cT := (← tyOf s).peel | throw "LIR: a level's cell that is not `1 + ref S`"
   let u ← fresh uT; let c ← fresh cT; let r ← fresh .unit
   return .letv r (.case s u (.var u) c (.prim .release [c])) (.drop r b)
 
@@ -991,7 +997,7 @@ complete (`withMachine`): a machine with that call and no other point passes its
 outcome on; a call that closes a loop of tail calls passes it on too (`tailPass`). -/
 def pointK (K : Kont) (args : List Var) (e : Tm) (M : OutInfo) : CM Tm := do
   let F ← curMach
-  if K.isEmpty && args.isEmpty && M.ty == F.ty && M.keys == F.keys then
+  if K.isEmpty && args.isEmpty && M.ty.sameRep F.ty && M.keys == F.keys then
     let fn ← reserveFn "tail"
     let o ← fresh M.ty
     match (← get).machs with
@@ -1129,7 +1135,7 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
     let stTy := machStateTy m op
     -- **The level's cell passed on** (SPEC §50), at the state's type the first conversion read.
     let threaded := m.cell.isSome
-    if threaded && m.cell != some stTy then
+    if threaded && !(m.cell.any (·.sameRep stTy)) then
       throw "LIR: a level's cell whose state differs from the first conversion's"
     -- **A state cell** where the machine's state holds its own suspended computation (its closure
     -- class holds itself: a recursion through a resumption point, a clause resuming `κ` before it
@@ -1244,7 +1250,7 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
   let (b, cp) ← opAnswer F op
   let stPay : Pay := ps.zipIdx.map fun (p, i) => ((0, i.toUInt32), tupleTy p.argTys)
   let stTy := (payTy stPay).getD .unit
-  unless stTy == S do throw "LIR: a stack machine's frame differs from the first conversion's"
+  unless stTy.sameRep S do throw "LIR: a stack machine's frame differs from the first conversion's"
   let reg ← stackRegister
   let fT : LTy := .ref stTy
   let aT : LTy := .int .w64
@@ -1317,6 +1323,9 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
     let some (key, _, _, _) := F.ms[j]? | throw "LIR: a suspension's summand"
     letpairM pv fun v k' => do
       let k₂ ← fresh (F.kTy b cp)
+      -- A level's suspended computation, dropped for the machine's own over the base: as at a
+      -- point's `mk` below (`Prog.stackKs`).
+      modify fun st => { st with stackKs := st.stackKs.insert k' }
       return .drop a₃ (.drop base₃' (.drop k' (.letv k₂ (.clos kc [base₃]) (← outSusp F key v k₂))))
   let exits ← match pF? with
     | none => suspArms ex
@@ -1368,9 +1377,17 @@ def genStackMach (m : Mach) (S : LTy) : CM (List (Key × Nat)) := do
     let body ← mkTuple xs fun t => injectPay stPay i t fun sv => do
       let u ← fresh .unit
       return .letv u (.prim .framePut [f, sv]) (.drop u (.clos kc [a]))
-    let body := match kv? with
-      | some kv => Tm.drop kv body
-      | none => body
+    -- UNPROVED: that dropping a level's suspended computation (`kv` here, `k'` in the step) leaks
+    -- nothing. Its type is a closure, which no typing rule lets a term discard; the drop rests on
+    -- the stack machine's call points calling a level of the machine itself (`stackedOf`), so that
+    -- it is a closure of this machine's `kc` over a stack address alone, the state it stands for
+    -- being in the level's frame on the task stack. `Lint` checks every other drop by its type,
+    -- and lets these through by `Prog.stackKs`. If it fails, the level's state is leaked.
+    let body ← match kv? with
+      | some kv => do
+        modify fun st => { st with stackKs := st.stackKs.insert kv }
+        pure (Tm.drop kv body)
+      | none => pure body
     setFn p.mkFn { name := s!"suspend {op.1}.{op.2}", params := kv?.toList ++ xs ++ [f, a], body,
                    ret := F.kTy b cp }
   readFact "machine:state"
@@ -1545,7 +1562,7 @@ def genWithload (x : Var) (cbT : LTy) (call : Var → CM Tm) : CM Tm := do
 store's drop of the old contents cancelled: the contents moved out, and `y` moved in. -/
 def genWithswap (m : Var) (fT : LTy) (call : Var → CM Tm) : CM Tm := do
   let (some aT, rT) ← answerOf fT | throw "LIR: withswap's function takes no argument"
-  let .pair yT zT := rT | throw "LIR: withswap's function answers no pair"
+  let .pair yT zT := rT.peel | throw "LIR: withswap's function answers no pair"
   let mT ← tyOf m
   let pr ← fresh (.pair mT aT)
   let m' ← fresh mT; let old ← fresh aT
@@ -1574,11 +1591,11 @@ def travF (k : FoldKind) (recV recL : Nat) (g : Var) : FShape → Var → CM (Tm
     let g' ← freshLike g
     match k with
     | .own => do
-      let .ref cT := (← tyOf w) | throw "LIR: fold_own at a `Ref X` that is not a cell"
+      let .ref cT := (← tyOf w).peel | throw "LIR: fold_own at a `Ref X` that is not a cell"
       let c ← fresh cT
       return (.copy g g' (.letv c (.prim .free [w]) (.call recV [g', c])), rT)
     | .reuse => do
-      let .ref cT := (← tyOf w) | throw "LIR: fold_reuse at a `Ref X` that is not a cell"
+      let .ref cT := (← tyOf w).peel | throw "LIR: fold_reuse at a `Ref X` that is not a cell"
       let u ← fresh .unit
       let pr ← fresh (.pair (.ref .unit) cT)
       let c ← fresh (.ref .unit); let v ← fresh cT
@@ -1591,14 +1608,14 @@ def travF (k : FoldKind) (recV recL : Nat) (g : Var) : FShape → Var → CM (Tm
     let g' ← freshLike g
     return (.copy g g' (.call recV [g', w]), rT)
   | .tensor F G, w => do
-    let .pair aT bT := (← tyOf w) | throw "LIR: a fold's shape `⊗` at a non-pair"
+    let .pair aT bT := (← tyOf w).peel | throw "LIR: a fold's shape `⊗` at a non-pair"
     let a ← fresh aT; let b ← fresh bT
     let (ta, ra) ← travF k recV recL g F a
     let (tb, rb) ← travF k recV recL g G b
     let x ← fresh ra; let y ← fresh rb
     return (.letpair a b w (.letv x ta (.letv y tb (.pair x y))), .pair ra rb)
   | .sum F G, w => do
-    let .sum aT bT := (← tyOf w) | throw "LIR: a fold's shape `⊕` at a non-sum"
+    let .sum aT bT := (← tyOf w).peel | throw "LIR: a fold's shape `⊕` at a non-sum"
     let a ← fresh aT; let b ← fresh bT
     let (ta, ra) ← travF k recV recL g F a
     let (tb, rb) ← travF k recV recL g G b
@@ -1614,7 +1631,7 @@ type of the values `recV` folds, `gT` the algebra's. -/
 def genFoldFns (k : FoldKind) (F : FShape) (muT cellT gT : LTy) : CM (Nat × Nat) := do
   let recV ← reserveFn "fold"
   let recL ← if k == .imm then reserveFn "fold_imm" else pure recV
-  let .mu body := muT | throw s!"LIR: a fold over a non-μ type: {muT}"
+  let .mu body := muT.peel | throw s!"LIR: a fold over a non-μ type: {muT}"
   let g ← fresh gT
   let u ← fresh muT
   let w ← fresh body.unrollMu
@@ -1643,15 +1660,22 @@ observation's leaf) and maps each state at an `X` of the answer to `unfold g` of
 def occursAt (n : Nat) : LTy → Bool
   | .tvar m => m == n
   | .pair a b | .sum a b => occursAt n a || occursAt n b
+  | .bang a => occursAt n a
   | _ => false
 
 def occ0 (a : LTy) : Bool := occursAt 0 a
 
-/-- `t` (the step's type at `a`) with each state at an `X` of `a` replaced by the codata type. -/
+/-- `t` (the step's type at `a`) with each state at an `X` of `a` replaced by the codata type; `t`
+read through a `!` (`peel`) where `a` is taken apart, and a `!` of `a` read through. -/
 def substState : LTy → LTy → LTy → LTy
   | .tvar 0, _, c => c
-  | .pair a b, .pair x y, c => .pair (substState a x c) (substState b y c)
-  | .sum a b, .sum x y, c => .sum (substState a x c) (substState b y c)
+  | .bang a, t, c => substState a t c
+  | .pair a b, t, c => match t.peel with
+    | .pair x y => .pair (substState a x c) (substState b y c)
+    | _ => t
+  | .sum a b, t, c => match t.peel with
+    | .sum x y => .sum (substState a x c) (substState b y c)
+    | _ => t
   | _, t, _ => t
 
 /-- A step of an observation's path: a component, or an argument. -/
@@ -1758,6 +1782,7 @@ def mapStates (fuel : Nat) (obs : Nat) (A : LTy) (g w : Var) : CM Tm := do
   | fuel + 1 =>
   match A with
   | .tvar 0 => return .clos obs [g, w]
+  | .bang a => mapStates fuel obs a g w
   | .pair a b => do
     if !(occ0 a || occ0 b) then return .drop g (.var w)
     letpairM w fun x y => dup g fun g g' => do
@@ -1766,7 +1791,7 @@ def mapStates (fuel : Nat) (obs : Nat) (A : LTy) (g w : Var) : CM Tm := do
       return .letv x' (← mapStates fuel obs a g x) (.letv y' (← mapStates fuel obs b g' y) (.pair x' y'))
   | .sum a b => do
     if !(occ0 a || occ0 b) then return .drop g (.var w)
-    let .sum xT yT := (← tyOf w) | throw "LIR: a codata answer's sum"
+    let .sum xT yT := (← tyOf w).peel | throw "LIR: a codata answer's sum"
     let x ← fresh xT; let y ← fresh yT
     let x' ← fresh (← mappedTy obs x a)
     let y' ← fresh (← mappedTy obs y b)
@@ -1822,9 +1847,9 @@ of tail calls with its budget, and one that calls it elsewhere a native recursio
 def genFix (sT : LTy) (p : Var) : CM Tm := do
   let fi ← reserveFn "bounded_fix"
   let (some qT, rT) ← answerOf sT | throw "LIR: bounded_fix's step takes no argument"
-  let .pair selfOT aT := qT | throw "LIR: bounded_fix's step does not take `(self, a)`"
-  let .sum _ selfT := selfOT | throw "LIR: bounded_fix's self-reference is not `1 ⊕ U(A ⊸ C)`"
-  let .thunk selfK := selfT | throw "LIR: bounded_fix's self-reference is not a closure"
+  let .pair selfOT aT := qT.peel | throw "LIR: bounded_fix's step does not take `(self, a)`"
+  let .sum _ selfT := selfOT.peel | throw "LIR: bounded_fix's self-reference is not `1 ⊕ U(A ⊸ C)`"
+  let .thunk selfK := selfT.peel | throw "LIR: bounded_fix's self-reference is not a closure"
   let si ← reserveFn "bounded_fix self"
   let s₁ ← fresh sT; let k₁ ← fresh i32T; let x ← fresh aT
   setFn si { name := "bounded_fix self", params := [s₁, k₁, x], body := .call fi [s₁, k₁, x],
@@ -1860,7 +1885,7 @@ def genDtor (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
       let u ← fresh .unit
       return .letv u (← genDtor f A a) (.drop u (← genDtor f B b))
   | .sum A B => do
-    let .sum aT bT := (← tyOf x) | throw "LIR: a destructor's sum"
+    let .sum aT bT := (← tyOf x).peel | throw "LIR: a destructor's sum"
     let a ← fresh aT; let b ← fresh bT
     return .case x a (← genDtor f A a) b (← genDtor f B b)
   | .ref A => do
@@ -1892,7 +1917,7 @@ def genDtor (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
     return .sel x 1
   | .fam (.ref A) => do
     let aT ← tyOf x
-    let .fam (.ref eT) := aT | throw "LIR: an array's destructor"
+    let .fam (.ref eT) := aT.peel | throw "LIR: an array's destructor"
     let fi ← reserveFn "array_dtor"
     let a ← fresh aT; let i ← fresh i32T; let n ← fresh i32T
     let body ← dup i fun i i₁ => dup n fun n n₁ =>
@@ -1925,7 +1950,7 @@ def dtorShape (fuel : Nat) (fi : Nat) (F : FShape) (T : VTy) (w : Var) : CM Tm :
       let u ← fresh .unit
       return .letv u (← dtorShape f fi F T a) (.drop u (← dtorShape f fi G T b))
   | .sum F G => do
-    let .sum aT bT := (← tyOf w) | throw "LIR: a destructor's sum"
+    let .sum aT bT := (← tyOf w).peel | throw "LIR: a destructor's sum"
     let a ← fresh aT; let b ← fresh bT
     return .case w a (← dtorShape f fi F T a) b (← dtorShape f fi G T b)
 end
@@ -1934,7 +1959,7 @@ end
 
 /-- A block's allocation at its shape: each leaf a cell. -/
 def allocTree (v : Var) (rT : LTy) (σ : Shape) : CM Tm := do
-  match rT, σ with
+  match rT.peel, σ with
   | .pair a b, .node σ₁ σ₂ => letpairM v fun x y => do
       let x' ← fresh a; let y' ← fresh b
       return .letv x' (← allocTree x a σ₁) (.letv y' (← allocTree y b σ₂) (.pair x' y'))
@@ -1943,23 +1968,26 @@ def allocTree (v : Var) (rT : LTy) (σ : Shape) : CM Tm := do
 
 /-- A block's release at its shape. -/
 def freeTree (v : Var) (vT : LTy) : CM Tm := do
-  match ← tyOf v, vT with
+  match (← tyOf v).peel, vT with
   | .pair _ _, .pair a b => letpairM v fun x y => do
       let x' ← fresh a; let y' ← fresh b
       return .letv x' (← freeTree x a) (.letv y' (← freeTree y b) (.pair x' y'))
   | .ref _, _ => return .prim .free [v]
+  | _, .bang b => freeTree v b
   | t, _ => throw s!"LIR: a block's handle at {t}"
 
 /-- Lend each leaf of the handle `v` at the borrow tree `bT`: the term binds `k`'s owners and
 borrows. -/
 def lendTree (m : Bool) (v : Var) (bT : LTy) (k : Var → Var → CM Tm) : CM Tm := do
-  match ← tyOf v, bT with
+  match (← tyOf v).peel, bT with
+  | .pair _ _, .bang b => lendTree m v b k
   | .pair _ _, .pair ba bb =>
     letpairM v (fun x y => lendTree m x ba (fun ox bx => lendTree m y bb (fun oy byy => do
       let o ← fresh (.pair (← tyOf ox) (← tyOf oy))
       let b ← fresh (.pair ba bb)
       return .letv o (.pair ox oy) (.letv b (.pair bx byy) (← k o b)))))
-  | vT, _ =>
+  | _, _ =>
+    let vT ← tyOf v
     let pr ← fresh (.pair vT bT)
     let o ← fresh vT; let b ← fresh bT
     return .letv pr (.prim (.lend m) [v]) (.letpair o b pr (← k o b))
@@ -1977,14 +2005,14 @@ def genLendTree (m : Bool) (src : Var) (cbT : LTy) (call : Var → CM Tm) : CM T
 
 /-- An I/O operation's closure at its extern's type: `λm. op m`, its `Λ`s erased (SPEC §44). -/
 def ioClos (fuel : Nat) (k : IOKind) (t : LTy) : CM Tm := do
-  match fuel, t with
+  match fuel, t.peel with
   | 0, _ => throw "LIR: an extern's type too deep"
   | _, .thunk (.arr a (.ret b)) =>
     mkClos "extern" [] (.arr a (.ret b)) (some a) b fun ctx => do
       match ctx with
       | some p :: _ => return .prim (.io k) [p]
       | _ => throw "LIR: an extern's argument"
-  | _, t => throw s!"LIR: an I/O extern at {t}"
+  | _, _ => throw s!"LIR: an I/O extern at {t}"
 
 /-! ### The conversion -/
 
@@ -2098,7 +2126,7 @@ def holdsClos : Nat → LTy → Bool
   | f + 1, t => match t with
     | .thunk _ => true
     | .pair a b | .sum a b => holdsClos f a || holdsClos f b
-    | .mu a | .ref a | .imm a | .mut a | .fam a => holdsClos f a
+    | .mu a | .ref a | .imm a | .mut a | .fam a | .bang a => holdsClos f a
     | _ => false
 /-- A value of the type takes a closure as an argument: a higher-order function, or a value holding
 one. -/
@@ -2107,6 +2135,7 @@ def takesClos : Nat → LTy → Bool
   | f + 1, t => match t with
     | .thunk k => takesClosK f k
     | .pair a b | .sum a b => takesClos f a || takesClos f b
+    | .bang a => takesClos f a
     | _ => false
 def takesClosK : Nat → LCTy → Bool
   | 0, _ => true
@@ -2180,9 +2209,9 @@ drive writes when the computation suspends there again. -/
 def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driveFn : Nat)
     (hvTys : List LTy) (cM : Option OutInfo) (cPay : Pay) (region : Option Nat := none)
     (swap : Bool := false) : CM Nat := do
-  let .thunk kL := kT | throw s!"LIR: κ's type {kT}"
+  let .thunk kL := kT.peel | throw s!"LIR: κ's type {kT}"
   let .amp (.arr bT (.ret oT)) cK := kL | throw s!"LIR: κ's type {kT}"
-  unless oT == outTy do throw s!"LIR: κ resumes to {oT}, the handler answers {outTy}"
+  unless oT.sameRep outTy do throw s!"LIR: κ resumes to {oT}, the handler answers {outTy}"
   let (_, cpIn) ← opAnswer T (n, idx.toUInt32)
   let kIn ← kTyAt T (n, idx.toUInt32)
   let hTy : LTy := .int .w64
@@ -2242,7 +2271,7 @@ def genKap (n : UInt32) (idx : Nat) (kT : LTy) (T : OutInfo) (outTy : LTy) (driv
     let want := match cM with
       | some O => O.ty
       | none => resTy .unit cPay
-    unless cT' == want do throw s!"LIR: κ's cancel answers {cT'}, its row {want}"
+    unless cT'.sameRep want do throw s!"LIR: κ's cancel answers {cT'}, its row {want}"
     let (ps₂, b₂) ← envOf fun k hv => do
       let cv ← fresh (cancelResTy cpIn)
       let body ← toResult .unit (cpIn.getD []) cM cPay cv
@@ -2306,6 +2335,7 @@ def closTys : Nat → LTy → List LTy
   | f + 1, t => match t with
     | .thunk k => [t, .thunk (k.whnf 8)]
     | .pair a b | .sum a b => closTys f a ++ closTys f b
+    | .bang a => closTys f a
     | _ => []
 
 /-- A join of the current machine, its body made by `body` at the context `c₂` renamed with the
@@ -2372,24 +2402,24 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
   | .tensorI _ j _ _ u t₁ t₂ => do
     let (pre, c₁, c₂) ← splitCtx ctx u "tensorI"
     let rT ← repJ j
-    let .pair aT bT := rT | throw "LIR: a pair at a non-pair type"
+    let .pair aT bT := rT.peel | throw "LIR: a pair at a non-pair type"
     return pre (← bindTm (← conv fuel c₁ t₁) aT fun a => do
       bindTm (← conv fuel c₂ t₂) bT fun b => pure (.pair a b))
   | .sumI₁ _ j _ _ c => do
-    let .sum aT _ ← repJ j | throw "LIR: an injection at a non-sum"
+    let .sum aT _ := (← repJ j).peel | throw "LIR: an injection at a non-sum"
     bindTm (← conv fuel ctx c) aT fun a => pure (.inj false a)
   | .sumI₂ _ j _ _ c => do
-    let .sum _ bT ← repJ j | throw "LIR: an injection at a non-sum"
+    let .sum _ bT := (← repJ j).peel | throw "LIR: an injection at a non-sum"
     bindTm (← conv fuel ctx c) bT fun a => pure (.inj true a)
   | .thunkF _ j _ c | .bangThunkF _ j _ c => do
-    let .thunk k ← repJ j | throw "LIR: a thunk at a non-closure type"
+    let .thunk k := (← repJ j).peel | throw "LIR: a thunk at a non-closure type"
     mkClos "thunk" ctx k none (← repK k) fun ctx' => convBody fuel (none :: ctx') c
   | .lam _ j A _ c => do
-    let .thunk k ← repJ j | throw "LIR: a λ at a non-closure type"
+    let .thunk k := (← repJ j).peel | throw "LIR: a λ at a non-closure type"
     let (_, r) ← answerOf (.thunk k)
     mkClos "lam" ctx k (some (← vty A)) r fun ctx' => convBody fuel ctx' c
   | .lamDead _ j _ _ c => do
-    let .thunk k ← repJ j | throw "LIR: a λ at a non-closure type"
+    let .thunk k := (← repJ j).peel | throw "LIR: a λ at a non-closure type"
     let (_, r) ← answerOf (.thunk k)
     mkClos "lam" ctx k (some .unit) r fun ctx' => do
       match ctx' with
@@ -2402,7 +2432,7 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     readFact "allI:body a λ-value"
     conv fuel (none :: ctx) c
   | .withI _ j _ _ tM tN => do
-    let .thunk k ← repJ j | throw "LIR: a `&` at a non-closure type"
+    let .thunk k := (← repJ j).peel | throw "LIR: a `&` at a non-closure type"
     let r₁ ← selTy (.thunk k) 0
     let r₂ ← selTy (.thunk k) 1
     readFact "withI:code kind"
@@ -2722,7 +2752,7 @@ def convK (fuel : Nat) (ctx : Ctx) (t : TExpr) (K : Kont) (args : List Var) : CM
     let F ← curMach
     let some (some r) := ctx[0]? | throw "LIR: a relaxed lend's owner is not live"
     let rT ← tyOf r
-    let .pair _ bT := M.r | throw "LIR: a relaxed lend's answer is not a pair"
+    let .pair _ bT := M.r.peel | throw "LIR: a relaxed lend's answer is not a pair"
     let mT : LTy := .mut (← vty T)
     let fnD ← reserveFn "lend finaliser"
     let oD ← fresh rT
@@ -2940,7 +2970,7 @@ def convDrive (fuel : Nat) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat �
         let rec proj : Nat → Nat → Var → CM Tm
           | 0, _, _ => throw "LIR: the clauses' value too deep"
           | f + 1, i, v => do
-            match ← tyOf v with
+            match (← tyOf v).peel with
             | .pair cT rT =>
               let x ← fresh cT; let y ← fresh rT
               if i == 0 then return .letpair x y v (.drop y (.app x a))
@@ -3414,7 +3444,7 @@ where
   curry (fuel : Nat) (c : TExpr) (t : LTy) (got : List Var) : Nat → CM Tm
     | 0 => throw "LIR: a constant of no arguments"
     | k + 1 => do
-      let .thunk ck := t | throw s!"LIR: a constant at a non-function type {t}"
+      let .thunk ck := t.peel | throw s!"LIR: a constant at a non-function type {t}"
       let (some aT, rT) ← answerOf t | throw "LIR: a constant takes no argument"
       let ctx : Ctx := got.reverse.map some
       mkClos "const" ctx ck (some aT) rT fun ctx' => do
@@ -3431,7 +3461,7 @@ def genLendU (fuel : Nat) (op : Op) (src : Var) (cbT : LTy) (call : Var → CM T
   | 0 => throw "LIR: the typed term is too deep"
   | fuel + 1 =>
   let (some bT, rT) ← answerOf cbT | throw "LIR: a borrow's callback takes no borrow"
-  match rT with
+  match rT.peel with
   | .sum vT eT => do
     readFact "withborU:finaliser"
     let pr ← fresh (.pair (← tyOf src) bT)
@@ -3480,11 +3510,11 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
   | .hostOp _ _ op, [x] => return .prim (.host op) [x]
   | .arrNew _ j _, [p] => do
     let (pT, aT) ← arrowOf (← repJ j)
-    let .pair _ fT := pT | throw "LIR: array_new's argument"
+    let .pair _ fT := pT.peel | throw "LIR: array_new's argument"
     genTab aT fT p
   | .arrFree _ j _, [p] => do
     let (pT, _) ← arrowOf (← repJ j)
-    let .pair fT aT := pT | throw "LIR: array_free's argument"
+    let .pair fT aT := pT.peel | throw "LIR: array_free's argument"
     genArrFree fT aT p
   | .arrSize .., [a] | .sliceLenM .., [a] => return .prim .size [a]
   | .arrLen .., [v] => return .prim .len [v]
@@ -3503,16 +3533,16 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     letpairM p fun v r => letpairM r fun i k => pure (.prim .swapSlots [v, i, k])
   | .countFold _ j _, [p] => do
     let (pT, sT) ← arrowOf (← repJ j)
-    let .pair fT _ := pT | throw "LIR: count_fold's argument"
+    let .pair fT _ := pT.peel | throw "LIR: count_fold's argument"
     genCount fT sT p
   | .countTry _ j _ _, [p] => do
     let (pT, rT) ← arrowOf (← repJ j)
-    let .pair fT _ := pT | throw "LIR: count_try's argument"
-    let .sum sT eT := rT | throw "LIR: count_try's answer"
+    let .pair fT _ := pT.peel | throw "LIR: count_try's argument"
+    let .sum sT eT := rT.peel | throw "LIR: count_try's answer"
     genCountTry fT sT eT p
   | .boundedFix _ j _ _, [p] => do
     let (some pT, _) ← answerOf (← repJ j) | throw "LIR: bounded_fix takes no argument"
-    let .pair sT _ := pT | throw "LIR: bounded_fix's argument"
+    let .pair sT _ := pT.peel | throw "LIR: bounded_fix's argument"
     readFact "boundedFix:budget"
     genFix sT p
   | .withbor1 .., [x, cb] | .sliceBorrowI .., [x, cb] => genLend (.lend false) x (← tyOf cb) (callCb cb)
@@ -3534,7 +3564,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
   | .withloadU .., [x, cb] => genWithload x (← tyOf cb) (callCb cb)
   | .foldOwn _ _ F _, [g] | .foldReuse _ _ F _, [g] => do
     let k : FoldKind := match c with | .foldReuse .. => .reuse | _ => .own
-    let .thunk fk := resT | throw "LIR: a fold's answer is not a closure"
+    let .thunk fk := resT.peel | throw "LIR: a fold's answer is not a closure"
     let (some muT, R) ← answerOf resT | throw "LIR: a fold takes no structure"
     readFact s!"{ruleName c}:shape"
     let (recV, _) ← genFoldFns k F muT muT (← tyOf g)
@@ -3544,9 +3574,9 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
       | _ => throw "LIR: a fold's environment"
   | .foldImm _ _ F y _ _, [g] => do
     -- The answer's `∀'y` is erased (SPEC §44): a closure on the borrow.
-    let .thunk fk := resT | throw "LIR: a fold's answer is not a closure"
+    let .thunk fk := resT.peel | throw "LIR: a fold's answer is not a closure"
     let (some lT, R) ← answerOf resT | throw "LIR: fold_imm takes no borrow"
-    let .imm cellT := lT | throw "LIR: fold_imm's argument is not a borrow"
+    let .imm cellT := lT.peel | throw "LIR: fold_imm's argument is not a borrow"
     let muT ← vty (VTy.immReborrow (.var y) (.mu F.ty))
     readFact s!"{ruleName c}:shape"
     let (_, recL) ← genFoldFns .imm F muT cellT (← tyOf g)
@@ -3555,7 +3585,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
       | some l :: some g' :: _ => return .call recL [g', l]
       | _ => throw "LIR: fold_imm's environment"
   | .unfoldN _ _ C _, [g] => do
-    let .thunk uk := resT | throw "LIR: unfold's answer is not a closure"
+    let .thunk uk := resT.peel | throw "LIR: unfold's answer is not a closure"
     let (some sT, _) ← answerOf resT | throw "LIR: unfold takes no state"
     let obs ← genUnfold (← cty C) C (← tyOf g) sT
     mkClos "unfold" [some g] uk (some sT) (.thunk (.nu (← cty C))) fun ctx' => do
@@ -3607,14 +3637,14 @@ def epilogue (r : Var) (ncaps : Nat) : CM Tm := do
       | 0, _ => pure ([], id)
       | 1, v => pure ([v], id)
       | k + 1, v => do
-        let .pair xT rT := (← tyOf v) | throw "LIR: main's capabilities"
+        let .pair xT rT := (← tyOf v).peel | throw "LIR: main's capabilities"
         let x ← fresh xT; let rest ← fresh rT
         let (xs, wrap) ← split k rest
         pure (x :: xs, fun t => .letpair x rest v (wrap t))
     let (xs, wrap) ← split ncaps caps
     let mut body : Tm := .var a
     for x in xs.reverse do
-      let .ref cT := (← tyOf x) | throw "LIR: a capability that is not a cell"
+      let .ref cT := (← tyOf x).peel | throw "LIR: a capability that is not a cell"
       let c ← fresh cT
       body := .letv c (.prim .free [x]) (.drop c body)
     return wrap body
@@ -3624,7 +3654,7 @@ def genDrive (lT : LTy) : CM Nat := do
   let fi ← reserveFn "drive"
   let l ← fresh lT
   let rT ← selTy lT 0
-  let .sum vT nT := rT | throw "LIR: main's loop does not answer a sum"
+  let .sum vT nT := rT.peel | throw "LIR: main's loop does not answer a sum"
   let r ← fresh rT
   let v ← fresh vT; let l' ← fresh nT
   setFn fi { name := "drive", params := [l], ret := vT,
@@ -3675,7 +3705,7 @@ def convMain (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) 
   let (tm, resT) ← if loops then do
       let d ← genDrive mT
       let fT ← tyOf (← fresh (← selTy mT 0)) -- the loop's `next` answer
-      let .sum vT _ := fT | throw "LIR: main's loop"
+      let .sum vT _ := fT.peel | throw "LIR: main's loop"
       let v ← fresh vT
       let ep ← epilogue v ncaps
       pure (Tm.letv r body (.letv v (.call d [r]) ep), ← resultTy vT)
@@ -3684,9 +3714,9 @@ def convMain (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CTy) 
 where
   resultTy (t : LTy) : CM LTy := do
     if ncaps == 0 then return t
-    match t with
+    match t.peel with
     | .pair _ a => pure a
-    | t => throw s!"LIR: main's value with capabilities is not a pair: {t}"
+    | _ => throw s!"LIR: main's value with capabilities is not a pair: {t}"
 
 /-- **Loops of tail calls** (SPEC §49): each call in tail position made a point whose callee's
 outcome may hold the machine's own suspended computation (`loop`, read off the layouts'
@@ -3703,7 +3733,7 @@ def tailPass (s : CState) (loop : Nat × Var × OutInfo × Nat → Bool) : Excep
         setFn fn { name := "tail", params := [oP], body := .var oP, ret := M.ty }
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics, lits := s'.lits }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs }, s')
 
 /-- **State cells** (SPEC §49): each machine operation whose suspended computation's closure class
 holds itself (`recursive`, the layouts' classes that keep their environment on the heap, §35)
@@ -3716,7 +3746,7 @@ def cellPass (s : CState) (recursive : Nat → Bool) : Except String (Prog × CS
         let _ ← genMach m ops
   let ((), s') ← act.run s
   return ({ fns := s'.fns, codes := s'.codes, main := default, mainTy := default, ty := s'.ty,
-            data := s'.data, statics := s'.statics, lits := s'.lits }, s')
+            data := s'.data, statics := s'.statics, lits := s'.lits, stackKs := s'.stackKs }, s')
 
 /-- **The levels whose state cell is passed on** (SPEC §50), from a conversion's machines and the
 layouts' recursive classes (`recursive`, as `cellPass` reads them): each machine whose body takes
@@ -3758,7 +3788,7 @@ def stackedOf (s : CState) (recursive : Nat → Bool) (stackOps : MachSet)
     unless stackOps.contains op do continue
     let self := m.points.all fun p => match p.kTy, p.outVar, p.callee with
       | none, _, _ => true
-      | some _, some o, some M => M.ty == m.info.ty && !(calleeCodes o M).isEmpty &&
+      | some _, some o, some M => M.ty.sameRep m.info.ty && !(calleeCodes o M).isEmpty &&
           (calleeCodes o M).all (· == kc) &&
           p.swapAt.isNone
       | _, _, _ => false
@@ -3778,6 +3808,6 @@ def convertProg (exts : List Ext) (ctx : List (VTy × Bool)) (t : TExpr) (C : CT
   let ((m, mT), s) ← (convMain exts ctx t C ncaps loops).run
     { census, direct, mach, threaded, stacked, classes }
   return ({ fns := s.fns, codes := s.codes, main := m, mainTy := mT, ty := s.ty, data := s.data,
-            statics := s.statics, lits := s.lits }, s)
+            statics := s.statics, lits := s.lits, stackKs := s.stackKs }, s)
 
 end Backend2
