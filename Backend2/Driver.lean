@@ -273,30 +273,46 @@ every node).  `[spec §62, §65]` -/
 def divAtMainOnly (c : Frontend.Check.Checked) : Bool :=
   divHandlers Frontend.Check.copiesFuel c.t == (if (mainReify? c.t).isSome then 1 else 0)
 
+/-- What `directOK` reads of the whole program, computed once: the code values of the typed term
+(`codeNodes`), the frames each name's nodes hold (`inside`), `Checked.flowsKept` and
+`divAtMainOnly`. -/
+structure DirectCx where
+  code : List (String × ClauseKinds.HIn × Option (List String))
+  inside : Std.HashMap UInt32 ClauseKinds.HIn
+  kept : Thunk ClauseKinds.HIn
+  divMain : Bool
+
+def DirectCx.of (c : Frontend.Check.Checked) (nodes : List HNode) : DirectCx :=
+  { code := codeNodes Frontend.Check.copiesFuel c.t,
+    inside := nodes.foldl (fun m h => m.insert h.n ((m.getD h.n {}) ++ h.inside)) {},
+    kept := Thunk.mk fun _ => c.flowsKept,
+    divMain := divAtMainOnly c }
+
 /-- **`DirectOK`, the checked fact at a `[handle-last]` operation** (#564's T-B2 spike, `DirectOK`
 and `ActiveOK`; the user's decision of 2026-10-22)  `[spec §65]`: the work of operation `j` of
 the node `h` runs in place of its `perform`, inside the context `K` between the `perform` and the
 node, when
-- **F-names**: no handler in `K` serves a name the work performs or raises: the work's own names
-  (`ruleNames`, its row `Σ_W`'s where it has none), other than `Div`'s, are ones the frames of
-  `K` cannot catch, bound by the frames the node's handled computation holds (`inside`, pinned by
-  the typed rule), the cancel delimiter and the frames code flowing in may hold
-  (`Checked.flowsKept`), at `cond2B`; and `Div`'s `tick` is caught by no frame of `K` when the
-  typed term's only handler of `Div` is `main`'s `reify` (`divAtMainOnly`);
+- **F-names**: no handler in `K` serves a name the work performs or raises. The work's own names
+  (`ruleNames`, its row `Σ_W`'s where it has none), other than `Div`'s, are held by no frame of
+  the bound: the frames the node's handled computation holds (`inside`, pinned by the typed rule),
+  the cancel delimiter, and the frames of the code it takes in (`takenFrames` at the shapes its
+  free variables' types hold; `Checked.flowsKept` where a type may hold a continuation or any
+  code). `Div`'s `tick` is caught by no frame of `K` when the typed term's only handler of `Div`
+  is `main`'s `reify` (`divAtMainOnly`). A finaliser in `K` catches a raise, and F-fin covers it;
 - **F-fin**: the cancel rows are the empty ones the checker emits, so every finaliser in `K` is
   at the empty row (`[then]`'s `hfin` at the empty cancel row): it performs and raises nothing;
 - **the exit indices are in bounds**: `2·|E| < 2³²`.
-Where it fails, the node is the fallback (a drive, SPEC §49): correct, not an error. -/
-def directOK (c : Frontend.Check.Checked) (h : HNode) (j : Nat) (emptyFins : Bool) : Bool :=
+Where it fails, the node is the fallback (a drive, SPEC §49, §65): correct, not an error. -/
+def directOK (D : DirectCx) (h : HNode) (j : Nat) (emptyFins : Bool) : Bool :=
   let names := Frontend.Check.cond2Names (h.codeRow.map (·.n)).eraseDups ((h.names[j]?).getD none)
   let taken := match h.codeIn with
     | some [] => some ({} : ClauseKinds.HIn)
-    | some shs => takenFrames (codeNodes Frontend.Check.copiesFuel c.t) shs
+    | some shs => takenFrames D.code shs
     | none => none
-  let bound := c.insideOf h.n ++ ClauseKinds.HIn.one 0 ++ taken.getD c.flowsKept
+  let bound := D.inside.getD h.n {} ++ ClauseKinds.HIn.one 0 ++ taken.getD D.kept.get
   emptyFins && decide (2 * h.E.length < 2 ^ 32) &&
     (names.filter (· != divName)).all (fun m => !(bound.names.contains m || bound.any)) &&
-    (!names.contains divName || divAtMainOnly c)
+    (!names.contains divName || D.divMain)
 
 /-- **The `[handle-last]` works the checked facts license to call where their operation is
 performed**  `[spec §64, §65]`: for each static name, for each of its operations, whether every
@@ -312,6 +328,7 @@ raises. -/
 def lastFacts (c : Frontend.Check.Checked) (io : Nat × (Nat → Bool) := (0, fun _ => false)) :
     Std.HashMap (UInt32 × UInt32) (VTy × Row) := Id.run do
   let nodes := hnodes Frontend.Check.copiesFuel c.t c.ctx.length
+  let D := DirectCx.of c nodes
   let mut out : Std.HashMap (UInt32 × UInt32) (VTy × Row) := {}
   for h in nodes do
     let some (SW, Xs, _) := h.last | continue
@@ -320,7 +337,7 @@ def lastFacts (c : Frontend.Check.Checked) (io : Nat × (Nat → Bool) := (0, fu
       if k.kind != .last then continue
       let ok := openOK io h.depth h.H &&
         same.all fun g => g.H == h.H && (match g.last with
-            | some (_, _, ef) => directOK c g j ef
+            | some (_, _, ef) => directOK D g j ef
             | none => false) &&
           decide (CTy.effOf g.S .unit = CTy.effOf h.S .unit) && decide (g.E = h.E)
       if ok then out := out.insert (h.n, j.toUInt32) (Xs j, SW)
