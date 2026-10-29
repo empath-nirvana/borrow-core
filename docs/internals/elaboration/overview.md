@@ -67,7 +67,7 @@ known type, and what lets the type system say which values hold resources.
 `!A` is a value that holds no resource, so it can be copied and dropped: the surface's `!(A =>
 B)` closures. `ref A` is an owned heap cell, and `imm 'a A`, `mut 'a A` its borrows, lent by the
 constants `withbor1`, `withbor2` and `withbor3` to a callback that runs within the lifetime `'a`.
-The [glossary](../glossary.md) has the rest of the vocabulary.
+The [glossary](../../glossary.md) has the rest of the vocabulary.
 
 ## What each surface form becomes
 

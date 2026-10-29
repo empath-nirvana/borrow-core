@@ -1,7 +1,7 @@
 # Integers and host operations
 
 The surface's operators at the numbers are these operations ([Values, functions and
-numbers](../guide/basics.md#numbers)); this chapter writes them as the core does. `i32` and `i64`
+numbers](../../../book/src/guide/basics.md#numbers)); this chapter writes them as the core does. `i32` and `i64`
 are WebAssembly's integers. They are persistent: an integer variable can be used
 any number of times.
 
@@ -58,7 +58,7 @@ main : F i32 =
 `42 < 100` is true, so the `inr` arm runs and returns `42 / 7`.
 
 The surface's `a / b` and `a % b` are these partial operations followed by a test: `inr ()`
-raises `Fail[DivError]` ([Errors](../guide/errors.md#division), SPEC §39), and a division by a
+raises `Fail[DivError]` ([Errors](../../../book/src/guide/errors.md#division), SPEC §39), and a division by a
 nonzero literal is the operation alone.
 
 ## Bytes and floats

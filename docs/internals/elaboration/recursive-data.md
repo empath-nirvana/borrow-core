@@ -27,7 +27,7 @@ def cons : i32 * List => List =
 ## Recursion
 
 The surface's recursion (a function that calls itself, its drivers `bounded` and `deep`, and
-layers) is in [Data and generics](../guide/data.md#recursion). In the core, a recursive group is
+layers) is in [Data and generics](../../../book/src/guide/data.md#recursion). In the core, a recursive group is
 the bounded fixed point of its *generator*: the record of the members' bodies, each call of the
 group a call of the self-reference. `bounded` is the kernel's `bounded_fix` at a budget of depth,
 whose end performs `Exhausted`; `deep` is a machine whose pending calls are frames in a growable

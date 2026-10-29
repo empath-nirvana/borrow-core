@@ -1,6 +1,6 @@
 # Standard I/O as capabilities
 
-The guide's [Input and output](../guide/io.md) performs I/O as effects (SPEC §34). Underneath,
+The guide's [Input and output](../../../book/src/guide/io.md) performs I/O as effects (SPEC §34). Underneath,
 and still usable directly, a program talks to the world through **capabilities**: values it is
 given, one per stream. Standard input, standard output and standard error are three of them,
 `stdin`, `stdout` and `stderr` (SPEC §11). In `main` they are in scope by name. Everywhere else a function that does
@@ -283,4 +283,4 @@ and nothing is claimed about them.
 - I/O errors are not modeled: a read error is the end of the input.
 - Environment variables, the exit status, files and the network are designed as more
   capabilities of the same kind (SPEC §11, §34) but not built. The clock and the arguments are
-  built, as effects ([Input and output](../guide/io.md)).
+  built, as effects ([Input and output](../../../book/src/guide/io.md)).

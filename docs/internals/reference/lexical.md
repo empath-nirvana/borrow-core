@@ -1,6 +1,6 @@
 # Lexical structure
 
-{{#include ../../../docs/syntax-core.md:lexical}}
+See [`docs/syntax-core.md`](../../syntax-core.md) (the part marked `lexical`).
 
 Further details from the parser (`Frontend/README.md`):
 

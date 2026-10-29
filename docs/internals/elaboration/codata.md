@@ -157,5 +157,5 @@ running a loop to completion yet: a driver is written out to the depth wanted, a
 
 The surface's generators and stored generators are codata of this former, `pull A B R`, and the
 adapters (`map`, `filter`, `take`, …) are library code over them, not new formers
-([Iteration](../guide/iteration.md)). External iteration over borrowed linked structures is still
+([Iteration](../../../book/src/guide/iteration.md)). External iteration over borrowed linked structures is still
 open (#57).
