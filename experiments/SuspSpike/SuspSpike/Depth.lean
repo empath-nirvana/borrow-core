@@ -31,7 +31,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 /-- A linear operation taking and answering `()`, at the empty resource. -/
 def unitEnt : OpEnt :=
   ⟨.lin, false, fun _ v ρ => v = Val.unit ∧ ρ = PMap.empty,
-    fun _ v ρ => v = Val.unit ∧ ρ = PMap.empty, none⟩
+    fun _ v ρ => v = Val.unit ∧ ρ = PMap.empty, none, false⟩
 
 /-- The row of the names `ns`, one operation each (index `0`). -/
 def tabOf (ns : List UInt32) : OpTab := fun n i => if n ∈ ns ∧ i = 0 then some unitEnt else none

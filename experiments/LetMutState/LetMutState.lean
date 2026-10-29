@@ -32,7 +32,7 @@ def stateRow (n : UInt32) (A : VTy) : Row :=
   Row.ofEff n [(.lin, .unit, A), (.lin, A, .unit)] 0
 
 theorem get_mem (n : UInt32) (A : VTy) :
-    (⟨n, 0, .lin, .unit, A, .ret .unit⟩ : OpSig) ∈ stateRow n A := by
+    (⟨n, 0, .lin, .unit, A, .ret .unit, false⟩ : OpSig) ∈ stateRow n A := by
   simp [stateRow, Row.ofEff, finsNil]
 
 /-- **No unwinding borrow carries `State`**: `get` is linear, so it is not abortive. -/

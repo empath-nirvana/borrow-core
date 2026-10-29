@@ -35,7 +35,7 @@ at every resource. -/
 theorem contShareC_of_contShare {en : OpEnt} {ls : List SRec} {K : Kont}
     {Φ : List SRec → Expr → WProp} {ρ : WRes} (h : contShare en ls K Φ ρ) :
     contShareC en ls K Φ ρ :=
-  fun ls' hs w => (h.2 ls' (ext_of_same hs ρ)).1 w
+  fun ls' hs w => (h.2 ls' (owed_of_same en hs ρ)).1 w
 
 theorem shareAt_of_contShare (C : Grade) (n i : UInt32) {en : OpEnt} {ls : List SRec} {K : Kont}
     {Φ : List SRec → Expr → WProp} {ρ : WRes} (h : contShare en ls K Φ ρ) :
