@@ -1,0 +1,194 @@
+-- A B-tree in the natural shape (minimum degree 3, at most 5 keys a node): a node owns a buffer
+-- of its keys and a buffer of its children, `mu X. buf i32 * buf (1 + X)`. A leaf's children
+-- buffer is empty, so a leaf is one heap allocation (its keys) and an inner node two, as Rust's
+-- `struct Node { keys: Vec<i32>, kids: Vec<Option<Node>> }`. Insertion is CLRS's: a full root is
+-- split first, and each full child is split before the descent enters it. A child is taken out of
+-- its parent's buffer (`inl ()` left in its place) and put back. The tree is dropped by its
+-- derived destructor (SPEC §12): each node's children, then its buffers, each at once.
+--
+-- Answer: `200 0 4` (every one of the 200 inserted keys found, an absent key not, height 4),
+-- `i32[200]` (the number of keys), `live 0`. 77 allocations, Rust's count for the same tree
+-- (`docs/expressiveness-probes/zero-cost/awfybg/rs/src/bin/btree_boxed.rs`).
+include textio
+include rec
+include buf
+include slice
+
+type BT = mu X. buf i32 * buf (1 + X)
+
+def maxk : i32 = 5
+
+fn mk(ks: buf i32, kids: buf (1 + BT)) -> BT = let t : BT = roll (ks, kids); t
+
+fn key(ks: buf i32, i: i32) -> buf i32 * i32 = let (a, n) = ks; let x = at(&a, i, 0); ((a, n), x)
+fn set_key(ks: buf i32, i: i32, x: i32) -> buf i32 = let (a, n) = ks; (array_set(a, i, x), n)
+
+-- The child at `i` taken out, `inl ()` left in its place.
+fn take_kid(kids: buf (1 + BT), i: i32) -> buf (1 + BT) * (1 + BT) =
+  let (a, n) = kids;
+  let (a, o) = array_replace[1 + BT] (a, i, inl ());
+  match o { inl c -> ((a, n), c) | inr c -> ((a, n), c) }
+
+-- `c` put at `i`.
+fn put_kid(kids: buf (1 + BT), i: i32, c: 1 + BT) -> buf (1 + BT) =
+  let (a, n) = kids; (array_set(a, i, c), n)
+
+-- The keys `ks[i..]` shifted one place right, `x` put at `i`, the length one more.
+fn ins_key(ks: buf i32, i: i32, x: i32) -> buf i32 =
+  let (a, n) = ks;
+  let mut a = a;
+  for d in 0..n - i { let j = n - 1 - d; let v = at(&a, j, 0); a = array_set(a, j + 1, v) };
+  (array_set(a, i, x), n + 1)
+
+-- The children `kids[i..]` shifted one place right, `c` put at `i`, the length one more.
+fn ins_kid(kids: buf (1 + BT), i: i32, c: 1 + BT) -> buf (1 + BT) =
+  let (a, n) = kids;
+  let mut b = (a, n);
+  for d in 0..n - i {
+    let j = n - 1 - d;
+    let (b1, x) = take_kid(b, j);
+    b = put_kid(b1, j + 1, x)
+  };
+  let (a, n) = b;
+  (array_set(a, i, c), n + 1)
+
+-- The full child `y` of a parent with keys `ks` and children `kids` at `i` split: its two upper
+-- keys and three upper children into a new node `z`, its middle key into the parent at `i`, and
+-- `y`, `z` at `i`, `i + 1`.
+fn split(ks: buf i32, kids: buf (1 + BT), i: i32, y: BT) -> buf i32 * buf (1 + BT) =
+  let (yks, ykids) = unroll y;
+  let (yks, m) = key(yks, 2);
+  let (yks, k3) = key(yks, 3);
+  let (yks, k4) = key(yks, 4);
+  let (ya, _) = yks;
+  let zks = set_key(set_key(box buf[i32](maxk), 0, k3), 1, k4);
+  let (zks, _) = len_of(zks);
+  let (za, _) = zks;
+  let (ykids, yn) = len_of(ykids);
+  let (ykids, zkids) = if yn == 0 { (ykids, box buf[1 + BT](0)) } else {
+    let mut yk = ykids;
+    let mut zk = box buf[1 + BT](maxk + 1);
+    for j in 0..3 { let (y2, c) = take_kid(yk, j + 3); yk = y2; zk = put_kid(zk, j, c) };
+    let (ya2, _) = yk;
+    let (za2, _) = zk;
+    ((ya2, 3), (za2, 3))
+  };
+  let y = mk((ya, 2), ykids);
+  let z = mk((za, 2), zkids);
+  let ks = ins_key(ks, i, m);
+  let kids = put_kid(kids, i, inr y);
+  (ks, ins_kid(kids, i + 1, inr z))
+
+-- `k` added to a node that is not full.
+fn ins_nonfull(t: BT, k: i32) -> BT =
+  let (ks, kids) = unroll t;
+  let (ks, n) = len_of(ks);
+  let (kids, nk) = len_of(kids);
+  -- the number of keys less than `k`
+  let mut ks = ks;
+  let mut i = 0;
+  for j in 0..n { let (k2, v) = key(ks, j); ks = k2; if v < k { i = j + 1 } else { break } };
+  if nk == 0 { mk(ins_key(ks, i, k), kids) } else {
+    let (kids, c) = take_kid(kids, i);
+    match c {
+      inl u -> mk(ks, kids)
+    | inr ch ->
+        let (cks, ckids) = unroll ch;
+        let (cks, cn) = len_of(cks);
+        let ch = mk(cks, ckids);
+        if cn == maxk {
+          let (ks, kids) = split(ks, kids, i, ch);
+          let (ks, m) = key(ks, i);
+          let j = if m < k { i + 1 } else { i };
+          let (kids, c2) = take_kid(kids, j);
+          match c2 {
+            inl u -> mk(ks, kids)
+          | inr c3 -> mk(ks, put_kid(kids, j, inr ins_nonfull(c3, k)))
+          }
+        } else { mk(ks, put_kid(kids, i, inr ins_nonfull(ch, k))) }
+    }
+  }
+
+fn insert(t: BT, k: i32) -> BT =
+  let (ks, kids) = unroll t;
+  let (ks, n) = len_of(ks);
+  let t = mk(ks, kids);
+  if n == maxk {
+    -- a new root, the old one its one child, split
+    let (ka, _) = box buf[1 + BT](maxk + 1);
+    let (ks, kids) = split(box buf[i32](maxk), (ka, 1), 0, t);
+    ins_nonfull(mk(ks, kids), k)
+  } else { ins_nonfull(t, k) }
+
+-- Whether `k` is in the tree.
+fn contains(t: BT, k: i32) -> BT * bool =
+  let (ks, kids) = unroll t;
+  let (ks, n) = len_of(ks);
+  let (kids, nk) = len_of(kids);
+  let mut ks = ks;
+  let mut i = 0;
+  let mut hit = false;
+  for j in 0..n {
+    let (k2, v) = key(ks, j);
+    ks = k2;
+    if v < k { i = j + 1 } else { if v == k { hit = true }; break }
+  };
+  if hit || nk == 0 { (mk(ks, kids), hit) } else {
+    let (kids, c) = take_kid(kids, i);
+    match c {
+      inl u -> (mk(ks, kids), false)
+    | inr ch -> let (ch, h) = contains(ch, k); (mk(ks, put_kid(kids, i, inr ch)), h)
+    }
+  }
+
+-- The number of keys.
+fn size(t: BT) -> BT * i32 =
+  let (ks, kids) = unroll t;
+  let (ks, n) = len_of(ks);
+  let (kids, m) = len_of(kids);
+  let mut kids = kids;
+  let mut s = n;
+  for i in 0..m {
+    let (k2, c) = take_kid(kids, i);
+    match c {
+      inl u -> kids = k2
+    | inr ch -> let (ch, cs) = size(ch); s = s + cs; kids = put_kid(k2, i, inr ch)
+    }
+  };
+  (mk(ks, kids), s)
+
+-- The depth (every leaf is at the same depth).
+fn height(t: BT) -> BT * i32 =
+  let (ks, kids) = unroll t;
+  let (kids, m) = len_of(kids);
+  if m == 0 { (mk(ks, kids), 1) } else {
+    let (kids, c) = take_kid(kids, 0);
+    match c {
+      inl u -> (mk(ks, kids), 1)
+    | inr ch -> let (ch, h) = height(ch); (mk(ks, put_kid(kids, 0, inr ch)), h + 1)
+    }
+  }
+
+fn next(x: i32) -> i32 = host[and32](host[add32](host[mul32](x, 1103515245), 12345), 2147483647)
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let mut t = mk(box buf[i32](maxk), box buf[1 + BT](0));
+  let mut x = 1;
+  for i in 0..200 { x = next(x); t = insert(t, host[shr_u32](x, 8)) };
+  let mut x = 1;
+  let mut hits = 0;
+  for i in 0..200 {
+    x = next(x);
+    let (t2, f) = contains(t, host[shr_u32](x, 8));
+    t = t2;
+    if f { hits = hits + 1 } else { () }
+  };
+  let (t, f) = contains(t, 0 - 5);
+  let (t, h) = height(t);
+  print_dec(hits); print_byte(b' ');
+  let fi = if f { 1 } else { 0 };
+  print_dec(fi); print_byte(b' ');
+  print_dec(h); print_byte(b'\n');
+  let (t, s) = size(t);
+  s
+}

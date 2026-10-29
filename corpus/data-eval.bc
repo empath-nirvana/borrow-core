@@ -1,0 +1,75 @@
+-- A call-by-value evaluator of terms with de Bruijn variables and closures (#32, SPEC §42).
+-- `Tm` is its own group; `Val` and `Env` form a group rooted at `Env`, which lies on every cycle,
+-- with `Val` its structure inlined: `Env` elaborates to
+-- `mu X. 1 + (i32 + ref X * ref Tm) * ref X`. `Clo` holds the environment itself, so it is a
+-- block (`box Clo(…)`); `ECons` holds the value inline and the rest of the environment in a cell.
+--
+-- The declared types hold cells, so they are not persistent and `clone` refuses them: an
+-- environment used twice is copied by hand (`dup_env`, with `dup_val` and `dup_tm`).
+--
+-- Answer: i32[42], `(\x. x + 1) 41`; `live 0`: every cell a run allocates is freed, the copies
+-- included, those the evaluation does not consume by their derived destructors (SPEC §12).
+include rec
+
+data Tm = Lit(i32) | Var(i32) | Lam(Tm) | App(Tm, Tm) | Add(Tm, Tm)
+
+data Val = VInt(i32) | Clo(Env, Tm)
+
+data Env = ENil | ECons(Val, box Env)
+
+fn lookup(env: Env, i: i32) -> Val =
+  match env {
+    ENil -> VInt(0 - 1)
+  | ECons(v, rest) -> if i == 0 { v } else { lookup(free(rest), i - 1) }
+  }
+
+fn dup_tm(t: Tm) -> Tm * Tm =
+  match t {
+    Lit(n) -> (Lit(n), Lit(n))
+  | Var(i) -> (Var(i), Var(i))
+  | box Lam(b) -> let (b1, b2) = dup_tm(b); (box Lam(b1), box Lam(b2))
+  | box App(f, a) ->
+      let (f1, f2) = dup_tm(f); let (a1, a2) = dup_tm(a); (box App(f1, a1), box App(f2, a2))
+  | box Add(f, a) ->
+      let (f1, f2) = dup_tm(f); let (a1, a2) = dup_tm(a); (box Add(f1, a1), box Add(f2, a2))
+  }
+
+fn dup_val(v: Val) -> Val * Val =
+  match v {
+    VInt(n) -> (VInt(n), VInt(n))
+  | box Clo(e, b) ->
+      let (e1, e2) = dup_env(e); let (b1, b2) = dup_tm(b); (box Clo(e1, b1), box Clo(e2, b2))
+  }
+
+fn dup_env(e: Env) -> Env * Env =
+  match e {
+    ENil -> (ENil, ENil)
+  | ECons(v, rest) ->
+      let (v1, v2) = dup_val(v); let (r1, r2) = dup_env(free(rest));
+      (ECons(v1, alloc(r1)), ECons(v2, alloc(r2)))
+  }
+
+fn eval(t: Tm, env: Env) -> Val =
+  match t {
+    Lit(n) -> VInt(n)
+  | Var(i) -> lookup(env, i)
+  | box Lam(b) -> box Clo(env, b)
+  | box App(f, a) ->
+      let (env, env2) = dup_env(env);
+      match eval(f, env) {
+        box Clo(cenv, body) -> eval(body, ECons(eval(a, env2), alloc(cenv)))
+      | VInt(n) -> VInt(0 - 2)
+      }
+  | box Add(a, b) ->
+      let (env, env2) = dup_env(env);
+      match (eval(a, env), eval(b, env2)) {
+        (VInt(x), VInt(y)) -> VInt(x + y)
+      | (_, _) -> VInt(0 - 3)
+      }
+  }
+
+fn to_int(v: Val) -> i32 = match v { VInt(n) -> n | box Clo(e, b) -> 0 - 4 }
+
+-- `(\x. x + 1) 41`.
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  to_int(eval(box App(box Lam(box Add(Var(0), Lit(1))), Lit(41)), ENil)) }

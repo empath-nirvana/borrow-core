@@ -3,10 +3,10 @@ import Core.Dtor
 /-!
 # NestedFold — the design pass's probe (#595)
 
-What the kernel's grammar does at nested recursion, before the class `P`:
+What the kernel's grammar does at nested recursion:
 
-- `μX. I32 ⊗ Array X` meets `roll`'s premises, and its body is outside `FShape`, so `HasDtor.mu`
-  cannot apply to it.
+- `μX. I32 ⊗ Array X` meets `roll`'s premises, and its body is outside `FShape` (it is in the
+  class `P`, `Core/FoldClass.lean`, SPEC §61).
 - A mutual group `A = 1 ⊕ (Ref A ⊗ Ref B)`, `B = 1 ⊕ (Ref B ⊗ Ref A)` encoded by Bekič as nested
   `μ`: the `B` found inside an unrolled `A` is `μY. B-body[A/X]`, which is not syntactically the
   canonical `B` (the kernel's `μ` is iso-recursive).
@@ -25,7 +25,7 @@ abbrev roseA : VTy := .mu (.tensor i32 (.fam (.ref (.tvar 0))))
 example : (VTy.tensor i32 (.fam (.ref (.tvar 0)))).NoMut 0 ∧ roseA.Cl 0 := by
   simp [VTy.NoMut, VTy.Cl]
 
-/-- Outside today's class: `toFShape` reads `Array X` as a leaf, not closed. -/
+/-- Outside `FShape`: `toFShape` reads `Array X` as a leaf, not closed. -/
 example : ¬ (toFShape (.tensor i32 (.fam (.ref (.tvar 0))))).WF := by
   simp [toFShape, FShape.WF, VTy.Cl]
 

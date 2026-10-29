@@ -4,6 +4,7 @@ import Core.EffExamples
 import Core.Rejections
 import Core.EffTier1Programs
 import Core.DivPrograms
+import Core.NestedPrograms
 
 /-!
 # Backend — kernel programs
@@ -213,6 +214,7 @@ def kernelPrograms : List (String × BoCa.Expr) :=
     ("forward", Shapes.forward),
     ("forward-cancel", Shapes.forwardCancel),
     ("multi-shot", Shapes.multiShot),
-    ("poly-id", Shapes.polyId) ]
+    ("poly-id", Shapes.polyId),
+    ("nested-fold", BoCa.Fig16.LogRel.Core.Nested.nestProg) ]
 
 end Backend

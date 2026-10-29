@@ -1,35 +1,27 @@
--- pending: a destructor and folds for `mu` with `X` under `array` (#182)
--- now: 97:56: `io_d17` is not consumed in its scope, and its type `(1 + (mu X. (1 + 1) * array (1 + X))) + 1 + (mu X. (1 + 1) * array (1 + X))` has no destructor
+-- LeetCode 208, Implement Trie (Prefix Tree), with the node of Rust's
+-- `struct Trie { end: bool, kids: Vec<Option<Trie>> }` written as a `data` declaration:
+-- `data Trie = Trie(bool, Vec[Option[Trie]])`. `Trie` occurs under the array of `Vec`'s buffer, so
+-- the constructor is not a block and needs no `box` (SPEC §42, §61): it elaborates to
+-- `mu X. bool * (array (X + 1) * i32)`, in the fold class `P` (§6), and its derived destructor
+-- drops each node's children, then the node's array, at once, as Rust drops a `Vec`. The same
+-- program over a `type` with `array (1 + X)` is `0208-implement-trie-boxed.bc`, and the arena form
+-- is `0208-implement-trie.bc`.
 --
--- LeetCode 208, Implement Trie (Prefix Tree), with each node owning an array of its children:
--- Rust's `Trie { children: [Option<Box<Trie>>; 26], end: bool }`, here `mu X. bool * array
--- (1 + X)`. The accepted program is `corpus/leetcode/trees/0208-implement-trie.bc`, an arena.
+-- `insert` and `walk` take a node apart, take the child at the next letter out of its array
+-- (`array_replace`, leaving `None`), go on in it, and put it back.
 --
--- `insert` and `walk` are recursions that take a node apart, take the child at the next letter out
--- of its array (`array_replace`, leaving `inl ()`), go on in it, and put it back: the borrow-free
--- form of walking `&mut` down the trie, and nothing is allocated but the new nodes. The trie is
--- dropped at the end of each case, as a `Box` tree is in Rust.
---
--- What is missing. `X` under `array` is outside `FShape` (SPEC §6, §12), so this `mu` type has no
--- destructor and no fold: every trie, and every `1 + Trie` that `array_replace` hands back, must
--- be consumed by hand (#182, item 2: folds beyond `FShape`). Writing the destructor by hand does
--- not get there today: a recursion over a node's 26 children inside a counted `for` is refused
--- (#492), and freeing the emptied array needs `array_free` with a consumer of `1 + Trie`, whose
--- `inl` arm must again drop a trie, a recursion inside a closure that is not run in place (#161).
--- The message names a variable of the elaborated code, and points at another `array_replace`
--- than the one in `insert` whose answer it is about.
---
--- Once it lands: on `corpus/leetcode/trees/0208-implement-trie.in`, the accepted program's
--- answers, `1 0 1 1 0`, `0 0 1 1 0`, `1 0 1 1 1 0 0` and `1 1 0 0 1`, one per line, then
--- `i32[4]`; `live 0`.
+-- Answer, on `0208-implement-trie.in`: `1 0 1 1 0`, `0 0 1 1 0`, `1 0 1 1 1 0 0` and `1 1 0 0 1`,
+-- one per line, then `i32[4]`; `live 0`. 58 allocations, Rust's count for the same program
+-- (`docs/expressiveness-probes/zero-cost/awfybg/rs/src/bin/trie_boxed.rs`).
 
 include textio
 include rec
+include buf
 
--- A trie node: whether a word ends here, and the child at each letter, `inl ()` for none.
-type Trie = mu X. bool * array (1 + X)
+-- A trie node: whether a word ends here, and the child at each letter.
+data Trie = Trie(bool, Vec[Option[Trie]])
 
-fn fresh() -> Trie = roll (false, array_new[1 + Trie] (26, !{ i -> inl () }))
+fn fresh() -> Trie = Trie(false, Vec((array_new[Option[Trie]] (26, !{ i -> None }), 26)))
 
 -- The tokens of the operations, as owned strings: a recursion cannot run inside the borrow of
 -- the input (SPEC §18, *Not provided*: a borrow of a buffer crossed by an abort).
@@ -56,33 +48,35 @@ fn letter(w: string, i: i32) -> string * i32 =
 
 -- `w[i..]` added below `t`.
 fn insert(t: Trie, w: string, i: i32) -> Trie * string =
-  let (end, kids) = unroll t;
+  let Trie(end, Vec(b)) = t;
+  let (kids, k) = b;
   let (w, n) = len_of(w);
-  if i == n { (roll (true, kids), w) } else {
+  if i == n { (Trie(true, Vec((kids, k))), w) } else {
     let (w, c) = letter(w, i);
-    let (kids, o) = array_replace[1 + Trie] (kids, c, inl ());
-    let child = match o { inl s -> match s { inl _ -> fresh() | inr t -> t } | inr s -> fresh() };
+    let (kids, o) = array_replace[Option[Trie]] (kids, c, None);
+    let child = match o { inl s -> match s { Some(t) -> t | None -> fresh() } | inr s -> fresh() };
     let (child, w) = insert(child, w, i + 1);
-    let kids = array_set(kids, c, inr child);
-    (roll (end, kids), w)
+    let kids = array_set(kids, c, Some(child));
+    (Trie(end, Vec((kids, k))), w)
   }
 
 -- Whether the walk along `w[i..]` stays in the trie, and whether a word ends where it stops.
 fn walk(t: Trie, w: string, i: i32) -> (Trie * string) * (bool * bool) =
-  let (end, kids) = unroll t;
+  let Trie(end, Vec(b)) = t;
+  let (kids, k) = b;
   let (w, n) = len_of(w);
-  if i == n { ((roll (end, kids), w), (true, end)) } else {
+  if i == n { ((Trie(end, Vec((kids, k))), w), (true, end)) } else {
     let (w, c) = letter(w, i);
-    let (kids, o) = array_replace[1 + Trie] (kids, c, inl ());
+    let (kids, o) = array_replace[Option[Trie]] (kids, c, None);
     match o {
       inl s -> match s {
-          inl _ -> ((roll (end, kids), w), (false, false))
-        | inr child ->
+          None -> ((Trie(end, Vec((kids, k))), w), (false, false))
+        | Some(child) ->
             let ((child, w), r) = walk(child, w, i + 1);
-            let kids = array_set(kids, c, inr child);
-            ((roll (end, kids), w), r)
+            let kids = array_set(kids, c, Some(child));
+            ((Trie(end, Vec((kids, k))), w), r)
         }
-    | inr s -> ((roll (end, kids), w), (false, false))
+    | inr s -> ((Trie(end, Vec((kids, k))), w), (false, false))
     }
   }
 

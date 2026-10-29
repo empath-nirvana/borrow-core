@@ -286,6 +286,9 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `slice_empty_mut : [Mut @a A]`, the family `(0, 0)`.  `[spec §9]` -/
   | sliceEmptyM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       CDerivesP Δ Γ (.val emptyFamV) (.val (.sliceMut a A))
+  /-- `array_empty : Array A`, the family `(0, 0)`: an owned array of no cells.  `[spec §9]` -/
+  | arrEmpty {Δ Γ} (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerivesP Δ Γ (.val emptyFamV) (.val (.array A))
   /-- `slice_replace_mut : !([Mut @a A] ⊗ (I32 ⊗ A) ⇒ [Mut @a A] ⊗ (A ⊕ A))`, `array_replace`'s
   term.  `[spec §9]` -/
   | sliceReplaceM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
@@ -383,6 +386,11 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   (the emptied cell and the result on its content), any `R`.  `[spec §6]` -/
   | foldReuse {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
       CDerivesP Δ Γ (.val (foldReuseV F)) (.val (.lolli (algRTy F R) (foldOTy F R)))
+  /-- The general owned fold, a constant: `foldOwnG : Algs ⊸ !U(μX. T ⊸ F R₀)`, for `T` of the
+  class `P`, the tuple `Algs` holding one algebra per key of `μX. T` at the results `Rs`
+  (`FoldOwnG.lean`).  `[spec §6]` -/
+  | foldOwnG {Δ Γ} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
+      CDerivesP Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs))
   /-- `νX. C` is its unrolling `C[U(νX. C)/X]` (`cC_nu_iff`), on the same term, at a positive
   `C`.  `[spec §7]` -/
   | nuIn {Δ Γ e C} (hC : C.NuOk) (h : CDerivesP Δ Γ e (.comp C.unroll)) :

@@ -100,6 +100,7 @@ def Const.subst (σ : TySubst) : Const → Const
   | .withborF2Mut c a b w A B T => .withborF2Mut c a b w (A.subst σ) (B.subst σ) (T.subst σ)
   | .withborF2Imm c a b A B T => .withborF2Imm c a b (A.subst σ) (B.subst σ) (T.subst σ)
   | .arrayNew A => .arrayNew (A.subst σ)
+  | .arrayEmpty A => .arrayEmpty (A.subst σ)
   | .arrayFree A => .arrayFree (A.subst σ)
   | .arraySize A => .arraySize (A.subst σ)
   | .arrayReplace A => .arrayReplace (A.subst σ)

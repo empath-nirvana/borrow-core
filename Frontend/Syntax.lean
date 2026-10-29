@@ -286,6 +286,8 @@ inductive Const where
       `array_replace[A]`, and on a family of leaf views `array_len[@, A]`, `array_get[@, A]`,
       `array_copy[@, A]`, `array_forget[@, A]`. -/
   | arrayNew (A : VTy)
+  /-- `array_empty[A]`: the owned array of no cells, which needs no element.  `[spec §9]` -/
+  | arrayEmpty (A : VTy)
   | arrayFree (A : VTy)
   | arraySize (A : VTy)
   | arrayReplace (A : VTy)
@@ -934,6 +936,7 @@ def Const.strip : Const → Const
       .withborF2Mut c.strip a.strip b.strip w.strip A.strip B.strip T.strip
   | .withborF2Imm c a b A B T => .withborF2Imm c.strip a.strip b.strip A.strip B.strip T.strip
   | .arrayNew A => .arrayNew A.strip
+  | .arrayEmpty A => .arrayEmpty A.strip
   | .arrayFree A => .arrayFree A.strip
   | .arraySize A => .arraySize A.strip
   | .arrayReplace A => .arrayReplace A.strip

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.10 · 2026-10-28
+Version 1.11 · 2026-10-29
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -411,6 +411,14 @@ value; `A″_R` gives `Ref 1 ⊗ R` at each `Ref X` (the emptied cell and the re
 be built in place. `foldImm` terminates by the size of each view's witness, which is strictly
 smaller than its parent's; `foldOwn`/`foldReuse` by the size of the owned resource.
 
+For `T` in the wider class `P` (closed leaf, a variable in scope, `⊗`, `⊕`, `Ref S`, `Array S`
+and `μ` over members, not headed by a variable; §61), the owned fold with one algebra per key
+(each `μ` and each array of recursive data), passed at run time:
+
+    foldOwnG  : Algs ⊸ !U(μX.T ⊸ F R₀)
+
+It terminates by the size of the owned resource, then of the value, then of the key's body.
+
 ### Semantics
 
 `vC` takes a type-variable environment; `μ` is an impredicative least fixed point.
@@ -807,6 +815,7 @@ The constants, at a dead context; `A ⇒ B` is `U(A ⊸ F B)`:
 | constant | type |
 |---|---|
 | `array_new` | `!(I32 ⊗ !(I32 ⇒ A) ⇒ Array A)` — `tab`: the tabulator's result at each index |
+| `array_empty` | `Array A` — `(0, 0)`, the array of no cells, at every `A`: it needs no element (`arrEmpty_compatX`, the empty family `famEmpty_compatX`; §61) |
 | `array_free` | `!(!(A ⇒ 1) ⊗ Array A ⇒ 1)` — `drop`: each element to the consumer, in index order, then the cells freed |
 | `array_size` | `!(Array A ⇒ Array A ⊗ I32)` |
 | `array_replace` | `!(Array A ⊗ (I32 ⊗ A) ⇒ Array A ⊗ (A ⊕ A))` — the old element, or the new one back if out of range |
@@ -1209,7 +1218,7 @@ judgment index or semantic definition changes. From `experiments/Affine`.
 ### Destructors
 
 `dtorE T : T ⊸ F 1` is a closed term, defined by one structural recursion on `T`
-(`Core/Dtor.lean`). `HasDtor T` is the class of types it is defined at, and `dtor_wf` types it
+(`Core/Dtor.lean`; with `algsIn`, which lists a `μ`'s algebras, one mutual recursion, §61). `HasDtor T` is the class of types it is defined at, and `dtor_wf` types it
 in `CDerives` at every lifetime context and every dead context, using existing rules only.
 There are three classes of value type.
 
@@ -1226,6 +1235,7 @@ There are three classes of value type.
    | `A ⊗ B`, `A ⊕ B`, `[@a] A` | componentwise |
    | `Ref A` | `free`, then the destructor of `A` |
    | `μX. T`, `T` in `FShape` (§6) | `foldOwn`, whose algebra is the destructor of `T[1/X]` |
+   | `μX. T`, `T` in `P` (§6, §61), not in `FShape` | `foldOwnG`, whose algebra at each key is the destructor of the key's body (an array key's element type) at results `1` |
    | `U(C & F 1)` | `close`: force, then the second projection |
    | `U(νX. C & F R)`, `R` closed with a destructor (`D A`, `Stream A`, `Iter A R₀ R`, `Aff^c A B`) | `close` (§7), then the destructor of `R` |
    These are linear. A value of one of these types that goes unused is consumed by its
@@ -1233,7 +1243,7 @@ There are three classes of value type.
    runs the object's `close` code, where it is inserted can be observed.
 3. **Types with no destructor**: `U C` other than the codata above (a thunk of `F A` or of
    `A ⊸ C` can be disposed of only by running it, which has effects and may need an argument), `μ`
-   outside `FShape`, a type variable, and anything built from one of these. These are strictly linear.
+   outside `P` (§61), a type variable, and anything built from one of these. These are strictly linear.
    A variable of one of these types must be consumed, and an unused one is a type error that
    names the type.
 
@@ -7617,9 +7627,19 @@ written.
 - **A field written `box A`** is a cell of its own; a constructor whose recursion is only under
   written boxes is not a block (`data L = { v: i32, next: Option[box L] }` is
   `μX. i32 ⊗ (ref X ⊕ 1)`).
-- **Refused, asking for `box`**: a block's field whose type holds a member of the group inside
-  another type (`tail: Option[List]`, a cell `ref (X ⊕ 1)` outside §6's `FShape`), at the
-  declaration; and a block constructor written without `box`, at the construction (E3).
+- **An array** is a recursive position with no `box` (§6.11, §61): its recursion is under the
+  array's allocation. A constructor whose recursion is only under arrays and written boxes is not
+  a block (`data Tree = Tip(i32) | Node(i32, array Tree)` is `μX. i32 ⊕ (i32 ⊗ array X)`), and a
+  block's field may be an array of the root.
+- **The class decides the positions** (§61): a declaration's recursion is accepted exactly when
+  its `μ` body, each application of a non-recursive declaration opened to its structure, is in §6's
+  class `P` (`FoldP.PB`, `pBodyB`). So the root may sit inside another type under any cell or
+  array: a block's `tail: Option[List]` is the cell `ref (X ⊕ 1)`, `Vec[Option[Trie]]` is
+  `array (X ⊕ 1) ⊗ i32`.
+- **Refused**: a field whose recursion is outside `P`, at the declaration, naming the former
+  (`X` under `imm`, `mut`, a view, `!`, `[@a]` or an array of borrows; under `U` the checker
+  refuses it); a recursive declaration around the root (a `μ` nested in a `μ`, U3); and a block
+  constructor written without `box`, at the construction (E3).
 - **Regular recursion**: inside its group a parameterised member occurs at its own parameters.
   A nested datatype (`Tree[(T, T)]`, D2) is refused: not provided.
 
@@ -7784,7 +7804,8 @@ So A7 waits for a block to be lowered as one object (N1, layouts from types): th
 | `corpus/fail/data-no-box.bc` | a block built without `box` | refused, asking for `box` |
 | `corpus/fail/data-not-exhaustive.bc`, `data-not-exhaustive-nested.bc` | matches missing a constructor, one over two columns with a nested pattern | refused, with the witness |
 | `corpus/fail/data-redundant.bc` | an arm after a wildcard | refused |
-| `corpus/reject/data-field-box.bc` | a recursive field under another type | refused, asking for `box` |
+| `corpus/reject/data-field-borrow.bc` | a recursive field under a borrow, outside `P` | refused, naming the borrow |
+| `corpus/data-option-block.bc` | a block whose field holds the root inside an option, `tail: Option[List]` | `i32[6]` |
 | `corpus/reject/data-no-root.bc` | mutual recursion with no member on every cycle | refused |
 | `corpus/data-fold-*.bc`, `corpus/fail/data-fold-*.bc`, `corpus/reject/data-fold-*.bc` | the fold block (F1, F2) | §60 |
 
@@ -9344,6 +9365,197 @@ exit status, `corpus/counts.expected`, `counts-backend2.expected`, `kernel-count
 
 ---
 
+## 61. Entry 60 — the owned fold and the destructor at the class `P` (#722, U1 of #595)
+
+### Motivation
+
+§6's folds and §12's destructors are defined for `μ` bodies in the class `FShape`, whose leaves
+are closed. A node that owns an array of its children (`μX. array i32 + array X`, AWFY's Storage;
+`μX. buf i32 * buf (1 + X)`, a B-tree; `μX. bool * array (1 + X)`, a trie) or a `μ` nested inside
+another (`μX. I32 ⊗ Array (μY. 1 ⊕ (Ref X ⊗ Ref Y))`) is outside it, so it has no destructor, and
+a program that lets one go unused is refused. The design pass (#595, agreed 2026-10-28; its §4)
+gives one class `P`, one owned fold for every body in it, generated by recursion on the type, and
+the destructor as that fold at results `1`. U0 (#719, `experiments/NestedFold/`) proved the
+traversal; this entry is the kernel constant, the destructor, the checker, the elaborator's
+arrays and both backends.
+
+### The class `P`
+
+`P d A`, at `d` type variables in scope (`Core/FoldClass.lean`):
+
+| form | condition |
+|---|---|
+| a closed type | a leaf, whatever its former |
+| `tvar i` | `i < d` |
+| `A ⊗ B`, `A ⊕ B` | both in `P d` |
+| `Ref S`, `Array S` (`[Ref S]`) | `S` in `P d` |
+| `μB` | `B` in `P (d + 1)`, and its head is not a variable (`Hd`, which passes through `μ`) |
+
+`X` under `Imm`, `Mut`, `!`, `[@a]`, `U` or a family that is not an array is outside it, as
+before. `PBody B` (`P 1 B ∧ Hd B`) is decidable (`pBodyB_iff`), and every `FShape` body is in it
+(`pBody_of_FShape`). A **key** is a binder the fold calls: each `μ` that is not closed, and each
+array whose element type is not closed, keyed by the stack of the bodies above it
+(`Bnd.mu`, `Bnd.arr`). `keys B₀` lists `μB₀`'s keys in preorder, the root first.
+
+### The constant
+
+    foldOwnG : Algs ⊸ !U(μX. T ⊸ F R₀)        T in P, any results R
+
+`Algs` is the right-nested `⊗` of one algebra per key, in the order of `keys`
+(`FoldP.algsTy`): `!U(T_b⟨R⟩ ⊸ F R_b)` at a `μ` key with body `T_b`, and
+`!U(1 ⊕ (R_a ⊗ S⟨R⟩) ⊸ F R_a)` at an array key of element type `S`. `T⟨R⟩` (`FoldP.resO`) is
+`T` with each key's result at its positions: a variable's binder's result, an inner `μ`'s result,
+an array key's result, and `S⟨R⟩` under a `Ref S` that is not closed (the cell is freed). The
+results are a list `Rs`, a key's the entry at its first position (`FoldP.algsOf`). The algebras
+are passed at run time.
+
+The term (`Core/FoldOwnGTerm.lean`) is one Z combinator whose body dispatches on the tag of the
+key it is called at, Bekič's simultaneous fixed point (decision 59's shape). A key's traversal
+is generated by recursion on its body, one action per former: a closed leaf is passed; a
+variable or an inner `μ` is the call of its key; `⊗`, `⊕` componentwise; `Ref S` frees the cell
+and traverses `S`; an array is a `count` loop (§16) that moves each element out of its slot
+(`swap` with `()`), traverses it and steps the array key's algebra, a left fold from
+`inj₁ ()`, and then `drop`s the emptied array, its buffer at once.
+
+### Soundness
+
+`foldOwnG_compatX` (`Core/FoldOwnG.lean`) is the rule's semantic typing, the CDerives rule
+`foldOwnG` its use (`Core/Fundamental.lean`), mirrored in `CDerivesAt` (`Core/Tied.lean`) and
+`CDerivesP` (`Core/PinDerives.lean`), with a case in each induction over them. The proof is
+U0's, with the algebras taken out of the tuple: `trav_spec` is induction on the position
+`A ∈ P`, one case per former, given every key's call below the measure `(cells, value size,
+rank)` lexicographically; `hs_all` is strong induction on that measure; `fold_spec` is the fold
+of `μB₀` at every body in `P`. The measure drops at every call: after `⊗`/`⊕` the value is
+smaller (a body's head is not a variable), after a cell or an array slot the resource is
+smaller (`dsize_tail_lt`), and at an inner `μ`, at the same value, the body is.
+
+### The destructor
+
+`dtorAt true A` is the destructor of `A⟨1⟩`, `A` at results `1` (`algE_eqP`). `HasDtor.mu`
+(`Core/Dtor.lean`) is restated at `P`: the body is in `P`, `T⟨1⟩` has a destructor, and so has
+every key's body (an array key's element type) at `1`. At a body in `FShape` (`fshapeB`) the
+destructor is `foldOwn` with the algebra `T[1/X]`'s destructor, the same term as before, so every
+existing program's destructor, run and counts are unchanged; at any other body of `P` it is
+`foldOwnG`, its algebra at a `μ` key the destructor of the key's body at `1` and at an array key
+the destructor of `1 ⊕ (1 ⊗ S⟨1⟩)` (`keyAlg`, listed by `algsIn` in the order of the keys,
+`algsIn_eq`). `dtor_wf` types it from the destructors of those types; `HasDtor.muF` is the old
+constructor's hypotheses. The checker's `dtorB` mirrors it (`Frontend/Check/Steps.lean`):
+`dtorB true A` decides `A⟨1⟩` and every key inside `A` in one recursion (`AlgDtor`,
+`dtorB_soundA`).
+
+### Declarations
+
+§42: a declaration's recursion is accepted exactly when its `μ` body is in `P`, decided by the
+kernel's `FoldP.PB` and `pBodyB` (`Frontend/Elab/Data.lean`, `pClass`), not by a predicate of the
+elaborator's own. The body is read with each application of a non-recursive declaration opened to
+its structure under every value former (`openX`) and mapped to the kernel type `P` reads (`pTy`):
+`X` its index, each former the kernel's, a subterm without `X` the leaf `1`. That map is marked
+`UNPROVED:` at the site: it assumes `P` reads no lifetime, that a closed subterm may stand for any
+other (`P_of_closed`), and that a type the table does not open is closed once elaborated.
+
+So an array is a recursive position with no `box` (data-declarations §6.11): its recursion is
+under the array's allocation, and a constructor whose recursion is only under arrays and cells is
+not a block. `data Tree = Tip(i32) | Node(i32, array Tree)` is `μX. i32 ⊕ (i32 ⊗ Array X)`;
+`data Trie = Trie(bool, Vec[Option[Trie]])` is `μX. bool ⊗ (Array (X ⊕ 1) ⊗ i32)`, Rust's
+`Vec<Option<Trie>>`; `Node(array (i32 * T))` is `Array (i32 ⊗ X)`. A block's cell may hold the
+root inside another type (`tail: Option[List]`, `ref (X ⊕ 1)`). `box` is still asked for where
+the recursion is bare (a block), which is where a layout would be infinite. A field outside `P` is
+refused at the declaration, the message naming the former that puts it outside (a borrow, `!`, a
+lifetime box, an array of borrows). A recursive declaration around the root is refused: its `μ`
+would mention the enclosing variable, which the checker refuses (U3).
+
+**The filler** (§17, design §5.4) of a buffer's unused slots is computed structurally
+(`Frontend/Sugar.lean`, `fillerOf`), under §6's stack of binders: `0`, `()`, componentwise at `⊗`,
+the first summand that has one at `⊕`, the empty view at a borrowed family, **the empty array**
+at an owned one, the constant function at `!(A ⇒ B)`, and at `μB` the filler of `B` with the
+`μ`'s own variable having none (the least fixed point's first approximant), rolled. The empty
+array is the constant `array_empty[A] : Array A` (§9), the empty family `(0, 0)` that
+`famEmpty_compatX` already types at every leaf, here at `Ref A`: the CDerives rule `arrEmpty`
+(and `CDerivesAt`'s, `CDerivesP`'s, the typed term's), whose soundness is `arrEmpty_compatX`.
+`array_new` at length 0 needs a function to an element, so an element type whose only finite
+values are built from empty arrays (`data Tree = Tree(i32, Vec[Tree])`, `μX. Array X`) had no
+closed term without it. So `Json`'s filler is `Num(0)` whichever constructor is first, the rose
+tree's is `Tree(0, [])`, and `box buf[Tree](0)` is an empty buffer that allocates nothing. A type
+with no finite value (`μX. i32 ⊗ X`) has none, and the message says so. The filler's typing is
+the checker's; that one is found at every type with a finite value whose leaves have fillers is
+`UNPROVED:` at the site.
+
+### Lowering
+
+- **Backend2**'s destructor was already generated by type (`genDtor`), and it covers `P` as it
+  stands: one function per closed `μ` type the value unrolls to (an inner binder, which names the
+  outer one, is its own function calling the outer's), and one loop function per array that
+  destroys each element and then frees the buffer once. This entry documents it, marks that it is
+  read off the `dtor` node's type and not compiled from `dtorE`'s term (`UNPROVED:` at the site),
+  and gives `foldOwnG` its arity (`constArity`). `array_empty` is the empty family
+  (`emptyFam`).
+- **The old backend** compiles `dtorE`'s term: the native fixed point whose body is the `case`
+  on the key's tag, each key's traversal a code of its own, the array's `count` loop of tail
+  calls, the buffer freed once by `drop`. Calls are direct and nothing is allocated. Its closure
+  IR's interpreter frees the one cell `tab` places at length 0 only when the base is not null:
+  `array_empty`'s `(0, 0)` holds none.
+
+### Programs
+
+| program | what it shows | answer | allocations (Rust's) |
+|---|---|---|---|
+| `corpus/storage-array.bc` | AWFY Storage in natural form, a tree of arrays, no hand-written destructor | `i32[5461]` | 5461 (5461) |
+| `corpus/btree-boxed.bc` | a B-tree whose nodes own buffers of keys and children, CLRS insertion of 200 keys | `200 0 4`, `i32[200]` | 77 (77) |
+| `corpus/leetcode/trees/0208-implement-trie-boxed.bc` | a trie whose nodes own arrays of their children | the arena form's answers, `i32[4]` | 58 (58) |
+| `corpus/data-array-tree.bc` | a `data` tree recursive under an array, with no `box` | `i32[12]` | 4 |
+| `corpus/data-json-vec.bc` | `data Json = Num(i32) \| Arr(Vec[Json])`, no `box`; a buffer of `Json` with the filler `Num(0)` | `i32[10]` | 6 |
+| `corpus/data-rose.bc` | #32's rose tree, `Rose`/`Forest`, `kids: box Forest` | `i32[16]` | 14 |
+| `corpus/data-eval.bc` | #32's `Tm`/`Val`/`Env` evaluator, `ECons(Val, box Env)`, copies by hand | `i32[42]` | 10 |
+| `corpus/leetcode/trees/0208-implement-trie-vec.bc` | the trie as Rust's struct, `data Trie = Trie(bool, Vec[Option[Trie]])`, no `box` | the arena form's answers, `i32[4]` | 58 (58) |
+| `corpus/data-rose-vec.bc` | `data Tree = Tree(i32, Vec[Tree])` built from empty buffers (filler `Tree(0, [])`); `data J = Arr(Vec[J]) \| Num(i32)`, the array constructor first (filler `Arr([])`) | `i32[19]` | 5 |
+| `corpus/data-option-block.bc` | a block whose cell holds the root inside an option, `tail: Option[List]` | `i32[6]` | 12 |
+| `corpus/filler-mu.bc` | buffers of `μX. Array X` and `μX. i32 ⊗ Array (Array X)`, filled by `roll []` and `roll (0, [])` | `i32[3]` | 3 |
+| `corpus/reject/filler-no-finite-value.bc` | `filler` at `μX. i32 ⊗ X` | refused: no finite value | — |
+| kernel program `nested-fold` (`Core/NestedPrograms.lean`) | `μX. I32 ⊗ Array (μY. 1 ⊕ (Ref X ⊗ Ref Y))`, three keys deep: built, summed by `foldOwnG`, dropped by its destructor; typed (`nestProg_derives`), run (`nestProg_runs`, `nestProg_eval`) | `i32[34]` | 14 |
+
+Every stage of both backends prints each program's golden and `live 0`. Rust's counts are the
+programs ported with the same containers and capacities
+(`docs/expressiveness-probes/zero-cost/awfybg/rs/src/bin/storage.rs`, `btree_boxed.rs`,
+`trie_boxed.rs`; `run.sh`); `trie_boxed.rs` is the Rust of both trie programs (its
+`Vec<Option<Trie>>`). The last two of #32's programs already worked under the single-root
+rule.
+
+### Baseline
+
+`fundamentalC` and `adequacyC` cover the new rules (`foldOwnG_compatX`, `arrEmpty_compatX`);
+`fundamentalC_pin` likewise. No change to the relation, the machine, `Paper/` or `Support/`. The
+destructor of a `μ` in `FShape` is the term it was, so every golden, exit status,
+`corpus/counts.expected`, `counts-backend2.expected`, `kernel-counts.expected` and
+`cells.expected` entry is unchanged; the new programs get rows. The checker accepts a superset of
+what it did, and so do declarations: `corpus/reject/data-field-box.bc`'s `tail: Option[List]` is
+in `P` and runs (`corpus/data-option-block.bc`); the reject is now a field under a borrow
+(`data-field-borrow.bc`).
+
+### Open
+
+- **The borrowed fold** at `P` (U2), the frontend's inner `μ` (U3, B14 and the check that a core
+  `μ` type is closed), reuse (U4) and mutual groups with no root (U5).
+- **A user-visible `fold_own` at `P`**: the constant is the kernel's and the destructors', not the
+  surface's; `fold_own[…]` and the fold block (§60) stay at `FShape`.
+- **`FShape`'s constants are not retired** by this entry: the old backend compiles `fold_own`'s
+  and `fold_reuse`'s step by pointer reversal, recognizing their term (`Backend/README.md`,
+  *Stack*), and the destructor of an `FShape` body keeps their term so that its counts and stack
+  behaviour stay.
+- **Per-key functions in the old backend**: it keeps the dispatch inside one code. A deep
+  structure recurses on the native stack there, as a non-linear `fold_own` does.
+- **Declarations refused by the checker, not by `P`**: a recursive type under a function type is
+  a leaf of `P` (`U C` is closed for it) and the checker refuses the `μ` variable under `U`; a
+  recursive declaration around the root is a `μ` mentioning the enclosing variable, which the
+  checker refuses (U3). Both refusals name their cause.
+- **A filler at a block's cells**: a mutual group through `Vec` whose member is a block
+  (`Obj(Vec[Pair])`, `data Pair = Pair(i32, Json)`) has none: a filler of a cell would allocate.
+  Mutual groups are U5.
+- **The filler's completeness** (`UNPROVED:` at `fillerOf`) and **the declaration check's map to
+  the kernel type** (`UNPROVED:` at `pTy`) are not proved; the filler's typing and the class's
+  decision are the checker's and the kernel's.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -9758,10 +9970,39 @@ Entry 59 (§60) is implemented in `Frontend/Elab/Data.lean` (`foldComp`, `foldBo
 `Frontend/Sugar.lean` (the `fold`, `like` and `cells` cases of `surfV`), `Frontend/Syntax.lean` (`FoldKind`,
 `VSugar.fold`, `like`, `cells`) and `Frontend/Print.lean`; no change to `CDerives`, `Core/`, `Paper/`, `Support/`,
 the checker or either backend.
+Entry 60 (§61) is implemented in `Core/FoldClass.lean`, `Core/FoldOwnGTerm.lean` and
+`Core/FoldOwnG.lean` (the class, the term, `foldOwnG_compatX`); the rule `CDerives.foldOwnG` in
+`Core/Fundamental.lean`, `CDerivesAt.foldOwnG` in `Core/Tied.lean` and `CDerivesP.foldOwnG` in
+`Core/PinDerives.lean`, with a case in each induction over them (`Core/Closed.lean`,
+`Inversions.lean`, `Mentions.lean`, `InsertDead.lean`, `Weaken.lean`, `RaiseNames.lean`,
+`PinFundamental.lean`, `EffTier1Programs.lean`); the destructor in `Core/Dtor.lean`; the kernel
+program in `Core/NestedPrograms.lean` and `Backend/Kernel.lean`; the checker's `dtorB` in
+`Frontend/Check/Steps.lean`; the declarations' class check in `Frontend/Elab/Data.lean`
+(`openX`, `pTy`, `notP`, `pClass`); the filler in `Frontend/Sugar.lean` (`fillerOf`); the
+constant `array_empty` (`Core/SliceOps.lean`, `arrEmpty_compatX`, the rule `arrEmpty` in the three
+judgments and their inductions, the typed term by `scripts/gen-pin.py`, `Frontend/Consts.lean`,
+`Frontend/Check/Consts.lean`, `Backend2/Convert.lean`, `Backend/Clos/Interp.lean`'s `drop`); and
+Backend2's `foldOwnG` arity (`Backend2/Convert.lean`). No change to `Paper/`, `Support/`, the
+relation or the machine.
 
 ---
 
 ## Changelog
+
+- **1.11** (2026-10-29) — §61 (#722, U1 of #595): the owned fold and the destructor at the class
+  `P`. The class (`Ref` and arrays of any member, `μ` nested in `μ`), the constant `foldOwnG` with
+  one algebra per key passed at run time, its compatibility lemma and `CDerives` rule (and
+  `CDerivesAt`'s, `CDerivesP`'s); `HasDtor.mu` and `dtorAt` at `P`, `FShape` bodies keeping
+  `foldOwn`; the checker's `dtorB`; declarations' recursion accepted exactly at `P`, decided by
+  the kernel's `PB` (§42), so an array is a recursive position with no `box`; Backend2's existing
+  type-directed destructor documented, with `foldOwnG`'s arity; the constant `array_empty` and the
+  filler computed structurally at `μ`. AWFY Storage, a
+  B-tree and a trie whose nodes own arrays run in natural form at Rust's allocation counts
+  (`corpus/storage-array.bc`, `btree-boxed.bc`, `leetcode/trees/0208-implement-trie-boxed.bc`,
+  moved from the probes and `pending/`); a value nested three deep (the kernel program
+  `nested-fold`); #32's rose tree and evaluator; the trie as Rust's struct
+  (`0208-implement-trie-vec.bc`), a rose tree over `Vec` (`data-rose-vec.bc`). Every existing
+  golden and count unchanged.
 
 - **1.10** (2026-10-28) — §60 (#718, `docs/data-declarations.md` §11.1 A2): the `fold` block.
   `fold_imm e { … }`, `fold_own`, `fold_reuse` with constructor patterns whose recursive fields

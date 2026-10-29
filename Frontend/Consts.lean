@@ -24,7 +24,7 @@ inductive CKw where
   | foldImm | foldOwn | foldReuse | fixd | unfoldS | unfold
   | i32 | i64 | u8 | f32 | f64 | host
   | allocS | freeS | withborSMut | withborSImm | withborF2Mut | withborF2Imm
-  | arrayNew | arrayFree | arraySize | arrayReplace | arrayLen | arrayGet | arrayCopy
+  | arrayNew | arrayEmpty | arrayFree | arraySize | arrayReplace | arrayLen | arrayGet | arrayCopy
   | arrayForget | sliceBorrowMut | sliceBorrowImm | sliceGetMut | sliceLenMut
   | sliceSplitImm | sliceSplitMut | sliceEmptyImm | sliceEmptyMut | sliceReplaceMut | sliceSwapMut
   | countFold | countTry | boundedFix
@@ -45,7 +45,7 @@ def CKw.str : CKw → String
   | .allocS => "alloc_s" | .freeS => "free_s"
   | .withborSMut => "withbor_s_mut" | .withborSImm => "withbor_s_imm"
   | .withborF2Mut => "withbor_f2_mut" | .withborF2Imm => "withbor_f2_imm"
-  | .arrayNew => "array_new" | .arrayFree => "array_free" | .arraySize => "array_size"
+  | .arrayNew => "array_new" | .arrayEmpty => "array_empty" | .arrayFree => "array_free" | .arraySize => "array_size"
   | .arrayReplace => "array_replace" | .arrayLen => "array_len" | .arrayGet => "array_get"
   | .arrayCopy => "array_copy" | .arrayForget => "array_forget"
   | .sliceBorrowMut => "slice_borrow_mut" | .sliceBorrowImm => "slice_borrow_imm"
@@ -64,7 +64,7 @@ def CKw.all : List CKw :=
    .withbor1, .withbor2, .withbor3, .withload, .withswap,
    .foldImm, .foldOwn, .foldReuse, .fixd, .unfoldS, .unfold, .i32, .i64, .u8, .f32, .f64, .host,
    .allocS, .freeS, .withborSMut, .withborSImm, .withborF2Mut, .withborF2Imm,
-   .arrayNew, .arrayFree, .arraySize, .arrayReplace, .arrayLen, .arrayGet, .arrayCopy,
+   .arrayNew, .arrayEmpty, .arrayFree, .arraySize, .arrayReplace, .arrayLen, .arrayGet, .arrayCopy,
    .arrayForget, .sliceBorrowMut, .sliceBorrowImm, .sliceGetMut, .sliceLenMut,
    .sliceSplitImm, .sliceSplitMut, .sliceEmptyImm, .sliceEmptyMut, .sliceReplaceMut,
    .sliceSwapMut,
@@ -78,7 +78,7 @@ open ArgKind in
     without brackets. -/
 def CKw.sig : CKw → List ArgKind
   | .alloc | .free | .copyBang | .forgetBang => [ty]
-  | .arrayNew | .arrayFree | .arraySize | .arrayReplace | .countFold => [ty]
+  | .arrayNew | .arrayEmpty | .arrayFree | .arraySize | .arrayReplace | .countFold => [ty]
   | .arrayLen | .arrayGet | .arrayCopy | .arrayForget => [life, ty]
   | .sliceGetMut | .sliceLenMut => [life, ty]
   | .sliceSplitImm | .sliceSplitMut | .sliceEmptyImm | .sliceEmptyMut | .sliceReplaceMut
@@ -141,6 +141,7 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .withborF2Imm, [.binder c, .binder a, .binder b, .ty A, .ty B, .ty T] =>
       some (.withborF2Imm c a b A B T)
   | .arrayNew, [.ty A] => some (.arrayNew A)
+  | .arrayEmpty, [.ty A] => some (.arrayEmpty A)
   | .arrayFree, [.ty A] => some (.arrayFree A)
   | .arraySize, [.ty A] => some (.arraySize A)
   | .arrayReplace, [.ty A] => some (.arrayReplace A)
@@ -208,6 +209,7 @@ def Const.toArgs : Const → CKw × List Arg
   | .withborF2Imm c a b A B T =>
       (.withborF2Imm, [.binder c, .binder a, .binder b, .ty A, .ty B, .ty T])
   | .arrayNew A => (.arrayNew, [.ty A])
+  | .arrayEmpty A => (.arrayEmpty, [.ty A])
   | .arrayFree A => (.arrayFree, [.ty A])
   | .arraySize A => (.arraySize, [.ty A])
   | .arrayReplace A => (.arrayReplace, [.ty A])

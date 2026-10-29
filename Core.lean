@@ -39,6 +39,9 @@ import Core.Sized
 import Core.FoldImm
 import Core.FoldOwn
 import Core.FoldReuse
+import Core.FoldOwnG
+import Core.FoldOwnGTerm
+import Core.FoldClass
 import Core.Nu
 import Core.Fundamental
 import Core.Examples
@@ -79,6 +82,7 @@ import Core.SliceFrames
 import Core.Slices
 import Core.CountFold
 import Core.ArrayPrograms
+import Core.NestedPrograms
 import Core.Demonic
 import Core.EffExamples
 import Core.EffPrograms

@@ -276,6 +276,12 @@ corpus/block-yield-inner.bc 26:3: handle 2: inside []; row []; ops 2.0 tail; nam
 corpus/block-yield-inner.bc 3.0 stored,tail: machine; condition 2 holds; -
 corpus/block-yield-inner.bc 2.0 tail: direct; condition 2 holds; agree
 corpus/borrow-in-scope.bc flows [0, 4294967295]; main []
+corpus/btree-boxed.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/btree-boxed.bc 174:15: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/btree-boxed.bc 177:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/btree-boxed.bc 180:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/btree-boxed.bc 151:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/btree-boxed.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/bytes-upper.bc flows [0, 4294967295]; main []
 corpus/capability-bang-width.bc flows [0, 4294967295]; main []
 corpus/capability-swap-width.bc flows [0, 4294967295]; main []
@@ -356,6 +362,10 @@ corpus/count-down-exact.bc flows [0, 4294967295]; main []
 corpus/count-down.bc flows [0, 4294967295]; main []
 corpus/count-fold.bc flows [0, 4294967295]; main []
 corpus/count-try.bc flows [0, 4294967295]; main []
+corpus/data-array-tree.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/data-array-tree.bc 38:15: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-array-tree.bc 25:7: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-array-tree.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/data-box-tree.bc flows [0, 4294967295], finaliser; main [1], finaliser
 corpus/data-box-tree.bc 27:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/data-box-tree.bc 1.0 abortive: branch; condition 2 holds; -
@@ -367,6 +377,9 @@ corpus/data-config.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; na
 corpus/data-config.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/data-config.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/data-config.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/data-eval.bc flows [0, 4294967295], finaliser; main [1], finaliser
+corpus/data-eval.bc 74:15: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-eval.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/data-fold-bang.bc flows [0, 4294967295]; main []
 corpus/data-fold-block.bc flows [0, 4294967295]; main []
 corpus/data-fold-forest.bc flows [0, 4294967295]; main []
@@ -378,10 +391,25 @@ corpus/data-fold-whole.bc flows [0, 4294967295]; main []
 corpus/data-group.bc flows [0, 4294967295], finaliser; main [1], finaliser
 corpus/data-group.bc 21:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/data-group.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/data-json-vec.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/data-json-vec.bc 42:15: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-json-vec.bc 21:7: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-json-vec.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/data-option-block.bc flows [0, 4294967295]; main [1]
+corpus/data-option-block.bc 21:15: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-option-block.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/data-option.bc flows [0, 4294967295]; main [1]
 corpus/data-option.bc 38:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/data-option.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/data-particles.bc flows [0, 4294967295]; main []
+corpus/data-rose-vec.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/data-rose-vec.bc 69:15: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-rose-vec.bc 33:7: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-rose-vec.bc 53:7: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-rose-vec.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/data-rose.bc flows [0, 4294967295], finaliser; main [1], finaliser
+corpus/data-rose.bc 24:15: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-rose.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/data-turnstile.bc flows [0, 4294967295]; main []
 corpus/deep-list.bc flows [0, 4294967295]; main []
 corpus/div-abstraction.bc flows [0, 2, 4294967295]; main [1, 2, 3]
@@ -556,6 +584,9 @@ corpus/effects-tunnel.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/effects-tunnel.bc 3.0 abortive: -; condition 2 holds; -
 corpus/family-swap.bc flows [0, 4294967295]; main []
 corpus/fields.bc flows [0, 4294967295]; main []
+corpus/filler-mu.bc flows [0, 4294967295]; main [1]
+corpus/filler-mu.bc 16:15: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/filler-mu.bc 1.0 abortive: -; condition 2 holds; -
 corpus/find-bytes.bc flows [0, 4294967295]; main []
 corpus/float-arith.bc flows [0, 4294967295]; main []
 corpus/float-compare.bc flows [0, 4294967295]; main []
@@ -1065,6 +1096,14 @@ corpus/leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-trave
 corpus/leetcode/trees/0124-binary-tree-maximum-path-sum.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
 corpus/leetcode/trees/0124-binary-tree-maximum-path-sum.bc 120:24: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/trees/0124-binary-tree-maximum-path-sum.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/leetcode/trees/0208-implement-trie-boxed.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/leetcode/trees/0208-implement-trie-boxed.bc 120:25: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/trees/0208-implement-trie-boxed.bc 85:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/trees/0208-implement-trie-boxed.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/leetcode/trees/0208-implement-trie-vec.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/leetcode/trees/0208-implement-trie-vec.bc 124:25: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/trees/0208-implement-trie-vec.bc 89:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/trees/0208-implement-trie-vec.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/trees/0208-implement-trie.bc flows [0, 4294967295]; main []
 corpus/leetcode/trees/0211-design-add-and-search-words-data-structure.bc flows [0, 4294967295]; main []
 corpus/leetcode/trees/0212-word-search-ii.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser
@@ -1363,6 +1402,10 @@ corpus/state-machine.bc 65:13: handle 2: inside []; row []; ops 2.0 abortive; na
 corpus/state-machine.bc 62:3: handle 1: inside []; row []; ops 1.0 resume-or-cancel; names 1.0 row; condition 2 holds
 corpus/state-machine.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/state-machine.bc 1.0 resume-or-cancel: machine; condition 2 holds; -
+corpus/storage-array.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/storage-array.bc 36:15: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/storage-array.bc 26:5: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/storage-array.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/sugar/ambient.bc flows [0, 4294967295]; main []
 corpus/sugar/ambient.core.bc flows [0, 4294967295]; main []
 corpus/sugar/data-box-tree.lowered.bc flows [0, 4294967295], finaliser; main [1], finaliser

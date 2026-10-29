@@ -1,4 +1,6 @@
 import Frontend.Elab.Subst
+import Core.FoldClass
+import Frontend.Print
 import Frontend.Lexer
 
 /-!
@@ -76,9 +78,11 @@ end
 /-- `A` mentions one of the type names `ns`. -/
 def mentions (ns : List String) (A : VTy) : Bool := A.tyNames.any ns.contains
 
-/-- `A` mentions one of `ns` other than under a cell (`box A`, which is `ref A`). -/
+/-- `A` mentions one of `ns` other than under a cell (`box A`, which is `ref A`) or an array,
+whose allocation the recursion is under (data-declarations §6.11). -/
 def _root_.Frontend.VTy.bare (ns : List String) : VTy → Bool
   | .ref _ _ => false
+  | .array _ _ => false
   | .name _ n => ns.contains n
   | .tensor _ A B | .sum _ A B | .app _ A B => A.bare ns || B.bare ns
   | .lapp _ A _ => A.bare ns
@@ -160,19 +164,6 @@ def groupInfo (t : Table) (d : DataDecl) : Except String (List String × String 
           "parameters: not provided"
   pure (g, r, true)
 
-/-- The constructors of `d` in its group `g` with root `r`: a block is a constructor of a
-recursive declaration with a field in which the root occurs other than under `box`. -/
-def consInfo (d : DataDecl) (rec_ : Bool) (r : String) : List CInfo :=
-  d.cons.zipIdx.map fun (c, i) =>
-    { name := c.name.name, idx := i, fields := c.fields,
-      block := rec_ && c.fields.any (·.ty.bare [r]) }
-
-/-- `info t n`: what the elaboration knows of the declaration `n`. -/
-def info (t : Table) (n : String) : Except String Info := do
-  let some d := t.decl? n | throw <| s!"no `data` declaration `{n}`"
-  let (g, r, rec_) ← groupInfo t d
-  pure { decl := d, group := g, root := r, rolls := rec_ && r == n, cons := consInfo d rec_ r }
-
 /-- The right-nested `⊗` of `As`, `1` when there are none. -/
 def tupleTy (sp : Span) : List VTy → VTy
   | [] => .unit sp
@@ -184,6 +175,38 @@ def sumTy (sp : Span) : List VTy → VTy
   | [] => .zero sp
   | [A] => A
   | A :: As => .sum sp A (sumTy sp As)
+
+/-- `A` mentions one of `ns` other than under a cell or an array, an application of a
+declaration that is not recursive read as its structure at its arguments: `Vec[Json]` holds `Json`
+under the array of `Vec`'s buffer. -/
+def bareIn (t : Table) : Nat → List String → VTy → Bool
+  | 0, ns, A => A.bare ns
+  | k + 1, ns, A => match headOf A with
+    | some (h, As, _) =>
+      if ns.contains h then true else
+      match t.decl? h with
+      | some d =>
+        if !(groupOf t h).isEmpty || !(As.any (mentions ns)) then A.bare ns else
+        let S := sumTy .none (d.cons.map fun c => tupleTy .none (c.fields.map (·.ty)))
+        bareIn t k ns (S.subst (d.tps.map (·.name) |>.zip As))
+      | none => A.bare ns
+    | none => match A with
+      | .tensor _ B C | .sum _ B C => bareIn t k ns B || bareIn t k ns C
+      | A => A.bare ns
+
+/-- The constructors of `d` in its group `g` with root `r`: a block is a constructor of a
+recursive declaration with a field in which the root occurs other than under `box` or an
+array. -/
+def consInfo (t : Table) (d : DataDecl) (rec_ : Bool) (r : String) : List CInfo :=
+  d.cons.zipIdx.map fun (c, i) =>
+    { name := c.name.name, idx := i, fields := c.fields,
+      block := rec_ && c.fields.any (bareIn t 16 [r] ·.ty) }
+
+/-- `info t n`: what the elaboration knows of the declaration `n`. -/
+def info (t : Table) (n : String) : Except String Info := do
+  let some d := t.decl? n | throw <| s!"no `data` declaration `{n}`"
+  let (g, r, rec_) ← groupInfo t d
+  pure { decl := d, group := g, root := r, rolls := rec_ && r == n, cons := consInfo t d rec_ r }
 
 /-- A recursive occurrence of a member `m` of the group `g` is at `m`'s own parameters. -/
 def regular (g : List String) (d : DataDecl) : VTy → Except String Unit
@@ -238,7 +261,7 @@ def structOf (t : Table) (g : List String) (root : String) (toX : Option String)
   | k + 1, n => do
     let some d := t.decl? n | throw <| s!"no `data` declaration `{n}`"
     let rec_ := g.length > 1 || (reachFrom t root).contains root
-    let cis := consInfo d rec_ root
+    let cis := consInfo t d rec_ root
     let pays ← cis.mapM fun c => do
       let tys ← c.fields.mapM fun f => do
         regular g d f.ty
@@ -264,9 +287,11 @@ def fieldTyOf (t : Table) (g : List String) (root : String) (toX : Option String
 end
 
 /-- `T` with each application of a non-recursive declaration of the table that holds the
-variable `X` replaced by that declaration's structure at its arguments, so that `X` is visible to
-§6's `FShape`. An application of a recursive declaration, or of an abbreviation the table does not
-hold, around `X` is refused: a `μ` nested in a `μ` (B14). -/
+variable `X` replaced by that declaration's structure at its arguments, under every value former,
+so that the class `P` (§6, `pClass`) sees each position of `X`. An application of a recursive
+declaration around `X` is refused: its `μ` would mention the enclosing `X`, which the checker
+refuses (`mu … must be closed`, SPEC §61 Open, U3). An abbreviation the table does not hold around
+`X` is refused: its structure is not known here. -/
 def openX (t : Table) (X : String) : Nat → VTy → Except String VTy
   | 0, A => pure A
   | k + 1, A => do
@@ -279,8 +304,8 @@ def openX (t : Table) (X : String) : Nat → VTy → Except String VTy
             "not provided"
       let (_, _, rec_) ← groupInfo t d
       if rec_ then
-        throw <| s!"the recursive type occurs under `{h}`, which is recursive itself: a recursion " ++
-          "nested in another is not provided (B14)"
+        throw <| s!"the recursive type occurs under `{h}`, which is recursive itself: its `mu` " ++
+          "would mention the enclosing recursive type, and a `mu` must be closed (B14, U3)"
       let S ← structOf t [h] h none 64 h
       let σ : TySubst := d.tps.map (·.name) |>.zip As
       openX t X k (S.subst σ)
@@ -288,13 +313,74 @@ def openX (t : Table) (X : String) : Nat → VTy → Except String VTy
       | .tensor sp B C => return .tensor sp (← openX t X k B) (← openX t X k C)
       | .sum sp B C => return .sum sp (← openX t X k B) (← openX t X k C)
       | .ref sp B => return .ref sp (← openX t X k B)
+      | .array sp B => return .array sp (← openX t X k B)
+      | .arrayImm sp a B => return .arrayImm sp a (← openX t X k B)
+      | .arrayMut sp a B => return .arrayMut sp a (← openX t X k B)
+      | .imm sp a B => return .imm sp a (← openX t X k B)
+      | .mut sp a B => return .mut sp a (← openX t X k B)
+      | .box sp a B => return .box sp a (← openX t X k B)
+      | .view sp a B => return .view sp a (← openX t X k B)
+      | .bang sp B => return .bang sp (← openX t X k B)
       | A => pure A
 
-/-- `T` is in §6's `FShape` over `X`: built from `⊗`, `⊕`, closed leaves and `ref X`. -/
-def fshape (X : String) : VTy → Bool
-  | .tensor _ A B | .sum _ A B => fshape X A && fshape X B
-  | .ref _ (.name _ _) => true
-  | A => !A.tyNames.contains X
+/-- The kernel type the class `P` reads of the opened field type `A`, the `μ` variables `vs` in
+scope innermost first (`X` last): a variable of `vs` is its index; each value former is the
+kernel's (an array `[Ref A]`, a view `Imm̲`, `VTy.immReborrow`); a function type, and any other
+former, is `U C`, which `P` reads as a leaf (the checker refuses a `μ` variable under `U` itself);
+a subterm that mentions no variable of `vs` is `1`. Lifetimes are `⊤`.
+
+UNPROVED: that `P` decides the same at this image as at the checker's elaboration of `A`. What is
+assumed: `P` reads no lifetime; a closed type is in `P` at every depth (`P_of_closed`), so a closed
+subterm may stand for any other; and a type the table does not open (a type parameter, an
+abbreviation) is closed once elaborated (`openX` refuses one around `X`). -/
+def pTy (vs : List String) : Nat → VTy → BoCa.Fig16.LogRel.Core.VTy
+  | 0, _ => .unit
+  | n + 1, A =>
+    if !(A.tyNames.any vs.contains) then .unit else
+    match A with
+    | .name _ x => match vs.idxOf? x with
+      | some i => .tvar i
+      | none => .unit
+    | .tensor _ B C => .tensor (pTy vs n B) (pTy vs n C)
+    | .sum _ B C => .sum (pTy vs n B) (pTy vs n C)
+    | .ref _ B => .ref (pTy vs n B)
+    | .array _ B => .fam (.ref (pTy vs n B))
+    | .arrayImm _ _ B => .fam (.imm .top (pTy vs n B))
+    | .arrayMut _ _ B => .fam (.mut .top (pTy vs n B))
+    | .imm _ _ B => .imm .top (pTy vs n B)
+    | .mut _ _ B => .mut .top (pTy vs n B)
+    | .box _ _ B => .box .top (pTy vs n B)
+    | .view _ _ B => (pTy vs n B).immReborrow .top
+    | .bang _ B => .bang (pTy vs n B)
+    | .mu _ Y B => .mu (pTy (Y.name :: vs) n B)
+    | .sized sp D S B => pTy vs n (VTy.sizedExpand sp D S B)
+    | _ => .thunk .top
+
+open BoCa.Fig16.LogRel.Core.FoldP (PB clB headB) in
+/-- Why the kernel type `A`, at `d` variables in scope, is not in the class `P` (§6): the former
+`PB` refuses it at, as the messages name it; `none` when `PB d A`. -/
+def notP (d : Nat) : BoCa.Fig16.LogRel.Core.VTy → Option String
+  | .tensor A B | .sum A B => (notP d A).orElse fun _ => notP d B
+  | .ref S | .fam (.ref S) => notP d S
+  | .fam _ => some "under an array of borrows (`array_imm`, `array_mut`)"
+  | .mu B =>
+    if clB 1 B || (PB (d + 1) B && (clB 0 B || headB B)) then none
+    else if PB (d + 1) B then some "in a `mu` whose body is headed by its own variable"
+    else notP (d + 1) B
+  | .tvar _ => none
+  | .imm _ _ | .mut _ _ => some "under a borrow (`imm`, `mut`, a view)"
+  | .box _ _ => some "under a lifetime box (`box @ A`)"
+  | .bang _ => some "under `!`"
+  | A => if clB 0 A then none else some "in a position outside the class"
+
+open BoCa.Fig16.LogRel.Core.FoldP (PB) in
+/-- The opened type `A` of a field, a cell when `cell`, is in §6's class `P` over `X`
+(`FoldP.PB`), the class the destructor and the owned fold are defined at (SPEC §61); otherwise
+why not. -/
+def pClass (X : String) (cell : Bool) (A : VTy) : Option String :=
+  let K := pTy [X] 64 A
+  let K := if cell then .ref K else K
+  if PB 1 K then none else (notP 1 K).orElse fun _ => some "in a position outside the class"
 
 /-- A fresh type variable for `d`'s `μ`. -/
 def muVar (d : DataDecl) (avoid : List String) : String :=
@@ -324,7 +410,7 @@ def typeDecls (t : Table) (sp : Span) (d : DataDecl) : Except Error (List Decl) 
   -- Each block's fields: cells holding the recursive type only as `ref X`.
   let checkFields (n : String) : Except Error Unit := do
     let some e := t.decl? n | pure ()
-    for c in consInfo e rec_ root do
+    for c in consInfo t e rec_ root do
       for (f, j) in c.fields.zipIdx do
         let A ← match fieldTyOf t g root (some X) 64 f.ty with
           | .ok A => pure A
@@ -335,15 +421,11 @@ def typeDecls (t : Table) (sp : Span) (d : DataDecl) : Except Error (List Decl) 
         let what := match f.name with
           | some x => s!"the field `{x.name}` of `{c.name}`"
           | none => s!"field {j + 1} of `{c.name}`"
-        if c.block then
-          unless (A matches .name _ _) || !A.tyNames.contains X do
-            err <| s!"{what} holds `{root}` inside another type (`{ppTy f.ty}`): write `box` at " ++
-              s!"the recursive type (`{ppTy (f.ty.subst [(root, .ref .none (.name .none root))])}`), " ++
-              s!"or make the field `{root}` itself"
-        else
-          unless fshape X A do
-            err <| s!"{what} holds `{root}` under a cell of another type (`{ppTy f.ty}`): write " ++
-              s!"`box` directly at `{root}`"
+        match pClass X c.block A with
+        | none => pure ()
+        | some why =>
+          err <| s!"{what}, of type `{f.ty.pp}`, holds `{root}` {why}: outside §6's class " ++
+            "`P`, the recursive types a destructor is defined at (SPEC §61)"
   if rec_ then for m in members do checkFields m
   let rootS ← match structOf t g root (if rec_ then some X else none) 64 root with
     | .ok S => pure S
@@ -352,6 +434,10 @@ def typeDecls (t : Table) (sp : Span) (d : DataDecl) : Except Error (List Decl) 
       | .ok S => pure S
       | .error m => err m
     else pure rootS
+  if rec_ && !BoCa.Fig16.LogRel.Core.FoldP.pBodyB (pTy [X] 64 rootS) then
+    err <| s!"`{root}`'s recursive type is outside §6's class `P` " ++
+      s!"({(notP 1 (pTy [X] 64 rootS)).getD "its body is headed by its variable"}): " ++
+      "a destructor is defined only in the class (SPEC §61)"
   let rootT : VTy := if rec_ then .mu sp ⟨X, sp⟩ rootS else rootS
   let mut out : List Decl := [mk root rootT]
   -- The other members, each after the members it names.
@@ -371,7 +457,7 @@ def typeDecls (t : Table) (sp : Span) (d : DataDecl) : Except Error (List Decl) 
   for m in members do
     let some e := t.decl? m | continue
     if !(e.tps.isEmpty && e.lps.isEmpty) then continue
-    for c in consInfo e rec_ root do
+    for c in consInfo t e rec_ root do
       if !c.block then continue
       let leaves := c.fields.map fun f => Shape.leaf sp f.ty
       let rec node : List Shape → Shape

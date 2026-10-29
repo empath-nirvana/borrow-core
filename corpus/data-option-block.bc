@@ -1,0 +1,25 @@
+-- A block whose field holds the recursive type inside another type (SPEC §42, §61): `Cons` is a
+-- block, so `tail` is a cell of `Option[List]`, `ref (X + 1)`, which is in §6's class `P`. `List`
+-- elaborates to `mu X. 1 + ref i32 * ref (X + 1)`; its derived destructor frees each block's
+-- cells and drops the option inside.
+--
+-- Answer: i32[6], `[1, 2, 3]` summed; `live 0`: the sum consumes one copy, freeing each block, and
+-- the other is dropped by its derived destructor. 12 allocations: two cells per block.
+include rec
+
+data List = Nil | Cons(head: i32, tail: Option[List])
+
+fn sum(l: List) -> i32 =
+  match l {
+    Nil -> 0
+  | box Cons(n, t) -> match t { None -> n | Some(r) -> n + sum(r) }
+  }
+
+-- `[1, 2, 3]`.
+fn three() -> List = box Cons(1, Some(box Cons(2, Some(box Cons(3, None)))))
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let a = three();
+  let b = three();
+  sum(a)
+}

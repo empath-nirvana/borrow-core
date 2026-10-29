@@ -2124,36 +2124,64 @@ def litValue (sp : Span) (bs : List Nat) : Val :=
     (.mark sp (.litFn bs) (.bangThunkv sp (.lam sp ⟨"io_li", sp⟩ (.int sp .w32) body)))
 
 /-- The filler of a buffer's unused slots at the element type `A` (design §5.4): `0` at an
-integer width, the empty view at a borrowed family, an empty array at an owned one (which
-allocates nothing), the empty literal's function at `!(A => B)`, `()`, and componentwise at `*`
-and `+`. `none` at a type with no filler (a cell, a capability). -/
-def fillerOf (c : TCx) (sp : Span) : Nat → CVTy → Except Error (Option Val)
-  | 0, _ => pure none
-  | n + 1, A => match A with
-    | .unit => pure (some (.unit sp))
-    | .int w => pure (some (litAt sp w 0))
-    | .tensor A B => do
-      match ← fillerOf c sp n A, ← fillerOf c sp n B with
-      | some a, some b => pure (some (.pair sp a b))
-      | _, _ => pure none
-    | .sum A _ => do pure ((← fillerOf c sp n A).map (.inl sp ·))
-    | .fam (.imm a B) => do
-      pure (some (.const sp (.sliceEmptyImm (← c.surfaceL sp a) (← c.surface sp B))))
-    | .fam (.mut a B) => do
-      pure (some (.const sp (.sliceEmptyMut (← c.surfaceL sp a) (← c.surface sp B))))
-    | .fam (.ref B) => do
-      match ← fillerOf c sp n B with
-      | some b =>
-        let Bs ← c.surface sp B
-        pure (some (.app sp (.unbang sp (.const sp (.arrayNew Bs))) (.pair sp (litAt sp .w32 0)
-          (.bangThunkv sp (.lam sp ⟨"io_fi", sp⟩ (.int sp .w32) (.ret sp b))))))
-      | none => pure none
-    | .bang (.thunk (.arr X (.ret B))) => do
-      match ← fillerOf c sp n B with
-      | some b =>
-        pure (some (.bangThunkv sp (.lam sp ⟨"io_fx", sp⟩ (← c.surface sp X) (.ret sp b))))
-      | none => pure none
-    | _ => pure none
+integer width, `()`, componentwise at `*`, the first summand with a filler at `+`, the empty view
+at a borrowed family and the empty array at an owned one (`array_empty`, which needs no element and
+allocates nothing), the constant function at `!(A => B)`, and at a `μ` its body's filler, rolled
+(`Num(0)` of a `Json`, `Tree(0, [])` of a rose tree, SPEC §61).
+
+`A` is a position under the binders `Bs` (§6's stack, innermost first), whose closed type is
+`A.subst (env Bs)`. A filler is a finite value, so a `μ` has one exactly when its body has one with
+the `μ`'s own variable having none: the least fixed point, decided structurally on the body. The
+answer is a filler, or why there is none: `.inl i` when every attempt met the variable `i` of an
+enclosing `μ` (that `μ` has no finite value), `.inr why` otherwise (a cell, a capability).
+
+The filler's typing is the checker's: it is elaborated and checked as any value is.
+UNPROVED: that a filler is found at every type with a finite value whose leaves have fillers. What
+is assumed: a finite value of `μB` unrolls to a finite value of `B` in which the `μ`'s variable is
+reached only through a smaller value, so the search may read the variable as having none (the least
+fixed point's first approximant). -/
+def fillerOf (c : TCx) (sp : Span) (Bs : BoCa.Fig16.LogRel.Core.FoldP.Stack) :
+    CVTy → Except Error (Except (Nat ⊕ String) Val)
+  | .unit => pure (.ok (.unit sp))
+  | .int w => pure (.ok (litAt sp w 0))
+  | .tensor A B => do
+    match ← fillerOf c sp Bs A with
+    | .error e => pure (.error e)
+    | .ok a => match ← fillerOf c sp Bs B with
+      | .error e => pure (.error e)
+      | .ok b => pure (.ok (.pair sp a b))
+  | .sum A B => do
+    match ← fillerOf c sp Bs A with
+    | .ok a => pure (.ok (.inl sp a))
+    | .error e => match ← fillerOf c sp Bs B with
+      | .ok b => pure (.ok (.inr sp b))
+      | .error e' => pure (.error (match e, e' with
+        | .inl _, .inr w => .inr w
+        | e, _ => e))
+  | .fam (.imm a B) => do
+    pure (.ok (.const sp (.sliceEmptyImm (← c.surfaceL sp a) (← c.surface sp (closed B)))))
+  | .fam (.mut a B) => do
+    pure (.ok (.const sp (.sliceEmptyMut (← c.surfaceL sp a) (← c.surface sp (closed B)))))
+  | .fam (.ref B) => do pure (.ok (.const sp (.arrayEmpty (← c.surface sp (closed B)))))
+  | .bang (.thunk (.arr X (.ret B))) => do
+    match ← fillerOf c sp Bs B with
+    | .ok b =>
+      pure (.ok (.bangThunkv sp (.lam sp ⟨"io_fx", sp⟩ (← c.surface sp (closed X)) (.ret sp b))))
+    | .error e => pure (.error e)
+  | .mu B => do
+    let T := BoCa.Fig16.LogRel.Core.FoldP.closedOf B Bs
+    match ← fillerOf c sp (B :: Bs) B with
+    | .ok b => pure (.ok (.ascribe sp (.roll sp b) (← c.surface sp T)))
+    | .error (.inl 0) =>
+      pure (.error (.inr s!"`{ppT T}` has no finite value: each of its values holds another"))
+    | .error (.inl (i + 1)) => pure (.error (.inl i))
+    | .error (.inr w) => pure (.error (.inr w))
+  | .tvar i => pure (.error (.inl i))
+  | A => pure (.error (.inr (s!"`{ppT (closed A)}` has no filler: a buffer holds elements that " ++
+      "have one (integers, views, arrays, and pairs and sums of them)")))
+where
+  /-- The closed type of a position under `Bs`. -/
+  closed (A : CVTy) : CVTy := A.subst (BoCa.Fig16.LogRel.Core.FoldP.env Bs)
 
 /-- The body `S` of a block with its tail values boxed at `'x`: a tail value is bound first, so
 that what it computes from the borrow is not inside the box (`boxI`'s context outlives `'x`). -/
@@ -3482,10 +3510,10 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
     | .defApp sp "filler" [A] => do
       -- `filler[A]`: the filler of a buffer's unused slots, by the type (design §5.4).
       let A' ← need sp "`filler`'s type" (c.elabV A)
-      match ← (fillerOf c sp 64 A' : Except Error (Option Val)) with
-      | some v => pure v
-      | none => throw ⟨sp, s!"`{ppT A'}` has no filler: a buffer holds elements that have one " ++
-          "(integers, views, arrays, and pairs and sums of them)"⟩
+      match ← (fillerOf c sp [] A' : Except Error _) with
+      | .ok v => pure v
+      | .error (.inr why) => throw ⟨sp, why⟩
+      | .error (.inl _) => throw ⟨sp, s!"`{ppT A'}` has no filler: it mentions a type variable"⟩
     | .app sp (.sugar _ .count) (.pair _ a b) => do
       -- `a..b` as a value: the sized iterator of the count, its data `(a, b)` and its step
       -- (SPEC §16). A `for` over `a..b` itself is elaborated by `forData`.
@@ -3996,6 +4024,21 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       if W.lends then
         if let some V' ← lendCall c sp f' (← surfV n c none W) then return V'
       let tf := c.tyV f'
+      -- A closure whose parameter's type is a hole, applied to a constant whose type is not
+      -- synthesized: the closure's type is then not determined, and the cause is the constant's
+      -- type argument that does not elaborate (one with no binder argument, so each is elaborated
+      -- where the constant is), whose error is reported instead.
+      let rec holeLam : Nat → Val → Bool
+        | 0, _ => false
+        | k + 1, .pair _ V W => holeLam k V || holeLam k W
+        | _, .bangThunkv _ (.lam _ _ A _) | _, .thunkv _ (.lam _ _ A _) => isHoleTy A
+        | _, _ => false
+      if tf.isNone && holeLam 8 W then
+        if let .const _ C := f' then
+          if !C.toArgs.2.any (· matches .binder _) then
+            for a in C.toArgs.2 do
+              if let .ty A := a then
+                if let .error e := c.E.elabV c.Δ A then throw e
       let (f', pW) := match tf with
         | some (.bang (.thunk (.arr A _))) => (Val.unbang f.span f', some A)
         | some (.thunk (.arr A _)) => (f', some A)

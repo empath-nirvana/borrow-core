@@ -141,7 +141,7 @@ theorem not_forget_kappa {Δ : LifeCtx} {Γ : Ctx VTy} {C₁ C₂ : CTy}
       · simp [withborUE, Expr.val, Val.lam] at he
       · simp only [OtherLam, copy, swap, withbor, withload, withswap, sizeV, replaceV, arrLenV,
           swapV,
-          foldImmV, foldOwnV, foldReuseV, unfoldV, Expr.val, Val.lam, lam2, elet, unit', v0, v1, v2,
+          foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, Expr.val, Val.lam, lam2, elet, unit', v0, v1, v2,
           v3, divFuelV, reifyV, rkV, BoCa.BoLo.hndE, Expr.lam.injEq, reduceCtorEq, exists_false,
           or_self] at ho
   · -- `[app]`: `forget` at `κ ⊸ C`, typed at `κ`'s slot

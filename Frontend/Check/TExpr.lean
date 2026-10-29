@@ -497,6 +497,7 @@ inductive TExpr where
   | sliceSplitM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
   | sliceEmptyI (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
   | sliceEmptyM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
+  | arrEmpty (info : TInfo) (jdg : Jdg) (A : VTy)
   | sliceReplaceM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
   | sliceSwapM (info : TInfo) (jdg : Jdg) (a : Lifetime.Life) (A : VTy)
   | withbor1 (info : TInfo) (jdg : Jdg) (A : VTy) (B : VTy) (x : LifeVar)
@@ -518,6 +519,7 @@ inductive TExpr where
   | foldImm (info : TInfo) (jdg : Jdg) (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy)
   | foldOwn (info : TInfo) (jdg : Jdg) (F : FShape) (R : VTy)
   | foldReuse (info : TInfo) (jdg : Jdg) (F : FShape) (R : VTy)
+  | foldOwnG (info : TInfo) (jdg : Jdg) (B₀ : VTy)
   | nuIn (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
   | nuOut (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
   | unfoldN (info : TInfo) (jdg : Jdg) (C : CTy) (S : VTy)
@@ -650,6 +652,7 @@ def TExpr.erase : TExpr → Expr
   | .sliceSplitM _ _ _ _ => (.val (.prim .split))
   | .sliceEmptyI _ _ _ _ => (.val emptyFamV)
   | .sliceEmptyM _ _ _ _ => (.val emptyFamV)
+  | .arrEmpty _ _ _ => (.val emptyFamV)
   | .sliceReplaceM _ _ _ _ => (.val replaceV)
   | .sliceSwapM _ _ _ _ => (.val swapV)
   | .withbor1 _ _ _ _ _ => withbor
@@ -671,6 +674,7 @@ def TExpr.erase : TExpr → Expr
   | .foldImm _ _ F _ _ _ => (.val (foldImmV F))
   | .foldOwn _ _ F _ => (.val (foldOwnV F))
   | .foldReuse _ _ F _ => (.val (foldReuseV F))
+  | .foldOwnG _ _ B₀ => (.val (FoldP.foldOwnGV B₀))
   | .nuIn _ _ _ t => t.erase
   | .nuOut _ _ _ t => t.erase
   | .unfoldN _ _ C _ => (.val (unfoldV C))
@@ -762,6 +766,7 @@ def TExpr.info : TExpr → TInfo
   | .sliceSplitM i _ _ _ => i
   | .sliceEmptyI i _ _ _ => i
   | .sliceEmptyM i _ _ _ => i
+  | .arrEmpty i _ _ => i
   | .sliceReplaceM i _ _ _ => i
   | .sliceSwapM i _ _ _ => i
   | .withbor1 i _ _ _ _ => i
@@ -783,6 +788,7 @@ def TExpr.info : TExpr → TInfo
   | .foldImm i _ _ _ _ _ => i
   | .foldOwn i _ _ _ => i
   | .foldReuse i _ _ _ => i
+  | .foldOwnG i _ _ => i
   | .nuIn i _ _ _ => i
   | .nuOut i _ _ _ => i
   | .unfoldN i _ _ _ => i
@@ -870,6 +876,7 @@ def TExpr.jdg : TExpr → Jdg
   | .sliceSplitM _ j _ _ => j
   | .sliceEmptyI _ j _ _ => j
   | .sliceEmptyM _ j _ _ => j
+  | .arrEmpty _ j _ => j
   | .sliceReplaceM _ j _ _ => j
   | .sliceSwapM _ j _ _ => j
   | .withbor1 _ j _ _ _ => j
@@ -891,6 +898,7 @@ def TExpr.jdg : TExpr → Jdg
   | .foldImm _ j _ _ _ _ => j
   | .foldOwn _ j _ _ => j
   | .foldReuse _ j _ _ => j
+  | .foldOwnG _ j _ => j
   | .nuIn _ j _ _ => j
   | .nuOut _ j _ _ => j
   | .unfoldN _ j _ _ => j
@@ -986,6 +994,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .sliceSplitM _ _ _ _ => []
   | .sliceEmptyI _ _ _ _ => []
   | .sliceEmptyM _ _ _ _ => []
+  | .arrEmpty _ _ _ => []
   | .sliceReplaceM _ _ _ _ => []
   | .sliceSwapM _ _ _ _ => []
   | .withbor1 _ _ _ _ _ => []
@@ -1007,6 +1016,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .foldImm _ _ _ _ _ _ => []
   | .foldOwn _ _ _ _ => []
   | .foldReuse _ _ _ _ => []
+  | .foldOwnG _ _ _ => []
   | .nuIn _ _ _ t => [(.push 0, t)]
   | .nuOut _ _ _ t => [(.push 0, t)]
   | .unfoldN _ _ _ _ => []
@@ -1115,6 +1125,7 @@ def TExpr.isLam : TExpr → Bool
   | .sliceSplitM _ _ _ _ => false
   | .sliceEmptyI _ _ _ _ => (((.val emptyFamV) : Expr) matches .lam _)
   | .sliceEmptyM _ _ _ _ => (((.val emptyFamV) : Expr) matches .lam _)
+  | .arrEmpty _ _ _ => (((.val emptyFamV) : Expr) matches .lam _)
   | .sliceReplaceM _ _ _ _ => (((.val replaceV) : Expr) matches .lam _)
   | .sliceSwapM _ _ _ _ => (((.val swapV) : Expr) matches .lam _)
   | .withbor1 _ _ _ _ _ => ((withbor : Expr) matches .lam _)
@@ -1136,6 +1147,7 @@ def TExpr.isLam : TExpr → Bool
   | .foldImm _ _ F _ _ _ => (((.val (foldImmV F)) : Expr) matches .lam _)
   | .foldOwn _ _ F _ => (((.val (foldOwnV F)) : Expr) matches .lam _)
   | .foldReuse _ _ F _ => (((.val (foldReuseV F)) : Expr) matches .lam _)
+  | .foldOwnG _ _ B₀ => (((.val (FoldP.foldOwnGV B₀)) : Expr) matches .lam _)
   | .nuIn _ _ _ t => t.isLam
   | .nuOut _ _ _ t => t.isLam
   | .unfoldN _ _ C _ => (((.val (unfoldV C)) : Expr) matches .lam _)
@@ -1227,6 +1239,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .sliceSplitM _ _ _ _ => rfl
   | .sliceEmptyI _ _ _ _ => rfl
   | .sliceEmptyM _ _ _ _ => rfl
+  | .arrEmpty _ _ _ => rfl
   | .sliceReplaceM _ _ _ _ => rfl
   | .sliceSwapM _ _ _ _ => rfl
   | .withbor1 _ _ _ _ _ => rfl
@@ -1248,6 +1261,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .foldImm _ _ _ _ _ _ => rfl
   | .foldOwn _ _ _ _ => rfl
   | .foldReuse _ _ _ _ => rfl
+  | .foldOwnG _ _ _ => rfl
   | .nuIn _ _ _ t => isLam_eq t
   | .nuOut _ _ _ t => isLam_eq t
   | .unfoldN _ _ _ _ => rfl

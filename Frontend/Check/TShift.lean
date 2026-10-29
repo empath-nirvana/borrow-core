@@ -256,6 +256,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | t@(.sliceSplitM ..) => t
   | t@(.sliceEmptyI ..) => t
   | t@(.sliceEmptyM ..) => t
+  | t@(.arrEmpty ..) => t
   | t@(.sliceReplaceM ..) => t
   | t@(.sliceSwapM ..) => t
   | t@(.withbor1 ..) => t
@@ -266,6 +267,7 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
   | t@(.withloadU ..) => t
   | t@(.foldImm ..) => t
   | t@(.foldOwn ..) => t
+  | t@(.foldOwnG ..) => t
   | t@(.foldReuse ..) => t
   | t@(.unfoldN ..) => t
   | t@(.lendR ..) => t
@@ -331,9 +333,10 @@ def TExpr.absF (Δ : LifeCtx) : TExpr → Option AbsF
   | .arrNew .. | .arrFree .. | .arrSize .. | .arrReplace .. | .arrLen .. | .arrGet ..
   | .arrCopy .. | .arrForget .. | .countFold .. | .countTry .. | .boundedFix ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
-  | .sliceSplitM .. | .sliceEmptyI .. | .sliceEmptyM .. | .sliceReplaceM .. | .sliceSwapM ..
+  | .sliceSplitM .. | .sliceEmptyI .. | .sliceEmptyM .. | .arrEmpty .. | .sliceReplaceM .. | .sliceSwapM ..
   | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap .. | .withloadU ..
-  | .foldImm .. | .foldOwn .. | .foldReuse .. | .unfoldN .. | .iterate .. | .divFuel .. | .reify .. =>
+  | .foldImm .. | .foldOwn .. | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .iterate .. | .divFuel ..
+  | .reify .. =>
       some (.atom .pers)
 where
   /-- `[let]`'s premise on the rest's live slots: they drop at a row with weakening, and are `!`

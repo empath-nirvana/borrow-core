@@ -1,26 +1,32 @@
-import Core
+import Core.FoldReuse
 
 /-!
-# NestedFold — the class `P` and its binders
+# Core — the fold class `P` and its binders  `[spec §6]`
 
-`P d A`, at `d` type variables in scope, is the class of #595's design §4.2. A closed `A` is a
-leaf, whatever its former. Otherwise `A` is a variable in scope, a `⊗`/`⊕` of members, a
-`Ref S` or an array `[Ref S]` of a member, or `μB` with `B` a member at `d + 1` whose head is not
-a variable (`Hd`). `PB` is the decidable check (`PB_iff`), and `P_of_FShape` puts every
-`FShape` body in the class.
+`P d A`, at `d` type variables in scope, is the class of bodies the general owned fold covers. A
+closed `A` is a leaf, whatever its former. Otherwise `A` is a variable in scope, a `⊗`/`⊕` of
+members, a `Ref S` or an array `[Ref S]` of a member, or `μB` with `B` a member at `d + 1` whose
+head is not a variable (`Hd`). `PB` decides it (`PB_iff`), and every `FShape` body is in the class
+(`pBody_of_FShape`).
 
-A **binder** is a stack `B :: Bs` of `μ` bodies, innermost first: the binder of `μB` met under
-the binders `Bs`. `env Bs` gives each variable in scope its closed type, so a position `A` under
-`Bs` holds a value of `A.subst (env Bs)`. `rIn Bs A` lists the binders of the `μ`s inside `A`
-that are not closed, `aIn Bs A` the element types of its arrays that are not closed, neither
-looking inside another binder's body for arrays. `reach B₀` is the list of binders of
-`μB₀`; `reach_ok` shows it meets `KeysOK`, the closure the traversal's proof uses, at every
-body in the class.
+A **stack** `B :: Bs` is the binder of a `μB` met under the binders `Bs`, innermost first.
+`env Bs` gives each variable in scope its closed type, so a position `A` under `Bs` holds a
+value of `A.subst (env Bs)`. A **key** (`Bnd`) names a binder the fold calls: a `μ` (`mu b`) or an
+array whose element type is not closed (`arr Bs S`, the array of `S` under `Bs`). `keysIn Bs A`
+lists the keys of a position in preorder, not looking past a closed leaf; `keys B₀` is the list
+of `μB₀`'s keys, the root first. `keys_ok` shows it meets `KeysOK`, the closure the traversal's
+proof uses, at every body in the class.
 -/
+
+namespace BoCa.Fig16.LogRel.Core
+
+deriving instance DecidableEq for VTy, CTy
+
+end BoCa.Fig16.LogRel.Core
 
 noncomputable section
 
-namespace BoCa.Fig16.LogRel.Core.NestedFold
+namespace BoCa.Fig16.LogRel.Core.FoldP
 open BoCa
 open BoCa.Fig16
 
@@ -74,7 +80,7 @@ def head : VTy → Prop
 /-- A body is a leaf (closed) or its head is not a variable. -/
 def Hd (B : VTy) : Prop := B.Cl 0 ∨ head B
 
-/-- **The class `P`.**  `[design §4.2]` -/
+/-- **The class `P`.**  `[spec §6]` -/
 def P : Nat → VTy → Prop
   | d, .tvar i => i < d
   | d, .tensor A B => P d A ∧ P d B
@@ -125,10 +131,15 @@ theorem PB_iff : ∀ (d : Nat) (A : VTy), PB d A = true ↔ P d A
   | _, .unit | _, .zero | _, .thunk _ | _, .imm _ _ | _, .mut _ _ | _, .box _ _ | _, .bang _
   | _, .unk | _, .int _ | _, .opq _ => by simp only [PB, P, clB_iff]
 
+/-- `PBody` as a `Bool`. -/
+def pBodyB (B : VTy) : Bool := PB 1 B && (clB 0 B || headB B)
+
+theorem pBodyB_iff (B : VTy) : pBodyB B = true ↔ PBody B := by
+  simp [pBodyB, PBody, PB_iff, clB_iff, headB_iff, Hd]
+
 instance (d : Nat) (A : VTy) : Decidable (P d A) := decidable_of_iff _ (PB_iff d A)
 
-instance (B : VTy) : Decidable (PBody B) :=
-  decidable_of_iff (PB 1 B && (clB 0 B || headB B)) (by simp [PBody, PB_iff, clB_iff, headB_iff, Hd])
+instance (B : VTy) : Decidable (PBody B) := decidable_of_iff _ (pBodyB_iff B)
 
 /-- A closed type is in the class at every depth. -/
 theorem P_of_closed : ∀ {A : VTy} (d : Nat), A.Cl 0 → P d A
@@ -162,6 +173,25 @@ theorem Hd_of_FShape : ∀ {F : FShape}, F.WF → F.Guarded → Hd F.ty
 
 theorem pBody_of_FShape {F : FShape} (hF : F.WF) (hG : F.Guarded) : PBody F.ty :=
   ⟨P_of_FShape hF, Hd_of_FShape hF hG⟩
+
+/-- A member of the class at depth `d` has its free variables below `d`. -/
+theorem Cl_of_P : ∀ {A : VTy} {d : Nat}, P d A → A.Cl d
+  | .tvar _, _, h => h
+  | .tensor _ _, _, h => ⟨Cl_of_P h.1, Cl_of_P h.2⟩
+  | .sum _ _, _, h => ⟨Cl_of_P h.1, Cl_of_P h.2⟩
+  | .ref S, _, h => Cl_of_P (A := S) h
+  | .fam (.ref S), _, h => Cl_of_P (A := S) h
+  | .fam (.unit), d, h | .fam (.tensor _ _), d, h | .fam (.zero), d, h | .fam (.sum _ _), d, h
+  | .fam (.thunk _), d, h | .fam (.imm _ _), d, h | .fam (.mut _ _), d, h | .fam (.box _ _), d, h
+  | .fam (.bang _), d, h | .fam (.unk), d, h | .fam (.tvar _), d, h | .fam (.mu _), d, h
+  | .fam (.int _), d, h | .fam (.fam _), d, h | .fam (.opq _), d, h =>
+      VTy.Cl_mono _ h (Nat.zero_le d)
+  | .mu B, d, h => by
+      rcases h with h | ⟨h, -⟩
+      · exact VTy.Cl_mono B h (by omega)
+      · exact Cl_of_P (A := B) h
+  | .unit, d, h | .zero, d, h | .thunk _, d, h | .imm _ _, d, h | .mut _ _, d, h | .box _ _, d, h
+  | .bang _, d, h | .unk, d, h | .int _, d, h | .opq _, d, h => VTy.Cl_mono _ h (Nat.zero_le d)
 
 /-! ### Binders and the closed types in scope -/
 
@@ -212,64 +242,78 @@ theorem closedOf_root (B₀ : VTy) : closedOf B₀ [] = .mu B₀ := by
     funext n; cases n <;> rfl
   simp only [closedOf, this, VTy.subst_id]
 
-/-! ### The binders and arrays of a position -/
+/-! ### Keys -/
 
-/-- The binders of the `μ`s inside `A` that are not closed, at every depth. -/
-def rIn (Bs : Stack) : VTy → List Stack
-  | .tensor A B => rIn Bs A ++ rIn Bs B
-  | .sum A B => rIn Bs A ++ rIn Bs B
-  | .ref S => rIn Bs S
-  | .fam (.ref S) => rIn Bs S
-  | .mu B => if clB 0 (.mu B) then [] else (B :: Bs) :: rIn (B :: Bs) B
+/-- A binder the fold calls: a `μ`, or an array of a non-closed element type under a stack. -/
+inductive Bnd where
+  | mu (b : Stack)
+  | arr (Bs : Stack) (S : VTy)
+  deriving DecidableEq
+
+/-- The keys of a position, in preorder: each non-closed `μ` and each array of a non-closed
+element type, then the keys inside it. -/
+def keysIn (Bs : Stack) : VTy → List Bnd
+  | .tensor A B => keysIn Bs A ++ keysIn Bs B
+  | .sum A B => keysIn Bs A ++ keysIn Bs B
+  | .ref S => keysIn Bs S
+  | .fam (.ref S) => if clB 0 S then [] else .arr Bs S :: keysIn Bs S
+  | .mu B => if clB 0 (.mu B) then [] else .mu (B :: Bs) :: keysIn (B :: Bs) B
   | _ => []
 
-/-- The element types of the arrays of `A` that are not closed, outside any inner binder. -/
-def aIn : VTy → List VTy
-  | .tensor A B => aIn A ++ aIn B
-  | .sum A B => aIn A ++ aIn B
-  | .ref S => aIn S
-  | .fam (.ref S) => if clB 0 S then [] else S :: aIn S
-  | _ => []
+/-- The keys of `μB₀`: the root, then the keys of its body. -/
+def keys (B₀ : VTy) : List Bnd := .mu [B₀] :: keysIn [B₀] B₀
 
-/-- The binders of `μB₀`: the root and every binder inside its body. -/
-def reach (B₀ : VTy) : List Stack := [B₀] :: rIn [B₀] B₀
-
-/-- The binders a traversal can call are listed: each binder's body is in the class, and the
-binders inside it are listed. -/
-def KeysOK (ks : List Stack) : Prop :=
-  ∀ B Bs, (B :: Bs) ∈ ks → P (Bs.length + 1) B ∧ Hd B ∧ ∀ c ∈ rIn (B :: Bs) B, c ∈ ks
+/-- The keys a traversal can call are listed: each `μ` key's body is in the class and the keys
+inside it are listed, and each array key's element type is in the class and the keys inside it
+are listed. -/
+def KeysOK (ks : List Bnd) : Prop :=
+  (∀ B Bs, .mu (B :: Bs) ∈ ks → P (Bs.length + 1) B ∧ Hd B ∧ ∀ c ∈ keysIn (B :: Bs) B, c ∈ ks) ∧
+  ∀ Bs S, .arr Bs S ∈ ks → P Bs.length S ∧ ∀ c ∈ keysIn Bs S, c ∈ ks
 
 /-- Every suffix of a binder is listed. -/
-def Anc (ks : List Stack) (Bs : Stack) : Prop := ∀ i, i < Bs.length → Bs.drop i ∈ ks
+def Anc (ks : List Bnd) (Bs : Stack) : Prop := ∀ i, i < Bs.length → .mu (Bs.drop i) ∈ ks
 
-theorem anc_cons {ks : List Stack} {B : VTy} {Bs : Stack} (h : (B :: Bs) ∈ ks) (hA : Anc ks Bs) :
+theorem anc_cons {ks : List Bnd} {B : VTy} {Bs : Stack} (h : .mu (B :: Bs) ∈ ks) (hA : Anc ks Bs) :
     Anc ks (B :: Bs) := fun i hi => by
   cases i with
   | zero => simpa using h
   | succ i => simpa using hA i (by simpa using hi)
 
-theorem anc_drop {ks : List Stack} {Bs : Stack} (hA : Anc ks Bs) (i : Nat) :
+theorem anc_drop {ks : List Bnd} {Bs : Stack} (hA : Anc ks Bs) (i : Nat) :
     Anc ks (Bs.drop i) := fun j hj => by
   rw [List.drop_drop]
   exact hA (i + j) (by simp at hj; omega)
 
-/-- A binder listed by `rIn Bs A` with `A` in the class has its body in the class. -/
-theorem rIn_P : ∀ (A : VTy) (Bs : Stack), P Bs.length A → ∀ c ∈ rIn Bs A,
-    ∃ B Bs', c = B :: Bs' ∧ P (Bs'.length + 1) B ∧ Hd B
+/-- What a key of a position in the class carries: a `μ` key's body is in the class with its
+head not a variable, and an array key's element type is in the class. -/
+def KeyP : Bnd → Prop
+  | .mu [] => False
+  | .mu (B :: Bs) => P (Bs.length + 1) B ∧ Hd B
+  | .arr Bs S => P Bs.length S
+
+/-- A key listed by `keysIn Bs A` with `A` in the class carries `KeyP`. -/
+theorem keysIn_P : ∀ (A : VTy) (Bs : Stack), P Bs.length A → ∀ c ∈ keysIn Bs A, KeyP c
   | .tensor A B, Bs, h, c, hc => by
-      simp only [rIn, List.mem_append] at hc
+      simp only [keysIn, List.mem_append] at hc
       rcases hc with hc | hc
-      · exact rIn_P A Bs h.1 c hc
-      · exact rIn_P B Bs h.2 c hc
+      · exact keysIn_P A Bs h.1 c hc
+      · exact keysIn_P B Bs h.2 c hc
   | .sum A B, Bs, h, c, hc => by
-      simp only [rIn, List.mem_append] at hc
+      simp only [keysIn, List.mem_append] at hc
       rcases hc with hc | hc
-      · exact rIn_P A Bs h.1 c hc
-      · exact rIn_P B Bs h.2 c hc
-  | .ref S, Bs, h, c, hc => rIn_P S Bs h c hc
-  | .fam (.ref S), Bs, h, c, hc => rIn_P S Bs h c hc
+      · exact keysIn_P A Bs h.1 c hc
+      · exact keysIn_P B Bs h.2 c hc
+  | .ref S, Bs, h, c, hc => keysIn_P S Bs h c hc
+  | .fam (.ref S), Bs, h, c, hc => by
+      simp only [keysIn] at hc
+      split at hc
+      · simp at hc
+      · simp only [List.mem_cons] at hc
+        rcases hc with rfl | hc
+        · exact h
+        · exact keysIn_P S Bs h c hc
   | .mu B, Bs, h, c, hc => by
-      simp only [rIn] at hc
+      simp only [keysIn] at hc
       split at hc
       · simp at hc
       · rename_i hcl
@@ -279,77 +323,93 @@ theorem rIn_P : ∀ (A : VTy) (Bs : Stack), P Bs.length A → ∀ c ∈ rIn Bs A
           · exact h
         simp only [List.mem_cons] at hc
         rcases hc with rfl | hc
-        · exact ⟨B, Bs, rfl, hP⟩
-        · exact rIn_P B (B :: Bs) hP.1 c hc
+        · exact hP
+        · exact keysIn_P B (B :: Bs) hP.1 c hc
   | .unit, _, _, _, hc | .zero, _, _, _, hc | .thunk _, _, _, _, hc | .imm _ _, _, _, _, hc
   | .mut _ _, _, _, _, hc | .box _ _, _, _, _, hc | .bang _, _, _, _, hc | .unk, _, _, _, hc
-  | .int _, _, _, _, hc | .opq _, _, _, _, hc | .tvar _, _, _, _, hc => by simp [rIn] at hc
+  | .int _, _, _, _, hc | .opq _, _, _, _, hc | .tvar _, _, _, _, hc => by simp [keysIn] at hc
   | .fam (.unit), _, _, _, hc | .fam (.tensor _ _), _, _, _, hc | .fam (.zero), _, _, _, hc
   | .fam (.sum _ _), _, _, _, hc | .fam (.thunk _), _, _, _, hc | .fam (.imm _ _), _, _, _, hc
   | .fam (.mut _ _), _, _, _, hc | .fam (.box _ _), _, _, _, hc | .fam (.bang _), _, _, _, hc
   | .fam (.unk), _, _, _, hc | .fam (.tvar _), _, _, _, hc | .fam (.mu _), _, _, _, hc
   | .fam (.int _), _, _, _, hc | .fam (.fam _), _, _, _, hc | .fam (.opq _), _, _, _, hc => by
-      simp [rIn] at hc
+      simp [keysIn] at hc
 
-/-- A binder listed by `rIn Bs A` lists the binders inside its own body. -/
-theorem rIn_closed : ∀ (A : VTy) (Bs : Stack) (B : VTy) (Bs' : Stack), (B :: Bs') ∈ rIn Bs A →
-    ∀ c ∈ rIn (B :: Bs') B, c ∈ rIn Bs A
-  | .tensor A₁ A₂, Bs, B, Bs', h, c, hc => by
-      simp only [rIn, List.mem_append] at h ⊢
+/-- The keys inside a key listed by `keysIn Bs A` are listed by it too. -/
+def keysOf : Bnd → List Bnd
+  | .mu [] => []
+  | .mu (B :: Bs) => keysIn (B :: Bs) B
+  | .arr Bs S => keysIn Bs S
+
+theorem keysIn_closed : ∀ (A : VTy) (Bs : Stack) (k : Bnd), k ∈ keysIn Bs A →
+    ∀ c ∈ keysOf k, c ∈ keysIn Bs A
+  | .tensor A₁ A₂, Bs, k, h, c, hc => by
+      simp only [keysIn, List.mem_append] at h ⊢
       rcases h with h | h
-      · exact Or.inl (rIn_closed A₁ Bs B Bs' h c hc)
-      · exact Or.inr (rIn_closed A₂ Bs B Bs' h c hc)
-  | .sum A₁ A₂, Bs, B, Bs', h, c, hc => by
-      simp only [rIn, List.mem_append] at h ⊢
+      · exact Or.inl (keysIn_closed A₁ Bs k h c hc)
+      · exact Or.inr (keysIn_closed A₂ Bs k h c hc)
+  | .sum A₁ A₂, Bs, k, h, c, hc => by
+      simp only [keysIn, List.mem_append] at h ⊢
       rcases h with h | h
-      · exact Or.inl (rIn_closed A₁ Bs B Bs' h c hc)
-      · exact Or.inr (rIn_closed A₂ Bs B Bs' h c hc)
-  | .ref S, Bs, B, Bs', h, c, hc => rIn_closed S Bs B Bs' h c hc
-  | .fam (.ref S), Bs, B, Bs', h, c, hc => rIn_closed S Bs B Bs' h c hc
-  | .mu B₁, Bs, B, Bs', h, c, hc => by
-      simp only [rIn] at h ⊢
+      · exact Or.inl (keysIn_closed A₁ Bs k h c hc)
+      · exact Or.inr (keysIn_closed A₂ Bs k h c hc)
+  | .ref S, Bs, k, h, c, hc => keysIn_closed S Bs k h c hc
+  | .fam (.ref S), Bs, k, h, c, hc => by
+      simp only [keysIn] at h ⊢
       split at h
       · simp at h
       · rw [if_neg (by assumption)]
         simp only [List.mem_cons] at h ⊢
-        rcases h with h | h
-        · simp only [List.cons.injEq] at h
-          obtain ⟨rfl, rfl⟩ := h
-          exact Or.inr hc
-        · exact Or.inr (rIn_closed B₁ (B₁ :: Bs) B Bs' h c hc)
-  | .unit, _, _, _, h, _, _ | .zero, _, _, _, h, _, _ | .thunk _, _, _, _, h, _, _
-  | .imm _ _, _, _, _, h, _, _ | .mut _ _, _, _, _, h, _, _ | .box _ _, _, _, _, h, _, _
-  | .bang _, _, _, _, h, _, _ | .unk, _, _, _, h, _, _ | .int _, _, _, _, h, _, _
-  | .opq _, _, _, _, h, _, _ | .tvar _, _, _, _, h, _, _ => by simp [rIn] at h
-  | .fam (.unit), _, _, _, h, _, _ | .fam (.tensor _ _), _, _, _, h, _, _
-  | .fam (.zero), _, _, _, h, _, _ | .fam (.sum _ _), _, _, _, h, _, _
-  | .fam (.thunk _), _, _, _, h, _, _ | .fam (.imm _ _), _, _, _, h, _, _
-  | .fam (.mut _ _), _, _, _, h, _, _ | .fam (.box _ _), _, _, _, h, _, _
-  | .fam (.bang _), _, _, _, h, _, _ | .fam (.unk), _, _, _, h, _, _
-  | .fam (.tvar _), _, _, _, h, _, _ | .fam (.mu _), _, _, _, h, _, _
-  | .fam (.int _), _, _, _, h, _, _ | .fam (.fam _), _, _, _, h, _, _
-  | .fam (.opq _), _, _, _, h, _, _ => by simp [rIn] at h
+        rcases h with rfl | h
+        · exact Or.inr hc
+        · exact Or.inr (keysIn_closed S Bs k h c hc)
+  | .mu B₁, Bs, k, h, c, hc => by
+      simp only [keysIn] at h ⊢
+      split at h
+      · simp at h
+      · rw [if_neg (by assumption)]
+        simp only [List.mem_cons] at h ⊢
+        rcases h with rfl | h
+        · exact Or.inr hc
+        · exact Or.inr (keysIn_closed B₁ (B₁ :: Bs) k h c hc)
+  | .unit, _, _, h, _, _ | .zero, _, _, h, _, _ | .thunk _, _, _, h, _, _
+  | .imm _ _, _, _, h, _, _ | .mut _ _, _, _, h, _, _ | .box _ _, _, _, h, _, _
+  | .bang _, _, _, h, _, _ | .unk, _, _, h, _, _ | .int _, _, _, h, _, _
+  | .opq _, _, _, h, _, _ | .tvar _, _, _, h, _, _ => by simp [keysIn] at h
+  | .fam (.unit), _, _, h, _, _ | .fam (.tensor _ _), _, _, h, _, _
+  | .fam (.zero), _, _, h, _, _ | .fam (.sum _ _), _, _, h, _, _
+  | .fam (.thunk _), _, _, h, _, _ | .fam (.imm _ _), _, _, h, _, _
+  | .fam (.mut _ _), _, _, h, _, _ | .fam (.box _ _), _, _, h, _, _
+  | .fam (.bang _), _, _, h, _, _ | .fam (.unk), _, _, h, _, _
+  | .fam (.tvar _), _, _, h, _, _ | .fam (.mu _), _, _, h, _, _
+  | .fam (.int _), _, _, h, _, _ | .fam (.fam _), _, _, h, _, _
+  | .fam (.opq _), _, _, h, _, _ => by simp [keysIn] at h
 
-/-- **The binders of a body in the class are closed under the traversal's calls.** -/
-theorem reach_ok {B₀ : VTy} (h : PBody B₀) : KeysOK (reach B₀) := by
-  intro B Bs hm
-  simp only [reach, List.mem_cons] at hm
-  rcases hm with e | hm
-  · simp only [List.cons.injEq] at e
-    obtain ⟨rfl, rfl⟩ := e
-    exact ⟨h.1, h.2, fun c hc => List.mem_cons_of_mem _ hc⟩
-  · obtain ⟨B', Bs', e, hP, hH⟩ := rIn_P B₀ [B₀] h.1 _ hm
-    simp only [List.cons.injEq] at e
-    obtain ⟨rfl, rfl⟩ := e
-    exact ⟨hP, hH, fun c hc => List.mem_cons_of_mem _ (rIn_closed B₀ [B₀] B Bs hm c hc)⟩
+/-- **The keys of a body in the class are closed under the traversal's calls.** -/
+theorem keys_ok {B₀ : VTy} (h : PBody B₀) : KeysOK (keys B₀) := by
+  have hall : ∀ k ∈ keys B₀, KeyP k ∧ ∀ c ∈ keysOf k, c ∈ keys B₀ := by
+    intro k hk
+    simp only [keys, List.mem_cons] at hk
+    rcases hk with rfl | hk
+    · exact ⟨h, fun c hc => List.mem_cons_of_mem _ hc⟩
+    · exact ⟨keysIn_P B₀ [B₀] h.1 k hk,
+        fun c hc => List.mem_cons_of_mem _ (keysIn_closed B₀ [B₀] k hk c hc)⟩
+  refine ⟨fun B Bs hm => ?_, fun Bs S hm => ?_⟩
+  · obtain ⟨hP, hc⟩ := hall _ hm
+    exact ⟨hP.1, hP.2, hc⟩
+  · obtain ⟨hP, hc⟩ := hall _ hm
+    exact ⟨hP, hc⟩
 
-theorem root_mem (B₀ : VTy) : [B₀] ∈ reach B₀ := List.mem_cons_self
+theorem root_mem (B₀ : VTy) : Bnd.mu [B₀] ∈ keys B₀ := List.mem_cons_self
 
-theorem anc_root (B₀ : VTy) : Anc (reach B₀) [B₀] := fun i hi => by
+theorem root_idx (B₀ : VTy) : (keys B₀).idxOf (.mu [B₀]) = 0 := by
+  simp [keys, List.idxOf_cons_self]
+
+theorem anc_root (B₀ : VTy) : Anc (keys B₀) [B₀] := fun i hi => by
   have : i = 0 := by simpa using hi
   subst this
   exact root_mem B₀
 
-end BoCa.Fig16.LogRel.Core.NestedFold
+end BoCa.Fig16.LogRel.Core.FoldP
 
 end

@@ -1872,7 +1872,11 @@ def genFix (sT : LTy) (p : Var) : CM Tm := do
 
 `dtor A` (the checker's `dtorE A`, at an owned value that goes unused) is the destructor its type
 gives (`Core/Dtor.lean`, `dtorAt`): nothing at a forgettable type, componentwise, a cell freed
-and its contents destroyed, a `μ` by an owned fold, `close` at codata, `array_free` at an array. -/
+and its contents destroyed, a `μ` by an owned fold, `close` at codata, `array_free` at an array.
+A `μ` whose body is in the fold class `P` (SPEC §6) gets one function per closed `μ` type it
+unrolls to (memoized by the type, so a binder nested in another, which names the outer one, is
+its own function calling the outer's), and an array of recursive data one loop function that
+destroys each element and then frees the buffer once (`freeArr`), as Rust drops a `Vec`. -/
 
 mutual
 /-- The destructor of `A` on `x`: a term of type `1`. -/
@@ -1893,6 +1897,11 @@ def genDtor (fuel : Nat) (A : VTy) (x : Var) : CM Tm := do
     return .letv c (.prim .free [x]) (← genDtor f A c)
   | .box _ A => genDtor f A x
   | .mu T => do
+    -- UNPROVED: that the function generated here from the type frees exactly the cells the
+    -- kernel's destructor `dtorE (.mu T)` frees (`foldOwn`, or `foldOwnG` outside `FShape`, at
+    -- results `1`), in some order, and observes nothing else. It is read off the type the
+    -- checker's `dtor` node carries, not compiled from `dtorE`'s term; a mismatch shows as a leak
+    -- or a double free in `live`, and as a disagreement with the source stage.
     let key := ppVT (.mu T) (← get).mach
     let fi ← match (← get).dtors[key]? with
       | some fi => pure fi
@@ -2048,12 +2057,12 @@ def constArity : TExpr → Option Nat
   | .arrNew .. | .arrFree .. | .arrSize .. | .arrReplace .. | .arrLen .. | .arrGet .. | .arrCopy ..
   | .arrForget .. | .countFold .. | .countTry .. | .sliceGetM .. | .sliceLenM .. | .sliceSplitI ..
   | .sliceSplitM .. | .sliceReplaceM .. | .sliceSwapM .. | .dtor .. | .foldImm .. | .foldOwn ..
-  | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. | .boundedFix .. => some 1
+  | .foldOwnG .. | .foldReuse .. | .unfoldN .. | .allocS .. | .freeS .. | .boundedFix .. => some 1
   | .swap .. | .withbor1 .. | .withbor2 .. | .withbor3 .. | .withload .. | .withswap ..
   | .sliceBorrowM .. | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU ..
   | .sliceBorrowMU .. | .sliceBorrowIU .. => some 2
-  | .sliceEmptyI .. | .sliceEmptyM .. => some 0
+  | .sliceEmptyI .. | .sliceEmptyM .. | .arrEmpty .. => some 0
   | _ => none
 
 /-- The nodes whose value is their child's: `ret`, a thunk of a λ-value, dereliction, the lifetime
@@ -3528,7 +3537,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     letpairM p fun v i => pure (.prim (.idx (!inRange)) [v, i])
   | .sliceSplitI .., [p] | .sliceSplitM .., [p] =>
     letpairM p fun v i => pure (.prim (.split true) [v, i])
-  | .sliceEmptyI .., [] | .sliceEmptyM .., [] => return .prim .emptyFam []
+  | .sliceEmptyI .., [] | .sliceEmptyM .., [] | .arrEmpty .., [] => return .prim .emptyFam []
   | .sliceSwapM .., [p] =>
     letpairM p fun v r => letpairM r fun i k => pure (.prim .swapSlots [v, i, k])
   | .countFold _ j _, [p] => do

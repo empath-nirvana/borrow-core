@@ -1,8 +1,0 @@
--- expect: 6:6: the field `tail` of `Cons` holds `List` inside another type (`Option[List]`): write `box` at the recursive type (`Option[box List]`), or make the field `List` itself
--- A recursive field without `box` (SPEC §42, *Recursion*): `Cons` is a block, so `tail` is a cell
--- of `Option[List]`, and the recursive type is under the option inside it, outside §6's `FShape`.
--- Written `Option[box List]`, the option holds a cell of its own.
-
-data List = Nil | Cons(head: i32, tail: Option[List])
-
-main -> i32 = 0

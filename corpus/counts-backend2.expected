@@ -69,6 +69,7 @@ block-capability-inner 0 0 0 5 5 0
 block-swap 2 0 0 4 4 0
 block-yield-inner 0 0 0 0 0 0
 borrow-in-scope 2 0 0 4 3 0
+btree-boxed 77 0 0 22930 19396 6795
 bytes-upper 1 0 0 80 52 54
 capability-bang-width 0 0 0 9 7 0
 capability-swap-width 0 0 0 7 5 0
@@ -95,8 +96,10 @@ count-down 0 0 0 0 0 0
 count-down-exact 6 0 0 18 12 0
 count-fold 0 0 0 0 0 0
 count-try 0 0 0 0 0 0
+data-array-tree 4 0 0 80 80 8
 data-box-tree 9 0 0 27 27 0
 data-config 2 0 0 161 25 202
+data-eval 10 0 0 56 56 0
 data-fold-bang 4 0 0 8 8 0
 data-fold-block 9 0 0 62 31 0
 data-fold-forest 8 0 0 104 68 0
@@ -106,8 +109,12 @@ data-fold-list 6 0 0 42 27 0
 data-fold-tree 9 0 0 89 58 0
 data-fold-whole 11 0 0 92 50 0
 data-group 5 0 0 21 21 0
+data-json-vec 6 0 0 188 188 23
 data-option 5 0 0 16 16 4
+data-option-block 12 0 0 30 30 0
 data-particles 1 0 0 667 651 150
+data-rose 14 0 0 56 56 0
+data-rose-vec 5 0 0 220 220 15
 data-turnstile 1 0 0 51 19 18
 deep-list 100000 0 0 300000 300000 0
 div-abstraction 0 0 0 0 0 0
@@ -141,6 +148,7 @@ effects-sum-gen 0 0 0 0 0 0
 effects-tunnel 0 0 0 0 0 0
 family-swap 2 0 0 4 4 0
 fields 3 0 0 426 279 248
+filler-mu 3 0 0 39 39 3
 find-bytes 2 0 0 54 12 47
 float-arith 312 0 0 12893 6512 10094
 float-compare 0 0 0 86 1 0
@@ -301,6 +309,8 @@ leetcode/trees/0104-maximum-depth-of-binary-tree 48 0 0 5103 4626 215
 leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-traversal 39 0 0 4847 4514 189
 leetcode/trees/0124-binary-tree-maximum-path-sum 65 0 0 5505 4850 318
 leetcode/trees/0208-implement-trie 25 0 0 8067 7610 2373
+leetcode/trees/0208-implement-trie-boxed 58 0 0 8011 7601 572
+leetcode/trees/0208-implement-trie-vec 58 0 0 8696 8286 572
 leetcode/trees/0211-design-add-and-search-words-data-structure 46 0 0 10900 9038 4453
 leetcode/trees/0212-word-search-ii 102 0 0 21673 17226 12863
 leetcode/trees/0226-invert-binary-tree 39 0 0 5074 4770 174
@@ -383,6 +393,7 @@ sort-lines 2 0 0 4465 4272 272
 sort-numbers 1 0 0 165 131 136
 split-at-mut 1 0 0 132 92 41
 state-machine 0 0 0 0 0 0
+storage-array 5461 0 0 55180 55180 5460
 sum-i32 7 0 0 30 15 0
 sum-prog-exact 37 9 3 120 78 0
 surface/array-sum 1 0 0 3000 3000 2024

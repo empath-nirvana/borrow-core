@@ -321,6 +321,7 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | sliceSplitM a A hΓ => exact .sliceSplitM a A (deadP_append h' hΓ)
   | sliceEmptyI a A hΓ => exact .sliceEmptyI a A (deadP_append h' hΓ)
   | sliceEmptyM a A hΓ => exact .sliceEmptyM a A (deadP_append h' hΓ)
+  | arrEmpty A hΓ => exact .arrEmpty A (deadP_append h' hΓ)
   | sliceReplaceM a A hΓ => exact .sliceReplaceM a A (deadP_append h' hΓ)
   | sliceSwapM a A hΓ => exact .sliceSwapM a A (deadP_append h' hΓ)
   | withbor1 x hΓ hx hsc hf₁ hf₂ => exact .withbor1 x (deadP_append h' hΓ) hx hsc hf₁ hf₂
@@ -348,6 +349,7 @@ theorem _root_.BoCa.Fig16.LogRel.Core.CDerivesAt.append_dead {Ξ : EffCtx} {Γ' 
   | foldImm F y c R hΓ hF hG hyM hyR hR =>
       exact .foldImm F y c R (deadP_append h' hΓ) hF hG hyM hyR hR
   | foldOwn F R hΓ hF hG => exact .foldOwn F R (deadP_append h' hΓ) hF hG
+  | foldOwnG B₀ Rs hΓ hB => exact .foldOwnG B₀ Rs (deadP_append h' hΓ) hB
   | foldReuse F R hΓ hF hG => exact .foldReuse F R (deadP_append h' hΓ) hF hG
   | nuIn hC _ ih => exact .nuIn hC ih
   | nuOut hC _ ih => exact .nuOut hC ih

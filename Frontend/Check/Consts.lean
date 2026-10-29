@@ -480,6 +480,9 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
       (cDead (fun j => .sliceEmptyM (at_ sp) j a A) fun hd _ => .sliceEmptyM a A hd)
+  | .arrayEmpty A => do
+      let A ← E.elabV Δ A
+      (cDead (fun j => .arrEmpty (at_ sp) j A) fun hd _ => .arrEmpty A hd)
   | .sliceReplaceMut a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A

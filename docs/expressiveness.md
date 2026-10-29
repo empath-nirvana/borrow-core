@@ -245,8 +245,7 @@ blocker. "Runs (shape)" means it runs only in a shape the language forces, named
 **Outside the target set, with their blockers** (recorded in their headers, measured still pending
 §10.1): `backtrack-multishot` (multi-shot, not a goal), `noalloc` (allocation is not tracked),
 `fold-under-u` (`X` under `U`, #182), `dig-bang` and `box-dup` (two kernel rules the model
-validates), `lc-0208-trie-boxed` (a destructor for `mu` with `X` under `array`, #182; the arena form
-is accepted), `closure-captures-int` (#9), `callbacks-in-data`, `map-div-fold`, `div-in-adapter`
+validates), `closure-captures-int` (#9), `callbacks-in-data`, `map-div-fold`, `div-in-adapter`
 (stored callbacks with rows, #161 B), `comp-param-*` (#487, ports), `closure-lend`, `lend-nested`
 (#54), `div-answering-clause`, `state-machine-audit` (§14), `async-worker-pool`,
 `async-borrow` (#52).
@@ -696,8 +695,8 @@ build unit or a documented limit.
 
 **Outside the target set** (no unit here): interior mutability and graphs (#119, #94; arenas work
 as library code); threads (#212); multi-shot search; allocation tracking (`noalloc`); folds with
-`X` under `U` (`fold-under-u`); digging and same-lifetime boxing (`dig-bang`, `box-dup`); a trie
-whose nodes own arrays of children (`lc-0208-trie-boxed`, #182); a borrowed list's iterator (#57);
+`X` under `U` (`fold-under-u`); digging and same-lifetime boxing (`dig-bang`, `box-dup`); a
+borrowed list's iterator (#57);
 K1 itself (#172).
 
 ## 10. Reproduction
@@ -747,7 +746,7 @@ gen-lines.bc: gen-lines.bc:23:18: `io_it1`, of type `U (iter u8 (ref input) (ref
 io-two-tasks.bc: io-two-tasks.bc:22:11: two tasks spawned in this block are given the capability of `Stdout`: a capability is lent to one task at
 lc-0039-combination-sum.bc: lc-0039-combination-sum.bc:58:28: in this `case`, `out` is consumed in the `inr` arm but not in the `inl` arm
 lc-0070-climbing-stairs-memo.bc: lc-0070-climbing-stairs-memo.bc:38:32: no handler `memo` is declared before this `with`
-lc-0208-trie-boxed.bc: lc-0208-trie-boxed.bc:97:56: `io_d23` is not consumed in its scope, and its type `(1 + (mu X. (1 + 1) * array (1 + X))) + 
+lc-0208-trie-boxed.bc: runs since #722, as `corpus/leetcode/trees/0208-implement-trie-boxed.bc` (the destructor at the class `P`, SPEC §61); its error was `io_d23` is not consumed in its scope, and its type `(1 + (mu X. (1 + 1) * array (1 + X))) + 
 lend-nested.bc: lend-nested.bc:33:38: type mismatch: expected `i32`, but this has type `ref array i32 * i32`
 lend-two.bc: lend-two.bc:31:14: type mismatch: expected `ref output`, but this has type `imm 'io_lb31_3 i32`
 loop-handler-binder.bc: loop-handler-binder.bc:18:3: `e` is used twice here, and its type `array_imm 'a u8` is not persistent
@@ -1838,7 +1837,7 @@ Every one runs; four need an arena for an object graph.
 | Bounce | balls in an array, mutated in place | natural | `for b in &mut balls { modify b { … } }` | — | 1 / 0 | `awfy/bounce.bc` |
 | List | build lists, compare lengths, Takeuchi over lists | workaround: `clone` per extra use (9830 copies) | "`y` is used again …, so this use copies it, and its type … holds recursive data: the copy allocates every node" | B9 (shared immutable data) | 75374 / 0 | `awfy/list.bc` |
 | Permute, Queens | recursive search over arrays | natural | — | — | 1 / 0, 40 / 0 | `awfy/permute_natural.bc`, `awfy/queens.bc` |
-| Storage | a tree of arrays of arrays, built recursively | workaround: four children as a tuple | children in an array: "`io_d23` is not consumed in its scope, and its type … has no destructor" | B14 | 5461 / 0 | `awfy/storage.bc`, `awfy/storage_array.bc` |
+| Storage | a tree of arrays of arrays, built recursively | workaround: four children as a tuple; natural since #722 | children in an array: runs with its derived destructor (SPEC §61) at Rust's 5461 allocations; it was "`io_d23` is not consumed in its scope, and its type … has no destructor" | B14 (closed for the owned destructor) | 5461 / 0 | `awfy/storage.bc`, `corpus/storage-array.bc` |
 | Towers | Hanoi with piles as linked lists | natural | — | — (cost: a box per push) | 86383 / 0 | `awfy/towers.bc` |
 
 ### 12.2 The Benchmarks Game
@@ -1889,7 +1888,7 @@ keyed by views), is refused by #491 and #492, both B7. So the AoC subset gates o
 | program | status | the refusal, or the workaround | blocker | probe |
 |---|---|---|---|---|
 | hash map | natural (`lib/map.bc`: generic, insert, lookup, remove, a view by `map_get`, iteration) | iterating a map whose keys are owned strings: "type mismatch: expected `array u8 * i32`, but this has type `array_imm 'y u8 * i32`" (at `lib/map.bc:230`) | B16 | `ds/hashmap.bc` |
-| B-tree | workaround: arena, generic with a comparator (2000 keys, height 6) | nodes owning arrays of children: "`e` is not consumed in its scope, and its type `1 + (mu X. …)` has no destructor" | B14 | `ds/btree.bc`, `ds/btree-boxed.bc` |
+| B-tree | workaround: arena, generic with a comparator (2000 keys, height 6); natural since #722 | nodes owning arrays of children: runs with its derived destructor (SPEC §61), 200 keys, at Rust's 77 allocations (792 at 2000 keys); it was "`e` is not consumed in its scope, and its type `1 + (mu X. …)` has no destructor" | B14 (closed for the owned destructor) | `ds/btree.bc`, `corpus/btree-boxed.bc` |
 | LRU cache | workaround: arena list with a sentinel plus `Map[i32, i32]`; LeetCode 146's example | the classic map-to-node plus linked nodes: "`n` is used twice here, and its type `ref (mu X. (i32 * i32) * (1 + ref X) * (1 + ref X))` is not persistent" | B13 | `ds/lru-arena.bc`, `ds/lru-cells.bc` |
 | doubly linked list | workaround: arena | linking cells both ways: "`a` is used twice here …" | B13 | `ds/dll-cells.bc` |
 | union-find, ring buffer, arena allocator | natural | ids are aliases, not distinct types (no `data`) | B3 | `ds/unionfind.bc`, `ds/ringbuf.bc`, `ds/arena.bc` |
@@ -1916,6 +1915,9 @@ keyed by views), is refused by #491 and #492, both B7. So the AoC subset gates o
   it by design, as Rust's does without `Rc<RefCell<_>>`.
 - **B14, recursive data under an array.** Storage, a B-tree whose nodes own child arrays, a buffer
   of AST nodes, `lc-0208-trie-boxed`: no destructor and no filler for `mu X. … array X …` (#182).
+  The destructor and the owned fold at the class `P` are built (#722, SPEC §61): Storage, the
+  B-tree and the trie run in natural form at Rust's allocation counts. A filler at `μ` and the
+  borrowed fold remain.
 - **B15, containers of `!` functions.** Richards' task functions, Lox's native functions: "`i` is
   not consumed in its scope, and it cannot be dropped where its scope ends" at `array_new[!(i32 =>
   i32)](n, !{ i -> f })`, and "`io_else` is not consumed …" at `if c { f } else { g }` with a `!`
@@ -1965,7 +1967,7 @@ bg/mut-name-capture-renamed.bc: runs
 bg/pidigits.bc: runs
 ds/lru-cells.bc: lru-cells.bc:14:3: `n` is used twice here, and its type `ref (mu X. (i32 * i32) * (1 + ref X) * (1 + ref X))` is not persistent
 ds/dll-cells.bc: dll-cells.bc:19:3: `a` is used twice here, and its type `ref (mu X. i32 * (1 + ref X) * (1 + ref X))` is not persistent
-ds/btree-boxed.bc: btree-boxed.bc:80:46: `e` is not consumed in its scope, and its type `1 + (mu X. (array i32 * i32) * array (1 + X) * i32)` has no destructor
+ds/btree-boxed.bc: runs since #722, as `corpus/btree-boxed.bc` (200 keys there; `2000 0 6` and Rust's 792 allocations at 2000); its error was `e` is not consumed in its scope, and its type `1 + (mu X. (array i32 * i32) * array (1 + X) * i32)` has no destructor
 ds/lru-arena.bc: runs
 conc/worker-pool-port.bc: ((i32[3], i32[2]), inr (i32[51], inr (i32[42], inr (i32[31], inr (i32[22], inr (i32[11], inl ()))))))
 lox/tree-arena.bc, lox/clox-vm.bc, ns/yaml-indent.bc: run
@@ -2146,7 +2148,7 @@ is written naturally only after it).
 |---|---|---|---|---|
 | C-1 | **`Arena[T]` with `Id[T]` newtypes** in `lib/`, and the `region` elaboration of §13.2 in its unbranded form | B13 | Richards, DeltaBlue, Havlak, CD, LRU, the doubly linked list, jlox, clox, the B-tree, each as a corpus program over the library | all ten run with goldens, and none indexes a raw `array i32` by hand |
 | C-2 | **spike S-G** (#119): yes/no — do branded handles into a handler-owned region make every access in bounds by the region-length Kripke fact, as one lemma with no change to the relation? | B13 (bounds) | DeltaBlue over C-1 with its bounds checks gone | **yes**: build it; `bcc-counts` bounds per access drop to 0. **Kill**: checked indices stay, documented as the arena's cost |
-| C-3 | **spike S-H**: yes/no — is a destructor and fold for `mu` with `X` under `array` one more `FShape` case of `foldOwn`, one lemma? | B14 | `awfy/storage_array.bc`, `ds/btree-boxed.bc`, `lc-0208-trie-boxed` | **yes**: build it and the three run. **Kill**: tuple children and arenas are the way, documented in SPEC §6 |
+| C-3 | **spike S-H**: yes/no — is a destructor and fold for `mu` with `X` under `array` one more `FShape` case of `foldOwn`, one lemma? | B14 | `awfy/storage_array.bc`, `ds/btree-boxed.bc`, `lc-0208-trie-boxed` | **yes**: build it and the three run. **Kill**: tuple children and arenas are the way, documented in SPEC §6. Answered by #595's design and #722: not one case, a class `P` and one generated fold (SPEC §61); the three run as `corpus/storage-array.bc`, `corpus/btree-boxed.bc`, `corpus/leetcode/trees/0208-implement-trie-boxed.bc` |
 | C-4 | **containers of `!` functions**: SPEC §26's weakening by a dead persistent binder, or an elaboration of the tabulator that does not need it | B15 | `awfy/fn_array.bc`, `richards_fnfield.bc`, `lox/fn-in-array.bc`, `lox/map-closures.bc` | those run |
 | C-5 | **#58 and #142, implicit copies of `imm`**, and **a borrowed walk of `mu`** (`unroll` at an `imm` view) | B9 | List without `clone`; AWFY Json's lookup returning a view; DeltaBlue's two views; T05 | those run, and List's `copies` are 0 |
 | C-6 | **spike S-F** (#174): yes/no — does `axWithborMITy` follow from the anti-frame and a variant of `wpTS_I_frameX` with `hQ` stated at the drop step? | B9 | T04 with `len(&v)` at a `mut` parameter | **yes**: build K2′. **Kill**: `mut`-taking read functions stay the API |

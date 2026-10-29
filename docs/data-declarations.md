@@ -831,10 +831,22 @@ Automatic boxing, one box a node placed by rule, is rejected for declarations.
 - A constructor with no fields (`Leaf`) allocates nothing.
 - The pattern `box Node(l, v, r)` frees the block and binds the values. `Node(c₁, c₂, c₃)` on an
   owned node binds its cells (§5.3), and on a view it binds the fields' views (SPEC §5, fieldwise).
-- A field may instead have type `box A`, a cell of its own. A recursive occurrence under neither a
-  block nor `box` is **an error at the declaration that asks for `box`**.
-- Recursion under an array (`Arr(Vec[Json])`) is under the array's allocation, the other written
-  heap allocation §5.3 names. It needs no `box`; its fold waits on B14 (§7.5). B.
+- A field may instead have type `box A`, a cell of its own. Under a cell, a block's or a written
+  `box`, the recursive type may sit inside another type: `tail: Option[List]` in a block is the
+  cell `ref (X ⊕ 1)`.
+- Recursion under an array (`Arr(Vec[Json])`, `Trie(bool, Vec[Option[Trie]])`,
+  `Node(array (i32 * T))`) is under the array's allocation, the other written heap allocation §5.3
+  names. It needs no `box` (built, SPEC §61, #722). Its destructor is the owned fold at the class
+  `P` (§61); the borrowed fold and a fold block over it wait (U2 of #595).
+- **Which positions are accepted is the kernel's class**: a declaration's recursion is accepted
+  exactly when its `μ` body is in SPEC §6's class `P` (`FoldP.PB`, `pBodyB`), the types a
+  destructor is defined at. A recursive type under a borrow (`imm`, `mut`, a view), `!`, a lifetime
+  box or an array of borrows is refused at the declaration, the message naming the former. Under
+  a function type it is a leaf of `P`, and the checker refuses it (a `μ` variable under `U`); under
+  another recursive declaration it is refused as a `μ` nested in a `μ` (B14, U3 of #595).
+- A buffer of recursive data is filled with the type's filler (§61): its first constructor with
+  one, an array empty (`Tree(0, [])` of `data Tree = Tree(i32, Vec[Tree])`), so
+  `box buf[Tree](n)` builds one; a type with no finite value has none, and the message says so.
 
 **What it changes.**
 

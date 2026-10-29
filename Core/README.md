@@ -47,7 +47,9 @@ coercions) in `AffRules.lean`, and its programs in `AffPrograms.lean`.
 `⊑Imm`/`⊑Mut`, and one constant per borrow axiom at arbitrary value-type payloads. It also has
 three call-by-value forms (`lolliE`, `allEV`, `ofRet`), the integer literal `lit` and the host
 operation `hostOp` (below), `roll`/`unroll`, the folds `foldImm`,
-`foldOwn` and `foldReuse`, and `nuIn`/`nuOut` with coiteration (`Nu.lean`):
+`foldOwn` and `foldReuse` at `FShape`, the general owned fold `foldOwnG` at the class `P` with one
+algebra per key (`FoldClass.lean`, `FoldOwnGTerm.lean`, `FoldOwnG.lean`, SPEC §61), and
+`nuIn`/`nuOut` with coiteration (`Nu.lean`):
 
     unfoldN : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)
 
@@ -295,7 +297,7 @@ with no new case.
 | family borrow `withborF2 : Ref A ⊗ Ref B ⊸ (∀'c ⊏ ⊓Δ. M 'c A ⊗ M 'c B ⊸ ['c] T) ⊸ …`, `M = Mut`/`Imm`: `withborM2_wf`, `withborI2_wf` | `Family.lean` |
 | block borrow `withborS σ : refTy σ ⊸ (∀'c ⊏ ⊓Δ. famTy M 'c σ ⊸ ['c] T) ⊸ refTy σ ⊗ T`, `shortenE`: `withborS_wf`, `withborSM_wf`, `withborSI_wf`, `shortenE_wf` | `BlockBorrow.lean` |
 | block allocation and free: `allocS`, `freeS` (`d_allocS`, `d_freeS`) | `Blocks.lean` |
-| destructors `dtorE T : T ⊸ F 1` at every `HasDtor T` (forgettable types, `Ref`, `⊗`/`⊕`/`[@a]`, fold-class `μ`, codata by `close`), and the drop `dropE T i e = (dtorE T xᵢ; e)`: `dtor_wf`, `drop_derives` (SPEC §12) | `Dtor.lean` |
+| destructors `dtorE T : T ⊸ F 1` at every `HasDtor T` (forgettable types, `Ref`, `⊗`/`⊕`/`[@a]`, `μ` of the class `P` by `foldOwn` or `foldOwnG`, codata by `close`), and the drop `dropE T i e = (dtorE T xᵢ; e)`: `dtor_wf`, `drop_derives` (SPEC §12, §61) | `Dtor.lean` |
 
 These facts are stated at the typed world:
 
@@ -324,6 +326,7 @@ interpreter (`…_eval`, kernel-checked by `decide`) with its result checked (`�
 | `StreamPrograms.lean` | `take_runs` (every closed `U(Stream 1)` observed `n` times and closed), `takeCloseR`, `natsSum` (`0 + 1 + 2 = 3`) |
 | `IntPrograms.lean` | `sumToProg` (`fixD` over `I32 ⊗ I32`, `1 + … + 10 = 55`), `sumListProg` (`[100, 20, 3]` as `μX. 1 ⊕ Ref (I32 ⊗ X)`, read by `withload` inside an immutable borrow, `foldImm` sum `123`), `signProg` (`div_s`/`div_u` of `-7` by `2`, a wrapping `mul`, `div_u` by zero taking the error branch) |
 | `ArrayPrograms.lean` | `arrProg`: `array_new` of three elements, `array_replace` at index 1, `array_size`, `array_free`; observed `(inl 11, 3)` and no cell left |
+| `NestedPrograms.lean` | `nestProg`: two values of `μX. I32 ⊗ Array (μY. 1 ⊕ (Ref X ⊗ Ref Y))`, nested three deep, built, one summed by `foldOwnG` and one dropped by its destructor; observed `34` and no cell left (the kernel program `nested-fold`) |
 
 The `IntPrograms.lean` runs are theorems at every host; the interpreter's results are at
 `wasmHost`.
