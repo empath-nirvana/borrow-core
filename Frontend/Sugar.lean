@@ -6285,6 +6285,22 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
         -- A callback that loops where a function is expected: its result is what its loop
         -- finishes with (it is specialized at its own type, `specV`), unless the parameter's
         -- result is itself a loop.
+        -- A call of a div function at a generic parameter whose type is a loop
+        -- (`div_fuel(f(x), n)`): its loop value, `reify` of the call, as `lvV` makes at a known
+        -- parameter type; the instance is then solved from the loop's type.  [spec §62]
+        let lv? : Option (CVTy × CVTy) := if (matchV m 0 Pi T).isSome then none else
+          match Wi' with
+          | .app _ f _ => match (c.tyV f).bind divFnOf with
+            | some (_, [], B', R') =>
+              if (matchV m 0 Pi (loopValTy [] B' R')).isSome then some (B', R') else none
+            | _ => none
+          | _ => none
+        let (Wi', T) ← match lv?, Wi' with
+          | some (B', R'), .app asp f W => do
+            let k := s!"{asp.start.line}_{asp.start.col}"
+            let L ← ((eReify c asp [] B' R' (eCallAt c asp s!"lv{k}" f W)).run' 0 : SM Val)
+            pure (L, loopValTy [] B' R')
+          | _, _ => pure (Wi', T)
         let T := if (matchV m 0 Pi T).isSome then T else match Pi, T with
           | .thunk (.arr _ (.ret Q)), .thunk (.arr A' C)
           | .bang (.thunk (.arr _ (.ret Q))), .bang (.thunk (.arr A' C)) =>

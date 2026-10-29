@@ -15,7 +15,7 @@ bcc=.lake/build/bin/bcc
 # several codes and widths, recursive types with boxed fields, a class kept on the heap, cells,
 # κ regions and frames, a static cell whose width class holds a `!` type, a host operation's pair
 # argument and the literal tables' class (neither on a cycle), a pointer read through a shared
-# borrow at a node of the owner's former.
+# borrow at a node of the owner's former, a nontrivial class over trivial children.
 progs=(
   corpus/aff-higher.bc
   corpus/deep-list.bc
@@ -27,6 +27,7 @@ progs=(
   corpus/array-replace.bc
   corpus/div-unhandled.bc
   corpus/tree-view-tasks.bc
+  corpus/count-down-exact.bc
 )
 # Each perturbation, and the refusal of its family (an extended regular expression).
 families=(

@@ -9602,7 +9602,8 @@ empty context). The checker builds them by `TTied.iterate` and `TTied.reify`
 
 **What stays.** `unfold`, `Loop`, `div_bind`, `div_defer` and `div_fuel` stay as library code
 over loop values (`lib/div.bc`); the elaboration emits none of `div_bind` and `div_defer`.
-`div_fuel`'s argument is a loop value: `reify` of a call. A `for` over a generator whose body does
+`div_fuel`'s argument is a loop value: `reify` of a call, also where the parameter is generic
+(`div_fuel(f(x), n)`, the instance solved from the loop's type: `genericCall`). A `for` over a generator whose body does
 not loop is one handled call, as before; one whose body loops handles each observation of the
 generator's loop value (`io_hwf`), as before, now `reify` of its call.
 
