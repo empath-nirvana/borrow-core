@@ -2851,6 +2851,9 @@ def conv (fuel : Nat) (ctx : Ctx) (t : TExpr) : CM Tm := do
     -- where it is performed, `inr z` (or a raise from the work) leaves for the node at the
     -- operation's cancel summand, the finalisers between run on the way (`last_resume_direct`,
     -- `last_cancel_direct`, `lastFacts`).  [spec §64]
+    -- UNPROVED where the work performs or ticks: the license is `directOK`'s
+    -- (`Backend2/Driver.lean`, which states what is assumed); T-B1/T-B1′ cover a work that
+    -- performs nothing.
     if let some (fi, phW, xT) := (← get).lasts[(o.n, o.i.toNat)]? then
       return ← lastPerform fuel ctx S o fi phW xT c
     -- `perform` of a tail-resumptive clause: a direct call of the clause's work (`tail_resumes`,

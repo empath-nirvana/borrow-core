@@ -95,14 +95,24 @@ def mayKont : CTy → Bool
 Code a function returns or is given is made by code of the program, whose frames that code holds
 (`Expr.hin` counts the frames of every λ and handled computation inside it). `none` when the
 value may hold code of any type (`Unk`) or a continuation (a `&` or a `ν`: `κ`,
-a stored generator), whose frames are another computation's.  `[spec §65]` -/
+a stored generator), whose frames are another computation's, or code under a `μ` whose type
+names the `μ`'s variable (its shape is not the shape of the code value that builds it).
+`[spec §65]` -/
 def codeShapesV : VTy → Option (List String)
   | .unit | .zero | .int _ | .opq _ => some []
   -- The typed term's types are closed: a type variable is a `μ`'s.
   | .tvar _ => some []
   | .unk => none
   | .tensor A B | .sum A B => do pure ((← codeShapesV A) ++ (← codeShapesV B))
-  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .mu A | .fam A => codeShapesV A
+  | .ref A | .imm _ A | .mut _ A | .box _ A | .bang A | .fam A => codeShapesV A
+  -- A code type under the `μ` that names its variable has the folded type's shape (`#n` for
+  -- the `μ`), while the code value that builds it has the unrolled type's (`shapeC` writes the
+  -- `μ` out): the shapes do not meet, so the bound is not read there and is any frame. (The
+  -- surface refuses a `μ`'s variable under `U`, `Frontend/Check/Elab.lean`, so no program
+  -- reaches this today.)
+  | .mu A => do
+    let shs ← codeShapesV A
+    if shs.any (·.contains '#') then none else pure shs
   | .thunk C => if mayKont C then none else some [shapeC C]
 
 /-- The types of the variables free in `t` (indices at or past the binders inside it, `d`), read
@@ -134,6 +144,13 @@ of those shapes, and of the code those take in, to a fixed point; `none` (any fr
 may hold code of any type. A value of a type holds code of a code value at that type's shape
 (`[sub]`, a row's or a lifetime's instantiation change only what the shape drops), or a
 continuation, whose frames a storing handler's flow record holds (`Checked.flowsKept`). -/
+-- UNPROVED: that the code a handled computation takes in through a free variable is a code value
+-- of the typed term whose type has one of the shapes that variable's type holds (`codeShapesV`), or
+-- code those take in. It should hold because every closure is made by a `thunkV`/`bangThunkV` node
+-- of the term, and `[sub]`, a row's or a lifetime's instantiation change only what `shapeC` drops;
+-- a continuation or `Unk` falls back to `Checked.flowsKept`. That a run never puts other code there
+-- is the run's typing invariant, which is not proved. If it fails, `directOK` misses a frame of
+-- `K` that catches a work's operation, and the work's `perform` is called past that handler.
 def takenFrames (nodes : List (String × ClauseKinds.HIn × Option (List String)))
     (shapes : List String) : Option ClauseKinds.HIn := Id.run do
   let mut seen : List String := []
@@ -303,6 +320,14 @@ node, when
   at the empty row (`[then]`'s `hfin` at the empty cancel row): it performs and raises nothing;
 - **the exit indices are in bounds**: `2·|E| < 2³²`.
 Where it fails, the node is the fallback (a drive, SPEC §49, §65): correct, not an error. -/
+-- UNPROVED: that calling the work in place of its `perform` runs as `[handle-last]`'s clause does.
+-- T-B1/T-B1′ (`last_resume_direct`, `last_cancel_direct`, `Core/DivHandleLastRuns.lean`) prove it
+-- for a work that performs nothing; for a work that performs an operation of a site outside or
+-- ticks (T-B2) it is not proved. `DirectOK` guards the two known differences: an operation of the
+-- work caught by a frame of `K` (F-names, bounded by the checked `inside`, the cancel delimiter
+-- and `takenFrames`, itself UNPROVED above) and a finaliser of `K` that performs or raises (F-fin,
+-- read off the checked cancel rows). If it fails, a work's operation reaches a handler inside `K`
+-- instead of the one outside the node, or a finaliser's effect is reordered.
 def directOK (D : DirectCx) (h : HNode) (j : Nat) (emptyFins : Bool) : Bool :=
   let names := Frontend.Check.cond2Names (h.codeRow.map (·.n)).eraseDups ((h.names[j]?).getD none)
   let taken := match h.codeIn with

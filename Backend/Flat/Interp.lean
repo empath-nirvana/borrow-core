@@ -12,6 +12,7 @@ words disjoint from every live range, `free a` takes back the range starting at 
 counts the live ranges. This implementation never reuses an address and leaves a gap after
 every range, so it reports what a reusing allocator would hide: a load or store outside a live
 range, a read of a word never written, a `free` of anything but the start of a live range.
+A function's locals start unwritten too, and a read of one before it is written is an error.
 Each call has a frame of fresh addresses, never reused; a frame slot's words are live from its
 `slot` to its `unslot` or the call's return (or tail call), so an access to a slot after its
 scope or its frame is an error too. Slots are not ranges: `live` does not count them.
@@ -217,21 +218,22 @@ def endFrame : FM Unit := do
 def readArgs : FM Unit :=
   modify fun s => if s.argsRead then s else { s with argsRead := true, allocs := s.allocs + 1 }
 
-def setLocal (fr : Array UInt64) (i : Nat) (v : UInt64) : FM (Array UInt64) :=
-  if i < fr.size then pure (fr.set! i v) else throw s!"flat IR: no local {i}"
+def setLocal (fr : Array (Option UInt64)) (i : Nat) (v : UInt64) : FM (Array (Option UInt64)) :=
+  if i < fr.size then pure (fr.set! i (some v)) else throw s!"flat IR: no local {i}"
 
-def setLocals (fr : Array UInt64) : List Nat → List UInt64 → FM (Array UInt64)
+def setLocals (fr : Array (Option UInt64)) : List Nat → List UInt64 → FM (Array (Option UInt64))
   | [], [] => pure fr
   | i :: is, v :: vs => do setLocals (← setLocal fr i v) is vs
   | _, _ => throw "flat IR: a call's results and its destinations differ in number"
 
-def getLocal (fr : Array UInt64) (i : Nat) : FM UInt64 :=
+def getLocal (fr : Array (Option UInt64)) (i : Nat) : FM UInt64 :=
   match fr[i]? with
-  | some v => pure v
+  | some (some v) => pure v
+  | some none => throw s!"flat IR: local {i} read before it is written"
   | none => throw s!"flat IR: no local {i}"
 
 mutual
-def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
+def evalExp (p : Prog) : Nat → Array (Option UInt64) → Exp → FM UInt64
   | 0, _, _ => throw "flat IR: out of fuel"
   | n + 1, fr, e =>
     match e with
@@ -284,7 +286,7 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
     | .data off => pure (dataBase + off).toUInt64
     | .gep a k => do pure ((← evalExp p n fr a) + (← evalExp p n fr k))
 
-def evalArgs (p : Prog) : Nat → Array UInt64 → List Exp → FM (List UInt64)
+def evalArgs (p : Prog) : Nat → Array (Option UInt64) → List Exp → FM (List UInt64)
   | 0, _, _ => throw "flat IR: out of fuel"
   | _, _, [] => pure []
   | n + 1, fr, e :: es => do
@@ -301,7 +303,10 @@ def callFn (p : Prog) : Nat → Nat → List UInt64 → Option Nat → FM (List 
     if args.length != fn.params then throw s!"flat IR: {fn.name} takes {fn.params} arguments"
     if let some k := results then
       if k != fn.results then throw s!"flat IR: {fn.name} answers {fn.results} results, not {k}"
-    let fr := (args ++ List.replicate fn.locals 0).toArray
+    -- The locals start unwritten, and reading one is an error: the Wasm lowering's
+    -- `compactLocals` shares a local's number between locals whose occurrences do not overlap,
+    -- which is sound only where each is written before it is read.
+    let fr := (args.map some ++ List.replicate fn.locals none).toArray
     -- The frame: a fresh range of addresses, as a stack frame's is when the stack is reused.
     let fp := (← get).next
     modify fun st => { st with next := st.next + (if fn.frame == 0 then 0 else 8 * fn.frame + 8),
@@ -316,8 +321,8 @@ def callFn (p : Prog) : Nat → Nat → List UInt64 → Option Nat → FM (List 
     | (_, none) => throw s!"flat IR: {fn.name} ends without returning"
 
 /-- Run statements; `some r` when one returns `r`. -/
-def execBlock (p : Prog) : Nat → Array UInt64 → List Stmt →
-    FM (Array UInt64 × Option (List UInt64))
+def execBlock (p : Prog) : Nat → Array (Option UInt64) → List Stmt →
+    FM (Array (Option UInt64) × Option (List UInt64))
   | 0, _, _ => throw "flat IR: out of fuel"
   | _, fr, [] => pure (fr, none)
   | n + 1, fr, s :: ss => do
@@ -326,7 +331,7 @@ def execBlock (p : Prog) : Nat → Array UInt64 → List Stmt →
     | some v => pure (fr, some v)
     | none => execBlock p n fr ss
 
-def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × Option (List UInt64))
+def execStmt (p : Prog) : Nat → Array (Option UInt64) → Stmt → FM (Array (Option UInt64) × Option (List UInt64))
   | 0, _, _ => throw "flat IR: out of fuel"
   | n + 1, fr, s =>
     match s with
