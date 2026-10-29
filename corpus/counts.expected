@@ -72,6 +72,7 @@ block-capability-inner 0 0 0 5 5 0
 block-swap 2 0 0 4 4 0
 block-yield-inner 0 0 0 0 0 0
 borrow-in-scope 2 0 0 4 3 0 # the borrowed cell and the cell holding the borrow
+btree-boxed 77 0 0 23560 19396 6885
 bytes-upper 1 0 0 80 52 54
 capture-await-raise 0 0 0 0 0 0 # `skip` resumes in place and `to_result` is a branch: nothing is allocated or dispatched
 capture-log-hand 0 0 0 0 0 0 # equal to the kernel program log-outside-native (corpus/kernel-counts.expected)
@@ -96,8 +97,10 @@ count-down 0 0 0 0 0 0
 count-down-exact 6 0 0 18 12 0
 count-fold 0 0 0 0 0 0
 count-try 0 0 0 0 0 0
+data-array-tree 4 0 0 104 80 14
 data-box-tree 9 0 0 27 27 0
 data-config 2 0 0 161 25 214
+data-eval 10 0 0 56 56 0
 data-fold-bang 4 0 0 14 14 0
 data-fold-block 9 0 0 62 31 0
 data-fold-forest 8 0 0 104 68 0
@@ -107,8 +110,10 @@ data-fold-list 6 0 0 60 45 0
 data-fold-tree 9 0 0 89 58 0
 data-fold-whole 11 0 0 107 65 0
 data-group 5 0 0 21 21 0
+data-json-vec 6 0 0 228 188 33
 data-option 5 0 0 16 16 4
 data-particles 1 0 0 667 651 353
+data-rose 14 0 0 56 56 0
 data-turnstile 1 0 0 51 19 36
 deep-list 100000 0 0 450000 450000 0
 div-abstraction 0 0 0 0 0 0
@@ -302,6 +307,7 @@ leetcode/trees/0104-maximum-depth-of-binary-tree 48 0 0 5103 4626 4404 # the inp
 leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-traversal 39 0 0 4847 4514 4362 # the input string; per case the line's tokens and two cells per node (Rust: one box, and a `HashMap`, #211)
 leetcode/trees/0124-binary-tree-maximum-path-sum 65 0 0 5505 4850 4546 # the input string; per case the line's tokens, two cells per node (Rust: one box)
 leetcode/trees/0208-implement-trie 25 0 0 8067 7610 6535 # the input string; per case the trie's two buffers and their doublings and the answer's string (an arena)
+leetcode/trees/0208-implement-trie-boxed 58 0 0 10195 7601 5585
 leetcode/trees/0211-design-add-and-search-words-data-structure 46 0 0 10900 9038 8615 # the input string; per case the trie's two buffers and their doublings, the search stack and the answer's string (an arena)
 leetcode/trees/0212-word-search-ii 102 0 0 21673 17226 17484 # the input string; per case the words as strings and their buffer, the trie's two buffers and their doublings, and the marks and found flags
 leetcode/trees/0226-invert-binary-tree 39 0 0 5042 4738 4345 # the input string; per case the line's tokens and two cells per node (Rust: one box); the inversion allocates nothing
@@ -384,6 +390,7 @@ sort-lines 2 0 0 4465 4272 4370 # the input string and the buffer of line views
 sort-numbers 1 0 0 165 131 137
 split-at-mut 1 0 0 132 92 51
 state-machine 0 0 0 0 0 0 # the generator's yields are direct calls of the loop's body
+storage-array 5461 0 0 71560 55180 10920
 sum-i32 7 0 0 39 24 0
 sum-prog-exact 37 9 0 153 111 0
 surface/array-sum 1 0 0 3000 3000 2024
