@@ -1565,6 +1565,55 @@ def eStart (c : TCx) (sp : Span) (sfx : String) (S : Frontend.Check.CRow) (B R :
     (.proj sp true (.nuOut sp (.force sp ⟨s!"io_rl{sfx}", sp⟩)))
   pure (.ret sp (.thunkv sp (.nuIn sp (.with_ sp first (eCallC sp s!"e{sfx}" fc W)))))
 
+/-- **The start of a call** `f W` of a div function at the row `div, S`, `S` not empty, as a stored
+generator keeps it before its first observation (SPEC §15): `thunkv < made, g__close W >`, of type
+`U (F_S U(Loop_S B R) & F_S R)`. Its first projection makes the loop value of the call (`reify` of
+its start, as `eStart`'s) and returns it, observing nothing; its second is the function's close
+before it starts. The stored generator observes the loop value it makes where it observes every
+later one, so that its handler's continuation is of one code. -/
+def eStartSplit (c : TCx) (sp : Span) (sfx : String) (S : Frontend.Check.CRow) (B R : CVTy) (f W : Val) :
+    EM Comp := do
+  let some g := calleeHead f
+    | throw ⟨sp, "internal error: a loop value of a call whose function has no name"⟩
+  let some (P, _, _, _) := (c.tyV f).bind divFnOf
+    | throw ⟨sp, "internal error: a loop value of a call of a function that is not div"⟩
+  let fc := renameHead (g ++ "__close") f
+  let row : Frontend.Check.CRow := BoCa.Fig16.LogRel.Core.tickSig :: S
+  let St : CVTy := .sum P P
+  let BL : CVTy := .sum B R
+  let stepT ← eTy c sp (BoCa.Fig16.LogRel.Core.iterStepTy row St BL R)
+  let Sts ← eTy c sp St
+  let BLs ← eTy c sp BL
+  let Bs ← eTy c sp B
+  let Rs ← eTy c sp R
+  let Ss ← (surfRow c sp S : Except Error Frontend.Row)
+  let rowS := divRowS sp Ss
+  let ss := s!"io_ss{sfx}"
+  let sp' := s!"io_sp{sfx}"
+  let sx := s!"io_sx{sfx}"
+  let turn : Comp := .case sp (.var sp ss)
+    ⟨sp', sp⟩ (.ret sp (.inr sp (.inr sp (.var sp sp'))))
+    ⟨sp', sp⟩ (eBind sp sx none (eCallC sp s!"s{sfx}" f (.var sp sp')) (.ret sp (.inl sp (.var sp sx))))
+  let close : Comp := .case sp (.var sp ss)
+    ⟨sp', sp⟩ (eCallC sp s!"c{sfx}" fc (.var sp sp')) ⟨sp', sp⟩ (eCallC sp s!"d{sfx}" fc (.var sp sp'))
+  let step : Val := .bangThunkv sp (.lam sp ⟨ss, sp⟩ Sts (.with_ sp turn close))
+  let it := s!"io_si{sfx}"
+  let p := s!"io_sp0{sfx}"
+  let x := s!"io_sr{sfx}"
+  let start : Comp :=
+    eBind sp it none (.ret sp (.unbang sp (.const sp (.iterate Sts BLs Rs rowS))))
+      (eBind sp p (some (.tensor sp stepT Sts)) (.ret sp (.pair sp step (.inl sp W)))
+        (eBind sp x none (.app sp (.force sp ⟨it, sp⟩) ⟨p, sp⟩)
+          (.case sp (.var sp x) ⟨"io_sa", sp⟩ (.ret sp (.var sp "io_sa"))
+            ⟨"io_sq", sp⟩ (.ret sp (.inr sp (.var sp "io_sq"))))))
+  let res ← eRes c sp B R
+  let tT : VTy := .thunk sp (.arr sp (.unit sp) (.eff sp rowS (.sum sp Bs Rs)))
+  let made : Comp := eBind sp s!"io_rf{sfx}" none (.ret sp (.unbang sp (.reify sp Bs Rs Ss res)))
+    (eBind sp s!"io_rt{sfx}" (some tT)
+      (.ret sp (.thunkv sp (.lam sp ⟨"io_u", sp⟩ (.unit sp) (.letUnit sp (.var sp "io_u") start))))
+      (.app sp (.force sp ⟨s!"io_rf{sfx}", sp⟩) ⟨s!"io_rt{sfx}", sp⟩))
+  pure (.ret sp (.thunkv sp (.with_ sp made (eCallC sp s!"e{sfx}" fc W))))
+
 /-- The call a computation makes in direct style, if it is one: `return (f W)` or
 `g <- return f; a <- return W; (force g) a`. A call of a div function placed for the empty row,
 at a row, is a call of its loop value. -/
@@ -6027,27 +6076,34 @@ return (thunkv nu_in < (nu_out (force io_pf{sfx} io_pq{sfx})).1, (nu_out (force 
       let some Rg := Rg? | throw ⟨sp, "internal error: a generator's loop"⟩
       let Lg ← pp Res
       let Rgs ← pp Rg
-      let Fn (A : String) : String :=
-        let es := row.map fun o => s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q} {Tt} ~> 1"
-        s!"F[{", ".intercalate es}] ({A})"
+      let es ← row.mapM fun o => do
+        pure s!"{o.n}.{o.i} {Frontend.Check.qualStr o.q} {← pp o.A} ~> {← pp o.B}"
+      let Fn (A : String) : String := s!"F[{", ".intercalate es}] ({A})"
       let Q := s!"nu Y. F (({Tt}) * U Y + (({Bt}) + {Lg})) & F 1"
       let R := s!"(({Tt}) * U ({Q})) + (({Bt}) + {Lg})"
       let K := s!"U ((1 -o F ({R})) & F 1)"
       let Kc := s!"U ((1 -o F ({Rgs})) & F 1)"
-      let St := s!"{Lg} + U ({Q})"
-      let _ := Fn
+      -- Before its first observation the state is the call's start (`eStartSplit`), which makes
+      -- the loop value; after, the loop value or the rest after the operation.
+      let Sx := s!"U ({Fn Lg} & {Fn Rgs}) + {Lg}"
+      let St := s!"({Sx}) + U ({Q})"
       pure s!"io_pl{sfx} <- force io_hole_call;
-io_ps{sfx} : {St} <- return (inl io_pl{sfx});
+io_ps{sfx} : {St} <- return (inl (inl io_pl{sfx}));
 io_pf{sfx} <- return (unbang (unfold[pull ({Tt}) ({Bt}) 1, {St}] (!thunkv fun (io_pa{sfx} : {St}) ->
   < -- One turn of the generator's loop, handled: one handler site, so that the continuation it
     -- keeps is of one code.
-    io_pob{sfx} : !({Lg} => {R}) <- return (!thunkv fun (io_pl{sfx} : {Lg}) ->
+    io_pob{sfx} : !({Sx} => {R}) <- return (!thunkv fun (io_pl{sfx} : {Sx}) ->
       handle_with[{i.n}](((!thunkv fun (io_pv{sfx} : ({Bt}) + {Lg}) -> return (inr io_pv{sfx})) :
           !(({Bt}) + {Lg} => {R})),
         (((!thunkv fun (io_pp{sfx} : ({Tt}) * {K}) ->
           let (io_px{sfx}, io_pk{sfx}) = io_pp{sfx};
           return (inl (io_px{sfx}, thunkv nu_in < io_pu{sfx} <- return (); (force io_pk{sfx}).1 io_pu{sfx}, (force io_pk{sfx}).2 >))), ()) :
-          (!(({Tt}) * {K} => {R})) * 1)) ((nu_out (force io_pl{sfx})).1));
+          (!(({Tt}) * {K} => {R})) * 1))
+        (io_pg{sfx} <- case io_pl{sfx} \{
+            inl io_pt{sfx} -> (force io_pt{sfx}).1
+          | inr io_pv{sfx} -> return io_pv{sfx}
+          };
+         (nu_out (force io_pg{sfx})).1));
     io_po{sfx} : {R} <- case io_pa{sfx} \{
         inl io_pg{sfx} -> return ((unbang io_pob{sfx}) io_pg{sfx})
       | inr io_pq{sfx} ->
@@ -6058,7 +6114,7 @@ io_pf{sfx} <- return (unbang (unfold[pull ({Tt}) ({Bt}) 1, {St}] (!thunkv fun (i
             inl io_py{sfx} -> return (inl io_py{sfx})
           | inr io_pd{sfx} -> case io_pd{sfx} \{
               inl io_pb{sfx} -> return (inr (inl io_pb{sfx}))
-            | inr io_pn{sfx} -> return ((unbang io_pob{sfx}) io_pn{sfx})
+            | inr io_pn{sfx} -> return ((unbang io_pob{sfx}) (inr io_pn{sfx}))
             }
           }
       };
@@ -6066,7 +6122,7 @@ io_pf{sfx} <- return (unbang (unfold[pull ({Tt}) ({Bt}) 1, {St}] (!thunkv fun (i
       inl io_px{sfx} -> let (io_pe{sfx}, io_pr{sfx}) = io_px{sfx}; return (inl (io_pe{sfx}, inr io_pr{sfx}))
     | inr io_pd{sfx} -> case io_pd{sfx} \{
         inl io_pb{sfx} -> return (inr (inl io_pb{sfx}))
-      | inr io_pn{sfx} -> return (inr (inr (inl io_pn{sfx})))
+      | inr io_pn{sfx} -> return (inr (inr (inl (inr io_pn{sfx}))))
       }
     },
     case io_pa{sfx} \{
@@ -6077,17 +6133,25 @@ io_pf{sfx} <- return (unbang (unfold[pull ({Tt}) ({Bt}) 1, {St}] (!thunkv fun (i
             let (io_cx{sfx}, io_ck{sfx}) = io_cp{sfx};
             io_cu{sfx} <- return ();
             (force io_ck{sfx}).1 io_cu{sfx}), ()) : (!(({Tt}) * {Kc} => {Rgs})) * 1))
-          ((nu_out (force io_pg{sfx})).2);
+          (case io_pg{sfx} \{
+              inl io_pt{sfx} -> (force io_pt{sfx}).2
+            | inr io_pv{sfx} -> (nu_out (force io_pv{sfx})).2
+            });
         return ()
     | inr io_pq{sfx} -> (nu_out (force io_pq{sfx})).2
     } >)));
 return (thunkv nu_in < (nu_out (force io_pf{sfx} io_ps{sfx})).1, (nu_out (force io_pf{sfx} io_ps{sfx})).2 >)"
     let site ← siteAtCall c sp g i.site
     let L ← (template sp "a stored generator" src : SM Comp)
-    -- The generator's loop value, when it is a div function: `reify` of its call (`eStart`).
-    let callC ← match divG, call', Rg? with
-      | true, .app _ f W, some Rg => ((eStart c sp sfx row Bg Rg f W).run' 0 : SM Comp)
-      | _, _, _ => pure (.ret sp call')
+    -- The start of the generator's call when it loops (`eStartSplit`): the making of its loop
+    -- value, `reify` of the call when it is a div function, and its close before it starts.
+    let callC ← match looping, divG, call', Rg? with
+      | true, true, .app _ f W, some Rg => ((eStartSplit c sp sfx row Bg Rg f W).run' 0 : SM Comp)
+      | true, false, _, _ =>
+        pure (.ret sp (.thunkv sp (.with_ sp (.ret sp call')
+          (eBind sp s!"io_pcv{sfx}" none (.ret sp call')
+            (.proj sp false (.nuOut sp (.force sp ⟨s!"io_pcv{sfx}", sp⟩)))))))
+      | _, _, _, _ => pure (.ret sp call')
     let L := L.fillS (fun _ => none) (fun h => if h == "io_hole_call" then some callC else none)
       fun k => if k == i.n then some site else none
     surfC n c none L
