@@ -688,7 +688,9 @@ def rowMs (S : Row) : CM (List (Key × LTy × LTy × Option Pay)) := do
   let mut acc : List (Key × LTy × LTy × Option Pay) := []
   for o in S do
     if !o.abort && ms.contains (o.n, o.i) && !(acc.any (·.1 == (o.n, o.i))) then
-      let cp ← lift (ofFin ms o.fin)
+      -- A linear `κ`'s cancel branch is at `⊤` whatever the operation's cancel row (SPEC §25): it
+      -- is resumed, never cancelled (read off the operation's qualifier).
+      let cp ← if o.q == .lin then pure none else lift (ofFin ms o.fin)
       acc := acc ++ [((o.n, o.i), ← vty o.A, ← vty o.B, cp.map dedupPay)]
   return acc
 
@@ -1198,9 +1200,12 @@ def genMach (m : Mach) (cellOps : List Key := []) : CM (List (Key × Nat)) := do
         | _, _ => resumeTm F p fs y reuse
     setFn rres { name := s!"resume {op.1}.{op.2}", params := [s₁, y], body := rb, ret := F.ty }
     let s₂ ← fresh envTy
-    -- At a cancel row `⊤` (a linear operation) the cancel entry is never run.
+    -- At a cancel row `⊤` (a linear operation) the cancel entry is never run (`rowMs`), so it is
+    -- `unreachable` and its state is not discarded.
     let cb ← match cp with
-      | none => pure (.drop s₂ .unit)
+      | none => do
+        let u ← fresh cT
+        pure (.letv u (.prim .unreachable []) (.var u))
       | some cp => withState s₂ fun c st => do
         let arms ← casePay stPay st fun i fv => do
           let some p := ps[i]? | throw "LIR: a machine's point"
@@ -2106,7 +2111,7 @@ def genReify (S : Row) (B R : VTy) (resV : Tm) (resT : LTy) (jT : LTy) : CM Tm :
   -- The closure `reify_res`: `t ()` driven; its first answer made a loop (`rkV`).
   readFact "reify:stored, a drive"
   modify fun st => { st with erased := st.erased.insert "machine" (st.erased.getD "machine" 0 + 1) }
-  let some (tkT, _) := (match jT with
+  let some (tkT, _) := (match jT.peel with
       | .thunk (.arr a k) => some (a, k)
       | _ => none) | throw s!"LIR: reify's type {jT}"
   let mkFn ← reserveFn "reify"
