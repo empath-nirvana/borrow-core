@@ -157,7 +157,8 @@ Dividing by zero, or `MIN / -1` at a signed width, raises `Fail[DivError]`. Its 
 `div_by_zero` and `div_overflow`. It's an ordinary `Fail`, so `to_result`, `default` and
 `map_err` handle it, and a function can raise its own `Fail[E]` and divide too. Dividing by a
 nonzero literal can't fail and needs no handler. `checked_div` and `checked_rem` return an
-`Option`-like sum instead, and `div_euclid` and `rem_euclid` are the Euclidean forms.
+`Option`-like sum instead. The Euclidean forms, `div_euclid` and `rem_euclid`, come with
+`include arith` ([arith](../stdlib.md#arith)).
 
 ```bc
 include textio

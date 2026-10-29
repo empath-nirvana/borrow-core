@@ -2,7 +2,8 @@
 
 This chapter covers the parts of the language that look like most others: functions, `let`,
 `if`, numbers, records and variants, generics and closures. Ownership, the part that is
-different, is the [next chapter](ownership.md).
+different, is the [next chapter](ownership.md). The [Language reference](../language-reference.md)
+has the whole syntax in one place.
 
 ## A program
 
@@ -185,6 +186,34 @@ main -> 1 =
   print_dec(manhattan(p));
   print_byte(b'\n')
 -- output: 34
+```
+
+A record pattern, `Point { x, y }`, takes a record apart in a `let` or a `match` and binds each
+field to a variable of its name; `Point { x: a, y: b }` binds them to other names. Construction
+has the same shorthand: `Point { x, y }` builds a record from variables named like its fields.
+
+```bc
+include textio
+
+data Point = { x: i32, y: i32 }
+
+-- The point reflected in the diagonal.
+fn flip(p: Point) -> Point =
+  match p { Point { x, y } -> Point { x: y, y: x } }
+
+-- The point moved right by `dx`.
+fn shift(p: Point, dx: i32) -> Point =
+  let Point { x, y } = p;
+  let x = x + dx;
+  Point { x, y }
+
+main -> 1 =
+  let p = shift(flip(Point { x: 1, y: 2 }), 10);
+  print_dec(p.x);
+  print_byte(b' ');
+  print_dec(p.y);
+  print_byte(b'\n')
+-- output: 12 1
 ```
 
 A **variant** is one of several cases, each with its own fields, and `match` takes it apart:

@@ -27,6 +27,8 @@ The operations work on bytes and byte views. Text and numbers are library code o
   string, and whether there was one) and `print_string(s)`, which prints an owned string and
   hands it back so you can keep using it.
 
+[Standard library](../stdlib.md#io) lists all of them.
+
 ```bc
 include textio
 

@@ -421,7 +421,8 @@ structurally. `==` and `equal` are separate families: a float has `==`, IEEE 754
 ## Maps and sets
 
 `include map` is a hash map, `Map[K, V]`, and a set, `Set[K]`. A map is a value: it is lent to
-each operation, and an operation that changes it takes it `&mut`.
+each operation, and an operation that changes it takes it `&mut`. [map](../stdlib.md#map) in
+the standard library lists every operation.
 
 | call | answers |
 |---|---|

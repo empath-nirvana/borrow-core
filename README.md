@@ -113,7 +113,9 @@ live 0
 | `bcc compile --target native file.bc -o out.ll` | write the LLVM IR |
 
 The [book](https://empath-nirvana.github.io/borrow-core/) teaches the language from there, starting
-with [Getting started](https://empath-nirvana.github.io/borrow-core/getting-started.html).
+with [Getting started](https://empath-nirvana.github.io/borrow-core/getting-started.html), and has
+[Recipes](book/src/recipes.md), a [Language reference](book/src/language-reference.md) and the
+[Standard library](book/src/stdlib.md).
 `mdbook serve book` builds it locally.
 
 ## Status

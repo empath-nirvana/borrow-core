@@ -75,7 +75,9 @@ the program.
 A program reads standard input and writes standard output as usual, and takes arguments after
 the file name: `bcc run tool.bc a b < input`.
 
-The [next chapter](guide/basics.md) starts the language from here. For larger programs, see the
+The [next chapter](guide/basics.md) starts the language from here. [Recipes](recipes.md) has
+short programs for everyday tasks, and the [Language reference](language-reference.md) and
+[Standard library](stdlib.md) are for looking things up. For larger programs, see the
 Advent of Code and LeetCode ports in
 [`corpus/aoc/`](https://github.com/empath-nirvana/borrow-core/tree/main/corpus/aoc) and
 [`corpus/leetcode/`](https://github.com/empath-nirvana/borrow-core/tree/main/corpus/leetcode).

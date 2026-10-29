@@ -48,8 +48,11 @@ book lists what isn't built yet.
   ([#143](https://github.com/empath-nirvana/borrow-core/issues/143)).
 - `total`, `leaf`, `node` and `swap` are reserved, so they can't be names of variables or
   functions.
+- `==` doesn't compare two `bool`s; use `if` or `match`.
+- An `if` or `borrow` block can't be a call's argument: bind it with `let` first.
 
 **Borrows**
+- `&mut r.field` doesn't parse: take the record apart, borrow the field, and build it again.
 - `&x` and `&mut x` must be the whole call of a `let` or statement: write
   `let n = len(&v); f(n)`, not `f(len(&v))`
   ([#510](https://github.com/empath-nirvana/borrow-core/issues/510)).
@@ -63,6 +66,8 @@ book lists what isn't built yet.
   directly inside the `borrow` block (a view of an array works either way).
 
 **Data**
+- A text view can be used only once, so a word can't be looked up in a map and then inserted as
+  a key.
 - Folds (`fold_imm`, `fold_own`, `fold_reuse`) don't walk a type that holds a `Vec` of itself;
   write the recursion, as in [Collections of recursive data](guide/data.md#collections-of-recursive-data).
 

@@ -274,7 +274,8 @@ main -> 1 =
 ### Pipelines
 
 `e |> f(a, …)` is `f(e, a, …)`: the value on the left becomes the first argument of the call on
-the right, so a chain of adapters reads left to right.
+the right, so a chain of adapters reads left to right. The adapters are listed in
+[adapters](../stdlib.md#adapters).
 
 ```bc
 include textio

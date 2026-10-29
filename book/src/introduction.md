@@ -42,6 +42,8 @@ The chapters under *The language* teach it in the order you meet it: values and 
 ownership, data, errors, I/O, iteration, effects and async. [Effects and
 handlers](guide/effects.md#computation-parameters-and-) ends with a generic `retry` with
 exponential backoff, tested against a fake timer, which uses most of it at once.
+[Recipes](recipes.md) shows short programs for everyday tasks, and the [Language
+reference](language-reference.md) and [Standard library](stdlib.md) are for looking things up.
 
 The language is young, and [Status](status.md) lists what isn't built yet. Every example in this
 book is a program the test suite runs, and the output shown is its output.
