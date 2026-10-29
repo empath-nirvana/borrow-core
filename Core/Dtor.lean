@@ -31,7 +31,7 @@ disposed of by running it. Nor does `μ` outside the fold class `P` (for example
 The `alg` mode `dtorAt true A` is the destructor of `A⟨1⟩` (`FoldP.resO dtorAlgs`): `A` with
 each recursive position (a variable, a `μ` or an array that is not closed) at its result `1`
 (`algE_eqP`). At a `μ` whose body is in `FShape` (`fshapeB`) the destructor is `foldOwn`, its
-algebra the `alg` mode of the body, as before. At any other body of `P` it is `foldOwnG`, with one
+algebra the `alg` mode of the body. At any other body of `P` it is `foldOwnG`, with one
 algebra per key (`FoldP.keys`): the root's and every inner `μ`'s are the `alg` mode of its body,
 an array key's the destructor of `1 ⊕ (1 ⊗ S⟨1⟩)` (`arrAlgE`). `algsIn` lists the inner keys'
 algebras by the same recursion as `FoldP.keysIn` (`algsIn_eq`), so `dtorAt` and `algsIn` are one
