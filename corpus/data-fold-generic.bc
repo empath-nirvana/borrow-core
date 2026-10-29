@@ -1,0 +1,19 @@
+-- A fold block over a generic declaration (SPEC §42, F1): `List[T]` of blocks, its length through
+-- a borrow in a generic function, at the element type of each use, and its total consumed at
+-- `i32`.
+--
+-- Answer: i32[32]: the total 3 of [1, 2] and its length 2. `live 0`.
+
+data List[T] = Nil | Cons(head: T, tail: List[T])
+
+fn len[T]<'a>(l: imm 'a List[T]) -> i32 = fold_imm l { Nil -> 0 | Cons(_, t) -> 1 + t }
+
+fn tot(l: List[i32]) -> i32 = fold_own l { Nil -> 0 | box Cons(h, t) -> h + t }
+
+fn cons(x: i32, l: List[i32]) -> List[i32] = box Cons(x, l)
+
+main -> i32 =
+  let nil : List[i32] = Nil;
+  let l = cons(1, cons(2, nil));
+  let n = len(&l);
+  tot(l) * 10 + n

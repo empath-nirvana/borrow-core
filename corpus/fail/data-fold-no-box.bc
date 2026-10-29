@@ -1,0 +1,9 @@
+-- A block reassembled from its cells outside a `fold_reuse` arm (SPEC §42, E3, F2): only
+-- `fold_reuse` hands its arms the block's emptied cells, so a `Cons` written without `box` in a
+-- `fold_own` arm is refused as everywhere else, asking for `box`.
+-- expect: 7:67: `Cons` builds a block, one cell per field: allocate it with `box Cons(…)`
+data List = Nil | Cons(head: i32, tail: List)
+
+fn dup(l: List) -> List = fold_own l { Nil -> Nil | Cons(c, t) -> Cons(c, alloc(t)) }
+
+main -> i32 = 0

@@ -349,6 +349,21 @@ inductive BorrowKind where
   | modify
   deriving DecidableEq, Repr, Inhabited
 
+/-- The fold a `fold` block elaborates to (SPEC §6, §60): `fold_imm` through an `imm` borrow,
+`fold_own` of an owned value, `fold_reuse` of an owned value rebuilt in its own cells.
+`[spec §60]` -/
+inductive FoldKind where
+  | imm
+  | own
+  | reuse
+  deriving DecidableEq, Repr, Inhabited
+
+/-- The keyword of a fold. -/
+def FoldKind.str : FoldKind → String
+  | .imm => "fold_imm"
+  | .own => "fold_own"
+  | .reuse => "fold_reuse"
+
 /-- What a handler site is, as `Frontend.Elab.Effects` makes it: a `with` of a control handler, a
 `for`'s site of an iteration effect, whose clause is the loop's body (`VSugar.forSite`), or a stored
 generator's, whose clause keeps the continuation (`VSugar.pullSite`).  `[spec §15, §19]` -/
@@ -530,6 +545,11 @@ inductive VSugar where
   variable `r_g` is the record's field `g`; the record's declaration is one of `cands`, as
   `field`'s.  `[spec §42]` -/
   | update (f : String) (cands : List FieldCand)
+  /-- `fold_imm e { p -> M | … }`, `fold_own …`, `fold_reuse …` (SPEC §60, F1): applied to the
+  value folded and then to the algebra `thunkv fun (x : _) -> M`, the arms compiled over `x` with
+  the recursive fields already folded. The typed pass gives the algebra its type and the fold its
+  bracket arguments.  `[spec §60]` -/
+  | fold (k : FoldKind)
   deriving DecidableEq, Repr, Inhabited
 
 /-- What a loop walks, as the program writes it (`docs/loops.md` §2.1), with the loop's value

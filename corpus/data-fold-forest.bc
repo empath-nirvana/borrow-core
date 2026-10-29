@@ -1,0 +1,41 @@
+-- A rose tree, a mutual group folded at its root (SPEC §42, F1, and the single-root rule): `Rose`
+-- and `Forest` name each other, and `Forest` lies on every cycle (its own, under `box Forest`), so
+-- it is the group's one `mu`, `mu X. 1 + ((i32 * ref X) * ref X)`, with `Rose`'s structure
+-- substituted in it. A fold over the group is a fold of `Forest`, and a `Rose` in its arms is
+-- matched as part of the shape: `FCons(Rose(v, k), rest)` binds the value and the folded kids and
+-- rest.
+--
+-- `inc` adds one to every value in place (`fold_reuse`): each `box Forest` cell comes emptied
+-- beside the mapped forest, which is put back in it. `sum` reads the forest through a borrow
+-- (`fold_imm`), and `count` consumes it (`fold_own`).
+--
+-- Answer: i32[144]: the roses 1 (with kids 2 and 3) and 4, incremented, sum to 14, and there are
+-- 4 of them. A fold that skips a rose's kids gives less. `live 0`: `count` frees every cell.
+
+data Rose = Rose(val: i32, kids: box Forest)
+
+data Forest = FNil | FCons(Rose, box Forest)
+
+fn rose(v: i32, kids: Forest) -> Rose = Rose(v, alloc(kids))
+
+fn cons(r: Rose, f: Forest) -> Forest = FCons(r, alloc(f))
+
+fn sum<'a>(f: imm 'a Forest) -> i32 =
+  fold_imm f { FNil -> 0 | FCons(Rose(v, k), rest) -> v + k + rest }
+
+fn inc(f: Forest) -> Forest =
+  fold_reuse f {
+    FNil -> FNil
+  | FCons(Rose(v, (dk, k)), (dr, r)) ->
+      let (dk, ()) = swap(dk, k);
+      let (dr, ()) = swap(dr, r);
+      FCons(Rose(v + 1, dk), dr)
+  }
+
+fn count(f: Forest) -> i32 = fold_own f { FNil -> 0 | FCons(Rose(_, k), rest) -> 1 + k + rest }
+
+main -> i32 =
+  let mut f = cons(rose(1, cons(rose(2, FNil), cons(rose(3, FNil), FNil))), cons(rose(4, FNil), FNil));
+  modify &mut f { k -> inc(k) };
+  let s = sum(&f);
+  s * 10 + count(f)

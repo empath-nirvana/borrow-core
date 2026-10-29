@@ -1,0 +1,22 @@
+-- A fold over a mutual group whose other member is a block (SPEC §42, F1): `corpus/data-group.bc`'s
+-- `Expr` and `Bind`, rooted at `Expr`. `Bind` holds the root, so it is a block whose `value` and
+-- `body` cells are recursive positions: in a fold block they are the fold's results, and `name`
+-- is a cell, read through its view in `fold_imm` and freed by `box` in `fold_own`.
+--
+-- Answer: i32[1714]: `eval` 17 = 10 + (1 + 2) + 4, and `size` 14 = the name 10 and one per other
+-- node. `live 0`: `eval` frees every block.
+
+data Expr = Num(i32) | Add(Expr, Expr) | Let(Bind)
+
+data Bind = Bind(name: i32, value: Expr, body: Expr)
+
+fn size<'a>(e: imm 'a Expr) -> i32 =
+  fold_imm e { Num(_) -> 1 | Add(a, b) -> a + b + 1 | Let(Bind(n, v, b)) -> *n + v + b }
+
+fn eval(e: Expr) -> i32 =
+  fold_own e { Num(n) -> n | box Add(a, b) -> a + b | Let(box Bind(n, v, b)) -> n + v + b }
+
+main -> i32 =
+  let e = Let(box Bind(10, box Add(Num(1), Num(2)), Num(4)));
+  let s = size(&e);
+  eval(e) * 100 + s

@@ -197,8 +197,48 @@ main : F i32 =
 
 The list `[1, 3, 5]` becomes `[2, 4, 6]`, read head last as `642`.
 
+## The fold block
+
+A `data` declaration's folds are written as blocks with its constructor patterns (SPEC §60):
+`fold_imm e { … }`, `fold_own e { … }` and `fold_reuse e { … }`. The arms are the algebra, and in
+them each recursive field is already the fold's result on it. The elaborator gives the constant
+its shape (the body of the declaration's `mu`) and its result (the type expected of the block),
+and the algebra its parameter type (`A_R`, `A′` or `A″`); the arms are compiled as a `match` on
+the unrolled layer. In `fold_imm` a block's other fields are views of its cells, read with `*`; in
+`fold_reuse` a recursive field is the emptied cell beside the result, and a block written
+without `box` is reassembled from cells, allocating nothing. The program above, as fold blocks:
+
+```bc
+data List = Nil | Cons(head: i32, tail: List)
+
+fn sum<'a>(l: imm 'a List) -> i32 = fold_imm l { Nil -> 0 | Cons(h, t) -> *h + t }
+
+fn map_inc(l: List) -> List =
+  fold_reuse l {
+    Nil -> Nil
+  | Cons(c, (d, t)) ->
+      let (c, x) = swap(c, ());
+      let (c, ()) = swap(c, x + 1);
+      let (d, ()) = swap(d, t);
+      Cons(c, d)
+  }
+
+fn digits(l: List) -> i32 = fold_own l { Nil -> 0 | Cons(c, t) -> free(c) + t * 10 }
+
+main -> i32 =
+  let mut l = box Cons(1, box Cons(3, box Cons(5, Nil)));
+  let s = sum(&l);
+  modify &mut l { k -> map_inc(k) };
+  digits(l) * 100 + s
+-- answer: i32[64209]
+```
+
+The sum `9` is read through a borrow before the map, and the mapped list `[2, 4, 6]` is read as
+`642`. A fold over a mutually recursive group is a fold of its root, whose other members are
+matched inside the arms (`corpus/data-fold-forest.bc`).
+
 ## Current limits
 
 - Folds recurse on the WebAssembly stack, so a very deep structure can overflow it (planned:
   stack-safe lowering, #50).
-- Mutually recursive data types are not yet exercised (#32).
+- A fold block's result type is the type expected of it; it is not inferred from the arms.

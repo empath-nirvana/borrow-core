@@ -3544,6 +3544,54 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       -- Ascribed its loop type, it is the loop as a value, not a call run in direct style.
       pure (.ascribe sp (.app sp (.defApp sp "div_defer" [Bs, Rs]) (.thunkv sp (.with_ sp M'' abort)))
         (.thunk sp (.loop sp Bs Rs)))
+    | .app sp (.app _ (.sugar ksp (.fold k)) S) (.thunkv tsp (.lam lsp x _ M)) => do
+      -- A `fold` block (SPEC §60, F1): the kernel's fold of the folded value's `μ`, its shape the
+      -- `μ`'s body and its result the type expected of the block, applied to the algebra the arms
+      -- are, at the algebra's type (`A_R`, `A′_R` or `A″_R`, §6).
+      let S' ← surfV n c none S
+      let T ← need S.span "the value folded" ((← refresh c).tyV S')
+      let (a?, B) ← match k, T with
+        | .imm, .imm a (.mu B) => pure (some a, B)
+        | .imm, .mu _ => throw ⟨ksp, "`fold_imm` folds through an `imm` borrow, and this is " ++
+            "owned: fold a borrow of it, or consume it with `fold_own`"⟩
+        | _, .mu B => pure (none, B)
+        | _, .imm _ (.mu _) => throw ⟨ksp, s!"`{k.str}` consumes the value it folds, and this is " ++
+            "an `imm` borrow: `fold_imm` folds through one"⟩
+        | _, T => throw ⟨S.span, s!"`{k.str}` folds a value of a recursive type, but this has " ++
+            s!"type `{ppT T}`"⟩
+      let some R := exp | throw ⟨sp, s!"the type of the `{k.str}` block's result is not " ++
+        s!"determined here: ascribe it, `({k.str} … : R)`"⟩
+      let G ← (Frontend.Check.decF ksp B : Except Error _)
+      -- The shape argument: the `μ`'s body, its variable `X`.
+      let Fs ← match ← (c.surface ksp (.mu B) : Except Error VTy) with
+        | .mu _ X body => if X.name == "X" then pure body else
+            throw ⟨ksp, "internal error: a fold's shape"⟩
+        | _ => throw ⟨ksp, "internal error: a fold's shape"⟩
+      let Rs ← c.surface ksp R
+      match k, a? with
+      | .imm, some a =>
+        -- `!thunkv Fun 'y < top. return (thunkv fun (x : A_R) -> M)`, `A_R = Imm̲ 'y T` with `R`
+        -- at every recursive position.
+        let y : Ident := ⟨s!"io_fy{sp.start.line}_{sp.start.col}", ksp⟩
+        let yv := c.Δ.freshVar
+        let AR := BoCa.Fig16.LogRel.Core.FShape.res yv R G
+        let As ← (c.pushLife y.name .top).surface lsp AR
+        let algTy : CVTy := .bang (.thunk (.all yv .top (.ret (.thunk (.arr AR (.ret R))))))
+        let alg ← surfV n c (some algTy) (.bangThunkv tsp (.lamL tsp y (.top tsp)
+          (.ret tsp (.thunkv tsp (.lam lsp x As M)))))
+        let as_ ← c.surfaceL ksp a
+        pure (.app sp (.inst sp (.unbang sp (.app sp (.const ksp (.foldImm Fs y (.top ksp) Rs)) alg))
+          as_) S')
+      | _, _ =>
+        -- `!thunkv fun (x : A) -> M`: `A′_R = T` with `R` at every recursive position, or
+        -- `A″_R`, with `ref 1 * R` at each `ref X`, the emptied cell beside the result.
+        let AR := if k == .own then BoCa.Fig16.LogRel.Core.FShape.resO R G
+          else BoCa.Fig16.LogRel.Core.FShape.resR R G
+        let As ← c.surface lsp AR
+        let algTy : CVTy := .bang (.thunk (.arr AR (.ret R)))
+        let alg ← surfV n c (some algTy) (.bangThunkv tsp (.lam lsp x As M))
+        let C : Const := if k == .own then .foldOwn Fs Rs else .foldReuse Fs Rs
+        pure (.app sp (.unbang sp (.app sp (.const ksp C) alg)) S')
     | .app sp (.sugar fsp (.field f cands)) R => do
       -- `e.f` (SPEC §42, E5), by the receiver's type; `&x` at a binding `let y = x.f;`.
       let (R', head) ← match R with

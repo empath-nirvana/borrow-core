@@ -1,0 +1,8 @@
+-- A constructor of the folded type below the top of a fold block's arm (SPEC §42, F1): the
+-- recursive field holds the fold's result on the tail, not the tail, so it is bound by a name.
+-- expect: 6:59: in a `fold_own` block a recursive field is the fold's result on it, not a `List`: bind it with a name
+data List = Nil | Cons(head: i32, tail: List)
+
+fn last(l: List) -> i32 = fold_own l { Nil -> 0 | Cons(c, Nil) -> free(c) | Cons(c, t) -> free(c) + t }
+
+main -> i32 = 0

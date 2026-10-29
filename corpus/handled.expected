@@ -367,6 +367,12 @@ corpus/data-config.bc 394:11: handle 2: inside []; row [1]; ops 2.0 abortive; na
 corpus/data-config.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/data-config.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/data-config.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/data-fold-block.bc flows [0, 4294967295]; main []
+corpus/data-fold-forest.bc flows [0, 4294967295]; main []
+corpus/data-fold-generic.bc flows [0, 4294967295]; main []
+corpus/data-fold-group.bc flows [0, 4294967295]; main []
+corpus/data-fold-list.bc flows [0, 4294967295]; main []
+corpus/data-fold-tree.bc flows [0, 4294967295]; main []
 corpus/data-group.bc flows [0, 4294967295], finaliser; main [1], finaliser
 corpus/data-group.bc 21:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/data-group.bc 1.0 abortive: branch; condition 2 holds; -
@@ -1368,6 +1374,12 @@ corpus/sugar/data-config.lowered.bc 394:11: handle 2: inside []; row [1]; ops 2.
 corpus/sugar/data-config.lowered.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/sugar/data-config.lowered.bc 3.0 abortive: branch; condition 2 holds; -
 corpus/sugar/data-config.lowered.bc 2.0 abortive: branch; condition 2 holds; -
+corpus/sugar/data-fold-block.lowered.bc flows [0, 4294967295]; main []
+corpus/sugar/data-fold-forest.lowered.bc flows [0, 4294967295]; main []
+corpus/sugar/data-fold-generic.lowered.bc flows [0, 4294967295]; main []
+corpus/sugar/data-fold-group.lowered.bc flows [0, 4294967295]; main []
+corpus/sugar/data-fold-list.lowered.bc flows [0, 4294967295]; main []
+corpus/sugar/data-fold-tree.lowered.bc flows [0, 4294967295]; main []
 corpus/sugar/data-forms.bc flows [0, 4294967295]; main []
 corpus/sugar/data-forms.core.bc flows [0, 4294967295]; main []
 corpus/sugar/data-particles.lowered.bc flows [0, 4294967295]; main []
