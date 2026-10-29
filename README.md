@@ -43,13 +43,13 @@ allocations still alive at exit.
 
 `raise` is an ordinary operation, and `with default(8080) { … }` is the handler that decides what
 it means. Another caller could turn the same failure into a value with `to_result`, or let it
-pass upward. The [introduction](book/src/introduction.md) has a longer example: a generic
-`retry` with backoff, tested against a fake timer.
+pass upward. [Effects and handlers](book/src/guide/effects.md#computation-parameters-and-) has a
+longer example: a generic `retry` with backoff, tested against a fake timer.
 
 ## What it can do
 
 - **Ownership and borrowing** as in Rust: values move, `&` and `&mut` lend them, and lifetimes
-  appear in signatures. Copying a list or tree is always written out with `clone`. → [Ownership and borrows](book/src/guide/ownership.md)
+  appear in signatures. Nothing is copied behind your back: copying a list is written `clone(xs)`. → [Ownership and borrows](book/src/guide/ownership.md)
 - **Data types** with records, variants, generics and pattern matching. Recursive data, nested
   as deep as you like (a tree whose children are a `Vec` of trees needs no `box`), and every
   allocation is one you wrote. Folds walk it by borrow, in place, or by consuming it.
@@ -106,11 +106,11 @@ live 0
 
 | command | what it does |
 |---|---|
-| `bcc check file.bc` | type-check, and show each declaration's type |
 | `bcc run file.bc [args…]` | compile to WebAssembly and run under wasmtime |
 | `bcc run --native file.bc` | compile through LLVM and run natively |
 | `bcc interp file.bc` | run in the reference interpreter |
 | `bcc compile file.bc -o out.wat` | write the WebAssembly text |
+| `bcc compile --target native file.bc -o out.ll` | write the LLVM IR |
 
 The [book](https://empath-nirvana.github.io/borrow-core/) teaches the language from there, starting
 with [Getting started](https://empath-nirvana.github.io/borrow-core/getting-started.html).
@@ -118,27 +118,18 @@ with [Getting started](https://empath-nirvana.github.io/borrow-core/getting-star
 
 ## Status
 
-The language is young and still changing. Not built yet:
-
-- modules and packages; traits or bounds on type parameters;
-- bitwise operators, unary minus, `+=` and indexing sugar;
-- files, the network and environment variables (today: stdin/stdout/stderr, the clock and
-  arguments);
-- an async event loop over real I/O, and threads;
-- interior mutability, unsafe code and a C FFI;
-- libraries such as JSON and regular expressions.
-
-The [Status](book/src/status.md) page has the longer list.
+The language is young and still changing. The [Status](book/src/status.md) page lists what works
+and what isn't built yet.
 
 ## Built on a proof
 
 borrow-core started as a Lean formalisation of the paper *From Linearity to Borrowing* (Wagner,
 Gierczak, Marshall, Li and Ahmed, OOPSLA 2025), and its safety rules are proved in Lean: a
 program that compiles can't use memory after freeing it, free it twice or leak it.
-[What is proved](book/src/proved.md) has the details, and [`SPEC.md`](SPEC.md) is the precise
-definition.
+[Safety guarantees](book/src/safety.md) says what that means for your programs, and
+[`SPEC.md`](SPEC.md) is the precise definition.
 
 ## Contributing
 
-Work is tracked in GitHub issues and merged by pull request; `make gate` is the check every pull
-request must pass. See [Contributing](book/src/contributing.md).
+Contributors start at [`docs/internals/`](docs/internals) (the core calculus, how the surface
+elaborates into it, the proofs and the working rules) and [`SPEC.md`](SPEC.md).

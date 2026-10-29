@@ -6,14 +6,14 @@ by pull request. The reasoning behind the design is in
 
 ## Spec first
 
-{{#include ../../CLAUDE.md:spec-first}}
+See [`CLAUDE.md`](../../CLAUDE.md) (the part marked `spec-first`).
 
 ## Definition of done
 
 A feature is done when it compiles and runs, not when it type-checks. A feature issue carries
 this checklist (`.github/ISSUE_TEMPLATE/feature.md`):
 
-{{#include ../../.github/ISSUE_TEMPLATE/feature.md:13:}}
+See [`.github/ISSUE_TEMPLATE/feature.md`](../../.github/ISSUE_TEMPLATE/feature.md) (from line 13).
 
 ## Experiments and the library
 
@@ -25,7 +25,7 @@ each experiment and what it found.
 
 ## Growth discipline
 
-{{#include ../../CLAUDE.md:growth}}
+See [`CLAUDE.md`](../../CLAUDE.md) (the part marked `growth`).
 
 ## Hygiene
 
@@ -100,4 +100,4 @@ To build the book, install [mdBook](https://rust-lang.github.io/mdBook/) and run
 `mdbook build book` (output in `book/book/`) or `mdbook serve book`.
 
 Guide chapters change with the features they describe: a feature's pull request updates its
-chapter and its line on the [Status](status.md) page.
+chapter and its line on the [Status](../../book/src/status.md) page.

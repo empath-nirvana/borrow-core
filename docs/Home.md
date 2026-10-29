@@ -1,8 +1,9 @@
 # borrow-core documentation
 
-Start here. For learning the language, read the book: the guide and reference in
-[`book/`](../book/src/SUMMARY.md), with doc-tested examples (`mdbook build book`). The pages
-below are design and research notes.
+Start here. For learning the language, read the book in
+[`book/`](../book/src/SUMMARY.md), with doc-tested examples (`mdbook build book`). The core
+syntax, the elaboration chapters, the theorems and the contributing rules are in
+[`internals/`](internals/README.md). The pages below are design and research notes.
 
 | page | what it covers |
 |---|---|

@@ -1,6 +1,6 @@
 # Terms
 
-{{#include ../../../docs/syntax-core.md:terms}}
+See [`docs/syntax-core.md`](../../syntax-core.md) (the part marked `terms`).
 
 ## Effects
 

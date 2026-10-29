@@ -34,7 +34,7 @@ main : F (i32 * i32) =
 
 **Implicit deep copy.** A persistent variable of a type that holds recursive data is used again
 after a use that would therefore copy it; that use is written `clone(x)` (see [Ownership and
-borrows](../guide/ownership.md)). The message names the use after it.
+borrows](../../../book/src/guide/ownership.md)). The message names the use after it.
 
 **Not consumed.** A variable is left unused and cannot be dropped: its type has no destructor,
 it is declared `linear`, or it cannot be dropped where its scope ends (inside a value, where no

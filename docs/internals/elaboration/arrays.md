@@ -189,7 +189,7 @@ main : F 1 =
 
 A borrow of a cell cannot hand out a view of something the cell *owns* at the borrow's own
 lifetime: that is a view through a pointer, and the model excludes it
-([decision 5](../decisions.md)). That is why `withload` gives the family at a shorter lifetime
+([decision 5](../../decisions.md)). That is why `withload` gives the family at a shorter lifetime
 `'y`. The family itself is not a pointer: it is the views of the elements, side by side, and
 nothing in it owns anything. `array_get` takes one of those views out and forgets the rest, so a
 view of an element at `'y` is sound (`SPEC.md` §9, `Core/Arrays.lean`).
@@ -200,5 +200,5 @@ This chapter borrows an array through a cell, with the family constants. SPEC §
 lend an owned array directly as a view, `array_imm 'x A` or `array_mut 'x A`, which can be split
 at a run-time index, and whose elements can be replaced, swapped or lent singly
 (`slice_get_mut`); the surface's `borrow imm a { v -> … }`, `for` over arrays and views, and
-`lib/slice.bc` are written over them ([Data and generics](../guide/data.md#arrays)). Growable
+`lib/slice.bc` are written over them ([Data and generics](../../../book/src/guide/data.md#arrays)). Growable
 buffers and strings are `lib/buf.bc` and `lib/text.bc` (SPEC §17).

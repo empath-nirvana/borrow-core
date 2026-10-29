@@ -48,7 +48,7 @@ to the proofs of its premises. `checkProgram_sound` in
 inserts ([Implicit destructors](elaboration/implicit-destructors.md)) are part of the derivation.
 
 **Elaborated handlers mean what their clauses say.** A surface handler (SPEC §18) is defined by
-its elaboration into core terms ([Effects and handlers](guide/effects.md)), so a handled program is safe by the theorems
+its elaboration into core terms ([Effects and handlers](../../book/src/guide/effects.md)), so a handled program is safe by the theorems
 above with no new case. What could still be wrong is what a handler *means*, and each class of
 clause has its law, about the machine's runs of the terms the elaboration emits
 ([`Core/Handlers.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/Handlers.lean)).
