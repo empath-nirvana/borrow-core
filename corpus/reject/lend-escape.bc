@@ -1,10 +1,9 @@
--- expect: 20:11: this borrow block's result has type `(imm 'x array i32 * i32) * i32`, which has the block's lifetime `'x`: nothing borrowed at `'x` outlives the block. When the body loops, each step borrows the place again, so the loop cannot keep what is borrowed before it (SPEC §14, borrow scopes over loops)
--- A borrow block over a loop whose loop keeps something borrowed before it (SPEC §14, borrow
--- scopes over loops). The block is lent per observation: the stretch before the loop borrows the
--- table for itself, and hands on to the loop what it binds, here `q`, a pair that holds the
--- borrow. Nothing borrowed at `'x` outlives that stretch's borrow, so the loop cannot hold it
--- between steps; the loop must use `b` (or a copy of it, `let b2 = b`), which each step borrows
--- again.
+-- expect: 22:34: `q` is used twice here, and its type `imm 'x array i32 * i32` is not persistent
+-- A borrow block over a loop whose loop keeps something borrowed before it. The block's body
+-- loops, so its lend is held across the loop's ticks, which the kernel admits at the graded row
+-- `div call` (SPEC §48); the loop then reads `q`, which holds the borrow, at each turn, and a borrow
+-- is not persistent, so the kernel refuses the second use (SPEC §10, §14; an implicit copy of an
+-- `imm` borrow is open, #58).
 
 fn tab(i: i32) -> i32 = i * 10
 

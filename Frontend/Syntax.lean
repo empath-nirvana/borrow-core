@@ -65,18 +65,21 @@ inductive Mode where
   | imm
   deriving DecidableEq, Repr, Inhabited
 
-/-- The qualifier of an operation's continuation in a row (SPEC §19): linear, affine or
-unrestricted. -/
+/-- The qualifier of an operation's continuation in a row (SPEC §19, §48): linear, affine,
+unrestricted, or `call`: linear and call-graded, its continuation resumed in the scope of the
+stop. -/
 inductive Qual where
   | lin
   | aff
   | unr
+  | call
   deriving DecidableEq, Repr, Inhabited
 
 def Qual.str : Qual → String
   | .lin => "lin"
   | .aff => "aff"
   | .unr => "unr"
+  | .call => "call"
 
 /-- The host resource kinds the surface names (SPEC §11, §34): `input`, `output`, `clock`,
 `args`. -/
@@ -327,6 +330,9 @@ inductive Const where
   | withloadU (a : Life) (x : Ident) (A B : VTy) (r : Row)
   | sliceBorrowMutU (x : Ident) (b : Life) (A B : VTy) (r : Row)
   | sliceBorrowImmU (x : Ident) (b : Life) (A B : VTy) (r : Row)
+  /-- `iterate[S, B, R, [r]]`: the loop of SPEC §14 with state `S`, result `B` and residual `R`,
+  at the row `r`, which holds `Div`.  `[spec §14]` -/
+  | iterate (St B R : VTy) (r : Row)
   deriving DecidableEq, Repr
 
 /-- A binary operator of the surface (draft 0 §2.12), resolved by the width of its operands.
@@ -563,6 +569,16 @@ inductive VSugar where
   so that a constructor written without `box` gets E3's hint. Printed `io_cells(C, k, V)`.
   `[spec §60]` -/
   | cells (c : String) (k : Nat)
+  /-- The step of a counted loop whose body performs `Div` (SPEC §14, §16), applied to it: a
+  `!` function from the counter and the loop's state at the row, its body the loop's body. `ws`
+  are the variables the loop threads, which a close inside the body hands back; `ret` is set when
+  a `return` inside the body's loops leaves through the loop's exit. The `Div` elaboration walks
+  the step's body, and leaves the step itself.  `[spec §14, §16]` -/
+  | rowStep (ws : List String) (ret : Bool)
+  /-- Where a counted loop whose body performs `Div` was closed during its step (`rowStep`): the
+  `Div` elaboration closes what the loops around hold and leaves the body with the residual by
+  name.  `[spec §14, §16]` -/
+  | rowClose
   deriving DecidableEq, Repr, Inhabited
 
 /-- What a loop walks, as the program writes it (`docs/loops.md` §2.1), with the loop's value
@@ -670,6 +686,10 @@ inductive Val where
   /-- `V`, a fixed scheme the elaborator wrote, marked `k`: checked as `V`, its typed node the
   scheme's derived node (SPEC §3). It is printed as `V`. -/
   | mark (sp : Span) (k : SchemeMark) (V : Val)
+  /-- `reify[B, R, [r]](res)`: the constant `reify_res` of SPEC §14 at the row `r` (which does not
+  hold `Div`), making a loop value `U(Loop_r B R)` of a computation at the row `div, r`; `res`,
+  a closed value `!U(B ⊸ F_r R)`, hands back the residual of a finished result.  `[spec §14]` -/
+  | reify (sp : Span) (B R : VTy) (r : Row) (res : Val)
 
 /-- Computations (syntax-core §6.2), checked at a computation type. -/
 inductive Comp where
@@ -963,6 +983,7 @@ def Const.strip : Const → Const
   | .withloadU a x A B r => .withloadU a.strip x.strip A.strip B.strip r.strip
   | .sliceBorrowMutU x b A B r => .sliceBorrowMutU x.strip b.strip A.strip B.strip r.strip
   | .sliceBorrowImmU x b A B r => .sliceBorrowImmU x.strip b.strip A.strip B.strip r.strip
+  | .iterate St B R r => .iterate St.strip B.strip R.strip r.strip
 
 /-- The record with `f` applied to each of its types. -/
 def SiteRec.mapTy (f : VTy → VTy) (r : SiteRec) : SiteRec :=
@@ -1009,6 +1030,7 @@ def Val.strip : Val → Val
   | .lend _ x m => .lend .none x.strip m
   | .sugar _ s => .sugar .none s.strip
   | .mark _ k V => .mark .none k V.strip
+  | .reify _ B R r V => .reify .none B.strip R.strip r.strip V.strip
 
 def Comp.strip : Comp → Comp
   | .ret _ V => .ret .none V.strip
@@ -1080,7 +1102,7 @@ def Val.span : Val → Span
   | .thunk sp _ | .thunkv sp _ | .bangThunk sp _ | .bangThunkv sp _ | .unbang sp _
   | .boxed sp _ _ | .unbox sp _ | .sub sp _ _ | .roll sp _ | .unroll sp _ | .run sp _
   | .app sp _ _ | .inst sp _ _ | .ascribe sp _ _ | .const sp _ | .shorten sp _ _ _ _
-  | .lend sp _ _ | .sugar sp _ | .mark sp _ _ => sp
+  | .lend sp _ _ | .sugar sp _ | .mark sp _ _ | .reify sp _ _ _ _ => sp
 
 /-- The span of a computation. -/
 def Comp.span : Comp → Span
@@ -1131,7 +1153,7 @@ def Val.anySugar (p : VSugar → Bool) : Val → Bool
   | .sugar _ s => p s
   | .pair _ V W | .app _ V W => V.anySugar p || W.anySugar p
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => V.anySugar p
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V | .reify _ _ _ _ V => V.anySugar p
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.anySugar p
   | _ => false
 

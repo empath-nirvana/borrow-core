@@ -9,6 +9,7 @@ import Core.FoldOwnG
 import Core.Nu
 import Core.EffFin
 import Core.EffBorrow
+import Core.EffLend
 import Core.EffBoxed
 import Core.PolyLet
 import Core.DivHandle
@@ -231,11 +232,12 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   step `iterate`: the loop that ticks at each back edge.  `[spec §14]` -/
   | iterate {Δ Γ} (S : Row) (St B R : VTy) (hS : Row.divB S = true) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val (.prim .iterate)) (.val (iterTy S St B R))
-  /-- `div_fuel : !U(U(1 ⊸ F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)`, `Σ` without `Div`'s name: the handler of
-  `Div` that answers *next* to the first ticks, as many as the budget, and *close* after.
-  `[spec §14]` -/
-  | divFuel {Δ Γ} (S : Row) (A : VTy) (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
-      CDerives Δ Γ (.val divFuelV) (.val (divFuelTy S A))
+  /-- `div_fuel : !U(U(1 ⊸ F_{tick^c, Σ} A) ⊗ I32 ⊸ F_Σ A)`, `Σ` without `Div`'s name, `tick` at
+  either grade: the handler of `Div` that answers *next* to the first ticks, as many as the
+  budget, and *close* after.  `[spec §14, §48]` -/
+  | divFuel {Δ Γ} {c : Bool} (S : Row) (A : VTy) (hS : ∀ o ∈ S, o.n ≠ divEff)
+      (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val divFuelV) (.val (divFuelTy S A c))
   /-- `reify_res : !U(U(1 ⊸ F_{tick, Σ}(B ⊕ R)) ⊸ F_Σ U(Loop_Σ B R))`, `Σ` without `Div`'s name, at
   the residual of a result `res : !U(B ⊸ F_Σ R)`, a closed term: the handler of `Div` that makes
   a loop value of a computation.  `[spec §14]` -/
@@ -307,14 +309,14 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- The unwinding form of `withbor` (1): `Ref A` lent as `Imm 'x A` to a callback at a row of
   abortive operations; when it unwinds, the finaliser `d` runs on the source.  `[spec §19]` -/
   | withbor1U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+      (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Lend x)
       (hdc : closedAt 0 d = true) (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
       CDerives Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S))
-  /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, its side condition
-  non-strict.  `[spec §19, §23]` -/
+  /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, at a lend's row, its side
+  condition non-strict.  `[spec §19, §23, §48]` -/
   | withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Lend x)
       (hdc : closedAt 0 d = true) (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
       CDerives Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S))
   /-- The unwinding form of `withbor` (3): `Mut @a A` reborrowed as `Mut 'x A`.  `[spec §19]` -/
@@ -457,14 +459,17 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `[handle]` at clauses that resume `κ` in tail position: `handle_n e with (h_ret, gs)`, the
   clauses written out from a tuple `gs` of answering functions (`tailTuple`), each at a row `Σ_N`
   of linear operations below `Σ`; an abortive operation's clause is its function itself.  The
-  handled row may hold `Div` (decision 68).  `[spec §14, §19]` -/
+  handled row may hold `Div` (decision 68).  At the grade `c` the handled operations are
+  call-graded and so is every operation of `Σ_N`: the only handler of a graded name.
+  `[spec §14, §19, §48]` -/
   | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
-      {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
+      {n : UInt32} {c : Bool} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
       (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
       (hc : CDerives Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
       (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
-      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
+      (hCN : c = true → ∀ o ∈ SN, o.call = true)
+      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs c ++ S) A))) :
       CDerives Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) e)
         (.comp (CTy.effOf S R))
   /-- `[handle-last]`: `handle_n e with (h_ret, ws, nfs)`, the clauses written out from a tuple
@@ -659,9 +664,9 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | withbor3 x hΓ hx hf₁ hf₂ => exact withbor3_compatX x hΓ hx hf₁ hf₂
   | withload x hΓ hx hf₁ hf₂ => exact withload_compatX x hΓ hx hf₁ hf₂
   | withswap hΓ => exact withswap_compatX hΓ
-  | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS hdc _ ihd => exact withbor1U_compatX x hΓ hsc₁ hf₁ hf₂ hS hdc ihd
+  | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS hdc _ ihd => exact withbor1L_compatX x hΓ hsc₁ hf₁ hf₂ hS hdc ihd
   | withbor2U x hΓ _ hside hf₁ hf₂ hS hdc _ ihd =>
-      exact withbor2U_compatX x hΓ hside hf₁ hf₂ hS hdc ihd
+      exact withbor2L_compatX x hΓ hside hf₁ hf₂ hS hdc ihd
   | withbor3U x hΓ _ hf₁ hf₂ hS hdc _ ihd => exact withbor3U_compatX x hΓ hf₁ hf₂ hS hdc ihd
   | withloadU x hΓ _ hf₁ hf₂ hS => exact withloadU_compatX x hΓ hf₁ hf₂ hS
   | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS hdc _ ihd =>
@@ -690,8 +695,8 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
       exact handleV_compatC hs hd hH ihc hn0 hnS hlen hdv ihe
   | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
       exact handleV_compatCB hs hd hH ihc hn0 hnS hlen hdv ihe hΓd hSd
-  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
-      exact handleT_compatC hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
+  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin hCN _ ihc ihe =>
+      exact handleT_compatC hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin hCN ihe
   | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hAff hSW hSu hFin _ ihc ihe =>
       exact handleL_compatC hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hAff hSW hSu hFin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN

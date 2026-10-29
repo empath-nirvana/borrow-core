@@ -209,7 +209,7 @@ theorem ewp_handleS (α : Life) (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
       subst hm
       obtain ⟨c, hc, hna, -⟩ := hop i en hT
       refine wpG_head (fun μ => Head.hop μ m i qs hr hs c v K₁ hc hK₁) rfl _ _ σ ?_
-      have hcan : ∀ ls'', Ext ls' ls'' ρk → en.q ≠ .lin → ∀ Tk, Tc i = some Tk →
+      have hcan : ∀ ls'', Owed en ls' ls'' ρk → en.q ≠ .lin → ∀ Tk, Tc i = some Tk →
           ewpTS ls'' (ccatchE (K₁.dead.plug (raiseE (.val (cancelVal none))))) (opTable Tk)
             (fun _ v => ⌜v = Val.unit⌝) ρk := by
         intro ls'' he hq' Tk hTk
@@ -239,11 +239,11 @@ theorem ewp_handleS (α : Life) (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
             fun ls'' he => ⟨fun w τ₁ τ₂ hB hcτ => ?_, fun hq' => ?_⟩⟩
           · obtain ⟨z, hz, hzτ⟩ := compS_exch hy₁ hcτ
             exact ewp_kappaC_resume (opTable_mono Tout) _ ℓ _ K₁ w
-              ⟨σ₁, z, ResU.CompS.comm hzτ, hcell, (hcont ls'' (Ext.left hy₁ he)).1 w τ₁ z hB hz⟩
+              ⟨σ₁, z, ResU.CompS.comm hzτ, hcell, (hcont ls'' (he.left hy₁)).1 w τ₁ z hB hz⟩
           · first
               | exact absurd hqq hq'
               | exact fun Tk hTk => ewp_kappaC_cancel (opTable_mono Tk) ℓ _ K₁
-                  ⟨σ₁, ρk, ResU.CompS.comm hy₁, hcell, hcan ls'' (Ext.left hy₁ he) hq' Tk hTk⟩
+                  ⟨σ₁, ρk, ResU.CompS.comm hy₁, hcell, hcan ls'' (he.left hy₁) hq' Tk hTk⟩
     · -- an operation of another name passes outward; its share's stratum is not needed
       refine wpG_here _ _ _ σ (Or.inr (Or.inl ⟨(hndK (hndVal n qs hr hs)).comp K₁, m, i, v, en,
         pure_sep_mk ⟨(Kont.plug_comp _ _ _).symm, ?_, (hTin m i hm) ▸ hT, ha⟩

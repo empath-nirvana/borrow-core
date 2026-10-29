@@ -127,7 +127,7 @@ theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 ih2 => exact CDerivesP.effThen a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 ih1 ih2
   | effHandleV a0 a1 a2 a3 a4 a5 a6 a7 a8 ih0 ih1 => exact CDerivesP.effHandleV a0 a1 a2 ih0 a4 a5 a6 a7 ih1
   | effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 ih0 ih1 => exact CDerivesP.effHandleVB a0 a1 a2 ih0 a4 a5 a6 a7 ih1 a9 a10
-  | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 ih0 ih1 => exact CDerivesP.effHandleT a0 a1 a2 a3 ih0 a5 a6 a7 a8 a9 a10 ih1
+  | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 ih0 ih1 => exact CDerivesP.effHandleT a0 a1 a2 a3 ih0 a5 a6 a7 a8 a9 a10 a11 ih1
   | effHandleL a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 ih0 ih1 => exact CDerivesP.effHandleL a0 a1 a2 a3 a4 ih0 a6 a7 a8 a9 a10 a11 a12 a13 a14 ih1
   | letPoly a0 a1 a2 a3 ih0 ih1 => exact CDerivesP.letPoly a0 a1 ih0 ih1
 
@@ -207,9 +207,9 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | withbor3 x hΓ hx hf₁ hf₂ => exact withbor3_compatX x hΓ hx hf₁ hf₂
   | withload x hΓ hx hf₁ hf₂ => exact withload_compatX x hΓ hx hf₁ hf₂
   | withswap hΓ => exact withswap_compatX hΓ
-  | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS hdc _ ihd => exact withbor1U_compatX x hΓ hsc₁ hf₁ hf₂ hS hdc ihd
+  | withbor1U x hΓ _ hsc₁ hf₁ hf₂ hS hdc _ ihd => exact withbor1L_compatX x hΓ hsc₁ hf₁ hf₂ hS hdc ihd
   | withbor2U x hΓ _ hside hf₁ hf₂ hS hdc _ ihd =>
-      exact withbor2U_compatX x hΓ hside hf₁ hf₂ hS hdc ihd
+      exact withbor2L_compatX x hΓ hside hf₁ hf₂ hS hdc ihd
   | withbor3U x hΓ _ hf₁ hf₂ hS hdc _ ihd => exact withbor3U_compatX x hΓ hf₁ hf₂ hS hdc ihd
   | withloadU x hΓ _ hf₁ hf₂ hS => exact withloadU_compatX x hΓ hf₁ hf₂ hS
   | sliceBorrowMU x hΓ hA hB hf₁ hf₂ hS hdc _ ihd =>
@@ -238,8 +238,8 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
       exact handleV_compatC hs hd hH ihc hn0 hnS hlen hdv ihe
   | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
       exact handleV_compatCB hs hd hH ihc hn0 hnS hlen hdv ihe hΓd hSd
-  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
-      exact handleT_compatC hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin ihe
+  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin hCN _ ihc ihe =>
+      exact handleT_compatC hs hd hHr hHc ihc hn0 hnd hnS hlen hSN hLin hCN ihe
   | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hAff hSW hSu hFin _ ihc ihe =>
       exact handleL_compatC hs hd hHr hHw hHn ihc hn0 hnd hnS hlen hNZ hAff hSW hSu hFin ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN

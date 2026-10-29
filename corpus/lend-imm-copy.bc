@@ -1,0 +1,32 @@
+-- An `imm` borrow block over a loop, its borrow copied explicitly at each turn (SPEC §14, §42,
+-- §48). A table of ten entries `10 * i` is borrowed `imm` around a `while` that sums the first
+-- five through `get`; each turn splits the borrow with `copy`, reads through one copy and keeps the
+-- other, and the last is forgotten. The lend spans the loop's ticks at the graded row `div call`.
+-- `corpus/pending/borrow-across-loop.bc` is this program with the copies implicit (#58).
+--
+-- Answer: i32[100], live 0: 0 + 10 + 20 + 30 + 40.
+
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return ((unbang host[mul32]) (i, i32[10]))
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let n = borrow imm t { 'x, b ->
+    let mut acc = 0;
+    let mut k = 0;
+    let mut c = b;
+    while k < 5 {
+      let (c1, c2) = copy['x, array i32](c);
+      acc = acc + get(c1, k);
+      c = c2;
+      k = k + 1
+    };
+    let () = forget_imm['x, array i32](c);
+    acc
+  };
+  n

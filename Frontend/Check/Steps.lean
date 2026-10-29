@@ -74,17 +74,17 @@ def dtorB : Bool → CVTy → Bool
 /-- At a thunk `dtorB` does not depend on the mode. -/
 theorem dtorB_thunk : ∀ (b : Bool) (C : CCTy), dtorB b (.thunk C) = dtorB false (.thunk C)
   | _, .amp _ (.ret .unit) | _, .nu (.amp _ (.ret _)) | _, .nu (.ret _) | _, .nu (.arr _ _)
-  | _, .nu .top | _, .nu (.all _ _ _) | _, .nu (.nu _) | _, .nu (.eff _ _ _ _ _ _ _)
+  | _, .nu .top | _, .nu (.all _ _ _) | _, .nu (.nu _) | _, .nu (.eff _ _ _ _ _ _ _ _)
   | _, .nu (.amp _ (.arr _ _)) | _, .nu (.amp _ (.amp _ _)) | _, .nu (.amp _ .top)
-  | _, .nu (.amp _ (.all _ _ _)) | _, .nu (.amp _ (.nu _)) | _, .nu (.amp _ (.eff _ _ _ _ _ _ _))
-  | _, .ret _ | _, .arr _ _ | _, .top | _, .all _ _ _ | _, .eff _ _ _ _ _ _ _
+  | _, .nu (.amp _ (.all _ _ _)) | _, .nu (.amp _ (.nu _)) | _, .nu (.amp _ (.eff _ _ _ _ _ _ _ _))
+  | _, .ret _ | _, .arr _ _ | _, .top | _, .all _ _ _ | _, .eff _ _ _ _ _ _ _ _
   | _, .amp _ (.ret (.tensor _ _)) | _, .amp _ (.ret .zero) | _, .amp _ (.ret (.sum _ _))
   | _, .amp _ (.ret (.thunk _)) | _, .amp _ (.ret (.ref _)) | _, .amp _ (.ret (.imm _ _))
   | _, .amp _ (.ret (.mut _ _)) | _, .amp _ (.ret (.box _ _)) | _, .amp _ (.ret (.bang _))
   | _, .amp _ (.ret .unk) | _, .amp _ (.ret (.tvar _)) | _, .amp _ (.ret (.mu _))
   | _, .amp _ (.ret (.int _)) | _, .amp _ (.ret (.fam _)) | _, .amp _ (.ret (.opq _))
   | _, .amp _ (.arr _ _) | _, .amp _ (.amp _ _) | _, .amp _ .top | _, .amp _ (.all _ _ _)
-  | _, .amp _ (.nu _) | _, .amp _ (.eff _ _ _ _ _ _ _) => rfl
+  | _, .amp _ (.nu _) | _, .amp _ (.eff _ _ _ _ _ _ _ _) => rfl
 
 open BoCa.Fig16.LogRel.Core.FoldP (clB) in
 /-- At a closed type the two modes agree. -/
@@ -342,7 +342,7 @@ def Env.ppL (E : Env) (a : CLife) : String := ppLifeP E.lenv 1 a
 /-- `C` as a returner chain `F_Σ A`: its row and answer. -/
 def effRow? : CCTy → Option (CRow × CVTy)
   | .ret A => some ([], A)
-  | .eff n i q A B fin C => (effRow? C).map fun (S, R) => (⟨n, i, q, A, B, fin⟩ :: S, R)
+  | .eff n i q A B fin cg C => (effRow? C).map fun (S, R) => (⟨n, i, q, A, B, fin, cg⟩ :: S, R)
   | _ => none
 
 /-- The environment of a computation checked against `C`: the row of `C` when it is a returner
@@ -357,7 +357,9 @@ def Env.forVal (E : Env) : Env := { E with own := [], row := none }
 
 def ppRow (E : Env) (S : CRow) : String :=
   "[" ++ ", ".intercalate (S.map fun o =>
-    s!"{o.n}.{o.i} {qualStr o.q} {E.ppV o.A} ~> {E.ppV o.B}") ++ "]"
+    if o.n = BoCa.divEff ∧ o.i = 0 ∧ o.q = .lin ∧ o.A = .unit ∧ o.B = .sum .unit .unit then
+      (if o.call then "div call" else "div")
+    else s!"{o.n}.{o.i} {if o.call && o.q == .lin then "call" else qualStr o.q} {E.ppV o.A} ~> {E.ppV o.B}") ++ "]"
 
 theorem Row.weak_of_unr {S : CRow} (h : S.Unr) : S.Weak := by
   obtain ⟨o, ho, hq⟩ := h
@@ -626,7 +628,7 @@ def mentionsV (x : String) : Val → Bool
   | .defApp .. | .unit _ | .const .. | .sugar .. => false
   | .pair _ V W | .app _ V W => mentionsV x V || mentionsV x W
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => mentionsV x V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V | .reify _ _ _ _ V => mentionsV x V
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => mentionsC x M
   | .lend _ y _ => y.name == x
 

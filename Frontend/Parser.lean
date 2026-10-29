@@ -765,13 +765,27 @@ def rowEntries : Nat → P Row
   | 0 => outOfFuel
   | n + 1 => do
     if ← isSym "]" then return .nil
+    -- `div`: `Div`'s `tick`, `4294967295.0 lin 1 ~> 1 + 1` (SPEC §14).
+    if (← peek).tok == .kw "div" then
+      let t ← bump
+      let sp := t.span
+      -- `div call`: the graded `tick` (SPEC §48).
+      let q ← match (← peek).tok with
+        | .ident "call" => discard bump; pure Qual.call
+        | _ => pure Qual.lin
+      let e : Row → Row := .cons 4294967295 0 q (.unit sp) (.sum sp (.unit sp) (.unit sp))
+      if ← isSym "," then
+        discard bump
+        return e (← rowEntries n)
+      return e .nil
     let (k, i) ← opNameNI "an operation `n.i` of a row"
     let tq ← peek
     let q ← match tq.tok with
       | .ident "lin" => discard bump; pure Qual.lin
       | .ident "aff" => discard bump; pure Qual.aff
       | .ident "unr" => discard bump; pure Qual.unr
-      | _ => expected "a qualifier `lin`, `aff` or `unr`"
+      | .ident "call" => discard bump; pure Qual.call
+      | _ => expected "a qualifier `lin`, `aff`, `unr` or `call`"
     let A ← rvty n
     expectSym "~>"
     let B ← rvty n
@@ -1449,6 +1463,20 @@ def valPrefix : Nat → P Val
       let V ← valPrefix n
       let m := if t.tok == .kw "shorten_mut" then Mode.mut else Mode.imm
       pure (.shorten (← spanFrom st) m σ a V)
+    | .kw "reify" =>
+      -- `reify[B, R, [r]](res)` (SPEC §14).
+      discard bump
+      expectSym "["
+      let B ← rvty n
+      expectSym ","
+      let R ← rvty n
+      expectSym ","
+      expectSym "["
+      let r ← rowEntries n
+      expectSym "]"
+      expectSym "]"
+      let V ← valAtom n
+      pure (.reify (← spanFrom st) B R r V)
     | .kw "borrow" | .kw "modify" => borrowBlock n
     -- `fold_imm V { … }`; with brackets, `fold_imm[…]` is the constant.
     | .kw "fold_imm" | .kw "fold_own" | .kw "fold_reuse" =>

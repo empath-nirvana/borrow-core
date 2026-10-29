@@ -197,7 +197,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .countTry ii jj S E => []
   | .boundedFix ii jj A C => []
   | .iterate ii jj S St B R => []
-  | .divFuel ii jj S A => []
+  | .divFuel ii jj c S A => []
   | .reify ii jj S B R tres => tres.lifeBinders
   | .sliceBorrowM ii jj A B x => []
   | .sliceBorrowI ii jj A B x => []
@@ -240,7 +240,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .effThen ii jj A B S SM SD u tM tN tD => tM.lifeBinders ++ tN.lifeBinders ++ tD.lifeBinders
   | .effHandleV ii jj S E fs n A R u ks site inside tc te => tc.lifeBinders ++ te.lifeBinders
   | .effHandleVB ii jj S E fs n A R d u ks site inside tc te => tc.lifeBinders ++ te.lifeBinders
-  | .effHandleT ii jj S SN E fs n A R u site inside tc te => tc.lifeBinders ++ te.lifeBinders
+  | .effHandleT ii jj S SN E fs n c A R u site inside tc te => tc.lifeBinders ++ te.lifeBinders
   | .effHandleL ii jj S SW E fs Xs n A R u site inside tc te => tc.lifeBinders ++ te.lifeBinders
   | .letPoly ii jj C j tV tN => tV.lifeBinders ++ tN.lifeBinders
   | .lendR ii jj x b T B S td tM => [x] ++ td.lifeBinders ++ tM.lifeBinders
@@ -308,7 +308,7 @@ def TExpr.domFree : TExpr → Bool
   | .countTry ii jj S E => true
   | .boundedFix ii jj A C => true
   | .iterate ii jj S St B R => true
-  | .divFuel ii jj S A => true
+  | .divFuel ii jj c S A => true
   | .reify ii jj S B R tres => tres.domFree
   | .sliceBorrowM ii jj A B x => false
   | .sliceBorrowI ii jj A B x => false
@@ -351,7 +351,7 @@ def TExpr.domFree : TExpr → Bool
   | .effThen ii jj A B S SM SD u tM tN tD => tM.domFree && tN.domFree && tD.domFree
   | .effHandleV ii jj S E fs n A R u ks site inside tc te => tc.domFree && te.domFree
   | .effHandleVB ii jj S E fs n A R d u ks site inside tc te => tc.domFree && te.domFree
-  | .effHandleT ii jj S SN E fs n A R u site inside tc te => tc.domFree && te.domFree
+  | .effHandleT ii jj S SN E fs n c A R u site inside tc te => tc.domFree && te.domFree
   | .effHandleL ii jj S SW E fs Xs n A R u site inside tc te => tc.domFree && te.domFree
   | .letPoly ii jj C j tV tN => tV.domFree && tN.domFree
   | .lendR ii jj x b T B S td tM => false
@@ -418,7 +418,7 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .countTry ii jj S E => .countTry ii jj S E
   | .boundedFix ii jj A C => .boundedFix ii jj A C
   | .iterate ii jj S St B R => .iterate ii jj S St B R
-  | .divFuel ii jj S A => .divFuel ii jj S A
+  | .divFuel ii jj c S A => .divFuel ii jj c S A
   | .reify ii jj S B R tres => .reify ii jj S B R (tres.reAb Δr)
   | .sliceBorrowM ii jj A B x => .sliceBorrowM ii jj A B x
   | .sliceBorrowI ii jj A B x => .sliceBorrowI ii jj A B x
@@ -461,7 +461,7 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .effThen ii jj A B S SM SD u tM tN tD => .effThen ii jj A B S SM SD u (tM.reAb Δr) (tN.reAb Δr) (tD.reAb Δr)
   | .effHandleV ii jj S E fs n A R u ks site inside tc te => .effHandleV ii jj S E fs n A R u ks site inside (tc.reAb Δr) (te.reAb Δr)
   | .effHandleVB ii jj S E fs n A R d u ks site inside tc te => .effHandleVB ii jj S E fs n A R d u ks site inside (tc.reAb Δr) (te.reAb Δr)
-  | .effHandleT ii jj S SN E fs n A R u site inside tc te => .effHandleT ii jj S SN E fs n A R u site inside (tc.reAb Δr) (te.reAb Δr)
+  | .effHandleT ii jj S SN E fs n c A R u site inside tc te => .effHandleT ii jj S SN E fs n c A R u site inside (tc.reAb Δr) (te.reAb Δr)
   | .effHandleL ii jj S SW E fs Xs n A R u site inside tc te => .effHandleL ii jj S SW E fs Xs n A R u site inside (tc.reAb Δr) (te.reAb Δr)
   | .letPoly ii jj C j tV tN => .letPoly ii jj C j (tV.reAb Δr) (tN.reAb Δr)
   | .lendR ii jj x b T B S td tM => .lendR ii jj x b T B S (td.reAb Δr) (tM.reAb (Δr.extend x b))
@@ -864,9 +864,9 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 ih0 ih1 =>
       intro Δ' he hd
       exact TDerivesP.effHandleVB a0 a1 (by simpa only [TExpr.reAb_erase] using a2) a3 (by rw [TExpr.reAb_erase]; exact a4) (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) a6 a7 a8 a9 (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (LeΔ.ctxOutlives he.1 a11) (LeΔ.ansOutlives he.1 a12) (by rw [TExpr.reAb_erase]; exact a13)
-  | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 ih0 ih1 =>
+  | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 ih0 ih1 =>
       intro Δ' he hd
-      exact TDerivesP.effHandleT a0 a1 (by simpa only [TExpr.reAb_erase] using a2) a3 a4 a5 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a7) a8 a9 a10 a11 a12 a13 (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a15)
+      exact TDerivesP.effHandleT a0 a1 (by simpa only [TExpr.reAb_erase] using a2) a3 a4 a5 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a7) a8 a9 a10 a11 a12 a13 a14 (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a16)
   | effHandleL a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 ih0 ih1 =>
       intro Δ' he hd
       exact TDerivesP.effHandleL a0 a1 (by simpa only [TExpr.reAb_erase] using a2) a3 a4 a5 a6 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a8) a9 a10 a11 a12 a13 a14 a15 a16 a17 (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a19)
@@ -1180,9 +1180,9 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | effHandleVB a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 ih0 ih1 =>
       intro Δ' he hd
       exact TDerivesAt.effHandleVB a0 a1 a2 (by simpa only [TExpr.reAb_erase] using a3) a4 (by rw [TExpr.reAb_erase]; exact a5) (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) a7 a8 a9 a10 (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (LeΔ.ctxOutlives he.1 a12) (LeΔ.ansOutlives he.1 a13) (by rw [TExpr.reAb_erase]; exact a14)
-  | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 ih0 ih1 =>
+  | effHandleT a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 ih0 ih1 =>
       intro Δ' he hd
-      exact TDerivesAt.effHandleT a0 a1 a2 (by simpa only [TExpr.reAb_erase] using a3) a4 a5 a6 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a8) a9 a10 a11 a12 a13 a14 (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a16)
+      exact TDerivesAt.effHandleT a0 a1 a2 (by simpa only [TExpr.reAb_erase] using a3) a4 a5 a6 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a8) a9 a10 a11 a12 a13 a14 a15 (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a17)
   | effHandleL a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 ih0 ih1 =>
       intro Δ' he hd
       exact TDerivesAt.effHandleL a0 a1 a2 (by simpa only [TExpr.reAb_erase] using a3) a4 a5 a6 a7 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a9) a10 a11 a12 a13 a14 a15 a16 a17 a18 (ih1 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree])) (by rw [TExpr.reAb_erase]; exact a20)

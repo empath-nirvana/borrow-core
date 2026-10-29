@@ -1,9 +1,7 @@
--- expect: 28:5: the iterator of this `for` holds the borrow of `b`: a borrow block over a loop lends its place again at each step, so what the loop holds between steps must not hold the borrow (SPEC §14, borrow scopes over loops)
--- A borrow block over a loop whose iterator holds the borrow (SPEC §14, borrow scopes over loops).
--- The generator `over` reads the table through the borrow it is given, so its loop holds the
--- borrow between turns. The block lends the table again at each step, so what the loop holds
--- between steps must not hold the borrow. This is a borrowed collection consumed by a
--- pipeline; rewriting the source to hold the owner needs the pipeline to hand the owner back.
+-- expect: 19:23: `b` is used twice here, and its type `imm 'a array i32` is not persistent
+-- A generator that holds a borrow it is given and reads it at each turn: a borrow is not persistent,
+-- so the generator's loop cannot use it again at each turn, and the kernel refuses the second use
+-- (SPEC §10, §14).
 
 include yield
 

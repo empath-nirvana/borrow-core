@@ -130,6 +130,12 @@ def CTy.pp (C : CTy) (lvl : Nat := 0) : String :=
 /-- A row's entries, `n.i q A ~> B, …`, without the brackets. -/
 def Row.pp : Row → String
   | .nil => ""
+  -- `Div`'s `tick : 1 ↠^lin Next` (SPEC §14) is written `div`.
+  | .cons 4294967295 0 .lin (.unit _) (.sum _ (.unit _) (.unit _)) .nil => "div"
+  | .cons 4294967295 0 .lin (.unit _) (.sum _ (.unit _) (.unit _)) r => "div, " ++ r.pp
+  -- the graded `tick` (SPEC §48) is written `div call`.
+  | .cons 4294967295 0 .call (.unit _) (.sum _ (.unit _) (.unit _)) .nil => "div call"
+  | .cons 4294967295 0 .call (.unit _) (.sum _ (.unit _) (.unit _)) r => "div call, " ++ r.pp
   | .cons n i q A B .nil => s!"{n}.{i} {q.str} " ++ A.pp ++ " ~> " ++ B.pp
   | .cons n i q A B r => s!"{n}.{i} {q.str} " ++ A.pp ++ " ~> " ++ B.pp ++ ", " ++ r.pp
 
@@ -175,7 +181,7 @@ def Val.level : Val → Nat
   | .app _ (.app _ (.sugar _ (.borrow ..)) _) _ => 2
   | .thunk .. | .thunkv .. | .bangThunk .. | .bangThunkv .. => 0
   | .inl .. | .inr .. | .roll .. | .unroll .. | .unbang .. | .unbox .. | .boxed .. | .run ..
-  | .shorten .. => 1
+  | .shorten .. | .reify .. => 1
   | .app .. | .inst .. => 2
   | _ => 3
 
@@ -282,6 +288,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .sugar _ s => s!"<{reprStr s}>"
     -- A marked scheme prints as the value it marks: the mark is the checker's, not the source's.
     | .mark _ _ V => V.pp 0 k
+    | .reify _ B R r V => "reify[" ++ B.pp ++ ", " ++ R.pp ++ ", [" ++ r.pp ++ "]](" ++ V.pp 0 (k + 2) ++ ")"
 
 /-- A computation at level `lvl`, indented by `k` after each line break. -/
 def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
@@ -373,7 +380,8 @@ def Decl.pp : Decl → String
         | .fn => "fn "
         | .ctl .lin => "linear ctl "
         | .ctl .aff => "ctl "
-        | .ctl .unr => "multi ctl ") ++
+        | .ctl .unr => "multi ctl "
+        | .ctl .call => "call ctl ") ++
       o.name.name ++
         (if o.lives.isEmpty then "" else "<" ++ ", ".intercalate (o.lives.map fun (a, b) =>
           (Life.var a.span a.name).pp ++ (match b with | .top _ => "" | b => " < " ++ b.pp)) ++ ">") ++

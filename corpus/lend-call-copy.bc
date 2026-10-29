@@ -1,0 +1,40 @@
+-- A div function that takes an `imm` borrow, called with a lend held across its ticks (SPEC §14,
+-- §42, §48): `corpus/pending/lend-server.bc` with the borrow copied explicitly at each turn of the
+-- callee's loop (`copy`, then `forget_imm` of the last copy) in place of the implicit copy #58
+-- leaves open. `serve` reads its input to the end, handling each byte under a configuration it
+-- borrows; `main` calls it in direct style with `serve(&config, stdin)`, and the lend at the call
+-- is the borrow's unwinding form at the graded row `div call`.
+--
+-- Answer: on the input `1203`, i32[65], live 0: the configuration is (step 10, bias 1), so each
+-- digit adds `10 * d + 1`, giving 64, and `main` adds the bias read from the configuration it got
+-- back.
+
+type Cfg = i32 * i32
+
+-- `acc + step * d + bias`.
+def handle : !(all 'a < top. imm 'a Cfg * (i32 * i32) => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a Cfg * (i32 * i32)) ->
+    let (cfg, q) = p;
+    let (acc, d) = q;
+    let (step, bias) = *cfg;
+    acc + step * d + bias)
+
+-- Reads its input to the end, handling each byte under the configuration it borrows.
+def serve : !(all 'a < top. imm 'a Cfg * ref input => ref input * i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a Cfg * ref input) ->
+    let (cfg0, i) = p;
+    let mut cfg = cfg0;
+    let mut acc = 0;
+    for c in bytes(&mut i) {
+      let (c1, c2) = copy['a, Cfg](cfg);
+      acc = handle(c1, (acc, to_i32(c) - 48));
+      cfg = c2
+    };
+    let () = forget_imm['a, Cfg](cfg);
+    (i, acc))
+
+main -> i32 =
+  let config = alloc((10, 1));
+  let (stdin, n) = serve(&config, stdin);
+  let (step, bias) = free(config);
+  n + bias

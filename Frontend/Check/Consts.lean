@@ -154,11 +154,21 @@ def finaliser (sp : Span) (src : CVTy) :
 /-- The finaliser's node: the source's destructor. -/
 def finNode (sp : Span) (src : CVTy) : TExpr := .dtor (at_ sp) (.val (.lolli src .unit)) src
 
-/-- The row of an unwinding callback: `Row.Unwind`.  `[spec §19]` -/
-def unwindRow (sp : Span) (x : LifeVar) (S : CRow) : Except Error (PLift (S.Unwind x)) :=
-  if h : Row.unwindB S x = true then pure ⟨Row.unwindB_sound h⟩
-  else err sp ("the row of an unwinding borrow's callback has only abortive operations, of " ++
-    "names other than 0, whose arguments outlive every lifetime and do not mention its lifetime")
+/-- The row of a lend's callback: `Row.Lend`.  `[spec §19, §48]` -/
+def lendRow (sp : Span) (x : LifeVar) (S : CRow) : Except Error (PLift (S.Lend x)) :=
+  if h : Row.lendB S x = true then pure ⟨Row.lendB_sound h⟩
+  else err sp ("the row of a lend's callback has only abortive operations and call-graded linear " ++
+    "ones (`div call`, `n.i call A ~> B`), of names other than 0, whose arguments (and a graded " ++
+    "operation's answers) outlive every lifetime and do not mention its lifetime")
+
+/-- The row of an unwinding callback of `withbor` (3), `withload` and the slice borrows: a lend's
+row with no graded operation (`Row.Unwind`).  `[spec §19, §48]` -/
+def unwindRow (sp : Span) (x : LifeVar) (S : CRow) : Except Error (PLift (S.Unwind x)) := do
+  let ⟨h⟩ ← lendRow sp x S
+  if hg : (S.all fun o => !o.call) = true then
+    pure ⟨h.unwind fun o ho => by simpa using List.all_eq_true.mp hg o ho⟩
+  else err sp ("this borrow's callback cannot hold its lend across a call-graded operation " ++
+    "yet: its row has only abortive operations")
 
 /-- A shape all of whose leaves are plain. -/
 def plainShape (sp : Span) (s : CShape) : Except Error (PLift (s.plain = true)) :=
@@ -178,7 +188,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let x := Δ.freshVar
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
       let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
-      let ⟨hS⟩ ← unwindRow sp x S
+      let ⟨hS⟩ ← lendRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A)
       (cDeadStrict (fun j => .withbor1U (at_ sp) j A B S x (finNode sp (.ref A))) fun hd _ =>
         .withbor1U x hd.toP hx (scopedB_sound hsc) h₁ h₂ hS hdc
@@ -191,7 +201,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let x := Δ.freshVar
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
       let ⟨hside⟩ ← outlivesWitness sp b A
-      let ⟨hS⟩ ← unwindRow sp x S
+      let ⟨hS⟩ ← lendRow sp x S
       let ⟨hdt, hdc, hde⟩ ← finaliser sp (.ref A)
       (cDeadStrict (fun j => .withbor2U (at_ sp) j A B S x (finNode sp (.ref A))) fun hd _ =>
         .withbor2U x hd.toP hx hside h₁ h₂ hS hdc
@@ -511,6 +521,16 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
           (outlivesB_sound _ _ _ hTo) he hd)
   | c@(.withbor1U ..) | c@(.withbor2U ..) | c@(.withbor3U ..) | c@(.withloadU ..)
   | c@(.sliceBorrowMutU ..) | c@(.sliceBorrowImmU ..) => synConstU E Δ T sp c
+  | .iterate St B R r => do
+      -- `iterate` reads its row, which holds `Div` (SPEC §14).
+      let St ← E.elabV Δ St
+      let B ← E.elabV Δ B
+      let R ← E.elabV Δ R
+      let S ← E.elabRow Δ sp r
+      if hS : BoCa.Fig16.LogRel.Core.Row.divB S = true then
+        pure ⟨_, ⟨.iterate (at_ sp) (.val (BoCa.Fig16.LogRel.Core.iterTy S St B R)) S St B R, S, [],
+          (Fam.dead T).map fun _ hd => TTied.iterate (at_ sp) S St B R hS hd⟩⟩
+      else err sp "`iterate`'s row does not hold `Div` (`div`)"
 
 /-- The lifetime of a family at a shape: the lifetime of its first leaf. -/
 def famLife (M : Mode) : CShape → CVTy → Option CLife

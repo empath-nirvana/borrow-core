@@ -1,0 +1,17 @@
+-- A counted `for` over a view bound in the body of a function with a lifetime parameter: the loop
+-- is total, bounded by the view's length (SPEC §16), as the same loop over the parameter itself is.
+--
+-- Answer: i32[3]: the three elements counted.
+
+include slice
+
+fn count<'a>(v: array_imm 'a u8) -> i32 =
+  let (v, w) = array_copy['a, u8] v;
+  let mut k = 0;
+  for x in w { k = k + 1 };
+  k
+
+main -> i32 =
+  let a = array_new[u8] (3, !{ i -> to_u8(i) });
+  let n = count(&a);
+  n

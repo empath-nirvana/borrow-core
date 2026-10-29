@@ -185,3 +185,8 @@ roots = ["DepSpike"]
 name = "NestedFold"
 srcDir = "experiments/NestedFold"
 roots = ["NestedFold"]
+
+[[lean_lib]]
+name = "SuspSpike"
+srcDir = "experiments/SuspSpike"
+roots = ["SuspSpike"]

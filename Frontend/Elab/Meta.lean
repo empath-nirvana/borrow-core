@@ -177,6 +177,7 @@ def _root_.Frontend.Val.takeLends : Val → Val × List Ident
   | .shorten sp m σ l V => let (V', a) := V.takeLends; (.shorten sp m σ l V', a)
   | .run sp M => let (M', a) := M.takeLends; (.run sp M', a)
   | .mark sp k V => let (V', a) := V.takeLends; (.mark sp k V', a)
+  | .reify sp B R r V => (.reify sp B R r V, [])
   | V => (V, [])
 
 /-- The `&c` of the head of a bind, outside nested binders. -/
@@ -192,6 +193,10 @@ def _root_.Frontend.Comp.takeLends : Comp → Comp × List Ident
   | .letPair sp x y V M => let (V', a) := V.takeLends; (.letPair sp x y V' M, a)
   | .perform sp k i V => let (V', a) := V.takeLends; (.perform sp k i V', a)
   | .abort sp k i V => let (V', a) := V.takeLends; (.abort sp k i V', a)
+  -- A borrow's unwinding form (`unwindingC?`), `k <- return CONST; p <- return P; …`: its place.
+  | .bind sp k kA K@(.ret _ (.const _ _)) (.bind sp₂ p pA (.ret psp P) N l₂) l₁ =>
+    let (P', a) := P.takeLends
+    (.bind sp k kA K (.bind sp₂ p pA (.ret psp P') N l₂) l₁, a)
   | M => (M, [])
 end
 
@@ -204,7 +209,7 @@ def _root_.Frontend.Val.synthInj : Val → Bool
   | .pair _ V W => V.synthInj || W.synthInj
   | .unbang _ V | .unbox _ V | .unroll _ V | .inst _ V _ | .sub _ V _ | .boxed _ _ V => V.synthInj
   | .run _ M => M.synthInj
-  | .mark _ _ V => V.synthInj
+  | .mark _ _ V | .reify _ _ _ _ V => V.synthInj
   | _ => false
 
 /-- An injection in a position of a computation whose type the checker synthesizes: the value
@@ -290,6 +295,9 @@ def direct (B : CVTy) : CVTy := match loopOf B with
   | some (B', _) => B'
   | none => B
 
+/-- `U (Loop_Σ B R)`, the type of a loop value at the row `Σ` (`U (loop B R)` at the empty row). -/
+def loopValTy (S : CRow) (B R : CVTy) : CVTy := .thunk (BoCa.Fig16.LogRel.Core.CTy.loopEff S B R)
+
 mutual
 /-- Synthesize a value's type. -/
 def synM : Nat → MCx → Val → MM MTy
@@ -309,6 +317,9 @@ def synM : Nat → MCx → Val → MM MTy
       let tf ← synM n c f
       match tf.walk (← get).sub 64 with
       | .known (.thunk (.arr A (.ret B))) => do chkM n c W (.known A); pure (.known (direct B))
+      | .known T => match divFnOf T with
+        | some (A, _, B, _) => do chkM n c W (.known A); pure (.known B)
+        | none => do let _ ← synM n c W; freshM
       | _ => do let _ ← synM n c W; freshM
     | .unbang _ V => do
       let t ← synM n c V

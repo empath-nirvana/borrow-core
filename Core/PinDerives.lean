@@ -240,11 +240,12 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   step `iterate`: the loop that ticks at each back edge.  `[spec §14]` -/
   | iterate {Δ Γ} (S : Row) (St B R : VTy) (hS : Row.divB S = true) (hΓ : Ctx.DeadP Γ) :
       CDerivesP Δ Γ (.val (.prim .iterate)) (.val (iterTy S St B R))
-  /-- `div_fuel : !U(U(1 ⊸ F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)`, `Σ` without `Div`'s name: the handler of
-  `Div` that answers *next* to the first ticks, as many as the budget, and *close* after.
-  `[spec §14]` -/
-  | divFuel {Δ Γ} (S : Row) (A : VTy) (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
-      CDerivesP Δ Γ (.val divFuelV) (.val (divFuelTy S A))
+  /-- `div_fuel : !U(U(1 ⊸ F_{tick^c, Σ} A) ⊗ I32 ⊸ F_Σ A)`, `Σ` without `Div`'s name, `tick` at
+  either grade: the handler of `Div` that answers *next* to the first ticks, as many as the
+  budget, and *close* after.  `[spec §14, §48]` -/
+  | divFuel {Δ Γ} {c : Bool} (S : Row) (A : VTy) (hS : ∀ o ∈ S, o.n ≠ divEff)
+      (hΓ : Ctx.DeadP Γ) :
+      CDerivesP Δ Γ (.val divFuelV) (.val (divFuelTy S A c))
   /-- `reify_res : !U(U(1 ⊸ F_{tick, Σ}(B ⊕ R)) ⊸ F_Σ U(Loop_Σ B R))`, `Σ` without `Div`'s name, at
   the residual of a result `res : !U(B ⊸ F_Σ R)`, a closed term: the handler of `Div` that makes
   a loop value of a computation.  `[spec §14]` -/
@@ -316,14 +317,14 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- The unwinding form of `withbor` (1): `Ref A` lent as `Imm 'x A` to a callback at a row of
   abortive operations; when it unwinds, the finaliser `d` runs on the source.  `[spec §19]` -/
   | withbor1U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+      (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Lend x)
       (hdc : closedAt 0 d = true) (hd : CDerivesP Δ Γ d (.val (.lolli (.ref A) .unit))) :
       CDerivesP Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S))
-  /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, its side condition
-  non-strict.  `[spec §19, §23]` -/
+  /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, at a lend's row, its side
+  condition non-strict.  `[spec §19, §23, §48]` -/
   | withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
-      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
+      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Lend x)
       (hdc : closedAt 0 d = true) (hd : CDerivesP Δ Γ d (.val (.lolli (.ref A) .unit))) :
       CDerivesP Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S))
   /-- The unwinding form of `withbor` (3): `Mut @a A` reborrowed as `Mut 'x A`.  `[spec §19]` -/
@@ -466,14 +467,17 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `[handle]` at clauses that resume `κ` in tail position: `handle_n e with (h_ret, gs)`, the
   clauses written out from a tuple `gs` of answering functions (`tailTuple`), each at a row `Σ_N`
   of linear operations below `Σ`; an abortive operation's clause is its function itself.  The
-  handled row may hold `Div` (decision 68).  `[spec §14, §19]` -/
+  handled row may hold `Div` (decision 68).  At the grade `c` the handled operations are
+  call-graded and so is every operation of `Σ_N`: the only handler of a graded name.
+  `[spec §14, §19, §48]` -/
   | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
-      {n : UInt32} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
+      {n : UInt32} {c : Bool} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
       (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
       (hc : CDerivesP Δ Γ₁ (.pair Hr Hc) (.val (.tensor (retTy S A R) (ansesTy S SN R E))))
       (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
-      (he : CDerivesP Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
+      (hCN : c = true → ∀ o ∈ SN, o.call = true)
+      (he : CDerivesP Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs c ++ S) A))) :
       CDerivesP Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) e)
         (.comp (CTy.effOf S R))
   /-- `[handle-last]`: `handle_n e with (h_ret, ws, nfs)`, the clauses written out from a tuple

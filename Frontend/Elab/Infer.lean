@@ -26,6 +26,28 @@ open BoCa BoCa.Lifetime
 /-- The depth bound for inference, and for each question to the checker. -/
 def inferFuel : Nat := 1 <<< 20
 
+/-! ### Div functions  `[spec §14]` -/
+
+/-- An entry of a row is `Div`'s `tick`. -/
+def isDivSig (o : BoCa.Fig16.LogRel.Core.OpSig) : Bool :=
+  o.n == BoCa.divEff && o.i == 0 && BoCa.Fig16.LogRel.Core.tickB o.q o.A o.B
+
+/-- The row without `Div`'s entry. -/
+def rowNoDiv (S : CRow) : CRow := S.filter (!isDivSig ·)
+
+/-- A **div function**'s type: `U(A ⊸ F_{div, Σ}(B ⊕ R))`, under `!` and lifetime binders: its
+`A`, `Σ` (the row without `Div`), its result `B` and its residual `R` (SPEC §14). -/
+def divFnOf : CVTy → Option (CVTy × CRow × CVTy × CVTy)
+  | .bang A => divFnOf A
+  | .thunk (.all _ _ (.ret A)) => divFnOf A
+  | .thunk (.arr A C) => do
+    let (S, O) ← effRow? C
+    if !BoCa.Fig16.LogRel.Core.Row.divB S then none
+    match O with
+    | .sum B R => some (A, rowNoDiv S, B, R)
+    | _ => none
+  | _ => none
+
 /-- Identities are numbered in order. -/
 abbrev IM := StateM Nat
 
@@ -86,7 +108,7 @@ def valLends : Val → Bool
   | .lend .. => true
   | .pair _ V W | .app _ V W => valLends V || valLends W
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => valLends V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V | .reify _ _ _ _ V => valLends V
   | _ => false
 
 mutual
@@ -106,6 +128,14 @@ def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → I
     | .mark _ _ V => do
       let a ← inferV n E Δ T exp V
       pure (node a.ty.v? [a])
+    | .reify sp B R r V => do
+      let ty : Option CVTy := do
+        let B ← (E.elabV Δ B).toOption
+        let R ← (E.elabV Δ R).toOption
+        let S ← (E.elabRow Δ sp r).toOption
+        pure (BoCa.Fig16.LogRel.Core.reifyTy S B R)
+      let a ← inferV n E Δ T none V
+      pure (node ty [a])
     | .const sp c =>
       pure (node (match synConst E Δ T sp c with | .ok ⟨A, _⟩ => some A | .error _ => none) [])
     | .pair _ V W => do
@@ -169,6 +199,10 @@ def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → I
       let f ← inferV n E Δ T none V
       let (eW, res) := match f.ty.v? with
         | some (.thunk (.arr A (.ret B))) => (some A, some B)
+        -- A call of a div function in direct style is its result (SPEC §14).
+        | some T => match divFnOf T with
+          | some (A, _, B, _) => (some A, some B)
+          | none => (none, none)
         | _ => (none, none)
       let w ← inferV n E Δ T eW W
       pure (node res [f, w])

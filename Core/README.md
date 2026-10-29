@@ -191,7 +191,16 @@ effect).
   `cwp_handle_last`, SPEC §51) at clauses that work, then resume or cancel `κ`, with `κ`'s cancel
   their unwind finaliser (`cwpF_frame_then`). `divResidual` (`DivPrograms.lean`) is a
   loop holding a cell closed by `div_fuel 3`, tied and run (`div-residual`); `divFuel_every_run`
-  and `runtime_every_run` (`DivRuntime.lean`) are adequacy at the row of `Div`.
+  and `runtime_every_run` (`DivRuntime.lean`) are adequacy at the row of `Div`, at either grade of
+  `tick` (§48); `runtime_main_every_run` and `io_rt_every_run` are the run of a graded `main`,
+  its answer read off (`rtMain`).
+- **Call-graded operations** (`SPEC.md` §48). `Owed` (`EffDefs.lean`) is what a stop owes its
+  continuation: every `Ext`-extension at an ungraded entry (`contShare_ungraded`,
+  `kapRelT_ungraded`), the stop's members at a graded one; `rowLe_gradeAt`/`effWp_gradeAt`
+  (`EffFin.lean`) say grading only weakens. 6.64 and 6.65 at a given lifetime are
+  `wpG_I_frameAt` and `wpG_M_frameAt` (`EffWp.lean`); `EffLend.lean` frames a lend across graded
+  stops (`lendI_frame`, `lendM_frame`, coinductively `cwp_lendI`, `cwp_lendM`) for
+  `withbor1L_compatX` and `withbor2L_compatX`, the rules at `Row.Lend`.
 - **Effect safety** (`SPEC.md` §19 *Laws*, `EffSafety.lean`). Every configuration a typed closed
   program reaches from the empty memory is a value or steps, and is no operation that no live frame
   catches: no `K[perform p]` with `K` free of a handler of `p`'s name, no `K[raise p]` with `K`

@@ -307,6 +307,30 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
       let r ← chkV n E Δ T V A'
       pure ⟨A', r⟩
     | .const sp c => synConst E Δ T sp c
+    | .reify sp B R r V => do
+      -- `reify_res` (SPEC §14): its residual `V` is checked as a closed value at the empty context.
+      let B ← liftM (m := Except Error) (E.elabV Δ B)
+      let R ← liftM (m := Except Error) (E.elabV Δ R)
+      let S ← liftM (m := Except Error) (E.elabRow Δ sp r)
+      if hS : (S.all fun o => o.n != BoCa.divEff) = true then
+        let E₀ : Env := { E with vars := [], own := [], nExt := 0, row := none }
+        let rr ← chkV n E₀ Δ [] V (BoCa.Fig16.LogRel.Core.resTy S B R)
+        if hv : BoCa.isValB rr.t.erase = true then
+          let res : BoCa.Val := ⟨rr.t.erase, BoCa.isVal_of_isValB _ hv⟩
+          have hq : rr.t.erase = Expr.val res := rfl
+          if hcl : BoCa.Fig16.LogRel.Core.closedAt 0 res.1 = true then
+            have hS' : ∀ o ∈ S, o.n ≠ BoCa.divEff := fun o ho => by
+              have := List.all_eq_true.mp hS o ho
+              simpa using this
+            have hu : rr.F.u = [] := List.eq_nil_of_length_eq_zero rr.F.hu
+            have hw : rr.F.w = [] := List.eq_nil_of_length_eq_zero rr.F.hw
+            have hres := rr.F.d [] (by rw [hu, hw]; exact .nil)
+            pure ⟨_, ⟨.reify (at_ sp) (.val (BoCa.Fig16.LogRel.Core.reifyTy S B R)) S B R rr.t,
+              (BoCa.Fig16.LogRel.Core.tickSig :: S) ∪ rr.sigs, rr.pins,
+              (Fam.dead T).map fun _ hd => TTied.reify (at_ sp) S B R res hS' hcl hres hq hd⟩⟩
+          else err sp "internal error: `reify`'s residual is not closed"
+        else err sp "`reify`'s residual must be a value"
+      else err sp "`reify`'s row holds `Div`: it is the row outside the loop"
     | .shorten sp m σ a V => do
       let s ← E.elabS Δ σ
       let al ← E.elabL Δ a

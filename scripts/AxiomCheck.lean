@@ -8,6 +8,7 @@ import Frontend.Check.Handled
 import Frontend.Check.TFacts
 import Frontend.Check.Derived
 import Backend2.Lint
+import Frontend.Elab.DivPlacement
 /-! The theorems `SPEC.md` names, with their axioms. -/
 #print axioms BoCa.Fig16.LogRel.Typed.fundamentalProperty
 #print axioms BoCa.Fig16.LogRel.Typed.adequacy
@@ -688,3 +689,24 @@ import Backend2.Lint
 #print axioms Backend2.Lint.copyable_ofV
 #print axioms Backend2.Lint.droppable_ofV_persistent
 #print axioms Backend2.Lint.droppable_ofV_drop
+#print axioms Frontend.Elab.DivPlacement.sim_loop
+/-! §48: call-graded operations. -/
+#print axioms BoCa.Fig16.LogRel.Core.contShare_ungraded
+#print axioms BoCa.Fig16.LogRel.Core.kapRelT_ungraded
+#print axioms BoCa.Fig16.LogRel.Core.rowLe_gradeAt
+#print axioms BoCa.Fig16.LogRel.Core.effWp_gradeAt
+#print axioms BoCa.Fig16.LogRel.Core.Row.Lend.resumes
+#print axioms BoCa.Fig16.LogRel.Core.wpG_M_frameAt
+#print axioms BoCa.Fig16.LogRel.Core.wpG_I_frameAt
+#print axioms BoCa.Fig16.LogRel.Core.lendM_frame
+#print axioms BoCa.Fig16.LogRel.Core.lendI_frame
+#print axioms BoCa.Fig16.LogRel.Core.cwp_lendM
+#print axioms BoCa.Fig16.LogRel.Core.cwp_lendI
+#print axioms BoCa.Fig16.LogRel.Core.withbor2L_compatX
+#print axioms BoCa.Fig16.LogRel.Core.withbor1L_compatX
+#print axioms BoCa.Fig16.LogRel.Core.handleT_compatC
+#print axioms BoCa.Fig16.LogRel.Core.DivPrograms.divFuel_every_run
+#print axioms BoCa.Fig16.LogRel.Core.runtime_every_run
+#print axioms BoCa.Fig16.LogRel.Core.runtime_main_every_run
+#print axioms BoCa.Fig16.LogRel.Core.io_rt_every_run
+#print axioms Frontend.Check.IORun.rt_every_run

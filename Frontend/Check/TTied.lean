@@ -377,12 +377,12 @@ theorem iterate (S : CRow) (St B R : CVTy) (hS : BoCa.Fig16.LogRel.Core.Row.divB
       (.val (BoCa.Fig16.LogRel.Core.iterTy S St B R)) :=
   ⟨fun _ _ hΞ => .iterate S St B R (rowAt_of_sigsAt hΞ) hS hΓ, .iterate S St B R hS hΓ⟩
 
-/-- `div_fuel` reads its handled row `tick, Σ`.  `[spec §14]` -/
-theorem divFuel (S : CRow) (A : CVTy) (hS : ∀ o ∈ S, o.n ≠ divEff)
+/-- `div_fuel` reads its handled row `tick^c, Σ`.  `[spec §14, §48]` -/
+theorem divFuel (c : Bool) (S : CRow) (A : CVTy) (hS : ∀ o ∈ S, o.n ≠ divEff)
     (hΓ : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) :
-    TTied [] (BoCa.Fig16.LogRel.Core.tickSig :: S) Δ Γ
-      (.divFuel i (.val (BoCa.Fig16.LogRel.Core.divFuelTy S A)) S A)
-      (.val (BoCa.Fig16.LogRel.Core.divFuelTy S A)) :=
+    TTied [] (BoCa.Fig16.LogRel.Core.tickSigG c :: S) Δ Γ
+      (.divFuel i (.val (BoCa.Fig16.LogRel.Core.divFuelTy S A c)) c S A)
+      (.val (BoCa.Fig16.LogRel.Core.divFuelTy S A c)) :=
   ⟨fun _ _ hΞ => .divFuel S A (rowAt_of_sigsAt hΞ) hS hΓ, .divFuel S A hS hΓ⟩
 
 /-- `reify_res` reads its handled row `tick, Σ`, and its residual's premise.  `[spec §14]` -/
@@ -401,7 +401,7 @@ theorem reify {p : Pins} {s : CRow} {t : TExpr} (S : CRow) (B R : CVTy) (res : B
 `CDerivesAt.effHandleT`.  `[spec §14, §19]` -/
 theorem effHandleT (u : Masks) (site : Option HSite) {p₁ p₂ : Pins} {s₁ s₂ : CRow} {Γ₁ Γ₂ : Ctx CVTy}
     {tc te : TExpr} {Hr Hc : BoCa.Expr} {S SN : CRow} {E : List (CQual × CVTy × CVTy)}
-    {fs : Nat → CCTy} {n : UInt32} {A R : CVTy}
+    {fs : Nat → CCTy} {n : UInt32} {c : Bool} {A R : CVTy}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hm : u.Rel Γ₁ Γ₂)
     (hcv : Covers u.u₁ 0 tc.erase ∧ Covers u.u₂ 0 te.erase) (hd : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ₁)
     (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
@@ -410,16 +410,17 @@ theorem effHandleT (u : Masks) (site : Option HSite) {p₁ p₂ : Pins} {s₁ s�
     (qc : tc.erase = .pair Hr Hc) (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n)
     (hlen : E.length ≤ 2 ^ 32) (hSN : BoCa.Fig16.LogRel.Core.RowLe SN S)
     (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
+    (hCN : c = true → ∀ o ∈ SN, o.call = true)
     (he : TTied p₂ s₂ Δ Γ₂ te
-      (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) A))) :
-    TTied (p₁ ++ p₂) ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs ++ S) ∪ (s₁ ∪ s₂)) Δ Γ
-      (.effHandleT i (.comp (effOf S R)) S SN E fs n A R u site te.erase.hin tc te)
+      (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs c ++ S) A))) :
+    TTied (p₁ ++ p₂) ((BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 fs c ++ S) ∪ (s₁ ∪ s₂)) Δ Γ
+      (.effHandleT i (.comp (effOf S R)) S SN E fs n c A R u site te.erase.hin tc te)
       (.comp (effOf S R)) :=
   ⟨fun hn Ξ hΞ => .effHandleT (rowAt_of_union_left hΞ) hs hm hcv hd hHr hHc
       (hc.1 (nilL hn) Ξ (sigsAt_union_left (sigsAt_union_right hΞ))) qc
-      hn0 hnd hnS hlen hSN hLin
+      hn0 hnd hnS hlen hSN hLin hCN
       (he.1 (nilR hn) Ξ (sigsAt_union_right (sigsAt_union_right hΞ))) rfl,
-    .effHandleT hs hm hcv hd hHr hHc hc.2 qc hn0 hnd hnS hlen hSN hLin he.2 rfl⟩
+    .effHandleT hs hm hcv hd hHr hHc hc.2 qc hn0 hnd hnS hlen hSN hLin hCN he.2 rfl⟩
 
 /-! ### Derived forms -/
 

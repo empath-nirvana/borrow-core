@@ -428,11 +428,11 @@ theorem last_cont {δ : LSub} {T' : OpTab} {Px' : Table} (hPx' : Px'.Mono) {G : 
   · obtain ⟨rfl, rfl⟩ := hp
     rw [eq_of_compS_empty_left hcy] at hc
     exact ewp_pureSteps hM (lastN_inl j κ vn y) _ _ ρ
-      ((hk.2 ls (Ext.refl ls σ₂)).1 y τ₂ ρ (hPB _ _ _ hy) (ResU.CompS.comm hc))
+      ((hk.2 ls (Owed.refl _ ls σ₂)).1 y τ₂ ρ (hPB _ _ _ hy) (ResU.CompS.comm hc))
   · obtain ⟨rfl, rfl⟩ := hp
     rw [eq_of_compS_empty_left hcz] at hc
     refine ewp_pureSteps hM (lastN_inr j κ vn z) _ _ ρ ?_
-    have hcan := (hk.2 ls (Ext.refl ls σ₂)).2 hq _ rfl
+    have hcan := (hk.2 ls (Owed.refl _ ls σ₂)).2 hq _ rfl
     refine ewp_frame_plain_or (Row.tab G δ) T' hGT Table.bot Px' hPx' (exitK j vn z)
       (exitK_plain j vn z).1 (exitK_plain j vn z).2 (fun ls => vC true X ls δ z)
       (fun _ _ hs σ h => vC_same hs h) (fun _ _ _ he h => vC_local true X he h) ?_ ?_ ?_
@@ -461,7 +461,7 @@ theorem lastD_run {Tb : Table} {Qout : List SRec → Val → WProp} {en : OpEnt}
     Entails (KapRelT Tb Qout en (some Tk) ls κ)
       (ewpTS ls (.app (.val (lastD κ)) (.val .unit)) (opTable Tk) (fun _ v => ⌜v = Val.unit⌝)) :=
   fun σ h => ewp_pureSteps (opTable_mono _) (lastD_steps κ) _ _ σ
-    ((h.2 ls (Ext.refl ls σ)).2 hq _ rfl)
+    ((h.2 ls (Owed.refl _ ls σ)).2 hq _ rfl)
 
 theorem lastD_post : ∀ (ls : List SRec) (v : Val) (ρ : WRes),
     (fun (_ : List SRec) (v : Val) => (⌜v = Val.unit⌝ : WProp)) ls v ρ → v = .unit ∧ NoOwn ρ :=
@@ -494,7 +494,7 @@ include hnS hlen hVw hVn in
 theorem last_clause_of {i : UInt32} {en : OpEnt}
     (hT : Row.tab (Row.ofEff n E 0 fs ++ S) δ n i = some en) :
     ∃ j, ∃ hj : j < E.length, i.toNat = j ∧
-      en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩ ∧
+      en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j, false⟩ ∧
       clauseAt (lastTuple E 0 (.val vw) (.val vn)) i.toNat =
         some ⟨lastClause j en.abort (.val vw) (.val vn), isVal_lastClause _ _ _ _⟩ ∧
       (∃ g, PureSteps (pickE j (.val vw)) (.val g) ∧
@@ -582,12 +582,12 @@ theorem last_closing (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {ρ :
         · exact closing_of_cwp hy'
       refine closing_then hSd hFd hNZ hSW hFS hFth hFP (lastN j κ vn) (lastD κ)
         (fun ls => KapRel (Row.tab S δ).closeAt (fun ls v => vC true R ls δ v)
-          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩) (some (Row.tab (fs j).rowOf δ))
+          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j, false⟩) (some (Row.tab (fs j).rowOf δ))
           ls κ)
-        KapRelT.same KapRelT.ext (fun hu => absurd hu hSu) lastD_post
+        KapRelT.same (KapRelT.ext rfl) (fun hu => absurd hu hSu) lastD_post
         (fun ls => lastD_run hq ls) _ _ (fun ls w τ hτ => ?_) hyc hK hck
       refine hb.mp (last_cont (T' := (Row.tab S δ).closeAt) (B := B')
-        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩) Table.bot_const.mono
+        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j, false⟩) Table.bot_const.mono
         (tab_le_closeAt hFS hSd hFd) (fun _ _ _ hf => find_not_unr hFS hSu hf) hFX hq
         (fun _ _ _ h => h) hnf (fun ls z τ hz => hb.mpr ?_) ?_)
       · have hf := (hVnf.2 ls (ext_empty' ls₀ ls)) z τ τ hz (compS_empty_left τ)
@@ -675,7 +675,7 @@ def lastP (δ : LSub) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CT
     Val → OpEnt → OpTab → (List SRec → Val → WProp) → Val → Val → Prop :=
   fun κ en Tk Q₁ Nv Dv => ∃ j, ∃ hj : j < E.length, ∃ nfv : Val,
     (E[j].2.2.isZero && E[j].1 != .lin) = false ∧
-    en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩ ∧
+    en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j, false⟩ ∧
     Tk = Row.tab (fs j).rowOf δ ∧ Q₁ = (fun ls v => vC true (.sum E[j].2.2 (Xs j)) ls δ v) ∧
     Nv = lastN j κ vn ∧ Dv = lastD κ ∧ PureSteps (pickE j (.val vn)) (.val nfv) ∧
     vC true (exitTy S R (Xs j)) ls₀ δ nfv PMap.empty
@@ -713,15 +713,15 @@ theorem cwp_handle_last (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
     refine cwpF_frame_then hSd hFd hNZ hSW hFS hFth hFP (lastN j κ vn) (lastD κ)
       (fun ls => KapRelT (divTab (Row.tab S δ) (fun ls v => vC true R ls δ v) Y)
         (fun ls v => vC true R ls δ v)
-        (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩)
+        (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j, false⟩)
         (some (Row.tab (fs j).rowOf δ)) ls κ)
-      KapRelT.same KapRelT.ext (fun hu => absurd hu hSu) lastD_post (fun ls => lastD_run hq ls) _ _
+      KapRelT.same (KapRelT.ext rfl) (fun hu => absurd hu hSu) lastD_post (fun ls => lastD_run hq ls) _ _
       Y (fun ls y' ρ' ρ₂ ρ'' hy' hF hc' => lastY_fold (Or.inr (Or.inl ⟨κ, y', _, _, _, _, _, ρ',
         ρ₂, ⟨j, hj, nfv, ha, rfl, rfl, rfl, rfl, rfl, hnf, hVnf⟩, rfl, hy', hF, hc'⟩)))
       ?_ ?_ hy hk hcy
     · intro ls w τ hτ
       refine last_cont (T' := (Row.tab S δ).erase0) (B := E[j].2.2)
-        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩)
+        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j, false⟩)
         (Table.Const.mono fun _ _ _ _ _ h => h) (tab_le_erase0 hFS hSd hFd)
         (fun _ _ _ hf => find_not_unr hFS hSu hf) hFX hq (fun _ _ _ h => h) hnf
         (fun ls z τ hz => ?_) hτ
@@ -731,7 +731,7 @@ theorem cwp_handle_last (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
       exact hc _ _ _ this
     · intro ls w τ hτ
       refine closing_of_cwpF (last_cont (T' := (Row.tab S δ).erase0) (B := E[j].2.2)
-        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩)
+        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j, false⟩)
         (Table.Const.mono fun _ _ _ _ _ h => h) (tab_le_erase0 hFS hSd hFd)
         (fun _ _ _ hf => find_not_unr hFS hSu hf) hFX hq (fun _ _ _ h => h) hnf
         (fun ls z τ hz => ?_) hτ)
@@ -758,6 +758,9 @@ theorem cwp_handle_last (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
     · -- a tick passes the handler
       intro ls' t Φ Φ' σ hp
       obtain ⟨K₁, en, rfl, hK₁, hT0, ht, hcont⟩ := tickStop_inv hTi hp
+      have heq : en = o.ent δ := by
+        rw [Row.tab_ofEff_ne δ (Ne.symm hnd), hTo0] at hT0; exact (Option.some.inj hT0).symm
+      subst heq
       rw [← Kont.plug_comp]
       refine tickStop_mk hTo0 hTo0' ((hndK (lastH n E vr vw vn)).comp K₁)
         (by rw [hasHnd_comp, hK₁]; simp [lastH, hndK_hasHnd]; exact hnd) fun ls'' he w hw => ?_
@@ -863,12 +866,12 @@ theorem ewp_handle_last (hSd : Row.divB S = false) {ls : List SRec} {e : Expr} {
       have hy' := (cC_effOf SW (.sum E[j].2.2 (Xs j)) ls' δ _ σa hSWd).mp hy
       refine ewp_frame_then δ S SW (fs j).rowOf hNZ hSW hFS hFth hFP (lastN j κ vn) (lastD κ)
         (fun ls => KapRel (Row.tab S δ) (fun ls v => vC true R ls δ v)
-          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩)
+          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j, false⟩)
           (some (Row.tab (fs j).rowOf δ)) ls κ)
-        KapRelT.same KapRelT.ext (fun hu => absurd hu hSu) lastD_post
+        KapRelT.same (KapRelT.ext rfl) (fun hu => absurd hu hSu) lastD_post
         (fun ls => lastD_run hq ls) _ _ (fun ls w τ hτ => ?_) hy' hK hck
       refine hb.mp (last_cont (T' := Row.tab S δ) (B := E[j].2.2)
-        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩)
+        (en := OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j, false⟩)
         Table.bot_const.mono (Row.tab_le δ hFS) (fun _ _ _ hf => find_not_unr hFS hSu hf) hFX hq
         (fun _ _ _ h => h) hnf (fun ls z τ hz => hb.mpr ?_) ?_)
       · have hf := (hVnf.2 ls (ext_empty' ls₀ ls)) z τ τ hz (compS_empty_left τ)

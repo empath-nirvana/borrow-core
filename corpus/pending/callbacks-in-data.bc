@@ -52,4 +52,4 @@ fn apply_all(fs: Fs) -> i32 =
   (unbang (fold_own[1 + !(i32 => i32) * X, i32] (!{ r -> match r { inl _ -> 0 | inr (f, s) -> f(27) + s } }))) fs
 
 main -> i32 = apply_all(cons(double, cons(steps, cons(succ, nil))))
--- now: 28:52: type mismatch: expected `!(i32 => i32)`, but this has type `!(i32 => U (delay i32))`
+-- now: 28:52: type mismatch: expected `!(i32 => i32)`, but this has type `!U (i32 -o F[div] (i32 + 1))`

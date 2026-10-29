@@ -249,7 +249,7 @@ theorem fuel_tick_succ {Tb : Table} (hTb : Tb.Mono) {k : UInt32} (hk : k ≠ 0) 
 /-! ### Totality -/
 
 section
-variable {S : Row} (hS : ∀ o ∈ S, o.n ≠ divEff) (δ : LSub) {Q : List SRec → Val → WProp}
+variable (c : Bool) {S : Row} (hS : ∀ o ∈ S, o.n ≠ divEff) (δ : LSub) {Q : List SRec → Val → WProp}
 
 include hS in
 /-- **An operation of another name passes `div_fuel`**, under its frame. -/
@@ -267,7 +267,7 @@ include hS in
 /-- **`div_fuel` of a computation of `Closing`, the budget spent, is total**: every tick is
 answered *close*, and `Closing`'s least fixed point bounds them. -/
 theorem fuel_closing {ls : List SRec} {e : Expr} {ρ : WRes}
-    (h : Closing (Row.tab (tickSig :: S) δ) Q ls e ρ) :
+    (h : Closing (Row.tab (tickSigG c :: S) δ) Q ls e ρ) :
     ∀ {K : Kont}, FuelFrame 0 K → ewpTS ls (K.plug (hndE fuelH e)) (opTable (Row.tab S δ)) Q ρ := by
   have hM := opTable_mono (Row.tab S δ)
   intro K₀ hK₀
@@ -286,16 +286,16 @@ theorem fuel_closing {ls : List SRec} {e : Expr} {ρ : WRes}
     by_cases hk : m = divEff ∧ i = 0
     · -- a tick, answered *close*
       obtain ⟨rfl, rfl⟩ := hk
-      rw [OpTab.closeAt_key, Row.tab_tick_key] at hT
+      rw [OpTab.closeAt_key, Row.tab_tickG_key c] at hT
       cases hT
-      have ht := tickSig_isTick δ
+      have ht := tickSigG_isTick c δ
       obtain ⟨rfl, rfl⟩ := (ht.2.2.1 ls' v ρa).mp hA
       rw [eq_of_compS_empty_left hcak]
       refine ewp_unfold hM (fuel_tick_zero hM hK K₁ hK₁ ?_)
-      exact (hcont ls' (Ext.refl ls' _)).1 closeV PMap.empty _
+      exact (hcont ls' (Owed.refl _ ls' _)).1 closeV PMap.empty _
         ⟨(ht.2.2.2 ls' closeV _).mpr ⟨Or.inr rfl, rfl⟩, rfl⟩ (ResU.comp_empty_right _) _
         spentK_frame
-    · rw [OpTab.closeAt_ne hk, Row.tab_tick_ne S δ hk] at hT
+    · rw [OpTab.closeAt_ne hk, Row.tab_tickG_ne c S δ hk] at hT
       refine wpG_here _ _ _ σ (Or.inr (fuel_fwd hS δ hK (Φ := fun ls e ρ => ∀ (K : Kont),
         FuelFrame 0 K → ewpTS ls (K.plug (hndE fuelH e)) (opTable (Row.tab S δ)) Q ρ) ?_
         (Or.inl ⟨K₁, m, i, v, en, pure_sep_mk ⟨rfl, hK₁, hT, ha⟩
@@ -304,10 +304,10 @@ theorem fuel_closing {ls : List SRec} {e : Expr} {ρ : WRes}
   · obtain ⟨⟨rfl, hK₁, hT, ha⟩, hrest⟩ := pure_sep_iff.mp hp'
     by_cases hk : m = divEff ∧ i = 0
     · obtain ⟨rfl, rfl⟩ := hk
-      rw [OpTab.closeAt_key, Row.tab_tick_key] at hT
+      rw [OpTab.closeAt_key, Row.tab_tickG_key c] at hT
       cases hT
-      exact absurd ha (by simp [OpEnt.closeOnly, OpSig.ent, OpSig.abort, tickSig, VTy.isZero])
-    · rw [OpTab.closeAt_ne hk, Row.tab_tick_ne S δ hk] at hT
+      exact absurd ha (by simp [OpEnt.closeOnly, OpSig.ent, OpSig.abort, tickSigG, VTy.isZero])
+    · rw [OpTab.closeAt_ne hk, Row.tab_tickG_ne c S δ hk] at hT
       refine wpG_here _ _ _ σ (Or.inr (fuel_fwd hS δ hK (Φ := fun ls e ρ => ∀ (K : Kont),
         FuelFrame 0 K → ewpTS ls (K.plug (hndE fuelH e)) (opTable (Row.tab S δ)) Q ρ) ?_
         (Or.inr ⟨K₁, m, i, v, en, pure_sep_mk ⟨rfl, hK₁, hT, ha⟩ hrest⟩)))
@@ -317,7 +317,7 @@ include hS in
 /-- **`div_fuel` is total**: at every budget, for every computation of `cwp`, in `ewpTS` at the
 rest of the row, by induction on the budget and, inside, on the segment.  `[spec §14]` -/
 theorem fuel_total : ∀ (n : ℕ) (k : UInt32), k.toNat = n → ∀ {K : Kont}, FuelFrame k K →
-    ∀ {ls : List SRec} {e : Expr} {ρ : WRes}, cwp (Row.tab (tickSig :: S) δ) Q ls e ρ →
+    ∀ {ls : List SRec} {e : Expr} {ρ : WRes}, cwp (Row.tab (tickSigG c :: S) δ) Q ls e ρ →
       ewpTS ls (K.plug (hndE fuelH e)) (opTable (Row.tab S δ)) Q ρ := by
   have hM := opTable_mono (Row.tab S δ)
   intro n
@@ -326,7 +326,7 @@ theorem fuel_total : ∀ (n : ℕ) (k : UInt32), k.toNat = n → ∀ {K : Kont},
       intro k hk K hK ls e ρ h
       have hk0 : k = 0 := UInt32.toNat_inj.mp (by simpa using hk)
       subst hk0
-      exact fuel_closing hS δ (closing_of_cwp h) hK
+      exact fuel_closing c hS δ (closing_of_cwp h) hK
   | succ m ih =>
       intro k hk K hK ls e ρ h
       have hk0 : k ≠ 0 := fun h' => by subst h'; simp at hk
@@ -347,31 +347,31 @@ theorem fuel_total : ∀ (n : ℕ) (k : UInt32), k.toNat = n → ∀ {K : Kont},
       rcases ht with ⟨v, rfl, hv⟩ | ht | ht
       · exact ewp_unfold hM (ewp_pureSteps hM (fuel_ret hK v) _ _ σ (ewp_val hM hv))
       · -- another operation passes the handler
-        have hT' : ∀ n i en, (Row.tab (tickSig :: S) δ).erase0 n i = some en →
+        have hT' : ∀ n i en, (Row.tab (tickSigG c :: S) δ).erase0 n i = some en →
             Row.tab S δ n i = some en := by
           intro n i en h'
           unfold OpTab.erase0 at h'
           split at h'
           · cases h'
-          · rwa [Row.tab_tick_ne S δ (by assumption)] at h'
+          · rwa [Row.tab_tickG_ne c S δ (by assumption)] at h'
         refine wpG_here _ _ _ σ (Or.inr (fuel_fwd hS δ hK (Φ := fun ls e ρ => ∀ (K : Kont),
           FuelFrame k K → ewpTS ls (K.plug (hndE fuelH e)) (opTable (Row.tab S δ)) Q ρ) ?_
           (opTable_le (fun n i en h' => ⟨en, hT' n i en h', OpEnt.Le.refl en⟩) ht)))
         exact fun _ _ _ h => h K hK
       · -- a tick, answered *next*
         obtain ⟨K₁, en, rfl, hK₁, hT0, ht', hcont⟩ :=
-          tickStop_inv (Row.divOK_of_divB (Row.divB_tick S) δ) ht
+          tickStop_inv (Row.divOK_of_divB (Row.divB_tickG c S) δ) ht
         refine ewp_unfold hM (fuel_tick_succ hM hk0 hK K₁ hK₁ ?_)
-        exact ih (k - 1) hkm (nextK_frame k) (hcont ls' (Ext.refl ls' σ) nextV (Or.inl rfl)).1
+        exact ih (k - 1) hkm (nextK_frame k) (hcont ls' (Owed.refl _ ls' σ) nextV (Or.inl rfl)).1
 
 end
 
 /-! ### The constant -/
 
 /-- `div_fuel : !U(U(1 ⊸ F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)`, the computation a callback
-`U(1 ⊸ F_{tick, Σ} A)`.  `[spec §14]` -/
-abbrev divFuelTy (S : Row) (A : VTy) : VTy :=
-  .bang (.thunk (.arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSig :: S) A))) (.int .w32))
+`U(1 ⊸ F_{tick, Σ} A)`, `tick` at the grade `c` (ungraded by default).  `[spec §14, §48]` -/
+abbrev divFuelTy (S : Row) (A : VTy) (c : Bool := false) : VTy :=
+  .bang (.thunk (.arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSigG c :: S) A))) (.int .w32))
     (CTy.effOf S A)))
 
 /-- `div_fuel (t, k) ↦* (λg. bounded_fix (fuelStep, (k, g))) (hnd_Div H (t ()))`. -/
@@ -389,9 +389,9 @@ theorem divFuel_steps (t : Val) (k : UInt32) :
   exact .refl
 
 /-- **`div_fuel` is sound**: total at the rest of the row.  `[spec §14]` -/
-theorem divFuel_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy}
+theorem divFuel_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} {c : Bool}
     (hS : ∀ o ∈ S, o.n ≠ divEff) (hΓ : Ctx.DeadP Γ) :
-    SemV Δ Γ (.val divFuelV) (divFuelTy S A) := by
+    SemV Δ Γ (.val divFuelV) (divFuelTy S A c) := by
   refine sem_const hΓ divFuelV_closed fun δ ls _ => ⟨rfl, ?_⟩
   intro ls' _ v σ τ hv hcomp
   rw [eq_of_compS_empty_left hcomp]
@@ -400,10 +400,10 @@ theorem divFuel_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy}
   rw [compS_empty_eq hc]
   refine (cC_effOf S A ls' δ _ σ₁ (Row.divB_of_without hS)).mpr ?_
   refine ewp_pureSteps (opTable_mono _) (divFuel_steps t n) _ _ σ₁ ?_
-  have hM := (cC_effOf_wp (tickSig :: S) A ls' δ _ σ₁).mp
+  have hM := (cC_effOf_wp (tickSigG c :: S) A ls' δ _ σ₁).mp
     (ht ls' (Ext.refl _ _) .unit PMap.empty σ₁ ⟨rfl, rfl⟩ (ResU.comp_empty_right σ₁))
-  rw [Row.divB_tick] at hM
-  exact fuel_total hS δ n.toNat n rfl (fuelK_frame n) hM
+  rw [Row.divB_tickG] at hM
+  exact fuel_total c hS δ n.toNat n rfl (fuelK_frame n) hM
 
 end BoCa.Fig16.LogRel.Core
 

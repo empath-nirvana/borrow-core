@@ -176,9 +176,9 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | effHandleVB hs hd hH _ hn0 hnS hlen hdv _ hΓd hSd ihc ihe =>
       exact .effHandleVB (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen hdv
         ihe (ctxOutlives_append h' hΓd) hSd
-  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin _ ihc ihe =>
+  | effHandleT hs hd hHr hHc _ hn0 hnd hnS hlen hSN hLin hCN _ ihc ihe =>
       exact .effHandleT (splitP_append h' hs) (deadP_append h' hd) hHr.append hHc.append ihc hn0
-        hnd hnS hlen hSN hLin ihe
+        hnd hnS hlen hSN hLin hCN ihe
   | effHandleL hs hd hHr hHw hHn _ hn0 hnd hnS hlen hNZ hAff hSW hSu hFin _ ihc ihe =>
       exact .effHandleL (splitP_append h' hs) (deadP_append h' hd) hHr.append hHw.append
         hHn.append ihc hn0 hnd hnS hlen hNZ hAff hSW hSu hFin ihe

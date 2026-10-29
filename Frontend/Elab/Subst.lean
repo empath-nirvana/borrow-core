@@ -127,6 +127,7 @@ def Const.subst (σ : TySubst) : Const → Const
   | .withloadU a x A B r => .withloadU a x (A.subst σ) (B.subst σ) (r.subst σ)
   | .sliceBorrowMutU x b A B r => .sliceBorrowMutU x b (A.subst σ) (B.subst σ) (r.subst σ)
   | .sliceBorrowImmU x b A B r => .sliceBorrowImmU x b (A.subst σ) (B.subst σ) (r.subst σ)
+  | .iterate St B R r => .iterate (St.subst σ) (B.subst σ) (R.subst σ) (r.subst σ)
 
 /-- A control handler's site (SPEC §19) at a template's instance: its types, at the template's
 type arguments. The handler's own type parameters the site leaves open (`tps`) are named apart
@@ -170,6 +171,7 @@ def Val.subst (σ : TySubst) : Val → Val
   | .sugar sp (.hndCtl i) => .sugar sp (.hndCtl (i.subst σ))
   | .sugar sp s => .sugar sp s
   | .mark sp k V => .mark sp k (V.subst σ)
+  | .reify sp B R r V => .reify sp (B.subst σ) (R.subst σ) (r.subst σ) (V.subst σ)
 
 def Comp.subst (σ : TySubst) : Comp → Comp
   | .ret sp V => .ret sp (V.subst σ)

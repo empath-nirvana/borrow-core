@@ -44,7 +44,7 @@ def OpSig.abort (o : OpSig) : Bool := o.B.isZero && o.q != .lin
 -/
 def OpSig.ent (δ : LSub) (o : OpSig) : OpEnt :=
   ⟨o.q, o.abort, fun ls v => vC true o.A ls δ v, fun ls v => vC true o.B ls δ v,
-    if capB o.q o.B then finObl o.fin δ else none⟩
+    if capB o.q o.B then finObl o.fin δ else none, o.call⟩
 
 /-- The operation table of a row at `δ`. -/
 def Row.tab (S : Row) (δ : LSub) : OpTab := fun n i => (Row.find S n i).map (OpSig.ent δ)
@@ -104,8 +104,8 @@ theorem cC_effOf_wp (S : Row) (R : VTy) (ls : List SRec) (δ : LSub) (e : Expr) 
       simp only [CTy.effOf] at h hr hd
       simp only [CTy.effOf, cC]
       rw [show OpTab.ext o.n o.i ⟨o.q, o.B.isZero && o.q != .lin, fun ls v => vCE none true o.A ls δ v,
-          fun ls v => vCE none true o.B ls δ v, if capB o.q o.B then finObl o.fin δ else none⟩
-          (effTab (CTy.effOf S R) δ) = Row.tab (o :: S) δ from h,
+          fun ls v => vCE none true o.B ls δ v, if capB o.q o.B then finObl o.fin δ else none,
+          o.call⟩ (effTab (CTy.effOf S R) δ) = Row.tab (o :: S) δ from h,
         show effRet (CTy.effOf S R) δ = _ from hr, hd]
 
 /-- **The relation at a row that does not hold `Div`** is `ewpTS` at its table.  `[spec §19]` -/
@@ -169,19 +169,23 @@ theorem FinLeS.trans : ∀ {P P' P'' : Option (List SRec → Expr → WProp)},
   | some _, none, some _, _, h => h.elim
   | some _, some _, some _, h, h' => fun ls e ρ hp => h' ls e ρ (h ls e ρ hp)
 
-/-- `en ≤ en′`: the same operation, and at a capturable one a weaker cancel obligation.
-`[spec §27]` -/
+/-- `en ≤ en′`: the same operation, at a capturable one a weaker cancel obligation, and graded
+where `en` is: a graded stop owes its continuation at fewer lists.  `[spec §27, §48]` -/
 def OpEnt.Le (en en' : OpEnt) : Prop :=
   en.q = en'.q ∧ en.abort = en'.abort ∧ en.PA = en'.PA ∧ en.PB = en'.PB ∧
-    (en.abort = false → en.q ≠ .lin → FinLeS en.fin en'.fin)
+    (en.abort = false → en.q ≠ .lin → FinLeS en.fin en'.fin) ∧ (en.call = true → en'.call = true)
 
 theorem OpEnt.Le.refl (en : OpEnt) : en.Le en :=
-  ⟨rfl, rfl, rfl, rfl, fun _ _ => FinLeS.refl _⟩
+  ⟨rfl, rfl, rfl, rfl, fun _ _ => FinLeS.refl _, id⟩
 
 theorem OpEnt.Le.trans {en en' en'' : OpEnt} (h : en.Le en') (h' : en'.Le en'') : en.Le en'' :=
   ⟨h.1.trans h'.1, h.2.1.trans h'.2.1, h.2.2.1.trans h'.2.2.1, h.2.2.2.1.trans h'.2.2.2.1,
-    fun ha hq => FinLeS.trans (h.2.2.2.2 ha hq)
-      (h'.2.2.2.2 (h.2.1 ▸ ha) (h.1 ▸ hq))⟩
+    fun ha hq => FinLeS.trans (h.2.2.2.2.1 ha hq)
+      (h'.2.2.2.2.1 (h.2.1 ▸ ha) (h.1 ▸ hq)), fun hc => h'.2.2.2.2.2 (h.2.2.2.2.2 hc)⟩
+
+/-- The grade of an entry's table is below its entry's. -/
+theorem OpEnt.Le.call {en en' : OpEnt} (h : en.Le en') : en.call = true → en'.call = true :=
+  h.2.2.2.2.2
 
 /-- `T` is included in `T′`: every entry of `T` is below `T′`'s at its key.  `[spec §19, §27]` -/
 def OpTab.Le (T T' : OpTab) : Prop :=
@@ -200,7 +204,7 @@ theorem cancelOK_le {en en' : OpEnt} (h : en.Le en') (ha : en.abort = false)
     (hq : en.q ≠ .lin) {ls : List SRec} {K : Kont} {ρ : WRes} (hc : cancelOK en ls K ρ) :
     cancelOK en' ls K ρ := by
   intro P' hP'
-  have hf := h.2.2.2.2 ha hq
+  have hf := h.2.2.2.2.1 ha hq
   rw [hP'] at hf
   cases hfin : en.fin with
   | none => rw [hfin] at hf; exact hf.elim
@@ -213,8 +217,8 @@ theorem contShare_le {en en' : OpEnt} (h : en.Le en') (ha : en.abort = false) {l
   have hq := h.1
   have hB := h.2.2.2.1
   refine ⟨fun hu => hc.1 (hq ▸ hu), fun ls' he => ⟨?_, fun hq' => ?_⟩⟩
-  · rw [← hB]; exact (hc.2 ls' he).1
-  · exact cancelOK_le h ha (hq ▸ hq') ((hc.2 ls' he).2 (hq ▸ hq'))
+  · rw [← hB]; exact (hc.2 ls' (he.of_le h.call)).1
+  · exact cancelOK_le h ha (hq ▸ hq') ((hc.2 ls' (he.of_le h.call)).2 (hq ▸ hq'))
 
 theorem errOk_le {T T' : OpTab} (hT : T.Le T') {ls : List SRec} :
     ∀ {err : Option Val} {ρ : WRes}, errOk T ls err ρ → errOk T' ls err ρ
@@ -334,13 +338,15 @@ whose stops owe nothing to the least fixed point.  `K` holds no handler and catc
 of the computation in the hole: resumed with it, at an abortive stop left behind, holding nothing
 owned, and at a cancel carried through `K` by the entry's cancel obligation (`hK`).  At an
 unrestricted operation the frame is empty.  A stop of `Px` with the frame is one of `Px'`
-(`hPx`): a tick at a row holding `Div` (`Core/Div.lean`).  `[spec §14, §19, §27]` -/
-theorem ewp_frame_plain_or (T T' : OpTab) (hTT : T.Le T') (Px Px' : Table) (hPx' : Px'.Mono)
+(`hPx`): a tick at a row holding `Div` (`Core/Div.lean`).  The frame is carried, at each stop, to the lists the stop's continuation is owed at (`hFo`):
+every extension at an ungraded operation, the lists with the stop's members at a graded one.
+`[spec §14, §19, §27, §48]` -/
+theorem ewp_frame_plain_owed (T T' : OpTab) (hTT : T.Le T') (Px Px' : Table) (hPx' : Px'.Mono)
     (K : Kont)
     (hH : ∀ n, K.HasHnd n = false)
     (hC : ∀ n, K.Catches n = false) (Fr : List SRec → WProp)
     (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr ls) (Fr ls'))
-    (hFe : ∀ ls ls' ρ, Ext ls ls' ρ → Fr ls ρ → Fr ls' ρ)
+    (hFo : ∀ n i en, T n i = some en → ∀ ls ls' ρ, Owed en ls ls' ρ → Fr ls ρ → Fr ls' ρ)
     (hW : ∀ n i en, T n i = some en → en.abort = true → ∀ ls ρ, Fr ls ρ → NoOwn ρ)
     (hU : ∀ n i en, T n i = some en → en.q = .unr → ∀ ls ρ, Fr ls ρ → ρ = PMap.empty)
     (hK : ∀ n i en, T n i = some en → en.abort = false → en.q ≠ .lin →
@@ -380,9 +386,9 @@ theorem ewp_frame_plain_or (T T' : OpTab) (hTT : T.Le T') (Px Px' : Table) (hPx'
       · intro w τ₁ τ₂ hB hcτ
         obtain ⟨z, hz, hcz⟩ := compS_exch hk' hcτ
         rw [Kont.plug_comp]
-        exact (hcont ls'' (he.left hk')).1 w τ₁ z hB hz (hFe ls' ls'' σ₂ (he.right hk') hF') hcz
+        exact (hcont ls'' (he.left hk')).1 w τ₁ z hB hz (hFo n i en hT ls' ls'' σ₂ (he.right hk') hF') hcz
       · exact hK n i en hT ha hq ls'' K₁ ρk σ₂ ρk' ((hcont ls'' (he.left hk')).2 hq)
-          (hFe ls' ls'' σ₂ (he.right hk') hF') hk'
+          (hFo n i en hT ls' ls'' σ₂ (he.right hk') hF') hk'
     · -- a `raise`: the frame is left behind
       obtain ⟨⟨rfl, hK₁, hT, ha⟩, ρa, ρn, hcan, hA, hn⟩ := pure_sep_iff.mp hp
       obtain ⟨ρn', hn', hcσ'⟩ := compS_reassoc hcan hcσ
@@ -393,6 +399,28 @@ theorem ewp_frame_plain_or (T T' : OpTab) (hTT : T.Le T') (Px Px' : Table) (hPx'
       rw [catches_comp, hC, hK₁]; rfl
   · -- a stop of the table beside: the frame joins it
     exact wpG_here _ _ _ σ (Or.inr (Or.inr (hPx ls' t _ _ σ₁ σ₂ σ hp hF' hcσ)))
+
+/-- `ewp_frame_plain_owed` with the frame carried along every extension.  `[spec §14, §19, §27]` -/
+theorem ewp_frame_plain_or (T T' : OpTab) (hTT : T.Le T') (Px Px' : Table) (hPx' : Px'.Mono)
+    (K : Kont)
+    (hH : ∀ n, K.HasHnd n = false)
+    (hC : ∀ n, K.Catches n = false) (Fr : List SRec → WProp)
+    (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr ls) (Fr ls'))
+    (hFe : ∀ ls ls' ρ, Ext ls ls' ρ → Fr ls ρ → Fr ls' ρ)
+    (hW : ∀ n i en, T n i = some en → en.abort = true → ∀ ls ρ, Fr ls ρ → NoOwn ρ)
+    (hU : ∀ n i en, T n i = some en → en.q = .unr → ∀ ls ρ, Fr ls ρ → ρ = PMap.empty)
+    (hK : ∀ n i en, T n i = some en → en.abort = false → en.q ≠ .lin →
+      ∀ ls K₁ ρ σ ρ', cancelOK en ls K₁ ρ → Fr ls σ → ResU.CompS ρ σ ρ' →
+        cancelOK en ls (K.comp K₁) ρ')
+    (hPx : ∀ ls t Φ Φ' σ₁ σ₂ σ, Px ls t Φ σ₁ → Fr ls σ₂ → ResU.CompS σ₁ σ₂ σ →
+      Px' ls (K.plug t) Φ' σ)
+    (Q₁ Q : List SRec → Val → WProp)
+    (hk : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls) (ewpTS ls (K.plug (.val v)) (orTab (opTable T') Px') Q)) :
+    ∀ {ls : List SRec} {e : Expr} {ρ : WRes}, ewpTS ls e (orTab (opTable T) Px) Q₁ ρ →
+      ∀ {ρ₂ ρ' : WRes}, Fr ls ρ₂ → ResU.CompS ρ ρ₂ ρ' →
+        ewpTS ls (K.plug e) (orTab (opTable T') Px') Q ρ' :=
+  ewp_frame_plain_owed T T' hTT Px Px' hPx' K hH hC Fr hFs
+    (fun _ _ _ _ ls ls' ρ ho => hFe ls ls' ρ ho.ext) hW hU hK hPx Q₁ Q hk
 
 /-- **A plain frame around an effectful computation** (`ewp_frame_plain_or` with nothing
 beside the table).  `[spec §19, §27]` -/
@@ -690,18 +718,32 @@ theorem hndK_hasHnd (n : UInt32) (qs hr hs : Val) (m : UInt32) :
 theorem dead_hndK (n : UInt32) (qs hr hs : Val) : (hndK (hndVal n qs hr hs)).dead = .hole := by
   simp [Kont.dead, Kont.DeadFrame, hndVal, Val.pair, Val.i32, Expr.val]
 
-/-- The relation of `κ`'s type at an operation's entry: resumed at every answer into `ewpTS` at
-the table `Tb`, and, with weakening, cancelled at `opTable Tk` when its cancel branch has the
-table `Tk` (`Tc = some Tk`), nothing when that branch is `⊤` (`Tc = none`).
-`[spec §14, §19, §27]` -/
+/-- The relation of `κ`'s type at an operation's entry: at every list it is owed at (`Owed`),
+resumed at every answer into `ewpTS` at the table `Tb`, and, with weakening, cancelled at
+`opTable Tk` when its cancel branch has the table `Tk` (`Tc = some Tk`), nothing when that branch
+is `⊤` (`Tc = none`).  `[spec §14, §19, §27, §48]` -/
 def KapRelT (Tb : Table) (Qout : List SRec → Val → WProp) (en : OpEnt) (Tc : Option OpTab)
     (ls : List SRec) (κ : Val) : WProp := fun ρ =>
   (en.q = .unr → ρ = PMap.empty) ∧
-  ∀ ls', Ext ls ls' ρ →
+  ∀ ls', Owed en ls ls' ρ →
     (∀ w : Val, (en.PB ls' w ─⋆
       ewpTS ls' (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val w)) Tb Qout) ρ) ∧
     (en.q ≠ .lin → ∀ Tk, Tc = some Tk →
       ewpTS ls' (.app κ.1 (.val (Val.inj₂ .unit))) (opTable Tk) (fun _ v => ⌜v = Val.unit⌝) ρ)
+
+/-- **Conservativity of the grade at a clause**: at an ungraded entry `κ` is owed at every
+`Ext`-extension, Core's `κ` relation before §48.  `[spec §48]` -/
+theorem kapRelT_ungraded {en : OpEnt} (h : en.call = false) (Tb : Table)
+    (Qout : List SRec → Val → WProp) (Tc : Option OpTab) (ls : List SRec) (κ : Val) :
+    KapRelT Tb Qout en Tc ls κ = fun ρ =>
+      (en.q = .unr → ρ = PMap.empty) ∧
+      ∀ ls', Ext ls ls' ρ →
+        (∀ w : Val, (en.PB ls' w ─⋆
+          ewpTS ls' (.app (.app κ.1 (.val (Val.inj₁ .unit))) (.val w)) Tb Qout) ρ) ∧
+        (en.q ≠ .lin → ∀ Tk, Tc = some Tk →
+          ewpTS ls' (.app κ.1 (.val (Val.inj₂ .unit))) (opTable Tk)
+            (fun _ v => ⌜v = Val.unit⌝) ρ) := by
+  unfold KapRelT Owed; rw [h]
 
 /-- `KapRelT` at the protocol table of a row's operation table.  `[spec §19, §27]` -/
 abbrev KapRel (Tout : OpTab) (Qout : List SRec → Val → WProp) (en : OpEnt) (Tc : Option OpTab)
@@ -859,7 +901,7 @@ theorem ewp_handle_or (Tin Tout : OpTab) (Px Px' : Table) (hPx' : Px'.Mono) (n :
       subst hm
       obtain ⟨c, hc, hna, -⟩ := hop i en hT
       refine wpG_head (fun μ => Head.hop μ m i qs hr hs c v K₁ hc hK₁) rfl _ _ σ ?_
-      have hcan : ∀ ls'', Ext ls' ls'' ρk → en.q ≠ .lin → ∀ Tk, Tc i = some Tk →
+      have hcan : ∀ ls'', Owed en ls' ls'' ρk → en.q ≠ .lin → ∀ Tk, Tc i = some Tk →
           ewpTS ls'' (ccatchE (K₁.dead.plug (raiseE (.val (cancelVal none))))) (opTable Tk)
             (fun _ v => ⌜v = Val.unit⌝) ρk := by
         intro ls'' he hq' Tk hTk
@@ -884,11 +926,11 @@ theorem ewp_handle_or (Tin Tout : OpTab) (Px Px' : Table) (hPx' : Px'.Mono) (n :
             fun ls'' he => ⟨fun w τ₁ τ₂ hB hcτ => ?_, fun hq' => ?_⟩⟩
           · obtain ⟨z, hz, hzτ⟩ := compS_exch hy₁ hcτ
             exact ewp_kappaC_resume hM _ ℓ _ K₁ w
-              ⟨σ₁, z, ResU.CompS.comm hzτ, hcell, (hcont ls'' (Ext.left hy₁ he)).1 w τ₁ z hB hz⟩
+              ⟨σ₁, z, ResU.CompS.comm hzτ, hcell, (hcont ls'' (he.left hy₁)).1 w τ₁ z hB hz⟩
           · first
               | exact absurd hqq hq'
               | exact fun Tk hTk => ewp_kappaC_cancel (opTable_mono Tk) ℓ _ K₁
-                  ⟨σ₁, ρk, ResU.CompS.comm hy₁, hcell, hcan ls'' (Ext.left hy₁ he) hq' Tk hTk⟩
+                  ⟨σ₁, ρk, ResU.CompS.comm hy₁, hcell, hcan ls'' (he.left hy₁) hq' Tk hTk⟩
     · -- an operation of another name passes outward
       refine wpG_here _ _ _ σ (Or.inr (Or.inl (Or.inl ⟨(hndK (hndVal n qs hr hs)).comp K₁, m, i, v, en,
         pure_sep_mk ⟨(Kont.plug_comp _ _ _).symm, ?_, (hTin m i hm) ▸ hT, ha⟩
@@ -962,7 +1004,7 @@ def Row.Unr (S : Row) : Prop := ∃ o ∈ S, o.q = .unr
 /-- A cancel row may perform an unrestricted operation, at some depth: a layer at `unr`, or one in
 the cancel row of a capturable layer.  `[spec §27]` -/
 def CTy.FinUnr : CTy → Prop
-  | .eff _ _ q _ B f C => q = .unr ∨ (capB q B = true ∧ f.FinUnr) ∨ C.FinUnr
+  | .eff _ _ q _ B f _ C => q = .unr ∨ (capB q B = true ∧ f.FinUnr) ∨ C.FinUnr
   | _ => False
 
 /-- A row has an unrestricted operation at its top, or in the cancel row of a capturable operation
@@ -1128,11 +1170,12 @@ abbrev finsNil : Nat → CTy := fun _ => .ret .unit
 
 /-- An effect's operations, as a row of the name `n`: the `j`-th at index `k + j`, with the
 cancel row `fs j`.  `[spec §19, §27]` -/
-def Row.ofEff (n : UInt32) (E : List (Qual × VTy × VTy)) (k : Nat) (fs : Nat → CTy := finsNil) :
-    Row :=
+def Row.ofEff (n : UInt32) (E : List (Qual × VTy × VTy)) (k : Nat) (fs : Nat → CTy := finsNil)
+    (c : Bool := false) : Row :=
   match E with
   | [] => []
-  | (q, A, B) :: E => ⟨n, UInt32.ofNat k, q, A, B, fs 0⟩ :: Row.ofEff n E (k + 1) (fun j => fs (j + 1))
+  | (q, A, B) :: E =>
+      ⟨n, UInt32.ofNat k, q, A, B, fs 0, c⟩ :: Row.ofEff n E (k + 1) (fun j => fs (j + 1)) c
 
 /-- The type of `κ`'s cancel branch at a handler whose outer row is `Σ`, for an operation whose
 cancel row is `F`: `F_{F ⊕ Σ} 1`, the cancel row's operations ahead of `Σ`, or `⊤` when `F` is
@@ -1173,10 +1216,10 @@ def hndTerm (n : UInt32) (qs : List Qual) (ir ic : Nat) (e : Expr) : Expr :=
   .app (.app (.val (.prim .hnd)) (.pair (.val (Val.i32 n))
     (.pair (.val (qualsVal qs)) (.pair (.var ir) (.var ic))))) e
 
-theorem Row.find_ofEff (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : Nat) (fs : Nat → CTy)
-    (m i : UInt32) (o : OpSig), Row.find (Row.ofEff n E k fs) m i = some o →
+theorem Row.find_ofEff (n : UInt32) {c : Bool} : ∀ (E : List (Qual × VTy × VTy)) (k : Nat)
+    (fs : Nat → CTy) (m i : UInt32) (o : OpSig), Row.find (Row.ofEff n E k fs c) m i = some o →
       m = n ∧ ∃ j, ∃ h : j < E.length, i = UInt32.ofNat (k + j) ∧
-        o = ⟨n, UInt32.ofNat (k + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩
+        o = ⟨n, UInt32.ofNat (k + j), E[j].1, E[j].2.1, E[j].2.2, fs j, c⟩
   | [], _, _, _, _, _, h => by simp [Row.ofEff, Row.find] at h
   | (q, A, B) :: E, k, fs, m, i, o, h => by
       unfold Row.find at h
@@ -1191,8 +1234,8 @@ theorem Row.find_ofEff (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : N
         exact ⟨hm, j + 1, by simp; omega, by rw [hi]; congr 1; omega,
           by rw [ho]; simp [show k + 1 + j = k + (j + 1) by omega]⟩
 
-theorem Row.find_ofEff_ne (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : Nat)
-    (fs : Nat → CTy) (m i : UInt32), m ≠ n → Row.find (Row.ofEff n E k fs) m i = none
+theorem Row.find_ofEff_ne (n : UInt32) {c : Bool} : ∀ (E : List (Qual × VTy × VTy)) (k : Nat)
+    (fs : Nat → CTy) (m i : UInt32), m ≠ n → Row.find (Row.ofEff n E k fs c) m i = none
   | [], _, _, _, _, _ => by simp [Row.ofEff, Row.find]
   | (q, A, B) :: E, k, fs, m, i, hm => by
       unfold Row.find
@@ -1247,14 +1290,14 @@ theorem substAll_var_some {γ : List Val} {i : Nat} {v : Val} (hv : γ[i]? = som
 /-- An operation of the handler's name in `Σ` extended by the handler's effect is the effect's
 `j`-th, at index `j`. -/
 theorem Row.tab_ofEff_self {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
-    {δ : LSub} (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) {i : UInt32} {en : OpEnt}
-    (hT : Row.tab (Row.ofEff n E 0 fs ++ S) δ n i = some en) :
+    {c : Bool} {δ : LSub} (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) {i : UInt32}
+    {en : OpEnt} (hT : Row.tab (Row.ofEff n E 0 fs c ++ S) δ n i = some en) :
     ∃ j, ∃ hj : j < E.length, i.toNat = j ∧ i = UInt32.ofNat (0 + j) ∧
-      en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j⟩ := by
+      en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2, fs j, c⟩ := by
   obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
-  have hfo : Row.find (Row.ofEff n E 0 fs) n i = some o := by
+  have hfo : Row.find (Row.ofEff n E 0 fs c) n i = some o := by
     rw [Row.find_append] at hf
-    cases h₁ : Row.find (Row.ofEff n E 0 fs) n i with
+    cases h₁ : Row.find (Row.ofEff n E 0 fs c) n i with
     | some o' => rw [h₁] at hf; exact hf
     | none =>
         rw [h₁] at hf
@@ -1268,8 +1311,8 @@ theorem Row.tab_ofEff_self {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat �
 /-- A handler records its effect's qualifiers: the tag at each operation's index is its
 qualifier's.  `[spec §25]` -/
 theorem capTag_ofEff {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
-    {δ : LSub} (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (i : UInt32) (en : OpEnt)
-    (hT : Row.tab (Row.ofEff n E 0 fs ++ S) δ n i = some en) :
+    {c : Bool} {δ : LSub} (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (i : UInt32)
+    (en : OpEnt) (hT : Row.tab (Row.ofEff n E 0 fs c ++ S) δ n i = some en) :
     capTag (qualsVal (E.map Prod.fst)).1 i.toNat = en.q.tag := by
   obtain ⟨j, hj, hji, -, rfl⟩ := Row.tab_ofEff_self hnS hlen hT
   rw [hji, capTag_qualsVal _ j (by simpa using hj)]

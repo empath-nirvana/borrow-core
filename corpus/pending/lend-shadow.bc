@@ -1,0 +1,32 @@
+-- pending: #58 (an implicit copy of an `imm` borrow, here one read at each turn of a loop; SPEC §42 Open)
+-- now: 29:34: `b` is used twice here, and its type `imm 'io_l2 array i32` is not persistent
+--
+-- A name bound inside a borrow block over a loop, beside a variable of the same name outside it:
+-- the block's `let mut acc` is a variable of its own (SPEC §41, rule R1), and the `acc` read
+-- after the block is `main`'s.
+--
+-- The lend spans the loop's ticks, which the kernel admits at the graded row `div call`
+-- (SPEC §48). The loop then reads the borrow `b` at each turn, so its state threads it and
+-- each turn uses it again; a borrow is not persistent, and an `imm` borrow is not copied
+-- implicitly (#58, SPEC §42 Open), so the checker refuses the second use, as it does
+-- `corpus/reject/lend-iter-borrow.bc`'s.
+--
+-- Once it lands: on the input `1234`, `i32[105]`, `live 0`: 10 + 20 + 30 + 40, the newline's entry
+-- 0, and `main`'s 5.
+fn tab(i: i32) -> i32 = i * 10
+
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let acc = 5;
+  let r = borrow imm t { b ->
+    let mut acc = 0;
+    for c in bytes(&mut stdin) { acc = acc + get(b, to_i32(c) - 48) };
+    acc
+  };
+  acc + r

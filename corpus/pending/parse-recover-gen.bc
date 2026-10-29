@@ -1,13 +1,14 @@
 -- pending: SPEC §14 (a for over a generator that holds a borrow, inside that borrow's block)
--- now: 136:7: the iterator of this `for` holds the borrow of `v`: a borrow block over a loop lends its place again at each step, so what the loop holds between steps must not hold the borrow (SPEC §14, borrow scopes over loops)
+-- now: 136:5: this borrow block's body loops, so its lend is held across the loop's ticks (T1), and its place (a buffer or a literal) has no unwinding form at a row: not provided
 -- `parse-recover.bc` with its tokenizer written as a generator: `tokens` yields each token of a
 -- borrowed view of the source literal, and `main` collects them with a `for` inside the borrow
 -- block of the literal, as a user would: `borrow imm "…" { v -> for t in tokens(v) { … } }`.
 --
 -- Blocked by: a `for` over a generator that holds a borrow, inside that borrow's block. The
 -- generator's loop is a div loop (its `for` over the view yields), so the `for` that drives it is
--- one too, and a borrow block over a loop lends its place per step (SPEC §14): the stored
--- iterator holds the view between steps. `corpus/gen-borrowed.bc` and
+-- one too, and the borrow of the literal is held across its ticks: a lend held across a tick (a
+-- suspension; T1, #172). Tier 2 is open and has no path. The literal's borrow has no unwinding
+-- form at a row besides. `corpus/gen-borrowed.bc` and
 -- `corpus/gen-tokenize-parse.bc` pull such a generator by hand instead. `parse-recover.bc` is
 -- this program with the tokenizer a counted loop that builds a list.
 --

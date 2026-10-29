@@ -1,0 +1,17 @@
+-- A `for` over data whose body has a `for` over `range`, a generator whose body loops: the `for`
+-- over `range` is div, so the counted loop around it is a loop of the machine (its class, SPEC
+-- §14, §16): a loop over its source's cursor, one turn per tick, not one total step.
+--
+-- Answer: i32[30]: `range(0, x)` yields `x` elements for `x` = 0, 1, 2, each adding 10.
+
+include yield
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+main -> i32 =
+  let mut acc = 0;
+  for x in 0..3 { for y in range(0, x) { acc = acc + 10 } };
+  acc

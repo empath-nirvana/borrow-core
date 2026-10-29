@@ -187,7 +187,7 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Elab/Tir.lean` | the sugar's inference nodes: one node per node of a term, with its type, binders (identity, type, class) and effect (`docs/typed-elaboration.md` §1.1) |
 | `Elab/Infer.lean` | the sugar's inference (`TCx.tyV`): a term's type, bidirectionally, in the environment the checker uses; the checker's synthesis answers for the core's substitutions |
 | `Elab/Pipeline.lean` | the pipeline `checkProgram` runs: the sugar, and errors in generated code named by their sugar (`renderError`) |
-| `Elab/LoopLend.lean` | borrow scopes over loops, per observation (SPEC §14): a borrow block whose body loops, `let r = &x` over a loop, and a div function over a borrow, rewritten so that each step borrows the owner again (`hook`, `lentDef`) |
+| `Elab/LoopLend.lean` | borrow scopes and loops (SPEC §14): a borrow block whose body loops (`blockLoops`), elaborated as written at the row `div` for the kernel to refuse; `let r = &x` (`lendLet`) |
 | `Check/Externs.lean` | the standard externs with their roles, models and assurance levels; the `run_io` wrapper; `IORun` (SPEC §11) |
 
 ### Soundness
@@ -323,7 +323,7 @@ of the search; none is a change to `CDerives`.
 The checker applies §19's rules (`Core/Fundamental.lean`) through the builders `rEffSub`,
 `rPerform`, `rRaise`, `rEffLet`, `rEffThen` and `rEffHandle` (`Rules.lean`) and the six unwinding
 borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowLeB`, `Row.nzB`,
-`Row.uniqB`, `Row.weakB`, `Row.unrB`, `Row.unwindB`, `dropB` and `CTy.effLeafB`
+`Row.uniqB`, `Row.weakB`, `Row.unrB`, `Row.lendB`, `dropB` and `CTy.effLeafB`
 (`Decide.lean`), each with its soundness lemma.
 
 * **The current row.** `Env.row` is the row of the returner chain `F_Σ B` a computation is checked

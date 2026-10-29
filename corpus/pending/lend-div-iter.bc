@@ -1,0 +1,46 @@
+-- pending: #58 (an implicit copy of an `imm` borrow, here one read at each turn of a loop; SPEC §42 Open)
+-- now: 39:24: `b` is used twice here, and its type `imm 'a array i32` is not persistent
+--
+-- A div function taking a borrow: `total_at` loops over its argument's entries, and
+-- `main` calls it lending the table's cell, `total_at(&t)`, and from inside a borrow block of the
+-- table, `total_at(b)`.
+--
+-- The div function's loop reads the borrow `b` it is given at each turn, so its state
+-- threads it and each turn uses it again; a borrow is not persistent, and an `imm` borrow is
+-- not copied implicitly (#58, SPEC §42 Open), so the checker refuses the second use, as it does
+-- `corpus/reject/lend-iter-borrow.bc`'s. The lend at the call, across the callee's ticks, is
+-- the kind the kernel admits at the graded row `div call` (SPEC §48); it is not reached.
+--
+-- Once it lands: `i32[200]`, `live 0`: each call sums the entries at 4, 3, 2, 1 of 10 * i.
+
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return ((unbang host[mul32]) (i, i32[10]))
+
+-- The numbers from `n` down to 1.
+def down : i32 => U (iter i32 1 1) =
+  thunkv fun (n : i32) ->
+    f <- return (unbang (unfold[iter i32 1 1, i32] (!thunkv fun (k : i32) ->
+      < case (unbang host[eqz32]) k {
+          inl nz -> return (inl (k, (unbang host[sub32]) (k, i32[1])))
+        | inr z -> return (inr ())
+        },
+        return () >)));
+    return (thunkv nu_in < (nu_out (force f n)).1, (nu_out (force f n)).2 >)
+
+-- The sum of the entries at 4, 3, 2, 1.
+def total_at : !(all 'a < top. imm 'a (array i32) => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (b : imm 'a (array i32)) ->
+    let mut acc = 0;
+    for i in down(4) { acc = acc + get(b, i) };
+    acc)
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let n = total_at(&t);
+  let m = borrow imm t { b -> total_at(b) };
+  n + m

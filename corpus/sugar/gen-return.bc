@@ -1,7 +1,7 @@
 -- `return` inside a generator's loop, not in tail position. `upto` yields `0, 1, …` up to `n`
 -- and returns `n`, or `return`s early with `i` when it reaches `stop`. The `if`'s `else` arm goes
 -- on, so what follows the `if` is moved into it and the `return` is a terminal of the loop's
--- body, which finishes the generator's machine with `i` at once.
+-- body, which leaves the loop with the generator's answer `i` at once.
 -- `gen-return.core.bc` is its elaboration in core, as `bcc desugar` prints it.
 -- Answer: i32[6], 0 + 1 + 2 + 3 before `stop` returns at 4.
 

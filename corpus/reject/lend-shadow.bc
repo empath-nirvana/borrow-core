@@ -1,10 +1,10 @@
--- expect: 21:11: `acc` is bound inside this borrow block, which loops, and read after it: the block is lent per observation in the enclosing body, where its bindings would reach the code after it. Rename `acc` inside the block, or read it there (SPEC §14, borrow scopes over loops)
--- A name bound inside a borrow block over a loop and read after it (SPEC §14, borrow scopes over
--- loops), in core text, whose names are not resolved (SPEC §41). The block's `let mut acc` shadows
--- `main`'s `acc`. The block is lent per observation in `main`'s body, where its loop and its
--- bindings are, so the `acc` read after the block would be the block's: the program is rejected
--- rather than changed in meaning. In a surface body the block's `acc` is a variable of its own
--- (`corpus/lend-shadow.bc`).
+-- expect: 23:34: `b` is used twice here, and its type `imm 'io_l2 array i32` is not persistent
+-- A name bound inside a borrow block over a loop, beside a variable of the same name outside it,
+-- in core text, whose names are not resolved (SPEC §41). The block's body loops, so its lend is held
+-- across the loop's ticks, which the kernel admits at the graded row `div call` (SPEC §48); the loop
+-- reads the borrow `b` at each turn, and a borrow is not persistent, so the kernel refuses the second
+-- use (SPEC §10, §14; an implicit copy of an `imm` borrow is open, #58). In a surface body the
+-- block's `acc` is a variable of its own (`corpus/pending/lend-shadow.bc`).
 
 fn tab(i: i32) -> i32 = i * 10
 
@@ -20,7 +20,7 @@ main : F i32 =
   let acc = 5;
   let r = borrow imm t { b ->
     let mut acc = 0;
-    for c in bytes(&mut stdin) { acc = acc + get(b, c - 48) };
+    for c in bytes(&mut stdin) { acc = acc + get(b, to_i32(c) - 48) };
     acc
   };
   acc + r

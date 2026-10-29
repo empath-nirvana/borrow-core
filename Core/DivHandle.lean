@@ -299,17 +299,17 @@ theorem tailClauseA_steps (j : Nat) (vc g v : Val)
 /-! ### The rows -/
 
 theorem Row.tab_ofEff_ne {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
-    (δ : LSub) {m i : UInt32} (hm : m ≠ n) :
-    Row.tab (Row.ofEff n E 0 fs ++ S) δ m i = Row.tab S δ m i := by
+    {c : Bool} (δ : LSub) {m i : UInt32} (hm : m ≠ n) :
+    Row.tab (Row.ofEff n E 0 fs c ++ S) δ m i = Row.tab S δ m i := by
   simp [Row.tab, Row.find_append, Row.find_ofEff_ne n E 0 fs m i hm]
 
 /-- A handled row of another name holds `Div` as the outer row does. -/
 theorem Row.divB_ofEff_eq {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
-    (hnd : n ≠ divEff) : Row.divB (Row.ofEff n E 0 fs ++ S) = Row.divB S := by
-  have hf : Row.find (Row.ofEff n E 0 fs ++ S) divEff 0 = Row.find S divEff 0 := by
+    {c : Bool} (hnd : n ≠ divEff) : Row.divB (Row.ofEff n E 0 fs c ++ S) = Row.divB S := by
+  have hf : Row.find (Row.ofEff n E 0 fs c ++ S) divEff 0 = Row.find S divEff 0 := by
     rw [Row.find_append, Row.find_ofEff_ne n E 0 fs _ _ (Ne.symm hnd)]; rfl
   cases h : Row.divB S
-  · cases h' : Row.divB (Row.ofEff n E 0 fs ++ S)
+  · cases h' : Row.divB (Row.ofEff n E 0 fs c ++ S)
     · rfl
     · obtain ⟨o, hfo, ho⟩ := Row.divB_find h'
       rw [hf] at hfo
@@ -328,12 +328,26 @@ theorem Row.tab_lin {SN : Row} (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = fa
 theorem KapRelT.same {Tb : Table} {Qout : List SRec → Val → WProp} {en : OpEnt} {Tc : Option OpTab}
     {κ : Val} : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) →
       Entails (KapRelT Tb Qout en Tc ls κ) (KapRelT Tb Qout en Tc ls' κ) :=
-  fun _ _ hs σ h => ⟨h.1, fun ls'' he => h.2 ls'' ((ext_of_same hs σ).trans he)⟩
+  fun _ _ hs _ h => ⟨h.1, fun ls'' he => h.2 ls'' (Owed.same_trans hs he)⟩
 
+/-- `κ`'s relation along an extension, at an ungraded operation.  `[spec §48]` -/
 theorem KapRelT.ext {Tb : Table} {Qout : List SRec → Val → WProp} {en : OpEnt} {Tc : Option OpTab}
-    {κ : Val} : ∀ ls ls' ρ, Ext ls ls' ρ → KapRelT Tb Qout en Tc ls κ ρ →
+    {κ : Val} (hc : en.call = false) : ∀ ls ls' ρ, Ext ls ls' ρ → KapRelT Tb Qout en Tc ls κ ρ →
       KapRelT Tb Qout en Tc ls' κ ρ :=
-  fun _ _ _ he h => ⟨h.1, fun ls'' he' => h.2 ls'' (he.trans he')⟩
+  fun _ _ _ he h => ⟨h.1, fun ls'' he' => h.2 ls'' (Owed.ext_trans hc he he')⟩
+
+/-- `κ`'s relation carried to a list a stop is owed at: along an extension at an ungraded `κ`,
+along the same members where the stop is graded, as it is wherever `κ` is.  `[spec §48]` -/
+theorem KapRelT.owed {Tb : Table} {Qout : List SRec → Val → WProp} {en en' : OpEnt}
+    {Tc : Option OpTab} {κ : Val} (hg : en.call = true → en'.call = true) :
+    ∀ ls ls' ρ, Owed en' ls ls' ρ → KapRelT Tb Qout en Tc ls κ ρ →
+      KapRelT Tb Qout en Tc ls' κ ρ := by
+  intro ls ls' ρ ho h
+  cases hc : en.call
+  · exact KapRelT.ext hc ls ls' ρ ho.ext h
+  · have hc' := hg hc
+    unfold Owed at ho; rw [hc'] at ho
+    exact KapRelT.same ls ls' ho ρ h
 
 /-- The resumption of `κ` at an answer, in the resume frame. -/
 theorem kapRelT_resume {Tb : Table} (hTb : Tb.Mono) {Qout : List SRec → Val → WProp} {en : OpEnt}
@@ -342,7 +356,7 @@ theorem kapRelT_resume {Tb : Table} (hTb : Tb.Mono) {Qout : List SRec → Val �
     ewpTS ls ((resK κ).plug (.val w)) Tb Qout σ := by
   obtain ⟨σ₁, σ₂, hc, hw, hk⟩ := h
   exact ewp_pureSteps hTb (resK_steps κ w) _ _ σ
-    ((hk.2 ls (Ext.refl ls σ₂)).1 w σ₁ σ (by exact hw) (ResU.CompS.comm hc))
+    ((hk.2 ls (Owed.refl en ls σ₂)).1 w σ₁ σ (by exact hw) (ResU.CompS.comm hc))
 
 /-- The frame conditions at a row of linear operations, for any frame. -/
 theorem lin_conds {T : OpTab} (hL : ∀ n i en, T n i = some en → en.q = .lin ∧ en.abort = false)
@@ -364,18 +378,26 @@ def tailH (n : UInt32) (E : List (Qual × VTy × VTy)) (vr vc : Val) : Val :=
 
 section
 variable {δ : LSub} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
-  {A R : VTy} (hnd : n ≠ divEff) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
+  {c : Bool} {A R : VTy} (hnd : n ≠ divEff) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
   (hlen : E.length ≤ 2 ^ 32) (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
+  (hCN : c = true → ∀ o ∈ SN, o.call = true)
   {vr vc : Val} {ls₀ : List SRec}
   (hVr : vC true (retTy S A R) ls₀ δ vr PMap.empty)
   (hVc : vC true (ansesTy S SN R E) ls₀ δ vc PMap.empty)
 
+include hCN in
+/-- At a graded handler every operation of the answering functions' row is graded.  `[spec §48]` -/
+theorem tab_call_of {n' i' : UInt32} {en' : OpEnt} (hT : Row.tab SN δ n' i' = some en') :
+    c = true → en'.call = true := fun hc => by
+  obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
+  exact hCN hc o (Row.find_mem hf).1
+
 include hnS hlen hVc in
 /-- The clause of an operation of the handler, from its entry. -/
 theorem tail_clause_of {i : UInt32} {en : OpEnt}
-    (hT : Row.tab (Row.ofEff n E 0 fs ++ S) δ n i = some en) :
+    (hT : Row.tab (Row.ofEff n E 0 fs c ++ S) δ n i = some en) :
     ∃ j, ∃ hj : j < E.length, en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1,
-      E[j].2.2, fs j⟩ ∧
+      E[j].2.2, fs j, c⟩ ∧
       clauseAt (tailTuple E 0 (.val vc)) i.toNat =
         some ⟨tailClause j en.abort (.val vc), isVal_tailClause _ _ _⟩ ∧
       ∃ g, PureSteps (pickE j (.val vc)) (.val g) ∧
@@ -386,11 +408,11 @@ theorem tail_clause_of {i : UInt32} {en : OpEnt}
   rw [hji, clauseAt_tailTuple _ E 0 j hj]
   simp [OpSig.ent, OpSig.abort]
 
-include hnd hn0 hnS hlen hSN hLin hVr hVc in
+include hnd hn0 hnS hlen hSN hLin hCN hVr hVc in
 /-- **`Closing` under a tail-resuming handler**: Core's `ewp_handle` at the closing tables; a
 clause's answering function is in `Closing` at its linear row, under the resume frame. -/
 theorem tail_closing (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {ρ : WRes}
-    (h : Closing (Row.tab (Row.ofEff n E 0 fs ++ S) δ) (fun ls v => vC true A ls δ v) ls e ρ) :
+    (h : Closing (Row.tab (Row.ofEff n E 0 fs c ++ S) δ) (fun ls v => vC true A ls δ v) ls e ρ) :
     Closing (Row.tab S δ) (fun ls v => vC true R ls δ v) ls (hndE (tailH n E vr vc) e) ρ := by
   have hTo := Row.divOK_of_divB hSd δ
   have hTN := Row.divOK_of_le hSN hSd δ
@@ -432,9 +454,10 @@ theorem tail_closing (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {ρ :
         · exact closing_of_cwp hy'
       obtain ⟨hW, hU, hK'⟩ := lin_conds (fun _ _ _ h => Row.tab_lin hLin δ h) (resK κ)
         (fun ls => KapRelT (opTable (Row.tab S δ).closeAt) (fun ls v => vC true R ls δ v)
-          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩) none ls κ)
-      exact closing_frame hSNle (resK κ) (resK_plain κ).1 (resK_plain κ).2 _ KapRelT.same
-        KapRelT.ext hW hU hK' _ _ (fun ls w τ hτ => kapRelT_resume (opTable_mono _) hτ) hyc hK
+          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j, c⟩) none ls κ)
+      exact closing_frame_owed hSNle (resK κ) (resK_plain κ).1 (resK_plain κ).2 _ KapRelT.same
+        (fun _ _ _ hT' => KapRelT.owed (tab_call_of hCN hT')) hW hU hK' _ _
+        (fun ls w τ hτ => kapRelT_resume (opTable_mono _) hτ) hyc hK
         hck
     · -- an abortive operation's clause runs `g v`, at the outer row
       show ewpTS ls' (.app (tailClause j (OpSig.ent δ _).abort (.val vc)) (.val v)) _ _ σ
@@ -461,7 +484,8 @@ def tailW₁ (Ti : OpTab) (Qin : List SRec → Val → WProp) (H : Val) : CPred 
 `Z`. -/
 def tailW₂ (TN To : OpTab) (Qout : List SRec → Val → WProp) (Z : CPred) : CPred :=
   fun ls x ρ => ∃ (κ : Val) (y : Expr) (en : OpEnt) (ρy ρk : WRes), x = (resK κ).plug y ∧
-    cwp TN en.PB ls y ρy ∧ KapRelT (divTab To Qout Z) Qout en none ls κ ρk ∧ ResU.CompS ρy ρk ρ
+    cwp TN en.PB ls y ρy ∧ KapRelT (divTab To Qout Z) Qout en none ls κ ρk ∧ ResU.CompS ρy ρk ρ ∧
+    ∀ n i en', TN n i = some en' → en.call = true → en'.call = true
 
 /-- One step of the candidate. -/
 def tailG (Ti TN To : OpTab) (Qin Qout : List SRec → Val → WProp) (H : Val) (Z : CPred) : CPred :=
@@ -476,9 +500,10 @@ variable {Ti TN To : OpTab} {Qin Qout : List SRec → Val → WProp} {H : Val}
 
 theorem tailG_mono {Z Z' : CPred} (h : ∀ ls x ρ, Z ls x ρ → Z' ls x ρ) {ls : List SRec} {x : Expr}
     {ρ : WRes} (hg : tailG Ti TN To Qin Qout H Z ls x ρ) : tailG Ti TN To Qin Qout H Z' ls x ρ := by
-  rcases hg with hg | ⟨κ, y, en, ρy, ρk, rfl, hy, hk, hc⟩ | hg
+  rcases hg with hg | ⟨κ, y, en, ρy, ρk, rfl, hy, hk, hc, hgr⟩ | hg
   · exact Or.inl hg
-  · refine Or.inr (Or.inl ⟨κ, y, en, ρy, ρk, rfl, hy, KapRelT.mono (fun _ _ _ h' => ?_) hk, hc⟩)
+  · refine Or.inr (Or.inl ⟨κ, y, en, ρy, ρk, rfl, hy, KapRelT.mono (fun _ _ _ h' => ?_) hk, hc,
+      hgr⟩)
     exact ewp_mono (divTab_mono _ _ _) (fun _ _ _ _ hd => divTab_le h (fun _ _ _ h => h) hd)
       (fun _ _ _ h => h) h'
   · exact Or.inr (Or.inr hg)
@@ -496,19 +521,20 @@ end candidate
 
 section
 variable {δ : LSub} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
-  {A R : VTy} (hnd : n ≠ divEff) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
+  {c : Bool} {A R : VTy} (hnd : n ≠ divEff) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
   (hlen : E.length ≤ 2 ^ 32) (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
+  (hCN : c = true → ∀ o ∈ SN, o.call = true)
   {vr vc : Val} {ls₀ : List SRec}
   (hVr : vC true (retTy S A R) ls₀ δ vr PMap.empty)
   (hVc : vC true (ansesTy S SN R E) ls₀ δ vc PMap.empty)
 
-include hnd hn0 hnS hlen hSN hLin hVr hVc in
+include hnd hn0 hnS hlen hSN hLin hCN hVr hVc in
 /-- **`[handle]` of another name at clauses that resume in tail position**, at a row holding
 `Div`, by coinduction with the candidate `tailY`.  `[spec §14, §19]` -/
 theorem cwp_handle_tail (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {ρ : WRes}
-    (h : cwp (Row.tab (Row.ofEff n E 0 fs ++ S) δ) (fun ls v => vC true A ls δ v) ls e ρ) :
+    (h : cwp (Row.tab (Row.ofEff n E 0 fs c ++ S) δ) (fun ls v => vC true A ls δ v) ls e ρ) :
     cwp (Row.tab S δ) (fun ls v => vC true R ls δ v) ls (hndE (tailH n E vr vc) e) ρ := by
-  have hSbd : Row.divB (Row.ofEff n E 0 fs ++ S) = true := by rw [Row.divB_ofEff_eq hnd]; exact hSd
+  have hSbd : Row.divB (Row.ofEff n E 0 fs c ++ S) = true := by rw [Row.divB_ofEff_eq hnd]; exact hSd
   have hTi := Row.divOK_of_divB hSbd δ
   have hTo := Row.divOK_of_divB hSd δ
   have hTN := Row.divOK_of_le hSN hSd δ
@@ -518,28 +544,28 @@ theorem cwp_handle_tail (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
   have hTo0' := OpSig.isTick_ent δ hto
   -- the parts of the candidate, one segment each
   have hc : ∀ ls x ρ, cwp (Row.tab S δ) (fun ls v => vC true R ls δ v) ls x ρ →
-      cwpF (Row.tab S δ) (fun ls v => vC true R ls δ v) (tailY (Row.tab (Row.ofEff n E 0 fs ++ S) δ)
+      cwpF (Row.tab S δ) (fun ls v => vC true R ls δ v) (tailY (Row.tab (Row.ofEff n E 0 fs c ++ S) δ)
         (Row.tab SN δ) (Row.tab S δ) (fun ls v => vC true A ls δ v) (fun ls v => vC true R ls δ v)
         (tailH n E vr vc)) ls x ρ :=
     fun _ _ _ h => cwpF_mono (fun _ _ _ h => tailY_fold (Or.inr (Or.inr h))) (cwp_out h)
   have hW₂ : ∀ ls x ρ, tailW₂ (Row.tab SN δ) (Row.tab S δ) (fun ls v => vC true R ls δ v)
-      (tailY (Row.tab (Row.ofEff n E 0 fs ++ S) δ) (Row.tab SN δ) (Row.tab S δ)
+      (tailY (Row.tab (Row.ofEff n E 0 fs c ++ S) δ) (Row.tab SN δ) (Row.tab S δ)
         (fun ls v => vC true A ls δ v) (fun ls v => vC true R ls δ v) (tailH n E vr vc)) ls x ρ →
-      cwpF (Row.tab S δ) (fun ls v => vC true R ls δ v) (tailY (Row.tab (Row.ofEff n E 0 fs ++ S) δ)
+      cwpF (Row.tab S δ) (fun ls v => vC true R ls δ v) (tailY (Row.tab (Row.ofEff n E 0 fs c ++ S) δ)
         (Row.tab SN δ) (Row.tab S δ) (fun ls v => vC true A ls δ v) (fun ls v => vC true R ls δ v)
         (tailH n E vr vc)) ls x ρ := by
-    rintro ls x ρ ⟨κ, y, en, ρy, ρk, rfl, hy, hk, hcy⟩
+    rintro ls x ρ ⟨κ, y, en, ρy, ρk, rfl, hy, hk, hcy, hgr⟩
     obtain ⟨hW, hU, hK⟩ := lin_conds (fun _ _ _ h => Row.tab_lin hLin δ h) (resK κ)
       (fun ls => KapRelT (divTab (Row.tab S δ) (fun ls v => vC true R ls δ v) _) _ en none ls κ)
-    exact cwpF_frame hTN hTo hSNle (resK κ) (resK_plain κ).1 (resK_plain κ).2 _ KapRelT.same
-      KapRelT.ext hW hU hK en.PB _ _
+    exact cwpF_frame_owed hTN hTo hSNle (resK κ) (resK_plain κ).1 (resK_plain κ).2 _ KapRelT.same
+      (fun _ _ _ hT' => KapRelT.owed (hgr _ _ _ hT')) hW hU hK en.PB _ _
       (fun ls y' ρ' ρ₂ ρ'' hy' hF hc' => tailY_fold (Or.inr (Or.inl ⟨κ, y', en, ρ', ρ₂, rfl, hy', hF,
-        hc'⟩)))
+        hc', hgr⟩)))
       (fun ls w σ hσ => kapRelT_resume (divTab_mono _ _ _) hσ)
       (fun ls w σ hσ => closing_of_cwpF (kapRelT_resume (divTab_mono _ _ _) hσ)) hy hk hcy
-  have hW₁ : ∀ ls x ρ, tailW₁ (Row.tab (Row.ofEff n E 0 fs ++ S) δ) (fun ls v => vC true A ls δ v)
+  have hW₁ : ∀ ls x ρ, tailW₁ (Row.tab (Row.ofEff n E 0 fs c ++ S) δ) (fun ls v => vC true A ls δ v)
       (tailH n E vr vc) ls x ρ →
-      cwpF (Row.tab S δ) (fun ls v => vC true R ls δ v) (tailY (Row.tab (Row.ofEff n E 0 fs ++ S) δ)
+      cwpF (Row.tab S δ) (fun ls v => vC true R ls δ v) (tailY (Row.tab (Row.ofEff n E 0 fs c ++ S) δ)
         (Row.tab SN δ) (Row.tab S δ) (fun ls v => vC true A ls δ v) (fun ls v => vC true R ls δ v)
         (tailH n E vr vc)) ls x ρ := by
     rintro ls x ρ ⟨e, rfl, he⟩
@@ -556,13 +582,16 @@ theorem cwp_handle_tail (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
     · -- a tick passes the handler
       intro ls' t Φ Φ' σ hp
       obtain ⟨K₁, en, rfl, hK₁, hT0, ht, hcont⟩ := tickStop_inv hTi hp
+      have heq : en = o.ent δ := by
+        rw [Row.tab_ofEff_ne δ (Ne.symm hnd), hTo0] at hT0; exact (Option.some.inj hT0).symm
+      subst heq
       rw [← Kont.plug_comp]
       refine tickStop_mk hTo0 hTo0' ((hndK (tailH n E vr vc)).comp K₁)
         (by rw [hasHnd_comp, hK₁]; simp [tailH, hndK_hasHnd]; exact hnd) fun ls'' he w hw => ?_
       have ho := hcont ls'' he w hw
       rw [Kont.plug_comp]
       exact ⟨tailY_fold (Or.inl ⟨_, rfl, ho.1⟩),
-        tail_closing hnd hn0 hnS hlen hSN hLin hVr hVc hSd ho.2⟩
+        tail_closing hnd hn0 hnS hlen hSN hLin hCN hVr hVc hSd ho.2⟩
     · intro ls' v σ hv
       have hf := (hVr.2 ls' (ext_empty' ls₀ ls')) v σ σ hv (compS_empty_left σ)
       have := (cC_effOf_wp S R ls' δ _ σ).mp hf
@@ -585,12 +614,12 @@ theorem cwp_handle_tail (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
         refine ewp_pureSteps (divTab_mono _ _ _) (tailClause_steps j vc g v κ hg) _ _ σ ?_
         have hy := (hVg.2 ls' (ext_empty' ls₀ ls')) v σa σa hA'' (compS_empty_left σa)
         have hy' := (cC_effOf_wp SN B' ls' δ _ σa).mp hy
-        have hyc : cwp (Row.tab SN δ) (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩).PB ls'
+        have hyc : cwp (Row.tab SN δ) (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j, c⟩).PB ls'
             (.app (.val g) (.val v)) σa := by
           cases hb : Row.divB SN <;> rw [hb] at hy'
           · exact cwp_of_ewp hTN.keyNA hy'
           · exact hy'
-        exact hW₂ _ _ _ ⟨κ, _, _, σa, σk, rfl, hyc, hK, hck⟩
+        exact hW₂ _ _ _ ⟨κ, _, _, σa, σk, rfl, hyc, hK, hck, fun _ _ _ hT' => tab_call_of hCN hT'⟩
       · show ewpTS ls' (.app (tailClause j (OpSig.ent δ _).abort (.val vc)) (.val v)) _ _ σ
         rw [ha]
         generalize hEj : E[j] = t at hVg ha hσ
@@ -602,7 +631,7 @@ theorem cwp_handle_tail (hSd : Row.divB S = true) {ls : List SRec} {e : Expr} {�
         have hy' := (cC_effOf_wp S R ls' δ _ σ).mp hy
         rw [hSd] at hy'
         exact hc _ _ _ hy'
-  refine cwp_coind (W := tailY (Row.tab (Row.ofEff n E 0 fs ++ S) δ) (Row.tab SN δ) (Row.tab S δ)
+  refine cwp_coind (W := tailY (Row.tab (Row.ofEff n E 0 fs c ++ S) δ) (Row.tab SN δ) (Row.tab S δ)
     (fun ls v => vC true A ls δ v) (fun ls v => vC true R ls δ v) (tailH n E vr vc))
     (fun ls x ρ hy => ?_) (tailY_fold (Or.inl ⟨e, rfl, h⟩))
   rcases tailY_unfold hy with hx | hx | hx
@@ -614,17 +643,18 @@ end
 
 section
 variable {δ : LSub} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32}
-  {A R : VTy} (hnd : n ≠ divEff) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
+  {c : Bool} {A R : VTy} (hnd : n ≠ divEff) (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
   (hlen : E.length ≤ 2 ^ 32) (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
+  (hCN : c = true → ∀ o ∈ SN, o.call = true)
   {vr vc : Val} {ls₀ : List SRec}
   (hVr : vC true (retTy S A R) ls₀ δ vr PMap.empty)
   (hVc : vC true (ansesTy S SN R E) ls₀ δ vc PMap.empty)
 
-include hnd hn0 hnS hlen hSN hLin hVr hVc in
+include hnd hn0 hnS hlen hSN hLin hCN hVr hVc in
 /-- **A tail-resuming handler at a row that does not hold `Div`**: Core's `ewp_handle`; a
 clause's answering function runs at its linear row under the resume frame. -/
 theorem ewp_handle_tail (hSd : Row.divB S = false) {ls : List SRec} {e : Expr} {ρ : WRes}
-    (h : ewpTS ls e (opTable (Row.tab (Row.ofEff n E 0 fs ++ S) δ)) (fun ls v => vC true A ls δ v) ρ) :
+    (h : ewpTS ls e (opTable (Row.tab (Row.ofEff n E 0 fs c ++ S) δ)) (fun ls v => vC true A ls δ v) ρ) :
     ewpTS ls (hndE (tailH n E vr vc) e) (opTable (Row.tab S δ)) (fun ls v => vC true R ls δ v) ρ := by
   have hSNd : Row.divB SN = false := by
     cases hb : Row.divB SN
@@ -651,13 +681,14 @@ theorem ewp_handle_tail (hSd : Row.divB S = false) {ls : List SRec} {e : Expr} {
       refine ewp_pureSteps (opTable_mono _) (tailClause_steps j vc g v κ hg) _ _ σ ?_
       have hy := (hVg.2 ls' (ext_empty' ls₀ ls')) v σa σa hA'' (compS_empty_left σa)
       have hy' : ewpTS ls' (.app (.val g) (.val v)) (opTable (Row.tab SN δ))
-          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩).PB σa :=
+          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j, c⟩).PB σa :=
         (cC_effOf SN B' ls' δ _ σa hSNd).mp hy
       obtain ⟨hW, hU, hK'⟩ := lin_conds (fun _ _ _ h => Row.tab_lin hLin δ h) (resK κ)
         (fun ls => KapRel (Row.tab S δ) (fun ls v => vC true R ls δ v)
-          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j⟩) none ls κ)
-      exact (ewp_orBot (opTable_mono _)).mp (ewp_frame_plain_or _ _ hSNle Table.bot Table.bot
-        Table.bot_const.mono (resK κ) (resK_plain κ).1 (resK_plain κ).2 _ KapRelT.same KapRelT.ext
+          (OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), q, A', B', fs j, c⟩) none ls κ)
+      exact (ewp_orBot (opTable_mono _)).mp (ewp_frame_plain_owed _ _ hSNle Table.bot Table.bot
+        Table.bot_const.mono (resK κ) (resK_plain κ).1 (resK_plain κ).2 _ KapRelT.same
+        (fun _ _ _ hT' => KapRelT.owed (tab_call_of hCN hT'))
         hW hU hK' (fun _ _ _ _ _ _ _ h => h.elim) _ _
         (fun ls w τ hτ => (ewp_orBot (opTable_mono _)).mpr (kapRelT_resume (opTable_mono _) hτ))
         ((ewp_orBot (opTable_mono _)).mpr hy') hK hck)
@@ -678,12 +709,13 @@ clauses written out from the answering functions `gs` (`tailTuple`).  At a row h
 handled computation's ticks pass the handler (`cwp_handle_tail`); elsewhere it is Core's handler
 (`ewp_handle_tail`).  `[spec §14, §19]` -/
 theorem handleT_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hc e : Expr} {S SN : Row}
-    {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {A R : VTy}
+    {E : List (Qual × VTy × VTy)} {fs : Nat → CTy} {n : UInt32} {c : Bool} {A R : VTy}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)
     (hc : SemV Δ Γ₁ (.pair Hr Hc) (.tensor (retTy S A R) (ansesTy S SN R E)))
     (hn0 : n ≠ 0) (hnd : n ≠ divEff) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (hSN : RowLe SN S) (hLin : ∀ o ∈ SN, o.q = .lin ∧ o.abort = false)
-    (he : SemC Δ Γ₂ e (CTy.effOf (Row.ofEff n E 0 fs ++ S) A)) :
+    (hCN : c = true → ∀ o ∈ SN, o.call = true)
+    (he : SemC Δ Γ₂ e (CTy.effOf (Row.ofEff n E 0 fs c ++ S) A)) :
     SemC Δ Γ (hndExpr n (E.map Prod.fst) (.pair Hr (tailTuple E 0 Hc)) e) (CTy.effOf S R) := by
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc12, hg₁, hg₂⟩ := gDenC_split hsp hg
@@ -727,14 +759,14 @@ theorem handleT_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {Hr Hc e : Exp
     intro ρf fρ ps hf hcf hT htg Al k
     obtain ⟨ls', vr, vc, h₁, h₂, hVr, hVc⟩ := key ρf fρ ps hf hcf hT htg
     rw [h₁, h₂]
-    exact ewp_unfold (opTable_mono _) (ewp_handle_tail (fs := fs) hnd hn0 hnS hlen hSN hLin hVr hVc
+    exact ewp_unfold (opTable_mono _) (ewp_handle_tail (fs := fs) hnd hn0 hnS hlen hSN hLin hCN hVr hVc
       hSd hE') ρf fρ ps hf hcf hT htg Al k
   · refine cwp_roll (ewp_fold (divTab_mono _ _ _) ?_)
     intro ρf fρ ps hf hcf hT htg Al k
     obtain ⟨ls', vr, vc, h₁, h₂, hVr, hVc⟩ := key ρf fρ ps hf hcf hT htg
     rw [h₁, h₂]
     exact ewp_unfold (divTab_mono _ _ _) (cwp_out (cwp_handle_tail (fs := fs) hnd hn0 hnS hlen hSN
-      hLin hVr hVc hSd hE')) ρf fρ ps hf hcf hT htg Al k
+      hLin hCN hVr hVc hSd hE')) ρf fρ ps hf hcf hT htg Al k
 
 /-! ### Closed terms -/
 

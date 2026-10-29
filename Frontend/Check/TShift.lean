@@ -208,8 +208,8 @@ def TExpr.shift (d c : Nat) : TExpr → TExpr
       .effHandleV i j S E fs n A R (u.ins d c) ks st ins (tc.shift d c) (te.shift d c)
   | .effHandleVB i j S E fs n A R a u ks st ins tc te =>
       .effHandleVB i j S E fs n A R a (u.ins d c) ks st ins (tc.shift d c) (te.shift d c)
-  | .effHandleT i j S SN E fs n A R u st ins tc te =>
-      .effHandleT i j S SN E fs n A R (u.ins d c) st ins (tc.shift d c) (te.shift d c)
+  | .effHandleT i j S SN E fs n cg A R u st ins tc te =>
+      .effHandleT i j S SN E fs n cg A R (u.ins d c) st ins (tc.shift d c) (te.shift d c)
   | .effHandleL i j S SW E fs Xs n A R u st ins tc te =>
       .effHandleL i j S SW E fs Xs n A R (u.ins d c) st ins (tc.shift d c) (te.shift d c)
   | .letPoly i j C j' tV tN => .letPoly i j C j' tV (tN.shift d (c + 1))

@@ -143,6 +143,7 @@ def Const.renameLife (f : Span → String → Life) : Const → Const
       .sliceBorrowMutU (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)
   | .sliceBorrowImmU x b A B r =>
       .sliceBorrowImmU (x.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f) (r.renameLife f)
+  | .iterate St B R r => .iterate (St.renameLife f) (B.renameLife f) (R.renameLife f) (r.renameLife f)
 
 mutual
 def Val.renameLife (f : Span → String → Life) : Val → Val
@@ -172,6 +173,7 @@ def Val.renameLife (f : Span → String → Life) : Val → Val
   | .lend s x m => .lend s (x.renameLife f) m
   | .sugar s g => .sugar s g
   | .mark s k V => .mark s k (V.renameLife f)
+  | .reify s B R r V => .reify s (B.renameLife f) (R.renameLife f) (r.renameLife f) (V.renameLife f)
 
 def Comp.renameLife (f : Span → String → Life) : Comp → Comp
   | .ret s V => .ret s (V.renameLife f)

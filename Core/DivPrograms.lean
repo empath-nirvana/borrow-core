@@ -154,7 +154,7 @@ theorem dAt_divResidual : CDerivesAt ΞDiv Δ [] divResidual (.comp (.ret I)) :=
     (.ret (.tensorI (.left .nil) (.thunkV rfl (.lamDead dAt_loopB)) (.lit (.i32 3) (.cons .nil))))
     ?_
   refine .bind (.right (.dead .nil))
-    (.ret (.bangE (.divFuel [] Ans (by simpa using rowAt_Sg) (fun _ h => absurd h List.not_mem_nil)
+    (.ret (.bangE (.divFuel (c := false) [] Ans (by simpa [tickSigG_false] using rowAt_Sg) (fun _ h => absurd h List.not_mem_nil)
       (.cons (.cons .nil))))) ?_
   refine .bind (.left (.left (.dead .nil)))
     (.app (.left (.right (.dead .nil)))
@@ -184,20 +184,21 @@ def fuelRun (t : Expr) (k : UInt32) : Expr :=
   bindE (.pair t (i32E k)) (bindE (.val divFuelV) (.app (.var 0) (.var 1)))
 
 /-- **`div_fuel` closes a computation that ticks**: for a closed callback `t` at the row of `Div`
-alone and every budget `k`, every run of `div_fuel (t, k)` from the empty memory continues to a
+alone, `tick` at either grade, and every budget `k`, every run of `div_fuel (t, k)` from the empty memory continues to a
 value.  The relation at `t ()`'s row is `cwp` (`effWp`); `div_fuel`'s rule and the Fundamental
 Property carry it to `F A`, and `total_every_run` reads it there.  `[spec §14]` -/
-theorem divFuel_every_run {t : Expr} {A : VTy}
-    (ht : CDerives LifeCtx.empty [] t (.val (.thunk (.arr .unit (CTy.effOf [tickSig] A)))))
+theorem divFuel_every_run {t : Expr} {A : VTy} {c : Bool}
+    (ht : CDerives LifeCtx.empty [] t (.val (.thunk (.arr .unit (CTy.effOf [tickSigG c] A)))))
     (k : UInt32) {μ₁ : BoCa.BoLo.Heap} {e₁ : Expr}
     (hs : BoCa.BoLo.Steps (ℍ := ℍ) Adequacy.emptyMem (fuelRun t k) μ₁ e₁) :
     ∃ (μ' : BoCa.BoLo.Heap) (v : Val), BoCa.BoLo.Steps (ℍ := ℍ) μ₁ e₁ μ' (.val v) := by
   have hd : CDerives LifeCtx.empty [] (fuelRun t k) (.comp (.ret A)) := by
     refine .bind .nil (.ret (.tensorI .nil ht (.lit (.i32 k) .nil))) ?_
     refine .bind (.right .nil)
-      (.ret (.bangE (.divFuel [] A (fun _ h => absurd h List.not_mem_nil) (.cons .nil)))) ?_
+      (.ret (.bangE (.divFuel (c := c) [] A (fun _ h => absurd h List.not_mem_nil) (.cons .nil))))
+      ?_
     exact .app (.left (.right .nil))
-      (.force (C := .arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSig :: []) A))) I)
+      (.force (C := .arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSigG c :: []) A))) I)
         (CTy.effOf [] A)) (.here (.cons .nil)))
       (.there (.here .nil))
   exact total_every_run hd hs

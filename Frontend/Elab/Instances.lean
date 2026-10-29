@@ -74,7 +74,7 @@ def hasPhC : CCTy → Bool
   | .amp C D => hasPhC C || hasPhC D
   | .nu C | .all _ _ C => hasPhC C
   | .top => false
-  | .eff _ _ _ A B fin C => hasPhV A || hasPhV B || hasPhC fin || hasPhC C
+  | .eff _ _ _ A B fin _ C => hasPhV A || hasPhV B || hasPhC fin || hasPhC C
 end
 
 /-- A type of the frame of a declaration with type parameters `names`, as surface syntax: each
@@ -124,7 +124,7 @@ def varsV : Nat → Val → List String
     | .lend _ x _ => [x.name]
     | .pair _ V W | .app _ V W => varsV k V ++ varsV k W
     | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => varsV k V
+    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V | .reify _ _ _ _ V => varsV k V
     | _ => []
 
 /-- The error type of an integer division, `lib/arith.bc`'s `DivError`: `inl ()` a zero divisor,
@@ -286,7 +286,7 @@ def walkV (d : Decls) (owner : String) (names : List String) : Nat → TCx → V
       walkV d owner names n c W
     | .pair _ V W => do walkV d owner names n c V; walkV d owner names n c W
     | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V => walkV d owner names n c V
+    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V | .mark _ _ V | .reify _ _ _ _ V => walkV d owner names n c V
     | .thunk _ M | .bangThunk _ M => walkC d owner names n c.pushDead M
     | .thunkv _ M | .bangThunkv _ M | .run _ M => walkC d owner names n c M
     | _ => pure ()

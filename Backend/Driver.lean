@@ -62,6 +62,11 @@ def checkedOf (file src : String) : Except String CheckedProg := do
   | .ok io => pure ⟨r.el.prog, c, io⟩
   | .error e => throw s!"{file}: {e}"
 
+/-- `main`'s expression as run: under the runtime's clause when its type is a computation at
+the graded row of `Div` (SPEC §48).  `[spec §48]` -/
+def CheckedProg.mainE (k : CheckedProg) : BoCa.Expr :=
+  if (Frontend.Check.rtMainOf k.main.C).isSome then Frontend.Check.rtMainE k.main.e else k.main.e
+
 /-- The host implementation of each extern, in declaration order. -/
 def extImpls (m : Frontend.Check.IOMain) : Except String (List Clos.ExtImpl) :=
   m.externs.mapM fun x => match x.role with
@@ -99,9 +104,13 @@ def lowerEffects (p : Clos.Prog) : Except String (Clos.Prog × Option Clos.Types
 
 /-- The closure IR of a checked program, and its layout types when collapsing found them. -/
 def CheckedProg.closTypes (k : CheckedProg) : Except String (Clos.Prog × Option Clos.Types) := do
+  -- A `main` the runtime's clause drives runs under it (SPEC §48), answering as one that does
+  -- not loop.
   let p ← match k.io with
-    | none => Clos.convert k.main.e
-    | some m => Clos.convertMain (← extImpls m) m.loopB.isSome k.main.e
+    | none => Clos.convert (k.mainE)
+    | some m => do
+      let e := if m.rt then Frontend.Check.rtMainE k.main.e else k.main.e
+      Clos.convertMain (← extImpls m) (m.loopB.isSome && !m.rt) e
   let (p, T) ← lowerEffects p
   pure ({ p with exits := k.main.exitsOnDivError }, T)
 
@@ -265,18 +274,22 @@ def compileWatTimed (file src : String) : IO (Except String String) := do
         s!"{q.codes.size} codes, {q.size} nodes") fun _ => match io with
       | none => Clos.convert c.e
       | some m => do Clos.convertMain (← extImpls m) m.loopB.isSome c.e
+    -- As `lowerEffects`: when the layout types fail, the control operations' answers are
+    -- carried as variants.
     let clos ← ExceptT.mk <| stage "effects" (fun (q : Clos.Prog) =>
-        s!"{q.codes.size} codes, {q.size} nodes") fun _ => do (← clos.capture).unwind
+        s!"{q.codes.size} codes, {q.size} nodes") fun _ => do
+      let q ← (← clos.capture).unwind
+      if q.collapseT.2.isSome then pure q else (← clos.capture (wrapAnswers := true)).unwind
     let _ ← ExceptT.mk <| analysis "  flow (converted)" flowSize fun _ =>
       pure (Clos.solve clos.codes clos.constraints (1 <<< 40))
-    let _ ← ExceptT.mk <| analysis "  types (converted)" (fun (T : Clos.Types) =>
+    let _ ← analysis "  types (converted)" (fun (T : Clos.Types) =>
       s!"{T.rep.size} type nodes") fun _ => clos.types
     let (col, colT) ← ExceptT.mk <| stage "collapse" (fun (q : Clos.Prog × Option Clos.Types) =>
         s!"{q.1.codes.size} codes, {q.1.liveCodes.size} live, {q.1.size} nodes") fun _ =>
       pure clos.collapseT
     let _ ← ExceptT.mk <| analysis "  flow (collapsed)" flowSize fun _ =>
       pure (Clos.solve col.codes col.constraints (1 <<< 40))
-    let _ ← ExceptT.mk <| analysis "  types (collapsed)" (fun (T : Clos.Types) =>
+    let _ ← analysis "  types (collapsed)" (fun (T : Clos.Types) =>
       s!"{T.rep.size} type nodes") fun _ => col.types
     let flat ← ExceptT.mk <| stage "flat" (fun (q : Flat.Prog) =>
         s!"{q.fns.size} functions, {q.fns.foldl (fun k f => k + Flat.Stmt.sizes f.body) 0} statements")
@@ -309,10 +322,11 @@ def interpStage (stage file : String) (k : Except String CheckedProg) (input : L
   | "source" =>
     let k ← k
     match k.io with
-    | none => interpSource runFuel k.main.e
+    | none => interpSource runFuel k.mainE
     | some m =>
       let r ← ioRunOf file k m args
-      if r.loops then interpIOLoop runFuel (r.expr input) k.main.exitsOnDivError
+      if r.rt then interpIO runFuel (Frontend.Check.rtMainE (r.expr input)) k.main.exitsOnDivError
+      else if r.loops then interpIOLoop runFuel (r.expr input) k.main.exitsOnDivError
       else interpIO runFuel (r.expr input) k.main.exitsOnDivError
   | "clos" => Clos.interp runFuel (← (← k).clos) input args
   | "flat" => Flat.interp runFuel (← (← k).flat) input args
@@ -342,10 +356,11 @@ def falsifyOpts : String → Except String Falsify.Opts
 def interpChecked (o : Falsify.Opts) (file : String) (k : CheckedProg) (input : List UInt8)
     (args : List UInt8 := []) : Except String (Output × String) := do
   match k.io with
-  | none => Falsify.interpSource o runFuel k.main.e
+  | none => Falsify.interpSource o runFuel k.mainE
   | some m =>
     let r ← ioRunOf file k m args
-    if r.loops then Falsify.interpIOLoop o runFuel (r.expr input) k.main.exitsOnDivError
+    if r.rt then Falsify.interpIO o runFuel (Frontend.Check.rtMainE (r.expr input)) k.main.exitsOnDivError
+    else if r.loops then Falsify.interpIOLoop o runFuel (r.expr input) k.main.exitsOnDivError
     else Falsify.interpIO o runFuel (r.expr input) k.main.exitsOnDivError
 
 /-- A closed term on the falsifier's machine under `o`. -/

@@ -80,7 +80,7 @@ theorem vP_zero_sum {ls : List SRec} {δ : LSub} {v : Val} {ρ : BoCa.Fig16.BoLo
 abbrev Flag : VTy := .sum .unit .unit
 
 /-- `raise : 1 ↠^aff 0`, the operation `0` of the name `1`. -/
-def failSig : OpSig := ⟨1, 0, .aff, .unit, .zero, .ret .unit⟩
+def failSig : OpSig := ⟨1, 0, .aff, .unit, .zero, .ret .unit, false⟩
 
 /-- The row `{Fail}`. -/
 abbrev Sf : Row := [failSig]
@@ -301,7 +301,7 @@ theorem d_failOutsideBody :
   refine .bind (.right (.right (.dead (.dead .nil))))
     (.ret (.withbor2U (A := Flag) (B := .zero) (S := Sf) 0 (by cdead) rfl
       ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree]) (by simp [VFree])
-      (Sf_unwind 0) dFlag_closed (dtor_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
+      (Sf_unwind 0).lend dFlag_closed (dtor_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
   refine .effLet (A := .tensor (.ref Flag) .zero) (.left (.left (.left (.dead (.dead .nil)))))
     (fun _ => Ctx.Dead.drops (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (.dead .nil))))) ?_ (.there (.here (by cdead)))
@@ -388,7 +388,7 @@ theorem d_reborrowRaiseBody :
   refine .bind (.right (.right (.dead (.dead .nil))))
     (.ret (.withbor2U (A := Flag) (B := .zero) (S := Sf) 0 (by cdead) rfl
       ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree]) (by simp [VFree])
-      (Sf_unwind 0) dFlag_closed (dtor_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
+      (Sf_unwind 0).lend dFlag_closed (dtor_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
   refine .effLet (A := .tensor (.ref Flag) .zero) (.left (.left (.left (.dead (.dead .nil)))))
     (fun _ => Ctx.Dead.drops (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
   · refine .app (.left (.right (.left (.dead (.dead .nil))))) ?_ (.there (.here (by cdead)))
@@ -429,7 +429,7 @@ The body `log (); raise ()` runs at the row `{Fail, Log}`.
 Both rows hold both names, in the two orders. -/
 
 /-- `log : 1 ↠^aff 1`, the operation `0` of the name `2`. -/
-def logSig : OpSig := ⟨2, 0, .aff, .unit, .unit, .ret .unit⟩
+def logSig : OpSig := ⟨2, 0, .aff, .unit, .unit, .ret .unit, false⟩
 
 /-- `Log`'s operations. -/
 abbrev El : List (Qual × VTy × VTy) := [(.aff, .unit, .unit)]
@@ -770,7 +770,7 @@ run, under every allocator, ends at the empty memory (`takeProg_runs`): when `ta
 producer early, the cell it held is freed. -/
 
 /-- `yield : 1 ↠^aff 1`. -/
-def yieldSig : OpSig := ⟨3, 0, .aff, .unit, .unit, .ret .unit⟩
+def yieldSig : OpSig := ⟨3, 0, .aff, .unit, .unit, .ret .unit, false⟩
 
 /-- `Yield`'s operations. -/
 abbrev Ey : List (Qual × VTy × VTy) := [(.aff, .unit, .unit)]
@@ -898,7 +898,7 @@ computation of `F 1`, so every run, under every allocator, ends at `()` with the
 (`storeCancel_runs`). -/
 
 /-- `susp : 1 ↠^aff 1`. -/
-def suspSig : OpSig := ⟨4, 0, .aff, .unit, .unit, .ret .unit⟩
+def suspSig : OpSig := ⟨4, 0, .aff, .unit, .unit, .ret .unit, false⟩
 
 /-- `Susp`'s operations. -/
 abbrev Es : List (Qual × VTy × VTy) := [(.aff, .unit, .unit)]
