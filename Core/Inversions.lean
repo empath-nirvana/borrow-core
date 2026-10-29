@@ -826,6 +826,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro k hk; exact absurd hk (not_hasVar_closed (withborUE_closed hdc))
   | foldImm => intro k hk; exact absurd hk (not_hasVar_closed (foldImmV_closed _))
   | foldOwn => intro k hk; exact absurd hk (not_hasVar_closed (foldOwnV_closed _))
+  | foldOwnG => intro k hk; exact absurd hk (not_hasVar_closed (FoldP.foldOwnGV_closed _))
   | foldReuse => intro k hk; exact absurd hk (not_hasVar_closed (foldReuseV_closed _))
   | unfoldN => intro k hk; exact absurd hk (not_hasVar_closed (unfoldV_closed _))
   | _ => intro k hk; exact absurd hk (not_hasVar_closed (by rfl))
@@ -836,7 +837,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
 rule whose conclusion's term has another head is told apart. -/
 macro "cd_terms" : tactic => `(tactic| (try simp_all [withPair, absurdE, copy, forget, swap,
     withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, forgetV, emptyFamV, swapV,
-    Val.arr, withborUE, foldImmV, foldOwnV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
+    Val.arr, withborUE, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
     BoCa.BoLo.raiseE, opArgE, thenE, hndTerm, hndExpr, Expr.val, Val.lam, Val.prim, Val.unit,
     Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store']))
 
@@ -850,7 +851,7 @@ theorem forceE_var {C : CTy} {i : Nat} {e : Expr} (h : forceE C (.var i) = e) :
 /-- The same, at one hypothesis alone. -/
 macro "cd_at " h:ident : tactic => `(tactic| (simp [withPair, absurdE, copy, forget, swap,
     withbor, withload, withswap, sizeV, replaceV, arrLenV, copyV, forgetV, emptyFamV, swapV,
-    Val.arr, withborUE, foldImmV, foldOwnV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
+    Val.arr, withborUE, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, divFuelV, reifyV, BoCa.BoLo.performE,
     BoCa.BoLo.raiseE, opArgE, thenE, hndTerm, hndExpr, Expr.val, Val.lam, Val.prim, Val.unit,
     Val.i32, lam2, elet, unit', v0, v1, v2, v3, load', store'] at $h:ident))
 
@@ -1456,7 +1457,7 @@ def OtherLam (e : Expr) : Prop :=
   e = copy ∨ e = swap ∨ e = withbor ∨ e = withload ∨ e = withswap ∨ e = sizeV.1 ∨
     e = replaceV.1 ∨ e = arrLenV.1 ∨ e = swapV.1 ∨ (∃ F, e = (foldImmV F).1) ∨
     (∃ F, e = (foldOwnV F).1) ∨ (∃ F, e = (foldReuseV F).1) ∨ (∃ C, e = (unfoldV C).1) ∨
-    e = divFuelV.1 ∨ (∃ res, e = (reifyV res).1)
+    e = divFuelV.1 ∨ (∃ res, e = (reifyV res).1) ∨ (∃ B, e = (FoldP.foldOwnGV B).1)
 
 /-- A λ-constant, read at the views of its axiom's type. -/
 def LamAx (e : Expr) (j : Jdg) : Prop :=
@@ -1638,7 +1639,12 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro M he
       exact LamInv.ofAx (he ▸ lamAx_other
         (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
-          (.inr (.inr (.inr ⟨_, rfl⟩)))))))))))))) _)
+          (.inr (.inr (.inr (.inl ⟨_, rfl⟩))))))))))))))) _)
+  | foldOwnG =>
+      intro M he
+      exact LamInv.ofAx (he ▸ lamAx_other
+        (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr
+          (.inr (.inr (.inr (.inr ⟨_, rfl⟩))))))))))))))) _)
   | forgetBang => intro M he; exact LamInv.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inl ⟨_, rfl⟩⟩))
   | forgetImm =>
       intro M he; exact LamInv.ofAx (he ▸ lamAx_forget (.inl ⟨_, rfl, .inr (.inl ⟨_, _, rfl⟩)⟩))
@@ -1861,7 +1867,7 @@ theorem not_der_load_app {Δ : LifeCtx} {Γ : Ctx VTy} {X : Expr} {j : Jdg} :
 
 /-- A term is no λ-constant, by unfolding. -/
 macro "not_const" : tactic => `(tactic| (simp only [NotConst, OtherLam, forget, copy, swap, withbor,
-    withload, withswap, sizeV, replaceV, arrLenV, swapV, foldImmV, foldOwnV, foldReuseV, unfoldV,
+    withload, withswap, sizeV, replaceV, arrLenV, swapV, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV,
     withborUE, divFuelV, reifyV, rkV, BoCa.BoLo.hndE,
     Expr.val, Val.lam, lam2, elet, unit', v0, v1, v2, v3, load', store', thenE, ne_eq,
     bindE, hndTerm, hndExpr, Val.unit, Val.prim, Val.i32, Val.inj₁, Val.inj₂, Val.pair,
@@ -1872,7 +1878,7 @@ macro "not_const" : tactic => `(tactic| (simp only [NotConst, OtherLam, forget, 
 
 /-- A hypothesis that a term is one of the other λ-constants is refuted by unfolding. -/
 macro "not_other " h:ident : tactic => `(tactic| (simp [OtherLam, copy, swap, withbor, withload,
-    withswap, sizeV, replaceV, arrLenV, swapV, foldImmV, foldOwnV, foldReuseV, unfoldV, Expr.val,
+    withswap, sizeV, replaceV, arrLenV, swapV, foldImmV, foldOwnV, FoldP.foldOwnGV, foldReuseV, unfoldV, Expr.val,
     divFuelV, reifyV, rkV, BoCa.BoLo.hndE, Val.lam, lam2, elet, unit', v0, v1, v2, v3, withborUE,
     thenE, load', store', Val.prim,
     Val.unit] at $h:ident))

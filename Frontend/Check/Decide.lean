@@ -23,8 +23,6 @@ cases the comments name; where it is not, the gap is stated at the function.
 
 namespace BoCa.Fig16.LogRel.Core
 
-deriving instance DecidableEq for VTy, CTy
-
 deriving instance DecidableEq for OpSig
 
 end BoCa.Fig16.LogRel.Core

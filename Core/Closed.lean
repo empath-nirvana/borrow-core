@@ -145,6 +145,7 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
       exact closedAt_of_zero (withborUE_closed hdc) _
   | foldImm => exact closedAt_of_zero (foldImmV_closed _) _
   | foldOwn => exact closedAt_of_zero (foldOwnV_closed _) _
+  | foldOwnG => exact closedAt_of_zero (FoldP.foldOwnGV_closed _) _
   | foldReuse => exact closedAt_of_zero (foldReuseV_closed _) _
   | unfoldN => exact closedAt_of_zero (unfoldV_closed _) _
   | effPerform _ _ _ ih | effRaise _ _ _ _ ih =>

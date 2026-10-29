@@ -114,6 +114,7 @@ theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | unroll a0 ih0 => exact CDerivesP.unroll ih0
   | foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 => exact CDerivesP.foldImm a0 a1 a2 a3 a4 a5 a6 a7 a8 a9
   | foldOwn a0 a1 a2 a3 a4 => exact CDerivesP.foldOwn a0 a1 a2 a3 a4
+  | foldOwnG a0 a1 a2 a3 => exact CDerivesP.foldOwnG a0 a1 a2 a3
   | foldReuse a0 a1 a2 a3 a4 => exact CDerivesP.foldReuse a0 a1 a2 a3 a4
   | nuIn a0 a1 ih0 => exact CDerivesP.nuIn a0 ih0
   | nuOut a0 a1 ih0 => exact CDerivesP.nuOut a0 ih0
@@ -220,6 +221,7 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | unroll _ ih => exact unroll_compatX ih
   | foldImm F y c R hΓ hF hG hyM hyR hR => exact foldImm_compatX F hF hG y c R hΓ hyM hyR hR
   | foldOwn F R hΓ hF hG => exact foldOwn_compatX F hF hG R hΓ
+  | foldOwnG B₀ Rs hΓ hB => exact FoldP.foldOwnG_compatX B₀ hB Rs hΓ
   | foldReuse F R hΓ hF hG => exact foldReuse_compatX F hF hG R hΓ
   | nuIn hC _ ih => exact nuIn_compatX hC ih
   | nuOut hC _ ih => exact nuOut_compatX hC ih

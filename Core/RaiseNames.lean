@@ -1260,6 +1260,74 @@ theorem rcE_foldReuseV (F : FShape) : rcE q (foldReuseV F).1 = true := by
   have hB : rcE q (fBR F) = true := by simp [fBR, bindE, rcE, rcE_app, rcE_travR]
   simp [foldReuseV, rcE, rcE_app, rcE_selfV hB]
 
+theorem rcE_tagE : ∀ (k : Nat) {e : Expr}, rcE q e = true → rcE q (FoldP.tagE k e) = true
+  | 0, _, h => by simp [FoldP.tagE, rcE, h]
+  | k + 1, _, h => by simp [FoldP.tagE, rcE, rcE_tagE k h]
+
+theorem rcE_swap : rcE q swap = true := rfl
+
+theorem rcE_stepV (k : Nat) {t : Val} (ht : rcE q t.1 = true) : rcE q (FoldP.stepV k t).1 = true := by
+  simp [FoldP.stepV, FoldP.stepE, bindE, rcE, rcE_app, ht, rcE_swap,
+    rcE_tagE k (e := .inj₂ (.pair (.var 8) (.var 0))) (by simp [rcE])]
+
+theorem rcE_arrE (k : Nat) {f : Val} (hf : rcE q f.1 = true) : rcE q (FoldP.arrE k f) = true := by
+  simp [FoldP.arrE, bindE, rcE, rcE_app, hf, FoldP.unitF, Val.i32,
+    rcE_tagE k (e := .inj₁ .unit) (by simp [rcE])]
+
+theorem rcE_tEG (ks : List FoldP.Bnd) (Bs : FoldP.Stack) :
+    ∀ A : VTy, rcE q (FoldP.tE ks Bs A) = true
+  | .tvar _ => by simp [FoldP.tE, FoldP.callE, rcE, rcE_tagE _ (e := .var 0) rfl]
+  | .tensor A B => by
+      simp only [FoldP.tE]; split
+      · rfl
+      · simp [FoldP.travOf, bindE, rcE, rcE_app, rcE_tEG ks Bs A, rcE_tEG ks Bs B]
+  | .sum A B => by
+      simp only [FoldP.tE]; split
+      · rfl
+      · simp [FoldP.travOf, bindE, rcE, rcE_app, rcE_tEG ks Bs A, rcE_tEG ks Bs B]
+  | .ref S => by
+      simp only [FoldP.tE]; split
+      · rfl
+      · simp [FoldP.travOf, bindE, rcE, rcE_app, rcE_tEG ks Bs S]
+  | .fam (.ref S) => by
+      simp only [FoldP.tE]; split
+      · rfl
+      · exact rcE_arrE _ (rcE_stepV _ (by simp [FoldP.travOf, rcE, rcE_tEG ks Bs S]))
+  | .mu B => by
+      simp only [FoldP.tE]; split
+      · rfl
+      · simp [FoldP.callE, rcE, rcE_tagE _ (e := .var 0) rfl]
+  | .unit | .zero | .thunk _ | .imm _ _ | .mut _ _ | .box _ _ | .bang _ | .unk | .int _ | .opq _ => rfl
+  | .fam .unit | .fam (.tensor _ _) | .fam .zero | .fam (.sum _ _) | .fam (.thunk _)
+  | .fam (.imm _ _) | .fam (.mut _ _) | .fam (.box _ _) | .fam (.bang _) | .fam .unk
+  | .fam (.tvar _) | .fam (.mu _) | .fam (.int _) | .fam (.fam _) | .fam (.opq _) => rfl
+
+theorem rcE_travB (ks : List FoldP.Bnd) : ∀ k, rcE q (FoldP.travB ks k).1 = true
+  | .mu [] => rfl
+  | .mu (B :: Bs) => by simp [FoldP.travB, FoldP.trav, FoldP.travOf, rcE, rcE_tEG]
+  | .arr _ _ => rfl
+
+theorem rcE_projE : ∀ (n p : Nat) {e : Expr}, rcE q e = true → rcE q (FoldP.projE n p e) = true
+  | 0, _, _, h => h
+  | 1, _, _, h => h
+  | _ + 2, 0, _, h => by simp [FoldP.projE, rcE, h]
+  | n + 2, p + 1, _, h => by simp [FoldP.projE, rcE, h, rcE_projE (n + 1) p (e := .var 0) rfl]
+
+theorem rcE_dsp (ks : List FoldP.Bnd) : ∀ (r : List FoldP.Bnd) (j p : Nat), rcE q (FoldP.dsp ks j p r) = true
+  | [], _, _ => rfl
+  | k :: r, j, p => by
+      have hp : rcE q (FoldP.projV ks.length p).1 = true := by
+        simp [FoldP.projV, rcE, rcE_projE _ p (e := .var 0) rfl]
+      have hb : rcE q (FoldP.branch ks j p k) = true := by
+        cases k with
+        | arr => simp [FoldP.branch, rcE, rcE_app, hp]
+        | mu b => simp [FoldP.branch, bindE, rcE, rcE_app, hp, rcE_travB]
+      simp [FoldP.dsp, rcE, hb, rcE_dsp ks r]
+
+theorem rcE_foldOwnGV (B₀ : VTy) : rcE q (FoldP.foldOwnGV B₀).1 = true := by
+  have hB : rcE q (FoldP.fBG (FoldP.keys B₀)) = true := by simp [FoldP.fBG, rcE, rcE_dsp]
+  simp [FoldP.foldOwnGV, FoldP.selfG, rcE, rcE_app, rcE_selfV hB, FoldP.tagE]
+
 theorem rcE_mapV : ∀ A : VTy, rcE q (mapV A).1 = true
   | .tvar 0 => rfl
   | .tensor A B => by simp [mapV, rcE, rcE_app, rcE_mapV A, rcE_mapV B]
@@ -1483,6 +1551,7 @@ theorem rcE_of_derivesAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} 
   | sliceBorrowIU _ _ _ _ _ _ _ _ _ _ ih => exact rcE_withborUE ih
   | foldImm => exact rcE_foldImmV _
   | foldOwn => exact rcE_foldOwnV _
+  | foldOwnG => exact rcE_foldOwnGV _
   | foldReuse => exact rcE_foldReuseV _
   | unfoldN => exact rcE_unfoldV _
   | lolliE _ _ _ iha ihf => rw [rcE_app ihf]; exact iha

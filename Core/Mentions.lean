@@ -263,6 +263,7 @@ theorem CDerivesP.mentions_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
       intro k hk; rw [mentions_of_closed (withborUE_closed hdc)] at hk; cases hk
   | foldImm => intro k hk; rw [mentions_of_closed (foldImmV_closed _)] at hk; cases hk
   | foldOwn => intro k hk; rw [mentions_of_closed (foldOwnV_closed _)] at hk; cases hk
+  | foldOwnG => intro k hk; rw [mentions_of_closed (FoldP.foldOwnGV_closed _)] at hk; cases hk
   | foldReuse => intro k hk; rw [mentions_of_closed (foldReuseV_closed _)] at hk; cases hk
   | unfoldN => intro k hk; rw [mentions_of_closed (unfoldV_closed _)] at hk; cases hk
   | divFuel => intro k hk; rw [mentions_of_closed divFuelV_closed] at hk; cases hk

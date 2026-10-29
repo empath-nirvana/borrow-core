@@ -473,6 +473,10 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (foldOwnV_closed F)]
       exact .foldOwn F R (deadP_insert hd Γa hΓ) hF hG
+  | foldOwnG B₀ Rs hΓ hB =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (FoldP.foldOwnGV_closed B₀)]
+      exact .foldOwnG B₀ Rs (deadP_insert hd Γa hΓ) hB
   | foldReuse F R hΓ hF hG =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (foldReuseV_closed F)]
@@ -826,6 +830,10 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (foldOwnV_closed F)]
       exact .foldOwn F R (deadP_insert hd Γa hΓ) hF hG
+  | foldOwnG B₀ Rs hΓ hB =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (FoldP.foldOwnGV_closed B₀)]
+      exact .foldOwnG B₀ Rs (deadP_insert hd Γa hΓ) hB
   | foldReuse F R hΓ hF hG =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (foldReuseV_closed F)]

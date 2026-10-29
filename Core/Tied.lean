@@ -344,6 +344,9 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   same class, `A′_R = T` with `R` at every recursive position, any `R`.  `[spec §6]` -/
   | foldOwn {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
       CDerivesAt Ξ Δ Γ (.val (foldOwnV F)) (.val (.lolli (algOTy F R) (foldOTy F R)))
+  /-- The general owned fold, a constant (`CDerives.foldOwnG`).  `[spec §6]` -/
+  | foldOwnG {Δ Γ} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
+      CDerivesAt Ξ Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs))
   /-- The owned fold with reuse, a constant: `foldReuse : !U(A″_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)`,
   for `T` of the same class, `A″_R = T` with `R` at a head `X` and `Ref 1 ⊗ R` at every `Ref X`
   (the emptied cell and the result on its content), any `R`.  `[spec §6]` -/
@@ -542,6 +545,7 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | unroll _ ih1 => exact .unroll ih1
   | foldImm F y c R hΓ hF hG hyM hyR hR => exact .foldImm F y c R hΓ hF hG hyM hyR hR
   | foldOwn F R hΓ hF hG => exact .foldOwn F R hΓ hF hG
+  | foldOwnG B₀ Rs hΓ hB => exact .foldOwnG B₀ Rs hΓ hB
   | foldReuse F R hΓ hF hG => exact .foldReuse F R hΓ hF hG
   | nuIn hC _ ih1 => exact .nuIn hC ih1
   | nuOut hC _ ih1 => exact .nuOut hC ih1
@@ -917,6 +921,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | unroll _ ih1 => exact .unroll (ih1 he)
   | foldImm F y c R hΓ hF hG hyM hyR hR => exact .foldImm F y c R hΓ hF hG hyM hyR hR
   | foldOwn F R hΓ hF hG => exact .foldOwn F R hΓ hF hG
+  | foldOwnG B₀ Rs hΓ hB => exact .foldOwnG B₀ Rs hΓ hB
   | foldReuse F R hΓ hF hG => exact .foldReuse F R hΓ hF hG
   | nuIn hC _ ih1 => exact .nuIn hC (ih1 he)
   | nuOut hC _ ih1 => exact .nuOut hC (ih1 he)

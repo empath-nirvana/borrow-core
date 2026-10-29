@@ -5,6 +5,7 @@ import Core.SliceOps
 import Core.CountFold
 import Core.BoundedFix
 import Core.FoldReuse
+import Core.FoldOwnG
 import Core.Nu
 import Core.EffFin
 import Core.EffBorrow
@@ -373,6 +374,11 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   (the emptied cell and the result on its content), any `R`.  `[spec §6]` -/
   | foldReuse {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
       CDerives Δ Γ (.val (foldReuseV F)) (.val (.lolli (algRTy F R) (foldOTy F R)))
+  /-- The general owned fold, a constant: `foldOwnG : Algs ⊸ !U(μX. T ⊸ F R₀)`, for `T` of the
+  class `P`, the tuple `Algs` holding one algebra per key of `μX. T` at the results `Rs`
+  (`FoldOwnG.lean`).  `[spec §6]` -/
+  | foldOwnG {Δ Γ} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
+      CDerives Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs))
   /-- `νX. C` is its unrolling `C[U(νX. C)/X]` (`cC_nu_iff`), on the same term, at a positive
   `C`.  `[spec §7]` -/
   | nuIn {Δ Γ e C} (hC : C.NuOk) (h : CDerives Δ Γ e (.comp C.unroll)) :
@@ -666,6 +672,7 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | foldImm F y c R hΓ hF hG hyM hyR hR => exact foldImm_compatX F hF hG y c R hΓ hyM hyR hR
   | foldOwn F R hΓ hF hG => exact foldOwn_compatX F hF hG R hΓ
   | foldReuse F R hΓ hF hG => exact foldReuse_compatX F hF hG R hΓ
+  | foldOwnG B₀ Rs hΓ hB => exact FoldP.foldOwnG_compatX B₀ hB Rs hΓ
   | nuIn hC _ ih => exact nuIn_compatX hC ih
   | nuOut hC _ ih => exact nuOut_compatX hC ih
   | unfoldN C S hC hΓ => exact unfold_compatX hC S hΓ

@@ -378,6 +378,9 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   same class, `A′_R = T` with `R` at every recursive position, any `R`.  `[spec §6]` -/
   | foldOwn {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
       CDerivesP Δ Γ (.val (foldOwnV F)) (.val (.lolli (algOTy F R) (foldOTy F R)))
+  /-- The general owned fold, a constant (`CDerives.foldOwnG`).  `[spec §6]` -/
+  | foldOwnG {Δ Γ} (B₀ : VTy) (Rs : List VTy) (hΓ : Ctx.DeadP Γ) (hB : FoldP.PBody B₀) :
+      CDerivesP Δ Γ (.val (FoldP.foldOwnGV B₀)) (.val (FoldP.foldGTy B₀ Rs))
   /-- The owned fold with reuse, a constant: `foldReuse : !U(A″_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)`,
   for `T` of the same class, `A″_R = T` with `R` at a head `X` and `Ref 1 ⊗ R` at every `Ref X`
   (the emptied cell and the result on its content), any `R`.  `[spec §6]` -/

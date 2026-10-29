@@ -154,6 +154,7 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | foldImm F y c R hΓ hF hG hyM hyR hR =>
       exact .foldImm F y c R (deadP_append h' hΓ) hF hG hyM hyR hR
   | foldOwn F R hΓ hF hG => exact .foldOwn F R (deadP_append h' hΓ) hF hG
+  | foldOwnG B₀ Rs hΓ hB => exact .foldOwnG B₀ Rs (deadP_append h' hΓ) hB
   | foldReuse F R hΓ hF hG => exact .foldReuse F R (deadP_append h' hΓ) hF hG
   | nuIn hC _ ih => exact .nuIn hC ih
   | nuOut hC _ ih => exact .nuOut hC ih

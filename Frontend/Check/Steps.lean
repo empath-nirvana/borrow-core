@@ -12,7 +12,7 @@ contexts, `boxed`, application to a variable, `<,>`, `case` and `Fun`.
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (Jdg FShape HasDtor toFShape isX0)
+open BoCa.Fig16.LogRel.Core (Jdg FShape HasDtor dtorAlgs)
 
 /-! ### Fold shapes and destructors, decided -/
 
@@ -49,111 +49,257 @@ theorem FShape.guardedB_sound : ∀ F : FShape, FShape.guardedB F = true → F.G
 
 /-! ### Destructors (SPEC §12) -/
 
-/-- `HasDtor`, decided: `dtorB false A` for `A`, and `dtorB true A` for `T[1/X]` at a `μ` body
-`T = A` (`Ref X` and `X` become `1`), the same recursion as `dtorAt`. -/
+open BoCa.Fig16.LogRel.Core.FoldP (clB keysIn resO PBody pBodyB pBodyB_iff Bnd Stack) in
+/-- `HasDtor`, decided: `dtorB false A` for `A`; `dtorB true A` for a position `A` of a `μ` body:
+`A⟨1⟩` has a destructor, and so has the body of each key inside `A` (the recursion of `dtorAt` and
+`algsIn`). -/
 def dtorB : Bool → CVTy → Bool
   | alg, .tensor A B => dtorB alg A && dtorB alg B
   | alg, .sum A B => dtorB alg A && dtorB alg B
-  | alg, .ref A => (alg && isX0 A) || dtorB false A
-  | alg, .tvar 0 => alg
-  | _, .tvar (_ + 1) => false
+  | alg, .ref A => if alg && !clB 0 A then dtorB true A else dtorB false A
+  | alg, .tvar _ => alg
   | _, .box _ A => dtorB false A
-  | _, .mu A => FShape.wfB (toFShape A) && FShape.guardedB (toFShape A) && dtorB true A
+  | alg, .mu A => if alg && !clB 0 (.mu A) then dtorB true A else pBodyB A && dtorB true A
   | _, .thunk (.amp _ (.ret .unit)) => true
   | _, .thunk (.nu (.amp C (.ret R))) =>
       CTy.nuOkB (.amp C (.ret R)) && VTy.clB 0 R && dtorB false R
   | _, .thunk _ => false
   | _, .unit | _, .zero | _, .int _ | _, .unk | _, .bang _ | _, .imm _ _ | _, .mut _ _ => true
-  | _, .fam (.ref A) => dtorB false A
+  | alg, .fam (.ref A) => if alg && !clB 0 A then dtorB true A else dtorB false A
   | _, .fam (.imm _ _) => true
   | _, .fam (.mut _ _) => true
   | _, .fam _ => false
   | _, .opq _ => false
 
-theorem dtorB_sound : ∀ (alg : Bool) (A : CVTy), dtorB alg A = true →
-    HasDtor (cond alg ((toFShape A).resO .unit) A)
-  | alg, .tensor A B, h => by
+/-- At a thunk `dtorB` does not depend on the mode. -/
+theorem dtorB_thunk : ∀ (b : Bool) (C : CCTy), dtorB b (.thunk C) = dtorB false (.thunk C)
+  | _, .amp _ (.ret .unit) | _, .nu (.amp _ (.ret _)) | _, .nu (.ret _) | _, .nu (.arr _ _)
+  | _, .nu .top | _, .nu (.all _ _ _) | _, .nu (.nu _) | _, .nu (.eff _ _ _ _ _ _ _)
+  | _, .nu (.amp _ (.arr _ _)) | _, .nu (.amp _ (.amp _ _)) | _, .nu (.amp _ .top)
+  | _, .nu (.amp _ (.all _ _ _)) | _, .nu (.amp _ (.nu _)) | _, .nu (.amp _ (.eff _ _ _ _ _ _ _))
+  | _, .ret _ | _, .arr _ _ | _, .top | _, .all _ _ _ | _, .eff _ _ _ _ _ _ _
+  | _, .amp _ (.ret (.tensor _ _)) | _, .amp _ (.ret .zero) | _, .amp _ (.ret (.sum _ _))
+  | _, .amp _ (.ret (.thunk _)) | _, .amp _ (.ret (.ref _)) | _, .amp _ (.ret (.imm _ _))
+  | _, .amp _ (.ret (.mut _ _)) | _, .amp _ (.ret (.box _ _)) | _, .amp _ (.ret (.bang _))
+  | _, .amp _ (.ret .unk) | _, .amp _ (.ret (.tvar _)) | _, .amp _ (.ret (.mu _))
+  | _, .amp _ (.ret (.int _)) | _, .amp _ (.ret (.fam _)) | _, .amp _ (.ret (.opq _))
+  | _, .amp _ (.arr _ _) | _, .amp _ (.amp _ _) | _, .amp _ .top | _, .amp _ (.all _ _ _)
+  | _, .amp _ (.nu _) | _, .amp _ (.eff _ _ _ _ _ _ _) => rfl
+
+open BoCa.Fig16.LogRel.Core.FoldP (clB) in
+/-- At a closed type the two modes agree. -/
+theorem dtorB_closed : ∀ (A : CVTy), clB 0 A = true → dtorB true A = dtorB false A
+  | .tensor A B, h => by
+      simp only [BoCa.Fig16.LogRel.Core.FoldP.clB, Bool.and_eq_true] at h
+      simp only [dtorB, dtorB_closed A h.1, dtorB_closed B h.2]
+  | .sum A B, h => by
+      simp only [BoCa.Fig16.LogRel.Core.FoldP.clB, Bool.and_eq_true] at h
+      simp only [dtorB, dtorB_closed A h.1, dtorB_closed B h.2]
+  | .ref A, h => by
+      simp only [BoCa.Fig16.LogRel.Core.FoldP.clB] at h
+      simp [dtorB, h]
+  | .fam (.ref A), h => by
+      simp only [BoCa.Fig16.LogRel.Core.FoldP.clB] at h
+      simp [dtorB, h]
+  | .mu A, h => by simp [dtorB, h]
+  | .tvar _, h => by simp [BoCa.Fig16.LogRel.Core.FoldP.clB] at h
+  | .thunk C, _ => dtorB_thunk true C
+  | .unit, _ | .zero, _ | .box _ _, _ | .bang _, _ | .unk, _ | .int _, _
+  | .opq _, _ | .imm _ _, _ | .mut _ _, _ => rfl
+  | .fam .unit, _ | .fam (.tensor _ _), _ | .fam .zero, _ | .fam (.sum _ _), _
+  | .fam (.thunk _), _ | .fam (.imm _ _), _ | .fam (.mut _ _), _ | .fam (.box _ _), _
+  | .fam (.bang _), _ | .fam .unk, _ | .fam (.tvar _), _ | .fam (.mu _), _ | .fam (.int _), _
+  | .fam (.fam _), _ | .fam (.opq _), _ => rfl
+
+open BoCa.Fig16.LogRel.Core.FoldP (keysIn resO Bnd Stack) in
+/-- What `dtorB true A` gives at a position `A` under the stack `Bs`: `A⟨1⟩` has a destructor,
+and so has the body of each key of `A`. -/
+abbrev AlgDtor (Bs : Stack) (A : CVTy) : Prop :=
+  HasDtor (resO dtorAlgs Bs A) ∧
+    (∀ B Bs', Bnd.mu (B :: Bs') ∈ keysIn Bs A → HasDtor (resO dtorAlgs (B :: Bs') B)) ∧
+    ∀ Bs' S, Bnd.arr Bs' S ∈ keysIn Bs A → HasDtor (resO dtorAlgs Bs' S)
+
+open BoCa.Fig16.LogRel.Core.FoldP (clB keysIn resO resO_leaf Bnd Stack) in
+/-- A closed position's `AlgDtor` is its own destructor. -/
+theorem algDtor_closed {A : CVTy} (hc : clB 0 A = true) (h : HasDtor A) (Bs : Stack) :
+    AlgDtor Bs A := by
+  refine ⟨by rwa [resO_leaf dtorAlgs Bs hc], fun B Bs' hm => ?_, fun Bs' S hm => ?_⟩
+  · rw [BoCa.Fig16.LogRel.Core.keysIn_toFShape.keysIn_closed Bs hc] at hm; cases hm
+  · rw [BoCa.Fig16.LogRel.Core.keysIn_toFShape.keysIn_closed Bs hc] at hm; cases hm
+
+open BoCa.Fig16.LogRel.Core.FoldP (keysIn resO Stack) in
+/-- A position the fold passes through: `A⟨1⟩` is `A`, and it has no key. -/
+theorem algDtorLeaf (A : CVTy) (h : HasDtor A) (Bs : Stack)
+    (hr : resO dtorAlgs Bs A = A := by rfl) (hk : keysIn Bs A = [] := by rfl) : AlgDtor Bs A :=
+  ⟨by rwa [hr], ⟨fun B Bs' hm => (by rw [hk] at hm; cases hm),
+    fun Bs' S hm => (by rw [hk] at hm; cases hm)⟩⟩
+
+mutual
+/-- **`dtorB false` is sound for `HasDtor`.** -/
+theorem dtorB_sound : ∀ (A : CVTy), dtorB false A = true → HasDtor A
+  | .tensor A B, h => by
       simp only [dtorB, Bool.and_eq_true] at h
-      have h₁ := dtorB_sound alg A h.1
-      have h₂ := dtorB_sound alg B h.2
-      cases alg <;> exact .tensor h₁ h₂
-  | alg, .sum A B, h => by
+      exact .tensor (dtorB_sound A h.1) (dtorB_sound B h.2)
+  | .sum A B, h => by
       simp only [dtorB, Bool.and_eq_true] at h
-      have h₁ := dtorB_sound alg A h.1
-      have h₂ := dtorB_sound alg B h.2
-      cases alg <;> exact .sum h₁ h₂
-  | false, .ref A, h => .ref (dtorB_sound false A (by simpa [dtorB] using h))
-  | true, .ref A, h => by
-      by_cases hA : A = .tvar 0
-      · subst hA; exact .unit
-      · have hx : isX0 A = false := by
-          cases A with
-          | tvar n => cases n <;> simp_all [isX0]
-          | _ => rfl
-        have hl : toFShape (.ref A) = .leaf (.ref A) := by
-          cases A with
-          | tvar n => cases n <;> simp_all [toFShape]
-          | _ => rfl
-        simp only [dtorB, hx, Bool.true_and, Bool.false_or] at h
-        simp only [cond, hl, FShape.resO]
-        exact .ref (dtorB_sound false A h)
-  | true, .tvar 0, _ => .unit
-  | false, .tvar 0, h => by simp [dtorB] at h
-  | _, .tvar (_ + 1), h => by simp [dtorB] at h
-  | alg, .box _ A, h => by
-      have := HasDtor.box (a := ‹_›) (dtorB_sound false A (by simpa [dtorB] using h))
-      cases alg <;> exact this
-  | alg, .mu A, h => by
+      exact .sum (dtorB_sound A h.1) (dtorB_sound B h.2)
+  | .ref A, h => .ref (dtorB_sound A (by simpa [dtorB] using h))
+  | .tvar _, h => by simp [dtorB] at h
+  | .box _ A, h => .box (dtorB_sound A (by simpa [dtorB] using h))
+  | .mu A, h => by
+      simp only [dtorB, Bool.false_and, Bool.false_eq_true, if_false, Bool.and_eq_true] at h
+      obtain ⟨h₁, h₂, h₃⟩ := dtorB_soundA A h.2 [A]
+      exact .mu ((BoCa.Fig16.LogRel.Core.FoldP.pBodyB_iff A).mp h.1) h₁ h₂ h₃
+  | .thunk (.amp _ (.ret .unit)), _ => .close
+  | .thunk (.nu (.amp C (.ret R))), h => by
       simp only [dtorB, Bool.and_eq_true] at h
-      have := HasDtor.mu (FShape.wfB_sound _ h.1.1) (FShape.guardedB_sound _ h.1.2)
-        (dtorB_sound true A h.2)
-      cases alg <;> exact this
-  | alg, .thunk (.amp _ (.ret .unit)), _ => by cases alg <;> exact .close
-  | alg, .thunk (.nu (.amp C (.ret R))), h => by
+      exact .nu (CTy.nuOkB_sound _ h.1.1) (VTy.clB_sound 0 R h.1.2) (dtorB_sound R h.2)
+  | .thunk (.nu (.ret _)), h | .thunk (.nu (.arr _ _)), h | .thunk (.nu .top), h
+  | .thunk (.nu (.all _ _ _)), h | .thunk (.nu (.nu _)), h
+  | .thunk (.nu (.amp _ (.arr _ _))), h | .thunk (.nu (.amp _ (.amp _ _))), h
+  | .thunk (.nu (.amp _ .top)), h | .thunk (.nu (.amp _ (.all _ _ _))), h
+  | .thunk (.nu (.amp _ (.nu _))), h => by simp [dtorB] at h
+  | .thunk (.ret _), h | .thunk (.arr _ _), h | .thunk .top, h
+  | .thunk (.all _ _ _), h => by simp [dtorB] at h
+  | .thunk (.amp _ (.ret (.tensor _ _))), h | .thunk (.amp _ (.ret .zero)), h
+  | .thunk (.amp _ (.ret (.sum _ _))), h | .thunk (.amp _ (.ret (.thunk _))), h
+  | .thunk (.amp _ (.ret (.ref _))), h | .thunk (.amp _ (.ret (.imm _ _))), h
+  | .thunk (.amp _ (.ret (.mut _ _))), h | .thunk (.amp _ (.ret (.box _ _))), h
+  | .thunk (.amp _ (.ret (.bang _))), h | .thunk (.amp _ (.ret .unk)), h
+  | .thunk (.amp _ (.ret (.tvar _))), h | .thunk (.amp _ (.ret (.mu _))), h
+  | .thunk (.amp _ (.ret (.int _))), h | .thunk (.amp _ (.ret (.fam _))), h
+  | .thunk (.amp _ (.ret (.opq _))), h
+  | .thunk (.amp _ (.arr _ _)), h
+  | .thunk (.amp _ (.amp _ _)), h | .thunk (.amp _ .top), h
+  | .thunk (.amp _ (.all _ _ _)), h | .thunk (.amp _ (.nu _)), h => by simp [dtorB] at h
+  | .unit, _ => .unit
+  | .zero, _ => .zero
+  | .int _, _ => .int
+  | .opq _, h => by simp [dtorB] at h
+  | .unk, _ => .unk
+  | .bang _, _ => .bang
+  | .imm _ _, _ => .imm
+  | .mut _ _, _ => .mut
+  | .fam (.ref A), h => .array (dtorB_sound A (by simpa [dtorB] using h))
+  | .fam (.imm _ _), _ => .arrayImm
+  | .fam (.mut _ _), _ => .arrayMut
+  | .fam .unit, h | .fam (.tensor _ _), h | .fam .zero, h | .fam (.sum _ _), h
+  | .fam (.thunk _), h | .fam (.box _ _), h
+  | .fam (.bang _), h | .fam .unk, h | .fam (.tvar _), h | .fam (.mu _), h
+  | .fam (.int _), h | .fam (.fam _), h => by simp [dtorB] at h
+
+/-- **`dtorB true` is sound for `AlgDtor`.** -/
+theorem dtorB_soundA : ∀ (A : CVTy), dtorB true A = true → ∀ Bs, AlgDtor Bs A
+  | .tensor A B, h, Bs => by
+      by_cases hc : BoCa.Fig16.LogRel.Core.FoldP.clB 0 (.tensor A B) = true
+      · exact algDtor_closed hc (dtorB_sound _ (by rwa [← dtorB_closed _ hc])) Bs
+      · simp only [dtorB, Bool.and_eq_true] at h
+        obtain ⟨a₁, a₂, a₃⟩ := dtorB_soundA A h.1 Bs
+        obtain ⟨b₁, b₂, b₃⟩ := dtorB_soundA B h.2 Bs
+        refine ⟨?_, fun B' Bs' hm => ?_, fun Bs' S hm => ?_⟩
+        · simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc]; exact .tensor a₁ b₁
+        · simp only [BoCa.Fig16.LogRel.Core.FoldP.keysIn, List.mem_append] at hm
+          exact hm.elim (a₂ B' Bs') (b₂ B' Bs')
+        · simp only [BoCa.Fig16.LogRel.Core.FoldP.keysIn, List.mem_append] at hm
+          exact hm.elim (a₃ Bs' S) (b₃ Bs' S)
+  | .sum A B, h, Bs => by
+      by_cases hc : BoCa.Fig16.LogRel.Core.FoldP.clB 0 (.sum A B) = true
+      · exact algDtor_closed hc (dtorB_sound _ (by rwa [← dtorB_closed _ hc])) Bs
+      · simp only [dtorB, Bool.and_eq_true] at h
+        obtain ⟨a₁, a₂, a₃⟩ := dtorB_soundA A h.1 Bs
+        obtain ⟨b₁, b₂, b₃⟩ := dtorB_soundA B h.2 Bs
+        refine ⟨?_, fun B' Bs' hm => ?_, fun Bs' S hm => ?_⟩
+        · simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc]; exact .sum a₁ b₁
+        · simp only [BoCa.Fig16.LogRel.Core.FoldP.keysIn, List.mem_append] at hm
+          exact hm.elim (a₂ B' Bs') (b₂ B' Bs')
+        · simp only [BoCa.Fig16.LogRel.Core.FoldP.keysIn, List.mem_append] at hm
+          exact hm.elim (a₃ Bs' S) (b₃ Bs' S)
+  | .ref A, h, Bs => by
+      by_cases hc : BoCa.Fig16.LogRel.Core.FoldP.clB 0 A = true
+      · exact algDtor_closed (A := .ref A) hc
+          (dtorB_sound _ (by rwa [← dtorB_closed (.ref A) hc])) Bs
+      · simp only [dtorB, hc, Bool.not_false, Bool.and_self, if_true] at h
+        obtain ⟨a₁, a₂, a₃⟩ := dtorB_soundA A h Bs
+        refine ⟨?_, fun B' Bs' hm => a₂ B' Bs' hm, fun Bs' S hm => a₃ Bs' S hm⟩
+        simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc]; exact a₁
+  | .fam (.ref A), h, Bs => by
+      by_cases hc : BoCa.Fig16.LogRel.Core.FoldP.clB 0 A = true
+      · exact algDtor_closed (A := .fam (.ref A)) hc
+          (dtorB_sound _ (by rwa [← dtorB_closed (.fam (.ref A)) hc])) Bs
+      · simp only [dtorB, hc, Bool.not_false, Bool.and_self, if_true] at h
+        obtain ⟨a₁, a₂, a₃⟩ := dtorB_soundA A h Bs
+        refine ⟨?_, fun B' Bs' hm => ?_, fun Bs' S hm => ?_⟩
+        · simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc]; exact .unit
+        · simp only [BoCa.Fig16.LogRel.Core.FoldP.keysIn, if_neg hc, List.mem_cons,
+            reduceCtorEq, false_or] at hm
+          exact a₂ B' Bs' hm
+        · simp only [BoCa.Fig16.LogRel.Core.FoldP.keysIn, if_neg hc, List.mem_cons,
+            BoCa.Fig16.LogRel.Core.FoldP.Bnd.arr.injEq] at hm
+          rcases hm with ⟨rfl, rfl⟩ | hm
+          · exact a₁
+          · exact a₃ Bs' S hm
+  | .mu A, h, Bs => by
+      by_cases hc : BoCa.Fig16.LogRel.Core.FoldP.clB 0 (.mu A) = true
+      · exact algDtor_closed hc (dtorB_sound _ (by rwa [← dtorB_closed _ hc])) Bs
+      · simp only [dtorB, hc, Bool.not_false, Bool.and_self, if_true] at h
+        obtain ⟨a₁, a₂, a₃⟩ := dtorB_soundA A h (A :: Bs)
+        refine ⟨?_, fun B' Bs' hm => ?_, fun Bs' S hm => ?_⟩
+        · simp only [BoCa.Fig16.LogRel.Core.FoldP.resO, if_neg hc]; exact .unit
+        · simp only [BoCa.Fig16.LogRel.Core.FoldP.keysIn, if_neg hc, List.mem_cons,
+            BoCa.Fig16.LogRel.Core.FoldP.Bnd.mu.injEq, List.cons.injEq] at hm
+          rcases hm with ⟨rfl, rfl⟩ | hm
+          · exact a₁
+          · exact a₂ B' Bs' hm
+        · simp only [BoCa.Fig16.LogRel.Core.FoldP.keysIn, if_neg hc, List.mem_cons,
+            reduceCtorEq, false_or] at hm
+          exact a₃ Bs' S hm
+  | .tvar _, _, Bs => by
+      refine ⟨by simp [BoCa.Fig16.LogRel.Core.FoldP.resO, dtorAlgs]; exact .unit,
+        fun _ _ hm => by simp [BoCa.Fig16.LogRel.Core.FoldP.keysIn] at hm,
+        fun _ _ hm => by simp [BoCa.Fig16.LogRel.Core.FoldP.keysIn] at hm⟩
+  | .box a A, h, Bs => algDtorLeaf (.box a A) (dtorB_sound _ h) Bs
+  | .thunk (.amp C (.ret .unit)), _, Bs => algDtorLeaf (.thunk (.amp C (.ret .unit))) .close Bs
+  | .thunk (.nu (.amp C (.ret R))), h, Bs => by
       simp only [dtorB, Bool.and_eq_true] at h
-      have := HasDtor.nu (CTy.nuOkB_sound _ h.1.1) (VTy.clB_sound 0 R h.1.2)
-        (dtorB_sound false R h.2)
-      cases alg <;> exact this
-  | _, .thunk (.nu (.ret _)), h | _, .thunk (.nu (.arr _ _)), h | _, .thunk (.nu .top), h
-  | _, .thunk (.nu (.all _ _ _)), h | _, .thunk (.nu (.nu _)), h
-  | _, .thunk (.nu (.amp _ (.arr _ _))), h | _, .thunk (.nu (.amp _ (.amp _ _))), h
-  | _, .thunk (.nu (.amp _ .top)), h | _, .thunk (.nu (.amp _ (.all _ _ _))), h
-  | _, .thunk (.nu (.amp _ (.nu _))), h => by simp [dtorB] at h
-  | _, .thunk (.ret _), h | _, .thunk (.arr _ _), h | _, .thunk .top, h
-  | _, .thunk (.all _ _ _), h => by simp [dtorB] at h
-  | _, .thunk (.amp _ (.ret (.tensor _ _))), h | _, .thunk (.amp _ (.ret .zero)), h
-  | _, .thunk (.amp _ (.ret (.sum _ _))), h | _, .thunk (.amp _ (.ret (.thunk _))), h
-  | _, .thunk (.amp _ (.ret (.ref _))), h | _, .thunk (.amp _ (.ret (.imm _ _))), h
-  | _, .thunk (.amp _ (.ret (.mut _ _))), h | _, .thunk (.amp _ (.ret (.box _ _))), h
-  | _, .thunk (.amp _ (.ret (.bang _))), h | _, .thunk (.amp _ (.ret .unk)), h
-  | _, .thunk (.amp _ (.ret (.tvar _))), h | _, .thunk (.amp _ (.ret (.mu _))), h
-  | _, .thunk (.amp _ (.ret (.int _))), h | _, .thunk (.amp _ (.ret (.fam _))), h
-  | _, .thunk (.amp _ (.ret (.opq _))), h
-  | _, .thunk (.amp _ (.arr _ _)), h
-  | _, .thunk (.amp _ (.amp _ _)), h | _, .thunk (.amp _ .top), h
-  | _, .thunk (.amp _ (.all _ _ _)), h | _, .thunk (.amp _ (.nu _)), h => by simp [dtorB] at h
-  | alg, .unit, _ => by cases alg <;> exact .unit
-  | alg, .zero, _ => by cases alg <;> exact .zero
-  | alg, .int _, _ => by cases alg <;> exact .int
-  | _, .opq _, h => by simp [dtorB] at h
-  | alg, .unk, _ => by cases alg <;> exact .unk
-  | alg, .bang _, _ => by cases alg <;> exact .bang
-  | alg, .imm _ _, _ => by cases alg <;> exact .imm
-  | alg, .mut _ _, _ => by cases alg <;> exact .mut
-  | alg, .fam (.ref A), h => by
-      have := HasDtor.array (dtorB_sound false A (by simpa [dtorB] using h))
-      cases alg <;> exact this
-  | alg, .fam (.imm _ _), _ => by cases alg <;> exact .arrayImm
-  | alg, .fam (.mut _ _), _ => by cases alg <;> exact .arrayMut
-  | _, .fam .unit, h | _, .fam (.tensor _ _), h | _, .fam .zero, h | _, .fam (.sum _ _), h
-  | _, .fam (.thunk _), h | _, .fam (.box _ _), h
-  | _, .fam (.bang _), h | _, .fam .unk, h | _, .fam (.tvar _), h | _, .fam (.mu _), h
-  | _, .fam (.int _), h | _, .fam (.fam _), h => by simp [dtorB] at h
+      exact algDtorLeaf _ (.nu (CTy.nuOkB_sound _ h.1.1) (VTy.clB_sound 0 R h.1.2) (dtorB_sound R h.2)) Bs
+  | .thunk (.nu (.ret _)), h, _ | .thunk (.nu (.arr _ _)), h, _ | .thunk (.nu .top), h, _
+  | .thunk (.nu (.all _ _ _)), h, _ | .thunk (.nu (.nu _)), h, _
+  | .thunk (.nu (.amp _ (.arr _ _))), h, _ | .thunk (.nu (.amp _ (.amp _ _))), h, _
+  | .thunk (.nu (.amp _ .top)), h, _ | .thunk (.nu (.amp _ (.all _ _ _))), h, _
+  | .thunk (.nu (.amp _ (.nu _))), h, _ => by simp [dtorB] at h
+  | .thunk (.ret _), h, _ | .thunk (.arr _ _), h, _ | .thunk .top, h, _
+  | .thunk (.all _ _ _), h, _ => by simp [dtorB] at h
+  | .thunk (.amp _ (.ret (.tensor _ _))), h, _ | .thunk (.amp _ (.ret .zero)), h, _
+  | .thunk (.amp _ (.ret (.sum _ _))), h, _ | .thunk (.amp _ (.ret (.thunk _))), h, _
+  | .thunk (.amp _ (.ret (.ref _))), h, _ | .thunk (.amp _ (.ret (.imm _ _))), h, _
+  | .thunk (.amp _ (.ret (.mut _ _))), h, _ | .thunk (.amp _ (.ret (.box _ _))), h, _
+  | .thunk (.amp _ (.ret (.bang _))), h, _ | .thunk (.amp _ (.ret .unk)), h, _
+  | .thunk (.amp _ (.ret (.tvar _))), h, _ | .thunk (.amp _ (.ret (.mu _))), h, _
+  | .thunk (.amp _ (.ret (.int _))), h, _ | .thunk (.amp _ (.ret (.fam _))), h, _
+  | .thunk (.amp _ (.ret (.opq _))), h, _
+  | .thunk (.amp _ (.arr _ _)), h, _
+  | .thunk (.amp _ (.amp _ _)), h, _ | .thunk (.amp _ .top), h, _
+  | .thunk (.amp _ (.all _ _ _)), h, _ | .thunk (.amp _ (.nu _)), h, _ => by simp [dtorB] at h
+  | .unit, _, Bs => algDtorLeaf .unit .unit Bs
+  | .zero, _, Bs => algDtorLeaf .zero .zero Bs
+  | .int w, _, Bs => algDtorLeaf (.int w) .int Bs
+  | .unk, _, Bs => algDtorLeaf .unk .unk Bs
+  | .bang A, _, Bs => algDtorLeaf (.bang A) .bang Bs
+  | .imm a A, _, Bs => algDtorLeaf (.imm a A) .imm Bs
+  | .mut a A, _, Bs => algDtorLeaf (.mut a A) .mut Bs
+  | .opq _, h, _ => by simp [dtorB] at h
+  | .fam (.imm a A), _, Bs => algDtorLeaf (.fam (.imm a A)) .arrayImm Bs
+  | .fam (.mut a A), _, Bs => algDtorLeaf (.fam (.mut a A)) .arrayMut Bs
+  | .fam .unit, h, _ | .fam (.tensor _ _), h, _ | .fam .zero, h, _ | .fam (.sum _ _), h, _
+  | .fam (.thunk _), h, _ | .fam (.box _ _), h, _
+  | .fam (.bang _), h, _ | .fam .unk, h, _ | .fam (.tvar _), h, _ | .fam (.mu _), h, _
+  | .fam (.int _), h, _ | .fam (.fam _), h, _ | .fam (.opq _), h, _ => by simp [dtorB] at h
+end
 
 /-- `A` has a destructor. -/
 def hasDtorB (A : CVTy) : Bool := dtorB false A
 
-theorem hasDtorB_sound {A : CVTy} (h : hasDtorB A = true) : HasDtor A := dtorB_sound false A h
+theorem hasDtorB_sound {A : CVTy} (h : hasDtorB A = true) : HasDtor A := dtorB_sound A h
 
 
 /-- What the checker knows at a point besides `Δ` and the slot types `T`: the declarations in
