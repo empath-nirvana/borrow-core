@@ -50,8 +50,9 @@ pass upward. The [introduction](book/src/introduction.md) has a longer example: 
 
 - **Ownership and borrowing** as in Rust: values move, `&` and `&mut` lend them, and lifetimes
   appear in signatures. Copying a list or tree is always written out with `clone`. → [Ownership and borrows](book/src/guide/ownership.md)
-- **Data types** with records, variants, generics and pattern matching. Recursive data goes
-  under an explicit `box`, and folds walk it by borrow, in place, or by consuming it.
+- **Data types** with records, variants, generics and pattern matching. Recursive data, nested
+  as deep as you like (a tree whose children are a `Vec` of trees needs no `box`), and every
+  allocation is one you wrote. Folds walk it by borrow, in place, or by consuming it.
   → [Data and generics](book/src/guide/data.md)
 - **Errors** as `raise` and handlers. A function's effects are inferred, so nothing is annotated
   along the way, and an unhandled error is a compile-time error. → [Errors](book/src/guide/errors.md)
