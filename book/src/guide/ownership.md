@@ -3,9 +3,11 @@
 Every value is either **copyable** or **owned**. A copyable value holds no resource, and may be
 used any number of times or not at all. An owned value holds memory (or a capability, or a
 suspended computation), and is used exactly once: passed on, taken apart, or freed. Borrowing
-lends an owned value for a while without giving it up. This is Rust's model, with two
-differences: there are no hidden copies of recursive data, and the rules are checked by a
-checker whose every acceptance is a proof (SPEC §1, [What is proved](../proved.md)).
+lends an owned value for a while without giving it up. If you know Rust, this is its model. One
+difference: data that holds no resources, like a list of integers, counts as copyable, but
+copying a list or tree must be written `clone(x)` (below). The rules are
+proved sound in Lean ([What is proved](../proved.md)), so a program that type-checks has no use
+after free, no double free and no leak.
 
 ## Copyable and owned values
 
@@ -97,8 +99,8 @@ main -> i32 =
 -- answer: i32[42]
 ```
 
-A lend must be the whole call of a `let` or a statement: `let x = get(&c); (x, …)` rather than
-`(get(&c), …)` (#510, #525).
+Write a lend as the whole call of a `let` or a statement: `let x = get(&c); (x, …)` rather than
+`(get(&c), …)`.
 
 ## Borrow blocks
 
@@ -120,13 +122,11 @@ main -> i32 =
 The block introduces a lifetime of its own. It is unnamed unless a type written inside the block
 mentions it, in which case it is written first: `borrow imm a { 'x, v -> … }`.
 
-Inside the block, `m` is a value like any other: passing it to a function moves it, so a function
-that takes a `mut` borrow and is called more than once hands it back, `fn f<'a>(m: mut 'a A) ->
-mut 'a A * B`, as the view functions of the next chapter do. Lending a borrow again with `&mut m`
-(a reborrow) is not provided at the surface.
-
-A second owner lent inside a borrow block is not yet handed back after the outer block: lend it
-before or after the block instead (#495).
+Inside the block, `m` is a value like any other: passing it to a function moves it. So a function
+that takes a `mut` borrow and is meant to be called more than once hands it back,
+`fn f<'a>(m: mut 'a A) -> mut 'a A * B`, as the view functions of the next chapter do. (`&mut m`,
+lending a borrow on again, is not available yet; nor is lending a second owner inside a borrow
+block. Lend it before or after the block.)
 
 ## What the checker refuses
 

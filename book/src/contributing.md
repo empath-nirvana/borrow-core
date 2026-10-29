@@ -1,7 +1,8 @@
 # Contributing
 
-The project's working rules are in `CLAUDE.md` and `docs/decisions.md`; this chapter collects
-them.
+This chapter collects the project's working rules. Work is tracked in GitHub issues and merged
+by pull request. The reasoning behind the design is in
+[`docs/decisions.md`](https://github.com/empath-nirvana/borrow-core/blob/main/docs/decisions.md).
 
 ## Spec first
 
@@ -9,7 +10,7 @@ them.
 
 ## Definition of done
 
-A feature is done when it compiles ([Design decisions](decisions.md), 17). A feature issue carries
+A feature is done when it compiles and runs, not when it type-checks. A feature issue carries
 this checklist (`.github/ISSUE_TEMPLATE/feature.md`):
 
 {{#include ../../.github/ISSUE_TEMPLATE/feature.md:13:}}
@@ -35,8 +36,8 @@ each experiment and what it found.
 
 ## Tests
 
-The gate, `make gate` (`scripts/ci-local.sh`), is run locally before a pull request is opened or
-merged; GitHub Actions does not run for this repository. It runs, among other checks:
+There is no hosted CI. The gate, `make gate` (`scripts/ci-local.sh`), is run locally before a
+pull request is opened or merged. It runs, among other checks:
 
 | script | checks |
 |---|---|
@@ -48,11 +49,25 @@ merged; GitHub Actions does not run for this repository. It runs, among other ch
 | `scripts/book-doctest.sh` | every program in this book, as below |
 | `mdbook build book` | this book |
 
+Other targets:
+
+```sh
+make gate-full   # the gate, re-checking every golden against the reference interpreter
+make gate-fast   # while iterating: only the steps your changes since origin/main reach
+make goldens     # rewrite the corpus goldens (.out) from the reference interpreter
+scripts/new-worktree.sh <branch>  # a worktree from origin/main, reusing this checkout's build
+```
+
+Every corpus program's `.out` and every book block's `-- answer:` is a golden: what the reference
+interpreter (`bcc interp`) prints. The gate checks every compiled stage against the goldens. It
+runs the interpreter itself, which is slow on the largest programs, only on programs and blocks
+that are new or changed; `make gate-full` runs it on all of them, and the gate turns that on by
+itself when `Paper/`, `Support/` or `Backend/` changed.
+
 A corpus program's `main` should have a **falsifier observable**: an answer that plausible wrong
 implementations cannot produce. `a - b` with `a ≠ b` catches swapped operands, and two stores read
-back in order catch a store that ignores its index. Its golden is written from the interpreter
-by `scripts/compile-corpus.sh --write-goldens corpus/<name>.bc`. The gate runs the interpreter
-itself only on new or changed programs and blocks; `make gate-full` runs it on all of them.
+back in order catch a store that ignores its index. Write a single program's golden with
+`scripts/compile-corpus.sh --write-goldens corpus/<name>.bc`.
 
 ## Doc-tests
 
@@ -66,7 +81,9 @@ Every fenced block in `book/src/` whose info string starts with `bc` is a progra
 | `bc,reject` | parse, and be rejected by the checker with exactly the message on its `-- expect:` line |
 | `bc,ignore` | nothing: it is not run |
 
-The line and column in an `-- expect:` line count from the block's first line. Failures are
+A `bc` block's expected standard output goes in `-- output:` lines, one per line, and its
+standard input in `-- stdin:` lines. The line and column in an `-- expect:` line count from the
+block's first line. Failures are
 reported at the block's opening fence, `book/src/<file>.md:<line>`. To run the doc-tests
 locally after `lake build`:
 

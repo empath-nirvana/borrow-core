@@ -1,8 +1,8 @@
 # Values, functions and numbers
 
-This chapter covers the parts of the language that look like any expression language: functions,
-`let`, `if`, integers and floats, pairs and sums. Ownership, the part that does not, is the
-[next chapter](ownership.md).
+This chapter covers the parts of the language that look like most others: functions, `let`,
+`if`, numbers, records and variants, generics and closures. Ownership, the part that is
+different, is the [next chapter](ownership.md).
 
 ## A program
 
@@ -18,8 +18,8 @@ main -> i32 = square(6) + square(2)
 ```
 
 `fn name(params) -> T = e` declares a function. Every parameter has its type written, and so does
-the result. A function can call any function declared before it, and itself (a recursion,
-[Data and generics](data.md#recursion)); it cannot call one declared after it.
+the result. A function can call itself and any function declared before it, but not one
+declared after it ([Recursion](data.md#recursion)).
 
 A body is a sequence of statements separated by `;`, and its value is the value of the last one:
 
@@ -94,10 +94,9 @@ main -> i64 * (i32 * bool) =
 -- answer: (i64[2666666667], (i32[2], inr ()))
 ```
 
-The value of `main` is printed in a form close to the machine's: a `bool` prints as `inl ()`
-(false) or `inr ()` (true), because `bool` is the sum `1 + 1` (below), and integers print unsigned,
-so `0 - 1` at `i32` prints as `i32[4294967295]`. Write to standard output for anything nicer
-([Input and output](io.md)).
+`main`'s value is printed raw: integers unsigned, so `0 - 1` prints as `i32[4294967295]`, and
+`bool` as `inl ()`/`inr ()` (see [Pairs and sums](#pairs-and-sums)). Print with `print_dec` for
+anything nicer ([Input and output](io.md)).
 
 A byte is a `u8`. Arithmetic on bytes is done at `i32` and narrowed back, and `to_i32(b)` and
 `to_u8(n)` convert between the two:
@@ -137,43 +136,78 @@ main -> i32 =
 
 `main`'s value prints a float as its bits (`f64[4617315517961601024]` for `5.0`), which is why
 this one prints with `print_f64`. A float has no hash or total order of its own, so it cannot be
-a map key directly; `lib/float.bc` has `total_cmp_f64` and `ord_f64` for when one is needed
-(SPEC §37).
+a map key directly; `lib/float.bc` has `total_cmp_f64` and `ord_f64` for when you need one.
 
-## Pairs, sums and type names
+## Records and variants
+
+`data` declares a type of your own. A **record** has named fields, read and written with `.`:
+
+```bc
+data Point = { x: i32, y: i32 }
+
+fn manhattan(p: Point) -> i32 = p.x + p.y
+
+main -> i32 =
+  let mut p = Point { x: 3, y: 4 };
+  p.x = p.x * 10;
+  manhattan(p)
+-- answer: i32[34]
+```
+
+A **variant** is one of several cases, each with its own fields, and `match` takes it apart:
+
+```bc
+data Shape = Rect(w: i32, h: i32) | Circle(r: i32)
+
+fn area(s: Shape) -> i32 =
+  match s {
+    Rect(w, h) -> w * h
+  | Circle(r) -> 3 * r * r
+  }
+
+main -> i32 = area(Rect(3, 4)) + area(Circle(2))
+-- answer: i32[24]
+```
+
+A `match` must cover every case, and it can match several values at once,
+`match (state, byte) { (Locked, b'c') -> Open | … }`. Declarations can be generic,
+`data Pair[A, B] = { fst: A, snd: B }`, and the prelude has `Option[T]`, with `Some(x)` and
+`None`. Recursive types, such as lists and trees, are in [Data and generics](data.md).
+
+## Pairs and sums
+
+Underneath, every type is built from two pieces, and you can use them directly.
 
 `(a, b)` is a pair, of type `A * B`. There are no wider tuples as such: `(a, b, c)` is the nested
 pair `(a, (b, c))`, of type `A * (B * C)`. `let (x, y) = p;` takes a pair apart, and patterns
 nest.
 
 A sum `A + B` holds either an `A`, written `inl a`, or a `B`, written `inr b`. `match` takes one
-apart; its arms are written `inl` first:
+apart, `inl` arm first:
 
 ```bc
-type Shape = (i32 * i32) + i32
+type Size = (i32 * i32) + i32
 
-fn area(s: Shape) -> i32 =
+fn cells(s: Size) -> i32 =
   match s {
     inl (w, h) -> w * h
-  | inr r -> 3 * r * r
+  | inr n -> n
   }
 
 main -> i32 =
-  let a: Shape = inl (3, 4);
-  let b: Shape = inr 2;
-  area(a) + area(b)
--- answer: i32[24]
+  let a: Size = inl (3, 4);
+  let b: Size = inr 2;
+  cells(a) + cells(b)
+-- answer: i32[14]
 ```
 
-`type Shape = …` gives a type a name; the name and its definition are interchangeable. `inl` and
+`type Size = …` gives a type a name; the name and its definition are interchangeable. `inl` and
 `inr` need to know the whole sum, so they appear where a type is expected: an annotated `let`, an
-argument, a result. A sum of more than two cases nests, `A + (B + C)`, matched as `inr (inl b)`.
+argument, a result.
 
-`bool` is `1 + 1`, with `false` as `inl ()` and `true` as `inr ()`; `if c { x } else { y }` is
-the `match` on it. An `Option` is `A + 1`: `inl a`, or `inr ()` for nothing.
-
-There are no `struct` or `enum` declarations yet: a record is a nested pair under a `type` name,
-and a variant a nested sum (SPEC §36 *Not provided*, #489).
+`bool` is the sum `1 + 1`, with `false` as `inl ()` and `true` as `inr ()`, and `Option[A]` is
+`A + 1`. This is why `main`'s value prints sums and pairs: a record prints as its fields, nested
+in pairs, and a variant as `inl`/`inr`.
 
 ## Generic functions
 
@@ -201,8 +235,8 @@ use: a body that copies an `A` works only where `A` can be copied (next chapter)
 A function can be passed to another. Its parameter's type says how often it may be called:
 
 - `!(A => B)` is a function that can be called any number of times. A named function is one, and
-  so is a closure `!{ x -> … }` that captures nothing from its surroundings except other `!`
-  values.
+  so is a closure `!{ x -> … }`, which can't capture local variables (pass them as arguments, or
+  use a one-shot closure).
 - `A => B` is a function called at most once. A closure `{ x -> … }` of this type may capture
   anything in scope, including local variables and owned values.
 
@@ -225,10 +259,6 @@ main -> i32 * (i32 * i32) =
 A closure's parameter types come from the parameter it is passed to, so a closure bound with
 `let` needs its type written: `let f: !(i32 => i32) = !{ x -> x + 1 };`. A pattern can take the
 argument apart, `!{ (a, b) -> a + b }`.
-
-A `!` closure cannot capture an ordinary local, even an `i32` (`!{ x -> x + k }` above is
-rejected); capture by a `!` closure is limited to `!` values for now (#9). Pass such a value as an
-argument instead, or use a one-shot closure.
 
 A function whose body performs effects, raises an error or waits, is passed the same way, and the
 function it is passed to needs nothing extra to accept it: [Effects and
