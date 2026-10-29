@@ -53,8 +53,8 @@ A `raise` that no handler can reach is a compile-time error naming the function 
 (`` `f` performs `Fail`, but no handler of `Fail` is in scope here ``): an error never escapes
 `main` unnoticed. The one exception is division, below.
 
-A written row is a promise, checked: a function that performs an effect its written row leaves
-out is rejected. A row may also give the error's type where nothing else does.
+If you do write the row, the compiler holds you to it: performing an effect the row leaves out
+is an error. A row may also give the error's type where nothing else does.
 
 ## What an error abandons
 
@@ -77,8 +77,8 @@ main -> (i32 + i32) * (i32 + i32) =
 ```
 
 A value with no destructor (a capability, a one-shot closure that must be called) cannot be live
-where an error may leave, and the checker names it. An error carries no owned value: its payload
-is data, borrows or `!` values (#215).
+where an error may leave, and the checker names it. An error's payload is plain data, borrows or
+`!` values; it cannot carry an owned value such as a buffer.
 
 The handler of `Fail` is a handler like any other, so it can be written for a purpose. `to_result`
 itself is
@@ -128,14 +128,13 @@ instances in one row, and two handlers of one instance told apart by name.
 ## Division
 
 `a / b` and `a % b` at `i32`, `i64` and `u8` truncate toward zero, the remainder taking the
-dividend's sign. A division with no answer raises `Fail[DivError]`: a zero divisor, and `MIN / -1`
-at a signed width (`DivError` is `1 + 1`, `inl ()` the zero divisor; `div_by_zero` and
-`div_overflow` name the two). It is one more instance of `Fail`, so `to_result`, `default` and
-`map_err` handle it, and a function may raise its own `Fail[E]` and divide: the two are two
-entries of its row. A function that divides by a variable has it in its row with nothing written;
-a division by a nonzero literal cannot fail, and performs nothing. `checked_div` and
-`checked_rem` answer the sum instead, and `div_euclid` and `rem_euclid` are the Euclidean forms
-(SPEC §39).
+dividend's sign.
+
+Dividing by zero, or `MIN / -1` at a signed width, raises `Fail[DivError]`. `div_by_zero` and
+`div_overflow` are its two values. It's an ordinary `Fail`, so `to_result`, `default` and
+`map_err` handle it, and a function can raise its own `Fail[E]` and divide too. Dividing by a
+nonzero literal can't fail and needs no handler. `checked_div` and `checked_rem` return an
+`Option`-like sum instead, and `div_euclid` and `rem_euclid` are the Euclidean forms.
 
 ```bc
 -- answer: (i32[0], (inl i32[3], i32[4294967293]))
@@ -155,10 +154,8 @@ error, and exits with status 1, after freeing what it held.
 main -> i32 = let n = 0; 10 / n
 ```
 
-## Not yet
+## Loops that raise
 
-- A loop with no bound (`while`, `loop`) cannot raise: its body may not perform `raise`, nor
-  divide by a variable. The message is a type mismatch that does not say so (#522; #517 for
-  division in such loops). A counted `for`, which always finishes, may raise.
-- An error raised in the step of a kernel fold (`fold_own`'s algebra) is not provided (#178).
-- An error cannot carry an owned value, such as the buffer a parser was filling (#215).
+A counted `for`, which always finishes, may raise. A loop with no bound, `while` or `loop`, may
+not yet: its body cannot call `raise` or divide by a variable. Raise after the loop instead, or
+count the loop with `for`.

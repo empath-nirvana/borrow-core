@@ -1,9 +1,23 @@
 # What is proved
 
-Everything below is a Lean theorem, checked by the gate (`scripts/ci-local.sh`) before every
-merge. No result depends on an axiom
-beyond Lean's standard three (`propext`, `Classical.choice`, `Quot.sound`), and the library
-contains no `sorry`, `native_decide` or `partial` (`scripts/check-hygiene.sh`).
+The language's safety guarantees are proved in Lean, not just tested. For you as a programmer,
+that means a program `bcc check` accepts:
+
+- never uses memory after freeing it, and never frees it twice;
+- never leaks: when it finishes, everything it allocated has been freed;
+- terminates, unless its type says it may loop (a `while`, a `loop`, or a call of a function
+  that has one);
+- does only the I/O its signature allows: a function with no I/O effect can't touch a stream.
+
+This holds however the program uses effects: errors that unwind through borrows, handlers,
+generators and cancelled tasks are all covered. Better still, it isn't just a claim about the
+checker: every time `bcc check` accepts a program, it builds a proof for that particular program.
+
+The rest of this page is for readers who want the details: the theorems, where they live in the
+Lean sources, what is trusted, and what is not claimed. Every result below is checked before each
+merge. None depends on an axiom beyond Lean's standard three (`propext`, `Classical.choice`,
+`Quot.sound`), and the library contains no `sorry`, `native_decide` or `partial`
+(`scripts/check-hygiene.sh`).
 
 ## The theorems, in plain language
 
@@ -53,20 +67,26 @@ passes the handler) are machine lemmas in
 `ewpTS`, a least fixed point: the computation performs finitely many operations, each at its
 protocol, and then answers. So the relation gives total correctness and safety at `F A`,
 finitely many operations at `F_Σ A`, and termination of each observation at `ν` types, including
-a loop whose observations perform operations. Each of the six rules has its compatibility lemma
+a loop whose observations perform operations.
+
+Each of the six rules has its compatibility lemma
 (`sub_compatC`, `perform_compatC`, `raise_compatC`, `let_compatC`, `then_compatC`,
 `handle_compatC` in [`Core/EffRules.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffRules.lean)), and
-`fundamentalC`, `fundamentalD` and `adequacyD` cover the extended judgment. An operation that
-raises crosses a borrow: each borrow has an unwinding form, which ends the lend and runs the
+`fundamentalC`, `fundamentalD` and `adequacyD` cover the extended judgment.
+
+An operation that raises crosses a borrow: each borrow has an unwinding form, which ends the lend and runs the
 source's finaliser before the unwind continues outward. Its obligations are the frame lemmas
 `ewpTS_I_frameU`, `ewpTS_M_frameU` and `ewpTS_M_antiFrameU` in
 [`Core/EffWp.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffWp.lean), used by
-[`Core/EffBorrow.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffBorrow.lean). Cancelling a stored continuation runs
+[`Core/EffBorrow.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffBorrow.lean).
+
+Cancelling a stored continuation runs
 its finalisers innermost first, with the handlers of the cancelled region dead, and answers `()`,
 or re-raises at the canceller the first error a finaliser raised, to the nearest live handler of
 its name; the outcomes are run in
-[`Core/EffCancel.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffCancel.lean) (`prog₃_run`, `progRe_run`, `progFinOp_run`, …). The six
-acceptance programs of §19 (two effects in both nesting orders, logging and raising inside a
+[`Core/EffCancel.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffCancel.lean) (`prog₃_run`, `progRe_run`, `progFinOp_run`, …).
+
+The six acceptance programs of §19 (two effects in both nesting orders, logging and raising inside a
 borrow, an infinite loop that logs, early exit from a producer that holds a cell, and
 cancelling a stored continuation) are closed derivations in
 [`Core/EffPrograms.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffPrograms.lean), each with its every-run theorem
@@ -117,7 +137,7 @@ text.
 
 - **The compiler is tested, not yet proved.** Each stage has an interpreter. Every corpus program
   and every runnable example in this book gives the same answer compiled as under the Lean
-  interpreter, and ends with `live 0`. The plan for proving it is #15.
+  interpreter, and ends with `live 0`. Proving the compiler correct is planned.
 - **The handler lowering is tested, not verified.** There is no runtime handler stack and no
   handler search: an abortive operation is a branch after each call that may raise
   (`Backend/Clos/Unwind.lean`), a tail-resumptive operation whose handler is known is a direct
@@ -136,10 +156,13 @@ text.
 ## What is not claimed
 
 - A program that holds a borrow across a suspension (a task that lends its own cell across
-  `await`, SPEC §29) is covered under `PinLaw`, a hypothesis stated in Lean
+  `await`, the relaxed lend of SPEC §29) is covered under `PinLaw`, a hypothesis stated in Lean
   ([`Core/PinLaw.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/PinLaw.lean))
-  and not proved: `fundamentalC_pin` and `adequacyD_pin` assume it. `bcc check` prints
-  `assurance: PinLaw (R1 at L:C)` for such a program and `assurance: unconditional` otherwise.
+  and not yet proved: `fundamentalC_pin` and `adequacyD_pin` assume it.
+  [`docs/async-capabilities.md`](https://github.com/empath-nirvana/borrow-core/blob/main/docs/async-capabilities.md)
+  §4 gives the evidence for it, and the corpus has programs that try to break it. `bcc check`
+  prints `assurance: PinLaw (R1 at L:C)` for such a program and `assurance: unconditional`
+  otherwise, so you can always see which programs rely on it.
 
 - A loop (`delay`, `loop`, a div function) is not claimed to terminate; its type says it may not.
   The same holds for a computation that performs operations forever: it is typed as a loop whose

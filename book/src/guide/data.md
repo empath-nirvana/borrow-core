@@ -1,120 +1,194 @@
 # Data and generics
 
-This chapter covers the data a program builds: recursive types such as lists and trees, arrays,
-buffers and strings, and the generic code over them: `poly` families, operators at your own
-types, and the hash map and set.
+This chapter covers the data a program builds: recursive types such as lists and trees, the
+folds that walk them, arrays, buffers and strings, and the generic code over them: `poly`
+families, operators at your own types, and the hash map and set.
 
-## Recursive types
+## Recursive data
 
-`mu X. A` is a recursive type: `A` with `X` standing for the type itself. A list of integers is
-empty, or a head and the rest:
-
-```text
-type IntList = mu X. 1 + (i32 * X)
-```
-
-`roll v` builds a value of a `mu` type from one layer, and `unroll v` exposes the layer, which a
-`match` takes apart:
-
-```bc
-type Tree = mu X. 1 + (X * (i32 * X))
-
-def empty : Tree = roll inl ()
-
-fn branch(l: Tree, v: i32, r: Tree) -> Tree = roll inr (l, (v, r))
-
-fn root(t: Tree) -> i32 =
-  match unroll t {
-    inl u -> 0
-  | inr (l, p) -> let (v, r) = p; v
-  }
-
-main -> i32 = root(branch(empty, 7, branch(empty, 3, empty)))
--- answer: i32[7]
-```
-
-`def name : T = v` declares a constant. A type may take parameters, `type Pair[A] = A * A`, and
-`include list` (`lib/list.bc`) gives the generic `List[A]`, with `nil()`, `cons(x, xs)` and the
-recursive `map`, `filter` and `fold`.
-
-There are no `data` declarations with named constructors yet (#489): a type is a `mu`, a sum and
-pairs, and constructors are functions. The names `leaf`, `node`, `swap`, `total` and the
-constant names of the core are reserved, and cannot name a function.
-
-## Recursion
-
-In short: a function that calls itself runs with a budget of depth (10000 levels) instead of an
-unbounded stack. `with on_exhausted(f) { … }` answers `f(())` when the budget is spent, and
-`with deep { … }` runs the recursion with its pending calls on the heap, limited only by memory.
-Both come from `include rec`. The details:
-
-A function may call itself, and functions may call one another: they form a recursive group, and
-a **driver** runs it (SPEC §20, §21). The group is the fixed point of its *generator*, the members'
-bodies with their calls of the group going to a self-reference, and each of those calls is a
-direct call. The default driver, `bounded`, needs nothing written: it takes the fixed point as
-native calls, carrying a budget of depth, and when the budget is spent it performs `exhausted()`,
-an error like any other (`include rec`). So a recursive function's *row*, the effects it may perform
-([Effects and handlers](effects.md)), has `Exhausted`, and something handles it:
+A `data` declaration may mention itself. A binary tree is a leaf, or a node with two subtrees
+and a value:
 
 ```bc
 include rec
 
-type Tree = mu X. 1 + (X * (i32 * X))
+data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)
 
-def empty : Tree = roll inl ()
-fn mk(l: Tree, v: i32, r: Tree) -> Tree = roll inr (l, (v, r))
-
-fn build(d: i32) -> Tree = if d == 0 { empty } else { mk(build(d - 1), d, build(d - 1)) }
+fn branch(l: Tree, v: i32, r: Tree) -> Tree = box Node(l, v, r)
 
 fn sum(t: Tree) -> i32 =
-  match unroll t {
-    inl u -> 0
-  | inr (l, p) -> let (v, r) = p; sum(l) + v + sum(r)
+  match t {
+    Leaf -> 0
+  | box Node(l, v, r) -> sum(l) + v + sum(r)
   }
+
+main -> i32 =
+  let t = branch(branch(Leaf, 1, Leaf), 2, branch(Leaf, 3, Leaf));
+  with on_exhausted(!{ u -> 0 - 1 }) { sum(t) }
+-- answer: i32[6]
+```
+
+A node holds a tree, so it has to live on the heap, and you say so: `box Node(l, v, r)` allocates
+it, where Rust would write `Box::new`. Nothing else allocates. The pattern `box Node(l, v, r)`
+takes the node apart and frees it, so `sum` consumes the tree, and the run ends with `live 0`.
+Cases that hold no tree, like `Leaf`, need no `box`. (`leaf`, `node`, `swap` and `total` are
+reserved, so pick other function names.)
+
+`sum` calls itself, so it runs with a depth budget, and `with on_exhausted(…)` says what to do if
+the budget runs out. [Recursion](#recursion), below, explains it. Most of the time you do not
+need it, because a fold walks the tree for you.
+
+## Folds
+
+A fold walks recursive data bottom-up: each arm sees a node with its subtrees already folded.
+There are three, one for each way of holding the data:
+
+| fold | takes | use it to |
+|---|---|---|
+| `fold_imm t { … }` | a borrow, `imm 'a T` | read the data and keep it |
+| `fold_own t { … }` | the data itself | consume it, freeing each node |
+| `fold_reuse t { … }` | the data itself | rebuild it in place, reusing each node's memory |
+
+```bc
+data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)
+
+fn branch(l: Tree, v: i32, r: Tree) -> Tree = box Node(l, v, r)
+
+-- Reads the tree through a borrow: `v` is a view of the node's value.
+fn sum<'a>(t: imm 'a Tree) -> i32 = fold_imm t { Leaf -> 0 | Node(l, v, r) -> l + *v + r }
+
+-- The largest value; consumes the tree.
+fn largest(t: Tree) -> i32 =
+  fold_own t {
+    Leaf -> 0
+  | box Node(l, v, r) -> if l > v && l > r { l } else if r > v { r } else { v }
+  }
+
+main -> i32 * i32 =
+  let t = branch(branch(Leaf, 1, Leaf), 7, branch(Leaf, 3, Leaf));
+  let s = sum(&t);
+  (s, largest(t))
+-- answer: (i32[11], i32[7])
+```
+
+In the arms, `l` and `r` are not subtrees but the fold's answers for them, here numbers. A fold
+needs no `on_exhausted`, and it works on generic data too:
+
+```bc
+data List[T] = Nil | Cons(head: T, tail: List[T])
+
+fn cons[T](x: T, rest: List[T]) -> List[T] = box Cons(x, rest)
+
+fn len[T]<'a>(l: imm 'a List[T]) -> i32 = fold_imm l { Nil -> 0 | Cons(_, rest) -> 1 + rest }
+
+fn first[T](l: List[T]) -> Option[T] = match l { Nil -> None | box Cons(x, rest) -> Some(x) }
+
+main -> i32 * i32 =
+  let xs = cons(1, cons(2, cons(3, Nil)));
+  let n = len(&xs);
+  let h = match first(xs) { Some(x) -> x | None -> 0 };
+  (n, h)
+-- answer: (i32[3], i32[1])
+```
+
+`first` keeps the head and drops the rest of the list, which the compiler frees.
+
+`fold_reuse` maps a tree in place: `corpus/data-fold-tree.bc` adds one to every value of a tree
+without allocating, and `corpus/data-fold-forest.bc` does the same over a rose tree, a pair of
+types that refer to each other (`data Rose = Rose(val: i32, kids: box Forest)`,
+`data Forest = FNil | FCons(Rose, box Forest)`).
+
+## Collections of recursive data
+
+A buffer (`Vec[T]`, [below](#buffers-and-strings)) keeps spare room past its last element, and
+each free slot holds a placeholder value. Numbers, views and pairs and sums of them have one; a
+tree does not, so `Vec[Tree]` is refused. Store `1 + Tree` instead, an empty-or-tree slot whose
+placeholder is the empty case:
+
+```bc
+include buf
+
+data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)
+
+fn single(v: i32) -> Tree = box Node(Leaf, v, Leaf)
+
+fn sum(t: Tree) -> i32 = fold_own t { Leaf -> 0 | box Node(l, v, r) -> l + v + r }
+
+main -> i32 =
+  let mut trees : Vec[1 + Tree] = buf_new[1 + Tree](4);
+  push(&mut trees, inr single(1));
+  push(&mut trees, inr box Node(single(2), 3, Leaf));
+  let mut s = 0;
+  for _ in 0..3 {
+    match pop(&mut trees) {
+      Some(slot) -> match slot { inr t -> s = s + sum(t) | inl _ -> () }
+    | None -> ()
+    }
+  };
+  s
+-- answer: i32[6]
+```
+
+`corpus/leetcode/trees/0102-binary-tree-level-order-traversal.bc` uses the same pattern for a
+breadth-first search, with a queue of subtrees.
+
+## Recursion
+
+A function that calls itself runs with a budget of depth, 10000 levels, instead of an unbounded
+stack. When the budget runs out the recursion raises an error, `Exhausted`, which unwinds every
+level, freeing what each held, like any other [error](errors.md). `include rec` has the two ways
+of dealing with it:
+
+- `with on_exhausted(f) { … }` answers `f(())` if the budget runs out;
+- `with deep { … }` keeps the pending calls on the heap instead of the stack, so the recursion is
+  limited only by memory.
+
+```bc
+include rec
 
 fn down(n: i32) -> i32 = if n == 0 { 0 } else { 1 + down(n - 1) }
 
 main -> i32 * i32 =
-  let s = with on_exhausted(!{ u -> 0 - 1 }) { sum(build(4)) };
-  let d = with on_exhausted(!{ u -> 0 - 1 }) { down(20000) };
-  (s, d)
--- answer: (i32[26], i32[4294967295])
+  let a = with on_exhausted(!{ u -> 0 - 1 }) { down(500) };
+  let b = with on_exhausted(!{ u -> 0 - 1 }) { down(20000) };
+  (a, b)
+-- answer: (i32[500], i32[4294967295])
 ```
 
-`down(20000)` is deeper than the budget, so it performs `exhausted()`, which unwinds every level
-(running what each level must finalise) and reaches `on_exhausted`. A recursion that must go
-deeper runs under the heap driver, `with deep { down(20000) }`, which keeps its pending calls in
-a buffer instead of on the stack, and is div.
+`down(20000)` is deeper than the budget, so its answer is `-1` (printed unsigned).
+`with deep { down(20000) }` would run it to the end. The compiler checks that something handles `Exhausted`: a recursive
+call with no handler around it is an error.
 
-A recursion may do what any function does. It may use a handler's capability: the capability is
-passed down with each call and handed back with each answer, as to any function that uses one. It
-may yield, or perform any operation, which goes to the handler around the call from outside. Its
-members may answer different types: the fixed point is taken at the record of their functions.
-A recursion whose body has a `while` or a `loop` is not provided yet: it is div, and its
-`Exhausted` would be performed inside its loop, where no handler reaches.
-
-A recursion may be **generic**. `lib/list.bc` (`include list`) gives `List[A]` with `nil`,
-`cons`, and the recursive templates `map`, `filter` and `fold`. Each use at new types is an
-instance of the whole recursion at those types, and a block given to one may itself perform
-operations, which go to the handlers where the block is written:
+Functions may call one another, and a recursion may be generic. Each use at new types is
+compiled as its own copy of the recursion:
 
 ```bc
-include list
+include rec
 
-main -> List[bool] * i32 = with on_exhausted(!{ u -> (nil(), 0) }) {
-  let xs = cons(3, cons(0 - 1, cons(4, nil())));
-  (map(xs, !{ x -> x > 1 }), fold(cons(1, cons(2, nil())), 0, !{ (a, x) -> a + x }))
-}
--- answer: (inr (inr (), inr (inl (), inr (inr (), inl ()))), i32[3])
+data List[T] = Nil | Cons(head: T, tail: List[T])
+
+fn cons[T](x: T, rest: List[T]) -> List[T] = box Cons(x, rest)
+
+fn map[A, B](l: List[A], f: !(A => B)) -> List[B] =
+  match l { Nil -> Nil | box Cons(x, rest) -> cons(f(x), map(rest, f)) }
+
+fn sum(l: List[i32]) -> i32 = fold_own l { Nil -> 0 | box Cons(x, rest) -> x + rest }
+
+main -> i32 =
+  let xs = cons(1, cons(2, cons(3, Nil)));
+  let ys = with on_exhausted(!{ u -> Nil }) { map(xs, !{ x -> x * x }) };
+  sum(ys)
+-- answer: i32[14]
 ```
 
-The members of a generic recursion take the same type parameters, and a call of itself is at
-them: a recursion that calls itself at other types is not provided.
+`include list` has a ready-made generic `List[A]` with `nil()`, `cons(x, xs)`, `map`, `filter`
+and `fold`.
 
-A **layer** runs around each call a recursion makes of itself. It is a function of the call and
-its argument, generic in their types, and `with L { … }` applies it to the recursions called in the
-block, before their fixed point is taken: it transforms the generator, and the recursion knows
-nothing of it.
+### Layers
+
+A **layer** wraps every call a recursion makes of itself, without touching the recursive
+function. It is a generic function of the call and its argument, and `with L { … }` applies it to
+the recursions in the block. Here a layer counts the calls of `fib`:
 
 ```bc
 include rec
@@ -134,8 +208,16 @@ main -> i32 * i32 =
 -- answer: (i32[55], i32[176])
 ```
 
-`fib(10)` makes 176 calls of itself, each counted; the call from outside is not. Effects and
-handlers (`effect`, `handler`, `with`) are [their own chapter](effects.md).
+`fib(10)` makes 176 calls of itself, each counted; the first call, from outside, is not. The same
+shape gives tracing or a step limit. Effects and handlers (`effect`, `handler`,
+`with`) are [their own chapter](effects.md).
+
+### Under the hood
+
+A `data` type is a recursive type `mu X. …` built from pairs and sums, and you will see that form
+in error messages: the tree above is `mu X. 1 + (ref X * (ref i32 * ref X))`.
+[Recursive data and folds](../elaboration/recursive-data.md) shows how declarations, `box` and
+the folds translate.
 
 ## Arrays
 
@@ -176,8 +258,7 @@ A view-taking function hands its `array_mut` back, so a block that sorts in plac
 the same elements (`split_at`, `split_at_mut`), as Rust's `split_at_mut` is: `corpus/quicksort.bc`
 sorts in place that way, with no allocation per element.
 
-A `for` directly over the view of a borrow block whose body is in the same function is not
-provided in every shape yet (#501): pass the view to a function, as `sum` above takes it.
+Write a `for` over a view inside a function that takes the view, as `sum` does.
 
 ## Buffers and strings
 
@@ -253,7 +334,7 @@ of the type:
   error.
 - **A type with no case** is an error at the call that needs it.
 
-There are no modules yet (#63), so a family's cases are global to the program.
+A family's cases are global to the program.
 
 ### Operators at your own types
 
@@ -262,17 +343,13 @@ types they are the machine instructions. At any other type, a program gives a ca
 H = …`, whose parameters are `a` and `b`:
 
 ```bc
-type Complex = i32 * i32
+data Complex = C(re: i32, im: i32)
 
 poly (+) at Complex =
-  let (ar, ai) = a;
-  let (br, bi) = b;
-  (ar + br, ai + bi)
+  match (a, b) { (C(ar, ai), C(br, bi)) -> C(ar + br, ai + bi) }
 
 poly (*) at Complex =
-  let (ar, ai) = a;
-  let (br, bi) = b;
-  (ar * br - ai * bi, ar * bi + ai * br)
+  match (a, b) { (C(ar, ai), C(br, bi)) -> C(ar * br - ai * bi, ar * bi + ai * br) }
 
 -- `x₁·y₁ + x₂·y₂`, at any type with `+` and `*`.
 fn dot[T](x: T * T, y: T * T) -> T =
@@ -280,17 +357,17 @@ fn dot[T](x: T * T, y: T * T) -> T =
   let (y1, y2) = y;
   x1 * y1 + x2 * y2
 
-main -> i32 * Complex =
+main -> i32 * (i32 * i32) =
   let n = dot((1, 2), (3, 4));
-  let z = dot[Complex](((1, 2), (1, 1)), ((3, 4), (0 - 1, 3)));
-  (n, z)
+  let z = dot((C(1, 2), C(1, 1)), (C(3, 4), C(0 - 1, 3)));
+  match z { C(re, im) -> (n, (re, im)) }
 -- answer: (i32[11], (i32[4294967287], i32[12]))
 ```
 
 `dot` at `i32` is compiled with the machine's `mul` and `add`; at `Complex` with the cases above.
-A different arithmetic is a different type, never a different scope. Because `Complex` is a name
-for `i32 * i32`, its cases are the cases of every pair of `i32`s (newtypes wait for `data`
-declarations, #489).
+A different arithmetic is a different type, never a different scope. Give the type a `data`
+declaration, as here: a `type` name is only an alias, so a case at `type Complex = i32 * i32`
+would be a case at every pair of `i32`s.
 
 ### Equality, hashing and order
 

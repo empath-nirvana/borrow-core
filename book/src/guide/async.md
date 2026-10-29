@@ -1,18 +1,17 @@
 # Async tasks
 
-Async is an effect like the others. `await()` is an ordinary control operation, a task is a
-computation suspended at it, and a scheduler is a handler: `lib/async.bc` is one, written in the
-language, with no runtime support (SPEC §30). A function that awaits is an ordinary function with
-`Async` in its row; nothing marks it `async`, and the same function runs inside a task or outside
-one. Tasks compile to state machines, as Rust's `async fn` do, with no garbage collector and no
-reference counting.
+Async is just another effect. `await()` is an ordinary operation, a task is a computation paused
+at one, and a scheduler is a handler. The one in `lib/async.bc` is written in the language itself,
+with no runtime support. A function that awaits is an ordinary function with `Async` in its row.
+There's no `async` keyword, and the same function runs inside a task or outside one. Tasks
+compile to state machines, as Rust's `async fn`s do, with no garbage collector and no reference
+counting.
 
-What is built is a cooperative, single-threaded scheduler for tasks the program spawns. There is
-no event loop over real I/O yet, and no threads.
+The scheduler in `lib/async.bc` is cooperative and single-threaded.
 
 ## Spawning and running tasks
 
-`include async` declares
+`include async` gives you:
 
 | name | what it is |
 |---|---|
@@ -39,16 +38,16 @@ main -> List[i32] =
   run_until_empty(q)
 ```
 
-The answer is the list `[111, 22]` (a `List` prints as nested sums). `ticker` names no scheduler:
-its row is `Async`, and it runs under whichever site spawns it. A task is a value, so a program
-can also drive tasks itself with `resume` and `cancel`, or write a scheduler of its own as a
-handler of `await` (`corpus/async-timers.bc` is an event loop with timers and deadlines).
+The answer is the list `[111, 22]` (a `List` prints as nested sums). `ticker` doesn't name a
+scheduler; it runs under whoever spawns it. A task is a value, so a program can also drive tasks
+itself with `resume` and `cancel`, or write its own scheduler as a handler of `await`
+(`corpus/async-timers.bc` is an event loop with timers and deadlines).
 
 ## Cancellation
 
-A task is a linear value: it is resumed to its end or cancelled, and cancelling runs the task's
-finalisers, so nothing it owns leaks. Here the first of two lookups to finish wins, and the other
-is cancelled with the buffer it holds:
+A task is a linear value: it has to be either run to the end or cancelled. Cancelling frees
+everything the task owns, so nothing leaks. Here the first of two lookups to finish wins, and the
+other is cancelled along with the buffer it holds:
 
 ```bc
 include async
@@ -79,8 +78,8 @@ main -> i32 + (i32 + 1) =
 -- answer: inl i32[30]
 ```
 
-`live 0`: the slow task's cell was freed by its cancel. (`race` is recursive, so its call is
-under `on_exhausted`, [Recursion](data.md#recursion).)
+The run ends with `live 0`: cancelling the slow task freed its cell. (`race` is recursive, so its
+call goes under `on_exhausted`; see [Recursion](data.md#recursion).)
 
 ## Borrows across `await`
 
@@ -106,20 +105,14 @@ main -> List[i32] =
 -- answer: inr (i32[23], inr (i32[35], inl ()))
 ```
 
-Each task holds the `mut` borrow of its cell while it is suspended. This is the *relaxed lend*
-of SPEC §29, and it is the one place where the guarantees rest on a stated assumption rather
-than a proof: `PinLaw`, a hypothesis of the theorems, stated in Lean and not yet proved
-(`docs/async-capabilities.md` §4 gives the evidence, and the corpus tries to break it). `bcc
-check` reports each program that uses it, `assurance: PinLaw (R1 at L:C)`; every other program is
-covered unconditionally.
+Each task holds a `mut` borrow of its own cell while it's suspended, and the compiler checks it
+like any other borrow.
 
-A task spawned with `spawn_in` inside a borrow block may also hold that outer borrow across its
-`await`s, and a task may perform other effects, such as writing to standard output, given to it
-by the borrow block that bounds it (SPEC §32, §34; `corpus/io-task.bc`, `corpus/async-scoped.bc`).
+A task spawned with `spawn_in` inside a borrow block can also hold that outer borrow across its
+`await`s, and it can use effects such as standard output that the surrounding block gives it
+(`corpus/io-task.bc`, `corpus/async-scoped.bc`).
 
 ## Not yet
 
-- An event loop over real I/O, timers from the platform's clock, and wakers (#52).
-- Spawning from a scheduler handle (`s.spawn { … }`), and an `imm` borrow or a segmented lend
-  across `await` (L0) (SPEC §30 *Open*, §29).
-- Two tasks sharing one output stream (SPEC §34 *Open*); threads and parallelism (#212, #22).
+An event loop over real I/O, platform timers and wakers; an `imm` borrow held across `await`; two
+tasks sharing one output stream; and threads. See [Status](../status.md).
