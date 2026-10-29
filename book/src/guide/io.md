@@ -37,8 +37,10 @@ main -> 1 = print_lit("Hello, world!\n")
 
 ## `main` holds the capabilities
 
-In `main`, any of these operations that no `with` handles goes to the platform: the WASI handlers
-in `lib/wasi.bc`, which call the host's `fd_write`, `fd_read`, `clock_time_get` and `args_get`.
+In `main`, any of these operations that no `with` handles goes to the platform: the handlers in
+`lib/wasi.bc`. Under WebAssembly they call the host's `fd_write`, `fd_read`, `clock_time_get` and
+`args_get`; built natively (`bcc run --native`), the same operations call POSIX `read`, `write`,
+`clock_gettime` and `nanosleep`, and read the arguments from `argv`.
 Every other function just performs its effects, and whoever calls it provides them. This one can
 write to standard output and nothing else:
 
@@ -198,5 +200,5 @@ are one mechanism. A `main` that names a stream's cell can't also perform its ef
 ## Not yet
 
 Files, the environment, the network and randomness will be effects of the same kind, but they
-aren't built yet, and WASI is the only platform so far. Two tasks can't share one output stream.
+aren't built yet. Two tasks can't share one output stream.
 The [Status](../status.md) page has the full list.

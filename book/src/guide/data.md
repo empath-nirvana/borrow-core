@@ -100,10 +100,7 @@ types that refer to each other (`data Rose = Rose(val: i32, kids: box Forest)`,
 
 ## Collections of recursive data
 
-A buffer (`Vec[T]`, [below](#buffers-and-strings)) keeps spare room past its last element, and
-each free slot holds a placeholder value. Numbers, views and pairs and sums of them have one; a
-tree does not, so `Vec[Tree]` is refused. Store `1 + Tree` instead, an empty-or-tree slot whose
-placeholder is the empty case:
+A buffer (`Vec[T]`, [below](#buffers-and-strings)) holds recursive data like any other value:
 
 ```bc
 include buf
@@ -115,22 +112,22 @@ fn single(v: i32) -> Tree = box Node(Leaf, v, Leaf)
 fn sum(t: Tree) -> i32 = fold_own t { Leaf -> 0 | box Node(l, v, r) -> l + v + r }
 
 main -> i32 =
-  let mut trees : Vec[1 + Tree] = buf_new[1 + Tree](4);
-  push(&mut trees, inr single(1));
-  push(&mut trees, inr box Node(single(2), 3, Leaf));
+  let mut trees : Vec[Tree] = buf_new[Tree](4);
+  push(&mut trees, single(1));
+  push(&mut trees, box Node(single(2), 3, Leaf));
   let mut s = 0;
   for _ in 0..3 {
-    match pop(&mut trees) {
-      Some(slot) -> match slot { inr t -> s = s + sum(t) | inl _ -> () }
-    | None -> ()
-    }
+    match pop(&mut trees) { Some(t) -> s = s + sum(t) | None -> () }
   };
   s
 -- answer: i32[6]
 ```
 
-`corpus/leetcode/trees/0102-binary-tree-level-order-traversal.bc` uses the same pattern for a
-breadth-first search, with a queue of subtrees.
+A type may also hold a buffer of itself, with no `box`: a rose tree is
+`data Tree = Tree(i32, Vec[Tree])` (`corpus/data-rose-vec.bc`), and a trie node is
+`data Trie = Trie(bool, Vec[Option[Trie]])`
+(`corpus/leetcode/trees/0208-implement-trie-vec.bc`). The buffer's array is already on the heap,
+so the node needs no `box` of its own.
 
 ## Recursion
 
