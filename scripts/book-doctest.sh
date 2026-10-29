@@ -7,6 +7,8 @@
 #                  runs (below). A program with standard I/O (SPEC §11) reads its
 #                  `-- stdin:` lines, each followed by a newline, as standard input, and must
 #                  write its `-- output:` lines, each followed by a newline, before the value.
+#                  A block with `-- output:` lines and no `-- answer:` line answers `()`: its
+#                  `main` returns `1`.
 #   ```bc,check    must check (a library, or a `main` whose value is not printed)
 #   ```bc,reject   must parse and be rejected by the checker with the message on its `-- expect:`
 #                  line (`line:col: message`, the line counted from the block's first line)
@@ -91,7 +93,8 @@ block() {
     ignore) return 0 ;;
     run)
       want=$(sed -n 's/^-- answer: //p' "$f" | head -1)
-      if [ -z "$want" ]; then fail "$at" "a \`bc\` block needs an \`-- answer:\` line (or mark it \`bc,check\`)"; return 1; fi
+      if [ -z "$want" ] && grep -q '^-- output:' "$f"; then want='()'; fi
+      if [ -z "$want" ]; then fail "$at" "a \`bc\` block needs an \`-- answer:\` or \`-- output:\` line (or mark it \`bc,check\`)"; return 1; fi
       if ! out=$("$bcc" check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; return 1; fi
       in="$tmp/$n.in"; : > "$in"
       sed -n 's/^-- stdin: \{0,1\}//p' "$f" | while IFS= read -r l; do printf '%s\n' "$l"; done > "$in"
