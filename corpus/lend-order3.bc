@@ -1,4 +1,4 @@
--- A lend held across the ticks of a callback of order three (SPEC §14, §48), in the shapes of
+-- A lend held across the ticks of a callback of order three (SPEC §14, §63), in the shapes of
 -- PR #472's `bench` and `compose`: `bench` takes a function `go` that takes a function, builds
 -- `h = compose(inc, inc)`, and loops calling `go(h)`. `l` holds a `mut` borrow across `bench`'s
 -- ticks at each turn of its own loop, and `main` holds one across `l`'s, then a borrow block of the

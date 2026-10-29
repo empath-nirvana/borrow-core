@@ -179,25 +179,25 @@ theorem Row.Unwind.out {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (α
 /-- **The row of a lend's callback** `'x`: every operation is of a nonzero name, its argument
 closed data (free of `'x` and outliving every lifetime); and each is either abortive, so a stop
 abandons its continuation (§19), or call-graded and linear with an answer that is closed data too,
-so its continuation is resumed in the scope of the stop (§48).  `[spec §19, §48]` -/
+so its continuation is resumed in the scope of the stop (§63).  `[spec §19, §63]` -/
 def Row.Lend (S : Row) (x : LifeVar) : Prop :=
   ∀ o ∈ S, o.n ≠ 0 ∧ ¬ VFree x o.A ∧ (∀ Δ a, VOutlives Δ a o.A) ∧
     (o.abort = true ∨ (o.call = true ∧ o.q = .lin ∧ ¬ VFree x o.B ∧ ∀ Δ a, VOutlives Δ a o.B))
 
-/-- An unwind-only row is a lend's row with no graded operation.  `[spec §48]` -/
+/-- An unwind-only row is a lend's row with no graded operation.  `[spec §63]` -/
 theorem Row.Unwind.lend {S : Row} {x : LifeVar} (hS : S.Unwind x) : S.Lend x :=
   fun o ho => ⟨(hS o ho).2.1, (hS o ho).2.2.1, (hS o ho).2.2.2, Or.inl (hS o ho).1⟩
 
 /-- **An operation of a lend's row that resumes is call-graded and linear**: an operation that
 resumes with a weakening qualifier (a generator's `aff` `yield`, whose continuation may be
-cancelled), or that is not graded, is not in the row of a lend's callback.  `[spec §48]` -/
+cancelled), or that is not graded, is not in the row of a lend's callback.  `[spec §63]` -/
 theorem Row.Lend.resumes {S : Row} {x : LifeVar} (hS : S.Lend x) {o : OpSig} (ho : o ∈ S)
     (ha : o.abort = false) : o.call = true ∧ o.q = .lin := by
   rcases (hS o ho).2.2.2 with h | ⟨hc, hq, -⟩
   · rw [ha] at h; cases h
   · exact ⟨hc, hq⟩
 
-/-- A lend's row with no graded operation is unwind-only.  `[spec §48]` -/
+/-- A lend's row with no graded operation is unwind-only.  `[spec §63]` -/
 theorem Row.Lend.unwind {S : Row} {x : LifeVar} (hS : S.Lend x) (hg : ∀ o ∈ S, o.call = false) :
     S.Unwind x := by
   intro o ho

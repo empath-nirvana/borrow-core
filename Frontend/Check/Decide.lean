@@ -769,7 +769,7 @@ theorem dropB_sound : ∀ A : VTy, dropB A = true → A.Drop
       simp [dropB] at h
 
 /-- `RowLe S S'`, decided: every operation of `S` is found in `S'` as itself, or as its graded
-form (grading only weakens what a stop owes, SPEC §48). -/
+form (grading only weakens what a stop owes, SPEC §63). -/
 def rowLeB (S S' : Row) : Bool := S.all fun o =>
   Row.find S' o.n o.i == some o || Row.find S' o.n o.i == some { o with call := true }
 
@@ -827,7 +827,7 @@ theorem Row.unrDB_iff {S : Row} : Row.unrDB S = true ↔ S.UnrD := by
 
 /-- `Row.Lend S x`, decided: every operation named, its argument free of `'x` and outliving every
 lifetime, and abortive, or call-graded and linear with an answer free of `'x` and outliving every
-lifetime.  `[spec §48]` -/
+lifetime.  `[spec §63]` -/
 def Row.lendB (S : Row) (x : LifeVar) : Bool :=
   S.all fun o => o.n != 0 && !vfreeB x o.A && outlivesAllB o.A &&
     (o.abort || (o.call && o.q == .lin && !vfreeB x o.B && outlivesAllB o.B))

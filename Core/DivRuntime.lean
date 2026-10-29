@@ -366,7 +366,7 @@ open DivRuntime in
 /-- **Every prefix of every run under the runtime's clause, from `cwp`**: a computation in `cwp`
 at the table of `Div` alone, at either grade, at the empty resource and list, under
 `hnd_Div H_rt`, from the empty memory: every configuration a run reaches is an answer or takes a
-step.  `[spec §14, §48]` -/
+step.  `[spec §14, §63]` -/
 theorem runtime_every_run_cwp (c : Bool) {M : Expr} {Q : List SRec → Val → WProp}
     (hc : cwp (T0 c) Q [] M PMap.empty) {μ₁ : Heap} {e₁ : Expr}
     (hs : Steps (ℍ := ℍ) Adequacy.emptyMem (hndE rtH M) μ₁ e₁) :
@@ -388,7 +388,7 @@ open DivRuntime in
 /-- **Every prefix of every run under the runtime's clause**: a closed `M` typed at `F_{Div} A`,
 `tick` at either grade, under `hnd_Div H_rt`, from the empty memory: every configuration a run
 reaches is an answer or takes a step.  The relation at `M`'s row is `cwp` (`effWp`), by the
-Fundamental Property.  `[spec §14, §48]` -/
+Fundamental Property.  `[spec §14, §63]` -/
 theorem runtime_every_run (c : Bool) {M : Expr} {A : VTy}
     (h : CDerives LifeCtx.empty [] M (.comp (CTy.effOf [tickSigG c] A))) {μ₁ : Heap} {e₁ : Expr}
     (hs : Steps (ℍ := ℍ) Adequacy.emptyMem (hndE rtH M) μ₁ e₁) :
@@ -414,7 +414,7 @@ def omegaE : Expr := .app (.lam (.app (.var 0) (.var 0))) (.lam (.app (.var 0) (
 def ansBody : Expr := .case (.var 0) (.var 0) omegaE
 
 /-- `main` under the runtime's clause, its answer read off: `(λx. ansBody) (hnd_Div H_rt M)`.
-`[spec §48]` -/
+`[spec §63]` -/
 def rtMain (M : Expr) : Expr := .app (.lam ansBody) (hndE rtH M)
 
 theorem omega_only (μ : Heap) : Step1Only (ℍ := ℍ) μ omegaE μ omegaE := by
@@ -495,7 +495,7 @@ open DivRuntime in
 /-- **Every prefix of every run of `main` under the runtime's clause, its answer read off**:
 a computation in `cwp` at the table of `Div` alone, at either grade, whose answers are
 injections: every configuration a run of `rtMain M` from the empty memory reaches is a value or
-takes a step.  `[spec §14, §48]` -/
+takes a step.  `[spec §14, §63]` -/
 theorem runtime_main_every_run_cwp (c : Bool) {M : Expr} {Q : List SRec → Val → WProp}
     (hQ : ∀ ls v ρ, Q ls v ρ → (∃ a, v = Val.inj₁ a) ∨ (∃ b, v = Val.inj₂ b))
     (hc : cwp (T0 c) Q [] M PMap.empty) {μ₁ : Heap} {e₁ : Expr}
@@ -518,7 +518,7 @@ theorem runtime_main_every_run_cwp (c : Bool) {M : Expr} {Q : List SRec → Val 
 open DivRuntime in
 /-- **Every prefix of every run of a closed `main` under the runtime's clause, its answer read
 off**: a closed `M` typed at `F_{Div}(A ⊕ B)`, `tick` at either grade: every configuration a run
-of `rtMain M` from the empty memory reaches is a value or takes a step.  `[spec §14, §48]` -/
+of `rtMain M` from the empty memory reaches is a value or takes a step.  `[spec §14, §63]` -/
 theorem runtime_main_every_run (c : Bool) {M : Expr} {A B : VTy}
     (h : CDerives LifeCtx.empty [] M (.comp (CTy.effOf [tickSigG c] (.sum A B))))
     {μ₁ : Heap} {e₁ : Expr}
@@ -538,7 +538,7 @@ open DivRuntime in
 /-- **The IO run under the runtime's clause**: `run_io : Bytes ⊸ F_{Div}(R ⊕ R′)`, `tick` at
 either grade, checked at a context of externs that meet their contracts (`ExternsMeet`): for
 every input byte list, every configuration a run of `rtMain (run_io[γ] inp)` from the empty
-memory reaches is a value or takes a step.  `[spec §11, §14, §48]` -/
+memory reaches is a value or takes a step.  `[spec §11, §14, §63]` -/
 theorem io_rt_every_run (c : Bool) {Γ : Ctx VTy} {e : Expr} {R R' : VTy}
     (h : CDerives LifeCtx.empty Γ e
       (.comp (.arr bytesTy (CTy.effOf [tickSigG c] (.sum R R')))))

@@ -176,7 +176,7 @@ qualifier with weakening), the relations of its argument and answer types, its c
 obligation: `none` at the cancel row `⊤`, otherwise the run a cancel of a continuation captured
 at the operation owes from the dead region's start (`cancelObl` of the cancel row's table); and
 its grade: a call-graded operation's continuation is owed only at lists with the stop's members.
-`[spec §19, §27, §48]` -/
+`[spec §19, §27, §63]` -/
 structure OpEnt where
   q : Qual
   abort : Bool
@@ -187,19 +187,19 @@ structure OpEnt where
 
 /-- **What a stop owes.**  The lists at which the continuation of a stop at the operation `en`
 is owed, from the stop's list `ls`: every `Ext`-extension, and at a call-graded operation every
-list with the stop's members.  At an ungraded entry it is `Ext`, by definition.  `[spec §48]` -/
+list with the stop's members.  At an ungraded entry it is `Ext`, by definition.  `[spec §63]` -/
 def Owed (en : OpEnt) (ls ls' : List SRec) (ρ : WRes) : Prop :=
   match en.call with
   | false => Ext ls ls' ρ
   | true => ∀ x, x ∈ ls' ↔ x ∈ ls
 
 /-- At an ungraded entry a stop is owed at every `Ext`-extension: Core's convention.
-`[spec §48]` -/
+`[spec §63]` -/
 theorem owed_ungraded {en : OpEnt} (h : en.call = false) {ls ls' : List SRec} {ρ : WRes} :
     Owed en ls ls' ρ ↔ Ext ls ls' ρ := by
   unfold Owed; rw [h]
 
-/-- A list a stop is owed at is an `Ext`-extension of the stop's.  `[spec §48]` -/
+/-- A list a stop is owed at is an `Ext`-extension of the stop's.  `[spec §63]` -/
 theorem Owed.ext {en : OpEnt} {ls ls' : List SRec} {ρ : WRes} (h : Owed en ls ls' ρ) :
     Ext ls ls' ρ := by
   unfold Owed at h
@@ -207,7 +207,7 @@ theorem Owed.ext {en : OpEnt} {ls ls' : List SRec} {ρ : WRes} (h : Owed en ls l
   · exact h
   · exact ext_of_same h ρ
 
-/-- A list with the stop's members is owed at.  `[spec §48]` -/
+/-- A list with the stop's members is owed at.  `[spec §63]` -/
 theorem owed_of_same (en : OpEnt) {ls ls' : List SRec} (h : ∀ x, x ∈ ls' ↔ x ∈ ls) (ρ : WRes) :
     Owed en ls ls' ρ := by
   unfold Owed
@@ -245,7 +245,7 @@ theorem Owed.of_ext {en : OpEnt} {ls ls' : List SRec} {ρ ρ' : WRes} (h : Owed 
   · exact hx h
   · exact h
 
-/-- Owed from `ls`, then the same members: owed from `ls`.  `[spec §48]` -/
+/-- Owed from `ls`, then the same members: owed from `ls`.  `[spec §63]` -/
 theorem Owed.trans_same {en : OpEnt} {ls ls' ls'' : List SRec} {ρ : WRes} (h : Owed en ls ls' ρ)
     (h' : ∀ x, x ∈ ls'' ↔ x ∈ ls') : Owed en ls ls'' ρ := by
   unfold Owed at h ⊢
@@ -253,7 +253,7 @@ theorem Owed.trans_same {en : OpEnt} {ls ls' ls'' : List SRec} {ρ : WRes} (h : 
   · exact h.trans (ext_of_same h' ρ)
   · exact fun x => (h' x).trans (h x)
 
-/-- The same members, then owed: owed.  `[spec §48]` -/
+/-- The same members, then owed: owed.  `[spec §63]` -/
 theorem Owed.same_trans {en : OpEnt} {ls ls' ls'' : List SRec} {ρ : WRes}
     (h' : ∀ x, x ∈ ls' ↔ x ∈ ls) (h : Owed en ls' ls'' ρ) : Owed en ls ls'' ρ := by
   unfold Owed at h ⊢
@@ -261,13 +261,13 @@ theorem Owed.same_trans {en : OpEnt} {ls ls' ls'' : List SRec} {ρ : WRes}
   · exact (ext_of_same h' ρ).trans h
   · exact fun x => (h x).trans (h' x)
 
-/-- An `Ext`-step, then owed, is owed at an ungraded entry.  `[spec §48]` -/
+/-- An `Ext`-step, then owed, is owed at an ungraded entry.  `[spec §63]` -/
 theorem Owed.ext_trans {en : OpEnt} (hc : en.call = false) {ls ls' ls'' : List SRec} {ρ : WRes}
     (he : Ext ls ls' ρ) (h : Owed en ls' ls'' ρ) : Owed en ls ls'' ρ :=
   (owed_ungraded hc).mpr (he.trans ((owed_ungraded hc).mp h))
 
 /-- Owed at a larger grade: an `Ext`-extension owed by the ungraded entry, a list with the same
-members owed by the graded one.  `[spec §48]` -/
+members owed by the graded one.  `[spec §63]` -/
 theorem Owed.of_le {en en' : OpEnt} (hc : en.call = true → en'.call = true)
     {ls ls' : List SRec} {ρ : WRes} (h : Owed en' ls ls' ρ) : Owed en ls ls' ρ := by
   cases h₁ : en.call
@@ -303,7 +303,7 @@ def cancelOK (en : OpEnt) (ls : List SRec) (K : Kont) : WProp := fun ρ =>
 /-- The continuation's share at a stopped operation: `∅` at `unr`; at every list it is owed at
 (`Owed`: every extension of the list, or at a call-graded operation every list with its members),
 resumed at every answer in `PB`; and, with weakening, cancelled (`cancelOK`).
-`[spec §19, §27, §48]` -/
+`[spec §19, §27, §63]` -/
 def contShare (en : OpEnt) (ls : List SRec) (K : Kont) (Φ : List SRec → Expr → WProp) : WProp :=
   fun ρ =>
     (en.q = .unr → ρ = PMap.empty) ∧
@@ -312,7 +312,7 @@ def contShare (en : OpEnt) (ls : List SRec) (K : Kont) (Φ : List SRec → Expr 
       (en.q ≠ .lin → cancelOK en ls' K ρ)
 
 /-- **Conservativity of the grade at a stop**: at an ungraded entry the continuation's share is
-owed at every `Ext`-extension, Core's share before §48.  `[spec §48]` -/
+owed at every `Ext`-extension, Core's share before §63.  `[spec §63]` -/
 theorem contShare_ungraded {en : OpEnt} (h : en.call = false) (ls : List SRec) (K : Kont)
     (Φ : List SRec → Expr → WProp) :
     contShare en ls K Φ = fun ρ =>

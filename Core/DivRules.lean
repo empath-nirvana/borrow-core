@@ -309,7 +309,7 @@ theorem owed_conds {T : OpTab} {Fr : List SRec → WProp}
 
 /-- **A plain frame around a computation of `Closing`**: `ewp_frame_plain_owed` at the closing
 tables, the row growing from `T` to `T′`, the frame carried to the lists each stop is owed at.
-`[spec §14, §48]` -/
+`[spec §14, §63]` -/
 theorem closing_frame_owed {T T' : OpTab} (hTT : T.Le T') (K : Kont) (hH : ∀ n, K.HasHnd n = false)
     (hC : ∀ n, K.Catches n = false) (Fr : List SRec → WProp)
     (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr ls) (Fr ls'))
@@ -349,7 +349,7 @@ theorem closing_frame {T T' : OpTab} (hTT : T.Le T') (K : Kont) (hH : ∀ n, K.H
 
 /-- **A plain frame around a computation of `cwp`, one segment**, the row growing from `T` to
 `T′`, at any target candidate `Y` that holds the frame around every computation of `cwp` (`hY`);
-the frame carried to the lists each stop is owed at.  `[spec §14, §48]` -/
+the frame carried to the lists each stop is owed at.  `[spec §14, §63]` -/
 theorem cwpF_frame_owed {T T' : OpTab} (hT : T.DivOK) (hT' : T'.DivOK) (hTT : T.Le T') (K : Kont)
     (hH : ∀ n, K.HasHnd n = false)
     (hC : ∀ n, K.Catches n = false) (Fr : List SRec → WProp)

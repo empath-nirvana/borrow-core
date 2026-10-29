@@ -233,7 +233,7 @@ main : {B} -o F ({out} * ({out} * ({ppVTy A}))) =
 
 /-- The source of `run_io` for a `main` the runtime's clause drives, `F[div call] ((Caps * A) +
 (Caps * B))`: `run_io` is a computation at that row, which the runtime runs the same way; on `inl`
-it takes the outputs back as `wrapperSrc` does.  `[spec §11, §48]` -/
+it takes the outputs back as `wrapperSrc` does.  `[spec §11, §63]` -/
 def rtWrapperSrc (caps : List String) (capsT A B : CVTy) (body : Comp) (args : List UInt8) :
     String :=
   let bs := bytesSrc
@@ -345,12 +345,12 @@ structure IOMain where
   A : CVTy
   /-- `some B` when `main` returns a loop `U (loop (Caps * A) (Caps * B))` (or `U (loop A B)`
   with no capabilities), run until it finishes (SPEC §11, §14); or, with `rt`, when `main` is a
-  computation `F[div call] ((Caps * A) + (Caps * B))` the runtime's clause drives (SPEC §48). -/
+  computation `F[div call] ((Caps * A) + (Caps * B))` the runtime's clause drives (SPEC §63). -/
   loopB : Option CVTy
   rt : Bool := false
 
 /-- `main`'s type at the graded row of `Div` alone, `F[div call] (X + Y)`: the runtime's clause
-drives it, answering every tick *next* (SPEC §14, §48). -/
+drives it, answering every tick *next* (SPEC §14, §63). -/
 def rtMainOf : CCTy → Option (CVTy × CVTy)
   | C@(.eff _ _ _ _ _ _ true (.ret (.sum X Y))) =>
     if C = BoCa.Fig16.LogRel.Core.CTy.effOf [BoCa.Fig16.LogRel.Core.tickSigG true] (.sum X Y) then
@@ -360,7 +360,7 @@ def rtMainOf : CCTy → Option (CVTy × CVTy)
 
 /-- `main` under the runtime's clause (`DivRuntime.rtH`), its answer `inl b` read as `b`. The
 runtime never answers a tick *close*, so `inr` is not reached; its branch is `Ω`, which runs
-forever and has every layout.  `[spec §48]` -/
+forever and has every layout.  `[spec §63]` -/
 def rtMainE (e : Expr) : Expr := BoCa.Fig16.LogRel.Core.DivRuntime.rtMain e
 
 /-- The externs of a checked `main`, and, when it has capabilities, its result type after them. -/
@@ -456,7 +456,7 @@ structure IORun where
   loops : Bool
   R : CVTy
   R' : CVTy
-  /-- `run_io` is a computation the runtime's clause drives (SPEC §48). -/
+  /-- `run_io` is a computation the runtime's clause drives (SPEC §63). -/
   rt : Bool
   hC : c.C = ioType loops R R' rt
   hR : R.Persistent
@@ -507,7 +507,7 @@ theorem IORun.loop_every_run (r : IORun) (hp : r.c.pins = []) (hl : r.loops = tr
 
 /-- **The model run of a `main` the runtime's clause drives**: every configuration a run of
 `rtMainE (IORun.expr inp)` reaches from the empty memory, under every allocator, is a value or
-takes a step. `io_rt_every_run` at the checked wrapper. `[spec §11, §48]` -/
+takes a step. `io_rt_every_run` at the checked wrapper. `[spec §11, §63]` -/
 theorem IORun.rt_every_run (r : IORun) (hp : r.c.pins = []) (hr : r.rt = true)
     (inp : List UInt8)
     {μ₁ : BoCa.BoLo.Heap} {e₁ : Expr}

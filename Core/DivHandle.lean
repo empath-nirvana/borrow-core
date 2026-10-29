@@ -330,14 +330,14 @@ theorem KapRelT.same {Tb : Table} {Qout : List SRec → Val → WProp} {en : OpE
       Entails (KapRelT Tb Qout en Tc ls κ) (KapRelT Tb Qout en Tc ls' κ) :=
   fun _ _ hs _ h => ⟨h.1, fun ls'' he => h.2 ls'' (Owed.same_trans hs he)⟩
 
-/-- `κ`'s relation along an extension, at an ungraded operation.  `[spec §48]` -/
+/-- `κ`'s relation along an extension, at an ungraded operation.  `[spec §63]` -/
 theorem KapRelT.ext {Tb : Table} {Qout : List SRec → Val → WProp} {en : OpEnt} {Tc : Option OpTab}
     {κ : Val} (hc : en.call = false) : ∀ ls ls' ρ, Ext ls ls' ρ → KapRelT Tb Qout en Tc ls κ ρ →
       KapRelT Tb Qout en Tc ls' κ ρ :=
   fun _ _ _ he h => ⟨h.1, fun ls'' he' => h.2 ls'' (Owed.ext_trans hc he he')⟩
 
 /-- `κ`'s relation carried to a list a stop is owed at: along an extension at an ungraded `κ`,
-along the same members where the stop is graded, as it is wherever `κ` is.  `[spec §48]` -/
+along the same members where the stop is graded, as it is wherever `κ` is.  `[spec §63]` -/
 theorem KapRelT.owed {Tb : Table} {Qout : List SRec → Val → WProp} {en en' : OpEnt}
     {Tc : Option OpTab} {κ : Val} (hg : en.call = true → en'.call = true) :
     ∀ ls ls' ρ, Owed en' ls ls' ρ → KapRelT Tb Qout en Tc ls κ ρ →
@@ -386,7 +386,7 @@ variable {δ : LSub} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → 
   (hVc : vC true (ansesTy S SN R E) ls₀ δ vc PMap.empty)
 
 include hCN in
-/-- At a graded handler every operation of the answering functions' row is graded.  `[spec §48]` -/
+/-- At a graded handler every operation of the answering functions' row is graded.  `[spec §63]` -/
 theorem tab_call_of {n' i' : UInt32} {en' : OpEnt} (hT : Row.tab SN δ n' i' = some en') :
     c = true → en'.call = true := fun hc => by
   obtain ⟨o, hf, rfl⟩ := Row.tab_some hT

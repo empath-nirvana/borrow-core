@@ -1,5 +1,5 @@
 -- An `imm` borrow block over a loop, its borrow copied explicitly at each turn (SPEC §14, §42,
--- §48). A table of ten entries `10 * i` is borrowed `imm` around a `while` that sums the first
+-- §63). A table of ten entries `10 * i` is borrowed `imm` around a `while` that sums the first
 -- five through `get`; each turn splits the borrow with `copy`, reads through one copy and keeps the
 -- other, and the last is forgotten. The lend spans the loop's ticks at the graded row `div call`.
 -- `corpus/pending/borrow-across-loop.bc` is this program with the copies implicit (#58).

@@ -126,7 +126,7 @@ termination_by sizeOf F
 decreasing_by exact rowOf_fin_lt F (Row.find_mem (by assumption)).1
 
 /-- `o ≤ o′`: the same operation, its cancel row grown at a capturable operation, and graded
-where `o` is: grading only weakens what a stop owes.  `[spec §27, §48]` -/
+where `o` is: grading only weakens what a stop owes.  `[spec §27, §63]` -/
 def OpSig.LeF (o o' : OpSig) : Prop :=
   o.Sig o' ∧ (capB o.q o.B = true → FinLe o.fin o'.fin) ∧ (o.call = true → o'.call = true)
 
@@ -986,13 +986,13 @@ theorem effWp_sub {S S' : Row} (hle : RowLe S S') {δ : LSub} {Q : List SRec →
 
 /-! ### Grading only weakens -/
 
-/-- `o` at the grade: call-graded.  `[spec §48]` -/
+/-- `o` at the grade: call-graded.  `[spec §63]` -/
 def OpSig.grade (o : OpSig) : OpSig := { o with call := true }
 
 theorem OpSig.LeF.grade (o : OpSig) : o.LeF o.grade :=
   ⟨⟨rfl, rfl, rfl, rfl, rfl⟩, fun _ => FinLe.refl o.fin, fun _ => rfl⟩
 
-/-- `Σ` with each operation `g` picks call-graded.  `[spec §48]` -/
+/-- `Σ` with each operation `g` picks call-graded.  `[spec §63]` -/
 def Row.gradeAt (g : OpSig → Bool) (S : Row) : Row := S.map fun o => if g o then o.grade else o
 
 theorem Row.find_gradeAt (g : OpSig → Bool) (S : Row) (n i : UInt32) :
@@ -1003,7 +1003,7 @@ theorem Row.find_gradeAt (g : OpSig → Bool) (S : Row) (n i : UInt32) :
   unfold Row.find Row.gradeAt
   rw [List.find?_map, hp]
 
-/-- **A row is below every grading of it** (`[sub]` grades).  `[spec §48]` -/
+/-- **A row is below every grading of it** (`[sub]` grades).  `[spec §63]` -/
 theorem rowLe_gradeAt (g : OpSig → Bool) (S : Row) : RowLe S (Row.gradeAt g S) := by
   intro n i o hf
   refine ⟨_, by rw [Row.find_gradeAt, hf]; rfl, ?_⟩
@@ -1013,7 +1013,7 @@ theorem rowLe_gradeAt (g : OpSig → Bool) (S : Row) : RowLe S (Row.gradeAt g S)
   · exact OpSig.LeF.refl o
 
 /-- **Conservativity: grading only weakens.**  Every computation in the relation at a row is in
-the relation at every grading of it.  `[spec §48]` -/
+the relation at every grading of it.  `[spec §63]` -/
 theorem effWp_gradeAt (g : OpSig → Bool) {S : Row} {δ : LSub} {Q : List SRec → Val → WProp}
     {ls : List SRec} {e : Expr} {ρ : WRes}
     (h : effWp (Row.divB S) (Row.tab S δ) Q ls e ρ) :
@@ -1029,10 +1029,10 @@ theorem CTy.divB_rowOf : ∀ C : CTy, Row.divB C.rowOf = C.divAt
 
 /-! ### `Closing` at a row -/
 
-/-- `tick` answered *close* only, at the grade `c`: `tick : 1 ↠ 0 ⊕ 1`.  `[spec §14, §48]` -/
+/-- `tick` answered *close* only, at the grade `c`: `tick : 1 ↠ 0 ⊕ 1`.  `[spec §14, §63]` -/
 def closeSig (c : Bool) : OpSig := ⟨divEff, 0, .lin, .unit, .sum .zero .unit, .ret .unit, c⟩
 
-/-- The grade of the row's `tick`, `false` where it has none.  `[spec §48]` -/
+/-- The grade of the row's `tick`, `false` where it has none.  `[spec §63]` -/
 def Row.divCall (S : Row) : Bool := ((Row.find S divEff 0).map OpSig.call).getD false
 
 theorem Row.divCall_of_find {S : Row} {o : OpSig} (hf : Row.find S divEff 0 = some o) :

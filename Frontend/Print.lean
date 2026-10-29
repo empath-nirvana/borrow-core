@@ -133,7 +133,7 @@ def Row.pp : Row → String
   -- `Div`'s `tick : 1 ↠^lin Next` (SPEC §14) is written `div`.
   | .cons 4294967295 0 .lin (.unit _) (.sum _ (.unit _) (.unit _)) .nil => "div"
   | .cons 4294967295 0 .lin (.unit _) (.sum _ (.unit _) (.unit _)) r => "div, " ++ r.pp
-  -- the graded `tick` (SPEC §48) is written `div call`.
+  -- the graded `tick` (SPEC §63) is written `div call`.
   | .cons 4294967295 0 .call (.unit _) (.sum _ (.unit _) (.unit _)) .nil => "div call"
   | .cons 4294967295 0 .call (.unit _) (.sum _ (.unit _) (.unit _)) r => "div call, " ++ r.pp
   | .cons n i q A B .nil => s!"{n}.{i} {q.str} " ++ A.pp ++ " ~> " ++ B.pp

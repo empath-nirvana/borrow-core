@@ -1,6 +1,6 @@
 -- A call of a div function in direct style inside a generator: `collatz` is a loop (its type says
 -- so), and `steps` calls it in direct style. The generator's body is a div body at the row of
--- `Yield`: the loop runs inside it, drained by `iterate` (SPEC §14, §47), one turn per
+-- `Yield`: the loop runs inside it, drained by `iterate` (SPEC §14, §62), one turn per
 -- observation; when it finishes, the rest of the body runs with its result.
 -- `gen-div.core.bc` is its elaboration in core, as `bcc desugar` prints it.
 -- Answer: i32[111], the Collatz steps from 27.

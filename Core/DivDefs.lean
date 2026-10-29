@@ -46,7 +46,7 @@ abbrev nextTy : VTy := .sum .unit .unit
 def tickSig : OpSig := ⟨divEff, 0, .lin, .unit, nextTy, .ret .unit, false⟩
 
 /-- `tick` at the grade `c`: call-graded at the runtime and `div_fuel`, whose clauses resume `κ` in
-tail position; ungraded at `reify`, whose loop value stores `κ`.  `[spec §14, §48]` -/
+tail position; ungraded at `reify`, whose loop value stores `κ`.  `[spec §14, §63]` -/
 def tickSigG (c : Bool) : OpSig := ⟨divEff, 0, .lin, .unit, nextTy, .ret .unit, c⟩
 
 theorem tickSigG_false : tickSigG false = tickSig := rfl

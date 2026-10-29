@@ -5,7 +5,7 @@
 -- does not stay in scope after the block, so `k()` after it is the declared `k` (hygiene, #481).
 --
 -- The lend spans the loop's ticks, which the kernel admits at the graded row `div call`
--- (SPEC §48). The loop then reads the borrow `b` at each turn, so its state threads it and
+-- (SPEC §63). The loop then reads the borrow `b` at each turn, so its state threads it and
 -- each turn uses it again; a borrow is not persistent, and an `imm` borrow is not copied
 -- implicitly (#58, SPEC §42 Open), so the checker refuses the second use, as it does
 -- `corpus/reject/lend-iter-borrow.bc`'s.

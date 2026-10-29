@@ -92,7 +92,7 @@ inductive CTy where
   may raise or perform, `⊤` when it cannot be cancelled, otherwise the operations of `fin`'s layers
   (`CTy.rowOf`); and its grade `c`: a call-graded operation's continuation is resumed only at a
   list with the stop's members.  `F_Σ R` is a stack of these over `F R` (`CTy.effOf`).
-  `[spec §19, §27, §48]` -/
+  `[spec §19, §27, §63]` -/
   | eff (n i : UInt32) (q : Qual) (A B : VTy) (fin : CTy) (c : Bool) (C : CTy)
 end
 
@@ -150,7 +150,7 @@ def CTy.EffFree : CTy → Prop
 /-- An operation of an effect row: the operation `i` of the name `n`, `A ↠^q B`, its cancel
 row `fin` (`CTy.eff`), the empty row `F 1` by default, and its grade `call`, ungraded by default:
 a call-graded operation's continuation is resumed only at a list with the stop's members.
-`[spec §19, §27, §48]` -/
+`[spec §19, §27, §63]` -/
 structure OpSig where
   n : UInt32
   i : UInt32

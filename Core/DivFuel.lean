@@ -369,7 +369,7 @@ end
 /-! ### The constant -/
 
 /-- `div_fuel : !U(U(1 ⊸ F_{tick, Σ} A) ⊗ I32 ⊸ F_Σ A)`, the computation a callback
-`U(1 ⊸ F_{tick, Σ} A)`, `tick` at the grade `c` (ungraded by default).  `[spec §14, §48]` -/
+`U(1 ⊸ F_{tick, Σ} A)`, `tick` at the grade `c` (ungraded by default).  `[spec §14, §63]` -/
 abbrev divFuelTy (S : Row) (A : VTy) (c : Bool := false) : VTy :=
   .bang (.thunk (.arr (.tensor (.thunk (.arr .unit (CTy.effOf (tickSigG c :: S) A))) (.int .w32))
     (CTy.effOf S A)))

@@ -63,7 +63,7 @@ def checkedOf (file src : String) : Except String CheckedProg := do
   | .error e => throw s!"{file}: {e}"
 
 /-- `main`'s expression as run: under the runtime's clause when its type is a computation at
-the graded row of `Div` (SPEC §48).  `[spec §48]` -/
+the graded row of `Div` (SPEC §63).  `[spec §63]` -/
 def CheckedProg.mainE (k : CheckedProg) : BoCa.Expr :=
   if (Frontend.Check.rtMainOf k.main.C).isSome then Frontend.Check.rtMainE k.main.e else k.main.e
 
@@ -104,7 +104,7 @@ def lowerEffects (p : Clos.Prog) : Except String (Clos.Prog × Option Clos.Types
 
 /-- The closure IR of a checked program, and its layout types when collapsing found them. -/
 def CheckedProg.closTypes (k : CheckedProg) : Except String (Clos.Prog × Option Clos.Types) := do
-  -- A `main` the runtime's clause drives runs under it (SPEC §48), answering as one that does
+  -- A `main` the runtime's clause drives runs under it (SPEC §63), answering as one that does
   -- not loop.
   let p ← match k.io with
     | none => Clos.convert (k.mainE)

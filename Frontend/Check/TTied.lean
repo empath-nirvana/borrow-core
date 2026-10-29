@@ -377,7 +377,7 @@ theorem iterate (S : CRow) (St B R : CVTy) (hS : BoCa.Fig16.LogRel.Core.Row.divB
       (.val (BoCa.Fig16.LogRel.Core.iterTy S St B R)) :=
   ⟨fun _ _ hΞ => .iterate S St B R (rowAt_of_sigsAt hΞ) hS hΓ, .iterate S St B R hS hΓ⟩
 
-/-- `div_fuel` reads its handled row `tick^c, Σ`.  `[spec §14, §48]` -/
+/-- `div_fuel` reads its handled row `tick^c, Σ`.  `[spec §14, §63]` -/
 theorem divFuel (c : Bool) (S : CRow) (A : CVTy) (hS : ∀ o ∈ S, o.n ≠ divEff)
     (hΓ : BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ) :
     TTied [] (BoCa.Fig16.LogRel.Core.tickSigG c :: S) Δ Γ

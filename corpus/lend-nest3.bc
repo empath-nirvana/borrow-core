@@ -1,5 +1,5 @@
 -- Borrow blocks nested three deep in one body, each lend held across the loop's ticks (SPEC §14,
--- §48). `main` borrows `a`; inside, it allocates `b` and borrows it; inside that, `c`; the
+-- §63). `main` borrows `a`; inside, it allocates `b` and borrows it; inside that, `c`; the
 -- innermost body loops over the input, storing through all three borrows. A borrow block loops
 -- when its body's spine holds a borrow block that loops, so each block is the unwinding form of
 -- its borrow at the graded row `div call`, and each lend is held across the ticks.

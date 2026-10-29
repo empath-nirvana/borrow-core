@@ -2,7 +2,7 @@ import Core.EffBorrow
 import Core.EffBoxed
 
 /-!
-# Core — a lend held across a call-graded stop  `[spec §48]`
+# Core — a lend held across a call-graded stop  `[spec §63]`
 
 A lend's callback runs at a row whose operations are abortive or call-graded (`Row.Lend`). At a
 graded stop the continuation is owed only at lists with the stop's members (`Owed`), so the
@@ -177,13 +177,13 @@ theorem compS_exists_swap {ρk₁ W kS τ₁ τ₂ ρk : WRes} {l : BoCa.Loc}
 
 /-- **A lend's table at `α`**: each entry of a nonzero name, its arguments in `Res_α`, and either
 abortive, or call-graded and linear with its answers in `Res_α` (closed data, `Row.Lend`).
-`[spec §48]` -/
+`[spec §63]` -/
 def OpTab.LendAt (α : Life) (T : OpTab) : Prop :=
   ∀ n i en, T n i = some en → n ≠ 0 ∧ (∀ ls w τ, en.PA ls w τ → τ.InStratum α) ∧
     (en.abort = true ∨ (en.call = true ∧ en.q = .lin ∧ ∀ ls w τ, en.PB ls w τ → τ.InStratum α))
 
 /-- The table of a lend's segment: the row's stops, and a tick's stop owing `Ψ`, whatever the
-run would owe (`T0` empty at a row without `Div`).  `[spec §48]` -/
+run would owe (`T0` empty at a row without `Div`).  `[spec §63]` -/
 abbrev LTab (T₁ T0 : OpTab) (Ψ : List SRec → Expr → WProp) : Table :=
   orTab (opTable T₁) (fun ls t _ => performStop T0 ls t Ψ)
 
@@ -304,7 +304,7 @@ theorem ubindK_comp_hasHnd (K₁ : Kont) (n : UInt32) (hK₁ : K₁.HasHnd n = f
 include hT₁ hL h0 hT0 hQd hD hk in
 /-- **The owner beside a callback that has left the lend behind**: at each graded stop the owner
 joins the continuation's share; at a `raise` the finaliser runs on it; at the answer it is handed
-to the callback's post (`postA`).  `[spec §48]` -/
+to the callback's post (`postA`).  `[spec §63]` -/
 theorem lendM_owner
     (hΨB : ∀ ls c σ σo σ', Ψi ls c σ → owner l Tt δ ls σo → ResU.CompS σ σo σ' →
       Ψo ls ((ubindK Nv Dv).plug c) σ') :
@@ -361,7 +361,7 @@ owing `Ψi`, whose answer hands the owner back (`postA`), is under `ubind (N, D)
 share holds the cell, the continuation is resumed in the scope of the stop, with the lend made
 again at `α` with the cell the stop held; at one whose share has left it, the owner goes on
 beside the callback (`lendM_owner`).  A tick's obligation is carried by `hΨA` and `hΨB`, the
-same two ways.  `[spec §48]` -/
+same two ways.  `[spec §63]` -/
 theorem lendM_frame
     (hΨB : ∀ ls c σ σo σ', Ψi ls c σ → owner l Tt δ ls σo → ResU.CompS σ σo σ' →
       Ψo ls ((ubindK Nv Dv).plug c) σ')
@@ -550,7 +550,7 @@ theorem Row.Lend.tab_extend {S : Row} {x : LifeVar} (hS : S.Lend x) (δ : LSub) 
         Bool.false_eq_true, if_false]
 
 /-- **A lend's row's table is a lend's table at every lifetime**: its arguments and graded answers
-are closed data (6.60, `vC_outlives`).  `[spec §48]` -/
+are closed data (6.60, `vC_outlives`).  `[spec §63]` -/
 theorem Row.Lend.lendAt {S : Row} {x : LifeVar} (hS : S.Lend x) (δ : LSub) (α : Life) :
     (Row.tab S δ).LendAt α := by
   intro n i en hT
@@ -630,7 +630,7 @@ theorem ewp_LTab_empty {T : OpTab} {Ψ : List SRec → Expr → WProp} {ls : Lis
 
 /-- **6.65's entry**: H4 chooses the lend's lifetime `A` below `β`, every tag and the callback's
 `fresh` bound, and the callback runs from the cell `ℓ ↦ mut(A, v, ρ_P, P̂)` beside `ρ_b ∈ Res_A`.
-The rest of the lend is made at this `A`, every time.  `[spec §48]` -/
+The rest of the lend is made at this `A`, every time.  `[spec §63]` -/
 theorem lendM_entry {l : BoCa.Loc} {Tt : VTy} {δ : LSub} {β : Life}
     (hP : ∀ ls w σ, vC true Tt ls δ w σ → σ.InStratum β) {v : Val} {ls : List SRec}
     {X : Life → WProp} {ρ : WRes}
@@ -678,7 +678,7 @@ theorem lendM_entry {l : BoCa.Loc} {Tt : VTy} {δ : LSub} {β : Life}
 /-! ### The lend at a row that holds `Div` -/
 
 /-- **The candidate** of the coinduction at `cwp`: the unwinding frame around a callback of `cwp`,
-either lent at `α` with the cell its last stop held, or with the owner beside it.  `[spec §48]` -/
+either lent at `α` with the cell its last stop held, or with the owner beside it.  `[spec §63]` -/
 def lendW (T : OpTab) (l : BoCa.Loc) (Tt : VTy) (δ : LSub) (α : Life)
     (Qx : List SRec → Val → WProp) (Nv Dv : Val) : List SRec → Expr → WProp := fun ls x ρ =>
   (∃ (e : Expr) (ρc : WRes) (ls₀ : List SRec) (v : Val) (ρP ρb ρlP : WRes)
@@ -729,7 +729,7 @@ include hT hL h0 hQd hD hkc in
 /-- **The lend across graded stops at a row that holds `Div`**, by coinduction (`lendW`): a
 segment of the callback is `lendM_frame` (lent) or `lendM_owner` (the owner beside) at the
 segment's tables, a tick of the callback a graded stop whose continuation is owed the candidate
-and `Closing`, which is the same lemma at the closing table.  `[spec §48]` -/
+and `Closing`, which is the same lemma at the closing table.  `[spec §63]` -/
 theorem cwp_lendM {ls : List SRec} {x : Expr} {ρ : WRes}
     (h : lendW T l Tt δ α Qx Nv Dv ls x ρ) : cwp T Q ls x ρ := by
   have hE0 := hT.erase0
@@ -784,7 +784,7 @@ theorem postA_of_box {l : BoCa.Loc} {A B : VTy} {δ : LSub} {x : LifeVar} {α : 
 abortive and call-graded operations (`Row.Lend`).  `[TR]` 6.173's proof (`withbor2_compatX`):
 the lend at a lifetime H4 chooses once (`lendM_entry`), then 6.65 across the callback's graded
 stops under the unwinding frame (`lendM_frame`), coinductively where the row holds `Div`
-(`cwp_lendM`).  Its side conditions are non-strict, read at `↓@bδ`.  `[spec §19, §23, §48]` -/
+(`cwp_lendM`).  Its side conditions are non-strict, read at `↓@bδ`.  `[spec §19, §23, §63]` -/
 theorem withbor2L_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Lend x)
@@ -969,7 +969,7 @@ at a lend's table beside a tick owing `Ψi`, whose answer hands the source back 
 `Ψo`.  At each segment's end the lend ends (`wpG_I_frameAt`): an answer goes to `N`, a `raise`'s
 source to `D`; at a graded stop the continuation, owed at the lists with the stop's members, is
 resumed at the frame's list with the lend made again at `A`: the cell the share held, or, where it
-had left it, the cell beside.  `[spec §48]` -/
+had left it, the cell beside.  `[spec §63]` -/
 theorem lendI_frame
     (hΨ : ∀ lsO c (b z' τ : WRes), (∀ x ∈ lsO, x.2 ⊐ A) → vC true Tt lsO δ v ρP →
       b.InStratum A → ResU.CompS b (immCell l A v ρP houtP) z' →
@@ -1124,7 +1124,7 @@ end
 
 /-- **The candidate** of the coinduction at `cwp` for an `imm` lend: the unwinding frame around a
 callback of `cwp` at the frame's list, lent at `A` with the cell beside, perhaps with more that
-holds nothing owned.  `[spec §48]` -/
+holds nothing owned.  `[spec §63]` -/
 def lendWI (T : OpTab) (l : BoCa.Loc) (Tt : VTy) (δ : LSub) (A : Life) (v : Val) (ρP ρlP : WRes)
     (houtP : ρP.InStratum A) (Qx : List SRec → Val → WProp) (Nv Dv : Val) :
     List SRec → Expr → WProp := fun lsO x ρ =>
@@ -1163,7 +1163,7 @@ include hT hL h0 hQd hadm hclP hD hQx hkc in
 /-- **The `imm` lend across graded stops at a row that holds `Div`**, by coinduction
 (`lendWI`): a segment of the callback is `lendI_frame` at the segment's tables, a tick a graded
 stop whose continuation is owed the candidate and `Closing`, the same lemma at the closing table.
-`[spec §48]` -/
+`[spec §63]` -/
 theorem cwp_lendI {lsO : List SRec} {x : Expr} {ρ : WRes}
     (h : lendWI T l Tt δ A v ρP ρlP houtP Qx Nv Dv lsO x ρ) : cwp T Q lsO x ρ := by
   have h00 : ∀ i, T.erase0 0 i = none := fun i => by
@@ -1195,7 +1195,7 @@ theorem owner_ext {l : BoCa.Loc} {T : VTy} {δ : LSub} {ls ls' : List SRec} {ρ 
 
 /-- **6.64's entry**: H4 chooses the lend's lifetime `A` below every tag and the callback's
 `fresh` bound, and the callback runs at the frame's list from `ℓ ↦ imm({A}, v, ρ_P)` beside
-`ρ_b ∈ Res_A`.  The rest of the lend is made at this `A`.  `[spec §48]` -/
+`ρ_b ∈ Res_A`.  The rest of the lend is made at this `A`.  `[spec §63]` -/
 theorem lendI_entry {l : BoCa.Loc} {Tt : VTy} {δ : LSub} {v : Val} {ls : List SRec}
     {X : Life → List SRec → WProp} {ρ : WRes}
     (h : (ptoOwn l v ⋆ vC true Tt ls δ v ⋆
@@ -1260,7 +1260,7 @@ theorem postI_of_box {l : BoCa.Loc} {A B : VTy} {δ : LSub} {x : LifeVar} {α : 
 abortive and call-graded operations (`Row.Lend`).  `[TR]` 6.172's proof (`withbor1_compatX`):
 the lend at a lifetime H4 chooses once (`lendI_entry`), then 6.64 across the callback's graded
 stops under the unwinding frame (`lendI_frame`), coinductively where the row holds `Div`
-(`cwp_lendI`).  `[spec §19, §48]` -/
+(`cwp_lendI`).  `[spec §19, §63]` -/
 theorem withbor1L_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc₁ : VScoped Δ A)
     (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Lend x)

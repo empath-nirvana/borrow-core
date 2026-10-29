@@ -769,7 +769,7 @@ def rowEntries : Nat → P Row
     if (← peek).tok == .kw "div" then
       let t ← bump
       let sp := t.span
-      -- `div call`: the graded `tick` (SPEC §48).
+      -- `div call`: the graded `tick` (SPEC §63).
       let q ← match (← peek).tok with
         | .ident "call" => discard bump; pure Qual.call
         | _ => pure Qual.lin

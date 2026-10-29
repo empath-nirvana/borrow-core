@@ -690,7 +690,7 @@ import Frontend.Elab.DivPlacement
 #print axioms Backend2.Lint.droppable_ofV_persistent
 #print axioms Backend2.Lint.droppable_ofV_drop
 #print axioms Frontend.Elab.DivPlacement.sim_loop
-/-! §48: call-graded operations. -/
+/-! §63: call-graded operations. -/
 #print axioms BoCa.Fig16.LogRel.Core.contShare_ungraded
 #print axioms BoCa.Fig16.LogRel.Core.kapRelT_ungraded
 #print axioms BoCa.Fig16.LogRel.Core.rowLe_gradeAt

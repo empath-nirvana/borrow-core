@@ -1,6 +1,6 @@
 # Loops: one loop model for every nest (#545)
 
-**Status (2026-10-21).** U1 (#548) is built, and U2's class with B2 (#644, SPEC §47): a counted
+**Status (2026-10-21).** U1 (#548) is built, and U2's class with B2 (#644, SPEC §62): a counted
 loop whose body loops is at the row `div`, `bounded_fix` over the count
 (`docs/pipeline-architecture.md` §3.2), with `break e` and `else`; counted machine loops over a
 cursor are not built. Over a lend (`&a`, `&mut a`) its borrow is held across the body's ticks, and

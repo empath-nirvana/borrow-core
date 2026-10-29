@@ -1,4 +1,4 @@
--- Lends held across a div function's ticks, nested three deep (SPEC §14, §48). `main` lends its
+-- Lends held across a div function's ticks, nested three deep (SPEC §14, §63). `main` lends its
 -- cell `a` to `l1`, `l1` lends its own cell `b` to `l2` at each turn of its loop, and `l2` lends
 -- its cell `c` to `l3` at each turn of its; `l3` loops, adding to the cell it borrows. Each lend
 -- is held across the callee's ticks: the borrow's unwinding form at the graded row `div call`,

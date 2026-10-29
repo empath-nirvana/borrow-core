@@ -82,7 +82,7 @@ theorem wpG_garbage {ls : List SRec} {e : Expr} {Q : List SRec → Expr → WPro
     ⟨(ResU.CompS.comm hFZ).1, fρ'p, ResU.CompS.comm hFZ, hv⟩, g5, hFZ, g7, g8, h₁Z, gA,
     noOwn_compS hZ hno gB, gT, gtg, gps, gls, hQ⟩
 
-/-! ### The `imm` lend's cell, list and end, at a given lifetime  `[spec §48]` -/
+/-! ### The `imm` lend's cell, list and end, at a given lifetime  `[spec §63]` -/
 
 /-- A record's lineage as a list, chosen once: the lists of its proper sub-records are equal up to
 the order of their members, and a lend that ends at a stop and lends again uses this one.  -/
@@ -249,7 +249,7 @@ theorem wpG_immEnd {l : BoCa.Loc} {A : Life} {v : Val} {ρP ρb ρlP BI : WRes}
 /-- What the end of an `imm` lend hands its frame: the callback's post `Y` at its share `ρ′` and
 the list `ls″` it ended at, which has the frame list's members; the share less the cell,
 `ρ₁`, which is `ρ′` where the share has left the cell behind; and the frame's resource
-`R = ρ₁ ● ℓ ↦ own(v) ● ρ_P`, at which `ls″` steps back to the caller's list.  `[spec §48]` -/
+`R = ρ₁ ● ℓ ↦ own(v) ● ρ_P`, at which `ls″` steps back to the caller's list.  `[spec §63]` -/
 def ExitPostI (l : BoCa.Loc) (T : VTy) (δ : LSub) (A : Life) (v : Val) (ρP : WRes)
     (houtP : ρP.InStratum A) (ρlP : WRes) (ls : List SRec) (Y : List SRec → Expr → WProp) :
     List SRec → Expr → WProp := fun lsE t R =>
@@ -263,7 +263,7 @@ def ExitPostI (l : BoCa.Loc) (T : VTy) (δ : LSub) (A : Life) (v : Val) (ρP : W
 H4's lifetime `A` given (`houtP`, `houtb`, `hAtag` are what H4 establishes), the callback run at
 every list with the frame's records from the cell the entry builds, the cell its share holds at
 the end set aside with the leftover, and the end reporting the callback's post (`ExitPostI`).  The
-printed lemma is `wpG_I_frameX`, at the lifetime H4 chooses.  `[spec §19, §48]` -/
+printed lemma is `wpG_I_frameX`, at the lifetime H4 chooses.  `[spec §19, §63]` -/
 theorem wpG_I_frameAt (l : BoCa.Loc) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (v : Val)
     (e : Expr) (ls : List SRec) (A : Life) (ρP ρb ρlP ρ : WRes) (hPv : vC true T ls δ v ρP)
     (houtP : ρP.InStratum A) (houtb : ρb.InStratum A) (hAtag : ∀ x ∈ ls, x.2 ⊐ A)
@@ -612,7 +612,7 @@ the cell the entry builds, and the end reporting what the lend hands back (`Exit
 and payload left in the cell, and whether the share at the end still held the cell, which then
 joins the leftover.  The printed lemma is `wpG_M_frameX`, at the lifetime H4 chooses; a lend
 held across a graded stop ends at the stop and lends again at `A` (`Core/EffLend.lean`).
-`[spec §19, §48]` -/
+`[spec §19, §63]` -/
 theorem wpG_M_frameAt (l : BoCa.Loc) (T : VTy) (δ : LSub) (A : Life) (v : Val) (e : Expr)
     (ls : List SRec)
     (ρP ρb ρlP ρ : WRes) (hPv : vC true T ls δ v ρP) (houtP : ρP.InStratum A)

@@ -1,9 +1,9 @@
--- A borrow block over a loop, `mut` (SPEC §14, §48). A counter cell borrowed `mut` around a `for`
+-- A borrow block over a loop, `mut` (SPEC §14, §63). A counter cell borrowed `mut` around a `for`
 -- over the input: each byte, a digit, is added to the cell through the borrow, and the loop counts
 -- the bytes in a `let mut` of its own.
 --
 -- The lend spans the loop's ticks: the block is the unwinding form of `withbor` at the graded row
--- `div call`, whose stops are resumed in their scope (SPEC §48), so `main` is that computation,
+-- `div call`, whose stops are resumed in their scope (SPEC §63), so `main` is that computation,
 -- `F[div call] …`, which the runtime's clause drives. What the body binds before the loop (`k`)
 -- does not use the borrow; what follows the loop, `k`, is handed back with `stdin`.
 --

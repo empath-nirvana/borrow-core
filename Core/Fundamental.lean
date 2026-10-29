@@ -234,7 +234,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       CDerives Δ Γ (.val (.prim .iterate)) (.val (iterTy S St B R))
   /-- `div_fuel : !U(U(1 ⊸ F_{tick^c, Σ} A) ⊗ I32 ⊸ F_Σ A)`, `Σ` without `Div`'s name, `tick` at
   either grade: the handler of `Div` that answers *next* to the first ticks, as many as the
-  budget, and *close* after.  `[spec §14, §48]` -/
+  budget, and *close* after.  `[spec §14, §63]` -/
   | divFuel {Δ Γ} {c : Bool} (S : Row) (A : VTy) (hS : ∀ o ∈ S, o.n ≠ divEff)
       (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val divFuelV) (.val (divFuelTy S A c))
@@ -313,7 +313,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hdc : closedAt 0 d = true) (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
       CDerives Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S))
   /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, at a lend's row, its side
-  condition non-strict.  `[spec §19, §23, §48]` -/
+  condition non-strict.  `[spec §19, §23, §63]` -/
   | withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Lend x)
@@ -461,7 +461,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   of linear operations below `Σ`; an abortive operation's clause is its function itself.  The
   handled row may hold `Div` (decision 68).  At the grade `c` the handled operations are
   call-graded and so is every operation of `Σ_N`: the only handler of a graded name.
-  `[spec §14, §19, §48]` -/
+  `[spec §14, §19, §63]` -/
   | effHandleT {Δ Γ Γ₁ Γ₂} {Hr Hc e : Expr} {S SN : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
       {n : UInt32} {c : Bool} {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁)
       (hHr : Hr.ValFormIn Γ₁) (hHc : Hc.ValFormIn Γ₁)

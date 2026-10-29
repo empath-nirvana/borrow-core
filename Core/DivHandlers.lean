@@ -125,7 +125,7 @@ theorem hnd_fwd {d : UInt32} {T : OpTab} (hTd : ∀ i, T d i = none) (hPC : T.Pl
 /-! ### The rows of `Div`'s handlers -/
 
 /-- The row `tick, Σ` at either grade, `Σ` without `Div`'s name: it holds `Div`.
-`[spec §14, §48]` -/
+`[spec §14, §63]` -/
 theorem Row.divB_tickG (c : Bool) (S : Row) : Row.divB (tickSigG c :: S) = true := by
   simp [Row.divB, CTy.effOf, CTy.divAt, tickSigG, tickB, VTy.isUnitB, VTy.isNextB]
 

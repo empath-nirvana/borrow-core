@@ -170,7 +170,7 @@ theorem FinLeS.trans : ∀ {P P' P'' : Option (List SRec → Expr → WProp)},
   | some _, some _, some _, h, h' => fun ls e ρ hp => h' ls e ρ (h ls e ρ hp)
 
 /-- `en ≤ en′`: the same operation, at a capturable one a weaker cancel obligation, and graded
-where `en` is: a graded stop owes its continuation at fewer lists.  `[spec §27, §48]` -/
+where `en` is: a graded stop owes its continuation at fewer lists.  `[spec §27, §63]` -/
 def OpEnt.Le (en en' : OpEnt) : Prop :=
   en.q = en'.q ∧ en.abort = en'.abort ∧ en.PA = en'.PA ∧ en.PB = en'.PB ∧
     (en.abort = false → en.q ≠ .lin → FinLeS en.fin en'.fin) ∧ (en.call = true → en'.call = true)
@@ -340,7 +340,7 @@ owned, and at a cancel carried through `K` by the entry's cancel obligation (`hK
 unrestricted operation the frame is empty.  A stop of `Px` with the frame is one of `Px'`
 (`hPx`): a tick at a row holding `Div` (`Core/Div.lean`).  The frame is carried, at each stop, to the lists the stop's continuation is owed at (`hFo`):
 every extension at an ungraded operation, the lists with the stop's members at a graded one.
-`[spec §14, §19, §27, §48]` -/
+`[spec §14, §19, §27, §63]` -/
 theorem ewp_frame_plain_owed (T T' : OpTab) (hTT : T.Le T') (Px Px' : Table) (hPx' : Px'.Mono)
     (K : Kont)
     (hH : ∀ n, K.HasHnd n = false)
@@ -721,7 +721,7 @@ theorem dead_hndK (n : UInt32) (qs hr hs : Val) : (hndK (hndVal n qs hr hs)).dea
 /-- The relation of `κ`'s type at an operation's entry: at every list it is owed at (`Owed`),
 resumed at every answer into `ewpTS` at the table `Tb`, and, with weakening, cancelled at
 `opTable Tk` when its cancel branch has the table `Tk` (`Tc = some Tk`), nothing when that branch
-is `⊤` (`Tc = none`).  `[spec §14, §19, §27, §48]` -/
+is `⊤` (`Tc = none`).  `[spec §14, §19, §27, §63]` -/
 def KapRelT (Tb : Table) (Qout : List SRec → Val → WProp) (en : OpEnt) (Tc : Option OpTab)
     (ls : List SRec) (κ : Val) : WProp := fun ρ =>
   (en.q = .unr → ρ = PMap.empty) ∧
@@ -732,7 +732,7 @@ def KapRelT (Tb : Table) (Qout : List SRec → Val → WProp) (en : OpEnt) (Tc :
       ewpTS ls' (.app κ.1 (.val (Val.inj₂ .unit))) (opTable Tk) (fun _ v => ⌜v = Val.unit⌝) ρ)
 
 /-- **Conservativity of the grade at a clause**: at an ungraded entry `κ` is owed at every
-`Ext`-extension, Core's `κ` relation before §48.  `[spec §48]` -/
+`Ext`-extension, Core's `κ` relation before §63.  `[spec §63]` -/
 theorem kapRelT_ungraded {en : OpEnt} (h : en.call = false) (Tb : Table)
     (Qout : List SRec → Val → WProp) (Tc : Option OpTab) (ls : List SRec) (κ : Val) :
     KapRelT Tb Qout en Tc ls κ = fun ρ =>

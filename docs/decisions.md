@@ -280,7 +280,7 @@ Each entry: the decision, and why. Newest last.
       case in the corpus (`corpus/axes/free-monad.bc`) needs the copy.
 40. **Provisional (SPEC §14, borrow scopes over loops, per observation; O1 step 1; to be confirmed
     by the user).**
-    - **Retired (#644, SPEC §47).** The per-observation rewrite decided lend extents in the
+    - **Retired (#644, SPEC §62).** The per-observation rewrite decided lend extents in the
       elaborator (`STOP: KERNEL WORK`). A borrow block whose body loops is now elaborated as written
       at the row `div`, and the kernel refuses it; the programs that used the rewrite are in
       `corpus/pending/` (a lend held across a tick: tier 2, open with no path). The library's

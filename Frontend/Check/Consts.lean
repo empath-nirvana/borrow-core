@@ -154,7 +154,7 @@ def finaliser (sp : Span) (src : CVTy) :
 /-- The finaliser's node: the source's destructor. -/
 def finNode (sp : Span) (src : CVTy) : TExpr := .dtor (at_ sp) (.val (.lolli src .unit)) src
 
-/-- The row of a lend's callback: `Row.Lend`.  `[spec §19, §48]` -/
+/-- The row of a lend's callback: `Row.Lend`.  `[spec §19, §63]` -/
 def lendRow (sp : Span) (x : LifeVar) (S : CRow) : Except Error (PLift (S.Lend x)) :=
   if h : Row.lendB S x = true then pure ⟨Row.lendB_sound h⟩
   else err sp ("the row of a lend's callback has only abortive operations and call-graded linear " ++
@@ -162,7 +162,7 @@ def lendRow (sp : Span) (x : LifeVar) (S : CRow) : Except Error (PLift (S.Lend x
     "operation's answers) outlive every lifetime and do not mention its lifetime")
 
 /-- The row of an unwinding callback of `withbor` (3), `withload` and the slice borrows: a lend's
-row with no graded operation (`Row.Unwind`).  `[spec §19, §48]` -/
+row with no graded operation (`Row.Unwind`).  `[spec §19, §63]` -/
 def unwindRow (sp : Span) (x : LifeVar) (S : CRow) : Except Error (PLift (S.Unwind x)) := do
   let ⟨h⟩ ← lendRow sp x S
   if hg : (S.all fun o => !o.call) = true then

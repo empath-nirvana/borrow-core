@@ -29,7 +29,7 @@ annotated first (`Frontend.Elab.fillProgram`), and each decision below reads tho
   with the capabilities read by name where the path ends (`wrapTail`).
 * **`for x in V { M }; N`**, `V` an iterator made from a capability, in any function or `main`
   becomes `iterate` over the state (iterator, other capabilities, threaded variables at their
-  inferred types), and makes the function div (§14, §47, *The `Div` elaboration* below).
+  inferred types), and makes the function div (§14, §62, *The `Div` elaboration* below).
 * **`&c`** in the head of `x <- M; N` becomes `r <- M[c/&c]; let (c, x) = r; N` (`Comp.elab`).
 
 The generated code is a template, printed and parsed, whose holes are filled with the program's
@@ -286,7 +286,7 @@ def parseComp (src : String) : Except Error Comp := do
   | some M => pure M
   | none => throw ⟨Span.none, "internal error: a template without main"⟩
 
-/-! ### Divergence  `[spec §14, §47]`
+/-! ### Divergence  `[spec §14, §62]`
 
 A **div function** is one whose computation performs `Div`: `A ⇒ F_{div, Σ}(B ⊕ R)`, which
 finishes with `inl b`, or, closed early at a tick, hands back the residual `R` as `inr r`. A
@@ -509,7 +509,7 @@ def _root_.Frontend.Row.hasDiv : Frontend.Row → Bool
   | .nil => false
   | .cons n i _ _ _ rest => (n == 4294967295 && i == 0) || rest.hasDiv
 
-/-- A written row with `Div`'s entry graded, `div call` (SPEC §48). -/
+/-- A written row with `Div`'s entry graded, `div call` (SPEC §63). -/
 def _root_.Frontend.Row.gradeDiv : Frontend.Row → Frontend.Row
   | .nil => .nil
   | .cons n i q A B rest =>
@@ -526,7 +526,7 @@ def gradeStepTy : VTy → VTy
     .bang sp (.thunk tsp (.arr asp P (.eff esp r.gradeDiv X)))
   | T => T
 
-/-- A kernel row with its `tick` graded, `tickSigG true` (SPEC §48). -/
+/-- A kernel row with its `tick` graded, `tickSigG true` (SPEC §63). -/
 def gradeRowC (S : Frontend.Check.CRow) : Frontend.Check.CRow :=
   S.map fun o => if isDivSig o then { o with call := true } else o
 
@@ -547,7 +547,7 @@ def _root_.Frontend.Const.gradedLend : Const → Bool
 
 mutual
 /-- A value holds a graded lend (an unwinding borrow at a graded row) or names a function `g`
-the predicate marks (a div function of graded type).  `[spec §48]` -/
+the predicate marks (a div function of graded type).  `[spec §63]` -/
 def _root_.Frontend.Val.graded (g : String → Bool) : Val → Bool
   | .var _ x | .clone _ x | .defApp _ x _ => g x
   | .const _ C => C.gradedLend
@@ -558,7 +558,7 @@ def _root_.Frontend.Val.graded (g : String → Bool) : Val → Bool
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.graded g
   | _ => false
 
-/-- A computation holds a graded lend or a call of a graded function.  `[spec §48]` -/
+/-- A computation holds a graded lend or a call of a graded function.  `[spec §63]` -/
 def _root_.Frontend.Comp.graded (g : String → Bool) : Comp → Bool
   | .ret _ V | .absurd _ V => V.graded g
   | .bind _ _ _ M N _ | .with_ _ M N => M.graded g || N.graded g
@@ -1587,7 +1587,7 @@ def eWalk (m : DCx) : Nat → TCx → Comp → EM Comp
   | 0, _, M => throw ⟨M.span, "internal error: a body nested too deeply"⟩
   | n + 1, c, .bind sp x A M N lin => do
     -- A borrow block whose body loops holds its lend across the body's ticks, at the graded row
-    -- `div call` (`Row.Lend`, SPEC §48). Its body is a div body of its own, at the callback's
+    -- `div call` (`Row.Lend`, SPEC §63). Its body is a div body of its own, at the callback's
     -- row, which a close inside the lend leaves with the body's residual.
     -- With `narrow`, a close inside the lend hands back the capabilities of the body that it
     -- mentions, which the lend's callback holds; what follows the lend has the others.
@@ -1619,7 +1619,7 @@ def eWalk (m : DCx) : Nat → TCx → Comp → EM Comp
       if let some l := lendCb? fA F then
         -- The lend's answer holds the body's: `['x](B ⊕ R)`, the residual `R` of a close inside
         -- the lend boxed beside the result; the borrow then answers `src ⊗ (B ⊕ R)`, which is a
-        -- call of the body's shape, `(src ⊗ B) ⊕ R` (SPEC §48).
+        -- call of the body's shape, `(src ⊗ B) ⊕ R` (SPEC §63).
         if let (some (.thunk ks₁ (.arr ks₂ src (.arr ks₃ _ (.eff ks₄ r (.tensor ks₅ _ _))))),
             .ret ksp (.const csp C),
             some (.thunk ts₁ (.all ts₂ xv bv (.arr ts₃ L (.eff ts₄ r' (.box bxs a B₀)))))) :=
@@ -1668,7 +1668,7 @@ def eWalk (m : DCx) : Nat → TCx → Comp → EM Comp
     -- The step of a counted loop at the row: its body is a div body of its own, whose answer is
     -- the step's, and whose close hands back the variables the loop threads.
     if let .ret rsp (.app _ (.sugar _ (.rowStep ws ret)) (.bangThunkv vsp (.lam lsp q T K))) := M then
-      -- The step is at the body's row, graded with it (SPEC §48).
+      -- The step is at the body's row, graded with it (SPEC §63).
       let A := if m.row.any (fun o => isDivSig o && o.call) then A.map gradeStepTy else A
       let some Fty := A.bind c.elabV
         | throw ⟨sp, "internal error: a counted loop's step at the row has no type"⟩
@@ -1921,7 +1921,7 @@ def divBody (cx : LoopCx) (row : Frontend.Check.CRow) (c : TCx) (M : Comp) : SM 
 def gradedName (c : TCx) (sp : Span) (x : String) : Bool :=
   (c.tyV (.var sp x)).any gradedDivTy
 
-/-- **A div body and its grade** (SPEC §48): the body at `row`, and, when its code holds a graded
+/-- **A div body and its grade** (SPEC §63): the body at `row`, and, when its code holds a graded
 lend or a call of a graded function, the body again at `row` with its `tick` graded, which the
 lend's or the call's row then subsumes into. The grade is a type, inferred; the kernel checks it. -/
 def divBodyG (cx : LoopCx) (row : Frontend.Check.CRow) (c : TCx) (M : Comp) :
@@ -1935,7 +1935,7 @@ def divBodyG (cx : LoopCx) (row : Frontend.Check.CRow) (c : TCx) (M : Comp) :
 
 /-- A `main` that loops: the loop value of its body (`reify`), which the runtime drives (SPEC §11,
 §14); at a graded row (a lend across its ticks), the body itself, `F[div call] (B + R)`, which the
-runtime's clause drives (SPEC §48). The grade is returned.  `[spec §14, §48]` -/
+runtime's clause drives (SPEC §63). The grade is returned.  `[spec §14, §63]` -/
 def divMain (cx : LoopCx) (c : TCx) (sp : Span) (M : Comp) : SM (Comp × Bool) := do
   let (body, g) ← divBodyG cx [BoCa.Fig16.LogRel.Core.tickSig] c M
   if g then return (body, true)
@@ -2794,7 +2794,7 @@ def replaceLend (y : String) : Val → Val
   | V => V
 
 /-- A borrow block's constant in its unwinding form, at the row `r` (SPEC §19); its `tick`, if
-it has one, graded: a lend's row has abortive and call-graded operations only (SPEC §48). -/
+it has one, graded: a lend's row has abortive and call-graded operations only (SPEC §63). -/
 def Const.unwinding (r₀ : Frontend.Row) (C : Const) : Option Const :=
   let r := r₀.gradeDiv
   match C with
@@ -2827,7 +2827,7 @@ def unwindingC? (sp : Span) : Val → Option Comp
         | .thunkv tsp (.lamL lsp xi b (.ret _ (.thunkv _ L))) => Val.thunkv tsp (.lamL lsp xi b L)
         | cb => cb
       -- At a row that holds `Div` (a body that loops), the constant is bound at its type, the
-      -- graded row `div call` (SPEC §48), and what follows is typed past it.
+      -- graded row `div call` (SPEC §63), and what follows is typed past it.
       let kTy : Option VTy := match C, cbTy with
         | .withbor1U _ A B r, some T | .withbor2U _ _ A B r, some T =>
           if r.hasDiv then some (uTy (.ref sp A) T B r) else none
@@ -2862,7 +2862,7 @@ def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
     (.lam sp ⟨mv, sp⟩ Tm (body l mv)))))
   let C : Const := if m == .mut then .withbor2 li (.top sp) As Bs else .withbor1 li As Bs
   -- A body that calls a div function holds the lend across its ticks: the borrow's unwinding
-  -- form at the graded row `div call, Σ` (`Row.Lend`, SPEC §48).
+  -- form at the graded row `div call, Σ` (`Row.Lend`, SPEC §63).
   let C ← match row with
     | some r => do pure ((Const.unwinding (← (surfRow c sp r : Except Error Frontend.Row)) C).getD C)
     | none => pure C
@@ -4743,7 +4743,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       if let .app _ (.sugar _ (.pullSite i)) call := V then return ← pullView n c sp i call
       if let some B := borrowBlock? V then
         -- A borrow block whose body loops holds its lend across the loop's ticks: its borrow is
-        -- at the graded row `div call` besides (`Row.Lend`).  `[spec §14, §19, §48]`
+        -- at the graded row `div call` besides (`Row.Lend`).  `[spec §14, §19, §63]`
         let loops := Frontend.Elab.LoopLend.blockLoops c (dataFor (← get).sizedFns) V
         if loops || c.E.row.isSome then
           let S := c.E.row.getD []

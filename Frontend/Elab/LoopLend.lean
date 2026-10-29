@@ -9,7 +9,7 @@ loop is at the row `div` (SPEC §14): each of its back edges ticks, and `tick` i
 operation that resumes, so a borrow block whose body loops holds its lend across a tick. That is
 a lend held by a suspension whose continuation is resumed in its scope: the block is elaborated as
 written, its borrow in the unwinding form at the graded row `div call` (`Frontend/Sugar.lean`,
-`blockLoops`), which the kernel's rule for a lend at a row (`Row.Lend`, SPEC §48) checks. The
+`blockLoops`), which the kernel's rule for a lend at a row (`Row.Lend`, SPEC §63) checks. The
 elaborator does not lend again per step.
 
 This module recognises such a block, and holds two forms around borrow scopes:

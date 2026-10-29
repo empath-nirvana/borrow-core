@@ -65,7 +65,7 @@ inductive Mode where
   | imm
   deriving DecidableEq, Repr, Inhabited
 
-/-- The qualifier of an operation's continuation in a row (SPEC §19, §48): linear, affine,
+/-- The qualifier of an operation's continuation in a row (SPEC §19, §63): linear, affine,
 unrestricted, or `call`: linear and call-graded, its continuation resumed in the scope of the
 stop. -/
 inductive Qual where

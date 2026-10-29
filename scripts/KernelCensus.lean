@@ -78,7 +78,7 @@ def formersC (acc : Std.HashSet String) : CTy → Std.HashSet String
   | t@(.amp C D) => formersC (formersC (acc.insert (cName t)) C) D
   | t@(.all _ _ C) | t@(.nu C) => formersC (acc.insert (cName t)) C
   | t@(.eff _ _ _ A B fin cg C) =>
-    -- A call-graded operation (SPEC §48) is counted as the former `C.eff.call` besides.
+    -- A call-graded operation (SPEC §63) is counted as the former `C.eff.call` besides.
     let acc := if cg then acc.insert "C.eff.call" else acc
     formersC (formersC (formersV (formersV (acc.insert (cName t)) A) B) fin) C
   | t@.top => acc.insert (cName t)

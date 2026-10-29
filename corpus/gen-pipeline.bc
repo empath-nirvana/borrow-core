@@ -1,7 +1,7 @@
 -- Generators composed: a `range` written with `while`, a map (`squares`) and a filter (`above`)
 -- written as generators over a stored generator, and a `for` that sums the pipeline.
 --
--- Each generator's body is one loop, `iterate` at its row (SPEC §47), whose loop value's
+-- Each generator's body is one loop, `iterate` at its row (SPEC §62), whose loop value's
 -- observation runs one turn of the loop. `squares` and `above` take a stored generator
 -- (`pull i32 1 1`), so each call in the pipeline is stored where it is passed, and observed by the
 -- loop it is passed to; `main`'s `for` handles `above`'s `yield`s. The pipeline allocates nothing;

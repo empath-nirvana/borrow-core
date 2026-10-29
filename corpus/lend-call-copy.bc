@@ -1,5 +1,5 @@
 -- A div function that takes an `imm` borrow, called with a lend held across its ticks (SPEC §14,
--- §42, §48): `corpus/pending/lend-server.bc` with the borrow copied explicitly at each turn of the
+-- §42, §63): `corpus/pending/lend-server.bc` with the borrow copied explicitly at each turn of the
 -- callee's loop (`copy`, then `forget_imm` of the last copy) in place of the implicit copy #58
 -- leaves open. `serve` reads its input to the end, handling each byte under a configuration it
 -- borrows; `main` calls it in direct style with `serve(&config, stdin)`, and the lend at the call

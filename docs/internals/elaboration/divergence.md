@@ -146,7 +146,7 @@ main -> i32 =
 
 A borrow block around the loop, `borrow imm t { b -> for … { … get(b, …) … } }`, or
 `let tb = &t` before it, holds the lend across the loop's ticks. The kernel admits that at the
-graded row `div call`, whose stops are resumed in their scope (SPEC §48), but the loop reads the
+graded row `div call`, whose stops are resumed in their scope (SPEC §63), but the loop reads the
 borrow `b` at each turn, and an `imm` borrow is not copied implicitly (#58), so the checker refuses
 its second use:
 
@@ -182,7 +182,7 @@ function holds (or `()`). Each loop is the kernel's `iterate` over the variables
 call of a div function in direct style is a call. Where a loop is expected (`div_fuel`'s
 argument, `main`'s result), the call's loop value is `reify` of it, a loop that runs the call one
 turn per observation. `bcc desugar` shows all of it; the checker sees only core
-(SPEC [§47](https://github.com/empath-nirvana/borrow-core/blob/main/SPEC.md#47-entry-46--loops-elaborate-to-div-b2)).
+(SPEC [§62](https://github.com/empath-nirvana/borrow-core/blob/main/SPEC.md#62-entry-61--loops-elaborate-to-div-b2)).
 
 ## What is proved
 
