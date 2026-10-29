@@ -329,6 +329,7 @@ corpus/hygiene-handler-param.bc 1.0 affine abortive: -; agree
 corpus/hygiene-handler-resume.bc 2.0 affine abortive: branch; agree
 corpus/hygiene-handler-resume.bc 1.0 affine tail: machine: the clause captures values; disagree
 corpus/hygiene-handler-state.bc 1.0 affine tail+state: machine: a path of the clause does not end in one resume in tail position; agree
+corpus/imm-copy-nest.bc 1.0 affine tail: direct; agree
 corpus/io-task.bc 3.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
 corpus/io-task.bc 3.1 affine tail: -; agree
 corpus/io-task.bc 2.0 affine stored: machine: a path of the clause does not end in one resume in tail position; agree
@@ -373,6 +374,7 @@ corpus/leetcode/trees/0230-kth-smallest-element-in-a-bst.bc 1.0 affine abortive:
 corpus/leetcode/trees/0235-lowest-common-ancestor-of-a-binary-search-tree.bc 1.0 affine abortive: branch; agree
 corpus/leetcode/trees/0297-serialize-and-deserialize-binary-tree.bc 1.0 affine abortive: branch; agree
 corpus/leetcode/trees/0572-subtree-of-another-tree.bc 1.0 affine abortive: branch; agree
+corpus/lend-iter-borrow.bc 1.0 affine tail: direct; agree
 corpus/list-blocks.bc 1.0 affine abortive: branch; agree
 corpus/list-blocks.bc 2.0 affine abortive: branch; agree
 corpus/list-blocks.bc 3.0 affine abortive: branch; agree
