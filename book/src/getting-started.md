@@ -2,26 +2,23 @@
 
 ## Installing
 
-borrow-core is built with Lean 4. You need:
+The compiler, `bcc`, is written in Lean 4 and built from source. You need:
 
-- **elan**, the Lean toolchain manager. The toolchain version is pinned in `lean-toolchain`, and
-  elan installs it on first use.
-- **wasmtime**, to run compiled programs. `bcc run` calls `wasmtime -W tail-call=y`, so any
-  version with tail-call support works.
-- **clang**, only if you want native builds (`bcc run --native`).
+- **elan**, the Lean toolchain manager. It installs the pinned toolchain on first use.
+- **wasmtime**, to run compiled programs. Any version with tail-call support works.
+- **clang**, only if you want native builds.
 
 On macOS, `brew bundle` in the repository installs elan and wasmtime (and `mdbook`, for building
-this book). Then clone the repository, fetch the prebuilt Mathlib cache, and build the compiler:
+this book). Then clone the repository and build the compiler:
 
 ```sh
 git clone https://github.com/empath-nirvana/borrow-core
 cd borrow-core
-lake exe cache get
+lake exe cache get      # downloads prebuilt Mathlib, which the proofs use, instead of compiling it
 lake build bcc
 ```
 
-The compiler is at `.lake/build/bin/bcc`, and `lake exe bcc …` runs it too. `lake build` on its
-own builds the proofs as well, which takes longer.
+The compiler is at `.lake/build/bin/bcc`.
 
 ## A first program
 
@@ -36,78 +33,49 @@ fn squares(n: i32) -> i32 =
   for i in 0..n { s = s + i * i };
   s
 
-main -> i32 =
-  print_lit("hello\n");
-  squares(4)
--- output: hello
--- answer: i32[14]
+main -> 1 =
+  print_lit("squares below 4: ");
+  print_dec(squares(4));
+  print_byte(b'\n')
+-- output: squares below 4: 14
 ```
 
 and run it:
 
 ```text
 $ bcc run hello.bc
-hello
-i32[14]
+squares below 4: 14
+()
 live 0
 ```
 
-`fn` declares a function, and `main -> i32` says the program computes an `i32`, which `bcc`
-prints after the program's own output. Then comes `live N`, the number of objects still
-allocated at the end: `live 0` means nothing leaked. `include textio` brings in the text and
-I/O library, and `print_lit` writes a string literal to standard output. `main` is the one
-function that can do I/O without being given it.
+`fn` declares a function, and `main` is where the program starts. `include textio` brings in
+the text and I/O library: `print_lit` writes a string literal, `print_dec` a number in decimal,
+and `print_byte` one byte. `main -> 1` says that `main` returns nothing interesting: `1` is the
+unit type, whose one value is `()`.
 
-The same program runs natively, or in the reference interpreter:
+The last two lines come from `bcc`, not from the program. `()` is the value `main` returned, and
+`live 0` is the number of heap objects still allocated when it finished: `live 0` means nothing
+leaked. Every program in this book ends that way; the examples show only the program's own
+output.
 
-```text
-$ bcc run --native hello.bc
-hello
-i32[14]
-live 0
-$ bcc interp hello.bc
-hello
-i32[14]
-live 0
-```
-
-`bcc check` type-checks without running, and prints the type of each declaration:
-
-```text
-$ bcc check hello.bc
-…
-def squares : !(i32 => i32)
-…
-loop 6:3: `for` is total, bounded by len(0..n)
-…
-```
-
-`bcc check` also prints notes on how each part compiles; you can ignore them for now. The types
-are those of the core the program is translated into, which
-[How it elaborates](elaboration/overview.md) explains.
+If something is wrong, `bcc run` prints the error, with its line and column, instead of running
+the program.
 
 ## The `bcc` commands
 
 | command | what it does |
 |---|---|
-| `bcc check file.bc` | type-check: print each declaration's type and notes, or the first error |
-| `bcc run file.bc [arg…]` | compile `main` to WebAssembly and run it under wasmtime |
+| `bcc run file.bc [arg…]` | compile to WebAssembly and run it under wasmtime |
 | `bcc run --native file.bc [arg…]` | compile through LLVM and clang, and run natively |
-| `bcc interp file.bc [-- arg…]` | run `main` in the reference interpreter |
-| `bcc compile file.bc -o out.wat` | write the WebAssembly text (`--target native` for LLVM IR) |
-| `bcc desugar file.bc` | print the core program the surface program translates to |
-| `bcc trusted file.bc` | list the externs `main` reaches, and what each takes on trust |
-| `bcc parse file.bc`, `bcc print file.bc` | parse and round-trip; print in the canonical spelling |
+| `bcc interp file.bc [-- arg…]` | run in the reference interpreter, without compiling |
+| `bcc compile file.bc -o out.wat` | write the WebAssembly text |
+| `bcc compile --target native file.bc -o out.ll` | write the LLVM IR |
 
 A program reads standard input and writes standard output as usual, and takes arguments after
-the file name: `bcc run tool.bc a b < input`. `make run hello.bc` builds `bcc` if needed and
-then runs the program.
+the file name: `bcc run tool.bc a b < input`.
 
-The [next chapter](guide/basics.md) starts the language from here.
-
-## Where to find more programs
-
-`corpus/` holds the programs the test suite runs, each with a comment saying what it computes.
-`corpus/aoc/` and `corpus/leetcode/` are ports of Advent of Code and LeetCode solutions.
-`corpus/reject/` holds programs the checker must reject, which is a quick way to see the errors
-it gives.
+The [next chapter](guide/basics.md) starts the language from here. For larger programs, see the
+Advent of Code and LeetCode ports in
+[`corpus/aoc/`](https://github.com/empath-nirvana/borrow-core/tree/main/corpus/aoc) and
+[`corpus/leetcode/`](https://github.com/empath-nirvana/borrow-core/tree/main/corpus/leetcode).

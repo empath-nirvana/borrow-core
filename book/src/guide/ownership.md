@@ -3,16 +3,14 @@
 Every value is either **copyable** or **owned**. A copyable value holds no resource, and may be
 used any number of times or not at all. An owned value holds memory (or a capability, or a
 suspended computation), and is used exactly once: passed on, taken apart, or freed. Borrowing
-lends an owned value for a while without giving it up. If you know Rust, this is its model. One
-difference: data that holds no resources, like a list of integers, counts as copyable, but
-copying a list or tree must be written `clone(x)` (below). The rules are
-proved sound in Lean ([What is proved](../proved.md)), so a program that type-checks has no use
-after free, no double free and no leak.
+lends an owned value for a while without giving it up. If you know Rust, this is its model, and
+a program that type-checks has no use after free, no double free and no leak
+([Safety guarantees](../safety.md)).
 
 ## Copyable and owned values
 
-These types are copyable (the reference calls them *persistent*): the numbers, `bool`, `1`, `!`
-functions, and pairs and sums of copyable types. Everything else is owned:
+These types are copyable: the numbers, `bool`, `1`, `!` functions, and tuples and sums of
+copyable types. Everything else is owned:
 
 | type | what it owns |
 |---|---|
@@ -22,16 +20,19 @@ functions, and pairs and sums of copyable types. Everything else is owned:
 | `A => B` | a closure that may hold owned values; called once |
 
 `alloc(v)` puts `v` in a new heap cell, a `ref A`, and `free(c)` takes the value back out and frees
-the cell. Using an owned value moves it, and a value that has moved cannot be used again:
+the cell. Using an owned value moves it, and a value that has moved can't be used again:
 
 ```bc
+include textio
+
 fn take_all(c: ref i32) -> i32 = free(c)
 
-main -> i32 =
+main -> 1 =
   let c = alloc(40);
   let d = c;
-  take_all(d) + 2
--- answer: i32[42]
+  print_dec(take_all(d) + 2);
+  print_byte(b'\n')
+-- output: 42
 ```
 
 ```bc,reject
@@ -48,16 +49,19 @@ The second use is an error, so there is no use after free and no double free. A 
 never used is not an error: the compiler frees it where its scope ends, as Rust drops it.
 
 ```bc
-main -> i32 =
+include textio
+
+main -> 1 =
   let unused = alloc(1);
   let c = alloc(41);
-  free(c) + 1
--- answer: i32[42]
+  print_dec(free(c) + 1);
+  print_byte(b'\n')
+-- output: 42
 ```
 
-`live 0` after the answer says that both cells were freed. A value that cannot be dropped this
-way, because dropping it would need an argument (a capability, or a one-shot closure that must
-be called), must be used, and leaving it unused is an error that names it.
+The run ends with `live 0`: both cells were freed. A value that can't be dropped this way,
+because dropping it would need an argument (a capability, or a one-shot closure that must be
+called), must be used, and leaving it unused is an error that names it.
 
 ## Borrowing for one call
 
@@ -66,6 +70,8 @@ usable again, changed if it was lent `&mut`. The function receives a borrow, `im
 `mut 'a A`, whose lifetime `'a` is a parameter of the function:
 
 ```bc
+include textio
+
 fn get<'a>(r: imm 'a i32) -> i32 = *r
 
 fn bump<'a>(r: mut 'a i32) -> 1 = modify r { v -> v + 1 }
@@ -73,13 +79,16 @@ fn bump<'a>(r: mut 'a i32) -> 1 = modify r { v -> v + 1 }
 -- Adds `k`, and answers the old value.
 fn add<'a>(m: mut 'a i32, k: i32) -> i32 = modify m { v -> (v + k, v) }
 
-main -> i32 * i32 =
+main -> 1 =
   let c = alloc(5);
   bump(&mut c);
   let old = add(&mut c, 10);
   let now = get(&c);
-  (now, old)
--- answer: (i32[16], i32[6])
+  print_dec(old);
+  print_byte(b' ');
+  print_dec(now);
+  print_byte(b'\n')
+-- output: 6 16
 ```
 
 - `*r` reads through a borrow. It copies the contents, so it needs a copyable content type.
@@ -87,20 +96,24 @@ main -> i32 * i32 =
   `(new, result)`, the contents become `new` and `modify` answers `result`.
 
 `&x` and `&mut x` work on a `let mut` variable too, with no heap cell: the compiler gives the
-variable a slot in the stack frame for the call.
+variable a slot in the stack frame for the call. Through a `mut` borrow of a record, a field is
+assigned as on the record itself:
 
 ```bc
-fn bump<'a>(r: mut 'a i32) -> 1 = modify r { v -> v * 2 }
+include textio
 
-main -> i32 =
-  let mut n = 21;
-  bump(&mut n);
-  n
--- answer: i32[42]
+data Point = { x: i32, y: i32 }
+
+fn nudge<'a>(p: mut 'a Point, dx: i32) -> 1 = p.x = p.x + dx
+
+main -> 1 =
+  let mut p = Point { x: 1, y: 2 };
+  nudge(&mut p, 10);
+  nudge(&mut p, 5);
+  print_dec(p.x);
+  print_byte(b'\n')
+-- output: 16
 ```
-
-Write a lend as the whole call of a `let` or a statement: `let x = get(&c); (x, …)` rather than
-`(get(&c), …)`.
 
 ## Borrow blocks
 
@@ -109,14 +122,19 @@ one call. Inside the block, `x` itself is out of reach; after it, `x` is back. T
 is the block's result:
 
 ```bc
-main -> i32 =
+include textio
+
+main -> 1 =
   let c = alloc(5);
   let k = 7;
-  let n = borrow mut c { m ->
+  let old = borrow mut c { m ->
     let old = modify m { v -> (v + k, v) };
     modify m { v -> (v * 2, old) } };
-  n * 100 + free(c)
--- answer: i32[524]
+  print_dec(old);
+  print_byte(b' ');
+  print_dec(free(c));
+  print_byte(b'\n')
+-- output: 5 24
 ```
 
 The block introduces a lifetime of its own. It is unnamed unless a type written inside the block
@@ -124,13 +142,12 @@ mentions it, in which case it is written first: `borrow imm a { 'x, v -> … }`.
 
 Inside the block, `m` is a value like any other: passing it to a function moves it. So a function
 that takes a `mut` borrow and is meant to be called more than once hands it back,
-`fn f<'a>(m: mut 'a A) -> mut 'a A * B`, as the view functions of the next chapter do. (`&mut m`,
-lending a borrow on again, is not available yet; nor is lending a second owner inside a borrow
-block. Lend it before or after the block.)
+`fn f<'a>(m: mut 'a A) -> mut 'a A * B`, and the caller binds it again, `let (m, r) = f(m);`.
+The view functions of the next chapter work this way.
 
 ## What the checker refuses
 
-The owner cannot be used while it is lent:
+The owner can't be used while it is lent:
 
 ```bc,reject
 main -> i32 =
@@ -140,8 +157,8 @@ main -> i32 =
 -- expect: 3:11: `c` is used twice here, and its type `ref i32` is not persistent
 ```
 
-and a borrow cannot outlive its lend: a call whose result mentions the lent place's lifetime
-cannot hand the place back.
+and a borrow can't outlive its lend: a call whose result mentions the lent place's lifetime
+can't hand the place back.
 
 ```bc,reject
 fn keep<'a>(r: imm 'a i32) -> imm 'a i32 = r
@@ -153,16 +170,15 @@ main -> i32 =
 -- expect: 5:11: the call's result mentions the lifetime of the lent place, so the place cannot be handed back after it
 ```
 
-There is no borrow checker separate from the type checker: an `imm` borrow is a value that is
-used once like any owned value (`copy` splits it in two), and a `mut` borrow cannot be split at
-all, so two `&mut` of one place are never live together. Lifetimes are lexical, as Rust's were
-before non-lexical lifetimes: a borrow lasts for its call or its block.
+Any number of `imm` borrows of a place may be live at once, and a `mut` borrow is exclusive, so
+two `&mut` of one place are never live together. Lifetimes are lexical, as Rust's were before
+non-lexical lifetimes: a borrow lasts for its call or its block.
 
 ## Recursive data is copied only when you say so
 
-A list of integers holds no resource, so it is copyable, but copying it allocates every node.
-Where a use would copy recursive data, the copy is written `clone(x)`; without it, the second use
-is an error that says so:
+A list of integers holds no resource, so it can be copied, but copying it allocates every node,
+so it's like a Rust type that is `Clone` but not `Copy`. Where a use would copy recursive data,
+the copy is written `clone(x)`; without it, the second use is an error that says so:
 
 ```bc,reject
 include list
@@ -190,6 +206,11 @@ fn get[A]<'a>(v: array_imm 'a A, i: i32) -> imm 'a A + 1
 ```
 
 Lifetimes are not elided in signatures. Inside a body they are inferred, except where a borrow
-block's lifetime must be named (above). The full rules, including `main`'s own lifetime `'main`
-and lifetime bounds `where S: 'c`, are in [Cells and borrows in the
-core](../elaboration/ownership-and-borrows.md#lifetime-parameters-bounds-and-mains-lifetime).
+block's lifetime must be named (above).
+
+A lifetime parameter can be declared shorter than another, `fn f<'x, 'w < 'x>(…)`, for a result
+that must not outlive a borrow it was made from. `main` runs under a lifetime of its own,
+`'main`, which lasts for its whole body; a call that needs a lifetime its arguments don't give
+gets the innermost one in scope, and `f['main](…)` passes `main`'s by name. A generic function
+can require that a type argument outlive one of its lifetimes, as in Rust:
+`fn hold[S]<'c>(s: S) -> … where S: 'c`.

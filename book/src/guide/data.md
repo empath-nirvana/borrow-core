@@ -1,7 +1,7 @@
 # Data and generics
 
 This chapter covers the data a program builds: recursive types such as lists and trees, the
-folds that walk them, arrays, buffers and strings, and the generic code over them: `poly`
+folds that walk them, arrays, vectors and strings, and the generic code over them: `poly`
 families, operators at your own types, and the hash map and set.
 
 ## Recursive data
@@ -10,33 +10,29 @@ A `data` declaration may mention itself. A binary tree is a leaf, or a node with
 and a value:
 
 ```bc
-include rec
+include textio
 
 data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)
 
 fn branch(l: Tree, v: i32, r: Tree) -> Tree = box Node(l, v, r)
 
-fn sum(t: Tree) -> i32 =
-  match t {
-    Leaf -> 0
-  | box Node(l, v, r) -> sum(l) + v + sum(r)
-  }
+-- The sum of the values; consumes the tree.
+fn sum(t: Tree) -> i32 = fold_own t { Leaf -> 0 | box Node(l, v, r) -> l + v + r }
 
-main -> i32 =
+main -> 1 =
   let t = branch(branch(Leaf, 1, Leaf), 2, branch(Leaf, 3, Leaf));
-  with on_exhausted(!{ u -> 0 - 1 }) { sum(t) }
--- answer: i32[6]
+  print_dec(sum(t));
+  print_byte(b'\n')
+-- output: 6
 ```
 
 A node holds a tree, so it has to live on the heap, and you say so: `box Node(l, v, r)` allocates
-it, where Rust would write `Box::new`. Nothing else allocates. The pattern `box Node(l, v, r)`
-takes the node apart and frees it, so `sum` consumes the tree, and the run ends with `live 0`.
-Cases that hold no tree, like `Leaf`, need no `box`. (`leaf`, `node`, `swap` and `total` are
-reserved, so pick other function names.)
+it, where Rust would write `Box::new`. Nothing else allocates. Cases that hold no tree, like
+`Leaf`, need no `box`.
 
-`sum` calls itself, so it runs with a depth budget, and `with on_exhausted(…)` says what to do if
-the budget runs out. [Recursion](#recursion), below, explains it. Most of the time you do not
-need it, because a fold walks the tree for you.
+`fold_own` walks the tree bottom up. In the `Node` arm, `l` and `r` are not subtrees but the
+fold's answers for them, here their sums, and the pattern `box Node(…)` frees each node as the
+fold passes it, so the run ends with nothing allocated.
 
 ## Folds
 
@@ -50,6 +46,8 @@ There are three, one for each way of holding the data:
 | `fold_reuse t { … }` | the data itself | rebuild it in place, reusing each node's memory |
 
 ```bc
+include textio
+
 data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)
 
 fn branch(l: Tree, v: i32, r: Tree) -> Tree = box Node(l, v, r)
@@ -64,17 +62,21 @@ fn largest(t: Tree) -> i32 =
   | box Node(l, v, r) -> if l > v && l > r { l } else if r > v { r } else { v }
   }
 
-main -> i32 * i32 =
+main -> 1 =
   let t = branch(branch(Leaf, 1, Leaf), 7, branch(Leaf, 3, Leaf));
   let s = sum(&t);
-  (s, largest(t))
--- answer: (i32[11], i32[7])
+  print_dec(s);
+  print_byte(b' ');
+  print_dec(largest(t));
+  print_byte(b'\n')
+-- output: 11 7
 ```
 
-In the arms, `l` and `r` are not subtrees but the fold's answers for them, here numbers. A fold
-needs no `on_exhausted`, and it works on generic data too:
+Folds work on generic data too:
 
 ```bc
+include textio
+
 data List[T] = Nil | Cons(head: T, tail: List[T])
 
 fn cons[T](x: T, rest: List[T]) -> List[T] = box Cons(x, rest)
@@ -83,83 +85,98 @@ fn len[T]<'a>(l: imm 'a List[T]) -> i32 = fold_imm l { Nil -> 0 | Cons(_, rest) 
 
 fn first[T](l: List[T]) -> Option[T] = match l { Nil -> None | box Cons(x, rest) -> Some(x) }
 
-main -> i32 * i32 =
+main -> 1 =
   let xs = cons(1, cons(2, cons(3, Nil)));
   let n = len(&xs);
-  let h = match first(xs) { Some(x) -> x | None -> 0 };
-  (n, h)
--- answer: (i32[3], i32[1])
+  print_dec(n);
+  print_byte(b' ');
+  match first(xs) { Some(x) -> print_dec(x) | None -> print_lit("empty") };
+  print_byte(b'\n')
+-- output: 3 1
 ```
 
 `first` keeps the head and drops the rest of the list, which the compiler frees.
 
-`fold_reuse` maps a tree in place: `corpus/data-fold-tree.bc` adds one to every value of a tree
-without allocating, and `corpus/data-fold-forest.bc` does the same over a rose tree, a pair of
-types that refer to each other (`data Rose = Rose(val: i32, kids: box Forest)`,
-`data Forest = FNil | FCons(Rose, box Forest)`).
-
 ## Collections of recursive data
 
-A buffer (`Vec[T]`, [below](#buffers-and-strings)) holds recursive data like any other value:
+`Vec[T]`, the prelude's growable vector ([below](#buffers-and-strings)), holds recursive data like
+any other value, and a type may hold a vector of itself with no `box`: the vector's storage is
+already on the heap. A rose tree, Rust's `struct Tree { val: i32, kids: Vec<Tree> }`, is
 
 ```bc
-include buf
+include textio
+include rec
 
-data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)
+data Tree = Tree(val: i32, kids: Vec[Tree])
 
-fn single(v: i32) -> Tree = box Node(Leaf, v, Leaf)
+-- A node with no children: an empty vector, which allocates nothing.
+fn tip(n: i32) -> Tree = Tree(n, box buf[Tree](0))
 
-fn sum(t: Tree) -> i32 = fold_own t { Leaf -> 0 | box Node(l, v, r) -> l + v + r }
+-- `t` added as the last child of `p`.
+fn adopt(p: Tree, t: Tree) -> Tree =
+  match p { Tree(n, kids) -> push(&mut kids, t); Tree(n, kids) }
 
-main -> i32 =
-  let mut trees : Vec[Tree] = buf_new[Tree](4);
-  push(&mut trees, single(1));
-  push(&mut trees, box Node(single(2), 3, Leaf));
-  let mut s = 0;
-  for _ in 0..3 {
-    match pop(&mut trees) { Some(t) -> s = s + sum(t) | None -> () }
-  };
-  s
--- answer: i32[6]
+-- The sum of the values, consuming the tree: each child taken out of its vector.
+fn sum(t: Tree) -> i32 =
+  match t {
+    Tree(v, kids) ->
+      let n = len_of(&kids);
+      let mut s = v;
+      for i in 0..n {
+        let child = take(&mut kids, i);
+        match child { Some(c) -> s = s + sum(c) | None -> () }
+      };
+      s
+  }
+
+main -> 1 =
+  let t = adopt(adopt(tip(10), tip(1)), adopt(tip(2), tip(3)));
+  print_dec(with on_exhausted(!{ u -> 0 - 1 }) { sum(t) });
+  print_byte(b'\n')
+-- output: 16
 ```
 
-A type may also hold a buffer of itself, with no `box`: a rose tree is
-`data Tree = Tree(i32, Vec[Tree])` (`corpus/data-rose-vec.bc`), and a trie node is
-`data Trie = Trie(bool, Vec[Option[Trie]])`
-(`corpus/leetcode/trees/0208-implement-trie-vec.bc`). The buffer's array is already on the heap,
-so the node needs no `box` of its own.
+`take(&mut kids, i)` moves element `i` out, leaving an empty node in its place. `sum` calls
+itself, which is what `on_exhausted` is for ([Recursion](#recursion), next). A node with a fixed
+number of children can hold an array of itself in the same way,
+`data Tree = Tip(i32) | Node(i32, array Tree)`, and a trie node is
+`data Trie = Trie(bool, Vec[Option[Trie]])`.
 
 ## Recursion
 
 A function that calls itself runs with a budget of depth, 10000 levels, instead of an unbounded
 stack. When the budget runs out the recursion raises an error, `Exhausted`, which unwinds every
-level, freeing what each held, like any other [error](errors.md). `include rec` has the two ways
-of dealing with it:
+level, freeing what each held, like any other [error](errors.md). The compiler checks that
+something handles it, and `include rec` has the two handlers:
 
-- `with on_exhausted(f) { … }` answers `f(())` if the budget runs out;
+- `with on_exhausted(f) { … }` answers `f(())` if the budget runs out, so `f` is a closure that
+  ignores its argument: `!{ u -> 0 - 1 }` answers −1;
 - `with deep { … }` keeps the pending calls on the heap instead of the stack, so the recursion is
   limited only by memory.
 
 ```bc
+include textio
 include rec
 
 fn down(n: i32) -> i32 = if n == 0 { 0 } else { 1 + down(n - 1) }
 
-main -> i32 * i32 =
-  let a = with on_exhausted(!{ u -> 0 - 1 }) { down(500) };
-  let b = with on_exhausted(!{ u -> 0 - 1 }) { down(20000) };
-  (a, b)
--- answer: (i32[500], i32[4294967295])
+main -> 1 =
+  print_dec(with on_exhausted(!{ u -> 0 - 1 }) { down(500) });
+  print_byte(b' ');
+  print_dec(with on_exhausted(!{ u -> 0 - 1 }) { down(20000) });
+  print_byte(b'\n')
+-- output: 500 -1
 ```
 
-`down(20000)` is deeper than the budget, so its answer is `-1` (printed unsigned).
-`with deep { down(20000) }` would run it to the end. The compiler checks that something handles `Exhausted`: a recursive
-call with no handler around it is an error.
+`down(20000)` is deeper than the budget, so its answer is −1. `with deep { down(20000) }` would
+run it to the end. A fold doesn't count as recursion and needs no handler.
 
-Functions may call one another, and a recursion may be generic. Each use at new types is
-compiled as its own copy of the recursion:
+Functions declared one after the other may call each other, as `even` calling `odd` and `odd`
+calling `even`, and a recursion may be generic. Each use at new types is compiled as its own copy
+of the recursion:
 
 ```bc
+include textio
 include rec
 
 data List[T] = Nil | Cons(head: T, tail: List[T])
@@ -171,11 +188,12 @@ fn map[A, B](l: List[A], f: !(A => B)) -> List[B] =
 
 fn sum(l: List[i32]) -> i32 = fold_own l { Nil -> 0 | box Cons(x, rest) -> x + rest }
 
-main -> i32 =
+main -> 1 =
   let xs = cons(1, cons(2, cons(3, Nil)));
   let ys = with on_exhausted(!{ u -> Nil }) { map(xs, !{ x -> x * x }) };
-  sum(ys)
--- answer: i32[14]
+  print_dec(sum(ys));
+  print_byte(b'\n')
+-- output: 14
 ```
 
 `include list` has a ready-made generic `List[A]` with `nil()`, `cons(x, xs)`, `map`, `filter`
@@ -188,6 +206,7 @@ function. It is a generic function of the call and its argument, and `with L { �
 the recursions in the block. Here a layer counts the calls of `fib`:
 
 ```bc
+include textio
 include rec
 
 effect Count { fn tick() -> i32 }
@@ -198,23 +217,19 @@ fn counted[A, B](call: !(A => B), a: A) -> B = tick(); call(a)
 
 fn fib(n: i32) -> i32 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
 
-main -> i32 * i32 =
+main -> 1 =
   let c = alloc(0);
   let f = with count(&mut c) { with counted { with on_exhausted(!{ u -> 0 - 1 }) { fib(10) } } };
-  (f, free(c))
--- answer: (i32[55], i32[176])
+  print_dec(f);
+  print_lit(" after ");
+  print_dec(free(c));
+  print_lit(" calls\n")
+-- output: 55 after 176 calls
 ```
 
 `fib(10)` makes 176 calls of itself, each counted; the first call, from outside, is not. The same
 shape gives tracing or a step limit. Effects and handlers (`effect`, `handler`,
 `with`) are [their own chapter](effects.md).
-
-### Under the hood
-
-A `data` type is a recursive type `mu X. …` built from pairs and sums, and you will see that form
-in error messages: the tree above is `mu X. 1 + (ref X * (ref i32 * ref X))`.
-[Recursive data and folds](../elaboration/recursive-data.md) shows how declarations, `box` and
-the folds translate.
 
 ## Arrays
 
@@ -226,11 +241,12 @@ the folds translate.
   `borrow mut a { v -> … }` as a mutable one, `array_mut 'a A`;
 - a `for` over a view visits each element's borrow, read with `*p`.
 
-`include slice` (`lib/slice.bc`) has the view operations, as Rust's slice methods: `len`, `get`,
-`set`, `swap_at`, `split_at`, `reverse`, `fill`, `find`, `binary_search`, `sort`, and their `_mut`
+`include slice` has the view operations, as Rust's slice methods: `len`, `get`, `set`,
+`swap_at`, `split_at`, `reverse`, `fill`, `find`, `binary_search`, `sort`, and their `_mut`
 forms.
 
 ```bc
+include textio
 include slice
 
 fn sum<'a>(v: array_imm 'a i32) -> i32 =
@@ -240,55 +256,73 @@ fn sum<'a>(v: array_imm 'a i32) -> i32 =
 
 fn scramble(i: i32) -> i32 = (i * 7) % 5
 
-main -> i32 * (i32 * i32) =
+main -> 1 =
   let a = array_new[i32](5, scramble);
   let s = borrow imm a { v -> sum(v) };
   borrow mut a { v -> let v = sort(v, cmp_i32, 0); discard_mut(v) };
   let lo = at(&a, 0, 0);
   let hi = at(&a, 4, 0);
-  (s, (lo, hi))
--- answer: (i32[10], (i32[0], i32[4]))
+  print_dec(s);
+  print_lit(", from ");
+  print_dec(lo);
+  print_lit(" to ");
+  print_dec(hi);
+  print_byte(b'\n')
+-- output: 10, from 0 to 4
 ```
 
-A view-taking function hands its `array_mut` back, so a block that sorts in place ends with
-`discard_mut(v)`, which ends the view. A view can be split at a run-time index into two views of
-the same elements (`split_at`, `split_at_mut`), as Rust's `split_at_mut` is: `corpus/quicksort.bc`
-sorts in place that way, with no allocation per element.
-
-Write a `for` over a view inside a function that takes the view, as `sum` does.
+A function that changes a view hands its `array_mut` back, so a block that sorts in place ends
+with `discard_mut(v)`, which ends the view. A view can be split at a run-time index into two
+views of the same elements (`split_at`, `split_at_mut`), as Rust's `split_at_mut` is, so a
+quicksort sorts each half in place with no allocation per element.
 
 ## Buffers and strings
 
-`buf A` is a growable array, `include buf`. `box buf[A](cap)` allocates one, `push(&mut b, x)`
-appends, `pop(&mut b)` takes the last, and `len_of(b)` hands it back with its length. A buffer
-lends its initialised prefix as a view, as an array does.
+`buf A` is a growable array, `include buf`, and `Vec[T]` is the prelude's name for one:
+`data Vec[T] = Vec(buf T)`, and every buffer function works on a `Vec`. `box buf[A](cap)`
+allocates one with room for `cap` elements (`box buf[A](0)` allocates nothing until the first
+push), `push(&mut v, x)` appends, `pop(&mut v)` takes the last as an `Option`, `take(&mut v, i)`
+moves element `i` out, and `len_of(&v)` is the length. A buffer lends its elements as a view, as an
+array does, so `get`, `set` and the rest of `include slice` index it:
 
 ```bc
-include buf
+include textio
 include slice
 
 fn sum<'a>(v: array_imm 'a i32) -> i32 = let mut s = 0; for p in v { s = s + *p }; s
 
-main -> i32 * i32 =
-  let mut b = box buf[i32](2);
-  for i in 0..5 { push(&mut b, i * i) };
-  let n = borrow imm b { v -> sum(v) };
-  let (b, len) = len_of(b);
-  (n, len)
--- answer: (i32[30], i32[5])
+main -> 1 =
+  let mut v: Vec[i32] = box buf[i32](2);
+  for i in 0..5 { push(&mut v, i * i) };
+  let n = len_of(&v);
+  let s = borrow imm v { w -> sum(w) };
+  borrow mut v { w -> let w = set(w, 0, 100); discard_mut(w) };
+  let first = borrow imm v { w -> at(w, 0, 0) };
+  print_dec(n);
+  print_byte(b' ');
+  print_dec(s);
+  print_byte(b' ');
+  print_dec(first);
+  print_byte(b'\n')
+-- output: 5 30 100
 ```
 
+A buffer's spare capacity holds placeholder elements, so its element type must have one: numbers,
+views, arrays, buffers, and data built from them do, but a heap cell `ref A` doesn't, and
+`buf[ref i32]` is refused.
+
 `string` is a buffer of UTF-8 bytes, and `text 'a` a view of some (`include textio`, which brings
-`include text` and the I/O helpers). `string_new(cap)` makes one; `push_lit(&mut s, "…")`,
+`include text` and the I/O helpers). `box string(cap)` makes one; `push_lit(&mut s, "…")`,
 `push_dec(&mut s, n)` and `push_char(&mut s, 'c')` append. A string literal `"…"` is data the
 program owns no copy of. Text views are cut without copying (`split_once`, `trim`, `next_line`,
-`fold_lines`), and `parse_i32` reads a number, raising on bad input ([Errors](errors.md)).
+`fold_lines`), `eq_lit(t, "…")` compares one with a literal, and `parse_i32` reads a number,
+raising on bad input ([Errors](errors.md)).
 
 ```bc
 include textio
 
 fn point(x: i32, y: i32) -> string =
-  let mut s = string_new(16);
+  let mut s = box string(16);
   push_lit(&mut s, "(");
   push_dec(&mut s, x);
   push_lit(&mut s, ", ");
@@ -296,13 +330,14 @@ fn point(x: i32, y: i32) -> string =
   push_char(&mut s, ')');
   s
 
-main -> i32 =
-  let s = print_string(point(3, 0 - 4));
-  print_byte(b'\n');
-  let n = borrow imm s { t -> len(t) };
-  n
--- output: (3, -4)
--- answer: i32[7]
+main -> 1 =
+  let s = point(3, 0 - 4);
+  let n = len_of(&s);
+  borrow imm s { t -> print_str(t) };
+  print_lit(" is ");
+  print_dec(n);
+  print_lit(" bytes\n")
+-- output: (3, -4) is 7 bytes
 ```
 
 ## `poly` families
@@ -312,14 +347,18 @@ chosen by the type, as a Rust trait with one method is. It is declared by its si
 body, and each `poly f at H = …` gives its case at a type `H`:
 
 ```bc
+include textio
+
 poly weight[T](x: T) -> i32
 
 poly weight at i32 = x
 poly weight at bool = if x { 1 } else { 0 }
 poly weight[A, B] at A * B = let (a, b) = x; weight(a) + weight(b)
 
-main -> i32 = weight((40, (true, true)))
--- answer: i32[42]
+main -> 1 =
+  print_dec(weight((40, (true, true))));
+  print_byte(b'\n')
+-- output: 42
 ```
 
 A call picks the case from its argument's type, at compile time; a case may itself be generic,
@@ -340,6 +379,8 @@ types they are the machine instructions. At any other type, a program gives a ca
 H = …`, whose parameters are `a` and `b`:
 
 ```bc
+include textio
+
 data Complex = C(re: i32, im: i32)
 
 poly (+) at Complex =
@@ -354,11 +395,14 @@ fn dot[T](x: T * T, y: T * T) -> T =
   let (y1, y2) = y;
   x1 * y1 + x2 * y2
 
-main -> i32 * (i32 * i32) =
-  let n = dot((1, 2), (3, 4));
-  let z = dot((C(1, 2), C(1, 1)), (C(3, 4), C(0 - 1, 3)));
-  match z { C(re, im) -> (n, (re, im)) }
--- answer: (i32[11], (i32[4294967287], i32[12]))
+main -> 1 =
+  print_dec(dot((1, 2), (3, 4)));
+  print_byte(b'\n');
+  match dot((C(1, 2), C(1, 1)), (C(3, 4), C(0 - 1, 3))) {
+    C(re, im) -> print_dec(re); print_lit(" + "); print_dec(im); print_lit("i\n")
+  }
+-- output: 11
+-- output: -9 + 12i
 ```
 
 `dot` at `i32` is compiled with the machine's `mul` and `add`; at `Complex` with the cases above.
@@ -368,55 +412,56 @@ would be a case at every pair of `i32`s.
 
 ### Equality, hashing and order
 
-`include key` (`lib/key.bc`) declares the families a map uses: `equal`, `hash` and `order`, each
-taking its operands as views so that a key is read where it is stored. They have cases at the
-integers, `1`, pairs, sums, arrays and buffers (so `bool`, `string` and `text` are covered),
-compared structurally. `==` and `equal` are separate families: a float has `==`, IEEE 754's, and
-no `equal`, so a float is not a map key.
+`include key` declares the families a map uses: `equal`, `hash` and `order`, each taking its
+operands as views so that a key is read where it is stored. They have cases at the integers,
+`1`, tuples, sums, arrays and buffers (so `bool`, `string` and `text` are covered), compared
+structurally. `==` and `equal` are separate families: a float has `==`, IEEE 754's, and no
+`equal`, so a float is not a map key.
 
 ## Maps and sets
 
-`include map` (`lib/map.bc`) is a hash map, `Map[K, V]`, and a set, `Set[K]`. A map is a value: it
-is lent to each operation, and an operation that changes it takes it `&mut`.
+`include map` is a hash map, `Map[K, V]`, and a set, `Set[K]`. A map is a value: it is lent to
+each operation, and an operation that changes it takes it `&mut`.
 
 | call | answers |
 |---|---|
 | `map_new[K, V](cap)` | an empty map with room for `cap` entries before it grows |
-| `map_insert(&mut m, k, v)` | `V + 1`: the value displaced, or `inr ()` |
-| `map_lookup(&m, k)` | `V + 1`: a copy of the value (`V` copyable) |
+| `map_insert(&mut m, k, v)` | the value displaced, as an `Option` |
+| `map_lookup(&m, k)` | a copy of the value (`V` copyable), as an `Option` |
 | `map_contains(&m, k)` | `bool` |
-| `map_remove(&mut m, k)` | `V + 1`: the value taken out |
+| `map_remove(&mut m, k)` | the value taken out, as an `Option` |
 | `map_len(&m)` | `i32` |
 | `set_new[K](cap)`, `set_insert(&mut s, k)`, `set_contains(&s, k)`, `set_remove(&mut s, k)`, `set_len(&s)` | `set_insert` answers whether `k` was new |
 
+Counting the letters of a word:
+
 ```bc
+include textio
 include map
 
--- How often each digit occurs among the first `n` squares' last digits; the count for 6.
-fn sixes(n: i32) -> i32 * i32 =
-  let mut m = map_new[i32, i32](8);
-  for i in 0..n {
-    let d = (i * i) % 10;
-    let old = map_insert(&mut m, d, 1);
-    match old { inl c -> let o = map_insert(&mut m, d, c + 1); () | inr u -> () }
+-- How often each byte of `t` occurs.
+fn tally<'t>(t: text 't) -> Map[u8, i32] =
+  let mut counts = map_new[u8, i32](16);
+  for p in t {
+    let c = *p;
+    let old = map_lookup(&counts, c);
+    let n = match old { Some(n) -> n + 1 | None -> 1 };
+    map_insert(&mut counts, c, n)
   };
-  let got = map_lookup(&m, 6);
-  let six = match got { inl c -> c | inr u -> 0 };
-  let kinds = map_len(&m);
-  (six, kinds)
+  counts
 
-main -> (i32 * i32) * bool =
-  let mut s = set_new[i32](4);
-  let a = set_insert(&mut s, 5);
-  let b = set_insert(&mut s, 5);
-  (sixes(20), a && not(b))
--- answer: ((i32[4], i32[6]), inr ())
+main -> 1 =
+  let counts = borrow imm "mississippi" { t -> tally(t) };
+  let kinds = map_len(&counts);
+  print_dec(kinds);
+  print_lit(" letters:");
+  borrow imm counts { 'x, r ->
+    for e in map_iter(r) { let (k, v) = e; print_byte(b' '); print_byte(k); print_dec(*v) } };
+  print_byte(b'\n')
+-- output: 4 letters: s4 p2 m1 i4
 ```
 
-For values that are not copyable, such as buffers, `borrow imm m { 'x, r -> … }` lends the map's
-entries, and `map_get(r, k)` answers a view of a value in place and `map_iter(r)` visits every
-entry (`corpus/map-views.bc`). While the map is lent it cannot change, so no view outlives a
-growth of the table.
-
-The map is open addressing with linear probing, grown by doubling. Its hash is deterministic, so
-the order of iteration is the same on every run.
+`borrow imm m { 'x, r -> … }` lends the map's entries: `map_iter(r)` visits every entry, each
+value as a view, and `map_get(r, k)` answers a view of one value in place, so values that aren't
+copyable, such as vectors, are read without copying. While the map is lent it can't change. The
+hash is deterministic, so the order of iteration is the same on every run.
