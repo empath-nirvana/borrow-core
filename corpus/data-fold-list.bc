@@ -1,4 +1,4 @@
--- A list declared with `data`, traversed and mapped in place by fold blocks (SPEC §42, F1, F2):
+-- A list declared with `data`, traversed and mapped in place by fold blocks (SPEC §60, F1, F2):
 -- `corpus/map-reuse.bc` and `corpus/sum-i32.bc` with the declaration and the folds' arms written
 -- with constructor patterns, as `docs/typed-elaboration.md` §6.2 spells them.
 --

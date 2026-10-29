@@ -1,0 +1,9 @@
+-- A fold block's arm that uses a variable of the enclosing body (SPEC §60, F1): the arms are the
+-- algebra, a `!` function, which holds only `!` values, so `k`, an `i32`, is refused there.
+-- A value the algebra needs is passed to it: fold to a function that takes it.
+-- expect: 7:39: the arms of `fold_own` are its algebra, a `!` function, which holds only `!` values: they cannot use `k`, of type `i32`; fold to a function that takes it instead
+data List = Nil | Cons(head: i32, tail: List)
+
+fn sum_from(l: List, k: i32) -> i32 = fold_own l { Nil -> k | box Cons(h, t) -> h + t }
+
+main -> i32 = 0

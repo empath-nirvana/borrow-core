@@ -1,4 +1,4 @@
--- A fold block over a member of a mutual group that is not its root (SPEC §42, F1, the
+-- A fold block over a member of a mutual group that is not its root (SPEC §60, F1, the
 -- single-root rule): only the root `Forest` is a `mu`, so a fold folds it, with `Rose` matched
 -- inside its arms.
 -- expect: 9:41: `fold_own` folds the root of a recursive group, and `Rose` is not its group's root `Forest` (the single-root rule): fold `Forest`

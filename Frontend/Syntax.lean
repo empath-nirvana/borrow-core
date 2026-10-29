@@ -548,8 +548,19 @@ inductive VSugar where
   /-- `fold_imm e { p -> M | … }`, `fold_own …`, `fold_reuse …` (SPEC §60, F1): applied to the
   value folded and then to the algebra `thunkv fun (x : _) -> M`, the arms compiled over `x` with
   the recursive fields already folded. The typed pass gives the algebra its type and the fold its
-  bracket arguments.  `[spec §60]` -/
-  | fold (k : FoldKind)
+  bracket arguments. `decl` is the declaration the arms' constructors are of, with its type
+  parameters, when they name one; printed `fold_imm io_of(N, P, …) e { x -> M }`.  `[spec §60]` -/
+  | fold (k : FoldKind) (decl : Option (String × List String))
+  /-- Applied to `V`: `V` ascribed the type of the variable `o`, which it does not use. In a
+  `fold` block a variable that binds a constructor's whole value is bound to it rebuilt from its parts, at the
+  type of the occurrence `o` it was taken apart from, a part of the algebra's parameter, whose type
+  only the typed pass knows. Printed `io_like(o, V)`.  `[spec §60]` -/
+  | like (o : String)
+  /-- Applied to the tuple of a block's `k` fields: a block reassembled from its cells in a
+  `fold_reuse` arm (SPEC §60, F2), `c` its constructor; the typed pass checks that each is a cell,
+  so that a constructor written without `box` gets E3's hint. Printed `io_cells(C, k, V)`.
+  `[spec §60]` -/
+  | cells (c : String) (k : Nat)
   deriving DecidableEq, Repr, Inhabited
 
 /-- What a loop walks, as the program writes it (`docs/loops.md` §2.1), with the loop's value

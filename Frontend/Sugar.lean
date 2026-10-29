@@ -3544,12 +3544,58 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       -- Ascribed its loop type, it is the loop as a value, not a call run in direct style.
       pure (.ascribe sp (.app sp (.defApp sp "div_defer" [Bs, Rs]) (.thunkv sp (.with_ sp M'' abort)))
         (.thunk sp (.loop sp Bs Rs)))
-    | .app sp (.app _ (.sugar ksp (.fold k)) S) (.thunkv tsp (.lam lsp x _ M)) => do
+    | .app sp (.sugar ksp (.cells cn k)) V => do
+      -- A block reassembled from its cells in a `fold_reuse` arm (SPEC §60, F2): each field a
+      -- cell, or E3's refusal.
+      let V' ← surfV n c none V
+      let rec parts : Nat → Val → List Val
+        | 0, _ => []
+        | 1, W => [W]
+        | j + 2, .pair _ W U => W :: parts (j + 1) U
+        | _, W => [W]
+      for W in parts k V' do
+        match (← refresh c).tyV W with
+        | some (.ref _) | none => pure ()
+        | some A => throw ⟨W.span, s!"`{cn}` builds a block, one cell per field, and this has type " ++
+            s!"`{ppT A}`: allocate it with `box {cn}(…)`, or reassemble it from the emptied cells of " ++
+            "the `fold_reuse` arm"⟩
+      pure V'
+    | .app sp (.sugar ksp (.like o)) V => do
+      -- A constructor's value rebuilt in a `fold` block (SPEC §60, F1), at the type of the
+      -- occurrence `o` it was taken apart from.
+      let A ← need ksp "the value a variable of a fold block binds" ((← refresh c).tyV (.var ksp o))
+      pure (.ascribe sp (← surfV n c (some A) V) (← c.surface ksp A))
+    | .app sp (.app _ (.sugar ksp (.fold k decl)) S) (.thunkv tsp (.lam lsp x _ M)) => do
       -- A `fold` block (SPEC §60, F1): the kernel's fold of the folded value's `μ`, its shape the
       -- `μ`'s body and its result the type expected of the block, applied to the algebra the arms
       -- are, at the algebra's type (`A_R`, `A′_R` or `A″_R`, §6).
+      if let .lend _ px _ := S then
+        throw ⟨S.span, s!"`{k.str} &{px.name} \{ … }`, a fold of a place lent to it, is not " ++
+          s!"provided (SPEC §60, Open): fold a borrow of `{px.name}`, as a function taking " ++
+          "`imm 'a N` does"⟩
+      -- The algebra is a `!` function: what its arms use of the enclosing body must be `!`.
+      let mut seen : List String := []
+      for (y, A?) in c.locals do
+        if seen.contains y then continue
+        seen := y :: seen
+        if y == x.name || !mentionsC y M then continue
+        if let some A := A? then
+          unless A matches .bang _ do
+            throw ⟨sp, s!"the arms of `{k.str}` are its algebra, a `!` function, which holds only " ++
+              s!"`!` values: they cannot use `{y}`, of type `{ppT A}`; fold to a function that " ++
+              "takes it instead"⟩
       let S' ← surfV n c none S
       let T ← need S.span "the value folded" ((← refresh c).tyV S')
+      -- The arms are the constructors of the declaration whose value is folded.
+      if let some (dn, tps) := decl then
+        let named : VTy := tps.foldl (fun F p => .app ksp F (.name ksp p)) (.name ksp dn)
+        let B := match T with
+          | .imm _ B => B
+          | B => B
+        if let some P := patOf c tps named then
+          if (matchV { ty := Array.replicate tps.length none } 0 P B).isNone then
+            throw ⟨S.span, s!"the arms of this `{k.str}` block are `{dn}`'s constructors, but it " ++
+              s!"folds a value of type `{ppT T}`"⟩
       let (a?, B) ← match k, T with
         | .imm, .imm a (.mu B) => pure (some a, B)
         | .imm, .mu _ => throw ⟨ksp, "`fold_imm` folds through an `imm` borrow, and this is " ++

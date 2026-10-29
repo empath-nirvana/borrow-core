@@ -1,4 +1,4 @@
--- A fold over a mutual group whose other member is a block (SPEC §42, F1): `corpus/data-group.bc`'s
+-- A fold over a mutual group whose other member is a block (SPEC §60, F1): `corpus/data-group.bc`'s
 -- `Expr` and `Bind`, rooted at `Expr`. `Bind` holds the root, so it is a block whose `value` and
 -- `body` cells are recursive positions: in a fold block they are the fold's results, and `name`
 -- is a cell, read through its view in `fold_imm` and freed by `box` in `fold_own`.

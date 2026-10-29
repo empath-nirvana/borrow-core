@@ -1,4 +1,4 @@
--- A rose tree, a mutual group folded at its root (SPEC §42, F1, and the single-root rule): `Rose`
+-- A rose tree, a mutual group folded at its root (SPEC §60, F1, and §42's single-root rule): `Rose`
 -- and `Forest` name each other, and `Forest` lies on every cycle (its own, under `box Forest`), so
 -- it is the group's one `mu`, `mu X. 1 + ((i32 * ref X) * ref X)`, with `Rose`'s structure
 -- substituted in it. A fold over the group is a fold of `Forest`, and a `Rose` in its arms is

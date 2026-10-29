@@ -356,8 +356,9 @@ swaps; that a cell holds only its class's types at run time is not proved
 (`Frontend/Check/TFacts.lean`). It is an upper bound: it joins the cells of one type.
 `scripts/check-cells.sh` compares the classes with the cell widths of the closure IR's layout
 types (`Backend/Clos/Types.lean`) on the corpus and pins the table in `corpus/cells.expected`:
-they agree on every program but three, where a class is wider (an `i32` cell, three words where
-the layout types give one, because a cell holding `1` is refilled with a list elsewhere).
+they agree on every program but eight, where a class is wider (an `i32` cell, three words where
+the layout types give one, because a cell holding `1` is refilled with a list elsewhere, as
+`fold_reuse`'s emptied cells are).
 
 ### Family borrows
 
@@ -9218,7 +9219,8 @@ are the constants, unchanged: the parser reads the block when no `[` follows the
 ### F1: the fold
 
 Let the arms' constructors be of the declaration `N` (the first constructor pattern at the top
-of an arm names it). `N` must be the root of a recursive group: a member that is not is refused,
+of an arm names it; arms with none, over a `μ` written in core, are the algebra's own `case`s on
+`inl`/`inr`, compiled as §42's draft-0 patterns are). `N` must be the root of a recursive group: a member that is not is refused,
 "`fold_k` folds the root of a recursive group, and `N` is not its group's root `R` (the
 single-root rule): fold `R`", and a declaration that is not recursive, "`N` is not recursive, so
 it has no fold: match it". Then, with `x` fresh,
@@ -9228,6 +9230,9 @@ it has no fold: match it". Then, with `x` fresh,
     fold_own e { … }   =  (unbang fold_own[T, R] (!thunkv fun (x : A′_R) -> M)) e     e : μX. T
     fold_reuse e { … } =  (unbang fold_reuse[T, R] (!thunkv fun (x : A″_R) -> M)) e   e : μX. T
 
+- `e` is of `N`'s type: a value of another type is refused, "the arms of this `fold_k` block are
+  `N`'s constructors, but it folds a value of type `T`" (`e`'s type matched against `N`'s, its
+  parameters placeholders, as a field's receiver is, §42 *Fields*).
 - `T` is the body of `e`'s `μ`, its variable `X`; `R` is the type expected of the block. A block
   whose type nothing gives is refused, "the type of the `fold_k` block's result is not determined
   here: ascribe it", as a closure's parameter is (§42 types a block's arms by its result, not its
@@ -9239,7 +9244,9 @@ it has no fold: match it". Then, with `x` fresh,
   recursive positions folded:
   - the root's constructors are tested on `x` as `case x` (not `case (unroll x)`), and nowhere
     else: a constructor of the root below the top of an arm is refused, "in a `fold_k` block a
-    recursive field is the fold's result on it, not a `N`: bind it with a name";
+    recursive field is the fold's result on it, and matching the fold's result with a constructor
+    of `N` is not provided: bind it with a name" (also when `R` is `N`'s type, as in a constant
+    folding of an expression);
   - below a block of the group (§42, *Recursion*), a recursive field (one whose type is the root)
     is the fold's result, `R`, and in `fold_reuse` the pair `(c, r)` of the emptied cell
     `c : ref 1` and the result; it is matched as a value, not a cell. The block's other fields
@@ -9249,13 +9256,20 @@ it has no fold: match it". Then, with `x` fresh,
   - `box C(p, …)` of a block of the group frees the block's cells that are not recursive
     positions and matches their values (`fold_own`, `fold_reuse`; the kernel's fold frees the
     others); in `fold_imm` it is refused, the block being read through views;
-  - a variable that binds a constructor's whole value binds it as the shape has it, not rolled or
-    ascribed `N`.
+  - a variable that binds a constructor's whole value binds it rebuilt from the parts the tests
+    took apart, at the type of the occurrence it was taken from, a part of `A_R` (`A′_R`, `A″_R`):
+    not rolled or ascribed `N`, but ascribed that type by the typed pass (`VSugar.like`), at the
+    root and at any other member of the group (`corpus/data-fold-whole.bc`).
 - One arm whose pattern is a variable is the algebra's parameter itself.
 - The arms are the body of the algebra, a `!` function, so they assign no enclosing `let mut`
-  variable: "the arms of `fold_k` are its algebra, a `!` function: they cannot assign `x`".
+  variable: "the arms of `fold_k` are its algebra, a `!` function: they cannot assign `x`"; and
+  they use no variable of the enclosing body whose type is not `!` (§2: `!` promotes only over `!`
+  types): "the arms of `fold_k` are its algebra, a `!` function, which holds only `!` values:
+  they cannot use `k`, of type `A`; fold to a function that takes it instead". A `!` value, a
+  function parameter of type `!(A => B)` say, may be used (`corpus/data-fold-bang.bc`).
 - `fold_imm` folds an `imm` borrow and `fold_own`, `fold_reuse` an owned value; the other is
-  refused, naming the fold that takes it.
+  refused, naming the fold that takes it. A place lent to the fold, `fold_k &x { … }`, is refused
+  as not provided (*Open*).
 
 The single-root rule makes the root the group's one `μ`, so a fold over a group is the root's,
 and its other members are matched inside the arms as parts of the shape (`corpus/data-fold-forest`,
@@ -9266,14 +9280,20 @@ and its other members are matched inside the arms as parts of the shape (`corpus
 
 In an arm of a `fold_reuse` block, outside any `fold_imm` or `fold_own` block in it, a block's
 constructor written without `box`, `C(e₁, …, eₖ)` or `N { f: e, … }`, is the block reassembled
-from the cells `eⱼ`: E1's form, `inj_i (e₁, (…, eₖ))`, rolled and ascribed `N` when `N` is the root
-and has no parameters. Nothing is allocated; the kernel checks that each `eⱼ` is a cell of the
+from the cells `eⱼ`: E1's form, `inj_i (e₁, (…, eₖ))`, rolled when `N` is the root and ascribed
+`N` when `N` has no parameters. Nothing is allocated. The typed pass checks that each `eⱼ` whose
+type it knows is a cell (`VSugar.cells`), and otherwise refuses with E3's hint: "`C` builds a
+block, one cell per field, and this has type `A`: allocate it with `box C(…)`, or reassemble it
+from the emptied cells of the `fold_reuse` arm"; the kernel checks that each is a cell of the
 field's type. Everywhere else such a constructor is refused by E3, asking for `box`.
 
 ### A1
 
 A fold's recursive positions are unordered (§42, *Folds: unordered positions*). The algebra's type
-is `!U(A ⊸ F R)` at the empty row, so an arm that performs an effect is refused by the checker.
+is `!U(A ⊸ F R)` at the empty row, so no arm may perform an effect. As for any `!` closure, an arm
+that does is refused by the elaboration of effects (§18: an operation "performed inside a closure
+or block that is not run in place") in a declaration reachable from `main`; a declaration that is
+not reachable is not elaborated for its effects.
 
 ### Programs
 
@@ -9285,14 +9305,20 @@ is `!U(A ⊸ F R)` at the empty row, so an arm that performs an effect is refuse
 | `corpus/data-fold-forest.bc` | `Rose`/`Forest`, folded at the root `Forest`; `Rose` matched in the arms; mapped in place | `i32[144]` |
 | `corpus/data-fold-group.bc` | `Expr`/`Bind`: a block of the group that is not the root, its recursive cells folded | `i32[1714]` |
 | `corpus/data-fold-generic.bc` | a fold block over `List[T]` in a generic function | `i32[32]` |
+| `corpus/data-fold-whole.bc` | a variable binding a constructor's whole value beside constructor arms, in each fold, at the root and at a member | `i32[2012014]` |
+| `corpus/data-fold-bang.bc` | an arm using a `!` parameter of the enclosing function | `i32[6]` |
 | `corpus/fail/data-fold-no-box.bc` | a block without `box` in a `fold_own` arm | refused (E3) |
 | `corpus/fail/data-fold-not-root.bc` | a fold of a group's member that is not its root | refused |
 | `corpus/fail/data-fold-nested.bc` | the root's constructor below the top of an arm | refused |
 | `corpus/fail/data-fold-imm-box.bc` | `box` in a `fold_imm` arm | refused |
 | `corpus/reject/data-fold-owned.bc` | `fold_imm` of an owned value | refused |
 | `corpus/reject/data-fold-untyped.bc` | a fold block whose result type nothing gives | refused |
+| `corpus/reject/data-fold-capture.bc` | an arm using an `i32` of the enclosing body | refused |
+| `corpus/reject/data-fold-reuse-no-box.bc` | a block without `box` in a `fold_reuse` arm, its fields not cells | refused (E3's hint) |
+| `corpus/reject/data-fold-other-decl.bc` | a `List` folded with `Tree`'s constructors | refused |
+| `corpus/reject/data-fold-lend.bc` | `fold_imm &l { … }` | refused, not provided |
 
-Each program's fold blocks are written out with the constants beside it
+The fold blocks of the first six programs are written out with the constants beside them
 (`corpus/sugar/data-fold-*.lowered.bc`, `scripts/check-sugar.sh`): the two erase to the same term,
 so their counts are equal, at both backends.
 
@@ -9309,7 +9335,10 @@ exit status, `corpus/counts.expected`, `counts-backend2.expected`, `kernel-count
 - **The result from the arms.** `R` is the type expected of the block; it is not synthesized from
   the arms (an arm's type may depend on `R` through the recursive fields).
 - **`fold_imm &x { … }`**, a fold through a borrow of an owned place lent to it, as a call's `&x`
-  argument is (§11): not provided; the fold takes a borrow.
+  argument is (§11): not provided, and refused as such ("`fold_imm &x { … }`, a fold of a place
+  lent to it, is not provided (SPEC §60, Open)"); the fold takes a borrow.
+- **Arms that use the enclosing body's values** that are not `!`: refused (F1). Folding to a
+  function of them, `R = A => R′`, passes them in.
 - The fold exported to clients as an observation the type chooses to give (A2's second half)
   comes with faces (U2); data unfolds (A3) are later.
 
@@ -9726,8 +9755,8 @@ Entry 58 (§59) is implemented in `Backend2/` (`Types.lean`, `Syntax.lean`, `Con
 `Layout.lean`, `Flow.lean`, `Lower.lean`, `Interp.lean`, `Lint.lean`, `LintTests.lean`).
 Entry 59 (§60) is implemented in `Frontend/Elab/Data.lean` (`foldComp`, `foldBox`, `FoldCx`,
 `compile`'s `fold?`, `conVal`'s `reuse`), `Frontend/Parser.lean` (`foldBlock`, `reuseArm`),
-`Frontend/Sugar.lean` (the `fold` case of `surfV`), `Frontend/Syntax.lean` (`FoldKind`,
-`VSugar.fold`) and `Frontend/Print.lean`; no change to `CDerives`, `Core/`, `Paper/`, `Support/`,
+`Frontend/Sugar.lean` (the `fold`, `like` and `cells` cases of `surfV`), `Frontend/Syntax.lean` (`FoldKind`,
+`VSugar.fold`, `like`, `cells`) and `Frontend/Print.lean`; no change to `CDerives`, `Core/`, `Paper/`, `Support/`,
 the checker or either backend.
 
 ---
@@ -9737,7 +9766,9 @@ the checker or either backend.
 - **1.10** (2026-10-28) — §60 (#718, `docs/data-declarations.md` §11.1 A2): the `fold` block.
   `fold_imm e { … }`, `fold_own`, `fold_reuse` with constructor patterns whose recursive fields
   arrive folded (F1), and a block reassembled from its cells in a `fold_reuse` arm (F2), as sugar
-  into §6's constants. `corpus/pending/data-fold-block.bc` moves to the corpus. No change to the
+  into §6's constants; a variable binding a constructor's whole value in the arms; refusals for
+  arms of another declaration, arms using non-`!` values, a lent place, and a reassembly from
+  values that are not cells. `corpus/pending/data-fold-block.bc` moves to the corpus. No change to the
   kernel, the checker or either backend; every other program elaborates as before.
 
 - **1.09** (2026-10-28) — §53, §54 and §56 retired (#698): lowering by simulation in `SemC` was

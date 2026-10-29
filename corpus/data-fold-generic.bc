@@ -1,4 +1,4 @@
--- A fold block over a generic declaration (SPEC §42, F1): `List[T]` of blocks, its length through
+-- A fold block over a generic declaration (SPEC §60, F1): `List[T]` of blocks, its length through
 -- a borrow in a generic function, at the element type of each use, and its total consumed at
 -- `i32`.
 --

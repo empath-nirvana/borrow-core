@@ -1,5 +1,5 @@
 -- A binary tree declared with `data`, traversed, mapped in place and consumed by fold blocks
--- (SPEC §42, F1, F2).
+-- (SPEC §60, F1, F2).
 --
 -- `sum` reads the tree through a borrow (`fold_imm`). `map_inc` increments every value in the
 -- tree's own cells (`fold_reuse`): `Node((dl, l), c, (dr, r))` binds each emptied child cell

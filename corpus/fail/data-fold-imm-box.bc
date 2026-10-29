@@ -1,4 +1,4 @@
--- A `box` pattern in a `fold_imm` block (SPEC §42, F1): the arms read the block through the
+-- A `box` pattern in a `fold_imm` block (SPEC §60, F1): the arms read the block through the
 -- views of its cells, and free nothing.
 -- expect: 6:61: `fold_imm` reads `Cons` through the views of its cells, and frees nothing: match it without `box`
 data List = Nil | Cons(head: i32, tail: List)

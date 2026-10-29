@@ -1670,6 +1670,21 @@ def foldBlock : Nat → P Val
       | .kw "fold_imm" => .imm
       | .kw "fold_own" => .own
       | _ => .reuse
+    -- `io_of(N, P, …)`: the printed form of the declaration the arms are of.
+    let mut decl₀ : Option (String × List String) := none
+    if (← peek).tok == .ident "io_of" then
+      discard bump
+      expectSym "("
+      let mut ns : Array String := #[]
+      for _ in [0:n] do
+        let nt ← bump
+        let .uident m := nt.tok | failAt nt.span "expected a type name"
+        ns := ns.push m
+        if ← isSym "," then discard bump else break
+      expectSym ")"
+      decl₀ := match ns.toList with
+        | m :: ps => some (m, ps)
+        | [] => none
     let V ← val n
     expectSym "{"
     if ← isSym "|" then discard bump
@@ -1692,14 +1707,14 @@ def foldBlock : Nat → P Val
     let sp ← spanFrom st
     if let x :: _ := writes then
       failAt sp s!"the arms of `{k.str}` are its algebra, a `!` function: they cannot assign `{x}`"
-    let lam ← match arms.toList with
-      | [(.var x, M)] => pure (Comp.lam sp x (holeTy sp) M)
+    let (lam, decl) ← match arms.toList with
+      | [(.var x, M)] => pure (Comp.lam sp x (holeTy sp) M, decl₀)
       | as_ => do
         let x : Ident := ⟨← freshName "io_fa", sp⟩
-        let (M, fresh) ← liftE (Data.foldComp (← get).data sp k x.name as_ (← get).fresh)
+        let ((M, fresh), decl) ← liftE (Data.foldComp (← get).data sp k x.name as_ (← get).fresh)
         modify fun s => { s with fresh }
-        pure (Comp.lam sp x (holeTy sp) M)
-    pure (.app sp (.app sp (.sugar t.span (.fold k)) V) (.thunkv sp lam))
+        pure (Comp.lam sp x (holeTy sp) M, decl)
+    pure (.app sp (.app sp (.sugar t.span (.fold k decl)) V) (.thunkv sp lam))
 
 /-- A borrow block: `borrow imm V { 'x, p -> S }`, `borrow mut V { … }`, `borrow mut (V, W)
 { … }` (a family), or `modify V { p -> S }`. The lifetime `'x` may be left out. -/
@@ -1837,6 +1852,30 @@ def valAtom : Nat → P Val
     let st ← startPos
     let t ← peek
     match t.tok with
+    | .ident "io_like" =>
+      -- `io_like(o, V)`: the printed form of `VSugar.like` (SPEC §60).
+      discard bump
+      expectSym "("
+      let o ← ident "an occurrence"
+      expectSym ","
+      let V ← val n
+      expectSym ")"
+      let sp ← spanFrom st
+      pure (.app sp (.sugar t.span (.like o.name)) V)
+    | .ident "io_cells" =>
+      -- `io_cells(C, k, V)`: the printed form of `VSugar.cells` (SPEC §60).
+      discard bump
+      expectSym "("
+      let ct ← bump
+      let .uident c := ct.tok | failAt ct.span "expected a constructor"
+      expectSym ","
+      let kt ← bump
+      let .int k := kt.tok | failAt kt.span "expected a number"
+      expectSym ","
+      let V ← val n
+      expectSym ")"
+      let sp ← spanFrom st
+      pure (.app sp (.sugar t.span (.cells c k)) V)
     | .ident s =>
       discard bump
       let nx ← peek

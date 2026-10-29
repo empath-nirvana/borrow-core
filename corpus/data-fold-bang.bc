@@ -1,0 +1,13 @@
+-- A fold block's arms using a `!` value of the enclosing body (SPEC §60, F1): the algebra is a
+-- `!` function, so it may hold `f`, a `!` function, where an `i32` would be refused
+-- (`corpus/reject/data-fold-capture.bc`).
+--
+-- Answer: i32[6]: the list [1, 2] summed with each element doubled. `live 0`.
+
+data List = Nil | Cons(head: i32, tail: List)
+
+fn sum_by(l: List, f: !(i32 => i32)) -> i32 = fold_own l { Nil -> 0 | box Cons(h, t) -> f(h) + t }
+
+fn dbl(x: i32) -> i32 = x * 2
+
+main -> i32 = sum_by(box Cons(1, box Cons(2, Nil)), dbl)

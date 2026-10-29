@@ -1,0 +1,8 @@
+-- A fold of a place lent to it, `fold_imm &l { … }` (SPEC §60, Open): not provided; the fold
+-- takes a borrow, which a function taking `imm 'a List` is given by `f(&l)`.
+-- expect: 6:35: `fold_imm &l { … }`, a fold of a place lent to it, is not provided (SPEC §60, Open): fold a borrow of `l`, as a function taking `imm 'a N` does
+data List = Nil | Cons(head: i32, tail: List)
+
+fn len(l: List) -> i32 = fold_imm &l { Nil -> 0 | Cons(h, t) -> 1 + t }
+
+main -> i32 = 0

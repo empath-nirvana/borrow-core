@@ -1,4 +1,4 @@
--- A block reassembled from its cells outside a `fold_reuse` arm (SPEC §42, E3, F2): only
+-- A block reassembled from its cells outside a `fold_reuse` arm (SPEC §42, E3; §60, F2): only
 -- `fold_reuse` hands its arms the block's emptied cells, so a `Cons` written without `box` in a
 -- `fold_own` arm is refused as everywhere else, asking for `box`.
 -- expect: 7:67: `Cons` builds a block, one cell per field: allocate it with `box Cons(…)`

@@ -438,7 +438,8 @@ def conVal (t : Table) (sp : Span) (c : String) (boxed : Bool) (args : List Val)
       s!"{if args.length == 1 then "is" else "are"} given"
   if ci.block then
     unless boxed do
-      if reuse then return injectV sp i ci (tupleV sp args)
+      if reuse then
+        return injectV sp i ci (.app sp (.sugar sp (.cells c k)) (tupleV sp args))
       err <| s!"`{c}` builds a block, one cell per field: allocate it with `box {c}(…)`"
     let P : Val := if i.mono then
         .app sp (.const sp (.allocS (.name sp (shapeName i.decl.name.name c)))) (tupleV sp args)
@@ -686,6 +687,9 @@ inductive RB where
   | tuple (args : List RB)
   | bool (b : Bool)
   | inj (left : Bool) (a : RB)
+  /-- `a` at the type of the occurrence `o` (`VSugar.like`): in a `fold` block, where the parts of
+  the algebra's parameter are not the declarations' values. -/
+  | like (o : String) (a : RB)
   deriving Inhabited
 
 /-- `r` with the occurrence `x` replaced by `s`. -/
@@ -696,6 +700,7 @@ def RB.subst (x : String) (s : RB) : Nat → RB → RB
   | k + 1, .tuple as => .tuple (as.map (RB.subst x s k))
   | _ + 1, .bool b => .bool b
   | k + 1, .inj l a => .inj l (RB.subst x s k a)
+  | k + 1, .like o a => .like o (RB.subst x s k a)
 
 /-- The value `r` denotes. -/
 def RB.toVal (sp : Span) : Nat → RB → Val
@@ -710,6 +715,8 @@ def RB.toVal (sp : Span) : Nat → RB → Val
   | k + 1, .tuple as => tupleV sp (as.map (RB.toVal sp k))
   | _ + 1, .bool b => if b then .inr sp (.unit sp) else .inl sp (.unit sp)
   | k + 1, .inj l a => if l then .inl sp (RB.toVal sp k a) else .inr sp (RB.toVal sp k a)
+  | k + 1, .like o a =>
+    .app sp (.sugar sp (.like o)) (RB.toVal sp k a)
 
 /-- A row of the clause matrix: its patterns, one per column, the variables bound so far to what
 they match, and its arm. -/
@@ -874,8 +881,9 @@ def compile (t : Table) (sp : Span) (arms : Array Comp) (info? : String → Opti
         | .inj _ =>
           let pl ← freshOcc
           let pr ← freshOcc
-          let L ← branch (.inj true) 1 [(pl, false)] (.inj true (.occ pl))
-          let R ← branch (.inj false) 1 [(pr, false)] (.inj false (.occ pr))
+          let like (r : RB) : RB := if fold?.isSome then .like o r else r
+          let L ← branch (.inj true) 1 [(pl, false)] (like (.inj true (.occ pl)))
+          let R ← branch (.inj false) 1 [(pr, false)] (like (.inj false (.occ pr)))
           pure (.case sp (.var sp o) ⟨pl, sp⟩ L ⟨pr, sp⟩ R)
         | .con d _ =>
           let some i := info? d | throw ⟨sp, s!"internal error: the declaration `{d}`"⟩
@@ -886,7 +894,8 @@ def compile (t : Table) (sp : Span) (arms : Array Comp) (info? : String → Opti
           if let some fc := fold? then
             if i.rolls && d == fc.root && o != fc.top then
               throw ⟨p.span, s!"in a `{fc.kind.str}` block a recursive field is the fold's result on " ++
-                s!"it, not a `{d}`: bind it with a name"⟩
+                s!"it, and matching the fold's result with a constructor of `{d}` is not provided: " ++
+                "bind it with a name"⟩
           let rolls := i.rolls && !inFold
           let asc := if i.mono && !inFold then some d else none
           let scrut : Val := if rolls then .unroll sp (.var sp o) else .var sp o
@@ -903,6 +912,9 @@ def compile (t : Table) (sp : Span) (arms : Array Comp) (info? : String → Opti
             let subs ← if k == 1 then pure [(pv, cellAt 0)] else
               (List.range k).mapM fun j => do pure ((← freshOcc), cellAt j)
             let rb := RB.con ci i.n rolls asc (subs.map (.occ ·.1))
+            -- In a `fold` block the rebuilt value is at the type of `o`, which only the typed pass
+            -- knows.
+            let rb := if fold?.isSome then RB.like o rb else rb
             let M ← branch h' k subs rb
             arms' := arms' ++ [(pv, if k == 1 then M else
               letTuple sp (.var sp pv) (subs.map (·.1)) M (· ++ "r"))]
@@ -961,7 +973,7 @@ def matchComp (t : Table) (sp : Span) (scruts : List Val) (arms : List (List MPa
 frees its cells and matches their values: the recursive fields are the fold's results, not cells,
 and are matched as they are. `fold_imm` reads the block through views, and frees nothing. -/
 def foldBox (t : Table) (k : FoldKind) (root : String) : Nat → MPat → Except Error MPat
-  | 0, p => pure p
+  | 0, p => throw ⟨p.span, "internal error: a pattern nested too deeply"⟩
   | n + 1, p => match p with
     | .tuple sp ps => do pure (.tuple sp (← ps.mapM (foldBox t k root n)))
     | .inj sp l q => do pure (.inj sp l (← foldBox t k root n q))
@@ -984,9 +996,10 @@ def foldBox (t : Table) (k : FoldKind) (root : String) : Nat → MPat → Except
 checked exhaustive and each reachable (M4), then compiled as a `match` on the unrolled shape
 whose recursive positions hold the fold's results (`FoldCx`). The group folded is the one whose
 root the arms' constructors name, and that root must be what is folded: the single-root rule
-makes it the one member that is a `μ`.  `[spec §60]` -/
+makes it the one member that is a `μ`. With the compiled arms, the root's name and type
+parameters, when the arms name it.  `[spec §60]` -/
 def foldComp (t : Table) (sp : Span) (k : FoldKind) (top : String) (arms : List (MPat × Comp))
-    (fresh : Nat) : Except Error (Comp × Nat) := do
+    (fresh : Nat) : Except Error ((Comp × Nat) × Option (String × List String)) := do
   let fuel := 4096
   let decl? := arms.findSome? fun (p, _) => match p with
     | .con csp c _ _ => some (csp, c)
@@ -1003,8 +1016,9 @@ def foldComp (t : Table) (sp : Span) (k : FoldKind) (top : String) (arms : List 
           s!"group's root `{i.root}` (the single-root rule): fold `{i.root}`"⟩
       throw ⟨csp, s!"`{d.name.name}` is not recursive, so it has no fold: match it"⟩
     root := some i.root
+  let rootDecl := root.bind fun r => (t.decl? r).map fun e => (r, e.tps.map (·.name))
   let arms ← match root with
-    | some r => arms.mapM fun (p, M) => do pure (← foldBox t k r 64 p, M)
+    | some r => arms.mapM fun (p, M) => do pure (← foldBox t k r 4096 p, M)
     | none => pure arms
   let rows := arms.map fun (p, _) => [p]
   for (r, i) in rows.zipIdx do
@@ -1019,6 +1033,7 @@ def foldComp (t : Table) (sp : Span) (k : FoldKind) (top : String) (arms : List 
   let infoOf (d : String) : Option Info := (info t d).toOption
   let fc : Option FoldCx := root.map fun r => { kind := k, top, root := r }
   let rs : List Row := arms.zipIdx.map fun ((p, _), i) => { pats := [p], binds := [], arm := i }
-  (compile t sp (arms.map (·.2)).toArray infoOf fc fuel rs [(top, false)]).run fresh
+  pure ((← (compile t sp (arms.map (·.2)).toArray infoOf fc fuel rs [(top, false)]).run fresh),
+    rootDecl)
 
 end Frontend.Data
