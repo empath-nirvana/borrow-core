@@ -222,6 +222,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     -- `clone(x)` prints as the variable it checks as: the printed core is checked without the
     -- check of implicit copies (`run_io`'s wrapper, `Frontend/Check/Externs.lean`).
     | .clone _ x => x
+    | .copyImm _ x => s!"copy({x})"
     | .defApp _ n As => n ++ "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]"
     | .unit _ => "()"
     | .pair _ V W => "(" ++ V.pp 0 k ++ ", " ++ W.pp 0 k ++ ")"

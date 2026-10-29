@@ -1,14 +1,14 @@
--- pending: #58 (an implicit copy of an `imm` borrow, here one read at each turn of a loop; SPEC §42 Open)
--- now: 44:49: `b` is used twice here, and its type `imm 'io_l5 array i32` is not persistent
+-- pending: decision R (a `for` threads the borrow its body reads through `yield`, and the pipeline's sites give the operation one signature per lifetime)
+-- now: 40:1: the operation 1.0 has two signatures in this program, `aff i32 * imm 'l0 array i32 * i32 ~> imm 'l0 array i32 * i32` and `aff i32 * imm 'l1 array i32 * i32 ~> imm 'l1 array i32 * i32`: an operation has one signature (decision R)
 --
 -- A borrow block over a pipeline: a table borrowed once, and read by every step of a `for` over a
 -- pipeline of generators, `above(20, squares(range(1, 11)))`.
 --
--- The lend spans the loop's ticks, which the kernel admits at the graded row `div call`
--- (SPEC §63). The loop then reads the borrow `b` at each turn, so its state threads it and
--- each turn uses it again; a borrow is not persistent, and an `imm` borrow is not copied
--- implicitly (#58, SPEC §42 Open), so the checker refuses the second use, as it does
--- `corpus/reject/lend-iter-borrow.bc`'s.
+-- The lend spans the loop's ticks, at the graded row `div call` (SPEC §63), and the `for`'s body
+-- reads `b` at each turn: the checker copies the `imm` borrow for each use (`copy`, SPEC §66).
+-- The `for` threads the variables its body uses through `yield` (SPEC §64), so the operation's
+-- signature holds `imm 'l array i32`, and the sites of the pipeline give it two lifetimes: an
+-- operation has one signature (decision R).
 --
 -- Once it lands: `i32[361]`, `live 0`: the table holds i + 1, and the squares above 20 from 1 to 10
 -- are 25, 36, 49, 64, 81, 100, so the sum is 355 + 6.

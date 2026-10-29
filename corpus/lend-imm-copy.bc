@@ -2,7 +2,7 @@
 -- §63). A table of ten entries `10 * i` is borrowed `imm` around a `while` that sums the first
 -- five through `get`; each turn splits the borrow with `copy`, reads through one copy and keeps the
 -- other, and the last is forgotten. The lend spans the loop's ticks at the graded row `div call`.
--- `corpus/pending/borrow-across-loop.bc` is this program with the copies implicit (#58).
+-- `corpus/axes/borrow-across-loop.bc` is this program with the copies implicit (SPEC §66).
 --
 -- Answer: i32[100], live 0: 0 + 10 + 20 + 30 + 40.
 

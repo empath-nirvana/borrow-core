@@ -1,10 +1,13 @@
--- expect: 23:34: `b` is used twice here, and its type `imm 'io_l2 array i32` is not persistent
 -- A name bound inside a borrow block over a loop, beside a variable of the same name outside it,
--- in core text, whose names are not resolved (SPEC §41). The block's body loops, so its lend is held
--- across the loop's ticks, which the kernel admits at the graded row `div call` (SPEC §63); the loop
--- reads the borrow `b` at each turn, and a borrow is not persistent, so the kernel refuses the second
--- use (SPEC §10, §14; an implicit copy of an `imm` borrow is open, #58). In a surface body the
--- block's `acc` is a variable of its own (`corpus/pending/lend-shadow.bc`).
+-- in core text, whose names are not resolved (SPEC §41): the checker resolves each name to the
+-- innermost binder in scope, so the block's `let mut acc` is its own and the `acc` read after the
+-- block is `main`'s. The block's body loops, so its lend is held across the loop's ticks, at the
+-- graded row `div call` (SPEC §63); the loop reads the borrow `b` at each turn, and the checker
+-- copies the `imm` borrow for each use (`copy`, SPEC §66). `corpus/lend-shadow.bc` is the same
+-- program in a surface body.
+--
+-- Answer: on the input `1234`, `i32[105]`, `live 0`: 10 + 20 + 30 + 40, the newline's entry 0, and
+-- `main`'s 5.
 
 fn tab(i: i32) -> i32 = i * 10
 

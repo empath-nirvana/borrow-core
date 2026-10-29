@@ -121,6 +121,9 @@ def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → I
     let node (A : Option CVTy) (ks : List TNode) : TNode := .mk (.val v) (tyV (exp <|> A)) [] ks
     match v with
     | .var _ x | .clone _ x => pure (node (varTy E Δ T x) [])
+    | .copyImm _ x => pure (node ((varTy E Δ T x).bind fun
+        | .imm a A => some (.tensor (.imm a A) (.imm a A))
+        | _ => none) [])
     | .defApp _ x args => pure (node (defAppTy E Δ T x args) [])
     | .unit _ => pure (node (some .unit) [])
     | .lend _ x _ => pure (node (varTy E Δ T x.name) [])

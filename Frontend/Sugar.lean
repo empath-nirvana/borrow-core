@@ -122,7 +122,8 @@ def _root_.Frontend.Val.elab (lend : Bool) : Val → Except Error Val
   | .run sp M => return .run sp (← M.elab lend)
   | .mark sp k V => return .mark sp k (← V.elab lend)
   | .reify sp B R r V => return .reify sp B R r (← V.elab lend)
-  | V@(.var ..) | V@(.clone ..) | V@(.defApp ..) | V@(.unit ..) | V@(.const ..) | V@(.sugar ..) => pure V
+  | V@(.var ..) | V@(.clone ..) | V@(.copyImm ..) | V@(.defApp ..) | V@(.unit ..) | V@(.const ..)
+  | V@(.sugar ..) => pure V
 
 /-- Elaborate `&c` in a computation: in `x <- M; N`, one `&c` in `M` becomes
 `io_lend <- M[c/&c]; let (c, x) = io_lend; N`. With `lend`, the computation is such a head, and

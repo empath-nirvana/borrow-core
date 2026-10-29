@@ -49,6 +49,7 @@ async-timers erased handles 2 performs 0 raises 5 machines 3 suspends 3 left 0 0
 async-try-join erased handles 4 performs 0 raises 31 machines 2 suspends 1 left 0 0
 async-unr-site erased handles 1 performs 1 raises 2 machines 3 suspends 2 left 0 0
 async-workers-scoped erased handles 2 performs 0 raises 2 machines 2 suspends 2 left 0 0
+axes/borrow-across-loop erased handles 1 performs 1 raises 0 left 0 0
 axes/codata-coeffects erased handles 0 performs 0 raises 0 left 0 0
 axes/codata-effects erased handles 1 performs 1 raises 0 left 0 0
 axes/codata-generic erased handles 0 performs 0 raises 0 left 0 0
@@ -190,6 +191,7 @@ generic-pair-arg erased handles 0 performs 0 raises 0 left 0 0
 hello erased handles 0 performs 0 raises 0 left 0 0
 http-request erased handles 0 performs 0 raises 0 left 0 0
 hygiene-answering-state erased handles 0 performs 0 raises 0 left 0 0
+hygiene-borrow-loop erased handles 1 performs 1 raises 0 left 0 0
 hygiene-box-lib erased handles 0 performs 0 raises 0 left 0 0
 hygiene-clause-global erased handles 2 performs 1 raises 1 left 0 0
 hygiene-clause-name erased handles 0 performs 0 raises 0 left 0 0
@@ -201,6 +203,8 @@ hygiene-handler-param erased handles 1 performs 0 raises 0 left 0 0
 hygiene-handler-resume erased handles 1 performs 0 raises 1 machines 1 suspends 1 left 0 0
 hygiene-handler-state erased handles 0 performs 0 raises 0 machines 1 suspends 1 left 0 0
 hygiene-local-fn erased handles 0 performs 0 raises 0 left 0 0
+imm-copy erased handles 0 performs 0 raises 0 left 0 0
+imm-copy-nest erased handles 2 performs 3 raises 0 left 0 0
 implicit-drops erased handles 0 performs 0 raises 0 left 0 0
 int-arith erased handles 0 performs 0 raises 0 left 0 0
 int-ops erased handles 0 performs 0 raises 0 left 0 0
@@ -322,6 +326,7 @@ leetcode/trees/0572-subtree-of-another-tree erased handles 2 performs 1 raises 6
 lend-call-copy erased handles 1 performs 1 raises 0 left 0 0
 lend-depth3 erased handles 1 performs 3 raises 0 left 0 0
 lend-imm-copy erased handles 1 performs 1 raises 0 left 0 0
+lend-iter-borrow erased handles 2 performs 1 raises 0 left 0 0
 lend-lib-each erased handles 0 performs 0 raises 0 left 0 0
 lend-lib-gen erased handles 0 performs 0 raises 0 left 0 0
 lend-lib-loop erased handles 0 performs 0 raises 0 left 0 0
@@ -330,6 +335,9 @@ lend-nest3 erased handles 1 performs 1 raises 0 left 0 0
 lend-order3 erased handles 1 performs 4 raises 0 left 0 0
 lend-owner-joined erased handles 0 performs 0 raises 0 left 0 0
 lend-owner-returned erased handles 0 performs 0 raises 0 left 0 0
+lend-server erased handles 1 performs 1 raises 0 left 0 0
+lend-shadow erased handles 1 performs 1 raises 0 left 0 0
+lend-shadow-core erased handles 1 performs 1 raises 0 left 0 0
 list-blocks erased handles 3 performs 0 raises 4 left 0 0
 list-capability erased handles 1 performs 0 raises 1 left 0 0
 list-generic erased handles 1 performs 0 raises 9 left 0 0

@@ -1,0 +1,20 @@
+-- A borrow block whose body loops, with a local of the block named as a function: the local
+-- does not stay in scope after the block, so `k()` after it is the declared `k` (hygiene, #481).
+--
+-- The lend spans the loop's ticks, which the kernel admits at the graded row `div call`
+-- (SPEC §63). The loop reads the borrow `b` at each turn, so its state threads it and
+-- each turn uses it again: the checker copies the `imm` borrow for each use (`copy`,
+-- SPEC §66), and the copy left at the end is dropped (`forget_imm`).
+--
+-- Answer: `i32[207]`, `live 0`: the loop's 2, times 100, plus the declared `k`, 7.
+fn k() -> i32 = 7
+main -> i32 =
+  let t = alloc(1);
+  let r = borrow imm t { 'x, b ->
+    let k: !(1 => i32) = !{ u -> 1 };
+    let mut i = 0;
+    while i < 2 { i = i + *b };
+    i
+  };
+  let v = free(t);
+  r * 100 + k()

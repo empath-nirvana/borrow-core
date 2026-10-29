@@ -526,7 +526,8 @@ def retRead (Tr : CVTy) :
 
 def Env.slotName (E : Env) (i : Nat) : String :=
   match E.vars[i]? with
-  | some (some x) => s!"`{x}`"
+  -- An implicit copy `x#d.i` (SPEC §66) is named by the variable it copies.
+  | some (some x) => s!"`{(x.splitOn "#").headD x}`"
   | _ => "a hidden slot"
 
 /-- The first slot both sides use whose type is not persistent. -/
@@ -676,7 +677,7 @@ variable {Δ : LifeCtx} {T : List CVTy}
 mutual
 /-- `x` occurs free in a value-judged expression. -/
 def mentionsV (x : String) : Val → Bool
-  | .var _ y | .clone _ y => y == x
+  | .var _ y | .clone _ y | .copyImm _ y => y == x
   | .defApp .. | .unit _ | .const .. | .sugar .. => false
   | .pair _ V W | .app _ V W => mentionsV x V || mentionsV x W
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V

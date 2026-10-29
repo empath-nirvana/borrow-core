@@ -261,6 +261,11 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
 
 
 
+/-- `copy[@a, A]` at elaborated arguments: the constant's derivations, for a written `copy` and for
+the checker's implicit copy of an `imm` borrow (SPEC §66).  `[spec §66]` -/
+def copyAt (sp : Span) (a : CLife) (A : CVTy) : Except Error (Σ B : CVTy, Res Δ T (.val B)) :=
+  cDead (fun j => .copy (at_ sp) j a A) fun hd _ => .copy (a := a) (A := A) hd
+
 /-- The type and derivations of a constant or derived form (syntax-core §8, §8a, §9). -/
 def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
     Const → Except Error (Σ A : CVTy, Res Δ T (.val A))
@@ -277,7 +282,7 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
   | .copy a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      (cDead (fun j => .copy (at_ sp) j a A) fun hd _ => .copy (a := a) (A := A) hd)
+      copyAt sp a A
   | .copyBang A => do
       let A ← E.elabV Δ A
       (cDead (fun j => .copyBang (at_ sp) j A) fun hd _ => .copyBang (A := A) hd)

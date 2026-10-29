@@ -1,16 +1,16 @@
--- pending: #58 (an implicit copy of an `imm` borrow, here one read at each turn of a loop; SPEC §42 Open)
--- now: 43:32: `cfg` is used twice here, and its type `imm 'io_ll41_13 (i32 * i32 * i32)` is not persistent
+-- pending: SPEC §63 (a capability the body of a `let x = &y` lend over a loop uses is not handed back where the lend finishes)
+-- now: 43:3: `stdin` is not consumed in its scope, and its type `ref input` has no destructor
+-- now|   in the core generated for `for` here (`bcc desugar` shows it)
 --
 -- A loop-invariant borrow: `let cfg = &config` borrows the configuration `imm` for the rest of
 -- `main` (the borrow block `borrow imm config { cfg -> … }`); the code before the loop reads it,
 -- every step of the loop reads it, and the code after the loop reads it again. The calls
 -- `scale(cfg, …)` and `cap(cfg, …)` take the lifetime of `cfg` from their argument.
 --
--- The lend spans the loop's ticks, which the kernel admits at the graded row `div call`
--- (SPEC §63). The loop then reads the borrow `cfg` at each turn, so its state threads it and
--- each turn uses it again; a borrow is not persistent, and an `imm` borrow is not copied
--- implicitly (#58, SPEC §42 Open), so the checker refuses the second use, as it does
--- `corpus/reject/lend-iter-borrow.bc`'s.
+-- The lend spans the loop's ticks, at the graded row `div call` (SPEC §63), and the loop reads
+-- `cfg` at each turn: the checker copies the `imm` borrow for each use (`copy`, SPEC §66).
+-- The lend's body also uses `stdin` (the `for`'s source); its close hands `stdin` back, but its
+-- finishing path does not, and the checker refuses the elaborated lend.
 --
 -- Once it lands: on the input `1203`, `i32[54]`, `live 0`: the configuration is (step 10, limit
 -- 100, bias 2); each digit adds `10 * d + 2`, giving 12, 34, 36, 68, under the limit, less 7 * 2

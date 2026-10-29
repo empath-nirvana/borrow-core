@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 1.13 · 2026-10-29
+Version 1.14 · 2026-10-29
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1605,11 +1605,11 @@ kernel's rules.
 **Open.** A lend held across a tick is §63's: `tick` is resumed in the scope of the stop, so a
 borrow block whose body loops, or a lend at a call of a div function, is the unwinding form at the
 graded row `div call` (`corpus/lend-mut.bc`, `lend-nest3.bc`, `lend-depth3.bc`,
-`lend-order3.bc`, `lend-imm-copy.bc`, `lend-call-copy.bc`). The rest of B2's pending programs,
-`hygiene-borrow-loop`, `lend-block`, `lend-config`, `lend-copy`, `lend-div`, `lend-div-iter`,
-`lend-let`, `lend-pipeline`, `lend-server`, `lend-shadow` and `borrow-across-loop`, read an `imm`
-borrow at each turn, which needs its implicit copy (#58, §42 *Open*); and `for-buf-borrow`,
-`parse-recover-gen`, `state-machine-audit` wait on their own refusals.
+`lend-order3.bc`, `lend-imm-copy.bc`, `lend-call-copy.bc`). B2's pending programs that read an
+`imm` borrow at each turn run with its implicit copy (§66): `hygiene-borrow-loop`, `lend-block`,
+`lend-let`, `lend-server`, `lend-shadow` and `borrow-across-loop`. `lend-config`, `lend-copy`,
+`lend-div`, `lend-div-iter` and `lend-pipeline` get past the copy and wait on their own refusals
+(§66, *Programs*), as do `for-buf-borrow`, `parse-recover-gen` and `state-machine-audit`.
 
 Programs: `corpus/axes/scope-loop-lend.bc` and the library's `lend-lib-loop.bc`, `lend-lib-gen.bc`,
 `lend-lib-each.bc`; rejects `corpus/reject/lend-*.bc`. Every elaborated program is checked core,
@@ -7810,9 +7810,8 @@ programs get rows.
 - **A block reassembled from its cells** without `box` (typed elaboration §5.3's `Node(c₁, c₂,
   c₃)`) outside a `fold_reuse` arm: refused, asking for `box` (E3). In a `fold_reuse` arm, which
   binds the emptied cells, it is F2 (§60).
-- **A field read through a `mut` borrow inside an expression**, and an implicit copy of an `imm`
-  borrow so that it can be read twice (#58): a read through a borrow is a binding of its own, and
-  it uses an `imm` borrow.
+- **A field read through a `mut` borrow inside an expression**: a read through a borrow is a
+  binding of its own. An `imm` borrow read twice is copied by the checker (§66).
 
 ### Open
 
@@ -9914,10 +9913,11 @@ shape of its answer type (`genLendU`), so a lend whose answer is a sum is `genLe
 
 Of B2's twelve pending programs (§14 *Open*, §62), `lend-mut` returns to the corpus at its golden.
 The other eleven read an `imm` borrow at each turn of a loop (in the callee, for `lend-div`,
-`lend-server` and `lend-div-iter`), which needs its implicit copy (#58, §42 *Open*); they are
-pending under #58. With the copies written (`copy`, `forget_imm`), the same lends run:
-`corpus/lend-imm-copy.bc` (`borrow-across-loop`'s) and `corpus/lend-call-copy.bc`
-(`lend-server`'s, a lend at a call of a div function).
+`lend-server` and `lend-div-iter`), which needs its implicit copy (#58): §66 writes it, six of
+them return to the corpus, and five stop at refusals of their own (§66, *Programs*). With the
+copies written by hand (`copy`, `forget_imm`), the same lends run: `corpus/lend-imm-copy.bc`
+(`borrow-across-loop`'s) and `corpus/lend-call-copy.bc` (`lend-server`'s, a lend at a call of a
+div function).
 
 Depth and order: `corpus/lend-nest3.bc` nests three borrow blocks across a `for`'s ticks;
 `corpus/lend-depth3.bc` nests three lends across div calls, each in its caller's loop;
@@ -10365,6 +10365,123 @@ source's result.
 
 ---
 
+## 66. Entry 65 — implicit copies of `imm` borrows (#58, E1)
+
+### Motivation
+
+An `imm` borrow is duplicable: the constant `copy[@a, A] : imm @a A ⊸ imm @a A ⊗ imm @a A` makes
+two of one (`CDerives.copy`, its compatibility `copy_compatX`, `[TR]` 6.170), and costs nothing at
+run time: both halves are the one pointer. It is not persistent (§10), so a program that reads it
+twice has had to write the copy. Since §62 and §63 a borrow block whose body loops holds its lend
+across the loop's ticks, and a loop that reads the borrow at each turn threads it in its state and
+uses it again at each turn: eleven programs were pending on this (§63, *Programs*). The same
+refusal stops `*xp * *xp` and a borrow read in an `if`'s condition and again in one arm
+(`docs/loops.md` §3: `b1`, `e2`, `e3`, `e6`, and `dR`…`dW` under every outer loop).
+
+The user's decision on #545 (2026-10-18): E1, implicit copies of `imm` borrows, first, with its own
+entry; E2 (views) and E3 (`&a` of a place an enclosing loop lends) are decided under #58 later. E1
+is Rust's `&T: Copy` for a variable of type `imm @a A`.
+
+### The rule
+
+The checker writes the copies, as §12 writes destructors (`Frontend/Check/ImmCopies.lean`).
+
+- **The pieces of a node.** The checker splits a computation node's context among its pieces:
+  `x <- M; N`'s `M` and `N`; `M x`'s `M` and `x`; `let () = V; M`'s and `let (x, y) = V; M`'s value
+  and body; `case V {…}`'s scrutinee and its two arms, which share one context and are one piece;
+  `x <- M unwind (D); N`'s `M`, and its continuation with its finaliser (one piece). A value splits
+  at `(V, W)` and `V W` and passes its context through every other form with one operand, so the
+  pieces of a node's value are the leaves of that tree. `<M, N>` shares its context and has one
+  piece; a binder's body is checked as a node of its own. A handler node (`handle_*`) and R1's
+  `withbor2r` are not split here.
+- **Where a copy goes.** Before checking a computation node, for each variable in scope whose slot
+  has type `imm @a A` and which two or more pieces mention free, every piece but the last that
+  mentions it gets its own copy: the node becomes `let (x₁, x) = copy[@a, A](x); …` around it, with
+  `x` named `x₁` in that piece. The node is then checked as written (`insertCopies`, at the entry of
+  `synC` and `chkC`).
+- **Unused copies.** The copies' binders are owed to their scope (§12): `imm @a A` has the
+  destructor `forget_imm`, so a path that does not use a copy drops it at its end, which runs no
+  code. A borrow read in an `if`'s condition and in one arm is copied for the condition, and the
+  other arm drops it.
+- **Only `imm` borrows.** The rule reads the slot's type: `imm @a A` and nothing else. A `mut`
+  borrow, a view (`array_imm`, `view`), a cell and a value that holds a borrow (`imm @a A ⊗ B`)
+  are never copied, and their second use is refused as before.
+- **The form.** The copy is the AST node `copy(x)` (`Val.copyImm`), which only the checker writes;
+  it is checked as the constant `copy` at `x`'s type applied to `x` (`copyAt`), so its typed node
+  is `copy`'s and the erasure is `copy[@a, A] x`. The copies are named `x#d.i`, which no source
+  identifier is (`#`), so they capture nothing; a message names the variable copied
+  (`Env.slotName`).
+
+Copies are written only where two pieces mention an `imm` borrow, which is where the checker
+refused the split before this entry. Every corpus program it accepted before erases to the same
+term (measured: `bcc erase` over every corpus program, before and after).
+
+**What the elaborator decides.** Nothing of the borrow calculus: the copy is a constant the kernel
+types, at the borrow's own lifetime, and the kernel checks every use of both halves. The rule is an
+ergonomic insertion of an existing core term (CLAUDE.md, *The elaborator never does the kernel's
+work*), as §12's destructors are.
+
+### Soundness
+
+No change to `CDerives`, `Core/`, `Paper/`, `Support/`, the relation, the machine or any kernel
+rule. The elaborated program is an ordinary core term with an ordinary derivation: `copy` is
+`CDerives.copy` at a dead context, applied by `lolliE`, and its halves are bound by `tensorE`.
+`checkProgram_sound` covers it, and `fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`,
+`total_every_run`, `runtime_every_run`, `fundamentalC_pin` and `adequacyD_pin` apply unchanged.
+Where a copy is placed does not affect soundness: any placement is a derivation, and a copy runs
+no code. Nothing is proved new, and nothing is assumed: the pass that places copies is outside the
+trusted base, since the kernel checks its output.
+
+### Programs
+
+- **Acceptance** (`docs/loops.md` §7.3): `b1`, `e2`, `e3`, `e6` are `corpus/imm-copy.bc`
+  (`(i32[49], (i32[2], (i32[14], i32[10])))`); `dR`, `dA`, `dW`, `dG`, `dL` are
+  `corpus/imm-copy-nest.bc` (each `10`, `i32[50]`). Each ran into the refusal before.
+- **From `pending/`**, at main's goldens and main's counts on both backends:
+  `axes/borrow-across-loop`, `hygiene-borrow-loop`, `lend-server`, `lend-shadow`, and the sugar
+  pairs `lend-block` and `lend-let` (their core forms `bcc desugar`'s output again).
+- **From `reject/`**, whose expected error was the refused copy: `lend-iter-borrow` (a generator
+  that holds a borrow, read at each turn) is a corpus program, and `lend-shadow` is
+  `corpus/lend-shadow-core.bc` (the core-text twin of `lend-shadow`). `lend-div-two` moves to
+  `pending/` (below). `lend-escape` stays rejected: its `q` is `imm 'x array i32 ⊗ i32`, a value
+  holding a borrow, not a borrow. `double-use-in-callee` (a view) stays rejected (E2, #545).
+- **Pending on something else.** Five of the eleven get past the copy and stop at a refusal of
+  their own, each now its `-- pending:` line:
+  - `lend-div`, `lend-div-iter`, and `lend-div-two` (from `reject/`): a borrow block whose body is a
+    direct-style call of a div function is typed at the call's `B ⊕ R`, its result inferred before
+    the `Div` elaboration (§62);
+  - `lend-config`: a capability that the body of a `let x = &y` lend over a loop uses is handed
+    back on the lend's close but not where it finishes (§63's elaboration);
+  - `lend-copy`: its `borrow mut a` is a slice borrow of an owned array, which keeps `Row.Unwind`
+    (§63 *Open*);
+  - `lend-pipeline`: the `for` threads the borrow its body reads through `yield`, and two sites of
+    the pipeline give the operation a signature at two lifetimes (decision R).
+
+### Baseline
+
+`fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`, `total_every_run`, `runtime_every_run`,
+`fundamentalC_pin` and `adequacyD_pin` keep their statements. Every corpus and kernel program that
+checked before checks to the same term, with the same output, golden, exit status and counts.
+
+### Open
+
+- **E2**: a view (`array_imm`, `view`) used twice; `corpus/reject/double-use-in-callee.bc` stays
+  rejected unless E2 is chosen (#545's hard-stop item 2). **E3**: `&a` of a place an enclosing loop
+  lends `imm`, as a copy of that loop's view (`docs/loops.md` §3, the matrix's `AA`, `b5`, `e7`).
+- **A value that holds an `imm` borrow** (`imm @a A ⊗ i32`, a record with a borrowed field) is not
+  copied, though Rust's `Copy` is structural: `corpus/reject/lend-escape.bc`.
+- **`linear` at an `imm` type.** The copies' binders are owed, so a variable declared `linear` at
+  an `imm` type that two pieces use is copied, and its copies may be dropped.
+- **Nodes not split here.** A borrow used by a handler node's clauses and its body, or around R1's
+  `withbor2r`, is not copied, and its second use is refused as before.
+- **The pieces are read by mention.** A piece that mentions a borrow on a path that does not use
+  it gets a copy that path drops (no run-time cost); the walk is not proved to agree with the
+  checker's splits, and need not be: a wrong piece costs a refusal or an unused copy, never an
+  unchecked term.
+- The five pending programs above.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -10795,8 +10912,23 @@ judgments and their inductions, the typed term by `scripts/gen-pin.py`, `Fronten
 `Frontend/Check/Consts.lean`, `Backend2/Convert.lean`, `Backend/Clos/Interp.lean`'s `drop`); and
 Backend2's `foldOwnG` arity (`Backend2/Convert.lean`). No change to `Paper/`, `Support/`, the
 relation or the machine.
-
-
+Entry 61 (§62) is implemented in `Frontend/Sugar.lean` (*The `Div` elaboration*: `eWalk`, `eIter`,
+`eCall`, `eDrain`, `eLoop`, `eFinish`, `lendCall`), `Frontend/Elab/LoopLend.lean`
+(`loopsOnSpine`), the checker's `iterate` and `reify` (`Frontend/Check/Consts.lean`,
+`Frontend/Check/Checker.lean`), `Frontend/Elab/DivPlacement.lean` (`sim_loop`), `lib/div.bc`, the
+old backend (`Backend/Clos/`, `compactLocals` in `Backend/Wasm/Lower.lean`), and the new backend's
+`Div` under the runtime (`Backend2/Convert.lean`'s `runtimeMain`, `Backend2/Driver.lean`'s
+`divRuntime`) with its laws in `Core/DivDrive.lean` and `Core/DivIterate.lean`. No change to
+`CDerives`, the relation, the machine or a kernel program.
+Entry 62 (§63) is implemented in the kernel: the grade `OpSig.call` and `CTy.eff`'s field
+(`Core/Types.lean`), `Owed`, `contShare` and `KapRelT` (`Core/EffDefs.lean`), the frames at a given
+lifetime (`Core/EffWp.lean`), the frames across graded stops and `Row.Lend` (`Core/EffLend.lean`,
+`Core/EffBorrow.lean`), `effHandleT`'s grade, `div_fuel`'s and `reify`'s premises, and `rtMain`
+with `runtime_main_every_run` (`Core/DivRuntime.lean`); in the checker and the core text (`n.i call
+A ~> B`, `div call`); in the elaboration (`Frontend/Sugar.lean`, `Frontend/Elab/LoopLend.lean`: the
+graded row of a borrow block whose body loops and of a lend at a call of a div function); and in
+the new backend (`Backend2/Convert.lean`: `convMain`'s graded `main`, `genLendU`). No index is
+added to `CDerives`.
 Entry 63 (§64) is implemented in `Core/DivHandleLastRuns.lean` (T-B1, T-B1′), `Core/ClauseKinds.lean`
 (`lastKind`, `lastClause_premise`), the checker (`Frontend/Syntax.lean` `HForm`, `Frontend/Parser.lean`,
 `Frontend/Print.lean`, `Frontend/Check/Steps.lean` `ansesRead`/`lastRead`, `Rules.lean`
@@ -10812,9 +10944,25 @@ Entry 64 (§65) is implemented in `Frontend/Elab/Effects.lean` (`Cx.lastOps`, so
 `takenFrames`, `codeShapesV`, `reifyReach`, `lirOf₀`'s second conversion), `Backend2/Convert.lean`
 (`lastClauseDrive`, `genMerges`, `prepWorks`), `Backend2/Layout.lean`, `Backend2/Lower.lean` and
 `Backend/Clos/Flow.lean`. No change to `CDerives`, `Core/`, the relation or the machine.
+Entry 65 (§66) is implemented in the checker: `Frontend/Check/ImmCopies.lean` (`insertCopies`,
+`walkC`, `walkV`, `renC`, `renV`), `Frontend/Check/Checker.lean` (`synC` and `chkC` read the copies
+first; `synV`'s `copyImm`), `Frontend/Check/Consts.lean` (`copyAt`), `Frontend/Check/Steps.lean`
+(`Env.slotName`) and the AST node `Val.copyImm` (`Frontend/Syntax.lean`). No change to `CDerives`,
+`Core/`, `Paper/`, `Support/`, the relation, the machine or either backend.
 ---
 
 ## Changelog
+
+- **1.14** (2026-10-29) — #58, E1 (#743 step 1).
+
+  §66: implicit copies of `imm` borrows. Before checking a computation node, the checker copies
+  each `imm` borrow that two of the node's pieces mention (`copy`), and a copy a path leaves
+  unused is dropped by `forget_imm` (§12). No change to `CDerives`, `Core/`, the relation, the
+  machine or either backend. `docs/loops.md` §7.3's `b1`, `e2`, `e3`, `e6`, `dR`…`dW` run
+  (`imm-copy`, `imm-copy-nest`); six of §63's eleven pending programs return at main's goldens and
+  counts; `reject/lend-iter-borrow` and `reject/lend-shadow` are accepted and move to the corpus,
+  `reject/lend-div-two` to `pending/`; five stay pending on other refusals. Status gains entries
+  61 and 62.
 
 - **1.13** (2026-10-29) — #564 R-1 (closed PR #665 with PR #667), ported from `b2-main` onto 1.12,
   its entries renumbered (`b2-main`'s §54 and §55 are §64 and §65).

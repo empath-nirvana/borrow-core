@@ -1,7 +1,11 @@
--- expect: 19:23: `b` is used twice here, and its type `imm 'a array i32` is not persistent
--- A generator that holds a borrow it is given and reads it at each turn: a borrow is not persistent,
--- so the generator's loop cannot use it again at each turn, and the kernel refuses the second use
--- (SPEC §10, §14).
+-- A generator that holds a borrow it is given and reads it at each turn, iterated by a `for` inside
+-- a borrow block. The block's body loops (the generator's `while`), so its lend is held across the
+-- loop's ticks, at the graded row `div call` (SPEC §63); the `for` is a handler around the
+-- generator's call (SPEC §64), so `yield` is handled inside the lend. The generator's loop reads
+-- `b` at each turn: the checker copies the `imm` borrow for each use (`copy`, SPEC §66).
+--
+-- Answer: `i32[60]`, `live 0`: the table holds 10 * i, and the generator yields the entries at 0,
+-- 1, 2, 3.
 
 include yield
 

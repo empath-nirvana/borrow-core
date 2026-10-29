@@ -151,6 +151,7 @@ mutual
 def Val.respan (sp : Span) : Val → Val
   | .var _ x => .var sp x
   | .clone _ x => .clone sp x
+  | .copyImm _ x => .copyImm sp x
   | .defApp _ n args => .defApp sp n (args.map ((VTy.respan sp)))
   | .unit _ => .unit sp
   | .pair _ V W => .pair sp (V.respan sp) (W.respan sp)

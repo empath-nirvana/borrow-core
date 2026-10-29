@@ -1,0 +1,43 @@
+-- Implicit copies of `imm` borrows (SPEC §66, #58 E1), `docs/loops.md` §7.3's `b1`, `e2`, `e3` and
+-- `e6`. An `imm` borrow read twice is copied by the checker (`copy`), and a copy a path leaves
+-- unused is dropped (`forget_imm`).
+--
+-- * `sq` reads its borrow twice in one expression (`e6`).
+-- * `small` reads its borrow in an `if`'s condition and in one arm (`e3`): the condition reads a
+--   copy, and the other arm drops the borrow.
+-- * `squares` reads each element borrow twice in a `for` over `&a` (`b1`).
+-- * `upto` reads each element borrow in the condition and in one arm, inside a counted loop (`e2`).
+--
+-- Answer: `(i32[49], (i32[2], (i32[14], i32[10])))`, `live 0`: 7 * 7; 2; 0 + 1 + 4 + 9; for each
+-- `i` of 0..3 the elements of [0, 1, 2, 3] at most `i`, 0 + 1 + 3 + 6.
+
+fn tab(i: i32) -> i32 = i
+
+fn sq<'l>(r: imm 'l i32) -> i32 = *r * *r
+
+fn small<'l>(r: imm 'l i32) -> i32 = if *r > 2 { 0 } else { let y = *r; y }
+
+fn squares(a: array i32) -> i32 * array i32 =
+  let mut s = 0;
+  for xp in &a { s = s + *xp * *xp };
+  (s, a)
+
+fn upto(b: array i32) -> i32 * array i32 =
+  let mut s = 0;
+  for i in 0..4 {
+    for yp in &b { if *yp > i { s = s + 0 } else { let y = *yp; s = s + y } }
+  };
+  (s, b)
+
+main -> i32 * (i32 * (i32 * i32)) =
+  let c = alloc(7);
+  let n = borrow imm c { x -> sq(x) };
+  free(c);
+  let d = alloc(2);
+  let m = borrow imm d { x -> small(x) };
+  free(d);
+  let (p, a) = squares(array_new[i32] (4, tab));
+  for _ in a { () };
+  let (q, b) = upto(array_new[i32] (4, tab));
+  for _ in b { () };
+  (n, (m, (p, q)))

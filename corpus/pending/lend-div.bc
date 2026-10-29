@@ -1,15 +1,14 @@
--- pending: #58 (an implicit copy of an `imm` borrow, here one read at each turn of a loop; SPEC §42 Open)
--- now: 37:28: `b` is used twice here, and its type `imm 'a array i32` is not persistent
+-- pending: SPEC §62 (a borrow block whose body is a direct-style call of a div function: the block's result is typed at the call's `B + R`)
+-- now: 43:7: type mismatch: expected `i32`, but this has type `i32 + 1`
 --
 -- A div function taking a borrow, called from a borrow block. `total_at` sums a table at the
 -- elements of a generator, so it loops. `main` calls it twice: lending the table's cell,
 -- `total_at(&t)`, and from inside a borrow block of the table, `total_at(b)`.
 --
--- The div function's loop reads the borrow `b` it is given at each turn, so its state
--- threads it and each turn uses it again; a borrow is not persistent, and an `imm` borrow is
--- not copied implicitly (#58, SPEC §42 Open), so the checker refuses the second use, as it does
--- `corpus/reject/lend-iter-borrow.bc`'s. The lend at the call, across the callee's ticks, is
--- the kind the kernel admits at the graded row `div call` (SPEC §63); it is not reached.
+-- The div function's loop reads the borrow `b` it is given at each turn: the checker copies the `imm` borrow for each use (`copy`, SPEC §66).
+-- `total_at(&t)` runs. `borrow imm t { b -> total_at(b) }` does not: the block's result is
+-- inferred from its body before the `Div` elaboration, as the call's `i32 + 1`, where the call
+-- in direct style answers `i32`.
 --
 -- Once it lands: `i32[200]`, `live 0`: the table holds 10 * i, and each call sums the entries 1 to
 -- 4, 100.

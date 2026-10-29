@@ -80,6 +80,7 @@ a `for`'s site threads is a name of the program in them. -/
 def _root_.Frontend.Val.hygD (defs : Ren) (glob : String → Bool) (ρ : Ren) : Val → HM Val
   | .var sp x => pure (.var sp (look ρ x))
   | .clone sp x => pure (.clone sp (look ρ x))
+  | .copyImm sp x => pure (.copyImm sp (look ρ x))
   | .defApp sp n args => pure (.defApp sp ((defs.lookup n).getD n) args)
   | .unit sp => pure (.unit sp)
   | .pair sp V W => do pure (.pair sp (← V.hygD defs glob ρ) (← W.hygD defs glob ρ))

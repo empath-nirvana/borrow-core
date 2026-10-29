@@ -1,0 +1,62 @@
+-- Implicit copies of `imm` borrows in nested loops (SPEC §66, #58 E1): `docs/loops.md` §7.3's
+-- `dR`, `dA`, `dW`, `dG` and `dL`. Under each kind of outer loop (a range, `&a`, `while`, a
+-- generator, `loop`), an inner `for` over `&b` reads its element borrow in an `if`'s condition and
+-- again in the arm that does not `break`: the condition reads a copy, and the arm that breaks drops
+-- the borrow.
+--
+-- Answer: `i32[50]`, `live 0`: each nest sums, for each `i` of 0..3, the elements of [0, 1, 2, 3]
+-- up to the first above `i`, 0 + 1 + 3 + 6 = 10; five nests.
+
+include yield
+
+fn tab(i: i32) -> i32 = i
+
+fn gen(n: i32) -> 1 with Yield[i32] =
+  for k in 0..n { yield(k) };
+  ()
+
+fn d_r(b: array i32) -> i32 * array i32 =
+  let mut s = 0;
+  for i in 0..4 {
+    for yp in &b { if *yp > i { break } else { let y = *yp; s = s + y } }
+  };
+  (s, b)
+
+fn d_a(a: array i32, b: array i32) -> i32 * (array i32 * array i32) =
+  let mut s = 0;
+  for ip in &a { let i = *ip;
+    for yp in &b { if *yp > i { break } else { let y = *yp; s = s + y } }
+  };
+  (s, (a, b))
+
+fn d_w(b: array i32) -> i32 * array i32 =
+  let mut s = 0;
+  let mut i = 0 - 1; while i < 3 { i = i + 1;
+    for yp in &b { if *yp > i { break } else { let y = *yp; s = s + y } }
+  };
+  (s, b)
+
+fn d_g(b: array i32) -> i32 * array i32 =
+  let mut s = 0;
+  for i in gen(4) {
+    for yp in &b { if *yp > i { break } else { let y = *yp; s = s + y } }
+  };
+  (s, b)
+
+fn d_l(b: array i32) -> i32 * array i32 =
+  let mut s = 0;
+  let mut i = 0 - 1; loop { i = i + 1; if i == 4 { break } else { () };
+    for yp in &b { if *yp > i { break } else { let y = *yp; s = s + y } }
+  };
+  (s, b)
+
+main -> i32 =
+  let (r, b) = d_r(array_new[i32] (4, tab));
+  let (a, ab) = d_a(array_new[i32] (4, tab), b);
+  let (a1, b) = ab;
+  for _ in a1 { () };
+  let (w, b) = d_w(b);
+  let (g, b) = d_g(b);
+  let (l, b) = d_l(b);
+  for _ in b { () };
+  r + a + w + g + l

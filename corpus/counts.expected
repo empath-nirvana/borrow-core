@@ -52,6 +52,7 @@ async-timers 40 5 0 440 422 0 # the pending and finished lists' nodes; one indir
 async-try-join 28 17 0 498 492 0 # the groups' list nodes and the jobs' cells; one indirect call per resume or cancel of a task
 async-unr-site 10 20 0 400 417 18
 async-workers-scoped 43 7 1 792 776 0
+axes/borrow-across-loop 2 0 0 30 13 4
 axes/codata-coeffects 2 0 0 27 10 16
 axes/codata-effects 0 6 0 11 1 0
 axes/codata-generic 0 0 0 5 1 0
@@ -191,6 +192,7 @@ generic-pair-arg 0 0 0 0 0 0
 hello 0 0 0 16 1 0 # nothing: the output capability's cell is a word of the program's data, and the literal is read-only data
 http-request 2 0 0 592 401 513 # the array of header literals and the request string; literal views point into read-only data
 hygiene-answering-state 0 0 0 2 2 0
+hygiene-borrow-loop 1 0 0 3 1 0
 hygiene-box-lib 1 0 0 4 4 0
 hygiene-clause-global 0 0 0 0 0 0
 hygiene-clause-name 0 0 0 2 2 0
@@ -202,6 +204,8 @@ hygiene-handler-param 0 0 0 0 0 0
 hygiene-handler-resume 0 0 0 0 0 0
 hygiene-handler-state 0 2 0 0 0 0
 hygiene-local-fn 2 0 0 2 2 0
+imm-copy 4 0 0 56 10 28
+imm-copy-nest 2 14 0 135 8 77
 implicit-drops 9 0 0 22 22 0
 int-arith 0 0 0 0 0 0
 int-ops 0 0 0 0 0 0
@@ -323,6 +327,7 @@ leetcode/trees/0572-subtree-of-another-tree 70 1 0 6371 5928 4618 # the input st
 lend-call-copy 1 0 0 16 3 0
 lend-depth3 5 0 0 38 38 0
 lend-imm-copy 2 0 0 27 12 5
+lend-iter-borrow 2 0 0 24 12 4
 lend-lib-each 2 0 0 44 12 11
 lend-lib-gen 1 0 0 4 4 0
 lend-lib-loop 3 0 0 34 22 4
@@ -331,6 +336,9 @@ lend-nest3 3 0 0 21 16 0
 lend-order3 1 0 0 13 8 0
 lend-owner-joined 2 0 0 2 2 0
 lend-owner-returned 1 0 0 1 1 0
+lend-server 1 0 0 16 3 0
+lend-shadow 2 0 0 33 13 5
+lend-shadow-core 2 0 0 33 13 5
 list-blocks 13 0 0 55 43 0
 list-capability 6 0 0 31 22 0
 list-generic 27 0 0 148 102 0 # the lists' nodes, one object each; no frame and no closure is allocated

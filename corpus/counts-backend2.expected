@@ -49,6 +49,7 @@ async-timers 40 5 0 398 380 0
 async-try-join 28 0 0 378 372 0
 async-unr-site 4 0 0 408 328 18 # SPEC §52: an unr site does not switch stacks
 async-workers-scoped 43 0 1 756 740 0
+axes/borrow-across-loop 2 0 0 30 13 4
 axes/codata-coeffects 2 0 0 27 10 16
 axes/codata-effects 0 0 0 11 1 0
 axes/codata-generic 0 0 0 5 1 0
@@ -190,6 +191,7 @@ generic-pair-arg 0 0 0 0 0 0
 hello 0 0 0 16 1 0
 http-request 2 0 0 592 401 257
 hygiene-answering-state 0 0 0 2 2 0
+hygiene-borrow-loop 1 0 0 3 1 0
 hygiene-box-lib 1 0 0 4 4 0
 hygiene-clause-global 0 0 0 0 0 0
 hygiene-clause-name 0 0 0 2 2 0
@@ -201,6 +203,8 @@ hygiene-handler-param 0 0 0 0 0 0
 hygiene-handler-resume 0 0 0 0 0 0
 hygiene-handler-state 0 2 0 0 0 0
 hygiene-local-fn 2 0 0 2 2 0
+imm-copy 4 0 0 56 10 0
+imm-copy-nest 2 0 0 135 8 0
 implicit-drops 9 0 0 16 16 0
 int-arith 0 0 0 0 0 0
 int-ops 0 0 0 0 0 0
@@ -322,6 +326,7 @@ leetcode/trees/0572-subtree-of-another-tree 70 0 0 6505 6062 380
 lend-call-copy 1 0 0 16 3 0
 lend-depth3 5 0 0 38 38 0
 lend-imm-copy 2 0 0 27 12 5
+lend-iter-borrow 2 0 0 24 12 4
 lend-lib-each 2 0 0 44 12 11
 lend-lib-gen 1 0 0 4 4 0
 lend-lib-loop 3 0 0 34 22 4
@@ -330,6 +335,9 @@ lend-nest3 3 0 0 21 16 0
 lend-order3 1 0 0 13 8 0
 lend-owner-joined 2 0 0 2 2 0
 lend-owner-returned 1 0 0 1 1 0
+lend-server 1 0 0 16 3 0
+lend-shadow 2 0 0 33 13 5
+lend-shadow-core 2 0 0 33 13 5
 list-blocks 13 0 0 55 43 0
 list-capability 6 0 0 31 22 0
 list-generic 32 0 0 158 105 0

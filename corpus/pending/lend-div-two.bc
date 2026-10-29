@@ -1,0 +1,31 @@
+-- pending: SPEC §62 (a borrow block whose body is a direct-style call of a div function: the block's result is typed at the call's `B + R`)
+-- now: 31:3: type mismatch: expected `i32`, but this has type `i32 + 1`
+--
+-- A div function with a lifetime parameter that takes two borrows at it and reads both at each turn
+-- of its loop, called from two nested borrow blocks. The loop's body reads `x` and `y` at each
+-- turn: the checker copies the `imm` borrows for each use (`copy`, SPEC §66), and the lends span
+-- the callee's ticks at the graded row `div call` (SPEC §63). The inner block's body is the call
+-- in direct style, and the block's result is inferred from its body before the `Div` elaboration,
+-- as the call's `i32 + 1`, where the call answers `i32`.
+--
+-- Once it lands: `i32[9]`, `live 0`: three turns of 1 + 2.
+
+include yield
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+def both : !(all 'a < top. imm 'a i32 * imm 'a i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a i32 * imm 'a i32) ->
+    let (x, y) = p;
+    let mut acc = 0;
+    for i in range(0, 3) { acc = acc + *x + *y };
+    acc)
+
+main -> i32 =
+  let c = alloc(1);
+  let d = alloc(2);
+  let n = borrow imm c { x -> borrow imm d { y -> both(x, y) } };
+  n

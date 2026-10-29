@@ -1,0 +1,97 @@
+-- `lend-let.bc` in core, as `bcc desugar` prints it: `let tb = &t` over the rest of `main` is
+-- the unwinding form of `withbor1` at the graded row `div call` (SPEC §63), its lend held across
+-- the loop's ticks. The loop's state holds the iterator, the borrow `tb` and `acc`; the checker
+-- copies `tb` where a turn reads it (SPEC §66).
+
+def get : !(all 'a < top. imm 'a array i32 * i32 => i32) =
+  !thunkv Fun 'a < top.
+      return (thunkv fun (p : imm 'a array i32 * i32) ->
+          let (b, i) = p;
+          return withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom.
+              return (thunkv fun (xs : array_imm 'z i32) ->
+                  case (unbang array_get['z, i32]) (xs, i) {
+                    inl e -> v <- return withload['z, 'io_ly15_59, i32, i32] e (thunkv Fun 'io_ly15_59 < dom.
+                            return (thunkv fun (io_dv : view 'io_ly15_59 i32) ->
+                                return boxed['io_ly15_59] io_dv));
+                      return boxed['z] v
+                  | inr io_m0 -> io_d1 <- return io_m0;
+                      return boxed['z] i32[0]
+                  })))
+
+def tab : !(i32 => i32) =
+  !thunkv fun (i : i32) ->
+      return (unbang host[mul32]) (i, i32[10])
+
+def down : i32 => U iter i32 1 1 =
+  thunkv fun (n : i32) ->
+      f <- return unbang unfold[iter i32 1 1, i32] (!thunkv fun (k : i32) ->
+            < case (unbang host[eqz32]) k {
+                inl nz -> return inl (k, (unbang host[sub32]) (k, i32[1]))
+              | inr z -> return inr ()
+              },
+              return () >);
+      return (thunkv nu_in < (nu_out force f n).1,
+          (nu_out force f n).2 >)
+
+main : F[div call] (i32 + 1) =
+  t <- return alloc[array i32] ((unbang array_new[i32]) (i32[10], tab));
+  io_d8 <- (io_lw7 <- (io_uk32_3 : U (ref array i32 -o U (forall 'io_ll32_12 < dom. imm 'io_ll32_12 array i32 -o F[div call] box 'io_ll32_12 (i32 + 1)) -o F[div call] (ref array i32 * (i32 + 1))) <- return withbor1u['io_ll32_12, array i32, i32 + 1, [div call]];
+      io_up32_3 <- return t;
+      io_uf32_3 : U (forall 'io_ll32_12 < dom. imm 'io_ll32_12 array i32 -o F[div call] box 'io_ll32_12 (i32 + 1)) <- return (thunkv Fun 'io_ll32_12 < dom.
+            fun (tb : imm 'io_ll32_12 array i32) ->
+              io_ly7 : box 'io_ll32_12 i32 + 1 <- (acc <- return i32[0];
+                io_it2 <- return down i32[4];
+                io_step6 : !U (U iter i32 1 1 * imm 'io_ll32_12 array i32 * i32 -o F[div call] ((i32 + box 'io_ll32_12 i32 + 1) + U iter i32 1 1 * imm 'io_ll32_12 array i32 * i32) & F[div call] 1) <- return (!thunkv fun (io_s6 : U iter i32 1 1 * imm 'io_ll32_12 array i32 * i32) ->
+                      < let (io_it2, io_s6t) = io_s6;
+                        let (tb, io_s6tt) = io_s6t;
+                        acc <- return io_s6tt;
+                        io_o <- (nu_out force io_it2).1;
+                        case io_o {
+                          inl io_p -> let (i, io_it2) = io_p;
+                            acc <- return (unbang host[add32]) (acc, (unbang get) ['io_ll32_12] (tb, i));
+                            return inr (io_it2, (tb, acc))
+                        | inr io_d -> io_q <- return io_d;
+                            return inl inl acc
+                        },
+                        let (io_it2, io_s6t) = io_s6;
+                        let (tb, io_s6tt) = io_s6t;
+                        acc <- return io_s6tt;
+                        io_c <- (nu_out force io_it2).2;
+                        return () >);
+                io_s06 : U iter i32 1 1 * imm 'io_ll32_12 array i32 * i32 <- return (io_it2, (tb, acc));
+                io_x6 : (i32 + box 'io_ll32_12 i32 + 1) + 1 <- (io_n6 <- perform[4294967295.0] ();
+                  case io_n6 {
+                    inl io_u -> io_iter6 <- return unbang iterate[U iter i32 1 1 * imm 'io_ll32_12 array i32 * i32, i32 + box 'io_ll32_12 i32 + 1, 1, [div call]];
+                      io_p6 : !U (U iter i32 1 1 * imm 'io_ll32_12 array i32 * i32 -o F[div call] ((i32 + box 'io_ll32_12 i32 + 1) + U iter i32 1 1 * imm 'io_ll32_12 array i32 * i32) & F[div call] 1) * U iter i32 1 1 * imm 'io_ll32_12 array i32 * i32 <- return (io_step6, io_s06);
+                      force io_iter6 io_p6
+                  | inr io_u -> io_sf6 <- return unbang io_step6;
+                      io_q6 <- force io_sf6 io_s06.2;
+                      return inr io_q6
+                  });
+                case io_x6 {
+                  inl io_l6 -> case io_l6 {
+                      inl io_j2 -> acc <- return io_j2;
+                        return inl boxed['io_ll32_12] acc
+                    | inr io_a6 -> return io_a6
+                    }
+                | inr io_r6 -> return inr io_r6
+                });
+              case io_ly7 {
+                inl io_lb7 -> io_lv7 <- return unbox io_lb7;
+                  return boxed['io_ll32_12] (inl io_lv7 : i32 + 1)
+              | inr io_lr7 -> return boxed['io_ll32_12] (inr io_lr7 : i32 + 1)
+              });
+      force io_uk32_3 io_up32_3 io_uf32_3);
+    let (io_ls7, io_ly7) = io_lw7;
+    case io_ly7 {
+      inl io_lb7 -> return (inl (io_ls7, io_lb7) : ref array i32 * i32 + 1)
+    | inr io_lr7 -> return (inr io_lr7 : ref array i32 * i32 + 1)
+    });
+  case io_d8 {
+    inl io_b -> io_lv32_12 <- return io_b;
+      let (t, io_lr32_12) = io_lv32_12;
+      return inl io_lr32_12
+  | inr io_r -> let () = io_r;
+      io_res10 <- return ();
+      return inr io_res10
+  }

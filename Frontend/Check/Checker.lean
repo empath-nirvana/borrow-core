@@ -1,4 +1,5 @@
 import Frontend.Check.Pin
+import Frontend.Check.ImmCopies
 import Frontend.Check.Kinds
 
 /-!
@@ -206,6 +207,23 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
         | some A => pure ⟨A, rVar { sp, name := x, clone := true } i A h⟩
         | none => err sp "internal error: variable out of range"
       | none => synV n E Δ T (.var sp x)
+    | .copyImm sp x =>
+      -- The implicit copy of an `imm` borrow (SPEC §66): `copy[@a, A] x` at `x : imm @a A`.
+      match lookupVar x E.vars with
+      | some i =>
+        match h : T[i]? with
+        | some (.imm a A) => do
+          let ⟨B, rf⟩ ← liftM (m := Except Error) (copyAt (Δ := Δ) (T := T) sp a A)
+          match B, rf with
+          | .thunk (.arr B (.ret _)), rf =>
+            if hB : B = .imm a A then
+              let ra : Res Δ T (.val B) := hB ▸ rVar { sp, name := x } i (.imm a A) h
+              if ho : overlapOK T ra.F.u rf.F.u = true then pure ⟨_, rLolliE (at_ sp) rf ra ho⟩
+              else throw (splitErr E T sp ra.F.u rf.F.u)
+            else err sp "internal error: the type of `copy`"
+          | _, _ => err sp "internal error: the type of `copy`"
+        | _ => err sp s!"internal error: an implicit copy of `{x}`, which is not an `imm` borrow"
+      | none => err sp s!"internal error: an implicit copy of `{x}`, which is not in scope"
     | .defApp sp x args =>
       match E.scope.findDef x with
       | none => err sp s!"unknown definition `{x}`"
@@ -428,6 +446,9 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     CheckM (Σ C : CCTy, Res Δ T (.comp C))
   | 0, _, _, _, m => err m.span "expression nested too deeply"
   | n + 1, E, Δ, T, m =>
+    match insertCopies E T m with
+    | some m' => synC n E Δ T m'
+    | none =>
     if m.terminal && E.own.any id then do
       let ⟨C, r⟩ ← synC n E.clearOwn Δ T m
       pure ⟨C, ← dropOwed E m.span r⟩
@@ -853,6 +874,9 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
   | 0, _, _, _, m, _ => err m.span "expression nested too deeply"
   | n + 1, E, Δ, T, m, C =>
     let E := E.atC C
+    match insertCopies E T m with
+    | some m' => chkC n E Δ T m' C
+    | none =>
     if m.terminal && E.own.any id then do
       let r ← chkC n E.clearOwn Δ T m C
       dropOwed E m.span r
