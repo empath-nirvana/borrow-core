@@ -40,3 +40,4 @@ forward 4 0 0 # the inner clause resumes non-tail while its handler forwards: re
 forward-cancel 1 0 0 # the cell, freed by the cancel
 multi-shot 0 0 0
 poly-id 0 0 0
+nested-fold 14 0 0 # two trees nested three deep (an array of chains of children), walked by foldOwnG and dropped by the derived destructor: a root array and a node cell and a chain cell for each of the three children, each
