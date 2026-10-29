@@ -9633,8 +9633,56 @@ kernel terms have those traces is the transcription's, not proved over the terms
   `Backend/Wasm/Lower.lean`): a flat-IR body has no back edge, so a local is live only between its
   first and last occurrence. Wasm bounds a function's locals, which `gen-adapters-fail`'s largest
   function passed.
-- The new backend (§43) leaves a program with `iterate` or `reify` outside its fragment (N2):
-  123 corpus programs run there, 222 before (7 of which are now in `corpus/pending/`, §14).
+- The new backend (§43) compiles `Div`'s loops under the runtime (below, *The new backend: `Div`'s
+  loops under the runtime*).
+
+### The new backend: `Div`'s loops under the runtime
+
+From PR #653's rules (N4's `iterate`, `tick` and `main`'s `reify`), as built on `b2-main`
+(e8f1f68a) and carried onto §48 (`bounded_fix`), §52 (stacks) and §57 (width classes). `Backend2/`;
+each rule reads the node's fields and the checker's facts; none recognises a term.
+
+- **`tick` has no run-time content in a row** (`Backend2/Types.lean`, `ofC`, `ofEff`;
+  `Backend2/Convert.lean`, `rowPay`, `rowMs`): it is linear, so not abortive (§47's payload), and
+  no `handle` node handles it, so it is not a machine operation (§49): `F_{div, Σ} R` is
+  `F_Σ R`'s representation.
+- **The runtime answers every tick** (`Backend2/Driver.lean`, `divRuntime`): when `main` is a loop
+  the runtime drives (§11, `IOMain.loopB`), its value is the `reify` node applied to its body's
+  thunk (`mainReify?`), and that `reify` is the typed term's one handler of `Div` (no other
+  `reify` node and no `div_fuel` node, `divHandlers`), every tick of the program is performed
+  inside `main`'s body, under the runtime's drive; so too when `main` is a computation the
+  runtime's clause drives (§63) and the term has no handler of `Div`. A program with another
+  handler of `Div` is outside the fragment.
+- **`main`'s loop** (`runtimeMain`): the body `t ()` runs in place, and its answer `inl b` is the
+  program's value (with its capabilities taken back, §11); `inr r`, a loop closed with its
+  residual, is a run that does not finish (a function that calls itself). The law
+  (`Core/DivDrive.lean`): `reify_start`, then at every tick the drive's observation with *next*
+  resumes the segment with *next* at the memory it had (`reify_first_tick`, `drive_first_tick`,
+  and at every later tick `drive_reify_tick`); a segment ending with `inl b` ends the drive with
+  `inl b` (`reify_first_done`, `drive_first_done`, `drive_reify_done`), and one ending with
+  `inr r` leaves `closed r`, which every observation skips (`drive_reify_closed`).
+- **`tick`** (`effPerform` at `Div`'s operation, in a value's position and in a machine, §49;
+  `tickTm`): the literal *next* where it is performed. The law: the runtime's clause
+  `λ((), κ). κ next` resumes in tail position with *next* (`tail_resumes`), as the drive does
+  (`drive_reify_tick`). The `case` on its answer is compiled as written.
+- **`iterate (f, s)`** (the `iterate` node's `S`, its type; `genIter`): a function of `(f, s)` per
+  node, one turn a call: the turn `(f s).1` answers `inl b`, the loop's answer, or `inr s′`, after
+  which the back edge is a tail call on `s′`; an abort of the row's payload is handed on. The law:
+  the machine step `Head.iterate` (`iter_step`), the turn's two answers (`iterK_inl`,
+  `iterK_inr`), the tick answered *next* (`drive_reify_tick`) and `turnK_next`
+  (`Core/DivIterate.lean`). The close `(f s′).2` is never observed under the runtime.
+- **The postcondition** (`bcc lir --erasure`, §47): `main`'s `reify` counts as a `handle` erased
+  and each tick as a `perform` erased.
+- **Programs.** 388 corpus programs at their goldens at the LIR interpreter, the word IR, Wasm and
+  natively. Every count of `corpus/counts-backend2.expected` that a program had before and keeps
+  is unchanged; `for-view-local`, `while-in-counted-for` and §63's programs join. 22 leave the
+  fragment: twenty that hold a stored loop, a generator that loops observed one step at a time
+  (`block-yield-inner`, `for-data-div`, `for-data-gen-loop`, `for-never`, `for-yield-branch`,
+  `gen-adapters`, `gen-adapters-fail`, `gen-borrowed`, `gen-cell`, `gen-close`, `gen-div`,
+  `gen-fib`, `gen-from`, `gen-nested`, `gen-pipeline`, `gen-pipeline-adapters`,
+  `gen-pipeline-pipe`, `gen-return`, `gen-tokenize-parse`, `gen-value`, `yield-callback`), and
+  `io-fuel` (`div_fuel` over a reified loop). Each is `reify` of a loop, a handler of `Div` that
+  keeps `κ` (`reifyH`, `Core/DivReify.lean`), which no rule of §49 takes (*Open*).
 
 ### Programs
 
@@ -9672,6 +9720,13 @@ elaborated program is checked core, so they cover it.
 - The old backend's counts and code size grow until B3 (native `iterate`, `main` under the
   runtime's clause); the source interpreter is slower on generators (`reify` captures the
   continuation at each tick).
+- **A stored loop in the new backend** (`reify` other than `main`'s): its tick keeps `κ`, so it is
+  a stored-continuation site. §49's machines are built at `handle` nodes from their typed clauses;
+  `reify` is a node of its own whose clause is `reifyH`'s, a Core value. Taking it needs a rule:
+  `tick` a machine operation at such a `reify`, and the `reify` node a drive whose clause is
+  `reifyH`'s (`reifyR`, `reifyC`); for a `for` over a generator, the direct elaboration of #564
+  R-1 (`handle_tail`/`handle_last` around the generator's call, PR #665) instead. `div_fuel`'s
+  counter is not built either.
 - **A lend held across a tick** (a borrow block whose body loops, `let r = &x` before a loop, a
   lend at a call of a div function, a counted loop over `&a` or `&mut a` whose body loops): the
   kernel refuses the lend at a row that holds `Div` (`Row.Unwind`). It would have to express a lend
@@ -9843,6 +9898,12 @@ A `main` of `F_{div call}(B ⊕ R)` is run as `rtMain main = (λx. case x {inj�
 every stage compiles, answering `B` as a `main` that does not loop does. The runtime never answers
 a tick *close*, so `inj₂` is not reached. Every run of it is safe: `runtime_main_every_run`, and
 `IORun.rt_every_run` for the `run_io` wrapper.
+
+The new backend (§62, *`Div`'s loops under the runtime*) runs such a `main`'s body in place, each
+tick answered *next* where it is performed, `inl b` its value and `inr` a function that calls
+itself (`Backend2/Convert.lean`, `convMain`'s `graded`). An unwinding borrow at a call-graded row
+has no abort to hand on: whether the callback may abort is read from the node's row, not from the
+shape of its answer type (`genLendU`), so a lend whose answer is a sum is `genLend`'s.
 
 ### Programs
 

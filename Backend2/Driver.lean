@@ -227,6 +227,24 @@ def checkedFlow (p : Prog) (L : Lay.Layouts) : Except String (Flow.St × Std.Has
   let fs := Flow.solution p L
   pure (fs, ← checkFlow p L fs)
 
+/-- The handlers of `Div` in a typed term, within the depth `fuel`: its `reify` and `div_fuel`
+nodes (SPEC §14). -/
+def divHandlers : Nat → TExpr → Nat
+  | 0, _ => 0
+  | f + 1, t =>
+    let here := match t with
+      | .reify .. | .divFuel .. => 1
+      | _ => 0
+    here + (t.children.map fun (_, c) => divHandlers f c).foldl (· + ·) 0
+
+/-- **The runtime answers every tick**  `[spec §62]`: the typed term's handlers of `Div` are
+`main`'s `reify` alone, when `main` is a loop the runtime drives (SPEC §11) and its value is
+`reify` of its body (`mainReify?`), or there are none. Every tick of the program is then performed
+inside `main`'s body, and the runtime's drive answers it *next* (`drive_reify_tick`). -/
+def divRuntime (c : Frontend.Check.Checked) (loops : Bool) : Bool :=
+  let main := if loops && (mainReify? c.t).isSome then 1 else 0
+  divHandlers Frontend.Check.copiesFuel c.t == main
+
 /-- The codes of the suspended computations an outcome `o` (of `M`) may hold, by the layouts: the
 closure classes of each suspension's `k`.  `[spec §49]` -/
 def suspCodes (L : Lay.Layouts) (o : Var) (M : OutInfo) : List Nat := Id.run do
@@ -252,14 +270,15 @@ next point (`threadedOf`, SPEC §50): the conversion's second run, at those mach
 def lirOf₀ (k : Backend.CheckedProg) (census : Bool := false) : Except String (Prog × CState) := do
   let c := k.main
   let classes ← classesOf k
-  let (exts, ncaps, loops) ← match k.io with
-    | none => pure ([], 0, false)
-    | some m => pure (← extsOf m, m.caps.length, m.loopB.isSome)
+  -- A `main` the runtime's clause drives (SPEC §63) is run as one that does not loop.
+  let (exts, ncaps, loops, rt) ← match k.io with
+    | none => pure ([], 0, false, (Frontend.Check.rtMainOf c.C).isSome)
+    | some m => pure (← extsOf m, m.caps.length, m.loopB.isSome && !m.rt, m.rt)
   let ctx := c.ctx.map fun s => (s.ty, s.live)
   let run (threaded stacked : Std.HashMap Nat LTy) :
       Except String (Prog × CState × Std.HashMap Nat LTy × Std.HashMap Nat LTy) := do
     let (p, st) ← convertProg exts ctx c.t c.C ncaps loops census (directFacts c) (machineOps c)
-      threaded stacked classes
+      (divRuntime c loops) threaded stacked classes rt
     let p := { p with exits := c.exitsOnDivError }
     if st.done.isEmpty then return (p, st, {}, {})
     -- A call in tail position whose callee's suspended computations may be the machine's own

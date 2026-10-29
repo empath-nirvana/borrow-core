@@ -151,6 +151,7 @@ def occExp (n : Nat) : Nat → Std.HashMap Nat (Nat × Nat) → Flat.Exp → Std
     | .load a _ | .load8 a | .load32 a | .alloc a | .getc a | .now a => occExp n k m a
     | .op _ args => args.foldl (occExp n k) m
     | .getv a b c => occExp n k (occExp n k (occExp n k m a) b) c
+    | .gep a b => occExp n k (occExp n k m a) b
     | _ => m
 
 /-- The occurrences of the locals in a statement, each statement one position on from the last. -/
@@ -183,6 +184,7 @@ def renExp (f : Nat → Nat) : Nat → Flat.Exp → Flat.Exp
     | .getc a => .getc (renExp f k a)
     | .getv a b c => .getv (renExp f k a) (renExp f k b) (renExp f k c)
     | .now a => .now (renExp f k a)
+    | .gep a b => .gep (renExp f k a) (renExp f k b)
     | e => e
 
 /-- A statement with its locals renamed by `f`. -/
