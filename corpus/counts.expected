@@ -69,7 +69,7 @@ binder-copies 0 2 0 0 0 0
 block-capability 0 0 0 3 3 0
 block-capability-inner 0 0 0 5 5 0
 block-swap 2 0 0 4 4 0
-block-yield-inner 0 20 0 0 0 0
+block-yield-inner 0 6 0 0 0 0
 borrow-in-scope 2 0 0 4 3 0 # the borrowed cell and the cell holding the borrow
 btree-boxed 77 0 0 23560 19396 6885 # the B-tree's buffers: a leaf's keys, an inner node's keys and children (Rust's count, btree_boxed.rs)
 bytes-upper 1 0 0 80 52 54
@@ -82,6 +82,7 @@ capture-tick-hand 0 0 0 0 0 0 # equal to the kernel program tick-native
 clause-captures 6 3 0 10 10 0 # the counter and the cells; the indirect calls are the state-passing answers of `asking`, as in the probe P4(a) (a native handler parameter is not built)
 clone-reuse 6 0 1 36 27 0
 comp-param 0 0 0 0 0 0 # every argument is a closed block and every error a branch
+comp-param-for 0 0 0 0 0 0
 core-callback-dead 0 0 0 0 0 0 # the callback and the function it answers are closed λs; each call's code is known
 core-effects-borrow-abort 1 0 0 1 1 0 # the cell, freed by the finaliser on the unwind
 core-effects-borrows 2 0 0 3 3 1
@@ -158,32 +159,32 @@ float-roundtrip 3721 0 0 258052 129687 218143 # each case's strings, and the big
 fn-lifetime 7 0 0 39 24 0
 for-adapters 1 0 0 12 6 7
 for-data 1 0 0 47 6 27
-for-data-div 3 37 0 17 9 6 # the two arrays and the cell the views are lent from
-for-data-gen-loop 0 19 0 0 0 0
+for-data-div 3 11 0 17 9 6 # the two arrays and the cell the views are lent from
+for-data-gen-loop 0 4 0 0 0 0
 for-finite 0 0 0 0 0 0
 for-in-if-lend 1 0 0 4 2 2
-for-never 0 136 0 0 0 0
+for-never 0 88 0 0 0 0
 for-return 1 0 0 9 5 4
 for-view-effect-copy 1 0 0 11 5 9 # the string the view lends
 for-view-local 1 0 0 3 3 3
-for-yield-branch 0 82 0 0 0 0
+for-yield-branch 0 28 0 0 0 0
 format 1 0 0 38 31 37 # the string, built at its capacity
-gen-adapters 5 289 0 30 30 0 # the nodes of the lists `chunks` builds; each generator one state machine, each stored generator one handler site, each `yield` to a `for` a direct call
-gen-adapters-fail 8 279 0 48 48 0 # the nodes of the lists `chunks` and `lines` build
-gen-borrowed 2 10 0 11 7 2
-gen-cell 1 18 0 11 6 0
-gen-close 4 16 0 12 12 0 # the list; the drop glue across each yield shares it with the rest (a finaliser frame's clauses one code, SPEC §19), so it is not copied
-gen-div 0 189 0 0 0 0 # the generator that read the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
-gen-fib 47 56 0 1024 1060 0
-gen-from 0 41 0 0 0 0 # the generator that echoed the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
-gen-nested 0 61 0 0 0 0
-gen-pipeline 0 73 0 0 0 0
-gen-pipeline-adapters 0 96 0 0 0 0
-gen-pipeline-pipe 0 176 0 0 0 0 # as gen-pipeline-adapters: the pipelines are its nested calls
+gen-adapters 5 174 0 30 30 0 # the nodes of the lists `chunks` builds; each generator one state machine, each stored generator one handler site, each `yield` to a `for` a direct call
+gen-adapters-fail 8 104 0 48 48 0 # the nodes of the lists `chunks` and `lines` build
+gen-borrowed 2 4 0 11 7 2
+gen-cell 1 5 0 11 6 0
+gen-close 4 5 0 12 12 0 # the list; the drop glue across each yield shares it with the rest (a finaliser frame's clauses one code, SPEC §19), so it is not copied
+gen-div 0 87 0 0 0 0 # the generator that read the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
+gen-fib 47 21 0 976 1012 0
+gen-from 0 13 0 0 0 0 # the generator that echoed the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
+gen-nested 0 22 0 0 0 0
+gen-pipeline 0 32 0 0 0 0
+gen-pipeline-adapters 0 63 0 0 0 0
+gen-pipeline-pipe 0 114 0 0 0 0 # as gen-pipeline-adapters: the pipelines are its nested calls
 gen-produce 0 0 0 0 0 0
-gen-return 0 74 0 14 1 0
-gen-tokenize-parse 0 38 0 34 0 17 # the stored generator's state is a stack value, and literal views are read-only data
-gen-value 0 76 0 0 0 0
+gen-return 0 23 0 14 1 0
+gen-tokenize-parse 0 19 0 34 0 17 # the stored generator's state is a stack value, and literal views are read-only data
+gen-value 0 31 0 0 0 0
 generated-names 1 0 0 2 2 0
 generic-in-def 0 0 0 0 0 0
 generic-pair-arg 0 0 0 0 0 0
@@ -409,4 +410,4 @@ tree-view-tasks 1205 0 0 50505 29457 8727
 trim-replace 5 1 0 4639 4178 4707 # the input string, and one replaced string per line (four)
 utf8-count 1 48 0 341 109 263 # the line buffer, reused; the stdin, stdout and stderr cells are words of the program's data
 while-in-counted-for 0 11 0 0 0 0
-yield-callback 0 20 0 0 0 0
+yield-callback 0 7 0 0 0 0
