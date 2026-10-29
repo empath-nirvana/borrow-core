@@ -1,27 +1,17 @@
--- pending: a destructor and folds for `mu` with `X` under `array` (#182)
--- now: 97:56: `io_d17` is not consumed in its scope, and its type `(1 + (mu X. (1 + 1) * array (1 + X))) + 1 + (mu X. (1 + 1) * array (1 + X))` has no destructor
---
--- LeetCode 208, Implement Trie (Prefix Tree), with each node owning an array of its children:
--- Rust's `Trie { children: [Option<Box<Trie>>; 26], end: bool }`, here `mu X. bool * array
--- (1 + X)`. The accepted program is `corpus/leetcode/trees/0208-implement-trie.bc`, an arena.
+-- LeetCode 208, Implement Trie (Prefix Tree), with each node owning an array of its children,
+-- `mu X. bool * array (1 + X)`: Rust's `Trie { end: bool, kids: Vec<Option<Trie>> }`. The arena
+-- form is `0208-implement-trie.bc`.
 --
 -- `insert` and `walk` are recursions that take a node apart, take the child at the next letter out
 -- of its array (`array_replace`, leaving `inl ()`), go on in it, and put it back: the borrow-free
--- form of walking `&mut` down the trie, and nothing is allocated but the new nodes. The trie is
--- dropped at the end of each case, as a `Box` tree is in Rust.
+-- form of walking `&mut` down the trie, and nothing is allocated but the new nodes. The trie, and
+-- every `1 + Trie` that `array_replace` hands back, is dropped by its derived destructor (SPEC §12,
+-- `X` under `array` is in the fold class `P`, §6): each node's children, then its array's buffer,
+-- at once, as Rust drops a `Vec`.
 --
--- What is missing. `X` under `array` is outside `FShape` (SPEC §6, §12), so this `mu` type has no
--- destructor and no fold: every trie, and every `1 + Trie` that `array_replace` hands back, must
--- be consumed by hand (#182, item 2: folds beyond `FShape`). Writing the destructor by hand does
--- not get there today: a recursion over a node's 26 children inside a counted `for` is refused
--- (#492), and freeing the emptied array needs `array_free` with a consumer of `1 + Trie`, whose
--- `inl` arm must again drop a trie, a recursion inside a closure that is not run in place (#161).
--- The message names a variable of the elaborated code, and points at another `array_replace`
--- than the one in `insert` whose answer it is about.
---
--- Once it lands: on `corpus/leetcode/trees/0208-implement-trie.in`, the accepted program's
--- answers, `1 0 1 1 0`, `0 0 1 1 0`, `1 0 1 1 1 0 0` and `1 1 0 0 1`, one per line, then
--- `i32[4]`; `live 0`.
+-- Answer, on `0208-implement-trie.in`: `1 0 1 1 0`, `0 0 1 1 0`, `1 0 1 1 1 0 0` and `1 1 0 0 1`,
+-- one per line, then `i32[4]`; `live 0`. 58 allocations, Rust's count for the same program
+-- (`docs/expressiveness-probes/zero-cost/awfybg/rs/src/bin/trie_boxed.rs`).
 
 include textio
 include rec

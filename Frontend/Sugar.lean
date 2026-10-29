@@ -2125,8 +2125,9 @@ def litValue (sp : Span) (bs : List Nat) : Val :=
 
 /-- The filler of a buffer's unused slots at the element type `A` (design §5.4): `0` at an
 integer width, the empty view at a borrowed family, an empty array at an owned one (which
-allocates nothing), the empty literal's function at `!(A => B)`, `()`, and componentwise at `*`
-and `+`. `none` at a type with no filler (a cell, a capability). -/
+allocates nothing), the empty literal's function at `!(A => B)`, `()`, componentwise at `*`
+and `+`, and at a `μ` its unrolling's filler, rolled (`Num(0)` of a `Json`, SPEC §61). `none` at
+a type with no filler (a cell, a capability). -/
 def fillerOf (c : TCx) (sp : Span) : Nat → CVTy → Except Error (Option Val)
   | 0, _ => pure none
   | n + 1, A => match A with
@@ -2152,6 +2153,10 @@ def fillerOf (c : TCx) (sp : Span) : Nat → CVTy → Except Error (Option Val)
       match ← fillerOf c sp n B with
       | some b =>
         pure (some (.bangThunkv sp (.lam sp ⟨"io_fx", sp⟩ (← c.surface sp X) (.ret sp b))))
+      | none => pure none
+    | .mu B => do
+      match ← fillerOf c sp n (BoCa.Fig16.LogRel.Core.VTy.inst (.mu B) B) with
+      | some b => pure (some (.ascribe sp (.roll sp b) (← c.surface sp (.mu B))))
       | none => pure none
     | _ => pure none
 

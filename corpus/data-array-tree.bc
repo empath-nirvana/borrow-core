@@ -1,0 +1,42 @@
+-- A tree declared with `data` whose node owns an array of its children (SPEC §42,
+-- data-declarations §6.11): the recursion is under the array's allocation, so `Node` is not a
+-- block and needs no `box`. `Tree` elaborates to `mu X. i32 + i32 * array X`, outside `FShape`
+-- and in the fold class `P`, so it has a derived destructor (SPEC §12): the second tree is
+-- dropped by it, each node's children first and then the node's array, its buffer at once.
+--
+-- Answer: i32[12]: the root 1, its first child 2 with three tips of 1, and two tips of 3; `live 0`.
+include rec
+include buf
+
+data Tree = Tip(i32) | Node(i32, array Tree)
+
+-- A node of `v` with `n` tips of `1`.
+fn bush(v: i32, n: i32) -> Tree = Node(v, array_new[Tree](n, !{ i -> Tip(1) }))
+
+-- The sum of a tree, consuming it: each child taken out of its node's array (`inr` answers an
+-- index out of range, the value handed back), a tip left in its place, and the array dropped.
+fn sum(t: Tree) -> i32 =
+  match t {
+    Tip(v) -> v
+  | Node(v, kids) ->
+      let (kids, n) = array_size[Tree](kids);
+      let mut kids = kids;
+      let mut s = v;
+      for i in 0..n {
+        let (k2, c) = array_replace[Tree](kids, i, Tip(0));
+        kids = k2;
+        let r = match c { inl x -> sum(x) | inr x -> sum(x) };
+        s = s + r
+      };
+      s
+  }
+
+fn build() -> Tree =
+  let (kids, o) = array_replace[Tree](array_new[Tree](3, !{ i -> Tip(3) }), 0, bush(2, 3));
+  Node(1, kids)
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let t = build();
+  let u = build();
+  sum(t)
+}

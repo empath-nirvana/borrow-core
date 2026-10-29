@@ -228,6 +228,7 @@ def TExpr.lifeBinders : TExpr → List LifeVar
   | .foldImm ii jj F y c R => []
   | .foldOwn ii jj F R => []
   | .foldReuse ii jj F R => []
+  | .foldOwnG ii jj B₀ => []
   | .nuIn ii jj C t => t.lifeBinders
   | .nuOut ii jj C t => t.lifeBinders
   | .unfoldN ii jj C S => []
@@ -337,6 +338,7 @@ def TExpr.domFree : TExpr → Bool
   | .foldImm ii jj F y c R => true
   | .foldOwn ii jj F R => true
   | .foldReuse ii jj F R => true
+  | .foldOwnG ii jj B₀ => true
   | .nuIn ii jj C t => t.domFree
   | .nuOut ii jj C t => t.domFree
   | .unfoldN ii jj C S => true
@@ -445,6 +447,7 @@ def TExpr.reAb (Δr : LifeCtx) : TExpr → TExpr
   | .foldImm ii jj F y c R => .foldImm ii jj F y c R
   | .foldOwn ii jj F R => .foldOwn ii jj F R
   | .foldReuse ii jj F R => .foldReuse ii jj F R
+  | .foldOwnG ii jj B₀ => .foldOwnG ii jj B₀
   | .nuIn ii jj C t => .nuIn ii jj C (t.reAb Δr)
   | .nuOut ii jj C t => .nuOut ii jj C (t.reAb Δr)
   | .unfoldN ii jj C S => .unfoldN ii jj C S
@@ -822,6 +825,9 @@ theorem TDerivesP.weakenΔ {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | foldReuse a0 a1 a2 a3 a4 =>
       intro Δ' he hd
       exact TDerivesP.foldReuse a0 a1 a2 a3 a4
+  | foldOwnG a0 a1 a2 a3 =>
+      intro Δ' he hd
+      exact TDerivesP.foldOwnG a0 a1 a2 a3
   | nuIn a0 a1 ih0 =>
       intro Δ' he hd
       exact TDerivesP.nuIn a0 (ih0 Δ' (ExtΔ.sub he (fun z hz => by simp [TExpr.lifeBinders, hz])) (by simp_all [TExpr.domFree]))
@@ -1129,6 +1135,9 @@ theorem TDerivesAt.weakenΔ {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TEx
   | foldOwn a0 a1 a2 a3 a4 =>
       intro Δ' he hd
       exact TDerivesAt.foldOwn a0 a1 a2 a3 a4
+  | foldOwnG a0 a1 a2 a3 =>
+      intro Δ' he hd
+      exact TDerivesAt.foldOwnG a0 a1 a2 a3
   | foldReuse a0 a1 a2 a3 a4 =>
       intro Δ' he hd
       exact TDerivesAt.foldReuse a0 a1 a2 a3 a4

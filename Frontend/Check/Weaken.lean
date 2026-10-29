@@ -650,6 +650,10 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.foldOwn F R (deadP_ins (live_eval_atom hf hp) Γa hΓ) hF hG,
         (shift_closed0 (foldOwnV_closed F) _ _).symm⟩
+  | foldOwnG B₀ Rs hΓ hB =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.foldOwnG B₀ Rs (deadP_ins (live_eval_atom hf hp) Γa hΓ) hB,
+        (shift_closed0 (FoldP.foldOwnGV_closed B₀) _ _).symm⟩
   | foldReuse F R hΓ hF hG =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.foldReuse F R (deadP_ins (live_eval_atom hf hp) Γa hΓ) hF hG,
@@ -1208,6 +1212,10 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.foldOwn F R (deadP_ins (live_eval_atom hf hp) Γa hΓ) hF hG,
         (shift_closed0 (foldOwnV_closed F) _ _).symm⟩
+  | foldOwnG B₀ Rs hΓ hB =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.foldOwnG B₀ Rs (deadP_ins (live_eval_atom hf hp) Γa hΓ) hB,
+        (shift_closed0 (FoldP.foldOwnGV_closed B₀) _ _).symm⟩
   | foldReuse F R hΓ hF hG =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.foldReuse F R (deadP_ins (live_eval_atom hf hp) Γa hΓ) hF hG,

@@ -518,6 +518,7 @@ inductive TExpr where
   | foldImm (info : TInfo) (jdg : Jdg) (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy)
   | foldOwn (info : TInfo) (jdg : Jdg) (F : FShape) (R : VTy)
   | foldReuse (info : TInfo) (jdg : Jdg) (F : FShape) (R : VTy)
+  | foldOwnG (info : TInfo) (jdg : Jdg) (B₀ : VTy)
   | nuIn (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
   | nuOut (info : TInfo) (jdg : Jdg) (C : CTy) (t : TExpr)
   | unfoldN (info : TInfo) (jdg : Jdg) (C : CTy) (S : VTy)
@@ -671,6 +672,7 @@ def TExpr.erase : TExpr → Expr
   | .foldImm _ _ F _ _ _ => (.val (foldImmV F))
   | .foldOwn _ _ F _ => (.val (foldOwnV F))
   | .foldReuse _ _ F _ => (.val (foldReuseV F))
+  | .foldOwnG _ _ B₀ => (.val (FoldP.foldOwnGV B₀))
   | .nuIn _ _ _ t => t.erase
   | .nuOut _ _ _ t => t.erase
   | .unfoldN _ _ C _ => (.val (unfoldV C))
@@ -783,6 +785,7 @@ def TExpr.info : TExpr → TInfo
   | .foldImm i _ _ _ _ _ => i
   | .foldOwn i _ _ _ => i
   | .foldReuse i _ _ _ => i
+  | .foldOwnG i _ _ => i
   | .nuIn i _ _ _ => i
   | .nuOut i _ _ _ => i
   | .unfoldN i _ _ _ => i
@@ -891,6 +894,7 @@ def TExpr.jdg : TExpr → Jdg
   | .foldImm _ j _ _ _ _ => j
   | .foldOwn _ j _ _ => j
   | .foldReuse _ j _ _ => j
+  | .foldOwnG _ j _ => j
   | .nuIn _ j _ _ => j
   | .nuOut _ j _ _ => j
   | .unfoldN _ j _ _ => j
@@ -1007,6 +1011,7 @@ def TExpr.children : TExpr → List (TScope × TExpr)
   | .foldImm _ _ _ _ _ _ => []
   | .foldOwn _ _ _ _ => []
   | .foldReuse _ _ _ _ => []
+  | .foldOwnG _ _ _ => []
   | .nuIn _ _ _ t => [(.push 0, t)]
   | .nuOut _ _ _ t => [(.push 0, t)]
   | .unfoldN _ _ _ _ => []
@@ -1136,6 +1141,7 @@ def TExpr.isLam : TExpr → Bool
   | .foldImm _ _ F _ _ _ => (((.val (foldImmV F)) : Expr) matches .lam _)
   | .foldOwn _ _ F _ => (((.val (foldOwnV F)) : Expr) matches .lam _)
   | .foldReuse _ _ F _ => (((.val (foldReuseV F)) : Expr) matches .lam _)
+  | .foldOwnG _ _ B₀ => (((.val (FoldP.foldOwnGV B₀)) : Expr) matches .lam _)
   | .nuIn _ _ _ t => t.isLam
   | .nuOut _ _ _ t => t.isLam
   | .unfoldN _ _ C _ => (((.val (unfoldV C)) : Expr) matches .lam _)
@@ -1248,6 +1254,7 @@ theorem TExpr.isLam_eq : ∀ (t : TExpr), t.isLam = (t.erase matches .lam _)
   | .foldImm _ _ _ _ _ _ => rfl
   | .foldOwn _ _ _ _ => rfl
   | .foldReuse _ _ _ _ => rfl
+  | .foldOwnG _ _ _ => rfl
   | .nuIn _ _ _ t => isLam_eq t
   | .nuOut _ _ _ t => isLam_eq t
   | .unfoldN _ _ _ _ => rfl

@@ -23,7 +23,7 @@ main : F i32 =
 | persistent types, `imm 'a A`, `mut 'a A` | nothing: they are discarded |
 | `ref A` | `free`, then the destructor of `A` |
 | `A * B`, `A + B`, `box 'a A` | the destructors of the parts |
-| a `mu` type that a fold can traverse | a `fold_own` that destroys each layer |
+| a `mu` type whose recursion is under `*`, `+`, `ref`, arrays and inner `mu`s (the class `P`, SPEC §61) | an owned fold that destroys each layer: a node's children, then its cells; an array's elements, then its buffer, at once |
 | `U (C & F 1)` | `close`: force it and run `.2` |
 | `U (stream A)`, `U (delay A)`, `U (iter A R R')` | `close`, then the destructor of the residual |
 

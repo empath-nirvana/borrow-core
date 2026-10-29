@@ -1,0 +1,46 @@
+-- A JSON-like value whose arrays are the prelude's `Vec` (SPEC §42, data-declarations §6.11):
+-- `Vec[Json]` holds `Json` under the array of `Vec`'s buffer, so `Arr` is not a block and needs no
+-- `box`. `Json` elaborates to `mu X. i32 + array X * i32`, in the fold class `P`; its buffer's
+-- filler is `Num(0)`, and its destructor drops each element, then the buffer (SPEC §61).
+--
+-- Answer: i32[10], `[1, [2, 3], 4]` summed; `live 0`: the sum consumes one copy, and the other is
+-- dropped by its derived destructor.
+include rec
+include buf
+
+data Json = Num(i32) | Arr(Vec[Json])
+
+-- The sum of the numbers, consuming the value: each element taken out of its buffer.
+fn sum(j: Json) -> i32 =
+  match j {
+    Num(n) -> n
+  | Arr(Vec(b)) ->
+      let (b, n) = len_of(b);
+      let mut b = b;
+      let mut s = 0;
+      for i in 0..n {
+        let (b2, o) = take(b, i);
+        b = b2;
+        let r = match o { inl x -> sum(x) | inr u -> 0 };
+        s = s + r
+      };
+      s
+  }
+
+fn arr2(x: Json, y: Json) -> Json =
+  let (b, _) = push(box buf[Json](2), x);
+  let (b, _) = push(b, y);
+  Arr(Vec(b))
+
+-- `[1, [2, 3], 4]`.
+fn value() -> Json =
+  let (b, _) = push(box buf[Json](2), Num(1));
+  let (b, _) = push(b, arr2(Num(2), Num(3)));
+  let (b, _) = push(b, Num(4));
+  Arr(Vec(b))
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let j = value();
+  let k = value();
+  sum(j)
+}

@@ -1,0 +1,28 @@
+-- A rose tree as a mutually recursive group (#32, SPEC §42): a node holds its value and a cell
+-- of the forest of its children (a `box Forest` field, filled by `alloc`), and a forest is a list
+-- of trees. `Forest` lies on every cycle of the group, so it is the root and `Rose` is its
+-- structure inlined: `Forest` elaborates to `mu X. 1 + (i32 * ref X) * ref X`. `FCons` holds the
+-- tree inline and the rest of the forest in a cell, so neither constructor is a block.
+--
+-- Answer: i32[16], the tree `10 [1, 2 [3]]` summed; `live 0`: the sum consumes one copy, freeing
+-- each cell, and the other copy is dropped by its derived destructor (SPEC §12).
+include rec
+
+data Rose = Rose(val: i32, kids: box Forest)
+data Forest = FNil | FCons(Rose, box Forest)
+
+fn sum(t: Rose) -> i32 = match t { Rose(v, ks) -> v + sum_forest(free(ks)) }
+fn sum_forest(f: Forest) -> i32 =
+  match f { FNil -> 0 | FCons(t, rest) -> sum(t) + sum_forest(free(rest)) }
+
+fn rnode(v: i32, ks: Forest) -> Rose = Rose(v, alloc(ks))
+fn kid(t: Rose, rest: Forest) -> Forest = FCons(t, alloc(rest))
+
+-- `10 [1, 2 [3]]`.
+fn tree() -> Rose = rnode(10, kid(rnode(1, FNil), kid(rnode(2, kid(rnode(3, FNil), FNil)), FNil)))
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let t = tree();
+  let u = tree();
+  sum(t)
+}

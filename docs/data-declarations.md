@@ -834,7 +834,9 @@ Automatic boxing, one box a node placed by rule, is rejected for declarations.
 - A field may instead have type `box A`, a cell of its own. A recursive occurrence under neither a
   block nor `box` is **an error at the declaration that asks for `box`**.
 - Recursion under an array (`Arr(Vec[Json])`) is under the array's allocation, the other written
-  heap allocation §5.3 names. It needs no `box`; its fold waits on B14 (§7.5). B.
+  heap allocation §5.3 names. It needs no `box` (built, SPEC §61, #722). Its destructor is the
+  owned fold at the class `P` (§61); the borrowed fold and a fold block over it wait (U2 of
+  #595).
 
 **What it changes.**
 

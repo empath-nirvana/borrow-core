@@ -162,19 +162,6 @@ def groupInfo (t : Table) (d : DataDecl) : Except String (List String × String 
           "parameters: not provided"
   pure (g, r, true)
 
-/-- The constructors of `d` in its group `g` with root `r`: a block is a constructor of a
-recursive declaration with a field in which the root occurs other than under `box`. -/
-def consInfo (d : DataDecl) (rec_ : Bool) (r : String) : List CInfo :=
-  d.cons.zipIdx.map fun (c, i) =>
-    { name := c.name.name, idx := i, fields := c.fields,
-      block := rec_ && c.fields.any (·.ty.bare [r]) }
-
-/-- `info t n`: what the elaboration knows of the declaration `n`. -/
-def info (t : Table) (n : String) : Except String Info := do
-  let some d := t.decl? n | throw <| s!"no `data` declaration `{n}`"
-  let (g, r, rec_) ← groupInfo t d
-  pure { decl := d, group := g, root := r, rolls := rec_ && r == n, cons := consInfo d rec_ r }
-
 /-- The right-nested `⊗` of `As`, `1` when there are none. -/
 def tupleTy (sp : Span) : List VTy → VTy
   | [] => .unit sp
@@ -186,6 +173,38 @@ def sumTy (sp : Span) : List VTy → VTy
   | [] => .zero sp
   | [A] => A
   | A :: As => .sum sp A (sumTy sp As)
+
+/-- `A` mentions one of `ns` other than under a cell or an array, an application of a
+declaration that is not recursive read as its structure at its arguments: `Vec[Json]` holds `Json`
+under the array of `Vec`'s buffer. -/
+def bareIn (t : Table) : Nat → List String → VTy → Bool
+  | 0, ns, A => A.bare ns
+  | k + 1, ns, A => match headOf A with
+    | some (h, As, _) =>
+      if ns.contains h then true else
+      match t.decl? h with
+      | some d =>
+        if !(groupOf t h).isEmpty || !(As.any (mentions ns)) then A.bare ns else
+        let S := sumTy .none (d.cons.map fun c => tupleTy .none (c.fields.map (·.ty)))
+        bareIn t k ns (S.subst (d.tps.map (·.name) |>.zip As))
+      | none => A.bare ns
+    | none => match A with
+      | .tensor _ B C | .sum _ B C => bareIn t k ns B || bareIn t k ns C
+      | A => A.bare ns
+
+/-- The constructors of `d` in its group `g` with root `r`: a block is a constructor of a
+recursive declaration with a field in which the root occurs other than under `box` or an
+array. -/
+def consInfo (t : Table) (d : DataDecl) (rec_ : Bool) (r : String) : List CInfo :=
+  d.cons.zipIdx.map fun (c, i) =>
+    { name := c.name.name, idx := i, fields := c.fields,
+      block := rec_ && c.fields.any (bareIn t 16 [r] ·.ty) }
+
+/-- `info t n`: what the elaboration knows of the declaration `n`. -/
+def info (t : Table) (n : String) : Except String Info := do
+  let some d := t.decl? n | throw <| s!"no `data` declaration `{n}`"
+  let (g, r, rec_) ← groupInfo t d
+  pure { decl := d, group := g, root := r, rolls := rec_ && r == n, cons := consInfo t d rec_ r }
 
 /-- A recursive occurrence of a member `m` of the group `g` is at `m`'s own parameters. -/
 def regular (g : List String) (d : DataDecl) : VTy → Except String Unit
@@ -240,7 +259,7 @@ def structOf (t : Table) (g : List String) (root : String) (toX : Option String)
   | k + 1, n => do
     let some d := t.decl? n | throw <| s!"no `data` declaration `{n}`"
     let rec_ := g.length > 1 || (reachFrom t root).contains root
-    let cis := consInfo d rec_ root
+    let cis := consInfo t d rec_ root
     let pays ← cis.mapM fun c => do
       let tys ← c.fields.mapM fun f => do
         regular g d f.ty
@@ -335,7 +354,7 @@ def typeDecls (t : Table) (sp : Span) (d : DataDecl) : Except Error (List Decl) 
   -- Each block's fields: cells holding the recursive type only as `ref X`.
   let checkFields (n : String) : Except Error Unit := do
     let some e := t.decl? n | pure ()
-    for c in consInfo e rec_ root do
+    for c in consInfo t e rec_ root do
       for (f, j) in c.fields.zipIdx do
         let A ← match fieldTyOf t g root (some X) 64 f.ty with
           | .ok A => pure A
@@ -383,7 +402,7 @@ def typeDecls (t : Table) (sp : Span) (d : DataDecl) : Except Error (List Decl) 
   for m in members do
     let some e := t.decl? m | continue
     if !(e.tps.isEmpty && e.lps.isEmpty) then continue
-    for c in consInfo e rec_ root do
+    for c in consInfo t e rec_ root do
       if !c.block then continue
       let leaves := c.fields.map fun f => Shape.leaf sp f.ty
       let rec node : List Shape → Shape
