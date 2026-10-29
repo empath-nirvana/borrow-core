@@ -1,0 +1,74 @@
+-- A rose tree whose children are the prelude's `Vec` (SPEC §42, §61, data-declarations §6.11):
+-- `data Tree = Tree(i32, Vec[Tree])`, Rust's `struct Tree { val: i32, kids: Vec<Tree> }`. Its only
+-- base case is a node with no children, so the filler of its buffers is `Tree(0, [])`, whose
+-- empty array needs no element (`array_empty`); a leaf's buffer, `box buf[Tree](0)`, is one, and
+-- allocates nothing. `J` is a JSON-like value with its array constructor first: its filler is
+-- `Arr([])`, the first summand that has one (`data-json-vec.bc` has `Num` first).
+--
+-- Answer: i32[19], the tree `10 [1, 2 [3]]` summed (16) plus `[1, [], 2]` summed (3); `live 0`: the
+-- sums consume one tree and the `J`, and the other tree is dropped by its derived destructor.
+-- 5 allocations: one buffer per node with children (two per tree) and one for `[1, [], 2]`; an
+-- empty buffer allocates nothing until its first push, as Rust's `Vec::new()`.
+include rec
+include buf
+
+data Tree = Tree(i32, Vec[Tree])
+
+data J = Arr(Vec[J]) | Num(i32)
+
+-- A node with no children: an empty buffer, which allocates nothing.
+fn tip(n: i32) -> Tree = Tree(n, Vec(box buf[Tree](0)))
+
+-- `t` added as the last child of `p`.
+fn adopt(p: Tree, t: Tree) -> Tree =
+  match p { Tree(n, Vec(b)) -> let (b, _) = push(b, t); Tree(n, Vec(b)) }
+
+-- The sum of the values, consuming the tree: each child taken out of its buffer.
+fn sum(t: Tree) -> i32 =
+  match t {
+    Tree(v, Vec(b)) ->
+      let (b, n) = len_of(b);
+      let mut b = b;
+      let mut s = v;
+      for i in 0..n {
+        let (b2, o) = take(b, i);
+        b = b2;
+        let r = match o { inl x -> sum(x) | inr u -> 0 };
+        s = s + r
+      };
+      s
+  }
+
+-- `10 [1, 2 [3]]`.
+fn tree() -> Tree = adopt(adopt(tip(10), tip(1)), adopt(tip(2), tip(3)))
+
+-- The sum of the numbers, consuming the value.
+fn jsum(j: J) -> i32 =
+  match j {
+    Num(n) -> n
+  | Arr(Vec(b)) ->
+      let (b, n) = len_of(b);
+      let mut b = b;
+      let mut s = 0;
+      for i in 0..n {
+        let (b2, o) = take(b, i);
+        b = b2;
+        let r = match o { inl x -> jsum(x) | inr u -> 0 };
+        s = s + r
+      };
+      s
+  }
+
+-- `[1, [], 2]`.
+fn jvalue() -> J =
+  let (b, _) = push(box buf[J](0), Num(1));
+  let (b, _) = push(b, Arr(Vec(box buf[J](0))));
+  let (b, _) = push(b, Num(2));
+  Arr(Vec(b))
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let t = tree();
+  let u = tree();
+  let j = jvalue();
+  sum(t) + jsum(j)
+}

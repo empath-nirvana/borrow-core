@@ -1,0 +1,7 @@
+-- expect: 7:23: `mu X. i32 * X` has no finite value: each of its values holds another
+-- A filler at a recursive type with no finite value (SPEC §61, design §5.4): every value of
+-- `mu X. i32 * X` holds another, so no buffer of it can be filled.
+include rec
+
+type R = mu X. i32 * X
+main -> i32 = let r = filler[R]; 0

@@ -1,0 +1,25 @@
+-- Buffers of recursive types whose only finite values are built from empty arrays (SPEC §61,
+-- design §5.4): a buffer's filler at a `μ` is its body's filler with the `μ`'s own variable having
+-- none, so `mu X. array X`'s is `roll []` and `mu X. i32 * array (array X)`'s is `roll (0, [])`,
+-- each empty array `array_empty`, which needs no element and allocates nothing.
+--
+-- Answer: i32[3], the length of the first buffer (1) plus its element's length (2); `live 0`: every
+-- buffer and the arrays inside them are dropped by their derived destructors. 3 allocations: `r`'s
+-- buffer, the pushed element's array, and the buffer `grow` gives `s` when it is pushed to (an
+-- empty buffer, `box buf[S](0)`, allocates nothing).
+include rec
+include buf
+
+type R = mu X. array X
+type S = mu X. i32 * array (array X)
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) {
+  let r = box buf[R](2);
+  let (r, _) = push(r, (roll array_new[R] (2, !{ i -> filler[R] }) : R));
+  let (r, n) = len_of(r);
+  let (r, x) = take(r, 0);
+  let k = match x { inl e -> let (a, k) = array_size[R](unroll e); let z = (roll a : R); k | inr u -> 0 };
+  let s = box buf[S](0);
+  let (s, _) = push(s, filler[S]);
+  n + k
+}

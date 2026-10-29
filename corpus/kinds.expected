@@ -148,7 +148,9 @@ corpus/data-config.bc 2.0 affine abortive: branch; agree
 corpus/data-eval.bc 1.0 affine abortive: branch; agree
 corpus/data-group.bc 1.0 affine abortive: branch; agree
 corpus/data-json-vec.bc 1.0 affine abortive: branch; agree
+corpus/data-option-block.bc 1.0 affine abortive: branch; agree
 corpus/data-option.bc 1.0 affine abortive: branch; agree
+corpus/data-rose-vec.bc 1.0 affine abortive: branch; agree
 corpus/data-rose.bc 1.0 affine abortive: branch; agree
 corpus/div-abstraction.bc 2.0 affine abortive: branch; agree
 corpus/div-abstraction.bc 1.0 affine abortive: branch; agree
@@ -217,6 +219,7 @@ corpus/effects-sum-gen.bc 1.0 affine abortive: branch; agree
 corpus/effects-tunnel.bc 1.0 affine abortive: -; agree
 corpus/effects-tunnel.bc 3.0 affine abortive: -; agree
 corpus/effects-tunnel.bc 2.0 affine abortive: branch; agree
+corpus/filler-mu.bc 1.0 affine abortive: -; agree
 corpus/float-roundtrip.bc 1.0 affine abortive: branch; agree
 corpus/float-roundtrip.bc 2.0 affine abortive: branch; agree
 corpus/for-data-div.bc 2.0 affine tail: direct; agree
@@ -359,6 +362,7 @@ corpus/leetcode/trees/0104-maximum-depth-of-binary-tree.bc 1.0 affine abortive: 
 corpus/leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-traversal.bc 1.0 affine abortive: branch; agree
 corpus/leetcode/trees/0124-binary-tree-maximum-path-sum.bc 1.0 affine abortive: branch; agree
 corpus/leetcode/trees/0208-implement-trie-boxed.bc 1.0 affine abortive: branch; agree
+corpus/leetcode/trees/0208-implement-trie-vec.bc 1.0 affine abortive: branch; agree
 corpus/leetcode/trees/0212-word-search-ii.bc 2.0 affine abortive: branch; agree
 corpus/leetcode/trees/0212-word-search-ii.bc 1.0 affine abortive: branch; agree
 corpus/leetcode/trees/0226-invert-binary-tree.bc 1.0 affine abortive: branch; agree

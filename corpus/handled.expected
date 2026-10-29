@@ -395,10 +395,18 @@ corpus/data-json-vec.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
 corpus/data-json-vec.bc 42:15: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/data-json-vec.bc 21:7: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/data-json-vec.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/data-option-block.bc flows [0, 4294967295]; main [1]
+corpus/data-option-block.bc 21:15: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-option-block.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/data-option.bc flows [0, 4294967295]; main [1]
 corpus/data-option.bc 38:11: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/data-option.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/data-particles.bc flows [0, 4294967295]; main []
+corpus/data-rose-vec.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/data-rose-vec.bc 69:15: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-rose-vec.bc 33:7: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-rose-vec.bc 53:7: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/data-rose-vec.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/data-rose.bc flows [0, 4294967295], finaliser; main [1], finaliser
 corpus/data-rose.bc 24:15: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/data-rose.bc 1.0 abortive: branch; condition 2 holds; -
@@ -576,6 +584,9 @@ corpus/effects-tunnel.bc 2.0 abortive: branch; condition 2 holds; -
 corpus/effects-tunnel.bc 3.0 abortive: -; condition 2 holds; -
 corpus/family-swap.bc flows [0, 4294967295]; main []
 corpus/fields.bc flows [0, 4294967295]; main []
+corpus/filler-mu.bc flows [0, 4294967295]; main [1]
+corpus/filler-mu.bc 16:15: handle 1: inside []; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/filler-mu.bc 1.0 abortive: -; condition 2 holds; -
 corpus/find-bytes.bc flows [0, 4294967295]; main []
 corpus/float-arith.bc flows [0, 4294967295]; main []
 corpus/float-compare.bc flows [0, 4294967295]; main []
@@ -1089,6 +1100,10 @@ corpus/leetcode/trees/0208-implement-trie-boxed.bc flows [0, 1, 4294967295], fin
 corpus/leetcode/trees/0208-implement-trie-boxed.bc 120:25: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/trees/0208-implement-trie-boxed.bc 85:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
 corpus/leetcode/trees/0208-implement-trie-boxed.bc 1.0 abortive: branch; condition 2 holds; -
+corpus/leetcode/trees/0208-implement-trie-vec.bc flows [0, 1, 4294967295], finaliser; main [1], finaliser
+corpus/leetcode/trees/0208-implement-trie-vec.bc 124:25: handle 1: inside [1], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/trees/0208-implement-trie-vec.bc 89:3: handle 1: inside [], finaliser; row []; ops 1.0 abortive; names 1.0 []; condition 2 holds
+corpus/leetcode/trees/0208-implement-trie-vec.bc 1.0 abortive: branch; condition 2 holds; -
 corpus/leetcode/trees/0208-implement-trie.bc flows [0, 4294967295]; main []
 corpus/leetcode/trees/0211-design-add-and-search-words-data-structure.bc flows [0, 4294967295]; main []
 corpus/leetcode/trees/0212-word-search-ii.bc flows [0, 1, 2, 4294967295], finaliser; main [1, 2], finaliser

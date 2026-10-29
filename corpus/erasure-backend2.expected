@@ -111,8 +111,10 @@ data-fold-whole erased handles 0 performs 0 raises 0 left 0 0
 data-group erased handles 1 performs 0 raises 4 left 0 0
 data-json-vec erased handles 2 performs 0 raises 2 left 0 0
 data-option erased handles 1 performs 0 raises 1 left 0 0
+data-option-block erased handles 1 performs 0 raises 1 left 0 0
 data-particles erased handles 0 performs 0 raises 0 left 0 0
 data-rose erased handles 1 performs 0 raises 3 left 0 0
+data-rose-vec erased handles 3 performs 0 raises 4 left 0 0
 data-turnstile erased handles 0 performs 0 raises 0 left 0 0
 deep-list erased handles 0 performs 0 raises 0 left 0 0
 div-abstraction erased handles 7 performs 0 raises 4 left 0 0
@@ -146,6 +148,7 @@ effects-sum-gen erased handles 1 performs 0 raises 1 machines 2 suspends 3 left 
 effects-tunnel erased handles 2 performs 0 raises 1 left 0 0
 family-swap erased handles 0 performs 0 raises 0 left 0 0
 fields erased handles 0 performs 0 raises 0 left 0 0
+filler-mu erased handles 1 performs 0 raises 0 left 0 0
 find-bytes erased handles 0 performs 0 raises 0 left 0 0
 float-arith erased handles 0 performs 0 raises 0 left 0 0
 float-compare erased handles 0 performs 0 raises 0 left 0 0
@@ -307,6 +310,7 @@ leetcode/trees/0105-construct-binary-tree-from-preorder-and-inorder-traversal er
 leetcode/trees/0124-binary-tree-maximum-path-sum erased handles 1 performs 0 raises 2 left 0 0
 leetcode/trees/0208-implement-trie erased handles 0 performs 0 raises 0 left 0 0
 leetcode/trees/0208-implement-trie-boxed erased handles 2 performs 0 raises 3 left 0 0
+leetcode/trees/0208-implement-trie-vec erased handles 2 performs 0 raises 3 left 0 0
 leetcode/trees/0211-design-add-and-search-words-data-structure erased handles 0 performs 0 raises 0 left 0 0
 leetcode/trees/0212-word-search-ii erased handles 5 performs 0 raises 9 left 0 0
 leetcode/trees/0226-invert-binary-tree erased handles 1 performs 0 raises 7 left 0 0

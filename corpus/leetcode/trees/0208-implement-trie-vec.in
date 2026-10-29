@@ -1,0 +1,4 @@
++cart ?cart ?car ^car +car ?car ^cat
+?a ^a +a ?a ^a ?ab
++tree +trie +algo ^tr ?tri ?trie ^al ?algo ?al ^b
++zz +z ?z ?zz ?zzz ^zzz ^z

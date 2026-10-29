@@ -1,0 +1,128 @@
+-- LeetCode 208, Implement Trie (Prefix Tree), with the node of Rust's
+-- `struct Trie { end: bool, kids: Vec<Option<Trie>> }` written as a `data` declaration:
+-- `data Trie = Trie(bool, Vec[Option[Trie]])`. `Trie` occurs under the array of `Vec`'s buffer, so
+-- the constructor is not a block and needs no `box` (SPEC §42, §61): it elaborates to
+-- `mu X. bool * (array (X + 1) * i32)`, in the fold class `P` (§6), and its derived destructor
+-- drops each node's children, then the node's array, at once, as Rust drops a `Vec`. The same
+-- program over a `type` with `array (1 + X)` is `0208-implement-trie-boxed.bc`, and the arena form
+-- is `0208-implement-trie.bc`.
+--
+-- `insert` and `walk` take a node apart, take the child at the next letter out of its array
+-- (`array_replace`, leaving `None`), go on in it, and put it back.
+--
+-- Answer, on `0208-implement-trie.in`: `1 0 1 1 0`, `0 0 1 1 0`, `1 0 1 1 1 0 0` and `1 1 0 0 1`,
+-- one per line, then `i32[4]`; `live 0`. 58 allocations, Rust's count for the same program
+-- (`docs/expressiveness-probes/zero-cost/awfybg/rs/src/bin/trie_boxed.rs`).
+
+include textio
+include rec
+include buf
+
+-- A trie node: whether a word ends here, and the child at each letter.
+data Trie = Trie(bool, Vec[Option[Trie]])
+
+fn fresh() -> Trie = Trie(false, Vec((array_new[Option[Trie]] (26, !{ i -> None }), 26)))
+
+-- The tokens of the operations, as owned strings: a recursion cannot run inside the borrow of
+-- the input (SPEC §18, *Not provided*: a borrow of a buffer crossed by an abort).
+fn words<'t>(l: text 't) -> buf string =
+  let (l, u) = array_copy['t, u8] l;
+  let n = len(u);
+  let mut out = box buf[string](8);
+  let mut w = string_new(8);
+  for p in l {
+    let b = *p;
+    if b == b' ' {
+      let (w0, k) = len_of(w);
+      if 0 < k { let (o, _) = push(out, w0); out = o; w = string_new(8) } else { w = w0 }
+    } else { let (w1, _) = push_byte(w, b); w = w1 }
+  };
+  let (w0, k) = len_of(w);
+  if 0 < k { let (o, _) = push(out, w0); o } else { out }
+
+-- The letter at `i` of `w`, as `0..26`.
+fn letter(w: string, i: i32) -> string * i32 =
+  let (a, n) = w;
+  let b = at(&a, i, 0);
+  ((a, n), to_i32(b) - 97)
+
+-- `w[i..]` added below `t`.
+fn insert(t: Trie, w: string, i: i32) -> Trie * string =
+  let Trie(end, Vec(b)) = t;
+  let (kids, k) = b;
+  let (w, n) = len_of(w);
+  if i == n { (Trie(true, Vec((kids, k))), w) } else {
+    let (w, c) = letter(w, i);
+    let (kids, o) = array_replace[Option[Trie]] (kids, c, None);
+    let child = match o { inl s -> match s { Some(t) -> t | None -> fresh() } | inr s -> fresh() };
+    let (child, w) = insert(child, w, i + 1);
+    let kids = array_set(kids, c, Some(child));
+    (Trie(end, Vec((kids, k))), w)
+  }
+
+-- Whether the walk along `w[i..]` stays in the trie, and whether a word ends where it stops.
+fn walk(t: Trie, w: string, i: i32) -> (Trie * string) * (bool * bool) =
+  let Trie(end, Vec(b)) = t;
+  let (kids, k) = b;
+  let (w, n) = len_of(w);
+  if i == n { ((Trie(end, Vec((kids, k))), w), (true, end)) } else {
+    let (w, c) = letter(w, i);
+    let (kids, o) = array_replace[Option[Trie]] (kids, c, None);
+    match o {
+      inl s -> match s {
+          None -> ((Trie(end, Vec((kids, k))), w), (false, false))
+        | Some(child) ->
+            let ((child, w), r) = walk(child, w, i + 1);
+            let kids = array_set(kids, c, Some(child));
+            ((Trie(end, Vec((kids, k))), w), r)
+        }
+    | inr s -> ((Trie(end, Vec((kids, k))), w), (false, false))
+    }
+  }
+
+-- One case's operations on a new trie, the answers of its searches printed.
+fn run_ops(ws: buf string) -> 1 =
+  let (ws, n) = ws;
+  let mut ws = ws;
+  let mut t = fresh();
+  let mut first = true;
+  for i in 0..n {
+    let (a, o) = array_replace[string] (ws, i, filler[string]);
+    ws = a;
+    match o {
+      inl w ->
+        let (w, op) = letter(w, 0);
+        if op == to_i32(b'+') - 97 {
+          let (r, _) = insert(t, w, 1);
+          t = r
+        } else {
+          let ((r, _), (stays, end)) = walk(t, w, 1);
+          t = r;
+          let yes = if op == to_i32(b'?') - 97 { stays && end } else { stays };
+          if first { first = false } else { print_byte(b' ') };
+          let d = if yes { b'1' } else { b'0' };
+          print_byte(d)
+        }
+    | inr w -> ()
+    }
+  };
+  print_byte(b'\n')
+
+main -> i32 =
+  let s = read_input();
+  let cs = borrow imm s { 't, t ->
+    fold_lines(t, !{ (l, cs) ->
+      let (l, m) = array_copy['t, u8] l;
+      if len(m) == 0 { array_forget['t, u8](l); cs } else { let (cs, _) = push(cs, words(l)); cs } },
+      box buf[buf string](8)) };
+  let (cs, n) = cs;
+  let mut cs = cs;
+  for i in 0..n {
+    let (c, o) = array_replace[buf string] (cs, i, filler[buf string]);
+    cs = c;
+    match o {
+      inl ws -> let r = with exhausted_to_option { run_ops(ws) }; match r { inl _ -> () | inr _ -> () }
+    | inr ws -> ()
+    }
+  };
+  n
