@@ -38,10 +38,6 @@ says what works, what you are likely to trip over, and what is coming.
 ## Things you'll run into
 
 **Types**
-- No traits or bounds on type parameters (not implemented yet,
-  [#489](https://github.com/empath-nirvana/borrow-core/issues/489)).
-- No modules: everything shares one namespace (not implemented yet,
-  [#63](https://github.com/empath-nirvana/borrow-core/issues/63)).
 - The unit type is spelled `1`, not `()`
   ([#148](https://github.com/empath-nirvana/borrow-core/issues/148)).
 
@@ -69,9 +65,7 @@ says what works, what you are likely to trip over, and what is coming.
 - An error can't carry an owned value yet
   ([#215](https://github.com/empath-nirvana/borrow-core/issues/215)).
 
-**I/O and async**
-- No files, environment variables, network or randomness yet (the network is
-  [#597](https://github.com/empath-nirvana/borrow-core/issues/597)).
+**Async**
 - Async is cooperative and single-threaded, with no event loop over real I/O yet
   ([#52](https://github.com/empath-nirvana/borrow-core/issues/52)).
 
@@ -86,7 +80,7 @@ says what works, what you are likely to trip over, and what is coming.
   ([#489](https://github.com/empath-nirvana/borrow-core/issues/489))
 - Operator sugar: unary minus, compound assignment, bitwise and shifts
   ([#583](https://github.com/empath-nirvana/borrow-core/issues/583))
-- Networking ([#597](https://github.com/empath-nirvana/borrow-core/issues/597))
+- Files, environment variables and randomness; networking ([#597](https://github.com/empath-nirvana/borrow-core/issues/597))
 - Threads and parallelism ([#212](https://github.com/empath-nirvana/borrow-core/issues/212))
 - Interior mutability ([#119](https://github.com/empath-nirvana/borrow-core/issues/119))
 - Unsafe code and a C FFI ([#79](https://github.com/empath-nirvana/borrow-core/issues/79))
