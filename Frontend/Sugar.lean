@@ -674,15 +674,24 @@ def isLinear (A : CVTy) : Bool := Class.of A == .linear
 /-- The variables a terminal `return V` of the body puts in each component of the result that
 has no destructor, as the loops' states hold them: a variable the terminal names by a copy made
 after the last loop, `x1 <- return x`, is `x` there. The residual is identified by its binder,
-followed through its copies, not by the name the terminal gives it (SPEC §41, #617). -/
-def termParts (parts : List CVTy) (ρ : List (String × String)) :
+followed through its copies, not by the name the terminal gives it (SPEC §41, #617). A copy of a
+variable bound on the spine after the last loop (`loc`: by a pattern, a `case` arm or a bind that
+is not a copy, as a rule-written handler's answer is taken apart, SPEC §64) is not followed: no
+loop state holds that variable, and the copy's own name is the one the states hold. -/
+def termParts (parts : List CVTy) (ρ : List (String × String)) (loc : List String := []) :
     Comp → Option (List (List (String × CVTy)))
   | .bind _ x _ (.ret _ V) N _ => match V.copyOf? with
-    | some y => termParts parts ((x.name, (ρ.lookup y).getD y) :: ρ) N
-    | none => termParts parts ρ N
-  | .loop _ _ _ _ _ N => termParts parts [] N
-  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N => termParts parts ρ N
-  | .case _ _ _ M _ N => (termParts parts ρ M).orElse fun _ => termParts parts ρ N
+    | some y =>
+      let y' := (ρ.lookup y).getD y
+      if loc.contains y' then termParts parts ρ (loc.erase x.name) N
+      else termParts parts ((x.name, y') :: ρ) loc N
+    | none => termParts parts ρ (x.name :: loc) N
+  | .loop _ _ _ _ _ N => termParts parts [] [] N
+  | .bind _ x _ _ N _ => termParts parts ρ (x.name :: loc) N
+  | .letPair _ a b _ N => termParts parts ρ (a.name :: b.name :: loc) N
+  | .letUnit _ _ N => termParts parts ρ loc N
+  | .case _ _ x M y N => (termParts parts ρ (x.name :: loc) M).orElse fun _ =>
+      termParts parts ρ (y.name :: loc) N
   | .ret _ (.app _ (.sugar _ .retE) V) | .ret _ V =>
     ((parts.zip (alignV parts V)).filter (isLinear ·.1)).mapM fun (A, v) =>
       (v.bind (varsFor A)).map (·.map fun (z, T) => ((ρ.lookup z).getD z, T))
@@ -724,7 +733,7 @@ def loopCxOf (sp : Span) (B : CVTy) (M : Comp) (bare : Bool := false) : Except E
   let lin := parts.filter isLinear
   if lin.isEmpty then return ⟨B, .unit, .unit, [], true⟩
   let K := tupleT lin
-  match termParts parts [] M with
+  match termParts parts [] [] M with
   | some ps => pure (if bare then ⟨B, K, K, ps, false⟩ else ⟨B, .tensor K .unit, K, ps, true⟩)
   | none => throw ⟨sp, s!"a div function whose result holds `{ppT K}`, which has no destructor, " ++
       "must hand it back by name: `return (c, …)` (SPEC §14)"⟩
@@ -968,6 +977,28 @@ def paramPrefix : Comp → Comp → Comp
   | .letUnit sp V@(.var ..) M, T | .letUnit sp V@(.clone ..) M, T => .letUnit sp V (paramPrefix M T)
   | .bind sp x A (.ret s V@(.var ..)) M lin, T | .bind sp x A (.ret s V@(.clone ..)) M lin, T => .bind sp x A (.ret s V) (paramPrefix M T) lin
   | _, T => T
+
+/-- The copies `x <- return y` of the prefix `paramPrefix` keeps, each `(y, x)`: after the prefix
+the value `y` held is `x`'s. -/
+def prefixCopies : Comp → List (String × String)
+  | .letPair _ _ _ (.var ..) M | .letPair _ _ _ (.clone ..) M
+  | .letUnit _ (.var ..) M | .letUnit _ (.clone ..) M => prefixCopies M
+  | .bind _ x _ (.ret _ V@(.var ..)) M _ | .bind _ x _ (.ret _ V@(.clone ..)) M _ =>
+    match V.copyOf? with
+    | some y => (y, x.name) :: prefixCopies M
+    | none => prefixCopies M
+  | _ => []
+
+/-- The residual's variables after the prefix of `M` (`paramPrefix`): each followed through the
+prefix's copies, so a close made after the prefix names what holds the value there. -/
+def LoopCx.afterPrefix (cx : LoopCx) (M : Comp) : LoopCx :=
+  let cs := prefixCopies M
+  let rec follow : Nat → String → String
+    | 0, z => z
+    | k + 1, z => match cs.lookup z with
+      | some x => follow k x
+      | none => z
+  { cx with parts := cx.parts.map (·.map fun (z, T) => (follow (cs.length + 1) z, T)) }
 
 /-- Bind the variables of each component of `K` from `v`, a residual `K * 1` (or `1`). -/
 def destructR (v : String) (parts : List (List (String × CVTy))) : String :=
@@ -2313,7 +2344,8 @@ def elabDef (scope : List Decl) : Decl → SM (Decl × Option (String × VTy) ×
       -- (`eStart`).  `[spec §14, §15]`
       let extra ← if S.isEmpty then pure [] else do
         let (closes, _) := closeGiven cx ((x.name, cl.elabV Ax) :: paramsOf divFuel cP M)
-        let ab ← template sp "a div body's `close` before it starts" s!"{closes}return {cx.rSrc}"
+        let ab ← template sp "a div body's `close` before it starts"
+          s!"{closes}return {(cx.afterPrefix M).rSrc}"
         let (Ac, Vc) := wrap (VTy.thunk A.span (.arr A.span Ar (.eff B.span row Rs)))
           (Comp.lam lsp x Ax (paramPrefix M ab))
         pure [Decl.def_ sp ⟨n.name ++ "__close", n.span⟩ [] Ac Vc .none]

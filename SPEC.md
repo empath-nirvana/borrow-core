@@ -10024,6 +10024,12 @@ call of a generator. One rule, `for x in g(e) { M }; N` over a site `n` (§15):
   (`io_hwf`), and a body with `break` was a stored-continuation site (§49): both are gone.
 - **A body whose control operations are all abortive** is a site's work (`Cx.aborts`); one that
   performs an operation that resumes, or loops, is §65's.
+- **The residual of a generator whose `for` threads a capability.** The node's answer is taken
+  apart after it, so the terminal's copy of a threaded variable is of a variable bound on the
+  spine after the last loop: the residual is that copy's own name, not followed past it
+  (`termParts`), and the close before the body starts names it as the parameters' prefix leaves
+  it (`LoopCx.afterPrefix`). The book's `guide/iteration.md` generator that prints is such a
+  program.
 
 No other construct changes. The elaborator decides no aliasing, mutation, ownership, lend extent
 or escape: the work is the body as written, checked by the kernel's rules.
