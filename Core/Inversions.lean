@@ -939,6 +939,7 @@ theorem der_pair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
   | tensorI hs h₁ h₂ => intro a b he; cases he; exact .inl ⟨_, _, _, _, hs, h₁, h₂, ValCls.refl _⟩
   | sliceEmptyI => intro a b he; exact .inr he.symm
   | sliceEmptyM => intro a b he; exact .inr he.symm
+  | arrEmpty => intro a b he; exact .inr he.symm
   | ret _ ih =>
       intro a b he
       rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h

@@ -104,6 +104,11 @@ theorem sliceEmptyM_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A
     (hΓ : Ctx.DeadP Γ) : SemV Δ Γ (.val emptyFamV) (.sliceMut a A) :=
   famEmpty_compatX hΓ
 
+/-- `array_empty : Array A`: the empty family is an owned array of no cells.  `[spec §9]` -/
+theorem arrEmpty_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy}
+    (hΓ : Ctx.DeadP Γ) : SemV Δ Γ (.val emptyFamV) (.array A) :=
+  famEmpty_compatX hΓ
+
 /-! ### K5: `slice_replace_mut` -/
 
 /-- `slice_replace_mut : !([Mut @a A] ⊗ (I32 ⊗ A) ⇒ [Mut @a A] ⊗ (A ⊕ A))`.  `[spec §9]` -/

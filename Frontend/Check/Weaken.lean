@@ -548,6 +548,10 @@ theorem TDerivesP.weaken {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TExpr} {j : Jdg}
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.sliceEmptyM a A (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
+  | arrEmpty A hΓ =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.arrEmpty A (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+        (shift_closed0 (by rfl) _ _).symm⟩
   | sliceReplaceM a A hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.sliceReplaceM a A (deadP_ins (live_eval_atom hf hp) Γa hΓ),
@@ -1109,6 +1113,10 @@ theorem TDerivesAt.weaken {Ξ : EffCtx} {Δ : LifeCtx} {Γ₀ : Ctx VTy} {t : TE
   | sliceEmptyM a A hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
       exact ⟨.sliceEmptyM a A (deadP_ins (live_eval_atom hf hp) Γa hΓ),
+        (shift_closed0 (by rfl) _ _).symm⟩
+  | arrEmpty A hΓ =>
+      intro Γa Γb Γp f hΓ' hf hp; subst hΓ'
+      exact ⟨.arrEmpty A (deadP_ins (live_eval_atom hf hp) Γa hΓ),
         (shift_closed0 (by rfl) _ _).symm⟩
   | sliceReplaceM a A hΓ =>
       intro Γa Γb Γp f hΓ' hf hp; subst hΓ'

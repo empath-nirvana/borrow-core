@@ -2062,7 +2062,7 @@ def constArity : TExpr → Option Nat
   | .sliceBorrowM .. | .sliceBorrowI .. | .withborSM .. | .withborSI .. | .withborF2M ..
   | .withborF2I .. | .withbor1U .. | .withbor2U .. | .withbor3U .. | .withloadU ..
   | .sliceBorrowMU .. | .sliceBorrowIU .. => some 2
-  | .sliceEmptyI .. | .sliceEmptyM .. => some 0
+  | .sliceEmptyI .. | .sliceEmptyM .. | .arrEmpty .. => some 0
   | _ => none
 
 /-- The nodes whose value is their child's: `ret`, a thunk of a λ-value, dereliction, the lifetime
@@ -3537,7 +3537,7 @@ def expand (fuel : Nat) (c : TExpr) (args : List Var) (resT : LTy) : CM Tm := do
     letpairM p fun v i => pure (.prim (.idx (!inRange)) [v, i])
   | .sliceSplitI .., [p] | .sliceSplitM .., [p] =>
     letpairM p fun v i => pure (.prim (.split true) [v, i])
-  | .sliceEmptyI .., [] | .sliceEmptyM .., [] => return .prim .emptyFam []
+  | .sliceEmptyI .., [] | .sliceEmptyM .., [] | .arrEmpty .., [] => return .prim .emptyFam []
   | .sliceSwapM .., [p] =>
     letpairM p fun v r => letpairM r fun i k => pure (.prim .swapSlots [v, i, k])
   | .countFold _ j _, [p] => do

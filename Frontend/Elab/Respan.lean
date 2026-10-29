@@ -111,6 +111,7 @@ def Const.respan (sp : Span) : Const → Const
       .withborF2Mut (c.respan sp) (a.respan sp) (b.respan sp) (w.respan sp) (A.respan sp) (B.respan sp) (T.respan sp)
   | .withborF2Imm c a b A B T => .withborF2Imm (c.respan sp) (a.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (T.respan sp)
   | .arrayNew A => .arrayNew (A.respan sp)
+  | .arrayEmpty A => .arrayEmpty (A.respan sp)
   | .arrayFree A => .arrayFree (A.respan sp)
   | .arraySize A => .arraySize (A.respan sp)
   | .arrayReplace A => .arrayReplace (A.respan sp)

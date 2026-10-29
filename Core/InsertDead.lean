@@ -394,6 +394,9 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
   | sliceEmptyM a A hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := emptyFamV.1) (by rfl)]; exact .sliceEmptyM a A (deadP_insert hd Γa hΓ)
+  | arrEmpty A hΓ =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (e := emptyFamV.1) (by rfl)]; exact .arrEmpty A (deadP_insert hd Γa hΓ)
   | sliceReplaceM a A hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := replaceV.1) (by rfl)]
@@ -751,6 +754,9 @@ theorem CDerivesAt.insert_dead {Ξ : EffCtx} (hd : Ctx.Dead Γd) {Δ : LifeCtx} 
   | sliceEmptyM a A hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := emptyFamV.1) (by rfl)]; exact .sliceEmptyM a A (deadP_insert hd Γa hΓ)
+  | arrEmpty A hΓ =>
+      intro Γa Γb hΓ'; subst hΓ'
+      rw [shift_closed0 (e := emptyFamV.1) (by rfl)]; exact .arrEmpty A (deadP_insert hd Γa hΓ)
   | sliceReplaceM a A hΓ =>
       intro Γa Γb hΓ'; subst hΓ'
       rw [shift_closed0 (e := replaceV.1) (by rfl)]

@@ -94,6 +94,7 @@ theorem CDerivesP.ofC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | sliceSplitM a0 a1 a2 => exact CDerivesP.sliceSplitM a0 a1 a2
   | sliceEmptyI a0 a1 a2 => exact CDerivesP.sliceEmptyI a0 a1 a2
   | sliceEmptyM a0 a1 a2 => exact CDerivesP.sliceEmptyM a0 a1 a2
+  | arrEmpty a0 a1 => exact CDerivesP.arrEmpty a0 a1
   | sliceReplaceM a0 a1 a2 => exact CDerivesP.sliceReplaceM a0 a1 a2
   | sliceSwapM a0 a1 a2 => exact CDerivesP.sliceSwapM a0 a1 a2
   | withbor1 a0 a1 a2 a3 a4 a5 => exact CDerivesP.withbor1 a0 a1 a2 a3 a4 a5
@@ -198,6 +199,7 @@ theorem fundamentalC_pin (hPin : PinLaw (ℍ := ℍ)) {Δ : LifeCtx} {Γ : Ctx V
   | sliceSplitM _ _ hΓ => exact sliceSplitM_compatX hΓ
   | sliceEmptyI _ _ hΓ => exact sliceEmptyI_compatX hΓ
   | sliceEmptyM _ _ hΓ => exact sliceEmptyM_compatX hΓ
+  | arrEmpty _ hΓ => exact arrEmpty_compatX hΓ
   | sliceReplaceM _ _ hΓ => exact sliceReplaceM_compatX hΓ
   | sliceSwapM _ _ hΓ => exact sliceSwapM_compatX hΓ
   | withbor1 x hΓ hx hsc₁ hf₁ hf₂ => exact withbor1_compatX x hΓ hx hsc₁ hf₁ hf₂

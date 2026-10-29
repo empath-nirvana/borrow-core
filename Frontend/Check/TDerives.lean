@@ -169,6 +169,8 @@ inductive TDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → TExpr → Jdg → P
       TDerivesAt Ξ Δ Γ (TExpr.sliceEmptyI (info := info) (jdg := (.val (.arrayImm a A))) (a := a) (A := A)) (.val (.arrayImm a A))
   | sliceEmptyM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       TDerivesAt Ξ Δ Γ (TExpr.sliceEmptyM (info := info) (jdg := (.val (.sliceMut a A))) (a := a) (A := A)) (.val (.sliceMut a A))
+  | arrEmpty {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      TDerivesAt Ξ Δ Γ (TExpr.arrEmpty (info := info) (jdg := (.val (.array A))) (A := A)) (.val (.array A))
   | sliceReplaceM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       TDerivesAt Ξ Δ Γ (TExpr.sliceReplaceM (info := info) (jdg := (.val (sliceReplaceMTy a A))) (a := a) (A := A)) (.val (sliceReplaceMTy a A))
   | sliceSwapM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
@@ -456,6 +458,8 @@ inductive TDerivesP : LifeCtx → Ctx VTy → TExpr → Jdg → Prop where
       TDerivesP Δ Γ (TExpr.sliceEmptyI (info := info) (jdg := (.val (.arrayImm a A))) (a := a) (A := A)) (.val (.arrayImm a A))
   | sliceEmptyM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       TDerivesP Δ Γ (TExpr.sliceEmptyM (info := info) (jdg := (.val (.sliceMut a A))) (a := a) (A := A)) (.val (.sliceMut a A))
+  | arrEmpty {Δ Γ} {info : TInfo} (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      TDerivesP Δ Γ (TExpr.arrEmpty (info := info) (jdg := (.val (.array A))) (A := A)) (.val (.array A))
   | sliceReplaceM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       TDerivesP Δ Γ (TExpr.sliceReplaceM (info := info) (jdg := (.val (sliceReplaceMTy a A))) (a := a) (A := A)) (.val (sliceReplaceMTy a A))
   | sliceSwapM {Δ Γ} {info : TInfo} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
@@ -820,6 +824,9 @@ theorem TDerivesAt.erase {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr}
   | sliceEmptyM a0 a1 a2 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.sliceEmptyM a0 a1 a2
+  | arrEmpty a0 a1 =>
+      dsimp only [TExpr.erase]
+      exact CDerivesAt.arrEmpty a0 a1
   | sliceReplaceM a0 a1 a2 =>
       dsimp only [TExpr.erase]
       exact CDerivesAt.sliceReplaceM a0 a1 a2
@@ -1145,6 +1152,9 @@ theorem TDerivesP.erase {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {j : Jdg}
   | sliceEmptyM a0 a1 a2 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.sliceEmptyM a0 a1 a2
+  | arrEmpty a0 a1 =>
+      dsimp only [TExpr.erase]
+      exact CDerivesP.arrEmpty a0 a1
   | sliceReplaceM a0 a1 a2 =>
       dsimp only [TExpr.erase]
       exact CDerivesP.sliceReplaceM a0 a1 a2
@@ -1345,6 +1355,7 @@ theorem TDerivesAt.toP {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {t : TExpr} {
   | sliceSplitM a0 a1 a2 => exact TDerivesP.sliceSplitM a0 a1 a2
   | sliceEmptyI a0 a1 a2 => exact TDerivesP.sliceEmptyI a0 a1 a2
   | sliceEmptyM a0 a1 a2 => exact TDerivesP.sliceEmptyM a0 a1 a2
+  | arrEmpty a0 a1 => exact TDerivesP.arrEmpty a0 a1
   | sliceReplaceM a0 a1 a2 => exact TDerivesP.sliceReplaceM a0 a1 a2
   | sliceSwapM a0 a1 a2 => exact TDerivesP.sliceSwapM a0 a1 a2
   | withbor1 a0 a1 a2 a3 a4 a5 => exact TDerivesP.withbor1 a0 a1 a2 a3 a4 a5

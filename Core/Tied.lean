@@ -250,6 +250,9 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
   /-- `slice_empty_mut : [Mut @a A]`, the family `(0, 0)`.  `[spec §9]` -/
   | sliceEmptyM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       CDerivesAt Ξ Δ Γ (.val emptyFamV) (.val (.sliceMut a A))
+  /-- `array_empty : Array A`, the family `(0, 0)`: an owned array of no cells.  `[spec §9]` -/
+  | arrEmpty {Δ Γ} (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerivesAt Ξ Δ Γ (.val emptyFamV) (.val (.array A))
   /-- `slice_replace_mut : !([Mut @a A] ⊗ (I32 ⊗ A) ⇒ [Mut @a A] ⊗ (A ⊕ A))`, `array_replace`'s
   term.  `[spec §9]` -/
   | sliceReplaceM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
@@ -520,6 +523,7 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | sliceSplitM a A hΓ => exact .sliceSplitM a A hΓ
   | sliceEmptyI a A hΓ => exact .sliceEmptyI a A hΓ
   | sliceEmptyM a A hΓ => exact .sliceEmptyM a A hΓ
+  | arrEmpty A hΓ => exact .arrEmpty A hΓ
   | sliceReplaceM a A hΓ => exact .sliceReplaceM a A hΓ
   | sliceSwapM a A hΓ => exact .sliceSwapM a A hΓ
   | withbor1 x hΓ hx hsc₁ hfree₁ hfree₂ => exact .withbor1 x hΓ hx hsc₁ hfree₁ hfree₂
@@ -896,6 +900,7 @@ theorem CDerivesAt.ofEffFree {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Ex
   | sliceSplitM a A hΓ => exact .sliceSplitM a A hΓ
   | sliceEmptyI a A hΓ => exact .sliceEmptyI a A hΓ
   | sliceEmptyM a A hΓ => exact .sliceEmptyM a A hΓ
+  | arrEmpty A hΓ => exact .arrEmpty A hΓ
   | sliceReplaceM a A hΓ => exact .sliceReplaceM a A hΓ
   | sliceSwapM a A hΓ => exact .sliceSwapM a A hΓ
   | withbor1 x hΓ hx hsc₁ hfree₁ hfree₂ => exact .withbor1 x hΓ hx hsc₁ hfree₁ hfree₂

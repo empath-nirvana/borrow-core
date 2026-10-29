@@ -109,6 +109,7 @@ def Const.renameLife (f : Span → String → Life) : Const → Const
       .withborF2Mut (c.renameLife f) (a.renameLife f) (b.renameLife f) (w.renameLife f) (A.renameLife f) (B.renameLife f) (T.renameLife f)
   | .withborF2Imm c a b A B T => .withborF2Imm (c.renameLife f) (a.renameLife f) (b.renameLife f) (A.renameLife f) (B.renameLife f) (T.renameLife f)
   | .arrayNew A => .arrayNew (A.renameLife f)
+  | .arrayEmpty A => .arrayEmpty (A.renameLife f)
   | .arrayFree A => .arrayFree (A.renameLife f)
   | .arraySize A => .arraySize (A.renameLife f)
   | .arrayReplace A => .arrayReplace (A.renameLife f)

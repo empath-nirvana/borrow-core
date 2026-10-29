@@ -286,6 +286,9 @@ inductive CDerivesP : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `slice_empty_mut : [Mut @a A]`, the family `(0, 0)`.  `[spec §9]` -/
   | sliceEmptyM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       CDerivesP Δ Γ (.val emptyFamV) (.val (.sliceMut a A))
+  /-- `array_empty : Array A`, the family `(0, 0)`: an owned array of no cells.  `[spec §9]` -/
+  | arrEmpty {Δ Γ} (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerivesP Δ Γ (.val emptyFamV) (.val (.array A))
   /-- `slice_replace_mut : !([Mut @a A] ⊗ (I32 ⊗ A) ⇒ [Mut @a A] ⊗ (A ⊕ A))`, `array_replace`'s
   term.  `[spec §9]` -/
   | sliceReplaceM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :

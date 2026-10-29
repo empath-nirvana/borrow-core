@@ -277,6 +277,9 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `slice_empty_mut : [Mut @a A]`, the family `(0, 0)`.  `[spec §9]` -/
   | sliceEmptyM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val emptyFamV) (.val (.sliceMut a A))
+  /-- `array_empty : Array A`, the family `(0, 0)`: an owned array of no cells.  `[spec §9]` -/
+  | arrEmpty {Δ Γ} (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val emptyFamV) (.val (.array A))
   /-- `slice_replace_mut : !([Mut @a A] ⊗ (I32 ⊗ A) ⇒ [Mut @a A] ⊗ (A ⊕ A))`, `array_replace`'s
   term.  `[spec §9]` -/
   | sliceReplaceM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
@@ -648,6 +651,7 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | sliceSplitM _ _ hΓ => exact sliceSplitM_compatX hΓ
   | sliceEmptyI _ _ hΓ => exact sliceEmptyI_compatX hΓ
   | sliceEmptyM _ _ hΓ => exact sliceEmptyM_compatX hΓ
+  | arrEmpty _ hΓ => exact arrEmpty_compatX hΓ
   | sliceReplaceM _ _ hΓ => exact sliceReplaceM_compatX hΓ
   | sliceSwapM _ _ hΓ => exact sliceSwapM_compatX hΓ
   | withbor1 x hΓ hx hsc₁ hf₁ hf₂ => exact withbor1_compatX x hΓ hx hsc₁ hf₁ hf₂

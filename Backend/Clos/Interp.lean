@@ -436,7 +436,9 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
         let .i32 len := len | throw "closure IR: drop of a non-array"
         dropFill codes n f a 0 len.toNat
         deepDrop objFuel f
-        if len.toNat = 0 then freeCell a
+        -- `tab` at length 0 places one cell, which this frees; the empty family `(0, 0)`
+        -- (`array_empty`) holds none.
+        if len.toNat = 0 && a ≠ 0 then freeCell a
         pure (.unit, env)
     | .prim op xs => do
         let (vs, env) ← takeAll env xs
