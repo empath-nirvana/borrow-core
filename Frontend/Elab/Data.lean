@@ -76,9 +76,11 @@ end
 /-- `A` mentions one of the type names `ns`. -/
 def mentions (ns : List String) (A : VTy) : Bool := A.tyNames.any ns.contains
 
-/-- `A` mentions one of `ns` other than under a cell (`box A`, which is `ref A`). -/
+/-- `A` mentions one of `ns` other than under a cell (`box A`, which is `ref A`) or an array,
+whose allocation the recursion is under (data-declarations §6.11). -/
 def _root_.Frontend.VTy.bare (ns : List String) : VTy → Bool
   | .ref _ _ => false
+  | .array _ _ => false
   | .name _ n => ns.contains n
   | .tensor _ A B | .sum _ A B | .app _ A B => A.bare ns || B.bare ns
   | .lapp _ A _ => A.bare ns
@@ -290,11 +292,20 @@ def openX (t : Table) (X : String) : Nat → VTy → Except String VTy
       | .ref sp B => return .ref sp (← openX t X k B)
       | A => pure A
 
-/-- `T` is in §6's `FShape` over `X`: built from `⊗`, `⊕`, closed leaves and `ref X`. -/
+mutual
+/-- `T` is in §6's class `P` over `X`: built from `⊗`, `⊕`, closed leaves, `ref X` and arrays
+whose element is `X` or such a type. -/
 def fshape (X : String) : VTy → Bool
   | .tensor _ A B | .sum _ A B => fshape X A && fshape X B
   | .ref _ (.name _ _) => true
+  | .array _ S => elemShape X S
   | A => !A.tyNames.contains X
+
+/-- An array's element in the class: `X` itself, or a type `fshape` admits. -/
+def elemShape (X : String) : VTy → Bool
+  | .name _ _ => true
+  | A => fshape X A
+end
 
 /-- A fresh type variable for `d`'s `μ`. -/
 def muVar (d : DataDecl) (avoid : List String) : String :=
@@ -336,7 +347,8 @@ def typeDecls (t : Table) (sp : Span) (d : DataDecl) : Except Error (List Decl) 
           | some x => s!"the field `{x.name}` of `{c.name}`"
           | none => s!"field {j + 1} of `{c.name}`"
         if c.block then
-          unless (A matches .name _ _) || !A.tyNames.contains X do
+          unless (A matches .name _ _) || (A matches .array _ _ && fshape X A) ||
+              !A.tyNames.contains X do
             err <| s!"{what} holds `{root}` inside another type (`{ppTy f.ty}`): write `box` at " ++
               s!"the recursive type (`{ppTy (f.ty.subst [(root, .ref .none (.name .none root))])}`), " ++
               s!"or make the field `{root}` itself"
