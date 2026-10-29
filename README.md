@@ -112,8 +112,9 @@ live 0
 | `bcc interp file.bc` | run in the reference interpreter |
 | `bcc compile file.bc -o out.wat` | write the WebAssembly text |
 
-The [book](book/src/introduction.md) teaches the language from there, starting with
-[Getting started](book/src/getting-started.md). `mdbook serve book` builds it locally.
+The [book](https://empath-nirvana.github.io/borrow-core/) teaches the language from there, starting
+with [Getting started](https://empath-nirvana.github.io/borrow-core/getting-started.html).
+`mdbook serve book` builds it locally.
 
 ## Status
 

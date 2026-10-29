@@ -1,7 +1,6 @@
 name: CI
 
-# Manual only: GitHub Actions minutes are not used for this private repository.
-# The gate is scripts/ci-local.sh, run locally before opening or merging a PR.
+# Manual only. The gate is scripts/ci-local.sh, run locally before opening or merging a PR.
 on:
   workflow_dispatch:
 
