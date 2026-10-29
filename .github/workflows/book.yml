@@ -1,0 +1,46 @@
+name: Book
+
+# Builds the book with mdbook and publishes it to GitHub Pages on every push to main that
+# touches it. The book's code blocks are tested by the local gate (scripts/book-doctest.sh),
+# which needs the compiler; this workflow only builds the HTML.
+on:
+  push:
+    branches: [main]
+    paths: ['book/**', '.github/workflows/book.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mdbook
+        run: |
+          curl -sSfL https://github.com/rust-lang/mdBook/releases/download/v0.5.4/mdbook-v0.5.4-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C /usr/local/bin
+
+      - name: Build
+        run: mdbook build book
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: book/book
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
