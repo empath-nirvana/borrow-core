@@ -10377,8 +10377,9 @@ relation or the machine.
 
 ## Changelog
 
-- **1.12** (2026-10-29) — merged from #654 (on #646) onto 1.11: §63 (#649, class 1 of #645): call-graded operations. `OpSig` and
-  `CTy.eff` carry a grade `call`; a graded stop's continuation is owed only at lists with the
+- **1.12** (2026-10-29) — PR #654 (stacked on #646) merged onto 1.11, its entries renumbered.
+
+  §63 (#649, class 1 of #645): call-graded operations. `OpSig` and `CTy.eff` carry a grade `call`; a graded stop's continuation is owed only at lists with the
   stop's members (`Owed`), definitionally Core's at an ungraded entry. The unwinding forms of the
   lends of an owned cell take a callback row of abortive or graded operations (`Row.Lend`);
   `[handle-tail]` is the only handler of a graded name; `tick` is graded at `div_fuel` and the
@@ -10402,7 +10403,9 @@ relation or the machine.
   text writes `div`, `iterate[…]` and `reify[…](res)`. The Wasm lowering reuses locals. Every
   output, golden, exit status, `live 0` and `div_fuel` answer of a program that checks is
   unchanged; `indirect` counts grow until B3. No change to `CDerives`, the relation, the machine
-  or `Core/`.
+  or `Core/`. On the merge: the new backend compiles `Div`'s loops under the runtime (PR #653's
+  rules, as on `b2-main`) and a graded `main`; `[handle-last]` (§51) stays ungraded; 22 programs
+  that hold a stored loop leave the new backend's fragment (§62 *Open*).
 
 - **1.11** (2026-10-29) — §61 (#722, U1 of #595): the owned fold and the destructor at the class
   `P`. The class (`Ref` and arrays of any member, `μ` nested in `μ`), the constant `foldOwnG` with

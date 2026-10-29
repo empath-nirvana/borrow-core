@@ -301,7 +301,8 @@ main -> 1 =
 
 ## Borrows and loops
 
-A borrow block around a loop is free: the loop body can use the borrow at every step. What the
-loop carries from one step to the next can't hold the borrow, though, so a generator that takes
-the borrow as an argument can't run in a `for` inside the block; the checker says which iterator
-holds it.
+A borrow block around a loop holds its borrow for the whole loop, at no run-time cost. A `mut`
+borrow of a cell can be used at every step. Reading an `imm` borrow at every step needs the borrow
+copied explicitly for now (`copy` and `forget_imm`, #58). A borrow of a buffer or a string held
+across a loop, and a `for` over `&a` whose body loops, are refused for now; the checker says
+which borrow and which loop.
