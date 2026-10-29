@@ -51,4 +51,4 @@ main -> i32 =
     let u = spawn(len(b2));
     t.await + u.await
   }
--- now: 41:12: expected `[`, found name `l`
+-- now: 41:55: expected `}`, found `.`

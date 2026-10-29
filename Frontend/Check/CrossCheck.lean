@@ -50,6 +50,7 @@ deriving instance ToExpr for Frontend.VTy, Frontend.CTy, Frontend.Row, Frontend.
 deriving instance ToExpr for Frontend.Const
 deriving instance ToExpr for Frontend.SurfOp
 deriving instance ToExpr for Frontend.BorrowKind
+deriving instance ToExpr for Frontend.FoldKind
 deriving instance ToExpr for Frontend.SiteKind
 deriving instance ToExpr for Frontend.SiteRec
 deriving instance ToExpr for Frontend.HInfo

@@ -1,0 +1,37 @@
+-- A binary tree declared with `data`, traversed, mapped in place and consumed by fold blocks
+-- (SPEC §60, F1, F2).
+--
+-- `sum` reads the tree through a borrow (`fold_imm`). `map_inc` increments every value in the
+-- tree's own cells (`fold_reuse`): `Node((dl, l), c, (dr, r))` binds each emptied child cell
+-- beside its mapped subtree and the value cell, and `Node(dl, c, dr)` reassembles the block from
+-- its cells. `digits` consumes the tree (`fold_own`): `box Node(l, v, r)` frees the value cell and
+-- binds its value; the kernel's fold frees the child cells.
+--
+-- Answer: i32[40506]: the sum 6 of the tree 1 ← 2 → 3 read before the map, and the mapped tree
+-- 2 ← 3 → 4 read as `l + 10 v + 100 r` at each node, 4050. A map that swaps the children gives
+-- 2070; one that skips a node changes a digit. `live 0`: the folds free every node.
+
+data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)
+
+fn branch(l: Tree, v: i32, r: Tree) -> Tree = box Node(l, v, r)
+
+fn sum<'a>(t: imm 'a Tree) -> i32 = fold_imm t { Leaf -> 0 | Node(l, v, r) -> l + *v + r }
+
+fn map_inc(t: Tree) -> Tree =
+  fold_reuse t {
+    Leaf -> Leaf
+  | Node((dl, l), c, (dr, r)) ->
+      let (dl, ()) = swap(dl, l);
+      let (c, x) = swap(c, ());
+      let (c, ()) = swap(c, x + 1);
+      let (dr, ()) = swap(dr, r);
+      Node(dl, c, dr)
+  }
+
+fn digits(t: Tree) -> i32 = fold_own t { Leaf -> 0 | box Node(l, v, r) -> l + v * 10 + r * 100 }
+
+main -> i32 =
+  let mut t = branch(branch(Leaf, 1, Leaf), 2, branch(Leaf, 3, Leaf));
+  let s = sum(&t);
+  modify &mut t { k -> map_inc(k) };
+  digits(t) * 10 + s

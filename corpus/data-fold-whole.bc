@@ -1,0 +1,50 @@
+-- A variable that binds a constructor's whole value in a fold block (SPEC §60, F1), beside arms
+-- with constructor patterns: at the root (`other` in each fold) and at a member of the group (`k`,
+-- a `Kid`). The value is rebuilt from the parts the earlier arms' tests took apart, at the type
+-- the algebra's parameter has there: the shape with the recursive positions folded.
+--
+-- Answer: i32[2012014]: `nonempty` 1; `nonempty_own` 1 and `last` 1 (each layer's tail folds to
+-- 1, so the `Cons(h, 0)` arm never matches); the list [0, 7] incremented in place, read as
+-- digits, 81; `marks` 201 (a `KA(1)` kid counts 100, the `KB` kid 1, its subtree's fold dropped with
+-- `k`) and `drops` 4 (each node 1, the `KB` kid's folded subtree added). `live 0`.
+
+data List = Nil | Cons(head: i32, tail: List)
+
+data T = L | N(Kid, box T)
+
+data Kid = KA(i32) | KB(box T)
+
+fn nonempty<'a>(l: imm 'a List) -> i32 = fold_imm l { Nil -> 0 | other -> 1 }
+
+fn nonempty_own(l: List) -> i32 = fold_own l { Nil -> 0 | other -> 1 }
+
+fn last<'a>(l: imm 'a List) -> i32 = fold_imm l { Cons(h, 0) -> *h | other -> 1 }
+
+fn inc(l: List) -> List =
+  fold_reuse l {
+    Cons(c, (d, t)) ->
+      let (c, x) = swap(c, ());
+      let (c, ()) = swap(c, x + 1);
+      let (d, ()) = swap(d, t);
+      Cons(c, d)
+  | other -> Nil
+  }
+
+fn digits(l: List) -> i32 = fold_own l { Nil -> 0 | box Cons(h, t) -> h + t * 10 }
+
+fn marks<'a>(t: imm 'a T) -> i32 =
+  fold_imm t { L -> 0 | N(KA(1), r) -> 100 + r | N(k, r) -> 1 + r }
+
+fn drops(t: T) -> i32 = fold_own t { L -> 0 | N(KB(s), r) -> 1 + s + r | N(k, r) -> 1 + r }
+
+fn tnode(k: Kid, t: T) -> T = N(k, alloc(t))
+
+main -> i32 =
+  let l = box Cons(0, box Cons(7, Nil));
+  let n = nonempty(&l);
+  let e = last(&l);
+  let z = nonempty_own(box Cons(4, Nil)) + e;
+  let c = digits(inc(l));
+  let t = tnode(KA(1), tnode(KB(alloc(tnode(KA(2), L))), tnode(KA(1), L)));
+  let m = marks(&t);
+  n * 1000000 + z * 100000 + c * 10000 + m * 10 + drops(t)

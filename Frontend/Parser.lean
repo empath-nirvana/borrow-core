@@ -198,6 +198,9 @@ structure PState where
   /-- A `run` just read that hands back what it writes (`blockThreads`): its binding must take
   them apart (SPEC §41, rule R3). -/
   pendingRun : Option Span := none
+  /-- In an arm of a `fold_reuse` block, where a block written without `box` is reassembled from
+  its cells (SPEC §60, F2). -/
+  reuseArm : Bool := false
   /-- Each name of the source that resolution resolved to a variable: where it is written, as
   written, and the number of its binder, one per binder of the source (`resolutionOf`,
   `bcc alpha`). -/
@@ -1447,6 +1450,12 @@ def valPrefix : Nat → P Val
       let m := if t.tok == .kw "shorten_mut" then Mode.mut else Mode.imm
       pure (.shorten (← spanFrom st) m σ a V)
     | .kw "borrow" | .kw "modify" => borrowBlock n
+    -- `fold_imm V { … }`; with brackets, `fold_imm[…]` is the constant.
+    | .kw "fold_imm" | .kw "fold_own" | .kw "fold_reuse" =>
+      if (← peekAt 1).tok == .sym "[" then
+        let V ← valAtom n
+        valSuffixes n st V
+      else foldBlock n
     | .kw "with" => withBlock n
     | .sym "*" =>
       discard bump
@@ -1630,7 +1639,8 @@ def dataValue : Nat → Pos → Ident → Bool → P Val
         let sp ← spanFrom st
         let mut vars : List (String × String) := []
         for (x, _) in fs do vars := vars ++ [(x.name, ← freshName "io_rf")]
-        liftE (Data.recordVal tab sp c.name boxed fs.toList fun f => (vars.lookup f).getD f)
+        liftE (Data.recordVal tab sp c.name boxed fs.toList (fun f => (vars.lookup f).getD f)
+          (← get).reuseArm)
       else do
         let args ← if ← isSym "(" then do
             discard bump
@@ -1642,9 +1652,69 @@ def dataValue : Nat → Pos → Ident → Bool → P Val
             expectSym ")"
             pure vs.toList
           else pure []
-        liftE (Data.conVal tab (← spanFrom st) c.name boxed args)
+        liftE (Data.conVal tab (← spanFrom st) c.name boxed args (← get).reuseArm)
     modify fun s => { s with angle }
     pure V
+
+/-- A `fold` block (SPEC §60, F1): `fold_imm V { p -> S | … }`, `fold_own …`, `fold_reuse …`,
+whose arms are the fold's algebra, a match on the unrolled shape with the recursive fields already
+folded (`Data.foldComp`). In a `fold_reuse` arm a block written without `box` is reassembled from
+its cells (F2). The algebra is a `!` function: its arms assign no enclosing `let mut` variable.
+`[spec §60]` -/
+def foldBlock : Nat → P Val
+  | 0 => outOfFuel
+  | n + 1 => inClosure do
+    let st ← startPos
+    let t ← bump
+    let k : FoldKind := match t.tok with
+      | .kw "fold_imm" => .imm
+      | .kw "fold_own" => .own
+      | _ => .reuse
+    -- `io_of(N, P, …)`: the printed form of the declaration the arms are of.
+    let mut decl₀ : Option (String × List String) := none
+    if (← peek).tok == .ident "io_of" then
+      discard bump
+      expectSym "("
+      let mut ns : Array String := #[]
+      for _ in [0:n] do
+        let nt ← bump
+        let .uident m := nt.tok | failAt nt.span "expected a type name"
+        ns := ns.push m
+        if ← isSym "," then discard bump else break
+      expectSym ")"
+      decl₀ := match ns.toList with
+        | m :: ps => some (m, ps)
+        | [] => none
+    let V ← val n
+    expectSym "{"
+    if ← isSym "|" then discard bump
+    let reuse₀ := (← get).reuseArm
+    modify fun s => { s with reuseArm := k == .reuse }
+    let mut arms : Array (Data.MPat × Comp) := #[]
+    let mut writes : List String := []
+    for _ in [0:n] do
+      let p ← mpat n
+      expectSym "->"
+      let (p, M, a) ← withScope do
+        let p ← bindMPatNames n p
+        let (M, a) ← frame (comp n)
+        pure (p, M, a)
+      arms := arms.push (p, M)
+      writes := writes ++ a
+      if ← isSym "|" then discard bump else break
+    modify fun s => { s with reuseArm := reuse₀ }
+    expectSym "}"
+    let sp ← spanFrom st
+    if let x :: _ := writes then
+      failAt sp s!"the arms of `{k.str}` are its algebra, a `!` function: they cannot assign `{x}`"
+    let (lam, decl) ← match arms.toList with
+      | [(.var x, M)] => pure (Comp.lam sp x (holeTy sp) M, decl₀)
+      | as_ => do
+        let x : Ident := ⟨← freshName "io_fa", sp⟩
+        let ((M, fresh), decl) ← liftE (Data.foldComp (← get).data sp k x.name as_ (← get).fresh)
+        modify fun s => { s with fresh }
+        pure (Comp.lam sp x (holeTy sp) M, decl)
+    pure (.app sp (.app sp (.sugar t.span (.fold k decl)) V) (.thunkv sp lam))
 
 /-- A borrow block: `borrow imm V { 'x, p -> S }`, `borrow mut V { … }`, `borrow mut (V, W)
 { … }` (a family), or `modify V { p -> S }`. The lifetime `'x` may be left out. -/
@@ -1782,6 +1852,30 @@ def valAtom : Nat → P Val
     let st ← startPos
     let t ← peek
     match t.tok with
+    | .ident "io_like" =>
+      -- `io_like(o, V)`: the printed form of `VSugar.like` (SPEC §60).
+      discard bump
+      expectSym "("
+      let o ← ident "an occurrence"
+      expectSym ","
+      let V ← val n
+      expectSym ")"
+      let sp ← spanFrom st
+      pure (.app sp (.sugar t.span (.like o.name)) V)
+    | .ident "io_cells" =>
+      -- `io_cells(C, k, V)`: the printed form of `VSugar.cells` (SPEC §60).
+      discard bump
+      expectSym "("
+      let ct ← bump
+      let .uident c := ct.tok | failAt ct.span "expected a constructor"
+      expectSym ","
+      let kt ← bump
+      let .int k := kt.tok | failAt kt.span "expected a number"
+      expectSym ","
+      let V ← val n
+      expectSym ")"
+      let sp ← spanFrom st
+      pure (.app sp (.sugar t.span (.cells c k)) V)
     | .ident s =>
       discard bump
       let nx ← peek

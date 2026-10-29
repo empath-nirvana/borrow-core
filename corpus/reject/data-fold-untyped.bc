@@ -1,0 +1,10 @@
+-- A fold block whose result type nothing gives (SPEC §60, F1): the fold's result is the type
+-- expected of the block, here none, as a closure's parameter is the type expected of the closure.
+-- expect: 7:11: the type of the `fold_own` block's result is not determined here: ascribe it, `(fold_own … : R)`
+data List = Nil | Cons(head: i32, tail: List)
+
+fn sum(l: List) -> i32 =
+  let s = fold_own l { Nil -> 0 | Cons(c, t) -> free(c) + t };
+  s
+
+main -> i32 = 0

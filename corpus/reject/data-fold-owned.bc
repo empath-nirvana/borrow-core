@@ -1,0 +1,8 @@
+-- A `fold_imm` block over an owned value (SPEC §60, F1): `fold_imm` folds through an `imm`
+-- borrow; an owned value is borrowed first, or consumed by `fold_own`.
+-- expect: 6:26: `fold_imm` folds through an `imm` borrow, and this is owned: fold a borrow of it, or consume it with `fold_own`
+data List = Nil | Cons(head: i32, tail: List)
+
+fn sum(l: List) -> i32 = fold_imm l { Nil -> 0 | Cons(h, t) -> *h + t }
+
+main -> i32 = 0

@@ -1,0 +1,22 @@
+-- A binary tree declared with `data`, built with `box`, and summed through a borrow by a fold
+-- block with constructor patterns (SPEC §60, F1; `docs/data-declarations.md` §11.1 A2).
+--
+-- `fold_imm t { … }` is the kernel's `fold_imm` (SPEC §6) at the tree's shape, its result the
+-- function's `i32`, applied to the algebra the arms are: `Node(l, v, r)` binds the folded subtrees
+-- `l` and `r` and the view `v : imm 'y i32` of the node's value cell, read with `*`.
+-- `corpus/sugar/data-fold-block.lowered.bc` writes the same program with the constant.
+--
+-- Answer: the tree 1 ← 2 → 3 sums to 6, `i32[6]`; `live 0`: the tree's destructor frees its
+-- three nodes. A fold that skips a node gives less, one that counts a node twice more.
+
+data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)
+
+fn branch(l: Tree, v: i32, r: Tree) -> Tree = box Node(l, v, r)
+
+fn sum<'a>(t: imm 'a Tree) -> i32 =
+  fold_imm t { Leaf -> 0 | Node(l, v, r) -> l + *v + r }
+
+main -> i32 =
+  let t = branch(branch(Leaf, 1, Leaf), 2, branch(Leaf, 3, Leaf));
+  let n = sum(&t);
+  n

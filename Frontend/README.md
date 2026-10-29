@@ -143,7 +143,9 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
     scope in its whole module. Constructors, record literals and `match` are elaborated as they are
     read (`Frontend/Elab/Data.lean`); a field read `e.f` is `VSugar.field`, printed `(e).f`, and a
     field update's rebuilt record, when the declarations disagree on the field's place,
-    `VSugar.update`, printed `(r).{f = e}`. The printed program is core text with the declarations
+    `VSugar.update`, printed `(r).{f = e}`. A `fold` block's arms are compiled as they are read,
+    and the block is `VSugar.fold` applied to the value folded and the algebra, printed
+    `fold_imm e { x -> M }` (SPEC §60). The printed program is core text with the declarations
     kept as written. `parseProgram` takes the library modules' sources (`lib`); without them only
     the file's own declarations are in scope.
 

@@ -98,6 +98,14 @@ count-fold 0 0 0 0 0 0
 count-try 0 0 0 0 0 0
 data-box-tree 9 0 0 27 27 0
 data-config 2 0 0 161 25 214
+data-fold-bang 4 0 0 14 14 0
+data-fold-block 9 0 0 62 31 0
+data-fold-forest 8 0 0 104 68 0
+data-fold-generic 4 0 0 26 17 0
+data-fold-group 5 0 0 52 26 0
+data-fold-list 6 0 0 60 45 0
+data-fold-tree 9 0 0 89 58 0
+data-fold-whole 11 0 0 107 65 0
 data-group 5 0 0 21 21 0
 data-option 5 0 0 16 16 4
 data-particles 1 0 0 667 651 353
